@@ -2,47 +2,89 @@ use std::cell::Cell;
 use std::fmt;
 use std::rc::Rc;
 
+/// Inline capacity of the SSO representation (WP-38). 15 covers 49.9% of the
+/// strings a WordPress media run constructs (wp36-harness/str-census.txt).
+/// 22 fits in the same 24-byte `Repr` (23 grows it to 32B) — kept at 15 per
+/// the measured attribution; the static asserts below pin the layout.
+const INLINE_CAP: usize = 15;
+
 /// A PHP string: an arbitrary byte sequence (never assumed UTF-8).
 ///
 /// Mirrors `zend_string` (Zend/zend_types.h:393-398): lazy hash with 0 meaning
 /// "not yet computed", same convention as ZSTR_H (Zend/zend_string.h:114).
+///
+/// WP-38: small-string optimization. The representation is chosen by length
+/// alone (`len <= INLINE_CAP` is always Inline), so equal bytes always share
+/// a representation and Eq/Hash/zhash read through `as_bytes` — the split is
+/// unobservable. A safe enum cannot overlap its discriminant with the Box fat
+/// pointer, so PhpStr is 32 bytes (was 24); the Zval invariant is untouched
+/// (it holds only the 8-byte Rc).
 pub struct PhpStr {
     hash: Cell<u64>,
-    bytes: Box<[u8]>,
+    repr: Repr,
 }
+
+enum Repr {
+    Inline { len: u8, buf: [u8; INLINE_CAP] },
+    Heap(Box<[u8]>),
+}
+
+const _: () = {
+    assert!(std::mem::size_of::<Repr>() == 24);
+    assert!(std::mem::size_of::<PhpStr>() == 32);
+};
 
 pub type ZStr = Rc<PhpStr>;
 
 impl PhpStr {
-    pub fn new(bytes: impl Into<Box<[u8]>>) -> ZStr {
-        let bytes = bytes.into();
+    /// The single construction funnel: every PhpStr goes through here.
+    /// Small payloads are copied inline without touching `Into<Box<[u8]>>`,
+    /// so a `&[u8]`/`&str` caller allocates nothing for them.
+    pub fn new(bytes: impl AsRef<[u8]> + Into<Box<[u8]>>) -> ZStr {
+        let len = bytes.as_ref().len();
         #[cfg(feature = "str-census")]
-        census::record(bytes.len());
+        census::record(len);
+        let repr = if len <= INLINE_CAP {
+            let mut buf = [0u8; INLINE_CAP];
+            buf[..len].copy_from_slice(bytes.as_ref());
+            Repr::Inline { len: len as u8, buf }
+        } else {
+            Repr::Heap(bytes.into())
+        };
         Rc::new(PhpStr {
             hash: Cell::new(0),
-            bytes,
+            repr,
         })
     }
 
     #[allow(clippy::should_implement_trait)] // infallible byte view, not FromStr
     pub fn from_str(s: &str) -> ZStr {
-        Self::new(s.as_bytes().to_vec())
+        Self::new(s.as_bytes())
     }
 
     pub fn empty() -> ZStr {
-        Self::new(Vec::new())
+        Self::new(&[][..])
     }
 
+    #[inline]
     pub fn as_bytes(&self) -> &[u8] {
-        &self.bytes
+        match &self.repr {
+            Repr::Inline { len, buf } => &buf[..*len as usize],
+            Repr::Heap(b) => b,
+        }
     }
 
+    #[inline]
     pub fn len(&self) -> usize {
-        self.bytes.len()
+        match &self.repr {
+            Repr::Inline { len, .. } => *len as usize,
+            Repr::Heap(b) => b.len(),
+        }
     }
 
+    #[inline]
     pub fn is_empty(&self) -> bool {
-        self.bytes.is_empty()
+        self.len() == 0
     }
 
     /// DJBX33A, same algorithm as zend_inline_hash_func. Lazily cached.
@@ -53,7 +95,7 @@ impl PhpStr {
             return h;
         }
         let mut hash: u64 = 5381;
-        for &b in self.bytes.iter() {
+        for &b in self.as_bytes().iter() {
             hash = hash.wrapping_mul(33).wrapping_add(b as u64);
         }
         // Mirror Zend: force the "computed" bit so a result of 0 is impossible.
@@ -65,7 +107,7 @@ impl PhpStr {
 
 impl PartialEq for PhpStr {
     fn eq(&self, other: &Self) -> bool {
-        self.bytes == other.bytes
+        self.as_bytes() == other.as_bytes()
     }
 }
 
@@ -84,7 +126,7 @@ impl std::hash::Hash for PhpStr {
 
 impl fmt::Debug for PhpStr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "PhpStr({:?})", String::from_utf8_lossy(&self.bytes))
+        write!(f, "PhpStr({:?})", String::from_utf8_lossy(self.as_bytes()))
     }
 }
 
@@ -159,5 +201,37 @@ mod tests {
         let h = s.zhash();
         assert_ne!(h, 0);
         assert_eq!(s.zhash(), h);
+    }
+
+    #[test]
+    fn sso_boundary_roundtrip() {
+        // Exactly INLINE_CAP stays inline, one more goes to the heap; both
+        // must round-trip bytes, len and zhash identically to a Vec source.
+        for n in [0, 1, INLINE_CAP - 1, INLINE_CAP, INLINE_CAP + 1, 64] {
+            let src: Vec<u8> = (0..n as u8).collect();
+            let from_vec = PhpStr::new(src.clone());
+            let from_slice = PhpStr::new(&src[..]);
+            assert_eq!(from_vec.as_bytes(), &src[..], "n={n}");
+            assert_eq!(from_vec.len(), n, "n={n}");
+            assert_eq!(*from_vec, *from_slice, "n={n}");
+            assert_eq!(from_vec.zhash(), from_slice.zhash(), "n={n}");
+            assert!(matches!(
+                from_vec.repr,
+                Repr::Inline { .. } if n <= INLINE_CAP
+            ) || n > INLINE_CAP, "n={n}");
+            assert!(matches!(from_vec.repr, Repr::Heap(_)) == (n > INLINE_CAP), "n={n}");
+        }
+    }
+
+    #[test]
+    fn sso_inline_binary_safe() {
+        // NUL and 0xFF inside the inline buffer; trailing buffer padding must
+        // never leak into as_bytes.
+        let s = PhpStr::new(vec![0u8, 255, 0, 7]);
+        assert!(matches!(s.repr, Repr::Inline { .. }));
+        assert_eq!(s.as_bytes(), &[0, 255, 0, 7]);
+        assert_eq!(s.len(), 4);
+        assert!(!s.is_empty());
+        assert!(PhpStr::empty().is_empty());
     }
 }
