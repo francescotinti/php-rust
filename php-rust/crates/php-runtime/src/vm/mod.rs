@@ -9514,7 +9514,7 @@ impl<'m> Vm<'m> {
         } else {
             match arg {
                 Zval::Str(_) => arg,
-                Zval::Long(l) => Zval::Str(PhpStr::new(l.to_string().into_bytes())),
+                Zval::Long(l) => Zval::Str(PhpStr::from_i64(l)),
                 Zval::Double(_) | Zval::Bool(_) => {
                     Zval::Str(convert::to_zstr(&arg, &mut self.diags))
                 }
