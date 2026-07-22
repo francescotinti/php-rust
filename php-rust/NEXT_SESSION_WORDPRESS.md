@@ -1,4 +1,59 @@
-# Rotta WORDPRESS-FIRST — WP-track (dopo WP-37: call-site specialization + ATTRIBUZIONE STRINGHE per B — prossima sessione = B, SSO PhpStr)
+# Rotta WORDPRESS-FIRST — WP-track (dopo WP-38: SSO bocciato dai dati, costruttori salvati — prossima sessione = E, gc batching)
+
+> ⚡ **WP-38 (2026-07-22, gated `b90f12c`+`e52a8ad`, 5 commit)** — **sessione
+> B: SSO PhpStr PROVATO E BOCCIATO; salvati i costruttori zero-round-trip.**
+> **Verità di layout** (misurata con probe rustc): il "PhpStr resta 24B" di
+> WP-37 è IMPOSSIBILE in safe Rust — il discriminante non può sovrapporsi al
+> fat pointer del `Box<[u8]>` (niche-filling: l'altra variante deve evitare i
+> byte del niche). cap15 ⇒ Repr 24B / PhpStr **32B**; cap22 gratis (Repr resta
+> 24B tagged); cap7 ⇒ **16B/24B via niche** (= size pre-SSO); union unsafe
+> fuori roadmap (WP-33).
+> **Cronologia**: round 1 (SSO puro, funnel `new`): probe new≡old BYTE-ID ma
+> micro string +5,2% — diagnosi con micro SOLA-LETTURA: read-tax ≈ 0 ⇒ tassa
+> nei costruttori Vec-fed (il Vec del chiamante si alloca comunque, l'SSO
+> aggiunge copia+free). Round 2 (costruttori zero-Vec): micro ribaltato a
+> −0,5%… **ma media reale +2,5/2,8%** (5 run new 61,1-61,6 vs 5 old
+> 59,6-60,5, interleaved stesso giorno). Bisezione **cap7 (24B): ancora
+> +1,5%** ⇒ ~1% dal 32B (pressione cache clone/drop/GC), il resto copie e
+> branch diffusi. Sample whole-run: mi_free −20% e memmove −15% (l'SSO
+> "lavora"), maxrss −3% — ma il CPU non torna. **REVERT: 59,75 = old 59,87.**
+> ⭐⭐ LEZIONE 1: i micro string-heavy mentono DUE volte (branch predictor su
+> repr omogenea + residenza cache): verdetto SOLO su workload reale
+> interleaved con old dello stesso giorno. ⭐⭐ LEZIONE 2: mimalloc small-bin
+> costa meno di copia-inline+branch ⇒ **ridurre il COUNT di alloc non è una
+> leva su questo VM: il collo resta il churn Zval (drop/clone/gc)**. ⭐ Il
+> −25% alloc previsto dal census WP-37 si è AVVERATO nei sample ma ha reso
+> 0 CPU: attribuire in nanosecondi, non in conteggi.
+> **SALVATO nel tree** (neutro sul reale, bench38-str −2,2%/bench36 −0,5%):
+> `PhpStr::new` bound `AsRef<[u8]>+Into<Box<[u8]>>` (siti slice-fed senza
+> to_vec: explode/substr/trim/from_str), `concat2` exact-size (ops::concat +
+> fast path Concat(Str,Str)), `from_i64` (niente String/fmt; to_zstr Long +
+> param-parsing weak), `concat_n_join` **#[inline(never)] FUORI da run_loop**
+> (lezione WP-33 applicata — il join stava nel dispatch loop da WP-34),
+> static assert 24B. Cargo **1631** (+4).
+> **Gate/run**: gate22 TUTTO verde (corpus 1455/sess 28/date 351/refl 290
+> identici; ORM 3E/13F; hk 0E/0F; probe gd/mysqli/media byte-id; http 16
+> DIFF attesi; option/restapi identici); **run29 = run28 PER NOME** (30.472,
+> 0E/2F/86W/73S) — ⚠️ al primo tentativo +1F sideload
+> (`test_sideload_scaled_unique_filename` = flake WP-21): **azzerare
+> `wpdev/src/wp-content/uploads` SUBITO PRIMA di ogni full run** (i run
+> media di profiling li sporcano); ⭐ `progress.txt` di gate22 è APPEND-ONLY:
+> leggere dal timestamp della propria run. Media pair: **59,75/20,955 =
+> 2,85×**; footprint 12,0× invariato (repr revertata).
+> **📌 Bonus probe** (`wp38-harness/probe_wp38.php`, new≡old ⇒ preesistenti,
+> catalogati in `PHPR_DIVERGENCES_FROM_PHP.md` §3.7): (1) `sort($a,
+> SORT_STRING)` ignora `$flags` — array.rs ~421 usa sempre ops::compare;
+> `key_flag_cmp` esiste già per ksort, manca il value_flag_cmp (guardare
+> anche rsort/asort/arsort); (2) warning "Uninitialized string offset"
+> mancante su lettura a offset == strlen; (3) deprecation "Increment on
+> non-numeric string" mancante su `$s++` alfabetico.
+> **→ PROSSIMA SESSIONE = E (gc batching)** dal riprofilo WP-36 (mi_free 681
+> + mi_theap_collect 475 + drop Zval/Repr/Rc ~430 dominano; gc_note 15 +
+> sweep 12): batching delle note + sweep, ⭐⭐ sentinelle drop-order pinnate
+> PRIMA di ogni cambiamento di layout (metodo WP-32). Le tre parità §3.7
+> sono fix contenuti buoni come warm-up di sessione.
+
+# (storia WP-37)
 
 > ⚡ **WP-37 (2026-07-22, gated `32a5820`, 1 commit)** — **leva C (sottoinsieme
 > sicuro) + groundwork attribuzione per B**. **(C) `Func.simple_call`**
@@ -630,6 +685,7 @@ misurare e riportare all'utente il gap aggiornato e aggiornare la tabella
 | WP-35 | 59,6/20,99 = **2,84×** ⭐ | 4,73/0,39GB = **12,0×** | ~12:05/5:39 = **2,14×** | ~17/11,5 min = **1,5×** |
 | WP-36 | 61,4/21,06 = **2,92×** ⚠️ | 4,78/0,40GB = **12,1×** | ~12:05/5:39 = **2,14×** | ~17/11,5 min = **1,5×** |
 | WP-37 | 60,07/20,94 = **2,87×** | 4,72/0,39GB = **12,0×** | ~12:30/5:39 = **2,2×** (rumore) | ~17/11,5 min = **1,5×** |
+| WP-38 | 59,75/20,955 = **2,85×** (SSO revertato: neutro) | 4,72/0,39GB = **12,0×** (invariato) | ~12:29/5:39 = **2,2×** | ~17/11,5 min = **1,5×** |
 
 ⚠️ riga WP-36: NON è una regressione — l'old-binary (WP-35) rimisurato lo
 STESSO giorno dà 61,1s (2,90×): la giornata di WP-35 era favorevole; il
