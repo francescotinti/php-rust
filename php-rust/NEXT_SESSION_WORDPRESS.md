@@ -61,6 +61,19 @@
 > 50k root). Il canale gc_note (177M chiamate, walk array/closure) è il
 > secondo bersaglio.
 
+> **📘 Post-WP-39 (2026-07-23)**: adottato il
+> [code-migration-kit](https://github.com/anthropics/code-migration-kit-with-claude-code)
+> di Anthropic — **`migration/RULEBOOK.md`** ora è la fonte citabile delle
+> regole del porting (posture, ecosistema, mappature canoniche, BUG rule,
+> giudice); read-only in sessione, emendamenti via sign-off utente + handoff.
+> Marker grammar `BUG(port):`/`PERF(port):`/`TODO(port):` adottata per le
+> deviazioni future nel codice. Skill `code-migration` installata user-level
+> (kit clonato in `/Volumes/Extreme Pro/Claude/migration-kit`) per migrazioni
+> future; phpr resta sul proprio processo (post-Step-6). In coda WP-39 anche:
+> **sentinelle drop-order GC committate** (`9ed457b`, cargo 1636) e **GitHub
+> sincronizzato** (`0e566ab`: corpus 2609/64,3%, WP single+multi a 1 diff,
+> perf 2,71×/2,11× pubblicate).
+
 # (storia WP-38)
 
 > ⚡ **WP-38 (2026-07-22, gated `b90f12c`+`e52a8ad`, 5 commit)** — **sessione

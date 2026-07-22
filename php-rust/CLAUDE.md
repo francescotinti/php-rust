@@ -20,6 +20,15 @@ fallback. DEVI: (1) `/usr/bin/find . -name '._*' -type f -not -path './.git/*' -
 e (2) **riprovare ancora con Serena** la stessa operazione. Ripetere se ricompaiono.
 grep/Read diretti NON sono un fallback accettabile per evitare Serena.
 
+## Rulebook di traduzione (LEGGERE prima di toccare semantica)
+Le regole del porting — posture byte-parity/functional-parity, correct-or-absent,
+policy unsafe, mappature canoniche zval/refcount/destructor/GC, ecosistema
+ammesso/bandito, marker `BUG(port):`/`PERF(port):`/`TODO(port):`, disciplina dei
+gate per nome — sono in **[migration/RULEBOOK.md](migration/RULEBOOK.md)**
+(forma del [code-migration-kit](https://github.com/anthropics/code-migration-kit-with-claude-code)
+di Anthropic, adottato in WP-39). Il rulebook è read-only in sessione: gli
+emendamenti passano dal sign-off dell'utente e dal handoff.
+
 ## Stato & copertura
 - **[COVERAGE.md](COVERAGE.md)** è la pagina dati (misurata, non stimata): funzioni
   641/2143 (core stdlib 483/654 = 73%), corpus Zend 2324, aree complete, mancanti
