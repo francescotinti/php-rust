@@ -63,6 +63,68 @@ pub struct Object {
     /// "initialized" state: property reads/writes redirect here and `var_dump`
     /// renders a single synthetic `["instance"]` slot.
     pub proxy_instance: Option<Box<Zval>>,
+    /// Possible-roots-buffer bookkeeping carried in the object itself (WP-40):
+    /// the VM's GC candidate buffer holds one strong clone per noted object,
+    /// and the object records its own slot index here. Dedup (`buffered()`) is
+    /// a `Cell` read and mid-buffer removal is O(1), replacing the id-keyed
+    /// side HashMap the buffer used to probe on every note/demote.
+    pub gc: GcMark,
+}
+
+/// GC candidate-buffer marks (WP-40, see [`Object::gc`]): `pos` is the
+/// object's slot in the VM's possible-roots buffer (`u32::MAX` = not
+/// buffered); `birth` marks that entry as the VM's own creation-time seed —
+/// consumable by a parent's free cascade (WP-28) — rather than a holder's
+/// release note. `Cell`s: the marks are flipped through shared borrows while
+/// the object graph is being walked.
+#[derive(Debug)]
+pub struct GcMark {
+    pos: std::cell::Cell<u32>,
+    birth: std::cell::Cell<bool>,
+}
+
+impl GcMark {
+    pub fn new() -> GcMark {
+        GcMark { pos: std::cell::Cell::new(u32::MAX), birth: std::cell::Cell::new(false) }
+    }
+
+    /// Whether the object currently has a buffer entry (live slot).
+    pub fn buffered(&self) -> bool {
+        self.pos.get() != u32::MAX
+    }
+
+    /// The buffer slot index, if buffered.
+    pub fn pos(&self) -> Option<usize> {
+        let p = self.pos.get();
+        (p != u32::MAX).then_some(p as usize)
+    }
+
+    pub fn set_pos(&self, pos: usize) {
+        debug_assert!(pos < u32::MAX as usize);
+        self.pos.set(pos as u32);
+    }
+
+    /// Whether the buffer entry is a BIRTH seed (only meaningful while
+    /// `buffered()`; cleared with the entry).
+    pub fn birth(&self) -> bool {
+        self.birth.get()
+    }
+
+    pub fn set_birth(&self, birth: bool) {
+        self.birth.set(birth);
+    }
+
+    /// Drop both marks — the object no longer has a buffer entry.
+    pub fn clear(&self) {
+        self.pos.set(u32::MAX);
+        self.birth.set(false);
+    }
+}
+
+impl Default for GcMark {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 /// Which kind of uninitialized lazy object this is (PHP 8.4): a *ghost*
@@ -188,6 +250,8 @@ impl Object {
             typed_unset: self.typed_unset.clone(),
             lazy: self.lazy,
             proxy_instance: self.proxy_instance.clone(),
+            // A fresh copy has no buffer entry of its own.
+            gc: GcMark::new(),
         }
     }
 
@@ -682,6 +746,7 @@ mod tests {
             typed_unset: Vec::new(),
             lazy: None,
             proxy_instance: None,
+            gc: GcMark::new(),
         })))
     }
 

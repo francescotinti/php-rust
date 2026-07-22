@@ -485,9 +485,8 @@ pub(crate) fn run_module_with_hir<'m>(
         typed_refs: Vec::new(),
         created: BTreeMap::new(),
         destructed: HashSet::default(),
-        gc_roots: HashMap::default(),
-        gc_birth: HashSet::default(),
-        gc_queue: std::collections::VecDeque::new(),
+        gc_buf: Vec::new(),
+        gc_buf_head: 0,
         gc_cycle_roots: HashSet::default(),
         gc_cycle_threshold: Vm::GC_CYCLE_THRESHOLD,
         gc_light_demoted: HashSet::default(),
@@ -1428,26 +1427,27 @@ struct Vm<'m> {
     /// `gc_possible_root` buffer). [`Op::Sweep`] re-examines only these instead
     /// of all of `created`, turning the per-statement O(created) scan into
     /// O(candidates) — the fix for the O(n²) blow-up on large cyclic graphs.
-    /// Holds one strong clone per object id (the map key dedupes), so a
-    /// buffered candidate's `Rc::strong_count` is inflated by exactly 1.
-    /// Drained at each sweep (objects still referenced get re-noted the next
-    /// time they lose a reference), keeping the buffer small.
-    gc_roots: HashMap<u32, Rc<RefCell<Object>>>,
-    /// Ids whose `gc_roots` entry is BIRTH tracking ([`Vm::gc_track`]'s seed
-    /// for unhooked temp deaths) rather than a release note. Zend has no such
-    /// note: a parent's free cascade consumes it and frees the child in place
-    /// (tidy 010's node tree dying as a `var_dump` temp), whereas a release
-    /// note marks a holder that dies on its own, AFTER the parent
-    /// (object_reference.phpt's `&$foo->bar` copy cell).
-    gc_birth: HashSet<u32>,
-    /// FIFO over the ids in `gc_roots`, pushed as each id enters the map.
-    /// The sweep pops candidates in NOTE ORDER — the order their holders were
-    /// released — which is Zend's free/destructor order (a `&$o->prop` copy
-    /// cell releases after the local that held `$o`: object_reference.phpt;
-    /// tidy 010's dump temps release before the tree root). Still O(1) per
-    /// candidate (the queue replaced a quadratic whole-buffer re-filter);
-    /// entries whose id is no longer in the map are stale and skipped.
-    gc_queue: std::collections::VecDeque<u32>,
+    /// Holds one strong clone per noted object, so a buffered candidate's
+    /// `Rc::strong_count` is inflated by exactly 1, in NOTE ORDER — the order
+    /// their holders were released — which is Zend's free/destructor order (a
+    /// `&$o->prop` copy cell releases after the local that held `$o`:
+    /// object_reference.phpt; tidy 010's dump temps release before the tree
+    /// root). WP-40 layout: dedup and O(1) mid-buffer removal live in the
+    /// object itself ([`php_types::GcMark`]: slot index + BIRTH flag — a birth
+    /// entry is [`Vm::gc_track`]'s creation-time seed for unhooked temp
+    /// deaths, consumable by a parent's free cascade, whereas a release note
+    /// marks a holder that dies on its own AFTER the parent), replacing the
+    /// id-keyed HashMap + VecDeque pair whose per-note/per-demote hashing
+    /// dominated the gc channel (47.5M demotions per media run, WP-39
+    /// census). A removed/consumed entry is a `None` slot (live slot indices
+    /// never move); the buffer is fully drained and reset by the sweep tail /
+    /// collect_cycles, but persists across the destructor-scheduling break
+    /// (the re-run sweep resumes at [`Self::gc_buf_head`]).
+    gc_buf: Vec<Option<Rc<RefCell<Object>>>>,
+    /// Pop cursor into [`Self::gc_buf`]: slots before it are spent. A Vm
+    /// field, not a sweep local — a sweep that schedules a destructor breaks
+    /// out mid-drain and the re-run continues here.
+    gc_buf_head: usize,
     /// Possible roots of *cyclic* garbage (mirrors Zend's root buffer feeding
     /// `gc_collect_cycles`): a candidate the sweep popped that was not
     /// collectable lost a reference but still has holders — if those holders
@@ -1744,8 +1744,9 @@ impl<'m> Vm<'m> {
             self.lazy_props.remove(&id);
             self.lazy_options.remove(&id);
             self.lazy_initializing.remove(&id);
-            self.gc_roots.remove(&id);
-            self.gc_birth.remove(&id);
+            // (The candidate buffer cannot hold a freed id: its strong clone
+            // would have kept the object alive. The buffer marks live in the
+            // object and died with it — WP-40.)
             // A dead object's per-id VM state must not leak into the reused
             // handle: a stale FiberState reports "Cannot start a fiber that
             // has already been started" (fibers/destructors_002 under
@@ -1768,7 +1769,7 @@ impl<'m> Vm<'m> {
 
     /// Record a value that is about to be dropped as a possible GC root: if it
     /// (transitively) still holds tracked objects whose refcount is about to
-    /// fall, push them onto `gc_roots` so the next [`Op::Sweep`] re-examines
+    /// fall, push them onto the candidate buffer so the next [`Op::Sweep`] re-examines
     /// them (mirrors Zend's `gc_possible_root`). Over-noting is safe — the sweep
     /// re-checks `Rc::strong_count` — whereas under-noting delays a destructor,
     /// so this errs generous. A `Ref`/`Array`/`Closure` is descended only when
@@ -1794,9 +1795,7 @@ impl<'m> Vm<'m> {
                 // that window: a destructor-driven cleanup (e.g. a file
                 // unlink) can slip past the tests that depend on it (WP-21:
                 // REST sideload unique-filename flake).
-                if let std::collections::hash_map::Entry::Vacant(e) = self.gc_roots.entry(id) {
-                    e.insert(Rc::clone(rc));
-                    self.gc_queue.push_back(id);
+                if self.gc_buf_push(rc, false) {
                     #[cfg(feature = "gc-census")]
                     gc_census::note_inserted();
                 }
@@ -1833,6 +1832,38 @@ impl<'m> Vm<'m> {
         }
     }
 
+    /// Append `rc` to the possible-roots buffer, recording its slot in the
+    /// object's own [`php_types::GcMark`]; a no-op returning `false` if the
+    /// object is already buffered (the old map's vacant-entry semantics — in
+    /// particular, a release note never flips an existing BIRTH entry).
+    /// `birth` marks the entry as a creation-time seed ([`Self::gc_track`],
+    /// the light-demote re-seed) rather than a holder's release note.
+    fn gc_buf_push(&mut self, rc: &Rc<RefCell<Object>>, birth: bool) -> bool {
+        let b = rc.borrow();
+        if b.gc.buffered() {
+            return false;
+        }
+        b.gc.set_pos(self.gc_buf.len());
+        b.gc.set_birth(birth);
+        drop(b);
+        self.gc_buf.push(Some(Rc::clone(rc)));
+        true
+    }
+
+    /// Drop object `o`'s buffer entry (if any) and clear its marks — the old
+    /// map remove. The slot may already be `None` when the sweep itself popped
+    /// the entry (the candidate path): the marks are still set then, and the
+    /// caller drops the popped clone right after this call — the same instant
+    /// the map remove used to drop it.
+    fn gc_unbuffer(&mut self, o: &Rc<RefCell<Object>>) {
+        let b = o.borrow();
+        if let Some(p) = b.gc.pos() {
+            b.gc.clear();
+            drop(b);
+            self.gc_buf[p] = None;
+        }
+    }
+
     fn gc_sweep(&mut self, top: usize, ip: usize, main: bool) -> Result<(), PhpError> {
         self.gc_sweep_impl(Some((top, ip)), main)
     }
@@ -1849,71 +1880,85 @@ impl<'m> Vm<'m> {
         gc_census::sweep(main);
         if main && !self.gc_light_demoted.is_empty() {
             for id in std::mem::take(&mut self.gc_light_demoted) {
-                if let Some(o) = self.created.get(&id) {
-                    if let std::collections::hash_map::Entry::Vacant(e) = self.gc_roots.entry(id) {
-                        e.insert(Rc::clone(o));
-                        self.gc_queue.push_back(id);
-                        self.gc_cycle_roots.remove(&id);
-                        // A re-seed is phpr's own safety net (like birth
-                        // tracking), not a real holder's release: a parent's
-                        // free cascade may consume it (gc_release_child).
-                        self.gc_birth.insert(id);
-                    }
+                let Some(o) = self.created.get(&id).cloned() else { continue };
+                // A re-seed is phpr's own safety net (like birth tracking),
+                // not a real holder's release: a parent's free cascade may
+                // consume it (gc_release_child) — hence `birth = true`.
+                if self.gc_buf_push(&o, true) {
+                    self.gc_cycle_roots.remove(&id);
                 }
             }
         }
         log::trace!(
             target: "phpr::gc",
-            "sweep: {} tracked / {} candidate objects",
+            "sweep: {} tracked / {} candidate slots",
             self.created.len(),
-            self.gc_roots.len()
+            self.gc_buf.len() - self.gc_buf_head
         );
         let verify = gc_verify_enabled();
         loop {
             // Candidate selection: a possible root is collectable when its only
-            // strong references are `created` (1) and its own buffer clone (1).
-            // Pop the max-heap so candidates are visited newest-first (highest
-            // id), matching the legacy full-filter max-id order. A popped id no
-            // longer in the buffer is stale — skip it. A popped candidate whose
-            // strong_count is still > 2 is not collectable *now*: demote it to
-            // the cycle-roots buffer instead of rescanning it after every freed
-            // object — if it later loses another reference it is re-noted (and
-            // re-queued) like any candidate, and if its remaining holders are a
-            // dead cycle the cycle collector picks it up from there.
-            let cand_id = loop {
-                let Some(id) = self.gc_queue.pop_front() else { break None };
-                match self.gc_roots.get(&id) {
-                    None => continue,
-                    Some(o) if Rc::strong_count(o) == 2 => break Some(id),
-                    Some(_) => {
-                        #[cfg(feature = "gc-census")]
-                        gc_census::cand_demoted();
-                        self.gc_roots.remove(&id);
-                        self.gc_birth.remove(&id);
-                        self.gc_cycle_roots.insert(id);
-                        // A light sweep's demotion must be re-checked by the
-                        // enclosing main sweep (unhooked temp deaths).
-                        if !main {
-                            self.gc_light_demoted.insert(id);
-                        }
-                    }
+            // strong references are `created` (1) and its buffer clone (1 —
+            // popped below, so held by us during the check). Slots are popped
+            // in note order (FIFO — Zend's free/destructor order); a `None`
+            // slot was removed mid-buffer (a cascade-consumed birth seed) and
+            // is skipped, like the old map-stale queue ids. A popped candidate
+            // whose strong_count is still > 2 is not collectable *now*: demote
+            // it to the cycle-roots buffer instead of rescanning it after
+            // every freed object — if it later loses another reference it is
+            // re-noted (and re-buffered) like any candidate, and if its
+            // remaining holders are a dead cycle the cycle collector picks it
+            // up from there. The collectable candidate keeps its marks set
+            // (its slot index parks on the taken `None`) until the unbuffer
+            // point below — the map used to keep its entry live to there too.
+            let mut cand = loop {
+                let Some(slot) = self.gc_buf.get_mut(self.gc_buf_head) else { break None };
+                let taken = slot.take();
+                self.gc_buf_head += 1;
+                let Some(o) = taken else { continue };
+                if Rc::strong_count(&o) == 2 {
+                    break Some(o);
                 }
+                #[cfg(feature = "gc-census")]
+                gc_census::cand_demoted();
+                let b = o.borrow();
+                let id = b.id;
+                b.gc.clear();
+                drop(b);
+                self.gc_cycle_roots.insert(id);
+                // A light sweep's demotion must be re-checked by the
+                // enclosing main sweep (unhooked temp deaths).
+                if !main {
+                    self.gc_light_demoted.insert(id);
+                }
+                // The buffer clone drops here — the same instant the old
+                // map remove dropped it.
             };
+            let cand_id = cand.as_ref().map(|o| o.borrow().id);
 
             let chosen_id = if verify {
                 // Authoritative full scan, cross-checking buffer completeness.
-                let full_id = {
-                    let roots = &self.gc_roots;
-                    self.created
-                        .iter()
-                        .filter(|(id, o)| {
-                            let extra = roots.contains_key(id) as usize;
-                            Rc::strong_count(o) - extra == 1
-                        })
-                        .map(|(id, _)| *id)
-                        .max()
-                };
+                let full_id = self
+                    .created
+                    .iter()
+                    .filter(|(_, o)| {
+                        // The popped candidate still counts as buffered: we
+                        // hold its clone, as the map entry used to.
+                        let extra = o.borrow().gc.buffered() as usize;
+                        Rc::strong_count(o) - extra == 1
+                    })
+                    .map(|(id, _)| *id)
+                    .max();
                 if full_id != cand_id {
+                    // Park the popped candidate back in its slot: the old map
+                    // kept the entry (queue id spent) until the sweep-tail
+                    // clear, and the counts must keep matching that.
+                    if let Some(c) = cand.take() {
+                        let p = c.borrow().gc.pos();
+                        if let Some(p) = p {
+                            self.gc_buf[p] = Some(c);
+                        }
+                    }
                     // `full_id` is collectable but the candidate buffer did not
                     // surface it: a reference-drop site is missing a `gc_note`.
                     if let Some(fid) = full_id {
@@ -1964,10 +2009,15 @@ impl<'m> Vm<'m> {
                         continue;
                     }
                 }
-                // Drop the candidate buffer.
-                self.gc_roots.clear();
-                self.gc_queue.clear();
-                self.gc_birth.clear();
+                // Drop the candidate buffer. Selection exhausted it, so every
+                // slot is spent (`None`) — except a verify-mismatch leftover
+                // parked behind the cursor, whose marks must clear with it.
+                for slot in self.gc_buf.drain(..) {
+                    if let Some(o) = slot {
+                        o.borrow().gc.clear();
+                    }
+                }
+                self.gc_buf_head = 0;
                 break;
             };
 
@@ -1975,12 +2025,34 @@ impl<'m> Vm<'m> {
             // A candidate not in `created` is an object the GC never tracked (e.g.
             // an interned enum-case singleton that was noted on a value drop): its
             // `strong_count == 2` is a false positive, so just drop it from the
-            // buffer and move on.
+            // buffer and move on. (`cand` — normally the chosen object's own
+            // buffer clone — drops at the unbuffer point, exactly where the map
+            // remove used to drop it; under a verify mismatch the chosen id was
+            // never popped, so its entry is cleared through its own marks.)
             let Some(o) = self.created.remove(&id) else {
-                self.gc_unnote(id);
+                match &cand {
+                    Some(c) if c.borrow().id == id => {
+                        self.gc_unbuffer(c);
+                    }
+                    _ => {
+                        // Verify-mismatch, untracked chosen id: hunt down its
+                        // buffer entry (diagnostic mode only — no index).
+                        if let Some(slot) = self
+                            .gc_buf
+                            .iter_mut()
+                            .find(|s| s.as_ref().is_some_and(|o| o.borrow().id == id))
+                        {
+                            if let Some(o) = slot.take() {
+                                o.borrow().gc.clear();
+                            }
+                        }
+                    }
+                }
+                drop(cand);
                 continue;
             };
-            self.gc_unnote(id);
+            self.gc_unbuffer(&o);
+            drop(cand);
             #[cfg(feature = "gc-census")]
             gc_census::cand_freed();
             let cid = o.borrow().class_id as usize;
@@ -2101,27 +2173,30 @@ impl<'m> Vm<'m> {
             Zval::Object(rc) => {
                 let (id, cid, lazy) = {
                     let b = rc.borrow();
+                    // A pending BIRTH entry is phpr's own temp-death seed, not
+                    // a real holder's pending release — consume it (drop the
+                    // buffer clone in place; the slot goes stale as `None`) so
+                    // the child frees inside this cascade, like Zend (tidy
+                    // 010's tree dying as a temp).
+                    if b.gc.birth() {
+                        if let Some(p) = b.gc.pos() {
+                            b.gc.clear();
+                            self.gc_buf[p] = None;
+                        }
+                    }
                     (b.id, b.class_id as usize, b.lazy.is_some())
                 };
                 // Holders of an exclusively-held child: `created` + the owning
                 // slot/cell. More means shared (another prop, a live variable,
                 // a buffer clone) — buffered path.
-                // A pending BIRTH entry is phpr's own temp-death seed, not a
-                // real holder's pending release — consume it (drop the buffer
-                // clone; the queue entry goes stale) so the child frees inside
-                // this cascade, like Zend (tidy 010's tree dying as a temp).
-                if self.gc_birth.contains(&id) && self.gc_roots.contains_key(&id) {
-                    self.gc_roots.remove(&id);
-                    self.gc_birth.remove(&id);
-                }
-                // A child still QUEUED with a RELEASE note (its own holder
+                // A child still BUFFERED with a RELEASE note (its own holder
                 // released after the parent's — note order is release order
-                // under the FIFO queue) dies through that later release in
+                // under the FIFO buffer) dies through that later release in
                 // Zend, AFTER the parent: keep it buffered
                 // (object_reference.phpt's `&$foo->bar` copy cell).
                 let exclusive = Rc::strong_count(rc) == 2
                     && !lazy
-                    && !self.gc_roots.contains_key(&id)
+                    && !rc.borrow().gc.buffered()
                     && self.created.get(&id).is_some_and(|c| Rc::ptr_eq(c, rc))
                     && (self.destructed.contains(&id)
                         || resolve_method_runtime(&self.classes, cid, b"__destruct").is_none());
@@ -2164,14 +2239,6 @@ impl<'m> Vm<'m> {
         }
     }
 
-    /// Remove object `id`'s candidate clone from the possible-roots buffer (if
-    /// present), so the buffer no longer keeps it alive. Called when the sweep
-    /// takes ownership of an object it is about to free.
-    fn gc_unnote(&mut self, id: u32) {
-        self.gc_roots.remove(&id);
-        self.gc_birth.remove(&id);
-    }
-
     /// Track a freshly created object as a possible root. A temporary that is
     /// created and then dropped within a single statement (e.g.
     /// `Foo::make()->bar`) is consumed off the operand stack by ops we do not
@@ -2180,12 +2247,7 @@ impl<'m> Vm<'m> {
     /// caught it. Objects that survive (stored in a variable/property) are simply
     /// drained and re-noted when they later lose a reference.
     fn gc_track(&mut self, rc: &Rc<RefCell<Object>>) {
-        let id = rc.borrow().id;
-        if let std::collections::hash_map::Entry::Vacant(e) = self.gc_roots.entry(id) {
-            e.insert(Rc::clone(rc));
-            self.gc_queue.push_back(id);
-            self.gc_birth.insert(id);
-        }
+        self.gc_buf_push(rc, true);
     }
 
     /// Note every object held by a frame that is being dropped (a returning or
@@ -2468,11 +2530,16 @@ impl<'m> Vm<'m> {
         loop {
             // Leftover acyclic candidates join the root set; their buffer
             // clones are dropped so the classifier sees only real holders.
-            let leftover: Vec<u32> = self.gc_roots.keys().copied().collect();
-            self.gc_roots.clear();
-            self.gc_queue.clear();
-            self.gc_birth.clear();
-            self.gc_cycle_roots.extend(leftover);
+            for slot in self.gc_buf.drain(..) {
+                if let Some(o) = slot {
+                    let b = o.borrow();
+                    let id = b.id;
+                    b.gc.clear();
+                    drop(b);
+                    self.gc_cycle_roots.insert(id);
+                }
+            }
+            self.gc_buf_head = 0;
             let roots: Vec<u32> = self
                 .gc_cycle_roots
                 .drain()
@@ -2542,8 +2609,11 @@ impl<'m> Vm<'m> {
             }
             total += (taken.len() + dead_containers) as i64;
             for (id, props, proxy) in taken {
-                self.created.remove(&id);
-                self.gc_unnote(id);
+                if let Some(rc) = self.created.remove(&id) {
+                    // Drop any buffer entry a destructor-phase note re-added
+                    // (the old map remove, same instant).
+                    self.gc_unbuffer(&rc);
+                }
                 // The dropped contents — properties, a proxy's real instance,
                 // a lazy wrapper's initializer closure — may hold the last
                 // reference to garbage outside the white set: note everything
@@ -6395,6 +6465,7 @@ impl<'m> Vm<'m> {
                         readonly_clone_writable: Vec::new(), typed_unset: Vec::new(),
                         lazy: None,
                         proxy_instance: None,
+                        gc: php_types::GcMark::new(),
                     };
                     let out = Zval::Object(Rc::new(RefCell::new(synth)));
                     memo.insert(addr, out.clone());
@@ -6744,7 +6815,7 @@ impl<'m> Vm<'m> {
             props.set(name, Zval::Undef);
         }
         let id = self.next_id();
-        let obj = Object { class_id: cid as u32, class_name, props, id, info, readonly_init: Vec::new(), readonly_clone_writable: Vec::new(), typed_unset: Vec::new(), lazy: None, proxy_instance: None };
+        let obj = Object { class_id: cid as u32, class_name, props, id, info, readonly_init: Vec::new(), readonly_clone_writable: Vec::new(), typed_unset: Vec::new(), lazy: None, proxy_instance: None, gc: php_types::GcMark::new() };
         let rc = Rc::new(RefCell::new(obj));
         // Track for `__destruct` (OOP-3d), like every other freshly minted object.
         self.created.insert(id, Rc::clone(&rc));
@@ -8635,7 +8706,7 @@ impl<'m> Vm<'m> {
         let class_name = Rc::clone(&cc.class_name);
         let info = Rc::clone(&cc.info);
         let id = self.next_id();
-        let obj = Object { class_id: cid as u32, class_name, props, id, info, readonly_init: Vec::new(), readonly_clone_writable: Vec::new(), typed_unset: Vec::new(), lazy: None, proxy_instance: None };
+        let obj = Object { class_id: cid as u32, class_name, props, id, info, readonly_init: Vec::new(), readonly_clone_writable: Vec::new(), typed_unset: Vec::new(), lazy: None, proxy_instance: None, gc: php_types::GcMark::new() };
         let rc = Rc::new(RefCell::new(obj));
         // Track for `__destruct` (OOP-3d): the extra strong ref drives the sweep.
         self.created.insert(id, Rc::clone(&rc));
@@ -9498,6 +9569,7 @@ impl<'m> Vm<'m> {
             readonly_clone_writable: Vec::new(), typed_unset: Vec::new(),
             lazy: None,
             proxy_instance: None,
+            gc: php_types::GcMark::new(),
         };
         let rc = Rc::new(RefCell::new(obj));
         self.enum_cache.insert((class, case), Rc::clone(&rc));

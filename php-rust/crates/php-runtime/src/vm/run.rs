@@ -2982,6 +2982,7 @@ impl<'m> super::Vm<'m> {
                             // A clone is a concrete copy; lazy state is not carried.
                             lazy: None,
                             proxy_instance: None,
+                            gc: php_types::GcMark::new(),
                         };
                         Rc::new(RefCell::new(obj))
                     };
@@ -3025,6 +3026,7 @@ impl<'m> super::Vm<'m> {
                             readonly_clone_writable: Vec::new(), typed_unset: Vec::new(),
                             lazy: Some(LazyKind::Proxy),
                             proxy_instance: Some(Box::new(clone_val.clone())),
+                            gc: php_types::GcMark::new(),
                         };
                         let wrc = Rc::new(RefCell::new(wrapper));
                         self.created.insert(wrc.borrow().id, Rc::clone(&wrc));
@@ -5096,14 +5098,15 @@ impl<'m> super::Vm<'m> {
                     // Frame::in_destructor (handle-id release order).
                     if !self.frames[top].flags.get(FrameFlags::IN_DESTRUCTOR) {
                         // WP-39 empty-buffer fast path: nothing was noted since
-                        // the last sweep (queue empty ⇒ roots/birth empty too —
-                        // the sweep tail clears them together), no light
-                        // demotions for a main sweep to re-seed, and the cycle
-                        // collector's pressure trigger is under threshold ⇒ the
-                        // sweep body would only walk/clear empty buffers.
-                        // gc-census (media): 53M statement sweeps, ~6M with a
-                        // non-empty buffer — the rest take this path.
-                        let noop = self.gc_queue.is_empty()
+                        // the last sweep (cursor at the end ⇒ no pending
+                        // candidate slots — the sweep tail drains and resets
+                        // the buffer), no light demotions for a main sweep to
+                        // re-seed, and the cycle collector's pressure trigger
+                        // is under threshold ⇒ the sweep body would only
+                        // walk/clear empty buffers. gc-census (media): 53M
+                        // statement sweeps, ~6M with a non-empty buffer — the
+                        // rest take this path.
+                        let noop = self.gc_buf_head >= self.gc_buf.len()
                             && (!*main || self.gc_light_demoted.is_empty())
                             && self.gc_cycle_roots.len() < self.gc_cycle_threshold;
                         if !noop {
