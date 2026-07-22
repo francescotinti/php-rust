@@ -15129,14 +15129,82 @@ mod tests {
         let a = crate::bytecode::PropIc::default();
         let b = crate::bytecode::PropIc::default();
         assert!(a == b);
-        a.fill(7, 3);
+        a.fill(7, 0, 3);
         assert!(a == b);
         let c = a.clone();
-        assert_eq!(c.get(), a.get());
-        c.fill(9, 1);
-        assert_eq!(a.get(), Some((10, 1)), "clone shares the cell");
+        assert_eq!(c.get(0), a.get(0));
+        c.fill(9, 0, 1);
+        assert_eq!(a.get(0), Some((10, 1)), "clone shares the cell");
+        assert_eq!(a.get(5), None, "scope is part of the key (WP-35)");
         crate::bytecode::bump_ic_epoch();
-        assert_eq!(a.get(), None, "epoch bump invalidates");
+        assert_eq!(a.get(0), None, "epoch bump invalidates");
+    }
+
+    #[test]
+    fn prop_ic_scoped_private_read_hits() {
+        // WP-35: a private read inside the declaring class is cacheable —
+        // the loop takes the IC hit after the first fill and keeps reading
+        // the right slot.
+        assert_eq!(
+            vm_stdout(
+                b"<?php
+                class S { private $p = 7; public function sum($n) { $t = 0; for ($i = 0; $i < $n; $i++) { $t += $this->p; } return $t; } }
+                echo (new S)->sum(5);"
+            ),
+            b"35"
+        );
+    }
+
+    #[test]
+    fn prop_ic_scope_key_blocks_cross_scope_hit() {
+        // WP-35: the SAME op site (one closure body) is executed under two
+        // different scopes via Closure::bind — each scope must resolve its
+        // own private storage; a stale hit from the other scope would read
+        // the wrong slot. Alternating calls force fill/miss churn.
+        assert_eq!(
+            vm_stdout(
+                b"<?php
+                class A { private $v = 'a'; }
+                class B { private $v = 'b'; }
+                $f = function () { return $this->v; };
+                $fa = Closure::bind($f, new A, A::class);
+                $fb = Closure::bind($f, new B, B::class);
+                for ($i = 0; $i < 3; $i++) { echo $fa(), $fb(); }"
+            ),
+            b"ababab"
+        );
+    }
+
+    #[test]
+    fn prop_ic_parent_private_shadowed_by_child_public() {
+        // Parent-private + child-public same-name props coexist in separate
+        // slots: the parent-scope site reads the private, the outside site
+        // reads the child's public — both loops must hit their OWN slot.
+        assert_eq!(
+            vm_stdout(
+                b"<?php
+                class P { private $x = 'p'; public function rd() { return $this->x; } }
+                class C extends P { public $x = 'c'; }
+                $c = new C;
+                for ($i = 0; $i < 3; $i++) { echo $c->rd(), $c->x; }"
+            ),
+            b"pcpcpc"
+        );
+    }
+
+    #[test]
+    fn prop_ic_scoped_isset_private() {
+        // isset() on a private: true (value-based) from the declaring scope,
+        // false (inaccessible, no magic) from outside — loop both sites.
+        assert_eq!(
+            vm_stdout(
+                b"<?php
+                class S { private $p = 1; private $q = null; public function probe() { return (isset($this->p) ? 'y' : 'n') . (isset($this->q) ? 'y' : 'n'); } }
+                $s = new S;
+                for ($i = 0; $i < 3; $i++) { echo $s->probe(), isset($s->p) ? 'Y' : 'N'; }"
+            ),
+            b"ynNynNynN"
+        );
     }
 
     #[test]

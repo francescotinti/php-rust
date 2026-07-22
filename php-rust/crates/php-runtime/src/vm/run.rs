@@ -305,6 +305,7 @@ impl<'m> super::Vm<'m> {
         ic: &crate::bytecode::PropIc,
     ) -> Result<(), PhpError> {
         let cur = self.frames[top].class;
+        let sk = crate::bytecode::PropIc::scope_key(cur);
         // FAST PATH (WP-25): a present, initialized slot on a
         // non-lazy instance of a hook-free all-public class reads
         // straight off the table. A miss or `Undef` falls through —
@@ -314,7 +315,12 @@ impl<'m> super::Vm<'m> {
             let b = o.borrow();
             if b.lazy.is_none() {
                 let ci = &self.classes[b.class_id as usize];
-                if ci.all_props_public && !ci.has_prop_hooks {
+                if ci.all_props_public
+                    && !ci.has_prop_hooks
+                    // A scope-private override targets the scope's mangled
+                    // slot, not the leaf entry this shortcut reads (WP-35).
+                    && !scope_private_overrides(&self.classes, b.class_id as usize, &name, cur)
+                {
                     if let Some(v) = b.props.get(&name) {
                         if !matches!(v, Zval::Undef) {
                             // IC fill from the fast path too —
@@ -324,7 +330,7 @@ impl<'m> super::Vm<'m> {
                             // (every access re-pays slot_of).
                             if let Some(pi) = ci.prop_info.get(&name[..]) {
                                 if let Some(i) = pi.slot {
-                                    ic.fill(b.class_id, i);
+                                    ic.fill(b.class_id, sk, i);
                                 }
                             }
                             // deref_clone: a slot holding a Ref
@@ -379,11 +385,16 @@ impl<'m> super::Vm<'m> {
             key = match resolve_prop_access(&self.classes, ocid, &name, cur) {
                 PropAccess::Slot { key: k, slot } => {
                     slot_idx = slot;
-                    // IC fill: only a scope-independent outcome —
-                    // PUBLIC, hook-free, backed (see PropIc).
-                    if let (Some(i), Some(pi)) = (slot, prop_info(&self.classes, ocid, &name)) {
-                        if pi.visibility == crate::hir::Visibility::Public && pi.hooks.is_none() {
-                            ic.fill(ocid as u32, i);
+                    // IC fill (WP-35): ANY visibility — the scope is part of
+                    // the cell key, so a hit re-derives this resolution
+                    // exactly. Gated on `!hook_guarded`: reaching Slot with
+                    // the guard off means prop_hook/is_virtual_hooked were
+                    // checked EMPTY this very execution (class-level fact);
+                    // under an active hook nothing is cached (a future
+                    // unguarded read must dispatch the hook).
+                    if let Some(i) = slot {
+                        if !self.hook_guarded(oid, &name) {
+                            ic.fill(ocid as u32, sk, i);
                         }
                     }
                     Cow::Borrowed(k)
@@ -3056,6 +3067,7 @@ impl<'m> super::Vm<'m> {
                 }
                 Op::PropGet { name, ic } => {
                     let obj = self.frames[top].stack.pop().expect("PropGet object");
+                    let sk = crate::bytecode::PropIc::scope_key(self.frames[top].class);
                     let target = obj.deref_clone();
                     // INLINE CACHE (WP-29): the site's last cacheable
                     // resolution — a PUBLIC hook-free backed slot on this
@@ -3064,7 +3076,7 @@ impl<'m> super::Vm<'m> {
                     // `__get`, `Undef` = typed-uninit fatal, other class, lazy
                     // wrapper) falls through to the paths that own it.
                     if let Zval::Object(o) = &target {
-                        if let Some((cid1, slot)) = ic.get() {
+                        if let Some((cid1, slot)) = ic.get(sk) {
                             let b = o.borrow();
                             if b.class_id + 1 == cid1 && b.lazy.is_none() {
                                 if let Some(v) = b.props.get_slot(slot) {
@@ -3086,9 +3098,10 @@ impl<'m> super::Vm<'m> {
                     // Everything else clones the receiver once and takes the
                     // shared PropGet fallback, so the fused op stays
                     // semantically identical to This+PropGet by construction.
+                    let sk = crate::bytecode::PropIc::scope_key(self.frames[top].class);
                     let mut hit: Option<Zval> = None;
                     if let Some(Zval::Object(o)) = &self.frames[top].this {
-                        if let Some((cid1, slot)) = ic.get() {
+                        if let Some((cid1, slot)) = ic.get(sk) {
                             let b = o.borrow();
                             if b.class_id + 1 == cid1 && b.lazy.is_none() {
                                 if let Some(v) = b.props.get_slot(slot) {
@@ -3230,7 +3243,7 @@ impl<'m> super::Vm<'m> {
                     // ones (lazy, enum, present slot, Ref×typed_refs) are
                     // re-checked here.
                     if let Zval::Object(o) = &target {
-                        if let Some((cid1, slot)) = ic.get() {
+                        if let Some((cid1, slot)) = ic.get(crate::bytecode::PropIc::scope_key(cur)) {
                             let hit = {
                                 let b = o.borrow();
                                 b.class_id + 1 == cid1
@@ -3266,6 +3279,9 @@ impl<'m> super::Vm<'m> {
                             let ok = b.lazy.is_none()
                                 && !b.info.is_enum_case
                                 && self.classes[b.class_id as usize].plain_set_props
+                                // A scope-private override writes the scope's
+                                // mangled slot, not the leaf entry (WP-35).
+                                && !scope_private_overrides(&self.classes, b.class_id as usize, &name, cur)
                                 && match b.props.get(&name) {
                                     Some(Zval::Ref(_)) => self.typed_refs.is_empty(),
                                     Some(_) => true,
@@ -3282,7 +3298,7 @@ impl<'m> super::Vm<'m> {
                                 .get(&name[..])
                                 .and_then(|pi| pi.slot);
                             if let Some(i) = slot {
-                                ic.fill(fcid, i);
+                                ic.fill(fcid, crate::bytecode::PropIc::scope_key(cur), i);
                             }
                             if let Some(old) = write_property_at(&target, &name, slot, value.clone())? {
                                 self.gc_note(&old);
@@ -3358,7 +3374,7 @@ impl<'m> super::Vm<'m> {
                                 // hook-free in blocco — see PropIc).
                                 if let Some(i) = slot {
                                     if self.classes[ocid].plain_set_props {
-                                        ic.fill(ocid as u32, i);
+                                        ic.fill(ocid as u32, crate::bytecode::PropIc::scope_key(cur), i);
                                     }
                                 }
                                 Cow::Borrowed(k)
@@ -3527,7 +3543,7 @@ impl<'m> super::Vm<'m> {
                     // is re-checked here. An absent/Undef slot falls through
                     // (undefined-prop warning, dynamic creation, `__get`).
                     if let Zval::Object(o) = &obj_d {
-                        if let Some((cid1, slot)) = ic.get() {
+                        if let Some((cid1, slot)) = ic.get(crate::bytecode::PropIc::scope_key(cur)) {
                             let hit = {
                                 let b = o.borrow();
                                 b.class_id + 1 == cid1
@@ -3575,7 +3591,7 @@ impl<'m> super::Vm<'m> {
                                         && !b.info.is_enum_case
                                         && self.classes[b.class_id as usize].plain_set_props
                                     {
-                                        ic.fill(b.class_id, i);
+                                        ic.fill(b.class_id, crate::bytecode::PropIc::scope_key(cur), i);
                                     }
                                 }
                                 Cow::Borrowed(k)
@@ -3714,7 +3730,7 @@ impl<'m> super::Vm<'m> {
                     // present non-`Undef` PUBLIC slot on the cached class
                     // answers with zero hashing; anything else falls through.
                     if let Zval::Object(o) = &recv {
-                        if let Some((cid1, slot)) = ic.get() {
+                        if let Some((cid1, slot)) = ic.get(crate::bytecode::PropIc::scope_key(cur)) {
                             let b = o.borrow();
                             if b.class_id + 1 == cid1 && b.lazy.is_none() {
                                 if let Some(v) = b.props.get_slot(slot) {
@@ -3737,14 +3753,17 @@ impl<'m> super::Vm<'m> {
                         let b = o.borrow();
                         if b.lazy.is_none() {
                             let ci = &self.classes[b.class_id as usize];
-                            if ci.all_props_public && !ci.has_prop_hooks {
+                            if ci.all_props_public
+                                && !ci.has_prop_hooks
+                                && !scope_private_overrides(&self.classes, b.class_id as usize, &name, cur)
+                            {
                                 if let Some(v) = b.props.get(&name) {
                                     if !matches!(v, Zval::Undef) {
                                         // IC fill from the fast path too (see
                                         // PropGet).
                                         if let Some(pi) = ci.prop_info.get(&name[..]) {
                                             if let Some(i) = pi.slot {
-                                                ic.fill(b.class_id, i);
+                                                ic.fill(b.class_id, crate::bytecode::PropIc::scope_key(cur), i);
                                             }
                                         }
                                         let set = !matches!(v.deref_clone(), Zval::Null | Zval::Undef);
@@ -3788,11 +3807,14 @@ impl<'m> super::Vm<'m> {
                         match resolve_prop_access(&self.classes, ocid, &name, cur) {
                             PropAccess::Denied { .. } => false,
                             PropAccess::Slot { key, slot } => {
-                                // IC fill: scope-independent outcomes only
-                                // (public, hook-free, backed — see PropIc).
-                                if let (Some(i), Some(pi)) = (slot, prop_info(&self.classes, ocid, &name)) {
-                                    if pi.visibility == crate::hir::Visibility::Public && pi.hooks.is_none() {
-                                        ic.fill(ocid as u32, i);
+                                // IC fill (WP-35): any visibility, scope in
+                                // the key; gated on `!hook_guarded` exactly
+                                // like the PropGet fill (reaching Slot with
+                                // the guard off means the hook probes came up
+                                // empty this execution).
+                                if let Some(i) = slot {
+                                    if !self.hook_guarded(oid, &name) {
+                                        ic.fill(ocid as u32, crate::bytecode::PropIc::scope_key(cur), i);
                                     }
                                 }
                                 prop_isset_at(&target, &key, slot)

@@ -462,6 +462,29 @@ pub(super) fn resolve_prop_access<'a>(classes: &[&'a CompiledClass], obj_class: 
     }
 }
 
+/// True when [`resolve_prop_access`]'s step-1 rule applies: the running
+/// scope declares its OWN private `name` and the object is an instance of
+/// that scope — the access targets the scope's mangled slot, so any
+/// leaf-table shortcut (the WP-25 per-class fast paths, which read the
+/// child's flattened entry) would resolve the WRONG storage. Discovered by
+/// the WP-35 scoped-IC tests: parent-private shadowed by a child-public
+/// same-name prop read 'c' where Zend reads 'p'.
+pub(super) fn scope_private_overrides(
+    classes: &[&CompiledClass],
+    obj_class: ClassId,
+    name: &[u8],
+    scope: Option<ClassId>,
+) -> bool {
+    if let Some(s) = scope {
+        if let Some(pi) = prop_info(classes, s, name) {
+            return pi.visibility == Visibility::Private
+                && pi.declaring_class == s
+                && class_is_a(classes, obj_class, s);
+        }
+    }
+    false
+}
+
 /// The property-resolution context a mixed field path (the recursive
 /// `field_write` / `field_get` / `field_unset` / `field_cell` walkers) drills
 /// with: the loaded classes plus the scope every `Prop` step resolves from.

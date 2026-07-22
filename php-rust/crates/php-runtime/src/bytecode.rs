@@ -172,39 +172,55 @@ fn ic_epoch() -> u32 {
     IC_EPOCH.with(|e| e.get())
 }
 
-/// Monomorphic per-op-site property cache (WP-29, lo Zend inline cache):
-/// `(epoch, class_id + 1, slot)` dell'ultima risoluzione cache-abile;
-/// `class_id+1 == 0` = vuota, epoch ≠ corrente = stantia (id di un run
-/// precedente). Riempita SOLO per esiti scope-indipendenti (proprietà
-/// public, classe senza hook; per le scritture anche `plain_set_props`),
-/// così un hit è valido per qualunque scope — le closure possono essere
-/// ri-bound.
+/// Monomorphic per-op-site property cache (WP-29, lo Zend inline cache;
+/// SCOPE-AWARE dal WP-35): `(epoch, class_id + 1, scope_id + 1 | 0, slot)`
+/// dell'ultima risoluzione cache-abile; `class_id+1 == 0` = vuota, epoch ≠
+/// corrente = stantia (id di un run precedente). Lo SCOPE chiamante fa
+/// parte della CHIAVE: un hit vale solo per la stessa coppia
+/// (classe receiver, scope) che ha riempito la cella, quindi anche gli
+/// esiti private/protected sono cache-abili — `Closure::bind` che porta un
+/// altro scope sul sito produce un MISS, mai un hit errato (la lezione
+/// WP-29 "mai cachare visibilità non-public" valeva per celle keyed sulla
+/// sola classe receiver). Le letture (GET/ISSET) fillano qualunque
+/// visibilità purché il canale hook sia strutturalmente assente per
+/// (classe, prop); le scritture restano `plain_set_props`-only.
 ///
-/// La cella è `Rc`-condivisa: il dispatch CLONA l'op a ogni esecuzione
-/// (WP-22), quindi il clone deve puntare alla STESSA cache perché i fill
-/// persistano sul sito. Lo stato resta invisibile all'uguaglianza
-/// strutturale (`Func` è `PartialEq` per la unit-cache: due compilazioni
-/// identiche DEVONO confrontare uguali qualunque cosa la VM abbia cachato).
+/// La cella è `Rc`-condivisa: il clone dell'op deve puntare alla STESSA
+/// cache perché i fill persistano sul sito. Lo stato resta invisibile
+/// all'uguaglianza strutturale (`Func` è `PartialEq` per la unit-cache:
+/// due compilazioni identiche DEVONO confrontare uguali qualunque cosa la
+/// VM abbia cachato).
 #[derive(Debug)]
-pub struct PropIc(Rc<std::cell::Cell<(u32, u32, u32)>>);
+pub struct PropIc(Rc<std::cell::Cell<(u32, u32, u32, u32)>>);
 
 impl PropIc {
-    /// The cached `(class_id + 1, slot)` when filled IN THIS RUN.
+    /// The cached `(class_id + 1, slot)` when filled IN THIS RUN for
+    /// exactly this calling scope (see [`PropIc::scope_key`]).
     #[inline]
-    pub fn get(&self) -> Option<(u32, u32)> {
-        let (epoch, cid1, slot) = self.0.get();
-        (cid1 != 0 && epoch == ic_epoch()).then_some((cid1, slot))
+    pub fn get(&self, scope_key: u32) -> Option<(u32, u32)> {
+        let (epoch, cid1, sk, slot) = self.0.get();
+        (cid1 != 0 && sk == scope_key && epoch == ic_epoch()).then_some((cid1, slot))
     }
 
     #[inline]
-    pub fn fill(&self, class_id: u32, slot: u32) {
-        self.0.set((ic_epoch(), class_id + 1, slot));
+    pub fn fill(&self, class_id: u32, scope_key: u32, slot: u32) {
+        self.0.set((ic_epoch(), class_id + 1, scope_key, slot));
+    }
+
+    /// Key form of a calling scope: `ClassId + 1`, `0` for no scope
+    /// (global code / free functions).
+    #[inline]
+    pub fn scope_key(cur: Option<crate::hir::ClassId>) -> u32 {
+        match cur {
+            Some(c) => c as u32 + 1,
+            None => 0,
+        }
     }
 }
 
 impl Default for PropIc {
     fn default() -> Self {
-        PropIc(Rc::new(std::cell::Cell::new((0, 0, 0))))
+        PropIc(Rc::new(std::cell::Cell::new((0, 0, 0, 0))))
     }
 }
 
