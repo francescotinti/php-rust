@@ -448,24 +448,38 @@ chiavi engine-hardwired storiche. Divergenze deliberate:
 - Il flusso `phpr -d`: gli override si applicano SOLO alle direttive registrate
   (identico all'invisibilità di `php -d unknown=x` a `ini_get`).
 
-### 3.7 Gap scovati dalla probe string WP-38 (2026-07-22, preesistenti)
+### 3.7 Gap scovati dalla probe string WP-38 — ✅ CHIUSI in WP-39 (2026-07-22)
 
-Scoperti da `wp38-harness/probe_wp38.php` (new≡old byte-id: NON introdotti
-dall'esperimento SSO). Verificati contro l'oracle 8.5.7:
+Scoperti da `wp38-harness/probe_wp38.php`; chiusi/riclassificati in WP-39
+(probe oracle-pinned `wp39-harness/probe_wp39.php` + `probe_offset_edge.php`
++ `probe_edge2/3.php`):
 
-- **`sort($a, SORT_STRING)` ignora `$flags`** — `sort()` in
-  `php-builtins/src/array.rs` (~421) usa sempre `ops::compare` (loose), quindi
-  `['','10','9']` con SORT_STRING ordina `9` prima di `10` dove Zend confronta
-  i byte (`10` < `9`). `ksort`/`krsort` hanno già il comparatore flag-aware
-  (`key_flag_cmp`); il value-sort no. Probabile stesso gap in
-  `rsort`/`asort`/`arsort`. Fix contenuto: parse flags + comparatore
-  `value_flag_cmp` (attenzione a SORT_FLAG_CASE e SORT_NUMERIC).
-- **Warning "Uninitialized string offset N" mancante** — la lettura di un
-  offset == strlen (`$s[15]` su stringa di 15) in phpr restituisce "" senza
-  emettere il warning che l'oracle emette.
-- **Deprecation "Increment on non-numeric string is deprecated" mancante** —
-  `$s++` su stringa alfabetica (perl-style increment) esegue l'increment ma
-  non emette la deprecation 8.3+.
+- **`$flags` dei value-sort** ✅ — `flag_value_sort` (gemello di
+  `key_flag_cmp`) cablato in sort/rsort/asort/arsort: SORT_NUMERIC (via
+  to_double), SORT_STRING/SORT_LOCALE_STRING (byte, ±SORT_FLAG_CASE folded),
+  SORT_NATURAL (strnatcmp ±case). Aggiunto anche l'arm SORT_NATURAL mancante
+  in `key_flag_cmp` (ksort/krsort). **Residuo dichiarato**: i valori
+  Stringable sotto SORT_STRING/NATURAL prendono il fallback-warning
+  "could not be converted to string" + placeholder invece di `__toString`
+  (sort non può stare nel gate statico §1.1: i `$flags` sono runtime, il
+  precompute chiamerebbe `__toString` spurio sotto SORT_REGULAR); la coercion
+  è 1× per elemento up-front (convenzione natsort), non per-confronto come
+  Zend (conteggio chiamate `__toString` non riprodotto).
+- **Diagnostica string-offset READ** ✅ — `read_dim_warn` ora oracle-pinned:
+  "Uninitialized string offset N" (N = offset castato PRE-aggiustamento
+  negativo), "String offset cast occurred" per chiavi float/bool/null (SENZA
+  la deprecation float-precision su questo path), "Illegal string offset
+  \"5abc\"" + uso del prefisso intero per stringhe leading-numeric (prima era
+  erroneamente TypeError), "Resource ID#n used as offset…". isset/`??`/empty
+  restano silenti come Zend. **Residui dichiarati** (funnel separati senza
+  diags): `isset($s[1.5])` non emette la deprecation "Implicit conversion
+  from float 1.5 to int loses precision"; `$s["5abc"] ?? $d` in Zend emette
+  Illegal-warning e LEGGE il prefisso, phpr prende silenziosamente il default.
+- **Deprecation increment/decrement** — RICLASSIFICATO: **già a parità**
+  (tutti e tre i messaggi 8.3+, incluso `dec('')` → int(-1) con messaggio
+  dedicato). Il "mancante" di WP-38 era un artefatto di lettura: mancava solo
+  la copia log "PHP Deprecated:" dell'oracle (log_errors=On nel php.ini brew;
+  i confronti probe vanno fatti con `-d log_errors=0`).
 
 ---
 

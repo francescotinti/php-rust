@@ -417,14 +417,18 @@ pub fn settype(var: &mut Zval, args: &[Zval], ctx: &mut Ctx) -> Result<Zval, Php
     Ok(Zval::Bool(true))
 }
 
-/// place with the default (SORT_REGULAR) comparison and reindex from 0, dropping
-/// the original keys. `$flags` is accepted but not honoured (Tier 1 scope).
-pub fn sort(arr: &mut Zval, _args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+/// place and reindex from 0, dropping the original keys. `$flags` selects the
+/// comparator (SORT_NUMERIC/STRING/LOCALE_STRING/NATURAL, ±SORT_FLAG_CASE —
+/// [`flag_value_sort`]); the default SORT_REGULAR is PHP's loose compare.
+pub fn sort(arr: &mut Zval, args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let flags = sort_flags_arg(args, ctx);
     let rc = as_array_mut(arr, "sort")?;
     let mut vals: Vec<Zval> = rc.iter().map(|(_, v)| v.clone()).collect();
-    // ops::compare (loose) NON è un ordine totale sui tipi misti: la std
-    // panica, zend_sort no — merge sort tollerante (WP-16).
-    ops::stable_sort_by(&mut vals, |a, b| ops::compare(a, b).cmp(&0));
+    if !flag_value_sort(&mut vals, flags, false, ctx, |v| v) {
+        // ops::compare (loose) NON è un ordine totale sui tipi misti: la std
+        // panica, zend_sort no — merge sort tollerante (WP-16).
+        ops::stable_sort_by(&mut vals, |a, b| ops::compare(a, b).cmp(&0));
+    }
     let mut out = PhpArray::new();
     for v in vals {
         let _ = out.append(v);
@@ -455,10 +459,13 @@ pub fn shuffle(arr: &mut Zval, _args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, P
 
 /// `rsort(array &$array, int $flags = SORT_REGULAR): true` — like [`sort`] but
 /// descending. Reindexes from 0, dropping the original keys.
-pub fn rsort(arr: &mut Zval, _args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+pub fn rsort(arr: &mut Zval, args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let flags = sort_flags_arg(args, ctx);
     let rc = as_array_mut(arr, "rsort")?;
     let mut vals: Vec<Zval> = rc.iter().map(|(_, v)| v.clone()).collect();
-    ops::stable_sort_by(&mut vals, |a, b| ops::compare(b, a).cmp(&0));
+    if !flag_value_sort(&mut vals, flags, true, ctx, |v| v) {
+        ops::stable_sort_by(&mut vals, |a, b| ops::compare(b, a).cmp(&0));
+    }
     let mut out = PhpArray::new();
     for v in vals {
         let _ = out.append(v);
@@ -486,8 +493,12 @@ where
 }
 
 /// `asort(array &$array, int $flags = SORT_REGULAR): true` — sort by value
-/// ascending, preserving keys.
-pub fn asort(arr: &mut Zval, _args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+/// ascending, preserving keys. `$flags` as in [`sort`].
+pub fn asort(arr: &mut Zval, args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let flags = sort_flags_arg(args, ctx);
+    if let Some(r) = sort_assoc_flags(arr, "asort", flags, false, ctx) {
+        return r;
+    }
     sort_assoc(arr, "asort", |a, b| ops::compare(&a.1, &b.1).cmp(&0))
 }
 
@@ -524,17 +535,130 @@ pub fn natcasesort(arr: &mut Zval, _args: &[Zval], ctx: &mut Ctx) -> Result<Zval
 }
 
 /// `arsort(array &$array, int $flags = SORT_REGULAR): true` — sort by value
-/// descending, preserving keys.
-pub fn arsort(arr: &mut Zval, _args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+/// descending, preserving keys. `$flags` as in [`sort`].
+pub fn arsort(arr: &mut Zval, args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
+    let flags = sort_flags_arg(args, ctx);
+    if let Some(r) = sort_assoc_flags(arr, "arsort", flags, true, ctx) {
+        return r;
+    }
     sort_assoc(arr, "arsort", |a, b| ops::compare(&b.1, &a.1).cmp(&0))
+}
+
+/// Parse the `$flags` argument of a value/key sort (absent → SORT_REGULAR).
+fn sort_flags_arg(args: &[Zval], ctx: &mut Ctx) -> i64 {
+    match args.first() {
+        Some(v) => convert::to_long_cast(&v.deref_clone(), ctx.diags),
+        None => 0,
+    }
+}
+
+/// The `$flags` path of the value sorts (sort/rsort/asort/arsort): build one
+/// comparison key per element up front, then sort stably by it (descending =
+/// swapped operands, so ties keep insertion order like the loose rsort path).
+/// SORT_STRING/SORT_LOCALE_STRING (C locale)/SORT_NATURAL coerce through
+/// `ctx.to_zstr` ONCE per element (natsort convention). sort cannot join the
+/// §1.1 static Stringable gate because `$flags` is runtime — a Stringable
+/// object here takes the could-not-be-converted Warning + class-name
+/// placeholder instead of `__toString` (declared residue, §3.7), and Zend's
+/// per-comparison re-coercion call counts are not reproduced.
+/// Returns false when `flags` selects SORT_REGULAR — the caller keeps its
+/// loose `ops::compare` merge sort (the WP-16 total-order-tolerant path).
+fn flag_value_sort<T: Clone>(
+    items: &mut Vec<T>,
+    flags: i64,
+    desc: bool,
+    ctx: &mut Ctx,
+    val_of: impl Fn(&T) -> &Zval,
+) -> bool {
+    fn by_key<T: Clone, K: Clone>(
+        items: &mut Vec<T>,
+        keys: Vec<K>,
+        desc: bool,
+        mut cmp: impl FnMut(&K, &K) -> std::cmp::Ordering,
+    ) {
+        let mut zip: Vec<(T, K)> = std::mem::take(items).into_iter().zip(keys).collect();
+        ops::stable_sort_by(&mut zip, |a, b| {
+            if desc {
+                cmp(&b.1, &a.1)
+            } else {
+                cmp(&a.1, &b.1)
+            }
+        });
+        items.extend(zip.into_iter().map(|(t, _)| t));
+    }
+    match flags & !8 {
+        // SORT_NUMERIC: numeric_compare_function — both sides through
+        // zval_get_double (a non-numeric string is 0.0, an object 1.0).
+        1 => {
+            let keys: Vec<f64> = items.iter().map(|t| convert::to_double(val_of(t))).collect();
+            by_key(items, keys, desc, |a, b| {
+                a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)
+            });
+        }
+        // SORT_STRING / SORT_LOCALE_STRING: byte compare of the string
+        // coercion; SORT_FLAG_CASE folds ASCII case (pre-folded here, like
+        // zend_binary_strcasecmp_l's zend_tolower_ascii).
+        2 | 5 => {
+            let mut keys: Vec<Vec<u8>> = items
+                .iter()
+                .map(|t| ctx.to_zstr(val_of(t)).as_bytes().to_vec())
+                .collect();
+            if flags & 8 != 0 {
+                for k in &mut keys {
+                    k.make_ascii_lowercase();
+                }
+            }
+            by_key(items, keys, desc, |a, b| a.cmp(b));
+        }
+        // SORT_NATURAL(|SORT_FLAG_CASE): strnatcmp/strnatcasecmp semantics.
+        6 => {
+            let ci = flags & 8 != 0;
+            let keys: Vec<Vec<u8>> = items
+                .iter()
+                .map(|t| ctx.to_zstr(val_of(t)).as_bytes().to_vec())
+                .collect();
+            by_key(items, keys, desc, move |a, b| {
+                crate::string::strnatcmp_ex(a, b, ci).cmp(&0)
+            });
+        }
+        _ => return false,
+    }
+    true
+}
+
+/// The flags path of asort/arsort: Some(result) when `$flags` selects a
+/// non-REGULAR comparator, None to keep the caller's loose-compare closure.
+fn sort_assoc_flags(
+    arr: &mut Zval,
+    fname: &str,
+    flags: i64,
+    desc: bool,
+    ctx: &mut Ctx,
+) -> Option<Result<Zval, PhpError>> {
+    if !matches!(flags & !8, 1 | 2 | 5 | 6) {
+        return None;
+    }
+    let rc = match as_array_mut(arr, fname) {
+        Ok(rc) => rc,
+        Err(e) => return Some(Err(e)),
+    };
+    let mut pairs: Vec<(Key, Zval)> = rc.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+    flag_value_sort(&mut pairs, flags, desc, ctx, |p| &p.1);
+    let mut out = PhpArray::new();
+    for (k, v) in pairs {
+        out.insert(k, v);
+    }
+    *arr = Zval::Array(Rc::new(out));
+    Some(Ok(Zval::Bool(true)))
 }
 
 /// The `$flags` comparator for key sorts. Keys are only ever int/string, so no
 /// diagnostics can fire: SORT_NUMERIC (1) compares the numeric value (a
 /// non-numeric string is 0 — WP_Hook's `ksort($cb, SORT_NUMERIC)` puts 'test'
 /// before 10, WP-17), SORT_STRING (2) / SORT_LOCALE_STRING (5) compare the
-/// byte string (SORT_FLAG_CASE 8 makes it ASCII-case-insensitive), anything
-/// else is PHP's loose compare. Ties keep insertion order (sort_by is stable).
+/// byte string (SORT_FLAG_CASE 8 makes it ASCII-case-insensitive), SORT_NATURAL
+/// (6) is strnatcmp, anything else is PHP's loose compare. Ties keep insertion
+/// order (sort_by is stable).
 fn key_flag_cmp(a: &Key, b: &Key, flags: i64) -> std::cmp::Ordering {
     fn key_bytes(k: &Key) -> Vec<u8> {
         match key_to_zval(k) {
@@ -556,6 +680,11 @@ fn key_flag_cmp(a: &Key, b: &Key, flags: i64) -> std::cmp::Ordering {
             } else {
                 sa.cmp(&sb)
             }
+        }
+        // SORT_NATURAL(|SORT_FLAG_CASE) works on keys too (ksort/krsort).
+        6 => {
+            let (sa, sb) = (key_bytes(a), key_bytes(b));
+            crate::string::strnatcmp_ex(&sa, &sb, flags & 8 != 0).cmp(&0)
         }
         _ => ops::compare(&key_to_zval(a), &key_to_zval(b)).cmp(&0),
     }

@@ -600,8 +600,7 @@ pub(super) fn read_dim(base: &Zval, key: &Zval) -> Zval {
 
 /// Like [`read_dim`] but raises `Warning: Undefined array key K` when an array
 /// key is absent (the warning-ful read context — `Op::FetchDim`, e.g. `echo
-/// $a[5]`). String-offset and other bases delegate to the silent [`read_dim`]
-/// (no failing parity case needs the "Uninitialized string offset" warning yet).
+/// $a[5]`), and carries the string-offset read diagnostics (§3.7).
 pub(super) fn read_dim_warn(base: &Zval, key: &Zval, diags: &mut Diags) -> Result<Zval, PhpError> {
     match base {
         Zval::Array(a) => match coerce_key_diag(key, diags) {
@@ -630,28 +629,63 @@ pub(super) fn read_dim_warn(base: &Zval, key: &Zval, diags: &mut Diags) -> Resul
             )));
             Ok(Zval::Null)
         }
-        // A warning-ful READ of a string offset with a non-integral string or
-        // container key is PHP 8's TypeError (isset/`??` stay silent-false).
-        Zval::Str(_) => {
+        // A warning-ful READ of a string offset (oracle-pinned, §3.7): an
+        // integral string key is silent; a leading-numeric one ("5abc") warns
+        // `Illegal string offset` and uses its integer prefix; any other
+        // string (incl. "1.5") or a container key is PHP 8's TypeError; a
+        // float/bool/null key warns `String offset cast occurred` (no
+        // float-precision deprecation on this path — zend_dval_to_lval);
+        // out of range warns `Uninitialized string offset N` with the
+        // pre-adjustment cast value and yields "". isset/`??` are separate
+        // silent funnels ([`read_dim_nullable`], [`silent_get_path`]).
+        Zval::Str(s) => {
             let kd = key.deref_clone();
-            match &kd {
-                Zval::Str(k)
-                    if std::str::from_utf8(k.as_bytes())
-                        .ok()
-                        .and_then(|t| t.trim().parse::<i64>().ok())
-                        .is_none() =>
-                {
-                    Err(PhpError::TypeError(
-                        "Cannot access offset of type string on string".to_string(),
-                    ))
-                }
+            let i = match &kd {
+                Zval::Str(k) => match php_types::numstr::parse_numeric_ex(k.as_bytes(), true) {
+                    Some(info) if matches!(info.num, php_types::numstr::Num::Long(_)) => {
+                        let php_types::numstr::Num::Long(l) = info.num else {
+                            unreachable!()
+                        };
+                        if info.trailing {
+                            diags.push(Diag::Warning(format!(
+                                "Illegal string offset \"{}\"",
+                                String::from_utf8_lossy(k.as_bytes())
+                            )));
+                        }
+                        l
+                    }
+                    _ => {
+                        return Err(PhpError::TypeError(
+                            "Cannot access offset of type string on string".to_string(),
+                        ))
+                    }
+                },
                 Zval::Array(_) | Zval::Object(_) | Zval::Closure(_) | Zval::Generator(_) => {
-                    Err(PhpError::TypeError(format!(
+                    return Err(PhpError::TypeError(format!(
                         "Cannot access offset of type {} on string",
                         kd.type_name_for_error()
                     )))
                 }
-                _ => Ok(read_dim(base, key)),
+                Zval::Long(l) => *l,
+                Zval::Resource(r) => {
+                    let id = r.borrow().id;
+                    diags.push(Diag::Warning(format!(
+                        "Resource ID#{id} used as offset, casting to integer ({id})"
+                    )));
+                    id as i64
+                }
+                _ => {
+                    diags.push(Diag::Warning("String offset cast occurred".to_string()));
+                    convert::to_long_cast(&kd, &mut Diags::new())
+                }
+            };
+            let len = s.len() as i64;
+            let idx = if i < 0 { len + i } else { i };
+            if idx < 0 || idx >= len {
+                diags.push(Diag::Warning(format!("Uninitialized string offset {i}")));
+                Ok(Zval::Str(PhpStr::new(Vec::new())))
+            } else {
+                Ok(Zval::Str(PhpStr::new(vec![s.as_bytes()[idx as usize]])))
             }
         }
         _ => Ok(read_dim(base, key)),

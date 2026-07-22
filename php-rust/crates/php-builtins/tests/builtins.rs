@@ -961,6 +961,94 @@ fn sort_orders_values_and_reindexes() {
 }
 
 #[test]
+fn sort_honours_flags() {
+    // SORT_STRING (2): byte compare — '10' before '9'; values are compared as
+    // strings but NOT converted in place.
+    assert_eq!(
+        out("<?php $a=['','10','9','a']; sort($a, SORT_STRING); echo implode('|',$a);"),
+        "|10|9|a"
+    );
+    // SORT_STRING|SORT_FLAG_CASE folds ASCII case (zend_binary_strcasecmp_l).
+    assert_eq!(
+        out("<?php $a=['10','1e1','9','B','a']; sort($a, SORT_STRING|SORT_FLAG_CASE); echo implode('|',$a);"),
+        "10|1e1|9|a|B"
+    );
+    // SORT_NUMERIC (1): both sides through zval_get_double ('a' is 0.0).
+    assert_eq!(
+        out("<?php $a=['10','9.5','a','2']; sort($a, SORT_NUMERIC); echo implode('|',$a);"),
+        "a|2|9.5|10"
+    );
+    // SORT_NATURAL (6): strnatcmp — 'IMG1' first (case), then numeric runs.
+    assert_eq!(
+        out("<?php $a=['img12','img10','img2','IMG1']; sort($a, SORT_NATURAL); echo implode('|',$a);"),
+        "IMG1|img2|img10|img12"
+    );
+    // rsort = swapped operands; asort/arsort keep the key association.
+    assert_eq!(
+        out("<?php $a=['','10','9','a']; rsort($a, SORT_STRING); echo implode('|',$a);"),
+        "a|9|10|"
+    );
+    assert_eq!(
+        out("<?php $a=['x'=>'10','y'=>'9','z'=>'a']; asort($a, SORT_STRING); echo implode('|',array_keys($a));"),
+        "x|y|z"
+    );
+    assert_eq!(
+        out("<?php $a=['x'=>'10','y'=>'9','z'=>'a']; arsort($a, SORT_STRING); echo implode('|',array_keys($a));"),
+        "z|y|x"
+    );
+}
+
+#[test]
+fn ksort_honours_sort_natural() {
+    assert_eq!(
+        out("<?php $a=['img12'=>1,'img10'=>2,'img2'=>3,'IMG1'=>4,10=>5,2=>6]; ksort($a, SORT_NATURAL); echo implode('|',array_keys($a));"),
+        "2|10|IMG1|img2|img10|img12"
+    );
+    assert_eq!(
+        out("<?php $a=['B'=>1,'a'=>2,'C'=>3]; ksort($a, SORT_NATURAL|SORT_FLAG_CASE); echo implode('|',array_keys($a));"),
+        "a|B|C"
+    );
+}
+
+#[test]
+fn string_offset_read_warnings() {
+    // Out-of-range read warns with the pre-adjustment cast offset (§3.7).
+    assert_eq!(
+        out("<?php $s='abc'; var_dump($s[3]);"),
+        "\nWarning: Uninitialized string offset 3 in t.php on line 1\nstring(0) \"\"\n"
+    );
+    assert_eq!(
+        out("<?php $s='abc'; var_dump($s[-4]);"),
+        "\nWarning: Uninitialized string offset -4 in t.php on line 1\nstring(0) \"\"\n"
+    );
+    // A float/bool/null key casts with a Warning (in range stays readable);
+    // no float-precision deprecation on this path.
+    assert_eq!(
+        out("<?php $s='abc'; var_dump($s[1.5]);"),
+        "\nWarning: String offset cast occurred in t.php on line 1\nstring(1) \"b\"\n"
+    );
+    // A leading-numeric string key warns and uses its integer prefix.
+    assert_eq!(
+        out("<?php $s='abcdef'; var_dump($s['5abc']);"),
+        "\nWarning: Illegal string offset \"5abc\" in t.php on line 1\nstring(1) \"f\"\n"
+    );
+    // An integral string key (leading blanks ok) stays silent; isset and `??`
+    // stay silent too (bug #69889 semantics unchanged).
+    assert_eq!(out("<?php $s='abc'; var_dump($s[' 2']);"), "string(1) \"c\"\n");
+    assert_eq!(
+        out("<?php $s='abc'; var_dump(isset($s[5])); echo $s[5] ?? 'DEF';"),
+        "bool(false)\nDEF"
+    );
+    // A fully-non-integral string key is still the PHP 8 TypeError.
+    match fatal("<?php $s='abc'; echo $s['1.5'];") {
+        PhpError::TypeError(m) => {
+            assert_eq!(m, "Cannot access offset of type string on string")
+        }
+        other => panic!("expected TypeError, got {other:?}"),
+    }
+}
+
+#[test]
 fn array_pop_removes_last_and_returns_it() {
     assert_eq!(
         out("<?php $a=[1,2,3]; $x=array_pop($a); echo $x; echo '|'; echo implode(',',$a); echo '|'; echo count($a);"),
