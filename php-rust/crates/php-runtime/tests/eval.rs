@@ -4710,6 +4710,36 @@ fn fetchdim_guard_ref_base_and_string_offset_generic() {
     );
 }
 
+// --- WP-33 T1c: IncDecSlot Long-slot guard pinned semantics ---
+
+#[test]
+fn incdec_slot_guard_overflow_promotes_to_double() {
+    // MAX++ / MIN-- fail the checked guard → generic ops::increment path
+    // promotes to Double (echo precision=14, oracle-pinned).
+    assert_eq!(
+        out("<?php $x = PHP_INT_MAX; $x++; echo $x;"),
+        "9.2233720368548E+18"
+    );
+    assert_eq!(
+        out("<?php $y = PHP_INT_MIN; $y--; echo $y;"),
+        "-9.2233720368548E+18"
+    );
+}
+
+#[test]
+fn incdec_slot_guard_ref_alias_writes_through() {
+    // A Ref slot fails the guard; the generic path writes through the
+    // reference so aliases see the update.
+    assert_eq!(out("<?php $a = 1; $b = &$a; $b++; ++$b; echo $a, ':', $b;"), "3:3");
+}
+
+#[test]
+fn incdec_slot_guard_pre_post_values() {
+    assert_eq!(out("<?php $p = 5; echo $p++, $p, ++$p, $p;"), "5677");
+    // Null seeds: ++ coerces to 1, -- is a no-op with the 8.5 warning.
+    assert_eq!(out("<?php $n = null; $n++; echo $n;"), "1");
+}
+
 #[test]
 fn binary_fast_long_spaceship_and_bitwise() {
     assert_eq!(

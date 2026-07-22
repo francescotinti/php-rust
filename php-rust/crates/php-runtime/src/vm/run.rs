@@ -651,6 +651,19 @@ impl<'m> super::Vm<'m> {
                 }
                 Op::IncDecSlot { slot, inc, pre } => {
                     let i = *slot as usize;
+                    // WP-33 T1c guard: a raw Long slot with no overflow is a
+                    // pure register op — no diags possible, no reference
+                    // write-through, store is a plain (non-Rc) overwrite.
+                    // Overflow (MAX++ → Double per ops::increment), Ref/
+                    // Undef/Double/object slots all fail → generic.
+                    if let Zval::Long(l) = &self.frames[top].slots[i] {
+                        let l = *l;
+                        if let Some(n) = l.checked_add(if *inc { 1 } else { -1 }) {
+                            self.frames[top].slots[i] = Zval::Long(n);
+                            self.frames[top].stack.push(Zval::Long(if *pre { n } else { l }));
+                            continue;
+                        }
+                    }
                     if matches!(self.frames[top].slots[i], Zval::Undef) {
                         self.frames[top].slots[i] = Zval::Null;
                     }
