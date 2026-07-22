@@ -51,6 +51,10 @@ mod calls;
 // module — the counters are compiled out of run_loop.
 #[cfg_attr(not(feature = "op-census"), allow(dead_code))]
 mod census;
+// WP-39: GC-pipeline census (note/sweep/collect attribution) — instrumentation
+// builds only, mirror of the op-census conventions.
+#[cfg(feature = "gc-census")]
+mod gc_census;
 mod coroutines;
 mod dom;
 mod exceptions;
@@ -71,6 +75,20 @@ mod websapi;
 use arrays::*;
 use calls::*;
 use oop::*;
+
+/// One-shot process fast shutdown (WP-39). When set, `run_module_with_hir`
+/// LEAKS the Vm at the very end instead of dropping it: every observable PHP
+/// shutdown effect (shutdown functions → destructors → session flush →
+/// filtered-stream + output-buffer flush) has already run by then, and the
+/// process exits right after — so the recursive Rust teardown of the VM heap
+/// (globals/statics/unit-cache array cascades; ~45% of a media child's
+/// final-phase samples, WP-39 attribution) is pure waste the OS reclaims
+/// anyway. Zend's fast RSHUTDOWN makes the same call.
+/// ONLY the php-cli one-shot script path sets this. It must NEVER be set by
+/// `phpr -S` (one Vm per request — leaking accumulates) or by any in-process
+/// multi-run host (phpt-runner without --isolate, library callers, tests).
+pub static FAST_SHUTDOWN: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
 
 /// The result of running a [`Module`]: the program's output streams plus an
 /// optional uncaught fatal. Re-exported as `php_runtime::Outcome`.
@@ -453,7 +471,11 @@ pub(crate) fn run_module_with_hir<'m>(
         preg_cache: HashMap::default(),
         frames: Vec::new(),
         frame_pool: FramePool::default(),
-        census_on: census::census_arm(),
+        census_on: {
+            #[cfg(feature = "gc-census")]
+            gc_census::arm();
+            census::census_arm()
+        },
         next_object_id: 1,
         next_resource_id: 5,
         static_props: HashMap::default(),
@@ -744,6 +766,27 @@ pub(crate) fn run_module_with_hir<'m>(
     // WP-33 T0: dump the op census to STDERR (parity-inert — stdout untouched).
     if vm.census_on {
         census::census_dump();
+    }
+    #[cfg(feature = "gc-census")]
+    gc_census::dump();
+    if FAST_SHUTDOWN.load(std::sync::atomic::Ordering::Relaxed) {
+        // Post-semantic leak (see the static's doc): move the outcome fields
+        // out, forget the rest of the Vm. No PHP-observable effect can depend
+        // on these drops — destructors/flushes all ran above.
+        let outcome = VmOutcome {
+            stdout: std::mem::take(&mut vm.stdout),
+            rendered: std::mem::take(&mut vm.rendered),
+            diags: std::mem::take(&mut vm.diags),
+            fatal,
+            return_value,
+            exit_code,
+            headers: std::mem::take(&mut vm.response_headers),
+            response_code: vm.response_code,
+            response_reason: std::mem::take(&mut vm.response_reason),
+            error_log: std::mem::take(&mut vm.error_log),
+        };
+        std::mem::forget(vm);
+        return outcome;
     }
     VmOutcome {
         stdout: vm.stdout,
@@ -1734,6 +1777,8 @@ impl<'m> Vm<'m> {
     /// here: they only lose their references when the object is actually freed,
     /// which the sweep handles via its cascade.
     fn gc_note(&mut self, v: &Zval) {
+        #[cfg(feature = "gc-census")]
+        gc_census::note();
         match v {
             Zval::Object(rc) => {
                 let id = rc.borrow().id;
@@ -1752,6 +1797,8 @@ impl<'m> Vm<'m> {
                 if let std::collections::hash_map::Entry::Vacant(e) = self.gc_roots.entry(id) {
                     e.insert(Rc::clone(rc));
                     self.gc_queue.push_back(id);
+                    #[cfg(feature = "gc-census")]
+                    gc_census::note_inserted();
                 }
             }
             Zval::Ref(r) => {
@@ -1798,6 +1845,8 @@ impl<'m> Vm<'m> {
     /// statement boundaries, and every synchronous caller) first re-seeds what
     /// LIGHT sweeps demoted, so unhooked mid-statement temp deaths are caught.
     fn gc_sweep_impl(&mut self, resume: Option<(usize, usize)>, main: bool) -> Result<(), PhpError> {
+        #[cfg(feature = "gc-census")]
+        gc_census::sweep(main);
         if main && !self.gc_light_demoted.is_empty() {
             for id in std::mem::take(&mut self.gc_light_demoted) {
                 if let Some(o) = self.created.get(&id) {
@@ -1837,6 +1886,8 @@ impl<'m> Vm<'m> {
                     None => continue,
                     Some(o) if Rc::strong_count(o) == 2 => break Some(id),
                     Some(_) => {
+                        #[cfg(feature = "gc-census")]
+                        gc_census::cand_demoted();
                         self.gc_roots.remove(&id);
                         self.gc_birth.remove(&id);
                         self.gc_cycle_roots.insert(id);
@@ -1907,6 +1958,8 @@ impl<'m> Vm<'m> {
                     } else if self.gc_cycle_threshold > Self::GC_CYCLE_THRESHOLD {
                         self.gc_cycle_threshold -= Self::GC_CYCLE_THRESHOLD;
                     }
+                    #[cfg(feature = "gc-census")]
+                    gc_census::threshold(self.gc_cycle_threshold);
                     if freed > 0 {
                         continue;
                     }
@@ -1928,6 +1981,8 @@ impl<'m> Vm<'m> {
                 continue;
             };
             self.gc_unnote(id);
+            #[cfg(feature = "gc-census")]
+            gc_census::cand_freed();
             let cid = o.borrow().class_id as usize;
 
             if self.destructed.contains(&id) {
@@ -1956,6 +2011,8 @@ impl<'m> Vm<'m> {
             if let Some((defc, midx)) = resolve_method_runtime(&self.classes, cid, b"__destruct") {
                 log::debug!(target: "phpr::gc", "destruct: {}#{}", String::from_utf8_lossy(&self.classes[cid].name), id);
                 self.destructed.insert(id);
+                #[cfg(feature = "gc-census")]
+                gc_census::destructor();
                 let callee = &self.classes[defc].methods[midx].func;
                 let mut frame = Frame::new(callee, self.class_mod(defc));
                 frame.this = Some(Zval::Object(Rc::clone(&o)));
@@ -2427,6 +2484,8 @@ impl<'m> Vm<'m> {
                 break;
             }
             let (whites, first_dead_containers) = self.gc_classify(&roots);
+            #[cfg(feature = "gc-census")]
+            gc_census::collect(roots.len(), whites.len());
             log::debug!(
                 target: "phpr::gc",
                 "cycle collect: {} roots, {} garbage objects",

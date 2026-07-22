@@ -9,6 +9,9 @@ license.workspace = true
 # even a dead bool-branch per dispatch tick costs ~3% on op-dense workloads,
 # so the census exists only in dedicated instrumentation builds.
 op-census = []
+# WP-39 leva E: GC-pipeline counters (PHPR_GC_CENSUS). Same convention as
+# op-census: only ever compiled into dedicated instrumentation builds.
+gc-census = []
 
 [dependencies]
 php-types.workspace = true

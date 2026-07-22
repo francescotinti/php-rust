@@ -155,6 +155,10 @@ fn run(
     argv_owned: Vec<Vec<u8>>,
     ini_overrides: Vec<(Vec<u8>, Vec<u8>)>,
 ) -> ExitCode {
+    // One-shot script process: the Vm is leaked at end of run instead of
+    // recursively dropped (WP-39 fast shutdown — post-semantic, Zend-style).
+    // The `-S` server path never reaches here and keeps per-request drops.
+    php_runtime::vm::FAST_SHUTDOWN.store(true, std::sync::atomic::Ordering::Relaxed);
     let registry = registry();
     // PHP CLI `$argv` / `$_SERVER['argv']`: element 0 is the script path, the rest
     // are the arguments after it (`phpr script.php a b` → ['script.php','a','b']).

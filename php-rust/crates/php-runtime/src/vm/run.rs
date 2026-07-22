@@ -5095,7 +5095,20 @@ impl<'m> super::Vm<'m> {
                     // A destructor body's statement sweeps no-op — see
                     // Frame::in_destructor (handle-id release order).
                     if !self.frames[top].flags.get(FrameFlags::IN_DESTRUCTOR) {
-                        self.gc_sweep(top, ip, *main)?;
+                        // WP-39 empty-buffer fast path: nothing was noted since
+                        // the last sweep (queue empty ⇒ roots/birth empty too —
+                        // the sweep tail clears them together), no light
+                        // demotions for a main sweep to re-seed, and the cycle
+                        // collector's pressure trigger is under threshold ⇒ the
+                        // sweep body would only walk/clear empty buffers.
+                        // gc-census (media): 53M statement sweeps, ~6M with a
+                        // non-empty buffer — the rest take this path.
+                        let noop = self.gc_queue.is_empty()
+                            && (!*main || self.gc_light_demoted.is_empty())
+                            && self.gc_cycle_roots.len() < self.gc_cycle_threshold;
+                        if !noop {
+                            self.gc_sweep(top, ip, *main)?;
+                        }
                     }
                 }
                 Op::Nop => {}
