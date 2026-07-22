@@ -1,4 +1,47 @@
-# Rotta WORDPRESS-FIRST — WP-track (dopo WP-34: fusioni bigram-driven, Fase 2 T2 dell'arco specializzante)
+# Rotta WORDPRESS-FIRST — WP-track (dopo WP-35: PropIc scope-aware, T2.5 — media group per la PRIMA volta sotto 3×)
+
+> ⚡ **WP-35 (2026-07-22, gated `38b727e`, 1 commit)** — **T2.5: PropIc
+> SCOPE-AWARE + fix parità private-shadow**. Il riprofilo WP-34 dava il
+> canale prop slow-path come collo phpr-only #1 (le IC fillavano solo
+> esiti public; le classi WP piene di protected/private non fillavano
+> MAI). **(1) Cella `(epoch, class_id+1, scope_id+1|0, slot)`** — lo
+> scope chiamante è parte della CHIAVE: hit valido solo per la coppia
+> (receiver, scope) che ha fillato ⇒ anche private/protected cache-abili;
+> `Closure::bind` con un altro scope = MISS, mai hit errato (⭐⭐ la
+> lezione WP-29 "mai cachare visibilità non-public" valeva per celle
+> keyed sulla sola classe receiver — con lo scope in chiave è sound).
+> Fill GET/ISSET = QUALSIASI visibilità, gated su `!hook_guarded`
+> (⭐ raggiungere PropAccess::Slot con la guardia spenta = prop_hook e
+> is_virtual_hooked sondati VUOTI in questa stessa esecuzione, fatto di
+> classe; sotto hook attivo mai fill). Fill SET/IncDec: restano
+> plain_set_props-only, ora keyed sullo scope. **(2) FIX PARITÀ
+> PREESISTENTE (scovato dai nuovi test cargo)**: parent-private
+> ombreggiata da child-public omonima — i fast-path WP-25 leaf-table
+> (GET/ISSET all_props_public, SET plain_set_props) leggevano/scrivevano
+> lo slot del FIGLIO dove Zend risolve il private dello scope; nuovo
+> helper `scope_private_overrides` (= precondizione step-1 di
+> resolve_prop_access) a guardia dei 3 fast-path. Probe S5b: old
+> "cccccc|KK" → new "pcpcpc|WK" = oracle. ⭐ il caso si nascondeva: basta
+> UNA prop non-public nel figlio e all_props_public spegneva già il fast
+> path — per questo le suite non l'hanno mai colpito.
+> **Esito: media group 65,1→59,6s, oracle 20,99 ⇒ 2,84× — PRIMA VOLTA
+> SOTTO 3×** (−8,4% assoluto); micro esteso (bench34 a-l, sezione l =
+> letture private/protected) **−4,3%** (8,99 vs 9,39, 5 coppie);
+> **full-suite ~12:05 (−4% vs run25); run26 = run25 = run24 PER NOME**
+> (30.472, 0E/2F = minimo teorico); footprint 12,0×. gate22 TUTTO verde;
+> cargo **1623** (+4: scoped hit, Closure::bind cross-scope, shadow,
+> isset scoped); probe estesa S5/S5b.
+> **Riprofilo `wp34-harness/new-wp35.sample`**: ⭐⭐ **il canale prop è
+> SPARITO dalla top-20** (resolve_prop_access/prop_get_fallback/slot_of/
+> prop_info/magic_applies/lazy_prop_access tutti fuori; memcmp 332→86);
+> run_loop 1074, poi syscalls/gd condivisi con l'oracle. Residui
+> phpr-only: **drop/clone Zval 231+166 (value churn), gc_note 161 +
+> gc_sweep 132 (batching), enter_callee 143 + bind_params 60 (call-site
+> specialization), dispatch_instance_call 100 (fusione This→MethodCall
+> 25,8M — stesso pattern receiver-in-place di ThisPropGet),
+> recycle_frame 92, is_instance_of 79 (cache (class,target))**.
+
+# (storia WP-34)
 
 > ⚡ **WP-34 (2026-07-22, gated `61868ce`, 1 commit)** — **T2 dell'arco:
 > fusioni bigram-driven** (dal census WP-33: This→PropGet 72M,
@@ -435,6 +478,7 @@ misurare e riportare all'utente il gap aggiornato e aggiornare la tabella
 | WP-32 | 69,0/20,91 = **3,3×** | 4,75/0,39GB = **12,0×** | 12:54/5:39 = **2,3×** | ~19,5/11,5 min = **1,7×** |
 | WP-33 | 66,9/20,97 = **3,19×** | 4,75/0,39GB = **12,0×** | 12:20/5:39 = **2,18×** | ~16,5/11,5 min = **1,4×** |
 | WP-34 | 65,1/20,92 = **3,11×** | 4,73/0,39GB = **12,0×** | ~12:35/5:39 = **2,2×** (rumore) | ~17,5/11,5 min = **1,5×** |
+| WP-35 | 59,6/20,99 = **2,84×** ⭐ | 4,73/0,39GB = **12,0×** | ~12:05/5:39 = **2,14×** | ~17/11,5 min = **1,5×** |
 
 ⚠️ riga WP-30: phpr media in calo ASSOLUTO (82,4→80,7) ma l'oracle del giorno
 gira −9% (23,0→21,0) → il rapporto sale per rumore dell'oracle, non per una
