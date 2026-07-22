@@ -2,90 +2,56 @@ use std::cell::Cell;
 use std::fmt;
 use std::rc::Rc;
 
-/// Inline capacity of the SSO representation (WP-38). 15 covers 49.9% of the
-/// strings a WordPress media run constructs (wp36-harness/str-census.txt).
-/// 22 fits in the same 24-byte `Repr` (23 grows it to 32B) — kept at 15 per
-/// the measured attribution; the static asserts below pin the layout.
-const INLINE_CAP: usize = 15;
-
 /// A PHP string: an arbitrary byte sequence (never assumed UTF-8).
 ///
 /// Mirrors `zend_string` (Zend/zend_types.h:393-398): lazy hash with 0 meaning
 /// "not yet computed", same convention as ZSTR_H (Zend/zend_string.h:114).
 ///
-/// WP-38: small-string optimization. The representation is chosen by length
-/// alone (`len <= INLINE_CAP` is always Inline), so equal bytes always share
-/// a representation and Eq/Hash/zhash read through `as_bytes` — the split is
-/// unobservable. A safe enum cannot overlap its discriminant with the Box fat
-/// pointer, so PhpStr is 32 bytes (was 24); the Zval invariant is untouched
-/// (it holds only the 8-byte Rc).
+/// WP-38: un SSO (enum Inline/Heap dentro questa struct) è stato provato e
+/// BOCCIATO dai dati — media reale +1,5% (cap 7, 24B totali via niche) /
+/// +2,5% (cap 15, 32B); i malloc small-bin di mimalloc costano meno delle
+/// copie inline + branch su ogni lettura. Restano i costruttori slice-fed
+/// (`new` accetta `&[u8]`), `concat2` e `from_i64`, che evitano round-trip
+/// inutili senza cambiare la rappresentazione. Da non riproporre senza
+/// nuovi dati (cfr. NaN-boxing WP-32).
 pub struct PhpStr {
     hash: Cell<u64>,
-    repr: Repr,
-}
-
-enum Repr {
-    Inline { len: u8, buf: [u8; INLINE_CAP] },
-    Heap(Box<[u8]>),
+    bytes: Box<[u8]>,
 }
 
 const _: () = {
-    assert!(std::mem::size_of::<Repr>() == 24);
-    assert!(std::mem::size_of::<PhpStr>() == 32);
+    assert!(std::mem::size_of::<PhpStr>() == 24);
 };
 
 pub type ZStr = Rc<PhpStr>;
 
 impl PhpStr {
     /// The single construction funnel: every PhpStr goes through here.
-    /// Small payloads are copied inline without touching `Into<Box<[u8]>>`,
-    /// so a `&[u8]`/`&str` caller allocates nothing for them.
+    /// Accepts both owned buffers and plain slices (`&[u8]`/`&str` callers
+    /// need no `to_vec` round-trip).
     pub fn new(bytes: impl AsRef<[u8]> + Into<Box<[u8]>>) -> ZStr {
-        let len = bytes.as_ref().len();
         #[cfg(feature = "str-census")]
-        census::record(len);
-        let repr = if len <= INLINE_CAP {
-            let mut buf = [0u8; INLINE_CAP];
-            buf[..len].copy_from_slice(bytes.as_ref());
-            Repr::Inline { len: len as u8, buf }
-        } else {
-            Repr::Heap(bytes.into())
-        };
+        census::record(bytes.as_ref().len());
         Rc::new(PhpStr {
             hash: Cell::new(0),
-            repr,
+            bytes: bytes.into(),
         })
     }
 
-    /// Binary concatenation without an intermediate Vec (WP-38): a small
+    /// Binary concatenation in one exact-size allocation (WP-38): a small
     /// result builds straight into the inline buffer, a large one into an
     /// exactly-sized heap buffer. Byte-wise identical to concatenating into
     /// a Vec and calling `new`.
     pub fn concat2(a: &[u8], b: &[u8]) -> ZStr {
-        let len = a.len() + b.len();
-        #[cfg(feature = "str-census")]
-        census::record(len);
-        let repr = if len <= INLINE_CAP {
-            let mut buf = [0u8; INLINE_CAP];
-            buf[..a.len()].copy_from_slice(a);
-            buf[a.len()..len].copy_from_slice(b);
-            Repr::Inline { len: len as u8, buf }
-        } else {
-            let mut out = Vec::with_capacity(len);
-            out.extend_from_slice(a);
-            out.extend_from_slice(b);
-            Repr::Heap(out.into())
-        };
-        Rc::new(PhpStr {
-            hash: Cell::new(0),
-            repr,
-        })
+        let mut out = Vec::with_capacity(a.len() + b.len());
+        out.extend_from_slice(a);
+        out.extend_from_slice(b);
+        Self::new(out)
     }
 
-    /// Integer stringification without the `String` round-trip (WP-38):
-    /// digits are rendered into a stack buffer and funneled through `new`,
-    /// so any i64 (max 20 bytes) short enough for the inline repr never
-    /// touches the heap. Byte-wise identical to `l.to_string()`.
+    /// Integer stringification without the `String`/fmt round-trip (WP-38):
+    /// digits are rendered into a stack buffer and funneled through `new`.
+    /// Byte-wise identical to `l.to_string()`.
     pub fn from_i64(v: i64) -> ZStr {
         let mut buf = [0u8; 20];
         let mut i = buf.len();
@@ -105,10 +71,6 @@ impl PhpStr {
         Self::new(&buf[i..])
     }
 
-    /// Sizing hint for callers that can assemble a small result on the stack
-    /// (e.g. ConcatN) before funneling it through `new`.
-    pub const INLINE_CAP: usize = INLINE_CAP;
-
     #[allow(clippy::should_implement_trait)] // infallible byte view, not FromStr
     pub fn from_str(s: &str) -> ZStr {
         Self::new(s.as_bytes())
@@ -120,18 +82,12 @@ impl PhpStr {
 
     #[inline]
     pub fn as_bytes(&self) -> &[u8] {
-        match &self.repr {
-            Repr::Inline { len, buf } => &buf[..*len as usize],
-            Repr::Heap(b) => b,
-        }
+        &self.bytes
     }
 
     #[inline]
     pub fn len(&self) -> usize {
-        match &self.repr {
-            Repr::Inline { len, .. } => *len as usize,
-            Repr::Heap(b) => b.len(),
-        }
+        self.bytes.len()
     }
 
     #[inline]
@@ -256,10 +212,9 @@ mod tests {
     }
 
     #[test]
-    fn sso_boundary_roundtrip() {
-        // Exactly INLINE_CAP stays inline, one more goes to the heap; both
-        // must round-trip bytes, len and zhash identically to a Vec source.
-        for n in [0, 1, INLINE_CAP - 1, INLINE_CAP, INLINE_CAP + 1, 64] {
+    fn slice_and_vec_sources_agree() {
+        // `new` accepts both owned buffers and slices: same bytes, len, zhash.
+        for n in [0usize, 1, 14, 15, 16, 64] {
             let src: Vec<u8> = (0..n as u8).collect();
             let from_vec = PhpStr::new(src.clone());
             let from_slice = PhpStr::new(&src[..]);
@@ -267,11 +222,6 @@ mod tests {
             assert_eq!(from_vec.len(), n, "n={n}");
             assert_eq!(*from_vec, *from_slice, "n={n}");
             assert_eq!(from_vec.zhash(), from_slice.zhash(), "n={n}");
-            assert!(matches!(
-                from_vec.repr,
-                Repr::Inline { .. } if n <= INLINE_CAP
-            ) || n > INLINE_CAP, "n={n}");
-            assert!(matches!(from_vec.repr, Repr::Heap(_)) == (n > INLINE_CAP), "n={n}");
         }
     }
 
@@ -302,11 +252,8 @@ mod tests {
     }
 
     #[test]
-    fn sso_inline_binary_safe() {
-        // NUL and 0xFF inside the inline buffer; trailing buffer padding must
-        // never leak into as_bytes.
+    fn short_binary_safe() {
         let s = PhpStr::new(vec![0u8, 255, 0, 7]);
-        assert!(matches!(s.repr, Repr::Inline { .. }));
         assert_eq!(s.as_bytes(), &[0, 255, 0, 7]);
         assert_eq!(s.len(), 4);
         assert!(!s.is_empty());

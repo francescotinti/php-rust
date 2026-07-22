@@ -186,6 +186,19 @@ fn binary_fast(b: BinOp, lhs: &Zval, rhs: &Zval) -> Option<Zval> {
     })
 }
 
+/// WP-34 flatten join for an all-Str `ConcatN`, kept OUT of `run_loop`
+/// (WP-33 ⭐⭐: extra rarely-taken code in the dispatch loop costs ~3%).
+#[inline(never)]
+fn concat_n_join(stack: &mut Vec<Zval>, base: usize, total: usize) -> php_types::ZStr {
+    let mut out = Vec::with_capacity(total);
+    for v in stack.drain(base..) {
+        if let Zval::Str(s) = v {
+            out.extend_from_slice(s.as_bytes());
+        }
+    }
+    PhpStr::new(out)
+}
+
 impl<'m> super::Vm<'m> {
     /// The bounded dispatch loop: runs until the frame at `baseline` returns
     /// ([`RunExit::Returned`]) or a generator at `baseline` suspends at a `yield`
@@ -848,27 +861,7 @@ impl<'m> super::Vm<'m> {
                                 _ => 0,
                             })
                             .sum();
-                        // WP-38: a small join assembles on the stack — no Vec.
-                        let joined = if total <= PhpStr::INLINE_CAP {
-                            let mut buf = [0u8; PhpStr::INLINE_CAP];
-                            let mut pos = 0;
-                            for v in self.frames[top].stack.drain(base..) {
-                                if let Zval::Str(s) = v {
-                                    let b = s.as_bytes();
-                                    buf[pos..pos + b.len()].copy_from_slice(b);
-                                    pos += b.len();
-                                }
-                            }
-                            PhpStr::new(&buf[..pos])
-                        } else {
-                            let mut out = Vec::with_capacity(total);
-                            for v in self.frames[top].stack.drain(base..) {
-                                if let Zval::Str(s) = v {
-                                    out.extend_from_slice(s.as_bytes());
-                                }
-                            }
-                            PhpStr::new(out)
-                        };
+                        let joined = concat_n_join(&mut self.frames[top].stack, base, total);
                         self.frames[top].stack.push(Zval::Str(joined));
                     } else {
                         let parts: Vec<Zval> = self.frames[top].stack.drain(base..).collect();
