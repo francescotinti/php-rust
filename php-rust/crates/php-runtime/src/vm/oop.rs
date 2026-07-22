@@ -1078,6 +1078,7 @@ impl<'m> Vm<'m> {
             }
             if let Some((defc, midx)) = resolve_method_runtime(&self.classes, cid, b"__destruct") {
                 self.destructed.insert(id);
+                o.borrow().gc.set_destructed(true);
                 let callee = &self.classes[defc].methods[midx].func;
                 let m = self.class_mod(defc);
                 let mut frame = self.pooled_frame(callee, m);

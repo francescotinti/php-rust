@@ -643,9 +643,11 @@ impl<'m> super::Vm<'m> {
             && resolve_method_runtime(&self.classes, ocid, b"__destruct").is_some()
         {
             self.destructed.insert(oid);
+            rc.borrow().gc.set_destructed(true);
             self.call_method_sync(obj.clone(), b"__destruct", Vec::new())?;
         }
         self.destructed.remove(&oid);
+        rc.borrow().gc.set_destructed(false);
         let kind = if is_proxy { LazyKind::Proxy } else { LazyKind::Ghost };
         let init = args.get(3).cloned().unwrap_or(Zval::Null);
         self.reject_internal_lazy(ocid)?;

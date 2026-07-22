@@ -73,19 +73,41 @@ pub struct Object {
 
 /// GC candidate-buffer marks (WP-40, see [`Object::gc`]): `pos` is the
 /// object's slot in the VM's possible-roots buffer (`u32::MAX` = not
-/// buffered); `birth` marks that entry as the VM's own creation-time seed —
-/// consumable by a parent's free cascade (WP-28) — rather than a holder's
-/// release note. `Cell`s: the marks are flipped through shared borrows while
-/// the object graph is being walked.
+/// buffered); `flags` carries per-object GC bits — BIRTH marks the buffer
+/// entry as the VM's own creation-time seed (consumable by a parent's free
+/// cascade, WP-28) rather than a holder's release note; DESTRUCTED mirrors
+/// the VM's `destructed` id-set (which stays authoritative — the flag only
+/// serves the per-note hot check); CYCLE_ROOT / LIGHT_DEMOTED mirror the
+/// object's membership in the VM's `gc_cycle_roots` / `gc_light_demoted`
+/// id-sets so the demote path can skip the redundant hash insert (95% of
+/// 47.5M demotions per media run re-demote an id already buffered). `Cell`s:
+/// the marks are flipped through shared borrows while the object graph is
+/// being walked.
 #[derive(Debug)]
 pub struct GcMark {
     pos: std::cell::Cell<u32>,
-    birth: std::cell::Cell<bool>,
+    flags: std::cell::Cell<u8>,
 }
+
+const GC_BIRTH: u8 = 1;
+const GC_DESTRUCTED: u8 = 2;
+const GC_CYCLE_ROOT: u8 = 4;
+const GC_LIGHT_DEMOTED: u8 = 8;
 
 impl GcMark {
     pub fn new() -> GcMark {
-        GcMark { pos: std::cell::Cell::new(u32::MAX), birth: std::cell::Cell::new(false) }
+        GcMark { pos: std::cell::Cell::new(u32::MAX), flags: std::cell::Cell::new(0) }
+    }
+
+    #[inline]
+    fn flag(&self, bit: u8) -> bool {
+        self.flags.get() & bit != 0
+    }
+
+    #[inline]
+    fn set_flag(&self, bit: u8, on: bool) {
+        let f = self.flags.get();
+        self.flags.set(if on { f | bit } else { f & !bit });
     }
 
     /// Whether the object currently has a buffer entry (live slot).
@@ -107,17 +129,49 @@ impl GcMark {
     /// Whether the buffer entry is a BIRTH seed (only meaningful while
     /// `buffered()`; cleared with the entry).
     pub fn birth(&self) -> bool {
-        self.birth.get()
+        self.flag(GC_BIRTH)
     }
 
     pub fn set_birth(&self, birth: bool) {
-        self.birth.set(birth);
+        self.set_flag(GC_BIRTH, birth);
     }
 
-    /// Drop both marks — the object no longer has a buffer entry.
+    /// Mirror of the VM's `destructed` set (exact for live objects: every
+    /// insert/remove site with the object in hand flips this too).
+    pub fn destructed(&self) -> bool {
+        self.flag(GC_DESTRUCTED)
+    }
+
+    pub fn set_destructed(&self, on: bool) {
+        self.set_flag(GC_DESTRUCTED, on);
+    }
+
+    /// Mirror of membership in the VM's `gc_cycle_roots` set (for live
+    /// objects), guarding the demote path's redundant insert.
+    pub fn cycle_root(&self) -> bool {
+        self.flag(GC_CYCLE_ROOT)
+    }
+
+    pub fn set_cycle_root(&self, on: bool) {
+        self.set_flag(GC_CYCLE_ROOT, on);
+    }
+
+    /// Mirror of membership in the VM's `gc_light_demoted` set (for live
+    /// objects), guarding the demote path's redundant insert.
+    pub fn light_demoted(&self) -> bool {
+        self.flag(GC_LIGHT_DEMOTED)
+    }
+
+    pub fn set_light_demoted(&self, on: bool) {
+        self.set_flag(GC_LIGHT_DEMOTED, on);
+    }
+
+    /// Drop the buffer-entry marks (slot + BIRTH) — the object no longer has
+    /// a buffer entry. The set-mirror bits are NOT touched: they track the
+    /// id-sets, not the buffer.
     pub fn clear(&self) {
         self.pos.set(u32::MAX);
-        self.birth.set(false);
+        self.set_flag(GC_BIRTH, false);
     }
 }
 

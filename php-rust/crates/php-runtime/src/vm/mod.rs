@@ -1782,8 +1782,12 @@ impl<'m> Vm<'m> {
         gc_census::note();
         match v {
             Zval::Object(rc) => {
-                let id = rc.borrow().id;
-                if self.destructed.contains(&id) {
+                // One borrow serves the whole note: the DESTRUCTED mirror
+                // flag replaces the id-set probe (the set stays authoritative
+                // everywhere else) and the buffer insert is inlined
+                // (gc_buf_push would re-borrow).
+                let b = rc.borrow();
+                if b.gc.destructed() {
                     return;
                 }
                 // Always buffer (no note-time classification): the sweep at
@@ -1795,7 +1799,11 @@ impl<'m> Vm<'m> {
                 // that window: a destructor-driven cleanup (e.g. a file
                 // unlink) can slip past the tests that depend on it (WP-21:
                 // REST sideload unique-filename flake).
-                if self.gc_buf_push(rc, false) {
+                if !b.gc.buffered() {
+                    b.gc.set_pos(self.gc_buf.len());
+                    b.gc.set_birth(false);
+                    drop(b);
+                    self.gc_buf.push(Some(Rc::clone(rc)));
                     #[cfg(feature = "gc-census")]
                     gc_census::note_inserted();
                 }
@@ -1881,11 +1889,15 @@ impl<'m> Vm<'m> {
         if main && !self.gc_light_demoted.is_empty() {
             for id in std::mem::take(&mut self.gc_light_demoted) {
                 let Some(o) = self.created.get(&id).cloned() else { continue };
+                // The take() emptied the set: the mirror flag must drop for
+                // every live member, buffered or not.
+                o.borrow().gc.set_light_demoted(false);
                 // A re-seed is phpr's own safety net (like birth tracking),
                 // not a real holder's release: a parent's free cascade may
                 // consume it (gc_release_child) — hence `birth = true`.
                 if self.gc_buf_push(&o, true) {
                     self.gc_cycle_roots.remove(&id);
+                    o.borrow().gc.set_cycle_root(false);
                 }
             }
         }
@@ -1922,15 +1934,20 @@ impl<'m> Vm<'m> {
                 #[cfg(feature = "gc-census")]
                 gc_census::cand_demoted();
                 let b = o.borrow();
-                let id = b.id;
                 b.gc.clear();
-                drop(b);
-                self.gc_cycle_roots.insert(id);
+                // The mirror flags guard the redundant hash inserts: 95% of
+                // demotions re-demote an id already in the sets.
+                if !b.gc.cycle_root() {
+                    b.gc.set_cycle_root(true);
+                    self.gc_cycle_roots.insert(b.id);
+                }
                 // A light sweep's demotion must be re-checked by the
                 // enclosing main sweep (unhooked temp deaths).
-                if !main {
-                    self.gc_light_demoted.insert(id);
+                if !main && !b.gc.light_demoted() {
+                    b.gc.set_light_demoted(true);
+                    self.gc_light_demoted.insert(b.id);
                 }
+                drop(b);
                 // The buffer clone drops here — the same instant the old
                 // map remove dropped it.
             };
@@ -2083,6 +2100,7 @@ impl<'m> Vm<'m> {
             if let Some((defc, midx)) = resolve_method_runtime(&self.classes, cid, b"__destruct") {
                 log::debug!(target: "phpr::gc", "destruct: {}#{}", String::from_utf8_lossy(&self.classes[cid].name), id);
                 self.destructed.insert(id);
+                o.borrow().gc.set_destructed(true);
                 #[cfg(feature = "gc-census")]
                 gc_census::destructor();
                 let callee = &self.classes[defc].methods[midx].func;
@@ -2204,6 +2222,11 @@ impl<'m> Vm<'m> {
                     self.created.remove(&id);
                     self.gc_cycle_roots.remove(&id);
                     self.gc_light_demoted.remove(&id);
+                    {
+                        let b = rc.borrow();
+                        b.gc.set_cycle_root(false);
+                        b.gc.set_light_demoted(false);
+                    }
                     self.var_dump_debug.remove(&id);
                     self.stringify_args.remove(&id);
                     work.push(RelItem::Obj(Rc::clone(rc)));
@@ -2533,20 +2556,23 @@ impl<'m> Vm<'m> {
             for slot in self.gc_buf.drain(..) {
                 if let Some(o) = slot {
                     let b = o.borrow();
-                    let id = b.id;
+                    if !b.gc.cycle_root() {
+                        b.gc.set_cycle_root(true);
+                        self.gc_cycle_roots.insert(b.id);
+                    }
                     b.gc.clear();
-                    drop(b);
-                    self.gc_cycle_roots.insert(id);
                 }
             }
             self.gc_buf_head = 0;
-            let roots: Vec<u32> = self
-                .gc_cycle_roots
-                .drain()
-                .collect::<Vec<_>>()
-                .into_iter()
-                .filter(|id| self.created.contains_key(id))
-                .collect();
+            let mut roots: Vec<u32> = Vec::new();
+            for id in self.gc_cycle_roots.drain().collect::<Vec<_>>() {
+                if let Some(o) = self.created.get(&id) {
+                    // The drain emptied the set: the mirror flag drops for
+                    // every live member.
+                    o.borrow().gc.set_cycle_root(false);
+                    roots.push(id);
+                }
+            }
             if roots.is_empty() {
                 break;
             }
@@ -2579,6 +2605,7 @@ impl<'m> Vm<'m> {
                 if resolve_method_runtime(&self.classes, cid, b"__destruct").is_some() {
                     log::debug!(target: "phpr::gc", "destruct (cycle): {}#{}", String::from_utf8_lossy(&self.classes[cid].name), id);
                     self.destructed.insert(id);
+                    rc.borrow().gc.set_destructed(true);
                     ran_destructor = true;
                     self.call_method_sync(Zval::Object(rc), b"__destruct", Vec::new())?;
                 }
