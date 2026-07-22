@@ -41,6 +41,57 @@
 > 25,8M — stesso pattern receiver-in-place di ThisPropGet),
 > recycle_frame 92, is_instance_of 79 (cache (class,target))**.
 
+## 📨 Direttive Gemini post-WP-35 (`2026-07-22_gemini.md`) — verdetti e integrazione
+
+Verificate sul codice il 2026-07-22 contro il riprofilo `new-wp35.sample`.
+Congruenza alta col piano già in testa; una leva NUOVA (SSO) con correzioni.
+
+- **✅ A — `Op::ThisMethodCall`**: COINCIDE con la leva #1 già raccomandata
+  (This→MethodCall **25,8M** bigram dal riprofilo; il "37M" citato da Gemini
+  è il bigram INVERSO MethodCall→This del census WP-33 — ordine diverso,
+  stessa coppia calda). Pattern receiver-in-place di ThisPropGet: elide il
+  push di $this + il pop del receiver + il clone/Rc-bump. ⭐ Il tail va
+  CONDIVISO col funnel esistente di `dispatch_instance_call` (MethodIc,
+  __call, shunt Generator/Fiber/Closure) esattamente come `prop_get_fallback`
+  — mai duplicare la semantica. → **WP-36**.
+- **✅ D — cache `is_instance_of`**: già in lista, basso sforzo. Cella
+  `(class_id, target_id) → bool` con epoch per-run come le altre IC (la
+  gerarchia è immutabile una volta dichiarate entrambe le classi).
+  Piggyback naturale nella stessa sessione di A.
+- **🟡 B — SSO su PhpStr**: candidata VALIDA (drop/clone 231+166 e mi_malloc
+  la supportano) ma con DUE correzioni al meccanismo proposto:
+  1. "stack-allocated / inline nello Zval" COLLIDE con l'invariante 16B
+     (static assert WP-27): servirebbe una nuova variante Zval con buffer
+     inline ≤14B — invasiva, tocca ogni match su Zval e ogni sito che
+     pretende `ZStr`.
+  2. La versione LOCALIZZATA a `zstr.rs` rende comunque molto: OGGI ogni
+     stringa costa **DUE allocazioni** (`Rc<PhpStr>` + `bytes: Box<[u8]>`) —
+     SSO dentro PhpStr (`enum { Inline { len, buf: [u8; N] }, Heap(Box<[u8]>) }`)
+     DIMEZZA le alloc per le stringhe corte senza toccare né Zval né i match,
+     e conserva la hash cell. Primo passo a basso rischio.
+  Prerequisito (lezione WP-26): attribuzione DATA-DRIVEN della quota
+  mi_malloc/churn dovuta a stringhe corte PRIMA del refactor. → sessione
+  dedicata.
+- **🟡 C — call-site specialization**: allineata al verdetto già dato
+  (Punto 5 del doc 21/07). Il sottoinsieme SICURO: precompute su Func
+  `simple_call: bool` (no hints — `has_hints` WP-31 —, no by-ref, no
+  default, no variadic) + arity ESATTA al call-site ⇒ salta il loop di
+  bind_params con copia diretta nei slot. Le guardie "tipi dell'ultimo hit"
+  proposte da Gemini sono la parte rischiosa (ordine coercion/TypeError) —
+  solo dopo, se il precompute non basta.
+- **🟡 E — batching GC sweep**: direzione condivisa (gc_note 161 +
+  gc_sweep 132); il vincolo DURO è l'ordine di free bit-identico a Zend
+  (WP-28: gc_queue FIFO + gc_birth + purge per-id; WP-32: le sentinelle
+  drop-order NON sono oracle-diffabili — vanno pinnate prima). L'idea
+  "liste intrusive per i soli candidati nati nello statement corrente" è
+  concreta e compatibile col LIFO id-reuse — da esplorare con la batteria
+  drop-order pinnata PRIMA di toccare lo sweep.
+
+**Ordine consigliato (Gemini ∩ riprofilo): WP-36 = A + D → C (sottoinsieme
+sicuro) → B (sessione dedicata, attribuzione prima) → E.** Il footprint
+12,0× resta il fronte non toccato dall'arco: B è l'unica delle cinque che
+lo aggredisce.
+
 # (storia WP-34)
 
 > ⚡ **WP-34 (2026-07-22, gated `61868ce`, 1 commit)** — **T2 dell'arco:
