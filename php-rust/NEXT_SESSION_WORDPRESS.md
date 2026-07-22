@@ -53,6 +53,66 @@
 > PRIMA di ogni cambiamento di layout (metodo WP-32). Le tre parità §3.7
 > sono fix contenuti buoni come warm-up di sessione.
 
+## 📨 Direttive Gemini post-WP-38 (`2026-07-22_gemini_wp38.md`) — verdetti e integrazione
+
+Verificate sul codice e sui dati WP-38 il 2026-07-22. Analisi retrospettiva
+concordante; sui prossimi passi due correzioni tecniche e un veto di policy.
+
+- **✅ §1 Analisi della bocciatura SSO**: CONCORDANTE coi dati (mimalloc
+  thread-local free-list ≈ manciata di istruzioni; branch a ogni accesso).
+  Una precisazione dai numeri: il read-tax PURO misurato è ≈0 (micro
+  sola-lettura, loop omogenei dove il predictor non sbaglia mai) — il costo
+  reale è distribuito tra costruttori Vec-fed, pressione cache del 32B e
+  misprediction sul mix inline/heap; quest'ultima è co-fattore plausibile,
+  non dimostrato dominante. Il verdetto operativo non cambia.
+- **✅ §2 Warm-up gap di parità — con DUE correzioni di mira**:
+  - *Increment deprecation*: il sito indicato da Gemini (`IncDecSlot`) è
+    SBAGLIATO — IncDecSlot è il fast path WP-33 **solo Long-checked**, le
+    stringhe non ci entrano mai. Il funnel giusto è
+    `compute_incdec`/`ops::increment`, che **già ritorna `diags`** e il cui
+    raise avviene PRIMA del write-back (semantica set_error_handler già
+    rispettata): il plumbing c'è, va solo emessa la deprecation. ⭐ Oracle
+    da consultare anche per il **decrement** su stringa non-numerica (RFC
+    8.3 "saner incdec" copre entrambi i versi).
+  - *sort flags*: giusto il gemello `value_flag_cmp` di `key_flag_cmp`
+    (coprire anche rsort/asort/arsort). ⚠️ Subtlety oggetti: sort è un
+    VALUE-sort ⇒ SORT_STRING su Stringable vorrebbe `__toString`, ma il
+    gate precompute (§1.1 divergenze) è STATICO per-builtin mentre i
+    `$flags` sono runtime — inserire `sort` nel gate chiamerebbe
+    `__toString` spurio sotto SORT_REGULAR (side effect osservabile).
+    Usare `ctx.to_zstr` col fallback-warning per gli oggetti e dichiarare
+    il residuo, come oggi negli altri percorsi non-gated.
+  - *Uninitialized string offset*: ✅ come da catalogo §3.7.
+- **✅ §3 Leva E (gc batching)**: CONCORDANTE col handoff. Cross-check utile:
+  soglia Zend `GC_THRESHOLD` = 10k root nel buffer — phpr ha già il GC
+  adattivo WP-21 (soglia che cresce sui collect inefficaci): PRIMA di
+  toccare, misurare sul media quante collection avvengono e con che resa
+  (attribuzione data-driven, metodo WP-26/33 — la lezione WP-38 sul
+  "count ≠ nanosecondi" vale anche qui). Drop batching dei Zval SOLO con
+  ordine di distruzione bit-identico (LIFO + cascata FIFO WP-28):
+  **sentinelle drop-order pinnate prima**, come già in piano.
+- **§4 Paradigmi radicali — verdetti puntuali**:
+  - *Bytecode a registri*: ✅ **unica "leva lunga" compatibile** con safe
+    Rust + byte-parity. Nota di realismo: le fusioni bigram WP-33/34
+    (ThisPropGet, CmpJmpConst, ThisMethodCall, ConcatN) già catturano una
+    parte del beneficio (meno dispatch sugli stessi pattern); il salto vero
+    è un arco multi-sessione (compiler + run_loop + unit-cache format).
+    Candidarla come arco dedicato DOPO la leva E, con census WP-33 alla
+    mano per stimare il tetto prima di iniziare (lezione WP-36).
+  - *JIT Cranelift*: ⏸ fuori orizzonte ora — parità di diagnostica/linee ed
+    exception-table nel codice nativo è un moltiplicatore di complessità; e
+    un eventuale JIT presuppone comunque un IR migliore (= il punto sopra).
+  - *Zval untagged union unsafe*: ❌ **VETO DI POLICY** — "unsafe fuori
+    roadmap" è decisione utente (WP-33), già applicata due volte
+    (NaN-boxing bocciato WP-32, union SSO rifiutata WP-38). Da non
+    riproporre salvo cambio di rotta esplicito dell'utente.
+  - *Arena per-request*: ⚠️ collide con la byte-parity dei distruttori
+    (ordine LIFO + free-order Zend WP-28: "buttare l'arena" non è
+    equivalente osservabile) e col workload di riferimento attuale (la
+    test-suite è UN processo senza confini di request). Variante stretta
+    eventualmente per `phpr -S` o per temporanei provabilmente senza
+    distruttori — non prioritaria.
+
 # (storia WP-37)
 
 > ⚡ **WP-37 (2026-07-22, gated `32a5820`, 1 commit)** — **leva C (sottoinsieme
