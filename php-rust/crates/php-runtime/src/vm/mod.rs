@@ -15661,6 +15661,29 @@ mod tests {
     }
 
     #[test]
+    fn simple_call_fast_bind_arities() {
+        // WP-37: the simple-call fast paths engage only at EXACT arity —
+        // fewer args (default prologue), surplus args, by-ref params and
+        // too-few errors all keep the generic binder's semantics; a
+        // reference argument into a by-value parameter still decays.
+        assert_eq!(
+            vm_stdout(
+                b"<?php
+                function s2($a, $b) { return $a . '/' . $b; }
+                function s3($a, $b = 5) { return $a . '|' . $b; }
+                function inc(&$n) { $n++; }
+                function byval($x) { $x .= '!'; return $x; }
+                function req2($a, $b) { return $a + $b; }
+                echo s2(1, 2), ';', s3(1, 2), ';', s3(1), ';';
+                $v = 3; inc($v); echo $v, ';';
+                $r = 'v'; $al =& $r; echo byval($al), $r, ';';
+                try { req2(1); } catch (Error $e) { echo 'AC'; }"
+            ),
+            b"1/2;1|2;1|5;4;v!v;AC"
+        );
+    }
+
+    #[test]
     fn instance_of_cache_repeats_and_late_class() {
         // WP-36 memo: repeated queries on the same (class, target) pairs stay
         // correct — positive, interface and negative outcomes — and a class

@@ -1291,6 +1291,15 @@ pub struct Func {
     /// consults it on every call — the per-call scan was pure waste for the
     /// overwhelmingly common hint-free function.
     pub has_hints: bool,
+    /// Precomputed "nothing per-call to do beyond moving arguments" (WP-37,
+    /// call-site specialization, safe subset): no hints, no by-reference
+    /// parameter, no variadic, not a generator. `enter_callee` then just
+    /// pushes the frame (no call-line / strict-mode capture — both feed
+    /// only hint TypeErrors), and `bind_params` with EXACT arity takes the
+    /// straight decay-into-slots loop. Defaults don't matter here: the
+    /// fast paths engage only when every declared slot receives a value,
+    /// so the callee's default prologue sees no `Undef` — same as today.
+    pub simple_call: bool,
     /// The declared scalar return type hint (step 14), enforced on the returned
     /// value at [`Op::Ret`]. `None` for an absent / non-scalar return type, and
     /// left unenforced for a by-reference function (which returns an alias).

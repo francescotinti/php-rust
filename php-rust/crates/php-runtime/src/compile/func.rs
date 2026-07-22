@@ -111,6 +111,8 @@ pub(super) fn compile_body(
         param_by_ref: params.iter().map(|p| p.by_ref).collect(),
         param_hints: params.iter().map(|p| p.hint.clone()).collect(),
         has_hints: params.iter().any(|p| p.hint.is_some()),
+        simple_call: !params.iter().any(|p| p.hint.is_some() || p.by_ref || p.variadic)
+            && !is_generator,
         // Default-value thunks for `ReflectionParameter::getDefaultValue()` (run in
         // this body's class context). A required/variadic param, or a default that
         // does not compile, has `None`.
@@ -259,6 +261,8 @@ pub(super) fn stub_func(fd: &FnDecl, err: &CompileError) -> Func {
         param_by_ref: fd.params.iter().map(|p| p.by_ref).collect(),
         param_hints: fd.params.iter().map(|p| p.hint.clone()).collect(),
         has_hints: fd.params.iter().any(|p| p.hint.is_some()),
+        simple_call: !fd.params.iter().any(|p| p.hint.is_some() || p.by_ref || p.variadic)
+            && !fd.is_generator,
         param_defaults: fd.params.iter().map(|_| None).collect(),
         param_default_const: fd.params.iter().map(|_| None).collect(),
         param_promoted: fd.params.iter().map(|_| false).collect(),
@@ -353,6 +357,7 @@ pub(super) fn compile_prop_init(items: &[(Box<[u8]>, &Expr)], ctx: &ProgramCtx, 
         param_by_ref: Box::default(),
         param_hints: Box::default(),
         has_hints: false,
+        simple_call: true,
         param_defaults: Box::default(),
         param_default_const: Box::default(),
         param_promoted: Box::default(),
@@ -395,6 +400,7 @@ pub(super) fn compile_default_thunk(value: &Expr, ctx: &ProgramCtx, cur_class: O
         param_by_ref: Box::default(),
         param_hints: Box::default(),
         has_hints: false,
+        simple_call: true,
         param_defaults: Box::default(),
         param_default_const: Box::default(),
         param_promoted: Box::default(),
@@ -434,6 +440,7 @@ pub(super) fn compile_const_thunk(name: &[u8], value: &Expr, ctx: &ProgramCtx, d
         param_by_ref: Box::default(),
         param_hints: Box::default(),
         has_hints: false,
+        simple_call: true,
         param_defaults: Box::default(),
         param_default_const: Box::default(),
         param_promoted: Box::default(),
@@ -493,6 +500,7 @@ pub(super) fn const_stub(name: &[u8], err: &CompileError) -> Func {
         param_by_ref: Box::default(),
         param_hints: Box::default(),
         has_hints: false,
+        simple_call: true,
         param_defaults: Box::default(),
         param_default_const: Box::default(),
         param_promoted: Box::default(),

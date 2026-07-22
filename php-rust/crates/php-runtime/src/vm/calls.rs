@@ -314,6 +314,17 @@ pub(super) fn decay_args(args: Vec<Zval>) -> Vec<Zval> {
 }
 
 pub(super) fn bind_params(frame: &mut Frame, args: Vec<Zval>) {
+    // WP-37 fast path: a simple-call callee (no by-ref/variadic) receiving
+    // EXACTLY its declared arity — every slot gets a by-value argument, no
+    // surplus to snapshot, no `Undef` for the default prologue. Equal to the
+    // generic non-variadic arm below with every `param_by_ref` false.
+    if frame.func.simple_call && args.len() == frame.func.n_params as usize {
+        frame.argc = args.len() as u32;
+        for (i, a) in args.into_iter().enumerate() {
+            frame.slots[i] = decay_arg(a);
+        }
+        return;
+    }
     frame.argc = args.len() as u32;
     match frame.func.variadic_slot {
         None => {
@@ -1078,6 +1089,22 @@ impl<'m> Vm<'m> {
     /// running it (GEN); otherwise push it to run. The caller is the current top
     /// frame, so this is called *before* `frame` is pushed.
     pub(super) fn enter_callee(&mut self, frame: Frame<'m>) -> Result<(), PhpError> {
+        // WP-37 fast path: a simple-call callee has nothing per-call that can
+        // raise or divert — no hint coercion (the call-line / strict-mode
+        // captures below feed only its TypeError), no variadic pack, not a
+        // generator. Just push the frame.
+        if frame.func.simple_call {
+            if log::log_enabled!(target: "phpr::call", log::Level::Trace) {
+                log::trace!(
+                    target: "phpr::call",
+                    "enter {}() (depth {})",
+                    String::from_utf8_lossy(&frame.func.name),
+                    self.frames.len() + 1
+                );
+            }
+            self.frames.push(frame);
+            return Ok(());
+        }
         // The call site is the caller's current line, reported in an arg TypeError
         // (captured before the callee frame is pushed). There may be NO caller
         // frame: an output-buffer callback (`ob_gzhandler`) invoked by the final

@@ -15,9 +15,12 @@ pub type ZStr = Rc<PhpStr>;
 
 impl PhpStr {
     pub fn new(bytes: impl Into<Box<[u8]>>) -> ZStr {
+        let bytes = bytes.into();
+        #[cfg(feature = "str-census")]
+        census::record(bytes.len());
         Rc::new(PhpStr {
             hash: Cell::new(0),
-            bytes: bytes.into(),
+            bytes,
         })
     }
 
@@ -82,6 +85,54 @@ impl std::hash::Hash for PhpStr {
 impl fmt::Debug for PhpStr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "PhpStr({:?})", String::from_utf8_lossy(&self.bytes))
+    }
+}
+
+/// WP-37 attribution counters (SSO groundwork, WP-26 lesson: measure BEFORE
+/// the refactor). Every `PhpStr::new` records its length into a bucket; the
+/// histogram is APPENDED to `$PHPR_STR_CENSUS` at process exit (`libc::atexit`
+/// — fires on `process::exit` too, and append-mode aggregates phpr
+/// subprocesses like the op-census file dump). Buckets are chosen around the
+/// candidate inline capacities of an SSO PhpStr (payload that fits alongside
+/// `len` without growing the struct beyond the current 24B heap-repr).
+#[cfg(feature = "str-census")]
+mod census {
+    use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+
+    /// Upper bounds of each bucket, inclusive; the last is a catch-all.
+    pub const BOUNDS: [usize; 8] = [0, 7, 15, 23, 31, 63, 255, usize::MAX];
+    static COUNTS: [AtomicU64; 8] = [const { AtomicU64::new(0) }; 8];
+    static BYTES: AtomicU64 = AtomicU64::new(0);
+    static REGISTERED: AtomicBool = AtomicBool::new(false);
+
+    pub fn record(len: usize) {
+        if !REGISTERED.swap(true, Ordering::Relaxed) {
+            unsafe { libc::atexit(dump) };
+        }
+        let i = BOUNDS.iter().position(|&b| len <= b).unwrap_or(7);
+        COUNTS[i].fetch_add(1, Ordering::Relaxed);
+        BYTES.fetch_add(len as u64, Ordering::Relaxed);
+    }
+
+    extern "C" fn dump() {
+        use std::io::Write;
+        let Ok(path) = std::env::var("PHPR_STR_CENSUS") else { return };
+        let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) else {
+            return;
+        };
+        let mut line = format!("pid={}", std::process::id());
+        let mut prev = 0usize;
+        for (i, &b) in BOUNDS.iter().enumerate() {
+            let label = if b == usize::MAX {
+                format!("{}+", prev)
+            } else {
+                format!("{}-{}", prev, b)
+            };
+            line.push_str(&format!(" {}={}", label, COUNTS[i].load(Ordering::Relaxed)));
+            prev = b.saturating_add(1);
+        }
+        line.push_str(&format!(" bytes={}\n", BYTES.load(Ordering::Relaxed)));
+        let _ = f.write_all(line.as_bytes());
     }
 }
 

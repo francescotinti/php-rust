@@ -4,6 +4,12 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[features]
+# WP-37 attribution build (SSO groundwork): length-bucket counters on every
+# PhpStr allocation, dumped at process exit to $PHPR_STR_CENSUS (append).
+# Off by default — zero cost in normal builds (the hook is compiled out).
+str-census = []
+
 [dependencies]
 libc = "0.2"
 rustc-hash.workspace = true
