@@ -103,16 +103,54 @@ impl<'a> super::FnCompiler<'a> {
                 self.emit(Op::IncDecSlot { slot: *slot, inc: *inc, pre: *pre });
             }
             ExprKind::Binary(op, a, b) => {
-                // String concatenation stringifies each operand, honouring
-                // `__toString` on object operands (OOP-3c).
+                if *op == BinOp::Concat {
+                    // String concatenation stringifies each operand, honouring
+                    // `__toString` on object operands (OOP-3c). The nested
+                    // Concat spine (`.` chains, string interpolation) is
+                    // FLATTENED (WP-34): parts evaluate and stringify in the
+                    // exact order of the old pairwise emission — the elided
+                    // intermediate Concats and the Stringify of an
+                    // already-Str value were pure. Literal Str parts skip
+                    // their no-op Stringify; empty literals (the
+                    // interpolation seed) vanish.
+                    fn flatten<'e>(e: &'e Expr, out: &mut Vec<&'e Expr>) {
+                        if let ExprKind::Binary(BinOp::Concat, a, b) = &e.kind {
+                            flatten(a, out);
+                            flatten(b, out);
+                        } else {
+                            out.push(e);
+                        }
+                    }
+                    let mut parts: Vec<&Expr> = Vec::new();
+                    flatten(a, &mut parts);
+                    flatten(b, &mut parts);
+                    parts.retain(|p| !matches!(&p.kind, ExprKind::Str(s) if s.is_empty()));
+                    // All-literal chain (line-split strings): byte-concat is
+                    // the whole semantics — fold to one constant at compile.
+                    if parts.iter().all(|p| matches!(&p.kind, ExprKind::Str(_))) {
+                        let mut all = Vec::new();
+                        for p in &parts {
+                            if let ExprKind::Str(s) = &p.kind {
+                                all.extend_from_slice(s);
+                            }
+                        }
+                        let k = self.konst(Const::Str(php_types::PhpStr::new(all)));
+                        self.emit(Op::PushConst(k));
+                        return Ok(());
+                    }
+                    for p in &parts {
+                        self.expr(p)?;
+                        if !matches!(&p.kind, ExprKind::Str(_)) {
+                            self.emit(Op::Stringify);
+                        }
+                    }
+                    if parts.len() > 1 {
+                        self.emit(Op::ConcatN(parts.len() as u32));
+                    }
+                    return Ok(());
+                }
                 self.expr(a)?;
-                if *op == BinOp::Concat {
-                    self.emit(Op::Stringify);
-                }
                 self.expr(b)?;
-                if *op == BinOp::Concat {
-                    self.emit(Op::Stringify);
-                }
                 self.emit(Op::Binary(*op));
             }
             ExprKind::Unary(op, a) => {
@@ -204,7 +242,9 @@ impl<'a> super::FnCompiler<'a> {
             }
             ExprKind::Print(a) => {
                 self.expr(a)?;
-                self.emit(Op::Stringify); // honour __toString (OOP-3c)
+                if !matches!(&a.kind, ExprKind::Str(_) | ExprKind::Binary(BinOp::Concat, ..)) {
+                    self.emit(Op::Stringify); // honour __toString (OOP-3c)
+                }
                 self.emit(Op::Print);
             }
             ExprKind::Call { name, fallback, args, named } => {
@@ -417,6 +457,15 @@ impl<'a> super::FnCompiler<'a> {
             }
             ExprKind::PropGet { object, name, nullsafe } => {
                 let root = self.chain_enter();
+                // Fused `$this->p` (WP-34): the This push/pop round-trip and one
+                // dispatch disappear; semantics are shared with PropGet by
+                // construction (same fallback). Root-safe: `$this` contributes
+                // no nullsafe skips of its own.
+                if !*nullsafe && matches!(object.kind, ExprKind::This) {
+                    self.emit(Op::ThisPropGet { name: name.clone().into(), ic: PropIc::default() });
+                    self.chain_exit(root);
+                    return Ok(());
+                }
                 self.expr(object)?;
                 if *nullsafe {
                     // `$o?->p`: a null receiver keeps null and skips the read —

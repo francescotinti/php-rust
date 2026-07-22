@@ -532,6 +532,7 @@ impl<'a> FnCompiler<'a> {
             | Op::JumpIfNotNull(a)
             | Op::JumpIfNull(a) => *a = target,
             Op::CmpJmp { addr, .. } => *addr = target,
+            Op::CmpJmpConst { addr, .. } => *addr = target,
             other => unreachable!("patch_target on non-jump op {other:?}"),
         }
     }
@@ -557,6 +558,20 @@ impl<'a> FnCompiler<'a> {
             b,
         ) = &cond.kind
         {
+            // A literal operand is inlined into the op (WP-34): pushing a
+            // literal has no observable effect, so eliding its PushConst —
+            // even the lhs one, compiled "out of order" — is sound.
+            if let Some(k) = self.lit_const_of(b) {
+                self.expr(a)?;
+                // The op keeps the line the literal's PushConst would have
+                // stamped (expr() sets cur_line at entry) — trace parity.
+                self.cur_line = b.line;
+                return Ok(self.emit(Op::CmpJmpConst { op: *op, cidx: k, addr: Addr::MAX, when, const_lhs: false }));
+            }
+            if let Some(k) = self.lit_const_of(a) {
+                self.expr(b)?;
+                return Ok(self.emit(Op::CmpJmpConst { op: *op, cidx: k, addr: Addr::MAX, when, const_lhs: true }));
+            }
             self.expr(a)?;
             self.expr(b)?;
             return Ok(self.emit(Op::CmpJmp { op: *op, addr: Addr::MAX, when }));
@@ -567,6 +582,20 @@ impl<'a> FnCompiler<'a> {
         } else {
             Op::JumpIfFalse(Addr::MAX)
         }))
+    }
+
+    /// The constant-pool index of a LITERAL expression (`null`/bool/int/
+    /// float/string written in source), or `None` for anything computed.
+    /// Used to inline the literal operand of a fused compare (WP-34).
+    fn lit_const_of(&mut self, e: &Expr) -> Option<ConstIdx> {
+        match &e.kind {
+            ExprKind::Null => Some(self.konst(Const::Null)),
+            ExprKind::Bool(b) => Some(self.konst(Const::Bool(*b))),
+            ExprKind::Int(i) => Some(self.konst(Const::Int(*i))),
+            ExprKind::Float(f) => Some(self.konst(Const::Float(*f))),
+            ExprKind::Str(s) => Some(self.konst(Const::Str(php_types::PhpStr::new(s.clone())))),
+            _ => None,
+        }
     }
 
     /// Intern a literal into the constant pool, returning its index.
@@ -665,7 +694,11 @@ impl<'a> FnCompiler<'a> {
             StmtKind::Echo(values) => {
                 for e in values {
                     self.expr(e)?;
-                    self.emit(Op::Stringify); // honour __toString (OOP-3c)
+                    // A Str literal / concat result is already a string —
+                    // its Stringify was a pure dispatch (WP-34).
+                    if !matches!(&e.kind, ExprKind::Str(_) | ExprKind::Binary(BinOp::Concat, ..)) {
+                        self.emit(Op::Stringify); // honour __toString (OOP-3c)
+                    }
                     self.emit(Op::Echo);
                 }
             }

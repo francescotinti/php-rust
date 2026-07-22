@@ -207,6 +207,14 @@ impl<'m> super::Vm<'m> {
     fn binary_value(&mut self, top: usize, b: BinOp) -> Result<Zval, PhpError> {
         let rhs = self.frames[top].stack.pop().expect("Binary rhs");
         let lhs = self.frames[top].stack.pop().expect("Binary lhs");
+        self.binary_value_ab(b, lhs, rhs)
+    }
+
+    /// Operand-explicit core of [`Self::binary_value`] (WP-34): shared by
+    /// `Binary`/`CmpJmp` (operands popped) and `CmpJmpConst` (one operand
+    /// materialised from the constant pool) so all three evaluate a binary
+    /// operator with identical semantics by construction.
+    fn binary_value_ab(&mut self, b: BinOp, lhs: Zval, rhs: Zval) -> Result<Zval, PhpError> {
         // WP-33 T1a: monomorphic tag-pair fast paths (census-driven); a
         // miss falls through to the generic path below unchanged.
         if let Some(r) = binary_fast(b, &lhs, &rhs) {
@@ -281,6 +289,117 @@ impl<'m> super::Vm<'m> {
             (lhs, rhs)
         };
         self.apply_binop_ovl(b, &lhs, &rhs)
+    }
+
+    /// Everything below [`Op::PropGet`]'s inline-cache hit: the WP-25
+    /// per-class fast path, lazy initialization, hooks, `__get`, visibility
+    /// resolution and the actual slot read. Extracted (WP-34) so the fused
+    /// [`Op::ThisPropGet`] shares the identical semantics (warning order,
+    /// IC fill discipline, magic re-entry) by construction. Pushes the read
+    /// value (or re-enters the VM via a hook/`__get` frame) and returns.
+    fn prop_get_fallback(
+        &mut self,
+        top: usize,
+        target: Zval,
+        name: &Rc<[u8]>,
+        ic: &crate::bytecode::PropIc,
+    ) -> Result<(), PhpError> {
+        let cur = self.frames[top].class;
+        // FAST PATH (WP-25): a present, initialized slot on a
+        // non-lazy instance of a hook-free all-public class reads
+        // straight off the table. A miss or `Undef` falls through —
+        // `__get`, the undefined-property warning and the
+        // typed-uninit fatal all live in the general path below.
+        if let Zval::Object(o) = &target {
+            let b = o.borrow();
+            if b.lazy.is_none() {
+                let ci = &self.classes[b.class_id as usize];
+                if ci.all_props_public && !ci.has_prop_hooks {
+                    if let Some(v) = b.props.get(&name) {
+                        if !matches!(v, Zval::Undef) {
+                            // IC fill from the fast path too —
+                            // all-public classes NEVER reach the
+                            // general resolve, and without this
+                            // the site's cache stays cold forever
+                            // (every access re-pays slot_of).
+                            if let Some(pi) = ci.prop_info.get(&name[..]) {
+                                if let Some(i) = pi.slot {
+                                    ic.fill(b.class_id, i);
+                                }
+                            }
+                            // deref_clone: a slot holding a Ref
+                            // reads as its inner value (same as
+                            // read_property).
+                            let v = v.deref_clone();
+                            drop(b);
+                            self.frames[top].stack.push(v);
+                            return Ok(());
+                        }
+                    }
+                }
+            }
+        }
+        // A read of a lazy object initializes it first (PHP 8.4) —
+        // unless a hook/`__get` serves it; an initialized proxy then
+        // forwards the read to its real instance (transitively).
+        let target = self.lazy_prop_access(target, &name, cur, Some(false), (MagicKind::Get, b"__get"))?;
+        // Storage slot to read (the plain name for a dynamic/non-object
+        // target; a mangled key for an accessible private — set below).
+        let mut key: Cow<[u8]> = Cow::Borrowed(&name[..]);
+        let mut slot_idx: Option<u32> = None;
+        if let Zval::Object(o) = &target {
+            // A `get` hook takes precedence over `__get` and direct read
+            // (step 50). Skip it while a hook for this property is active
+            // (a backing read inside the hook).
+            let (oid, cid) = { let b = o.borrow(); (b.id, b.class_id as usize) };
+            if !self.hook_guarded(oid, &name) {
+                if let Some(func) = self.prop_hook(cid, &name, false) {
+                    self.push_hook(func, target.clone(), oid, &name, None);
+                    return Ok(());
+                }
+                // A virtual hooked property with no get hook is write-only.
+                if self.is_virtual_hooked(cid, &name) {
+                    return Err(PhpError::Error(format!(
+                        "Property {}::${} is write-only",
+                        String::from_utf8_lossy(&self.classes[cid].name),
+                        String::from_utf8_lossy(&name),
+                    )));
+                }
+            }
+            if let Some((defc, midx, oid)) =
+                self.magic_applies(o, &name, cur, MagicKind::Get, b"__get")
+            {
+                // __get's return *is* the read result (flows via Ret).
+                self.push_magic_prop(defc, midx, oid, MagicKind::Get, target.clone(), &name, None, None, false);
+                return Ok(());
+            }
+            // Single resolution decides visibility AND the storage key
+            // (was check_prop_access + prop_storage_key = two walks).
+            let ocid = o.borrow().class_id as usize;
+            key = match resolve_prop_access(&self.classes, ocid, &name, cur) {
+                PropAccess::Slot { key: k, slot } => {
+                    slot_idx = slot;
+                    // IC fill: only a scope-independent outcome —
+                    // PUBLIC, hook-free, backed (see PropIc).
+                    if let (Some(i), Some(pi)) = (slot, prop_info(&self.classes, ocid, &name)) {
+                        if pi.visibility == crate::hir::Visibility::Public && pi.hooks.is_none() {
+                            ic.fill(ocid as u32, i);
+                        }
+                    }
+                    Cow::Borrowed(k)
+                }
+                PropAccess::Dynamic => Cow::Borrowed(&name[..]),
+                PropAccess::Denied { decl, vis } => {
+                    return Err(prop_access_error(&self.classes, decl, &name, vis))
+                }
+            };
+            if let Some(err) = self.uninit_typed_read_at(o, &key, slot_idx, &name) {
+                return Err(err);
+            }
+        }
+        let v = read_property_at(&target, &key, slot_idx, &mut self.diags);
+        self.frames[top].stack.push(v);
+        Ok(())
     }
 
     pub(super) fn run_loop(&mut self, baseline: usize) -> Result<RunExit, PhpError> {
@@ -692,6 +811,53 @@ impl<'m> super::Vm<'m> {
                     let r = self.binary_value(top, *op)?;
                     if convert::to_bool(&r, &mut self.diags) == *when {
                         self.frames[top].ip = *addr as usize;
+                    }
+                }
+                Op::CmpJmpConst { op, cidx, addr, when, const_lhs } => {
+                    // CmpJmp with one literal operand inlined (WP-34): the
+                    // PushConst dispatch and its stack round-trip disappear;
+                    // the compare runs through binary_value_ab — identical
+                    // semantics to Binary/CmpJmp by construction.
+                    let x = self.frames[top].stack.pop().expect("CmpJmpConst operand");
+                    let c = func.consts[*cidx as usize].to_zval();
+                    let (lhs, rhs) = if *const_lhs { (c, x) } else { (x, c) };
+                    let r = self.binary_value_ab(*op, lhs, rhs)?;
+                    if convert::to_bool(&r, &mut self.diags) == *when {
+                        self.frames[top].ip = *addr as usize;
+                    }
+                }
+                Op::ConcatN(n) => {
+                    // Flattened concat chain (WP-34): every part arrived
+                    // through `Stringify` or as a Str literal, so the join is
+                    // pure — one allocation instead of n-1 left-associated
+                    // reallocs. A non-Str part (unreachable by construction)
+                    // folds pairwise through binary_value_ab to keep concat
+                    // semantics owned in one place.
+                    let n = *n as usize;
+                    let base = self.frames[top].stack.len() - n;
+                    if self.frames[top].stack[base..].iter().all(|v| matches!(v, Zval::Str(_))) {
+                        let total: usize = self.frames[top].stack[base..]
+                            .iter()
+                            .map(|v| match v {
+                                Zval::Str(s) => s.len(),
+                                _ => 0,
+                            })
+                            .sum();
+                        let mut out = Vec::with_capacity(total);
+                        for v in self.frames[top].stack.drain(base..) {
+                            if let Zval::Str(s) = v {
+                                out.extend_from_slice(s.as_bytes());
+                            }
+                        }
+                        self.frames[top].stack.push(Zval::Str(PhpStr::new(out)));
+                    } else {
+                        let parts: Vec<Zval> = self.frames[top].stack.drain(base..).collect();
+                        let mut it = parts.into_iter();
+                        let mut acc = it.next().expect("ConcatN parts");
+                        for p in it {
+                            acc = self.binary_value_ab(BinOp::Concat, acc, p)?;
+                        }
+                        self.frames[top].stack.push(acc);
                     }
                 }
                 Op::Unary(u) => {
@@ -2890,7 +3056,6 @@ impl<'m> super::Vm<'m> {
                 }
                 Op::PropGet { name, ic } => {
                     let obj = self.frames[top].stack.pop().expect("PropGet object");
-                    let cur = self.frames[top].class;
                     let target = obj.deref_clone();
                     // INLINE CACHE (WP-29): the site's last cacheable
                     // resolution — a PUBLIC hook-free backed slot on this
@@ -2913,100 +3078,40 @@ impl<'m> super::Vm<'m> {
                             }
                         }
                     }
-                    // FAST PATH (WP-25): a present, initialized slot on a
-                    // non-lazy instance of a hook-free all-public class reads
-                    // straight off the table. A miss or `Undef` falls through —
-                    // `__get`, the undefined-property warning and the
-                    // typed-uninit fatal all live in the general path below.
-                    if let Zval::Object(o) = &target {
-                        let b = o.borrow();
-                        if b.lazy.is_none() {
-                            let ci = &self.classes[b.class_id as usize];
-                            if ci.all_props_public && !ci.has_prop_hooks {
-                                if let Some(v) = b.props.get(&name) {
+                    self.prop_get_fallback(top, target, name, ic)?;
+                }
+                Op::ThisPropGet { name, ic } => {
+                    // Fused `$this->name` (WP-34): the IC hit borrows the
+                    // receiver in place — no This clone, no stack round-trip.
+                    // Everything else clones the receiver once and takes the
+                    // shared PropGet fallback, so the fused op stays
+                    // semantically identical to This+PropGet by construction.
+                    let mut hit: Option<Zval> = None;
+                    if let Some(Zval::Object(o)) = &self.frames[top].this {
+                        if let Some((cid1, slot)) = ic.get() {
+                            let b = o.borrow();
+                            if b.class_id + 1 == cid1 && b.lazy.is_none() {
+                                if let Some(v) = b.props.get_slot(slot) {
                                     if !matches!(v, Zval::Undef) {
-                                        // IC fill from the fast path too —
-                                        // all-public classes NEVER reach the
-                                        // general resolve, and without this
-                                        // the site's cache stays cold forever
-                                        // (every access re-pays slot_of).
-                                        if let Some(pi) = ci.prop_info.get(&name[..]) {
-                                            if let Some(i) = pi.slot {
-                                                ic.fill(b.class_id, i);
-                                            }
-                                        }
-                                        // deref_clone: a slot holding a Ref
-                                        // reads as its inner value (same as
-                                        // read_property).
-                                        let v = v.deref_clone();
-                                        drop(b);
-                                        self.frames[top].stack.push(v);
-                                        continue;
+                                        hit = Some(v.deref_clone());
                                     }
                                 }
                             }
                         }
                     }
-                    // A read of a lazy object initializes it first (PHP 8.4) —
-                    // unless a hook/`__get` serves it; an initialized proxy then
-                    // forwards the read to its real instance (transitively).
-                    let target = self.lazy_prop_access(target, &name, cur, Some(false), (MagicKind::Get, b"__get"))?;
-                    // Storage slot to read (the plain name for a dynamic/non-object
-                    // target; a mangled key for an accessible private — set below).
-                    let mut key: Cow<[u8]> = Cow::Borrowed(&name[..]);
-                    let mut slot_idx: Option<u32> = None;
-                    if let Zval::Object(o) = &target {
-                        // A `get` hook takes precedence over `__get` and direct read
-                        // (step 50). Skip it while a hook for this property is active
-                        // (a backing read inside the hook).
-                        let (oid, cid) = { let b = o.borrow(); (b.id, b.class_id as usize) };
-                        if !self.hook_guarded(oid, &name) {
-                            if let Some(func) = self.prop_hook(cid, &name, false) {
-                                self.push_hook(func, target.clone(), oid, &name, None);
-                                continue;
-                            }
-                            // A virtual hooked property with no get hook is write-only.
-                            if self.is_virtual_hooked(cid, &name) {
-                                return Err(PhpError::Error(format!(
-                                    "Property {}::${} is write-only",
-                                    String::from_utf8_lossy(&self.classes[cid].name),
-                                    String::from_utf8_lossy(&name),
-                                )));
-                            }
-                        }
-                        if let Some((defc, midx, oid)) =
-                            self.magic_applies(o, &name, cur, MagicKind::Get, b"__get")
-                        {
-                            // __get's return *is* the read result (flows via Ret).
-                            self.push_magic_prop(defc, midx, oid, MagicKind::Get, target.clone(), &name, None, None, false);
-                            continue;
-                        }
-                        // Single resolution decides visibility AND the storage key
-                        // (was check_prop_access + prop_storage_key = two walks).
-                        let ocid = o.borrow().class_id as usize;
-                        key = match resolve_prop_access(&self.classes, ocid, &name, cur) {
-                            PropAccess::Slot { key: k, slot } => {
-                                slot_idx = slot;
-                                // IC fill: only a scope-independent outcome —
-                                // PUBLIC, hook-free, backed (see PropIc).
-                                if let (Some(i), Some(pi)) = (slot, prop_info(&self.classes, ocid, &name)) {
-                                    if pi.visibility == crate::hir::Visibility::Public && pi.hooks.is_none() {
-                                        ic.fill(ocid as u32, i);
-                                    }
-                                }
-                                Cow::Borrowed(k)
-                            }
-                            PropAccess::Dynamic => Cow::Borrowed(&name[..]),
-                            PropAccess::Denied { decl, vis } => {
-                                return Err(prop_access_error(&self.classes, decl, &name, vis))
-                            }
-                        };
-                        if let Some(err) = self.uninit_typed_read_at(o, &key, slot_idx, &name) {
-                            return Err(err);
-                        }
+                    if let Some(v) = hit {
+                        self.frames[top].stack.push(v);
+                        continue;
                     }
-                    let v = read_property_at(&target, &key, slot_idx, &mut self.diags);
-                    self.frames[top].stack.push(v);
+                    let target = match &self.frames[top].this {
+                        Some(t) => t.deref_clone(),
+                        None => {
+                            return Err(PhpError::Error(
+                                "Using $this when not in object context".to_string(),
+                            ))
+                        }
+                    };
+                    self.prop_get_fallback(top, target, name, ic)?;
                 }
                 Op::PropGetSilent { name } => {
                     // Like PropGet but with no "Undefined property" warning and no

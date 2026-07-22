@@ -549,6 +549,18 @@ pub enum Op {
     /// condition's AST root is a comparison (compiler `cond_jump`), so the
     /// boolean is never observed as a value — no `Zval::Bool` round-trip.
     CmpJmp { op: BinOp, addr: Addr, when: bool },
+    /// `[x] -> []` — [`Op::CmpJmp`] with one LITERAL operand inlined (WP-34,
+    /// bigram PushConst→CmpJmp): `consts[cidx]` is the lhs when `const_lhs`
+    /// (literal written on the left) else the rhs. Same compare funnel as
+    /// `Binary`/`CmpJmp` (binary_value_ab) — a literal push has no effects,
+    /// so eliding its dispatch and stack round-trip is unobservable.
+    CmpJmpConst { op: BinOp, cidx: ConstIdx, addr: Addr, when: bool, const_lhs: bool },
+    /// `[s1..sn] -> [s]` — join `n` already-stringified parts (WP-34): the
+    /// compiler emits each part through `Stringify` (or as a Str literal), so
+    /// the flattened chain's intermediate `Concat`s were pure — one
+    /// allocation replaces n-1 left-associated reallocs. A non-Str part
+    /// (unreachable by construction) folds through the pairwise funnel.
+    ConcatN(u32),
     /// `[v] -> [v]` if `v` is *not* null/undefined (jump to `addr`, value kept);
     /// `[v] -> []` otherwise (fall through, value discarded). The primitive
     /// behind `??` and `??=`: the left operand is read silently, and the right is
@@ -829,6 +841,11 @@ pub enum Op {
     /// `[obj] -> [value]` — read property `name` (deref-clone); a missing property
     /// (or a non-object receiver) warns and yields NULL, matching the tree-walker.
     PropGet { name: Rc<[u8]>, ic: PropIc },
+    /// `[] -> [value]` — fused `$this->name` read (WP-34, bigram This→PropGet):
+    /// same semantics as `This` + `PropGet` by construction (shared fallback),
+    /// minus one dispatch and the receiver clone/push/pop round-trip on the
+    /// IC-hit path. Emitted only for a non-nullsafe read whose base is `$this`.
+    ThisPropGet { name: Rc<[u8]>, ic: PropIc },
     /// `[obj, value] -> [value]` — write `value` into property `name` (created if
     /// absent), in place through the shared object cell. Leaves the assigned value.
     PropSet { name: Rc<[u8]>, ic: PropIc },

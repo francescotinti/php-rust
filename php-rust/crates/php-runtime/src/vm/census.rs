@@ -13,7 +13,7 @@ use crate::bytecode::Op;
 use crate::hir::BinOp;
 use php_types::Zval;
 
-pub const N_OPS: usize = 173;
+pub const N_OPS: usize = 176;
 
 pub const OP_NAMES: [&str; N_OPS] = [
     "PushConst", "Pop", "Dup", "LoadSlot", "LoadVar", "PushUndef", "StoreSlot", "Swap",
@@ -37,7 +37,7 @@ pub const OP_NAMES: [&str; N_OPS] = [
     "ClassNameScope", "AllocStatic", "AllocDynamic", "InvokeCtor", "InvokeCtorArgs", "InitProps", "StampThrowable", "StaticPropGet",
     "StaticPropSet", "StaticPropRef", "StaticPropOpSet", "StaticPropIncDec", "StaticPropGetDynamic", "StaticPropSetDynamic", "StaticPropOpSetDynamic", "StaticPropIncDecDynamic",
     "FieldAssign", "FieldAssignOp", "FieldIncDec", "FieldIsset", "FieldEmpty", "FieldUnset", "Fatal", "EmitNotice",
-    "Exit", "SuppressBegin", "SuppressEnd", "Sweep", "Nop",
+    "Exit", "SuppressBegin", "SuppressEnd", "Sweep", "ThisPropGet", "CmpJmpConst", "ConcatN", "Nop",
 ];
 
 pub fn op_index(op: &Op) -> usize {
@@ -214,7 +214,13 @@ pub fn op_index(op: &Op) -> usize {
         Op::SuppressBegin => 169,
         Op::SuppressEnd => 170,
         Op::Sweep { .. } => 171,
-        Op::Nop => 172,
+        Op::ThisPropGet { .. } => 172,
+        // CmpJmpConst keeps its inline operand off the stack, so it is
+        // counted (ops/bigram) but NOT folded into the Binary type-pair
+        // matrix — the stack peek would misattribute the pair.
+        Op::CmpJmpConst { .. } => 173,
+        Op::ConcatN(..) => 174,
+        Op::Nop => 175,
     }
 }
 

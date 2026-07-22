@@ -77,6 +77,14 @@ pub(super) fn compile_body(
     let null = c.konst(Const::Null);
     c.emit(Op::PushConst(null));
     c.emit(Op::Ret);
+    // In-place jump threading (WP-34) — every target is final here (blocks
+    // compiled, gotos resolved). Skipped for a body with exception regions:
+    // `Ret` can raise (return-hint coercion) and the raise site's ip selects
+    // the protecting region, so moving a `Ret` into a `try` range could
+    // change which handler sees it.
+    if c.exc_regions.is_empty() {
+        thread_jumps(&mut c.ops, &c.lines);
+    }
     Ok(Func {
         name: name.into(),
         file: file.into(),
@@ -140,6 +148,82 @@ pub(super) fn compile_body(
         attributes: Vec::new(),
         exc_table: c.exc_regions,
     })
+}
+
+/// In-place jump threading (WP-34, bigram Jump→Ret 29M/run): a `Jump` whose
+/// target is another `Jump` retargets to the chain's final destination, and a
+/// `Jump` landing on `Ret` BECOMES that `Ret` (ternary/`&&`/`??` in return
+/// position). Strictly in-place — no op is inserted or removed, so no address
+/// shifts (the WP-32 "never peephole" lesson stands). Conditional jumps and
+/// the fused compare families only collapse Jump chains. The `Ret`
+/// replacement additionally requires the jump and the `Ret` to carry the SAME
+/// source line: `Ret` can raise (return-hint coercion) and the faulting op's
+/// line feeds `getLine()` — trace parity over the last dispatch saved.
+fn thread_jumps(ops: &mut [Op], lines: &[Line]) {
+    /// Follow a chain of unconditional `Jump`s to its final landing address
+    /// (bounded: a self-jump — `while(true);` — or a jump cycle stops it).
+    /// An out-of-range target (`Addr::MAX` on a DEAD, never-executed jump —
+    /// e.g. the unreachable fallthrough jump after a `goto`) is terminal:
+    /// returned unchanged, never followed.
+    fn final_target(ops: &[Op], mut a: Addr) -> Addr {
+        let mut hops = 0u32;
+        while let Some(Op::Jump(next)) = ops.get(a as usize) {
+            if *next == a || hops > 64 {
+                break;
+            }
+            a = *next;
+            hops += 1;
+        }
+        a
+    }
+    for i in 0..ops.len() {
+        let new = match &ops[i] {
+            Op::Jump(a) => {
+                let t = final_target(ops, *a);
+                if matches!(ops.get(t as usize), Some(Op::Ret)) && lines[t as usize] == lines[i] {
+                    Some(Op::Ret)
+                } else if t != *a {
+                    Some(Op::Jump(t))
+                } else {
+                    None
+                }
+            }
+            Op::JumpIfFalse(a) => {
+                let t = final_target(ops, *a);
+                (t != *a).then_some(Op::JumpIfFalse(t))
+            }
+            Op::JumpIfTrue(a) => {
+                let t = final_target(ops, *a);
+                (t != *a).then_some(Op::JumpIfTrue(t))
+            }
+            Op::JumpIfNull(a) => {
+                let t = final_target(ops, *a);
+                (t != *a).then_some(Op::JumpIfNull(t))
+            }
+            Op::JumpIfNotNull(a) => {
+                let t = final_target(ops, *a);
+                (t != *a).then_some(Op::JumpIfNotNull(t))
+            }
+            Op::CmpJmp { op, addr, when } => {
+                let t = final_target(ops, *addr);
+                (t != *addr).then_some(Op::CmpJmp { op: *op, addr: t, when: *when })
+            }
+            Op::CmpJmpConst { op, cidx, addr, when, const_lhs } => {
+                let t = final_target(ops, *addr);
+                (t != *addr).then_some(Op::CmpJmpConst {
+                    op: *op,
+                    cidx: *cidx,
+                    addr: t,
+                    when: *when,
+                    const_lhs: *const_lhs,
+                })
+            }
+            _ => None,
+        };
+        if let Some(n) = new {
+            ops[i] = n;
+        }
+    }
 }
 
 /// A placeholder body for a function that could not be compiled yet: it raises

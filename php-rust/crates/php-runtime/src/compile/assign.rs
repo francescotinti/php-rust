@@ -214,10 +214,15 @@ impl<'a> super::FnCompiler<'a> {
         for (i, case) in cases.iter().enumerate() {
             if let Some(test) = &case.test {
                 self.emit(Op::LoadSlot(t));
-                self.expr(test)?;
-                // Fused loose-Eq dispatch (WP-32): the bool was consumed
-                // solely by the following JumpIfTrue.
-                test_jumps.push((i, self.emit(Op::CmpJmp { op: BinOp::Eq, addr: Addr::MAX, when: true })));
+                // Fused loose-Eq dispatch (WP-32); a literal case value is
+                // inlined into the op (WP-34 — most switch arms are literals).
+                if let Some(k) = self.lit_const_of(test) {
+                    self.cur_line = test.line; // line the elided PushConst carried
+                    test_jumps.push((i, self.emit(Op::CmpJmpConst { op: BinOp::Eq, cidx: k, addr: Addr::MAX, when: true, const_lhs: false })));
+                } else {
+                    self.expr(test)?;
+                    test_jumps.push((i, self.emit(Op::CmpJmp { op: BinOp::Eq, addr: Addr::MAX, when: true })));
+                }
             }
         }
         // No case matched -> default (if any) or past the end.
@@ -263,9 +268,15 @@ impl<'a> super::FnCompiler<'a> {
             }
             for cond in &arm.conditions {
                 self.emit(Op::LoadSlot(t));
-                self.expr(cond)?;
-                // Fused strict-=== arm test (WP-32).
-                to_body.push((i, self.emit(Op::CmpJmp { op: BinOp::Identical, addr: Addr::MAX, when: true })));
+                // Fused strict-=== arm test (WP-32); literal arm values are
+                // inlined (WP-34).
+                if let Some(k) = self.lit_const_of(cond) {
+                    self.cur_line = cond.line; // line the elided PushConst carried
+                    to_body.push((i, self.emit(Op::CmpJmpConst { op: BinOp::Identical, cidx: k, addr: Addr::MAX, when: true, const_lhs: false })));
+                } else {
+                    self.expr(cond)?;
+                    to_body.push((i, self.emit(Op::CmpJmp { op: BinOp::Identical, addr: Addr::MAX, when: true })));
+                }
             }
         }
         let no_match = self.emit(Op::Jump(Addr::MAX));
