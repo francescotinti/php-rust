@@ -9,7 +9,7 @@
 > peggio di una funzione assente. Molte voci qui sotto sono "assenze
 > consapevoli" o "divergenze circoscritte", non bug silenziosi.
 >
-> Ultimo aggiornamento: 2026-07-20 (Sessione WordPress-25).
+> Ultimo aggiornamento: 2026-07-22 (Sessione WordPress-38).
 
 ---
 
@@ -447,6 +447,25 @@ chiavi engine-hardwired storiche. Divergenze deliberate:
   interne non costruisce descriptor (bug74541).
 - Il flusso `phpr -d`: gli override si applicano SOLO alle direttive registrate
   (identico all'invisibilità di `php -d unknown=x` a `ini_get`).
+
+### 3.7 Gap scovati dalla probe string WP-38 (2026-07-22, preesistenti)
+
+Scoperti da `wp38-harness/probe_wp38.php` (new≡old byte-id: NON introdotti
+dall'esperimento SSO). Verificati contro l'oracle 8.5.7:
+
+- **`sort($a, SORT_STRING)` ignora `$flags`** — `sort()` in
+  `php-builtins/src/array.rs` (~421) usa sempre `ops::compare` (loose), quindi
+  `['','10','9']` con SORT_STRING ordina `9` prima di `10` dove Zend confronta
+  i byte (`10` < `9`). `ksort`/`krsort` hanno già il comparatore flag-aware
+  (`key_flag_cmp`); il value-sort no. Probabile stesso gap in
+  `rsort`/`asort`/`arsort`. Fix contenuto: parse flags + comparatore
+  `value_flag_cmp` (attenzione a SORT_FLAG_CASE e SORT_NUMERIC).
+- **Warning "Uninitialized string offset N" mancante** — la lettura di un
+  offset == strlen (`$s[15]` su stringa di 15) in phpr restituisce "" senza
+  emettere il warning che l'oracle emette.
+- **Deprecation "Increment on non-numeric string is deprecated" mancante** —
+  `$s++` su stringa alfabetica (perl-style increment) esegue l'increment ma
+  non emette la deprecation 8.3+.
 
 ---
 
