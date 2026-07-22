@@ -1011,6 +1011,34 @@ fn ksort_honours_sort_natural() {
 }
 
 #[test]
+fn gc_id_reuse_and_collect_sentinels() {
+    // WP-39 sentinels for the WP-40 GC-buffer refactor: pin phpr's CURRENT
+    // id-reuse (LIFO; the cascade puts the PARENT id on top — WP-28), the
+    // explicit gc_collect_cycles destructor order and count, and that an
+    // acyclic leftover candidate survives a collect. The cycle-collect and
+    // end-of-script orders intentionally differ from Zend (priced into the
+    // per-name baselines); WP-40 must not change phpr's own order.
+    assert_eq!(
+        out("<?php
+        class D { public $t; function __construct($t){ $this->t = $t; } function __destruct(){ echo '[', $this->t, ']'; } }
+        class K { public $o; public $t; function __construct($t){ $this->t=$t; } function __destruct(){ echo '[', $this->t, ']'; } }
+        $a = new D('a'); $b = new D('b');
+        echo spl_object_id($a), ',', spl_object_id($b), '|';
+        unset($a); $c = new D('c'); echo spl_object_id($c), '|';
+        $p = new stdClass; $p->k = new stdClass;
+        $pid = spl_object_id($p); $kid = spl_object_id($p->k);
+        unset($p); $n1 = new stdClass; $n2 = new stdClass;
+        echo ($pid === spl_object_id($n1) ? 'P' : '?'), ($kid === spl_object_id($n2) ? 'K' : '?'), '|';
+        $g1 = new K('c1'); $g2 = new K('c2'); $g1->o = $g2; $g2->o = $g1;
+        unset($g1, $g2); echo 'U';
+        $n = gc_collect_cycles(); echo 'N', $n, '|';
+        $d = new K('l1'); $e = $d; unset($d);
+        $r = gc_collect_cycles(); echo 'L', $r; unset($e); echo '.';"),
+        "1,2|[a]1|PK|U[c1][c2]N2|L0[l1].[b][c]"
+    );
+}
+
+#[test]
 fn string_offset_read_warnings() {
     // Out-of-range read warns with the pre-adjustment cast offset (§3.7).
     assert_eq!(

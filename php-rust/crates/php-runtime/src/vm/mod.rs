@@ -15619,6 +15619,46 @@ mod tests {
         );
     }
 
+    // ------------------------------------------------------------------
+    // WP-39 — GC note/sweep drop-order SENTINELS, committed BEFORE the
+    // WP-40 buffer refactor (in-object flag + Vec buffer replacing the
+    // gc_roots map + gc_queue). They pin the CURRENT phpr destructor
+    // order/timing for exactly the paths that refactor touches: the
+    // note→demote→re-note churn, same-statement FIFO, the in-function
+    // light-sweep demote re-seeded by the main sweep, the parent→child
+    // release cascade (direct and through a container), and the
+    // displaced-value note at a re-assignment site. phpr's sweep-driven
+    // timing intentionally differs from Zend's immediate refcount
+    // destruction (priced into the per-name baselines); the invariant is
+    // that WP-40 does not CHANGE phpr's own order.
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn gc_drop_order_sentinel_note_demote_cascade() {
+        assert_eq!(
+            vm_stdout(
+                b"<?php
+                class D { public $t; function __construct($t){ $this->t = $t; } function __destruct(){ echo '[', $this->t, ']'; } }
+                // note -> demote (still held by $b) -> re-note -> freed at that sweep
+                $a = new D('a'); $b = $a; unset($a); echo '1'; unset($b); echo '2';
+                // same-statement multi-unset: FIFO note order
+                $x = new D('x'); $y = new D('y'); $z = new D('z'); unset($x, $y, $z); echo '.';
+                // in-function light demote, freed at frame teardown + main sweep
+                function f() { $t = new D('m'); $u = $t; unset($u); echo 'i'; return 'r'; }
+                echo f(); echo '.';
+                // destructor-bearing parent -> exclusive destructor-bearing child
+                class P { public $c; function __destruct(){ echo '[p]'; } }
+                class C2 { public $t; function __construct($t){ $this->t=$t; } function __destruct(){ echo '[', $this->t, ']'; } }
+                $p = new P; $p->c = new C2('c'); unset($p); echo '.';
+                // cascade through a container (array of children)
+                $q = new P; $q->c = [new C2('k1'), new C2('k2')]; unset($q); echo '.';
+                // displaced value noted at the re-assignment site
+                $w = new D('w1'); $w = new D('w2'); echo 'W'; unset($w); echo '.';"
+            ),
+            b"1[a]2[x][y][z].ir[m].[p][c].[p][k1][k2].[w1]W[w2]."
+        );
+    }
+
     #[test]
     fn cmp_jmp_fused_conditions_semantics() {
         // Conditions with a comparison ROOT compile to the fused CmpJmp
