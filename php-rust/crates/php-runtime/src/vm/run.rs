@@ -906,6 +906,38 @@ impl<'m> super::Vm<'m> {
                 Op::FetchDim => {
                     let key = self.frames[top].stack.pop().expect("FetchDim key");
                     let base = self.frames[top].stack.pop().expect("FetchDim base");
+                    // WP-33 T1b guard: Array base + Long/Str key (census:
+                    // 98.8% of FetchDim in the WP suites) resolved with ONE
+                    // canonical-key lookup, skipping the ArrayAccess probe
+                    // and the diag-ful funnel. Key canonicalization matches
+                    // coerce_key ("5" → Int(5) via Key::from_zstr); float
+                    // keys (deprecation), Bool/Null/Ref keys and Ref/Str/
+                    // object bases all fail the guard → generic. A MISS
+                    // (key absent) also falls through so the "Undefined
+                    // array key" warning keeps its single source of truth.
+                    if let Zval::Array(a) = &base {
+                        let k = match &key {
+                            Zval::Long(i) => Some(Key::Int(*i)),
+                            Zval::Str(s) => Some(Key::from_zstr(s)),
+                            _ => None,
+                        };
+                        if let Some(v) = k.as_ref().and_then(|k| a.get(k)) {
+                            let v = v.deref_clone();
+                            // The pending-diag flush MUST stay on the hit
+                            // path (trap #1): a warning staged by the
+                            // preceding op surfaces AT this read, and a
+                            // throwing error handler unwinds from HERE.
+                            if self.diags_rendered < self.diags.len() {
+                                let line = self.cur_line(top);
+                                self.flush_diags(line)?;
+                                let top = self.frames.len() - 1;
+                                self.frames[top].stack.push(v);
+                                continue;
+                            }
+                            self.frames[top].stack.push(v);
+                            continue;
+                        }
+                    }
                     // `$o[$k]` on an ArrayAccess object dispatches `offsetGet` (step 51).
                     if let Some(recv) = self.as_arrayaccess(&base) {
                         self.enter_object_method(recv, b"offsetGet", vec![key], RetMode::Stack)?;
@@ -941,6 +973,25 @@ impl<'m> super::Vm<'m> {
                 Op::CoalesceFetchDim => {
                     let key = self.frames[top].stack.pop().expect("CoalesceFetchDim key");
                     let base = self.frames[top].stack.pop().expect("CoalesceFetchDim base");
+                    // WP-33 T1b guard (silent twin of the FetchDim guard):
+                    // for an Array base with a Long/Str key the coalesce
+                    // read is get-or-null with NO diagnostics by semantics,
+                    // so hit AND miss resolve inline; other keys/bases →
+                    // generic (float-key deprecation fires there via the
+                    // shared coerce funnel — read_dim_nullable is silent,
+                    // matching today's behavior).
+                    if let Zval::Array(a) = &base {
+                        let k = match &key {
+                            Zval::Long(i) => Some(Key::Int(*i)),
+                            Zval::Str(s) => Some(Key::from_zstr(s)),
+                            _ => None,
+                        };
+                        if let Some(k) = k {
+                            let v = a.get(&k).map(|v| v.deref_clone()).unwrap_or(Zval::Null);
+                            self.frames[top].stack.push(v);
+                            continue;
+                        }
+                    }
                     // `$aa[$k] ?? $default` on an ArrayAccess object dispatches
                     // the protocol quietly: !offsetExists → null (the coalesce
                     // takes the default), else offsetGet (a null result also

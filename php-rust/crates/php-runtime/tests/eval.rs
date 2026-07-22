@@ -4654,6 +4654,62 @@ fn binary_fast_cross_class_identical_is_constant_false() {
     assert_eq!(out("<?php echo null === null ? 't' : 'f';"), "t");
 }
 
+// --- WP-33 T1b: FetchDim/CoalesceFetchDim guard pinned semantics ---
+
+#[test]
+fn fetchdim_guard_hit_and_canonical_string_key() {
+    // "5" canonicalizes to Int(5) on BOTH paths (Key::from_zstr); "07"
+    // stays a string key.
+    assert_eq!(
+        out(r#"<?php $a = ['x' => 1, 5 => 'five', '07' => 's']; echo $a['x'], $a[5], $a['5'], $a['07'];"#),
+        "1fivefives"
+    );
+}
+
+#[test]
+fn fetchdim_guard_miss_keeps_warning_text_and_line() {
+    assert_eq!(
+        out(r#"<?php $a = ['x' => 1]; echo $a['nope'];"#),
+        "\nWarning: Undefined array key \"nope\" in t.php on line 1\n"
+    );
+    assert_eq!(
+        out(r#"<?php $a = ['x' => 1]; echo $a[42];"#),
+        "\nWarning: Undefined array key 42 in t.php on line 1\n"
+    );
+}
+
+#[test]
+fn fetchdim_guard_float_key_deprecation_survives() {
+    // A float key fails the guard → generic funnel → deprecation intact
+    // in the warn-ful read context (oracle-identical).
+    assert_eq!(
+        out(r#"<?php $a = [9 => 'nine']; echo $a[9.5];"#),
+        "\nDeprecated: Implicit conversion from float 9.5 to int loses precision in t.php on line 1\nnine"
+    );
+    // Coalesce keeps phpr's DOCUMENTED silent funnel (read_dim_nullable;
+    // residual divergence from 8.5's coalesce deprecation — pre-existing,
+    // pinned so the guard can't change it either way).
+    assert_eq!(out(r#"<?php $a = [9 => 'nine']; echo $a[9.5] ?? 'D';"#), "nine");
+    // An exact float key resolves (silently) to the int slot.
+    assert_eq!(out(r#"<?php $a = [9 => 'nine']; echo $a[9.0];"#), "nine");
+}
+
+#[test]
+fn coalesce_fetchdim_guard_is_silent_hit_and_miss() {
+    assert_eq!(
+        out(r#"<?php $a = ['k' => 'V']; echo $a['k'] ?? 'D', $a['missing'] ?? 'D', $a[7] ?? 'D';"#),
+        "VDD"
+    );
+}
+
+#[test]
+fn fetchdim_guard_ref_base_and_string_offset_generic() {
+    assert_eq!(
+        out(r#"<?php $r = ['k' => 'v']; $rr = &$r; echo $rr['k']; $s = "hello"; echo $s[1], $s["2"];"#),
+        "vel"
+    );
+}
+
 #[test]
 fn binary_fast_long_spaceship_and_bitwise() {
     assert_eq!(
