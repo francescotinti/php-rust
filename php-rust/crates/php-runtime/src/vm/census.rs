@@ -399,7 +399,17 @@ thread_local! {
 }
 
 /// Arm the census for this run if `PHPR_OP_CENSUS` is set; returns whether
-/// the per-tick hook should record (hoisted into a `Vm` bool).
+/// the per-tick hook should record (hoisted into a `Vm` bool). Without the
+/// `op-census` feature this is a constant `false` and the run_loop hook is
+/// compiled out entirely (a dead per-tick branch costs ~3% on op-dense
+/// workloads — measured 5-pair interleaved A/B, WP-33 C1).
+#[cfg(not(feature = "op-census"))]
+#[inline(always)]
+pub fn census_arm() -> bool {
+    false
+}
+
+#[cfg(feature = "op-census")]
 pub fn census_arm() -> bool {
     if std::env::var_os("PHPR_OP_CENSUS").is_none() {
         return false;
@@ -414,6 +424,7 @@ pub fn census_arm() -> bool {
 }
 
 /// Record one op (census-on path only).
+#[cfg(feature = "op-census")]
 #[cold]
 pub fn census_record(op: &Op, stack: &[Zval], slots: &[Zval]) {
     CENSUS.with(|c| {

@@ -4,6 +4,12 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[features]
+# WP-33 T0: compile in the op-census hook (PHPR_OP_CENSUS). Off by default:
+# even a dead bool-branch per dispatch tick costs ~3% on op-dense workloads,
+# so the census exists only in dedicated instrumentation builds.
+op-census = []
+
 [dependencies]
 php-types.workspace = true
 rustc-hash.workspace = true

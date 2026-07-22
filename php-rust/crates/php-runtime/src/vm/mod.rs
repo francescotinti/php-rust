@@ -47,6 +47,9 @@ use crate::hir::{
 
 mod arrays;
 mod calls;
+// Without `op-census` only the arm/dump stubs and the unit tests use the
+// module — the counters are compiled out of run_loop.
+#[cfg_attr(not(feature = "op-census"), allow(dead_code))]
 mod census;
 mod coroutines;
 mod dom;

@@ -176,7 +176,9 @@ impl<'m> super::Vm<'m> {
             // clone payloads only where they genuinely take ownership.
             let func = self.frames[top].func;
             let op = &func.ops[ip];
-            // WP-33 T0: op census (off by default — one predictable branch).
+            // WP-33 T0: op census — compiled out unless the `op-census`
+            // feature is on (even a never-taken branch here costs ~3%).
+            #[cfg(feature = "op-census")]
             if self.census_on {
                 super::census::census_record(
                     op,
