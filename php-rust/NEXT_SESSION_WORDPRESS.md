@@ -1,4 +1,57 @@
-# Rotta WORDPRESS-FIRST — WP-track (dopo WP-35: PropIc scope-aware, T2.5 — media group per la PRIMA volta sotto 3×)
+# Rotta WORDPRESS-FIRST — WP-track (dopo WP-36: ThisMethodCall fusa + memo is_instance_of — leve A+D chiuse, esito flat come da tetto del profilo)
+
+> ⚡ **WP-36 (2026-07-22, gated `1b2db38`, 1 commit)** — **leve A+D del
+> handoff (direttive Gemini ∩ riprofilo WP-35)**. **(A) `Op::ThisMethodCall
+> { method, ic }`**: fusione del bigram This→MethodCall 25,8M, emessa SOLO
+> per `$this->m()` **zero-arg** non-nullsafe — ⭐ il bigram ADIACENTE è per
+> definizione argc==0, e con argomenti l'errore unbound-`$this` (che oggi
+> Op::This solleva PRIMA delle SEND, come Zend INIT_METHOD_CALL) si
+> sposterebbe DOPO gli effetti degli argomenti ⇒ la fusione con args è
+> bloccata by design. IC-hit INLINE nell'arm (pattern ThisPropGet spinto
+> fino in fondo): receiver letto in place dal frame, un solo Rc-bump verso
+> frame.this del callee, entra riga-per-riga come il hit di
+> dispatch_instance_call; ⭐ saltare gli shunt sul hit è sound (un Object
+> non è mai Generator/Closure; ArgPlace-scan vacua a argc 0; una
+> sottoclasse **Fiber non può MAI stare nella cella**: method_call devia i
+> Fiber prima del fill-site e l'op è l'unico scrittore della sua cella).
+> Miss → deref_clone + funnel method_call condiviso (semantica identica per
+> costruzione). **(D) memo `is_instance_of`**: `iof_cache:
+> RefCell<FxHashMap<(ClassId, ClassId), bool>>` su Vm, ⭐ senza epoch (Vm
+> per-run, tabella classi append-only, ancestry immutabile — anche
+> l'auto-impl Stringable via __toString è fissa per classe);
+> `Vm::instance_of` cabla ~30 siti (shunt Fiber di OGNI instance call,
+> InstanceOf*, catch-matching, is_a, iterator checks, serialize/json,
+> reflection, session). ⚠️ regex a prefisso sul file aveva riscritto anche
+> la chiamata INTERNA del wrapper → ricorsione infinita: dopo un replace
+> multiplo, rileggere il wrapper.
+> **Esito (onesto): FLAT — micro fused-call dedicato −1,5%; bench36
+> completo −0,2% = rumore; instanceof micro ≈ pari (gerarchie corte: il
+> walk era già 2-3 deref; il memo rende sul Fiber-shunt e sulle catene
+> interfacce profonde); media group 61,4 vs old STESSO GIORNO 61,1 ≈ −0,5%
+> (oracle 21,06 ⇒ 2,92×; il 2,84× di WP-35 era giornata favorevole — anche
+> l'old oggi misura 61,1); full ~12:05 = run26; footprint 12,1×.**
+> ⭐⭐ LEZIONE: il tetto era leggibile PRIMA dal riprofilo —
+> dispatch_instance_call 100 + is_instance_of 79 campioni su >3000 totali
+> ≈ 3-4% massimo teorico: dimensionare l'aspettativa sul peso del canale
+> prima di aprire la sessione. **run27 = run26 = run25 PER NOME** (30.472,
+> 0E/2F/86W/73S = minimo teorico); gate22 TUTTO verde; cargo **1626** (+3:
+> fused dispatch, unbound-$this + &ret copy/alias, memo instanceof);
+> probe_wp36.php byte-id vs oracle E vs old (cdc4c4c).
+> ⭐ `vm_stdout` nei test cargo = `Registry::default()`: NIENTE builtins né
+> prelude — solo costrutti di linguaggio + Exception/Error engine-level
+> (count()/eval()/Stringable/RuntimeException lì falliscono o APPENDONO —
+> un eval nel test è rimasto appeso >60s).
+> **Riprofilo (`wp36-harness/new-wp36.sample`, finestra GC-heavy)**:
+> ⭐ dispatch_instance_call e is_instance_of SPARITI dalla top-of-stack;
+> dominano mi_free 681 + mi_theap_collect 475 + drop Zval/Repr/Rc ~430
+> (value churn + alloc), poi run_loop 89, gc_note 15 + sweep 12,
+> enter_callee 11 + recycle_frame 10, resolve_method_runtime 25 (siti
+> polimorfi non-IC-abili). **→ prossime: C call-site spec (sottoinsieme
+> sicuro `simple_call` + arity esatta — canale enter_callee/bind_params),
+> poi B SSO PhpStr (sessione dedicata, attribuzione WP-26-style prima —
+> il canale allocatore la supporta), poi E gc batching.**
+
+# (storia WP-35)
 
 > ⚡ **WP-35 (2026-07-22, gated `38b727e`, 1 commit)** — **T2.5: PropIc
 > SCOPE-AWARE + fix parità private-shadow**. Il riprofilo WP-34 dava il
@@ -87,10 +140,11 @@ Congruenza alta col piano già in testa; una leva NUOVA (SSO) con correzioni.
   concreta e compatibile col LIFO id-reuse — da esplorare con la batteria
   drop-order pinnata PRIMA di toccare lo sweep.
 
-**Ordine consigliato (Gemini ∩ riprofilo): WP-36 = A + D → C (sottoinsieme
-sicuro) → B (sessione dedicata, attribuzione prima) → E.** Il footprint
-12,0× resta il fronte non toccato dall'arco: B è l'unica delle cinque che
-lo aggredisce.
+**Ordine consigliato (Gemini ∩ riprofilo): ~~WP-36 = A + D~~ ✅ ESEGUITE
+(esito flat, tetto 3-4% previsto dal profilo) → C (sottoinsieme sicuro) →
+B (sessione dedicata, attribuzione prima) → E.** Il footprint 12,1× resta
+il fronte non toccato dall'arco: B è l'unica delle cinque che lo
+aggredisce — e il riprofilo WP-36 (mi_free/collect dominanti) la rafforza.
 
 # (storia WP-34)
 
@@ -530,6 +584,11 @@ misurare e riportare all'utente il gap aggiornato e aggiornare la tabella
 | WP-33 | 66,9/20,97 = **3,19×** | 4,75/0,39GB = **12,0×** | 12:20/5:39 = **2,18×** | ~16,5/11,5 min = **1,4×** |
 | WP-34 | 65,1/20,92 = **3,11×** | 4,73/0,39GB = **12,0×** | ~12:35/5:39 = **2,2×** (rumore) | ~17,5/11,5 min = **1,5×** |
 | WP-35 | 59,6/20,99 = **2,84×** ⭐ | 4,73/0,39GB = **12,0×** | ~12:05/5:39 = **2,14×** | ~17/11,5 min = **1,5×** |
+| WP-36 | 61,4/21,06 = **2,92×** ⚠️ | 4,78/0,40GB = **12,1×** | ~12:05/5:39 = **2,14×** | ~17/11,5 min = **1,5×** |
+
+⚠️ riga WP-36: NON è una regressione — l'old-binary (WP-35) rimisurato lo
+STESSO giorno dà 61,1s (2,90×): la giornata di WP-35 era favorevole; il
+confronto interleaved new/old dà phpr −0,5/−1% (rumore/flat).
 
 ⚠️ riga WP-30: phpr media in calo ASSOLUTO (82,4→80,7) ma l'oracle del giorno
 gira −9% (23,0→21,0) → il rapporto sale per rumore dell'oracle, non per una
