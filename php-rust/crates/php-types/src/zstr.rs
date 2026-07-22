@@ -57,6 +57,58 @@ impl PhpStr {
         })
     }
 
+    /// Binary concatenation without an intermediate Vec (WP-38): a small
+    /// result builds straight into the inline buffer, a large one into an
+    /// exactly-sized heap buffer. Byte-wise identical to concatenating into
+    /// a Vec and calling `new`.
+    pub fn concat2(a: &[u8], b: &[u8]) -> ZStr {
+        let len = a.len() + b.len();
+        #[cfg(feature = "str-census")]
+        census::record(len);
+        let repr = if len <= INLINE_CAP {
+            let mut buf = [0u8; INLINE_CAP];
+            buf[..a.len()].copy_from_slice(a);
+            buf[a.len()..len].copy_from_slice(b);
+            Repr::Inline { len: len as u8, buf }
+        } else {
+            let mut out = Vec::with_capacity(len);
+            out.extend_from_slice(a);
+            out.extend_from_slice(b);
+            Repr::Heap(out.into())
+        };
+        Rc::new(PhpStr {
+            hash: Cell::new(0),
+            repr,
+        })
+    }
+
+    /// Integer stringification without the `String` round-trip (WP-38):
+    /// digits are rendered into a stack buffer and funneled through `new`,
+    /// so any i64 (max 20 bytes) short enough for the inline repr never
+    /// touches the heap. Byte-wise identical to `l.to_string()`.
+    pub fn from_i64(v: i64) -> ZStr {
+        let mut buf = [0u8; 20];
+        let mut i = buf.len();
+        let mut u = v.unsigned_abs();
+        loop {
+            i -= 1;
+            buf[i] = b'0' + (u % 10) as u8;
+            u /= 10;
+            if u == 0 {
+                break;
+            }
+        }
+        if v < 0 {
+            i -= 1;
+            buf[i] = b'-';
+        }
+        Self::new(&buf[i..])
+    }
+
+    /// Sizing hint for callers that can assemble a small result on the stack
+    /// (e.g. ConcatN) before funneling it through `new`.
+    pub const INLINE_CAP: usize = INLINE_CAP;
+
     #[allow(clippy::should_implement_trait)] // infallible byte view, not FromStr
     pub fn from_str(s: &str) -> ZStr {
         Self::new(s.as_bytes())
@@ -220,6 +272,32 @@ mod tests {
                 Repr::Inline { .. } if n <= INLINE_CAP
             ) || n > INLINE_CAP, "n={n}");
             assert!(matches!(from_vec.repr, Repr::Heap(_)) == (n > INLINE_CAP), "n={n}");
+        }
+    }
+
+    #[test]
+    fn concat2_matches_vec_path() {
+        for (a, b) in [
+            (&b""[..], &b""[..]),
+            (b"abc", b""),
+            (b"1234567", b"89012345"),  // 15: inline
+            (b"12345678", b"89012345"), // 16: heap
+            (b"x", &[0u8, 255][..]),
+        ] {
+            let fused = PhpStr::concat2(a, b);
+            let mut v = a.to_vec();
+            v.extend_from_slice(b);
+            let plain = PhpStr::new(v);
+            assert_eq!(*fused, *plain);
+            assert_eq!(fused.zhash(), plain.zhash());
+            assert_eq!(fused.len(), a.len() + b.len());
+        }
+    }
+
+    #[test]
+    fn from_i64_matches_to_string() {
+        for v in [0i64, 7, -1, 42, -308641975, i64::MAX, i64::MIN] {
+            assert_eq!(PhpStr::from_i64(v).as_bytes(), v.to_string().as_bytes());
         }
     }
 

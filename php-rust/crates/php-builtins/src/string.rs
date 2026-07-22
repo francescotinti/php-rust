@@ -96,7 +96,7 @@ pub fn explode(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
         // reconstructed by re-joining with the separator.
         let keep = limit as usize - 1;
         for p in &parts[..keep] {
-            let _ = out.append(Zval::Str(PhpStr::new(p.to_vec())));
+            let _ = out.append(Zval::Str(PhpStr::new(*p)));
         }
         let remainder = parts[keep..].join(sep);
         let _ = out.append(Zval::Str(PhpStr::new(remainder)));
@@ -104,7 +104,7 @@ pub fn explode(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
         let drop = (-limit) as usize;
         let keep = parts.len().saturating_sub(drop);
         for p in &parts[..keep] {
-            let _ = out.append(Zval::Str(PhpStr::new(p.to_vec())));
+            let _ = out.append(Zval::Str(PhpStr::new(*p)));
         }
     } else {
         // limit == 0 behaves like 1; limit >= parts.len() keeps everything.
@@ -112,7 +112,7 @@ pub fn explode(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
             let _ = out.append(Zval::Str(Rc::clone(&string)));
         } else {
             for p in &parts {
-                let _ = out.append(Zval::Str(PhpStr::new(p.to_vec())));
+                let _ = out.append(Zval::Str(PhpStr::new(*p)));
             }
         }
     }
@@ -159,7 +159,7 @@ pub fn substr(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     } else {
         &[]
     };
-    Ok(Zval::Str(PhpStr::new(window.to_vec())))
+    Ok(Zval::Str(PhpStr::new(window)))
 }
 
 /// strpos($haystack, $needle[, $offset]): byte index of the first occurrence at
@@ -792,7 +792,7 @@ fn do_trim(args: &[Zval], ctx: &mut Ctx, fname: &str, left: bool, right: bool) -
             end -= 1;
         }
     }
-    Ok(Zval::Str(PhpStr::new(bytes[start..end].to_vec())))
+    Ok(Zval::Str(PhpStr::new(&bytes[start..end])))
 }
 
 /// trim($string[, $characters]): strip the charlist from both ends.

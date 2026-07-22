@@ -269,10 +269,7 @@ fn int_pow(base: i64, exp: i64) -> Zval {
 pub fn concat(a: &Zval, b: &Zval, diags: &mut Diags) -> OpResult {
     let sa = to_zstr(a, diags);
     let sb = to_zstr(b, diags);
-    let mut out = Vec::with_capacity(sa.len() + sb.len());
-    out.extend_from_slice(sa.as_bytes());
-    out.extend_from_slice(sb.as_bytes());
-    Ok(Zval::Str(PhpStr::new(out)))
+    Ok(Zval::Str(PhpStr::concat2(sa.as_bytes(), sb.as_bytes())))
 }
 
 pub fn neg(a: &Zval, diags: &mut Diags) -> OpResult {

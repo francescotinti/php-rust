@@ -199,7 +199,7 @@ pub fn to_zstr(v: &Zval, diags: &mut Diags) -> ZStr {
         Zval::Undef | Zval::Null | Zval::ArgPlace(_) => PhpStr::empty(),
         Zval::Bool(false) => PhpStr::empty(),
         Zval::Bool(true) => PhpStr::from_str("1"),
-        Zval::Long(l) => PhpStr::new(l.to_string().into_bytes()),
+        Zval::Long(l) => PhpStr::from_i64(*l),
         // NAN converts silently here (oracle: null . NAN); the explicit
         // (string) cast warns — see to_zstr_cast.
         Zval::Double(d) => PhpStr::new(double_to_precision(*d, 14)),

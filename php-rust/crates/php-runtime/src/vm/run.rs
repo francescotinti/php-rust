@@ -166,13 +166,7 @@ fn binary_fast(b: BinOp, lhs: &Zval, rhs: &Zval) -> Option<Zval> {
         (Zval::Str(l), Zval::Str(r)) => match b {
             // Operands are already strings — `ops::concat`'s to_zstr is an
             // identity with no diagnostics; byte concat verbatim.
-            Concat => {
-                let (la, ra) = (l.as_bytes(), r.as_bytes());
-                let mut out = Vec::with_capacity(la.len() + ra.len());
-                out.extend_from_slice(la);
-                out.extend_from_slice(ra);
-                Zval::Str(PhpStr::new(out))
-            }
+            Concat => Zval::Str(PhpStr::concat2(l.as_bytes(), r.as_bytes())),
             Identical => Zval::Bool(l.as_bytes() == r.as_bytes()),
             NotIdentical => Zval::Bool(l.as_bytes() != r.as_bytes()),
             // Loose ==/comparisons: numeric-string semantics stay in ONE
@@ -854,13 +848,28 @@ impl<'m> super::Vm<'m> {
                                 _ => 0,
                             })
                             .sum();
-                        let mut out = Vec::with_capacity(total);
-                        for v in self.frames[top].stack.drain(base..) {
-                            if let Zval::Str(s) = v {
-                                out.extend_from_slice(s.as_bytes());
+                        // WP-38: a small join assembles on the stack — no Vec.
+                        let joined = if total <= PhpStr::INLINE_CAP {
+                            let mut buf = [0u8; PhpStr::INLINE_CAP];
+                            let mut pos = 0;
+                            for v in self.frames[top].stack.drain(base..) {
+                                if let Zval::Str(s) = v {
+                                    let b = s.as_bytes();
+                                    buf[pos..pos + b.len()].copy_from_slice(b);
+                                    pos += b.len();
+                                }
                             }
-                        }
-                        self.frames[top].stack.push(Zval::Str(PhpStr::new(out)));
+                            PhpStr::new(&buf[..pos])
+                        } else {
+                            let mut out = Vec::with_capacity(total);
+                            for v in self.frames[top].stack.drain(base..) {
+                                if let Zval::Str(s) = v {
+                                    out.extend_from_slice(s.as_bytes());
+                                }
+                            }
+                            PhpStr::new(out)
+                        };
+                        self.frames[top].stack.push(Zval::Str(joined));
                     } else {
                         let parts: Vec<Zval> = self.frames[top].stack.drain(base..).collect();
                         let mut it = parts.into_iter();
