@@ -512,6 +512,13 @@ l'oracle e vanno preservati:
 ---
 
 ### Changelog di questo documento
+- 2026-07-22 (sessione WordPress-39): ✅ CHIUSI i tre gap §3.7 (probe WP-38):
+  `$flags` dei value-sort (`flag_value_sort` + arm SORT_NATURAL in
+  `key_flag_cmp`), diagnostica string-offset READ oracle-pinned
+  (Uninitialized/cast occurred/Illegal + prefisso, prima TypeError errato su
+  "5abc"), incdec deprecation RICLASSIFICATA già-a-parità (artefatto
+  log_errors nella probe WP-38 — confrontare sempre con `-d log_errors=0`).
+  Residui dichiarati in §3.7. Corpus 1455→1447 (−8, 0 nuovi).
 - 2026-07-20 (sessione WordPress-25): ✅ CHIUSO il gap (non catalogato)
   dell'**asymmetric visibility 8.4 in scrittura**: phpr non negava affatto
   `$o->p = v` / `unset` / compound / `++` su `private(set)`/`protected(set)`

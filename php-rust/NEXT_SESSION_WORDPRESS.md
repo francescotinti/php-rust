@@ -1,4 +1,67 @@
-# Rotta WORDPRESS-FIRST — WP-track (dopo WP-38: SSO bocciato dai dati, costruttori salvati — prossima sessione = E, gc batching)
+# Rotta WORDPRESS-FIRST — WP-track (dopo WP-39: §3.7 chiuso + fast-shutdown/sweep fast-path −5,0% — prossima = demote churn 47,5M via flag in-object)
+
+> ⚡ **WP-39 (2026-07-22/23, gated `ed5d0f4`+`073914d`, 2 commit)** — **warm-up
+> §3.7 chiuso + leva E RIDEFINITA DAI DATI: fast-shutdown + sweep empty
+> fast-path = media −5,0% (2,85×→2,71×), full −4,4%.**
+> **Warm-up (`ed5d0f4`)**: (1) `flag_value_sort` per sort/rsort/asort/arsort
+> (NUMERIC via to_double; STRING/LOCALE byte ±FLAG_CASE pre-folded; NATURAL
+> strnatcmp ±ci; chiavi 1× per elemento, convenzione natsort) + arm
+> SORT_NATURAL mancante in `key_flag_cmp` (ksort/krsort). ⭐ sort NON
+> gate-abile §1.1 ($flags runtime) ⇒ Stringable = fallback-warning, residuo
+> dichiarato. (2) diagnostica string-offset READ in `read_dim_warn`,
+> oracle-pinned: "Uninitialized string offset N" (N pre-aggiustamento),
+> "String offset cast occurred" (float/bool/null, ⭐ senza deprecation
+> float-precision), "Illegal string offset \"5abc\"" + USO del prefisso
+> (prima TypeError ERRATO; "1.5" resta TypeError), Resource-key warning;
+> isset/`??`/empty silenti come Zend (residui dichiarati: deprecation float
+> su isset, coalesce "5abc"). **8 phpt upstream chiusi: corpus 1455→1447
+> (0 nuovi), baseline wp18 aggiornata.** (3) ⭐⭐ **incdec deprecation GIÀ A
+> PARITÀ**: il "gap" della probe WP-38 era la copia log "PHP Deprecated:"
+> dell'oracle (log_errors=On nel php.ini brew) — **le probe oracle vanno
+> SEMPRE con `-d log_errors=0`**. ⭐ visto di passaggio: `$fn($arr,$fl)`
+> dinamico su builtin by-ref = "out of slice" (gap noto, probe con switch).
+> **Leva E (`073914d`) — attribuzione prima, che RIBALTA la diagnosi**:
+> ⭐⭐ il tail-sample WP-36 mescolava shutdown e run: il call-tree mostra 45%
+> della finestra in UN drop ricorsivo delle hashmap del Vm a fine processo
+> + 18% in `exit → mi_process_done` — tutto POST-semantico (qualificare le
+> finestre di sample; attribuire i mi_* per CHIAMANTE). Purge A/B:
+> MIMALLOC_PURGE_DELAY=0 costa solo ~0,5% user (+1,9s sys) — non è il collo.
+> **gc-census** (feature nuova, pattern op-census, PHPR_GC_CENSUS=1|/path):
+> media master = 177M gc_note (47M inserted), 53M sweep per-statement
+> (~87% a buffer VUOTO), **47,5M demotion vs 2,1M freed = 95,6% churn**,
+> 1 solo cycle-collect (50k root → 1 freed, soglia 50k→100k), 1001 dtor.
+> **Le due leve (semantics-identical per costruzione)**: (a) `FAST_SHUTDOWN`
+> static — il php-cli one-shot LEAKA il Vm a fine `run_module_with_hir`,
+> DOPO l'intera sequenza osservabile (shutdown fn → dtor → session → filtri
+> → OB flush) = Zend fast RSHUTDOWN; ⭐ MAI per `phpr -S` né host in-process
+> (phpt-runner non-isolate e test cargo continuano a droppare); zero unsafe
+> (mem::take dei campi outcome + mem::forget). (b) **sweep empty fast-path**
+> nell'arm Op::Sweep: queue vuota (⇒ roots/birth vuoti per invariante) +
+> niente light_demoted da ri-seminare (main) + cycle_roots sotto soglia ⇒
+> skip totale del corpo. **Esito A/B (2 coppie interleaved, 762 test
+> identici): old 59,80/59,77 → new 56,83/56,74 = −5,0% user, sys −20%;
+> media pair 56,79/20,93 = 2,71×; full master-CPU 11:56 (−4,4%)**. Probe
+> distruttori new≡old byte-id; 📌 scoperta divergenza PREESISTENTE: timing
+> dtor in-function (Zend libera al return — "d11" prima dell'output
+> dell'echo — phpr allo statement-sweep). ⭐ maxrss media +9% (3,85→4,20GB)
+> = accounting MADV_FREE macOS (meno madvise): script controllato = picco
+> IDENTICO (267,8MB) e CPU −11% anche lì — caveat WP-20 sulla riga
+> footprint. **Gate/run**: gate22 TUTTO verde ×2 (warm-up e leva E; corpus
+> 1447 IDENTICO al secondo giro); **run30 = run29 PER NOME** (30.472,
+> 0E/2F/86W/73S; 88 righe fail identiche); cargo **1634** (+3).
+> **Riprofilo (`wp39-harness/gc-out/new-wp39.sample`, stessa finestra t=35s
+> del pre-leve `media-p0a.sample`)**: gc_sweep_impl **141→38** (−73%),
+> gc_note 122→111 (canale residuo), drop/clone Zval 134/173, slot_of 60,
+> resolve_prop_access 47.
+> **→ PROSSIMA SESSIONE = demote churn (47,5M)**: flag in-object
+> (`Cell<bool> in_gc_buf` su Object) al posto del probe hashmap di gc_roots
+> + buffer Vec<Rc> al posto di map+queue — stessa FIFO, stessa dedup per
+> costruzione; ⭐⭐ sentinelle drop-order pinnate PRIMA (metodo WP-32); poi
+> ripensare cycle_roots (il collect è quasi-mai-utile: 1/run, 1 freed su
+> 50k root). Il canale gc_note (177M chiamate, walk array/closure) è il
+> secondo bersaglio.
+
+# (storia WP-38)
 
 > ⚡ **WP-38 (2026-07-22, gated `b90f12c`+`e52a8ad`, 5 commit)** — **sessione
 > B: SSO PhpStr PROVATO E BOCCIATO; salvati i costruttori zero-round-trip.**
@@ -583,19 +646,20 @@ Riprendiamo phpr (PHP 8.5.7 in Rust). **Roadmap**: obiettivo primario = 100%
 compatibilità WordPress; la WP core test suite (PHPUnit) è il GATE PER NOME.
 
 ## Stato gate per nome (tutte le superfici)
-- Gate22 WP-32 verde (wp22-harness/gate-out): corpus **1455** · sess 28 ·
+- Gate22 WP-39 verde (wp22-harness/gate-out): corpus **1447** (baseline
+  wp18-harness/gate-out/corpus.fails AGGIORNATA a 1447 in WP-39) · sess 28 ·
   date 351 · refl 290 IDENTICI · ORM 3E/13F identico per nome · hk 1665 0E/0F ·
-  cargo **1600**/0 · probe gd/mysqli/media byte-id · http battery DIFF-set = 16
-  (WP-14) · option 413 e restapi 3514 identici per nome. ⚠️ i work-tree
+  cargo **1634**/0 · probe gd/mysqli/media byte-id · http battery DIFF-set = 16
+  (WP-14) · option 413 e restapi identici per nome. ⚠️ i work-tree
   ORM/hk in /private/tmp/wp11-gates possono sparire (pulizia /tmp): se
   "Could not open input file: vendor/bin/phpunit", ri-estrarre i tarball da
   wp9-harness/gates/ e ri-runnare.
-- **Full-suite single-site run23 (tree NUOVO ~/Claude/wpdev, trunk@5e3fced):
-  30.472 test, 0E/2F/86W/73S — fail-set IDENTICO per nome a run22** (stessi
+- **Full-suite single-site run30 (tree ~/Claude/wpdev, trunk@5e3fced):
+  30.472 test, 0E/2F/86W/73S — fail-set IDENTICO PER NOME a run29** (stessi
   2F: wpPostsListTable search_hierarchical + wp_is_stream #2 = minimo
-  teorico); le 9 differenze di nome sono TUTTE test P-only del delta di
-  test-set upstream (documentate). master-CPU 12:54. Archiviata in
-  `wp16-harness/full-out/run23/`. Le run future si confrontano con run23.
+  teorico). master-CPU **11:56** (−4,4%, fast-shutdown). Confronto per nome
+  = `wp16-harness/full-out/run30-fails.txt` (88 righe) vs run29-fails.txt.
+  Le run future si confrontano con run30.
 - **Full-suite multisite RICONFERMATA (WP-28): 1 diff per nome — minimo
   teorico** (31.278 test, 0E/2F; solo `wp_is_stream #2`;
   `wp19-harness/ms-out/diff-names-wp28.txt`).
@@ -746,6 +810,7 @@ misurare e riportare all'utente il gap aggiornato e aggiornare la tabella
 | WP-36 | 61,4/21,06 = **2,92×** ⚠️ | 4,78/0,40GB = **12,1×** | ~12:05/5:39 = **2,14×** | ~17/11,5 min = **1,5×** |
 | WP-37 | 60,07/20,94 = **2,87×** | 4,72/0,39GB = **12,0×** | ~12:30/5:39 = **2,2×** (rumore) | ~17/11,5 min = **1,5×** |
 | WP-38 | 59,75/20,955 = **2,85×** (SSO revertato: neutro) | 4,72/0,39GB = **12,0×** (invariato) | ~12:29/5:39 = **2,2×** | ~17/11,5 min = **1,5×** |
+| WP-39 | 56,79/20,93 = **2,71×** ⭐ (fast-shutdown + sweep fast-path) | 4,20/0,435GB = **9,7×** ⚠️ maxrss stesso-giorno (old 8,9×; il +9% new = accounting MADV_FREE, picco reale identico — caveat WP-20) | 11:56/5:39 = **2,11×** | ~17,4/11,5 min = **1,5×** |
 
 ⚠️ riga WP-36: NON è una regressione — l'old-binary (WP-35) rimisurato lo
 STESSO giorno dà 61,1s (2,90×): la giornata di WP-35 era favorevole; il
