@@ -4593,3 +4593,71 @@ fn undefined_constant_is_error() {
         "unexpected: {fatal:?}"
     );
 }
+
+// --- WP-33 T1a: binary_fast pinned semantics (oracle-verified strings;
+// run_source has no php-builtins, so everything asserts through echo) ---
+
+#[test]
+fn binary_fast_long_overflow_promotes_to_double_of_operands() {
+    // Overflow recomputes on the ORIGINAL operands in f64 (never the
+    // wrapped value) — ops.rs add/sub/mul verbatim. Echo precision=14
+    // strings pinned on the oracle.
+    assert_eq!(
+        out(r#"<?php echo PHP_INT_MAX + 1, "|", PHP_INT_MIN - 1, "|", PHP_INT_MAX * 2;"#),
+        "9.2233720368548E+18|-9.2233720368548E+18|1.844674407371E+19"
+    );
+    // Oracle-pinned subtlety: the promoted double EQUALS (float)PHP_INT_MAX
+    // (f64 has 53 mantissa bits), so `>` is false — not wrapped-negative,
+    // just rounded. Long-vs-Double compare goes through the generic path.
+    assert_eq!(out("<?php echo PHP_INT_MAX + 1 > PHP_INT_MAX ? 't' : 'f';"), "f");
+}
+
+#[test]
+fn binary_fast_double_nan_and_negative_zero() {
+    // Gt/Ge are the swapped smaller() forms: every NaN comparison is false.
+    assert_eq!(
+        out("<?php $n = NAN; echo ($n > 1.0 ?'t':'f'), ($n >= 1.0 ?'t':'f'), (1.0 > $n ?'t':'f'), (1.0 >= $n ?'t':'f');"),
+        "ffff"
+    );
+    // `===` is IEEE ==: NaN !== NaN, -0.0 === 0.0.
+    assert_eq!(
+        out("<?php $n = NAN; echo ($n === NAN ?'t':'f'), ($n !== NAN ?'t':'f'), (-0.0 === 0.0 ?'t':'f');"),
+        "ftt"
+    );
+}
+
+#[test]
+fn binary_fast_ref_operands_take_generic_path() {
+    // A Ref never matches the fast-path tags; identity follows references.
+    assert_eq!(
+        out("<?php $a = 1; $b = &$a; echo $b + 1, ($b === 1 ?'t':'f'), ($b !== 2 ?'t':'f');"),
+        "2tt"
+    );
+}
+
+#[test]
+fn binary_fast_string_loose_eq_stays_numeric() {
+    // "10" == "1e1" (smart_streq) must survive: loose == never fast-paths.
+    assert_eq!(
+        out(r#"<?php echo ("10" == "1e1" ?'t':'f'), ("10" === "1e1" ?'t':'f'), ("abc" === "abc" ?'t':'f'), ("abc" !== "abd" ?'t':'f');"#),
+        "tftt"
+    );
+}
+
+#[test]
+fn binary_fast_cross_class_identical_is_constant_false() {
+    assert_eq!(
+        out(r#"<?php echo (1 === "1" ?'t':'f'), ([] === false ?'t':'f'), (null === false ?'t':'f'), (1 === 1.0 ?'t':'f'), (1.0 === 1 ?'t':'f'), ("a" === null ?'t':'f'), ([1] === true ?'t':'f'), (null !== 0 ?'t':'f');"#),
+        "ffffffft"
+    );
+    // Same-class pairs still resolve through ops::identical semantics.
+    assert_eq!(out("<?php echo null === null ? 't' : 'f';"), "t");
+}
+
+#[test]
+fn binary_fast_long_spaceship_and_bitwise() {
+    assert_eq!(
+        out(r#"<?php echo 1 <=> 2, " ", 2 <=> 1, " ", 1 <=> 1, " ", 6 & 3, 6 | 3, 6 ^ 3;"#),
+        "-1 1 0 275"
+    );
+}

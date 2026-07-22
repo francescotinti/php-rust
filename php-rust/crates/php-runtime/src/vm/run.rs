@@ -70,6 +70,128 @@ pub(super) fn user_wrapper_url(
     }
 }
 
+/// WP-33 T1a: the identity class of an operand for the `===`/`!==` fast
+/// path. Mirrors the arm structure of [`ops::identical`] exactly: two
+/// operands of DIFFERENT classes are never identical (no coercion), same
+/// class falls back to the generic path unless handled inline. `Ref`,
+/// `ArgPlace` and `WeakHandle` return `None` (deref / special-cased there).
+#[inline(always)]
+fn ident_class(v: &Zval) -> Option<u8> {
+    Some(match v {
+        // `identical` treats Undef and Null as one identity class.
+        Zval::Undef | Zval::Null => 0,
+        Zval::Bool(_) => 1,
+        Zval::Long(_) => 2,
+        Zval::Double(_) => 3,
+        Zval::Str(_) => 4,
+        Zval::Array(_) => 5,
+        Zval::Object(_) => 6,
+        Zval::Resource(_) => 7,
+        Zval::Closure(_) => 8,
+        Zval::Generator(_) => 9,
+        _ => return None,
+    })
+}
+
+/// WP-33 T1a: monomorphic fast paths for the hottest operand tag pairs
+/// (census-driven: Concat/NotIdentical (Str,Str) ~30M each per WP suite
+/// run, Long arithmetic/compares, cross-class `===` constants). Tried
+/// straight after the two pops in [`Vm::binary_value`]; `None` falls
+/// through to the generic path (lazy realization, `__toString` rule,
+/// GMP/BcMath overloads, division/shift error paths, numeric-string
+/// loose equality) unchanged.
+///
+/// Semantics are inlined VERBATIM from ops.rs: Long overflow promotes to
+/// Double recomputing on the ORIGINAL operands (never the wrapped value);
+/// Double comparisons keep IEEE semantics (`Gt`/`Ge` written as the
+/// swapped `smaller` forms, NaN-exact; `===` is IEEE `==`: -0.0===0.0,
+/// NaN!==NaN). String LOOSE equality never fast-paths ("10"=="1e1" lives
+/// in smart_streq only). None of the handled pairs can involve a lazy
+/// object, an overload receiver, or a diagnostic.
+#[inline(always)]
+fn binary_fast(b: BinOp, lhs: &Zval, rhs: &Zval) -> Option<Zval> {
+    use BinOp::*;
+    Some(match (lhs, rhs) {
+        (Zval::Long(l), Zval::Long(r)) => {
+            let (l, r) = (*l, *r);
+            match b {
+                Add => match l.checked_add(r) {
+                    Some(s) => Zval::Long(s),
+                    None => Zval::Double(l as f64 + r as f64),
+                },
+                Sub => match l.checked_sub(r) {
+                    Some(s) => Zval::Long(s),
+                    None => Zval::Double(l as f64 - r as f64),
+                },
+                Mul => match l.checked_mul(r) {
+                    Some(s) => Zval::Long(s),
+                    None => Zval::Double(l as f64 * r as f64),
+                },
+                Lt => Zval::Bool(l < r),
+                Le => Zval::Bool(l <= r),
+                Gt => Zval::Bool(l > r),
+                Ge => Zval::Bool(l >= r),
+                Eq | Identical => Zval::Bool(l == r),
+                NotEq | NotIdentical => Zval::Bool(l != r),
+                Spaceship => Zval::Long(match l.cmp(&r) {
+                    std::cmp::Ordering::Less => -1,
+                    std::cmp::Ordering::Equal => 0,
+                    std::cmp::Ordering::Greater => 1,
+                }),
+                BitAnd => Zval::Long(l & r),
+                BitOr => Zval::Long(l | r),
+                BitXor => Zval::Long(l ^ r),
+                // Div (zero / exact-division / MIN÷-1), Mod, Pow, Shl/Shr
+                // (negative-shift errors), Concat → generic.
+                _ => return None,
+            }
+        }
+        (Zval::Double(l), Zval::Double(r)) => {
+            let (l, r) = (*l, *r);
+            match b {
+                Add => Zval::Double(l + r),
+                Sub => Zval::Double(l - r),
+                Mul => Zval::Double(l * r),
+                Lt => Zval::Bool(l < r),
+                Le => Zval::Bool(l <= r),
+                // `a > b` is `smaller(b, a)`: the swapped form is NaN-exact.
+                Gt => Zval::Bool(r < l),
+                Ge => Zval::Bool(r <= l),
+                Identical => Zval::Bool(l == r),
+                NotIdentical => Zval::Bool(l != r),
+                // Eq/NotEq/Spaceship keep the generic compare() path.
+                _ => return None,
+            }
+        }
+        (Zval::Str(l), Zval::Str(r)) => match b {
+            // Operands are already strings — `ops::concat`'s to_zstr is an
+            // identity with no diagnostics; byte concat verbatim.
+            Concat => {
+                let (la, ra) = (l.as_bytes(), r.as_bytes());
+                let mut out = Vec::with_capacity(la.len() + ra.len());
+                out.extend_from_slice(la);
+                out.extend_from_slice(ra);
+                Zval::Str(PhpStr::new(out))
+            }
+            Identical => Zval::Bool(l.as_bytes() == r.as_bytes()),
+            NotIdentical => Zval::Bool(l.as_bytes() != r.as_bytes()),
+            // Loose ==/comparisons: numeric-string semantics stay in ONE
+            // place (smart_streq / compare) — never fast-pathed.
+            _ => return None,
+        },
+        (lhs, rhs) if matches!(b, Identical | NotIdentical) => {
+            // Cross-class `===` is a constant: no coercion, no lazy init,
+            // no overload (try_number_binop never handles ===/!==), and
+            // ops::identical's cross-class arms are all `_ => false`.
+            match (ident_class(lhs), ident_class(rhs)) {
+                (Some(ca), Some(cb)) if ca != cb => Zval::Bool(b == NotIdentical),
+                _ => return None,
+            }
+        }
+        _ => return None,
+    })
+}
+
 impl<'m> super::Vm<'m> {
     /// The bounded dispatch loop: runs until the frame at `baseline` returns
     /// ([`RunExit::Returned`]) or a generator at `baseline` suspends at a `yield`
@@ -85,6 +207,11 @@ impl<'m> super::Vm<'m> {
     fn binary_value(&mut self, top: usize, b: BinOp) -> Result<Zval, PhpError> {
         let rhs = self.frames[top].stack.pop().expect("Binary rhs");
         let lhs = self.frames[top].stack.pop().expect("Binary lhs");
+        // WP-33 T1a: monomorphic tag-pair fast paths (census-driven); a
+        // miss falls through to the generic path below unchanged.
+        if let Some(r) = binary_fast(b, &lhs, &rhs) {
+            return Ok(r);
+        }
         // A *loose* comparison reads the whole property table, so it
         // initializes a lazy operand (PHP 8.4, init_trigger_compare)
         // and compares a proxy's real instance; `===`/`!==` compare
