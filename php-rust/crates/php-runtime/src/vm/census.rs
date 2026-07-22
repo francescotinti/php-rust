@@ -327,24 +327,27 @@ impl OpCensus {
         }
     }
 
-    fn dump(&self) {
+    fn render(&self) -> String {
+        use std::fmt::Write as _;
+        let mut o = String::with_capacity(8192);
         let total: u64 = self.ops.iter().sum();
-        eprintln!("== PHPR_OP_CENSUS: {total} ops dispatched ==");
+        let _ = writeln!(o, "== PHPR_OP_CENSUS: {total} ops dispatched ==");
         let mut idx: Vec<usize> = (0..N_OPS).collect();
         idx.sort_by_key(|&i| std::cmp::Reverse(self.ops[i]));
-        eprintln!("-- op counts (top 40) --");
+        let _ = writeln!(o, "-- op counts (top 40) --");
         for &i in idx.iter().take(40) {
             if self.ops[i] == 0 {
                 break;
             }
-            eprintln!(
+            let _ = writeln!(
+                o,
                 "{:>12}  {:5.2}%  {}",
                 self.ops[i],
                 self.ops[i] as f64 * 100.0 / total as f64,
                 OP_NAMES[i]
             );
         }
-        eprintln!("-- bigrams (top 40) --");
+        let _ = writeln!(o, "-- bigrams (top 40) --");
         let mut bi: Vec<(u64, usize)> = self
             .bigram
             .iter()
@@ -354,9 +357,9 @@ impl OpCensus {
             .collect();
         bi.sort_unstable_by(|a, b| b.cmp(a));
         for &(c, i) in bi.iter().take(40) {
-            eprintln!("{:>12}  {} -> {}", c, OP_NAMES[i / N_OPS], OP_NAMES[i % N_OPS]);
+            let _ = writeln!(o, "{:>12}  {} -> {}", c, OP_NAMES[i / N_OPS], OP_NAMES[i % N_OPS]);
         }
-        eprintln!("-- Binary/CmpJmp type pairs (top 40) --");
+        let _ = writeln!(o, "-- Binary/CmpJmp type pairs (top 40) --");
         let mut pairs: Vec<(u64, usize)> = self
             .binary
             .iter()
@@ -366,7 +369,8 @@ impl OpCensus {
             .collect();
         pairs.sort_unstable_by(|a, b| b.cmp(a));
         for &(c, i) in pairs.iter().take(40) {
-            eprintln!(
+            let _ = writeln!(
+                o,
                 "{:>12}  {} ({}, {})",
                 c,
                 BINOP_NAMES[i / 100],
@@ -374,18 +378,19 @@ impl OpCensus {
                 TAG_NAMES[i % 10]
             );
         }
-        eprintln!("-- FetchDim base x key --");
+        let _ = writeln!(o, "-- FetchDim base x key --");
         for (i, &c) in self.fetchdim.iter().enumerate() {
             if c > 0 {
-                eprintln!("{:>12}  base={} key={}", c, TAG_NAMES[i / 10], TAG_NAMES[i % 10]);
+                let _ = writeln!(o, "{:>12}  base={} key={}", c, TAG_NAMES[i / 10], TAG_NAMES[i % 10]);
             }
         }
-        eprintln!("-- IncDecSlot slot tags --");
+        let _ = writeln!(o, "-- IncDecSlot slot tags --");
         for (i, &c) in self.incdec.iter().enumerate() {
             if c > 0 {
-                eprintln!("{:>12}  {}", c, TAG_NAMES[i]);
+                let _ = writeln!(o, "{:>12}  {}", c, TAG_NAMES[i]);
             }
         }
+        o
     }
 }
 
@@ -418,13 +423,27 @@ pub fn census_record(op: &Op, stack: &[Zval], slots: &[Zval]) {
     });
 }
 
-/// Dump and clear at end of run.
+/// Dump and clear at end of run. `PHPR_OP_CENSUS=1` prints on STDERR;
+/// an absolute-path value appends to that file instead — needed when the
+/// workload spawns phpr subprocesses that inherit the env (a stderr dump
+/// from a child would pollute output a test harness captures and asserts
+/// on, e.g. PHPUnit separate-process tests).
 pub fn census_dump() {
-    CENSUS.with(|c| {
-        if let Some(census) = c.borrow_mut().take() {
-            census.dump();
+    let report = match CENSUS.with(|c| c.borrow_mut().take()) {
+        Some(census) => census.render(),
+        None => return,
+    };
+    match std::env::var("PHPR_OP_CENSUS") {
+        Ok(path) if path.starts_with('/') => {
+            use std::io::Write as _;
+            if let Ok(mut f) =
+                std::fs::OpenOptions::new().create(true).append(true).open(&path)
+            {
+                let _ = f.write_all(report.as_bytes());
+            }
         }
-    });
+        _ => eprint!("{report}"),
+    }
 }
 
 #[cfg(test)]
