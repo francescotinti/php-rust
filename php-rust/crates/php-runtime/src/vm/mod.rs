@@ -47,6 +47,7 @@ use crate::hir::{
 
 mod arrays;
 mod calls;
+mod census;
 mod coroutines;
 mod dom;
 mod exceptions;
@@ -449,6 +450,7 @@ pub(crate) fn run_module_with_hir<'m>(
         preg_cache: HashMap::default(),
         frames: Vec::new(),
         frame_pool: FramePool::default(),
+        census_on: census::census_arm(),
         next_object_id: 1,
         next_resource_id: 5,
         static_props: HashMap::default(),
@@ -735,6 +737,10 @@ pub(crate) fn run_module_with_hir<'m>(
     // at request shutdown). Done last, so shutdown-function and destructor output
     // produced while a buffer was active is captured then emitted in order.
     vm.flush_all_output_buffers();
+    // WP-33 T0: dump the op census to STDERR (parity-inert — stdout untouched).
+    if vm.census_on {
+        census::census_dump();
+    }
     VmOutcome {
         stdout: vm.stdout,
         rendered: vm.rendered,
@@ -1323,6 +1329,9 @@ struct Vm<'m> {
     frames: Vec<Frame<'m>>,
     /// WP-30: recycled frame backing buffers (see [`FramePool`]).
     frame_pool: FramePool,
+    /// WP-33 T0: whether the op census records this run (`PHPR_OP_CENSUS`).
+    /// Hoisted to a bool so the per-tick check is one predictable branch.
+    census_on: bool,
     /// Monotonic object-handle counter (`#N` in `var_dump`), starting at 1 like
     /// the tree-walker's `next_object_id`.
     next_object_id: u32,

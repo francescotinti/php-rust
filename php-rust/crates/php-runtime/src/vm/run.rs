@@ -176,6 +176,14 @@ impl<'m> super::Vm<'m> {
             // clone payloads only where they genuinely take ownership.
             let func = self.frames[top].func;
             let op = &func.ops[ip];
+            // WP-33 T0: op census (off by default — one predictable branch).
+            if self.census_on {
+                super::census::census_record(
+                    op,
+                    &self.frames[top].stack,
+                    &self.frames[top].slots,
+                );
+            }
             // Default fall-through advance. Jumps overwrite `ip`; `Call` advances
             // the *caller* before pushing the callee; `Ret` discards this frame.
             self.frames[top].ip = ip + 1;
