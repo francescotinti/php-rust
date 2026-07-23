@@ -1,21 +1,24 @@
-# Rotta WORDPRESS-FIRST — WP-track (dopo WP-44: stadio 2 registri BOCCIATO su A/B e revertato → ARCO REGISTRI CHIUSO; si apre la validazione Laravel o il backlog)
+# Rotta WORDPRESS-FIRST — WP-track (dopo WP-44: stadio 2 registri BOCCIATO su A/B in TRE forme e revertato → ARCO REGISTRI CHIUSO; si apre la validazione Laravel o il backlog)
 
-> 🚫 **WP-44 (2026-07-23, `35ff89f`+`1e365db` revertati da
-> `b1ea256`+`ebc0eb6` — tree finale BYTE-IDENTICO a `e3c8e0b`/WP-43)** —
-> **STADIO 2 Leva B eseguito, provato e BOCCIATO su A/B in DUE forme:
-> +1,17% (v1) e +1,28% (v2, con risoluzione singola e assorbimento solo
-> per forma) — 12/12 round new>old, oracle 20,75-20,80 stabilissimo.
-> Revert secco da protocollo; le fusioni WP-32/33/34 restano; l'infra
-> stadio 1 resta dormiente (pass vuoto, delta zero).** Prima del verdetto
-> erano PASSATI tutti i criteri di parità: dump flag-off byte-id a WP-43
-> (162.615 righe), catalogo diff pulito, **gate22 COMPLETO verde DUE volte
-> (flag off e flag on)** — quindi la bocciatura è solo fisica del CPU, non
-> correttezza. ⭐⭐ Lezione: generalizzare a registri gli op caldi PERDE
-> contro le fusioni enumerate (I-cache/BTB > elisione data-movement);
-> v1 vs v2 dimostra che non era un artefatto d'implementazione. ⭐⭐ Un
-> gate a flag ambientale vuole la PROVA POSITIVA nel log (il wrapper
-> `gate22-regon.sh` conta le forme registro nel dump e abortisce a 0;
-> `ps eww` su macOS non mostra l'env nemmeno dei processi propri).
+> 🚫 **WP-44 (2026-07-23, `35ff89f`+`1e365db`+`f4c80cf` revertati — tree
+> finale BYTE-IDENTICO a `e3c8e0b`/WP-43)** — **STADIO 2 Leva B eseguito,
+> provato e BOCCIATO su A/B in TRE forme: +1,17% (v1 enum-operand),
+> +1,28% (v2 enum + risoluzione singola), +1,01% (v3 "raw registers" dal
+> rebuttal Gemini: 7 shape monomorfe u16, ZERO dispatch operandi runtime,
+> mirror const-lhs a compile time) — 18/18 round new>old, oracle
+> 20,74-20,80 stabilissimo su 6 serie. Revert secco; le fusioni
+> WP-32/33/34 restano; l'infra stadio 1 resta dormiente.** Prima dei
+> verdetti erano PASSATI tutti i criteri di parità: dump flag-off byte-id
+> a WP-43, cataloghi diff puliti, **gate22 COMPLETO verde 2× (off e on)**
+> per v1/v2 e **corpus intero flag-on 1447 IDENTICO** per v3 — bocciatura
+> solo fisica CPU, non correttezza. ⭐⭐ Epitaffio (3 forme = verbale
+> solido): il costo strutturale è il NUMERO DI CORPI HANDLER CALDI nel
+> run_loop, NON lo stile di estrazione degli operandi — il rebuttal
+> "colpa dell'enum" è falsificato (v3 la migliore ma sempre sopra old);
+> l'elisione dei LoadVar non ripaga il working-set I-cache/BTB aggiunto.
+> ⭐⭐ Un gate a flag ambientale vuole la PROVA POSITIVA nel log
+> (`gate22-regon.sh` conta le forme nel dump e abortisce a 0; `ps eww`
+> su macOS non mostra l'env nemmeno dei processi propri).
 > **Storia: `sessions/WP_SESSION_44.md`.**
 
 ## 📁 Convenzioni (decisione utente 2026-07-23)
@@ -34,13 +37,16 @@
 - **Zero `unsafe` nel value core** (RULEBOOK §0; NaN-boxing WP-32,
   SSO-union WP-38 e stadio-2 registri WP-44 bocciati — non riproporre
   senza rotta esplicita utente).
-- **ARCO REGISTRI CHIUSO allo stadio 1 (WP-44)**: l'infra dual-mode resta
-  dormiente a delta zero (`PHPR_REG_LOWER` = pass vuoto); gli stadi 3-4
-  NON si aprono (stessa premessa fisica falsificata dal go/no-go di
-  stadio 2). Il census WP-42 resta valido come mappa (Ret→DerefTop 40,5M
-  = call ABI); ogni riapertura richiede un CAMBIO DI FISICA del dispatch,
-  non nuove varianti Op. La macchina di riscrittura (pass a finestre +
-  remap totale, gate-proven) vive in `35ff89f`/`1e365db`.
+- **ARCO REGISTRI CHIUSO allo stadio 1 (WP-44, verbale a TRE forme)**:
+  l'infra dual-mode resta dormiente a delta zero (`PHPR_REG_LOWER` = pass
+  vuoto); gli stadi 3-4 NON si aprono. Falsificati sia l'ibrido
+  enum-operand (v1/v2) sia i raw-registers monomorfi (v3): il costo è il
+  numero di corpi handler caldi nel run_loop. Il census WP-42 resta mappa
+  valida (Ret→DerefTop 40,5M = call ABI); ogni riapertura deve RIDURRE o
+  mantenere i corpi caldi (dispatch-table/token-threading = ipotesi DA
+  MISURARE, spesso perde in Rust; ristrutturazione del loop), mai
+  aggiungerne. La macchina di riscrittura (pass a finestre + remap
+  totale, gate/corpus-proven) vive in `35ff89f`/`1e365db`/`f4c80cf`.
 - Micro-bench solo advisory: verdetti SOLO su A/B interleaved stesso-giorno
   sul workload reale. Gate per NOME a ogni commit; refactor layout/GC =
   sentinelle drop-order pinnate PRIMA; oracle-probe con `-d log_errors=0`.

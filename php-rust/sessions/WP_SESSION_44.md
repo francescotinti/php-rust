@@ -3,13 +3,19 @@
 > Convenzione: un file per sessione; il handoff tiene solo l'ultima sintesi.
 > Dettagli gemelli in memoria: topic php-rust-wordpress-track.
 
-> 🚫 **WP-44 (2026-07-23, commit `35ff89f`+`1e365db` REVERTATI da
-> `b1ea256`+`ebc0eb6` — tree finale BYTE-IDENTICO a `e3c8e0b`/WP-43)** —
-> **STADIO 2 Leva B (Binary/CmpJmp a operandi diretti) ESEGUITO, PROVATO E
-> BOCCIATO su A/B in DUE forme: +1,17% e +1,28% consistenti (12/12 round
-> new>old, segno mai invertito). Revert secco da protocollo. ARCO REGISTRI
+> 🚫 **WP-44 (2026-07-23, commit `35ff89f`+`1e365db`+`f4c80cf` REVERTATI —
+> tree finale BYTE-IDENTICO a `e3c8e0b`/WP-43)** — **STADIO 2 Leva B
+> ESEGUITO, PROVATO E BOCCIATO su A/B in TRE forme: +1,17% (v1
+> enum-operand), +1,28% (v2 enum + risoluzione singola), +1,01% (v3 "raw
+> registers" su rebuttal Gemini — 7 shape monomorfe u16, ZERO dispatch
+> operandi a runtime). 18/18 round new>old, segno mai invertito, oracle
+> 20,74-20,80 su 6 serie. Revert secco da protocollo. ARCO REGISTRI
 > CHIUSO** (le fusioni WP-32/33/34 restano; infrastruttura stadio 1 a delta
-> zero resta, pass di nuovo vuoto).
+> zero resta, pass di nuovo vuoto). **Epitaffio corretto: il colpevole NON
+> è (solo) l'estrazione a enum — falsificato il rebuttal — ma il numero di
+> CORPI HANDLER CALDI nel run_loop: da 2 (Binary, CmpJmpConst) a 9 in v3,
+> e l'elisione dei LoadVar (slot-read + clone economico) non ripaga il
+> working-set I-cache/BTB aggiunto, in NESSUNA forma.**
 
 ## Cosa è stato costruito (e revertato — il codice vive in `35ff89f`/`1e365db`)
 
@@ -54,35 +60,62 @@
    da un falso-verde a flag morto (`ps eww` su macOS NON mostra l'env
    nemmeno dei processi propri: non è un check).
 
+## La v3 "raw registers" (rebuttal Gemini, `f4c80cf` — l'esperimento discriminante)
+
+Su intervento utente (doc `20260723_gemini_rebuttal_wp44.md`): l'ipotesi di
+Gemini era che il colpevole fosse SOLO l'estrazione a enum `Operand`
+(match runtime sulla provenienza in ogni istruzione fusa) e che i "registri
+grezzi" (indici u16, risoluzione tutta nel compiler) avrebbero vinto. v1/v2
+non avevano isolato quella variabile → costruita la v3:
+
+- 7 varianti MONOMORFE: `BinarySS`/`BinarySSDst`/`BinarySC`/`BinarySCDst`/
+  `BinaryDst`/`CmpJmpSS`/`CmpJmpSC` — solo u16 grezzi, zero match operandi.
+- Const sempre RHS: const-lhs foldata solo se commutativa (const scalare
+  non-diagnostico, o l'ordine dei diag di coercizione si invertirebbe) o
+  comparazione MIRRORATA a compile time (Lt↔Gt, Le↔Ge; Spaceship escluso).
+- Niente fold stack-lhs, niente rename 1:1: zero polimorfismo aggiunto.
+- Parità v3 prima del verdetto: cargo 1641/0 · dump flag-off byte-id ·
+  catalogo pulito (Binary −188 = Dst 118+SC 46+SCDst 3+SS 20+SSDst 1;
+  CmpJmp −15→SS; CmpJmpConst −526→SC; LoadVar −647; Dup/StoreSlot/Pop
+  −122) · **corpus INTERO flag-on 1447 IDENTICO per nome** (mirror incluso).
+
 ## A/B go/no-go (gruppo media, user CPU dai .time, stesso giorno)
 
-| round | v1 old | v1 new | v2 old | v2 new |
-|---|---|---|---|---|
-| 1 | 55,30 | 55,70 | 55,30 | 55,88 |
-| 2 | 55,22 | 56,04 | 55,37 | 55,82 |
-| 3 | 55,29 | 56,01 | 55,15 | 55,71 |
-| 4 | 55,35 | 56,05 | 55,10 | 55,87 |
-| 5 | 55,19 | 55,97 | 55,15 | 55,93 |
-| 6 | 55,48 | 55,95 | 55,19 | 56,30 |
+| round | v1 old | v1 new | v2 old | v2 new | v3 old | v3 new |
+|---|---|---|---|---|---|---|
+| 1 | 55,30 | 55,70 | 55,30 | 55,88 | 55,21 | 55,55 |
+| 2 | 55,22 | 56,04 | 55,37 | 55,82 | 55,98 | 56,36 |
+| 3 | 55,29 | 56,01 | 55,15 | 55,71 | 55,52 | 55,92 |
+| 4 | 55,35 | 56,05 | 55,10 | 55,87 | 55,47 | 55,96 |
+| 5 | 55,19 | 55,97 | 55,15 | 55,93 | 55,57 | 56,66 |
+| 6 | 55,48 | 55,95 | 55,19 | 56,30 | 55,31 | 55,97 |
 
-Medie: v1 55,305/55,953 = **+1,17%** · v2 55,21/55,92 = **+1,28%**.
-Oracle 20,75-20,80 in tutte e quattro le serie = giornata pulitissima.
-12/12 round new>old ⇒ **regressione consistente, NO-GO, revert secco**.
+Medie: v1 55,305/55,953 = **+1,17%** · v2 55,21/55,92 = **+1,28%** ·
+v3 55,51/56,07 = **+1,01%**. Oracle 20,74-20,80 in tutte e sei le serie.
+**18/18 round new>old ⇒ NO-GO in ogni forma, revert secco.** La v3 è la
+migliore delle tre (l'enum un costo ce l'aveva — direzione del rebuttal
+giusta) ma il termine dominante resta e il segno non si inverte mai.
 (old = `phpr-e3c8e0b`, build in `/tmp/phpr-old-44`, binario archiviato in
 `phpr-old-target/release/phpr-e3c8e0b`.)
 
 ## ⭐⭐ Lezioni (perché l'arco si chiude)
 
-- **La generalizzazione a registri degli op caldi PERDE contro le fusioni
-  enumerate**: due corpi handler polimorfi in più nel run_loop costano in
-  I-cache/BTB più di quanto l'elisione del data-movement renda (LoadVar
-  elisi = clone già economico + dispatch; il grosso del churn Zval sta
-  ALTROVE: Ret→DerefTop, call ABI). Fisica coerente con WP-33 ("+2,9% un
-  branch mai preso"), WP-38 (i micro mentono), WP-41 (shim bocciato).
-- **v1 vs v2 dimostra che NON era un artefatto d'implementazione**: tolta
-  la spolimorfizzazione gratuita (CmpJmpConst 1:1) e la doppia
-  risoluzione, la regressione resta ≈uguale. È il costo strutturale delle
-  varianti aggiuntive + la quota di CmpJmpConst caldi convertiti.
+- **⭐⭐ Il costo strutturale è il NUMERO DI CORPI HANDLER CALDI nel
+  run_loop, non lo stile di estrazione degli operandi.** v1/v2 (enum) e v3
+  (u16 grezzi, monomorfa) perdono tutte: da 2 corpi caldi del canale
+  (Binary, CmpJmpConst) si passa a 4 (v1/v2) o 9 (v3) e il working-set
+  I-cache/BTB del dispatch cresce comunque; l'elisione dei LoadVar
+  (slot-read + clone spesso Rc-bump) non lo ripaga. Il rebuttal Gemini
+  ("colpa dell'enum, i raw registers vincono") è FALSIFICATO sullo scope
+  stadio-2 — pur avendo direzione giusta: v3 è la migliore delle tre.
+  Il grosso del churn Zval sta ALTROVE (Ret→DerefTop, call ABI). Fisica
+  coerente con WP-33 ("+2,9% un branch mai preso"), WP-38, WP-41.
+- **Tre forme = verbale solido**: v1 vs v2 esclude gli artefatti
+  d'implementazione (doppia risoluzione, spolimorfizzazione gratuita);
+  v2 vs v3 esclude l'estrazione a enum. Qualunque riapertura deve RIDURRE
+  o mantenere i corpi caldi (es. dispatch-table/token-threading — da
+  MISURARE, la indirect call per op in Rust spesso perde vs match — o
+  ristrutturazione del loop), mai aggiungerne.
 - **⭐⭐ Un gate a flag ambientale VUOLE la prova positiva nel log**
   (conteggio forme nel dump), come i gate DB vogliono il conteggio nomi.
 - ⭐ Il pass a finestre con remap totale è CORRETTO e riusabile (gate22
@@ -96,6 +129,7 @@ Oracle 20,75-20,80 in tutte e quattro le serie = giornata pulitissima.
 
 ## Stato finale
 
+- Commit v3: `f4c80cf`, revertato dall'ultimo revert di chiusura.
 - **Tree = `e3c8e0b` byte-identico** (diff vuoto); cargo **1637/0**;
   dump probe BYTE-ID a WP-43; out == oracle; flag-on (pass vuoto) =
   identità. Full gate22 post-revert NON rilanciato: tree identico allo
@@ -114,9 +148,10 @@ Oracle 20,75-20,80 in tutte e quattro le serie = giornata pulitissima.
 
 **Arco registri (Leva B) CHIUSO allo stadio 1** (infra dormiente a delta
 zero; stadi 3-4 NON si aprono: condividono la stessa premessa fisica
-falsificata — più forme nel loop caldo per elidere data-movement). Il
-census resta valido come mappa (Ret→DerefTop 40,5M = call ABI), ma ogni
-riapertura richiede un cambio di fisica del dispatch, non nuove varianti.
+falsificata in TRE forme — più corpi nel loop caldo per elidere
+data-movement). Il census resta valido come mappa (Ret→DerefTop 40,5M =
+call ABI), ma ogni riapertura richiede un cambio di fisica del dispatch
+che NON aggiunga corpi caldi, non nuove varianti.
 Da rotta ([[php-rust-roadmap-wp-first]]): con l'arco perf chiuso si apre la
 **validazione Laravel**; in alternativa il backlog di
 [[php-rust-todo-master]] (candidato pronto: bug isset via `__get` annidato,
