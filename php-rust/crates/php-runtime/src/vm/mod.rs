@@ -10223,41 +10223,59 @@ impl<'m> Vm<'m> {
     }
 
     /// Resolve a MULTI-key isset/empty dim path with Zend's BP_VAR_IS quiet
-    /// fetch: raw containers walk silently, but an intermediate ArrayAccess
-    /// object dispatches `offsetExists` (false short-circuits to `Missing`)
-    /// then `offsetGet` — symfony VarDumper's `Data` nests exactly this way
+    /// fetch: raw containers walk silently BY BORROW (zero `Zval` clones,
+    /// WP-42), but an intermediate ArrayAccess object dispatches
+    /// `offsetExists` (false short-circuits to `Missing`) then `offsetGet` —
+    /// symfony VarDumper's `Data` nests exactly this way
     /// (`isset($data['a']['b'])`). The leaf is handed back for protocol
-    /// dispatch when it lands on an ArrayAccess object, else pre-read raw.
+    /// dispatch when it lands on an ArrayAccess object, else folded into
+    /// the `mode` verdict on the borrow.
     fn dim_is_walk(
         &mut self,
         base: DimBase,
         top: usize,
         keys: &[Zval],
+        mode: IsMode,
     ) -> Result<DimIsLeaf, PhpError> {
-        let mut cur = self.base_cell(base, top).deref_clone();
-        // A bare `isset($x)`/`empty($x)` compiles with no keys: the base value
-        // itself is the leaf.
-        let Some((last, prefix)) = keys.split_last() else {
-            return Ok(DimIsLeaf::Raw(Some(cur)));
-        };
-        for k in prefix {
-            if matches!(cur, Zval::Object(_)) && self.object_implements(&cur, b"arrayaccess") {
-                let ex = self.call_method_sync(cur.clone(), b"offsetExists", vec![k.clone()])?;
-                if !convert::is_true_silent(&ex.deref_clone()) {
-                    return Ok(DimIsLeaf::Missing);
-                }
-                cur = self.call_method_sync(cur, b"offsetGet", vec![k.clone()])?.deref_clone();
-            } else {
-                match silent_get_path(&cur, std::slice::from_ref(k)) {
-                    Some(v) => cur = v,
-                    None => return Ok(DimIsLeaf::Missing),
+        let first = silent_walk(self.base_cell(base, top), keys, 0, mode);
+        self.is_walk_resume(first, keys, mode)
+    }
+
+    /// Drive a BP_VAR_IS walk to its verdict, resuming across ArrayAccess
+    /// intermediates: `Object` bail-outs from [`silent_walk`] land here — a
+    /// non-ArrayAccess object is `Missing` (the quiet fetch), the LAST key
+    /// hands the protocol leaf back to the caller, and a mid-path object
+    /// dispatches `offsetExists`/`offsetGet` (user code — outside any
+    /// borrow) before the walk resumes on the result.
+    fn is_walk_resume(
+        &mut self,
+        mut out: SilentOut,
+        keys: &[Zval],
+        mode: IsMode,
+    ) -> Result<DimIsLeaf, PhpError> {
+        loop {
+            match out {
+                SilentOut::Missing => return Ok(DimIsLeaf::Missing),
+                SilentOut::Verdict(b) => return Ok(DimIsLeaf::Verdict(b)),
+                SilentOut::Object(obj, at) => {
+                    if !self.object_implements(&obj, b"arrayaccess") {
+                        return Ok(DimIsLeaf::Missing);
+                    }
+                    if at + 1 == keys.len() {
+                        return Ok(DimIsLeaf::Aa(obj, keys[at].clone()));
+                    }
+                    let k = &keys[at];
+                    let ex =
+                        self.call_method_sync(obj.clone(), b"offsetExists", vec![k.clone()])?;
+                    if !convert::is_true_silent(&ex.deref_clone()) {
+                        return Ok(DimIsLeaf::Missing);
+                    }
+                    let next =
+                        self.call_method_sync(obj, b"offsetGet", vec![k.clone()])?.deref_clone();
+                    out = silent_walk(&next, &keys[at + 1..], at + 1, mode);
                 }
             }
         }
-        if matches!(cur, Zval::Object(_)) && self.object_implements(&cur, b"arrayaccess") {
-            return Ok(DimIsLeaf::Aa(cur, last.clone()));
-        }
-        Ok(DimIsLeaf::Raw(silent_get_path(&cur, std::slice::from_ref(last))))
     }
 
     /// The fused-field analogue of [`Self::dim_is_walk`] for isset/empty:
@@ -10274,6 +10292,7 @@ impl<'m> Vm<'m> {
         top: usize,
         steps: &[FieldStep],
         keys: &[Zval],
+        mode: IsMode,
     ) -> Result<Option<DimIsLeaf>, PhpError> {
         let m = steps.iter().rev().take_while(|s| matches!(s, FieldStep::Index)).count();
         if m < 2 || keys.len() < m {
@@ -10315,26 +10334,11 @@ impl<'m> Vm<'m> {
         {
             return Ok(None);
         }
-        let mut cur = container;
-        let (last, mids) = keys[split..].split_last().expect("m >= 2");
-        for k in mids {
-            if matches!(cur, Zval::Object(_)) && self.object_implements(&cur, b"arrayaccess") {
-                let ex = self.call_method_sync(cur.clone(), b"offsetExists", vec![k.clone()])?;
-                if !convert::is_true_silent(&ex.deref_clone()) {
-                    return Ok(Some(DimIsLeaf::Missing));
-                }
-                cur = self.call_method_sync(cur, b"offsetGet", vec![k.clone()])?.deref_clone();
-            } else {
-                match silent_get_path(&cur, std::slice::from_ref(k)) {
-                    Some(v) => cur = v,
-                    None => return Ok(Some(DimIsLeaf::Missing)),
-                }
-            }
-        }
-        if matches!(cur, Zval::Object(_)) && self.object_implements(&cur, b"arrayaccess") {
-            return Ok(Some(DimIsLeaf::Aa(cur, last.clone())));
-        }
-        Ok(Some(DimIsLeaf::Raw(silent_get_path(&cur, std::slice::from_ref(last)))))
+        // The container is a verified ArrayAccess object at key index
+        // `split`: hand it to the shared BP_VAR_IS driver (WP-42), which
+        // dispatches the protocol on intermediates and folds a raw leaf
+        // into the `mode` verdict by borrow.
+        self.is_walk_resume(SilentOut::Object(container, split), keys, mode).map(Some)
     }
 
     /// The dim-path analogue of [`Self::field_aa_leaf`]: for a MULTI-key
@@ -11656,8 +11660,17 @@ enum DimIsLeaf {
     Missing,
     /// The leaf container is an ArrayAccess object: dispatch the protocol.
     Aa(Zval, Zval),
-    /// A raw leaf, pre-read (`None` = absent).
-    Raw(Option<Zval>),
+    /// A raw leaf, folded into its [`IsMode`] verdict on the borrow —
+    /// `Exists`: present and not null; `Truthy`: the leaf's boolean.
+    Verdict(bool),
+}
+
+/// The BP_VAR_IS verdict a silent walk folds its raw leaf into: `Exists`
+/// backs `isset`, `Truthy` backs `empty` (the caller negates).
+#[derive(Clone, Copy)]
+enum IsMode {
+    Exists,
+    Truthy,
 }
 
 /// Opaque internal handle classes (PHP 8 resource-object wrappers): the

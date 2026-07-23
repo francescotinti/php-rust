@@ -27,6 +27,62 @@ pub(super) fn silent_get_path(cell: &Zval, keys: &[Zval]) -> Option<Zval> {
     }
 }
 
+/// Outcome of [`silent_walk`]: the walk resolves the whole path by borrow
+/// (`Missing` / `Verdict`) or stops at an OBJECT with keys left to consume
+/// (`Object(handle, key_index)`) — the caller decides between the
+/// ArrayAccess protocol and `Missing`. No user code runs inside the walk
+/// (objects bail immediately), so holding `Ref` borrow guards across
+/// levels is safe.
+pub(super) enum SilentOut {
+    Missing,
+    Verdict(bool),
+    Object(Zval, usize),
+}
+
+/// The zero-clone twin of [`silent_get_path`] for `isset` / `empty`: follow
+/// `keys` from `cell` entirely by reference and fold the leaf into an
+/// [`IsMode`] verdict — no intermediate or leaf `Zval` is cloned (an object
+/// bails out with an `Rc` handle bump only). `depth` is the absolute index
+/// of the next key so resumed walks report `Object` positions key-indexed.
+pub(super) fn silent_walk(cell: &Zval, keys: &[Zval], depth: usize, mode: IsMode) -> SilentOut {
+    if let Zval::Ref(rc) = cell {
+        return silent_walk(&rc.borrow(), keys, depth, mode);
+    }
+    match keys.split_first() {
+        None => match cell {
+            Zval::Undef => SilentOut::Missing,
+            v => SilentOut::Verdict(match mode {
+                IsMode::Exists => !matches!(v, Zval::Null),
+                IsMode::Truthy => convert::is_true_silent(v),
+            }),
+        },
+        Some((k, rest)) => match cell {
+            Zval::Object(_) => SilentOut::Object(cell.clone(), depth),
+            Zval::Array(a) => match coerce_key_silent(k).and_then(|key| a.get(&key)) {
+                Some(child) => silent_walk(child, rest, depth + 1, mode),
+                None => SilentOut::Missing,
+            },
+            // A string offset can sit at ANY step (`isset($s[0][0])` chains
+            // through one-byte strings — the per-key walk it replaces saw a
+            // single-key slice at every level, so `silent_get_path`'s
+            // final-step restriction never applied here).
+            Zval::Str(s) => match string_offset(s, k) {
+                Some(byte) if rest.is_empty() => SilentOut::Verdict(match mode {
+                    IsMode::Exists => true,
+                    IsMode::Truthy => {
+                        convert::is_true_silent(&Zval::Str(PhpStr::new(vec![byte])))
+                    }
+                }),
+                Some(byte) => {
+                    silent_walk(&Zval::Str(PhpStr::new(vec![byte])), rest, depth + 1, mode)
+                }
+                None => SilentOut::Missing,
+            },
+            _ => SilentOut::Missing,
+        },
+    }
+}
+
 /// The in-bounds byte at a string offset (negatives count from the end), or
 /// `None` if out of range — the existence test behind `isset($s[i])`.
 pub(super) fn string_offset(s: &PhpStr, key: &Zval) -> Option<u8> {

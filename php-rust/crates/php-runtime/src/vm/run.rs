@@ -1243,15 +1243,13 @@ impl<'m> super::Vm<'m> {
                     // Nested form: BP_VAR_IS walk (an intermediate ArrayAccess
                     // dispatches offsetExists/offsetGet; the protocol runs on
                     // an ArrayAccess leaf).
-                    let set = match self.dim_is_walk(*base, top, &keys)? {
+                    let set = match self.dim_is_walk(*base, top, &keys, super::IsMode::Exists)? {
                         super::DimIsLeaf::Missing => false,
                         super::DimIsLeaf::Aa(recv, key) => {
                             let r = self.call_method_sync(recv, b"offsetExists", vec![key])?;
                             convert::is_true_silent(&r.deref_clone())
                         }
-                        super::DimIsLeaf::Raw(v) => {
-                            matches!(v, Some(v) if !matches!(v, Zval::Null | Zval::Undef))
-                        }
+                        super::DimIsLeaf::Verdict(set) => set,
                     };
                     self.frames[top].stack.push(Zval::Bool(set));
                 }
@@ -1277,7 +1275,7 @@ impl<'m> super::Vm<'m> {
                         }
                     }
                     // Nested form: same BP_VAR_IS walk as `isset` above.
-                    let empty = match self.dim_is_walk(*base, top, &keys)? {
+                    let empty = match self.dim_is_walk(*base, top, &keys, super::IsMode::Truthy)? {
                         super::DimIsLeaf::Missing => true,
                         super::DimIsLeaf::Aa(recv, key) => {
                             let exists = self
@@ -1289,10 +1287,7 @@ impl<'m> super::Vm<'m> {
                                 true
                             }
                         }
-                        super::DimIsLeaf::Raw(v) => match v {
-                            Some(v) => !convert::is_true_silent(&v),
-                            None => true,
-                        },
+                        super::DimIsLeaf::Verdict(truthy) => !truthy,
                     };
                     self.frames[top].stack.push(Zval::Bool(empty));
                 }
@@ -4800,7 +4795,9 @@ impl<'m> super::Vm<'m> {
                     }
                     // Nested Index run on an ArrayAccess property
                     // (`isset($this->data['a']['b'])`): BP_VAR_IS walk.
-                    if let Some(res) = self.field_aa_walk(*base, top, &steps, &keys)? {
+                    if let Some(res) =
+                        self.field_aa_walk(*base, top, &steps, &keys, super::IsMode::Exists)?
+                    {
                         let set = match res {
                             super::DimIsLeaf::Missing => false,
                             super::DimIsLeaf::Aa(recv, key) => {
@@ -4808,9 +4805,7 @@ impl<'m> super::Vm<'m> {
                                     self.call_method_sync(recv, b"offsetExists", vec![key])?;
                                 convert::is_true_silent(&r.deref_clone())
                             }
-                            super::DimIsLeaf::Raw(v) => {
-                                matches!(v, Some(v) if !matches!(v, Zval::Null | Zval::Undef))
-                            }
+                            super::DimIsLeaf::Verdict(set) => set,
                         };
                         self.frames[top].stack.push(Zval::Bool(set));
                         continue;
@@ -4857,7 +4852,9 @@ impl<'m> super::Vm<'m> {
                     }
                     // Nested Index run on an ArrayAccess property: same
                     // BP_VAR_IS walk as Op::FieldIsset above.
-                    if let Some(res) = self.field_aa_walk(*base, top, &steps, &keys)? {
+                    if let Some(res) =
+                        self.field_aa_walk(*base, top, &steps, &keys, super::IsMode::Truthy)?
+                    {
                         let empty = match res {
                             super::DimIsLeaf::Missing => true,
                             super::DimIsLeaf::Aa(recv, key) => {
@@ -4874,10 +4871,7 @@ impl<'m> super::Vm<'m> {
                                     true
                                 }
                             }
-                            super::DimIsLeaf::Raw(v) => match v {
-                                Some(v) => !convert::is_true_silent(&v),
-                                None => true,
-                            },
+                            super::DimIsLeaf::Verdict(truthy) => !truthy,
                         };
                         self.frames[top].stack.push(Zval::Bool(empty));
                         continue;
