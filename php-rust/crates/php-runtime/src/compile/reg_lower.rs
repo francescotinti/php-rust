@@ -18,13 +18,10 @@
 //!   LoadVar semantics.
 //! - dst folds: `Binary, StoreSlot s` and `Binary, Dup, StoreSlot s, Pop`
 //!   sink into `dst: Slot(s)` (the census assign-and-discard bigrams).
-//! - absorption by SHAPE (plan §3.7 — substitution, never coexistence):
-//!   `CmpJmpReg` owns every *folded* shape (a `CmpJmpConst` preceded by a
-//!   foldable LoadVar is absorbed into it), while the pure stack-lhs
-//!   `CmpJmpConst` keeps its WP-34 monomorphic handler — the 1:1 rewrite
-//!   with no elision was measured at +1.3% consistent (WP-44 first A/B):
-//!   polymorphic operand dispatch on the hottest compare site is pure cost.
-//!   A `Binary` with no folded source and no dst stays `Op::Binary`.
+//! - absorption (plan §3.7 — substitution, never coexistence): every
+//!   remaining `CmpJmpConst` is rewritten 1:1 into `CmpJmpReg`, so at flag-on
+//!   the WP-34 handler goes cold. A `Binary` with no folded source and no
+//!   dst stays `Op::Binary` (nothing to win).
 //!
 //! Window guards (plan §3 non-negotiables): every op of a window shares one
 //! source line (diagnostic parity — the fused op reports the same line), no
@@ -200,14 +197,15 @@ fn fuse_window(f: &Func, blocked: &[bool], i: usize) -> (Op, usize) {
         }
     }
     match &f.ops[i] {
+        // Absorption: a bare CmpJmpConst becomes CmpJmpReg 1:1 (same
+        // address, same line) so the old form goes cold at flag-on.
+        Op::CmpJmpConst { op, cidx, addr, when, const_lhs } if *cidx <= u16::MAX as u32 => {
+            let c = Operand::Const(*cidx as u16);
+            let (lo, ro) = if *const_lhs { (c, Operand::Stack) } else { (Operand::Stack, c) };
+            (Op::CmpJmpReg { op: *op, l: lo, r: ro, addr: *addr, when: *when }, 1)
+        }
         // A bare Binary still wins if its result sinks straight into a slot.
         Op::Binary(b) => with_dst(f, blocked, i, 1, *b, Operand::Stack, Operand::Stack),
-        // A bare CmpJmpConst (stack lhs, no fold) STAYS: rewriting it 1:1
-        // into CmpJmpReg elides nothing and turns the hottest monomorphic
-        // handler (ThisPropGet→CmpJmpConst, 29.9M/run) into a polymorphic
-        // one — measured +1.3% consistent on the WP-44 first-cut A/B.
-        // "Substitution, never coexistence" (plan §3.7) applies per operand
-        // SHAPE: CmpJmpReg owns the folded shapes, CmpJmpConst the stack one.
         _ => (f.ops[i].clone(), 1),
     }
 }
@@ -405,48 +403,14 @@ mod tests {
             )),
             "expected a Const-side CmpJmpReg (absorbed CmpJmpConst)"
         );
-        // Folded shapes only: a CmpJmpConst *preceded by a foldable LoadVar*
-        // is absorbed; no fused window may survive un-rewritten in f.
-        for (a, b) in lf.ops.iter().zip(lf.ops.iter().skip(1)) {
-            assert!(
-                !(matches!(a, Op::LoadVar { .. }) && matches!(b, Op::CmpJmpConst { .. })),
-                "LoadVar→CmpJmpConst window left unfused"
-            );
-        }
         for f in all_funcs(&lm) {
             assert_eq!(f.max_temps, 0, "stage 2 emits no temps");
+            assert!(
+                !f.ops.iter().any(|o| matches!(o, Op::CmpJmpConst { .. })),
+                "CmpJmpConst must be fully absorbed at flag-on"
+            );
         }
         // Behavior identical to the stack forms.
-        assert_eq!(run(&m), run(&lm));
-    }
-
-    /// A compare whose lhs comes from the stack (no foldable producer) keeps
-    /// the monomorphic WP-34 CmpJmpConst — the 1:1 no-elision rewrite was a
-    /// measured regression (see module doc).
-    #[test]
-    fn stage2_stack_lhs_compare_keeps_cmpjmpconst() {
-        let m = compile(
-            br#"<?php
-            function g($a) { return $a + 1; }
-            function h($a) { if (g($a) == 3) { return 1; } return 2; }
-            echo h(2), h(5);
-            "#,
-        );
-        let lm = lowered(&m);
-        let lh = lm
-            .functions
-            .iter()
-            .find(|f| f.name.as_ref() == b"h")
-            .expect("fn h present");
-        assert!(
-            lh.ops.iter().any(|o| matches!(o, Op::CmpJmpConst { .. })),
-            "stack-lhs compare must stay CmpJmpConst: {:#?}",
-            lh.ops
-        );
-        assert!(
-            !lh.ops.iter().any(|o| matches!(o, Op::CmpJmpReg { .. })),
-            "no fold available in h — no CmpJmpReg expected"
-        );
         assert_eq!(run(&m), run(&lm));
     }
 
