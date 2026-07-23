@@ -15969,6 +15969,47 @@ mod tests {
         );
     }
 
+    // ------------------------------------------------------------------
+    // WP-46 — object-cycle collect_cycles SENTINEL, committed BEFORE the
+    // container-root extension (Ref/Array/Closure possible roots + the
+    // Zend-exact count/destructor restructure of collect_cycles). Pins the
+    // CURRENT — already oracle-identical (probe 2026-07-24) — counts,
+    // destructor order and timing of gc_collect_cycles() for cycles the
+    // collector ALREADY sees (object-rooted): self-cycle, mutual pair,
+    // dtor-less pair, cycle through an array prop, three-object chain,
+    // object<->array without refs, and a resurrecting destructor. The
+    // restructure must not change one byte of this.
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn gc_object_cycle_collect_sentinel() {
+        assert_eq!(
+            vm_stdout(
+                b"<?php
+                class D { public $t; public $link; function __construct($t){ $this->t = $t; } function __destruct(){ echo '[', $this->t, ']'; } }
+                class N { public $link; }
+                $a = new D('a'); $a->link = $a; unset($a);
+                echo 'O1:', gc_collect_cycles(), ';';
+                $x = new D('x'); $y = new D('y'); $x->link = $y; $y->link = $x; unset($x, $y);
+                echo 'O2:', gc_collect_cycles(), ';';
+                $p = new N; $q = new N; $p->link = $q; $q->link = $p; unset($p, $q);
+                echo 'O3:', gc_collect_cycles(), ';';
+                $m = new D('m'); $m->link = [ $m ]; unset($m);
+                echo 'O4:', gc_collect_cycles(), ';';
+                $u = new N; $v = new D('v'); $w = new N; $u->link = $v; $v->link = $w; $w->link = $u; unset($u, $v, $w);
+                echo 'O5:', gc_collect_cycles(), ';';
+                class E2 { public $arr; function __destruct(){ echo '[E]'; } }
+                $e = new E2; $e->arr = [$e]; unset($e);
+                echo 'O6:', gc_collect_cycles(), ';';
+                class R2 { public $self; function __destruct(){ echo '[R]'; global $keep; $keep = $this; } }
+                $r = new R2; $r->self = $r; unset($r);
+                echo 'O7:', gc_collect_cycles(), ';';
+                echo 'O7b:', gc_collect_cycles(), ';';"
+            ),
+            b"O1:[a]1;O2:[x][y]2;O3:2;O4:[m]2;O5:[v]3;O6:[E]2;O7:[R]0;O7b:0;"
+        );
+    }
+
     #[test]
     fn cmp_jmp_fused_conditions_semantics() {
         // Conditions with a comparison ROOT compile to the fused CmpJmp
