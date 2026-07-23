@@ -8,6 +8,11 @@ license.workspace = true
 name = "phpr"
 path = "src/main.rs"
 
+[features]
+# WP-45 Fase 0: byte-attribution build (PHPR_MEM_CENSUS). Instrumentation
+# builds only — never parity/A-B binaries. See FOOTPRINT_CPU_ROADMAP.md.
+mem-census = ["php-runtime/mem-census", "php-types/mem-census"]
+
 [dependencies]
 php-types.workspace = true
 php-runtime.workspace = true

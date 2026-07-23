@@ -269,8 +269,30 @@ pub(crate) fn drop_bounded(payload: DeepDrop) {
     }
 }
 
+/// Fase 0 byte-census (census builds only): OBJ channel is death-accounted;
+/// bytes are computed BEFORE the props are taken for bounded drop.
+#[cfg(feature = "mem-census")]
+impl Object {
+    fn census_bytes(&self) -> usize {
+        std::mem::size_of::<Object>()
+            + crate::memcensus::OBJ_OVERHEAD
+            + self.props.slots.capacity() * std::mem::size_of::<Option<Zval>>()
+            + self.props.dyn_entries.capacity()
+                * std::mem::size_of::<(Box<[u8]>, Zval)>()
+            + (self.readonly_init.capacity()
+                + self.readonly_clone_writable.capacity()
+                + self.typed_unset.capacity())
+                * std::mem::size_of::<Box<[u8]>>()
+    }
+}
+
 impl Drop for Object {
     fn drop(&mut self) {
+        #[cfg(feature = "mem-census")]
+        if self.id != 0 {
+            crate::memcensus::death(crate::memcensus::CH_OBJ, self.census_bytes());
+            crate::memcensus::count_free(crate::memcensus::CH_OBJ);
+        }
         // Zend's teardown (zend_objects_store_del) runs free_obj — releasing
         // the properties, so any exclusively-held descendant returns its
         // handle FIRST — and only then links the object's own handle into the

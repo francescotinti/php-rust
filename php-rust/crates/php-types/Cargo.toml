@@ -9,6 +9,10 @@ license.workspace = true
 # PhpStr allocation, dumped at process exit to $PHPR_STR_CENSUS (append).
 # Off by default — zero cost in normal builds (the hook is compiled out).
 str-census = []
+# WP-45 Fase 0 (FOOTPRINT_CPU_ROADMAP.md): byte-attribution per canale
+# (str/arr/obj/unit), dump su $PHPR_MEM_CENSUS. Misura-only, mai nei build
+# di parità o A/B.
+mem-census = []
 
 [dependencies]
 libc = "0.2"

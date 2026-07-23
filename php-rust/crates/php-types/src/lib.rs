@@ -3,6 +3,8 @@
 //! Semantics reference: PHP 8.5.7 C source (see diary/01-semantic-model.md).
 
 mod array;
+#[cfg(feature = "mem-census")]
+pub mod memcensus;
 pub mod convert;
 mod diag;
 pub mod dtoa;

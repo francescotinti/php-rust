@@ -1741,6 +1741,8 @@ impl<'m> Vm<'m> {
     /// a reused id must not inherit a "destructor already ran" mark or a
     /// dead lazy-object state.
     fn next_id(&mut self) -> u32 {
+        #[cfg(feature = "mem-census")]
+        php_types::memcensus::count_alloc(php_types::memcensus::CH_OBJ);
         if let Some(id) = php_types::take_freed_object_id() {
             self.destructed.remove(&id);
             self.lazy_init.remove(&id);
@@ -1889,6 +1891,11 @@ impl<'m> Vm<'m> {
     fn gc_sweep_impl(&mut self, resume: Option<(usize, usize)>, main: bool) -> Result<(), PhpError> {
         #[cfg(feature = "gc-census")]
         gc_census::sweep(main);
+        #[cfg(feature = "mem-census")]
+        php_types::memcensus::gauge(
+            php_types::memcensus::G_CREATED,
+            self.created.len() as i64,
+        );
         if main && !self.gc_light_demoted.is_empty() {
             for id in std::mem::take(&mut self.gc_light_demoted) {
                 let Some(o) = self.created.get(&id).cloned() else { continue };
@@ -3328,6 +3335,11 @@ impl<'m> Vm<'m> {
         // Rewrite every op / class-metadata id in place (the module is still owned),
         // and offset the unit's static-cell ids past the live `self.statics` range.
         relocate_module_class_ids(&mut module, &class_remap, self.statics.len());
+        #[cfg(feature = "mem-census")]
+        php_types::memcensus::alloc(
+            php_types::memcensus::CH_UNIT,
+            module_census_bytes(&module),
+        );
         let leaked: &'static Module = Box::leak(Box::new(module));
         self.run_linked(leaked, &new_locals, eval_origin, scope_bridge)
     }
@@ -3968,6 +3980,11 @@ impl<'m> Vm<'m> {
         let static_off = self.statics.len();
         let (class_remap, new_locals) = self.unit_class_remap(&module);
         relocate_module_class_ids(&mut module, &class_remap, static_off);
+        #[cfg(feature = "mem-census")]
+        php_types::memcensus::alloc(
+            php_types::memcensus::CH_UNIT,
+            module_census_bytes(&module),
+        );
         let leaked: &'static Module = Box::leak(Box::new(module));
         if pure && self.main_hir.is_some() {
             if let Some(uk) = unit_key {
@@ -12559,6 +12576,47 @@ fn gc_verify_enabled() -> bool {
 /// returned old value to [`Vm::gc_note`] so a now-unreachable object enters the
 /// possible-roots buffer; callers that don't simply drop it (unchanged
 /// behaviour). The return value is deliberately not `#[must_use]`.
+/// Fase 0 byte-census: retained bytes of a compiled unit at its leak site
+/// (census builds only). Rc-shared entries (prelude functions/classes,
+/// strong_count > 1) are counted once by their owner; Const string BYTES are
+/// excluded (already tracked by the STR channel at construction) — only the
+/// Vec<Const> slab is counted here.
+#[cfg(feature = "mem-census")]
+fn module_census_bytes(m: &Module) -> usize {
+    use crate::bytecode::{Const, Func, Op};
+    fn func_bytes(f: &Func) -> usize {
+        std::mem::size_of::<Func>()
+            + f.ops.capacity() * std::mem::size_of::<Op>()
+            + f.lines.capacity() * std::mem::size_of::<u32>()
+            + f.consts.capacity() * std::mem::size_of::<Const>()
+            + f.slot_names.iter().map(|s| s.len() + 16).sum::<usize>()
+            + f.param_names.iter().map(|s| s.len() + 16).sum::<usize>()
+            + f.param_defaults.iter().flatten().map(func_bytes).sum::<usize>()
+            + f.exc_table.capacity() * 16
+    }
+    let mut b = std::mem::size_of::<Module>() + func_bytes(&m.main);
+    for f in &m.functions {
+        if Rc::strong_count(f) == 1 {
+            b += func_bytes(f);
+        }
+    }
+    for f in &m.closures {
+        b += func_bytes(f);
+    }
+    for c in &m.classes {
+        if Rc::strong_count(c) == 1 {
+            b += std::mem::size_of_val(&**c);
+            for meth in &c.methods {
+                b += func_bytes(&meth.func);
+            }
+            if let Some(pi) = &c.prop_init {
+                b += func_bytes(pi);
+            }
+        }
+    }
+    b
+}
+
 fn store_slot(cell: &mut Zval, v: Zval) -> Zval {
     if let Zval::Ref(r) = cell {
         std::mem::replace(&mut *r.borrow_mut(), v)

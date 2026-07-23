@@ -12,6 +12,9 @@ op-census = []
 # WP-39 leva E: GC-pipeline counters (PHPR_GC_CENSUS). Same convention as
 # op-census: only ever compiled into dedicated instrumentation builds.
 gc-census = []
+# WP-45 Fase 0: byte-attribution census (PHPR_MEM_CENSUS) — see
+# FOOTPRINT_CPU_ROADMAP.md. Instrumentation builds only.
+mem-census = ["php-types/mem-census"]
 
 [dependencies]
 php-types.workspace = true

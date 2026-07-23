@@ -180,6 +180,8 @@ impl Clone for PhpArray {
                 index: index.clone(),
             },
         };
+        #[cfg(feature = "mem-census")]
+        crate::memcensus::count_alloc(crate::memcensus::CH_ARR);
         PhpArray {
             repr,
             next_free: self.next_free,
@@ -190,8 +192,40 @@ impl Clone for PhpArray {
     }
 }
 
+/// Fase 0 byte-census (census builds only): the ARR channel is
+/// death-accounted — exact capacity bytes measured when the array drops,
+/// live-count via new/default/clone. Live bytes are estimated at dump time
+/// (live_n × average death size) and cross-checked against the residual of
+/// the external peak footprint.
+#[cfg(feature = "mem-census")]
+impl Drop for PhpArray {
+    fn drop(&mut self) {
+        crate::memcensus::death(crate::memcensus::CH_ARR, self.census_bytes());
+        crate::memcensus::count_free(crate::memcensus::CH_ARR);
+    }
+}
+
+#[cfg(feature = "mem-census")]
+impl PhpArray {
+    /// Retained capacity bytes of this array right now: element storage plus
+    /// (for hashed) the index map, approximated at hashbrown's ~1 ctrl byte
+    /// per bucket, plus the fixed header+Rc overhead.
+    pub(crate) fn census_bytes(&self) -> usize {
+        let body = match &self.repr {
+            Repr::Packed(slots) => slots.capacity() * std::mem::size_of::<Option<Zval>>(),
+            Repr::Hashed { entries, index } => {
+                entries.capacity() * std::mem::size_of::<Option<(Key, Zval)>>()
+                    + index.capacity() * (std::mem::size_of::<(Key, u32)>() + 1)
+            }
+        };
+        body + crate::memcensus::ARR_OVERHEAD
+    }
+}
+
 impl Default for PhpArray {
     fn default() -> Self {
+        #[cfg(feature = "mem-census")]
+        crate::memcensus::count_alloc(crate::memcensus::CH_ARR);
         PhpArray {
             repr: Repr::Packed(Vec::new()),
             next_free: i64::MIN,

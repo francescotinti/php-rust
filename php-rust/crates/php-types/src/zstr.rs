@@ -32,6 +32,11 @@ impl PhpStr {
     pub fn new(bytes: impl AsRef<[u8]> + Into<Box<[u8]>>) -> ZStr {
         #[cfg(feature = "str-census")]
         census::record(bytes.as_ref().len());
+        #[cfg(feature = "mem-census")]
+        crate::memcensus::alloc(
+            crate::memcensus::CH_STR,
+            bytes.as_ref().len() + crate::memcensus::STR_OVERHEAD,
+        );
         Rc::new(PhpStr {
             hash: Cell::new(0),
             bytes: bytes.into(),
@@ -110,6 +115,18 @@ impl PhpStr {
         let hash = hash | 0x8000_0000_0000_0000;
         self.hash.set(hash);
         hash
+    }
+}
+
+/// Fase 0 byte-census: exact live tracking for the STR channel (the `new`
+/// funnel is the single construction site). Census builds only.
+#[cfg(feature = "mem-census")]
+impl Drop for PhpStr {
+    fn drop(&mut self) {
+        crate::memcensus::free(
+            crate::memcensus::CH_STR,
+            self.bytes.len() + crate::memcensus::STR_OVERHEAD,
+        );
     }
 }
 
