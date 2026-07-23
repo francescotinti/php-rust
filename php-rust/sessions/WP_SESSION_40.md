@@ -62,3 +62,28 @@
 > SEMPRE con census di parità prima/dopo). Il footprint (12,0×) resta il
 > fronte non aggredito; Object +8B/istanza (GcMark) = trascurabile
 > (2,5M oggetti ⇒ ~20MB teorici sul picco multi-GB).
+
+## 📨 Direttive Gemini post-WP-40 (`20260723_gemini.md`) — verdetti (verificati sul codice 2026-07-23)
+
+- **✅ §1 Leva C (frontend gc_note) — ACCOLTA, è il warm-up della prossima
+  sessione** (punto 1 sopra). Verifica sul codice: gli scalari cadono GIÀ
+  in `_ => {}` (e `Str` non è nel match — verdetto WP-30 §4 confermato),
+  ma la funzione è grossa (match ricorsivo) e NON viene inlinata: ai
+  177M call si paga call+match. Lo shim discriminante-only è esatto per
+  costruzione. ⚠️ CORREZIONE DI MIRA sulla parte (b) "elisione a
+  compile-time": ridondante col shim — la nota di uno slot
+  provabilmente-Undef si riduce già a un confronto inline; un pass del
+  compilatore aggiungerebbe complessità per ~nulla. Riconsiderare solo se
+  il census post-shim mostra residuo concentrato su siti elidibili.
+- **✅ §2 Leva A (churn Zval) — CONCORDANTE con correzione**: la domanda
+  CoW è legittima ma il design è già corretto — `Zval::Array(Rc<PhpArray>)`
+  + `Rc::make_mut`: il passaggio by-value costa un bump di refcount, MAI
+  deep-clone su lettura passiva (= zend refcount++). Il churn misurato È
+  il traffico bump/drop del modello a stack; le "reference temporanee per
+  argomenti read-only" richiedono plumbing che di fatto coincide con
+  l'arco a registri. Resta valido il punto condiviso: attribuzione
+  per-chiamante PRIMA di qualunque intervento.
+- **✅ §3 Leva B (registri) — CONCORDANTE** col verdetto già in vigore
+  (post-WP-38): unica leva lunga approvata, da aprire SOLO ad A+C esaurite;
+  l'avvertenza "a cuore aperto" (pass compiler + run_loop + fusioni da
+  riscrivere) coincide con la nostra stima multi-sessione.
