@@ -1,20 +1,19 @@
-# Rotta WORDPRESS-FIRST — WP-track (dopo WP-41: shim gc_note BOCCIATO + attribuzione churn Zval = strutturale → WP-42 = registri, opzionale warm-up silent_get_path)
+# Rotta WORDPRESS-FIRST — WP-track (dopo WP-42: warm-up by-borrow FLAT→keep, leva locale chiusa; Leva B APERTA con census+piano → WP-43 = stadio 1 registri)
 
-> 🚫 **WP-41 (2026-07-23, zero delta codice: `a24539f` shim + `17bfbcd`
-> revert)** — (1) **Leva C eseguita e BOCCIATA**: shim `#[inline(always)]`
-> su gc_note con parità PROVATA (gc-census contatori IDENTICI a WP-40,
-> probe byte-id, simbolo inlinato) ma **A/B 4 round = new +0,62%
-> consistente** → revert secco. ⭐⭐ Lezione: i 86 self di gc_note erano il
-> WALK dei container, non call-overhead scalari; inline a ~60 siti = bloat
-> I-cache nel run_loop (fisica WP-33). Su un canale il cui self è WORK,
-> l'inlining del frontend è leva morta. (2) **Attribuzione churn
-> drop/clone Zval** (2 finestre sample): self drop+clone ~7% della
-> finestra GC-heavy MA senza chiamante dominante — churn operandi inline
-> nel run_loop (strutturale → registri) + recycle_frame (teardown vero) +
-> **dim_is_walk→silent_get_path ~1,5%** (unica inefficienza locale: clone
-> di ogni intermedio + leaf anche per isset/empty); memmove frammentato.
-> Gate22/run32 NON servite: tree post-revert = `0a03772` gated (diff
-> vuoto), run31 resta baseline. **Storia: `sessions/WP_SESSION_41.md`.**
+> ⚡ **WP-42 (2026-07-23, `c6e82c2` warm-up + `19b4d27` piano)** —
+> (1) **Warm-up `silent_walk` by-borrow ESEGUITO: FLAT su A/B 6 round →
+> KEEP** (precedente WP-36; parità: probe ~70 casi oracle==new e old==new
+> byte-id, gate22 tutto verde). Zero cloni su isset/empty nested; verdetto
+> exists/truthy nei 4 consumer; `??` non passava di lì. Mini-leva CHIUSA —
+> le leve locali sul canale churn sono ESAURITE (A WP-33/34, C WP-41,
+> warm-up WP-42). (2) **Leva B aperta formalmente**: census op WP-33
+> misurato (**743,9M op/run media, 30,77% data-movement puro**, Ret 8,4%
+> con Ret→DerefTop 40,5M) + piano d'arco in **`REGISTER_BYTECODE_PLAN.md`**
+> (tetto plausibile ~8-15% CPU; 5 stadi; parità a ogni commit).
+> (3) ⚠️ **Incidente disco root 100%** durante il gate (fail spuri
+> corpus/sess → rilanciati IDENTICI): liberati 6,3G (npm cache + cargo
+> debug/), restano ~5G — il grosso è dati utente. **Storia:
+> `sessions/WP_SESSION_42.md`.**
 
 ## 📁 Convenzioni (decisione utente 2026-07-23)
 
@@ -31,25 +30,29 @@
 
 - **Zero `unsafe` nel value core** (RULEBOOK §0; NaN-boxing WP-32 e
   SSO-union WP-38 bocciati — non riproporre senza rotta esplicita utente).
-- **Bytecode a registri = unica "leva lunga" approvata** (WP_SESSION_38);
-  JIT fuori orizzonte; arena per-request collide con byte-parity dtor.
+- **Bytecode a registri = unica "leva lunga" approvata**; l'arco è APERTO:
+  piano e census in `REGISTER_BYTECODE_PLAN.md` (WP-42). JIT fuori
+  orizzonte; arena per-request collide con byte-parity dtor.
 - Micro-bench solo advisory: verdetti SOLO su A/B interleaved stesso-giorno
   sul workload reale. Gate per NOME a ogni commit; refactor layout/GC =
   sentinelle drop-order pinnate PRIMA; oracle-probe con `-d log_errors=0`.
 - Commit AND push a ogni step; deviazioni deliberate = marker
   `BUG(port):` / `PERF(port):` / `TODO(port):`.
 
-## Stato gate per nome (WP-40, ancora validi: WP-41 chiude a zero delta codice)
+## Stato gate per nome (gate22 completo su `c6e82c2`, 2026-07-23)
 
 - Gate22 verde (wp22-harness/gate-out): corpus **1447** · sess 28 ·
   date 351 · refl 290 IDENTICI · ORM 3E/13F · hk 0E/0F · cargo **1636** ·
   probe gd/mysqli/media byte-id · http DIFF-set 16 · option/restapi
-  identici. (Se ORM/hk in /private/tmp spariscono: ri-estrarre i tarball
-  da wp9-harness/gates/.)
-- **Full-suite run31** (~/Claude/wpdev, trunk@5e3fced): 30.472 test,
-  0E/2F/86W/73S, **identico per nome a run30**; baseline =
-  `wp16-harness/full-out/run31-fails.txt` (88 righe); master-CPU ~11:39.
-  Multisite (WP-28): 1 diff = minimo teorico.
+  identici. ⚠️ Se un gate attraversa una finestra disco-pieno: RILANCIARE
+  le suite che scrivono (corpus/sess) — i "nuovi fail" ENOSPC mentono.
+  (Se ORM/hk in /private/tmp spariscono: ri-estrarre i tarball da
+  wp9-harness/gates/.)
+- **Full-suite run32** (~/Claude/wpdev, trunk@5e3fced): 30.472 test,
+  0E/2F/86W/73S, **fail-set BYTE-IDENTICO a run31**; baseline =
+  `wp16-harness/full-out/run32-fails.txt` (88 righe). Master-CPU ~12:50
+  nominale su giornata rumorosa — riferimento resta ~11:39 (WP-40) con
+  A/B same-day flat. Multisite (WP-28): 1 diff = minimo teorico.
 - Suite phpt (misura): xsl 63/64 (da CWD root php-8.5.7) · tidy 44/45 ·
   asym 38/39. Suite phpt SEMPRE con path ASSOLUTO.
 
@@ -63,33 +66,37 @@
 # multisite: wp19-harness/run-multisite-detached.sh <oracle|phpr>
 ```
 
-## 🎯 PROSSIMO LAVORO (dopo WP-41: A e C esaurite — dettaglio in WP_SESSION_41)
+## 🎯 PROSSIMO LAVORO (Leva B, stadio 1 — dal piano `REGISTER_BYTECODE_PLAN.md` §5)
 
-1. **Arco bytecode-a-registri (Leva B)** — ora è LA strada: le leve locali
-   sul canale churn sono esaurite (Leva C bocciata su A/B; attribuzione
-   WP-41: churn = traffico strutturale del modello a stack, nessun
-   chiamante dominante). Multi-sessione (compiler + run_loop + unit-cache
-   + riscrittura fusioni stack-based WP-33/34); PRIMA di aprire: census
-   WP-33 per il tetto. Unica leva lunga approvata (WP_SESSION_38).
-   ⚠️ Correzioni di mira ai verdetti Gemini post-WP-41 (dettaglio in
-   WP_SESSION_41 §verdetti): l'allocazione registri vive nel compiler
-   phpr (`lower/` → `Op`) e nel run_loop — mago è SOLO parser, non si
-   tocca; e NIENTE "periodo turbolento" su main: l'arco va stadiato con
-   parità a ogni commit (dual-mode dietro flag / lowering opt-in
-   per-funzione / branch con gate regolari).
-2. **(Opzionale, warm-up di una sessione registri) `silent_get_path`
-   by-borrow** — unica inefficienza locale residua (WP-41: ~1,5% della
-   finestra GC-heavy): walk iterativo per riferimento, clone del SOLO
-   leaf e SOLO quando il valore serve (`??`); mai per isset/empty. Tetto
-   dichiarato ~0,5-1%, A/B obbligatorio, aspettative basse — abbandonare
-   subito se flat.
-3. **NON riproporre**: shim/inlining frontend gc_note (bocciato WP-41),
-   NaN-boxing (WP-32), SSO union (WP-38).
-4. **Validazione Laravel** ([[php-rust-roadmap-wp-first]]) alla chiusura
-   dell'arco perf. Il footprint (12,0×) resta il fronte non aggredito.
+1. **Stadio 1 — infrastruttura a parità zero-delta**: `max_temps` nel
+   `Func` (=0 ovunque), estensione Frame, tipo `Operand`, pass di
+   riscrittura vuoto dietro flag (`PHPR_REG_LOWER`), chiave unit-cache
+   con modalità. Diff di bytecode atteso VUOTO a flag spento; gate22 +
+   **A/B "infra presente ma spenta" vs old = rumore zero** (guardia
+   contro il costo del solo layout — fisica WP-32 Frame). Se lo stadio 1
+   non è a costo zero, fermarsi e ridisegnare PRIMA di scrivere op.
+2. **Stadio 2 — Binary/CmpJmp a operandi diretti** (assorbe binary_fast/
+   CmpJmpConst WP-33/34, sostituzione mai convivenza): bigrammi target
+   dal census (ThisPropGet→CmpJmpConst 29,9M ecc.). A/B go/no-go.
+3. **NON riproporre**: leve locali sul canale churn (esaurite: fusioni
+   WP-33/34, shim gc_note WP-41, by-borrow WP-42); NaN-boxing; SSO union.
+4. Fronte footprint (12×): NON aggredito; quando si apre → PRIMA una
+   sessione di attribuzione memoria data-driven (metodo WP-26). I verdetti
+   sul doc Gemini "vincoli safe-Rust" sono in WP_SESSION_42 (AST-leak
+   falso; unit-cache=opcache deliberato; PhpArray già dual-repr).
+5. **Validazione Laravel** ([[php-rust-roadmap-wp-first]]) alla chiusura
+   dell'arco perf.
 
 ## Backlog aperto (non legato a una sessione)
 
+- 🆕 **isset via prefisso `__get` con indici annidati** perde il walk sul
+  risultato (`isset($mg->m['a']['b'])` → false, oracle true) — bug
+  funzionale preesistente trovato dalla probe WP-42
+  (wp42-harness/probe-isset-div.php §3). Candidato fix.
+- 🆕 Deprecation PHP 8.5 (chiave null/float-frac) non emesse dentro
+  isset/empty (`coerce_key_silent` muto); `isset($nonAA['k'])` non lancia
+  Error — famiglia quiet-fetch, catalogare in PHPR_DIVERGENCES se si
+  decide di non chiudere.
 - Residui strutturali: `ast_printing.phpt` (serve zend_ast_export
   sull'HIR) · xsl `bug69168` (nodi php:function devono aliasare il doc
   live) · tidy `010` (free-order var_dump-di-albero).
@@ -97,12 +104,15 @@
   `__destruct` nel subtree — nessun test lo copre oggi.
 - Verbo "increment/decrement" per `$null->p++` (oggi "assign").
 - Se si toccano date/prelude DateTime: gate ext/date OBBLIGATORIO (351).
+- ⚠️ Disco root della macchina a ~5G liberi: i consumatori grossi = dati utente
+  (Application Support 33G, Parallels 4,9G, var/folders 6G) — serve
+  decisione utente, non pulizia automatica.
 
 ## 📊 Report gap perf — ricorrente di fine sessione
 
-Tabella cumulativa e metodo di misura: **`gaps/REPORT_GAP_41.md`** (ultimo
+Tabella cumulativa e metodo di misura: **`gaps/REPORT_GAP_42.md`** (ultimo
 file = tabella viva). A ogni chiusura: misurare media (user CPU +
 footprint) e full-suite master-CPU, copiare l'ultimo report in
 `gaps/REPORT_GAP_<N>.md` con la riga nuova, riportare il gap all'utente.
-Ultimo stato (WP-41, invariato): **media 2,68× · full 2,06× · footprint
-12,0×**.
+Ultimo stato (WP-42): **media ~2,75× (flat, giornata rumorosa) ·
+full [run32] · footprint ~12,7× raw maxrss (old==new)**.
