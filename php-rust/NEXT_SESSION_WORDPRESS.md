@@ -68,6 +68,19 @@
 
 ## 🎯 PROSSIMO LAVORO (Leva B, stadio 1 — dal piano `REGISTER_BYTECODE_PLAN.md` §5)
 
+0. **PRE-FLIGHT DISCO (prima di qualsiasi build/gate/run — recepito da
+   `20260723_gemini_post_wp42.md`)**: `df -h /System/Volumes/Data` e NON
+   partire sotto ~15-20G liberi. A fine WP-42 c'erano ~5G: troppo pochi
+   per un ciclo build+gate22+full run (il gate ha già toccato 0 byte una
+   volta, falsando corpus/sess). La pulizia grossa è DECISIONE UTENTE
+   (Parallels 4,9G, cache Google/Chrome 8,9G, vm_bundles Claude 8,5G);
+   lato harness: cancellare eventuale `php-rust-output/debug/` rigenerato
+   e tenere pulite le cache npm. Se lo spazio non c'è, chiedere
+   all'utente PRIMA di aprire il cantiere.
+   ⚠️ Nota di taratura sul census (per non gonfiare le aspettative): il
+   30,77% data-movement è quota del CONTEGGIO dispatch, non del tempo
+   CPU — il tetto resta ~8-15% (piano §2), non "un terzo del tempo".
+
 1. **Stadio 1 — infrastruttura a parità zero-delta**: `max_temps` nel
    `Func` (=0 ovunque), estensione Frame, tipo `Operand`, pass di
    riscrittura vuoto dietro flag (`PHPR_REG_LOWER`), chiave unit-cache
@@ -104,9 +117,10 @@
   `__destruct` nel subtree — nessun test lo copre oggi.
 - Verbo "increment/decrement" per `$null->p++` (oggi "assign").
 - Se si toccano date/prelude DateTime: gate ext/date OBBLIGATORIO (351).
-- ⚠️ Disco root della macchina a ~5G liberi: i consumatori grossi = dati utente
-  (Application Support 33G, Parallels 4,9G, var/folders 6G) — serve
-  decisione utente, non pulizia automatica.
+- ⚠️ Disco root della macchina a ~5G liberi: i consumatori grossi = dati
+  utente (Application Support 33G, Parallels 4,9G, var/folders 6G) —
+  serve decisione utente, non pulizia automatica. Vedi pre-flight §0 del
+  prossimo lavoro (soglia ~15-20G prima di build/gate/run).
 
 ## 📊 Report gap perf — ricorrente di fine sessione
 
