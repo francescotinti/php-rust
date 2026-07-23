@@ -1,20 +1,20 @@
-# Rotta WORDPRESS-FIRST — WP-track (dopo WP-40: GC marks in-object −2,5%, 2,68× — WP-41 = shim gc_note → attribuzione churn Zval)
+# Rotta WORDPRESS-FIRST — WP-track (dopo WP-41: shim gc_note BOCCIATO + attribuzione churn Zval = strutturale → WP-42 = registri, opzionale warm-up silent_get_path)
 
-> ⚡ **WP-40 (2026-07-23, gated `4c8de21`+`2f00d36`)** — demote churn GC
-> chiuso con marks in-object (`GcMark` su Object: slot-index + bitfield;
-> buffer unico `Vec<Option<Rc>>`; flag-guard sui set per-id, che restano
-> autoritativi): **media −2,5% = 56,05/20,95 = 2,68×** (old stesso-giorno
-> 2,75×), full run31 **~11:39**. Parità provata: sentinelle drop-order
-> verdi prima/dopo, probe old==new byte-id, gc-census con contatori
-> IDENTICI, gate22 tutto verde, **run31 = run30 per nome**, cargo 1636.
-> Riprofilo: probe hashmap sparito (sweep 38→19); restano il WALK di
-> gc_note (86 campioni; 177M chiamate) e il canale drop/clone Zval
-> (132+116) + memmove (108) come colli phpr-only.
-> ⭐ Lezione chiave: i flag specchio vanno azzerati a OGNI svuotamento del
-> set autoritativo o è under-insert (= destructor perso); il clone del
-> buffer deve droppare nello stesso istante della vecchia map remove.
-> **Storia completa, meccanica, lezioni e verdetti Gemini 23/07:
-> `sessions/WP_SESSION_40.md`.**
+> 🚫 **WP-41 (2026-07-23, zero delta codice: `a24539f` shim + `17bfbcd`
+> revert)** — (1) **Leva C eseguita e BOCCIATA**: shim `#[inline(always)]`
+> su gc_note con parità PROVATA (gc-census contatori IDENTICI a WP-40,
+> probe byte-id, simbolo inlinato) ma **A/B 4 round = new +0,62%
+> consistente** → revert secco. ⭐⭐ Lezione: i 86 self di gc_note erano il
+> WALK dei container, non call-overhead scalari; inline a ~60 siti = bloat
+> I-cache nel run_loop (fisica WP-33). Su un canale il cui self è WORK,
+> l'inlining del frontend è leva morta. (2) **Attribuzione churn
+> drop/clone Zval** (2 finestre sample): self drop+clone ~7% della
+> finestra GC-heavy MA senza chiamante dominante — churn operandi inline
+> nel run_loop (strutturale → registri) + recycle_frame (teardown vero) +
+> **dim_is_walk→silent_get_path ~1,5%** (unica inefficienza locale: clone
+> di ogni intermedio + leaf anche per isset/empty); memmove frammentato.
+> Gate22/run32 NON servite: tree post-revert = `0a03772` gated (diff
+> vuoto), run31 resta baseline. **Storia: `sessions/WP_SESSION_41.md`.**
 
 ## 📁 Convenzioni (decisione utente 2026-07-23)
 
@@ -39,7 +39,7 @@
 - Commit AND push a ogni step; deviazioni deliberate = marker
   `BUG(port):` / `PERF(port):` / `TODO(port):`.
 
-## Stato gate per nome (WP-40)
+## Stato gate per nome (WP-40, ancora validi: WP-41 chiude a zero delta codice)
 
 - Gate22 verde (wp22-harness/gate-out): corpus **1447** · sess 28 ·
   date 351 · refl 290 IDENTICI · ORM 3E/13F · hk 0E/0F · cargo **1636** ·
@@ -63,24 +63,22 @@
 # multisite: wp19-harness/run-multisite-detached.sh <oracle|phpr>
 ```
 
-## 🎯 PROSSIMO LAVORO (riprofilo WP-40 ∩ verdetti Gemini 23/07 — dettaglio verdetti in WP_SESSION_40)
+## 🎯 PROSSIMO LAVORO (dopo WP-41: A e C esaurite — dettaglio in WP_SESSION_41)
 
-1. **Warm-up: frontend `gc_note` (Leva C)** — shim `#[inline(always)]` con
-   guardia sul discriminante (`Object|Ref|Array|Closure` → slow path
-   out-of-line), così i ~60 call-site (gc_note_frame su slots/stack di ogni
-   frame che ritorna, overwrite di slot, displaced degli array) pagano un
-   confronto inline invece di call+match per i 177M/run. ⭐ il hook
-   `gc_census::note()` resta NEL shim (il contatore deve contare TUTTE le
-   chiamate). **Tetto dichiarato ~1-1,5%** (gc_note self 86/10s ≈ 2,9%
-   include walk vero — lezione WP-36). Census di parità prima/dopo.
-   L'"elisione a compile-time" proposta da Gemini è ridondante col shim.
-2. **Canale drop/clone Zval + memmove (Leva A)** — collo phpr-only #1 da
-   WP-36 (132+116+108 campioni/10s): attribuzione per-chiamante PRIMA
-   (metodo WP-26/39), poi la leva. (CoW già corretto: by-value = Rc bump,
-   mai deep-clone passivo.)
-3. **Arco bytecode-a-registri (Leva B)** — multi-sessione (compiler +
-   run_loop + unit-cache + riscrittura fusioni stack-based WP-33/34);
-   census WP-33 per il tetto PRIMA di aprire. SOLO ad A+C esaurite.
+1. **Arco bytecode-a-registri (Leva B)** — ora è LA strada: le leve locali
+   sul canale churn sono esaurite (Leva C bocciata su A/B; attribuzione
+   WP-41: churn = traffico strutturale del modello a stack, nessun
+   chiamante dominante). Multi-sessione (compiler + run_loop + unit-cache
+   + riscrittura fusioni stack-based WP-33/34); PRIMA di aprire: census
+   WP-33 per il tetto. Unica leva lunga approvata (WP_SESSION_38).
+2. **(Opzionale, warm-up di una sessione registri) `silent_get_path`
+   by-borrow** — unica inefficienza locale residua (WP-41: ~1,5% della
+   finestra GC-heavy): walk iterativo per riferimento, clone del SOLO
+   leaf e SOLO quando il valore serve (`??`); mai per isset/empty. Tetto
+   dichiarato ~0,5-1%, A/B obbligatorio, aspettative basse — abbandonare
+   subito se flat.
+3. **NON riproporre**: shim/inlining frontend gc_note (bocciato WP-41),
+   NaN-boxing (WP-32), SSO union (WP-38).
 4. **Validazione Laravel** ([[php-rust-roadmap-wp-first]]) alla chiusura
    dell'arco perf. Il footprint (12,0×) resta il fronte non aggredito.
 
@@ -96,8 +94,9 @@
 
 ## 📊 Report gap perf — ricorrente di fine sessione
 
-Tabella cumulativa e metodo di misura: **`gaps/REPORT_GAP_40.md`** (ultimo
+Tabella cumulativa e metodo di misura: **`gaps/REPORT_GAP_41.md`** (ultimo
 file = tabella viva). A ogni chiusura: misurare media (user CPU +
 footprint) e full-suite master-CPU, copiare l'ultimo report in
 `gaps/REPORT_GAP_<N>.md` con la riga nuova, riportare il gap all'utente.
-Ultimo stato: **media 2,68× · full 2,06× · footprint 12,0×**.
+Ultimo stato (WP-41, invariato): **media 2,68× · full 2,06× · footprint
+12,0×**.
