@@ -1777,9 +1777,25 @@ impl<'m> Vm<'m> {
     /// releases its contents. An `Object`'s own properties are *not* descended
     /// here: they only lose their references when the object is actually freed,
     /// which the sweep handles via its cascade.
+    /// Frontend shim (WP-41, Leva C): inlined at every drop site so the 177M
+    /// calls/run pay one discriminant range check (`Array..=Object` are
+    /// contiguous variants) instead of call+match into the walk. The census
+    /// hook stays HERE so `notes` keeps counting every invocation, scalars
+    /// included — the recursive walk re-enters through this shim for the same
+    /// reason, keeping census parity with the pre-split counters.
+    #[inline(always)]
     fn gc_note(&mut self, v: &Zval) {
         #[cfg(feature = "gc-census")]
         gc_census::note();
+        if matches!(v, Zval::Array(_) | Zval::Ref(_) | Zval::Closure(_) | Zval::Object(_)) {
+            self.gc_note_slow(v);
+        }
+    }
+
+    /// Out-of-line walk behind [`Self::gc_note`] — only ever entered with a
+    /// container variant; scalars already fell out of the shim.
+    #[inline(never)]
+    fn gc_note_slow(&mut self, v: &Zval) {
         match v {
             Zval::Object(rc) => {
                 // One borrow serves the whole note: the DESTRUCTED mirror
