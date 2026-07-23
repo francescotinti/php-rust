@@ -85,16 +85,32 @@
 # multisite: wp19-harness/run-multisite-detached.sh <oracle|phpr>
 ```
 
-## 🎯 PROSSIMO LAVORO — ⚡ SUPERSEDED (2026-07-24): ROADMAP FOOTPRINT+CPU
+## 🎯 PROSSIMO LAVORO — ROADMAP FOOTPRINT+CPU (Fase 0 ✅, ora WP-46)
 
-**Decisione utente 2026-07-24: il fronte perf RIAPRE con
-`FOOTPRINT_CPU_ROADMAP.md`** (piano "concilio", approvato): footprint-first
-(12× mai aggredito), safe-only, TUTTE le fasi si eseguono comunque e
-**niente revert in caso di insuccesso** (direttiva esplicita — supera la
-legge revert-su-regressione per queste sessioni). WP-45 = Fase 0
-(attribuzione byte-per-struttura + purge day-zero + domanda
-template-include). La validazione Laravel è POSTICIPATA a valle della
-roadmap. La sezione sotto resta per riferimento storico.
+**Rotta (utente 2026-07-24)**: `FOOTPRINT_CPU_ROADMAP.md` — footprint-first,
+safe-only, TUTTE le fasi comunque, **niente revert su insuccesso**.
+Laravel POSTICIPATA a valle.
+
+**⚡ WP-45 (2026-07-24, `36b7c6e`→`b9bcd84`) — Fase 0 CHIUSA col verdetto**
+(storia: `sessions/WP_SESSION_45.md`): il gap è **11,9× su peak footprint
+FISICO** (metrica nuova: `/usr/bin/time -l` "peak memory footprint") e
+l'attribuzione dice: **~3,08G (≈72% dell'eccesso) = GARBAGE CICLICO Rc
+IRRAGGIUNGIBILE** — `gc_note` buffera solo Object, i cicli via
+Ref/Array/Closure non diventano mai cycle-root (prova regina: root-walk =
+149MB PHP-visibili contro 3,53G di canali vivi; collect unico 50k root →
+freed 1; cap soglia ininfluente). Altri canali: unit ritenute 0,30G,
+stato PHP 0,15G, ~1,2G non censito (rounding/tabelle). Strumenti: feature
+`mem-census` (canali+root-walk, `PHPR_MEM_CENSUS`), `PHPR_GC_THRESHOLD_MAX`.
+Binario census SEPARATO in `phpr-mem-target/` — mai il binario di parità.
+
+**WP-46 = la leva dominante: estendere il cycle-collector ai root
+non-oggetto (Ref-cell, Array condivisi; valutare Closure) — modello Zend.**
+Bersaglio ~3G. Regole: sentinelle dtor-order pinnate PRIMA, gate famiglia
+gc/dtor per nome, A/B con guardia CPU (≤ +0,5% target ma NIENTE revert:
+si verbalizza e si prosegue), census mem prima/dopo = mechanism check.
+In coda (stessa fase): shrink unit (~0,3G), disciplina di confine per-test
+(`mi_collect`+drain pool), interning se il censimento duplicati lo quota.
+Fase 2 CPU invariata (RET_DEREF+ret_shape in UNA modifica, Sweep elision).
 
 ## (storico, pre-roadmap) PROSSIMO LAVORO
 
