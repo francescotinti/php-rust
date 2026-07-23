@@ -154,8 +154,9 @@ pub(super) fn compile_body(
         exc_table: c.exc_regions,
     };
     // Register-lowering pass (Leva B, REGISTER_BYTECODE_PLAN.md §5): opt-in
-    // per process via PHPR_REG_LOWER; stage 1 ships it EMPTY so the dual-mode
-    // plumbing is proven zero-delta before any op is rewritten.
+    // per process via PHPR_REG_LOWER. Stage 2: Binary/CmpJmp windows become
+    // direct-operand forms (BinaryReg/CmpJmpReg); flag-off emission is
+    // untouched, so flag-off bytecode stays byte-identical.
     if super::reg_lower::enabled() {
         super::reg_lower::lower_func(&mut f);
     }

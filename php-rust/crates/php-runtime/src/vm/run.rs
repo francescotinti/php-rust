@@ -3,6 +3,8 @@
 
 use std::borrow::Cow;
 
+use crate::bytecode::Operand;
+
 use super::*;
 
 /// A file op that a userland stream wrapper (`stream_wrapper_register`) can
@@ -296,6 +298,102 @@ impl<'m> super::Vm<'m> {
             (lhs, rhs)
         };
         self.apply_binop_ovl(b, &lhs, &rhs)
+    }
+
+    /// Try the [`binary_fast`] tag pairs directly on borrowed direct operands
+    /// (Leva B stage 2) — the zero-clone path of [`Op::BinaryReg`]/
+    /// [`Op::CmpJmpReg`]. `None` when either operand needs the generic funnel:
+    /// a `Stack` source (pop mutates), an `Undef` slot (LoadVar warning), a
+    /// `Ref` slot (borrow through the cell), or a tag-pair miss. A `Const`
+    /// operand materialises exactly like `PushConst`/`CmpJmpConst` (ZStr
+    /// refcount bump — no byte copy).
+    fn reg_binary_fast(
+        &self,
+        top: usize,
+        f: &crate::bytecode::Func,
+        b: BinOp,
+        l: &Operand,
+        r: &Operand,
+    ) -> Option<Zval> {
+        let (lc, rc);
+        let fr = &self.frames[top];
+        let lv: &Zval = match l {
+            Operand::Slot(i) => match &fr.slots[*i as usize] {
+                Zval::Undef | Zval::Ref(_) => return None,
+                v => v,
+            },
+            Operand::Const(i) => {
+                lc = f.consts[*i as usize].to_zval();
+                &lc
+            }
+            Operand::Stack | Operand::Temp(_) => return None,
+        };
+        let rv: &Zval = match r {
+            Operand::Slot(i) => match &fr.slots[*i as usize] {
+                Zval::Undef | Zval::Ref(_) => return None,
+                v => v,
+            },
+            Operand::Const(i) => {
+                rc = f.consts[*i as usize].to_zval();
+                &rc
+            }
+            Operand::Stack | Operand::Temp(_) => return None,
+        };
+        binary_fast(b, lv, rv)
+    }
+
+    /// Materialise a direct operand as an owned value, with the semantics of
+    /// the op the lowering pass folded away: `Stack` pops (the producer ran
+    /// earlier), `Slot` is a `LoadVar` read (queue the PHP 8 "Undefined
+    /// variable" warning on `Undef` — the pass folds a slot only after
+    /// proving `slot_names[slot]` equals the LoadVar's name const — and
+    /// deref-clone a Ref), `Const` is a `PushConst` materialisation.
+    fn reg_operand_value(&mut self, top: usize, f: &crate::bytecode::Func, o: &Operand) -> Zval {
+        match o {
+            Operand::Stack => self.frames[top].stack.pop().expect("reg operand"),
+            Operand::Slot(i) => {
+                let i = *i as usize;
+                if matches!(self.frames[top].slots[i], Zval::Undef) {
+                    let msg = format!(
+                        "Undefined variable ${}",
+                        String::from_utf8_lossy(&f.slot_names[i])
+                    );
+                    self.diags.push(Diag::Warning(msg));
+                }
+                read_slot(&self.frames[top].slots[i])
+            }
+            Operand::Const(i) => f.consts[*i as usize].to_zval(),
+            Operand::Temp(_) => unreachable!("stage 2 emits no register temps"),
+        }
+    }
+
+    /// Sink a result into a direct destination: `Stack` pushes (legacy),
+    /// `Slot` replicates `Op::StoreSlot` in full — typed-ref coercion guard,
+    /// write-through via [`store_slot`], `gc_note` on the overwritten value.
+    fn reg_store(&mut self, top: usize, dst: &Operand, v: Zval) -> Result<(), PhpError> {
+        match dst {
+            Operand::Stack => {
+                self.frames[top].stack.push(v);
+                Ok(())
+            }
+            Operand::Slot(i) => {
+                let i = *i as usize;
+                let mut v = v;
+                if !self.typed_refs.is_empty() {
+                    if let Zval::Ref(cell) = &self.frames[top].slots[i] {
+                        let cell = Rc::clone(cell);
+                        let strict = self.frames[top].module.strict;
+                        v = self.typed_ref_assign(&cell, v, strict)?;
+                    }
+                }
+                let old = store_slot(&mut self.frames[top].slots[i], v);
+                self.gc_note(&old);
+                Ok(())
+            }
+            Operand::Temp(_) | Operand::Const(_) => {
+                unreachable!("stage 2 dst is Stack or Slot")
+            }
+        }
     }
 
     /// Everything below [`Op::PropGet`]'s inline-cache hit: the WP-25
@@ -841,6 +939,64 @@ impl<'m> super::Vm<'m> {
                     let (lhs, rhs) = if *const_lhs { (c, x) } else { (x, c) };
                     let r = self.binary_value_ab(*op, lhs, rhs)?;
                     if convert::to_bool(&r, &mut self.diags) == *when {
+                        self.frames[top].ip = *addr as usize;
+                    }
+                }
+                Op::BinaryReg { op: b, l, r, dst } => {
+                    // Register-form Binary (Leva B stage 2): direct-operand
+                    // sourcing. Fast path: both sources borrowable plain
+                    // values (no Ref/Undef/Stack) through the same
+                    // binary_fast tag pairs — zero operand clones. A miss
+                    // materialises with LoadVar/PushConst semantics in the
+                    // original order and funnels through binary_value_ab,
+                    // identical diags/overloads by construction.
+                    if let Some(res) = self.reg_binary_fast(top, func, *b, l, r) {
+                        self.reg_store(top, dst, res)?;
+                    } else {
+                        let (lhs, rhs) = if matches!(l, Operand::Stack) && matches!(r, Operand::Stack)
+                        {
+                            // dst-only fold: operands pop exactly like
+                            // binary_value — rhs first.
+                            let rhs = self.frames[top].stack.pop().expect("BinaryReg rhs");
+                            let lhs = self.frames[top].stack.pop().expect("BinaryReg lhs");
+                            (lhs, rhs)
+                        } else {
+                            debug_assert!(
+                                !matches!(r, Operand::Stack),
+                                "BinaryReg: r is Stack only when l is too"
+                            );
+                            let lhs = self.reg_operand_value(top, func, l);
+                            let rhs = self.reg_operand_value(top, func, r);
+                            (lhs, rhs)
+                        };
+                        let res = self.binary_value_ab(*b, lhs, rhs)?;
+                        self.reg_store(top, dst, res)?;
+                    }
+                }
+                Op::CmpJmpReg { op, l, r, addr, when } => {
+                    // Register-form CmpJmp/CmpJmpConst (Leva B stage 2):
+                    // same compare funnel, direct operands, then branch.
+                    let res = if let Some(res) = self.reg_binary_fast(top, func, *op, l, r) {
+                        res
+                    } else {
+                        debug_assert!(
+                            !matches!(r, Operand::Stack) || matches!(l, Operand::Stack | Operand::Const(_)),
+                            "CmpJmpReg: at most one Stack operand"
+                        );
+                        let (lhs, rhs) = if matches!(r, Operand::Stack) {
+                            // const_lhs shape (l is Const): the stack operand
+                            // popped first in CmpJmpConst; a Const has no
+                            // effects, so materialisation order is unobservable.
+                            let rhs = self.frames[top].stack.pop().expect("CmpJmpReg rhs");
+                            (self.reg_operand_value(top, func, l), rhs)
+                        } else {
+                            let lhs = self.reg_operand_value(top, func, l);
+                            let rhs = self.reg_operand_value(top, func, r);
+                            (lhs, rhs)
+                        };
+                        self.binary_value_ab(*op, lhs, rhs)?
+                    };
+                    if convert::to_bool(&res, &mut self.diags) == *when {
                         self.frames[top].ip = *addr as usize;
                     }
                 }
