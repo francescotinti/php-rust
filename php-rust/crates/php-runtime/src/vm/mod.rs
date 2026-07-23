@@ -744,6 +744,120 @@ pub(crate) fn run_module_with_hir<'m>(
             vm.render_fatal(err, line);
         }
     }
+    // WP-45 Fase 0: root attribution walk (census builds only, read-only) —
+    // BEFORE shutdown so the full end-of-run graph is attributed. Roots are
+    // walked in priority order; shared structure counts toward the FIRST
+    // root that reaches it (dedup by Rc pointer).
+    #[cfg(feature = "mem-census")]
+    {
+        use php_types::memcensus as mc;
+        let mut seen: rustc_hash::FxHashSet<usize> = Default::default();
+        let mut rep: Vec<(String, u64)> = Vec::new();
+        let mut b: u64 = 0;
+        for v in vm.superglobals.iter() {
+            b += mc::deep_size(v, &mut seen, 0);
+        }
+        rep.push(("superglobals".into(), b));
+        if let Some(f) = &vm.retired_main {
+            b = 0;
+            for v in f.slots.iter().chain(f.stack.iter()) {
+                b += mc::deep_size(v, &mut seen, 0);
+            }
+            rep.push(("globals-main-frame".into(), b));
+        }
+        b = 0;
+        for v in vm.constants.values() {
+            b += mc::deep_size(v, &mut seen, 0);
+        }
+        rep.push(("constants".into(), b));
+        b = 0;
+        for c in vm.statics.iter().flatten() {
+            if seen.insert(std::rc::Rc::as_ptr(c) as usize) {
+                if let Ok(g) = c.try_borrow() {
+                    b += 32 + mc::deep_size(&g, &mut seen, 0);
+                }
+            }
+        }
+        rep.push(("fn-statics".into(), b));
+        b = 0;
+        for c in vm.static_props.values() {
+            if seen.insert(std::rc::Rc::as_ptr(c) as usize) {
+                if let Ok(g) = c.try_borrow() {
+                    b += 32 + mc::deep_size(&g, &mut seen, 0);
+                }
+            }
+        }
+        rep.push(("static-props".into(), b));
+        b = 0;
+        for c in vm.closure_statics.values() {
+            if seen.insert(std::rc::Rc::as_ptr(c) as usize) {
+                if let Ok(g) = c.try_borrow() {
+                    b += 32 + mc::deep_size(&g, &mut seen, 0);
+                }
+            }
+        }
+        rep.push(("closure-statics".into(), b));
+        b = 0;
+        for f in vm.generators.values() {
+            for v in f.slots.iter().chain(f.stack.iter()) {
+                b += mc::deep_size(v, &mut seen, 0);
+            }
+        }
+        rep.push(("generator-frames".into(), b));
+        b = 0;
+        for o in vm.created.values() {
+            let z = php_types::Zval::Object(std::rc::Rc::clone(o));
+            b += mc::deep_size(&z, &mut seen, 0);
+        }
+        rep.push(("created-registry-only".into(), b));
+        b = 0;
+        for s in vm.gc_buf.iter().flatten() {
+            let z = php_types::Zval::Object(std::rc::Rc::clone(s));
+            b += mc::deep_size(&z, &mut seen, 0);
+        }
+        rep.push(("gc-buf-only".into(), b));
+        // Const pools of every linked module (leaked units): their ZStr are
+        // permanent STR-channel residents that no PHP root reaches.
+        b = 0;
+        {
+            fn func_consts(
+                f: &crate::bytecode::Func,
+                seen: &mut rustc_hash::FxHashSet<usize>,
+            ) -> u64 {
+                let mut b = 0u64;
+                for c in &f.consts {
+                    if let crate::bytecode::Const::Str(s) = c {
+                        if seen.insert(std::rc::Rc::as_ptr(s) as usize) {
+                            b += (s.as_bytes().len() + mc::STR_OVERHEAD) as u64;
+                        }
+                    }
+                }
+                for pd in f.param_defaults.iter().flatten() {
+                    b += func_consts(pd, seen);
+                }
+                b
+            }
+            for m in vm.modules.iter() {
+                b += func_consts(&m.main, &mut seen);
+                for f in &m.functions {
+                    b += func_consts(f, &mut seen);
+                }
+                for f in &m.closures {
+                    b += func_consts(f, &mut seen);
+                }
+                for c in &m.classes {
+                    for meth in &c.methods {
+                        b += func_consts(&meth.func, &mut seen);
+                    }
+                    if let Some(pi) = &c.prop_init {
+                        b += func_consts(pi, &mut seen);
+                    }
+                }
+            }
+        }
+        rep.push(("unit-consts".into(), b));
+        mc::report_roots(&rep);
+    }
     // `register_shutdown_function` callbacks run after the main script (and any
     // uncaught-fatal banner), before object destructors (PHP shutdown sequence).
     vm.run_shutdown_functions();
@@ -2026,7 +2140,7 @@ impl<'m> Vm<'m> {
                         self.gc_cycle_threshold = self
                             .gc_cycle_threshold
                             .saturating_add(Self::GC_CYCLE_THRESHOLD)
-                            .min(Self::GC_CYCLE_THRESHOLD_MAX);
+                            .min(gc_threshold_max());
                     } else if self.gc_cycle_threshold > Self::GC_CYCLE_THRESHOLD {
                         self.gc_cycle_threshold -= Self::GC_CYCLE_THRESHOLD;
                     }
@@ -12615,6 +12729,23 @@ fn module_census_bytes(m: &Module) -> usize {
         }
     }
     b
+}
+
+/// Cap for the adaptive cycle-collect trigger (WP-45, FOOTPRINT_CPU_ROADMAP
+/// Fase 1): `PHPR_GC_THRESHOLD_MAX` overrides the built-in
+/// [`Vm::GC_CYCLE_THRESHOLD_MAX`] (read once; cold path — only consulted
+/// after a collection ran). Fase-0 attribution showed the escalation with a
+/// de-facto uncapped bound (1e9) disables cycle collection for the life of a
+/// WP phpunit process (1 collect/run, WP-39 gc-census), retaining the whole
+/// cyclic object graph — Zend keeps collecting at an adapted cadence.
+fn gc_threshold_max() -> usize {
+    static V: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
+    *V.get_or_init(|| {
+        std::env::var("PHPR_GC_THRESHOLD_MAX")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(Vm::GC_CYCLE_THRESHOLD_MAX)
+    })
 }
 
 fn store_slot(cell: &mut Zval, v: Zval) -> Zval {

@@ -180,3 +180,110 @@ fn dump_line(tag: &str) {
 extern "C" fn dump_exit() {
     dump_line("exit");
 }
+
+/// Deep retained-size walk from a root value (Fase 0 root attribution):
+/// counts each shared allocation ONCE (dedup by Rc pointer), so walking the
+/// roots in priority order attributes shared structure to the FIRST root
+/// that reaches it. Read-only borrows; recursion capped by `depth`
+/// (a hit on the cap under-counts and bumps [`truncated`]).
+pub fn deep_size(
+    v: &crate::Zval,
+    seen: &mut rustc_hash::FxHashSet<usize>,
+    depth: u32,
+) -> u64 {
+    use crate::Zval;
+    if depth > 2000 {
+        TRUNCATED.fetch_add(1, Relaxed);
+        return 0;
+    }
+    match v {
+        Zval::Str(s) => {
+            if seen.insert(std::rc::Rc::as_ptr(s) as usize) {
+                (s.as_bytes().len() + STR_OVERHEAD) as u64
+            } else {
+                0
+            }
+        }
+        Zval::Array(a) => {
+            if !seen.insert(std::rc::Rc::as_ptr(a) as usize) {
+                return 0;
+            }
+            let mut b = a.census_bytes() as u64;
+            for (k, ev) in a.iter() {
+                if let crate::Key::Str(ks) = &k {
+                    if seen.insert(std::rc::Rc::as_ptr(ks) as usize) {
+                        b += (ks.as_bytes().len() + STR_OVERHEAD) as u64;
+                    }
+                }
+                b += deep_size(ev, seen, depth + 1);
+            }
+            b
+        }
+        Zval::Object(o) => {
+            if !seen.insert(std::rc::Rc::as_ptr(o) as usize) {
+                return 0;
+            }
+            let Ok(bo) = o.try_borrow() else { return 0 };
+            let mut b = bo.census_bytes() as u64;
+            let kids = bo.census_children_cloned();
+            drop(bo);
+            for k in &kids {
+                b += deep_size(k, seen, depth + 1);
+            }
+            b
+        }
+        Zval::Ref(r) => {
+            if !seen.insert(std::rc::Rc::as_ptr(r) as usize) {
+                return 0;
+            }
+            let Ok(inner) = r.try_borrow() else { return 0 };
+            32 + deep_size(&inner, seen, depth + 1)
+        }
+        Zval::Closure(c) => {
+            if !seen.insert(std::rc::Rc::as_ptr(c) as usize) {
+                return 0;
+            }
+            let mut b = 128u64;
+            for (_, cv) in &c.captures {
+                b += deep_size(cv, seen, depth + 1);
+            }
+            if let Some(bt) = &c.bound_this {
+                b += deep_size(bt, seen, depth + 1);
+            }
+            b
+        }
+        Zval::Generator(g) => {
+            if !seen.insert(std::rc::Rc::as_ptr(g) as usize) {
+                return 0;
+            }
+            let Ok(gs) = g.try_borrow() else { return 0 };
+            512 + deep_size(&gs.cur_key, seen, depth + 1)
+                + deep_size(&gs.cur_val, seen, depth + 1)
+        }
+        Zval::Resource(_) | Zval::ArgPlace(_) => 256,
+        _ => 0,
+    }
+}
+
+static TRUNCATED: AtomicU64 = AtomicU64::new(0);
+
+/// Append the per-root attribution lines (tag=root) plus a closing summary.
+pub fn report_roots(entries: &[(String, u64)]) {
+    use std::io::Write;
+    let Ok(path) = std::env::var("PHPR_MEM_CENSUS") else { return };
+    let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) else {
+        return;
+    };
+    let pid = std::process::id();
+    let total: u64 = entries.iter().map(|(_, b)| b).sum();
+    for (name, b) in entries {
+        if *b >= 1 << 20 {
+            let _ = writeln!(f, "pid={pid} tag=root name={name} bytes={b}");
+        }
+    }
+    let _ = writeln!(
+        f,
+        "pid={pid} tag=roots_total bytes={total} truncated={}",
+        TRUNCATED.load(Relaxed)
+    );
+}

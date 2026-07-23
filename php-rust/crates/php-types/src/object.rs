@@ -273,7 +273,7 @@ pub(crate) fn drop_bounded(payload: DeepDrop) {
 /// bytes are computed BEFORE the props are taken for bounded drop.
 #[cfg(feature = "mem-census")]
 impl Object {
-    fn census_bytes(&self) -> usize {
+    pub(crate) fn census_bytes(&self) -> usize {
         std::mem::size_of::<Object>()
             + crate::memcensus::OBJ_OVERHEAD
             + self.props.slots.capacity() * std::mem::size_of::<Option<Zval>>()
@@ -283,6 +283,18 @@ impl Object {
                 + self.readonly_clone_writable.capacity()
                 + self.typed_unset.capacity())
                 * std::mem::size_of::<Box<[u8]>>()
+    }
+
+    /// Root-walk support: clones of every child value (declared slots,
+    /// dynamic entries, proxy) so the walker can recurse without holding
+    /// this object's RefCell borrow.
+    pub(crate) fn census_children_cloned(&self) -> Vec<Zval> {
+        let mut out: Vec<Zval> = self.props.slots.iter().flatten().cloned().collect();
+        out.extend(self.props.dyn_entries.iter().map(|(_, v)| v.clone()));
+        if let Some(p) = &self.proxy_instance {
+            out.push((**p).clone());
+        }
+        out
     }
 }
 
