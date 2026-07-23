@@ -571,25 +571,6 @@ pub enum Op {
     /// `Binary`/`CmpJmp` (binary_value_ab) — a literal push has no effects,
     /// so eliding its dispatch and stack round-trip is unobservable.
     CmpJmpConst { op: BinOp, cidx: ConstIdx, addr: Addr, when: bool, const_lhs: bool },
-    /// Register-form [`Op::Binary`] (Leva B stage 2): `l <op> r -> dst` with
-    /// direct [`Operand`] sourcing. Emitted ONLY by the register-lowering pass
-    /// ([`crate::compile::reg_lower`], behind `PHPR_REG_LOWER`) rewriting
-    /// LoadVar/PushConst→Binary(→Dup?→StoreSlot→Pop?) windows — so a `Slot`
-    /// source carries LoadVar semantics (warn on `Undef` via
-    /// [`Func::slot_names`], deref a Ref) and a `Slot` dst carries full
-    /// StoreSlot semantics (typed-ref guard, write-through, gc_note). The
-    /// evaluation funnel is `binary_fast`/`binary_value_ab`, identical to
-    /// `Binary` by construction. Invariants (asserted by the pass): `r` is
-    /// `Stack` only when `l` is too (dst-only fold — operands then pop in
-    /// `binary_value` order, rhs first); no `Temp` until stage 3.
-    BinaryReg { op: BinOp, l: Operand, r: Operand, dst: Operand },
-    /// Register-form [`Op::CmpJmp`]/[`Op::CmpJmpConst`] (Leva B stage 2): the
-    /// compare runs on direct operands (same funnel, same diags), then jumps
-    /// to `addr` when the boolean equals `when`. At flag-on every remaining
-    /// `CmpJmpConst` is absorbed into this form (substitution, never
-    /// coexistence — plan §3.7); `l`/`r` follow the same source semantics as
-    /// [`Op::BinaryReg`]. At most one operand is `Stack`.
-    CmpJmpReg { op: BinOp, l: Operand, r: Operand, addr: Addr, when: bool },
     /// `[s1..sn] -> [s]` — join `n` already-stringified parts (WP-34): the
     /// compiler emits each part through `Stringify` (or as a Str literal), so
     /// the flattened chain's intermediate `Concat`s were pure — one
@@ -1249,7 +1230,7 @@ pub enum Op {
 /// operand stack; the direct forms read by borrow from a named slot, a
 /// register temp (`Func::max_temps` slots past `n_slots`), or the function's
 /// constant pool, skipping the stack round-trip. Cold ops stay stack-based
-/// forever. Consumed by [`Op::BinaryReg`]/[`Op::CmpJmpReg`] (stage 2).
+/// forever. Not consumed by any op yet — stage 2 wires it into Binary/CmpJmp.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Operand {
     /// Legacy: the value transits the frame's operand stack.
