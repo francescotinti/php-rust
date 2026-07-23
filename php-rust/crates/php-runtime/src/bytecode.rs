@@ -571,6 +571,37 @@ pub enum Op {
     /// `Binary`/`CmpJmp` (binary_value_ab) — a literal push has no effects,
     /// so eliding its dispatch and stack round-trip is unobservable.
     CmpJmpConst { op: BinOp, cidx: ConstIdx, addr: Addr, when: bool, const_lhs: bool },
+    // ----- register-form fusions (Leva B stage 2 v3, WP-44: "raw registers") -----
+    // Specialized MONOMORPHIC shapes with bare u16 indices — no runtime
+    // operand dispatch (the enum-operand hybrid v1/v2 measured +1.2%
+    // consistent on A/B; see sessions/WP_SESSION_44.md). Emitted ONLY by the
+    // register-lowering pass (compile/reg_lower.rs, behind PHPR_REG_LOWER).
+    // A slot READ carries LoadVar semantics (queue the "Undefined variable"
+    // warning via Func::slot_names — the pass folds only when that name is
+    // byte-identical to the LoadVar's name const — and deref a Ref); a slot
+    // WRITE carries full StoreSlot semantics (typed-ref guard, write-through,
+    // gc_note). The evaluation funnel is binary_fast/binary_value_ab —
+    // identical semantics to Binary/CmpJmp by construction.
+    /// `[] -> [slots[l] <op> slots[r]]`.
+    BinarySS { op: BinOp, l: u16, r: u16 },
+    /// `[] -> []` — slot ⊕ slot, result sunk into `slots[dst]`.
+    BinarySSDst { op: BinOp, l: u16, r: u16, dst: u16 },
+    /// `[] -> [slots[slot] <op> consts[cidx]]` (const is ALWAYS rhs: a
+    /// written const-lhs is folded only for commutative ops — same op — or
+    /// mirrorable comparisons — Lt↔Gt, Le↔Ge — rewritten at fold time).
+    BinarySC { op: BinOp, slot: u16, cidx: u16 },
+    /// `[] -> []` — slot ⊕ const, result sunk into `slots[dst]`.
+    BinarySCDst { op: BinOp, slot: u16, cidx: u16, dst: u16 },
+    /// `[l, r] -> []` — stack ⊕ stack, result sunk into `slots[dst]`: the
+    /// assign-and-discard tails `Binary,StoreSlot` and
+    /// `Binary,Dup,StoreSlot,Pop` collapse here.
+    BinaryDst { op: BinOp, dst: u16 },
+    /// `[] -> []` — compare `slots[l] <op> slots[r]`, jump to `addr` when
+    /// the boolean equals `when` (same contract as [`Op::CmpJmp`]).
+    CmpJmpSS { op: BinOp, l: u16, r: u16, addr: Addr, when: bool },
+    /// `[] -> []` — compare `slots[slot] <op> consts[cidx]` (const always
+    /// rhs, mirrored at fold time like [`Op::BinarySC`]), then jump.
+    CmpJmpSC { op: BinOp, slot: u16, cidx: u16, addr: Addr, when: bool },
     /// `[s1..sn] -> [s]` — join `n` already-stringified parts (WP-34): the
     /// compiler emits each part through `Stringify` (or as a Str literal), so
     /// the flattened chain's intermediate `Concat`s were pure — one
