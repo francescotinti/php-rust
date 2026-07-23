@@ -13,7 +13,7 @@ use crate::bytecode::Op;
 use crate::hir::BinOp;
 use php_types::Zval;
 
-pub const N_OPS: usize = 184;
+pub const N_OPS: usize = 177;
 
 pub const OP_NAMES: [&str; N_OPS] = [
     "PushConst", "Pop", "Dup", "LoadSlot", "LoadVar", "PushUndef", "StoreSlot", "Swap",
@@ -38,8 +38,7 @@ pub const OP_NAMES: [&str; N_OPS] = [
     "StaticPropSet", "StaticPropRef", "StaticPropOpSet", "StaticPropIncDec", "StaticPropGetDynamic", "StaticPropSetDynamic", "StaticPropOpSetDynamic", "StaticPropIncDecDynamic",
     "FieldAssign", "FieldAssignOp", "FieldIncDec", "FieldIsset", "FieldEmpty", "FieldUnset", "Fatal", "EmitNotice",
     "Exit", "SuppressBegin", "SuppressEnd", "Sweep", "ThisPropGet", "CmpJmpConst", "ConcatN",
-    "ThisMethodCall", "BinarySS", "BinarySSDst", "BinarySC", "BinarySCDst", "BinaryDst", "CmpJmpSS", "CmpJmpSC",
-    "Nop",
+    "ThisMethodCall", "Nop",
 ];
 
 pub fn op_index(op: &Op) -> usize {
@@ -223,14 +222,7 @@ pub fn op_index(op: &Op) -> usize {
         Op::CmpJmpConst { .. } => 173,
         Op::ConcatN(..) => 174,
         Op::ThisMethodCall { .. } => 175,
-        Op::BinarySS { .. } => 176,
-        Op::BinarySSDst { .. } => 177,
-        Op::BinarySC { .. } => 178,
-        Op::BinarySCDst { .. } => 179,
-        Op::BinaryDst { .. } => 180,
-        Op::CmpJmpSS { .. } => 181,
-        Op::CmpJmpSC { .. } => 182,
-        Op::Nop => 183,
+        Op::Nop => 176,
     }
 }
 
