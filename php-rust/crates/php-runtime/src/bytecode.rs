@@ -1224,6 +1224,25 @@ pub enum Op {
     Nop,
 }
 
+/// Where a hot op sources (or sinks) a value under the register-bytecode plan
+/// (Leva B, REGISTER_BYTECODE_PLAN.md §4): operand sourcing on the HOT ops,
+/// not a second ISA. `Stack` is the legacy form — pop/push a clone through the
+/// operand stack; the direct forms read by borrow from a named slot, a
+/// register temp (`Func::max_temps` slots past `n_slots`), or the function's
+/// constant pool, skipping the stack round-trip. Cold ops stay stack-based
+/// forever. Not consumed by any op yet — stage 2 wires it into Binary/CmpJmp.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Operand {
+    /// Legacy: the value transits the frame's operand stack.
+    Stack,
+    /// A named local / parameter slot (`0..n_slots`).
+    Slot(u16),
+    /// A register temp slot (`n_slots..n_slots + max_temps`).
+    Temp(u16),
+    /// An index into the function's constant pool ([`Func::consts`]).
+    Const(u16),
+}
+
 /// A compiled callable: the top-level script body, a user function, a closure
 /// body, or (later) a method body. Self-contained — owns its instructions and
 /// constant pool — so it can outlive the parser arena and be cached, mirroring
@@ -1258,6 +1277,15 @@ pub struct Func {
     /// from the source [`crate::hir::FnDecl::slots`] length (or
     /// [`crate::hir::Program::slots`] for the script body).
     pub n_slots: u32,
+    /// Number of *register* temp slots past `n_slots` (Leva B,
+    /// REGISTER_BYTECODE_PLAN.md §4): a "register" is an ordinary frame slot
+    /// with a static index in `n_slots..n_slots + max_temps`, assigned by the
+    /// register-lowering pass ([`crate::compile::reg_lower`]). The frame is
+    /// sized `n_slots + max_temps`; recycle/drop machinery covers these slots
+    /// like any other. Always 0 until the pass emits register forms (stage 2+)
+    /// — distinct from the compiler's pinned temporaries, which are already
+    /// folded INTO `n_slots`.
+    pub max_temps: u32,
     /// Number of formal parameters, occupying the leading `n_params` slots
     /// (`params[i].slot == i`, as the HIR guarantees).
     pub n_params: u32,

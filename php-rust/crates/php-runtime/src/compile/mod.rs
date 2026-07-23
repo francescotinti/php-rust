@@ -37,6 +37,7 @@ use crate::hir::{
 
 mod class;
 mod func;
+pub(crate) mod reg_lower;
 mod expr;
 mod assign;
 use class::*;
@@ -210,7 +211,7 @@ fn compile_program_impl(
     fn_ci.sort_unstable();
     let fn_ci = fn_ci.into_boxed_slice();
 
-    Ok(Module {
+    let m = Module {
         main,
         functions,
         fn_ci,
@@ -225,7 +226,11 @@ fn compile_program_impl(
         static_count: program.static_count,
         strict: program.strict,
         const_attributes,
-    })
+    };
+    // Diagnostic bytecode dump (Leva B, gated on PHPR_DUMP_OPS — see
+    // `reg_lower::dump_module_ops`). No-op when the env var is unset.
+    reg_lower::dump_module_ops(&m);
+    Ok(m)
 }
 
 

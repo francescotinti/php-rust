@@ -995,7 +995,10 @@ impl<'m> Frame<'m> {
         stack_buf: Vec<Zval>,
     ) -> Self {
         debug_assert!(slots_buf.is_empty() && stack_buf.is_empty());
-        slots_buf.resize(func.n_slots as usize, Zval::Undef);
+        // Named locals plus register temps (Leva B stage 1): max_temps is 0
+        // until the reg_lower pass emits register forms, so this is today's
+        // size; register temps are ordinary slots past n_slots (plan §4).
+        slots_buf.resize((func.n_slots + func.max_temps) as usize, Zval::Undef);
         Frame {
             func,
             module,
@@ -11953,6 +11956,11 @@ struct UnitKey {
     path: Vec<u8>,
     mtime: (u64, u32),
     size: u64,
+    /// Bytecode mode (Leva B): whether the register-lowering pass was active
+    /// when this unit compiled. The flag is fixed per process today, but the
+    /// key must carry it for as long as the dual-mode exists (plan §4) — a
+    /// cached unit compiled in one mode must never serve the other.
+    reg_mode: bool,
 }
 
 /// Distinct fingerprints kept per file — a template re-included at shifting
@@ -11973,6 +11981,7 @@ fn unit_key_for(path: &[u8], meta: &std::fs::Metadata) -> Option<UnitKey> {
         path: path.to_vec(),
         mtime: (d.as_secs(), d.subsec_nanos()),
         size: meta.len(),
+        reg_mode: crate::compile::reg_lower::enabled(),
     })
 }
 

@@ -85,7 +85,7 @@ pub(super) fn compile_body(
     if c.exc_regions.is_empty() {
         thread_jumps(&mut c.ops, &c.lines);
     }
-    Ok(Func {
+    let mut f = Func {
         name: name.into(),
         file: file.into(),
         // Set by `compile_fndecl` (compile_body only sees the pieces).
@@ -96,6 +96,9 @@ pub(super) fn compile_body(
         static_vars: c.static_vars,
         // Named locals plus the high-water mark of compiler temporaries.
         n_slots: n_locals + c.n_temps_max,
+        // Register temps (Leva B): none until the reg_lower pass emits
+        // register forms (stage 2+).
+        max_temps: 0,
         n_params,
         slot_names: slot_names.to_vec().into_boxed_slice(),
         // Parameter names / required-ness for run-time named-argument binding (A):
@@ -149,7 +152,14 @@ pub(super) fn compile_body(
         end_line: 0,
         attributes: Vec::new(),
         exc_table: c.exc_regions,
-    })
+    };
+    // Register-lowering pass (Leva B, REGISTER_BYTECODE_PLAN.md §5): opt-in
+    // per process via PHPR_REG_LOWER; stage 1 ships it EMPTY so the dual-mode
+    // plumbing is proven zero-delta before any op is rewritten.
+    if super::reg_lower::enabled() {
+        super::reg_lower::lower_func(&mut f);
+    }
+    Ok(f)
 }
 
 /// In-place jump threading (WP-34, bigram Jump→Ret 29M/run): a `Jump` whose
@@ -247,6 +257,7 @@ pub(super) fn stub_func(fd: &FnDecl, err: &CompileError) -> Func {
         static_vars: Vec::new(),
         slot_names: fd.slots.to_vec().into_boxed_slice(),
         n_slots: fd.slots.len() as u32,
+        max_temps: 0,
         n_params: fd.params.len() as u32,
         param_names: fd
             .params
@@ -350,6 +361,7 @@ pub(super) fn compile_prop_init(items: &[(Box<[u8]>, &Expr)], ctx: &ProgramCtx, 
         consts: c.consts,
         static_vars: Vec::new(),
         n_slots: c.n_temps_max,
+        max_temps: 0,
         n_params: 0,
         slot_names: Box::default(),
         param_names: Box::default(),
@@ -393,6 +405,7 @@ pub(super) fn compile_default_thunk(value: &Expr, ctx: &ProgramCtx, cur_class: O
         consts: c.consts,
         static_vars: Vec::new(),
         n_slots: c.n_temps_max,
+        max_temps: 0,
         n_params: 0,
         slot_names: Box::default(),
         param_names: Box::default(),
@@ -433,6 +446,7 @@ pub(super) fn compile_const_thunk(name: &[u8], value: &Expr, ctx: &ProgramCtx, d
         consts: c.consts,
         static_vars: Vec::new(),
         n_slots: c.n_temps_max,
+        max_temps: 0,
         n_params: 0,
         slot_names: Box::default(),
         param_names: Box::default(),
@@ -493,6 +507,7 @@ pub(super) fn const_stub(name: &[u8], err: &CompileError) -> Func {
         consts: vec![Const::Str(php_types::PhpStr::new(msg.into_bytes()))],
         static_vars: Vec::new(),
         n_slots: 0,
+        max_temps: 0,
         n_params: 0,
         slot_names: Box::default(),
         param_names: Box::default(),
