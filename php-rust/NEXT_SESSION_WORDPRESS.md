@@ -126,20 +126,54 @@ H="/Volumes/Extreme Pro/Claude/wp16-harness"
 #   marker ms-phpr.done)
 ```
 
-## 🎯 PROSSIMO LAVORO (dal riprofilo WP-40)
+## 🎯 PROSSIMO LAVORO (riprofilo WP-40 ∩ direttive Gemini 23/07)
 
-1. **Canale drop/clone Zval + memmove** — collo phpr-only #1 costante da
-   WP-36 (132+116+108 campioni/10s): attribuzione per-chiamante PRIMA
-   (metodo WP-26/39), poi la leva.
-2. **Arco bytecode-a-registri** — leva lunga multi-sessione (compiler +
-   run_loop + unit-cache format); census WP-33 alla mano per stimare il
-   tetto PRIMA di aprire (lezione WP-36).
-3. **Volume gc_note** (177M chiamate/run; il walk residuo = 86 campioni):
-   elidere note ridondanti per costruzione — SEMPRE con gc-census di parità
-   prima/dopo (metodo WP-40).
+1. **Warm-up: frontend `gc_note` (Leva C Gemini)** — shim
+   `#[inline(always)]` con guardia sul discriminante
+   (`Object|Ref|Array|Closure` → slow path out-of-line `gc_note_slow`),
+   così i ~60 call-site (loop di gc_note_frame su slots/stack di ogni
+   frame che ritorna, overwrite di slot, displaced degli array) pagano un
+   confronto inline invece di call+match per i 177M/run. ⭐ il hook
+   `gc_census::note()` resta NEL shim (il contatore `notes` deve contare
+   TUTTE le chiamate o il confronto census cross-versione si rompe).
+   **Tetto dichiarato: ~1-1,5%** (gc_note self = 86 campioni/10s ≈ 2,9%,
+   e include walk vero — lezione WP-36). Census di parità prima/dopo.
+2. **Canale drop/clone Zval + memmove (Leva A)** — collo phpr-only #1
+   costante da WP-36 (132+116+108 campioni/10s): attribuzione
+   per-chiamante PRIMA (metodo WP-26/39), poi la leva.
+3. **Arco bytecode-a-registri (Leva B)** — leva lunga multi-sessione
+   (compiler + run_loop + unit-cache format + riscrittura delle fusioni
+   stack-based WP-33/34); census WP-33 alla mano per stimare il tetto
+   PRIMA di aprire (lezione WP-36). SOLO quando A e C sono esaurite
+   (verdetto condiviso, vedi sotto).
 4. **Validazione Laravel** ([[php-rust-roadmap-wp-first]]) quando si decide
    di chiudere l'arco perf.
    Il footprint (12,0×) resta il fronte non aggredito.
+
+## 📨 Direttive Gemini post-WP-40 (`20260723_gemini.md`) — verdetti (verificati sul codice 2026-07-23)
+
+- **✅ §1 Leva C (frontend gc_note) — ACCOLTA, è il warm-up della prossima
+  sessione** (punto 1 sopra). Verifica sul codice: gli scalari cadono GIÀ
+  in `_ => {}` (e `Str` non è nel match — verdetto WP-30 §4 confermato),
+  ma la funzione è grossa (match ricorsivo) e NON viene inlinata: ai
+  177M call si paga call+match. Lo shim discriminante-only è esatto per
+  costruzione. ⚠️ CORREZIONE DI MIRA sulla parte (b) "elisione a
+  compile-time": ridondante col shim — la nota di uno slot
+  provabilmente-Undef si riduce già a un confronto inline; un pass del
+  compilatore aggiungerebbe complessità per ~nulla. Riconsiderare solo se
+  il census post-shim mostra residuo concentrato su siti elidibili.
+- **✅ §2 Leva A (churn Zval) — CONCORDANTE con correzione**: la domanda
+  CoW è legittima ma il design è già corretto — `Zval::Array(Rc<PhpArray>)`
+  + `Rc::make_mut`: il passaggio by-value costa un bump di refcount, MAI
+  deep-clone su lettura passiva (= zend refcount++). Il churn misurato È
+  il traffico bump/drop del modello a stack; le "reference temporanee per
+  argomenti read-only" richiedono plumbing che di fatto coincide con
+  l'arco a registri. Resta valido il punto condiviso: attribuzione
+  per-chiamante PRIMA di qualunque intervento.
+- **✅ §3 Leva B (registri) — CONCORDANTE** col verdetto già in vigore
+  (post-WP-38): unica leva lunga approvata, da aprire SOLO ad A+C esaurite;
+  l'avvertenza "a cuore aperto" (pass compiler + run_loop + fusioni da
+  riscrivere) coincide con la nostra stima multi-sessione.
 
 ## Backlog aperto (non legato a una sessione)
 
