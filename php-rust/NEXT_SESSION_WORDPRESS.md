@@ -71,6 +71,12 @@
    chiamante dominante). Multi-sessione (compiler + run_loop + unit-cache
    + riscrittura fusioni stack-based WP-33/34); PRIMA di aprire: census
    WP-33 per il tetto. Unica leva lunga approvata (WP_SESSION_38).
+   ⚠️ Correzioni di mira ai verdetti Gemini post-WP-41 (dettaglio in
+   WP_SESSION_41 §verdetti): l'allocazione registri vive nel compiler
+   phpr (`lower/` → `Op`) e nel run_loop — mago è SOLO parser, non si
+   tocca; e NIENTE "periodo turbolento" su main: l'arco va stadiato con
+   parità a ogni commit (dual-mode dietro flag / lowering opt-in
+   per-funzione / branch con gate regolari).
 2. **(Opzionale, warm-up di una sessione registri) `silent_get_path`
    by-borrow** — unica inefficienza locale residua (WP-41: ~1,5% della
    finestra GC-heavy): walk iterativo per riferimento, clone del SOLO

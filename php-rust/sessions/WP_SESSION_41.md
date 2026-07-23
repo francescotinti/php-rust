@@ -105,3 +105,40 @@ sezione "Total number in stack": attribuire SOLO dalla sezione albero):**
   **2,06×** (run31 resta baseline) · footprint **12,0×** (non aggredito).
 - Artefatti: `wp41-harness/` (ab-out 4 round, gc-out census+sample,
   build-old/build-census/reprofile41 script).
+
+## 📨 Direttive Gemini post-WP-41 (`20260723_gemini_post_wp41.md`) — verdetti (verificati su codice e dati, 2026-07-23)
+
+- **✅ §1 (diagnosi I-cache sul fallimento Leva C) — CONCORDANTE, con una
+  correzione di dettaglio**: la diagnosi è la stessa già a verbale (self di
+  gc_note = walk container; bloat da ~60 siti inline). Restano due
+  precisazioni: (a) è l'ipotesi più consistente coi dati (fisica WP-33),
+  non una misura diretta — nessuno ha contato i miss L1i; (b) "L1
+  Instruction Cache tipicamente 32KB" è taglia x86 — sui P-core Apple
+  Silicon la L1i è 192KB: il meccanismo plausibile è pressione
+  I-cache/BTB/decoder su un run_loop già enorme, non la saturazione di
+  32KB. Verdetto invariato: Leva C chiusa.
+- **✅ §2 (churn = sentenza sul bytecode a stack) — CONCORDANTE**: è la
+  riformulazione del verdetto WP-41; nessuna correzione.
+- **✅ §3a (warm-up silent_get_path by-borrow, WP-42) — ACCOLTA** (era già
+  il punto 2 del handoff). Precisazione di design verificata sul codice:
+  dentro `silent_get_path` non gira MAI codice utente (gli `Object` fanno
+  `None`; ArrayAccess è intercettato FUORI, in `dim_aa_leaf`/
+  `field_aa_walk`) ⇒ il walk by-borrow è sicuro coi RefCell; servono i
+  borrow-guard per le catene `Ref` (oggi la ricorsione crea il guard per
+  livello) e la biforcazione va fatta nei CHIAMANTI: exists/truthy
+  (isset/empty → mai clone) vs value (`??` → clone del SOLO leaf). Tetto
+  resta ~0,5-1%, A/B obbligatorio, abbandonare se flat.
+- **⚠️ §3b (Leva B registri) — CONCORDANTE sull'apertura, DUE CORREZIONI
+  DI MIRA**: (1) "istruire mago ad allocare i registri" sbaglia strato:
+  mago è SOLO parser/lexer (verificato: `mago_syntax::parser::parse_file`
+  + AST consumati da `lower/`); l'allocazione slot/registri vive nel
+  compiler di phpr (`lower/` → emissione `Op`) e nel run_loop — mago non
+  si tocca. (2) Il "periodo turbolento in cui il codice non compilerà o le
+  perf peggioreranno" NON è compatibile con le regole del progetto
+  (RULEBOOK: gate per nome a ogni commit, parità mai persa): l'arco va
+  stadiato con parità a ogni commit (dual-mode dietro flag / lowering
+  opt-in per-funzione / branch con gate regolari) — turbolenza confinata,
+  mai su main. Concordante su "nessuna ottimizzazione locale mentre il
+  cantiere è aperto" (= decisione già in vigore). Resta il prerequisito
+  NON citato da Gemini: census WP-33 alla mano per fissare il tetto PRIMA
+  di aprire.
