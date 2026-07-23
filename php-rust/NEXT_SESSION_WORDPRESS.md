@@ -85,7 +85,18 @@
 # multisite: wp19-harness/run-multisite-detached.sh <oracle|phpr>
 ```
 
-## 🎯 PROSSIMO LAVORO (l'arco perf è chiuso — decisione di rotta)
+## 🎯 PROSSIMO LAVORO — ⚡ SUPERSEDED (2026-07-24): ROADMAP FOOTPRINT+CPU
+
+**Decisione utente 2026-07-24: il fronte perf RIAPRE con
+`FOOTPRINT_CPU_ROADMAP.md`** (piano "concilio", approvato): footprint-first
+(12× mai aggredito), safe-only, TUTTE le fasi si eseguono comunque e
+**niente revert in caso di insuccesso** (direttiva esplicita — supera la
+legge revert-su-regressione per queste sessioni). WP-45 = Fase 0
+(attribuzione byte-per-struttura + purge day-zero + domanda
+template-include). La validazione Laravel è POSTICIPATA a valle della
+roadmap. La sezione sotto resta per riferimento storico.
+
+## (storico, pre-roadmap) PROSSIMO LAVORO
 
 0. **PRE-FLIGHT DISCO**: `df -h /System/Volumes/Data`, non partire sotto
    ~15-20G liberi (WP-44 è partita a 16G; il cargo test DEBUG rigenera
