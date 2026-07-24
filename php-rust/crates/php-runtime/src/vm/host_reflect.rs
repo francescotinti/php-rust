@@ -449,6 +449,15 @@ impl<'m> super::Vm<'m> {
         // file / startLine / endLine are added by build_func_descriptor (shared with
         // ReflectionFunction), with a declaration-line fallback for body-less methods.
         let out = Zval::Array(Rc::new(d));
+        // Epoch eviction (WP-47): every PHPUnit mock is a fresh class id, so
+        // an unbounded memo pins one descriptor graph per dead mock method —
+        // 456k entries / 2,48G on the WP media group, the dominant holder of
+        // the whole footprint gap. Descriptors are PHP values (COW arrays):
+        // dropping the memo is invisible to PHP semantics; the hot set
+        // re-memoizes after a clear.
+        if self.reflect_method_info_cache.len() >= 8192 {
+            self.reflect_method_info_cache.clear();
+        }
         self.reflect_method_info_cache.insert(cache_key, out.clone());
         Ok(out)
     }
