@@ -199,7 +199,9 @@ pub fn deep_size(
     match v {
         Zval::Str(s) => {
             if seen.insert(std::rc::Rc::as_ptr(s) as usize) {
-                (s.as_bytes().len() + STR_OVERHEAD) as u64
+                let b = (s.as_bytes().len() + STR_OVERHEAD) as u64;
+                reached(CH_STR, b);
+                b
             } else {
                 0
             }
@@ -208,11 +210,15 @@ pub fn deep_size(
             if !seen.insert(std::rc::Rc::as_ptr(a) as usize) {
                 return 0;
             }
-            let mut b = a.census_bytes() as u64;
+            let own = a.census_bytes() as u64;
+            reached(CH_ARR, own);
+            let mut b = own;
             for (k, ev) in a.iter() {
                 if let crate::Key::Str(ks) = &k {
                     if seen.insert(std::rc::Rc::as_ptr(ks) as usize) {
-                        b += (ks.as_bytes().len() + STR_OVERHEAD) as u64;
+                        let kb = (ks.as_bytes().len() + STR_OVERHEAD) as u64;
+                        reached(CH_STR, kb);
+                        b += kb;
                     }
                 }
                 b += deep_size(ev, seen, depth + 1);
@@ -224,6 +230,7 @@ pub fn deep_size(
                 return 0;
             }
             let Ok(bo) = o.try_borrow() else { return 0 };
+            reached(CH_OBJ, bo.census_bytes() as u64);
             let mut b = bo.census_bytes() as u64;
             let kids = bo.census_children_cloned();
             drop(bo);
@@ -267,6 +274,26 @@ pub fn deep_size(
 
 static TRUNCATED: AtomicU64 = AtomicU64::new(0);
 
+/// Per-channel tally of what the ROOT WALK actually reached (WP-47): count
+/// and bytes of each distinct allocation credited by [`deep_size`]. Reset
+/// before a walk; the reconciliation lines in [`report_roots`] compare these
+/// against the channel live counters — the residual IS the unattributed set.
+static REACHED_N: [AtomicU64; N_CH] = [const { AtomicU64::new(0) }; N_CH];
+static REACHED_B: [AtomicU64; N_CH] = [const { AtomicU64::new(0) }; N_CH];
+
+pub fn reached_reset() {
+    for ch in 0..N_CH {
+        REACHED_N[ch].store(0, Relaxed);
+        REACHED_B[ch].store(0, Relaxed);
+    }
+}
+
+#[inline]
+fn reached(ch: usize, bytes: u64) {
+    REACHED_N[ch].fetch_add(1, Relaxed);
+    REACHED_B[ch].fetch_add(bytes, Relaxed);
+}
+
 /// Append the per-root attribution lines (tag=root) plus a closing summary.
 pub fn report_roots(entries: &[(String, u64)]) {
     use std::io::Write;
@@ -286,4 +313,18 @@ pub fn report_roots(entries: &[(String, u64)]) {
         "pid={pid} tag=roots_total bytes={total} truncated={}",
         TRUNCATED.load(Relaxed)
     );
+    // WP-47 reconciliation: walk-reached vs channel-live, per channel. The
+    // residual (live − reached) is the set no Vm root reaches — the number
+    // the second-generation attribution must drive to ~0 (±15%).
+    for ch in [CH_STR, CH_ARR, CH_OBJ] {
+        let _ = writeln!(
+            f,
+            "pid={pid} tag=walk_recon ch={} reached_n={} reached_b={} live_n={} live_b={}",
+            CHANNEL_NAMES[ch],
+            REACHED_N[ch].load(Relaxed),
+            REACHED_B[ch].load(Relaxed),
+            LIVE_N[ch].load(Relaxed),
+            live_estimate(ch),
+        );
+    }
 }

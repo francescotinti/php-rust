@@ -756,6 +756,11 @@ pub(crate) fn run_module_with_hir<'m>(
     #[cfg(feature = "mem-census")]
     {
         use php_types::memcensus as mc;
+        // WP-47 second-generation attribution: walk EVERY Zval/Rc-bearing Vm
+        // field (the WP-45 walk covered 11 categories and reached 149MB of a
+        // 3,2G live set); deep_size tallies per-channel reached counts so the
+        // dump carries the walk-vs-live reconciliation directly.
+        mc::reached_reset();
         let mut seen: rustc_hash::FxHashSet<usize> = Default::default();
         let mut rep: Vec<(String, u64)> = Vec::new();
         let mut b: u64 = 0;
@@ -764,12 +769,13 @@ pub(crate) fn run_module_with_hir<'m>(
         }
         rep.push(("superglobals".into(), b));
         if let Some(f) = &vm.retired_main {
-            b = 0;
-            for v in f.slots.iter().chain(f.stack.iter()) {
-                b += mc::deep_size(v, &mut seen, 0);
-            }
-            rep.push(("globals-main-frame".into(), b));
+            rep.push(("globals-main-frame".into(), census_walk_frame(f, &mut seen)));
         }
+        b = 0;
+        for f in &vm.frames {
+            b += census_walk_frame(f, &mut seen);
+        }
+        rep.push(("frames-live".into(), b));
         b = 0;
         for v in vm.constants.values() {
             b += mc::deep_size(v, &mut seen, 0);
@@ -777,38 +783,32 @@ pub(crate) fn run_module_with_hir<'m>(
         rep.push(("constants".into(), b));
         b = 0;
         for c in vm.statics.iter().flatten() {
-            if seen.insert(std::rc::Rc::as_ptr(c) as usize) {
-                if let Ok(g) = c.try_borrow() {
-                    b += 32 + mc::deep_size(&g, &mut seen, 0);
-                }
-            }
+            b += census_walk_cell(c, &mut seen);
         }
         rep.push(("fn-statics".into(), b));
         b = 0;
         for c in vm.static_props.values() {
-            if seen.insert(std::rc::Rc::as_ptr(c) as usize) {
-                if let Ok(g) = c.try_borrow() {
-                    b += 32 + mc::deep_size(&g, &mut seen, 0);
-                }
-            }
+            b += census_walk_cell(c, &mut seen);
         }
         rep.push(("static-props".into(), b));
         b = 0;
         for c in vm.closure_statics.values() {
-            if seen.insert(std::rc::Rc::as_ptr(c) as usize) {
-                if let Ok(g) = c.try_borrow() {
-                    b += 32 + mc::deep_size(&g, &mut seen, 0);
-                }
-            }
+            b += census_walk_cell(c, &mut seen);
         }
         rep.push(("closure-statics".into(), b));
         b = 0;
         for f in vm.generators.values() {
-            for v in f.slots.iter().chain(f.stack.iter()) {
-                b += mc::deep_size(v, &mut seen, 0);
-            }
+            b += census_walk_frame(f, &mut seen);
         }
         rep.push(("generator-frames".into(), b));
+        b = 0;
+        for fs in vm.fibers.values() {
+            for f in &fs.parked {
+                b += census_walk_frame(f, &mut seen);
+            }
+            b += mc::deep_size(&fs.ret, &mut seen, 0);
+        }
+        rep.push(("fibers".into(), b));
         b = 0;
         for o in vm.created.values() {
             let z = php_types::Zval::Object(std::rc::Rc::clone(o));
@@ -836,6 +836,60 @@ pub(crate) fn run_module_with_hir<'m>(
             b += mc::deep_size(&z, &mut seen, 0);
         }
         rep.push(("gc-ctr-roots".into(), b));
+        b = 0;
+        for v in &vm.autoloaders {
+            b += mc::deep_size(v, &mut seen, 0);
+        }
+        rep.push(("autoloaders".into(), b));
+        b = 0;
+        for v in &vm.exception_handlers {
+            b += mc::deep_size(v, &mut seen, 0);
+        }
+        for (v, _) in &vm.error_handlers {
+            b += mc::deep_size(v, &mut seen, 0);
+        }
+        for (cb, args) in &vm.shutdown_fns {
+            b += mc::deep_size(cb, &mut seen, 0);
+            for a in args {
+                b += mc::deep_size(a, &mut seen, 0);
+            }
+        }
+        for v in vm.signal_handlers.values() {
+            b += mc::deep_size(v, &mut seen, 0);
+        }
+        if let Some(v) = &vm.uncaught_throwable {
+            b += mc::deep_size(v, &mut seen, 0);
+        }
+        rep.push(("handlers".into(), b));
+        b = 0;
+        for ob in &vm.ob_stack {
+            b += ob.content.len() as u64;
+            if let Some(cb) = &ob.callback {
+                b += mc::deep_size(cb, &mut seen, 0);
+            }
+        }
+        rep.push(("ob-stack".into(), b));
+        b = 0;
+        for o in vm.enum_cache.values() {
+            let z = php_types::Zval::Object(std::rc::Rc::clone(o));
+            b += mc::deep_size(&z, &mut seen, 0);
+        }
+        rep.push(("enum-cache".into(), b));
+        b = 0;
+        for v in vm.lazy_init.values() {
+            b += mc::deep_size(v, &mut seen, 0);
+        }
+        for v in vm.reflect_object_bound.values() {
+            b += mc::deep_size(v, &mut seen, 0);
+        }
+        for v in vm.reflect_method_info_cache.values() {
+            b += mc::deep_size(v, &mut seen, 0);
+        }
+        for v in vm.var_dump_debug.values() {
+            b += mc::deep_size(v, &mut seen, 0);
+        }
+        rep.push(("lazy-reflect-caches".into(), b));
+        rep.push(("filtered-streams".into(), (vm.filtered_streams.len() as u64) * 256));
         // Const pools of every linked module (leaked units): their ZStr are
         // permanent STR-channel residents that no PHP root reaches.
         b = 0;
@@ -962,6 +1016,88 @@ enum Transfer {
     /// `break` / `continue`: jump to the loop's (already-patched) break/continue
     /// target once the finally completes.
     Jump(Addr),
+}
+
+/// WP-47 (census builds only): deep-walk one shared `Rc<RefCell<Zval>>` cell,
+/// deduped by cell pointer like every other shared allocation.
+#[cfg(feature = "mem-census")]
+fn census_walk_cell(
+    c: &Rc<RefCell<Zval>>,
+    seen: &mut rustc_hash::FxHashSet<usize>,
+) -> u64 {
+    if !seen.insert(Rc::as_ptr(c) as usize) {
+        return 0;
+    }
+    match c.try_borrow() {
+        Ok(g) => 32 + php_types::memcensus::deep_size(&g, seen, 0),
+        Err(_) => 0,
+    }
+}
+
+/// WP-47 (census builds only): deep-walk one `foreach` cursor — a ByVal
+/// snapshot owns real (key, value) Zvals invisible to the slot/stack walk.
+#[cfg(feature = "mem-census")]
+fn census_walk_iter(it: &IterState, seen: &mut rustc_hash::FxHashSet<usize>) -> u64 {
+    use php_types::memcensus as mc;
+    match it {
+        IterState::ByVal { entries, .. } => entries
+            .iter()
+            .map(|(k, v)| mc::deep_size(k, seen, 0) + mc::deep_size(v, seen, 0))
+            .sum(),
+        IterState::ByRef { keys, .. } => (keys.len() * 32) as u64,
+        IterState::ObjVals { obj, .. } | IterState::ObjRefs { obj, .. } => {
+            mc::deep_size(obj, seen, 0)
+        }
+        IterState::Gen { rc, .. } => {
+            let z = php_types::Zval::Generator(Rc::clone(rc));
+            mc::deep_size(&z, seen, 0)
+        }
+        IterState::Object { it, pending, cur_val, .. } => {
+            let mut b = mc::deep_size(it, seen, 0);
+            if let Some(p) = pending {
+                b += census_walk_cell(p, seen);
+            }
+            if let Some(v) = cur_val {
+                b += mc::deep_size(v, seen, 0);
+            }
+            b
+        }
+    }
+}
+
+/// WP-47 (census builds only): deep-walk EVERY Zval-bearing field of a frame —
+/// the pre-WP-47 walk read only `slots`+`stack`, missing `dyn_vars`, `$this`,
+/// `ret_cell`, live `foreach` snapshots and the cold `ext` Zvals.
+#[cfg(feature = "mem-census")]
+fn census_walk_frame(f: &Frame<'_>, seen: &mut rustc_hash::FxHashSet<usize>) -> u64 {
+    use php_types::memcensus as mc;
+    let mut b = 0u64;
+    for v in f.slots.iter().chain(f.stack.iter()) {
+        b += mc::deep_size(v, seen, 0);
+    }
+    if let Some(dv) = &f.dyn_vars {
+        for v in dv.values() {
+            b += mc::deep_size(v, seen, 0);
+        }
+    }
+    if let Some(t) = &f.this {
+        b += mc::deep_size(t, seen, 0);
+    }
+    if let Some(rc) = &f.ret_cell {
+        b += census_walk_cell(rc, seen);
+    }
+    for it in &f.iters {
+        b += census_walk_iter(it, seen);
+    }
+    if let Some(ext) = &f.ext {
+        for v in &ext.extra_args {
+            b += mc::deep_size(v, seen, 0);
+        }
+        if let Some(t) = &ext.pending_throw {
+            b += mc::deep_size(t, seen, 0);
+        }
+    }
+    b
 }
 
 /// One activation record: the function being run, its instruction pointer, its
