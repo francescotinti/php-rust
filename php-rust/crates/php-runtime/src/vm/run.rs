@@ -5132,7 +5132,7 @@ impl<'m> super::Vm<'m> {
                             && (!*main || self.gc_light_demoted.is_empty())
                             && (!self.gc_enabled
                                 || self.gc_cycle_roots.len() + self.gc_ctr_roots.len()
-                                    < self.gc_cycle_threshold.max(self.gc_purge_floor));
+                                    < self.gc_sweep_bound);
                         #[cfg(feature = "gc-census")]
                         if noop
                             && self.gc_enabled

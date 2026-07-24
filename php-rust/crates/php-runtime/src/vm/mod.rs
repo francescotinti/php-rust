@@ -495,6 +495,7 @@ pub(crate) fn run_module_with_hir<'m>(
         gc_collected: 0,
         gc_cycle_threshold: Vm::GC_CYCLE_THRESHOLD,
         gc_purge_floor: 0,
+        gc_sweep_bound: Vm::GC_CYCLE_THRESHOLD,
         gc_light_demoted: HashSet::default(),
         shutdown_fns: Vec::new(),
         generators: HashMap::default(),
@@ -1879,6 +1880,14 @@ struct Vm<'m> {
     /// threshold cannot degenerate into a purge per insertion. Reset to 0
     /// whenever the buffers drain (a collect ran).
     gc_purge_floor: usize,
+    /// WP-50 forward-fix: cached `gc_cycle_threshold.max(gc_purge_floor)`,
+    /// refreshed at the (four) mutation sites. The statement-sweep noop
+    /// check reads this ONE field — the first WP-50 form loaded both fields
+    /// and computed the max inside the hot `Op::Sweep` arm, and the arm
+    /// growth cost more I-cache than the 825M skipped entries saved
+    /// (full A/B stesso-giorno: leva-1-sola 848,1s vs old 828,9/832,7s;
+    /// the WP-44 law again — hot-arm SIZE is the cost, not the work).
+    gc_sweep_bound: usize,
     /// Objects a LIGHT (in-body) sweep demoted to `gc_cycle_roots` since the
     /// last MAIN sweep. A temp consumed off the operand stack mid-statement is
     /// not gc_note'd, so its death is only observable by re-checking the
@@ -2519,7 +2528,7 @@ impl<'m> Vm<'m> {
                 if self.gc_enabled
                     && !self.gc_collecting
                     && self.gc_cycle_roots.len() + self.gc_ctr_roots.len()
-                        >= self.gc_cycle_threshold.max(self.gc_purge_floor)
+                        >= self.gc_sweep_bound
                 {
                     // Zend removes a root from its buffer the instant it dies
                     // by refcount (`gc_remove_from_buffer`), so its trigger
@@ -2570,12 +2579,14 @@ impl<'m> Vm<'m> {
                         }
                         #[cfg(feature = "gc-census")]
                         gc_census::threshold(self.gc_cycle_threshold);
+                        self.gc_refresh_sweep_bound();
                         if freed > 0 {
                             continue;
                         }
                     } else {
                         self.gc_purge_floor =
                             live.saturating_add(Self::GC_CYCLE_THRESHOLD);
+                        self.gc_refresh_sweep_bound();
                     }
                 }
                 // Drop the candidate buffer. Selection exhausted it, so every
@@ -3211,6 +3222,13 @@ impl<'m> Vm<'m> {
     /// repeats until nothing more dies, so follow-up garbage that PHP would
     /// have freed by refcount the instant the cycle broke does not outlive
     /// this call.
+    /// Keep the cached statement-sweep bound in lockstep with its inputs —
+    /// call after EVERY write to `gc_cycle_threshold` or `gc_purge_floor`.
+    #[inline]
+    fn gc_refresh_sweep_bound(&mut self) {
+        self.gc_sweep_bound = self.gc_cycle_threshold.max(self.gc_purge_floor);
+    }
+
     fn collect_cycles(&mut self) -> Result<i64, PhpError> {
         // Zend `gc_active`: a collection reached from inside a collection
         // (a destructor calling gc_collect_cycles()) returns 0, it does not
@@ -3232,6 +3250,7 @@ impl<'m> Vm<'m> {
         // The drains below empty both root buffers: any purge floor from an
         // avoided-collect is stale now.
         self.gc_purge_floor = 0;
+        self.gc_refresh_sweep_bound();
         // Destructor-phase deaths of the PREVIOUS round (Zend gc_029 shape):
         // `gc_call_destructors` DELREFs the receiver without a zero check, so
         // a root whose last real holder vanished inside its own destructor
