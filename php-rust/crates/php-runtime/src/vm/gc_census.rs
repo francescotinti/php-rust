@@ -27,6 +27,14 @@ struct GcCensus {
     threshold_last: u64,
     /// `__destruct` frames scheduled by sweeps.
     destructors: u64,
+    /// Cumulative wall-time inside `gc_classify` (WP-48 attribution: the
+    /// collect-walk share of the full-suite CPU residual).
+    classify_ns: u64,
+    /// `ho_reflect_method_info` memo traffic (WP-48: is the WP-47 epoch
+    /// eviction cap 8192 thrashing — rebuilds = misses after evictions?).
+    reflect_hits: u64,
+    reflect_misses: u64,
+    reflect_evictions: u64,
 }
 
 thread_local! {
@@ -69,6 +77,10 @@ pub fn collect(roots: usize, freed: usize) {
 }
 pub fn threshold(t: usize) { bump(|c| c.threshold_last = t as u64); }
 pub fn destructor() { bump(|c| c.destructors += 1); }
+pub fn classify_ns(ns: u64) { bump(|c| c.classify_ns += ns); }
+pub fn reflect_hit() { bump(|c| c.reflect_hits += 1); }
+pub fn reflect_miss() { bump(|c| c.reflect_misses += 1); }
+pub fn reflect_evict() { bump(|c| c.reflect_evictions += 1); }
 
 /// Dump and clear at end of run (called next to `census_dump`).
 pub fn dump() {
@@ -79,11 +91,15 @@ pub fn dump() {
          sweeps main {} / light {}\n\
          candidates freed {} / demoted {}\n\
          collects {} (roots {} freed {}) threshold_last {}\n\
-         destructors {}\n",
+         destructors {}\n\
+         classify_ms {}\n\
+         reflect cache hits {} / misses {} / evictions {}\n",
         c.notes, c.notes_inserted, c.sweeps_main, c.sweeps_light,
         c.cand_freed, c.cand_demoted,
         c.collects, c.collect_roots, c.collect_freed, c.threshold_last,
         c.destructors,
+        c.classify_ns / 1_000_000,
+        c.reflect_hits, c.reflect_misses, c.reflect_evictions,
     );
     match std::env::var("PHPR_GC_CENSUS") {
         Ok(path) if path.starts_with('/') => {

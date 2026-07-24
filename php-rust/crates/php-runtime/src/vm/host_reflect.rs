@@ -426,8 +426,12 @@ impl<'m> super::Vm<'m> {
         let Some(&cid) = self.class_index.get(&key) else { return Ok(Zval::Bool(false)) };
         let cache_key = (cid, mname.to_ascii_lowercase());
         if let Some(hit) = self.reflect_method_info_cache.get(&cache_key) {
+            #[cfg(feature = "gc-census")]
+            super::gc_census::reflect_hit();
             return Ok(hit.clone());
         }
+        #[cfg(feature = "gc-census")]
+        super::gc_census::reflect_miss();
         let Some((m, decl, is_abstract)) = self.find_method_reflect(cid, &mname) else {
             return Ok(Zval::Bool(false));
         };
@@ -457,6 +461,8 @@ impl<'m> super::Vm<'m> {
         // re-memoizes after a clear.
         if self.reflect_method_info_cache.len() >= 8192 {
             self.reflect_method_info_cache.clear();
+            #[cfg(feature = "gc-census")]
+            super::gc_census::reflect_evict();
         }
         self.reflect_method_info_cache.insert(cache_key, out.clone());
         Ok(out)

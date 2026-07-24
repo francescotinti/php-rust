@@ -3194,9 +3194,17 @@ impl<'m> Vm<'m> {
             }
             self.gc_runs += 1;
             let n_roots = roots.len() + ctr_roots.len();
+            #[cfg(feature = "gc-census")]
+            let classify_t0 = std::time::Instant::now();
             let whites = self.gc_classify(&roots, ctr_roots);
             #[cfg(feature = "gc-census")]
-            gc_census::collect(n_roots, whites.objs.len() + whites.arrs.len() + whites.clos.len());
+            {
+                gc_census::classify_ns(classify_t0.elapsed().as_nanos() as u64);
+                gc_census::collect(
+                    n_roots,
+                    whites.objs.len() + whites.arrs.len() + whites.clos.len(),
+                );
+            }
             log::debug!(
                 target: "phpr::gc",
                 "cycle collect: {} roots, {} garbage objects / {} arrays / {} closures",
