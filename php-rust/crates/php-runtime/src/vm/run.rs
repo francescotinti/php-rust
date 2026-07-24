@@ -1342,9 +1342,15 @@ impl<'m> super::Vm<'m> {
                         *source,
                     ));
                     let value = cell.borrow().clone();
-                    *ref_base_mut(&mut self.frames, &mut self.superglobals, top, *target) =
-                        Zval::Ref(cell);
+                    let old = std::mem::replace(
+                        ref_base_mut(&mut self.frames, &mut self.superglobals, top, *target),
+                        Zval::Ref(cell),
+                    );
                     self.frames[top].stack.push(value);
+                    // The displaced target is a reference drop (WP-46,
+                    // gc_019/gc_021: `$a =& $b` rebinding away from a cyclic
+                    // array) — note it like any assignment's displaced value.
+                    self.gc_note(&old);
                 }
                 Op::PushRef(slot) => {
                     // REF-2: promote the local to a shared cell and push the ref;
@@ -3923,13 +3929,23 @@ impl<'m> super::Vm<'m> {
                             || ob.info.type_of(&name).is_some();
                         drop(ob);
                         if typed {
-                            let mut ob = o.borrow_mut();
-                            ob.props.set(&key, Zval::Undef);
-                            ob.mark_typed_unset(&key);
+                            let displaced = {
+                                let mut ob = o.borrow_mut();
+                                let d = ob.props.replace(&key, Zval::Undef);
+                                ob.mark_typed_unset(&key);
+                                d
+                            };
+                            // The displaced value is a reference drop (WP-46):
+                            // note it like an assignment's displaced value.
+                            if let Some(d) = displaced {
+                                self.gc_note(&d);
+                            }
                             continue;
                         }
                     }
-                    prop_unset(&target, &key);
+                    if let Some(d) = prop_unset(&target, &key) {
+                        self.gc_note(&d);
+                    }
                 }
                 Op::MethodCall { method, argc, ic } => {
                     let args = self.pop_keys(top, *argc); // source order
@@ -4999,7 +5015,10 @@ impl<'m> super::Vm<'m> {
                                 });
                             }
                             if prop_type_decl(&self.classes, ocid, &n).is_some() {
-                                o.borrow_mut().props.set(&key, Zval::Undef);
+                                let displaced = o.borrow_mut().props.replace(&key, Zval::Undef);
+                                if let Some(d) = displaced {
+                                    self.gc_note(&d);
+                                }
                                 continue;
                             }
                         }

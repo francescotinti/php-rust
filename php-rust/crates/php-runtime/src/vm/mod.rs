@@ -488,6 +488,11 @@ pub(crate) fn run_module_with_hir<'m>(
         gc_buf: Vec::new(),
         gc_buf_head: 0,
         gc_cycle_roots: HashSet::default(),
+        gc_ctr_roots: Vec::new(),
+        gc_enabled: true,
+        gc_collecting: false,
+        gc_runs: 0,
+        gc_collected: 0,
         gc_cycle_threshold: Vm::GC_CYCLE_THRESHOLD,
         gc_light_demoted: HashSet::default(),
         shutdown_fns: Vec::new(),
@@ -816,6 +821,21 @@ pub(crate) fn run_module_with_hir<'m>(
             b += mc::deep_size(&z, &mut seen, 0);
         }
         rep.push(("gc-buf-only".into(), b));
+        b = 0;
+        for cr in &vm.gc_ctr_roots {
+            let z = match cr {
+                CtrWeak::Arr(w) => match w.upgrade() {
+                    Some(a) => php_types::Zval::Array(a),
+                    None => continue,
+                },
+                CtrWeak::Clo(w) => match w.upgrade() {
+                    Some(c) => php_types::Zval::Closure(c),
+                    None => continue,
+                },
+            };
+            b += mc::deep_size(&z, &mut seen, 0);
+        }
+        rep.push(("gc-ctr-roots".into(), b));
         // Const pools of every linked module (leaked units): their ZStr are
         // permanent STR-channel residents that no PHP root reaches.
         b = 0;
@@ -1330,6 +1350,76 @@ struct UnserCtx {
     cells: std::collections::HashMap<i64, Rc<RefCell<Zval>>>,
 }
 
+/// A container buffered in [`Vm::gc_ctr_roots`] as a possible cycle root
+/// (WP-46). References are deliberately absent, as in Zend
+/// (`gc_check_possible_root`): a reference is never a root — the collectable
+/// *inside* it is buffered instead, so every kind here is directly walkable.
+/// `Weak`, not `Rc`: a strong buffer clone would inflate `strong_count` for
+/// the container's whole buffered life, silently blocking every
+/// `strong_count == 1` descend in the note/release paths (the WP-39
+/// sentinel caught exactly that as a destructor delay). A weak handle
+/// perturbs nothing, and a container freed by plain refcount just fails the
+/// upgrade at drain time — Zend's buffer-entry-removed-at-death, for free.
+/// Nothing else in the workspace downgrades these `Rc`s, so
+/// `Rc::weak_count == 0` doubles as the exact O(1) re-note dedup.
+enum CtrWeak {
+    Arr(std::rc::Weak<PhpArray>),
+    Clo(std::rc::Weak<Closure>),
+}
+
+/// A drained-and-upgraded [`CtrWeak`]: the strong handle [`Vm::gc_classify`]
+/// consumes as a walk seed.
+enum CtrRoot {
+    Arr(Rc<PhpArray>),
+    Clo(Rc<Closure>),
+}
+
+/// One node of the cycle-classification graph ([`Vm::gc_classify`]): tracked
+/// objects by id, containers by `Rc` pointer identity (stable while the walk
+/// holds its handle clones).
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+enum GcNode {
+    Obj(u32),
+    Arr(usize),
+    Ref(usize),
+    Clo(usize),
+}
+
+/// What [`Vm::gc_classify`] found dead: the garbage ("white") slice of the
+/// walked graph, with exactly the identity each kind needs downstream —
+/// objects are detached via `created`, reference cells are the severing
+/// points for pure-container cycles (emptied in place), arrays/closures only
+/// need counting (they die through the `Rc` cascade once the refs/objects
+/// holding them break; a cycle can only close through a `RefCell` cell or an
+/// object property, because arrays are COW and closure captures are fixed at
+/// creation). `children` (white→white edges) drives Zend's nested-data
+/// removal: garbage still reachable from an object with a pending destructor
+/// is neither destroyed nor counted in that round.
+struct GcWhites {
+    /// Garbage objects, ascending id (phpr's Zend-buffer-order proxy).
+    objs: Vec<u32>,
+    /// Garbage reference cells (node key + handle).
+    refs: Vec<(usize, Rc<RefCell<Zval>>)>,
+    /// Garbage array / closure node keys (counted in the Zend total).
+    arrs: Vec<usize>,
+    clos: Vec<usize>,
+    /// Children edges restricted to white nodes on both ends.
+    children: HashMap<GcNode, Vec<GcNode>>,
+    /// Whites peeled by the refcount-death simulation: iteratively remove
+    /// whites with zero white-only in-edges, cascading (Kahn-style). In Zend
+    /// these are exactly the nodes plain refcounting frees the instant their
+    /// holder breaks — they never reach the collector's counter (phpr's
+    /// `created` registry pins objects, so the classifier sees them where
+    /// Zend never would). What survives the peel is true cycle garbage.
+    uncounted: HashSet<GcNode>,
+}
+
+impl GcWhites {
+    fn is_empty(&self) -> bool {
+        self.objs.is_empty() && self.refs.is_empty() && self.arrs.is_empty() && self.clos.is_empty()
+    }
+}
+
 /// The virtual machine: the module under execution plus the explicit call stack.
 /// PHP function calls grow `frames` rather than the Rust stack, so deep PHP
 /// recursion cannot overflow the host stack, and a frame is suspendable.
@@ -1592,6 +1682,35 @@ struct Vm<'m> {
     /// id once), and a PHPUnit run executes for minutes between main sweeps —
     /// duplicates would pile up unboundedly.
     gc_light_demoted: HashSet<u32>,
+    /// Possible cycle roots that are *containers* rather than objects (WP-46,
+    /// mirroring Zend's `gc_possible_root`, which accepts IS_ARRAY alongside
+    /// IS_OBJECT — references are never buffered; `gc_check_possible_root`
+    /// buffers the collectable *inside* a reference instead). Weak handles:
+    /// a candidate that dies by plain refcount before the next
+    /// [`Self::collect_cycles`] drain simply fails its upgrade there, exactly
+    /// like Zend dropping the buffer entry at refcount death — and the
+    /// buffer never perturbs a `strong_count` check anywhere else in the
+    /// GC. Dedup is O(1) via `Rc::weak_count` (see
+    /// [`CtrWeak`]), the WP-40 flag-in-the-value lesson without touching a
+    /// single layout.
+    gc_ctr_roots: Vec<CtrWeak>,
+    /// Automatic cycle collection switch (Zend `gc_enabled`): flipped by
+    /// `gc_enable()`/`gc_disable()`/`ini_set('zend.enable_gc')`. Gates only
+    /// the threshold-triggered collection — an explicit
+    /// `gc_collect_cycles()` runs regardless, as in Zend.
+    gc_enabled: bool,
+    /// Re-entrancy latch (Zend `gc_active`): a `gc_collect_cycles()` reached
+    /// from inside a running collection (a destructor calling it, or a
+    /// destructor's statements crossing the sweep threshold) returns 0
+    /// immediately instead of recursing (gc_016). Doubles as
+    /// `gc_status()['running']` — how a destructor detects it was invoked by
+    /// the collector (gc_049).
+    gc_collecting: bool,
+    /// `gc_status()` counters (Zend `gc_runs` / `collected`): collections
+    /// that actually processed roots, and the cumulative Zend-count of
+    /// values they freed.
+    gc_runs: i64,
+    gc_collected: i64,
     /// Callbacks registered with `register_shutdown_function`, each with its bound
     /// arguments, run in registration order at script end — after the main run (and
     /// any uncaught-fatal banner), before object destructors.
@@ -1931,14 +2050,39 @@ impl<'m> Vm<'m> {
                 if Rc::strong_count(r) == 1 {
                     let inner = r.borrow();
                     self.gc_note(&inner);
+                } else {
+                    // Holders remain: if they form a dead cycle only the
+                    // cycle collector can see it. Zend never buffers the
+                    // reference itself (gc_check_possible_root) — the
+                    // collectable *inside* it becomes the possible root
+                    // (WP-46).
+                    let inner = r.borrow();
+                    match &*inner {
+                        Zval::Object(rc) => {
+                            if !rc.borrow().gc.destructed() {
+                                self.gc_buf_push(rc, false);
+                            }
+                        }
+                        Zval::Array(a) if a.may_hold_containers() => self.gc_root_arr(a),
+                        Zval::Closure(c) => self.gc_root_clo(c),
+                        _ => {}
+                    }
                 }
             }
             Zval::Array(a) => {
                 // A scalar-only array (tracked by its own conservative marker)
-                // cannot release any object — skip walking it entirely.
-                if Rc::strong_count(a) == 1 && a.may_hold_containers() {
-                    for (_, ev) in a.iter() {
-                        self.gc_note(ev);
+                // cannot release any object — and cannot sit in a cycle, so
+                // it is skipped entirely (Zend buffers every shared array;
+                // the marker is phpr's cheap narrowing of the same rule).
+                if a.may_hold_containers() {
+                    if Rc::strong_count(a) == 1 {
+                        for (_, ev) in a.iter() {
+                            self.gc_note(ev);
+                        }
+                    } else {
+                        // Zend gc_possible_root(IS_ARRAY): a shared container
+                        // losing a holder is a possible cycle root (WP-46).
+                        self.gc_root_arr(a);
                     }
                 }
             }
@@ -1953,6 +2097,18 @@ impl<'m> Vm<'m> {
                     if let Some(bt) = &cl.bound_this {
                         self.gc_note(bt);
                     }
+                } else if cl.bound_this.is_some()
+                    || cl.captures.iter().any(|(_, cv)| {
+                        matches!(
+                            cv,
+                            Zval::Array(_) | Zval::Object(_) | Zval::Ref(_) | Zval::Closure(_)
+                        )
+                    })
+                {
+                    // A closure is an object in Zend and roots like one; a
+                    // capture-less/scalar-capture closure without a bound
+                    // `$this` cannot participate in a cycle and is skipped.
+                    self.gc_root_clo(cl);
                 }
             }
             _ => {}
@@ -1975,6 +2131,25 @@ impl<'m> Vm<'m> {
         drop(b);
         self.gc_buf.push(Some(Rc::clone(rc)));
         true
+    }
+
+    /// Buffer a shared array as a possible cycle root (WP-46, Zend's
+    /// `gc_possible_root` for IS_ARRAY). `weak_count == 0` is the exact
+    /// not-yet-buffered test (see [`CtrWeak`]); the weak handle parks in
+    /// [`Self::gc_ctr_roots`] until the next [`Self::collect_cycles`] drain.
+    #[inline]
+    fn gc_root_arr(&mut self, a: &Rc<PhpArray>) {
+        if Rc::weak_count(a) == 0 {
+            self.gc_ctr_roots.push(CtrWeak::Arr(Rc::downgrade(a)));
+        }
+    }
+
+    /// Buffer a shared closure as a possible cycle root (WP-46; a closure is
+    /// an object in Zend and roots like one).
+    fn gc_root_clo(&mut self, c: &Rc<Closure>) {
+        if Rc::weak_count(c) == 0 {
+            self.gc_ctr_roots.push(CtrWeak::Clo(Rc::downgrade(c)));
+        }
     }
 
     /// Drop object `o`'s buffer entry (if any) and clear its marks — the old
@@ -2134,7 +2309,11 @@ impl<'m> Vm<'m> {
                 // suite's fixtures, not garbage) grows it by one step so the
                 // whole-graph scan is not repeated on every re-fill; an
                 // effective one steps it back toward the base.
-                if self.gc_cycle_roots.len() >= self.gc_cycle_threshold {
+                if self.gc_enabled
+                    && !self.gc_collecting
+                    && self.gc_cycle_roots.len() + self.gc_ctr_roots.len()
+                        >= self.gc_cycle_threshold
+                {
                     let freed = self.collect_cycles()?;
                     if freed < Self::GC_ADJUST_TRIGGER {
                         self.gc_cycle_threshold = self
@@ -2519,58 +2698,62 @@ impl<'m> Vm<'m> {
     const GC_CYCLE_THRESHOLD_MAX: usize = 1_000_000_000;
 
     /// Trial-deletion cycle detection (the mark phase of Zend's
-    /// `gc_collect_cycles`, adapted to `Rc`): starting from `roots`, walk the
-    /// object graph through props, arrays, references, closure captures and
-    /// lazy-proxy instances, counting for every reachable node how many of its
-    /// strong references come from *inside* the walked graph. A node whose
-    /// `Rc::strong_count` exceeds its in-graph edges (plus the handles we know
-    /// about: `created` for objects, plus the clone this walk itself holds) has
-    /// an external holder — a VM slot, a global, a static, a live container —
-    /// and is alive; anything reachable from a live node is alive too. What
-    /// remains is garbage kept only by its own cycles. Returns those object
-    /// ids (ascending) plus the count of dead *containers* (arrays and
-    /// closures — what Zend reports alongside objects in the
-    /// `gc_collect_cycles` total; references are traversed transparently and
-    /// never counted). Containers the walk cannot see through (generator /
-    /// fiber state, host-side handles) simply leave their referents with
-    /// unexplained strong counts ⇒ alive: unknown edges err on keeping.
-    fn gc_classify(&self, roots: &[u32]) -> (Vec<u32>, usize) {
+    /// `gc_collect_cycles`, adapted to `Rc`): starting from the object roots
+    /// and the drained container roots (WP-46), walk the value graph through
+    /// props, arrays, references, closure captures and lazy-proxy instances,
+    /// counting for every reachable node how many of its strong references
+    /// come from *inside* the walked graph. A node whose `Rc::strong_count`
+    /// exceeds its in-graph edges (plus the handles we know about: `created`
+    /// for objects, plus the clone this walk itself holds) has an external
+    /// holder — a VM slot, a global, a static, a live container — and is
+    /// alive; anything reachable from a live node is alive too. What remains
+    /// is garbage kept only by its own cycles, returned as [`GcWhites`].
+    /// Containers the walk cannot see through (generator / fiber state,
+    /// host-side handles) simply leave their referents with unexplained
+    /// strong counts ⇒ alive: unknown edges err on keeping.
+    fn gc_classify(&self, roots: &[u32], ctr_roots: Vec<CtrRoot>) -> GcWhites {
         use std::collections::VecDeque;
-        #[derive(Clone, Copy, PartialEq, Eq, Hash)]
-        enum Node {
-            Obj(u32),
-            Arr(usize),
-            Ref(usize),
-            Clo(usize),
-        }
         enum Handle {
             Obj(Rc<RefCell<Object>>),
             Arr(Rc<PhpArray>),
             Ref(Rc<RefCell<Zval>>),
             Clo(Rc<Closure>),
         }
-        fn node_of(v: &Zval) -> Option<(Node, Handle)> {
+        fn node_of(v: &Zval) -> Option<(GcNode, Handle)> {
             match v {
-                Zval::Object(o) => Some((Node::Obj(o.borrow().id), Handle::Obj(Rc::clone(o)))),
+                Zval::Object(o) => Some((GcNode::Obj(o.borrow().id), Handle::Obj(Rc::clone(o)))),
                 Zval::Array(a) => {
-                    Some((Node::Arr(Rc::as_ptr(a) as usize), Handle::Arr(Rc::clone(a))))
+                    Some((GcNode::Arr(Rc::as_ptr(a) as usize), Handle::Arr(Rc::clone(a))))
                 }
-                Zval::Ref(r) => Some((Node::Ref(Rc::as_ptr(r) as usize), Handle::Ref(Rc::clone(r)))),
+                Zval::Ref(r) => {
+                    Some((GcNode::Ref(Rc::as_ptr(r) as usize), Handle::Ref(Rc::clone(r))))
+                }
                 Zval::Closure(c) => {
-                    Some((Node::Clo(Rc::as_ptr(c) as usize), Handle::Clo(Rc::clone(c))))
+                    Some((GcNode::Clo(Rc::as_ptr(c) as usize), Handle::Clo(Rc::clone(c))))
                 }
                 _ => None,
             }
         }
 
-        let mut handles: HashMap<Node, Handle> = HashMap::default();
-        let mut in_edges: HashMap<Node, usize> = HashMap::default();
-        let mut children: HashMap<Node, Vec<Node>> = HashMap::default();
-        let mut work: VecDeque<Node> = VecDeque::new();
+        let mut handles: HashMap<GcNode, Handle> = HashMap::default();
+        let mut in_edges: HashMap<GcNode, usize> = HashMap::default();
+        let mut children: HashMap<GcNode, Vec<GcNode>> = HashMap::default();
+        let mut work: VecDeque<GcNode> = VecDeque::new();
         for &id in roots {
             let Some(rc) = self.created.get(&id) else { continue };
-            let node = Node::Obj(id);
+            let node = GcNode::Obj(id);
             if handles.insert(node, Handle::Obj(Rc::clone(rc))).is_none() {
+                work.push_back(node);
+            }
+        }
+        // Container roots (WP-46) move their buffer handle into the walk —
+        // one known holder, the same accounting as a handle cloned mid-walk.
+        for cr in ctr_roots {
+            let (node, h) = match cr {
+                CtrRoot::Arr(a) => (GcNode::Arr(Rc::as_ptr(&a) as usize), Handle::Arr(a)),
+                CtrRoot::Clo(c) => (GcNode::Clo(Rc::as_ptr(&c) as usize), Handle::Clo(c)),
+            };
+            if handles.insert(node, h).is_none() {
                 work.push_back(node);
             }
         }
@@ -2613,11 +2796,11 @@ impl<'m> Vm<'m> {
         // External check. `known` = references this walk can account for
         // without an outside holder: our own handle clone, and `created` for a
         // tracked object. An untracked object (interned enum case) is immortal.
-        let mut live: VecDeque<Node> = VecDeque::new();
-        let mut is_live: HashSet<Node> = HashSet::default();
+        let mut live: VecDeque<GcNode> = VecDeque::new();
+        let mut is_live: HashSet<GcNode> = HashSet::default();
         for (node, h) in &handles {
             let external = match (node, h) {
-                (Node::Obj(id), Handle::Obj(o)) => {
+                (GcNode::Obj(id), Handle::Obj(o)) => {
                     !self.created.contains_key(id)
                         || Rc::strong_count(o) - 2 > in_edges.get(node).copied().unwrap_or(0)
                 }
@@ -2645,36 +2828,145 @@ impl<'m> Vm<'m> {
                 }
             }
         }
-        let mut whites: Vec<u32> = Vec::new();
-        let mut dead_containers = 0usize;
-        for n in handles.keys() {
+        let mut whites = GcWhites {
+            objs: Vec::new(),
+            refs: Vec::new(),
+            arrs: Vec::new(),
+            clos: Vec::new(),
+            children: HashMap::default(),
+            uncounted: HashSet::default(),
+        };
+        let mut all_white: Vec<GcNode> = Vec::new();
+        for (n, h) in &handles {
             if is_live.contains(n) {
                 continue;
             }
-            match n {
-                Node::Obj(id) if self.created.contains_key(id) => whites.push(*id),
-                Node::Arr(_) | Node::Clo(_) => dead_containers += 1,
-                _ => {}
+            match (n, h) {
+                (GcNode::Obj(id), _) if self.created.contains_key(id) => {
+                    whites.objs.push(*id);
+                }
+                (GcNode::Obj(_), _) => continue,
+                (GcNode::Arr(p), _) => whites.arrs.push(*p),
+                (GcNode::Clo(p), _) => whites.clos.push(*p),
+                (GcNode::Ref(p), Handle::Ref(r)) => whites.refs.push((*p, Rc::clone(r))),
+                _ => unreachable!("node/handle kinds always match"),
+            }
+            all_white.push(*n);
+        }
+        whites.objs.sort_unstable();
+        for (n, kids) in children {
+            if is_live.contains(&n) {
+                continue;
+            }
+            let wk: Vec<GcNode> = kids.into_iter().filter(|k| !is_live.contains(k)).collect();
+            if !wk.is_empty() {
+                whites.children.insert(n, wk);
             }
         }
-        whites.sort_unstable();
-        (whites, dead_containers)
+        // Refcount-death simulation (see [`GcWhites::uncounted`]): peel the
+        // whites no white parent holds, cascading through their edges.
+        let mut white_in: HashMap<GcNode, usize> = HashMap::default();
+        for n in &all_white {
+            white_in.insert(*n, 0);
+        }
+        for kids in whites.children.values() {
+            for k in kids {
+                if let Some(c) = white_in.get_mut(k) {
+                    *c += 1;
+                }
+            }
+        }
+        let mut peel: Vec<GcNode> = all_white
+            .iter()
+            .copied()
+            .filter(|n| white_in.get(n) == Some(&0))
+            .collect();
+        while let Some(n) = peel.pop() {
+            if !whites.uncounted.insert(n) {
+                continue;
+            }
+            if let Some(kids) = whites.children.get(&n) {
+                for k in kids {
+                    if let Some(c) = white_in.get_mut(k) {
+                        *c -= 1;
+                        if *c == 0 {
+                            peel.push(*k);
+                        }
+                    }
+                }
+            }
+        }
+        whites
     }
 
     /// Collect reference cycles (Zend `gc_collect_cycles`): classify the
-    /// buffered possible roots via [`Self::gc_classify`], run `__destruct` on
-    /// the doomed objects (oldest-first, synchronously — an exception
-    /// propagates to the triggering statement, as in PHP), re-classify (a
-    /// destructor may resurrect part of the graph), then break the surviving
-    /// cycles by dropping every white object's properties and freeing it.
-    /// Freeing may liberate further garbage (its contents are re-noted), so
-    /// the whole pass repeats until nothing more dies — in PHP that follow-up
-    /// garbage would have died by refcount the instant the cycle broke, so it
-    /// must not outlive this call. Returns the number of destroyed objects,
-    /// arrays and closures (what Zend's counter reports).
+    /// buffered possible roots — objects AND containers (WP-46) — via
+    /// [`Self::gc_classify`], then, per round, in Zend's order: run
+    /// `__destruct` on the doomed objects that still have one pending
+    /// (oldest-first, synchronously — an exception propagates to the
+    /// triggering statement, as in PHP), EXCLUDE those objects plus every
+    /// white they can still reach (Zend's nested-data removal: a destructor
+    /// may resurrect anything it can see, so none of that is destroyed or
+    /// counted this round), then destroy the remaining whites: objects lose
+    /// their properties, garbage *reference cells* are emptied in place —
+    /// the one severing point a pure container cycle has in safe Rust
+    /// (arrays are COW, closure captures fixed at creation) — and the
+    /// arrays/closures of the cycle fall to the `Rc` cascade. The returned
+    /// count mirrors Zend's: destroyed objects, arrays and closures;
+    /// references never; an acyclic white (no in-graph edge) is a refcount
+    /// death in Zend's world — destroyed, not counted. Destructed objects
+    /// re-enter the root set (Zend re-marks them purple) so the next round —
+    /// Zend's automatic rerun — reaps or spares them by re-walk; the loop
+    /// repeats until nothing more dies, so follow-up garbage that PHP would
+    /// have freed by refcount the instant the cycle broke does not outlive
+    /// this call.
     fn collect_cycles(&mut self) -> Result<i64, PhpError> {
+        // Zend `gc_active`: a collection reached from inside a collection
+        // (a destructor calling gc_collect_cycles()) returns 0, it does not
+        // recurse (gc_016). The latch clears on the error path too — a
+        // destructor exception must not disable the collector for good.
+        if self.gc_collecting {
+            return Ok(0);
+        }
+        self.gc_collecting = true;
+        let r = self.collect_cycles_inner();
+        self.gc_collecting = false;
+        r
+    }
+
+    fn collect_cycles_inner(&mut self) -> Result<i64, PhpError> {
         let mut total = 0i64;
+        // Destructor-phase deaths of the PREVIOUS round (Zend gc_029 shape):
+        // `gc_call_destructors` DELREFs the receiver without a zero check, so
+        // a root whose last real holder vanished inside its own destructor
+        // phase stays in Zend's buffer and IS counted by the rerun — unlike
+        // everything refcounting reaps (which leaves the buffer at death).
+        // phpr's mirror is exact: after a sync `__destruct` returns, the
+        // receiver clone drops without a note, so `strong_count == 1`
+        // (`created` only, not even candidate-buffered) at the end of the
+        // destructor pass singles out precisely those objects.
+        let mut dtor_dead_prev: HashSet<u32> = HashSet::default();
         loop {
+            // Container roots (WP-46): upgrade the drained weak handles. A
+            // failed upgrade is a candidate plain refcounting already freed
+            // (its contents were pre-noted by whichever drop site released
+            // the last handle) — Zend's buffer entry removed at refcount
+            // death, for free.
+            let mut ctr_roots: Vec<CtrRoot> = Vec::new();
+            for cr in std::mem::take(&mut self.gc_ctr_roots) {
+                match cr {
+                    CtrWeak::Arr(w) => {
+                        if let Some(a) = w.upgrade() {
+                            ctr_roots.push(CtrRoot::Arr(a));
+                        }
+                    }
+                    CtrWeak::Clo(w) => {
+                        if let Some(c) = w.upgrade() {
+                            ctr_roots.push(CtrRoot::Clo(c));
+                        }
+                    }
+                }
+            }
             // Leftover acyclic candidates join the root set; their buffer
             // clones are dropped so the classifier sees only real holders.
             for slot in self.gc_buf.drain(..) {
@@ -2697,17 +2989,21 @@ impl<'m> Vm<'m> {
                     roots.push(id);
                 }
             }
-            if roots.is_empty() {
+            if roots.is_empty() && ctr_roots.is_empty() {
                 break;
             }
-            let (whites, first_dead_containers) = self.gc_classify(&roots);
+            self.gc_runs += 1;
+            let n_roots = roots.len() + ctr_roots.len();
+            let whites = self.gc_classify(&roots, ctr_roots);
             #[cfg(feature = "gc-census")]
-            gc_census::collect(roots.len(), whites.len());
+            gc_census::collect(n_roots, whites.objs.len() + whites.arrs.len() + whites.clos.len());
             log::debug!(
                 target: "phpr::gc",
-                "cycle collect: {} roots, {} garbage objects",
-                roots.len(),
-                whites.len()
+                "cycle collect: {} roots, {} garbage objects / {} arrays / {} closures",
+                n_roots,
+                whites.objs.len(),
+                whites.arrs.len(),
+                whites.clos.len()
             );
             if whites.is_empty() {
                 break;
@@ -2715,10 +3011,11 @@ impl<'m> Vm<'m> {
             // Destructor phase, oldest-first (creation order — matches Zend's
             // buffer order). The destructor runs at most once per object
             // (`destructed`), and never for an uninitialized lazy wrapper.
-            let mut ran_destructor = false;
-            for &id in whites.iter() {
+            // Zend calls destructors BEFORE destroying anything (the destroy
+            // set below is exactly what no destructor can reach).
+            let mut dtor_w: Vec<u32> = Vec::new();
+            for &id in whites.objs.iter() {
                 let Some(rc) = self.created.get(&id) else { continue };
-                let rc = Rc::clone(rc);
                 let (cid, lazy_wrapper) = {
                     let b = rc.borrow();
                     (b.class_id as usize, b.lazy.is_some())
@@ -2727,39 +3024,104 @@ impl<'m> Vm<'m> {
                     continue;
                 }
                 if resolve_method_runtime(&self.classes, cid, b"__destruct").is_some() {
-                    log::debug!(target: "phpr::gc", "destruct (cycle): {}#{}", String::from_utf8_lossy(&self.classes[cid].name), id);
-                    self.destructed.insert(id);
-                    rc.borrow().gc.set_destructed(true);
-                    ran_destructor = true;
-                    self.call_method_sync(Zval::Object(rc), b"__destruct", Vec::new())?;
+                    dtor_w.push(id);
                 }
             }
-            // A destructor may have stored parts of the graph somewhere
-            // reachable: only what is *still* unreferenced dies. Dead
-            // arrays/closures inside the garbage count toward the total.
-            // No destructor ran ⇒ the graph is exactly as the first classify
-            // saw it — reuse that result instead of re-walking it.
-            let (whites, dead_containers) = if ran_destructor {
-                self.gc_classify(&roots)
-            } else {
-                (whites, first_dead_containers)
-            };
-            // Detach every white's contents first, then free: a white's
-            // properties may hold the last references to other whites.
-            let mut taken: Vec<(u32, Props, Option<Box<Zval>>)> = Vec::new();
-            for &id in whites.iter().rev() {
+            for &id in &dtor_w {
+                let Some(rc) = self.created.get(&id) else { continue };
+                let rc = Rc::clone(rc);
+                let cid = rc.borrow().class_id as usize;
+                log::debug!(target: "phpr::gc", "destruct (cycle): {}#{}", String::from_utf8_lossy(&self.classes[cid].name), id);
+                self.destructed.insert(id);
+                rc.borrow().gc.set_destructed(true);
+                self.call_method_sync(Zval::Object(rc), b"__destruct", Vec::new())?;
+            }
+            let mut dtor_dead_now: HashSet<u32> = HashSet::default();
+            for &id in &dtor_w {
+                if let Some(rc) = self.created.get(&id) {
+                    if Rc::strong_count(rc) == 1 {
+                        dtor_dead_now.insert(id);
+                    }
+                }
+            }
+            // Zend's nested-data removal: every white a pending destructor
+            // could reach is excluded from this round's destroy AND from the
+            // count — the destructor may have resurrected it in a way no
+            // refcount shows, so only the automatic re-walk (next round) may
+            // touch it. The destructed objects themselves re-enter the root
+            // set, as Zend re-marks them purple.
+            let mut excluded: HashSet<GcNode> = HashSet::default();
+            if !dtor_w.is_empty() {
+                let mut bfs: Vec<GcNode> = Vec::with_capacity(dtor_w.len());
+                for &id in &dtor_w {
+                    let n = GcNode::Obj(id);
+                    excluded.insert(n);
+                    bfs.push(n);
+                }
+                while let Some(n) = bfs.pop() {
+                    if let Some(kids) = whites.children.get(&n) {
+                        for k in kids {
+                            if excluded.insert(*k) {
+                                bfs.push(*k);
+                            }
+                        }
+                    }
+                }
+                for &id in &dtor_w {
+                    if let Some(o) = self.created.get(&id) {
+                        let b = o.borrow();
+                        if !b.gc.cycle_root() {
+                            b.gc.set_cycle_root(true);
+                            self.gc_cycle_roots.insert(id);
+                        }
+                    }
+                }
+            }
+            // Destroy phase. Detach every non-excluded white's contents
+            // first, then free: a white's properties may hold the last
+            // references to other whites. Newest-first detach order and the
+            // note-everything tail are the pre-WP-46 mechanics, unchanged.
+            let mut taken: Vec<(u32, bool, Props, Option<Box<Zval>>)> = Vec::new();
+            for &id in whites.objs.iter().rev() {
+                if excluded.contains(&GcNode::Obj(id)) {
+                    continue;
+                }
                 let Some(rc) = self.created.get(&id) else { continue };
                 let mut b = rc.borrow_mut();
                 let props = std::mem::replace(&mut b.props, Props::new());
                 let proxy = b.proxy_instance.take();
                 drop(b);
-                taken.push((id, props, proxy));
+                let counted = !whites.uncounted.contains(&GcNode::Obj(id))
+                    || dtor_dead_prev.contains(&id);
+                taken.push((id, counted, props, proxy));
             }
-            if taken.is_empty() && dead_containers == 0 {
-                break;
+            // Sever the garbage reference cells: this is what actually frees
+            // a pure Ref/Array/Closure cycle (the inner value is noted like
+            // any displaced holder, then dropped).
+            let mut ref_inners: Vec<Zval> = Vec::new();
+            for (ptr, r) in &whites.refs {
+                if excluded.contains(&GcNode::Ref(*ptr)) {
+                    continue;
+                }
+                ref_inners.push(std::mem::replace(&mut *r.borrow_mut(), Zval::Null));
             }
-            total += (taken.len() + dead_containers) as i64;
-            for (id, props, proxy) in taken {
+            for p in &whites.arrs {
+                let n = GcNode::Arr(*p);
+                if !excluded.contains(&n) && !whites.uncounted.contains(&n) {
+                    total += 1;
+                }
+            }
+            for p in &whites.clos {
+                let n = GcNode::Clo(*p);
+                if !excluded.contains(&n) && !whites.uncounted.contains(&n) {
+                    total += 1;
+                }
+            }
+            let progressed = !taken.is_empty() || !ref_inners.is_empty() || !dtor_w.is_empty();
+            for (id, counted, props, proxy) in taken {
+                if counted {
+                    total += 1;
+                }
                 if let Some(rc) = self.created.remove(&id) {
                     // Drop any buffer entry a destructor-phase note re-added
                     // (the old map remove, same instant).
@@ -2768,7 +3130,7 @@ impl<'m> Vm<'m> {
                 // The dropped contents — properties, a proxy's real instance,
                 // a lazy wrapper's initializer closure — may hold the last
                 // reference to garbage outside the white set: note everything
-                // so the next fixpoint round (or the normal sweep) reaps it.
+                // so the next round (or the normal sweep) reaps it.
                 if let Some(init) = self.lazy_init.remove(&id) {
                     self.gc_note(&init);
                 }
@@ -2780,10 +3142,20 @@ impl<'m> Vm<'m> {
                     self.gc_note(p);
                 }
             }
+            for v in &ref_inners {
+                self.gc_note(v);
+            }
+            drop(ref_inners);
+            drop(whites);
+            dtor_dead_prev = dtor_dead_now;
+            if !progressed {
+                break;
+            }
         }
         if total > 0 {
             log::debug!(target: "phpr::gc", "cycle collect: {} values freed", total);
         }
+        self.gc_collected += total;
         Ok(total)
     }
 
@@ -11179,6 +11551,10 @@ macro_rules! host_builtins {
 host_builtins! {
     vm: vm, name: name, args: args;
     b"gc_collect_cycles" => vm.ho_gc_collect_cycles(args),
+    b"gc_enable" => vm.ho_gc_enable(true),
+    b"gc_disable" => vm.ho_gc_enable(false),
+    b"gc_enabled" => vm.ho_gc_enabled(),
+    b"gc_status" => vm.ho_gc_status(),
     b"spl_autoload_register" => vm.ho_spl_autoload_register(args),
     b"spl_autoload_unregister" => vm.ho_spl_autoload_unregister(args),
     b"spl_autoload_functions" => vm.ho_spl_autoload_functions(),
@@ -16007,6 +16383,50 @@ mod tests {
                 echo 'O7b:', gc_collect_cycles(), ';';"
             ),
             b"O1:[a]1;O2:[x][y]2;O3:2;O4:[m]2;O5:[v]3;O6:[E]2;O7:[R]0;O7b:0;"
+        );
+    }
+
+    #[test]
+    fn gc_container_cycle_collect_acceptance() {
+        // WP-46 acceptance, oracle-derived (PHP 8.5.7 probes 2026-07-24):
+        // container cycles — Ref-cell (`$a[] = &$a`), shared arrays, closure
+        // self-captures — are rooted, classified, counted and freed with
+        // Zend's exact counts and destructor timing. Probe 7 diverges by
+        // design and is EXCLUDED here: `['inner'=>['deep'=>[1,2,3]]]` nested
+        // const-literal arrays are immutable/non-collectable in Zend (count
+        // 1) but real per-value arrays in phpr (count 3, still freed) — see
+        // PHPR_DIVERGENCES_FROM_PHP.md.
+        assert_eq!(
+            vm_stdout(
+                b"<?php
+                class D { public $t; function __construct($t){ $this->t = $t; } function __destruct(){ echo '[', $this->t, ']'; } }
+                $a = []; $a[] = &$a; $a[] = new D('A'); unset($a);
+                echo '1:', gc_collect_cycles(), ';';
+                $b = []; $b[] = &$b; unset($b);
+                echo '2:', gc_collect_cycles(), ';';
+                $f = function() use (&$f) { return 1; }; unset($f);
+                echo '3:', gc_collect_cycles(), ';';
+                $x = []; $y = []; $x['y'] = &$y; $y['x'] = &$x; unset($x, $y);
+                echo '4:', gc_collect_cycles(), ';';
+                $g = []; $g[] = &$g; $g[] = new D('f1'); $g[] = new D('f2'); unset($g);
+                echo '6:', gc_collect_cycles(), ';';
+                $w = 1; $h = []; $h['inner'] = [$w, 2]; $h['self'] = &$h; unset($h);
+                echo '8:', gc_collect_cycles(), ';';
+                $k = []; $k['inner'] = [new D('n1')]; $k['self'] = &$k; unset($k);
+                echo '9:', gc_collect_cycles(), ';';
+                class P2 { public $bag; function __destruct(){ echo '[P]'; } }
+                $p = new P2; $p->bag = [$w, 3]; $q = [ $p ]; $q['self'] = &$q; unset($p, $q);
+                echo '10:', gc_collect_cycles(), ';';
+                $u = []; $u[] = &$u; $v = []; $v[] = &$v; unset($u, $v);
+                echo '12:', gc_collect_cycles(), ';';
+                echo '13:', gc_collect_cycles(), ';';
+                gc_disable(); echo gc_enabled() ? 'E' : 'd'; echo ini_get('zend.enable_gc');
+                gc_enable(); echo gc_enabled() ? 'E' : 'd'; echo ini_get('zend.enable_gc'), ';';
+                $r1 = []; $r1[0] = &$r1; $rb = 1; $r1 = &$rb;
+                echo 'R:', gc_collect_cycles(), ';';
+                $s = gc_status(); echo 'S:', $s['running'] ? 'y' : 'n', gc_collect_cycles(), $s['roots'], ';';"
+            ),
+            b"1:[A]1;2:1;3:1;4:2;6:[f1][f2]1;8:2;9:[n1]2;10:[P]1;12:2;13:0;d0E1;R:1;S:n00;"
         );
     }
 

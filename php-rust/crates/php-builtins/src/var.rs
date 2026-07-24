@@ -23,6 +23,17 @@ pub(crate) fn pdo_hidden_prop(key: &[u8]) -> bool {
         || key.starts_with(b"\0PDOStatement\0__")
         || key.starts_with(b"\0PDORow\0__")
 }
+/// Whether a reference element points back into a container currently being
+/// dumped — the case Zend prints as a bare `*RECURSION*` (no `&` prefix:
+/// var.c emits it via PUTS, bypassing the COMMON reference marker).
+fn ref_recurses(cell: &std::rc::Rc<std::cell::RefCell<Zval>>, seen: &[usize]) -> bool {
+    match &*cell.borrow() {
+        Zval::Array(a) => seen.contains(&(Rc::as_ptr(a) as usize)),
+        Zval::Object(o) => seen.contains(&(Rc::as_ptr(o) as usize)),
+        _ => false,
+    }
+}
+
 /// Recursive var_dump formatter. `indent` is the leading-space count for this
 /// value's own block; nested entries indent by a further 2. `seen` holds the
 /// addresses of containers currently being dumped, so a value that refers back
@@ -74,7 +85,12 @@ pub(crate) fn dump(
                 // prints as a plain value, matching PHP's var_dump.
                 match val {
                     Zval::Ref(cell) if std::rc::Rc::strong_count(cell) >= 2 => {
-                        out.push(b'&');
+                        // Zend prints `*RECURSION*` bare (var.c PUTS, no
+                        // COMMON prefix): the `&` marker is suppressed when
+                        // the reference closes a cycle back into the dump.
+                        if !ref_recurses(cell, seen) {
+                            out.push(b'&');
+                        }
                         dump(out, &cell.borrow(), indent + 2, seen, debug);
                     }
                     _ => dump(out, val, indent + 2, seen, debug),
@@ -366,7 +382,10 @@ pub(crate) fn dump(
                     // a sole-holder reference prints as a plain value.
                     match val {
                         Zval::Ref(cell) if std::rc::Rc::strong_count(cell) >= 2 => {
-                            out.push(b'&');
+                            // Same COMMON-suppression as the array branch.
+                            if !ref_recurses(cell, seen) {
+                                out.push(b'&');
+                            }
                             dump(out, &cell.borrow(), indent + 2, seen, debug);
                         }
                         _ => dump(out, val, indent + 2, seen, debug),

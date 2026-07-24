@@ -241,6 +241,7 @@ impl PhpArray {
         PhpArray::default()
     }
 
+
     #[inline]
     pub fn len(&self) -> usize {
         self.count as usize

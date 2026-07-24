@@ -141,13 +141,11 @@ pub(super) fn prop_isset(recv: &Zval, name: &[u8]) -> bool {
 }
 
 /// `unset($o->name)`: remove the property (no-op if absent or non-object).
-pub(super) fn prop_unset(recv: &Zval, name: &[u8]) {
+pub(super) fn prop_unset(recv: &Zval, name: &[u8]) -> Option<Zval> {
     match recv {
-        Zval::Object(o) => {
-            o.borrow_mut().props.remove(name);
-        }
+        Zval::Object(o) => o.borrow_mut().props.remove(name),
         Zval::Ref(rc) => prop_unset(&rc.borrow(), name),
-        _ => {}
+        _ => None,
     }
 }
 

@@ -1745,6 +1745,25 @@ l'oracle e vanno preservati:
   visibility error). Workaround nel prelude: helper privati con nomi
   per-classe (__dicur/__disync in DirectoryIterator). Da fixare in
   resolve_method_runtime.
+- 2026-07-24 (WP-46, cycle collector esteso ai container): divergenze
+  residue del GC. (1) **Conteggio di `gc_collect_cycles()` sugli array
+  annidati da LITERAL const in un ciclo**: `$h = ['inner'=>[1,2,3]];
+  $h['self'] = &$h` → Zend 1 (l'inner è immutable/interned, mai
+  collectable), phpr 3 (gli array da const pool sono materializzati
+  per-valore: garbage vero, CONTATO e liberato — memoria corretta, numero
+  diverso). Interning dei const-array = candidato Fase 1.5. (2) **Temp
+  container morti a metà statement** (`array(1) + unserialize(...)` di un
+  ciclo, gc_022): nessun sito di nota li registra come root (gli oggetti
+  hanno il re-check light-demoted, i container no) → il ciclo temp resta
+  fino a shutdown. (3) **Meccanica soglia**: buffer Zend 10001/16384 con
+  collect a buffer-pieno intra-statement vs phpr soglia 50k adattiva a
+  confine statement — bug70805*, gc_023, gc_045 divergono per costruzione
+  (gc_status riporta i default Zend, non la soglia reale). (4) Ordine echo
+  dei dtor annidati durante il collect: Zend distrugge per refcount DENTRO
+  l'unset del dtor (`F(b)B(f)gonegone`), phpr esegue i dtor in sequenza
+  (`F(b)goneB(f)gone`) — timing sweep-driven storico, conteggi comunque
+  identici. (5) `unset($o->a->b)` profondo via `field_unset` non nota il
+  valore rimosso (fn libera senza Vm); il path a singola prop nota.
 - 2026-07-13 (sessione 3): autoload dei nomi di trait allineato alla class
   table unica di Zend (un trait dichiarato non ri-innesca MAI l'autoloader da
   class_exists/interface_exists/ReflectionClass — prima il re-include

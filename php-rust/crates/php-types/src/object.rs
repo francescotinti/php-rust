@@ -747,22 +747,24 @@ impl Props {
         }
     }
 
-    /// Remove property `name`; returns whether it was present. A declared
+    /// Remove property `name`; returns the displaced value if it was present
+    /// (WP-46: an unset is a reference-drop site — the VM must `gc_note` what
+    /// came out, exactly like an assignment's displaced value; silently
+    /// dropping it starves the cycle collector of a possible root). A declared
     /// property's slot goes absent (its declaration position is kept for a
     /// possible re-assignment); a dynamic one is spliced out.
-    pub fn remove(&mut self, name: &[u8]) -> bool {
+    pub fn remove(&mut self, name: &[u8]) -> Option<Zval> {
         if let Some(i) = self.layout.slot_of(name) {
-            if self.slots[i].take().is_some() {
+            let v = self.slots[i].take();
+            if v.is_some() {
                 self.live -= 1;
-                return true;
             }
-            return false;
+            return v;
         }
         if let Some(pos) = self.dyn_entries.iter().position(|(k, _)| k.as_ref() == name) {
-            self.dyn_entries.remove(pos);
-            true
+            Some(self.dyn_entries.remove(pos).1)
         } else {
-            false
+            None
         }
     }
 

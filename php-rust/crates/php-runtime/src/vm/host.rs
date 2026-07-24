@@ -146,6 +146,50 @@ impl<'m> super::Vm<'m> {
         let n = self.collect_cycles()?;
         Ok(Zval::Long(n))
     }
+
+    /// `gc_enable()` / `gc_disable()` — flip automatic cycle collection
+    /// (the explicit `gc_collect_cycles()` keeps working while disabled, as
+    /// in Zend) and mirror the state into the `zend.enable_gc` directive.
+    pub(super) fn ho_gc_enable(&mut self, on: bool) -> Result<Zval, PhpError> {
+        self.gc_enabled = on;
+        self.ini_set_local(b"zend.enable_gc", if on { b"1".to_vec() } else { b"0".to_vec() });
+        Ok(Zval::Null)
+    }
+
+    /// `gc_enabled()` — the live collector switch.
+    pub(super) fn ho_gc_enabled(&mut self) -> Result<Zval, PhpError> {
+        Ok(Zval::Bool(self.gc_enabled))
+    }
+
+    /// `gc_status()` — live collector state (WP-46). `running` is the
+    /// re-entrancy latch (true while a destructor invoked by the collector
+    /// executes — gc_049 branches on it); `roots` counts the buffered
+    /// possible roots (object cycle roots + container roots); `runs` /
+    /// `collected` are the real counters. `threshold`/`buffer_size` report
+    /// Zend's defaults (phpr's trigger is statement-boundary and adaptive —
+    /// PHPR_DIVERGENCES_FROM_PHP.md); the times are not tracked.
+    pub(super) fn ho_gc_status(&mut self) -> Result<Zval, PhpError> {
+        let mut out = php_types::PhpArray::new();
+        let mut put = |k: &str, v: Zval| {
+            out.insert(php_types::Key::Str(PhpStr::from_str(k)), v);
+        };
+        put("running", Zval::Bool(self.gc_collecting));
+        put("protected", Zval::Bool(false));
+        put("full", Zval::Bool(false));
+        put("runs", Zval::Long(self.gc_runs));
+        put("collected", Zval::Long(self.gc_collected));
+        put("threshold", Zval::Long(10001));
+        put("buffer_size", Zval::Long(16384));
+        put(
+            "roots",
+            Zval::Long((self.gc_cycle_roots.len() + self.gc_ctr_roots.len()) as i64),
+        );
+        put("application_time", Zval::Double(0.0));
+        put("collector_time", Zval::Double(0.0));
+        put("destructor_time", Zval::Double(0.0));
+        put("free_time", Zval::Double(0.0));
+        Ok(Zval::Array(Rc::new(out)))
+    }
     /// `iterator_to_array(iterable $it, bool $preserve_keys = true): array`
     /// (step 56b): collect an array / Generator / Traversable object into an
     /// array, reusing the same protocol-driver as spread. With `$preserve_keys`

@@ -159,6 +159,9 @@ impl IniTable {
         // `-n`; writes propagate to php_types::tz so the date builtins and
         // date_default_timezone_get() see them.
         add("date.timezone", "UTC", INI_ALL, true, false);
+        // The cycle-collector switch (WP-46): honoured live — gc_enable()/
+        // gc_disable() mirror here, and an ini_set lands in Vm::gc_enabled.
+        add("zend.enable_gc", "1", INI_ALL, true, false);
         // Diagnostics-display directives (CLI defaults; the web SAPI swaps in
         // its own at request init — html_errors=1, output_buffering=4096).
         // html_errors/display_errors/log_errors are honoured by the render
@@ -484,6 +487,10 @@ impl<'m> Vm<'m> {
         // live mask consulted by raise_diagnostic/flush_diags too.
         if name == b"error_reporting" {
             self.error_level = leading_long(trim_ascii(&entry.local));
+        }
+        // zend.enable_gc is the live collector switch (WP-46).
+        if name == b"zend.enable_gc" {
+            self.gc_enabled = ini_bool(&self.ini.0[&name[..]].local);
         }
         Ok(Zval::Str(PhpStr::new(old)))
     }

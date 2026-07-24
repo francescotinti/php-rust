@@ -618,11 +618,10 @@ pub fn registry() -> Registry {
     add(b"print_r", print_r);
     // Environment / runtime-introspection stubs (no real engine state modelled).
     add(b"gc_collect_cycles", env::gc_collect_cycles);
-    add(b"gc_enable", env::gc_enable);
-    add(b"gc_disable", env::gc_enable);
-    add(b"gc_enabled", env::gc_enabled);
+    // gc_enable/gc_disable/gc_enabled are host builtins (WP-46): they flip
+    // real collector state on the Vm and mirror zend.enable_gc.
     add(b"gc_mem_caches", env::gc_mem_caches);
-    add(b"gc_status", env::gc_status);
+    // gc_status is a host builtin (WP-46): it reports live collector state.
     add(b"getmypid", env::getmypid);
     add(b"memory_get_usage", env::memory_get_usage);
     add(b"memory_get_peak_usage", env::memory_get_usage);
