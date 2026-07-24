@@ -25,9 +25,10 @@ interpreter, not to pass a toy subset.
 > opcache-like per-request unit cache. Current front: **performance** — a
 > measured arc of specializing-interpreter work has brought the WordPress
 > media benchmark to **~2.9×** the oracle's CPU, and an owner-level memory
-> attribution (exact reached-vs-live reconciliation per allocation) just
-> cut the peak-footprint gap **from 11.9× to 4.3×** in one session — then
-> Laravel validation.
+> attribution (exact reached-vs-live reconciliation per allocation) cut
+> the peak-footprint gap **from 11.9× to ~4.3×**; the full-suite CPU
+> residual is now fully attributed (measured) to the cycle-collector
+> walk, giving the next levers a numeric target — then Laravel validation.
 
 ## Coverage at a glance
 
@@ -113,10 +114,13 @@ Near-term, highest-leverage work (see [COVERAGE.md](COVERAGE.md) for the data,
    scope-aware inline caches, call-site specialization, Zend-style fast
    shutdown) took the media benchmark from 4.1× to **~2.9×** the oracle's
    CPU, and the **memory-attribution arc** (exact reached-vs-live
-   reconciliation over every VM root) just cut the peak-footprint gap
-   **from 11.9× to 4.3×**. Next: module-retention shrink (~0.30G) and
-   full-suite CPU attribution (currently 3.42×). Plan:
-   NEXT_SESSION_WORDPRESS.md.
+   reconciliation over every VM root) cut the peak-footprint gap
+   **from 11.9× to ~4.3×**; the retained-module channel then shrank by
+   its exact measured Vec-capacity slack (−70.6MB, 100.0%
+   predicted-vs-actual, zero CPU cost) and the full-suite CPU residual
+   (3.4× vs 2.06×) is now fully attributed — measured, not suspected —
+   to the cycle-collector classify walk. Next: collector levers with
+   those numbers. Plan: NEXT_SESSION_WORDPRESS.md.
 2. **Laravel** as the second framework validation target once the perf
    pass lands.
 3. Remaining extension surfaces on demand — ext/tidy (one WP test dataset),
