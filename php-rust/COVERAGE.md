@@ -7,7 +7,7 @@ functions with `function_exists()` inside `phpr` (grouped by
 `ReflectionFunction::getExtensionName()`); the corpus number is the real pass
 count of the upstream Zend test suite under `phpt-runner`.
 
-_Last measured: 2026-07-24 (WP-49) · reference: PHP 8.5.7 (`get_defined_functions()`)._
+_Last measured: 2026-07-25 (WP-50) · reference: PHP 8.5.7 (`get_defined_functions()`)._
 
 ---
 
@@ -129,10 +129,17 @@ reached-vs-live reconciliation over every VM root) has cut the
 peak-footprint gap **from 11.9× to ~4.3×** with the retained-module
 channel shrunk by its exact measured slack (100.0% predicted-vs-actual).
 The attributed full-suite CPU residual (3.4×, cycle-collector walk) was
-then cut to **~2.5×** by a Zend-style purge of refcount-dead roots at
-the GC trigger (collector rounds 1005→297, freed count conserved to
-+0.5%, media peak footprint −2.2% as a bonus) — next is the remaining
-~1.2× residual, then Laravel validation. See NEXT_SESSION_WORDPRESS.md.
+cut to **~2.5×** by a Zend-style purge of refcount-dead roots at the GC
+trigger (collector rounds 1005→297, freed count conserved to +0.5%), and
+then to **~2.41×** (WP-50) by closing the statement-sweep fast-path band
+the purge floor had opened (1.01G→210M no-op sweep entries; the winning
+form caches the effective bound in a field — computing it inline in the
+hot dispatch arm *regressed* despite removing work, the I-cache law
+measured again). A full-scan end-of-run collect probe measured the
+pinned `created` channel as **100% collectable cyclic garbage**
+(114.7MB→0 on the media group), sizing the boundary-collect lever next —
+then the classify-walk cost itself, then Laravel validation.
+See NEXT_SESSION_WORDPRESS.md.
 
 ---
 

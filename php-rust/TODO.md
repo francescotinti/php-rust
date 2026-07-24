@@ -6,7 +6,7 @@ as they complete. Deliberate behavioural deviations are catalogued in
 [`PHPR_DIVERGENCES_FROM_PHP.md`](PHPR_DIVERGENCES_FROM_PHP.md); measured
 coverage in [`COVERAGE.md`](COVERAGE.md).
 
-Current state (2026-07-24, post session WP-49): Zend corpus **2635** passing
+Current state (2026-07-25, post session WP-50): Zend corpus **2635** passing
 (65.0% of runnable; gate baseline **1421** fails by name) · internal functions
 **1017/2143, 47%** (core stdlib **539/654, 82%**). **WORDPRESS: the full
 single-site core PHPUnit suite (30,472 tests, wordpress-develop trunk) AND
@@ -32,12 +32,17 @@ the cycle-collector classify walk** (494.9s over 1005 collects, measured);
 WP-49 acted on that attribution: the auto-collect trigger was firing on
 buffers ~97% full of refcount-dead tombstones (Zend removes those at
 death) — a lazy purge at the trigger cut the **full suite from 3.4× to
-~2.5×** (rounds 1005→297, freed conserved to +0.5%, media peak −2.2%),
-and the measured `created`-channel split (rc==1 subset = 0.1%) falsified
-the planned `created`→Weak lever: the pinned mass is uncollected cyclic
-garbage — **next: the ~1.2× residual (reflect-cache thrash, light-sweep
-entries) + boundary collects (Fase 1.4) + cold-box Object (Fase 1.3)**
-(NEXT_SESSION_WORDPRESS.md). Other stacks at parity: **symfony/http-kernel
+~2.5×** (rounds 1005→297, freed conserved to +0.5%, media peak −2.2%);
+WP-50 closed the statement-sweep fast-path band that purge had opened
+(1.01G→210M no-op entries) taking the **full suite to ~2.41×** — the
+inline form of the fix *regressed* +2..4% despite strictly removing work
+(hot-arm I-cache law, WP-44, now measured on a guard; cure = bound
+cached in a field), the reflect-cache cap doubling was falsified
+(hit-rate 16.3→16.5%), and a full-scan end-of-run collect probe measured
+the pinned `created` channel as **100% collectable cyclic garbage**
+(114.7MB→0 on media, 874ms) — **next: the full-scale probe + boundary
+collect design (Fase 1.4), the classify-walk cost, cold-box Object
+(Fase 1.3)** (NEXT_SESSION_WORDPRESS.md). Other stacks at parity: **symfony/http-kernel
 CLOSED 0/0 (1665)**, http-foundation 0 errors, Doctrine ORM 3484 (3E/13F
 declared, stable by name) + DBAL 3769/0/0, PHPUnit 9/11/13, Composer,
 wp-cli, Monolog. Laravel afterwards as validation.

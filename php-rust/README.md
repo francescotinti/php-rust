@@ -123,9 +123,13 @@ Near-term, highest-leverage work (see [COVERAGE.md](COVERAGE.md) for the data,
    attributed — measured, not suspected — to the cycle-collector classify
    walk, and acting on it a Zend-style purge of refcount-dead roots at
    the GC trigger cut the full suite **from 3.4× to ~2.5×** (collector
-   rounds 1005→297 with the freed count conserved, media peak footprint
-   −2.2% as a bonus). Next: the remaining ~1.2× residual (reflect-cache
-   thrash, boundary collects). Plan: NEXT_SESSION_WORDPRESS.md.
+   rounds 1005→297 with the freed count conserved); closing the
+   statement-sweep fast-path band that purge had opened brought it to
+   **~2.41×** (WP-50; 1.01G→210M no-op sweep entries, bound cached in a
+   field after the inline form measurably regressed — hot-arm I-cache
+   law). A full-scan collect probe also measured the pinned `created`
+   channel as 100% collectable cyclic garbage, sizing the
+   boundary-collect lever next. Plan: NEXT_SESSION_WORDPRESS.md.
 2. **Laravel** as the second framework validation target once the perf
    pass lands.
 3. Remaining extension surfaces on demand — ext/tidy (one WP test dataset),
