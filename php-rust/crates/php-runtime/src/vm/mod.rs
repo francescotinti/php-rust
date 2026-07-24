@@ -490,6 +490,7 @@ pub(crate) fn run_module_with_hir<'m>(
         gc_cycle_roots: HashSet::default(),
         gc_ctr_roots: Vec::new(),
         gc_classify_last_nodes: Cell::new(0),
+        gc_fullscan_mark: 0,
         gc_enabled: true,
         gc_collecting: false,
         gc_runs: 0,
@@ -1918,6 +1919,11 @@ struct Vm<'m> {
     /// full-size table, nor clobber the estimate). `Cell`: [`Vm::gc_classify`]
     /// takes `&self`. No standing footprint — the map itself stays call-local.
     gc_classify_last_nodes: Cell<usize>,
+    /// WP-51 Fase 1.4: `created.len()` right after the last full-scan-seeded
+    /// collect. When the registry has grown [`Vm::GC_FULLSCAN_GROWTH`] past
+    /// this, the next collect seeds every tracked object (see
+    /// [`Vm::collect_cycles`]).
+    gc_fullscan_mark: usize,
     /// Automatic cycle collection switch (Zend `gc_enabled`): flipped by
     /// `gc_enable()`/`gc_disable()`/`ini_set('zend.enable_gc')`. Gates only
     /// the threshold-triggered collection — an explicit
@@ -2965,6 +2971,18 @@ impl<'m> Vm<'m> {
     /// saturating growth.
     const GC_CYCLE_THRESHOLD_MAX: usize = 1_000_000_000;
 
+    /// WP-51 Fase 1.4 (boundary discipline): a collect whose `created`
+    /// registry grew by at least this much since the last full-scan seed
+    /// re-seeds EVERY tracked object as a cycle root before classifying.
+    /// `collect_cycles` roots itself from the note buffers alone, so cyclic
+    /// garbage whose refcounts stopped moving after formation is otherwise
+    /// invisible forever (WP-50 probe: 353,7MB registry-only channel on the
+    /// full suite, 100% collectable, 2,5s once at end-scale). Growth-gated —
+    /// never per-test (30k×collect = the WP-49 disease), never per explicit
+    /// call: ~4-5 full-scans across a full suite run, zero for short-lived
+    /// workers.
+    const GC_FULLSCAN_GROWTH: usize = 50_000;
+
     /// Trial-deletion cycle detection (the mark phase of Zend's
     /// `gc_collect_cycles`, adapted to `Rc`): starting from the object roots
     /// and the drained container roots (WP-46), walk the value graph through
@@ -3294,11 +3312,39 @@ impl<'m> Vm<'m> {
         if self.gc_collecting {
             return Ok(0);
         }
+        // WP-51 Fase 1.4: growth-gated full-scan seed. Quiescent cyclic
+        // garbage (refcounts frozen since formation) is never note-buffered,
+        // so no number of buffer-rooted collects can reach it; seeding the
+        // whole registry hands it to the classifier, which keeps everything
+        // externally held (Zend buffers these candidates at every RC-dec —
+        // this brings phpr's coverage to the same ceiling at a bounded
+        // cadence). O(1) check; the seed loop only runs on the ~handful of
+        // collects where the registry actually grew by the gate.
+        let fullscan = self.created.len()
+            >= self.gc_fullscan_mark.saturating_add(Self::GC_FULLSCAN_GROWTH);
+        if fullscan {
+            let ids: Vec<u32> = self.created.keys().copied().collect();
+            for id in ids {
+                if let Some(o) = self.created.get(&id) {
+                    let bo = o.borrow();
+                    if !bo.gc.cycle_root() {
+                        bo.gc.set_cycle_root(true);
+                        drop(bo);
+                        self.gc_cycle_roots.insert(id);
+                    }
+                }
+            }
+        }
         #[cfg(feature = "gc-census")]
         gc_census::collect_begin();
         self.gc_collecting = true;
         let r = self.collect_cycles_inner();
         self.gc_collecting = false;
+        if fullscan {
+            // Post-collect size: the next full-scan waits for real growth of
+            // the surviving registry, not for churn around the old mark.
+            self.gc_fullscan_mark = self.created.len();
+        }
         r
     }
 
