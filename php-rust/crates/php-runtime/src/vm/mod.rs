@@ -879,16 +879,25 @@ pub(crate) fn run_module_with_hir<'m>(
         for v in vm.lazy_init.values() {
             b += mc::deep_size(v, &mut seen, 0);
         }
+        rep.push((format!("lazy-init[n={}]", vm.lazy_init.len()), b));
+        b = 0;
         for v in vm.reflect_object_bound.values() {
             b += mc::deep_size(v, &mut seen, 0);
         }
+        rep.push((format!("reflect-object-bound[n={}]", vm.reflect_object_bound.len()), b));
+        b = 0;
         for v in vm.reflect_method_info_cache.values() {
             b += mc::deep_size(v, &mut seen, 0);
         }
+        rep.push((
+            format!("reflect-method-info-cache[n={}]", vm.reflect_method_info_cache.len()),
+            b,
+        ));
+        b = 0;
         for v in vm.var_dump_debug.values() {
             b += mc::deep_size(v, &mut seen, 0);
         }
-        rep.push(("lazy-reflect-caches".into(), b));
+        rep.push((format!("var-dump-debug[n={}]", vm.var_dump_debug.len()), b));
         rep.push(("filtered-streams".into(), (vm.filtered_streams.len() as u64) * 256));
         // Const pools of every linked module (leaked units): their ZStr are
         // permanent STR-channel residents that no PHP root reaches.
