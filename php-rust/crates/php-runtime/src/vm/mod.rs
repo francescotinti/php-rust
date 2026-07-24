@@ -494,6 +494,7 @@ pub(crate) fn run_module_with_hir<'m>(
         gc_runs: 0,
         gc_collected: 0,
         gc_cycle_threshold: Vm::GC_CYCLE_THRESHOLD,
+        gc_purge_floor: 0,
         gc_light_demoted: HashSet::default(),
         shutdown_fns: Vec::new(),
         generators: HashMap::default(),
@@ -809,6 +810,24 @@ pub(crate) fn run_module_with_hir<'m>(
             b += mc::deep_size(&fs.ret, &mut seen, 0);
         }
         rep.push(("fibers".into(), b));
+        // WP-49 Fase 1.2 prediction: split the created-only walk into the
+        // DEAD-pinned subset (strong_count minus the candidate-buffer clone
+        // == 1: the registry is the only holder — what an eviction/Weak
+        // lever would release) and the rest. Dead entries walk FIRST so
+        // shared structure lands in the evictable bucket.
+        b = 0;
+        let mut created_dead_n: u64 = 0;
+        for o in vm.created.values() {
+            let bo = o.borrow();
+            let extra = bo.gc.buffered() as usize;
+            drop(bo);
+            if std::rc::Rc::strong_count(o) - extra == 1 {
+                created_dead_n += 1;
+                let z = php_types::Zval::Object(std::rc::Rc::clone(o));
+                b += mc::deep_size(&z, &mut seen, 0);
+            }
+        }
+        rep.push((format!("created-dead-rc1[n={created_dead_n}]"), b));
         b = 0;
         for o in vm.created.values() {
             let z = php_types::Zval::Object(std::rc::Rc::clone(o));
@@ -1819,6 +1838,13 @@ struct Vm<'m> {
     /// suite holds >50k live objects in fixtures alone). An effective
     /// collection steps it back down toward the base.
     gc_cycle_threshold: usize,
+    /// WP-49 refill guard for the trigger-time tombstone purge: after a purge
+    /// whose LIVE survivors stayed under the threshold (collect avoided), the
+    /// next purge waits until the raw buffer length has grown a full step
+    /// past those survivors — so a live count hovering just under the
+    /// threshold cannot degenerate into a purge per insertion. Reset to 0
+    /// whenever the buffers drain (a collect ran).
+    gc_purge_floor: usize,
     /// Objects a LIGHT (in-body) sweep demoted to `gc_cycle_roots` since the
     /// last MAIN sweep. A temp consumed off the operand stack mid-statement is
     /// not gc_note'd, so its death is only observable by re-checking the
@@ -2459,32 +2485,63 @@ impl<'m> Vm<'m> {
                 if self.gc_enabled
                     && !self.gc_collecting
                     && self.gc_cycle_roots.len() + self.gc_ctr_roots.len()
-                        >= self.gc_cycle_threshold
+                        >= self.gc_cycle_threshold.max(self.gc_purge_floor)
                 {
-                    let roots_processed =
-                        self.gc_cycle_roots.len() + self.gc_ctr_roots.len();
-                    let freed = self.collect_cycles()?;
-                    if freed < Self::GC_ADJUST_TRIGGER {
-                        self.gc_cycle_threshold = self
-                            .gc_cycle_threshold
-                            .saturating_add(Self::GC_CYCLE_THRESHOLD)
-                            .min(gc_threshold_max());
-                    } else if self.gc_cycle_threshold > Self::GC_CYCLE_THRESHOLD
-                        && (freed as usize).saturating_mul(100) >= roots_processed
+                    // Zend removes a root from its buffer the instant it dies
+                    // by refcount (`gc_remove_from_buffer`), so its trigger
+                    // counts LIVE possible roots only. phpr's container
+                    // buffer keeps dead `Weak`s until the collect drain, and
+                    // the raw length counted those tombstones toward the
+                    // trigger — WP-49 full-suite census: collects fired at
+                    // threshold 350k-1M with only ~10-30k surviving roots,
+                    // one whole-graph classify every few seconds (1005 rounds
+                    // / 494,9s). Purge the dead entries AT the trigger (the
+                    // lazy equivalent of Zend's remove-at-death, ~cheap
+                    // retains vs a classify) and collect on live pressure
+                    // only. Cyclic garbage stays strong-held by its own
+                    // cycle, so it survives the purge and keeps triggering —
+                    // only refcount-dead tombstones leave the count.
+                    self.gc_ctr_roots.retain(|w| match w {
+                        CtrWeak::Arr(w) => w.strong_count() > 0,
+                        CtrWeak::Clo(w) => w.strong_count() > 0,
+                    });
                     {
-                        // Threshold hysteresis (WP-47): step back toward the
-                        // base only when ≥1% of the processed roots actually
-                        // died. A collect that frees a token amount off a
-                        // huge live root set (the full-suite shape: freed
-                        // ~10² of 10⁵ live roots) used to drag the trigger
-                        // straight back down and re-walk the whole reachable
-                        // graph on every re-fill. The base 50k is untouched.
-                        self.gc_cycle_threshold -= Self::GC_CYCLE_THRESHOLD;
+                        // Object ids leave at free/recycle already; this
+                        // sweeps the not-yet-recycled stragglers.
+                        let created = &self.created;
+                        self.gc_cycle_roots.retain(|id| created.contains_key(id));
                     }
-                    #[cfg(feature = "gc-census")]
-                    gc_census::threshold(self.gc_cycle_threshold);
-                    if freed > 0 {
-                        continue;
+                    let live =
+                        self.gc_cycle_roots.len() + self.gc_ctr_roots.len();
+                    if live >= self.gc_cycle_threshold {
+                        self.gc_purge_floor = 0;
+                        let roots_processed = live;
+                        let freed = self.collect_cycles()?;
+                        if freed < Self::GC_ADJUST_TRIGGER {
+                            self.gc_cycle_threshold = self
+                                .gc_cycle_threshold
+                                .saturating_add(Self::GC_CYCLE_THRESHOLD)
+                                .min(gc_threshold_max());
+                        } else if self.gc_cycle_threshold > Self::GC_CYCLE_THRESHOLD
+                            && (freed as usize).saturating_mul(100) >= roots_processed
+                        {
+                            // Threshold hysteresis (WP-47): step back toward the
+                            // base only when ≥1% of the processed roots actually
+                            // died. A collect that frees a token amount off a
+                            // huge live root set (the full-suite shape: freed
+                            // ~10² of 10⁵ live roots) used to drag the trigger
+                            // straight back down and re-walk the whole reachable
+                            // graph on every re-fill. The base 50k is untouched.
+                            self.gc_cycle_threshold -= Self::GC_CYCLE_THRESHOLD;
+                        }
+                        #[cfg(feature = "gc-census")]
+                        gc_census::threshold(self.gc_cycle_threshold);
+                        if freed > 0 {
+                            continue;
+                        }
+                    } else {
+                        self.gc_purge_floor =
+                            live.saturating_add(Self::GC_CYCLE_THRESHOLD);
                     }
                 }
                 // Drop the candidate buffer. Selection exhausted it, so every
@@ -3138,6 +3195,9 @@ impl<'m> Vm<'m> {
 
     fn collect_cycles_inner(&mut self) -> Result<i64, PhpError> {
         let mut total = 0i64;
+        // The drains below empty both root buffers: any purge floor from an
+        // avoided-collect is stale now.
+        self.gc_purge_floor = 0;
         // Destructor-phase deaths of the PREVIOUS round (Zend gc_029 shape):
         // `gc_call_destructors` DELREFs the receiver without a zero check, so
         // a root whose last real holder vanished inside its own destructor
