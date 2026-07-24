@@ -902,7 +902,9 @@ pub(crate) fn run_module_with_hir<'m>(
                 for c in &f.consts {
                     if let crate::bytecode::Const::Str(s) = c {
                         if seen.insert(std::rc::Rc::as_ptr(s) as usize) {
-                            b += (s.as_bytes().len() + mc::STR_OVERHEAD) as u64;
+                            let sb = (s.as_bytes().len() + mc::STR_OVERHEAD) as u64;
+                            mc::reached_note(mc::CH_STR, sb);
+                            b += sb;
                         }
                     }
                 }

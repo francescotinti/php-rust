@@ -294,6 +294,12 @@ fn reached(ch: usize, bytes: u64) {
     REACHED_B[ch].fetch_add(bytes, Relaxed);
 }
 
+/// Credit an allocation reached OUTSIDE [`deep_size`] (e.g. the unit const
+/// pools, tallied by the caller with its own dedup against the same `seen`).
+pub fn reached_note(ch: usize, bytes: u64) {
+    reached(ch, bytes);
+}
+
 /// Append the per-root attribution lines (tag=root) plus a closing summary.
 pub fn report_roots(entries: &[(String, u64)]) {
     use std::io::Write;
