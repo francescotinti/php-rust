@@ -459,7 +459,13 @@ impl<'m> super::Vm<'m> {
         // the whole footprint gap. Descriptors are PHP values (COW arrays):
         // dropping the memo is invisible to PHP semantics; the hot set
         // re-memoizes after a clear.
-        if self.reflect_method_info_cache.len() >= 8192 {
+        // WP-50: 8192 → 16384. The WP-48/49 full census showed the WP-47 cap
+        // in thrash: 108 epoch clears × ~8k entries ≈ the 890k misses (16%
+        // hit rate) — the suite's working set is far above the cap, so each
+        // clear forces a full re-memoize wave. Doubling trades ≤ ~45MB of
+        // descriptor retention for half the clear waves; measured on the
+        // media A/B (CPU AND footprint) per the WP-50 mandate.
+        if self.reflect_method_info_cache.len() >= 16384 {
             self.reflect_method_info_cache.clear();
             #[cfg(feature = "gc-census")]
             super::gc_census::reflect_evict();
