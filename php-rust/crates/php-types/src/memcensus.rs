@@ -321,7 +321,10 @@ pub fn report_roots(entries: &[(String, u64)]) {
     let pid = std::process::id();
     let total: u64 = entries.iter().map(|(_, b)| b).sum();
     for (name, b) in entries {
-        if *b >= 1 << 20 {
+        // Bracketed names carry an entry count (n=...) whose value matters
+        // even at 0 bytes (WP-49: created-dead-rc1 distinguishes "subset
+        // empty" from "walk not run").
+        if *b >= 1 << 20 || name.contains('[') {
             let _ = writeln!(f, "pid={pid} tag=root name={name} bytes={b}");
         }
     }
