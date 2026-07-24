@@ -1,23 +1,28 @@
-# Rotta WORDPRESS-FIRST — WP-track (dopo WP-49: purge tombstone al trigger → full 2,46×; Fase 1.2 falsificata dal census; WP-50 = residuo CPU + Fase 1.4/1.3)
+# Rotta WORDPRESS-FIRST — WP-track (dopo WP-50: banda light-sweep chiusa col bound-cache → full 2,41×; reflect-cap falsificata; Fase 1.4 quotata POSITIVA; WP-51 = probe full-scan sulla full + classify + Fase 1.3)
 
-> ⚡ **WP-49 (2026-07-24, `08fe322`+`951e2fd`+`e2d7805`)** — **leva collector
-> dall'attribuzione WP-48: PURGE dei tombstone al trigger (modello Zend
-> `gc_remove_from_buffer`). Il log per-collect nuovo (PHPR_GC_COLLECT_LOG)
-> ha scagionato rerun-loop e chiamate esplicite e trovato la causa: trigger
-> a maggioranza tombstone in 530/530 call (soglia 350k-1M, sopravvissuti
-> ~7-30k — i Weak morti di gc_ctr_roots non lasciavano MAI il buffer).
-> Leva: retain dei vivi al trigger + collect solo su pressione viva +
-> gc_purge_floor anti-degenerazione. RISULTATI: full run36 master-CPU
-> 19:10→≈13:55 = −27% (3,39×→2,46×), fail-set BYTE-ID a run33, RSS max
-> 5431MB INVARIATO; A/B media CPU −1,19% (5/6) E peak −2,22% (prima leva
-> che migliora entrambe); mechanism-check a CONSERVAZIONE: round 1005→297,
-> classify_ms −62%, freed +0,5% (stessa garbage in ⅓ dei round), soglia
-> ferma a 50k base. Ob.2: Fase 1.2 created→Weak FALSIFICATA PRIMA di
-> scriverla — census split `created-dead-rc1[n=14]=113KB` su 114,73MB:
-> il canale è garbage CICLICA (un registry Weak non la libera); obiettivo
-> de-pinning (385MB full) → Fase 1.4. Parità: cargo 1639/0 ×2, corpus 1421
-> BYTE-ID, gate22 verde col conteggio.**
-> **Storia: `sessions/WP_SESSION_49.md`. WP-48: `sessions/WP_SESSION_48.md`.**
+> ⚡ **WP-50 (2026-07-24/25, `3922e6b`+`60c7e04`+`f034c6c`)** — **Ob.1: il
+> light-sweep 1,01G ingressi era la BANDA [soglia, purge_floor): il
+> fast-path sweep-empty usava la sola soglia, il trigger usa max(soglia,
+> floor) — ogni statement sweep nella banda entrava nel corpo a fare
+> nulla. La forma-1 della leva (max() nell'arm caldo) REGREDIVA +17..35s
+> nonostante −825,6M ingressi (legge WP-44 su una GUARDIA: +1 load+max
+> nell'arm Op::Sweep = I-cache > risparmio, invisibile ai census);
+> forward-fix `gc_sweep_bound` (campo cache, refresh ai 4 siti di
+> mutazione): **run37c 816,8s = 13:37 = 2,41× — sotto ENTRAMBI gli old
+> stesso-sera (828,9/832,7, spread 3,8s), −14s ≈ il risparmio teorico:
+> bilancio RICONCILIATO**; 6 full stesso-sera tutte BYTE-ID a run33.
+> Reflect-cap 16384 FALSIFICATA come leva CPU (miss −0,3%, hit 16,3→16,5%;
+> costo footprint media +41,7MB standing nei buffer ctr = il peak +2,64%
+> dell'A/B — TENUTA, eventuale ritorno a 8192 = decisione utente). ⭐⭐ il
+> "RSS max 5431 invariato" di run34-37 era un artefatto: telemetria .rss
+> in APPEND, max cross-segmento — i veri massimi di segmento sono
+> 1,6-2,3G. **Ob.2 Fase 1.4 quotata POSITIVA: canale created media = 100%
+> garbage ciclica collettabile (114,73MB→0 col probe full-scan
+> `PHPR_GC_EOR_FULL_COLLECT`, 874ms; Δroots_total = 99,98% del canale) —
+> ma collect_cycles si radica SOLO dai buffer: i cicli quiescenti sono
+> invisibili anche ai collect espliciti, serve il seed da `created`.**
+> Parità: corpus 1421 ×2, cargo 1639/0 ×2, gate22 verde col conteggio.**
+> **Storia: `sessions/WP_SESSION_50.md`. WP-49: `sessions/WP_SESSION_49.md`.**
 
 ## 📁 Convenzioni (decisione utente 2026-07-23)
 
@@ -51,25 +56,28 @@
 - Commit AND push a ogni step; deviazioni deliberate = marker
   `BUG(port):` / `PERF(port):` / `TODO(port):`.
 
-## Stato gate per nome (gate22 completo su `e2d7805`, 2026-07-24, archivio `gate-out-wp49-archived/`)
+## Stato gate per nome (gate22 completo su `60c7e04`, 2026-07-25, archivio `gate-out-wp50-archived/`; fix GC-only `f034c6c` gated con corpus+cargo+full BYTE-ID)
 
-- Gate22 verde: corpus **1421** IDENTICO alla baseline WP-46 (0 nuovi-fail)
-  · sess 28 · date 351 · refl 290 IDENTICI · ORM 3484 3E/13F per nome ·
-  hk 1665 0E/0F · cargo **1639/0** · probe gd/mysqli/media byte-id ·
-  http DIFF-set atteso (WP-14) · **option 413/1061 · restapi 3508/15947
-  (1E = oracle) IDENTICI per nome COL conteggio**. Baseline corpus resta
-  **1421** (`gate-out-wp46-archived/corpus.fails`).
+- Gate22 verde: corpus **1421** IDENTICO alla baseline WP-46 (0 nuovi-fail;
+  ri-verificato ×2 anche su `f034c6c`) · sess 28 · date 351 · refl 290
+  IDENTICI · ORM 3484 3E/13F per nome · hk 1665 0E/0F · cargo **1639/0 ×2**
+  · probe gd/mysqli/media byte-id · http DIFF-set atteso (WP-14, 2 item) ·
+  **option 413/1061 · restapi 3508/15947 (1E = oracle) IDENTICI per nome
+  COL conteggio**. Baseline corpus resta **1421**
+  (`gate-out-wp46-archived/corpus.fails`).
 - ⚠️ **MySQL**: datadir del progetto = `/Volumes/Extreme Pro/Claude/
   mysql-wp8/data` (socket `/private/tmp/mysql-wp8.sock`, porta 3306) —
   MAI `mysql.server start` naive (apre il datadir brew vergine ⇒ gate DB
   FALSI VERDI a 0 nomi). Avvio: `mysqld_safe --datadir=... --socket=...`
   daemonizzato (double-fork+setsid). Gate DB "IDENTICO" da validare
   SEMPRE col conteggio (option 413, restapi 3508).
-- **Full-suite run36** (~/Claude/wpdev, WP-49): 30.472 test, 0E/2F/86W/73S,
-  **fail-set BYTE-IDENTICO a run33** (88 nomi); baseline resta
-  `wp16-harness/full-out/run33-fails.txt`. Master-CPU **≈13:55 = 2,46×**
-  (run35 19:10 = 3,39×; WP-40 11:39 = 2,06× = riferimento residuo).
-  Wall ~18 min = 1,6×. RSS transiente mid-run 5431MB INVARIATO.
+- **Full-suite run37c** (~/Claude/wpdev, WP-50, binario `f034c6c`): 30.472
+  test, 0E/2F/86W/73S, **fail-set BYTE-IDENTICO a run33** (88 nomi);
+  baseline resta `wp16-harness/full-out/run33-fails.txt`. Master-CPU
+  **816,8s ≈13:37 = 2,41×** (old stesso-sera 828,9/832,7; run36 13:55 =
+  2,46×; WP-40 11:39 = 2,06× = riferimento residuo). Wall ~18 min = 1,6×.
+  ⚠️ RSS: telemetria `.rss` in APPEND — max PER SEGMENTO (veri massimi
+  1,6-2,3G; il "5431 invariato" storico era cross-segmento).
 - Suite phpt (misura): xsl 63/64 (da CWD root php-8.5.7) · tidy 44/45 ·
   asym 38/39. Suite phpt SEMPRE con path ASSOLUTO.
 
@@ -82,32 +90,39 @@
 # ogni full run; non ricompilare mentre una run/gate usa il binario.
 # multisite: wp19-harness/run-multisite-detached.sh <oracle|phpr>
 # WP-49: per-collect log dietro gc-census: PHPR_GC_COLLECT_LOG=<path>
-# (harness census: wp49-harness/run-full-census49*.sh, ab49.sh, report)
+# WP-50: probe full-scan fine-run (census-only): PHPR_GC_EOR_FULL_COLLECT=1
+# (harness: wp50-harness/{pipeline50,ab50a,ab50b,census50-media,
+#  run-full-census50,run37,run37-old}.sh + ab50-report.pl; binario census
+#  phpr-memgc50 in phpr-mem-target/release/)
 ```
 
-## 🎯 PROSSIMO LAVORO — WP-50: residuo CPU full + Fase 1 residua (1.4/1.3)
+## 🎯 PROSSIMO LAVORO — WP-51: Fase 1.4 sulla full + classify + Fase 1.3
 
 **Rotta (utente 2026-07-24)**: `FOOTPRINT_CPU_ROADMAP.md` — footprint-first,
 safe-only, TUTTE le fasi comunque, **niente revert su insuccesso**.
 Laravel POSTICIPATA a valle.
 
-1. **Residuo CPU full ≈1,20× vs WP-40** (13:55 vs 11:39): candidati coi
-   numeri WP-49 — classify residuo (142s census sui 297 round veri),
-   reflect-cache thrash (890k miss / 16% hit / cap 8192; cap 16384 ≈ +45MB
-   teorici: misurare CPU E footprint), light-sweep 1,01G ingressi post-leva
-   (i buffer restano pieni più a lungo ⇒ meno fast-path sweep-empty:
-   corpi economici ma 5× più ingressi — micro-leva candidata).
-2. **Fase 1.4 disciplina di confine per-test** — ora è ANCHE la leva
-   footprint per il canale created (385,2MB full a fine run = garbage
-   ciclica non collettata, verdetto census WP-49). ⚠️ un collect per test =
-   il male appena curato: PRIMA quotare con log per-collect quanto costerebbe
-   (roots vivi per confine), POI decidere cadenza (ogni N test?).
-3. **Fase 1.3 cold-box Object** (~96B×istanze, pattern WP-32) e
-   **attribuzione transiente 5,4G** (pacing-dipendente: serve snapshot al
-   picco sulla full).
-4. **NON riproporre**: Fase 1.2 created→Weak/eviction rc==1 (falsificata:
-   rc1 = 0,1% del canale); rooting selettivo (reroot 8,7%, live 11% —
-   i root sono garbage legittima); cap rerun stile Zend (round 2 = 0-11ms).
+1. **Census full col probe full-scan** (`PHPR_GC_EOR_FULL_COLLECT=1` in
+   `wp50-harness/run-full-census50.sh`, binario `phpr-memgc50` GIÀ pronto):
+   quota il canale created a scala full (353,7MB a fine run) + costo del
+   full-scan collect a full-graph → disegno leva Fase 1.4 (cadenza per
+   CRESCITA di created, es. ogni +50k — mai per-test: 30k×collect = il
+   male WP-49; PEAK-value da misurare, il peak è mid-run).
+2. **Residuo CPU full 2,41× vs 2,06× WP-40**: il classify (142s census,
+   139,7s nei 149 round-1, ~938ms/call su ~60k root, ~94k white/call =
+   lavoro utile) è l'INTERO residuo; il numero di round è già minimo ⇒
+   la leva è il COSTO del walk. Solo coi numeri per-round in mano.
+3. **Fase 1.3 cold-box Object** (~96B×istanze, pattern WP-32);
+   attribuzione transiente da RIVALUTARE (il 5,4G era artefatto di lettura
+   cross-segmento; transiente vero 1,6-2,3G per segmento).
+4. **reflect-cache**: la leva vera è l'OWNER della cardinalità (memo keyed
+   su ClassId freschi dei mock, leak WP-47) — il cap è un cerotto
+   (16384 falsificata: hit 16,3→16,5%; ritorno a 8192 = decisione utente,
+   risparmierebbe ~42MB standing sul media).
+5. **NON riproporre**: Fase 1.2 created→Weak/eviction rc==1 (falsificata);
+   rooting selettivo; cap rerun stile Zend; **bound/guardie calcolate
+   negli arm caldi del run_loop** (WP-50: +1 load+max = +17..35s — campo
+   cache ai siti di mutazione); soglia adattiva/isteresi su buffer RAW.
 
 ## (storico, pre-roadmap) PROSSIMO LAVORO
 
@@ -118,7 +133,10 @@ Laravel POSTICIPATA a valle.
    **PRE-FLIGHT MYSQL**: `mysql -h 127.0.0.1 -u root -e "SHOW DATABASES"`
    deve elencare wp_o/wp_p/probe — altrimenti vedi ⚠️ MySQL sopra.
    **STASH OLD**: copiare subito il binario release corrente in
-   `phpr-old-target/release/phpr-wp49` (old dell'A/B di WP-50).
+   `/Volumes/Extreme Pro/Claude/phpr-old-target/release/phpr-wp50`
+   (old dell'A/B di WP-51). ⚠️ path CANONICO = drive esterno: lo stash
+   in `~/Claude/phpr-old-target` (WP-50) ha prodotto un A/B con 12 run
+   da 0,00s.
 1. **Rotta ([[php-rust-roadmap-wp-first]])**: dopo la roadmap
    footprint+CPU si apre la VALIDAZIONE LARAVEL (metodo = ricetta gate
    ORM/hk: oracolo+composer build, phpr esegue).
@@ -149,12 +167,13 @@ Laravel POSTICIPATA a valle.
 
 ## 📊 Report gap perf — ricorrente di fine sessione
 
-Tabella cumulativa e metodo di misura: **`gaps/REPORT_GAP_49.md`** (ultimo
+Tabella cumulativa e metodo di misura: **`gaps/REPORT_GAP_50.md`** (ultimo
 file = tabella viva). A ogni chiusura: misurare media (user CPU +
 footprint) e full-suite master-CPU, copiare l'ultimo report in
 `gaps/REPORT_GAP_<N>.md` con la riga nuova, riportare il gap all'utente.
-Ultimo stato (WP-49): **media CPU 3,01× di giornata rumorosa (interleaved
-−1,19%, 5/6) · footprint peak fisico 1,715/0,394G = 4,35× (−2,22%) · full
-run36 ≈13:55 = 2,46× (−27% da run35; riferimento WP-40 2,06×), fail-set
-byte-id a run33 · Fase 1.2 falsificata (canale created = cicli) · tabella
-viva: `gaps/REPORT_GAP_49.md`**.
+Ultimo stato (WP-50): **media CPU 2,86× (A/B leve flat) · footprint peak
+fisico 1,755/0,394G = 4,45× (leva 2: +2,64% attribuito ai descriptor
+ritenuti) · full run37c 816,8s ≈13:37 = 2,41× (old stesso-sera
+828,9/832,7; riferimento WP-40 2,06×), fail-set byte-id a run33 su 6 run ·
+Fase 1.4 quotata POSITIVA (canale created media 100% collettabile col
+full-scan) · tabella viva: `gaps/REPORT_GAP_50.md`**.
