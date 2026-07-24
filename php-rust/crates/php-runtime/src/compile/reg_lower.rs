@@ -1,4 +1,4 @@
-//! Register-lowering pass — Leva B stage 1 (REGISTER_BYTECODE_PLAN.md §5).
+//! Register-lowering pass — Leva B stage 1 (doc/plans-archive/REGISTER_BYTECODE_PLAN.md §5).
 //!
 //! The register model extends the frame's slot file: the compiler computes
 //! per-function `max_temps` and the VM sizes the frame `n_slots + max_temps`,

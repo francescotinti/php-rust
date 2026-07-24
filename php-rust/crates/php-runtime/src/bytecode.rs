@@ -1225,7 +1225,7 @@ pub enum Op {
 }
 
 /// Where a hot op sources (or sinks) a value under the register-bytecode plan
-/// (Leva B, REGISTER_BYTECODE_PLAN.md §4): operand sourcing on the HOT ops,
+/// (Leva B, doc/plans-archive/REGISTER_BYTECODE_PLAN.md §4): operand sourcing on the HOT ops,
 /// not a second ISA. `Stack` is the legacy form — pop/push a clone through the
 /// operand stack; the direct forms read by borrow from a named slot, a
 /// register temp (`Func::max_temps` slots past `n_slots`), or the function's
@@ -1278,7 +1278,7 @@ pub struct Func {
     /// [`crate::hir::Program::slots`] for the script body).
     pub n_slots: u32,
     /// Number of *register* temp slots past `n_slots` (Leva B,
-    /// REGISTER_BYTECODE_PLAN.md §4): a "register" is an ordinary frame slot
+    /// doc/plans-archive/REGISTER_BYTECODE_PLAN.md §4): a "register" is an ordinary frame slot
     /// with a static index in `n_slots..n_slots + max_temps`, assigned by the
     /// register-lowering pass ([`crate::compile::reg_lower`]). The frame is
     /// sized `n_slots + max_temps`; recycle/drop machinery covers these slots

@@ -153,7 +153,7 @@ pub(super) fn compile_body(
         attributes: Vec::new(),
         exc_table: c.exc_regions,
     };
-    // Register-lowering pass (Leva B, REGISTER_BYTECODE_PLAN.md §5): opt-in
+    // Register-lowering pass (Leva B, doc/plans-archive/REGISTER_BYTECODE_PLAN.md §5): opt-in
     // per process via PHPR_REG_LOWER; stage 1 ships it EMPTY so the dual-mode
     // plumbing is proven zero-delta before any op is rewritten.
     if super::reg_lower::enabled() {

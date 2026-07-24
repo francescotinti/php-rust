@@ -132,8 +132,11 @@ Near-term, highest-leverage work (see [COVERAGE.md](COVERAGE.md) for the data,
    xmlwriter, calendar, sockets.
 
 Longer-term direction (server SAPI, async, single-binary distribution):
-[ASYNC_AND_DISTRIBUTION_ROADMAP.md](ASYNC_AND_DISTRIBUTION_ROADMAP.md) ·
-extension strategy: [EXTENSIONS_ARCHITECTURE.md](EXTENSIONS_ARCHITECTURE.md).
+[doc/architecture/ASYNC_AND_DISTRIBUTION_ROADMAP.md](doc/architecture/ASYNC_AND_DISTRIBUTION_ROADMAP.md) ·
+extension strategy:
+[doc/architecture/EXTENSIONS_ARCHITECTURE.md](doc/architecture/EXTENSIONS_ARCHITECTURE.md).
+Historical plans, external reviews and one-off analyses live under
+[doc/](doc/README.md).
 
 ---
 

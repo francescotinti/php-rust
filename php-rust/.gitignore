@@ -19,7 +19,9 @@ crates/php-server/
 /1x1.jpg
 /DataFile*.txt
 /EmptyFile*.txt
-20270615-gemini.md
 php-8.5.7.code-workspace
-20260716-gemini-feedback.md
-refactor_plan_prelude_claude.md
+
+# phpt scratch: nested workdirs some file/zlib variation tests create when run
+# with the repo root as cwd (dir1/dir2/dir3/workdir shape), plus bug fixtures.
+/*.dir/
+/bug*_x/
