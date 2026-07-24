@@ -79,7 +79,12 @@
   cargo 1639/0 · gd/mysqli/media BYTE-ID · http DIFF-set identico (16 item
   WP-14) · **option 413 IDENTICO col conteggio (413/1061)** · **restapi
   3508 IDENTICO col conteggio (1E/1F = oracle)**.
-- full-suite vs run33 (88 nomi): (TBD)
+- **Full-suite (run34): fail-set BYTE-IDENTICO a run33** (88 nomi; 30.472
+  test, 0E/2F/86W/73S). Master-CPU **≈19:20 = 3,42×** (da ~21:00 = 3,71×
+  WP-46: l'isteresi + classify 2-passate recuperano ~8%; riferimento
+  storico WP-40 resta 11:39 = 2,06×). Wall ~23 min = 2,0× (da 2,3×).
+  RSS telemetry max 5,4G mid-run (transiente; a fine run 1,35G), con
+  purge=0. Baseline per nome resta `run33-fails.txt` (=`run34-fails.txt`).
 
 ## ⭐⭐ Lezioni
 
@@ -99,7 +104,25 @@
 - ⭐ La leva footprint era anche la leva CPU: i root che il collector
   camminava inutilmente erano i descrittori della cache.
 
+## Dove vive il gap residuo (dal census post-fix, per WP-48)
+
+Peak media 1,77G vs oracle 0,41G = 4,3×. A fine run (census): unit 0,30G
+(2046 moduli leakati — **Fase 1.1 shrink**, ora il canale singolo più
+grosso) · arr esatti 79M · str 55M · obj 45M · created 115M ·
+non-censito ~1G al picco (transienti mid-run, rounding size-class, preg
+engines, dom arenas, frammentazione mimalloc — il delta 1,77G-peak vs
+~0,6G live-end). Str residuo walk 3% (≈39MB, metadati moduli fuori
+const-pool). Full-suite CPU ancora 3,42× vs 2,06× WP-40: il collect
+sul grafo vivo della full resta il sospetto (prossime leve: collect al
+confine test se si trova un segnale, rooting più selettivo).
+
 ## Prossimo (WP-48)
 
-(TBD a fine gate: residui gc_047/gc_030/gc_022, shrink unit 0,3G Fase 1.1,
-interning const-array, str residual 3% = metadati moduli, Laravel a valle.)
+1. Fase 1.1: shrink unit (~0,3G, `shrink_to_fit`/`Box<[T]>` su Func/Module
+   + drop seed HIR post-link) — ora il canale dominante del residuo.
+2. Recupero CPU full-suite: attribuzione del 3,42× (op/gc census sulla
+   full o su un gruppo grande) prima di altre leve.
+3. Coda: cold-box Object, Fase 2 CPU (RET_DEREF+ret_shape, Sweep elision),
+   interning const-array, residui gc (gc_047 iteratore al break, gc_030
+   trace shape, gc_022 temp mid-statement), bug isset __get annidato.
+4. Laravel a valle (rotta WP-first).

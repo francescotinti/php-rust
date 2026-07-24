@@ -1,26 +1,24 @@
-# Rotta WORDPRESS-FIRST — WP-track (dopo WP-46: GC container-roots LANDED a parità record, ma il bersaglio footprint ~3G NON è caduto → WP-47 = ri-attribuzione owner-level)
+# Rotta WORDPRESS-FIRST — WP-track (dopo WP-47: attribuzione owner-level RIUSCITA, footprint 11,9×→4,3×; WP-48 = shrink unit + recupero CPU full)
 
-> ⚡ **WP-46 (2026-07-24, `d4a02fa`→`e6af390`)** — **Cycle collector esteso
-> ai root NON-oggetto (array condivisi, inner delle Ref, closure), fedele a
-> zend_gc.c letto via Vexp: buffer container a `Weak` (CtrWeak, dedup
-> `weak_count==0`, zero perturbazione dei conteggi), cicli puro-container
-> spezzati svuotando le Ref-cell white (unico punto di taglio in safe Rust:
-> array COW, capture fisse), conteggio `gc_collect_cycles()` Zend-esatto
-> (esclusione dtor-subtree, peel refcount-dead, eccezione DELREF-muto) —
-> 18/18 probe oracle byte-id. Under-note storici chiusi: PropUnset, BindRef
-> (`$a =& $b`), typed-unset; `gc_enable/disable/enabled/status` host-side
-> reali (INI zend.enable_gc, latch gc_active per gc_016/gc_049);
-> `*RECURSION*` senza `&`. PARITÀ RECORD: corpus 1447→1421 (0 nuovi, 26
-> fixati), famiglia gc 36→14, gate22 COMPLETO verde (option 413 / restapi
-> 3508 identici per nome col conteggio), cargo 1639/0.**
-> **MA il mechanism-check ha FALSIFICATO il bersaglio: collector operativo
-> (11 collect, 726k root processati) e freed=543 — arr 3,113M/1,9G e str
-> 23,8M/1,29G INVARIATI alla cifra; i root notati sono dati VIVI. ⭐⭐ La
-> diagnosi WP-45 "3,08G = cicli irraggiungibili" è da RI-ATTRIBUIRE:
-> irraggiungibile-dal-root-walk ≠ ciclo morto (il walk non cammina
-> FramePool/operand-stack/tabelle VM). A/B: +7,0% CPU e +2,5% footprint
-> TENUTI per direttiva no-revert (2,85× media, 12,3× peak).**
-> **Storia: `sessions/WP_SESSION_46.md`. WP-44: `sessions/WP_SESSION_44.md`.**
+> ⚡ **WP-47 (2026-07-24, `583dd30`→`f3bea49`+)** — **RI-ATTRIBUZIONE
+> owner-level RIUSCITA al primo colpo e leva landed: il root-walk mem-census
+> esteso a TUTTI i campi Zval-bearing del Vm (walk_frame completo con
+> dyn_vars/this/ret_cell/iters/ext; fibers, handlers, ob, enum-cache,
+> tabelle lazy/reflect) + contatori reached-vs-live DENTRO deep_size
+> riconcilia il canale arr al 100,0% (3.114.573/3.114.573) e str al 96,7%
+> — e l'owner del "3G irraggiungibile" di WP-45/46 è UNO:
+> `reflect_method_info_cache`, 455.978 entry / 2,48G (ogni mock PHPUnit =
+> ClassId fresco; memo mai evitta; ~5,4KB/descrittore). Erano anche i
+> root "vivi" che il collector WP-46 camminava a vuoto (726k→276k).**
+> **Leve: epoch eviction cap 8192 (`fa100ad`, PHP-invisibile) +
+> gc_classify a 2 passate senza children-map globale né cloni scalari +
+> isteresi soglia step-down solo se ≥1% dei root muore (`d684cd7`, base
+> 50k intoccata). ESITO: peak media 4,88→1,77G = −63,8%, gap footprint
+> 11,9×→4,3× (⭐⭐⭐ record); full master-CPU 21:00→≈19:20 (3,71×→3,42×);
+> media CPU +1,3% (6/6, rebuild descrittori) TENUTO per direttiva.
+> PARITÀ TOTALE: corpus 1421 IDENTICO ×2, gate22 completo verde col
+> conteggio, full-suite BYTE-ID a run33 (88 nomi), cargo 1639/0.**
+> **Storia: `sessions/WP_SESSION_47.md`. WP-46: `sessions/WP_SESSION_46.md`.**
 
 ## 📁 Convenzioni (decisione utente 2026-07-23)
 
@@ -54,27 +52,26 @@
 - Commit AND push a ogni step; deviazioni deliberate = marker
   `BUG(port):` / `PERF(port):` / `TODO(port):`.
 
-## Stato gate per nome (gate22 completo su `e6af390`, 2026-07-24, archivio `gate-out-wp46-archived/`)
+## Stato gate per nome (gate22 completo su `d684cd7`, 2026-07-24, archivio `gate-out-wp47-archived/`)
 
-- Gate22 verde: corpus **1421** (da 1447: 0 nuovi-fail, 26 rimozioni — 22
-  famiglia gc + bug35163×2/bug35239/foreach_002 dai fix &*RECURSION*/
-  BindRef/unset-note) · sess 28 · date 351 · refl 290 IDENTICI · ORM
-  3E/13F · hk 0E/0F · cargo **1639** (1637 + 2 sentinelle WP-46) · probe
-  gd/mysqli/media byte-id · http DIFF-set 16 byte-id al WP-44 · option 413
-  / restapi 3508 identici per nome. ⚠️ nuova baseline corpus = **1421**
-  (aggiornare i confronti; fail-set in `gate-out-wp46-archived/corpus.fails`).
+- Gate22 verde: corpus **1421** IDENTICO alla baseline WP-46 (0 nuovi-fail)
+  · sess 28 · date 351 · refl 290 IDENTICI · ORM 3E/13F · hk 0E/0F ·
+  cargo **1639** (2 sentinelle GC incluse, anche rilanciate singole) ·
+  probe gd/mysqli/media byte-id · http DIFF-set 16 byte-id al WP-44 ·
+  option 413 / restapi 3508 identici per nome COL conteggio. Baseline
+  corpus resta **1421** (`gate-out-wp46-archived/corpus.fails`).
 - ⚠️ **MySQL**: datadir del progetto = `/Volumes/Extreme Pro/Claude/
   mysql-wp8/data` (socket `/private/tmp/mysql-wp8.sock`, porta 3306) —
   MAI `mysql.server start` naive (apre il datadir brew vergine ⇒ gate DB
   FALSI VERDI a 0 nomi). Avvio: `mysqld_safe --datadir=... --socket=...`
   daemonizzato (double-fork+setsid). Gate DB "IDENTICO" da validare
   SEMPRE col conteggio (option 413, restapi 3508).
-- **Full-suite run33** (~/Claude/wpdev, trunk@5e3fced, WP-46): 30.472 test,
-  0E/2F/86W/73S, fail-set BYTE-IDENTICO a run32; baseline =
-  `wp16-harness/full-out/run33-fails.txt` (88 righe). ⚠️⚠️ master-CPU
-  **~21:00 = 3,71×** (+80% dal riferimento 11:39/2,06× di WP-40: costo
-  collect-walk del GC container-roots, vedi WP_SESSION_46 — recupero in
-  WP-47 dopo l'attribuzione). Multisite: 1 diff = minimo teorico.
+- **Full-suite run34** (~/Claude/wpdev, WP-47): 30.472 test, 0E/2F/86W/73S,
+  **fail-set BYTE-IDENTICO a run33**; baseline resta
+  `wp16-harness/full-out/run33-fails.txt` (88 righe, = run34-fails.txt).
+  Master-CPU **≈19:20 = 3,42×** (da 21:00/3,71× WP-46; riferimento WP-40
+  11:39/2,06× non ancora recuperato — residuo = collect sul grafo vivo
+  della full). Wall ~23 min = 2,0×. Multisite: 1 diff = minimo teorico.
 - Suite phpt (misura): xsl 63/64 (da CWD root php-8.5.7) · tidy 44/45 ·
   asym 38/39. Suite phpt SEMPRE con path ASSOLUTO.
 
@@ -88,42 +85,34 @@
 # multisite: wp19-harness/run-multisite-detached.sh <oracle|phpr>
 ```
 
-## 🎯 PROSSIMO LAVORO — WP-47: RI-ATTRIBUZIONE owner-level del footprint
+## 🎯 PROSSIMO LAVORO — WP-48: shrink unit (Fase 1.1) + recupero CPU full-suite
 
 **Rotta (utente 2026-07-24)**: `FOOTPRINT_CPU_ROADMAP.md` — footprint-first,
 safe-only, TUTTE le fasi comunque, **niente revert su insuccesso**.
 Laravel POSTICIPATA a valle.
 
-**WP-46 ha eseguito la leva dominante e il mechanism-check l'ha
-falsificata come leva footprint** (dettaglio in testa e in
-`sessions/WP_SESSION_46.md`): il collector esteso Zend-model è landed,
-corretto e gate-proven, ma i possible-root che transitano dai note-site
-nel run media sono VIVI (726k root → freed 543) e i canali non si sono
-mossi di una cifra. Le due letture da discriminare:
-(A) i cicli morti muoiono per vie non notate — ma ogni probe costruito per
-trovare il drop silente è finito su un sito notato o su un write-through;
-(B) **il ~3G "irraggiungibile" del WP-45 è in realtà TENUTO da holder vivi
-fuori dalle 11 categorie del root-walk** (FramePool con slot sporchi?
-operand stack di frame? ob/resources/iteratori/tabelle VM non censite?).
+**WP-47 ha chiuso l'attribuzione** (arr 100%, str 96,7%; owner unico
+`reflect_method_info_cache` → eviction landed, −63,8% peak). Il residuo
+(census post-fix, dettaglio in `sessions/WP_SESSION_47.md`):
 
-**WP-47 = attribuzione di SECONDA generazione, PRIMA di ogni altra leva:**
-1. **Owner-tracer**: strumento mem-census che campiona CHI tiene i 3,1M
-   array vivi (1-su-N: al drop dell'ultimo handle noto risali... o più
-   semplice: walk COMPLETO del Vm — ogni campo che può tenere Zval/Rc —
-   e bilancio per-categoria fino a riconciliare il 1,9G arr + 1,29G str).
-2. Root-walk esteso: FramePool (i frame ritirati azzerano gli slot?),
-   frames stack completo, ob/output buffers, resources, iteratori,
-   session, typed_refs, IC/tabelle — qualsiasi campo Vm Zval-bearing.
-3. Se emerge il vero holder → la leva giusta (drain pool al retire?
-   disciplina di confine per-test? created→Weak Fase 1.2?) si sceglie coi
-   dati, non si indovina.
-4. Recupero CPU possibile solo DOPO l'attribuzione (rooting selettivo /
-   collect al confine test) — il +7% resta finché non si sa se serve.
-In coda (invariati): shrink unit ~0,3G (Fase 1.1), interning const-array
-(divergenza conteggio documentata), cold-box Object, Fase 2 CPU
-(RET_DEREF+ret_shape, Sweep elision).
+1. **Fase 1.1 — shrink unit ~0,30G** (2046 moduli `Box::leak`ati; ora il
+   canale singolo più grosso): `shrink_to_fit`/`Box<[T]>` sulle Vec
+   ritenute di Func/Module + drop dei seed HIR post-link. Guardia CPU
+   ≤+0,5%, A/B interleaved.
+2. **Recupero CPU full-suite** (3,42× vs riferimento 2,06× WP-40):
+   PRIMA attribuzione (gc/op census su un gruppo grande o sulla full) —
+   il sospetto è il collect-walk sul grafo vivo della full; leve
+   candidate: rooting più selettivo, collect ancorato a un segnale di
+   confine se esiste, cap dell'escalation. Il +1,3% media (rebuild
+   descrittori evitti) si può limare alzando il cap 8192 SE il census
+   mostra thrash (misurare, non indovinare).
+3. Coda invariata: cold-box Object (~96B×istanze), Fase 2 CPU
+   (RET_DEREF+ret_shape, Sweep elision), interning const-array
+   (divergenza conteggio documentata), str residuo walk 3% (metadati
+   moduli), disciplina di confine per-test (Fase 1.4).
 Residui famiglia gc pescabili: gc_047 (nota release iteratore al break),
-gc_030 (trace shape dtor-da-collect), gc_022 (temp container mid-statement).
+gc_030 (trace shape dtor-da-collect), gc_022 (temp container mid-statement);
+bug isset via `__get` con indici annidati (WP-42).
 
 ## (storico, pre-roadmap) PROSSIMO LAVORO
 
@@ -165,10 +154,11 @@ gc_030 (trace shape dtor-da-collect), gc_022 (temp container mid-statement).
 
 ## 📊 Report gap perf — ricorrente di fine sessione
 
-Tabella cumulativa e metodo di misura: **`gaps/REPORT_GAP_44.md`** (ultimo
+Tabella cumulativa e metodo di misura: **`gaps/REPORT_GAP_47.md`** (ultimo
 file = tabella viva). A ogni chiusura: misurare media (user CPU +
 footprint) e full-suite master-CPU, copiare l'ultimo report in
 `gaps/REPORT_GAP_<N>.md` con la riga nuova, riportare il gap all'utente.
-Ultimo stato (WP-44): **media 2,66× (old di giornata pulitissima; main =
-binario WP-43) · full [run32, non rilanciata: tree revertato byte-id] ·
-footprint raw 10,0× di giornata — riferimento strutturale resta ~12×**.
+Ultimo stato (WP-47): **media CPU 3,00× di giornata (+1,3% tenuto; riferimento
+comparabile ~2,85× WP-46) · footprint peak fisico 1,77/0,41G = 4,3× ⭐⭐⭐
+(da 11,9×: −63,8%) · full run34 ≈19:20 = 3,42× (da 3,71×), fail-set
+byte-id a run33 · tabella viva: `gaps/REPORT_GAP_47.md`**.
