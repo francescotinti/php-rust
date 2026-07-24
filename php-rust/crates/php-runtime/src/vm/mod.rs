@@ -2461,13 +2461,24 @@ impl<'m> Vm<'m> {
                     && self.gc_cycle_roots.len() + self.gc_ctr_roots.len()
                         >= self.gc_cycle_threshold
                 {
+                    let roots_processed =
+                        self.gc_cycle_roots.len() + self.gc_ctr_roots.len();
                     let freed = self.collect_cycles()?;
                     if freed < Self::GC_ADJUST_TRIGGER {
                         self.gc_cycle_threshold = self
                             .gc_cycle_threshold
                             .saturating_add(Self::GC_CYCLE_THRESHOLD)
                             .min(gc_threshold_max());
-                    } else if self.gc_cycle_threshold > Self::GC_CYCLE_THRESHOLD {
+                    } else if self.gc_cycle_threshold > Self::GC_CYCLE_THRESHOLD
+                        && (freed as usize).saturating_mul(100) >= roots_processed
+                    {
+                        // Threshold hysteresis (WP-47): step back toward the
+                        // base only when ≥1% of the processed roots actually
+                        // died. A collect that frees a token amount off a
+                        // huge live root set (the full-suite shape: freed
+                        // ~10² of 10⁵ live roots) used to drag the trigger
+                        // straight back down and re-walk the whole reachable
+                        // graph on every re-fill. The base 50k is untouched.
                         self.gc_cycle_threshold -= Self::GC_CYCLE_THRESHOLD;
                     }
                     #[cfg(feature = "gc-census")]
@@ -2858,6 +2869,16 @@ impl<'m> Vm<'m> {
     /// Containers the walk cannot see through (generator / fiber state,
     /// host-side handles) simply leave their referents with unexplained
     /// strong counts ⇒ alive: unknown edges err on keeping.
+    ///
+    /// WP-47 cost shape: the old single pass cloned EVERY child `Zval`
+    /// (scalars included — an Rc bump per string) into a per-node `Vec` and
+    /// stored a whole-graph `children` map only so the live BFS and the
+    /// white peel could re-read edges. This version keeps one `Handle`
+    /// clone per *discovered* node and otherwise borrows: pass 1 discovers
+    /// `handles`/`in_edges` with no child storage, pass 2 re-walks children
+    /// of live nodes by borrow, and the white child-lists are rebuilt only
+    /// over the (small) white subgraph. Same whites, same counts, no
+    /// whole-graph allocation.
     fn gc_classify(&self, roots: &[u32], ctr_roots: Vec<CtrRoot>) -> GcWhites {
         use std::collections::VecDeque;
         enum Handle {
@@ -2866,25 +2887,72 @@ impl<'m> Vm<'m> {
             Ref(Rc<RefCell<Zval>>),
             Clo(Rc<Closure>),
         }
-        fn node_of(v: &Zval) -> Option<(GcNode, Handle)> {
+        impl Handle {
+            fn dup(&self) -> Handle {
+                match self {
+                    Handle::Obj(o) => Handle::Obj(Rc::clone(o)),
+                    Handle::Arr(a) => Handle::Arr(Rc::clone(a)),
+                    Handle::Ref(r) => Handle::Ref(Rc::clone(r)),
+                    Handle::Clo(c) => Handle::Clo(Rc::clone(c)),
+                }
+            }
+        }
+        /// Node key WITHOUT cloning — the cheap test applied to every child.
+        fn node_key(v: &Zval) -> Option<GcNode> {
             match v {
-                Zval::Object(o) => Some((GcNode::Obj(o.borrow().id), Handle::Obj(Rc::clone(o)))),
-                Zval::Array(a) => {
-                    Some((GcNode::Arr(Rc::as_ptr(a) as usize), Handle::Arr(Rc::clone(a))))
-                }
-                Zval::Ref(r) => {
-                    Some((GcNode::Ref(Rc::as_ptr(r) as usize), Handle::Ref(Rc::clone(r))))
-                }
-                Zval::Closure(c) => {
-                    Some((GcNode::Clo(Rc::as_ptr(c) as usize), Handle::Clo(Rc::clone(c))))
-                }
+                Zval::Object(o) => Some(GcNode::Obj(o.borrow().id)),
+                Zval::Array(a) => Some(GcNode::Arr(Rc::as_ptr(a) as usize)),
+                Zval::Ref(r) => Some(GcNode::Ref(Rc::as_ptr(r) as usize)),
+                Zval::Closure(c) => Some(GcNode::Clo(Rc::as_ptr(c) as usize)),
                 _ => None,
+            }
+        }
+        /// Handle clone — only paid once per newly-discovered node.
+        fn handle_of(v: &Zval) -> Handle {
+            match v {
+                Zval::Object(o) => Handle::Obj(Rc::clone(o)),
+                Zval::Array(a) => Handle::Arr(Rc::clone(a)),
+                Zval::Ref(r) => Handle::Ref(Rc::clone(r)),
+                Zval::Closure(c) => Handle::Clo(Rc::clone(c)),
+                _ => unreachable!("handle_of follows a Some(node_key)"),
+            }
+        }
+        /// Walk the child values of one node by borrow, in the same order the
+        /// old collected-Vec walk produced them (props, then proxy_instance;
+        /// array entries; ref inner; captures, then bound_this).
+        fn each_child<F: FnMut(&Zval)>(h: &Handle, mut f: F) {
+            match h {
+                Handle::Obj(o) => {
+                    let b = o.borrow();
+                    for (_, v) in b.props.iter() {
+                        f(v);
+                    }
+                    if let Some(pi) = &b.proxy_instance {
+                        f(pi);
+                    }
+                }
+                // A scalar-only array has no outgoing edges — nothing to walk
+                // (it can still be counted dead if nothing external holds it).
+                Handle::Arr(a) if !a.may_hold_containers() => {}
+                Handle::Arr(a) => {
+                    for (_, v) in a.iter() {
+                        f(v);
+                    }
+                }
+                Handle::Ref(r) => f(&r.borrow()),
+                Handle::Clo(c) => {
+                    for (_, v) in &c.captures {
+                        f(v);
+                    }
+                    if let Some(bt) = &c.bound_this {
+                        f(bt);
+                    }
+                }
             }
         }
 
         let mut handles: HashMap<GcNode, Handle> = HashMap::default();
         let mut in_edges: HashMap<GcNode, usize> = HashMap::default();
-        let mut children: HashMap<GcNode, Vec<GcNode>> = HashMap::default();
         let mut work: VecDeque<GcNode> = VecDeque::new();
         for &id in roots {
             let Some(rc) = self.created.get(&id) else { continue };
@@ -2904,41 +2972,17 @@ impl<'m> Vm<'m> {
                 work.push_back(node);
             }
         }
+        // Pass 1 — discovery: handles + in-graph edge counts, no child storage.
         while let Some(node) = work.pop_front() {
-            let child_vals: Vec<Zval> = match handles.get(&node).expect("worklist node has handle") {
-                Handle::Obj(o) => {
-                    let b = o.borrow();
-                    let mut vs: Vec<Zval> = b.props.iter().map(|(_, v)| v.clone()).collect();
-                    if let Some(pi) = &b.proxy_instance {
-                        vs.push((**pi).clone());
-                    }
-                    vs
+            let h = handles.get(&node).expect("worklist node has handle").dup();
+            each_child(&h, |v| {
+                let Some(cn) = node_key(v) else { return };
+                *in_edges.entry(cn).or_insert(0) += 1;
+                if let std::collections::hash_map::Entry::Vacant(e) = handles.entry(cn) {
+                    e.insert(handle_of(v));
+                    work.push_back(cn);
                 }
-                // A scalar-only array has no outgoing edges — nothing to walk
-                // (it can still be counted dead if nothing external holds it).
-                Handle::Arr(a) if !a.may_hold_containers() => Vec::new(),
-                Handle::Arr(a) => a.iter().map(|(_, v)| v.clone()).collect(),
-                Handle::Ref(r) => vec![r.borrow().clone()],
-                Handle::Clo(c) => {
-                    let mut vs: Vec<Zval> = c.captures.iter().map(|(_, v)| v.clone()).collect();
-                    if let Some(bt) = &c.bound_this {
-                        vs.push(bt.clone());
-                    }
-                    vs
-                }
-            };
-            let mut kids = Vec::new();
-            for v in &child_vals {
-                if let Some((cn, ch)) = node_of(v) {
-                    *in_edges.entry(cn).or_insert(0) += 1;
-                    kids.push(cn);
-                    if let std::collections::hash_map::Entry::Vacant(e) = handles.entry(cn) {
-                        e.insert(ch);
-                        work.push_back(cn);
-                    }
-                }
-            }
-            children.insert(node, kids);
+            });
         }
         // External check. `known` = references this walk can account for
         // without an outside holder: our own handle clone, and `created` for a
@@ -2966,14 +3010,16 @@ impl<'m> Vm<'m> {
                 live.push_back(*node);
             }
         }
+        // Pass 2 — live propagation, re-reading edges by borrow.
         while let Some(node) = live.pop_front() {
-            if let Some(kids) = children.get(&node) {
-                for k in kids {
-                    if is_live.insert(*k) {
-                        live.push_back(*k);
+            let h = handles.get(&node).expect("live node has handle").dup();
+            each_child(&h, |v| {
+                if let Some(cn) = node_key(v) {
+                    if is_live.insert(cn) {
+                        live.push_back(cn);
                     }
                 }
-            }
+            });
         }
         let mut whites = GcWhites {
             objs: Vec::new(),
@@ -3001,13 +3047,20 @@ impl<'m> Vm<'m> {
             all_white.push(*n);
         }
         whites.objs.sort_unstable();
-        for (n, kids) in children {
-            if is_live.contains(&n) {
-                continue;
-            }
-            let wk: Vec<GcNode> = kids.into_iter().filter(|k| !is_live.contains(k)).collect();
+        // White→white child lists, rebuilt only over the white subgraph (the
+        // old whole-graph children map filtered to the same entries).
+        for n in &all_white {
+            let h = handles.get(n).expect("white node has handle").dup();
+            let mut wk: Vec<GcNode> = Vec::new();
+            each_child(&h, |v| {
+                if let Some(cn) = node_key(v) {
+                    if !is_live.contains(&cn) {
+                        wk.push(cn);
+                    }
+                }
+            });
             if !wk.is_empty() {
-                whites.children.insert(n, wk);
+                whites.children.insert(*n, wk);
             }
         }
         // Refcount-death simulation (see [`GcWhites::uncounted`]): peel the
