@@ -5121,7 +5121,9 @@ impl<'m> super::Vm<'m> {
                         // rest take this path.
                         let noop = self.gc_buf_head >= self.gc_buf.len()
                             && (!*main || self.gc_light_demoted.is_empty())
-                            && self.gc_cycle_roots.len() < self.gc_cycle_threshold;
+                            && (!self.gc_enabled
+                                || self.gc_cycle_roots.len() + self.gc_ctr_roots.len()
+                                    < self.gc_cycle_threshold);
                         if !noop {
                             self.gc_sweep(top, ip, *main)?;
                         }
