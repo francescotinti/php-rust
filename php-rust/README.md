@@ -24,8 +24,10 @@ interpreter, not to pass a toy subset.
 > destructor timing, property hooks, lazy objects, fibers, and an
 > opcache-like per-request unit cache. Current front: **performance** — a
 > measured arc of specializing-interpreter work has brought the WordPress
-> media benchmark from 4.1× to **2.71×** the oracle's CPU and the full-suite
-> master CPU to **2.11×** — then Laravel validation.
+> media benchmark to **~2.9×** the oracle's CPU, and an owner-level memory
+> attribution (exact reached-vs-live reconciliation per allocation) just
+> cut the peak-footprint gap **from 11.9× to 4.3×** in one session — then
+> Laravel validation.
 
 ## Coverage at a glance
 
@@ -33,7 +35,7 @@ interpreter, not to pass a toy subset.
 | --- | --- |
 | Core / language stdlib functions | **539 / 654 (82%)** |
 | All internal functions | 1017 / 2143 (47%) |
-| Zend test corpus passing | **2609** (64.3% of runnable) |
+| Zend test corpus passing | **2635** (65.0% of runnable) |
 | WordPress core suite | **effective parity** (single-site AND multisite: **1** declared name-diff each) |
 
 Full, measured breakdown → **[COVERAGE.md](COVERAGE.md)**.
@@ -109,10 +111,12 @@ Near-term, highest-leverage work (see [COVERAGE.md](COVERAGE.md) for the data,
 1. **Performance** — the WordPress suite is at parity; a data-driven
    specializing-interpreter arc (typed fast paths, bigram-fused opcodes,
    scope-aware inline caches, call-site specialization, Zend-style fast
-   shutdown) has taken the media benchmark from 4.1× to **2.71×** the
-   oracle's CPU and the full-suite master CPU to **2.11×** (12 min vs 5:39).
-   Next: the GC note/demote churn (in-object buffer flag) and live-data
-   memory footprint. Plan: NEXT_SESSION_WORDPRESS.md.
+   shutdown) took the media benchmark from 4.1× to **~2.9×** the oracle's
+   CPU, and the **memory-attribution arc** (exact reached-vs-live
+   reconciliation over every VM root) just cut the peak-footprint gap
+   **from 11.9× to 4.3×**. Next: module-retention shrink (~0.30G) and
+   full-suite CPU attribution (currently 3.42×). Plan:
+   NEXT_SESSION_WORDPRESS.md.
 2. **Laravel** as the second framework validation target once the perf
    pass lands.
 3. Remaining extension surfaces on demand — ext/tidy (one WP test dataset),

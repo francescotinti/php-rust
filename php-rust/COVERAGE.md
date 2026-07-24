@@ -7,7 +7,7 @@ functions with `function_exists()` inside `phpr` (grouped by
 `ReflectionFunction::getExtensionName()`); the corpus number is the real pass
 count of the upstream Zend test suite under `phpt-runner`.
 
-_Last measured: 2026-07-23 (WP-39) · reference: PHP 8.5.7 (`get_defined_functions()`)._
+_Last measured: 2026-07-24 (WP-47) · reference: PHP 8.5.7 (`get_defined_functions()`)._
 
 ---
 
@@ -17,11 +17,11 @@ _Last measured: 2026-07-23 (WP-39) · reference: PHP 8.5.7 (`get_defined_functio
 | --- | --- |
 | Internal functions implemented | **1017 / 2143** (47%) |
 | — of which **core / language stdlib** (standard + Core + date) | **539 / 654** (82%) |
-| Zend test corpus (`Zend/tests/*.phpt`) | **2609 passing** — 64.3% of runnable (2609/4056) |
+| Zend test corpus (`Zend/tests/*.phpt`) | **2635 passing** — 65.0% of runnable (2635/4056) |
 | **WordPress core test suite** | **full effective parity** — single-site 30,472 tests AND multisite 31,278 tests each at **a single declared name-diff**, stable by name across runs |
 | Fully-complete areas | ctype, json, SimpleXML, zlib, bcmath, tokenizer, session, **xml**, **fileinfo**, **tidy**, PDO core |
 
-Corpus breakdown: 5305 total · **2609 pass** · 1447 fail · 1249 skip (skips are
+Corpus breakdown: 5305 total · **2635 pass** · 1421 fail · 1249 skip (skips are
 mostly tests that need an extension `phpr` hasn't ported, or SAPI-specific
 setup; the runner executes `--INI--` sections as `php -d`-style overrides).
 
@@ -123,10 +123,12 @@ XSLTProcessor (system libxslt FFI, incl. `registerPHPFunctions` callbacks),
 ZipArchive (write side), XMLReader-level SAX** are implemented as classes.
 **The WordPress track is at a single divergent test name on both the full
 single-site and multisite suites** — current work is performance: the
-specializing-interpreter arc has brought the media benchmark to **2.71×**
-the oracle's CPU (from 4.1×) and the full-suite master CPU to **2.11×**;
-next is the GC note/demote churn and the live-data memory footprint, then
-Laravel validation. See NEXT_SESSION_WORDPRESS.md.
+specializing-interpreter arc holds the media benchmark at **~2.9×** the
+oracle's CPU (from 4.1×), and the memory-attribution arc (exact
+reached-vs-live reconciliation over every VM root) has cut the
+peak-footprint gap **from 11.9× to 4.3×**; next is module-retention
+shrink and full-suite CPU attribution (3.42×), then Laravel validation.
+See NEXT_SESSION_WORDPRESS.md.
 
 ---
 

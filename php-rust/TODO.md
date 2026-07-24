@@ -6,8 +6,8 @@ as they complete. Deliberate behavioural deviations are catalogued in
 [`PHPR_DIVERGENCES_FROM_PHP.md`](PHPR_DIVERGENCES_FROM_PHP.md); measured
 coverage in [`COVERAGE.md`](COVERAGE.md).
 
-Current state (2026-07-23, post session WP-39): Zend corpus **2609** passing
-(64.3% of runnable; gate baseline **1447** fails by name) · internal functions
+Current state (2026-07-24, post session WP-47): Zend corpus **2635** passing
+(65.0% of runnable; gate baseline **1421** fails by name) · internal functions
 **1017/2143, 47%** (core stdlib **539/654, 82%**). **WORDPRESS: the full
 single-site core PHPUnit suite (30,472 tests, wordpress-develop trunk) AND
 multisite (31,278 tests) are each at a SINGLE declared name-diff vs the
@@ -16,14 +16,17 @@ installs and serves on **real MySQL** via native `mysqli`;
 wp-admin/front/REST/permalinks **byte-identical over HTTP** (`phpr -S`
 SAPI); media byte-parity on **system libgd FFI** (+exif + fileinfo native);
 XSLT on **system libxslt** with the real **registerPHPFunctions/php:function
-trampoline** (xsl phpt 63/64). Perf: the specializing-interpreter arc
-(WP-29..39 — `&'m`-op dispatch, typed fast paths, bigram-fused opcodes,
-scope-aware PropIc/MethodIc, call-site specialization, packed arrays +
-slot-based props, frame arena/slimming, Zend-style **fast shutdown** +
-sweep empty fast-path) has taken the media benchmark from 4.1× to **2.71×**
-the oracle's CPU and the full-suite master CPU to **2.11×** (11:56 vs 5:39)
-— **next front: the GC note/demote churn (in-object buffer flag; drop-order
-sentinels already pinned), then live-data memory footprint**
+trampoline** (xsl phpt 63/64). The GC is now a **Zend-model cycle collector
+over objects AND containers** (Weak root buffer, Zend-exact
+`gc_collect_cycles()` counts, real `gc_enable`/`gc_status`; gc family
+36→14 fails, WP-46). Perf: the specializing-interpreter arc (WP-29..44)
+holds the media benchmark at **~2.9×** the oracle's CPU; the **memory
+attribution arc (WP-45..47)** — exact reached-vs-live reconciliation per
+allocation over every Zval-bearing VM field — found the dominant holder
+(an uneviced ReflectionMethod-descriptor memo, 456k entries/2.48G under
+PHPUnit mocks) and cut the **peak-footprint gap from 11.9× to 4.3×** in
+one lever; full-suite master CPU 3.42× (recovery arc open) — **next:
+module-retention shrink (Fase 1.1, ~0.30G) + full-suite CPU attribution**
 (NEXT_SESSION_WORDPRESS.md). Other stacks at parity: **symfony/http-kernel
 CLOSED 0/0 (1665)**, http-foundation 0 errors, Doctrine ORM 3484 (3E/13F
 declared, stable by name) + DBAL 3769/0/0, PHPUnit 9/11/13, Composer,
