@@ -5119,11 +5119,28 @@ impl<'m> super::Vm<'m> {
                         // walk/clear empty buffers. gc-census (media): 53M
                         // statement sweeps, ~6M with a non-empty buffer — the
                         // rest take this path.
+                        // WP-50: the skip bound must match the trigger's
+                        // effective bound `max(threshold, purge_floor)`
+                        // (vm/mod.rs sweep tail) — with the WP-49 trigger-time
+                        // tombstone purge the raw buffer sits in the band
+                        // [threshold, floor) most of the time, and a body
+                        // entry there does nothing at all: no candidates (the
+                        // note buffer is empty here), no purge, no collect.
+                        // Full census: 1.014,7M light entries, ~805M of them
+                        // band-only.
                         let noop = self.gc_buf_head >= self.gc_buf.len()
                             && (!*main || self.gc_light_demoted.is_empty())
                             && (!self.gc_enabled
                                 || self.gc_cycle_roots.len() + self.gc_ctr_roots.len()
-                                    < self.gc_cycle_threshold);
+                                    < self.gc_cycle_threshold.max(self.gc_purge_floor));
+                        #[cfg(feature = "gc-census")]
+                        if noop
+                            && self.gc_enabled
+                            && self.gc_cycle_roots.len() + self.gc_ctr_roots.len()
+                                >= self.gc_cycle_threshold
+                        {
+                            super::gc_census::sweep_band_skipped();
+                        }
                         if !noop {
                             self.gc_sweep(top, ip, *main)?;
                         }

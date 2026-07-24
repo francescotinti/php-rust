@@ -15,6 +15,12 @@ struct GcCensus {
     notes_inserted: u64,
     sweeps_main: u64,
     sweeps_light: u64,
+    /// WP-50: statement sweeps skipped by the noop fast path ONLY because the
+    /// purge-floor raised the effective bound (pressure ≥ threshold but <
+    /// max(threshold, floor)) — the band entries the WP-49 lever created.
+    /// Conservation identity vs the WP-49 census: light + band_skipped here
+    /// must equal the old light count on the same (deterministic) workload.
+    sweeps_band_skipped: u64,
     /// Candidates freed (or destructor-scheduled) by refcount at a sweep.
     cand_freed: u64,
     /// Candidates demoted to the cycle-roots buffer (strong_count > 2).
@@ -97,6 +103,7 @@ pub fn note_inserted() { bump(|c| c.notes_inserted += 1); }
 pub fn sweep(main: bool) {
     bump(|c| if main { c.sweeps_main += 1 } else { c.sweeps_light += 1 });
 }
+pub fn sweep_band_skipped() { bump(|c| c.sweeps_band_skipped += 1); }
 pub fn cand_freed() { bump(|c| c.cand_freed += 1); }
 pub fn cand_demoted() { bump(|c| c.cand_demoted += 1); }
 pub fn collect(roots: usize, freed: usize) {
@@ -187,7 +194,7 @@ pub fn dump() {
     let report = format!(
         "== PHPR_GC_CENSUS ==\n\
          notes {} (inserted {})\n\
-         sweeps main {} / light {}\n\
+         sweeps main {} / light {} / band_skipped {}\n\
          candidates freed {} / demoted {}\n\
          collects {} (roots {} freed {}) threshold_last {}\n\
          collect calls {} (explicit {}) distinct_obj_roots {} reroot {} live_roots {}\n\
@@ -195,6 +202,7 @@ pub fn dump() {
          classify_ms {}\n\
          reflect cache hits {} / misses {} / evictions {}\n",
         c.notes, c.notes_inserted, c.sweeps_main, c.sweeps_light,
+        c.sweeps_band_skipped,
         c.cand_freed, c.cand_demoted,
         c.collects, c.collect_roots, c.collect_freed, c.threshold_last,
         c.collect_calls, c.explicit_calls, c.seen_roots.len(), c.reroot_roots,
