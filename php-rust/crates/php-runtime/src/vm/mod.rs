@@ -4022,10 +4022,13 @@ impl<'m> Vm<'m> {
         // and offset the unit's static-cell ids past the live `self.statics` range.
         relocate_module_class_ids(&mut module, &class_remap, self.statics.len());
         #[cfg(feature = "mem-census")]
-        php_types::memcensus::alloc(
-            php_types::memcensus::CH_UNIT,
-            module_census_bytes(&module),
-        );
+        {
+            php_types::memcensus::alloc(
+                php_types::memcensus::CH_UNIT,
+                module_census_bytes(&module),
+            );
+            php_types::memcensus::unit_slack(module_slack_bytes(&module) as u64);
+        }
         let leaked: &'static Module = Box::leak(Box::new(module));
         self.run_linked(leaked, &new_locals, eval_origin, scope_bridge)
     }
@@ -4667,10 +4670,13 @@ impl<'m> Vm<'m> {
         let (class_remap, new_locals) = self.unit_class_remap(&module);
         relocate_module_class_ids(&mut module, &class_remap, static_off);
         #[cfg(feature = "mem-census")]
-        php_types::memcensus::alloc(
-            php_types::memcensus::CH_UNIT,
-            module_census_bytes(&module),
-        );
+        {
+            php_types::memcensus::alloc(
+                php_types::memcensus::CH_UNIT,
+                module_census_bytes(&module),
+            );
+            php_types::memcensus::unit_slack(module_slack_bytes(&module) as u64);
+        }
         let leaked: &'static Module = Box::leak(Box::new(module));
         if pure && self.main_hir.is_some() {
             if let Some(uk) = unit_key {
@@ -13271,6 +13277,43 @@ fn gc_verify_enabled() -> bool {
 /// strong_count > 1) are counted once by their owner; Const string BYTES are
 /// excluded (already tracked by the STR channel at construction) — only the
 /// Vec<Const> slab is counted here.
+/// Fase 1.1 (WP-48): the SLACK portion of [`module_census_bytes`] — the
+/// `capacity − len` bytes of the same Vec fields the unit channel counts by
+/// capacity. Measured at the leak site into [`php_types::memcensus::unit_slack`]:
+/// on a pre-shrink binary this is the predicted saving of the shrink lever;
+/// post-shrink it must read ≈ 0.
+#[cfg(feature = "mem-census")]
+fn module_slack_bytes(m: &Module) -> usize {
+    use crate::bytecode::{Const, Func, Op};
+    fn func_slack(f: &Func) -> usize {
+        (f.ops.capacity() - f.ops.len()) * std::mem::size_of::<Op>()
+            + (f.lines.capacity() - f.lines.len()) * std::mem::size_of::<u32>()
+            + (f.consts.capacity() - f.consts.len()) * std::mem::size_of::<Const>()
+            + f.param_defaults.iter().flatten().map(func_slack).sum::<usize>()
+            + (f.exc_table.capacity() - f.exc_table.len()) * 16
+    }
+    let mut b = func_slack(&m.main);
+    for f in &m.functions {
+        if Rc::strong_count(f) == 1 {
+            b += func_slack(f);
+        }
+    }
+    for f in &m.closures {
+        b += func_slack(f);
+    }
+    for c in &m.classes {
+        if Rc::strong_count(c) == 1 {
+            for meth in &c.methods {
+                b += func_slack(&meth.func);
+            }
+            if let Some(pi) = &c.prop_init {
+                b += func_slack(pi);
+            }
+        }
+    }
+    b
+}
+
 #[cfg(feature = "mem-census")]
 fn module_census_bytes(m: &Module) -> usize {
     use crate::bytecode::{Const, Func, Op};

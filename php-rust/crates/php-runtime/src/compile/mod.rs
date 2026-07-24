@@ -211,7 +211,7 @@ fn compile_program_impl(
     fn_ci.sort_unstable();
     let fn_ci = fn_ci.into_boxed_slice();
 
-    let m = Module {
+    let mut m = Module {
         main,
         functions,
         fn_ci,
@@ -227,6 +227,9 @@ fn compile_program_impl(
         strict: program.strict,
         const_attributes,
     };
+    // Fase 1.1 (WP-48): compiled modules are leaked for the life of the
+    // process — release the push-growth capacity slack before linking.
+    m.shrink();
     // Diagnostic bytecode dump (Leva B, gated on PHPR_DUMP_OPS — see
     // `reg_lower::dump_module_ops`). No-op when the env var is unset.
     reg_lower::dump_module_ops(&m);

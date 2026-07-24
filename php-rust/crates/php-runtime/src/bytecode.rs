@@ -1385,6 +1385,132 @@ pub struct Func {
     pub exc_table: Vec<ExcRegion>,
 }
 
+impl Func {
+    /// Release the push-growth capacity slack of every retained Vec (Fase 1.1,
+    /// WP-48). Compiled modules are leaked for the life of the process
+    /// (`Vm::drive_unit`), so slack bytes are retained bytes; runs once per
+    /// compile ([`crate::compile`]), never on the execution path.
+    pub fn shrink(&mut self) {
+        self.ops.shrink_to_fit();
+        self.lines.shrink_to_fit();
+        self.consts.shrink_to_fit();
+        self.static_vars.shrink_to_fit();
+        self.exc_table.shrink_to_fit();
+        self.attributes.shrink_to_fit();
+        for sv in &mut self.static_vars {
+            if let StaticInit::Thunk(t) = &mut sv.init {
+                t.shrink();
+            }
+        }
+        for d in self.param_defaults.iter_mut().flatten() {
+            d.shrink();
+        }
+        for a in &mut self.attributes {
+            a.shrink();
+        }
+        for al in self.param_attributes.iter_mut() {
+            al.shrink_to_fit();
+            for a in al {
+                a.shrink();
+            }
+        }
+    }
+}
+
+impl CompiledAttribute {
+    pub fn shrink(&mut self) {
+        self.new_thunk.shrink();
+        self.args_thunk.shrink();
+    }
+}
+
+impl CompiledClass {
+    /// See [`Func::shrink`]: every nested thunk/method body plus the class's
+    /// own metadata Vecs.
+    pub fn shrink(&mut self) {
+        self.interfaces.shrink_to_fit();
+        self.prop_defaults.shrink_to_fit();
+        self.methods.shrink_to_fit();
+        self.abstract_methods.shrink_to_fit();
+        self.abstract_sigs.shrink_to_fit();
+        self.own_prop_vis.shrink_to_fit();
+        self.static_props.shrink_to_fit();
+        self.consts.shrink_to_fit();
+        self.enum_cases.shrink_to_fit();
+        self.attributes.shrink_to_fit();
+        self.uses_traits.shrink_to_fit();
+        self.uninit_props.shrink_to_fit();
+        for m in &mut self.methods {
+            m.func.shrink();
+        }
+        for m in &mut self.abstract_sigs {
+            m.func.shrink();
+        }
+        if let Some(pi) = &mut self.prop_init {
+            pi.shrink();
+        }
+        for sp in &mut self.static_props {
+            if let StaticInit::Thunk(t) = &mut sp.init {
+                t.shrink();
+            }
+        }
+        for c in &mut self.consts {
+            c.func.shrink();
+            c.attributes.shrink_to_fit();
+            for a in &mut c.attributes {
+                a.shrink();
+            }
+        }
+        for a in &mut self.attributes {
+            a.shrink();
+        }
+        for al in self.prop_attributes.values_mut() {
+            al.shrink_to_fit();
+            for a in al {
+                a.shrink();
+            }
+        }
+        for info in self.prop_info.values_mut() {
+            if let Some(h) = &mut info.hooks {
+                if let Some(g) = &mut h.get {
+                    g.shrink();
+                }
+                if let Some(s) = &mut h.set {
+                    s.shrink();
+                }
+            }
+        }
+    }
+}
+
+impl Module {
+    /// See [`Func::shrink`]. An `Rc`-shared entry (prelude function / interned
+    /// class stub, `strong_count > 1`) was already shrunk when its owning
+    /// module compiled — `Rc::get_mut` skips it, same discipline as
+    /// `relocate_module_class_ids`.
+    pub fn shrink(&mut self) {
+        self.main.shrink();
+        self.functions.shrink_to_fit();
+        self.closures.shrink_to_fit();
+        self.classes.shrink_to_fit();
+        self.conditional_traits.shrink_to_fit();
+        self.deferred.shrink_to_fit();
+        for f in &mut self.functions {
+            if let Some(f) = std::rc::Rc::get_mut(f) {
+                f.shrink();
+            }
+        }
+        for f in &mut self.closures {
+            f.shrink();
+        }
+        for c in &mut self.classes {
+            if let Some(c) = std::rc::Rc::get_mut(c) {
+                c.shrink();
+            }
+        }
+    }
+}
+
 /// One protected `try` region: the half-open op range `[start, end)` it guards
 /// and the `target` it routes an in-flight exception to (EXC). For a *catch*
 /// region (`is_finally == false`) the target is the catch-dispatch block; for a

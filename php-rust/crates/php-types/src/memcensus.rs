@@ -39,6 +39,16 @@ pub const G_UNITS: usize = 1; // leaked modules count
 pub const N_GAUGES: usize = 2;
 static GAUGES: [AtomicI64; N_GAUGES] = [const { AtomicI64::new(0) }; N_GAUGES];
 
+/// Fase 1.1 (WP-48): cumulative Vec capacity SLACK (capacity − len, in the
+/// same terms [`CH_UNIT`] counts) of every leaked module, measured at the
+/// leak site. On a pre-shrink binary this IS the predicted saving of the
+/// shrink lever; on a post-shrink binary it must read ≈ 0 (mechanism-check).
+static UNIT_SLACK: AtomicU64 = AtomicU64::new(0);
+
+pub fn unit_slack(bytes: u64) {
+    UNIT_SLACK.fetch_add(bytes, Relaxed);
+}
+
 static PROXY_PEAK: AtomicI64 = AtomicI64::new(0);
 static REGISTERED: AtomicBool = AtomicBool::new(false);
 /// Next proxy-total watermark (bytes) that triggers a snapshot line.
@@ -169,9 +179,10 @@ fn dump_line(tag: &str) {
         ));
     }
     line.push_str(&format!(
-        " created={} units={} proxy_peak={}\n",
+        " created={} units={} unit_slack={} proxy_peak={}\n",
         GAUGES[G_CREATED].load(Relaxed),
         GAUGES[G_UNITS].load(Relaxed),
+        UNIT_SLACK.load(Relaxed),
         PROXY_PEAK.load(Relaxed),
     ));
     let _ = f.write_all(line.as_bytes());
