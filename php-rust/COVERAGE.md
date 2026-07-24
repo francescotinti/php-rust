@@ -7,7 +7,7 @@ functions with `function_exists()` inside `phpr` (grouped by
 `ReflectionFunction::getExtensionName()`); the corpus number is the real pass
 count of the upstream Zend test suite under `phpt-runner`.
 
-_Last measured: 2026-07-24 (WP-48) · reference: PHP 8.5.7 (`get_defined_functions()`)._
+_Last measured: 2026-07-24 (WP-49) · reference: PHP 8.5.7 (`get_defined_functions()`)._
 
 ---
 
@@ -127,10 +127,12 @@ specializing-interpreter arc holds the media benchmark at **~2.9×** the
 oracle's CPU (from 4.1×), and the memory-attribution arc (exact
 reached-vs-live reconciliation over every VM root) has cut the
 peak-footprint gap **from 11.9× to ~4.3×** with the retained-module
-channel shrunk by its exact measured slack (100.0% predicted-vs-actual);
-the full-suite CPU residual (3.4×) is now fully attributed to the
-cycle-collector walk — next are the collector levers, then Laravel
-validation. See NEXT_SESSION_WORDPRESS.md.
+channel shrunk by its exact measured slack (100.0% predicted-vs-actual).
+The attributed full-suite CPU residual (3.4×, cycle-collector walk) was
+then cut to **~2.5×** by a Zend-style purge of refcount-dead roots at
+the GC trigger (collector rounds 1005→297, freed count conserved to
++0.5%, media peak footprint −2.2% as a bonus) — next is the remaining
+~1.2× residual, then Laravel validation. See NEXT_SESSION_WORDPRESS.md.
 
 ---
 

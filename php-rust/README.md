@@ -26,9 +26,11 @@ interpreter, not to pass a toy subset.
 > measured arc of specializing-interpreter work has brought the WordPress
 > media benchmark to **~2.9×** the oracle's CPU, and an owner-level memory
 > attribution (exact reached-vs-live reconciliation per allocation) cut
-> the peak-footprint gap **from 11.9× to ~4.3×**; the full-suite CPU
-> residual is now fully attributed (measured) to the cycle-collector
-> walk, giving the next levers a numeric target — then Laravel validation.
+> the peak-footprint gap **from 11.9× to ~4.3×**; acting on that
+> attribution, a Zend-style purge of dead roots at the GC trigger cut the
+> full WordPress-suite CPU **from 3.4× to ~2.5×** in one lever (same
+> garbage collected in one third of the collector rounds) — next: the
+> remaining ~1.2× residual, then Laravel validation.
 
 ## Coverage at a glance
 
@@ -117,10 +119,13 @@ Near-term, highest-leverage work (see [COVERAGE.md](COVERAGE.md) for the data,
    reconciliation over every VM root) cut the peak-footprint gap
    **from 11.9× to ~4.3×**; the retained-module channel then shrank by
    its exact measured Vec-capacity slack (−70.6MB, 100.0%
-   predicted-vs-actual, zero CPU cost) and the full-suite CPU residual
-   (3.4× vs 2.06×) is now fully attributed — measured, not suspected —
-   to the cycle-collector classify walk. Next: collector levers with
-   those numbers. Plan: NEXT_SESSION_WORDPRESS.md.
+   predicted-vs-actual, zero CPU cost), the full-suite CPU residual was
+   attributed — measured, not suspected — to the cycle-collector classify
+   walk, and acting on it a Zend-style purge of refcount-dead roots at
+   the GC trigger cut the full suite **from 3.4× to ~2.5×** (collector
+   rounds 1005→297 with the freed count conserved, media peak footprint
+   −2.2% as a bonus). Next: the remaining ~1.2× residual (reflect-cache
+   thrash, boundary collects). Plan: NEXT_SESSION_WORDPRESS.md.
 2. **Laravel** as the second framework validation target once the perf
    pass lands.
 3. Remaining extension surfaces on demand — ext/tidy (one WP test dataset),

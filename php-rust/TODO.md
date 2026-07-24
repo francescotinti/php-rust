@@ -6,7 +6,7 @@ as they complete. Deliberate behavioural deviations are catalogued in
 [`PHPR_DIVERGENCES_FROM_PHP.md`](PHPR_DIVERGENCES_FROM_PHP.md); measured
 coverage in [`COVERAGE.md`](COVERAGE.md).
 
-Current state (2026-07-24, post session WP-48): Zend corpus **2635** passing
+Current state (2026-07-24, post session WP-49): Zend corpus **2635** passing
 (65.0% of runnable; gate baseline **1421** fails by name) · internal functions
 **1017/2143, 47%** (core stdlib **539/654, 82%**). **WORDPRESS: the full
 single-site core PHPUnit suite (30,472 tests, wordpress-develop trunk) AND
@@ -28,9 +28,16 @@ PHPUnit mocks) and cut the **peak-footprint gap from 11.9× to ~4.3×**;
 WP-48 then shrank the retained-module channel by the *exact* measured
 Vec-capacity slack (−70.6MB, 100.0% predicted-vs-actual, zero CPU cost)
 and **attributed the full-suite CPU residual (3.4× vs 2.06×) entirely to
-the cycle-collector classify walk** (494.9s over 1005 collects, measured)
-— **next: collector levers with those numbers + `created`→Weak (Fase
-1.2) + cold-box Object (Fase 1.3)** (NEXT_SESSION_WORDPRESS.md). Other stacks at parity: **symfony/http-kernel
+the cycle-collector classify walk** (494.9s over 1005 collects, measured);
+WP-49 acted on that attribution: the auto-collect trigger was firing on
+buffers ~97% full of refcount-dead tombstones (Zend removes those at
+death) — a lazy purge at the trigger cut the **full suite from 3.4× to
+~2.5×** (rounds 1005→297, freed conserved to +0.5%, media peak −2.2%),
+and the measured `created`-channel split (rc==1 subset = 0.1%) falsified
+the planned `created`→Weak lever: the pinned mass is uncollected cyclic
+garbage — **next: the ~1.2× residual (reflect-cache thrash, light-sweep
+entries) + boundary collects (Fase 1.4) + cold-box Object (Fase 1.3)**
+(NEXT_SESSION_WORDPRESS.md). Other stacks at parity: **symfony/http-kernel
 CLOSED 0/0 (1665)**, http-foundation 0 errors, Doctrine ORM 3484 (3E/13F
 declared, stable by name) + DBAL 3769/0/0, PHPUnit 9/11/13, Composer,
 wp-cli, Monolog. Laravel afterwards as validation.
