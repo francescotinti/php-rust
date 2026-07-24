@@ -56,11 +56,23 @@
    non hanno campo mutabile in safe Rust — solo gli Object hanno GcMark);
    collect al confine test (nessun segnale di boundary visibile alla VM).
 
-## Gate (in corso / da completare)
+## Gate
 
-- cargo test --release: **1639/0** su `fa100ad` (2 sentinelle GC incluse).
-- corpus per nome vs baseline 1421 (`gate-out-wp46-archived/corpus.fails`): (TBD)
-- A/B 6 round old=`e6af390`: (TBD)
+- cargo test --release: **1639/0** sia su `fa100ad` che su `d684cd7`
+  (sentinelle `gc_object_cycle_collect_sentinel` +
+  `gc_container_cycle_collect_acceptance` anche rilanciate singolarmente:
+  verdi).
+- Corpus per nome vs baseline 1421: **IDENTICO due volte** — su `fa100ad`
+  (solo eviction) e su `d684cd7` (classify 2-passate + isteresi).
+- **A/B 6 round old=`e6af390`** (oracle 21,12/21,30 stabilissimo):
+  - **peak footprint fisico: old 4,877-4,924G → new 1,743-1,792G = −63,8%**;
+    vs oracle ~0,41G il gap passa **da ~11,9× a ~4,3×** — il più grande
+    salto footprint della storia del progetto.
+  - user CPU: old 62,77s medio → new 63,60s = **+1,3%** (6/6 round
+    new>old, delta 0,2-2,0s) — la ricostruzione dei descrittori evitti
+    costa più di quanto il classify snellito recuperi sul media group.
+    **TENUTO per direttiva no-revert**; il bersaglio vero dell'isteresi è
+    la full-suite (3,71× WP-46).
 - gate22 completo col conteggio: (TBD)
 - full-suite vs run33 (88 nomi): (TBD)
 
