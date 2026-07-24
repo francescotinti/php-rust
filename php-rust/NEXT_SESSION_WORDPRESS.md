@@ -1,25 +1,26 @@
-# Rotta WORDPRESS-FIRST — WP-track (dopo WP-44: stadio 2 registri BOCCIATO su A/B in TRE forme e revertato → ARCO REGISTRI CHIUSO; si apre la validazione Laravel o il backlog)
+# Rotta WORDPRESS-FIRST — WP-track (dopo WP-46: GC container-roots LANDED a parità record, ma il bersaglio footprint ~3G NON è caduto → WP-47 = ri-attribuzione owner-level)
 
-> 🚫 **WP-44 (2026-07-23, `35ff89f`+`1e365db`+`f4c80cf` revertati — tree
-> finale BYTE-IDENTICO a `e3c8e0b`/WP-43)** — **STADIO 2 Leva B eseguito,
-> provato e BOCCIATO su A/B in TRE forme: +1,17% (v1 enum-operand),
-> +1,28% (v2 enum + risoluzione singola), +1,01% (v3 "raw registers" dal
-> rebuttal Gemini: 7 shape monomorfe u16, ZERO dispatch operandi runtime,
-> mirror const-lhs a compile time) — 18/18 round new>old, oracle
-> 20,74-20,80 stabilissimo su 6 serie. Revert secco; le fusioni
-> WP-32/33/34 restano; l'infra stadio 1 resta dormiente.** Prima dei
-> verdetti erano PASSATI tutti i criteri di parità: dump flag-off byte-id
-> a WP-43, cataloghi diff puliti, **gate22 COMPLETO verde 2× (off e on)**
-> per v1/v2 e **corpus intero flag-on 1447 IDENTICO** per v3 — bocciatura
-> solo fisica CPU, non correttezza. ⭐⭐ Epitaffio (3 forme = verbale
-> solido): il costo strutturale è il NUMERO DI CORPI HANDLER CALDI nel
-> run_loop, NON lo stile di estrazione degli operandi — il rebuttal
-> "colpa dell'enum" è falsificato (v3 la migliore ma sempre sopra old);
-> l'elisione dei LoadVar non ripaga il working-set I-cache/BTB aggiunto.
-> ⭐⭐ Un gate a flag ambientale vuole la PROVA POSITIVA nel log
-> (`gate22-regon.sh` conta le forme nel dump e abortisce a 0; `ps eww`
-> su macOS non mostra l'env nemmeno dei processi propri).
-> **Storia: `sessions/WP_SESSION_44.md`.**
+> ⚡ **WP-46 (2026-07-24, `d4a02fa`→`e6af390`)** — **Cycle collector esteso
+> ai root NON-oggetto (array condivisi, inner delle Ref, closure), fedele a
+> zend_gc.c letto via Vexp: buffer container a `Weak` (CtrWeak, dedup
+> `weak_count==0`, zero perturbazione dei conteggi), cicli puro-container
+> spezzati svuotando le Ref-cell white (unico punto di taglio in safe Rust:
+> array COW, capture fisse), conteggio `gc_collect_cycles()` Zend-esatto
+> (esclusione dtor-subtree, peel refcount-dead, eccezione DELREF-muto) —
+> 18/18 probe oracle byte-id. Under-note storici chiusi: PropUnset, BindRef
+> (`$a =& $b`), typed-unset; `gc_enable/disable/enabled/status` host-side
+> reali (INI zend.enable_gc, latch gc_active per gc_016/gc_049);
+> `*RECURSION*` senza `&`. PARITÀ RECORD: corpus 1447→1421 (0 nuovi, 26
+> fixati), famiglia gc 36→14, gate22 COMPLETO verde (option 413 / restapi
+> 3508 identici per nome col conteggio), cargo 1639/0.**
+> **MA il mechanism-check ha FALSIFICATO il bersaglio: collector operativo
+> (11 collect, 726k root processati) e freed=543 — arr 3,113M/1,9G e str
+> 23,8M/1,29G INVARIATI alla cifra; i root notati sono dati VIVI. ⭐⭐ La
+> diagnosi WP-45 "3,08G = cicli irraggiungibili" è da RI-ATTRIBUIRE:
+> irraggiungibile-dal-root-walk ≠ ciclo morto (il walk non cammina
+> FramePool/operand-stack/tabelle VM). A/B: +7,0% CPU e +2,5% footprint
+> TENUTI per direttiva no-revert (2,85× media, 12,3× peak).**
+> **Storia: `sessions/WP_SESSION_46.md`. WP-44: `sessions/WP_SESSION_44.md`.**
 
 ## 📁 Convenzioni (decisione utente 2026-07-23)
 
@@ -53,15 +54,15 @@
 - Commit AND push a ogni step; deviazioni deliberate = marker
   `BUG(port):` / `PERF(port):` / `TODO(port):`.
 
-## Stato gate per nome (gate22 completo ×2 su `35ff89f`, 2026-07-23; tree finale = stesso bytecode a flag off)
+## Stato gate per nome (gate22 completo su `e6af390`, 2026-07-24, archivio `gate-out-wp46-archived/`)
 
-- Gate22 verde due volte (flag OFF e flag ON, archivi
-  `wp22-harness/gate-out-wp44-{off,on}-archived/`): corpus **1447** ·
-  sess 28 · date 351 · refl 290 IDENTICI · ORM 3E/13F · hk 0E/0F ·
-  cargo (1640 col pass; **1637** sul tree finale revertato) · probe
-  gd/mysqli/media byte-id · http DIFF-set 16 · option 413 / restapi 3508
-  identici per nome. Post-revert: tree byte-id a `e3c8e0b` (già gated),
-  dump probe byte-id, out==oracle — full gate NON rilanciato.
+- Gate22 verde: corpus **1421** (da 1447: 0 nuovi-fail, 26 rimozioni — 22
+  famiglia gc + bug35163×2/bug35239/foreach_002 dai fix &*RECURSION*/
+  BindRef/unset-note) · sess 28 · date 351 · refl 290 IDENTICI · ORM
+  3E/13F · hk 0E/0F · cargo **1639** (1637 + 2 sentinelle WP-46) · probe
+  gd/mysqli/media byte-id · http DIFF-set 16 byte-id al WP-44 · option 413
+  / restapi 3508 identici per nome. ⚠️ nuova baseline corpus = **1421**
+  (aggiornare i confronti; fail-set in `gate-out-wp46-archived/corpus.fails`).
 - ⚠️ **MySQL**: datadir del progetto = `/Volumes/Extreme Pro/Claude/
   mysql-wp8/data` (socket `/private/tmp/mysql-wp8.sock`, porta 3306) —
   MAI `mysql.server start` naive (apre il datadir brew vergine ⇒ gate DB
@@ -85,32 +86,42 @@
 # multisite: wp19-harness/run-multisite-detached.sh <oracle|phpr>
 ```
 
-## 🎯 PROSSIMO LAVORO — ROADMAP FOOTPRINT+CPU (Fase 0 ✅, ora WP-46)
+## 🎯 PROSSIMO LAVORO — WP-47: RI-ATTRIBUZIONE owner-level del footprint
 
 **Rotta (utente 2026-07-24)**: `FOOTPRINT_CPU_ROADMAP.md` — footprint-first,
 safe-only, TUTTE le fasi comunque, **niente revert su insuccesso**.
 Laravel POSTICIPATA a valle.
 
-**⚡ WP-45 (2026-07-24, `36b7c6e`→`b9bcd84`) — Fase 0 CHIUSA col verdetto**
-(storia: `sessions/WP_SESSION_45.md`): il gap è **11,9× su peak footprint
-FISICO** (metrica nuova: `/usr/bin/time -l` "peak memory footprint") e
-l'attribuzione dice: **~3,08G (≈72% dell'eccesso) = GARBAGE CICLICO Rc
-IRRAGGIUNGIBILE** — `gc_note` buffera solo Object, i cicli via
-Ref/Array/Closure non diventano mai cycle-root (prova regina: root-walk =
-149MB PHP-visibili contro 3,53G di canali vivi; collect unico 50k root →
-freed 1; cap soglia ininfluente). Altri canali: unit ritenute 0,30G,
-stato PHP 0,15G, ~1,2G non censito (rounding/tabelle). Strumenti: feature
-`mem-census` (canali+root-walk, `PHPR_MEM_CENSUS`), `PHPR_GC_THRESHOLD_MAX`.
-Binario census SEPARATO in `phpr-mem-target/` — mai il binario di parità.
+**WP-46 ha eseguito la leva dominante e il mechanism-check l'ha
+falsificata come leva footprint** (dettaglio in testa e in
+`sessions/WP_SESSION_46.md`): il collector esteso Zend-model è landed,
+corretto e gate-proven, ma i possible-root che transitano dai note-site
+nel run media sono VIVI (726k root → freed 543) e i canali non si sono
+mossi di una cifra. Le due letture da discriminare:
+(A) i cicli morti muoiono per vie non notate — ma ogni probe costruito per
+trovare il drop silente è finito su un sito notato o su un write-through;
+(B) **il ~3G "irraggiungibile" del WP-45 è in realtà TENUTO da holder vivi
+fuori dalle 11 categorie del root-walk** (FramePool con slot sporchi?
+operand stack di frame? ob/resources/iteratori/tabelle VM non censite?).
 
-**WP-46 = la leva dominante: estendere il cycle-collector ai root
-non-oggetto (Ref-cell, Array condivisi; valutare Closure) — modello Zend.**
-Bersaglio ~3G. Regole: sentinelle dtor-order pinnate PRIMA, gate famiglia
-gc/dtor per nome, A/B con guardia CPU (≤ +0,5% target ma NIENTE revert:
-si verbalizza e si prosegue), census mem prima/dopo = mechanism check.
-In coda (stessa fase): shrink unit (~0,3G), disciplina di confine per-test
-(`mi_collect`+drain pool), interning se il censimento duplicati lo quota.
-Fase 2 CPU invariata (RET_DEREF+ret_shape in UNA modifica, Sweep elision).
+**WP-47 = attribuzione di SECONDA generazione, PRIMA di ogni altra leva:**
+1. **Owner-tracer**: strumento mem-census che campiona CHI tiene i 3,1M
+   array vivi (1-su-N: al drop dell'ultimo handle noto risali... o più
+   semplice: walk COMPLETO del Vm — ogni campo che può tenere Zval/Rc —
+   e bilancio per-categoria fino a riconciliare il 1,9G arr + 1,29G str).
+2. Root-walk esteso: FramePool (i frame ritirati azzerano gli slot?),
+   frames stack completo, ob/output buffers, resources, iteratori,
+   session, typed_refs, IC/tabelle — qualsiasi campo Vm Zval-bearing.
+3. Se emerge il vero holder → la leva giusta (drain pool al retire?
+   disciplina di confine per-test? created→Weak Fase 1.2?) si sceglie coi
+   dati, non si indovina.
+4. Recupero CPU possibile solo DOPO l'attribuzione (rooting selettivo /
+   collect al confine test) — il +7% resta finché non si sa se serve.
+In coda (invariati): shrink unit ~0,3G (Fase 1.1), interning const-array
+(divergenza conteggio documentata), cold-box Object, Fase 2 CPU
+(RET_DEREF+ret_shape, Sweep elision).
+Residui famiglia gc pescabili: gc_047 (nota release iteratore al break),
+gc_030 (trace shape dtor-da-collect), gc_022 (temp container mid-statement).
 
 ## (storico, pre-roadmap) PROSSIMO LAVORO
 
