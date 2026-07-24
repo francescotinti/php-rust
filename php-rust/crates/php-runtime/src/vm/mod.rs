@@ -3128,6 +3128,8 @@ impl<'m> Vm<'m> {
         if self.gc_collecting {
             return Ok(0);
         }
+        #[cfg(feature = "gc-census")]
+        gc_census::collect_begin();
         self.gc_collecting = true;
         let r = self.collect_cycles_inner();
         self.gc_collecting = false;
@@ -3195,14 +3197,24 @@ impl<'m> Vm<'m> {
             self.gc_runs += 1;
             let n_roots = roots.len() + ctr_roots.len();
             #[cfg(feature = "gc-census")]
+            let n_ctr = ctr_roots.len();
+            #[cfg(feature = "gc-census")]
             let classify_t0 = std::time::Instant::now();
             let whites = self.gc_classify(&roots, ctr_roots);
             #[cfg(feature = "gc-census")]
             {
-                gc_census::classify_ns(classify_t0.elapsed().as_nanos() as u64);
-                gc_census::collect(
-                    n_roots,
-                    whites.objs.len() + whites.arrs.len() + whites.clos.len(),
+                let round_ns = classify_t0.elapsed().as_nanos() as u64;
+                let n_whites =
+                    whites.objs.len() + whites.arrs.len() + whites.clos.len();
+                gc_census::classify_ns(round_ns);
+                gc_census::collect(n_roots, n_whites);
+                gc_census::collect_round(
+                    &roots,
+                    n_ctr,
+                    n_whites,
+                    &whites.objs,
+                    self.gc_cycle_threshold,
+                    round_ns,
                 );
             }
             log::debug!(

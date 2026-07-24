@@ -143,6 +143,8 @@ impl<'m> super::Vm<'m> {
     /// `gc_collect_cycles()` — force a cycle collection now, regardless of the
     /// root-buffer threshold. Returns the number of destroyed objects.
     pub(super) fn ho_gc_collect_cycles(&mut self, _args: Vec<Zval>) -> Result<Zval, PhpError> {
+        #[cfg(feature = "gc-census")]
+        super::gc_census::mark_explicit();
         let n = self.collect_cycles()?;
         Ok(Zval::Long(n))
     }
