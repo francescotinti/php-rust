@@ -1,6 +1,12 @@
-# Test coverage & PHP compatibility
+# Test coverage & PHP compatibility (historical snapshot)
 
-*This is a living document — it is refreshed as functions and features land in phpr.*
+> ⚠️ **This page is a dated snapshot (2026-07-08) kept as part of the
+> experiment diary. The LIVE, measured coverage — refreshed at every
+> work session — is [php-rust/COVERAGE.md](php-rust/COVERAGE.md)**
+> (headline 2026-07-24: 1017/2143 functions 47%, core-stdlib 539/654
+> 82%, Zend corpus 2635/5305 = 65.0% of runnable, WordPress full suite
+> at parity with the full-suite CPU at ~2.5× the oracle).
+
 *Read the project intro in [English](README.md) · [Italiano](italiano.md).*
 
 phpr is validated against the **official PHP `.phpt` test corpus** (PHP 8.5.7). Each

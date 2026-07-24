@@ -159,11 +159,13 @@ The third dragon — the **C extension ecosystem (PECL)** — is being tackled b
 rewrites (PDO/sqlite, dom/simplexml, and curl have already fallen that way); a compatibility FFI
 layer remains the long-term option for the tail.
 
-**Fidelity** (at HEAD `8018850`, 2026-07-14): differential type-juggling vs real PHP at
+**Fidelity** (at 2026-07-24, WP-49): differential type-juggling vs real PHP at
 **0 mismatches** (37,835 cases — this is the *operator* differential, a metric distinct from the
-`.phpt` corpus); 1,550 green Rust unit/integration tests; on the official `Zend/tests` corpus
-**2,493 phpt pass** (61.5% of the runnable ones, growing every session, with a "zero pass→fail by
-name" gate on every commit); ~860 commits of history tracked session by session.
+`.phpt` corpus); **1,639** green Rust unit/integration tests; on the official `Zend/tests` corpus
+**2,635 phpt pass** (65.0% of the runnable ones, with a "zero pass→fail by name" gate on every
+commit); WordPress full core suite (30,472 tests) at parity with **full-suite CPU at ~2.5×** the
+oracle. Live measured coverage: **[php-rust/COVERAGE.md](php-rust/COVERAGE.md)**; current route:
+**[php-rust/NEXT_SESSION_WORDPRESS.md](php-rust/NEXT_SESSION_WORDPRESS.md)**.
 
 > The detailed history of the ~70 build steps lives in **[HISTORY.md](HISTORY.md)**; the
 > replicable methodological journal is in **[diary/](diary/)**.
