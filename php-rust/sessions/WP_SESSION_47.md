@@ -73,7 +73,12 @@
     costa più di quanto il classify snellito recuperi sul media group.
     **TENUTO per direttiva no-revert**; il bersaglio vero dell'isteresi è
     la full-suite (3,71× WP-46).
-- gate22 completo col conteggio: (TBD)
+- **Gate22 COMPLETO VERDE** (binario `d684cd7`, 10:08→10:31, archivio
+  `gate-out-wp47-archived/`): corpus 1421 (0 nuovi-fail) · sess 28 /
+  date 351 / refl 290 IDENTICI · ORM 3484 3E/13F per nome · hk 1665 0E/0F ·
+  cargo 1639/0 · gd/mysqli/media BYTE-ID · http DIFF-set identico (16 item
+  WP-14) · **option 413 IDENTICO col conteggio (413/1061)** · **restapi
+  3508 IDENTICO col conteggio (1E/1F = oracle)**.
 - full-suite vs run33 (88 nomi): (TBD)
 
 ## ⭐⭐ Lezioni
