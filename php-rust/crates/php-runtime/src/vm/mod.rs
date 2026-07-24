@@ -750,6 +750,40 @@ pub(crate) fn run_module_with_hir<'m>(
             vm.render_fatal(err, line);
         }
     }
+    // WP-50 Ob.2 (Fase 1.4 quota, census builds ONLY): end-of-run FULL-SCAN
+    // collect probe. `collect_cycles` roots itself from the note buffers
+    // alone, so cyclic garbage whose refcounts never moved after formation
+    // is invisible even to an explicit collect — this probe seeds EVERY
+    // live `created` entry as a cycle root and lets the classifier decide,
+    // measuring the true collectable ceiling of the created channel (the
+    // most a per-test-boundary discipline could ever de-pin). Behavior-
+    // changing (frees + destructors): never in parity builds; the census
+    // walk below then attributes the POST-collect graph.
+    #[cfg(feature = "gc-census")]
+    if std::env::var_os("PHPR_GC_EOR_FULL_COLLECT").is_some() {
+        let before = vm.created.len();
+        let ids: Vec<u32> = vm.created.keys().copied().collect();
+        for id in ids {
+            if let Some(o) = vm.created.get(&id) {
+                let bo = o.borrow();
+                if !bo.gc.cycle_root() {
+                    bo.gc.set_cycle_root(true);
+                    drop(bo);
+                    vm.gc_cycle_roots.insert(id);
+                }
+            }
+        }
+        gc_census::mark_explicit();
+        let t0 = std::time::Instant::now();
+        let freed = vm.collect_cycles().unwrap_or(-1);
+        gc_census::probe_line(&format!(
+            "eor_full_collect created_before={} created_after={} freed={} ms={}",
+            before,
+            vm.created.len(),
+            freed,
+            t0.elapsed().as_millis()
+        ));
+    }
     // WP-45 Fase 0: root attribution walk (census builds only, read-only) —
     // BEFORE shutdown so the full end-of-run graph is attributed. Roots are
     // walked in priority order; shared structure counts toward the FIRST

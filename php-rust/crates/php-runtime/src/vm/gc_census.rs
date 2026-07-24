@@ -182,6 +182,17 @@ pub fn collect_round(
         }
     });
 }
+/// WP-50 Ob.2: free-form probe line into the per-collect log (the
+/// end-of-run full-scan collect reports its before/after through here).
+pub fn probe_line(msg: &str) {
+    bump(|c| {
+        if let Some(f) = c.collect_log.as_mut() {
+            use std::io::Write as _;
+            let t_ms = c.t0.map(|t| t.elapsed().as_millis()).unwrap_or(0);
+            let _ = writeln!(f, "t={t_ms} probe {msg}");
+        }
+    });
+}
 pub fn destructor() { bump(|c| c.destructors += 1); }
 pub fn classify_ns(ns: u64) { bump(|c| c.classify_ns += ns); }
 pub fn reflect_hit() { bump(|c| c.reflect_hits += 1); }
