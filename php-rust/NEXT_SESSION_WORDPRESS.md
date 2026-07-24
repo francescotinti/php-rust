@@ -120,6 +120,10 @@ bug isset via `__get` con indici annidati (WP-42).
    ~15-20G liberi (WP-44 è partita a 16G; il cargo test DEBUG rigenera
    ~3,8G di `php-rust-output/debug/` — in sessione usare SEMPRE
    `cargo test --release`, e pulire `debug/` se ricompare).
+   ⚠️ WP-47 è chiusa con Data a **11Gi** (deriva non di sessione: i target
+   census/old sono sull'esterno; `php-rust-output` è 1,3G release-only) —
+   prima di WP-48 liberare spazio di sistema (cache utente/log) o
+   verificare che basti.
    **PRE-FLIGHT MYSQL**: `mysql -h 127.0.0.1 -u root -e "SHOW DATABASES"`
    deve elencare wp_o/wp_p/probe — altrimenti vedi ⚠️ MySQL sopra.
 
