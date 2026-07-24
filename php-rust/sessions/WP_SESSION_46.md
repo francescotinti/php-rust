@@ -161,9 +161,30 @@ test — ma PRIMA l'attribuzione.
   corrotto: `vexp daemon-cmd stop` + rm index.db* + `._*` AppleDouble +
   reindex 83s.)
 
-## Prossimo
+## Full-suite (run33, stessa notte)
 
-[DA COMPILARE dopo census/AB: se footprint media crolla → Fase 1 residua
-(shrink unit ~0,3G, created→Weak, cold-box Object) o Fase 2 CPU; residui gc
-famiglia: gc_047 (nota release iteratore al break), gc_030 (trace shape),
-interning const-array.]
+**Fail-set BYTE-IDENTICO a run32** (88 nomi; 30.472 test, 0E/2F/86W/73S —
+baseline nuova `wp16-harness/full-out/run33-fails.txt`). Master-CPU però
+**~21:00 = 3,71×** (da 11:39 = 2,06×, **+80%**): sulla full il costo dei
+collect esplode — ogni classify costruisce le HashMap
+handles/in_edges/children dell'INTERO grafo raggiungibile, il grafo vivo
+della full è molto più grande del media, e i collect "efficaci" (freed ≥
+100) RIABBASSANO la soglia adattiva verso 50k ⇒ ri-walk continui. Wall
+~26 min = 2,3×. TENUTO per direttiva; il recupero (classify a 2 passate
+senza children-map quando dtorW è vuoto, mark intrusivi al posto delle
+HashMap, collect ancorato al confine test, isteresi della soglia) si
+disegna DOPO l'attribuzione WP-47 — prima di pagare altra ingegneria
+serve sapere se quei walk servono a qualcosa.
+
+## Prossimo (WP-47)
+
+1. **Ri-attribuzione owner-level** (mandato pieno in
+   NEXT_SESSION_WORDPRESS.md): owner-tracer sui 3,1M array vivi +
+   root-walk esteso a TUTTI i campi Zval-bearing del Vm (FramePool,
+   frames stack, ob, resources, iteratori, typed_refs, tabelle).
+2. **Recupero CPU del collector** coi dati della (1): il +7% media /
+   +80% full è quasi tutto collect-walk su root vivi.
+3. Coda invariata: shrink unit ~0,3G, interning const-array (divergenza
+   conteggio), cold-box Object, Fase 2 CPU. Residui gc: gc_047 (nota
+   release iteratore al break), gc_030 (trace shape), gc_022 (temp
+   mid-statement).

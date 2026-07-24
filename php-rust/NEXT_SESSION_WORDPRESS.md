@@ -69,10 +69,12 @@
   FALSI VERDI a 0 nomi). Avvio: `mysqld_safe --datadir=... --socket=...`
   daemonizzato (double-fork+setsid). Gate DB "IDENTICO" da validare
   SEMPRE col conteggio (option 413, restapi 3508).
-- **Full-suite run32** (~/Claude/wpdev, trunk@5e3fced): 30.472 test,
-  0E/2F/86W/73S, fail-set BYTE-IDENTICO a run31; baseline =
-  `wp16-harness/full-out/run32-fails.txt` (88 righe). Riferimento
-  master-CPU ~11:39 (WP-40) = 2,06×. Multisite: 1 diff = minimo teorico.
+- **Full-suite run33** (~/Claude/wpdev, trunk@5e3fced, WP-46): 30.472 test,
+  0E/2F/86W/73S, fail-set BYTE-IDENTICO a run32; baseline =
+  `wp16-harness/full-out/run33-fails.txt` (88 righe). ⚠️⚠️ master-CPU
+  **~21:00 = 3,71×** (+80% dal riferimento 11:39/2,06× di WP-40: costo
+  collect-walk del GC container-roots, vedi WP_SESSION_46 — recupero in
+  WP-47 dopo l'attribuzione). Multisite: 1 diff = minimo teorico.
 - Suite phpt (misura): xsl 63/64 (da CWD root php-8.5.7) · tidy 44/45 ·
   asym 38/39. Suite phpt SEMPRE con path ASSOLUTO.
 
