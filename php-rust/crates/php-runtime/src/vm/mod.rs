@@ -3169,6 +3169,21 @@ impl<'m> Vm<'m> {
         let mut cur = 0usize;
         while cur < recs.len() {
             let h = recs[cur].handle.dup();
+            #[cfg(feature = "gc-census")]
+            {
+                let mut slots = 0u64;
+                let mut containers = 0u64;
+                each_child(&h, |v| {
+                    slots += 1;
+                    if matches!(
+                        v,
+                        Zval::Object(_) | Zval::Array(_) | Zval::Closure(_) | Zval::Ref(_)
+                    ) {
+                        containers += 1;
+                    }
+                });
+                gc_census::walk_node(matches!(h, Handle::Obj(_)), slots, containers);
+            }
             each_child(&h, |v| match v {
                 Zval::Object(o) => {
                     let b = o.borrow();

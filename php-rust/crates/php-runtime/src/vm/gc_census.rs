@@ -41,6 +41,19 @@ struct GcCensus {
     reflect_hits: u64,
     reflect_misses: u64,
     reflect_evictions: u64,
+    /// WP-54 Ob.3: inserts split by owner — `declared` (declaring class ==
+    /// queried class: mock-declared overrides live here) vs `inherited`
+    /// (decl != cid: the duplicates a (decl, mname) re-key would collapse).
+    reflect_ins_declared: u64,
+    reflect_ins_inherited: u64,
+    /// WP-54: classify-walk composition (pass 1 discovery). A "leaf" object
+    /// yields zero container children (proxy included: `each_child` walks
+    /// it) — the upper bound of the leaf-bit lever's skippable iteration.
+    walk_obj_nodes: u64,
+    walk_obj_leaf: u64,
+    walk_obj_slots: u64,
+    walk_obj_slots_leaf: u64,
+    walk_other_nodes: u64,
     /// WP-49 per-collect pattern: `collect_cycles` entries (calls, not
     /// classify rounds — `collects` above counts rounds), split by trigger.
     collect_calls: u64,
@@ -198,6 +211,31 @@ pub fn classify_ns(ns: u64) { bump(|c| c.classify_ns += ns); }
 pub fn reflect_hit() { bump(|c| c.reflect_hits += 1); }
 pub fn reflect_miss() { bump(|c| c.reflect_misses += 1); }
 pub fn reflect_evict() { bump(|c| c.reflect_evictions += 1); }
+pub fn reflect_insert(declared: bool) {
+    bump(|c| {
+        if declared {
+            c.reflect_ins_declared += 1;
+        } else {
+            c.reflect_ins_inherited += 1;
+        }
+    });
+}
+/// One pass-1 discovery visit: `slots` children yielded, `containers` of
+/// them container-typed (Object/Array/Closure/Ref).
+pub fn walk_node(is_obj: bool, slots: u64, containers: u64) {
+    bump(|c| {
+        if is_obj {
+            c.walk_obj_nodes += 1;
+            c.walk_obj_slots += slots;
+            if containers == 0 {
+                c.walk_obj_leaf += 1;
+                c.walk_obj_slots_leaf += slots;
+            }
+        } else {
+            c.walk_other_nodes += 1;
+        }
+    });
+}
 
 /// Dump and clear at end of run (called next to `census_dump`).
 pub fn dump() {
@@ -211,7 +249,9 @@ pub fn dump() {
          collect calls {} (explicit {}) distinct_obj_roots {} reroot {} live_roots {}\n\
          destructors {}\n\
          classify_ms {}\n\
-         reflect cache hits {} / misses {} / evictions {}\n",
+         reflect cache hits {} / misses {} / evictions {}\n\
+         reflect inserts declared {} / inherited {}\n\
+         walk obj nodes {} (leaf {}) slots {} (leaf {}) other nodes {}\n",
         c.notes, c.notes_inserted, c.sweeps_main, c.sweeps_light,
         c.sweeps_band_skipped,
         c.cand_freed, c.cand_demoted,
@@ -221,6 +261,9 @@ pub fn dump() {
         c.destructors,
         c.classify_ns / 1_000_000,
         c.reflect_hits, c.reflect_misses, c.reflect_evictions,
+        c.reflect_ins_declared, c.reflect_ins_inherited,
+        c.walk_obj_nodes, c.walk_obj_leaf, c.walk_obj_slots,
+        c.walk_obj_slots_leaf, c.walk_other_nodes,
     );
     match std::env::var("PHPR_GC_CENSUS") {
         Ok(path) if path.starts_with('/') => {

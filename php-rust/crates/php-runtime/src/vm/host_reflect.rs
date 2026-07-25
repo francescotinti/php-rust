@@ -470,6 +470,8 @@ impl<'m> super::Vm<'m> {
             #[cfg(feature = "gc-census")]
             super::gc_census::reflect_evict();
         }
+        #[cfg(feature = "gc-census")]
+        super::gc_census::reflect_insert(decl == cid);
         self.reflect_method_info_cache.insert(cache_key, out.clone());
         Ok(out)
     }

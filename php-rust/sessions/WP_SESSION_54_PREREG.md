@@ -55,6 +55,33 @@ margine, con census reflect (split mock-declared vs inherited); ritorno cap
 6. args-Vec pool: ~1 alloc/call method/static; atteso <2% ⇒ quota a
    verbale, non apertura.
 
+## Pre-registrazione 2 (dopo la tabella Ob.1, PRIMA del census walk/reflect)
+
+Tabella Ob.1 (run42): l'unico canale pre-registrato sopra soglia =
+classify/walk (77,4s = 10,0% full; media ~5%). Leva candidata dentro il
+canale: **leaf-object bit** (bit conservativo "may_hold_containers" su
+Props, mantenuto ai siti di mutazione — forma sanzionata WP-50; pattern
+`PhpArray::may_hold_containers` già in-codebase), che salta borrow+iter
+per gli oggetti foglia in pass1/pass2/white-rebuild di `gc_classify`.
+
+Soglie di apertura (fissate PRIMA di leggere i contatori walk del census):
+- SI implementa se: quota slots-foglia ≥ 35% degli slot oggetto walkati
+  (upper bound del lavoro d'iterazione saltabile) ⇒ stima classify −20%+
+  ⇒ ~−1,5-3s media-classify e −10-20s full — quota in secondi ≥ di ogni
+  altra leva quotata oggi.
+- NO se < 20% (quota a verbale, canale resta "ripiego WP-52").
+- Zona 20-35%: si implementa SOLO se il costo di mantenimento stimato ai
+  siti di mutazione resta fuori dagli arm caldi del run_loop (store di
+  prop = sito di mutazione, ammesso da WP-50).
+Erosione attesa (da verbalizzare, non misurabile ex-ante): i `&mut`
+(get_mut/get_slot_mut) avvelenano il bit conservativamente.
+
+Reflect re-key (Ob.3): si implementa il two-level (resolve-map leggera
+(cid,mname)→decl + descrittori su (decl,mname)) se il census mostra
+inserts inherited ≥ 50% degli inserts (= i duplicati collassabili
+dominano la cardinalità). Sotto il 30%: solo verbale. Il ritorno del cap
+16384→8192 resta decisione utente a dati pronti.
+
 ## Kill-switch / vincoli
 
 - Niente leve sul dispatch (WP-44), niente elisioni sweep oltre whitelist
