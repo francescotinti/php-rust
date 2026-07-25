@@ -23,14 +23,15 @@ interpreter, not to pass a toy subset.
 > cycle-collecting GC with Zend-style adaptive thresholds and Zend-faithful
 > destructor timing, property hooks, lazy objects, fibers, and an
 > opcache-like per-request unit cache. Current front: **performance** — a
-> measured arc of specializing-interpreter work has brought the WordPress
-> media benchmark to **~2.9×** the oracle's CPU, and an owner-level memory
-> attribution (exact reached-vs-live reconciliation per allocation) cut
-> the peak-footprint gap **from 11.9× to ~4.3×**; acting on that
-> attribution, a Zend-style purge of dead roots at the GC trigger cut the
-> full WordPress-suite CPU **from 3.4× to ~2.5×** in one lever (same
-> garbage collected in one third of the collector rounds) — next: the
-> remaining ~1.2× residual, then Laravel validation.
+> measured arc of specializing-interpreter and GC work has brought the
+> WordPress media benchmark to **~2.84×** the oracle's CPU, and an
+> owner-level memory attribution (exact reached-vs-live reconciliation
+> per allocation) cut the peak-footprint gap **from 11.9× to ~4.34×**;
+> acting on that attribution, a Zend-style purge of dead roots at the GC
+> trigger, the closure of the statement-sweep fast-path band and a fusion
+> of the cycle-classifier's bookkeeping tables cut the full
+> WordPress-suite CPU **from 3.4× to ~2.31×** — next: the remaining
+> classify-walk cost, then Laravel validation.
 
 ## Coverage at a glance
 
@@ -114,22 +115,23 @@ Near-term, highest-leverage work (see [COVERAGE.md](COVERAGE.md) for the data,
 1. **Performance** — the WordPress suite is at parity; a data-driven
    specializing-interpreter arc (typed fast paths, bigram-fused opcodes,
    scope-aware inline caches, call-site specialization, Zend-style fast
-   shutdown) took the media benchmark from 4.1× to **~2.9×** the oracle's
-   CPU, and the **memory-attribution arc** (exact reached-vs-live
-   reconciliation over every VM root) cut the peak-footprint gap
-   **from 11.9× to ~4.3×**; the retained-module channel then shrank by
-   its exact measured Vec-capacity slack (−70.6MB, 100.0%
-   predicted-vs-actual, zero CPU cost), the full-suite CPU residual was
-   attributed — measured, not suspected — to the cycle-collector classify
-   walk, and acting on it a Zend-style purge of refcount-dead roots at
-   the GC trigger cut the full suite **from 3.4× to ~2.5×** (collector
-   rounds 1005→297 with the freed count conserved); closing the
-   statement-sweep fast-path band that purge had opened brought it to
-   **~2.41×** (WP-50; 1.01G→210M no-op sweep entries, bound cached in a
-   field after the inline form measurably regressed — hot-arm I-cache
-   law). A full-scan collect probe also measured the pinned `created`
-   channel as 100% collectable cyclic garbage, sizing the
-   boundary-collect lever next. Plan: NEXT_SESSION_WORDPRESS.md.
+   shutdown) took the media benchmark from 4.1× to **~2.84×** the
+   oracle's CPU, and the **memory-attribution arc** (exact
+   reached-vs-live reconciliation over every VM root) cut the
+   peak-footprint gap **from 11.9× to ~4.34×**; the full-suite CPU
+   residual was attributed — measured, not suspected — to the
+   cycle-collector classify walk, and three successive levers on it cut
+   the full suite **from 3.4× to ~2.31×**: a Zend-style purge of
+   refcount-dead roots at the GC trigger (rounds 1005→297, freed
+   conserved), the closure of the statement-sweep fast-path band that
+   purge had opened (WP-50; bound cached in a field after the inline
+   form measurably regressed — hot-arm I-cache law), and the fusion of
+   the classifier's three bookkeeping tables into one pre-reserved map
+   (WP-51; 2 hash lookups per edge instead of 3, the −33s census delta
+   reconciling the same-night full A/B to the digit). A growth-gated
+   boundary collect landed free alongside it; its counters proved the
+   pinned `created` channel is teardown garbage on this workload —
+   kept for long-running coverage. Plan: NEXT_SESSION_WORDPRESS.md.
 2. **Laravel** as the second framework validation target once the perf
    pass lands.
 3. Remaining extension surfaces on demand — ext/tidy (one WP test dataset),

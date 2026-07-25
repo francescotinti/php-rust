@@ -6,7 +6,7 @@ as they complete. Deliberate behavioural deviations are catalogued in
 [`PHPR_DIVERGENCES_FROM_PHP.md`](PHPR_DIVERGENCES_FROM_PHP.md); measured
 coverage in [`COVERAGE.md`](COVERAGE.md).
 
-Current state (2026-07-25, post session WP-50): Zend corpus **2635** passing
+Current state (2026-07-25, post session WP-51): Zend corpus **2635** passing
 (65.0% of runnable; gate baseline **1421** fails by name) · internal functions
 **1017/2143, 47%** (core stdlib **539/654, 82%**). **WORDPRESS: the full
 single-site core PHPUnit suite (30,472 tests, wordpress-develop trunk) AND
@@ -20,29 +20,27 @@ trampoline** (xsl phpt 63/64). The GC is now a **Zend-model cycle collector
 over objects AND containers** (Weak root buffer, Zend-exact
 `gc_collect_cycles()` counts, real `gc_enable`/`gc_status`; gc family
 36→14 fails, WP-46). Perf: the specializing-interpreter arc (WP-29..44)
-holds the media benchmark at **~2.9×** the oracle's CPU; the **memory
-attribution arc (WP-45..48)** — exact reached-vs-live reconciliation per
-allocation over every Zval-bearing VM field — found the dominant holder
-(an uneviced ReflectionMethod-descriptor memo, 456k entries/2.48G under
-PHPUnit mocks) and cut the **peak-footprint gap from 11.9× to ~4.3×**;
-WP-48 then shrank the retained-module channel by the *exact* measured
-Vec-capacity slack (−70.6MB, 100.0% predicted-vs-actual, zero CPU cost)
-and **attributed the full-suite CPU residual (3.4× vs 2.06×) entirely to
-the cycle-collector classify walk** (494.9s over 1005 collects, measured);
-WP-49 acted on that attribution: the auto-collect trigger was firing on
-buffers ~97% full of refcount-dead tombstones (Zend removes those at
-death) — a lazy purge at the trigger cut the **full suite from 3.4× to
-~2.5×** (rounds 1005→297, freed conserved to +0.5%, media peak −2.2%);
-WP-50 closed the statement-sweep fast-path band that purge had opened
-(1.01G→210M no-op entries) taking the **full suite to ~2.41×** — the
-inline form of the fix *regressed* +2..4% despite strictly removing work
-(hot-arm I-cache law, WP-44, now measured on a guard; cure = bound
-cached in a field), the reflect-cache cap doubling was falsified
-(hit-rate 16.3→16.5%), and a full-scan end-of-run collect probe measured
-the pinned `created` channel as **100% collectable cyclic garbage**
-(114.7MB→0 on media, 874ms) — **next: the full-scale probe + boundary
-collect design (Fase 1.4), the classify-walk cost, cold-box Object
-(Fase 1.3)** (NEXT_SESSION_WORDPRESS.md). Other stacks at parity: **symfony/http-kernel
+plus the GC arc hold the media benchmark at **~2.84×** the oracle's CPU;
+the **memory attribution arc (WP-45..48)** — exact reached-vs-live
+reconciliation per allocation over every Zval-bearing VM field — found
+the dominant holder (an uneviced ReflectionMethod-descriptor memo, 456k
+entries/2.48G under PHPUnit mocks) and cut the **peak-footprint gap from
+11.9× to ~4.34×**; the full-suite CPU residual (3.4× vs 2.06×) was
+attributed entirely to the cycle-collector classify walk (WP-48,
+measured), then cut by three successive levers: WP-49's lazy purge of
+refcount-dead tombstones at the trigger (**3.4×→~2.5×**, rounds
+1005→297, freed conserved), WP-50's closure of the statement-sweep
+fast-path band (**~2.41×**; the inline form regressed — hot-arm I-cache
+law — cure = bound cached in a field), and WP-51's fusion of the
+classifier's three bookkeeping tables into one pre-reserved map
+(**~2.31×**, 2 hash lookups per edge instead of 3; census classify
+−33s reconciles the same-night full A/B to the digit). WP-51 also
+landed the growth-gated boundary collect (Fase 1.4) free on CPU and
+peak — its counters proved the pinned `created` channel (353.7MB at
+exit) is **teardown garbage**, alive until the harness unwinds, so no
+mid-run cadence can reclaim it on this workload (kept for long-running
+coverage) — **next: the remaining classify cost (in-node marks, quote
+first), cold-box Object (Fase 1.3)** (NEXT_SESSION_WORDPRESS.md). Other stacks at parity: **symfony/http-kernel
 CLOSED 0/0 (1665)**, http-foundation 0 errors, Doctrine ORM 3484 (3E/13F
 declared, stable by name) + DBAL 3769/0/0, PHPUnit 9/11/13, Composer,
 wp-cli, Monolog. Laravel afterwards as validation.
