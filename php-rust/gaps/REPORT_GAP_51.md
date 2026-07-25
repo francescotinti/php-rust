@@ -21,10 +21,16 @@
   monetizza poco sul PICCO mid-run, coerente con la lezione WP-48
 - **full-suite master-CPU**: **run39 782,7s ≈13:03 = 2,31×** ⭐⭐ (tre full
   stessa notte: old phpr-wp50 827,9s = 2,44× → leva A classify-fuso run38
-  793,7s = 2,34× (−4,1%) → leve A+B run39 782,7s = 2,31× (−5,5% totale;
-  la leva B boundary-collect è GRATIS sulla full, anzi −11s); old di notte
-  coerente con gli old di ieri 828,9/832,7 = macchina stabile) — fail-set
-  **BYTE-IDENTICO a run33** (88 nomi) su tutte e tre; 30.472 test
-  0E/2F/86W/73S; RSS max di segmento run38 1696 / run39 1945 / old 1700
-  (range rumoroso storico, nessun segnale per-leva)
+  793,7s = 2,34× (−4,1%, **riconciliata alla cifra**: classify_ms census
+  142,4→109,4s = −33s) → leve A+B run39 782,7s = 2,31× (−5,5% totale; la
+  leva B boundary-collect è GRATIS — il −11s marginale NON è
+  mechanism-backed: freed +0,1%, rumore); old di notte coerente con gli
+  old di ieri 828,9/832,7 = macchina stabile) — fail-set **BYTE-IDENTICO
+  a run33** (88 nomi) su tutte e tre; 30.472 test 0E/2F/86W/73S; RSS max
+  di segmento run38 1696 / run39 1945 / old 1700 (rumore, nessun segnale
+  per-leva). **Mechanism-check leva B: canale created-registry-only
+  INVARIATO a 353,7MB = garbage di TEARDOWN (vivo fino allo smontaggio
+  PHPUnit, invisibile a ogni cadenza mid-run per costruzione) — esito
+  footprint Fase 1.4 su PHPUnit = NEUTRO, leva tenuta perché gratis +
+  ceiling Zend per processi long-running**
 - **full-suite wall**: ~17/11,5 min = **1,5×**

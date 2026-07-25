@@ -58,8 +58,28 @@
   (guardia Fase 1 ≤+0,5% a rischio → tenere e verbalizzare).
 - **Giudice**: run39 (A+B) 782,7s (13:02.67) — **B gratis sulla full, anzi
   −11s vs run38** (created più piccola + località); BYTE-ID a run33.
-- Mechanism-check census (conteggi): <DA COMPILARE: census51b freed totale,
-  n. seed, created-registry-only fine-run>.
+- **Mechanism-check census (conteggi, binario phpr-memgc51, probe OFF)** —
+  **la predizione di B è FALSIFICATA nei conteggi**: freed totale
+  **14.235.479 vs 14.220.683 WP-50 = +14,8k (+0,1%)**, NON i +1,45M
+  predetti; `created-registry-only` a fine run **353.743.993 byte ≈
+  INVARIATO** (353.743.905 WP-50). I seed SONO scattati (~6-7 call con
+  roots seed-inflated: call 6 = 165k vs 51k WP-50, call 15/16 = 201k/231k,
+  call 132/133; reroot 359k→998k, live_roots 588k→1.215k) — ma non c'era
+  nulla da liberare: **il canale created è garbage di TEARDOWN**, vivo per
+  tutta la run e morto in massa allo smontaggio finale di PHPUnit, DOPO
+  l'ultimo trigger. Nessuna cadenza mid-run può raccoglierlo. I probe EOR
+  (WP-50 media, WP-51a full) misuravano il ceiling del FINE-run, non dello
+  standing mid-run — coerente col peak ab51 flat (−0,32%). ⇒ **il −11s di
+  run39 vs run38 NON è mechanism-backed: rumore.** Verdetto B: LANDED e
+  TENUTA (gratis su CPU e peak, parity verde; dà il ceiling di copertura
+  Zend per processi long-running dove i cicli quiescenti nascono davvero
+  mid-run), ma l'obiettivo de-pin footprint della Fase 1.4 sul workload
+  PHPUnit è chiuso con esito NEUTRO — il canale non è recuperabile prima
+  del teardown per costruzione del workload, non per difetto della leva.
+- Conservazione census-B vs WP-50 (leva A inclusa): notes 4.108.758.922 ≈
+  4.108.763.376; light 209.829.927 ≈ 209.830.152; band 825,7M ≈ 825,6M;
+  collects 303=303; calls 152=152. **classify_ms 142.407→109.383 = −33,0s
+  ≈ il −34,2s del giudice full run38: leva A RICONCILIATA alla cifra.**
 
 ## Guardia A/B media (ab51: old=phpr-wp50, new=A+B, 6 round + 2 oracle)
 
@@ -98,11 +118,14 @@
   mappe→1 (`GcInfo`) + reserve dalla taglia dell'ultimo walk = −4,1% di full
   senza toccare l'algoritmo (stessi conteggi alla cifra). Il rehash a cascata
   da tabella vuota su milioni di nodi era ~metà del guadagno.
-- ⭐⭐ **La disciplina di confine giusta è growth-gated, non per-test**: seed
-  full-scan a +50k di crescita del registry = ~4-5 collect extra su una full
-  intera, costo NEGATIVO sulla full (de-pin ⇒ created più piccola), zero per
-  i worker. La predizione-misurata del probe (2.489ms una tantum) aveva già
-  dimensionato il costo.
+- ⭐⭐ **La disciplina di confine giusta è growth-gated, non per-test** (costo:
+  ~6-7 seed su una full, CPU e peak FLAT, zero per i worker) — **ma un probe
+  EOR non predice il mid-run**: il canale created del workload PHPUnit è
+  garbage di TEARDOWN (vivo fino allo smontaggio finale ⇒ invisibile a ogni
+  cadenza mid-run PER COSTRUZIONE). Quotare una leva di confine col probe a
+  fine run misura il ceiling del fine-run; il valore sul PICCO va sempre
+  verificato coi conteggi mid-run (qui: freed +0,1%, canale invariato, peak
+  −0,32% — tre misure indipendenti che dicono la stessa cosa).
 - ⭐ **Estrazione fail-set full**: `run3x-fails.txt` = righe `^\d+\) ` dal
   full-*.txt ORDINATE (88 = F+W, no skip); il junit non-P dà 161 (88+73 S).
 - ⭐ **Filtro del `.rss` in append**: mai `awk '$1>=ora'` da solo (le ore di
@@ -115,9 +138,12 @@
 
 ## Prossimo (WP-52)
 
-1. <DA COMPILARE dopo ab51/census: residuo classify post-leve (era 142s,
-   −34s dalla fusione) — prossima leva candidata = in-node marks (elimina
-   l'hashing residuo; costa +8B/nodo sui container: quotare col census)
-   oppure Fase 1.3 cold-box Object.>
-2. reflect-cache: owner della cardinalità (memo keyed su ClassId dei mock).
-3. Laravel resta posticipata a valle della roadmap.
+1. **Residuo classify post-fusione: 109,4s census** (era 142,4s) su un
+   residuo full totale di ~85s vs WP-40 2,06×. Leva candidata = in-node
+   marks (elimina l'hashing residuo ~2 op/arco; costa +8B/nodo su
+   PhpArray/Closure/Ref senza header GC): QUOTARE byte col mem-census e
+   archi con un conteggio, PRIMA di toccare layout (sentinelle drop-order
+   pinnate prima, WP-28).
+2. Fase 1.3 cold-box Object (~96B×istanze, pattern WP-32).
+3. reflect-cache: owner della cardinalità (memo keyed su ClassId dei mock).
+4. Laravel resta posticipata a valle della roadmap.

@@ -11,11 +11,17 @@
 > (`84a22f6`, **Fase 1.4 LANDED**): full-scan seed growth-gated
 > (`GC_FULLSCAN_GROWTH=50k` su `created.len()`, check O(1) nel wrapper
 > COLD `collect_cycles` — mai per-test, zero per i worker) → **run39
-> 782,7s = 13:03 = 2,31×: B è GRATIS sulla full (−11s), totale notte
-> −5,5% (2,44×→2,31×)**. Media (ab51): CPU **FLAT +0,01%** (guardia Fase 1
-> ≤+0,5% RISPETTATA) → **2,84×**; peak fisico −0,32% → **4,34×** (minimi
-> di sempre entrambi). ⭐ PEAK-value risposto: il de-pin created monetizza
-> poco sul picco mid-run — è ritenzione di fine-run (WP-48 confermata).
+> 782,7s = 13:03 = 2,31×: B è GRATIS sulla full (il −11s vs run38 NON è
+> mechanism-backed: rumore), totale notte −5,5% (2,44×→2,31×)**. Media
+> (ab51): CPU **FLAT +0,01%** (guardia Fase 1 ≤+0,5% RISPETTATA) →
+> **2,84×**; peak fisico −0,32% → **4,34×** (minimi di sempre entrambi).
+> ⭐⭐ **mechanism-check census-B: la predizione footprint di B è
+> FALSIFICATA nei conteggi — freed +0,1% (non +1,45M), canale
+> created-registry-only INVARIATO a 353,7MB: è garbage di TEARDOWN, vivo
+> fino allo smontaggio PHPUnit ⇒ invisibile a OGNI cadenza mid-run per
+> costruzione del workload. B tenuta (gratis + ceiling Zend per processi
+> long-running); esito footprint Fase 1.4 su PHPUnit = NEUTRO.** Leva A
+> riconciliata alla cifra: classify_ms census 142,4→109,4s ≈ −34,2s full.
 > Parità: 3 full stessa notte tutte BYTE-ID a run33; corpus 1421 ×2;
 > cargo 1639/0. ⭐⭐ lezione launcher: daemonizer con `chdir "/"` ⇒ FINTI
 > fail phpt (bug60771 scrive ./test.php nella CWD; la CWD è parte del
