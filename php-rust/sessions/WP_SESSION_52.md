@@ -65,8 +65,13 @@ WP-44 per −16B; si prende l'80% del canale (64 di 80B) a rischio ~zero.
 
 ## Stato
 
-- [ ] Ob.1 implementazione in-node marks
-- [ ] Gate classe GC (corpus per nome + cargo + full BYTE-ID)
-- [ ] Census mechanism-check (conteggi + classify_ms)
-- [ ] Ob.2 cold-box Object
-- [ ] Giudici notte: full new vs old phpr-wp51b + A/B media 6 round
+- [x] Ob.1 implementazione in-node marks (`1a52712`)
+- [x] Ob.2 cold-box Object (`ebd44f3`)
+- [x] Gate albero Ob.1: corpus **1421 IDENTICO per nome** + cargo 1639/0
+- [x] Cargo albero Ob.2: 1639/0; smoke readonly/clone/typed-unset BYTE-ID
+      con l'oracle; gc_smoke identico
+- [ ] Gate corpus albero Ob.2 (in corso)
+- [ ] Census mechanism-check (phpr-memgc52 costruito, sha 79c9ed34…)
+- [ ] Giudici stesso-giorno: census52 → run40 → run40-old → ab52
+      (orchestrate52.sh, sequenziali detached; run39 archiviato in
+      wp16-harness/full-out/run39/)
