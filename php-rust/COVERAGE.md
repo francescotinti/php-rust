@@ -7,7 +7,7 @@ functions with `function_exists()` inside `phpr` (grouped by
 `ReflectionFunction::getExtensionName()`); the corpus number is the real pass
 count of the upstream Zend test suite under `phpt-runner`.
 
-_Last measured: 2026-07-25 (WP-52) · reference: PHP 8.5.7 (`get_defined_functions()`)._
+_Last measured: 2026-07-25 (WP-54) · reference: PHP 8.5.7 (`get_defined_functions()`)._
 
 ---
 
@@ -124,9 +124,9 @@ ZipArchive (write side), XMLReader-level SAX** are implemented as classes.
 **The WordPress track is at a single divergent test name on both the full
 single-site and multisite suites** — current work is performance: the
 specializing-interpreter arc plus the GC work now hold the media benchmark
-at **~2.83×** the oracle's CPU (from 4.1×), and the memory-attribution arc
+at **~2.61×** the oracle's CPU (from 4.1×), and the memory-attribution arc
 (exact reached-vs-live reconciliation over every VM root) has cut the
-peak-footprint gap **from 11.9× to ~4.36×** with the retained-module
+peak-footprint gap **from 11.9× to ~4.16×** with the retained-module
 channel shrunk by its exact measured slack (100.0% predicted-vs-actual).
 The attributed full-suite CPU residual (3.4×, cycle-collector walk) was
 cut to **~2.5×** by a Zend-style purge of refcount-dead roots at the GC
@@ -144,9 +144,17 @@ measured) landed alongside. A growth-gated full-scan collect at the GC
 boundary also landed free — its census counters showed the pinned
 `created` channel is *teardown* garbage, alive until the harness's final
 unwind, so no mid-run cadence can reclaim it on this workload; the lever
-stays for Zend-ceiling coverage of long-running processes. Next: the
-last ~4% vs the historic full-suite best, the reflect-cache cardinality
-owner, then Laravel validation. See NEXT_SESSION_WORDPRESS.md.
+stays for Zend-ceiling coverage of long-running processes. WP-54 then
+applied the owner-level attribution method to CPU-seconds (sampled call
+trees over the full run, reconciled against the master clock): it
+falsified three backlog levers in one pass and exposed the
+reflection-descriptor memo — keyed by *queried* class, 96% of its
+entries inherited duplicates minted per PHPUnit mock (hit-rate 11.7%).
+Re-keying it on the **declaring class** took the memo to a 96.7%
+hit-rate and was worth **−7.4% CPU** and −5.8% peak on the media A/B
+alone: the full suite now stands at **~2.12×**. Next: a growable string
+representation to close the measured O(n²) `.=` append gap (244× on a
+probe), then Laravel validation. See NEXT_SESSION_WORDPRESS.md.
 
 ---
 

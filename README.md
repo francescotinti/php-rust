@@ -166,12 +166,12 @@ The third dragon — the **C extension ecosystem (PECL)** — is being tackled b
 rewrites (PDO/sqlite, dom/simplexml, and curl have already fallen that way); a compatibility FFI
 layer remains the long-term option for the tail.
 
-**Fidelity** (at 2026-07-25, WP-51): differential type-juggling vs real PHP at
+**Fidelity** (at 2026-07-25, WP-54): differential type-juggling vs real PHP at
 **0 mismatches** (37,835 cases — this is the *operator* differential, a metric distinct from the
 `.phpt` corpus); **1,639** green Rust unit/integration tests; on the official `Zend/tests` corpus
 **2,635 phpt pass** (65.0% of the runnable ones, with a "zero pass→fail by name" gate on every
-commit); WordPress full core suite (30,472 tests) at parity with **full-suite CPU at ~2.31×**
-the oracle and the **peak-footprint gap cut from 11.9× to ~4.34×** by the measured
+commit); WordPress full core suite (30,472 tests) at parity with **full-suite CPU at ~2.12×**
+the oracle and the **peak-footprint gap cut from 11.9× to ~4.16×** by the measured
 memory-attribution arc. Live measured coverage: **[php-rust/COVERAGE.md](php-rust/COVERAGE.md)**;
 current route: **[php-rust/NEXT_SESSION_WORDPRESS.md](php-rust/NEXT_SESSION_WORDPRESS.md)**.
 
@@ -187,10 +187,10 @@ current route: **[php-rust/NEXT_SESSION_WORDPRESS.md](php-rust/NEXT_SESSION_WORD
    core suite (30,472 tests, single-site AND multisite) runs at effective
    oracle parity, media at byte parity on system libgd/libxslt/libtidy FFI.
    The current front is the measured perf roadmap
-   (`php-rust/FOOTPRINT_CPU_ROADMAP.md`): full-suite CPU is at **~2.31×** the
-   oracle (from 4.1×), peak footprint at **~4.34×** (from 11.9×) — next
-   levers: the remaining cycle-collector classify cost (in-node marks) and
-   cold-box Object. Route: `php-rust/NEXT_SESSION_WORDPRESS.md`.
+   (`php-rust/FOOTPRINT_CPU_ROADMAP.md`): full-suite CPU is at **~2.12×** the
+   oracle (from 4.1×), peak footprint at **~4.16×** (from 11.9×), media CPU at **~2.61×** — next
+   lever: a growable string representation closing the measured O(n²)
+   `.=` append gap (probe: 244× vs the oracle). Route: `php-rust/NEXT_SESSION_WORDPRESS.md`.
 2. **Laravel** — the second framework validation target, queued after the perf
    roadmap (user decision); method = the proven ORM/http-kernel gate recipe.
 3. **Doctrine ORM to zero** — down to 3 errors / 13 failures, stable by name;

@@ -20,11 +20,11 @@ trampoline** (xsl phpt 63/64). The GC is now a **Zend-model cycle collector
 over objects AND containers** (Weak root buffer, Zend-exact
 `gc_collect_cycles()` counts, real `gc_enable`/`gc_status`; gc family
 36→14 fails, WP-46). Perf: the specializing-interpreter arc (WP-29..44)
-plus the GC arc hold the media benchmark at **~2.83×** the oracle's CPU;
+plus the GC arc hold the media benchmark at **~2.61×** the oracle's CPU;
 the **memory attribution arc (WP-45..48)** — exact reached-vs-live
 reconciliation per allocation over every Zval-bearing VM field — found
 the dominant holder (an uneviced ReflectionMethod-descriptor memo, 456k
-entries/2.48G under PHPUnit mocks) and cut the **peak-footprint gap from 11.9× to ~4.36×**; the full-suite CPU residual (3.4× vs 2.06×) was
+entries/2.48G under PHPUnit mocks) and cut the **peak-footprint gap from 11.9× to ~4.16×**; the full-suite CPU residual (3.4× vs 2.06×) was
 attributed entirely to the cycle-collector classify walk (WP-48,
 measured), then cut by four successive levers: WP-49's lazy purge of
 refcount-dead tombstones at the trigger (**3.4×→~2.5×**, rounds
@@ -43,9 +43,16 @@ cold-boxed `Object`'s rare feature sets behind one `Option<Box>`
 deliberately excluded — it is stdClass's storage, a hot path). WP-51's
 growth-gated boundary collect proved the pinned `created` channel
 (353.7MB at exit) is **teardown garbage**, unreachable by any mid-run
-cadence (kept for long-running coverage) — **next: the last ~30s vs
-the WP-40 reference (walk profile or Fase 2: RET_DEREF/ret_shape +
-Sweep elision), reflect-cache cardinality owner**
+cadence (kept for long-running coverage). WP-53 shipped Fase 2
+(ret_shape+RET_DEREF absorbed DerefTop, Sweep emit-time elision:
+−5.66% dispatch = only −0.9% CPU — levers are now quoted in ns/event
+first). WP-54 applied the attribution method to **CPU-seconds**
+(sampled call trees over the full run) and re-keyed the
+reflect-descriptor memo on its true owner, the **declaring class**
+(96% of entries were inherited duplicates, hit-rate 11.7%→96.7%):
+**−7.4% media CPU (2.61×, all-time best), −5.8% peak (4.16×), full
+~2.12×** — **next: growable PhpStr + in-place `.=` append (measured
+O(n²), 244× on a probe) + Fase-3 byte checkpoint**
 (NEXT_SESSION_WORDPRESS.md). Other stacks at parity: **symfony/http-kernel
 CLOSED 0/0 (1665)**, http-foundation 0 errors, Doctrine ORM 3484 (3E/13F
 declared, stable by name) + DBAL 3769/0/0, PHPUnit 9/11/13, Composer,
