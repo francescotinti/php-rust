@@ -50,9 +50,12 @@ first). WP-54 applied the attribution method to **CPU-seconds**
 (sampled call trees over the full run) and re-keyed the
 reflect-descriptor memo on its true owner, the **declaring class**
 (96% of entries were inherited duplicates, hit-rate 11.7%→96.7%):
-**−7.4% media CPU (2.61×, all-time best), −5.8% peak (4.16×), full
-~2.12×** — **next: growable PhpStr + in-place `.=` append (measured
-O(n²), 244× on a probe) + Fase-3 byte checkpoint**
+**−7.4% media CPU (2.61×, all-time best), −5.8% peak**. WP-55 shipped
+**growable PhpStr (`hash + Vec<u8>`) + a fused `.=` op with in-place
+append at unique refcount** (probe 499ms→2ms = oracle; full **−2.6%
+same-evening → ~2.11×**, peak **~4.15×** with the +8B layout cost
+inside its ≤2% guard) and ran the Fase-3 byte checkpoint: **next pilot
+= hashed arrays** (~421MB live at peak vs ~45MB strings)
 (NEXT_SESSION_WORDPRESS.md). Other stacks at parity: **symfony/http-kernel
 CLOSED 0/0 (1665)**, http-foundation 0 errors, Doctrine ORM 3484 (3E/13F
 declared, stable by name) + DBAL 3769/0/0, PHPUnit 9/11/13, Composer,

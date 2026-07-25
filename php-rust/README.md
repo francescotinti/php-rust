@@ -27,12 +27,13 @@ interpreter, not to pass a toy subset.
 > owner-level attribution of both bytes and CPU-seconds (sampled call
 > trees reconciled against the master clock), has brought the WordPress
 > media benchmark to **~2.61×** the oracle's CPU and cut the
-> peak-footprint gap **from 11.9× to ~4.16×**; the latest lever — re-keying
-> the reflection-descriptor memo on its true owner, the *declaring* class,
-> after a census showed 96% of its entries were inherited duplicates —
-> was worth −7.4% CPU on its own, and the full WordPress-suite CPU now
-> stands at **~2.12×** (from 3.4×) — next: a growable string
-> representation to close the measured O(n²) append gap, then Laravel
+> peak-footprint gap **from 11.9× to ~4.15×**; the latest lever — a
+> growable string representation with in-place `.=` append at unique
+> refcount (mirroring `zend_string_extend`) — closed the measured O(n²)
+> append channel (micro-probe: 499ms → 2ms, byte-parity with the
+> oracle) and the full WordPress-suite CPU now stands at **~2.11×**
+> (from 3.4×) — next: the heap-to-handle pilot on hashed arrays (the
+> byte census puts them at 10× the string channel), then Laravel
 > validation.
 
 ## Coverage at a glance
@@ -128,14 +129,14 @@ Near-term, highest-leverage work (see [COVERAGE.md](COVERAGE.md) for the data,
    epoch-guarded in-node walk marks — census classify −42.7%, every
    count conserved), then — via the same owner-level method applied to
    CPU-seconds (sampled call trees reconciled against the master
-   clock) — to the reflection-descriptor memo, whose key multiplied
-   inherited duplicates per PHPUnit mock (96% of entries); re-keying it
-   on the *declaring* class was worth **−7.4% CPU** alone, and the full
-   suite now stands at **~2.12×** (from 3.4×). The same attribution
-   falsified three backlog levers in one pass (string single-alloc
-   fusion, args-Vec pooling, leaf-skip in the GC walk) and confirmed an
-   O(n²) `.=` append gap (244× on a probe) — the next lever.
-   Plan: NEXT_SESSION_WORDPRESS.md.
+   clock) — to the reflection-descriptor memo (re-keyed on the
+   *declaring* class: **−7.4% CPU** alone) and to an O(n²) `.=` append
+   gap, now closed by a growable string representation with in-place
+   append at unique refcount (probe 499ms → 2ms = oracle; full suite
+   −2.6% same-evening): the full suite stands at **~2.11×** (from
+   3.4×), peak footprint at **~4.15×**. The byte census picked the next
+   heap-to-handle pilot: hashed arrays (10× the string channel's live
+   bytes). Plan: NEXT_SESSION_WORDPRESS.md.
 2. **Laravel** as the second framework validation target once the perf
    pass lands.
 3. Remaining extension surfaces on demand — ext/tidy (one WP test dataset),

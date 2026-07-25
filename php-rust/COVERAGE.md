@@ -7,7 +7,7 @@ functions with `function_exists()` inside `phpr` (grouped by
 `ReflectionFunction::getExtensionName()`); the corpus number is the real pass
 count of the upstream Zend test suite under `phpt-runner`.
 
-_Last measured: 2026-07-25 (WP-54) · reference: PHP 8.5.7 (`get_defined_functions()`)._
+_Last measured: 2026-07-25 (WP-55) · reference: PHP 8.5.7 (`get_defined_functions()`)._
 
 ---
 
@@ -152,9 +152,17 @@ reflection-descriptor memo — keyed by *queried* class, 96% of its
 entries inherited duplicates minted per PHPUnit mock (hit-rate 11.7%).
 Re-keying it on the **declaring class** took the memo to a 96.7%
 hit-rate and was worth **−7.4% CPU** and −5.8% peak on the media A/B
-alone: the full suite now stands at **~2.12×**. Next: a growable string
-representation to close the measured O(n²) `.=` append gap (244× on a
-probe), then Laravel validation. See NEXT_SESSION_WORDPRESS.md.
+alone. WP-55 closed the measured O(n²) `.=` append gap with a
+**growable string representation** (`hash + Vec<u8>`) and a fused
+assign-op that extends the buffer **in place at unique refcount**
+(mirroring `zend_string_extend`; aliases and interned literals fall
+back to copy-on-write by construction): the micro-probe went 499ms →
+2ms — byte-parity with the oracle — and the full suite gained −2.6%
+same-evening, landing at **~2.11×** (peak footprint **~4.15×**, the
++8B-per-string layout cost measured within its ≤2% guard). The byte
+census then picked the next heap-to-handle pilot: **hashed arrays**
+(~421MB live at peak vs ~45MB for strings). Then Laravel validation.
+See NEXT_SESSION_WORDPRESS.md.
 
 ---
 
