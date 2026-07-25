@@ -667,6 +667,7 @@ impl<'a> FnCompiler<'a> {
         self.scope_opaque.push(opaque);
         self.scope_path.push(id);
         for s in stmts {
+            let start = self.ops.len();
             self.stmt(s)?;
             // Sweep unreachable objects after EVERY statement, in every body
             // (OOP-3d): Zend destructs on refcount-zero anywhere, so a
@@ -677,10 +678,75 @@ impl<'a> FnCompiler<'a> {
             // O(buffered candidates), so a statement that allocated nothing
             // pays one no-op opcode. Global-scope sweeps are `main`: they also
             // re-examine what in-body sweeps demoted (see Vm::gc_sweep_impl).
-            self.emit(Op::Sweep { main: self.is_main });
+            // WP-53 (Fase 2.2): the sweep is ELIDED AT EMIT TIME (never
+            // removed after — no address ever shifts, WP-33) for a statement
+            // that provably cannot feed the note buffer nor release an
+            // object's last reference — see `sweep_elidable`.
+            if !self.sweep_elidable(&s.kind, start) {
+                self.emit(Op::Sweep { main: self.is_main });
+            }
         }
         self.scope_path.pop();
         Ok(())
+    }
+
+    /// WP-53 (Fase 2.2): true when the statement just compiled into
+    /// `ops[start..]` cannot need its trailing [`Op::Sweep`].
+    ///
+    /// Two independent proofs:
+    /// 1. **Control diverges** — `return`/`break`/`continue`/`goto` never fall
+    ///    through to the trailing slot, and being kind-gated LINEAR statements
+    ///    no later-patched jump can land there (compound statements — loops,
+    ///    `if` — are NOT kind-gated: a `while`'s exit jump lands exactly on
+    ///    its trailing sweep, which covers the FINAL failing condition's
+    ///    releases, so they only qualify through proof 2).
+    /// 2. **Container-inert ops only** — every emitted op is in a whitelist
+    ///    that (a) never calls `gc_note`, (b) never runs user code (`Binary`/
+    ///    `CmpJmp` are excluded: a loose `==`/concat against an object drives
+    ///    `__toString`), and (c) never drops an object's last reference —
+    ///    value-pushing ops only push CLONES of slots that stay alive for the
+    ///    whole statement, so the pops (jumps' condition, `Pop`) can't hit
+    ///    refcount zero. `Op::Pop` DOES note its operand, so it is admitted
+    ///    only when nothing in the statement can have pushed a container
+    ///    (`$i++;` = IncDecSlot+Pop: scalar/string by construction — a
+    ///    container operand throws before pushing).
+    ///
+    /// Everything else keeps its sweep: the destructor SAFEPOINT contract
+    /// (gc/dtor-order parity) stays byte-identical by construction.
+    fn sweep_elidable(&self, kind: &StmtKind, start: usize) -> bool {
+        if matches!(
+            kind,
+            StmtKind::Return(_)
+                | StmtKind::ReturnRef(_)
+                | StmtKind::Break(_)
+                | StmtKind::Continue(_)
+                | StmtKind::Goto(_)
+        ) {
+            return true;
+        }
+        let mut has_pop = false;
+        let mut container_push = false;
+        for op in &self.ops[start..] {
+            match op {
+                // No push, no note, no user code.
+                Op::Jump(_) | Op::JumpIfFalse(_) | Op::JumpIfTrue(_) => {}
+                // Scalar/string push only (container operands throw first).
+                Op::IncDecSlot { .. } => {}
+                // Push a CLONE of a value that outlives the statement (its
+                // backing slot/const/`$this` cannot be cleared by whitelist
+                // ops), so no pop in range can be a last reference.
+                Op::LoadSlot(_)
+                | Op::LoadVar { .. }
+                | Op::LoadGlobal(_)
+                | Op::This
+                | Op::Dup
+                | Op::PushConst(_) => container_push = true,
+                // Notes its operand: admissible only for scalar operands.
+                Op::Pop => has_pop = true,
+                _ => return false,
+            }
+        }
+        !(has_pop && container_push)
     }
 
     fn stmt(&mut self, s: &Stmt) -> R<()> {
