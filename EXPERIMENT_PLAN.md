@@ -1,8 +1,9 @@
 # Piano: PHP → Rust come reimplementazione moderna (non porting di Zend)
 
 > **Nota**: questo è il piano *iniziale* (Fase 0), conservato come artefatto storico.
-> Per lo **stato corrente** (step 0–61, 934 test, struttura dei crate, tooling) vedi
-> `README.md` e il diario in `diary/03-translation-log.md`.
+> Per lo **stato corrente** (copertura misurata, rotta di lavoro, tooling) vedi
+> `README.md`, `php-rust/COVERAGE.md` e `php-rust/NEXT_SESSION_WORDPRESS.md`;
+> il diario metodologico è in `diary/03-translation-log.md`.
 
 ## Context
 

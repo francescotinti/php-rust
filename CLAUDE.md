@@ -26,7 +26,8 @@ Reimplementazione moderna di PHP 8.5 in Rust, guidata dal comportamento osservab
 
 ## Comandi
 
-- Test: `cd php-rust && cargo test`
+- Test: `cd php-rust && cargo test --release` (SEMPRE `--release`: il profilo
+  debug rigenera ~3,8G di artefatti in `php-rust-output`)
 - CLI: `cargo run -p php-cli -- script.php` (binario `phpr`, php drop-in)
 - Runner .phpt: `cargo run -p phpt-runner -- <dir o file .phpt>` (`--isolate`, `--list-fails`)
 - Trace diagnostico: `PHP_RUST_TRACE=hir|body|exec|all` su stderr (lowering vs evaluation)
@@ -38,4 +39,4 @@ Reimplementazione moderna di PHP 8.5 in Rust, guidata dal comportamento osservab
 > NON build sul volume esterno. Sorgente/corpus sul volume esterno sono solo letti.
 > Engine: VM a bytecode unico (pipeline mago AST→HIR→bytecode→VM); il vecchio
 > tree-walker `eval/` è stato eliminato. Lowering in `php-runtime/src/lower/`,
-> VM in `php-runtime/src/vm/` (mod.rs ~11k righe — usare Serena/Vexp).
+> VM in `php-runtime/src/vm/` (mod.rs ~15k righe — usare Serena/Vexp).

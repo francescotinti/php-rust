@@ -12,9 +12,15 @@ osservabile, non dall'architettura interna dello Zend Engine.
 Metodologia: skill `legacy-port`, adattata (Strategia A adapter per il front-end +
 full port semantico del solo `zend_operators.c`).
 
-## Stato attuale
+## Stato alla chiusura di questo archivio
 
-**Steps 0–68 + Sessione F completati · 1.496 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.**
+> ⚠️ **Questo file è un archivio storico** (steps 0–68 + Sessione F, fino alla
+> migrazione alla VM a bytecode). Lo **stato corrente** vive in `README.md`,
+> `php-rust/COVERAGE.md` (copertura misurata) e
+> `php-rust/NEXT_SESSION_WORDPRESS.md` (rotta); la storia successiva, per
+> sessione, in `php-rust/sessions/WP_SESSION_<n>.md`.
+
+**Steps 0–68 + Sessione F completati · 1.496 test verdi · clippy pulito · differential 37.835 casi a 0 mismatch.** *(numeri alla data dell'archivio)*
 
 > **✅ Migrazione VM completata (Sessione F).** La **VM a bytecode** (`compile.rs` HIR→bytecode +
 > `vm/` dispatch loop) è ora **l'unico motore di produzione**. Il tree-walker (`eval/`, ~7.000 righe),

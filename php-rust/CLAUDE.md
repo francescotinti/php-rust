@@ -31,8 +31,10 @@ emendamenti passano dal sign-off dell'utente e dal handoff.
 
 ## Stato & copertura
 - **[COVERAGE.md](COVERAGE.md)** è la pagina dati (misurata, non stimata): funzioni
-  641/2143 (core stdlib 483/654 = 73%), corpus Zend 2324, aree complete, mancanti
-  per estensione. **[README.md](README.md)** è la home GitHub. Aggiornarle quando i
+  1017/2143, 47% (core stdlib 539/654 = 82%), corpus Zend 2635 pass (baseline gate
+  1421 fail per nome), aree complete, mancanti per estensione. **[README.md](README.md)**
+  è la pagina di progetto; la home GitHub del repo è il README della root.
+  Rigenerare con `scripts/measure-coverage.sh` / skill `gh-status-sync` quando i
   numeri cambiano in modo sostanziale. Divergenze note in
   [PHPR_DIVERGENCES_FROM_PHP.md](PHPR_DIVERGENCES_FROM_PHP.md) (principio
   **correct-or-absent**).
@@ -48,8 +50,9 @@ emendamenti passano dal sign-off dell'utente e dal handoff.
   volume esterno ma sono solo letti (nessun artefatto di compilazione lì).
 - Build: `CARGO_TARGET_DIR=$HOME/Claude/php-rust-output cargo build --release`
   (equivalente al config.toml; l'env è ridondante ma innocuo).
-- Unit: `CARGO_TARGET_DIR=$HOME/Claude/php-rust-output cargo test --release` → i test
-  lib di `php-runtime` devono restare **554 passed** (più gli altri crate verdi); non regredire.
+- Unit: `CARGO_TARGET_DIR=$HOME/Claude/php-rust-output cargo test --release` → il
+  workspace deve restare **1639 passed / 0 failed**; non regredire. SEMPRE
+  `--release` in sessione (il profilo debug rigenera ~3,8G di artefatti).
 - Corpus: `$HOME/Claude/php-rust-output/release/phpt-runner --list-fails --isolate "/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests"` (foreground, timeout 600000). Delta vs baseline con `comm`; disciplina **zero pass→fail**.
 - Oracle: `$HOME/Claude/php-oracle/php-src/sapi/cli/php`; CLI nostro `phpr` = `$HOME/Claude/php-rust-output/release/phpr`. Metodo: `diff <(oracle x.php) <(phpr x.php)` finché IDENTICAL.
 - Commit **e** push a ogni step concluso (no chiedere).

@@ -67,7 +67,7 @@ more than any synthetic test.
 | **4. Exceptions & errors** | `try/catch/finally`, catchable engine errors, stack traces, line tracking | ✅ Done |
 | **5. Bytecode VM** | Generators, `yield from`, Fibers on explicit frames — **no `unsafe`, no stackful coroutines** | ✅ Done |
 | **6. Memory** | Cycle collector for circular references (the other big "dragon") | ✅ Done |
-| **7. Standard library** | 785 registered internal functions (measured): array/string/math/json/preg/mbstring/hash/file/stream/date/session… | ✅ Substantial (long tail in progress) |
+| **7. Standard library** | 1017 registered internal functions (measured; core language stdlib 539/654 = 82%): array/string/math/json/preg/mbstring/hash/file/stream/date/session… | ✅ Substantial (long tail in progress) |
 | **8. Real Composer** | `composer require monolog/monolog` **end-to-end**: resolution, HTTPS download (rustls), unzip, autoload — and the package **runs** | ✅ Done |
 | **8b. Real ecosystem** | **PHPUnit 13 green, byte-identical** (incl. process isolation); Doctrine **DBAL 3769 tests / 0 err / 0 fail** on native PDO+sqlite; **ORM 3484 tests / 3 err / 13 fail**; symfony http-foundation full suite, **http-kernel CLOSED: 1663 tests, 0 err / 0 fail**; Monolog, collections, inflector, instantiator… | ✅/🔄 In progress |
 | **9. Framework bootstrap** | *Hello World* on Laravel / Symfony | ⏳ Next |
@@ -92,7 +92,7 @@ php-rust/crates/
   php-builtins   registry of pure value builtins (var_dump, array_*, sprintf, json_*, preg_*,
                  mb_*, hash/encoding, file/stream, …); together with the VM-side host
                  builtins (reflection, callable, PDO/sqlite, dom/xml, curl, proc_open,
-                 session, …) phpr registers 785 internal functions (measured by probe)
+                 session, …) phpr registers 1017 internal functions (measured by probe)
   php-cli        the `phpr` binary — drop-in for `php`, CLI-faithful streams + faithful exit code
   php-server     native web server (Axum + Tokio) — the bridgehead toward async
   phpt-runner    runs the official `.phpt` tests with capability scan and unified diff vs oracle
@@ -143,10 +143,17 @@ But the real leap is that **the real ecosystem runs**:
   **http-kernel CLOSED — the full 1663-test suite at 0 errors / 0 failures**, parity with
   the oracle (DI container compiles, dumps and reloads; real IANA timezones; Zend-faithful
   destructor timing); String / Console / Process green.
+- **WordPress 7.0.1 runs on real MySQL** (native `mysqli` wire protocol) through the
+  built-in `phpr -S` server SAPI — wp-admin, front pages, REST and pretty permalinks
+  **byte-identical over HTTP**; the full core PHPUnit suite (30,472 tests single-site,
+  31,278 multisite) is at effective oracle parity, and the media pipeline reaches
+  byte parity via **system libgd / libxslt / libtidy through FFI** (+ native exif,
+  fileinfo).
 - Extensions modeled without C: `pdo`, `pdo_sqlite`, `sqlite3`, `dom`, `libxml`,
   **`simplexml`** (on the Rust DOM), `curl` (easy-API on ureq), `openssl`/TLS (rustls),
   `zip`, `mbstring`, `pcre` (3 engines), `hash`, `json`, `pcntl`, `posix`, `ctype`,
-  `session`, `zlib` (system FFI), `bcmath`, `gmp`, `tokenizer`.
+  `session`, `zlib` (system FFI), `bcmath`, `gmp`, `tokenizer`, **`mysqli`** (native
+  wire protocol).
 
 Two of the three historical "dragons" of a PHP port have already been tamed:
 
@@ -159,13 +166,14 @@ The third dragon — the **C extension ecosystem (PECL)** — is being tackled b
 rewrites (PDO/sqlite, dom/simplexml, and curl have already fallen that way); a compatibility FFI
 layer remains the long-term option for the tail.
 
-**Fidelity** (at 2026-07-24, WP-49): differential type-juggling vs real PHP at
+**Fidelity** (at 2026-07-25, WP-50): differential type-juggling vs real PHP at
 **0 mismatches** (37,835 cases — this is the *operator* differential, a metric distinct from the
 `.phpt` corpus); **1,639** green Rust unit/integration tests; on the official `Zend/tests` corpus
 **2,635 phpt pass** (65.0% of the runnable ones, with a "zero pass→fail by name" gate on every
-commit); WordPress full core suite (30,472 tests) at parity with **full-suite CPU at ~2.5×** the
-oracle. Live measured coverage: **[php-rust/COVERAGE.md](php-rust/COVERAGE.md)**; current route:
-**[php-rust/NEXT_SESSION_WORDPRESS.md](php-rust/NEXT_SESSION_WORDPRESS.md)**.
+commit); WordPress full core suite (30,472 tests) at parity with **full-suite CPU at ~2.41×**
+the oracle and the **peak-footprint gap cut from 11.9× to ~4.4×** by the measured
+memory-attribution arc. Live measured coverage: **[php-rust/COVERAGE.md](php-rust/COVERAGE.md)**;
+current route: **[php-rust/NEXT_SESSION_WORDPRESS.md](php-rust/NEXT_SESSION_WORDPRESS.md)**.
 
 > The detailed history of the ~70 build steps lives in **[HISTORY.md](HISTORY.md)**; the
 > replicable methodological journal is in **[diary/](diary/)**.
@@ -174,15 +182,19 @@ oracle. Live measured coverage: **[php-rust/COVERAGE.md](php-rust/COVERAGE.md)**
 
 ## 🚀 Next steps
 
-1. **WordPress** — the new primary target (roadmap reordered: WP before Laravel).
-   symfony/http-kernel is **done (0/0)** and **wp-cli already runs end-to-end from source**
-   (`wp --info` at oracle parity). Next: `wp core download` + the official SQLite integration
-   plugin (runs on the already-green PDO/SQLite), then a real server SAPI, then `mysqli` and
-   media (gd/exif/zip). Plan: `php-rust/NEXT_SESSION_WORDPRESS.md`.
-2. **Doctrine ORM to zero** — down to 3 errors / 14 failures; the remainder is triaged
-   (XSD `schemaValidate`, lazy-proxy edges).
-3. **Framework bootstrap** — *Hello World* on Laravel / full Symfony kernel: the ultimate stress
-   test for autoloading and Reflection, within reach now that the DI container runs.
+1. **Performance (footprint + CPU roadmap)** — the WordPress milestone is DONE:
+   WP 7.0.1 installs and serves on **real MySQL** (native `mysqli`), the full
+   core suite (30,472 tests, single-site AND multisite) runs at effective
+   oracle parity, media at byte parity on system libgd/libxslt/libtidy FFI.
+   The current front is the measured perf roadmap
+   (`php-rust/FOOTPRINT_CPU_ROADMAP.md`): full-suite CPU is at **~2.41×** the
+   oracle (from 4.1×), peak footprint at **~4.4×** (from 11.9×) — next levers:
+   the cycle-collector classify walk cost and the boundary-collect discipline
+   (Fase 1.4). Route: `php-rust/NEXT_SESSION_WORDPRESS.md`.
+2. **Laravel** — the second framework validation target, queued after the perf
+   roadmap (user decision); method = the proven ORM/http-kernel gate recipe.
+3. **Doctrine ORM to zero** — down to 3 errors / 13 failures, stable by name;
+   the remainder is triaged (XSD `schemaValidate`, lazy-proxy edges).
 4. **Robustness** — convert user-input-reachable `unwrap`/`expect` into typed VM errors + fuzz the
    `lower/compile` pipeline, for a *no-panic* guarantee.
 5. **The async leap** — integrate a **Tokio** event loop and consolidate `php-server` (Axum) into a
