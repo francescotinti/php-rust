@@ -6,7 +6,7 @@ as they complete. Deliberate behavioural deviations are catalogued in
 [`PHPR_DIVERGENCES_FROM_PHP.md`](PHPR_DIVERGENCES_FROM_PHP.md); measured
 coverage in [`COVERAGE.md`](COVERAGE.md).
 
-Current state (2026-07-25, post session WP-51): Zend corpus **2635** passing
+Current state (2026-07-25, post session WP-52): Zend corpus **2635** passing
 (65.0% of runnable; gate baseline **1421** fails by name) · internal functions
 **1017/2143, 47%** (core stdlib **539/654, 82%**). **WORDPRESS: the full
 single-site core PHPUnit suite (30,472 tests, wordpress-develop trunk) AND
@@ -20,27 +20,33 @@ trampoline** (xsl phpt 63/64). The GC is now a **Zend-model cycle collector
 over objects AND containers** (Weak root buffer, Zend-exact
 `gc_collect_cycles()` counts, real `gc_enable`/`gc_status`; gc family
 36→14 fails, WP-46). Perf: the specializing-interpreter arc (WP-29..44)
-plus the GC arc hold the media benchmark at **~2.84×** the oracle's CPU;
+plus the GC arc hold the media benchmark at **~2.83×** the oracle's CPU;
 the **memory attribution arc (WP-45..48)** — exact reached-vs-live
 reconciliation per allocation over every Zval-bearing VM field — found
 the dominant holder (an uneviced ReflectionMethod-descriptor memo, 456k
-entries/2.48G under PHPUnit mocks) and cut the **peak-footprint gap from
-11.9× to ~4.34×**; the full-suite CPU residual (3.4× vs 2.06×) was
+entries/2.48G under PHPUnit mocks) and cut the **peak-footprint gap from 11.9× to ~4.36×**; the full-suite CPU residual (3.4× vs 2.06×) was
 attributed entirely to the cycle-collector classify walk (WP-48,
-measured), then cut by three successive levers: WP-49's lazy purge of
+measured), then cut by four successive levers: WP-49's lazy purge of
 refcount-dead tombstones at the trigger (**3.4×→~2.5×**, rounds
 1005→297, freed conserved), WP-50's closure of the statement-sweep
 fast-path band (**~2.41×**; the inline form regressed — hot-arm I-cache
-law — cure = bound cached in a field), and WP-51's fusion of the
+law — cure = bound cached in a field), WP-51's fusion of the
 classifier's three bookkeeping tables into one pre-reserved map
-(**~2.31×**, 2 hash lookups per edge instead of 3; census classify
-−33s reconciles the same-night full A/B to the digit). WP-51 also
-landed the growth-gated boundary collect (Fase 1.4) free on CPU and
-peak — its counters proved the pinned `created` channel (353.7MB at
-exit) is **teardown garbage**, alive until the harness unwinds, so no
-mid-run cadence can reclaim it on this workload (kept for long-running
-coverage) — **next: the remaining classify cost (in-node marks, quote
-first), cold-box Object (Fase 1.3)** (NEXT_SESSION_WORDPRESS.md). Other stacks at parity: **symfony/http-kernel
+(**~2.31×**; census classify −33s reconciles the same-night full A/B
+to the digit), and WP-52's **in-node walk marks** (**~2.14×**;
+epoch-guarded 8-byte mark on objects/arrays/closures + one contiguous
+record table = ZERO hash lookups per edge; census classify **−42.7%**,
+109.4s→62.7s, every collector count conserved; media A/B −0.57% new
+6/6, peak physical +0.61% — kept and verbalized). WP-52 also
+cold-boxed `Object`'s rare feature sets behind one `Option<Box>`
+(**−56B/instance measured**, obj churn −2.02GB; `dyn_entries`
+deliberately excluded — it is stdClass's storage, a hot path). WP-51's
+growth-gated boundary collect proved the pinned `created` channel
+(353.7MB at exit) is **teardown garbage**, unreachable by any mid-run
+cadence (kept for long-running coverage) — **next: the last ~30s vs
+the WP-40 reference (walk profile or Fase 2: RET_DEREF/ret_shape +
+Sweep elision), reflect-cache cardinality owner**
+(NEXT_SESSION_WORDPRESS.md). Other stacks at parity: **symfony/http-kernel
 CLOSED 0/0 (1665)**, http-foundation 0 errors, Doctrine ORM 3484 (3E/13F
 declared, stable by name) + DBAL 3769/0/0, PHPUnit 9/11/13, Composer,
 wp-cli, Monolog. Laravel afterwards as validation.

@@ -7,7 +7,7 @@ functions with `function_exists()` inside `phpr` (grouped by
 `ReflectionFunction::getExtensionName()`); the corpus number is the real pass
 count of the upstream Zend test suite under `phpt-runner`.
 
-_Last measured: 2026-07-25 (WP-51) · reference: PHP 8.5.7 (`get_defined_functions()`)._
+_Last measured: 2026-07-25 (WP-52) · reference: PHP 8.5.7 (`get_defined_functions()`)._
 
 ---
 
@@ -124,24 +124,29 @@ ZipArchive (write side), XMLReader-level SAX** are implemented as classes.
 **The WordPress track is at a single divergent test name on both the full
 single-site and multisite suites** — current work is performance: the
 specializing-interpreter arc plus the GC work now hold the media benchmark
-at **~2.84×** the oracle's CPU (from 4.1×), and the memory-attribution arc
+at **~2.83×** the oracle's CPU (from 4.1×), and the memory-attribution arc
 (exact reached-vs-live reconciliation over every VM root) has cut the
-peak-footprint gap **from 11.9× to ~4.34×** with the retained-module
+peak-footprint gap **from 11.9× to ~4.36×** with the retained-module
 channel shrunk by its exact measured slack (100.0% predicted-vs-actual).
 The attributed full-suite CPU residual (3.4×, cycle-collector walk) was
 cut to **~2.5×** by a Zend-style purge of refcount-dead roots at the GC
 trigger (rounds 1005→297, freed conserved to +0.5%), to **~2.41×** (WP-50)
 by closing the statement-sweep fast-path band the purge floor had opened,
-and to **~2.31×** (WP-51) by fusing the classify walk's three side tables
-into one pre-reserved map (2 hash lookups per edge instead of 3; the −33s
-census classify delta reconciles the same-night full A/B to the digit).
-A growth-gated full-scan collect at the GC boundary also landed free
-(CPU and peak both flat) — its census counters showed the pinned
+to **~2.31×** (WP-51) by fusing the classify walk's three side tables
+into one pre-reserved map, and to **~2.14×** (WP-52) by **in-node walk
+marks**: discovery is stamped on the nodes themselves (an epoch-guarded
+8-byte mark on objects, arrays and closures) and all walk state lives in
+one contiguous record table, eliminating hashing per edge entirely —
+census classify −42.7% (109.4s→62.7s) with every collector count
+conserved to the digit. A cold-boxed rare-feature pointer on `Object`
+(readonly/typed-unset sets behind one `Option<Box>`, −56B/instance
+measured) landed alongside. A growth-gated full-scan collect at the GC
+boundary also landed free — its census counters showed the pinned
 `created` channel is *teardown* garbage, alive until the harness's final
 unwind, so no mid-run cadence can reclaim it on this workload; the lever
 stays for Zend-ceiling coverage of long-running processes. Next: the
-remaining classify cost (in-node marks, to be quoted first), cold-box
-Object, then Laravel validation. See NEXT_SESSION_WORDPRESS.md.
+last ~4% vs the historic full-suite best, the reflect-cache cardinality
+owner, then Laravel validation. See NEXT_SESSION_WORDPRESS.md.
 
 ---
 
