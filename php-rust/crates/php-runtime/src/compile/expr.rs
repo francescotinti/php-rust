@@ -493,9 +493,10 @@ impl<'a> super::FnCompiler<'a> {
                         method: method.clone().into(),
                         ic: MethodIc::default(),
                     });
-                    // Value context: copy a by-reference return (REF-4b), a
-                    // no-op for a plain result — same tail as the generic arm.
-                    self.emit(Op::DerefTop);
+                    // Value context: a by-reference return is copied (REF-4b)
+                    // by the callee's `RET_DEREF` epilogue (WP-53) — this op
+                    // is only ever emitted in value context, so no trailing
+                    // `DerefTop` dispatch is needed.
                     self.chain_exit(root);
                     return Ok(());
                 }
@@ -514,14 +515,12 @@ impl<'a> super::FnCompiler<'a> {
                     let skip = self.emit(Op::JumpIfNull(Addr::MAX));
                     self.nullsafe_chain.as_mut().expect("chain open").push(skip);
                 }
-                self.chain_pause(|s| s.emit_method_call(method, args, named, recv_class))?;
                 // A method that returns by reference (`&m()`) yields a raw `Ref`;
                 // in value context (everything except a `$x =& $o->m()` bind, which
                 // compiles through `assign_ref_call` → `BindRefToChecked`) PHP hands
-                // back a COPY, not an alias (REF-4b, mirrors the known-function
-                // `DerefTop` above). `DerefTop` is a no-op for a non-reference
-                // result, so it is safe to emit after every value-context call.
-                self.emit(Op::DerefTop);
+                // back a COPY, not an alias (REF-4b). WP-53: the copy now rides the
+                // op's `deref` bit → callee `RET_DEREF`, not a trailing `DerefTop`.
+                self.chain_pause(|s| s.emit_method_call(method, args, named, recv_class, true))?;
                 self.chain_exit(root);
             }
             ExprKind::PropGetDyn { object, name, nullsafe } => {
@@ -543,9 +542,9 @@ impl<'a> super::FnCompiler<'a> {
                     self.nullsafe_chain.as_mut().expect("chain open").push(skip);
                 }
                 self.chain_pause(|s| s.emit_method_call_dyn(method, args, named))?;
-                // Value context: copy a by-reference return (see the static-call
-                // arm above); `DerefTop` is a no-op for a plain result.
-                self.emit(Op::DerefTop);
+                // Value context: a by-reference return is copied via the callee
+                // frame's `RET_DEREF` (WP-53) — the dynamic-method ops are only
+                // emitted in value context (`$x =& $o->$m()` is unsupported).
                 self.chain_exit(root);
             }
             ExprKind::VarDyn(name) => {
@@ -1675,12 +1674,17 @@ impl<'a> super::FnCompiler<'a> {
         Ok(())
     }
 
+    /// `deref` (WP-53, Fase 2.1): true at a *value*-context call site (the
+    /// callee's `Ret` copies a by-ref return via `RET_DEREF` — the old
+    /// trailing `DerefTop` is no longer emitted); false only for the
+    /// `$x =& $o->m()` bind (`assign_ref_call`), which needs the raw `Ref`.
     pub(super) fn emit_method_call(
         &mut self,
         method: &[u8],
         args: &[Expr],
         named: &[(Box<[u8]>, Expr)],
         recv_class: Option<ClassId>,
+        deref: bool,
     ) -> R<()> {
         let has_spread = args.iter().any(|a| matches!(a.kind, ExprKind::Spread(_)));
         if !named.is_empty() {
@@ -1699,10 +1703,11 @@ impl<'a> super::FnCompiler<'a> {
                 method: method.into(),
                 positional: args.len() as u32,
                 names: named.iter().map(|(n, _)| n.clone()).collect(),
+                deref,
             });
         } else if has_spread {
             self.build_args_array(args)?;
-            self.emit(Op::MethodCallArgs { method: method.into() });
+            self.emit(Op::MethodCallArgs { method: method.into(), deref });
         } else {
             // When the receiver's class is statically known (a `$this->m(...)` call
             // within a method body), honour the method's by-reference parameters
@@ -1739,6 +1744,7 @@ impl<'a> super::FnCompiler<'a> {
                 method: method.into(),
                 argc: args.len() as u32,
                 ic: MethodIc::default(),
+                deref,
             });
         }
         Ok(())

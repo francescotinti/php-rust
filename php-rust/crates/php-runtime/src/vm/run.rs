@@ -2649,39 +2649,45 @@ impl<'m> super::Vm<'m> {
                 }
                 Op::Ret => {
                     let mut ret = self.frames[top].stack.pop().unwrap_or(Zval::Null);
-                    // Coerce the returned value to a scalar return hint (weak, or
-                    // checked under strict_types) — step 14. A by-reference function
-                    // returns an alias, so its return type stays unenforced; the
-                    // init-thunk / magic path (`ret_cell`) carries no hint either.
                     let func = self.frames[top].func;
-                    // A generator function's declared type (`: Generator`/`iterable`)
-                    // describes the returned *generator*, not its internal `return`
-                    // value — so it is never checked here (the body's `return` sets
-                    // `getReturn`).
-                    if let Some(hint) = func.ret_hint.clone().filter(|_| !func.is_generator) {
-                        if !func.by_ref && self.frames[top].ret_cell.is_none() {
+                    // WP-53 (Fase 2.1): `ret_shape` folds the hint/by_ref/
+                    // generator declaration facts into one precomputed byte —
+                    // the common shape-0 function skips the whole prologue on
+                    // a single load+branch (was: `ret_hint.clone()` + three
+                    // scattered field reads at every one of 62,6M returns).
+                    let shape = func.ret_shape;
+                    if shape != 0 {
+                        // Coerce the returned value to a scalar return hint
+                        // (weak, or checked under strict_types) — step 14. A
+                        // by-reference function returns an alias, so its
+                        // return type stays unenforced, and a generator's
+                        // declared type describes the returned *generator*
+                        // (both excluded from RS_HINT at construction); the
+                        // init-thunk / magic path (`ret_cell`) carries no hint.
+                        if shape & Func::RS_HINT != 0 && self.frames[top].ret_cell.is_none() {
+                            let hint = func.ret_hint.as_ref().expect("RS_HINT implies ret_hint");
                             // The function's own unit governs its return check.
                             let strict = self.frames[top].module.strict;
-                            match self.coerce_or_check_hint(ret, &hint, strict) {
+                            match self.coerce_or_check_hint(ret, hint, strict) {
                                 Ok(c) => ret = c,
                                 Err(given) => {
-                                    return Err(self.return_type_error(func, &hint, &given))
+                                    return Err(self.return_type_error(func, hint, &given))
                                 }
                             }
                         }
-                    }
-                    // A by-ref function that returned a plain value (the in-body
-                    // notice already fired) still hands the caller a *reference*
-                    // in Zend — so `$t = &f()` binds it silently instead of
-                    // raising a second "assigned by reference" notice.
-                    if func.by_ref && !func.is_generator && !matches!(ret, Zval::Ref(_)) {
-                        ret = Zval::Ref(Rc::new(RefCell::new(ret)));
+                        // A by-ref function that returned a plain value (the
+                        // in-body notice already fired) still hands the caller
+                        // a *reference* in Zend — so `$t = &f()` binds it
+                        // silently instead of raising a second notice.
+                        if shape & Func::RS_WRAP != 0 && !matches!(ret, Zval::Ref(_)) {
+                            ret = Zval::Ref(Rc::new(RefCell::new(ret)));
+                        }
                     }
                     let ret_cell = self.frames[top].ret_cell.take();
-                    let ret_bool = self.frames[top].flags.get(FrameFlags::RET_BOOL);
-                    let ret_isset = self.frames[top].flags.get(FrameFlags::RET_ISSET);
-                    let ret_stringify = self.frames[top].flags.get(FrameFlags::RET_STRINGIFY);
-                    let ret_deref = self.frames[top].flags.get(FrameFlags::RET_DEREF);
+                    // ONE load of the packed flag byte covers the four
+                    // Ret-shaping bits and CLONE_INIT (WP-53; flags are not
+                    // mutated between here and the frame pop).
+                    let fl = self.frames[top].flags.bits();
                     let guard = self
                         .frames[top]
                         .ext_opt_mut()
@@ -2690,7 +2696,7 @@ impl<'m> super::Vm<'m> {
                     // A `clone`-driven `__clone` is finishing: revoke any remaining
                     // readonly re-init permission on the copy (PHP 8.3), so writes
                     // after the clone — or via a manual `__clone()` — fatal again.
-                    if self.frames[top].flags.get(FrameFlags::CLONE_INIT) {
+                    if fl & FrameFlags::CLONE_INIT != 0 {
                         if let Some(Zval::Object(o)) = self.frames[top].this.clone() {
                             o.borrow_mut().clear_readonly_clone_writable();
                         }
@@ -2719,16 +2725,24 @@ impl<'m> super::Vm<'m> {
                         // the caller already has (or re-reads) its own value.
                         *cell.borrow_mut() = ret;
                     } else {
-                        let v = if ret_isset {
-                            Zval::Bool(!matches!(ret.deref_clone(), Zval::Null))
-                        } else if ret_bool {
-                            Zval::Bool(convert::to_bool(&ret, &mut self.diags))
-                        } else if ret_stringify {
-                            Zval::Str(convert::to_zstr(&ret, &mut self.diags))
-                        } else if ret_deref {
-                            ret.deref_clone()
-                        } else {
+                        // Priority order preserved from the original if-chain
+                        // (isset > bool > stringify > deref); the common
+                        // flag-free return takes the first branch on the byte
+                        // already loaded above.
+                        const RET_SHAPING: u8 = FrameFlags::RET_ISSET
+                            | FrameFlags::RET_BOOL
+                            | FrameFlags::RET_STRINGIFY
+                            | FrameFlags::RET_DEREF;
+                        let v = if fl & RET_SHAPING == 0 {
                             ret
+                        } else if fl & FrameFlags::RET_ISSET != 0 {
+                            Zval::Bool(!matches!(ret.deref_clone(), Zval::Null))
+                        } else if fl & FrameFlags::RET_BOOL != 0 {
+                            Zval::Bool(convert::to_bool(&ret, &mut self.diags))
+                        } else if fl & FrameFlags::RET_STRINGIFY != 0 {
+                            Zval::Str(convert::to_zstr(&ret, &mut self.diags))
+                        } else {
+                            ret.deref_clone()
                         };
                         // The frame that owned this bounded run has returned: hand
                         // the value back to whoever started it (the host, for the
@@ -3954,11 +3968,11 @@ impl<'m> super::Vm<'m> {
                         self.gc_note(&d);
                     }
                 }
-                Op::MethodCall { method, argc, ic } => {
+                Op::MethodCall { method, argc, ic, deref } => {
                     let args = self.pop_keys(top, *argc); // source order
                     let recv = self.frames[top].stack.pop().expect("MethodCall receiver");
                     let this = recv.deref_clone();
-                    self.method_call(top, this, &method, args, Some(&ic))?;
+                    self.method_call(top, this, &method, args, Some(&ic), *deref)?;
                 }
                 Op::ThisMethodCall { method, ic } => {
                     // Fused zero-argument `$this->m()` (WP-36): the IC hit
@@ -3984,6 +3998,11 @@ impl<'m> super::Vm<'m> {
                         let callee = &self.classes[defc].methods[midx].func;
                         let m = self.class_mod(defc);
                         let mut frame = self.pooled_frame(callee, m);
+                        // Value context by construction: copy a `&m()` return
+                        // via the Ret epilogue (WP-53, replaces `DerefTop`).
+                        if callee.by_ref && !callee.is_generator {
+                            frame.flags.set(FrameFlags::RET_DEREF, true);
+                        }
                         bind_params(&mut frame, Vec::new());
                         frame.this = Some(this);
                         frame.class = Some(defc);
@@ -3999,9 +4018,9 @@ impl<'m> super::Vm<'m> {
                             ))
                         }
                     };
-                    self.method_call(top, this, &method, Vec::new(), Some(&ic))?;
+                    self.method_call(top, this, &method, Vec::new(), Some(&ic), true)?;
                 }
-                Op::MethodCallArgs { method } => {
+                Op::MethodCallArgs { method, deref } => {
                     // Spread `$obj->m(...$a)` (Session A): the arguments are the
                     // values of a runtime array (the receiver sits beneath it);
                     // string keys bind as named arguments (PHP 8.1).
@@ -4010,9 +4029,9 @@ impl<'m> super::Vm<'m> {
                     let recv = self.frames[top].stack.pop().expect("MethodCallArgs receiver");
                     let this = recv.deref_clone();
                     if named.is_empty() {
-                        self.method_call(top, this, &method, args, None)?;
+                        self.method_call(top, this, &method, args, None, *deref)?;
                     } else {
-                        self.dispatch_instance_call_named(top, this, &method, args, named)?;
+                        self.dispatch_instance_call_named(top, this, &method, args, named, *deref)?;
                     }
                 }
                 Op::MethodCallDynamic { argc } => {
@@ -4023,7 +4042,8 @@ impl<'m> super::Vm<'m> {
                     let args = self.pop_keys(top, *argc);
                     let recv = self.frames[top].stack.pop().expect("MethodCallDynamic receiver");
                     let this = recv.deref_clone();
-                    self.method_call(top, this, &method, args, None)?;
+                    // Always value context: `$x =& $o->$m()` is a compile error.
+                    self.method_call(top, this, &method, args, None, true)?;
                 }
                 Op::MethodCallDynamicArgs => {
                     // Spread `$obj->$m(...$a)`: name on top, args array beneath it;
@@ -4034,13 +4054,14 @@ impl<'m> super::Vm<'m> {
                     let (args, named) = split_args_from_array_value(argsval);
                     let recv = self.frames[top].stack.pop().expect("MethodCallDynamicArgs receiver");
                     let this = recv.deref_clone();
+                    // Always value context (see `MethodCallDynamic`).
                     if named.is_empty() {
-                        self.method_call(top, this, &method, args, None)?;
+                        self.method_call(top, this, &method, args, None, true)?;
                     } else {
-                        self.dispatch_instance_call_named(top, this, &method, args, named)?;
+                        self.dispatch_instance_call_named(top, this, &method, args, named, true)?;
                     }
                 }
-                Op::MethodCallNamed { method, positional, names } => {
+                Op::MethodCallNamed { method, positional, names, deref } => {
                     // Named `$obj->m(p…, n: v, …)` (Session A): pop the named values
                     // (source order), then the positional values, then the receiver.
                     let named_vals = self.pop_keys(top, names.len() as u32);
@@ -4049,7 +4070,7 @@ impl<'m> super::Vm<'m> {
                     let pos = self.pop_keys(top, *positional);
                     let recv = self.frames[top].stack.pop().expect("MethodCallNamed receiver");
                     let this = recv.deref_clone();
-                    self.dispatch_instance_call_named(top, this, &method, pos, named)?;
+                    self.dispatch_instance_call_named(top, this, &method, pos, named, *deref)?;
                 }
                 Op::InvokeMethod { class, method_idx, argc } => {
                     let args = self.pop_keys(top, *argc);

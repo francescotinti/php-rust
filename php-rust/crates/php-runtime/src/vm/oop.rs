@@ -1100,6 +1100,10 @@ impl<'m> Vm<'m> {
     /// method at run time via [`Self::dispatch_instance_call`]; a non-object is the
     /// "Call to a member function …() on …" fatal. Shared by [`Op::MethodCall`] and
     /// the spread variant [`Op::MethodCallArgs`].
+    /// `deref` (WP-53): value-context call site — a by-ref user callee gets
+    /// `RET_DEREF` on its frame (the Ret epilogue copies the returned `Ref`,
+    /// REF-4b, replacing the old trailing `DerefTop`); a native result is
+    /// deref-copied at its push site. False only for `$x =& $o->m()`.
     pub(super) fn method_call(
         &mut self,
         top: usize,
@@ -1107,6 +1111,7 @@ impl<'m> Vm<'m> {
         method: &[u8],
         mut args: Vec<Zval>,
         ic: Option<&crate::bytecode::MethodIc>,
+        deref: bool,
     ) -> Result<(), PhpError> {
         // Deferred place arguments (SEND_VAR_EX) resolve against the callee's
         // by-ref mask now that the receiver — hence the callee — is known; a
@@ -1126,6 +1131,8 @@ impl<'m> Vm<'m> {
             // Native dispatch — no `bind_params` step — so a reference pushed by a
             // dynamic call (SEND_VAR_EX) is decayed to its value first.
             let result = self.generator_method(gs, method, decay_args(args))?;
+            let result =
+                if deref && matches!(result, Zval::Ref(_)) { result.deref_clone() } else { result };
             self.frames[top].stack.push(result);
             return Ok(());
         }
@@ -1135,6 +1142,8 @@ impl<'m> Vm<'m> {
             let cid = o.borrow().class_id as usize;
             if self.instance_of(cid, fcid) {
                 let result = self.fiber_method(&this, method, decay_args(args))?;
+                let result =
+                    if deref && matches!(result, Zval::Ref(_)) { result.deref_clone() } else { result };
                 self.frames[top].stack.push(result);
                 return Ok(());
             }
@@ -1144,6 +1153,8 @@ impl<'m> Vm<'m> {
         if let Zval::Closure(cl) = &this {
             let cl = Rc::clone(cl);
             let result = self.closure_instance_method(&cl, method, decay_args(args))?;
+            let result =
+                if deref && matches!(result, Zval::Ref(_)) { result.deref_clone() } else { result };
             self.frames[top].stack.push(result);
             return Ok(());
         }
@@ -1157,7 +1168,7 @@ impl<'m> Vm<'m> {
                 )))
             }
         };
-        self.dispatch_instance_call(top, cid, this, method, args, ic)
+        self.dispatch_instance_call(top, cid, this, method, args, ic, deref)
     }
 
     /// Dispatch an instance method call `$this->method(positional…, named…)` whose
@@ -1175,6 +1186,7 @@ impl<'m> Vm<'m> {
         method: &[u8],
         positional: Vec<Zval>,
         named: Vec<(Box<[u8]>, Zval)>,
+        deref: bool,
     ) -> Result<(), PhpError> {
         let cid = match &this {
             // A `Generator`/`Fiber`'s native methods take no named arguments.
@@ -1222,6 +1234,10 @@ impl<'m> Vm<'m> {
                 // get the entry script's module here and die on MakeClosure.
                 let mut frame =
                     build_named_frame(callee, self.class_mod(defc), &qn, positional, named)?;
+                // Value-context copy of a `&m()` return (WP-53, ex-`DerefTop`).
+                if deref && callee.by_ref && !callee.is_generator {
+                    frame.flags.set(FrameFlags::RET_DEREF, true);
+                }
                 frame.this = Some(this);
                 frame.class = Some(defc);
                 frame.static_class = Some(cid); // LSB = receiver's actual class
@@ -1229,7 +1245,16 @@ impl<'m> Vm<'m> {
             }
             None => match resolve_method_runtime(&self.classes, cid, b"__call") {
                 Some((cdefc, cmidx)) => {
+                    let cf = &self.classes[cdefc].methods[cmidx].func;
+                    let set_deref = deref && cf.by_ref && !cf.is_generator;
                     self.push_magic_call_named(cdefc, cmidx, Some(this), cid, method, positional, named);
+                    if set_deref {
+                        self.frames
+                            .last_mut()
+                            .expect("magic __call frame just pushed")
+                            .flags
+                            .set(FrameFlags::RET_DEREF, true);
+                    }
                 }
                 None => {
                     return Err(match resolved {

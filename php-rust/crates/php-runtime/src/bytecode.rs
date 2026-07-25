@@ -927,7 +927,12 @@ pub enum Op {
     /// at *run time* by walking the receiver's class `parent` chain
     /// (case-insensitive). The callee runs in a pushed frame with `$this` bound to
     /// the receiver; a missing method is a fatal (magic `__call` is OOP-3).
-    MethodCall { method: Rc<[u8]>, argc: u32, ic: MethodIc },
+    /// `deref` (WP-53, Fase 2.1): true for a *value*-context call site — a
+    /// by-reference callee's returned `Ref` is copied (REF-4b) via the callee
+    /// frame's `RET_DEREF` flag instead of a trailing [`Op::DerefTop`]; false
+    /// only for the `$x =& $o->m()` bind (`assign_ref_call`), whose
+    /// `BindRefToChecked` needs the raw `Ref`.
+    MethodCall { method: Rc<[u8]>, argc: u32, ic: MethodIc, deref: bool },
     /// `[] -> [result]` — fused zero-argument `$this->m()` (WP-36, bigram
     /// This→MethodCall): same semantics as `This` + `MethodCall{argc: 0}` by
     /// construction (the handler feeds the shared `method_call` funnel), minus
@@ -940,7 +945,7 @@ pub enum Op {
     /// the values of a runtime array (spread call `$obj->m(...$a)`, Session A):
     /// string keys are dropped, values bound positionally. Resolves the method at
     /// run time exactly as [`Op::MethodCall`] (including `Generator`/`Fiber`).
-    MethodCallArgs { method: Rc<[u8]> },
+    MethodCallArgs { method: Rc<[u8]>, deref: bool },
     /// `[obj, arg0, …, arg{argc-1}, name] -> [ret]` — dynamic instance method call
     /// `$obj->$m(args)` / `$obj->{expr}(args)`: the method-name string is popped
     /// from the top of the stack, then dispatched exactly like [`Op::MethodCall`]
@@ -958,7 +963,7 @@ pub enum Op {
     /// with gaps left for the default prologue and a trailing `...$rest` collecting
     /// unmatched names (string keys). Mirrors the evaluator's named-binding errors
     /// (`ArgumentCountError`, unknown / overwriting name).
-    MethodCallNamed { method: Rc<[u8]>, positional: u32, names: Rc<[Box<[u8]>]> },
+    MethodCallNamed { method: Rc<[u8]>, positional: u32, names: Rc<[Box<[u8]>]>, deref: bool },
     /// `[pos…, named…] -> [ret]` — call known user function `func` with named
     /// arguments bound at run time against the callee's `param_names` (the runtime
     /// binder, not the compile-time layout). Used when the compile-time layout
@@ -1369,6 +1374,12 @@ pub struct Func {
     /// The body contains a `yield` — calling it produces a `Generator` rather
     /// than running the body. Drives generator setup once `Yield` is wired in.
     pub is_generator: bool,
+    /// Precomputed shape of the [`Op::Ret`] epilogue (WP-53, Fase 2.1): the
+    /// common function (no return hint, not by-reference) has shape 0 and the
+    /// Ret body skips the whole hint/wrap prologue on ONE load+branch instead
+    /// of reading `ret_hint`/`by_ref`/`is_generator` at every return. Derived
+    /// from those three fields at construction (they are never mutated after).
+    pub ret_shape: u8,
     /// Source line of the declaration, for diagnostics / stack traces.
     pub line: Line,
     /// Line of the closing `}` of the body, for `getEndLine` / the `@@` export span
@@ -1386,6 +1397,31 @@ pub struct Func {
 }
 
 impl Func {
+    /// [`Func::ret_shape`] bit: enforce the scalar return hint at `Ret`
+    /// (`ret_hint` present on a by-value, non-generator function).
+    pub const RS_HINT: u8 = 1 << 0;
+    /// [`Func::ret_shape`] bit: wrap a plain returned value into a `Ref`
+    /// (`function &f()`, non-generator) — the by-ref return protocol.
+    pub const RS_WRAP: u8 = 1 << 1;
+
+    /// Compute [`Func::ret_shape`] from the three governing declaration facts.
+    /// Every `Func` construction site funnels through this so the cached shape
+    /// can never drift from the fields it summarises.
+    pub fn ret_shape_of(
+        ret_hint: &Option<TypeHint>,
+        by_ref: bool,
+        is_generator: bool,
+    ) -> u8 {
+        let mut s = 0;
+        if ret_hint.is_some() && !by_ref && !is_generator {
+            s |= Self::RS_HINT;
+        }
+        if by_ref && !is_generator {
+            s |= Self::RS_WRAP;
+        }
+        s
+    }
+
     /// Release the push-growth capacity slack of every retained Vec (Fase 1.1,
     /// WP-48). Compiled modules are leaked for the life of the process
     /// (`Vm::drive_unit`), so slack bytes are retained bytes; runs once per

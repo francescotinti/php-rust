@@ -1308,6 +1308,13 @@ impl FrameFlags {
         self.0 & mask != 0
     }
 
+    /// Raw byte — lets `Op::Ret` test all four Ret-shaping bits with ONE load
+    /// instead of four masked reads (WP-53, Fase 2.1).
+    #[inline]
+    fn bits(self) -> u8 {
+        self.0
+    }
+
     #[inline]
     fn set(&mut self, mask: u8, v: bool) {
         if v {
@@ -9018,6 +9025,7 @@ impl<'m> Vm<'m> {
         method: &[u8],
         args: Vec<Zval>,
         ic: Option<&crate::bytecode::MethodIc>,
+        deref: bool,
     ) -> Result<(), PhpError> {
         // INLINE CACHE (WP-30): this site's last scope-independent resolution
         // for exactly this receiver class. Sound to skip resolve + private-
@@ -9030,6 +9038,12 @@ impl<'m> Vm<'m> {
                 let callee = &self.classes[defc].methods[midx].func;
                 let m = self.class_mod(defc);
                 let mut frame = self.pooled_frame(callee, m);
+                // Value-context copy of a `&m()` return (WP-53, ex-`DerefTop`):
+                // the branch is dead for the overwhelmingly common by-value
+                // callee, so the IC fast path pays one predictable test.
+                if deref && callee.by_ref && !callee.is_generator {
+                    frame.flags.set(FrameFlags::RET_DEREF, true);
+                }
                 bind_params(&mut frame, args);
                 frame.this = Some(this);
                 frame.class = Some(defc);
@@ -9069,6 +9083,10 @@ impl<'m> Vm<'m> {
                 let callee = &self.classes[defc].methods[midx].func;
                 let m = self.class_mod(defc);
                 let mut frame = self.pooled_frame(callee, m);
+                // Value-context copy of a `&m()` return (WP-53, ex-`DerefTop`).
+                if deref && callee.by_ref && !callee.is_generator {
+                    frame.flags.set(FrameFlags::RET_DEREF, true);
+                }
                 bind_params(&mut frame, args);
                 frame.this = Some(this);
                 frame.class = Some(defc);
@@ -9081,7 +9099,16 @@ impl<'m> Vm<'m> {
                 Some((cdefc, cmidx)) => {
                     // `__call($name, $args)` gets a value array — decay references
                     // pushed by a dynamic call (SEND_VAR_EX).
+                    let cf = &self.classes[cdefc].methods[cmidx].func;
+                    let set_deref = deref && cf.by_ref && !cf.is_generator;
                     self.push_magic_call(cdefc, cmidx, Some(this), cid, method, decay_args(args));
+                    if set_deref {
+                        self.frames
+                            .last_mut()
+                            .expect("magic __call frame just pushed")
+                            .flags
+                            .set(FrameFlags::RET_DEREF, true);
+                    }
                 }
                 None => {
                     return Err(match resolved {
@@ -16819,6 +16846,13 @@ mod tests {
             std::mem::size_of::<crate::vm::Frame<'static>>() <= 176,
             "Frame grew to {} bytes",
             std::mem::size_of::<crate::vm::Frame<'static>>()
+        );
+        // WP-53: the `deref` bit on the MethodCall payloads must ride in
+        // existing padding — a bigger Op multiplies every retained unit.
+        assert!(
+            std::mem::size_of::<crate::bytecode::Op>() <= 48,
+            "Op grew to {} bytes",
+            std::mem::size_of::<crate::bytecode::Op>()
         );
         let mut fl = FrameFlags::default();
         assert!(!fl.get(FrameFlags::RET_DEREF));

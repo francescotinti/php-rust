@@ -382,7 +382,9 @@ impl<'a> super::FnCompiler<'a> {
                 ExprKind::This => self.cur_class,
                 _ => None,
             };
-            self.emit_method_call(method, args, named, recv_class)?;
+            // `deref: false`: the bind needs the raw `Ref` a `&m()` returns —
+            // the callee's `RET_DEREF` must stay clear (WP-53).
+            self.emit_method_call(method, args, named, recv_class, false)?;
             self.emit(Op::BindRefToChecked { base, steps: steps.into() });
             return Ok(());
         }
