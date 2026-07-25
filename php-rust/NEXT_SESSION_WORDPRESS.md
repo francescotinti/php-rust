@@ -1,34 +1,28 @@
-# Rotta WORDPRESS-FIRST — WP-track (dopo WP-51: classify fuso −4,1% + Fase 1.4 LANDED gratis → full 2,31×, media 2,84×/4,34×; WP-52 = residuo classify (in-node marks da quotare) + Fase 1.3)
+# Rotta WORDPRESS-FIRST — WP-track (dopo WP-52: in-node marks −42,7% classify + cold-box Object → full 2,14×, media 2,83×/4,36×; WP-53 = residuo ~30s vs 2,06× + reflect-cache owner / Fase 2)
 
-> ⚡ **WP-51 (2026-07-25, `ffb8e3b`+`84a22f6`)** — **Ob.1a: probe full-scan a
-> scala FULL POSITIVO: `created-registry-only` 353,74MB→0, roots_total
-> −354,2M (=100% del canale), freed 1.481.070 zval, live drop ≈−545MB;
-> costo UN full-scan a full-graph = 2.489ms — kill-switch NON scattato.**
-> Ob.2 leva A (`ffb8e3b`): classify a MAPPA FUSA (3 tabelle→1 `GcInfo`,
-> 3→2 hash op/arco, pre-reserve della taglia dell'ultimo walk sui call
-> ≥1024 root, zero footprint standing) → **run38 793,7s vs old 827,9s
-> stessa notte = −4,1% (~24% del classify rimosso)**. Ob.1b leva B
-> (`84a22f6`, **Fase 1.4 LANDED**): full-scan seed growth-gated
-> (`GC_FULLSCAN_GROWTH=50k` su `created.len()`, check O(1) nel wrapper
-> COLD `collect_cycles` — mai per-test, zero per i worker) → **run39
-> 782,7s = 13:03 = 2,31×: B è GRATIS sulla full (il −11s vs run38 NON è
-> mechanism-backed: rumore), totale notte −5,5% (2,44×→2,31×)**. Media
-> (ab51): CPU **FLAT +0,01%** (guardia Fase 1 ≤+0,5% RISPETTATA) →
-> **2,84×**; peak fisico −0,32% → **4,34×** (minimi di sempre entrambi).
-> ⭐⭐ **mechanism-check census-B: la predizione footprint di B è
-> FALSIFICATA nei conteggi — freed +0,1% (non +1,45M), canale
-> created-registry-only INVARIATO a 353,7MB: è garbage di TEARDOWN, vivo
-> fino allo smontaggio PHPUnit ⇒ invisibile a OGNI cadenza mid-run per
-> costruzione del workload. B tenuta (gratis + ceiling Zend per processi
-> long-running); esito footprint Fase 1.4 su PHPUnit = NEUTRO.** Leva A
-> riconciliata alla cifra: classify_ms census 142,4→109,4s ≈ −34,2s full.
-> Parità: 3 full stessa notte tutte BYTE-ID a run33; corpus 1421 ×2;
-> cargo 1639/0. ⭐⭐ lezione launcher: daemonizer con `chdir "/"` ⇒ FINTI
-> fail phpt (bug60771 scrive ./test.php nella CWD; la CWD è parte del
-> contratto della suite — `cd` root php-8.5.7 DENTRO lo script di gate).
-> Convenzione gap corretta (utente): REPORT_GAP_N per-sessione +
-> `gaps/GAP_TREND.md` cumulativo.
-> **Storia: `sessions/WP_SESSION_51.md`. WP-50: `sessions/WP_SESSION_50.md`.**
+> ⚡ **WP-52 (2026-07-25, `1a52712`+`ebd44f3`)** — **Ob.1 in-node marks:
+> `WalkMark{epoch,slot}` 8B NEI nodi (Object dentro GcMark, campo nuovo su
+> PhpArray/Closure; Ref su mini-mappa — non ha struct), stato del walk in
+> `Vec<NodeRec>` contigua che È la worklist FIFO (stessa sequenza ⇒ stessi
+> conteggi): classify_ms census 109.383→62.678 = −46,7s (−42,7%), OLTRE
+> la quota −25..−34s (surplus = get-per-pop pass-2 + iterazione contigua
+> vs mappa). Conservazione alla cifra: collects 303=303, calls 152=152,
+> freed Δ−16 su 14,2M.** Ob.2 Fase 1.3 cold-box (`rare:
+> Option<Box<ObjRare>>` = −64B/istanza; **dyn_entries ESCLUSO e
+> verbalizzato: è lo storage di stdClass = fast-path WP, rischio classe
+> WP-44**): −56,0B/oggetto alla cifra (87,5%, obj.live_n conservato
+> 525.258=525.258), churn obj −2,02GB. **Giudici: full stesso-giorno
+> run40 725,1s = 2,14× vs old phpr-wp51b 787,4s = 2,32× (−7,9% raw,
+> ~−6,7% corretto — mechanism-backed); media ab52 CPU −0,57% new 6/6 →
+> 2,83× (minimo di sempre); peak fisico +0,61% (+10,4MB, guardia ≤+2% ok
+> ma predizione −2MB MANCATA: size-class mimalloc 80→96B sugli array —
+> regressione piccola TENUTA e verbalizzata).** Parità: corpus 1421
+> IDENTICO ×2, cargo 1639/0 ×2, fail-set BYTE-ID a run33 su census52 +
+> run40 + run40-old. ⭐⭐ RSS ps dei full (new 4024 vs old 2897 MB) =
+> accounting MADV/pagine tenute residenti dai mark, NON footprint — il
+> peak fisico media si muove di +0,61%. Residuo vs WP-40 2,06×: **~30s**
+> (era ~85s). Binario stashed: `phpr-wp52` (sha256 57607da3…).
+> **Storia: `sessions/WP_SESSION_52.md`. WP-51: `sessions/WP_SESSION_51.md`.**
 
 ## 📁 Convenzioni (decisione utente 2026-07-23)
 
@@ -65,27 +59,28 @@
 - Commit AND push a ogni step; deviazioni deliberate = marker
   `BUG(port):` / `PERF(port):` / `TODO(port):`.
 
-## Stato gate per nome (gate22 completo su `60c7e04`, 2026-07-25, archivio `gate-out-wp50-archived/`; fix GC-only `f034c6c` gated con corpus+cargo+full BYTE-ID)
+## Stato gate per nome (gate22 completo su `60c7e04`, 2026-07-25, archivio `gate-out-wp50-archived/`; leve GC/layout WP-52 `1a52712`+`ebd44f3` gated con corpus ×2 + cargo ×2 + 3 full BYTE-ID)
 
 - Gate22 verde: corpus **1421** IDENTICO alla baseline WP-46 (0 nuovi-fail;
-  ri-verificato ×2 anche su `f034c6c`) · sess 28 · date 351 · refl 290
+  ri-verificato ×2 in WP-52 su entrambi gli alberi — set =
+  `wp52-harness/corpus.fails`) · sess 28 · date 351 · refl 290
   IDENTICI · ORM 3484 3E/13F per nome · hk 1665 0E/0F · cargo **1639/0 ×2**
   · probe gd/mysqli/media byte-id · http DIFF-set atteso (WP-14, 2 item) ·
   **option 413/1061 · restapi 3508/15947 (1E = oracle) IDENTICI per nome
-  COL conteggio**. Baseline corpus resta **1421**
-  (`gate-out-wp46-archived/corpus.fails`).
+  COL conteggio**. Baseline corpus resta **1421**.
 - ⚠️ **MySQL**: datadir del progetto = `/Volumes/Extreme Pro/Claude/
   mysql-wp8/data` (socket `/private/tmp/mysql-wp8.sock`, porta 3306) —
   MAI `mysql.server start` naive (apre il datadir brew vergine ⇒ gate DB
   FALSI VERDI a 0 nomi). Avvio: `mysqld_safe --datadir=... --socket=...`
   daemonizzato (double-fork+setsid). Gate DB "IDENTICO" da validare
   SEMPRE col conteggio (option 413, restapi 3508).
-- **Full-suite run39** (~/Claude/wpdev, WP-51, binario `84a22f6`+docs):
-  30.472 test, 0E/2F/86W/73S, **fail-set BYTE-IDENTICO a run33** (88 nomi);
-  baseline resta `wp16-harness/full-out/run33-fails.txt`. Master-CPU
-  **782,7s ≈13:03 = 2,31×** (catena stessa notte: old wp50 827,9 = 2,44× →
-  run38 leva-A 793,7 = 2,34× → run39 A+B 782,7; WP-40 11:39 = 2,06× =
-  riferimento residuo). Wall ~17 min = 1,5×.
+- **Full-suite run40** (~/Claude/wpdev, WP-52, binario `ebd44f3`+docs):
+  30.472 test, 0E/2F/86W/73S, **fail-set BYTE-IDENTICO a run33** (88 nomi;
+  idem run40-old e census52); baseline resta
+  `wp16-harness/full-out/run33-fails.txt` (run39 archiviato in
+  `full-out/run39/`). Master-CPU **725,1s ≈12:05 = 2,14×** (coppia
+  stesso-giorno: old phpr-wp51b 787,4 = 2,32×; WP-40 11:39 = 2,06× =
+  riferimento residuo ~30s). Wall ~16,3 min = 1,4×.
   ⚠️ RSS: telemetria `.rss` in APPEND — max PER SEGMENTO, e il filtro
   orario da solo NON basta (le ore dei giorni prima passano il confronto
   stringa): prima delimitare il blocco della notte (ultimo time-reset),
@@ -109,38 +104,43 @@
 # WP-51: wp51-harness/{run-full-census51,run-full-census51b,corpus51,
 #  corpus51-diffs,run38,run38-old,ab51}.sh; binario census A+B
 #  phpr-memgc51; stash A/B: phpr-wp51a (leva A) / phpr-wp51b (A+B).
+# WP-52: wp52-harness/{daemonize.pl (SENZA chdir "/"),corpus52,
+#  build-memgc52,run-full-census52,run40,run40-old,ab52,orchestrate52}.sh;
+#  binario census phpr-memgc52; stash: phpr-wp52 (sha256 57607da3…).
+#  orchestrate52.sh = catena sequenziale census→full-new→full-old→ab.
 # ⚠️ launcher: MAI chdir "/" nel daemonizer per i gate phpt — cd root
 #  php-8.5.7 DENTRO lo script (bug60771 scrive ./test.php nella CWD).
 ```
 
-## 🎯 PROSSIMO LAVORO — WP-52: residuo classify + Fase 1.3
+## 🎯 PROSSIMO LAVORO — WP-53: residuo ~30s + reflect-cache owner / Fase 2
 
 **Rotta (utente 2026-07-24)**: `FOOTPRINT_CPU_ROADMAP.md` — footprint-first,
 safe-only, TUTTE le fasi comunque, **niente revert su insuccesso**.
 Laravel POSTICIPATA a valle.
 
-1. **Residuo CPU full 2,31× vs 2,06× WP-40 (~85s)**: il classify resta il
-   candidato (era 142s; la fusione ne ha tolti ~34). Prossima leva da
-   QUOTARE prima di scrivere: **in-node marks** (visited/in_edges/live nei
-   valori invece della HashMap — elimina l'hashing residuo ~2 op/arco; ma
-   costa +8B/nodo su PhpArray/Closure/Ref che oggi non hanno header GC:
-   quotare i byte col mem-census e la CPU con un micro-conteggio archi
-   PRIMA di toccare i layout; sentinelle drop-order pinnate PRIMA, WP-28).
-   Alternativa più piccola: profilo del walk per separare hash-cost da
-   borrow/iter-cost (i conteggi per-round sono in
-   `wp51-harness/fullcensus-out/collect-full.log`).
-2. **Fase 1.3 cold-box Object** (~96B×istanze, pattern WP-32) — prossima
-   leva footprint; attribuzione transiente col criterio di lettura .rss
-   corretto (blocco notte + finestra).
-3. **reflect-cache**: la leva vera è l'OWNER della cardinalità (memo keyed
+1. **Residuo CPU full 2,14× vs 2,06× WP-40 (~30s)**: il classify census
+   residuo è 62,7s e ora è dominato da borrow/iter/strong_count (l'hashing
+   è stato eliminato in WP-52) — se si insiste sul classify, la lente è il
+   "profilo del walk" (separare borrow-cost da traversal); rendimenti
+   decrescenti attesi. In alternativa aprire la **Fase 2 CPU della roadmap
+   (mai toccata)**: RET_DEREF+ret_shape COME UNA SOLA MODIFICA (~40,5M
+   DerefTop sprecati) + Sweep emit-time elision (~47M noop) — op-census
+   come mechanism-check, guardia footprint ≤+2%.
+2. **reflect-cache**: la leva vera è l'OWNER della cardinalità (memo keyed
    su ClassId freschi dei mock, leak WP-47) — il cap è un cerotto
    (16384 falsificata: hit 16,3→16,5%; ritorno a 8192 = decisione utente,
    risparmierebbe ~42MB standing sul media).
+3. **Footprint**: canali grossi rimasti = hashed-array (Fase 3, redesign) e
+   interning stringhe (Fase 1.5, se il censimento duplicati lo quota);
+   il +10,4MB del +8B/nodo WP-52 è pagato e verbalizzato.
 4. **NON riproporre**: Fase 1.2 created→Weak/eviction rc==1 (falsificata);
    rooting selettivo; cap rerun stile Zend; **bound/guardie calcolate
    negli arm caldi del run_loop** (WP-50: +1 load+max = +17..35s — campo
    cache ai siti di mutazione); soglia adattiva/isteresi su buffer RAW;
-   collect per-test (il gating a crescita è la forma giusta, WP-51).
+   collect per-test (il gating a crescita è la forma giusta, WP-51);
+   **cold-box di dyn_entries** (storage di stdClass = fast-path, WP-52);
+   giudizi footprint dall'RSS telemetrico dei full (accounting MADV —
+   solo peak fisico /usr/bin/time -l).
 
 ## (storico, pre-roadmap) PROSSIMO LAVORO
 
@@ -190,8 +190,10 @@ vivo); misure per-sessione in `gaps/REPORT_GAP_<N>.md`. A ogni chiusura:
 misurare media (user CPU + footprint) e full-suite master-CPU, scrivere
 REPORT_GAP_N (sola sessione N), aggiungere la riga a GAP_TREND, riportare
 il gap all'utente.
-Ultimo stato (WP-51): **media CPU 59,17/20,82 = 2,84× (A/B +0,01% flat) ·
-footprint peak fisico 1,721/0,396G = 4,34× (A/B −0,32%) · full run39
-782,7s ≈13:03 = 2,31× (old stessa notte 827,9 = 2,44×; riferimento WP-40
-2,06×), fail-set byte-id a run33 su 3 run · Fase 1.4 LANDED gratis ·
-dettaglio: `gaps/REPORT_GAP_51.md`, trend: `gaps/GAP_TREND.md`**.
+Ultimo stato (WP-52): **media CPU 58,84/20,82 = 2,83× (A/B −0,57%, new
+6/6) · footprint peak fisico 1,720/0,395G = 4,36× (A/B +0,61% = +10,4MB,
+tenuta e verbalizzata) · full run40 725,1s ≈12:05 = 2,14× (old
+stesso-giorno 787,4 = 2,32×; riferimento WP-40 2,06×, residuo ~30s),
+fail-set byte-id a run33 su 3 run · classify −42,7% (in-node marks) +
+cold-box Object −56B/ist · dettaglio: `gaps/REPORT_GAP_52.md`, trend:
+`gaps/GAP_TREND.md`**.
