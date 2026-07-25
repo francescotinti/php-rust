@@ -87,6 +87,14 @@ WP-44 per −16B; si prende l'80% del canale (64 di 80B) a rischio ~zero.
     ≥70% ✓; il residuo = i Box ObjRare di chi usa le feature).
     `arr.live` +14,0MB = il +8B/nodo Ob.1 sugli array vivi al teardown.
     **Netto exit −15,4MB.** obj.cum −2,02GB di churn (36,13M alloc).
-- [ ] Giudici stesso-giorno in corso: run40 → run40-old → ab52
-      (orchestrate52.sh, sequenziali detached; run39 archiviato in
-      wp16-harness/full-out/run39/)
+- [x] **Full giudice stesso-giorno (coppia run40/run40-old)**: new
+      **725,1s** (ultimo sample 12:05.10, morte +19s) vs old phpr-wp51b
+      **787,4s** (13:07.36, morte +10s) = **−7,9% raw / ~−6,7% corretto**
+      — mechanism-backed (classify −46,7s ≈ −5,9% + churn obj −2,02GB del
+      cold-box). Entrambi fail-set **BYTE-ID a run33 (88 nomi)**,
+      30.472 test 2F/86W/73S. Old di giorno 787s vs old di notte 782,7
+      (run39): ambiente diurno ~+1%, la coppia stesso-giorno è il giudice.
+      ⚠️ RSS telemetrico (ps, accounting MADV): new max 4024 vs old 2897
+      stesso-giorno; entrambi gonfi vs notte (1945/1700) — verdetto
+      footprint rimandato al peak FISICO di ab52 (metrica ufficiale).
+- [ ] ab52 in corso (media 6 round interleaved + 2 oracle)
