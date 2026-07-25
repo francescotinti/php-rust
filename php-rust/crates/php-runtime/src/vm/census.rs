@@ -494,8 +494,8 @@ mod tests {
             assert!(i < N_OPS, "{name} index {i} out of range");
             assert_eq!(OP_NAMES[i], *name, "OP_NAMES row mismatch for {name}");
         }
-        // Nop is the last variant by construction.
-        assert_eq!(op_index(&Op::Nop), N_OPS - 1);
+        // ConcatAssignSlot is the last table row (WP-55).
+        assert_eq!(op_index(&Op::ConcatAssignSlot(0)), N_OPS - 1);
     }
 
     #[test]
