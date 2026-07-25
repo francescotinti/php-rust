@@ -1,29 +1,31 @@
-# Rotta WORDPRESS-FIRST — WP-track (dopo WP-54: attribuzione CPU-secondi del full + reflect re-key = −7,4% media / −2,7% full; WP-55 = PhpStr growable + append-in-place + checkpoint Fase 3)
+# Rotta WORDPRESS-FIRST — WP-track (dopo WP-55: PhpStr growable + append-in-place `.=` = full −2,56% → 2,11×; checkpoint Fase 3: pilota = HASHED-ARRAY; WP-56 = Fase 3 pilota array)
 
-> ⚡ **WP-54 (2026-07-25, `5915b7b`+`f927bf7`+`14141ab`)** — **Metodo
-> WP-45 applicato alla CPU: tabella CPU-secondi del full-master**
-> (run42 campionata a 6 finestre `sample`, stratificata col cpu-rate del
-> `.rss`, Σ=776,7s; tabella decisionale PRE-REGISTRATA prima dei numeri;
-> strumenti in `wp54-harness/*.py`). Verdetti: corpi+dispatch 41,9% (in
-> banda, arco chiuso) · crypt 11,7% ONESTO (probe bcrypt: phpr −14% vs
-> oracle) · gc-walk 10,0% (unico canale prereg sopra soglia) · str-copy
-> 6,5% + madvise 5,4% = **`.=` O(n²) CONFERMATO (probe 244× vs oracle:
-> concat2 = alloc esatta + doppia copia, Box<[u8]> senza capacity)** ·
-> malloc TOTALE 4,4%, di cui stringhe 0,3% (~10-20ns/pair) ⇒ fusione
-> single-alloc FALSIFICATA come leva CPU; args-pool morta (0,14%);
-> leaf-bit walk falsificata (foglie = 37,5% nodi ma 6,6% SLOT). **Leva
-> aperta (census reflect: inherited 96,3%): re-key
-> reflect_method_info_cache su (declaring class, mname)** dopo la
-> resolve — hit-rate 11,7%→96,7%, ~450k descriptor-build/run evitati.
-> Giudici: ab54 **−7,42% CPU new 6/6 netti → 2,61× MINIMO ASSOLUTO**;
-> peak fisico **−5,79% → 4,16×**; full run43 **717,3s = 2,12×** (−2,71%
-> vs old stesso-giorno, old replica run41: numero pulito; residuo vs
-> WP-40 ≈18s). Parità: corpus 1421 + refl 290 IDENTICI, cargo 1639/0,
-> ORM 3E/13F per nome, hk 0E/0F, fail-set full BYTE-ID a run33 su
-> run43 E run43-old, probe54 NEW==OLD. Stash: `phpr-wp54` (sha256
-> e4341e77…); old = `phpr-wp53` (e75c5abb…).
-> **Storia: `sessions/WP_SESSION_54.md` (+ prereg in
-> `WP_SESSION_54_PREREG.md`). WP-53: `sessions/WP_SESSION_53.md`.**
+> ⚡ **WP-55 (2026-07-25, `a8bc9aa`+`50e2fb2`)** — **PhpStr growable +
+> append-in-place a refcount unico** (mandato WP-54): `PhpStr{hash:
+> Cell<u64>, bytes: Vec<u8>}` (24→32B; RcBox 40→48B = +8B/stringa,
+> quotato PRIMA: 713k vive al picco = +5,7MB = +0,36%) + op fuso
+> `ConcatAssignSlot` (mirror ASSIGN_OP) per `$s .= rhs` su locale nudo:
+> slot-Str-UNICO + rhs Str ⇒ `append` via `Rc::get_mut` (hash azzerato
+> a ogni mutazione); alias/const-pool/Ref/non-Str ⇒ fallback
+> byte-identico (binary_value_ab condiviso) = COW per costruzione.
+> **Mechanism-check: probe 5k×1KB = 499ms → 2ms (250×) = ORACLE**.
+> Giudici: full run44 **716,9s vs 735,7s old stessa-sera = −2,56%
+> (−18,8s, bordo basso banda 15-90s) → 2,11× nuovo minimo**; ab55 media
+> **FLAT** (leva full-only, atteso); footprint **+1,27%** (+8B +
+> slack append-grown; guardia ≤2% ok, tenuto). **Checkpoint Fase 3
+> (census fresco)**: arr vive ~421MB (39% proxy) vs str ~45MB (4%) ⇒
+> **pilota heap-a-handle = HASHED-ARRAY** (10×; stringhe: falsificate
+> come pilota). ⭐⭐ il full si giudica SOLO in coppia stessa-sera
+> (deriva pomeriggio→sera ~2,6% = taglia delle leve); ⭐⭐ la banda si
+> realizza al bordo che il SITO copre: restano i `.=` su prop/element
+> (quotare per sito PRIMA di estendere il fuso). Parità: corpus 1421 +
+> refl 290 IDENTICI, cargo 1639/0, ORM 3E/13F (16 nomi), hk 0E/0F,
+> fail-set full BYTE-ID a run33 su run44 E run44-old, probe55-sem/dtor
+> BYTE-ID. 2 divergenze PRE-esistenti a verbale (`.=` su undef senza
+> warning; operandi oggetto in `.=` senza `__toString`). Stash:
+> `phpr-wp55` (sha256 ecc04817…); old = `phpr-wp54` (e4341e77…).
+> **Storia: `sessions/WP_SESSION_55.md`. WP-54:
+> `sessions/WP_SESSION_54.md` (+ prereg).**
 
 ## 📁 Convenzioni (decisione utente 2026-07-23)
 
@@ -60,13 +62,14 @@
 - Commit AND push a ogni step; deviazioni deliberate = marker
   `BUG(port):` / `PERF(port):` / `TODO(port):`.
 
-## Stato gate per nome (gate54 su `14141ab`, 2026-07-25, `wp54-harness/gate-out/`; superficie reflection → corpus + refl + cargo + ORM + hk COMPLETI; ultima verifica gate22 integrale: `60c7e04`, archivio `gate-out-wp50-archived/`)
+## Stato gate per nome (gate55 su `50e2fb2`, 2026-07-25, `wp55-harness/gate-out/`; classe layout/emit → corpus + refl + cargo + ORM + hk COMPLETI; ultima verifica gate22 integrale: `60c7e04`, archivio `gate-out-wp50-archived/`)
 
-- Gate54 verde (2026-07-25, tree `14141ab`): corpus **1421 IDENTICO** per
-  nome (baseline = `wp53-harness/corpus.fails`) · **refl 290 IDENTICO** ·
-  cargo **1639/0** · ORM 3484 **3E/13F fail-set IDENTICO** · hk 1665
-  **0E/0F** · smoke probe54 (12 scenari ReflectionMethod) NEW==OLD
-  BYTE-ID. Baseline corpus resta **1421**.
+- Gate55 verde (2026-07-25, tree `50e2fb2`): corpus **1421 IDENTICO** per
+  nome (baseline = `wp54-harness/gate-out/corpus.fails`) · **refl 290
+  IDENTICO** · cargo **1639/0** · ORM 3484 **3E/13F fail-set IDENTICO**
+  (16 nomi) · hk 1665 **0E/0F** · probe55-sem/dtor BYTE-ID new vs old
+  (sentinelle append: alias-COW, const-pool, dtor del displaced,
+  `__toString`-throw ⇒ slot intatto). Baseline corpus resta **1421**.
 - Gate22 integrale (storico, su `60c7e04`): sess 28 · date 351 · probe
   gd/mysqli/media byte-id · http DIFF-set atteso (WP-14, 2 item) ·
   option 413/1061 · restapi 3508/15947 IDENTICI per nome COL conteggio.
@@ -76,16 +79,17 @@
   FALSI VERDI a 0 nomi). Avvio: `mysqld_safe --datadir=... --socket=...`
   daemonizzato (double-fork+setsid). Gate DB "IDENTICO" da validare
   SEMPRE col conteggio (option 413, restapi 3508).
-- **Full-suite run43** (~/Claude/wpdev, WP-54, binario `14141ab`):
+- **Full-suite run44** (~/Claude/wpdev, WP-55, binario `50e2fb2`):
   30.472 test, 0E/2F/86W/73S, **fail-set BYTE-IDENTICO a run33** (88 nomi;
-  idem run43-old su phpr-wp53); baseline resta
+  idem run44-old su phpr-wp54); baseline resta
   `wp16-harness/full-out/run33-fails.txt` (⚠️ righe con prefisso
   numerico: normalizzare `s/^\d+\) //` prima del diff). Master-CPU
-  **717,3s ≈11:57 = 2,12×** (−2,71% vs run43-old 737,3 stesso-giorno;
-  l'old replica il suo run41 738,6 ⇒ ambiente stabile). WP-40 11:39 =
-  2,06× = riferimento residuo ≈18s. Wall ~17 min = 1,4×. Archivi:
-  `full-out/run42/` (run di misura campionata, non riferimento),
-  `full-out/run43/`, `wp54-harness/full-old-out/`.
+  **716,9s ≈11:57 = 2,11×** (−2,56% vs run44-old 735,7 STESSA SERA;
+  ⚠️ lo stesso binario old aveva dato 717,3 il pomeriggio: deriva
+  d'ambiente ~2,6%, fa fede SOLO la coppia). WP-40 11:39 = 2,06× =
+  riferimento residuo ≈14s. Wall ~16 min = 1,4×. Archivi:
+  `full-out/run44/`, `wp55-harness/full-old-out/`; storici run42/run43
+  in `full-out/`, `wp54-harness/full-old-out/`.
   ⚠️ RSS: telemetria `.rss` in APPEND — max PER SEGMENTO, e il filtro
   orario da solo NON basta (le ore dei giorni prima passano il confronto
   stringa): prima delimitare il blocco della notte (ultimo time-reset),
@@ -126,44 +130,53 @@
 #  binario gc-census phpr-gc54{,b} in phpr-op-target/; sample-out/ =
 #  finestre win1-6 (full) + mwin1-3 (media) + attribution-table.txt;
 #  stash: phpr-wp54 (sha256 e4341e77…). PHPR_GC_CENSUS=<path> → append.
+# WP-55: wp55-harness/{build-memgc55,census55-media,gate55,run44,
+#  run44-old,ab55,orchestrate55}.sh + probe55-{sem,dtor,concat}.php
+#  (sentinelle append + probe O(n), baseline old in probe55-*-old.txt);
+#  binario census phpr-memgc55 in phpr-mem-target/ (tree wp54);
+#  census-media-out/memcensus.txt = tabella checkpoint Fase 3;
+#  stash: phpr-wp55 (sha256 ecc04817…).
 ```
 
-## 🎯 PROSSIMO LAVORO — WP-55: PhpStr growable + append-in-place + checkpoint Fase 3
+## 🎯 PROSSIMO LAVORO — WP-56: Fase 3, pilota HASHED-ARRAY
 
 **Rotta (utente 2026-07-24)**: `FOOTPRINT_CPU_ROADMAP.md` — footprint-first,
 safe-only, TUTTE le fasi comunque, **niente revert su insuccesso**.
-Laravel POSTICIPATA a valle. La tabella CPU-secondi WP-54
-(`wp54-harness/sample-out/attribution-table.txt`) è la mappa: le leve si
-aprono da lì, quotate in secondi.
+Laravel POSTICIPATA a valle. Il checkpoint d'ingresso Fase 3 è FATTO
+(WP-55): il pilota è deciso dai pesi reali.
 
-1. **PhpStr growable + append-in-place a refcount unico** (mandato dai
-   dati WP-54): `hash: Cell<u64> + bytes: Vec<u8>` (+8B/stringa, quotare
-   in SIZE-CLASS — lezione WP-52) e `$s .= x` che estende in place via
-   `Rc::get_mut` quando il ZStr è unico (mirror di zend_string_extend).
-   Chiude il canale O(n²) del `.=` (probe: 244× vs oracle) quotato
-   15-90s sul full (str-copy 8-50s + gran parte di madvise 41,8s).
-   ⚠️ il vecchio mandato "fusione single-alloc via Rc<[u8]>" è
-   INCOMPATIBILE con l'append-in-place (immutabile, niente capacity) e
-   da solo NON è leva CPU (0,3% del full): i due design si decidono
-   INSIEME, con l'append-in-place prioritario. Classe layout/emit ⇒
-   gate pieno: corpus+cargo+full BYTE-ID + sentinelle drop-order.
-2. **Checkpoint d'ingresso Fase 3** (ri-attribuzione BYTE post Fase 1-2,
-   metodo WP-45): scegliere il tipo pilota heap-a-handle {stringhe vs
-   hashed-array} coi pesi REALI post-WP-54 — naturale farlo insieme al
-   design PhpStr (se vince "stringhe", i due lavori si fondono).
-3. **Residuo full vs WP-40 ≈18s**: canali rimasti dalla tabella: gc-walk
-   fasi mock del full (classify — il media non lo vede: classify_ms 351ms
-   vs 62,7s sul full), drop/rc churn 4,8%, corpi handler diffusi.
+1. **Fase 3 — pilota HASHED-ARRAY** (checkpoint WP-55: arr vive ~421MB
+   = 39% proxy vs str 4% — 10× di margine): redesign a tabella singola
+   Zend-style (entries + indice SENZA Key duplicata, `array.rs:96-103`),
+   arena-compatibile, VERTICALE end-to-end su questo solo tipo (mai
+   dual-mode su tutto il value graph). Parità enorme da presidiare:
+   ordine di iterazione, tombstone, chiavi numeriche-stringa,
+   dtor-order. Multi-sessione per design (ROADMAP §Fase 3); checkpoint
+   pilota = se >+2% CPU dopo due sessioni di ottimizzazione → verbale
+   all'utente, l'arco continua.
+2. **Residuo append non-locale** (lezione WP-55): i `.=` su
+   proprietà/elementi (`$this->buf .= …`, `$a[k] .= …`) restano O(n²) —
+   QUOTARE PER SITO (op-census: AssignOpPath/PropOpSet/FieldAssignOp con
+   op=Concat, in ns/evento×frequenza) PRIMA di estendere il fuso.
+3. **Residuo full vs WP-40 ≈14s**: gc-walk fasi mock del full (classify
+   — il media non lo vede: classify_ms 351ms vs 62,7s sul full),
+   drop/rc churn 4,8%, corpi handler diffusi.
 4. **Ritorno cap reflect 16384→8192**: dopo il re-key le evictions sono
    1/run (era 28) — quasi irrilevante; decisione utente se farlo comunque.
-5. **NON riproporre**: fusione single-alloc COME LEVA CPU (0,3% del full,
-   ~10-20ns/pair — WP-54); Fase 2.3 args-Vec pool (0,14% — morta);
+5. **Divergenze `.=` PRE-esistenti (WP-55, a verbale)**: undef-lhs senza
+   warning "Undefined variable"; operandi oggetto senza `__toString`
+   (un `__toString` che throwa NON throwa in phpr) — catalogare in
+   PHPR_DIVERGENCES o chiudere in una sessione funzionale.
+6. **NON riproporre**: stringhe come pilota Fase 3 (checkpoint WP-55:
+   4% del proxy — falsificate); fusione single-alloc (incompatibile con
+   growable + 0,3% CPU — WP-54); Fase 2.3 args-Vec pool (0,14% — morta);
    leaf-bit sul walk (foglie 6,6% degli SLOT — WP-54); leve sul canale
    crypt (probe: phpr −14% vs oracle = onesto); Fase 1.2 created→Weak;
    rooting selettivo; cap rerun stile Zend; bound/guardie negli arm caldi
    (WP-50); soglia adattiva su buffer RAW; collect per-test; cold-box
    dyn_entries (WP-52); giudizi footprint da RSS telemetrico; Sweep-
-   elision oltre whitelist (WP-53); micro-op quotati solo in conteggi.
+   elision oltre whitelist (WP-53); micro-op quotati solo in conteggi;
+   giudizi full da momenti diversi della giornata (WP-55: deriva ~2,6%).
 
 ## (storico, pre-roadmap) PROSSIMO LAVORO
 
@@ -213,11 +226,11 @@ vivo); misure per-sessione in `gaps/REPORT_GAP_<N>.md`. A ogni chiusura:
 misurare media (user CPU + footprint) e full-suite master-CPU, scrivere
 REPORT_GAP_N (sola sessione N), aggiungere la riga a GAP_TREND, riportare
 il gap all'utente.
-Ultimo stato (WP-54): **media CPU 54,51/20,90 = 2,61× MINIMO ASSOLUTO
-(A/B −7,42%, new 6/6 netti — reflect re-key) · footprint peak fisico
-1,564/0,376G = 4,16× (A/B −5,79%) · full: run43 717,3s = 2,12× (−2,71%
-vs old stesso-giorno, ambiente stabile; residuo vs WP-40 2,06× ≈18s) ·
-fail-set byte-id a run33 (88 nomi) su run43 e run43-old · tabella
-CPU-secondi del full in `wp54-harness/sample-out/attribution-table.txt`
-(crypt ONESTO, `.=` O(n²) → mandato WP-55) · dettaglio:
-`gaps/REPORT_GAP_54.md`, trend: `gaps/GAP_TREND.md`**.
+Ultimo stato (WP-55): **media CPU 55,06/21,07 = 2,61× (A/B FLAT — leva
+full-only) · footprint peak fisico 1,566/0,377G = 4,15× (A/B +1,27% =
++8B/stringa + slack append, guardia ≤2% ok) · full: run44 716,9s =
+2,11× NUOVO MINIMO (−2,56% vs old STESSA-SERA 735,7s; residuo vs WP-40
+2,06× ≈14s) · fail-set byte-id a run33 (88 nomi) su run44 e run44-old ·
+probe `.=` 499ms→2ms = oracle (250×) · checkpoint Fase 3: pilota =
+hashed-array (arr 421MB vs str 45MB) · dettaglio:
+`gaps/REPORT_GAP_55.md`, trend: `gaps/GAP_TREND.md`**.
