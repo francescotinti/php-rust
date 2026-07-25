@@ -70,8 +70,23 @@ WP-44 per −16B; si prende l'80% del canale (64 di 80B) a rischio ~zero.
 - [x] Gate albero Ob.1: corpus **1421 IDENTICO per nome** + cargo 1639/0
 - [x] Cargo albero Ob.2: 1639/0; smoke readonly/clone/typed-unset BYTE-ID
       con l'oracle; gc_smoke identico
-- [ ] Gate corpus albero Ob.2 (in corso)
-- [ ] Census mechanism-check (phpr-memgc52 costruito, sha 79c9ed34…)
-- [ ] Giudici stesso-giorno: census52 → run40 → run40-old → ab52
+- [x] Gate corpus albero Ob.2: **1421 IDENTICO per nome** (vs set WP-51)
+- [x] **Census mechanism-check (phpr-memgc52, sha 79c9ed34…) — ENTRAMBE le
+      leve mechanism-backed:**
+  - **classify_ms 109.383 → 62.678 = −46,7s (−42,7%)** — OLTRE la
+    predizione (−25..−34s): il surplus viene dal `get` per-nodo dei pop di
+    pass-2, dall'iterazione contigua (Vec vs mappa) di external-check e
+    whites, e dall'azzeramento del costo-mappa residuo. Il calo è NEL
+    contatore bersaglio.
+  - Conservazione: collects **303=303**, calls **152=152**, freed
+    14.235.463 vs 14.235.479 (Δ−16, 10⁻⁶), roots 9.718.875 vs 9.718.980,
+    notes Δ−2,5k su 4,109G — stessa banda di micro-rumore del check WP-51.
+  - Fail-set census **BYTE-ID a run33 (88 nomi)**; 30.472 test 2F/86W/73S.
+  - Ob.2 alla cifra: `obj.live_n` exit IDENTICO 525.258=525.258;
+    `obj.live` −29,41MB = **−56,0B/oggetto** (predetto −64B = 87,5%,
+    ≥70% ✓; il residuo = i Box ObjRare di chi usa le feature).
+    `arr.live` +14,0MB = il +8B/nodo Ob.1 sugli array vivi al teardown.
+    **Netto exit −15,4MB.** obj.cum −2,02GB di churn (36,13M alloc).
+- [ ] Giudici stesso-giorno in corso: run40 → run40-old → ab52
       (orchestrate52.sh, sequenziali detached; run39 archiviato in
       wp16-harness/full-out/run39/)
