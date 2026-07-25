@@ -1,11 +1,5 @@
 use std::rc::Rc;
 
-/// Fx-hashed key index: PHP array keys are hashed on every dim access, where
-/// Zend reads a precomputed zend_string hash — SipHash here was ~10% of the
-/// per-request profile. Insertion order lives in `entries`, so the hasher is
-/// not observable.
-type HashMap<K, V> = rustc_hash::FxHashMap<K, V>;
-
 use crate::{PhpStr, Zval};
 
 /// An array key: PHP arrays have dual int|string keys.
@@ -98,8 +92,185 @@ enum Repr {
     Packed(Vec<Option<Zval>>),
     Hashed {
         entries: Vec<Option<(Key, Zval)>>,
-        index: HashMap<Key, u32>,
+        index: KeyIndex,
     },
+}
+
+/// Slot markers of [`KeyIndex`]: entry positions are `< SLOT_TOMB`.
+const SLOT_EMPTY: u32 = u32::MAX;
+const SLOT_TOMB: u32 = u32::MAX - 1;
+
+/// Murmur3 fmix64: spreads the (cached) key hash over all bits so the
+/// power-of-two mask sees a uniform distribution.
+#[inline]
+fn mix(h: u64) -> u64 {
+    let mut x = h;
+    x ^= x >> 33;
+    x = x.wrapping_mul(0xff51_afd7_ed55_8ccd);
+    x ^= x >> 33;
+    x = x.wrapping_mul(0xc4ce_b9fe_1a85_ec53);
+    x ^ (x >> 33)
+}
+
+impl Key {
+    /// Index hash without storing the key: ints hash by value, strings reuse
+    /// the per-string cached DJBX33A (WP-29) — a key string hashes once in
+    /// its lifetime, exactly like the former FxHashMap `Hash` impl.
+    #[inline]
+    fn khash(&self) -> u64 {
+        match self {
+            Key::Int(i) => mix(*i as u64),
+            Key::Str(s) => mix(s.zhash()),
+        }
+    }
+}
+
+/// The abbreviated entry-slice type the index probes against.
+type Entries = [Option<(Key, Zval)>];
+
+/// Keyless position index of the hashed representation (WP-56, Fase 3):
+/// an open-addressing table of `u32` positions into `entries` — the key
+/// itself lives only in the entry it points at, mirroring Zend's
+/// arData + uint32 hash slots (no duplicated key). Insertion order lives
+/// in `entries`, so neither the hash function nor the probe order is
+/// observable (same invariant the former FxHashMap index had).
+///
+/// Linear probing over a power-of-two table, occupancy (live + tombstones)
+/// kept ≤ 1/2 by [`KeyIndex::rebuild`]; index tombstones only appear on
+/// `remove` and are reclaimed by the next rebuild. Invariant: every
+/// non-sentinel slot points at a live (`Some`) entry.
+#[derive(Debug, Clone)]
+struct KeyIndex {
+    slots: Box<[u32]>,
+    /// Occupied slots (== the array's live count).
+    live: u32,
+    /// Tombstoned slots — counted like occupied ones by the rebuild
+    /// trigger so probe chains stay short under insert/remove churn.
+    tomb: u32,
+}
+
+/// Table size for `live` keys: power of two with occupancy ≤ 1/2, min 8.
+fn table_cap(live: usize) -> usize {
+    (live * 2 + 1).next_power_of_two().max(8)
+}
+
+impl KeyIndex {
+    /// Build a fresh index over the live entries (escalation, compaction).
+    fn build(entries: &Entries, live: usize) -> KeyIndex {
+        let mut idx = KeyIndex {
+            slots: vec![SLOT_EMPTY; table_cap(live)].into_boxed_slice(),
+            live: 0,
+            tomb: 0,
+        };
+        for (pos, e) in entries.iter().enumerate() {
+            if let Some((k, _)) = e {
+                idx.raw_insert(k.khash(), pos as u32);
+                idx.live += 1;
+            }
+        }
+        idx
+    }
+
+    /// Probe to the first EMPTY slot and write `pos` (rebuild/build path:
+    /// the key is known absent and the table holds no tombstones).
+    #[inline]
+    fn raw_insert(&mut self, khash: u64, pos: u32) {
+        let mask = self.slots.len() - 1;
+        let mut i = (khash as usize) & mask;
+        while self.slots[i] != SLOT_EMPTY {
+            i = (i + 1) & mask;
+        }
+        self.slots[i] = pos;
+    }
+
+    /// Position of `key`, comparing candidate slots against the entry they
+    /// point at (the single stored copy of the key).
+    #[inline]
+    fn lookup(&self, key: &Key, entries: &Entries) -> Option<u32> {
+        let mask = self.slots.len() - 1;
+        let mut i = (key.khash() as usize) & mask;
+        loop {
+            match self.slots[i] {
+                SLOT_EMPTY => return None,
+                SLOT_TOMB => {}
+                pos => {
+                    let (k, _) = entries[pos as usize].as_ref().unwrap();
+                    if k == key {
+                        return Some(pos);
+                    }
+                }
+            }
+            i = (i + 1) & mask;
+        }
+    }
+
+    /// Insert a key known to be ABSENT (callers always probe first), to be
+    /// pushed at `pos` — call BEFORE or AFTER the entry push: a triggered
+    /// rebuild rehashes from the OLD slots, never rescans `entries`, so a
+    /// pushed-but-unindexed entry cannot be double-added.
+    fn insert_new(&mut self, key: &Key, pos: u32, entries: &Entries) {
+        if ((self.live + self.tomb + 1) as usize) * 2 > self.slots.len() {
+            self.rebuild(entries);
+        }
+        let mask = self.slots.len() - 1;
+        let mut i = (key.khash() as usize) & mask;
+        loop {
+            match self.slots[i] {
+                SLOT_EMPTY => {
+                    self.slots[i] = pos;
+                    self.live += 1;
+                    return;
+                }
+                SLOT_TOMB => {
+                    self.slots[i] = pos;
+                    self.live += 1;
+                    self.tomb -= 1;
+                    return;
+                }
+                _ => i = (i + 1) & mask,
+            }
+        }
+    }
+
+    /// Tombstone `key`'s slot; returns the entry position it held.
+    fn remove(&mut self, key: &Key, entries: &Entries) -> Option<u32> {
+        let mask = self.slots.len() - 1;
+        let mut i = (key.khash() as usize) & mask;
+        loop {
+            match self.slots[i] {
+                SLOT_EMPTY => return None,
+                SLOT_TOMB => {}
+                pos => {
+                    let (k, _) = entries[pos as usize].as_ref().unwrap();
+                    if k == key {
+                        self.slots[i] = SLOT_TOMB;
+                        self.live -= 1;
+                        self.tomb += 1;
+                        return Some(pos);
+                    }
+                }
+            }
+            i = (i + 1) & mask;
+        }
+    }
+
+    /// Re-size for the current live count (dropping tombstones), rehashing
+    /// the positions held by the OLD table — `entries` is only read at those
+    /// positions, which are live by invariant.
+    #[cold]
+    fn rebuild(&mut self, entries: &Entries) {
+        let old = std::mem::replace(
+            &mut self.slots,
+            vec![SLOT_EMPTY; table_cap(self.live as usize + 1)].into_boxed_slice(),
+        );
+        self.tomb = 0;
+        for &pos in old.iter() {
+            if pos < SLOT_TOMB {
+                let (k, _) = entries[pos as usize].as_ref().unwrap();
+                self.raw_insert(k.khash(), pos);
+            }
+        }
+    }
 }
 
 /// A PHP array: an insertion-ordered hash with int|string keys.
@@ -220,7 +391,7 @@ impl PhpArray {
             Repr::Packed(slots) => slots.capacity() * std::mem::size_of::<Option<Zval>>(),
             Repr::Hashed { entries, index } => {
                 entries.capacity() * std::mem::size_of::<Option<(Key, Zval)>>()
-                    + index.capacity() * (std::mem::size_of::<(Key, u32)>() + 1)
+                    + index.slots.len() * std::mem::size_of::<u32>()
             }
         };
         body + crate::memcensus::ARR_OVERHEAD
@@ -283,13 +454,7 @@ impl PhpArray {
             .enumerate()
             .map(|(i, e)| e.map(|v| (Key::Int(i as i64), v)))
             .collect();
-        let mut index = HashMap::default();
-        index.reserve(entries.len());
-        for (pos, entry) in entries.iter().enumerate() {
-            if let Some((key, _)) = entry {
-                index.insert(key.clone(), pos as u32);
-            }
-        }
+        let index = KeyIndex::build(&entries, self.count as usize);
         self.repr = Repr::Hashed { entries, index };
     }
 
@@ -326,7 +491,7 @@ impl PhpArray {
         let Repr::Hashed { entries, index } = &mut self.repr else {
             unreachable!()
         };
-        if let Some(&pos) = index.get(&key) {
+        if let Some(pos) = index.lookup(&key, entries) {
             entries[pos as usize] = Some((key, val));
             return;
         }
@@ -336,7 +501,7 @@ impl PhpArray {
             }
         }
         let pos = entries.len() as u32;
-        index.insert(key.clone(), pos);
+        index.insert_new(&key, pos, entries);
         entries.push(Some((key, val)));
         self.count += 1;
     }
@@ -389,8 +554,8 @@ impl PhpArray {
         }
         self.holds_containers = true;
         let hit = {
-            let Repr::Hashed { index, .. } = &self.repr else { unreachable!() };
-            index.get(&key).copied()
+            let Repr::Hashed { entries, index } = &self.repr else { unreachable!() };
+            index.lookup(&key, entries)
         };
         if hit.is_none() {
             if let Key::Int(i) = key {
@@ -405,7 +570,7 @@ impl PhpArray {
             Some(pos) => pos,
             None => {
                 let pos = entries.len() as u32;
-                index.insert(key.clone(), pos);
+                index.insert_new(&key, pos, entries);
                 entries.push(Some((key, Zval::Null)));
                 pos
             }
@@ -436,7 +601,9 @@ impl PhpArray {
                 }
                 _ => None,
             },
-            Repr::Hashed { index, .. } => index.get(&key).map(|&pos| pos as usize),
+            Repr::Hashed { entries, index } => {
+                index.lookup(&key, entries).map(|pos| pos as usize)
+            }
         };
         match hit {
             Some(pos) => {
@@ -502,8 +669,8 @@ impl PhpArray {
                 _ => None,
             },
             Repr::Hashed { entries, index } => index
-                .get(key)
-                .map(|&pos| &entries[pos as usize].as_ref().unwrap().1),
+                .lookup(key, entries)
+                .map(|pos| &entries[pos as usize].as_ref().unwrap().1),
         }
     }
 
@@ -523,8 +690,8 @@ impl PhpArray {
                 }
                 _ => None,
             },
-            Repr::Hashed { entries, index } => match index.get(key) {
-                Some(&pos) => {
+            Repr::Hashed { entries, index } => match index.lookup(key, entries) {
+                Some(pos) => {
                     self.holds_containers = true;
                     Some(&mut entries[pos as usize].as_mut().unwrap().1)
                 }
@@ -541,7 +708,7 @@ impl PhpArray {
                 Key::Int(i) if (*i as usize) < slots.len() && *i >= 0
                     && slots[*i as usize].is_some()
             ),
-            Repr::Hashed { index, .. } => index.contains_key(key),
+            Repr::Hashed { entries, index } => index.lookup(key, entries).is_some(),
         }
     }
 
@@ -568,7 +735,7 @@ impl PhpArray {
                 Some(val)
             }
             Repr::Hashed { entries, index } => {
-                let pos = index.remove(key)?;
+                let pos = index.remove(key, entries)?;
                 let (_, val) = entries[pos as usize].take().unwrap();
                 self.count -= 1;
                 if entries.len() >= 8 && (self.count as usize) < entries.len() / 2 {
@@ -584,11 +751,7 @@ impl PhpArray {
             return;
         };
         entries.retain(Option::is_some);
-        index.clear();
-        for (pos, entry) in entries.iter().enumerate() {
-            let (key, _) = entry.as_ref().unwrap();
-            index.insert(key.clone(), pos as u32);
-        }
+        *index = KeyIndex::build(entries, entries.len());
     }
 
     /// Iterate in insertion order, skipping tombstones. Keys are yielded by
@@ -1114,6 +1277,57 @@ mod tests {
         assert!(!is_packed(&a));
         assert_eq!(a.ptr_key(), Some(Key::Int(1)));
         assert!(matches!(a.ptr_next(), Some(Zval::Long(2))));
+    }
+
+    /// WP-56 keyless index: heavy insert/remove/overwrite churn (mixed
+    /// int/string keys, compaction and index rebuilds included) against a
+    /// Vec model of Zend order semantics — updates keep position, re-inserts
+    /// go to the end; lookups, count and iteration order match at every step.
+    #[test]
+    fn keyless_index_churn_matches_model() {
+        let mut a = PhpArray::new();
+        a.insert(k("seed"), Zval::Long(-1)); // hashed from the start
+        a.remove(&k("seed"));
+        let mut model: Vec<(Key, i64)> = Vec::new();
+        let mut x: u64 = 0x9e37_79b9_7f4a_7c15;
+        for step in 0..4000i64 {
+            x = x.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            let r = (x >> 33) % 100;
+            let key = if r % 2 == 0 {
+                Key::Int((r as i64) % 37)
+            } else {
+                k(&format!("k{}", r % 37))
+            };
+            if r < 70 {
+                match model.iter_mut().find(|(mk, _)| *mk == key) {
+                    Some((_, v)) => *v = step,
+                    None => model.push((key.clone(), step)),
+                }
+                a.insert(key, Zval::Long(step));
+            } else {
+                let removed = a.remove(&key);
+                let had = model.iter().position(|(mk, _)| *mk == key);
+                assert_eq!(removed.is_some(), had.is_some(), "step {step}");
+                if let Some(i) = had {
+                    model.remove(i);
+                }
+            }
+            assert_eq!(a.len(), model.len(), "step {step}");
+        }
+        let got: Vec<(Key, i64)> = a
+            .iter()
+            .map(|(kk, v)| match v {
+                Zval::Long(n) => (kk, *n),
+                other => panic!("non-long value {other:?}"),
+            })
+            .collect();
+        assert_eq!(got, model);
+        for (mk, mv) in &model {
+            match a.get(mk) {
+                Some(Zval::Long(n)) => assert_eq!(n, mv),
+                other => panic!("{mk:?}: {other:?}"),
+            }
+        }
     }
 
     #[test]
