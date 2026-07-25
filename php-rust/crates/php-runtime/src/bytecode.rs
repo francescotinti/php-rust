@@ -346,6 +346,17 @@ pub enum Op {
     /// `[v] -> []` — pop and store into local `slot`. To use an assignment as an
     /// expression, the compiler emits [`Op::Dup`] before this.
     StoreSlot(Slot),
+    /// `[rhs] -> [v]` — fused `$slot .= rhs` (WP-55, mirror of Zend's
+    /// ASSIGN_OP concat). When the slot holds a directly-owned Str whose Rc
+    /// is UNIQUE and the rhs is a Str, the buffer extends in place
+    /// (`PhpStr::append` via `Rc::get_mut`) — the O(n) cure for the O(n²)
+    /// append-loop channel. Any other shape (aliased string, Ref slot,
+    /// non-Str operand) falls back to the exact semantics of the old
+    /// `LoadSlot; Swap; Binary(Concat); Dup; StoreSlot` sequence — shared
+    /// `binary_value_ab`, same typed-ref coercion, same displaced-value
+    /// `gc_note` — so diagnostics, dtor timing and COW stay byte-identical
+    /// by construction.
+    ConcatAssignSlot(Slot),
     /// `[a, b] -> [b, a]` — swap the top two stack entries. Used to realise the
     /// pipe operator `$x |> $f`, whose operands evaluate left-to-right (input then
     /// callable) but must reach [`Op::CallValue`] in callee-then-arg stack order.

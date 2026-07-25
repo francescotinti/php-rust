@@ -217,6 +217,42 @@ impl<'m> super::Vm<'m> {
         self.binary_value_ab(b, lhs, rhs)
     }
 
+    /// Fused `$slot .= rhs` (WP-55, [`Op::ConcatAssignSlot`]): in-place
+    /// append when the slot holds a directly-owned UNIQUE Str and the rhs is
+    /// a Str (`Rc::get_mut` — an alias, the const pool, or a Ref slot makes
+    /// it fail and the copy path runs: COW by construction). The fallback
+    /// reproduces the old `LoadSlot; Swap; Binary; Dup; StoreSlot` sequence
+    /// exactly: silent slot read (`read_slot`), shared `binary_value_ab`
+    /// (same diags/`__toString`-less funnel), typed-ref coercion on the
+    /// STORED copy only, write-through `store_slot`, `gc_note` on the
+    /// displaced value (dtor timing). The in-place arm skips `gc_note`
+    /// legitimately: the displaced value is the very Str being extended.
+    #[inline(never)]
+    fn concat_assign_slot(&mut self, top: usize, s: crate::hir::Slot) -> Result<Zval, PhpError> {
+        let rhs = self.frames[top].stack.pop().expect("ConcatAssignSlot rhs");
+        if let Zval::Str(rv) = &rhs {
+            if let Zval::Str(l) = &mut self.frames[top].slots[s as usize] {
+                if let Some(ls) = Rc::get_mut(l) {
+                    ls.append(rv.as_bytes());
+                    return Ok(Zval::Str(Rc::clone(l)));
+                }
+            }
+        }
+        let lhs = read_slot(&self.frames[top].slots[s as usize]);
+        let v = self.binary_value_ab(BinOp::Concat, lhs, rhs)?;
+        let mut stored = v.clone();
+        if !self.typed_refs.is_empty() {
+            if let Zval::Ref(cell) = &self.frames[top].slots[s as usize] {
+                let cell = Rc::clone(cell);
+                let strict = self.frames[top].module.strict;
+                stored = self.typed_ref_assign(&cell, stored, strict)?;
+            }
+        }
+        let old = store_slot(&mut self.frames[top].slots[s as usize], stored);
+        self.gc_note(&old);
+        Ok(v)
+    }
+
     /// Operand-explicit core of [`Self::binary_value`] (WP-34): shared by
     /// `Binary`/`CmpJmp` (operands popped) and `CmpJmpConst` (one operand
     /// materialised from the constant pool) so all three evaluate a binary
@@ -819,6 +855,12 @@ impl<'m> super::Vm<'m> {
                 }
                 Op::Binary(b) => {
                     let r = self.binary_value(top, *b)?;
+                    self.frames[top].stack.push(r);
+                }
+                Op::ConcatAssignSlot(s) => {
+                    // Fused `$s .= rhs` (WP-55): body out of the loop
+                    // (WP-33 discipline), arm = one call + push.
+                    let r = self.concat_assign_slot(top, *s)?;
                     self.frames[top].stack.push(r);
                 }
                 Op::CmpJmp { op, addr, when } => {

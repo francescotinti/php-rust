@@ -14,13 +14,22 @@ use std::rc::Rc;
 /// (`new` accetta `&[u8]`), `concat2` e `from_i64`, che evitano round-trip
 /// inutili senza cambiare la rappresentazione. Da non riproporre senza
 /// nuovi dati (cfr. NaN-boxing WP-32).
+/// WP-55: `bytes` è `Vec<u8>` (growable) per l'append-in-place di `.=`
+/// (mirror di `zend_string_extend`): quando lo ZStr è UNICO (`Rc::get_mut`)
+/// l'append estende il buffer con crescita ammortizzata invece di
+/// riallocare+copiare l'intera stringa (canale O(n²), probe WP-54: 244×
+/// vs oracle). Costo quotato PRIMA del layout (WP-52): RcBox 40→48B =
+/// +8B/stringa viva (bin mimalloc a passo 8 sotto i 64B). I costruttori
+/// slice/Vec-fed restano exact-size per costruzione (`shrink_to_fit` nel
+/// funnel = stessa disciplina della vecchia conversione a `Box<[u8]>`);
+/// solo il path append lascia slack di crescita.
 pub struct PhpStr {
     hash: Cell<u64>,
-    bytes: Box<[u8]>,
+    bytes: Vec<u8>,
 }
 
 const _: () = {
-    assert!(std::mem::size_of::<PhpStr>() == 24);
+    assert!(std::mem::size_of::<PhpStr>() == 32);
 };
 
 pub type ZStr = Rc<PhpStr>;
@@ -29,7 +38,7 @@ impl PhpStr {
     /// The single construction funnel: every PhpStr goes through here.
     /// Accepts both owned buffers and plain slices (`&[u8]`/`&str` callers
     /// need no `to_vec` round-trip).
-    pub fn new(bytes: impl AsRef<[u8]> + Into<Box<[u8]>>) -> ZStr {
+    pub fn new(bytes: impl AsRef<[u8]> + Into<Vec<u8>>) -> ZStr {
         #[cfg(feature = "str-census")]
         census::record(bytes.as_ref().len());
         #[cfg(feature = "mem-census")]
@@ -37,10 +46,28 @@ impl PhpStr {
             crate::memcensus::CH_STR,
             bytes.as_ref().len() + crate::memcensus::STR_OVERHEAD,
         );
+        // Exact-size discipline (WP-55 pin): the old `Into<Box<[u8]>>`
+        // conversion shrank any slack; keep that byte-for-byte so only the
+        // append path ever carries growth capacity.
+        let mut bytes: Vec<u8> = bytes.into();
+        bytes.shrink_to_fit();
         Rc::new(PhpStr {
             hash: Cell::new(0),
-            bytes: bytes.into(),
+            bytes,
         })
+    }
+
+    /// WP-55 append-in-place: extend the buffer with amortised growth and
+    /// INVALIDATE the cached hash (the one in-place mutation site — every
+    /// other constructor freezes the bytes). Reachable only through
+    /// `Rc::get_mut`, i.e. when this string has a single owner; callers
+    /// (the VM's fused `.=` op) fall back to `concat2` otherwise, which is
+    /// what makes aliased/interned strings copy-on-write by construction.
+    pub fn append(&mut self, more: &[u8]) {
+        #[cfg(feature = "mem-census")]
+        crate::memcensus::adjust(crate::memcensus::CH_STR, more.len() as i64);
+        self.bytes.extend_from_slice(more);
+        self.hash.set(0);
     }
 
     /// Binary concatenation in one exact-size allocation (WP-38): a small

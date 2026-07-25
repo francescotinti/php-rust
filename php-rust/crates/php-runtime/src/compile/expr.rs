@@ -93,11 +93,17 @@ impl<'a> super::FnCompiler<'a> {
                 // post-mutation value: `$at += strcspn($s, '<', ++$at)` adds
                 // to the incremented $at (WP's validate_custom_css loop).
                 self.expr(rhs)?;
-                self.emit(Op::LoadSlot(*slot));
-                self.emit(Op::Swap); // [target, rhs]
-                self.emit(Op::Binary(*op));
-                self.emit(Op::Dup);
-                self.emit(Op::StoreSlot(*slot));
+                if *op == BinOp::Concat {
+                    // `$s .= rhs` fuses into one op (WP-55) so the VM can see
+                    // the slot and append in place when its string is unique.
+                    self.emit(Op::ConcatAssignSlot(*slot));
+                } else {
+                    self.emit(Op::LoadSlot(*slot));
+                    self.emit(Op::Swap); // [target, rhs]
+                    self.emit(Op::Binary(*op));
+                    self.emit(Op::Dup);
+                    self.emit(Op::StoreSlot(*slot));
+                }
             }
             ExprKind::IncDec { slot, inc, pre } => {
                 self.emit(Op::IncDecSlot { slot: *slot, inc: *inc, pre: *pre });
