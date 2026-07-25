@@ -41,6 +41,7 @@
 | WP-48 | 61,05/20,86 = **2,93×** (+0,04% flat) | **1,747/0,395 = 4,42×** peak fisico | run35 ≈19:10 = **3,39×** | ~24/11,5 min = **2,1×** |
 | WP-49 | 63,69/21,18 = **3,01×** (A/B −1,19%) | **1,715/0,394 = 4,35×** (−2,22%) | run36 ≈13:55 = **2,46×** ⭐⭐ | ~18/11,5 min = **1,6×** |
 | WP-50 | 59,84/20,935 = **2,86×** (leve flat) | **1,755/0,394 = 4,45×** (+2,64% attribuito) | run37c ≈13:37 = **2,41×** ⭐ | ~18/11,5 min = **1,6×** |
+| WP-51 | 59,17/20,82 = **2,84×** ⭐ (A/B +0,01% flat, guardia ok) | **1,721/0,396 = 4,34×** ⭐ (A/B −0,32%) | run39 ≈13:03 = **2,31×** ⭐⭐ (old 2,44× stessa notte; classify fuso −4,1% + boundary-collect gratis) | ~17/11,5 min = **1,5×** |
 
 ⚠️ riga WP-36: NON è una regressione — l'old-binary (WP-35) rimisurato lo
 STESSO giorno dà 61,1s (2,90×): la giornata di WP-35 era favorevole; il
