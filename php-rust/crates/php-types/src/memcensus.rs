@@ -24,7 +24,7 @@ pub const CHANNEL_NAMES: [&str; N_CH] = ["str", "arr", "obj", "unit"];
 /// Fixed per-value overhead added on top of payload bytes, per channel:
 /// Rc header (strong+weak = 16) + struct size. Documented in the dump.
 pub const STR_OVERHEAD: usize = 16 + 24; // Rc hdr + PhpStr{hash,Box<[u8]>}
-pub const ARR_OVERHEAD: usize = 16 + 40; // Rc hdr + PhpArray header
+pub const ARR_OVERHEAD: usize = 16 + 48; // Rc hdr + PhpArray header (+8B WalkMark, WP-52)
 pub const OBJ_OVERHEAD: usize = 16 + 8; // Rc hdr + RefCell borrow flag
 
 static LIVE: [AtomicI64; N_CH] = [const { AtomicI64::new(0) }; N_CH];

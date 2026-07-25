@@ -45,11 +45,23 @@ nome `gate-out-wp46-archived/corpus.fails`, fail-set full run33 88 nomi,
 cargo 1639/0) — ogni divergenza del gate = rottura di parità da fixare
 in avanti.
 
-## Ob.2 — Fase 1.3 cold-box Object (da eseguire dopo Ob.1)
+## Ob.2 — Fase 1.3 cold-box Object (QUOTA registrata PRIMA dei giudici)
 
-Pattern WP-32 (`Option<Box<RareObj>>`) su `readonly_init`,
-`readonly_clone_writable`, `typed_unset` (+ eventuale `dyn_entries`):
-~96B×istanze. Predizione dal canale census PRIMA della leva.
+**Leva**: `readonly_init` + `readonly_clone_writable` + `typed_unset`
+(3 Vec = 72B) → `rare: Option<Box<ObjRare>>` (8B) = **−64B/istanza** sul
+comune oggetto senza feature rare.
+**Deviazione dichiarata dalla lettera della roadmap**: `dyn_entries` NON
+boxato — è LO storage delle proprietà di stdClass/dynamic props (WP ne fa
+uso pesante): +1 deref per accesso su un fast-path = rischio CPU classe
+WP-44 per −16B; si prende l'80% del canale (64 di 80B) a rischio ~zero.
+**Predizioni**:
+1. Peak fisico media: −64B × obj.live_n peak 140.156 ≈ **−9,0MB ≈ −0,5%**
+   (census-media WP-50: max obj.live_n=140.156, max arr.live_n=769.897 —
+   che quota anche il +8B/nodo di Ob.1 a +7,3MB: nette **−1..−2MB**).
+2. Canale census obj: `size_of::<Object>()` −64B visibile in obj.live.
+3. Guardia CPU media ≤+0,5%: i path readonly/typed-unset/clone sono
+   freddi; accessors predicano su `rare` senza allocare.
+`ARR_OVERHEAD` census 40→48 (il WalkMark Ob.1 entra nell'header PhpArray).
 
 ## Stato
 

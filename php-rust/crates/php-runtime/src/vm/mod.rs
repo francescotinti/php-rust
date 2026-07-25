@@ -7535,8 +7535,7 @@ impl<'m> Vm<'m> {
                         props,
                         id: self.next_id(),
                         info: Rc::new(php_types::ObjectInfo::default()),
-                        readonly_init: Vec::new(),
-                        readonly_clone_writable: Vec::new(), typed_unset: Vec::new(),
+                        rare: None,
                         lazy: None,
                         proxy_instance: None,
                         gc: php_types::GcMark::new(),
@@ -7889,7 +7888,7 @@ impl<'m> Vm<'m> {
             props.set(name, Zval::Undef);
         }
         let id = self.next_id();
-        let obj = Object { class_id: cid as u32, class_name, props, id, info, readonly_init: Vec::new(), readonly_clone_writable: Vec::new(), typed_unset: Vec::new(), lazy: None, proxy_instance: None, gc: php_types::GcMark::new() };
+        let obj = Object { class_id: cid as u32, class_name, props, id, info, rare: None, lazy: None, proxy_instance: None, gc: php_types::GcMark::new() };
         let rc = Rc::new(RefCell::new(obj));
         // Track for `__destruct` (OOP-3d), like every other freshly minted object.
         self.created.insert(id, Rc::clone(&rc));
@@ -7920,7 +7919,7 @@ impl<'m> Vm<'m> {
                 None => k,
             };
             if prop_readonly_decl(&self.classes, cid, &k).is_some() {
-                rc.borrow_mut().readonly_init.push(k.as_slice().into());
+                rc.borrow_mut().rare_mut().readonly_init.push(k.as_slice().into());
             }
             rc.borrow_mut().props.set(&k, v);
         }
@@ -9780,7 +9779,7 @@ impl<'m> Vm<'m> {
         let class_name = Rc::clone(&cc.class_name);
         let info = Rc::clone(&cc.info);
         let id = self.next_id();
-        let obj = Object { class_id: cid as u32, class_name, props, id, info, readonly_init: Vec::new(), readonly_clone_writable: Vec::new(), typed_unset: Vec::new(), lazy: None, proxy_instance: None, gc: php_types::GcMark::new() };
+        let obj = Object { class_id: cid as u32, class_name, props, id, info, rare: None, lazy: None, proxy_instance: None, gc: php_types::GcMark::new() };
         let rc = Rc::new(RefCell::new(obj));
         // Track for `__destruct` (OOP-3d): the extra strong ref drives the sweep.
         self.created.insert(id, Rc::clone(&rc));
@@ -9855,7 +9854,7 @@ impl<'m> Vm<'m> {
         // initializer (`reset_as_lazy_readonly`, zend_object_make_lazy).
         let preserved_ro: HashSet<Box<[u8]>> = {
             let b = rc.borrow();
-            b.readonly_init
+            b.readonly_init_slice()
                 .iter()
                 .filter(|k| {
                     reflected.contains(k.as_ref())
@@ -9914,7 +9913,9 @@ impl<'m> Vm<'m> {
             // not yet lazy — `zend_object_make_lazy` sets the flag last
             // (`reset_as_lazy_can_reset_initialized_proxies`' dump).
             b.lazy = None;
-            b.readonly_init.retain(|k| preserved_ro.contains(k));
+            if let Some(r) = b.rare.as_deref_mut() {
+                r.readonly_init.retain(|k| preserved_ro.contains(k));
+            }
             (b.id, dropped)
         };
         // The reset discards the property table, detaching any reference that
@@ -9976,7 +9977,7 @@ impl<'m> Vm<'m> {
                 // leaves the object LAZY, reverting any change the initializer
                 // made to it (PHP 8.4, init_exception_reverts_initializer_changes).
                 let saved_props = rc.borrow().props.clone();
-                let saved_ro = rc.borrow().readonly_init.clone();
+                let saved_ro = rc.borrow().readonly_init_slice().to_vec();
                 let saved_lazy_props = self.lazy_props.get(&oid).cloned();
                 // The initializer may `unset()` properties, deleting their
                 // typed-reference sources — a rollback resurrects them
@@ -10050,7 +10051,7 @@ impl<'m> Vm<'m> {
                         {
                             let mut b = rc.borrow_mut();
                             b.props = saved_props;
-                            b.readonly_init = saved_ro;
+                            b.set_readonly_init(saved_ro);
                             b.lazy = Some(LazyKind::Ghost);
                         }
                         if let Some(sp) = saved_lazy_props {
@@ -10639,8 +10640,7 @@ impl<'m> Vm<'m> {
             id,
             info: Rc::new(ObjectInfo::enum_case(entries)),
             // Enum-case immutability has its own dedicated check (is_enum_case).
-            readonly_init: Vec::new(),
-            readonly_clone_writable: Vec::new(), typed_unset: Vec::new(),
+            rare: None,
             lazy: None,
             proxy_instance: None,
             gc: php_types::GcMark::new(),

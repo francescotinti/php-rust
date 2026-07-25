@@ -27,28 +27,13 @@ pub struct Object {
     /// `print_r` can annotate `:protected` / `:"C":private` without the class
     /// table (step 19-7, D-19.20). Shared (`Rc`) by all instances of a class.
     pub info: Rc<ObjectInfo>,
-    /// Names of `readonly` properties that have been **initialised** on this
-    /// instance (readonly enforcement). A readonly property is write-once: the
-    /// first in-scope write records its name here; any later write fatals with
-    /// "Cannot modify readonly property", and a read before initialisation fatals
-    /// with "must not be accessed before initialization". Empty for objects with
-    /// no readonly properties, so the common case costs nothing.
-    pub readonly_init: Vec<Box<[u8]>>,
-    /// Readonly properties that may be **re-initialised once** right now (PHP 8.3
-    /// readonly-clone amendment): populated by the `clone` operator before it runs
-    /// `__clone`, one entry per readonly property, and revoked when that `__clone`
-    /// frame returns. A write consumes the matching entry; a manual `__clone()`
-    /// call leaves this empty, so a readonly write there still fatals. Empty for
-    /// every object outside an active clone, so the common case costs nothing.
-    pub readonly_clone_writable: Vec<Box<[u8]>>,
-    /// Declared TYPED properties explicitly `unset()` on this instance. Zend
-    /// keeps the slot UNDEF but clears its IS_PROP_UNINIT flag: the property
-    /// still renders `uninitialized` (var_dump/reflection), but a read now
-    /// dispatches `__get` (never-initialized reads keep the before-init
-    /// fatal instead — symfony Constraint's lazy-groups idiom). Meaningful
-    /// only while the slot holds `Undef`; a re-assignment makes it moot.
-    /// Empty for the common object, so it costs nothing.
-    pub typed_unset: Vec<Box<[u8]>>,
+    /// Rare per-instance bookkeeping (readonly-init set, clone-write grants,
+    /// typed-unset set) cold-boxed behind one pointer (WP-52 Fase 1.3,
+    /// pattern WP-32 `FrameExt`): the three `Vec` headers cost 72B on every
+    /// object while virtually none uses them; `None` for the common object.
+    /// (`Props::dyn_entries` is deliberately NOT boxed: it is stdClass's
+    /// property storage — a hot path, not a rare feature.)
+    pub rare: Option<Box<ObjRare>>,
     /// Lazy-object marker (PHP 8.4): `Some` while the object is a lazy
     /// ghost/proxy. A **ghost** clears this to `None` on initialization (it
     /// becomes an ordinary object). A **proxy** keeps `Some(Proxy)` for life —
@@ -69,6 +54,32 @@ pub struct Object {
     /// a `Cell` read and mid-buffer removal is O(1), replacing the id-keyed
     /// side HashMap the buffer used to probe on every note/demote.
     pub gc: GcMark,
+}
+
+/// The rarely-populated per-instance sets of [`Object`], allocated on first
+/// use (WP-52 cold-box, see [`Object::rare`]).
+#[derive(Debug, Default, Clone)]
+pub struct ObjRare {
+    /// Names of `readonly` properties that have been **initialised** on this
+    /// instance (readonly enforcement). A readonly property is write-once: the
+    /// first in-scope write records its name here; any later write fatals with
+    /// "Cannot modify readonly property", and a read before initialisation
+    /// fatals with "must not be accessed before initialization".
+    pub readonly_init: Vec<Box<[u8]>>,
+    /// Readonly properties that may be **re-initialised once** right now (PHP
+    /// 8.3 readonly-clone amendment): populated by the `clone` operator before
+    /// it runs `__clone`, one entry per readonly property, and revoked when
+    /// that `__clone` frame returns. A write consumes the matching entry; a
+    /// manual `__clone()` call leaves this empty, so a readonly write there
+    /// still fatals.
+    pub readonly_clone_writable: Vec<Box<[u8]>>,
+    /// Declared TYPED properties explicitly `unset()` on this instance. Zend
+    /// keeps the slot UNDEF but clears its IS_PROP_UNINIT flag: the property
+    /// still renders `uninitialized` (var_dump/reflection), but a read now
+    /// dispatches `__get` (never-initialized reads keep the before-init
+    /// fatal instead — symfony Constraint's lazy-groups idiom). Meaningful
+    /// only while the slot holds `Undef`; a re-assignment makes it moot.
+    pub typed_unset: Vec<Box<[u8]>>,
 }
 
 /// GC candidate-buffer marks (WP-40, see [`Object::gc`]): `pos` is the
@@ -330,10 +341,13 @@ impl Object {
             + self.props.slots.capacity() * std::mem::size_of::<Option<Zval>>()
             + self.props.dyn_entries.capacity()
                 * std::mem::size_of::<(Box<[u8]>, Zval)>()
-            + (self.readonly_init.capacity()
-                + self.readonly_clone_writable.capacity()
-                + self.typed_unset.capacity())
-                * std::mem::size_of::<Box<[u8]>>()
+            + self.rare.as_deref().map_or(0, |r| {
+                std::mem::size_of::<ObjRare>()
+                    + (r.readonly_init.capacity()
+                        + r.readonly_clone_writable.capacity()
+                        + r.typed_unset.capacity())
+                        * std::mem::size_of::<Box<[u8]>>()
+            })
     }
 
     /// Root-walk support: clones of every child value (declared slots,
@@ -384,9 +398,7 @@ impl Object {
             props: self.props.clone(),
             id,
             info: Rc::clone(&self.info),
-            readonly_init: self.readonly_init.clone(),
-            readonly_clone_writable: self.readonly_clone_writable.clone(),
-            typed_unset: self.typed_unset.clone(),
+            rare: self.rare.clone(),
             lazy: self.lazy,
             proxy_instance: self.proxy_instance.clone(),
             // A fresh copy has no buffer entry of its own.
@@ -394,45 +406,95 @@ impl Object {
         }
     }
 
+    /// The lazily-created rare-feature box (allocates on first use — only
+    /// callers about to RECORD something should use this; predicates read
+    /// through `rare` without allocating).
+    #[inline]
+    pub fn rare_mut(&mut self) -> &mut ObjRare {
+        self.rare.get_or_insert_with(Default::default)
+    }
+
     /// Whether typed property `name` was explicitly `unset()` (see field doc).
     pub fn is_typed_unset(&self, name: &[u8]) -> bool {
-        self.typed_unset.iter().any(|n| n.as_ref() == name)
+        self.rare
+            .as_deref()
+            .is_some_and(|r| r.typed_unset.iter().any(|n| n.as_ref() == name))
     }
 
     /// Record that typed property `name` was explicitly `unset()` (idempotent).
     pub fn mark_typed_unset(&mut self, name: &[u8]) {
         if !self.is_typed_unset(name) {
-            self.typed_unset.push(name.into());
+            self.rare_mut().typed_unset.push(name.into());
         }
     }
 
     /// Whether readonly property `name` has been initialised on this instance.
     pub fn is_readonly_init(&self, name: &[u8]) -> bool {
-        self.readonly_init.iter().any(|n| n.as_ref() == name)
+        self.rare
+            .as_deref()
+            .is_some_and(|r| r.readonly_init.iter().any(|n| n.as_ref() == name))
     }
 
     /// Record that readonly property `name` has now been initialised (idempotent).
     pub fn mark_readonly_init(&mut self, name: &[u8]) {
         if !self.is_readonly_init(name) {
-            self.readonly_init.push(name.into());
+            self.rare_mut().readonly_init.push(name.into());
         }
     }
 
     /// Drop `name` from the initialised set (an `unset` during `__clone`, which
     /// returns a readonly property to the uninitialised state).
     pub fn clear_readonly_init(&mut self, name: &[u8]) {
-        self.readonly_init.retain(|n| n.as_ref() != name);
+        if let Some(r) = self.rare.as_deref_mut() {
+            r.readonly_init.retain(|n| n.as_ref() != name);
+        }
+    }
+
+    /// The readonly-initialised name set (empty slice when never used).
+    pub fn readonly_init_slice(&self) -> &[Box<[u8]>] {
+        self.rare.as_deref().map_or(&[], |r| &r.readonly_init)
+    }
+
+    /// Replace the readonly-initialised set (lazy-object rollback path).
+    /// An empty list on a rare-less object stays allocation-free.
+    pub fn set_readonly_init(&mut self, list: Vec<Box<[u8]>>) {
+        match self.rare.as_deref_mut() {
+            Some(r) => r.readonly_init = list,
+            None if list.is_empty() => {}
+            None => self.rare_mut().readonly_init = list,
+        }
     }
 
     /// Whether readonly property `name` may be (re-)initialised once right now —
     /// i.e. `clone` granted a write permission still pending consumption.
     pub fn readonly_clone_writable(&self, name: &[u8]) -> bool {
-        self.readonly_clone_writable.iter().any(|n| n.as_ref() == name)
+        self.rare
+            .as_deref()
+            .is_some_and(|r| r.readonly_clone_writable.iter().any(|n| n.as_ref() == name))
     }
 
     /// Consume the clone-write permission for `name` (a no-op if absent).
     pub fn consume_clone_writable(&mut self, name: &[u8]) {
-        self.readonly_clone_writable.retain(|n| n.as_ref() != name);
+        if let Some(r) = self.rare.as_deref_mut() {
+            r.readonly_clone_writable.retain(|n| n.as_ref() != name);
+        }
+    }
+
+    /// Grant/replace the clone-write set (the `clone` operator's entry grant).
+    /// An empty grant on a rare-less object stays allocation-free.
+    pub fn set_readonly_clone_writable(&mut self, list: Vec<Box<[u8]>>) {
+        match self.rare.as_deref_mut() {
+            Some(r) => r.readonly_clone_writable = list,
+            None if list.is_empty() => {}
+            None => self.rare_mut().readonly_clone_writable = list,
+        }
+    }
+
+    /// Revoke every clone-write grant (a `clone`-driven `__clone` returning).
+    pub fn clear_readonly_clone_writable(&mut self) {
+        if let Some(r) = self.rare.as_deref_mut() {
+            r.readonly_clone_writable.clear();
+        }
     }
 }
 
@@ -882,9 +944,7 @@ mod tests {
             props,
             id,
             info: Rc::new(ObjectInfo::default()),
-            readonly_init: Vec::new(),
-            readonly_clone_writable: Vec::new(),
-            typed_unset: Vec::new(),
+            rare: None,
             lazy: None,
             proxy_instance: None,
             gc: GcMark::new(),

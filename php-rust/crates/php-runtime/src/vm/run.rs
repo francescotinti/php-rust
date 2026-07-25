@@ -2692,7 +2692,7 @@ impl<'m> super::Vm<'m> {
                     // after the clone — or via a manual `__clone()` — fatal again.
                     if self.frames[top].flags.get(FrameFlags::CLONE_INIT) {
                         if let Some(Zval::Object(o)) = self.frames[top].this.clone() {
-                            o.borrow_mut().readonly_clone_writable.clear();
+                            o.borrow_mut().clear_readonly_clone_writable();
                         }
                     }
                     let dead = self.frames.pop().expect("Ret pops the active frame");
@@ -2978,10 +2978,16 @@ impl<'m> super::Vm<'m> {
                             props,
                             id: self.next_id(),
                             info: Rc::clone(&b.info),
-                            // A clone keeps the source's readonly props initialised.
-                            readonly_init: b.readonly_init.clone(),
-                            // Granted below if `__clone` runs (one re-init each).
-                            readonly_clone_writable: Vec::new(), typed_unset: Vec::new(),
+                            // A clone keeps the source's readonly props
+                            // initialised; the clone-write grants come below
+                            // (if `__clone` runs) and typed-unset starts clean.
+                            rare: match b.readonly_init_slice() {
+                                [] => None,
+                                ro => Some(Box::new(php_types::ObjRare {
+                                    readonly_init: ro.to_vec(),
+                                    ..Default::default()
+                                })),
+                            },
                             // A clone is a concrete copy; lazy state is not carried.
                             lazy: None,
                             proxy_instance: None,
@@ -3025,8 +3031,7 @@ impl<'m> super::Vm<'m> {
                             props: Props::new(),
                             id: self.next_id(),
                             info: winfo,
-                            readonly_init: Vec::new(),
-                            readonly_clone_writable: Vec::new(), typed_unset: Vec::new(),
+                            rare: None,
                             lazy: Some(LazyKind::Proxy),
                             proxy_instance: Some(Box::new(clone_val.clone())),
                             gc: php_types::GcMark::new(),
@@ -3053,7 +3058,7 @@ impl<'m> super::Vm<'m> {
                             .map(|(n, _)| n.to_vec().into_boxed_slice())
                             .filter(|n| prop_readonly_decl(&self.classes, cid, n).is_some())
                             .collect();
-                        clone_rc.borrow_mut().readonly_clone_writable = writable;
+                        clone_rc.borrow_mut().set_readonly_clone_writable(writable);
                         let callee = &self.classes[defc].methods[midx].func;
                         let m = self.class_mod(defc);
                         let mut frame = self.pooled_frame(callee, m);
