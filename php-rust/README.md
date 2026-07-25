@@ -27,14 +27,14 @@ interpreter, not to pass a toy subset.
 > owner-level attribution of both bytes and CPU-seconds (sampled call
 > trees reconciled against the master clock), has brought the WordPress
 > media benchmark to **~2.61×** the oracle's CPU and cut the
-> peak-footprint gap **from 11.9× to ~4.15×**; the latest lever — a
-> growable string representation with in-place `.=` append at unique
-> refcount (mirroring `zend_string_extend`) — closed the measured O(n²)
-> append channel (micro-probe: 499ms → 2ms, byte-parity with the
-> oracle) and the full WordPress-suite CPU now stands at **~2.11×**
-> (from 3.4×) — next: the heap-to-handle pilot on hashed arrays (the
-> byte census puts them at 10× the string channel), then Laravel
-> validation.
+> peak-footprint gap **from 11.9× to ~4.08×**; the latest lever — a
+> keyless hashed-array index (single Zend-style table: `u32` position
+> slots probing against the entry storage, no duplicated key) — cut
+> peak footprint another −1.8%, removed ~300MB/run of index-allocation
+> churn, and brought the full WordPress-suite CPU to **~2.06×** (from
+> 3.4×) at zero CPU cost — next: per-site quota of the remaining `.=`
+> append channels, then re-basing the heap-to-handle arc on unbiased
+> live accounting, then Laravel validation.
 
 ## Coverage at a glance
 
@@ -131,12 +131,14 @@ Near-term, highest-leverage work (see [COVERAGE.md](COVERAGE.md) for the data,
    CPU-seconds (sampled call trees reconciled against the master
    clock) — to the reflection-descriptor memo (re-keyed on the
    *declaring* class: **−7.4% CPU** alone) and to an O(n²) `.=` append
-   gap, now closed by a growable string representation with in-place
-   append at unique refcount (probe 499ms → 2ms = oracle; full suite
-   −2.6% same-evening): the full suite stands at **~2.11×** (from
-   3.4×), peak footprint at **~4.15×**. The byte census picked the next
-   heap-to-handle pilot: hashed arrays (10× the string channel's live
-   bytes). Plan: NEXT_SESSION_WORDPRESS.md.
+   gap closed by a growable string representation with in-place
+   append at unique refcount (probe 499ms → 2ms = oracle), and — first
+   tranche of the heap-to-handle arc — a keyless hashed-array index
+   (single Zend-style table, no duplicated key: −62B/array measured on
+   4.75M array deaths, −1.8% peak footprint, −2.7% full-suite CPU
+   same-evening at zero media-CPU cost): the full suite stands at
+   **~2.06×** (from 3.4×), peak footprint at **~4.08×**. Plan:
+   NEXT_SESSION_WORDPRESS.md.
 2. **Laravel** as the second framework validation target once the perf
    pass lands.
 3. Remaining extension surfaces on demand — ext/tidy (one WP test dataset),

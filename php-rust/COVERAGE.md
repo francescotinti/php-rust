@@ -7,7 +7,7 @@ functions with `function_exists()` inside `phpr` (grouped by
 `ReflectionFunction::getExtensionName()`); the corpus number is the real pass
 count of the upstream Zend test suite under `phpt-runner`.
 
-_Last measured: 2026-07-25 (WP-55) · reference: PHP 8.5.7 (`get_defined_functions()`)._
+_Last measured: 2026-07-26 (WP-56) · reference: PHP 8.5.7 (`get_defined_functions()`)._
 
 ---
 
@@ -158,11 +158,15 @@ assign-op that extends the buffer **in place at unique refcount**
 (mirroring `zend_string_extend`; aliases and interned literals fall
 back to copy-on-write by construction): the micro-probe went 499ms →
 2ms — byte-parity with the oracle — and the full suite gained −2.6%
-same-evening, landing at **~2.11×** (peak footprint **~4.15×**, the
-+8B-per-string layout cost measured within its ≤2% guard). The byte
-census then picked the next heap-to-handle pilot: **hashed arrays**
-(~421MB live at peak vs ~45MB for strings). Then Laravel validation.
-See NEXT_SESSION_WORDPRESS.md.
+same-evening (the +8B-per-string layout cost measured within its ≤2%
+guard). WP-56 opened the heap-to-handle arc with a **keyless
+hashed-array index**: the duplicated-key `FxHashMap` became a single
+Zend-style table of `u32` position slots probing against the entry
+storage — −62B/array measured across 4.75M array deaths (~300MB/run
+less allocation churn), **−1.8% peak footprint and −2.7% full-suite
+CPU same-evening at zero media-CPU cost**, landing at **~2.06×** CPU /
+**~4.08×** peak with every parity gate identical by name. Then Laravel
+validation. See NEXT_SESSION_WORDPRESS.md.
 
 ---
 
