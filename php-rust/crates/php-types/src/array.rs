@@ -131,6 +131,10 @@ pub struct PhpArray {
     /// cycle classify skip scalar-only arrays without iterating them. Never
     /// cleared by `remove` — stays pessimistic once set.
     holds_containers: bool,
+    /// Cycle-classify in-node mark (WP-52) — see [`crate::object::WalkMark`].
+    /// Epoch-guarded: stale between walks by construction, so no reset pass;
+    /// `Clone` (COW) starts fresh — a copy is a new node.
+    walk: crate::object::WalkMark,
 }
 
 /// The element-duplication rule of `zend_array_dup` (Zend/zend_hash.c): an
@@ -188,6 +192,7 @@ impl Clone for PhpArray {
             count: self.count,
             cursor: self.cursor,
             holds_containers: self.holds_containers,
+            walk: crate::object::WalkMark::new(),
         }
     }
 }
@@ -232,11 +237,18 @@ impl Default for PhpArray {
             count: 0,
             cursor: 0,
             holds_containers: false,
+            walk: crate::object::WalkMark::new(),
         }
     }
 }
 
 impl PhpArray {
+    /// The classify-walk mark carried by this array (WP-52).
+    #[inline]
+    pub fn walk_mark(&self) -> &crate::object::WalkMark {
+        &self.walk
+    }
+
     pub fn new() -> PhpArray {
         PhpArray::default()
     }

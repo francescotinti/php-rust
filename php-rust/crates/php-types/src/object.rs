@@ -87,6 +87,53 @@ pub struct Object {
 pub struct GcMark {
     pos: std::cell::Cell<u32>,
     flags: std::cell::Cell<u8>,
+    /// Cycle-classify in-node bookkeeping (WP-52) — see [`WalkMark`].
+    pub walk: WalkMark,
+}
+
+/// Classify-walk in-node mark (WP-52): the node's slot in the walk-local
+/// record table, valid only while `epoch` matches the walk's current epoch.
+/// A stale mark — any other epoch, including the 0 every node is born
+/// with — reads as "not discovered yet", so walks never reset marks
+/// between calls. Replaces the per-arc hash lookups of the WP-51 fused
+/// map with two `Cell` reads on the node itself. A COW/`Clone` copy is a
+/// NEW node, never the walked one, so clones start with a fresh mark.
+#[derive(Debug)]
+pub struct WalkMark {
+    epoch: std::cell::Cell<u32>,
+    slot: std::cell::Cell<u32>,
+}
+
+impl WalkMark {
+    pub fn new() -> WalkMark {
+        WalkMark { epoch: std::cell::Cell::new(0), slot: std::cell::Cell::new(0) }
+    }
+
+    /// The walk-table slot recorded under `epoch`, if this node was already
+    /// discovered by the walk currently using that epoch.
+    #[inline]
+    pub fn get(&self, epoch: u32) -> Option<u32> {
+        (self.epoch.get() == epoch).then(|| self.slot.get())
+    }
+
+    #[inline]
+    pub fn set(&self, epoch: u32, slot: u32) {
+        self.epoch.set(epoch);
+        self.slot.set(slot);
+    }
+}
+
+impl Default for WalkMark {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Clone for WalkMark {
+    /// A copy is a new, undiscovered node: fresh mark, never the original's.
+    fn clone(&self) -> Self {
+        WalkMark::new()
+    }
 }
 
 const GC_BIRTH: u8 = 1;
@@ -96,7 +143,11 @@ const GC_LIGHT_DEMOTED: u8 = 8;
 
 impl GcMark {
     pub fn new() -> GcMark {
-        GcMark { pos: std::cell::Cell::new(u32::MAX), flags: std::cell::Cell::new(0) }
+        GcMark {
+            pos: std::cell::Cell::new(u32::MAX),
+            flags: std::cell::Cell::new(0),
+            walk: WalkMark::new(),
+        }
     }
 
     #[inline]

@@ -625,6 +625,7 @@ impl<'m> Vm<'m> {
             scope: new_scope.unwrap_or(cl.scope),
             is_static: cl.is_static,
             lsb,
+            walk: Default::default(),
         }))
     }
 
@@ -767,6 +768,7 @@ impl<'m> Vm<'m> {
                         scope: None,
                         is_static: false,
                         lsb: None,
+                        walk: Default::default(),
                     })))
                 }
                 // An invokable object: the callable is its `__invoke` method
@@ -864,6 +866,7 @@ impl<'m> Vm<'m> {
             scope: Some(scope),
             is_static: false,
             lsb: Some(cid),
+            walk: Default::default(),
         })))
     }
 

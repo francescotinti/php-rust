@@ -490,6 +490,7 @@ pub(crate) fn run_module_with_hir<'m>(
         gc_cycle_roots: HashSet::default(),
         gc_ctr_roots: Vec::new(),
         gc_classify_last_nodes: Cell::new(0),
+        gc_walk_epoch: Cell::new(0),
         gc_fullscan_mark: 0,
         gc_enabled: true,
         gc_collecting: false,
@@ -1919,6 +1920,11 @@ struct Vm<'m> {
     /// full-size table, nor clobber the estimate). `Cell`: [`Vm::gc_classify`]
     /// takes `&self`. No standing footprint — the map itself stays call-local.
     gc_classify_last_nodes: Cell<usize>,
+    /// WP-52 in-node marks: the classify-walk epoch stamped into every
+    /// discovered node's `WalkMark`. Bumped at each [`Vm::gc_classify`]
+    /// entry (never 0 — the value every mark is born with), so stale marks
+    /// from earlier walks read as "not discovered" with no reset pass.
+    gc_walk_epoch: Cell<u32>,
     /// WP-51 Fase 1.4: `created.len()` right after the last full-scan-seeded
     /// collect. When the registry has grown [`Vm::GC_FULLSCAN_GROWTH`] past
     /// this, the next collect seeds every tracked object (see
@@ -3008,11 +3014,20 @@ impl<'m> Vm<'m> {
     /// (small) white subgraph. Same whites, same counts, no whole-graph
     /// allocation.
     ///
-    /// WP-51 bookkeeping shape: handle, in-edge count and liveness mark live
-    /// in ONE map entry (`GcInfo`) instead of three side tables — at most two
-    /// hash lookups per edge instead of three, and the external check reads
-    /// `in_edges` while iterating. Big calls pre-reserve the previous walk's
-    /// node count to skip the growth rehash cascade.
+    /// WP-51 bookkeeping shape: handle, in-edge count and liveness mark fused
+    /// in one map entry — at most two hash lookups per edge instead of three.
+    ///
+    /// WP-52 bookkeeping shape (in-node marks): discovery is stamped ON the
+    /// node itself (`WalkMark`: epoch-guarded slot, 8B, no reset between
+    /// walks) and all mutable walk state lives in ONE contiguous record
+    /// table indexed by that slot — ZERO hash lookups per edge for objects,
+    /// arrays and closures. `Ref` nodes have no struct to carry a mark
+    /// (`Zval::Ref(Rc<RefCell<Zval>>)`) and keep a small side map of their
+    /// own. The record table doubles as the FIFO worklist (push order IS
+    /// discovery order), so the walk sequence — and every count — is
+    /// unchanged; the external check now iterates in deterministic
+    /// discovery order instead of hash order (same live/white SETS). Big
+    /// calls pre-reserve the previous walk's node count.
     fn gc_classify(&self, roots: &[u32], ctr_roots: Vec<CtrRoot>) -> GcWhites {
         use std::collections::VecDeque;
         enum Handle {
@@ -3031,36 +3046,17 @@ impl<'m> Vm<'m> {
                 }
             }
         }
-        /// Per-node record (WP-51): the walk handle, the in-graph edge count
-        /// and the liveness mark FUSED into one map entry — the WP-47 shape
-        /// paid three hash lookups per edge (`handles` + `in_edges` in pass 1,
-        /// `is_live` in pass 2); one map pays at most two, and the external
-        /// check reads `in_edges` for free while iterating. Same walk, same
-        /// counts — only the bookkeeping layout changes.
-        struct GcInfo {
+        /// Per-node record (WP-52): the walk handle, the in-graph edge count
+        /// and the liveness mark, in a contiguous walk-local table indexed
+        /// by the slot each node carries in its `WalkMark`. The table also
+        /// IS the pass-1 FIFO worklist: records are pushed in discovery
+        /// order and a cursor walks them, so the sequence matches the old
+        /// VecDeque exactly.
+        struct NodeRec {
+            node: GcNode,
             handle: Handle,
             in_edges: u32,
             live: bool,
-        }
-        /// Node key WITHOUT cloning — the cheap test applied to every child.
-        fn node_key(v: &Zval) -> Option<GcNode> {
-            match v {
-                Zval::Object(o) => Some(GcNode::Obj(o.borrow().id)),
-                Zval::Array(a) => Some(GcNode::Arr(Rc::as_ptr(a) as usize)),
-                Zval::Ref(r) => Some(GcNode::Ref(Rc::as_ptr(r) as usize)),
-                Zval::Closure(c) => Some(GcNode::Clo(Rc::as_ptr(c) as usize)),
-                _ => None,
-            }
-        }
-        /// Handle clone — only paid once per newly-discovered node.
-        fn handle_of(v: &Zval) -> Handle {
-            match v {
-                Zval::Object(o) => Handle::Obj(Rc::clone(o)),
-                Zval::Array(a) => Handle::Arr(Rc::clone(a)),
-                Zval::Ref(r) => Handle::Ref(Rc::clone(r)),
-                Zval::Closure(c) => Handle::Clo(Rc::clone(c)),
-                _ => unreachable!("handle_of follows a Some(node_key)"),
-            }
         }
         /// Walk the child values of one node by borrow, in the same order the
         /// old collected-Vec walk produced them (props, then proxy_instance;
@@ -3096,107 +3092,184 @@ impl<'m> Vm<'m> {
             }
         }
 
-        // WP-51: round-1 walks reach millions of nodes — growing the table
-        // from empty re-hashes every entry ~log2(n) times. Pre-reserve the
-        // previous big walk's node count; small rescans (round ≥2, a handful
-        // of re-rooted destructor objects) neither reserve nor update the
-        // estimate. Transient high-water is the same table the old growth
-        // path ended at; nothing survives the call.
+        // WP-52: the walk epoch — every node's mark born under an older
+        // epoch (or the 0 of a fresh node) reads as undiscovered, so there
+        // is no reset pass and no growth-rehash cascade at all (the record
+        // table is a Vec; big calls still pre-reserve the last walk's size).
+        let epoch = {
+            let e = match self.gc_walk_epoch.get().wrapping_add(1) {
+                0 => 1, // skip the born-with value on u32 wrap
+                e => e,
+            };
+            self.gc_walk_epoch.set(e);
+            e
+        };
         let big_call = roots.len() + ctr_roots.len() >= 1024;
-        let mut nodes: HashMap<GcNode, GcInfo> = HashMap::default();
+        let mut recs: Vec<NodeRec> = Vec::new();
         if big_call {
-            nodes.reserve(self.gc_classify_last_nodes.get());
+            recs.reserve(self.gc_classify_last_nodes.get());
         }
-        let mut work: VecDeque<GcNode> = VecDeque::new();
+        // Slot side-table for `Ref` nodes only — they have no in-node mark.
+        let mut ref_slots: HashMap<usize, u32> = HashMap::default();
         for &id in roots {
             let Some(rc) = self.created.get(&id) else { continue };
-            let node = GcNode::Obj(id);
-            match nodes.entry(node) {
-                std::collections::hash_map::Entry::Occupied(mut e) => {
-                    e.get_mut().handle = Handle::Obj(Rc::clone(rc));
-                }
-                std::collections::hash_map::Entry::Vacant(e) => {
-                    e.insert(GcInfo {
+            let seen = rc.borrow().gc.walk.get(epoch);
+            match seen {
+                Some(s) => recs[s as usize].handle = Handle::Obj(Rc::clone(rc)),
+                None => {
+                    rc.borrow().gc.walk.set(epoch, recs.len() as u32);
+                    recs.push(NodeRec {
+                        node: GcNode::Obj(id),
                         handle: Handle::Obj(Rc::clone(rc)),
                         in_edges: 0,
                         live: false,
                     });
-                    work.push_back(node);
                 }
             }
         }
         // Container roots (WP-46) move their buffer handle into the walk —
         // one known holder, the same accounting as a handle cloned mid-walk.
         for cr in ctr_roots {
-            let (node, h) = match cr {
-                CtrRoot::Arr(a) => (GcNode::Arr(Rc::as_ptr(&a) as usize), Handle::Arr(a)),
-                CtrRoot::Clo(c) => (GcNode::Clo(Rc::as_ptr(&c) as usize), Handle::Clo(c)),
-            };
-            match nodes.entry(node) {
-                std::collections::hash_map::Entry::Occupied(mut e) => {
-                    e.get_mut().handle = h;
-                }
-                std::collections::hash_map::Entry::Vacant(e) => {
-                    e.insert(GcInfo { handle: h, in_edges: 0, live: false });
-                    work.push_back(node);
-                }
+            match cr {
+                CtrRoot::Arr(a) => match a.walk_mark().get(epoch) {
+                    Some(s) => recs[s as usize].handle = Handle::Arr(a),
+                    None => {
+                        a.walk_mark().set(epoch, recs.len() as u32);
+                        recs.push(NodeRec {
+                            node: GcNode::Arr(Rc::as_ptr(&a) as usize),
+                            handle: Handle::Arr(a),
+                            in_edges: 0,
+                            live: false,
+                        });
+                    }
+                },
+                CtrRoot::Clo(c) => match c.walk.get(epoch) {
+                    Some(s) => recs[s as usize].handle = Handle::Clo(c),
+                    None => {
+                        c.walk.set(epoch, recs.len() as u32);
+                        recs.push(NodeRec {
+                            node: GcNode::Clo(Rc::as_ptr(&c) as usize),
+                            handle: Handle::Clo(c),
+                            in_edges: 0,
+                            live: false,
+                        });
+                    }
+                },
             }
         }
-        // Pass 1 — discovery: handles + in-graph edge counts, no child storage.
-        while let Some(node) = work.pop_front() {
-            let h = nodes.get(&node).expect("worklist node has entry").handle.dup();
-            each_child(&h, |v| {
-                let Some(cn) = node_key(v) else { return };
-                match nodes.entry(cn) {
-                    std::collections::hash_map::Entry::Occupied(mut e) => {
-                        e.get_mut().in_edges += 1;
+        // Pass 1 — discovery: handles + in-graph edge counts, no child
+        // storage, no per-edge hashing (marks on the nodes, `Ref` excepted).
+        let mut cur = 0usize;
+        while cur < recs.len() {
+            let h = recs[cur].handle.dup();
+            each_child(&h, |v| match v {
+                Zval::Object(o) => {
+                    let b = o.borrow();
+                    match b.gc.walk.get(epoch) {
+                        Some(s) => {
+                            drop(b);
+                            recs[s as usize].in_edges += 1;
+                        }
+                        None => {
+                            b.gc.walk.set(epoch, recs.len() as u32);
+                            let id = b.id;
+                            drop(b);
+                            recs.push(NodeRec {
+                                node: GcNode::Obj(id),
+                                handle: Handle::Obj(Rc::clone(o)),
+                                in_edges: 1,
+                                live: false,
+                            });
+                        }
                     }
-                    std::collections::hash_map::Entry::Vacant(e) => {
-                        e.insert(GcInfo {
-                            handle: handle_of(v),
+                }
+                Zval::Array(a) => match a.walk_mark().get(epoch) {
+                    Some(s) => recs[s as usize].in_edges += 1,
+                    None => {
+                        a.walk_mark().set(epoch, recs.len() as u32);
+                        recs.push(NodeRec {
+                            node: GcNode::Arr(Rc::as_ptr(a) as usize),
+                            handle: Handle::Arr(Rc::clone(a)),
                             in_edges: 1,
                             live: false,
                         });
-                        work.push_back(cn);
+                    }
+                },
+                Zval::Closure(c) => match c.walk.get(epoch) {
+                    Some(s) => recs[s as usize].in_edges += 1,
+                    None => {
+                        c.walk.set(epoch, recs.len() as u32);
+                        recs.push(NodeRec {
+                            node: GcNode::Clo(Rc::as_ptr(c) as usize),
+                            handle: Handle::Clo(Rc::clone(c)),
+                            in_edges: 1,
+                            live: false,
+                        });
+                    }
+                },
+                Zval::Ref(r) => {
+                    let p = Rc::as_ptr(r) as usize;
+                    match ref_slots.entry(p) {
+                        std::collections::hash_map::Entry::Occupied(e) => {
+                            recs[*e.get() as usize].in_edges += 1;
+                        }
+                        std::collections::hash_map::Entry::Vacant(e) => {
+                            e.insert(recs.len() as u32);
+                            recs.push(NodeRec {
+                                node: GcNode::Ref(p),
+                                handle: Handle::Ref(Rc::clone(r)),
+                                in_edges: 1,
+                                live: false,
+                            });
+                        }
                     }
                 }
+                _ => {}
             });
+            cur += 1;
         }
         // External check. `known` = references this walk can account for
         // without an outside holder: our own handle clone, and `created` for a
         // tracked object. An untracked object (interned enum case) is immortal.
-        let mut live: VecDeque<GcNode> = VecDeque::new();
-        for (node, info) in nodes.iter_mut() {
-            let external = match (node, &info.handle) {
+        let mut live: VecDeque<u32> = VecDeque::new();
+        for (i, rec) in recs.iter_mut().enumerate() {
+            let external = match (&rec.node, &rec.handle) {
                 (GcNode::Obj(id), Handle::Obj(o)) => {
                     !self.created.contains_key(id)
-                        || Rc::strong_count(o) - 2 > info.in_edges as usize
+                        || Rc::strong_count(o) - 2 > rec.in_edges as usize
                 }
-                (_, Handle::Arr(a)) => Rc::strong_count(a) - 1 > info.in_edges as usize,
-                (_, Handle::Ref(r)) => Rc::strong_count(r) - 1 > info.in_edges as usize,
-                (_, Handle::Clo(c)) => Rc::strong_count(c) - 1 > info.in_edges as usize,
+                (_, Handle::Arr(a)) => Rc::strong_count(a) - 1 > rec.in_edges as usize,
+                (_, Handle::Ref(r)) => Rc::strong_count(r) - 1 > rec.in_edges as usize,
+                (_, Handle::Clo(c)) => Rc::strong_count(c) - 1 > rec.in_edges as usize,
                 _ => unreachable!("node/handle kinds always match"),
             };
-            if external && !info.live {
-                info.live = true;
-                live.push_back(*node);
+            if external && !rec.live {
+                rec.live = true;
+                live.push_back(i as u32);
             }
         }
         // Pass 2 — live propagation, re-reading edges by borrow.
-        while let Some(node) = live.pop_front() {
-            let h = nodes.get(&node).expect("live node has entry").handle.dup();
+        while let Some(i) = live.pop_front() {
+            let h = recs[i as usize].handle.dup();
             each_child(&h, |v| {
-                let Some(cn) = node_key(v) else { return };
-                if let Some(info) = nodes.get_mut(&cn) {
-                    if !info.live {
-                        info.live = true;
-                        live.push_back(cn);
+                let s = match v {
+                    Zval::Object(o) => o.borrow().gc.walk.get(epoch),
+                    Zval::Array(a) => a.walk_mark().get(epoch),
+                    Zval::Closure(c) => c.walk.get(epoch),
+                    Zval::Ref(r) => ref_slots.get(&(Rc::as_ptr(r) as usize)).copied(),
+                    _ => None,
+                };
+                if let Some(s) = s {
+                    let rec = &mut recs[s as usize];
+                    if !rec.live {
+                        rec.live = true;
+                        live.push_back(s);
                     }
                 }
             });
         }
         if big_call {
-            self.gc_classify_last_nodes.set(nodes.len());
+            self.gc_classify_last_nodes.set(recs.len());
         }
         let mut whites = GcWhites {
             objs: Vec::new(),
@@ -3206,12 +3279,12 @@ impl<'m> Vm<'m> {
             children: HashMap::default(),
             uncounted: HashSet::default(),
         };
-        let mut all_white: Vec<GcNode> = Vec::new();
-        for (n, info) in &nodes {
-            if info.live {
+        let mut all_white: Vec<u32> = Vec::new();
+        for (i, rec) in recs.iter().enumerate() {
+            if rec.live {
                 continue;
             }
-            match (n, &info.handle) {
+            match (&rec.node, &rec.handle) {
                 (GcNode::Obj(id), _) if self.created.contains_key(id) => {
                     whites.objs.push(*id);
                 }
@@ -3221,30 +3294,56 @@ impl<'m> Vm<'m> {
                 (GcNode::Ref(p), Handle::Ref(r)) => whites.refs.push((*p, Rc::clone(r))),
                 _ => unreachable!("node/handle kinds always match"),
             }
-            all_white.push(*n);
+            all_white.push(i as u32);
         }
         whites.objs.sort_unstable();
         // White→white child lists, rebuilt only over the white subgraph (the
         // old whole-graph children map filtered to the same entries).
-        for n in &all_white {
-            let h = nodes.get(n).expect("white node has entry").handle.dup();
+        for &wi in &all_white {
+            let (h, n) = {
+                let rec = &recs[wi as usize];
+                (rec.handle.dup(), rec.node)
+            };
             let mut wk: Vec<GcNode> = Vec::new();
             each_child(&h, |v| {
-                if let Some(cn) = node_key(v) {
-                    if !nodes.get(&cn).is_some_and(|i| i.live) {
-                        wk.push(cn);
+                let (key, live_now) = match v {
+                    Zval::Object(o) => {
+                        let b = o.borrow();
+                        (
+                            GcNode::Obj(b.id),
+                            b.gc.walk.get(epoch).is_some_and(|s| recs[s as usize].live),
+                        )
                     }
+                    Zval::Array(a) => (
+                        GcNode::Arr(Rc::as_ptr(a) as usize),
+                        a.walk_mark().get(epoch).is_some_and(|s| recs[s as usize].live),
+                    ),
+                    Zval::Closure(c) => (
+                        GcNode::Clo(Rc::as_ptr(c) as usize),
+                        c.walk.get(epoch).is_some_and(|s| recs[s as usize].live),
+                    ),
+                    Zval::Ref(r) => {
+                        let p = Rc::as_ptr(r) as usize;
+                        (
+                            GcNode::Ref(p),
+                            ref_slots.get(&p).is_some_and(|&s| recs[s as usize].live),
+                        )
+                    }
+                    _ => return,
+                };
+                if !live_now {
+                    wk.push(key);
                 }
             });
             if !wk.is_empty() {
-                whites.children.insert(*n, wk);
+                whites.children.insert(n, wk);
             }
         }
         // Refcount-death simulation (see [`GcWhites::uncounted`]): peel the
         // whites no white parent holds, cascading through their edges.
         let mut white_in: HashMap<GcNode, usize> = HashMap::default();
-        for n in &all_white {
-            white_in.insert(*n, 0);
+        for &wi in &all_white {
+            white_in.insert(recs[wi as usize].node, 0);
         }
         for kids in whites.children.values() {
             for k in kids {
@@ -3255,7 +3354,7 @@ impl<'m> Vm<'m> {
         }
         let mut peel: Vec<GcNode> = all_white
             .iter()
-            .copied()
+            .map(|&wi| recs[wi as usize].node)
             .filter(|n| white_in.get(n) == Some(&0))
             .collect();
         while let Some(n) = peel.pop() {

@@ -165,6 +165,8 @@ pub struct Closure {
     /// as `Child::getCb()` has scope Base but `static::` = Child
     /// (php-ai-client's discovery strategy relies on it, WP-17).
     pub lsb: Option<usize>,
+    /// Cycle-classify in-node mark (WP-52) — see [`crate::object::WalkMark`].
+    pub walk: crate::object::WalkMark,
 }
 
 /// What `var_dump` / `print_r` print for a closure value (step 18-7, D-18.9).

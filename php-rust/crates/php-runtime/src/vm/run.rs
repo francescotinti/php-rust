@@ -1410,6 +1410,7 @@ impl<'m> super::Vm<'m> {
                         scope,
                         is_static: !bind_this,
                         lsb,
+                        walk: Default::default(),
                     };
                     self.frames[top].stack.push(Zval::Closure(Rc::new(cl)));
                 }
@@ -1440,6 +1441,7 @@ impl<'m> super::Vm<'m> {
                         scope: None,
                         is_static: false,
                         lsb: None,
+                        walk: Default::default(),
                     };
                     self.frames[top].stack.push(Zval::Closure(Rc::new(cl)));
                 }
