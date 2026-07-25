@@ -43,6 +43,7 @@
 | WP-50 | 59,84/20,935 = **2,86×** (leve flat) | **1,755/0,394 = 4,45×** (+2,64% attribuito) | run37c ≈13:37 = **2,41×** ⭐ | ~18/11,5 min = **1,6×** |
 | WP-51 | 59,17/20,82 = **2,84×** ⭐ (A/B +0,01% flat, guardia ok) | **1,721/0,396 = 4,34×** ⭐ (A/B −0,32%) | run39 ≈13:03 = **2,31×** ⭐⭐ (old 2,44× stessa notte; classify fuso −4,1% + boundary-collect gratis) | ~17/11,5 min = **1,5×** |
 | WP-52 | 58,84/20,82 = **2,83×** ⭐ (A/B −0,57%, new 6/6) | **1,720/0,395 = 4,36×** (A/B +0,61% = +10,4MB, size-class del +8B/nodo — tenuta e verbalizzata) | run40 ≈12:05 = **2,14×** ⭐⭐ (old 2,32× stesso-giorno = −7,9% raw; in-node marks: classify −42,7% + cold-box Object −56B/ist) | ~16,3/11,5 min = **1,4×** |
+| WP-53 | 59,05/20,90 = **2,83×** (A/B −0,88%, new 6/6 stretti) | **1,628/0,376 = 4,33×** (A/B −0,69% — guardia Fase 2 ≤+2% con margine) | run41 ≈12:19 −0,2% raw vs old stesso-giorno; **riferimento resta run40 2,14×** (giornata +2,1% d'ambiente; Fase 2.1+2.2: −40,2M DerefTop + Sweep-elision, −5,66% dispatch = ⭐ solo −0,9% CPU) | ~16,5/11,5 min = **1,4×** |
 
 ⚠️ riga WP-36: NON è una regressione — l'old-binary (WP-35) rimisurato lo
 STESSO giorno dà 61,1s (2,90×): la giornata di WP-35 era favorevole; il

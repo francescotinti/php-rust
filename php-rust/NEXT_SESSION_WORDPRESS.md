@@ -1,28 +1,28 @@
-# Rotta WORDPRESS-FIRST — WP-track (dopo WP-52: in-node marks −42,7% classify + cold-box Object → full 2,14×, media 2,83×/4,36×; WP-53 = residuo ~30s vs 2,06× + reflect-cache owner / Fase 2)
+# Rotta WORDPRESS-FIRST — WP-track (dopo WP-53: Fase 2 CPU aperta e quotata — −40,2M DerefTop + Sweep elision = −0,9% media / −0,2% full; WP-54 = residuo ~30s con lente ns/evento + reflect-cache owner)
 
-> ⚡ **WP-52 (2026-07-25, `1a52712`+`ebd44f3`)** — **Ob.1 in-node marks:
-> `WalkMark{epoch,slot}` 8B NEI nodi (Object dentro GcMark, campo nuovo su
-> PhpArray/Closure; Ref su mini-mappa — non ha struct), stato del walk in
-> `Vec<NodeRec>` contigua che È la worklist FIFO (stessa sequenza ⇒ stessi
-> conteggi): classify_ms census 109.383→62.678 = −46,7s (−42,7%), OLTRE
-> la quota −25..−34s (surplus = get-per-pop pass-2 + iterazione contigua
-> vs mappa). Conservazione alla cifra: collects 303=303, calls 152=152,
-> freed Δ−16 su 14,2M.** Ob.2 Fase 1.3 cold-box (`rare:
-> Option<Box<ObjRare>>` = −64B/istanza; **dyn_entries ESCLUSO e
-> verbalizzato: è lo storage di stdClass = fast-path WP, rischio classe
-> WP-44**): −56,0B/oggetto alla cifra (87,5%, obj.live_n conservato
-> 525.258=525.258), churn obj −2,02GB. **Giudici: full stesso-giorno
-> run40 725,1s = 2,14× vs old phpr-wp51b 787,4s = 2,32× (−7,9% raw,
-> ~−6,7% corretto — mechanism-backed); media ab52 CPU −0,57% new 6/6 →
-> 2,83× (minimo di sempre); peak fisico +0,61% (+10,4MB, guardia ≤+2% ok
-> ma predizione −2MB MANCATA: size-class mimalloc 80→96B sugli array —
-> regressione piccola TENUTA e verbalizzata).** Parità: corpus 1421
-> IDENTICO ×2, cargo 1639/0 ×2, fail-set BYTE-ID a run33 su census52 +
-> run40 + run40-old. ⭐⭐ RSS ps dei full (new 4024 vs old 2897 MB) =
-> accounting MADV/pagine tenute residenti dai mark, NON footprint — il
-> peak fisico media si muove di +0,61%. Residuo vs WP-40 2,06×: **~30s**
-> (era ~85s). Binario stashed: `phpr-wp52` (sha256 57607da3…).
-> **Storia: `sessions/WP_SESSION_52.md`. WP-51: `sessions/WP_SESSION_51.md`.**
+> ⚡ **WP-53 (2026-07-25, `db4ae14`+`357915d`)** — **Fase 2 CPU della
+> roadmap (2.1+2.2). Ob.1 UNA modifica: `ret_shape: u8` precomputato su
+> Func (Ret shape-0 = un load+branch, via la `ret_hint.clone()`
+> per-return; flags frame letti con UN load) + DerefTop NON più emesso
+> dopo le method-call a valore — copy REF-4b via RET_DEREF sul frame
+> callee, bit `deref` nei payload MethodCall/Named/Args
+> (assign_ref_call=false; generator SEMPRE esclusi dal flag). Ob.2 Sweep
+> emit-time elision (kind divergenti + whitelist container-inerte;
+> Binary/CmpJmp esclusi: loose ==/concat vs oggetto → __toString).
+> Mechanism-check op-census old/new stesso-giorno: DerefTop 40,23M→<1,4M
+> (≥96,5% rimosso), Ret/ThisMethodCall INVARIATI alla cifra, dispatch
+> −5,66%; Sweep dinamici solo −0,27% (gli assegnamenti NOTANO: non
+> elidibili per parità dtor). Giudici: ab53 CPU −0,88% new 6/6 → 2,83×
+> pari-minimo; peak fisico −0,69% → 4,33× (guardia ≤+2% con margine);
+> full run41 −0,2% raw vs old stesso-giorno (giornata +2,1% d'ambiente:
+> riferimento pubblicato RESTA run40 2,14×). ⭐⭐ LEZIONE CHIAVE: −5,66%
+> di dispatch = −0,9% di CPU — i micro-op valgono ~5-15ns; le prossime
+> leve si quotano in ns/evento PRIMA, non solo in conteggi. Parità:
+> corpus 1421 ×2, cargo 1639/0 ×2, fail-set BYTE-ID a run33 (88 nomi) su
+> run41 E run41-old, probe dtor NEW==OLD. Residuo vs WP-40 2,06×: ~30s
+> sostanzialmente INTATTO. Binario stashed: `phpr-wp53` (sha256
+> e75c5abb…); old = `phpr-wp52` (57607da3…).
+> **Storia: `sessions/WP_SESSION_53.md`. WP-52: `sessions/WP_SESSION_52.md`.**
 
 ## 📁 Convenzioni (decisione utente 2026-07-23)
 
@@ -59,7 +59,7 @@
 - Commit AND push a ogni step; deviazioni deliberate = marker
   `BUG(port):` / `PERF(port):` / `TODO(port):`.
 
-## Stato gate per nome (gate22 completo su `60c7e04`, 2026-07-25, archivio `gate-out-wp50-archived/`; leve GC/layout WP-52 `1a52712`+`ebd44f3` gated con corpus ×2 + cargo ×2 + 3 full BYTE-ID)
+## Stato gate per nome (gate22 completo su `60c7e04`, 2026-07-25, archivio `gate-out-wp50-archived/`; leve emit/call-ABI WP-53 `db4ae14`+`357915d` gated con corpus ×2 + cargo ×2 + 2 full BYTE-ID + probe dtor NEW==OLD)
 
 - Gate22 verde: corpus **1421** IDENTICO alla baseline WP-46 (0 nuovi-fail;
   ri-verificato ×2 in WP-52 su entrambi gli alberi — set =
@@ -74,13 +74,14 @@
   FALSI VERDI a 0 nomi). Avvio: `mysqld_safe --datadir=... --socket=...`
   daemonizzato (double-fork+setsid). Gate DB "IDENTICO" da validare
   SEMPRE col conteggio (option 413, restapi 3508).
-- **Full-suite run40** (~/Claude/wpdev, WP-52, binario `ebd44f3`+docs):
+- **Full-suite run41** (~/Claude/wpdev, WP-53, binario `357915d`):
   30.472 test, 0E/2F/86W/73S, **fail-set BYTE-IDENTICO a run33** (88 nomi;
-  idem run40-old e census52); baseline resta
-  `wp16-harness/full-out/run33-fails.txt` (run39 archiviato in
-  `full-out/run39/`). Master-CPU **725,1s ≈12:05 = 2,14×** (coppia
-  stesso-giorno: old phpr-wp51b 787,4 = 2,32×; WP-40 11:39 = 2,06× =
-  riferimento residuo ~30s). Wall ~16,3 min = 1,4×.
+  idem run41-old); baseline resta
+  `wp16-harness/full-out/run33-fails.txt`. Master-CPU 738,6s ≈12:19 =
+  −0,2% raw vs old phpr-wp52 740,2s stesso-giorno — giornata +2,1%
+  d'ambiente (l'old-binario su run40 ieri: 725,1): **riferimento
+  pubblicato RESTA run40 725,1s = 2,14×** (WP-40 11:39 = 2,06× =
+  riferimento residuo ~30s). Wall ~16,5 min = 1,4×.
   ⚠️ RSS: telemetria `.rss` in APPEND — max PER SEGMENTO, e il filtro
   orario da solo NON basta (le ore dei giorni prima passano il confronto
   stringa): prima delimitare il blocco della notte (ultimo time-reset),
@@ -110,29 +111,37 @@
 #  orchestrate52.sh = catena sequenziale census→full-new→full-old→ab.
 # ⚠️ launcher: MAI chdir "/" nel daemonizer per i gate phpt — cd root
 #  php-8.5.7 DENTRO lo script (bug60771 scrive ./test.php nella CWD).
+# WP-53: wp53-harness/{corpus53,build-opcensus53,census53,run41,
+#  run41-old,ab53,ab53-report,orchestrate53}.sh; binari OP-census
+#  phpr-op53 (phpr-op-target/) e phpr-op52 (phpr-op-target-old/, build da
+#  worktree della ROOT repo + php-server/+Cargo.lock copiati a mano);
+#  stash: phpr-wp53 (sha256 e75c5abb…). PHPR_OP_CENSUS=1 → dump STDERR.
 ```
 
-## 🎯 PROSSIMO LAVORO — WP-53: residuo ~30s + reflect-cache owner / Fase 2
+## 🎯 PROSSIMO LAVORO — WP-54: residuo ~30s con lente ns/evento + reflect-cache owner
 
 **Rotta (utente 2026-07-24)**: `FOOTPRINT_CPU_ROADMAP.md` — footprint-first,
 safe-only, TUTTE le fasi comunque, **niente revert su insuccesso**.
-Laravel POSTICIPATA a valle.
+Laravel POSTICIPATA a valle. Fase 2.1+2.2 CHIUSE in WP-53 (piccole ma
+positive su tutti i giudici); Fase 2.3 args-Vec pool = da quotare PRIMA
+in ns/alloc.
 
-1. **Residuo CPU full 2,14× vs 2,06× WP-40 (~30s)**: il classify census
-   residuo è 62,7s e ora è dominato da borrow/iter/strong_count (l'hashing
-   è stato eliminato in WP-52) — se si insiste sul classify, la lente è il
-   "profilo del walk" (separare borrow-cost da traversal); rendimenti
-   decrescenti attesi. In alternativa aprire la **Fase 2 CPU della roadmap
-   (mai toccata)**: RET_DEREF+ret_shape COME UNA SOLA MODIFICA (~40,5M
-   DerefTop sprecati) + Sweep emit-time elision (~47M noop) — op-census
-   come mechanism-check, guardia footprint ≤+2%.
-2. **reflect-cache**: la leva vera è l'OWNER della cardinalità (memo keyed
-   su ClassId freschi dei mock, leak WP-47) — il cap è un cerotto
-   (16384 falsificata: hit 16,3→16,5%; ritorno a 8192 = decisione utente,
-   risparmierebbe ~42MB standing sul media).
+1. **Residuo CPU full 2,14× vs 2,06× WP-40 (~30s), intatto dopo la Fase
+   2**: ⭐⭐ lezione WP-53 — quotare le leve in ns/evento, non in conteggi
+   (−5,66% dispatch = −0,9% CPU). Lenti candidate: profilo del walk
+   classify (62,7s census, dominato da borrow/iter/strong_count — il
+   ripiego dichiarato in WP-52); alloc-rate census per Fase 2.3 args-Vec
+   pool (~1 Vec per method/static call) e per la fusione single-alloc
+   stringhe (51,8M×2 malloc — è la voce col ns/evento più alto rimasto:
+   ~40-80ns/malloc-pair).
+2. **reflect-cache**: la leva vera è l'OWNER della cardinalità — il
+   descrittore di ho_reflect_method_info è funzione PURA di (declaring
+   class, metodo): memo su (decl, mname) DOPO la resolve collasserebbe i
+   duplicati ereditati (WP-53, host_reflect.rs:416); quotare il split
+   mock-declared vs inherited col census reflect. Ritorno cap 16384→8192
+   = decisione utente a dati pronti (~42MB standing sul media).
 3. **Footprint**: canali grossi rimasti = hashed-array (Fase 3, redesign) e
-   interning stringhe (Fase 1.5, se il censimento duplicati lo quota);
-   il +10,4MB del +8B/nodo WP-52 è pagato e verbalizzato.
+   interning stringhe (Fase 1.5, se il censimento duplicati lo quota).
 4. **NON riproporre**: Fase 1.2 created→Weak/eviction rc==1 (falsificata);
    rooting selettivo; cap rerun stile Zend; **bound/guardie calcolate
    negli arm caldi del run_loop** (WP-50: +1 load+max = +17..35s — campo
@@ -140,7 +149,9 @@ Laravel POSTICIPATA a valle.
    collect per-test (il gating a crescita è la forma giusta, WP-51);
    **cold-box di dyn_entries** (storage di stdClass = fast-path, WP-52);
    giudizi footprint dall'RSS telemetrico dei full (accounting MADV —
-   solo peak fisico /usr/bin/time -l).
+   solo peak fisico /usr/bin/time -l); **Sweep-elision oltre la whitelist
+   inerte** (gli assegnamenti NOTANO il displaced: timing dtor = parità,
+   WP-53); leve micro-op quotate solo in conteggi (WP-53).
 
 ## (storico, pre-roadmap) PROSSIMO LAVORO
 
@@ -190,10 +201,11 @@ vivo); misure per-sessione in `gaps/REPORT_GAP_<N>.md`. A ogni chiusura:
 misurare media (user CPU + footprint) e full-suite master-CPU, scrivere
 REPORT_GAP_N (sola sessione N), aggiungere la riga a GAP_TREND, riportare
 il gap all'utente.
-Ultimo stato (WP-52): **media CPU 58,84/20,82 = 2,83× (A/B −0,57%, new
-6/6) · footprint peak fisico 1,720/0,395G = 4,36× (A/B +0,61% = +10,4MB,
-tenuta e verbalizzata) · full run40 725,1s ≈12:05 = 2,14× (old
-stesso-giorno 787,4 = 2,32×; riferimento WP-40 2,06×, residuo ~30s),
-fail-set byte-id a run33 su 3 run · classify −42,7% (in-node marks) +
-cold-box Object −56B/ist · dettaglio: `gaps/REPORT_GAP_52.md`, trend:
-`gaps/GAP_TREND.md`**.
+Ultimo stato (WP-53): **media CPU 59,05/20,90 = 2,83× (A/B −0,88%, new
+6/6 stretti) · footprint peak fisico 1,628/0,376G = 4,33× (A/B −0,69%,
+guardia Fase 2 con margine) · full: run41 −0,2% raw vs old stesso-giorno,
+riferimento pubblicato resta run40 2,14× (giornata +2,1% d'ambiente;
+residuo vs WP-40 2,06× ~30s INTATTO) · fail-set byte-id a run33 (88 nomi)
+su run41 e run41-old · Fase 2.1+2.2: −40,2M DerefTop (≥96,5% del canale) +
+Sweep elision, dispatch −5,66% ⭐ ma CPU −0,9%: quotare in ns/evento ·
+dettaglio: `gaps/REPORT_GAP_53.md`, trend: `gaps/GAP_TREND.md`**.
