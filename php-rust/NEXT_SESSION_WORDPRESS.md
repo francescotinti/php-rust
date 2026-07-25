@@ -29,11 +29,14 @@
 - Qui SOLO: sintesi ultima sessione · decisioni in vigore · stato gate ·
   prossimo lavoro · backlog. Storia: `sessions/WP_SESSION_<n>.md` (un file
   per sessione, con lezioni e verdetti; ≤WP-27: memoria + git history).
-  Gap perf: `gaps/REPORT_GAP_<n>.md` (l'ultimo = tabella viva).
-- Chiusura della sessione N: scrivere `sessions/WP_SESSION_N.md`; copiare
-  l'ultimo REPORT_GAP in `gaps/REPORT_GAP_N.md` aggiungendo la riga N;
-  sostituire la sintesi qui in testa e aggiornare stato gate / prossimo
-  lavoro; commit+push.
+  Gap perf: `gaps/REPORT_GAP_<n>.md` = SOLO le misure della sessione n
+  (correzione utente 2026-07-25: la vecchia forma cumulativa era una
+  trascrizione sbagliata dell'intento); il trend cumulativo vive in
+  `gaps/GAP_TREND.md` (file unico vivo, una riga per sessione).
+- Chiusura della sessione N: scrivere `sessions/WP_SESSION_N.md`; scrivere
+  `gaps/REPORT_GAP_N.md` con le SOLE misure della sessione N e aggiungere
+  la riga N a `gaps/GAP_TREND.md`; sostituire la sintesi qui in testa e
+  aggiornare stato gate / prossimo lavoro; commit+push.
 
 ## 🧭 Decisioni in vigore (fonte citabile: migration/RULEBOOK.md)
 
