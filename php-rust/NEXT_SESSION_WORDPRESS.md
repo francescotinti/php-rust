@@ -161,13 +161,14 @@ Laravel POSTICIPATA a valle. Il checkpoint d'ingresso Fase 3 è FATTO
 3. **Residuo full vs WP-40 ≈14s**: gc-walk fasi mock del full (classify
    — il media non lo vede: classify_ms 351ms vs 62,7s sul full),
    drop/rc churn 4,8%, corpi handler diffusi.
-4. **Ritorno cap reflect 16384→8192**: dopo il re-key le evictions sono
-   1/run (era 28) — quasi irrilevante; decisione utente se farlo comunque.
-5. **Divergenze `.=` PRE-esistenti (WP-55, a verbale)**: undef-lhs senza
+4. **Divergenze `.=` PRE-esistenti (WP-55, a verbale)**: undef-lhs senza
    warning "Undefined variable"; operandi oggetto senza `__toString`
    (un `__toString` che throwa NON throwa in phpr) — catalogare in
    PHPR_DIVERGENCES o chiudere in una sessione funzionale.
-6. **NON riproporre**: stringhe come pilota Fase 3 (checkpoint WP-55:
+5. **NON riproporre**: **cap reflect 16384→8192 (DECISIONE UTENTE
+   2026-07-25: resta 16384** — working set misurato ~17,8k appena sopra
+   il cap, evictions 1/run: dimezzare = thrash garantito per un
+   risparmio non quotato); stringhe come pilota Fase 3 (checkpoint WP-55:
    4% del proxy — falsificate); fusione single-alloc (incompatibile con
    growable + 0,3% CPU — WP-54); Fase 2.3 args-Vec pool (0,14% — morta);
    leaf-bit sul walk (foglie 6,6% degli SLOT — WP-54); leve sul canale
