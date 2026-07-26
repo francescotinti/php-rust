@@ -27,14 +27,18 @@ interpreter, not to pass a toy subset.
 > owner-level attribution of both bytes and CPU-seconds (sampled call
 > trees reconciled against the master clock), has brought the WordPress
 > media benchmark to **~2.61×** the oracle's CPU and cut the
-> peak-footprint gap **from 11.9× to ~4.08×**; the latest lever — a
-> keyless hashed-array index (single Zend-style table: `u32` position
-> slots probing against the entry storage, no duplicated key) — cut
-> peak footprint another −1.8%, removed ~300MB/run of index-allocation
-> churn, and brought the full WordPress-suite CPU to **~2.06×** (from
-> 3.4×) at zero CPU cost — next: per-site quota of the remaining `.=`
-> append channels, then re-basing the heap-to-handle arc on unbiased
-> live accounting, then Laravel validation.
+> peak-footprint gap **from 11.9× to ~4.07×**; the latest levers — a
+> keyless hashed-array index (single Zend-style table, no duplicated
+> key), then an array-storage tranche (header diet to an exact 96B
+> allocator bin, index elision for small hashes, and a bounded
+> block-recycling arena) — cut peak footprint another −1.8% and −1.05%
+> in successive sessions at flat benchmark CPU; the full WordPress-suite
+> CPU sits at **~2.06–2.11×** (from 3.4×; the array tranche cost
+> +1–2.5% on the full suite only, kept and on the books per the
+> no-revert policy). Every value channel (strings, arrays, objects) is
+> now measured with exact live byte-accounting — next: attributing the
+> physical footprint that lives *outside* those channels, then Laravel
+> validation.
 
 ## Coverage at a glance
 

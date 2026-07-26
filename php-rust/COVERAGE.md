@@ -7,7 +7,7 @@ functions with `function_exists()` inside `phpr` (grouped by
 `ReflectionFunction::getExtensionName()`); the corpus number is the real pass
 count of the upstream Zend test suite under `phpt-runner`.
 
-_Last measured: 2026-07-26 (WP-56) · reference: PHP 8.5.7 (`get_defined_functions()`)._
+_Last measured: 2026-07-26 (WP-58) · reference: PHP 8.5.7 (`get_defined_functions()`)._
 
 ---
 
