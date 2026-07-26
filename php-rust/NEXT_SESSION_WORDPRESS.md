@@ -1,40 +1,36 @@
-# Rotta WORDPRESS-FIRST — WP-track (dopo WP-57: sessione di QUOTA — canale `.=` non-locale MORTO sul full (0,70MB≈23µs, fuso esteso NON si apre); arr peak ESATTO 66,4MB = 4,3% del fisico ⇒ tranche 2 arena vale ~−1%; WP-58 = decisione di rotta sul fuori-canale)
+# Rotta WORDPRESS-FIRST — WP-track (dopo WP-58: Fase 3 tranche 2 "arena" ESEGUITA — peak fisico −1,05% (−17MB, dentro banda), media CPU FLAT, full +1..+2,5% solo-full TENUTO; obj live-ESATTO; WP-59 = attribuzione fuori-canale, decisione utente)
 
-> ⚡ **WP-57 (2026-07-26, `b4e85ca`+`b23de56`+`0b5790f`)** — **Sessione di
-> QUOTA, binari di parità INTATTI** (release verificato = `phpr-wp56`
-> 65466c64… ⇒ nessun gate; riferimenti perf WP-56 restano validi).
-> **Ob.1**: op-census esteso a 6 famiglie di siti `.=` non-locali
-> (eventi + Σ lhs byte = volume O(n²) + istogramma log2(lhs); scoperta:
-> `$o->p .= x` NON emette PropOpSet — lower a Swap;Binary;PropSet ⇒
-> macchinetta a stati nel census; validato ORACLE alla cifra sul probe56,
-> banda rebuild ~30GB/s). **VERDETTO sul FULL (prima run census di sempre
-> sul full): 48.934 eventi, Σ lhs 0,70MB ≈ 23µs — canale MORTO, Ob.1c
-> (fuso esteso prop/element) NON si apre**: il ~500×/evento del probe è
-> reale ma il workload non copre MAI il bordo (nessun lhs >1KB); media:
-> 221 ev. Lo "str-copy 12%" WP-54 era il sito LOCALE (già chiuso WP-55).
-> **Ob.2**: canale arr da estimatore a **live-accounting ESATTO**
-> (accounted+census_sync+Drop, drift-proof; riconciliazione reached==live
-> alla UNITÀ: 63.435==63.435) + istogramma per-repr nel walk EOR.
-> **arr peak ESATTO 66,4MB = ~4,3% del peak fisico 1.536MB** (il "39% del
-> proxy" WP-55 era l'artefatto, 6,0× alla cifra); str peak 62,3MB; unit
-> standing 222,6MB; popolazione arr = MINUSCOLI (packed 1-2 el 22k;
-> hashed 1-4 el 21k; overhead fisso 64B/arr ≈30% del canale).
-> **Ri-quota tranche 2: arena handle ≈ −10..−20MB (~−1% fisico),
-> exact-fit ≈ −1..−2MB — la leva GRANDE di footprint è FUORI dal canale
-> arr** (~1,15GB fuori dai canali valore + unit 222,6MB). Divergenze
-> WP-55/56 catalogate in PHPR_DIVERGENCES (`0b5790f`). **CODA DI
-> SESSIONE (mandato utente): indagine COMPLETA del panic census-only
-> run.rs:478** — root cause non dimostrata (1/4 run, 3 repro pulite,
-> trappola diagnostica permanente nei build census), ma l'indagine ha
-> scovato un **BUG REALE di parità: `yield_from` stantio dopo throw del
-> delegate catturato nel generatore (delega successiva SALTATA — oracle
-> 10,20 vs phpr niente). FIX `e9a1679` + TDD; GATE57 VERDE: corpus 1421
-> IDENTICO · refl 290 · ORM 3E/13F · hk 0E/0F · cargo 1643/0. Release
-> CAMBIATA ⇒ stash `phpr-wp57` (a5ae7d27…)**; fail-set full da
-> ri-validare col full A/B della tranche 2. ⚖️ DECISIONE UTENTE:
-> **WP-58 = tranche 2 arena COMUNQUE**. Binari census: `phpr-op57`,
-> `phpr-memgc57` (41a21c65…). **Storia: `sessions/WP_SESSION_57.md`.
-> WP-56: `sessions/WP_SESSION_56.md`.**
+> ⚡ **WP-58 (2026-07-26, `8e54185`→`ff033ce`)** — **Fase 3 tranche 2
+> eseguita** (decisione utente, banda onesta nota). Pin (a) su size
+> MISURATE: blocco `Rc<RefCell<PhpArray>>` 104B→bin 112; buffer entries/
+> index già su bin esatti ⇒ rounding entries ≈ 0 e l'arena condivisa a
+> handle u32 è IRRAGGIUNGIBILE in safe Rust (RULEBOOK §0) ⇒ tranche
+> materializzata in TRE leve (array.rs, sentinelle 5 assi byte-id):
+> **A dieta header** (cursor+holds in una u32 ⇒ blocco 96B = bin esatto,
+> −16B/array reali) · **C scan-mode ≤8 slot** (niente KeyIndex sui
+> piccoli: 21,4k standing senza indice) · **B block-arena**
+> ownership-transfer (shelf thread-local pow2 bounded <700KB su crescita/
+> rebuild/Drop; zero indirection = zero parità). **GATE58 VERDE: corpus
+> 1421 IDENTICO · refl 290 · ORM 3E/13F · hk 0E/0F · cargo 1645/0.**
+> **Giudici**: ab58 → **peak fisico −1,05% = −17MB (1,619→1,602G, dentro
+> banda −10..−20MB) · CPU media −0,13% FLAT** (guardia pilota ok);
+> mechanism-check ALLA CIFRA (hashed b1/b2 = −32B×n esatti; recon arr
+> 63.435==63.435 intatta). **FULL stessa-sera: run46 e run46-old
+> ENTRAMBE 0E/2F/86W/73S, fail-set 88 BYTE-ID a run33 ×2 ⇒ fix
+> yield_from VALIDATO sul full** (⚠️ WP-57 chiusa; baseline resta run33).
+> ⚠️ CPU full new +1,0..+2,5% (raw 714,4 vs 696,6s; troncamento
+> campionatore asimmetrico) — regressione SOLO-full (media flat), TENUTA
+> per no-revert; attribuzione a WP-59 (candidati: TLS+RefCell del pool
+> sul Drop path, scan 5-8 slot); cumulato Fase 3 full resta negativo.
+> **Ob.2**: live-accounting ESATTO esteso a obj (Props accounted+sync+
+> Drop + parte fissa al choke next_id; rare/proxy walk-only) — validato
+> alla cifra (1501==1501, 352.208==352.208); **prima misura esatta:
+> obj peak 56,1MB ≈ 3,7% del fisico; canali valore al picco ≈ 12%** —
+> la leva GRANDE resta FUORI (unit 222,6MB + ~1,1GB non attribuito).
+> Rapporti: media CPU 2,61× · footprint 4,07× · full 2,11× di giornata.
+> Release: **phpr-wp58 (2d7efdf8…)**; census phpr-memgc58 (4c9b8da3…) e
+> phpr-memgc58b con Ob.2 (bc47f237…). **Storia: `sessions/
+> WP_SESSION_58.md`. WP-57: `sessions/WP_SESSION_57.md`.**
 
 ## 📁 Convenzioni (decisione utente 2026-07-23)
 
@@ -71,7 +67,7 @@
 - Commit AND push a ogni step; deviazioni deliberate = marker
   `BUG(port):` / `PERF(port):` / `TODO(port):`.
 
-## Stato gate per nome (gate57 su `e9a1679`, 2026-07-26, `wp57-harness/gate-out/` — fix engine yield_from: corpus **1421 IDENTICO** · refl **290 IDENTICO** · ORM **3E/13F IDENTICO** · hk **0E/0F** · cargo **1643/0**; release = **phpr-wp57 a5ae7d27…**; ⚠️ fail-set FULL non ancora ri-validato post-fix — lo fa il full A/B di WP-58 (baseline run33, old=phpr-wp57); ultima verifica gate22 integrale: `60c7e04`)
+## Stato gate per nome (gate58 su tree WP-58, 2026-07-26, `wp58-harness/gate-out/`: corpus **1421 IDENTICO** · refl **290 IDENTICO** · ORM **3E/13F IDENTICO** · hk **0E/0F** · cargo **1645/0**; release = **phpr-wp58 2d7efdf8…**; fail-set FULL ri-validato: run46 + run46-old BYTE-ID a run33 (fix yield_from incluso); ultima verifica gate22 integrale: `60c7e04`)
 
 - Gate56 verde (2026-07-26, tree `0943f58`): corpus **1421 IDENTICO** per
   nome (baseline = `wp55-harness/gate-out/corpus.fails`) · **refl 290
@@ -161,33 +157,45 @@
 #  wp56), probe57-yieldfrom-stale.php (regressione fix e9a1679),
 #  run57-census-debug.sh; trappola diagnostica ip>=len nei build census.
 #  Stash NUOVO: phpr-wp57 (sha256 a5ae7d27…) — release col fix engine.
+# WP-58: wp58-harness/{design58.md (quota su size misurate),gate58.sh,
+#  build-memgc58.sh,census58-media.sh,ab58.sh,run46.sh,run46-old.sh,
+#  orchestrate58.sh,daemonize.pl} + probe58-*-{old,new}.txt (sentinelle
+#  5 assi: order/tomb/numkey/dtor/yieldfrom) + probe58-objlive.php
+#  (validazione Ob.2); census-media-out/memcensus58{,b}.txt; binari
+#  census phpr-memgc58 (4c9b8da3…) e phpr-memgc58b (bc47f237…, con Ob.2)
+#  in phpr-mem-target/; full: full-out/run46/ + wp58-harness/full-old-out/.
+#  Stash: phpr-wp58 (sha256 2d7efdf8…).
 ```
 
-## 🎯 PROSSIMO LAVORO — WP-58: Fase 3 tranche 2 ARENA (⚖️ decisione utente 2026-07-26)
+## 🎯 PROSSIMO LAVORO — WP-59 (proposta; ⚖️ rotta da confermare con l'utente)
 
 **Rotta (utente 2026-07-24)**: `FOOTPRINT_CPU_ROADMAP.md` — footprint-first,
 safe-only, TUTTE le fasi comunque, **niente revert su insuccesso**.
-Laravel POSTICIPATA a valle. WP-57 (quota) ha chiuso ENTRAMBE le metà del
-mandato: canale `.=` non-locale MORTO (0,70MB sul full) e arr peak esatto
-66,4MB = 4,3% del fisico.
+Laravel POSTICIPATA a valle. WP-58 ha eseguito la tranche 2 (peak −17MB
+dentro banda, media flat) e chiuso il metro: TUTTI i canali valore ora
+live-esatti.
 
-1. **⚖️ DECISIONE UTENTE (2026-07-26, in sessione WP-57): tranche 2
-   arena COMUNQUE**, presa DOPO l'indagine panic richiesta (verbale in
-   WP_SESSION_57: root cause non dimostrata, trappola armata, bug
-   adiacente yield_from FIXATO e gate-verde). Banda footprint onesta
-   ~−10..−20MB (~−1% fisico) — ma CPU-side l'indice keyless ha pagato
-   −2,66% full: l'arena (alloc/dealloc/rounding) può ripetere il
-   pattern. Design arena handle-based entries su `design56.md`+KeyIndex
-   (già arena-compatibile, solo u32); quota size-class PRIMA (pin a),
-   sentinelle probe56 riusabili (pin b), giudici = ab + full
-   interleaved stessa-sera vs old **phpr-wp57** (che ri-valida ANCHE il
-   fail-set del fix yield_from vs run33).
-2. **Metro**: estendere accounted+census_sync al canale obj (ultimo
-   death-accounted; pattern validato alla unità su arr).
-3. **Residuo full vs oracle (2,06×)**: attribuzione WP-54 aggiornata:
+1. **Candidato Ob.1 — attribuzione di seconda generazione del fisico
+   FUORI-canale**: i metri esatti dicono arr 65,6 + str 62,3 + obj 56,1
+   ≈ 12% del fisico al picco + unit 222,6MB (14,5%) ⇒ ~1,1GB non
+   attribuito (allocatore/COW/frammentazione/walk-unreached: obj live_n
+   68,6k vs reached 22,1k). Strumenti Fase 0/54 (vmmap, walk roots,
+   mi_stats). La prossima leva GRANDE di footprint va TROVATA prima di
+   aprire altre tranche arena (str single-alloc resta demansionata:
+   serve crate DST + WP-55 la falsificò come pilota).
+2. **Attribuzione regressione full-only WP-58 (+1,0..+2,5%)**: media
+   FLAT ⇒ fenomeno churn/subprocess-shaped del full. Candidati:
+   TLS+RefCell del pool sul Drop path (ogni array con cap>0),
+   scan lineare 5-8 slot, materializzazione indice. Probe churn-shaped
+   10 righe + op/gc census sul full se serve. Anche solo per verbale.
+3. **Residuo full vs oracle (2,11× di giornata)**: attribuzione WP-54:
    corpi+dispatch 41,9% · gc-walk 10% · crypt onesto; str-copy residuo =
    copie GENERICHE (i siti compound non-locali valgono 23µs — chiuso).
-4. **NON riproporre**: **fuso `.=` sui siti non-locali (prop/element/
+4. **NON riproporre**: **arena condivisa a handle u32 per le entries
+   (WP-58 pin a: restituire `&/&mut` da uno slab condiviso richiede
+   unsafe o riscrittura closure-based della VM — RULEBOOK §0; il
+   rounding lato entries è ≈0, i buffer pow2 cadono su bin mimalloc
+   esatti)**; **fuso `.=` sui siti non-locali (prop/element/
    static — WP-57: 48.934 ev / 0,70MB / 23µs sul FULL, falsificato dal
    workload; riaprire SOLO con un workload nuovo che copra il bordo)**; **cap reflect 16384→8192 (DECISIONE UTENTE
    2026-07-25: resta 16384** — working set misurato ~17,8k appena sopra
@@ -259,11 +267,10 @@ vivo); misure per-sessione in `gaps/REPORT_GAP_<N>.md`. A ogni chiusura:
 misurare media (user CPU + footprint) e full-suite master-CPU, scrivere
 REPORT_GAP_N (sola sessione N), aggiungere la riga a GAP_TREND, riportare
 il gap all'utente.
-Ultimo stato (WP-57, sessione di quota — riferimenti perf = WP-56):
-**media CPU 2,61× · footprint 4,08× · full run45 2,06× (binari parità
-INTATTI, phpr-wp56 65466c64…) · QUOTA: canale `.=` non-locale MORTO sul
-full (48.934 ev / 0,70MB ≈ 23µs — fuso esteso non si apre) · arr peak
-ESATTO 66,4MB = 4,3% del fisico (estimatore WP-55 era 6,0× over alla
-cifra; riconciliazione reached==live 63.435==63.435) · tranche 2 arena
-ri-quotata ~−10..−20MB (~−1%) · dettaglio: `gaps/REPORT_GAP_57.md`,
-trend: `gaps/GAP_TREND.md`**.
+Ultimo stato (WP-58, Fase 3 tranche 2):
+**media CPU 2,61× (A/B −0,13% flat) · footprint 4,07× (A/B −1,05% =
+−17MB, dentro banda) · full run46 2,11× di giornata (⚠️ +1,0..+2,5%
+solo-full vs old stessa-sera, TENUTO no-revert; fail-set ×2 byte-id a
+run33 = fix yield_from validato) · obj peak ESATTO 56,1MB = 3,7% del
+fisico (ultimo estimatore morto; canali valore ≈12% al picco) ·
+dettaglio: `gaps/REPORT_GAP_58.md`, trend: `gaps/GAP_TREND.md`**.
