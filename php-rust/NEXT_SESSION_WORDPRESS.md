@@ -1,36 +1,33 @@
-# Rotta WORDPRESS-FIRST — WP-track (dopo WP-58: Fase 3 tranche 2 "arena" ESEGUITA — peak fisico −1,05% (−17MB, dentro banda), media CPU FLAT, full +1..+2,5% solo-full TENUTO; obj live-ESATTO; WP-59 = attribuzione fuori-canale, decisione utente)
+# Rotta WORDPRESS-FIRST — WP-track (dopo WP-59: la MAPPA del fuori-canale è FATTA — frag mimalloc 2% (ipotesi concilio FALSIFICATA), ~65% del fisico = compile-side VIVO non censito (HIR seeds + payload op); leak template-include CONFERMATO; obj de-fantasmato 56,1→48,7MB; ⚖️ verbale revert leva B aperto)
 
-> ⚡ **WP-58 (2026-07-26, `8e54185`→`ff033ce`)** — **Fase 3 tranche 2
-> eseguita** (decisione utente, banda onesta nota). Pin (a) su size
-> MISURATE: blocco `Rc<RefCell<PhpArray>>` 104B→bin 112; buffer entries/
-> index già su bin esatti ⇒ rounding entries ≈ 0 e l'arena condivisa a
-> handle u32 è IRRAGGIUNGIBILE in safe Rust (RULEBOOK §0) ⇒ tranche
-> materializzata in TRE leve (array.rs, sentinelle 5 assi byte-id):
-> **A dieta header** (cursor+holds in una u32 ⇒ blocco 96B = bin esatto,
-> −16B/array reali) · **C scan-mode ≤8 slot** (niente KeyIndex sui
-> piccoli: 21,4k standing senza indice) · **B block-arena**
-> ownership-transfer (shelf thread-local pow2 bounded <700KB su crescita/
-> rebuild/Drop; zero indirection = zero parità). **GATE58 VERDE: corpus
-> 1421 IDENTICO · refl 290 · ORM 3E/13F · hk 0E/0F · cargo 1645/0.**
-> **Giudici**: ab58 → **peak fisico −1,05% = −17MB (1,619→1,602G, dentro
-> banda −10..−20MB) · CPU media −0,13% FLAT** (guardia pilota ok);
-> mechanism-check ALLA CIFRA (hashed b1/b2 = −32B×n esatti; recon arr
-> 63.435==63.435 intatta). **FULL stessa-sera: run46 e run46-old
-> ENTRAMBE 0E/2F/86W/73S, fail-set 88 BYTE-ID a run33 ×2 ⇒ fix
-> yield_from VALIDATO sul full** (⚠️ WP-57 chiusa; baseline resta run33).
-> ⚠️ CPU full new +1,0..+2,5% (raw 714,4 vs 696,6s; troncamento
-> campionatore asimmetrico) — regressione SOLO-full (media flat), TENUTA
-> per no-revert; attribuzione a WP-59 (candidati: TLS+RefCell del pool
-> sul Drop path, scan 5-8 slot); cumulato Fase 3 full resta negativo.
-> **Ob.2**: live-accounting ESATTO esteso a obj (Props accounted+sync+
-> Drop + parte fissa al choke next_id; rare/proxy walk-only) — validato
-> alla cifra (1501==1501, 352.208==352.208); **prima misura esatta:
-> obj peak 56,1MB ≈ 3,7% del fisico; canali valore al picco ≈ 12%** —
-> la leva GRANDE resta FUORI (unit 222,6MB + ~1,1GB non attribuito).
-> Rapporti: media CPU 2,61× · footprint 4,07× · full 2,11× di giornata.
-> Release: **phpr-wp58 (2d7efdf8…)**; census phpr-memgc58 (4c9b8da3…) e
-> phpr-memgc58b con Ob.2 (bc47f237…). **Storia: `sessions/
-> WP_SESSION_58.md`. WP-57: `sessions/WP_SESSION_57.md`.**
+> ⚡ **WP-59 (2026-07-26, `c52c394`+`1e06464`+`e22f373`+docs)** — **Sessione di MISURA del
+> concilio esteso** (binari di parità INTATTI = phpr-wp58 2d7efdf8…;
+> codice solo census-only + 2 feature diagnostiche). **Ob.0**: mimalloc
+> v3.3.2, committed peak ≈ 93-102% del phys peak su media E full ⇒ il
+> mistero vive DENTRO l'allocatore; FFI ~90-120MB; maxrss onesto (sul
+> full 2,3G in compressor). **Ob.1 (finestre phys nel census,
+> `c52c394`)**: gate pre-registrato riconciliato ALLA CIFRA (win10: phys
+> 1436,2 = Σused 1298,0 + frag 29,8 + resto 108,4) ⇒ **frammentazione
+> 2% = ipotesi dominante del concilio FALSIFICATA; non-censito VIVO
+> 936,6MB = 65%**, e `--list-tests` (0 test) ne mostra 818MB già a fine
+> bootstrap+discovery ⇒ il footprint è ~90% COSTRUZIONE DELLA SUITE.
+> Probe differenziale classi-vs-funzioni: compile-side = 3,8× il counted
+> sulle classi (1,5× funcs) ⇒ **canale unit VERO ≈ 1,0GB** (channel 222MB
+> = 1/5); colpevoli con nome: `seed_classes`/`main_hir` (HIR con
+> `MethodDecl.body` interi, ≈2/3) + payload Rc op (≈1/3). **Probe B:
+> LEAK template-include CONFERMATO** (200 re-include ⇒ unit.cum_n=200):
+> Fase 0.5 SI APRE. **Ob.2**: 46k unreached = FANTASMI del choke next_id
+> (closure/generator; ipotesi 1 Gregg) — fix `next_obj_id`, recon obj
+> 22.141==22.141 ESATTO, **obj peak 56,1→48,7MB**. **Ob.3 (3 full
+> stessa-sera, CPU esatta time -l)**: new 790,83s (fail-set 88 BYTE-ID a
+> run33 ✓), pool-off 786,44s = **−0,56%** (unico costo identificato,
+> footprint ±0), scan4 796,05s = **+0,66%** (scan-mode ASSOLTO; spread
+> serata ±0,6% ⇒ banda WP-58 in buona parte rumore del campionatore) —
+> ⚖️ verbale revert leva B all'utente (racc.: revert). Rapporti
+> INVARIATI: media 2,61× · footprint 4,07× · full rif. 2,11×.
+> Census: **phpr-memgc59 (00ca4d3d…)**; diagnostici phpr-pooloff59
+> (93aea5a3…), phpr-scan4-59 (b955afb1…). **Storia: `sessions/
+> WP_SESSION_59.md`. WP-58: `sessions/WP_SESSION_58.md`.**
 
 ## 📁 Convenzioni (decisione utente 2026-07-23)
 
@@ -165,73 +162,76 @@
 #  census phpr-memgc58 (4c9b8da3…) e phpr-memgc58b (bc47f237…, con Ob.2)
 #  in phpr-mem-target/; full: full-out/run46/ + wp58-harness/full-old-out/.
 #  Stash: phpr-wp58 (sha256 2d7efdf8…).
+# WP-59: wp59-harness/{design59.md (verdetti Ob.0-3 + gate pre-registrati),
+#  ob0-media.sh,ob0-full.sh (diagnostiche MIMALLOC_SHOW_STATS+vmmap),
+#  build-memgc59.sh,ob1-census59-media.sh,ob1-supervisor.sh (finestre
+#  phys: vmmap+footprint per flag-file),ob1-report.pl (tabella
+#  riconciliazione+top bin),build-pooloff59.sh,run47-pooloff.sh,
+#  run47-new.sh,run47-scan4.sh,orchestrate59-evening.sh}; out: ob0-out/,
+#  census-media-out/ (memcensus59-master.txt = solo master pid),
+#  full-{pooloff,new,scan4}-out/ (CPU esatta in *.time). Binari: census
+#  phpr-memgc59 (00ca4d3d…, phpr-mem-target/); diagnostici phpr-pooloff59
+#  (93aea5a3…, phpr-pooloff-target/), phpr-scan4-59 (b955afb1…,
+#  phpr-scan4-target/). Probe scratchpad: probe59-{inc,boot,classes,
+#  funcs,null} (leak template + moltiplicatore compile-side).
 ```
 
-## 🎯 PROSSIMO LAVORO — WP-59: attribuzione fuori-canale (programma del CONCILIO ESTESO — review integrale delle 3 sedie in `doc/analysis/COUNCIL_WP58_REVIEWS.md`, ⚖️ mandato utente 2026-07-26: "integra i loro feedback e richieste nella prossima sessione")
+## 🎯 PROSSIMO LAVORO — WP-60: dieta del compile-side (la mappa WP-59 comanda; programma post-concilio)
 
 **Rotta (utente 2026-07-24)**: `FOOTPRINT_CPU_ROADMAP.md` — footprint-first,
 safe-only, TUTTE le fasi comunque, **niente revert su insuccesso**.
-Laravel POSTICIPATA a valle. Convergenza 3/3 delle nuove sedie
-(Leijen/Stogov/Gregg): PRIMA la quota falsificata del ~1,1GB
-fuori-canale; ipotesi dominante = ritenzione/frammentazione per-pagina
-mimalloc accoppiata al churn (~6GB/run; unit immortali `Box::leak`
-interleavate con l'effimero negli stessi bin = page-pinning) + strutture
-runtime non censite (frame, IC, Rc sciolti, slack Vec).
+Laravel POSTICIPATA a valle. **La mappa WP-59 ha ribaltato le priorità**:
+frammentazione mimalloc 2% (ipotesi concilio falsificata); il giacimento
+è il **compile-side vivo non censito ≈800MB** (HIR seeds ≈2/3 + payload
+Rc op ≈1/3) + **leak template-include** (Fase 0.5). Dettaglio:
+`sessions/WP_SESSION_59.md` + `wp59-harness/design59.md`.
 
-1. **Ob.0 (Gregg R1 / Leijen 1 — ZERO codice, ~20-30 min, FARE PER
-   PRIMO)**: run media + full con `MIMALLOC_SHOW_STATS=1` (+VERBOSE) e
-   one-shot `vmmap --summary` al picco vs maxrss dello stesso run.
-   Falsifica subito: committed mimalloc ≪ fisico ⇒ il residuo NON è
-   nell'allocatore; maxrss ≫ vmmap-phys ⇒ quota MADV_FREE contabile.
-   Può ridimensionare il mistero prima di spendere altro.
-2. **Ob.1 — strumentazione census "Fase 0-bis"** (Leijen 2+3, Gregg
-   R2-R4; build census, mai giudici): (a) watermark RI-CHIAVATO sul
-   fisico vero (`task_info` phys_footprint, +128MB, tag col nome del
-   test) + flag-file; (b) `mi_stats_print_out` + `mi_process_info` nel
-   callback; (c) occupancy per size-class al picco via
-   `mi_heap_visit_blocks` (visit_blocks=false); (d) supervisore esterno
-   vmmap+footprint per finestra (⚠️ heap mimalloc = regioni VM_ALLOCATE,
-   NON MALLOC_*; le MALLOC_* = zone FFI). **Gate pre-registrato**:
-   Σ used_bins = census+non-censiti; Σ(committed−used) = frammentazione;
-   +metadata ≈ fisico ±10-15%; tabella copre ≥90% del 1,1GB con nome
-   del test per finestra.
-3. **Ob.2 — probe anomalia 46k obj unreached** (Gregg §3, ~30 righe
-   census-only): istogramma per-ClassId/kind della differenza
-   registry−reached + `collect_cycles` forzato pre-walk. Sospetto n.1:
-   sovra-conteggio al choke `next_id` (condiviso con closure/generator/
-   handle — firma: created==reached alla cifra). ⚠️ Se confermato, il
-   fix contabile corregge ANCHE l'obj_fixed di WP-58-Ob.2 (alloca la
-   parte fissa a ids non-Object mai liberati) e sgonfia il canale obj.
-4. **Ob.3 — attribuzione regressione full-only +1..+2,5%** (Leijen 4):
-   binario `pool-off` (feature/`class()`→None, NON DEPTH=0 che paga il
-   TLS comunque) vs new, full STESSA-SERA; se il delta resta, secondo
-   binario `SCAN_MAX=4`. UN asse per binario. Se il pool è colpevole:
-   la roadmap Fase 3 consente il revert della SOLA versione regressiva
-   (⚖️ decisione utente al verbale — A e C restano comunque).
-5. **Quote Stogov (se margine, altrimenti WP-60; mezza giornata l'una)**:
-   (a) censimento duplicati contenuto-stringa al mark (tetto interning);
-   (b) censimento literal-array (quota `[]` vuoti + tutto-costanti dei
-   5,46M cum ⇒ banda empty-singleton/immutable-literal); (c)
-   `memory_get_peak_usage` per-test lato oracle (target per-canale
-   onesto); (d) breakdown unit per-componente (ops/payload/literal/meta
-   + duplicazione cross-unit) — **unit diet = la più grande leva GIÀ
-   attribuita: banda Stogov −80..−150MB**. Giudizio Stogov sull'ordine:
-   mappa → unit diet → interning (solo col censimento in mano; il suo
-   valore vero è uccidere il churn alla fonte se Ob.1 attribuisce
-   ≥400MB alla frammentazione churn-correlata).
-6. **Residuo CPU full vs oracle (2,11× di giornata)**: attribuzione
-   WP-54 vigente (corpi+dispatch 41,9% · gc-walk 10% · crypt onesto).
+1. **Quota ex-ante delle due leve compile-side** (census-only, PRIMA di
+   scrivere le leve — regola "byte misurati"):
+   (a) contatore bytes HIR per classe, firma-vs-corpo (`MethodDecl.body`)
+   nei seed (`seed_classes`/`seed_traits`/`main_hir`);
+   (b) conteggio unit per path risolto (quota del leak template:
+   quante delle 2046 unit media sono re-compile dello stesso file);
+   (c) gauge G_UNITS (oggi morto) + breakdown payload Rc op.
+2. **Fase 0.5 — compile-cache keyed sul path risolto** (roadmap: "è un
+   LEAK, si chiude prima di attribuire il resto"): riuso del Module già
+   linkato per include non-`_once` ripetuti. Parità: gate PIENO (classe
+   layout/engine) + full A/B stessa-sera.
+3. **Seed HIR signature-only**: il lowering di una sottoclasse usa
+   forme/firme, non i corpi ⇒ clone snello al push in `seed_classes`
+   (corpi droppati), stesso trattamento per `main_hir` se separabile.
+   Banda potenziale: centinaia di MB — da confermare col contatore 1a.
+   Rischio parità: eval che ri-lowera con l'immagine (gate pieno).
+4. **Esito ⚖️ revert leva B (pool)**: verbale Ob.3 WP-59 all'utente —
+   pool-off −0,56% full, footprint ±0, beneficio B nullo (il −17MB di
+   WP-58 era A+C). Se l'utente firma: revert della SOLA B (A e C
+   restano), gate pieno + coppia full.
+5. **Quote Stogov declassate dalla mappa** (solo se margine): duplicati
+   str (tetto ≤62MB), literal-array, peak oracle per-test.
+   (Il "residuo full-only" WP-58 è CHIUSO da Ob.3: pool ~0,6% + rumore
+   del campionatore; nei prossimi harness full usare SEMPRE
+   /usr/bin/time -l per la CPU.)
 
-**VETI del concilio (vincolanti per WP-59)**: mai toccare
-MIMALLOC_PURGE_DELAY nei giudici; mai giudicare ritenzione col maxrss;
-nessun nuovo pool/freelist sopra mimalloc prima del verdetto Ob.3;
-nessun reset per-test al boundary PHPUnit (static-props = SEMANTICA);
-mai `mi_heap_destroy` su heap con Drop Rust; `mi_collect(true)` solo
-nei build census etichettati; malloc_history/Instruments-Allocations
-sono CIECHI su mimalloc (heap = VM_ALLOCATE); interning (futuro): Rc
-forti in tabella + mai nel path append + re-gate output refcount;
+**VETI del concilio (restano vincolanti)**: mai toccare
+MIMALLOC_PURGE_DELAY nei giudici; mai giudicare ritenzione col maxrss
+(WP-59: sul full 2,3G in compressor — maxrss 1,5G vs phys 3,9G);
+nessun nuovo pool/freelist sopra mimalloc (verdetto Ob.3: il pool
+esistente costa ~0,6% full a beneficio nullo); nessun reset per-test al
+boundary PHPUnit (static-props = SEMANTICA); mai `mi_heap_destroy` su
+heap con Drop Rust; `mi_collect(true)` solo nei build census
+etichettati; malloc_history/Instruments-Allocations sono CIECHI su
+mimalloc (⚠️ correzione WP-59: su macOS 26 il heap mimalloc appare come
+regioni **IOAccelerator** — os_tag 100 — NON VM_ALLOCATE); mai env
+MIMALLOC_SHOW_STATS/VERBOSE su run di cui serve il fail-set (propaga ai
+figli ⇒ errori artefatti); DB reset anche nei PROBE che bootstrappano
+phpunit (il flake wp_install di Ob.3 nasce da lì); interning (futuro):
+Rc forti in tabella + mai nel path append + re-gate output refcount;
 immutable-literal (futuro): solo tutto-scalari + cursore separabile.
-4. **NON riproporre**: **arena condivisa a handle u32 per le entries
+4. **NON riproporre**: **ipotesi frammentazione/ritenzione mimalloc come
+   leva footprint (WP-59: 2% al picco, riconciliazione alla cifra —
+   riaprire SOLO con una tabella per-bin che dica altro)**; **interning
+   come leva grande di footprint (WP-59: il giacimento è compile-side;
+   tetto diretto str ≤62MB)**; **arena condivisa a handle u32 per le entries
    (WP-58 pin a: restituire `&/&mut` da uno slab condiviso richiede
    unsafe o riscrittura closure-based della VM — RULEBOOK §0; il
    rounding lato entries è ≈0, i buffer pow2 cadono su bin mimalloc
@@ -307,10 +307,10 @@ vivo); misure per-sessione in `gaps/REPORT_GAP_<N>.md`. A ogni chiusura:
 misurare media (user CPU + footprint) e full-suite master-CPU, scrivere
 REPORT_GAP_N (sola sessione N), aggiungere la riga a GAP_TREND, riportare
 il gap all'utente.
-Ultimo stato (WP-58, Fase 3 tranche 2):
-**media CPU 2,61× (A/B −0,13% flat) · footprint 4,07× (A/B −1,05% =
-−17MB, dentro banda) · full run46 2,11× di giornata (⚠️ +1,0..+2,5%
-solo-full vs old stessa-sera, TENUTO no-revert; fail-set ×2 byte-id a
-run33 = fix yield_from validato) · obj peak ESATTO 56,1MB = 3,7% del
-fisico (ultimo estimatore morto; canali valore ≈12% al picco) ·
-dettaglio: `gaps/REPORT_GAP_58.md`, trend: `gaps/GAP_TREND.md`**.
+Ultimo stato (WP-59, sessione di misura — parità intatta):
+**media CPU 2,61× · footprint 4,07× (INVARIATI, nessun A/B) · full:
+riferimento run46 2,11×; Ob.3 stessa-sera (metro nuovo time -l, tree
+user): new 790,83s = fail-set 88 BYTE-ID a run33 ✓, pool-off −0,56%,
+scan4 +0,66% (assolto) · obj peak de-fantasmato 48,7MB · LA MAPPA: frag 2%,
+compile-side vivo ≈800MB = la leva di WP-60 · dettaglio:
+`gaps/REPORT_GAP_59.md`, trend: `gaps/GAP_TREND.md`**.

@@ -106,6 +106,20 @@ lavoro DENTRO corpi esistenti, elidere op a emit-time, ridurre alloc-rate.
 **NON invitati (disciplina)**: Pall/Ertl (riaprirebbero l'arco
 registri/threading chiuso da WP-44); Lattner/JIT (fuori rotta safe-only).
 
+**ESITO WP-59 (2026-07-26, sessione di misura del concilio esteso)**: la
+Fase 0-bis ha riconciliato il fisico ALLA CIFRA (win10: 1436,2 = Σused
+1298,0 + frag 29,8 + resto). **L'ipotesi condivisa 3/3 (frammentazione/
+ritenzione mimalloc) è FALSIFICATA: 2% al picco.** Il fuori-canale è
+**standing VIVO compile-side ≈800MB** (HIR seeds con corpi interi ≈2/3 +
+payload Rc op ≈1/3; `--list-tests` da solo = 818MB) + **leak
+template-include confermato** (probe: 200 re-include ⇒ 200 unit) ⇒ la
+**Fase 0.5 SI APRE** e la leva grande di Fase 4 è la DIETA del
+compile-side (seed signature-only + compile-cache), non l'interning
+(tetto diretto str ≤62MB). Anomalia 46k obj = artefatto contabile del
+choke next_id, fixata (obj peak 56,1→48,7MB). Regressione full-only
+WP-58: pool-off spiega −0,56% (parziale) — verbale ⚖️ revert leva B
+aperto. Dettaglio: sessions/WP_SESSION_59.md + wp59-harness/design59.md.
+
 ## Roadmap (fasi, ognuna = 1 sessione WP salvo nota; parità per nome a ogni commit; A/B interleaved come giudice)
 
 ### Fase 0 — Attribuzione byte-per-struttura (WP-45)
