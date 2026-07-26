@@ -426,6 +426,9 @@ pub(crate) fn run_module_with_hir<'m>(
     // (PropIc) must not resurrect (class_id → slot) pairs from a previous
     // run where the same numeric id named another class (WP-29).
     crate::bytecode::bump_ic_epoch();
+    // WP-62 M1: new VM = new epoch — unit-cache hits from entries inserted
+    // by an earlier VM on this thread are cross-VM (server replay) hits.
+    VM_EPOCH.with(|e| e.set(e.get() + 1));
     let mut vm = Vm {
         module,
         classes: module.classes.iter().map(|c| &**c).collect(),
@@ -1139,6 +1142,78 @@ pub(crate) fn run_module_with_hir<'m>(
                 units.len(),
                 by.len(),
             ));
+            // WP-62 M0b: nesting guard of the net-compile windows — >0 means
+            // a parent window absorbed a child's net (K6: map invalid).
+            mc::census_line(&format!(
+                "tag=netguard nested_windows={}",
+                CENSUS_NESTED_WINDOWS.with(|n| n.get()),
+            ));
+            // WP-62 M1: unit-cache observability (design62). `superseded_*`
+            // is computed at dump time by grouping keys per path — an edited
+            // file re-keys and strands its old entries (Leijen R5; de-leak is
+            // a TODO(port), not WP-62).
+            {
+                let st = UC_STATS.with(|s| *s.borrow());
+                let (entries, bytes, paths, superseded_paths, superseded_entries) =
+                    UNIT_CACHE.with(|c| {
+                        let cache = c.borrow();
+                        let mut entries = 0u64;
+                        let mut bytes = 0u64;
+                        let mut by_path: rustc_hash::FxHashMap<&[u8], u32> = Default::default();
+                        for (k, slot) in cache.iter() {
+                            entries += slot.len() as u64;
+                            for cu in slot {
+                                bytes += module_census_bytes(cu.module) as u64;
+                            }
+                            *by_path.entry(&k.path[..]).or_insert(0) += 1;
+                        }
+                        let sup = by_path.values().filter(|&&n| n > 1).count() as u64;
+                        let sup_e: u64 =
+                            by_path.values().filter(|&&n| n > 1).map(|&n| (n - 1) as u64).sum();
+                        (entries, bytes, by_path.len() as u64, sup, sup_e)
+                    });
+                mc::census_line(&format!(
+                    "tag=unitcache hit_intra={} hit_cross={} miss_cold={} miss_fp={} \
+                     miss_dc={} miss_nostat={} inserts={} fp_replaced={} ways_evictions={} \
+                     metadata_calls={} entries={entries} bytes_counted={bytes} paths={paths} \
+                     superseded_paths={superseded_paths} superseded_entries={superseded_entries}",
+                    st.hit_intra,
+                    st.hit_cross,
+                    st.miss_cold,
+                    st.miss_fp,
+                    st.miss_dc,
+                    st.miss_nostat,
+                    st.inserts,
+                    st.fp_replaced,
+                    st.ways_evictions,
+                    st.metadata_calls,
+                ));
+            }
+            // WP-62 M1 (Leijen R1 / Klabnik b): per-path hit-net aggregation
+            // — count, sum and MEDIAN (KS1 is judged on the median over
+            // ≥100 hits per named target, on --list-tests, before any full).
+            {
+                let hits = CENSUS_HITS.with(|h| h.borrow().clone());
+                let mut by: rustc_hash::FxHashMap<&[u8], Vec<u64>> = Default::default();
+                for (p, n) in &hits {
+                    by.entry(&p[..]).or_default().push(*n);
+                }
+                let mut rows: Vec<(&[u8], usize, u64, u64)> = by
+                    .iter_mut()
+                    .map(|(p, v)| {
+                        v.sort_unstable();
+                        let sum: u64 = v.iter().sum();
+                        (*p, v.len(), sum, v[v.len() / 2])
+                    })
+                    .collect();
+                rows.sort_by(|a, b| b.2.cmp(&a.2));
+                for (p, n, sum, med) in rows.iter().take(40) {
+                    mc::census_line(&format!(
+                        "tag=cachehit n={n} net_sum={sum} net_med={med} path={}",
+                        String::from_utf8_lossy(p)
+                    ));
+                }
+            }
             // WP-61 P2 (design61): census v2 DEEP of the retained Modules —
             // address-deduped walk over the leak registry. clone-delta counts
             // OWNED payloads; an op's Rc payload is a refcount bump under
@@ -1494,15 +1569,69 @@ thread_local! {
     /// parked by the compile site and consumed by [`census_unit_note`] —
     /// the deep-TRUE per-unit metric (op Rc payloads included), design61.
     static CENSUS_COMPILE_NET: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+    /// WP-62 M0b (Leijen R3 / Gregg R1): open net-compile windows. A window
+    /// opened while another is open is NESTING — the parent's net would
+    /// absorb the child's; counted below, expected 0 on every workload.
+    static CENSUS_NET_DEPTH: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+    /// Times a net window opened inside another (K6-Gregg: >0 invalidates
+    /// the per-unit net map — it must be re-emitted before quoting bands).
+    static CENSUS_NESTED_WINDOWS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+/// WP-62 M0b: RAII net-compile window. `open()` marks the window (and counts
+/// nesting), `close()` parks the net delta for [`census_unit_note`]; the
+/// depth is released by `Drop`, so an early-return compile failure cannot
+/// poison the nesting counter for every later window.
+#[cfg(feature = "mem-census")]
+struct CensusNetWindow {
+    net0: (u64, u64),
 }
 
 #[cfg(feature = "mem-census")]
-fn census_compile_net_set(net0: (u64, u64)) {
-    let (a1, f1) = php_types::memcensus::alloc_counters();
-    let net = a1
-        .saturating_sub(net0.0)
-        .saturating_sub(f1.saturating_sub(net0.1));
-    CENSUS_COMPILE_NET.with(|c| c.set(net));
+impl CensusNetWindow {
+    fn open() -> Self {
+        CENSUS_NET_DEPTH.with(|d| {
+            if d.get() > 0 {
+                CENSUS_NESTED_WINDOWS.with(|n| n.set(n.get() + 1));
+            }
+            d.set(d.get() + 1);
+        });
+        Self { net0: php_types::memcensus::alloc_counters() }
+    }
+
+    /// Net delta of the window (consumes it; depth released by Drop).
+    fn finish(self) -> u64 {
+        let (a1, f1) = php_types::memcensus::alloc_counters();
+        a1.saturating_sub(self.net0.0).saturating_sub(f1.saturating_sub(self.net0.1))
+    }
+
+    fn close(self) {
+        let net = self.finish();
+        CENSUS_COMPILE_NET.with(|c| c.set(net));
+    }
+}
+
+#[cfg(feature = "mem-census")]
+impl Drop for CensusNetWindow {
+    fn drop(&mut self) {
+        CENSUS_NET_DEPTH.with(|d| d.set(d.get().saturating_sub(1)));
+    }
+}
+
+/// WP-62 M1 (Leijen R1): per-hit net of the HIT path (remap recompute +
+/// double-check + seed-delta apply; the linked run itself is execution, not
+/// compile, and stays out — same boundary as the miss window). Rows feed the
+/// dump-time `tag=cachehit` aggregation (count / sum / median per path).
+#[cfg(feature = "mem-census")]
+fn census_hit_note(w: CensusNetWindow, path: &[u8]) {
+    let net = w.finish();
+    CENSUS_HITS.with(|h| h.borrow_mut().push((path.to_vec(), net)));
+}
+
+#[cfg(feature = "mem-census")]
+thread_local! {
+    static CENSUS_HITS: std::cell::RefCell<Vec<(Vec<u8>, u64)>> =
+        const { std::cell::RefCell::new(Vec::new()) };
 }
 
 #[cfg(feature = "mem-census")]
@@ -4744,7 +4873,7 @@ impl<'m> Vm<'m> {
         self.accumulate_seed(&program);
         let stubs = self.seed_stub_mask(&program);
         #[cfg(feature = "mem-census")]
-        let net0 = php_types::memcensus::alloc_counters();
+        let netw = CensusNetWindow::open();
         let module = match crate::compile::compile_program_seeded(
             &program,
             self.registry,
@@ -4757,7 +4886,7 @@ impl<'m> Vm<'m> {
         // Window closes before relocation (drive_unit): small under-count,
         // labeled in design61.
         #[cfg(feature = "mem-census")]
-        census_compile_net_set(net0);
+        netw.close();
         // Record the eval()'s call site (the file/line of the frame invoking it) so
         // a backtrace can render this unit as `eval()` and attribute code it calls
         // to "<file>(<line>) : eval()'d code" (Phase 1c-2c).
@@ -5161,7 +5290,7 @@ impl<'m> Vm<'m> {
         self.accumulate_seed(&program);
         let stubs = self.seed_stub_mask(&program);
         #[cfg(feature = "mem-census")]
-        let net0 = php_types::memcensus::alloc_counters();
+        let netw = CensusNetWindow::open();
         let module = match crate::compile::compile_program_seeded(
             &program,
             self.registry,
@@ -5184,7 +5313,7 @@ impl<'m> Vm<'m> {
             }
         };
         #[cfg(feature = "mem-census")]
-        census_compile_net_set(net0);
+        netw.close();
         // Bridge the calling frame's scope only for the expression form: its
         // constructor arguments are re-evaluated inside the snippet and must
         // see the caller's variables live.
@@ -5358,15 +5487,23 @@ impl<'m> Vm<'m> {
         // include chain over a fresh VM skips lower+compile entirely. The reuse
         // is double-checked structurally (static baseline, recomputed remap);
         // a mismatch simply falls through to the fresh path.
+        uc_stat(|s| s.metadata_calls += 1);
         let unit_key = std::fs::metadata(&real).ok().and_then(|m| unit_key_for(&key, &m));
         let fp = self.unit_fp();
         if let Some(uk) = &unit_key {
             if let Some(cu) = unit_cache_get(uk, fp) {
+                #[cfg(feature = "mem-census")]
+                let hitw = CensusNetWindow::open();
                 let (remap, locals) = self.unit_class_remap(cu.module);
                 if cu.static_off == self.statics.len()
                     && remap == cu.class_remap
                     && locals == cu.new_locals
                 {
+                    // WP-62 M1: the two hit boundaries have different
+                    // contracts (Pedersen P1-i/ii) — count them apart.
+                    let intra = VM_EPOCH.with(|e| e.get()) == cu.owner_epoch;
+                    uc_stat(|s| if intra { s.hit_intra += 1 } else { s.hit_cross += 1 });
+                    uc_log(if intra { "hit intra" } else { "hit cross" }, &key);
                     self.included_files.insert(key.clone());
                     self.unit_chain_fp = fp_mix_key(self.unit_chain_fp, uk);
                     log::debug!(
@@ -5376,11 +5513,30 @@ impl<'m> Vm<'m> {
                         String::from_utf8_lossy(&key)
                     );
                     self.apply_seed_delta(&cu.seed_delta);
+                    // Window closes BEFORE the linked run: a nested include
+                    // inside the unit body must not read as window nesting.
+                    #[cfg(feature = "mem-census")]
+                    census_hit_note(hitw, &key);
                     let caller = self.frames.len() - 1;
                     let ret = self.run_linked(cu.module, &locals, None, Some(caller))?;
                     return Ok(if matches!(ret, Zval::Null) { Zval::Long(1) } else { ret });
                 }
+                uc_stat(|s| s.miss_dc += 1);
+                uc_log("miss dc", &key);
+            } else if unit_cache_key_present(uk) {
+                // Entries exist for these file bytes but none matches the VM
+                // fingerprint: the CLI re-include leak (design62 M2 quota).
+                uc_stat(|s| s.miss_fp += 1);
+                uc_log("miss fp", &key);
+            } else {
+                uc_stat(|s| s.miss_cold += 1);
+                uc_log("miss cold", &key);
             }
+        } else {
+            // metadata failed (stream wrapper / racing unlink): fresh path
+            // by contract (Stogov R5.iii).
+            uc_stat(|s| s.miss_nostat += 1);
+            uc_log("miss nostat", &key);
         }
         let mut content = match std::fs::read(&real) {
             Ok(c) => c,
@@ -5423,7 +5579,7 @@ impl<'m> Vm<'m> {
         // per included file is quadratic (PHPUnit's preload() = ~1200 requires).
         let stubs = self.seed_stub_mask(&program);
         #[cfg(feature = "mem-census")]
-        let net0 = php_types::memcensus::alloc_counters();
+        let netw = CensusNetWindow::open();
         let mut module = match crate::compile::compile_program_seeded(
             &program,
             self.registry,
@@ -5443,7 +5599,7 @@ impl<'m> Vm<'m> {
         relocate_module_class_ids(&mut module, &class_remap, static_off);
         #[cfg(feature = "mem-census")]
         {
-            census_compile_net_set(net0);
+            netw.close();
             php_types::memcensus::alloc(
                 php_types::memcensus::CH_UNIT,
                 module_census_bytes(&module),
@@ -5464,6 +5620,7 @@ impl<'m> Vm<'m> {
                         new_locals: new_locals.clone(),
                         seed_delta: Rc::clone(&seed_delta),
                         module: leaked,
+                        owner_epoch: VM_EPOCH.with(|e| e.get()),
                     },
                 );
             }
@@ -13444,6 +13601,11 @@ struct CachedUnit {
     new_locals: Vec<usize>,
     seed_delta: Rc<SeedDelta>,
     module: &'static Module,
+    /// WP-62 M1 (Pedersen P3): [`VM_EPOCH`] of the VM that inserted the
+    /// entry — a later hit from the same epoch is an intra-VM re-include,
+    /// from a newer epoch a cross-VM (server replay) hit. The two boundaries
+    /// have different contracts and are counted separately.
+    owner_epoch: u64,
 }
 
 /// What a unit contributes to the accumulating seed image — the retained
@@ -13481,6 +13643,75 @@ thread_local! {
     /// leak bounded by reusing the same module across requests.
     static UNIT_CACHE: RefCell<HashMap<UnitKey, Vec<CachedUnit>>> =
         RefCell::new(HashMap::default());
+    /// WP-62 M1: monotone id of the VM currently running on this thread,
+    /// bumped at every VM construction — distinguishes intra-VM re-include
+    /// hits from cross-VM (fresh-VM replay) hits without a field in `Vm`.
+    static VM_EPOCH: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+    /// WP-62 M1: unit-cache observability (design62; Leijen R1 = Gregg R4 =
+    /// Stogov R2). Counted always (the include path is cold); dumped only
+    /// on demand — census `tag=unitcache` line, or per-event log behind
+    /// `PHPR_UNIT_CACHE_LOG` (WP-44: positive proof lives in a log).
+    static UC_STATS: std::cell::RefCell<UcStats> =
+        const { std::cell::RefCell::new(UcStats::ZERO) };
+}
+
+/// WP-62 M1 counters. Miss taxonomy matters for M2: `miss_cold` = no entry
+/// for the key at all; `miss_fp` = entries exist but no fingerprint match
+/// (the CLI re-include leak lives HERE); `miss_dc` = fingerprint matched but
+/// the structural double-check refused the reuse.
+#[derive(Clone, Copy)]
+struct UcStats {
+    hit_intra: u64,
+    hit_cross: u64,
+    miss_cold: u64,
+    miss_fp: u64,
+    miss_dc: u64,
+    miss_nostat: u64,
+    inserts: u64,
+    fp_replaced: u64,
+    ways_evictions: u64,
+    metadata_calls: u64,
+}
+
+impl UcStats {
+    const ZERO: UcStats = UcStats {
+        hit_intra: 0,
+        hit_cross: 0,
+        miss_cold: 0,
+        miss_fp: 0,
+        miss_dc: 0,
+        miss_nostat: 0,
+        inserts: 0,
+        fp_replaced: 0,
+        ways_evictions: 0,
+        metadata_calls: 0,
+    };
+}
+
+fn uc_stat(f: impl FnOnce(&mut UcStats)) {
+    UC_STATS.with(|s| f(&mut s.borrow_mut()));
+}
+
+/// Append one unit-cache event line to the file named by
+/// `PHPR_UNIT_CACHE_LOG` (checked once). No-op when unset — probes assert
+/// `cachehit>0` by grepping this log (meta-rule K5/KK1: a sentinel that
+/// passes with zero hits proves nothing).
+fn uc_log(event: &str, path: &[u8]) {
+    use std::io::Write;
+    use std::sync::OnceLock;
+    static LOG: OnceLock<Option<std::path::PathBuf>> = OnceLock::new();
+    let Some(p) = LOG.get_or_init(|| std::env::var_os("PHPR_UNIT_CACHE_LOG").map(Into::into))
+    else {
+        return;
+    };
+    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(p) {
+        let _ = writeln!(f, "unitcache {event} {}", String::from_utf8_lossy(path));
+    }
+}
+
+/// Whether any fingerprint variant is cached under `key` (miss taxonomy).
+fn unit_cache_key_present(key: &UnitKey) -> bool {
+    UNIT_CACHE.with(|c| c.borrow().get(key).is_some_and(|v| !v.is_empty()))
 }
 
 fn unit_key_for(path: &[u8], meta: &std::fs::Metadata) -> Option<UnitKey> {
@@ -13520,11 +13751,14 @@ fn unit_cache_put(key: UnitKey, cu: CachedUnit) {
         let slot = cache.entry(key).or_default();
         if let Some(pos) = slot.iter().position(|e| e.fp == cu.fp) {
             slot[pos] = cu;
+            uc_stat(|s| s.fp_replaced += 1);
         } else {
             if slot.len() >= UNIT_CACHE_WAYS {
                 slot.remove(0);
+                uc_stat(|s| s.ways_evictions += 1);
             }
             slot.push(cu);
+            uc_stat(|s| s.inserts += 1);
         }
     })
 }
