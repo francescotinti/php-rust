@@ -659,6 +659,7 @@ impl<'m> super::Vm<'m> {
                     // run the initialiser; every later one skips to the alias. A
                     // closure keys its own per-instance storage (fresh statics per
                     // closure object); everything else the program-global `statics`.
+                    let id = &self.rbs(*id);
                     let exists = match self.frames[top].closure_id() {
                         Some(cid) => self.closure_statics.contains_key(&(cid, *id)),
                         None => self.statics[*id as usize].is_some(),
@@ -668,6 +669,7 @@ impl<'m> super::Vm<'m> {
                     }
                 }
                 Op::StaticStore { id } => {
+                    let id = &self.rbs(*id);
                     let v = self.frames[top].stack.pop().expect("StaticStore on empty stack");
                     let cell = Rc::new(RefCell::new(v));
                     let old = match self.frames[top].closure_id() {
@@ -682,6 +684,7 @@ impl<'m> super::Vm<'m> {
                     }
                 }
                 Op::StaticAlias { slot, id } => {
+                    let id = &self.rbs(*id);
                     // Alias the local slot to the persistent cell: reads/writes of
                     // the variable now go through it (the slot holds a `Zval::Ref`,
                     // followed by `read_slot`/`store_slot` like any reference).
@@ -2955,8 +2958,9 @@ impl<'m> super::Vm<'m> {
                     }
                 }
                 Op::Alloc { class } => {
-                    self.check_new_ctor_access(self.frames[top].class, *class)?;
-                    let obj = self.alloc_object(*class)?;
+                    let class = self.rb(*class);
+                    self.check_new_ctor_access(self.frames[top].class, class)?;
+                    let obj = self.alloc_object(class)?;
                     self.frames[top].stack.push(obj);
                 }
                 Op::AllocStatic => {
@@ -4152,20 +4156,22 @@ impl<'m> super::Vm<'m> {
                     self.dispatch_instance_call_named(top, this, &method, pos, named, *deref)?;
                 }
                 Op::InvokeMethod { class, method_idx, argc } => {
+                    let class = self.rb(*class);
                     let args = self.pop_keys(top, *argc);
                     let recv = self.frames[top].stack.pop().expect("InvokeMethod receiver");
                     let this = recv.deref_clone();
-                    let lsb = object_class_id(&this).unwrap_or(*class);
-                    let callee = &self.classes[*class].methods[*method_idx as usize].func;
-                    let m = self.class_mod(*class);
+                    let lsb = object_class_id(&this).unwrap_or(class);
+                    let callee = &self.classes[class].methods[*method_idx as usize].func;
+                    let m = self.class_mod(class);
                     let mut frame = self.pooled_frame(callee, m);
                     bind_params(&mut frame, args);
                     frame.this = Some(this);
-                    frame.class = Some(*class);
+                    frame.class = Some(class);
                     frame.static_class = Some(lsb);
                     self.enter_callee(frame)?;
                 }
                 Op::InstanceOf { class } => {
+                    let class = &self.rb(*class);
                     let v = self.frames[top].stack.pop().expect("InstanceOf operand");
                     let result = match v.deref_clone() {
                         Zval::Object(o) => {
@@ -4445,6 +4451,7 @@ impl<'m> super::Vm<'m> {
                     }
                 }
                 Op::ClassConst { class, idx } => {
+                    let class = &self.rb(*class);
                     // Run the constant's value thunk as a frame in its declaring
                     // class's context; its `Ret` leaves the value on the caller's
                     // stack.
@@ -4565,6 +4572,7 @@ impl<'m> super::Vm<'m> {
                     self.frames[top].stack.push(Zval::Str(PhpStr::new(name)));
                 }
                 Op::EnumCase { class, case } => {
+                    let class = &self.rb(*class);
                     let obj = self.enum_case(*class, *case);
                     self.frames[top].stack.push(Zval::Object(obj));
                 }

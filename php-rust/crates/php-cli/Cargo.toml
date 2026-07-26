@@ -12,6 +12,8 @@ path = "src/main.rs"
 # WP-45 Fase 0: byte-attribution build (PHPR_MEM_CENSUS). Instrumentation
 # builds only — never parity/A-B binaries. See FOOTPRINT_CPU_ROADMAP.md.
 mem-census = ["php-runtime/mem-census", "php-types/mem-census"]
+# WP-62 M2.3: form-B arm-cost diagnostic (see php-runtime/relbase-probe).
+relbase-probe = ["php-runtime/relbase-probe"]
 
 [dependencies]
 php-types.workspace = true

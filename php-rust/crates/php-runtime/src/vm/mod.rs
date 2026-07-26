@@ -442,6 +442,10 @@ pub(crate) fn run_module_with_hir<'m>(
         seed_globals: main_hir.map(|p| p.slots.clone()).unwrap_or_default(),
         linked_functions: HashMap::default(),
         included_files: HashSet::default(),
+        #[cfg(feature = "relbase-probe")]
+        relbase_remap: (0..module.classes.len().max(65536)).collect(),
+        #[cfg(feature = "relbase-probe")]
+        relbase_base: 0,
         unit_chain_fp: {
             use std::hash::{Hash, Hasher};
             let mut h = std::collections::hash_map::DefaultHasher::new();
@@ -1111,24 +1115,62 @@ pub(crate) fn run_module_with_hir<'m>(
             let units: Vec<(Vec<u8>, u64, u64, usize)> =
                 CENSUS_UNITS.with(|u| u.borrow().clone());
             let mut by: rustc_hash::FxHashMap<&[u8], (u32, u64, u64)> = Default::default();
-            for (file, bytes, net, _p) in &units {
+            // WP-62 M2.1: per-path [tables, stub, fnshare, proper] sums (the
+            // dup targets' prefix share is THE Hejlsberg A1 number).
+            let mut by_split: rustc_hash::FxHashMap<&[u8], [u64; 4]> = Default::default();
+            for (i, (file, bytes, net, _p)) in units.iter().enumerate() {
                 let e = by.entry(&file[..]).or_insert((0, 0, 0));
                 e.0 += 1;
                 e.1 += *bytes;
                 e.2 += *net;
+                if let Some(sp) = CENSUS_SPLITS.with(|s| s.borrow().get(i).copied()) {
+                    let es = by_split.entry(&file[..]).or_insert([0; 4]);
+                    for k in 0..4 {
+                        es[k] += sp[k];
+                    }
+                }
             }
             // WP-62 M0c: top single load events by net — the calibration
             // probes (known-size synthetic units) read their per-unit net
             // here; dup rows below aggregate per path and hide singles.
+            // WP-62 M2.1: rows carry the compile split (pfx = tables+stub+
+            // fnshare vs proper); indices pair CENSUS_UNITS ↔ CENSUS_SPLITS.
+            let splits: Vec<[u64; 4]> = CENSUS_SPLITS.with(|s| s.borrow().clone());
             {
-                let mut top: Vec<&(Vec<u8>, u64, u64, usize)> = units.iter().collect();
-                top.sort_by(|a, b| b.2.cmp(&a.2));
-                for (file, bytes, net, _p) in top.iter().take(24) {
+                let mut top: Vec<(usize, &(Vec<u8>, u64, u64, usize))> =
+                    units.iter().enumerate().collect();
+                top.sort_by(|a, b| b.1 .2.cmp(&a.1 .2));
+                for (i, (file, bytes, net, _p)) in top.iter().take(24) {
+                    let sp = splits.get(*i).copied().unwrap_or([0; 4]);
                     mc::census_line(&format!(
-                        "tag=unittop bytes_counted={bytes} net={net} path={}",
+                        "tag=unittop bytes_counted={bytes} net={net} pfx_tables={} \
+                         pfx_stub={} pfx_fnshare={} proper={} path={}",
+                        sp[0],
+                        sp[1],
+                        sp[2],
+                        sp[3],
                         String::from_utf8_lossy(file)
                     ));
                 }
+            }
+            // Global prefix-vs-proper aggregate (Hejlsberg A1 decision line).
+            {
+                let mut t = [0u64; 4];
+                for sp in &splits {
+                    for k in 0..4 {
+                        t[k] += sp[k];
+                    }
+                }
+                let prefix = t[0] + t[1] + t[2];
+                mc::census_line(&format!(
+                    "tag=prefixsum tables={} stub={} fnshare={} proper={} prefix={prefix} \
+                     split_tot={}",
+                    t[0],
+                    t[1],
+                    t[2],
+                    t[3],
+                    prefix + t[3],
+                ));
             }
             let mut dups: Vec<(&[u8], u32, u64, u64)> = by
                 .iter()
@@ -1144,8 +1186,14 @@ pub(crate) fn run_module_with_hir<'m>(
                 dup_b += (bytes / (*n as u64)) * ((*n as u64) - 1);
                 dup_n += (net / (*n as u64)) * ((*n as u64) - 1);
                 if i < 40 {
+                    let sp = by_split.get(p).copied().unwrap_or([0; 4]);
                     mc::census_line(&format!(
-                        "tag=unitpath2 n={n} bytes_counted={bytes} net={net} path={}",
+                        "tag=unitpath2 n={n} bytes_counted={bytes} net={net} \
+                         pfx_tables={} pfx_stub={} pfx_fnshare={} proper={} path={}",
+                        sp[0],
+                        sp[1],
+                        sp[2],
+                        sp[3],
                         String::from_utf8_lossy(p)
                     ));
                 }
@@ -1161,6 +1209,15 @@ pub(crate) fn run_module_with_hir<'m>(
                 "tag=netguard nested_windows={}",
                 CENSUS_NESTED_WINDOWS.with(|n| n.get()),
             ));
+            // WP-62 (Matsakis M2): skipped-relocation counts — fns/classes
+            // skipped by explicit global marker; unexpected always 0 (census
+            // builds panic at the site).
+            {
+                let (f, k, u) = RELOC_SKIPPED.with(|c| c.get());
+                mc::census_line(&format!(
+                    "tag=reloc skipped_fns={f} skipped_classes={k} unexpected={u}"
+                ));
+            }
             // WP-62 M1: unit-cache observability (design62). `superseded_*`
             // is computed at dump time by grouping keys per path — an edited
             // file re-keys and strands its old entries (Leijen R5; de-leak is
@@ -1650,6 +1707,11 @@ thread_local! {
 #[cfg(feature = "mem-census")]
 fn census_unit_note(m: &'static Module) {
     let net = CENSUS_COMPILE_NET.with(|c| c.replace(0));
+    // WP-62 M2.1: the compile's prefix/proper split rides in a parallel row
+    // (same push order as CENSUS_UNITS — one note per leaked unit).
+    let sp = crate::compile::census_take_split();
+    CENSUS_SPLITS
+        .with(|s| s.borrow_mut().push([sp.tables, sp.stub, sp.fnshare, sp.proper]));
     CENSUS_UNITS.with(|u| {
         u.borrow_mut().push((
             m.file.to_vec(),
@@ -1658,6 +1720,14 @@ fn census_unit_note(m: &'static Module) {
             m as *const Module as usize,
         ))
     });
+}
+
+#[cfg(feature = "mem-census")]
+thread_local! {
+    /// WP-62 M2.1: per-unit [tables, stub, fnshare, proper] compile split,
+    /// parallel to `CENSUS_UNITS` (Hejlsberg A1: prefix = tables+stub+fnshare).
+    static CENSUS_SPLITS: std::cell::RefCell<Vec<[u64; 4]>> =
+        const { std::cell::RefCell::new(Vec::new()) };
 }
 
 /// Renders `depth=N;fn@file:line;...` for the top 3 PHP frames.
@@ -2233,6 +2303,15 @@ struct Vm<'m> {
     /// fingerprint ([`Vm::unit_fp`]) — two VMs with equal chains loaded the same
     /// code in the same order, so seeded lowering of the next unit is replayable.
     unit_chain_fp: u64,
+    /// WP-62 M2.3 DIAGNOSTIC (form-B pre-quote, K-M1): identity class-id
+    /// table simulating the per-execution remap indirection cost in the hot
+    /// arms. Feature-gated — parity builds compile without the field.
+    #[cfg(feature = "relbase-probe")]
+    relbase_remap: Vec<ClassId>,
+    /// WP-62 M2.3 DIAGNOSTIC: zero static-cell base simulating form B's
+    /// per-execution base add on StaticGuard/Store/Alias.
+    #[cfg(feature = "relbase-probe")]
+    relbase_base: u32,
     /// Autoload callbacks registered by `spl_autoload_register` (step 57, Phase 3),
     /// in registration order. Consulted when a class name fails to resolve (a `new`
     /// / static reference / `class_exists` of an undeclared class), each given the
@@ -11583,13 +11662,42 @@ impl<'m> Vm<'m> {
     /// context: `Static` reads the LSB class, `SelfScope`/`ParentScope` the
     /// closure frame's (rebindable) scope class, each with PHP's faithful
     /// error when the context is missing.
+    /// WP-62 M2.3 DIAGNOSTIC (form-B pre-quote): the remap indirection form
+    /// B would pay on every class-id consumption in the hot arms — an
+    /// identity table load (+bounds branch, exactly what safe-Rust form B
+    /// pays). Compiles to a no-op pass-through in parity builds.
+    #[cfg(feature = "relbase-probe")]
+    #[inline(always)]
+    pub(super) fn rb(&self, c: ClassId) -> ClassId {
+        *self.relbase_remap.get(c).unwrap_or(&c)
+    }
+
+    #[cfg(not(feature = "relbase-probe"))]
+    #[inline(always)]
+    pub(super) fn rb(&self, c: ClassId) -> ClassId {
+        c
+    }
+
+    /// Form B's static-cell base add (id + base, base owned per-execution).
+    #[cfg(feature = "relbase-probe")]
+    #[inline(always)]
+    pub(super) fn rbs(&self, id: u32) -> u32 {
+        id.wrapping_add(self.relbase_base)
+    }
+
+    #[cfg(not(feature = "relbase-probe"))]
+    #[inline(always)]
+    pub(super) fn rbs(&self, id: u32) -> u32 {
+        id
+    }
+
     pub(super) fn target_class_id(
         &self,
         target: ClassTarget,
         top: usize,
     ) -> Result<ClassId, PhpError> {
         match target {
-            ClassTarget::Class(cid) => Ok(cid),
+            ClassTarget::Class(cid) => Ok(self.rb(cid)),
             ClassTarget::Static => self.frames[top].static_class.ok_or_else(|| {
                 PhpError::Error("Cannot use \"static\" in the global scope".to_string())
             }),
@@ -13776,19 +13884,63 @@ fn unit_cache_put(key: UnitKey, cu: CachedUnit) {
     })
 }
 
+/// WP-62 (Matsakis M2): relocation-skip observability. Counts land in the
+/// census (`tag=reloc`) so `reloc_skipped` reconciles with the expected
+/// prelude+stub population per unit; no cost in parity builds.
+#[cfg(feature = "mem-census")]
+thread_local! {
+    static RELOC_SKIPPED: std::cell::Cell<(u64, u64, u64)> =
+        const { std::cell::Cell::new((0, 0, 0)) };
+}
+
+#[inline]
+fn reloc_note_skip(_class: bool) {
+    #[cfg(feature = "mem-census")]
+    RELOC_SKIPPED.with(|c| {
+        let (f, k, u) = c.get();
+        c.set(if _class { (f, k + 1, u) } else { (f + 1, k, u) });
+    });
+}
+
+/// A shared entry that is NOT marked global (`prelude`/`seed-stub`): today's
+/// silent-stale-id bug class. Loud in every build; fatal under census.
+#[cold]
+fn reloc_unexpected_shared(kind: &str, name: &[u8]) {
+    log::error!(
+        target: "phpr::include",
+        "relocation skipped a shared non-global {kind} entry: {} — stale-id risk",
+        String::from_utf8_lossy(name)
+    );
+    #[cfg(feature = "mem-census")]
+    {
+        RELOC_SKIPPED.with(|c| {
+            let (f, k, u) = c.get();
+            c.set((f, k, u + 1));
+        });
+        panic!("census: relocation silently skipped a non-global {kind} entry");
+    }
+}
+
 fn relocate_module_class_ids(module: &mut Module, remap: &[ClassId], static_base: usize) {
     // 1. Every function body (main, free functions, closures, and each class's
     //    methods / property-init thunk / const thunks / non-const static-prop
     //    thunks / property-hook get & set bodies).
     relocate_func(&mut module.main, remap, static_base);
     for f in &mut module.functions {
-        // A shared entry (`Rc::strong_count > 1`) is a prelude body reused from
-        // the main module (WP-20): it is already in the global id space (main
-        // is never relocated) and MUST keep its static-cell ids 0..pstatic —
-        // `Rc::get_mut` returning `None` skips it for free. Freshly-compiled
-        // bodies are uniquely owned here, so they always relocate.
+        // WP-62 (Matsakis M2): the skip decision is the EXPLICIT marker, not
+        // the `Rc::get_mut` aliasing pun. A prelude body reused from the main
+        // module (WP-20, `file == b"prelude"`) is already in the global id
+        // space and MUST keep its static-cell ids 0..pstatic. A non-marked
+        // entry must relocate: `get_mut` failing there is the silent-stale-id
+        // bug class (symfony IpUtils) — loud from today.
+        if f.file.as_ref() == b"prelude" {
+            reloc_note_skip(false);
+            continue;
+        }
         if let Some(f) = std::rc::Rc::get_mut(f) {
             relocate_func(f, remap, static_base);
+        } else {
+            reloc_unexpected_shared("function", &f.name);
         }
     }
     for f in &mut module.closures {
@@ -13799,11 +13951,18 @@ fn relocate_module_class_ids(module: &mut Module, remap: &[ClassId], static_base
         relocate_attrs(attrs, remap, static_base);
     }
     for cc in &mut module.classes {
-        // A shared entry is an interned seed stub (WP-20): no relocatable ids
-        // inside (no parent/methods/thunks), and it must stay untouched —
-        // `Rc::get_mut` returning `None` skips it. Freshly-compiled classes
-        // are uniquely owned here, so they always relocate.
-        let Some(cc) = Rc::get_mut(cc) else { continue };
+        // WP-62 (Matsakis M2): explicit marker instead of the get_mut pun —
+        // an interned seed stub (`file == b"seed-stub"`, WP-20) has no
+        // relocatable ids and must stay untouched; anything else must
+        // relocate, and a shared non-stub entry is the loud failure case.
+        if cc.file.as_ref() == b"seed-stub" {
+            reloc_note_skip(true);
+            continue;
+        }
+        let Some(cc) = Rc::get_mut(cc) else {
+            reloc_unexpected_shared("class", &cc.name);
+            continue;
+        };
         // 2. Class metadata: superclass and implemented interfaces.
         if let Some(p) = cc.parent.as_mut() {
             *p = remap[*p];

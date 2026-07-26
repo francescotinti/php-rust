@@ -121,12 +121,53 @@ pub fn compile_program_stubbed(
     compile_program_impl(program, registry, stub_mask, &[])
 }
 
+/// WP-62 M2.1 (Hejlsberg A1): per-compile net split into what scales with
+/// the accumulated SEED PREFIX (name index + module tables, stub compiles,
+/// prelude sharing) vs the unit's PROPER code (its own bodies/classes).
+/// Parked by [`compile_program_impl`], consumed by the VM's census note.
+#[cfg(feature = "mem-census")]
+#[derive(Default, Clone, Copy)]
+pub struct CompileSplit {
+    /// class_index build + fn_ci + conditional-set clones + Module assembly.
+    pub tables: u64,
+    /// stub_class_shared over the masked seed classes.
+    pub stub: u64,
+    /// prelude-shared function entries (Rc clones — expected ≈0).
+    pub fnshare: u64,
+    /// the unit's own compiled bodies (functions/closures/main/classes/attrs).
+    pub proper: u64,
+}
+
+#[cfg(feature = "mem-census")]
+thread_local! {
+    static COMPILE_SPLIT: std::cell::Cell<CompileSplit> =
+        const { std::cell::Cell::new(CompileSplit { tables: 0, stub: 0, fnshare: 0, proper: 0 }) };
+}
+
+/// Take (and reset) the split parked by the last seeded compile.
+#[cfg(feature = "mem-census")]
+pub fn census_take_split() -> CompileSplit {
+    COMPILE_SPLIT.with(|c| c.replace(CompileSplit::default()))
+}
+
+/// Net allocator delta since `m0` (census-only sub-window; the segments
+/// partition the compile sequentially, so Σ segments ≈ the unit net window).
+#[cfg(feature = "mem-census")]
+fn seg_net(m0: (u64, u64)) -> u64 {
+    let (a1, f1) = php_types::memcensus::alloc_counters();
+    a1.saturating_sub(m0.0).saturating_sub(f1.saturating_sub(m0.1))
+}
+
 fn compile_program_impl(
     program: &Program,
     registry: &Registry,
     stub_mask: &[bool],
     prelude: &[std::rc::Rc<Func>],
 ) -> R<Module> {
+    #[cfg(feature = "mem-census")]
+    let mut split = CompileSplit::default();
+    #[cfg(feature = "mem-census")]
+    let mut m0 = php_types::memcensus::alloc_counters();
     // Case-insensitive name→id index for resolving `ClassRef::Named`; the first
     // declaration of a name wins (PHP forbids redeclaration).
     let mut class_index: rustc_hash::FxHashMap<Vec<u8>, ClassId> = rustc_hash::FxHashMap::default();
@@ -138,6 +179,11 @@ fn compile_program_impl(
             continue;
         }
         class_index.entry(cd.name.to_ascii_lowercase()).or_insert(i);
+    }
+    #[cfg(feature = "mem-census")]
+    {
+        split.tables += seg_net(m0);
+        m0 = php_types::memcensus::alloc_counters();
     }
     let ctx = ProgramCtx {
         funcs: &program.functions,
@@ -157,6 +203,11 @@ fn compile_program_impl(
         if let Some(pf) = prelude.get(idx) {
             if pf.name == fd.name && !program.conditional_fns.contains(&idx) {
                 functions.push(std::rc::Rc::clone(pf));
+                #[cfg(feature = "mem-census")]
+                {
+                    split.fnshare += seg_net(m0);
+                    m0 = php_types::memcensus::alloc_counters();
+                }
                 continue;
             }
         }
@@ -169,6 +220,11 @@ fn compile_program_impl(
             Ok(f) => functions.push(std::rc::Rc::new(f)),
             Err(e) => functions.push(std::rc::Rc::new(stub_func(fd, &e))),
         }
+        #[cfg(feature = "mem-census")]
+        {
+            split.proper += seg_net(m0);
+            m0 = php_types::memcensus::alloc_counters();
+        }
     }
     // Closure bodies compile tolerantly (like functions): an unsupported body
     // becomes a stub that fatals only if the closure is actually invoked. Same
@@ -179,20 +235,33 @@ fn compile_program_impl(
         .map(|fd| compile_fndecl(fd, &ctx, true).unwrap_or_else(|e| stub_func(fd, &e)))
         .collect();
     let main = compile_body(b"", &program.file, &program.body, program.slots.len() as u32, &[], &program.slots, false, false, None, 0, &ctx, None, false, true, 0)?;
+    #[cfg(feature = "mem-census")]
+    {
+        split.proper += seg_net(m0);
+        m0 = php_types::memcensus::alloc_counters();
+    }
     // Classes are compiled tolerantly too (see `compile_class`); a seed class
     // the VM already links compiles to an inert stub (see the doc above).
-    let classes = program
-        .classes
-        .iter()
-        .enumerate()
-        .map(|(cid, cd)| {
-            if stub_mask.get(cid).copied().unwrap_or(false) {
-                stub_class_shared(cd)
-            } else {
-                std::rc::Rc::new(compile_class(cid, cd, &ctx))
+    let mut classes: Vec<std::rc::Rc<CompiledClass>> =
+        Vec::with_capacity(program.classes.len());
+    for (cid, cd) in program.classes.iter().enumerate() {
+        if stub_mask.get(cid).copied().unwrap_or(false) {
+            classes.push(stub_class_shared(cd));
+            #[cfg(feature = "mem-census")]
+            {
+                split.stub += seg_net(m0);
+                m0 = php_types::memcensus::alloc_counters();
             }
-        })
-        .collect();
+        } else {
+            classes.push(std::rc::Rc::new(compile_class(cid, cd, &ctx)));
+            #[cfg(feature = "mem-census")]
+            {
+                split.proper += seg_net(m0);
+                m0 = php_types::memcensus::alloc_counters();
+            }
+        }
+    }
+    let classes = classes;
 
     // Top-level `const` attributes, compiled name→thunks (free-function context,
     // so `cur_class = None`).
@@ -201,6 +270,11 @@ fn compile_program_impl(
         .iter()
         .map(|(name, attrs)| (name.clone(), compile_attrs(attrs, &ctx, None)))
         .collect();
+    #[cfg(feature = "mem-census")]
+    {
+        split.proper += seg_net(m0);
+        m0 = php_types::memcensus::alloc_counters();
+    }
 
     // WP-29 B2: case-insensitive function index (see `Module::fn_ci`).
     let mut fn_ci: Vec<(u64, u32)> = functions
@@ -230,6 +304,11 @@ fn compile_program_impl(
     // Fase 1.1 (WP-48): compiled modules are leaked for the life of the
     // process — release the push-growth capacity slack before linking.
     m.shrink();
+    #[cfg(feature = "mem-census")]
+    {
+        split.tables += seg_net(m0);
+        COMPILE_SPLIT.with(|c| c.set(split));
+    }
     // Diagnostic bytecode dump (Leva B, gated on PHPR_DUMP_OPS — see
     // `reg_lower::dump_module_ops`). No-op when the env var is unset.
     reg_lower::dump_module_ops(&m);

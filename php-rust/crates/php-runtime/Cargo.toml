@@ -15,6 +15,9 @@ gc-census = []
 # WP-45 Fase 0: byte-attribution census (PHPR_MEM_CENSUS) — see
 # FOOTPRINT_CPU_ROADMAP.md. Instrumentation builds only.
 mem-census = ["php-types/mem-census"]
+# WP-62 M2.3: form-B pre-quote diagnostic — identity class-id remap + zero
+# static base in the hot arms (K-M1 arm-cost measurement). Never parity.
+relbase-probe = []
 
 [dependencies]
 php-types.workspace = true
