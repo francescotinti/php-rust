@@ -56,6 +56,7 @@ static NEXT_MARK: AtomicI64 = AtomicI64::new(256 << 20);
 
 fn ensure_registered() {
     if !REGISTERED.swap(true, Relaxed) {
+        mono_ms(); // anchor the monotonic clock at the first census event
         unsafe { libc::atexit(dump_exit) };
     }
 }
@@ -634,8 +635,17 @@ fn phys_window_dump(win: u32, phys: u64, tag: &str) {
             };
             let _ = writeln!(
                 f,
-                "pid={pid} tag=mi_proc win={win} phys={phys} phys_peak={} rss={rss} peak_rss={prss} commit={cm} peak_commit={pcm}",
+                "pid={pid} tag=mi_proc win={win} mono_ms={} phys={phys} phys_peak={} rss={rss} peak_rss={prss} commit={cm} peak_commit={pcm}",
+                mono_ms(),
                 PHYS_PEAK.load(Relaxed),
+            );
+            // WP-60 P2(a): in-process window context (Gregg R1/V4) — the VM's
+            // registered renderer names the frame stack; never child stdout.
+            let _ = writeln!(
+                f,
+                "pid={pid} tag=ctx win={win} mono_ms={} top={}",
+                mono_ms(),
+                ctx_render().unwrap_or_else(|| "none".into()),
             );
             let mut main_t = BinTab::boxed();
             let main_ok = unsafe {
@@ -700,4 +710,104 @@ fn phys_window_dump(win: u32, phys: u64, tag: &str) {
     if let Ok(flag) = std::env::var("PHPR_PHYS_FLAG") {
         let _ = std::fs::write(flag, format!("{win} {phys}\n"));
     }
+}
+
+// ---------------------------------------------------------------------------
+// WP-60 (P2/P3): counting-allocator meter, window context hook, abandoned
+// positive-control, raw census lines. Census-build instrumentation only.
+// ---------------------------------------------------------------------------
+
+/// Cumulative layout bytes allocated/freed through the process-global
+/// allocator. Fed by php-cli's census `#[global_allocator]` wrapper (the
+/// binary owns the allocator choice; this crate only owns the counters).
+static GA_ALLOC: AtomicU64 = AtomicU64::new(0);
+static GA_FREE: AtomicU64 = AtomicU64::new(0);
+
+#[inline]
+pub fn galloc_note(bytes: usize) {
+    GA_ALLOC.fetch_add(bytes as u64, Relaxed);
+}
+
+#[inline]
+pub fn gfree_note(bytes: usize) {
+    GA_FREE.fetch_add(bytes as u64, Relaxed);
+}
+
+/// Snapshot of the cumulative (allocated, freed) counters — the clone-delta
+/// meter behind the seed deep-size split (design60 P3b): read before and
+/// after a `clone()`, the alloc difference is the clone's owned deep size in
+/// layout bytes (mimalloc bin rounding excluded; Rc-shared subtrees excluded
+/// — a clone bumps their refcount without allocating).
+pub fn alloc_counters() -> (u64, u64) {
+    (GA_ALLOC.load(Relaxed), GA_FREE.load(Relaxed))
+}
+
+/// Monotonic milliseconds since the first census event in the process —
+/// stamped on window lines so the external supervisor's log joins on time,
+/// never on child stdout offsets (Gregg V4).
+pub fn mono_ms() -> u64 {
+    static T0: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+    T0.get_or_init(std::time::Instant::now).elapsed().as_millis() as u64
+}
+
+/// Window context hook (Gregg R1): the VM registers a renderer that formats
+/// its current PHP stack top; [`phys_window_dump`] calls it in-process on
+/// every window so each window has a test/frame address.
+static CTX_HOOK: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+pub fn set_ctx_hook(f: fn(&mut String)) {
+    CTX_HOOK.store(f as usize, Relaxed);
+}
+
+fn ctx_render() -> Option<String> {
+    let p = CTX_HOOK.load(Relaxed);
+    if p == 0 {
+        return None;
+    }
+    // SAFETY: the only writer is `set_ctx_hook`, which stores a valid
+    // `fn(&mut String)` pointer; 0 is filtered above.
+    let f: fn(&mut String) = unsafe { std::mem::transmute(p) };
+    let mut s = String::new();
+    f(&mut s);
+    Some(s)
+}
+
+/// Raw appended census line (pid-prefixed) for census-build reporters that
+/// live outside this crate (seed split, unit-per-path histogram).
+pub fn census_line(line: &str) {
+    use std::io::Write;
+    let Ok(path) = std::env::var("PHPR_MEM_CENSUS") else { return };
+    let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) else {
+        return;
+    };
+    let _ = writeln!(f, "pid={} {}", std::process::id(), line);
+}
+
+/// WP-60 P2(b): positive control of the abandoned-blocks visitor (Gregg
+/// R5a) — a thread allocates 1MiB, leaks it and dies; the visitor MUST see
+/// it, or the `aband` column is declared dead in the reports.
+pub fn abandoned_positive_control() {
+    let joined = std::thread::spawn(|| {
+        std::mem::forget(vec![0xA5u8; 1 << 20].into_boxed_slice());
+    })
+    .join();
+    let mut t = BinTab::boxed();
+    let ok = unsafe {
+        mi_heap_visit_abandoned_blocks(
+            mi_heap_main(),
+            false,
+            area_visitor,
+            &mut *t as *mut BinTab as *mut std::os::raw::c_void,
+        )
+    };
+    let (mut ub, mut un) = (0u64, 0u64);
+    for i in 0..N_BINS {
+        ub += t.used_b[i];
+        un += t.used_n[i];
+    }
+    census_line(&format!(
+        "tag=aband_check join_ok={} visit_ok={ok} used_b={ub} used_n={un} verdict={}",
+        joined.is_ok(),
+        if ok && ub >= (1 << 20) { "SEEN" } else { "DEAD" },
+    ));
 }

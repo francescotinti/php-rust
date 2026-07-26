@@ -999,6 +999,143 @@ pub(crate) fn run_module_with_hir<'m>(
         }
         rep.push(("unit-consts".into(), b));
         mc::report_roots(&rep);
+        // WP-60 P2(b): positive control of the abandoned-blocks visitor,
+        // on demand (PHPR_MI_ABAND_CHECK=1) — see design60.
+        if std::env::var_os("PHPR_MI_ABAND_CHECK").is_some() {
+            mc::abandoned_positive_control();
+        }
+        // WP-60 P3(b): deep-size DIRETTO of the seed HIR image via the
+        // counting-allocator clone-delta (design60): per class
+        // {full, bodies = MethodDecl.body+slots, doc+attributes};
+        // firma = full − bodies − doc. Rc-shared subtrees are NOT counted
+        // by a clone (refcount bump, no allocation): any under-count is
+        // structural sharing, labeled here, never estimated away.
+        {
+            fn dclone<T: Clone>(v: &T) -> u64 {
+                let (a0, _) = mc::alloc_counters();
+                let c = v.clone();
+                let (a1, _) = mc::alloc_counters();
+                drop(c);
+                a1.saturating_sub(a0)
+            }
+            fn fn_split(d: &crate::hir::FnDecl) -> (u64, u64) {
+                (
+                    dclone(&d.body) + dclone(&d.slots),
+                    dclone(&d.doc) + dclone(&d.attributes),
+                )
+            }
+            let mut rows: Vec<(String, u64, u64, u64)> = Vec::new();
+            let (mut t_full, mut t_body, mut t_doc) = (0u64, 0u64, 0u64);
+            for c in &vm.seed_classes {
+                let full = dclone(&**c);
+                let mut body = 0u64;
+                let mut doc = dclone(&c.doc) + dclone(&c.attributes);
+                for m in c.methods.iter().chain(c.abstract_sigs.iter()) {
+                    let (b_, d_) = fn_split(&m.decl);
+                    body += b_;
+                    doc += d_;
+                }
+                t_full += full;
+                t_body += body;
+                t_doc += doc;
+                rows.push((String::from_utf8_lossy(&c.name).into_owned(), full, body, doc));
+            }
+            rows.sort_by(|a, b| b.1.cmp(&a.1));
+            for (name, full, body, doc) in rows.iter().take(48) {
+                mc::census_line(&format!(
+                    "tag=seedclass name={name} full={full} body={body} doc={doc}"
+                ));
+            }
+            mc::census_line(&format!(
+                "tag=seedsum src=classes n={} full={t_full} body={t_body} doc={t_doc} firma={}",
+                vm.seed_classes.len(),
+                t_full.saturating_sub(t_body).saturating_sub(t_doc),
+            ));
+            let (mut tr_full, mut tr_body, mut tr_doc) = (0u64, 0u64, 0u64);
+            for (_k, t) in &vm.seed_traits {
+                tr_full += dclone(t);
+                for m in &t.methods {
+                    let (b_, d_) = fn_split(&m.decl);
+                    tr_body += b_;
+                    tr_doc += d_;
+                }
+                for cl in &t.closures {
+                    let (b_, d_) = fn_split(cl);
+                    tr_body += b_;
+                    tr_doc += d_;
+                }
+            }
+            mc::census_line(&format!(
+                "tag=seedsum src=traits n={} full={tr_full} body={tr_body} doc={tr_doc} firma={}",
+                vm.seed_traits.len(),
+                tr_full.saturating_sub(tr_body).saturating_sub(tr_doc),
+            ));
+            if let Some(p) = vm.main_hir {
+                // Program full counts only its OWNED parts (classes/functions
+                // are Rc: refcount bumps) — the fn table is measured apart.
+                let full = dclone(p);
+                let mut body = dclone(&p.body);
+                let mut doc = 0u64;
+                for cl in &p.closures {
+                    let (b_, d_) = fn_split(cl);
+                    body += b_;
+                    doc += d_;
+                }
+                mc::census_line(&format!(
+                    "tag=seedsum src=main_hir n=1 full={full} body={body} doc={doc} firma={}",
+                    full.saturating_sub(body).saturating_sub(doc),
+                ));
+                let (mut f_full, mut f_body, mut f_doc) = (0u64, 0u64, 0u64);
+                for f in &p.functions {
+                    f_full += dclone(&**f);
+                    let (b_, d_) = fn_split(&**f);
+                    f_body += b_;
+                    f_doc += d_;
+                }
+                mc::census_line(&format!(
+                    "tag=seedsum src=main_fns n={} full={f_full} body={f_body} doc={f_doc} firma={}",
+                    p.functions.len(),
+                    f_full.saturating_sub(f_body).saturating_sub(f_doc),
+                ));
+            }
+        }
+        // WP-60 P3(c): unit-per-path histogram — the retained-module count
+        // and (counted-v1) bytes per resolved path, fed by the LEAK SITES
+        // (Vm::modules is lazy and misses most units). n>1 rows are the
+        // template-include leak's address book; dup_bytes is quoted on the
+        // v1 counted metric (deep v2 replaces it when it lands).
+        {
+            let units: Vec<(Vec<u8>, u64)> =
+                CENSUS_UNITS.with(|u| u.borrow().clone());
+            let mut by: rustc_hash::FxHashMap<&[u8], (u32, u64)> = Default::default();
+            for (file, bytes) in &units {
+                let e = by.entry(&file[..]).or_insert((0, 0));
+                e.0 += 1;
+                e.1 += *bytes;
+            }
+            let mut dups: Vec<(&[u8], u32, u64)> = by
+                .iter()
+                .filter(|(_, (n, _))| *n > 1)
+                .map(|(p, (n, bytes))| (*p, *n, *bytes))
+                .collect();
+            dups.sort_by(|a, b| b.1.cmp(&a.1));
+            let (mut dup_u, mut dup_b) = (0u64, 0u64);
+            for (i, (p, n, bytes)) in dups.iter().enumerate() {
+                dup_u += (*n as u64) - 1;
+                dup_b += (bytes / (*n as u64)) * ((*n as u64) - 1);
+                if i < 40 {
+                    mc::census_line(&format!(
+                        "tag=unitpath n={n} bytes_counted={bytes} path={}",
+                        String::from_utf8_lossy(p)
+                    ));
+                }
+            }
+            mc::census_line(&format!(
+                "tag=unitsum units={} paths={} dup_units={dup_u} dup_bytes_counted={dup_b}",
+                units.len(),
+                by.len(),
+            ));
+        }
     }
     // `register_shutdown_function` callbacks run after the main script (and any
     // uncaught-fatal banner), before object destructors (PHP shutdown sequence).
@@ -1024,6 +1161,12 @@ pub(crate) fn run_module_with_hir<'m>(
     }
     #[cfg(feature = "gc-census")]
     gc_census::dump();
+    // WP-60 P2(a): un-park the VM before it is destructured/forgotten — the
+    // atexit window (win 0) must render tag=ctx as "none", never a dangling
+    // pointer (a Drop impl is not an option: both paths below move fields
+    // out of the Vm, and the fast path forgets it entirely).
+    #[cfg(feature = "mem-census")]
+    census_vm_park(0);
     if FAST_SHUTDOWN.load(std::sync::atomic::Ordering::Relaxed) {
         // Post-semantic leak (see the static's doc): move the outcome fields
         // out, forget the rest of the Vm. No PHP-observable effect can depend
@@ -1167,6 +1310,74 @@ fn census_walk_frame(f: &Frame<'_>, seen: &mut rustc_hash::FxHashSet<usize>) -> 
     }
     b
 }
+
+/// WP-60 P2(a): the running VM parks a raw pointer to itself here (from
+/// `run_loop` entry, census builds only) so the memcensus window dump can
+/// name the PHP frame stack in-process (`tag=ctx`) — never via child stdout
+/// (Gregg R1/V4). Cleared by the census `Drop for Vm`.
+#[cfg(feature = "mem-census")]
+thread_local! {
+    static CENSUS_VM: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(feature = "mem-census")]
+pub(super) fn census_vm_park(p: usize) {
+    CENSUS_VM.with(|c| c.set(p));
+}
+
+/// WP-60 P3(c): census-only registry of every LEAKED unit (include/eval) —
+/// `Vm::modules` is populated lazily by `module_id` and misses most units,
+/// so the per-path histogram feeds from the leak sites themselves.
+#[cfg(feature = "mem-census")]
+thread_local! {
+    static CENSUS_UNITS: std::cell::RefCell<Vec<(Vec<u8>, u64)>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
+#[cfg(feature = "mem-census")]
+fn census_unit_note(m: &Module) {
+    CENSUS_UNITS.with(|u| {
+        u.borrow_mut().push((m.file.to_vec(), module_census_bytes(m) as u64))
+    });
+}
+
+/// Renders `depth=N;fn@file:line;...` for the top 3 PHP frames.
+///
+/// SAFETY(census-only): reads plain fields of the parked VM while the VM is
+/// suspended inside one of its own census accounting notes (the window
+/// fires from a `memcensus` channel note in VM code, not from inside the
+/// global allocator), so the frame stack is between mutations. Formally an
+/// aliasing read next to a live `&mut Vm` — diagnostic builds only, never
+/// parity binaries.
+#[cfg(feature = "mem-census")]
+pub(super) fn census_ctx_hook(out: &mut String) {
+    use std::fmt::Write;
+    let p = CENSUS_VM.with(|c| c.get());
+    if p == 0 {
+        out.push_str("none");
+        return;
+    }
+    let vm: &Vm<'static> = unsafe { &*(p as *const Vm<'static>) };
+    let _ = write!(out, "depth={}", vm.frames.len());
+    for fr in vm.frames.iter().rev().take(3) {
+        let name = if fr.func.name.is_empty() {
+            std::borrow::Cow::Borrowed("{main}")
+        } else {
+            String::from_utf8_lossy(&fr.func.name)
+        };
+        let file = String::from_utf8_lossy(&fr.module.file);
+        let file = file.rsplit('/').next().unwrap_or("");
+        let line = fr
+            .func
+            .lines
+            .get(fr.ip.min(fr.func.lines.len().saturating_sub(1)))
+            .copied()
+            .unwrap_or(0);
+        let _ = write!(out, ";{name}@{file}:{line}");
+    }
+}
+
+
 
 /// One activation record: the function being run, its instruction pointer, its
 /// slot array (named locals) and its operand stack. This is the unit that would
@@ -4398,6 +4609,7 @@ impl<'m> Vm<'m> {
                 module_census_bytes(&module),
             );
             php_types::memcensus::unit_slack(module_slack_bytes(&module) as u64);
+            census_unit_note(&module);
         }
         let leaked: &'static Module = Box::leak(Box::new(module));
         self.run_linked(leaked, &new_locals, eval_origin, scope_bridge)
@@ -5046,6 +5258,7 @@ impl<'m> Vm<'m> {
                 module_census_bytes(&module),
             );
             php_types::memcensus::unit_slack(module_slack_bytes(&module) as u64);
+            census_unit_note(&module);
         }
         let leaked: &'static Module = Box::leak(Box::new(module));
         if pure && self.main_hir.is_some() {

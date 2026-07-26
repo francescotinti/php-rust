@@ -19,8 +19,42 @@ mod server;
 
 /// The evaluator's per-request workload is allocation-bound (Zval/PhpArray
 /// churn); mimalloc's sharded free lists stand in for Zend's bin/chunk ZMM.
+#[cfg(not(feature = "mem-census"))]
 #[global_allocator]
 static GLOBAL_ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
+/// WP-60 P3: census builds meter every allocation through the global
+/// allocator (the clone-delta deep-size meter, design60 P3b). Counters live
+/// in `php_types::memcensus`; the wrapper stays in the binary that owns the
+/// allocator choice. Never in parity/A-B builds (feature-gated like all
+/// census plumbing).
+#[cfg(feature = "mem-census")]
+#[global_allocator]
+static GLOBAL_ALLOC: CountingMi = CountingMi;
+
+#[cfg(feature = "mem-census")]
+struct CountingMi;
+
+#[cfg(feature = "mem-census")]
+unsafe impl std::alloc::GlobalAlloc for CountingMi {
+    unsafe fn alloc(&self, layout: std::alloc::Layout) -> *mut u8 {
+        php_types::memcensus::galloc_note(layout.size());
+        std::alloc::GlobalAlloc::alloc(&mimalloc::MiMalloc, layout)
+    }
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: std::alloc::Layout) {
+        php_types::memcensus::gfree_note(layout.size());
+        std::alloc::GlobalAlloc::dealloc(&mimalloc::MiMalloc, ptr, layout)
+    }
+    unsafe fn alloc_zeroed(&self, layout: std::alloc::Layout) -> *mut u8 {
+        php_types::memcensus::galloc_note(layout.size());
+        std::alloc::GlobalAlloc::alloc_zeroed(&mimalloc::MiMalloc, layout)
+    }
+    unsafe fn realloc(&self, ptr: *mut u8, layout: std::alloc::Layout, new_size: usize) -> *mut u8 {
+        php_types::memcensus::galloc_note(new_size);
+        php_types::memcensus::gfree_note(layout.size());
+        std::alloc::GlobalAlloc::realloc(&mimalloc::MiMalloc, ptr, layout, new_size)
+    }
+}
 
 /// Best-effort human text from a caught panic payload (the common `&str` /
 /// `String` cases; anything else is reported opaquely).

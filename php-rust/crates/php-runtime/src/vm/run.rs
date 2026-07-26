@@ -457,6 +457,13 @@ impl<'m> super::Vm<'m> {
     }
 
     pub(super) fn run_loop(&mut self, baseline: usize) -> Result<RunExit, PhpError> {
+        // WP-60 P2(a): park the VM for the census window-context renderer
+        // (tag=ctx). Two relaxed stores, census builds only.
+        #[cfg(feature = "mem-census")]
+        {
+            php_types::memcensus::set_ctx_hook(super::census_ctx_hook);
+            super::census_vm_park(self as *const Self as usize);
+        }
         loop {
             // Defensive call-stack depth guard (mirrors `eval::guard_call_depth`):
             // surface a catchable PHP `Error` before runaway recursion exhausts
