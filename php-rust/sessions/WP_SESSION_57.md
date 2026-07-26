@@ -55,16 +55,50 @@
 - arr_shape (EOR master): packed b1=22.198 · hashed b1+b2=21.437 ·
   hashed b4 (9-16 el)=3.041/2,1MB · coda ≥b7: 96 arr/1,1MB.
 
-## ⚠️ Panic census-only (BACKLOG, non riprodotto)
+## ⚠️ Panic census-only — INDAGINE COMPLETA (mandato utente, coda di sessione)
 
 Prima run full census: panic del master a ~6 min, `run.rs:478`
 `index out of bounds: len 78, index 78` (PC oltre fine `func.ops`).
-Rerun identico +`--debug`+`RUST_BACKTRACE=1`: intera suite completata
-senza panic ⇒ non-deterministico. MAI visto sui binari di parità (~45
-full run). Solo build op-census. Evidenza in
-`wp57-harness/full-out/full-census.txt`. Nota onestà collegata: la run
-census+--debug chiude 7F vs 2F di run45 (5 extra = assert sul conteggio
-query DB, sensibili al timing) — i binari census non sono mai giudici.
+**Indagine sistematica** (richiesta utente prima della tranche 2):
+- **Caccia statica**: l'invariante di compilazione (ogni Func termina con
+  `PushConst;Ret`) esclude il fall-through; `Ret` poppa sempre; tutti i
+  target jump/catch/finally sono indirizzi COMPILATI (deterministici ⇒
+  incompatibili con la non-riproducibilità); lo scheduler dtor applica
+  `(top,ip)` immediatamente. Restano solo i meccanismi di park/resume.
+- **Nella famiglia park/resume trovato un BUG REALE DI PARITÀ** (sotto):
+  stato `yield_from` stantio — stessa famiglia meccanica (stato residuo
+  nei frame ripresi), ma il collegamento a ip==len NON è derivabile dal
+  codice: NON dichiarato causa del panic.
+- **Riproduzione**: 3 full census aggiuntivi (1×--debug, 1×condizioni
+  originali con trappola armata) TUTTI puliti — panic 1/4 run totali,
+  non riprodotto. La repro strumentata chiude 30.472 test con
+  **2F/86W = profilo run45** (conferma: i 7F della run --debug erano
+  artefatti del timing sugli assert query-count).
+- **Mitigazione permanente**: trappola diagnostica nei build census
+  (`ip>=len` → fn/file/line, coda op, exc_table, stack frame) — se
+  ricompare, la diagnosi è automatica. Zero costo parità (cfg).
+- **Verdetto onesto**: root cause NON dimostrata; bug adiacente reale
+  trovato e chiuso; strumento di cattura in posizione. Resta nel backlog
+  con questa evidenza.
+
+## 🔴 FIX ENGINE (parità): `yield_from` stantio dopo throw del delegate catturato (`e9a1679`)
+
+`probe57-yieldfrom-stale.php`: delegate che lancia al primo avvio,
+catturato DENTRO il generatore esterno → oracle `caught,10,20,30,done`;
+phpr saltava la delega successiva (`caught,30,done`). Causa: nel ramo Gen
+`ext.yield_from` è settato PRIMA di `ensure_started` (run.rs:2859→2861) e
+nessun percorso d'errore lo puliva: il `yield from` successivo prendeva
+il ramo re-entry (poppa il proprio delegate come "sent", vede il sub
+stantio Done) ⇒ delega saltata in silenzio. **Fix**: l'unwind che
+instrada un handler (catch O finally) nel frame azzera la delegazione
+in-flight (semantica PHP: l'espressione yield-from ha lanciato), notando
+i riferimenti rilasciati come root (disciplina gc_note). **TDD**:
+`generator_yield_from_survives_caught_delegate_throw` rosso→verde.
+**GATE57 VERDE**: corpus **1421 IDENTICO** per nome · refl **290
+IDENTICO** · ORM **3E/13F IDENTICO** · hk **0E/0F** · cargo **1643/0**.
+Probe = oracle. **Stash: `phpr-wp57` (sha256 a5ae7d27…)**; il fail-set
+full per nome verrà ri-validato dal full A/B della tranche 2 (WP-58) —
+il fix altera solo il caso errore-catturato del `yield from`.
 
 ## ⭐ Lezioni
 
@@ -90,12 +124,11 @@ query DB, sensibili al timing) — i binari census non sono mai giudici.
 
 ## Prossimo (WP-58)
 
-1. **Fase 3 tranche 2 coi numeri veri**: arena handle-based entries
-   (banda onesta −10..−20MB peak) O — più ricco — attacco al fuori-canale
-   (il fisico 1.536MB ha ~1,15GB fuori dai canali valore: allocatore/
-   frammentazione/COW PHPUnit; unit 222,6MB standing) — decisione di
-   rotta utente sull'ordine.
+1. **⚖️ DECISIONE UTENTE (2026-07-26, in sessione): tranche 2 arena
+   COMUNQUE** (banda onesta −10..−20MB; l'indagine panic richiesta è
+   chiusa col verdetto sopra). Il full A/B della tranche valida anche il
+   fail-set del fix yield_from (baseline run33, old = phpr-wp57).
 2. Candidato metro: estendere accounted+sync al canale obj (chiude
    l'ultimo death-estimator).
-3. Backlog: panic census-only run.rs:478 (evidenza sopra); bug isset via
-   `__get` annidato (WP-42).
+3. Backlog: panic census-only run.rs:478 (trappola armata, evidenza
+   sopra); bug isset via `__get` annidato (WP-42).

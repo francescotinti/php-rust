@@ -22,11 +22,19 @@
 > **Ri-quota tranche 2: arena handle ≈ −10..−20MB (~−1% fisico),
 > exact-fit ≈ −1..−2MB — la leva GRANDE di footprint è FUORI dal canale
 > arr** (~1,15GB fuori dai canali valore + unit 222,6MB). Divergenze
-> WP-55/56 catalogate in PHPR_DIVERGENCES (`0b5790f`). ⚠️ NUOVO a
-> backlog: panic census-only run.rs:478 (ip==len, non-deterministico,
-> mai sui binari di parità — evidenza in WP_SESSION_57). Binari census:
-> `phpr-op57` (dcb589ea…), `phpr-memgc57` (41a21c65…). **Storia:
-> `sessions/WP_SESSION_57.md`. WP-56: `sessions/WP_SESSION_56.md`.**
+> WP-55/56 catalogate in PHPR_DIVERGENCES (`0b5790f`). **CODA DI
+> SESSIONE (mandato utente): indagine COMPLETA del panic census-only
+> run.rs:478** — root cause non dimostrata (1/4 run, 3 repro pulite,
+> trappola diagnostica permanente nei build census), ma l'indagine ha
+> scovato un **BUG REALE di parità: `yield_from` stantio dopo throw del
+> delegate catturato nel generatore (delega successiva SALTATA — oracle
+> 10,20 vs phpr niente). FIX `e9a1679` + TDD; GATE57 VERDE: corpus 1421
+> IDENTICO · refl 290 · ORM 3E/13F · hk 0E/0F · cargo 1643/0. Release
+> CAMBIATA ⇒ stash `phpr-wp57` (a5ae7d27…)**; fail-set full da
+> ri-validare col full A/B della tranche 2. ⚖️ DECISIONE UTENTE:
+> **WP-58 = tranche 2 arena COMUNQUE**. Binari census: `phpr-op57`,
+> `phpr-memgc57` (41a21c65…). **Storia: `sessions/WP_SESSION_57.md`.
+> WP-56: `sessions/WP_SESSION_56.md`.**
 
 ## 📁 Convenzioni (decisione utente 2026-07-23)
 
@@ -63,7 +71,7 @@
 - Commit AND push a ogni step; deviazioni deliberate = marker
   `BUG(port):` / `PERF(port):` / `TODO(port):`.
 
-## Stato gate per nome (gate56 su `0943f58` resta CORRENTE — WP-57 non ha toccato i binari di parità: i commit b4e85ca/b23de56 sono solo codice `#[cfg(op-census|mem-census)]` compilato via, release verificato = phpr-wp56 65466c64…; ultima verifica gate22 integrale: `60c7e04`)
+## Stato gate per nome (gate57 su `e9a1679`, 2026-07-26, `wp57-harness/gate-out/` — fix engine yield_from: corpus **1421 IDENTICO** · refl **290 IDENTICO** · ORM **3E/13F IDENTICO** · hk **0E/0F** · cargo **1643/0**; release = **phpr-wp57 a5ae7d27…**; ⚠️ fail-set FULL non ancora ri-validato post-fix — lo fa il full A/B di WP-58 (baseline run33, old=phpr-wp57); ultima verifica gate22 integrale: `60c7e04`)
 
 - Gate56 verde (2026-07-26, tree `0943f58`): corpus **1421 IDENTICO** per
   nome (baseline = `wp55-harness/gate-out/corpus.fails`) · **refl 290
@@ -149,10 +157,13 @@
 #  phpr-op57 (dcb589ea…, phpr-op-target/) e phpr-memgc57 (41a21c65…,
 #  phpr-mem-target/); dati: full-out/opcensus57-debug.txt (tabella `.=`
 #  full), census-media-out/memcensus57.txt (arr esatto + arr_shape).
-#  NESSUNO stash nuovo: parità invariata, resta phpr-wp56.
+#  Coda di sessione (indagine panic): gate57.sh (baseline = gate-out
+#  wp56), probe57-yieldfrom-stale.php (regressione fix e9a1679),
+#  run57-census-debug.sh; trappola diagnostica ip>=len nei build census.
+#  Stash NUOVO: phpr-wp57 (sha256 a5ae7d27…) — release col fix engine.
 ```
 
-## 🎯 PROSSIMO LAVORO — WP-58: tranche 2 Fase 3 coi numeri veri O attacco al fuori-canale (decisione di rotta)
+## 🎯 PROSSIMO LAVORO — WP-58: Fase 3 tranche 2 ARENA (⚖️ decisione utente 2026-07-26)
 
 **Rotta (utente 2026-07-24)**: `FOOTPRINT_CPU_ROADMAP.md` — footprint-first,
 safe-only, TUTTE le fasi comunque, **niente revert su insuccesso**.
@@ -160,15 +171,17 @@ Laravel POSTICIPATA a valle. WP-57 (quota) ha chiuso ENTRAMBE le metà del
 mandato: canale `.=` non-locale MORTO (0,70MB sul full) e arr peak esatto
 66,4MB = 4,3% del fisico.
 
-1. **DECISIONE DI ROTTA (utente)**: con l'arena handle-based quotata
-   onestamente a ~−10..−20MB (~−1% fisico), l'ordine sensato dell'arco
-   diventa: (a) eseguire comunque la tranche 2 arena (direttiva "tutte le
-   fasi"; banda piccola ma CPU-side l'indice keyless ha già pagato −2,66%
-   full — l'arena può ripetere il pattern su alloc/dealloc); oppure
-   (b) prima il FUORI-CANALE: il fisico 1.536MB ha ~1,15GB oltre i canali
-   valore (attribuzione Fase 0/WP-54: allocatore/frammentazione/COW
-   PHPUnit) + unit 222,6MB standing. Il verbale WP-57 consegna i numeri;
-   la scelta d'ordine è di rango utente.
+1. **⚖️ DECISIONE UTENTE (2026-07-26, in sessione WP-57): tranche 2
+   arena COMUNQUE**, presa DOPO l'indagine panic richiesta (verbale in
+   WP_SESSION_57: root cause non dimostrata, trappola armata, bug
+   adiacente yield_from FIXATO e gate-verde). Banda footprint onesta
+   ~−10..−20MB (~−1% fisico) — ma CPU-side l'indice keyless ha pagato
+   −2,66% full: l'arena (alloc/dealloc/rounding) può ripetere il
+   pattern. Design arena handle-based entries su `design56.md`+KeyIndex
+   (già arena-compatibile, solo u32); quota size-class PRIMA (pin a),
+   sentinelle probe56 riusabili (pin b), giudici = ab + full
+   interleaved stessa-sera vs old **phpr-wp57** (che ri-valida ANCHE il
+   fail-set del fix yield_from vs run33).
 2. **Metro**: estendere accounted+census_sync al canale obj (ultimo
    death-accounted; pattern validato alla unità su arr).
 3. **Residuo full vs oracle (2,06×)**: attribuzione WP-54 aggiornata:

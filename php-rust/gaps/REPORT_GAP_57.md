@@ -1,10 +1,15 @@
 # REPORT_GAP_57 — gap perf oracle↔phpr della sessione WP-57
 
 > SOLO le misure della sessione WP-57; trend cumulativo in `GAP_TREND.md`.
-> Sessione di QUOTA: **zero modifiche ai binari di parità** (release
-> verificato = stash `phpr-wp56` sha256 65466c64…) ⇒ media CPU/footprint e
-> full-suite NON rimisurati — restano validi i riferimenti WP-56
-> (media 2,61× · footprint 4,08× · full run45 2,06×).
+> Sessione di QUOTA: nessuna leva perf sui binari di parità ⇒ media
+> CPU/footprint e full-suite NON rimisurati — restano validi i riferimenti
+> WP-56 (media 2,61× · footprint 4,08× · full run45 2,06×).
+> ⚠️ AGGIORNAMENTO coda di sessione: l'indagine panic (mandato utente) ha
+> prodotto un **FIX ENGINE di parità** (`e9a1679`, yield_from stantio —
+> semantica solo del caso errore-catturato, nessuna attesa perf) ⇒ release
+> ora = **phpr-wp57 (a5ae7d27…)**, GATE57 VERDE per nome (corpus 1421 ·
+> refl 290 · ORM 3E/13F · hk 0E/0F · cargo 1643/0); fail-set FULL da
+> ri-validare col full A/B di WP-58 (baseline run33).
 
 ## Misure della sessione (quota, non gap)
 
