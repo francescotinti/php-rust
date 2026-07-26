@@ -82,6 +82,30 @@ lavoro DENTRO corpi esistenti, elidere op a emit-time, ridurre alloc-rate.
   + drain pool + `mi_collect`) — è il modello request-bound che dà a Zend
   i suoi 0,4GB, simulabile senza toccare le strutture.
 
+### Sedie aggiunte a valle di WP-58 (⚖️ decisione utente 2026-07-26 — i
+### metri esatti dicono: canali valore ≈12% del fisico, ~1,1GB fuori)
+
+- **Leijen** (mimalloc): il principale sospettato del fuori-canale è il
+  modello di ritenzione per pagina/size-class dell'allocatore (una pagina
+  resta committed finché UN blocco è vivo; churn 5,46M arr/run). Mandato:
+  `mi_stats` al picco (committed vs reserved vs peak), opzioni purge/
+  commit, `mi_heap_collect(force)` al boundary — il verdetto
+  frammentazione-vs-ritenzione si prende in UNA run strumentata.
+- **Stogov** (Zend internals): le tre risposte strutturali dello 0,4GB
+  dell'oracolo — arena per-request (ZMM), stringhe interned + immutable
+  array in opcache (i letterali non vengono MAI ricreati né refcounted),
+  layout HashTable. Mandato: quota duplicati-str/letterali (29M
+  costruzioni str/run è il segno del canale che Zend ha azzerato),
+  equità dei confronti col C PHP, target per-canale.
+- **Gregg** (attribuzione): mai attribuire il picco per sottrazione
+  (fisico − canali = mistero) ma per ACCUMULO: campionare chi tocca
+  pagine nuove mentre il footprint sale — vmmap differenziale per
+  regione + malloc_history/Instruments a finestre (schema WP-54 esteso
+  ai byte). Mandato: trasformare il residuo in lista di colpevoli.
+
+**NON invitati (disciplina)**: Pall/Ertl (riaprirebbero l'arco
+registri/threading chiuso da WP-44); Lattner/JIT (fuori rotta safe-only).
+
 ## Roadmap (fasi, ognuna = 1 sessione WP salvo nota; parità per nome a ogni commit; A/B interleaved come giudice)
 
 ### Fase 0 — Attribuzione byte-per-struttura (WP-45)
