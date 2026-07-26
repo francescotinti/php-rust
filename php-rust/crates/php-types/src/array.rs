@@ -104,6 +104,18 @@ const SLOT_TOMB: u32 = u32::MAX - 1;
 const HOLDS_BIT: u32 = 1 << 31;
 const CURSOR_MASK: u32 = HOLDS_BIT - 1;
 
+/// WP-58 (leva C): hashed arrays whose entry table (live + tombstones) fits
+/// in this many slots carry NO index at all (`KeyIndex::slots` empty) — a
+/// lookup linearly scans the entries, which is the same key comparison the
+/// probe path performs on its candidate, minus the mix/probe/maintenance
+/// and minus the 32B+ slots allocation. The dominant hashed population
+/// (WP-57 histogram: 21,4k of 26,7k standing arrays hold 1-4 elements)
+/// never builds an index. Not observable: iteration order lives in
+/// `entries`, and a key is unique by invariant, so scan and probe find the
+/// same slot. The index materializes once the table would exceed this
+/// bound and only goes away again through `build` (compaction).
+const SCAN_MAX: usize = 8;
+
 /// Murmur3 fmix64: spreads the (cached) key hash over all bits so the
 /// power-of-two mask sees a uniform distribution.
 #[inline]
@@ -160,7 +172,16 @@ fn table_cap(live: usize) -> usize {
 
 impl KeyIndex {
     /// Build a fresh index over the live entries (escalation, compaction).
+    /// A table of at most [`SCAN_MAX`] slots stays in scan mode (no slots
+    /// allocation — see the constant's doc).
     fn build(entries: &Entries, live: usize) -> KeyIndex {
+        if entries.len() <= SCAN_MAX {
+            return KeyIndex {
+                slots: Box::new([]),
+                live: entries.iter().filter(|e| e.is_some()).count() as u32,
+                tomb: 0,
+            };
+        }
         let mut idx = KeyIndex {
             slots: vec![SLOT_EMPTY; table_cap(live)].into_boxed_slice(),
             live: 0,
@@ -191,6 +212,13 @@ impl KeyIndex {
     /// point at (the single stored copy of the key).
     #[inline]
     fn lookup(&self, key: &Key, entries: &Entries) -> Option<u32> {
+        if self.slots.is_empty() {
+            // Scan mode (≤ SCAN_MAX slots): compare keys in entry order.
+            return entries.iter().enumerate().find_map(|(i, e)| match e {
+                Some((k, _)) if k == key => Some(i as u32),
+                _ => None,
+            });
+        }
         let mask = self.slots.len() - 1;
         let mut i = (key.khash() as usize) & mask;
         loop {
@@ -213,6 +241,28 @@ impl KeyIndex {
     /// rebuild rehashes from the OLD slots, never rescans `entries`, so a
     /// pushed-but-unindexed entry cannot be double-added.
     fn insert_new(&mut self, key: &Key, pos: u32, entries: &Entries) {
+        if self.slots.is_empty() {
+            self.live += 1;
+            if (pos as usize) < SCAN_MAX {
+                return; // still within the scan bound after this insert
+            }
+            // Crossing SCAN_MAX: materialize the table over the live
+            // entries plus the incoming (key, pos). The incoming entry may
+            // or may not be pushed yet (both call orders are legal), so
+            // position `pos` is skipped in the sweep and added explicitly.
+            self.slots =
+                vec![SLOT_EMPTY; table_cap(self.live as usize)].into_boxed_slice();
+            self.tomb = 0;
+            for (i, e) in entries.iter().enumerate() {
+                if i as u32 != pos {
+                    if let Some((k, _)) = e {
+                        self.raw_insert(k.khash(), i as u32);
+                    }
+                }
+            }
+            self.raw_insert(key.khash(), pos);
+            return;
+        }
         if ((self.live + self.tomb + 1) as usize) * 2 > self.slots.len() {
             self.rebuild(entries);
         }
@@ -238,6 +288,15 @@ impl KeyIndex {
 
     /// Tombstone `key`'s slot; returns the entry position it held.
     fn remove(&mut self, key: &Key, entries: &Entries) -> Option<u32> {
+        if self.slots.is_empty() {
+            // Scan mode: no slot to tombstone, just the live count.
+            let pos = entries.iter().enumerate().find_map(|(i, e)| match e {
+                Some((k, _)) if k == key => Some(i as u32),
+                _ => None,
+            })?;
+            self.live -= 1;
+            return Some(pos);
+        }
         let mask = self.slots.len() - 1;
         let mut i = (key.khash() as usize) & mask;
         loop {
@@ -1420,6 +1479,49 @@ mod tests {
                 other => panic!("{mk:?}: {other:?}"),
             }
         }
+    }
+
+    /// WP-58 leva C: hashed arrays within SCAN_MAX slots carry no index
+    /// allocation; the index materializes exactly when the 9th slot
+    /// arrives, and correctness holds across the boundary, removals, and
+    /// compaction back under the bound.
+    #[test]
+    fn small_hashed_scan_mode_elides_index() {
+        fn idx_len(a: &PhpArray) -> usize {
+            match &a.repr {
+                Repr::Hashed { index, .. } => index.slots.len(),
+                Repr::Packed(_) => panic!("expected hashed"),
+            }
+        }
+        let mut a = PhpArray::new();
+        a.insert(k("k0"), Zval::Long(0));
+        assert_eq!(idx_len(&a), 0, "small hashed: no index");
+        for i in 1..8 {
+            a.insert(k(&format!("k{i}")), Zval::Long(i));
+        }
+        assert_eq!(a.len(), 8);
+        assert_eq!(idx_len(&a), 0, "8 slots still scan mode");
+        for i in 0..8 {
+            assert!(matches!(a.get(&k(&format!("k{i}"))), Some(Zval::Long(_))));
+        }
+        assert!(a.get(&k("nope")).is_none());
+        a.insert(k("k8"), Zval::Long(8)); // 9th slot: materializes
+        assert!(idx_len(&a) >= 16, "index materialized past SCAN_MAX");
+        for i in 0..9 {
+            assert!(matches!(a.get(&k(&format!("k{i}"))), Some(Zval::Long(_))));
+        }
+        let keys: Vec<_> = a.iter().map(|(kk, _)| kk).collect();
+        let want: Vec<_> = (0..9).map(|i| k(&format!("k{i}"))).collect();
+        assert_eq!(keys, want, "insertion order across materialization");
+        // Deep removal compacts back under the bound → scan mode again.
+        for i in 0..7 {
+            a.remove(&k(&format!("k{i}")));
+        }
+        assert_eq!(a.len(), 2);
+        assert_eq!(idx_len(&a), 0, "compaction under SCAN_MAX drops the index");
+        assert!(matches!(a.get(&k("k7")), Some(Zval::Long(7))));
+        assert!(matches!(a.get(&k("k8")), Some(Zval::Long(8))));
+        assert!(a.get(&k("k0")).is_none());
     }
 
     /// WP-58 pin (a): the allocation-side sizes the arena quota rests on.
