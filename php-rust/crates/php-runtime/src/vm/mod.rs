@@ -2217,14 +2217,6 @@ impl<'m> Vm<'m> {
     /// a reused id must not inherit a "destructor already ran" mark or a
     /// dead lazy-object state.
     fn next_id(&mut self) -> u32 {
-        // WP-58 Ob.2: the id choke is the obj channel's construction funnel
-        // — allocate the fixed header part here (props live-account
-        // themselves; Object::drop with id != 0 frees exactly this figure).
-        #[cfg(feature = "mem-census")]
-        php_types::memcensus::alloc(
-            php_types::memcensus::CH_OBJ,
-            php_types::memcensus::obj_fixed(),
-        );
         if let Some(id) = php_types::take_freed_object_id() {
             self.destructed.remove(&id);
             self.lazy_init.remove(&id);
@@ -2252,6 +2244,21 @@ impl<'m> Vm<'m> {
         let id = self.next_object_id;
         self.next_object_id += 1;
         id
+    }
+
+    /// Mint a handle id for a REAL `Object` (WP-59 Ob.2). The obj-channel
+    /// census alloc lives on this wrapper, NOT on `next_id`: the raw choke
+    /// is shared with closures/generators/fcc/rebind, whose ids never pass
+    /// through `Object::drop` — accounting there minted one phantom live
+    /// object per closure/generator created (~46k per media run, the WP-58
+    /// walk-recon gap; Gregg §3 hypothesis 1, confirmed by call-site audit).
+    fn next_obj_id(&mut self) -> u32 {
+        #[cfg(feature = "mem-census")]
+        php_types::memcensus::alloc(
+            php_types::memcensus::CH_OBJ,
+            php_types::memcensus::obj_fixed(),
+        );
+        self.next_id()
     }
 
     /// Record a value that is about to be dropped as a possible GC root: if it
@@ -7561,7 +7568,7 @@ impl<'m> Vm<'m> {
                         class_id: orc.borrow().class_id,
                         class_name: PhpStr::new(b"\0__phpr_cformat".to_vec()),
                         props,
-                        id: self.next_id(),
+                        id: self.next_obj_id(),
                         info: Rc::new(php_types::ObjectInfo::default()),
                         rare: None,
                         lazy: None,
@@ -7915,7 +7922,7 @@ impl<'m> Vm<'m> {
         for name in &cc.uninit_props {
             props.set(name, Zval::Undef);
         }
-        let id = self.next_id();
+        let id = self.next_obj_id();
         let obj = Object { class_id: cid as u32, class_name, props, id, info, rare: None, lazy: None, proxy_instance: None, gc: php_types::GcMark::new() };
         let rc = Rc::new(RefCell::new(obj));
         // Track for `__destruct` (OOP-3d), like every other freshly minted object.
@@ -9826,7 +9833,7 @@ impl<'m> Vm<'m> {
         }
         let class_name = Rc::clone(&cc.class_name);
         let info = Rc::clone(&cc.info);
-        let id = self.next_id();
+        let id = self.next_obj_id();
         let obj = Object { class_id: cid as u32, class_name, props, id, info, rare: None, lazy: None, proxy_instance: None, gc: php_types::GcMark::new() };
         let rc = Rc::new(RefCell::new(obj));
         // Track for `__destruct` (OOP-3d): the extra strong ref drives the sweep.
@@ -10680,7 +10687,7 @@ impl<'m> Vm<'m> {
             props.set(b"value", v.to_zval());
             entries.push((Box::from(&b"value"[..]), PropVis::Public));
         }
-        let id = self.next_id();
+        let id = self.next_obj_id();
         let obj = Object {
             class_id: class as u32,
             class_name: Rc::clone(&cc.class_name),

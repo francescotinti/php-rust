@@ -3058,7 +3058,7 @@ impl<'m> super::Vm<'m> {
                             class_id: b.class_id,
                             class_name: Rc::clone(&b.class_name),
                             props,
-                            id: self.next_id(),
+                            id: self.next_obj_id(),
                             info: Rc::clone(&b.info),
                             // A clone keeps the source's readonly props
                             // initialised; the clone-write grants come below
@@ -3111,7 +3111,7 @@ impl<'m> super::Vm<'m> {
                             class_id: wcid,
                             class_name: wname,
                             props: Props::new(),
-                            id: self.next_id(),
+                            id: self.next_obj_id(),
                             info: winfo,
                             rare: None,
                             lazy: Some(LazyKind::Proxy),

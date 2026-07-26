@@ -139,6 +139,11 @@ fn watermark() {
     {
         dump_line("mark");
     }
+    // WP-59 Ob.1a: windows re-keyed on the TRUE physical footprint —
+    // throttled (task_info ~1µs) to one check per 16384 census events.
+    if PHYS_TICK.fetch_add(1, Relaxed) & 0x3FFF == 0 {
+        phys_check();
+    }
 }
 
 fn proxy_total() -> i64 {
@@ -190,6 +195,10 @@ fn dump_line(tag: &str) {
 
 extern "C" fn dump_exit() {
     dump_line("exit");
+    // WP-59 Ob.1: exit snapshot (win=0) — the cleanest fragmentation read:
+    // channel live is exact here (recon reached==live), so per-bin
+    // committed−used at this instant IS retention + non-censused standing.
+    phys_window_dump(0, phys_footprint(), "exit_mi");
 }
 
 /// Deep retained-size walk from a root value (Fase 0 root attribution):
@@ -391,5 +400,304 @@ pub fn report_roots(entries: &[(String, u64)]) {
                 );
             }
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// WP-59 Ob.1 — "Fase 0-bis" window instrumentation (census-only).
+//
+// The WP-45 watermark keys on the census PROXY total (peaks ~0,4GB) while the
+// physical footprint peaks ~1,6GB: three quarters of the climb happened in
+// windows the dump never delimited (Gregg R2). These hooks re-key snapshot
+// windows on the TRUE physical footprint (`task_info` phys_footprint — the
+// same ledger `footprint(1)`/vmmap report), and at each +128MB window emit:
+//   tag=mi_proc   — mi_process_info (rss/commit, current+peak) + phys
+//   tag=mi_bin    — per-size-class occupancy (reserved/committed/used) from
+//                   mi_heap_visit_blocks(visit_blocks=false), main heap and
+//                   abandoned pages separately (src=main|aband)
+//   tag=mark_phys — the usual channel snapshot line
+// plus the full mimalloc stats to $PHPR_MI_STATS (own file: multi-line), and
+// a flag-file touch ($PHPR_PHYS_FLAG) for the external vmmap supervisor.
+// Reconciliation identity (pre-registered, Leijen 3): Σ used_bins = census +
+// non-censused live; Σ (committed − used) = fragmentation; + metadata +
+// non-mimalloc regions ≈ physical footprint ±10-15%.
+//
+// Everything below is metrology: it runs only in `mem-census` builds and only
+// every 16384 census events (task_info ~1µs) or at a window boundary.
+
+/// Prefix of darwin's `task_vm_info` out to `phys_footprint` (rev1). The
+/// kernel copies `min(requested, available)` words, so asking for exactly
+/// this prefix is stable ABI on every macOS that has phys_footprint.
+#[repr(C)]
+struct TaskVmInfoPrefix {
+    virtual_size: u64,
+    region_count: i32,
+    page_size: i32,
+    resident_size: u64,
+    resident_size_peak: u64,
+    device: u64,
+    device_peak: u64,
+    internal: u64,
+    internal_peak: u64,
+    external: u64,
+    external_peak: u64,
+    reusable: u64,
+    reusable_peak: u64,
+    purgeable_volatile_pmap: u64,
+    purgeable_volatile_resident: u64,
+    purgeable_volatile_virtual: u64,
+    compressed: u64,
+    compressed_peak: u64,
+    compressed_lifetime: u64,
+    phys_footprint: u64,
+}
+
+const TASK_VM_INFO: u32 = 22;
+
+extern "C" {
+    static mach_task_self_: u32;
+    fn task_info(task: u32, flavor: u32, info: *mut i32, count: *mut u32) -> i32;
+}
+
+/// The ledger the judges' metric reports (`/usr/bin/time -l` "peak memory
+/// footprint" is the peak of this): internal + compressed, in bytes.
+pub fn phys_footprint() -> u64 {
+    let mut info = std::mem::MaybeUninit::<TaskVmInfoPrefix>::zeroed();
+    let mut count = (std::mem::size_of::<TaskVmInfoPrefix>() / 4) as u32;
+    let kr = unsafe {
+        task_info(mach_task_self_, TASK_VM_INFO, info.as_mut_ptr() as *mut i32, &mut count)
+    };
+    if kr != 0 || (count as usize) * 4 < std::mem::size_of::<TaskVmInfoPrefix>() {
+        return 0;
+    }
+    unsafe { info.assume_init() }.phys_footprint
+}
+
+// mimalloc v3 public API (statically linked via the `mimalloc` crate; no
+// bindings in libmimalloc-sys for these, so they are declared here).
+#[repr(C)]
+struct MiHeapArea {
+    blocks: *mut std::os::raw::c_void,
+    reserved: usize,
+    committed: usize,
+    used: usize, // number of ALLOCATED BLOCKS in the area
+    block_size: usize,
+    full_block_size: usize, // block size incl. padding/metadata
+    reserved1: *mut std::os::raw::c_void,
+}
+
+type MiBlockVisitFun = unsafe extern "C" fn(
+    heap: *const std::os::raw::c_void,
+    area: *const MiHeapArea,
+    block: *mut std::os::raw::c_void,
+    block_size: usize,
+    arg: *mut std::os::raw::c_void,
+) -> bool;
+
+extern "C" {
+    fn mi_heap_main() -> *mut std::os::raw::c_void;
+    fn mi_heap_visit_blocks(
+        heap: *mut std::os::raw::c_void,
+        visit_blocks: bool,
+        visitor: MiBlockVisitFun,
+        arg: *mut std::os::raw::c_void,
+    ) -> bool;
+    fn mi_heap_visit_abandoned_blocks(
+        heap: *mut std::os::raw::c_void,
+        visit_blocks: bool,
+        visitor: MiBlockVisitFun,
+        arg: *mut std::os::raw::c_void,
+    ) -> bool;
+    fn mi_process_info(
+        elapsed_msecs: *mut usize,
+        user_msecs: *mut usize,
+        system_msecs: *mut usize,
+        current_rss: *mut usize,
+        peak_rss: *mut usize,
+        current_commit: *mut usize,
+        peak_commit: *mut usize,
+        page_faults: *mut usize,
+    );
+    fn mi_stats_print_out(
+        out: Option<unsafe extern "C" fn(*const std::os::raw::c_char, *mut std::os::raw::c_void)>,
+        arg: *mut std::os::raw::c_void,
+    );
+}
+
+/// Per-size-class occupancy table filled by [`area_visitor`]. Fixed arrays:
+/// the visitor MUST NOT allocate (it walks the very heap that would serve
+/// the allocation). Sizes > 64KiB collapse into one "large" bucket — those
+/// areas are 1 block each and carry no per-page fragmentation to speak of.
+const N_BINS: usize = 192;
+const LARGE_BUCKET: usize = 1 << 20;
+
+struct BinTab {
+    size: [usize; N_BINS],
+    reserved: [u64; N_BINS],
+    committed: [u64; N_BINS],
+    used_b: [u64; N_BINS],
+    used_n: [u64; N_BINS],
+    areas: [u32; N_BINS],
+    overflow: u32,
+}
+
+impl BinTab {
+    fn boxed() -> Box<Self> {
+        Box::new(BinTab {
+            size: [0; N_BINS],
+            reserved: [0; N_BINS],
+            committed: [0; N_BINS],
+            used_b: [0; N_BINS],
+            used_n: [0; N_BINS],
+            areas: [0; N_BINS],
+            overflow: 0,
+        })
+    }
+}
+
+unsafe extern "C" fn area_visitor(
+    _heap: *const std::os::raw::c_void,
+    area: *const MiHeapArea,
+    _block: *mut std::os::raw::c_void,
+    _block_size: usize,
+    arg: *mut std::os::raw::c_void,
+) -> bool {
+    let t = &mut *(arg as *mut BinTab);
+    let a = &*area;
+    let key = if a.block_size > 65536 { LARGE_BUCKET } else { a.block_size };
+    for i in 0..N_BINS {
+        if t.size[i] == key || t.size[i] == 0 {
+            t.size[i] = key;
+            t.reserved[i] += a.reserved as u64;
+            t.committed[i] += a.committed as u64;
+            t.used_b[i] += (a.used as u64) * (a.full_block_size as u64);
+            t.used_n[i] += a.used as u64;
+            t.areas[i] += 1;
+            return true;
+        }
+    }
+    t.overflow += 1;
+    true
+}
+
+unsafe extern "C" fn mi_out_write(
+    msg: *const std::os::raw::c_char,
+    arg: *mut std::os::raw::c_void,
+) {
+    let fd = arg as usize as i32;
+    let len = libc::strlen(msg);
+    let _ = libc::write(fd, msg as *const std::os::raw::c_void, len);
+}
+
+static PHYS_TICK: AtomicU64 = AtomicU64::new(0);
+static PHYS_MARK: AtomicI64 = AtomicI64::new(256 << 20);
+static PHYS_PEAK: AtomicI64 = AtomicI64::new(0);
+static PHYS_WIN: AtomicU64 = AtomicU64::new(0);
+
+/// Throttled physical-footprint window check, called from [`watermark`]
+/// every 16384 census events (~tens of ms at media alloc rates).
+fn phys_check() {
+    let phys = phys_footprint();
+    if phys == 0 {
+        return;
+    }
+    PHYS_PEAK.fetch_max(phys as i64, Relaxed);
+    let mark = PHYS_MARK.load(Relaxed);
+    if phys as i64 >= mark
+        && PHYS_MARK
+            .compare_exchange(mark, phys as i64 + (128 << 20), Relaxed, Relaxed)
+            .is_ok()
+    {
+        let win = PHYS_WIN.fetch_add(1, Relaxed) + 1;
+        phys_window_dump(win as u32, phys, "mark_phys");
+    }
+}
+
+/// One full window snapshot: mi_process_info + per-bin occupancy (main +
+/// abandoned) into the census file, channel line, mimalloc stats into
+/// `$PHPR_MI_STATS`, flag-file touch for the external vmmap supervisor.
+/// `win == 0` is the exit snapshot.
+fn phys_window_dump(win: u32, phys: u64, tag: &str) {
+    use std::io::Write;
+    if let Ok(path) = std::env::var("PHPR_MEM_CENSUS") {
+        if let Ok(mut f) =
+            std::fs::OpenOptions::new().create(true).append(true).open(path)
+        {
+            let pid = std::process::id();
+            let (mut el, mut us, mut sy, mut rss, mut prss, mut cm, mut pcm, mut flt) =
+                (0usize, 0usize, 0usize, 0usize, 0usize, 0usize, 0usize, 0usize);
+            unsafe {
+                mi_process_info(
+                    &mut el, &mut us, &mut sy, &mut rss, &mut prss, &mut cm, &mut pcm,
+                    &mut flt,
+                )
+            };
+            let _ = writeln!(
+                f,
+                "pid={pid} tag=mi_proc win={win} phys={phys} phys_peak={} rss={rss} peak_rss={prss} commit={cm} peak_commit={pcm}",
+                PHYS_PEAK.load(Relaxed),
+            );
+            let mut main_t = BinTab::boxed();
+            let main_ok = unsafe {
+                mi_heap_visit_blocks(
+                    mi_heap_main(),
+                    false,
+                    area_visitor,
+                    &mut *main_t as *mut BinTab as *mut std::os::raw::c_void,
+                )
+            };
+            let mut ab_t = BinTab::boxed();
+            let ab_ok = unsafe {
+                mi_heap_visit_abandoned_blocks(
+                    mi_heap_main(),
+                    false,
+                    area_visitor,
+                    &mut *ab_t as *mut BinTab as *mut std::os::raw::c_void,
+                )
+            };
+            for (src, ok, t) in [("main", main_ok, &main_t), ("aband", ab_ok, &ab_t)] {
+                if !ok {
+                    let _ = writeln!(f, "pid={pid} tag=mi_bin win={win} src={src} visit=FAILED");
+                    continue;
+                }
+                for i in 0..N_BINS {
+                    if t.size[i] == 0 {
+                        continue;
+                    }
+                    let _ = writeln!(
+                        f,
+                        "pid={pid} tag=mi_bin win={win} src={src} size={} reserved={} committed={} used_b={} used_n={} areas={}",
+                        t.size[i], t.reserved[i], t.committed[i], t.used_b[i], t.used_n[i],
+                        t.areas[i],
+                    );
+                }
+                if t.overflow > 0 {
+                    let _ = writeln!(
+                        f,
+                        "pid={pid} tag=mi_bin win={win} src={src} size=OVERFLOW areas={}",
+                        t.overflow
+                    );
+                }
+            }
+        }
+    }
+    dump_line(tag);
+    if let Ok(path) = std::env::var("PHPR_MI_STATS") {
+        use std::os::unix::io::AsRawFd;
+        if let Ok(mut f) =
+            std::fs::OpenOptions::new().create(true).append(true).open(path)
+        {
+            let _ = writeln!(f, "== pid={} win={} phys={} ==", std::process::id(), win, phys);
+            let _ = f.flush();
+            unsafe {
+                mi_stats_print_out(
+                    Some(mi_out_write),
+                    f.as_raw_fd() as usize as *mut std::os::raw::c_void,
+                )
+            };
+        }
+    }
+    if let Ok(flag) = std::env::var("PHPR_PHYS_FLAG") {
+        let _ = std::fs::write(flag, format!("{win} {phys}\n"));
     }
 }
