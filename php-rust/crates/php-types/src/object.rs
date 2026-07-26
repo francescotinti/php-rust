@@ -365,10 +365,12 @@ impl Object {
 
 impl Drop for Object {
     fn drop(&mut self) {
+        // WP-58 Ob.2: the fixed header part allocated at the id choke
+        // (`Vm::next_id`) comes back here; the props part is freed by
+        // `Props::drop` itself (wherever the taken table ends up dropping).
         #[cfg(feature = "mem-census")]
         if self.id != 0 {
-            crate::memcensus::death(crate::memcensus::CH_OBJ, self.census_bytes());
-            crate::memcensus::count_free(crate::memcensus::CH_OBJ);
+            crate::memcensus::free(crate::memcensus::CH_OBJ, crate::memcensus::obj_fixed());
         }
         // Zend's teardown (zend_objects_store_del) runs free_obj — releasing
         // the properties, so any exclusively-held descendant returns its
@@ -708,7 +710,7 @@ thread_local! {
 /// Slot states: `None` = absent (never seeded, or `unset()`); `Some(Undef)`
 /// = present-but-uninitialized (a typed property without default — rendered
 /// `uninitialized(T)`, still iterated like the old explicit `Undef` entry).
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Props {
     layout: Rc<PropsLayout>,
     slots: Vec<Option<Zval>>,
@@ -716,16 +718,81 @@ pub struct Props {
     live: u32,
     /// Dynamic (undeclared) properties, in assignment order.
     dyn_entries: Vec<(Box<[u8]>, Zval)>,
+    /// WP-58 Ob.2 (census builds only): bytes currently credited to the
+    /// LIVE obj counter for THIS property table — the same
+    /// accounted+sync+Drop discipline as `PhpArray::accounted` (WP-57).
+    /// The obj channel's live figure = Σ(props tables) + the fixed header
+    /// part allocated per real object at the id choke (`Vm::next_id`);
+    /// `ObjRare` and `proxy_instance` stay WALK-only (documented exclusion:
+    /// their mutation sites are pub-field writes without a funnel).
+    #[cfg(feature = "mem-census")]
+    accounted: std::cell::Cell<usize>,
 }
 
 impl Default for Props {
     fn default() -> Self {
-        Props {
+        let new = Props {
             layout: EMPTY_LAYOUT.with(Rc::clone),
             slots: Vec::new(),
             live: 0,
             dyn_entries: Vec::new(),
+            #[cfg(feature = "mem-census")]
+            accounted: std::cell::Cell::new(0),
+        };
+        #[cfg(feature = "mem-census")]
+        new.census_sync_props();
+        new
+    }
+}
+
+impl Clone for Props {
+    fn clone(&self) -> Self {
+        let new = Props {
+            layout: Rc::clone(&self.layout),
+            slots: self.slots.clone(),
+            live: self.live,
+            dyn_entries: self.dyn_entries.clone(),
+            // A copy starts with its own zero balance (never the source's).
+            #[cfg(feature = "mem-census")]
+            accounted: std::cell::Cell::new(0),
+        };
+        #[cfg(feature = "mem-census")]
+        new.census_sync_props();
+        new
+    }
+}
+
+/// WP-58 Ob.2: the props part of the obj channel is live-accounted exactly
+/// (the WP-56 verdict killed the death-avg estimator). Every construction
+/// funnels through `Default`/`with_layout`/`Clone` (private fields), the
+/// only capacity-changing mutators are the dyn-entry pushes in
+/// [`Props::set`]/[`Props::replace`] (declared slots are sized once at
+/// construction), and `Drop` returns exactly the accounted figure.
+#[cfg(feature = "mem-census")]
+impl Props {
+    pub(crate) fn census_bytes_props(&self) -> usize {
+        self.slots.capacity() * std::mem::size_of::<Option<Zval>>()
+            + self.dyn_entries.capacity() * std::mem::size_of::<(Box<[u8]>, Zval)>()
+    }
+
+    #[inline]
+    pub(crate) fn census_sync_props(&self) {
+        let cb = self.census_bytes_props();
+        let delta = cb as i64 - self.accounted.get() as i64;
+        if delta != 0 {
+            crate::memcensus::adjust(crate::memcensus::CH_OBJ, delta);
+            self.accounted.set(cb);
         }
+    }
+}
+
+#[cfg(feature = "mem-census")]
+impl Drop for Props {
+    fn drop(&mut self) {
+        crate::memcensus::adjust(
+            crate::memcensus::CH_OBJ,
+            -(self.accounted.get() as i64),
+        );
     }
 }
 
@@ -750,12 +817,17 @@ impl Props {
     /// `prop_defaults` (the layout's own key order).
     pub fn with_layout(layout: Rc<PropsLayout>) -> Self {
         let n = layout.keys.len();
-        Props {
+        let new = Props {
             layout,
             slots: vec![None; n],
             live: 0,
             dyn_entries: Vec::new(),
-        }
+            #[cfg(feature = "mem-census")]
+            accounted: std::cell::Cell::new(0),
+        };
+        #[cfg(feature = "mem-census")]
+        new.census_sync_props();
+        new
     }
 
     /// Direct slot read (WP-29): the value of declared slot `i`, if live.
@@ -826,6 +898,8 @@ impl Props {
     /// a dynamic one updates in place or appends at the end.
     #[inline]
     pub fn set(&mut self, name: &[u8], value: Zval) {
+        #[cfg(feature = "mem-census")]
+        self.census_sync_props();
         if let Some(i) = self.layout.slot_of(name) {
             if self.slots[i].is_none() {
                 self.live += 1;
@@ -844,6 +918,8 @@ impl Props {
     /// path to hand the dropped value to the GC's possible-roots tracking.
     #[inline]
     pub fn replace(&mut self, name: &[u8], value: Zval) -> Option<Zval> {
+        #[cfg(feature = "mem-census")]
+        self.census_sync_props();
         if let Some(i) = self.layout.slot_of(name) {
             let old = self.slots[i].replace(value);
             if old.is_none() {

@@ -1702,6 +1702,8 @@ mod tests {
         assert_eq!(size_of::<Option<Zval>>(), 16);
         // WP-58 header diet: the per-array heap block must stay on the
         // exact 96B mimalloc bin (going back to 104 costs +16B/array).
+        // Census builds carry the `accounted` Cell (+8B) — parity only.
+        #[cfg(not(feature = "mem-census"))]
         assert_eq!(size_of::<RefCell<PhpArray>>() + 16, 96);
     }
 

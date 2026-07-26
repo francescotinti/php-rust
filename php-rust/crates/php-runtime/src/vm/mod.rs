@@ -2217,8 +2217,14 @@ impl<'m> Vm<'m> {
     /// a reused id must not inherit a "destructor already ran" mark or a
     /// dead lazy-object state.
     fn next_id(&mut self) -> u32 {
+        // WP-58 Ob.2: the id choke is the obj channel's construction funnel
+        // — allocate the fixed header part here (props live-account
+        // themselves; Object::drop with id != 0 frees exactly this figure).
         #[cfg(feature = "mem-census")]
-        php_types::memcensus::count_alloc(php_types::memcensus::CH_OBJ);
+        php_types::memcensus::alloc(
+            php_types::memcensus::CH_OBJ,
+            php_types::memcensus::obj_fixed(),
+        );
         if let Some(id) = php_types::take_freed_object_id() {
             self.destructed.remove(&id);
             self.lazy_init.remove(&id);

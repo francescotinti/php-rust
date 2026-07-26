@@ -92,9 +92,18 @@ pub fn adjust(ch: usize, delta: i64) {
     }
 }
 
-/// Death accounting (OBJ channel): exact bytes measured at drop; the live
-/// byte figure for this channel is estimated at dump time as
-/// `live_count × (cum/cum_n)`.
+/// WP-58 Ob.2: fixed live-bytes of one REAL object (the `Rc<RefCell<..>>`
+/// header block), allocated at the id choke (`Vm::next_id`) and freed at
+/// `Object::drop` (`id != 0`); the props part is live-accounted on `Props`
+/// itself. `ObjRare` + `proxy_instance` are WALK-only (no mutation funnel:
+/// pub-field writes) — a small documented positive residual of
+/// `reached_b − live_b` on objects that carry them.
+pub fn obj_fixed() -> usize {
+    std::mem::size_of::<crate::Object>() + OBJ_OVERHEAD
+}
+
+/// Death accounting (formerly the OBJ channel's feed; every value channel
+/// is live-accounted since WP-58 — kept for potential one-off censuses).
 #[inline]
 pub fn death(ch: usize, bytes: usize) {
     ensure_registered();
@@ -141,21 +150,10 @@ fn proxy_total() -> i64 {
 }
 
 fn live_estimate(ch: usize) -> i64 {
-    if ch == CH_OBJ {
-        // death-accounted channel: live bytes ≈ live count × average death
-        // size. WP-56 measured this estimator at 5,7× over on arr (churn
-        // deaths don't resemble the standing population) — arr is therefore
-        // live-accounted exactly since WP-57 (accounted/census_sync hooks);
-        // only obj still uses the biased average, cross-checked externally.
-        let n = CUM_N[ch].load(Relaxed);
-        if n == 0 {
-            return 0;
-        }
-        let avg = CUM[ch].load(Relaxed) / n;
-        LIVE_N[ch].load(Relaxed).max(0) * avg as i64
-    } else {
-        LIVE[ch].load(Relaxed)
-    }
+    // Every channel is live-accounted since WP-58 (obj: fixed part at the
+    // id choke + Props accounted/sync/Drop; the death-avg estimator died
+    // with WP-56's 5,7× over-count verdict on arr).
+    LIVE[ch].load(Relaxed)
 }
 
 fn dump_line(tag: &str) {
