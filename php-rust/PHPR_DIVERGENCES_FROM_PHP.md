@@ -1745,6 +1745,22 @@ l'oracle e vanno preservati:
   visibility error). Workaround nel prelude: helper privati con nomi
   per-classe (__dicur/__disync in DirectoryIterator). Da fixare in
   resolve_method_runtime.
+- 2026-07-26 (WP-55/56, catalogazione WP-57): due famiglie PRE-esistenti
+  emerse dalle sentinelle dei lavori `.=`/hashed-array (valgono per old E
+  new: non introdotte dalle leve). **(1) Famiglia `.=` (WP-55)**:
+  (a) `$s .= rhs` con `$s` mai definita NON emette il warning "Undefined
+  variable" che Zend produce alla lettura del lhs (il fuso
+  `ConcatAssignSlot` e il fallback leggono lo slot in silenzio);
+  (b) un operando OGGETTO senza `__toString` in `.=`/concat non riproduce
+  la shape esatta dell'Error Zend ("Object of class X could not be
+  converted to string" con la linea dell'espressione). **(2) Dtor dei
+  valori RIMOSSI da array (WP-56, probe56-dtor)**: i `__destruct` dei
+  valori tolti con `unset($a[k])` o mass-unset sono DIFFERITI a fine
+  script invece che eseguiti al punto di rimozione; l'OVERWRITE
+  (`$a[k] = new`) è invece puntuale (il displaced passa da `gc_note`).
+  Timing-only: conteggi e contenuti dei dtor restano identici; stessa
+  radice del punto (2) dell'entry WP-46 (i container rimossi non hanno un
+  sito di nota immediato).
 - 2026-07-24 (WP-46, cycle collector esteso ai container): divergenze
   residue del GC. (1) **Conteggio di `gc_collect_cycles()` sugli array
   annidati da LITERAL const in un ciclo**: `$h = ['inner'=>[1,2,3]];
