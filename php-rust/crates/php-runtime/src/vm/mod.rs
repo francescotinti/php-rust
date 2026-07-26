@@ -1117,6 +1117,19 @@ pub(crate) fn run_module_with_hir<'m>(
                 e.1 += *bytes;
                 e.2 += *net;
             }
+            // WP-62 M0c: top single load events by net — the calibration
+            // probes (known-size synthetic units) read their per-unit net
+            // here; dup rows below aggregate per path and hide singles.
+            {
+                let mut top: Vec<&(Vec<u8>, u64, u64, usize)> = units.iter().collect();
+                top.sort_by(|a, b| b.2.cmp(&a.2));
+                for (file, bytes, net, _p) in top.iter().take(24) {
+                    mc::census_line(&format!(
+                        "tag=unittop bytes_counted={bytes} net={net} path={}",
+                        String::from_utf8_lossy(file)
+                    ));
+                }
+            }
             let mut dups: Vec<(&[u8], u32, u64, u64)> = by
                 .iter()
                 .filter(|(_, (n, _, _))| *n > 1)
