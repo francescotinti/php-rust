@@ -13998,6 +13998,15 @@ fn stub_elision_enabled() -> bool {
     *ON.get_or_init(|| std::env::var("PHPR_STUB_ELISION").is_ok_and(|v| v == "1"))
 }
 
+/// Diagnostic kill-switch for the unit cache (WP-63, Pedersen P1): with
+/// `PHPR_UNIT_CACHE=0` the include path neither probes nor publishes the
+/// cache — the honest cache-off control the P1 probes byte-compare against.
+/// Default ON (unset/any other value): behaviour unchanged.
+fn unit_cache_enabled() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var("PHPR_UNIT_CACHE").map_or(true, |v| v != "0"))
+}
+
 fn uc_stat(f: impl FnOnce(&mut UcStats)) {
     UC_STATS.with(|s| f(&mut s.borrow_mut()));
 }
@@ -14040,6 +14049,9 @@ fn uc_log(event: &str, path: &[u8]) {
 
 /// Whether any fingerprint variant is cached under `key` (miss taxonomy).
 fn unit_cache_key_present(key: &UnitKey) -> bool {
+    if !unit_cache_enabled() {
+        return false;
+    }
     UNIT_CACHE.with(|c| c.borrow().get(key).is_some_and(|v| !v.is_empty()))
 }
 
@@ -14071,10 +14083,16 @@ fn fp_mix_key(chain: u64, uk: &UnitKey) -> u64 {
 }
 
 fn unit_cache_get(key: &UnitKey, fp: u64) -> Option<CachedUnit> {
+    if !unit_cache_enabled() {
+        return None;
+    }
     UNIT_CACHE.with(|c| c.borrow().get(key)?.iter().find(|cu| cu.fp == fp).cloned())
 }
 
 fn unit_cache_put(key: UnitKey, cu: CachedUnit) {
+    if !unit_cache_enabled() {
+        return;
+    }
     UNIT_CACHE.with(|c| {
         let mut cache = c.borrow_mut();
         let slot = cache.entry(key).or_default();
