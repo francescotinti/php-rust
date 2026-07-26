@@ -1,33 +1,41 @@
-# Rotta WORDPRESS-FIRST — WP-track (dopo WP-59: la MAPPA del fuori-canale è FATTA — frag mimalloc 2% (ipotesi concilio FALSIFICATA), ~65% del fisico = compile-side VIVO non censito (HIR seeds + payload op); leak template-include CONFERMATO; obj de-fantasmato 56,1→48,7MB; ⚖️ verbale revert leva B aperto)
+# Rotta WORDPRESS-FIRST — WP-track (dopo WP-60: ⚖️ revert leva B ESEGUITO e PROMOSSO — phpr-wp60 = NUOVA BASELINE; contatori ex-ante consegnati: seed HIR = 221MB (corpi 88%) ⇒ ripartizione 2/3-1/3 FALSIFICATA, banda seed-thin ~130-195MB; leak template sul FULL = 240MB counted con 3 file = 204MB; il ~600MB residuo è nei Module compilati ⇒ census v2 deep PRIMA di ogni leva)
 
-> ⚡ **WP-59 (2026-07-26, `c52c394`+`1e06464`+`e22f373`+docs)** — **Sessione di MISURA del
-> concilio esteso** (binari di parità INTATTI = phpr-wp58 2d7efdf8…;
-> codice solo census-only + 2 feature diagnostiche). **Ob.0**: mimalloc
-> v3.3.2, committed peak ≈ 93-102% del phys peak su media E full ⇒ il
-> mistero vive DENTRO l'allocatore; FFI ~90-120MB; maxrss onesto (sul
-> full 2,3G in compressor). **Ob.1 (finestre phys nel census,
-> `c52c394`)**: gate pre-registrato riconciliato ALLA CIFRA (win10: phys
-> 1436,2 = Σused 1298,0 + frag 29,8 + resto 108,4) ⇒ **frammentazione
-> 2% = ipotesi dominante del concilio FALSIFICATA; non-censito VIVO
-> 936,6MB = 65%**, e `--list-tests` (0 test) ne mostra 818MB già a fine
-> bootstrap+discovery ⇒ il footprint è ~90% COSTRUZIONE DELLA SUITE.
-> Probe differenziale classi-vs-funzioni: compile-side = 3,8× il counted
-> sulle classi (1,5× funcs) ⇒ **canale unit VERO ≈ 1,0GB** (channel 222MB
-> = 1/5); colpevoli con nome: `seed_classes`/`main_hir` (HIR con
-> `MethodDecl.body` interi, ≈2/3) + payload Rc op (≈1/3). **Probe B:
-> LEAK template-include CONFERMATO** (200 re-include ⇒ unit.cum_n=200):
-> Fase 0.5 SI APRE. **Ob.2**: 46k unreached = FANTASMI del choke next_id
-> (closure/generator; ipotesi 1 Gregg) — fix `next_obj_id`, recon obj
-> 22.141==22.141 ESATTO, **obj peak 56,1→48,7MB**. **Ob.3 (3 full
-> stessa-sera, CPU esatta time -l)**: new 790,83s (fail-set 88 BYTE-ID a
-> run33 ✓), pool-off 786,44s = **−0,56%** (unico costo identificato,
-> footprint ±0), scan4 796,05s = **+0,66%** (scan-mode ASSOLTO; spread
-> serata ±0,6% ⇒ banda WP-58 in buona parte rumore del campionatore) —
-> ⚖️ verbale revert leva B all'utente (racc.: revert). Rapporti
-> INVARIATI: media 2,61× · footprint 4,07× · full rif. 2,11×.
-> Census: **phpr-memgc59 (00ca4d3d…)**; diagnostici phpr-pooloff59
-> (93aea5a3…), phpr-scan4-59 (b955afb1…). **Storia: `sessions/
-> WP_SESSION_59.md`. WP-58: `sessions/WP_SESSION_58.md`.**
+> ⚡ **WP-60 (2026-07-26, `915ea27`+`f0f75d4`+seg.)** — Programma del
+> concilio 2° giro eseguito (P1→P4→P2→P3; **P5 NON aperto**: census v2
+> deep mancante — il perimetro non si comprime). **P1 revert leva B DA
+> SOLO (`915ea27`, inverso esatto di 14b8c4c + feature pool-off; scan4
+> resta): PROMOSSO** sui criteri pre-registrati — gate pieno VERDE
+> (corpus 1421 ID + refl 290 ID + cargo 1645/0 + ORM 3E/13F ID + hk
+> 0E/0F + sentinelle 5 assi BYTE-ID) + coppia full run48 stessa-sera:
+> fail-set **88 BYTE-ID a run33 ×2**, footprint **−0,19%** ✓ (±0,5%),
+> CPU −0,93% informativo. **Stash phpr-wp60 (46b517fc…) = NUOVA
+> BASELINE.** **P4**: sentinelle i-v pinnate con oracolo — (i) static
+> closure re-include: phpr==oracolo BYTE-ID (cella FRESCA per include:
+> VINCOLO cache); 3 divergenze PRE-ESISTENTI a catalogo (anon-class
+> bind-once; class doc/startLine con #[Attr] prima del doc; default
+> prop const-expr valutati nella classe istanziata). **P2**: tag=ctx
+> IN-PROCESS validato (win2-9 = addTestFile/getMethods = discovery,
+> win10 = wp_get_image_editor: la salita HA i nomi) + mono_ms; colonna
+> abandoned **MORTA** (positive-control a 3 esiti: 1,25MiB di thread
+> morto invisibili anche con VISIT_ABANDONED=1 ⇒ i 104,3MB
+> "non-visitato" di Ob.1 si etichettano così); igiene DB nei probe.
+> **P3 (metro nuovo: counting global allocator + clone-delta = deep-size
+> senza walker)**: seed split DIRETTO — full run: **2280 classi, 221,2MB
+> di cui corpi 195,0MB (88,2%), firma 22,4MB** ⇒ **la ripartizione WP-59
+> (seeds ≈2/3 ≈530MB) è FALSIFICATA: banda seed-thin ~130-195MB**, il
+> ~600MB residuo è Module/payload op (census v2 deep WP-61, KILL-SWITCH
+> applicato). Unit-per-path dai LEAK SITE (Vm::modules è lazy!):
+> **FULL = 4726 unit / 2316 path / dup 2410 = 240,2MB counted**, con
+> version.php ×899 (63,4MB) + script-modules-packages ×704 (75,0MB) +
+> script-loader-packages ×400 (65,3MB) = 204MB ⇒ banda Fase 0.5 ≈
+> −240MB+ sul full (media: 0,18MB — leva full-only). Target oracle:
+> C PHP --list-tests = **237MB/1,52s** vs phpr 1,35-1,44GB = 5,7-6×.
+> 🔵 la unit-cache WP-20 ESISTE GIÀ in run_include (chiave
+> path+mtime+size + fp): il leak è la CHIAVE (unit_chain_fp folda ogni
+> load ⇒ miss garantito sul re-include) — Fase 0.5 = rilassarla.
+> Census: **phpr-memgc60 (d1c8dc81…)**. Gap: media 2,58×/4,08× (flat).
+> **Storia: `sessions/WP_SESSION_60.md`. WP-59: `sessions/
+> WP_SESSION_59.md`.**
 
 ## 📁 Convenzioni (decisione utente 2026-07-23)
 
@@ -64,7 +72,7 @@
 - Commit AND push a ogni step; deviazioni deliberate = marker
   `BUG(port):` / `PERF(port):` / `TODO(port):`.
 
-## Stato gate per nome (gate58 su tree WP-58, 2026-07-26, `wp58-harness/gate-out/`: corpus **1421 IDENTICO** · refl **290 IDENTICO** · ORM **3E/13F IDENTICO** · hk **0E/0F** · cargo **1645/0**; release = **phpr-wp58 2d7efdf8…**; fail-set FULL ri-validato: run46 + run46-old BYTE-ID a run33 (fix yield_from incluso); ultima verifica gate22 integrale: `60c7e04`)
+## Stato gate per nome (gate60 su tree WP-60 `915ea27`, 2026-07-26, `wp60-harness/gate-out/`: corpus **1421 IDENTICO** · refl **290 IDENTICO** · ORM **3E/13F IDENTICO** · hk **0E/0F** · cargo **1645/0** · sentinelle 5 assi **BYTE-ID**; release = **phpr-wp60 46b517fc…** (revert leva B); fail-set FULL ri-validato: run48 new+old BYTE-ID a run33; ultima verifica gate22 integrale: `60c7e04`)
 
 - Gate56 verde (2026-07-26, tree `0943f58`): corpus **1421 IDENTICO** per
   nome (baseline = `wp55-harness/gate-out/corpus.fails`) · **refl 290
@@ -162,6 +170,16 @@
 #  census phpr-memgc58 (4c9b8da3…) e phpr-memgc58b (bc47f237…, con Ob.2)
 #  in phpr-mem-target/; full: full-out/run46/ + wp58-harness/full-old-out/.
 #  Stash: phpr-wp58 (sha256 2d7efdf8…).
+# WP-60: wp60-harness/{design60.md (criteri P1 pre-registrati + verdetti
+#  P2-P4 + scoperta unit-cache),gate60.sh,run48-new.sh,run48-old.sh,
+#  orchestrate60-evening.sh,build-memgc60.sh,probe60-listtests.sh,
+#  census60-media.sh,census60-full.sh,gap60-media.sh,probe60-p4*.php
+#  (+output -{oracle,new,wp58}.txt = sentinelle Stogov pinnate)};
+#  out: gate-out/, full-{new,old}-out/ (run48, time -l), census-out/
+#  (memcensus60-{listtests,media,full}.txt = seed split + unitpath +
+#  ctx), gap-out/ (coppia media). Binario census phpr-memgc60
+#  (d1c8dc81…, phpr-mem-target/). ⚠️ telemetria .rss di run48-new
+#  agganciata al wrapper time (profilo assente, metro time -l intatto).
 # WP-59: wp59-harness/{design59.md (verdetti Ob.0-3 + gate pre-registrati),
 #  ob0-media.sh,ob0-full.sh (diagnostiche MIMALLOC_SHOW_STATS+vmmap),
 #  build-memgc59.sh,ob1-census59-media.sh,ob1-supervisor.sh (finestre
@@ -176,66 +194,46 @@
 #  funcs,null} (leak template + moltiplicatore compile-side).
 ```
 
-## 🎯 PROSSIMO LAVORO — WP-60: revert B + quota ex-ante del compile-side (programma del CONCILIO 2° giro — review integrali in `doc/analysis/COUNCIL_WP59_REVIEWS.md`; convergenza 3/3: contatori PRIMA delle leve, A/B SEPARATI)
+## 🎯 PROSSIMO LAVORO — WP-61: census v2 deep dei Module → Fase 0.5 compile-cache → seed signature-only (A/B SEPARATI; bande ora MISURATE dai contatori WP-60)
 
 **Rotta (utente 2026-07-24)**: `FOOTPRINT_CPU_ROADMAP.md` — footprint-first,
-safe-only, TUTTE le fasi comunque, no-revert (eccezione B firmata).
-Laravel POSTICIPATA a valle. La mappa WP-59: giacimento = compile-side
-vivo ≈800MB (HIR seeds + payload op) + leak template-include. Dettaglio:
-`sessions/WP_SESSION_59.md` + `wp59-harness/design59.md`.
+safe-only, TUTTE le fasi comunque, no-revert. Laravel POSTICIPATA a valle.
+Stato WP-60: baseline pulita (phpr-wp60), sentinelle pinnate, quote
+ex-ante consegnate. Dettaglio: `sessions/WP_SESSION_60.md` +
+`wp60-harness/design60.md` + `gaps/REPORT_GAP_60.md`.
 
-1. **⚖️ Revert leva B per PRIMO, DA SOLO (deciso dall'utente 2026-07-26)**
-   — rimozione `mod pool` + feature `pool-off` + branch residui nel Drop;
-   il binario revertato = **NUOVA BASELINE** di ogni misura successiva
-   (Gregg: altrimenti i delta delle leve sono inattribuibili). Gate PIENO
-   (corpus 1421 per nome + refl 290 + cargo + ORM 3E/13F + hk 0E/0F +
-   sentinelle 5 assi) + coppia full stessa-sera. **Verdetto = parità per
-   nome + footprint ±0,5% — NON il CPU** (atteso −0,3..−0,8 ma dentro lo
-   spread ±0,6%: informativo, Leijen §1b-iv / Gregg V3). Stash del
-   binario come phpr-wp60.
-2. **Riparazioni di metodo (Gregg R1/R5/R6, prerequisiti economici)**:
-   (a) mappa finestra→test IN-PROCESS nel callback watermark (top dello
-   stack PHP su ogni riga mi_proc + wall-clock monotono; mai più offset
-   stdout — bufferizzato); (b) positive-control della visita abandoned
-   (thread che alloca e muore: il visitor DEVE vederlo, o la colonna si
-   dichiara morta); (c) riconciliare str al walk (362k/23MB fuori-walk:
-   censirli o etichettarli); (d) igiene DB DENTRO gli script di probe
-   (il flake Ob.3 nasce lì); (e) pensionare SHOW_STATS env → FFI
-   programmatica nei build census.
-3. **Contatori ex-ante (nessuna banda si firma prima — Stogov R1-R4,
-   Leijen R1, Gregg R2-R4)**: (a) **census v2 DEEP con dedup per
-   indirizzo** (l'attuale sotto-conta 5×: rc>1 = zero volte, Const
-   piatti); (b) deep-size dei seed con split {firma, corpi
-   MethodDecl.body+slots, doc/attributes} su media e --list-tests —
-   sostituisce l'estrapolazione 2/3-1/3; (c) istogramma unit-per-path
-   con HASH del contenuto (quota leak template su media E FULL — il
-   bordo è lì); (d) breakdown payload op/literal-duplicati-cross-unit/
-   slack + gauge G_UNITS; (e) istogramma per-bin delle allocazioni HIR
-   (Leijen: il ritorno fisico dipende dall'occupancy delle pagine
-   liberate; riconcilia col non-censito ±10-15%); (f) **mappa census del
-   FULL** (1 run detached, ~30 finestre + probe bootstrap-only) — senza,
-   ogni banda sul full è inventata; (g) target oracle: `--list-tests`
-   sotto C PHP con memory_get_peak_usage+time -l (denominatore della
-   voce "costruzione suite").
-4. **Sentinelle di parità pinnate PRIMA delle leve (Stogov R5)**:
-   (i) closure `static $x` in file re-incluso (verdetto oracolo PRIMA:
-   Zend condivide la cella per op_array); (ii) classe anonima in file
-   re-incluso; (iii) fatal `Cannot redeclare` preservato; (iv)
-   getDocComment/getFileName/getAttributes dal CompiledClass; (v) eval
-   extends multi-livello cross-unit con trait nel mezzo (DeferredDecl
-   indipendente dai corpi: verificato, non assunto).
-5. **SOLO DOPO 3+4, e in A/B SEPARATI (mai cumulativo)**: prima **Fase
-   0.5 compile-cache** (chiave realpath+mtime-ns+size, hash in fallback
-   — MAI path-only, V1; il cache-hit RI-ESEGUE il top-level e preserva
-   i fatal; hit/miss distinti nel census; probe write→include→rewrite→
-   include nel gate); poi (WP-61 se manca margine) **seed signature-only**
-   (SOLO seed_classes/main_hir; **seed_traits INTATTO** — i corpi dei
-   trait servono al flattening; PropDecl/consts/enum_cases/attributes/
-   abstract_sigs interi; seed snello costruito EX-NOVO, mai
-   clone-poi-strip: il picco transitorio è il metro; gate fisico Leijen:
-   **phys_drop ≥ 80% dei byte droppati dal contatore, frag picco ≤ ~2×
-   29,8MB**, predicted-vs-actual ±15%).
-6. Post-dieta (code): footprint(1) compressed/dirty sul full
+1. **Census v2 DEEP dei Module (dedup per indirizzo)** — il ~600MB di
+   compile-side NON è nei seed HIR (misurati: 221MB) ma nei Module
+   compilati: payload op per-kind, Const profondi, literal duplicati
+   cross-unit, slack, exc_table, CompiledClass interno + gauge G_UNITS.
+   NESSUNA banda sul payload op si firma prima. Qui si chiude anche il
+   recon str al walk (P2c residuo: 362k/23MB fuori-walk = literal dei
+   moduli, da censire o etichettare) e l'istogramma per-bin HIR
+   (Leijen R1, riconciliazione ±10-15% col non-censito).
+2. **Fase 0.5 compile-cache = RILASSARE la chiave della unit-cache
+   ESISTENTE** (WP-20, `run_include`: unit_key path+mtime+size c'è già,
+   il double-check strutturale c'è già; il miss è causato da
+   `unit_chain_fp` foldato a ogni load). Vincoli pinnati: celle static
+   FRESCHE a ogni esecuzione (P4-i, phpr==oracolo OGGI: non
+   regredire); fatal redeclare preservato (P4-iii); hash contenuto in
+   fallback stesso-secondo (V1); hit/miss distinti nel census; probe
+   write→include→rewrite→include nel gate. **Predizione ex-ante (da
+   registrare in design61 PRIMA dell'A/B): −240MB+ counted sul FULL**
+   (bersagli nominati: version.php ×899, script-modules-packages ×704,
+   script-loader-packages ×400 = 204MB), **media ≈ 0 (0,18MB: leva
+   full-only)** ⇒ il metro è la coppia full + mappa census
+   (memcensus60-full come baseline) + phys per-bin (drenaggio atteso
+   nei bin standing). Gate PIENO (la cache è semanticamente invisibile
+   come lo era il pool: ogni diff = allarme).
+3. **DOPO, in A/B SEPARATO: seed signature-only con banda MISURATA
+   ~130-195MB** (corpi 195,0MB × gate fisico Leijen ≥80%): si strippa
+   SOLO `MethodDecl.body`+`slots` di seed_classes/main_hir;
+   **seed_traits INTATTO** (i corpi servono al flattening); PropDecl/
+   consts/enum_cases/attributes/abstract_sigs interi; seed snello
+   EX-NOVO (mai clone-poi-strip: il picco transitorio è il metro);
+   sentinella P4-iv (reflection dal CompiledClass) + P4-v (eval
+   extends) nel gate; predicted-vs-actual ±15%; frag picco ≤ ~2×29,8MB.
+4. Post-dieta (code): footprint(1) compressed/dirty sul full
    (dividendo-compressor, Leijen R4); exit-frag 171MB solo da osservare
    (R6); FFI malloc_history solo se il residuo lo giustifica (R5).
 
@@ -254,7 +252,14 @@ figli ⇒ errori artefatti); DB reset anche nei PROBE che bootstrappano
 phpunit (il flake wp_install di Ob.3 nasce da lì); interning (futuro):
 Rc forti in tabella + mai nel path append + re-gate output refcount;
 immutable-literal (futuro): solo tutto-scalari + cursore separabile.
-4. **NON riproporre**: **ipotesi frammentazione/ritenzione mimalloc come
+4. **NON riproporre**: **la ripartizione "seeds ≈2/3 del compile-side
+   ≈530MB" (WP-60: contatore diretto = 221MB, corpi 195 — le bande
+   seed-thin si citano SOLO dalle righe tag=seedsum)**; **la colonna
+   `aband` del visitor mimalloc come attribuzione (WP-60:
+   positive-control DEAD — "mimalloc non-visitato" è l'unica etichetta
+   onesta)**; **leva B/pool sopra mimalloc (revertata e ri-misurata:
+   −0,93% CPU, footprint −0,19% — il verdetto sperimentale è
+   definitivo)**; **ipotesi frammentazione/ritenzione mimalloc come
    leva footprint (WP-59: 2% al picco, riconciliazione alla cifra —
    riaprire SOLO con una tabella per-bin che dica altro)**; **interning
    come leva grande di footprint (WP-59: il giacimento è compile-side;
@@ -334,10 +339,11 @@ vivo); misure per-sessione in `gaps/REPORT_GAP_<N>.md`. A ogni chiusura:
 misurare media (user CPU + footprint) e full-suite master-CPU, scrivere
 REPORT_GAP_N (sola sessione N), aggiungere la riga a GAP_TREND, riportare
 il gap all'utente.
-Ultimo stato (WP-59, sessione di misura — parità intatta):
-**media CPU 2,61× · footprint 4,07× (INVARIATI, nessun A/B) · full:
-riferimento run46 2,11×; Ob.3 stessa-sera (metro nuovo time -l, tree
-user): new 790,83s = fail-set 88 BYTE-ID a run33 ✓, pool-off −0,56%,
-scan4 +0,66% (assolto) · obj peak de-fantasmato 48,7MB · LA MAPPA: frag 2%,
-compile-side vivo ≈800MB = la leva di WP-60 · dettaglio:
-`gaps/REPORT_GAP_59.md`, trend: `gaps/GAP_TREND.md`**.
+Ultimo stato (WP-60, revert B + contatori):
+**media CPU 2,58× · footprint 4,08× (flat — revert neutro come da
+verdetto) · full: coppia run48 new 781,39s vs old 788,72 (−0,93% info),
+footprint 3,900 vs 3,907GB (−0,19% ✓), fail-set 88 BYTE-ID ×2;
+riferimento master-CPU resta run46 2,11× · baseline NUOVA phpr-wp60
+(46b517fc…) · quote ex-ante: seed 221MB (corpi 88%) / leak template full
+240MB counted / oracle bootstrap 237MB · dettaglio:
+`gaps/REPORT_GAP_60.md`, trend: `gaps/GAP_TREND.md`**.
