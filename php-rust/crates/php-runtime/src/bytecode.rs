@@ -2004,6 +2004,14 @@ pub struct Module {
     /// `#[Attr]` attributes on top-level `const` declarations, keyed by FQN —
     /// read by `ReflectionConstant::getAttributes()`. Empty for the common case.
     pub const_attributes: std::collections::HashMap<Box<[u8]>, Vec<CompiledAttribute>>,
+    /// WP-63 stub-elision (contract v2): `Some(n)` marks a unit compiled with
+    /// the seed prefix ELIDED — `classes` holds only the unit's own retained
+    /// declarations (n program classes were not materialized),
+    /// `conditional_classes` lives in retained space and `class_index` is
+    /// empty (the VM's own table is authoritative). `None` = legacy contract
+    /// v1 (main module and flag-OFF units). Typed provenance, not a filename
+    /// pun: link/hit paths branch on this, never on markers.
+    pub elided: Option<u32>,
 }
 
 impl Module {

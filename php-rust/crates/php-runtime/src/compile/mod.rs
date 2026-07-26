@@ -100,9 +100,39 @@ pub fn compile_program_seeded(
     stub_mask: &[bool],
     prelude: &[std::rc::Rc<Func>],
 ) -> R<Module> {
-    compile_program_impl(program, registry, stub_mask, prelude)
+    compile_program_impl(program, registry, stub_mask, prelude, None)
 }
 
+/// WP-63 stub-elision (contract v2): the read-only view of the VM's symbol
+/// table a seeded unit compiles against. `seed_len` is the seed-class count
+/// captured BEFORE this unit's own delta was accumulated (an eval's own
+/// classes are part of the seed by the time it compiles — they must NOT be
+/// elided). Borrowed shared from the VM for the duration of the compile only
+/// (H3': no mutation, no interior mutability, closed before leak/drive).
+pub struct SeedLink {
+    pub seed_len: usize,
+}
+
+/// Like [`compile_program_seeded`], but under the WP-63 stub-elision contract
+/// (v2): program classes the running VM already links by name — and the whole
+/// seed prefix, including still-undeclared conditionals of earlier units —
+/// are NOT materialized in the Module at all (no interned stub push, no full
+/// recompile of seed conditionals), and the per-unit `class_index` is not
+/// retained (the compile-time map stays transient). Ops still bake unit-local
+/// (program-space) ids exactly as the legacy path does; the link-time
+/// relocation (`Vm::unit_remap_elided`) rewrites them into the global space
+/// with the very same decisions `unit_class_remap` takes today, so the
+/// retained bytecode is byte-identical to the legacy path's — the elision
+/// removes dead weight, it never changes an emission.
+pub fn compile_program_elided(
+    program: &Program,
+    registry: &Registry,
+    stub_mask: &[bool],
+    prelude: &[std::rc::Rc<Func>],
+    link: &SeedLink,
+) -> R<Module> {
+    compile_program_impl(program, registry, stub_mask, prelude, Some(link))
+}
 
 /// Like [`compile_program`], but a class whose index is marked in `stub_mask`
 /// compiles to an inert stub. An `include`/`eval` unit is lowered against the
@@ -118,7 +148,7 @@ pub fn compile_program_stubbed(
     registry: &Registry,
     stub_mask: &[bool],
 ) -> R<Module> {
-    compile_program_impl(program, registry, stub_mask, &[])
+    compile_program_impl(program, registry, stub_mask, &[], None)
 }
 
 /// WP-62 M2.1 (Hejlsberg A1): per-compile net split into what scales with
@@ -163,6 +193,7 @@ fn compile_program_impl(
     registry: &Registry,
     stub_mask: &[bool],
     prelude: &[std::rc::Rc<Func>],
+    link: Option<&SeedLink>,
 ) -> R<Module> {
     #[cfg(feature = "mem-census")]
     let mut split = CompileSplit::default();
@@ -242,9 +273,32 @@ fn compile_program_impl(
     }
     // Classes are compiled tolerantly too (see `compile_class`); a seed class
     // the VM already links compiles to an inert stub (see the doc above).
-    let mut classes: Vec<std::rc::Rc<CompiledClass>> =
-        Vec::with_capacity(program.classes.len());
+    let mut classes: Vec<std::rc::Rc<CompiledClass>> = Vec::new();
+    let mut elided_classes: u32 = 0;
+    // Contract v2 (WP-63): rebased conditional set — indices into the
+    // RETAINED `classes` vec, matching what `run_linked` walks.
+    let mut cond_retained: std::collections::HashSet<usize> = std::collections::HashSet::new();
+    if link.is_none() {
+        classes.reserve(program.classes.len());
+    }
     for (cid, cd) in program.classes.iter().enumerate() {
+        if let Some(link) = link {
+            // Stub-elision (contract v2): the masked classes (already linked
+            // by the VM) and the WHOLE seed prefix — including the
+            // still-undeclared conditionals of earlier units, which the
+            // legacy path recompiles in full only for the link to discard
+            // them — are not materialized at all. Ops referencing them keep
+            // baking program-space ids; `unit_remap_elided` resolves those
+            // at link time exactly like the legacy remap.
+            let elide = stub_mask.get(cid).copied().unwrap_or(false) || cid < link.seed_len;
+            if elide {
+                elided_classes += 1;
+                continue;
+            }
+            if program.conditional_classes.contains(&cid) {
+                cond_retained.insert(classes.len());
+            }
+        }
         if stub_mask.get(cid).copied().unwrap_or(false) {
             classes.push(stub_class_shared(cd));
             #[cfg(feature = "mem-census")]
@@ -290,16 +344,25 @@ fn compile_program_impl(
         functions,
         fn_ci,
         conditional_fns: program.conditional_fns.clone(),
-        conditional_classes: program.conditional_classes.clone(),
+        // Contract v2: conditional indices live in RETAINED space (the only
+        // space `run_linked` sees); the per-unit name index is not retained
+        // at all — the VM resolves against its own table (the compile-time
+        // map above stays transient and dies with this frame).
+        conditional_classes: if link.is_some() {
+            cond_retained
+        } else {
+            program.conditional_classes.clone()
+        },
         conditional_traits: program.conditional_traits.clone(),
         deferred: program.deferred.clone(),
         closures,
         classes,
         file: program.file.clone(),
-        class_index,
+        class_index: if link.is_some() { Default::default() } else { class_index },
         static_count: program.static_count,
         strict: program.strict,
         const_attributes,
+        elided: link.is_some().then_some(elided_classes),
     };
     // Fase 1.1 (WP-48): compiled modules are leaked for the life of the
     // process — release the push-growth capacity slack before linking.

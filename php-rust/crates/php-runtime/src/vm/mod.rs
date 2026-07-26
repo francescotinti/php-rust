@@ -1246,7 +1246,8 @@ pub(crate) fn run_module_with_hir<'m>(
                     "tag=unitcache hit_intra={} hit_cross={} miss_cold={} miss_fp={} \
                      miss_dc={} miss_nostat={} inserts={} fp_replaced={} ways_evictions={} \
                      metadata_calls={} entries={entries} bytes_counted={bytes} paths={paths} \
-                     superseded_paths={superseded_paths} superseded_entries={superseded_entries}",
+                     superseded_paths={superseded_paths} superseded_entries={superseded_entries} \
+                     stub_elided_units={} stub_classes_elided={} elide_align_miss={}",
                     st.hit_intra,
                     st.hit_cross,
                     st.miss_cold,
@@ -1257,6 +1258,14 @@ pub(crate) fn run_module_with_hir<'m>(
                     st.fp_replaced,
                     st.ways_evictions,
                     st.metadata_calls,
+                    st.stub_elided_units,
+                    st.stub_classes_elided,
+                    st.elide_align_miss,
+                ));
+                // WP-63 B7: finestre ns separate lower vs compile (bordo CPU).
+                let (lns, cns, un) = census_compile_ns_take();
+                mc::census_line(&format!(
+                    "tag=compilens lower_ns={lns} compile_ns={cns} units={un}"
                 ));
             }
             // WP-62 M1 (Leijen R1 / Klabnik b): per-path hit-net aggregation
@@ -4962,16 +4971,12 @@ impl<'m> Vm<'m> {
             Ok(p) => p,
             Err(_) => return Ok(Zval::Bool(false)),
         };
+        let elide = self.elide_seed_len();
         self.accumulate_seed(&program);
         let stubs = self.seed_stub_mask(&program);
         #[cfg(feature = "mem-census")]
         let netw = CensusNetWindow::open();
-        let module = match crate::compile::compile_program_seeded(
-            &program,
-            self.registry,
-            &stubs,
-            &self.prelude_fns,
-        ) {
+        let module = match self.compile_unit_module(&program, &stubs, elide) {
             Ok(m) => m,
             Err(_) => return Ok(Zval::Bool(false)),
         };
@@ -4984,7 +4989,7 @@ impl<'m> Vm<'m> {
         // to "<file>(<line>) : eval()'d code" (Phase 1c-2c).
         let caller = self.frames.len() - 1;
         let origin = (self.frames[caller].module.file.clone(), self.cur_line(caller));
-        self.drive_unit(module, Some(origin), Some(caller))
+        self.drive_unit(module, Some(origin), Some(caller), elide.map(|l| (&program, l)))
     }
 
     /// Link a freshly-compiled `eval`/`include` unit into the running VM and drive
@@ -5001,11 +5006,22 @@ impl<'m> Vm<'m> {
         mut module: Module,
         eval_origin: Option<(Box<[u8]>, Line)>,
         scope_bridge: Option<usize>,
+        elide: Option<(&Program, usize)>,
     ) -> Result<Zval, PhpError> {
-        let (class_remap, new_locals) = self.unit_class_remap(&module);
         // Rewrite every op / class-metadata id in place (the module is still owned),
         // and offset the unit's static-cell ids past the live `self.statics` range.
-        relocate_module_class_ids(&mut module, &class_remap, self.statics.len());
+        // Contract v2 (WP-63): an elided module's ops bake PROGRAM-space ids,
+        // so the remap is computed over the program (same decisions as
+        // `unit_class_remap`), with `new_locals` in retained space.
+        let new_locals = if let (Some(_), Some((program, seed_len))) = (module.elided, elide) {
+            let (prog_remap, _retained_remap, locals) = self.unit_remap_elided(program, seed_len);
+            relocate_module_class_ids(&mut module, &prog_remap, self.statics.len());
+            locals
+        } else {
+            let (class_remap, locals) = self.unit_class_remap(&module);
+            relocate_module_class_ids(&mut module, &class_remap, self.statics.len());
+            locals
+        };
         #[cfg(feature = "mem-census")]
         {
             php_types::memcensus::alloc(
@@ -5047,6 +5063,91 @@ impl<'m> Vm<'m> {
             }
         }
         (class_remap, new_locals)
+    }
+
+    /// WP-63 stub-elision (contract v2) link-time remap: replicate
+    /// [`Self::unit_class_remap`]'s per-name decisions over the WHOLE
+    /// `program.classes` (the id space the unit's ops bake), without needing
+    /// the elided entries materialized. Returns the program-space remap fed
+    /// to the relocation walker, its projection onto the RETAINED entries
+    /// (stored in the unit cache for the hit double-check) and `new_locals`
+    /// in retained (`module.classes`) space, matching `run_linked`.
+    /// `seed_len` is the pre-delta seed length the compile elided against.
+    fn unit_remap_elided(
+        &self,
+        program: &Program,
+        seed_len: usize,
+    ) -> (Vec<ClassId>, Vec<ClassId>, Vec<usize>) {
+        let mut prog_remap: Vec<ClassId> = Vec::with_capacity(program.classes.len());
+        let mut retained_remap: Vec<ClassId> = Vec::new();
+        let mut new_locals: Vec<usize> = Vec::new();
+        let mut k = 0usize; // retained (module.classes) cursor
+        for (i, cd) in program.classes.iter().enumerate() {
+            let lower = cd.name.to_ascii_lowercase();
+            let registered = self.class_index.get(&lower).copied();
+            // Mirror of the compile-side predicate: the unit's own conditionals
+            // and its genuinely-new names were materialized, everything else
+            // (masked classes + whole seed prefix) was elided.
+            let retained = i >= seed_len
+                && (program.conditional_classes.contains(&i) || registered.is_none());
+            let g = if let Some(existing) = registered {
+                existing
+            } else if !retained {
+                // Unregistered seed entry: a still-undeclared conditional of an
+                // earlier unit — identity against the aligned runtime prefix
+                // (S2, load-bearing: accumulate_seed keeps ids aligned; see
+                // unit_class_remap's identity arm for the semantics).
+                if i < self.classes.len() && self.classes[i].name == cd.name {
+                    i
+                } else {
+                    // Alignment broken: never expected (gate asserts 0). Loud
+                    // in parity, fatal in census builds; identity keeps the
+                    // op-visible behaviour of the legacy path's eager index.
+                    uc_stat(|s| s.elide_align_miss += 1);
+                    log::error!(
+                        target: "phpr::include",
+                        "stub-elision: seed/runtime prefix misaligned at id {i} ({})",
+                        String::from_utf8_lossy(&cd.name)
+                    );
+                    if cfg!(feature = "mem-census") {
+                        panic!("stub-elision: seed/runtime prefix misaligned at id {i}");
+                    }
+                    i
+                }
+            } else {
+                let id = self.classes.len() + new_locals.len();
+                new_locals.push(k);
+                id
+            };
+            prog_remap.push(g);
+            if retained {
+                retained_remap.push(g);
+                k += 1;
+            }
+        }
+        (prog_remap, retained_remap, new_locals)
+    }
+
+    /// Retained-space double-check for a cached ELIDED module (contract v2):
+    /// every `module.classes` entry is the unit's own, so the check is purely
+    /// name-based against the live symbol table — a name registered since the
+    /// insert, or a moved append base, degrades the hit to `miss dc`. The
+    /// positional-identity arm of the legacy remap has no equivalent here BY
+    /// DESIGN (Pedersen P2): baked seed references are guarded by the
+    /// fingerprint (any registration / table growth changes `unit_fp`), which
+    /// this entry already matched.
+    fn unit_class_remap_retained(&self, module: &Module) -> (Vec<ClassId>, Vec<usize>) {
+        let mut remap: Vec<ClassId> = Vec::with_capacity(module.classes.len());
+        let mut new_locals: Vec<usize> = Vec::new();
+        for (k, cc) in module.classes.iter().enumerate() {
+            if let Some(&existing) = self.class_index.get(&cc.name.to_ascii_lowercase()) {
+                remap.push(existing);
+            } else {
+                remap.push(self.classes.len() + new_locals.len());
+                new_locals.push(k);
+            }
+        }
+        (remap, new_locals)
     }
 
     /// Register a linked (relocated, leaked) unit module into the VM and drive
@@ -5379,16 +5480,12 @@ impl<'m> Vm<'m> {
                 }
             }
         };
+        let elide = self.elide_seed_len();
         self.accumulate_seed(&program);
         let stubs = self.seed_stub_mask(&program);
         #[cfg(feature = "mem-census")]
         let netw = CensusNetWindow::open();
-        let module = match crate::compile::compile_program_seeded(
-            &program,
-            self.registry,
-            &stubs,
-            &self.prelude_fns,
-        ) {
+        let module = match self.compile_unit_module(&program, &stubs, elide) {
             Ok(m) => m,
             Err(e) => {
                 log::warn!(
@@ -5409,7 +5506,7 @@ impl<'m> Vm<'m> {
         // Bridge the calling frame's scope only for the expression form: its
         // constructor arguments are re-evaluated inside the snippet and must
         // see the caller's variables live.
-        self.drive_unit(module, None, if expr { Some(caller) } else { None })
+        self.drive_unit(module, None, if expr { Some(caller) } else { None }, elide.map(|l| (&program, l)))
     }
 
     /// Fold a freshly-lowered unit's *new* classes into the accumulating seed image
@@ -5485,6 +5582,39 @@ impl<'m> Vm<'m> {
                     && self.class_index.contains_key(&cd.name.to_ascii_lowercase())
             })
             .collect()
+    }
+
+    /// WP-63: contract v2 engagement for the NEXT seeded compile — the
+    /// pre-delta seed length, captured BEFORE `accumulate_seed` /
+    /// `apply_seed_delta` runs for the unit (an eval's own classes join the
+    /// seed before its compile and must not be elided). `None` = contract v1.
+    fn elide_seed_len(&self) -> Option<usize> {
+        (stub_elision_enabled() && self.main_hir.is_some()).then(|| self.seed_classes.len())
+    }
+
+    /// Compile a seeded unit under the active contract: v2 (stub-elision)
+    /// when `elide` carries the pre-delta seed length, v1 otherwise.
+    fn compile_unit_module(
+        &self,
+        program: &Program,
+        stubs: &[bool],
+        elide: Option<usize>,
+    ) -> Result<Module, crate::compile::CompileError> {
+        match elide {
+            Some(seed_len) => crate::compile::compile_program_elided(
+                program,
+                self.registry,
+                stubs,
+                &self.prelude_fns,
+                &crate::compile::SeedLink { seed_len },
+            ),
+            None => crate::compile::compile_program_seeded(
+                program,
+                self.registry,
+                stubs,
+                &self.prelude_fns,
+            ),
+        }
     }
 
     /// Fingerprint of the VM state a unit's lowering/compilation/relocation can
@@ -5582,11 +5712,23 @@ impl<'m> Vm<'m> {
         uc_stat(|s| s.metadata_calls += 1);
         let unit_key = std::fs::metadata(&real).ok().and_then(|m| unit_key_for(&key, &m));
         let fp = self.unit_fp();
+        // KS-S2 (Stogov, decisivo per WP-63): la sequenza dei fingerprint
+        // per-include è il digest dello stato VM-visibile — identica pre/post
+        // elisione ⇒ le tabelle runtime sono identiche benché i Module
+        // differiscano. Emessa solo a log attivo (costo zero altrimenti).
+        uc_log(&format!("fp {fp:016x}"), &key);
         if let Some(uk) = &unit_key {
             if let Some(cu) = unit_cache_get(uk, fp) {
                 #[cfg(feature = "mem-census")]
                 let hitw = CensusNetWindow::open();
-                let (remap, locals) = self.unit_class_remap(cu.module);
+                // Contract v2 modules double-check in retained space (their
+                // classes vec holds only the unit's own declarations); the
+                // baked seed references are covered by the fingerprint match.
+                let (remap, locals) = if cu.module.elided.is_some() {
+                    self.unit_class_remap_retained(cu.module)
+                } else {
+                    self.unit_class_remap(cu.module)
+                };
                 if cu.static_off == self.statics.len()
                     && remap == cu.class_remap
                     && locals == cu.new_locals
@@ -5630,6 +5772,8 @@ impl<'m> Vm<'m> {
             uc_stat(|s| s.miss_nostat += 1);
             uc_log("miss nostat", &key);
         }
+        #[cfg(feature = "mem-census")]
+        let lower_t0 = std::time::Instant::now();
         let mut content = match std::fs::read(&real) {
             Ok(c) => c,
             Err(_) => return self.include_open_failed(&path, mode),
@@ -5661,6 +5805,13 @@ impl<'m> Vm<'m> {
             }
         };
         let program = Rc::new(program);
+        // WP-63 B7 (Bak): separate ns windows — lex/parse/lower must stay flat
+        // under elision, the compile window is where the lever lives.
+        #[cfg(feature = "mem-census")]
+        census_compile_ns(lower_t0.elapsed().as_nanos() as u64, 0, 0);
+        // Contract v2 engagement (WP-63): captured BEFORE the delta below, for
+        // the same reason the delta itself is.
+        let elide = self.elide_seed_len();
         // The seed delta is captured BEFORE it is applied (the tails are
         // computed against the pre-accumulation seed lengths) — it is what the
         // unit cache retains in place of the whole program HIR (WP-20).
@@ -5672,23 +5823,41 @@ impl<'m> Vm<'m> {
         let stubs = self.seed_stub_mask(&program);
         #[cfg(feature = "mem-census")]
         let netw = CensusNetWindow::open();
-        let mut module = match crate::compile::compile_program_seeded(
-            &program,
-            self.registry,
-            &stubs,
-            &self.prelude_fns,
-        ) {
+        #[cfg(feature = "mem-census")]
+        let compile_t0 = std::time::Instant::now();
+        let mut module = match self.compile_unit_module(&program, &stubs, elide) {
             Ok(m) => m,
             Err(e) => {
                 log::warn!(target: "phpr::include", "compile failed for {}: {:?}", String::from_utf8_lossy(&key), e);
                 return self.include_compile_failed(&key, mode);
             }
         };
+        #[cfg(feature = "mem-census")]
+        census_compile_ns(0, compile_t0.elapsed().as_nanos() as u64, 1);
+        if let Some(n) = module.elided {
+            // KK1' medium: sentinels assert `elide`>0 from this log, exactly
+            // like `cachehit>0` (a probe green with zero elisions is invalid).
+            uc_stat(|s| {
+                s.stub_elided_units += 1;
+                s.stub_classes_elided += n as u64;
+            });
+            uc_log(&format!("elide {n}"), &key);
+        }
         // Link inline (rather than via drive_unit) so the relocated module can
         // be published to the unit cache before it runs.
         let static_off = self.statics.len();
-        let (class_remap, new_locals) = self.unit_class_remap(&module);
-        relocate_module_class_ids(&mut module, &class_remap, static_off);
+        let (class_remap, new_locals) = if module.elided.is_some() {
+            // Contract v2: program-space remap for the walker; the cache
+            // stores its RETAINED-space projection (hit double-check).
+            let (prog_remap, retained_remap, locals) =
+                self.unit_remap_elided(&program, elide.unwrap_or(0));
+            relocate_module_class_ids(&mut module, &prog_remap, static_off);
+            (retained_remap, locals)
+        } else {
+            let (remap, locals) = self.unit_class_remap(&module);
+            relocate_module_class_ids(&mut module, &remap, static_off);
+            (remap, locals)
+        };
         #[cfg(feature = "mem-census")]
         {
             netw.close();
@@ -13792,6 +13961,14 @@ struct UcStats {
     fp_replaced: u64,
     ways_evictions: u64,
     metadata_calls: u64,
+    /// WP-63: units compiled under contract v2 (seed prefix elided) and the
+    /// total program classes not materialized. The gate's KK1' meta-rule
+    /// asserts these are >0 wherever a sentinel claims to exercise elision.
+    stub_elided_units: u64,
+    stub_classes_elided: u64,
+    /// Loud counter for the S2 invariant (seed↔runtime prefix alignment) —
+    /// asserted 0 in every gate; census builds panic instead.
+    elide_align_miss: u64,
 }
 
 impl UcStats {
@@ -13806,11 +13983,42 @@ impl UcStats {
         fp_replaced: 0,
         ways_evictions: 0,
         metadata_calls: 0,
+        stub_elided_units: 0,
+        stub_classes_elided: 0,
+        elide_align_miss: 0,
     };
+}
+
+/// WP-63 stub-elision (contract v2, design63 §2): compile include/eval units
+/// against the VM's live symbol table without materializing the seed prefix
+/// in the per-unit Module. Default OFF (Klabnik E3); `PHPR_STUB_ELISION=1`
+/// opts in. The E5 flip (default-ON) is the single point of no return.
+fn stub_elision_enabled() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var("PHPR_STUB_ELISION").is_ok_and(|v| v == "1"))
 }
 
 fn uc_stat(f: impl FnOnce(&mut UcStats)) {
     UC_STATS.with(|s| f(&mut s.borrow_mut()));
+}
+
+/// WP-63 B7 (census-only): cumulative lower/compile wall-ns over the include
+/// path, dumped as `tag=compilens` — the bordo check that elision moves the
+/// COMPILE window and leaves lex/parse/lower flat.
+#[cfg(feature = "mem-census")]
+thread_local! {
+    static COMPILE_NS: std::cell::Cell<(u64, u64, u64)> = const { std::cell::Cell::new((0, 0, 0)) };
+}
+#[cfg(feature = "mem-census")]
+fn census_compile_ns(lower: u64, compile: u64, units: u64) {
+    COMPILE_NS.with(|c| {
+        let (l, co, n) = c.get();
+        c.set((l + lower, co + compile, n + units));
+    });
+}
+#[cfg(feature = "mem-census")]
+pub(crate) fn census_compile_ns_take() -> (u64, u64, u64) {
+    COMPILE_NS.with(|c| c.get())
 }
 
 /// Append one unit-cache event line to the file named by

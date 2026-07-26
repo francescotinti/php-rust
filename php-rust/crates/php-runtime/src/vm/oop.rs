@@ -929,9 +929,12 @@ impl<'m> Vm<'m> {
     }
 
     /// Allocate a fresh empty `stdClass` instance (PAR), for `(object)` casts.
+    /// Resolved against the VM's own table (NOT the current module's index:
+    /// a WP-63 contract-v2 unit module carries an empty `class_index`; the
+    /// two resolve identically whenever both are populated — stdClass is
+    /// registered by the prelude in every image).
     pub(super) fn alloc_stdclass(&mut self) -> Result<Zval, PhpError> {
         let cid = self
-            .module
             .class_index
             .get(&b"stdclass"[..])
             .copied()
