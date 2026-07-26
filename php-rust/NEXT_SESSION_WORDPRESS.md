@@ -1,37 +1,36 @@
-# Rotta WORDPRESS-FIRST — WP-track (dopo WP-61: 🏁 php-server STANDALONE consegnato — WordPress admin inclusa su wpdev/src, accettazione 5/6 BYTE-ID + admin NORM-ID vs phpr -S; census v2 deep ESEGUITO: il ~600MB non-seed è ATTRIBUITO — net unit 648,8MB su --list-tests: CompiledClass-priv 58%, module-owned 31%, payload-Rc solo 14%; mappa FULL v2 detached da leggere come PRIMO ATTO di WP-62)
+# Rotta WORDPRESS-FIRST — WP-track (dopo WP-62: ⚖️ decision point M2 CHIUSO COL METRO — prefisso stub = 89,5% del dup dei 3 bersagli ⇒ leva compile-cache SOSPESA, rotta Hejlsberg: WP-63 = STUB-ELISION leva nominata; metro tarato ±10%, osservabilità unit-cache consegnata, refactor reloc marker-espliciti; gate62 VERDE COMPLETO, stash phpr-wp62)
 
-> ⚡ **WP-61 (2026-07-26, `c0eb97a`+`242a7ee`+`9ada23d`)** — **P1 (direttiva
-> utente): php-server AUTONOMO consegnato.** php-cli esposto anche come lib
-> (lib.rs: server+mime, main.rs INTATTO); php-server riscritto da wrapper
-> axum GET-only a launcher sottile su `php_cli::server::serve`
-> (--host/--port/--docroot/router, mimalloc, de-gitignorato). wpdev/src
-> servito per la PRIMA volta: wp-config NUOVO → DB `wp` (era vuoto; grant
-> aggiunto; wp_o/wp_p intatti), install via oracle su porta 8080, pretty
-> permalinks; 🔵 wordpress-develop src/ ha un guard anti-unbuilt ⇒
-> `npm install` + `grunt build --dev` obbligatori (senza, 500 + admin
-> senza JS). **Accettazione meccanica VERDE**: front/asset/permalink/
-> wp-login GET/POST **BYTE-ID** php-server vs phpr -S, dashboard admin
-> **NORM-ID** (solo _wpnonce di sessione). Gate solo-server: cargo
-> **1645/0**; ⚠️ hash phpr cambiato dai metadati del lib target ⇒
-> ri-stash **phpr-wp61 (c7e93597…) = baseline di parità** (wp60 accanto).
-> Quick-start php-server PUBBLICATO nel README. **P2: census v2 deep
-> ESEGUITO** (metro nuovo: net-compile delta per unit ai 3 siti compile
-> = deep VERO payload-Rc inclusi; walk address-dedup con split
-> priv/shared per strong_count; binario phpr-memgc61 9600a662…):
-> su `--list-tests` **net_tot 648,8MB su 1950 unit** (counted-v1 211MB)
-> ⇒ il ~600MB di WP-60 è CHIUSO: **cls_priv 325,6MB (58%) + mod_owned
-> 202,9MB + fns_priv 30,7MB; rc_residue (payload op) SOLO 89,6MB (14%)**
-> — l'ipotesi payload-op ridimensionata; opkind owned=0 (payload tutti
-> Rc); literal dup cross-unit 11,7MB (interning = banda modesta);
-> net/re-include ~40× il counted (il template paga il prefisso stub del
-> seed accumulato). **Mappa FULL v2 LETTA (master pid, 4726 unit
-> conservate)**: net_tot **1.973,3MB** (counted-v1 490,7) — split
-> mod_owned 932,6 + cls_priv 758,0 + fns_priv 32,1 = owned 1.722,7MB,
-> rc_residue 250,5MB (12,7%); **QUOTA DUP IN NET = 1.130,2MB (~4,7× il
-> counted)**: i 3 bersagli Fase 0.5 = **951,6MB net** (version.php ×899
-> = 393,5 · script-modules ×704 = 339,9 · script-loader ×400 = 218,2);
-> modlit dup 28,9MB. **Storia: `sessions/WP_SESSION_61.md`. WP-60:
-> `sessions/WP_SESSION_60.md`.**
+> ⚡ **WP-62 (2026-07-26, `d7a9e85`→`c20a42d`)** — **Fase 0.5: P0/M2
+> DECISO COL METRO, zero codice di leva** (design62 = recepimento
+> integrale della sintesi a 9). **M0**: uploads-guard Gregg R7
+> (tar+manifest+restore verificato, self-test 5 casi; integrato nel
+> launcher full e nell'orchestratore) · guard anti-annidamento RAII
+> (`nested_windows=0` ovunque) · metro TARATO (sintetici ±10%: ratio
+> 1,007-1,058; net_tot listtests riproduce WP-61 alla cifra) ⇒ banda
+> dup 1.130,2MB NET CITABILE. **M1**: osservabilità unit-cache
+> (tassonomia miss cold/fp/dc/nostat, hit intra/cross-VM via VM_EPOCH,
+> tag=unitcache/cachehit con MEDIANA, log `PHPR_UNIT_CACHE_LOG`);
+> baseline mai misurata: **hit 0+0, miss_cold 1925, miss_fp 6** — la
+> cache CLI non serve nulla. **M2 (decision point)**: 🔵 **prefisso
+> stub = 99%/86%/77% sui 3 bersagli (A/B seed-vuoto) = 851,6MB dei
+> 951,6MB (89,5%) ≫ soglia A1 60%** ⇒ dissenso Hejlsberg REGGE; forma
+> A copia-leggera **MORTA per pre-quota** (owned_priv 86-87% ≫ KS-H2);
+> forma B viva (K-M1 non scatta: media B −2,0%; micro +1,0-1,3%
+> advisory sui canali op-densi, binario relbase-probe mai-parità) ⇒
+> **⚖️ leva compile-cache SOSPESA, riordino Hejlsberg: WP-63 =
+> STUB-ELISION** (tetto ≥851,6MB misurati; 1,2-1,6GB plausibile), la
+> cache si riapre DOPO su moduli position-independent (matrice M4 +
+> contatori M1 pronti in design62 §1/§6). **Refactor F**: reloc
+> marker-espliciti (`prelude`/`seed-stub`), shared non-marcato = LOUD
+> (classe IpUtils); 🔴 prima stesura sbagliata (skip-se-marcato) PRESA
+> DAL GATE (hk KernelTest warmup 1F) e corretta in `c20a42d` — owned
+> riloca SEMPRE. **Gate62 VERDE COMPLETO** (cargo 1645/0 · sentinelle
+> 5 assi BYTE-ID · corpus 1421 IDENTICO · refl 290 IDENTICO · ORM
+> 3E/13F IDENTICO · hk 0E/0F). Catena serale orchestrate62 (gap media
+> + census62-full con colonne prefix + coppia full run49 new-vs-wp61):
+> esiti in `gaps/REPORT_GAP_62.md` + `wp62-harness/eve-out/`.
+> **Storia: `sessions/WP_SESSION_62.md`. WP-61:
+> `sessions/WP_SESSION_61.md`.**
 
 ## 📁 Convenzioni (decisione utente 2026-07-23)
 
@@ -90,7 +89,7 @@
   chiude senza concilio, il PRIMO atto della successiva è convocarlo.
   Modello: `wp62-harness/COUNCIL_WP62_REVIEWS.md`.
 
-## Stato gate per nome (WP-61 `9ada23d`: cambio SOLO server-layer+census ⇒ gate ridotto da direttiva = cargo **1645/0** + batteria HTTP php-server vs phpr -S **5/6 BYTE-ID + admin NORM-ID**; release = **phpr-wp61 c7e93597…** — hash cambiato dai soli metadati del lib target, main.rs intatto, ri-stash a verbale; ultimo gate PIENO = gate60 su `915ea27`, `wp60-harness/gate-out/`: corpus **1421 IDENTICO** · refl **290 IDENTICO** · ORM **3E/13F IDENTICO** · hk **0E/0F** · sentinelle 5 assi **BYTE-ID**; fail-set FULL run48 BYTE-ID a run33; ultima verifica gate22 integrale: `60c7e04`)
+## Stato gate per nome (WP-62 `c20a42d`: **gate62 PIENO VERDE** su `wp62-harness/gate-out/` — cargo **1645/0** · sentinelle 5 assi **BYTE-ID** (baseline probe58) · corpus **1421 IDENTICO** · refl **290 IDENTICO** · ORM 3484 **3E/13F fail-set IDENTICO** · hk 1665 **0E/0F**; release = **phpr-wp62 2f5220c7…** (stash additivo, wp61 c7e93597… accanto); coppia full run49 new-vs-wp61 nella catena serale (fail-set atteso 88 BYTE-ID a run33 → esito in eve-out/); ultima verifica gate22 integrale: `60c7e04`)
 
 - Gate56 verde (2026-07-26, tree `0943f58`): corpus **1421 IDENTICO** per
   nome (baseline = `wp55-harness/gate-out/corpus.fails`) · **refl 290
@@ -205,6 +204,18 @@
 #  mappa FULL v2, run detached — flag census61-full.done). Batteria HTTP
 #  php-server: scratchpad battery61.sh (pattern run-http.sh WP-9, porta
 #  8080, docroot ~/Claude/wpdev/src, DB wp).
+# WP-62: wp62-harness/{design62.md (recepimento sintesi a 9 + §5 verdetti
+#  P0/M2 + §6 decision point),uploads-guard.sh (Gregg R7: backup-wipe|
+#  restore, UPLOADS_GUARD_DIR per self-test),build-memgc62.sh,calib62.sh
+#  (taratura ±10%),probe62-listtests.sh,census62-full.sh,gate62.sh,
+#  probe62-relbase.php,ab62-media.sh,orchestrate62.sh (catena serale:
+#  gap media→census full→run49 new/old, guard attorno)}; out: gate-out/,
+#  census-out/ (memcensus62-{listtests,full}.txt con colonne prefix +
+#  tag=unitcache/cachehit/netguard/reloc), calib-out/, ab-media-out/,
+#  eve-out/ (run49). Binari: census phpr-memgc62 (105df139…,
+#  phpr-mem-target/); diagnostico phpr-relb62 (97ed6469…,
+#  phpr-relbase-target/, feature relbase-probe MAI parità).
+#  uploads-backups/ = tar+manifest su drive esterno (guard).
 # WP-59: wp59-harness/{design59.md (verdetti Ob.0-3 + gate pre-registrati),
 #  ob0-media.sh,ob0-full.sh (diagnostiche MIMALLOC_SHOW_STATS+vmmap),
 #  build-memgc59.sh,ob1-census59-media.sh,ob1-supervisor.sh (finestre
@@ -219,105 +230,51 @@
 #  funcs,null} (leak template + moltiplicatore compile-side).
 ```
 
-## 🎯 PROSSIMO LAVORO — WP-62: mappa FULL v2 → Fase 0.5 compile-cache → seed signature-only (A/B SEPARATI; il metro ora è il NET del census v2)
+## 🎯 PROSSIMO LAVORO — WP-63: STUB-ELISION (rotta Hejlsberg, leva NOMINATA dal decision point M2) — la cache re-link resta SOSPESA e si riapre dopo, su moduli PI
 
 **Rotta (utente 2026-07-24)**: `FOOTPRINT_CPU_ROADMAP.md` — footprint-first,
 safe-only, TUTTE le fasi comunque, no-revert. Laravel POSTICIPATA a valle.
-Stato WP-61: php-server consegnato (verifica personale = Francesco);
-census v2 attribuito su --list-tests. Dettaglio: `sessions/
-WP_SESSION_61.md` + `wp61-harness/design61.md`.
+Stato WP-62: decision point M2 chiuso col metro (dettaglio:
+`sessions/WP_SESSION_62.md` + `wp62-harness/design62.md` §5-§6).
 
-⚖️ **CONCILIO SU WP-62 ESEGUITO A COLLEGIO PIENO (2026-07-26 sera,
-9/9 CONCORDO CON EMENDAMENTI — due sedute: Leijen/Stogov/Gregg + le 6
-sedie fondative; verbali integrali e SINTESI FINALE A 9 in
-`wp62-harness/COUNCIL_WP62_REVIEWS.md`, VINCOLANTI per design62)**.
-Dalla seconda seduta, in aggiunta ai punti sotto: **(A) CONFLITTO
-Hoare↔Matsakis sulla FORMA del re-link** (copia-leggera vs
-id-relativi+base: ciascuno dimostra fatale la forma dell'altro —
-make_mut clonerebbe le CompiledClass 58% del net / l'add-base viola la
-legge WP-44 negli arm caldi) ⇒ design62 misura ENTRAMBE le pre-quote
-(bytes_copied/shared; ns/op remap) PRIMA di scegliere; se entrambe
-falliscono i kill-switch, passa la rotta Hejlsberg. **(B) Dissenso
-Hejlsberg**: il giacimento primario è il PREFISSO STUB (version.php 1KB
-→ 437KB net/include) — contatore prefix-vs-proper PRIMA dell'A/B; se
-prefix >60% del dup, stub-elision = leva NOMINATA WP-63 (tetto
-1,2-1,6GB). **(C) Bloccante Pedersen**: TRE contratti di confine
-(intra-VM · replay cross-VM stessa-rotta OGGI VERDE da non regredire ·
-cross-rotta = contratto nuovo), probe via php-server, dual-path
-exact-fp preservato; cache thread_local ⇒ nota axum ×N. **(D) Budget
-CPU ASSOLUTI di Bak**: ns/hit ≤20% ns/compile, hit totale ≤0,3%
-master-CPU, parse_avoided>0 o la banda CPU si ri-quota (il hit deve
-saltare ANCHE lex/parse/lower). **(E) Scaletta Klabnik M0-M6**: flag
-default-OFF, flip=unico punto di non ritorno, matrice sentinelle
-completa (R6+K1-K4+M4+P1/P4) TUTTE con `cachehit>0` asserito (verde con
-hit==0 = gate INVALIDO). **(F) Refactor di sicurezza indipendenti:
-get_mut→flag in_global_space + reloc_skipped; SealedModule.**
-Punti di convergenza: (1) contatori hit/miss + net del HIT path
-obbligatori (drenaggio vero = dup_net − hit_net; hit_net ≤5% ex-ante);
-(2) predizione phys SEPARATA dal counted, per-bin, banda [0,6-1,0]× di
-(dup_net − hit_net), <50% ⇒ si ri-quota; (3) guard anti-annidamento
-delle finestre net + taratura del metro (probe sintetico ±10%) PRIMA di
-ri-citare 1.130MB; (4) ⚠️ Stogov R1: il perimetro NON è "rilassare la
-chiave" ma **re-link sul hit** (unit_fp hasha statics.len/class_index/
-seed_globals; double-check esige uguaglianza esatta) — pre-quotare la
-frazione position-independent dei 951,6MB e ns/hit vs ns/compile su
-version.php come kill-switch; (5) idempotenza di apply_seed_delta sul
-hit = condizione di esistenza; (6) P2 seed-thin in sessione SOLO con
-doppia coppia full a catena (P1 vs wp61, poi P1+P2 vs P1), altrimenti
-WP-63; (7) uploads: backup/wipe/restore AUTOMATIZZATO nell'harness
-(tar+manifest, abort se fallisce) prima di ogni full; (8) 8 sentinelle
-nuove al gate (Stogov R6: define/const re-include, __FILE__ cross-path,
-strict_types hit/fresh, classe condizionale + stub-mask
-contesto-dipendente ⇒ degradare a miss, redeclare DAL hit, include
-in-funzione sul hit, rewrite stessa-size-stesso-secondo,
-get_included_files).
+⚖️ **CONCILIO DI CHIUSURA WP-62 → verbali in
+`wp63-harness/COUNCIL_WP63_REVIEWS.md`, VINCOLANTI per design63**
+(ratifica del riordino di programma + emendamenti alla leva
+stub-elision). Se manca, primo atto di WP-63 = convocarlo.
 
-0. **Mappa FULL v2 GIÀ LETTA in coda a WP-61** (master 4726 unit):
-   **la banda Fase 0.5 in NET = dup 1.130,2MB, di cui 951,6MB sui 3
-   bersagli nominati** (version.php ×899 = 393,5MB · script-modules
-   ×704 = 339,9MB · script-loader ×400 = 218,2MB); modrecon full
-   conferma il --list-tests (cls_priv 44% / mod_owned 54% del owned;
-   rc_residue 12,7%) ⇒ le leve future guardano ANCHE a
-   CompiledClass/Module tables, non solo al payload op. In design62:
-   registrare la predizione del drenaggio PHYS (non è 1:1 col counted;
-   il peak full parità è 3,90GB) PRIMA dell'A/B.
-   ⚠️ **uploads**: da quando Francesco carica media nella verifica
-   personale, i futuri harness full NON devono più azzerare
-   `src/wp-content/uploads` senza backup (census61-full è stato l'ultimo
-   wipe naive a dir vuota).
-1. **Fase 0.5 compile-cache = RILASSARE la chiave della unit-cache
-   ESISTENTE** (WP-20, `run_include`: unit_key path+mtime+size c'è già,
-   il double-check strutturale c'è già; il miss è causato da
-   `unit_chain_fp` foldato a ogni load). Vincoli pinnati: celle static
-   FRESCHE a ogni esecuzione (P4-i, phpr==oracolo OGGI: non
-   regredire); fatal redeclare preservato (P4-iii); hash contenuto in
-   fallback stesso-secondo (V1); hit/miss distinti nel census; probe
-   write→include→rewrite→include nel gate. **Predizione ex-ante (da
-   registrare in design61 PRIMA dell'A/B): −240MB+ counted sul FULL**
-   (bersagli nominati: version.php ×899, script-modules-packages ×704,
-   script-loader-packages ×400 = 204MB), **media ≈ 0 (0,18MB: leva
-   full-only)** ⇒ il metro è la coppia full + mappa census
-   (memcensus60-full come baseline) + phys per-bin (drenaggio atteso
-   nei bin standing). Gate PIENO (la cache è semanticamente invisibile
-   come lo era il pool: ogni diff = allarme).
-2. **DOPO, in A/B SEPARATO: seed signature-only con banda MISURATA
-   ~130-195MB** (corpi 195,0MB × gate fisico Leijen ≥80%): si strippa
-   SOLO `MethodDecl.body`+`slots` di seed_classes/main_hir;
-   **seed_traits INTATTO** (i corpi servono al flattening); PropDecl/
-   consts/enum_cases/attributes/abstract_sigs interi; seed snello
-   EX-NOVO (mai clone-poi-strip: il picco transitorio è il metro);
-   sentinella P4-iv (reflection dal CompiledClass) + P4-v (eval
-   extends) nel gate; predicted-vs-actual ±15%; frag picco ≤ ~2×29,8MB.
-3. Post-dieta (code): footprint(1) compressed/dirty sul full
-   (dividendo-compressor, Leijen R4); exit-frag 171MB solo da osservare
-   (R6); FFI malloc_history solo se il residuo lo giustifica (R5).
+0. **Leggere gli esiti della catena serale WP-62** (`wp62-harness/
+   eve-out/` + `census-out/memcensus62-full.txt`): (i) coppia full
+   run49 new-vs-wp61 — fail-set atteso 88 BYTE-ID a run33 (normalizzare
+   `s/^\d+\) //`), footprint/CPU informativi; (ii) mappa FULL v2 CON
+   COLONNE prefix (tag=prefixsum + unitpath2 pfx_*) ⇒ **la QUOTA
+   stub-elision si inchioda qui** (banda misurata in sessione: ≥851,6MB
+   sui soli 3 bersagli; tetto plausibile 1,2-1,6GB del net_tot
+   1.973,3MB). tag=netguard atteso 0; tag=reloc unexpected atteso 0.
+1. **Stub-elision (leva)**: compilare le unit CONTRO la symbol table
+   del VM senza materializzare il prefisso del seed nel Module
+   per-unit (Roslyn-style: metadata reference, mai ri-emissione).
+   Bersagli del costo per-include a seed pieno (misure WP-62 su
+   version.php: 437KB/inc di cui proper fresco 4,1KB): class_index
+   clonato per-unit, tabelle Module O(seed), stub compiles, ricompile
+   dei condizionali del seed, main compilato contro ctx grande.
+   Vincoli: il contratto di compilazione cambia per TUTTE le 4726 unit
+   ⇒ gate PIENO + coppia full stessa-sera OBBLIGATORI; sentinelle
+   P4-i/iii + le 8 di Stogov R6 restano pertinenti (il Module diventa
+   position-independent per costruzione = il presupposto della cache).
+   Predizione ex-ante in design63 PRIMA dell'A/B (predicted-vs-actual
+   ±15%; phys per-bin [0,6-1,0]× come da igiene WP-62).
+2. **DOPO la stub-elision: riaprire la cache re-link su moduli PI**
+   (design62 §1 M3-M5 riusabile: matrice sentinelle M4 completa +
+   contatori M1 GIÀ consegnati e a costo zero; budget Bak ns/hit;
+   dual-path Pedersen; il conflitto di forma Hoare↔Matsakis EVAPORA
+   sui moduli PI — niente copia, niente arm caldi).
+3. **P2 seed signature-only**: invariato (banda ~130-195MB, solo con
+   doppia coppia full a catena — Gregg R6).
 4. 🆕 **php-server: front-end axum (richiesta utente 2026-07-26,
-   sessione dedicata)** — oggi php-server è il SAPI sequenziale
-   byte-parity (scelta giusta per l'estrazione e i probe); l'evoluzione
-   è axum davanti (HTTP production-grade: keep-alive, TLS, concorrenza)
-   + pool di worker engine dietro (il VM è `Rc`/!Send ⇒ un engine per
-   thread, dispatch blocking). La parità byte del SAPI resta il metro
-   dei probe di accettazione.
+   sessione dedicata)** — axum davanti + pool worker engine dietro
+   (VM `Rc`/!Send ⇒ un engine per thread); ⚠️ nota Pedersen:
+   UNIT_CACHE thread_local ⇒ si moltiplica ×N worker. La parità byte
+   del SAPI resta il metro dei probe.
 
 **VETI del concilio (restano vincolanti)**: mai toccare
 MIMALLOC_PURGE_DELAY nei giudici; mai giudicare ritenzione col maxrss
@@ -334,7 +291,13 @@ figli ⇒ errori artefatti); DB reset anche nei PROBE che bootstrappano
 phpunit (il flake wp_install di Ob.3 nasce da lì); interning (futuro):
 Rc forti in tabella + mai nel path append + re-gate output refcount;
 immutable-literal (futuro): solo tutto-scalari + cursore separabile.
-4. **NON riproporre**: **la ripartizione "seeds ≈2/3 del compile-side
+- **NON riproporre**: **forma A copia-leggera del re-link (WP-62 M2.2:
+   owned_priv = 86-87% del net dai contatori census v2 ⇒ hit_net ≈
+   miss_net per costruzione — KS-H2/KS1 scattati in pre-quota)**; **skip
+   di relocation deciso dal solo marker (WP-62: un corpo prelude
+   ricompilato FRESCO è owned e DEVE rilocare — la decisione resta a
+   get_mut, il marker classifica solo il caso shared)**; **la
+   ripartizione "seeds ≈2/3 del compile-side
    ≈530MB" (WP-60: contatore diretto = 221MB, corpi 195 — le bande
    seed-thin si citano SOLO dalle righe tag=seedsum)**; **la colonna
    `aband` del visitor mimalloc come attribuzione (WP-60:
@@ -416,11 +379,14 @@ vivo); misure per-sessione in `gaps/REPORT_GAP_<N>.md`. A ogni chiusura:
 misurare media (user CPU + footprint) e full-suite master-CPU, scrivere
 REPORT_GAP_N (sola sessione N), aggiungere la riga a GAP_TREND, riportare
 il gap all'utente.
-Ultimo stato (WP-61, consegna php-server + census v2 — perf NON
-rimisurata, engine intatto):
-**media CPU 2,58× · footprint 4,08× · full 2,11× (tutti riferimento
-WP-60) · baseline parità phpr-wp61 (c7e93597…, ri-stash per metadati
-lib target — cargo 1645/0) · census v2: net unit 648,8MB su
---list-tests (cls_priv 58% / mod_owned 31% / rc_residue 14%), literal
-dup 11,7MB, mappa FULL v2 in census-out (WP-62) · dettaglio:
-`sessions/WP_SESSION_61.md`, trend: `gaps/GAP_TREND.md`**.
+Ultimo stato (WP-62, decision point M2 — nessuna leva perf spedita;
+coppia media misurata, full run49 in coda serale):
+**media CPU 2,62× (oracle 21,00u / phpr 55,05u) · footprint media
+4,52× CON CAVEAT (spread serale phpr ±1,6% osservato 1611-1663MB,
+oracle −6,9% su run singola — riferimento strutturale resta ~4,1×) ·
+full: riferimento resta 2,06-2,11× (run49 in eve-out/) · baseline
+parità phpr-wp62 (2f5220c7…, M1 contatori + refactor reloc — gate62
+pieno verde) · prefisso stub 89,5% del dup 3 bersagli (quota
+stub-elision ≥851,6MB, tetto 1,2-1,6GB da census62-full) · dettaglio:
+`sessions/WP_SESSION_62.md` + `gaps/REPORT_GAP_62.md`, trend:
+`gaps/GAP_TREND.md`**.
