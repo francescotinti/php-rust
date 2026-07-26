@@ -202,10 +202,13 @@ Rc op ≈1/3) + **leak template-include** (Fase 0.5). Dettaglio:
    (corpi droppati), stesso trattamento per `main_hir` se separabile.
    Banda potenziale: centinaia di MB — da confermare col contatore 1a.
    Rischio parità: eval che ri-lowera con l'immagine (gate pieno).
-4. **Esito ⚖️ revert leva B (pool)**: verbale Ob.3 WP-59 all'utente —
-   pool-off −0,56% full, footprint ±0, beneficio B nullo (il −17MB di
-   WP-58 era A+C). Se l'utente firma: revert della SOLA B (A e C
-   restano), gate pieno + coppia full.
+4. **⚖️ Revert leva B (pool): DECISO dall'utente (2026-07-26 sera, sul
+   verbale Ob.3)** — pool-off −0,56% full, footprint ±0, beneficio B
+   nullo (il −17MB di WP-58 era A+C); concorde la sedia Leijen (unica
+   pronunciata). Esecuzione in WP-60: revert della SOLA B (A e C
+   restano; rimuovere anche mod pool + feature pool-off ormai inutile),
+   gate PIENO (corpus 1421 per nome + refl 290 + cargo + ORM 3E/13F +
+   hk 0E/0F + sentinelle 5 assi) + coppia full stessa-sera.
 5. **Quote Stogov declassate dalla mappa** (solo se margine): duplicati
    str (tetto ≤62MB), literal-array, peak oracle per-test.
    (Il "residuo full-only" WP-58 è CHIUSO da Ob.3: pool ~0,6% + rumore

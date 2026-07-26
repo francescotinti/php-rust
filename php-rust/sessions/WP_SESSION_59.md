@@ -112,6 +112,8 @@ del campionatore ps — lezione WP-58). Coppia + terzo asse back-to-back:
   versione regressiva su decisione utente al verbale. Raccomandazione:
   **revertare B** (A e C restano); in alternativa B resta dietro
   feature-off, dato che il codice è già gated da `pool-off`.
+  **⚖️ ESITO: l'utente ha FIRMATO il revert (stessa sera) — esecuzione
+  in WP-60 con gate pieno + coppia full.**
 
 ## ⭐ Lezioni
 
