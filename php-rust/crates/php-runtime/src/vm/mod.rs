@@ -1105,36 +1105,191 @@ pub(crate) fn run_module_with_hir<'m>(
         // template-include leak's address book; dup_bytes is quoted on the
         // v1 counted metric (deep v2 replaces it when it lands).
         {
-            let units: Vec<(Vec<u8>, u64)> =
+            let units: Vec<(Vec<u8>, u64, u64, usize)> =
                 CENSUS_UNITS.with(|u| u.borrow().clone());
-            let mut by: rustc_hash::FxHashMap<&[u8], (u32, u64)> = Default::default();
-            for (file, bytes) in &units {
-                let e = by.entry(&file[..]).or_insert((0, 0));
+            let mut by: rustc_hash::FxHashMap<&[u8], (u32, u64, u64)> = Default::default();
+            for (file, bytes, net, _p) in &units {
+                let e = by.entry(&file[..]).or_insert((0, 0, 0));
                 e.0 += 1;
                 e.1 += *bytes;
+                e.2 += *net;
             }
-            let mut dups: Vec<(&[u8], u32, u64)> = by
+            let mut dups: Vec<(&[u8], u32, u64, u64)> = by
                 .iter()
-                .filter(|(_, (n, _))| *n > 1)
-                .map(|(p, (n, bytes))| (*p, *n, *bytes))
+                .filter(|(_, (n, _, _))| *n > 1)
+                .map(|(p, (n, bytes, net))| (*p, *n, *bytes, *net))
                 .collect();
-            dups.sort_by(|a, b| b.1.cmp(&a.1));
-            let (mut dup_u, mut dup_b) = (0u64, 0u64);
-            for (i, (p, n, bytes)) in dups.iter().enumerate() {
+            // WP-61: ranked by the TRUE metric (net compile delta); the v1
+            // counted metric stays in the row for continuity with WP-60.
+            dups.sort_by(|a, b| b.3.cmp(&a.3));
+            let (mut dup_u, mut dup_b, mut dup_n) = (0u64, 0u64, 0u64);
+            for (i, (p, n, bytes, net)) in dups.iter().enumerate() {
                 dup_u += (*n as u64) - 1;
                 dup_b += (bytes / (*n as u64)) * ((*n as u64) - 1);
+                dup_n += (net / (*n as u64)) * ((*n as u64) - 1);
                 if i < 40 {
                     mc::census_line(&format!(
-                        "tag=unitpath n={n} bytes_counted={bytes} path={}",
+                        "tag=unitpath2 n={n} bytes_counted={bytes} net={net} path={}",
                         String::from_utf8_lossy(p)
                     ));
                 }
             }
             mc::census_line(&format!(
-                "tag=unitsum units={} paths={} dup_units={dup_u} dup_bytes_counted={dup_b}",
+                "tag=unitsum2 units={} paths={} dup_units={dup_u} dup_bytes_counted={dup_b} dup_net={dup_n}",
                 units.len(),
                 by.len(),
             ));
+            // WP-61 P2 (design61): census v2 DEEP of the retained Modules —
+            // address-deduped walk over the leak registry. clone-delta counts
+            // OWNED payloads; an op's Rc payload is a refcount bump under
+            // clone, so it stays UNCOUNTED here and is quoted only as the
+            // net − owned residue in tag=modrecon (never per-kind).
+            {
+                use crate::bytecode::{Const as BConst, Func as BFunc};
+                use std::hash::{Hash, Hasher};
+                fn dclone2<T: Clone>(v: &T) -> u64 {
+                    let (a0, _) = mc::alloc_counters();
+                    let c = v.clone();
+                    let (a1, _) = mc::alloc_counters();
+                    drop(c);
+                    a1.saturating_sub(a0)
+                }
+                struct W {
+                    op_n: Vec<u64>,
+                    op_owned: Vec<u64>,
+                    n_funcs: u64,
+                    lit_addr: rustc_hash::FxHashSet<usize>,
+                    lit_uniq_bytes: u64,
+                    lit_content: rustc_hash::FxHashMap<u64, (u64, u64)>,
+                }
+                fn walk_func(w: &mut W, f: &BFunc) {
+                    w.n_funcs += 1;
+                    for op in &f.ops {
+                        let k = census::op_index(op);
+                        w.op_n[k] += 1;
+                        w.op_owned[k] += dclone2(op);
+                    }
+                    for c in &f.consts {
+                        if let BConst::Str(s) = c {
+                            let mut h = rustc_hash::FxHasher::default();
+                            s.as_bytes().hash(&mut h);
+                            let e = w
+                                .lit_content
+                                .entry(h.finish())
+                                .or_insert((0, 32 + s.as_bytes().len() as u64));
+                            e.0 += 1;
+                            // PhpStr is not Clone (growable, WP-55): logical
+                            // bytes (len + 32B header), same basis as the
+                            // content histogram — labeled, never physical.
+                            if w.lit_addr.insert(std::rc::Rc::as_ptr(s) as usize) {
+                                w.lit_uniq_bytes += 32 + s.as_bytes().len() as u64;
+                            }
+                        }
+                    }
+                    for d in f.param_defaults.iter().flatten() {
+                        walk_func(w, d);
+                    }
+                }
+                let mut w = W {
+                    op_n: vec![0; census::N_OPS],
+                    op_owned: vec![0; census::N_OPS],
+                    n_funcs: 0,
+                    lit_addr: Default::default(),
+                    lit_uniq_bytes: 0,
+                    lit_content: Default::default(),
+                };
+                let mut seen_mod: rustc_hash::FxHashSet<usize> = Default::default();
+                let mut seen_fn: rustc_hash::FxHashSet<usize> = Default::default();
+                let mut seen_cls: rustc_hash::FxHashSet<usize> = Default::default();
+                // priv = Rc strong_count 1 at dump time (unit-private body);
+                // shared = prelude fns / interned seed stubs, owned by the
+                // MAIN module's image — counted once, reported apart so the
+                // recon against net (units-only window) compares like with
+                // like (smoke test WP-61: prelude alone is ~0.88MB).
+                let (mut mod_owned, mut fns_priv, mut fns_shared) = (0u64, 0u64, 0u64);
+                let (mut cls_priv, mut cls_shared) = (0u64, 0u64);
+                for (_file, _c, _n, p) in &units {
+                    if *p == 0 || !seen_mod.insert(*p) {
+                        continue;
+                    }
+                    // SAFETY(census-only): every registered pointer is a
+                    // `Box::leak`ed &'static Module (leak sites); it is never
+                    // freed for the life of the process.
+                    let m: &'static Module = unsafe { &*(*p as *const Module) };
+                    mod_owned += dclone2(m);
+                    walk_func(&mut w, &m.main);
+                    for cl in &m.closures {
+                        walk_func(&mut w, cl);
+                    }
+                    for f in &m.functions {
+                        if seen_fn.insert(std::rc::Rc::as_ptr(f) as usize) {
+                            if std::rc::Rc::strong_count(f) > 1 {
+                                fns_shared += dclone2(&**f);
+                            } else {
+                                fns_priv += dclone2(&**f);
+                            }
+                            walk_func(&mut w, f);
+                        }
+                    }
+                    for c in &m.classes {
+                        if seen_cls.insert(std::rc::Rc::as_ptr(c) as usize) {
+                            if std::rc::Rc::strong_count(c) > 1 {
+                                cls_shared += dclone2(&**c);
+                            } else {
+                                cls_priv += dclone2(&**c);
+                            }
+                            for meth in &c.methods {
+                                walk_func(&mut w, &meth.func);
+                            }
+                            if let Some(pi) = &c.prop_init {
+                                walk_func(&mut w, pi);
+                            }
+                        }
+                    }
+                }
+                let mut rows: Vec<(usize, u64, u64)> = (0..census::N_OPS)
+                    .filter(|&i| w.op_n[i] > 0)
+                    .map(|i| (i, w.op_n[i], w.op_owned[i]))
+                    .collect();
+                rows.sort_by(|a, b| b.2.cmp(&a.2));
+                for (i, n, owned) in rows.iter().take(40) {
+                    mc::census_line(&format!(
+                        "tag=opkind name={} n={n} owned={owned}",
+                        census::OP_NAMES[*i]
+                    ));
+                }
+                let n_ops_tot: u64 = w.op_n.iter().sum();
+                let owned_ops_tot: u64 = w.op_owned.iter().sum();
+                mc::census_line(&format!(
+                    "tag=opkind_sum n_ops={n_ops_tot} owned={owned_ops_tot} funcs={}",
+                    w.n_funcs
+                ));
+                let (mut litdup_n, mut litdup_b) = (0u64, 0u64);
+                for (n, rep) in w.lit_content.values() {
+                    if *n > 1 {
+                        litdup_n += n - 1;
+                        litdup_b += (n - 1) * rep;
+                    }
+                }
+                mc::census_line(&format!(
+                    "tag=modlit uniq_n={} uniq_bytes={} content_dup_n={litdup_n} content_dup_bytes={litdup_b}",
+                    w.lit_addr.len(),
+                    w.lit_uniq_bytes,
+                ));
+                let net_tot: u64 = units.iter().map(|r| r.2).sum();
+                let counted_tot: u64 = units.iter().map(|r| r.1).sum();
+                // owned_priv = the clone-visible unit-private bytes; the
+                // residue against net is op Rc payloads + allocator overhead
+                // (labeled; lits lowered before the compile window are in
+                // NEITHER side).
+                let owned_priv = mod_owned + fns_priv + cls_priv;
+                mc::census_line(&format!(
+                    "tag=modrecon units={} uniq_mods={} mod_owned={mod_owned} fns_priv={fns_priv} fns_shared={fns_shared} cls_priv={cls_priv} cls_shared={cls_shared} owned_priv={owned_priv} net_tot={net_tot} counted_v1_tot={counted_tot} rc_residue={}",
+                    units.len(),
+                    seen_mod.len(),
+                    net_tot.saturating_sub(owned_priv),
+                ));
+            }
         }
     }
     // `register_shutdown_function` callbacks run after the main script (and any
@@ -1330,14 +1485,36 @@ pub(super) fn census_vm_park(p: usize) {
 /// so the per-path histogram feeds from the leak sites themselves.
 #[cfg(feature = "mem-census")]
 thread_local! {
-    static CENSUS_UNITS: std::cell::RefCell<Vec<(Vec<u8>, u64)>> =
+    /// WP-61 P2: rows are (file, counted_v1, net_compile, leaked ptr). The
+    /// pointer is to the `Box::leak`ed module ('static by construction), so
+    /// the dump-time v2 walk can revisit every retained unit address-deduped.
+    static CENSUS_UNITS: std::cell::RefCell<Vec<(Vec<u8>, u64, u64, usize)>> =
         const { std::cell::RefCell::new(Vec::new()) };
+    /// Net allocator delta (Δalloc − Δfree) of the unit's compile window,
+    /// parked by the compile site and consumed by [`census_unit_note`] —
+    /// the deep-TRUE per-unit metric (op Rc payloads included), design61.
+    static CENSUS_COMPILE_NET: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
 }
 
 #[cfg(feature = "mem-census")]
-fn census_unit_note(m: &Module) {
+fn census_compile_net_set(net0: (u64, u64)) {
+    let (a1, f1) = php_types::memcensus::alloc_counters();
+    let net = a1
+        .saturating_sub(net0.0)
+        .saturating_sub(f1.saturating_sub(net0.1));
+    CENSUS_COMPILE_NET.with(|c| c.set(net));
+}
+
+#[cfg(feature = "mem-census")]
+fn census_unit_note(m: &'static Module) {
+    let net = CENSUS_COMPILE_NET.with(|c| c.replace(0));
     CENSUS_UNITS.with(|u| {
-        u.borrow_mut().push((m.file.to_vec(), module_census_bytes(m) as u64))
+        u.borrow_mut().push((
+            m.file.to_vec(),
+            module_census_bytes(m) as u64,
+            net,
+            m as *const Module as usize,
+        ))
     });
 }
 
@@ -4566,6 +4743,8 @@ impl<'m> Vm<'m> {
         };
         self.accumulate_seed(&program);
         let stubs = self.seed_stub_mask(&program);
+        #[cfg(feature = "mem-census")]
+        let net0 = php_types::memcensus::alloc_counters();
         let module = match crate::compile::compile_program_seeded(
             &program,
             self.registry,
@@ -4575,6 +4754,10 @@ impl<'m> Vm<'m> {
             Ok(m) => m,
             Err(_) => return Ok(Zval::Bool(false)),
         };
+        // Window closes before relocation (drive_unit): small under-count,
+        // labeled in design61.
+        #[cfg(feature = "mem-census")]
+        census_compile_net_set(net0);
         // Record the eval()'s call site (the file/line of the frame invoking it) so
         // a backtrace can render this unit as `eval()` and attribute code it calls
         // to "<file>(<line>) : eval()'d code" (Phase 1c-2c).
@@ -4609,9 +4792,10 @@ impl<'m> Vm<'m> {
                 module_census_bytes(&module),
             );
             php_types::memcensus::unit_slack(module_slack_bytes(&module) as u64);
-            census_unit_note(&module);
         }
         let leaked: &'static Module = Box::leak(Box::new(module));
+        #[cfg(feature = "mem-census")]
+        census_unit_note(leaked);
         self.run_linked(leaked, &new_locals, eval_origin, scope_bridge)
     }
 
@@ -4976,6 +5160,8 @@ impl<'m> Vm<'m> {
         };
         self.accumulate_seed(&program);
         let stubs = self.seed_stub_mask(&program);
+        #[cfg(feature = "mem-census")]
+        let net0 = php_types::memcensus::alloc_counters();
         let module = match crate::compile::compile_program_seeded(
             &program,
             self.registry,
@@ -4997,6 +5183,8 @@ impl<'m> Vm<'m> {
                 )));
             }
         };
+        #[cfg(feature = "mem-census")]
+        census_compile_net_set(net0);
         // Bridge the calling frame's scope only for the expression form: its
         // constructor arguments are re-evaluated inside the snippet and must
         // see the caller's variables live.
@@ -5234,6 +5422,8 @@ impl<'m> Vm<'m> {
         // them by name anyway; fully recompiling the whole accumulated seed image
         // per included file is quadratic (PHPUnit's preload() = ~1200 requires).
         let stubs = self.seed_stub_mask(&program);
+        #[cfg(feature = "mem-census")]
+        let net0 = php_types::memcensus::alloc_counters();
         let mut module = match crate::compile::compile_program_seeded(
             &program,
             self.registry,
@@ -5253,14 +5443,16 @@ impl<'m> Vm<'m> {
         relocate_module_class_ids(&mut module, &class_remap, static_off);
         #[cfg(feature = "mem-census")]
         {
+            census_compile_net_set(net0);
             php_types::memcensus::alloc(
                 php_types::memcensus::CH_UNIT,
                 module_census_bytes(&module),
             );
             php_types::memcensus::unit_slack(module_slack_bytes(&module) as u64);
-            census_unit_note(&module);
         }
         let leaked: &'static Module = Box::leak(Box::new(module));
+        #[cfg(feature = "mem-census")]
+        census_unit_note(leaked);
         if pure && self.main_hir.is_some() {
             if let Some(uk) = unit_key {
                 unit_cache_put(
