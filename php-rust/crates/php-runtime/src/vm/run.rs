@@ -3570,6 +3570,10 @@ impl<'m> super::Vm<'m> {
                         }
                     }
                     let old = read_property_at(&obj, &key, slot_idx, &mut self.diags);
+                    #[cfg(feature = "op-census")]
+                    if matches!(*op, crate::hir::BinOp::Concat) {
+                        crate::vm::census::census_concat_site(1, &old, &rhs);
+                    }
                     let mut result = self.apply_binop_ovl(*op, &old, &rhs)?;
                     // A `set` hook with no `get` hook (the backing read above is then
                     // the property's own value) handles the write: dispatch it like
@@ -4652,6 +4656,10 @@ impl<'m> super::Vm<'m> {
                     };
                     let rhs = self.frames[top].stack.pop().expect("StaticPropOpSet rhs");
                     let old = cell.borrow().deref_clone();
+                    #[cfg(feature = "op-census")]
+                    if matches!(*op, crate::hir::BinOp::Concat) {
+                        crate::vm::census::census_concat_site(2, &old, &rhs);
+                    }
                     let result = self.apply_binop_ovl(*op, &old, &rhs)?;
                     *cell.borrow_mut() = result.clone();
                     self.frames[top].stack.push(result);
@@ -4741,6 +4749,10 @@ impl<'m> super::Vm<'m> {
                     self.frames[top].stack.pop(); // class
                     let rhs = self.frames[top].stack.pop().expect("StaticPropOpSetDynamic rhs");
                     let old = cell.borrow().deref_clone();
+                    #[cfg(feature = "op-census")]
+                    if matches!(*op, crate::hir::BinOp::Concat) {
+                        crate::vm::census::census_concat_site(3, &old, &rhs);
+                    }
                     let result = self.apply_binop_ovl(*op, &old, &rhs)?;
                     *cell.borrow_mut() = result.clone();
                     self.frames[top].stack.push(result);
@@ -4795,6 +4807,10 @@ impl<'m> super::Vm<'m> {
                             field_get(&Zval::Ref(Rc::clone(&root)), &steps[1..], &mut keys.clone().into_iter(), fs)
                                 .unwrap_or(Zval::Null)
                         };
+                        #[cfg(feature = "op-census")]
+                        if matches!(*op, crate::hir::BinOp::Concat) {
+                            crate::vm::census::census_concat_site(4, &old, &rhs);
+                        }
                         let result = self.apply_binop_ovl(*op, &old, &rhs)?;
                         self.field_set_in_root(root, top, &steps[1..], keys, result.clone(), false, true)?;
                         self.frames[top].stack.push(result);
@@ -4806,12 +4822,20 @@ impl<'m> super::Vm<'m> {
                             let fs = FieldScope { classes: &self.classes, scope: self.frames[top].class };
                             field_get(&root, &steps, &mut keys.clone().into_iter(), fs).unwrap_or(Zval::Null)
                         };
+                        #[cfg(feature = "op-census")]
+                        if matches!(*op, crate::hir::BinOp::Concat) {
+                            crate::vm::census::census_concat_site(4, &old, &rhs);
+                        }
                         let result = self.apply_binop_ovl(*op, &old, &rhs)?;
                         self.field_set_in_root(Rc::new(RefCell::new(root)), top, &steps, keys, result.clone(), false, true)?;
                         self.frames[top].stack.push(result);
                         continue;
                     }
                     let old = self.field_value(*base, top, &steps, keys.clone()).unwrap_or(Zval::Null);
+                    #[cfg(feature = "op-census")]
+                    if matches!(*op, crate::hir::BinOp::Concat) {
+                        crate::vm::census::census_concat_site(4, &old, &rhs);
+                    }
                     let result = self.apply_binop_ovl(*op, &old, &rhs)?;
                     self.field_set_op(*base, top, &steps, keys, result.clone())?;
                     self.frames[top].stack.push(result);

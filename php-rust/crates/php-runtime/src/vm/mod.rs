@@ -13405,6 +13405,10 @@ fn apply_last(parent: &mut Zval, last: Last, diags: &mut Diags, dropped: &mut Op
             let k = coerce_key_diag(&key, diags)
                 .ok_or_else(|| PhpError::TypeError("Illegal offset type".to_string()))?;
             let old = arr.get(&k).map(|v| v.deref_clone()).unwrap_or(Zval::Null);
+            #[cfg(feature = "op-census")]
+            if matches!(op, crate::hir::BinOp::Concat) {
+                crate::vm::census::census_concat_site(0, &old, &rhs);
+            }
             let result = apply_binop(op, &old, &rhs, diags)?;
             // Write through an existing reference element (REF-4) — ONE
             // lookup on the hit path (WP-32 B3).

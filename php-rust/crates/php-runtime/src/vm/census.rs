@@ -280,6 +280,40 @@ pub fn binop_index(b: BinOp) -> usize {
     }
 }
 
+/// WP-57: `.=`-family compound-assign SITE census. The WP-55 fuse
+/// (`ConcatAssignSlot`) covers only the bare local; every other site still
+/// rebuilds the string (O(n²)): the copy volume per event is the CURRENT
+/// lhs length, so Σ lhs bytes is the honest seconds-metric for the channel
+/// and the log2(lhs) histogram says where the volume lives (WP-56 lesson:
+/// a band is per-element × DISTRIBUTION).
+pub const N_CONCAT_SITES: usize = 6;
+
+pub const CONCAT_SITE_NAMES: [&str; N_CONCAT_SITES] = [
+    "ArrElem(AssignOpPath)",
+    "Prop(Swap;Concat;PropSet + PropOpSet)",
+    "StaticProp(StaticPropOpSet)",
+    "StaticPropDyn(StaticPropOpSetDynamic)",
+    "Field(FieldAssignOp)",
+    "ArrayAccess(offsetGet/offsetSet)",
+];
+
+/// log2 buckets for lhs length: bucket 0 = empty, bucket b = 2^(b-1)..2^b-1,
+/// last bucket = everything ≥ 4MB.
+pub const N_CONCAT_BUCKETS: usize = 24;
+
+/// Str payload length through at most one Ref level; non-string lhs/rhs
+/// (first append onto null, numeric operands) count as 0 bytes.
+fn zstr_len(v: &Zval) -> usize {
+    match v {
+        Zval::Str(s) => s.as_bytes().len(),
+        Zval::Ref(c) => match &*c.borrow() {
+            Zval::Str(s) => s.as_bytes().len(),
+            _ => 0,
+        },
+        _ => 0,
+    }
+}
+
 pub struct OpCensus {
     ops: Box<[u64; N_OPS]>,
     /// bigram[prev * N_OPS + cur] — the fusion oracle.
@@ -290,6 +324,18 @@ pub struct OpCensus {
     fetchdim: [u64; 100],
     /// incdec[slot_tag] for IncDecSlot.
     incdec: [u64; 10],
+    /// WP-57 concat-assign site rows: events, Σ lhs bytes, Σ rhs bytes.
+    concat_ev: [u64; N_CONCAT_SITES],
+    concat_lhs_b: [u64; N_CONCAT_SITES],
+    concat_rhs_b: [u64; N_CONCAT_SITES],
+    /// Per-site log2(lhs len) histogram (see N_CONCAT_BUCKETS).
+    concat_hist: [[u64; N_CONCAT_BUCKETS]; N_CONCAT_SITES],
+    /// WP-57: `$o->p op= rhs` lowers to `…;Swap;Binary(op);PropSet` — no
+    /// dedicated op (`Op::PropOpSet` is not emitted on this path). A
+    /// Swap→Binary(Concat) records the operand lengths here; the very next
+    /// op being PropSet commits them to the Prop row, anything else drops
+    /// them.
+    pending_prop_concat: Option<(u64, u64)>,
     last: usize,
 }
 
@@ -301,8 +347,32 @@ impl OpCensus {
             binary: vec![0u64; N_BINOPS * 100].into_boxed_slice().try_into().unwrap(),
             fetchdim: [0; 100],
             incdec: [0; 10],
+            concat_ev: [0; N_CONCAT_SITES],
+            concat_lhs_b: [0; N_CONCAT_SITES],
+            concat_rhs_b: [0; N_CONCAT_SITES],
+            concat_hist: [[0; N_CONCAT_BUCKETS]; N_CONCAT_SITES],
+            pending_prop_concat: None,
             last: N_OPS - 1, // Nop: harmless first-bigram seed
         }
+    }
+
+    /// Record one non-local `.=`-family compound concat at `site` (a row of
+    /// [`CONCAT_SITE_NAMES`]), with the pre-concat lhs and the rhs operand.
+    pub fn concat_site(&mut self, site: usize, lhs: &Zval, rhs: &Zval) {
+        self.concat_tally(site, zstr_len(lhs) as u64, zstr_len(rhs) as u64);
+    }
+
+    fn concat_tally(&mut self, site: usize, llen: u64, rlen: u64) {
+        self.concat_ev[site] += 1;
+        self.concat_lhs_b[site] += llen;
+        self.concat_rhs_b[site] += rlen;
+        let b = if llen == 0 {
+            0
+        } else {
+            (u64::BITS - llen.leading_zeros()) as usize
+        }
+        .min(N_CONCAT_BUCKETS - 1);
+        self.concat_hist[site][b] += 1;
     }
 
     /// Record one dispatched op. `stack` is the current frame's operand
@@ -310,14 +380,30 @@ impl OpCensus {
     pub fn record(&mut self, op: &Op, stack: &[Zval], slots: &[Zval]) {
         let i = op_index(op);
         self.ops[i] += 1;
-        self.bigram[self.last * N_OPS + i] += 1;
+        let prev = self.last;
+        self.bigram[prev * N_OPS + i] += 1;
         self.last = i;
+        // WP-57 Prop-site commit: the op AFTER a Swap→Binary(Concat) decides —
+        // PropSet lands the pending lengths in the Prop row, anything else
+        // drops them (the concat was not a `$o->p .= rhs` shape).
+        if let Some((ll, rl)) = self.pending_prop_concat.take() {
+            if matches!(op, Op::PropSet { .. }) {
+                self.concat_tally(1, ll, rl);
+            }
+        }
         match op {
             Op::Binary(b) | Op::CmpJmp { op: b, .. } => {
                 if stack.len() >= 2 {
-                    let l = tag_index(&stack[stack.len() - 2]);
-                    let r = tag_index(&stack[stack.len() - 1]);
-                    self.binary[binop_index(*b) * 100 + l * 10 + r] += 1;
+                    let lv = &stack[stack.len() - 2];
+                    let rv = &stack[stack.len() - 1];
+                    self.binary[binop_index(*b) * 100 + tag_index(lv) * 10 + tag_index(rv)] += 1;
+                    if matches!(b, BinOp::Concat)
+                        && matches!(op, Op::Binary(_))
+                        && prev == op_index(&Op::Swap)
+                    {
+                        self.pending_prop_concat =
+                            Some((zstr_len(lv) as u64, zstr_len(rv) as u64));
+                    }
                 }
             }
             Op::FetchDim | Op::CoalesceFetchDim => {
@@ -399,6 +485,28 @@ impl OpCensus {
                 let _ = writeln!(o, "{:>12}  {}", c, TAG_NAMES[i]);
             }
         }
+        let _ = writeln!(o, "-- ConcatAssign non-local sites (lhs bytes = O(n^2) copy volume) --");
+        for s in 0..N_CONCAT_SITES {
+            if self.concat_ev[s] == 0 {
+                continue;
+            }
+            let _ = writeln!(
+                o,
+                "{:>12} ev  lhs_b={} rhs_b={} avg_lhs={}  {}",
+                self.concat_ev[s],
+                self.concat_lhs_b[s],
+                self.concat_rhs_b[s],
+                self.concat_lhs_b[s] / self.concat_ev[s],
+                CONCAT_SITE_NAMES[s]
+            );
+            let mut h = String::new();
+            for (b, &c) in self.concat_hist[s].iter().enumerate() {
+                if c > 0 {
+                    let _ = write!(h, " b{b}={c}");
+                }
+            }
+            let _ = writeln!(o, "        hist log2(lhs):{h}");
+        }
         o
     }
 }
@@ -439,6 +547,20 @@ pub fn census_record(op: &Op, stack: &[Zval], slots: &[Zval]) {
     CENSUS.with(|c| {
         if let Some(census) = c.borrow_mut().as_deref_mut() {
             census.record(op, stack, slots);
+        }
+    });
+}
+
+/// WP-57: record one non-local compound concat. Call sites are themselves
+/// `#[cfg(feature = "op-census")]`-gated inside the handlers, so parity
+/// builds compile them out entirely; unarmed census builds hit the
+/// `None` thread-local and return.
+#[cfg(feature = "op-census")]
+#[cold]
+pub fn census_concat_site(site: usize, lhs: &Zval, rhs: &Zval) {
+    CENSUS.with(|c| {
+        if let Some(census) = c.borrow_mut().as_deref_mut() {
+            census.concat_site(site, lhs, rhs);
         }
     });
 }
@@ -529,6 +651,47 @@ mod tests {
         assert_eq!(BINOP_NAMES[binop_index(BinOp::Add)], "Add");
         assert_eq!(BINOP_NAMES[binop_index(BinOp::Concat)], "Concat");
         assert!(binop_index(BinOp::Spaceship) < N_BINOPS);
+    }
+
+    #[test]
+    fn concat_site_accumulates_events_bytes_and_hist() {
+        let mut c = OpCensus::new();
+        let lhs = Zval::Str(php_types::PhpStr::new(vec![b'x'; 1024]));
+        let rhs = Zval::Str(php_types::PhpStr::new(b"ab".to_vec()));
+        c.concat_site(1, &lhs, &rhs);
+        // First append onto a non-string lhs counts 0 bytes into bucket 0.
+        c.concat_site(1, &Zval::Null, &rhs);
+        assert_eq!(c.concat_ev[1], 2);
+        assert_eq!(c.concat_lhs_b[1], 1024);
+        assert_eq!(c.concat_rhs_b[1], 4);
+        assert_eq!(c.concat_hist[1][11], 1); // 1024 = 2^10 → bucket 11
+        assert_eq!(c.concat_hist[1][0], 1);
+        assert!(c.render().contains("Prop(Swap;Concat;PropSet"));
+    }
+
+    #[test]
+    fn prop_concat_shape_commits_only_on_propset() {
+        // `$o->p .= rhs` lowering: …;Swap;Binary(Concat);PropSet.
+        let mut c = OpCensus::new();
+        let stack = vec![
+            Zval::Str(php_types::PhpStr::new(vec![b'x'; 8])),
+            Zval::Str(php_types::PhpStr::new(b"yz".to_vec())),
+        ];
+        c.record(&Op::Swap, &stack, &[]);
+        c.record(&Op::Binary(BinOp::Concat), &stack, &[]);
+        c.record(&Op::PropSet { name: b"p".to_vec().into(), ic: crate::bytecode::PropIc::default() }, &stack, &[]);
+        assert_eq!(c.concat_ev[1], 1);
+        assert_eq!(c.concat_lhs_b[1], 8);
+        assert_eq!(c.concat_rhs_b[1], 2);
+        // Same shape but followed by Pop: pending must be dropped.
+        c.record(&Op::Swap, &stack, &[]);
+        c.record(&Op::Binary(BinOp::Concat), &stack, &[]);
+        c.record(&Op::Pop, &stack, &[]);
+        assert_eq!(c.concat_ev[1], 1);
+        // Concat NOT preceded by Swap then PropSet: no commit either.
+        c.record(&Op::Binary(BinOp::Concat), &stack, &[]);
+        c.record(&Op::PropSet { name: b"p".to_vec().into(), ic: crate::bytecode::PropIc::default() }, &stack, &[]);
+        assert_eq!(c.concat_ev[1], 1);
     }
 
     #[test]

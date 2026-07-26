@@ -930,6 +930,10 @@ impl<'m> Vm<'m> {
                     let old = self
                         .call_method_sync(obj.clone(), b"offsetGet", vec![key.clone()])?
                         .deref_clone();
+                    #[cfg(feature = "op-census")]
+                    if matches!(op, crate::hir::BinOp::Concat) {
+                        crate::vm::census::census_concat_site(5, &old, &rhs);
+                    }
                     let new = super::apply_binop(op, &old, &rhs, &mut self.diags)?;
                     self.call_method_sync(obj, b"offsetSet", vec![key, new.clone()])?;
                     result = new;
