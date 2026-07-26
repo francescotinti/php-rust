@@ -205,6 +205,29 @@ Stato WP-61: php-server consegnato (verifica personale = Francesco);
 census v2 attribuito su --list-tests. Dettaglio: `sessions/
 WP_SESSION_61.md` + `wp61-harness/design61.md`.
 
+⚖️ **CONCILIO SU WP-62 ESEGUITO (2026-07-26 sera, 3/3 CONCORDO CON
+EMENDAMENTI — verbali integrali in
+`wp62-harness/COUNCIL_WP62_REVIEWS.md`, VINCOLANTI per design62)**.
+Punti di convergenza: (1) contatori hit/miss + net del HIT path
+obbligatori (drenaggio vero = dup_net − hit_net; hit_net ≤5% ex-ante);
+(2) predizione phys SEPARATA dal counted, per-bin, banda [0,6-1,0]× di
+(dup_net − hit_net), <50% ⇒ si ri-quota; (3) guard anti-annidamento
+delle finestre net + taratura del metro (probe sintetico ±10%) PRIMA di
+ri-citare 1.130MB; (4) ⚠️ Stogov R1: il perimetro NON è "rilassare la
+chiave" ma **re-link sul hit** (unit_fp hasha statics.len/class_index/
+seed_globals; double-check esige uguaglianza esatta) — pre-quotare la
+frazione position-independent dei 951,6MB e ns/hit vs ns/compile su
+version.php come kill-switch; (5) idempotenza di apply_seed_delta sul
+hit = condizione di esistenza; (6) P2 seed-thin in sessione SOLO con
+doppia coppia full a catena (P1 vs wp61, poi P1+P2 vs P1), altrimenti
+WP-63; (7) uploads: backup/wipe/restore AUTOMATIZZATO nell'harness
+(tar+manifest, abort se fallisce) prima di ogni full; (8) 8 sentinelle
+nuove al gate (Stogov R6: define/const re-include, __FILE__ cross-path,
+strict_types hit/fresh, classe condizionale + stub-mask
+contesto-dipendente ⇒ degradare a miss, redeclare DAL hit, include
+in-funzione sul hit, rewrite stessa-size-stesso-secondo,
+get_included_files).
+
 0. **Mappa FULL v2 GIÀ LETTA in coda a WP-61** (master 4726 unit):
    **la banda Fase 0.5 in NET = dup 1.130,2MB, di cui 951,6MB sui 3
    bersagli nominati** (version.php ×899 = 393,5MB · script-modules
