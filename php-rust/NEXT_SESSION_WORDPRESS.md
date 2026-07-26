@@ -167,30 +167,70 @@
 #  Stash: phpr-wp58 (sha256 2d7efdf8…).
 ```
 
-## 🎯 PROSSIMO LAVORO — WP-59 (proposta; ⚖️ rotta da confermare con l'utente)
+## 🎯 PROSSIMO LAVORO — WP-59: attribuzione fuori-canale (programma del CONCILIO ESTESO — review integrale delle 3 sedie in `doc/analysis/COUNCIL_WP58_REVIEWS.md`, ⚖️ mandato utente 2026-07-26: "integra i loro feedback e richieste nella prossima sessione")
 
 **Rotta (utente 2026-07-24)**: `FOOTPRINT_CPU_ROADMAP.md` — footprint-first,
 safe-only, TUTTE le fasi comunque, **niente revert su insuccesso**.
-Laravel POSTICIPATA a valle. WP-58 ha eseguito la tranche 2 (peak −17MB
-dentro banda, media flat) e chiuso il metro: TUTTI i canali valore ora
-live-esatti.
+Laravel POSTICIPATA a valle. Convergenza 3/3 delle nuove sedie
+(Leijen/Stogov/Gregg): PRIMA la quota falsificata del ~1,1GB
+fuori-canale; ipotesi dominante = ritenzione/frammentazione per-pagina
+mimalloc accoppiata al churn (~6GB/run; unit immortali `Box::leak`
+interleavate con l'effimero negli stessi bin = page-pinning) + strutture
+runtime non censite (frame, IC, Rc sciolti, slack Vec).
 
-1. **Candidato Ob.1 — attribuzione di seconda generazione del fisico
-   FUORI-canale**: i metri esatti dicono arr 65,6 + str 62,3 + obj 56,1
-   ≈ 12% del fisico al picco + unit 222,6MB (14,5%) ⇒ ~1,1GB non
-   attribuito (allocatore/COW/frammentazione/walk-unreached: obj live_n
-   68,6k vs reached 22,1k). Strumenti Fase 0/54 (vmmap, walk roots,
-   mi_stats). La prossima leva GRANDE di footprint va TROVATA prima di
-   aprire altre tranche arena (str single-alloc resta demansionata:
-   serve crate DST + WP-55 la falsificò come pilota).
-2. **Attribuzione regressione full-only WP-58 (+1,0..+2,5%)**: media
-   FLAT ⇒ fenomeno churn/subprocess-shaped del full. Candidati:
-   TLS+RefCell del pool sul Drop path (ogni array con cap>0),
-   scan lineare 5-8 slot, materializzazione indice. Probe churn-shaped
-   10 righe + op/gc census sul full se serve. Anche solo per verbale.
-3. **Residuo full vs oracle (2,11× di giornata)**: attribuzione WP-54:
-   corpi+dispatch 41,9% · gc-walk 10% · crypt onesto; str-copy residuo =
-   copie GENERICHE (i siti compound non-locali valgono 23µs — chiuso).
+1. **Ob.0 (Gregg R1 / Leijen 1 — ZERO codice, ~20-30 min, FARE PER
+   PRIMO)**: run media + full con `MIMALLOC_SHOW_STATS=1` (+VERBOSE) e
+   one-shot `vmmap --summary` al picco vs maxrss dello stesso run.
+   Falsifica subito: committed mimalloc ≪ fisico ⇒ il residuo NON è
+   nell'allocatore; maxrss ≫ vmmap-phys ⇒ quota MADV_FREE contabile.
+   Può ridimensionare il mistero prima di spendere altro.
+2. **Ob.1 — strumentazione census "Fase 0-bis"** (Leijen 2+3, Gregg
+   R2-R4; build census, mai giudici): (a) watermark RI-CHIAVATO sul
+   fisico vero (`task_info` phys_footprint, +128MB, tag col nome del
+   test) + flag-file; (b) `mi_stats_print_out` + `mi_process_info` nel
+   callback; (c) occupancy per size-class al picco via
+   `mi_heap_visit_blocks` (visit_blocks=false); (d) supervisore esterno
+   vmmap+footprint per finestra (⚠️ heap mimalloc = regioni VM_ALLOCATE,
+   NON MALLOC_*; le MALLOC_* = zone FFI). **Gate pre-registrato**:
+   Σ used_bins = census+non-censiti; Σ(committed−used) = frammentazione;
+   +metadata ≈ fisico ±10-15%; tabella copre ≥90% del 1,1GB con nome
+   del test per finestra.
+3. **Ob.2 — probe anomalia 46k obj unreached** (Gregg §3, ~30 righe
+   census-only): istogramma per-ClassId/kind della differenza
+   registry−reached + `collect_cycles` forzato pre-walk. Sospetto n.1:
+   sovra-conteggio al choke `next_id` (condiviso con closure/generator/
+   handle — firma: created==reached alla cifra). ⚠️ Se confermato, il
+   fix contabile corregge ANCHE l'obj_fixed di WP-58-Ob.2 (alloca la
+   parte fissa a ids non-Object mai liberati) e sgonfia il canale obj.
+4. **Ob.3 — attribuzione regressione full-only +1..+2,5%** (Leijen 4):
+   binario `pool-off` (feature/`class()`→None, NON DEPTH=0 che paga il
+   TLS comunque) vs new, full STESSA-SERA; se il delta resta, secondo
+   binario `SCAN_MAX=4`. UN asse per binario. Se il pool è colpevole:
+   la roadmap Fase 3 consente il revert della SOLA versione regressiva
+   (⚖️ decisione utente al verbale — A e C restano comunque).
+5. **Quote Stogov (se margine, altrimenti WP-60; mezza giornata l'una)**:
+   (a) censimento duplicati contenuto-stringa al mark (tetto interning);
+   (b) censimento literal-array (quota `[]` vuoti + tutto-costanti dei
+   5,46M cum ⇒ banda empty-singleton/immutable-literal); (c)
+   `memory_get_peak_usage` per-test lato oracle (target per-canale
+   onesto); (d) breakdown unit per-componente (ops/payload/literal/meta
+   + duplicazione cross-unit) — **unit diet = la più grande leva GIÀ
+   attribuita: banda Stogov −80..−150MB**. Giudizio Stogov sull'ordine:
+   mappa → unit diet → interning (solo col censimento in mano; il suo
+   valore vero è uccidere il churn alla fonte se Ob.1 attribuisce
+   ≥400MB alla frammentazione churn-correlata).
+6. **Residuo CPU full vs oracle (2,11× di giornata)**: attribuzione
+   WP-54 vigente (corpi+dispatch 41,9% · gc-walk 10% · crypt onesto).
+
+**VETI del concilio (vincolanti per WP-59)**: mai toccare
+MIMALLOC_PURGE_DELAY nei giudici; mai giudicare ritenzione col maxrss;
+nessun nuovo pool/freelist sopra mimalloc prima del verdetto Ob.3;
+nessun reset per-test al boundary PHPUnit (static-props = SEMANTICA);
+mai `mi_heap_destroy` su heap con Drop Rust; `mi_collect(true)` solo
+nei build census etichettati; malloc_history/Instruments-Allocations
+sono CIECHI su mimalloc (heap = VM_ALLOCATE); interning (futuro): Rc
+forti in tabella + mai nel path append + re-gate output refcount;
+immutable-literal (futuro): solo tutto-scalari + cursore separabile.
 4. **NON riproporre**: **arena condivisa a handle u32 per le entries
    (WP-58 pin a: restituire `&/&mut` da uno slab condiviso richiede
    unsafe o riscrittura closure-based della VM — RULEBOOK §0; il
