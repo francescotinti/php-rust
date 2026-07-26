@@ -24,9 +24,13 @@
 > — l'ipotesi payload-op ridimensionata; opkind owned=0 (payload tutti
 > Rc); literal dup cross-unit 11,7MB (interning = banda modesta);
 > net/re-include ~40× il counted (il template paga il prefisso stub del
-> seed accumulato). **Mappa FULL v2 detached**:
-> `wp61-harness/census-out/memcensus61-full.txt` (flag `.done`) — da
-> leggere a inizio WP-62. **Storia: `sessions/WP_SESSION_61.md`. WP-60:
+> seed accumulato). **Mappa FULL v2 LETTA (master pid, 4726 unit
+> conservate)**: net_tot **1.973,3MB** (counted-v1 490,7) — split
+> mod_owned 932,6 + cls_priv 758,0 + fns_priv 32,1 = owned 1.722,7MB,
+> rc_residue 250,5MB (12,7%); **QUOTA DUP IN NET = 1.130,2MB (~4,7× il
+> counted)**: i 3 bersagli Fase 0.5 = **951,6MB net** (version.php ×899
+> = 393,5 · script-modules ×704 = 339,9 · script-loader ×400 = 218,2);
+> modlit dup 28,9MB. **Storia: `sessions/WP_SESSION_61.md`. WP-60:
 > `sessions/WP_SESSION_60.md`.**
 
 ## 📁 Convenzioni (decisione utente 2026-07-23)
@@ -201,13 +205,15 @@ Stato WP-61: php-server consegnato (verifica personale = Francesco);
 census v2 attribuito su --list-tests. Dettaglio: `sessions/
 WP_SESSION_61.md` + `wp61-harness/design61.md`.
 
-0. **PRIMO ATTO: leggere la mappa FULL v2** (`wp61-harness/census-out/
-   memcensus61-full.txt`, run detached di fine WP-61 — verificare flag
-   `census61-full.done`): ri-quotare in NET la banda Fase 0.5 (era
-   −240MB+ counted; lo smoke dice net/counted ~2-3× sul dup) e leggere
-   il modrecon del full (su --list-tests: cls_priv 58% / mod_owned 31% /
-   rc_residue 14% — se il full conferma, le leve future guardano ANCHE a
-   CompiledClass/Module tables, non solo al payload op).
+0. **Mappa FULL v2 GIÀ LETTA in coda a WP-61** (master 4726 unit):
+   **la banda Fase 0.5 in NET = dup 1.130,2MB, di cui 951,6MB sui 3
+   bersagli nominati** (version.php ×899 = 393,5MB · script-modules
+   ×704 = 339,9MB · script-loader ×400 = 218,2MB); modrecon full
+   conferma il --list-tests (cls_priv 44% / mod_owned 54% del owned;
+   rc_residue 12,7%) ⇒ le leve future guardano ANCHE a
+   CompiledClass/Module tables, non solo al payload op. In design62:
+   registrare la predizione del drenaggio PHYS (non è 1:1 col counted;
+   il peak full parità è 3,90GB) PRIMA dell'A/B.
    ⚠️ **uploads**: da quando Francesco carica media nella verifica
    personale, i futuri harness full NON devono più azzerare
    `src/wp-content/uploads` senza backup (census61-full è stato l'ultimo

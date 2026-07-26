@@ -121,10 +121,24 @@ Binario **phpr-memgc61** (9600a662…), harness `wp61-harness/`.
 - Smoke probe: **net/re-include ~127KB vs 3,1KB counted (~40×)** — il
   costo vero del template-include include la compilazione del prefisso
   stub del seed accumulato (cresce col seed: super-lineare sul full).
-- **Mappa FULL v2**: lanciata detached a fine sessione →
-  `wp61-harness/census-out/memcensus61-full.txt` (+ flag `.done`);
-  lettura = PRIMO ATTO di WP-62 (la predizione Fase 0.5 si ri-quota in
-  NET su quella mappa).
+**Risultati mappa FULL v2** (memcensus61-full.txt, run 991s wall / 830s
+user, peak census 3,928GB ≈ parità+0,7%; profilo test atteso 2F/86W/73S;
+⚠️ il file ha un record per OGNI processo di isolation — il MASTER è
+pid con units=4726, conservate a WP-60):
+- master: **net_tot 1.973,3MB su 4726 unit** (counted-v1 490,7MB) —
+  il compile-side delle unit sul full è ~2GB in NET, super-lineare col
+  seed (il re-include paga il prefisso stub accumulato).
+- Split master: **mod_owned 932,6MB + cls_priv 758,0MB + fns_priv
+  32,1MB = owned_priv 1.722,7MB; rc_residue 250,5MB (12,7%)** —
+  conferma del --list-tests: payload-Rc minoritario anche sul full.
+- **QUOTA DUP IN NET = 1.130,2MB** (counted-v1: 240,2MB ⇒ ~4,7×): i 3
+  bersagli Fase 0.5 = **951,6MB net** (version.php ×899 = 393,5MB ·
+  script-modules-packages ×704 = 339,9MB · script-loader-packages ×400
+  = 218,2MB). **La banda compile-cache cambia di scala: ~1,1GB counted
+  sul full** (il drenaggio phys atteso va ri-quotato in design62 PRIMA
+  dell'A/B, non è 1:1 col peak).
+- modlit master: uniq 34,7MB, dup contenuto cross-unit 28,9MB; opkind
+  5,92M op / 109.949 func, owned=0 (payload tutti Rc, come listtests).
 
 ## ⭐ Lezioni P2
 
