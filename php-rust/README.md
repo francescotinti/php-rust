@@ -94,7 +94,8 @@ crates/
   php-types/     Zval, type coercion & comparison semantics, streams, zlib FFI
   php-builtins/  pure stdlib functions (fn(args, ctx) -> Zval)
   php-runtime/   the VM: compiler, bytecode, host builtins, OOP, PDO, GC
-  php-cli/       the `phpr` binary
+  php-cli/       the `phpr` binary (also a lib: exposes the cli-server SAPI)
+  php-server/    standalone HTTP server binary over the same SAPI
   phpt-runner/   the .phpt conformance harness (differential vs upstream)
 ```
 
@@ -113,6 +114,27 @@ Run the upstream Zend conformance suite:
 ```sh
 phpt-runner --isolate /path/to/php-8.5.7/Zend/tests
 ```
+
+## Quick-start: serve WordPress with `php-server`
+
+`php-server` is a standalone binary over the same oracle-pinned cli-server
+SAPI as `phpr -S` (sequential request handling, POST/cookies/uploads,
+`$_SERVER`, static files, and the `index.php` PATH_INFO fallback that serves
+WordPress pretty permalinks and `/wp-json/` without a router script). It was
+validated against `phpr -S` byte-for-byte on a WordPress front page, login
+(POST + auth cookie), wp-admin dashboard, a pretty permalink, and a static
+asset.
+
+```sh
+cargo build --release            # binaries land in the configured target-dir
+# prerequisite, one line: a MySQL reachable at the host:port in wp-config.php
+# with the WordPress database already installed.
+php-server --port 8080 --docroot /path/to/wordpress
+# then browse http://127.0.0.1:8080/  (wp-admin included)
+```
+
+Defaults are `--host 127.0.0.1 --port 8080 --docroot .`; an optional
+positional `router.php` argument is honoured exactly like `phpr -S`.
 
 ## Roadmap
 
