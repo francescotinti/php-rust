@@ -296,6 +296,13 @@ pub struct PhpArray {
     /// not touch it (PHP 8). Carried by `Clone`/COW like the rest of the array
     /// state. Escalation preserves slot positions, so the cursor survives it.
     cursor: usize,
+    /// WP-57 (census builds only): bytes currently credited to the LIVE
+    /// arr counter for THIS array. Synced to `census_bytes()` at the top of
+    /// every mutating method (lag ≤ the array's most recent capacity step);
+    /// `Drop` frees exactly this figure, so a missed sync can never drift
+    /// the channel negative.
+    #[cfg(feature = "mem-census")]
+    accounted: std::cell::Cell<usize>,
     /// Conservative container-content marker: `false` only when every value ever
     /// stored is a scalar/string AND no `&mut` element handle was ever handed out
     /// (a caller could promote a scalar in place). Lets the GC's drop-descent and
@@ -355,29 +362,38 @@ impl Clone for PhpArray {
                 index: index.clone(),
             },
         };
-        #[cfg(feature = "mem-census")]
-        crate::memcensus::count_alloc(crate::memcensus::CH_ARR);
-        PhpArray {
+        let new = PhpArray {
             repr,
             next_free: self.next_free,
             count: self.count,
             cursor: self.cursor,
             holds_containers: self.holds_containers,
+            #[cfg(feature = "mem-census")]
+            accounted: std::cell::Cell::new(0),
             walk: crate::object::WalkMark::new(),
+        };
+        #[cfg(feature = "mem-census")]
+        {
+            let cb = new.census_bytes();
+            crate::memcensus::alloc(crate::memcensus::CH_ARR, cb);
+            new.accounted.set(cb);
         }
+        new
     }
 }
 
-/// Fase 0 byte-census (census builds only): the ARR channel is
-/// death-accounted — exact capacity bytes measured when the array drops,
-/// live-count via new/default/clone. Live bytes are estimated at dump time
-/// (live_n × average death size) and cross-checked against the residual of
-/// the external peak footprint.
+/// WP-57: the ARR channel is now LIVE-accounted exactly (the WP-56 verdict
+/// killed the death-avg estimator: churn-shaped deaths overstate standing
+/// 5,7×). Every construction funnels through `Default`/`Clone` (private
+/// fields), every capacity change through a `&mut self` method that opens
+/// with [`PhpArray::census_sync`]; `Drop` frees the per-array `accounted`
+/// figure, so the channel can never drift. CUM now accumulates
+/// alloc + positive adjusts (same convention as the str channel) — the
+/// old `death()` feed is gone with the estimator.
 #[cfg(feature = "mem-census")]
 impl Drop for PhpArray {
     fn drop(&mut self) {
-        crate::memcensus::death(crate::memcensus::CH_ARR, self.census_bytes());
-        crate::memcensus::count_free(crate::memcensus::CH_ARR);
+        crate::memcensus::free(crate::memcensus::CH_ARR, self.accounted.get());
     }
 }
 
@@ -396,20 +412,47 @@ impl PhpArray {
         };
         body + crate::memcensus::ARR_OVERHEAD
     }
+
+    /// Re-credit this array's current capacity to the LIVE arr counter
+    /// (delta vs the last sync). Called at the TOP of every mutating
+    /// method: the lag is at most the array's own most recent capacity
+    /// step, and `Drop` reconciles whatever is left.
+    #[inline]
+    pub(crate) fn census_sync(&self) {
+        let cb = self.census_bytes();
+        let delta = cb as i64 - self.accounted.get() as i64;
+        if delta != 0 {
+            crate::memcensus::adjust(crate::memcensus::CH_ARR, delta);
+            self.accounted.set(cb);
+        }
+    }
+
+    /// Census shape row for the per-repr histogram: (is_packed, live count,
+    /// capacity bytes) — read by the EOR reached-walk.
+    pub fn census_shape(&self) -> (bool, u32, usize) {
+        (matches!(self.repr, Repr::Packed(_)), self.count, self.census_bytes())
+    }
 }
 
 impl Default for PhpArray {
     fn default() -> Self {
-        #[cfg(feature = "mem-census")]
-        crate::memcensus::count_alloc(crate::memcensus::CH_ARR);
-        PhpArray {
+        let new = PhpArray {
             repr: Repr::Packed(Vec::new()),
             next_free: i64::MIN,
             count: 0,
             cursor: 0,
             holds_containers: false,
+            #[cfg(feature = "mem-census")]
+            accounted: std::cell::Cell::new(0),
             walk: crate::object::WalkMark::new(),
+        };
+        #[cfg(feature = "mem-census")]
+        {
+            let cb = new.census_bytes();
+            crate::memcensus::alloc(crate::memcensus::CH_ARR, cb);
+            new.accounted.set(cb);
         }
+        new
     }
 }
 
@@ -460,6 +503,8 @@ impl PhpArray {
 
     /// Insert or update. Updating an existing key keeps its position.
     pub fn insert(&mut self, key: Key, val: Zval) {
+        #[cfg(feature = "mem-census")]
+        self.census_sync();
         self.holds_containers |= !matches!(
             val,
             Zval::Undef | Zval::Null | Zval::Bool(_) | Zval::Long(_) | Zval::Double(_) | Zval::Str(_)
@@ -515,6 +560,8 @@ impl PhpArray {
     /// return exactly like the composite's `get_mut` did (the caller may
     /// write any value through the handle).
     pub fn slot_or_vivify(&mut self, key: Key) -> &mut Zval {
+        #[cfg(feature = "mem-census")]
+        self.census_sync();
         enum Plan {
             Hit(usize),
             Append(i64),
@@ -588,6 +635,8 @@ impl PhpArray {
     /// vivify-Null-then-overwrite, which would mis-flag scalar-only arrays
     /// and feed a spurious Null to gc_note) and returns `None`.
     pub fn set_returning_displaced(&mut self, key: Key, val: Zval) -> Option<Zval> {
+        #[cfg(feature = "mem-census")]
+        self.census_sync();
         fn write_slot(slot: &mut Zval, val: Zval) -> Zval {
             match slot {
                 Zval::Ref(cell) => std::mem::replace(&mut *cell.borrow_mut(), val),
@@ -627,6 +676,8 @@ impl PhpArray {
     /// element whose int key was the latest auto-index (`next_free - 1`)
     /// frees that index again, so pop-then-append reuses the same key.
     pub fn pop_adjust_next_free(&mut self, popped: &Key) {
+        #[cfg(feature = "mem-census")]
+        self.census_sync();
         if let Key::Int(i) = popped {
             if self.next_free != i64::MIN && *i == self.next_free - 1 {
                 self.next_free = *i;
@@ -638,6 +689,8 @@ impl PhpArray {
     /// Fails only when that slot is occupied (possible after saturation at
     /// i64::MAX), matching Zend's "next element is already occupied" error.
     pub fn append(&mut self, val: Zval) -> Result<(), ArrayAppendError> {
+        #[cfg(feature = "mem-census")]
+        self.census_sync();
         let h = if self.next_free == i64::MIN { 0 } else { self.next_free };
         if self.contains_key(&Key::Int(h)) {
             return Err(ArrayAppendError);
@@ -651,6 +704,8 @@ impl PhpArray {
     /// reference cell. `None` when that slot is occupied (saturation), matching
     /// [`Self::append`].
     pub fn append_default(&mut self) -> Option<&mut Zval> {
+        #[cfg(feature = "mem-census")]
+        self.census_sync();
         let h = if self.next_free == i64::MIN { 0 } else { self.next_free };
         if self.contains_key(&Key::Int(h)) {
             return None;
@@ -715,6 +770,8 @@ impl PhpArray {
     /// `unset($a[k])`: leaves a tombstone so iteration order is preserved.
     /// `next_free` intentionally not touched (Zend semantics).
     pub fn remove(&mut self, key: &Key) -> Option<Zval> {
+        #[cfg(feature = "mem-census")]
+        self.census_sync();
         match &mut self.repr {
             Repr::Packed(slots) => {
                 let i = match key {

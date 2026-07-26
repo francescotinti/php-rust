@@ -141,10 +141,12 @@ fn proxy_total() -> i64 {
 }
 
 fn live_estimate(ch: usize) -> i64 {
-    if ch == CH_OBJ || ch == CH_ARR {
-        // death-accounted channels: live bytes ≈ live count × average death
-        // size (exact live requires mutator hooks — Fase 0 accepts the bias
-        // and cross-checks against the external peak residual).
+    if ch == CH_OBJ {
+        // death-accounted channel: live bytes ≈ live count × average death
+        // size. WP-56 measured this estimator at 5,7× over on arr (churn
+        // deaths don't resemble the standing population) — arr is therefore
+        // live-accounted exactly since WP-57 (accounted/census_sync hooks);
+        // only obj still uses the biased average, cross-checked externally.
         let n = CUM_N[ch].load(Relaxed);
         if n == 0 {
             return 0;
@@ -223,6 +225,8 @@ pub fn deep_size(
             }
             let own = a.census_bytes() as u64;
             reached(CH_ARR, own);
+            let (is_packed, n_live, cb) = a.census_shape();
+            shape_note(is_packed, n_live, cb);
             let mut b = own;
             for (k, ev) in a.iter() {
                 if let crate::Key::Str(ks) = &k {
@@ -292,10 +296,38 @@ static TRUNCATED: AtomicU64 = AtomicU64::new(0);
 static REACHED_N: [AtomicU64; N_CH] = [const { AtomicU64::new(0) }; N_CH];
 static REACHED_B: [AtomicU64; N_CH] = [const { AtomicU64::new(0) }; N_CH];
 
+/// WP-57: per-repr histogram of the REACHED arr population (EOR walk):
+/// row 0 = packed, row 1 = hashed; bucket = log2(live element count)
+/// (bucket 0 = empty array). `SHAPE_B` carries capacity bytes
+/// (`census_bytes`), so Σ SHAPE_B ≈ reached_b of the arr channel.
+pub const N_SHAPE_BUCKETS: usize = 24;
+static SHAPE_N: [[AtomicU64; N_SHAPE_BUCKETS]; 2] =
+    [const { [const { AtomicU64::new(0) }; N_SHAPE_BUCKETS] }; 2];
+static SHAPE_B: [[AtomicU64; N_SHAPE_BUCKETS]; 2] =
+    [const { [const { AtomicU64::new(0) }; N_SHAPE_BUCKETS] }; 2];
+
+fn shape_note(is_packed: bool, count: u32, bytes: usize) {
+    let row = if is_packed { 0 } else { 1 };
+    let b = if count == 0 {
+        0
+    } else {
+        (u32::BITS - count.leading_zeros()) as usize
+    }
+    .min(N_SHAPE_BUCKETS - 1);
+    SHAPE_N[row][b].fetch_add(1, Relaxed);
+    SHAPE_B[row][b].fetch_add(bytes as u64, Relaxed);
+}
+
 pub fn reached_reset() {
     for ch in 0..N_CH {
         REACHED_N[ch].store(0, Relaxed);
         REACHED_B[ch].store(0, Relaxed);
+    }
+    for row in 0..2 {
+        for b in 0..N_SHAPE_BUCKETS {
+            SHAPE_N[row][b].store(0, Relaxed);
+            SHAPE_B[row][b].store(0, Relaxed);
+        }
     }
 }
 
@@ -346,5 +378,20 @@ pub fn report_roots(entries: &[(String, u64)]) {
             LIVE_N[ch].load(Relaxed),
             live_estimate(ch),
         );
+    }
+    // WP-57 per-repr histogram of the reached arr population (non-empty
+    // buckets only): the input the Fase-3 tranche-2 ordering needs — where
+    // the standing bytes live by shape and size.
+    for (row, name) in [(0usize, "packed"), (1, "hashed")] {
+        for b in 0..N_SHAPE_BUCKETS {
+            let n = SHAPE_N[row][b].load(Relaxed);
+            if n > 0 {
+                let _ = writeln!(
+                    f,
+                    "pid={pid} tag=arr_shape repr={name} b={b} n={n} bytes={}",
+                    SHAPE_B[row][b].load(Relaxed)
+                );
+            }
+        }
     }
 }
