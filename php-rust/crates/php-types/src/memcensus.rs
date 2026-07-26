@@ -784,30 +784,50 @@ pub fn census_line(line: &str) {
 }
 
 /// WP-60 P2(b): positive control of the abandoned-blocks visitor (Gregg
-/// R5a) — a thread allocates 1MiB, leaks it and dies; the visitor MUST see
-/// it, or the `aband` column is declared dead in the reports.
+/// R5a) — a thread leaks ~1.25MiB and dies; either the abandoned visitor
+/// sees it (SEEN), or the main-heap visit absorbed the pages
+/// (ADOPTED_MAIN: v3 reclaimed the dead thread's pages), or the column is
+/// dead (DEAD) and the reports must label it so.
 pub fn abandoned_positive_control() {
+    fn visit(aband: bool) -> (bool, u64, u64) {
+        let mut t = BinTab::boxed();
+        let arg = &mut *t as *mut BinTab as *mut std::os::raw::c_void;
+        let ok = unsafe {
+            if aband {
+                mi_heap_visit_abandoned_blocks(mi_heap_main(), false, area_visitor, arg)
+            } else {
+                mi_heap_visit_blocks(mi_heap_main(), false, area_visitor, arg)
+            }
+        };
+        let (mut ub, mut un) = (0u64, 0u64);
+        for i in 0..N_BINS {
+            ub += t.used_b[i];
+            un += t.used_n[i];
+        }
+        (ok, ub, un)
+    }
+    let (_, mb0, mn0) = visit(false);
     let joined = std::thread::spawn(|| {
-        std::mem::forget(vec![0xA5u8; 1 << 20].into_boxed_slice());
+        for _ in 0..32 {
+            std::mem::forget(vec![0xA5u8; 40960].into_boxed_slice());
+        }
     })
     .join();
-    let mut t = BinTab::boxed();
-    let ok = unsafe {
-        mi_heap_visit_abandoned_blocks(
-            mi_heap_main(),
-            false,
-            area_visitor,
-            &mut *t as *mut BinTab as *mut std::os::raw::c_void,
-        )
-    };
-    let (mut ub, mut un) = (0u64, 0u64);
-    for i in 0..N_BINS {
-        ub += t.used_b[i];
-        un += t.used_n[i];
-    }
+    let (ok, ab, an) = visit(true);
+    let (_, mb1, mn1) = visit(false);
+    let planted = 32u64 * 40960;
+    let main_delta = mb1.saturating_sub(mb0);
     census_line(&format!(
-        "tag=aband_check join_ok={} visit_ok={ok} used_b={ub} used_n={un} verdict={}",
+        "tag=aband_check join_ok={} visit_ok={ok} aband_b={ab} aband_n={an} \
+         main_delta_b={main_delta} main_delta_n={} verdict={}",
         joined.is_ok(),
-        if ok && ub >= (1 << 20) { "SEEN" } else { "DEAD" },
+        mn1.saturating_sub(mn0),
+        if ok && ab >= planted {
+            "SEEN"
+        } else if main_delta >= planted {
+            "ADOPTED_MAIN"
+        } else {
+            "DEAD"
+        },
     ));
 }
