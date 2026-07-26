@@ -181,6 +181,12 @@ mod pool {
     /// Shelf for a pow2 capacity with minimum class `1 << base`.
     #[inline]
     fn class(cap: usize, base: u32) -> Option<usize> {
+        // WP-59 Ob.3: pool-off = nessuno shelf per NESSUNA classe; il TLS
+        // e i borrow spariscono interi dal codegen (attribuzione a binario,
+        // un asse solo — la via DEPTH=0 pagherebbe comunque l'accesso TLS).
+        if cfg!(feature = "pool-off") {
+            return None;
+        }
         if cap.is_power_of_two() {
             let c = cap.trailing_zeros();
             if (base..base + NCLASS as u32).contains(&c) {
