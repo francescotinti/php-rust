@@ -483,6 +483,30 @@ Scoperti da `wp38-harness/probe_wp38.php`; chiusi/riclassificati in WP-39
 
 ---
 
+### 3.8 Famiglia opcache/unit-cache (depositata in WP-63, design62 §3 (i)-(iv))
+
+La unit-cache di phpr (WP-20, chiave path+mtime+size / fingerprint VM) è
+il MECCANISMO analogo a opcache; le divergenze sono di meccanismo, MAI di
+output osservabile (il gate lo asserisce):
+
+- **(i)** L'oracolo CLI NON ha opcache attivo; phpr con unit-cache diverge
+  in meccanismo (salta lower+compile sul hit) ma mai in output.
+- **(ii)** `opcache_reset()` / `opcache_invalidate()` / `opcache_*` API:
+  ASSENTI. `TODO(port)`: stub onesti se un workload reale li chiama.
+- **(iii)** Retention illimitata su edit ripetuti in php-server: i Module
+  sono `Box::leak` `'static`, un supersede NON libera il vecchio
+  (`TODO(port)` de-leak su supersede — Leijen R5/KS4; il budget andrà
+  per-BYTES, mai per-entries; con axum ×N worker la cache thread_local
+  si moltiplica — nota Pedersen).
+- **(iv)** `clearstatcache()` vs mtime cacheato nella unit-key: la
+  file_update_protection (~2s, mtime giovane ⇒ hash sempre) copre il
+  bordo write→include→rewrite; la semantica di clearstatcache sui
+  metadata della unit-key resta divergente in meccanismo.
+- **(v, WP-63)** Ordine di enumerazione (`get_declared_classes`): l'ordine
+  di push nella tabella runtime è INVARIATO dalla stub-elision (sentinella
+  KE-a); se un futuro cambio di rappresentazione lo toccasse, la voce va
+  promossa a divergenza reale con probe.
+
 ## 4. Punti di forza da NON toccare (invarianti verificati byte-identici)
 
 Per evitare regressioni, questi comportamenti sono **già** byte-identici con
@@ -512,6 +536,10 @@ l'oracle e vanno preservati:
 ---
 
 ### Changelog di questo documento
+
+- 2026-07-27: §3.8 — famiglia opcache/unit-cache (voci (i)-(iv) di
+  design62 §3 depositate in apertura WP-63, K5-Klabnik; + nota KE-a
+  sull'ordine di enumerazione).
 - 2026-07-22 (sessione WordPress-39): ✅ CHIUSI i tre gap §3.7 (probe WP-38):
   `$flags` dei value-sort (`flag_value_sort` + arm SORT_NATURAL in
   `key_flag_cmp`), diagnostica string-offset READ oracle-pinned

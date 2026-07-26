@@ -91,6 +91,38 @@ declared residues stays `PHPR_DIVERGENCES_FROM_PHP.md`.
   tests asserting phpr's current order — WP-32, WP-39): such orders are
   timing-derived, not oracle-diffable, and must not change silently.
 
+## 4. Unit compilation contracts (WP-62/63 — user-signed 2026-07-27)
+
+- **Contract v1 (seeded materialization, legacy / flag OFF)**: a unit's
+  Module materializes the accumulated seed image ahead of its own
+  declarations (interned stubs + fully recompiled seed conditionals),
+  with unit-local ids relocated into the global space at link time and
+  name-dedup performed by the link-time remap.
+- **Contract v2 (stub-elision, WP-63)**: a unit compiles against the
+  VM's live symbol table through a READ-ONLY view (Roslyn-style
+  metadata reference, never re-emission). Class references resolve at
+  emit time to ABSOLUTE global ids; ids for genuinely-new classes are
+  reserved from `classes.len()` in a mutation-free pre-pass (rollback
+  on failed compile is trivially empty — nothing was mutated). The
+  Module carries ONLY the unit's own declarations; no per-execution id
+  resolution may appear in the run loop (WP-44 law).
+- **Monotonicity invariant (load-bearing for v2 and the unit cache)**:
+  baked global ids are valid only because the class table is
+  APPEND-ONLY and name registration is FIRST-WINS. Any future removal
+  or reordering of class-table entries invalidates contract v2 and
+  every cached unit; such a change must reopen this section first.
+- **Relocation rule (WP-62, pinned)**: whether an entry relocates is
+  decided by `Rc::get_mut` (the aliasing fact); explicit provenance
+  markers only CLASSIFY the shared case (prelude / seed-stub). The
+  skip-if-marked bug class is FORBIDDEN — a fresh-compiled
+  prelude-named body is uniquely owned, carries unit-local ids and
+  MUST relocate. An unmarked shared entry is loud (silent-stale-id
+  class, symfony IpUtils).
+- **Module post-leak is immutable**: publication as `&'static Module`
+  is the seal (borrow checker). The `SealedModule` newtype stays
+  DEFERRED — ratified WP-63 — until an owned-copy path reappears
+  (e.g. unit-cache re-link on non-elided modules).
+
 ## Deviation log
 
 Priced, catalogued divergences live in `PHPR_DIVERGENCES_FROM_PHP.md`
