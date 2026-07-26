@@ -475,6 +475,32 @@ impl<'m> super::Vm<'m> {
             // struct plus an Rc bump per payload on every VM tick). Handlers
             // clone payloads only where they genuinely take ownership.
             let func = self.frames[top].func;
+            // WP-57 diagnostic trap (census builds only): one full full-suite
+            // census run fetched ops[len] (non-deterministic, never seen on
+            // parity binaries). Convert the next occurrence into a diagnosis
+            // instead of a bare index-out-of-bounds.
+            #[cfg(feature = "op-census")]
+            if ip >= func.ops.len() {
+                eprintln!(
+                    "[phpr op-census diag] PC out of bounds: ip={} len={} fn={} file={} line={} generator={}",
+                    ip,
+                    func.ops.len(),
+                    String::from_utf8_lossy(&func.name),
+                    String::from_utf8_lossy(&func.file),
+                    func.line,
+                    func.is_generator,
+                );
+                eprintln!("[phpr op-census diag] tail ops: {:?}", &func.ops[func.ops.len().saturating_sub(5)..]);
+                eprintln!("[phpr op-census diag] exc_table: {:?}", func.exc_table);
+                for (i, fr) in self.frames.iter().enumerate().rev().take(12) {
+                    eprintln!(
+                        "[phpr op-census diag]   frame[{i}] fn={} ip={} len={}",
+                        String::from_utf8_lossy(&fr.func.name),
+                        fr.ip,
+                        fr.func.ops.len(),
+                    );
+                }
+            }
             let op = &func.ops[ip];
             // WP-33 T0: op census — compiled out unless the `op-census`
             // feature is on (even a never-taken branch here costs ~3%).

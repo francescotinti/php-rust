@@ -206,6 +206,27 @@ impl<'m> Vm<'m> {
                 for v in &partial {
                     self.gc_note(v);
                 }
+                // An exception routed to a handler in this frame crossed (and
+                // aborted) any in-flight `yield from` delegation — PHP treats
+                // the yield-from expression as having thrown. Stale state here
+                // would make the frame's NEXT `YieldFrom` take its re-entry
+                // branch and swallow the fresh delegate (WP-57,
+                // generator_yield_from_survives_caught_delegate_throw). The
+                // dropped delegation loses its references like any other
+                // holder — note them as possible roots.
+                let stale_yf = self.frames[top].ext_opt_mut().and_then(|e| e.yield_from.take());
+                match stale_yf {
+                    Some(super::YieldFromState::Gen { rc, .. }) => {
+                        self.gc_note(&Zval::Generator(rc));
+                    }
+                    Some(super::YieldFromState::Array { entries, .. }) => {
+                        for (k, v) in &entries {
+                            self.gc_note(k);
+                            self.gc_note(v);
+                        }
+                    }
+                    None => {}
+                }
                 if r.is_finally {
                     if let Some(old) = self.frames[top].ext_mut().pending_throw.replace(obj) {
                         self.gc_note(&old);

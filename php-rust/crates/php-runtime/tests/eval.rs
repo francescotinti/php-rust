@@ -4396,6 +4396,27 @@ fn generator_yield_from_generator_return() {
 }
 
 #[test]
+fn generator_yield_from_survives_caught_delegate_throw() {
+    // WP-57 (probe57-yieldfrom-stale): a delegate that throws during its
+    // first resume, caught INSIDE the outer generator, must not leave the
+    // in-flight delegation state behind — the NEXT `yield from` is a fresh
+    // first visit, not a re-entry. Verified against PHP 8.5:
+    // `caught;10 20 30 done`.
+    assert_eq!(
+        out(r#"<?php
+            function bad(){ throw new Exception("boom"); yield 1; }
+            function outer(){
+                try { yield from bad(); } catch (Exception $e) { echo "caught;"; }
+                yield from [10, 20];
+                yield 30;
+            }
+            foreach (outer() as $v) echo "$v ";
+            echo "done";"#),
+        "caught;10 20 30 done"
+    );
+}
+
+#[test]
 fn generator_yield_from_send_forwarding() {
     // send() through a `yield from` reaches the delegated sub-generator.
     assert_eq!(
