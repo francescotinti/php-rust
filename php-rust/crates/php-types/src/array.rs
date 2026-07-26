@@ -1387,6 +1387,30 @@ mod tests {
         }
     }
 
+    /// WP-58 pin (a): the allocation-side sizes the arena quota rests on.
+    /// Printed (not asserted) so a layout drift shows up in --nocapture runs
+    /// next to the census constants they must stay reconciled with.
+    #[test]
+    fn wp58_layout_size_pins() {
+        use std::cell::RefCell;
+        use std::mem::size_of;
+        eprintln!(
+            "wp58 sizes: PhpArray={} Repr={} KeyIndex={} RefCell<PhpArray>={} \
+             Rc-block(RefCell+16)={} hashed_entry={} packed_slot={} Key={}",
+            size_of::<PhpArray>(),
+            size_of::<Repr>(),
+            size_of::<KeyIndex>(),
+            size_of::<RefCell<PhpArray>>(),
+            size_of::<RefCell<PhpArray>>() + 16,
+            size_of::<Option<(Key, Zval)>>(),
+            size_of::<Option<Zval>>(),
+            size_of::<Key>(),
+        );
+        // The entry payloads the whole Fase 3 quota is denominated in.
+        assert_eq!(size_of::<Option<(Key, Zval)>>(), 32);
+        assert_eq!(size_of::<Option<Zval>>(), 16);
+    }
+
     #[test]
     fn packed_iter_rev_and_ptr_ops() {
         let mut a = PhpArray::new();
