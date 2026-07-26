@@ -237,10 +237,26 @@ safe-only, TUTTE le fasi comunque, no-revert. Laravel POSTICIPATA a valle.
 Stato WP-62: decision point M2 chiuso col metro (dettaglio:
 `sessions/WP_SESSION_62.md` + `wp62-harness/design62.md` §5-§6).
 
-⚖️ **CONCILIO DI CHIUSURA WP-62 → verbali in
-`wp63-harness/COUNCIL_WP63_REVIEWS.md`, VINCOLANTI per design63**
-(ratifica del riordino di programma + emendamenti alla leva
-stub-elision). Se manca, primo atto di WP-63 = convocarlo.
+⚖️ **CONCILIO DI CHIUSURA WP-62 ESEGUITO A 9 SEDIE (2026-07-26/27
+notte, 9/9 CONCORDO CON EMENDAMENTI — verbali integrali + sintesi in
+`wp63-harness/COUNCIL_WP63_REVIEWS.md`, VINCOLANTI per design63)**.
+Punti capitali: **(K1, BLOCCANTE) il riordino tocca la regola di rango
+utente "entrambe bocciate" (B è INDETERMINATA, non bocciata) ⇒ serve
+RATIFICA ESPLICITA di Francesco prima di scrivere la leva**; il K-M1
+su forma B è dichiarato SOTTOPOTENZIATO (mai citare "B −2,0%";
+protocollo futuro ≥5+5 run, mediana, MAD); il prefisso regge (worst
+case 84%; base version corretta 95,7%) ma la quota si RI-DERIVA dal
+MASTER di census62-full (KG1: <60% ⇒ riordino decade); "PI per
+costruzione" riscritto come fp-bound + monotonia append-only (RULEBOOK);
+la clausola "cache dopo" DEGRADATA a condizionale (residuo ≥150MB o
+compile-CPU ≥2% full, altrimenti resta chiusa); variante di consenso =
+global-id baked con riserva id pre-compile + rollback (WP-28);
+double-check/remap da rispecificare (il ramo identità-posizionale
+muore); matrice sentinelle = R6+S1-S6+KE-a..e+P1-a..d+reverse-order+
+**probe unit_fp-sequence (KS-S2, decisivo)**, tutte con
+`stub_elided>0` asserito; metro: sintetico molte-piccole + banda phys
+[0,75-1,10]× + R2/R3 chiusi in M0-63; regola GAP_TREND = solo mediane
+≥3+3 (il 4,52× di stasera NON entra nel trend).
 
 0. **Leggere gli esiti della catena serale WP-62** (`wp62-harness/
    eve-out/` + `census-out/memcensus62-full.txt`): (i) coppia full
