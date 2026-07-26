@@ -109,7 +109,24 @@ gap62 media (oracle+phpr) → census62-full con memgc62 (colonne prefix
 sul bordo vero = quota stub-elision) → coppia full run49 new (wp62) vs
 old (phpr-wp61). Esiti: → REPORT_GAP_62 + §sotto.
 
-<!-- SLOT-ESITI-CATENA (compilato a fine catena) -->
+**ESITI (00:17)**: gap media oracle 21,00u/367,8MB · phpr 55,05u/
+1663,5MB = 2,62×/4,52× su coppia singola (per G3 NON entra nel trend;
+riferimenti restano 2,58×/~4,1×). **Coppia full run49: fail-set 88
+BYTE-ID a run33 su ENTRAMBE** ✓ (KS-H5 soddisfatto); CPU new 791,49 vs
+old 798,11 = −0,83% info; peak 3,906 vs 3,885GB = +0,54% info.
+**census62-full: mappa riprodotta ALLA CIFRA** (net_tot 1.973.265.968
+vs …960 WP-61; dup_net identico), nested_windows=0 sul full, colonne
+prefix master: **globale 38,6% LB (781,0MB su 2.024,0)**, 3 bersagli
+LB 46,4% del dup — le colonne sotto-attribuiscono ~2× (version
+"proper"-col 211KB/inc vs 4,1KB freschi: dentro ci sono le ricompile
+dei condizionali del seed); minuendo A/B confermato dal master.
+unitcache full: miss_fp=2323, ways_evictions=2226, hit 0+0. Uploads:
+48 file utente backup→wipe→restore VERIFICATO (prima esecuzione reale
+della procedura Gregg R7). ⚠️ tag=reloc assente dalla mappa: memgc62
+(105df139) è stato buildato PRIMA del refactor reloc — i contatori
+S5 debuttano col census63.
+⇒ **quota stub-elision design63: banda [781MB colonne-LB … ~1,6GB
+tetto A/B]; ri-derivazione G1 completa in E0.**
 
 ## ⭐ Lezioni
 
