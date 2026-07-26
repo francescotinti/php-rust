@@ -13991,11 +13991,12 @@ impl UcStats {
 
 /// WP-63 stub-elision (contract v2, design63 §2): compile include/eval units
 /// against the VM's live symbol table without materializing the seed prefix
-/// in the per-unit Module. Default OFF (Klabnik E3); `PHPR_STUB_ELISION=1`
-/// opts in. The E5 flip (default-ON) is the single point of no return.
+/// in the per-unit Module. Default ON since the E5 flip (gate63 full green
+/// at OFF and ON + KE2 −82.7% net/include on --list-tests);
+/// `PHPR_STUB_ELISION=0` reverts to the legacy contract v1.
 fn stub_elision_enabled() -> bool {
     static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *ON.get_or_init(|| std::env::var("PHPR_STUB_ELISION").is_ok_and(|v| v == "1"))
+    *ON.get_or_init(|| std::env::var("PHPR_STUB_ELISION").map_or(true, |v| v != "0"))
 }
 
 /// Diagnostic kill-switch for the unit cache (WP-63, Pedersen P1): with
