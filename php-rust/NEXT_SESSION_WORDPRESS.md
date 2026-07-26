@@ -176,44 +176,68 @@
 #  funcs,null} (leak template + moltiplicatore compile-side).
 ```
 
-## 🎯 PROSSIMO LAVORO — WP-60: dieta del compile-side (la mappa WP-59 comanda; programma post-concilio)
+## 🎯 PROSSIMO LAVORO — WP-60: revert B + quota ex-ante del compile-side (programma del CONCILIO 2° giro — review integrali in `doc/analysis/COUNCIL_WP59_REVIEWS.md`; convergenza 3/3: contatori PRIMA delle leve, A/B SEPARATI)
 
 **Rotta (utente 2026-07-24)**: `FOOTPRINT_CPU_ROADMAP.md` — footprint-first,
-safe-only, TUTTE le fasi comunque, **niente revert su insuccesso**.
-Laravel POSTICIPATA a valle. **La mappa WP-59 ha ribaltato le priorità**:
-frammentazione mimalloc 2% (ipotesi concilio falsificata); il giacimento
-è il **compile-side vivo non censito ≈800MB** (HIR seeds ≈2/3 + payload
-Rc op ≈1/3) + **leak template-include** (Fase 0.5). Dettaglio:
+safe-only, TUTTE le fasi comunque, no-revert (eccezione B firmata).
+Laravel POSTICIPATA a valle. La mappa WP-59: giacimento = compile-side
+vivo ≈800MB (HIR seeds + payload op) + leak template-include. Dettaglio:
 `sessions/WP_SESSION_59.md` + `wp59-harness/design59.md`.
 
-1. **Quota ex-ante delle due leve compile-side** (census-only, PRIMA di
-   scrivere le leve — regola "byte misurati"):
-   (a) contatore bytes HIR per classe, firma-vs-corpo (`MethodDecl.body`)
-   nei seed (`seed_classes`/`seed_traits`/`main_hir`);
-   (b) conteggio unit per path risolto (quota del leak template:
-   quante delle 2046 unit media sono re-compile dello stesso file);
-   (c) gauge G_UNITS (oggi morto) + breakdown payload Rc op.
-2. **Fase 0.5 — compile-cache keyed sul path risolto** (roadmap: "è un
-   LEAK, si chiude prima di attribuire il resto"): riuso del Module già
-   linkato per include non-`_once` ripetuti. Parità: gate PIENO (classe
-   layout/engine) + full A/B stessa-sera.
-3. **Seed HIR signature-only**: il lowering di una sottoclasse usa
-   forme/firme, non i corpi ⇒ clone snello al push in `seed_classes`
-   (corpi droppati), stesso trattamento per `main_hir` se separabile.
-   Banda potenziale: centinaia di MB — da confermare col contatore 1a.
-   Rischio parità: eval che ri-lowera con l'immagine (gate pieno).
-4. **⚖️ Revert leva B (pool): DECISO dall'utente (2026-07-26 sera, sul
-   verbale Ob.3)** — pool-off −0,56% full, footprint ±0, beneficio B
-   nullo (il −17MB di WP-58 era A+C); concorde la sedia Leijen (unica
-   pronunciata). Esecuzione in WP-60: revert della SOLA B (A e C
-   restano; rimuovere anche mod pool + feature pool-off ormai inutile),
-   gate PIENO (corpus 1421 per nome + refl 290 + cargo + ORM 3E/13F +
-   hk 0E/0F + sentinelle 5 assi) + coppia full stessa-sera.
-5. **Quote Stogov declassate dalla mappa** (solo se margine): duplicati
-   str (tetto ≤62MB), literal-array, peak oracle per-test.
-   (Il "residuo full-only" WP-58 è CHIUSO da Ob.3: pool ~0,6% + rumore
-   del campionatore; nei prossimi harness full usare SEMPRE
-   /usr/bin/time -l per la CPU.)
+1. **⚖️ Revert leva B per PRIMO, DA SOLO (deciso dall'utente 2026-07-26)**
+   — rimozione `mod pool` + feature `pool-off` + branch residui nel Drop;
+   il binario revertato = **NUOVA BASELINE** di ogni misura successiva
+   (Gregg: altrimenti i delta delle leve sono inattribuibili). Gate PIENO
+   (corpus 1421 per nome + refl 290 + cargo + ORM 3E/13F + hk 0E/0F +
+   sentinelle 5 assi) + coppia full stessa-sera. **Verdetto = parità per
+   nome + footprint ±0,5% — NON il CPU** (atteso −0,3..−0,8 ma dentro lo
+   spread ±0,6%: informativo, Leijen §1b-iv / Gregg V3). Stash del
+   binario come phpr-wp60.
+2. **Riparazioni di metodo (Gregg R1/R5/R6, prerequisiti economici)**:
+   (a) mappa finestra→test IN-PROCESS nel callback watermark (top dello
+   stack PHP su ogni riga mi_proc + wall-clock monotono; mai più offset
+   stdout — bufferizzato); (b) positive-control della visita abandoned
+   (thread che alloca e muore: il visitor DEVE vederlo, o la colonna si
+   dichiara morta); (c) riconciliare str al walk (362k/23MB fuori-walk:
+   censirli o etichettarli); (d) igiene DB DENTRO gli script di probe
+   (il flake Ob.3 nasce lì); (e) pensionare SHOW_STATS env → FFI
+   programmatica nei build census.
+3. **Contatori ex-ante (nessuna banda si firma prima — Stogov R1-R4,
+   Leijen R1, Gregg R2-R4)**: (a) **census v2 DEEP con dedup per
+   indirizzo** (l'attuale sotto-conta 5×: rc>1 = zero volte, Const
+   piatti); (b) deep-size dei seed con split {firma, corpi
+   MethodDecl.body+slots, doc/attributes} su media e --list-tests —
+   sostituisce l'estrapolazione 2/3-1/3; (c) istogramma unit-per-path
+   con HASH del contenuto (quota leak template su media E FULL — il
+   bordo è lì); (d) breakdown payload op/literal-duplicati-cross-unit/
+   slack + gauge G_UNITS; (e) istogramma per-bin delle allocazioni HIR
+   (Leijen: il ritorno fisico dipende dall'occupancy delle pagine
+   liberate; riconcilia col non-censito ±10-15%); (f) **mappa census del
+   FULL** (1 run detached, ~30 finestre + probe bootstrap-only) — senza,
+   ogni banda sul full è inventata; (g) target oracle: `--list-tests`
+   sotto C PHP con memory_get_peak_usage+time -l (denominatore della
+   voce "costruzione suite").
+4. **Sentinelle di parità pinnate PRIMA delle leve (Stogov R5)**:
+   (i) closure `static $x` in file re-incluso (verdetto oracolo PRIMA:
+   Zend condivide la cella per op_array); (ii) classe anonima in file
+   re-incluso; (iii) fatal `Cannot redeclare` preservato; (iv)
+   getDocComment/getFileName/getAttributes dal CompiledClass; (v) eval
+   extends multi-livello cross-unit con trait nel mezzo (DeferredDecl
+   indipendente dai corpi: verificato, non assunto).
+5. **SOLO DOPO 3+4, e in A/B SEPARATI (mai cumulativo)**: prima **Fase
+   0.5 compile-cache** (chiave realpath+mtime-ns+size, hash in fallback
+   — MAI path-only, V1; il cache-hit RI-ESEGUE il top-level e preserva
+   i fatal; hit/miss distinti nel census; probe write→include→rewrite→
+   include nel gate); poi (WP-61 se manca margine) **seed signature-only**
+   (SOLO seed_classes/main_hir; **seed_traits INTATTO** — i corpi dei
+   trait servono al flattening; PropDecl/consts/enum_cases/attributes/
+   abstract_sigs interi; seed snello costruito EX-NOVO, mai
+   clone-poi-strip: il picco transitorio è il metro; gate fisico Leijen:
+   **phys_drop ≥ 80% dei byte droppati dal contatore, frag picco ≤ ~2×
+   29,8MB**, predicted-vs-actual ±15%).
+6. Post-dieta (code): footprint(1) compressed/dirty sul full
+   (dividendo-compressor, Leijen R4); exit-frag 171MB solo da osservare
+   (R6); FFI malloc_history solo se il residuo lo giustifica (R5).
 
 **VETI del concilio (restano vincolanti)**: mai toccare
 MIMALLOC_PURGE_DELAY nei giudici; mai giudicare ritenzione col maxrss

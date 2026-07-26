@@ -27,9 +27,9 @@
 | canali valore (str+arr+obj live) | ~150 | 10% |
 | unit counted (canale) | ~212 | 15% |
 | **compile-side NON censito (HIR seeds ~2/3, payload op ~1/3)** | **~800** | **~55%** |
-| runtime engine non censito (caches, frames, created, ...) | ~100-140 | 7-10% |
+| runtime engine — ⚠️ PER DIFFERENZA, non attribuito (veto Gregg V8: da strumentare in WP-60 o etichettare così) | ~100-140 | 7-10% |
 | frammentazione mimalloc | 29,8 | 2% |
-| metadata + regioni non-mimalloc (binario, FFI ~90-120MB dirty) | ~110 | 8% |
+| mimalloc non-visitato (104,3 dentro commit; non-mimalloc misurato a win10 = 4,1MB — i "FFI ~90-120MB dirty" sono di Ob.0, run diversa: NON sommabili qui, veto Gregg V8) | ~108 | 8% |
 
 - Identità pre-registrata verificata alla cifra (win10): phys 1436,2 =
   Σused 1298,0 + frag 29,8 + non-visitato 104,3 + nonmi 4,1.
