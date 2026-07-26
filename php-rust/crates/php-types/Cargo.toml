@@ -13,11 +13,6 @@ str-census = []
 # (str/arr/obj/unit), dump su $PHPR_MEM_CENSUS. Misura-only, mai nei build
 # di parità o A/B.
 mem-census = []
-# WP-59 Ob.3 (attribuzione regressione full-only WP-58, prescrizione
-# Leijen 4): class() del block-pool → None costante, ogni take/put manca il
-# pool e l'ottimizzatore elide il TLS. Binario diagnostico: MAI nei build
-# di parità o nei giudici standard.
-pool-off = []
 # WP-59 Ob.3 asse 2: SCAN_MAX 8→4 (metà superiore dello scan-mode torna
 # all'indice). Binario diagnostico, mai nei giudici standard.
 scan4 = []
