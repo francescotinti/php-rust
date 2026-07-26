@@ -45,7 +45,9 @@
 - Chiusura della sessione N: scrivere `sessions/WP_SESSION_N.md`; scrivere
   `gaps/REPORT_GAP_N.md` con le SOLE misure della sessione N e aggiungere
   la riga N a `gaps/GAP_TREND.md`; sostituire la sintesi qui in testa e
-  aggiornare stato gate / prossimo lavoro; commit+push.
+  aggiornare stato gate / prossimo lavoro; **convocare il CONCILIO sul
+  report N + programma N+1 (regola utente 2026-07-26, v. Decisioni in
+  vigore) e archiviarne i verbali**; commit+push.
 
 ## 🧭 Decisioni in vigore (fonte citabile: migration/RULEBOOK.md)
 
@@ -67,6 +69,18 @@
   sentinelle drop-order pinnate PRIMA; oracle-probe con `-d log_errors=0`.
 - Commit AND push a ogni step; deviazioni deliberate = marker
   `BUG(port):` / `PERF(port):` / `TODO(port):`.
+- **⚖️ CONCILIO DOPO OGNI SESSIONE (regola utente 2026-07-26)**: a
+  chiusura della sessione N si riunisce il concilio di TUTTI gli
+  sviluppatori — permanenti: allocatore (Leijen) · engine/opcache
+  (Stogov) · metodologia (Gregg), più co-optati di dominio quando il
+  tema lo richiede (es. axum/HTTP ⇒ web-runtime). Mandato: REFUTARE il
+  report N + il programma N+1, leggendo i file di rotazione e dove
+  serve il codice. Ogni membro delibera VERDETTO + emendamenti R1..Rn +
+  kill-switch; verbali INTEGRALI in
+  `wp<N+1>-harness/COUNCIL_WP<N+1>_REVIEWS.md`, VINCOLANTI per
+  design<N+1> (recepiti PRIMA di toccare codice). Se una sessione
+  chiude senza concilio, il PRIMO atto della successiva è convocarlo.
+  Modello: `wp62-harness/COUNCIL_WP62_REVIEWS.md`.
 
 ## Stato gate per nome (WP-61 `9ada23d`: cambio SOLO server-layer+census ⇒ gate ridotto da direttiva = cargo **1645/0** + batteria HTTP php-server vs phpr -S **5/6 BYTE-ID + admin NORM-ID**; release = **phpr-wp61 c7e93597…** — hash cambiato dai soli metadati del lib target, main.rs intatto, ri-stash a verbale; ultimo gate PIENO = gate60 su `915ea27`, `wp60-harness/gate-out/`: corpus **1421 IDENTICO** · refl **290 IDENTICO** · ORM **3E/13F IDENTICO** · hk **0E/0F** · sentinelle 5 assi **BYTE-ID**; fail-set FULL run48 BYTE-ID a run33; ultima verifica gate22 integrale: `60c7e04`)
 
