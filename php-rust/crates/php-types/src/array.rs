@@ -100,6 +100,10 @@ enum Repr {
 const SLOT_EMPTY: u32 = u32::MAX;
 const SLOT_TOMB: u32 = u32::MAX - 1;
 
+/// Bit layout of `PhpArray::cur_holds` (WP-58) — see the field doc.
+const HOLDS_BIT: u32 = 1 << 31;
+const CURSOR_MASK: u32 = HOLDS_BIT - 1;
+
 /// Murmur3 fmix64: spreads the (cached) key hash over all bits so the
 /// power-of-two mask sees a uniform distribution.
 #[inline]
@@ -295,7 +299,17 @@ pub struct PhpArray {
     /// pointer when the pointed bucket is deleted). `foreach` snapshots and does
     /// not touch it (PHP 8). Carried by `Clone`/COW like the rest of the array
     /// state. Escalation preserves slot positions, so the cursor survives it.
-    cursor: usize,
+    ///
+    /// Packed word (WP-58 header diet): bits 0..31 = the cursor position,
+    /// bit 31 = the `holds_containers` flag (doc below). Positions are
+    /// already bounded to u32 by [`KeyIndex`] (`SLOT_TOMB`), `count` is u32,
+    /// and a table past 2G slots is physically unreachable (32GB of slots);
+    /// saturating casts keep "past the end" meaning past the end even in
+    /// that impossible world. The flag rides the COLD word (cursor is only
+    /// touched by the ptr_* builtins), never `count`/`len()`. This drops the
+    /// `Rc<RefCell<PhpArray>>` heap block from 104B (mimalloc bin 112) to
+    /// 96B (exact bin 96): −16B on every array allocation.
+    cur_holds: u32,
     /// WP-57 (census builds only): bytes currently credited to the LIVE
     /// arr counter for THIS array. Synced to `census_bytes()` at the top of
     /// every mutating method (lag ≤ the array's most recent capacity step);
@@ -303,12 +317,12 @@ pub struct PhpArray {
     /// the channel negative.
     #[cfg(feature = "mem-census")]
     accounted: std::cell::Cell<usize>,
-    /// Conservative container-content marker: `false` only when every value ever
-    /// stored is a scalar/string AND no `&mut` element handle was ever handed out
-    /// (a caller could promote a scalar in place). Lets the GC's drop-descent and
-    /// cycle classify skip scalar-only arrays without iterating them. Never
-    /// cleared by `remove` — stays pessimistic once set.
-    holds_containers: bool,
+    // `holds_containers` (bit 31 of `cur_holds`): conservative container-
+    // content marker — `false` only when every value ever stored is a
+    // scalar/string AND no `&mut` element handle was ever handed out
+    // (a caller could promote a scalar in place). Lets the GC's drop-descent
+    // and cycle classify skip scalar-only arrays without iterating them.
+    // Never cleared by `remove` — stays pessimistic once set.
     /// Cycle-classify in-node mark (WP-52) — see [`crate::object::WalkMark`].
     /// Epoch-guarded: stale between walks by construction, so no reset pass;
     /// `Clone` (COW) starts fresh — a copy is a new node.
@@ -366,8 +380,7 @@ impl Clone for PhpArray {
             repr,
             next_free: self.next_free,
             count: self.count,
-            cursor: self.cursor,
-            holds_containers: self.holds_containers,
+            cur_holds: self.cur_holds,
             #[cfg(feature = "mem-census")]
             accounted: std::cell::Cell::new(0),
             walk: crate::object::WalkMark::new(),
@@ -440,8 +453,7 @@ impl Default for PhpArray {
             repr: Repr::Packed(Vec::new()),
             next_free: i64::MIN,
             count: 0,
-            cursor: 0,
-            holds_containers: false,
+            cur_holds: 0,
             #[cfg(feature = "mem-census")]
             accounted: std::cell::Cell::new(0),
             walk: crate::object::WalkMark::new(),
@@ -479,11 +491,25 @@ impl PhpArray {
     }
 
     /// Whether this array may (transitively) hold objects / references /
-    /// other containers — see the `holds_containers` field. `false` is a
-    /// guarantee; `true` only means "must be walked".
+    /// other containers — see the `holds_containers` bit doc on `cur_holds`.
+    /// `false` is a guarantee; `true` only means "must be walked".
     #[inline]
     pub fn may_hold_containers(&self) -> bool {
-        self.holds_containers
+        self.cur_holds & HOLDS_BIT != 0
+    }
+
+    /// The cursor position carried in `cur_holds` — see the field doc.
+    #[inline]
+    fn cursor(&self) -> usize {
+        (self.cur_holds & CURSOR_MASK) as usize
+    }
+
+    /// Store a cursor position, saturating into the 31-bit field (a real
+    /// position never reaches the clamp — see the `cur_holds` doc).
+    #[inline]
+    fn set_cursor(&mut self, pos: usize) {
+        self.cur_holds =
+            (self.cur_holds & HOLDS_BIT) | pos.min(CURSOR_MASK as usize) as u32;
     }
 
     /// Convert a packed array to the hashed representation. Slot positions
@@ -505,10 +531,11 @@ impl PhpArray {
     pub fn insert(&mut self, key: Key, val: Zval) {
         #[cfg(feature = "mem-census")]
         self.census_sync();
-        self.holds_containers |= !matches!(
+        self.cur_holds |= (!matches!(
             val,
             Zval::Undef | Zval::Null | Zval::Bool(_) | Zval::Long(_) | Zval::Double(_) | Zval::Str(_)
-        );
+        ) as u32)
+            << 31;
         if let Repr::Packed(slots) = &mut self.repr {
             match key {
                 Key::Int(i) if (i as usize) < slots.len() && i >= 0 => {
@@ -582,7 +609,7 @@ impl PhpArray {
             };
             match plan {
                 Plan::Hit(i) => {
-                    self.holds_containers = true;
+                    self.cur_holds |= HOLDS_BIT;
                     let Repr::Packed(slots) = &mut self.repr else { unreachable!() };
                     return slots[i].as_mut().unwrap();
                 }
@@ -591,7 +618,7 @@ impl PhpArray {
                         self.next_free = i.saturating_add(1);
                     }
                     self.count += 1;
-                    self.holds_containers = true;
+                    self.cur_holds |= HOLDS_BIT;
                     let Repr::Packed(slots) = &mut self.repr else { unreachable!() };
                     slots.push(Some(Zval::Null));
                     return slots.last_mut().unwrap().as_mut().unwrap();
@@ -599,7 +626,7 @@ impl PhpArray {
                 Plan::Escalate => self.to_hashed(),
             }
         }
-        self.holds_containers = true;
+        self.cur_holds |= HOLDS_BIT;
         let hit = {
             let Repr::Hashed { entries, index } = &self.repr else { unreachable!() };
             index.lookup(&key, entries)
@@ -656,7 +683,7 @@ impl PhpArray {
         };
         match hit {
             Some(pos) => {
-                self.holds_containers = true;
+                self.cur_holds |= HOLDS_BIT;
                 let displaced = match &mut self.repr {
                     Repr::Packed(slots) => write_slot(slots[pos].as_mut().unwrap(), val),
                     Repr::Hashed { entries, .. } => {
@@ -737,7 +764,7 @@ impl PhpArray {
                     match &mut slots[*i as usize] {
                         Some(v) => {
                             // The caller may write any value through this handle.
-                            self.holds_containers = true;
+                            self.cur_holds |= HOLDS_BIT;
                             Some(v)
                         }
                         None => None,
@@ -747,7 +774,7 @@ impl PhpArray {
             },
             Repr::Hashed { entries, index } => match index.lookup(key, entries) {
                 Some(pos) => {
-                    self.holds_containers = true;
+                    self.cur_holds |= HOLDS_BIT;
                     Some(&mut entries[pos as usize].as_mut().unwrap().1)
                 }
                 None => None,
@@ -824,7 +851,7 @@ impl PhpArray {
     #[inline]
     pub fn iter_mut(&mut self) -> IterMut<'_> {
         // The caller may write any value through these handles.
-        self.holds_containers = true;
+        self.cur_holds |= HOLDS_BIT;
         match &mut self.repr {
             Repr::Packed(slots) => IterMut::Packed(slots.iter_mut().enumerate()),
             Repr::Hashed { entries, .. } => IterMut::Hashed(entries.iter_mut()),
@@ -854,7 +881,7 @@ impl PhpArray {
     /// end. A read never moves `cursor`; it skips forward lazily, so deleting the
     /// pointed bucket makes the next live one current (matches Zend).
     fn cursor_pos(&self) -> Option<usize> {
-        (self.cursor..self.slots_len()).find(|&i| self.live_at(i))
+        (self.cursor()..self.slots_len()).find(|&i| self.live_at(i))
     }
 
     /// `current($a)`: the value at the internal pointer, or `None` (PHP `false`).
@@ -875,18 +902,22 @@ impl PhpArray {
 
     /// `reset($a)`: move the pointer to the first live entry; return its value.
     pub fn ptr_reset(&mut self) -> Option<Zval> {
-        self.cursor = (0..self.slots_len())
-            .find(|&i| self.live_at(i))
-            .unwrap_or(self.slots_len());
+        self.set_cursor(
+            (0..self.slots_len())
+                .find(|&i| self.live_at(i))
+                .unwrap_or(self.slots_len()),
+        );
         self.ptr_current()
     }
 
     /// `end($a)`: move the pointer to the last live entry; return its value.
     pub fn ptr_end(&mut self) -> Option<Zval> {
-        self.cursor = (0..self.slots_len())
-            .rev()
-            .find(|&i| self.live_at(i))
-            .unwrap_or(self.slots_len());
+        self.set_cursor(
+            (0..self.slots_len())
+                .rev()
+                .find(|&i| self.live_at(i))
+                .unwrap_or(self.slots_len()),
+        );
         self.ptr_current()
     }
 
@@ -897,9 +928,11 @@ impl PhpArray {
             Some(i) => i + 1,
             None => self.slots_len(),
         };
-        self.cursor = (start..self.slots_len())
-            .find(|&i| self.live_at(i))
-            .unwrap_or(self.slots_len());
+        self.set_cursor(
+            (start..self.slots_len())
+                .find(|&i| self.live_at(i))
+                .unwrap_or(self.slots_len()),
+        );
         self.ptr_current()
     }
 
@@ -907,10 +940,12 @@ impl PhpArray {
     /// Stepping before the first entry invalidates the pointer (`false`).
     pub fn ptr_prev(&mut self) -> Option<Zval> {
         let end = self.cursor_pos().unwrap_or(self.slots_len());
-        self.cursor = (0..end)
-            .rev()
-            .find(|&i| self.live_at(i))
-            .unwrap_or(self.slots_len());
+        self.set_cursor(
+            (0..end)
+                .rev()
+                .find(|&i| self.live_at(i))
+                .unwrap_or(self.slots_len()),
+        );
         self.ptr_current()
     }
 }
@@ -1409,6 +1444,9 @@ mod tests {
         // The entry payloads the whole Fase 3 quota is denominated in.
         assert_eq!(size_of::<Option<(Key, Zval)>>(), 32);
         assert_eq!(size_of::<Option<Zval>>(), 16);
+        // WP-58 header diet: the per-array heap block must stay on the
+        // exact 96B mimalloc bin (going back to 104 costs +16B/array).
+        assert_eq!(size_of::<RefCell<PhpArray>>() + 16, 96);
     }
 
     #[test]
