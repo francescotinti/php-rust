@@ -1,0 +1,10 @@
+[package]
+name = "php-server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+php-cli = { path = "../php-cli" }
+php-runtime.workspace = true
+mimalloc.workspace = true
