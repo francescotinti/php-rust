@@ -13927,18 +13927,17 @@ fn relocate_module_class_ids(module: &mut Module, remap: &[ClassId], static_base
     //    thunks / property-hook get & set bodies).
     relocate_func(&mut module.main, remap, static_base);
     for f in &mut module.functions {
-        // WP-62 (Matsakis M2): the skip decision is the EXPLICIT marker, not
-        // the `Rc::get_mut` aliasing pun. A prelude body reused from the main
-        // module (WP-20, `file == b"prelude"`) is already in the global id
-        // space and MUST keep its static-cell ids 0..pstatic. A non-marked
-        // entry must relocate: `get_mut` failing there is the silent-stale-id
-        // bug class (symfony IpUtils) — loud from today.
-        if f.file.as_ref() == b"prelude" {
-            reloc_note_skip(false);
-            continue;
-        }
+        // WP-62 (Matsakis M2): a UNIQUELY-OWNED entry always relocates — even
+        // a prelude-named body, when it was compiled fresh (name-mismatch /
+        // conditional fallback), carries unit-local ids. Sharing still means
+        // "main-module body already in the global id space" (WP-20) and is
+        // skipped, but the skip is now CLASSIFIED by the explicit marker:
+        // a shared entry NOT marked `prelude` is the silent-stale-id bug
+        // class (symfony IpUtils) and is loud from today.
         if let Some(f) = std::rc::Rc::get_mut(f) {
             relocate_func(f, remap, static_base);
+        } else if f.file.as_ref() == b"prelude" {
+            reloc_note_skip(false);
         } else {
             reloc_unexpected_shared("function", &f.name);
         }
@@ -13951,16 +13950,16 @@ fn relocate_module_class_ids(module: &mut Module, remap: &[ClassId], static_base
         relocate_attrs(attrs, remap, static_base);
     }
     for cc in &mut module.classes {
-        // WP-62 (Matsakis M2): explicit marker instead of the get_mut pun —
-        // an interned seed stub (`file == b"seed-stub"`, WP-20) has no
-        // relocatable ids and must stay untouched; anything else must
-        // relocate, and a shared non-stub entry is the loud failure case.
-        if cc.file.as_ref() == b"seed-stub" {
-            reloc_note_skip(true);
-            continue;
-        }
+        // WP-62 (Matsakis M2): same rule as functions — owned entries always
+        // relocate; a shared entry is the interned seed stub (WP-20,
+        // `file == b"seed-stub"`, no relocatable ids) and the skip is
+        // classified by that marker; shared non-stub = loud failure case.
         let Some(cc) = Rc::get_mut(cc) else {
-            reloc_unexpected_shared("class", &cc.name);
+            if cc.file.as_ref() == b"seed-stub" {
+                reloc_note_skip(true);
+            } else {
+                reloc_unexpected_shared("class", &cc.name);
+            }
             continue;
         };
         // 2. Class metadata: superclass and implemented interfaces.
