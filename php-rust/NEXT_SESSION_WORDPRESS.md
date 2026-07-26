@@ -224,9 +224,31 @@ Stato WP-61: php-server consegnato (verifica personale = Francesco);
 census v2 attribuito su --list-tests. Dettaglio: `sessions/
 WP_SESSION_61.md` + `wp61-harness/design61.md`.
 
-⚖️ **CONCILIO SU WP-62 ESEGUITO (2026-07-26 sera, 3/3 CONCORDO CON
-EMENDAMENTI — verbali integrali in
+⚖️ **CONCILIO SU WP-62 ESEGUITO A COLLEGIO PIENO (2026-07-26 sera,
+9/9 CONCORDO CON EMENDAMENTI — due sedute: Leijen/Stogov/Gregg + le 6
+sedie fondative; verbali integrali e SINTESI FINALE A 9 in
 `wp62-harness/COUNCIL_WP62_REVIEWS.md`, VINCOLANTI per design62)**.
+Dalla seconda seduta, in aggiunta ai punti sotto: **(A) CONFLITTO
+Hoare↔Matsakis sulla FORMA del re-link** (copia-leggera vs
+id-relativi+base: ciascuno dimostra fatale la forma dell'altro —
+make_mut clonerebbe le CompiledClass 58% del net / l'add-base viola la
+legge WP-44 negli arm caldi) ⇒ design62 misura ENTRAMBE le pre-quote
+(bytes_copied/shared; ns/op remap) PRIMA di scegliere; se entrambe
+falliscono i kill-switch, passa la rotta Hejlsberg. **(B) Dissenso
+Hejlsberg**: il giacimento primario è il PREFISSO STUB (version.php 1KB
+→ 437KB net/include) — contatore prefix-vs-proper PRIMA dell'A/B; se
+prefix >60% del dup, stub-elision = leva NOMINATA WP-63 (tetto
+1,2-1,6GB). **(C) Bloccante Pedersen**: TRE contratti di confine
+(intra-VM · replay cross-VM stessa-rotta OGGI VERDE da non regredire ·
+cross-rotta = contratto nuovo), probe via php-server, dual-path
+exact-fp preservato; cache thread_local ⇒ nota axum ×N. **(D) Budget
+CPU ASSOLUTI di Bak**: ns/hit ≤20% ns/compile, hit totale ≤0,3%
+master-CPU, parse_avoided>0 o la banda CPU si ri-quota (il hit deve
+saltare ANCHE lex/parse/lower). **(E) Scaletta Klabnik M0-M6**: flag
+default-OFF, flip=unico punto di non ritorno, matrice sentinelle
+completa (R6+K1-K4+M4+P1/P4) TUTTE con `cachehit>0` asserito (verde con
+hit==0 = gate INVALIDO). **(F) Refactor di sicurezza indipendenti:
+get_mut→flag in_global_space + reloc_skipped; SealedModule.**
 Punti di convergenza: (1) contatori hit/miss + net del HIT path
 obbligatori (drenaggio vero = dup_net − hit_net; hit_net ≤5% ex-ante);
 (2) predizione phys SEPARATA dal counted, per-bin, banda [0,6-1,0]× di
