@@ -144,6 +144,137 @@ impl Key {
 /// The abbreviated entry-slice type the index probes against.
 type Entries = [Option<(Key, Zval)>];
 
+/// WP-58 (leva B): ownership-transfer block arena for PhpArray storage.
+///
+/// A shared handle-arena that hands out `&mut` into a slab is unreachable
+/// in safe Rust (RULEBOOK §0), so the arena manages whole BLOCKS instead:
+/// a block is owned by its array while alive (zero indirection, zero
+/// parity surface) and returns to a thread-local, per-size-class shelf on
+/// drop/regrow instead of round-tripping through malloc. Only pow2
+/// capacities are shelved — exactly what the growth path produces (Rust's
+/// Vec starts at 4 for these element sizes and doubles) — so `collect()`ed
+/// exact-fit blocks (`to_hashed`, `Clone`) simply miss and free normally.
+/// Per-class depth is bounded (lesson FramePool/drop_bounded): worst-case
+/// retention < ~700KB per thread.
+mod pool {
+    use super::{Key, SLOT_EMPTY};
+    use crate::Zval;
+    use std::cell::RefCell;
+
+    const DEPTH: usize = 16;
+    const NCLASS: usize = 7;
+
+    #[derive(Default)]
+    struct Shelves {
+        /// Hashed entry blocks, caps 4..=256 (32B/slot).
+        entries: [Vec<Vec<Option<(Key, Zval)>>>; NCLASS],
+        /// Packed slot blocks, caps 4..=256 (16B/slot).
+        packed: [Vec<Vec<Option<Zval>>>; NCLASS],
+        /// Index tables, caps 8..=1024 (4B/slot).
+        index: [Vec<Box<[u32]>>; NCLASS],
+    }
+
+    thread_local! {
+        static POOL: RefCell<Shelves> = RefCell::new(Shelves::default());
+    }
+
+    /// Shelf for a pow2 capacity with minimum class `1 << base`.
+    #[inline]
+    fn class(cap: usize, base: u32) -> Option<usize> {
+        if cap.is_power_of_two() {
+            let c = cap.trailing_zeros();
+            if (base..base + NCLASS as u32).contains(&c) {
+                return Some((c - base) as usize);
+            }
+        }
+        None
+    }
+
+    pub(super) fn take_entries(cap: usize) -> Vec<Option<(Key, Zval)>> {
+        if let Some(cl) = class(cap, 2) {
+            if let Some(v) = POOL.with(|p| p.borrow_mut().entries[cl].pop()) {
+                return v;
+            }
+        }
+        Vec::with_capacity(cap)
+    }
+
+    pub(super) fn put_entries(mut v: Vec<Option<(Key, Zval)>>) {
+        // Element drops run BEFORE any pool borrow: a nested array's own
+        // Drop re-enters the pool, which must be free at that point.
+        v.clear();
+        if let Some(cl) = class(v.capacity(), 2) {
+            POOL.with(|p| {
+                let mut p = p.borrow_mut();
+                if p.entries[cl].len() < DEPTH {
+                    p.entries[cl].push(v);
+                }
+            });
+        }
+    }
+
+    pub(super) fn take_packed(cap: usize) -> Vec<Option<Zval>> {
+        if let Some(cl) = class(cap, 2) {
+            if let Some(v) = POOL.with(|p| p.borrow_mut().packed[cl].pop()) {
+                return v;
+            }
+        }
+        Vec::with_capacity(cap)
+    }
+
+    pub(super) fn put_packed(mut v: Vec<Option<Zval>>) {
+        v.clear(); // see put_entries on drop order / reentrancy
+        if let Some(cl) = class(v.capacity(), 2) {
+            POOL.with(|p| {
+                let mut p = p.borrow_mut();
+                if p.packed[cl].len() < DEPTH {
+                    p.packed[cl].push(v);
+                }
+            });
+        }
+    }
+
+    /// A table of `cap` slots, every slot reset to `SLOT_EMPTY`.
+    pub(super) fn take_index(cap: usize) -> Box<[u32]> {
+        if let Some(cl) = class(cap, 3) {
+            let hit = POOL.with(|p| p.borrow_mut().index[cl].pop());
+            if let Some(mut b) = hit {
+                b.fill(SLOT_EMPTY);
+                return b;
+            }
+        }
+        vec![SLOT_EMPTY; cap].into_boxed_slice()
+    }
+
+    pub(super) fn put_index(b: Box<[u32]>) {
+        if let Some(cl) = class(b.len(), 3) {
+            POOL.with(|p| {
+                let mut p = p.borrow_mut();
+                if p.index[cl].len() < DEPTH {
+                    p.index[cl].push(b);
+                }
+            });
+        }
+    }
+}
+
+/// Grow a full block through the arena (WP-58 leva B): the element moves
+/// are the same memcpy `Vec::push`'s realloc would do; the old block goes
+/// back on its shelf instead of to `free`.
+#[cold]
+fn grow_entries(entries: &mut Vec<Option<(Key, Zval)>>) {
+    let mut new = pool::take_entries((entries.capacity() * 2).max(4));
+    new.extend(entries.drain(..));
+    pool::put_entries(std::mem::replace(entries, new));
+}
+
+#[cold]
+fn grow_packed(slots: &mut Vec<Option<Zval>>) {
+    let mut new = pool::take_packed((slots.capacity() * 2).max(4));
+    new.extend(slots.drain(..));
+    pool::put_packed(std::mem::replace(slots, new));
+}
+
 /// Keyless position index of the hashed representation (WP-56, Fase 3):
 /// an open-addressing table of `u32` positions into `entries` — the key
 /// itself lives only in the entry it points at, mirroring Zend's
@@ -183,7 +314,7 @@ impl KeyIndex {
             };
         }
         let mut idx = KeyIndex {
-            slots: vec![SLOT_EMPTY; table_cap(live)].into_boxed_slice(),
+            slots: pool::take_index(table_cap(live)),
             live: 0,
             tomb: 0,
         };
@@ -250,8 +381,7 @@ impl KeyIndex {
             // entries plus the incoming (key, pos). The incoming entry may
             // or may not be pushed yet (both call orders are legal), so
             // position `pos` is skipped in the sweep and added explicitly.
-            self.slots =
-                vec![SLOT_EMPTY; table_cap(self.live as usize)].into_boxed_slice();
+            self.slots = pool::take_index(table_cap(self.live as usize));
             self.tomb = 0;
             for (i, e) in entries.iter().enumerate() {
                 if i as u32 != pos {
@@ -324,7 +454,7 @@ impl KeyIndex {
     fn rebuild(&mut self, entries: &Entries) {
         let old = std::mem::replace(
             &mut self.slots,
-            vec![SLOT_EMPTY; table_cap(self.live as usize + 1)].into_boxed_slice(),
+            pool::take_index(table_cap(self.live as usize + 1)),
         );
         self.tomb = 0;
         for &pos in old.iter() {
@@ -333,6 +463,7 @@ impl KeyIndex {
                 self.raw_insert(k.khash(), pos);
             }
         }
+        pool::put_index(old);
     }
 }
 
@@ -462,10 +593,20 @@ impl Clone for PhpArray {
 /// figure, so the channel can never drift. CUM now accumulates
 /// alloc + positive adjusts (same convention as the str channel) — the
 /// old `death()` feed is gone with the estimator.
-#[cfg(feature = "mem-census")]
+/// WP-58 (leva B): drop returns the storage blocks to the arena shelves.
+/// Element drops happen inside `put_*`'s `clear()`, front-to-back — the
+/// exact order and moment the derived drop of the Vec produced.
 impl Drop for PhpArray {
     fn drop(&mut self) {
+        #[cfg(feature = "mem-census")]
         crate::memcensus::free(crate::memcensus::CH_ARR, self.accounted.get());
+        match std::mem::replace(&mut self.repr, Repr::Packed(Vec::new())) {
+            Repr::Packed(slots) => pool::put_packed(slots),
+            Repr::Hashed { entries, index } => {
+                pool::put_entries(entries);
+                pool::put_index(index.slots);
+            }
+        }
     }
 }
 
@@ -611,6 +752,9 @@ impl PhpArray {
                     if i >= self.next_free {
                         self.next_free = i.saturating_add(1);
                     }
+                    if slots.len() == slots.capacity() {
+                        grow_packed(slots);
+                    }
                     slots.push(Some(val));
                     self.count += 1;
                     return;
@@ -630,6 +774,9 @@ impl PhpArray {
             if i >= self.next_free {
                 self.next_free = i.saturating_add(1);
             }
+        }
+        if entries.len() == entries.capacity() {
+            grow_entries(entries);
         }
         let pos = entries.len() as u32;
         index.insert_new(&key, pos, entries);
@@ -679,6 +826,9 @@ impl PhpArray {
                     self.count += 1;
                     self.cur_holds |= HOLDS_BIT;
                     let Repr::Packed(slots) = &mut self.repr else { unreachable!() };
+                    if slots.len() == slots.capacity() {
+                        grow_packed(slots);
+                    }
                     slots.push(Some(Zval::Null));
                     return slots.last_mut().unwrap().as_mut().unwrap();
                 }
@@ -702,6 +852,9 @@ impl PhpArray {
         let pos = match hit {
             Some(pos) => pos,
             None => {
+                if entries.len() == entries.capacity() {
+                    grow_entries(entries);
+                }
                 let pos = entries.len() as u32;
                 index.insert_new(&key, pos, entries);
                 entries.push(Some((key, Zval::Null)));
@@ -894,7 +1047,8 @@ impl PhpArray {
             return;
         };
         entries.retain(Option::is_some);
-        *index = KeyIndex::build(entries, entries.len());
+        let old = std::mem::replace(index, KeyIndex::build(entries, entries.len()));
+        pool::put_index(old.slots);
     }
 
     /// Iterate in insertion order, skipping tombstones. Keys are yielded by
