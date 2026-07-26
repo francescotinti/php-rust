@@ -370,17 +370,12 @@ immutable-literal (futuro): solo tutto-scalari + cursore separabile.
 
 ## (storico, pre-roadmap) PROSSIMO LAVORO
 
-0. **PRE-FLIGHT DISCO**: `df -h /System/Volumes/Data`, non partire sotto
-   ~15-20G liberi (WP-49 partita a 16-17G dopo rm del debug/ 834M
-   ricomparso; in sessione usare SEMPRE `cargo test --release`, e pulire
-   `debug/` se ricompare).
-   **PRE-FLIGHT MYSQL**: `mysql -h 127.0.0.1 -u root -e "SHOW DATABASES"`
-   deve elencare wp_o/wp_p/probe — altrimenti vedi ⚠️ MySQL sopra.
-   **STASH OLD**: copiare subito il binario release corrente in
-   `/Volumes/Extreme Pro/Claude/phpr-old-target/release/phpr-wp50`
-   (old dell'A/B di WP-51). ⚠️ path CANONICO = drive esterno: lo stash
-   in `~/Claude/phpr-old-target` (WP-50) ha prodotto un A/B con 12 run
-   da 0,00s.
+0. **PRE-FLIGHT = skill `apri-sessione`** (decisione utente 2026-07-26:
+   disco×2 / MySQL con datadir giusto / hash binario di parità /
+   residui detached / uploads / ordine di lettura — procedura in
+   `~/.claude/skills/apri-sessione/SKILL.md`). ⚠️ path CANONICO dello
+   stash = drive esterno `phpr-old-target/release/` (lo stash in
+   ~/Claude ha prodotto un A/B con 12 run da 0,00s — WP-50).
 1. **Rotta ([[php-rust-roadmap-wp-first]])**: dopo la roadmap
    footprint+CPU si apre la VALIDAZIONE LARAVEL (metodo = ricetta gate
    ORM/hk: oracolo+composer build, phpr esegue).
