@@ -71,9 +71,14 @@
   `BUG(port):` / `PERF(port):` / `TODO(port):`.
 - **⚖️ CONCILIO DOPO OGNI SESSIONE (regola utente 2026-07-26)**: a
   chiusura della sessione N si riunisce il concilio di TUTTI gli
-  sviluppatori — permanenti: allocatore (Leijen) · engine/opcache
-  (Stogov) · metodologia (Gregg), più co-optati di dominio quando il
-  tema lo richiede (es. axum/HTTP ⇒ web-runtime). Mandato: REFUTARE il
+  sviluppatori — **9 sedie**: le 6 fondative del piano Concilio
+  (`FOOTPRINT_CPU_ROADMAP.md`) Hoare (design Rust safe) · Matsakis
+  (ownership/aliasing) · Klabnik (spec/testabilità) · Hejlsberg
+  (compilatori/interning) · Bak (V8/HotSpot: alloc-rate, code-cache) ·
+  Pedersen (disciplina di confine) + le 3 aggiunte 2026-07-26 Leijen
+  (allocatore) · Stogov (Zend/opcache) · Gregg (metodologia), più
+  co-optati di dominio quando il tema lo richiede (es. axum/HTTP ⇒
+  web-runtime). Mandato: REFUTARE il
   report N + il programma N+1, leggendo i file di rotazione e dove
   serve il codice. Ogni membro delibera VERDETTO + emendamenti R1..Rn +
   kill-switch; verbali INTEGRALI in
