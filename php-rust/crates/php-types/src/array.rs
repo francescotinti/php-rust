@@ -114,7 +114,9 @@ const CURSOR_MASK: u32 = HOLDS_BIT - 1;
 /// `entries`, and a key is unique by invariant, so scan and probe find the
 /// same slot. The index materializes once the table would exceed this
 /// bound and only goes away again through `build` (compaction).
-const SCAN_MAX: usize = 8;
+// WP-59 Ob.3 asse 2: binario diagnostico `scan4` per l'attribuzione della
+// regressione full-only (il pool-off ne ha spiegato ~0,6% su +1..+2,5%).
+const SCAN_MAX: usize = if cfg!(feature = "scan4") { 4 } else { 8 };
 
 /// Murmur3 fmix64: spreads the (cached) key hash over all bits so the
 /// power-of-two mask sees a uniform distribution.
