@@ -42,12 +42,15 @@
   (correzione utente 2026-07-25: la vecchia forma cumulativa era una
   trascrizione sbagliata dell'intento); il trend cumulativo vive in
   `gaps/GAP_TREND.md` (file unico vivo, una riga per sessione).
-- Chiusura della sessione N: scrivere `sessions/WP_SESSION_N.md`; scrivere
-  `gaps/REPORT_GAP_N.md` con le SOLE misure della sessione N e aggiungere
-  la riga N a `gaps/GAP_TREND.md`; sostituire la sintesi qui in testa e
-  aggiornare stato gate / prossimo lavoro; **convocare il CONCILIO sul
-  report N + programma N+1 (regola utente 2026-07-26, v. Decisioni in
-  vigore) e archiviarne i verbali**; commit+push.
+- **Chiusura della sessione N = skill `chiudi-sessione`** (decisione
+  utente 2026-07-26: la procedura NON si ripete nei prompt; vive in
+  `~/.claude/skills/chiudi-sessione/SKILL.md`): bonifica processi →
+  verbale/ri-stash binario di parità → rotazione (WP_SESSION_N ·
+  REPORT_GAP_N solo se misurato, MAI cumulativo · riga GAP_TREND ·
+  questa testa + stato gate + §WP-N+1) → memoria → CONCILIO 9 sedie
+  (verbali vincolanti in wp<N+1>-harness/) → gh-status-sync se file
+  pubblicati cambiati → report utente + prompt N+1 CORTO. Commit+push
+  a ogni passo.
 
 ## 🧭 Decisioni in vigore (fonte citabile: migration/RULEBOOK.md)
 
