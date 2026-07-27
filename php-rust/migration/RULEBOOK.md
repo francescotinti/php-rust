@@ -98,14 +98,29 @@ declared residues stays `PHPR_DIVERGENCES_FROM_PHP.md`.
   declarations (interned stubs + fully recompiled seed conditionals),
   with unit-local ids relocated into the global space at link time and
   name-dedup performed by the link-time remap.
-- **Contract v2 (stub-elision, WP-63)**: a unit compiles against the
-  VM's live symbol table through a READ-ONLY view (Roslyn-style
-  metadata reference, never re-emission). Class references resolve at
-  emit time to ABSOLUTE global ids; ids for genuinely-new classes are
-  reserved from `classes.len()` in a mutation-free pre-pass (rollback
-  on failed compile is trivially empty — nothing was mutated). The
-  Module carries ONLY the unit's own declarations; no per-execution id
-  resolution may appear in the run loop (WP-44 law).
+- **Contract v2 (stub-elision, WP-63; §amended WP-64 per council K6''
+  — user-signed in the WP-64 session prompt)**: a unit compiles against
+  the VM's live symbol table (Roslyn-style metadata reference, never
+  re-emission) WITHOUT materializing the seed prefix; emission keeps
+  unit-local (program-space) ids exactly like contract v1. The baking
+  into ABSOLUTE global ids happens **AT LINK TIME** — the existing
+  relocation walker driven by a program-space remap
+  (`Vm::unit_remap_elided`) that replicates `unit_class_remap`'s
+  per-name decisions (registered → existing id / unregistered seed
+  entry → positional identity with name-check / genuinely new →
+  reserved append id) — so the RETAINED Module carries absolute ids and
+  the retained bytecode is byte-identical to v1 by construction. Ids
+  for genuinely-new classes are reserved from `classes.len()` with no
+  table mutation before `run_linked` (rollback on failed compile is
+  trivially empty). The Module carries ONLY the unit's own
+  declarations; no per-execution id resolution may appear in the run
+  loop (WP-44 law — satisfied STRUCTURALLY, not by a counter: a
+  `vm_symtab_lookups` counter would itself be a never-taken arm,
+  WP-38). S2 stated truthfully (council S-2): the seed↔runtime
+  alignment check is positional and lives ONLY on the identity arm
+  (undeclared conditionals of earlier units); registered names are
+  name-resolved by construction. An alignment miss is FATAL in every
+  build (correct-or-absent; upgraded WP-64, K-M5 matured).
 - **Monotonicity invariant (load-bearing for v2 and the unit cache)**:
   baked global ids are valid only because the class table is
   APPEND-ONLY and name registration is FIRST-WINS. Any future removal
