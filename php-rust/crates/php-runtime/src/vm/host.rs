@@ -894,7 +894,7 @@ impl<'m> super::Vm<'m> {
         if name == b"this" {
             return self.frames[top].this.clone();
         }
-        if let Some(s) = self.frames[top].func.slot_names.iter().position(|n| n.as_ref() == name) {
+        if let Some(s) = super::unit_slot_pos(&self.seed_globals, self.frames[top].func, name) {
             let v = self.frames[top].slots[s].deref_clone();
             if !matches!(v, Zval::Undef) {
                 return Some(v);

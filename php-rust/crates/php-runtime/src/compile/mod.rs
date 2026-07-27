@@ -290,7 +290,18 @@ fn compile_program_impl(
         .iter()
         .map(|fd| compile_fndecl(fd, &ctx, true).unwrap_or_else(|e| stub_func(fd, &e)))
         .collect();
-    let main = compile_body(b"", &program.file, &program.body, program.slots.len() as u32, &[], &program.slots, false, false, None, 0, &ctx, None, false, true, 0)?;
+    let mut main = compile_body(b"", &program.file, &program.body, program.slots.len() as u32, &[], &program.slots, false, false, None, 0, &ctx, None, false, true, 0)?;
+    if link.is_some() {
+        // WP-65 slot_names v2 (design65 §4.2): the elided unit's `{main}`
+        // cedes its WHOLE name table to the VM's canonical seed_globals —
+        // `program.slots = [seed…, new…]` is entirely in the seed table by
+        // the time this module links (`apply_seed_delta` runs before the
+        // compile on the include, eval and deferred paths alike), and the
+        // seed is append-only + fp-guarded across cache epochs. Emission is
+        // untouched: ops keep baking the same slot indices.
+        main.seed_slots = main.slot_names.len() as u32;
+        main.slot_names = Box::default();
+    }
     #[cfg(feature = "mem-census")]
     {
         split.proper += seg_net(m0);

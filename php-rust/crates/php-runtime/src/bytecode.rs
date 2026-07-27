@@ -1316,6 +1316,18 @@ pub struct Func {
     /// can bridge its variable scope by name (PHP: the included file shares the
     /// caller's symbol table). Empty for synthetic thunks.
     pub slot_names: Box<[Box<[u8]>]>,
+    /// WP-65 slot_names v2 (stub-elision contract v2 only): number of leading
+    /// named slots whose NAMES this table does NOT carry — they are the VM's
+    /// canonical `seed_globals[0..seed_slots]` prefix, byte-identical to what
+    /// used to be duplicated here (`program.slots` is entirely in the seed
+    /// table by link time: `apply_seed_delta` runs before compile on every
+    /// path, and the seed is append-only + fp-guarded across epochs). 0 for
+    /// every function except an elided unit's `{main}`, whose `slot_names`
+    /// is empty. Name reads go through the VM's outlined cold helpers
+    /// (`unit_slot_name`/`unit_slot_pos` — KH65-2); slot INDICES are
+    /// untouched everywhere (K-M65.3), and the shared prefix is immutable
+    /// by construction (KS-P65.1: there is no per-module copy to mutate).
+    pub seed_slots: u32,
     /// Whether each formal parameter is *required* (no default and non-variadic),
     /// parallel to `param_names`. The run-time named binder validates that every
     /// required parameter received an argument (raising `ArgumentCountError`).

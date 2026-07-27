@@ -101,6 +101,9 @@ pub(super) fn compile_body(
         max_temps: 0,
         n_params,
         slot_names: slot_names.to_vec().into_boxed_slice(),
+        // WP-65: 0 everywhere; the elided-unit `{main}` is rewritten by
+        // `compile_program_impl` (slot_names ceded to the VM seed table).
+        seed_slots: 0,
         // Parameter names / required-ness for run-time named-argument binding (A):
         // a param's name is its slot's name (`params[i].slot == i`).
         param_names: params
@@ -257,6 +260,7 @@ pub(super) fn stub_func(fd: &FnDecl, err: &CompileError) -> Func {
         consts: vec![Const::Str(php_types::PhpStr::new(msg.into_bytes()))],
         static_vars: Vec::new(),
         slot_names: fd.slots.to_vec().into_boxed_slice(),
+        seed_slots: 0,
         n_slots: fd.slots.len() as u32,
         max_temps: 0,
         n_params: fd.params.len() as u32,
@@ -366,6 +370,7 @@ pub(super) fn compile_prop_init(items: &[(Box<[u8]>, &Expr)], ctx: &ProgramCtx, 
         max_temps: 0,
         n_params: 0,
         slot_names: Box::default(),
+        seed_slots: 0,
         param_names: Box::default(),
         param_required: Box::default(),
         param_by_ref: Box::default(),
@@ -411,6 +416,7 @@ pub(super) fn compile_default_thunk(value: &Expr, ctx: &ProgramCtx, cur_class: O
         max_temps: 0,
         n_params: 0,
         slot_names: Box::default(),
+        seed_slots: 0,
         param_names: Box::default(),
         param_required: Box::default(),
         param_by_ref: Box::default(),
@@ -453,6 +459,7 @@ pub(super) fn compile_const_thunk(name: &[u8], value: &Expr, ctx: &ProgramCtx, d
         max_temps: 0,
         n_params: 0,
         slot_names: Box::default(),
+        seed_slots: 0,
         param_names: Box::default(),
         param_required: Box::default(),
         param_by_ref: Box::default(),
@@ -515,6 +522,7 @@ pub(super) fn const_stub(name: &[u8], err: &CompileError) -> Func {
         max_temps: 0,
         n_params: 0,
         slot_names: Box::default(),
+        seed_slots: 0,
         param_names: Box::default(),
         param_required: Box::default(),
         param_by_ref: Box::default(),

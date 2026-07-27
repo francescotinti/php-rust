@@ -5459,16 +5459,26 @@ impl<'m> Vm<'m> {
                 }
                 root == 0
             };
-            let names = &leaked.main.slot_names;
+            // WP-65 slot_names v2: the unit main may carry no name table
+            // (seed_slots > 0) — names come from the canonical seed prefix.
+            let n_named = unit_slot_count(&leaked.main);
+            debug_assert!(
+                leaked.main.seed_slots as usize <= self.seed_globals.len(),
+                "elided unit links before its slots reached the seed table"
+            );
             if caller == 0 {
-                let n = names.len().min(self.frames[0].slots.len());
+                let n = n_named.min(self.frames[0].slots.len());
                 for i in 0..n {
                     frame.slots[i] = Zval::Ref(make_cell(&mut self.frames[0].slots[i]));
                 }
             } else {
-                for (i, name) in names.iter().enumerate() {
+                for i in 0..n_named {
+                    let Some(name) = unit_slot_name(&self.seed_globals, &leaked.main, i)
+                    else {
+                        continue;
+                    };
                     if let Some(cs) =
-                        self.frames[caller].func.slot_names.iter().position(|n| n == name)
+                        unit_slot_pos(&self.seed_globals, self.frames[caller].func, name)
                     {
                         if let Some(slot) = self.frames[caller].slots.get_mut(cs) {
                             frame.slots[i] = Zval::Ref(make_cell(slot));
@@ -5476,7 +5486,7 @@ impl<'m> Vm<'m> {
                     } else if let Some(dyn_slot) = self.frames[caller]
                         .dyn_vars
                         .as_deref_mut()
-                        .and_then(|d| d.get_mut(&name[..]))
+                        .and_then(|d| d.get_mut(name))
                     {
                         // A variable the includer created by NAME at run time
                         // (extract() in HtmlErrorRenderer::include feeds its
@@ -5485,8 +5495,12 @@ impl<'m> Vm<'m> {
                     } else if global_scope {
                         // Global-scope include chain: the fresh name lives in
                         // the global symbol table, immediately (Zend has one
-                        // table for the whole chain — see note above).
-                        let slot = self.global_slot_by_name(name);
+                        // table for the whole chain — see note above). The
+                        // name is cloned: `global_slot_by_name` takes `&mut
+                        // self` and may grow the very seed table the borrow
+                        // came from (cold arm, per-include).
+                        let name = name.to_vec();
+                        let slot = self.global_slot_by_name(&name);
                         frame.slots[i] = Zval::Ref(make_cell(&mut self.frames[0].slots[slot]));
                     } else {
                         let cell = Rc::new(RefCell::new(Zval::Undef));
@@ -9427,7 +9441,7 @@ impl<'m> Vm<'m> {
         if let Some(idx) = crate::bytecode::superglobal_index(name) {
             return read_slot(&self.superglobals[idx as usize]);
         }
-        let named = self.frames[top].func.slot_names.iter().position(|n| n.as_ref() == name);
+        let named = unit_slot_pos(&self.seed_globals, self.frames[top].func, name);
         if let Some(s) = named {
             if matches!(self.frames[top].slots[s], Zval::Undef) {
                 self.diags.push(Diag::Warning(format!(
@@ -9460,7 +9474,7 @@ impl<'m> Vm<'m> {
             self.gc_note(&old);
             return Ok(());
         }
-        let named = self.frames[top].func.slot_names.iter().position(|n| n.as_ref() == name);
+        let named = unit_slot_pos(&self.seed_globals, self.frames[top].func, name);
         if let Some(s) = named {
             let old = store_slot(&mut self.frames[top].slots[s], v);
             self.gc_note(&old);
@@ -9498,8 +9512,7 @@ impl<'m> Vm<'m> {
         // the global frame itself (frame 0 holds the cell already).
         let mut f = top;
         loop {
-            let named =
-                self.frames[f].func.slot_names.iter().position(|n| n.as_ref() == name);
+            let named = unit_slot_pos(&self.seed_globals, self.frames[f].func, name);
             if let Some(s) = named {
                 self.frames[f].slots[s] = Zval::Ref(cell.clone());
             } else {
@@ -13511,7 +13524,14 @@ host_builtins! {
     // frameless, so the top frame IS the caller.
     b"get_defined_vars" => {
         let top = vm.frames.len() - 1;
-        let names: Vec<Box<[u8]>> = vm.frames[top].func.slot_names.to_vec();
+        // WP-65 slot_names v2: an elided unit main names its slots from the
+        // canonical seed prefix (declaration order preserved: seed order IS
+        // program.slots order for the unit).
+        let names: Vec<Box<[u8]>> = (0..unit_slot_count(vm.frames[top].func))
+            .filter_map(|i| {
+                unit_slot_name(&vm.seed_globals, vm.frames[top].func, i).map(Box::from)
+            })
+            .collect();
         let mut arr = PhpArray::new();
         for (i, name) in names.iter().enumerate() {
             if let Some(v) = vm.frames[top].slots.get(i) {
@@ -14378,6 +14398,46 @@ fn uc_log_flush() {
             }
         });
     });
+}
+
+/// WP-65 slot_names v2 — outlined COLD name reads for a frame whose func may
+/// be an elided unit `{main}` (`seed_slots > 0`, empty `slot_names`): slots
+/// `0..seed_slots` are named by the VM's canonical `seed_globals` prefix
+/// (append-only, fp-guarded), the rest by the func's own table. For every
+/// normal function `seed_slots == 0` and these degrade to the plain reads.
+/// Cold consumers only (KH65-2); indices are never translated (K-M65.3);
+/// no pointer-identity anywhere (P-65.2). Free functions on purpose: the
+/// callers borrow `seed` and `func` from disjoint `Vm` fields while
+/// mutating frames.
+#[cold]
+fn unit_slot_name<'a>(
+    seed: &'a [Box<[u8]>],
+    func: &'a crate::bytecode::Func,
+    i: usize,
+) -> Option<&'a [u8]> {
+    let s = func.seed_slots as usize;
+    if i < s {
+        seed.get(i).map(|n| n.as_ref())
+    } else {
+        func.slot_names.get(i - s).map(|n| n.as_ref())
+    }
+}
+
+/// See [`unit_slot_name`]: position of `name` in the frame's named slots.
+#[cold]
+fn unit_slot_pos(seed: &[Box<[u8]>], func: &crate::bytecode::Func, name: &[u8]) -> Option<usize> {
+    let s = func.seed_slots as usize;
+    if s > 0 {
+        if let Some(i) = seed[..s.min(seed.len())].iter().position(|n| n.as_ref() == name) {
+            return Some(i);
+        }
+    }
+    func.slot_names.iter().position(|n| n.as_ref() == name).map(|p| p + s)
+}
+
+/// See [`unit_slot_name`]: total NAMED slot count of the func (temps past it).
+fn unit_slot_count(func: &crate::bytecode::Func) -> usize {
+    func.seed_slots as usize + func.slot_names.len()
 }
 
 /// Whether any fingerprint variant is cached under `key` (miss taxonomy).
