@@ -1,4 +1,15 @@
-# WP_SESSION_66 — debiti concilio WP-65 consegnati + FRONTE AXUM aperto (KS-P1/S-66.4: parità server verde, SCOPERTA leak 15 unit impure/richiesta) + L-66.1 (65b = outlier di run; Σcommitted stabile alla cifra)
+# WP_SESSION_66 — debiti concilio WP-65 consegnati + fronte server ISTRUITO su SAPI -S (KS-P1: parità di risposta byte-id, bordi R3/R4 scattati ⇒ P-2 BLOCCO; SCOPERTA leak 15 unit impure/richiesta) + L-66.1 (65b anomalo; Σcommitted metro di lavoro)
+
+> ⚖️ Verbale EMENDATO alla chiusura dal concilio WP-67 (sintesi in
+> `wp67-harness/COUNCIL_WP67_REVIEWS.md`): (i) bug di UNITÀ in L-66.1
+> corretto (L-67.1: 65b = 1.807,9 MiB phys / 121,8 fuori-bin; accusa
+> al recount RITIRATA — L-67.2); (ii) KK67-1: il probe KS-P1 ebbe
+> verdetto macchina FAIL (bordi P66-R3/R4) — la testa non dice più
+> "verde"; il letto fp-seq steady-state è POST-HOC (da pre-registrare
+> nel probe, K-67.6); (iii) ogni claim KS-P1 porta "SAPI -S
+> sequenziale, worker unico" (il fronte axum è ISTRUITO, non aperto);
+> (iv) "65b outlier" = ipotesi-forte (G-67.4); (v) claim phys
+> standing SOSPESI (KL-66.1 non soddisfatto per-causa).
 
 > ⚡ **WP-66 (2026-07-27 sera, `c3c9e38`→`b1e9466`→`fe33706`→`131f7c0`)**
 > — sintesi a 9 recepita INTEGRALE in `wp66-harness/design66.md` PRIMA
@@ -69,21 +80,30 @@
   d'accettazione pre-registrati.
 
 ## L-66.1 fuori-bin (census66-l661.sh su memgc65b INVARIATO, run2)
+## ⚠️ EMENDATA DAL CONCILIO WP-67 (L-67.1/L-67.2: bug di unità)
 
-- Metrica riproducibile (phys mi_proc win=0 − Σ mi_bin win=0 dump-1):
-  **census65 37,4MB/97,9% · census65b 209,6MB/88,9% · l661 33,9MB/
-  98,0%** ⇒ **census65b è un OUTLIER di run, non crescita
-  strutturale**; classe = slack di segmento mimalloc (IOAccelerator,
-  WP-59: dirty+swap 1.751,2 vs committed 1.684,8), attribuzione 100%
-  in classi nominate ⇒ KL-66.1 NON scatta.
-- **Σcommitted è il metro STABILE**: 1.686,1 (65b) vs 1.684,8 (l661)
-  = 1,3MB su due run; la leva slot_names vi replica (−58MB da
-  census65). Il phys standing ha spread −177MB a parità di binario ⇒
-  L-66.2 vendicata (phys del checkpoint MAI da solo).
-- ⚠️ A VERBALE: il recount del concilio (Σ65b=1.768 ⇒ fuori-bin
-  127,7/Δ+88,5) NON è riproducibile dai file (mi_bin dà 1.686,1 ⇒
-  209,6/Δ+172,2); la conclusione non ne dipende — discrepanza al
-  concilio WP-67.
+- Metrica riproducibile (phys mi_proc win=0 − Σ mi_bin win=0 dump-1),
+  **tutte le cifre in MiB** (la prima stesura mischiava MB decimali):
+  **census65 37,4/97,9% · census65b 121,8/93,3% (phys 1.807,9) ·
+  l661 33,9/98,0%** ⇒ **census65b resta ANOMALO (ipotesi-forte
+  "outlier di run", G-67.4: covariata pressione non controllata —
+  ≈290MB swapped a metà l661)**; spread phys a binario invariato
+  **89,2 MiB (~5%)**.
+- **Σcommitted è il metro di lavoro**: 1.686,1 (65b) vs 1.684,8
+  (l661) = 1,3 MiB (0,08%) su due run; la leva slot_names vi replica
+  (−58MB da census65); lo standing "stabile alla cifra" si promuove
+  alla TERZA run (KL67-1) — L-66.2 confermata (phys del checkpoint
+  MAI da solo).
+- ⚖️ RITIRATA l'accusa "recount del concilio non riproducibile": il
+  concilio contava in MB decimali (Σ65b=1.768,0 = 1.686,1 MiB;
+  fuori-bin 127,7 dec = 121,8 MiB) — contabilità coerente; il bug di
+  unità era della sessione (L-67.2: ogni cifra dichiara l'unità).
+- L'attribuzione vmmap (dirty+swap vs footprint, copertura "199%") è
+  VACUA per unità miste ⇒ **KL-66.1 resta NON soddisfatto in forma
+  per-causa: i claim phys standing restano SOSPESI** (solo
+  counted+committed) finché L-67.3 non consegna la colonna per-causa
+  lato mimalloc (segment-committed − bin-committed, ≤100% per
+  costruzione).
 
 ## Parità e stash
 

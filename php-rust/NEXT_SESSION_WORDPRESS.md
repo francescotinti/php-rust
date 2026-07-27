@@ -1,4 +1,4 @@
-# Rotta WORDPRESS-FIRST — WP-track (dopo WP-66: ⚡ debiti concilio consegnati a delta zero (seed_prefix_short FATAL + H-66.2 + colonne lcpath/lower_partial) · GATE66 = primo gate a VERDETTO MACCHINA, PASS fails=0 · FRONTE AXUM aperto: KS-P1 replay wpdev VERDE (body byte-id ×10, fp-seq steady-state IDENTICHE, hit-rate 97,1%) e S-66.4 zero bleed, MA 🔴 SCOPERTA: 15 unit impure (autoload-in-lowering ⇒ pure=false ⇒ MAI pubblicate) = 15 compile+Box::leak A OGNI RICHIESTA ⇒ P-2 de-leak è BLOCCO (KS-P66.3) · L-66.1: census65b era OUTLIER di run (fuori-bin 33,9MB/98,0% su l661; Σcommitted STABILE alla cifra 1.686,1/1.684,8, phys spread −177MB stesso binario ⇒ L-66.2 provata sperimentalmente); stash phpr-wp66 5aa60d56…, tree fe33706)
+# Rotta WORDPRESS-FIRST — WP-track (dopo WP-66: ⚡ debiti concilio consegnati a delta zero (seed_prefix_short FATAL + H-66.2 + colonne lcpath/lower_partial) · GATE66 = primo gate a VERDETTO MACCHINA, PASS fails=0 · fronte server ISTRUITO su SAPI -S sequenziale: KS-P1 replay wpdev = parità di risposta BYTE-ID ×10 + steady-state R3..R10 fp-stabile (letto post-hoc, K-67.6) MA verdetto macchina del probe FAIL sui bordi P66-R3/R4 (KK67-1) e 🔴 SCOPERTA: 15 unit impure (autoload-in-lowering ⇒ pure=false ⇒ MAI pubblicate) = 15 compile+Box::leak A OGNI RICHIESTA ⇒ P-2 de-leak è BLOCCO (KS-P66.3); S-66.4 zero bleed osservato · L-66.1 (EMENDATA L-67.1, unità MiB): 65b anomalo = ipotesi-forte outlier (121,8 fuori-bin vs 37,4/33,9; spread phys 89,2 MiB ~5%); Σcommitted metro di lavoro (Δ 1,3 MiB su 2 run); claim phys standing SOSPESI (KL-66.1 per-causa aperto); stash phpr-wp66 5aa60d56…, tree fe33706, full parità 88 BYTE-ID)
 
 > ⚡ **WP-66 (2026-07-27 sera, `c3c9e38`→`fe33706`+`131f7c0`)** — TUTTI
 > i debiti d'apertura del concilio consegnati (design66 recepimento
@@ -18,9 +18,15 @@
 > **15 compile + 15 Module leakati a ogni richiesta** — P-2 (+
 > cacheabilità unit impure) = BLOCCO del fronte. Mini-design P-2 in
 > `wp66-harness/design66-p2.md` (cache Rc-owned + RetainSet
-> per-richiesta; arena safe ⇒ decisione concilio). **L-66.1**: 65b
-> OUTLIER di run; Σcommitted = metro stabile (1,3MB su due run);
-> recount concilio 1.768 NON riproducibile dai file (a verbale WP-67).
+> per-richiesta; arena safe ⇒ decisione concilio). **L-66.1 (EMENDATA
+> dal concilio WP-67 — bug di unità L-67.1/2)**: in MiB 65b = 1.807,9
+> phys / 121,8 fuori-bin (93,3%) vs 37,4/33,9 delle altre due run ⇒
+> anomalia = ipotesi-forte outlier (G-67.4); Σcommitted = metro di
+> lavoro (Δ 1,3 MiB su due run, standing alla terza — KL67-1);
+> l'accusa al recount del concilio è RITIRATA (contava in MB
+> decimali, coerente). ⚖️ Il probe KS-P1 ebbe verdetto macchina FAIL
+> (bordi R3/R4): il fronte è ISTRUITO, non "verde" (KK67-1); claim
+> phys standing SOSPESI (KL-66.1 per-causa aperto).
 > **Storia: `sessions/WP_SESSION_66.md`. WP-65:
 > `sessions/WP_SESSION_65.md`.**
 
@@ -329,14 +335,19 @@ recepire INTEGRALI prima di toccare codice.**
    PINNATE prima; coppia full PROPRIA (tocca l'include path); criteri
    d'accettazione §6 del mini-design (KL-64.2 bytes bounded a
    N={1,100,1000}).
-2. **Cacheabilità unit impure (scoperta WP-66)**: le unit con
-   autoload-in-lowering restano `pure=false` e non si pubblicano MAI
-   (15 compile+leak/richiesta su wpdev: script-loader, pomo/*,
-   Requests/*, ai-client/*…). Design della publish sotto invariante
-   (es. re-lower finale a seed stabilizzato ⇒ pure, o publish con
-   double-check dedicato) — è metà del costo per-richiesta del fronte;
-   da quotare in bytes con un census server run (binario memgc66 da
-   buildare su fe33706, colonne già armate).
+2. **Cacheabilità unit impure (scoperta WP-66) — FORMA VINCOLATA DAL
+   CONCILIO (sintesi punto 2: le due forme originarie RESPINTE)**: le
+   unit con autoload-in-lowering restano `pure=false` e non si
+   pubblicano MAI (15 compile+leak/richiesta su wpdev: script-loader,
+   pomo/*, Requests/*, ai-client/*…). Forma ammessa: **publish keyed
+   sul fp d'INGRESSO + lista ordinata delle dipendenze autoload
+   nell'entry; al hit replay delle dipendenze via include/autoload
+   normale, POI double-check** (E-67.2/S-67.1/P-67.4). Fixture
+   obbligatorie: ordering-echo 3 lati (S-67.2), figlio editato ⇒ MISS
+   (P-67.4); criterio di successo = le 15 diventano hit_cross
+   (KB67-2), catena impura ⇒ never-published (KS67-1). Quota in
+   bytes/ms-per-richiesta dal census server memgc66 (B-67.1) PRIMA di
+   disegnare.
 3. **E6 ri-quota (KS64-4/KS66-1)**: colonne `lcpath/lcsum dup_lc_ns`
    ARMATE in fe33706 — serve solo un census run full; soglia in forma
    E-66.2 (riapertura SOLO se misurato_dup ≥ ~2× costo stimato di
@@ -346,10 +357,11 @@ recepire INTEGRALI prima di toccare codice.**
    {1,100,1000}, batteria S-66.4 punti (iv) session e (vi)
    cross-worker, B-66.3 sample sotto carico, H-66.5 unit_fp, G-66.5
    coppia log-off/on server.
-5. **Contabilità L-66.1 al concilio**: il recount Σcommitted65b=1.768
-   del verbale WP-66 non è riproducibile dai file (mi_bin dà 1.686,1);
-   le conclusioni (65b outlier; Σcommitted metro stabile) non ne
-   dipendono ma la discrepanza va risolta.
+5. **Contabilità L-66.1: RISOLTA dal concilio (L-67.1/L-67.2)** — era
+   un bug di UNITÀ della sessione (MB decimali vs MiB), accusa
+   ritirata; resta da consegnare L-67.3 (attribuzione per-causa lato
+   mimalloc, ≤100% per costruzione) e la terza run del metro
+   Σcommitted (KL67-1, gratis con la baseline P-2).
 6. **G3**: invariato — quarta coppia o risoluzione criterio ≥3+3
    (G-66.4). **P2 seed signature-only**: invariato (Gregg R6).
 
