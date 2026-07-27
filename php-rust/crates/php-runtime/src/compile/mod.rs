@@ -174,6 +174,19 @@ thread_local! {
         const { std::cell::Cell::new(CompileSplit { tables: 0, stub: 0, fnshare: 0, proper: 0 }) };
 }
 
+#[cfg(feature = "mem-census")]
+thread_local! {
+    /// WP-64 E1-64: cumulative wall-ns + entries of the eager-map build
+    /// (`map_ns`, the first O(seed) pass per include — H5'').
+    static MAP_NS: std::cell::Cell<(u64, u64)> = const { std::cell::Cell::new((0, 0)) };
+}
+
+/// WP-64 E1-64: read the cumulative eager-map (ns, entries) pair.
+#[cfg(feature = "mem-census")]
+pub fn census_map_ns_take() -> (u64, u64) {
+    MAP_NS.with(|c| c.get())
+}
+
 /// Take (and reset) the split parked by the last seeded compile.
 #[cfg(feature = "mem-census")]
 pub fn census_take_split() -> CompileSplit {
@@ -201,6 +214,8 @@ fn compile_program_impl(
     let mut m0 = php_types::memcensus::alloc_counters();
     // Case-insensitive name→id index for resolving `ClassRef::Named`; the first
     // declaration of a name wins (PHP forbids redeclaration).
+    #[cfg(feature = "mem-census")]
+    let map_t0 = std::time::Instant::now();
     let mut class_index: rustc_hash::FxHashMap<Vec<u8>, ClassId> = rustc_hash::FxHashMap::default();
     for (i, cd) in program.classes.iter().enumerate() {
         // A conditional declaration is not resolvable by name until its
@@ -213,6 +228,16 @@ fn compile_program_impl(
     }
     #[cfg(feature = "mem-census")]
     {
+        // WP-64 E1-64 (B2/H5''): the transient eager map is the FIRST of the
+        // two O(seed) per-include passes — timed apart from the compile
+        // window so tranche 2's CPU quota reads per-channel, not inferred.
+        MAP_NS.with(|c| {
+            let (ns, n) = c.get();
+            c.set((
+                ns + map_t0.elapsed().as_nanos() as u64,
+                n + program.classes.len() as u64,
+            ));
+        });
         split.tables += seg_net(m0);
         m0 = php_types::memcensus::alloc_counters();
     }

@@ -1117,15 +1117,15 @@ pub(crate) fn run_module_with_hir<'m>(
             let mut by: rustc_hash::FxHashMap<&[u8], (u32, u64, u64)> = Default::default();
             // WP-62 M2.1: per-path [tables, stub, fnshare, proper] sums (the
             // dup targets' prefix share is THE Hejlsberg A1 number).
-            let mut by_split: rustc_hash::FxHashMap<&[u8], [u64; 4]> = Default::default();
+            let mut by_split: rustc_hash::FxHashMap<&[u8], [u64; 7]> = Default::default();
             for (i, (file, bytes, net, _p)) in units.iter().enumerate() {
                 let e = by.entry(&file[..]).or_insert((0, 0, 0));
                 e.0 += 1;
                 e.1 += *bytes;
                 e.2 += *net;
                 if let Some(sp) = CENSUS_SPLITS.with(|s| s.borrow().get(i).copied()) {
-                    let es = by_split.entry(&file[..]).or_insert([0; 4]);
-                    for k in 0..4 {
+                    let es = by_split.entry(&file[..]).or_insert([0; 7]);
+                    for k in 0..7 {
                         es[k] += sp[k];
                     }
                 }
@@ -1135,41 +1135,48 @@ pub(crate) fn run_module_with_hir<'m>(
             // here; dup rows below aggregate per path and hide singles.
             // WP-62 M2.1: rows carry the compile split (pfx = tables+stub+
             // fnshare vs proper); indices pair CENSUS_UNITS ↔ CENSUS_SPLITS.
-            let splits: Vec<[u64; 4]> = CENSUS_SPLITS.with(|s| s.borrow().clone());
+            let splits: Vec<[u64; 7]> = CENSUS_SPLITS.with(|s| s.borrow().clone());
             {
                 let mut top: Vec<(usize, &(Vec<u8>, u64, u64, usize))> =
                     units.iter().enumerate().collect();
                 top.sort_by(|a, b| b.1 .2.cmp(&a.1 .2));
                 for (i, (file, bytes, net, _p)) in top.iter().take(24) {
-                    let sp = splits.get(*i).copied().unwrap_or([0; 4]);
+                    let sp = splits.get(*i).copied().unwrap_or([0; 7]);
                     mc::census_line(&format!(
                         "tag=unittop bytes_counted={bytes} net={net} pfx_tables={} \
-                         pfx_stub={} pfx_fnshare={} proper={} path={}",
+                         pfx_stub={} pfx_fnshare={} proper={} pfx_slotnames={} \
+                         pfx_fnvec={} sc={} path={}",
                         sp[0],
                         sp[1],
                         sp[2],
                         sp[3],
+                        sp[4],
+                        sp[5],
+                        sp[6],
                         String::from_utf8_lossy(file)
                     ));
                 }
             }
             // Global prefix-vs-proper aggregate (Hejlsberg A1 decision line).
             {
-                let mut t = [0u64; 4];
+                let mut t = [0u64; 7];
                 for sp in &splits {
-                    for k in 0..4 {
+                    for k in 0..7 {
                         t[k] += sp[k];
                     }
                 }
                 let prefix = t[0] + t[1] + t[2];
                 mc::census_line(&format!(
                     "tag=prefixsum tables={} stub={} fnshare={} proper={} prefix={prefix} \
-                     split_tot={}",
+                     split_tot={} slotnames_tot={} fnvec_tot={} sc_tot={}",
                     t[0],
                     t[1],
                     t[2],
                     t[3],
                     prefix + t[3],
+                    t[4],
+                    t[5],
+                    t[6],
                 ));
             }
             let mut dups: Vec<(&[u8], u32, u64, u64)> = by
@@ -1186,14 +1193,18 @@ pub(crate) fn run_module_with_hir<'m>(
                 dup_b += (bytes / (*n as u64)) * ((*n as u64) - 1);
                 dup_n += (net / (*n as u64)) * ((*n as u64) - 1);
                 if i < 40 {
-                    let sp = by_split.get(p).copied().unwrap_or([0; 4]);
+                    let sp = by_split.get(p).copied().unwrap_or([0; 7]);
                     mc::census_line(&format!(
                         "tag=unitpath2 n={n} bytes_counted={bytes} net={net} \
-                         pfx_tables={} pfx_stub={} pfx_fnshare={} proper={} path={}",
+                         pfx_tables={} pfx_stub={} pfx_fnshare={} proper={} \
+                         pfx_slotnames={} pfx_fnvec={} sc={} path={}",
                         sp[0],
                         sp[1],
                         sp[2],
                         sp[3],
+                        sp[4],
+                        sp[5],
+                        sp[6],
                         String::from_utf8_lossy(p)
                     ));
                 }
@@ -1266,8 +1277,14 @@ pub(crate) fn run_module_with_hir<'m>(
                 ));
                 // WP-63 B7: finestre ns separate lower vs compile (bordo CPU).
                 let (lns, cns, un) = census_compile_ns_take();
+                // WP-64 E1-64 (B2/H5''): le DUE passate O(seed) per-include,
+                // quotate separatamente — mappa eager (compile) e remap
+                // program-space (link) — mai più inferite dalle finestre.
+                let (mns, mn) = crate::compile::census_map_ns_take();
+                let (rns, rn) = REMAP_NS.with(|c| c.get());
                 mc::census_line(&format!(
-                    "tag=compilens lower_ns={lns} compile_ns={cns} units={un}"
+                    "tag=compilens lower_ns={lns} compile_ns={cns} units={un} \
+                     map_ns={mns} map_entries={mn} remap_ns={rns} remap_entries={rn}"
                 ));
             }
             // WP-62 M1 (Leijen R1 / Klabnik b): per-path hit-net aggregation
@@ -1721,8 +1738,35 @@ fn census_unit_note(m: &'static Module) {
     // WP-62 M2.1: the compile's prefix/proper split rides in a parallel row
     // (same push order as CENSUS_UNITS — one note per leaked unit).
     let sp = crate::compile::census_take_split();
-    CENSUS_SPLITS
-        .with(|s| s.borrow_mut().push([sp.tables, sp.stub, sp.fnshare, sp.proper]));
+    // WP-64 E1-64: retained O(seed) columns measured on the LEAKED module —
+    // they carve the previously-polluted `proper` into per-channel shares:
+    // `main.slot_names` over the pre-delta seed_globals prefix, the
+    // prelude-shared fn-Vec entries (Rc clone + fn_ci row each), plus the
+    // raw statics dimension (answers Hejlsberg's "statics?" either way —
+    // per-unit `static_count` vs the parked seed_static tells which).
+    let dims = CENSUS_SEED_DIMS.with(|c| c.get());
+    let pfx_slotnames = m
+        .main
+        .slot_names
+        .iter()
+        .take(dims.0 as usize)
+        .map(|s| s.len() + 16)
+        .sum::<usize>() as u64;
+    let shared_fns = m.functions.iter().filter(|f| Rc::strong_count(f) > 1).count() as u64;
+    let pfx_fnvec = shared_fns
+        * (std::mem::size_of::<Rc<crate::bytecode::Func>>()
+            + std::mem::size_of::<(u64, u32)>()) as u64;
+    CENSUS_SPLITS.with(|s| {
+        s.borrow_mut().push([
+            sp.tables,
+            sp.stub,
+            sp.fnshare,
+            sp.proper,
+            pfx_slotnames,
+            pfx_fnvec,
+            m.static_count as u64,
+        ])
+    });
     CENSUS_UNITS.with(|u| {
         u.borrow_mut().push((
             m.file.to_vec(),
@@ -1735,10 +1779,20 @@ fn census_unit_note(m: &'static Module) {
 
 #[cfg(feature = "mem-census")]
 thread_local! {
-    /// WP-62 M2.1: per-unit [tables, stub, fnshare, proper] compile split,
-    /// parallel to `CENSUS_UNITS` (Hejlsberg A1: prefix = tables+stub+fnshare).
-    static CENSUS_SPLITS: std::cell::RefCell<Vec<[u64; 4]>> =
+    /// WP-62 M2.1 + WP-64 E1-64: per-unit [tables, stub, fnshare, proper,
+    /// pfx_slotnames, pfx_fnvec, static_count] split, parallel to
+    /// `CENSUS_UNITS` (Hejlsberg A1: prefix = tables+stub+fnshare; the three
+    /// WP-64 columns carve `proper` per channel for the tranche-2 quota).
+    static CENSUS_SPLITS: std::cell::RefCell<Vec<[u64; 7]>> =
         const { std::cell::RefCell::new(Vec::new()) };
+    /// WP-64 E1-64: pre-delta (seed_globals.len, seed_static) parked by
+    /// `elide_seed_len` for the next unit's census note.
+    static CENSUS_SEED_DIMS: std::cell::Cell<(u64, u64)> =
+        const { std::cell::Cell::new((0, 0)) };
+    /// WP-64 E1-64 (H5''): cumulative (wall-ns, entries) of the link-time
+    /// program-space remap walk — the second O(seed) per-include pass.
+    static REMAP_NS: std::cell::Cell<(u64, u64)> =
+        const { std::cell::Cell::new((0, 0)) };
 }
 
 /// Renders `depth=N;fn@file:line;...` for the top 3 PHP frames.
@@ -5086,6 +5140,10 @@ impl<'m> Vm<'m> {
         program: &Program,
         seed_len: usize,
     ) -> (Vec<ClassId>, Vec<ClassId>, Vec<usize>) {
+        // WP-64 E1-64 (H5''): this walk is the SECOND O(seed) per-include
+        // pass (lowercase alloc per entry) — timed so tranche 2 quotes BOTH.
+        #[cfg(feature = "mem-census")]
+        let remap_t0 = std::time::Instant::now();
         let mut prog_remap: Vec<ClassId> = Vec::with_capacity(program.classes.len());
         let mut retained_remap: Vec<ClassId> = Vec::new();
         let mut new_locals: Vec<usize> = Vec::new();
@@ -5140,6 +5198,14 @@ impl<'m> Vm<'m> {
                 k += 1;
             }
         }
+        #[cfg(feature = "mem-census")]
+        REMAP_NS.with(|c| {
+            let (ns, n) = c.get();
+            c.set((
+                ns + remap_t0.elapsed().as_nanos() as u64,
+                n + program.classes.len() as u64,
+            ));
+        });
         (prog_remap, retained_remap, new_locals)
     }
 
@@ -5623,6 +5689,12 @@ impl<'m> Vm<'m> {
     /// `apply_seed_delta` runs for the unit (an eval's own classes join the
     /// seed before its compile and must not be elided). `None` = contract v1.
     fn elide_seed_len(&self) -> Option<usize> {
+        // WP-64 E1-64: park the pre-delta seed dimensions for the census
+        // note of the unit about to compile (all three callers — include,
+        // eval, deferred — run BEFORE their accumulate/apply by contract).
+        #[cfg(feature = "mem-census")]
+        CENSUS_SEED_DIMS
+            .with(|c| c.set((self.seed_globals.len() as u64, self.seed_static as u64)));
         (stub_elision_enabled() && self.main_hir.is_some()).then(|| self.seed_classes.len())
     }
 
