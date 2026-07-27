@@ -1333,10 +1333,47 @@ pub(crate) fn run_module_with_hir<'m>(
                 // include path — compare via the counts, not blindly.
                 let rdns = READ_NS.with(|c| c.get());
                 let (lpns, lhns, lct) = crate::lower::census_lower_phase_take();
+                // WP-66 B-66.x: the retries' partial-HIR share, counted —
+                // closes the B-65.3 lower balance (was a narrated residual).
+                let (plns, plct) = crate::lower::census_lower_partial_take();
                 mc::census_line(&format!(
                     "tag=compilens lower_ns={lns} compile_ns={cns} units={un} \
                      map_ns={mns} map_entries={mn} remap_ns={rns} remap_entries={rn} \
-                     read_ns={rdns} lexparse_ns={lpns} lowerhir_ns={lhns} lowers={lct}"
+                     read_ns={rdns} lexparse_ns={lpns} lowerhir_ns={lhns} lowers={lct} \
+                     lower_partial_ns={plns} lower_partials={plct}"
+                ));
+                // WP-66 E-66.2: per-path dup cost — for a path compiled n>1
+                // times, all but one compile is duplicated work:
+                // dup_lc = (l+c)·(n−1)/n. Top rows + aggregate; the E6 quota
+                // reads dup_lc_ns here, at the cifra (KS66-1).
+                let mut lc_rows: Vec<(u64, Vec<u8>, u64, u64, u64)> = Vec::new();
+                let (mut lc_paths, mut lc_compiles, mut lc_l, mut lc_c) = (0u64, 0u64, 0u64, 0u64);
+                let (mut dup_paths, mut dup_compiles, mut dup_lc) = (0u64, 0u64, 0u64);
+                for (p, (l, c, n)) in census_path_ns_snapshot() {
+                    lc_paths += 1;
+                    lc_compiles += n;
+                    lc_l += l;
+                    lc_c += c;
+                    if n > 1 {
+                        let dup = (l + c) - (l + c) / n;
+                        dup_paths += 1;
+                        dup_compiles += n - 1;
+                        dup_lc += dup;
+                        lc_rows.push((dup, p, l, c, n));
+                    }
+                }
+                lc_rows.sort_by(|a, b| b.0.cmp(&a.0));
+                for (dup, p, l, c, n) in lc_rows.iter().take(40) {
+                    mc::census_line(&format!(
+                        "tag=lcpath compiles={n} lower_ns={l} compile_ns={c} \
+                         dup_lc_ns={dup} path={}",
+                        String::from_utf8_lossy(p)
+                    ));
+                }
+                mc::census_line(&format!(
+                    "tag=lcsum paths={lc_paths} compiles={lc_compiles} lower_ns={lc_l} \
+                     compile_ns={lc_c} dup_paths={dup_paths} dup_compiles={dup_compiles} \
+                     dup_lc_ns={dup_lc}"
                 ));
             }
             // WP-62 M1 (Leijen R1 / Klabnik b): per-path hit-net aggregation
@@ -6057,7 +6094,11 @@ impl<'m> Vm<'m> {
         // WP-63 B7 (Bak): separate ns windows — lex/parse/lower must stay flat
         // under elision, the compile window is where the lever lives.
         #[cfg(feature = "mem-census")]
-        census_compile_ns(lower_t0.elapsed().as_nanos() as u64, 0, 0);
+        {
+            let lns = lower_t0.elapsed().as_nanos() as u64;
+            census_compile_ns(lns, 0, 0);
+            census_path_ns(&key, lns, 0, 0);
+        }
         // Contract v2 engagement (WP-63): captured BEFORE the delta below, for
         // the same reason the delta itself is.
         let elide = self.elide_seed_len();
@@ -6082,7 +6123,11 @@ impl<'m> Vm<'m> {
             }
         };
         #[cfg(feature = "mem-census")]
-        census_compile_ns(0, compile_t0.elapsed().as_nanos() as u64, 1);
+        {
+            let cns = compile_t0.elapsed().as_nanos() as u64;
+            census_compile_ns(0, cns, 1);
+            census_path_ns(&key, 0, cns, 1);
+        }
         if let Some(n) = module.elided {
             // KK1' medium: sentinels assert `elide`>0 from this log, exactly
             // like `cachehit>0` (a probe green with zero elisions is invalid).
@@ -14326,6 +14371,29 @@ fn census_compile_ns(lower: u64, compile: u64, units: u64) {
 #[cfg(feature = "mem-census")]
 pub(crate) fn census_compile_ns_take() -> (u64, u64, u64) {
     COMPILE_NS.with(|c| c.get())
+}
+
+/// WP-66 E-66.2 (Hejlsberg c): per-path (lower, compile) wall-ns + compile
+/// count over the include path. The E6 re-quota is judged on the MEASURED
+/// per-path dup cost (KS66-1) — never on cross-path averages (G-65.3).
+#[cfg(feature = "mem-census")]
+thread_local! {
+    static PATH_NS: std::cell::RefCell<std::collections::HashMap<Vec<u8>, (u64, u64, u64)>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
+}
+#[cfg(feature = "mem-census")]
+fn census_path_ns(path: &[u8], lower: u64, compile: u64, compiles: u64) {
+    PATH_NS.with(|m| {
+        let mut m = m.borrow_mut();
+        let e = m.entry(path.to_vec()).or_insert((0, 0, 0));
+        e.0 += lower;
+        e.1 += compile;
+        e.2 += compiles;
+    });
+}
+#[cfg(feature = "mem-census")]
+fn census_path_ns_snapshot() -> Vec<(Vec<u8>, (u64, u64, u64))> {
+    PATH_NS.with(|m| m.borrow().iter().map(|(k, v)| (k.clone(), *v)).collect())
 }
 
 /// WP-65 P-65.4: the `uc_log` event vocabulary is CLOSED — event names are

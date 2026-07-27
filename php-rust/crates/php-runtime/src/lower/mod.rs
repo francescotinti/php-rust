@@ -160,6 +160,40 @@ pub(crate) fn census_lower_phase_take() -> (u64, u64, u64) {
     LOWER_PHASE_NS.with(|c| c.get())
 }
 
+// WP-66 B-66.x (Bak b): the HIR share of lowers that error MID-PASS
+// (autoload retries) is COUNTED here, not narrated — it is the ~10%
+// residual of the B-65.3 lower balance: (partial_hir_ns, count).
+#[cfg(feature = "mem-census")]
+thread_local! {
+    static LOWER_PARTIAL_NS: std::cell::Cell<(u64, u64)> =
+        const { std::cell::Cell::new((0, 0)) };
+}
+#[cfg(feature = "mem-census")]
+pub(crate) fn census_lower_partial_take() -> (u64, u64) {
+    LOWER_PARTIAL_NS.with(|c| c.get())
+}
+/// Drop-guard armed after lexparse books; a mid-pass error path drops it
+/// armed and the partial HIR time lands in `lower_partial`. The happy path
+/// defuses it right where `lowerhir` books.
+#[cfg(feature = "mem-census")]
+struct LowerPartialGuard {
+    t0: std::time::Instant,
+    base: u64,
+    armed: bool,
+}
+#[cfg(feature = "mem-census")]
+impl Drop for LowerPartialGuard {
+    fn drop(&mut self) {
+        if self.armed {
+            let hir = (self.t0.elapsed().as_nanos() as u64).saturating_sub(self.base);
+            LOWER_PARTIAL_NS.with(|c| {
+                let (ns, n) = c.get();
+                c.set((ns + hir, n + 1));
+            });
+        }
+    }
+}
+
 fn lower_source_impl(
     name: &[u8],
     source: &[u8],
@@ -185,6 +219,10 @@ fn lower_source_impl(
             c.set((lp + phase_lexparse, lh, n + 1));
         });
     }
+    // WP-66 B-66.x: every early `?`/return below drops this armed.
+    #[cfg(feature = "mem-census")]
+    let mut partial_guard =
+        LowerPartialGuard { t0: phase_t0, base: phase_lexparse, armed: phase_seeded };
 
     if program.has_errors() {
         let msg = program
@@ -355,6 +393,11 @@ fn lower_source_impl(
             let (lp, lh, n) = c.get();
             c.set((lp, lh + lowerhir, n));
         });
+    }
+    // Happy path: the pass completed, its HIR time booked above (B-66.x).
+    #[cfg(feature = "mem-census")]
+    {
+        partial_guard.armed = false;
     }
     Ok(Program {
         body,
