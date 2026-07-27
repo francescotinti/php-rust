@@ -1297,7 +1297,8 @@ pub(crate) fn run_module_with_hir<'m>(
                      metadata_calls={} entries={entries} bytes_counted={bytes} paths={paths} \
                      superseded_paths={superseded_paths} superseded_entries={superseded_entries} \
                      stub_elided_units={} stub_classes_elided={} elide_align_miss={} \
-                     elide_align_hit={} miss_dc_base={} miss_dc_remap={} miss_dc_locals={}",
+                     elide_align_hit={} miss_dc_base={} miss_dc_remap={} miss_dc_locals={} \
+                     seed_prefix_short={}",
                     st.hit_intra,
                     st.hit_cross,
                     st.miss_cold,
@@ -1315,6 +1316,7 @@ pub(crate) fn run_module_with_hir<'m>(
                     st.miss_dc_base,
                     st.miss_dc_remap,
                     st.miss_dc_locals,
+                    st.seed_prefix_short,
                 ));
                 // WP-63 B7: finestre ns separate lower vs compile (bordo CPU).
                 let (lns, cns, un) = census_compile_ns_take();
@@ -13527,14 +13529,18 @@ host_builtins! {
         // WP-65 slot_names v2: an elided unit main names its slots from the
         // canonical seed prefix (declaration order preserved: seed order IS
         // program.slots order for the unit).
-        let names: Vec<Box<[u8]>> = (0..unit_slot_count(vm.frames[top].func))
+        // WP-66 H-66.2: names carry their slot index EXPLICITLY — the old
+        // `filter_map` + `enumerate` pairing desynced name↔value for every
+        // slot after a None (silent mislabeling, worse than a crash).
+        let names: Vec<(usize, Box<[u8]>)> = (0..unit_slot_count(vm.frames[top].func))
             .filter_map(|i| {
-                unit_slot_name(&vm.seed_globals, vm.frames[top].func, i).map(Box::from)
+                unit_slot_name(&vm.seed_globals, vm.frames[top].func, i)
+                    .map(|n| (i, Box::from(n)))
             })
             .collect();
         let mut arr = PhpArray::new();
-        for (i, name) in names.iter().enumerate() {
-            if let Some(v) = vm.frames[top].slots.get(i) {
+        for (i, name) in &names {
+            if let Some(v) = vm.frames[top].slots.get(*i) {
                 let v = v.deref_clone();
                 if !matches!(v, Zval::Undef) {
                     arr.insert(Key::from_bytes(name), v);
@@ -14251,6 +14257,10 @@ struct UcStats {
     miss_dc_base: u64,
     miss_dc_remap: u64,
     miss_dc_locals: u64,
+    /// WP-66 M-66.1/P-66.2: loud counter for the helper contract
+    /// `seed_slots ≤ seed_globals.len()` — asserted 0 in every gate; a
+    /// breach is FATAL in every build (see [`seed_prefix_breach`]).
+    seed_prefix_short: u64,
 }
 
 impl UcStats {
@@ -14272,6 +14282,7 @@ impl UcStats {
         miss_dc_base: 0,
         miss_dc_remap: 0,
         miss_dc_locals: 0,
+        seed_prefix_short: 0,
     };
 }
 
@@ -14322,7 +14333,7 @@ pub(crate) fn census_compile_ns_take() -> (u64, u64, u64) {
 /// silently). Gate detectors match the anchored form `^unitcache <event> `
 /// only; the cargo test `uc_log_event_vocabulary_is_prefix_free` pins that
 /// no anchored event is a prefix of another. Extend the array to add one.
-pub(crate) const UC_LOG_EVENTS: [&str; 9] = [
+pub(crate) const UC_LOG_EVENTS: [&str; 10] = [
     "alignhit",
     "fp",
     "hit intra",
@@ -14332,6 +14343,7 @@ pub(crate) const UC_LOG_EVENTS: [&str; 9] = [
     "miss cold",
     "miss nostat",
     "elide",
+    "seed_prefix_short",
 ];
 
 thread_local! {
@@ -14416,6 +14428,11 @@ fn unit_slot_name<'a>(
     i: usize,
 ) -> Option<&'a [u8]> {
     let s = func.seed_slots as usize;
+    // WP-66 H-66.1/S-66.3: the contract `seed_slots ≤ seed.len()` is checked
+    // INSIDE the helper — it covers every consumer, not just the bridge.
+    if s > seed.len() {
+        seed_prefix_breach("unit_slot_name", s, seed.len());
+    }
     if i < s {
         seed.get(i).map(|n| n.as_ref())
     } else {
@@ -14427,12 +14444,32 @@ fn unit_slot_name<'a>(
 #[cold]
 fn unit_slot_pos(seed: &[Box<[u8]>], func: &crate::bytecode::Func, name: &[u8]) -> Option<usize> {
     let s = func.seed_slots as usize;
+    if s > seed.len() {
+        // WP-66 H-66.1/S-66.3: see unit_slot_name; the `.min()` below stays
+        // as a release guard but is unreachable past this check.
+        seed_prefix_breach("unit_slot_pos", s, seed.len());
+    }
     if s > 0 {
         if let Some(i) = seed[..s.min(seed.len())].iter().position(|n| n.as_ref() == name) {
             return Some(i);
         }
     }
     func.slot_names.iter().position(|n| n.as_ref() == name).map(|p| p + s)
+}
+
+/// WP-66 M-66.1/P-66.2: a breach of the helper contract
+/// `seed_slots ≤ seed.len()` is FATAL in every build, parity included —
+/// same K-M5/H2'' discipline as `elide_align_miss`. A short seed would
+/// resolve `$$name`/`get_defined_vars` silently wrong (slot unnamed, search
+/// truncated), which correct-or-absent forbids. Counted in the closed
+/// uc_log vocabulary as `seed_prefix_short` so server probes assert 0
+/// (K-M66.1: ONE event on the axum workload = STOP the front).
+#[cold]
+fn seed_prefix_breach(site: &str, seed_slots: usize, seed_len: usize) -> ! {
+    uc_stat(|s| s.seed_prefix_short += 1);
+    uc_log("seed_prefix_short", site.as_bytes());
+    uc_log_flush();
+    panic!("unit seed prefix short at {site}: seed_slots={seed_slots} > seed.len()={seed_len}");
 }
 
 /// See [`unit_slot_name`]: total NAMED slot count of the func (temps past it).

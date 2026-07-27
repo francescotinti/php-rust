@@ -301,6 +301,16 @@ fn compile_program_impl(
         // untouched: ops keep baking the same slot indices.
         main.seed_slots = main.slot_names.len() as u32;
         main.slot_names = Box::default();
+        // WP-66 M-66.2: tail∩seed=∅ — `unit_slot_pos` prefers the prefix, so
+        // a tail name shadowed by the seed would give one PHP variable TWO
+        // cells. Today the whole table is ceded (tail empty); this tripwire
+        // guards the invariant if the split ever changes.
+        debug_assert!(
+            main.slot_names
+                .iter()
+                .all(|t| !program.slots[..main.seed_slots as usize].contains(t)),
+            "elided-unit tail name shadows the seed prefix (M-66.2)"
+        );
     }
     #[cfg(feature = "mem-census")]
     {
