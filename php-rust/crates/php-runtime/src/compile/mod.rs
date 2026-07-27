@@ -41,6 +41,8 @@ pub(crate) mod reg_lower;
 mod expr;
 mod assign;
 use class::*;
+#[cfg(feature = "mem-census")]
+pub(crate) use class::census_stub_entries;
 use func::*;
 
 /// A construct the proof-slice compiler does not yet lower. Carries the HIR

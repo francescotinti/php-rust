@@ -756,6 +756,14 @@ thread_local! {
     static PRELUDE_CACHE: std::cell::OnceCell<LoweredPrelude> = const { std::cell::OnceCell::new() };
 }
 
+/// WP-67 P-67.3 (census-only): PRELUDE_CACHE population for the bounded-set
+/// metric — a OnceCell (0 or 1 lowering per thread), reported as its class
+/// and fn table sizes. Survives requests by design.
+#[cfg(feature = "mem-census")]
+pub(crate) fn census_prelude_entries() -> (u64, u64) {
+    PRELUDE_CACHE.with(|c| c.get().map_or((0, 0), |p| (p.0.len() as u64, p.2.len() as u64)))
+}
+
 /// Lower [`PRELUDE_SRC`] once per thread (cached) and return a clone of its
 /// owned class table + name→id index (step 20) plus the global functions it
 /// declares (step 35: the procedural date API). Function/`new` call sites

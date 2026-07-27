@@ -1352,6 +1352,16 @@ pub(crate) fn run_module_with_hir<'m>(
                     st.parked_modules,
                     st.parked_bytes,
                 ));
+                // WP-67 P-67.3: the cross-request bounded sets OUTSIDE
+                // cache+RetainSet — the per-worker metric counts them
+                // (KS-P67.3: Δ between N=100 and N=1000 at warm = 0).
+                {
+                    let (pc, pf) = crate::lower::census_prelude_entries();
+                    mc::census_line(&format!(
+                        "tag=boundset stubs_entries={} prelude_classes={pc} prelude_fns={pf}",
+                        crate::compile::census_stub_entries()
+                    ));
+                }
                 // WP-63 B7: finestre ns separate lower vs compile (bordo CPU).
                 let (lns, cns, un) = census_compile_ns_take();
                 // WP-64 E1-64 (B2/H5''): le DUE passate O(seed) per-include,

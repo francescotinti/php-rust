@@ -544,12 +544,22 @@ pub(super) fn builtin_iface_for(name: &[u8]) -> Option<BuiltinIface> {
 /// stub for EVERY already-linked seed class into EVERY unit module — the same
 /// (name-only) content each time. One shared `Rc` per name bounds that cost by
 /// the number of distinct classes instead of files × classes.
+thread_local! {
+    /// See [`stub_class_shared`]. Thread-local and NEVER cleared: survives
+    /// requests by design (bounded by distinct class names, not by traffic).
+    /// WP-67 P-67.3: counted in the census `tag=boundset` line — the
+    /// per-worker bounded-bytes metric must include it (KS-P67.3).
+    static STUBS: std::cell::RefCell<rustc_hash::FxHashMap<Box<[u8]>, std::rc::Rc<CompiledClass>>> =
+        std::cell::RefCell::new(rustc_hash::FxHashMap::default());
+}
+
+/// WP-67 P-67.3 (census-only): STUBS population for the bounded-set metric.
+#[cfg(feature = "mem-census")]
+pub(crate) fn census_stub_entries() -> u64 {
+    STUBS.with(|s| s.borrow().len() as u64)
+}
+
 pub(super) fn stub_class_shared(cd: &crate::hir::ClassDecl) -> std::rc::Rc<CompiledClass> {
-    use std::cell::RefCell;
-    thread_local! {
-        static STUBS: RefCell<rustc_hash::FxHashMap<Box<[u8]>, std::rc::Rc<CompiledClass>>> =
-            RefCell::new(rustc_hash::FxHashMap::default());
-    }
     STUBS.with(|s| {
         std::rc::Rc::clone(
             s.borrow_mut()
