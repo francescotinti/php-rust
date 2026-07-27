@@ -554,6 +554,23 @@ output osservabile (il gate lo asserisce):
   lo scope); da chiudere con un fronte scope-hygiene dedicato, non
   in coda a una leva footprint.
 
+- **Ordering dei side-effect di autoload durante il lowering (WP-67,
+  fixture eseguibile `wp67-harness/fixtures/ordering/`)**: per una unit
+  con `class Child extends ParentA` e ParentA autoloadabile, Zend
+  compila SENZA eseguire l'autoload (DECLARE_CLASS_DELAYED) e lo
+  esegue AL punto di dichiarazione — output `U-top · [autoload] ·
+  U-after`; phpr autoloada DENTRO il lowering (retry di
+  `lower_unit`) ⇒ `[autoload] · U-top · U-after`. Divergenza
+  PRE-ESISTENTE sul path COLD (non introdotta dalla cache; scoperta
+  formalizzando la fixture S-67.2), pinnata come regressione in
+  `fixtures/gate-ordering.sh` (phpr-cold e oracle byte-stabili ai
+  rispettivi pin). È la STESSA radice della non-cacheabilità delle 15
+  unit impure su wpdev (P66-R4): la forma Zend-fedele (defer sempre =
+  late binding, l'autoload si ri-esegue a ogni richiesta) è anche
+  quella che renderebbe le unit pure — materiale per il design WP-68
+  (concilio: forma vincolata publish+dep-list+dep-replay vs
+  defer-always da rivalutare alla luce di questa prova).
+
 ## 4. Punti di forza da NON toccare (invarianti verificati byte-identici)
 
 Per evitare regressioni, questi comportamenti sono **già** byte-identici con
