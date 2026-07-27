@@ -265,6 +265,12 @@ pub fn run_source_with_ini(
     registry: &Registry,
     ini_overrides: &[(Vec<u8>, Vec<u8>)],
 ) -> Result<VmOutcome, VmRunError> {
+    // WP-67 G-67.1/K-67.5: request-begin marker — server probes segment the
+    // uc_log stream on this event (offset+sleep segmentation DEPRECATED).
+    // The per-thread buffer preserves emission order, so the marker is a
+    // correct boundary even when a previous request's tail lines are still
+    // buffered: they flush BEFORE it, in order.
+    uc_log("reqmark", name);
     let program = match crate::lower_source(name, source) {
         Ok(p) => p,
         Err(crate::LowerError::Fatal { message, line }) => {
@@ -1346,34 +1352,44 @@ pub(crate) fn run_module_with_hir<'m>(
                 // times, all but one compile is duplicated work:
                 // dup_lc = (l+c)·(n−1)/n. Top rows + aggregate; the E6 quota
                 // reads dup_lc_ns here, at the cifra (KS66-1).
-                let mut lc_rows: Vec<(u64, Vec<u8>, u64, u64, u64)> = Vec::new();
+                // WP-67 E-67.1 split: fp-class recompiles (legitimate ways —
+                // NOT recoverable by any re-link cache) are attributed apart:
+                // per path, avg=(l+c)/n; dup_fp = avg·min(n_fp, n−1) (the one
+                // "legitimate" compile is the first/cold one), dup_cold the
+                // remainder. `l` is already net of nested autoload includes.
+                let mut lc_rows: Vec<(u64, Vec<u8>, u64, u64, u64, u64)> = Vec::new();
                 let (mut lc_paths, mut lc_compiles, mut lc_l, mut lc_c) = (0u64, 0u64, 0u64, 0u64);
                 let (mut dup_paths, mut dup_compiles, mut dup_lc) = (0u64, 0u64, 0u64);
-                for (p, (l, c, n)) in census_path_ns_snapshot() {
+                let (mut dup_fp, mut dup_cold) = (0u64, 0u64);
+                for (p, (l, c, n, nfp)) in census_path_ns_snapshot() {
                     lc_paths += 1;
                     lc_compiles += n;
                     lc_l += l;
                     lc_c += c;
                     if n > 1 {
-                        let dup = (l + c) - (l + c) / n;
+                        let avg = (l + c) / n;
+                        let dup = (l + c) - avg;
+                        let dfp = avg * nfp.min(n - 1);
                         dup_paths += 1;
                         dup_compiles += n - 1;
                         dup_lc += dup;
-                        lc_rows.push((dup, p, l, c, n));
+                        dup_fp += dfp;
+                        dup_cold += dup - dfp;
+                        lc_rows.push((dup, p, l, c, n, nfp));
                     }
                 }
                 lc_rows.sort_by(|a, b| b.0.cmp(&a.0));
-                for (dup, p, l, c, n) in lc_rows.iter().take(40) {
+                for (dup, p, l, c, n, nfp) in lc_rows.iter().take(40) {
                     mc::census_line(&format!(
-                        "tag=lcpath compiles={n} lower_ns={l} compile_ns={c} \
-                         dup_lc_ns={dup} path={}",
+                        "tag=lcpath compiles={n} fp_compiles={nfp} lower_ns={l} \
+                         compile_ns={c} dup_lc_ns={dup} path={}",
                         String::from_utf8_lossy(p)
                     ));
                 }
                 mc::census_line(&format!(
                     "tag=lcsum paths={lc_paths} compiles={lc_compiles} lower_ns={lc_l} \
                      compile_ns={lc_c} dup_paths={dup_paths} dup_compiles={dup_compiles} \
-                     dup_lc_ns={dup_lc}"
+                     dup_lc_ns={dup_lc} dup_fp_ns={dup_fp} dup_cold_ns={dup_cold}"
                 ));
             }
             // WP-62 M1 (Leijen R1 / Klabnik b): per-path hit-net aggregation
@@ -5616,7 +5632,15 @@ impl<'m> Vm<'m> {
                     // by a class being lowered; autoload it (which may load a trait
                     // file into `seed_traits`) and retry.
                     *pure = false;
-                    if self.resolve_name_autoload(&pname)? {
+                    // WP-67 E-67.1: the autoload runs a whole nested include
+                    // (read+lower+compile+run) inside the caller's lower
+                    // window — note its wall so the caller's `l` can shed it.
+                    #[cfg(feature = "mem-census")]
+                    let al_t0 = std::time::Instant::now();
+                    let loaded = self.resolve_name_autoload(&pname)?;
+                    #[cfg(feature = "mem-census")]
+                    census_nested_lc_note(al_t0.elapsed().as_nanos() as u64);
+                    if loaded {
                         continue;
                     }
                     // Unloadable: mark it deferrable and re-lower. A name that
@@ -5967,6 +5991,11 @@ impl<'m> Vm<'m> {
         // is double-checked structurally (static baseline, recomputed remap);
         // a mismatch simply falls through to the fresh path.
         uc_stat(|s| s.metadata_calls += 1);
+        // WP-67 E-67.1: the lcpath dup split needs the miss class of THIS
+        // compile — fp-class recompiles (legitimate ways, not recoverable by
+        // any re-link cache) are counted apart from the rest in tag=lcsum.
+        #[cfg(feature = "mem-census")]
+        let mut census_fp_miss = false;
         let unit_key = std::fs::metadata(&real).ok().and_then(|m| unit_key_for(&key, &m));
         let fp = self.unit_fp();
         // KS-S2 (Stogov, decisivo per WP-63): la sequenza dei fingerprint
@@ -6044,6 +6073,10 @@ impl<'m> Vm<'m> {
                 // fingerprint: the CLI re-include leak (design62 M2 quota).
                 uc_stat(|s| s.miss_fp += 1);
                 uc_log("miss fp", &key);
+                #[cfg(feature = "mem-census")]
+                {
+                    census_fp_miss = true;
+                }
             } else {
                 uc_stat(|s| s.miss_cold += 1);
                 uc_log("miss cold", &key);
@@ -6083,7 +6116,17 @@ impl<'m> Vm<'m> {
         };
         log::debug!(target: "phpr::include", "{:?} {}", mode, String::from_utf8_lossy(&key));
         let mut pure = true;
-        let program = match self.lower_unit(&key, &content, &mut pure)? {
+        // WP-67 E-67.1: open a nested-autoload frame around lower_unit —
+        // autoloads fired mid-lower run whole nested includes whose time
+        // books on their OWN lcpath rows; this unit's `l` subtracts them so
+        // Σ lcsum stays additive (Hejlsberg a). Pop BEFORE the `?` so an
+        // autoload PhpError cannot leak a stack frame.
+        #[cfg(feature = "mem-census")]
+        census_nested_lc_push();
+        let lowered = self.lower_unit(&key, &content, &mut pure);
+        #[cfg(feature = "mem-census")]
+        let nested_lc_ns = census_nested_lc_pop();
+        let program = match lowered? {
             Ok(p) => p,
             Err(e) => {
                 log::warn!(target: "phpr::include", "lower failed for {}: {:?}", String::from_utf8_lossy(&key), e);
@@ -6095,9 +6138,11 @@ impl<'m> Vm<'m> {
         // under elision, the compile window is where the lever lives.
         #[cfg(feature = "mem-census")]
         {
-            let lns = lower_t0.elapsed().as_nanos() as u64;
+            // E-67.1: `l` net of nested autoload includes (their own rows
+            // carry that time); saturating for clock-skew paranoia only.
+            let lns = (lower_t0.elapsed().as_nanos() as u64).saturating_sub(nested_lc_ns);
             census_compile_ns(lns, 0, 0);
-            census_path_ns(&key, lns, 0, 0);
+            census_path_ns(&key, lns, 0, 0, 0);
         }
         // Contract v2 engagement (WP-63): captured BEFORE the delta below, for
         // the same reason the delta itself is.
@@ -6126,7 +6171,7 @@ impl<'m> Vm<'m> {
         {
             let cns = compile_t0.elapsed().as_nanos() as u64;
             census_compile_ns(0, cns, 1);
-            census_path_ns(&key, 0, cns, 1);
+            census_path_ns(&key, 0, cns, 1, u64::from(census_fp_miss));
         }
         if let Some(n) = module.elided {
             // KK1' medium: sentinels assert `elide`>0 from this log, exactly
@@ -13577,6 +13622,13 @@ host_builtins! {
         // WP-66 H-66.2: names carry their slot index EXPLICITLY — the old
         // `filter_map` + `enumerate` pairing desynced name↔value for every
         // slot after a None (silent mislabeling, worse than a crash).
+        // WP-67 M-67.4 (infallibility): with the FATAL seed-prefix breach
+        // upstream, `unit_slot_name` can no longer return None here — for
+        // i<seed_slots, i<seed_slots≤seed.len(); for i≥seed_slots,
+        // i−seed_slots<slot_names.len(). The `filter_map` is a provable
+        // dead-path kept as belt-and-braces; the deliberate omission in
+        // this builtin is the `Undef` check on the VALUE below — do not
+        // "repair" undefined-variable handling in this name loop.
         let names: Vec<(usize, Box<[u8]>)> = (0..unit_slot_count(vm.frames[top].func))
             .filter_map(|i| {
                 unit_slot_name(&vm.seed_globals, vm.frames[top].func, i)
@@ -14378,22 +14430,53 @@ pub(crate) fn census_compile_ns_take() -> (u64, u64, u64) {
 /// per-path dup cost (KS66-1) — never on cross-path averages (G-65.3).
 #[cfg(feature = "mem-census")]
 thread_local! {
-    static PATH_NS: std::cell::RefCell<std::collections::HashMap<Vec<u8>, (u64, u64, u64)>> =
+    static PATH_NS: std::cell::RefCell<std::collections::HashMap<Vec<u8>, (u64, u64, u64, u64)>> =
         std::cell::RefCell::new(std::collections::HashMap::new());
 }
 #[cfg(feature = "mem-census")]
-fn census_path_ns(path: &[u8], lower: u64, compile: u64, compiles: u64) {
+fn census_path_ns(path: &[u8], lower: u64, compile: u64, compiles: u64, fp_compiles: u64) {
     PATH_NS.with(|m| {
         let mut m = m.borrow_mut();
-        let e = m.entry(path.to_vec()).or_insert((0, 0, 0));
+        let e = m.entry(path.to_vec()).or_insert((0, 0, 0, 0));
         e.0 += lower;
         e.1 += compile;
         e.2 += compiles;
+        e.3 += fp_compiles;
     });
 }
 #[cfg(feature = "mem-census")]
-fn census_path_ns_snapshot() -> Vec<(Vec<u8>, (u64, u64, u64))> {
+fn census_path_ns_snapshot() -> Vec<(Vec<u8>, (u64, u64, u64, u64))> {
     PATH_NS.with(|m| m.borrow().iter().map(|(k, v)| (k.clone(), *v)).collect())
+}
+
+/// WP-67 E-67.1 (Hejlsberg a): per-include stack of NESTED autoload wall-ns.
+/// The lower window of a unit whose lowering autoloads a supertype contains
+/// the supertype's whole read+lower+compile+run, already booked on the
+/// supertype's own lcpath row — without this subtraction Σ lcsum
+/// double-counts and dup_lc_ns is inflated. NOTE: PATH_NS and this stack
+/// are thread_local — on a multi-worker server the dump must aggregate
+/// cross-thread before summing (E-67.3); the census binary is
+/// single-worker today.
+#[cfg(feature = "mem-census")]
+thread_local! {
+    static NESTED_LC_NS: std::cell::RefCell<Vec<u64>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+#[cfg(feature = "mem-census")]
+fn census_nested_lc_push() {
+    NESTED_LC_NS.with(|s| s.borrow_mut().push(0));
+}
+#[cfg(feature = "mem-census")]
+fn census_nested_lc_note(ns: u64) {
+    NESTED_LC_NS.with(|s| {
+        if let Some(top) = s.borrow_mut().last_mut() {
+            *top += ns;
+        }
+    });
+}
+#[cfg(feature = "mem-census")]
+fn census_nested_lc_pop() -> u64 {
+    NESTED_LC_NS.with(|s| s.borrow_mut().pop().unwrap_or(0))
 }
 
 /// WP-65 P-65.4: the `uc_log` event vocabulary is CLOSED — event names are
@@ -14401,7 +14484,7 @@ fn census_path_ns_snapshot() -> Vec<(Vec<u8>, (u64, u64, u64))> {
 /// silently). Gate detectors match the anchored form `^unitcache <event> `
 /// only; the cargo test `uc_log_event_vocabulary_is_prefix_free` pins that
 /// no anchored event is a prefix of another. Extend the array to add one.
-pub(crate) const UC_LOG_EVENTS: [&str; 10] = [
+pub(crate) const UC_LOG_EVENTS: [&str; 11] = [
     "alignhit",
     "fp",
     "hit intra",
@@ -14412,6 +14495,10 @@ pub(crate) const UC_LOG_EVENTS: [&str; 10] = [
     "miss nostat",
     "elide",
     "seed_prefix_short",
+    // WP-67 G-67.1/K-67.5: request-begin boundary, emitted once at the top
+    // of every top-level `run_source_with_ini` — the server probes' segment
+    // delimiter (one marker per request on the `-S` SAPI).
+    "reqmark",
 ];
 
 thread_local! {
@@ -14519,6 +14606,22 @@ fn unit_slot_pos(seed: &[Box<[u8]>], func: &crate::bytecode::Func, name: &[u8]) 
     }
     if s > 0 {
         if let Some(i) = seed[..s.min(seed.len())].iter().position(|n| n.as_ref() == name) {
+            // WP-67 H-67.3: tail∩seed=∅, checked LIVE on the real lookup —
+            // a tail name shadowed by the seed prefix would give one PHP
+            // variable TWO cells (the tail cell unreachable from here).
+            // Replaces the WP-66 M-66.2 compile-time tripwire, which
+            // iterated the already-emptied tail and could never fire; this
+            // one can (cargo test `seed_tail_shadow_tripwire_fires`, M-67.6).
+            // FATAL in every build (K-M5/H2'' discipline, like
+            // seed_prefix_breach): today the ceded tail is empty, so this
+            // scan is O(0) on a #[cold] path; a future partial split that
+            // shadows faults loudly instead of splitting one variable.
+            if func.slot_names.iter().any(|t| t.as_ref() == name) {
+                panic!(
+                    "slot name in BOTH seed prefix and tail (tail∩seed≠∅): {}",
+                    String::from_utf8_lossy(name)
+                );
+            }
             return Some(i);
         }
     }
@@ -14534,8 +14637,17 @@ fn unit_slot_pos(seed: &[Box<[u8]>], func: &crate::bytecode::Func, name: &[u8]) 
 /// (K-M66.1: ONE event on the axum workload = STOP the front).
 #[cold]
 fn seed_prefix_breach(site: &str, seed_slots: usize, seed_len: usize) -> ! {
+    // WP-67 H-67.1: the UcStats counter below is UNREACHABLE-BY-DESIGN as a
+    // readable artefact — UcStats dump only on normal-exit census paths,
+    // which never run after this panic. The readable artefacts are the
+    // flushed uc_log line (carrying seed_slots/seed_len) and the panic
+    // message on stderr; the increment stays only so every vocabulary event
+    // keeps a counter. Do not build detectors on the counter.
     uc_stat(|s| s.seed_prefix_short += 1);
-    uc_log("seed_prefix_short", site.as_bytes());
+    uc_log(
+        &format!("seed_prefix_short seed_slots={seed_slots} seed_len={seed_len}"),
+        site.as_bytes(),
+    );
     uc_log_flush();
     panic!("unit seed prefix short at {site}: seed_slots={seed_slots} > seed.len()={seed_len}");
 }
@@ -16579,6 +16691,23 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    #[should_panic(expected = "tail∩seed")]
+    fn seed_tail_shadow_tripwire_fires() {
+        // WP-67 M-67.6 (Matsakis): the H-67.3 live tripwire must be SHOWN
+        // able to fire — a tripwire that cannot trip is not evidence (the
+        // WP-66 M-66.2 lesson). Synthetic shadowed Func: name "x" in BOTH
+        // the seed prefix and the tail.
+        let reg = Registry::default();
+        let program = crate::lower_source(b"t.php", b"<?php $x = 1;").expect("lower");
+        let module = crate::compile::compile_program(&program, &reg).expect("compile");
+        let mut f = module.main.clone();
+        f.seed_slots = 1;
+        f.slot_names = vec![Box::from(&b"x"[..])].into_boxed_slice();
+        let seed: Vec<Box<[u8]>> = vec![Box::from(&b"x"[..])];
+        let _ = super::unit_slot_pos(&seed, &f, b"x");
     }
 
     #[test]

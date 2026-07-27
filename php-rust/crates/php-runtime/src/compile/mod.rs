@@ -301,16 +301,12 @@ fn compile_program_impl(
         // untouched: ops keep baking the same slot indices.
         main.seed_slots = main.slot_names.len() as u32;
         main.slot_names = Box::default();
-        // WP-66 M-66.2: tail∩seed=∅ — `unit_slot_pos` prefers the prefix, so
-        // a tail name shadowed by the seed would give one PHP variable TWO
-        // cells. Today the whole table is ceded (tail empty); this tripwire
-        // guards the invariant if the split ever changes.
-        debug_assert!(
-            main.slot_names
-                .iter()
-                .all(|t| !program.slots[..main.seed_slots as usize].contains(t)),
-            "elided-unit tail name shadows the seed prefix (M-66.2)"
-        );
+        // tail∩seed=∅ invariant: `unit_slot_pos` prefers the prefix, so a
+        // tail name shadowed by the seed would give one PHP variable TWO
+        // cells. The WP-66 M-66.2 tripwire here iterated the just-emptied
+        // tail and could never fire (Hoare c); the LIVE check now sits in
+        // `vm::unit_slot_pos` on the real lookup (WP-67 H-67.3), with a
+        // negative cargo test proving it can trip (M-67.6).
     }
     #[cfg(feature = "mem-census")]
     {

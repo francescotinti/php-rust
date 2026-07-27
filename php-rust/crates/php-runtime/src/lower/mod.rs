@@ -384,6 +384,9 @@ fn lower_source_impl(
     // `goto`/label validation (step 45): the top-level script body is its own
     // function scope. Each user function / method / closure validates its own
     // body where it is lowered (`lower_function`/`lower_method`/`lower_closure`).
+    // WP-67 E-67.3 (declared bordo, Hejlsberg b): a goto error here exits
+    // BEFORE the lowerhir booking below, so its time lands in
+    // `lower_partial` via the armed drop-guard — accepted, not a leak.
     validate_goto(&body)?;
     // B-65.3: the HIR share of this pass (lexparse landed above).
     #[cfg(feature = "mem-census")]
