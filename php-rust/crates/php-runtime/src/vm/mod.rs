@@ -1304,7 +1304,7 @@ pub(crate) fn run_module_with_hir<'m>(
                      superseded_paths={superseded_paths} superseded_entries={superseded_entries} \
                      stub_elided_units={} stub_classes_elided={} elide_align_miss={} \
                      elide_align_hit={} miss_dc_base={} miss_dc_remap={} miss_dc_locals={} \
-                     seed_prefix_short={}",
+                     seed_prefix_short={} leaked_modules={} leaked_bytes={}",
                     st.hit_intra,
                     st.hit_cross,
                     st.miss_cold,
@@ -1323,6 +1323,8 @@ pub(crate) fn run_module_with_hir<'m>(
                     st.miss_dc_remap,
                     st.miss_dc_locals,
                     st.seed_prefix_short,
+                    st.leaked_modules,
+                    st.leaked_bytes,
                 ));
                 // WP-63 B7: finestre ns separate lower vs compile (bordo CPU).
                 let (lns, cns, un) = census_compile_ns_take();
@@ -5200,12 +5202,14 @@ impl<'m> Vm<'m> {
         };
         #[cfg(feature = "mem-census")]
         {
-            php_types::memcensus::alloc(
-                php_types::memcensus::CH_UNIT,
-                module_census_bytes(&module),
-            );
+            let mcb = module_census_bytes(&module);
+            php_types::memcensus::alloc(php_types::memcensus::CH_UNIT, mcb);
             php_types::memcensus::unit_slack(module_slack_bytes(&module) as u64);
+            // WP-67 B-67.2: direct leak accounting — evals pass here and
+            // never reach the uc_log taxonomy.
+            uc_stat(|s| s.leaked_bytes += mcb as u64);
         }
+        uc_stat(|s| s.leaked_modules += 1);
         let leaked: &'static Module = Box::leak(Box::new(module));
         #[cfg(feature = "mem-census")]
         census_unit_note(leaked);
@@ -6205,12 +6209,14 @@ impl<'m> Vm<'m> {
         #[cfg(feature = "mem-census")]
         {
             netw.close();
-            php_types::memcensus::alloc(
-                php_types::memcensus::CH_UNIT,
-                module_census_bytes(&module),
-            );
+            let mcb = module_census_bytes(&module);
+            php_types::memcensus::alloc(php_types::memcensus::CH_UNIT, mcb);
             php_types::memcensus::unit_slack(module_slack_bytes(&module) as u64);
+            // WP-67 B-67.2: direct leak accounting — the never-published
+            // impure includes land here (15/request on wpdev, P66-R4).
+            uc_stat(|s| s.leaked_bytes += mcb as u64);
         }
+        uc_stat(|s| s.leaked_modules += 1);
         let leaked: &'static Module = Box::leak(Box::new(module));
         #[cfg(feature = "mem-census")]
         census_unit_note(leaked);
@@ -14358,6 +14364,15 @@ struct UcStats {
     /// `seed_slots ≤ seed_globals.len()` — asserted 0 in every gate; a
     /// breach is FATAL in every build (see [`seed_prefix_breach`]).
     seed_prefix_short: u64,
+    /// WP-67 B-67.2 (Bak): DIRECT count of `Box::leak`ed Modules at the two
+    /// leak sites — never-published impure includes AND evals, the latter
+    /// invisible to the uc_log taxonomy. The P-2 de-leak metric reads THIS,
+    /// not the miss events (KB67-1: no axum band with leaked bytes ≠ 0 at
+    /// steady state). `leaked_bytes` is census-only (deep module walk).
+    leaked_modules: u64,
+    // Written on parity builds too (cheap), read only by the census dump.
+    #[cfg_attr(not(feature = "mem-census"), allow(dead_code))]
+    leaked_bytes: u64,
 }
 
 impl UcStats {
@@ -14380,6 +14395,8 @@ impl UcStats {
         miss_dc_remap: 0,
         miss_dc_locals: 0,
         seed_prefix_short: 0,
+        leaked_modules: 0,
+        leaked_bytes: 0,
     };
 }
 
