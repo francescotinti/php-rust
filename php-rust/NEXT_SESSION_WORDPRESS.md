@@ -282,8 +282,31 @@ safe-only, TUTTE le fasi comunque, no-revert. Laravel POSTICIPATA a valle.
 Stato WP-63: leva spedita e misurata (dettaglio:
 `sessions/WP_SESSION_63.md` + `wp63-harness/design63.md` §10).
 
-⚖️ Il concilio di chiusura WP-63 delibera in
-`wp64-harness/COUNCIL_WP64_REVIEWS.md` (VINCOLANTE per design64).
+⚖️ **CONCILIO DI CHIUSURA WP-63 ESEGUITO A 9 SEDIE (2026-07-27 notte,
+9/9 CONCORDO CON EMENDAMENTI, nessuna opposizione — LEVA RATIFICATA;
+verbali integrali + sintesi in `wp64-harness/COUNCIL_WP64_REVIEWS.md`,
+VINCOLANTI per design64)**. Punti capitali: reporting emendato ("lower
+−10,8% causa non attribuita" — il canale CPU compile-side è ORA il
+LOWER, tetto tranche-2 = 6,1%; KB7 scattato: nessun claim CPU come
+guadagno; KS63-1 = "totale confermato, ATTRIBUZIONE non citabile",
+formula WMAPE K5'' in design64; −74,7% è MISURATO, "spiegato" solo con
+Σ_coda ±15%); **DEBITI DI APERTURA WP-64 prima di ogni leva**: upgrade
+`elide_align_miss`→FATAL (K-M5 maturato, il fallback identity viola
+correct-or-absent) IN COPPIA con l'assert anti-collisione pun (M1''),
+debug_assert run_linked id==baked (M3''), contatore positivo
+`elide_align_hit` (S-1, KS-S6 anti-vacuità), fp + digest del minting
+runtime (M2''), reserved_base/doc-comment (P-1), RULEBOOK §4
+allineato alla forma spedita (H1''=K6'', sign-off utente); **E6
+declassata a SOSPENSIONE** (numeratore vero = (lower+compile)_dup;
+ri-quota POST-tranche-2, KS64-4); attribuzione phys CHIUSA da Leijen
+sui tag=mi_bin (drain riconciliato 0,4%: ¾ rounding + ¼ page-slack;
+bersaglio bin 4-16K committed/used≈2); matrice gate64: KE-e stale-id
+DEDICATO, strict R6.3, P1 nel gate, KK3''; banda footprint media
+provvisoria **2,9-3,2×** (KG63-A). Le opzioni K-64 restano ENTRAMBE
+ammesse coi rispettivi obblighi (A: E1-64 colonne per-canale + basi
+omogenee G63-1 + solo link-time; B: KS-P1 replay wpdev PRIMO ATTO +
+KS-P2 breakdown shutdown su parità + P-2 de-leak Module prerequisito
++ KS-S8 + KL-64.2).
 
 0. **Leggere WP_SESSION_63 + design63 §10 + verbali concilio WP-64.**
 1. **Opzione A — TRANCHE 2 stub-elision (KS63-4 scattato: fronte non
