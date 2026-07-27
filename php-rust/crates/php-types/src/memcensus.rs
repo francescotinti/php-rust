@@ -206,8 +206,25 @@ extern "C" fn dump_exit() {
     // window across the two census binaries (KL-65.1/KL-65.3); the delta
     // vs `exit_mi` above is retention, free. Opt-in per run.
     if std::env::var_os("PHPR_MI_COLLECT_EXIT").is_some_and(|v| v == "1") {
-        unsafe { mi_collect(true) };
-        phys_window_dump(0, phys_footprint(), "exit_collect_mi");
+        collect_mi_standing();
+    }
+}
+
+/// The standing checkpoint body shared by the atexit path above and the
+/// per-request opt-in below — the ONLY `mi_collect` call site (no new
+/// unsafe was added for WP-67, KH67-1).
+fn collect_mi_standing() {
+    unsafe { mi_collect(true) };
+    phys_window_dump(0, phys_footprint(), "exit_collect_mi");
+}
+
+/// WP-67 (probe N={1,100,1000}, L-67.4): a killed `-S` server never reaches
+/// atexit, so the per-request census dump invokes the SAME standing
+/// checkpoint behind `PHPR_MI_COLLECT_REQ=1`. The metro reads the LAST
+/// `exit_collect_mi` pair before the kill = the last completed request.
+pub fn request_collect_mi() {
+    if std::env::var_os("PHPR_MI_COLLECT_REQ").is_some_and(|v| v == "1") {
+        collect_mi_standing();
     }
 }
 

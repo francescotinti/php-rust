@@ -1362,6 +1362,9 @@ pub(crate) fn run_module_with_hir<'m>(
                         crate::compile::census_stub_entries()
                     ));
                 }
+                // WP-67 L-67.4: per-request standing checkpoint (opt-in
+                // PHPR_MI_COLLECT_REQ=1) — a killed server has no atexit.
+                mc::request_collect_mi();
                 // WP-63 B7: finestre ns separate lower vs compile (bordo CPU).
                 let (lns, cns, un) = census_compile_ns_take();
                 // WP-64 E1-64 (B2/H5''): le DUE passate O(seed) per-include,
