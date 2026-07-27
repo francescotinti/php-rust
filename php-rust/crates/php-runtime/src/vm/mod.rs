@@ -1247,7 +1247,8 @@ pub(crate) fn run_module_with_hir<'m>(
                      miss_dc={} miss_nostat={} inserts={} fp_replaced={} ways_evictions={} \
                      metadata_calls={} entries={entries} bytes_counted={bytes} paths={paths} \
                      superseded_paths={superseded_paths} superseded_entries={superseded_entries} \
-                     stub_elided_units={} stub_classes_elided={} elide_align_miss={}",
+                     stub_elided_units={} stub_classes_elided={} elide_align_miss={} \
+                     elide_align_hit={}",
                     st.hit_intra,
                     st.hit_cross,
                     st.miss_cold,
@@ -1261,6 +1262,7 @@ pub(crate) fn run_module_with_hir<'m>(
                     st.stub_elided_units,
                     st.stub_classes_elided,
                     st.elide_align_miss,
+                    st.elide_align_hit,
                 ));
                 // WP-63 B7: finestre ns separate lower vs compile (bordo CPU).
                 let (lns, cns, un) = census_compile_ns_take();
@@ -5013,8 +5015,14 @@ impl<'m> Vm<'m> {
         // Contract v2 (WP-63): an elided module's ops bake PROGRAM-space ids,
         // so the remap is computed over the program (same decisions as
         // `unit_class_remap`), with `new_locals` in retained space.
+        // WP-64 M3'': the bases the remap reserves against; run_linked asserts
+        // they still hold at registration (nothing minted in between).
+        let remap_base = (self.classes.len(), self.statics.len());
         let new_locals = if let (Some(_), Some((program, seed_len))) = (module.elided, elide) {
-            let (prog_remap, _retained_remap, locals) = self.unit_remap_elided(program, seed_len);
+            let (prog_remap, retained_remap, locals) = self.unit_remap_elided(program, seed_len);
+            // WP-64 H4'': the elide predicate is duplicated compile↔link —
+            // pin the mirror (retained projection == materialized classes).
+            debug_assert_eq!(retained_remap.len(), module.classes.len());
             relocate_module_class_ids(&mut module, &prog_remap, self.statics.len());
             locals
         } else {
@@ -5033,7 +5041,7 @@ impl<'m> Vm<'m> {
         let leaked: &'static Module = Box::leak(Box::new(module));
         #[cfg(feature = "mem-census")]
         census_unit_note(leaked);
-        self.run_linked(leaked, &new_locals, eval_origin, scope_bridge)
+        self.run_linked(leaked, &new_locals, eval_origin, scope_bridge, remap_base)
     }
 
     /// Build the unit-local -> global class-id remap: a name already in the
@@ -5098,21 +5106,28 @@ impl<'m> Vm<'m> {
                 // (S2, load-bearing: accumulate_seed keeps ids aligned; see
                 // unit_class_remap's identity arm for the semantics).
                 if i < self.classes.len() && self.classes[i].name == cd.name {
+                    // WP-64 S-1 (Stogov): positive counter — S2 coverage is
+                    // provable only where this arm actually ran (KS-S6: a
+                    // gate citing S2 with hit==0 proves nothing by vacuity).
+                    uc_stat(|s| s.elide_align_hit += 1);
+                    uc_log("alignhit", &cd.name);
                     i
                 } else {
-                    // Alignment broken: never expected (gate asserts 0). Loud
-                    // in parity, fatal in census builds; identity keeps the
-                    // op-visible behaviour of the legacy path's eager index.
+                    // Alignment broken: FATAL in every build (WP-64 H2'',
+                    // K-M5 matured — three full gates with miss==0). The
+                    // legacy path MATERIALIZES and appends the class when the
+                    // name-check fails; an elided module cannot, so falling
+                    // back to identity would bind the op to a slot of a
+                    // DIFFERENT name — a silently wrong execution, which
+                    // correct-or-absent forbids (worse than a crash).
+                    // KH64-3: any occurrence is a blocking bug.
                     uc_stat(|s| s.elide_align_miss += 1);
                     log::error!(
                         target: "phpr::include",
                         "stub-elision: seed/runtime prefix misaligned at id {i} ({})",
                         String::from_utf8_lossy(&cd.name)
                     );
-                    if cfg!(feature = "mem-census") {
-                        panic!("stub-elision: seed/runtime prefix misaligned at id {i}");
-                    }
-                    i
+                    panic!("stub-elision: seed/runtime prefix misaligned at id {i}");
                 }
             } else {
                 let id = self.classes.len() + new_locals.len();
@@ -5131,7 +5146,9 @@ impl<'m> Vm<'m> {
     /// Retained-space double-check for a cached ELIDED module (contract v2):
     /// every `module.classes` entry is the unit's own, so the check is purely
     /// name-based against the live symbol table — a name registered since the
-    /// insert, or a moved append base, degrades the hit to `miss dc`. The
+    /// insert degrades the hit to `miss dc`; a moved append base changes
+    /// `unit_fp` (`classes.len` is hashed) and surfaces as a `miss fp`
+    /// upstream, plus the explicit `reserved_base` check (WP-64 P-1). The
     /// positional-identity arm of the legacy remap has no equivalent here BY
     /// DESIGN (Pedersen P2): baked seed references are guarded by the
     /// fingerprint (any registration / table growth changes `unit_fp`), which
@@ -5160,7 +5177,15 @@ impl<'m> Vm<'m> {
         new_locals: &[usize],
         eval_origin: Option<(Box<[u8]>, Line)>,
         scope_bridge: Option<usize>,
+        remap_base: (usize, usize),
     ) -> Result<Zval, PhpError> {
+        // WP-64 M3'' (=S-3=H3''): the module's relocated/baked ops assume the
+        // (classes, statics) append bases captured at remap time — the
+        // reserved ids are honoured only if nothing minted entries between
+        // the remap and this registration. That held by call-site adjacency
+        // alone until today; now it is checked.
+        debug_assert_eq!(self.classes.len(), remap_base.0);
+        debug_assert_eq!(self.statics.len(), remap_base.1);
         self.statics.resize(self.statics.len() + leaked.static_count, None);
         // Append the new user classes to the global table (dedup'd prelude /
         // caller-image classes were already mapped to existing ids). A conditional
@@ -5171,6 +5196,15 @@ impl<'m> Vm<'m> {
         for &i in new_locals {
             self.classes.push(&leaked.classes[i]);
             self.class_module.push(leaked);
+            // WP-64 M2'' (Matsakis c): fold the runtime class-minting event
+            // into the load chain — this is the crate's only runtime
+            // `self.classes.push` site. Closes the v2 double-check hole: a
+            // cross-epoch hit with the same table length and the same
+            // registered-name digest but a DIFFERENT unregistered entry at
+            // position i was fingerprint-invisible (v1's positional-identity
+            // arm would have caught it as `miss dc`).
+            self.unit_chain_fp =
+                fp_mix(self.unit_chain_fp, b"mint-class", &leaked.classes[i].name);
             if !leaked.conditional_classes.contains(&i) {
                 self.class_index
                     .insert(leaked.classes[i].name.to_ascii_lowercase(), self.classes.len() - 1);
@@ -5700,6 +5734,21 @@ impl<'m> Vm<'m> {
             return self.include_open_failed(&path, mode);
         };
         let key = real.as_os_str().as_bytes().to_vec();
+        // WP-64 M1'' (council debt, the deferred M2): the provenance puns
+        // (`b"prelude"` on shared functions, `b"seed-stub"` on interned
+        // stubs) are load-bearing in relocation/elision classification — a
+        // user unit must never collide with them. Canonicalization yields an
+        // absolute path here, so a collision is impossible by construction;
+        // this turns that into an executable invariant (under the K-M5 fatal
+        // upgrade a collision would surface as a false release fatal).
+        debug_assert!(!matches!(key.as_slice(), b"prelude" | b"seed-stub"));
+        if matches!(key.as_slice(), b"prelude" | b"seed-stub") {
+            log::error!(
+                target: "phpr::include",
+                "include unit path collides with a provenance marker: {}",
+                String::from_utf8_lossy(&key)
+            );
+        }
         if mode.is_once() && self.included_files.contains(&key) {
             return Ok(Zval::Bool(true));
         }
@@ -5724,12 +5773,19 @@ impl<'m> Vm<'m> {
                 // Contract v2 modules double-check in retained space (their
                 // classes vec holds only the unit's own declarations); the
                 // baked seed references are covered by the fingerprint match.
+                let remap_base = (self.classes.len(), self.statics.len());
                 let (remap, locals) = if cu.module.elided.is_some() {
                     self.unit_class_remap_retained(cu.module)
                 } else {
                     self.unit_class_remap(cu.module)
                 };
+                // WP-64 P-1 (Pedersen): the append base is checked
+                // EXPLICITLY — with an empty proper set the remap comparison
+                // is trivially true, and a moved base is otherwise covered
+                // only by the fingerprint (classes.len is hashed), i.e. by
+                // an earlier `miss fp`, never by this double-check.
                 if cu.static_off == self.statics.len()
+                    && cu.reserved_base == self.classes.len()
                     && remap == cu.class_remap
                     && locals == cu.new_locals
                 {
@@ -5752,7 +5808,7 @@ impl<'m> Vm<'m> {
                     #[cfg(feature = "mem-census")]
                     census_hit_note(hitw, &key);
                     let caller = self.frames.len() - 1;
-                    let ret = self.run_linked(cu.module, &locals, None, Some(caller))?;
+                    let ret = self.run_linked(cu.module, &locals, None, Some(caller), remap_base)?;
                     return Ok(if matches!(ret, Zval::Null) { Zval::Long(1) } else { ret });
                 }
                 uc_stat(|s| s.miss_dc += 1);
@@ -5846,11 +5902,16 @@ impl<'m> Vm<'m> {
         // Link inline (rather than via drive_unit) so the relocated module can
         // be published to the unit cache before it runs.
         let static_off = self.statics.len();
+        // WP-64 P-1/M3'': the class append base the remap reserves against —
+        // stored in the cache entry and asserted again at registration.
+        let reserved_base = self.classes.len();
         let (class_remap, new_locals) = if module.elided.is_some() {
             // Contract v2: program-space remap for the walker; the cache
             // stores its RETAINED-space projection (hit double-check).
             let (prog_remap, retained_remap, locals) =
                 self.unit_remap_elided(&program, elide.unwrap_or(0));
+            // WP-64 H4'': pin the compile↔link mirror of the elide predicate.
+            debug_assert_eq!(retained_remap.len(), module.classes.len());
             relocate_module_class_ids(&mut module, &prog_remap, static_off);
             (retained_remap, locals)
         } else {
@@ -5877,6 +5938,7 @@ impl<'m> Vm<'m> {
                     CachedUnit {
                         fp,
                         static_off,
+                        reserved_base,
                         class_remap,
                         new_locals: new_locals.clone(),
                         seed_delta: Rc::clone(&seed_delta),
@@ -5892,7 +5954,7 @@ impl<'m> Vm<'m> {
         // drive_unit by aliasing the unit frame's named slots to the includer's
         // cells (see `scope_bridge` there).
         let caller = self.frames.len() - 1;
-        let ret = self.run_linked(leaked, &new_locals, None, Some(caller))?;
+        let ret = self.run_linked(leaked, &new_locals, None, Some(caller), (reserved_base, static_off))?;
         // A file with no top-level `return` yields int(1); an explicit return passes
         // through (a literal `return null;` is the accepted edge that also yields 1).
         Ok(if matches!(ret, Zval::Null) { Zval::Long(1) } else { ret })
@@ -13887,6 +13949,12 @@ fn json_has_cycle(v: &Zval, visiting: &mut Vec<usize>) -> bool {
 struct CachedUnit {
     fp: u64,
     static_off: usize,
+    /// WP-64 P-1 (Pedersen): `classes.len()` at remap/publish time — the base
+    /// the module's new-class ids were reserved from. Checked explicitly on a
+    /// hit: with an empty proper set `class_remap` compares `[] == []`
+    /// trivially, so a moved append base would otherwise be covered only by
+    /// the fingerprint (as a `miss fp`, never `miss dc`).
+    reserved_base: usize,
     class_remap: Vec<ClassId>,
     new_locals: Vec<usize>,
     seed_delta: Rc<SeedDelta>,
@@ -13967,8 +14035,12 @@ struct UcStats {
     stub_elided_units: u64,
     stub_classes_elided: u64,
     /// Loud counter for the S2 invariant (seed↔runtime prefix alignment) —
-    /// asserted 0 in every gate; census builds panic instead.
+    /// asserted 0 in every gate; a miss is FATAL in every build (WP-64 H2'').
     elide_align_miss: u64,
+    /// WP-64 S-1 (Stogov): positive counter for the identity arm — S2
+    /// coverage is provable only where the arm actually ran (KS-S6: a gate
+    /// citing S2 with hit==0 where the workload exercises the arm is vacuous).
+    elide_align_hit: u64,
 }
 
 impl UcStats {
@@ -13986,6 +14058,7 @@ impl UcStats {
         stub_elided_units: 0,
         stub_classes_elided: 0,
         elide_align_miss: 0,
+        elide_align_hit: 0,
     };
 }
 
