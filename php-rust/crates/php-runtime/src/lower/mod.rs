@@ -146,15 +146,45 @@ type Seed<'a> = (
     &'a [(Vec<u8>, Vec<u8>)],
 );
 
+// WP-65 B-65.3 (KB65-3): cumulative wall-ns of the two lower phases over
+// SEEDED lowers only (include/eval/deferred + autoload retries — the
+// population the `lower_ns` window quotes): (lexparse, lowerhir, count).
+// Lex and parse are fused inside `parse_file` — the column says so.
+#[cfg(feature = "mem-census")]
+thread_local! {
+    static LOWER_PHASE_NS: std::cell::Cell<(u64, u64, u64)> =
+        const { std::cell::Cell::new((0, 0, 0)) };
+}
+#[cfg(feature = "mem-census")]
+pub(crate) fn census_lower_phase_take() -> (u64, u64, u64) {
+    LOWER_PHASE_NS.with(|c| c.get())
+}
+
 fn lower_source_impl(
     name: &[u8],
     source: &[u8],
     seed: Option<Seed<'_>>,
     defer: DeferPolicy<'_>,
 ) -> Result<Program, LowerError> {
+    #[cfg(feature = "mem-census")]
+    let phase_seeded = seed.is_some();
+    #[cfg(feature = "mem-census")]
+    let phase_t0 = std::time::Instant::now();
     let arena = Bump::new();
     let file = File::ephemeral(Cow::Owned(name.to_vec()), Cow::Owned(source.to_vec()));
     let program = parse_file(&arena, &file);
+    // Lexparse accumulates HERE (every seeded pass, retries included);
+    // lowerhir accumulates on the happy path only — a lower that errors
+    // mid-pass (autoload retry) loses its partial HIR tail, declared.
+    #[cfg(feature = "mem-census")]
+    let phase_lexparse = phase_t0.elapsed().as_nanos() as u64;
+    #[cfg(feature = "mem-census")]
+    if phase_seeded {
+        LOWER_PHASE_NS.with(|c| {
+            let (lp, lh, n) = c.get();
+            c.set((lp + phase_lexparse, lh, n + 1));
+        });
+    }
 
     if program.has_errors() {
         let msg = program
@@ -317,6 +347,15 @@ fn lower_source_impl(
     // function scope. Each user function / method / closure validates its own
     // body where it is lowered (`lower_function`/`lower_method`/`lower_closure`).
     validate_goto(&body)?;
+    // B-65.3: the HIR share of this pass (lexparse landed above).
+    #[cfg(feature = "mem-census")]
+    if phase_seeded {
+        let lowerhir = (phase_t0.elapsed().as_nanos() as u64).saturating_sub(phase_lexparse);
+        LOWER_PHASE_NS.with(|c| {
+            let (lp, lh, n) = c.get();
+            c.set((lp, lh + lowerhir, n));
+        });
+    }
     Ok(Program {
         body,
         file: name.into(),

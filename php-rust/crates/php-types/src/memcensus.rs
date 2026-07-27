@@ -200,6 +200,15 @@ extern "C" fn dump_exit() {
     // channel live is exact here (recon reached==live), so per-bin
     // committed−used at this instant IS retention + non-censused standing.
     phys_window_dump(0, phys_footprint(), "exit_mi");
+    // WP-65 L-65.2 (L-64b made exigible): the STANDING checkpoint —
+    // mi_collect(true) drains retention, then a second per-bin/phys read
+    // says what actually stands. The PRIMA/DOPO pair for the lever is this
+    // window across the two census binaries (KL-65.1/KL-65.3); the delta
+    // vs `exit_mi` above is retention, free. Opt-in per run.
+    if std::env::var_os("PHPR_MI_COLLECT_EXIT").is_some_and(|v| v == "1") {
+        unsafe { mi_collect(true) };
+        phys_window_dump(0, phys_footprint(), "exit_collect_mi");
+    }
 }
 
 /// Deep retained-size walk from a root value (Fase 0 root attribution):
@@ -523,6 +532,9 @@ extern "C" {
         out: Option<unsafe extern "C" fn(*const std::os::raw::c_char, *mut std::os::raw::c_void)>,
         arg: *mut std::os::raw::c_void,
     );
+    /// WP-65 L-65.2: force-collect for the exit STANDING checkpoint —
+    /// census builds only (the module is feature-gated), never parity.
+    fn mi_collect(force: bool);
 }
 
 /// Per-size-class occupancy table filled by [`area_visitor`]. Fixed arrays:

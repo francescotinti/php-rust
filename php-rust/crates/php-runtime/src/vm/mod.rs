@@ -418,6 +418,21 @@ pub(crate) fn run_module_with_hir<'m>(
     argv: Option<&[&[u8]]>,
     ini_overrides: &[(Vec<u8>, Vec<u8>)],
 ) -> VmOutcome {
+    // WP-65 M-65.3 (Matsakis): the M1'' pun check extended to the bootstrap
+    // main — `phpr prelude` (a relative CLI path, never canonicalized here)
+    // would otherwise make a unit whose file collides with the provenance
+    // marker and classify as prelude-shared, silently.
+    debug_assert!(
+        !matches!(module.file.as_ref(), b"prelude" | b"seed-stub"),
+        "main script name collides with a provenance marker"
+    );
+    if matches!(module.file.as_ref(), b"prelude" | b"seed-stub") {
+        log::error!(
+            target: "phpr::run",
+            "main script name collides with a provenance marker: {}",
+            String::from_utf8_lossy(&module.file)
+        );
+    }
     // A fresh program starts a fresh handle space: ids freed by a PREVIOUS
     // run's teardown (same thread — in-process phpt batches, unit tests)
     // must not leak into this run's `#N` numbering.
@@ -1117,17 +1132,20 @@ pub(crate) fn run_module_with_hir<'m>(
             let mut by: rustc_hash::FxHashMap<&[u8], (u32, u64, u64)> = Default::default();
             // WP-62 M2.1: per-path [tables, stub, fnshare, proper] sums (the
             // dup targets' prefix share is THE Hejlsberg A1 number).
-            let mut by_split: rustc_hash::FxHashMap<&[u8], [u64; 7]> = Default::default();
+            let mut by_split: rustc_hash::FxHashMap<&[u8], [u64; 8]> = Default::default();
             for (i, (file, bytes, net, _p)) in units.iter().enumerate() {
                 let e = by.entry(&file[..]).or_insert((0, 0, 0));
                 e.0 += 1;
                 e.1 += *bytes;
                 e.2 += *net;
                 if let Some(sp) = CENSUS_SPLITS.with(|s| s.borrow().get(i).copied()) {
-                    let es = by_split.entry(&file[..]).or_insert([0; 7]);
+                    let es = by_split.entry(&file[..]).or_insert([0; 8]);
+                    // Col 7 (seedlen) is a per-unit reading, not a summable
+                    // byte share — per-path it keeps the LAST unit's value.
                     for k in 0..7 {
                         es[k] += sp[k];
                     }
+                    es[7] = sp[7];
                 }
             }
             // WP-62 M0c: top single load events by net — the calibration
@@ -1135,13 +1153,32 @@ pub(crate) fn run_module_with_hir<'m>(
             // here; dup rows below aggregate per path and hide singles.
             // WP-62 M2.1: rows carry the compile split (pfx = tables+stub+
             // fnshare vs proper); indices pair CENSUS_UNITS ↔ CENSUS_SPLITS.
-            let splits: Vec<[u64; 7]> = CENSUS_SPLITS.with(|s| s.borrow().clone());
+            let splits: Vec<[u64; 8]> = CENSUS_SPLITS.with(|s| s.borrow().clone());
+            // WP-65 M-65.1: pre-delta seed-length distribution over the
+            // retained units — D distinct lengths vs U units decides
+            // K-M65.1 (D > 0.5×U ⇒ Rc-prefix sharing dead by construction).
+            {
+                let mut freq: rustc_hash::FxHashMap<u64, u64> = Default::default();
+                for sp in &splits {
+                    *freq.entry(sp[7]).or_insert(0) += 1;
+                }
+                let mut rows: Vec<(u64, u64)> = freq.into_iter().collect();
+                rows.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+                let top: Vec<String> =
+                    rows.iter().take(20).map(|(l, n)| format!("{l}:{n}")).collect();
+                mc::census_line(&format!(
+                    "tag=seedlen units={} distinct={} top={}",
+                    splits.len(),
+                    rows.len(),
+                    top.join(",")
+                ));
+            }
             {
                 let mut top: Vec<(usize, &(Vec<u8>, u64, u64, usize))> =
                     units.iter().enumerate().collect();
                 top.sort_by(|a, b| b.1 .2.cmp(&a.1 .2));
                 for (i, (file, bytes, net, _p)) in top.iter().take(24) {
-                    let sp = splits.get(*i).copied().unwrap_or([0; 7]);
+                    let sp = splits.get(*i).copied().unwrap_or([0; 8]);
                     mc::census_line(&format!(
                         "tag=unittop bytes_counted={bytes} net={net} pfx_tables={} \
                          pfx_stub={} pfx_fnshare={} proper={} pfx_slotnames={} \
@@ -1193,11 +1230,11 @@ pub(crate) fn run_module_with_hir<'m>(
                 dup_b += (bytes / (*n as u64)) * ((*n as u64) - 1);
                 dup_n += (net / (*n as u64)) * ((*n as u64) - 1);
                 if i < 40 {
-                    let sp = by_split.get(p).copied().unwrap_or([0; 7]);
+                    let sp = by_split.get(p).copied().unwrap_or([0; 8]);
                     mc::census_line(&format!(
                         "tag=unitpath2 n={n} bytes_counted={bytes} net={net} \
                          pfx_tables={} pfx_stub={} pfx_fnshare={} proper={} \
-                         pfx_slotnames={} pfx_fnvec={} sc={} path={}",
+                         pfx_slotnames={} pfx_fnvec={} sc={} seedlen={} path={}",
                         sp[0],
                         sp[1],
                         sp[2],
@@ -1205,6 +1242,7 @@ pub(crate) fn run_module_with_hir<'m>(
                         sp[4],
                         sp[5],
                         sp[6],
+                        sp[7],
                         String::from_utf8_lossy(p)
                     ));
                 }
@@ -1259,7 +1297,7 @@ pub(crate) fn run_module_with_hir<'m>(
                      metadata_calls={} entries={entries} bytes_counted={bytes} paths={paths} \
                      superseded_paths={superseded_paths} superseded_entries={superseded_entries} \
                      stub_elided_units={} stub_classes_elided={} elide_align_miss={} \
-                     elide_align_hit={}",
+                     elide_align_hit={} miss_dc_base={} miss_dc_remap={} miss_dc_locals={}",
                     st.hit_intra,
                     st.hit_cross,
                     st.miss_cold,
@@ -1274,6 +1312,9 @@ pub(crate) fn run_module_with_hir<'m>(
                     st.stub_classes_elided,
                     st.elide_align_miss,
                     st.elide_align_hit,
+                    st.miss_dc_base,
+                    st.miss_dc_remap,
+                    st.miss_dc_locals,
                 ));
                 // WP-63 B7: finestre ns separate lower vs compile (bordo CPU).
                 let (lns, cns, un) = census_compile_ns_take();
@@ -1282,9 +1323,18 @@ pub(crate) fn run_module_with_hir<'m>(
                 // program-space (link) — mai più inferite dalle finestre.
                 let (mns, mn) = crate::compile::census_map_ns_take();
                 let (rns, rn) = REMAP_NS.with(|c| c.get());
+                // WP-65 B-65.3 (KB65-3): the lower window decomposed —
+                // read (fs::read, vm-side) + lexparse (parse_file, lexer
+                // fused) + lowerhir (Lowerer proper). The phase counters
+                // cover ALL seeded lowers (include+eval+deferred+retries;
+                // `lowers` counts them) while `lower_ns` windows only the
+                // include path — compare via the counts, not blindly.
+                let rdns = READ_NS.with(|c| c.get());
+                let (lpns, lhns, lct) = crate::lower::census_lower_phase_take();
                 mc::census_line(&format!(
                     "tag=compilens lower_ns={lns} compile_ns={cns} units={un} \
-                     map_ns={mns} map_entries={mn} remap_ns={rns} remap_entries={rn}"
+                     map_ns={mns} map_entries={mn} remap_ns={rns} remap_entries={rn} \
+                     read_ns={rdns} lexparse_ns={lpns} lowerhir_ns={lhns} lowers={lct}"
                 ));
             }
             // WP-62 M1 (Leijen R1 / Klabnik b): per-path hit-net aggregation
@@ -1495,6 +1545,9 @@ pub(crate) fn run_module_with_hir<'m>(
     // out of the Vm, and the fast path forgets it entirely).
     #[cfg(feature = "mem-census")]
     census_vm_park(0);
+    // B-65.2: end-of-run flush — the last uc_log events of this VM (final
+    // includes, shutdown-path probes) land before the outcome is returned.
+    uc_log_flush();
     if FAST_SHUTDOWN.load(std::sync::atomic::Ordering::Relaxed) {
         // Post-semantic leak (see the static's doc): move the outcome fields
         // out, forget the rest of the Vm. No PHP-observable effect can depend
@@ -1765,6 +1818,7 @@ fn census_unit_note(m: &'static Module) {
             pfx_slotnames,
             pfx_fnvec,
             m.static_count as u64,
+            dims.0,
         ])
     });
     CENSUS_UNITS.with(|u| {
@@ -1779,11 +1833,13 @@ fn census_unit_note(m: &'static Module) {
 
 #[cfg(feature = "mem-census")]
 thread_local! {
-    /// WP-62 M2.1 + WP-64 E1-64: per-unit [tables, stub, fnshare, proper,
-    /// pfx_slotnames, pfx_fnvec, static_count] split, parallel to
-    /// `CENSUS_UNITS` (Hejlsberg A1: prefix = tables+stub+fnshare; the three
-    /// WP-64 columns carve `proper` per channel for the tranche-2 quota).
-    static CENSUS_SPLITS: std::cell::RefCell<Vec<[u64; 7]>> =
+    /// WP-62 M2.1 + WP-64 E1-64 + WP-65 M-65.1: per-unit [tables, stub,
+    /// fnshare, proper, pfx_slotnames, pfx_fnvec, static_count, seedlen]
+    /// split, parallel to `CENSUS_UNITS` (Hejlsberg A1: prefix =
+    /// tables+stub+fnshare; the WP-64 columns carve `proper` per channel;
+    /// col 7 = pre-delta seed_globals.len — the `tag=seedlen` distribution
+    /// that decides K-M65.1, never summed into prefixsum).
+    static CENSUS_SPLITS: std::cell::RefCell<Vec<[u64; 8]>> =
         const { std::cell::RefCell::new(Vec::new()) };
     /// WP-64 E1-64: pre-delta (seed_globals.len, seed_static) parked by
     /// `elide_seed_len` for the next unit's census note.
@@ -1793,6 +1849,9 @@ thread_local! {
     /// program-space remap walk — the second O(seed) per-include pass.
     static REMAP_NS: std::cell::Cell<(u64, u64)> =
         const { std::cell::Cell::new((0, 0)) };
+    /// WP-65 B-65.3: cumulative wall-ns of the include-path `fs::read` —
+    /// the first slice of the `lower_ns` window, attributed apart.
+    static READ_NS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
 }
 
 /// Renders `depth=N;fn@file:line;...` for the top 3 PHP frames.
@@ -5095,6 +5154,9 @@ impl<'m> Vm<'m> {
         let leaked: &'static Module = Box::leak(Box::new(module));
         #[cfg(feature = "mem-census")]
         census_unit_note(leaked);
+        // B-65.2: boundary flush (covers the eval/deferred alignhit events);
+        // every timed window of this unit is closed here.
+        uc_log_flush();
         self.run_linked(leaked, &new_locals, eval_origin, scope_bridge, remap_base)
     }
 
@@ -5185,7 +5247,15 @@ impl<'m> Vm<'m> {
                         "stub-elision: seed/runtime prefix misaligned at id {i} ({})",
                         String::from_utf8_lossy(&cd.name)
                     );
-                    panic!("stub-elision: seed/runtime prefix misaligned at id {i}");
+                    // B-65.2 exception: flush the buffered probe log BEFORE
+                    // dying (crash robustness beats window hygiene here).
+                    uc_log_flush();
+                    // WP-65 H-65.1: the class name rides in the panic itself —
+                    // the log::error above is visible only with a logger.
+                    panic!(
+                        "stub-elision: seed/runtime prefix misaligned at id {i} ({})",
+                        String::from_utf8_lossy(&cd.name)
+                    );
                 }
             } else {
                 let id = self.classes.len() + new_locals.len();
@@ -5640,6 +5710,12 @@ impl<'m> Vm<'m> {
     }
 
     fn apply_seed_delta(&mut self, delta: &SeedDelta) {
+        // WP-65 H-65.2 (executable contract): this fn grows the SEED image
+        // only — it must never mint runtime classes/statics. The hit path
+        // relies on it running between the P-1 base check and run_linked
+        // (in release the contract held by adjacency alone; now it's pinned).
+        #[cfg(debug_assertions)]
+        let bases = (self.classes.len(), self.statics.len());
         if self.main_hir.is_none() {
             return;
         }
@@ -5663,6 +5739,13 @@ impl<'m> Vm<'m> {
                 self.seed_traits.push((k.clone(), t.clone()));
             }
         }
+        // H-65.2: seed-only growth, verified.
+        #[cfg(debug_assertions)]
+        debug_assert_eq!(
+            bases,
+            (self.classes.len(), self.statics.len()),
+            "apply_seed_delta minted runtime classes/statics (H-65.2)"
+        );
     }
 
     /// Mask of `program.classes` indices the running VM already links by name:
@@ -5879,11 +5962,29 @@ impl<'m> Vm<'m> {
                     // inside the unit body must not read as window nesting.
                     #[cfg(feature = "mem-census")]
                     census_hit_note(hitw, &key);
+                    // B-65.2: boundary flush — the hit window is closed, the
+                    // linked run has not started.
+                    uc_log_flush();
                     let caller = self.frames.len() - 1;
                     let ret = self.run_linked(cu.module, &locals, None, Some(caller), remap_base)?;
                     return Ok(if matches!(ret, Zval::Null) { Zval::Long(1) } else { ret });
                 }
-                uc_stat(|s| s.miss_dc += 1);
+                // WP-65 M-65.2: attribute the first failing leg — the `base`
+                // share is the autoload-in-lowering hit-rate ceiling
+                // (`lower_unit` may include supertypes between fp and publish).
+                let dc_base = cu.static_off != self.statics.len()
+                    || cu.reserved_base != self.classes.len();
+                let dc_remap = remap != cu.class_remap;
+                uc_stat(|s| {
+                    s.miss_dc += 1;
+                    if dc_base {
+                        s.miss_dc_base += 1;
+                    } else if dc_remap {
+                        s.miss_dc_remap += 1;
+                    } else {
+                        s.miss_dc_locals += 1;
+                    }
+                });
                 uc_log("miss dc", &key);
             } else if unit_cache_key_present(uk) {
                 // Entries exist for these file bytes but none matches the VM
@@ -5906,6 +6007,10 @@ impl<'m> Vm<'m> {
             Ok(c) => c,
             Err(_) => return self.include_open_failed(&path, mode),
         };
+        // WP-65 B-65.3: the file read is the first slice of the lower window —
+        // attributed apart so `lower_ns` decomposes (read + lexparse + lowerhir).
+        #[cfg(feature = "mem-census")]
+        READ_NS.with(|c| c.set(c.get() + lower_t0.elapsed().as_nanos() as u64));
         // The Zend lexer skips a leading `#!` line in *included* files too
         // (oracle-verified on 8.5: `include` of a shebang script outputs no
         // shebang) — Composer's vendor/bin proxies include the real tool
@@ -6020,6 +6125,9 @@ impl<'m> Vm<'m> {
                 );
             }
         }
+        // B-65.2: boundary flush — compile/remap windows are closed, the
+        // linked run has not started (no timed window contains this I/O).
+        uc_log_flush();
         // PHP scope rule: an included file shares the *including* scope's variable
         // table — it reads the surrounding variables and the ones it assigns land
         // back in the includer (global scope and function scope alike). Bridged in
@@ -6037,6 +6145,8 @@ impl<'m> Vm<'m> {
     /// (step 57, Phase 2), mirroring PHP's diagnostics. Warnings go through the
     /// deferred `diags` buffer so `@` suppression (and the stamped line) apply.
     fn include_open_failed(&mut self, path: &[u8], mode: IncludeMode) -> Result<Zval, PhpError> {
+        // B-65.2: the include aborted — flush its buffered probe events.
+        uc_log_flush();
         let line = self.cur_line(self.frames.len() - 1);
         let pstr = String::from_utf8_lossy(path).into_owned();
         let kw = mode.keyword();
@@ -6068,6 +6178,8 @@ impl<'m> Vm<'m> {
     /// Phase 2): a fatal regardless of `require`/`include`, as PHP raises a
     /// `ParseError`/compile fatal in the loaded unit.
     fn include_compile_failed(&mut self, name: &[u8], mode: IncludeMode) -> Result<Zval, PhpError> {
+        // B-65.2: the include aborted — flush its buffered probe events.
+        uc_log_flush();
         let line = self.cur_line(self.frames.len() - 1);
         self.fatal_line = line;
         Err(PhpError::Error(format!(
@@ -14113,6 +14225,12 @@ struct UcStats {
     /// coverage is provable only where the arm actually ran (KS-S6: a gate
     /// citing S2 with hit==0 where the workload exercises the arm is vacuous).
     elide_align_hit: u64,
+    /// WP-65 M-65.2 (Matsakis): `miss_dc` disaggregated by the FIRST failing
+    /// leg of the double-check — base (static_off/reserved_base moved: the
+    /// autoload-in-lowering ceiling), remap, locals. Sums to `miss_dc`.
+    miss_dc_base: u64,
+    miss_dc_remap: u64,
+    miss_dc_locals: u64,
 }
 
 impl UcStats {
@@ -14131,6 +14249,9 @@ impl UcStats {
         stub_classes_elided: 0,
         elide_align_miss: 0,
         elide_align_hit: 0,
+        miss_dc_base: 0,
+        miss_dc_remap: 0,
+        miss_dc_locals: 0,
     };
 }
 
@@ -14176,21 +14297,87 @@ pub(crate) fn census_compile_ns_take() -> (u64, u64, u64) {
     COMPILE_NS.with(|c| c.get())
 }
 
-/// Append one unit-cache event line to the file named by
-/// `PHPR_UNIT_CACHE_LOG` (checked once). No-op when unset — probes assert
-/// `cachehit>0` by grepping this log (meta-rule K5/KK1: a sentinel that
-/// passes with zero hits proves nothing).
+/// WP-65 P-65.4: the `uc_log` event vocabulary is CLOSED — event names are
+/// probe API (WP-64: `alignhit` degraded a bare `grep "hit"` detector
+/// silently). Gate detectors match the anchored form `^unitcache <event> `
+/// only; the cargo test `uc_log_event_vocabulary_is_prefix_free` pins that
+/// no anchored event is a prefix of another. Extend the array to add one.
+pub(crate) const UC_LOG_EVENTS: [&str; 9] = [
+    "alignhit",
+    "fp",
+    "hit intra",
+    "hit cross",
+    "miss dc",
+    "miss fp",
+    "miss cold",
+    "miss nostat",
+    "elide",
+];
+
+thread_local! {
+    /// WP-65 B-65.2: uc_log lines buffer here; I/O happens only in
+    /// [`uc_log_flush`], never at the emission site — no timed census
+    /// window may contain its own logging I/O (K-65.5/KB65-2; the WP-64
+    /// observer-effect was a per-event `open()` inside the remap walk).
+    static UC_LOG_BUF: std::cell::RefCell<Vec<u8>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+    /// The log file, opened ONCE per thread on first flush (B-65.2).
+    static UC_LOG_FILE: std::cell::RefCell<Option<std::fs::File>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+fn uc_log_path() -> Option<&'static std::path::PathBuf> {
+    static LOG: std::sync::OnceLock<Option<std::path::PathBuf>> = std::sync::OnceLock::new();
+    LOG.get_or_init(|| std::env::var_os("PHPR_UNIT_CACHE_LOG").map(Into::into)).as_ref()
+}
+
+/// Append one unit-cache event line to the in-memory buffer for the file
+/// named by `PHPR_UNIT_CACHE_LOG` (checked once). No-op when unset — probes
+/// assert `cachehit>0` by grepping this log (meta-rule K5/KK1: a sentinel
+/// that passes with zero hits proves nothing). The line format
+/// `unitcache <event>[ <arg>] <path>` is probe API — never change it.
 fn uc_log(event: &str, path: &[u8]) {
     use std::io::Write;
-    use std::sync::OnceLock;
-    static LOG: OnceLock<Option<std::path::PathBuf>> = OnceLock::new();
-    let Some(p) = LOG.get_or_init(|| std::env::var_os("PHPR_UNIT_CACHE_LOG").map(Into::into))
-    else {
+    if uc_log_path().is_none() {
         return;
-    };
-    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(p) {
-        let _ = writeln!(f, "unitcache {event} {}", String::from_utf8_lossy(path));
     }
+    // P-65.4 executable vocabulary: every emission's first token(s) must be
+    // a registered event (arguments follow after a space).
+    debug_assert!(
+        UC_LOG_EVENTS
+            .iter()
+            .any(|e| event == *e || event.strip_prefix(e).is_some_and(|r| r.starts_with(' '))),
+        "uc_log event outside the closed vocabulary: {event}"
+    );
+    UC_LOG_BUF.with(|b| {
+        let _ = writeln!(b.borrow_mut(), "unitcache {event} {}", String::from_utf8_lossy(path));
+    });
+}
+
+/// Write the buffered uc_log lines out (B-65.2). Call sites live at
+/// include/unit boundaries and process-exit paths — OUTSIDE every `*_ns`
+/// and net census window — plus the fatal-misalignment arm (crash
+/// robustness beats window hygiene on a path that panics anyway).
+fn uc_log_flush() {
+    use std::io::Write;
+    let Some(p) = uc_log_path() else { return };
+    UC_LOG_BUF.with(|b| {
+        let mut buf = b.borrow_mut();
+        if buf.is_empty() {
+            return;
+        }
+        UC_LOG_FILE.with(|f| {
+            let mut f = f.borrow_mut();
+            if f.is_none() {
+                *f = std::fs::OpenOptions::new().create(true).append(true).open(p).ok();
+            }
+            if let Some(file) = f.as_mut() {
+                if file.write_all(&buf).is_ok() {
+                    buf.clear();
+                }
+            }
+        });
+    });
 }
 
 /// Whether any fingerprint variant is cached under `key` (miss taxonomy).
@@ -16211,6 +16398,23 @@ mod tests {
     }
 
     // ----- E2: vm::run_source_with (lower → compile → run) -----
+
+    #[test]
+    fn uc_log_event_vocabulary_is_prefix_free() {
+        // WP-65 P-65.4 (Pedersen): event names are probe API. Detectors
+        // anchor on `unitcache <event> `; no anchored event may be a prefix
+        // of another's anchored form (the WP-64 alignhit/"hit" incident).
+        for a in super::UC_LOG_EVENTS {
+            for b in super::UC_LOG_EVENTS {
+                if a != b {
+                    assert!(
+                        !format!("unitcache {b} ").starts_with(&format!("unitcache {a} ")),
+                        "uc_log event {a:?} is an anchored prefix of {b:?}"
+                    );
+                }
+            }
+        }
+    }
 
     #[test]
     fn run_source_with_runs_plain_code() {
