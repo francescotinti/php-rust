@@ -25,8 +25,10 @@
 - **Gate pieno gate64-debts.sh (flip)**: cargo 1645/0 · sentinelle 5
   assi BYTE-ID · sentinelle63 VERDI · **KS-S6 alignhit>0** · corpus
   1421 IDENTICO · refl 290 IDENTICO · ORM 3E/13F IDENTICO · hk 0E/0F ·
-  reverse-order 2F GEMELLO IDENTICO · P1-a..d VERDI (hit_cross=2, col
-  controllo cache-off ESERCITATO dopo il fix detector).
+  reverse-order 2F GEMELLO IDENTICO. P1-a..d VERDI **a lato del gate**
+  (esecuzione manuale probe63-p1.sh, hit_cross=2, controllo cache-off
+  esercitato dopo il fix detector; K-65.2 Klabnik: la matrice K1''
+  integrale — P1 e KE-e DENTRO gate65.sh — resta dovuta alla leva).
 - **S-4**: divergenza get_declared_classes catalogata
   (PHPR_DIVERGENCES §3.8(vi), pre-esistente, probe wp64-harness/).
 
@@ -36,27 +38,41 @@ Axum slitta a WP-65+ (primo atto resta KS-P1 invariato).
 
 ## Quota tranche 2 (E1-64: memgc64 `6d6b518b`, census64-full)
 
-- **P64-1 ✓ KS64-1**: version.php net/inc 22.623 = slotnames 12.554 +
-  fnvec 7.608 + fnshare 2.536 = **100,3%** — la colonna "proper
-  inquinata" (Hejlsberg) è RISOLTA: il floor per-include dei
-  seed-heavy è ~100% O(seed). Re-include grossi: Σ colonne 35%/18%,
-  il resto è dup del proper (canale E6, non tranche-2).
-- **P64-2**: quota counted standing = **slotnames 51,6MB + fnvec
-  36,0MB = 87,6MB (17,5% del net_tot 499,9 — replica WP-63 alla
-  cifra) + fnshare 12,0MB adiacente** ⇒ leva ~90-100MB.
+- **P64-1 (KS64-1, formulazione emendata dal concilio E-65.1)**:
+  version.php net/inc 22.623 = slotnames 12.554 + fnvec 7.608 +
+  fnshare 2.536 = **100,3%** e comments 109,4% DENTRO ±10% — la
+  colonna "proper inquinata" (Hejlsberg) è RISOLTA sui seed-heavy;
+  **modules 35,2% e loader 18,1% = bordo per-bersaglio ESERCITATO**
+  (residuo attribuito al dup del proper — canale E6 — senza colonna
+  che lo misuri: ATTRIBUZIONE, non riconciliazione; mai "✓" secco).
+- **P64-2 (SOPRA banda pre-registrata [35,70]MB: +25% — formula di
+  scaling falsificata in ALTO; la quota si tiene per l'attribuzione
+  P64-1, non per la predizione)**: counted standing = **slotnames
+  51,6MB + fnvec 36,0MB = 87,6MB (17,5% del net_tot 499,9 — replica
+  WP-63 alla cifra) + fnshare 12,0MB adiacente**. Quota leva ONESTA
+  (E-65.3 Hejlsberg): **64-76MB** — la componente fn_ci (~24MB dei
+  36,0 di fnvec) è un hash-index misto seed+proper NON banalmente
+  condivisibile; sale a ~100MB SOLO con una forma fn_ci a costo zero.
 - **P64-3 FALSIFICATA — CANALE CPU MORTO**: map 1,66s + remap 1,15s
   all-proc = **0,36% del full** ≪ tetto 6,1%; confermato da B4 sample
   su PARITÀ (unit_remap_elided ≈0,08% dei campioni). KB11: la
   motivazione CPU della tranche 2 CADE; resta la sola footprint. Il
   lower 32,9s (4,2%) resta "causa non attribuita" (B1).
-- **P64-4 ✓ KS64-3**: Δcoda = 1.021,7−382,5 = **639,2MB vs ~623 =
-  +2,6%** (±15%) ⇒ **il −74,7% ora si dice SPIEGATO**
-  (totale+bersagli+coda riconciliati).
+- **P64-4 (KS64-3 — vizio K4'' a verbale, sanato)**: Δcoda =
+  1.021,7−382,5 = **639,2MB vs ~623 = +2,6%** (±15%); ⚠️ il letto
+  pre-registrato era il join per-path e la sessione l'aveva sostituito
+  con l'aggregato (E-65.2/KS65-2: un letto non si sostituisce
+  post-hoc). Il concilio ha eseguito il join e la sessione l'ha
+  DEPOSITATO (`wp64-harness/coda-join-top40.txt`: 31 path comuni, 0
+  crescite, n62==n64 ovunque, Δ visibile 941,3MB) ⇒ **il −74,7% si
+  dice SPIEGATO** (totale+bersagli+coda, col letto giusto).
 - **P64-5 ✓**: sc 135-169/unit ⇒ statics NON O(seed) (domanda chiusa).
-- **L-64a con falsificazione**: al segmento-peak del FULL
-  committed/used=**1,007** (slack 13,2MB; bin 4-16K DENSI) — il c/u≈2
-  di Leijen vive sul letto lt, non al peak ⇒ quota
-  rounding-recuperabile al peak ≈0 (L-64c ridimensionata).
+- **L-64a con falsificazione (terminologia emendata L-65.1)**: al
+  segmento-peak del FULL committed/used=**1,007** (slack 13,2MB; bin
+  4-16K DENSI; copertura strumento 87,9% del phys) — il c/u≈2 vive
+  sul drain lt (~12MB assoluti), non al peak ⇒ quota **page-slack** al
+  peak ≈0 (L-64c ridimensionata). Il **bin-rounding** requested<block
+  è INVISIBILE a c/u e resta VIVO (~×1,15, a FAVORE della leva).
 
 ## Catena orchestrate64 (stessa-mattina)
 
@@ -94,9 +110,10 @@ hit-eventi).
   net**: slotnames+fnvec+fnshare riconcilia il net/inc di version al
   100,3% — la "proper inquinata" era decomponibile con 30 righe di
   census, non con nuove ipotesi.
-- ⭐ La riconciliazione Σ_coda (639 vs 623MB) si fa dai SOLI totali +
-  righe bersaglio dei due census (OFF wp62 / ON wp64) — niente join
-  per-path completo necessario al primo ordine.
+- ⭐ (EMENDATA dal concilio, E-65.2/KS65-2): l'aggregato Σ_coda NON
+  sostituisce un letto per-path PRE-REGISTRATO — la versione "niente
+  join necessario" era la stessa retorica di KS63-1; il join top-40
+  era dovuto, il concilio l'ha eseguito e ora è depositato.
 - ⭐ daemonize.pl vuole `<log> <cmd>` e la out-dir DEVE esistere prima.
 
 ## Prossimo (WP-65) — vedi NEXT_SESSION §WP-65

@@ -1,4 +1,4 @@
-# Rotta WORDPRESS-FIRST — WP-track (dopo WP-64: ⚡ DEBITI DEL CONCILIO CONSEGNATI a delta zero — fatal+assert+contatori, gate pieno verde + P1, coppia run51 88 BYTE-ID ×2; ⚖️ K-64=A: tranche 2; QUOTA INCHIODATA ~90-100MB counted (slotnames 51,6+fnvec 36,0+fnshare 12,0), canale CPU O(seed) MORTO 0,36%, Δcoda +2,6% ⇒ il −74,7% è SPIEGATO; media 3,01× dentro banda 2,9-3,2×; stash phpr-wp64)
+# Rotta WORDPRESS-FIRST — WP-track (dopo WP-64: ⚡ DEBITI DEL CONCILIO CONSEGNATI a delta zero — fatal+assert+contatori, gate pieno verde + P1, coppia run51 88 BYTE-ID ×2; ⚖️ K-64=A: tranche 2; QUOTA INCHIODATA 64-76MB counted onesti (slotnames 51,6+fn-entries ~12; +fn_ci ~24 solo con forma dedicata), canale CPU O(seed) MORTO 0,36%, Δcoda +2,6% col join depositato ⇒ il −74,7% è SPIEGATO; media 3,01× dentro banda 2,9-3,2×; stash phpr-wp64)
 
 > ⚡ **WP-64 (2026-07-27 mattina, `6c4cf7e`→`0a94329`)** — **PRIMO ATTO
 > = debiti di apertura del concilio** (sintesi a 9 recepita INTEGRALE
@@ -10,16 +10,21 @@
 > P-1 `reserved_base` in CachedUnit · H4'' mirror compile↔link.
 > **Gate pieno verde** (cargo 1645/0 · corpus 1421 · refl 290 · ORM
 > 3E/13F · hk 0E/0F · reverse 2F gemello · sentinelle63 + KS-S6
-> alignhit>0 · P1-a..d hit_cross=2 col controllo cache-off ESERCITATO
-> dopo il fix detector). **⚖️ K-64 (utente) = OPZIONE A**: tranche 2;
-> axum slitta (KS-P1 resta il suo primo atto). **QUOTA (E1-64,
-> memgc64)**: P64-1 ✓ version 22.623/inc = slot 12.554+fnvec 7.608+
-> fnshare 2.536 = **100,3%** (proper-inquinata RISOLTA); P64-2 quota
-> counted **87,6MB** (+12 fnshare); **P64-3 FALSIFICATA: CPU O(seed)
-> 0,36% ≪ 6,1% — canale MORTO** (il 4,57s lt era observer-effect
-> uc_log; B4 sample parità concorde 0,08%); P64-4 ✓ Δcoda 639,2 vs
-> ~623MB (+2,6%) ⇒ **−74,7% SPIEGATO**; P64-5 ✓ statics NON O(seed);
-> L-64a: peak full c/u=**1,007** ⇒ rounding-recuperabile al peak ≈0.
+> alignhit>0; P1-a..d A LATO del gate: hit_cross=2, cache-off
+> esercitato post-fix detector). **⚖️ K-64 (utente) = OPZIONE A**:
+> tranche 2; axum slitta (KS-P1 resta il suo primo atto). **QUOTA
+> (E1-64, memgc64)**: P64-1 version 22.623/inc = slot 12.554+fnvec
+> 7.608+fnshare 2.536 = **100,3%** (proper-inquinata RISOLTA sui
+> seed-heavy; modules 35,2%/loader 18,1% = bordo ESERCITATO,
+> attribuzione dup-proper); P64-2 **SOPRA banda [35,70] (+25%)**:
+> counted 87,6MB (+12 fnshare) ⇒ quota leva ONESTA **64-76MB**
+> (fn_ci ~24MB non condivisibile senza forma dedicata, E-65.3);
+> **P64-3 FALSIFICATA: CPU O(seed) 0,36% ≪ 6,1% — canale MORTO**
+> (il 4,57s lt era observer-effect uc_log; B4 sample comprimario
+> concorde); P64-4 Δcoda 639,2 vs ~623MB (+2,6%) col join per-path
+> DEPOSITATO (coda-join-top40: 0 crescite, n identici) ⇒ **−74,7%
+> SPIEGATO**; P64-5 ✓ statics NON O(seed); L-64a: peak full
+> c/u=**1,007** ⇒ *page-slack* al peak ≈0 (bin-rounding resta vivo).
 > S-4: divergenza get_declared_classes catalogata (§3.8(vi)).
 > Coppia run51: **88 BYTE-ID ×2**, CPU −1,5% (spread), peak −0,7%.
 > **Storia: `sessions/WP_SESSION_64.md`. WP-63:
@@ -279,7 +284,7 @@
 #  funcs,null} (leak template + moltiplicatore compile-side).
 ```
 
-## 🎯 PROSSIMO LAVORO — WP-65: TRANCHE 2, LA LEVA (K-64=A deciso; quota inchiodata ~90-100MB counted; canale CPU morto)
+## 🎯 PROSSIMO LAVORO — WP-65: TRANCHE 2, LA LEVA (K-64=A deciso; quota onesta 64-76MB counted; canale CPU morto)
 
 **Rotta (utente 2026-07-24)**: `FOOTPRINT_CPU_ROADMAP.md` — footprint-first,
 safe-only, TUTTE le fasi comunque, no-revert. Laravel POSTICIPATA a valle.
@@ -287,26 +292,61 @@ Stato WP-64: debiti consegnati a delta zero + quota tranche 2 misurata
 (dettaglio: `sessions/WP_SESSION_64.md` + `wp64-harness/design64.md`
 §4-A/§4-B/§4-C/§9).
 
-⚖️ **La sintesi a 9 in `wp64-harness/COUNCIL_WP64_REVIEWS.md` resta
-VINCOLANTE** per la parte leva (matrice gate64 K1''-K4'', KH64-1/2/3,
-KS64-1/2, K-M6); il concilio di chiusura WP-64 deposita i NUOVI verbali
-in `wp65-harness/COUNCIL_WP65_REVIEWS.md` (vincolanti per design65).
+⚖️ **CONCILIO DI CHIUSURA WP-64 ESEGUITO A 9 SEDIE (2026-07-27, 9/9
+CONCORDO CON EMENDAMENTI, nessuna opposizione — verbali integrali +
+sintesi in `wp65-harness/COUNCIL_WP65_REVIEWS.md`, VINCOLANTI per
+design65)**. Punti capitali: debiti TUTTI verificati NEL CODICE dalle
+sedie competenti; etichette emendate in sessione (P64-1 "bordo
+esercitato" non "✓"; P64-2 "SOPRA banda +25%"; P1 "a lato del gate";
+"page-slack ≈0" non "rounding"; join per-path DEPOSITATO); quota leva
+onesta **64-76MB** (E-65.3: fn_ci ~24MB fuori senza forma dedicata);
+DUE misure PRE-leva obbligatorie (M-65.1 distribuzione lunghezze-seed
+⇒ K-M65.1 può UCCIDERE la forma Rc-prefix a favore della v2-style di
+Hoare; L-65.2 checkpoint mi_collect); banda phys pre-registrata
+(full peak −70..−120MB, KL-65.2); igiene misura strutturale (B-65.2
+uc_log bufferizzato, G-65.2 self-test log-on/off, KB65-2/KK65-3
+finestre con I/O = invalide); buco M1'' residuo sul bootstrap main
+(M-65.3); vecchie regole restano armate (KH64-1/2/3, KS64-2, K-M6,
+KS-S7, KG63-A). La sintesi INTEGRALE va recepita in design65 PRIMA di
+toccare codice.
 
 0. **Leggere WP_SESSION_64 + design64 §4-B (spec-sketch coi rischi) +
    verbali concilio WP-65.**
 1. **LEVA tranche 2 — SOLO footprint** (motivazione CPU CADUTA: P64-3,
-   0,36%; B4 concorde): ordine consigliato **(a) slot_names prefix
+   0,36%; B4 comprimario concorde): ordine **(a) slot_names prefix
    (51,6MB)** — consumatori dell'indice = scope-bridge drive_unit +
-   diagnostica + get_defined_vars/compact, tutti FREDDI: forma =
-   prefisso condiviso dall'immagine VM + tail proprio, VIETATO
-   tradurre indici nel run_loop (KH64-2 stop); **(b) fn-Vec prefix
-   (36,0+12,0MB)** SOLO se esiste una forma a costo caldo ZERO —
-   `functions[idx]` è nel dispatch (KH64-1 stop se serve indirection).
-   Obblighi: predizione K4'' su census65 PRIMA dell'A/B; gate PIENO +
-   coppia full stessa-sera; matrice gate64 Klabnik: KE-e stale-id
-   probe DEDICATO nel gate, fixture strict R6.3 con elide>0, P1-a..d
-   NEL gate, run_pair greppa miss+alignhit, conteggio elide pinnato
-   per-unit (KK3'': probe dichiarato assente = gate invalido).
+   diagnostica + get_defined_vars/compact, tutti FREDDI; forma da
+   scegliere in design65 tra prefisso `Rc` NON-growable (P-65.1: mai
+   make_mut, crescita solo live-table/tail) e la forma v2-style di
+   Hoare (il Module NON porta il prefisso, i freddi leggono la copia
+   canonica del VM via &self — dominante se lo sharing per snapshot
+   muore); **PRE-LEVA OBBLIGATORIA M-65.1**: colonna census con la
+   distribuzione delle lunghezze-seed distinte (K-M65.1: se
+   #snapshot>0,5×#unit lo sharing è morto per costruzione ⇒ forma
+   v2-style o stop). VIETATO tradurre indici nel run_loop (KH64-2);
+   probe semantici S-65.3 ($GLOBALS ordine, $$name, get_defined_vars/
+   compact/extract, global bridge, testo warning undef-var);
+   **(b) fn-Vec** SOLO a costo caldo ZERO — `functions[idx]` è nel
+   dispatch (KH64-1/KB65-4: mai prefisso+tail con branch); E-65.3:
+   decomporre pfx_fnvec in entries (~12MB) vs fn_ci (~24MB, hash-index
+   misto NON condivisibile senza forma dedicata — KS65-1: senza forma,
+   canale riquotato a 12MB o ritirato). Obblighi trasversali:
+   predizione K4'' su census65 PRIMA dell'A/B con bande BILATERALI +
+   snapshot auditabile (K-65.3/G-65.1); gate PIENO + coppia full
+   stessa-sera; **matrice gate65 INTEGRALE (K-65.1/KK65-1)**: KE-e
+   stale-id DEDICATO, fixture strict R6.3 con elide>0, P1-a..d
+   INVOCATI dal gate, run_pair greppa miss+alignhit, conteggio elide
+   pinnato per-unit, check pinnati all'out-dir corrente (K-65.4);
+   L-65.2/3: checkpoint mi_collect + tabella per-bin PRIMA/DOPO
+   (banda phys pre-registrata Leijen: full peak −70..−120MB;
+   KL-65.1/2); B-65.2: uc_log ristrutturato (fd OnceLock + buffer,
+   flush FUORI dalle finestre ns) PRIMA del census65; B-65.3: colonne
+   attribuzione lower (lex/parse/lower_proper) nel census65 (KB65-3:
+   senza, il 4,2% va a GAP_TREND come fronte APERTO); G-65.2:
+   self-test log-on/log-off delle finestre ns; M-65.3: check pun
+   esteso al bootstrap main; H-65.1: nome classe nel panic;
+   H-65.2: contratto eseguibile "apply_seed_delta non minta";
+   P-65.4: vocabolario eventi uc_log chiuso con test cargo.
 2. **E6 (cache re-link): ri-quota POST-leva** con soglia su
    `(lower_ns+compile_ns)_dup` (KS64-4) — resta SOSPESA, non chiusa.
 3. **P2 seed signature-only**: invariato (banda ~130-195MB, solo con

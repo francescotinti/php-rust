@@ -506,19 +506,32 @@ output osservabile (il gate lo asserisce):
   di push nella tabella runtime è INVARIATO dalla stub-elision (sentinella
   KE-a); se un futuro cambio di rappresentazione lo toccasse, la voce va
   promossa a divergenza reale con probe.
-- **(vi, WP-64 — probe S-4 Stogov, `wp64-harness/probe64-s4.php`)**
-  Suffisso user di `get_declared_classes` vs oracolo: DIVERGE quando
-  un'unit inclusa dichiara una classe CONDIZIONALE tra due
-  incondizionali. Zend enumera in ordine di DICHIARAZIONE nel sorgente
-  (`Inc1, Ghost, Inc2`); phpr in ordine di REGISTRAZIONE (le
-  incondizionali dell'unit registrano al link PRIMA del body, la
-  condizionale al suo `DeclareClass` ⇒ `Inc1, Inc2, Ghost`).
-  PRE-ESISTENTE alla stub-elision (probe identico a
-  `PHPR_STUB_ELISION=0`) e mai colto dai gate (nessun test enumera a
-  cavallo di un polyfill incluso). Costo di chiusura: registrare le
-  condizionali con slot riservato ma nome pending in ordine posizionale
-  = tocco alla semantica di registrazione — NON aperto senza un
-  workload reale che lo osservi.
+- **(vi, WP-64 — probe S-4 Stogov, `wp64-harness/probe64-s4.php`;
+  razionale emendato dal concilio S-65.1)** Suffisso user di
+  `get_declared_classes` vs oracolo: DIVERGE per OGNI classe
+  condizionale legata fuori ordine di sorgente della compile-unit
+  (non solo "inclusa tra due incondizionali": anche main script,
+  anche classe-in-funzione chiamata tardi). Meccanismo Zend VERO
+  (zend_compile.c 8.5.7): le incondizionali si registrano a compile
+  time (hoisting, r.9381); le CONDIZIONALI entrano comunque a compile
+  time sotto **RTD key** NUL-prefissata (r.9428-9433) = bucket
+  segnaposto in POSIZIONE DI SORGENTE; al bind runtime
+  `zend_bind_class_in_slot → zend_hash_set_bucket_key` (r.1313)
+  ri-chiava il bucket IN PLACE preservando la posizione;
+  `get_declared_classes` salta chiavi NUL e alias. (⚠️ NON è "early
+  binding ritardato": `DECLARE_CLASS_DELAYED` esiste solo con
+  opcache.) phpr registra in ordine di REGISTRAZIONE (incondizionali
+  al link prima del body, condizionale al suo `DeclareClass` ⇒
+  `Inc1, Inc2, Ghost` vs Zend `Inc1, Ghost, Inc2`). PRE-ESISTENTE
+  alla stub-elision (probe identico a `PHPR_STUB_ELISION=0`) e mai
+  colta dai gate. Tripwire che RIAPRE la voce (S-65.2): l'idioma
+  `end(get_declared_classes())` / diff-after-include (loader di
+  plugin, discovery) sceglierebbe la classe SBAGLIATA quando un
+  polyfill condizionale scatta. Costo di chiusura: slot segnaposto
+  posizionale RTD-like = Zend-fedele MA tocca la semantica di
+  registrazione ⇒ KS-S65.3: non si implementa senza riaprire
+  RULEBOOK §4 (il name-check dell'identity arm deve distinguere
+  pending da misaligned, pena falsi fatal).
 
 ## 4. Punti di forza da NON toccare (invarianti verificati byte-identici)
 

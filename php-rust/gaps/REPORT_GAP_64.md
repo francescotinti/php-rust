@@ -25,8 +25,11 @@ attorno, reset DB per ogni run.
 
 - net_tot master **499,9MB** = replica WP-63 alla cifra.
 - Canali O(seed) ritenuti: slotnames_tot 51,6MB + fnvec_tot 36,0MB
-  (+ fnshare 12,0MB) = quota leva WP-65 ~90-100MB counted.
+  (+ fnshare 12,0MB) — **SOPRA la banda pre-registrata [35,70]MB
+  (+25%)**; quota leva WP-65 ONESTA = **64-76MB counted** (E-65.3:
+  fn_ci ~24MB non condivisibile senza forma dedicata).
 - CPU O(seed): map 1,66s + remap 1,15s = **0,36% del full** (canale
-  morto; B4 sample su parità concorde ≈0,08%).
-- Δcoda riconciliata: 639,2MB vs ~623 attesi (+2,6%, ±15%) ⇒
+  morto; B4 sample comprimario concorde, mai cifra autonoma).
+- Δcoda riconciliata: 639,2MB vs ~623 attesi (+2,6%, ±15%) col join
+  per-path depositato (`wp64-harness/coda-join-top40.txt`) ⇒
   **−74,7% SPIEGATO**.
