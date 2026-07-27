@@ -506,6 +506,19 @@ output osservabile (il gate lo asserisce):
   di push nella tabella runtime è INVARIATO dalla stub-elision (sentinella
   KE-a); se un futuro cambio di rappresentazione lo toccasse, la voce va
   promossa a divergenza reale con probe.
+- **(vi, WP-64 — probe S-4 Stogov, `wp64-harness/probe64-s4.php`)**
+  Suffisso user di `get_declared_classes` vs oracolo: DIVERGE quando
+  un'unit inclusa dichiara una classe CONDIZIONALE tra due
+  incondizionali. Zend enumera in ordine di DICHIARAZIONE nel sorgente
+  (`Inc1, Ghost, Inc2`); phpr in ordine di REGISTRAZIONE (le
+  incondizionali dell'unit registrano al link PRIMA del body, la
+  condizionale al suo `DeclareClass` ⇒ `Inc1, Inc2, Ghost`).
+  PRE-ESISTENTE alla stub-elision (probe identico a
+  `PHPR_STUB_ELISION=0`) e mai colto dai gate (nessun test enumera a
+  cavallo di un polyfill incluso). Costo di chiusura: registrare le
+  condizionali con slot riservato ma nome pending in ordine posizionale
+  = tocco alla semantica di registrazione — NON aperto senza un
+  workload reale che lo osservi.
 
 ## 4. Punti di forza da NON toccare (invarianti verificati byte-identici)
 
