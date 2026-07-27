@@ -415,6 +415,26 @@ fn seed_cli_superglobals(
     }
 }
 
+/// WP-67 P-2 (design66-p2 §2, emendamenti M-67.1/M-67.3, sign-off utente
+/// H-67.2 su elsa =1.11.2): per-request arena that OWNS every unit Module
+/// the request touches and lends heap-stable `&'m Module` refs. Replaces
+/// `Box::leak` — a module now survives the request ONLY if the unit cache
+/// (Rc-owned) still holds it. Created by the harness BEFORE the `Vm`, so
+/// the borrow-checker itself enforces drop order Vm → RetainSet (P-67.5):
+/// destructors at VM shutdown run with every parked module still alive.
+/// `FrozenVec::push_get` takes `&self` and the `Rc` pointee is heap-stable
+/// (`StableDeref`), so parking never invalidates previously lent refs.
+pub(crate) struct RetainSet(elsa::FrozenVec<Rc<Module>>);
+
+impl RetainSet {
+    pub(crate) fn new() -> Self {
+        RetainSet(elsa::FrozenVec::new())
+    }
+    fn park(&self, rc: Rc<Module>) -> &Module {
+        self.0.push_get(rc)
+    }
+}
+
 /// [`run_module`] with the caller's lowered HIR retained (`main_hir`), so an
 /// `eval()` in the script compiles against the image (step 57, Phase 1c-2c).
 pub(crate) fn run_module_with_hir<'m>(
@@ -450,7 +470,13 @@ pub(crate) fn run_module_with_hir<'m>(
     // WP-62 M1: new VM = new epoch — unit-cache hits from entries inserted
     // by an earlier VM on this thread are cross-VM (server replay) hits.
     VM_EPOCH.with(|e| e.set(e.get() + 1));
+    // WP-67 P-2 (P-67.5): declared BEFORE `vm` — Rust drops locals in
+    // reverse declaration order, so the Vm (frames/linked_functions/modules
+    // and every user destructor it runs at shutdown) dies FIRST, with all
+    // parked modules still alive. This ordering is load-bearing.
+    let retain = RetainSet::new();
     let mut vm = Vm {
+        retain: &retain,
         module,
         classes: module.classes.iter().map(|c| &**c).collect(),
         class_index: module.class_index.clone(),
@@ -1133,7 +1159,7 @@ pub(crate) fn run_module_with_hir<'m>(
         // template-include leak's address book; dup_bytes is quoted on the
         // v1 counted metric (deep v2 replaces it when it lands).
         {
-            let units: Vec<(Vec<u8>, u64, u64, usize)> =
+            let units: Vec<(Vec<u8>, u64, u64, std::rc::Weak<Module>)> =
                 CENSUS_UNITS.with(|u| u.borrow().clone());
             let mut by: rustc_hash::FxHashMap<&[u8], (u32, u64, u64)> = Default::default();
             // WP-62 M2.1: per-path [tables, stub, fnshare, proper] sums (the
@@ -1180,7 +1206,7 @@ pub(crate) fn run_module_with_hir<'m>(
                 ));
             }
             {
-                let mut top: Vec<(usize, &(Vec<u8>, u64, u64, usize))> =
+                let mut top: Vec<(usize, &(Vec<u8>, u64, u64, std::rc::Weak<Module>))> =
                     units.iter().enumerate().collect();
                 top.sort_by(|a, b| b.1 .2.cmp(&a.1 .2));
                 for (i, (file, bytes, net, _p)) in top.iter().take(24) {
@@ -1288,7 +1314,7 @@ pub(crate) fn run_module_with_hir<'m>(
                         for (k, slot) in cache.iter() {
                             entries += slot.len() as u64;
                             for cu in slot {
-                                bytes += module_census_bytes(cu.module) as u64;
+                                bytes += module_census_bytes(&cu.module) as u64;
                             }
                             *by_path.entry(&k.path[..]).or_insert(0) += 1;
                         }
@@ -1304,7 +1330,7 @@ pub(crate) fn run_module_with_hir<'m>(
                      superseded_paths={superseded_paths} superseded_entries={superseded_entries} \
                      stub_elided_units={} stub_classes_elided={} elide_align_miss={} \
                      elide_align_hit={} miss_dc_base={} miss_dc_remap={} miss_dc_locals={} \
-                     seed_prefix_short={} leaked_modules={} leaked_bytes={}",
+                     seed_prefix_short={} parked_modules={} parked_bytes={}",
                     st.hit_intra,
                     st.hit_cross,
                     st.miss_cold,
@@ -1323,8 +1349,8 @@ pub(crate) fn run_module_with_hir<'m>(
                     st.miss_dc_remap,
                     st.miss_dc_locals,
                     st.seed_prefix_short,
-                    st.leaked_modules,
-                    st.leaked_bytes,
+                    st.parked_modules,
+                    st.parked_bytes,
                 ));
                 // WP-63 B7: finestre ns separate lower vs compile (bordo CPU).
                 let (lns, cns, un) = census_compile_ns_take();
@@ -1488,14 +1514,18 @@ pub(crate) fn run_module_with_hir<'m>(
                 // like (smoke test WP-61: prelude alone is ~0.88MB).
                 let (mut mod_owned, mut fns_priv, mut fns_shared) = (0u64, 0u64, 0u64);
                 let (mut cls_priv, mut cls_shared) = (0u64, 0u64);
-                for (_file, _c, _n, p) in &units {
-                    if *p == 0 || !seen_mod.insert(*p) {
+                // WP-67 P-2: dead modules (request-scoped, evicted) report
+                // as a count — the walk visits only the LIVE retained set.
+                let mut dead_units = 0u64;
+                for (_file, _c, _n, wk) in &units {
+                    let Some(rcm) = wk.upgrade() else {
+                        dead_units += 1;
+                        continue;
+                    };
+                    if !seen_mod.insert(Rc::as_ptr(&rcm) as usize) {
                         continue;
                     }
-                    // SAFETY(census-only): every registered pointer is a
-                    // `Box::leak`ed &'static Module (leak sites); it is never
-                    // freed for the life of the process.
-                    let m: &'static Module = unsafe { &*(*p as *const Module) };
+                    let m: &Module = &rcm;
                     mod_owned += dclone2(m);
                     walk_func(&mut w, &m.main);
                     for cl in &m.closures {
@@ -1564,7 +1594,7 @@ pub(crate) fn run_module_with_hir<'m>(
                 // NEITHER side).
                 let owned_priv = mod_owned + fns_priv + cls_priv;
                 mc::census_line(&format!(
-                    "tag=modrecon units={} uniq_mods={} mod_owned={mod_owned} fns_priv={fns_priv} fns_shared={fns_shared} cls_priv={cls_priv} cls_shared={cls_shared} owned_priv={owned_priv} net_tot={net_tot} counted_v1_tot={counted_tot} rc_residue={}",
+                    "tag=modrecon units={} uniq_mods={} dead_units={dead_units} mod_owned={mod_owned} fns_priv={fns_priv} fns_shared={fns_shared} cls_priv={cls_priv} cls_shared={cls_shared} owned_priv={owned_priv} net_tot={net_tot} counted_v1_tot={counted_tot} rc_residue={}",
                     units.len(),
                     seen_mod.len(),
                     net_tot.saturating_sub(owned_priv),
@@ -1768,10 +1798,11 @@ pub(super) fn census_vm_park(p: usize) {
 /// so the per-path histogram feeds from the leak sites themselves.
 #[cfg(feature = "mem-census")]
 thread_local! {
-    /// WP-61 P2: rows are (file, counted_v1, net_compile, leaked ptr). The
-    /// pointer is to the `Box::leak`ed module ('static by construction), so
-    /// the dump-time v2 walk can revisit every retained unit address-deduped.
-    static CENSUS_UNITS: std::cell::RefCell<Vec<(Vec<u8>, u64, u64, usize)>> =
+    /// WP-61 P2 (+WP-67 P-2): rows are (file, counted_v1, net_compile,
+    /// Weak<Module>). Modules are no longer leaked — the dump-time v2 walk
+    /// upgrades each Weak, skips (and counts) the dead ones, and dedups by
+    /// address the live ones.
+    static CENSUS_UNITS: std::cell::RefCell<Vec<(Vec<u8>, u64, u64, std::rc::Weak<Module>)>> =
         const { std::cell::RefCell::new(Vec::new()) };
     /// Net allocator delta (Δalloc − Δfree) of the unit's compile window,
     /// parked by the compile site and consumed by [`census_unit_note`] —
@@ -1843,7 +1874,11 @@ thread_local! {
 }
 
 #[cfg(feature = "mem-census")]
-fn census_unit_note(m: &'static Module) {
+fn census_unit_note(rc: &Rc<Module>) {
+    // WP-67 P-2: the registry holds a Weak — modules can now DIE (request
+    // end, cache eviction); the dump-time walk upgrades and skips the dead
+    // (counting them), and the old `unsafe { &* }` deref is GONE.
+    let m: &Module = rc;
     let net = CENSUS_COMPILE_NET.with(|c| c.replace(0));
     // WP-62 M2.1: the compile's prefix/proper split rides in a parallel row
     // (same push order as CENSUS_UNITS — one note per leaked unit).
@@ -1883,7 +1918,7 @@ fn census_unit_note(m: &'static Module) {
             m.file.to_vec(),
             module_census_bytes(m) as u64,
             net,
-            m as *const Module as usize,
+            Rc::downgrade(rc),
         ))
     });
 }
@@ -2416,6 +2451,13 @@ impl GcWhites {
 /// PHP function calls grow `frames` rather than the Rust stack, so deep PHP
 /// recursion cannot overflow the host stack, and a frame is suspendable.
 struct Vm<'m> {
+    /// WP-67 P-2: the per-request module arena (owned by the harness,
+    /// created BEFORE the Vm). [`Vm::park_module`] is THE unique
+    /// constructor of `&'m Module` for unit modules (M-67.1) — every path
+    /// (hit, compile, eval, deferred) transits it; `module` below (main) is
+    /// the one exception: a caller-owned borrow that dies with the request
+    /// (M-67.2 audit: never leaked, never cached).
+    retain: &'m RetainSet,
     module: &'m Module,
     /// The **global class table** (step 57, Phase 1c): every loaded module's
     /// classes flattened into one id space, so `ClassId` is global and an object's
@@ -5164,11 +5206,24 @@ impl<'m> Vm<'m> {
         self.drive_unit(module, Some(origin), Some(caller), elide.map(|l| (&program, l)))
     }
 
+    /// WP-67 P-2 (M-67.1): THE unique constructor of `&'m Module` for unit
+    /// modules — hit, compile, eval and deferred paths all transit here.
+    /// K-M67.2: callers own the `Rc` (the cache clones on get); never lend
+    /// out of the cache's `RefCell` borrow. The parked clone keeps the
+    /// module alive for the whole request even if a ways-eviction or an
+    /// fp-replace drops the cache's own `Rc` mid-request (H-67.4).
+    fn park_module(&self, rc: Rc<Module>) -> &'m Module {
+        let r: &'m RetainSet = self.retain;
+        r.park(rc)
+    }
+
     /// Link a freshly-compiled `eval`/`include` unit into the running VM and drive
     /// its `main` to completion (step 57). Shared by [`Self::run_eval`] and
     /// [`Self::run_include`]. Relocates the unit's compile-time class ids into the
     /// global table (Phase 1c-2b), offsets its static-cell ids past the live range,
-    /// leaks it so its `&'m` bytecode outlives the call, appends its genuinely-new
+    /// PARKS it in the per-request [`RetainSet`] so its `&'m` bytecode outlives
+    /// the call (WP-67 P-2 — no longer leaked: the module dies with the request
+    /// unless the unit cache retains it), appends its genuinely-new
     /// classes (so they stay visible afterwards) and links its new user functions
     /// (Phase 1c-2a/2). `eval_origin` marks the pushed frame as an `eval()` unit for
     /// backtraces; `None` for an `include` (its frame is the real file). Returns the
@@ -5205,18 +5260,21 @@ impl<'m> Vm<'m> {
             let mcb = module_census_bytes(&module);
             php_types::memcensus::alloc(php_types::memcensus::CH_UNIT, mcb);
             php_types::memcensus::unit_slack(module_slack_bytes(&module) as u64);
-            // WP-67 B-67.2: direct leak accounting — evals pass here and
-            // never reach the uc_log taxonomy.
-            uc_stat(|s| s.leaked_bytes += mcb as u64);
+            // WP-67 B-67.2: direct park accounting (pre-P-2: leak) — evals
+            // pass here and never reach the uc_log taxonomy.
+            uc_stat(|s| s.parked_bytes += mcb as u64);
         }
-        uc_stat(|s| s.leaked_modules += 1);
-        let leaked: &'static Module = Box::leak(Box::new(module));
+        uc_stat(|s| s.parked_modules += 1);
+        let rc = Rc::new(module);
         #[cfg(feature = "mem-census")]
-        census_unit_note(leaked);
+        census_unit_note(&rc);
+        // WP-67 P-2: park, don't leak — the eval/deferred unit dies with the
+        // request (design66-p2 §2: fine leak classe (ii)).
+        let parked: &'m Module = self.park_module(rc);
         // B-65.2: boundary flush (covers the eval/deferred alignhit events);
         // every timed window of this unit is closed here.
         uc_log_flush();
-        self.run_linked(leaked, &new_locals, eval_origin, scope_bridge, remap_base)
+        self.run_linked(parked, &new_locals, eval_origin, scope_bridge, remap_base)
     }
 
     /// Build the unit-local -> global class-id remap: a name already in the
@@ -6016,9 +6074,9 @@ impl<'m> Vm<'m> {
                 // baked seed references are covered by the fingerprint match.
                 let remap_base = (self.classes.len(), self.statics.len());
                 let (remap, locals) = if cu.module.elided.is_some() {
-                    self.unit_class_remap_retained(cu.module)
+                    self.unit_class_remap_retained(&cu.module)
                 } else {
-                    self.unit_class_remap(cu.module)
+                    self.unit_class_remap(&cu.module)
                 };
                 // WP-64 P-1 (Pedersen): the append base is checked
                 // EXPLICITLY — with an empty proper set the remap comparison
@@ -6052,7 +6110,12 @@ impl<'m> Vm<'m> {
                     // linked run has not started.
                     uc_log_flush();
                     let caller = self.frames.len() - 1;
-                    let ret = self.run_linked(cu.module, &locals, None, Some(caller), remap_base)?;
+                    // WP-67 P-2 (K-M67.2/H-67.4): the hit CLONES the Rc out
+                    // of the cache (unit_cache_get already cloned the entry)
+                    // and PARKS it — an eviction mid-request cannot drop a
+                    // module under a live frame.
+                    let parked = self.park_module(cu.module);
+                    let ret = self.run_linked(parked, &locals, None, Some(caller), remap_base)?;
                     return Ok(if matches!(ret, Zval::Null) { Zval::Long(1) } else { ret });
                 }
                 // WP-65 M-65.2: attribute the first failing leg — the `base`
@@ -6214,12 +6277,15 @@ impl<'m> Vm<'m> {
             php_types::memcensus::unit_slack(module_slack_bytes(&module) as u64);
             // WP-67 B-67.2: direct leak accounting — the never-published
             // impure includes land here (15/request on wpdev, P66-R4).
-            uc_stat(|s| s.leaked_bytes += mcb as u64);
+            uc_stat(|s| s.parked_bytes += mcb as u64);
         }
-        uc_stat(|s| s.leaked_modules += 1);
-        let leaked: &'static Module = Box::leak(Box::new(module));
+        uc_stat(|s| s.parked_modules += 1);
+        // WP-67 P-2: the cache OWNS (Rc) — a superseded/evicted entry now
+        // DROPS its module (fine leak classe (i)); the request keeps its own
+        // parked clone alive via the RetainSet.
+        let rc = Rc::new(module);
         #[cfg(feature = "mem-census")]
-        census_unit_note(leaked);
+        census_unit_note(&rc);
         if pure && self.main_hir.is_some() {
             if let Some(uk) = unit_key {
                 unit_cache_put(
@@ -6231,12 +6297,13 @@ impl<'m> Vm<'m> {
                         class_remap,
                         new_locals: new_locals.clone(),
                         seed_delta: Rc::clone(&seed_delta),
-                        module: leaked,
+                        module: Rc::clone(&rc),
                         owner_epoch: VM_EPOCH.with(|e| e.get()),
                     },
                 );
             }
         }
+        let parked: &'m Module = self.park_module(rc);
         // B-65.2: boundary flush — compile/remap windows are closed, the
         // linked run has not started (no timed window contains this I/O).
         uc_log_flush();
@@ -6246,7 +6313,7 @@ impl<'m> Vm<'m> {
         // drive_unit by aliasing the unit frame's named slots to the includer's
         // cells (see `scope_bridge` there).
         let caller = self.frames.len() - 1;
-        let ret = self.run_linked(leaked, &new_locals, None, Some(caller), (reserved_base, static_off))?;
+        let ret = self.run_linked(parked, &new_locals, None, Some(caller), (reserved_base, static_off))?;
         // A file with no top-level `return` yields int(1); an explicit return passes
         // through (a literal `return null;` is the accepted edge that also yields 1).
         Ok(if matches!(ret, Zval::Null) { Zval::Long(1) } else { ret })
@@ -14271,7 +14338,11 @@ struct CachedUnit {
     class_remap: Vec<ClassId>,
     new_locals: Vec<usize>,
     seed_delta: Rc<SeedDelta>,
-    module: &'static Module,
+    /// WP-67 P-2: the cache OWNS the module. A superseded (fp_replaced) or
+    /// ways-evicted entry drops it for real — the running request stays
+    /// safe because every hit PARKS its own clone in the RetainSet before
+    /// lending `&'m` (K-M67.2/H-67.4).
+    module: Rc<Module>,
     /// WP-62 M1 (Pedersen P3): [`VM_EPOCH`] of the VM that inserted the
     /// entry — a later hit from the same epoch is an intra-VM re-include,
     /// from a newer epoch a cross-VM (server replay) hit. The two boundaries
@@ -14368,11 +14439,11 @@ struct UcStats {
     /// leak sites — never-published impure includes AND evals, the latter
     /// invisible to the uc_log taxonomy. The P-2 de-leak metric reads THIS,
     /// not the miss events (KB67-1: no axum band with leaked bytes ≠ 0 at
-    /// steady state). `leaked_bytes` is census-only (deep module walk).
-    leaked_modules: u64,
+    /// steady state). `parked_bytes` is census-only (deep module walk).
+    parked_modules: u64,
     // Written on parity builds too (cheap), read only by the census dump.
     #[cfg_attr(not(feature = "mem-census"), allow(dead_code))]
-    leaked_bytes: u64,
+    parked_bytes: u64,
 }
 
 impl UcStats {
@@ -14395,8 +14466,8 @@ impl UcStats {
         miss_dc_remap: 0,
         miss_dc_locals: 0,
         seed_prefix_short: 0,
-        leaked_modules: 0,
-        leaked_bytes: 0,
+        parked_modules: 0,
+        parked_bytes: 0,
     };
 }
 
