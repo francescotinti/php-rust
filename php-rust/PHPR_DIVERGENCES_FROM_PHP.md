@@ -542,7 +542,13 @@ output osservabile (il gate lo asserisce):
   (`_GET`,`_POST`,…); (b) enumerazione `$GLOBALS`: un nome creato via
   scrittura esplicita `$GLOBALS['x']=…` compare in TESTA invece che in
   ordine d'inserzione, gli slot mai definiti compaiono con NULL (Zend
-  li omette) e compare `_SESSION`; (c) `echo $mai_definita;` a
+  li omette) e compare `_SESSION` — ⚠️ meccanismo (S-66.2, Stogov):
+  non è l'enumerazione, è la PROMOZIONE `make_cell` nel bridge
+  caller==0 (ogni slot Undef del main diventa cella Null al primo
+  include a global scope) ⇒ dopo un include anche
+  `array_key_exists('x',$GLOBALS)` e `count($GLOBALS)` mentono su
+  nomi MAI definiti (idiomi plugin-guard a rischio); (c)
+  `echo $mai_definita;` a
   toplevel del main CLI NON emette il warning "Undefined variable"
   (l'oracle sì). Bordo reale per i temi WP (template che ispezionano
   lo scope); da chiudere con un fronte scope-hygiene dedicato, non

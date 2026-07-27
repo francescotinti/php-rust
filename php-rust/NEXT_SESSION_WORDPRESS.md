@@ -1,4 +1,4 @@
-# Rotta WORDPRESS-FIRST — WP-track (dopo WP-65: ⚡ LEVA TRANCHE 2 slot_names v2-style SPEDITA — counted −51,63MB alla cifra (KS65-3: slotnames_tot 51,6MB→0), CPU leva −0,21% su coppia build-adiacente, peak full ~1,98-2,03GB, TRE coppie full 88 BYTE-ID ×2, gate65 matrice INTEGRALE verde; compile-side counted cumulato −77,3% da WP-62; G3: terza coppia media 3,01× ⇒ tre coppie {2,98·3,01·3,01} in banda; stash phpr-wp65 778f8ead…)
+# Rotta WORDPRESS-FIRST — WP-track (dopo WP-65: ⚡ LEVA slot_names v2-style SPEDITA, canale fn RITIRATO (KS65-1) — counted −51,63MB alla cifra (KS65-3: slotnames_tot 51,6MB→0; claim canonico 51.626.653 B tail incluso), CPU leva −0,21% su coppia build-adiacente ("compatibile con zero", KG66-1), peak full ~1,98-2,03GB (coerente col counted ×1,0-1,17; Δcommitted per-bin −60,6MB noise-free), TRE coppie full 88 BYTE-ID ×2, gate65 matrice INTEGRALE verde; compile-side counted cumulato −77,3% da WP-62; G3: riferimento 3,0× (mediana 3,01, n=3); stash phpr-wp65 778f8ead…)
 
 > ⚡ **WP-65 (2026-07-27 pomeriggio, `ad15ada`→`8a03d6e`)** — sintesi a
 > 9 recepita INTEGRALE in `wp65-harness/design65.md`; **PRIMO ATTO =
@@ -20,12 +20,15 @@
 > · ORM 3E/13F · hk 0E/0F · reverse 2F. **Verdetti**: KS65-3 residuo 0
 > ESATTO · P65-C −51,63MB DENTRO [40,62] · KL-65.1 63,3%≥60% (slack non
 > migrato) · P65-D: coppia ADIACENTE −51,8MB ≈ counted ×1,00 (vs stash
-> {−86,−16} = rumore ±35MB) · **P65-E bordo eseguito e chiuso: run54
-> build-adiacenti −0,21% = costo leva ZERO; il +1,2-2,2% vs stash è
+> {−86,−16} = range 70MB, n=3 — mai banda) · **P65-E bordo eseguito e
+> chiuso: run54 build-adiacenti −0,21% = "compatibile con zero, spread
+> di classe non caratterizzato" (KG66-1); il +1,2-2,2% vs stash è
 > spread build-vs-stash (classe run51)**. §3.8(vii) catalogata (scope
 > S-65.3 pre-esistenti). ⭐⭐ la coppia build-adiacente è l'unico giudice
-> del costo di una leva; ⭐⭐ outlined = misurabile nel sample; ⭐⭐ peak
-> di coppia singola vs stash: rumore ±35MB.
+> del costo di una leva (con self-pair A-A′ prima di citare cifre <1% —
+> B-66.1); ⭐⭐ outlined = misurabile nel sample; ⭐⭐ peak di coppia
+> singola vs stash: range 70MB — citare dalla coppia adiacente o dal
+> Δcommitted per-bin del checkpoint.
 > **Storia: `sessions/WP_SESSION_65.md`. WP-64:
 > `sessions/WP_SESSION_64.md`.**
 
@@ -287,20 +290,53 @@ safe-only, TUTTE le fasi, no-revert. Laravel POSTICIPATA a valle.
 Stato WP-65: leva tranche 2 spedita e chiusa sul metro (dettaglio:
 `sessions/WP_SESSION_65.md` + `wp65-harness/design65.md` §8).
 
-⚖️ **CONCILIO DI CHIUSURA WP-65: verbali in
-`wp66-harness/COUNCIL_WP66_REVIEWS.md` — VINCOLANTI per design66**
-(recepire INTEGRALI prima di toccare codice).
+⚖️ **CONCILIO DI CHIUSURA WP-65 ESEGUITO A 9 SEDIE (2026-07-27 sera:
+la LEVA regge 9/9 nel merito — codice verificato riga per riga da
+Hoare/Matsakis/Stogov, numeri ricontati alla cifra da Hejlsberg/
+Leijen; il REPORT è stato emendato d'ufficio in sessione: "✓"→
+"misurato" per KK66-1 (pre-immagine snapshot non conservata), "costo
+zero"→"compatibile con zero" KG66-1, "±35MB"→range, "×1,00"→
+"×1,0-1,17 + Δcommitted −60,6MB", B4 2/3/0, G3 forma mediana).
+Verbali integrali + sintesi in `wp66-harness/COUNCIL_WP66_REVIEWS.md`
+— VINCOLANTI per design66, recepire INTEGRALI prima di toccare
+codice.** DEBITI D'APERTURA WP-66 (dalla sintesi): (1) L-66.1 fuori-
+bin master +88,5MB tra census65/65b da attribuire (vmmap vs
+Σcommitted) — PRIMO ATTO census; (2) degrado silenzioso in release:
+assert `seed_slots ≤ seed.len()` DENTRO gli helper (H-66.1/S-66.3) +
+contatore `seed_prefix_short` nel vocabolario con fatal su parità
+(M-66.1/P-66.2) + fix desync get_defined_vars (H-66.2) + debug_assert
+tail∩seed=∅ (M-66.2); (3) gate a VERDETTO MACCHINA (K-66.3: contatore
+FAIL, done solo a zero ✗, hk/reverse asseriti; K-66.4: mai auto-pin
+baseline, provenienza registrata); (4) K-66.1 snapshot predizioni =
+COPIA conservata (file separato dai verdetti), mai solo sha256;
+(5) regola di misura permanente (Gregg d/K-66.2/B-66.1): coppia
+build-adiacente + self-pair A-A′ prima di cifre <1%, bande vs stash
+mai <±2%, letto pinnato verbatim + formula di scaling (K-66.5/G-66.3);
+(6) P-66.1 design65 §4.3 emendata (DUE punti di crescita seed_globals)
++ S-66.2 §3.8(vii)(b) riscritta (meccanismo make_cell) + S-66.1
+sem-oracle.diff.expected PINNATO; (7) B-66.x residuo lower contato
+(tag=lower_partial) + E-66.2 colonna per-path (lower+compile)_ns per
+E6 (KS66-1: sospesa finché non misurata).
 
 1. **Front-end axum (K-64 traccia 2, ora prima in coda)**: primo atto
    **KS-P1** = replay wpdev sul binario di parità CORRENTE (phpr-wp65:
    hit_cross>0 + risposta-2 byte-id + fp-seq identica); **P-2 de-leak
-   Module = PREREQUISITO**; KS-P2 breakdown bytes shutdown (il prefisso
-   canonico seed_globals si conta UNA volta — P-65.3) + KL4/KL-64.2
-   bytes-bounded per-worker; KS-S8; **M-65.2 letto server**: sul CLI
-   full miss_dc=0 — la disaggregazione base/remap/locals (armata) dice
-   il ceiling autoload-in-lowering SOLO sul workload server. KS-P65.2:
-   GIÀ soddisfatto (P1-a..d rigiocata in gate65 sul binario tranche-2,
-   hit_cross=2).
+   Module = MINI-DESIGN PROPRIO (M-66.4: ownership Frame/
+   linked_functions, sentinelle drop-order, verbale lifetime helper
+   H-66.3) e PREREQUISITO**; la unit cache è PER-THREAD (Rc ⇒ !Send —
+   M-66.3/H-66.4: footprint ×N worker in KS-P2, nessun Rc→Arc
+   implicito, K-M66.2); KS-P2 breakdown bytes shutdown (prefisso
+   canonico contato UNA volta — P-65.3) + KL-64.2/L-66.3 per-worker a
+   N={1,100,1000} richieste; KS-S8; **scope-hygiene PRIMA o DENTRO il
+   fronte (Stogov): KS-S66.1 = il bleed cross-request di $GLOBALS è il
+   fallimento più probabile — batteria probe per-richiesta S-66.4
+   pre-registrata**; B-66.2 contatori compile-side PIATTI al warm-up;
+   B-66.3 sample sotto carico (helper ≤0,5%, KB66-2); H-66.5 unit_fp
+   ri-misurato sul server (KH66-3); G-66.5 coppia log-off/on sul
+   workload server prima di ogni claim ns; **M-65.2 letto server**
+   (miss_dc_base = ceiling autoload; CLI miss_dc=0). KS-P65.2: GIÀ
+   soddisfatto (P1-a..d rigiocata in gate65, hit_cross=2) — sul
+   fronte axum si rigioca comunque (perimetro -S ≠ concorrenza).
 2. **E6 ri-quota POST-leva (KS64-4, resta SOSPESA)**: dati pronti in
    census65b (unitsum2: dup_units=2410, dup_net=108,9MB; soglia su
    `(lower_ns+compile_ns)_dup` — lower ora DECOMPOSTO: read 7,6% /

@@ -59,28 +59,47 @@
 
 ## Verdetti (design65 §8, predizioni K4'' bilaterali + snapshot sha256)
 
-- **KS65-3 ESATTO**: slotnames_tot 51.615.151 → **0** (residuo 0%).
-- **P65-C DENTRO banda [40,62], al centro**: net_tot 499,9→448,3MB =
-  **−51,63MB**; compile-side counted cumulato da WP-62:
-  1.973,3→448,3 = **−77,3%**.
+- ⚖️ Nota del concilio (KK66-1): la pre-immagine dello snapshot
+  sha256 di design65 non è stata conservata ⇒ le etichette "✓" di
+  questa sezione si leggono "MISURATO, dentro banda" (le cifre
+  restano; K-66.1: dal WP-66 lo snapshot è una COPIA del file
+  predizioni, mai solo hash).
+- **KS65-3 MISURATO ESATTO**: slotnames_tot 51.615.151 → **0**
+  (residuo 0%). Claim canonico del canale (E-66.1): **−51.626.653 B
+  = delta net, tail 11.502 B incluso** (la colonna era prefix-only;
+  riconciliazione Hejlsberg a 0,022%).
+- **P65-C MISURATO dentro banda [40,62], al centro**: net_tot
+  499,9→448,3MB = **−51,63MB**; compile-side counted cumulato da
+  WP-62: 1.973,3→448,3 = **−77,3%**.
 - **KL-65.1 non scatta (L-65.3)**: Δcommitted bin 8-64B al checkpoint
   collect = −32,7MB = 63,3% del counted (il resto nei bin medi dei
   fat-pointer array). Slack NON migrato.
-- **P65-D con attribuzione**: coppia ADIACENTE run54 (hyg vs leva)
-  peak **−51,8MB ≈ counted ×1,00**; coppie vs stash {−86,3, −15,8} =
-  rumore peak ±35MB attorno alla stessa media. Peak full ora
-  **~1,98-2,03GB**.
+- **P65-D con attribuzione (etichetta emendata dal concilio)**: peak
+  **coerente col counted (×1,0-1,17)** — coppia ADIACENTE run54
+  −51,8MB; coppie vs stash {−86,3, −15,8} = RANGE osservato 70MB
+  (n=3, confondenti — mai "±35MB" come banda); **evidenza forte =
+  Δcommitted per-bin al checkpoint: −60,56MB = counted ×1,173,
+  noise-free** (bin piccoli −32,7 + bin medi 4096-8192 −29,2, letti
+  dal concilio — Leijen). Peak full ora **~1,98-2,03GB**.
+  ⚠️ DEBITO NUOVO (L-66.1): il fuori-bin del master è cresciuto di
+  +88,5MB tra census65 e 65b (copertura 97,9%→93,3%) — L-65.4 NON
+  saldato, primo atto census di WP-66.
 - **P65-E: bordo eseguito e chiuso** — run52 +2,16% e run53 (ordine
-  invertito) +1,23% vs stash wp64; sample: helper 0,03% (scagionati);
-  **run54 DISCRIMINANTE (build adiacenti): −0,21% ⇒ costo CPU della
-  leva ZERO**; il +1,2-2,2% vs stash = spread build-vs-stash (classe
+  invertito) +1,23% vs stash wp64; sample: helper **2/3/0** campioni
+  (≈0,06%, copertura 3%, advisory — scagionati; correzione fattuale
+  B-66.5 del concilio: il primo verbale scriveva 2/1/0);
+  **run54 DISCRIMINANTE (build adiacenti): −0,21% — "compatibile con
+  zero; spread della classe build-adiacente non caratterizzato (n=1)"
+  (etichetta emendata dal concilio, KG66-1/KK66-2 — mai "zero"
+  secco)**; il +1,2-2,2% vs stash = spread build-vs-stash (classe
   run51 −1,5%, segno opposto — non si cita).
 - **Fail-set: TRE coppie full (run52/53/54) tutte 88 BYTE-ID ×2 =
   run33.**
-- **G3 terza coppia media**: CPU 2,57× (20,89/53,77u) · footprint
-  **3,01×** (382,2/1.150,6MB) — coppie {2,98, 3,01, 3,01}, mediana
-  3,01: KG63-A ha le sue ≥3 coppie, banda consolidabile ~3,0×
-  (ratifica al concilio).
+- **G3 terza coppia media (forma emendata dal concilio, G-66.4)**:
+  CPU 2,57× (20,89/53,77u) · footprint **3,01×** (382,2/1.150,6MB) —
+  coppie {2,98, 3,01, 3,01}: forma lecita = "riferimento 3,0×
+  (mediana 3,01, n=3, range 0,03)"; la banda 2,9-3,2 NON si ritira
+  senza quarta coppia o risoluzione esplicita del criterio ≥3+3.
 - Catalogo: PHPR_DIVERGENCES **§3.8(vii)** (S-65.3: get_defined_vars
   unit-toplevel, ordine $GLOBALS su scritture esplicite, warning
   undef-var muto sul main CLI — pre-esistenti, identiche in wp64).
