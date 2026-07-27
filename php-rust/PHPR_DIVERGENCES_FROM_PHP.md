@@ -532,6 +532,21 @@ output osservabile (il gate lo asserisce):
   registrazione ⇒ KS-S65.3: non si implementa senza riaprire
   RULEBOOK §4 (il name-check dell'identity arm deve distinguere
   pending da misaligned, pena falsi fatal).
+- **(vii, WP-65 — probe S-65.3, `wp65-harness/sem-units/` +
+  `probe65-sem.sh`)** Scope-variabili al toplevel: TRE divergenze
+  PRE-esistenti alla leva slot_names (byte-identiche in phpr-wp64 e
+  nel binario leva; la leva è stata gateata proprio su questo):
+  (a) `get_defined_vars()` a toplevel di unit INCLUSA elenca anche gli
+  slot del main non ancora definiti a quel punto (l'oracle elenca solo
+  i definiti) e OMETTE i superglobals che Zend include a global scope
+  (`_GET`,`_POST`,…); (b) enumerazione `$GLOBALS`: un nome creato via
+  scrittura esplicita `$GLOBALS['x']=…` compare in TESTA invece che in
+  ordine d'inserzione, gli slot mai definiti compaiono con NULL (Zend
+  li omette) e compare `_SESSION`; (c) `echo $mai_definita;` a
+  toplevel del main CLI NON emette il warning "Undefined variable"
+  (l'oracle sì). Bordo reale per i temi WP (template che ispezionano
+  lo scope); da chiudere con un fronte scope-hygiene dedicato, non
+  in coda a una leva footprint.
 
 ## 4. Punti di forza da NON toccare (invarianti verificati byte-identici)
 
