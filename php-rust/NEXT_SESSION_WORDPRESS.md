@@ -1,66 +1,34 @@
-# Rotta WORDPRESS-FIRST — WP-track (dopo WP-66: ⚡ debiti concilio consegnati a delta zero (seed_prefix_short FATAL + H-66.2 + colonne lcpath/lower_partial) · GATE66 = primo gate a VERDETTO MACCHINA, PASS fails=0 · fronte server ISTRUITO su SAPI -S sequenziale: KS-P1 replay wpdev = parità di risposta BYTE-ID ×10 + steady-state R3..R10 fp-stabile (letto post-hoc, K-67.6) MA verdetto macchina del probe FAIL sui bordi P66-R3/R4 (KK67-1) e 🔴 SCOPERTA: 15 unit impure (autoload-in-lowering ⇒ pure=false ⇒ MAI pubblicate) = 15 compile+Box::leak A OGNI RICHIESTA ⇒ P-2 de-leak è BLOCCO (KS-P66.3); S-66.4 zero bleed osservato · L-66.1 (EMENDATA L-67.1, unità MiB): 65b anomalo = ipotesi-forte outlier (121,8 fuori-bin vs 37,4/33,9; spread phys 89,2 MiB ~5%); Σcommitted metro di lavoro (Δ 1,3 MiB su 2 run); claim phys standing SOSPESI (KL-66.1 per-causa aperto); stash phpr-wp66 5aa60d56…, tree fe33706, full parità 88 BYTE-ID)
+# Rotta WORDPRESS-FIRST — WP-track (dopo WP-67: ⚡ **P-2 DE-LEAK SPEDITA** — Box::leak MORTO sull'include path: RetainSet per-richiesta (elsa =1.11.2, sign-off utente H-67.2) + cache Rc-owned, park = costruttore UNICO di &'m Module (M-67.1), zero unsafe aggiunti e UNO RIMOSSO · GATE67 PASS fails=0 a verdetto macchina (cargo 1647/0, reverse PER NOME) · coppia full PROPRIA + self-pair A-A′ stessa sera (PRIMO protocollo): −1,30% dentro spread A-A′ 1,26% ⇒ costo CPU ≈ ZERO; fail-set 88 BYTE-ID ×3 = run33 · leak-shape: pre-P2 1,62 MiB/richiesta RITENUTI (22 mod: 15 impure+7 eval) → post-P2 pendenza Σcommitted +2,55 KiB/req (soglia 50), dead 1998/2003, Δstubs=0 (KS-P67.3) · quota B-67.1: CPU residua impure ≈21 ms/richiesta (script-loader 8,4+comment 6,1+ProviderRegistry 1,5 = 76%) = la leva WP-68 · rigiochi KS-P1/S-66.4 PASS con verdict-file (SAPI -S sequenziale, worker unico) · 🔴 SCOPERTA S-67.2: divergenza ordering autoload-in-lowering PRE-ESISTENTE sul COLD (oracle: U-top·[autoload]; phpr: [autoload]·U-top) — catalogata PHPR_DIVERGENCES §3 + pinnata nel gate; defer-always chiuderebbe ANCHE questa (prova eseguibile per il concilio WP-68) · reqmark spedito: il marker ha reso VISIBILE il self-traffic WP (cron+loopback) che l'offset assorbiva in silenzio · stash phpr-wp67 c0f5cfff…, tree 2b92c78)
 
-> ⚡ **WP-66 (2026-07-27 sera, `c3c9e38`→`fe33706`+`131f7c0`)** — TUTTI
-> i debiti d'apertura del concilio consegnati (design66 recepimento
-> integrale PRIMA del codice; predizioni committate PRIMA dei letti —
-> K-66.1 primo snapshot=COPIA): tripwire `seed_prefix_short` FATAL in
-> ogni build dentro i helper (K-M5/H2''), get_defined_vars a pairing
-> esplicito, tail∩seed=∅, colonne `lower_partial` + `lcpath/lcsum
-> dup_lc_ns` (E6 sbloccabile sul misurato), S-66.1 diff-oracle
-> PINNATO, gate66 a verdetto macchina (PASS fails=0, hk/reverse
-> ASSERITI). **Fronte axum**: KS-P1 replay wpdev = parità server VERDE
-> (body BYTE-ID, fp-seq steady-state identiche, seed_prefix_short=0,
-> miss_dc=0) — P66-R3 falsificata per referente (load-SET R1≠R2 è
-> transitorio DB di WP; il referente è steady-state R≥3); S-66.4 =
-> ZERO bleed cross-request (KS-S66.1 non scatta sul SAPI). **🔴
-> Scoperta (P66-R4/KB66-3)**: le unit con autoload-in-lowering restano
-> `pure=false` e NON si pubblicano MAI (mod.rs:5617/6172) ⇒ su wpdev
-> **15 compile + 15 Module leakati a ogni richiesta** — P-2 (+
-> cacheabilità unit impure) = BLOCCO del fronte. Mini-design P-2 in
-> `wp66-harness/design66-p2.md` (cache Rc-owned + RetainSet
-> per-richiesta; arena safe ⇒ decisione concilio). **L-66.1 (EMENDATA
-> dal concilio WP-67 — bug di unità L-67.1/2)**: in MiB 65b = 1.807,9
-> phys / 121,8 fuori-bin (93,3%) vs 37,4/33,9 delle altre due run ⇒
-> anomalia = ipotesi-forte outlier (G-67.4); Σcommitted = metro di
-> lavoro (Δ 1,3 MiB su due run, standing alla terza — KL67-1);
-> l'accusa al recount del concilio è RITIRATA (contava in MB
-> decimali, coerente). ⚖️ Il probe KS-P1 ebbe verdetto macchina FAIL
-> (bordi R3/R4): il fronte è ISTRUITO, non "verde" (KK67-1); claim
-> phys standing SOSPESI (KL-66.1 per-causa aperto).
-> **Storia: `sessions/WP_SESSION_66.md`. WP-65:
-> `sessions/WP_SESSION_65.md`.**
-
-> ⚡ (storico) **WP-65 (2026-07-27 pomeriggio, `ad15ada`→`8a03d6e`)** — sintesi a
-> 9 recepita INTEGRALE in `wp65-harness/design65.md`; **PRIMO ATTO =
-> igiene pre-leva (`6619b7a`)**: B-65.2 uc_log BUFFERIZZATO (flush solo
-> ai confini — G-65.2 certificata: finestre ±10% log-on/off, il remap lt
-> passa 4,573s→0,090s: observer-effect WP-64 morto strutturalmente) ·
-> P-65.4 vocabolario eventi chiuso + test cargo · M-65.1 tag=seedlen ·
-> M-65.2 miss_dc disaggregato · M-65.3 pun bootstrap · B-65.3 colonne
-> read/lexparse/lowerhir (lower 34,9s = 7,6%/40,8%/41,2%, coperto
-> 89,6% — KB65-3 saldato) · H-65.1/H-65.2 · L-65.2 exit_collect_mi.
-> **M-65.1 formale: D/U=0,025 ⇒ K-M65.1 non scatta, forma v2-style per
-> dominanza pre-registrata.** **LEVA (`04d559b`)**: `Func.seed_slots` —
-> il {main} eliso cede l'INTERA name-table a `seed_globals` (canonica,
-> append-only, fp-guarded); 9 consumatori censiti (H-65.5), 7 convertiti
-> a helper freddi outlined; indici INTATTI; PHPR_STUB_ELISION=0 = v1.
-> **Gate65 INTEGRALE verde (K-65.1 zero deroghe)**: cargo 1646/0 ·
-> sent65 5/5 (elide per-unit PINNATI, coppia v1-vs-v2 reale) · KE-e ·
-> P1 nel gate hit_cross=2 (P-65.5 ✓) · S-65.3 · corpus 1421 · refl 290
-> · ORM 3E/13F · hk 0E/0F · reverse 2F. **Verdetti**: KS65-3 residuo 0
-> ESATTO · P65-C −51,63MB DENTRO [40,62] · KL-65.1 63,3%≥60% (slack non
-> migrato) · P65-D: coppia ADIACENTE −51,8MB ≈ counted ×1,00 (vs stash
-> {−86,−16} = range 70MB, n=3 — mai banda) · **P65-E bordo eseguito e
-> chiuso: run54 build-adiacenti −0,21% = "compatibile con zero, spread
-> di classe non caratterizzato" (KG66-1); il +1,2-2,2% vs stash è
-> spread build-vs-stash (classe run51)**. §3.8(vii) catalogata (scope
-> S-65.3 pre-esistenti). ⭐⭐ la coppia build-adiacente è l'unico giudice
-> del costo di una leva (con self-pair A-A′ prima di citare cifre <1% —
-> B-66.1); ⭐⭐ outlined = misurabile nel sample; ⭐⭐ peak di coppia
-> singola vs stash: range 70MB — citare dalla coppia adiacente o dal
-> Δcommitted per-bin del checkpoint.
-> **Storia: `sessions/WP_SESSION_65.md`. WP-64:
-> `sessions/WP_SESSION_64.md`.**
+> ⚡ **WP-67 (2026-07-28 notte, `4fe85a1`→`2b92c78` release + `046c961`/
+> `f0f0e72` census/doc)** — sintesi a 9 recepita INTEGRALE in
+> `wp67-harness/design67.md` PRIMA del codice; predizioni committate
+> PRIMA dei letti (34aed31). **Debiti d'apertura a delta zero**:
+> H-67.1 breach leggibile; H-67.3/M-67.6 tripwire tail∩seed VIVO
+> promosso a FATAL in ogni build + test negativo (cargo 1646→1647);
+> E-67.1 finestra `l` depurata + split dup_fp/dup_cold (E6 sbloccata);
+> G-67.1/K-67.5 evento `reqmark` (vocabolario 10→11) — offset+sleep
+> DEPRECATO; B-67.2 contatore diretto parked_modules/bytes; K-67.1/2/3
+> gate hardening (verdict-file, trap-FAIL, reverse PER NOME);
+> L-67.3/G-67.3 analyze-l67.pl (per-causa esatta; sotto swap (a)/(b)
+> opposte ⇒ run senza pressione ancora dovuta, phys standing SOSPESI).
+> **P-2 SPEDITA** (design66-p2 emendato integrale): RetainSet
+> (elsa =1.11.2, sign-off utente) + cache Rc-owned; park_module =
+> costruttore UNICO (M-67.1); hit clone+park (K-M67.2/H-67.4); eval
+> muoiono a fine richiesta; main = borrow del chiamante (M-67.2);
+> census ptr→Weak = UN unsafe RIMOSSO, zero aggiunti (verifica a
+> macchina). GATE67 PASS fails=0; probe67-nk N=1000: pendenza
+> +2,55 KiB/req, dead 1998/2003, Δstubs=0; A/B pre-P2: 1,62 MiB/req
+> ritenuti su wpdev che ora MUOIONO; rigiochi KS-P1/S-66.4 PASS;
+> run55 TRIPLE: CPU ≈ 0 (−1,30% dentro A-A′ 1,26%), 88 BYTE-ID ×3.
+> **🔴 S-67.2**: la fixture ordering-echo ha falsificato il COLD:
+> divergenza autoload-in-lowering PRE-ESISTENTE vs oracle (catalogata
+> + pinnata); la leva impure NON eseguita (scope onesto) — la forma
+> vincolata publish+dep-replay va ripesata contro defer-always
+> (Zend-fedele E purificante) al concilio WP-68, con la quota
+> 21 ms/richiesta sul tavolo.
+> **Storia: `sessions/WP_SESSION_67.md`. WP-66:
+> `sessions/WP_SESSION_66.md`.**
 
 ## 📁 Convenzioni (decisione utente 2026-07-23)
 
@@ -119,9 +87,9 @@
   chiude senza concilio, il PRIMO atto della successiva è convocarlo.
   Modello: `wp62-harness/COUNCIL_WP62_REVIEWS.md`.
 
-## Stato gate per nome (WP-66 `fe33706`: **GATE66 a VERDETTO MACCHINA — PASS fails=0** su `wp66-harness/gate-out/` (K-66.3/KK66-3: contatore FAIL, done solo a zero; K-66.4 baseline con provenienza) — cargo **1646/0** · sentinelle 5 assi BYTE-ID · sentinels65 + KS-S6 + **seed_prefix_short=0** · KE-e · P1 hit_cross=2 · S-65.3 + **diff oracle == pinnato S-66.1** · corpus **1421 IDENTICO** · refl **290** · ORM **3E/13F IDENTICO** · **hk 1665 OK ASSERITO** · **reverse 2F ASSERITO**; release = **phpr-wp66 (5aa60d56…, tree `fe33706`)** stash additivo accanto a wp65 (778f8ead…); full-suite parità nuovo binario: 30.472 test 0E/2F/86W/73S, fail-set **88 BYTE-ID = run33** (run singola, nessun claim CPU/peak); KS-P1 server: body byte-id ×10, fp-seq steady-state identiche; census: memgc65/65b invariati + letto l661 in `wp66-harness/census-out/`)
+## Stato gate per nome (WP-67 `2b92c78`: **GATE67 a VERDETTO MACCHINA — PASS fails=0** su `wp67-harness/gate-out/` (K-67.1/2/3: trap-FAIL su uscite premature, cargo tot≥1646, purge log freschi, **reverse PER NOME** con baseline+PROVENANCE in `wp67-harness/gate-baseline/`) — cargo **1647/0** (+1 = test tripwire M-67.6) · sentinelle 5 assi BYTE-ID · sentinels65 + KS-S6 + **seed_prefix_short=0** · KE-e · P1 hit_cross=2 · S-65.3 + diff-oracle pinnato · **fixture gate-ordering (S-67.2) agganciata** · corpus **1421 IDENTICO** · refl **290** · ORM **3E/13F IDENTICO** · **hk 1665 OK** · **reverse 2F PER NOME**; release = **phpr-wp67 (c0f5cfff…, tree `2b92c78`)** stash additivo accanto a wp66 (5aa60d56…); catena serale run55 TRIPLE: fail-set **88 BYTE-ID = run33 ×3** (new/old/new′), CPU coppia −1,30% DENTRO spread A-A′ 1,26% ⇒ ≈0; probe verdict-file: probe67-census PASS · probe67-nk post-p2 PASS · probe67-ksp1 PASS · S-66.4 PASS; census: phpr-memgc66 (cea61455, PRE-P2) + phpr-memgc67 (95d07638, POST-P2); ⚠️ /private/tmp/wp11-gates dopo un reboot va ripristinato dai tarball `wp9-harness/gates/`)
 
-## (storico) Stato gate WP-65 (`8a03d6e`: **gate65 MATRICE INTEGRALE VERDE** su `wp65-harness/gate-out/` — cargo **1646/0** (incl. test vocabolario P-65.4) · sentinelle 5 assi **BYTE-ID** · sentinelle65 5/5 (elide per-unit PINNATI in `sent-baseline/`, coppia v1-vs-v2 REALE, miss ancorati, KS-S6 per-fixture) · **KE-e stale-id DEDICATO verde** · **P1-a..d NEL gate, hit_cross=2** (rigiocata post-leva, P-65.5) · S-65.3 byte-id a wp64 · corpus **1421 IDENTICO** · refl **290 IDENTICO** · ORM 3484 **3E/13F IDENTICO** · hk 1665 **0E/0F** · reverse-order **2F GEMELLO**; release = **phpr-wp65 (778f8ead…, tree `8a03d6e`)** (stash additivo; wp64 522e0f61… e wp63 1666e1b4… accanto); **TRE coppie full stessa-sera (run52/53/54): fail-set 88 BYTE-ID ×2 in TUTTE = run33**; CPU leva −0,21% (coppia build-adiacente hyg65 b93a6e91 vs leva), peak coppia adiacente −51,8MB; census: phpr-memgc65 (e2a2016a, pre-leva) / phpr-memgc65b (02b7d9d2, post-leva); ultima verifica gate22 integrale: `60c7e04`)
+## (storico) Stato gate WP-66 (`fe33706`: GATE66 PASS fails=0 — cargo 1646/0 · corpus 1421 · refl 290 · ORM 3E/13F · hk 1665 OK asserito · reverse 2F a conteggio; stash phpr-wp66 5aa60d56…; dettaglio: `sessions/WP_SESSION_66.md`)
 
 - Gate56 verde (2026-07-26, tree `0943f58`): corpus **1421 IDENTICO** per
   nome (baseline = `wp55-harness/gate-out/corpus.fails`) · **refl 290
@@ -303,6 +271,25 @@
 #  replay/ (uc.log, seg*.log, fpseq*), s4-out/, census-out/
 #  (memcensus66-l661.txt, l661-vmmap-*.txt, l661-attribution.txt;
 #  run1 = wrapper, tenuta come lezione). Stash phpr-wp66 (5aa60d56…).
+# WP-67: wp67-harness/{design67.md (recepimento sintesi 9 + §8 verdetti),
+#  predictions67.md (+.locked + copia repo sessions/WP67_PREDICTIONS.md,
+#  commit 34aed31), gate67.sh (K-67.2 trap-FAIL + tot>=1646 + purge;
+#  K-67.3 reverse PER NOME; aggancia fixtures/gate-*.sh),
+#  gate-baseline/{hk-reverse-fails.txt,PROVENANCE}, analyze-l67.pl
+#  (per-causa esatta, unità MiB, dirty/swap separati),
+#  build-memgc66.sh, probe67-census.sh (B-67.1: census server
+#  PER-RICHIESTA via dump per run top-level; segmentazione reqmark),
+#  probe67-nk.sh (P2-a leak-shape N=1000, fixture nk-doc/),
+#  probe67-ksp1.sh (rigioco KS-P1 post-P2, segmenti CLASSIFICATI per
+#  entry-script del reqmark — il self-traffic WP è visibile),
+#  run55-triple.sh (coppia propria + A-A′ nella stessa catena),
+#  droporder/ (sentinelle P-2 pinnate, baseline == oracle),
+#  fixtures/ordering/ (S-67.2: pin divergenza + gate-ordering.sh)};
+#  out: gate-out/ (gate67.verdict PASS), census-out/server/, nk-out/,
+#  ksp1-out/, eve-out/ (run55 new/old/new2). Binari census:
+#  phpr-memgc66 (cea61455, PRE-P2) e phpr-memgc67 (95d07638, POST-P2)
+#  in phpr-mem-target/. Env nuovi: PHPR_MI_COLLECT_REQ=1 (checkpoint
+#  standing per-richiesta, census-only).
 # WP-59: wp59-harness/{design59.md (verdetti Ob.0-3 + gate pre-registrati),
 #  ob0-media.sh,ob0-full.sh (diagnostiche MIMALLOC_SHOW_STATS+vmmap),
 #  build-memgc59.sh,ob1-census59-media.sh,ob1-supervisor.sh (finestre
@@ -317,86 +304,74 @@
 #  funcs,null} (leak template + moltiplicatore compile-side).
 ```
 
-## 🎯 PROSSIMO LAVORO — WP-67: P-2 DE-LEAK (blocco del fronte axum) + cacheabilità unit impure + E6 ri-quota
+## 🎯 PROSSIMO LAVORO — WP-68: cacheabilità unit impure (forma DA RIDECIDERE al concilio con la prova S-67.2) + fronte axum multi-worker + code L-67
 
 **Rotta (utente 2026-07-24)**: `FOOTPRINT_CPU_ROADMAP.md` — footprint-first,
 safe-only, TUTTE le fasi, no-revert. Laravel POSTICIPATA a valle.
-Stato WP-66: debiti consegnati, fronte axum aperto e FERMO su P-2
-(dettaglio: `sessions/WP_SESSION_66.md` + `wp66-harness/design66.md` §8).
+Stato WP-67: P-2 SPEDITA e verificata (dettaglio:
+`sessions/WP_SESSION_67.md` + `wp67-harness/design67.md` §8).
 
-⚖️ **CONCILIO DI CHIUSURA WP-66: verbali in
-`wp67-harness/COUNCIL_WP67_REVIEWS.md` — VINCOLANTI per design67,
+⚖️ **CONCILIO DI CHIUSURA WP-67: verbali in
+`wp68-harness/COUNCIL_WP68_REVIEWS.md` — VINCOLANTI per design68,
 recepire INTEGRALI prima di toccare codice.**
 
-1. **P-2 de-leak Module (BLOCCO, KS-P66.3 materializzato)**: eseguire
-   `wp66-harness/design66-p2.md` (cache Rc-owned + RetainSet
-   per-richiesta; decisione concilio sull'arena safe — elsa/typed-arena
-   vs alternative, KH66-2: zero unsafe nostro); sentinelle drop-order
-   PINNATE prima; coppia full PROPRIA (tocca l'include path); criteri
-   d'accettazione §6 del mini-design (KL-64.2 bytes bounded a
-   N={1,100,1000}).
-2. **Cacheabilità unit impure (scoperta WP-66) — FORMA VINCOLATA DAL
-   CONCILIO (sintesi punto 2: le due forme originarie RESPINTE)**: le
-   unit con autoload-in-lowering restano `pure=false` e non si
-   pubblicano MAI (15 compile+leak/richiesta su wpdev: script-loader,
-   pomo/*, Requests/*, ai-client/*…). Forma ammessa: **publish keyed
-   sul fp d'INGRESSO + lista ordinata delle dipendenze autoload
-   nell'entry; al hit replay delle dipendenze via include/autoload
-   normale, POI double-check** (E-67.2/S-67.1/P-67.4). Fixture
-   obbligatorie: ordering-echo 3 lati (S-67.2), figlio editato ⇒ MISS
-   (P-67.4); criterio di successo = le 15 diventano hit_cross
-   (KB67-2), catena impura ⇒ never-published (KS67-1). Quota in
-   bytes/ms-per-richiesta dal census server memgc66 (B-67.1) PRIMA di
-   disegnare.
-3. **E6 ri-quota (KS64-4/KS66-1)**: colonne `lcpath/lcsum dup_lc_ns`
-   ARMATE in fe33706 — serve solo un census run full; soglia in forma
-   E-66.2 (riapertura SOLO se misurato_dup ≥ ~2× costo stimato di
-   invalidazione+retention; dup_net 108,9MB = ceiling).
-4. **Axum vero (multi-worker) SOLO dopo P-2**: KS-P2 breakdown
-   per-worker (cache PER-THREAD ×N — M-66.3), L-66.3 metro
-   {1,100,1000}, batteria S-66.4 punti (iv) session e (vi)
-   cross-worker, B-66.3 sample sotto carico, H-66.5 unit_fp, G-66.5
-   coppia log-off/on server.
-5. **Contabilità L-66.1: RISOLTA dal concilio (L-67.1/L-67.2)** — era
-   un bug di UNITÀ della sessione (MB decimali vs MiB), accusa
-   ritirata; resta da consegnare L-67.3 (attribuzione per-causa lato
-   mimalloc, ≤100% per costruzione) e la terza run del metro
-   Σcommitted (KL67-1, gratis con la baseline P-2).
-6. **G3**: invariato — quarta coppia o risoluzione criterio ≥3+3
+1. **Cacheabilità unit impure — LA DECISIONE DI FORMA VA RIAPERTA AL
+   CONCILIO** con la prova eseguibile S-67.2 sul tavolo
+   (`wp67-harness/fixtures/ordering/`): (a) forma WP-67 vincolata
+   publish+dep-list+dep-replay (E-67.2/S-67.1) = hit==cold coerente ma
+   ENTRAMBI ≠ Zend nell'ordering (divergenza pre-esistente resta); (b)
+   forma defer-always (Stogov: "in Zend è ESATTAMENTE il caso
+   cachato") = late binding fedele ⇒ unit PURE per costruzione, chiude
+   ANCHE la divergenza cold — da valutare costo (defer di ogni extends
+   non-seed) e rischi (ordine di dichiarazione). Quota sul tavolo:
+   **21 ms/richiesta CPU + niente più leak** (il leak è già morto con
+   P-2). Criterio di successo INVARIATO: le 15 diventano hit_cross
+   (KB67-2), mai "publish avvenuta"; fixture: ordering-echo (pinnata),
+   P-67.4 figlio-editato⇒MISS (si arma con la leva), catena impura ⇒
+   never-published (KS67-1/KS-S67.1).
+2. **Fronte axum vero (multi-worker) — ora SBLOCCATO da P-2**: KS-P2
+   breakdown per-worker (cache PER-THREAD ×N — M-66.3), L-66.3 metro
+   {1,100,1000} per-worker, batteria S-67.3 confini server
+   (pre-registrata in design67 §5: session, POST/FILES/COOKIE,
+   header/setcookie reset, ob, **static function-vars su unit cacheata
+   KS-S67.2**, define/ini, shutdown, cross-worker), S-67.4 g2′
+   include-vuoto, P-67.2 seed-materializzazione, S-67.5 set route
+   minimo {/, permalink, ?s=, 404, /wp-json/wp/v2/posts, wp-login GET,
+   POST commento}, B-67.4 replay multi-URL con plateau ways (KB67-3),
+   B-66.3 sample sotto carico, G-66.5 coppia log-off/on server.
+3. **Code L-67**: la colonna per-causa PULITA vuole una census run
+   SENZA pressione di swap (G-67.4: swap loggato pre-run; su l661 le
+   cause (a)/(b) si gonfiano opposte) — claim phys standing SOSPESI
+   finché non c'è; KL67-1 terza run del metro Σcommitted (attesa:
+   post-P-2 il counted unit cala — dichiarare l'atteso dal Δcounted
+   PRIMA della run).
+4. **E6 ri-quota**: colonne DEPURATE (E-67.1: dup_fp/dup_cold split)
+   ARMATE in 2b92c78 — serve un census full; soglia in forma E-66.2;
+   KS67-2: mai su dup_lc_ns non depurato.
+5. **G3**: invariato — quarta coppia media o risoluzione criterio ≥3+3
    (G-66.4). **P2 seed signature-only**: invariato (Gregg R6).
 
-— (Il blocco ⚖️ WP-65 e il programma WP-66 originario sono superati:
-storia in `sessions/WP_SESSION_65.md`/`WP_SESSION_66.md`; la sintesi
-del concilio WP-65 resta in `wp66-harness/COUNCIL_WP66_REVIEWS.md`.)
-
-**VETI del concilio (restano vincolanti)**: invariati da WP-64 (mai
+**VETI del concilio (restano vincolanti)**: invariati da WP-64/65
+(NEXT_SESSION storico + `sessions/WP_SESSION_64.md`: mai
 MIMALLOC_PURGE_DELAY nei giudici; mai maxrss come giudice; nessun
-pool/freelist; nessun reset per-test PHPUnit; mai mi_heap_destroy;
-mi_collect(true) solo census; malloc_history cieco su mimalloc =
-IOAccelerator; mai MIMALLOC_SHOW_STATS su run con fail-set; DB reset
-nei probe; interning/immutable-literal con le loro condizioni).
-- **NON riproporre (nuovi WP-65)**: **bande CPU di coppia più strette
-  dello spread storico** (±1,5-2% build-vs-stash documentato: run51
-  −1,5%, run52 +2,16% STESSA classe — il giudice del costo di una leva
-  è la coppia BUILD-ADIACENTE, run54 −0,21%); **giudizi peak da coppia
-  singola vs stash** (rumore ±35MB misurato: {−86,−16,−52} sulla
-  stessa leva — peak citabile dalla coppia adiacente o dal checkpoint
-  exit_collect_mi); **forma Rc-prefix per slot_names** (dominata dalla
-  v2-style: zero duplicazione, zero superficie di mutazione — letto
-  M-65.1 D/U=0,025 depositato, la dominanza è registrata ex-ante in
-  design65 §4.2).
-- **NON riproporre (ereditati WP-63/64)**: leva CPU su map/remap
-  (0,36%, riconfermato 0,37% col doppio strumento); rounding al peak;
-  finestre ns con I/O proprio (ora FATTO STRUTTURALE: uc_log
-  bufferizzato + G-65.2); eventi log con sottostringhe (ora vocabolario
-  CHIUSO con test cargo); baking emit-time; peak-differential; bande
-  NET→PHYS come traduzione; colonne prefixsum a flag ON come
+pool/freelist; interning/immutable-literal con condizioni; ecc.).
+- **NON riproporre (nuovi WP-67)**: **offset+sleep come delimitatore di
+  richiesta** (reqmark spedito: segmentare SEMPRE per marker,
+  classificando i segmenti per entry-script — il self-traffic WP
+  esiste); **tripwire debug-only** (il gate gira `--release`: la forma
+  è FATAL-in-ogni-build + test negativo); **re-lower aggiuntivo**
+  (Hejlsberg c: l'ultima iterazione del retry È il lower a seed
+  stabilizzato); **publish senza dep-replay** (respinta WP-67, salvo
+  ridecisione esplicita del concilio con la prova S-67.2); **cifre
+  <1% senza self-pair A-A′ stessa sera** (ora protocollo eseguito:
+  run55 triple); **phys standing come giudice** (solo Σcommitted,
+  KG67-2).
+- **NON riproporre (ereditati WP-63/64/65)**: bande CPU di coppia più
+  strette dello spread storico; giudizi peak da coppia singola vs
+  stash; forma Rc-prefix per slot_names; leva CPU su map/remap;
+  rounding al peak; eventi log con sottostringhe; baking emit-time;
+  peak-differential; bande NET→PHYS; colonne prefixsum a flag ON come
   attribuzione; riaprire cache re-link senza numeri sopra soglia.
-- **NON riproporre (storici)**: tutti gli item della lista WP-56..62
-  (vedi `sessions/WP_SESSION_64.md` e precedenti — la lista completa
-  resta in vigore: estimatore live×death-avg, arena handle u32, fuso
-  `.=` non-locale, cap reflect 16384, SSO, NaN-boxing, registri 3-4,
-  pool sopra mimalloc, RSS telemetrico come giudice, ecc.).
 
 ## (storico, pre-roadmap) PROSSIMO LAVORO
 
@@ -446,12 +421,13 @@ vivo); misure per-sessione in `gaps/REPORT_GAP_<N>.md`. A ogni chiusura:
 misurare media (user CPU + footprint) e full-suite master-CPU, scrivere
 REPORT_GAP_N (sola sessione N), aggiungere la riga a GAP_TREND, riportare
 il gap all'utente.
-Ultimo stato (WP-63, STUB-ELISION spedita default-ON):
-**media CPU 2,58× (oracle 21,01u / phpr 54,14u — riferimento
-confermato) · footprint media 2,98× (1.170,3/393,3MB, coppia singola:
-variazione STRUTTURALE −30% dal peak 1.611-1.663MB; nuovo riferimento
-~3,0× da confermare G3 ≥3+3) · full: CPU riferimento resta 2,06-2,11×
-(run50 −0,32%), PEAK FISICO 3,896→2,105GB = −46,0%, compile-side
-counted −74,7% · baseline parità phpr-wp63 (1666e1b4…, tre gate pieni
-verdi) · dettaglio: `sessions/WP_SESSION_63.md` +
-`gaps/REPORT_GAP_63.md`, trend: `gaps/GAP_TREND.md`**.
+Ultimo stato (WP-67, P-2 de-leak spedita):
+**media CPU riferimento 2,58× · footprint media ~3,0× (mediana n=3,
+banda 2,9-3,2 aperta su G-66.4) · full: CPU 2,06-2,11× (run55 triple:
+P-2 costo ≈ 0, −1,30% dentro spread A-A′ 1,26%), peak ~1,98-2,03GB
+(riferimento WP-65) · leak server: pre-P2 1,62 MiB/richiesta ritenuti
+→ post-P2 pendenza +2,55 KiB/req (bookkeeping census), dead
+1998/2003 · CPU residua impure ≈21 ms/richiesta (leva WP-68) ·
+baseline parità phpr-wp67 (c0f5cfff…, gate67 PASS fails=0) ·
+dettaglio: `sessions/WP_SESSION_67.md` + `gaps/REPORT_GAP_67.md`,
+trend: `gaps/GAP_TREND.md`**.

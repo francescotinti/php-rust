@@ -67,4 +67,6 @@ confronto interleaved new/old dà phpr −0,5/−1% (rumore/flat).
 gira −9% (23,0→21,0) → il rapporto sale per rumore dell'oracle, non per una
 regressione phpr (2 coppie consistenti: 80,42/21,03 e 80,97/21,02).
 
+| WP-67 | non rimisurato (riferimento resta **2,58×**, G3 **3,0×** mediana n=3) | non rimisurato (riferimento resta ~3,0×; banda 2,9-3,2 aperta — G-66.4) | **P-2 DE-LEAK SPEDITA** (RetainSet elsa =1.11.2 sign-off utente + cache Rc-owned; zero unsafe aggiunti, UNO rimosso): coppia full PROPRIA + **self-pair A-A′ stessa sera (PRIMO protocollo)** — new 777,19u / old 787,45u / new′ 786,95u: delta coppia **−1,30% DENTRO lo spread A-A′ 1,26% ⇒ costo CPU compatibile con ZERO** (nessuna cifra citabile); fail-set **88 BYTE-ID = run33 in TUTTE E TRE**; riferimenti full restano CPU **2,06-2,11×**, peak **~1,98-2,03GB**; leak-shape server: pre-P2 **1,62 MiB/richiesta ritenuti** (22 moduli: 15 impure+7 eval) → post-P2 pendenza Σcommitted **+2,55 KiB/req** (soglia 50), dead_units 1998/2003, Δstubs=0; CPU residua impure ≈**21 ms/richiesta** (quota leva WP-68); GATE67 PASS fails=0 (cargo 1647/0, reverse PER NOME); 🔴 scoperta S-67.2: divergenza ordering autoload-in-lowering PRE-ESISTENTE sul cold (catalogata+pinnata); baseline **phpr-wp67 (c0f5cfff…)** | **1,4×** rif. |
+
 Dettaglio e contesto di ogni riga: `gaps/REPORT_GAP_<N>.md` (per-sessione).
