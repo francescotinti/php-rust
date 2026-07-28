@@ -1331,7 +1331,8 @@ pub(crate) fn run_module_with_hir<'m>(
                      superseded_paths={superseded_paths} superseded_entries={superseded_entries} \
                      stub_elided_units={} stub_classes_elided={} elide_align_miss={} \
                      elide_align_hit={} miss_dc_base={} miss_dc_remap={} miss_dc_locals={} \
-                     seed_prefix_short={} parked_modules={} parked_bytes={}",
+                     seed_prefix_short={} parked_modules={} parked_bytes={} \
+                     defer_relowers={} defer_relower_ns={}",
                     st.hit_intra,
                     st.hit_cross,
                     st.miss_cold,
@@ -1352,6 +1353,8 @@ pub(crate) fn run_module_with_hir<'m>(
                     st.seed_prefix_short,
                     st.parked_modules,
                     st.parked_bytes,
+                    st.defer_relowers,
+                    st.defer_relower_ns,
                 ));
                 // WP-67 P-67.3: the cross-request bounded sets OUTSIDE
                 // cache+RetainSet — the per-worker metric counts them
@@ -5778,6 +5781,11 @@ impl<'m> Vm<'m> {
     /// expression (`expr = true`) the snippet `return`s the instance and the
     /// caller's scope is bridged so constructor arguments see its variables.
     fn run_deferred(&mut self, idx: usize, expr: bool) -> Result<Zval, PhpError> {
+        // WP-68 S-68.4 quota channel: count every DECLARE; time the snippet
+        // re-lower + compile (census builds only) up to the drive.
+        uc_stat(|s| s.defer_relowers += 1);
+        #[cfg(feature = "mem-census")]
+        let defer_t0 = std::time::Instant::now();
         let caller = self.frames.len() - 1;
         let unit = self.frames[caller].module;
         let dd = &unit.deferred[idx];
@@ -5858,6 +5866,8 @@ impl<'m> Vm<'m> {
         };
         #[cfg(feature = "mem-census")]
         netw.close();
+        #[cfg(feature = "mem-census")]
+        uc_stat(|s| s.defer_relower_ns += defer_t0.elapsed().as_nanos() as u64);
         // Bridge the calling frame's scope only for the expression form: its
         // constructor arguments are re-evaluated inside the snippet and must
         // see the caller's variables live.
@@ -14498,6 +14508,13 @@ struct UcStats {
     // Written on parity builds too (cheap), read only by the census dump.
     #[cfg_attr(not(feature = "mem-census"), allow(dead_code))]
     parked_bytes: u64,
+    /// WP-68 S-68.4: DeclareDeferred executions — the defer-always lever's
+    /// per-request cost channel (snippet re-lower + compile in
+    /// `run_deferred`, quota P68-Q). Count on every build; the ns column is
+    /// census-only (an `Instant` pair per DECLARE is not parity-priced).
+    defer_relowers: u64,
+    #[cfg_attr(not(feature = "mem-census"), allow(dead_code))]
+    defer_relower_ns: u64,
 }
 
 impl UcStats {
@@ -14522,6 +14539,8 @@ impl UcStats {
         seed_prefix_short: 0,
         parked_modules: 0,
         parked_bytes: 0,
+        defer_relowers: 0,
+        defer_relower_ns: 0,
     };
 }
 
