@@ -335,10 +335,24 @@ safe-only, TUTTE le fasi, no-revert. Stato WP-69: debiti concilio chiusi,
 fedeltà declare consegnata (dettaglio: `sessions/WP_SESSION_69.md` +
 `wp69-harness/design69.md` §9).
 
-⚖️ **CONCILIO DI CHIUSURA WP-69: verbali in
-`wp70-harness/COUNCIL_WP70_REVIEWS.md` — VINCOLANTI per design70.**
+⚖️ **CONCILIO DI CHIUSURA WP-69 ESEGUITO: verbali INTEGRALI + sintesi
+in `wp70-harness/COUNCIL_WP70_REVIEWS.md` — VINCOLANTI per design70,
+recepire INTEGRALI prima di toccare codice. Verdetti: 0 concordi
+secchi · 6 con emendamenti (Klabnik, Hejlsberg, Bak, Pedersen,
+Leijen, Gregg) · 3 OPPOSIZIONI con refutazioni EMPIRICHE (Hoare,
+Matsakis, Stogov).**
 
-0. **DEBITI D'APERTURA**: quelli deliberati dal concilio WP-70 (verbali).
+0. **DEBITI D'APERTURA (delta-zero, dai verbali)**: (i) 🔴 **H-69.2
+   CHIUSA A METÀ (Hoare+Matsakis, panic ESEGUITO)**: `&$a[0][0]` /
+   `&$o->self->x` panicano ancora (`RefCell already borrowed` nei
+   walker `elem_cell`/`field_cell` — borrow_mut nudi residui;
+   H-70.1≡M-70.1, KH70-1 BLOCCA run_loop/spike); (ii) 🔴 **Stogov:
+   declare deferito fallito = SKIP SILENZIOSO** (classe fantasma,
+   autoload bypassato — S-70.1..3, KS-S70.1/2); (iii) gli altri
+   emendamenti dei verbali (K-70.x pre-registri caccia residuo,
+   E-70.1/2 passo-0 release strumento-free + firma per-bin
+   ~16-20 obj/req 112-128 B ⇒ ipotesi defer-mini, G-70.x forma dei
+   pre-registri, L-70.1, P-70.x).
 1. **🔴 CACCIA AL RESIDUO ~2 KiB/req (KL69-1 SCATTATO — blocca axum)**:
    protocollo pulito PRONTO (memgc69, HITS-off + DISABLE_WP_CRON,
    probe69-l681/cron come template); leak-shape per-bin sulla finestra
