@@ -5599,7 +5599,7 @@ impl<'m> Vm<'m> {
             if caller == 0 {
                 let n = n_named.min(self.frames[0].slots.len());
                 for i in 0..n {
-                    frame.slots[i] = Zval::Ref(make_cell(&mut self.frames[0].slots[i]));
+                    frame.slots[i] = Zval::Ref(make_cell_bridge(&mut self.frames[0].slots[i]));
                 }
             } else {
                 for i in 0..n_named {
@@ -5611,7 +5611,7 @@ impl<'m> Vm<'m> {
                         unit_slot_pos(&self.seed_globals, self.frames[caller].func, name)
                     {
                         if let Some(slot) = self.frames[caller].slots.get_mut(cs) {
-                            frame.slots[i] = Zval::Ref(make_cell(slot));
+                            frame.slots[i] = Zval::Ref(make_cell_bridge(slot));
                         }
                     } else if let Some(dyn_slot) = self.frames[caller]
                         .dyn_vars
@@ -5621,7 +5621,7 @@ impl<'m> Vm<'m> {
                         // A variable the includer created by NAME at run time
                         // (extract() in HtmlErrorRenderer::include feeds its
                         // template context this way) shares the same way.
-                        frame.slots[i] = Zval::Ref(make_cell(dyn_slot));
+                        frame.slots[i] = Zval::Ref(make_cell_bridge(dyn_slot));
                     } else if global_scope {
                         // Global-scope include chain: the fresh name lives in
                         // the global symbol table, immediately (Zend has one
@@ -5631,7 +5631,8 @@ impl<'m> Vm<'m> {
                         // came from (cold arm, per-include).
                         let name = name.to_vec();
                         let slot = self.global_slot_by_name(&name);
-                        frame.slots[i] = Zval::Ref(make_cell(&mut self.frames[0].slots[slot]));
+                        frame.slots[i] =
+                            Zval::Ref(make_cell_bridge(&mut self.frames[0].slots[slot]));
                     } else {
                         let cell = Rc::new(RefCell::new(Zval::Undef));
                         frame.slots[i] = Zval::Ref(Rc::clone(&cell));
@@ -15234,18 +15235,45 @@ fn ref_base_mut<'f>(
     }
 }
 
-/// Promote a cell to a shared [`Zval::Ref`], returning the shared cell. An
-/// already-shared cell is returned as-is; an `Undef` is promoted to a defined
-/// `Null` (a later write through the alias then has a real cell to land in).
+/// Promote a cell to a shared [`Zval::Ref`], returning the shared cell. This
+/// is the *defining* promotion (`&$x`, `global $x`, element refs): an `Undef`
+/// becomes a defined `Null`, matching Zend — the entry appears in `$GLOBALS`
+/// even before any assignment. That holds for an already-shared cell too: a
+/// bridge-promoted alias ([`make_cell_bridge`]) may still hold `Undef`, and a
+/// defining site reached through it must define now.
 /// Mirrors `eval::make_cell` (the step-11d reference machinery, D-R3 / D-12.4).
 fn make_cell(cell: &mut Zval) -> Rc<RefCell<Zval>> {
     if let Zval::Ref(rc) = cell {
+        {
+            let mut inner = rc.borrow_mut();
+            if matches!(&*inner, Zval::Undef) {
+                *inner = Zval::Null;
+            }
+        }
         return Rc::clone(rc);
     }
     let init = match &*cell {
         Zval::Undef => Zval::Null,
         other => other.clone(),
     };
+    let rc = Rc::new(RefCell::new(init));
+    *cell = Zval::Ref(Rc::clone(&rc));
+    rc
+}
+
+/// Promote a cell to a shared [`Zval::Ref`] WITHOUT defining it: `Undef`
+/// stays `Undef` inside the shared cell. The include/eval scope bridge
+/// aliases every name a unit *mentions* to the includer's scope — merely
+/// mentioning a name must not make it spring into existence in `$GLOBALS`
+/// (Zend defines it only when the unit actually assigns; P-67.2/KS-P67.2,
+/// WP-68). A later write through the alias defines it for both scopes;
+/// reads map `Undef` to NULL as everywhere else; `$GLOBALS` snapshots and
+/// enumeration already skip `Ref(Undef)` cells.
+fn make_cell_bridge(cell: &mut Zval) -> Rc<RefCell<Zval>> {
+    if let Zval::Ref(rc) = cell {
+        return Rc::clone(rc);
+    }
+    let init = std::mem::replace(cell, Zval::Undef);
     let rc = Rc::new(RefCell::new(init));
     *cell = Zval::Ref(Rc::clone(&rc));
     rc
@@ -21818,6 +21846,74 @@ mod tests {
         assert_eq!(vm_stdout(b"<?php $x=1; function f(){ $GLOBALS['x'] += 4; } f(); echo $x;"), b"5");
         // Top-level $GLOBALS write aliases the plain variable.
         assert_eq!(vm_stdout(b"<?php $GLOBALS['x']=7; echo $x;"), b"7");
+    }
+
+    /// P-67.2/KS-P67.2 (WP-68): the include/eval scope bridge aliases every
+    /// name a unit *mentions* — merely mentioning one must not make it spring
+    /// into existence in `$GLOBALS` (Zend defines it only on assignment).
+    /// The *defining* promotions (`global $x`, `&$x`) still create the entry
+    /// as NULL, and an actual assignment still publishes into the shared scope.
+    /// Runs through [`run_source_with`] — the HIR must be retained so the
+    /// eval'd units lower SEEDED (the plain `run_module` harness path lowers
+    /// them standalone, whose slots don't mirror the global frame).
+    #[test]
+    fn scope_bridge_does_not_define_unassigned_names() {
+        fn hir_stdout(src: &[u8]) -> Vec<u8> {
+            let out = super::run_source_with(b"test.php", src, &Registry::default())
+                .expect("run_source_with");
+            assert!(out.fatal.is_none(), "unexpected fatal: {:?}", out.fatal);
+            out.stdout
+        }
+        // Conditional never-run assignment in an eval'd unit (caller == 0 arm).
+        assert_eq!(
+            hir_stdout(
+                b"<?php eval('$z = 0; if ($z) { $cv_probe = 1; }');\
+                  $found = 'no';\
+                  foreach ($GLOBALS as $k => $v) { if ($k === 'cv_probe') { $found = 'yes'; } }\
+                  echo $found;"
+            ),
+            b"no"
+        );
+        // Same through a *nested* unit at global scope (global_scope arm).
+        assert_eq!(
+            hir_stdout(
+                b"<?php eval(\"eval('\\$z = 0; if (\\$z) { \\$cv_deep = 1; }');\");\
+                  $found = 'no';\
+                  foreach ($GLOBALS as $k => $v) { if ($k === 'cv_deep') { $found = 'yes'; } }\
+                  echo $found;"
+            ),
+            b"no"
+        );
+        // `global $x` DOES define the entry (as NULL) even when never assigned.
+        assert_eq!(
+            hir_stdout(
+                b"<?php function f(){ global $gx_probe; } f();\
+                  $found = 'no';\
+                  foreach ($GLOBALS as $k => $v) { if ($k === 'gx_probe') { $found = 'yes'; } }\
+                  echo $found;"
+            ),
+            b"yes"
+        );
+        // A reference DOES define its target.
+        assert_eq!(
+            hir_stdout(
+                b"<?php $r = &$undef_probe;\
+                  $found = 'no';\
+                  foreach ($GLOBALS as $k => $v) { if ($k === 'undef_probe') { $found = 'yes'; } }\
+                  echo $found;"
+            ),
+            b"yes"
+        );
+        // An eval that assigns still publishes the name with its value.
+        assert_eq!(
+            hir_stdout(
+                b"<?php eval('$dv_probe = 3;');\
+                  $found = 'no';\
+                  foreach ($GLOBALS as $k => $v) { if ($k === 'dv_probe') { $found = $v; } }\
+                  echo $found, $dv_probe;"
+            ),
+            b"33"
+        );
     }
 
     #[test]
