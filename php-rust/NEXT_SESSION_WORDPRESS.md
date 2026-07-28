@@ -311,9 +311,17 @@ safe-only, TUTTE le fasi, no-revert. Laravel POSTICIPATA a valle.
 Stato WP-67: P-2 SPEDITA e verificata (dettaglio:
 `sessions/WP_SESSION_67.md` + `wp67-harness/design67.md` §8).
 
-⚖️ **CONCILIO DI CHIUSURA WP-67: verbali in
+⚖️ **CONCILIO DI CHIUSURA WP-67 ESEGUITO: verbali INTEGRALI + sintesi in
 `wp68-harness/COUNCIL_WP68_REVIEWS.md` — VINCOLANTI per design68,
-recepire INTEGRALI prima di toccare codice.**
+recepire INTEGRALI prima di toccare codice. DECISIONE DI FORMA PRESA:
+**DEFER-ALWAYS** (5 sedie esplicite; publish+dep-replay RESPINTA come
+default, resta fallback KS68-2) sul fondamento della batteria
+`wp67-harness/fixtures/ordering-s68/` (Stogov, 5 casi TUTTI divergenti,
+2 SEMANTICI: a-func esegue codice che Zend fatalerebbe, c-cond autoloada
+su rami morti, e-exists anticipa il binding). Condizioni: S-68.1 scope
+(defer SOLO nomi irrisolvibili da seed∪unit-corrente), quota ns/DECLARE
+pre-registrata (S-68.4/M-68.2), predizioni B-68.4, precondizioni
+P-68.3/KS-P68.1 {KS-S67.2, P-67.2, S-67.4} PRIMA del codice.**
 
 1. **Cacheabilità unit impure — LA DECISIONE DI FORMA VA RIAPERTA AL
    CONCILIO** con la prova eseguibile S-67.2 sul tavolo
