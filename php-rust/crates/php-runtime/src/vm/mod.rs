@@ -6542,19 +6542,15 @@ impl<'m> Vm<'m> {
             // remap mints. A mismatch is the WP-68 drift resurfacing: it
             // would silently corrupt the positional-identity arm for every
             // later unit — correct-or-absent says die loudly HERE.
-            if seed_delta.new_classes.len() != locals.len() {
-                uc_log_flush();
-                panic!(
-                    "seed fold/mint mismatch: folded {} classes, minting {} (unit {})",
-                    seed_delta.new_classes.len(),
-                    locals.len(),
-                    String::from_utf8_lossy(&key),
-                );
-            }
+            assert_fold_equals_mint(&seed_delta, &locals, &module, &key);
             relocate_module_class_ids(&mut module, &prog_remap, static_off);
             (retained_remap, locals)
         } else {
             let (remap, locals) = self.unit_class_remap(&module);
+            // WP-70 H-70.3: same drift check on the v1 branch — `seed_delta`
+            // is applied to the seed on BOTH branches (the fold), and v1's
+            // `new_locals` is the mint; nothing exempts it from mirroring.
+            assert_fold_equals_mint(&seed_delta, &locals, &module, &key);
             relocate_module_class_ids(&mut module, &remap, static_off);
             (remap, locals)
         };
@@ -14667,6 +14663,38 @@ struct SeedDelta {
     /// WP-70 S-70.2: lowercase names of the unit's tail classes that are
     /// CONDITIONAL — folded into `Vm::seed_conditional` on apply.
     conditional_names: Vec<Vec<u8>>,
+}
+
+/// WP-69 H-69.3 + WP-70 H-70.2/H-70.3: the seed fold must mirror the
+/// link-time mint EXACTLY — zipped PER NOME on both link branches, not
+/// len-only (two compensating errors pass a length check while skewing
+/// every later positional id). FATAL in every build, correct-or-absent.
+fn assert_fold_equals_mint(seed_delta: &SeedDelta, locals: &[usize], module: &Module, key: &[u8]) {
+    let mismatch = seed_delta.new_classes.len() != locals.len()
+        || seed_delta
+            .new_classes
+            .iter()
+            .zip(locals.iter())
+            .any(|(f, &m)| module.classes.get(m).is_none_or(|cc| cc.name != f.name));
+    if mismatch {
+        uc_log_flush();
+        panic!(
+            "seed fold/mint mismatch: folded {} classes {:?}, minting {} {:?} (unit {})",
+            seed_delta.new_classes.len(),
+            seed_delta
+                .new_classes
+                .iter()
+                .map(|c| String::from_utf8_lossy(&c.name).into_owned())
+                .collect::<Vec<_>>(),
+            locals.len(),
+            locals
+                .iter()
+                .filter_map(|&m| module.classes.get(m))
+                .map(|c| String::from_utf8_lossy(&c.name).into_owned())
+                .collect::<Vec<_>>(),
+            String::from_utf8_lossy(key),
+        );
+    }
 }
 
 /// File identity for the unit cache: canonical path + mtime + size. An edited

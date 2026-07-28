@@ -582,6 +582,13 @@ impl<'f> Lowerer<'f> {
                 };
                 self.class_index.remove(&key);
                 self.conditional_classes.insert(i);
+                // M-70.3 (WP-70, documented load-bearing): the demoted
+                // statement's span STAYS in `hoisted_class_spans` — the main
+                // pass's no-op is CONJUNCTIVE (span ∈ set AND name ∈
+                // class_index), and the `remove` above breaks the second leg,
+                // so the statement falls through and re-lowers (deferring).
+                // Removing the span here would need a span-by-index reverse
+                // map for no behavioral change.
                 self.classes[i] = std::rc::Rc::new(self.placeholder_class(i, line));
             }
         }

@@ -990,6 +990,10 @@ struct Lowerer<'f> {
     /// — it stays a runtime (re)declaration whose `DeclareClass` raises
     /// Zend's redeclaration fatal when reached — and the main pass no-ops
     /// only the hoisted statement itself, identified by span, never by name.
+    /// H-70.5 (WP-70, proof note): offsets are relative to ONE source — a
+    /// `Lowerer` is constructed per `lower_source_impl` call and never reused
+    /// across sources (eval/deferred snippets each get a fresh one), so
+    /// same-offset spans from different sources cannot collide here.
     hoisted_class_spans: HashSet<u32>,
     /// Anonymous/arrow function bodies, in one flat table (step 18, D-18.2). An
     /// [`ExprKind::Closure`] indexes into this by position.

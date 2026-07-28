@@ -74,7 +74,7 @@ contesto, [500,540] ✓), zero segmenti spontanei, Δconfine +498
 una-tantum ∈ [480,540] ✓, coda PIATTA, body byte-id, ways Δsteady=0
 (KB69-3 ok — ma 8 evizioni AL confine). **P69-C-b FUORI con firma**:
 4 re-miss front post-confine TUTTI `miss fp` su version.php,
-una-tantum R501..R504 — input per B-67.4/ways. **B-69.2 audit fp a
+una-tantum R501..R504 [⚠️ rettifica WP-70/B-70.2: TUTTI in R501] — input per B-67.4/ways. **B-69.2 audit fp a
 codice**: la chiave È context-sensitive PER COSTRUZIONE
 (unit_chain_fp seminato con l'identità del MAIN — vm/mod.rs ~495);
 il secondo set cron è costo strutturale del salt, non un bug;

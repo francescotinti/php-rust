@@ -29,7 +29,21 @@ impl<'f> Lowerer<'f> {
         for s in stmts {
             if let Statement::Trait(t) = s {
                 let key = t.name.value.to_ascii_lowercase();
-                if self.class_index.contains_key(&key) || asts.contains_key(&key) {
+                // H-70.4 (WP-70, oracle-pinned t4_redecl): a same-unit
+                // duplicate trait is Zend's compile-time fatal at the SECOND
+                // declaration, naming the first site — never "unsupported".
+                if let Some(first) = asts.get(&key) {
+                    return Err(LowerError::Fatal {
+                        message: format!(
+                            "Cannot redeclare trait {} (previously declared in {}:{})",
+                            String::from_utf8_lossy(first.name.value),
+                            String::from_utf8_lossy(&self.unit_file()),
+                            self.line_of(first.span()),
+                        ),
+                        line: self.line_of(t.span()),
+                    });
+                }
+                if self.class_index.contains_key(&key) {
                     return Err(LowerError::Unsupported {
                         what: "trait redeclaration",
                         line: self.line_of(t.span()),
