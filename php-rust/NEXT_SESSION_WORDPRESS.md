@@ -64,6 +64,10 @@
   MISURARE, spesso perde in Rust; ristrutturazione del loop), mai
   aggiungerne. La macchina di riscrittura (pass a finestre + remap
   totale, gate/corpus-proven) vive in `35ff89f`/`1e365db`/`f4c80cf`.
+  🆕 ROTTA UTENTE 2026-07-28: autorizzato per WP-69 (post WP-68) uno
+  SPIKE DISPATCH bounded a una sessione DENTRO la condizione WP-44
+  (ridurre/mantenere i corpi caldi) — dettagli e kill-switch in
+  §WP-68 punto 6; i registri-come-rappresentazione restano falsificati.
 - Micro-bench solo advisory: verdetti SOLO su A/B interleaved stesso-giorno
   sul workload reale. Gate per NOME a ogni commit; refactor layout/GC =
   sentinelle drop-order pinnate PRIMA; oracle-probe con `-d log_errors=0`.
@@ -358,6 +362,26 @@ P-68.3/KS-P68.1 {KS-S67.2, P-67.2, S-67.4} PRIMA del codice.**
    KS67-2: mai su dup_lc_ns non depurato.
 5. **G3**: invariato — quarta coppia media o risoluzione criterio ≥3+3
    (G-66.4). **P2 seed signature-only**: invariato (Gregg R6).
+6. **🆕 IN CODA (rotta ESPLICITA utente 2026-07-28, per WP-69 — DOPO la
+   consegna di WP-68)**: **SPIKE DISPATCH bounded a UNA sessione** sul
+   fronte interprete. NON riapre l'arco registri-come-rappresentazione
+   (WP-44 resta falsificato ×3, veto intatto): esercita la porta
+   lasciata socchiusa dal verbale WP-44 sotto la sua condizione
+   ("ogni riapertura deve RIDURRE o mantenere i corpi handler caldi,
+   mai aggiungerne"). Forma concordata: (i) PRIMA un profilo `sample`
+   mirato che separi DENTRO i corpi handler l'operand-fetch/stack-
+   traffic dal lavoro utile (attribuzione owner-level stile WP-54,
+   outlined misurabili per nome — WP-65); (ii) POI **UN solo
+   prototipo** a scelta motivata dal profilo — token-threading/
+   dispatch-table O core-caldo-ridotto (match spaccato, handler
+   freddi outlined) O tranche di superistruzioni oltre le bigram —
+   in WORKTREE, mai sul tree vivo; (iii) giudice = coppia
+   build-adiacente + self-pair A-A′ stessa sera (KG67-1/G-68.1);
+   (iv) kill-switch pre-registrato: se non batte lo spread della
+   serata ⇒ l'arco si RICHIUDE con la strumentazione moderna a
+   verbale, senza tuning. Predizioni committate PRIMA dei letti;
+   candidati e priorità li fissa il concilio di apertura WP-69 sul
+   profilo (i).
 
 **VETI del concilio (restano vincolanti)**: invariati da WP-64/65
 (NEXT_SESSION storico + `sessions/WP_SESSION_64.md`: mai
