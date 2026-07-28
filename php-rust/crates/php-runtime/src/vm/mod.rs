@@ -1624,6 +1624,15 @@ pub(crate) fn run_module_with_hir<'m>(
                     seen_mod.len(),
                     net_tot.saturating_sub(owned_priv),
                 ));
+                // WP-69 L-68.1 (counter leg, capacity-aware — the closed
+                // table list of predictions69 §B): the standing bytes the
+                // census itself owns, subtractable from Σcommitted slopes.
+                mc::census_line(&format!(
+                    "tag=censusown bytes={} hits_rows={} hits_on={}",
+                    census_own_bytes(),
+                    CENSUS_HITS.with(|h| h.borrow().len()),
+                    u8::from(census_hits_enabled()),
+                ));
                 // WP-68 E-68.2 (Hejlsberg d / Leijen b): prune the dead rows
                 // one-shot — without this the registry grows ~2 rows/request
                 // forever, and each dead row's Weak pins the whole Module
@@ -1923,10 +1932,48 @@ impl Drop for CensusNetWindow {
 /// double-check + seed-delta apply; the linked run itself is execution, not
 /// compile, and stays out — same boundary as the miss window). Rows feed the
 /// dump-time `tag=cachehit` aggregation (count / sum / median per path).
+/// WP-69 L-68.1: `PHPR_CENSUS_HITS=0` disables the per-hit rows — the
+/// tag=cachehit table stays CUMULATIVE by contract, so on a long replay the
+/// rows themselves are the census-own slope (B-68.3); the off-run is the
+/// self-accounting judge (L-69.P1/P2), the counter below the reconciler.
 #[cfg(feature = "mem-census")]
 fn census_hit_note(w: CensusNetWindow, path: &[u8]) {
     let net = w.finish();
+    if !census_hits_enabled() {
+        return;
+    }
     CENSUS_HITS.with(|h| h.borrow_mut().push((path.to_vec(), net)));
+}
+
+#[cfg(feature = "mem-census")]
+fn census_hits_enabled() -> bool {
+    thread_local! {
+        static ON: std::cell::OnceCell<bool> = const { std::cell::OnceCell::new() };
+    }
+    ON.with(|c| *c.get_or_init(|| std::env::var_os("PHPR_CENSUS_HITS").is_none_or(|v| v != "0")))
+}
+
+/// WP-69 L-68.1 (L-69.1 counter leg): capacity-aware bytes owned by the
+/// census's OWN standing tables — the closed list pre-registered in
+/// predictions69 §B: CENSUS_HITS (Vec backing + per-row path heap),
+/// CENSUS_UNITS + CENSUS_SPLITS (backing; the Weak does NOT count the
+/// pointed Module). Dump-transient allocations live inside the dump window
+/// and stay out by declaration.
+#[cfg(feature = "mem-census")]
+fn census_own_bytes() -> u64 {
+    let hits = CENSUS_HITS.with(|h| {
+        let h = h.borrow();
+        (h.capacity() * std::mem::size_of::<(Vec<u8>, u64)>()) as u64
+            + h.iter().map(|(p, _)| p.capacity() as u64).sum::<u64>()
+    });
+    let units = CENSUS_UNITS.with(|u| {
+        let u = u.borrow();
+        (u.capacity() * std::mem::size_of::<(Vec<u8>, u64, u64, std::rc::Weak<Module>)>()) as u64
+            + u.iter().map(|r| r.0.capacity() as u64).sum::<u64>()
+    });
+    let splits = CENSUS_SPLITS
+        .with(|s| (s.borrow().capacity() * std::mem::size_of::<[u64; 8]>()) as u64);
+    hits + units + splits
 }
 
 #[cfg(feature = "mem-census")]
