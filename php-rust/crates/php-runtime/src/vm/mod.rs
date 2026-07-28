@@ -503,6 +503,7 @@ pub(crate) fn run_module_with_hir<'m>(
             main_hir.is_some().hash(&mut h);
             h.finish()
         },
+        pending_unit_call: None,
         autoloaders: Vec::new(),
         autoloading: HashSet::default(),
         registry,
@@ -2103,6 +2104,11 @@ struct FrameExt {
     /// within it under the composite `<file>(<line>) : eval()'d code` file name,
     /// matching PHP. `None` for an ordinary frame.
     eval_origin: Option<(Box<[u8]>, Line)>,
+    /// Set on an `include`/`require` unit's top frame to the construct keyword
+    /// (`"require"`, `"include_once"`, …): an exception trace renders the
+    /// frame as `require()` exactly like Zend (batteria ordering-s68 a-func).
+    /// `None` for every other frame.
+    unit_call: Option<&'static str>,
     /// The instance id of the closure this frame is running, if any. `static $x`
     /// inside a closure persists **per closure instance** (PHP binds the static to
     /// the Closure object, not the op-array): a fresh closure from the same literal
@@ -2229,6 +2235,11 @@ impl<'m> Frame<'m> {
     #[inline]
     fn eval_origin(&self) -> Option<&(Box<[u8]>, Line)> {
         self.ext().and_then(|e| e.eval_origin.as_ref())
+    }
+
+    #[inline]
+    fn unit_call(&self) -> Option<&'static str> {
+        self.ext().and_then(|e| e.unit_call)
     }
 
     /// The `$$x` dynamic-variable table, boxing on first write.
@@ -2539,6 +2550,12 @@ struct Vm<'m> {
     /// fingerprint ([`Vm::unit_fp`]) — two VMs with equal chains loaded the same
     /// code in the same order, so seeded lowering of the next unit is replayable.
     unit_chain_fp: u64,
+    /// The `include`/`require` construct keyword of the unit whose frame is
+    /// about to be built — set by [`Self::run_include`] immediately before
+    /// `run_linked`, consumed (`take`) by `drive_unit` at frame construction
+    /// so the trace renders the frame as `require()` like Zend. `None`
+    /// everywhere else (eval / deferred snippets build no such frame name).
+    pending_unit_call: Option<&'static str>,
     /// WP-62 M2.3 DIAGNOSTIC (form-B pre-quote, K-M1): identity class-id
     /// table simulating the per-execution remap indirection cost in the hot
     /// arms. Feature-gated — parity builds compile without the field.
@@ -5553,6 +5570,12 @@ impl<'m> Vm<'m> {
         if eval_origin.is_some() {
             frame.ext_mut().eval_origin = eval_origin;
         }
+        // The include/require keyword travels from `run_include` to exactly
+        // this frame (the unit top); nested drives (deferred snippets, eval)
+        // never set it — `take` keeps it from leaking onto them.
+        if let Some(kw) = self.pending_unit_call.take() {
+            frame.ext_mut().unit_call = Some(kw);
+        }
         // PHP's include shares the *including* scope's variable table. Alias the
         // unit frame's named slots to the includer's cells (promoting the
         // includer slot to a shared `Zval::Ref` via `make_cell`): reads see the
@@ -5669,15 +5692,23 @@ impl<'m> Vm<'m> {
         outcome
     }
 
-    /// Lower an `eval`/`include` unit against the accumulating class image,
-    /// autoloading any `extends`/`implements` target not yet loaded and retrying
-    /// (step 57, Phase 3) — so a lazily-autoloaded `class Dog extends Animal`
-    /// loads `Animal` first. With no retained image it lowers standalone. The outer
-    /// `Result` carries a throwing autoloader's exception; the inner one a genuine
-    /// lower failure (parse / unsupported / still-undefined parent).
-    /// `pure` is cleared when the lowering needed an autoload retry or a defer
-    /// re-lower — such a result depends on side effects (files loaded mid-lower)
-    /// the unit cache cannot replay, so only a first-shot success is cacheable.
+    /// Lower an `eval`/`include` unit against the accumulating class image.
+    /// With no retained image it lowers standalone.
+    ///
+    /// WP-68 DEFER-ALWAYS (S-68.1, batteria ordering-s68): a supertype
+    /// unresolvable from seed ∪ this unit is NOT autoloaded here — the
+    /// declaration defers to its execution point ([`Self::run_deferred`]),
+    /// which is Zend's late binding: the autoload fires at the DECLARE, in
+    /// Zend's order, and the lowering stays side-effect-free (`pure` ⇒
+    /// cacheable). This is the same [`crate::DeferPolicy::All`] the main
+    /// script has always lowered under. Only a name surfacing from a
+    /// NON-deferrable site (e.g. a hoisted trait's own `use`) still
+    /// autoloads inside the lowering, clearing `pure` — that residual
+    /// impurity keeps the unit never-published (KS67-1).
+    ///
+    /// The outer `Result` carries a throwing autoloader's exception; the
+    /// inner one a genuine lower failure (parse / unsupported / a
+    /// non-deferrable name that autoload could not supply).
     fn lower_unit(
         &mut self,
         name: &[u8],
@@ -5687,11 +5718,11 @@ impl<'m> Vm<'m> {
         if self.main_hir.is_none() {
             return Ok(crate::lower_source(name, src));
         }
-        // Names whose autoload failed: re-lower with them deferrable, so the
-        // affected declarations bind at their execution point (Zend late
-        // binding) instead of failing the whole unit — PHP compiles a file
-        // whose class extends a missing parent just fine.
-        let mut defer: std::collections::HashSet<Vec<u8>> = std::collections::HashSet::new();
+        // Names already autoload-attempted: a second surfacing means the
+        // lowering cannot use what the autoload loaded (the name is known to
+        // the VM but not resolvable by the seeded lowerer) — surface the
+        // failure instead of retrying forever.
+        let mut attempted: std::collections::HashSet<Vec<u8>> = std::collections::HashSet::new();
         loop {
             match crate::lower_source_seeded(
                 name,
@@ -5701,13 +5732,21 @@ impl<'m> Vm<'m> {
                 &self.seed_traits,
                 &self.seed_globals,
                 &self.seed_aliases,
-                crate::DeferPolicy::Set(&defer),
+                crate::DeferPolicy::All,
             ) {
                 Err(crate::LowerError::UndefinedClass { name: pname, kind, line }) => {
-                    // An undefined name may be a class/interface *or* a trait used
-                    // by a class being lowered; autoload it (which may load a trait
-                    // file into `seed_traits`) and retry.
+                    // Non-deferrable site: the undefined name may be a
+                    // class/interface *or* a trait used by a class being
+                    // lowered; autoload it (which may load a trait file into
+                    // `seed_traits`) and retry.
                     *pure = false;
+                    if !attempted.insert(pname.to_ascii_lowercase()) {
+                        return Ok(Err(crate::LowerError::UndefinedClass {
+                            name: pname,
+                            kind,
+                            line,
+                        }));
+                    }
                     // WP-67 E-67.1: the autoload runs a whole nested include
                     // (read+lower+compile+run) inside the caller's lower
                     // window — note its wall so the caller's `l` can shed it.
@@ -5717,13 +5756,6 @@ impl<'m> Vm<'m> {
                     #[cfg(feature = "mem-census")]
                     census_nested_lc_note(al_t0.elapsed().as_nanos() as u64);
                     if loaded {
-                        continue;
-                    }
-                    // Unloadable: mark it deferrable and re-lower. A name that
-                    // *stays* unresolved while already deferrable comes from a
-                    // non-deferrable site (e.g. a hoisted trait's own `use`) —
-                    // that one is the genuine failure.
-                    if defer.insert(pname.to_ascii_lowercase()) {
                         continue;
                     }
                     return Ok(Err(crate::LowerError::UndefinedClass {
@@ -6129,6 +6161,7 @@ impl<'m> Vm<'m> {
                     // and PARKS it — an eviction mid-request cannot drop a
                     // module under a live frame.
                     let parked = self.park_module(cu.module);
+                    self.pending_unit_call = Some(mode.keyword());
                     let ret = self.run_linked(parked, &locals, None, Some(caller), remap_base)?;
                     return Ok(if matches!(ret, Zval::Null) { Zval::Long(1) } else { ret });
                 }
@@ -6327,6 +6360,7 @@ impl<'m> Vm<'m> {
         // drive_unit by aliasing the unit frame's named slots to the includer's
         // cells (see `scope_bridge` there).
         let caller = self.frames.len() - 1;
+        self.pending_unit_call = Some(mode.keyword());
         let ret = self.run_linked(parked, &new_locals, None, Some(caller), (reserved_base, static_off))?;
         // A file with no top-level `return` yields int(1); an explicit return passes
         // through (a literal `return null;` is the accepted edge that also yields 1).
@@ -12232,7 +12266,13 @@ impl<'m> Vm<'m> {
             // PHP renders each frame's call arguments inline (`f(42, 'x')`),
             // scalars literal and strings quoted/truncated (`format_bt_arg`).
             let frame_args = self.current_frame_args(k);
-            s.extend_from_slice(&frame.func.name);
+            // An include/require unit frame renders as its construct keyword
+            // (`require()`), exactly like Zend (batteria ordering-s68 a-func).
+            let fname: &[u8] = match frame.unit_call() {
+                Some(kw) if frame.func.name.is_empty() => kw.as_bytes(),
+                _ => &frame.func.name,
+            };
+            s.extend_from_slice(fname);
             s.push(b'(');
             let joined =
                 frame_args.iter().map(format_bt_arg).collect::<Vec<_>>().join(", ");
@@ -12246,7 +12286,7 @@ impl<'m> Vm<'m> {
             }
             fr.insert(
                 Key::from_bytes(b"function"),
-                Zval::Str(PhpStr::new(frame.func.name.to_vec())),
+                Zval::Str(PhpStr::new(fname.to_vec())),
             );
             if let Some(c) = class {
                 fr.insert(Key::from_bytes(b"class"), Zval::Str(PhpStr::new(c.to_vec())));

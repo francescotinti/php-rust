@@ -128,7 +128,7 @@ pub fn lower_source_seeded(
     seed_traits: &[(Vec<u8>, LoweredTrait)],
     seed_globals: &[Box<[u8]>],
     seed_aliases: &[(Vec<u8>, Vec<u8>)],
-    defer: DeferPolicy<'_>,
+    defer: DeferPolicy,
 ) -> Result<Program, LowerError> {
     lower_source_impl(
         name,
@@ -198,7 +198,7 @@ fn lower_source_impl(
     name: &[u8],
     source: &[u8],
     seed: Option<Seed<'_>>,
-    defer: DeferPolicy<'_>,
+    defer: DeferPolicy,
 ) -> Result<Program, LowerError> {
     #[cfg(feature = "mem-census")]
     let phase_seeded = seed.is_some();
@@ -237,7 +237,6 @@ fn lower_source_impl(
     let mut low = Lowerer::new(&file, name);
     low.defer = match defer {
         DeferPolicy::All => DeferConf::All,
-        DeferPolicy::Set(s) => DeferConf::Set(s.clone()),
         DeferPolicy::No => DeferConf::No,
     };
     // `declare(strict_types=1)` must be the file's first statement, but the
@@ -1052,7 +1051,6 @@ struct Lowerer<'f> {
 /// Owned form of [`DeferPolicy`] held by the [`Lowerer`].
 enum DeferConf {
     All,
-    Set(HashSet<Vec<u8>>),
     No,
 }
 
@@ -1072,15 +1070,12 @@ struct BodyCtx {
 /// trait-`use` target is not in the class image, should the declaration be
 /// *deferred* to its execution point (as Zend does — it simply skips early
 /// binding then), or surface as [`LowerError::UndefinedClass`]?
-pub enum DeferPolicy<'a> {
-    /// Defer every unresolved supertype — the main script: autoload cannot run
-    /// at lowering time, so resolvability is only known at execution.
+pub enum DeferPolicy {
+    /// Defer every unresolved supertype — the main script AND every
+    /// `include`/`eval` unit (WP-68 defer-always): the autoload belongs at
+    /// the DECLARE's execution point, never inside the lowering, so the
+    /// lowering stays side-effect-free and Zend's late-binding order holds.
     All,
-    /// Defer exactly these (lowercased, fully-qualified) names — an
-    /// `include`/`eval` unit: the VM autoload-retries first and adds a name
-    /// here only once autoload failed, keeping eager binding for everything
-    /// autoloadable.
-    Set(&'a HashSet<Vec<u8>>),
     /// Never defer — re-lowering a deferred snippet at its execution point: an
     /// unresolved supertype there IS the faithful `… "X" not found` error.
     No,
@@ -1361,10 +1356,9 @@ impl<'f> Lowerer<'f> {
 
     /// May a class-like whose supertype resolved to the unknown `name` be
     /// deferred to its execution point? (See [`DeferPolicy`].)
-    fn deferrable(&self, name: &[u8]) -> bool {
+    fn deferrable(&self, _name: &[u8]) -> bool {
         match &self.defer {
             DeferConf::All => true,
-            DeferConf::Set(s) => s.contains(&name.to_ascii_lowercase()),
             DeferConf::No => false,
         }
     }
