@@ -105,3 +105,28 @@ b91b4799) NON si rifanno (KK70-3). Qui SOLO il recinto della coppia:
 - KS70-3: pendenza wpdev citabile solo con confine cron escluso PER
   COSTRUZIONE (DISABLE_WP_CRON), mai per timing.
 - KG70-2: pendenza su finestra senza assert macchina = NON-CITABILE.
+
+## ADDENDUM pre-letto (2026-07-29 01:10, PRIMA di qualunque letto del residuo)
+
+Feasibility check (non-letto): il release NON stampa le stats mimalloc
+su SIGTERM (atexit non gira) ⇒ il metro per-bin di P70-0 è
+INDISPONIBILE. Esito P70-0 forma mi-stats: **NON-CALCOLABILE** (dalla
+sua stessa tassonomia). Per non perdere il passo-0 di Pedersen si
+DICHIARA QUI, prima di ogni letto, la forma sostitutiva:
+
+### P70-0-bis — esistenza sul RELEASE, vmmap two-boot
+
+Due boot separati del server RELEASE (stesso protocollo: wpdev,
+DISABLE_WP_CRON iniettato con backup/restore+pkill nel trap, assert
+stato canonico): leg A N=1000, leg B N=5000. Metro = vmmap "Physical
+footprint" del pid server VIVO, letto a fine run dopo 5 s di settle
+(mai come slope intra-run — L-70.2; il two-boot Δ cancella lo startup).
+- Δ(B−A) ∈ **[5, 15] MiB** ⇒ **ESISTE-SU-RELEASE** (engine; caccia
+  nel path DECL, KS70-1 sostanziale).
+- Δ(B−A) < **2 MiB** ⇒ **CENSUS-OWN sospetto** (route KS-P70.2:
+  riclassificazione solo a riconciliazione ≥95% del metro).
+- altrimenti ⇒ **NON-CONCLUSIVO**: l'esistenza resta aperta, decide
+  la tripla P70-T + attribuzione P70-D (KG70-1 invariato).
+Il verdetto è INFORMATIVO sull'esistenza; il giudice del leak resta
+used_n della tripla (KL70-1). Nessuna banda di P70-T/P70-D/P70-S è
+modificata da questo addendum (KK70-3 rispettato).
