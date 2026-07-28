@@ -333,10 +333,41 @@ safe-only, TUTTE le fasi, no-revert. Laravel POSTICIPATA a valle.
 Stato WP-68: leva defer-always SPEDITA e verificata (dettaglio:
 `sessions/WP_SESSION_68.md` + `wp68-harness/design68.md` §10).
 
-⚖️ **CONCILIO DI CHIUSURA WP-68: verbali INTEGRALI + sintesi in
-`wp69-harness/COUNCIL_WP69_REVIEWS.md` — VINCOLANTI per design69,
-recepire INTEGRALI prima di toccare codice.**
+⚖️ **CONCILIO DI CHIUSURA WP-68 ESEGUITO: verbali INTEGRALI + sintesi
+in `wp69-harness/COUNCIL_WP69_REVIEWS.md` — VINCOLANTI per design69,
+recepire INTEGRALI prima di toccare codice. ESITI CHIAVE: la leva
+regge in tutte le sedi, MA (i) 🔴 **S-69.1 BLOCCANTE**: bug
+demozione-a-cascata trovato dal vivo da Stogov (s69-deep: phpr
+`Failed to compile` dove Zend esegue — fixture in
+`wp69-harness/fixtures/`, fix DEFER-SIDE, KS-S69.1); (ii) M-69.1
+pending_unit_call stale su FatalAt (canale parità trace) + M-69.2
+CENSUS_DEAD_TOTAL doppio conteggio su prune-skip + H-69.1 fixture
+ciclica contro il borrow_mut di make_cell; (iii) **lettura plateau
+REFUTATA da Bak**: vivi≈1.036 = 518 steady + ~508 DUPLICATI-CRON
+permanenti (+43,9 MB/worker; il claim OTHER_SEGS=0 era falsificato da
+b683 stessa) ⇒ P-68.4 CONFERMATO-da-isolare, audit fp
+context-sensitivity B-69.2 PRIMA di ways/B-67.4; (iv) census-own
+RAFFORZATA da Leijen per-bin (528 oggetti/req = 512 hit + 16 mini,
+99,5%; engine ≈0 in finestra di regime) — L-68.1 forma DOPPIA con
+attese L-69.P1-P3; (v) co-giudice INSTRUCTIONS RETIRED (coppia
++0,121%, banda 12× più stretta; A′ era disturbata ictx ×6,7) —
+G-69.1 in ogni tripla; (vi) gap sotto swap: CPU 2,68× NON-CITABILE,
+footprint non incrementa G-66.4; (vii) cache defer-mini PREMATURA
+(split {lower,compile,drive} + quota release prima; chiave con
+dep-fp supertype); (viii) spike dispatch: predictions69 PRIMA del
+profilo, criterio ex-ante, MDE ≥ 2× spread o RICHIUSO, profilo su
+outlined, contatore meccanico corpi caldi.**
 
+0. **DEBITI D'APERTURA (delta-zero, PRIMA di ogni fronte — sintesi
+   punto 1)**: 🔴 S-69.1 fix demozione-a-cascata (s69-deep, defer-side,
+   KS-S69.1) + tranche fixture S-69.2 · M-69.1/H-69.4 take
+   incondizionato di pending_unit_call + test · M-69.2 dead-total nel
+   ramo eseguito · H-69.1 fixture ciclica make_cell (KH69-2: se panica,
+   fix prima dello spike) · K-69.1 sanatoria FAIL(3) census-probe +
+   P68-B-b Δparked_bytes + deviazione P68-M-c · K-69.4 test cargo
+   fold==mint + H-69.3 assert al link · M-69.4 parentetica FrameExt ·
+   B-69.1 correzione riga plateau (fatta qui) · E-69.1 correzioni
+   dicitura census-own.
 1. **SPIKE DISPATCH bounded a UNA sessione (rotta ESPLICITA utente
    2026-07-28 — WP-68 consegnata ⇒ la coda è DOVUTA)**: dentro la
    condizione WP-44 (ridurre/mantenere i corpi handler caldi, MAI
@@ -364,9 +395,11 @@ recepire INTEGRALI prima di toccare codice.**
    per-worker, batteria S-67.3 residua (session, POST/FILES/COOKIE,
    header/setcookie reset, ob, define/ini, shutdown, cross-worker —
    KS-S67.2/P-67.2/S-67.4 GIÀ verdi in WP-68), S-67.5 set route
-   minimo, B-67.4 replay multi-URL con plateau ways (KB67-3 — dato
-   nuovo WP-68: vivi ≈1.036 su wpdev = plateau ~2 entry/path, base
-   per la discussione ways), P-68.4 confine cron (B-68.2/KB68-2),
+   minimo, B-67.4 replay multi-URL (KB67-3 — dato CORRETTO dal
+   concilio B-69.1: vivi ≈1.036 su wpdev = 518 steady + ~508
+   DUPLICATI-CRON permanenti, +43,9 MB/worker; B-69.2 audit fp
+   context-sensitivity PRIMA), P-68.4 confine cron CONFERMATO-da-
+   isolare (B-69.5 test deterministico, B-68.2/KB68-2),
    B-66.3 sample sotto carico, G-66.5 coppia log-off/on server.
 4. **Follow-up leva defer-always (canale NOMINATO, non aperto)**:
    cache dei defer-mini keyed (unit,idx,fp) — 7,8 ms/req residui su
