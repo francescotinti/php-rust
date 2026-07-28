@@ -1648,6 +1648,12 @@ pub(crate) fn run_module_with_hir<'m>(
                     "tag=cellskip skips={}",
                     CELL_SKIP.with(|c| c.get()),
                 ));
+                // WP-70 P70-D (E-70.2): the defer-mini channel — cumulative
+                // calls and net bytes of every run_deferred execution.
+                {
+                    let (dn, db) = DEFER_MINI.with(|c| c.get());
+                    mc::census_line(&format!("tag=defermini calls={dn} net_b={db}"));
+                }
                 // WP-68 E-68.2 (Hejlsberg d / Leijen b): prune the dead rows
                 // one-shot — without this the registry grows ~2 rows/request
                 // forever, and each dead row's Weak pins the whole Module
@@ -1901,6 +1907,43 @@ thread_local! {
     /// Times a net window opened inside another (K6-Gregg: >0 invalidates
     /// the per-unit net map — it must be re-emitted before quoting bands).
     static CENSUS_NESTED_WINDOWS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+/// WP-70 P70-D (E-70.2): cumulative (calls, net bytes) of the DECL-deferred
+/// path — every `run_deferred` execution measured whole (re-lower + compile
+/// + link + declare drive) via raw alloc counters, no window nesting. The
+/// per-call net is clamped at zero (a drive that frees MORE than it
+/// allocates reads as 0 — bias declared upward). Dumped as `tag=defermini`;
+/// per-request rates come from consecutive dumps.
+#[cfg(feature = "mem-census")]
+thread_local! {
+    static DEFER_MINI: std::cell::Cell<(u64, u64)> = const { std::cell::Cell::new((0, 0)) };
+}
+
+#[cfg(feature = "mem-census")]
+struct DeferMiniNote {
+    net0: (u64, u64),
+}
+
+#[cfg(feature = "mem-census")]
+impl DeferMiniNote {
+    fn open() -> Self {
+        Self { net0: php_types::memcensus::alloc_counters() }
+    }
+}
+
+#[cfg(feature = "mem-census")]
+impl Drop for DeferMiniNote {
+    fn drop(&mut self) {
+        let (a1, f1) = php_types::memcensus::alloc_counters();
+        let net = a1
+            .saturating_sub(self.net0.0)
+            .saturating_sub(f1.saturating_sub(self.net0.1));
+        DEFER_MINI.with(|c| {
+            let (n, b) = c.get();
+            c.set((n + 1, b + net));
+        });
+    }
 }
 
 /// WP-62 M0b: RAII net-compile window. `open()` marks the window (and counts
@@ -5960,6 +6003,8 @@ impl<'m> Vm<'m> {
         // WP-68 S-68.4 quota channel: count every DECLARE; time the snippet
         // re-lower + compile (census builds only) up to the drive.
         uc_stat(|s| s.defer_relowers += 1);
+        #[cfg(feature = "mem-census")]
+        let _defer_mini = DeferMiniNote::open();
         #[cfg(feature = "mem-census")]
         let defer_t0 = std::time::Instant::now();
         let caller = self.frames.len() - 1;
