@@ -5450,8 +5450,13 @@ impl<'m> Vm<'m> {
                     // WP-65 H-65.1: the class name rides in the panic itself —
                     // the log::error above is visible only with a logger.
                     panic!(
-                        "stub-elision: seed/runtime prefix misaligned at id {i} ({})",
-                        String::from_utf8_lossy(&cd.name)
+                        "stub-elision: seed/runtime prefix misaligned at id {i} ({}) — runtime len={} holds ({})",
+                        String::from_utf8_lossy(&cd.name),
+                        self.classes.len(),
+                        self.classes
+                            .get(i)
+                            .map(|c| String::from_utf8_lossy(&c.name).into_owned())
+                            .unwrap_or_else(|| "<oltre la tabella>".into()),
                     );
                 }
             } else {
@@ -5943,8 +5948,26 @@ impl<'m> Vm<'m> {
     fn seed_delta_of(&self, program: &Program) -> SeedDelta {
         let l = self.seed_classes.len();
         let g = self.seed_globals.len();
+        // WP-68: the fold must mirror EXACTLY the set `run_linked` will
+        // mint. A tail class whose name is already registered dedups to its
+        // existing runtime id at link (no new slot) — folding it anyway
+        // grew the seed image past the runtime table, silently breaking the
+        // positional-identity arm of the elided remap for every LATER
+        // unregistered entry. Latent since the guarded-polyfill era (the
+        // `class ValueError extends Error` dup in symfony/polyfill
+        // bootstraps); exposed by defer-always, whose `\0deferred\0N`
+        // placeholders made unregistered seed entries common (hk panic
+        // "prefix misaligned at id 180, runtime len=179").
+        let new_classes = program
+            .classes
+            .get(l..)
+            .unwrap_or(&[])
+            .iter()
+            .filter(|cd| !self.class_index.contains_key(&cd.name.to_ascii_lowercase()))
+            .cloned()
+            .collect();
         SeedDelta {
-            new_classes: program.classes.get(l..).unwrap_or(&[]).to_vec(),
+            new_classes,
             static_count: program.static_count,
             new_slots: program.slots.get(g..).unwrap_or(&[]).to_vec(),
             traits: program.traits.clone(),
