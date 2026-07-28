@@ -2,6 +2,17 @@ use std::rc::Rc;
 
 use crate::{PhpStr, Zval};
 
+/// Outcome of [`PhpArray::set_returning_displaced`] (H-70.1, WP-70). `Done`
+/// is the write as performed (through an existing `Ref` slot or in place),
+/// carrying the displaced value for GC noting. `Busy` means the slot is a
+/// `Ref` whose cell is currently borrowed — a reference cycle mid-statement:
+/// nothing was written, and the CALLER owns the store (through the returned
+/// cell) once its guards drop.
+pub enum LeafWrite {
+    Done(Option<Zval>),
+    Busy(Rc<std::cell::RefCell<Zval>>, Zval),
+}
+
 /// An array key: PHP arrays have dual int|string keys.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Key {
@@ -722,13 +733,23 @@ impl PhpArray {
     /// logic byte-identical, `holds_containers` from the VALUE — never
     /// vivify-Null-then-overwrite, which would mis-flag scalar-only arrays
     /// and feed a spurious Null to gc_note) and returns `None`.
-    pub fn set_returning_displaced(&mut self, key: Key, val: Zval) -> Option<Zval> {
+    pub fn set_returning_displaced(&mut self, key: Key, val: Zval) -> LeafWrite {
         #[cfg(feature = "mem-census")]
         self.census_sync();
-        fn write_slot(slot: &mut Zval, val: Zval) -> Zval {
+        fn write_slot(slot: &mut Zval, val: Zval) -> Result<Zval, LeafWrite> {
             match slot {
-                Zval::Ref(cell) => std::mem::replace(&mut *cell.borrow_mut(), val),
-                _ => std::mem::replace(slot, val),
+                // H-70.1 (WP-70): the slot's cell can be mid-write on this
+                // very statement — a reference cycle closing at the leaf
+                // (`$b[0] = "x"` with `$a[0] = &$a`, `$b` aliasing `$a`)
+                // reaches here while the walker's guard on the same cell is
+                // still alive. Never a naked `borrow_mut` on a walk path:
+                // hand the write back to the caller, who owns it once its
+                // guards drop.
+                Zval::Ref(cell) => match cell.try_borrow_mut() {
+                    Ok(mut inner) => Ok(std::mem::replace(&mut *inner, val)),
+                    Err(_) => Err(LeafWrite::Busy(Rc::clone(cell), val)),
+                },
+                _ => Ok(std::mem::replace(slot, val)),
             }
         }
         let hit = match &self.repr {
@@ -751,11 +772,14 @@ impl PhpArray {
                         write_slot(&mut entries[pos].as_mut().unwrap().1, val)
                     }
                 };
-                Some(displaced)
+                match displaced {
+                    Ok(d) => LeafWrite::Done(Some(d)),
+                    Err(busy) => busy,
+                }
             }
             None => {
                 self.insert(key, val);
-                None
+                LeafWrite::Done(None)
             }
         }
     }
@@ -1185,20 +1209,20 @@ mod tests {
         let mut a = PhpArray::new();
         a.insert(Key::from_bytes(b"r"), Zval::Ref(Rc::clone(&cell)));
         let d = a.set_returning_displaced(Key::from_bytes(b"r"), Zval::Long(9));
-        assert!(matches!(d, Some(Zval::Long(5))));
+        assert!(matches!(d, LeafWrite::Done(Some(Zval::Long(5)))));
         assert!(matches!(&*cell.borrow(), Zval::Long(9)));
         assert!(matches!(a.get(&Key::from_bytes(b"r")), Some(Zval::Ref(_))));
         // Plain hit: displaced returned, holds_containers set like get_mut.
         let mut b = PhpArray::new();
         let _ = b.append(Zval::Long(1));
         let d = b.set_returning_displaced(Key::Int(0), Zval::Long(2));
-        assert!(matches!(d, Some(Zval::Long(1))));
+        assert!(matches!(d, LeafWrite::Done(Some(Zval::Long(1)))));
         assert!(b.may_hold_containers(), "hit mirrors get_mut's flag");
         // Miss with a scalar value: holds_containers stays FALSE (insert
         // semantics — no spurious Null vivify).
         let mut c = PhpArray::new();
         let d = c.set_returning_displaced(Key::from_bytes(b"x"), Zval::Long(3));
-        assert!(d.is_none());
+        assert!(matches!(d, LeafWrite::Done(None)));
         assert!(!c.may_hold_containers(), "miss keeps scalar-only flag");
         assert_eq!(c.len(), 1);
         // Miss on a packed tombstone escalates and appends at the END.
@@ -1208,7 +1232,7 @@ mod tests {
         }
         e.remove(&Key::Int(1));
         let d = e.set_returning_displaced(Key::Int(1), Zval::Long(7));
-        assert!(d.is_none());
+        assert!(matches!(d, LeafWrite::Done(None)));
         let order: Vec<_> = e.iter().map(|(k, _)| k.clone()).collect();
         assert_eq!(format!("{order:?}"), format!("{:?}", [Key::Int(0), Key::Int(2), Key::Int(1)]));
     }

@@ -26,7 +26,7 @@ pub mod zlibio;
 mod zstr;
 mod zval;
 
-pub use array::{ArrayAppendError, Key, PhpArray};
+pub use array::{ArrayAppendError, Key, LeafWrite, PhpArray};
 pub use diag::{Diag, Diags, PhpError};
 pub use generator::{GenKey, GenState, GenStatus};
 pub use object::{is_opaque_handle_class, mangle_prop_key, prop_display_name, unmangle_prop_key, GcMark, LazyKind, ObjRare, Object, ObjectInfo, PropVis, Props, PropsLayout, WalkMark};

@@ -30,7 +30,7 @@ type HashSet<T> = rustc_hash::FxHashSet<T>;
 use php_types::{
     convert, open_file_stream, open_php_stream, ops, ArgPlace, ArgPlaceBase, ArgPlaceStep, Closure,
     ClosureInfo, ClosureParam, ClosureRender, Diag,
-    Diags, DirHandle, GenKey, GenState, GenStatus, Key, LazyKind, Object, ObjectInfo, PhpArray, PhpError,
+    Diags, DirHandle, GenKey, GenState, GenStatus, Key, LazyKind, LeafWrite, Object, ObjectInfo, PhpArray, PhpError,
     PhpStr, PropVis, Props, ResKind, Resource, Stream, StreamBackend, Zval,
 };
 
@@ -1632,6 +1632,12 @@ pub(crate) fn run_module_with_hir<'m>(
                     census_own_bytes(),
                     CENSUS_HITS.with(|h| h.borrow().len()),
                     u8::from(census_hits_enabled()),
+                ));
+                // WP-70 M-70.2/K-M70.2: walker skip-routes (cycle mid-write);
+                // expected 0 outside the cycle fixtures on every workload.
+                mc::census_line(&format!(
+                    "tag=cellskip skips={}",
+                    CELL_SKIP.with(|c| c.get()),
                 ));
                 // WP-68 E-68.2 (Hejlsberg d / Leijen b): prune the dead rows
                 // one-shot — without this the registry grows ~2 rows/request
@@ -15294,16 +15300,60 @@ pub(super) fn closure_params(func: &Func) -> Vec<ClosureParam> {
         .collect()
 }
 
+/// H-70.1 (WP-70): a leaf write whose target ref-cell was BORROWED
+/// mid-statement — the walk's own guard, i.e. a reference cycle closing at
+/// the leaf (`$b[0] = "x"` with `$a[0] = &$a`, `$b` aliasing `$a`). Parked
+/// by [`apply_last`], executed by `path_op`'s drain AFTER every walk guard
+/// is dropped — Zend performs the same store through the collapsed pointer.
+enum RefLeaf {
+    Set { cell: Rc<RefCell<Zval>>, value: Zval },
+    OpSet { cell: Rc<RefCell<Zval>>, op: BinOp, rhs: Zval },
+    IncDec { cell: Rc<RefCell<Zval>>, inc: bool, pre: bool },
+}
+
+/// Boundary token of the path-write walk (H-70.1, same discipline as
+/// [`CellWalk`]): crossing into a `Zval::Ref` cell hands the cloned handle
+/// back to the [`path_apply`] driver so the current guard drops BEFORE the
+/// next borrow — a reference cycle revisiting a cell never finds its own
+/// guard alive.
+enum PathWalk {
+    Done(Zval),
+    IntoRef(Rc<RefCell<Zval>>, usize, Last),
+}
+
 /// Drill through `keys` from `cell` (following references, auto-vivifying and
-/// copy-on-writing each level), then apply `last` at the leaf. Recursion (not a
-/// reassigned `&mut` in a loop) keeps the nested borrows well-formed.
-fn path_apply(cell: &mut Zval, keys: &[Zval], last: Last, diags: &mut Diags, dropped: &mut Option<Zval>, aa: &mut Option<PathAa>) -> Result<Zval, PhpError> {
-    if let Zval::Ref(rc) = cell {
-        let mut inner = rc.borrow_mut();
-        return path_apply(&mut inner, keys, last, diags, dropped, aa);
+/// copy-on-writing each level), then apply `last` at the leaf. The driver
+/// loop re-borrows at every `Ref` boundary ([`PathWalk`]); [`path_walk`]
+/// recursion across plain containers keeps the nested borrows well-formed.
+fn path_apply(cell: &mut Zval, keys: &[Zval], last: Last, diags: &mut Diags, dropped: &mut Option<Zval>, aa: &mut Option<PathAa>, refw: &mut Option<RefLeaf>) -> Result<Zval, PhpError> {
+    let mut walk = path_walk(cell, keys, 0, last, diags, dropped, aa, refw)?;
+    loop {
+        walk = match walk {
+            PathWalk::Done(v) => return Ok(v),
+            PathWalk::IntoRef(rc, i, last) => match rc.try_borrow_mut() {
+                Ok(mut g) => path_walk(&mut g, keys, i, last, diags, dropped, aa, refw)?,
+                Err(_) => {
+                    // Every walker guard is already dropped (boundary
+                    // discipline) — only a caller-held guard can trip this:
+                    // the cell is mid-write on this very statement. Skip
+                    // route, counted (M-70.2).
+                    cell_skip_note();
+                    PathWalk::Done(Zval::Null)
+                }
+            },
+        };
     }
-    match keys.split_first() {
-        Some((k, rest)) => {
+}
+
+/// Walk `keys[i..]` from `cell` up to the next `Ref` boundary (see
+/// [`PathWalk`]); plain containers are crossed in place — no guard outlives
+/// the return.
+fn path_walk(cell: &mut Zval, keys: &[Zval], i: usize, last: Last, diags: &mut Diags, dropped: &mut Option<Zval>, aa: &mut Option<PathAa>, refw: &mut Option<RefLeaf>) -> Result<PathWalk, PhpError> {
+    if let Zval::Ref(rc) = cell {
+        return Ok(PathWalk::IntoRef(Rc::clone(rc), i, last));
+    }
+    match keys.get(i) {
+        Some(k) => {
             // Writing *through* a string offset (`$s[0][1] = …`) is the PHP error.
             if matches!(cell, Zval::Str(_)) {
                 return Err(PhpError::Error("Cannot use string offset as an array".to_string()));
@@ -15319,10 +15369,10 @@ fn path_apply(cell: &mut Zval, keys: &[Zval], last: Last, diags: &mut Diags, dro
                 *aa = Some(PathAa::Descend {
                     obj: cell.clone(),
                     key: k.clone(),
-                    rest: rest.to_vec(),
+                    rest: keys[i + 1..].to_vec(),
                     last: Box::new(last),
                 });
-                return Ok(provisional);
+                return Ok(PathWalk::Done(provisional));
             }
             ensure_array(cell)?;
             let Zval::Array(rc) = cell else { unreachable!("ensured array") };
@@ -15332,9 +15382,9 @@ fn path_apply(cell: &mut Zval, keys: &[Zval], last: Last, diags: &mut Diags, dro
             // ONE lookup, no key clone (WP-32 B2) — semantics identical to
             // the old contains_key + insert(Null) + get_mut composite.
             let child = arr.slot_or_vivify(key);
-            path_apply(child, rest, last, diags, dropped, aa)
+            path_walk(child, keys, i + 1, last, diags, dropped, aa, refw)
         }
-        None => apply_last(cell, last, diags, dropped, aa),
+        None => Ok(PathWalk::Done(apply_last(cell, last, diags, dropped, aa, refw)?)),
     }
 }
 
@@ -15342,7 +15392,7 @@ fn path_apply(cell: &mut Zval, keys: &[Zval], last: Last, diags: &mut Diags, dro
 /// `dropped` receives the single value a displacing leaf write replaced (at
 /// most ONE per path op — the `Set`/`OpSet` arms — WP-32: was a Vec that
 /// allocated on every displacing write just to hold it).
-fn apply_last(parent: &mut Zval, last: Last, diags: &mut Diags, dropped: &mut Option<Zval>, aa: &mut Option<PathAa>) -> Result<Zval, PhpError> {
+fn apply_last(parent: &mut Zval, last: Last, diags: &mut Diags, dropped: &mut Option<Zval>, aa: &mut Option<PathAa>, refw: &mut Option<RefLeaf>) -> Result<Zval, PhpError> {
     // A string parent takes the byte-offset write path (`$s[0] = 'X'`), whose
     // expression value is the written byte; the other leaf ops are the PHP
     // errors for string offsets.
@@ -15394,10 +15444,16 @@ fn apply_last(parent: &mut Zval, last: Last, diags: &mut Diags, dropped: &mut Op
             // sees the update; otherwise overwrite / insert — ONE lookup on
             // the hit path (WP-32 B3). The displaced element is handed back
             // via `dropped` so the caller can note it (an object it held may
-            // now be unreachable).
-            if let Some(d) = arr.set_returning_displaced(k, value.clone()) {
-                debug_assert!(dropped.is_none());
-                *dropped = Some(d);
+            // now be unreachable). `Busy` = the ref element's cell is
+            // mid-write on this very statement (cycle, H-70.1): park the
+            // store for `path_op`'s drain, outside every walk guard.
+            match arr.set_returning_displaced(k, value.clone()) {
+                LeafWrite::Done(Some(d)) => {
+                    debug_assert!(dropped.is_none());
+                    *dropped = Some(d);
+                }
+                LeafWrite::Done(None) => {}
+                LeafWrite::Busy(cell, val) => *refw = Some(RefLeaf::Set { cell, value: val }),
             }
             Ok(value)
         }
@@ -15413,17 +15469,37 @@ fn apply_last(parent: &mut Zval, last: Last, diags: &mut Diags, dropped: &mut Op
         Last::OpSet { key, op, rhs } => {
             let k = coerce_key_diag(&key, diags)
                 .ok_or_else(|| PhpError::TypeError("Illegal offset type".to_string()))?;
-            let old = arr.get(&k).map(|v| v.deref_clone()).unwrap_or(Zval::Null);
+            // A ref element whose cell is mid-write on this very statement
+            // (cycle, H-70.1) has an unreadable old value — park the whole
+            // compound for `path_op`'s drain, which supplies the expression
+            // value once the walk guards are gone.
+            let old = match arr.get(&k) {
+                Some(Zval::Ref(cell)) => match cell.try_borrow() {
+                    Ok(inner) => inner.clone(),
+                    Err(_) => {
+                        *refw = Some(RefLeaf::OpSet { cell: Rc::clone(cell), op, rhs });
+                        return Ok(Zval::Null);
+                    }
+                },
+                Some(v) => v.clone(),
+                None => Zval::Null,
+            };
             #[cfg(feature = "op-census")]
             if matches!(op, crate::hir::BinOp::Concat) {
                 crate::vm::census::census_concat_site(0, &old, &rhs);
             }
             let result = apply_binop(op, &old, &rhs, diags)?;
             // Write through an existing reference element (REF-4) — ONE
-            // lookup on the hit path (WP-32 B3).
-            if let Some(d) = arr.set_returning_displaced(k, result.clone()) {
-                debug_assert!(dropped.is_none());
-                *dropped = Some(d);
+            // lookup on the hit path (WP-32 B3). `Busy` is unreachable here
+            // in practice (the old-read just succeeded on the same cell);
+            // routed safely all the same.
+            match arr.set_returning_displaced(k, result.clone()) {
+                LeafWrite::Done(Some(d)) => {
+                    debug_assert!(dropped.is_none());
+                    *dropped = Some(d);
+                }
+                LeafWrite::Done(None) => {}
+                LeafWrite::Busy(cell, val) => *refw = Some(RefLeaf::Set { cell, value: val }),
             }
             Ok(result)
         }
@@ -15444,7 +15520,12 @@ fn apply_last(parent: &mut Zval, last: Last, diags: &mut Diags, dropped: &mut Op
                 }
                 return Ok(if pre { slot.clone() } else { old });
             };
-            let mut inner = cell.borrow_mut();
+            // Cycle at the leaf (H-70.1): the ref'd cell is mid-write on
+            // this very statement — park for `path_op`'s drain.
+            let Ok(mut inner) = cell.try_borrow_mut() else {
+                *refw = Some(RefLeaf::IncDec { cell, inc, pre });
+                return Ok(Zval::Null);
+            };
             let old = inner.clone();
             if inc {
                 ops::increment(&mut inner, diags)?;
@@ -15501,10 +15582,13 @@ fn make_cell(cell: &mut Zval) -> Rc<RefCell<Zval>> {
         // actively manipulating its value and a cycle's base is never an
         // undefined name — try_borrow_mut skips exactly that case, keeping
         // Undef→Null on every reachable cell (KS-P67.2 intact).
-        if let Ok(mut inner) = rc.try_borrow_mut() {
-            if matches!(&*inner, Zval::Undef) {
-                *inner = Zval::Null;
+        match rc.try_borrow_mut() {
+            Ok(mut inner) => {
+                if matches!(&*inner, Zval::Undef) {
+                    *inner = Zval::Null;
+                }
             }
+            Err(_) => cell_skip_note(),
         }
         return Rc::clone(rc);
     }
@@ -15546,6 +15630,22 @@ fn ref_array_keys(cell: &Zval) -> Vec<Key> {
     }
 }
 
+/// M-70.2 (WP-70): count of skip-routes taken because a cell on a walk path
+/// was already borrowed — a reference CYCLE closing back onto a cell that is
+/// mid-write on this very statement. Cycle statements are the only expected
+/// source (K-M70.2: a census wpdev run where `tag=cellskip` moves outside
+/// the cycle fixtures falsifies the declared H-69.2 semantics).
+#[cfg(feature = "mem-census")]
+thread_local! {
+    static CELL_SKIP: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+#[inline]
+fn cell_skip_note() {
+    #[cfg(feature = "mem-census")]
+    CELL_SKIP.with(|c| c.set(c.get() + 1));
+}
+
 /// Promote `array[key]` to a shared cell and return it, de-COW-ing the array in
 /// place (REF-3 / future REF-4). Mirrors `eval::place_cell` for a single key
 /// step: a missing element auto-vivifies as `Null`, the element is promoted to a
@@ -15553,9 +15653,24 @@ fn ref_array_keys(cell: &Zval) -> Vec<Key> {
 /// non-array yields a detached cell so the caller has something to bind.
 fn elem_cell(cell: &mut Zval, key: &Key) -> Rc<RefCell<Zval>> {
     if let Zval::Ref(rc) = cell {
-        let inner = &mut *rc.borrow_mut();
-        return elem_cell(inner, key);
+        // H-70.1: one hop suffices (a `Ref` never wraps a `Ref`), but the
+        // guard must be OUR only borrow — clone the handle and re-borrow in
+        // this scope. A borrow failure means the caller holds this very cell
+        // mid-statement: hand back a detached cell (the non-array tolerance)
+        // and count the route (M-70.2).
+        let rc = Rc::clone(rc);
+        let Ok(mut inner) = rc.try_borrow_mut() else {
+            cell_skip_note();
+            return Rc::new(RefCell::new(Zval::Null));
+        };
+        return elem_cell_step(&mut inner, key);
     }
+    elem_cell_step(cell, key)
+}
+
+/// The borrow-free half of [`elem_cell`]: one key step on a non-`Ref` value.
+/// The only interior borrow is `make_cell`'s own try (cycle-safe, H-69.2).
+fn elem_cell_step(cell: &mut Zval, key: &Key) -> Rc<RefCell<Zval>> {
     if let Zval::Array(rc) = cell {
         let arr = Rc::make_mut(rc);
         // ONE lookup (WP-32 B2); the Key clone is an Rc bump / int copy.
@@ -15584,99 +15699,171 @@ fn field_base_mut<'f>(
     })
 }
 
+/// H-70.1 (WP-70, K-M70.1): boundary token of the by-ref path walk. A
+/// reference CYCLE routes the walk back into a cell whose `RefMut` is still
+/// alive further up the stack (`&$a[0][0]` with `$a[0] = &$a`;
+/// `&$o->self->x` with `$o->self = $o`) — holding a guard ACROSS the
+/// recursion panicked exactly there. The walkers stop at every cell boundary
+/// (`Zval::Ref`, `Zval::Object`), hand the cloned handle back to the
+/// [`field_cell`] driver, and let the current guard drop BEFORE the next
+/// borrow — a revisited cell never finds its own guard alive.
+enum CellWalk {
+    /// Leaf resolved: the shared cell to bind.
+    Done(Rc<RefCell<Zval>>),
+    /// The walk crossed into a `Zval::Ref` cell; `steps[i..]` remain.
+    IntoRef(Rc<RefCell<Zval>>, usize),
+    /// The next step (`steps[i]`, a Prop/PropDyn) fetches on this handle.
+    IntoObj(Rc<RefCell<Object>>, usize),
+}
+
 fn field_cell(
     target: &mut Zval,
     steps: &[FieldStep],
     keys: &mut std::vec::IntoIter<Zval>,
     fs: FieldScope,
 ) -> Result<Rc<RefCell<Zval>>, PhpError> {
-    let Some((first, rest)) = steps.split_first() else {
-        return Ok(make_cell(target));
-    };
-    if let Zval::Ref(rc) = target {
-        let inner = &mut *rc.borrow_mut();
-        return field_cell(inner, steps, keys, fs);
+    let mut walk = field_walk(target, steps, 0, keys, fs)?;
+    loop {
+        walk = match walk {
+            CellWalk::Done(rc) => return Ok(rc),
+            CellWalk::IntoRef(rc, i) => {
+                // Steps remain (a leaf `Ref` resolves to `Done` via
+                // `make_cell`), so the walk continues INSIDE this cell. Every
+                // walker guard is already dropped (boundary discipline) —
+                // only a caller-held guard can trip this, i.e. the cell is
+                // mid-write on this very statement: hand back a detached cell
+                // so the caller has something to bind (M-70.2 counts it).
+                match rc.try_borrow_mut() {
+                    Ok(mut g) => field_walk(&mut g, steps, i, keys, fs)?,
+                    Err(_) => {
+                        cell_skip_note();
+                        CellWalk::Done(Rc::new(RefCell::new(Zval::Null)))
+                    }
+                }
+            }
+            CellWalk::IntoObj(o, i) => field_prop_step(&o, steps, i, keys, fs)?,
+        };
     }
-    match first {
+}
+
+/// Walk `steps[i..]` from `target` up to the next cell boundary. Plain
+/// containers (arrays nested by value) are crossed in place — they hold no
+/// `RefCell`, so no guard outlives the return; `Ref`/`Object` boundaries
+/// return a token instead of borrowing (see [`CellWalk`]).
+fn field_walk(
+    target: &mut Zval,
+    steps: &[FieldStep],
+    i: usize,
+    keys: &mut std::vec::IntoIter<Zval>,
+    fs: FieldScope,
+) -> Result<CellWalk, PhpError> {
+    if steps.len() == i {
+        return Ok(CellWalk::Done(make_cell(target)));
+    }
+    if let Zval::Ref(rc) = target {
+        return Ok(CellWalk::IntoRef(Rc::clone(rc), i));
+    }
+    match &steps[i] {
         FieldStep::Prop(_) | FieldStep::PropDyn => {
             // `&$o->prop` / `&$o->$n` (Session A / step 51): promote the property to
             // a shared cell. A non-object yields a detached cell (PHP warns).
-            let owned;
-            let name: &[u8] = match first {
-                FieldStep::Prop(n) => n,
-                _ => {
-                    owned = prop_dyn_name(keys, &mut Diags::new());
-                    &owned
-                }
-            };
             let Zval::Object(o) = target else {
-                return Ok(Rc::new(RefCell::new(Zval::Null)));
+                return Ok(CellWalk::Done(Rc::new(RefCell::new(Zval::Null))));
             };
-            let mut obj = o.borrow_mut();
-            let cid = obj.class_id as usize;
-            // PHP 8.4 container-fetch guard (W+REF): a readonly / set-denied
-            // property errs on a non-object value; an OBJECT value at the
-            // LEAF hands back a detached copy of the handle (Zend's ZVAL_COPY
-            // — the alias must not make the slot itself writable,
-            // object_reference.phpt), while an intermediate object step
-            // continues into the same handle.
-            let key = fs.prop_key(cid, name);
-            let key = key.as_ref();
-            let state = oop::prop_slot_state(obj.props.get(key));
-            oop::prop_indirect_guard(fs.classes, fs.scope, cid, name, state, false, false)?;
-            if state == oop::PropSlotState::Object
-                && oop::prop_info(fs.classes, cid, name)
-                    .is_some_and(|pi| pi.readonly || pi.set_visibility.is_some_and(|sv| {
-                        !oop::visible_from(fs.classes, fs.scope, sv, pi.declaring_class)
-                    }))
-            {
-                if rest.is_empty() {
-                    let copy = obj.props.get(key).map(|v| v.deref_clone()).unwrap_or(Zval::Null);
-                    return Ok(Rc::new(RefCell::new(copy)));
-                }
-                let child = obj.props.get_mut(key).expect("object slot present");
-                return field_cell(child, rest, keys, fs);
-            }
-            if !obj.props.contains(key) {
-                obj.props.set(key, Zval::Null);
-            }
-            let child = obj.props.get_mut(key).expect("property present after insert");
-            field_cell(child, rest, keys, fs)
+            Ok(CellWalk::IntoObj(Rc::clone(o), i))
         }
         FieldStep::Append => {
             // `&$a[]` (Session A): append a fresh element and reference it. Append
             // is always the final step (the compiler enforces it).
             if ensure_array(target).is_err() {
-                return Ok(Rc::new(RefCell::new(Zval::Null)));
+                return Ok(CellWalk::Done(Rc::new(RefCell::new(Zval::Null))));
             }
             let Zval::Array(rc) = target else {
-                return Ok(Rc::new(RefCell::new(Zval::Null)));
+                return Ok(CellWalk::Done(Rc::new(RefCell::new(Zval::Null))));
             };
             let arr = Rc::make_mut(rc);
             match arr.append_default() {
-                Some(child) => field_cell(child, rest, keys, fs),
-                None => Ok(Rc::new(RefCell::new(Zval::Null))),
+                Some(child) => field_walk(child, steps, i + 1, keys, fs),
+                None => Ok(CellWalk::Done(Rc::new(RefCell::new(Zval::Null)))),
             }
         }
         FieldStep::Index => {
             let key = keys.next().expect("ref index key");
             let Some(k) = coerce_key_silent(&key) else {
-                return Ok(Rc::new(RefCell::new(Zval::Null)));
+                return Ok(CellWalk::Done(Rc::new(RefCell::new(Zval::Null))));
             };
             if ensure_array(target).is_err() {
-                return Ok(Rc::new(RefCell::new(Zval::Null)));
+                return Ok(CellWalk::Done(Rc::new(RefCell::new(Zval::Null))));
             }
             let Zval::Array(rc) = target else {
-                return Ok(Rc::new(RefCell::new(Zval::Null)));
+                return Ok(CellWalk::Done(Rc::new(RefCell::new(Zval::Null))));
             };
             let arr = Rc::make_mut(rc);
             if !arr.contains_key(&k) {
                 arr.insert(k.clone(), Zval::Null);
             }
             let child = arr.get_mut(&k).expect("key present after insert");
-            field_cell(child, rest, keys, fs)
+            field_walk(child, steps, i + 1, keys, fs)
         }
     }
+}
+
+/// One property step (`steps[i]` is Prop/PropDyn) on an object HANDLE — the
+/// driver-side half of the boundary discipline: the object is borrowed here
+/// and the borrow ends when this function returns (the interior `field_walk`
+/// stops at the next boundary).
+fn field_prop_step(
+    o: &Rc<RefCell<Object>>,
+    steps: &[FieldStep],
+    i: usize,
+    keys: &mut std::vec::IntoIter<Zval>,
+    fs: FieldScope,
+) -> Result<CellWalk, PhpError> {
+    let owned;
+    let name: &[u8] = match &steps[i] {
+        FieldStep::Prop(n) => n,
+        _ => {
+            owned = prop_dyn_name(keys, &mut Diags::new());
+            &owned
+        }
+    };
+    let Ok(mut obj) = o.try_borrow_mut() else {
+        // A cycle closed back onto an object the caller is mid-writing
+        // (`$o->self = $o` walked twice on one statement can't happen — the
+        // driver dropped its guard — so only a caller-held borrow trips
+        // this): detached cell, counted (M-70.2).
+        cell_skip_note();
+        return Ok(CellWalk::Done(Rc::new(RefCell::new(Zval::Null))));
+    };
+    let cid = obj.class_id as usize;
+    // PHP 8.4 container-fetch guard (W+REF): a readonly / set-denied
+    // property errs on a non-object value; an OBJECT value at the
+    // LEAF hands back a detached copy of the handle (Zend's ZVAL_COPY
+    // — the alias must not make the slot itself writable,
+    // object_reference.phpt), while an intermediate object step
+    // continues into the same handle.
+    let key = fs.prop_key(cid, name);
+    let key = key.as_ref();
+    let state = oop::prop_slot_state(obj.props.get(key));
+    oop::prop_indirect_guard(fs.classes, fs.scope, cid, name, state, false, false)?;
+    if state == oop::PropSlotState::Object
+        && oop::prop_info(fs.classes, cid, name)
+            .is_some_and(|pi| pi.readonly || pi.set_visibility.is_some_and(|sv| {
+                !oop::visible_from(fs.classes, fs.scope, sv, pi.declaring_class)
+            }))
+    {
+        if steps.len() == i + 1 {
+            let copy = obj.props.get(key).map(|v| v.deref_clone()).unwrap_or(Zval::Null);
+            return Ok(CellWalk::Done(Rc::new(RefCell::new(copy))));
+        }
+        let child = obj.props.get_mut(key).expect("object slot present");
+        return field_walk(child, steps, i + 1, keys, fs);
+    }
+    if !obj.props.contains(key) {
+        obj.props.set(key, Zval::Null);
+    }
+    let child = obj.props.get_mut(key).expect("property present after insert");
+    field_walk(child, steps, i + 1, keys, fs)
 }
 
 /// Whether `PHPR_GC_VERIFY` is set: a diagnostic mode in which [`Vm::gc_sweep`]
@@ -17728,6 +17915,29 @@ mod tests {
         // Aliasing an undefined variable defines a shared NULL cell; a later write
         // through the alias creates the original (D-12.4 semantics for bare vars).
         assert_eq!(vm_stdout(b"<?php $b = &$a; $b = 9; echo $a;"), b"9");
+    }
+
+    #[test]
+    fn cycle_walkers_bind_and_write_without_panic() {
+        // H-70.1 (WP-70, K-M70.1): reference cycles reached at walk depth >= 2
+        // panicked (`RefCell already borrowed`) in `field_cell`/`path_apply`
+        // while the depth-1 fixture stayed green — the walkers held a guard
+        // across the recursion. Array cycle, object cycle, and a write
+        // through the cycle (oracle-checked in the h70 gate fixtures).
+        assert_eq!(
+            vm_stdout(b"<?php $a = [1]; $a[0] = &$a; $b = &$a[0][0]; echo 'bound';"),
+            b"bound"
+        );
+        assert_eq!(
+            vm_stdout(
+                b"<?php $o = new stdClass; $o->self = $o; $r = &$o->self->x; $r = 42; echo $o->x;"
+            ),
+            b"42"
+        );
+        assert_eq!(
+            vm_stdout(b"<?php $a = [1]; $a[0] = &$a; $b = &$a; $b[0] = 'x'; echo $a[0];"),
+            b"x"
+        );
     }
 
     #[test]

@@ -899,11 +899,57 @@ impl<'m> Vm<'m> {
         // noted as a possible GC root once the borrow of the base cell ends.
         let mut dropped = None;
         let mut aa = None;
-        let result = path_apply(cell, &keys, last, &mut self.diags, &mut dropped, &mut aa);
+        let mut refw = None;
+        let result = path_apply(cell, &keys, last, &mut self.diags, &mut dropped, &mut aa, &mut refw);
         if let Some(d) = &dropped {
             self.gc_note(d);
         }
         let mut result = result?;
+        // H-70.1 drain: a leaf write whose target ref-cell was mid-write on
+        // this very statement (a reference cycle) parks here; every walk
+        // guard is gone now, so the store proceeds — Zend's semantics for a
+        // write through the collapsed pointer. At most one per path op.
+        if let Some(rl) = refw.take() {
+            match rl {
+                super::RefLeaf::Set { cell, value } => {
+                    if let Ok(mut g) = cell.try_borrow_mut() {
+                        let d = std::mem::replace(&mut *g, value);
+                        drop(g);
+                        self.gc_note(&d);
+                    }
+                }
+                super::RefLeaf::OpSet { cell, op, rhs } => {
+                    let old = match cell.try_borrow() {
+                        Ok(g) => g.clone(),
+                        Err(_) => Zval::Null,
+                    };
+                    let new = super::apply_binop(op, &old, &rhs, &mut self.diags)?;
+                    if let Ok(mut g) = cell.try_borrow_mut() {
+                        let d = std::mem::replace(&mut *g, new.clone());
+                        drop(g);
+                        self.gc_note(&d);
+                    }
+                    result = new;
+                }
+                super::RefLeaf::IncDec { cell, inc, pre } => {
+                    let vals = match cell.try_borrow_mut() {
+                        Ok(mut g) => {
+                            let old = g.clone();
+                            if inc {
+                                super::ops::increment(&mut g, &mut self.diags)?;
+                            } else {
+                                super::ops::decrement(&mut g, &mut self.diags)?;
+                            }
+                            Some((old, g.clone()))
+                        }
+                        Err(_) => None,
+                    };
+                    if let Some((old, newv)) = vals {
+                        result = if pre { newv } else { old };
+                    }
+                }
+            }
+        }
         // Drain the parked ArrayAccess dispatches: offsetSet at the leaf,
         // offsetGet→op→offsetSet for compound/incdec leaves, offsetGet +
         // resumed drill mid-path (`$ctx[0][$i] = v` on nested SplFixedArrays).
@@ -967,11 +1013,49 @@ impl<'m> Vm<'m> {
                     }
                     let mut dropped2 = None;
                     let mut aa2 = None;
-                    let r = path_apply(&mut val, &rest, *last, &mut self.diags, &mut dropped2, &mut aa2);
+                    let mut refw2 = None;
+                    let r = path_apply(&mut val, &rest, *last, &mut self.diags, &mut dropped2, &mut aa2, &mut refw2);
                     if let Some(d) = &dropped2 {
                         self.gc_note(d);
                     }
                     r?;
+                    // H-70.1: the nested walk's guards are gone here; the
+                    // nested result value is discarded (as `r` above), so
+                    // Set-shape stores suffice for all three leaves.
+                    if let Some(rl) = refw2.take() {
+                        let (cell, value) = match rl {
+                            super::RefLeaf::Set { cell, value } => (cell, value),
+                            super::RefLeaf::OpSet { cell, op, rhs } => {
+                                let old = match cell.try_borrow() {
+                                    Ok(g) => g.clone(),
+                                    Err(_) => Zval::Null,
+                                };
+                                let new = super::apply_binop(op, &old, &rhs, &mut self.diags)?;
+                                (cell, new)
+                            }
+                            super::RefLeaf::IncDec { cell, inc, pre: _ } => {
+                                let old = match cell.try_borrow() {
+                                    Ok(g) => g.clone(),
+                                    Err(_) => Zval::Null,
+                                };
+                                let mut new = old;
+                                if inc {
+                                    super::ops::increment(&mut new, &mut self.diags)?;
+                                } else {
+                                    super::ops::decrement(&mut new, &mut self.diags)?;
+                                }
+                                (cell, new)
+                            }
+                        };
+                        match cell.try_borrow_mut() {
+                            Ok(mut g) => {
+                                let d = std::mem::replace(&mut *g, value);
+                                drop(g);
+                                self.gc_note(&d);
+                            }
+                            Err(_) => {}
+                        };
+                    }
                     pending = aa2;
                 }
             }
