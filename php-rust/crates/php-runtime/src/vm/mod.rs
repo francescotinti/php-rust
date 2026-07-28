@@ -1402,6 +1402,10 @@ pub(crate) fn run_module_with_hir<'m>(
                 // per path, avg=(l+c)/n; dup_fp = avg·min(n_fp, n−1) (the one
                 // "legitimate" compile is the first/cold one), dup_cold the
                 // remainder. `l` is already net of nested autoload includes.
+                // E-68.3 (dichiarato): lo split è un CEILING, non una
+                // ripartizione esatta — avg assume costo omogeneo per
+                // compile e con n_fp=n il min "grazia" il primo compile;
+                // l'E6-quota legge dup_fp/dup_cold come limiti superiori.
                 let mut lc_rows: Vec<(u64, Vec<u8>, u64, u64, u64, u64)> = Vec::new();
                 let (mut lc_paths, mut lc_compiles, mut lc_l, mut lc_c) = (0u64, 0u64, 0u64, 0u64);
                 let (mut dup_paths, mut dup_compiles, mut dup_lc) = (0u64, 0u64, 0u64);
@@ -1610,12 +1614,45 @@ pub(crate) fn run_module_with_hir<'m>(
                 // (labeled; lits lowered before the compile window are in
                 // NEITHER side).
                 let owned_priv = mod_owned + fns_priv + cls_priv;
+                // WP-68 E-68.2: `units.len()`/`dead_units` report the
+                // CUMULATIVE registry (pruned rows included) so the
+                // leak-shape probes keep their monotone reading across the
+                // prune below.
+                let dead_cum = CENSUS_DEAD_TOTAL.with(|c| c.get() + dead_units);
                 mc::census_line(&format!(
-                    "tag=modrecon units={} uniq_mods={} dead_units={dead_units} mod_owned={mod_owned} fns_priv={fns_priv} fns_shared={fns_shared} cls_priv={cls_priv} cls_shared={cls_shared} owned_priv={owned_priv} net_tot={net_tot} counted_v1_tot={counted_tot} rc_residue={}",
-                    units.len(),
+                    "tag=modrecon units={} uniq_mods={} dead_units={dead_cum} mod_owned={mod_owned} fns_priv={fns_priv} fns_shared={fns_shared} cls_priv={cls_priv} cls_shared={cls_shared} owned_priv={owned_priv} net_tot={net_tot} counted_v1_tot={counted_tot} rc_residue={}",
+                    units.len() as u64 + CENSUS_DEAD_TOTAL.with(|c| c.get()),
                     seen_mod.len(),
                     net_tot.saturating_sub(owned_priv),
                 ));
+                // WP-68 E-68.2 (Hejlsberg d / Leijen b): prune the dead rows
+                // one-shot — without this the registry grows ~2 rows/request
+                // forever, and each dead row's Weak pins the whole Module
+                // RcBox (~896 B): that was the +2,55 KiB/req residue of
+                // probe67-nk. CENSUS_SPLITS pairs by index: same mask.
+                CENSUS_DEAD_TOTAL.with(|c| c.set(dead_cum));
+                CENSUS_UNITS.with(|u| {
+                    CENSUS_SPLITS.with(|s| {
+                        let mut u = u.borrow_mut();
+                        let mut s = s.borrow_mut();
+                        if u.len() == s.len() {
+                            let keep: Vec<bool> =
+                                u.iter().map(|r| r.3.strong_count() > 0).collect();
+                            let mut k = keep.iter();
+                            u.retain(|_| *k.next().unwrap_or(&true));
+                            let mut k = keep.iter();
+                            s.retain(|_| *k.next().unwrap_or(&true));
+                        } else {
+                            // Pairing broken: prune would desync the split
+                            // columns — keep rows, surface the anomaly.
+                            mc::census_line(&format!(
+                                "tag=modrecon_prune_skip units={} splits={}",
+                                u.len(),
+                                s.len()
+                            ));
+                        }
+                    })
+                });
             }
         }
     }
@@ -1821,6 +1858,10 @@ thread_local! {
     /// address the live ones.
     static CENSUS_UNITS: std::cell::RefCell<Vec<(Vec<u8>, u64, u64, std::rc::Weak<Module>)>> =
         const { std::cell::RefCell::new(Vec::new()) };
+    /// WP-68 E-68.2: dead rows pruned from `CENSUS_UNITS` across all past
+    /// dumps — `tag=modrecon dead_units` reports pruned + this-dump dead so
+    /// the leak-shape probes keep their cumulative monotone reading.
+    static CENSUS_DEAD_TOTAL: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
     /// Net allocator delta (Δalloc − Δfree) of the unit's compile window,
     /// parked by the compile site and consumed by [`census_unit_note`] —
     /// the deep-TRUE per-unit metric (op Rc payloads included), design61.
@@ -1965,12 +2006,18 @@ thread_local! {
 
 /// Renders `depth=N;fn@file:line;...` for the top 3 PHP frames.
 ///
-/// SAFETY(census-only): reads plain fields of the parked VM while the VM is
-/// suspended inside one of its own census accounting notes (the window
-/// fires from a `memcensus` channel note in VM code, not from inside the
-/// global allocator), so the frame stack is between mutations. Formally an
-/// aliasing read next to a live `&mut Vm` — diagnostic builds only, never
-/// parity binaries.
+/// SAFETY(census-only, contratto ristretto M-68.4): reads plain fields of
+/// the parked VM while the VM is suspended inside one of its own census
+/// accounting notes (the window fires from a `memcensus` channel note in
+/// VM code, not from inside the global allocator), so the frame stack is
+/// between mutations. The `'static` below is a COUNTERFEIT standing in for
+/// the VM's real `'m`: valid only because (a) the pointer is parked at
+/// `run_loop` entry and cleared (`census_vm_park(0)`) BEFORE the Vm is
+/// destructured/forgotten, so it never dangles; and (b) post-P-2 the
+/// Modules the frames borrow are Rc-owned by the request's RetainSet,
+/// created BEFORE the Vm (P-67.5 drop order) — they can die at request
+/// end, never inside the parked window. Formally an aliasing read next to
+/// a live `&mut Vm` — diagnostic builds only, never parity binaries.
 #[cfg(feature = "mem-census")]
 pub(super) fn census_ctx_hook(out: &mut String) {
     use std::fmt::Write;
@@ -6343,6 +6390,10 @@ impl<'m> Vm<'m> {
         let rc = Rc::new(module);
         #[cfg(feature = "mem-census")]
         census_unit_note(&rc);
+        // M-68.5: the MAIN module can never reach this put — the key is the
+        // *included* file's UnitKey and this whole path runs under
+        // `run_include`; main stays the caller-owned borrow of M-67.2
+        // (eccezione documentata sul campo `Vm::module`).
         if pure && self.main_hir.is_some() {
             if let Some(uk) = unit_key {
                 unit_cache_put(
@@ -14777,6 +14828,11 @@ fn unit_slot_pos(seed: &[Box<[u8]>], func: &crate::bytecode::Func, name: &[u8]) 
             // seed_prefix_breach): today the ceded tail is empty, so this
             // scan is O(0) on a #[cold] path; a future partial split that
             // shadows faults loudly instead of splitting one variable.
+            // H-68.4 (dichiarato): il tripwire è UNILATERALE — scatta solo
+            // su QUESTO path name-lookup; `unit_slot_name` (per indice) non
+            // può vederlo per costruzione. Il test negativo M-67.6 pinna
+            // questo ramo: un riordino che lo sposti fuori dal lookup lo fa
+            // fallire (should_panic su questo panic, non su un altro).
             if func.slot_names.iter().any(|t| t.as_ref() == name) {
                 panic!(
                     "slot name in BOTH seed prefix and tail (tail∩seed≠∅): {}",
