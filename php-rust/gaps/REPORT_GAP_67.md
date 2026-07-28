@@ -30,5 +30,5 @@ WP-63: CPU 2,58×, footprint ~3,0× banda da ratificare G3).
   (soglia pre-registrata 50; residuo = bookkeeping census dichiarato);
   dead_units 1998/2003; Δstubs_entries=0.
 - CPU residua per-richiesta dei 15 impuri: **≈21 ms/richiesta**
-  (script-loader 8,4 + comment 6,1 + ProviderRegistry 1,5 = 76%) — è
+  (script-loader 8,4 + comment 6,1 + ProviderRegistry 1,5 = 74-75%, emend. Hejlsberg) — è
   la quota della leva WP-68.

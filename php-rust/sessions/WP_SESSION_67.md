@@ -34,7 +34,7 @@ server PER-RICHIESTA gratis (delta dump_i−dump_{i−1}). Steady R9→R10:
 **Δparked = 22 moduli = 1,62 MiB/richiesta** (15 impure + 7 eval — gli
 eval sono invisibili a uc.log, il contatore diretto li vede);
 **Δ(lower+compile) ≈ 21 ms/richiesta**; per-file script-loader 8,4 +
-comment 6,1 + ProviderRegistry 1,5 ms = 76%. Q1-a/c/d DENTRO le bande.
+comment 6,1 + ProviderRegistry 1,5 ms = 74-75% (emend. Hejlsberg). Q1-a/c/d DENTRO le bande.
 
 ## P-2 DE-LEAK (release = 2b92c78, binario phpr-wp67 c0f5cfff…)
 
@@ -53,7 +53,7 @@ comment 6,1 + ProviderRegistry 1,5 ms = 76%. Q1-a/c/d DENTRO le bande.
   KE-e · P1 · S-65.3+diff-oracle · corpus 1421 · refl 290 · ORM 3E/13F
   · hk 1665 OK · reverse **2F PER NOME**. (Primo run FAIL onesto:
   /private/tmp/wp11-gates sparito col reboot — ripristino dai tarball
-  wp9-harness; la trap K-67.2 ha scritto il verdict anche lì.)
+  wp9-harness; il verdict FAIL fu scritto per via ORDINARIA, non dalla trap — emend. Klabnik, K-68.4 chiede il self-test.)
 - **Leak-shape (probe67-nk, N=1000, verdict PASS)**: pendenza
   Σcommitted **+2,55 KiB/req** (soglia 50; residuo = bookkeeping del
   census, dichiarato); **dead_units 1998/2003, vivi 5**, mod_owned
@@ -66,7 +66,7 @@ comment 6,1 + ProviderRegistry 1,5 ms = 76%. Q1-a/c/d DENTRO le bande.
   NEL probe); S-66.4 PASS.
 - **Catena serale (run55 triple, PRIMO protocollo coppia+A-A′)**:
   new **777,19u** · old (wp66) **787,45u** · new′ **786,95u** — delta
-  coppia −1,30% DENTRO lo spread A-A′ stesso-binario **1,26%** ⇒
+  coppia −1,30% (1,3029%) della STESSA TAGLIA dello spread A-A′ **1,26%** (1,2558% — emend. concilio: non "dentro"; new′≈old a 0,06% ⇒ rumore/posizione-1) ⇒
   **costo CPU P-2 compatibile con zero**, nessuna cifra citabile
   (KG67-1 rispettata COL self-pair, prima volta). **Fail-set 88
   BYTE-ID = run33 in tutte e tre le run.** KH67-3 non scatta.
