@@ -1,6 +1,15 @@
 //! VM exceptions logic, extracted from vm/mod.rs (no semantic change).
 use super::*;
 
+/// The html_errors diagnostic escape (php_escape_html_entities, ENT_COMPAT
+/// subset): `&`, `<`, `>`, `"` — single quotes stay raw. Zend escapes the
+/// error *message* buffer only: an uncaught throwable's buffer includes its
+/// trace (`K2-&gt;go()`), a non-throwable fatal's backtrace is appended
+/// outside it and stays raw (both oracle-pinned, WP-69).
+fn esc_html(s: &str) -> String {
+    s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
+}
+
 impl<'m> Vm<'m> {
     /// Render an uncaught fatal at the tail of `rendered` (E1; mirrors
     /// `eval::render_fatal`). A user-thrown object carries its own class, message,
@@ -8,8 +17,11 @@ impl<'m> Vm<'m> {
     /// `fault_line`.
     pub(super) fn render_fatal(&mut self, err: &PhpError, fault_line: Line) {
         // A hard (non-throwable) fatal renders Zend's plain E_ERROR banner:
-        // no `Uncaught`, no stack trace, located at the site it carries.
-        if let PhpError::FatalAt { msg, file, line } = err {
+        // no `Uncaught`, located at the site it carries. PHP 8.5 appends the
+        // live stack trace (fatal_error_backtraces=On by default) — in the
+        // html_errors form too, where the trace lines stay UN-bolded after
+        // the `<br />` banner (oracle-pinned, s69 srv pins).
+        if let PhpError::FatalAt { msg, file, line, trace } = err {
             let file = String::from_utf8_lossy(file);
             if self.web && self.ini.get_bool(b"log_errors") {
                 self.error_log
@@ -18,8 +30,15 @@ impl<'m> Vm<'m> {
             if !self.ini.get_bool(b"display_errors") {
                 return;
             }
+            let bt = self.ini.get_bool(b"fatal_error_backtraces") && !trace.is_empty();
             let block = if self.ini.get_bool(b"html_errors") {
-                format!("<br />\n<b>Fatal error</b>:  {msg} in <b>{file}</b> on line <b>{line}</b><br />\n")
+                let head = format!(
+                    "<br />\n<b>Fatal error</b>:  {} in <b>{file}</b> on line <b>{line}</b><br />\n",
+                    esc_html(msg)
+                );
+                if bt { format!("{head}Stack trace:\n{trace}\n") } else { head }
+            } else if bt {
+                format!("\nFatal error: {msg} in {file} on line {line}\nStack trace:\n{trace}\n")
             } else {
                 format!("\nFatal error: {msg} in {file} on line {line}\n")
             };
@@ -102,10 +121,14 @@ impl<'m> Vm<'m> {
         }
         if self.ini.get_bool(b"html_errors") {
             // html_errors form (oracle-pinned: the head's file:line stays
-            // plain, the "thrown in" tail is bolded).
+            // plain, the "thrown in" tail is bolded). Zend escapes the whole
+            // message buffer — label, head file:line and trace included
+            // (`Trait &quot;TA&quot;`, `K2-&gt;go()`) — while the template's
+            // bolded tail stays raw.
+            let head =
+                esc_html(&format!("{label}{joiner} {file}:{line}\nStack trace:\n{trace}\n  thrown"));
             let block = format!(
-                "<br />\n<b>Fatal error</b>:  {label}{joiner} {file}:{line}\nStack trace:\n\
-                 {trace}\n  thrown in <b>{file}</b> on line <b>{line}</b><br />\n"
+                "<br />\n<b>Fatal error</b>:  {head} in <b>{file}</b> on line <b>{line}</b><br />\n"
             );
             self.rendered.extend_from_slice(block.as_bytes());
         } else {

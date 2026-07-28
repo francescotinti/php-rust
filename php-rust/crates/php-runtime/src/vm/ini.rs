@@ -167,6 +167,9 @@ impl IniTable {
         // html_errors/display_errors/log_errors are honoured by the render
         // chokepoints; output_buffering/implicit_flush are report-only.
         add("display_errors", "1", INI_ALL, true, false);
+        // PHP 8.5: append the live stack trace to non-throwable fatals
+        // (honoured by the FatalAt render chokepoint).
+        add("fatal_error_backtraces", "1", INI_ALL, true, false);
         // EG(error_reporting) as an INI directive: ini_set/ini_get see the
         // same mask as the error_reporting() builtin (ho_ini_set and
         // ho_error_reporting mirror writes into `error_level`). WP's template

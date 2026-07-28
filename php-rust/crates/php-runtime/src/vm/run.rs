@@ -2214,13 +2214,17 @@ impl<'m> super::Vm<'m> {
                     let cid = class;
                     let cc = self.classes[*cid];
                     let key = cc.name.to_ascii_lowercase();
-                    if self.class_index.contains_key(&key) {
-                        let kind = if cc.enum_cases.is_empty() { "class" } else { "enum" };
-                        return Err(PhpError::Error(format!(
-                            "Cannot declare {} {}, because the name is already in use",
-                            kind,
-                            String::from_utf8_lossy(&cc.name)
-                        )));
+                    if let Some(&old) = self.class_index.get(&key) {
+                        // Zend's non-throwable E_COMPILE_ERROR
+                        // (zend_class_redeclaration_error), located at the
+                        // executing DECLARE (the op's own id may have been
+                        // remapped onto the registered class, so `cc`'s
+                        // file/line can be the OLD site — the faulting frame
+                        // position is the faithful one).
+                        let top = self.frames.len() - 1;
+                        let file: Box<[u8]> = Box::from(self.frame_file(top));
+                        let line = self.cur_line(top);
+                        return Err(self.class_redeclaration_fatal(old, file, line));
                     }
                     self.class_index.insert(key, *cid);
                     self.serializable_link_check(*cid)?;

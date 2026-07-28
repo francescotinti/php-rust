@@ -290,18 +290,19 @@ impl<'f> Lowerer<'f> {
             // when this statement is reached — PHP's conditional class declaration.
             Statement::Class(class) => {
                 let key = join_ns(&self.cur_namespace, class.name.value).to_ascii_lowercase();
-                if let Some(&existing) = self.class_index.get(&key) {
-                    // A same-unit hoisted duplicate statement is a no-op; a
-                    // name that maps into the SEED prefix is a re-included
-                    // file re-declaring its class — lower THIS declaration
-                    // fresh, so its conditional `Op::DeclareClass` can still
-                    // register it (the seed copy may never have been declared:
-                    // an autoloader `include __FILE__` re-entry, bug63741).
-                    // Whichever declaration executes first wins, exactly like
-                    // PHP; a second execution is the duplicate-name fatal.
-                    if existing >= self.seed_class_len {
-                        return Ok(None);
-                    }
+                if self.class_index.contains_key(&key)
+                    && self.hoisted_class_spans.contains(&class.span().start.offset)
+                {
+                    // The hoisted declaration's OWN statement: already lowered
+                    // and registered by the hoist — a no-op here. Identified
+                    // by span, never by name: any OTHER statement of an
+                    // in-use name (same-unit duplicate, a duplicate inside a
+                    // branch/function body, or a seed class re-declared by a
+                    // re-included file — bug63741) falls through and is
+                    // lowered fresh, so its conditional `Op::DeclareClass`
+                    // either registers it (seed copy never declared) or
+                    // raises Zend's redeclaration fatal when reached.
+                    return Ok(None);
                 }
                 let ctx = self.save_body_ctx();
                 match self.lower_class(class) {
@@ -325,7 +326,12 @@ impl<'f> Lowerer<'f> {
             }
             Statement::Interface(iface) => {
                 let key = join_ns(&self.cur_namespace, iface.name.value).to_ascii_lowercase();
-                if self.class_index.contains_key(&key) {
+                if self.class_index.contains_key(&key)
+                    && self.hoisted_class_spans.contains(&iface.span().start.offset)
+                {
+                    // No-op only for the hoisted statement itself (by span) —
+                    // a duplicate falls through to the runtime declare, like
+                    // the Class arm above.
                     return Ok(None);
                 }
                 let ctx = self.save_body_ctx();
@@ -346,7 +352,12 @@ impl<'f> Lowerer<'f> {
             }
             Statement::Enum(en) => {
                 let key = join_ns(&self.cur_namespace, en.name.value).to_ascii_lowercase();
-                if self.class_index.contains_key(&key) {
+                if self.class_index.contains_key(&key)
+                    && self.hoisted_class_spans.contains(&en.span().start.offset)
+                {
+                    // No-op only for the hoisted statement itself (by span) —
+                    // a duplicate falls through to the runtime declare, like
+                    // the Class arm above.
                     return Ok(None);
                 }
                 let ctx = self.save_body_ctx();
@@ -525,10 +536,55 @@ impl<'f> Lowerer<'f> {
     /// resolve (D-19.3). Names are reserved in the same order the bodies are
     /// pushed, so each reserved index equals its eventual position in `classes`.
     pub(super) fn hoist_classes(&mut self, stmts: &[Statement]) -> Result<(), LowerError> {
+        let base = self.classes.len();
         let mut counter = 0usize;
         self.for_blocks(stmts, |lo, body| lo.reserve_class_names(body, &mut counter))?;
         self.for_blocks(stmts, |lo, body| lo.lower_class_bodies(body))?;
+        self.demote_unbindable_chains(base);
         Ok(())
+    }
+
+    /// WP-69 S-69.1: demotion CASCADES. Zend early-binds a declaration only
+    /// when its whole supertype chain is compile-time bindable, so a body
+    /// lowered against a reserved supertype that was *later* demoted (its own
+    /// supertype being unresolvable) must be dropped from hoisting too — its
+    /// declaration statement then re-attempts and defers to run time, where
+    /// the autoload fires in Zend's order and may SHADOW the intra-file
+    /// declaration (fixture s69-deep). Runs to a fixpoint after all namespace
+    /// blocks: a demotion in a later block can unbind a class lowered in an
+    /// earlier one. Only this unit's entries (`>= base`) participate — a
+    /// supertype resolved into the seed is already declared at run time.
+    fn demote_unbindable_chains(&mut self, base: usize) {
+        loop {
+            let mut demote: Vec<usize> = Vec::new();
+            for i in base..self.classes.len() {
+                if self.conditional_classes.contains(&i) {
+                    continue;
+                }
+                let d = &self.classes[i];
+                let unbindable = d
+                    .parent
+                    .is_some_and(|p| p >= base && self.conditional_classes.contains(&p))
+                    || d.interfaces
+                        .iter()
+                        .any(|&p| p >= base && self.conditional_classes.contains(&p));
+                if unbindable {
+                    demote.push(i);
+                }
+            }
+            if demote.is_empty() {
+                return;
+            }
+            for i in demote {
+                let (key, line) = {
+                    let d = &self.classes[i];
+                    (d.name.to_ascii_lowercase(), d.line)
+                };
+                self.class_index.remove(&key);
+                self.conditional_classes.insert(i);
+                self.classes[i] = std::rc::Rc::new(self.placeholder_class(i, line));
+            }
+        }
     }
 
     /// Reserve `class_index` entries for every class/interface/enum in one
@@ -547,12 +603,15 @@ impl<'f> Lowerer<'f> {
                 _ => continue,
             };
             let key = join_ns(&self.cur_namespace, name).to_ascii_lowercase();
+            // An in-use name (a same-unit duplicate, or a seed/prelude class
+            // being re-declared by this unit) is NOT hoisted: Zend compiles
+            // the duplicate and fatals only when its DECLARE executes — the
+            // statement is left to the main pass (WP-69, dup-top/bug63741
+            // family). First declaration wins the reservation.
             if self.class_index.contains_key(&key) {
-                return Err(LowerError::Unsupported {
-                    what: "class/interface redeclaration",
-                    line: self.line_of(span),
-                });
+                continue;
             }
+            self.hoisted_class_spans.insert(span.start.offset);
             // Offset by the current table length so user classes follow the
             // injected built-in exception prelude (step 20).
             self.class_index.insert(key, self.classes.len() + *counter);
@@ -607,6 +666,12 @@ impl<'f> Lowerer<'f> {
                 Statement::Enum(e) => (e.name.value, e.span()),
                 _ => continue,
             };
+            // A statement the reservation skipped (in-use name): not hoisted,
+            // its runtime (re)declaration is lowered by the main pass. The
+            // skip keeps reserved indices == positions in `classes`.
+            if !self.hoisted_class_spans.contains(&span.start.offset) {
+                continue;
+            }
             let ctx = self.save_body_ctx();
             let lowered = match s {
                 Statement::Class(c) => self.lower_class(c),

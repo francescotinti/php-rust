@@ -57,9 +57,11 @@ pub enum PhpError {
     /// A hard engine fatal in Zend's *non-throwable* class (E_ERROR bail-out,
     /// e.g. "Cannot redeclare function f()"): uncatchable, skips `finally`,
     /// and renders as a plain "Fatal error: {msg} in {file} on line {line}"
-    /// banner — no `Uncaught`, no stack trace — located at the site it
-    /// carries (the offending declaration), not at the faulting op.
-    FatalAt { msg: String, file: Box<[u8]>, line: u32 },
+    /// banner — no `Uncaught` — located at the site it carries (the offending
+    /// declaration), not at the faulting op. `trace` is the live stack in
+    /// `getTraceAsString` form, captured at the bail-out (frames are gone by
+    /// render time): PHP 8.5 appends it under `fatal_error_backtraces`.
+    FatalAt { msg: String, file: Box<[u8]>, line: u32, trace: String },
     /// `exit`/`die` terminating the script (step 46). NOT a throwable: it is
     /// uncatchable (a `catch` never sees it) but `finally` blocks still run, so
     /// it rides the `Err` channel like a throw and unwinds to the top, where

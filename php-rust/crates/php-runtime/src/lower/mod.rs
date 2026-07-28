@@ -954,6 +954,12 @@ struct Lowerer<'f> {
     /// Indices into `classes` that are *conditional* declarations (registered at
     /// run time by `DeclareClass`, not resolvable by name eagerly).
     conditional_classes: HashSet<usize>,
+    /// Start offsets of the class-like statements the hoist RESERVED (WP-69
+    /// S-69.1 family): a statement re-declaring an in-use name is not hoisted
+    /// — it stays a runtime (re)declaration whose `DeclareClass` raises
+    /// Zend's redeclaration fatal when reached — and the main pass no-ops
+    /// only the hoisted statement itself, identified by span, never by name.
+    hoisted_class_spans: HashSet<u32>,
     /// Anonymous/arrow function bodies, in one flat table (step 18, D-18.2). An
     /// [`ExprKind::Closure`] indexes into this by position.
     closures: Vec<FnDecl>,
@@ -1114,6 +1120,7 @@ impl<'f> Lowerer<'f> {
             fn_index: HashMap::new(),
             conditional_fns: HashSet::new(),
             conditional_classes: HashSet::new(),
+            hoisted_class_spans: HashSet::new(),
             conditional_traits: Vec::new(),
             closures: Vec::new(),
             prog_name: prog_name.into(),

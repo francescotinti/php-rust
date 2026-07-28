@@ -247,13 +247,17 @@ pub fn run_phpt_opts(src: &[u8], name: &[u8], reg: &Registry, opts: RunOpts) -> 
         }
     }
     // `--INI--` runs as `php -d` overrides (applied to SKIPIF and CLEAN too).
-    let ini: Vec<(Vec<u8>, Vec<u8>)> = match find(&sections, "INI") {
-        Some(body) => match parse_ini_section(body) {
-            Ok(v) => v,
+    // run-tests.php forces `fatal_error_backtraces=Off` in its default INI
+    // (run-tests.php:275) so EXPECT sections predate-8.5 stay valid — mirror
+    // it FIRST, so a test's own `--INI--` (fatal_error_backtraces_00x) wins.
+    let mut ini: Vec<(Vec<u8>, Vec<u8>)> =
+        vec![(b"fatal_error_backtraces".to_vec(), b"0".to_vec())];
+    if let Some(body) = find(&sections, "INI") {
+        match parse_ini_section(body) {
+            Ok(v) => ini.extend(v),
             Err(why) => return TestResult::skip("ini", why),
-        },
-        None => Vec::new(),
-    };
+        }
+    }
     if opts.run_skipif {
         if let Some(skipif) = find(&sections, "SKIPIF") {
             if let Some(skip) = eval_skipif(skipif, name, reg, &ini) {

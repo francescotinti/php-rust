@@ -503,7 +503,6 @@ pub(crate) fn run_module_with_hir<'m>(
             main_hir.is_some().hash(&mut h);
             h.finish()
         },
-        pending_unit_call: None,
         autoloaders: Vec::new(),
         autoloading: HashSet::default(),
         registry,
@@ -1630,12 +1629,17 @@ pub(crate) fn run_module_with_hir<'m>(
                 // forever, and each dead row's Weak pins the whole Module
                 // RcBox (~896 B): that was the +2,55 KiB/req residue of
                 // probe67-nk. CENSUS_SPLITS pairs by index: same mask.
-                CENSUS_DEAD_TOTAL.with(|c| c.set(dead_cum));
+                // WP-69 M-69.2: the cumulative total advances ONLY when the
+                // prune executes — on `prune_skip` the dead rows stay in the
+                // registry and the next dump re-counts them, so folding them
+                // into the total here would double-count the monotone metric
+                // of KS68-1.
                 CENSUS_UNITS.with(|u| {
                     CENSUS_SPLITS.with(|s| {
                         let mut u = u.borrow_mut();
                         let mut s = s.borrow_mut();
                         if u.len() == s.len() {
+                            CENSUS_DEAD_TOTAL.with(|c| c.set(dead_cum));
                             let keep: Vec<bool> =
                                 u.iter().map(|r| r.3.strong_count() > 0).collect();
                             let mut k = keep.iter();
@@ -2111,9 +2115,9 @@ struct Frame<'m> {
     /// extra_args) already lived AFTER `iters` in the pre-C3 declaration
     /// order and keeps its relative order — so a dying frame's Rc-release
     /// sequence is bit-identical to the old derived Drop. (guard_release /
-    /// gen_id / eval_origin / closure_id / bridge_caller hold no Zvals:
-    /// their positions are unobservable. `dyn_vars` and `ret_cell` stay
-    /// inline at their old positions for the same reason.)
+    /// gen_id / eval_origin / closure_id / bridge_caller / unit_call hold no
+    /// Zvals: their positions are unobservable. `dyn_vars` and `ret_cell`
+    /// stay inline at their old positions for the same reason.)
     ext: Option<Box<FrameExt>>,
 }
 
@@ -2600,12 +2604,7 @@ struct Vm<'m> {
     /// fingerprint ([`Vm::unit_fp`]) — two VMs with equal chains loaded the same
     /// code in the same order, so seeded lowering of the next unit is replayable.
     unit_chain_fp: u64,
-    /// The `include`/`require` construct keyword of the unit whose frame is
-    /// about to be built — set by [`Self::run_include`] immediately before
-    /// `run_linked`, consumed (`take`) by `drive_unit` at frame construction
-    /// so the trace renders the frame as `require()` like Zend. `None`
-    /// everywhere else (eval / deferred snippets build no such frame name).
-    pending_unit_call: Option<&'static str>,
+
     /// WP-62 M2.3 DIAGNOSTIC (form-B pre-quote, K-M1): identity class-id
     /// table simulating the per-execution remap indirection cost in the hot
     /// arms. Feature-gated — parity builds compile without the field.
@@ -5354,7 +5353,7 @@ impl<'m> Vm<'m> {
         // B-65.2: boundary flush (covers the eval/deferred alignhit events);
         // every timed window of this unit is closed here.
         uc_log_flush();
-        self.run_linked(parked, &new_locals, eval_origin, scope_bridge, remap_base)
+        self.run_linked(parked, &new_locals, eval_origin, scope_bridge, remap_base, None)
     }
 
     /// Build the unit-local -> global class-id remap: a name already in the
@@ -5509,6 +5508,14 @@ impl<'m> Vm<'m> {
     /// its body — the back half of [`Self::drive_unit`], shared with the unit
     /// cache: `run_include` re-drives a cached, already-relocated module through
     /// here after verifying the remap/static baseline still matches.
+    ///
+    /// `unit_call` is the include/require construct keyword for the unit
+    /// frame's trace name (`require()`, like Zend) — a PARAMETER, not VM
+    /// state (WP-69 M-69.1/H-69.4): the old `pending_unit_call` field went
+    /// stale when the function-registration loop below bailed with the
+    /// redeclare `FatalAt` before the frame consumed it, and the next
+    /// eval/deferred drive would have worn the label. Eval and deferred
+    /// snippets pass `None`.
     fn run_linked(
         &mut self,
         leaked: &'m Module,
@@ -5516,6 +5523,7 @@ impl<'m> Vm<'m> {
         eval_origin: Option<(Box<[u8]>, Line)>,
         scope_bridge: Option<usize>,
         remap_base: (usize, usize),
+        unit_call: Option<&'static str>,
     ) -> Result<Zval, PhpError> {
         // WP-64 M3'' (=S-3=H3''): the module's relocated/baked ops assume the
         // (classes, statics) append bases captured at remap time — the
@@ -5614,6 +5622,7 @@ impl<'m> Vm<'m> {
                         ),
                         file: f.file.clone(),
                         line: f.line,
+                        trace: String::from_utf8_lossy(&self.capture_trace().1).into_owned(),
                     });
                 }
                 continue; // prelude-named user fn: historical silent skip
@@ -5625,10 +5634,10 @@ impl<'m> Vm<'m> {
         if eval_origin.is_some() {
             frame.ext_mut().eval_origin = eval_origin;
         }
-        // The include/require keyword travels from `run_include` to exactly
+        // The include/require keyword arrives as a parameter for exactly
         // this frame (the unit top); nested drives (deferred snippets, eval)
-        // never set it — `take` keeps it from leaking onto them.
-        if let Some(kw) = self.pending_unit_call.take() {
+        // pass `None` — no VM state to go stale on an early `Err` above.
+        if let Some(kw) = unit_call {
             frame.ext_mut().unit_call = Some(kw);
         }
         // PHP's include shares the *including* scope's variable table. Alias the
@@ -5832,6 +5841,40 @@ impl<'m> Vm<'m> {
     /// `Error: Class|Interface|Trait "X" not found`. For an anonymous-class
     /// expression (`expr = true`) the snippet `return`s the instance and the
     /// caller's scope is bridged so constructor arguments see its variables.
+    /// Zend's non-throwable redeclaration bail-out for a class-like DECLARE
+    /// whose name is already in use (`zend_class_redeclaration_error`): the
+    /// kind word is the OLD entry's type, an internal old class carries no
+    /// location, and the fatal sits at the NEW declaration site (`file`,
+    /// `line`). The stack trace is captured live (PHP 8.5
+    /// `fatal_error_backtraces`).
+    fn class_redeclaration_fatal(&self, old: ClassId, file: Box<[u8]>, line: u32) -> PhpError {
+        let cc = self.classes[old];
+        let kind = match cc.instantiable {
+            crate::bytecode::Instantiable::Interface => "interface",
+            crate::bytecode::Instantiable::Enum => "enum",
+            _ => "class",
+        };
+        // Zend prints the OLD entry's stored name (its canonical case:
+        // `class stdclass {}` fatals "Cannot redeclare class stdClass",
+        // errmsg_026) — the new spelling is only reachable case-folded.
+        let name = String::from_utf8_lossy(&cc.name);
+        let msg = if cc.file.as_ref() == b"prelude" {
+            format!("Cannot redeclare {kind} {name}")
+        } else {
+            format!(
+                "Cannot redeclare {kind} {name} (previously declared in {}:{})",
+                String::from_utf8_lossy(&cc.file),
+                cc.line
+            )
+        };
+        PhpError::FatalAt {
+            msg,
+            file,
+            line,
+            trace: String::from_utf8_lossy(&self.capture_trace().1).into_owned(),
+        }
+    }
+
     fn run_deferred(&mut self, idx: usize, expr: bool) -> Result<Zval, PhpError> {
         // WP-68 S-68.4 quota channel: count every DECLARE; time the snippet
         // re-lower + compile (census builds only) up to the drive.
@@ -5842,12 +5885,11 @@ impl<'m> Vm<'m> {
         let unit = self.frames[caller].module;
         let dd = &unit.deferred[idx];
         if !expr {
-            if self.class_index.contains_key(&dd.name.to_ascii_lowercase()) {
-                return Err(PhpError::Error(format!(
-                    "Cannot declare {} {}, because the name is already in use",
-                    dd.kind_word,
-                    String::from_utf8_lossy(&dd.name)
-                )));
+            if let Some(&old) = self.class_index.get(&dd.name.to_ascii_lowercase()) {
+                // Zend's non-throwable E_COMPILE_ERROR bail-out
+                // (zend_class_redeclaration_error): kind is the OLD entry's
+                // type, an internal old class carries no location.
+                return Err(self.class_redeclaration_fatal(old, unit.file.clone(), dd.line));
             }
         }
         let file = unit.file.clone();
@@ -6241,8 +6283,8 @@ impl<'m> Vm<'m> {
                     // and PARKS it — an eviction mid-request cannot drop a
                     // module under a live frame.
                     let parked = self.park_module(cu.module);
-                    self.pending_unit_call = Some(mode.keyword());
-                    let ret = self.run_linked(parked, &locals, None, Some(caller), remap_base)?;
+                    let ret =
+                        self.run_linked(parked, &locals, None, Some(caller), remap_base, Some(mode.keyword()))?;
                     return Ok(if matches!(ret, Zval::Null) { Zval::Long(1) } else { ret });
                 }
                 // WP-65 M-65.2: attribute the first failing leg — the `base`
@@ -6389,6 +6431,21 @@ impl<'m> Vm<'m> {
                 self.unit_remap_elided(&program, elide.unwrap_or(0));
             // WP-64 H4'': pin the compile↔link mirror of the elide predicate.
             debug_assert_eq!(retained_remap.len(), module.classes.len());
+            // WP-69 H-69.3: fold==mint CHECKED at link in EVERY build — the
+            // seed delta captured at publish (adjacent above; nothing may
+            // creep between fold and mint) must mirror exactly the tail this
+            // remap mints. A mismatch is the WP-68 drift resurfacing: it
+            // would silently corrupt the positional-identity arm for every
+            // later unit — correct-or-absent says die loudly HERE.
+            if seed_delta.new_classes.len() != locals.len() {
+                uc_log_flush();
+                panic!(
+                    "seed fold/mint mismatch: folded {} classes, minting {} (unit {})",
+                    seed_delta.new_classes.len(),
+                    locals.len(),
+                    String::from_utf8_lossy(&key),
+                );
+            }
             relocate_module_class_ids(&mut module, &prog_remap, static_off);
             (retained_remap, locals)
         } else {
@@ -6444,8 +6501,14 @@ impl<'m> Vm<'m> {
         // drive_unit by aliasing the unit frame's named slots to the includer's
         // cells (see `scope_bridge` there).
         let caller = self.frames.len() - 1;
-        self.pending_unit_call = Some(mode.keyword());
-        let ret = self.run_linked(parked, &new_locals, None, Some(caller), (reserved_base, static_off))?;
+        let ret = self.run_linked(
+            parked,
+            &new_locals,
+            None,
+            Some(caller),
+            (reserved_base, static_off),
+            Some(mode.keyword()),
+        )?;
         // A file with no top-level `return` yields int(1); an explicit return passes
         // through (a literal `return null;` is the accepted edge that also yields 1).
         Ok(if matches!(ret, Zval::Null) { Zval::Long(1) } else { ret })
@@ -15382,8 +15445,16 @@ fn ref_base_mut<'f>(
 /// Mirrors `eval::make_cell` (the step-11d reference machinery, D-R3 / D-12.4).
 fn make_cell(cell: &mut Zval) -> Rc<RefCell<Zval>> {
     if let Zval::Ref(rc) = cell {
-        {
-            let mut inner = rc.borrow_mut();
+        // H-69.2 (WP-69, KH69-2 onorato): a cell already under a live `&mut`
+        // guard is mid-write on this very statement — a reference CYCLE
+        // (`$a[0] = &$a; $b = &$a[0];`, fixture h69-cycle) routes
+        // `elem_cell`'s walk back to its own base while the parent RefMut is
+        // still held, and the naked borrow_mut here PANICKED. The defining
+        // promotion is observably moot for that cell: the guard holder is
+        // actively manipulating its value and a cycle's base is never an
+        // undefined name — try_borrow_mut skips exactly that case, keeping
+        // Undef→Null on every reachable cell (KS-P67.2 intact).
+        if let Ok(mut inner) = rc.try_borrow_mut() {
             if matches!(&*inner, Zval::Undef) {
                 *inner = Zval::Null;
             }
@@ -21994,6 +22065,27 @@ mod tests {
     /// Runs through [`run_source_with`] — the HIR must be retained so the
     /// eval'd units lower SEEDED (the plain `run_module` harness path lowers
     /// them standalone, whose slots don't mirror the global frame).
+    /// K-69.4 (WP-69): the seed fold must equal the link-time mint — repo
+    /// coverage for the f663765 fix (previously proven only by the external
+    /// hk/reverse gates, which live in /private/tmp and don't survive a
+    /// reboot). Unit 1 carries a guarded DUP of a registered prelude class
+    /// (folded-without-mint was the WP-68 drift), followed by a genuinely
+    /// new class and a never-declared conditional; unit 2 then lowers
+    /// SEEDED — with fold != mint its positional-identity arm panics
+    /// ("prefix misaligned"), with fold == mint it aligns and runs.
+    #[test]
+    fn conditional_dup_fold_equals_mint() {
+        let out = super::run_source_with(
+            b"test.php",
+            b"<?php eval('if (!class_exists(\"ValueError\")) { class ValueError extends Error {} } class K69A {} if (false) { class K69Cond {} }');\
+              eval('class K69B {} echo (new K69B) instanceof K69B ? \"ok\" : \"ko\"; echo \"|\", K69A::class;');",
+            &Registry::default(),
+        )
+        .expect("run_source_with");
+        assert!(out.fatal.is_none(), "unexpected fatal: {:?}", out.fatal);
+        assert_eq!(out.stdout, b"ok|K69A");
+    }
+
     #[test]
     fn scope_bridge_does_not_define_unassigned_names() {
         fn hir_stdout(src: &[u8]) -> Vec<u8> {
