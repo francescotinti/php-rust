@@ -484,6 +484,15 @@ pub(crate) fn run_module_with_hir<'m>(
         modules: vec![module],
         main_hir,
         seed_classes: main_hir.map(|p| p.classes.clone()).unwrap_or_default(),
+        seed_conditional: main_hir
+            .map(|p| {
+                p.conditional_classes
+                    .iter()
+                    .filter_map(|&i| p.classes.get(i))
+                    .map(|c| c.name.to_ascii_lowercase())
+                    .collect()
+            })
+            .unwrap_or_default(),
         seed_traits: main_hir.map(|p| p.traits.clone()).unwrap_or_default(),
         seed_static: main_hir.map_or(0, |p| p.static_count),
         seed_globals: main_hir.map(|p| p.slots.clone()).unwrap_or_default(),
@@ -2627,6 +2636,12 @@ struct Vm<'m> {
     /// earlier one (or an autoloaded one) declared. Ids stay aligned with the
     /// global compiled table. Empty (and unused) when no HIR is retained.
     seed_classes: Vec<std::rc::Rc<crate::hir::ClassDecl>>,
+    /// WP-70 S-70.2: lowercase names of `seed_classes` entries that are
+    /// CONDITIONAL in their source unit (declared only when their
+    /// `DeclareClass` executes). The seeded lowering must not bind a
+    /// supertype against one eagerly unless it is runtime-declared, and an
+    /// eager bind that does marks the program cache-impure.
+    seed_conditional: std::collections::HashSet<Vec<u8>>,
     /// The accumulating trait image (step 21, trait analogue of `seed_classes`):
     /// every loaded unit's declared traits, keyed by bare lowercase name, so a
     /// later (e.g. autoloaded) unit's `use T` resolves a trait an earlier unit
@@ -5849,8 +5864,21 @@ impl<'m> Vm<'m> {
                 &self.seed_traits,
                 &self.seed_globals,
                 &self.seed_aliases,
+                // S-70.2: eagerly resolvable = runtime-declared (Zend's early
+                // binding consults the class table, never a compile registry).
+                &|k| self.class_index.contains_key(k),
+                &self.seed_conditional,
                 crate::DeferPolicy::All,
             ) {
+                Ok(program) => {
+                    // S-70.2: an eager bind against a runtime-declared seed
+                    // CONDITIONAL ties this program to declaration state the
+                    // chain fingerprint cannot see — never publish it.
+                    if program.used_conditional_seed {
+                        *pure = false;
+                    }
+                    return Ok(Ok(program));
+                }
                 Err(crate::LowerError::UndefinedClass { name: pname, kind, line }) => {
                     // Non-deferrable site: the undefined name may be a
                     // class/interface *or* a trait used by a class being
@@ -5948,6 +5976,10 @@ impl<'m> Vm<'m> {
         let file = unit.file.clone();
         let snippet = dd.snippet.clone();
         let line = dd.line;
+        // S-70.2 guard (mirrors `lower_unit`): a name that surfaces AGAIN
+        // after a "resolved" autoload is known to the VM but unresolvable by
+        // the seeded lowerer — error out instead of retrying forever.
+        let mut attempted: std::collections::HashSet<Vec<u8>> = std::collections::HashSet::new();
         let program = loop {
             match crate::lower_source_seeded(
                 &file,
@@ -5957,6 +5989,11 @@ impl<'m> Vm<'m> {
                 &self.seed_traits,
                 &self.seed_globals,
                 &self.seed_aliases,
+                // S-70.2: the deferred bind resolves ONLY against the runtime
+                // class table (+ spl_autoload below, in Zend's order) — never
+                // the conditional registry of the lowering (phantom family).
+                &|k| self.class_index.contains_key(k),
+                &self.seed_conditional,
                 crate::DeferPolicy::No,
             ) {
                 Ok(p) => break p,
@@ -5965,7 +6002,9 @@ impl<'m> Vm<'m> {
                     // since the unit was lowered — that's the whole point of
                     // binding late. Still missing → the PHP error, at the
                     // declaration's (padded, so original) line.
-                    if self.resolve_name_autoload(&missing)? {
+                    if attempted.insert(missing.to_ascii_lowercase())
+                        && self.resolve_name_autoload(&missing)?
+                    {
                         continue;
                     }
                     self.fatal_line = if eline > 0 { eline } else { line };
@@ -6053,7 +6092,7 @@ impl<'m> Vm<'m> {
         // bootstraps); exposed by defer-always, whose `\0deferred\0N`
         // placeholders made unregistered seed entries common (hk panic
         // "prefix misaligned at id 180, runtime len=179").
-        let new_classes = program
+        let new_classes: Vec<Rc<crate::hir::ClassDecl>> = program
             .classes
             .get(l..)
             .unwrap_or(&[])
@@ -6061,11 +6100,21 @@ impl<'m> Vm<'m> {
             .filter(|cd| !self.class_index.contains_key(&cd.name.to_ascii_lowercase()))
             .cloned()
             .collect();
+        // S-70.2: carry the tail's conditional provenance so the folded seed
+        // remembers which entries are declaration-dependent.
+        let conditional_names = program
+            .conditional_classes
+            .iter()
+            .filter(|&&i| i >= l)
+            .filter_map(|&i| program.classes.get(i))
+            .map(|cd| cd.name.to_ascii_lowercase())
+            .collect();
         SeedDelta {
             new_classes,
             static_count: program.static_count,
             new_slots: program.slots.get(g..).unwrap_or(&[]).to_vec(),
             traits: program.traits.clone(),
+            conditional_names,
         }
     }
 
@@ -6080,6 +6129,9 @@ impl<'m> Vm<'m> {
             return;
         }
         self.seed_classes.extend_from_slice(&delta.new_classes);
+        for k in &delta.conditional_names {
+            self.seed_conditional.insert(k.clone());
+        }
         self.seed_static = delta.static_count;
         // Fold the unit's new global variable names into the shared registry and
         // grow the bottom (`main`) frame to cover them, so a `$GLOBALS['new']` /
@@ -14612,6 +14664,9 @@ struct SeedDelta {
     static_count: usize,
     new_slots: Vec<Box<[u8]>>,
     traits: Vec<(Vec<u8>, crate::hir::LoweredTrait)>,
+    /// WP-70 S-70.2: lowercase names of the unit's tail classes that are
+    /// CONDITIONAL — folded into `Vm::seed_conditional` on apply.
+    conditional_names: Vec<Vec<u8>>,
 }
 
 /// File identity for the unit cache: canonical path + mtime + size. An edited

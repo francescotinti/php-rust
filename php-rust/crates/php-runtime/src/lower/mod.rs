@@ -120,6 +120,15 @@ pub fn lower_source(name: &[u8], source: &[u8]) -> Result<Program, LowerError> {
 /// is not re-seeded; the unit's own classes hoist contiguously after the seeded
 /// ones, keeping their ids aligned with the VM's global table. The prelude
 /// *functions* are always (re-)seeded.
+/// `declared` (WP-70 S-70.2) filters which SEED class names pre-populate the
+/// lowering `class_index`: only names it accepts (the VM passes its runtime
+/// class table) are eagerly resolvable — a seed entry that exists only as a
+/// conditional declaration never executed must NOT bind a supertype (Zend
+/// resolves a declare against the runtime table + autoload, never against a
+/// compile registry; the phantom-class family b_chain/b5/b6 of the WP-70
+/// council). `seed_conditional` names the seed entries that are conditional
+/// in their source unit — an eager bind against one marks the program
+/// [`Program::used_conditional_seed`] (cache-publish gate).
 pub fn lower_source_seeded(
     name: &[u8],
     source: &[u8],
@@ -128,12 +137,22 @@ pub fn lower_source_seeded(
     seed_traits: &[(Vec<u8>, LoweredTrait)],
     seed_globals: &[Box<[u8]>],
     seed_aliases: &[(Vec<u8>, Vec<u8>)],
+    declared: &dyn Fn(&[u8]) -> bool,
+    seed_conditional: &std::collections::HashSet<Vec<u8>>,
     defer: DeferPolicy,
 ) -> Result<Program, LowerError> {
     lower_source_impl(
         name,
         source,
-        Some((seed_classes, seed_static, seed_traits, seed_globals, seed_aliases)),
+        Some((
+            seed_classes,
+            seed_static,
+            seed_traits,
+            seed_globals,
+            seed_aliases,
+            declared,
+            seed_conditional,
+        )),
         defer,
     )
 }
@@ -144,6 +163,8 @@ type Seed<'a> = (
     &'a [(Vec<u8>, LoweredTrait)],
     &'a [Box<[u8]>],
     &'a [(Vec<u8>, Vec<u8>)],
+    &'a dyn Fn(&[u8]) -> bool,
+    &'a std::collections::HashSet<Vec<u8>>,
 );
 
 // WP-65 B-65.3 (KB65-3): cumulative wall-ns of the two lower phases over
@@ -299,7 +320,7 @@ fn lower_source_impl(
         // `__FILE__`/backtrace to "eval()'d code". Calling a caller user function
         // from eval therefore remains unsupported here (a later phase resolves it
         // against the caller module instead of re-emitting).
-        Some((sclasses, sstatic, straits, sglobals, saliases)) => {
+        Some((sclasses, sstatic, straits, sglobals, saliases, declared, seed_conditional)) => {
             // Seed the shared global variable name→slot registry (step 57): a
             // seeded (`include`/`eval`) unit numbers its `$GLOBALS['x']` / `global
             // $x` slots to *agree* with `main`'s (and every earlier unit's), since
@@ -314,9 +335,18 @@ fn lower_source_impl(
             }
             low.classes = sclasses.to_vec();
             low.seed_class_len = sclasses.len();
+            low.seed_conditional = seed_conditional.clone();
             let mut ci: HashMap<Vec<u8>, usize> = HashMap::new();
             for (i, cd) in sclasses.iter().enumerate() {
-                ci.entry(cd.name.to_ascii_lowercase()).or_insert(i);
+                // WP-70 S-70.2: a seed entry is eagerly resolvable only if its
+                // name is DECLARED (runtime class table) — a conditional
+                // declaration never executed stays unresolvable, so a
+                // dependent statement defers to run time exactly like Zend
+                // (the phantom-class family: b_chain/b4/b5/b6).
+                let key = cd.name.to_ascii_lowercase();
+                if declared(&key) {
+                    ci.entry(key).or_insert(i);
+                }
             }
             // Runtime `class_alias` entries resolve to the ORIGINAL decl (index
             // only — no clone), so `extends LegacyName` inherits the real class.
@@ -422,6 +452,7 @@ fn lower_source_impl(
             .collect(),
         const_attributes: low.const_attributes,
         deferred: low.deferred,
+        used_conditional_seed: low.used_conditional_seed.get(),
     })
 }
 
@@ -989,6 +1020,13 @@ struct Lowerer<'f> {
     /// maps into the seed prefix is a RE-declaration from a re-included file
     /// — it must lower fresh, not be suppressed (bug63741).
     seed_class_len: usize,
+    /// WP-70 S-70.2: lowercase names of seed classes that are CONDITIONAL in
+    /// their source unit; an eager supertype bind against one flags
+    /// [`Program::used_conditional_seed`] (see [`Lowerer::note_seed_super`]).
+    seed_conditional: std::collections::HashSet<Vec<u8>>,
+    /// Set by [`Lowerer::note_seed_super`]; `Cell` because interface
+    /// resolution runs under `&self`.
+    used_conditional_seed: std::cell::Cell<bool>,
     /// Lowered traits, keyed by ASCII-lowercased name (step 21). Held only in the
     /// Lowerer — traits are not types and never enter `Program.classes`. Each
     /// entry is fully resolved (nested `use` already flattened), so a consuming
@@ -1131,6 +1169,8 @@ impl<'f> Lowerer<'f> {
             classes: Vec::new(),
             class_index: HashMap::new(),
             seed_class_len: 0,
+            seed_conditional: std::collections::HashSet::new(),
+            used_conditional_seed: std::cell::Cell::new(false),
             traits: HashMap::new(),
             cur_class: None,
             cur_function: None,

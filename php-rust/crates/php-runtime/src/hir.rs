@@ -55,6 +55,12 @@ pub struct Program {
     /// name), registered at run time by [`StmtKind::DeclareTrait`] into the
     /// VM's seed-trait image for later units to `use`.
     pub conditional_traits: Vec<(Vec<u8>, LoweredTrait)>,
+    /// WP-70 S-70.2: true when a supertype of this unit resolved EAGERLY to a
+    /// seed class that is conditional in its source unit (declared at run
+    /// time, so possibly absent in another request with the same include
+    /// chain). Such a lowering is context-sensitive beyond the chain
+    /// fingerprint — the unit-cache publish gate treats it as impure.
+    pub used_conditional_seed: bool,
     /// Anonymous functions and arrow functions, lowered into one flat table
     /// (step 18, D-18.2). A [`ExprKind::Closure`] selects its body by index;
     /// closures nest by appending to this same vector.

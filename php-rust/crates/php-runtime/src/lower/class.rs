@@ -452,13 +452,27 @@ impl<'f> Lowerer<'f> {
         None
     }
 
+    /// WP-70 S-70.2: an EAGER supertype bind against a seed class that is
+    /// conditional in its source unit ties this lowering to the runtime
+    /// declaration state — flag it so the unit-cache publish gate treats
+    /// the program as impure ([`crate::hir::Program::used_conditional_seed`]).
+    pub(super) fn note_seed_super(&self, key: &[u8], idx: usize) {
+        if idx < self.seed_class_len && self.seed_conditional.contains(key) {
+            self.used_conditional_seed.set(true);
+        }
+    }
+
     /// Resolve a list of interface names (`implements`/interface `extends`) to
     /// their class ids (step 19-5). Unknown interfaces are out of scope.
     fn resolve_interfaces(&self, names: &[Box<[u8]>], line: Line) -> Result<Vec<usize>, LowerError> {
         let mut out = Vec::new();
         for n in names {
-            match self.class_index.get(&n.to_ascii_lowercase()) {
-                Some(&i) => out.push(i),
+            let key = n.to_ascii_lowercase();
+            match self.class_index.get(&key) {
+                Some(&i) => {
+                    self.note_seed_super(&key, i);
+                    out.push(i);
+                }
                 None => {
                     return Err(LowerError::UndefinedClass {
                         name: n.clone(),
@@ -670,8 +684,12 @@ impl<'f> Lowerer<'f> {
         let parent = match extends {
             Some(ext) => {
                 let pname = parent_name(self, ext, line)?;
-                match self.class_index.get(&pname.to_ascii_lowercase()) {
-                    Some(&i) => Some(i),
+                let pkey = pname.to_ascii_lowercase();
+                match self.class_index.get(&pkey) {
+                    Some(&i) => {
+                        self.note_seed_super(&pkey, i);
+                        Some(i)
+                    }
                     None => {
                         return Err(LowerError::UndefinedClass {
                             name: pname,

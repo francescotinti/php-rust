@@ -3112,8 +3112,13 @@ impl<'m> super::Vm<'m> {
         };
         let alias_key = alias.to_ascii_lowercase();
         if self.class_index.contains_key(&alias_key) {
+            // S-70.3 (WP-70, oracle-pinned): Zend's class_alias collision is
+            // `Cannot redeclare class %s` with the ALIAS argument's spelling
+            // and the literal "class" kind (even when the existing entry is
+            // an interface/enum — h_alias3); the "name is already in use"
+            // wording belongs to other Zend sites only.
             self.diags.push(Diag::Warning(format!(
-                "Cannot declare class {}, because the name is already in use",
+                "Cannot redeclare class {}",
                 String::from_utf8_lossy(&alias)
             )));
             return Ok(Zval::Bool(false));
