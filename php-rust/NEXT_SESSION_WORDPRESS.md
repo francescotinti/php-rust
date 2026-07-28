@@ -1,34 +1,32 @@
-# Rotta WORDPRESS-FIRST — WP-track (dopo WP-67: ⚡ **P-2 DE-LEAK SPEDITA** — Box::leak MORTO sull'include path: RetainSet per-richiesta (elsa =1.11.2, sign-off utente H-67.2) + cache Rc-owned, park = costruttore UNICO di &'m Module (M-67.1), zero unsafe aggiunti e UNO RIMOSSO · GATE67 PASS fails=0 a verdetto macchina (cargo 1647/0, reverse PER NOME) · coppia full PROPRIA + self-pair A-A′ stessa sera (PRIMO protocollo): delta coppia −1,30% della STESSA TAGLIA dello spread A-A′ 1,26% (emend. concilio: indistinguibile da zero; new′ ≈ old a 0,06%) ⇒ costo CPU ≈ ZERO, nessuna cifra citabile; fail-set 88 BYTE-ID ×3 = run33 · leak-shape: pre-P2 1,62 MiB/richiesta RITENUTI (22 mod: 15 impure+7 eval) → post-P2 pendenza Σcommitted +2,55 KiB/req (soglia 50), dead 1998/2003, Δstubs=0 (KS-P67.3) · quota B-67.1: CPU residua impure ≈21 ms/richiesta (script-loader 8,4+comment 6,1+ProviderRegistry 1,5 = 74-75%, emend. Hejlsberg) = la leva WP-68 · rigiochi KS-P1/S-66.4 PASS con verdict-file (SAPI -S sequenziale, worker unico) · 🔴 SCOPERTA S-67.2: divergenza ordering autoload-in-lowering PRE-ESISTENTE sul COLD (oracle: U-top·[autoload]; phpr: [autoload]·U-top) — catalogata PHPR_DIVERGENCES §3 + pinnata nel gate; defer-always chiuderebbe ANCHE questa (prova eseguibile per il concilio WP-68) · reqmark spedito: il marker ha reso VISIBILE il self-traffic WP (cron+loopback) che l'offset assorbiva in silenzio · stash phpr-wp67 c0f5cfff…, tree 2b92c78)
+# Rotta WORDPRESS-FIRST — WP-track (dopo WP-68: ⚡ **LEVA DEFER-ALWAYS SPEDITA** — l'autoload è FUORI dal lowering delle unit (`DeferPolicy::All` come il main, `Set` ELIMINATA): le 15 ex-impure sono PURE per costruzione e PUBBLICATE — **KB67-2 CONSEGNATO: hit_cross=512/512, cold=0, dc=0**, fp-seq stabili · batteria ordering-s68 (5 Stogov) + declaration-order H-68.1 (3 nuove) **8/8 BYTE-ID all'oracle a 2 LATI** (cold CLI + hit -S, hit-cross asserito — il Fatal di a-func byte-id DALLA CACHE): **la divergenza semantica S-67.2 è CHIUSA**, gate-ordering RI-PINNATA a oracle (atto deliberato) · quota S-68.4 (mediana R4→R10 ×3): Δdefer=16/req, **7,84 ms/req** [7,79-7,85] su build census, 490 µs/DECL, **Δ(l+c) whole-file 21→0,00** — KS68-2 NON scatta, fallback publish+dep-replay DECADE (H-68.5) · coppia full run56: **−0,10% ≪ spread A-A′ 3,16% ⇒ costo CPU ≈ 0**; **88 BYTE-ID = run33 ×3** · 2 fix engine da precondizioni/gate: **KS-P67.2** (make_cell_bridge: i nomi solo-menzionati non affiorano più come NULL in $GLOBALS — diff vs oracle RISTRETTO, sem ri-pinnata a doppio pin) e 🔴 **drift seed-fold PRE-ESISTENTE** (dup conditional già registrate piegate nel seed senza mint — fold==mint ora per costruzione; sentinelle65 ri-pin 177→176 spiegato alla cifra) · debiti P-2: prune E-68.2 ⇒ nk **0,586 KiB/req** (era 2,549, bookkeeping riconciliato ≈77%); prova viva STUBS 0→173; **de-leak wpdev LETTO alla scala** (dead ~16/req, vivi PIATTI ≈1.036 = plateau ways) · **B-68.3 kill-switch ONORATO**: pendenza wpdev +62,6 KiB/req = census-own quantificato (CENSUS_HITS 512×~120 B ≈ 61) ⇒ banda axum NON citabile fino a L-68.1 · metro KL67-1 terza run: counted PIATTO per MECCANISMO (master CLI = una richiesta), NON-promosso (KL68-2 → WP-69 no-swap+L-68.1) · GATE68 PASS fails=0 a verdetto macchina (cargo 1648/0, trap self-test ESERCITATA K-68.4, assert park M-68.1, editmiss P-67.4 ARMATA) · media 2,68×/3,08× (quarta coppia G-66.4: banda 2,9-3,2 confermata) · stash phpr-wp68 8eea807e…, tree f663765)
 
-> ⚡ **WP-67 (2026-07-28 notte, `4fe85a1`→`2b92c78` release + `046c961`/
-> `f0f0e72` census/doc)** — sintesi a 9 recepita INTEGRALE in
-> `wp67-harness/design67.md` PRIMA del codice; predizioni committate
-> PRIMA dei letti (34aed31). **Debiti d'apertura a delta zero**:
-> H-67.1 breach leggibile; H-67.3/M-67.6 tripwire tail∩seed VIVO
-> promosso a FATAL in ogni build + test negativo (cargo 1646→1647);
-> E-67.1 finestra `l` depurata + split dup_fp/dup_cold (E6 sbloccata);
-> G-67.1/K-67.5 evento `reqmark` (vocabolario 10→11) — offset+sleep
-> DEPRECATO; B-67.2 contatore diretto parked_modules/bytes; K-67.1/2/3
-> gate hardening (verdict-file, trap-FAIL, reverse PER NOME);
-> L-67.3/G-67.3 analyze-l67.pl (per-causa esatta; sotto swap (a)/(b)
-> opposte ⇒ run senza pressione ancora dovuta, phys standing SOSPESI).
-> **P-2 SPEDITA** (design66-p2 emendato integrale): RetainSet
-> (elsa =1.11.2, sign-off utente) + cache Rc-owned; park_module =
-> costruttore UNICO (M-67.1); hit clone+park (K-M67.2/H-67.4); eval
-> muoiono a fine richiesta; main = borrow del chiamante (M-67.2);
-> census ptr→Weak = UN unsafe RIMOSSO, zero aggiunti (verifica a
-> macchina). GATE67 PASS fails=0; probe67-nk N=1000: pendenza
-> +2,55 KiB/req, dead 1998/2003, Δstubs=0; A/B pre-P2: 1,62 MiB/req
-> ritenuti su wpdev che ora MUOIONO; rigiochi KS-P1/S-66.4 PASS;
-> run55 TRIPLE: CPU indistinguibile da zero (coppia −1,30% ≈ spread A-A′ 1,26%, STESSA TAGLIA — emend. concilio; new′≈old a 0,06%), 88 BYTE-ID ×3.
-> **🔴 S-67.2**: la fixture ordering-echo ha falsificato il COLD:
-> divergenza autoload-in-lowering PRE-ESISTENTE vs oracle (catalogata
-> + pinnata); la leva impure NON eseguita (scope onesto) — la forma
-> vincolata publish+dep-replay va ripesata contro defer-always
-> (Zend-fedele E purificante) al concilio WP-68, con la quota
-> 21 ms/richiesta sul tavolo.
-> **Storia: `sessions/WP_SESSION_67.md`. WP-66:
-> `sessions/WP_SESSION_66.md`.**
+> ⚡ **WP-68 (2026-07-28 mattina, `9f4c8a9`→`f663765`)** — sintesi a 9
+> recepita INTEGRALE in `wp68-harness/design68.md` PRIMA del codice;
+> predizioni PRIMA dei letti (9bc603f, locked 3deb3b1b…).
+> **Precondizioni KS-P68.1 eseguite PRIMA del codice**: (b) P-67.2 ha
+> trovato una violazione REALE di KS-P67.2 (nomi solo-menzionati
+> materializzati come NULL in $GLOBALS) → fix `make_cell_bridge`
+> (16869da: il bridge PRESERVA Undef; `&`/`global` restano promozioni
+> DEFINENTI, oracle-pinned) + test cargo su `run_source_with`.
+> **LEVA DEFER-ALWAYS SPEDITA (b8dca2c)**: `lower_unit` →
+> `DeferPolicy::All` (il late binding del main diventa la forma di
+> TUTTE le unit); autoload solo al DECLARE via `run_deferred`; siti
+> non-deferrable = unica impurità residua (never-published, KS67-1);
+> `DeferPolicy::Set` ELIMINATA (H-68.5); frame `require()` nel trace.
+> Batteria s68+h68 8/8 BYTE-ID oracle 2 LATI; KB67-2: hit_cross=512;
+> quota 7,84 ms/req (KS68-2 no); P-67.4 editmiss ARMATA e verde.
+> **🔴 SCOPERTA dal gate (run1 FAIL onesto)**: drift seed-vs-runtime
+> PRE-ESISTENTE (le conditional con nome già registrato — ValueError
+> dei polyfill — si piegavano nel seed SENZA mint) esposto dai
+> placeholder defer ⇒ fix `f663765`: fold==mint per costruzione.
+> GATE68 PASS al terzo run (FAIL 1-2 archiviati .superseded, K-68.1);
+> run56 triple: coppia −0,10% ≪ A-A′ 3,16%, 88 BYTE-ID ×3.
+> Debiti: prune E-68.2 (nk 0,586 KiB/req), STUBS viva 0→173,
+> H-68.3 audit stable_deref_trait 1.2.1, M-68.4/5, H-68.4, E-68.3.
+> B-68.3 kill-switch onorato (census-own ~61 KiB/req quantificato);
+> metro non-promosso per meccanismo (master CLI = una richiesta).
+> **Storia: `sessions/WP_SESSION_68.md`. WP-67:
+> `sessions/WP_SESSION_67.md`.**
 
 ## 📁 Convenzioni (decisione utente 2026-07-23)
 
@@ -91,9 +89,9 @@
   chiude senza concilio, il PRIMO atto della successiva è convocarlo.
   Modello: `wp62-harness/COUNCIL_WP62_REVIEWS.md`.
 
-## Stato gate per nome (WP-67 `2b92c78`: **GATE67 a VERDETTO MACCHINA — PASS fails=0** su `wp67-harness/gate-out/` (K-67.1/2/3: trap-FAIL su uscite premature, cargo tot≥1646, purge log freschi, **reverse PER NOME** con baseline+PROVENANCE in `wp67-harness/gate-baseline/`) — cargo **1647/0** (+1 = test tripwire M-67.6) · sentinelle 5 assi BYTE-ID · sentinels65 + KS-S6 + **seed_prefix_short=0** · KE-e · P1 hit_cross=2 · S-65.3 + diff-oracle pinnato · fixture gate-ordering (S-67.2) PINNATA — NON eseguita dal run PASS (creata dopo il passo 2b, emend. Klabnik KK68-1); eseguita a mano dal concilio su c0f5cfff: verde; in matrice dal prossimo gate · corpus **1421 IDENTICO** · refl **290** · ORM **3E/13F IDENTICO** · **hk 1665 OK** · **reverse 2F PER NOME**; release = **phpr-wp67 (c0f5cfff…, tree `2b92c78`)** stash additivo accanto a wp66 (5aa60d56…); catena serale run55 TRIPLE: fail-set **88 BYTE-ID = run33 ×3** (new/old/new′), CPU coppia −1,30% DENTRO spread A-A′ 1,26% ⇒ ≈0; probe verdict-file: probe67-census PASS · probe67-nk post-p2 PASS · probe67-ksp1 PASS · S-66.4 PASS; census: phpr-memgc66 (cea61455, PRE-P2) + phpr-memgc67 (95d07638, POST-P2); ⚠️ /private/tmp/wp11-gates dopo un reboot va ripristinato dai tarball `wp9-harness/gates/`)
+## Stato gate per nome (WP-68 `f663765`: **GATE68 a VERDETTO MACCHINA — PASS fails=0** su `wp68-harness/gate-out/` al TERZO run — il PASS esercita TUTTA la matrice nello stesso run (K-68.2); run1/run2 FAIL archiviati `.superseded-*` (K-68.1) — **K-68.4 trap self-test ESERCITATA** · **M-68.1 assert park** (3 call-site+1 def, Box::leak(=0) ) · cargo **1648/0** (tot≥1648) · sentinelle 5 assi BYTE-ID · fixture: gate-ordering **RI-PINNATA a ORACLE** + **gate-ordering-s68 (5+3 casi, 2 LATI, hit-cross asserito)** + **gate-droporder (P-68.1 ricorrente)** + **gate-editmiss (P-67.4 ARMATA)** · sentinels65 (ri-pin main.elide 176, PROVENANCE) + KS-S6 alignhit>0 + seed_prefix_short=0 · KE-e · P1 · **sem a DOPPIO pin** (probe68-sem: vs oracle ristretto + firma-fix vs stash wp67, `wp68-harness/sem-baseline/`) · corpus **1421 IDENTICO** · refl **290** · ORM **3E/13F IDENTICO** · **hk 1665 OK** · **reverse 2F PER NOME**; release = **phpr-wp68 (8eea807e…, tree `f663765`)** stash additivo accanto a wp67 (c0f5cfff…); catena run56 TRIPLE: **88 BYTE-ID = run33 ×3**, coppia −0,10% ≪ spread A-A′ 3,16% ⇒ ≈0; probe verdict-file: probe68-pre PASS · probe68-ksp1 PASS (512/0) · probe68-census PASS (quota 7,84 ms/req) · probe67-nk post-prune PASS (0,586 KiB/req) · probe68-b683 **FAIL ONORATO** (census-own, banda axum non citabile); census: phpr-memgc68 (5027e4e8, tree f663765); ⚠️ /private/tmp/wp11-gates dopo un reboot va ripristinato dai tarball `wp9-harness/gates/`)
 
-## (storico) Stato gate WP-66 (`fe33706`: GATE66 PASS fails=0 — cargo 1646/0 · corpus 1421 · refl 290 · ORM 3E/13F · hk 1665 OK asserito · reverse 2F a conteggio; stash phpr-wp66 5aa60d56…; dettaglio: `sessions/WP_SESSION_66.md`)
+## (storico) Stato gate WP-67 (`2b92c78`: GATE67 PASS fails=0 — cargo 1647/0 · corpus 1421 · refl 290 · ORM 3E/13F · hk 1665 OK · reverse 2F PER NOME; run55 triple 88 BYTE-ID ×3; stash phpr-wp67 c0f5cfff…; dettaglio: `sessions/WP_SESSION_67.md`)
 
 - Gate56 verde (2026-07-26, tree `0943f58`): corpus **1421 IDENTICO** per
   nome (baseline = `wp55-harness/gate-out/corpus.fails`) · **refl 290
@@ -294,6 +292,26 @@
 #  phpr-memgc66 (cea61455, PRE-P2) e phpr-memgc67 (95d07638, POST-P2)
 #  in phpr-mem-target/. Env nuovi: PHPR_MI_COLLECT_REQ=1 (checkpoint
 #  standing per-richiesta, census-only).
+# WP-68: wp68-harness/{design68.md (recepimento sintesi 9 + §10 verdetti
+#  con disposizione K-68.3 di OGNI predizione), predictions68.md (+.locked
+#  + copia repo sessions/WP68_PREDICTIONS.md, commit 9bc603f),
+#  probe68-pre.sh (precondizioni KS-P68.1 a verdict), probe68-ksp1.sh
+#  (KB67-2: attese cold=0/hit_cross=512), probe68-census.sh (quota
+#  S-68.4, G-68.4 ×3 run, KS68-2 nel verdetto), probe68-sem.sh (S-65.3
+#  forma WP-68: DOPPIO diff pinnato, sem-baseline/+PROVENANCE),
+#  probe68-b683.sh (B-68.3 slope wpdev N=1000, slope-only L-68.3),
+#  build-memgc68.sh, census68-metro.sh (KL67-1 con protocollo no-swap
+#  L-68.4), gap68-media.sh, run56-triple.sh, gate68.sh (K-68.1 verdict
+#  .superseded / K-68.4 trap self-test / M-68.1 assert park),
+#  fixtures/{gate-ordering-s68.sh (5+3 casi 2 LATI, pins/+PROVENANCE),
+#  gate-droporder.sh (P-68.1), gate-editmiss.sh (P-67.4),
+#  ordering-h68/ (f-intra g-declared h-livecond)}}; out: gate-out/
+#  (gate68.verdict PASS + .superseded-*), pre-out/, ksp1-out/,
+#  census-out/ (quota-table, memcensus68-metro), b683-out/, eve-out/
+#  (run56 new/old/new2), stubs-out/, gap-out/. Binario census
+#  phpr-memgc68 (5027e4e8) in phpr-mem-target/. ⚠️ ri-pin WP-68 con
+#  PROVENANCE: gate-ordering (atteso=oracle), sem-baseline (doppio pin),
+#  sentinels65 main.elide 177→176 (copia .pre-wp68 accanto).
 # WP-59: wp59-harness/{design59.md (verdetti Ob.0-3 + gate pre-registrati),
 #  ob0-media.sh,ob0-full.sh (diagnostiche MIMALLOC_SHOW_STATS+vmmap),
 #  build-memgc59.sh,ob1-census59-media.sh,ob1-supervisor.sh (finestre
@@ -308,102 +326,75 @@
 #  funcs,null} (leak template + moltiplicatore compile-side).
 ```
 
-## 🎯 PROSSIMO LAVORO — WP-68: cacheabilità unit impure (forma DA RIDECIDERE al concilio con la prova S-67.2) + fronte axum multi-worker + code L-67
+## 🎯 PROSSIMO LAVORO — WP-69: SPIKE DISPATCH bounded (rotta utente, ora DOVUTA) + L-68.1 census self-accounting + fronte axum
 
 **Rotta (utente 2026-07-24)**: `FOOTPRINT_CPU_ROADMAP.md` — footprint-first,
 safe-only, TUTTE le fasi, no-revert. Laravel POSTICIPATA a valle.
-Stato WP-67: P-2 SPEDITA e verificata (dettaglio:
-`sessions/WP_SESSION_67.md` + `wp67-harness/design67.md` §8).
+Stato WP-68: leva defer-always SPEDITA e verificata (dettaglio:
+`sessions/WP_SESSION_68.md` + `wp68-harness/design68.md` §10).
 
-⚖️ **CONCILIO DI CHIUSURA WP-67 ESEGUITO: verbali INTEGRALI + sintesi in
-`wp68-harness/COUNCIL_WP68_REVIEWS.md` — VINCOLANTI per design68,
-recepire INTEGRALI prima di toccare codice. DECISIONE DI FORMA PRESA:
-**DEFER-ALWAYS** (5 sedie esplicite; publish+dep-replay RESPINTA come
-default, resta fallback KS68-2) sul fondamento della batteria
-`wp67-harness/fixtures/ordering-s68/` (Stogov, 5 casi TUTTI divergenti,
-2 SEMANTICI: a-func esegue codice che Zend fatalerebbe, c-cond autoloada
-su rami morti, e-exists anticipa il binding). Condizioni: S-68.1 scope
-(defer SOLO nomi irrisolvibili da seed∪unit-corrente), quota ns/DECLARE
-pre-registrata (S-68.4/M-68.2), predizioni B-68.4, precondizioni
-P-68.3/KS-P68.1 {KS-S67.2, P-67.2, S-67.4} PRIMA del codice.**
+⚖️ **CONCILIO DI CHIUSURA WP-68: verbali INTEGRALI + sintesi in
+`wp69-harness/COUNCIL_WP69_REVIEWS.md` — VINCOLANTI per design69,
+recepire INTEGRALI prima di toccare codice.**
 
-1. **Cacheabilità unit impure — LA DECISIONE DI FORMA VA RIAPERTA AL
-   CONCILIO** con la prova eseguibile S-67.2 sul tavolo
-   (`wp67-harness/fixtures/ordering/`): (a) forma WP-67 vincolata
-   publish+dep-list+dep-replay (E-67.2/S-67.1) = hit==cold coerente ma
-   ENTRAMBI ≠ Zend nell'ordering (divergenza pre-esistente resta); (b)
-   forma defer-always (Stogov: "in Zend è ESATTAMENTE il caso
-   cachato") = late binding fedele ⇒ unit PURE per costruzione, chiude
-   ANCHE la divergenza cold — da valutare costo (defer di ogni extends
-   non-seed) e rischi (ordine di dichiarazione). Quota sul tavolo:
-   **21 ms/richiesta CPU + niente più leak** (il leak è già morto con
-   P-2). Criterio di successo INVARIATO: le 15 diventano hit_cross
-   (KB67-2), mai "publish avvenuta"; fixture: ordering-echo (pinnata),
-   P-67.4 figlio-editato⇒MISS (si arma con la leva), catena impura ⇒
-   never-published (KS67-1/KS-S67.1).
-2. **Fronte axum vero (multi-worker) — ora SBLOCCATO da P-2**: KS-P2
-   breakdown per-worker (cache PER-THREAD ×N — M-66.3), L-66.3 metro
-   {1,100,1000} per-worker, batteria S-67.3 confini server
-   (pre-registrata in design67 §5: session, POST/FILES/COOKIE,
-   header/setcookie reset, ob, **static function-vars su unit cacheata
-   KS-S67.2**, define/ini, shutdown, cross-worker), S-67.4 g2′
-   include-vuoto, P-67.2 seed-materializzazione, S-67.5 set route
-   minimo {/, permalink, ?s=, 404, /wp-json/wp/v2/posts, wp-login GET,
-   POST commento}, B-67.4 replay multi-URL con plateau ways (KB67-3),
+1. **SPIKE DISPATCH bounded a UNA sessione (rotta ESPLICITA utente
+   2026-07-28 — WP-68 consegnata ⇒ la coda è DOVUTA)**: dentro la
+   condizione WP-44 (ridurre/mantenere i corpi handler caldi, MAI
+   aggiungerne; i registri-come-rappresentazione restano falsificati).
+   Forma: (i) profilo `sample` mirato che separi DENTRO i corpi
+   handler l'operand-fetch/stack-traffic dal lavoro utile
+   (owner-level WP-54, outlined per nome WP-65); (ii) UN solo
+   prototipo motivato dal profilo — token-threading/dispatch-table O
+   core-caldo-ridotto O tranche superistruzioni — in WORKTREE;
+   (iii) giudice = coppia build-adiacente + A-A′ stessa sera (G-68.1);
+   (iv) kill-switch pre-registrato: sotto lo spread della serata ⇒
+   arco RICHIUSO a verbale, senza tuning. Candidati e priorità: il
+   concilio di apertura WP-69 sul profilo (i).
+2. **L-68.1 census self-accounting (BLOCCA la banda axum — KH68-3
+   onorato in WP-68)**: census_own_bytes; pendenza citabile =
+   Σcommitted − census_own; verifica dell'ipotesi quantificata B-68.3
+   (CENSUS_HITS 512 righe/req × ~120 B ≈ 61,4 dei 62,6 KiB/req letti
+   su wpdev); attesa residuo engine ≤0,3 KiB/req su nk-doc. In
+   subordine: prune/cap di CENSUS_HITS con semantica dichiarata (oggi
+   il tag=cachehit è cumulativo — cambiarla = atto deliberato).
+   KL68-2: promozione del metro = run no-swap VERA (da reboot) +
+   self-accounting. Δbytes STUBS (colonna stubs_bytes) in coda.
+3. **Fronte axum vero (multi-worker)**: KS-P2 breakdown per-worker
+   (cache PER-THREAD ×N — M-66.3), L-66.3 metro {1,100,1000}
+   per-worker, batteria S-67.3 residua (session, POST/FILES/COOKIE,
+   header/setcookie reset, ob, define/ini, shutdown, cross-worker —
+   KS-S67.2/P-67.2/S-67.4 GIÀ verdi in WP-68), S-67.5 set route
+   minimo, B-67.4 replay multi-URL con plateau ways (KB67-3 — dato
+   nuovo WP-68: vivi ≈1.036 su wpdev = plateau ~2 entry/path, base
+   per la discussione ways), P-68.4 confine cron (B-68.2/KB68-2),
    B-66.3 sample sotto carico, G-66.5 coppia log-off/on server.
-3. **Code L-67**: la colonna per-causa PULITA vuole una census run
-   SENZA pressione di swap (G-67.4: swap loggato pre-run; su l661 le
-   cause (a)/(b) si gonfiano opposte) — claim phys standing SOSPESI
-   finché non c'è; KL67-1 terza run del metro Σcommitted (attesa:
-   post-P-2 il counted unit cala — dichiarare l'atteso dal Δcounted
-   PRIMA della run).
-4. **E6 ri-quota**: colonne DEPURATE (E-67.1: dup_fp/dup_cold split)
-   ARMATE in 2b92c78 — serve un census full; soglia in forma E-66.2;
-   KS67-2: mai su dup_lc_ns non depurato.
-5. **G3**: invariato — quarta coppia media o risoluzione criterio ≥3+3
-   (G-66.4). **P2 seed signature-only**: invariato (Gregg R6).
-6. **🆕 IN CODA (rotta ESPLICITA utente 2026-07-28, per WP-69 — DOPO la
-   consegna di WP-68)**: **SPIKE DISPATCH bounded a UNA sessione** sul
-   fronte interprete. NON riapre l'arco registri-come-rappresentazione
-   (WP-44 resta falsificato ×3, veto intatto): esercita la porta
-   lasciata socchiusa dal verbale WP-44 sotto la sua condizione
-   ("ogni riapertura deve RIDURRE o mantenere i corpi handler caldi,
-   mai aggiungerne"). Forma concordata: (i) PRIMA un profilo `sample`
-   mirato che separi DENTRO i corpi handler l'operand-fetch/stack-
-   traffic dal lavoro utile (attribuzione owner-level stile WP-54,
-   outlined misurabili per nome — WP-65); (ii) POI **UN solo
-   prototipo** a scelta motivata dal profilo — token-threading/
-   dispatch-table O core-caldo-ridotto (match spaccato, handler
-   freddi outlined) O tranche di superistruzioni oltre le bigram —
-   in WORKTREE, mai sul tree vivo; (iii) giudice = coppia
-   build-adiacente + self-pair A-A′ stessa sera (KG67-1/G-68.1);
-   (iv) kill-switch pre-registrato: se non batte lo spread della
-   serata ⇒ l'arco si RICHIUDE con la strumentazione moderna a
-   verbale, senza tuning. Predizioni committate PRIMA dei letti;
-   candidati e priorità li fissa il concilio di apertura WP-69 sul
-   profilo (i).
+4. **Follow-up leva defer-always (canale NOMINATO, non aperto)**:
+   cache dei defer-mini keyed (unit,idx,fp) — 7,8 ms/req residui su
+   census (16 DECL × 490 µs); aprire SOLO su decisione concilio con
+   predizioni pre-registrate (il costo su build parità è già
+   indistinguibile: run56 −0,10% ≪ spread).
+5. **E6 ri-quota**: colonne depurate (dup_fp/dup_cold + nota CEILING
+   E-68.3) armate — serve census full; KS67-2 invariato. **G3**:
+   quarta coppia media LETTA in WP-68 (3,08× dentro banda) —
+   criterio G-66.4 al concilio per la chiusura formale.
+   **P2 seed signature-only**: invariato (Gregg R6).
 
 **VETI del concilio (restano vincolanti)**: invariati da WP-64/65
-(NEXT_SESSION storico + `sessions/WP_SESSION_64.md`: mai
-MIMALLOC_PURGE_DELAY nei giudici; mai maxrss come giudice; nessun
-pool/freelist; interning/immutable-literal con condizioni; ecc.).
-- **NON riproporre (nuovi WP-67)**: **offset+sleep come delimitatore di
-  richiesta** (reqmark spedito: segmentare SEMPRE per marker,
-  classificando i segmenti per entry-script — il self-traffic WP
-  esiste); **tripwire debug-only** (il gate gira `--release`: la forma
-  è FATAL-in-ogni-build + test negativo); **re-lower aggiuntivo**
-  (Hejlsberg c: l'ultima iterazione del retry È il lower a seed
-  stabilizzato); **publish senza dep-replay** (respinta WP-67, salvo
-  ridecisione esplicita del concilio con la prova S-67.2); **cifre
-  <1% senza self-pair A-A′ stessa sera** (ora protocollo eseguito:
-  run55 triple); **phys standing come giudice** (solo Σcommitted,
-  KG67-2).
-- **NON riproporre (ereditati WP-63/64/65)**: bande CPU di coppia più
-  strette dello spread storico; giudizi peak da coppia singola vs
-  stash; forma Rc-prefix per slot_names; leva CPU su map/remap;
-  rounding al peak; eventi log con sottostringhe; baking emit-time;
-  peak-differential; bande NET→PHYS; colonne prefixsum a flag ON come
-  attribuzione; riaprire cache re-link senza numeri sopra soglia.
+(mai MIMALLOC_PURGE_DELAY nei giudici; mai maxrss come giudice;
+nessun pool/freelist; ecc.) + WP-67 (offset+sleep; tripwire
+debug-only; re-lower aggiuntivo; cifre <1% senza self-pair; phys
+standing come giudice).
+- **NON riproporre (nuovi WP-68)**: **publish+dep-replay** (DECADUTA
+  con KS68-2 non scattato: defer-always confermata, la spec è
+  eliminata dal codice — H-68.5); **pendenze census-contaminate come
+  cifre engine** (B-68.3: senza L-68.1 la banda axum NON si cita);
+  **predizioni sul metro full senza dichiarare il meccanismo
+  single-request del master CLI** (P68-M: il RetainSet vive fino
+  all'exit — il canale per-richiesta si giudica SOLO sul probe
+  server); **run MI_COLLECT_REQ come footprint standing** (L-68.3
+  invariato); **pin che si muovono per un miglioramento aggiornati
+  senza coppia di diff** (forma probe68-sem: vs oracle + firma-fix
+  vs stash).
 
 ## (storico, pre-roadmap) PROSSIMO LAVORO
 
@@ -453,13 +444,16 @@ vivo); misure per-sessione in `gaps/REPORT_GAP_<N>.md`. A ogni chiusura:
 misurare media (user CPU + footprint) e full-suite master-CPU, scrivere
 REPORT_GAP_N (sola sessione N), aggiungere la riga a GAP_TREND, riportare
 il gap all'utente.
-Ultimo stato (WP-67, P-2 de-leak spedita):
-**media CPU riferimento 2,58× · footprint media ~3,0× (mediana n=3,
-banda 2,9-3,2 aperta su G-66.4) · full: CPU 2,06-2,11× (run55 triple:
-P-2 costo ≈ 0, −1,30% dentro spread A-A′ 1,26%), peak ~1,98-2,03GB
-(riferimento WP-65) · leak server: pre-P2 1,62 MiB/richiesta ritenuti
-→ post-P2 pendenza +2,55 KiB/req (bookkeeping census), dead
-1998/2003 · CPU residua impure ≈21 ms/richiesta (leva WP-68) ·
-baseline parità phpr-wp67 (c0f5cfff…, gate67 PASS fails=0) ·
-dettaglio: `sessions/WP_SESSION_67.md` + `gaps/REPORT_GAP_67.md`,
-trend: `gaps/GAP_TREND.md`**.
+Ultimo stato (WP-68, leva defer-always spedita):
+**media CPU 2,68× (coppia singola sotto swap; riferimento 2,58×) ·
+footprint media 3,08× (QUARTA coppia G-66.4: banda 2,9-3,2
+confermata, mediana ≈3,0-3,1) · full: CPU 2,06-2,11× (run56 triple:
+costo leva ≈ 0, −0,10% ≪ spread A-A′ 3,16%; 790,31u ≈2,10× sotto
+swap), peak ~1,98-2,03GB (riferimento WP-65) · server: hit_cross
+512/512, cold=0; CPU residua include 21 → ~7,8 ms/req (16 DECL ×
+490 µs, su build census); nk post-prune 0,586 KiB/req; de-leak wpdev
+LETTO (dead ~16/req, vivi piatti ≈1.036); banda axum NON citabile
+fino a L-68.1 (census-own ~61 KiB/req quantificato) · baseline parità
+phpr-wp68 (8eea807e…, gate68 PASS fails=0) · dettaglio:
+`sessions/WP_SESSION_68.md` + `gaps/REPORT_GAP_68.md`, trend:
+`gaps/GAP_TREND.md`**.
