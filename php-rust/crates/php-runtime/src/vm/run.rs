@@ -1401,7 +1401,9 @@ impl<'m> super::Vm<'m> {
                             DimBase::Global(s) => &mut self.frames[0].slots[*s as usize],
                             DimBase::Superglobal(i) => &mut self.superglobals[*i as usize],
                         };
-                        unset_into(cell, &keys);
+                        let mut aa = None;
+                        unset_into(cell, &keys, &mut aa);
+                        self.drain_unset_aa(aa, top)?;
                         None
                     };
                     if let Some(old) = dropped {
@@ -5165,8 +5167,12 @@ impl<'m> super::Vm<'m> {
                     // A lazy base initializes; the removal runs on the realized
                     // object (a guarded `unset($this->$name)` inside `__unset`).
                     if let Some(mut root) = self.field_lazy_root(*base, top, &steps, &keys, false)? {
-                        let fs = FieldScope { classes: &self.classes, scope: self.frames[top].class };
-                        field_unset(&mut root, &steps, &mut keys.into_iter(), fs)?;
+                        let mut aa = None;
+                        {
+                            let fs = FieldScope { classes: &self.classes, scope: self.frames[top].class };
+                            field_unset(&mut root, &steps, &mut keys.into_iter(), fs, &mut aa)?;
+                        }
+                        self.drain_unset_aa(aa, top)?;
                         continue;
                     }
                     self.field_remove(*base, top, &steps, keys)?;

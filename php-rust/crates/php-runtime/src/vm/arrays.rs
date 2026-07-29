@@ -115,13 +115,13 @@ pub(super) fn string_offset(s: &PhpStr, key: &Zval) -> Option<u8> {
 /// Remove the leaf of `keys` from `cell` (or, when `keys` is empty, unset the
 /// variable itself by resetting it to `Undef`). A missing intermediate level is
 /// a silent no-op; copy-on-write applies to each array touched.
-pub(super) fn unset_into(cell: &mut Zval, keys: &[Zval]) {
-    let mut walk = unset_into_walk(cell, keys, 0);
+pub(super) fn unset_into(cell: &mut Zval, keys: &[Zval], aa: &mut Option<UnsetAa>) {
+    let mut walk = unset_into_walk(cell, keys, 0, aa);
     loop {
         walk = match walk {
             UnsetIntoWalk::Done => return,
             UnsetIntoWalk::IntoRef(rc, i) => match rc.try_borrow_mut() {
-                Ok(mut g) => unset_into_walk(&mut g, keys, i),
+                Ok(mut g) => unset_into_walk(&mut g, keys, i, aa),
                 Err(_) => {
                     // Every walker guard is already dropped (boundary
                     // discipline) — only a caller-held guard can trip this.
@@ -144,7 +144,7 @@ enum UnsetIntoWalk {
 
 /// Walk `keys[i..]` from `cell` up to the next `Ref` boundary (see
 /// [`UnsetIntoWalk`]); plain containers are crossed in place.
-fn unset_into_walk(cell: &mut Zval, keys: &[Zval], i: usize) -> UnsetIntoWalk {
+fn unset_into_walk(cell: &mut Zval, keys: &[Zval], i: usize, aa: &mut Option<UnsetAa>) -> UnsetIntoWalk {
     let Some(k) = keys.get(i) else {
         *cell = Zval::Undef;
         return UnsetIntoWalk::Done;
@@ -158,8 +158,22 @@ fn unset_into_walk(cell: &mut Zval, keys: &[Zval], i: usize) -> UnsetIntoWalk {
             if i + 1 == keys.len() {
                 arr.remove(&key);
             } else if let Some(child) = arr.get_mut(&key) {
-                return unset_into_walk(child, keys, i + 1);
+                return unset_into_walk(child, keys, i + 1, aa);
             }
+        }
+    } else if matches!(cell, Zval::Object(_)) {
+        // M-72.1: a dim step on an object defers to the VM drain (the
+        // leaf/one-key AA forms are dispatched at the op level; what
+        // reaches the walker is the nested form, `unset($c['a']['b'])`).
+        if i + 1 == keys.len() {
+            *aa = Some(UnsetAa::Unset { obj: cell.clone(), key: k.clone() });
+        } else {
+            *aa = Some(UnsetAa::Descend {
+                obj: cell.clone(),
+                key: k.clone(),
+                rest: keys[i + 1..].iter().map(|_| FieldStep::Index).collect(),
+                keys: keys[i + 1..].to_vec(),
+            });
         }
     }
     UnsetIntoWalk::Done
@@ -626,13 +640,13 @@ pub(super) fn field_get(cell: &Zval, steps: &[FieldStep], keys: &mut std::vec::I
     }
 }
 
-pub(super) fn field_unset(target: &mut Zval, steps: &[FieldStep], keys: &mut std::vec::IntoIter<Zval>, fs: FieldScope) -> Result<(), PhpError> {
-    let mut walk = field_unset_walk(target, steps, 0, keys, fs)?;
+pub(super) fn field_unset(target: &mut Zval, steps: &[FieldStep], keys: &mut std::vec::IntoIter<Zval>, fs: FieldScope, aa: &mut Option<UnsetAa>) -> Result<(), PhpError> {
+    let mut walk = field_unset_walk(target, steps, 0, keys, fs, aa)?;
     loop {
         walk = match walk {
             UnsetWalk::Done => return Ok(()),
             UnsetWalk::IntoRef(rc, i) => match rc.try_borrow_mut() {
-                Ok(mut g) => field_unset_walk(&mut g, steps, i, keys, fs)?,
+                Ok(mut g) => field_unset_walk(&mut g, steps, i, keys, fs, aa)?,
                 Err(_) => {
                     // Every walker guard is already dropped (boundary
                     // discipline) — only a caller-held guard can trip this.
@@ -641,7 +655,7 @@ pub(super) fn field_unset(target: &mut Zval, steps: &[FieldStep], keys: &mut std
                     UnsetWalk::Done
                 }
             },
-            UnsetWalk::IntoObj(o, i) => field_unset_prop_step(&o, steps, i, keys, fs)?,
+            UnsetWalk::IntoObj(o, i) => field_unset_prop_step(&o, steps, i, keys, fs, aa)?,
         };
     }
 }
@@ -654,6 +668,16 @@ enum UnsetWalk {
     IntoObj(Rc<RefCell<Object>>, usize),
 }
 
+/// M-72.1 (WP-72): the pending ArrayAccess dispatch an UNSET walk produced —
+/// `unset($aa[k])` at the leaf is `offsetUnset`, mid-path is `offsetGet` +
+/// resumed walk on the result (a non-object result is Zend's
+/// indirect-modification notice and nothing is removed). Mirrors [`AaOp`]:
+/// the walker parks, the VM drains — user code never runs under a walk guard.
+pub(super) enum UnsetAa {
+    Unset { obj: Zval, key: Zval },
+    Descend { obj: Zval, key: Zval, rest: Vec<FieldStep>, keys: Vec<Zval> },
+}
+
 /// Walk `steps[i..]` from `target` up to the next cell boundary (see
 /// [`UnsetWalk`]); plain containers are crossed in place — no guard
 /// outlives the return.
@@ -663,6 +687,7 @@ fn field_unset_walk(
     i: usize,
     keys: &mut std::vec::IntoIter<Zval>,
     fs: FieldScope,
+    aa: &mut Option<UnsetAa>,
 ) -> Result<UnsetWalk, PhpError> {
     if let Zval::Ref(rc) = target {
         return Ok(UnsetWalk::IntoRef(Rc::clone(rc), i));
@@ -685,8 +710,22 @@ fn field_unset_walk(
                     if steps.len() == i + 1 {
                         arr.remove(&k);
                     } else if let Some(child) = arr.get_mut(&k) {
-                        return field_unset_walk(child, steps, i + 1, keys, fs);
+                        return field_unset_walk(child, steps, i + 1, keys, fs, aa);
                     }
+                }
+            } else if matches!(target, Zval::Object(_)) {
+                // M-72.1: a dim step on an object defers to the VM drain —
+                // ArrayAccess `offsetUnset` at the leaf, `offsetGet` +
+                // resumed walk mid-path (a non-AA object errors there).
+                if steps.len() == i + 1 {
+                    *aa = Some(UnsetAa::Unset { obj: target.clone(), key });
+                } else {
+                    *aa = Some(UnsetAa::Descend {
+                        obj: target.clone(),
+                        key,
+                        rest: steps[i + 1..].to_vec(),
+                        keys: keys.collect(),
+                    });
                 }
             }
             Ok(UnsetWalk::Done)
@@ -704,6 +743,7 @@ fn field_unset_prop_step(
     i: usize,
     keys: &mut std::vec::IntoIter<Zval>,
     fs: FieldScope,
+    aa: &mut Option<UnsetAa>,
 ) -> Result<UnsetWalk, PhpError> {
     let owned;
     let name: &[u8] = match &steps[i] {
@@ -731,6 +771,38 @@ fn field_unset_prop_step(
     }
     let key = fs.prop_key(cid, name);
     if rest_empty {
+        // M-72.1 leaf-op parity with Op::PropUnset: enum-case → visibility →
+        // asym set-visibility → readonly. (`__unset`/hook dispatch runs at
+        // the op level BEFORE the walker; the typed-ref release stays
+        // op-level too — pre-existing walker gap.)
+        if obj.info.is_enum_case {
+            return Err(PhpError::Error(format!(
+                "Cannot unset readonly property {}::${}",
+                String::from_utf8_lossy(obj.class_name.as_bytes()),
+                String::from_utf8_lossy(name)
+            )));
+        }
+        check_prop_access(fs.classes, fs.scope, cid, name)?;
+        if let Some(err) = asym_write_error(fs.classes, fs.scope, cid, name, "unset") {
+            return Err(err);
+        }
+        if let Some(decl) = prop_readonly_decl(fs.classes, cid, name) {
+            if obj.readonly_clone_writable(key.as_ref()) {
+                obj.clear_readonly_init(key.as_ref());
+            } else {
+                let inited = obj.is_readonly_init(key.as_ref());
+                let set_vis =
+                    prop_info(fs.classes, cid, name).and_then(|pi| pi.set_visibility);
+                if let Some(err) =
+                    readonly_write_error(fs.classes, fs.scope, decl, name, inited, set_vis)
+                {
+                    let PhpError::Error(m) = err else { return Err(err) };
+                    return Err(PhpError::Error(
+                        m.replacen("Cannot modify", "Cannot unset", 1),
+                    ));
+                }
+            }
+        }
         // A declared TYPED property returns to *uninitialized* on
         // unset (mirrors Op::PropUnset; doctrine unsets via a
         // bound closure with a dynamic name).
@@ -738,6 +810,7 @@ fn field_unset_prop_step(
             obj.info.type_of(key.as_ref()).is_some() || obj.info.type_of(name).is_some();
         if typed {
             obj.props.set(key.as_ref(), Zval::Undef);
+            obj.mark_typed_unset(key.as_ref());
         } else {
             obj.props.remove(key.as_ref());
         }
@@ -745,7 +818,7 @@ fn field_unset_prop_step(
     } else if let Some(child) = obj.props.get_mut(key.as_ref()) {
         // Continue INSIDE this guard only up to the next boundary; the
         // guard drops when the token returns (boundary discipline).
-        field_unset_walk(child, steps, i + 1, keys, fs)
+        field_unset_walk(child, steps, i + 1, keys, fs, aa)
     } else {
         Ok(UnsetWalk::Done)
     }
@@ -1536,6 +1609,63 @@ impl<'m> Vm<'m> {
                     for d in &dropped {
                         self.gc_note(d);
                     }
+                    pending = aa2;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Run the pending ArrayAccess dispatches an UNSET walk parked (M-72.1),
+    /// chaining through `Descend` (`unset($c['a']->b['x'])`). Every walker
+    /// guard is dead by the time this runs — user code (`offsetGet` /
+    /// `offsetUnset`) never executes under a walk borrow.
+    pub(super) fn drain_unset_aa(&mut self, aa: Option<UnsetAa>, top: usize) -> Result<(), PhpError> {
+        let mut pending = aa;
+        while let Some(op) = pending.take() {
+            let recv = match &op {
+                UnsetAa::Unset { obj, .. } | UnsetAa::Descend { obj, .. } => obj,
+            };
+            if !self.object_implements(recv, b"arrayaccess") {
+                let name = deref_object(recv)
+                    .and_then(|o| {
+                        o.try_borrow().ok().map(|b| {
+                            String::from_utf8_lossy(b.class_name.as_bytes()).into_owned()
+                        })
+                    })
+                    .unwrap_or_default();
+                return Err(PhpError::Error(format!(
+                    "Cannot use object of type {name} as array"
+                )));
+            }
+            match op {
+                UnsetAa::Unset { obj, key } => {
+                    self.call_method_sync(obj, b"offsetUnset", vec![key])?;
+                }
+                UnsetAa::Descend { obj, key, rest, keys } => {
+                    let cname = deref_object(&obj)
+                        .and_then(|o| {
+                            o.try_borrow().ok().map(|b| {
+                                String::from_utf8_lossy(b.class_name.as_bytes()).into_owned()
+                            })
+                        })
+                        .unwrap_or_default();
+                    let mut val =
+                        self.call_method_sync(obj, b"offsetGet", vec![key])?.deref_clone();
+                    if !matches!(val, Zval::Object(_)) {
+                        // Unsetting through a by-value offsetGet result would
+                        // mutate a temporary — Zend's notice, nothing removed.
+                        self.diags.push(Diag::Notice(format!(
+                            "Indirect modification of overloaded element of {cname} has no effect"
+                        )));
+                        let line = self.cur_line(top);
+                        self.flush_diags(line)?;
+                        break;
+                    }
+                    let fs =
+                        FieldScope { classes: &self.classes, scope: self.frames[top].class };
+                    let mut aa2 = None;
+                    field_unset(&mut val, &rest, &mut keys.into_iter(), fs, &mut aa2)?;
                     pending = aa2;
                 }
             }

@@ -13134,17 +13134,21 @@ impl<'m> Vm<'m> {
     }
 
     fn field_remove(&mut self, base: FieldBase, top: usize, steps: &[FieldStep], keys: Vec<Zval>) -> Result<(), PhpError> {
-        let fs = FieldScope { classes: &self.classes, scope: self.frames[top].class };
-        let cell = match base {
-            FieldBase::Local(s) => &mut self.frames[top].slots[s as usize],
-            FieldBase::Global(s) => &mut self.frames[0].slots[s as usize],
-            FieldBase::Superglobal(i) => &mut self.superglobals[i as usize],
-            FieldBase::This => match self.frames[top].this.as_mut() {
-                Some(c) => c,
-                None => return Ok(()),
-            },
-        };
-        field_unset(cell, steps, &mut keys.into_iter(), fs)
+        let mut aa = None;
+        {
+            let fs = FieldScope { classes: &self.classes, scope: self.frames[top].class };
+            let cell = match base {
+                FieldBase::Local(s) => &mut self.frames[top].slots[s as usize],
+                FieldBase::Global(s) => &mut self.frames[0].slots[s as usize],
+                FieldBase::Superglobal(i) => &mut self.superglobals[i as usize],
+                FieldBase::This => match self.frames[top].this.as_mut() {
+                    Some(c) => c,
+                    None => return Ok(()),
+                },
+            };
+            field_unset(cell, steps, &mut keys.into_iter(), fs, &mut aa)?;
+        }
+        self.drain_unset_aa(aa, top)
     }
 
     /// Push a `__call` / `__callStatic` magic-dispatch frame (OOP-3a): the magic
