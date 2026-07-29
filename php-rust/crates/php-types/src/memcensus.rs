@@ -524,7 +524,22 @@ type MiBlockVisitFun = unsafe extern "C" fn(
 extern "C" {
     fn mi_heap_main() -> *mut std::os::raw::c_void;
     fn mi_heap_new() -> *mut std::os::raw::c_void;
-    fn mi_heap_set_default(heap: *mut std::os::raw::c_void) -> *mut std::os::raw::c_void;
+    fn mi_heap_malloc_aligned(
+        heap: *mut std::os::raw::c_void,
+        size: usize,
+        align: usize,
+    ) -> *mut std::os::raw::c_void;
+    fn mi_heap_zalloc_aligned(
+        heap: *mut std::os::raw::c_void,
+        size: usize,
+        align: usize,
+    ) -> *mut std::os::raw::c_void;
+    fn mi_heap_realloc_aligned(
+        heap: *mut std::os::raw::c_void,
+        p: *mut std::os::raw::c_void,
+        newsize: usize,
+        align: usize,
+    ) -> *mut std::os::raw::c_void;
     fn mi_heap_visit_blocks(
         heap: *mut std::os::raw::c_void,
         visit_blocks: bool,
@@ -592,44 +607,85 @@ impl BinTab {
 // mentre lo scope è attivo finisce nelle pagine del heap dedicato; ciò che
 // sopravvive al pop (e ai teardown successivi) resta contato lì, il churn
 // che muore non accumula. Il visitor emette le sue righe come
-// `tag=mi_bin src=defer`. Thread-safety: il heap è thread_local (un heap
-// per thread, mai condiviso) — l'assert "stesso thread" di L-71.1 vale per
-// costruzione; il master wpdev è single-thread.
+// `tag=mi_bin src=defer`.
+//
+// ADDENDUM STRUMENTO (pre-letto, forma P70-0-bis): il mimalloc v3 di questo
+// tree non esporta più `mi_heap_set_default` — il push/pop del default-heap
+// del lock è realizzato al livello del GLOBAL ALLOCATOR del binario census
+// (php-cli `CountingMi`): a scope attivo `scoped_alloc`/`scoped_realloc`
+// instradano su `mi_heap_malloc_aligned(defer_heap, …)`; `mi_free` è
+// heap-agnostico (libera nella pagina proprietaria). La GRANDEZZA misurata
+// è identica a quella lockata. Thread-safety: heap e flag thread_local
+// (mai condivisi); il master wpdev è single-thread.
 thread_local! {
     static DEFER_HEAP: std::cell::Cell<*mut std::os::raw::c_void> =
         const { std::cell::Cell::new(std::ptr::null_mut()) };
+    static DEFER_DEPTH: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
 }
 
-/// RAII della finestra scope-heap: ripristina il default-heap al drop.
-pub struct DeferHeapScope {
-    old: *mut std::os::raw::c_void,
-}
+/// RAII della finestra scope-heap: decrementa la profondità al drop
+/// (rientranze annidate di run_deferred restano nello scope).
+pub struct DeferHeapScope;
 
 /// Entra nello scope-heap del canale defer (creandolo alla prima entrata).
-/// Un fallimento di `mi_heap_new` degrada a no-op (old = null ⇒ nessun
-/// set_default e nessun ripristino): il letto per-src semplicemente non
-/// esiste, mai un crash del census.
+/// Un fallimento di `mi_heap_new` degrada a no-op (heap null ⇒
+/// `scoped_alloc` risponde None e l'allocazione resta sul default): il
+/// letto per-src semplicemente non esiste, mai un crash del census.
 pub fn defer_heap_enter() -> DeferHeapScope {
-    let heap = DEFER_HEAP.with(|h| {
+    DEFER_HEAP.with(|h| {
         if h.get().is_null() {
             h.set(unsafe { mi_heap_new() });
         }
-        h.get()
     });
-    let old = if heap.is_null() {
-        std::ptr::null_mut()
-    } else {
-        unsafe { mi_heap_set_default(heap) }
-    };
-    DeferHeapScope { old }
+    DEFER_DEPTH.with(|d| d.set(d.get() + 1));
+    DeferHeapScope
 }
 
 impl Drop for DeferHeapScope {
     fn drop(&mut self) {
-        if !self.old.is_null() {
-            unsafe { mi_heap_set_default(self.old) };
-        }
+        DEFER_DEPTH.with(|d| d.set(d.get().saturating_sub(1)));
     }
+}
+
+#[inline]
+fn defer_active_heap() -> *mut std::os::raw::c_void {
+    if DEFER_DEPTH.with(|d| d.get()) == 0 {
+        return std::ptr::null_mut();
+    }
+    DEFER_HEAP.with(|h| h.get())
+}
+
+/// Allocazione instradata sullo scope-heap quando attivo; `None` = usa il
+/// default (scope inattivo o heap non creabile). Chiamata dal
+/// `#[global_allocator]` del binario census.
+#[inline]
+pub fn scoped_alloc(size: usize, align: usize, zeroed: bool) -> Option<*mut u8> {
+    let heap = defer_active_heap();
+    if heap.is_null() {
+        return None;
+    }
+    let p = unsafe {
+        if zeroed {
+            mi_heap_zalloc_aligned(heap, size, align)
+        } else {
+            mi_heap_malloc_aligned(heap, size, align)
+        }
+    };
+    Some(p as *mut u8)
+}
+
+/// Realloc instradato sullo scope-heap quando attivo (un blocco nato su un
+/// altro heap viene ricopiato nel defer-heap da mimalloc). `None` = default.
+#[inline]
+pub fn scoped_realloc(ptr: *mut u8, new_size: usize, align: usize) -> Option<*mut u8> {
+    let heap = defer_active_heap();
+    if heap.is_null() {
+        return None;
+    }
+    let p = unsafe {
+        mi_heap_realloc_aligned(heap, ptr as *mut std::os::raw::c_void, new_size, align)
+    };
+    Some(p as *mut u8)
 }
 
 unsafe extern "C" fn area_visitor(

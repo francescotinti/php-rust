@@ -37,8 +37,15 @@ struct CountingMi;
 
 #[cfg(feature = "mem-census")]
 unsafe impl std::alloc::GlobalAlloc for CountingMi {
+    // L-71.1 (WP-71): while the run_deferred scope is active, allocations
+    // route to the dedicated mimalloc heap (`scoped_alloc`) so the census
+    // reports the channel's RETAINED occupancy as src=defer; mi_free is
+    // heap-agnostic, so dealloc stays on the plain path.
     unsafe fn alloc(&self, layout: std::alloc::Layout) -> *mut u8 {
         php_types::memcensus::galloc_note(layout.size());
+        if let Some(p) = php_types::memcensus::scoped_alloc(layout.size(), layout.align(), false) {
+            return p;
+        }
         std::alloc::GlobalAlloc::alloc(&mimalloc::MiMalloc, layout)
     }
     unsafe fn dealloc(&self, ptr: *mut u8, layout: std::alloc::Layout) {
@@ -47,11 +54,17 @@ unsafe impl std::alloc::GlobalAlloc for CountingMi {
     }
     unsafe fn alloc_zeroed(&self, layout: std::alloc::Layout) -> *mut u8 {
         php_types::memcensus::galloc_note(layout.size());
+        if let Some(p) = php_types::memcensus::scoped_alloc(layout.size(), layout.align(), true) {
+            return p;
+        }
         std::alloc::GlobalAlloc::alloc_zeroed(&mimalloc::MiMalloc, layout)
     }
     unsafe fn realloc(&self, ptr: *mut u8, layout: std::alloc::Layout, new_size: usize) -> *mut u8 {
         php_types::memcensus::galloc_note(new_size);
         php_types::memcensus::gfree_note(layout.size());
+        if let Some(p) = php_types::memcensus::scoped_realloc(ptr, new_size, layout.align()) {
+            return p;
+        }
         std::alloc::GlobalAlloc::realloc(&mimalloc::MiMalloc, ptr, layout, new_size)
     }
 }

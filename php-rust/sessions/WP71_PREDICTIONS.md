@@ -102,3 +102,16 @@ Alias di token dichiarati NEL lock (K-71.1): "DOMINANTE" ≡ DENTRO di
 H1-C1; "MORTA" ≡ FUORI-basso di H1-C1; "PARZIALE" ≡ FUORI con letto
 valido. Set chiuso invariato: {DENTRO, FUORI, NON-CALCOLABILE,
 NON-ESEGUITA}.
+
+## ADDENDUM STRUMENTO (pre-letto, forma P70-0-bis — puramente ADDITIVO)
+
+Feasibility check di sola strumentazione (nessun letto del residuo): il
+mimalloc v3 del tree NON esporta `mi_heap_set_default` (simboli
+verificati con nm su libmimalloc_sys: esiste mi_heap_new, non il
+set_default del design v2). Lo scope-heap L-71.1 è quindi realizzato al
+livello del GLOBAL ALLOCATOR del binario census (CountingMi di php-cli):
+a scope attivo (`DEFER_DEPTH>0`, RAII su run_deferred) alloc/zalloc/
+realloc instradano su `mi_heap_*_aligned(defer_heap, …)`; `mi_free` è
+heap-agnostico. La GRANDEZZA misurata (occupazione ritenuta del heap
+dedicato, righe `tag=mi_bin src=defer`) è IDENTICA a quella lockata;
+bande, finestra, margini e libro mastro INVARIATI.

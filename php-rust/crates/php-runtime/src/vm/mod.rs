@@ -6025,7 +6025,7 @@ impl<'m> Vm<'m> {
         // dedicated scope-heap — the census reports its RETAINED occupancy as
         // `tag=mi_bin src=defer` (restored on every early return via Drop).
         #[cfg(feature = "mem-census")]
-        let _defer_heap = mc::defer_heap_enter();
+        let _defer_heap = php_types::memcensus::defer_heap_enter();
         #[cfg(feature = "mem-census")]
         let defer_t0 = std::time::Instant::now();
         let caller = self.frames.len() - 1;
