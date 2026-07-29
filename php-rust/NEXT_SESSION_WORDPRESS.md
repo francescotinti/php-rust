@@ -422,6 +422,29 @@ K-72.2 su probe72-h2 è stato SANATO col rigioco in chiusura (6e6d966).**
 3. **Migrazione + gate-axum** (fixture concorrente inclusa, KK73-4).
 4. **Spike dispatch** (sessione dedicata, baseline DICHIARATA post
    punto 1 — mai mista).
+4b. **DEBITI AUDIT SOL (2026-07-30, archiviati come apertura WP-73)** —
+   ricognizione esterna in `20260730-chatgpt-sol.md` (fatti verificati,
+   allineata alle nostre discipline). **Pacchetto A GIÀ FATTO in
+   chiusura WP-72** (f0bb8b8: LICENSE BSD-3-Clause = stessa di
+   php-src/Zend da PHP 8.4, Cargo.lock tracciato, rust-toolchain
+   1.96.0, .cargo/config untracked, falso-verde differential chiuso).
+   Da portare al CONCILIO WP-73 come emendamenti del design axum:
+   (i) **P0.4 hash-DoS**: `rustc-hash` sull'indice di `PhpArray` NON è
+   DoS-hardened e le chiavi arrivano da input remoto (query/JSON/form)
+   — con axum esposto entra nel threat model: hasher resistente sulle
+   tabelle raggiungibili da input O(collision-cap) + benchmark del
+   costo + test avversariale (co-optare una sedia security al concilio);
+   (ii) **P0.2 soundness FFI**: wrapper safe in gdio.rs che
+   dereferenziano raw pointer → `unsafe fn` + `# Safety` o newtype
+   NonNull; `#![deny(unsafe_op_in_unsafe_fn)]` nei crate FFI;
+   (iii) **P0.3 perimetro server**: threat model + resource limits
+   (memory/instruction/recursion/body/upload) + etichetta esplicita
+   "development server" fino a hardening; (iv) rustfmt/Clippy verdi
+   (un commit solo-format + policy) — NON durante la migrazione, dopo.
+   **Fase C dell'audit (CI matrix, sanitizer, fuzz, SBOM, release
+   engineering) = SESSIONE DEDICATA "hardening di prodotto" DOPO axum**
+   (decisione utente: "ok per Axum poi C"), con proprio design e
+   concilio (sedia security/release-engineering co-optata).
 5. **Backlog**: ways/fp multi-flip (B-72.5) · typed-const retention ·
    get_included_files · S-71.3 · famiglie STRING-OFFSET-BIND /
    DIAG-LINE / quiet-fetch / EVAL-NAMING / parse-error · S-72.5 ·
