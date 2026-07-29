@@ -244,7 +244,9 @@ thread_local! {
     static BLOCKDUMP_REQ: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
 }
 
-const BLOCKDUMP_BINS: [usize; 7] = [32, 64, 96, 112, 128, 160, 192];
+// KL71-2 seconda passata: TUTTI i bin fino a 1024 — le foglie dei nodi
+// della firma (stringhe condivise) vivono nei bin medi (256/512/640).
+const BLOCKDUMP_MAX: usize = 1024;
 
 unsafe extern "C" fn block_content_visitor(
     _heap: *const std::os::raw::c_void,
@@ -256,7 +258,7 @@ unsafe extern "C" fn block_content_visitor(
     if block.is_null() {
         return true; // area entry (visit_blocks also reports areas)
     }
-    if !BLOCKDUMP_BINS.contains(&(*area).block_size) {
+    if (*area).block_size > BLOCKDUMP_MAX {
         return true;
     }
     let f = &mut *(arg as *mut std::io::BufWriter<std::fs::File>);
