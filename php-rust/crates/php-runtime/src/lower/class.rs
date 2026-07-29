@@ -43,7 +43,11 @@ impl<'f> Lowerer<'f> {
                         line: self.line_of(t.span()),
                     });
                 }
-                if self.class_index.contains_key(&key) {
+                if let Some(&ci) = self.class_index.get(&key) {
+                    // E-71.H1 (WP-72): rejecting on a CONDITIONAL seed entry is
+                    // a runtime-state decision — flag the unit impure so the
+                    // cache never serves this verdict cross-request.
+                    self.note_seed_super(&key, ci);
                     return Err(LowerError::Unsupported {
                         what: "trait redeclaration",
                         line: self.line_of(t.span()),
@@ -354,7 +358,10 @@ impl<'f> Lowerer<'f> {
                             let t = a.trait_orig.as_deref().unwrap_or(tl);
                             let t = String::from_utf8_lossy(t);
                             // A known CLASS in `as`/`insteadof` has its own fatal.
-                            let message = if self.class_index.contains_key(tl.as_slice()) {
+                            // E-71.H1: the message choice reads the registry —
+                            // on a conditional seed it is runtime state, flag it.
+                            let message = if let Some(&ci) = self.class_index.get(tl.as_slice()) {
+                                self.note_seed_super(tl.as_slice(), ci);
                                 format!("Class {t} is not a trait, Only traits may be used in 'as' and 'insteadof' statements")
                             } else {
                                 format!("Could not find trait {t}")

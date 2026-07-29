@@ -1060,9 +1060,68 @@ impl<'m> Vm<'m> {
     }
 
     pub(super) fn run_shutdown_destructors(&mut self) {
+        // Phase A (S-72.4, Zend `shutdown_destructors`): repeated
+        // `zend_hash_reverse_apply(symbol_table, zend_call_destructors)` —
+        // walk the GLOBAL slots in REVERSE order and release only an OBJECT
+        // slot holding the LAST user reference (strong == slot + store
+        // registry [+ gc-buffer clone]), until a pass changes nothing.
+        // Cyclic or shared globals survive to the store-walk below (fixture
+        // d2: dtor order c,a then b,d,e). Ref-held globals are left to the
+        // store-walk (Zend's IS_INDIRECT niche — not modelled).
+        // After a normal end the global frame was parked by `Ret`
+        // (`retired_main`); after a fatal it is still `frames[0]`.
+        let mut gframe = if !self.frames.is_empty() {
+            Some(self.frames.swap_remove(0))
+        } else {
+            self.retired_main.take()
+        };
+        if let Some(gf) = gframe.as_mut() {
+            loop {
+                let mut changed = false;
+                for idx in (0..gf.slots.len()).rev() {
+                    let releasable = match &gf.slots[idx] {
+                        Zval::Object(rc) => {
+                            // BORROW-OK: shared read, no walk in flight.
+                            let extra = usize::from(rc.borrow().gc.buffered());
+                            Rc::strong_count(rc) == 2 + extra
+                        }
+                        _ => false,
+                    };
+                    if releasable {
+                        let v = std::mem::replace(&mut gf.slots[idx], Zval::Undef);
+                        self.gc_note(&v);
+                        drop(v);
+                        let _ = self.gc_sweep_impl(None, true);
+                        changed = true;
+                    }
+                }
+                if !changed {
+                    break;
+                }
+            }
+        }
+        drop(gframe);
         self.frames.clear();
-        let survivors = std::mem::take(&mut self.created);
-        for (_, o) in survivors.into_iter().rev() {
+        // S-72.4 (WP-72, Stogov dal sorgente 8.5.7): Zend's
+        // `shutdown_destructors` walks the object store in CREATION order
+        // (cyclic objects included) and keeps walking entries the destructors
+        // themselves append (fixture d4: a dtor-spawned object is destructed
+        // too). `created` is keyed by the monotone object id, so ascending
+        // BTreeMap iteration IS store order; each round's handles stay alive
+        // until the round ends (a destructor may still reach a peer), then
+        // drop wholesale — the spawn loop re-takes whatever was born.
+        loop {
+            let survivors = std::mem::take(&mut self.created);
+            if survivors.is_empty() {
+                break;
+            }
+            self.dtor_walk_round(survivors);
+        }
+    }
+
+    /// One store-order destructor round over a snapshot of the object store.
+    fn dtor_walk_round(&mut self, survivors: std::collections::BTreeMap<u32, Rc<RefCell<Object>>>) {
+        for (_, o) in survivors.iter() {
             let (cid, id) = {
                 let b = o.borrow();
                 (b.class_id as usize, b.id)
@@ -1083,7 +1142,7 @@ impl<'m> Vm<'m> {
                 let callee = &self.classes[defc].methods[midx].func;
                 let m = self.class_mod(defc);
                 let mut frame = self.pooled_frame(callee, m);
-                frame.this = Some(Zval::Object(Rc::clone(&o)));
+                frame.this = Some(Zval::Object(Rc::clone(o)));
                 frame.class = Some(defc);
                 frame.static_class = Some(cid);
                 self.frames.push(frame);
@@ -1092,6 +1151,60 @@ impl<'m> Vm<'m> {
                 let _ = self.run();
             }
         }
+    }
+
+    /// S-72.4 (WP-72) — the "free wholesale" half of Zend's request shutdown:
+    /// after every observable flush (session/streams/output buffers), sever
+    /// the outgoing edges of every object still registered so the per-request
+    /// `Rc` cycles dissolve (Zend frees the store wholesale; phpr breaks the
+    /// edges instead — the WP_Metadata_Lazyloader 20 obj/req family, WP-71
+    /// §7.7). An EXPLICIT call before the VM drops (M-72.3); the three-phase
+    /// discipline (detect → dtor → break) means NO user code runs here, so a
+    /// busy cell is declared unreachable (K-M72.2). Only edges LEAVING
+    /// registry objects are cut — a reference INTO a shared arena is a plain
+    /// decref (M-72.4 frontier).
+    pub(super) fn break_request_cycles(&mut self) {
+        // Semina/drain of the VM's own value roots first (P-72.3): what they
+        // referenced is either acyclic (dies on the drop below) or cyclic
+        // (its props are broken below).
+        self.frames.clear();
+        self.retired_main = None;
+        for s in self.superglobals.iter_mut() {
+            *s = Zval::Undef;
+        }
+        self.autoloaders.clear();
+        let survivors = std::mem::take(&mut self.created);
+        let reg = survivors.len() as u64;
+        if reg == 0 {
+            // Fast path (B-72.2): empty store ⇒ zero work.
+            return;
+        }
+        let weaks: Vec<std::rc::Weak<RefCell<Object>>> =
+            survivors.values().map(Rc::downgrade).collect();
+        drop(survivors);
+        let (mut broken, mut busy) = (0u64, 0u64);
+        for w in &weaks {
+            // Still alive after the strong store dropped = held by a cycle
+            // (or by a VM field the drain above did not cover).
+            let Some(o) = w.upgrade() else { continue };
+            let taken = match o.try_borrow_mut() {
+                Ok(mut b) => {
+                    let t = std::mem::take(&mut b.props);
+                    b.proxy_instance = None;
+                    broken += 1;
+                    Some(t)
+                }
+                Err(_) => {
+                    busy += 1;
+                    None
+                }
+            };
+            // The cascade drop runs with NO guard alive on this object (a
+            // dying peer may re-reach it through the severed graph).
+            drop(taken);
+        }
+        let alive_after = weaks.iter().filter(|w| w.strong_count() > 0).count() as u64;
+        super::teardown_note(reg, broken, busy, alive_after);
     }
 
     /// Dispatch an instance method call `obj->method(args)` where the receiver's

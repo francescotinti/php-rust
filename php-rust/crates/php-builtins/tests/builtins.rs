@@ -1015,9 +1015,12 @@ fn gc_id_reuse_and_collect_sentinels() {
     // WP-39 sentinels for the WP-40 GC-buffer refactor: pin phpr's CURRENT
     // id-reuse (LIFO; the cascade puts the PARENT id on top — WP-28), the
     // explicit gc_collect_cycles destructor order and count, and that an
-    // acyclic leftover candidate survives a collect. The cycle-collect and
-    // end-of-script orders intentionally differ from Zend (priced into the
-    // per-name baselines); WP-40 must not change phpr's own order.
+    // acyclic leftover candidate survives a collect. RE-PINNED in WP-72
+    // (S-72.4 mass-teardown): the end-of-script tail is now Zend's
+    // reverse-symtab-apply order `[c][b]` (oracle-verified — the old
+    // `[b][c]` was phpr's priced divergence, closed by the leva). The
+    // explicit-collect order `[c1][c2]` still intentionally differs from
+    // Zend's `[c2][c1]` (PHPR_DIVERGENCES §sweep-driven, unchanged).
     assert_eq!(
         out("<?php
         class D { public $t; function __construct($t){ $this->t = $t; } function __destruct(){ echo '[', $this->t, ']'; } }
@@ -1034,7 +1037,7 @@ fn gc_id_reuse_and_collect_sentinels() {
         $n = gc_collect_cycles(); echo 'N', $n, '|';
         $d = new K('l1'); $e = $d; unset($d);
         $r = gc_collect_cycles(); echo 'L', $r; unset($e); echo '.';"),
-        "1,2|[a]1|PK|U[c1][c2]N2|L0[l1].[b][c]"
+        "1,2|[a]1|PK|U[c1][c2]N2|L0[l1].[c][b]"
     );
 }
 

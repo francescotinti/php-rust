@@ -1656,6 +1656,13 @@ pub(crate) fn run_module_with_hir<'m>(
                     CELL_PARK.with(|c| c.get()),
                     DRAIN_FAIL.with(|c| c.get()),
                 ));
+                // WP-72 S-72.4: mass-teardown break stats (cumulative).
+                {
+                    let (tr, tb, tu, ta) = TEARDOWN_STATS.with(|c| c.get());
+                    mc::census_line(&format!(
+                        "tag=teardown reg={tr} broken={tb} busy={tu} alive_after={ta}"
+                    ));
+                }
                 // WP-70 P70-D (E-70.2): the defer-mini channel — cumulative
                 // calls and net bytes of every run_deferred execution.
                 {
@@ -1716,6 +1723,13 @@ pub(crate) fn run_module_with_hir<'m>(
     // at request shutdown). Done last, so shutdown-function and destructor output
     // produced while a buffer was active is captured then emitted in order.
     vm.flush_all_output_buffers();
+    // S-72.4 (WP-72): break the per-request Rc cycles — Zend's wholesale free
+    // — after EVERY observable flush (session writes serialize real props)
+    // and before the VM drops. Under FAST_SHUTDOWN the process exit reclaims
+    // everything, so the pass is skipped (zero CLI cost).
+    if !FAST_SHUTDOWN.load(std::sync::atomic::Ordering::Relaxed) {
+        vm.break_request_cycles();
+    }
     // WP-33 T0: dump the op census to STDERR (parity-inert — stdout untouched).
     if vm.census_on {
         census::census_dump();
@@ -15891,6 +15905,23 @@ thread_local! {
 thread_local! {
     static CELL_PARK: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
     static DRAIN_FAIL: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+    // S-72.4 (WP-72): cumulative mass-teardown stats — (objects registered at
+    // the break phase, props-broken, busy cells [declared unreachable: no
+    // user code runs at break — K-M72.2], still-alive after the break
+    // [KH72-1 completeness proof — VM-field-held only, calibrated B-72.1]).
+    static TEARDOWN_STATS: std::cell::Cell<(u64, u64, u64, u64)> =
+        const { std::cell::Cell::new((0, 0, 0, 0)) };
+}
+
+/// S-72.4: accumulate one request's break-phase stats (always compiled —
+/// same policy as the cellpark/drainfail tripwires).
+#[inline]
+fn teardown_note(reg: u64, broken: u64, busy: u64, alive_after: u64) {
+    debug_assert!(busy == 0, "mass-teardown break hit a live guard (declared unreachable, K-M72.2)");
+    TEARDOWN_STATS.with(|c| {
+        let (r, b, u, a) = c.get();
+        c.set((r + reg, b + broken, u + busy, a + alive_after));
+    });
 }
 
 #[inline]
@@ -19505,6 +19536,12 @@ mod tests {
 
     #[test]
     fn frame_drop_order_sentinel_generator_and_extras() {
+        // RE-PINNED in WP-72 (S-72.4 mass-teardown): the shutdown tail for
+        // generator-held survivors is now STORE order `[d2][d1]` (creation
+        // order — Zend's own store-walk rule for objects that reach
+        // shutdown). The deferred-vs-immediate TIMING divergence is
+        // unchanged (Zend frees them AT the unset: `[d1][d2]G…` — priced,
+        // sweep-driven family).
         assert_eq!(
             vm_stdout(
                 b"<?php
@@ -19515,7 +19552,7 @@ mod tests {
                 function f5($a) { $args = func_get_args(); return 'f'; }
                 echo f5(1, new D('e1'), new D('e2')); $n = new D('e3'); unset($n); echo '.';"
             ),
-            b"G[d3].f[e1][e2][e3].[d1][d2]"
+            b"G[d3].f[e1][e2][e3].[d2][d1]"
         );
     }
 

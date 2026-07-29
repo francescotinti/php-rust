@@ -615,7 +615,11 @@ impl<'f> Lowerer<'f> {
             // the duplicate and fatals only when its DECLARE executes — the
             // statement is left to the main pass (WP-69, dup-top/bug63741
             // family). First declaration wins the reservation.
-            if self.class_index.contains_key(&key) {
+            if let Some(&ci) = self.class_index.get(&key) {
+                // E-71.H1 (WP-72): skipping the hoist because a CONDITIONAL
+                // seed occupies the name is a runtime-state (hoist-timing)
+                // decision — flag the unit impure for the cache gate.
+                self.note_seed_super(&key, ci);
                 continue;
             }
             self.hoisted_class_spans.insert(span.start.offset);
