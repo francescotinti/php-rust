@@ -75,4 +75,6 @@ regressione phpr (2 coppie consistenti: 80,42/21,03 e 80,97/21,02).
 
 | WP-70 | 2026-07-29 | non rimisurato il gap classico (sessione fedeltà+caccia) — riferimenti restano: media CPU 2,58×, footprint media ~3,0-3,1 (banda 2,9-3,2), full 2,06-2,11×, peak ~1,98-2,03GB | corpus 1422→1421 (−1 fix reale class_order_autoload1, S-70.2); **residuo per-request MISURATO E CONFERMATO: esiste su RELEASE (P70-0-bis Δ5,8 MiB/4000 req) + tripla census 2,1121 KiB/req · 20,000 obj/req (spread 0,024/0,003 = MDE fondato); defer path 16,00 calls/req; attribuzione ≥80% APERTA ⇒ axum fermo** |
 
+| WP-71 | 2026-07-29 | non rimisurato il gap classico (sessione fedeltà+attribuzione) — riferimenti restano: media CPU 2,58×, footprint media ~3,0-3,1 (banda 2,9-3,2), full 2,06-2,11×, peak ~1,98-2,03GB | corpus 1421→1420 (−1 fix reale ns_064, M-71.1); **ATTRIBUZIONE CHIUSA A MACCHINA: residuo = cicli Rc non raccolti al teardown (grafo WP_Metadata_Lazyloader; KL71-1 totale 20,000 spread 0,000; Σdelta pattern 10.000/10.000; amplificazione K=10 → +80,000 obj/req ESATTO = MECCANISMO-CONFERMATO; ladder 1k/5k/9k LINEARE ratio 1,078 ≈2,0 KiB/req phys) ⇒ leva cycle-collect-al-teardown LEGITTIMA, axum si sblocca con P-71.3 post-fix < 2 MiB** |
+
 Dettaglio e contesto di ogni riga: `gaps/REPORT_GAP_<N>.md` (per-sessione).
