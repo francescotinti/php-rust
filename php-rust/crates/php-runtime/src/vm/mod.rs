@@ -513,6 +513,7 @@ pub(crate) fn run_module_with_hir<'m>(
             h.finish()
         },
         autoloaders: Vec::new(),
+        autoload_cursors: Vec::new(),
         autoloading: HashSet::default(),
         registry,
         stdout: Vec::new(),
@@ -2738,6 +2739,14 @@ struct Vm<'m> {
     /// requested name; one that loads the class (typically via `require`) ends the
     /// search.
     autoloaders: Vec<Zval>,
+    /// S-71.2 (WP-71): the LIVE iteration cursors of every in-flight
+    /// `spl_autoload_call` walk (nested lookups stack). `next` is the index
+    /// of the next loader to call; register/unregister keep each cursor
+    /// pointing at the same ELEMENT across list mutations, mirroring Zend's
+    /// HashTable iterator (deleting the just-called entry repositions to its
+    /// successor AT DELETION TIME — nothing after ⇒ sticky end, later
+    /// appends stay invisible to that walk).
+    autoload_cursors: Vec<AutoloadCursor>,
     /// Class names (lowercased) currently mid-autoload, to break recursion if an
     /// autoloader (transitively) references the same name (step 57, Phase 3).
     autoloading: HashSet<Vec<u8>>,
@@ -6012,6 +6021,11 @@ impl<'m> Vm<'m> {
         uc_stat(|s| s.defer_relowers += 1);
         #[cfg(feature = "mem-census")]
         let _defer_mini = DeferMiniNote::open();
+        // L-71.1 (WP-71): every allocation of this deferred fire lands in the
+        // dedicated scope-heap — the census reports its RETAINED occupancy as
+        // `tag=mi_bin src=defer` (restored on every early return via Drop).
+        #[cfg(feature = "mem-census")]
+        let _defer_heap = mc::defer_heap_enter();
         #[cfg(feature = "mem-census")]
         let defer_t0 = std::time::Instant::now();
         let caller = self.frames.len() - 1;
@@ -11220,9 +11234,24 @@ impl<'m> Vm<'m> {
         self.autoloading.insert(key.to_vec());
         log::debug!(target: "phpr::autoload", "autoload {}", String::from_utf8_lossy(name));
         let arg = Zval::Str(PhpStr::new(name.to_vec()));
-        let loaders = self.autoloaders.clone();
+        // S-71.2 (WP-71, Stogov): Zend iterates the LIVE registration list —
+        // an autoloader that unregisters a later one during this very lookup
+        // prevents it from firing, and one that unregisters ITSELF with
+        // nothing after it ends the walk (a substitute appended afterwards is
+        // NOT called for this lookup: the iterator sits on the end sentinel,
+        // fixture vii_unregister_self). A snapshot broke all of these. The
+        // cursor lives on the VM (`autoload_cursors`, stacked for nested
+        // lookups) and register/unregister keep it element-stable.
+        self.autoload_cursors.push(AutoloadCursor { next: 0, ended: false });
+        let ci = self.autoload_cursors.len() - 1;
         let mut outcome = Ok(());
-        for loader in loaders {
+        loop {
+            let cur = &self.autoload_cursors[ci];
+            if cur.ended || cur.next >= self.autoloaders.len() {
+                break;
+            }
+            let loader = self.autoloaders[cur.next].clone();
+            self.autoload_cursors[ci].next += 1;
             if let Err(e) = self.call_callable(loader, vec![arg.clone()]) {
                 outcome = Err(e);
                 break;
@@ -11231,6 +11260,7 @@ impl<'m> Vm<'m> {
                 break;
             }
         }
+        self.autoload_cursors.pop();
         self.autoloading.remove(key);
         outcome
     }
@@ -14639,6 +14669,16 @@ fn os_random_range64(umax: u64) -> Result<u64, PhpError> {
 /// Best-effort equality of two callable [`Zval`]s for `spl_autoload_unregister`
 /// (step 57, Phase 3): a function-name string (case-insensitive) or the same
 /// closure handle. Other callable shapes (`[$obj, 'm']`) compare unequal.
+/// S-71.2: one live `spl_autoload_call` iteration (see `Vm::autoload_cursors`).
+pub(super) struct AutoloadCursor {
+    /// Index of the next loader to call in the LIVE `autoloaders` list.
+    pub(super) next: usize,
+    /// Sticky end: the just-called loader was removed with nothing after it —
+    /// Zend's iterator sits on the end sentinel and later appends are
+    /// invisible to this walk.
+    pub(super) ended: bool,
+}
+
 fn callable_eq(a: &Zval, b: &Zval) -> bool {
     match (a, b) {
         (Zval::Str(x), Zval::Str(y)) => x.as_bytes().eq_ignore_ascii_case(y.as_bytes()),

@@ -7501,6 +7501,12 @@ impl<'m> super::Vm<'m> {
                 let prepend = args.get(2).is_some_and(|v| convert::to_bool(v, &mut self.diags));
                 if prepend {
                     self.autoloaders.insert(0, cb.clone());
+                    // S-71.2: keep every in-flight lookup cursor pointing at
+                    // the same element (Zend's iterator never revisits a
+                    // position already passed — a prepend lands before it).
+                    for c in &mut self.autoload_cursors {
+                        c.next += 1;
+                    }
                 } else {
                     self.autoloaders.push(cb.clone());
                 }
@@ -7514,7 +7520,35 @@ impl<'m> super::Vm<'m> {
     pub(super) fn ho_spl_autoload_unregister(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
         let Some(cb) = args.first() else { return Ok(Zval::Bool(false)) };
         let before = self.autoloaders.len();
-        self.autoloaders.retain(|a| !callable_eq(a, cb));
+        // S-71.2: removals must keep every in-flight lookup cursor
+        // element-stable (Zend HashTable iterator semantics): removing an
+        // already-passed entry shifts the cursor down; removing the
+        // JUST-CALLED entry repositions to its successor at deletion time —
+        // with nothing after it, the walk is over for good (sticky end:
+        // appends made later in the same lookup stay invisible,
+        // vii_unregister_self).
+        let mut r = 0usize;
+        while r < self.autoloaders.len() {
+            if !callable_eq(&self.autoloaders[r], cb) {
+                r += 1;
+                continue;
+            }
+            self.autoloaders.remove(r);
+            let live_len = self.autoloaders.len();
+            for c in &mut self.autoload_cursors {
+                if c.ended {
+                    continue;
+                }
+                if r + 1 == c.next {
+                    c.next = r;
+                    if r >= live_len {
+                        c.ended = true;
+                    }
+                } else if r < c.next {
+                    c.next -= 1;
+                }
+            }
+        }
         Ok(Zval::Bool(self.autoloaders.len() != before))
     }
     /// `spl_autoload_functions()` (step 57, Phase 3): the registered autoloaders as

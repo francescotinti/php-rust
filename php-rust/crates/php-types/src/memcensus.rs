@@ -523,6 +523,8 @@ type MiBlockVisitFun = unsafe extern "C" fn(
 
 extern "C" {
     fn mi_heap_main() -> *mut std::os::raw::c_void;
+    fn mi_heap_new() -> *mut std::os::raw::c_void;
+    fn mi_heap_set_default(heap: *mut std::os::raw::c_void) -> *mut std::os::raw::c_void;
     fn mi_heap_visit_blocks(
         heap: *mut std::os::raw::c_void,
         visit_blocks: bool,
@@ -582,6 +584,51 @@ impl BinTab {
             areas: [0; N_BINS],
             overflow: 0,
         })
+    }
+}
+
+// L-71.1 (WP-71, Leijen): SCOPE-HEAP mimalloc attorno a `run_deferred` —
+// il retained-form del canale defer PER COSTRUZIONE: ogni allocazione fatta
+// mentre lo scope è attivo finisce nelle pagine del heap dedicato; ciò che
+// sopravvive al pop (e ai teardown successivi) resta contato lì, il churn
+// che muore non accumula. Il visitor emette le sue righe come
+// `tag=mi_bin src=defer`. Thread-safety: il heap è thread_local (un heap
+// per thread, mai condiviso) — l'assert "stesso thread" di L-71.1 vale per
+// costruzione; il master wpdev è single-thread.
+thread_local! {
+    static DEFER_HEAP: std::cell::Cell<*mut std::os::raw::c_void> =
+        const { std::cell::Cell::new(std::ptr::null_mut()) };
+}
+
+/// RAII della finestra scope-heap: ripristina il default-heap al drop.
+pub struct DeferHeapScope {
+    old: *mut std::os::raw::c_void,
+}
+
+/// Entra nello scope-heap del canale defer (creandolo alla prima entrata).
+/// Un fallimento di `mi_heap_new` degrada a no-op (old = null ⇒ nessun
+/// set_default e nessun ripristino): il letto per-src semplicemente non
+/// esiste, mai un crash del census.
+pub fn defer_heap_enter() -> DeferHeapScope {
+    let heap = DEFER_HEAP.with(|h| {
+        if h.get().is_null() {
+            h.set(unsafe { mi_heap_new() });
+        }
+        h.get()
+    });
+    let old = if heap.is_null() {
+        std::ptr::null_mut()
+    } else {
+        unsafe { mi_heap_set_default(heap) }
+    };
+    DeferHeapScope { old }
+}
+
+impl Drop for DeferHeapScope {
+    fn drop(&mut self) {
+        if !self.old.is_null() {
+            unsafe { mi_heap_set_default(self.old) };
+        }
     }
 }
 
@@ -694,7 +741,34 @@ fn phys_window_dump(win: u32, phys: u64, tag: &str) {
                     &mut *ab_t as *mut BinTab as *mut std::os::raw::c_void,
                 )
             };
-            for (src, ok, t) in [("main", main_ok, &main_t), ("aband", ab_ok, &ab_t)] {
+            // L-71.1: the defer scope-heap, when it exists (census builds
+            // running the defer channel), reports as src=defer. A never-
+            // entered heap emits a single NULLHEAP marker so the analyzer
+            // can tell "absent" from "visit failed".
+            let mut defer_t = BinTab::boxed();
+            let defer_heap = DEFER_HEAP.with(|h| h.get());
+            let defer_ok = if defer_heap.is_null() {
+                let _ = writeln!(f, "pid={pid} tag=mi_bin win={win} src=defer visit=NULLHEAP");
+                false
+            } else {
+                unsafe {
+                    mi_heap_visit_blocks(
+                        defer_heap,
+                        false,
+                        area_visitor,
+                        &mut *defer_t as *mut BinTab as *mut std::os::raw::c_void,
+                    )
+                }
+            };
+            let defer_rows = !defer_heap.is_null();
+            for (src, ok, t) in [
+                ("main", main_ok, &main_t),
+                ("aband", ab_ok, &ab_t),
+                ("defer", defer_ok && defer_rows, &defer_t),
+            ] {
+                if src == "defer" && !defer_rows {
+                    continue;
+                }
                 if !ok {
                     let _ = writeln!(f, "pid={pid} tag=mi_bin win={win} src={src} visit=FAILED");
                     continue;
