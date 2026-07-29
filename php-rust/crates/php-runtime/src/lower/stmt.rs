@@ -378,7 +378,8 @@ impl<'f> Lowerer<'f> {
             // registered at run time via `DeclareTrait`, so later units can
             // `use` whichever variant the executed branch declared.
             Statement::Trait(t) => {
-                let key = t.name.value.to_ascii_lowercase();
+                // S-72.6: chiave FQN come in lower_traits.
+                let key = join_ns(&self.cur_namespace, t.name.value).to_ascii_lowercase();
                 if self.traits.contains_key(&key) {
                     return Ok(None); // top-level, already hoisted
                 }

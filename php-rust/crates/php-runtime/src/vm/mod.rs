@@ -11225,9 +11225,10 @@ impl<'m> Vm<'m> {
     fn resolve_name_autoload(&mut self, name: &[u8]) -> Result<bool, PhpError> {
         let bare = name.strip_prefix(b"\\").unwrap_or(name);
         let key = bare.to_ascii_lowercase();
-        let trait_key = bare.rsplit(|&b| b == b'\\').next().unwrap_or(bare).to_ascii_lowercase();
+        // S-72.6: seed_traits e' keyed per FQN — il match e' sul nome pieno.
         let known = |s: &Self| {
-            s.class_index.contains_key(&key) || s.seed_traits.iter().any(|(k, _)| *k == trait_key)
+            s.class_index.contains_key(&key)
+                || s.seed_traits.iter().any(|(_, t)| t.name.eq_ignore_ascii_case(bare))
         };
         if known(self) {
             return Ok(true);

@@ -346,11 +346,14 @@ fn lower_source_impl(
                 let key = cd.name.to_ascii_lowercase();
                 if let Some(rid) = declared(&key) {
                     // E-71.H2 (WP-72): a CONDITIONAL name binds to the image
-                    // of the branch the runtime actually DECLARED — the seed
-                    // ids are aligned with the runtime table, so the runtime
-                    // id picks the right duplicate (never "first image wins":
-                    // fixtures h2a/h2c fataled on the un-executed branch).
-                    let idx = if rid < sclasses.len()
+                    // of the branch the runtime actually DECLARED — the
+                    // runtime id picks the right duplicate (never "first
+                    // image wins": fixtures h2a/h2c fataled on the
+                    // un-executed branch). ONLY for seed-conditional names:
+                    // for plain classes the seed position is authoritative
+                    // (elision can skew id alignment — hk regression).
+                    let idx = if seed_conditional.contains(&key)
+                        && rid < sclasses.len()
                         && sclasses[rid].name.to_ascii_lowercase() == key
                     {
                         rid
@@ -3156,6 +3159,31 @@ pub(crate) fn resolve_constant(name: &[u8]) -> Option<ExprKind> {
         b"STREAM_FILTER_READ" => ExprKind::Int(1),
         b"STREAM_FILTER_WRITE" => ExprKind::Int(2),
         b"STREAM_FILTER_ALL" => ExprKind::Int(3),
+        // stream_socket_enable_crypto methods (oracle 8.5 values; WP-72:
+        // Symfony HttpClientKernel reads TLSv1_2_CLIENT).
+        b"STREAM_CRYPTO_METHOD_ANY_CLIENT" => ExprKind::Int(127),
+        b"STREAM_CRYPTO_METHOD_SSLv2_CLIENT" => ExprKind::Int(3),
+        b"STREAM_CRYPTO_METHOD_SSLv3_CLIENT" => ExprKind::Int(5),
+        b"STREAM_CRYPTO_METHOD_SSLv23_CLIENT" => ExprKind::Int(57),
+        b"STREAM_CRYPTO_METHOD_TLS_CLIENT" => ExprKind::Int(121),
+        b"STREAM_CRYPTO_METHOD_TLSv1_0_CLIENT" => ExprKind::Int(9),
+        b"STREAM_CRYPTO_METHOD_TLSv1_1_CLIENT" => ExprKind::Int(17),
+        b"STREAM_CRYPTO_METHOD_TLSv1_2_CLIENT" => ExprKind::Int(33),
+        b"STREAM_CRYPTO_METHOD_TLSv1_3_CLIENT" => ExprKind::Int(65),
+        b"STREAM_CRYPTO_METHOD_ANY_SERVER" => ExprKind::Int(126),
+        b"STREAM_CRYPTO_METHOD_SSLv2_SERVER" => ExprKind::Int(2),
+        b"STREAM_CRYPTO_METHOD_SSLv3_SERVER" => ExprKind::Int(4),
+        b"STREAM_CRYPTO_METHOD_SSLv23_SERVER" => ExprKind::Int(120),
+        b"STREAM_CRYPTO_METHOD_TLS_SERVER" => ExprKind::Int(120),
+        b"STREAM_CRYPTO_METHOD_TLSv1_0_SERVER" => ExprKind::Int(8),
+        b"STREAM_CRYPTO_METHOD_TLSv1_1_SERVER" => ExprKind::Int(16),
+        b"STREAM_CRYPTO_METHOD_TLSv1_2_SERVER" => ExprKind::Int(32),
+        b"STREAM_CRYPTO_METHOD_TLSv1_3_SERVER" => ExprKind::Int(64),
+        b"STREAM_CRYPTO_PROTO_SSLv3" => ExprKind::Int(4),
+        b"STREAM_CRYPTO_PROTO_TLSv1_0" => ExprKind::Int(8),
+        b"STREAM_CRYPTO_PROTO_TLSv1_1" => ExprKind::Int(16),
+        b"STREAM_CRYPTO_PROTO_TLSv1_2" => ExprKind::Int(32),
+        b"STREAM_CRYPTO_PROTO_TLSv1_3" => ExprKind::Int(64),
         // Output-handler phase flags (ob_start callbacks).
         b"PHP_OUTPUT_HANDLER_WRITE" | b"PHP_OUTPUT_HANDLER_CONT" => ExprKind::Int(0),
         b"PHP_OUTPUT_HANDLER_START" => ExprKind::Int(1),

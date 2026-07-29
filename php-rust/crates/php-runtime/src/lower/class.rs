@@ -28,7 +28,11 @@ impl<'f> Lowerer<'f> {
         let mut asts: HashMap<Vec<u8>, &Trait> = HashMap::new();
         for s in stmts {
             if let Statement::Trait(t) = s {
-                let key = t.name.value.to_ascii_lowercase();
+                // S-72.6 (WP-72): the trait table is keyed by FQN — two
+                // same-bare-name traits in different namespaces are distinct
+                // (hk ArgumentTrait collision: the second silently never
+                // registered and `use` bound the WRONG trait).
+                let key = join_ns(&self.cur_namespace, t.name.value).to_ascii_lowercase();
                 // H-70.4 (WP-70, oracle-pinned t4_redecl): a same-unit
                 // duplicate trait is Zend's compile-time fatal at the SECOND
                 // declaration, naming the first site — never "unsupported".
@@ -84,7 +88,9 @@ impl<'f> Lowerer<'f> {
             Some(t) => *t,
             None => {
                 return Err(LowerError::UndefinedClass {
-                    name: join_ns(&self.cur_namespace, key),
+                    // `key` is already the FQN (S-72.6) — lowercase, which
+                    // the composer classmap/case-insensitive FS tolerates.
+                    name: Box::from(key),
                     kind: MissingSym::Trait,
                     line: 0,
                 })
@@ -145,7 +151,7 @@ impl<'f> Lowerer<'f> {
         // Resolve any nested traits before flattening their members in.
         for u in &uses {
             for tn in u.trait_names.iter() {
-                let nk = bare_last_segment(tn).to_ascii_lowercase();
+                let nk = self.resolve_class(tn).to_ascii_lowercase();
                 self.resolve_trait(&nk, asts, in_progress)?;
             }
         }
@@ -238,14 +244,14 @@ impl<'f> Lowerer<'f> {
                             let m_lc = p.method_reference.method_name.value.to_ascii_lowercase();
                             for loser in p.trait_names.iter() {
                                 excluded
-                                    .insert((bare_last_segment(loser).to_ascii_lowercase(), m_lc.clone()));
+                                    .insert((self.resolve_class(loser).to_ascii_lowercase(), m_lc.clone()));
                             }
                         }
                         TraitUseAdaptation::Alias(a) => {
                             let (trait_lc, method_lc, trait_orig, method_orig) =
                                 match &a.method_reference {
                                     TraitUseMethodReference::Absolute(abs) => (
-                                        Some(bare_last_segment(&abs.trait_name).to_ascii_lowercase()),
+                                        Some(self.resolve_class(&abs.trait_name).to_ascii_lowercase()),
                                         abs.method_name.value.to_ascii_lowercase(),
                                         Some(bare_last_segment(&abs.trait_name).to_vec()),
                                         abs.method_name.value.to_vec(),
@@ -275,7 +281,7 @@ impl<'f> Lowerer<'f> {
         let mut seen_c = own_c.clone();
         for u in uses {
             for tn in u.trait_names.iter() {
-                let tkey = bare_last_segment(tn).to_ascii_lowercase();
+                let tkey = self.resolve_class(tn).to_ascii_lowercase();
                 let torig: Box<[u8]> = bare_last_segment(tn).into();
                 // Unknown trait → surface as an undefined class (with its resolved
                 // FQN) so lower_unit's autoload retry can load the trait's file.
@@ -382,7 +388,7 @@ impl<'f> Lowerer<'f> {
                         uses.iter().any(|u| {
                             u.trait_names.iter().any(|tn| {
                                 self.traits
-                                    .get(&bare_last_segment(tn).to_ascii_lowercase())
+                                    .get(&self.resolve_class(tn).to_ascii_lowercase())
                                     .is_some_and(|lt| {
                                         lt.abstract_methods
                                             .iter()
@@ -464,7 +470,7 @@ impl<'f> Lowerer<'f> {
         }
         for u in uses {
             for tn in u.trait_names.iter() {
-                let tkey = bare_last_segment(tn).to_ascii_lowercase();
+                let tkey = self.resolve_class(tn).to_ascii_lowercase();
                 if let Some(found) = self.traits.get(&tkey).and_then(pick) {
                     return Some(found);
                 }

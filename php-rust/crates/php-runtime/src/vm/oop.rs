@@ -1079,11 +1079,28 @@ impl<'m> Vm<'m> {
             loop {
                 let mut changed = false;
                 for idx in (0..gf.slots.len()).rev() {
+                    let last_user_ref = |rc: &Rc<RefCell<Object>>| {
+                        // BORROW-OK: shared read, no walk in flight.
+                        let extra = usize::from(rc.borrow().gc.buffered());
+                        Rc::strong_count(rc) == 2 + extra
+                    };
                     let releasable = match &gf.slots[idx] {
-                        Zval::Object(rc) => {
-                            // BORROW-OK: shared read, no walk in flight.
-                            let extra = usize::from(rc.borrow().gc.buffered());
-                            Rc::strong_count(rc) == 2 + extra
+                        Zval::Object(rc) => last_user_ref(rc),
+                        // A Closure is an object in Zend's symbol table: a
+                        // slot holding its only reference releases here and
+                        // its captures die with it (droporder in-closure).
+                        Zval::Closure(c) => Rc::strong_count(c) == 1,
+                        // After any include, main's globals live in SHARED
+                        // cells (cross-unit slot bridging) — Zend's symbol
+                        // table holds them as plain objects, so a cell whose
+                        // only holder is this slot releases like one.
+                        Zval::Ref(cell) if Rc::strong_count(cell) == 1 => {
+                            // BORROW-OK: shared read on the cell (no walk).
+                            match &*cell.borrow() {
+                                Zval::Object(rc) => last_user_ref(rc),
+                                Zval::Closure(c) => Rc::strong_count(c) == 1,
+                                _ => false,
+                            }
                         }
                         _ => false,
                     };

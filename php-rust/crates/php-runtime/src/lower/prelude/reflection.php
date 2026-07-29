@@ -769,6 +769,13 @@ class ReflectionClassConstant implements Reflector {
     // without a `/** */` block).
     public function getDocComment() { return false; }
     public function isEnumCase() { return $this->__info['enumCase']; }
+    // PHP 8.3 typed class constants: phpr's HIR parses the hint but does
+    // not retain it (ClassConstDecl has no type field) — every constant
+    // reports untyped. TODO(port): typed-const hint retention (catalogato
+    // in PHPR_DIVERGENCES 2026-07-29; sblocca DebugClassLoader che prima
+    // fatalava su metodo assente).
+    public function getType() { return null; }
+    public function hasType() { return false; }
     public function getModifiers() {
         $m = 0;
         if ($this->__info['visibility'] === 'public') { $m |= self::IS_PUBLIC; }
