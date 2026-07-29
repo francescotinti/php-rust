@@ -58,3 +58,17 @@ alive_after/req=20 · busy=0. Derivazioni:
   ≤1% full): il walk è O(680)/req in fase gia' esistente + break
   O(21) — nessuna ri-dimensione necessaria dal conteggio.
 - reg/req=680 = O(roots) del teardown (B-72.1 consegnato).
+
+## ADDENDUM lock3 (U-72 emendata in FORMA STRUTTURALE — additivo, pre-rigioco)
+
+Il pin numerico 512 (ereditato WP-66/71) e' risultato STANTIO sul
+binario WP-72: fp/req = 505 su tutti e 3 i leg con steady PERFETTO
+(miss=505 solo R1, 0 dopo; hit = fp−miss alla cifra). Spiegazione: i
+fix di fedelta' S-72.6 (trait FQN) / E-71.H2 (bind condizionale)
+eliminano 7 caricamenti-unit inutili per richiesta (505 vs 512).
+U-72 RI-LOCKATA in forma strutturale (KG71-2: nuovo lock derivato dal
+letto, mai aggiustamento della stessa riga):
+  **miss(R1) == fp_totali/1000  ∧  miss dopo R1 == 0  ∧
+  hit == fp − miss** — la steadiness resta l'assert; il conteggio
+  assoluto delle unit non e' piu' pinnato qui (il gate sentinels65 lo
+  copre per conto suo).
