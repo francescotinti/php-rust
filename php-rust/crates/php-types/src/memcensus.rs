@@ -225,7 +225,80 @@ fn collect_mi_standing() {
 pub fn request_collect_mi() {
     if std::env::var_os("PHPR_MI_COLLECT_REQ").is_some_and(|v| v == "1") {
         collect_mi_standing();
+        // KL71-2 (WP-71, escalation pre-registrata): block-CONTENT dump ai
+        // checkpoint dichiarati — dopo il drain (standing only).
+        blockdump_maybe();
     }
+}
+
+// ---------------------------------------------------------------------------
+// KL71-2 (WP-71): ispezione CONTENUTO dei blocchi vivi nei bin della firma.
+// Armata da PHPR_MI_BLOCKDUMP=<base> (+ PHPR_MI_BLOCKDUMP_AT="500,1000");
+// al checkpoint per-richiesta n ∈ AT scrive <base>.r<n> con una riga per
+// blocco vivo dei bin {32,64,96,112,128,160,192}: ptr, size e i primi 48
+// byte (ascii-escaped). Il diff per puntatore+contenuto tra due checkpoint
+// isola il set cresciuto-e-sopravvissuto; l'istogramma dei contenuti nomina
+// il canale. Census-only, opt-in, mai su path di parità.
+// ---------------------------------------------------------------------------
+thread_local! {
+    static BLOCKDUMP_REQ: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+const BLOCKDUMP_BINS: [usize; 7] = [32, 64, 96, 112, 128, 160, 192];
+
+unsafe extern "C" fn block_content_visitor(
+    _heap: *const std::os::raw::c_void,
+    area: *const MiHeapArea,
+    block: *mut std::os::raw::c_void,
+    block_size: usize,
+    arg: *mut std::os::raw::c_void,
+) -> bool {
+    if block.is_null() {
+        return true; // area entry (visit_blocks also reports areas)
+    }
+    if !BLOCKDUMP_BINS.contains(&(*area).block_size) {
+        return true;
+    }
+    let f = &mut *(arg as *mut std::io::BufWriter<std::fs::File>);
+    use std::io::Write;
+    let take = block_size.min(48);
+    let bytes = std::slice::from_raw_parts(block as *const u8, take);
+    let mut esc = String::with_capacity(take * 2);
+    for &b in bytes {
+        if (0x20..0x7f).contains(&b) && b != b'\\' {
+            esc.push(b as char);
+        } else {
+            esc.push_str(&format!("\\x{b:02x}"));
+        }
+    }
+    let _ = writeln!(f, "ptr={:p} bin={} size={} data={}", block, (*area).block_size, block_size, esc);
+    true
+}
+
+fn blockdump_maybe() {
+    let Some(base) = std::env::var_os("PHPR_MI_BLOCKDUMP") else { return };
+    let n = BLOCKDUMP_REQ.with(|c| {
+        c.set(c.get() + 1);
+        c.get()
+    });
+    let at = std::env::var("PHPR_MI_BLOCKDUMP_AT").unwrap_or_else(|_| "500,1000".into());
+    if !at.split(',').any(|t| t.trim().parse::<u64>() == Ok(n)) {
+        return;
+    }
+    let path = format!("{}.r{n}", base.to_string_lossy());
+    let Ok(f) = std::fs::File::create(&path) else { return };
+    let mut w = std::io::BufWriter::new(f);
+    let ok = unsafe {
+        mi_heap_visit_blocks(
+            mi_heap_main(),
+            true,
+            block_content_visitor,
+            &mut w as *mut std::io::BufWriter<std::fs::File> as *mut std::os::raw::c_void,
+        )
+    };
+    use std::io::Write;
+    let _ = writeln!(w, "blockdump req={n} complete={ok}");
+    let _ = w.flush();
 }
 
 /// Deep retained-size walk from a root value (Fase 0 root attribution):

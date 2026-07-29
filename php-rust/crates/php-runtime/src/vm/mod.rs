@@ -15024,7 +15024,11 @@ fn census_nested_lc_pop() -> u64 {
 /// silently). Gate detectors match the anchored form `^unitcache <event> `
 /// only; the cargo test `uc_log_event_vocabulary_is_prefix_free` pins that
 /// no anchored event is a prefix of another. Extend the array to add one.
-pub(crate) const UC_LOG_EVENTS: [&str; 11] = [
+pub(crate) const UC_LOG_EVENTS: [&str; 12] = [
+    // WP-71 B-70.1 (Bak B-71.3): PER-EVENT eviction record — the ways/fp
+    // council must see cron-ON evictions per-evento, never reconstructed
+    // from the cumulative counter.
+    "evict",
     "alignhit",
     "fp",
     "hit intra",
@@ -15250,14 +15254,23 @@ fn unit_cache_put(key: UnitKey, cu: CachedUnit) {
     }
     UNIT_CACHE.with(|c| {
         let mut cache = c.borrow_mut();
+        // B-70.1 (WP-71): per-event eviction record needs the slot's file
+        // after `key` moves into the entry — cloned only when the event log
+        // is armed (probe runs), never on the plain path.
+        let kpath = if uc_log_path().is_some() { Some(key.path.clone()) } else { None };
         let slot = cache.entry(key).or_default();
         if let Some(pos) = slot.iter().position(|e| e.fp == cu.fp) {
             slot[pos] = cu;
             uc_stat(|s| s.fp_replaced += 1);
         } else {
             if slot.len() >= UNIT_CACHE_WAYS {
-                slot.remove(0);
+                let victim = slot.remove(0);
                 uc_stat(|s| s.ways_evictions += 1);
+                // Probe-API event (UC_LOG_EVENTS): victim fp, path = the
+                // slot's file (the ways are per-key).
+                if let Some(p) = &kpath {
+                    uc_log(&format!("evict fp {:016x}", victim.fp), p);
+                }
             }
             slot.push(cu);
             uc_stat(|s| s.inserts += 1);
