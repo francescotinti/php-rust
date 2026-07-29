@@ -8,6 +8,14 @@
 
 ## 🔴 H-70.1 ≡ M-70.1 (bloccante Hoare+Matsakis) — CHIUSO (4c0a3bc)
 
+> ⚠️ RETTIFICA CONCILIO WP-70 (M-71.4, verbali Hoare/Matsakis): la
+> chiusura vale per i walker BIND (field_cell) e DIM-write (path_op);
+> PROP-write (field_write), PROP-unset (field_unset) e DIM-unset
+> (unset_into) tenevano ancora guard nudi e PANICANO su 6 repro
+> (arrays.rs 229/253/322/501/518/120) ⇒ KH70-1 RI-ARMATO, debito
+> d'apertura WP-71 (M-71.1). "Il path di SCRITTURA" nel testo sotto
+> va letto come DIM-write soltanto.
+
 Panic riprodotti alla riga (`&$a[0][0]` → field_cell; `&$o->self->x`
 → object borrow). Fix = **disciplina di confine**: i walker si fermano
 a OGNI confine di cella (Ref/Object), consegnano l'handle clonato a un

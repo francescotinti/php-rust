@@ -1,4 +1,4 @@
-# Rotta WORDPRESS-FIRST — WP-track (dopo WP-70: ⚡ **DEBITI D'APERTURA CHIUSI + CACCIA AL RESIDUO CONSEGNATA** — 🔴 H-70.1≡M-70.1 CHIUSO: walker a DISCIPLINA DI CONFINE (token CellWalk/PathWalk, guard mai vivo attraverso un confine di cella; panic trovato ANCHE sul path di SCRITTURA ⇒ LeafWrite::Busy + RefLeaf drenato fuori dai guard), batteria h70cycle 8/8, cellskip=0 su wpdev (K-M70.2 ok) · 🔴 S-70.1..3 CHIUSO: il seed-ci non contiene più condizionali NON runtime-dichiarate ⇒ declare-fallito = Error Zend al sito (b_chain/b2/b3/b4), FANTASMA morto (b5), autoload in ORDINE ZEND con side-effect (m_auto `load:M`, anche via require), class_alias oracle-pinned; trappola cache S-69.5 governata (used_conditional_seed ⇒ impure); **corpus RI-PIN 1422→1421 (−1 fix REALE class_order_autoload1, zero regressioni)** · emendamenti TUTTI (fold==mint zip-PER-NOME 2 rami; trait-redecl fatal Zend; note H-70.5/M-70.3; rettifiche E-70.3/B-70.2 nei verbali storici) · **GATE70 PASS fails=0 AL 1° RUN (28✓, cargo 1650/0)** · 🔴 **CACCIA (predictions70 LOCK cbf251fe PRIMA dei letti): residuo ESISTE SU RELEASE (P70-0-bis Δ5,8 MiB ∈ [5,15]) + tripla DENTRO SU TUTTO — 2,1121 KiB/req · 20,000 obj/req ESATTI (spread 0,024/0,003 = MDE fondato), firma per-bin 5/5; defer path FIRA 16,00/req esatto ma il net-form non misura il ritenuto ⇒ ATTRIBUZIONE ≥80% APERTA, AXUM RESTA FERMO (KG70-1)** · spike: evidenza 83 continue+115 return nei bracci ⇒ outlining = sessione dedicata; predictions69 b91b4799 restano lockate · stash phpr-wp70 a666382e…, tree feca5b2+1f73b2b census-only)
+# Rotta WORDPRESS-FIRST — WP-track (dopo WP-70: ⚡ **DEBITI D'APERTURA CHIUSI + CACCIA AL RESIDUO CONSEGNATA** — 🔴 H-70.1≡M-70.1 CHIUSO: walker a DISCIPLINA DI CONFINE (token CellWalk/PathWalk, guard mai vivo attraverso un confine di cella; panic trovato ANCHE sul path di SCRITTURA ⇒ LeafWrite::Busy + RefLeaf drenato fuori dai guard), batteria h70cycle 8/8, cellskip=0 su wpdev (K-M70.2 ok) — ⚠️ RETTIFICA CONCILIO (M-71.4): la chiusura vale per bind+DIM-write; **PROP-write/unset e DIM-unset panicano ANCORA (6 repro Hoare+Matsakis) ⇒ KH70-1 RI-ARMATO, debito d'apertura WP-71** · 🔴 S-70.1..3 CHIUSO: il seed-ci non contiene più condizionali NON runtime-dichiarate ⇒ declare-fallito = Error Zend al sito (b_chain/b2/b3/b4), FANTASMA morto (b5), autoload in ORDINE ZEND con side-effect (m_auto `load:M`, anche via require), class_alias oracle-pinned; trappola cache S-69.5 governata (used_conditional_seed ⇒ impure); **corpus RI-PIN 1422→1421 (−1 fix REALE class_order_autoload1, zero regressioni)** · emendamenti TUTTI (fold==mint zip-PER-NOME 2 rami; trait-redecl fatal Zend; note H-70.5/M-70.3; rettifiche E-70.3/B-70.2 nei verbali storici) · **GATE70 PASS fails=0 AL 1° RUN (28✓, cargo 1650/0)** · 🔴 **CACCIA (predictions70 LOCK cbf251fe PRIMA dei letti): residuo ESISTE SU RELEASE (P70-0-bis Δ5,8 MiB ∈ [5,15]) + tripla DENTRO SU TUTTO — 2,1121 KiB/req · 20,000 obj/req ESATTI (spread 0,024/0,003 = MDE fondato), firma per-bin 5/5; defer path FIRA 16,00/req esatto ma il net-form non misura il ritenuto ⇒ ATTRIBUZIONE ≥80% APERTA, AXUM RESTA FERMO (KG70-1)** · spike: evidenza 83 continue+115 return nei bracci ⇒ outlining = sessione dedicata; predictions69 b91b4799 restano lockate · stash phpr-wp70 a666382e…, tree feca5b2+1f73b2b census-only)
 
 > ⚡ **WP-70 (2026-07-29 notte, `2a308ff`→`1f73b2b`)** — sintesi a 9
 > recepita INTEGRALE in `wp70-harness/design70.md` PRIMA del codice;
@@ -349,21 +349,51 @@ safe-only, TUTTE le fasi, no-revert. Stato WP-70: debiti d'apertura
 chiusi, gate70 PASS 1° run, caccia consegnata fino all'esistenza+firma
 (dettaglio: `sessions/WP_SESSION_70.md` + `wp70-harness/design70.md` §7).
 
-⚖️ **CONCILIO DI CHIUSURA WP-70: verbali INTEGRALI + sintesi in
-`wp71-harness/COUNCIL_WP71_REVIEWS.md` — VINCOLANTI per design71,
-recepire INTEGRALI prima di toccare codice.**
+⚖️ **CONCILIO DI CHIUSURA WP-70 ESEGUITO: verbali INTEGRALI + sintesi
+in `wp71-harness/COUNCIL_WP71_REVIEWS.md` — VINCOLANTI per design71,
+recepire INTEGRALI prima di toccare codice. Verdetti: 0 concordi
+secchi · 7 con emendamenti/riserve (Klabnik, Hejlsberg, Bak,
+Pedersen, Leijen, Stogov, Gregg) · 2 OPPOSIZIONI con refutazione
+EMPIRICA CONGIUNTA (Hoare, Matsakis).**
+
+0. **🔴 DEBITO D'APERTURA (delta-zero, refutazione Hoare+Matsakis
+   RI-VERIFICATA dal vivo)**: H-70.1 NON è chiuso come FAMIGLIA — la
+   disciplina di confine copre field_cell/path_op (bind + DIM-write)
+   ma **field_write, field_unset e unset_into panicano ANCORA su 6
+   repro** (`$o->self=$o; $o->self->self->y=2` panic arrays.rs:253;
+   `unset($a[0][1])` su ciclo panic arrays.rs:120; prop-array,
+   compound, unset-prop — la batteria h70cycle non aveva il VERBO
+   unset/prop-write). **KH70-1 RI-ARMATO ⇒ spike/run_loop BLOCCATI**
+   (K-M71.1). Primo atto = M-71.1≡H-71.1 (conversione 3 walker +
+   batteria 6 repro oracle-pinned + varianti verbo + grep-gate zero
+   borrow nudi nei walker, K-M71.2) + H-71.3 tripwire drain in ogni
+   build + M-71.2 contatore cellpark + M-71.4 rettifica verbale
+   (fatta) + KH71-2 ri-pin con PROVENANCE se muove nomi. E dal
+   collegio: S-71.1 readonly-extends mai enforced (anche eager) +
+   S-71.2 spl_autoload_call su snapshot (due divergenze generiche
+   NUOVE, fixture pinnate in scratch stogov71) — delta-zero
+   candidate della stessa apertura.
 
 1. **🔴 ATTRIBUZIONE del residuo 2,1121 KiB/req / 20,000 obj/req
-   (unico blocco per axum, KG70-1)**: il flow-form ha provato che il
-   path defer FIRA 16,00/req esatto ma NON misura il ritenuto ⇒
-   serve il **contatore RETAINED-form** (L-70.1): trap census sul bin
-   112/128 (allocation-site tagging) o tag per-canale; candidato #1 =
-   run_deferred (cosa sopravvive al teardown di 16 defer/req?);
-   se muore, ordine Pedersen (b): census-own residuo → tabelle nomi
-   monotone (P-69.5 mere-mention) → set dedup process-lifetime →
-   cache statement DB → slack per ultimo. Definizione "attribuito"
-   ≥80% e bande già lockate (predictions70 cbf251fe — restano valide,
-   KK70-3); MDE fondato: spread tripla 0,024/0,003.
+   (unico blocco per axum, KG70-1)**: protocollo VINCOLATO dal
+   concilio — strumento = **SCOPE-HEAP mimalloc attorno a
+   run_deferred** nel build census (L-71.1, retained PER COSTRUZIONE;
+   niente trap per-bin, e se trap set {96,112,128} L-71.2);
+   pre-registro ADDITIVO G-71.1 (cause che SOMMANO a 20,000 ±3×spread
+   + clausola di riconciliazione strumento, KG71-1/KG71-3); firma
+   ri-pinnata a STRADDLE (L-71.3: 9@96|112 + 6@128 + 3@64 + 1@160|192
+   + 1@32 — l'invariante è il totale); candidati in ordine:
+   parked_bytes 132 B/defer (E-71.H4, n.1) → per-id re-lower (WP-28)
+   → accumulate_seed dedup (S-71.4) → attempted-guard (P-71.4) →
+   interning → RefLeaf error-path; escalation visita-heap (KL71-2);
+   validazione release-side (P-71.3) + ladder linearità 1k/5k/9k
+   (L-71.4, KL71-3: rate phys = 69% del census, linearità oltre
+   N=1000 non provata). Igiene: verdict SOLO da script committato
+   (P-71.1), timbri retroattivi K-71.3, alias token nel lock K-71.1,
+   assert finestra completo vivi+ins+used_n (G-71.3), bilancio CPU
+   8,0 ms/req del path defer (B-71.5); NESSUNA leva sul canale defer
+   prima dell'attribuzione (KB71-3/KS71-H2); cache deferred =
+   DESIGN-ONLY chiave read-set (E-71.H3).
 2. **Fronte axum (a residuo attribuito)**: gate-axum per NOME P-70.4
    = P-69.2 fasce 1-3 + P-69.4 retry-autoload (KS-P70.3) + P-69.1;
    P-69.3 prima del multi-worker; KB69-3 armato.
