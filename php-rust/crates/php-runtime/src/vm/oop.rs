@@ -1132,6 +1132,11 @@ impl<'m> Vm<'m> {
             if survivors.is_empty() {
                 break;
             }
+            // The walk consumes the strong store (wholesale drop per round):
+            // the break phase can only reach the surviving CYCLES through
+            // weaks captured BEFORE the drop (S-72.4 — without this the
+            // break found an empty store and the memory half was a no-op).
+            self.teardown_weaks.extend(survivors.values().map(Rc::downgrade));
             self.dtor_walk_round(survivors);
         }
     }
@@ -1190,15 +1195,22 @@ impl<'m> Vm<'m> {
             *s = Zval::Undef;
         }
         self.autoloaders.clear();
+        // WP-49 root buffers: the gc buffer holds STRONG clones of noted
+        // objects — without this drain every cycle member it noted survives
+        // the break (alive_after read 20/req instead of ~0).
+        self.gc_buf.clear();
+        // Whatever the dtor-walk registered (pre-drop weaks) plus anything
+        // born AFTER it (session flush / stream finalizers) still in the
+        // strong store.
+        let mut weaks = std::mem::take(&mut self.teardown_weaks);
         let survivors = std::mem::take(&mut self.created);
-        let reg = survivors.len() as u64;
+        weaks.extend(survivors.values().map(Rc::downgrade));
+        drop(survivors);
+        let reg = weaks.len() as u64;
         if reg == 0 {
             // Fast path (B-72.2): empty store ⇒ zero work.
             return;
         }
-        let weaks: Vec<std::rc::Weak<RefCell<Object>>> =
-            survivors.values().map(Rc::downgrade).collect();
-        drop(survivors);
         let (mut broken, mut busy) = (0u64, 0u64);
         for w in &weaks {
             // Still alive after the strong store dropped = held by a cycle

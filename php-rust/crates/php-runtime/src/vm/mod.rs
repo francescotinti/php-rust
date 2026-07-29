@@ -548,6 +548,7 @@ pub(crate) fn run_module_with_hir<'m>(
         magic_guard: HashSet::default(),
         typed_refs: Vec::new(),
         created: BTreeMap::new(),
+        teardown_weaks: Vec::new(),
         destructed: HashSet::default(),
         gc_buf: Vec::new(),
         gc_buf_head: 0,
@@ -2890,6 +2891,10 @@ struct Vm<'m> {
     /// (`Rc::strong_count == 1` ⇒ only this tracking ref remains); entries are
     /// removed as they are destructed or at shutdown.
     created: BTreeMap<u32, Rc<RefCell<Object>>>,
+    /// S-72.4: weak mirror of the store captured by the teardown dtor-walk
+    /// (which consumes `created` wholesale) so the break phase can still
+    /// reach the surviving cycles. Populated only during shutdown.
+    teardown_weaks: Vec<std::rc::Weak<RefCell<Object>>>,
     /// Object handles whose `__destruct` has already run, guarding double calls.
     destructed: HashSet<u32>,
     /// Possible-roots buffer for the destruction sweep: objects that have just

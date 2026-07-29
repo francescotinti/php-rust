@@ -40,3 +40,21 @@ miss 512 (solo R1) · hit_cross 512/512; ladder release 1,078
   come misura (KG72-4); blockdump solo con buffer fisso (L-72.5) —
   in WP-72 NON si riusa il blockdump se non necessario.
 - KS-S72.3: ogni letto su build dove gate integrale regredisce = NULLO.
+
+## ADDENDUM lock2 (post-B-72.1, PRIMA dei letti tripla/amp/ladder — additivo)
+
+Istogramma B-72.1 (probe72-hist, memgc72 c6cf3da9, N=200, mediane su
+199 delta): reg/req=680 · broken/req=21 (COSTANTE su 199/199) ·
+alive_after/req=20 · busy=0. Derivazioni:
+- **T-72.d banda LOCKATA: broken/req ∈ [15, 30]** (atteso ~21: i ~20
+  del grafo lazyloader + 1; fuori banda = la leva raccoglie altro/non
+  tutto, KL72-2).
+- **T-72.f banda LOCKATA: alive_after/req ∈ [0, 30]** con SEMANTICA
+  dichiarata: still-alive-post-break = oggetti tenuti da campi VM non
+  drenati (statics/stream table), liberati dal Drop immediatamente
+  successivo — NON leak; il leak lo giudica T-72.a (used_n). KH72-1 si
+  decide su T-72.a, non su questo contatore.
+- Cap CPU C-72 CONFERMATO ai valori del lock1 (≤0,5 ms/req mediana E
+  ≤1% full): il walk è O(680)/req in fase gia' esistente + break
+  O(21) — nessuna ri-dimensione necessaria dal conteggio.
+- reg/req=680 = O(roots) del teardown (B-72.1 consegnato).
