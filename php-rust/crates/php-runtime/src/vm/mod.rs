@@ -5939,7 +5939,7 @@ impl<'m> Vm<'m> {
                 &self.seed_aliases,
                 // S-70.2: eagerly resolvable = runtime-declared (Zend's early
                 // binding consults the class table, never a compile registry).
-                &|k| self.class_index.contains_key(k),
+                &|k| self.class_index.get(k).copied(),
                 &self.seed_conditional,
                 crate::DeferPolicy::All,
             ) {
@@ -6072,7 +6072,7 @@ impl<'m> Vm<'m> {
                 // S-70.2: the deferred bind resolves ONLY against the runtime
                 // class table (+ spl_autoload below, in Zend's order) — never
                 // the conditional registry of the lowering (phantom family).
-                &|k| self.class_index.contains_key(k),
+                &|k| self.class_index.get(k).copied(),
                 &self.seed_conditional,
                 crate::DeferPolicy::No,
             ) {

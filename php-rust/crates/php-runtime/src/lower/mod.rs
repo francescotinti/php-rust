@@ -137,7 +137,7 @@ pub fn lower_source_seeded(
     seed_traits: &[(Vec<u8>, LoweredTrait)],
     seed_globals: &[Box<[u8]>],
     seed_aliases: &[(Vec<u8>, Vec<u8>)],
-    declared: &dyn Fn(&[u8]) -> bool,
+    declared: &dyn Fn(&[u8]) -> Option<usize>,
     seed_conditional: &std::collections::HashSet<Vec<u8>>,
     defer: DeferPolicy,
 ) -> Result<Program, LowerError> {
@@ -163,7 +163,7 @@ type Seed<'a> = (
     &'a [(Vec<u8>, LoweredTrait)],
     &'a [Box<[u8]>],
     &'a [(Vec<u8>, Vec<u8>)],
-    &'a dyn Fn(&[u8]) -> bool,
+    &'a dyn Fn(&[u8]) -> Option<usize>,
     &'a std::collections::HashSet<Vec<u8>>,
 );
 
@@ -344,8 +344,20 @@ fn lower_source_impl(
                 // dependent statement defers to run time exactly like Zend
                 // (the phantom-class family: b_chain/b4/b5/b6).
                 let key = cd.name.to_ascii_lowercase();
-                if declared(&key) {
-                    ci.entry(key).or_insert(i);
+                if let Some(rid) = declared(&key) {
+                    // E-71.H2 (WP-72): a CONDITIONAL name binds to the image
+                    // of the branch the runtime actually DECLARED — the seed
+                    // ids are aligned with the runtime table, so the runtime
+                    // id picks the right duplicate (never "first image wins":
+                    // fixtures h2a/h2c fataled on the un-executed branch).
+                    let idx = if rid < sclasses.len()
+                        && sclasses[rid].name.to_ascii_lowercase() == key
+                    {
+                        rid
+                    } else {
+                        i
+                    };
+                    ci.entry(key).or_insert(idx);
                 }
             }
             // Runtime `class_alias` entries resolve to the ORIGINAL decl (index
