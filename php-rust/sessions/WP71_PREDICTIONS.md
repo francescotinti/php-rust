@@ -115,3 +115,21 @@ realloc instradano su `mi_heap_*_aligned(defer_heap, …)`; `mi_free` è
 heap-agnostico. La GRANDEZZA misurata (occupazione ritenuta del heap
 dedicato, righe `tag=mi_bin src=defer`) è IDENTICA a quella lockata;
 bande, finestra, margini e libro mastro INVARIATI.
+
+## ADDENDUM AMPLIFICAZIONE (pre-letto, additivo — verifica del meccanismo)
+
+KL71-2 ha nominato il canale dal contenuto dei blocchi: il residuo è il
+grafo per-richiesta di WP_Metadata_Lazyloader (settings con chiavi
+'filter'/'callback' condivise strong 3001 = 3 entry/req; hook
+get_comment_metadata/get_term_metadata; callback [$this,…]) ⇒ CICLO Rc
+auto-referente NON raccolto al teardown della richiesta (la VM muore,
+il Drop libera i raggiungibili, i cicli Rc restano — famiglia
+"collector mai eseguito al teardown", NON famiglia WP-28 per-id).
+TEST DI AMPLIFICAZIONE (macchina): mu-plugin amp71 che crea K=3 cicli
+sintetici della stessa forma per request. BANDE (lockate qui, PRIMA
+del letto): used_n_slope(amp) − 20,000 ∈ **[30, 90] obj/req** ⇒
+MECCANISMO CONFERMATO (≥80% attribuito alla causa "cicli Rc al
+teardown"); ∈ [−0,5, +5] ⇒ meccanismo REFUTATO (i cicli del mu-plugin
+vengono raccolti ⇒ la causa è altro); altrove ⇒ NON-CONCLUSIVO.
+Strumento invariato (memgc71c, stessa finestra/assert G-71.3/G-71.4;
+1 leg basta: il confronto è vs la mediana tripla 20,000 ± 3×MDE).
