@@ -46,7 +46,7 @@ interpreter, not to pass a toy subset.
 | --- | --- |
 | Core / language stdlib functions | **539 / 654 (82%)** |
 | All internal functions | 1017 / 2143 (47%) |
-| Zend test corpus passing | **2635** (65.0% of runnable) |
+| Zend test corpus passing | **2644** (65.0% of runnable) |
 | WordPress core suite | **effective parity** (single-site AND multisite: **1** declared name-diff each) |
 
 Full, measured breakdown → **[COVERAGE.md](COVERAGE.md)**.
