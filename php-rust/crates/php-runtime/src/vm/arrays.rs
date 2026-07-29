@@ -845,7 +845,17 @@ pub(super) fn read_slot(cell: &Zval) -> Zval {
 /// keep the silent funnel (no diags in scope there; residual divergence).
 pub(super) fn coerce_key_diag(v: &Zval, diags: &mut Diags) -> Option<Key> {
     if let Zval::Ref(c) = v {
-        return coerce_key_diag(&c.borrow(), diags);
+        // H-72.5: a key can reach the walkers as a Ref, and these run INSIDE
+        // a prop-step guard — a busy key cell (the key aliases a cell
+        // mid-write on this very statement) is counted and treated as
+        // un-coercible, never a panic.
+        return match c.try_borrow() {
+            Ok(g) => coerce_key_diag(&g, diags),
+            Err(_) => {
+                cell_skip_note();
+                None
+            }
+        };
     }
     if let Zval::Double(d) = v {
         let l = convert::dval_to_lval(*d);
@@ -868,7 +878,15 @@ pub(super) fn coerce_key_silent(v: &Zval) -> Option<Key> {
         Zval::Double(d) => Some(Key::Int(convert::dval_to_lval(*d))),
         Zval::Str(s) => Some(Key::from_zstr(s)),
         Zval::Null | Zval::Undef => Some(Key::from_bytes(b"")),
-        Zval::Ref(c) => coerce_key_silent(&c.borrow()),
+        // H-72.5: try-routed for the same reason as coerce_key_diag — the
+        // walkers call this inside a prop-step guard.
+        Zval::Ref(c) => match c.try_borrow() {
+            Ok(g) => coerce_key_silent(&g),
+            Err(_) => {
+                cell_skip_note();
+                None
+            }
+        },
         _ => None,
     }
 }
@@ -1183,25 +1201,30 @@ impl<'m> Vm<'m> {
                     }
                 }
                 super::RefLeaf::OpSet { cell, op, rhs } => {
+                    // H-72.3: a busy cell is counted and SKIPPED — the drain
+                    // never computes `op(Null, rhs)` into the cell (a
+                    // fabricated value would be a deferred divergence).
                     let old = match cell.try_borrow() {
-                        Ok(g) => g.clone(),
+                        Ok(g) => Some(g.clone()),
                         Err(_) => {
                             // H-71.3: declared unreachable (all guards gone).
                             super::drain_fail_note();
-                            Zval::Null
+                            None
                         }
                     };
-                    let new = super::apply_binop(op, &old, &rhs, &mut self.diags)?;
-                    match cell.try_borrow_mut() {
-                        Ok(mut g) => {
-                            let d = std::mem::replace(&mut *g, new.clone());
-                            drop(g);
-                            self.gc_note(&d);
+                    if let Some(old) = old {
+                        let new = super::apply_binop(op, &old, &rhs, &mut self.diags)?;
+                        match cell.try_borrow_mut() {
+                            Ok(mut g) => {
+                                let d = std::mem::replace(&mut *g, new.clone());
+                                drop(g);
+                                self.gc_note(&d);
+                            }
+                            // H-71.3: declared unreachable (all guards gone).
+                            Err(_) => super::drain_fail_note(),
                         }
-                        // H-71.3: declared unreachable (all guards gone).
-                        Err(_) => super::drain_fail_note(),
+                        result = new;
                     }
-                    result = new;
                 }
                 super::RefLeaf::IncDec { cell, inc, pre } => {
                     let vals = match cell.try_borrow_mut() {
@@ -1240,7 +1263,11 @@ impl<'m> Vm<'m> {
             let obj = obj_of(&op);
             if !self.object_implements(&obj, b"arrayaccess") {
                 let name = deref_object(&obj)
-                    .map(|o| String::from_utf8_lossy(o.borrow().class_name.as_bytes()).into_owned())
+                    .and_then(|o| {
+                            o.try_borrow().ok().map(|b| {
+                                String::from_utf8_lossy(b.class_name.as_bytes()).into_owned()
+                            })
+                        })
                     .unwrap_or_default();
                 return Err(PhpError::Error(format!("Cannot use object of type {name} as array")));
             }
@@ -1275,7 +1302,11 @@ impl<'m> Vm<'m> {
                 }
                 super::PathAa::Descend { obj, key, rest, last } => {
                     let cname = deref_object(&obj)
-                        .map(|o| String::from_utf8_lossy(o.borrow().class_name.as_bytes()).into_owned())
+                        .and_then(|o| {
+                            o.try_borrow().ok().map(|b| {
+                                String::from_utf8_lossy(b.class_name.as_bytes()).into_owned()
+                            })
+                        })
                         .unwrap_or_default();
                     let mut val =
                         self.call_method_sync(obj, b"offsetGet", vec![key])?.deref_clone();
@@ -1299,47 +1330,60 @@ impl<'m> Vm<'m> {
                     // nested result value is discarded (as `r` above), so
                     // Set-shape stores suffice for all three leaves.
                     if let Some(rl) = refw2.take() {
-                        let (cell, value) = match rl {
-                            super::RefLeaf::Set { cell, value } => (cell, value),
+                        // H-72.3: a busy cell is counted and SKIPPED — never
+                        // `op(Null, ·)` fabricated into the store.
+                        let store = match rl {
+                            super::RefLeaf::Set { cell, value } => Some((cell, value)),
                             super::RefLeaf::OpSet { cell, op, rhs } => {
                                 let old = match cell.try_borrow() {
-                                    Ok(g) => g.clone(),
+                                    Ok(g) => Some(g.clone()),
                                     Err(_) => {
                                         // H-71.3: declared unreachable.
                                         super::drain_fail_note();
-                                        Zval::Null
+                                        None
                                     }
                                 };
-                                let new = super::apply_binop(op, &old, &rhs, &mut self.diags)?;
-                                (cell, new)
+                                match old {
+                                    Some(old) => {
+                                        let new = super::apply_binop(op, &old, &rhs, &mut self.diags)?;
+                                        Some((cell, new))
+                                    }
+                                    None => None,
+                                }
                             }
                             super::RefLeaf::IncDec { cell, inc, pre: _ } => {
                                 let old = match cell.try_borrow() {
-                                    Ok(g) => g.clone(),
+                                    Ok(g) => Some(g.clone()),
                                     Err(_) => {
                                         // H-71.3: declared unreachable.
                                         super::drain_fail_note();
-                                        Zval::Null
+                                        None
                                     }
                                 };
-                                let mut new = old;
-                                if inc {
-                                    super::ops::increment(&mut new, &mut self.diags)?;
-                                } else {
-                                    super::ops::decrement(&mut new, &mut self.diags)?;
+                                match old {
+                                    Some(mut new) => {
+                                        if inc {
+                                            super::ops::increment(&mut new, &mut self.diags)?;
+                                        } else {
+                                            super::ops::decrement(&mut new, &mut self.diags)?;
+                                        }
+                                        Some((cell, new))
+                                    }
+                                    None => None,
                                 }
-                                (cell, new)
                             }
                         };
-                        match cell.try_borrow_mut() {
-                            Ok(mut g) => {
-                                let d = std::mem::replace(&mut *g, value);
-                                drop(g);
-                                self.gc_note(&d);
-                            }
-                            // H-71.3: declared unreachable (all guards gone).
-                            Err(_) => super::drain_fail_note(),
-                        };
+                        if let Some((cell, value)) = store {
+                            match cell.try_borrow_mut() {
+                                Ok(mut g) => {
+                                    let d = std::mem::replace(&mut *g, value);
+                                    drop(g);
+                                    self.gc_note(&d);
+                                }
+                                // H-71.3: declared unreachable (all guards gone).
+                                Err(_) => super::drain_fail_note(),
+                            };
+                        }
                     }
                     pending = aa2;
                 }
@@ -1453,6 +1497,9 @@ impl<'m> Vm<'m> {
             if let AaOp::MagicDescend(AaMagicDescend { obj, name, rest, keys, value }) = op {
                 let o = deref_object(&obj).expect("MagicDescend carries an object");
                 let (cid, cname) = {
+                    // Drain entry: every walk guard is dead (H-70.1) and no
+                    // user code has run yet in this dispatch.
+                    // BORROW-OK: shared read for cid/name only.
                     let b = o.borrow();
                     (
                         b.class_id as usize,
@@ -1488,6 +1535,7 @@ impl<'m> Vm<'m> {
                     // an object is a handle (the write lands); anything else is
                     // Zend's indirect-modification notice, then the write faults
                     // or silently mutates the discarded temporary.
+                    // BORROW-OK: shared read pre-call (no guard, `__get` not entered).
                     let oid = o.borrow().id;
                     let gkey = (oid, MagicKind::Get, name.clone());
                     let ins = self.magic_guard.insert(gkey.clone());
@@ -1554,6 +1602,10 @@ impl<'m> Vm<'m> {
                     )));
                 }
                 {
+                    // The flush_diags above may have run a user error-handler,
+                    // but it has RETURNED — no guard survives a re-entry into
+                    // the VM (M-71.3 statement-level invariant).
+                    // BORROW-OK: scoped autoviv borrow, ends before the walk resumes.
                     let mut b = o.borrow_mut();
                     if !b.props.contains(&key_owned) {
                         b.props.set(&key_owned, Zval::Array(Rc::new(PhpArray::new())));
@@ -1580,7 +1632,11 @@ impl<'m> Vm<'m> {
             };
             if !self.object_implements(msg_obj, b"arrayaccess") {
                 let name = deref_object(msg_obj)
-                    .map(|o| String::from_utf8_lossy(o.borrow().class_name.as_bytes()).into_owned())
+                    .and_then(|o| {
+                            o.try_borrow().ok().map(|b| {
+                                String::from_utf8_lossy(b.class_name.as_bytes()).into_owned()
+                            })
+                        })
                     .unwrap_or_default();
                 return Err(PhpError::Error(format!("Cannot use object of type {name} as array")));
             }
@@ -1591,7 +1647,11 @@ impl<'m> Vm<'m> {
                 }
                 AaOp::Descend(AaDescend { obj, key, rest, keys, value }) => {
                     let cname = deref_object(&obj)
-                        .map(|o| String::from_utf8_lossy(o.borrow().class_name.as_bytes()).into_owned())
+                        .and_then(|o| {
+                            o.try_borrow().ok().map(|b| {
+                                String::from_utf8_lossy(b.class_name.as_bytes()).into_owned()
+                            })
+                        })
                         .unwrap_or_default();
                     let mut val = self.call_method_sync(obj, b"offsetGet", vec![key])?.deref_clone();
                     if !matches!(val, Zval::Object(_)) {

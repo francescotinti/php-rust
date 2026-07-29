@@ -7492,18 +7492,30 @@ impl<'m> super::Vm<'m> {
     /// bool $prepend = false)` (step 57, Phase 3): register `$callback` as an
     /// autoloader (prepended when `$prepend`). With no callback PHP registers its
     /// default file-based loader, which we don't model — a no-op that still
-    /// succeeds. The break-on-found in `try_autoload` makes a duplicate harmless,
-    /// so registration is not deduplicated. Always returns `true`.
+    /// succeeds. Always returns `true`.
     pub(super) fn ho_spl_autoload_register(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
         match args.first() {
             None | Some(Zval::Null) => Ok(Zval::Bool(true)),
             Some(cb) => {
+                // S-72.1: an already-registered callable is a no-op that still
+                // returns true (Zend's hash-key dedup: `spl_autoload_functions`
+                // reports it ONCE and a lookup calls it once; a duplicate
+                // prepend does not move the existing entry either).
+                if self.autoloaders.iter().any(|x| callable_eq(x, cb)) {
+                    return Ok(Zval::Bool(true));
+                }
                 let prepend = args.get(2).is_some_and(|v| convert::to_bool(v, &mut self.diags));
                 if prepend {
                     self.autoloaders.insert(0, cb.clone());
-                    // S-71.2: keep every in-flight lookup cursor pointing at
-                    // the same element (Zend's iterator never revisits a
-                    // position already passed — a prepend lands before it).
+                    // BUG(port): S-72.3 — Zend's lookup cursor is POSITIONAL
+                    // on a rebuilt table: a loader that prepends during the
+                    // lookup makes the cursor land back on the SAME loader,
+                    // which re-fires forever (a genuine livelock, verified on
+                    // the 8.5.7 oracle — fixture s72/b2, >100s of "A:X2").
+                    // phpr keeps the cursor element-stable instead: the walk
+                    // never re-runs an already-called loader and terminates
+                    // with "class not found". Deliberate deviation — entry in
+                    // PHPR_DIVERGENCES_FROM_PHP.md, pin s72-b2 PROVENANCE.
                     for c in &mut self.autoload_cursors {
                         c.next += 1;
                     }
@@ -7522,11 +7534,15 @@ impl<'m> super::Vm<'m> {
         let before = self.autoloaders.len();
         // S-71.2: removals must keep every in-flight lookup cursor
         // element-stable (Zend HashTable iterator semantics): removing an
-        // already-passed entry shifts the cursor down; removing the
-        // JUST-CALLED entry repositions to its successor at deletion time —
-        // with nothing after it, the walk is over for good (sticky end:
-        // appends made later in the same lookup stay invisible,
-        // vii_unregister_self).
+        // already-passed entry shifts the cursor down; removing the entry the
+        // ACTIVE walk just called repositions to its successor at deletion
+        // time — with nothing after it, the walk is over for good (sticky
+        // end: appends made later in the same lookup stay invisible,
+        // vii_unregister_self). S-72.2: a SUSPENDED walk (an outer lookup
+        // parked under a nested one) whose current element is removed DIES
+        // with it — Zend's iterator sits on the deleted bucket and never
+        // recovers (fixture b5b: the outer lookup ends, "not found").
+        let active = self.autoload_cursors.len().checked_sub(1);
         let mut r = 0usize;
         while r < self.autoloaders.len() {
             if !callable_eq(&self.autoloaders[r], cb) {
@@ -7535,13 +7551,17 @@ impl<'m> super::Vm<'m> {
             }
             self.autoloaders.remove(r);
             let live_len = self.autoloaders.len();
-            for c in &mut self.autoload_cursors {
+            for (ci, c) in self.autoload_cursors.iter_mut().enumerate() {
                 if c.ended {
                     continue;
                 }
                 if r + 1 == c.next {
-                    c.next = r;
-                    if r >= live_len {
+                    if Some(ci) == active {
+                        c.next = r;
+                        if r >= live_len {
+                            c.ended = true;
+                        }
+                    } else {
                         c.ended = true;
                     }
                 } else if r < c.next {

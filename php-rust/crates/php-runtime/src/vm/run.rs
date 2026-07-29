@@ -5106,6 +5106,7 @@ impl<'m> super::Vm<'m> {
                         if self.magic_applies(&o, &name, cur, MagicKind::Unset, b"__unset").is_none() {
                             break 'magic_unset false;
                         }
+                        // BORROW-OK: shared read pre-call (no walk started, `__unset` not entered).
                         let oid = o.borrow().id;
                         let gkey = (oid, MagicKind::Unset, name.clone());
                         let ins = self.magic_guard.insert(gkey.clone());
@@ -5146,6 +5147,7 @@ impl<'m> super::Vm<'m> {
                         let target = target.map(|v| self.proxy_view(v));
                         if let Some(o) = target.as_ref().and_then(deref_object) {
                             let cur = self.frames[top].class;
+                            // BORROW-OK: shared read on a fresh handle (no walk in flight).
                             let ocid = o.borrow().class_id as usize;
                             let key = self.prop_storage_key(ocid, &n, cur);
                             if !self.typed_refs.is_empty() {
@@ -5156,6 +5158,7 @@ impl<'m> super::Vm<'m> {
                                 });
                             }
                             if prop_type_decl(&self.classes, ocid, &n).is_some() {
+                                // BORROW-OK: scoped mut on the same fresh handle, op level.
                                 let displaced = o.borrow_mut().props.replace(&key, Zval::Undef);
                                 if let Some(d) = displaced {
                                     self.gc_note(&d);

@@ -14670,9 +14670,11 @@ fn os_random_range64(umax: u64) -> Result<u64, PhpError> {
     Ok(result % umax)
 }
 
-/// Best-effort equality of two callable [`Zval`]s for `spl_autoload_unregister`
-/// (step 57, Phase 3): a function-name string (case-insensitive) or the same
-/// closure handle. Other callable shapes (`[$obj, 'm']`) compare unequal.
+/// Equality of two callable [`Zval`]s for `spl_autoload_register`'s dedup and
+/// `spl_autoload_unregister` (step 57, Phase 3): a function-name string
+/// (case-insensitive), the same closure handle, or a two-element array
+/// callable — receiver identity (object) / class name (ci) + method name (ci),
+/// mirroring Zend's registration hash key (S-72.1).
 /// S-71.2: one live `spl_autoload_call` iteration (see `Vm::autoload_cursors`).
 pub(super) struct AutoloadCursor {
     /// Index of the next loader to call in the LIVE `autoloaders` list.
@@ -14687,6 +14689,28 @@ fn callable_eq(a: &Zval, b: &Zval) -> bool {
     match (a, b) {
         (Zval::Str(x), Zval::Str(y)) => x.as_bytes().eq_ignore_ascii_case(y.as_bytes()),
         (Zval::Closure(x), Zval::Closure(y)) => Rc::ptr_eq(x, y),
+        (Zval::Array(x), Zval::Array(y)) => {
+            let xe: Vec<Zval> = x.iter().map(|(_, v)| v.deref_clone()).collect();
+            let ye: Vec<Zval> = y.iter().map(|(_, v)| v.deref_clone()).collect();
+            if xe.len() != 2 || ye.len() != 2 {
+                return false;
+            }
+            let recv_eq = match (&xe[0], &ye[0]) {
+                (Zval::Object(p), Zval::Object(q)) => Rc::ptr_eq(p, q),
+                (Zval::Str(p), Zval::Str(q)) => {
+                    p.as_bytes().eq_ignore_ascii_case(q.as_bytes())
+                }
+                // Mixed `[$obj,'m']` vs `['Cls','m']` shapes are distinct keys.
+                _ => false,
+            };
+            recv_eq
+                && match (&xe[1], &ye[1]) {
+                    (Zval::Str(p), Zval::Str(q)) => {
+                        p.as_bytes().eq_ignore_ascii_case(q.as_bytes())
+                    }
+                    _ => false,
+                }
+        }
         _ => false,
     }
 }

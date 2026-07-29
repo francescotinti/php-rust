@@ -1872,6 +1872,21 @@ l'oracle e vanno preservati:
   (`F(b)goneB(f)gone`) — timing sweep-driven storico, conteggi comunque
   identici. (5) `unset($o->a->b)` profondo via `field_unset` non nota il
   valore rimosso (fn libera senza Vm); il path a singola prop nota.
+- 2026-07-29 (WP-72, S-72.3): **prepend-durante-lookup dell'autoloader =
+  deviazione DELIBERATA**. Zend itera la lista con cursore POSIZIONALE su
+  tabella ricostruita: un loader che si auto-prepende un altro loader
+  DURANTE la lookup fa ricadere il cursore sullo STESSO loader, che
+  ri-fira all'infinito — livelock genuino verificato sull'oracle 8.5.7
+  (fixture wp72-harness/fixtures/s72/b2_prepend_during.php, >100s di
+  "A:X2"). phpr mantiene il cursore element-stable (S-71.2): il loader
+  gia' chiamato non ri-fira, il prepeso atterra PRIMA del cursore e non
+  viene visitato in quella lookup, la lookup termina con "Class not
+  found". Pin phpr con PROVENANCE in wp72-harness/fixtures/pins/
+  s72-b2_prepend_during.phpr.txt; marker BUG(port) in
+  ho_spl_autoload_register. Il resto della semantica live e' Zend-fedele:
+  append durante lookup FIRA (b2b), dedup al register (S-72.1/b1),
+  cursore SOSPESO muore con l'elemento (S-72.2/b5b), unregister di
+  [$obj,'m'] (b7) — tutti oracle-pinned nel gate-s72.
 - 2026-07-13 (sessione 3): autoload dei nomi di trait allineato alla class
   table unica di Zend (un trait dichiarato non ri-innesca MAI l'autoloader da
   class_exists/interface_exists/ReflectionClass — prima il re-include
