@@ -5,9 +5,9 @@
 > predictions72 a catena ADDITIVA (lock1 9b9391fc → lock2 376147c2
 > post-B-72.1 → lock3 U-72 strutturale), harness wp72 SOTTO GIT
 > dall'apertura (K-72.2: hash pre-letto per costruzione). **GATE72 PASS
-> fails=0 sul binario finale** (attempts=4, onesto: i 2 FAIL intermedi
-> hanno MORSO — §S-72.6 e fase-A — e sono stati pagati con fix a
-> meccanismo). Stash **phpr-wp72 (4fd7b2d5…, 28°)**; census memgc72.
+> fails=0 sul binario finale** (attempts=4, onesto: 1 rigettato per
+> rebuild + 1 FAIL con 2 morsi — §S-72.6 e fase-A — pagati con fix a
+> meccanismo; correzione K-73.3 recepita). Stash **phpr-wp72 (4fd7b2d5…, 28°)**; census memgc72.
 
 ## 🔴 PUNTO 0 — debiti d'apertura delta-zero CHIUSI (d3edc18 + 2333039)
 
@@ -94,15 +94,21 @@ readonly del parent tra 2 richieste, stesso server): PASS 3/3.
   199/199** · busy=0 → lock2.
 - **TRIPLA72 PASS**: **used_n 0,000 obj/req (spread 0,000) — era
   20,000**; used_b 0,0010 — era 2,1109; i 5 canali per-bin → ~0;
-  **160|192 −0,000 ⇒ C4 CHIUSA**; cellpark/drainfails/busy 0; U-72
+  **160|192 = 0,008 ⇒ C4 CHIUSA (≤0,2)**; cellpark/drainfails/busy 0; U-72
   steady in forma STRUTTURALE lock3 (pin 512 STANTIO: fp/req=505, 7
   load-unit in meno dai fix di fedeltà — zero re-cold).
 - **AMP72 PASS**: K=10 post-fix delta **0,005** ∈ [−0,5,+5] (pre-fix
   +80,000) — controllo negativo chiuso.
-- **LADDER P-71.3**: fp 191,0/189,0/176,4 ⇒ d12=−2,0 d23=−12,6
-  (pre +7,7/+8,3): **crescita SPARITA** = PASS (token verdict vuoto
-  per bug `perl --` del runner, fixato + nota; metro primario=tripla).
-- **C-72 CPU PASS**: coppia full stessa-sera old(wp71)=821,4s /
+- **LADDER P-71.3**: fp 191,0/189,0/176,4 — **ESISTENZA-ONLY, non
+  attestato a macchina** (correzione concilio K-73.3: token verdict
+  vuoto per bug `perl --`, classificazione in nota umana, banda
+  unilaterale cieca al drift purge d23=−12,6 ≈5σ). La prova flat VERA:
+  tripla 0,000 + **peak vmmap 221,5|221,1|221,5 MiB (spread 0,4 su
+  1000→9000 req)** — L-73.1: il peak diventa l'invariante primaria.
+- **C-72 CPU PASS-PARZIALE** (correzione concilio: il lock aveva DUE
+  metri — media-group MAI letta; e Bak: il path CLI non esercita il
+  walk per-request ⇒ il costo O(680)/req si prezza in WP-73 su -S):
+  coppia full stessa-sera old(wp71)=821,4s /
   new=818,4s ⇒ **−0,36%** ≤ +1: leva CPU-NEUTRA; fail-set full 88
   IDENTICO (== run33 baseline); sagoma 30.472/2F/86W/73S conservata.
 - **P-71.4/P-72.6 PASS** (probe72-axumgate): attempted-retry
@@ -117,7 +123,7 @@ cargo 1651/0 · sentinelle 5 assi (dtor RI-PIN) · fixture WP-67..72
 TUTTE (h72 13 casi, s72 11, d72 6, walkborrow72 BORROW-OK=13) ·
 corpus **1418 IDENTICO** · refl 290 · ORM 3E/13F · hk 1665 0E/0F ·
 reverse 2F per nome. Attempt 1 = contaminato da rebuild (rigettato,
-lezione rispettata); attempt 2 = FAIL che ha MORSO (droporder + hk);
+lezione rispettata); attempt 2 = FAIL fails=3 con 2 morsi (droporder + hk);
 attempt 3 = PASS su 72b76f80; attempt 4 = PASS sul finale 4fd7b2d5.
 
 ## ⭐ Lezioni

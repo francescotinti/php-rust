@@ -1,4 +1,4 @@
-# Rotta WORDPRESS-FIRST — WP-track (dopo WP-72: ⚡ **IL LEAK PER-RICHIESTA È CHIUSO E AXUM È SBLOCCATO** — 🔴 LEVA S-72.4 mass-teardown Zend-fedele SPEDITA E VALIDATA: fase A reverse-symtab a fixpoint (celle condivise e Closure incluse) + dtor-walk in ORDINE DI CREAZIONE a round + fase BREAK dei cicli Rc pre-Drop via Weak (fix meta 730fa4a: senza cattura pre-walk era un no-op — l'istogramma tutto-zero l'ha svelato); tripla post-fix **used_n 20,000→0,000 obj/req (spread 0,000)** · used_b 2,1109→0,0010 · amp K=10 +80,000→**+0,005** · ladder +8→−2/−13 MiB · **C4 (160|192) CHIUSA** · broken/req=21 COSTANTE · coppia full stessa-sera **−0,36%** (CPU-NEUTRA, fail-set 88 IDENTICO) · 🔴 PUNTO 0 concilio CHIUSO (M-72.1 UnsetWalk canale AA+readonly f1/f6 BYTE-ID; S-72.1/2/3 autoload dedup+callable_eq array+cursore sospeso+prepend BUG(port); H-72.3/5; grep-gate esteso BORROW-OK=13) · 🔴 il gate ha MORSO 2 volte e ha pagato: **S-72.6 trait table keyed FQN** (wrong-result: due trait omonimi in ns diversi = il 2° mai registrato, smascherato dal DebugClassLoader ATTIVATO dal fix callable_eq) + getType/STREAM_CRYPTO + declared-id ristretto · E-71.H1/H2 ESEGUITI (3 letture flaggate + fixture flip-readonly PASS + bug conditional-image chiuso) · corpus **1420→1418 (−2 fix reali dtor-order, PROVENANCE)** · GATE72 PASS fails=0 sul binario finale (attempts=4 ONESTO: 2 FAIL intermedi = fix a meccanismo) · **⚡ SBLOCCO AXUM DICHIARATO (P-71.3 ✓ AND E-71.H1/H2 ✓ AND P-71.4/P-72.6 ✓ — KG70-1 DECADE)** · stash phpr-wp72 4fd7b2d5…, tree `730fa4a`)
+# Rotta WORDPRESS-FIRST — WP-track (dopo WP-72: ⚡ **IL LEAK PER-RICHIESTA È CHIUSO E AXUM È SBLOCCATO** — 🔴 LEVA S-72.4 mass-teardown Zend-fedele SPEDITA E VALIDATA: fase A reverse-symtab a fixpoint (celle condivise e Closure incluse) + dtor-walk in ORDINE DI CREAZIONE a round + fase BREAK dei cicli Rc pre-Drop via Weak (fix meta 730fa4a: senza cattura pre-walk era un no-op — l'istogramma tutto-zero l'ha svelato); tripla post-fix **used_n 20,000→0,000 obj/req (spread 0,000)** · used_b 2,1109→0,0010 · amp K=10 +80,000→**+0,005** · ladder ESISTENZA-ONLY (flat vero = tripla + peak vmmap 221,5|221,1|221,5) · **C4 (160|192) CHIUSA (0,008≤0,2)** · broken/req=21 COSTANTE · coppia full stessa-sera **−0,36% = PASS-PARZIALE** (fail-set 88 IDENTICO; metà media-group da leggere su -S in WP-73) · 🔴 PUNTO 0 concilio CHIUSO (M-72.1 UnsetWalk canale AA+readonly f1/f6 BYTE-ID; S-72.1/2/3 autoload dedup+callable_eq array+cursore sospeso+prepend BUG(port); H-72.3/5; grep-gate esteso BORROW-OK=13) · 🔴 il gate ha MORSO 2 volte e ha pagato: **S-72.6 trait table keyed FQN** (wrong-result: due trait omonimi in ns diversi = il 2° mai registrato, smascherato dal DebugClassLoader ATTIVATO dal fix callable_eq) + getType/STREAM_CRYPTO + declared-id ristretto · E-71.H1/H2 ESEGUITI (3 letture flaggate + fixture flip-readonly PASS + bug conditional-image chiuso) · corpus **1420→1418 (−2 fix reali dtor-order, PROVENANCE)** · GATE72 PASS fails=0 sul binario finale (attempts=4 ONESTO: 1 rigettato + 1 FAIL con 2 morsi = fix a meccanismo) · **⚡ SBLOCCO AXUM DICHIARATO (P-71.3 ✓ AND E-71.H1/H2 ✓ AND P-71.4/P-72.6 ✓ — KG70-1 DECADE)** · stash phpr-wp72 4fd7b2d5…, tree `730fa4a`)
 
 > ⚡ **WP-72 (2026-07-29, →`730fa4a`)** — sintesi a 9 recepita INTEGRALE
 > in `wp72-harness/design72.md` PRIMA del codice; predictions72 a catena
@@ -69,7 +69,7 @@
   chiude senza concilio, il PRIMO atto della successiva è convocarlo.
   Modello: `wp62-harness/COUNCIL_WP62_REVIEWS.md`.
 
-## Stato gate per nome (WP-72 `730fa4a`: **GATE72 PASS fails=0 sul binario FINALE** su `wp72-harness/gate-out/` — attempts=4 ONESTO (1 contaminato-rigettato, 2 FAIL che hanno morso S-72.6+fase-A, PASS su 72b76f80 e sul finale) — cargo **1651/0** · sentinelle 5 assi BYTE-ID (**dtor RI-PINNATA .pre-wp72**: coda shutdown in ordine Zend, 29/29 dtor, PROVENANCE in wp72-harness/fixtures/pins/PROVENANCE-s72.txt) · fixture: TUTTE le WP-67..71 + **gate-h72 (13 casi M-72.1+E-71.H2: f1-f10 + h2a/b/c pin oracle)** + **gate-s72 (11 casi S-72.1/2/3+E-72.H3; b2 pin phpr PROVENANCE=deviazione livelock)** + **gate-d72 (6 casi P-72.4 __destruct/teardown pin oracle)** + **gate-walkborrow72 (recinto esteso ai drain+run.rs, BORROW-OK=13 PINNATO)** · sentinels65 + KS-S6 + seed_prefix_short=0 · KE-e · P1 · sem doppio pin · **corpus 1418 IDENTICO (baseline wp72-harness/gate-baseline/corpus72.fails, PROVENANCE: −2 fix reali dtor-order fibers/destructors_011 + bug74053)** · refl **290** · ORM **3E/13F** · hk **1665 0E/0F** · reverse **2F PER NOME**; release = **phpr-wp72 (4fd7b2d5…, tree `730fa4a`)** stash additivo 28° accanto a wp71 (38af5eaa…); census **phpr-memgc72 (c6cf3da9)** con tag=teardown (reg/broken/busy/alive_after) in phpr-mem-target/; probe verdict-file (tutti da runner COMMITTATI in wp72-harness GIT): tripla72 **PASS used_n 0,000** · amp72 **PASS +0,005** · ladder72 **PASS d12=−2,0 d23=−12,6** (token vuoto per bug perl `--` fixato, nota in ladder-out) · run72-pair **PASS −0,36%** · probe72-h2 **PASS 3/3** · probe72-axumgate **PASS 3/3** · hist72 **PASS broken=21** · U-72 uc-steady STRUTTURALE (fp/req 512→505: 7 unit-load in meno dai fix fedeltà, zero re-cold); **AXUM SBLOCCATO**; ⚠️ /private/tmp/wp11-gates dopo un reboot va ripristinato dai tarball `wp9-harness/gates/`)
+## Stato gate per nome (WP-72 `730fa4a`: **GATE72 PASS fails=0 sul binario FINALE** su `wp72-harness/gate-out/` — attempts=4 ONESTO (1 contaminato-rigettato, 2 FAIL che hanno morso S-72.6+fase-A, PASS su 72b76f80 e sul finale) — cargo **1651/0** · sentinelle 5 assi BYTE-ID (**dtor RI-PINNATA .pre-wp72**: coda shutdown in ordine Zend, 29/29 dtor, PROVENANCE in wp72-harness/fixtures/pins/PROVENANCE-s72.txt) · fixture: TUTTE le WP-67..71 + **gate-h72 (13 casi M-72.1+E-71.H2: f1-f10 + h2a/b/c pin oracle)** + **gate-s72 (11 casi S-72.1/2/3+E-72.H3; b2 pin phpr PROVENANCE=deviazione livelock)** + **gate-d72 (6 casi P-72.4 __destruct/teardown pin oracle)** + **gate-walkborrow72 (recinto esteso ai drain+run.rs, BORROW-OK=13 PINNATO)** · sentinels65 + KS-S6 + seed_prefix_short=0 · KE-e · P1 · sem doppio pin · **corpus 1418 IDENTICO (baseline wp72-harness/gate-baseline/corpus72.fails, PROVENANCE: −2 fix reali dtor-order fibers/destructors_011 + bug74053)** · refl **290** · ORM **3E/13F** · hk **1665 0E/0F** · reverse **2F PER NOME**; release = **phpr-wp72 (4fd7b2d5…, tree `730fa4a`)** stash additivo 28° accanto a wp71 (38af5eaa…); census **phpr-memgc72 (c6cf3da9)** con tag=teardown (reg/broken/busy/alive_after) in phpr-mem-target/; probe verdict-file (tutti da runner COMMITTATI in wp72-harness GIT): tripla72 **PASS used_n 0,000** · amp72 **PASS +0,005** · ladder72 **ESISTENZA-ONLY** (K-73.3: token vuoto, banda unilaterale; flat attestato da tripla+peak) · run72-pair **PASS −0,36%** · probe72-h2 **PASS 3/3** · probe72-axumgate **PASS 3/3** · hist72 **PASS broken=21** · U-72 uc-steady STRUTTURALE (fp/req 512→505: 7 unit-load in meno dai fix fedeltà, zero re-cold); **AXUM SBLOCCATO**; ⚠️ /private/tmp/wp11-gates dopo un reboot va ripristinato dai tarball `wp9-harness/gates/`)
 
 ## (storico) Stato gate WP-71: vedi `sessions/WP_SESSION_71.md`
 
@@ -368,56 +368,75 @@
 #  funcs,null} (leak template + moltiplicatore compile-side).
 ```
 
-## 🎯 PROSSIMO LAVORO — WP-73: MIGRAZIONE AXUM (sbloccata) + ri-pin baseline post-leva + spike dispatch (sessione dedicata)
+## 🎯 PROSSIMO LAVORO — WP-73: punto-0 concilio → ancora-stash + media-pair -S → DESIGN axum lockato → migrazione (forma pool N=1)
 
 **Rotta (utente 2026-07-24)**: `FOOTPRINT_CPU_ROADMAP.md` — footprint-first,
 safe-only, TUTTE le fasi, no-revert. Stato WP-72: leak per-richiesta
-CHIUSO su tutti i metri, axum SBLOCCATO (dettaglio:
+CHIUSO (tripla 0,000 + peak flat), axum SBLOCCATO (dettaglio:
 `sessions/WP_SESSION_72.md` + `wp72-harness/design72.md` §7).
 
-⚖️ **CONCILIO DI CHIUSURA WP-72: verbali INTEGRALI + sintesi in
-`wp73-harness/COUNCIL_WP73_REVIEWS.md` — VINCOLANTI per design73,
-recepire INTEGRALI prima di toccare codice.**
+⚖️ **CONCILIO DI CHIUSURA WP-72 ESEGUITO (10 sedie: 9 + web-runtime
+co-optata): 0 concordi secchi · 9 con emendamenti/riserve · 1 REFUTATO
+PARZIALE (Stogov: canale errore/exit del teardown non Zend — 1 PANIC
+da PHP puro su ob-handler a shutdown, t3). Verbali INTEGRALI + sintesi
+in `wp73-harness/COUNCIL_WP73_REVIEWS.md` — VINCOLANTI per design73,
+recepire INTEGRALI prima di toccare codice. Deliberazioni chiave:
+ordine dei fronti RIORDINATO (Bak); forma axum = pool worker N=1
+pinnato, byte di risposta al writer attuale (web-runtime); contratto
+di teardown NEI TIPI via `Vm::finish_request(self)` (Hoare); il breach
+K-72.2 su probe72-h2 è stato SANATO col rigioco in chiusura (6e6d966).**
 
-1. **⚡ MIGRAZIONE AXUM (fronte principale, ora legittimo)**: il
-   server HTTP passa dal loop -S per-request ad axum. Vincoli dal
-   collegio storico: co-optare la sedia web-runtime al prossimo
-   concilio; il modello VM-per-request RESTA (la leva S-72.4 è il
-   contratto di pulizia al confine); E-72.H2 permanente (uc-steady
-   asserito post-migrazione: miss solo R1, hit_cross pieno);
-   gate-axum = probe72-h2 + probe72-axumgate + tripla POST-migrazione
-   (used_n atteso 0,000 invariato); Rc→il runtime axum è multi-thread:
-   la VM single-thread va confinata (spawn_blocking / thread-per-req o
-   runtime single-thread) — DESIGN PRIMA del codice, safe-only.
-2. **Ri-pin baseline POST-leva (B-72.4/KB72-3, PRIMA dello spike)**:
-   K-69.3 handler-bodies (=178 da verificare a script) + recinto P70-S
-   ricalcolato contro la coppia post-leva; media-group pair (CPU+
-   footprint vs oracle) NON rimisurata in WP-72 → rimisurarla.
-3. **SPIKE DISPATCH (sessione dedicata, sbloccata da WP-71)**: vincoli
-   invariati (B-71.1/KB71-1 cifre a script, DispatchOutcome B-71.2,
-   tier-1 hot×puliti, recinto P70-S 2%/5% su coppia POST-leva,
-   KH70-3 grep-gate sul diff).
-4. **ways/fp**: multi-flip forzato ≥20 + ms/evict (B-72.5) — solo
-   census, delibera digest ancora RINVIATA.
-5. **Backlog**: typed-const hint retention (getType oggi null,
-   catalogato) · get_included_files() + famiglia missing-builtins ·
-   S-71.3 trait-redecl cross-unit (pin pronto) · famiglie
-   STRING-OFFSET-BIND / DIAG-LINE-alias / quiet-fetch (t7) /
-   EVAL-NAMING / rendering parse-error (a6/a9) · S-72.5 anon-class
-   parent-prefixed · Δbytes STUBS · metro no-swap · quinta coppia
-   G-66.4 · cache deferred E-71.H3 (DESIGN-ONLY: ora che la firma è
-   0,000, la chiave read-set si progetta su base pulita e il beneficio
-   8,0 ms/req va ri-pesato post-leva).
+0. **🔴 PUNTO-0 (delta-zero, PRIMA di ogni riga axum)**: S-73.1/2/3
+   canale errore/exit del teardown (eccezione-in-dtor = Fatal+abort
+   walk; RIORDINO shutdown-fns → ob_end_all su VM viva → dtor-walk →
+   break — il PANIC t3 vm/mod.rs:10729 vive qui, KS-S73.1 =
+   pre-condizione del primo gate axum; exit-code propagato; batteria
+   t1-t12 → gate-d73 con RC-PARITY) · E-73.H1/H2 trait-identity
+   (redecl cross-unit per SPAN + fatal a DeclareTrait; autoload
+   nested-use case-preservato — pre-requisito Linux/PSR-4) · M-73.1
+   DimBase::This (m9/m11) · H-73.2 tripwire phasea_skip + H-73.3
+   fixture d7/d8 · E-73.H3 tag=condfallback (atteso 0) · L-73.2
+   attribuzione one-shot dei 20 alive_after per campo · K-73.1 diff
+   per-NOME dei 7 fp-load (505 vs 512, log su disco) · G-73.2 guardia
+   anti-leak FISSA nel gate73 (hist N=200 + amp K=10 single-leg, con
+   controllo positivo EMBEDDED — KG73-1) · correzioni K-73.3 GIÀ
+   APPLICATE alla rotazione in chiusura WP-72.
+1. **Misure-ancora (Bak, PRIMA del design axum)**: B-73.1 ancora-stash
+   wp56-vs-wp72 stessa-sera (deriva +17,7%; KB73-1: wp56 ≤760s ⇒
+   righe ×-CPU GAP_TREND congelate, spike ri-prioritizzato) · B-72.4
+   media-pair -S post-leva (ULTIMA baseline -S possibile) + K-69.3 +
+   recinto P70-S · B-73.3 timer tag=teardown ns/req (cap ≤500 µs).
+2. **DESIGN AXUM lockato (predictions73 PRIMA del primo commit)**:
+   forma (b) pool worker PHP dedicati IMMORTALI, **N=1 pinnato**
+   (spawn_blocking/LocalSet REFUTATE); canale mpsc+oneshot SOLI dati
+   piatti (Rc nel tipo o unsafe impl Send = FATAL, grep-gate M-73.2);
+   byte di risposta al WRITER ATTUALE (pin WP-4: no Content-Length,
+   case header, router-prefix raw — KW73-2 diff RAW sapi-probe);
+   H-73.1 `Vm::finish_request(self)` consumante (unico call-site
+   CLI+axum); KH73-1 boot assert FAST_SHUTDOWN==false + reg>0;
+   contatori aggregati o thread-id costante (KS73-H1); P-73.3
+   contratto confine (parità -S vs axum; teardown su OGNI uscita,
+   panic incluso; respawn==0); lock G-73.1/K-73.4: tripla post
+   [−0,009,+0,5], uc-steady SCOPE PER WORKER pre-definito, latenza
+   p50/p95 ≤+1% (hello ≤+100 µs/req), cap CPU BILATERALE.
+3. **Migrazione + gate-axum** (fixture concorrente inclusa, KK73-4).
+4. **Spike dispatch** (sessione dedicata, baseline DICHIARATA post
+   punto 1 — mai mista).
+5. **Backlog**: ways/fp multi-flip (B-72.5) · typed-const retention ·
+   get_included_files · S-71.3 · famiglie STRING-OFFSET-BIND /
+   DIAG-LINE / quiet-fetch / EVAL-NAMING / parse-error · S-72.5 ·
+   L-73.3 riconciliazione Σ una-tantum · L-72.4/L-72.5 (condizionali
+   espliciti) · cache deferred E-71.H3 (design-only, E-73.H6).
 
-**VETI (restano vincolanti)**: invariati WP-64..71 + WP-72: leg di
-misura da comandi inline (KS-P72.1) · conteggi per-pattern blockdump
-come misura (KG72-4) · delibera digest su singolo flip (B-72.5) ·
-claim di famiglia oltre il recinto del gate · bande aggiustate
-post-hoc (KG71-2: un pin numerico cross-sessione STANTIO si sostituisce
-con un lock STRUTTURALE derivato dal letto, mai riscrivendo la riga) ·
-letto zero senza CONTROLLO POSITIVO (rinnovato DUE volte: scope-heap
-WP-71 e istogramma-zero WP-72) · verdict solo da script committato ·
-NUOVO: perl -e con argomenti negativi vuole `--` (runner).
+**VETI (restano vincolanti)**: invariati WP-64..72 + nuovi dal
+concilio: **token verdict asserito dal RUNNER** (mai note post-letto —
+la deroga ladder non fa precedente, KG73-3/KK73-1) · **letto con
+mtime < commit del runner = NULLO** (KK73-2) · **assert di
+non-vuotezza sui file confrontati** (KK73-3) · **runner-contatore con
+controllo positivo embedded** (KG73-1: mai più PASS su tutto-zero) ·
+**cap letto a metà si dichiara PARZIALE** (KG73-4) · **uc-scope mai
+ridefinito post-letto** (KG73-2) · verdict di coppia CPU parsa anche
+instructions-retired (B-73.2).
 
 ## (storico, pre-roadmap) PROSSIMO LAVORO
 
