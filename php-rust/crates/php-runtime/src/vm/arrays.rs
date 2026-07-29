@@ -7,6 +7,8 @@ use super::*;
 /// a string base supports a final byte-offset step.
 pub(super) fn silent_get_path(cell: &Zval, keys: &[Zval]) -> Option<Zval> {
     if let Zval::Ref(rc) = cell {
+        // Shared read-walk (Matsakis WP-71: nested shared borrows coexist;
+        // no mut guard ever lives on this path). BORROW-OK: shared read.
         return silent_get_path(&rc.borrow(), keys);
     }
     match keys.split_first() {
@@ -46,6 +48,7 @@ pub(super) enum SilentOut {
 /// of the next key so resumed walks report `Object` positions key-indexed.
 pub(super) fn silent_walk(cell: &Zval, keys: &[Zval], depth: usize, mode: IsMode) -> SilentOut {
     if let Zval::Ref(rc) = cell {
+        // BORROW-OK: shared read-walk (see silent_get_path).
         return silent_walk(&rc.borrow(), keys, depth, mode);
     }
     match keys.split_first() {
@@ -113,26 +116,53 @@ pub(super) fn string_offset(s: &PhpStr, key: &Zval) -> Option<u8> {
 /// variable itself by resetting it to `Undef`). A missing intermediate level is
 /// a silent no-op; copy-on-write applies to each array touched.
 pub(super) fn unset_into(cell: &mut Zval, keys: &[Zval]) {
-    match keys.split_first() {
-        None => *cell = Zval::Undef,
-        Some((k, rest)) => {
-            if let Zval::Ref(rc) = cell {
-                let mut inner = rc.borrow_mut();
-                unset_into(&mut inner, keys);
-                return;
-            }
-            if let Zval::Array(rc) = cell {
-                if let Some(key) = coerce_key_silent(k) {
-                    let arr = Rc::make_mut(rc);
-                    if rest.is_empty() {
-                        arr.remove(&key);
-                    } else if let Some(child) = arr.get_mut(&key) {
-                        unset_into(child, rest);
-                    }
+    let mut walk = unset_into_walk(cell, keys, 0);
+    loop {
+        walk = match walk {
+            UnsetIntoWalk::Done => return,
+            UnsetIntoWalk::IntoRef(rc, i) => match rc.try_borrow_mut() {
+                Ok(mut g) => unset_into_walk(&mut g, keys, i),
+                Err(_) => {
+                    // Every walker guard is already dropped (boundary
+                    // discipline) — only a caller-held guard can trip this.
+                    // Skip route, counted (M-70.2).
+                    cell_skip_note();
+                    UnsetIntoWalk::Done
                 }
+            },
+        };
+    }
+}
+
+/// M-71.1 (WP-71): boundary token of the plain unset-dim walk — same
+/// discipline as [`WriteWalk`] (`$a[0] = &$a; unset($a[0][1])` closed the
+/// cycle back onto the walk's own live guard and panicked).
+enum UnsetIntoWalk {
+    Done,
+    IntoRef(Rc<RefCell<Zval>>, usize),
+}
+
+/// Walk `keys[i..]` from `cell` up to the next `Ref` boundary (see
+/// [`UnsetIntoWalk`]); plain containers are crossed in place.
+fn unset_into_walk(cell: &mut Zval, keys: &[Zval], i: usize) -> UnsetIntoWalk {
+    let Some(k) = keys.get(i) else {
+        *cell = Zval::Undef;
+        return UnsetIntoWalk::Done;
+    };
+    if let Zval::Ref(rc) = cell {
+        return UnsetIntoWalk::IntoRef(Rc::clone(rc), i);
+    }
+    if let Zval::Array(rc) = cell {
+        if let Some(key) = coerce_key_silent(k) {
+            let arr = Rc::make_mut(rc);
+            if i + 1 == keys.len() {
+                arr.remove(&key);
+            } else if let Some(child) = arr.get_mut(&key) {
+                return unset_into_walk(child, keys, i + 1);
             }
         }
     }
+    UnsetIntoWalk::Done
 }
 
 /// Write `value` through a mixed field path (OOP-2c), the VM analogue of the
@@ -217,148 +247,103 @@ pub(super) fn field_write(
     rebind: bool,
     rw: bool,
 ) -> Result<(), PhpError> {
+    let mut walk = field_write_walk(target, steps, 0, keys, fs, value, diags, dropped, aa, rebind, rw)?;
+    loop {
+        walk = match walk {
+            WriteWalk::Done => return Ok(()),
+            WriteWalk::IntoRef(rc, i, value) => match rc.try_borrow_mut() {
+                Ok(mut g) => field_write_walk(&mut g, steps, i, keys, fs, value, diags, dropped, aa, rebind, rw)?,
+                Err(_) => {
+                    // Every walker guard is already dropped (boundary
+                    // discipline) — only a caller-held guard can trip this:
+                    // the cell is mid-write on this very statement. Skip
+                    // route, counted (M-70.2).
+                    cell_skip_note();
+                    WriteWalk::Done
+                }
+            },
+            WriteWalk::IntoObj(o, i, value) => {
+                field_write_prop_step(&o, steps, i, keys, fs, value, diags, dropped, aa, rebind, rw)?
+            }
+        };
+    }
+}
+
+/// M-71.1 (WP-71): boundary token of the property/dim WRITE walk — the same
+/// discipline as `CellWalk`/`PathWalk` (H-70.1): the walk stops at every cell
+/// boundary (`Zval::Ref`, `Zval::Object`), hands the cloned handle and the
+/// not-yet-consumed leaf value back to the [`field_write`] driver, and the
+/// current guard drops BEFORE the next borrow — a reference cycle revisiting
+/// a cell (`$o->self = $o; $o->self->self->y = 2`) never finds its own guard
+/// alive.
+enum WriteWalk {
+    Done,
+    /// The walk crossed into a `Zval::Ref` cell; `steps[i..]` remain.
+    IntoRef(Rc<RefCell<Zval>>, usize, Zval),
+    /// The next step (`steps[i]`, a Prop/PropDyn) writes on this handle.
+    IntoObj(Rc<RefCell<Object>>, usize, Zval),
+}
+
+/// Walk `steps[i..]` from `target` up to the next cell boundary (see
+/// [`WriteWalk`]). Plain containers (arrays nested by value) are crossed in
+/// place — they hold no `RefCell`, so no guard outlives the return.
+fn field_write_walk(
+    target: &mut Zval,
+    steps: &[FieldStep],
+    i: usize,
+    keys: &mut std::vec::IntoIter<Zval>,
+    fs: FieldScope,
+    value: Zval,
+    diags: &mut Diags,
+    dropped: &mut Vec<Zval>,
+    aa: &mut Option<AaOp>,
+    rebind: bool,
+    rw: bool,
+) -> Result<WriteWalk, PhpError> {
     if let Zval::Ref(cell) = target {
         // A reference-BIND (`$arr['k'] =& $x`) REPLACES a leaf slot that
         // already holds a reference — writing through it instead would nest
         // the new ref inside the old cell (ORM's ArrayHydrator resultPointers
         // built a self-referential cell that way: infinite deref).
-        if rebind && steps.is_empty() {
+        if rebind && steps.len() == i {
             dropped.push(std::mem::replace(target, value));
-            return Ok(());
+            return Ok(WriteWalk::Done);
         }
-        let inner = &mut *cell.borrow_mut();
-        return field_write(inner, steps, keys, fs, value, diags, dropped, aa, rebind, rw);
+        return Ok(WriteWalk::IntoRef(Rc::clone(cell), i, value));
     }
-    let Some((first, rest)) = steps.split_first() else {
+    let Some(first) = steps.get(i) else {
         // Leaf overwrite: hand the displaced value back for GC noting.
         dropped.push(std::mem::replace(target, value));
-        return Ok(());
+        return Ok(WriteWalk::Done);
     };
+    let rest = &steps[i + 1..];
     match first {
-        FieldStep::Prop(_) | FieldStep::PropDyn => {
-            let owned;
-            let name: &[u8] = match first {
-                FieldStep::Prop(n) => n,
-                _ => {
-                    owned = prop_dyn_name(keys, diags);
-                    &owned
-                }
-            };
-            match target {
-                Zval::Object(o) => {
-                    // Own a handle so the leaf-defer branch can move the object into
-                    // the pending op without holding a borrow of `target`.
-                    let o = o.clone();
-                    let (cid, is_enum, is_lazy) = {
-                        let b = o.borrow();
-                        (b.class_id as usize, b.info.is_enum_case, b.lazy.is_some())
-                    };
-                    // PHP 8.4 container-fetch guard: drilling INTO a readonly
-                    // or set-visibility-denied property whose value is not an
-                    // object is "Cannot indirectly modify …" (and a compound
-                    // fetch of an uninitialized TYPED slot is the uninit
-                    // fatal), BEFORE any magic-descend deferral — the slot is
-                    // declared and get-visible here, so Zend never reaches
-                    // `__get` for it.
-                    if !rest.is_empty() && !is_enum && !is_lazy {
-                        let state = {
-                            let b = o.borrow();
-                            prop_slot_state(b.props.get(fs.prop_key(cid, name).as_ref()))
-                        };
-                        prop_indirect_guard(fs.classes, fs.scope, cid, name, state, rw, false)?;
+        FieldStep::Prop(_) | FieldStep::PropDyn => match target {
+            // Property steps run on the driver side (one scoped borrow per
+            // step): hand the handle over, the current guard drops first.
+            Zval::Object(o) => Ok(WriteWalk::IntoObj(Rc::clone(o), i, value)),
+            other => {
+                let owned;
+                let name: &[u8] = match first {
+                    FieldStep::Prop(n) => n,
+                    _ => {
+                        owned = prop_dyn_name(keys, diags);
+                        &owned
                     }
-                    // A leaf write on a property that is not a declared, accessible
-                    // slot defers to the VM caller (`prop_set_magic_or_dynamic`),
-                    // which dispatches `__set` (guarded against re-entrant recursion)
-                    // or, absent a magic setter, materialises a dynamic property /
-                    // enforces visibility. A declared accessible slot is written
-                    // directly below — PHP never invokes `__set` for an accessible
-                    // property. Enum cases keep their dedicated immutability error.
-                    // A *hooked* property (PHP 8.4) also defers: its set hook (or
-                    // the hooked write rules) must run, not a raw storage write.
-                    // So does a *lazy* object (uninitialized, or a forwarding
-                    // proxy): the write must trigger initialization / follow the
-                    // proxy, not land on the wrapper's raw storage.
-                    // A reference-BIND (`=&`) at the leaf must REPLACE the slot
-                    // with the incoming reference (and let the VM register the
-                    // typed-ref source afterwards); it must NOT be diverted to
-                    // `__set`/hook/coerce-as-value dispatch, which would drop the
-                    // aliasing (`typed_properties_071`, oss-fuzz hooked backing).
-                    if rest.is_empty()
-                        && !is_enum
-                        && (!fs.prop_is_declared_slot(cid, name)
-                            || (!rebind
-                                && (fs.prop_hooked(cid, name) || fs.prop_typed(cid, name)))
-                            || is_lazy)
-                    {
-                        *aa = Some(AaOp::MagicSet(AaMagicSet {
-                            obj: Zval::Object(o),
-                            name: name.to_vec(),
-                            value,
-                        }));
-                        return Ok(());
-                    }
-                    // An intermediate step whose raw slot is absent or
-                    // inaccessible needs the VM (overloaded-property protocol /
-                    // no-autoviv semantics) — defer the remaining path. Lazy
-                    // wrappers keep the legacy raw walk (their realization has
-                    // its own machinery); enum cases fall through to their
-                    // dedicated immutability error below.
-                    if !rest.is_empty() && !is_enum && !is_lazy {
-                        let denied = fs.prop_key_read(cid, name).is_none();
-                        let absent =
-                            !o.borrow().props.contains(fs.prop_key(cid, name).as_ref());
-                        if denied || absent {
-                            *aa = Some(AaOp::MagicDescend(AaMagicDescend {
-                                obj: Zval::Object(o),
-                                name: name.to_vec(),
-                                rest: rest.to_vec(),
-                                keys: keys.collect(),
-                                value,
-                            }));
-                            return Ok(());
-                        }
-                    }
-                    let mut obj = o.borrow_mut();
-                    let key = fs.prop_key(cid, name);
-                    let key = key.as_ref();
-                    if obj.info.is_enum_case {
-                        let cls = String::from_utf8_lossy(obj.class_name.as_bytes()).into_owned();
-                        let prop = String::from_utf8_lossy(name).into_owned();
-                        return Err(PhpError::Error(if obj.props.contains(key) {
-                            format!("Cannot modify readonly property {cls}::${prop}")
-                        } else {
-                            format!("Cannot create dynamic property {cls}::${prop}")
-                        }));
-                    }
-                    if rest.is_empty() {
-                        if let Some(old) = obj.props.replace(key, value) {
-                            dropped.push(old);
-                        }
-                    } else {
-                        if !obj.props.contains(key) {
-                            obj.props.set(key, Zval::Array(Rc::new(PhpArray::new())));
-                        }
-                        let child = obj.props.get_mut(key).expect("property just inserted");
-                        field_write(child, rest, keys, fs, value, diags, dropped, aa, rebind, rw)?;
-                    }
-                }
-                other => {
-                    // PHP 8: writing a property of a non-object is an Error —
-                    // a LEAF write is "assign", drilling further is "modify"
-                    // (zend_throw_non_object_error's verb split). The incdec
-                    // funnel shares this arm and PHP's dedicated
-                    // "increment/decrement" verb is a residual divergence.
-                    return Err(PhpError::Error(format!(
-                        "Attempt to {} property \"{}\" on {}",
-                        if rest.is_empty() { "assign" } else { "modify" },
-                        String::from_utf8_lossy(name),
-                        other.type_name_for_error()
-                    )));
-                }
+                };
+                // PHP 8: writing a property of a non-object is an Error —
+                // a LEAF write is "assign", drilling further is "modify"
+                // (zend_throw_non_object_error's verb split). The incdec
+                // funnel shares this arm and PHP's dedicated
+                // "increment/decrement" verb is a residual divergence.
+                Err(PhpError::Error(format!(
+                    "Attempt to {} property \"{}\" on {}",
+                    if rest.is_empty() { "assign" } else { "modify" },
+                    String::from_utf8_lossy(name),
+                    other.type_name_for_error()
+                )))
             }
-            Ok(())
-        }
+        },
         FieldStep::Index => {
             let key = keys.next().expect("field index key");
             // A *string* base takes the single-byte offset write (`$s[0] = 'X'`,
@@ -370,7 +355,7 @@ pub(super) fn field_write(
                         "Cannot use string offset as an array".to_string(),
                     ));
                 }
-                return string_offset_write(target, &key, &value, diags).map(|_| ());
+                return string_offset_write(target, &key, &value, diags).map(|_| WriteWalk::Done);
             }
             if matches!(target, Zval::Object(_)) {
                 // A dim-write on an object defers to ArrayAccess dispatch in
@@ -387,7 +372,7 @@ pub(super) fn field_write(
                         value,
                     }));
                 }
-                return Ok(());
+                return Ok(WriteWalk::Done);
             }
             ensure_array(target)?;
             let Zval::Array(rc) = target else { unreachable!("ensured array") };
@@ -396,19 +381,23 @@ pub(super) fn field_write(
                 .ok_or_else(|| PhpError::TypeError("Illegal offset type".to_string()))?;
             if rest.is_empty() {
                 // Overwrite a plain element, but write *through* an existing
-                // reference element (the recursive call derefs at its top).
+                // reference element (the continued walk derefs at its top —
+                // a ref element is a boundary token, so a cycle closing at
+                // the leaf re-borrows only after this guard-free frame ends).
                 match arr.get_mut(&k) {
-                    Some(child) => field_write(child, rest, keys, fs, value, diags, dropped, aa, rebind, rw)?,
-                    None => arr.insert(k, value),
+                    Some(child) => field_write_walk(child, steps, i + 1, keys, fs, value, diags, dropped, aa, rebind, rw),
+                    None => {
+                        arr.insert(k, value);
+                        Ok(WriteWalk::Done)
+                    }
                 }
             } else {
                 if !arr.contains_key(&k) {
                     arr.insert(k.clone(), Zval::Array(Rc::new(PhpArray::new())));
                 }
                 let child = arr.get_mut(&k).expect("key just inserted");
-                field_write(child, rest, keys, fs, value, diags, dropped, aa, rebind, rw)?;
+                field_write_walk(child, steps, i + 1, keys, fs, value, diags, dropped, aa, rebind, rw)
             }
-            Ok(())
         }
         FieldStep::Append => {
             if matches!(target, Zval::Str(_)) {
@@ -419,14 +408,20 @@ pub(super) fn field_write(
             if matches!(target, Zval::Object(_)) {
                 if rest.is_empty() {
                     *aa = Some(AaOp::Write(AaWrite { obj: target.clone(), key: None, value }));
-                    return Ok(());
+                    return Ok(WriteWalk::Done);
                 }
                 // `$o->c[]->x = v` — appending then drilling has no PHP
                 // equivalent through ArrayAccess; keep the object-as-array error.
                 let Zval::Object(o) = target else { unreachable!() };
+                // BORROW-OK: shared try-read for the message only; a busy cell
+                // (caller-held guard) falls back to an empty name rather than
+                // panicking (boundary discipline, M-71.1).
+                let cname = o
+                    .try_borrow()
+                    .map(|b| String::from_utf8_lossy(b.class_name.as_bytes()).into_owned())
+                    .unwrap_or_default();
                 return Err(PhpError::Error(format!(
-                    "Cannot use object of type {} as array",
-                    String::from_utf8_lossy(o.borrow().class_name.as_bytes())
+                    "Cannot use object of type {cname} as array"
                 )));
             }
             ensure_array(target)?;
@@ -437,17 +432,150 @@ pub(super) fn field_write(
             if rest.is_empty() {
                 arr.append(value).map_err(|_| occupied())?;
             } else {
+                // A fresh child can never route back into an existing cell
+                // (it contains no Ref/Object boundary), so a nested DRIVER
+                // run is cycle-safe here.
                 let mut child = Zval::Array(Rc::new(PhpArray::new()));
                 field_write(&mut child, rest, keys, fs, value, diags, dropped, aa, rebind, rw)?;
                 arr.append(child).map_err(|_| occupied())?;
             }
-            Ok(())
+            Ok(WriteWalk::Done)
         }
+    }
+}
+
+/// One property step (`steps[i]` is Prop/PropDyn) on an object HANDLE — the
+/// driver-side half of the boundary discipline (M-71.1, mirrors
+/// `field_prop_step`): the object is borrowed ONCE here and the borrow ends
+/// when this function returns (the interior [`field_write_walk`] stops at
+/// the next boundary).
+fn field_write_prop_step(
+    o: &Rc<RefCell<Object>>,
+    steps: &[FieldStep],
+    i: usize,
+    keys: &mut std::vec::IntoIter<Zval>,
+    fs: FieldScope,
+    value: Zval,
+    diags: &mut Diags,
+    dropped: &mut Vec<Zval>,
+    aa: &mut Option<AaOp>,
+    rebind: bool,
+    rw: bool,
+) -> Result<WriteWalk, PhpError> {
+    let owned;
+    let name: &[u8] = match &steps[i] {
+        FieldStep::Prop(n) => n,
+        _ => {
+            owned = prop_dyn_name(keys, diags);
+            &owned
+        }
+    };
+    let rest = &steps[i + 1..];
+    // Own a handle so the defer branches can move the object into the
+    // pending op after the guard drops.
+    let o = Rc::clone(o);
+    let Ok(mut obj) = o.try_borrow_mut() else {
+        // Only a caller-held guard can trip this (the driver dropped its own
+        // before the step): the object is mid-write on this very statement.
+        // Skip route, counted (M-70.2).
+        cell_skip_note();
+        return Ok(WriteWalk::Done);
+    };
+    let cid = obj.class_id as usize;
+    let is_enum = obj.info.is_enum_case;
+    let is_lazy = obj.lazy.is_some();
+    // PHP 8.4 container-fetch guard: drilling INTO a readonly or
+    // set-visibility-denied property whose value is not an object is
+    // "Cannot indirectly modify …" (and a compound fetch of an
+    // uninitialized TYPED slot is the uninit fatal), BEFORE any
+    // magic-descend deferral — the slot is declared and get-visible here,
+    // so Zend never reaches `__get` for it.
+    if !rest.is_empty() && !is_enum && !is_lazy {
+        let state = prop_slot_state(obj.props.get(fs.prop_key(cid, name).as_ref()));
+        prop_indirect_guard(fs.classes, fs.scope, cid, name, state, rw, false)?;
+    }
+    // A leaf write on a property that is not a declared, accessible
+    // slot defers to the VM caller (`prop_set_magic_or_dynamic`),
+    // which dispatches `__set` (guarded against re-entrant recursion)
+    // or, absent a magic setter, materialises a dynamic property /
+    // enforces visibility. A declared accessible slot is written
+    // directly below — PHP never invokes `__set` for an accessible
+    // property. Enum cases keep their dedicated immutability error.
+    // A *hooked* property (PHP 8.4) also defers: its set hook (or
+    // the hooked write rules) must run, not a raw storage write.
+    // So does a *lazy* object (uninitialized, or a forwarding
+    // proxy): the write must trigger initialization / follow the
+    // proxy, not land on the wrapper's raw storage.
+    // A reference-BIND (`=&`) at the leaf must REPLACE the slot
+    // with the incoming reference (and let the VM register the
+    // typed-ref source afterwards); it must NOT be diverted to
+    // `__set`/hook/coerce-as-value dispatch, which would drop the
+    // aliasing (`typed_properties_071`, oss-fuzz hooked backing).
+    if rest.is_empty()
+        && !is_enum
+        && (!fs.prop_is_declared_slot(cid, name)
+            || (!rebind && (fs.prop_hooked(cid, name) || fs.prop_typed(cid, name)))
+            || is_lazy)
+    {
+        drop(obj);
+        *aa = Some(AaOp::MagicSet(AaMagicSet {
+            obj: Zval::Object(o),
+            name: name.to_vec(),
+            value,
+        }));
+        return Ok(WriteWalk::Done);
+    }
+    // An intermediate step whose raw slot is absent or
+    // inaccessible needs the VM (overloaded-property protocol /
+    // no-autoviv semantics) — defer the remaining path. Lazy
+    // wrappers keep the legacy raw walk (their realization has
+    // its own machinery); enum cases fall through to their
+    // dedicated immutability error below.
+    if !rest.is_empty() && !is_enum && !is_lazy {
+        let denied = fs.prop_key_read(cid, name).is_none();
+        let absent = !obj.props.contains(fs.prop_key(cid, name).as_ref());
+        if denied || absent {
+            drop(obj);
+            *aa = Some(AaOp::MagicDescend(AaMagicDescend {
+                obj: Zval::Object(o),
+                name: name.to_vec(),
+                rest: rest.to_vec(),
+                keys: keys.collect(),
+                value,
+            }));
+            return Ok(WriteWalk::Done);
+        }
+    }
+    let key = fs.prop_key(cid, name);
+    let key = key.as_ref();
+    if obj.info.is_enum_case {
+        let cls = String::from_utf8_lossy(obj.class_name.as_bytes()).into_owned();
+        let prop = String::from_utf8_lossy(name).into_owned();
+        return Err(PhpError::Error(if obj.props.contains(key) {
+            format!("Cannot modify readonly property {cls}::${prop}")
+        } else {
+            format!("Cannot create dynamic property {cls}::${prop}")
+        }));
+    }
+    if rest.is_empty() {
+        if let Some(old) = obj.props.replace(key, value) {
+            dropped.push(old);
+        }
+        Ok(WriteWalk::Done)
+    } else {
+        if !obj.props.contains(key) {
+            obj.props.set(key, Zval::Array(Rc::new(PhpArray::new())));
+        }
+        let child = obj.props.get_mut(key).expect("property just inserted");
+        // Continue INSIDE this guard only up to the next boundary; the
+        // guard drops when the token returns (boundary discipline).
+        field_write_walk(child, steps, i + 1, keys, fs, value, diags, dropped, aa, rebind, rw)
     }
 }
 
 pub(super) fn field_get(cell: &Zval, steps: &[FieldStep], keys: &mut std::vec::IntoIter<Zval>, fs: FieldScope) -> Option<Zval> {
     if let Zval::Ref(rc) = cell {
+        // BORROW-OK: shared read-walk (see silent_get_path).
         return field_get(&rc.borrow(), steps, keys, fs);
     }
     match steps.split_first() {
@@ -467,6 +595,7 @@ pub(super) fn field_get(cell: &Zval, steps: &[FieldStep], keys: &mut std::vec::I
                 };
                 match cell {
                     Zval::Object(o) => {
+                        // BORROW-OK: shared read-walk (see silent_get_path).
                         let obj = o.borrow();
                         // Denied (inaccessible declared) reads as absent here:
                         // this walker backs isset/empty/`??` only.
@@ -498,70 +627,128 @@ pub(super) fn field_get(cell: &Zval, steps: &[FieldStep], keys: &mut std::vec::I
 }
 
 pub(super) fn field_unset(target: &mut Zval, steps: &[FieldStep], keys: &mut std::vec::IntoIter<Zval>, fs: FieldScope) -> Result<(), PhpError> {
-    if let Zval::Ref(rc) = target {
-        return field_unset(&mut rc.borrow_mut(), steps, keys, fs);
+    let mut walk = field_unset_walk(target, steps, 0, keys, fs)?;
+    loop {
+        walk = match walk {
+            UnsetWalk::Done => return Ok(()),
+            UnsetWalk::IntoRef(rc, i) => match rc.try_borrow_mut() {
+                Ok(mut g) => field_unset_walk(&mut g, steps, i, keys, fs)?,
+                Err(_) => {
+                    // Every walker guard is already dropped (boundary
+                    // discipline) — only a caller-held guard can trip this.
+                    // Skip route, counted (M-70.2).
+                    cell_skip_note();
+                    UnsetWalk::Done
+                }
+            },
+            UnsetWalk::IntoObj(o, i) => field_unset_prop_step(&o, steps, i, keys, fs)?,
+        };
     }
-    let Some((first, rest)) = steps.split_first() else {
-        return Ok(());
+}
+
+/// M-71.1 (WP-71): boundary token of the property/dim UNSET walk — same
+/// discipline as [`WriteWalk`].
+enum UnsetWalk {
+    Done,
+    IntoRef(Rc<RefCell<Zval>>, usize),
+    IntoObj(Rc<RefCell<Object>>, usize),
+}
+
+/// Walk `steps[i..]` from `target` up to the next cell boundary (see
+/// [`UnsetWalk`]); plain containers are crossed in place — no guard
+/// outlives the return.
+fn field_unset_walk(
+    target: &mut Zval,
+    steps: &[FieldStep],
+    i: usize,
+    keys: &mut std::vec::IntoIter<Zval>,
+    fs: FieldScope,
+) -> Result<UnsetWalk, PhpError> {
+    if let Zval::Ref(rc) = target {
+        return Ok(UnsetWalk::IntoRef(Rc::clone(rc), i));
+    }
+    let Some(first) = steps.get(i) else {
+        return Ok(UnsetWalk::Done);
     };
     match first {
-        FieldStep::Prop(_) | FieldStep::PropDyn => {
-            let owned;
-            let name: &[u8] = match first {
-                FieldStep::Prop(n) => n,
-                _ => {
-                    owned = prop_dyn_name(keys, &mut Diags::new());
-                    &owned
-                }
-            };
-            if let Zval::Object(o) = target {
-                let cid = o.borrow().class_id as usize;
-                // PHP 8.4 container-fetch guard, UNSET flavour: drilling into
-                // a readonly / set-denied property errors on a non-object
-                // value; an uninitialized slot is a silent no-op (Zend's
-                // BP_VAR_UNSET read of an UNDEF slot).
-                if !rest.is_empty() {
-                    let state = {
-                        let b = o.borrow();
-                        prop_slot_state(b.props.get(fs.prop_key(cid, name).as_ref()))
-                    };
-                    prop_indirect_guard(fs.classes, fs.scope, cid, name, state, false, true)?;
-                }
-                let key = fs.prop_key(cid, name);
-                if rest.is_empty() {
-                    // A declared TYPED property returns to *uninitialized* on
-                    // unset (mirrors Op::PropUnset; doctrine unsets via a
-                    // bound closure with a dynamic name).
-                    let typed = {
-                        let ob = o.borrow();
-                        ob.info.type_of(key.as_ref()).is_some() || ob.info.type_of(name).is_some()
-                    };
-                    if typed {
-                        o.borrow_mut().props.set(key.as_ref(), Zval::Undef);
-                    } else {
-                        o.borrow_mut().props.remove(key.as_ref());
-                    }
-                } else if let Some(child) = o.borrow_mut().props.get_mut(key.as_ref()) {
-                    field_unset(child, rest, keys, fs)?;
-                }
-            }
-        }
+        FieldStep::Prop(_) | FieldStep::PropDyn => match target {
+            Zval::Object(o) => Ok(UnsetWalk::IntoObj(Rc::clone(o), i)),
+            // Unsetting a property of a non-object is a silent no-op here
+            // (the VM-level PropUnset op has its own diagnostics).
+            _ => Ok(UnsetWalk::Done),
+        },
         FieldStep::Index => {
-            let Some(key) = keys.next() else { return Ok(()) };
+            let Some(key) = keys.next() else { return Ok(UnsetWalk::Done) };
             if let Zval::Array(rc) = target {
                 if let Some(k) = coerce_key_silent(&key) {
                     let arr = Rc::make_mut(rc);
-                    if rest.is_empty() {
+                    if steps.len() == i + 1 {
                         arr.remove(&k);
                     } else if let Some(child) = arr.get_mut(&k) {
-                        field_unset(child, rest, keys, fs)?;
+                        return field_unset_walk(child, steps, i + 1, keys, fs);
                     }
                 }
             }
+            Ok(UnsetWalk::Done)
         }
-        FieldStep::Append => {}
+        FieldStep::Append => Ok(UnsetWalk::Done),
     }
-    Ok(())
+}
+
+/// One property step of the UNSET walk on an object HANDLE — the object is
+/// borrowed ONCE here and the borrow ends when this function returns
+/// (M-71.1, mirrors [`field_write_prop_step`]).
+fn field_unset_prop_step(
+    o: &Rc<RefCell<Object>>,
+    steps: &[FieldStep],
+    i: usize,
+    keys: &mut std::vec::IntoIter<Zval>,
+    fs: FieldScope,
+) -> Result<UnsetWalk, PhpError> {
+    let owned;
+    let name: &[u8] = match &steps[i] {
+        FieldStep::Prop(n) => n,
+        _ => {
+            owned = prop_dyn_name(keys, &mut Diags::new());
+            &owned
+        }
+    };
+    let rest_empty = steps.len() == i + 1;
+    let Ok(mut obj) = o.try_borrow_mut() else {
+        // Only a caller-held guard can trip this (the driver dropped its
+        // own before the step). Skip route, counted (M-70.2).
+        cell_skip_note();
+        return Ok(UnsetWalk::Done);
+    };
+    let cid = obj.class_id as usize;
+    // PHP 8.4 container-fetch guard, UNSET flavour: drilling into
+    // a readonly / set-denied property errors on a non-object
+    // value; an uninitialized slot is a silent no-op (Zend's
+    // BP_VAR_UNSET read of an UNDEF slot).
+    if !rest_empty {
+        let state = prop_slot_state(obj.props.get(fs.prop_key(cid, name).as_ref()));
+        prop_indirect_guard(fs.classes, fs.scope, cid, name, state, false, true)?;
+    }
+    let key = fs.prop_key(cid, name);
+    if rest_empty {
+        // A declared TYPED property returns to *uninitialized* on
+        // unset (mirrors Op::PropUnset; doctrine unsets via a
+        // bound closure with a dynamic name).
+        let typed =
+            obj.info.type_of(key.as_ref()).is_some() || obj.info.type_of(name).is_some();
+        if typed {
+            obj.props.set(key.as_ref(), Zval::Undef);
+        } else {
+            obj.props.remove(key.as_ref());
+        }
+        Ok(UnsetWalk::Done)
+    } else if let Some(child) = obj.props.get_mut(key.as_ref()) {
+        // Continue INSIDE this guard only up to the next boundary; the
+        // guard drops when the token returns (boundary discipline).
+        field_unset_walk(child, steps, i + 1, keys, fs)
+    } else {
+        Ok(UnsetWalk::Done)
+    }
 }
 
 /// Read a local cell's value, following a reference and mapping an unset slot to
@@ -912,22 +1099,34 @@ impl<'m> Vm<'m> {
         if let Some(rl) = refw.take() {
             match rl {
                 super::RefLeaf::Set { cell, value } => {
-                    if let Ok(mut g) = cell.try_borrow_mut() {
-                        let d = std::mem::replace(&mut *g, value);
-                        drop(g);
-                        self.gc_note(&d);
+                    match cell.try_borrow_mut() {
+                        Ok(mut g) => {
+                            let d = std::mem::replace(&mut *g, value);
+                            drop(g);
+                            self.gc_note(&d);
+                        }
+                        // H-71.3: declared unreachable (all guards gone).
+                        Err(_) => super::drain_fail_note(),
                     }
                 }
                 super::RefLeaf::OpSet { cell, op, rhs } => {
                     let old = match cell.try_borrow() {
                         Ok(g) => g.clone(),
-                        Err(_) => Zval::Null,
+                        Err(_) => {
+                            // H-71.3: declared unreachable (all guards gone).
+                            super::drain_fail_note();
+                            Zval::Null
+                        }
                     };
                     let new = super::apply_binop(op, &old, &rhs, &mut self.diags)?;
-                    if let Ok(mut g) = cell.try_borrow_mut() {
-                        let d = std::mem::replace(&mut *g, new.clone());
-                        drop(g);
-                        self.gc_note(&d);
+                    match cell.try_borrow_mut() {
+                        Ok(mut g) => {
+                            let d = std::mem::replace(&mut *g, new.clone());
+                            drop(g);
+                            self.gc_note(&d);
+                        }
+                        // H-71.3: declared unreachable (all guards gone).
+                        Err(_) => super::drain_fail_note(),
                     }
                     result = new;
                 }
@@ -942,7 +1141,11 @@ impl<'m> Vm<'m> {
                             }
                             Some((old, g.clone()))
                         }
-                        Err(_) => None,
+                        Err(_) => {
+                            // H-71.3: declared unreachable (all guards gone).
+                            super::drain_fail_note();
+                            None
+                        }
                     };
                     if let Some((old, newv)) = vals {
                         result = if pre { newv } else { old };
@@ -1028,7 +1231,11 @@ impl<'m> Vm<'m> {
                             super::RefLeaf::OpSet { cell, op, rhs } => {
                                 let old = match cell.try_borrow() {
                                     Ok(g) => g.clone(),
-                                    Err(_) => Zval::Null,
+                                    Err(_) => {
+                                        // H-71.3: declared unreachable.
+                                        super::drain_fail_note();
+                                        Zval::Null
+                                    }
                                 };
                                 let new = super::apply_binop(op, &old, &rhs, &mut self.diags)?;
                                 (cell, new)
@@ -1036,7 +1243,11 @@ impl<'m> Vm<'m> {
                             super::RefLeaf::IncDec { cell, inc, pre: _ } => {
                                 let old = match cell.try_borrow() {
                                     Ok(g) => g.clone(),
-                                    Err(_) => Zval::Null,
+                                    Err(_) => {
+                                        // H-71.3: declared unreachable.
+                                        super::drain_fail_note();
+                                        Zval::Null
+                                    }
                                 };
                                 let mut new = old;
                                 if inc {
@@ -1053,7 +1264,8 @@ impl<'m> Vm<'m> {
                                 drop(g);
                                 self.gc_note(&d);
                             }
-                            Err(_) => {}
+                            // H-71.3: declared unreachable (all guards gone).
+                            Err(_) => super::drain_fail_note(),
                         };
                     }
                     pending = aa2;

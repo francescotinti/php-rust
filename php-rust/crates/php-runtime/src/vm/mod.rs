@@ -1648,6 +1648,13 @@ pub(crate) fn run_module_with_hir<'m>(
                     "tag=cellskip skips={}",
                     CELL_SKIP.with(|c| c.get()),
                 ));
+                // WP-71 M-71.2: park routes (RefLeaf) + drain-fail tripwire
+                // (H-71.3, declared unreachable — expected 0 ALWAYS).
+                mc::census_line(&format!(
+                    "tag=cellpark parks={} drainfails={}",
+                    CELL_PARK.with(|c| c.get()),
+                    DRAIN_FAIL.with(|c| c.get()),
+                ));
                 // WP-70 P70-D (E-70.2): the defer-mini channel — cumulative
                 // calls and net bytes of every run_deferred execution.
                 {
@@ -6058,6 +6065,20 @@ impl<'m> Vm<'m> {
                         kind.word(),
                         String::from_utf8_lossy(&missing)
                     )));
+                }
+                Err(crate::LowerError::Fatal { message, line: fline }) => {
+                    // S-71.1 (WP-71): a lowering FATAL from the deferred bind
+                    // (readonly-extends, extend-final/enum …) is Zend's fatal
+                    // at the declaration site, trace-bearing — never the
+                    // generic failed-to-compile wrapper.
+                    let at = if fline > 0 { fline } else { line };
+                    self.fatal_line = at;
+                    return Err(PhpError::FatalAt {
+                        msg: message,
+                        file: file.clone(),
+                        line: at,
+                        trace: String::from_utf8_lossy(&self.capture_trace().1).into_owned(),
+                    });
                 }
                 Err(e) => {
                     log::warn!(
@@ -15581,7 +15602,10 @@ fn apply_last(parent: &mut Zval, last: Last, diags: &mut Diags, dropped: &mut Op
                     *dropped = Some(d);
                 }
                 LeafWrite::Done(None) => {}
-                LeafWrite::Busy(cell, val) => *refw = Some(RefLeaf::Set { cell, value: val }),
+                LeafWrite::Busy(cell, val) => {
+                    cell_park_note();
+                    *refw = Some(RefLeaf::Set { cell, value: val });
+                }
             }
             Ok(value)
         }
@@ -15605,6 +15629,7 @@ fn apply_last(parent: &mut Zval, last: Last, diags: &mut Diags, dropped: &mut Op
                 Some(Zval::Ref(cell)) => match cell.try_borrow() {
                     Ok(inner) => inner.clone(),
                     Err(_) => {
+                        cell_park_note();
                         *refw = Some(RefLeaf::OpSet { cell: Rc::clone(cell), op, rhs });
                         return Ok(Zval::Null);
                     }
@@ -15627,7 +15652,10 @@ fn apply_last(parent: &mut Zval, last: Last, diags: &mut Diags, dropped: &mut Op
                     *dropped = Some(d);
                 }
                 LeafWrite::Done(None) => {}
-                LeafWrite::Busy(cell, val) => *refw = Some(RefLeaf::Set { cell, value: val }),
+                LeafWrite::Busy(cell, val) => {
+                    cell_park_note();
+                    *refw = Some(RefLeaf::Set { cell, value: val });
+                }
             }
             Ok(result)
         }
@@ -15651,6 +15679,7 @@ fn apply_last(parent: &mut Zval, last: Last, diags: &mut Diags, dropped: &mut Op
             // Cycle at the leaf (H-70.1): the ref'd cell is mid-write on
             // this very statement — park for `path_op`'s drain.
             let Ok(mut inner) = cell.try_borrow_mut() else {
+                cell_park_note();
                 *refw = Some(RefLeaf::IncDec { cell, inc, pre });
                 return Ok(Zval::Null);
             };
@@ -15753,6 +15782,7 @@ fn make_cell_bridge(cell: &mut Zval) -> Rc<RefCell<Zval>> {
 fn ref_array_keys(cell: &Zval) -> Vec<Key> {
     match cell {
         Zval::Array(a) => a.iter().map(|(k, _)| k.clone()).collect(),
+        // BORROW-OK: shared read at loop entry (Matsakis WP-71).
         Zval::Ref(rc) => ref_array_keys(&rc.borrow()),
         _ => Vec::new(),
     }
@@ -15768,10 +15798,39 @@ thread_local! {
     static CELL_SKIP: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
 }
 
+// M-71.2 (WP-71): count of PARK routes — a leaf write whose ref-cell was
+// busy parked as a `RefLeaf` for the drain (`LeafWrite::Busy`, the OpSet
+// old-read, the IncDec funnel) — and of DRAIN-FAIL routes — a parked store
+// whose cell was STILL busy at drain time, a branch DECLARED unreachable
+// (every walk guard is gone at the drain). Always compiled (H-71.3, the
+// WP-67 tripwire lesson: never swallow a declared-unreachable route
+// silently); the census reads them as `tag=cellpark`, and K-M70.2 extends
+// to cellskip+cellpark (K-M71.3: >0 on a clean wpdev run outside the cycle
+// fixtures falsifies the declared semantics).
+thread_local! {
+    static CELL_PARK: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+    static DRAIN_FAIL: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
 #[inline]
 fn cell_skip_note() {
     #[cfg(feature = "mem-census")]
     CELL_SKIP.with(|c| c.set(c.get() + 1));
+}
+
+#[inline]
+fn cell_park_note() {
+    CELL_PARK.with(|c| c.set(c.get() + 1));
+}
+
+/// H-71.3: a [`RefLeaf`] drain found its cell still borrowed. Every walk
+/// guard is dropped before the drain runs, so this branch is DECLARED
+/// unreachable — debug builds assert, every build counts (never a silent
+/// swallow).
+#[inline]
+fn drain_fail_note() {
+    debug_assert!(false, "RefLeaf drain hit a live guard (declared unreachable, H-71.3)");
+    DRAIN_FAIL.with(|c| c.set(c.get() + 1));
 }
 
 /// Promote `array[key]` to a shared cell and return it, de-COW-ing the array in
@@ -16107,8 +16166,15 @@ fn gc_threshold_max() -> usize {
     })
 }
 
+/// M-71.3 (WP-71) INVARIANT: statement-level store only — every call site
+/// reaches here with NO walk guard alive (the cell is a frame slot or an
+/// already-driver-resolved cell), so the naked borrow below cannot meet its
+/// own guard. Never call this from inside a walker/driver step; a path that
+/// can revisit a cell must go through the boundary-discipline walkers
+/// (`field_write`/`path_op`) instead.
 fn store_slot(cell: &mut Zval, v: Zval) -> Zval {
     if let Zval::Ref(r) = cell {
+        // BORROW-OK: statement-level (invariant above, M-71.3).
         std::mem::replace(&mut *r.borrow_mut(), v)
     } else {
         std::mem::replace(cell, v)
@@ -18065,6 +18131,45 @@ mod tests {
         assert_eq!(
             vm_stdout(b"<?php $a = [1]; $a[0] = &$a; $b = &$a; $b[0] = 'x'; echo $a[0];"),
             b"x"
+        );
+    }
+
+    #[test]
+    fn cycle_walkers_prop_write_unset_without_panic() {
+        // M-71.1 (WP-71, opposizione Hoare+Matsakis): the WP-70 closure
+        // covered bind + DIM-write only — PROP-write (`field_write`),
+        // PROP-unset (`field_unset`) and DIM-unset (`unset_into`) still
+        // recursed with live guards and panicked on the 6 council repros
+        // (arrays.rs 253/229/518/120). Converted to the same boundary
+        // discipline (WriteWalk/UnsetWalk/UnsetIntoWalk tokens);
+        // oracle-checked in the h71 gate fixtures.
+        assert_eq!(
+            vm_stdout(b"<?php $o = new stdClass; $o->self = $o; $o->self->self->y = 2; echo $o->y;"),
+            b"2"
+        );
+        assert_eq!(
+            vm_stdout(
+                b"<?php $o = new stdClass; $o->a = []; $o->a[0] = &$o->a; $o->a[0][1] = 'x'; echo $o->a[1];"
+            ),
+            b"x"
+        );
+        assert_eq!(
+            vm_stdout(
+                b"<?php $o = new stdClass; $o->self = $o; $o->y = 1; unset($o->self->self->y); echo isset($o->y) ? 'set' : 'unset';"
+            ),
+            b"unset"
+        );
+        assert_eq!(
+            vm_stdout(
+                b"<?php $a = [1, 2]; $a[0] = &$a; unset($a[0][1]); echo isset($a[1]) ? 'set' : 'unset';"
+            ),
+            b"unset"
+        );
+        assert_eq!(
+            vm_stdout(
+                b"<?php $o = new stdClass; $o->self = $o; $o->n = 2; $o->self->self->n += 2; echo $o->n;"
+            ),
+            b"4"
         );
     }
 

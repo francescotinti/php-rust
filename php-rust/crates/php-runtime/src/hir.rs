@@ -217,6 +217,12 @@ pub struct ClassDecl {
     /// `final class` — cannot be extended (enforced at lowering; `ReflectionClass::
     /// isFinal`).
     pub is_final: bool,
+    /// `readonly class` (PHP 8.2) — every instance property is readonly AND the
+    /// hierarchy must be readonly-homogeneous: a non-readonly class cannot
+    /// extend a readonly one and vice versa (S-71.1, enforced at lowering on
+    /// both the eager and the seeded/deferred path — the seed image carries
+    /// this flag).
+    pub is_readonly: bool,
     /// `interface` declaration (vs `class`), step 19-5.
     pub is_interface: bool,
     /// Instance properties *declared on this class* (not the inherited ones), in

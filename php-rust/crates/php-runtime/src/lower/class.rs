@@ -549,6 +549,7 @@ impl<'f> Lowerer<'f> {
             interfaces,
             is_abstract: true,
             is_final: false,
+            is_readonly: false,
             is_interface: true,
             props,
             static_props,
@@ -605,6 +606,39 @@ impl<'f> Lowerer<'f> {
         None
     }
 
+    /// S-71.1 (WP-71, Stogov): PHP 8.2 readonly classes are hierarchy-
+    /// homogeneous — `Non-readonly class %s cannot extend readonly class %s`
+    /// and `Readonly class %s cannot extend non-readonly class %s`, both
+    /// compile-time fatals at the declaration site. A forward-declared (not
+    /// yet lowered) parent skips the check, like the final/enum guards above;
+    /// the seeded/deferred re-lower sees the seed image's flag and fires there.
+    fn check_readonly_extends(&self, decl: &ClassDecl, line: Line) -> Result<(), LowerError> {
+        let Some(p) = decl.parent.and_then(|pid| self.classes.get(pid)) else {
+            return Ok(());
+        };
+        if p.is_readonly && !decl.is_readonly {
+            return Err(LowerError::Fatal {
+                message: format!(
+                    "Non-readonly class {} cannot extend readonly class {}",
+                    String::from_utf8_lossy(&decl.name),
+                    String::from_utf8_lossy(&p.name)
+                ),
+                line,
+            });
+        }
+        if !p.is_readonly && decl.is_readonly {
+            return Err(LowerError::Fatal {
+                message: format!(
+                    "Readonly class {} cannot extend non-readonly class {}",
+                    String::from_utf8_lossy(&decl.name),
+                    String::from_utf8_lossy(&p.name)
+                ),
+                line,
+            });
+        }
+        Ok(())
+    }
+
     pub(super) fn lower_class(&mut self, class: &Class) -> Result<ClassDecl, LowerError> {
         let line = self.line_of(class.span());
         let is_abstract = class.modifiers.iter().any(|m| m.is_abstract());
@@ -621,11 +655,16 @@ impl<'f> Lowerer<'f> {
         decl.end_line = self.line_of_end(class.span());
         // A `readonly class` (PHP 8.2): every (non-static) instance property is
         // readonly, including promoted and trait-supplied ones.
-        if class.modifiers.iter().any(|m| m.is_readonly()) {
+        decl.is_readonly = class.modifiers.iter().any(|m| m.is_readonly());
+        if decl.is_readonly {
             for p in &mut decl.props {
                 p.readonly = true;
             }
         }
+        // S-71.1 (WP-71): the hierarchy must be readonly-homogeneous — checked
+        // here (eager) and on the seeded/deferred re-lower alike (the seed
+        // image carries `is_readonly`).
+        self.check_readonly_extends(&decl, line)?;
         decl.is_final = class.modifiers.iter().any(|m| m.is_final());
         decl.attributes = self.lower_attributes(&class.attribute_lists, line)?;
         Ok(decl)
@@ -957,6 +996,7 @@ impl<'f> Lowerer<'f> {
             interfaces,
             is_abstract,
             is_final: false,
+            is_readonly: false,
             is_interface: false,
             props,
             static_props,
@@ -1021,11 +1061,14 @@ impl<'f> Lowerer<'f> {
             }
             Err(e) => return Err(e),
         };
-        if anon.modifiers.iter().any(|m| m.is_readonly()) {
+        decl.is_readonly = anon.modifiers.iter().any(|m| m.is_readonly());
+        if decl.is_readonly {
             for p in &mut decl.props {
                 p.readonly = true;
             }
         }
+        // S-71.1: readonly-homogeneous hierarchy holds for anonymous classes too.
+        self.check_readonly_extends(&decl, line)?;
         // `new #[AllowDynamicProperties] class { … }`: class-target attributes
         // apply to anonymous classes too (the deprecation gate reads them).
         decl.attributes = self.lower_attributes(&anon.attribute_lists, line)?;
@@ -1148,6 +1191,7 @@ impl<'f> Lowerer<'f> {
             is_abstract: false,
             // Enums are implicitly final (cannot be extended; ReflectionClass::isFinal).
             is_final: true,
+            is_readonly: false,
             is_interface: false,
             props: Vec::new(),
             static_props: Vec::new(),

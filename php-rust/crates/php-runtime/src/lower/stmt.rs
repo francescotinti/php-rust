@@ -640,6 +640,7 @@ impl<'f> Lowerer<'f> {
             interfaces: Vec::new(),
             is_abstract: true,
             is_final: false,
+            is_readonly: false,
             is_interface: false,
             props: Vec::new(),
             static_props: Vec::new(),
