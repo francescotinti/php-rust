@@ -66,8 +66,14 @@ fn oracle_path() -> Option<String> {
             return Some(p);
         }
     }
-    let default = "/tmp/php-src/sapi/cli/php";
-    Path::new(default).exists().then(|| default.to_string())
+    // Project oracle first (the reference build every gate uses), then the
+    // legacy /tmp build.
+    for default in ["/opt/homebrew/opt/php/bin/php", "/tmp/php-src/sapi/cli/php"] {
+        if Path::new(default).exists() {
+            return Some(default.to_string());
+        }
+    }
+    None
 }
 
 fn oracle_stdout(php: &str, code: &str) -> Vec<u8> {
@@ -83,9 +89,16 @@ fn oracle_stdout(php: &str, code: &str) -> Vec<u8> {
 #[test]
 fn builtins_match_oracle() {
     let Some(php) = oracle_path() else {
-        eprintln!("SKIP: PHP oracle not found (set PHP_ORACLE or build /tmp/php-src)");
-        return;
-    };
+        // Audit Sol 2026-07-30 P1.2: senza oracle questo test era un
+        // FALSO VERDE (return = "ok" senza confronti). Ora fallisce
+        // forte; PHPR_ALLOW_MISSING_ORACLE=1 e' l'escape ESPLICITO
+        // per ambienti senza oracle (CI job non-differential).
+        if std::env::var_os("PHPR_ALLOW_MISSING_ORACLE").is_some() {
+            eprintln!("SKIPPED-BY-ENV: differential senza oracle");
+            return;
+        }
+        panic!("PHP oracle non trovato: set PHP_ORACLE (o installa l'oracle brew); PHPR_ALLOW_MISSING_ORACLE=1 per saltare ESPLICITAMENTE");
+};
 
     let reg = registry();
     let mut mismatches = Vec::new();

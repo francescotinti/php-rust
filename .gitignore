@@ -1,5 +1,6 @@
 target/
-Cargo.lock
+# Cargo.lock e' TRACCIATO (workspace con binari: build riproducibile,
+# audit Sol 2026-07-30 P0.1). Ignorato resta solo il target/.
 .DS_Store
 **/._*
 ._*
@@ -8,3 +9,6 @@ Cargo.lock
 .vexp/
 # file temporanei hash-named creati da run di test con cwd nel repo
 php-rust/[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]
+# config Cargo LOCALE (target-dir personale fuori dal volume esterno):
+# tracciato solo l'esempio .cargo/config.toml.example
+php-rust/.cargo/config.toml

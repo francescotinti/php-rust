@@ -1,3 +1,7 @@
+# ESEMPIO di config locale NON tracciata (copiare in .cargo/config.toml).
+# Il target-dir personale resta fuori dal repo (audit Sol P0.1): su questa
+# macchina punta al disco interno perche' il volume esterno non supporta gli
+# hardlink della cache incrementale di cargo.
 # Build artifacts are redirected off the "Extreme Pro" external volume, whose
 # filesystem cannot hard-link the incremental-compilation cache (cargo prints
 # "hard linking files ... failed" and can leave stale/inconsistent binaries).

@@ -1,0 +1,5 @@
+# Toolchain PINNATA (audit Sol 2026-07-30 P0.1): i gate Clippy/lint non
+# devono rompersi per un cambio di compilatore non deliberato.
+# Aggiornare = decisione esplicita con gate integrale verde sulla nuova.
+[toolchain]
+channel = "1.96.0"

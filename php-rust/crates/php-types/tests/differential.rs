@@ -15,12 +15,18 @@ use php_types::ops;
 use php_types::{Diag, Diags, Key, PhpArray, PhpError, Zval};
 
 fn oracle() -> Option<String> {
-    let path = std::env::var("PHP_ORACLE").unwrap_or_else(|_| "/tmp/php-src/sapi/cli/php".into());
-    if std::path::Path::new(&path).exists() {
-        Some(path)
-    } else {
-        None
+    if let Ok(p) = std::env::var("PHP_ORACLE") {
+        if std::path::Path::new(&p).exists() {
+            return Some(p);
+        }
     }
+    // Project oracle first (the reference build every gate uses).
+    for default in ["/opt/homebrew/opt/php/bin/php", "/tmp/php-src/sapi/cli/php"] {
+        if std::path::Path::new(default).exists() {
+            return Some(default.to_string());
+        }
+    }
+    None
 }
 
 /// (php literal, our value)
@@ -248,9 +254,13 @@ fn parse_blocks(output: &str) -> std::collections::HashMap<String, String> {
 #[test]
 fn differential_operators_vs_oracle() {
     let Some(php) = oracle() else {
-        eprintln!("SKIP: php oracle not found (build /tmp/php-src or set PHP_ORACLE)");
-        return;
-    };
+        // Audit Sol 2026-07-30 P1.2: mai un "ok" senza confronti.
+        if std::env::var_os("PHPR_ALLOW_MISSING_ORACLE").is_some() {
+            eprintln!("SKIPPED-BY-ENV: differential senza oracle");
+            return;
+        }
+        panic!("PHP oracle non trovato: set PHP_ORACLE; PHPR_ALLOW_MISSING_ORACLE=1 per saltare ESPLICITAMENTE");
+};
     let corpus = corpus();
     let mut php_cases: Vec<(String, String)> = Vec::new();
     let mut rust_results: Vec<(String, String)> = Vec::new();
