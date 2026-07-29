@@ -2200,11 +2200,23 @@ impl<'m> super::Vm<'m> {
                     // A conditional trait declaration executed: register the
                     // lowered trait into the seed image so later units can
                     // `use` it (only the branch that RAN registers its variant).
+                    // E-73.H1: Redeclaration of the same trait FQN in different
+                    // branches is a Fatal, matching Zend (Cannot redeclare trait T).
                     let module = self.frames[top].module;
                     if let Some((key, lt)) = module.conditional_traits.get(*idx as usize) {
-                        if !self.seed_traits.iter().any(|(k, _)| k == key) {
-                            self.seed_traits.push((key.clone(), lt.clone()));
+                        if self.seed_traits.iter().any(|(k, _)| k == key) {
+                            // Trait already declared (first-wins redecl) — FATAL
+                            let file: Box<[u8]> = Box::from(self.frame_file(top));
+                            let line = self.cur_line(top);
+                            return Err(PhpError::FatalAt {
+                                msg: format!("Cannot redeclare trait {}",
+                                    String::from_utf8_lossy(key)),
+                                file,
+                                line,
+                                trace: String::from_utf8_lossy(&self.capture_trace().1).into_owned(),
+                            });
                         }
+                        self.seed_traits.push((key.clone(), lt.clone()));
                     }
                 }
                 Op::DeclareClass { class } => {
