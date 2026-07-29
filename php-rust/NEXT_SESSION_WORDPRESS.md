@@ -374,28 +374,54 @@ chiusi PER COSTRUZIONE, gate71 PASS al 1° run attestato, attribuzione
 del residuo CHIUSA a macchina (dettaglio: `sessions/WP_SESSION_71.md` +
 `wp71-harness/design71.md` §7).
 
-⚖️ (il blocco concilio WP-72 si aggiunge qui a verbali consegnati —
-regola: sintesi VINCOLANTE per design72, recepire INTEGRALE prima di
-toccare codice.)
+⚖️ **CONCILIO DI CHIUSURA WP-71 ESEGUITO: verbali INTEGRALI + sintesi
+in `wp72-harness/COUNCIL_WP72_REVIEWS.md` — VINCOLANTI per design72,
+recepire INTEGRALI prima di toccare codice. Verdetti: 0 concordi
+secchi · 8 con emendamenti/riserve · 1 OPPOSIZIONE (Matsakis: 2
+wrong-result SILENZIOSI provati sul verbo UNSET). Deliberazioni
+chiave: il claim "KH70-1 sciolto come FAMIGLIA" si EMENDA in
+"famiglia PANIC chiusa nei corpi gateati"; S-71.2 è ROTTO su 3 forme
+nuove; la leva è RI-SAGOMATA a mass-teardown Zend-fedele (dtor-walk
+store-order, non trace-GC); lo sblocco axum è RIORDINATO (P-71.3 AND
+E-71.H1/H2 AND P-71.4).**
 
-1. **🔴 LEVA cycle-collect al teardown (POST-attribuzione, ora
-   legittima)**: il residuo 2,11 KiB/req · 20,000 obj/req = cicli Rc
-   utente non raccolti quando la VM per-request muore (grafo
-   WP_Metadata_Lazyloader: callback [$this,…] in settings). Forma da
-   progettare in design72: collect_cycles radicato PRIMA del Drop
-   della VM (i buffer dei possible-roots al teardown — lezione WP-49:
-   il collector si radica SOLO dai buffer; il displaced dell'ultimo
-   statement può non esserci mai entrato ⇒ serve la semina dei root
-   giusti o una passata dedicata al confine di richiesta del server).
-   Guardie: predizione LOCKATA prima dei letti (tripla post-fix
-   attesa ~0 obj/req; CPU della passata a coppia stessa-sera, cap da
-   dichiarare); gate integrale (KH71-2-stile: ogni nome che si muove
-   = stop e PROVENANCE); **validazione P-71.3: two-boot release
-   post-fix Δ < 2 MiB su ΔN=4000 ⇒ SBLOCCO AXUM** (poi gate-axum
-   P-70.4 + P-71.4: fixture attempted-retry cross-request + assert
-   parked-RefLeaf==0 al teardown; KS-P71.2 verificato: attempted è
-   locale per-fire, nessun reset mancante).
-2. **Debiti Hejlsberg (non eseguiti in WP-71)**: E-71.H1 audit delle
+0. **🔴 DEBITO D'APERTURA (delta-zero, opposizione Matsakis +
+   Stogov)**: M-72.1 UnsetWalk guadagna i token AA (Descend + leaf
+   offsetUnset) + guard readonly/leaf-op-parity in
+   field_unset_prop_step (fixture f1/f6 pin oracle: oggi f1 resetta
+   senza Fatal, f6 no-op silenzioso su AA) · S-72.1 dedup del
+   duplicato al register + fix `callable_eq` per `[$obj,'m']` ·
+   S-72.2 cursore SOSPESO muore con l'elemento (lookup annidata b5b)
+   · S-72.3 prepend-durante-lookup (Zend = livelock posizionale:
+   replicare o BUG(port)+PROVENANCE) · H-72.1/M-72.2 grep-gate esteso
+   (drain + run.rs + conteggio BORROW-OK pinnato) · H-72.3 drain non
+   fabbrica valori · H-72.5 invariante chiavi-mai-Ref · K-72.1 stamps
+   k72 per predictions71 (C2/C3/C4/C5/C6/P-71.3/KS-P71.2).
+
+1. **🔴 LEVA al teardown — FORMA RI-SAGOMATA DAL CONCILIO (S-72.4):
+   MASS-TEARDOWN Zend-fedele, non trace-GC** — dal sorgente 8.5.7:
+   Zend in release NON cicla il GC a fine richiesta; fa dtor-walk
+   sull'object-store in ORDINE DI CREAZIONE (ciclici COMPRESI) poi
+   free wholesale; phpr diverge GIÀ oggi sull'ordine dtor (c1
+   reverse ⇒ sentinella store-order da pinnare PRIMA, KS-S72.2).
+   design72 dichiara PRIMA del codice: fonte dei root + prova di
+   completezza (census vivi post-collect==0, KH72-1); ordine di
+   smantellamento pinnato (drain RefLeaf → semina root WP-49 →
+   dtor-walk/collect → assert parked==0 ∧ cellpark/drainfails==0 →
+   Drop VM, P-72.3) con sentinelle drop-order; politica __destruct
+   dei cicli con fixture byte-parity PRIMA (P-72.4, KH72-2);
+   **cap CPU NUMERICO nel lock** (B-72.2/L-72.3: ≤0,5 ms/req media E
+   ≤1% full, coppia stessa-sera, fast-path buffer-vuoto); B-72.1
+   istogramma possible-roots PRIMA del design; bande post-fix
+   LOCKATE: tripla used_n ∈ [−0,009,+0,5] PASS, (0,5,1,5] PARZIALE
+   con ri-attribuzione, used_b < 0,15 KiB/req, per-bin → 0 con
+   160|192 che DECIDE C4 (KG72-2); controllo negativo G-72.3 (amp71
+   K=10 post-fix ∈ [−0,5,+5]); uc-steady nel verdict (E-72.H2);
+   P-71.3 in forma ladder three-boot con rumore dichiarato (L-72.1).
+   **SBLOCCO AXUM = ULTIMO ATTO, riordinato (E-72.H1 vincolante):
+   P-71.3 AND E-71.H1/E-71.H2 timbrati AND gate-axum P-71.4/P-72.6**
+   (KS72-H1: sblocco senza audit = revocato).
+2. **Debiti Hejlsberg (ORA GATE dello sblocco axum, E-72.H1)**: E-71.H1 audit delle
    letture di class_index su entry seed fuori da note_seed_super
    (stmt.rs ~617 riserva; class.rs 45/356) + E-71.H2 fixture
    caso-negativo hoist-timing nel gate (KS71-H1 armato). Cache
@@ -403,10 +429,10 @@ toccare codice.)
    pre-registrato 8,0 ms/req + 1526 KiB/req churn) — SHIP solo dopo
    la leva 1 (il canale ora è attribuito, KB71-3 decade a leva
    consegnata ma la firma va ri-pinnata post-fix).
-3. **ways/fp AL CONCILIO**: l'evidenza per-evento c'è (8 evict
-   osservati, firma version.php ×4 per segmento, set front/cron
-   disgiunti — cron-table71). KB71-4 soddisfatto: il concilio può
-   deliberare la chiave digest sul DEP-SET.
+3. **ways/fp: delibera digest RINVIATA (Bak B-72.5)**: il singolo
+   flip prova il MECCANISMO, non il regime — servono multi-flip
+   forzato (≥20), ms/evict del re-lower, rate reale (~8/1000 req =
+   possibile verdetto "non vale una chiave nuova").
 4. **SPIKE DISPATCH (sessione dedicata, SBLOCCATA)**: K-M71.1 è
    sciolto (batteria M-71.1 verde + grep-gate). Restano vincolanti:
    B-71.1/KB71-1 (cifre ri-pinnate a script: 95+90+312, 104/178
@@ -419,7 +445,12 @@ toccare codice.)
    quiet-fetch (t7, H-71.5) · famiglia EVAL-NAMING · Δbytes STUBS ·
    metro no-swap · quinta coppia G-66.4 · replica quota 7,84.
 
-**VETI (restano vincolanti)**: invariati WP-64..70 + nuovi WP-71:
+**VETI (restano vincolanti)**: invariati WP-64..70 + WP-72 (concilio):
+**leg di misura da comandi inline** (P-72.1/KS-P72.1: solo runner
+committati, hash pre-letto K-72.2); **conteggi per-pattern del
+blockdump citati come misura** (KG72-4: solo foglie address-free);
+**delibera digest ways/fp su singolo flip** (B-72.5); **claim di
+famiglia oltre il recinto del gate** (M-72.1/H-72.2). E nuovi WP-71:
 **letto zero senza CONTROLLO POSITIVO dello strumento = NON-CITABILE**
 (lezione H1-C1: il canale deve dimostrare di firare nello scope);
 **bande sbagliate si correggono con un NUOVO lock derivato dal letto,
