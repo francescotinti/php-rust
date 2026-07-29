@@ -73,4 +73,6 @@ regressione phpr (2 coppie consistenti: 80,42/21,03 e 80,97/21,02).
 
 | WP-69 | 2026-07-28 | non rimisurato (sessione fedeltà/debiti: gate-only) — riferimenti restano: media CPU 2,58×, footprint media ~3,0-3,1 (banda 2,9-3,2), full 2,06-2,11×, peak ~1,98-2,03GB | corpus 1421→1422 (ri-pin: −2 fix reali, +3 ex-skip runnable); KL69-1 SCATTA: residuo vero ~2 KiB/req wpdev (axum fermo) |
 
+| WP-70 | 2026-07-29 | non rimisurato il gap classico (sessione fedeltà+caccia) — riferimenti restano: media CPU 2,58×, footprint media ~3,0-3,1 (banda 2,9-3,2), full 2,06-2,11×, peak ~1,98-2,03GB | corpus 1422→1421 (−1 fix reale class_order_autoload1, S-70.2); **residuo per-request MISURATO E CONFERMATO: esiste su RELEASE (P70-0-bis Δ5,8 MiB/4000 req) + tripla census 2,1121 KiB/req · 20,000 obj/req (spread 0,024/0,003 = MDE fondato); defer path 16,00 calls/req; attribuzione ≥80% APERTA ⇒ axum fermo** |
+
 Dettaglio e contesto di ogni riga: `gaps/REPORT_GAP_<N>.md` (per-sessione).
