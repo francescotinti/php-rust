@@ -133,3 +133,14 @@ teardown"); ∈ [−0,5, +5] ⇒ meccanismo REFUTATO (i cicli del mu-plugin
 vengono raccolti ⇒ la causa è altro); altrove ⇒ NON-CONCLUSIVO.
 Strumento invariato (memgc71c, stessa finestra/assert G-71.3/G-71.4;
 1 leg basta: il confronto è vs la mediana tripla 20,000 ± 3×MDE).
+
+## ADDENDUM AMPLIFICAZIONE-2 (pre-letto, additivo)
+
+Esito K=3 (bande 744e4b00): delta=23,996 obj/req ⇒ token
+**NON-CONCLUSIVO** come lockato (la banda [30,90] presumeva ≥10
+obj/ciclo; il grafo sintetico ha 1 sola entry ⇒ 8 obj/ciclo,
+INTERO-ESATTO ×3). La banda di REFUTAZIONE [−0,5, 5] è ESCLUSA:
+il meccanismo non è refutato. NUOVO test: **K=10** cicli identici,
+banda CONFERMA = **10 × 8 = 80 ± 16 ⇒ delta ∈ [64, 96] obj/req**;
+delta ∈ [−0,5, 5] ⇒ REFUTATO; altrove ⇒ NON-CONCLUSIVO. Stessi
+strumento/finestra/assert.
