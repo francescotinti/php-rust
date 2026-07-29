@@ -1872,6 +1872,17 @@ l'oracle e vanno preservati:
   (`F(b)goneB(f)gone`) — timing sweep-driven storico, conteggi comunque
   identici. (5) `unset($o->a->b)` profondo via `field_unset` non nota il
   valore rimosso (fn libera senza Vm); il path a singola prop nota.
+- 2026-07-29 (WP-72, S-72.6/E-72): (1) **ReflectionClassConstant::getType()/
+  hasType()**: implementate nel prelude ma il TIPO dichiarato delle
+  costanti di classe (PHP 8.3) non e' ritenuto dall'HIR (ClassConstDecl
+  senza campo type) ⇒ getType() = null e hasType() = false ANCHE per una
+  costante tipizzata (oracle: ReflectionNamedType). Colmabile ritenendo
+  l'hint al lower. (2) get_included_files() ASSENTE (scoperta strumentando
+  DebugClassLoader): famiglia missing-builtins, in coda al detector.
+  (3) CHIUSA in sessione la famiglia trait-bare-name (S-72.6): la tabella
+  trait e' ora keyed FQN — due trait omonimi in namespace diversi sono
+  distinti (prima il secondo non si registrava MAI e `use` bindava il
+  primo in silenzio).
 - 2026-07-29 (WP-72, S-72.3): **prepend-durante-lookup dell'autoloader =
   deviazione DELIBERATA**. Zend itera la lista con cursore POSIZIONALE su
   tabella ricostruita: un loader che si auto-prepende un altro loader
