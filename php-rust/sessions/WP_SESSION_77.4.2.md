@@ -1,0 +1,75 @@
+# WP_SESSION_77.4.2 — 2026-07-30 (sera)
+
+**Mandato**: binding steps 4-5 del programma WP-77.4 (deferiti da WP-77.4.1):
+KM-77-2 concurrent gate + KS-M1-Gate-Upgraded byte-snapshot ×3 workload +
+metriche M4. Baseline: phpr 7bf53854 @ 45d3bc5. **Esito: ENTRAMBI I
+KILL-SWITCH CHIUSI PASS**, verdetti da runner COMMITTATI. Commit: 927e66f.
+
+## Verdetti
+
+| Gate | Verdetto | Evidenza |
+|---|---|---|
+| **KM-77-2** | ✅ PASS | 15 round × 2 curl parallele vs php-server (cli-mode): 30/30 PASS, 30 marker unici, 0 leak; **controllo positivo MORDE** (stale $GLOBALS iniettato ⇒ FAIL) |
+| **KS-M1-Gate-Upgraded** | ✅ PASS | A: axum hello 7/7 byte-id (42 B) · B: WP front 57 428 B + post 71 093 B + feed 1 675 B, tutte 7/7 byte-id (5 seq + 2 par) · C: ORM 3484 **3E/13F, 16 nomi IDENTICI** alle famiglie catalogate |
+
+Verdict-file: `/Volumes/Extreme Pro/Claude/wp77-harness/gate-out/
+{km77_2,ks_m1_upgraded}.verdict` — emessi da `wp77-harness/
+run_gate_km77_2.sh` e `run_gate_ks_m1_upgraded.sh` (committati nel repo).
+Pin nomi ORM: `wp77-harness/gate-baseline/orm7742-fails.txt` (16 righe;
+provenance: conteggio = stato gate WP-72, nomi = famiglie recipe 2026-07-15).
+
+## Metriche M4 (PULITE — prima passata scartata: contaminata dall'ORM
+phpunit in parallelo; rimisurate a macchina scarica)
+
+| Endpoint | Mediana (n=10) | Footprint fisico (vmmap) |
+|---|---|---|
+| Axum hello-world (placeholder) | 0,3 ms | 4,3 MB |
+| cli-server (fixture km77) | 6,8 ms | 18,4 MB |
+| WP front (phpr -S, DB wp) | 352 ms | **350–367 MB STABILE su ~46 req (no growth)** |
+
+Abort-times: N/A (M3 non costruito, nulla è abortito).
+
+## Caveat onesto di perimetro
+
+Il handler Axum è ancora **placeholder** (non esegue PHP): il workload A
+valida plumbing+stabilità byte della risposta; l'isolamento $GLOBALS reale
+è validato sul percorso **cli-server** (dov'è il PHP per-richiesta oggi).
+Il KM-77-2 "task async simultanei nello stesso processo" in senso pieno
+richiede il Vm nel handler ⇒ WP-77.5.
+
+## ⭐ Lezioni
+
+- ⭐⭐ **Un fixture che non può fallire non è un gate**: il
+  `gate_km77_2_concurrent.php` di WP-77.4.1 settava il marker a 'initial'
+  e verificava 'initial' — un leak sarebbe passato VERDE. La forma giusta:
+  stamp UNICO per richiesta + controllo positivo che dimostri il morso
+  (stale iniettato ⇒ FAIL). Superseded, non emendato: il vecchio resta
+  come storia.
+- ⭐⭐ **7 hash identici su corpi VUOTI = controllo positivo fallito**
+  (variante della lezione istogramma-tutto-zero WP-72): `/?p=1` è una 301
+  body-vuoto e lo snapshot dava "byte-id" su 0 byte. Ogni parity-check di
+  snapshot vuole la guardia `size>0`.
+- ⭐ **`wait` nudo con un server backgrounded nello stesso shell non torna
+  mai**: nel runner il `wait` del round aspettava anche il server ⇒ hang
+  al primo run (nell'esplorativo funzionava perché il server era
+  daemonizzato a parte). `wait $PID1 $PID2` espliciti.
+- ⭐ **Latenze misurate con un phpunit concorrente sono spazzatura**: la
+  prima passata M4 è stata scartata e rifatta post-ORM (variante del
+  "wall inquinato → solo user CPU": qui l'inquinamento era la CPU di un
+  altro run nostro).
+- ⭐ I file WP-77 vivono in DUE posti (harness esterno + repo-interno
+  `wp77-harness/`): il pre-flight che guarda solo l'esterno dichiara
+  "fixture mancanti" che invece sono committati nel repo. Fonte di verità
+  = repo-interno (committato).
+
+## Stato binario
+
+phpr **7bf53854** INVARIATO (unico build: php-server con feature
+axum-server — phpr ri-verificato dopo). Stash: `phpr-wp77.4` (già =
+7bf53854, nessun ri-stash). php-server con axum: 17,8 MB.
+
+## Prossimo (WP-77.5)
+
+Vm reale nel handler Axum (Module+RetainSet+task_local, M9), M3 exception
+bridge, M4 measurement vero (steady-state ≤±2%). Concilio WP-77.5
+VINCOLANTE in `wp77-harness/COUNCIL_WP77.5_REVIEWS.md`.
