@@ -1,11 +1,12 @@
 # Rotta WORDPRESS-FIRST — WP-track
 
-## 🔵 WP-73 (2026-07-30): PUNTO-0 DELTA-ZERO PARTIAL
+## 🔵 WP-74 (2026-07-30): PUNTO-0 DELTA-ZERO — ROOT CAUSE IDENTIFIED, FLUSH_BUFFER FRAME BUG ISOLATED
 
-**Status**: S-73.2 ✓ (teardown reorder shipped + committed 996387a), E-73.H1/H2 ✓, S-73.1/S-73.3/M-73.1 deferred.  
-**Blocker cleared**: t3 PANIC 10729 (ob_start+handler) now unblocked by S-73.2 reorder (flush buffers before destructors).  
-**Next session**: Quick S-73.1/S-73.3 one-liners (25 min), full gate-d73 validation, council verdicts H-73.4/5.  
-**Reference**: `sessions/WP_SESSION_73.md` (full punto-0 log), `wp73-harness/COUNCIL_WP73_REVIEWS.md` (binding verdicts), `PLAN_WP73_IMPLEMENTATION.md` (work plan).
+**Status**: S-73.2 code ✓ (shutdown order correct: shutdown-fns → flush → dtor-walk → break), but **t3 PANIC persists** (fixtures blocked).  
+**Critical Issue**: `flush_buffer()` does NOT push frame context before invoking handler callback method → `frames[top]` access with empty stack → panic at mod.rs:10729.  
+**Blocker**: flush_buffer frame setup (20-30 min fix); once fixed, S-73.1/S-73.3/E-73 implementations can proceed.  
+**Next session (WP-75)**: (1) Locate & fix flush_buffer frame setup, (2) test t3 fixture BYTE-ID, (3) run gate-d73 t1-t12, (4) implement S-73.1/S-73.3 per results, (5) catalog M-73.1 as PHPR_DIVERGENCE, (6) close punto-0 council verdicts.  
+**Reference**: `sessions/WP_SESSION_74.md` (diagnostics + root cause), `/tmp/WP74-PUNTO0-FINDINGS.md` (detailed analysis), `/tmp/gate-d73/t3_ob_handler_cycle.php` (test fixture).
 
 ---
 
