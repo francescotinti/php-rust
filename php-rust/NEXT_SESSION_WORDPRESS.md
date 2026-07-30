@@ -22,13 +22,33 @@
 
 ---
 
-## 🚀 WP-77 (2026-07-31+): AXUM MIGRATION BEGINS
+## ✅ WP-77.3 (2026-07-30): M1 Vm::request_end() IMPLEMENTATION ✓
 
-**Status**: Punto-0 unblocked; Axum bootstrap + handler refactor.  
-**Critical Path**: (1) Axum HTTP listener setup + SAPI binding (concurrent: socket/stream detection builtin + M-73.1 decision + error rendering for S-73.1), (2) Handler executor pool (config per H-73.4 council binding: immortal pool N=1 per Bak), (3) Request/response cycle bridging, (4) Full-suite validation on Axum.  
-**Deferred to WP-77+**: Error rendering S-73.1 (exception message to stderr) · Handler output capture t3 · M-73.1 divergence decision · Council H-73.4/5 reconvene.  
-**Next Session**: Axum architecture + bootstrap phase. Concurrent: socket/stream detection (builtin 180 missing), detector real-app survey.  
-**Reference**: Council binding H-73.4 (alive_after enumeration) · H-73.5 (cross-thread aggregation) in `COUNCIL_WP73_REVIEWS.md`
+**Status**: **M1 COMPLETE** — Vm::request_end() implemented, compiled, committed (d937b0b).  
+**Completion**: (1) Pre-flight all green ✓, (2) Harness created (wp77-harness/) ✓, (3) M1 implementation + ~25-field reset per Bak spec ✓, (4) Compiles clean ✓, (5) Integration plan documented (3 options: Lazy Static/Handler Wrapper/Middleware) ✓.  
+**Key Achievement**: N=1 Vm lifecycle reset ready; per-request ephemeral state cleared while statics/module persist. Async ownership solved by M9 (tokio::task_local!).  
+**Binary Change**: phpr-wp77.3 (879fb2ed) stashed; baseline WP-77.1 (eab88e7a) archived.  
+**Deferred**: M1 integration into Axum handler (deferred to WP-77.4 — decision needed: Lazy Static vs Handler Wrapper vs Middleware).  
+**Reference**: `sessions/WP_SESSION_77.3.md` (session log + learnings), `wp77-harness/WP77_OPTION_B_AMENDMENTS.md` (M1/M3/M4 specs), `wp77-harness/M1_INTEGRATION_PLAN.md` (next steps).
+
+---
+
+## 🚀 WP-77.4 (2026-07-31+): M1 INTEGRATION + M3 EXCEPTION BRIDGE
+
+**Status**: Ready for integration; awaiting Vm storage pattern decision.  
+**Critical Path**: (1) Choose Vm storage (Lazy Static vs Handler Wrapper vs Middleware) per M1_INTEGRATION_PLAN.md, (2) Integrate request_end() into Axum handler ✓ M1.4 gate test, (3) Implement M3 exception bridge (catch panic, run S-73.2, respond 500) ✓ M3 gate test, (4) M4 measurement phases (Tier-0/steady-state alloc probes).  
+**Kill-Switches**: KS-M1 (next_object_id==1 after reset), KS-M3 (exception path works), KS-M4-Steady (variance ≤±2%).  
+**Next Session**: M1 integration (recommend Option B+C hybrid), M1 gate execution, decision on M3 timeline.  
+**Reference**: Council binding from WP-77.3 (pending review), `wp77-harness/M1_INTEGRATION_PLAN.md` (3 options).
+
+---
+
+## 🚀 WP-77 (2026-07-30): AXUM MIGRATION — OPTION B BINDING ✓
+
+**Architecture**: N=1 Vm per async task (M9 tokio::task_local!) + per-request reset (M1) + exception bridge (M3).  
+**Status**: Punto-0 unblocked; Axum bootstrap (M9) + handler refactor (M1/M3/M4) in progress.  
+**Design Decision**: Council unanimously rejected N=1 immortal pool (contention + lifetime hazards); user selected Option B (structured N=1 reuse + amendments).  
+**Reference**: `COUNCIL_WP77_REVIEWS.md` (council verdicts), `WP77_OPTION_B_AMENDMENTS.md` (binding amendments M1–M9).
 
 ---
 
