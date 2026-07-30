@@ -715,14 +715,12 @@ pub fn run_module_with_hir<'m>(
     // WP-67 P-2 (P-67.5): RetainSet must be held by run_module_with_hir so it
     // drops AFTER vm — Rust's drop order is load-bearing (RetainSet declared
     // here stays in scope until the end of run_module_with_hir).
+    // S-77.6.4.1+S-77.6.4.2: Persistent Vm lifecycle
+    // WP-67 P-2: RetainSet held by run_module_with_hir, drops after vm.
     let retain = RetainSet::new();
     let mut vm = vm_new(&retain, module, registry, main_hir);
-    // Link-time `Serializable` policy for the hoisted (unconditional) classes:
-    // the deprecation is staged in `diags` (flushed with the first statement,
-    // so it prints before any script output, like Zend's compile-time emission)
-    // and an enum implementing it aborts before `main` runs. Conditional
-    // classes are checked by their `Op::DeclareClass` instead. (Classes linked
-    // later by an include unit are not checked — deliberate slice.)
+
+    // S-77.6.4.2a: Link-time fatal check (part of per-request setup)
     let mut link_fatal = None;
     for cid in 0..vm.classes.len() {
         if module.conditional_classes.contains(&cid) {
@@ -734,20 +732,17 @@ pub fn run_module_with_hir<'m>(
         }
     }
     vm.frames.push(Frame::new(&module.main, module));
-    // A web request installed on this thread (phpr -S) switches the run to
-    // web-SAPI behaviour and seeds the request superglobals; the `argv` CLI
-    // seeding below is skipped (the cli-server registers no argv/argc).
+
+    // S-77.6.4.2b: request_start (setup INI, superglobals, session)
+    // Web SAPI seeding (cli-server mode)
     if let Some(req) = php_types::sapi::web_request() {
         vm.web = true;
         vm.response_headers.push(b"X-Powered-By: PHP/8.5.7".to_vec());
         websapi::seed_web_superglobals(&mut vm.superglobals, &req);
-        // The cli-server SAPI's own startup INI values (oracle-pinned).
         for (name, value) in [
             (&b"html_errors"[..], &b"1"[..]),
             (b"output_buffering", b"4096"),
             (b"implicit_flush", b""),
-            // Zend's CLI SAPI hardwires these two; the cli-server keeps the
-            // php.ini values (site-health debug tab reads them, WP-11).
             (b"max_execution_time", b"30"),
             (b"max_input_time", b"60"),
         ] {
@@ -757,18 +752,9 @@ pub fn run_module_with_hir<'m>(
             }
         }
     }
-    // Seed the CLI superglobals (`$_SERVER`/`$argv`/`$argc`/`$_ENV`) into the
-    // script frame's global slots for a real CLI run; the test harness passes
-    // `None`, leaving them undefined as before. Only slots the script references
-    // exist, so a script that never mentions `$_SERVER` is unaffected.
+    // CLI superglobals seeding
     if let (Some(argv), Some(prog)) = (argv, main_hir) {
         seed_cli_superglobals(&mut vm.superglobals, &mut vm.frames[0].slots, &prog.slots, argv);
-        // Zend's CLI SAPI registers `$argv`/`$argc` in the global symbol table
-        // unconditionally (register_argc_argv=On), so `$GLOBALS['argv']` works
-        // from ANY unit — wp-cli's Runner reads it from a required file while
-        // the entry script never mentions it. Register the names in the
-        // cross-unit global registry; the named-slot path above already filled
-        // them when the main script declares the variables.
         let mut arr = PhpArray::new();
         for a in argv {
             let _ = arr.append(Zval::Str(PhpStr::new(a.to_vec())));
@@ -782,13 +768,8 @@ pub fn run_module_with_hir<'m>(
             vm.frames[0].slots[slot] = Zval::Long(argv.len() as i64);
         }
     }
-    // `php -d`-style INI overrides (phpt --INI-- sections): a registered
-    // directive gets the value as its startup default too (ini_restore under
-    // run-tests.php reverts to the -d value); an unknown name is ignored,
-    // invisible to ini_get exactly like `php -d unknown=x`. Validation and
-    // ext/session's module-startup deprecations render "in Unknown on line 0".
+    // INI overrides and session auto-start
     vm.apply_ini_overrides(ini_overrides);
-    // `session.auto_start=1` opens the session at request start (RINIT).
     if vm.ini.get_bool(b"session.auto_start") {
         let _ = vm.ho_session_start(Vec::new());
     }
