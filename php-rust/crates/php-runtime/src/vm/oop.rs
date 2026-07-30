@@ -1168,9 +1168,17 @@ impl<'m> Vm<'m> {
                 frame.class = Some(defc);
                 frame.static_class = Some(cid);
                 self.frames.push(frame);
-                // Drive the destructor to completion; swallow any fatal it raises
-                // (PHP turns a shutdown-time throw into a separate fatal).
-                let _ = self.run();
+                // S-73.1: Catch exception thrown in destructor and abort walk
+                match self.run() {
+                    Err(PhpError::Thrown(_)) => {
+                        // Exception in destructor: abort remaining dtor walk (return early)
+                        return;
+                    }
+                    Err(_) => {
+                        // Other errors: continue walk (destructors run even on errors)
+                    }
+                    Ok(_) => {}
+                }
             }
         }
     }
