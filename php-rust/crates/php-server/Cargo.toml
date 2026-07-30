@@ -7,13 +7,16 @@ license.workspace = true
 [dependencies]
 php-cli = { path = "../php-cli", optional = true }
 php-runtime.workspace = true
+php-builtins = { path = "../php-builtins", optional = true }
+php-types.workspace = true
 mimalloc.workspace = true
 tokio = { version = "1", features = ["full"], optional = true }
 axum = { version = "0.7", optional = true }
 tower = { version = "0.4", optional = true }
 hyper = { version = "1", optional = true }
+num_cpus = { version = "1", optional = true }
 
 [features]
 default = ["cli-server"]
 cli-server = ["php-cli"]
-axum-server = ["tokio", "axum", "tower", "hyper"]
+axum-server = ["tokio", "axum", "tower", "hyper", "php-builtins", "num_cpus"]
