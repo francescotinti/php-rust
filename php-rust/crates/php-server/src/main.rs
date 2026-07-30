@@ -33,12 +33,12 @@ mod axum_handler {
         Router, response::IntoResponse,
     };
 
-    // WP-77.1 thread-local Vm (N=1 pattern):
-    // One Vm per handler thread, reused for each request
-    thread_local! {
-        // Placeholder: actual Vm initialization happens at first request
-        // TODO(WP-77.2): Implement Vm::new() + thread-local binding
-        static _VM_INSTANCE: std::cell::RefCell<Option<String>> = std::cell::RefCell::new(None);
+    // M9 (Hoare/Matsakis): Replace thread_local! with tokio::task_local!
+    // Task-local storage binds to the async task, not the OS thread.
+    // This allows safe borrow across await boundaries (task migration-safe).
+    // Rule: Handler must NOT hold VM_INSTANCE borrow across internal await points.
+    tokio::task_local! {
+        static VM_INSTANCE: std::cell::RefCell<Option<String>>;
     }
 
     pub async fn hello_world() -> impl IntoResponse {
