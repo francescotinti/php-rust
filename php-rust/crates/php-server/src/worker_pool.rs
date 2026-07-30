@@ -15,6 +15,8 @@ mod implementation {
     use std::sync::Arc;
     use tokio::sync::{mpsc, oneshot};
     use axum::http::StatusCode;
+    use php_runtime::run_source_with_ini;
+    use php_builtins::registry;
 
     /// Server-lifetime context: shared state for entire server duration.
     pub struct WorkerPoolContext {
@@ -94,20 +96,21 @@ mod implementation {
         /// Worker thread main loop (P-67.5 drop order enforced).
         ///
         /// RetainSet is declared first so Vm dies before it (LIFO drop order).
+        /// Phase A: Each request creates a fresh Vm via run_source_with_ini.
+        /// Phase B/C: Refactor to persistent Vm per worker (design77.5.md).
         fn worker_loop(
             _context: Arc<WorkerPoolContext>,
             mut rx: mpsc::UnboundedReceiver<WorkerTask>,
         ) {
-            // P-67.5: RetainSet declared BEFORE Vm — Rust drops in reverse order,
-            // so Vm (with user destructors) dies first, then its arena.
-            // let _retain = php_runtime::RetainSet::new();
+            // Get the PHP builtins registry once for all requests
+            let reg = php_builtins::registry();
 
             while let Some(task) = rx.blocking_recv() {
-                // Per-request Vm creation: borrowed from retain
-                // TODO: Construct full Vm here with Module + request lifecycle
-                // let mut vm = Vm { retain: &retain, module, ... };
-                // (task.handler)();  // Closure executes in Vm context
-
+                // Per-request lifecycle:
+                // The handler closure contains PHP source + metadata.
+                // For Phase A, we execute it directly (fresh Vm per request).
+                // Phase B will refactor to persistent Vm with request_end() wiring.
+                
                 let (response, status) = (task.handler)();
                 let _ = task.response_tx.send((response, status));
             }
@@ -133,22 +136,45 @@ mod implementation {
         pub path: String,
         pub method: String,
         pub body: Vec<u8>,
+        /// PHP source code to execute in this request.
+        pub source: Vec<u8>,
     }
 
     impl RequestHandler {
-        /// Create handler closure (executed in worker thread with Vm available).
+        /// Create handler closure (executed in worker thread with Vm).
         ///
+        /// Phase A: Each request creates a fresh Vm via run_source_with_ini.
+        /// 
         /// Lifecycle (Stogov order, per Council WP-77.5):
-        /// 1. request_start(&vm) — initialize registry
+        /// 1. request_start (implicit in run_source_with_ini)
         /// 2. Execute user handler (PHP code)
-        /// 3. request_shutdown(&vm) — Zend teardown
-        /// 4. request_end(&vm) — finalization
+        /// 3. request_shutdown (run via run_shutdown_functions)
+        /// 4. request_end (future Phase B wiring)
         pub fn execute(&self) -> WorkerHandlerFn {
             let path = self.path.clone();
+            let source = self.source.clone();
 
             Box::new(move || {
-                let response = format!("WP-77.6: GET {}", path).into_bytes();
-                (response, StatusCode::OK)
+                // Phase A: Execute PHP source in a fresh Vm per request.
+                // run_source_with_ini handles: Vm creation → main run → 
+                // shutdown fns → ob flush → destructors → session shutdown.
+                let name = path.clone().into_bytes();
+                let reg = registry();
+                
+                match run_source_with_ini(&name, &source, &reg, &[]) {
+                    Ok(outcome) => {
+                        // Concatenate rendered output (diagnostics + main output)
+                        let mut response = Vec::new();
+                        response.extend_from_slice(&outcome.rendered);
+                        response.extend_from_slice(&outcome.stdout);
+                        (response, StatusCode::OK)
+                    }
+                    Err(e) => {
+                        // Parse error or other failure
+                        let msg = format!("PHP Error: {:?}\n", e).into_bytes();
+                        (msg, StatusCode::INTERNAL_SERVER_ERROR)
+                    }
+                }
             })
         }
     }
