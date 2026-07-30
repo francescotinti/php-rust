@@ -59,13 +59,24 @@
 
 ---
 
+## ✅ WP-77.4.2 (2026-07-30): KM-77-2 + KS-M1-GATE-UPGRADED — BINDING STEPS 4-5 COMPLETE ✓
+
+**Status**: 🟢 COMPLETE — entrambi i kill-switch pendenti CHIUSI con verdetto da runner COMMITTATI.  
+**Verdicts**: **KM-77-2 PASS** (30/30 richieste, 30 marker unici, 0 leak; controllo positivo MORDE — fixture WP-77.4.1 superseded: false-PASSava sui leak) · **KS-M1-Gate-Upgraded PASS** (A axum hello 7/7 byte-id · B WordPress front/post/feed 7/7 byte-id ciascuna — ⚠️ /?p=1 è 301 body-vuoto = falso verde, si usa il permalink reale + guardia size>0 · C ORM 3484 **3E/13F fail-set 16 nomi IDENTICO**, pin nomi in `wp77-harness/gate-baseline/orm7742-fails.txt`).  
+**M4 metrics (pulite, post-ORM)**: axum 0,3 ms/4,3 MB · cli-server 6,8 ms/18,4 MB · WP front 352 ms/**350-367 MB STABILE su ~46 req (no growth)**. Abort-times N/A (M3 non ancora costruito).  
+**Caveat onesto**: il handler Axum è ancora placeholder (non esegue PHP) — l'isolamento reale è validato sul percorso cli-server; il KM-77-2 "task async simultanei" pieno richiede Vm nel handler (WP-77.5+).  
+**Critical Path rimanente**: (5) M3 exception bridge, (6) M4 measurement phases, (7) Vm reale nel handler Axum.  
+**Reference**: `wp77-harness/WP77_4_2_RESULTS.md` (verdetti+metriche), runner `run_gate_km77_2.sh` + `run_gate_ks_m1_upgraded.sh`, verdetti in `/Volumes/Extreme Pro/Claude/wp77-harness/gate-out/`.
+
+---
+
 ## 🚀 WP-77.4 (2026-07-31+): M1 INTEGRATION + M3 EXCEPTION BRIDGE (Continuation to WP-77.4.2)
 
-**Status**: Binding steps 1-3 COMPLETE; steps 4-5 continue to WP-77.4.2.  
-**Critical Path**: (1) ✅ DONE: Choose Vm storage + integrate, (2) ✅ DONE: KS-M1-Complete gate, (3) 🟡 TODO: Concurrent fixture (KM-77-2), (4) 🟡 TODO: Byte-snapshot (KS-M1-Gate-Upgraded), (5) M3 exception bridge, (6) M4 measurement phases.  
-**Kill-Switches**: KS-M1 ✅ PASS, KM-77-2 (concurrent), KS-M1-Gate-Upgraded (multi-workload), KS-M3, KS-M4-Steady.  
-**Next Session WP-77.4.2**: Concurrent HTTP testing, byte-snapshot validation, M3 planning.  
-**Reference**: `wp77-harness/` (all docs), commits b4e655c–7a0d47b.
+**Status**: Binding steps 1-3 COMPLETE (WP-77.4.1); steps 4-5 COMPLETE (WP-77.4.2 ✅).  
+**Critical Path**: (1) ✅ DONE: Choose Vm storage + integrate, (2) ✅ DONE: KS-M1-Complete gate, (3) ✅ DONE: Concurrent fixture (KM-77-2), (4) ✅ DONE: Byte-snapshot (KS-M1-Gate-Upgraded), (5) M3 exception bridge, (6) M4 measurement phases.  
+**Kill-Switches**: KS-M1 ✅ PASS, KM-77-2 ✅ PASS, KS-M1-Gate-Upgraded ✅ PASS, KS-M3 (pending), KS-M4-Steady (pending).  
+**Next Session (WP-77.5)**: Vm reale nel handler Axum + M3 exception bridge + M4 measurement.  
+**Reference**: `wp77-harness/` (all docs), commits b4e655c–7a0d47b + WP-77.4.2.
 
 ---
 
