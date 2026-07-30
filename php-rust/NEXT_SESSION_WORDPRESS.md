@@ -1,53 +1,103 @@
-# Rotta WORDPRESS-FIRST — WP-track
+# Rotta WORDPRESS-FIRST — WP-track (Current)
 
-## ✅ WP-75 (2026-07-30): PUNTO-0 DELTA-ZERO — S-73.2.1 FRAME FIX SHIPPED ✓
+## 🔴 WP-77.5 (2026-07-30 19:00-19:45): WORKER-ACTOR ARCHITECTURE SPIKE ✅
 
-**Status**: **S-73.2.1 CRITICAL FIX COMPLETE** — flush_buffer frame context now working.  
-**What Was Fixed**: `invoke_array_callable()` at calls.rs:553 panicked when accessing `frames[top]` with empty stack during shutdown. Now pushes synthetic caller frame (reusing first class with methods) when frames empty.  
-**Pattern**: Mirrors `dtor_walk_round()` (oop.rs:1161-1174) — frame-push before method dispatch ensures context available.  
-**Test Result**: t3_ob_handler_cycle.php runs WITHOUT PANIC (was: `index out of bounds`; now: deprecation warning only).  
-**Commit**: **b2c93bd** "S-73.2.1: Push synthetic frame in invoke_array_callable when frames empty"  
-**Outcome**: S-73.2 (teardown reorder) + S-73.2.1 (frame context) SHIPPED & VALIDATED. Punto-0 structurally complete. Outstanding: full gate validation (S-73.1/S-73.3/E-73 decisions), handler output capture issue (separate), council verdicts H-73.4/5.  
-**Reference**: `sessions/WP_SESSION_75.md` (session log + learnings), `sessions/WP_SESSION_74.md` (root cause), `/tmp/gate-d73/t3_ob_handler_cycle.php` (fixture).
+**Status**: **G1 SPIKE COMPLETE** — Vm storage compiles (no unsafe); G2-G5 roadmap defined.
 
----
-
-## ✅ WP-76 (2026-07-30): GATE-D73 VALIDATION + S-73.1 IMPLEMENTATION ✓
-
-**Status**: **PUNTO-0 FULLY CLOSED** — S-73.2/S-73.2.1/S-73.1 all shipped; gate-d73 5-test batch validated.  
-**Completion**: (1) Created full fixture set (t1, t2, t5, t8 + runner) ✓, (2) Executed gate batch ✓, (3) Implemented S-73.1 (walk-abort on exception) ✓, (4) Council reconvene pending (H-73.4/5 deferred).  
-**Gate Results**: t1/t5/t8 PASS · t2 partial (walk aborts correctly; error rendering TBD) · t3 known-separate (handler output capture).  
-**Key Achievement**: Exception-in-dtor now halts remaining destructors (matches PHP 8.5.7); Axum migration **UNBLOCKED**.  
-**Reference**: `sessions/WP_SESSION_76.md` (session log), `gaps/REPORT_GAP_76.md` (no measurement).
-
----
-
-## ✅ WP-77.3 (2026-07-30): M1 Vm::request_end() IMPLEMENTATION ✓
-
-**Status**: **M1 COMPLETE** — Vm::request_end() implemented, compiled, committed (d937b0b).  
-**Completion**: (1) Pre-flight all green ✓, (2) Harness created (wp77-harness/) ✓, (3) M1 implementation + ~25-field reset per Bak spec ✓, (4) Compiles clean ✓, (5) Integration plan documented (3 options: Lazy Static/Handler Wrapper/Middleware) ✓.  
-**Key Achievement**: N=1 Vm lifecycle reset ready; per-request ephemeral state cleared while statics/module persist. Async ownership solved by M9 (tokio::task_local!).  
-**Binary Change**: phpr-wp77.3 (879fb2ed) stashed; baseline WP-77.1 (eab88e7a) archived.  
-**Deferred**: M1 integration into Axum handler (deferred to WP-77.4 — decision needed: Lazy Static vs Handler Wrapper vs Middleware).  
-**Reference**: `sessions/WP_SESSION_77.3.md` (session log + learnings), `wp77-harness/WP77_OPTION_B_AMENDMENTS.md` (M1/M3/M4 specs), `wp77-harness/M1_INTEGRATION_PLAN.md` (next steps).
-
----
-
-## ✅ WP-77.4.1 (2026-07-30): M1 OPTION B INTEGRATION — BINDING STEPS 1-3 COMPLETE ✓
-
-**Status**: 🟢 COMPLETE — Binding steps 1-3 of mandate fulfilled; gates passing.
+**Mandate**: Reject M9/task_local (4 MI OPPONGO); converge to php-fpm-style worker-actor pool with dedicated OS threads.
 
 **Completed**:
-- ✅ Step 1: Implement Option B (Handler Wrapper) — with_vm_lifecycle() in axum_handler module
-- ✅ Step 2: Integrate request_end() call — integration point ready for Vm instance + reset
-- ✅ Step 3: Run KS-M1-Complete gate — **PASSES** (object_id==1 verified, spl_object_id test)
+- ✅ G1: Vm storage spike — **PASS** (no unsafe, clean build, 17.8M binary)
+- ✅ Removed M9/task_local (tokio::task_local! VM_EPOCH) — council veto
+- ✅ Implemented WorkerPoolContext + WorkerPool structs (skeleton)
+- ✅ Created gate fixture: gate_two_reqs_same_vm.php (G2)
+- ✅ Pre-flight ALL GREEN (disk, MySQL, processes, binary)
 
-**Harness Created**:
-- M1_INTEGRATION_PLAN.md (3 options: A/B/C; Option B chosen per council binding)
-- fixtures/gate_ks_m1_complete.php (✅ PASS)
-- fixtures/gate_km77_2_concurrent.php (pending concurrent HTTP)
-- run_gate_ks_m1.sh (gate runner script)
-- WP77_4_1_PROGRESS.md (session tracking)
+**Architecture Pattern**:
+```
+Server startup: RetainSet + Registry (shared, server-lifetime)
+Worker threads: N dedicated OS threads, each owns 1 Vm<'server>
+Request dispatch: Axum → mpsc → Worker → FnOnce(Vm) → (Vm, Response) → Axum
+Vm lifecycle: request_start() → handler → request_shutdown() → request_end()
+```
+
+**Commits**: 2be6813, b600cf3, 8487500
+
+**Council Status**: Binding verdicts in COUNCIL_WP77.5_REVIEWS.md (9 chairs)
+
+**Key Findings**:
+- ⭐⭐ Vm is !Send (Rc fields), but owner-model (pinned to worker) is correct
+- ⭐⭐ request_shutdown() MUST precede request_end() (Stogov order)
+- ⭐⭐ G2 byte-parity gate is prerequisite for "request_end() works" (Klabnik)
+
+**Deferred to WP-77.6**: Full Vm construction + G2-G5 gate execution
+
+**Reference**: `sessions/WP_SESSION_77.5.md`, `wp77-harness/COUNCIL_WP77.5_REVIEWS.md`, `wp77-harness/design77.5.md`
+
+---
+
+## ⚖️ NEXT SESSION: WP-77.6 (Full Vm Integration + Gate Execution)
+
+**Scope**: Implement Vm reuse in workers; execute G2-G5 gates
+
+**Blocking issue**: Vm construction requires RetainSet + Module + PHP file loading
+
+**Recommended approach**: Use cli-server pattern for G2-G5 validation (reuse existing sequential handler), then explore async patterns for M4
+
+**Gates to run**:
+- G2: Two-requests-same-Vm byte-parity (gate_two_reqs_same_vm.php created ✓)
+- G3: Tripla + K=10 amplification (new fixture needed)
+- G4: Oracle pair fresh vs reuse (new fixture needed)
+- G5: Request lifecycle order (new fixture needed)
+
+**Kill-switches**:
+- KS-M-77.5-A: Vm construction requires unsafe/leak → HALT
+- KS-P77-A: req-2 ≠ fresh → fallback fresh-Vm
+- KS-B77-1: M4 without oracle pair → non-launched
+- KS-S77-A: Incomplete lifecycle (S-77.6.2/3/4 not green) → no M1 claim
+
+---
+
+## 📋 PRE-FLIGHT WP-77.6 (Before Starting)
+
+```bash
+# Disk (both ≥15G)
+df -g "/Volumes/Extreme Pro" | tail -1
+df -g /System/Volumes/Data | tail -1
+
+# MySQL
+mysql --socket=/private/tmp/mysql-wp8.sock -uroot -e "SHOW DATABASES" | grep -E "wp"
+
+# phpr binary (should be 7bf53854)
+shasum -a 256 ~/Claude/php-rust-output/release/phpr | cut -c1-8
+
+# No orphaned processes
+pgrep -fl "phpr|php-server"
+```
+
+---
+
+## 📍 EARLIER SESSIONS (for reference)
+
+### WP-77.4.2 (2026-07-30): CONCURRENT HTTP + BYTE-SNAPSHOT VALIDATION
+
+**Status**: ✅ COMPLETE — KM-77-2 PASS (30/30 requests), KS-M1-Gate-Upgraded PASS
+
+**Key outcome**: Council re-labeled verdicts as "cli-server/fresh-Vm only" (not applicable to persistent-Vm reset-and-reuse)
+
+**Lesson**: ⭐⭐ A gate that BITES (produces real output) is worth more than 10 that just pass
+
+### WP-77.4.1 (2026-07-30): M1 OPTION B INTEGRATION
+
+**Status**: ✅ COMPLETE — with_vm_lifecycle wrapper implemented
+
+### WP-77.3 (2026-07-30): M1 IMPLEMENTATION
+
+**Status**: ✅ COMPLETE — Vm::request_end() with ~25-field reset
+
+### WP-77.1 (2026-07-30): AXUM BOOTSTRAP
+
+**Status**: ✅ COMPLETE — Axum server running on port 8199
 
 **Commits**: 2 (b4e655c "Option B integration + KS-M1-Complete PASS", 7a0d47b progress update)
 
