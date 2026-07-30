@@ -19,6 +19,11 @@ pub mod json;
 pub mod logging;
 pub mod lower;
 pub mod vm;
+
+// WP-77.6 Phase B: Expose Vm construction for worker-pool integration.
+// run_module_with_hir handles: Vm init → request_start semantics →
+// main run → shutdown_fns → ob_flush → destructors → session_shutdown.
+pub use vm::run_module_with_hir;
 pub mod mbregex;
 pub mod preg;
 pub mod scanf;

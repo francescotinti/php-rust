@@ -424,7 +424,7 @@ fn seed_cli_superglobals(
 /// destructors at VM shutdown run with every parked module still alive.
 /// `FrozenVec::push_get` takes `&self` and the `Rc` pointee is heap-stable
 /// (`StableDeref`), so parking never invalidates previously lent refs.
-pub(crate) struct RetainSet(elsa::FrozenVec<Rc<Module>>);
+pub struct RetainSet(elsa::FrozenVec<Rc<Module>>);
 
 impl RetainSet {
     pub(crate) fn new() -> Self {
@@ -437,7 +437,8 @@ impl RetainSet {
 
 /// [`run_module`] with the caller's lowered HIR retained (`main_hir`), so an
 /// `eval()` in the script compiles against the image (step 57, Phase 1c-2c).
-pub(crate) fn run_module_with_hir<'m>(
+/// WP-77.6: Exposed as pub for worker-pool persistent Vm integration.
+pub fn run_module_with_hir<'m>(
     module: &'m Module,
     registry: &'m Registry,
     main_hir: Option<&'m Program>,
@@ -2656,7 +2657,7 @@ impl GcWhites {
 /// The virtual machine: the module under execution plus the explicit call stack.
 /// PHP function calls grow `frames` rather than the Rust stack, so deep PHP
 /// recursion cannot overflow the host stack, and a frame is suspendable.
-struct Vm<'m> {
+pub struct Vm<'m> {
     /// WP-67 P-2: the per-request module arena (owned by the harness,
     /// created BEFORE the Vm). [`Vm::park_module`] is THE unique
     /// constructor of `&'m Module` for unit modules (M-67.1) — every path
