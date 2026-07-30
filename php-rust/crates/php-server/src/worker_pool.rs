@@ -31,12 +31,17 @@ mod implementation {
         }
     }
 
-    /// Type-erased handler closure sent to worker.
-    pub type WorkerHandlerFn = Box<dyn FnOnce() -> (Vec<u8>, StatusCode) + Send>;
+    /// Per-request handler metadata (sent to worker, not the Vm).
+    pub struct WorkerHandlerMeta {
+        pub path: String,
+        pub method: String,
+        pub body: Vec<u8>,
+        pub source: Vec<u8>,
+    }
 
-    /// Task sent from Axum handler to worker thread.
+    /// Task sent from Axum handler to worker thread (metadata only, Vm lives in worker).
     pub struct WorkerTask {
-        pub handler: WorkerHandlerFn,
+        pub meta: WorkerHandlerMeta,
         pub response_tx: oneshot::Sender<(Vec<u8>, StatusCode)>,
     }
 
@@ -94,9 +99,17 @@ mod implementation {
 
         /// Worker thread main loop (P-67.5 drop order enforced).
         ///
-        /// RetainSet is declared first so Vm dies before it (LIFO drop order).
-        /// Phase A: Each request creates a fresh Vm via run_source_with_ini.
-        /// Phase B/C: Refactor to persistent Vm per worker (design77.5.md).
+        /// S-77.6.5.2.2: Persistent RetainSet per worker thread (php-fpm-style actor).
+        /// - RetainSet is declared ONCE (server-lifetime arena for object table, class cache)
+        /// - Vm is created per-request but borrows persistent RetainSet
+        /// - Per-request: request_start → run → request_shutdown → request_end
+        /// - RetainSet lifetime: entire worker thread (never Send/migrated)
+        ///
+        /// Architecture (Council WP-77.5 P-77.5.2, P-77.5.3, P-77.5.4):
+        /// - Each request gets new Vm instance, new Module from source
+        /// - But Vm borrows same RetainSet → object table, class cache persist
+        /// - request_end() resets ephemeral state (globals, statics, etc)
+        /// - Two sequential requests on same RetainSet → byte-identical output (G-APERTURA-2 gate)
         fn worker_loop(
             _context: Arc<WorkerPoolContext>,
             mut rx: mpsc::UnboundedReceiver<WorkerTask>,
@@ -104,13 +117,14 @@ mod implementation {
             // Get the PHP builtins registry once for all requests
             let reg = php_builtins::registry();
 
+            // P-67.5: RetainSet for entire thread (MUST be declared first so Vm dies first)
+            // This persists: object table, class cache, string interning pool
+            let retain = php_runtime::RetainSet::new();
+
+            // Main request loop: each request gets fresh Vm that borrows persistent RetainSet
             while let Some(task) = rx.blocking_recv() {
-                // Per-request lifecycle:
-                // The handler closure contains PHP source + metadata.
-                // For Phase A, we execute it directly (fresh Vm per request).
-                // Phase B will refactor to persistent Vm with request_end() wiring.
-                
-                let (response, status) = (task.handler)();
+                // Execute handler: creates Vm per-request, reuses RetainSet per-thread
+                let (response, status) = RequestHandler::execute_with_retain(&retain, &task.meta);
                 let _ = task.response_tx.send((response, status));
             }
         }
@@ -140,24 +154,112 @@ mod implementation {
     }
 
     impl RequestHandler {
-        /// Create handler closure (executed in worker thread with Vm).
+        /// S-77.6.5.2.2: Execute PHP with persistent RetainSet (per-thread persistent object table).
         ///
-        /// S-77.6.5.2: Wire persistent-Vm lifecycle methods.
+        /// Called from worker_loop with &RetainSet that persists across all requests in this thread.
+        /// Vm is created per-request but borrows the thread-persistent RetainSet.
+        /// Module is recompiled per-request from handler.meta.source.
+        ///
         /// Lifecycle (Stogov order, per Council WP-77.5):
-        /// 1. request_start (setup superglobals, INI)
-        /// 2. Execute user handler (PHP code via vm.run())
-        /// 3. request_shutdown (shutdown functions, flush buffers, destructors)
-        /// 4. request_end (reset ephemeral state for next request)
-        pub fn execute(&self) -> WorkerHandlerFn {
+        /// 1. Compile new Module from request source
+        /// 2. Create Vm from persistent RetainSet (object table, class cache persist)
+        /// 3. request_start: setup superglobals, INI, session
+        /// 4. Execute user handler (PHP code via vm.run())
+        /// 5. request_shutdown: shutdown functions, flush buffers, destructors
+        /// 6. request_end: reset ephemeral state for next request (byte-parity via G2)
+        /// 7. Vm dropped (returns to stack), but objects in RetainSet persist
+        pub fn execute_with_retain(
+            retain: &php_runtime::RetainSet,
+            meta: &WorkerHandlerMeta,
+        ) -> (Vec<u8>, StatusCode) {
+            let reg = registry();
+            let name = meta.path.clone().into_bytes();
+            let source = &meta.source;
+
+            // Phase 1: Compile PHP source to bytecode (per-request Module)
+            let program = match php_runtime::lower_source(&name, source) {
+                Ok(p) => p,
+                Err(php_runtime::LowerError::Fatal { message, line }) => {
+                    let msg = format!("PHP Fatal: {} on line {}\n", message, line).into_bytes();
+                    return (msg, StatusCode::INTERNAL_SERVER_ERROR);
+                }
+                Err(e) => {
+                    let msg = format!("PHP Lower Error: {:?}\n", e).into_bytes();
+                    return (msg, StatusCode::INTERNAL_SERVER_ERROR);
+                }
+            };
+
+            // Phase 2: Compile to bytecode module
+            let module = match php_runtime::compile_program(&program, &reg) {
+                Ok(m) => m,
+                Err(php_runtime::CompileError::Unsupported(what)) => {
+                    let msg = format!("PHP Unsupported: {}\n", what).into_bytes();
+                    return (msg, StatusCode::INTERNAL_SERVER_ERROR);
+                }
+            };
+
+            // Phase 3: Create Vm from persistent RetainSet
+            // S-77.6.5.2.2: This is the KEY architectural change
+            // - Vm is created per-request (fresh instance)
+            // - But it borrows thread-persistent RetainSet
+            // - Object table, class cache, string interning persist across requests
+            // - request_end() resets ephemeral state (globals, statics, etc)
+            let mut vm = php_runtime::vm_new(retain, &module, &reg, Some(&program));
+
+            // Phase 4: Per-request lifecycle (Stogov order, Council WP-77.5)
+            // 1. request_start: setup superglobals, INI, session
+            vm.request_start(None, &[]);
+
+            // 2. Execute PHP code
+            vm.final_flush = false;
+            let run_result = vm.run();
+
+            // Handle exit/fatal
+            let (fatal, _return_value) = match run_result {
+                Ok(v) => (None, v),
+                Err(php_runtime::PhpError::Exit(_code)) => (None, php_runtime::Zval::Null),
+                Err(e) => (Some(e), php_runtime::Zval::Null),
+            };
+
+            // Flush diagnostics before shutdown
+            let line = vm.fatal_line;
+            let _ = vm.flush_diags(line);
+
+            // Render fatal if present
+            if let Some(err) = &fatal {
+                vm.flush_all_output_buffers();
+                let file = String::from_utf8_lossy(&module.file);
+                let block = format!("\nFatal error: {} in {} on line {}\n", err.message(), file, line);
+                vm.rendered.extend_from_slice(block.as_bytes());
+            }
+
+            // 3. request_shutdown: shutdown functions, flush buffers, destructors
+            vm.final_flush = true;
+            vm.request_shutdown();
+
+            // 4. request_end: reset ephemeral state for next request
+            // (G-APERTURA-2 gate: two requests on same RetainSet must produce byte-identical output)
+            vm.request_end();
+
+            // Concatenate output
+            let mut response = Vec::new();
+            response.extend_from_slice(&vm.rendered);
+            response.extend_from_slice(&vm.stdout);
+
+            (response, StatusCode::OK)
+        }
+
+        /// Legacy closure-based execute (kept for backwards compatibility, not used in S-77.6.5.2.2).
+        /// @deprecated: Use execute_with_vm with persistent Vm instead.
+        #[deprecated(since = "0.77.6.5.2", note = "Use execute_with_vm with persistent Vm")]
+        pub fn execute(&self) -> Box<dyn FnOnce() -> (Vec<u8>, StatusCode) + Send> {
             let path = self.path.clone();
             let source = self.source.clone();
 
             Box::new(move || {
-                // S-77.6.5.2: Execute PHP source with explicit lifecycle wiring.
                 let name = path.clone().into_bytes();
                 let reg = registry();
 
-                // Compile PHP source to bytecode (same as run_source_with_ini Phase 1)
                 let program = match php_runtime::lower_source(&name, &source) {
                     Ok(p) => p,
                     Err(php_runtime::LowerError::Fatal { message, line }) => {
@@ -170,7 +272,6 @@ mod implementation {
                     }
                 };
 
-                // Compile to bytecode module (same as run_source_with_ini Phase 2)
                 let module = match php_runtime::compile_program(&program, &reg) {
                     Ok(m) => m,
                     Err(php_runtime::CompileError::Unsupported(what)) => {
@@ -179,30 +280,22 @@ mod implementation {
                     }
                 };
 
-                // S-77.6.5.2: Explicit lifecycle wiring (non-breaking vs run_module_with_hir)
-                // Create fresh Vm for this request
                 let retain = php_runtime::RetainSet::new();
                 let mut vm = php_runtime::vm_new(&retain, &module, &reg, Some(&program));
 
-                // 1. request_start: setup superglobals, INI, session
                 vm.request_start(None, &[]);
-
-                // 2. Execute PHP code
                 vm.final_flush = false;
                 let run_result = vm.run();
 
-                // Handle exit/fatal
                 let (fatal, _return_value) = match run_result {
                     Ok(v) => (None, v),
                     Err(php_runtime::PhpError::Exit(_code)) => (None, php_runtime::Zval::Null),
                     Err(e) => (Some(e), php_runtime::Zval::Null),
                 };
 
-                // Flush diagnostics before shutdown
                 let line = vm.fatal_line;
                 let _ = vm.flush_diags(line);
 
-                // Render fatal if present
                 if let Some(err) = &fatal {
                     vm.flush_all_output_buffers();
                     let file = String::from_utf8_lossy(&module.file);
@@ -210,14 +303,10 @@ mod implementation {
                     vm.rendered.extend_from_slice(block.as_bytes());
                 }
 
-                // 3. request_shutdown: shutdown functions, flush buffers, destructors
                 vm.final_flush = true;
                 vm.request_shutdown();
-
-                // 4. request_end: reset ephemeral state for next request (not yet wired)
                 vm.request_end();
 
-                // Concatenate output
                 let mut response = Vec::new();
                 response.extend_from_slice(&vm.rendered);
                 response.extend_from_slice(&vm.stdout);
