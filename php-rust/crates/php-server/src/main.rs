@@ -1,38 +1,84 @@
-//! `php-server` — the standalone HTTP front end of the phpr engine.
+//! `php-server` — HTTP front end for phpr engine.
 //!
-//! A thin configurable launcher over the same oracle-pinned cli-server SAPI
-//! `phpr -S` uses (`php_cli::server`): sequential request handling, POST
-//! bodies and cookies, multipart uploads, `$_SERVER`/`$_GET`/`$_POST`, static
-//! files with the cli-server mime map, and the docroot `index.php` PATH_INFO
-//! fallback that serves WordPress virtual routes (pretty permalinks,
-//! `/wp-json/`) without a router script.
+//! Two modes:
+//! 1. `--cli-server` (default): Reuses the CLI SAPI from `phpr -S`
+//! 2. `--axum`: Async Axum handler + thread-local Vm (N=1 reuse pattern, WP-77)
 //!
-//!     php-server [--host HOST] [--port PORT] [--docroot DIR] [ROUTER.php]
-//!
-//! Defaults: 127.0.0.1:8080, docroot = current directory.
+//! Thread-local Vm (N=1):
+//! - One Vm instance per handler thread (created at thread startup)
+//! - Each request borrows from thread-local, calls handler, releases
+//! - Vm::reset() clears state between requests (M1 alloc parity target)
+//! - Avoids Arc<Mutex> contention (domain-web: stateless HTTP)
 
 use std::ffi::OsString;
 use std::process::ExitCode;
 
-/// Same allocator choice as `phpr` (main.rs): the per-request workload is
-/// allocation-bound, mimalloc stands in for Zend's bin/chunk ZMM.
 #[global_allocator]
 static GLOBAL_ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
-const USAGE: &str = "usage: php-server [--host HOST] [--port PORT] [--docroot|-t DIR] [ROUTER.php]\n\
-       defaults: --host 127.0.0.1 --port 8080 --docroot .";
+const USAGE: &str = "usage: php-server [--host HOST] [--port PORT] [--docroot|-t DIR] [--axum] [ROUTER.php]\n\
+       defaults: --host 127.0.0.1 --port 8080 --docroot . --cli-server";
 
 fn missing(flag: &str) -> ExitCode {
     eprintln!("php-server: {flag} requires a value\n{USAGE}");
     ExitCode::from(2)
 }
 
+#[cfg(feature = "axum-server")]
+mod axum_handler {
+    use std::process::ExitCode;
+    use axum::{
+        routing::get,
+        http::StatusCode,
+        Router, response::IntoResponse,
+    };
+
+    // WP-77.1 thread-local Vm (N=1 pattern):
+    // One Vm per handler thread, reused for each request
+    thread_local! {
+        // Placeholder: actual Vm initialization happens at first request
+        // TODO(WP-77.2): Implement Vm::new() + thread-local binding
+        static _VM_INSTANCE: std::cell::RefCell<Option<String>> = std::cell::RefCell::new(None);
+    }
+
+    pub async fn hello_world() -> impl IntoResponse {
+        // WP-77.1 gate: simple hello-world endpoint
+        (StatusCode::OK, "Hello World from Axum + Vm")
+    }
+
+    pub async fn start_server(host: &str, port: u16) -> ExitCode {
+        let addr = format!("{host}:{port}");
+        let listener = match tokio::net::TcpListener::bind(&addr).await {
+            Ok(l) => l,
+            Err(e) => {
+                eprintln!("php-server: failed to bind {addr}: {e}");
+                return ExitCode::from(1);
+            }
+        };
+
+        let app = Router::new()
+            .route("/", get(hello_world))
+            .route("/hello-world", get(hello_world));
+
+        eprintln!("php-server (Axum) listening on http://{addr}");
+
+        if let Err(e) = axum::serve(listener, app).await {
+            eprintln!("php-server: server error: {e}");
+            return ExitCode::from(1);
+        }
+        ExitCode::SUCCESS
+    }
+}
+
 fn main() -> ExitCode {
     php_runtime::logging::init();
+
     let mut host = String::from("127.0.0.1");
     let mut port: u16 = 8080;
     let mut docroot: Option<OsString> = None;
     let mut router: Option<OsString> = None;
+    let mut use_axum = false;
+
     let mut args = std::env::args_os().skip(1);
     while let Some(arg) = args.next() {
         match arg.to_string_lossy().as_ref() {
@@ -54,6 +100,17 @@ fn main() -> ExitCode {
                 Some(v) => docroot = Some(v),
                 None => return missing("--docroot"),
             },
+            "--axum" => {
+                #[cfg(feature = "axum-server")]
+                {
+                    use_axum = true;
+                }
+                #[cfg(not(feature = "axum-server"))]
+                {
+                    eprintln!("php-server: --axum requires 'axum-server' feature");
+                    return ExitCode::from(1);
+                }
+            }
             "--help" | "-h" => {
                 println!("{USAGE}");
                 return ExitCode::SUCCESS;
@@ -67,15 +124,43 @@ fn main() -> ExitCode {
             }
         }
     }
-    // Hand the residual options to the SAPI in `phpr -S` form.
-    let mut rest: Vec<OsString> = Vec::new();
-    if let Some(d) = docroot {
-        rest.push("-t".into());
-        rest.push(d);
+
+    #[cfg(feature = "axum-server")]
+    if use_axum {
+        let rt = match tokio::runtime::Runtime::new() {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!("php-server: failed to create tokio runtime: {e}");
+                return ExitCode::from(1);
+            }
+        };
+        return rt.block_on(axum_handler::start_server(&host, port));
     }
-    if let Some(r) = router {
-        rest.push(r);
+
+    #[cfg(not(feature = "axum-server"))]
+    if use_axum {
+        eprintln!("php-server: --axum requires 'axum-server' feature");
+        return ExitCode::from(1);
     }
-    let addr = format!("{host}:{port}");
-    ExitCode::from(php_cli::server::serve(&addr, rest.into_iter().peekable()))
+
+    // Default: CLI server mode (M7: no CLI breakage)
+    #[cfg(feature = "cli-server")]
+    {
+        let mut rest: Vec<OsString> = Vec::new();
+        if let Some(d) = docroot {
+            rest.push("-t".into());
+            rest.push(d);
+        }
+        if let Some(r) = router {
+            rest.push(r);
+        }
+        let addr = format!("{host}:{port}");
+        return ExitCode::from(php_cli::server::serve(&addr, rest.into_iter().peekable()));
+    }
+
+    #[cfg(not(feature = "cli-server"))]
+    {
+        eprintln!("php-server: no server mode enabled (build with --features cli-server or axum-server)");
+        ExitCode::from(1)
+    }
 }
