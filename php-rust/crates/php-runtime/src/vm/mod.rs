@@ -435,16 +435,18 @@ impl RetainSet {
     }
 }
 
-/// [`run_module`] with the caller's lowered HIR retained (`main_hir`), so an
-/// `eval()` in the script compiles against the image (step 57, Phase 1c-2c).
-/// WP-77.6: Exposed as pub for worker-pool persistent Vm integration.
-pub fn run_module_with_hir<'m>(
+/// S-77.6.4.1: Vm constructor for persistent-Vm worker-pool integration.
+/// Initializes Vm with all 150+ fields, resets epoch counters, and establishes
+/// the main frame. The RetainSet must be held by the caller across the Vm's
+/// lifetime (WP-67 P-2: RetainSet must drop after Vm). Called per-request;
+/// lifecycle is: vm_new → request_start → vm.run() → request_shutdown →
+/// request_end (repeated for persistent Vm).
+pub fn vm_new<'m>(
+    retain: &'m RetainSet,
     module: &'m Module,
     registry: &'m Registry,
     main_hir: Option<&'m Program>,
-    argv: Option<&[&[u8]]>,
-    ini_overrides: &[(Vec<u8>, Vec<u8>)],
-) -> VmOutcome {
+) -> Vm<'m> {
     // WP-65 M-65.3 (Matsakis): the M1'' pun check extended to the bootstrap
     // main — `phpr prelude` (a relative CLI path, never canonicalized here)
     // would otherwise make a unit whose file collides with the provenance
@@ -471,13 +473,8 @@ pub fn run_module_with_hir<'m>(
     // WP-62 M1: new VM = new epoch — unit-cache hits from entries inserted
     // by an earlier VM on this thread are cross-VM (server replay) hits.
     VM_EPOCH.with(|e| e.set(e.get() + 1));
-    // WP-67 P-2 (P-67.5): declared BEFORE `vm` — Rust drops locals in
-    // reverse declaration order, so the Vm (frames/linked_functions/modules
-    // and every user destructor it runs at shutdown) dies FIRST, with all
-    // parked modules still alive. This ordering is load-bearing.
-    let retain = RetainSet::new();
     let mut vm = Vm {
-        retain: &retain,
+        retain,
         module,
         classes: module.classes.iter().map(|c| &**c).collect(),
         class_index: module.class_index.clone(),
@@ -700,6 +697,26 @@ pub fn run_module_with_hir<'m>(
     // implicit HTML namespace. Registered here because it is namespace-
     // qualified (the lowering's engine-constant fold is for global names).
     vm.constants.insert(b"Dom\\HTML_NO_DEFAULT_NS".to_vec(), Zval::Long(2_147_483_648));
+    vm.frames.push(Frame::new(&module.main, module));
+    vm
+}
+
+/// [`run_module`] with the caller's lowered HIR retained (`main_hir`), so an
+/// `eval()` in the script compiles against the image (step 57, Phase 1c-2c).
+/// WP-77.6: Exposed as pub for worker-pool persistent Vm integration.
+pub fn run_module_with_hir<'m>(
+    module: &'m Module,
+    registry: &'m Registry,
+    main_hir: Option<&'m Program>,
+    argv: Option<&[&[u8]]>,
+    ini_overrides: &[(Vec<u8>, Vec<u8>)],
+) -> VmOutcome {
+    // S-77.6.4.1: Use vm_new to create and initialize Vm with all 150+ fields.
+    // WP-67 P-2 (P-67.5): RetainSet must be held by run_module_with_hir so it
+    // drops AFTER vm — Rust's drop order is load-bearing (RetainSet declared
+    // here stays in scope until the end of run_module_with_hir).
+    let retain = RetainSet::new();
+    let mut vm = vm_new(&retain, module, registry, main_hir);
     // Link-time `Serializable` policy for the hoisted (unconditional) classes:
     // the deprecation is staged in `diags` (flushed with the first statement,
     // so it prints before any script output, like Zend's compile-time emission)
