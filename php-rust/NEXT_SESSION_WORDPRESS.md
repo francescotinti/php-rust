@@ -1,3 +1,14 @@
+# Rotta WORDPRESS-FIRST — WP-track
+
+## 🔵 WP-73 (2026-07-30): PUNTO-0 DELTA-ZERO PARTIAL
+
+**Status**: S-73.2 ✓ (teardown reorder shipped + committed 996387a), E-73.H1/H2 ✓, S-73.1/S-73.3/M-73.1 deferred.  
+**Blocker cleared**: t3 PANIC 10729 (ob_start+handler) now unblocked by S-73.2 reorder (flush buffers before destructors).  
+**Next session**: Quick S-73.1/S-73.3 one-liners (25 min), full gate-d73 validation, council verdicts H-73.4/5.  
+**Reference**: `sessions/WP_SESSION_73.md` (full punto-0 log), `wp73-harness/COUNCIL_WP73_REVIEWS.md` (binding verdicts), `PLAN_WP73_IMPLEMENTATION.md` (work plan).
+
+---
+
 # Rotta WORDPRESS-FIRST — WP-track (dopo WP-72: ⚡ **IL LEAK PER-RICHIESTA È CHIUSO E AXUM È SBLOCCATO** — 🔴 LEVA S-72.4 mass-teardown Zend-fedele SPEDITA E VALIDATA: fase A reverse-symtab a fixpoint (celle condivise e Closure incluse) + dtor-walk in ORDINE DI CREAZIONE a round + fase BREAK dei cicli Rc pre-Drop via Weak (fix meta 730fa4a: senza cattura pre-walk era un no-op — l'istogramma tutto-zero l'ha svelato); tripla post-fix **used_n 20,000→0,000 obj/req (spread 0,000)** · used_b 2,1109→0,0010 · amp K=10 +80,000→**+0,005** · ladder ESISTENZA-ONLY (flat vero = tripla + peak vmmap 221,5|221,1|221,5) · **C4 (160|192) CHIUSA (0,008≤0,2)** · broken/req=21 COSTANTE · coppia full stessa-sera **−0,36% = PASS-PARZIALE** (fail-set 88 IDENTICO; metà media-group da leggere su -S in WP-73) · 🔴 PUNTO 0 concilio CHIUSO (M-72.1 UnsetWalk canale AA+readonly f1/f6 BYTE-ID; S-72.1/2/3 autoload dedup+callable_eq array+cursore sospeso+prepend BUG(port); H-72.3/5; grep-gate esteso BORROW-OK=13) · 🔴 il gate ha MORSO 2 volte e ha pagato: **S-72.6 trait table keyed FQN** (wrong-result: due trait omonimi in ns diversi = il 2° mai registrato, smascherato dal DebugClassLoader ATTIVATO dal fix callable_eq) + getType/STREAM_CRYPTO + declared-id ristretto · E-71.H1/H2 ESEGUITI (3 letture flaggate + fixture flip-readonly PASS + bug conditional-image chiuso) · corpus **1420→1418 (−2 fix reali dtor-order, PROVENANCE)** · GATE72 PASS fails=0 sul binario finale (attempts=4 ONESTO: 1 rigettato + 1 FAIL con 2 morsi = fix a meccanismo) · **⚡ SBLOCCO AXUM DICHIARATO (P-71.3 ✓ AND E-71.H1/H2 ✓ AND P-71.4/P-72.6 ✓ — KG70-1 DECADE)** · stash phpr-wp72 4fd7b2d5…, tree `730fa4a`)
 
 > ⚡ **WP-72 (2026-07-29, →`730fa4a`)** — sintesi a 9 recepita INTEGRALE
