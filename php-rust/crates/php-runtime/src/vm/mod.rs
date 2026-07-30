@@ -1706,9 +1706,13 @@ pub(crate) fn run_module_with_hir<'m>(
             }
         }
     }
-    // `register_shutdown_function` callbacks run after the main script (and any
-    // uncaught-fatal banner), before object destructors (PHP shutdown sequence).
+    // S-73.2 (WP-73): Correct teardown ordering per php_request_shutdown:
+    // shutdown-fns → ob_end_all → dtor-walk → break
+    // (Output buffer handlers must run with a live VM, before destructors.)
     vm.run_shutdown_functions();
+    // Flush any output buffers BEFORE destructors — so handlers run with a live VM.
+    // MOVED HERE from after destructors (was incorrectly after finalize_filtered_streams).
+    vm.flush_all_output_buffers();
     // End-of-script destructors (LIFO over the objects still tracked), run after
     // `main` returns — or after a fatal, on a cleared stack (OOP-3d). Their output
     // flows through `emit_str`, so it lands in `rendered` after the fatal block.
@@ -1720,10 +1724,6 @@ pub(crate) fn run_module_with_hir<'m>(
     // Streams with attached write filters flush their final tail when the stream
     // is destroyed at request end (PHP filter close) — a script need not fclose.
     vm.finalize_filtered_streams();
-    // Flush any output buffers the script left open (PHP flushes the buffer stack
-    // at request shutdown). Done last, so shutdown-function and destructor output
-    // produced while a buffer was active is captured then emitted in order.
-    vm.flush_all_output_buffers();
     // S-72.4 (WP-72): break the per-request Rc cycles — Zend's wholesale free
     // — after EVERY observable flush (session writes serialize real props)
     // and before the VM drops. Under FAST_SHUTDOWN the process exit reclaims
