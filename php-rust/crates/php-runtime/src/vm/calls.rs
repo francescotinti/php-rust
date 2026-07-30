@@ -550,8 +550,30 @@ impl<'m> Vm<'m> {
             Zval::Str(s) => s.as_bytes().to_vec(),
             _ => return Err(not_callable()),
         };
+
+        // S-73.2.1: Ensure frames is not empty before accessing frames[top].
+        // During shutdown (when handlers are invoked), frames may be empty.
+        // Push a synthetic caller frame if needed to provide context for method dispatch.
+        let pushed_frame = if self.frames.is_empty() {
+            // Find any class with at least one method to use for frame context
+            let mut found_frame = false;
+            for cid in 0..self.classes.len() {
+                if !self.classes[cid].methods.is_empty() {
+                    let m_mod = self.class_mod(cid);
+                    let func = &self.classes[cid].methods[0].func;
+                    let mut frame = self.pooled_frame(func, m_mod);
+                    self.frames.push(frame);
+                    found_frame = true;
+                    break;
+                }
+            }
+            found_frame
+        } else {
+            false
+        };
+
         let top = self.frames.len() - 1;
-        match &elems[0] {
+        let result = match &elems[0] {
             Zval::Object(_) => {
                 let cid = object_class_id(&elems[0]).expect("object class id");
                 // `deref: false`: no `DerefTop` ever followed a callable-array
@@ -563,7 +585,14 @@ impl<'m> Vm<'m> {
                 self.dispatch_static_call(top, cid, &method, false, args, Vec::new(), None)
             }
             _ => Err(not_callable()),
+        };
+
+        // Pop the synthetic frame if we pushed one
+        if pushed_frame {
+            self.frames.pop();
         }
+
+        result
     }
 
     /// Invoke a user callable (`$callable($args)`) from inside a host builtin and
