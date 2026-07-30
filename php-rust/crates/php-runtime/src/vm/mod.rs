@@ -3324,6 +3324,10 @@ impl<'m> Vm<'m> {
     /// prepare the Vm for the next request.
     ///
     /// Follows Bak specification: ~25-field reset categorized by lifecycle.
+    /// Council binding amendments applied (WP-77.3 COUNCIL_WP77_REVIEWS.md):
+    /// - AMEND-1: Reset ALL resource ID counters (next_zip, next_pdo, next_gd, etc.)
+    /// - AMEND-2: PRESERVE uncaught_throwable for M3 exception bridge (WP-76 binding R1)
+    /// - AMEND-3: Reset web, fatal_line, error_level, census_on, user_abort_ignored
     pub fn request_end(&mut self) {
         // Output streams & diagnostics
         self.stdout.clear();
@@ -3343,6 +3347,9 @@ impl<'m> Vm<'m> {
         self.output_started = false;
         self.output_start = None;
 
+        // Web vs CLI mode (AMEND-3: Hejlsberg E-W1)
+        self.web = false;
+
         // Execution stack & lifecycle
         self.frames.clear();
         self.generators.clear();
@@ -3356,18 +3363,22 @@ impl<'m> Vm<'m> {
         self.last_error = None;
         self.in_error_handler = false;
         self.final_flush = false;
-        self.uncaught_throwable = None;
+        // NOTE: DO NOT reset uncaught_throwable (AMEND-2: Pedersen binding R1 from WP-76)
+        // Exception state must persist until M3 handler reads/logs it
 
         // Error suppression
         self.suppress_depth = 0;
         self.suppress_marks.clear();
         self.silence_saved.clear();
+        self.fatal_line = 0;                    // AMEND-3: Hejlsberg E-B3
+        self.error_level = 0;                   // AMEND-3: Hejlsberg E-B3
 
         // Handlers & wrappers
         self.signal_handlers.clear();
         self.async_signals = false;
         self.stream_wrappers.clear();
         self.filtered_streams.clear();
+        self.magic_guard.clear();               // AMEND-3: Hejlsberg E-W2
 
         // Object tracking & GC
         self.created.clear();
@@ -3382,9 +3393,19 @@ impl<'m> Vm<'m> {
         // Resource IDs & caches
         self.next_object_id = 1;
         self.next_resource_id = 5;
+        // AMEND-1: Reset ALL resource ID counters (Pedersen E-P1, Bak E-B1)
+        self.next_zip = 1;
+        self.next_pdo = 1;
+        self.next_gd = 1;
+        self.next_xslt = 1;
+        self.next_tidy = 1;
+        self.next_mysqli = 1;
+        self.next_dom = 1;
         self.preg_cache.clear();
         self.json_active.clear();
         self.enum_cache.clear();
+        // AMEND-3: Clear iof_cache per-request (Hejlsberg E-B2: epoch reset)
+        self.iof_cache.borrow_mut().clear();
 
         // Other per-request state
         self.json_last_error = 0;
@@ -3397,6 +3418,10 @@ impl<'m> Vm<'m> {
         self.reflect_method_info_cache.clear();
         self.reflect_object_bound.clear();
         self.lazy_initializing.clear();
+        self.census_on = false;                 // AMEND-3: Pedersen E-P3
+        // NOTE: mb_regex is PERSISTENT per Matsakis E-M1 amendment (do NOT reset)
+        self.user_abort_ignored = false;        // AMEND-3: Pedersen E-P3
+        self.autoload_cursors.clear();          // AMEND-3: Pedersen E-P3
 
         // File/stream/resource handles
         self.zips.clear();
