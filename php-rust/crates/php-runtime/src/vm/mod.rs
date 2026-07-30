@@ -3318,6 +3318,101 @@ impl<'m> Vm<'m> {
         self.next_id()
     }
 
+    /// M1: Per-request VM state reset (WP-77.3). Clears all ephemeral state
+    /// accumulated during a request while preserving persistent data (statics,
+    /// module code, class table). Called at the end of each Axum handler to
+    /// prepare the Vm for the next request.
+    ///
+    /// Follows Bak specification: ~25-field reset categorized by lifecycle.
+    pub fn request_end(&mut self) {
+        // Output streams & diagnostics
+        self.stdout.clear();
+        self.rendered.clear();
+        self.ob_stack.clear();
+        self.diags = Diags::new();
+        self.diags_rendered = 0;
+        self.error_log.clear();
+
+        // Request HTTP state
+        for sg in &mut self.superglobals {
+            *sg = Zval::Undef;
+        }
+        self.response_headers.clear();
+        self.response_code = None;
+        self.response_reason = None;
+        self.output_started = false;
+        self.output_start = None;
+
+        // Execution stack & lifecycle
+        self.frames.clear();
+        self.generators.clear();
+        self.fibers.clear();
+        self.fiber_stack.clear();
+        self.shutdown_fns.clear();
+
+        // Exception/error handling
+        self.exception_handlers.clear();
+        self.error_handlers.clear();
+        self.last_error = None;
+        self.in_error_handler = false;
+        self.final_flush = false;
+        self.uncaught_throwable = None;
+
+        // Error suppression
+        self.suppress_depth = 0;
+        self.suppress_marks.clear();
+        self.silence_saved.clear();
+
+        // Handlers & wrappers
+        self.signal_handlers.clear();
+        self.async_signals = false;
+        self.stream_wrappers.clear();
+        self.filtered_streams.clear();
+
+        // Object tracking & GC
+        self.created.clear();
+        self.destructed.clear();
+        self.teardown_weaks.clear();
+        self.gc_buf.clear();
+        self.gc_buf_head = 0;
+        self.gc_cycle_roots.clear();
+        self.gc_light_demoted.clear();
+        self.gc_ctr_roots.clear();
+
+        // Resource IDs & caches
+        self.next_object_id = 1;
+        self.next_resource_id = 5;
+        self.preg_cache.clear();
+        self.json_active.clear();
+        self.enum_cache.clear();
+
+        // Other per-request state
+        self.json_last_error = 0;
+        self.constants.clear();
+        self.lazy_init.clear();
+        self.lazy_props.clear();
+        self.lazy_options.clear();
+        self.var_dump_debug.clear();
+        self.stringify_args.clear();
+        self.reflect_method_info_cache.clear();
+        self.reflect_object_bound.clear();
+        self.lazy_initializing.clear();
+
+        // File/stream/resource handles
+        self.zips.clear();
+        self.zip_writers.clear();
+        self.pdo_conns.clear();
+        self.mysqli_conns.clear();
+        self.mysqli_stmts.clear();
+        self.gd_images.clear();
+        self.xslt_sheets.clear();
+        self.tidy_docs.clear();
+        self.dom_docs.clear();
+
+        // Sequence/iteration state
+        self.strtok = None;
+    }
+
     /// Record a value that is about to be dropped as a possible GC root: if it
     /// (transitively) still holds tracked objects whose refcount is about to
     /// fall, push them onto the candidate buffer so the next [`Op::Sweep`] re-examines
