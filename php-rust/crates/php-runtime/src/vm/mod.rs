@@ -715,6 +715,8 @@ pub fn run_module_with_hir<'m>(
     // WP-67 P-2 (P-67.5): RetainSet must be held by run_module_with_hir so it
     // drops AFTER vm — Rust's drop order is load-bearing (RetainSet declared
     // here stays in scope until the end of run_module_with_hir).
+    // S-77.6.4.1+S-77.6.4.2: Persistent Vm lifecycle
+    // WP-67 P-2: RetainSet held by run_module_with_hir, drops after vm.
     let retain = RetainSet::new();
     let mut vm = vm_new(&retain, module, registry, main_hir);
 
@@ -729,13 +731,54 @@ pub fn run_module_with_hir<'m>(
             break;
         }
     }
+    // Frame already pushed by vm_new()
 
-    // S-77.6.5.1: Use extracted request_start method for per-request setup
-    vm.request_start(argv, ini_overrides);
-    
+    // S-77.6.4.2b: request_start (setup INI, superglobals, session)
+    // Web SAPI seeding (cli-server mode)
+    if let Some(req) = php_types::sapi::web_request() {
+        vm.web = true;
+        vm.response_headers.push(b"X-Powered-By: PHP/8.5.7".to_vec());
+        websapi::seed_web_superglobals(&mut vm.superglobals, &req);
+        for (name, value) in [
+            (&b"html_errors"[..], &b"1"[..]),
+            (b"output_buffering", b"4096"),
+            (b"implicit_flush", b""),
+            (b"max_execution_time", b"30"),
+            (b"max_input_time", b"60"),
+        ] {
+            if let Some(e) = vm.ini.0.get_mut(name) {
+                e.global = value.to_vec();
+                e.local = value.to_vec();
+            }
+        }
+    }
+    // CLI superglobals seeding
+    if let (Some(argv), Some(prog)) = (argv, main_hir) {
+        seed_cli_superglobals(&mut vm.superglobals, &mut vm.frames[0].slots, &prog.slots, argv);
+        let mut arr = PhpArray::new();
+        for a in argv {
+            let _ = arr.append(Zval::Str(PhpStr::new(a.to_vec())));
+        }
+        let slot = vm.global_slot_by_name(b"argv");
+        if matches!(vm.frames[0].slots[slot], Zval::Undef) {
+            vm.frames[0].slots[slot] = Zval::Array(Rc::new(arr));
+        }
+        let slot = vm.global_slot_by_name(b"argc");
+        if matches!(vm.frames[0].slots[slot], Zval::Undef) {
+            vm.frames[0].slots[slot] = Zval::Long(argv.len() as i64);
+        }
+    }
+    // INI overrides and session auto-start
+    vm.apply_ini_overrides(ini_overrides);
+    if vm.ini.get_bool(b"session.auto_start") {
+        let _ = vm.ho_session_start(Vec::new());
+    }
     // `exit`/`die` is a clean termination (the exit code is surfaced, not a fatal);
     // any other `Err` is an uncaught fatal. A `Ok` carries the top-level return.
     let mut exit_code = None;
+    // Disable error-handler routing for everything past the main run: the final
+    // flush, the uncaught-fatal render, and shutdown destructors must render raw
+    // and never call user code (Session 2 `final_flush` guard).
     let is_link_fatal = link_fatal.is_some();
     let run_result = match link_fatal {
         Some(e) => Err(e),
@@ -748,14 +791,26 @@ pub fn run_module_with_hir<'m>(
             exit_code = Some(code);
             (None, Zval::Null)
         }
+        // An uncaught throwable routed to a `set_exception_handler` is handled
+        // there (no fatal banner; PHP exits cleanly); otherwise it is the fatal.
+        // A link-time fatal is Zend's compile-time kind: never a throwable, so
+        // it bypasses the exception handler and renders a plain banner below.
         Err(e) if !is_link_fatal && vm.handle_uncaught_exception(&e) => (None, Zval::Null),
         Err(e) => (Some(e), Zval::Null),
     };
+    // Flush any diagnostics still staged, then render the uncaught fatal at the
+    // tail of `rendered` (mirrors `eval::run_with`).
     let line = vm.fatal_line;
+    // `final_flush` is set, so routing is skipped and this never errs.
     let _ = vm.flush_diags(line);
     if let Some(err) = &fatal {
+        // PHP flushes any active output buffers *before* printing the fatal banner,
+        // so the script's buffered output precedes the "Fatal error:" block.
         vm.flush_all_output_buffers();
         if is_link_fatal {
+            // Compile/link-time fatal (e.g. an enum implementing Serializable):
+            // a plain banner with the declaration site — no throwable wrapping,
+            // no stack trace.
             let file = String::from_utf8_lossy(&module.file);
             let block = format!("\nFatal error: {} in {} on line {}\n", err.message(), file, line);
             vm.rendered.extend_from_slice(block.as_bytes());
@@ -763,10 +818,15 @@ pub fn run_module_with_hir<'m>(
             vm.render_fatal(err, line);
         }
     }
-    
-    // S-77.6.5.1: Use extracted request_shutdown method (with preserved census logic)
-    // Note: Full census attribution code is preserved inline here to maintain test compatibility
-    // WP-77.6.4.2-S-77.6.5.1: Census and attribution walks preserved (cfgd-only, read-only)
+    // WP-50 Ob.2 (Fase 1.4 quota, census builds ONLY): end-of-run FULL-SCAN
+    // collect probe. `collect_cycles` roots itself from the note buffers
+    // alone, so cyclic garbage whose refcounts never moved after formation
+    // is invisible even to an explicit collect — this probe seeds EVERY
+    // live `created` entry as a cycle root and lets the classifier decide,
+    // measuring the true collectable ceiling of the created channel (the
+    // most a per-test-boundary discipline could ever de-pin). Behavior-
+    // changing (frees + destructors): never in parity builds; the census
+    // walk below then attributes the POST-collect graph.
     #[cfg(feature = "gc-census")]
     if std::env::var_os("PHPR_GC_EOR_FULL_COLLECT").is_some() {
         let before = vm.created.len();
@@ -782,19 +842,913 @@ pub fn run_module_with_hir<'m>(
             }
         }
         gc_census::mark_explicit();
+        let t0 = std::time::Instant::now();
         let freed = vm.collect_cycles().unwrap_or(-1);
+        gc_census::probe_line(&format!(
+            "eor_full_collect created_before={} created_after={} freed={} ms={}",
+            before,
+            vm.created.len(),
+            freed,
+            t0.elapsed().as_millis()
+        ));
     }
+    // WP-45 Fase 0: root attribution walk (census builds only, read-only) —
+    // BEFORE shutdown so the full end-of-run graph is attributed. Roots are
+    // walked in priority order; shared structure counts toward the FIRST
+    // root that reaches it (dedup by Rc pointer).
     #[cfg(feature = "mem-census")]
     {
         use php_types::memcensus as mc;
+        // WP-47 second-generation attribution: walk EVERY Zval/Rc-bearing Vm
+        // field (the WP-45 walk covered 11 categories and reached 149MB of a
+        // 3,2G live set); deep_size tallies per-channel reached counts so the
+        // dump carries the walk-vs-live reconciliation directly.
         mc::reached_reset();
+        let mut seen: rustc_hash::FxHashSet<usize> = Default::default();
+        let mut rep: Vec<(String, u64)> = Vec::new();
+        let mut b: u64 = 0;
+        for v in vm.superglobals.iter() {
+            b += mc::deep_size(v, &mut seen, 0);
+        }
+        rep.push(("superglobals".into(), b));
+        if let Some(f) = &vm.retired_main {
+            rep.push(("globals-main-frame".into(), census_walk_frame(f, &mut seen)));
+        }
+        b = 0;
+        for f in &vm.frames {
+            b += census_walk_frame(f, &mut seen);
+        }
+        rep.push(("frames-live".into(), b));
+        b = 0;
+        for v in vm.constants.values() {
+            b += mc::deep_size(v, &mut seen, 0);
+        }
+        rep.push(("constants".into(), b));
+        b = 0;
+        for c in vm.statics.iter().flatten() {
+            b += census_walk_cell(c, &mut seen);
+        }
+        rep.push(("fn-statics".into(), b));
+        b = 0;
+        for c in vm.static_props.values() {
+            b += census_walk_cell(c, &mut seen);
+        }
+        rep.push(("static-props".into(), b));
+        b = 0;
+        for c in vm.closure_statics.values() {
+            b += census_walk_cell(c, &mut seen);
+        }
+        rep.push(("closure-statics".into(), b));
+        b = 0;
+        for f in vm.generators.values() {
+            b += census_walk_frame(f, &mut seen);
+        }
+        rep.push(("generator-frames".into(), b));
+        b = 0;
+        for fs in vm.fibers.values() {
+            for f in &fs.parked {
+                b += census_walk_frame(f, &mut seen);
+            }
+            b += mc::deep_size(&fs.ret, &mut seen, 0);
+        }
+        rep.push(("fibers".into(), b));
+        // WP-49 Fase 1.2 prediction: split the created-only walk into the
+        // DEAD-pinned subset (strong_count minus the candidate-buffer clone
+        // == 1: the registry is the only holder — what an eviction/Weak
+        // lever would release) and the rest. Dead entries walk FIRST so
+        // shared structure lands in the evictable bucket.
+        b = 0;
+        let mut created_dead_n: u64 = 0;
+        for o in vm.created.values() {
+            let bo = o.borrow();
+            let extra = bo.gc.buffered() as usize;
+            drop(bo);
+            if std::rc::Rc::strong_count(o) - extra == 1 {
+                created_dead_n += 1;
+                let z = php_types::Zval::Object(std::rc::Rc::clone(o));
+                b += mc::deep_size(&z, &mut seen, 0);
+            }
+        }
+        rep.push((format!("created-dead-rc1[n={created_dead_n}]"), b));
+        b = 0;
+        for o in vm.created.values() {
+            let z = php_types::Zval::Object(std::rc::Rc::clone(o));
+            b += mc::deep_size(&z, &mut seen, 0);
+        }
+        rep.push(("created-registry-only".into(), b));
+        b = 0;
+        for s in vm.gc_buf.iter().flatten() {
+            let z = php_types::Zval::Object(std::rc::Rc::clone(s));
+            b += mc::deep_size(&z, &mut seen, 0);
+        }
+        rep.push(("gc-buf-only".into(), b));
+        b = 0;
+        for cr in &vm.gc_ctr_roots {
+            let z = match cr {
+                CtrWeak::Arr(w) => match w.upgrade() {
+                    Some(a) => php_types::Zval::Array(a),
+                    None => continue,
+                },
+                CtrWeak::Clo(w) => match w.upgrade() {
+                    Some(c) => php_types::Zval::Closure(c),
+                    None => continue,
+                },
+            };
+            b += mc::deep_size(&z, &mut seen, 0);
+        }
+        rep.push(("gc-ctr-roots".into(), b));
+        b = 0;
+        for v in &vm.autoloaders {
+            b += mc::deep_size(v, &mut seen, 0);
+        }
+        rep.push(("autoloaders".into(), b));
+        b = 0;
+        for v in &vm.exception_handlers {
+            b += mc::deep_size(v, &mut seen, 0);
+        }
+        for (v, _) in &vm.error_handlers {
+            b += mc::deep_size(v, &mut seen, 0);
+        }
+        for (cb, args) in &vm.shutdown_fns {
+            b += mc::deep_size(cb, &mut seen, 0);
+            for a in args {
+                b += mc::deep_size(a, &mut seen, 0);
+            }
+        }
+        for v in vm.signal_handlers.values() {
+            b += mc::deep_size(v, &mut seen, 0);
+        }
+        if let Some(v) = &vm.uncaught_throwable {
+            b += mc::deep_size(v, &mut seen, 0);
+        }
+        rep.push(("handlers".into(), b));
+        b = 0;
+        for ob in &vm.ob_stack {
+            b += ob.content.len() as u64;
+            if let Some(cb) = &ob.callback {
+                b += mc::deep_size(cb, &mut seen, 0);
+            }
+        }
+        rep.push(("ob-stack".into(), b));
+        b = 0;
+        for o in vm.enum_cache.values() {
+            let z = php_types::Zval::Object(std::rc::Rc::clone(o));
+            b += mc::deep_size(&z, &mut seen, 0);
+        }
+        rep.push(("enum-cache".into(), b));
+        b = 0;
+        for v in vm.lazy_init.values() {
+            b += mc::deep_size(v, &mut seen, 0);
+        }
+        rep.push((format!("lazy-init[n={}]", vm.lazy_init.len()), b));
+        b = 0;
+        for v in vm.reflect_object_bound.values() {
+            b += mc::deep_size(v, &mut seen, 0);
+        }
+        rep.push((format!("reflect-object-bound[n={}]", vm.reflect_object_bound.len()), b));
+        b = 0;
+        for v in vm.reflect_method_info_cache.values() {
+            b += mc::deep_size(v, &mut seen, 0);
+        }
+        rep.push((
+            format!("reflect-method-info-cache[n={}]", vm.reflect_method_info_cache.len()),
+            b,
+        ));
+        b = 0;
+        for v in vm.var_dump_debug.values() {
+            b += mc::deep_size(v, &mut seen, 0);
+        }
+        rep.push((format!("var-dump-debug[n={}]", vm.var_dump_debug.len()), b));
+        rep.push(("filtered-streams".into(), (vm.filtered_streams.len() as u64) * 256));
+        // Const pools of every linked module (leaked units): their ZStr are
+        // permanent STR-channel residents that no PHP root reaches.
+        b = 0;
+        {
+            fn func_consts(
+                f: &crate::bytecode::Func,
+                seen: &mut rustc_hash::FxHashSet<usize>,
+            ) -> u64 {
+                let mut b = 0u64;
+                for c in &f.consts {
+                    if let crate::bytecode::Const::Str(s) = c {
+                        if seen.insert(std::rc::Rc::as_ptr(s) as usize) {
+                            let sb = (s.as_bytes().len() + mc::STR_OVERHEAD) as u64;
+                            mc::reached_note(mc::CH_STR, sb);
+                            b += sb;
+                        }
+                    }
+                }
+                for pd in f.param_defaults.iter().flatten() {
+                    b += func_consts(pd, seen);
+                }
+                b
+            }
+            for m in vm.modules.iter() {
+                b += func_consts(&m.main, &mut seen);
+                for f in &m.functions {
+                    b += func_consts(f, &mut seen);
+                }
+                for f in &m.closures {
+                    b += func_consts(f, &mut seen);
+                }
+                for c in &m.classes {
+                    for meth in &c.methods {
+                        b += func_consts(&meth.func, &mut seen);
+                    }
+                    if let Some(pi) = &c.prop_init {
+                        b += func_consts(pi, &mut seen);
+                    }
+                }
+            }
+        }
+        rep.push(("unit-consts".into(), b));
+        mc::report_roots(&rep);
+        // WP-60 P2(b): positive control of the abandoned-blocks visitor,
+        // on demand (PHPR_MI_ABAND_CHECK=1) — see design60.
+        if std::env::var_os("PHPR_MI_ABAND_CHECK").is_some() {
+            mc::abandoned_positive_control();
+        }
+        // WP-60 P3(b): deep-size DIRETTO of the seed HIR image via the
+        // counting-allocator clone-delta (design60): per class
+        // {full, bodies = MethodDecl.body+slots, doc+attributes};
+        // firma = full − bodies − doc. Rc-shared subtrees are NOT counted
+        // by a clone (refcount bump, no allocation): any under-count is
+        // structural sharing, labeled here, never estimated away.
+        {
+            fn dclone<T: Clone>(v: &T) -> u64 {
+                let (a0, _) = mc::alloc_counters();
+                let c = v.clone();
+                let (a1, _) = mc::alloc_counters();
+                drop(c);
+                a1.saturating_sub(a0)
+            }
+            fn fn_split(d: &crate::hir::FnDecl) -> (u64, u64) {
+                (
+                    dclone(&d.body) + dclone(&d.slots),
+                    dclone(&d.doc) + dclone(&d.attributes),
+                )
+            }
+            let mut rows: Vec<(String, u64, u64, u64)> = Vec::new();
+            let (mut t_full, mut t_body, mut t_doc) = (0u64, 0u64, 0u64);
+            for c in &vm.seed_classes {
+                let full = dclone(&**c);
+                let mut body = 0u64;
+                let mut doc = dclone(&c.doc) + dclone(&c.attributes);
+                for m in c.methods.iter().chain(c.abstract_sigs.iter()) {
+                    let (b_, d_) = fn_split(&m.decl);
+                    body += b_;
+                    doc += d_;
+                }
+                t_full += full;
+                t_body += body;
+                t_doc += doc;
+                rows.push((String::from_utf8_lossy(&c.name).into_owned(), full, body, doc));
+            }
+            rows.sort_by(|a, b| b.1.cmp(&a.1));
+            for (name, full, body, doc) in rows.iter().take(48) {
+                mc::census_line(&format!(
+                    "tag=seedclass name={name} full={full} body={body} doc={doc}"
+                ));
+            }
+            mc::census_line(&format!(
+                "tag=seedsum src=classes n={} full={t_full} body={t_body} doc={t_doc} firma={}",
+                vm.seed_classes.len(),
+                t_full.saturating_sub(t_body).saturating_sub(t_doc),
+            ));
+            let (mut tr_full, mut tr_body, mut tr_doc) = (0u64, 0u64, 0u64);
+            for (_k, t) in &vm.seed_traits {
+                tr_full += dclone(t);
+                for m in &t.methods {
+                    let (b_, d_) = fn_split(&m.decl);
+                    tr_body += b_;
+                    tr_doc += d_;
+                }
+                for cl in &t.closures {
+                    let (b_, d_) = fn_split(cl);
+                    tr_body += b_;
+                    tr_doc += d_;
+                }
+            }
+            mc::census_line(&format!(
+                "tag=seedsum src=traits n={} full={tr_full} body={tr_body} doc={tr_doc} firma={}",
+                vm.seed_traits.len(),
+                tr_full.saturating_sub(tr_body).saturating_sub(tr_doc),
+            ));
+            if let Some(p) = vm.main_hir {
+                // Program full counts only its OWNED parts (classes/functions
+                // are Rc: refcount bumps) — the fn table is measured apart.
+                let full = dclone(p);
+                let mut body = dclone(&p.body);
+                let mut doc = 0u64;
+                for cl in &p.closures {
+                    let (b_, d_) = fn_split(cl);
+                    body += b_;
+                    doc += d_;
+                }
+                mc::census_line(&format!(
+                    "tag=seedsum src=main_hir n=1 full={full} body={body} doc={doc} firma={}",
+                    full.saturating_sub(body).saturating_sub(doc),
+                ));
+                let (mut f_full, mut f_body, mut f_doc) = (0u64, 0u64, 0u64);
+                for f in &p.functions {
+                    f_full += dclone(&**f);
+                    let (b_, d_) = fn_split(&**f);
+                    f_body += b_;
+                    f_doc += d_;
+                }
+                mc::census_line(&format!(
+                    "tag=seedsum src=main_fns n={} full={f_full} body={f_body} doc={f_doc} firma={}",
+                    p.functions.len(),
+                    f_full.saturating_sub(f_body).saturating_sub(f_doc),
+                ));
+            }
+        }
+        // WP-60 P3(c): unit-per-path histogram — the retained-module count
+        // and (counted-v1) bytes per resolved path, fed by the LEAK SITES
+        // (Vm::modules is lazy and misses most units). n>1 rows are the
+        // template-include leak's address book; dup_bytes is quoted on the
+        // v1 counted metric (deep v2 replaces it when it lands).
+        {
+            let units: Vec<(Vec<u8>, u64, u64, std::rc::Weak<Module>)> =
+                CENSUS_UNITS.with(|u| u.borrow().clone());
+            let mut by: rustc_hash::FxHashMap<&[u8], (u32, u64, u64)> = Default::default();
+            // WP-62 M2.1: per-path [tables, stub, fnshare, proper] sums (the
+            // dup targets' prefix share is THE Hejlsberg A1 number).
+            let mut by_split: rustc_hash::FxHashMap<&[u8], [u64; 8]> = Default::default();
+            for (i, (file, bytes, net, _p)) in units.iter().enumerate() {
+                let e = by.entry(&file[..]).or_insert((0, 0, 0));
+                e.0 += 1;
+                e.1 += *bytes;
+                e.2 += *net;
+                if let Some(sp) = CENSUS_SPLITS.with(|s| s.borrow().get(i).copied()) {
+                    let es = by_split.entry(&file[..]).or_insert([0; 8]);
+                    // Col 7 (seedlen) is a per-unit reading, not a summable
+                    // byte share — per-path it keeps the LAST unit's value.
+                    for k in 0..7 {
+                        es[k] += sp[k];
+                    }
+                    es[7] = sp[7];
+                }
+            }
+            // WP-62 M0c: top single load events by net — the calibration
+            // probes (known-size synthetic units) read their per-unit net
+            // here; dup rows below aggregate per path and hide singles.
+            // WP-62 M2.1: rows carry the compile split (pfx = tables+stub+
+            // fnshare vs proper); indices pair CENSUS_UNITS ↔ CENSUS_SPLITS.
+            let splits: Vec<[u64; 8]> = CENSUS_SPLITS.with(|s| s.borrow().clone());
+            // WP-65 M-65.1: pre-delta seed-length distribution over the
+            // retained units — D distinct lengths vs U units decides
+            // K-M65.1 (D > 0.5×U ⇒ Rc-prefix sharing dead by construction).
+            {
+                let mut freq: rustc_hash::FxHashMap<u64, u64> = Default::default();
+                for sp in &splits {
+                    *freq.entry(sp[7]).or_insert(0) += 1;
+                }
+                let mut rows: Vec<(u64, u64)> = freq.into_iter().collect();
+                rows.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+                let top: Vec<String> =
+                    rows.iter().take(20).map(|(l, n)| format!("{l}:{n}")).collect();
+                mc::census_line(&format!(
+                    "tag=seedlen units={} distinct={} top={}",
+                    splits.len(),
+                    rows.len(),
+                    top.join(",")
+                ));
+            }
+            {
+                let mut top: Vec<(usize, &(Vec<u8>, u64, u64, std::rc::Weak<Module>))> =
+                    units.iter().enumerate().collect();
+                top.sort_by(|a, b| b.1 .2.cmp(&a.1 .2));
+                for (i, (file, bytes, net, _p)) in top.iter().take(24) {
+                    let sp = splits.get(*i).copied().unwrap_or([0; 8]);
+                    mc::census_line(&format!(
+                        "tag=unittop bytes_counted={bytes} net={net} pfx_tables={} \
+                         pfx_stub={} pfx_fnshare={} proper={} pfx_slotnames={} \
+                         pfx_fnvec={} sc={} path={}",
+                        sp[0],
+                        sp[1],
+                        sp[2],
+                        sp[3],
+                        sp[4],
+                        sp[5],
+                        sp[6],
+                        String::from_utf8_lossy(file)
+                    ));
+                }
+            }
+            // Global prefix-vs-proper aggregate (Hejlsberg A1 decision line).
+            {
+                let mut t = [0u64; 7];
+                for sp in &splits {
+                    for k in 0..7 {
+                        t[k] += sp[k];
+                    }
+                }
+                let prefix = t[0] + t[1] + t[2];
+                mc::census_line(&format!(
+                    "tag=prefixsum tables={} stub={} fnshare={} proper={} prefix={prefix} \
+                     split_tot={} slotnames_tot={} fnvec_tot={} sc_tot={}",
+                    t[0],
+                    t[1],
+                    t[2],
+                    t[3],
+                    prefix + t[3],
+                    t[4],
+                    t[5],
+                    t[6],
+                ));
+            }
+            let mut dups: Vec<(&[u8], u32, u64, u64)> = by
+                .iter()
+                .filter(|(_, (n, _, _))| *n > 1)
+                .map(|(p, (n, bytes, net))| (*p, *n, *bytes, *net))
+                .collect();
+            // WP-61: ranked by the TRUE metric (net compile delta); the v1
+            // counted metric stays in the row for continuity with WP-60.
+            dups.sort_by(|a, b| b.3.cmp(&a.3));
+            let (mut dup_u, mut dup_b, mut dup_n) = (0u64, 0u64, 0u64);
+            for (i, (p, n, bytes, net)) in dups.iter().enumerate() {
+                dup_u += (*n as u64) - 1;
+                dup_b += (bytes / (*n as u64)) * ((*n as u64) - 1);
+                dup_n += (net / (*n as u64)) * ((*n as u64) - 1);
+                if i < 40 {
+                    let sp = by_split.get(p).copied().unwrap_or([0; 8]);
+                    mc::census_line(&format!(
+                        "tag=unitpath2 n={n} bytes_counted={bytes} net={net} \
+                         pfx_tables={} pfx_stub={} pfx_fnshare={} proper={} \
+                         pfx_slotnames={} pfx_fnvec={} sc={} seedlen={} path={}",
+                        sp[0],
+                        sp[1],
+                        sp[2],
+                        sp[3],
+                        sp[4],
+                        sp[5],
+                        sp[6],
+                        sp[7],
+                        String::from_utf8_lossy(p)
+                    ));
+                }
+            }
+            mc::census_line(&format!(
+                "tag=unitsum2 units={} paths={} dup_units={dup_u} dup_bytes_counted={dup_b} dup_net={dup_n}",
+                units.len(),
+                by.len(),
+            ));
+            // WP-62 M0b: nesting guard of the net-compile windows — >0 means
+            // a parent window absorbed a child's net (K6: map invalid).
+            mc::census_line(&format!(
+                "tag=netguard nested_windows={}",
+                CENSUS_NESTED_WINDOWS.with(|n| n.get()),
+            ));
+            // WP-62 (Matsakis M2): skipped-relocation counts — fns/classes
+            // skipped by explicit global marker; unexpected always 0 (census
+            // builds panic at the site).
+            {
+                let (f, k, u) = RELOC_SKIPPED.with(|c| c.get());
+                mc::census_line(&format!(
+                    "tag=reloc skipped_fns={f} skipped_classes={k} unexpected={u}"
+                ));
+            }
+            // WP-62 M1: unit-cache observability (design62). `superseded_*`
+            // is computed at dump time by grouping keys per path — an edited
+            // file re-keys and strands its old entries (Leijen R5; de-leak is
+            // a TODO(port), not WP-62).
+            {
+                let st = UC_STATS.with(|s| *s.borrow());
+                let (entries, bytes, paths, superseded_paths, superseded_entries) =
+                    UNIT_CACHE.with(|c| {
+                        let cache = c.borrow();
+                        let mut entries = 0u64;
+                        let mut bytes = 0u64;
+                        let mut by_path: rustc_hash::FxHashMap<&[u8], u32> = Default::default();
+                        for (k, slot) in cache.iter() {
+                            entries += slot.len() as u64;
+                            for cu in slot {
+                                bytes += module_census_bytes(&cu.module) as u64;
+                            }
+                            *by_path.entry(&k.path[..]).or_insert(0) += 1;
+                        }
+                        let sup = by_path.values().filter(|&&n| n > 1).count() as u64;
+                        let sup_e: u64 =
+                            by_path.values().filter(|&&n| n > 1).map(|&n| (n - 1) as u64).sum();
+                        (entries, bytes, by_path.len() as u64, sup, sup_e)
+                    });
+                mc::census_line(&format!(
+                    "tag=unitcache hit_intra={} hit_cross={} miss_cold={} miss_fp={} \
+                     miss_dc={} miss_nostat={} inserts={} fp_replaced={} ways_evictions={} \
+                     metadata_calls={} entries={entries} bytes_counted={bytes} paths={paths} \
+                     superseded_paths={superseded_paths} superseded_entries={superseded_entries} \
+                     stub_elided_units={} stub_classes_elided={} elide_align_miss={} \
+                     elide_align_hit={} miss_dc_base={} miss_dc_remap={} miss_dc_locals={} \
+                     seed_prefix_short={} parked_modules={} parked_bytes={} \
+                     defer_relowers={} defer_relower_ns={}",
+                    st.hit_intra,
+                    st.hit_cross,
+                    st.miss_cold,
+                    st.miss_fp,
+                    st.miss_dc,
+                    st.miss_nostat,
+                    st.inserts,
+                    st.fp_replaced,
+                    st.ways_evictions,
+                    st.metadata_calls,
+                    st.stub_elided_units,
+                    st.stub_classes_elided,
+                    st.elide_align_miss,
+                    st.elide_align_hit,
+                    st.miss_dc_base,
+                    st.miss_dc_remap,
+                    st.miss_dc_locals,
+                    st.seed_prefix_short,
+                    st.parked_modules,
+                    st.parked_bytes,
+                    st.defer_relowers,
+                    st.defer_relower_ns,
+                ));
+                // WP-67 P-67.3: the cross-request bounded sets OUTSIDE
+                // cache+RetainSet — the per-worker metric counts them
+                // (KS-P67.3: Δ between N=100 and N=1000 at warm = 0).
+                {
+                    let (pc, pf) = crate::lower::census_prelude_entries();
+                    mc::census_line(&format!(
+                        "tag=boundset stubs_entries={} prelude_classes={pc} prelude_fns={pf}",
+                        crate::compile::census_stub_entries()
+                    ));
+                }
+                // WP-67 L-67.4: per-request standing checkpoint (opt-in
+                // PHPR_MI_COLLECT_REQ=1) — a killed server has no atexit.
+                mc::request_collect_mi();
+                // WP-63 B7: finestre ns separate lower vs compile (bordo CPU).
+                let (lns, cns, un) = census_compile_ns_take();
+                // WP-64 E1-64 (B2/H5''): le DUE passate O(seed) per-include,
+                // quotate separatamente — mappa eager (compile) e remap
+                // program-space (link) — mai più inferite dalle finestre.
+                let (mns, mn) = crate::compile::census_map_ns_take();
+                let (rns, rn) = REMAP_NS.with(|c| c.get());
+                // WP-65 B-65.3 (KB65-3): the lower window decomposed —
+                // read (fs::read, vm-side) + lexparse (parse_file, lexer
+                // fused) + lowerhir (Lowerer proper). The phase counters
+                // cover ALL seeded lowers (include+eval+deferred+retries;
+                // `lowers` counts them) while `lower_ns` windows only the
+                // include path — compare via the counts, not blindly.
+                let rdns = READ_NS.with(|c| c.get());
+                let (lpns, lhns, lct) = crate::lower::census_lower_phase_take();
+                // WP-66 B-66.x: the retries' partial-HIR share, counted —
+                // closes the B-65.3 lower balance (was a narrated residual).
+                let (plns, plct) = crate::lower::census_lower_partial_take();
+                mc::census_line(&format!(
+                    "tag=compilens lower_ns={lns} compile_ns={cns} units={un} \
+                     map_ns={mns} map_entries={mn} remap_ns={rns} remap_entries={rn} \
+                     read_ns={rdns} lexparse_ns={lpns} lowerhir_ns={lhns} lowers={lct} \
+                     lower_partial_ns={plns} lower_partials={plct}"
+                ));
+                // WP-66 E-66.2: per-path dup cost — for a path compiled n>1
+                // times, all but one compile is duplicated work:
+                // dup_lc = (l+c)·(n−1)/n. Top rows + aggregate; the E6 quota
+                // reads dup_lc_ns here, at the cifra (KS66-1).
+                // WP-67 E-67.1 split: fp-class recompiles (legitimate ways —
+                // NOT recoverable by any re-link cache) are attributed apart:
+                // per path, avg=(l+c)/n; dup_fp = avg·min(n_fp, n−1) (the one
+                // "legitimate" compile is the first/cold one), dup_cold the
+                // remainder. `l` is already net of nested autoload includes.
+                // E-68.3 (dichiarato): lo split è un CEILING, non una
+                // ripartizione esatta — avg assume costo omogeneo per
+                // compile e con n_fp=n il min "grazia" il primo compile;
+                // l'E6-quota legge dup_fp/dup_cold come limiti superiori.
+                let mut lc_rows: Vec<(u64, Vec<u8>, u64, u64, u64, u64)> = Vec::new();
+                let (mut lc_paths, mut lc_compiles, mut lc_l, mut lc_c) = (0u64, 0u64, 0u64, 0u64);
+                let (mut dup_paths, mut dup_compiles, mut dup_lc) = (0u64, 0u64, 0u64);
+                let (mut dup_fp, mut dup_cold) = (0u64, 0u64);
+                for (p, (l, c, n, nfp)) in census_path_ns_snapshot() {
+                    lc_paths += 1;
+                    lc_compiles += n;
+                    lc_l += l;
+                    lc_c += c;
+                    if n > 1 {
+                        let avg = (l + c) / n;
+                        let dup = (l + c) - avg;
+                        let dfp = avg * nfp.min(n - 1);
+                        dup_paths += 1;
+                        dup_compiles += n - 1;
+                        dup_lc += dup;
+                        dup_fp += dfp;
+                        dup_cold += dup - dfp;
+                        lc_rows.push((dup, p, l, c, n, nfp));
+                    }
+                }
+                lc_rows.sort_by(|a, b| b.0.cmp(&a.0));
+                for (dup, p, l, c, n, nfp) in lc_rows.iter().take(40) {
+                    mc::census_line(&format!(
+                        "tag=lcpath compiles={n} fp_compiles={nfp} lower_ns={l} \
+                         compile_ns={c} dup_lc_ns={dup} path={}",
+                        String::from_utf8_lossy(p)
+                    ));
+                }
+                mc::census_line(&format!(
+                    "tag=lcsum paths={lc_paths} compiles={lc_compiles} lower_ns={lc_l} \
+                     compile_ns={lc_c} dup_paths={dup_paths} dup_compiles={dup_compiles} \
+                     dup_lc_ns={dup_lc} dup_fp_ns={dup_fp} dup_cold_ns={dup_cold}"
+                ));
+            }
+            // WP-62 M1 (Leijen R1 / Klabnik b): per-path hit-net aggregation
+            // — count, sum and MEDIAN (KS1 is judged on the median over
+            // ≥100 hits per named target, on --list-tests, before any full).
+            {
+                let hits = CENSUS_HITS.with(|h| h.borrow().clone());
+                let mut by: rustc_hash::FxHashMap<&[u8], Vec<u64>> = Default::default();
+                for (p, n) in &hits {
+                    by.entry(&p[..]).or_default().push(*n);
+                }
+                let mut rows: Vec<(&[u8], usize, u64, u64)> = by
+                    .iter_mut()
+                    .map(|(p, v)| {
+                        v.sort_unstable();
+                        let sum: u64 = v.iter().sum();
+                        (*p, v.len(), sum, v[v.len() / 2])
+                    })
+                    .collect();
+                rows.sort_by(|a, b| b.2.cmp(&a.2));
+                for (p, n, sum, med) in rows.iter().take(40) {
+                    mc::census_line(&format!(
+                        "tag=cachehit n={n} net_sum={sum} net_med={med} path={}",
+                        String::from_utf8_lossy(p)
+                    ));
+                }
+            }
+            // WP-61 P2 (design61): census v2 DEEP of the retained Modules —
+            // address-deduped walk over the leak registry. clone-delta counts
+            // OWNED payloads; an op's Rc payload is a refcount bump under
+            // clone, so it stays UNCOUNTED here and is quoted only as the
+            // net − owned residue in tag=modrecon (never per-kind).
+            {
+                use crate::bytecode::{Const as BConst, Func as BFunc};
+                use std::hash::{Hash, Hasher};
+                fn dclone2<T: Clone>(v: &T) -> u64 {
+                    let (a0, _) = mc::alloc_counters();
+                    let c = v.clone();
+                    let (a1, _) = mc::alloc_counters();
+                    drop(c);
+                    a1.saturating_sub(a0)
+                }
+                struct W {
+                    op_n: Vec<u64>,
+                    op_owned: Vec<u64>,
+                    n_funcs: u64,
+                    lit_addr: rustc_hash::FxHashSet<usize>,
+                    lit_uniq_bytes: u64,
+                    lit_content: rustc_hash::FxHashMap<u64, (u64, u64)>,
+                }
+                fn walk_func(w: &mut W, f: &BFunc) {
+                    w.n_funcs += 1;
+                    for op in &f.ops {
+                        let k = census::op_index(op);
+                        w.op_n[k] += 1;
+                        w.op_owned[k] += dclone2(op);
+                    }
+                    for c in &f.consts {
+                        if let BConst::Str(s) = c {
+                            let mut h = rustc_hash::FxHasher::default();
+                            s.as_bytes().hash(&mut h);
+                            let e = w
+                                .lit_content
+                                .entry(h.finish())
+                                .or_insert((0, 32 + s.as_bytes().len() as u64));
+                            e.0 += 1;
+                            // PhpStr is not Clone (growable, WP-55): logical
+                            // bytes (len + 32B header), same basis as the
+                            // content histogram — labeled, never physical.
+                            if w.lit_addr.insert(std::rc::Rc::as_ptr(s) as usize) {
+                                w.lit_uniq_bytes += 32 + s.as_bytes().len() as u64;
+                            }
+                        }
+                    }
+                    for d in f.param_defaults.iter().flatten() {
+                        walk_func(w, d);
+                    }
+                }
+                let mut w = W {
+                    op_n: vec![0; census::N_OPS],
+                    op_owned: vec![0; census::N_OPS],
+                    n_funcs: 0,
+                    lit_addr: Default::default(),
+                    lit_uniq_bytes: 0,
+                    lit_content: Default::default(),
+                };
+                let mut seen_mod: rustc_hash::FxHashSet<usize> = Default::default();
+                let mut seen_fn: rustc_hash::FxHashSet<usize> = Default::default();
+                let mut seen_cls: rustc_hash::FxHashSet<usize> = Default::default();
+                // priv = Rc strong_count 1 at dump time (unit-private body);
+                // shared = prelude fns / interned seed stubs, owned by the
+                // MAIN module's image — counted once, reported apart so the
+                // recon against net (units-only window) compares like with
+                // like (smoke test WP-61: prelude alone is ~0.88MB).
+                let (mut mod_owned, mut fns_priv, mut fns_shared) = (0u64, 0u64, 0u64);
+                let (mut cls_priv, mut cls_shared) = (0u64, 0u64);
+                // WP-67 P-2: dead modules (request-scoped, evicted) report
+                // as a count — the walk visits only the LIVE retained set.
+                let mut dead_units = 0u64;
+                for (_file, _c, _n, wk) in &units {
+                    let Some(rcm) = wk.upgrade() else {
+                        dead_units += 1;
+                        continue;
+                    };
+                    if !seen_mod.insert(Rc::as_ptr(&rcm) as usize) {
+                        continue;
+                    }
+                    let m: &Module = &rcm;
+                    mod_owned += dclone2(m);
+                    walk_func(&mut w, &m.main);
+                    for cl in &m.closures {
+                        walk_func(&mut w, cl);
+                    }
+                    for f in &m.functions {
+                        if seen_fn.insert(std::rc::Rc::as_ptr(f) as usize) {
+                            if std::rc::Rc::strong_count(f) > 1 {
+                                fns_shared += dclone2(&**f);
+                            } else {
+                                fns_priv += dclone2(&**f);
+                            }
+                            walk_func(&mut w, f);
+                        }
+                    }
+                    for c in &m.classes {
+                        if seen_cls.insert(std::rc::Rc::as_ptr(c) as usize) {
+                            if std::rc::Rc::strong_count(c) > 1 {
+                                cls_shared += dclone2(&**c);
+                            } else {
+                                cls_priv += dclone2(&**c);
+                            }
+                            for meth in &c.methods {
+                                walk_func(&mut w, &meth.func);
+                            }
+                            if let Some(pi) = &c.prop_init {
+                                walk_func(&mut w, pi);
+                            }
+                        }
+                    }
+                }
+                let mut rows: Vec<(usize, u64, u64)> = (0..census::N_OPS)
+                    .filter(|&i| w.op_n[i] > 0)
+                    .map(|i| (i, w.op_n[i], w.op_owned[i]))
+                    .collect();
+                rows.sort_by(|a, b| b.2.cmp(&a.2));
+                for (i, n, owned) in rows.iter().take(40) {
+                    mc::census_line(&format!(
+                        "tag=opkind name={} n={n} owned={owned}",
+                        census::OP_NAMES[*i]
+                    ));
+                }
+                let n_ops_tot: u64 = w.op_n.iter().sum();
+                let owned_ops_tot: u64 = w.op_owned.iter().sum();
+                mc::census_line(&format!(
+                    "tag=opkind_sum n_ops={n_ops_tot} owned={owned_ops_tot} funcs={}",
+                    w.n_funcs
+                ));
+                let (mut litdup_n, mut litdup_b) = (0u64, 0u64);
+                for (n, rep) in w.lit_content.values() {
+                    if *n > 1 {
+                        litdup_n += n - 1;
+                        litdup_b += (n - 1) * rep;
+                    }
+                }
+                mc::census_line(&format!(
+                    "tag=modlit uniq_n={} uniq_bytes={} content_dup_n={litdup_n} content_dup_bytes={litdup_b}",
+                    w.lit_addr.len(),
+                    w.lit_uniq_bytes,
+                ));
+                let net_tot: u64 = units.iter().map(|r| r.2).sum();
+                let counted_tot: u64 = units.iter().map(|r| r.1).sum();
+                // owned_priv = the clone-visible unit-private bytes; the
+                // residue against net is op Rc payloads + allocator overhead
+                // (labeled; lits lowered before the compile window are in
+                // NEITHER side).
+                let owned_priv = mod_owned + fns_priv + cls_priv;
+                // WP-68 E-68.2: `units.len()`/`dead_units` report the
+                // CUMULATIVE registry (pruned rows included) so the
+                // leak-shape probes keep their monotone reading across the
+                // prune below.
+                let dead_cum = CENSUS_DEAD_TOTAL.with(|c| c.get() + dead_units);
+                mc::census_line(&format!(
+                    "tag=modrecon units={} uniq_mods={} dead_units={dead_cum} mod_owned={mod_owned} fns_priv={fns_priv} fns_shared={fns_shared} cls_priv={cls_priv} cls_shared={cls_shared} owned_priv={owned_priv} net_tot={net_tot} counted_v1_tot={counted_tot} rc_residue={}",
+                    units.len() as u64 + CENSUS_DEAD_TOTAL.with(|c| c.get()),
+                    seen_mod.len(),
+                    net_tot.saturating_sub(owned_priv),
+                ));
+                // WP-69 L-68.1 (counter leg, capacity-aware — the closed
+                // table list of predictions69 §B): the standing bytes the
+                // census itself owns, subtractable from Σcommitted slopes.
+                mc::census_line(&format!(
+                    "tag=censusown bytes={} hits_rows={} hits_on={}",
+                    census_own_bytes(),
+                    CENSUS_HITS.with(|h| h.borrow().len()),
+                    u8::from(census_hits_enabled()),
+                ));
+                // WP-70 M-70.2/K-M70.2: walker skip-routes (cycle mid-write);
+                // expected 0 outside the cycle fixtures on every workload.
+                mc::census_line(&format!(
+                    "tag=cellskip skips={}",
+                    CELL_SKIP.with(|c| c.get()),
+                ));
+                // WP-71 M-71.2: park routes (RefLeaf) + drain-fail tripwire
+                // (H-71.3, declared unreachable — expected 0 ALWAYS).
+                mc::census_line(&format!(
+                    "tag=cellpark parks={} drainfails={}",
+                    CELL_PARK.with(|c| c.get()),
+                    DRAIN_FAIL.with(|c| c.get()),
+                ));
+                // WP-72 S-72.4: mass-teardown break stats (cumulative).
+                {
+                    let (tr, tb, tu, ta) = TEARDOWN_STATS.with(|c| c.get());
+                    mc::census_line(&format!(
+                        "tag=teardown reg={tr} broken={tb} busy={tu} alive_after={ta}"
+                    ));
+                }
+                // WP-70 P70-D (E-70.2): the defer-mini channel — cumulative
+                // calls and net bytes of every run_deferred execution.
+                {
+                    let (dn, db) = DEFER_MINI.with(|c| c.get());
+                    mc::census_line(&format!("tag=defermini calls={dn} net_b={db}"));
+                }
+                // WP-68 E-68.2 (Hejlsberg d / Leijen b): prune the dead rows
+                // one-shot — without this the registry grows ~2 rows/request
+                // forever, and each dead row's Weak pins the whole Module
+                // RcBox (~896 B): that was the +2,55 KiB/req residue of
+                // probe67-nk. CENSUS_SPLITS pairs by index: same mask.
+                // WP-69 M-69.2: the cumulative total advances ONLY when the
+                // prune executes — on `prune_skip` the dead rows stay in the
+                // registry and the next dump re-counts them, so folding them
+                // into the total here would double-count the monotone metric
+                // of KS68-1.
+                CENSUS_UNITS.with(|u| {
+                    CENSUS_SPLITS.with(|s| {
+                        let mut u = u.borrow_mut();
+                        let mut s = s.borrow_mut();
+                        if u.len() == s.len() {
+                            CENSUS_DEAD_TOTAL.with(|c| c.set(dead_cum));
+                            let keep: Vec<bool> =
+                                u.iter().map(|r| r.3.strong_count() > 0).collect();
+                            let mut k = keep.iter();
+                            u.retain(|_| *k.next().unwrap_or(&true));
+                            let mut k = keep.iter();
+                            s.retain(|_| *k.next().unwrap_or(&true));
+                        } else {
+                            // Pairing broken: prune would desync the split
+                            // columns — keep rows, surface the anomaly.
+                            mc::census_line(&format!(
+                                "tag=modrecon_prune_skip units={} splits={}",
+                                u.len(),
+                                s.len()
+                            ));
+                        }
+                    })
+                });
+            }
+        }
     }
-
-    // S-77.6.5.1: Core teardown (abstracted to request_shutdown)
-    vm.request_shutdown();
-    vm.request_end();
-
+    // S-73.2 (WP-73): Correct teardown ordering per php_request_shutdown:
+    // shutdown-fns → ob_end_all → dtor-walk → break
+    // (Output buffer handlers must run with a live VM, before destructors.)
+    vm.run_shutdown_functions();
+    // Flush any output buffers BEFORE destructors — so handlers run with a live VM.
+    // MOVED HERE from after destructors (was incorrectly after finalize_filtered_streams).
+    vm.flush_all_output_buffers();
+    // End-of-script destructors (LIFO over the objects still tracked), run after
+    // `main` returns — or after a fatal, on a cleared stack (OOP-3d). Their output
+    // flows through `emit_str`, so it lands in `rendered` after the fatal block.
+    vm.run_shutdown_destructors();
+    // An active session auto-commits at request shutdown — AFTER shutdown
+    // functions and destructors (both still see an active session and their
+    // $_SESSION writes are persisted; oracle-verified order).
+    vm.session_shutdown_flush();
+    // Streams with attached write filters flush their final tail when the stream
+    // is destroyed at request end (PHP filter close) — a script need not fclose.
+    vm.finalize_filtered_streams();
+    // S-72.4 (WP-72): break the per-request Rc cycles — Zend's wholesale free
+    // — after EVERY observable flush (session writes serialize real props)
+    // and before the VM drops. Under FAST_SHUTDOWN the process exit reclaims
+    // everything, so the pass is skipped (zero CLI cost).
+    if !FAST_SHUTDOWN.load(std::sync::atomic::Ordering::Relaxed) {
+        vm.break_request_cycles();
+    }
+    // WP-33 T0: dump the op census to STDERR (parity-inert — stdout untouched).
+    if vm.census_on {
+        census::census_dump();
+    }
+    #[cfg(feature = "gc-census")]
+    gc_census::dump();
+    // WP-60 P2(a): un-park the VM before it is destructured/forgotten — the
+    // atexit window (win 0) must render tag=ctx as "none", never a dangling
+    // pointer (a Drop impl is not an option: both paths below move fields
+    // out of the Vm, and the fast path forgets it entirely).
+    #[cfg(feature = "mem-census")]
+    census_vm_park(0);
+    // B-65.2: end-of-run flush — the last uc_log events of this VM (final
+    // includes, shutdown-path probes) land before the outcome is returned.
+    uc_log_flush();
     if FAST_SHUTDOWN.load(std::sync::atomic::Ordering::Relaxed) {
+        // Post-semantic leak (see the static's doc): move the outcome fields
+        // out, forget the rest of the Vm. No PHP-observable effect can depend
+        // on these drops — destructors/flushes all ran above.
         let outcome = VmOutcome {
             stdout: std::mem::take(&mut vm.stdout),
             rendered: std::mem::take(&mut vm.rendered),
@@ -2363,8 +3317,6 @@ impl<'m> Vm<'m> {
         self.next_id()
     }
 
-/// S-77.6.5.1: Per-request setup lifecycle (WP-77.6).
-    /// Initializes superglobals, applies INI overrides, and starts session if configured.
     /// Called after vm_new() and link-time checks, before vm.run().
     pub fn request_start(&mut self, argv: Option<&[&[u8]]>, ini_overrides: &[(Vec<u8>, Vec<u8>)]) {
         // Web SAPI seeding (cli-server mode)
