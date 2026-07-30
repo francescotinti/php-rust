@@ -239,14 +239,14 @@ mod implementation {
             vm.final_flush = true;
             vm.request_shutdown();
 
-            // 4. request_end: reset ephemeral state for next request
-            // (G-APERTURA-2 gate: two requests on same RetainSet must produce byte-identical output)
-            vm.request_end();
-
-            // Concatenate output
+            // Capture output BEFORE request_end() clears it
             let mut response = Vec::new();
             response.extend_from_slice(&vm.rendered);
             response.extend_from_slice(&vm.stdout);
+
+            // 4. request_end: reset ephemeral state for next request
+            // (G-APERTURA-2 gate: two requests on same RetainSet must produce byte-identical output)
+            vm.request_end();
 
             (response, StatusCode::OK)
         }

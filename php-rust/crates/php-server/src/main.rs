@@ -60,7 +60,6 @@ mod axum_handler {
         } else {
             path
         };
-        eprintln!("[Axum] Request: {} {} from {}", method, request_path, uri);
 
         // Read PHP source from disk (docroot + request_path)
         let file_path = format!("{}{}", state.docroot, request_path);
@@ -99,26 +98,18 @@ mod axum_handler {
         };
 
         if let Err(e) = state.pool.dispatch(task) {
-            eprintln!("[Axum] Dispatch error: {}", e);
             let msg = format!("Pool dispatch failed: {}\n", e);
             return (StatusCode::INTERNAL_SERVER_ERROR, msg.into_bytes());
         }
-        eprintln!("[Axum] Task dispatched, awaiting response...");
 
         // Await response from worker
-        let result = match rx.await {
-            Ok((body, status)) => {
-                eprintln!("[Axum] Response received: {} bytes, status {}", body.len(), status);
-                (status, body)
-            },
-            Err(e) => {
-                eprintln!("[Axum] Worker response error: {:?}", e);
-                let msg = format!("Worker error: {}\n", e).into_bytes();
+        match rx.await {
+            Ok((body, status)) => (status, body),
+            Err(_) => {
+                let msg = b"Worker dropped response channel\n".to_vec();
                 (StatusCode::INTERNAL_SERVER_ERROR, msg)
             }
-        };
-        eprintln!("[Axum] Sending response");
-        result
+        }
     }
 
     pub async fn start_server(host: &str, port: u16, docroot: Option<&std::ffi::OsStr>) -> ExitCode {
