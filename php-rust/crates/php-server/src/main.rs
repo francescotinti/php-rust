@@ -32,66 +32,96 @@ mod axum_handler {
     use std::process::ExitCode;
     use std::sync::Arc;
     use axum::{
-        routing::get,
-        http::StatusCode,
+        routing::{get, post},
+        http::{StatusCode, Method, Uri},
+        extract::State,
         Router, response::IntoResponse,
+        body::Body,
     };
+    use tokio::sync::oneshot;
 
-    /// WP-77.5: Worker pool context (shared server-lifetime state).
-    /// Vm instances borrow from this; lives for entire server lifetime.
-    struct WorkerPoolContext {
-        // G1 spike: Minimal structure to store Vm without unsafe
-        // TODO: Initialize RetainSet + Module here (server startup)
-        _marker: std::marker::PhantomData<()>,
+    /// S-77.6.5.2.3: Application state (shared server-lifetime).
+    pub struct AppState {
+        pool: Arc<crate::worker_pool::WorkerPool>,
+        docroot: String,
     }
 
-    impl WorkerPoolContext {
-        fn new() -> Arc<Self> {
-            Arc::new(WorkerPoolContext {
-                _marker: std::marker::PhantomData,
-            })
-        }
-    }
+    /// PHP handler accepting path.php requests
+    async fn php_handler(
+        State(state): State<Arc<AppState>>,
+        method: Method,
+        uri: Uri,
+        body: Body,
+    ) -> impl IntoResponse {
+        // Extract path from request URI
+        let path = uri.path().to_string();
+        let request_path = if path.is_empty() || path == "/" {
+            "/index.php".to_string()
+        } else {
+            path
+        };
+        eprintln!("[Axum] Request: {} {} from {}", method, request_path, uri);
 
-    /// WP-77.5: Worker pool type (collection of persistent worker threads).
-    /// Each worker owns a Vm instance for the duration of the server.
-    struct WorkerPool {
-        context: Arc<WorkerPoolContext>,
-        // G1 spike: Workers will be stored here (N dedicated OS threads)
-        // TODO: Create workers on pool initialization
-        _workers: Vec<Arc<std::sync::Mutex<()>>>,
-    }
-
-    impl WorkerPool {
-        fn new(context: Arc<WorkerPoolContext>, _num_workers: usize) -> Self {
-            WorkerPool {
-                context,
-                _workers: Vec::new(),
+        // Read PHP source from disk (docroot + request_path)
+        let file_path = format!("{}{}", state.docroot, request_path);
+        let source = match std::fs::read(&file_path) {
+            Ok(s) => s,
+            Err(e) => {
+                let msg = format!("404: {} ({})\n", file_path, e);
+                return (StatusCode::NOT_FOUND, msg.into_bytes());
             }
-        }
-    }
-
-    /// G1 spike: Test whether Vm can be stored in a worker without unsafe.
-    /// This is the minimal gate: Can we even create the structure?
-    async fn test_vm_storage() -> Result<(), String> {
-        let context = WorkerPoolContext::new();
-        let _pool = WorkerPool::new(context, 4);
-        // G1 success: No unsafe required, compiles cleanly
-        Ok(())
-    }
-
-    pub async fn hello_world() -> impl IntoResponse {
-        // WP-77.5 integration point: handlers will receive worker dispatch
-        // For now, placeholder until worker pool is wired
-        let response = match test_vm_storage().await {
-            Ok(()) => "Hello World from Axum + Worker Pool (G1 spike)".to_string(),
-            Err(e) => format!("G1 spike failed: {e}"),
         };
 
-        (StatusCode::OK, response)
+        // Read request body
+        let body_bytes = match axum::body::to_bytes(body, usize::MAX).await {
+            Ok(b) => b.to_vec(),
+            Err(e) => {
+                let msg = format!("Failed to read body: {}\n", e);
+                return (StatusCode::BAD_REQUEST, msg.into_bytes());
+            }
+        };
+
+        // Create oneshot channel for response
+        let (tx, rx) = oneshot::channel();
+
+        // Build handler metadata
+        let meta = crate::worker_pool::WorkerHandlerMeta {
+            path: request_path.clone(),
+            method: method.to_string(),
+            body: body_bytes,
+            source,
+        };
+
+        // Dispatch to worker pool
+        let task = crate::worker_pool::WorkerTask {
+            meta,
+            response_tx: tx,
+        };
+
+        if let Err(e) = state.pool.dispatch(task) {
+            eprintln!("[Axum] Dispatch error: {}", e);
+            let msg = format!("Pool dispatch failed: {}\n", e);
+            return (StatusCode::INTERNAL_SERVER_ERROR, msg.into_bytes());
+        }
+        eprintln!("[Axum] Task dispatched, awaiting response...");
+
+        // Await response from worker
+        let result = match rx.await {
+            Ok((body, status)) => {
+                eprintln!("[Axum] Response received: {} bytes, status {}", body.len(), status);
+                (status, body)
+            },
+            Err(e) => {
+                eprintln!("[Axum] Worker response error: {:?}", e);
+                let msg = format!("Worker error: {}\n", e).into_bytes();
+                (StatusCode::INTERNAL_SERVER_ERROR, msg)
+            }
+        };
+        eprintln!("[Axum] Sending response");
+        result
     }
 
-    pub async fn start_server(host: &str, port: u16) -> ExitCode {
+    pub async fn start_server(host: &str, port: u16, docroot: Option<&std::ffi::OsStr>) -> ExitCode {
         let addr = format!("{host}:{port}");
         let listener = match tokio::net::TcpListener::bind(&addr).await {
             Ok(l) => l,
@@ -101,11 +131,27 @@ mod axum_handler {
             }
         };
 
-        let app = Router::new()
-            .route("/", get(hello_world))
-            .route("/hello-world", get(hello_world));
+        // Resolve docroot
+        let docroot_str = docroot
+            .and_then(|d| d.to_str())
+            .unwrap_or(".")
+            .to_string();
 
-        eprintln!("php-server (Axum) listening on http://{addr}");
+        // Initialize worker pool
+        let pool_context = crate::worker_pool::WorkerPoolContext::new();
+        let pool = crate::worker_pool::WorkerPool::new(pool_context, 0); // 0 = CPU count
+
+        let app_state = Arc::new(AppState {
+            pool,
+            docroot: docroot_str.clone(),
+        });
+
+        // Router: use fallback to catch-all paths
+        let app = Router::new()
+            .fallback(php_handler)
+            .with_state(app_state);
+
+        eprintln!("php-server (Axum) listening on http://{addr} (docroot: {docroot_str})");
 
         if let Err(e) = axum::serve(listener, app).await {
             eprintln!("php-server: server error: {e}");
@@ -179,7 +225,7 @@ fn main() -> ExitCode {
                 return ExitCode::from(1);
             }
         };
-        return rt.block_on(axum_handler::start_server(&host, port));
+        return rt.block_on(axum_handler::start_server(&host, port, docroot.as_deref()));
     }
 
     #[cfg(not(feature = "axum-server"))]

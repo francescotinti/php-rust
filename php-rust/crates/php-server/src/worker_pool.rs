@@ -130,7 +130,9 @@ mod implementation {
         }
 
         /// Dispatch task to next available worker (round-robin).
-        pub async fn dispatch(&self, task: WorkerTask) -> Result<(Vec<u8>, StatusCode), String> {
+        /// Caller must create the oneshot channel, hold the receiver,
+        /// pass the sender to WorkerTask, and await the receiver.
+        pub fn dispatch(&self, task: WorkerTask) -> Result<(), String> {
             let idx = self
                 .next_worker
                 .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
@@ -140,7 +142,7 @@ mod implementation {
                 .send(task)
                 .map_err(|_| "worker channel closed".to_string())?;
 
-            Ok((Vec::new(), StatusCode::OK))
+            Ok(())
         }
     }
 
@@ -318,4 +320,4 @@ mod implementation {
 }
 
 #[cfg(feature = "axum-server")]
-pub use implementation::{RequestHandler, WorkerHandlerFn, WorkerPool, WorkerPoolContext, WorkerTask};
+pub use implementation::{RequestHandler, WorkerPool, WorkerPoolContext, WorkerTask, WorkerHandlerMeta};

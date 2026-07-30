@@ -2768,11 +2768,13 @@ pub struct Vm<'m> {
     /// Builtin registry, injected by the caller (php-runtime can't build a
     /// populated one — that lives in php-builtins, which depends on php-runtime).
     registry: &'m Registry,
-    stdout: Vec<u8>,
+    /// WP-77.6.5.2.3: Made pub for worker-pool integration (php-server).
+    pub stdout: Vec<u8>,
     /// CLI-faithful output stream built alongside `stdout` (E1): diagnostics are
     /// flushed into it (stamped with the current line) at each output point, and an
     /// uncaught fatal is rendered at the tail. Mirrors `eval::Evaluator::rendered`.
-    rendered: Vec<u8>,
+    /// WP-77.6.5.2.3: Made pub for worker-pool integration (php-server).
+    pub rendered: Vec<u8>,
     /// Output-buffering stack (`ob_start` family). When non-empty, `echo`/`print`
     /// and output-producing builtins append to the topmost buffer instead of
     /// `stdout`/`rendered`; the buffer surfaces via `ob_get_contents`/`ob_get_clean`
@@ -2787,7 +2789,8 @@ pub struct Vm<'m> {
     /// The source line where the uncaught fatal occurred, captured before unwinding
     /// pops the faulting frame — used by [`Vm::render_fatal`] for an engine error
     /// (a thrown object carries its own line).
-    fatal_line: Line,
+    /// WP-77.6.5.2.3: Made pub for worker-pool integration (php-server).
+    pub fatal_line: Line,
     /// The active `error_reporting` bitmask (Session 1). A diagnostic is rendered
     /// by [`Vm::flush_diags`] only when its severity bit is set here. Defaults to
     /// PHP 8.5's `E_ALL` (30719), so every diagnostic surfaces unless a script
@@ -2816,7 +2819,8 @@ pub struct Vm<'m> {
     /// Set true once `run()` returns (in [`run_module`]): the final flush,
     /// `render_fatal`, and shutdown destructors must render raw and never call a
     /// user error handler. Load-bearing guard in [`Vm::raise_diagnostic`].
-    final_flush: bool,
+    /// WP-77.6.5.2.3: Made pub for worker-pool integration (php-server).
+    pub final_flush: bool,
     /// `@` error-suppression nesting depth (step 48). The silencing itself
     /// happens through `error_level` (Zend's BEGIN_SILENCE masks
     /// EG(error_reporting) with E_FATAL_ERRORS = 4437); the depth only tracks
@@ -5051,7 +5055,8 @@ impl<'m> Vm<'m> {
         engine
     }
 
-    fn flush_diags(&mut self, line: Line) -> Result<(), PhpError> {
+    /// WP-77.6.5.2.3: Made pub for worker-pool integration (php-server).
+    pub fn flush_diags(&mut self, line: Line) -> Result<(), PhpError> {
         // Under `@` the flush still runs: Zend delivers a suppressed diagnostic
         // to the user error handler (which sees error_reporting() == 4437 and
         // usually declines it) — only the default render is swallowed, which
@@ -5453,7 +5458,8 @@ impl<'m> Vm<'m> {
     /// Intercepts thrown exceptions (EXC): when [`Self::run_until_error`] surfaces
     /// an `Err`, [`Self::unwind`] either routes it to a matching `catch` (and we
     /// resume) or reports it unhandled (and we propagate it as the run's fatal).
-    fn run(&mut self) -> Result<Zval, PhpError> {
+    /// WP-77.6.5.2.3: Made pub for worker-pool integration (php-server).
+    pub fn run(&mut self) -> Result<Zval, PhpError> {
         loop {
             // Top-level run: baseline 0 (only `main` and its callees), so the only
             // possible exit is the script body returning. `floor = 0` keeps `main`
@@ -7730,7 +7736,8 @@ impl<'m> Vm<'m> {
     /// flushes the buffer stack top-down, each into the next, finally to the SAPI).
     /// A flushing callback that throws is swallowed here (shutdown is past the point
     /// where a fatal can be reported).
-    fn flush_all_output_buffers(&mut self) {
+    /// WP-77.6.5.2.3: Made pub for worker-pool integration (php-server).
+    pub fn flush_all_output_buffers(&mut self) {
         while let Some(buf) = self.ob_stack.pop() {
             let _ = self.flush_buffer(buf);
         }
