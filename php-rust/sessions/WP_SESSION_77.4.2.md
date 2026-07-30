@@ -68,8 +68,30 @@ phpr **7bf53854** INVARIATO (unico build: php-server con feature
 axum-server — phpr ri-verificato dopo). Stash: `phpr-wp77.4` (già =
 7bf53854, nessun ri-stash). php-server con axum: 17,8 MB.
 
+## ⚖️ Concilio (chiusura sessione — verbali `wp77-harness/COUNCIL_WP77.5_REVIEWS.md`)
+
+**4 MI OPPONGO (Matsakis, Pedersen, Leijen, web-runtime) + 6 CON
+EMENDAMENTI ⇒ programma "Vm in task_local" RESPINTO; verdetti di questa
+sessione RIETICHETTATI**: Pedersen ha verificato sul tree che
+`request_end()` ha ZERO chiamanti e che il cli-server usa Vm fresco +
+mass-teardown WP-72 ⇒ i PASS valgono per il confine cli-server/fresh-Vm,
+NON per il reset-e-riusa (kill-switch M1 reale APERTO). Metriche M4
+retrocesse a indicative (wall≠user CPU, niente oracle, "no growth" non
+falsificato a 46 req). Architettura convergente per WP-77.5: worker-attore
+stile php-fpm (thread dedicati proprietari della Vm, mpsc bounded +
+oneshot); request_shutdown() in ordine Zend prima di request_end().
+
+## ⭐ Lezione aggiunta dal concilio
+
+- ⭐⭐ **Un kill-switch va chiuso sul MECCANISMO che deve gateare, non su un
+  meccanismo omologo**: KM-77-2 doveva gateare il confine reset-e-riusa;
+  è stato chiuso sul confine fresh-Vm (che WP-72 aveva già provato). Il
+  gate era vero, l'etichetta no — gate-inflation. Prima di dichiarare un
+  kill-switch chiuso: verificare CHI CHIAMA il codice sotto gate.
+
 ## Prossimo (WP-77.5)
 
-Vm reale nel handler Axum (Module+RetainSet+task_local, M9), M3 exception
-bridge, M4 measurement vero (steady-state ≤±2%). Concilio WP-77.5
-VINCOLANTE in `wp77-harness/COUNCIL_WP77.5_REVIEWS.md`.
+Recepire il concilio (VINCOLANTE) PRIMA del codice: rinegoziare M9 →
+worker pool php-fpm-style; G1 spike Vm-storage compila; G2 gate
+due-richieste-stesso-Vm; G3 tripla+amp sul path reuse; G4 coppia oracle.
+M3/M4 vincolati agli emendamenti S/W/G/B/L.

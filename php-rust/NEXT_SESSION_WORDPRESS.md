@@ -59,14 +59,28 @@
 
 ---
 
-## ✅ WP-77.4.2 (2026-07-30): KM-77-2 + KS-M1-GATE-UPGRADED — BINDING STEPS 4-5 COMPLETE ✓
+## ✅ WP-77.4.2 (2026-07-30): KM-77-2 + KS-M1-GATE-UPGRADED — STEPS 4-5 ESEGUITI (verdetti RIETICHETTATI dal concilio)
 
-**Status**: 🟢 COMPLETE — entrambi i kill-switch pendenti CHIUSI con verdetto da runner COMMITTATI.  
-**Verdicts**: **KM-77-2 PASS** (30/30 richieste, 30 marker unici, 0 leak; controllo positivo MORDE — fixture WP-77.4.1 superseded: false-PASSava sui leak) · **KS-M1-Gate-Upgraded PASS** (A axum hello 7/7 byte-id · B WordPress front/post/feed 7/7 byte-id ciascuna — ⚠️ /?p=1 è 301 body-vuoto = falso verde, si usa il permalink reale + guardia size>0 · C ORM 3484 **3E/13F fail-set 16 nomi IDENTICO**, pin nomi in `wp77-harness/gate-baseline/orm7742-fails.txt`).  
-**M4 metrics (pulite, post-ORM)**: axum 0,3 ms/4,3 MB · cli-server 6,8 ms/18,4 MB · WP front 352 ms/**350-367 MB STABILE su ~46 req (no growth)**. Abort-times N/A (M3 non ancora costruito).  
-**Caveat onesto**: il handler Axum è ancora placeholder (non esegue PHP) — l'isolamento reale è validato sul percorso cli-server; il KM-77-2 "task async simultanei" pieno richiede Vm nel handler (WP-77.5+).  
-**Critical Path rimanente**: (5) M3 exception bridge, (6) M4 measurement phases, (7) Vm reale nel handler Axum.  
-**Reference**: `wp77-harness/WP77_4_2_RESULTS.md` (verdetti+metriche), runner `run_gate_km77_2.sh` + `run_gate_ks_m1_upgraded.sh`, verdetti in `/Volumes/Extreme Pro/Claude/wp77-harness/gate-out/`.
+**Status**: 🟢 gate eseguiti da runner COMMITTATI — ⚠️ **etichetta corretta dal concilio WP-77.5 (Pedersen R1/R2, VINCOLANTE)**: i PASS valgono per il confine **cli-server/fresh-Vm** (baseline preziosa), NON per il confine reset-e-riusa di M1 — `request_end()` ha **ZERO chiamanti** nel tree (unica menzione = un commento in main.rs); il cli-server usa Vm fresco + mass-teardown WP-72. **Il kill-switch sul confine reuse RESTA APERTO.**  
+**Verdicts (scope cli-server)**: **KM-77-2 PASS (cli-server; PIENO=pending WP-77.5)** — 30/30, 30 marker unici, 0 leak; controllo positivo MORDE (fixture WP-77.4.1 superseded: false-PASSava sui leak); ⚠️ Klabnik: overlap non dimostrato ⇒ finché non misurato va letto come "isolamento sequenziale via HTTP" · **KS-M1-Gate-Upgraded PASS (cli-server)** — A axum hello 7/7 byte-id (placeholder, no PHP) · B WP front/post/feed 7/7 (permalink reale + guardia size>0; ⚠️ /?p=1 è 301 body-vuoto = falso verde) · C ORM 3484 **3E/13F, 16 nomi**, pin `wp77-harness/gate-baseline/orm7742-fails.txt` (⚠️ pin nato in-sessione: non-tautologico solo dalla prossima run).  
+**M4 metrics — INDICATIVE, non citabili (Gregg/Bak/Leijen)**: axum 0,3 ms/4,3 MB · cli 6,8 ms/18,4 MB · WP front 352 ms (wall curl, NON user CPU; nessuna colonna oracle) / footprint 350-367 MB su ~46 req **RETROCESSO a "non falsificato"** (banda 17 MB > qualsiasi leak plausibile a 46 req; serve ladder K sotto census). Abort-times N/A.  
+**Reference**: `wp77-harness/WP77_4_2_RESULTS.md`, runner `run_gate_km77_2.sh` + `run_gate_ks_m1_upgraded.sh`, verdetti in `/Volumes/Extreme Pro/Claude/wp77-harness/gate-out/`.
+
+---
+
+## ⚖️ WP-77.5 — CONCILIO VINCOLANTE (2026-07-30, 9 sedie + co-optata web-runtime)
+
+**Verbali INTEGRALI in `wp77-harness/COUNCIL_WP77.5_REVIEWS.md` — VINCOLANTI per design77.5, da recepire PRIMA di toccare codice.**  
+**Esito: 4 MI OPPONGO (Matsakis, Pedersen, Leijen, web-runtime) + 6 CON EMENDAMENTI ⇒ il programma "Vm in task_local + M3 + M4" è RESPINTO.**  
+**Convergenza (sintesi)**: (1) rietichettatura verdetti 77.4.2 (fatta, sopra); (2) **M9/task_local MORTO come scritto** (Vm `!Send` + `'static` richiesto + per-task=per-request ⇒ nessun riuso; task_local+spawn_blocking non si compongono, blocking pool = 512 thread) ⇒ **architettura convergente: worker-attore stile php-fpm** (N thread OS dedicati longevi proprietari della Vm, mpsc bounded + oneshot, 503 su pieno; ownership round-trip `FnOnce(Vm)->Vm`); (3) request_end() ha buchi RSHUTDOWN (static non resettati, shutdown_fns/OB/dtors SCARTATI senza eseguire, bypassa mass-teardown S-72.4, uncaught_throwable senza consumatore) ⇒ serve **`request_shutdown()` in ordine Zend** + `request_start()` simmetrico + registro PRESERVE/RESET per costruzione (grep-gate campi Vm); (4) cache calde: preg_cache persistente (Zend), iof/enum a epoch, costo clear da CONTARE; (5) **M4 NON avviata** senza coppia oracle stessa-sera + user CPU + ladder K∈{1,10,50} sotto census + budget footprint(N) predetto PRIMA del pool.  
+**Gate d'apertura WP-77.5 (bloccanti)**: G1 spike Vm-nello-storage che compila senza unsafe/leak · G2 due-richieste-STESSO-Vm byte-parity vs fresh · G3 tripla+amp K=10 sul path reuse · G4 coppia oracle su front/post/feed.  
+**Kill-switch di rotta**: KS-M-77.5-A (spike richiede unsafe/leak ⇒ halt+riconvoca) · KS-P77-A (req-2 stesso-Vm ≠ fresh ⇒ fallback fresh-Vm-per-task) · KS-W77-A (reactor bloccato sotto carico ⇒ stop design) · KS-B77-1 (M4 senza oracle ⇒ non-avviata) · KL-77.5-1 (ΔVm marginale >25% ⇒ stop pool) · KS-S77-A (S-77.5.2/3/4 non verdi ⇒ vietato "M1 complete").
+
+---
+
+## (superseded dal concilio — storico) WP-77.4.2 piano originale
+
+**Critical Path rimanente**: (5) M3 exception bridge, (6) M4 measurement phases, (7) Vm reale nel handler Axum — ora tutti VINCOLATI dagli emendamenti del concilio WP-77.5.
 
 ---
 
