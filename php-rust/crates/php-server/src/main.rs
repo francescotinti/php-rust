@@ -16,6 +16,9 @@ use std::process::ExitCode;
 #[global_allocator]
 static GLOBAL_ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
+#[cfg(feature = "axum-server")]
+mod worker_pool;
+
 const USAGE: &str = "usage: php-server [--host HOST] [--port PORT] [--docroot|-t DIR] [--axum] [ROUTER.php]\n\
        defaults: --host 127.0.0.1 --port 8080 --docroot . --cli-server";
 
