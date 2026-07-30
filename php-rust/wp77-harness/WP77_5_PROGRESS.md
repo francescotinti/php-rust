@@ -118,12 +118,37 @@ Need to:
 
 ---
 
-## Next Session Goals
+## G2 Implementation Roadmap (Next Session)
 
+**Prerequisite**: Full Vm creation + reuse in worker threads
+
+**Pattern** (from php-runtime):
+```rust
+// 1. Create server-lifetime context (RetainSet + shared registry)
+let retain = RetainSet::new();
+let registry = php_builtins::registry();  // shared Registry
+
+// 2. Each worker thread:
+//    a. Create Vm<'server> borrowing from retain/registry
+//    b. On each request: call request_start()
+//    c. Execute PHP handler
+//    d. Call request_shutdown() → request_end()
+
+// 3. Channel dispatch:
+//    Axum → (request, tx) → Worker → (Vm, response) → tx → Axum
+```
+
+**Files to implement**:
+- `crates/php-server/src/worker_pool.rs` (WorkerPool + dispatch)
+- `crates/php-server/src/request_handler.rs` (PHP execution + request_lifecycle)
+- Gate fixtures (already created: gate_two_reqs_same_vm.php)
+
+**Next Session Goals**:
 1. Implement full Vm creation in worker threads
-2. Add channel dispatch for requests (mpsc + oneshot)
-3. Run G2 gate: two-requests-same-Vm byte-parity
-4. Create gate fixtures (gate_two_reqs_same_vm.php, etc.)
+2. Wire channel dispatch (mpsc + oneshot)
+3. Create request_start() → handler → request_shutdown() → request_end() flow
+4. Run G2 gate: two-requests-same-Vm byte-parity
+5. Run G3–G4 gates (tripla, oracle pair)
 
 ---
 
