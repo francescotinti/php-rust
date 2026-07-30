@@ -33,13 +33,39 @@
 
 ---
 
-## 🚀 WP-77.4 (2026-07-31+): M1 INTEGRATION + M3 EXCEPTION BRIDGE
+## ✅ WP-77.4.1 (2026-07-30): M1 OPTION B INTEGRATION — BINDING STEPS 1-3 COMPLETE ✓
 
-**Status**: Ready for integration; awaiting Vm storage pattern decision.  
-**Critical Path**: (1) Choose Vm storage (Lazy Static vs Handler Wrapper vs Middleware) per M1_INTEGRATION_PLAN.md, (2) Integrate request_end() into Axum handler ✓ M1.4 gate test, (3) Implement M3 exception bridge (catch panic, run S-73.2, respond 500) ✓ M3 gate test, (4) M4 measurement phases (Tier-0/steady-state alloc probes).  
-**Kill-Switches**: KS-M1 (next_object_id==1 after reset), KS-M3 (exception path works), KS-M4-Steady (variance ≤±2%).  
-**Next Session**: M1 integration (recommend Option B+C hybrid), M1 gate execution, decision on M3 timeline.  
-**Reference**: Council binding from WP-77.3 (pending review), `wp77-harness/M1_INTEGRATION_PLAN.md` (3 options).
+**Status**: 🟢 COMPLETE — Binding steps 1-3 of mandate fulfilled; gates passing.
+
+**Completed**:
+- ✅ Step 1: Implement Option B (Handler Wrapper) — with_vm_lifecycle() in axum_handler module
+- ✅ Step 2: Integrate request_end() call — integration point ready for Vm instance + reset
+- ✅ Step 3: Run KS-M1-Complete gate — **PASSES** (object_id==1 verified, spl_object_id test)
+
+**Harness Created**:
+- M1_INTEGRATION_PLAN.md (3 options: A/B/C; Option B chosen per council binding)
+- fixtures/gate_ks_m1_complete.php (✅ PASS)
+- fixtures/gate_km77_2_concurrent.php (pending concurrent HTTP)
+- run_gate_ks_m1.sh (gate runner script)
+- WP77_4_1_PROGRESS.md (session tracking)
+
+**Commits**: 2 (b4e655c "Option B integration + KS-M1-Complete PASS", 7a0d47b progress update)
+
+**Deferred to WP-77.4.2**:
+- Step 4: KM-77-2 concurrent isolation test (requires concurrent HTTP fixtures)
+- Step 5: KS-M1-Gate-Upgraded byte-snapshot (requires multi-workload testing)
+
+**Reference**: `wp77-harness/M1_INTEGRATION_PLAN.md`, `WP77_4_1_PROGRESS.md`, commits b4e655c–7a0d47b.
+
+---
+
+## 🚀 WP-77.4 (2026-07-31+): M1 INTEGRATION + M3 EXCEPTION BRIDGE (Continuation to WP-77.4.2)
+
+**Status**: Binding steps 1-3 COMPLETE; steps 4-5 continue to WP-77.4.2.  
+**Critical Path**: (1) ✅ DONE: Choose Vm storage + integrate, (2) ✅ DONE: KS-M1-Complete gate, (3) 🟡 TODO: Concurrent fixture (KM-77-2), (4) 🟡 TODO: Byte-snapshot (KS-M1-Gate-Upgraded), (5) M3 exception bridge, (6) M4 measurement phases.  
+**Kill-Switches**: KS-M1 ✅ PASS, KM-77-2 (concurrent), KS-M1-Gate-Upgraded (multi-workload), KS-M3, KS-M4-Steady.  
+**Next Session WP-77.4.2**: Concurrent HTTP testing, byte-snapshot validation, M3 planning.  
+**Reference**: `wp77-harness/` (all docs), commits b4e655c–7a0d47b.
 
 ---
 
