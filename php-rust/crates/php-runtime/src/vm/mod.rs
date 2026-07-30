@@ -731,7 +731,7 @@ pub fn run_module_with_hir<'m>(
             break;
         }
     }
-    vm.frames.push(Frame::new(&module.main, module));
+    // Frame already pushed by vm_new()
 
     // S-77.6.4.2b: request_start (setup INI, superglobals, session)
     // Web SAPI seeding (cli-server mode)
