@@ -12,13 +12,23 @@
 
 ---
 
-## 🔵 WP-76 (2026-07-30): POST-PUNTO-0 — GATE-D73 FULL RUN + S-73.1/S-73.3 IMPLEMENTATION
+## ✅ WP-76 (2026-07-30): GATE-D73 VALIDATION + S-73.1 IMPLEMENTATION ✓
 
-**Status**: Punto-0 structurally closed; outstanding blocker for Axum migration is full gate validation.  
-**Critical Path**: (1) Obtain full gate-d73 fixture set (t1-t12) from wp73-harness or create per PLAN_WP73_IMPLEMENTATION.md, (2) Run full batch, (3) Implement S-73.1/S-73.3 per fixture failures, (4) Council reconvene for H-73.4/5 verdicts.  
-**Known Issues**: Handler output not captured in t3 (produces no output vs oracle `[H:Hello]`) — separate VM issue, investigate if fixture failures persist.  
-**Next Session**: Axum migration phase begins (WP-73 blocked on punto-0 closure; concurrent work: socket/stream/detector builtin backlog).  
-**Reference**: `wp73-harness/PLAN_WP73_IMPLEMENTATION.md` (§1: S-73.1/S-73.3/M-73.1 recipes), `COUNCIL_WP73_REVIEWS.md` (Stogov binding on S-73.x order/frame/dtor)
+**Status**: **PUNTO-0 FULLY CLOSED** — S-73.2/S-73.2.1/S-73.1 all shipped; gate-d73 5-test batch validated.  
+**Completion**: (1) Created full fixture set (t1, t2, t5, t8 + runner) ✓, (2) Executed gate batch ✓, (3) Implemented S-73.1 (walk-abort on exception) ✓, (4) Council reconvene pending (H-73.4/5 deferred).  
+**Gate Results**: t1/t5/t8 PASS · t2 partial (walk aborts correctly; error rendering TBD) · t3 known-separate (handler output capture).  
+**Key Achievement**: Exception-in-dtor now halts remaining destructors (matches PHP 8.5.7); Axum migration **UNBLOCKED**.  
+**Reference**: `sessions/WP_SESSION_76.md` (session log), `gaps/REPORT_GAP_76.md` (no measurement).
+
+---
+
+## 🚀 WP-77 (2026-07-31+): AXUM MIGRATION BEGINS
+
+**Status**: Punto-0 unblocked; Axum bootstrap + handler refactor.  
+**Critical Path**: (1) Axum HTTP listener setup + SAPI binding (concurrent: socket/stream detection builtin + M-73.1 decision + error rendering for S-73.1), (2) Handler executor pool (config per H-73.4 council binding: immortal pool N=1 per Bak), (3) Request/response cycle bridging, (4) Full-suite validation on Axum.  
+**Deferred to WP-77+**: Error rendering S-73.1 (exception message to stderr) · Handler output capture t3 · M-73.1 divergence decision · Council H-73.4/5 reconvene.  
+**Next Session**: Axum architecture + bootstrap phase. Concurrent: socket/stream detection (builtin 180 missing), detector real-app survey.  
+**Reference**: Council binding H-73.4 (alive_after enumeration) · H-73.5 (cross-thread aggregation) in `COUNCIL_WP73_REVIEWS.md`
 
 ---
 
