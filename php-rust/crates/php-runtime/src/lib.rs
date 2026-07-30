@@ -38,3 +38,8 @@ pub use vm::{
     run_source, run_source_with, run_source_with_argv, run_source_with_ini,
     VmOutcome as Outcome, VmRunError,
 };
+
+// WP-77.6.5.2: Expose Vm lifecycle methods and construction for worker-pool integration
+pub use compile::{compile_program, CompileError};
+pub use vm::{RetainSet, Vm, vm_new};
+pub use php_types::{Zval, PhpError};

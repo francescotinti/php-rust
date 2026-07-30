@@ -15,7 +15,6 @@ mod implementation {
     use std::sync::Arc;
     use tokio::sync::{mpsc, oneshot};
     use axum::http::StatusCode;
-    use php_runtime::run_source_with_ini;
     use php_builtins::registry;
 
     /// Server-lifetime context: shared state for entire server duration.
@@ -143,38 +142,87 @@ mod implementation {
     impl RequestHandler {
         /// Create handler closure (executed in worker thread with Vm).
         ///
-        /// Phase A: Each request creates a fresh Vm via run_source_with_ini.
-        /// 
+        /// S-77.6.5.2: Wire persistent-Vm lifecycle methods.
         /// Lifecycle (Stogov order, per Council WP-77.5):
-        /// 1. request_start (implicit in run_source_with_ini)
-        /// 2. Execute user handler (PHP code)
-        /// 3. request_shutdown (run via run_shutdown_functions)
-        /// 4. request_end (future Phase B wiring)
+        /// 1. request_start (setup superglobals, INI)
+        /// 2. Execute user handler (PHP code via vm.run())
+        /// 3. request_shutdown (shutdown functions, flush buffers, destructors)
+        /// 4. request_end (reset ephemeral state for next request)
         pub fn execute(&self) -> WorkerHandlerFn {
             let path = self.path.clone();
             let source = self.source.clone();
 
             Box::new(move || {
-                // Phase A: Execute PHP source in a fresh Vm per request.
-                // run_source_with_ini handles: Vm creation → main run → 
-                // shutdown fns → ob flush → destructors → session shutdown.
+                // S-77.6.5.2: Execute PHP source with explicit lifecycle wiring.
                 let name = path.clone().into_bytes();
                 let reg = registry();
-                
-                match run_source_with_ini(&name, &source, &reg, &[]) {
-                    Ok(outcome) => {
-                        // Concatenate rendered output (diagnostics + main output)
-                        let mut response = Vec::new();
-                        response.extend_from_slice(&outcome.rendered);
-                        response.extend_from_slice(&outcome.stdout);
-                        (response, StatusCode::OK)
+
+                // Compile PHP source to bytecode (same as run_source_with_ini Phase 1)
+                let program = match php_runtime::lower_source(&name, &source) {
+                    Ok(p) => p,
+                    Err(php_runtime::LowerError::Fatal { message, line }) => {
+                        let msg = format!("PHP Fatal: {} on line {}\n", message, line).into_bytes();
+                        return (msg, StatusCode::INTERNAL_SERVER_ERROR);
                     }
                     Err(e) => {
-                        // Parse error or other failure
-                        let msg = format!("PHP Error: {:?}\n", e).into_bytes();
-                        (msg, StatusCode::INTERNAL_SERVER_ERROR)
+                        let msg = format!("PHP Lower Error: {:?}\n", e).into_bytes();
+                        return (msg, StatusCode::INTERNAL_SERVER_ERROR);
                     }
+                };
+
+                // Compile to bytecode module (same as run_source_with_ini Phase 2)
+                let module = match php_runtime::compile_program(&program, &reg) {
+                    Ok(m) => m,
+                    Err(php_runtime::CompileError::Unsupported(what)) => {
+                        let msg = format!("PHP Unsupported: {}\n", what).into_bytes();
+                        return (msg, StatusCode::INTERNAL_SERVER_ERROR);
+                    }
+                };
+
+                // S-77.6.5.2: Explicit lifecycle wiring (non-breaking vs run_module_with_hir)
+                // Create fresh Vm for this request
+                let retain = php_runtime::RetainSet::new();
+                let mut vm = php_runtime::vm_new(&retain, &module, &reg, Some(&program));
+
+                // 1. request_start: setup superglobals, INI, session
+                vm.request_start(None, &[]);
+
+                // 2. Execute PHP code
+                vm.final_flush = false;
+                let run_result = vm.run();
+
+                // Handle exit/fatal
+                let (fatal, _return_value) = match run_result {
+                    Ok(v) => (None, v),
+                    Err(php_runtime::PhpError::Exit(_code)) => (None, php_runtime::Zval::Null),
+                    Err(e) => (Some(e), php_runtime::Zval::Null),
+                };
+
+                // Flush diagnostics before shutdown
+                let line = vm.fatal_line;
+                let _ = vm.flush_diags(line);
+
+                // Render fatal if present
+                if let Some(err) = &fatal {
+                    vm.flush_all_output_buffers();
+                    let file = String::from_utf8_lossy(&module.file);
+                    let block = format!("\nFatal error: {} in {} on line {}\n", err.message(), file, line);
+                    vm.rendered.extend_from_slice(block.as_bytes());
                 }
+
+                // 3. request_shutdown: shutdown functions, flush buffers, destructors
+                vm.final_flush = true;
+                vm.request_shutdown();
+
+                // 4. request_end: reset ephemeral state for next request (not yet wired)
+                vm.request_end();
+
+                // Concatenate output
+                let mut response = Vec::new();
+                response.extend_from_slice(&vm.rendered);
+                response.extend_from_slice(&vm.stdout);
+
+                (response, StatusCode::OK)
             })
         }
     }

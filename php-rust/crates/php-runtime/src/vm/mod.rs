@@ -427,7 +427,8 @@ fn seed_cli_superglobals(
 pub struct RetainSet(elsa::FrozenVec<Rc<Module>>);
 
 impl RetainSet {
-    pub(crate) fn new() -> Self {
+    /// S-77.6.5.2: Public constructor for worker-pool persistent Vm lifecycle.
+    pub fn new() -> Self {
         RetainSet(elsa::FrozenVec::new())
     }
     fn park(&self, rc: Rc<Module>) -> &Module {
