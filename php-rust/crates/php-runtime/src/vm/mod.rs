@@ -15240,6 +15240,10 @@ struct CachedUnit {
     /// non-mem-census builds. This is the honest figure the ×W budget uses;
     /// the structural `add_program` walk stays a FLOOR (its HIR body mass
     /// is size_of-flat by construction).
+    // Written on every build (cheap), read only by the mem-census dump —
+    // the parked_bytes convention (A-AH15: the -D tooth bit this on the
+    // census-only perimeter, S-82.0).
+    #[cfg_attr(not(feature = "mem-census"), allow(dead_code))]
     main_program_net: u64,
 }
 
