@@ -34,10 +34,13 @@ RUN="$OUT/$MODE.$LABEL"
 BIN="$HOME/Claude/php-rust-output/release/php-server"
 HASH=$(shasum -a 256 "$BIN" | cut -c1-16)
 
+# W: pool size for axum/census (default 1 per protocollo; la probe di
+# linearità passa W=num_cpus e scala nreq a >=100 per worker).
+W="${W:-1}"
 case "$MODE" in
   tier0)     ARGS=(--axum --tier0 --port "$PORT") ;;
-  axum)      ARGS=(--axum --workers 1 --port "$PORT" -t "$FIX") ;;
-  census)    ARGS=(--axum --workers 1 --port "$PORT" -t "$FIX") ;;
+  axum)      ARGS=(--axum --workers "$W" --port "$PORT" -t "$FIX") ;;
+  census)    ARGS=(--axum --workers "$W" --port "$PORT" -t "$FIX") ;;
   cliserver) ARGS=(--port "$PORT" -t "$FIX") ;;
   *) echo "unknown mode $MODE"; exit 2 ;;
 esac
