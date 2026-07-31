@@ -6,7 +6,11 @@ export PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin:$HOME/.cargo/bin:$PATH
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$HERE/.." && pwd)"
-W="$HERE/battery-82pre"
+# OUTSIDE the repo: the feature-matrix gate refuses ANY dirty/untracked path
+# (git status --porcelain over the WHOLE tree, A-AH14) — the battery's own
+# logs must not trip it. Summary + key logs are copied in and committed at
+# session close (evidence discipline unchanged).
+W="/Volumes/Extreme Pro/Claude/wp82-battery-out"
 mkdir -p "$W"
 FAILS=0
 run_gate() { # <label> <cmd...>

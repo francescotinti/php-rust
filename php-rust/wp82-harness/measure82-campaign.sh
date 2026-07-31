@@ -46,8 +46,9 @@ build_arm() { # <features>  (rebuild php-server; matrix row must match)
 }
 
 # --- preconditions ------------------------------------------------------------
-[ -f "$HERE/battery-82pre/.done" ] || { echo "FAIL: battery-82pre not run"; exit 1; }
-grep -q "BATTERY-82PRE PASS" "$HERE/battery-82pre.out" || { echo "FAIL: battery-82pre not PASS"; exit 1; }
+BATT="/Volumes/Extreme Pro/Claude/wp82-battery-out"
+[ -f "$BATT/.done" ] || { echo "FAIL: battery-82pre not run"; exit 1; }
+grep -q "BATTERY-82PRE PASS" "$BATT/battery-82pre.out" || { echo "FAIL: battery-82pre not PASS"; exit 1; }
 DIRTY="$(git -C "$REPO" status --porcelain -- crates Cargo.toml Cargo.lock \
   'wp7*-harness/*.sh' 'wp7*-harness/*.pl' 'wp8*-harness/*.sh' 'wp8*-harness/*.pl' 2>/dev/null)"
 [ -z "$DIRTY" ] || { echo "FAIL: tree/harness dirty (KS-AH-81-1/A-AH21)"; echo "$DIRTY" | head -5; exit 1; }

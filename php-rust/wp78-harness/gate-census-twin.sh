@@ -44,8 +44,11 @@ FAILS=0
 # Both are admitted as CANONICAL FORMS here (decoys below); any other
 # combinator spelling stays a raw!=form FAIL.
 CFG_RE='cfg\((not\()?feature = "census-instrumentation"|cfg\(not\(any\(feature = "census-instrumentation"|cfg\(all\(feature = "mem-census", not\(feature = "census-instrumentation"'
+# main.rs 5->7 (S-82.0 p5 A-DL15 allocator, NAMED lines — A-AH28): :41
+# not(any(census,mem)) plain-alloc; :52+:56 all(mem,not(census)) x2
+# (MemCountingMi attr + mod); :87/:91/:196/:375 pre-existing census sites.
 PINS="
-crates/php-server/src/main.rs:5
+crates/php-server/src/main.rs:7
 crates/php-server/src/worker_pool.rs:23
 crates/php-runtime/src/lib.rs:1
 crates/php-runtime/src/lower/mod.rs:2
