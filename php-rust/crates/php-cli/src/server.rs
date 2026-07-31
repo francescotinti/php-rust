@@ -620,9 +620,36 @@ fn run_php(
     };
     php_types::sapi::set_web_request(Rc::new(web));
     let name = file.as_os_str().as_bytes().to_vec();
+    // S-79.0.6 (A-BG16, Council WP-80): per-request census line on the CLI
+    // arm — the engine window only (lower+compile+run+teardown), comparable
+    // to the axum arm's a+b+c; fs read and HTTP plumbing sit outside, like
+    // the axum resid channel. Line name "census-cli:" is probe API (WP-64).
+    #[cfg(feature = "census-instrumentation")]
+    let census_s0 = php_runtime::alloc_census::SNAPSHOT_FN
+        .get()
+        .map(|f| f())
+        .unwrap_or((0, 0));
     let result = catch_unwind(AssertUnwindSafe(|| {
         php_runtime::run_source_with_ini(&name, &source, registry, &[])
     }));
+    #[cfg(feature = "census-instrumentation")]
+    {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static CLI_REQS: AtomicU64 = AtomicU64::new(0);
+        let census_s1 = php_runtime::alloc_census::SNAPSHOT_FN
+            .get()
+            .map(|f| f())
+            .unwrap_or((0, 0));
+        let ((a1_calls, a1_bytes), (a3_calls, a3_bytes)) =
+            php_runtime::alloc_census::take_split();
+        let req = CLI_REQS.fetch_add(1, Ordering::Relaxed) + 1;
+        eprintln!(
+            "census-cli: req={req} total_calls={} total_bytes={} \
+             a1_calls={a1_calls} a1_bytes={a1_bytes} a3_calls={a3_calls} a3_bytes={a3_bytes}",
+            census_s1.0 - census_s0.0,
+            census_s1.1 - census_s0.1,
+        );
+    }
     php_types::sapi::clear_web_request();
     // Unclaimed upload tmp files die with the request (PHP request shutdown).
     for tmp in php_types::sapi::take_uploaded_files() {

@@ -26,5 +26,8 @@ axum-server = ["tokio", "axum", "tower", "hyper", "php-builtins", "num_cpus"]
 # KB-78-5/KL-78-5: footprint/peak verdicts come ONLY from the non-instrumented
 # twin; this build produces counters, never figures.
 # S-79.0.3: the split a1/a2/a3 (Council WP-80) needs the runtime-side
-# brackets too — the feature unifies across the crate boundary.
-census-instrumentation = ["axum-server", "php-runtime/census-instrumentation"]
+# brackets too — the feature unifies across the crate boundary. S-79.0.6
+# (A-BG16): the weak dep-feature also lights the cli-server arm's census
+# line when php-cli is in the build (the union census binary), so A-BB1
+# gets per-request counters on BOTH arms.
+census-instrumentation = ["axum-server", "php-runtime/census-instrumentation", "php-cli?/census-instrumentation"]

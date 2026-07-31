@@ -573,16 +573,20 @@ mod implementation {
             }
         }
 
-        /// A-SK3: in-cargo form of G-APERTURA-2 — two requests on the SAME
-        /// RetainSet must produce byte-identical bodies AND match the absolute
-        /// expected content (A-SK7/KS-SK-79.2: a parity assert may never stand
-        /// alone — self-equality blessed the doubled-body bug).
+        /// A-SK3: in-cargo form of G-APERTURA-2 — two requests must produce
+        /// byte-identical bodies AND match the absolute expected content
+        /// (A-SK7/KS-SK-79.2: a parity assert may never stand alone —
+        /// self-equality blessed the doubled-body bug). S-79.0.6 (A-MS2):
+        /// WORKER_LOOP FORM — fresh RetainSet per request, like production;
+        /// the shared-RetainSet shape is the one KS-DS-78-4 banned and would
+        /// silently change meaning once A-BB6 parks the main module.
         #[test]
-        fn gate_apertura2_two_requests_same_retainset_byte_parity() {
+        fn gate_apertura2_two_requests_worker_loop_form_byte_parity() {
             let reg = registry();
-            let retain = php_runtime::RetainSet::new();
-            let (b1, s1) = execute_with_retain(&retain, &reg, &meta("<?php echo \"hello axum\\n\";"));
-            let (b2, s2) = execute_with_retain(&retain, &reg, &meta("<?php echo \"hello axum\\n\";"));
+            let r1 = php_runtime::RetainSet::new();
+            let (b1, s1) = execute_with_retain(&r1, &reg, &meta("<?php echo \"hello axum\\n\";"));
+            let r2 = php_runtime::RetainSet::new();
+            let (b2, s2) = execute_with_retain(&r2, &reg, &meta("<?php echo \"hello axum\\n\";"));
             assert_eq!(s1, StatusCode::OK);
             assert_eq!(s2, StatusCode::OK);
             assert_eq!(
@@ -597,9 +601,10 @@ mod implementation {
         #[test]
         fn stateful_static_counter_restarts_each_request() {
             let reg = registry();
-            let retain = php_runtime::RetainSet::new();
             let src = "<?php function c() { static $n = 0; return ++$n; } echo c();";
             for i in 1..=3 {
+                // Worker_loop form (A-MS2): fresh RetainSet per request.
+                let retain = php_runtime::RetainSet::new();
                 let (body, status) = execute_with_retain(&retain, &reg, &meta(src));
                 assert_eq!(status, StatusCode::OK);
                 assert_eq!(
@@ -616,10 +621,13 @@ mod implementation {
         #[test]
         fn capture_before_reset_with_positive_control() {
             let reg = registry();
-            let retain = php_runtime::RetainSet::new();
             let src = "<?php ob_start(); echo \"buffered-bytes\";";
-            let (b1, _) = execute_with_retain(&retain, &reg, &meta(src));
-            let (b2, _) = execute_with_retain(&retain, &reg, &meta(src));
+            // Worker_loop form (A-MS2): fresh RetainSet per request.
+            let ra = php_runtime::RetainSet::new();
+            let (b1, _) = execute_with_retain(&ra, &reg, &meta(src));
+            let rb = php_runtime::RetainSet::new();
+            let (b2, _) = execute_with_retain(&rb, &reg, &meta(src));
+            let retain = php_runtime::RetainSet::new();
             assert_eq!(b1, b"buffered-bytes", "OB content lost on request 1");
             assert_eq!(b1, b2, "second request diverges (KS-PP-1)");
 
@@ -657,6 +665,7 @@ mod implementation {
         #[test]
         fn fatal_maps_to_http_500_compile_and_runtime() {
             let reg = registry();
+            // Worker_loop form (A-MS2): fresh RetainSet per request.
             let retain = php_runtime::RetainSet::new();
             // Runtime fatal: undefined function — render_fatal's uncaught-Error
             // form (the one the corpus pins byte-identical to the oracle).
@@ -671,10 +680,11 @@ mod implementation {
                 "runtime fatal body != CLI-faithful full body (A-TH8): {:?}",
                 String::from_utf8_lossy(&body)
             );
-            // The worker survives a fatal: next request on the same RetainSet
-            // is clean (boundary discipline).
+            // The worker survives a fatal: the NEXT request (fresh RetainSet,
+            // worker_loop form) is clean (boundary discipline).
+            let retain2 = php_runtime::RetainSet::new();
             let (ok_body, ok_status) =
-                execute_with_retain(&retain, &reg, &meta("<?php echo \"alive\";"));
+                execute_with_retain(&retain2, &reg, &meta("<?php echo \"alive\";"));
             assert_eq!(ok_status, StatusCode::OK);
             assert_eq!(ok_body, b"alive");
         }
@@ -743,13 +753,14 @@ mod implementation {
         #[test]
         fn method_and_inherited_statics_restart_each_request() {
             let reg = registry();
-            let retain = php_runtime::RetainSet::new();
             let src = "<?php \
                 class Base { public static function tick() { static $n = 0; return ++$n; } } \
                 class Child extends Base {} \
                 echo \"SM:base=\" . Base::tick() . Base::tick() \
                    . \";child=\" . Child::tick() . \";again=\" . Base::tick();";
             for i in 1..=3 {
+                // Worker_loop form (A-MS2): fresh RetainSet per request.
+                let retain = php_runtime::RetainSet::new();
                 let (body, status) = execute_with_retain(&retain, &reg, &meta(src));
                 assert_eq!(status, StatusCode::OK);
                 assert_eq!(

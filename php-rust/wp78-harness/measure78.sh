@@ -11,6 +11,9 @@
 #               this arm — vmmap V1/V2 only)                    [union twin]
 #   census    — instrumented build --workers 1: per-phase counters ONLY
 #               (KB-78-5: any footprint figure from this build is NULL)
+#   censuscli — instrumented build, --cli-server arm: per-request census-cli
+#               lines (S-79.0.6/A-BG16 — the counters that make A-BB1
+#               judgeable; footprint figures NULL here too)
 #
 # Protocol constants (design78): WARMUP=10, MEASURED=100, closed-sequential
 # (single curl loop — mechanism per A-BG9), MIMALLOC_PURGE_DELAY=0,
@@ -37,7 +40,7 @@ REPO="$(cd "$HERE/.." && pwd)"
 FIX="$HERE/gate-axum/fixtures"
 OUT="$HERE/measure-out"
 mkdir -p "$OUT"
-MODE="${1:?usage: measure78.sh <tier0|axum|cliserver|census> <label> [fixture] [nreq]}"
+MODE="${1:?usage: measure78.sh <tier0|axum|cliserver|census|censuscli> <label> [fixture] [nreq]}"
 LABEL="${2:?label required}"
 FIXTURE="${3:-hello.php}"
 WARMUP=10
@@ -53,8 +56,8 @@ RC=0
 # --- Identity quaterna ENFORCE (KS-AH-80-1/KS-SK-80-4) ----------------------
 MATRIX_LOG="$HERE/gate-axum/out/feature-matrix.log"
 case "$MODE" in
-  census) ROW="census" ;;
-  *)      ROW="union" ;;
+  census|censuscli) ROW="census" ;;
+  *)                ROW="union" ;;
 esac
 if [ ! -f "$MATRIX_LOG" ]; then
   echo "FAIL: $MATRIX_LOG missing — run gate-feature-matrix.sh on THIS build first (KS-AH-78-1)"
@@ -80,6 +83,7 @@ case "$MODE" in
   axum)      ARGS=(--axum --workers "$W" --port "$PORT" -t "$FIX") ;;
   census)    ARGS=(--axum --workers "$W" --port "$PORT" -t "$FIX") ;;
   cliserver) ARGS=(--port "$PORT" -t "$FIX") ;;
+  censuscli) ARGS=(--port "$PORT" -t "$FIX") ;;
   *) echo "unknown mode $MODE"; exit 2 ;;
 esac
 
@@ -140,6 +144,11 @@ if [ "$MODE" = census ]; then
   EXPECTED_LINES=$((WARMUP + MEASURED))
   tr -d '\0' < "$RUN.log" | grep "^census-global:" > "$RUN.idle" || true
 fi
+if [ "$MODE" = censuscli ]; then
+  tr -d '\0' < "$RUN.log" | grep "^census-cli:" > "$RUN.census"
+  CENSUS_LINES=$(wc -l < "$RUN.census" | tr -d ' ')
+  EXPECTED_LINES=$((WARMUP + MEASURED))
+fi
 
 echo "peak_rss_bytes=$PEAK (whole process, time -l)"
 echo "vmmap_V1=$V1 vmmap_V2=$V2 (Physical footprint)"
@@ -150,6 +159,15 @@ case "$MODE" in
     echo "exit_stats=VERDICT-GRADE-N/A-JOIN (tier0: no pool by construction, graceful shutdown)" ;;
   cliserver)
     echo "exit_stats=UNAVAILABLE-BY-DESIGN (KG-79.B: cli-server arm has no join) — vmmap only" ;;
+  censuscli)
+    echo "NOTE: footprint figures from this run are NULL (KB-78-5) — census-cli counters only in $RUN.census"
+    echo "exit_stats=UNAVAILABLE-BY-DESIGN (KG-79.B) — counters do not need them (A-BG16)"
+    if [ "$CENSUS_LINES" -ne "$EXPECTED_LINES" ]; then
+      echo "FAIL: census-cli lines $CENSUS_LINES != expected $EXPECTED_LINES (A-PP5) — run VOID"
+      RC=1
+    else
+      echo "census_cli_lines=$CENSUS_LINES == expected (A-PP5 OK)"
+    fi ;;
   census)
     echo "NOTE: footprint figures from this run are NULL (KB-78-5) — counters only in $RUN.census"
     if [ "$CENSUS_LINES" -ne "$EXPECTED_LINES" ]; then

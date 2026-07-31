@@ -38,6 +38,8 @@ check_sites() { # check_sites <dir> <expected>
 }
 check_sites crates/php-server/src 18
 check_sites crates/php-runtime/src 11
+# S-79.0.6 (A-BG16): the cli-server arm's census-cli line (run_php brackets).
+check_sites crates/php-cli/src 2
 
 # Positive control (the WP-72 lesson): the scan must be able to COUNT — a
 # decoy directory with one marker must read exactly 1.
