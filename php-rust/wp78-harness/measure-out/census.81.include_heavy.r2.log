@@ -1,0 +1,172 @@
+php-server (Axum) listening on http://127.0.0.1:8194 (docroot: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/gate-axum/fixtures)
+census-global: calls=875 bytes=238426 gross=1
+census: req=1 gross=1 a_calls=128551 a_bytes=61467397 a1_calls=121823 a1_bytes=58900099 a2_calls=6728 a2_bytes=2567298 a3_calls=8716 a3_bytes=1592320 b_calls=36650 b_bytes=3453773 c_calls=24 c_bytes=17984 resid_calls=0 resid_bytes=0 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=2 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=3 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=4 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=5 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=6 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=7 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=8 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=9 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=10 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census-global: calls=418549 bytes=82481602 gross=1
+census-global: calls=418587 bytes=82523126 gross=1
+census-global: calls=418625 bytes=82564650 gross=1
+census: req=11 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=157 resid_bytes=168464 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=12 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=13 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=14 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=15 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=16 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=17 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=18 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=19 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=20 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=21 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=22 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=23 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=24 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=25 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=26 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=27 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=28 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=29 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=30 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=31 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=32 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=33 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=44 resid_bytes=45716 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=34 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=35 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=36 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=37 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=38 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=39 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=40 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=41 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=42 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=43 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=44 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=45 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=46 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=47 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=48 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=49 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=50 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=51 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=52 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=53 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=54 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=55 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=56 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=57 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=58 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=59 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=60 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=61 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=62 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=63 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=64 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=65 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=66 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=67 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=68 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=69 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=70 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=71 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=72 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=73 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=74 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=75 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=76 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=77 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=78 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=79 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=80 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=81 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=82 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=83 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=84 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=85 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=86 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=87 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=88 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=89 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=90 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=91 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=92 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=93 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=94 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=95 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=96 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=97 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=98 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=99 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=100 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=101 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=102 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=103 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=104 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=105 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=106 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=107 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=108 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=109 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+census: req=110 gross=1 a_calls=2 a_bytes=212 a1_calls=0 a1_bytes=0 a2_calls=2 a2_bytes=212 a3_calls=0 a3_bytes=0 b_calls=27982 b_bytes=1867510 c_calls=14 c_bytes=1568 resid_calls=43 resid_bytes=43892 retain_len=6 live_objs=0 depth_max=1 inflight_max=1 a3_trip=0
+php-server: shutdown signal received, draining
+php-server: all 1 workers joined — exit stats are authoritative (KL-78-4)
+census-drained: calls=0 bytes=0 gross=1 (A-PP14: fatal-request churn; 0 on a clean run)
+subproc 0
+ pages           peak       total     current       block      total#   
+  touched   :     0           0           0                                ok
+  pages     :   253           1.5 K      15      
+  abandoned :   154         400           9      
+  reclaima  :     1      
+  reclaimf  :   377      
+  reabandon :     0      
+  waits     :     0      
+  extended  :     0      
+  retire    :     0      
+  searches  :     2.4 avg
+
+ arenas          peak       total     current       block      total#   
+  reserved  :     1.0 GiB     1.0 GiB     1.0 GiB                          
+  committed :    69.5 MiB    69.5 MiB    69.5 MiB                          
+  reset     :     0      
+  purged    :   586.3 MiB
+  arenas    :     1      
+  rollback  :     0      
+  mmaps     :     3      
+  commits   :     0      
+  resets    :     0      
+  purges    :     1.5 K  
+  guarded   :     0      
+  theaps    :    11          11           0      
+  heaps     :     1           1           1      
+  heap waits:     0      
+
+ process         peak       total     current       block      total#   
+  threads   :    12          12           1      
+  numa nodes:     1
+  elapsed   :    14.039 s
+  process   : user: 0.598 s, system: 0.079 s, faults: 2, peak rss: 57.0 MiB, peak commit: 69.5 MiB
+
+       14.05 real         0.59 user         0.07 sys
+            59834368  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+                3971  page reclaims
+                   2  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                 115  messages sent
+                 229  messages received
+                   1  signals received
+                 666  voluntary context switches
+                1248  involuntary context switches
+          6033098788  instructions retired
+          1414960959  cycles elapsed
+            38732304  peak memory footprint
+driver_sha=436b453ef0980c03 git=3f32c16 bin=12a8777c8c38fdc4

@@ -1,0 +1,477 @@
+[Fri Jul 31 20:20:22 2026] PHP 8.5.7 Development Server (http://127.0.0.1:8194) started
+[Fri Jul 31 20:20:23 2026] 127.0.0.1:59033 Accepted
+census-global: calls=608 bytes=99806 gross=1
+[Fri Jul 31 20:20:23 2026] 127.0.0.1:59033 [200]: GET /__census_global
+[Fri Jul 31 20:20:23 2026] 127.0.0.1:59033 Closing
+[Fri Jul 31 20:20:23 2026] 127.0.0.1:59034 Accepted
+census-cli: req=1 gross=1 total_calls=131387 total_bytes=61440795 a1_calls=121823 a1_bytes=58900099 a3_calls=2155 a3_bytes=198301 a3_trip=0
+[Fri Jul 31 20:20:23 2026] 127.0.0.1:59034 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:23 2026] 127.0.0.1:59034 Closing
+[Fri Jul 31 20:20:23 2026] 127.0.0.1:59035 Accepted
+census-cli: req=2 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:23 2026] 127.0.0.1:59035 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:23 2026] 127.0.0.1:59035 Closing
+[Fri Jul 31 20:20:23 2026] 127.0.0.1:59036 Accepted
+census-cli: req=3 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:23 2026] 127.0.0.1:59036 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:23 2026] 127.0.0.1:59036 Closing
+[Fri Jul 31 20:20:23 2026] 127.0.0.1:59037 Accepted
+census-cli: req=4 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:23 2026] 127.0.0.1:59037 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:23 2026] 127.0.0.1:59037 Closing
+[Fri Jul 31 20:20:23 2026] 127.0.0.1:59038 Accepted
+census-cli: req=5 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:23 2026] 127.0.0.1:59038 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:23 2026] 127.0.0.1:59038 Closing
+[Fri Jul 31 20:20:23 2026] 127.0.0.1:59039 Accepted
+census-cli: req=6 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:23 2026] 127.0.0.1:59039 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:23 2026] 127.0.0.1:59039 Closing
+[Fri Jul 31 20:20:23 2026] 127.0.0.1:59040 Accepted
+census-cli: req=7 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:23 2026] 127.0.0.1:59040 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:23 2026] 127.0.0.1:59040 Closing
+[Fri Jul 31 20:20:23 2026] 127.0.0.1:59041 Accepted
+census-cli: req=8 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:23 2026] 127.0.0.1:59041 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:23 2026] 127.0.0.1:59041 Closing
+[Fri Jul 31 20:20:23 2026] 127.0.0.1:59042 Accepted
+census-cli: req=9 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:23 2026] 127.0.0.1:59042 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:23 2026] 127.0.0.1:59042 Closing
+[Fri Jul 31 20:20:23 2026] 127.0.0.1:59043 Accepted
+census-cli: req=10 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:23 2026] 127.0.0.1:59043 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:23 2026] 127.0.0.1:59043 Closing
+[Fri Jul 31 20:20:24 2026] 127.0.0.1:59044 Accepted
+census-global: calls=143328 bytes=62825373 gross=1
+[Fri Jul 31 20:20:24 2026] 127.0.0.1:59044 [200]: GET /__census_global
+[Fri Jul 31 20:20:24 2026] 127.0.0.1:59044 Closing
+[Fri Jul 31 20:20:24 2026] 127.0.0.1:59045 Accepted
+census-global: calls=143377 bytes=62835012 gross=1
+[Fri Jul 31 20:20:24 2026] 127.0.0.1:59045 [200]: GET /__census_global
+[Fri Jul 31 20:20:24 2026] 127.0.0.1:59045 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59049 Accepted
+census-global: calls=143426 bytes=62844651 gross=1
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59049 [200]: GET /__census_global
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59049 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59050 Accepted
+census-cli: req=11 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59050 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59050 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59051 Accepted
+census-cli: req=12 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59051 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59051 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59052 Accepted
+census-cli: req=13 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59052 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59052 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59053 Accepted
+census-cli: req=14 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59053 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59053 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59054 Accepted
+census-cli: req=15 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59054 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59054 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59055 Accepted
+census-cli: req=16 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59055 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59055 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59056 Accepted
+census-cli: req=17 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59056 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59056 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59057 Accepted
+census-cli: req=18 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59057 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59057 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59058 Accepted
+census-cli: req=19 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59058 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59058 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59059 Accepted
+census-cli: req=20 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59059 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59059 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59060 Accepted
+census-cli: req=21 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59060 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59060 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59061 Accepted
+census-cli: req=22 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59061 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59061 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59062 Accepted
+census-cli: req=23 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59062 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59062 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59063 Accepted
+census-cli: req=24 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59063 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59063 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59064 Accepted
+census-cli: req=25 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59064 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59064 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59065 Accepted
+census-cli: req=26 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59065 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59065 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59066 Accepted
+census-cli: req=27 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59066 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59066 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59067 Accepted
+census-cli: req=28 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59067 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59067 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59068 Accepted
+census-cli: req=29 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59068 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59068 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59069 Accepted
+census-cli: req=30 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59069 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59069 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59070 Accepted
+census-cli: req=31 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59070 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59070 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59071 Accepted
+census-cli: req=32 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59071 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59071 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59072 Accepted
+census-cli: req=33 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59072 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59072 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59073 Accepted
+census-cli: req=34 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59073 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59073 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59074 Accepted
+census-cli: req=35 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59074 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59074 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59075 Accepted
+census-cli: req=36 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59075 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59075 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59076 Accepted
+census-cli: req=37 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59076 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59076 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59077 Accepted
+census-cli: req=38 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59077 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59077 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59078 Accepted
+census-cli: req=39 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59078 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59078 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59079 Accepted
+census-cli: req=40 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59079 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59079 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59080 Accepted
+census-cli: req=41 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59080 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59080 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59081 Accepted
+census-cli: req=42 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59081 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59081 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59082 Accepted
+census-cli: req=43 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59082 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59082 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59084 Accepted
+census-cli: req=44 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59084 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59084 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59085 Accepted
+census-cli: req=45 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59085 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59085 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59086 Accepted
+census-cli: req=46 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59086 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59086 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59087 Accepted
+census-cli: req=47 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59087 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59087 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59088 Accepted
+census-cli: req=48 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59088 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59088 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59089 Accepted
+census-cli: req=49 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59089 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59089 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59090 Accepted
+census-cli: req=50 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59090 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59090 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59091 Accepted
+census-cli: req=51 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59091 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59091 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59092 Accepted
+census-cli: req=52 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59092 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59092 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59093 Accepted
+census-cli: req=53 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59093 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59093 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59094 Accepted
+census-cli: req=54 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59094 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59094 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59095 Accepted
+census-cli: req=55 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59095 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59095 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59096 Accepted
+census-cli: req=56 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59096 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59096 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59097 Accepted
+census-cli: req=57 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59097 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59097 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59098 Accepted
+census-cli: req=58 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59098 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59098 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59099 Accepted
+census-cli: req=59 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59099 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59099 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59100 Accepted
+census-cli: req=60 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59100 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59100 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59101 Accepted
+census-cli: req=61 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59101 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59101 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59102 Accepted
+census-cli: req=62 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59102 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59102 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59103 Accepted
+census-cli: req=63 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59103 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59103 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59104 Accepted
+census-cli: req=64 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59104 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59104 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59105 Accepted
+census-cli: req=65 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59105 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59105 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59106 Accepted
+census-cli: req=66 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59106 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59106 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59107 Accepted
+census-cli: req=67 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59107 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59107 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59108 Accepted
+census-cli: req=68 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59108 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59108 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59109 Accepted
+census-cli: req=69 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59109 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59109 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59110 Accepted
+census-cli: req=70 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59110 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59110 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59111 Accepted
+census-cli: req=71 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59111 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59111 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59112 Accepted
+census-cli: req=72 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59112 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59112 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59113 Accepted
+census-cli: req=73 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59113 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59113 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59114 Accepted
+census-cli: req=74 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59114 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59114 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59115 Accepted
+census-cli: req=75 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59115 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59115 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59116 Accepted
+census-cli: req=76 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59116 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59116 Closing
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59117 Accepted
+census-cli: req=77 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59117 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:34 2026] 127.0.0.1:59117 Closing
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59118 Accepted
+census-cli: req=78 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59118 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59118 Closing
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59119 Accepted
+census-cli: req=79 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59119 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59119 Closing
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59120 Accepted
+census-cli: req=80 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59120 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59120 Closing
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59121 Accepted
+census-cli: req=81 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59121 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59121 Closing
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59122 Accepted
+census-cli: req=82 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59122 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59122 Closing
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59123 Accepted
+census-cli: req=83 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59123 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59123 Closing
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59124 Accepted
+census-cli: req=84 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59124 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59124 Closing
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59125 Accepted
+census-cli: req=85 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59125 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59125 Closing
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59126 Accepted
+census-cli: req=86 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59126 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59126 Closing
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59127 Accepted
+census-cli: req=87 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59127 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59127 Closing
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59128 Accepted
+census-cli: req=88 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59128 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59128 Closing
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59129 Accepted
+census-cli: req=89 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59129 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59129 Closing
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59130 Accepted
+census-cli: req=90 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59130 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59130 Closing
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59131 Accepted
+census-cli: req=91 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59131 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59131 Closing
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59132 Accepted
+census-cli: req=92 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59132 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59132 Closing
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59133 Accepted
+census-cli: req=93 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59133 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59133 Closing
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59134 Accepted
+census-cli: req=94 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59134 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59134 Closing
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59135 Accepted
+census-cli: req=95 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59135 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59135 Closing
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59136 Accepted
+census-cli: req=96 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59136 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59136 Closing
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59137 Accepted
+census-cli: req=97 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59137 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59137 Closing
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59138 Accepted
+census-cli: req=98 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59138 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59138 Closing
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59139 Accepted
+census-cli: req=99 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59139 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59139 Closing
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59140 Accepted
+census-cli: req=100 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59140 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59140 Closing
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59141 Accepted
+census-cli: req=101 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59141 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59141 Closing
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59142 Accepted
+census-cli: req=102 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59142 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59142 Closing
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59143 Accepted
+census-cli: req=103 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59143 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59143 Closing
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59144 Accepted
+census-cli: req=104 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59144 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59144 Closing
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59145 Accepted
+census-cli: req=105 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59145 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59145 Closing
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59146 Accepted
+census-cli: req=106 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59146 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59146 Closing
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59147 Accepted
+census-cli: req=107 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59147 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59147 Closing
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59148 Accepted
+census-cli: req=108 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59148 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59148 Closing
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59149 Accepted
+census-cli: req=109 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59149 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59149 Closing
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59150 Accepted
+census-cli: req=110 gross=1 total_calls=1176 total_bytes=128947 a1_calls=0 a1_bytes=0 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59150 [200]: GET /include_gate.php
+[Fri Jul 31 20:20:35 2026] 127.0.0.1:59150 Closing
+time: command terminated abnormally
+       13.39 real         0.04 user         0.03 sys
+            54247424  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+                3618  page reclaims
+                   2  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                 114  messages sent
+                 114  messages received
+                   0  signals received
+                 513  voluntary context switches
+                  31  involuntary context switches
+           414645843  instructions retired
+           161446769  cycles elapsed
+            37061160  peak memory footprint
+driver_sha=436b453ef0980c03 git=3f32c16 bin=12a8777c8c38fdc4

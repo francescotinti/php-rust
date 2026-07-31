@@ -1,0 +1,13 @@
+self-test PASS: idle parser exact on synthetic 4-line log; 5-line rejected (A-SK14)
+identity: bin=12a8777c8c38fdc4 == matrix bin[census] (git=3f32c16 == matrix git) — ENFORCED; archived: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/census.81.idle60.matrix
+== measure78 mode=census label=81.idle60 fixture=hello.php bin=12a8777c8c38fdc4 git=3f32c16 driver_sha=436b453ef0980c03 warmup=10 measured=100 idle_secs=60 ==
+peak_rss_bytes=56246272 (whole process, time -l)
+vmmap_V1=20.0M vmmap_V2=20.1M (Physical footprint)
+NOTE: footprint figures from this run are NULL (KB-78-5) — counters only in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/census.81.idle60.census
+NOTE: all census byte figures are GROSS churn, upper bound (A-DL1/A-DL10)
+census_lines=110 == expected (A-PP5 OK)
+OK: inflight_max <= 1 on all 110 lines
+OK: a3_trip <= 0 on all 110 lines
+idle: probe_self_cost calls=38 bytes=41524 | idle_window(+self) calls=38 bytes=41524 (A-AH13/A-DL5; churn-only, KL-81-3)
+raw: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/census.81.idle60.log | vmmap: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/census.81.idle60.vmmap.V1/V2 | matrix: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/census.81.idle60.matrix | summary: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/census.81.idle60.summary
+== measure78 done mode=census label=81.idle60 bin=12a8777c8c38fdc4 git=3f32c16 driver_sha=436b453ef0980c03 rc=0 ==

@@ -1,0 +1,13 @@
+self-test PASS: idle parser exact on synthetic 4-line log; 5-line rejected (A-SK14)
+identity: bin=12a8777c8c38fdc4 == matrix bin[census] (git=3f32c16 == matrix git) — ENFORCED; archived: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/censuscli.81.include_gate.r2.matrix
+== measure78 mode=censuscli label=81.include_gate.r2 fixture=include_gate.php bin=12a8777c8c38fdc4 git=3f32c16 driver_sha=436b453ef0980c03 warmup=10 measured=100 idle_secs=10 ==
+peak_rss_bytes=54231040 (whole process, time -l)
+vmmap_V1=18.5M vmmap_V2=18.5M (Physical footprint)
+NOTE: footprint figures from this run are NULL (KB-78-5) — census-cli counters only in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/censuscli.81.include_gate.r2.census
+NOTE: all census byte figures are GROSS churn, upper bound (A-DL1/A-DL10)
+exit_stats=UNAVAILABLE-BY-DESIGN (KG-79.B) — counters do not need them (A-BG16)
+census_cli_lines=110 == expected (A-PP5 OK)
+OK: a3_trip <= 0 on all 110 lines
+idle: probe_self_cost calls=49 bytes=9639 | idle_window(+self) calls=49 bytes=9639 (A-AH13/A-DL5; churn-only, KL-81-3)
+raw: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/censuscli.81.include_gate.r2.log | vmmap: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/censuscli.81.include_gate.r2.vmmap.V1/V2 | matrix: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/censuscli.81.include_gate.r2.matrix | summary: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/censuscli.81.include_gate.r2.summary
+== measure78 done mode=censuscli label=81.include_gate.r2 bin=12a8777c8c38fdc4 git=3f32c16 driver_sha=436b453ef0980c03 rc=0 ==
