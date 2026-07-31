@@ -33,7 +33,7 @@ A-DL10). Raw: `wp78-harness/measure-out/census.80.<fx>.r{1,2,3}.*` e
 | bare | 80.450 | 12.998.624 | 74.288 | 10.825.612 | 6.162 | 2.173.012 | 0 | 721 | 95.358 | 0 | 0 | 41,1 | 43.368 | 0 |
 | hello | 80.476 | 13.015.960 | 74.288 | 10.825.612 | 6.188 | 2.190.348 | 0 | 730 | 95.627 | 0 | 0 | 44,1 | 43.463 | 0 |
 | include_gate | 80.513 | 13.037.032 | 74.288 | 10.825.612 | 6.225 | 2.211.420 | 0 | 767 | 98.333 | 0 | 0 | 43,1 | 43.896 | 2 |
-| include_heavy | 81.012 | 13.391.378 | 74.288 | 10.825.612 | 6.724 | 2.565.766 | 0 | 2.798 | 1.867.510 | 14 | 1.568 | 44,1 | 45.156 | 5 |
+| include_heavy | 81.012 | 13.391.378 | 74.288 | 10.825.612 | 6.724 | 2.565.766 | 0 | 27.982 | 1.867.510 | 14 | 1.568 | 44,1 | 45.156 | 5 |
 
 - **a1 (prelude) = 74.288 call / 10.825.612 B, IDENTICO su ogni fixture e ogni
   run** — la costante che la unit cache TL estesa al MAIN salta su HIT.
@@ -93,6 +93,14 @@ a1+a2 = 80.476 call / 13,0MB su hello (l'82%+17% = 100% della fase a).
 - **resid**: post-leva ≈ invariato (44±15 call / 43,5±5KB su hello — il
   fs::read del main resta nel resid). Un leak da leva si nasconderebbe QUI:
   canale dichiarato con predizione, verdetto A-BB6 la cita (KG-81-3).
-- **b**: invariato ±5% (hello 730/95.627; include_heavy 2.798/1.867.510) —
-  la leva non tocca il run.
+  Precisazione A-BG23 (Concilio WP-82): la predizione è sulla MEDIA steady;
+  la riga req=11 è un residuo di transiente (resid=157 su hello, regime da
+  req=12) — dichiarato nella baseline, il picco per-riga non è nel bound.
+  Le tolleranze ±15/±5KB/±5% sono CONCESSIONI dichiarate, non statistica
+  (spread 0,0% = determinismo, zero informazione di varianza — A-BG25): la
+  prima campagna post-leva ri-deriva lo spread osservato (KG-82-2).
+- **b**: invariato ±5% (hello 730/95.627; include_heavy 27.982/1.867.510 —
+  cifra CORRETTA in chiusura S-80.0: la prima trascrizione diceva 2.798, un
+  ×10 da output troncato, trovato dal ricomputo indipendente del Concilio
+  WP-82/A-BG22 sui raw) — la leva non tocca il run.
 - **a2**: →0 su HIT (assorbita nel salto a1+a2).

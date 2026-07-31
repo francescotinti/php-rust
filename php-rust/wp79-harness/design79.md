@@ -258,7 +258,9 @@ hello.php, `--workers 1`, richieste ≥11 (steady, HIT):
   il fs::read del main resta nel resid; un leak da leva si nasconderebbe
   qui: il verdetto A-BB6 DEVE citare resid a caldo vs questa predizione;
 - **b (A-BG21)**: invariato ±5% (hello 730/95.627; include_heavy
-  2.798/1.867.510) — la leva non tocca il run.
+  27.982/1.867.510 — corretto da 2.798 in chiusura S-80.0, A-BG22/KG-82-1:
+  il ricomputo va SCRIPTATO dai raw, mai trascritto a mano) — la leva non
+  tocca il run.
 La sessione di implementazione ricalcola la baseline R≥3 con la coppia
 build-adiacente PRIMA di leggere il braccio leva (KG-78.A/KB-78-4).
 Confronti censuscli↔axum SOLO con la dichiarazione d'asimmetria

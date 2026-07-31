@@ -47,15 +47,40 @@ sessione. Dettaglio: `sessions/WP_SESSION_80.md`.
    privata di modulo (KS-MS-81-3).
 4. **Panic = FAIL-FAST via HOOK globale** + tripwire census d==0.
 
-## ⚖️ Concilio WP-82 (2026-07-31, verbali VINCOLANTI): `wp82-harness/COUNCIL_WP82_REVIEWS.md`
+## ⚖️ Concilio WP-82 ESEGUITO (2026-07-31, verbali VINCOLANTI): `wp82-harness/COUNCIL_WP82_REVIEWS.md`
 
-(compilato in chiusura S-80.0 — vedi verbale per emendamenti e kill-switch
-vincolanti sul programma leva)
+**9× CONCORDO CON EMENDAMENTI, 0 opposizioni.** S-80.0 verificata NEL CODICE
+E NEI RAW da ogni sedia (ricomputo indipendente di Gregg: md5 r1==r2==r3,
+cifre riga per riga). REFUTATI: **errore trascrizione ×10** (b_calls
+include_heavy 2.798→27.982, A-BG22 — CORRETTO in chiusura con nota),
+**DR-1 copre le celle non i payload** (id run-scoped COTTI negli op del
+Module cached, A-DS12+F13; il wrap u32 dell'epoch diventa classe ATTIVA
+sotto la leva → u64 o bound same-commit, A-TH16/KH82-1), **protocollo non
+certificato dall'identità git** (script harness fuori dal porcelain +
+parser posizionali senza pin → driver_sha + self-test, A-AH21/A-SK14/
+A-BG24), **porta vm_new aperta** (A-MS13), **fixture vacue possibili**
+(F-oneshot tre denti, battery-su-HIT col pin main_hit, F8c a contatori),
+**churn del fatal sparito dal denominatore** (drained_* observable,
+A-PP14; mod-tests non ancorato REINTRODOTTO in count_postend_reads,
+A-PP15), **bare.php contraddittoria** (A-BB22), **"idle drift 0" da
+scopare** (canali ciechi enumerati, A-DL11), **ORM/hk su ef90cb19 PRIMA
+del commit leva** (A-AH23). Ordine vincolante S-81.0 = verbale §Sintesi
+(8 passi) + 30 kill-switch nuovi KH82/KS-MS-82/KS-SK-82/KS-AH-82/KB-82/
+KS-PP-82/KL-82/KS-DS-82/KG-82.
 
-## §WP-81 (prossima sessione) — LEVA A-BB6
+## §WP-81 (prossima sessione) — S-81.0 "seals & instruments" poi LEVA A-BB6
 
-Contratto = `wp79-harness/design79.md` EMENDATO S-80.0.7 (+ emendamenti
-Concilio WP-82). Ordine:
+Contratto = `wp79-harness/design79.md` EMENDATO S-80.0.7 + **ordine
+vincolante Concilio WP-82 §Sintesi (8 passi, non rinegoziare)**: 1. fix
+meccanici pre-leva (A-PP15, A-SK14/A-BG24, A-MS14, A-DL14, A-AH25, A-TH15,
+A-TH17, A-TH18) · 2. ORM+hk su ef90cb19 (A-AH23) · 3. driver_sha (A-AH21)
+· 4. commit leva con i same-commit obbligati (A-TH16 epoch, A-DS12/14,
+A-AH22 fp falsificatore, A-MS13 allowlist, A-BB22 bare, A-PP16/17,
+M-68.5, F-oneshot tre denti) · 5. strumenti §11 (A-DL12 walker, sestetto
+mem-census, budget ×W dopo, A-PP14 drained) · 6. fixture F1-F13+F-probe+
+F-oneshot + battery-su-HIT pin main_hit · 7. A/B (A-BB23/24/25, A-DL13,
+A-SK18/KG-82-2, KB-82-5, KG-82-1) · 8. revert KS-DS-80-3. Poi in
+dettaglio:
 1. Pre-flight skill + battery verde sul tree di apertura.
 2. Implementazione leva (unit cache TL estesa al MAIN): probe
    canonicalize+stat+fp su `meta.path`, `MAIN_CHAIN_FP` COMPUTATO
@@ -78,12 +103,15 @@ Concilio WP-82). Ordine:
 6. Revert policy KS-DS-80-3: un body ≠ oracolo ⇒ git revert, mai
    fix-forward.
 
-**Kill-switch di rotta (attivi)**: tabella WP-81 (KH81-* · KS-MS-81-* ·
-KS-SK-81-* · KS-AH-81-* · KB-81-* · KS-PP-81-* · KL-81-* · KS-DS-81-* ·
-KG-81-*, verbale WP-81 §Kill-switch) + eventuali NUOVI WP-82 + mappa
-design79 (KH80-* · KB-80-* · KS-*-80-*) + storici (KG-78.D · KS-PP-3 ·
-KS-SK-79.2 · KS-AH-78-1). KH81-1 è SODDISFATTO (OUTSTANDING atterrato):
-il claim closed-sequential è verdict-grade.
+**Kill-switch di rotta (attivi)**: tabella NUOVA WP-82 (30 KS: KH82-1/2 ·
+KS-MS-82-1..3 · KS-SK-82-1..4 · KS-AH-82-1..4 · KB-82-1..5 · KS-PP-82-1..3
+· KL-82-1..3 · KS-DS-82-1..3 · KG-82-1..3 — verbale §Kill-switch) + tabella
+WP-81 (KH81-* · KS-MS-81-* · KS-SK-81-* · KS-AH-81-* · KB-81-* ·
+KS-PP-81-* · KL-81-* · KS-DS-81-* · KG-81-*) + mappa design79 (KH80-* ·
+KB-80-* · KS-*-80-*) + storici (KG-78.D · KS-PP-3 · KS-SK-79.2 ·
+KS-AH-78-1). KH81-1 è SODDISFATTO (OUTSTANDING atterrato): il claim
+closed-sequential è verdict-grade (col ri-scope A-TH15: watermark>1 = run
+VOID, mai "prova di overlap").
 
 **NON riproporre**: N=1 Vm persistente (KS-DS-78-3); RetainSet condiviso/
 Send/persistente o ri-esposto fuori dal sigillo; seconda cache Module
