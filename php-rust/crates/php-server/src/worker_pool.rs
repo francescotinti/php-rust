@@ -92,8 +92,10 @@ mod implementation {
     pub mod census {
         use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
-        /// In-flight tasks across the pool channels (inc on dispatch, dec on
-        /// worker pickup).
+        /// In-flight tasks across the pool channels. Protocol (A-TH1/KH80-4):
+        /// increment in dispatch BEFORE send, decrement in the worker AFTER
+        /// recv — the decrement can then never precede its increment, so the
+        /// counter cannot underflow and the watermark cannot under-count.
         pub static QUEUE_DEPTH: AtomicUsize = AtomicUsize::new(0);
         /// High-watermark of QUEUE_DEPTH since process start.
         pub static QUEUE_DEPTH_MAX: AtomicUsize = AtomicUsize::new(0);
@@ -102,6 +104,15 @@ mod implementation {
 
         pub fn note_depth(d: usize) {
             QUEUE_DEPTH_MAX.fetch_max(d, Ordering::Relaxed);
+        }
+
+        /// A-SK8 (Council WP-80): tests observing the depth watermark must
+        /// start from a clean one — without a reset, a PASS can be inherited
+        /// from another test's traffic. Test-only: the production watermark
+        /// is process-lifetime by design and is never reset.
+        #[cfg(test)]
+        pub fn reset_depth_stats() {
+            QUEUE_DEPTH_MAX.store(0, Ordering::Relaxed);
         }
     }
 
@@ -259,15 +270,26 @@ mod implementation {
                 .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
                 % self.senders.len();
 
-            self.senders[idx]
-                .send(task)
-                .map_err(|_| "worker channel closed".to_string())?;
-
+            // A-TH1/A-BB13/A-MS1 (Council WP-80, KH80-4): increment BEFORE
+            // send. With inc-after-send the worker's pickup decrement could
+            // precede the increment: usize underflow (wrap to MAX) and a
+            // watermark that can UNDER-count — a fail-open observable for
+            // KH78-2. Inc → send → recv → dec makes underflow impossible:
+            // every decrement is preceded by its own increment (the channel
+            // provides the happens-before edge).
             #[cfg(feature = "census-instrumentation")]
             {
                 use std::sync::atomic::Ordering;
                 let d = census::QUEUE_DEPTH.fetch_add(1, Ordering::Relaxed) + 1;
                 census::note_depth(d);
+            }
+
+            if self.senders[idx].send(task).is_err() {
+                // Failed send: no worker will ever pick this task up, so no
+                // decrement will pair with the increment above — undo it.
+                #[cfg(feature = "census-instrumentation")]
+                census::QUEUE_DEPTH.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+                return Err("worker channel closed".to_string());
             }
 
             Ok(())
@@ -490,6 +512,12 @@ mod implementation {
     #[cfg(test)]
     mod tests {
         use super::*;
+
+        // A-SK8: the depth counters are process-global — every test that
+        // drives a WorkerPool (and thus dispatch's inc/dec) serializes here,
+        // so watermark resets and end-of-drain assertions cannot race with
+        // another test's pool traffic.
+        static DEPTH_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
         fn meta(src: &str) -> WorkerHandlerMeta {
             WorkerHandlerMeta {
@@ -732,6 +760,8 @@ mod implementation {
         #[cfg(feature = "census-instrumentation")]
         #[test]
         fn census_queue_depth_burst_positive() {
+            let _guard = DEPTH_TEST_LOCK.lock().unwrap();
+            census::reset_depth_stats();
             let ctx = WorkerPoolContext::new();
             let pool = WorkerPool::new(ctx, 1);
             let mut rxs = Vec::new();
@@ -755,12 +785,52 @@ mod implementation {
             );
         }
 
+        /// A-TH1/A-BB13/A-MS1 anti-wrap (KH80-4): with the inc-BEFORE-send
+        /// protocol the pickup decrement can never precede its increment, so
+        /// QUEUE_DEPTH cannot underflow. This hammers the raciest shape (one
+        /// worker, dispatch→await cycles, depth oscillating 1→0 at the exact
+        /// send/recv boundary) and asserts depth drains to 0 with a sane
+        /// watermark. Under the old inc-after-send ordering an early pickup
+        /// wrapped QUEUE_DEPTH to usize::MAX and poisoned the watermark —
+        /// which is what the bounds below would catch.
+        #[cfg(feature = "census-instrumentation")]
+        #[test]
+        fn census_queue_depth_no_underflow_inc_before_send() {
+            let _guard = DEPTH_TEST_LOCK.lock().unwrap();
+            census::reset_depth_stats();
+            let ctx = WorkerPoolContext::new();
+            let pool = WorkerPool::new(ctx, 1);
+            const N: usize = 200;
+            for _ in 0..N {
+                let (tx, rx) = oneshot::channel();
+                pool.dispatch(WorkerTask {
+                    meta: meta("<?php echo \"w\";"),
+                    response_tx: tx,
+                })
+                .unwrap();
+                let (b, s) = rx.blocking_recv().unwrap();
+                assert_eq!(s, StatusCode::OK);
+                assert_eq!(b, b"w");
+            }
+            let depth = census::QUEUE_DEPTH.load(std::sync::atomic::Ordering::Relaxed);
+            let peak = census::QUEUE_DEPTH_MAX.load(std::sync::atomic::Ordering::Relaxed);
+            assert_eq!(
+                depth, 0,
+                "depth did not drain to 0: {depth} (a huge value here = usize wrap)"
+            );
+            assert!(
+                (1..=N).contains(&peak),
+                "watermark out of sane bounds: {peak} (usize wrap poisons it to ~MAX)"
+            );
+        }
+
         /// A-MS7/A-DL6 (KS-MS-5): shutdown() drops the senders and JOINS
         /// every worker — it returns only after real thread teardown (a hang
         /// here fails CI), with a real request drained through the pool
         /// first (positive control: the pool actually worked before dying).
         #[test]
         fn shutdown_joins_all_workers_after_drain() {
+            let _guard = DEPTH_TEST_LOCK.lock().unwrap();
             let ctx = WorkerPoolContext::new();
             let pool = WorkerPool::new(ctx, 2);
             let (tx, rx) = oneshot::channel();
