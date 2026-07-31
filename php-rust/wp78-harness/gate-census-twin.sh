@@ -40,7 +40,7 @@ FAILS=0
 CFG_RE='cfg\((not\()?feature = "census-instrumentation"'
 PINS="
 crates/php-server/src/main.rs:5
-crates/php-server/src/worker_pool.rs:20
+crates/php-server/src/worker_pool.rs:23
 crates/php-runtime/src/lib.rs:1
 crates/php-runtime/src/lower/mod.rs:2
 crates/php-runtime/src/compile/mod.rs:6
