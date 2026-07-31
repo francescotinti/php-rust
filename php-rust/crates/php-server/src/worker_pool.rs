@@ -1258,6 +1258,31 @@ mod implementation {
             );
         }
 
+        /// F6 (design79 §9, A-MS10/KS-MS-80-2 v2): park-EVENTS pinned — the
+        /// same file included TWICE non-`_once` parks TWICE by construction,
+        /// plus the MAIN's park (A-BB6): retain.len() == 2 + 1 = 3 EXACT.
+        #[test]
+        fn f6_double_include_parks_two_events_plus_main() {
+            let reg = registry();
+            let dir = std::env::temp_dir().join("phpr_gate_f6");
+            std::fs::create_dir_all(&dir).unwrap();
+            let lib = dir.join("f6_lib.php");
+            std::fs::write(&lib, b"<?php echo \"x\";").unwrap();
+            let src = format!(
+                "<?php include '{p}'; include '{p}';",
+                p = lib.display()
+            );
+            let retain = php_runtime::RetainSet::new();
+            let (b, s) = execute_with_retain(&retain, &reg, &meta(&src));
+            assert_eq!(s, StatusCode::OK);
+            assert_eq!(b, b"xx");
+            assert_eq!(
+                retain.len(),
+                3,
+                "park-EVENTS pin: 2 include events (non-_once, same file) + 1 main = 3 (F6)"
+            );
+        }
+
         /// KL-82-2 (Council WP-82): the retained-walk shared-subgraph
         /// positive control — the walker's visited-set is prose without it.
         /// Runs HERE because php-runtime lib tests cannot link the
