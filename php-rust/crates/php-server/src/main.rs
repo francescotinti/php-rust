@@ -2,40 +2,37 @@
 //!
 //! Two modes:
 //! 1. `--cli-server` (default): Reuses the CLI SAPI from `phpr -S`
-//! 2. `--axum`: Async Axum handler + thread-local Vm (N=1 reuse pattern, WP-77)
+//! 2. `--axum`: Axum HTTP front end + worker-actor pool (WP-77.6):
+//!    N OS worker threads, each owning a thread-persistent RetainSet (arena of
+//!    compiled unit modules); a FRESH Vm is created per request and borrows the
+//!    worker's RetainSet. There is NO `Vm::reset()` and NO N=1 thread-local Vm
+//!    reuse — that architecture was REJECTED in WP-77.2 (A-TH3/A-BG2 purge).
+//!    Request isolation: `request_end()` reset + Vm death (A-DS2 matrix in
+//!    worker_pool.rs).
 //!
-//! Thread-local Vm (N=1):
-//! - One Vm instance per handler thread (created at thread startup)
-//! - Each request borrows from thread-local, calls handler, releases
-//! - Vm::reset() clears state between requests (M1 alloc parity target)
-//! - Avoids Arc<Mutex> contention (domain-web: stateless HTTP)
+//! Gate: G-APERTURA-2 (A-SK2, Council WP-78)
+//! =========================================
+//! Executable gate: `wp78-harness/gate-axum/run-gate.sh` — builds this crate
+//! with the axum-server feature, records the php-server binary hash (A-SK5:
+//! the Axum baseline binary is php-server, NEVER phpr), starts `--axum`, runs
+//! sequential POSTs (hello x2, stateful x3) and byte-compares the bodies
+//! (KS-SK-78.2; stateful drift = KS-DS-78-1). A PASS may only be declared by
+//! citing that command and the hash it logs.
+//! Scope (A-BG1): correctness only — alloc/CPU/footprint are measured
+//! separately under the WP-78 protocol (wp78-harness/design78.md).
 //!
-//! Gate: G-APERTURA-2 (A-SK1, Klabnik Council mandate)
-//! =====================================================
-//! **Scope**: Correctness (bytewise output parity), NOT alloc/CPU/footprint
-//! **Input**: Two sequential HTTP POST requests (hello-world PHP script)
-//! **Output**: Byte-identical response bodies ✓
-//! **Verification**: Compare two request outputs; REJECT if divergent
-//! **Kill-switch**: If bodies differ, REJECT S-77.6.5.2.3 architectural change
-//! **Contract**: Persistent RetainSet per thread MUST produce byte-parity on two sequential requests
-//!
-//! Measurement Scope (A-BG1, Gregg Council mandate)
-//! =================================================
-//! Gate G-APERTURA-2 measures **correctness only**, NOT alloc/CPU/footprint.
-//! - Correctness: Bytewise output parity (deterministic diff, binary match)
-//! - NOT measured: Allocation overhead, CPU attribution, footprint baseline
-//! - Future WP-78+: Will measure alloc/CPU/warmup separately with distinct methodology
-//! - Boot variance: Controlled via sequential request pattern (no JIT warm-up confusion)
-//!
-//! Feature-Gating Verification (A-AH1, Hejlsberg Council mandate)
-//! ==============================================================
-//! CLI-mode and Axum-mode builds MUST NOT overlap:
-//! ```bash
-//! cargo build --features cli-server      # no axum-server (default)
-//! cargo build --features axum-server     # explicit axum flag
-//! # Assert: no duplicate symbols, no binary section overlap
-//! ```
-//! Verification: CLI-mode crate unaffected by Axum feature flag; codegen bloat ≤500 bytes
+//! Feature identity (A-AH2, Council WP-78)
+//! =======================================
+//! Cargo features UNION with `default = ["cli-server"]`, so the real build
+//! matrix is a TRIPLE, verified by `wp78-harness/gate-feature-matrix.sh`
+//! (all with -D warnings; KS-AH-78-2):
+//!   1. default                                       → cli-server only
+//!      (absence of axum symbols in the binary is asserted)
+//!   2. --no-default-features --features axum-server  → axum only
+//!   3. --features axum-server                        → UNION (both modes;
+//!      the deployed dual-mode binary)
+//! `cargo build --features axum-server` does NOT produce an axum-only binary —
+//! it is the union build (the old A-AH1 comment claiming a pair was wrong).
 
 use std::ffi::OsString;
 use std::process::ExitCode;
@@ -59,7 +56,6 @@ mod axum_handler {
     use std::process::ExitCode;
     use std::sync::Arc;
     use axum::{
-        routing::{get, post},
         http::{StatusCode, Method, Uri},
         extract::State,
         Router, response::IntoResponse,

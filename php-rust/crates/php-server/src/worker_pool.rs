@@ -1,9 +1,11 @@
 //! WP-77.6: Worker-Actor PHP-FPM-style pool
 //!
 //! Architecture:
-//! - N OS threads, each owns 1 persistent Vm
-//! - Axum → mpsc → Worker → FnOnce handler() → Response → Axum
-//! - Vm never leaves owning worker thread (!Send pinned ownership)
+//! - N OS threads, each owning 1 persistent RetainSet; a FRESH Vm is created
+//!   per request and borrows the worker's RetainSet (no Vm reuse — the N=1
+//!   persistent-Vm architecture was REJECTED in WP-77.2)
+//! - Axum → mpsc → Worker → execute_with_retain() → Response → Axum
+//! - Vm and RetainSet never leave the owning worker thread (!Send)
 //!
 //! Binding constraints (Council WP-77.5, P-67.5):
 //! - RetainSet MUST be declared BEFORE Vm (Rust drop order is load-bearing)
@@ -130,8 +132,10 @@ mod implementation {
             _context: Arc<WorkerPoolContext>,
             mut rx: mpsc::UnboundedReceiver<WorkerTask>,
         ) {
-            // Get the PHP builtins registry once for all requests
-            let reg = php_builtins::registry();
+            // Build the PHP builtins registry ONCE per worker (A-DL5/A-PP5:
+            // registry() is NOT cached — building it per request was pure churn
+            // that would have polluted the WP-78 alloc census).
+            let reg = registry();
 
             // P-67.5: RetainSet for entire thread (MUST be declared first so Vm dies first)
             // This persists: parked unit modules (compiled bytecode; a module
@@ -144,7 +148,7 @@ mod implementation {
             // Main request loop: each request gets fresh Vm that borrows persistent RetainSet
             while let Some(task) = rx.blocking_recv() {
                 // Execute handler: creates Vm per-request, reuses RetainSet per-thread
-                let (response, status) = execute_with_retain(&retain, &task.meta);
+                let (response, status) = execute_with_retain(&retain, &reg, &task.meta);
                 let _ = task.response_tx.send((response, status));
             }
         }
@@ -201,9 +205,9 @@ mod implementation {
     /// Rule: output capture before request_end() (Pedersen/Stogov permanent rule).
     pub fn execute_with_retain(
         retain: &php_runtime::RetainSet,
+        reg: &php_runtime::Registry,
         meta: &WorkerHandlerMeta,
     ) -> (Vec<u8>, StatusCode) {
-        let reg = registry();
         let name = meta.path.clone().into_bytes();
         let source = &meta.source;
 
@@ -221,7 +225,7 @@ mod implementation {
         };
 
         // Phase 2: Compile to bytecode module
-        let module = match php_runtime::compile_program(&program, &reg) {
+        let module = match php_runtime::compile_program(&program, reg) {
             Ok(m) => m,
             Err(php_runtime::CompileError::Unsupported(what)) => {
                 let msg = format!("PHP Unsupported: {}\n", what).into_bytes();
@@ -235,7 +239,7 @@ mod implementation {
         // - But it borrows thread-persistent RetainSet
         // - Parked unit modules persist across requests (bytecode only)
         // - request_end() resets per-request state; statics die with the Vm (A-DS2)
-        let mut vm = php_runtime::vm_new(retain, &module, &reg, Some(&program));
+        let mut vm = php_runtime::vm_new(retain, &module, reg, Some(&program));
 
         // Phase 4: Per-request lifecycle (Stogov order, Council WP-77.5)
         // 1. request_start: setup superglobals, INI, session
