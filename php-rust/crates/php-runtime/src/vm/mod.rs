@@ -3422,9 +3422,12 @@ impl<'m> Vm<'m> {
     /// stack, resource ids, per-request caches). Function statics, closure
     /// statics and class static props are NOT in its scope: they are per-Vm
     /// fields and die with the Vm (A-DS2 — FPM isolation by Vm death, A-DS6).
-    /// The only cross-request survivor is the caller-held RetainSet arena of
-    /// compiled unit modules (bytecode, never userland state). Called at the
-    /// end of each request, before the Vm is dropped.
+    /// Nothing owned by the request survives it: the RetainSet is the
+    /// request-lifetime pin of unit modules and dies right after the Vm
+    /// (S-78.1.5, KS-DS-78-4 — a longer-lived RetainSet is a leak). The one
+    /// cross-request survivor is the THREAD-LOCAL unit cache (WP-63/66:
+    /// bytecode only, fingerprinted, ways-evicted — the opcache analog).
+    /// Called at the end of each request, before the Vm is dropped.
     ///
     /// Follows Bak specification: ~25-field reset categorized by lifecycle.
     /// Council binding amendments applied (WP-77.3 COUNCIL_WP77_REVIEWS.md):

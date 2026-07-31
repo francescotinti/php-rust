@@ -25,6 +25,13 @@ PATTERNS=(
   "object table, class cache"
   "persistent RetainSet"
   "thread-persistent RetainSet"
+  # A-DS1 (Council WP-80): the request_end doc still claimed the RetainSet
+  # was the cross-request survivor (false post S-78.1.5 — the survivor is
+  # the thread-local unit cache). The TRUE sentence "cross-request survivor
+  # is the THREAD-LOCAL unit cache" must keep passing, so the ban is on the
+  # RetainSet framing, not on "cross-request survivor" alone.
+  "survivor is the caller-held RetainSet"
+  "RetainSet arena"
 )
 
 scan() { # scan <dir> -> matches on stdout, rc 0 if any found

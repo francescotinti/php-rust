@@ -164,6 +164,13 @@ mod implementation {
                 // process — the default panic hook has already printed the
                 // payload and backtrace by the time catch_unwind sees it.
                 let handle = std::thread::spawn(move || {
+                    // SAFETY (A-MS4, Council WP-80): AssertUnwindSafe is sound
+                    // here because the Err arm NEVER resumes — it aborts the
+                    // process, so no code can observe state broken mid-panic.
+                    // The unwind itself still runs drops for the in-flight
+                    // request's Vm/RetainSet before abort() is reached; those
+                    // types own per-request state only, and any panic-in-drop
+                    // escalates to an immediate abort anyway.
                     let unwind =
                         std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                             Self::worker_loop(ctx, rx);
