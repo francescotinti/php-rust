@@ -17,6 +17,7 @@ detect() {
   # any .rendered/.stdout read within the same fn is a violation.
   awk '
     /^[[:space:]]*\/\// { next }          # comments do not arm nor violate
+    /grep-gate-allow: post-reset-emptiness-check/ { next }  # explicit, auditable
     /fn [A-Za-z0-9_]+ *(<[^>]*>)? *\(/ { seen = 0 }
     /request_end\(\)/ { seen = 1; next }
     seen && /\.(rendered|stdout)/ {

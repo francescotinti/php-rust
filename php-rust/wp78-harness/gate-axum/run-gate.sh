@@ -63,7 +63,13 @@ fi
 
 req() { curl -s -m 5 -X POST "http://127.0.0.1:$PORT/$1"; }
 
-# hello.php x2 — byte parity (KS-SK-78.2)
+# Expected bodies are compared IN FULL (cmp): a head -1 check was blind to the
+# doubled-body bug (rendered+stdout concatenation) — self-equality plus a
+# first-line probe is NOT a positive control (S-78.0 lesson).
+printf 'hello axum\nsum=42\n' > "$OUTDIR/hello.expected"
+printf 'G3:fn=12;prop=12;closure=12;const=fresh;constval=1\n' > "$OUTDIR/stateful.expected"
+
+# hello.php x2 — byte parity (KS-SK-78.2) + full-body oracle match
 req hello.php > "$OUTDIR/hello.1"
 req hello.php > "$OUTDIR/hello.2"
 if cmp -s "$OUTDIR/hello.1" "$OUTDIR/hello.2"; then
@@ -72,13 +78,13 @@ else
   echo "FAIL hello: bodies differ (KS-SK-78.2 → REJECT S-77.6.5.2.3)"
   FAILS=$((FAILS+1))
 fi
-if [ ! -s "$OUTDIR/hello.1" ]; then
-  echo "FAIL hello: empty body"
+if ! cmp -s "$OUTDIR/hello.1" "$OUTDIR/hello.expected"; then
+  echo "FAIL hello: body != oracle body:"
+  diff "$OUTDIR/hello.expected" "$OUTDIR/hello.1" | head -5
   FAILS=$((FAILS+1))
 fi
 
-# gate_stateful.php x3 — byte parity + positive control (KS-DS-78-1)
-EXPECTED='G3:fn=12;prop=12;closure=12;const=fresh;constval=1'
+# gate_stateful.php x3 — byte parity + full-body oracle match (KS-DS-78-1)
 for i in 1 2 3; do req gate_stateful.php > "$OUTDIR/stateful.$i"; done
 for i in 2 3; do
   if ! cmp -s "$OUTDIR/stateful.1" "$OUTDIR/stateful.$i"; then
@@ -87,12 +93,13 @@ for i in 2 3; do
   fi
 done
 for i in 1 2 3; do
-  if [ "$(head -1 "$OUTDIR/stateful.$i")" != "$EXPECTED" ]; then
-    echo "FAIL stateful req $i: got '$(head -1 "$OUTDIR/stateful.$i")' expected '$EXPECTED' (KS-DS-78-1)"
+  if ! cmp -s "$OUTDIR/stateful.$i" "$OUTDIR/stateful.expected"; then
+    echo "FAIL stateful req $i: body != oracle body (KS-DS-78-1):"
+    diff "$OUTDIR/stateful.expected" "$OUTDIR/stateful.$i" | head -5
     FAILS=$((FAILS+1))
   fi
 done
-[ "$FAILS" = 0 ] && echo "OK  stateful: 3 bodies byte-identical and == expected"
+[ "$FAILS" = 0 ] && echo "OK  stateful: 3 bodies byte-identical and == oracle"
 
 # Teardown
 kill "$SRV" 2>/dev/null

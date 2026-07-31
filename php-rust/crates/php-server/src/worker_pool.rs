@@ -210,15 +210,22 @@ mod implementation {
         let name = meta.path.clone().into_bytes();
         let source = &meta.source;
 
-        // Phase 1: Compile PHP source to bytecode (per-request Module)
+        // Phase 1: Compile PHP source to bytecode (per-request Module).
+        // A-PP4/A-TH5/A-DS4 (Council WP-78): the HTTP boundary mirrors the PHP
+        // boundary — EVERY fatal (compile or runtime) is 500 with the same
+        // byte-parity body the CLI renders (FPM: 500 when headers not sent).
+        let file_s = String::from_utf8_lossy(&name).into_owned();
         let program = match php_runtime::lower_source(&name, source) {
             Ok(p) => p,
             Err(php_runtime::LowerError::Fatal { message, line }) => {
-                let msg = format!("PHP Fatal: {} on line {}\n", message, line).into_bytes();
+                let msg = format!(
+                    "\nFatal error: {message} in {file_s} on line {line}\nStack trace:\n#0 {{main}}\n"
+                )
+                .into_bytes();
                 return (msg, StatusCode::INTERNAL_SERVER_ERROR);
             }
             Err(e) => {
-                let msg = format!("PHP Lower Error: {:?}\n", e).into_bytes();
+                let msg = format!("PHP Parse error: {e}\n").into_bytes();
                 return (msg, StatusCode::INTERNAL_SERVER_ERROR);
             }
         };
@@ -273,18 +280,135 @@ mod implementation {
 
         // SAFETY (A-PP1): Output capture MUST precede request_end() reset boundary.
         // Reset boundary (step 4) clears per-request state (superglobals, handlers, OB stack).
-        // Output capture reads buffered output from rendered + stdout BEFORE reset.
         // Violation results in truncated or lost output on subsequent requests.
-        // Enforced by dispatch boundary: handler runs, output captured, THEN reset.
-        let mut response = Vec::new();
-        response.extend_from_slice(&vm.rendered);
-        response.extend_from_slice(&vm.stdout);
+        // Body = `rendered` ONLY: it is the CLI-faithful stream (stdout with
+        // diagnostics inline + fatal tail); appending `stdout` too DOUBLED every
+        // body — caught by the absolute-content gate tests (S-78.0, the head -1
+        // check in the old HTTP gate was blind to it).
+        let response = std::mem::take(&mut vm.rendered);
 
         // 4. request_end: reset ephemeral state for next request
         // (G-APERTURA-2 gate: two requests on same RetainSet must produce byte-identical output)
         vm.request_end();
 
-        (response, StatusCode::OK)
+        // A-PP4/A-TH5/A-DS4: runtime fatal → 500 (was an accidental 200; the
+        // KS-M3 verbale claimed 500 — now true). Body stays byte-parity.
+        let status = if fatal.is_some() {
+            StatusCode::INTERNAL_SERVER_ERROR
+        } else {
+            StatusCode::OK
+        };
+        (response, status)
+    }
+
+    /// Gate tests (A-SK3/A-PP3, Council WP-78). They only compile under the
+    /// axum-server feature — CI runs them via
+    /// `cargo test --release -p php-server --features axum-server` (A-SK4);
+    /// the default workspace suite covers none of this file.
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        fn meta(src: &str) -> WorkerHandlerMeta {
+            WorkerHandlerMeta {
+                path: "/gate.php".to_string(),
+                source: src.as_bytes().to_vec(),
+            }
+        }
+
+        /// A-SK3: in-cargo form of G-APERTURA-2 — two requests on the SAME
+        /// RetainSet must produce non-empty, byte-identical bodies.
+        #[test]
+        fn gate_apertura2_two_requests_same_retainset_byte_parity() {
+            let reg = registry();
+            let retain = php_runtime::RetainSet::new();
+            let (b1, s1) = execute_with_retain(&retain, &reg, &meta("<?php echo \"hello axum\\n\";"));
+            let (b2, s2) = execute_with_retain(&retain, &reg, &meta("<?php echo \"hello axum\\n\";"));
+            assert_eq!(s1, StatusCode::OK);
+            assert_eq!(s2, StatusCode::OK);
+            assert!(!b1.is_empty(), "first body empty (KS-PP-1)");
+            assert_eq!(b1, b2, "bodies diverge (KS-SK-78.2 → REJECT)");
+        }
+
+        /// KS-DS-78-1 (A-DS3): function statics restart per request — request
+        /// N≥2 printing ≠1 is FATAL (FPM semantics: isolation by Vm death).
+        #[test]
+        fn stateful_static_counter_restarts_each_request() {
+            let reg = registry();
+            let retain = php_runtime::RetainSet::new();
+            let src = "<?php function c() { static $n = 0; return ++$n; } echo c();";
+            for i in 1..=3 {
+                let (body, status) = execute_with_retain(&retain, &reg, &meta(src));
+                assert_eq!(status, StatusCode::OK);
+                assert_eq!(
+                    body, b"1",
+                    "request {i}: static counter leaked across requests (KS-DS-78-1)"
+                );
+            }
+        }
+
+        /// A-PP3 with POSITIVE control (KS-PP-1): buffered output (ob_start
+        /// without explicit flush) survives two sequential requests — and the
+        /// reset boundary really zeroes the buffers, proving a post-reset
+        /// capture would lose the bytes.
+        #[test]
+        fn capture_before_reset_with_positive_control() {
+            let reg = registry();
+            let retain = php_runtime::RetainSet::new();
+            let src = "<?php ob_start(); echo \"buffered-bytes\";";
+            let (b1, _) = execute_with_retain(&retain, &reg, &meta(src));
+            let (b2, _) = execute_with_retain(&retain, &reg, &meta(src));
+            assert_eq!(b1, b"buffered-bytes", "OB content lost on request 1");
+            assert_eq!(b1, b2, "second request diverges (KS-PP-1)");
+
+            // Positive control: replicate the lifecycle by hand and assert the
+            // buffers are EMPTY after request_end() — i.e. the permanent rule
+            // (capture BEFORE reset) is load-bearing, not decorative.
+            let name = b"/gate.php".to_vec();
+            let program = php_runtime::lower_source(&name, b"<?php echo \"payload\";").unwrap();
+            let module = php_runtime::compile_program(&program, &reg).unwrap();
+            let mut vm = php_runtime::vm_new(&retain, &module, &reg, Some(&program));
+            vm.request_start(None, &[]);
+            vm.final_flush = false;
+            let _ = vm.run();
+            vm.final_flush = true;
+            vm.request_shutdown();
+            assert!(
+                !(vm.rendered.is_empty() && vm.stdout.is_empty()),
+                "positive control broken: no output before request_end"
+            );
+            vm.request_end();
+            // This is the one sanctioned post-reset read: it asserts EMPTINESS
+            // (proving a capture here would lose bytes), it is not a capture.
+            assert!(
+                vm.rendered.is_empty() && vm.stdout.is_empty(), // grep-gate-allow: post-reset-emptiness-check
+                "request_end() no longer clears the output buffers — \
+                 the capture-before-reset rule lost its mechanism"
+            );
+        }
+
+        /// A-PP4/A-TH5/A-DS4: every fatal is HTTP 500 — runtime fatal and
+        /// compile fatal alike — with the CLI's byte-parity `Fatal error:` body.
+        #[test]
+        fn fatal_maps_to_http_500_compile_and_runtime() {
+            let reg = registry();
+            let retain = php_runtime::RetainSet::new();
+            // Runtime fatal: undefined function.
+            let (body, status) =
+                execute_with_retain(&retain, &reg, &meta("<?php nope_missing_fn();"));
+            assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+            assert!(
+                String::from_utf8_lossy(&body).contains("Fatal error:"),
+                "runtime fatal body not byte-parity: {:?}",
+                String::from_utf8_lossy(&body)
+            );
+            // The worker survives a fatal: next request on the same RetainSet
+            // is clean (boundary discipline).
+            let (ok_body, ok_status) =
+                execute_with_retain(&retain, &reg, &meta("<?php echo \"alive\";"));
+            assert_eq!(ok_status, StatusCode::OK);
+            assert_eq!(ok_body, b"alive");
+        }
     }
 }
 
