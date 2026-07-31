@@ -43,26 +43,44 @@ la porta vm_new/park_main è ALLOWLISTED (gate-lever-pins). 4. **Panic =
 FAIL-FAST**. 5. **Un body ≠ oracolo sulla leva ⇒ git revert, mai
 fix-forward** (KS-DS-80-3, mai innescata).
 
-## §WP-82 (prossima sessione) — misure RESIDUE dell'A/B, poi verdetto A-BB6 COMPLETO
+## ⚖️ Concilio WP-83 ESEGUITO (2026-07-31, verbali VINCOLANTI): `wp83-harness/COUNCIL_WP83_REVIEWS.md`
 
-I residui sono DICHIARATI in MEASURE81 §Residui — nessuno è chiuso:
-1. Pre-flight skill + battery verde + matrix sestetto sul tree di apertura.
-2. **Footprint twin** (design79 §11.3): union NON strumentato, V2 steady
-   W=1 su N vs 2N con floor vmmap 0,1MB (N scalato: floor ≤ 1/10
-   dell'effetto) + **peak a W=num_cpus** (KL-80-2; lo spread 12% W=10 è
-   metrica di verdetto). Coppia build-adiacente stessa-sera vs phpr-wp80/
-   binari WP-80 se si cita un delta.
-3. **CPU slope due-N** (100/200 req, KB-81-5) con risoluzione ex-ante
-   dichiarata (KL-82-3) + costo scan supersede (A-DS9, soglia numerica).
-4. **Retained ×W**: run mem-census (d5bba760) su hello+include_heavy,
-   cifra retained_walk_bytes (etichetta "≥, Const esclusi") → budget ×W
-   DICHIARATO (KS-MS-82-2) prima di ogni lettura ulteriore del braccio leva.
-5. **Fixture autoload-run** (KB-81-3/KB-82-5) PRIMA di citare "HIT salta
-   a3" come verdetto.
-6. **Battery-su-HIT col pin ESPLICITO main_hit per richiesta** (KS-SK-82-3).
-7. ORM/hk POST-leva build-adiacente se l'A/B li cita (KS-AH-82-3).
-8. F4: giudizio del Concilio WP-83 sulla deviazione dichiarata (nessun
-   path main-impuro sul tree).
+**9× CONCORDO CON EMENDAMENTI, 0 opposizioni.** La leva è giudicata REALE:
+clone-on-stack borrowck-enforced, put-dopo-link su entrambi i path, purezza
+del main verificata al lowering, e **a_calls(HIT)=2 PROVATA dall'aritmetica
+dei raw** (Bak: a_bytes==2×len(path canonico) ESATTO; Gregg: md5 r1==r2==r3
+su tutte le 8 coppie). REFUTATI: **strumenti di verdetto non fail-closed**
+(field() vuoto passa, P5-P7 solo-r1, percentuali a mano nell'header
+"scriptato" — A-SK19/20, A-BG26/27/28), **il one-shot NON passa dall'acquire**
+(run_source_with_argv duplica lower+compile: F-oneshot t2 vacua, A-TH21),
+**u64 chiuso nel codice non nella macchina** (gate-dr1 dice ancora u32,
+A-TH19/KH83-1), **ledger drained non esatto** (manca il resid del fatal,
+A-PP18), **raw VOID rimossi senza quarantena** (A-AH27), **retained MAIN =
+FLOOR non budget** (add_program shallow 1-2 ordini, selftest non lo esercita
+— A-DL15/16 + battery mem-census A-AH29), **F13 insufficiente per la classe
+2** (serve F14: condizionali+eval-mint+deferred, A-DS18), **eviction thrash
+main/include stessa key** (FIFO senza refresh: main_evicted + F15, A-DS20),
+**sigillo di TIPO sulla porta vm_new** (token ZST, A-MS17; newtype per il
+fp, A-AH26). Ordine vincolante S-82.0 = verbale §Sintesi (8 passi) + 30 KS
+nuovi (KH83 · KS-MS-83 · KS-SK-83 · KS-AH-83 · KB-83 · KS-PP-83 · KL-83 ·
+KS-DS-83 · KG-83).
+
+## §WP-82 (prossima sessione) — S-82.0 "honest instruments" poi misure RESIDUE
+
+**Ordine = Concilio WP-83 §Sintesi (8 passi, non rinegoziare)**: 1. strumenti
+di verdetto fail-closed (A-SK19/20, A-BG26/27/28, KG-83-3, MEASURE81
+retro-annotato) · 2. fold one-shot su acquire (A-TH21 + A-SK23/24) ·
+3. denti macchina sui sigilli (A-TH19 pin u64, A-TH20, A-MS18/19/20, A-AH26,
+A-PP19/20/21, A-DL17/18, A-TH22) · 4. quarantena raw (A-AH27, KH83-2) ·
+5. strumento retained onesto PRIMA del budget (A-DL15/16, A-AH29/30) ·
+6. fixture nuove (F14 A-DS18 · F15+main_evicted A-DS20 · F2 same-key A-SK21
+· trigger F4 A-DS19 · A-DS16/17 · spike resid req=11 NOMINATO KB-83-2) ·
+7. SOLO POI misure residue: footprint twin V2 N/2N + peak W=num_cpus (floor
+A-DL19) · CPU slope N=1000/2000 (soglie Bak: ≤×1,05+25µs/req; scan ≤1µs/key)
+· battery-su-HIT TWIN-PAIR (Pedersen Q5/A-SK25) · autoload-run (KB-82-5) ·
+ORM/hk perf SOLO build-adiacente a 7593d8e (KS-AH-83-4) · budget ×W solo
+dopo il passo 5 (KL-83-1) · 8. revert policy KS-DS-80-3 invariata.
+F4: deviazione ACCETTATA da Stogov col trigger test-only richiesto (A-DS19).
 
 **Kill-switch di rotta (attivi)**: tabella WP-82 (30 KS — verbale
 `wp82-harness/COUNCIL_WP82_REVIEWS.md` §Kill-switch) + tabella WP-81 +
