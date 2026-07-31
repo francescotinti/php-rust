@@ -130,6 +130,19 @@ mod axum_handler {
             path
         };
 
+        // S-79.0.3 (A-AH13/A-DL5): idle-window probe — answered from the
+        // ROUTER task, no pool, no worker, no Vm. The driver brackets an
+        // idle period with two probes; the counter drift between them is
+        // the cross-thread background noise the per-phase diffs absorb.
+        // Anchored ends_with (S-78.1 lesson: magic paths anchored at the
+        // END, never by equality — the docroot prefix varies).
+        #[cfg(feature = "census-instrumentation")]
+        if request_path.ends_with("/__census_global") {
+            let (calls, bytes) = crate::census_alloc::snapshot();
+            eprintln!("census-global: calls={calls} bytes={bytes}");
+            return (StatusCode::OK, b"census-global\n".to_vec());
+        }
+
         // Read PHP source from disk (docroot + request_path)
         let file_path = format!("{}{}", state.docroot, request_path);
         let source = match std::fs::read(&file_path) {
@@ -285,6 +298,11 @@ mod axum_handler {
 
 fn main() -> ExitCode {
     php_runtime::logging::init();
+
+    // S-79.0.3: hand the runtime-side census brackets (a1/a3 split) the
+    // counting allocator's snapshot. Install-once; a duplicate set is a no-op.
+    #[cfg(feature = "census-instrumentation")]
+    let _ = php_runtime::alloc_census::SNAPSHOT_FN.set(census_alloc::snapshot);
 
     let mut host = String::from("127.0.0.1");
     let mut port: u16 = 8080;

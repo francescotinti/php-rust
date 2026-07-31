@@ -1,4 +1,4 @@
-# design78.md — WP-78 protocollo di misura (A-BG3/A-DL3, Council WP-78; emendato S-78.1.7 per Council WP-79)
+# design78.md — WP-78 protocollo di misura (A-BG3/A-DL3, Council WP-78; emendato S-78.1.7 per Council WP-79; emendato S-79.0 per Council WP-80)
 
 **Stato**: protocollo scritto in S-78.0 (sanatoria), PRIMA di qualunque run di
 misura; EMENDATO in S-78.1.7 (A-DL8/A-BG8/A-BG9/A-BG10/A-BB9 + KG-79.B/C/D).
@@ -11,6 +11,16 @@ Ogni run cita: hash sha256[0:16] di **php-server** (mai phpr — A-SK5), feature
 set, e il log `gate-axum/out/feature-matrix.log` della stessa build. Prima di
 ogni batch di misura: `gate-feature-matrix.sh` PASS + `gate-axum/run-gate.sh`
 PASS sulla build che verrà misurata.
+
+**S-79.0.4 (Council WP-80, KS-AH-80-1/KS-SK-80-4)**: la matrice è una
+QUATERNA (default / axum-only / census / union, tutte sotto -D warnings, in
+gate e in CI) e il driver ENFORCE l'identità: hash del binario misurato ==
+riga `bin[census]` (mode census) o `bin[union]` (altri modi) del
+feature-matrix.log — mismatch ⇒ il driver rifiuta di partire. Il gemello
+census ha il SUO gate di equivalenza funzionale (run-gate sul binario
+census + test feature-gated in CI, A-AH11). Semantica CountingAlloc
+dichiarata: `realloc` conta `n` LORDO, `dealloc` non conta — ogni cifra
+census è churn lordo, upper bound (A-DL1/A-AH11).
 
 ## Configurazione di misura (A-BG3, KB-78-3, KG-78.A)
 
@@ -114,6 +124,38 @@ contatore visto muoversi almeno una volta nel run o census VOID — KG-79.A).
 **I verdetti footprint/peak escono SOLO dal gemello NON strumentato**
 (KB-78-5/KL-78-5: cifra da build strumentata = NULLA); la build strumentata
 produce solo contatori.
+
+### Split sub-canale S-79.0.3 (Council WP-80, KH80-2/KB-80-1/KS-SK-80-2)
+
+La fase a aggregata è un LETTO, non un canale (A-TH2). Riga census estesa:
+- **a1** = prelude lower+compile del path MAIN (bracket in php-runtime,
+  feature `census-instrumentation` propagata cross-crate);
+- **a2** = a − a1 (main proper, DERIVATO dall'emettitore — mai un contatore);
+- **a3** = include-compile su unit-cache MISS (contato nella finestra b: gli
+  include compilano a run time; a3 è la quota di b che un cache-HIT salta —
+  il discriminatore che il design A-BB6 ha diritto di usare);
+- **resid** = gap s3(prev)→s0(now): il traffico server FUORI da ogni finestra
+  (fs read, WorkerTask, canali, la riga census stessa) — riconciliazione del
+  denominatore (A-BB11/KB-80-3: Δglobale/req = a+b+c+resid). A --workers >1
+  il gap assorbe il traffico degli altri worker: protocollo = --workers 1.
+
+Obblighi (driver ENFORCE, exit≠0):
+- righe census attese == WARMUP+MEASURED (A-PP5: un fatal precoce salta la
+  riga in silenzio);
+- depth>1 in un campione ⇒ run VOID con exit≠0 (KH78-2 enforcement, A-SK7);
+- finestra idle (A-AH13/A-DL5): probe dispatcher-side `/__census_global`
+  (coppia back-to-back = self-cost, poi sleep+probe = drift) — il rumore
+  cross-thread dichiarato accanto alle cifre di fase;
+- **R≥3 per OGNI fixture census, INCLUSE le include** (A-BG13: census.inc
+  era R=1 non dichiarato);
+- seconda fixture include-pesante `include_heavy.php` (5 unit + compute,
+  byte-identica all'oracle) — i verdetti citano ASSOLUTI, mai il "99%"
+  della fixture minima (KB-80-1).
+
+Controlli positivi in-cargo (KG-79.A): a1>0 su ogni richiesta; a3>0 su MISS
+e ==0 su HIT (`census_split_a1_prelude_and_a3_include_discriminate`); canale
+c mosso da una fixture teardown-allocante
+(`census_c_channel_positive_control_teardown_allocates`, KB-80-5).
 
 ## Tier-0 (KG-79.D — configurazione ESEGUIBILE tracciata)
 

@@ -6779,6 +6779,15 @@ impl<'m> Vm<'m> {
             uc_stat(|s| s.miss_nostat += 1);
             uc_log("miss nostat", &key);
         }
+        // S-79.0.3 (A-TH2/A-BB10): the whole fresh path — read + lower +
+        // compile + relocate + publish — is the a3 include-compile channel
+        // (exactly the work a unit-cache hit skips). RAII window: the early
+        // failure returns below must not leave it open; nested windows (an
+        // autoload firing a whole include mid-lower) book their own delta
+        // net of the inner ones. Closed explicitly BEFORE run_linked — the
+        // unit's execution is phase b, not compile.
+        #[cfg(feature = "census-instrumentation")]
+        let a3w = crate::alloc_census::A3Window::open();
         #[cfg(feature = "mem-census")]
         let lower_t0 = std::time::Instant::now();
         let mut content = match std::fs::read(&real) {
@@ -6943,6 +6952,9 @@ impl<'m> Vm<'m> {
                 );
             }
         }
+        // a3 window closes here: publish done, the linked run has not started.
+        #[cfg(feature = "census-instrumentation")]
+        drop(a3w);
         let parked: &'m Module = self.park_module(rc);
         // B-65.2: boundary flush — compile/remap windows are closed, the
         // linked run has not started (no timed window contains this I/O).

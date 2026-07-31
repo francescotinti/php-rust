@@ -36,7 +36,16 @@ OUTDIR="$HERE/out"
 mkdir -p "$OUTDIR"
 PORT="${PORT:-8199}"
 GIT_REV="$(git -C "$REPO" rev-parse --short HEAD 2>/dev/null || echo 'no-git')"
-VERDICT="$OUTDIR/g_apertura_2.verdict"
+# S-79.0.4 (A-AH11, Council WP-80): FEATURES overrides the build config so the
+# CENSUS twin runs the SAME full-body-vs-oracle battery (gate-census-twin.sh
+# sets census-instrumentation); the verdict file is per-config so a census
+# PASS can never masquerade as the union one.
+FEATURES="${FEATURES:-axum-server}"
+if [ "$FEATURES" = "axum-server" ]; then
+  VERDICT="$OUTDIR/g_apertura_2.verdict"
+else
+  VERDICT="$OUTDIR/g_apertura_2.$FEATURES.verdict"
+fi
 [ -f "$VERDICT" ] && mv "$VERDICT" "$VERDICT.superseded-$(date +%Y%m%d%H%M%S)"
 FAILS=0
 
@@ -47,8 +56,8 @@ find "$HERE/fixtures" -name '._*' -delete
 # 1. Build with the feature (union with default is fine for the dual-mode binary;
 #    the feature identity of the DEFAULT binary is gated by gate-feature-matrix.sh).
 #    A-AH7/KS-AH-78-5: capture cargo's own artifact report — BIN comes from it.
-echo "== build -p php-server --features axum-server (json artifact capture) =="
-( cd "$REPO" && cargo build --release -p php-server --features axum-server \
+echo "== build -p php-server --features $FEATURES (json artifact capture) =="
+( cd "$REPO" && cargo build --release -p php-server --features "$FEATURES" \
     --message-format=json ) > "$OUTDIR/build.json" 2> "$OUTDIR/build.log"
 if [ $? -ne 0 ]; then
   echo "FAIL: build failed (see $OUTDIR/build.log)"

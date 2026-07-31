@@ -47,6 +47,16 @@ build() { # $1 label, rest: cargo flags
     echo "FAIL [$label]: build with -D warnings failed (KS-AH-78-2)" | tee -a "$LOG"
     FAILS=$((FAILS+1)); return 1
   fi
+  # A-AH12 (Council WP-80): cargo rustc's extra -D warnings flag changes the
+  # crate hash and therefore the BITS — measured empirically (census row:
+  # 07e6fd9d via rustc vs 69760159 via build, same source). The warnings
+  # check above stays; the LOGGED hash is of the binary as operators (and
+  # run-gate, and the measure driver) actually build it: plain cargo build.
+  if ! ( cd "$REPO" && cargo build --release -p php-server "$@" ) \
+      >> "$OUT/feature-matrix-build.log" 2>&1; then
+    echo "FAIL [$label]: plain cargo build failed after rustc pass (A-AH12)" | tee -a "$LOG"
+    FAILS=$((FAILS+1)); return 1
+  fi
   local h
   h=$(shasum -a 256 "$BIN" | cut -c1-16)
   echo "bin[$label] sha256[0:16]=$h" | tee -a "$LOG"
@@ -69,7 +79,14 @@ build "default" && {
 # 2. axum only
 build "axum-only" --no-default-features --features axum-server
 
-# 3. union (deployed dual-mode binary) — built LAST so the binary on disk is
+# 3. census (union + counters) — S-79.0.4 (A-AH10, Council WP-80): the fourth
+#    configuration was OUTSIDE the matrix — it could bit-rot in silence and
+#    its hash was absent from this log, so census figures were auto-exempt
+#    from KS-AH-78-1. Now it builds under -D warnings and its hash is the
+#    bin[census] row the measure driver ENFORCES for census-mode runs.
+build "census" --features census-instrumentation
+
+# 4. union (deployed dual-mode binary) — built LAST so the binary on disk is
 #    the measured one; positive control for the nm detector.
 build "union" --features axum-server && {
   n=$(net_syms)
@@ -81,7 +98,7 @@ build "union" --features axum-server && {
   fi
 }
 
-# 4. A-AH6: warnings fatal on TEST targets (release profile — the debug/ dir
+# 5. A-AH6: warnings fatal on TEST targets (release profile — the debug/ dir
 #    must never reappear on the local disk). cargo scopes the summary line per
 #    crate, so grepping for the php-server summary keeps dependency warnings
 #    out of scope, same as the cargo-rustc -D pass above.
@@ -96,6 +113,19 @@ elif grep -E 'warning: `php-server`.*generated [0-9]+ warning' "$TESTLOG"; then
   FAILS=$((FAILS+1))
 else
   echo "OK  [test-targets]: php-server test build warning-free" | tee -a "$LOG"
+fi
+
+# 6. A-AH12 (Council WP-80): the test build above runs AFTER the union build —
+#    assert the binary on disk still carries the union hash, so the bin[union]
+#    row keeps describing the file the measure driver will hash. (cargo build
+#    vs cargo rustc identity is otherwise "reproducible luck", not an assert.)
+UNION_HASH="$(awk -F= '/^bin\[union\]/ {print $2}' "$LOG" | tail -1)"
+FINAL_HASH="$(shasum -a 256 "$BIN" | cut -c1-16)"
+if [ -n "$UNION_HASH" ] && [ "$FINAL_HASH" != "$UNION_HASH" ]; then
+  echo "FAIL [identity]: binary on disk changed after the union build ($FINAL_HASH != $UNION_HASH, A-AH12)" | tee -a "$LOG"
+  FAILS=$((FAILS+1))
+else
+  echo "OK  [identity]: on-disk binary == bin[union] after all steps (A-AH12)" | tee -a "$LOG"
 fi
 
 if [ "$FAILS" = 0 ]; then

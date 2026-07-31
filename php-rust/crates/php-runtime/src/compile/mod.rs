@@ -251,8 +251,21 @@ fn compile_program_impl(
         class_index: &class_index,
     };
 
+    // S-79.0.3 (A-TH2): on the MAIN path (no shared prelude, no elision link)
+    // the leading fn/class indices are the prelude bodies compiled FRESH —
+    // that cost is the a1 sub-channel. Seeded paths share them (fnshare ≈ 0
+    // alloc) or elide them, so only this path opens the window.
+    #[cfg(feature = "census-instrumentation")]
+    let mut a1w: Option<(u64, u64)> = (prelude.is_empty() && link.is_none())
+        .then(crate::alloc_census::a1_open);
     let mut functions: Vec<std::rc::Rc<Func>> = Vec::with_capacity(program.functions.len());
     for (idx, fd) in program.functions.iter().enumerate() {
+        #[cfg(feature = "census-instrumentation")]
+        if idx == crate::alloc_census::prelude_fn_count() {
+            if let Some(s) = a1w.take() {
+                crate::alloc_census::a1_close(s);
+            }
+        }
         // Prelude reuse (WP-20): a seeded unit's leading function indices are
         // the always-injected prelude, already compiled (and relocated into
         // the global id space) in the main module — share that body instead
@@ -283,6 +296,12 @@ fn compile_program_impl(
             split.proper += seg_net(m0);
             m0 = php_types::memcensus::alloc_counters();
         }
+    }
+    // a1 tail: a program whose functions are ALL prelude (bare `<?php`)
+    // never crosses the prefix boundary inside the loop.
+    #[cfg(feature = "census-instrumentation")]
+    if let Some(s) = a1w.take() {
+        crate::alloc_census::a1_close(s);
     }
     // Closure bodies compile tolerantly (like functions): an unsupported body
     // becomes a stub that fatals only if the closure is actually invoked. Same
@@ -325,7 +344,17 @@ fn compile_program_impl(
     if link.is_none() {
         classes.reserve(program.classes.len());
     }
+    // a1 prefix for classes — same contract as the functions loop above.
+    #[cfg(feature = "census-instrumentation")]
+    let mut a1cw: Option<(u64, u64)> = (prelude.is_empty() && link.is_none())
+        .then(crate::alloc_census::a1_open);
     for (cid, cd) in program.classes.iter().enumerate() {
+        #[cfg(feature = "census-instrumentation")]
+        if cid == crate::alloc_census::prelude_class_count() {
+            if let Some(s) = a1cw.take() {
+                crate::alloc_census::a1_close(s);
+            }
+        }
         if let Some(link) = link {
             // Stub-elision (contract v2): the masked classes (already linked
             // by the VM) and the WHOLE seed prefix — including the
@@ -358,6 +387,10 @@ fn compile_program_impl(
                 m0 = php_types::memcensus::alloc_counters();
             }
         }
+    }
+    #[cfg(feature = "census-instrumentation")]
+    if let Some(s) = a1cw.take() {
+        crate::alloc_census::a1_close(s);
     }
     let classes = classes;
 

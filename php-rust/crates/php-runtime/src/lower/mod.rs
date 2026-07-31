@@ -296,7 +296,16 @@ fn lower_source_impl(
         // date API) are seeded ahead of the user's too, so user functions get ids
         // contiguous after them. Call sites resolve by name, so no fix-up needed.
         None => {
+            // S-79.0.3 (A-TH2): the prelude lowering is the a1 sub-channel —
+            // the census must not book it to the main script's account.
+            #[cfg(feature = "census-instrumentation")]
+            let a1s = crate::alloc_census::a1_open();
             let (pclasses, pindex, pfunctions, pfn_index, pstatic) = lower_prelude();
+            #[cfg(feature = "census-instrumentation")]
+            {
+                crate::alloc_census::note_prelude_counts(pfunctions.len(), pclasses.len());
+                crate::alloc_census::a1_close(a1s);
+            }
             low.classes = pclasses;
             low.class_index = pindex;
             low.functions = pfunctions;

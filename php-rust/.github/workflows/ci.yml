@@ -29,20 +29,30 @@ jobs:
         run: cargo build --release --workspace
       - name: Unit tests
         run: cargo test --release --workspace
-      # A-AH2/A-AH3 (Council WP-78): the php-server feature matrix is a TRIPLE
-      # (default / axum-only / union) and the crate must be warning-free in
-      # every configuration (KS-AH-78-2). `cargo rustc` scopes -D warnings to
-      # the php-server crate alone (dependency warnings stay warnings).
+      # A-AH2/A-AH3 (Council WP-78) + A-AH10 (Council WP-80): the php-server
+      # feature matrix is a QUATERNA (default / axum-only / census / union)
+      # and the crate must be warning-free in every configuration
+      # (KS-AH-78-2). The census configuration was OUTSIDE the matrix and
+      # could bit-rot in silence until measurement day. `cargo rustc` scopes
+      # -D warnings to the php-server crate alone (dependency warnings stay
+      # warnings).
       - name: php-server feature matrix (fatal warnings)
         run: |
           cargo rustc --release -p php-server -- -D warnings
           cargo rustc --release -p php-server --no-default-features --features axum-server -- -D warnings
+          cargo rustc --release -p php-server --features census-instrumentation -- -D warnings
           cargo rustc --release -p php-server --features axum-server -- -D warnings
       # A-SK4 (Council WP-78): worker_pool.rs and the axum handler only compile
       # under the feature — the default workspace test run above covers 0% of
       # that code. This step compiles AND runs the feature-gated gate tests.
       - name: php-server axum tests
         run: cargo test --release -p php-server --features axum-server
+      # A-AH11 (Council WP-80): the census build must stay the FUNCTIONAL twin
+      # — its feature-gated tests (split positive controls, c-channel, depth
+      # anti-wrap) run in CI so a cfg(census) block that alters behavior
+      # instead of counting it fails here, not on measurement day.
+      - name: php-server census tests
+        run: cargo test --release -p php-server --features census-instrumentation
       # S-78.1.3 (Council WP-79): the two shell grep-gates are pure-text and
       # cheap — running them here enforces KS-MS-4 (forbidden doc patterns) and
       # KS-PP-2/KS-PP-4 (capture order + allow-marker census) on every push.

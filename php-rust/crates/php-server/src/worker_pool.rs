@@ -106,6 +106,22 @@ mod implementation {
             QUEUE_DEPTH_MAX.fetch_max(d, Ordering::Relaxed);
         }
 
+        thread_local! {
+            /// s3 of the previous request on THIS worker: the s3→s0 gap is
+            /// the residual channel (A-BB11 — the server-side traffic the
+            /// phase windows deliberately exclude: fs read, WorkerTask,
+            /// channels, the census line itself). Counters are global, so at
+            /// --workers >1 the gap absorbs other workers' traffic — the
+            /// measurement protocol pins --workers 1 (KB-78-3).
+            pub static LAST_S3: std::cell::Cell<Option<(u64, u64)>> =
+                const { std::cell::Cell::new(None) };
+            /// Last request's ((a1_calls, a1_bytes), (a3_calls, a3_bytes)) —
+            /// the emitter consumes take_split(), the in-cargo positive
+            /// controls read the copy stashed here.
+            pub static LAST_SPLIT: std::cell::Cell<((u64, u64), (u64, u64))> =
+                const { std::cell::Cell::new(((0, 0), (0, 0))) };
+        }
+
         /// A-SK8 (Council WP-80): tests observing the depth watermark must
         /// start from a clean one — without a reset, a PASS can be inherited
         /// from another test's traffic. Test-only: the production watermark
@@ -487,11 +503,35 @@ mod implementation {
             use std::sync::atomic::Ordering;
             let census_s3 = crate::census_alloc::snapshot();
             let req = census::REQUESTS.fetch_add(1, Ordering::Relaxed) + 1;
+            // S-79.0.3 (KH80-2/A-BB10/A-BB11): sub-channel split — a1 =
+            // prelude, a2 = a − a1 (main proper), a3 = include-compile on
+            // unit-cache miss (booked during the b window: includes compile
+            // at run time; a3 is the compile share within b, what a cache
+            // hit skips). resid = s3(prev)→s0(now) gap: the per-request
+            // traffic OUTSIDE every phase window, reported so the
+            // denominator reconciles (Δglobal/req = a+b+c+resid).
+            let ((a1_calls, a1_bytes), (a3_calls, a3_bytes)) =
+                php_runtime::alloc_census::take_split();
+            census::LAST_SPLIT
+                .with(|c| c.set(((a1_calls, a1_bytes), (a3_calls, a3_bytes))));
+            let a_calls = census_s1.0 - census_s0.0;
+            let a_bytes = census_s1.1 - census_s0.1;
+            let (resid_calls, resid_bytes) = census::LAST_S3.with(|c| {
+                let gap = match c.get() {
+                    Some((pc, pb)) => (census_s0.0 - pc, census_s0.1 - pb),
+                    None => (0, 0),
+                };
+                c.set(Some((census_s3.0, census_s3.1)));
+                gap
+            });
             eprintln!(
-                "census: req={req} a_calls={} a_bytes={} b_calls={} b_bytes={} \
-                 c_calls={} c_bytes={} retain_len={} live_objs={} depth_max={}",
-                census_s1.0 - census_s0.0,
-                census_s1.1 - census_s0.1,
+                "census: req={req} a_calls={a_calls} a_bytes={a_bytes} \
+                 a1_calls={a1_calls} a1_bytes={a1_bytes} a2_calls={} a2_bytes={} \
+                 a3_calls={a3_calls} a3_bytes={a3_bytes} b_calls={} b_bytes={} \
+                 c_calls={} c_bytes={} resid_calls={resid_calls} \
+                 resid_bytes={resid_bytes} retain_len={} live_objs={} depth_max={}",
+                a_calls.saturating_sub(a1_calls),
+                a_bytes.saturating_sub(a1_bytes),
                 census_s2.0 - census_s1.0,
                 census_s2.1 - census_s1.1,
                 census_s3.0 - census_s2.0,
@@ -757,6 +797,90 @@ mod implementation {
             assert!(
                 after.0 > before.0 && after.1 > before.1,
                 "alloc counters did not move across a request (KG-79.A): {before:?} -> {after:?}"
+            );
+        }
+
+        /// S-79.0.3 positive controls (KH80-2/KB-80-1): the a1/a3 sub-channel
+        /// counters must MOVE where they claim to and stay ZERO where they
+        /// claim to. a1 (prelude) moves on every request; a3 moves on the
+        /// FIRST include in a thread (unit-cache miss) and returns to 0 on
+        /// the second (cache hit) — the exact discriminator the A-BB6 design
+        /// is entitled to rely on (a counter never seen moving is blind,
+        /// KG-79.A; one never seen at zero proves nothing either).
+        #[cfg(feature = "census-instrumentation")]
+        #[test]
+        fn census_split_a1_prelude_and_a3_include_discriminate() {
+            let _ = php_runtime::alloc_census::SNAPSHOT_FN.set(crate::census_alloc::snapshot);
+            let reg = registry();
+
+            // Request 1: hello — a1 > 0 (prelude lowered+compiled fresh),
+            // a3 == 0 (no include anywhere in the request).
+            let retain = php_runtime::RetainSet::new();
+            let (b, s) = execute_with_retain(&retain, &reg, &meta("<?php echo \"h\";"));
+            assert_eq!(s, StatusCode::OK);
+            assert_eq!(b, b"h");
+            let ((a1, _), (a3, _)) = census::LAST_SPLIT.with(|c| c.get());
+            assert!(a1 > 0, "a1 (prelude) never moved on a plain request (KG-79.A)");
+            assert_eq!(a3, 0, "a3 moved without any include — window leak");
+
+            // Request 2: first include on this thread — cache miss, a3 > 0.
+            let dir = std::env::temp_dir().join("phpr_census_split_a3");
+            std::fs::create_dir_all(&dir).unwrap();
+            let lib = dir.join("split_lib.php");
+            std::fs::write(&lib, "<?php function split_lib_f() { return 7; }").unwrap();
+            let src = format!("<?php require '{}'; echo split_lib_f();", lib.display());
+            let retain = php_runtime::RetainSet::new();
+            let (b, s) = execute_with_retain(&retain, &reg, &meta(&src));
+            assert_eq!(s, StatusCode::OK);
+            assert_eq!(b, b"7");
+            let ((a1, _), (a3_miss, _)) = census::LAST_SPLIT.with(|c| c.get());
+            assert!(a1 > 0, "a1 must move on the include request too");
+            assert!(a3_miss > 0, "a3 (include-compile) never moved on a cache MISS");
+
+            // Request 3: same include — thread-local unit cache HIT, a3 == 0.
+            let retain = php_runtime::RetainSet::new();
+            let (b, s) = execute_with_retain(&retain, &reg, &meta(&src));
+            assert_eq!(s, StatusCode::OK);
+            assert_eq!(b, b"7");
+            let (_, (a3_hit, _)) = census::LAST_SPLIT.with(|c| c.get());
+            assert_eq!(
+                a3_hit, 0,
+                "a3 moved on a unit-cache HIT — either the cache missed \
+                 (fingerprint drift) or the window brackets hit-path code"
+            );
+        }
+
+        /// A-BB12/A-BG14 (KB-80-5): positive control for the c CHANNEL — a
+        /// fixture whose teardown ALLOCATES must move the s2→s3 window.
+        /// Until this exists, "c=0" is indistinguishable from a blind
+        /// counter. The lifecycle is replicated by hand (same order as
+        /// execute_with_retain) so the window can be read directly.
+        #[cfg(feature = "census-instrumentation")]
+        #[test]
+        fn census_c_channel_positive_control_teardown_allocates() {
+            let reg = registry();
+            let retain = php_runtime::RetainSet::new();
+            let name = b"/gate.php".to_vec();
+            let src = b"<?php register_shutdown_function(function () { \
+                        $s = str_repeat('x', 65536); echo strlen($s); });";
+            let program = php_runtime::lower_source(&name, src).unwrap();
+            let module = php_runtime::compile_program(&program, &reg).unwrap();
+            let mut vm = php_runtime::vm_new(&retain, &module, &reg, Some(&program));
+            vm.request_start(None, &[]);
+            vm.final_flush = false;
+            let _ = vm.run();
+            vm.final_flush = true;
+            // c window opens here (mirror of census_s2 in execute_with_retain)
+            let s2 = crate::census_alloc::snapshot();
+            vm.request_shutdown();
+            let response = std::mem::take(&mut vm.rendered);
+            vm.request_end();
+            let s3 = crate::census_alloc::snapshot();
+            assert_eq!(response, b"65536", "shutdown function did not run in teardown");
+            assert!(
+                s3.0 > s2.0 && s3.1 > s2.1,
+                "c window did not see the allocating teardown (KB-80-5): \
+                 {s2:?} -> {s3:?} — the channel is blind"
             );
         }
 

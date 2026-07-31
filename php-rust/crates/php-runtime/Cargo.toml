@@ -18,6 +18,11 @@ mem-census = ["php-types/mem-census"]
 # WP-62 M2.3: form-B pre-quote diagnostic — identity class-id remap + zero
 # static base in the hot arms (K-M1 arm-cost measurement). Never parity.
 relbase-probe = []
+# S-79.0.3 (Council WP-80 A-TH2/A-BB10): compile-phase sub-channel counters
+# (a1 prelude / a3 include-compile) for the php-server census build. Same
+# convention as the other census features: instrumentation builds only —
+# verdict-grade figures never come from a build with this feature on.
+census-instrumentation = []
 
 [dependencies]
 php-types.workspace = true

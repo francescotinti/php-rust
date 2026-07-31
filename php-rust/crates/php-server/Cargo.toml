@@ -25,4 +25,6 @@ axum-server = ["tokio", "axum", "tower", "hyper", "php-builtins", "num_cpus"]
 # per phase, per-worker requests/RetainSet len/live objects, mpsc queue depth.
 # KB-78-5/KL-78-5: footprint/peak verdicts come ONLY from the non-instrumented
 # twin; this build produces counters, never figures.
-census-instrumentation = ["axum-server"]
+# S-79.0.3: the split a1/a2/a3 (Council WP-80) needs the runtime-side
+# brackets too — the feature unifies across the crate boundary.
+census-instrumentation = ["axum-server", "php-runtime/census-instrumentation"]
