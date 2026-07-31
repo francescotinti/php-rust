@@ -32,10 +32,10 @@ BASE_REV="7593d8e"
 BASEWT="/Volumes/Extreme Pro/Claude/wp82-basewt"
 BASE_TARGET="/Volumes/Extreme Pro/Claude/phpr-old-target"
 export PHPR_CAMPAIGN_SCRIPT="$HERE/measure82-campaign.sh"   # A-AH30
-# KH83-2: campaign-1 (f22ff0b) died at the base-arm build (worktree subdir
-# bug) — its 81 raws are QUARANTINED with manifest, never rm'd:
-#   wp82-harness/evidence/void/20260731T225158Z-f22ff0b/MANIFEST.txt
-VOID_RUNS=81
+# KH83-2: two void campaigns, both QUARANTINED with manifest, never rm'd:
+#   campaign-1 (f22ff0b, worktree subdir bug):  evidence/void/20260731T225158Z-f22ff0b/
+#   campaign-2 (00858ac, --locked vs dev-dep):  evidence/void/20260731T225700Z-00858ac/
+VOID_RUNS=162
 FAILS=0
 NC=$(sysctl -n hw.ncpu)
 GIT_REV="$(git -C "$REPO" rev-parse --short HEAD)"
@@ -118,7 +118,13 @@ fi
 BASECRATE="$BASEWT/php-rust"
 [ -f "$BASECRATE/Cargo.toml" ] || { echo "FAIL: no Cargo.toml at $BASECRATE"; exit 1; }
 cp "$REPO/Cargo.lock" "$BASECRATE/Cargo.lock"
-( cd "$BASECRATE" && CARGO_TARGET_DIR="$BASE_TARGET" cargo build --release --locked -p php-server --features axum-server ) \
+# WP-65 intent (same dep VERSIONS as the live build) with a DECLARED
+# deviation: --offline instead of --locked. The live lock carries the p5
+# php-runtime mimalloc DEV-dependency that the 7593d8e manifest lacks —
+# --locked refuses; --offline resolves from the copied lock + local cache
+# (dev-deps never enter the release build, so the build-dep versions are
+# identical to the live arm).
+( cd "$BASECRATE" && CARGO_TARGET_DIR="$BASE_TARGET" cargo build --release --offline -p php-server --features axum-server ) \
   > "$OUT/m82.base-build.log" 2>&1 || { echo "FAIL: base build"; tail -5 "$OUT/m82.base-build.log"; exit 1; }
 BASE_BIN="$BASE_TARGET/release/php-server"
 BASE_HASH=$(shasum -a 256 "$BASE_BIN" | cut -c1-16)

@@ -1,0 +1,8 @@
+self-test PASS: idle parser exact on synthetic 4-line log; 5-line rejected (A-SK14)
+identity: bin=318853ca3fe0ecb9 == matrix bin[union] (git=00858ac == matrix git) — ENFORCED; archived: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/axum.82p.w10.r3.matrix
+== measure78 mode=axum label=82p.w10.r3 fixture=hello.php bin=318853ca3fe0ecb9 git=00858ac driver_sha=951f1d070169ebb1 campaign=/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp82-harness/measure82-campaign.sh warmup=10 measured=100 idle_secs=10 ==
+peak_rss_bytes=241483776 (whole process, time -l)
+vmmap_V1=175.4M vmmap_V2=175.6M (Physical footprint)
+exit_stats=VERDICT-GRADE (join line present, KL-78-4)
+raw: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/axum.82p.w10.r3.log | vmmap: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/axum.82p.w10.r3.vmmap.V1/V2 | matrix: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/axum.82p.w10.r3.matrix | summary: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/axum.82p.w10.r3.summary
+== measure78 done mode=axum label=82p.w10.r3 bin=318853ca3fe0ecb9 git=00858ac driver_sha=951f1d070169ebb1 rc=0 ==
