@@ -440,6 +440,15 @@ impl RetainSet {
     pub fn new() -> Self {
         RetainSet(elsa::FrozenVec::new())
     }
+    /// S-78.1.5 (A-DS8, Council WP-79): number of parked unit modules. The
+    /// arena is append-only, so this is the ONE observable of the KS-DS-78-4
+    /// kill-switch: growth beyond the distinct units after warm-up = the
+    /// per-request leak is back (C-leak reopen, FATAL). Gated by the
+    /// include/require test in worker_pool.rs and read by the census
+    /// instrumentation (never by parity builds).
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
     fn park(&self, rc: Rc<Module>) -> &Module {
         self.0.push_get(rc)
     }
@@ -3422,6 +3431,13 @@ impl<'m> Vm<'m> {
     /// - AMEND-1: Reset ALL resource ID counters (next_zip, next_pdo, next_gd, etc.)
     /// - AMEND-2: PRESERVE uncaught_throwable for M3 exception bridge (WP-76 binding R1)
     /// - AMEND-3: Reset web, fatal_line, error_level, census_on, user_abort_ignored
+    /// S-78.1.6 (A-DL7/Stogov c.6): live entries in the object store — the
+    /// WP-72 "used_n" observable. Post-request_end it MUST be 0 (mass-teardown
+    /// signature; KS-DS-78-2). Read by the census instrumentation only.
+    pub fn live_objects(&self) -> usize {
+        self.created.len()
+    }
+
     pub fn request_end(&mut self) {
         // Output streams & diagnostics
         self.stdout.clear();

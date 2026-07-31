@@ -23,6 +23,8 @@ PATTERNS=(
   "RetainSet is Send"
   "preserving persistent data"
   "object table, class cache"
+  "persistent RetainSet"
+  "thread-persistent RetainSet"
 )
 
 scan() { # scan <dir> -> matches on stdout, rc 0 if any found

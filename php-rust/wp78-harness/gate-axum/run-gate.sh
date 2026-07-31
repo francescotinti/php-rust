@@ -168,6 +168,26 @@ for i in 1 2 3; do
 done
 [ "$FAILS" = 0 ] && echo "OK  stateful: 3 bodies byte-identical and == oracle"
 
+# --- A-DS8/A-DS9 stateful surface (S-78.1.5, Council WP-79) ------------------
+# include/require units (the RetainSet parking surface — exercised by NO gate
+# before this, Stogov c.5c) + statics in methods and inherited methods:
+# x3 requests, each full-body == oracle (statics restart per request even
+# though the parked units persist). Arena flatness (KS-DS-78-4) is asserted
+# by the cargo test include_units_park_once_retainset_len_stable.
+for fx in include_gate static_methods; do
+  "$ORACLE" "$HERE/fixtures/$fx.php" > "$OUTDIR/$fx.expected"
+  for i in 1 2 3; do req "$fx.php" > "$OUTDIR/$fx.$i"; done
+  ok=1
+  for i in 1 2 3; do
+    if ! cmp -s "$OUTDIR/$fx.$i" "$OUTDIR/$fx.expected"; then
+      echo "FAIL $fx req $i: body != oracle (KS-DS-78-1/KS-DS-78-4):"
+      diff "$OUTDIR/$fx.expected" "$OUTDIR/$fx.$i" | head -5
+      FAILS=$((FAILS+1)); ok=0
+    fi
+  done
+  [ "$ok" = 1 ] && echo "OK  $fx: 3 bodies == oracle"
+done
+
 # --- A-TH8 fatal contract (S-78.1.4, Council WP-79) — KH79-2/KS-DS-78-5 ------
 # Every fatal (compile AND runtime) → HTTP 500 with the FULL oracle-CLI stdout
 # as body; exit() → 200 with captured output; parse error → 500 with the
