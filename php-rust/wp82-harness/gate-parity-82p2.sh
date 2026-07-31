@@ -11,7 +11,11 @@ OUT="$HOME/Claude/php-rust-output/release"
 CORPUS="/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests"
 REFL="/Volumes/Extreme Pro/Claude/php-8.5.7/ext/reflection/tests"
 EV="$REPO/wp81-harness/evidence"
-W="$HERE/p2-parity"
+# OUTSIDE the repo (S-82.0 battery lesson): this gate re-runs inside the
+# battery and its logs are TRACKED-file churn that dirties the tree for the
+# next feature-matrix whole-tree porcelain. The committed wp82-harness/
+# p2-parity/ snapshot stays as the p2-era evidence; live runs write here.
+W="/Volumes/Extreme Pro/Claude/wp82-battery-out/p2-parity"
 mkdir -p "$W"
 FAILS=0
 
