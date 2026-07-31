@@ -1,0 +1,27 @@
+git=552e6fb
+tree=clean (git status --porcelain empty at gate start, A-AH14)
+== build [default]  ==
+bin[default] sha256[0:16]=cee8c63e251124f8
+OK  [default]: 0 axum/tokio/hyper/tower symbols
+== build [axum-only] --no-default-features --features axum-server ==
+bin[axum-only] sha256[0:16]=e2183043ae3e000e
+== build [census] --features census-instrumentation ==
+bin[census] sha256[0:16]=12a8777c8c38fdc4
+== build [census-axum-only] --no-default-features --features census-instrumentation ==
+bin[census-axum-only] sha256[0:16]=13c429be49e4510e
+== build [mem-census] --features mem-census ==
+bin[mem-census] sha256[0:16]=d5bba760069639e0
+== lint [php-runtime] --features census-instrumentation -- -D warnings ==
+OK  [lint-php-runtime]: warning-free under census-instrumentation (A-AH15)
+== lint [php-cli] --lib --features census-instrumentation -- -D warnings ==
+OK  [lint-php-cli]: warning-free under census-instrumentation (A-AH15)
+== lint [php-runtime] --features mem-census -- -D warnings ==
+OK  [lint-php-runtime]: warning-free under census-instrumentation (A-AH15)
+== lint [php-cli] --lib --features mem-census -- -D warnings ==
+OK  [lint-php-cli]: warning-free under census-instrumentation (A-AH15)
+== build [union] --features axum-server ==
+bin[union] sha256[0:16]=9f9f8d92ff969729
+OK  [union]: 1245 net-stack symbols (positive control for nm detector)
+== test-target warnings (A-AH6) ==
+OK  [test-targets]: php-server test build warning-free
+OK  [identity]: on-disk binary == bin[union] after all steps (A-AH12)
