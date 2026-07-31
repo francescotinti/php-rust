@@ -1,37 +1,39 @@
-# NEXT_SESSION_WORDPRESS.md — S-81.0: LEVA A-BB6 SPEDITA, churn VERDICT PASS → WP-82 (misure residue footprint/CPU/retained)
+# NEXT_SESSION_WORDPRESS.md — S-82.0: HONEST INSTRUMENTS + MISURE RESIDUE fatte (verdict82 PASS) → WP-83 (slope N-doppio + verdetto peak ×W)
 
-**Ultima sessione**: S-81.0 (2026-07-31 sera, commit 62cd100…f6e13c3) —
-ordine vincolante Concilio WP-82 eseguito passi 1-7: fix meccanici (6fd8aac),
-ORM 16/16 + hk 0E/0F su ef90cb19 PRE-leva (7593d8e), driver_sha+porcelain
-harness (88ea8ee), **LEVA A-BB6 (57ec7dc)** con tutti i same-commit (epoch
-u64, MAIN_CHAIN_FP computato+falsificatore, allowlist vm_new, put dopo
-link_fatal_check, bare.php riscritta, M-68.5 superata, A-DS12 §5 in due
-classi, A-DS14 scelte pinnate), strumenti §11 (drained_*, SESTETTO
-mem-census, RetainedWalk+controllo positivo, stranded_bytes), fixture
-F1-F13 TUTTE VERDI, **A/B churn a verdetto MACCHINA: PASS su tutte le
-predizioni §10** (`wp81-harness/MEASURE81_RESULTS.md` + verdict81.sh/out).
-Punto 8 (revert): mai innescato — zero body ≠ oracolo.
-Dettaglio: `sessions/WP_SESSION_81.md`.
+**Ultima sessione**: S-82.0 (2026-07-31→08-01, commit 2a883e8…5b668d0) —
+ordine vincolante Concilio WP-83 eseguito p1-p8: strumenti di verdetto
+FAIL-CLOSED (verdict81 v2 su medie R=3 + md5-gate, gate-measure-cifre
+KG-83-3), **fold one-shot su acquire (A-TH21)** con parità integrale,
+denti macchina sui sigilli (u64 mutation-tested KH83-1, publish==2,
+include-hit guard, uclog in-band, A-PP20 entries-probe, drain-sync),
+quarantena raw (ESERCITATA: 3 campagne void → manifest, mai rm),
+**retained ONESTO** (bracket net-at-lower; 🔴 strumento net era MORTO nel
+build mem-census — allocatore sanato), fixture F14/F15 (thrash FIFO reale,
+main_evicted contato) + F2 same-key a macchina, **misure residue A/B a
+verdetto macchina (verdict82.out PASS)**: dettaglio in
+`wp82-harness/MEASURE82_RESULTS.md`; KB-83-2 chiusa ad aritmetica esatta.
+Dettaglio: `sessions/WP_SESSION_82.md`.
 
 ## Stato gate
 
-- **phpr (CLI, parità release)**: **f33151fbe383159c** (stash additivo
-  `phpr-wp81`; bit mossi dalla leva) — corpus Zend per NOME: **1418
-  IDENTICO** + refl 290 IDENTICO a ef90cb19 (`wp81-harness/evidence/`);
-  workspace 0 fail.
-- **php-server SESTETTO (git 3f32c16, matrix `tree=clean`, archivio
-  per-run)**: union **9f9f8d92ff969729** · census **12a8777c8c38fdc4** ·
-  **mem-census d5bba760069639e0** (nuova config KS-AH-82-4, lane CI) ·
-  census-axum-only 13c429be · axum-only e2183043 · default cee8c63e.
-  Battery COMPLETA PASS sul tree leva: run-gate · census-twin (pin
-  worker_pool 20→23 NOMINATO) · concurrent · worker-panic · stdout-tandem ·
-  capture-order · doc-purge (12 pattern, ora anche fixtures/*.php) · DR-1 ·
-  **gate-lever-pins** (A-MS13/A-PP16/KS-PP-82-3/A-TH14) ·
-  **gate-lever-fixtures 1+2** (F1-F13).
-- **Misura leva (churn)**: `wp81-harness/MEASURE81_RESULTS.md` — hello
-  a_calls HIT **80.476→2**, floor bare-HIT=2≤200 (KB-82-3 regge), a1==0,
-  a3==0, b/resid INVARIANTI ESATTI, retain 1/1/3/6, idle drift 0/0@60s,
-  spread 0,00% ri-derivato in-campagna, driver_sha in ogni header.
+- **phpr (CLI, parità release)**: **c84bb425f007a52d** (stash additivo
+  `phpr-wp82`; bit mossi dal fold A-TH21) — corpus Zend per NOME: **1418
+  IDENTICO** + refl 290 IDENTICO (verificato 2× in sessione,
+  `wp82-harness/p2-parity/` + battery-5); workspace 0 fail.
+- **php-server sestetto**: matrix a **e2990b3** (riga per binario nel
+  matrix-archive; union 318853ca · mem-census **b620d64c89abb584**).
+  Battery 15/15 in forma equivalenza KH82-2 (14 gate a 83a1d67 + matrix a
+  HEAD, crates-diff vuoto, check A MACCHINA nel precondition di campagna):
+  run-gate ×2 · census-twin (main.rs pin 5→7 NOMINATO, forme cfg combinate
+  canoniche) · concurrent · worker-panic · stdout-tandem · capture-order ·
+  doc-purge · DR-1 (dente u64 + mutation) · lever-pins (lower_source ==9
+  NOMINATO, A-TH20/A-AH26, sweep classe, A-DS17) · lever-fixtures 1+2
+  (F1-F15 + F-oneshot t2b) · measure-cifre · parity-full.
+- **Misure residue**: `wp82-harness/MEASURE82_RESULTS.md` + verdict82.out —
+  VF no-leak PASS · VP peak W=10 DECLARED-WORSE (+34,4MB ×W, APERTA) ·
+  VC NULL (KB-83-3) · VH twin-pair PASS (path misto CHIUSO) · VR retained
+  20,65MB ×W · VA autoload PASS forte · void_runs=162+23 (manifest in
+  `wp82-harness/evidence/void/`).
 - GATE72 CLI resta baseline trasversale (corpus 1418 · refl 290 · ORM
   3E/13F · hk 1665).
 
@@ -39,68 +41,48 @@ Dettaglio: `sessions/WP_SESSION_81.md`.
 
 1. **Output capture BEFORE request_end()**. 2. **Isolamento = semantica
 FPM** (A-DS2). 3. **RetainSet thread-affine PER-RICHIESTA, sigillato**;
-la porta vm_new/park_main è ALLOWLISTED (gate-lever-pins). 4. **Panic =
-FAIL-FAST**. 5. **Un body ≠ oracolo sulla leva ⇒ git revert, mai
-fix-forward** (KS-DS-80-3, mai innescata).
+porta vm_new/park_main ALLOWLISTED. 4. **Panic = FAIL-FAST**. 5. **Un
+body ≠ oracolo sulla leva ⇒ git revert, mai fix-forward** (KS-DS-80-3,
+mai innescata). 6. **Mai rm di raw: quarantena + manifest** (KS-AH-83-2).
 
-## ⚖️ Concilio WP-83 ESEGUITO (2026-07-31, verbali VINCOLANTI): `wp83-harness/COUNCIL_WP83_REVIEWS.md`
+## ⚖️ Concilio WP-84: DA CONVOCARE / verbale in `wp84-harness/COUNCIL_WP84_REVIEWS.md`
 
-**9× CONCORDO CON EMENDAMENTI, 0 opposizioni.** La leva è giudicata REALE:
-clone-on-stack borrowck-enforced, put-dopo-link su entrambi i path, purezza
-del main verificata al lowering, e **a_calls(HIT)=2 PROVATA dall'aritmetica
-dei raw** (Bak: a_bytes==2×len(path canonico) ESATTO; Gregg: md5 r1==r2==r3
-su tutte le 8 coppie). REFUTATI: **strumenti di verdetto non fail-closed**
-(field() vuoto passa, P5-P7 solo-r1, percentuali a mano nell'header
-"scriptato" — A-SK19/20, A-BG26/27/28), **il one-shot NON passa dall'acquire**
-(run_source_with_argv duplica lower+compile: F-oneshot t2 vacua, A-TH21),
-**u64 chiuso nel codice non nella macchina** (gate-dr1 dice ancora u32,
-A-TH19/KH83-1), **ledger drained non esatto** (manca il resid del fatal,
-A-PP18), **raw VOID rimossi senza quarantena** (A-AH27), **retained MAIN =
-FLOOR non budget** (add_program shallow 1-2 ordini, selftest non lo esercita
-— A-DL15/16 + battery mem-census A-AH29), **F13 insufficiente per la classe
-2** (serve F14: condizionali+eval-mint+deferred, A-DS18), **eviction thrash
-main/include stessa key** (FIFO senza refresh: main_evicted + F15, A-DS20),
-**sigillo di TIPO sulla porta vm_new** (token ZST, A-MS17; newtype per il
-fp, A-AH26). Ordine vincolante S-82.0 = verbale §Sintesi (8 passi) + 30 KS
-nuovi (KH83 · KS-MS-83 · KS-SK-83 · KS-AH-83 · KB-83 · KS-PP-83 · KL-83 ·
-KS-DS-83 · KG-83).
+(blocco aggiornato alla chiusura — se manca, primo atto di WP-83 =
+convocarlo, regola [[php-rust-council-rule]])
 
-## §WP-82 (prossima sessione) — S-82.0 "honest instruments" poi misure RESIDUE
+## §WP-83 (prossima sessione) — verdetti APERTI della leva + riprese
 
-**Ordine = Concilio WP-83 §Sintesi (8 passi, non rinegoziare)**: 1. strumenti
-di verdetto fail-closed (A-SK19/20, A-BG26/27/28, KG-83-3, MEASURE81
-retro-annotato) · 2. fold one-shot su acquire (A-TH21 + A-SK23/24) ·
-3. denti macchina sui sigilli (A-TH19 pin u64, A-TH20, A-MS18/19/20, A-AH26,
-A-PP19/20/21, A-DL17/18, A-TH22) · 4. quarantena raw (A-AH27, KH83-2) ·
-5. strumento retained onesto PRIMA del budget (A-DL15/16, A-AH29/30) ·
-6. fixture nuove (F14 A-DS18 · F15+main_evicted A-DS20 · F2 same-key A-SK21
-· trigger F4 A-DS19 · A-DS16/17 · spike resid req=11 NOMINATO KB-83-2) ·
-7. SOLO POI misure residue: footprint twin V2 N/2N + peak W=num_cpus (floor
-A-DL19) · CPU slope N=1000/2000 (soglie Bak: ≤×1,05+25µs/req; scan ≤1µs/key)
-· battery-su-HIT TWIN-PAIR (Pedersen Q5/A-SK25) · autoload-run (KB-82-5) ·
-ORM/hk perf SOLO build-adiacente a 7593d8e (KS-AH-83-4) · budget ×W solo
-dopo il passo 5 (KL-83-1) · 8. revert policy KS-DS-80-3 invariata.
-F4: deviazione ACCETTATA da Stogov col trigger test-only richiesto (A-DS19).
+1. **VC slope CPU a N=2000/4000** (KB-83-3: la risoluzione ex-ante decide;
+   grezzi WP-82: lever 150 vs base 7043 µs/req — il segnale è ~×47 ma il
+   claim aspetta la banda). Stesso protocollo campagna (measure82 phase C
+   con N raddoppiato; base 7593d8e --offline).
+2. **VP peak ×W**: eseguire il DELIBERATO del Concilio WP-84 (accettazione
+   del costo retained ×W ~3,44MB/worker vs churn −13MB/req, o mitigazione
+   — candidata storica: registry/cache condivisa read-only tra worker).
+3. Deferred WP-83+: A-TH4 request_end(self); A-AH5/A-BB4 superglobali
+   reali axum (KS-DS-82-3 attivo); A-MS17 token ZST + newtype
+   PreludeBinding (al prossimo tocco dei file); ORM/hk perf SOLO
+   build-adiacente se citati (KS-AH-83-4).
+4. Poi: ripresa ROADMAP FOOTPRINT+CPU da [[php-rust-todo-master]].
 
-**Kill-switch di rotta (attivi)**: tabella WP-82 (30 KS — verbale
-`wp82-harness/COUNCIL_WP82_REVIEWS.md` §Kill-switch) + tabella WP-81 +
-mappa design79 + storici. KH82-1 SODDISFATTO (epoch u64 nel commit leva);
-KS-AH-82-2 SODDISFATTO (falsificatore in-cargo); KS-PP-82-2/3 SODDISFATTI
-(F8c contatori; SplitDrain-primo-return a macchina); KG-82-1 SODDISFATTO
-(verdict81.sh); KS-SK-82-4 rispettato (R=3, spread in-campagna).
+**Kill-switch di rotta**: tabella WP-83 (30 KS, verbale
+`wp83-harness/COUNCIL_WP83_REVIEWS.md`) TUTTI onorati o chiusi in S-82.0
+(KH83-1 mutation ✓, KH83-2/KS-AH-83-2 esercitati ×3, KH83-3/KS-SK-83-4 a
+macchina, KS-SK-83-1/2/3 ✓, KS-AH-83-1 full-body-first ✓, KB-83-1 aperto
+[fixture path-lungo non eseguita — dichiarato], KB-83-2 chiusa aritmetica,
+KB-83-3 APPLICATA (VC NULL), KB-83-4 pin in tabella, KS-PP-83-1/2/3 ✓,
+KL-83-1 soddisfatta (budget con rw_main_net), KL-83-3 applicata (VP forma
+dichiarativa), KS-DS-83-1 ✓ (main_evicted==0 dichiarato), KS-DS-83-2 ✓
+(double-compile verde), KS-DS-83-3 ✓ (F14 verde), KG-83-1/2/3 ✓.
 
-**NON riproporre**: tutti i NON-riproporre WP-81 restano; in più — cifra
-retained citata senza riga matrix mem-census + lane CI (KS-AH-82-4);
-campagna con harness toccato mid-run (l'identità del protocollo include
-gli script: la campagna si rifà INTERA a un rev); claim CPU derivato dal
-floor alloc (KB-82-4 — il floor misurato è 2 call, alloc-invisibile ≠
-CPU-invisibile).
-
-**Deferiti WP-83+**: A-TH4 (request_end(self)); A-AH5/A-BB4 (superglobali
-reali axum — KS-DS-82-3 attivo: mai fixture $_GET/$_SERVER censuscli↔axum
-pre-A-BB4); registry condivisa read-only; spread 12% picco W=10.
+**NON riproporre**: tutti i NON-riproporre WP-82 restano; in più — battery
+/gate output DENTRO il repo (il porcelain whole-tree del matrix li rifiuta:
+dir esterna `wp82-battery-out`); matrix non-ULTIMO prima di una campagna o
+commit tra matrix e campagna (KG-81-2 rifiuta); claim di strumento senza
+prova che è ARMATO (feature ≠ env ≠ allocatore — controllo positivo del
+canale in OGNI build citato); --locked su worktree vecchio con lock vivo
+che porta dev-dep nuovi (--offline + lock copiato, deviazione dichiarata).
 
 ---
-**Chiusura**: 2026-07-31. Apertura/chiusura sessioni = skill
-`apri-sessione` / `chiudi-sessione`. ⚖️ Concilio WP-83: verbale in
-`wp83-harness/COUNCIL_WP83_REVIEWS.md` (vincolante per WP-82).
+**Chiusura**: 2026-08-01. Apertura/chiusura sessioni = skill
+`apri-sessione` / `chiudi-sessione`.
