@@ -22,6 +22,18 @@
 //!   (String/Vec/oneshot::Sender), positively asserted Send below (A-MS3).
 //! - Vm borrows the worker-local RetainSet and drops in the owning worker
 //!   thread before it (borrowck-enforced drop order, P-67.5).
+//!
+//! Panic policy (A-PP9, Council WP-79 — KS-PP-6): FAIL-FAST.
+//! - A Rust panic in a worker thread ABORTS the whole process. Without this a
+//!   panicked worker died silently and round-robin kept dispatching to its
+//!   queue: 1/N of all requests blackholed. No respawn — respawning would mask
+//!   state corruption. A PHP fatal is NOT a panic: workers survive fatals
+//!   (see fatal_maps_to_http_500_compile_and_runtime).
+//! - Executable gate: wp78-harness/gate-worker-panic.sh — the deliberate
+//!   panic trigger is armed ONLY by the PHPR_TEST_WORKER_PANIC env var.
+//! - Teardown (A-MS7/A-DL6): shutdown() drops the senders and JOINS every
+//!   worker; exit-time figures without that join are ADVISORY (KS-MS-5,
+//!   KL-78-4).
 
 #[cfg(feature = "axum-server")]
 mod implementation {
@@ -69,6 +81,10 @@ mod implementation {
     pub struct WorkerPool {
         senders: Vec<mpsc::UnboundedSender<WorkerTask>>,
         next_worker: std::sync::atomic::AtomicUsize,
+        // A-MS7/A-DL6 (Council WP-79): join handles retained so shutdown()
+        // can prove worker teardown before process-exit stats are read
+        // (KS-MS-5/KL-78-4: exit figures without a join are ADVISORY).
+        handles: Vec<std::thread::JoinHandle<()>>,
     }
 
     impl WorkerPool {
@@ -97,21 +113,36 @@ mod implementation {
             };
 
             let mut senders = Vec::new();
+            let mut handles = Vec::new();
             for _i in 0..num {
                 let (tx, rx) = mpsc::unbounded_channel::<WorkerTask>();
                 let ctx = Arc::clone(&context);
 
-                // Spawn worker thread (P-67.5: RetainSet before Vm)
-                std::thread::spawn(move || {
-                    Self::worker_loop(ctx, rx);
+                // Spawn worker thread (P-67.5: RetainSet before Vm).
+                // A-PP9 FAIL-FAST (KS-PP-6): any worker panic aborts the
+                // process — the default panic hook has already printed the
+                // payload and backtrace by the time catch_unwind sees it.
+                let handle = std::thread::spawn(move || {
+                    let unwind =
+                        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                            Self::worker_loop(ctx, rx);
+                        }));
+                    if unwind.is_err() {
+                        eprintln!(
+                            "php-server: worker panicked — aborting (A-PP9 fail-fast, KS-PP-6)"
+                        );
+                        std::process::abort();
+                    }
                 });
 
                 senders.push(tx);
+                handles.push(handle);
             }
 
             Arc::new(WorkerPool {
                 senders,
                 next_worker: std::sync::atomic::AtomicUsize::new(0),
+                handles,
             })
         }
 
@@ -147,12 +178,45 @@ mod implementation {
             // compiler enforces the affinity (assert_not_impl_any, php-runtime).
             let retain = php_runtime::RetainSet::new();
 
+            // A-PP9 gate hook (KS-PP-6): deliberate panic trigger, armed ONLY
+            // when PHPR_TEST_WORKER_PANIC is set in the environment — lets
+            // gate-worker-panic.sh prove the fail-fast policy on the real
+            // binary instead of asserting it in prose. Unarmed, the path is
+            // an ordinary docroot lookup.
+            let test_panic = std::env::var_os("PHPR_TEST_WORKER_PANIC").is_some();
+
             // Main request loop: each request gets fresh Vm that borrows persistent RetainSet
             while let Some(task) = rx.blocking_recv() {
+                if test_panic && task.meta.path == "/__phpr_panic" {
+                    panic!("PHPR_TEST_WORKER_PANIC armed: deliberate worker panic (A-PP9 gate)");
+                }
                 // Execute handler: creates Vm per-request, reuses RetainSet per-thread
                 let (response, status) = execute_with_retain(&retain, &reg, &task.meta);
                 let _ = task.response_tx.send((response, status));
             }
+        }
+
+        /// A-MS7/A-DL6 (Council WP-79): deterministic teardown — drop every
+        /// sender (each worker's blocking_recv() then yields None and its
+        /// loop ends) and JOIN every worker before returning. Only after this
+        /// may process-exit figures (/usr/bin/time -l, MIMALLOC_SHOW_STATS)
+        /// be read as verdict-grade (KS-MS-5/KL-78-4). Consumes the pool:
+        /// call via Arc::try_unwrap once the router (the only other owner)
+        /// has been dropped.
+        pub fn shutdown(self) {
+            let WorkerPool { senders, handles, .. } = self;
+            drop(senders);
+            let n = handles.len();
+            for h in handles {
+                // A panicked worker has already aborted the process (A-PP9),
+                // so a join Err is unreachable — kept loud, not swallowed.
+                if h.join().is_err() {
+                    eprintln!("php-server: worker join failed after drain");
+                }
+            }
+            eprintln!(
+                "php-server: all {n} workers joined — exit stats are authoritative (KL-78-4)"
+            );
         }
 
         /// Dispatch task to next available worker (round-robin).
@@ -413,6 +477,29 @@ mod implementation {
                 execute_with_retain(&retain, &reg, &meta("<?php echo \"alive\";"));
             assert_eq!(ok_status, StatusCode::OK);
             assert_eq!(ok_body, b"alive");
+        }
+
+        /// A-MS7/A-DL6 (KS-MS-5): shutdown() drops the senders and JOINS
+        /// every worker — it returns only after real thread teardown (a hang
+        /// here fails CI), with a real request drained through the pool
+        /// first (positive control: the pool actually worked before dying).
+        #[test]
+        fn shutdown_joins_all_workers_after_drain() {
+            let ctx = WorkerPoolContext::new();
+            let pool = WorkerPool::new(ctx, 2);
+            let (tx, rx) = oneshot::channel();
+            let task = WorkerTask {
+                meta: meta("<?php echo \"drain\";"),
+                response_tx: tx,
+            };
+            pool.dispatch(task).unwrap();
+            let (body, status) = rx.blocking_recv().unwrap();
+            assert_eq!(status, StatusCode::OK);
+            assert_eq!(body, b"drain");
+            let Ok(pool) = Arc::try_unwrap(pool) else {
+                panic!("pool still shared — cannot exercise shutdown()");
+            };
+            pool.shutdown();
         }
     }
 }

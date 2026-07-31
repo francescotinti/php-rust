@@ -154,7 +154,7 @@ mod axum_handler {
         let pool = crate::worker_pool::WorkerPool::new(pool_context, workers);
 
         let app_state = Arc::new(AppState {
-            pool,
+            pool: Arc::clone(&pool),
             docroot: docroot_str.clone(),
         });
 
@@ -184,6 +184,18 @@ mod axum_handler {
         {
             eprintln!("php-server: server error: {e}");
             return ExitCode::from(1);
+        }
+        // A-MS7/A-DL6 (Council WP-79): serve() returning means the router —
+        // the only other pool owner — is gone; unwrap and JOIN the workers
+        // BEFORE process exit so /usr/bin/time -l and MIMALLOC_SHOW_STATS
+        // report a fully torn-down process (KS-MS-5). If a straggler still
+        // holds the Arc the figures are declared ADVISORY (KL-78-4), never
+        // silently blessed.
+        match Arc::try_unwrap(pool) {
+            Ok(p) => p.shutdown(),
+            Err(_) => eprintln!(
+                "php-server: worker pool still referenced at exit — exit stats ADVISORY (KL-78-4)"
+            ),
         }
         ExitCode::SUCCESS
     }
