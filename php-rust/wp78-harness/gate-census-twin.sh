@@ -20,38 +20,74 @@ REPO="$(cd "$HERE/.." && pwd)"
 GIT_REV="$(git -C "$REPO" rev-parse --short HEAD 2>/dev/null || echo 'no-git')"
 FAILS=0
 
-# --- 1. Marker census (bump-in-commit like ALLOW_CENSUS/NSITES) -------------
-# Counts are cfg-attribute OCCURRENCES in .rs files (not Cargo.toml).
-# macOS bash 3.2: plain "dir:count" pairs, no associative arrays.
-check_sites() { # check_sites <dir> <expected>
-  local dir="$1" want="$2" n
-  n=$(grep -RI --include='*.rs' --exclude='._*' -c 'census-instrumentation' \
-        "$REPO/$dir" 2>/dev/null | awk -F: '{s+=$2} END{print s+0}')
+# --- 1. Marker census, PER-FILE on the cfg FORM (S-80.0.5, Council WP-81 ----
+# A-AH18/A-SK10/KS-SK-81-3): the old pin was a per-crate SUM of raw string
+# matches — a comment mentioning the feature entered the count, and an
+# intra-crate substitution (−1 site here, +1 site there) was invisible.
+# Now: (a) each file pins its count of the ATTRIBUTE form
+# `cfg(feature = "census-instrumentation")` / `cfg(not(feature = ...))`;
+# (b) in a pinned file, raw-string mentions must EQUAL the form count (a
+# comment mention is a loud FAIL: it becomes a real site or it goes);
+# (c) any UNPINNED .rs file mentioning the feature at all is a FAIL.
+# Bump rule (KS-AH-81-3): a bump lands ONLY with the site list named in the
+# same commit — `grep -nE "$CFG_RE" <file>` is the enumerable diff.
+CFG_RE='cfg\((not\()?feature = "census-instrumentation"'
+PINS="
+crates/php-server/src/main.rs:5
+crates/php-server/src/worker_pool.rs:20
+crates/php-runtime/src/lib.rs:1
+crates/php-runtime/src/lower/mod.rs:2
+crates/php-runtime/src/compile/mod.rs:6
+crates/php-runtime/src/vm/mod.rs:2
+crates/php-cli/src/server.rs:3
+"
+for pin in $PINS; do
+  f="${pin%%:*}"; want="${pin##*:}"
+  n=$(grep -EIc "$CFG_RE" "$REPO/$f" 2>/dev/null || true)
+  raw=$(grep -Ic 'census-instrumentation' "$REPO/$f" 2>/dev/null || true)
   if [ "$n" -ne "$want" ]; then
-    echo "FAIL: $dir has $n census-instrumentation sites, pinned $want"
-    echo "      (A-AH11: a new cfg(census) block needs a same-commit bump here"
-    echo "       and must only snapshot/count/eprintln — never alter a path)"
+    echo "FAIL: $f has $n cfg(census) sites, pinned $want (A-AH18)"
+    echo "      sites: $(grep -nE "$CFG_RE" "$REPO/$f" | awk -F: '{printf "%s ", $1}')"
+    FAILS=$((FAILS+1))
+  elif [ "$raw" -ne "$n" ]; then
+    echo "FAIL: $f has $raw raw mentions vs $n cfg sites — a non-attribute"
+    echo "      mention (comment/string) is not a site; make it real or drop it"
     FAILS=$((FAILS+1))
   else
-    echo "OK  $dir: $want census sites (pinned)"
+    echo "OK  $f: $want cfg(census) sites (pinned, raw==form)"
   fi
-}
-check_sites crates/php-server/src 18
-check_sites crates/php-runtime/src 11
-# S-79.0.6 (A-BG16): the cli-server arm's census-cli line (run_php brackets).
-check_sites crates/php-cli/src 2
+done
 
-# Positive control (the WP-72 lesson): the scan must be able to COUNT — a
-# decoy directory with one marker must read exactly 1.
+# (c) No unpinned .rs file may mention the feature at all. (while-read: the
+# repo path contains a space — an unquoted for-loop word-splits it.)
+STRAY=0
+while IFS= read -r f; do
+  [ -z "$f" ] && continue
+  rel="${f#"$REPO"/}"
+  case "$PINS" in
+    *"$rel:"*) : ;;
+    *) echo "FAIL: UNPINNED file mentions census-instrumentation: $rel (KS-SK-81-3)"
+       STRAY=1; FAILS=$((FAILS+1)) ;;
+  esac
+done < <(grep -RIl --include='*.rs' --exclude='._*' 'census-instrumentation' "$REPO/crates" 2>/dev/null)
+[ "$STRAY" = 0 ] && echo "OK  no unpinned .rs file mentions the feature"
+
+# Positive controls (the WP-72 lesson: a detector never seen firing proves
+# nothing): a decoy cfg site must count 1 under the FORM match; a decoy
+# comment-only mention must count 0 under the form match (and 1 raw — the
+# exact divergence check (b) exists to catch).
 DECOY="$(mktemp -d)"
 trap 'rm -rf "$DECOY"' EXIT
 printf '#[cfg(feature = "census-instrumentation")]\nfn x() {}\n' > "$DECOY/d.rs"
-n=$(grep -RI --include='*.rs' -c 'census-instrumentation' "$DECOY" | awk -F: '{s+=$2} END{print s+0}')
-if [ "$n" -ne 1 ]; then
-  echo "FAIL: marker-census self-test counted $n != 1 on decoy — scanner broken"
+printf '// census-instrumentation mentioned in a comment only\nfn y() {}\n' > "$DECOY/c.rs"
+n=$(grep -EIc "$CFG_RE" "$DECOY/d.rs")
+m=$(grep -EIc "$CFG_RE" "$DECOY/c.rs")
+mraw=$(grep -Ic 'census-instrumentation' "$DECOY/c.rs")
+if [ "$n" -ne 1 ] || [ "$m" -ne 0 ] || [ "$mraw" -ne 1 ]; then
+  echo "FAIL: marker-census self-test (form=$n want 1; comment-form=$m want 0; comment-raw=$mraw want 1)"
   FAILS=$((FAILS+1))
 else
-  echo "OK  marker-census self-test (decoy counted 1)"
+  echo "OK  marker-census self-test (cfg form counted, comment mention excluded from form)"
 fi
 
 if [ "$FAILS" -ne 0 ]; then

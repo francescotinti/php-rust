@@ -32,6 +32,13 @@ PATTERNS=(
   # RetainSet framing, not on "cross-request survivor" alone.
   "survivor is the caller-held RetainSet"
   "RetainSet arena"
+  # A-TH11 (Council WP-81): the worker catch_unwind SAFETY claimed the unwind
+  # "still runs drops" UNCONDITIONALLY — false since the global abort hook
+  # (S-79.0.5): in axum mode the hook aborts BEFORE any unwind, no drops run.
+  # The corrected text scopes the drops claim to non-axum contexts; the
+  # unconditional spelling is banned (a false doc on the panic surface is the
+  # A-DS1 mine in another guise).
+  "unwind itself still runs drops"
 )
 
 scan() { # scan <dir> -> matches on stdout, rc 0 if any found

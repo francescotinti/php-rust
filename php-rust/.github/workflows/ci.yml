@@ -29,30 +29,53 @@ jobs:
         run: cargo build --release --workspace
       - name: Unit tests
         run: cargo test --release --workspace
-      # A-AH2/A-AH3 (Council WP-78) + A-AH10 (Council WP-80): the php-server
-      # feature matrix is a QUATERNA (default / axum-only / census / union)
-      # and the crate must be warning-free in every configuration
-      # (KS-AH-78-2). The census configuration was OUTSIDE the matrix and
-      # could bit-rot in silence until measurement day. `cargo rustc` scopes
-      # -D warnings to the php-server crate alone (dependency warnings stay
-      # warnings).
+      # A-AH2/A-AH3 (Council WP-78) + A-AH10 (Council WP-80) + A-AH16 (Council
+      # WP-81): the php-server feature matrix is a QUINTET (default /
+      # axum-only / census / census-axum-only / union) and the crate must be
+      # warning-free in every configuration (KS-AH-78-2). The census
+      # configuration was OUTSIDE the matrix and could bit-rot in silence
+      # until measurement day; the census-axum-only weak-dep configuration
+      # (S-80.0.5) was compiled by NOBODY — pinned here per KS-AH-81-4.
+      # `cargo rustc` scopes -D warnings to the php-server crate alone
+      # (dependency warnings stay warnings).
       - name: php-server feature matrix (fatal warnings)
         run: |
           cargo rustc --release -p php-server -- -D warnings
           cargo rustc --release -p php-server --no-default-features --features axum-server -- -D warnings
           cargo rustc --release -p php-server --features census-instrumentation -- -D warnings
+          cargo rustc --release -p php-server --no-default-features --features census-instrumentation -- -D warnings
           cargo rustc --release -p php-server --features axum-server -- -D warnings
+      # A-AH15 (Council WP-81): the census bracket/emitter code lives in
+      # php-runtime and php-cli since S-79.0.3/6 — the php-server-scoped
+      # passes above compile them as DEPENDENCIES, where warnings stay
+      # warnings, so that code never saw -D at all.
+      - name: cross-crate census lint (fatal warnings)
+        run: |
+          cargo rustc --release -p php-runtime --features census-instrumentation -- -D warnings
+          cargo rustc --release -p php-cli --lib --features census-instrumentation -- -D warnings
       # A-SK4 (Council WP-78): worker_pool.rs and the axum handler only compile
       # under the feature — the default workspace test run above covers 0% of
       # that code. This step compiles AND runs the feature-gated gate tests.
       - name: php-server axum tests
         run: cargo test --release -p php-server --features axum-server
-      # A-AH11 (Council WP-80): the census build must stay the FUNCTIONAL twin
-      # — its feature-gated tests (split positive controls, c-channel, depth
-      # anti-wrap) run in CI so a cfg(census) block that alters behavior
-      # instead of counting it fails here, not on measurement day.
-      - name: php-server census tests
+      # A-AH11 (Council WP-80) + A-AH17 (Council WP-81): the census build must
+      # stay the FUNCTIONAL twin. This is a deliberate DOUBLE-RUN of the axum
+      # gate tests (plain above, under census here) — the twin-check on the
+      # test suite, not duplication. The census-only tests (split positive
+      # controls, tripwires, drain) run only here.
+      - name: php-server census tests (twin-check double-run)
         run: cargo test --release -p php-server --features census-instrumentation
+      # A-AH15: the alloc_census integrity tests (LIFO trip, provider guard)
+      # live in php-runtime and compile only under the feature — without this
+      # step they would be a PASS on code cargo test never runs (the WP-78
+      # Klabnik lesson).
+      - name: php-runtime census tests
+        run: cargo test --release -p php-runtime --lib --features census-instrumentation
+      # A-AH17: the axum-only configuration's test targets otherwise never
+      # compile anywhere — build them (no run: the union run above covers the
+      # behavior; this pins compilability).
+      - name: axum-only test targets compile
+        run: cargo test --release -p php-server --no-default-features --features axum-server --no-run
       # S-78.1.3 (Council WP-79): the two shell grep-gates are pure-text and
       # cheap — running them here enforces KS-MS-4 (forbidden doc patterns) and
       # KS-PP-2/KS-PP-4 (capture order + allow-marker census) on every push.

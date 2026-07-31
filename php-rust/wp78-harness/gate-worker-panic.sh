@@ -50,6 +50,11 @@ trap 'rm -rf "$DOCROOT"' EXIT
 printf '<?php echo "alive\n";' > "$DOCROOT/hello.php"
 printf 'inert\n' > "$DOCROOT/__phpr_panic"
 printf 'inert-dispatcher\n' > "$DOCROOT/__phpr_panic_dispatcher"
+# S-80.0.5 (A-PP12): ARMED near-miss fixtures — paths that a sloppier match
+# than ends_with would confuse with the triggers. Neither ends with a magic
+# path, so even ARMED they must be ordinary lookups.
+printf 'near-miss-suffix\n' > "$DOCROOT/__phpr_panic_dispatcherX"
+printf 'near-miss-prefix\n' > "$DOCROOT/x__phpr_panic"
 
 pkill -f "php-server --axum --port $PORT" 2>/dev/null && sleep 1
 
@@ -74,6 +79,25 @@ if [ "$BODY" = "alive" ]; then
   echo "OK  positive control: pool serves requests while armed"
 else
   echo "FAIL positive control: hello body '$BODY' != 'alive'"; FAILS=$((FAILS+1))
+fi
+
+# S-80.0.5 (A-PP12): ARMED near-miss — the trigger match is asserted as
+# ends_with in a comment, but a comment is not a gate. With the env var SET,
+# a near-miss path (wrong suffix / wrong prefix) must be an ordinary lookup
+# and the server must stay alive; only then is the real trigger fired.
+BODY=$(curl -s -m 5 "http://127.0.0.1:$PORT/__phpr_panic_dispatcherX")
+if [ "$BODY" = "near-miss-suffix" ] && kill -0 "$SRV" 2>/dev/null; then
+  echo "OK  armed near-miss /__phpr_panic_dispatcherX is an ordinary lookup (A-PP12)"
+else
+  echo "FAIL armed near-miss: dispatcherX body '$BODY' or server died (A-PP12)"
+  FAILS=$((FAILS+1))
+fi
+BODY=$(curl -s -m 5 "http://127.0.0.1:$PORT/x__phpr_panic")
+if [ "$BODY" = "near-miss-prefix" ] && kill -0 "$SRV" 2>/dev/null; then
+  echo "OK  armed near-miss /x__phpr_panic is an ordinary lookup (A-PP12)"
+else
+  echo "FAIL armed near-miss: x__phpr_panic body '$BODY' or server died (A-PP12)"
+  FAILS=$((FAILS+1))
 fi
 
 curl -s -o /dev/null -m 5 "http://127.0.0.1:$PORT/__phpr_panic" || true

@@ -103,8 +103,12 @@ fn production() {
 }
 EOF
 check_marker_position() { # <file...> -> violations on stdout, rc 1 if any
+  # S-80.0.5 (A-PP10 fix): the arming line is ANCHORED — only a line that IS
+  # the attribute (optional indent + #[cfg(test)] and nothing else) arms the
+  # region; a comment or string mentioning #[cfg(test)] armed the old check
+  # for the rest of the file, silently blessing later production markers.
   awk '
-    /#\[cfg\(test\)\]/ { in_test = 1 }
+    /^[[:space:]]*#\[cfg\(test\)\]$/ { in_test = 1 }
     /grep-gate-allow: post-reset-emptiness-check/ {
       if (!in_test) {
         printf "%s:%d: sanctioned marker OUTSIDE any #[cfg(test)] region (A-PP1)\n", FILENAME, FNR
@@ -164,6 +168,52 @@ if [ -n "$POSOUT" ]; then
   echo "FAIL: sanctioned marker in a non-conforming position (A-PP1)"
   FAIL=1
 fi
+
+# --- A-PP10 (S-80.0.5, KS-PP-81-3): post-request_end READ census -------------
+# The lexical ban above covers .rendered/.stdout (captures). The census block
+# ALSO reads other vm./retain. state after request_end( — legal (non-capture:
+# counters, pin length) but the region grew from 2 to ~5 reads with no
+# discipline. Now the count of `vm.`/`retain.` reads lexically after
+# request_end( in NON-test code is PINNED per file: a new read lands ONLY
+# with a same-commit bump here (KS-PP-81-3: no bump => gate FAIL).
+count_postend_reads() { # <file> -> count on stdout
+  awk '
+    /mod tests/ { in_tests = 1 }
+    in_tests { next }
+    /^[[:space:]]*\/\// { next }
+    /fn [A-Za-z0-9_]+ *(<[^>]*>)? *\(/ { seen = 0 }
+    /request_end\(/ { seen = 1; next }
+    seen && /(vm|retain)\./ { n++ }
+    END { print n + 0 }
+  ' "$1"
+}
+# Pinned census (bump-in-commit): worker_pool.rs = 2 (retain.len(),
+# vm.live_objects() on the census line); every other file = 0.
+POSTEND_PIN_WORKER=2
+for f in "${FILES[@]}"; do
+  n=$(count_postend_reads "$f")
+  case "$f" in
+    */worker_pool.rs) want=$POSTEND_PIN_WORKER ;;
+    *)                want=0 ;;
+  esac
+  if [ "$n" -ne "$want" ]; then
+    echo "FAIL: ${f##*/} has $n vm./retain. reads after request_end(, pinned $want (A-PP10/KS-PP-81-3)"
+    FAIL=1
+  fi
+done
+# Positive control: a synthetic post-end read must count exactly 1.
+cat > "$TMPD/postend_read.rs" <<'EOF'
+fn f() {
+    vm.request_end();
+    let n = retain.len();
+}
+EOF
+n=$(count_postend_reads "$TMPD/postend_read.rs")
+if [ "$n" -ne 1 ]; then
+  echo "SELF-TEST BROKEN: post-end read census counted $n != 1 on control snippet"
+  exit 2
+fi
+echo "post-request_end read census: worker_pool.rs==$POSTEND_PIN_WORKER, others==0 (pinned, A-PP10)"
 
 if [ "$FAIL" = 0 ]; then
   echo "== KS-PP-2 grep-gate PASS (recursive, markers $NMARK/$ALLOW_CENSUS) [git $GIT_REV] =="

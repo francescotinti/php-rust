@@ -123,7 +123,20 @@ else
   FAILS=$((FAILS+BAD))
 fi
 
-# --- A-SK1 overlap observable (KS-SK-80-1) ----------------------------------
+# --- A-SK1 overlap observable (KS-SK-80-1, emended S-80.0.5 per A-SK9) ------
+# Thresholds DERIVED from the volley constants and printed (no magic numbers):
+#   serial floor  = NREQ x SLEEP_MS (usleep never under-sleeps)
+#   2-worker floor = ceil(NREQ/2) x SLEEP_MS
+#   overlap threshold = 2-worker floor + 0.1s margin — hence a pass proves
+#   "overlap >= 2 workers" and NOTHING stronger (KS-SK-81-1: W and W-1 are
+#   not separated by this observable; the verdict must never claim W=4).
+SLEEP_MS=400
+NREQ=8
+SERIAL_FLOOR=$(python3 -c "print(f'{$NREQ * $SLEEP_MS / 1000:.1f}')")
+W2_FLOOR=$(python3 -c "import math; print(f'{math.ceil($NREQ/2) * $SLEEP_MS / 1000:.1f}')")
+OVERLAP_THRESH=$(python3 -c "print(f'{$NREQ//2 * $SLEEP_MS / 1000 + 0.1:.1f}')")
+W1_THRESH=$(python3 -c "print(f'{$NREQ * $SLEEP_MS / 1000 - 0.2:.1f}')")
+echo "thresholds (derived): serial_floor=${SERIAL_FLOOR}s w2_floor=${W2_FLOOR}s overlap<${OVERLAP_THRESH}s w1_serial>=${W1_THRESH}s"
 "$ORACLE" "$FIX/sleep_gate.php" > "$OUTDIR/sleep_gate.expected"
 now_s() { python3 -c 'import time; print(f"{time.time():.3f}")'; }
 sleep_volley() { # sleep_volley <port> <n> -> elapsed seconds on stdout
@@ -142,15 +155,18 @@ sleep_volley() { # sleep_volley <port> <n> -> elapsed seconds on stdout
     fi
   done
 }
-echo "== A-SK1 overlap: 8 x 400ms sleep over W=$WORKERS =="
-ELAPSED=$(sleep_volley "$PORT" 8 2> "$OUTDIR/sleep-bodyfail.log")
+overlap_check() { # 0 iff elapsed proves overlap (>=2 workers)
+  python3 -c "import sys; sys.exit(0 if $1 < $OVERLAP_THRESH else 1)"
+}
+echo "== A-SK1 overlap: $NREQ x ${SLEEP_MS}ms sleep over W=$WORKERS =="
+ELAPSED=$(sleep_volley "$PORT" "$NREQ" 2> "$OUTDIR/sleep-bodyfail.log")
 if [ -s "$OUTDIR/sleep-bodyfail.log" ]; then
   cat "$OUTDIR/sleep-bodyfail.log"; FAILS=$((FAILS+1))
 fi
-if python3 -c "import sys; sys.exit(0 if $ELAPSED < 1.7 else 1)"; then
-  echo "OK  overlap PROVEN: 8x400ms in ${ELAPSED}s < 1.7s (serial floor 3.2s) — >=2 workers concurrent"
+if overlap_check "$ELAPSED"; then
+  echo "OK  overlap PROVEN: ${NREQ}x${SLEEP_MS}ms in ${ELAPSED}s < ${OVERLAP_THRESH}s (serial floor ${SERIAL_FLOOR}s) — overlap>=2 (KS-SK-81-1: claims nothing about W>2)"
 else
-  echo "FAIL: 8x400ms took ${ELAPSED}s — no overlap observed (KS-SK-80-1: PASS would be vacuous)"
+  echo "FAIL: ${NREQ}x${SLEEP_MS}ms took ${ELAPSED}s — no overlap observed (KS-SK-80-1: PASS would be vacuous)"
   FAILS=$((FAILS+1))
 fi
 
@@ -183,20 +199,41 @@ if [ "$up" != 1 ]; then
   echo "FAIL: W=1 control server did not come up"; kill "$SRV1" 2>/dev/null
   FAILS=$((FAILS+1))
 else
-  ELAPSED1=$(sleep_volley "$CPORT" 8 2>> "$OUTDIR/sleep-bodyfail.log")
-  if python3 -c "import sys; sys.exit(0 if $ELAPSED1 >= 3.0 else 1)"; then
-    echo "OK  discriminator: W=1 serialized (8x400ms in ${ELAPSED1}s >= 3.0s) — the observable can tell the shapes apart"
+  # S-80.0.5 (A-SK9c): the W=1 volley bodies get their OWN log and their own
+  # check — the old append-to-shared-log was never re-read, so a W=1 body
+  # corruption passed silently.
+  ELAPSED1=$(sleep_volley "$CPORT" "$NREQ" 2> "$OUTDIR/sleep-bodyfail-w1.log")
+  if [ -s "$OUTDIR/sleep-bodyfail-w1.log" ]; then
+    echo "FAIL: W=1 volley body mismatches (A-SK9c):"
+    cat "$OUTDIR/sleep-bodyfail-w1.log"; FAILS=$((FAILS+1))
+  else
+    echo "OK  W=1 volley bodies == oracle expected (A-SK9c)"
+  fi
+  if python3 -c "import sys; sys.exit(0 if $ELAPSED1 >= $W1_THRESH else 1)"; then
+    echo "OK  discriminator: W=1 serialized (${NREQ}x${SLEEP_MS}ms in ${ELAPSED1}s >= ${W1_THRESH}s) — the observable can tell the shapes apart"
   else
     echo "FAIL: W=1 volley took only ${ELAPSED1}s — the overlap observable cannot discriminate (fixture not sleeping?)"
     FAILS=$((FAILS+1))
+  fi
+  # S-80.0.5 (A-SK9b) FAIL-branch bait: feed the SERIAL W=1 elapsed to the
+  # overlap detector and DEMAND it fails — a detector whose FAIL branch is
+  # never exercised could rot into always-pass (WP-72: a detector never seen
+  # firing proves nothing).
+  if overlap_check "$ELAPSED1"; then
+    echo "FAIL: bait — the overlap detector PASSED on serial W=1 data (${ELAPSED1}s < ${OVERLAP_THRESH}s): detector broken"
+    FAILS=$((FAILS+1))
+  else
+    echo "OK  bait: overlap detector's FAIL branch fires on serial data (A-SK9b)"
   fi
   kill -TERM "$SRV1" 2>/dev/null
   wait "$SRV1" 2>/dev/null
 fi
 
 if [ "$FAILS" = 0 ]; then
-  echo "PASS fails=0 bin=$HASH git=$GIT_REV W=$WORKERS reqs=$((ROUNDS * ${#FIXTURES[@]})) overlap=${ELAPSED:-n/a}s w1_serial=${ELAPSED1:-n/a}s $(date +%F_%H:%M:%S) (gate-concurrent.sh)" > "$VERDICT"
-  echo "== KH78-1 PASS (bin=$HASH git=$GIT_REV) =="; exit 0
+  # KS-SK-81-1: the verdict claims overlap>=2 — the observable cannot
+  # separate W from W-1 above 2, so it never claims the full pool width.
+  echo "PASS fails=0 bin=$HASH git=$GIT_REV pool_w=$WORKERS overlap>=2 reqs=$((ROUNDS * ${#FIXTURES[@]})) volley=${ELAPSED:-n/a}s w1_serial=${ELAPSED1:-n/a}s thresholds=${OVERLAP_THRESH}s/${W1_THRESH}s $(date +%F_%H:%M:%S) (gate-concurrent.sh)" > "$VERDICT"
+  echo "== KH78-1 PASS overlap>=2 (bin=$HASH git=$GIT_REV) =="; exit 0
 else
   echo "FAIL fails=$FAILS bin=$HASH git=$GIT_REV" > "$VERDICT"
   echo "== KH78-1 FAIL($FAILS) bin=$HASH git=$GIT_REV =="; exit 1
