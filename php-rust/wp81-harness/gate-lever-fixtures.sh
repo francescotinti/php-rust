@@ -63,6 +63,17 @@ if [ "$NP" -ne 0 ]; then
 else
   echo "OK  F-oneshot t2: main_probe == 0 on the one-shot arm (channel proven alive)"
 fi
+# t2b (A-SK23, Council WP-83): the zero above must come from a path that
+# CALLS the acquire — the synthetic acquire_oneshot event is pinned ==1
+# (one request). A refactor that bypasses main_unit_acquire entirely would
+# give t2==0 on a live channel: t2b makes that read FAIL, not PASS.
+NA=$(count_ev "$ONELOG" acquire_oneshot)
+if [ "$NA" -ne 1 ]; then
+  echo "FAIL: F-oneshot t2b — acquire_oneshot events = $NA, pinned 1 (A-SK23: t2's zero is vacuous unless the acquire ran)"
+  FAILS=$((FAILS+1))
+else
+  echo "OK  F-oneshot t2b: acquire ran on the one-shot arm (acquire_oneshot == 1)"
+fi
 
 # --- server arm: F-oneshot t3 (positive twin) + F5 + put/hit accounting -------
 DOCROOT="$TMPD/docroot"

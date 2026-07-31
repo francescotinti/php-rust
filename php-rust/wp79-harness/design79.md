@@ -123,7 +123,11 @@ thread-local ⇒ retained moltiplicato per worker — KL-80-1/A-TH7).
 - La cache OWNS (Rc) come oggi; il worker che fa HIT **parcheggia il clone
   nel RetainSet della richiesta** (park_module — identico agli include,
   WP-67 P-2): una eviction/supersede mid-request non può mai lasciare la
-  cache unico owner del Module in esecuzione. **KS-PP-80-2 ESTESA ALLA
+  cache unico owner del Module in esecuzione. **A-MS20 (Concilio WP-83, a
+  verbale)**: il park è CINTURA — l'owner PRIMARIO mid-request è il
+  CLONE-ON-STACK (`unit` vive nello stack del chiamante fino a fine
+  richiesta, borrowck-enforced); sul ramo `probe=false` la safety non
+  dipende dal park affatto. **KS-PP-80-2 ESTESA ALLA
   COPPIA (Module, Program) (A-PP13/KS-PP-81-2)**: il RetainSet è
   `FrozenVec<Rc<Module>>` e NON può parcheggiare `main_program` — la forma
   pinnata è il CLONE-ON-STACK dell'`Rc<Program>` per l'intera richiesta
@@ -186,6 +190,17 @@ source):
   `vm_new` DAL MEDESIMO Module a ogni richiesta.
 - **slot id / seed_slots**: idem — il main definisce il proprio name space,
   nessun seed esterno (link=None sul path main).
+- **A-DS16 (Concilio WP-83) — enumerazione ESTESA per NOME** (KS-DS-82-1:
+  enumerazione o nullità; i campi mancavano nella LETTERA, non nel merito):
+  `MakeClosure{fn_idx}` (indice funzione Module-relative),
+  `DeclareTrait{idx}` (Module-relative), `DeclareDeferred` /
+  `NewAnonDeferred{idx}` (indice dello snippet deferred NELLO STESSO
+  Module), `EnumCase{class,case}` (ClassId deterministico dal vergine-fp
+  sul path main; remappato sul path include come gli altri op class-carrying
+  — vm/mod.rs braccio remap). **Sede del singleton EnumCase DICHIARATA**:
+  `Vm::enum_cache` (FxHashMap per-richiesta, VM-side — vm/mod.rs
+  `enum_case()`): il Module non porta NESSUNA cella per i case (DR-1 = 0
+  celle oltre le IC, verificato S-82.0).
 Ogni campo: o "deterministico dal vergine-fp" (tutti i precedenti) o
 "Module-relative" (pool indices) — nessun campo richiede remap sul path
 main, ed è per questo che la entry main ha relocation vacuamente vuota.
@@ -325,7 +340,11 @@ hello.php, `--workers 1`, richieste ≥11 (steady, HIT):
 - **b (A-BG21)**: invariato ±5% (hello 730/95.627; include_heavy
   27.982/1.867.510 — corretto da 2.798 in chiusura S-80.0, A-BG22/KG-82-1:
   il ricomputo va SCRIPTATO dai raw, mai trascritto a mano) — la leva non
-  tocca il run.
+  tocca il run. **A-PP21 (Concilio WP-83)**: la definizione di b è EMENDATA
+  — `publish_if_armed` (put del main) cade nella finestra b della richiesta
+  MISS: b non è «solo run», contiene anche il publish sulla MISS. Su HIT
+  publish=None e il termine è 0; la riga MISS req=1 è il pin (A-BB30,
+  sezione REQ1 di verdict81.out).
 La sessione di implementazione ricalcola la baseline R≥3 con la coppia
 build-adiacente PRIMA di leggere il braccio leva (KG-78.A/KB-78-4).
 Confronti censuscli↔axum SOLO con la dichiarazione d'asimmetria

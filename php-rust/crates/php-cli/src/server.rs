@@ -660,7 +660,7 @@ fn run_php(
     // run_source_with_ini). This arm stays the honest A/B twin of the axum
     // worker: same acquire, same park, same put-after-link_fatal_check.
     let result = catch_unwind(AssertUnwindSafe(|| {
-        php_runtime::run_source_probed(&name, &source, registry, &[], true)
+        php_runtime::run_source_probed(&name, &source, registry, &[], None, true)
     }));
     #[cfg(feature = "census-instrumentation")]
     {

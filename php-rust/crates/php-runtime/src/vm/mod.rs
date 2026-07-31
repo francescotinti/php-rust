@@ -239,20 +239,12 @@ pub fn run_source_with(
     source: &[u8],
     registry: &Registry,
 ) -> Result<VmOutcome, VmRunError> {
-    let program = match crate::lower_source(name, source) {
-        Ok(p) => p,
-        // A link-time PHP fatal renders like a runtime one (no "Uncaught" prefix),
-        // mirroring `eval::compile_fatal_outcome`.
-        Err(crate::LowerError::Fatal { message, line }) => {
-            return Ok(compile_fatal_outcome(name, &message, line))
-        }
-        Err(e) => return Err(VmRunError::Lower(e)),
-    };
-    let module = crate::compile::compile_program(&program, registry)
-        .map_err(|crate::compile::CompileError::Unsupported(what)| VmRunError::Unsupported(what))?;
-    // Retain the lowered HIR so an `eval()` in the script can be compiled against
-    // the image (step 57, Phase 1c-2c): both borrows outlive the run.
-    Ok(run_module_with_hir(&module, registry, Some(&program), None, &[], None))
+    // A-TH21 (Council WP-83): folded onto the ONE acquire path. This body
+    // used to be a lexical duplicate of lower+compile that BYPASSED
+    // `main_unit_acquire`, so F-oneshot t2 (`main_probe == 0`) was vacuously
+    // true on a path the acquire never saw — the "second compile path in
+    // waiting" of A-TH14 existed right here.
+    run_source_probed(name, source, registry, &[], None, false)
 }
 
 /// Like [`run_source_with`], with `php -d`-style INI overrides applied before
@@ -267,19 +259,26 @@ pub fn run_source_with_ini(
 ) -> Result<VmOutcome, VmRunError> {
     // A-TH14: the one-shot CLI (corpus, `phpr script.php`, phpt) NEVER
     // engages the main probe — same path as the server, probe parameter off.
-    run_source_probed(name, source, registry, ini_overrides, false)
+    run_source_probed(name, source, registry, ini_overrides, None, false)
 }
 
 /// A-BB6: the ONE main entry point under the lever — `probe` is the single
 /// on/off parameter at the SAPI boundary (A-TH14: two call-sites with their
 /// own logic would be a second compile path in waiting; grep-gated by
-/// wp81-harness/gate-lever-pins.sh). cli-server passes true, everything
-/// one-shot passes false through [`run_source_with_ini`].
+/// wp81-harness/gate-lever-pins.sh). cli-server passes true; EVERY one-shot
+/// wrapper — [`run_source_with`], [`run_source_with_ini`],
+/// [`run_source_with_argv`] (the real `phpr script.php`) — passes false
+/// (A-TH21: no wrapper owns its own lower+compile anymore).
 pub fn run_source_probed(
     name: &[u8],
     source: &[u8],
     registry: &Registry,
     ini_overrides: &[(Vec<u8>, Vec<u8>)],
+    // A-TH21: argv passes THROUGH the one acquire path (the real
+    // `phpr script.php` seeds CLI superglobals) — a separate argv entry
+    // point would be a second compile path in waiting. `probe` stays the
+    // LAST parameter so the KS-SK-83-4 class sweep (`…true)`) reads it.
+    argv: Option<&[&[u8]]>,
     probe: bool,
 ) -> Result<VmOutcome, VmRunError> {
     // WP-67 G-67.1/K-67.5: request-begin marker — server probes segment the
@@ -316,7 +315,7 @@ pub fn run_source_probed(
         &unit.module,
         registry,
         Some(&unit.program),
-        None,
+        argv,
         ini_overrides,
         lever,
     );
@@ -344,24 +343,11 @@ pub fn run_source_with_argv(
     ini_overrides: &[(Vec<u8>, Vec<u8>)],
 ) -> Result<VmOutcome, VmRunError> {
     log::info!(target: "phpr::run", "run {} ({} bytes)", String::from_utf8_lossy(name), source.len());
-    // F-oneshot t1 (KS-SK-82-2): the one-shot arm emits the reqmark too —
-    // the fixture pins `main_probe == 0` HERE, and a zero on a dead channel
-    // proves nothing; the reqmark is the aliveness proof. Flushed at the
-    // end of this fn (no-op unless PHPR_UNIT_CACHE_LOG is armed).
-    uc_log("reqmark", name);
-    let program = match crate::lower_source(name, source) {
-        Ok(p) => p,
-        Err(crate::LowerError::Fatal { message, line }) => {
-            return Ok(compile_fatal_outcome(name, &message, line))
-        }
-        Err(e) => return Err(VmRunError::Lower(e)),
-    };
-    let module = crate::compile::compile_program(&program, registry)
-        .map_err(|crate::compile::CompileError::Unsupported(what)| VmRunError::Unsupported(what))?;
-    log::debug!(target: "phpr::compile", "compiled {}: {} functions, {} classes", String::from_utf8_lossy(name), module.functions.len(), module.classes.len());
-    let outcome = run_module_with_hir(&module, registry, Some(&program), Some(argv), ini_overrides, None);
-    uc_log_flush();
-    Ok(outcome)
+    // A-TH21 (Council WP-83): this was the REAL `phpr script.php` — a
+    // lexical duplicate of lower+compile bypassing `main_unit_acquire`.
+    // Folded: argv passes through the one acquire path (probe=false); the
+    // reqmark + flush now come from `run_source_probed` itself.
+    run_source_probed(name, source, registry, ini_overrides, Some(argv), false)
 }
 
 /// Lower `source`, compile it, and run it on the VM with no builtins registered.
@@ -15840,6 +15826,11 @@ pub fn main_unit_acquire(
             }
         }
     } else {
+        // A-SK23 (Council WP-83): synthetic acquire event on the unprobed
+        // arm — F-oneshot t2 pins `main_probe == 0` on a path that PROVABLY
+        // calls the acquire (`acquire_oneshot` == nreq), so a refactor that
+        // bypasses the acquire entirely can no longer read as a clean zero.
+        uc_log("acquire_oneshot", name);
         None
     };
     if let Some((key, fp)) = &probe_state {

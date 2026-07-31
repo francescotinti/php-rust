@@ -47,6 +47,12 @@ P8  PASS: include_gate depth<=1 inflight<=1 trip==0 (max over R=3)
 P8  PASS: include_heavy depth<=1 inflight<=1 trip==0 (max over R=3)
 P8  PASS: bare depth<=1 inflight<=1 trip==0 (max over R=3)
 
+## row-11 resid spike (KB-83-2 — named by arithmetic)
+SPIKE hello: row11 resid delta = 114 calls/124572 B == 3 x probe self-cost (38/41524) EXACT — source NAMED: 3 mid-campaign __census_global probes (driver lines, phase boundary)
+SPIKE include_gate: row11 resid delta = 114 calls/124572 B == 3 x probe self-cost (38/41524) EXACT — source NAMED: 3 mid-campaign __census_global probes (driver lines, phase boundary)
+SPIKE include_heavy: row11 resid delta = 114 calls/124572 B == 3 x probe self-cost (38/41524) EXACT — source NAMED: 3 mid-campaign __census_global probes (driver lines, phase boundary)
+SPIKE bare: row11 resid delta = 114 calls/124572 B == 3 x probe self-cost (38/41524) EXACT — source NAMED: 3 mid-campaign __census_global probes (driver lines, phase boundary)
+
 ## derived figures (A-BG26 — formula+sources; MEASURE cites these lines)
 D1 [derivata] hello a_calls HIT drop = (1 - 2/80476)*100 = 99.9975%  [src: census.81.hello mean; baseline MEASURE80 hello a_calls=80476]
 D2 [derivata] hello b_calls delta = (731/730 - 1)*100 = +0.14%  [src: census.81.hello mean; baseline MEASURE80 b=730]

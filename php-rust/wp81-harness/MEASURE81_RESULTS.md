@@ -90,12 +90,17 @@ determinismo è pieno, quindi media==r1). Byte accanto alle call (A-BG27).
   verdict81.out (include_heavy req1 a_calls=128551) — fuori dalla finestra
   steady: «b invariato» si legge accanto a quel pin, non al posto suo.
 - **resid invariato**: 44,1 call / 43.463 B == baseline ESATTO (media
-  steady; nessun leak nel canale dichiarato, KG-81-3). ⚠️ **La media
-  ingloba uno spike periodico NON ancora NOMINATO a req=11** (r1 hello:
-  157 call / 166.771 B vs 43/42.199 tipici — Bak/KB-83-2): finché la
-  sorgente non è identificata, ogni «resid invariato» di WP-82 è BLOCCATO;
-  l'etichetta «steady» della finestra è quindi imprecisa (req=11 è ancora
-  transiente — Gregg).
+  steady; nessun leak nel canale dichiarato, KG-81-3). **Spike req=11
+  NOMINATO A MACCHINA (KB-83-2 CHIUSA, S-82.0)**: r1 hello riga 11 =
+  157 call / 166.771 B vs 43/42.199 tipici — il delta (114/124.572) è
+  ESATTAMENTE 3 × il self-cost del probe `__census_global` (38/41.524,
+  misurato nello stesso .idle della campagna): il driver fa 3 probe
+  mid-campagna tra warmup e loop misurato e il loro costo si prenota nel
+  resid della richiesta successiva (sezione SPIKE di verdict81.out, pin
+  aritmetico su TUTTE le fixture). Non periodico, non cresce con N
+  (3 probe fissi per campagna): NON è una struttura che cresce. L'etichetta
+  «steady» della finestra resta imprecisa per la riga 11 (transiente di
+  fase, ora nominato — Gregg).
 - retain_len = park-EVENTI: bare/hello 1 (main), include_gate 3 (2+main),
   include_heavy 6 (5+main) — pin A-DS8/F6 per NOME.
 - cli arm (asimmetria superglobali DICHIARATA, A-DS10/KS-DS-81-3; confronti
@@ -110,7 +115,10 @@ Post-leva: **drift idle = 0 call / 0 B su entrambi gli arm a 60s**
 (finestra == self-cost esatto: axum 38/41.524, cli 49/9.639). KL-82-1: la
 frase precisa è «0 allocazioni Rust-allocator, tutti i thread» — canali
 CIECHI per costruzione: (i) dealloc (il contatore non le incrementa),
-(ii) malloc FFI (zlib/gd/tidy fuori dal GlobalAlloc), (iii) arene/metadata
+(ii) **qualunque malloc libc-side, incluso quello di realpath(3)/stat del
+probe main** (A-DL18, Concilio WP-83 — non solo zlib/gd/tidy FFI: il canale
+è «fuori dal GlobalAlloc», e il probe della leva ci vive; la residenza del
+path probe si giudica solo col twin V2), (iii) arene/metadata
 mimalloc (mmap diretto; senza purge-thread: con PURGE_DELAY=0 e zero
 traffico non scatta nulla), (iv) page-dirtying di memoria già allocata.
 La residenza idle esige il twin union + vmmap + floor (KL-81-3).

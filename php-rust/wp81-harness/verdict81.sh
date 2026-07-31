@@ -251,6 +251,53 @@ for my $fx (@FX) {
     : fail "P8 $fx tripwires: depth=$dm inflight=$im trip=$tp";
 }
 
+# ---- SPIKE row 11 (KB-83-2): NAME the source by arithmetic -----------------
+# The driver (measure78.sh) curls __census_global exactly 3 times between the
+# warmup loop and the measured loop; each probe's self-cost (measured in the
+# SAME campaign's .idle raw: probe2-probe1 back-to-back) is booked into the
+# NEXT fixture request's resid — i.e. row 11. The pin is EXACT arithmetic:
+#   row11_resid - steady_resid == 3 x probe_self_cost   (calls AND bytes)
+# A mismatch means an UNNAMED allocation source at the phase boundary =>
+# FAIL (the KB-83-2 "resid invariato" blocker stays).
+print "\n## row-11 resid spike (KB-83-2 — named by arithmetic)\n";
+{
+  my $idle = "$mout/census.81.hello.r1.idle";
+  my (@ic, @ib);
+  if (open my $fh, '<', $idle) {
+    while (<$fh>) {
+      if (/^census-global: calls=(\d+) bytes=(\d+)/) { push @ic, $1; push @ib, $2 }
+    }
+    close $fh;
+  }
+  if (@ic < 3) { fail "idle raw missing/short for spike arithmetic (KB-83-2)" }
+  else {
+    my ($selfc, $selfb) = ($ic[2] - $ic[1], $ib[2] - $ib[1]);
+    for my $fx (@FX) {
+      my $raw = "$mout/census.81.$fx.r1.census";
+      open my $fh, '<', $raw or do { fail "no raw for spike check $fx"; next };
+      my ($n, %row) = (0);
+      while (<$fh>) {
+        next unless /^census: /;
+        $n++;
+        if ($n == 11 || $n == 12) {
+          my %f; while (/([a-z0-9_]+)=(\d+)/g) { $f{$1} = $2 }
+          $row{$n} = \%f;
+        }
+        last if $n > 12;
+      }
+      close $fh;
+      unless ($row{11} && $row{12}) { fail "spike check $fx: rows 11/12 missing"; next }
+      my $dc = $row{11}{resid_calls} - $row{12}{resid_calls};
+      my $db = $row{11}{resid_bytes} - $row{12}{resid_bytes};
+      if ($dc == 3 * $selfc && $db == 3 * $selfb) {
+        print "SPIKE $fx: row11 resid delta = $dc calls/$db B == 3 x probe self-cost ($selfc/$selfb) EXACT — source NAMED: 3 mid-campaign __census_global probes (driver lines, phase boundary)\n";
+      } else {
+        fail "SPIKE $fx: row11 delta $dc/$db != 3 x probe self-cost ($selfc/$selfb) — UNNAMED source (KB-83-2)";
+      }
+    }
+  }
+}
+
 # ---- derived figures (A-BG26): emitted HERE, cited by MEASURE81 ------------
 print "\n## derived figures (A-BG26 — formula+sources; MEASURE cites these lines)\n";
 # Baselines: wp80-harness/MEASURE80_RESULTS.md (git 6910767, census 5c9c6eec).

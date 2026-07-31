@@ -59,9 +59,10 @@ fi
 echo "OK  self-test: non-test counter bites (decoy=1; comment+test excluded)"
 
 # --- 1. A-MS13 allowlist (pinned counts, bump-in-commit BY NAME) -------------
-# vm_new( non-test call-sites:
-#   vm/mod.rs      = 2 (run_module_with_hir + eval-image sub-VM if any; see
-#                       `grep -n 'vm_new(' vm/mod.rs` for the named list)
+# vm_new( non-test call-sites (A-MS19: this comment used to say "vm/mod.rs=2
+# ... eval-image sub-VM" while the pin below is 1 — doc drift corrected
+# same-commit; false doc is worse than none, WP-78):
+#   vm/mod.rs      = 1 (run_module_with_hir — the ONLY production vm_new)
 #   worker_pool.rs = 1 (execute_with_retain)
 #   ALL other .rs  = 0
 check_pin() { # <file> <token> <want> <label>
@@ -98,8 +99,14 @@ else
 fi
 
 # --- 2. A-PP16: publish AFTER link_fatal_check, in both SAPI files -----------
+# NOTE (A-TH20): this lexical order pin is POSITION only — it is guard-blind
+# (an unconditional publish lexically after the check would pass). The
+# BEHAVIORAL falsifier of the guard is F8c-contatori in
+# gate-lever-fixtures.sh (double link-fatal => put==0/hit==0; fix => put==1):
+# the two teeth judge together, neither alone.
 check_order() { # <file> <first-re> <second-re> <label> -> rc 1 on violation
   awk -v a="$2" -v b="$3" -v lbl="$4" -v f="${1##*/}" '
+    /^[[:space:]]*\/\// { next }   # A-TH20: comments must not satisfy order pins
     $0 ~ a && !la { la = NR }
     $0 ~ b && !lb { lb = NR }
     END {
@@ -111,11 +118,18 @@ check_order() { # <file> <first-re> <second-re> <label> -> rc 1 on violation
 }
 check_order "$WORKER" 'link_fatal_check[(]' 'publish_if_armed[(][)]' 'A-PP16 put-after-link (worker)' || FAILS=$((FAILS+1))
 check_order "$VMMOD"  'let link_fatal = vm[.]link_fatal_check[(]' 'publish_if_armed[(][)]' 'A-PP16 put-after-link (run_module_with_hir)' || FAILS=$((FAILS+1))
+# A-TH20 (Council WP-83): EXACT pins, no more `>=`. Call-sites (empty-paren
+# spelling) == 1 per SAPI file; total `publish_if_armed(` tokens in vm/mod.rs
+# == 2 EXACT (the impl def + the one guarded call) — a second call-site
+# after run_module_with_hir:828 can no longer pass.
 n=$(count_nontest "$WORKER" 'publish_if_armed[(][)]')
 m=$(count_nontest "$VMMOD" 'publish_if_armed[(][)]')
-if [ "$n" -ne 1 ] || [ "$m" -lt 1 ]; then
-  echo "FAIL: publish_if_armed() call-sites worker=$n (pin 1) vm/mod.rs=$m (>=1: impl+call)"
+t=$(count_nontest "$VMMOD" 'publish_if_armed[(]')
+if [ "$n" -ne 1 ] || [ "$m" -ne 1 ] || [ "$t" -ne 2 ]; then
+  echo "FAIL: publish_if_armed pins — worker calls=$n (pin 1), vm/mod.rs calls=$m (pin 1), vm/mod.rs tokens=$t (pin 2 = def+call) (A-TH20)"
   FAILS=$((FAILS+1))
+else
+  echo "OK  publish_if_armed: worker=1 call, vm/mod.rs=1 call + def (==2 tokens exact, A-TH20)"
 fi
 # decoy: reversed order must be flagged
 cat > "$TMPD/rev.rs" <<'EOF'
@@ -130,16 +144,31 @@ fi
 echo "OK  self-test: reversed publish/link order flagged (decoy)"
 
 # --- 3. KS-PP-82-3: SplitDrain before the first return -----------------------
-awk '
-  /fn execute_with_retain\(/ { inside = 1 }
-  inside && /let mut split_drain/ && !sd { sd = NR }
-  inside && /^[[:space:]]*return / && !fr { fr = NR }
-  END {
-    if (!sd)      { print "FAIL: split_drain construction not found (KS-PP-82-3)"; exit 1 }
-    if (fr && fr < sd) { printf "FAIL: return at %d precedes SplitDrain at %d (KS-PP-82-3)\n", fr, sd; exit 1 }
-    printf "OK  SplitDrain (line %d) precedes the first return (line %d) in execute_with_retain\n", sd, fr
-  }
-' "$WORKER" || FAILS=$((FAILS+1))
+check_splitdrain() { # <file> -> rc 1 on violation
+  awk '
+    /fn execute_with_retain\(/ { inside = 1 }
+    inside && /let mut split_drain/ && !sd { sd = NR }
+    inside && /^[[:space:]]*return / && !fr { fr = NR }
+    END {
+      if (!sd)      { print "FAIL: split_drain construction not found (KS-PP-82-3)"; exit 1 }
+      if (fr && fr < sd) { printf "FAIL: return at %d precedes SplitDrain at %d (KS-PP-82-3)\n", fr, sd; exit 1 }
+      printf "OK  SplitDrain (line %d) precedes the first return (line %d) in execute_with_retain\n", sd, fr
+    }
+  ' "$1"
+}
+check_splitdrain "$WORKER" || FAILS=$((FAILS+1))
+# decoy (A-SK24, Council WP-83): tooth 3 was the ONLY one without a negative —
+# a return ABOVE the SplitDrain construction must be flagged.
+cat > "$TMPD/sd.rs" <<'EOF'
+fn execute_with_retain() {
+    return early;
+    let mut split_drain = SplitDrain::new();
+}
+EOF
+if check_splitdrain "$TMPD/sd.rs" > /dev/null 2>&1; then
+  echo "SELF-TEST BROKEN: return-before-SplitDrain not flagged (KS-PP-82-3 decoy)"; exit 2
+fi
+echo "OK  self-test: return-before-SplitDrain flagged (decoy)"
 
 # --- 4. A-TH14: probe = ONE parameter, pinned call-sites ----------------------
 n=$(count_nontest "$WORKER" 'main_unit_acquire[(]name, source, reg, true[)]')
@@ -149,20 +178,115 @@ if [ "$n" -ne 1 ]; then
 else
   echo "OK  worker: exactly 1 probed acquire call-site"
 fi
-n=$(count_nontest "$CLISRV" 'run_source_probed[(]&name, &source, registry, &[[][]], true[)]')
+n=$(count_nontest "$CLISRV" 'run_source_probed[(]&name, &source, registry, &[[][]], None, true[)]')
 if [ "$n" -ne 1 ]; then
-  echo "FAIL: cli-server run_source_probed(..., true) sites = $n, pinned 1 (A-TH14)"
+  echo "FAIL: cli-server run_source_probed(..., None, true) sites = $n, pinned 1 (A-TH14)"
   FAILS=$((FAILS+1))
 else
   echo "OK  cli-server: exactly 1 probed run call-site"
 fi
-# the one-shot wrapper must pass false (the corpus never probes):
-if ! grep -q 'run_source_probed(name, source, registry, ini_overrides, false)' "$VMMOD"; then
-  echo "FAIL: run_source_with_ini does not delegate with probe=false (A-TH14/F-oneshot)"
+# A-TH21 (Council WP-83): ALL one-shot wrappers delegate to the acquire path
+# with probe=false — none may own a lexical lower+compile of its own.
+for pat in \
+  'run_source_probed(name, source, registry, ini_overrides, None, false)' \
+  'run_source_probed(name, source, registry, &\[\], None, false)' \
+  'run_source_probed(name, source, registry, ini_overrides, Some(argv), false)'; do
+  if ! grep -q "$pat" "$VMMOD"; then
+    echo "FAIL: one-shot wrapper delegation missing: '$pat' (A-TH21)"
+    FAILS=$((FAILS+1))
+  fi
+done
+echo "OK  one-shot wrappers (with/with_ini/with_argv) all delegate with probe=false (A-TH21)"
+# The old duplicate bodies are BANNED: pin the non-test 'crate::lower_source('
+# count in vm/mod.rs so a new wrapper cannot quietly re-grow its own main
+# compile. NAMED sites (bump = same-commit, named — KS-AH-81-3 class):
+#   1. main_unit_acquire        (the ONE main lower path)
+#   2. include-lower fallback   (Vm include path, main_hir.is_none() arm)
+#   3+4. retained_walk_selftest (mem-census PUB selftest — outside mod tests
+#        by design: lib-tests of an allocator-linking instrument live as
+#        pub-selftests called from the bin, WP-81 lesson)
+n=$(count_nontest "$VMMOD" 'crate::lower_source[(]')
+if [ "$n" -ne 4 ]; then
+  echo "FAIL: vm/mod.rs has $n non-test 'crate::lower_source(' sites, pinned 4 NAMED (A-TH21)"
   FAILS=$((FAILS+1))
 else
-  echo "OK  one-shot wrapper delegates with probe=false"
+  echo "OK  vm/mod.rs: crate::lower_source( == 4 named sites (acquire, include-fallback, selftest x2)"
 fi
+
+# --- 4a2. A-AH26/KS-AH-83-3: MAIN_CHAIN_FP single-binding pins ----------------
+# `main_chain_fp_from` is module-private with a doc contract ("MUST NOT call
+# with anything but PRELUDE_SRC") — prose. The machine pins: exactly 2
+# non-test tokens in lower/mod.rs (the def + the ONE production call), and
+# the production call is textually `main_chain_fp_from(PRELUDE_SRC`. A
+# call-site outside the pin or with a masked copy of the binding =>
+# lever de-certified, MAIN_CHAIN_FP back to ADVISORY (KS-AH-83-3).
+LOWERMOD="$REPO/crates/php-runtime/src/lower/mod.rs"
+# The falsifier lives in `#[cfg(test)] mod main_chain_fp_tests` — NOT named
+# `mod tests`, so count_nontest would count it (the Matsakis Q3 prefix-match
+# class, live). This tooth arms on the #[cfg(test)] attribute instead —
+# declared: valid because in lower/mod.rs the cfg(test) region is terminal.
+count_noncfgtest() { # <file> <token-regex> -> count
+  awk -v re="$2" '
+    /^[[:space:]]*#\[cfg\(test\)\]/ { in_t = 1 }
+    in_t { next }
+    /^[[:space:]]*\/\// { next }
+    { n += gsub(re, "&") }
+    END { print n + 0 }
+  ' "$1"
+}
+n=$(count_noncfgtest "$LOWERMOD" 'main_chain_fp_from[(]')
+if [ "$n" -ne 2 ]; then
+  echo "FAIL: lower/mod.rs main_chain_fp_from( tokens = $n, pinned 2 (def+call, A-AH26)"
+  FAILS=$((FAILS+1))
+elif ! grep -q 'main_chain_fp_from(PRELUDE_SRC' "$LOWERMOD"; then
+  echo "FAIL: production call is not textually main_chain_fp_from(PRELUDE_SRC (A-AH26/KS-AH-83-3)"
+  FAILS=$((FAILS+1))
+else
+  echo "OK  main_chain_fp_from: ==2 tokens (def+call), call arg is PRELUDE_SRC literal (A-AH26)"
+fi
+# sweep: no caller anywhere else in the workspace
+SWEEPFP=$(find "$REPO/crates" -name '*.rs' ! -name '._*' ! -path "$LOWERMOD" -print0 |
+  while IFS= read -r -d '' f; do
+    n=$(count_nontest "$f" 'main_chain_fp_from[(]')
+    [ "$n" -gt 0 ] && echo "${f#"$REPO"/}: $n"
+  done)
+if [ -n "$SWEEPFP" ]; then
+  echo "FAIL: main_chain_fp_from( call-site outside lower/mod.rs (KS-AH-83-3):"
+  echo "$SWEEPFP"
+  FAILS=$((FAILS+1))
+else
+  echo "OK  sweep: main_chain_fp_from( confined to lower/mod.rs"
+fi
+
+# --- 4b. KS-SK-83-4/A-SK24: CLASS sweep, any spelling ------------------------
+# Exactly ONE probed-acquire call-site and ONE probed-run call-site in the
+# WHOLE workspace, matched as a CLASS (`…true)`), not as a pinned spelling —
+# a second call-site with different arg names must trip this even though the
+# tooth-4 literal pins would stay green.
+sweep_class() { # <token-class-regex> <want> <label>
+  local total=0 n f
+  while IFS= read -r -d '' f; do
+    n=$(count_nontest "$f" "$1")
+    total=$((total+n))
+  done < <(find "$REPO/crates" -name '*.rs' ! -name '._*' -print0)
+  if [ "$total" -ne "$2" ]; then
+    echo "FAIL: class sweep '$3' = $total workspace-wide, pinned $2 (KS-SK-83-4)"
+    FAILS=$((FAILS+1))
+  else
+    echo "OK  class sweep: $3 == $2 workspace-wide (any spelling)"
+  fi
+}
+sweep_class 'main_unit_acquire[(][^)]*true[)]' 1 'main_unit_acquire(...true)'
+sweep_class 'run_source_probed[(][^)]*true[)]' 1 'run_source_probed(...true)'
+# decoy: a differently-spelled probed call must be counted by the class regex
+cat > "$TMPD/cls.rs" <<'EOF'
+fn f() { let u = main_unit_acquire(nm, src, r, true); }
+EOF
+n=$(count_nontest "$TMPD/cls.rs" 'main_unit_acquire[(][^)]*true[)]')
+if [ "$n" -ne 1 ]; then
+  echo "SELF-TEST BROKEN: class regex missed alt spelling (KS-SK-83-4 decoy)"; exit 2
+fi
+echo "OK  self-test: class sweep catches alternative spellings (decoy)"
 
 if [ "$FAILS" = 0 ]; then
   echo "== GATE-LEVER-PINS PASS (A-MS13 + A-PP16 + KS-PP-82-3 + A-TH14) [git $GIT_REV] =="

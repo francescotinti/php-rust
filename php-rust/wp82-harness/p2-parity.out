@@ -1,0 +1,7 @@
+== corpus Zend (--isolate) ==
+OK  corpus: fail set BY NAME identical (1418 files)
+== refl (--isolate) ==
+OK  refl: fail set BY NAME identical (290 files)
+== workspace cargo test --release ==
+OK  workspace tests (rc=0)
+== GATE-PARITY-82P2 PASS ==
