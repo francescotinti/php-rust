@@ -47,22 +47,46 @@ Dettaglio: `sessions/WP_SESSION_78_1.md` + `wp78-harness/MEASURE78_RESULTS.md`.
 4. **Politica panic worker = FAIL-FAST** (A-PP9/KS-PP-6): panic ⇒ abort del
    processo (mai thread morto in silenzio); gate-worker-panic.
 
-## §WP-79 (prossima sessione) — PROPOSTA: leva A-BB6 "cache Module" data-driven
+## ⚖️ Concilio WP-80 ESEGUITO (2026-07-31, verbali VINCOLANTI): `wp80-harness/COUNCIL_WP80_REVIEWS.md`
+**9× CONCORDO CON EMENDAMENTI, 0 opposizioni.** S-78.1 giudicata reale
+(cifre = raw ×campione — Gregg; fix leak Zend-fedele — Stogov; rigore gate
+mantenuto — Klabnik). MA: **bug reale nel contatore depth** (inc-DOPO-send,
+3 sedie: fail-open, può sotto-contare — ogni claim depth-based è ADVISORY
+finché non fixato) e **il "99% fase a" NON autorizza ancora il design A-BB6**
+(3 sedie: va decomposto prelude/main/include — su hello è quasi tutto
+PRELUDE). Delta A/B declassato: verdict-grade = **+4,8M residente** (il
++5,7MB peak usa il braccio vietato da KG-79.B). Forma fedele della leva
+(Stogov A-DS5): **la STESSA unit cache TL estesa al main** (canonicalize+
+stat+fingerprint), MAI una seconda cache, MAI mtime (6 sedie).
 
-Il census ha stabilito il canale: **99% dell'alloc/req è ricompilazione**
-(80.476 call / 13,0MB su hello; ~identico su include). Programma proposto
-(da confermare col verbale Concilio WP-80 qui sotto):
-1. Design A-BB6 con i dati (frequenza×taglia WP-57): riuso del Module del
-   MAIN script cross-request (la unit cache TL già copre gli include) —
-   opzioni: unit-cache anche per il main / Rc<Module> cache per (path,mtime)
-   thread-local. Vincoli: byte-parity (G-APERTURA-2 + corpus), isolamento
-   FPM intatto (statics per-Vm), niente RetainSet persistente (regola 3).
-2. Gate PRIMA della leva (lezione: il gate morde sulle superfici vergini):
-   fixture che modifica il file tra richieste (mtime invalidation),
-   fixture con include condizionale.
-3. A/B build-adiacente stessa-sera (WP-65) su census + gemello.
-4. Residui minori: decomposizione delta +5,7MB (tier0 già misura il floor);
-   contatori sul path cli-server per chiudere A-BB1 (o dichiararlo N/A).
+## §WP-79 (prossima sessione) — S-79.0 "PRE-LEVER HARDENING" poi design A-BB6
+
+**S-79.0 (ordine vincolante, verbale WP-80 §Sintesi — non rinegoziare)**:
+1. Fix depth inc-PRIMA-di-send + test anti-wrap + reset watermark nei test
+   (A-TH1/A-BB13/A-MS1/A-SK8) [KH80-4]
+2. Doc purge: frase request_end "cross-request survivor" + pattern nuovi
+   (A-DS1); SAFETY inline su AssertUnwindSafe (A-MS4)
+3. Census hardening: split a1/a2/a3 (prelude/main/include) + seconda fixture
+   include-pesante + residuo Δglobale−(a+b+c) + controllo positivo canale c
+   + righe-attese==N + finestra idle + census.inc R≥3
+   (A-TH2/A-BB10..12/A-SK5/A-PP5/A-AH13/A-DL5/A-BG13/A-BG14)
+4. Identità QUATERNA: census build nel feature-matrix+CI con hash nel log
+   (A-AH10), gate equivalenza funzionale del gemello (A-AH11), driver
+   ENFORCE hash+depth exit≠0 (A-SK7/A-BG15/A-AH12)
+5. Gate hardening: concurrent con osservabile di sovrapposizione (A-SK1),
+   stdout-tandem NSITES==4+verbi+tandem-scrittura (A-SK2/A-PP3), marker per
+   posizione (A-PP1), worker-panic RC!=134 FAIL + N pinnato (A-SK4), panic
+   dispatcher gateato (A-PP4)
+6. Test in-cargo a forma worker_loop (A-MS2/A-TH5) + riga census sul path
+   cli-server (A-BG16, prerequisito del verdetto A-BB1)
+7. Stranded keys unit cache: supersede-per-path o cap + contatore (A-DS2)
+   [KS-DS-80-1]
+8. SOLO POI design A-BB6 coi vincoli consolidati (§Sintesi punto 8 del
+   verbale: unit cache TL estesa al main, fingerprint, pin nel RetainSet
+   della richiesta, immutabilità Module asserita, 6 fixture A-DS6,
+   predizione ex-ante, A/B coppia churn/retained + peak W=num_cpus + CPU +
+   corpus per NOME; body ≠ oracolo ⇒ REVERT) [KS-DS-80-2/-3, KG-80-1,
+   KL-80-1/2, KS-AH-80-2/3/4]
 
 **Kill-switch di rotta (attivi)**: KG-78.D (cifra senza run tracciato) ·
 KB-78-5/KL-78-5 (cifre solo dal gemello) · KB-78-3/KG-78.A (workers≠1 o R<3)
