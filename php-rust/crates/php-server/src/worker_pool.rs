@@ -1258,6 +1258,16 @@ mod implementation {
             );
         }
 
+        /// KL-82-2 (Council WP-82): the retained-walk shared-subgraph
+        /// positive control — the walker's visited-set is prose without it.
+        /// Runs HERE because php-runtime lib tests cannot link the
+        /// mem-census dump (mimalloc symbols live in the bin crates).
+        #[cfg(feature = "mem-census")]
+        #[test]
+        fn retained_walk_shared_subgraph_control() {
+            php_runtime::retained_walk_selftest();
+        }
+
         /// A-PP14 (Council WP-82) positive control: a fatal request's churn
         /// must LAND in the DRAINED_* ledger, not vanish from the
         /// denominator (Δglobal = Σlines + drained).

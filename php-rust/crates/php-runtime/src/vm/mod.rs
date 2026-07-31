@@ -1421,23 +1421,33 @@ pub fn run_module_with_hir<'m>(
             // `stranded_keys_superseded`/`stranded_entries_dropped`.
             {
                 let st = UC_STATS.with(|s| *s.borrow());
-                let (entries, bytes, paths, superseded_paths, superseded_entries) =
+                let (entries, bytes, paths, superseded_paths, superseded_entries, rw_bytes, rw_nodes) =
                     UNIT_CACHE.with(|c| {
                         let cache = c.borrow();
                         let mut entries = 0u64;
                         let mut bytes = 0u64;
                         let mut by_path: rustc_hash::FxHashMap<&[u8], u32> = Default::default();
+                        // A-DL12: ONE walker over the WHOLE cache — the
+                        // visited-set dedups nodes shared BETWEEN entries
+                        // (cache-as-owner counts each once); main entries
+                        // contribute their Program too. Figure label:
+                        // ">= bytes, Const excluded".
+                        let mut rw = RetainedWalk::new();
                         for (k, slot) in cache.iter() {
                             entries += slot.len() as u64;
                             for cu in slot {
                                 bytes += module_census_bytes(&cu.module) as u64;
+                                rw.add_module(&cu.module);
+                                if let Some(p) = &cu.main_program {
+                                    rw.add_program(p);
+                                }
                             }
                             *by_path.entry(&k.path[..]).or_insert(0) += 1;
                         }
                         let sup = by_path.values().filter(|&&n| n > 1).count() as u64;
                         let sup_e: u64 =
                             by_path.values().filter(|&&n| n > 1).map(|&n| (n - 1) as u64).sum();
-                        (entries, bytes, by_path.len() as u64, sup, sup_e)
+                        (entries, bytes, by_path.len() as u64, sup, sup_e, rw.bytes, rw.nodes)
                     });
                 mc::census_line(&format!(
                     "tag=unitcache hit_intra={} hit_cross={} miss_cold={} miss_fp={} \
@@ -1450,7 +1460,9 @@ pub fn run_module_with_hir<'m>(
                      defer_relowers={} defer_relower_ns={} \
                      stranded_keys_superseded={} stranded_entries_dropped={} \
                      main_probe={} main_hit={} main_put={} main_impure_skip={} \
-                     main_probe_fail={}",
+                     main_probe_fail={} retained_walk_bytes={rw_bytes} \
+                     retained_walk_nodes={rw_nodes} \
+                     stranded_bytes_dropped={} gross=1",
                     st.hit_intra,
                     st.hit_cross,
                     st.miss_cold,
@@ -1480,6 +1492,7 @@ pub fn run_module_with_hir<'m>(
                     st.main_put,
                     st.main_impure_skip,
                     st.main_probe_fail,
+                    st.stranded_bytes_dropped,
                 ));
                 // WP-67 P-67.3: the cross-request bounded sets OUTSIDE
                 // cache+RetainSet — the per-worker metric counts them
@@ -15353,6 +15366,14 @@ struct UcStats {
     main_put: u64,
     main_impure_skip: u64,
     main_probe_fail: u64,
+    /// KL-81-1/A-DL6 (design79 §7): supersede in BYTE, not just entries —
+    /// `module_census_bytes` of every dropped stale entry accumulates here
+    /// (mem-census builds; 0 elsewhere). "The supersede frees memory"
+    /// without this figure AND the resident probe twin = claim rejected.
+    /// Reader = the mem-census unitcache dump ONLY (declared: in other
+    /// builds the ledger is write-only dead weight, hence the cfg_attr).
+    #[cfg_attr(not(feature = "mem-census"), allow(dead_code))]
+    stranded_bytes_dropped: u64,
 }
 
 impl UcStats {
@@ -15386,6 +15407,7 @@ impl UcStats {
         main_put: 0,
         main_impure_skip: 0,
         main_probe_fail: 0,
+        stranded_bytes_dropped: 0,
     };
 }
 
@@ -15932,9 +15954,20 @@ fn unit_cache_put(key: UnitKey, cu: CachedUnit) {
                 .collect();
             for sk in stale {
                 if let Some(slot) = cache.remove(&sk) {
+                    // KL-81-1/A-DL6: supersede in BYTE — the dropped
+                    // entries' census size lands in the ledger BEFORE the
+                    // drop (mem-census builds; the resident-side proof is
+                    // the untampered twin's vmmap probe, design79 §7).
+                    #[cfg(feature = "mem-census")]
+                    let dropped_bytes: u64 =
+                        slot.iter().map(|cu| module_census_bytes(&cu.module) as u64).sum();
                     uc_stat(|s| {
                         s.stranded_keys_superseded += 1;
                         s.stranded_entries_dropped += slot.len() as u64;
+                        #[cfg(feature = "mem-census")]
+                        {
+                            s.stranded_bytes_dropped += dropped_bytes;
+                        }
                     });
                     if let Some(p) = &kpath {
                         uc_log(&format!("supersede entries {}", slot.len()), p);
@@ -16865,6 +16898,160 @@ fn module_slack_bytes(m: &Module) -> usize {
         }
     }
     b
+}
+
+/// Shallow structural size of one [`Func`] (mem-census): size_of +
+/// capacities + name strings; Const heap payloads EXCLUDED by construction —
+/// every figure derived from this is "≥, Const excluded" (declared
+/// systematic understatement, A-DL12).
+#[cfg(feature = "mem-census")]
+fn func_census_bytes(f: &crate::bytecode::Func) -> usize {
+    use crate::bytecode::{Const, Func, Op};
+    std::mem::size_of::<Func>()
+        + f.ops.capacity() * std::mem::size_of::<Op>()
+        + f.lines.capacity() * std::mem::size_of::<u32>()
+        + f.consts.capacity() * std::mem::size_of::<Const>()
+        + f.slot_names.iter().map(|s| s.len() + 16).sum::<usize>()
+        + f.param_names.iter().map(|s| s.len() + 16).sum::<usize>()
+        + f.param_defaults.iter().flatten().map(func_census_bytes).sum::<usize>()
+        + f.exc_table.capacity() * 16
+}
+
+/// A-DL12/KL-82-2 (Council WP-82): retained-size walker with a VISITED-SET
+/// by POINTER IDENTITY over the WHOLE walk (root = the thread-local unit
+/// cache). Ownership rule, stated next to every figure: CACHE-AS-OWNER —
+/// each node counts ONCE per walk even when `Rc`-shared between entries
+/// (the per-entry `strong_count==1` skip of [`module_census_bytes`]
+/// undercounts exactly the shared prelude a cached MAIN maximizes; that
+/// form survives only for the per-unit `census_unit_note` channel, whose
+/// semantics predate the lever). Every figure is "≥ bytes, Const/heap
+/// payloads excluded" (shallow structural sizes).
+#[cfg(feature = "mem-census")]
+struct RetainedWalk {
+    seen: rustc_hash::FxHashSet<usize>,
+    bytes: u64,
+    nodes: u64,
+}
+
+#[cfg(feature = "mem-census")]
+impl RetainedWalk {
+    fn new() -> Self {
+        RetainedWalk { seen: Default::default(), bytes: 0, nodes: 0 }
+    }
+
+    /// True on FIRST visit of this Rc pointee (address-identity dedup).
+    fn first_visit<T>(&mut self, rc: &Rc<T>) -> bool {
+        self.nodes += 1;
+        self.seen.insert(Rc::as_ptr(rc) as usize)
+    }
+
+    fn add_module(&mut self, m: &Rc<Module>) {
+        if !self.first_visit(m) {
+            return;
+        }
+        self.bytes += (std::mem::size_of::<Module>() + func_census_bytes(&m.main)) as u64;
+        for f in &m.functions {
+            if self.first_visit(f) {
+                self.bytes += func_census_bytes(f) as u64;
+            }
+        }
+        for f in &m.closures {
+            self.bytes += func_census_bytes(f) as u64;
+        }
+        for c in &m.classes {
+            if self.first_visit(c) {
+                self.bytes += std::mem::size_of_val(&**c) as u64;
+                for meth in &c.methods {
+                    self.bytes += func_census_bytes(&meth.func) as u64;
+                }
+                if let Some(pi) = &c.prop_init {
+                    self.bytes += func_census_bytes(pi) as u64;
+                }
+            }
+        }
+    }
+
+    /// The Program half of a cached MAIN (design79 §11.1: "il walk del
+    /// PROGRAM non esiste — va scritto"). Shallow: Stmt/Expr trees count by
+    /// top-level capacity only ("≥" label), Rc decls dedup by pointer.
+    fn add_program(&mut self, p: &Rc<Program>) {
+        if !self.first_visit(p) {
+            return;
+        }
+        self.bytes += std::mem::size_of::<Program>() as u64;
+        self.bytes += (p.body.capacity() * std::mem::size_of::<crate::hir::Stmt>()) as u64;
+        self.bytes += p.slots.iter().map(|s| s.len() + 16).sum::<usize>() as u64;
+        for f in &p.functions {
+            if self.first_visit(f) {
+                self.bytes += std::mem::size_of::<crate::hir::FnDecl>() as u64;
+            }
+        }
+        for c in &p.classes {
+            if self.first_visit(c) {
+                self.bytes += std::mem::size_of::<crate::hir::ClassDecl>() as u64;
+            }
+        }
+        self.bytes +=
+            (p.closures.capacity() * std::mem::size_of::<crate::hir::FnDecl>()) as u64;
+        self.bytes +=
+            (p.deferred.capacity() * std::mem::size_of::<crate::hir::DeferredDecl>()) as u64;
+    }
+}
+
+/// KL-82-2 (Council WP-82): the POSITIVE control the mono-module form
+/// cannot provide — two modules SHARING an `Rc<Func>` subgraph must walk
+/// to EXACTLY S1 + S2 − Sshared (a walker without cross-entry pointer
+/// dedup double-counts the shared node and this equality breaks; a walker
+/// that skips shared nodes undercounts and it breaks the other way).
+/// Lives as a pub selftest because php-runtime LIB tests cannot link the
+/// mem-census dump (mi_stats_print_out lives in the bin crates' mimalloc)
+/// — the runner is a php-server test under --features mem-census (CI lane
+/// same commit, KS-AH-82-4).
+#[cfg(feature = "mem-census")]
+pub fn retained_walk_selftest() {
+    {
+        let reg = Registry::default();
+        let p1 = crate::lower_source(
+            b"rw_m1.php",
+            b"<?php function rw_f1() { return 1; } echo rw_f1();",
+        )
+        .unwrap();
+        let m1 = Rc::new(crate::compile::compile_program(&p1, &reg).unwrap());
+        let p2 = crate::lower_source(
+            b"rw_m2.php",
+            b"<?php function rw_g2() { return 2; } echo rw_g2();",
+        )
+        .unwrap();
+        let mut m2 = crate::compile::compile_program(&p2, &reg).unwrap();
+        // Graft the shared subgraph: m2 carries a clone of one of m1's
+        // function Rcs (exactly what prelude sharing does between entries).
+        let shared = Rc::clone(&m1.functions[0]);
+        let s_shared = func_census_bytes(&shared) as u64;
+        assert!(s_shared > 0, "control func has zero census size — vacuous");
+        m2.functions.push(shared);
+        let m2 = Rc::new(m2);
+
+        let mut w1 = RetainedWalk::new();
+        w1.add_module(&m1);
+        let s1 = w1.bytes;
+        let mut w2 = RetainedWalk::new();
+        w2.add_module(&m2);
+        let s2 = w2.bytes;
+        assert!(s1 > 0 && s2 > 0, "solo walks are zero — vacuous control");
+
+        let mut both = RetainedWalk::new();
+        both.add_module(&m1);
+        both.add_module(&m2);
+        assert_eq!(
+            both.bytes,
+            s1 + s2 - s_shared,
+            "shared subgraph not deduped to exactly S1+S2-Sshared (KL-82-2)"
+        );
+        // Idempotence: re-adding an already-walked module adds ZERO.
+        let b = both.bytes;
+        both.add_module(&m1);
+        assert_eq!(both.bytes, b, "re-walk of a visited module added bytes");
+    }
 }
 
 #[cfg(feature = "mem-census")]

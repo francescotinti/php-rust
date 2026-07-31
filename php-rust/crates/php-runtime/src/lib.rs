@@ -46,6 +46,10 @@ pub use vm::{
 // SAPI, run_source_probed for the cli-server (probe = ONE parameter at the
 // SAPI boundary, A-TH14; call-sites grep-gated by gate-lever-pins.sh).
 pub use vm::{main_unit_acquire, run_source_probed, MainAcquireError, MainLever, MainUnit};
+// KL-82-2: the retained-walk positive control — run by a php-server test
+// (php-runtime lib tests cannot link the mem-census dump).
+#[cfg(feature = "mem-census")]
+pub use vm::retained_walk_selftest;
 
 // WP-77.6.5.2: Expose Vm lifecycle methods and construction for worker-pool integration
 pub use compile::{compile_program, CompileError};
