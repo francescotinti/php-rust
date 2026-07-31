@@ -57,10 +57,14 @@ my %ALLOW = map { $_ => 1 } qw(
 
 # ---- corpus: committed machine outputs -------------------------------------
 my @sources;
-push @sources, bsd_glob("$here/*.out");
+push @sources, bsd_glob("$here/*.out"), bsd_glob("$here/../wp82-harness/*.out");
 push @sources, bsd_glob("$mout/*81*.summary"), bsd_glob("$mout/*81*.matrix"),
                bsd_glob("$mout/*81*.idle"),    bsd_glob("$mout/*81*.census"),
                bsd_glob("$mout/*81*.log");
+# S-82.0: the measure82 campaign raws (82*/m82*/m82r* labels)
+push @sources, bsd_glob("$mout/*82*.summary"), bsd_glob("$mout/*82*.census"),
+               bsd_glob("$mout/*82*.log"),     bsd_glob("$mout/m82*"),
+               bsd_glob("$mout/axum.82*");
 push @sources, bsd_glob("$here/evidence/*");
 die "gate-measure-cifre: EMPTY corpus (no committed sources found)\n" unless @sources;
 my (%corpus, %corpus_count);

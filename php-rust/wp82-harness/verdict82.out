@@ -1,0 +1,26 @@
+# verdict82 — residual A/B measures (S-82.0 p7) — machine, fail-closed
+
+VF data N=100: V2 = 20.2/20.2/20.2 MB (spread 0.00%)
+VF data N=200: V2 = 20.0/20.1/20.1 MB (spread 0.50%)
+VF  note(100/200): delta -0.133 MB outside the 0.1 MB vmmap floor — NEGATIVE (shrink, not growth: purge noise at this resolution); A-DL19a escalation: judged at the SCALED pair below
+VF data scaled: V2(1000)=20.2/20.1/20.2 V2(2000)=20.2/20.2/20.1 MB
+VF  PASS: scaled pair |V2(2000)-V2(1000)| = 0.000 MB <= 0.1 MB floor => per-request residency <= 0.1KB/req (A-DL19a, no leak on the HIT path)
+VP data: peak lever=232.0 MB (232/232/232) base=197.6 MB (190/202/201) spread-band=6.5%
+VP  DECLARED-WORSE (KL-80-2 non-silence; Council WP-84 OPEN ITEM): peak W=10 lever 232.0 vs base 197.6 MB = +34.4 MB (17.4% > band 6.5%) — consistent with the xW retained cost of the cached main (3.44 MB/worker)
+VC data lever: slope = 150.0 us/req (per-R: 120.0/170.0/160.0)
+VC data base: slope = 7043.3 us/req (per-R: 6520.0/7490.0/7120.0)
+VC  NULL (KB-83-3, by rule): slope spread 970.0 us/req >= banda/3 (125.7) — N doubles (2000/4000) in WP-83; NO CPU claim is made (raw means: lever 150.0, base 7043.3 us/req)
+VH  PASS: hello.php battery segment probe==20 hit==20 put==0 (pure HIT path, KS-PP-83-2)
+VH  PASS: include_gate.php battery segment probe==20 hit==20 put==0 (pure HIT path, KS-PP-83-2)
+VH  PASS: include_heavy.php battery segment probe==20 hit==20 put==0 (pure HIT path, KS-PP-83-2)
+VH  PASS: bare.php battery segment probe==20 hit==20 put==0 (pure HIT path, KS-PP-83-2)
+VH  PASS: census witness hello steady a_calls=2.0 <= 4 (2x floor margin), steady_n=30 (binary NAMED in the raw header, KS-SK-83-3)
+VH  PASS: census witness include_gate steady a_calls=2.0 <= 4 (2x floor margin), steady_n=30 (binary NAMED in the raw header, KS-SK-83-3)
+VH  PASS: census witness include_heavy steady a_calls=2.0 <= 4 (2x floor margin), steady_n=30 (binary NAMED in the raw header, KS-SK-83-3)
+VH  PASS: census witness bare steady a_calls=2.0 <= 4 (2x floor margin), steady_n=30 (binary NAMED in the raw header, KS-SK-83-3)
+VR  PASS: unitcache row — rw_bytes=14250027 [FLOOR, cache-as-owner] + rw_main_net=7407810 [net-at-lower] uclog=0 main_evicted=0 (DECLARED; mem binary b620d64c89abb584)
+VR  [derivata: budget = (rw_bytes + rw_main_net) x W = 20.65 MB x W (W=1 measured; thread-local => xW by construction, KL-83-1 now satisfiable)]
+VA  PASS: autoload-run — MISS row1 a3=1112 calls (positive control: the autoload FIRES and compiles through a3), steady a3==0 EXACT ('HIT salta a3' holds even for runtime autoload: the include is itself a HIT), steady_n=30
+VA  [derivata: autoload RUN share lives in b = 787 - 731 = +56 calls/req vs hello (register+closure+include-HIT link)]
+
+== VERDICT82 PASS ==
