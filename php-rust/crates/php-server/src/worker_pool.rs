@@ -964,6 +964,53 @@ mod implementation {
             }
         }
 
+        /// A-PP20 (Council WP-83): the in-cargo tooth of "a link-fatal main
+        /// is NEVER published". F8c's counter form (put==0) assumes the
+        /// publish path is unique (A-PP16, grep-gated); this tooth ALSO
+        /// probes the cache ENTRIES directly — a second insertion path
+        /// would be caught even if the counters missed it. Real file path
+        /// (the probe canonicalizes meta.path): probe delta == 2 across two
+        /// requests, put == 0, hit == 0, and the (key, fp) is ABSENT.
+        #[test]
+        fn a_pp20_link_fatal_main_never_published_key_never_in_entries() {
+            let reg = registry();
+            let dir = std::env::temp_dir().join("phpr_gate_a_pp20");
+            std::fs::create_dir_all(&dir).unwrap();
+            let file = dir.join("lf.php");
+            // Compile-OK, LINK-fatal (the F8c source): enum implementing
+            // Serializable renders the plain fatal banner at link time.
+            let src = "<?php\nenum LF implements Serializable { case A; }\necho \"never-reached\";";
+            std::fs::write(&file, src).unwrap();
+            let path = file.display().to_string();
+            let (p0, h0, u0) = php_runtime::uc_main_stats();
+            for req in 1..=2 {
+                let retain = php_runtime::RetainSet::new();
+                let (body, status) = execute_with_retain(
+                    &retain,
+                    &reg,
+                    &WorkerHandlerMeta { path: path.clone(), source: src.as_bytes().to_vec() },
+                );
+                assert_eq!(
+                    status,
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "request {req}: link-fatal main must 500"
+                );
+                assert!(
+                    String::from_utf8_lossy(&body).contains("Fatal error"),
+                    "request {req}: body must carry the fatal banner"
+                );
+            }
+            let (p1, h1, u1) = php_runtime::uc_main_stats();
+            assert_eq!(p1 - p0, 2, "positive control: both requests must PROBE (vitality)");
+            assert_eq!(u1 - u0, 0, "link-fatal main was PUT (A-PP16/A-PP20)");
+            assert_eq!(h1 - h0, 0, "link-fatal main was served from cache (A-PP20)");
+            assert!(
+                !php_runtime::uc_main_key_in_cache(path.as_bytes(), src.as_bytes()),
+                "link-fatal main's (key, fp) is IN the entries — a second \
+                 insertion path exists (A-PP20)"
+            );
+        }
+
         /// A-DS9 (S-78.1.5): statics in methods and in INHERITED methods (PHP
         /// 8.1+: a child inheriting the method SHARES the parent's static).
         /// Absolute body pinned from the oracle (`php static_methods.php` →
@@ -1174,6 +1221,17 @@ mod implementation {
                 let (b, s) = rx.blocking_recv().unwrap();
                 assert_eq!(s, StatusCode::OK);
                 assert_eq!(b, b"w");
+                // A-TH22 (Council WP-83): the rescoped window doc ADMITS
+                // that recv can complete while the worker sits between send
+                // and the OUTSTANDING decrement — without this drain-sync
+                // the opeak==1 assert below contradicts that doc and can
+                // legitimately flake to 2. Bounded spin until drained.
+                let mut spins: u64 = 0;
+                while census::OUTSTANDING.load(std::sync::atomic::Ordering::Relaxed) != 0 {
+                    std::thread::yield_now();
+                    spins += 1;
+                    assert!(spins < 10_000_000, "OUTSTANDING never drained after recv (A-TH22)");
+                }
             }
             let depth = census::QUEUE_DEPTH.load(std::sync::atomic::Ordering::Relaxed);
             let peak = census::QUEUE_DEPTH_MAX.load(std::sync::atomic::Ordering::Relaxed);

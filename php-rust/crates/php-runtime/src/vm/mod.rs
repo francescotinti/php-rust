@@ -1435,6 +1435,13 @@ pub fn run_module_with_hir<'m>(
                             by_path.values().filter(|&&n| n > 1).map(|&n| (n - 1) as u64).sum();
                         (entries, bytes, by_path.len() as u64, sup, sup_e, rw.bytes, rw.nodes)
                     });
+                // A-DL17 (Council WP-83): the row carries TWO byte-ownership
+                // rules, both declared IN-BAND — `retained_walk_bytes` uses
+                // CACHE-AS-OWNER (visited-set walker, shared subgraphs
+                // counted once); `stranded_bytes_dropped` is UNIQUE-AT-DROP
+                // (strong_count>1 skipped: deferred-freed/shared EXCLUDED —
+                // a lower bound, never "bytes freed"; the resident verdict
+                // is the vmmap twin, KL-83-2).
                 mc::census_line(&format!(
                     "tag=unitcache hit_intra={} hit_cross={} miss_cold={} miss_fp={} \
                      miss_dc={} miss_nostat={} inserts={} fp_replaced={} ways_evictions={} \
@@ -1446,9 +1453,11 @@ pub fn run_module_with_hir<'m>(
                      defer_relowers={} defer_relower_ns={} \
                      stranded_keys_superseded={} stranded_entries_dropped={} \
                      main_probe={} main_hit={} main_put={} main_impure_skip={} \
-                     main_probe_fail={} retained_walk_bytes={rw_bytes} \
+                     main_probe_fail={} include_hit_main_reject={} main_evicted={} \
+                     retained_walk_bytes={rw_bytes} \
                      retained_walk_nodes={rw_nodes} \
-                     stranded_bytes_dropped={} gross=1",
+                     stranded_bytes_dropped={} uclog={} \
+                     rw_rule=cache-as-owner stranded_rule=unique-at-drop gross=1",
                     st.hit_intra,
                     st.hit_cross,
                     st.miss_cold,
@@ -1478,7 +1487,14 @@ pub fn run_module_with_hir<'m>(
                     st.main_put,
                     st.main_impure_skip,
                     st.main_probe_fail,
+                    st.include_hit_main_reject,
+                    st.main_evicted,
                     st.stranded_bytes_dropped,
+                    // A-PP19 (Council WP-83): the uc_log flush discipline
+                    // ("never during a census run") was prose — now the row
+                    // SELF-DECLARES an armed PHPR_UNIT_CACHE_LOG in-band;
+                    // the campaign driver rejects uclog=1 (KS-PP-83-1).
+                    u8::from(uc_log_path().is_some()),
                 ));
                 // WP-67 P-67.3: the cross-request bounded sets OUTSIDE
                 // cache+RetainSet — the per-worker metric counts them
@@ -6800,7 +6816,24 @@ impl<'m> Vm<'m> {
         // differiscano. Emessa solo a log attivo (costo zero altrimenti).
         uc_log(&format!("fp {fp:016x}"), &key);
         if let Some(uk) = &unit_key {
-            if let Some(cu) = unit_cache_get(uk, fp) {
+            // A-MS18 (Council WP-83): the main/include fp domains are
+            // disjoint by construction AND the structural double-check
+            // below would reject a main entry incidentally (static_off=0/
+            // reserved_base=0 cannot match a mid-request Vm) — but that
+            // direction was never NAMED. Refuse a MAIN entry on the
+            // include-hit path EXPLICITLY, with its own counter: one
+            // observed crossover = STOP (KS-MS-83-1); a dc refactor can no
+            // longer silently reopen this door.
+            let cached = unit_cache_get(uk, fp).filter(|cu| {
+                if cu.main_program.is_some() {
+                    uc_stat(|s| s.include_hit_main_reject += 1);
+                    uc_log("include_hit_main_reject", &key);
+                    false
+                } else {
+                    true
+                }
+            });
+            if let Some(cu) = cached {
                 #[cfg(feature = "mem-census")]
                 let hitw = CensusNetWindow::open();
                 // Contract v2 modules double-check in retained space (their
@@ -15352,6 +15385,15 @@ struct UcStats {
     main_put: u64,
     main_impure_skip: u64,
     main_probe_fail: u64,
+    /// A-MS18 (Council WP-83): a MAIN entry surfacing on the include-hit
+    /// path is refused EXPLICITLY (never consumed through include
+    /// relocation) — one observed crossover = STOP (KS-MS-83-1).
+    include_hit_main_reject: u64,
+    /// A-DS20 (Council WP-83): ways-eviction that dropped an entry holding
+    /// `main_program` — the FIFO thrash channel (same UnitKey as main AND
+    /// include under >=4 chain-fps evicts the hot main in a cycle). An A/B
+    /// with main_evicted>0 undeclared is VOID (KS-DS-83-1); fixture F15.
+    main_evicted: u64,
     /// KL-81-1/A-DL6 (design79 §7): supersede in BYTE, not just entries —
     /// `module_census_bytes` of every dropped stale entry accumulates here
     /// (mem-census builds; 0 elsewhere). "The supersede frees memory"
@@ -15393,6 +15435,8 @@ impl UcStats {
         main_put: 0,
         main_impure_skip: 0,
         main_probe_fail: 0,
+        include_hit_main_reject: 0,
+        main_evicted: 0,
         stranded_bytes_dropped: 0,
     };
 }
@@ -15498,7 +15542,17 @@ fn census_nested_lc_pop() -> u64 {
 /// silently). Gate detectors match the anchored form `^unitcache <event> `
 /// only; the cargo test `uc_log_event_vocabulary_is_prefix_free` pins that
 /// no anchored event is a prefix of another. Extend the array to add one.
-pub(crate) const UC_LOG_EVENTS: [&str; 17] = [
+pub(crate) const UC_LOG_EVENTS: [&str; 21] = [
+    // S-82.0 (Council WP-83): the acquire-vitality + rejection observables.
+    // `acquire_oneshot` (A-SK23) makes F-oneshot t2's zero non-vacuous;
+    // `include_hit_main_reject` (A-MS18) names the main-entry-on-include
+    // crossover; `main_evicted` (A-DS20) names the FIFO thrash victim;
+    // `supersede` was emitted (with args) since S-79.0.7 — REGISTERED here
+    // because the vocabulary is the probe API, not a suggestion.
+    "acquire_oneshot",
+    "include_hit_main_reject",
+    "main_evicted",
+    "supersede",
     // A-BB6 (design79 §8): MAIN-unit probe observables — the fixture teeth
     // for F5/F8c/F-probe/F-oneshot live on these events (any build,
     // PHPR_UNIT_CACHE_LOG-gated): counters that only a census build could
@@ -15880,6 +15934,33 @@ pub fn main_unit_acquire(
     })
 }
 
+/// A-PP20 (Council WP-83) test surface: snapshot of the main-lever counters
+/// `(main_probe, main_hit, main_put)` for in-cargo teeth living in OTHER
+/// crates (the worker tests). Probe API, not runtime API.
+#[doc(hidden)]
+pub fn uc_main_stats() -> (u64, u64, u64) {
+    UC_STATS.with(|s| {
+        let s = s.borrow();
+        (s.main_probe, s.main_hit, s.main_put)
+    })
+}
+
+/// A-PP20 (Council WP-83): TRUE iff this main's `(UnitKey, fp)` is present
+/// in the thread-local unit cache. The F8c counter form (`put==0`) assumes
+/// the publish path is UNIQUE (A-PP16, grep-gated); this tooth probes the
+/// ENTRIES directly, so a second insertion path would be caught even if the
+/// counters missed it.
+#[doc(hidden)]
+pub fn uc_main_key_in_cache(name: &[u8], source: &[u8]) -> bool {
+    match main_unit_key(name) {
+        Some(key) => {
+            let fp = fp_mix(crate::lower::main_chain_fp(key.reg_mode), b"main", source);
+            unit_cache_get(&key, fp).is_some()
+        }
+        None => false,
+    }
+}
+
 /// The put core. A main entry re-uses the include entry shape with vacuously
 /// empty relocation state (the main DEFINES the base id space) and carries
 /// the Program (eval-against-image on HIT).
@@ -15974,6 +16055,18 @@ fn unit_cache_put(key: UnitKey, cu: CachedUnit) {
             if slot.len() >= UNIT_CACHE_WAYS {
                 let victim = slot.remove(0);
                 uc_stat(|s| s.ways_evictions += 1);
+                // A-DS20 (Council WP-83): FIFO without refresh-on-hit means
+                // the same UnitKey used as MAIN and as include under >=4
+                // chain-fps evicts the hot main in a cycle (5 fps on 4
+                // ways = permanent thrash). Count the main victims: an A/B
+                // with main_evicted>0 undeclared is VOID (KS-DS-83-1);
+                // fixture F15 is the positive control.
+                if victim.main_program.is_some() {
+                    uc_stat(|s| s.main_evicted += 1);
+                    if let Some(p) = &kpath {
+                        uc_log("main_evicted", p);
+                    }
+                }
                 // Probe-API event (UC_LOG_EVENTS): victim fp, path = the
                 // slot's file (the ways are per-key).
                 if let Some(p) = &kpath {
