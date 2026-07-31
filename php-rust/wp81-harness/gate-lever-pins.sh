@@ -288,6 +288,30 @@ if [ "$n" -ne 1 ]; then
 fi
 echo "OK  self-test: class sweep catches alternative spellings (decoy)"
 
+# --- 5. A-DS17: compile purity grep-gate (DR-1 style) ------------------------
+# compile_program must stay a pure function of (Program, Registry, reg_mode):
+# no iteration over a Hash* container may feed an emission (hash order is
+# nondeterministic across processes — a baked order would break the cached
+# main's determinism-from-virgin-fp). Pin: ZERO direct iteration on
+# hash-suffixed containers in compile/ (behavioral tooth = the in-cargo
+# double-compile test, KS-DS-83-2 — the two judge together).
+COMPILE_DIR="$REPO/crates/php-runtime/src/compile"
+HASHITER=$(grep -rnE '(_index|_map|_set|conditional_fns|conditional_classes|stubs)\.(iter|keys|values)\(' \
+  "$COMPILE_DIR" --include='*.rs' 2>/dev/null | grep -v '^\s*//' || true)
+if [ -n "$HASHITER" ]; then
+  echo "FAIL: hash-container iteration in compile/ (A-DS17 — re-audit before any emission feeds on it):"
+  echo "$HASHITER" | head -5
+  FAILS=$((FAILS+1))
+else
+  echo "OK  compile/: zero hash-container iterations (A-DS17 pin ==0)"
+fi
+# decoy: the pattern must bite
+printf 'fn f() { for k in class_index.keys() { emit(k); } }\n' > "$TMPD/hi.rs"
+if ! grep -qE '(_index|_map|_set)\.(iter|keys|values)\(' "$TMPD/hi.rs"; then
+  echo "SELF-TEST BROKEN: hash-iteration decoy not matched (A-DS17)"; exit 2
+fi
+echo "OK  self-test: hash-iteration decoy matched (A-DS17)"
+
 if [ "$FAILS" = 0 ]; then
   echo "== GATE-LEVER-PINS PASS (A-MS13 + A-PP16 + KS-PP-82-3 + A-TH14) [git $GIT_REV] =="
   exit 0

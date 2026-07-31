@@ -15950,15 +15950,7 @@ pub fn main_unit_acquire(
     // distinguishable from a broken cache (F4; deviation declared: no
     // impure-main path exists on the current tree).
     let pure = !program.used_conditional_seed;
-    let publish = match (probe_state, pure) {
-        (Some((key, fp)), true) => Some(MainPublishTicket { key, fp }),
-        (Some(_), false) => {
-            uc_stat(|s| s.main_impure_skip += 1);
-            uc_log("main_impure_skip", name);
-            None
-        }
-        (None, _) => None,
-    };
+    let publish = main_publish_decision(probe_state, pure, name);
     Ok(MainUnit {
         program: Rc::new(program),
         module: Rc::new(module),
@@ -15966,6 +15958,28 @@ pub fn main_unit_acquire(
         publish,
         lower_net,
     })
+}
+
+/// A-DS19 (Council WP-83): the publish decision, EXTRACTED so the
+/// `main_impure_skip` arm is triggerable by test — no impure-main path
+/// exists on this tree (the main lowers pre-Vm), so fixture F4 pins the
+/// counter ==0 and the arm would otherwise be a tripwire that cannot trip
+/// (not evidence, WP-80 lesson). The in-cargo trigger feeds `pure=false`
+/// here and asserts ticket None + counter++.
+fn main_publish_decision(
+    probe_state: Option<(UnitKey, u64)>,
+    pure: bool,
+    name: &[u8],
+) -> Option<MainPublishTicket> {
+    match (probe_state, pure) {
+        (Some((key, fp)), true) => Some(MainPublishTicket { key, fp }),
+        (Some(_), false) => {
+            uc_stat(|s| s.main_impure_skip += 1);
+            uc_log("main_impure_skip", name);
+            None
+        }
+        (None, _) => None,
+    }
 }
 
 /// A-PP20 (Council WP-83) test surface: snapshot of the main-lever counters
@@ -18686,6 +18700,66 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// A-DS19 (Council WP-83): trigger of the `main_impure_skip` arm — the
+    /// F4 fixture pins the counter ==0 (no impure-main path exists on this
+    /// tree), so WITHOUT this trigger the arm is a tripwire that cannot
+    /// trip. Feeds pure=false through the extracted decision: ticket None,
+    /// counter moves by exactly 1, event in the closed vocabulary.
+    #[test]
+    fn a_ds19_main_impure_skip_arm_triggers() {
+        let dir = std::env::temp_dir().join("phpr_gate_a_ds19");
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("imp.php");
+        std::fs::write(&file, "<?php echo 1;").unwrap();
+        use std::os::unix::ffi::OsStrExt;
+        let name = file.as_os_str().as_bytes();
+        let key = super::main_unit_key(name).expect("real file must key");
+        let fp = 0x5eed_u64;
+        let before = super::UC_STATS.with(|s| s.borrow().main_impure_skip);
+        let t = super::main_publish_decision(Some((key.clone(), fp)), false, name);
+        assert!(t.is_none(), "impure main produced a publish ticket (A-DS19)");
+        let after = super::UC_STATS.with(|s| s.borrow().main_impure_skip);
+        assert_eq!(after - before, 1, "main_impure_skip did not move (A-DS19)");
+        // Positive twin: the pure arm still arms the ticket.
+        let t = super::main_publish_decision(Some((key, fp)), true, name);
+        assert!(t.is_some(), "pure main lost its publish ticket (A-DS19 control)");
+    }
+
+    /// A-DS17/KS-DS-83-2 (Council WP-83): `compile_program` purity at
+    /// MACHINE level — the §5 claim "pura di (Program, Registry, reg_mode)"
+    /// was a claim of READING. Double-compile of the same Program must be
+    /// structurally identical, and a compile on a FRESH THREAD (fresh
+    /// thread-locals: interner, epoch) of the same source must match too —
+    /// a hash-order or TL leak into emission diverges here.
+    #[test]
+    fn a_ds17_compile_program_pure_double_compile() {
+        fn sig(m: &crate::bytecode::Module) -> String {
+            let mut s = format!("main:{:?};", m.main.ops);
+            for f in &m.functions {
+                s.push_str(&format!("f:{}:{:?};", f.ops.len(), f.ops));
+            }
+            s.push_str(&format!("classes:{};fns:{}", m.classes.len(), m.functions.len()));
+            s
+        }
+        const SRC: &[u8] = b"<?php class Dc1 { public function m() { return 1; } } \
+            class Dc2 extends Dc1 {} function dcf() { return new Dc2(); } \
+            echo dcf()->m();";
+        let reg = Registry::default();
+        let p = crate::lower_source(b"dc.php", SRC).unwrap();
+        let m1 = crate::compile::compile_program(&p, &reg).unwrap();
+        let m2 = crate::compile::compile_program(&p, &reg).unwrap();
+        assert_eq!(sig(&m1), sig(&m2), "same-thread double-compile diverges (A-DS17)");
+        let other = std::thread::spawn(|| {
+            let reg = Registry::default();
+            let p = crate::lower_source(b"dc.php", SRC).unwrap();
+            let m = crate::compile::compile_program(&p, &reg).unwrap();
+            sig(&m)
+        })
+        .join()
+        .expect("cross-thread compile panicked");
+        assert_eq!(sig(&m1), other, "fresh-thread compile diverges (A-DS17/KS-DS-83-2)");
     }
 
     #[test]

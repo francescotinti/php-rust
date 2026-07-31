@@ -295,6 +295,8 @@ Nuovi contatori (census/parity come UcStats esistenti): `main_probe`,
 | F-probe | probe-fail (A-SK12): canonicalize/stat che fallisce | esito PINNATO = MISS senza put, contatore `main_probe_fail` (§8) |
 | F-oneshot | CLI one-shot (§2, A-TH14) — TRE DENTI (A-SK16/KS-SK-82-2) | t1 canale uc_log VIVO sul one-shot (reqmark presente: assente≠zero); t2 `main_probe == 0`; t3 positivo gemello: `main_probe == nreq` sull'arm server nella stessa campagna |
 | F13 | ordine di include VARIATO tra richieste su HIT (A-DS13, classe 2 del §5): include condizionale A-poi-B vs B-poi-A, `new`/`instanceof`/`static::` su classi di entrambe le lib | body == ORACOLO su ≥3 richieste; controllo POSITIVO obbligatorio (variante che rompe il determinismo deve far mordere — auto-uguaglianza vietata KS-AH-80-2); body ≠ oracolo ⇒ leva RESPINTA (KS-DS-82-1) |
+| F14 | (A-DS18, S-82.0) classe CONDIZIONALE nel main + eval-mint + `extends` deferred (parent da include), ordine include variato | body == ORACOLO su ≥4 richieste + controllo positivo (ramo condizionale variato morde); F14 rossa/assente in un A/B che cita la classe 2 ⇒ classe 2 RIAPERTA (KS-DS-83-3) |
+| F15 | (A-DS20, S-82.0) stesso file come MAIN e come include sotto ≥4 chain-fp distinti (5 fp su 4 ways FIFO senza refresh) | contatore `main_evicted` VISTO scattare (positivo del contatore; in S-82.0: ==1) + body corretto sotto thrash; A/B con `main_evicted>0` non dichiarato = cifra VOID (KS-DS-83-1); mitigazione (main esente da ways o ways-bump) AMMESSA ma va PINNATA qui |
 
 **Nota F4 (deviazione DICHIARATA, S-81.0)**: sul tree attuale un main
 IMPURO non esiste per costruzione (il main lowera pre-Vm: niente
@@ -303,7 +305,11 @@ difensivo (guard `!program.used_conditional_seed` al publish). F4 esercita
 la NON-interferenza dell'include impuro (body corretto, include non
 pubblicata) col pin `main_impure_skip == 0`; il wiring del contatore è
 provato a livello di guard, non da una fixture positiva end-to-end.
-Deviazione da giudicare al Concilio WP-83 (lezione goto-vs-Unsupported).
+Deviazione ACCETTATA dal Concilio WP-83 (A-DS19) col trigger test-only
+richiesto — ESEGUITO S-82.0: `main_publish_decision` estratta e il test
+in-cargo `a_ds19_main_impure_skip_arm_triggers` alimenta `pure=false`
+(ticket None + contatore ++): il ramo non è più un tripwire che non può
+scattare.
 
 **Nota S-81.0 su F8c/F5/F8b/F-oneshot**: ARMATE nello stesso commit della
 leva in `wp81-harness/gate-lever-fixtures.sh` (F8c in FORMA CONTATORI,

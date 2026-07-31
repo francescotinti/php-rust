@@ -65,15 +65,31 @@ fi
 # --- F2: SAME-SIZE, SAME-MTIME edit — the content fp is the ONLY judge --------
 echo '<?php echo "AAAA";' > "$DOCROOT/f2.php"
 touch -r "$DOCROOT/f2.php" "$TMPD/f2.ref" 2>/dev/null || cp -p "$DOCROOT/f2.php" "$TMPD/f2.ref"
+M_PRE=$(stat -f "%Fm %z" "$DOCROOT/f2.php")
 B1=$(req f2.php); B1b=$(req f2.php)
 # same byte-length, different content; RESTORE the original mtime so the
 # UnitKey (path, mtime, size) is IDENTICAL — without this the test passes
 # vacuously through a key miss (mtime moved), never exercising the fp.
 echo '<?php echo "BBBB";' > "$DOCROOT/f2.php"
 touch -r "$TMPD/f2.ref" "$DOCROOT/f2.php"
+# A-SK21/KS-SK-83-2 (Council WP-83): SAME-KEY proven BY MACHINE — APFS
+# `touch -r` can truncate sub-µs mtime (utimes µs vs stat ns): if the
+# restored (mtime ns, size) differ, the MISS below is a key-miss and the
+# fingerprint was never exercised — F2 must then FAIL, not pass vacuously.
+M_POST=$(stat -f "%Fm %z" "$DOCROOT/f2.php")
 B2=$(req f2.php)
-if [ "$B1" = "AAAA" ] && [ "$B2" = "BBBB" ]; then
-  okf "F2: SAME-SIZE edit => MISS via content fp, never stale"
+if [ "$M_PRE" != "$M_POST" ]; then
+  kof "F2 same-key NOT proven: (mtime ns, size) '$M_PRE' -> '$M_POST' (A-SK21: fp never exercised, F2 vacuous)"
+elif [ "$B1" = "AAAA" ] && [ "$B2" = "BBBB" ]; then
+  # counter tooth: both versions PUT, the repeat was a genuine HIT — with
+  # key identity proven above, the second put can only be an fp-MISS.
+  np2=$(count_ev "$ULOG" main_put f2.php)
+  nh2=$(count_ev "$ULOG" main_hit f2.php)
+  if [ "$np2" -eq 2 ] && [ "$nh2" -eq 1 ]; then
+    okf "F2: SAME-SIZE SAME-KEY edit => MISS via content fp (stat ns identical, put==2, hit==1)"
+  else
+    kof "F2 counters: main_put=$np2 (pin 2) main_hit=$nh2 (pin 1) on f2.php (A-SK21)"
+  fi
 else
   kof "F2: same-size edit served stale body ('$B2' after '$B1') — KH80-1: lever REJECTED"
 fi
@@ -230,10 +246,83 @@ else
   okf "F13 positive control: comparator bites on a varying body (KS-AH-80-2)"
 fi
 
+# --- F14 (A-DS18, Council WP-83): conditional class IN the main + eval-mint
+# + extends-deferred (parent from include), include order varied, >=3
+# requests == oracle. F13 alone does not discriminate the conditional/
+# deferred surfaces (KS-DS-83-3: F14 red or absent in an A/B citing class 2
+# => class 2 REOPENED).
+cat > "$DOCROOT/f14a.php" <<'EOF'
+<?php class F14P { public function v() { return "P"; } }
+EOF
+cat > "$DOCROOT/f14b.php" <<'EOF'
+<?php class F14Q { public function v() { return "Q"; } }
+EOF
+cat > "$DOCROOT/f14.php" <<'EOF'
+<?php
+if (($_GET["o"] ?? "ab") === "ab") { include "f14a.php"; include "f14b.php"; }
+else { include "f14b.php"; include "f14a.php"; }
+if (($_GET["c"] ?? "y") === "y") {
+    class F14C { public function w() { return "C1"; } }
+} else {
+    class F14C { public function w() { return "C2"; } }
+}
+eval('class F14E { public function e() { return "E"; } }');
+class F14D extends F14P {}
+$c = new F14C; $e = new F14E; $d = new F14D; $q = new F14Q;
+echo $c->w(), $e->e(), $d->v(), $q->v(),
+     ($d instanceof F14P ? "iP" : "-"), get_class($d), get_class($e);
+EOF
+W14=$(oracle_body "f14.php")
+B1=$(req "f14.php?o=ab&c=y"); B2=$(req "f14.php?o=ba&c=y"); B3=$(req "f14.php?o=ab&c=y"); B4=$(req "f14.php?o=ba&c=y")
+if [ -n "$W14" ] && [ "$B1" = "$W14" ] && [ "$B2" = "$W14" ] && [ "$B3" = "$W14" ] && [ "$B4" = "$W14" ]; then
+  okf "F14: conditional-class + eval-mint + extends-deferred, order varied x4 on HIT == oracle (A-DS18)"
+else
+  kof "F14: '$B1'/'$B2'/'$B3'/'$B4' vs oracle '$W14' — conditional/deferred surface stale => lever REJECTED (KS-DS-83-3)"
+fi
+# F14 positive control (same comparator law as F13x: it must BITE) — the
+# c=n arm declares a DIFFERENT F14C body: oracle (no $_GET) vs c=n differ.
+BX=$(req "f14.php?o=ab&c=n")
+if [ "$BX" = "$W14" ]; then
+  kof "F14 positive control: c=n arm did NOT diverge from oracle — comparator vacuous"
+else
+  okf "F14 positive control: comparator bites on the varied conditional arm"
+fi
+
+# --- F15 (A-DS20, Council WP-83): same file as MAIN and as include under
+# >=4 distinct chain-fps — 5 fps on 4 FIFO ways WITHOUT refresh evicts the
+# hot main in a cycle. The counter (main_evicted, wired at the eviction
+# site) must be SEEN firing; correctness must survive the thrash. An A/B
+# with main_evicted>0 undeclared is VOID (KS-DS-83-1) — this fixture is
+# the positive control of that counter.
+cat > "$DOCROOT/t15.php" <<'EOF'
+<?php echo "T15";
+EOF
+for i in 1 2 3 4; do
+  cat > "$DOCROOT/f15h$i.php" <<EOF
+<?php class F15H$i { public static function h() { return "h$i"; } }
+EOF
+  cat > "$DOCROOT/f15w$i.php" <<EOF
+<?php include "f15h$i.php"; include "t15.php"; echo F15H$i::h();
+EOF
+done
+BM1=$(req t15.php)                      # main entry for t15's UnitKey
+for i in 1 2 3 4; do req "f15w$i.php" > /dev/null; done   # 4 include-fps, same key
+NEV=$(count_ev "$ULOG" main_evicted t15.php)
+BM2=$(req t15.php)                      # thrash: re-MISS + re-put, still correct
+if [ "$BM1" = "T15" ] && [ "$BM2" = "T15" ]; then
+  if [ "$NEV" -ge 1 ]; then
+    okf "F15: main_evicted SEEN ($NEV) — FIFO ways-thrash on shared main/include key documented, body correct (A-DS20)"
+  else
+    kof "F15: main_evicted never fired after 4 include-fps on the main's key (counter blind or ways changed — re-pin A-DS20)"
+  fi
+else
+  kof "F15: bodies '$BM1'/'$BM2' != 'T15' under ways-thrash"
+fi
+
 kill -TERM "$SRVPID" 2>/dev/null; wait "$SRVPID" 2>/dev/null; SRVPID=""
 
 if [ "$FAILS" = 0 ]; then
-  echo "== GATE-LEVER-FIXTURES2 PASS (F1-F4, F7, F9-F13 + positive control) [git $GIT_REV] =="
+  echo "== GATE-LEVER-FIXTURES2 PASS (F1-F4, F7, F9-F15 + positive controls) [git $GIT_REV] =="
   exit 0
 else
   echo "== GATE-LEVER-FIXTURES2 FAIL($FAILS) [git $GIT_REV] =="
