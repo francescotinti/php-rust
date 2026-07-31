@@ -39,6 +39,14 @@ PATTERNS=(
   # unconditional spelling is banned (a false doc on the panic surface is the
   # A-DS1 mine in another guise).
   "unwind itself still runs drops"
+  # A-DS11/M-68.5 (Council WP-82, same commit as the A-BB6 main put): the
+  # claim died when the lever landed — the main DOES reach a put now
+  # (its own, main_unit path). The old spelling is banned.
+  "main can never reach this put"
+  # A-BB22: the old bare.php framing ("fixed per-request cost that no cache
+  # HIT can remove") is FALSE by 30x under A-BB6 — on HIT a2 goes away with
+  # a1. Banned in sources AND fixtures (see the php scan below).
+  "cost that no cache HIT can remove"
 )
 
 scan() { # scan <dir> -> matches on stdout, rc 0 if any found
@@ -46,6 +54,11 @@ scan() { # scan <dir> -> matches on stdout, rc 0 if any found
   for p in "${PATTERNS[@]}"; do
     if grep -RIni --include='*.rs' --exclude='._*' --exclude-dir=target \
          -F -e "$p" "$dir"; then
+      found=0
+    fi
+    # A-BB22: fixtures are doc too — the bare.php contradiction lived there.
+    if grep -RIni --include='*.php' --exclude='._*' \
+         -F -e "$p" "$dir" 2>/dev/null; then
       found=0
     fi
   done
@@ -69,11 +82,11 @@ if [ "$fail_self" -ne 0 ]; then
 fi
 echo "gate-doc-purge: self-test PASS (${#PATTERNS[@]} decoy patterns all bitten)"
 
-# --- Real scan -------------------------------------------------------------
-MATCHES="$(scan "$SCOPE" 2>/dev/null)"
+# --- Real scan (crates/**/*.rs + harness fixtures *.php, A-BB22) ------------
+MATCHES="$(scan "$SCOPE" 2>/dev/null; scan "$REPO/wp78-harness/gate-axum/fixtures" 2>/dev/null)"
 if [ -n "$MATCHES" ]; then
   echo "$MATCHES"
   echo "gate-doc-purge: FAIL — forbidden doc pattern reappeared (KS-MS-4) [git $GIT_REV]"
   exit 1
 fi
-echo "gate-doc-purge: PASS — 0 forbidden patterns in crates/**/*.rs [git $GIT_REV]"
+echo "gate-doc-purge: PASS — 0 forbidden patterns in crates/**/*.rs + fixtures/*.php [git $GIT_REV]"

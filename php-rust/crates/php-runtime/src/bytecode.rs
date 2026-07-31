@@ -155,7 +155,13 @@ thread_local! {
     /// requests, where the same numeric id can name a DIFFERENT class.
     /// Bumping the epoch at each `Vm` construction invalidates every cache
     /// in O(1). Starts at 1 and never returns 0 (0 = the empty-cache tag).
-    static IC_EPOCH: std::cell::Cell<u32> = const { std::cell::Cell::new(1) };
+    /// A-TH16/KH82-1 (Council WP-82, same commit as the main-unit put): u64 —
+    /// with the main Module cached process-lifetime its IC cells outlive
+    /// requests, so a u32 wrap (~4.3e9 bumps/thread, ~50 days at 1k req/s)
+    /// became an ACTIVE silent-stale class. At u64 the wrap needs ~5.8e11
+    /// years at the same rate: machine-impossible, residual closed. Cost:
+    /// 8 bytes per cell, zero atomics (thread-local).
+    static IC_EPOCH: std::cell::Cell<u64> = const { std::cell::Cell::new(1) };
 }
 
 /// Invalidate all [`PropIc`] caches (a new run's id space). Called by
@@ -168,7 +174,7 @@ pub fn bump_ic_epoch() {
 }
 
 #[inline]
-fn ic_epoch() -> u32 {
+fn ic_epoch() -> u64 {
     IC_EPOCH.with(|e| e.get())
 }
 
@@ -191,7 +197,7 @@ fn ic_epoch() -> u32 {
 /// due compilazioni identiche DEVONO confrontare uguali qualunque cosa la
 /// VM abbia cachato).
 #[derive(Debug)]
-pub struct PropIc(Rc<std::cell::Cell<(u32, u32, u32, u32)>>);
+pub struct PropIc(Rc<std::cell::Cell<(u64, u32, u32, u32)>>);
 
 impl PropIc {
     /// The cached `(class_id + 1, slot)` when filled IN THIS RUN for
@@ -247,7 +253,7 @@ impl Clone for PropIc {
 /// cloni dell'op, stato invisibile all'uguaglianza strutturale, epoch
 /// per-run contro gli id stantii.
 #[derive(Debug)]
-pub struct MethodIc(Rc<std::cell::Cell<(u32, u32, u32, u32)>>);
+pub struct MethodIc(Rc<std::cell::Cell<(u64, u32, u32, u32)>>);
 
 impl MethodIc {
     /// The cached `(defining ClassId, method idx)` when filled IN THIS RUN

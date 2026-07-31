@@ -96,11 +96,20 @@ thread-local ⇒ retained moltiplicato per worker — KL-80-1/A-TH7).
   (tabelle pristine): **`MAIN_CHAIN_FP` COMPUTATO a init dal contenuto
   reale del prelude** (hash della forma lowered/include_str!), MAI un
   letterale hand-maintained (KS-AH-81-2: letterale ⇒ leva respinta) e MAI
-  da mtime. **Input compile-rilevanti ENUMERATI (A-DS7)**: (i) il vettore
-  ini di `run_source_with_ini` — oggi `&[]`: assert-vuoto ESEGUIBILE sul
-  path cached, o il fold del vettore entra nel fp; (ii) le unit risolte
-  DURANTE lower/compile del main (autoload-mid-compile) entrano nel fp
-  dello slot oppure F10 (§9) deve falsificare il binding stantio.
+  da mtime. **S-81.0 (A-AH22/KS-AH-82-2)**: fp = `main_chain_fp()` in
+  lower/mod.rs — hasha il MEDESIMO binding `PRELUDE_SRC` che
+  `lower_prelude_uncached` consuma (single-binding, niente copie) + tutte
+  le unit prelude hoistate + reg_mode; falsificatore in-cargo
+  `main_chain_fp_falsifier_mutated_prelude_changes_fp` (prelude mutato
+  attraverso lo stesso seam ⇒ fp DIVERSO). **Input compile-rilevanti
+  ENUMERATI (A-DS7) — scelte PINNATE S-81.0 (A-DS14, una sola per
+  "oppure")**: (i) vettore ini → **assert-vuoto ESEGUIBILE** in
+  `run_source_probed` (probed + ini non vuoto = panic fail-loud, mai una
+  unit servita sotto direttive diverse); (ii) autoload-mid-compile → **F10
+  falsifica il binding stantio**: per il MAIN l'autoload-mid-compile è
+  IMPOSSIBILE per costruzione (il main lowera PRE-Vm: nessun autoload può
+  scattare, nessun seed esiste) — niente fold nel fp, la fixture è il
+  giudice.
 - L'handler legge già `source` da disco a ogni richiesta (`fs::read` in
   main.rs): il fingerprint del contenuto è GRATIS sul path server — si
   hasha `meta.source`. Edit same-second, edit same-size, mtime-preserving
@@ -135,13 +144,51 @@ thread-local ⇒ retained moltiplicato per worker — KL-80-1/A-TH7).
   leva, sulla base della misura §11.1 — un retained oltre budget = HALT.
 
 ## 5. Immutabilità del Module condiviso (A-TH4-Hoare) — RISCHIO DR-1
+### RISCRITTO S-81.0 (A-DS12, Council WP-82): DUE classi di stale, mai una
 
-Il riuso cross-request di un `Rc<Module>` del main esige che Module sia
-privo di interior mutability osservabile. Gli include lo fanno GIÀ oggi
-(unit cache) — ma passano per remap/relocation; il main definisce lo spazio
-base e ricompila deterministico, quindi gli id coincidono per costruzione.
-Superficie vergine: **le inline cache (PropIc/MethodIc, WP-29+)** se vivono
-dentro Func/Module con `Cell`.
+Il riuso cross-request di un `Rc<Module>` del main ha DUE classi di rischio
+distinte — l'epoch chiude la prima, l'enumerazione qui sotto la seconda
+(KS-DS-82-1: ogni claim "stessi id per costruzione" senza questa
+enumerazione è NULLO):
+
+**Classe 1 — stato IC (interior mutability): CHIUSA dall'epoch.** Le inline
+cache (PropIc/MethodIc) sono le UNICHE celle mutabili del grafo Module
+(DR-1, 3 occorrenze pinnate via gsub A-TH17); ogni fill embedda l'epoch
+thread-local, `bump_ic_epoch()` in `Vm::new` (pin ==1) invalida in O(1) a
+ogni richiesta. **Epoch a u64 dal commit leva (A-TH16/KH82-1)**: col main
+cached process-lifetime il wrap u32 era diventato classe ATTIVA
+(~50 giorni a 1k req/s); a u64 il wrap è macchina-impossibile (~5,8e11
+anni) — residuo DR-1 ri-derivato e chiuso.
+
+**Classe 2 — id run-scoped COTTI nei payload immutabili (A-DS12):
+enumerazione per-campo.** I payload degli op del Module cached portano
+questi id, tutti minted da `compile_program` (funzione PURA di
+(Program, Registry, reg_mode); Program = funzione pura di (source, catena
+prelude) — esattamente gli input del vergine-fp `MAIN_CHAIN_FP` + hash del
+source):
+- **`ClassId` negli op** (`New`/`InstanceOf`/`StaticProp`/`Const` di
+  classe…): deterministico dal vergine-fp — il main compila da stato
+  VERGINE, il prelude semina la testa della tabella in ordine fisso e le
+  classi user seguono in ordine di hoisting del source. Gli id run-scoped
+  degli INCLUDE vivono SOPRA la base (minted al run, richiesta per
+  richiesta): il main cached, compilato prima di qualunque include, non può
+  cuocerne uno per costruzione — è QUESTO che F13 falsifica (ordine di
+  include variato tra richieste, `new`/`instanceof`/`static::` su classi di
+  entrambe le lib, body == oracolo su ≥3 richieste, con controllo
+  POSITIVO).
+- **indici funzione nei call-site**: stessa struttura (prelude prefix +
+  user in ordine source); risoluzione per NOME al link — un id cotto è
+  Module-relative.
+- **indici const-pool / string-pool**: Module-interni per costruzione
+  (l'op indica nel pool DELLO STESSO Module riusato).
+- **id celle `static $x`**: base = pstatic del prelude (costante della
+  catena), user in ordine source; le tabelle runtime sono ricostruite da
+  `vm_new` DAL MEDESIMO Module a ogni richiesta.
+- **slot id / seed_slots**: idem — il main definisce il proprio name space,
+  nessun seed esterno (link=None sul path main).
+Ogni campo: o "deterministico dal vergine-fp" (tutti i precedenti) o
+"Module-relative" (pool indices) — nessun campo richiede remap sul path
+main, ed è per questo che la entry main ha relocation vacuamente vuota.
 
 **DR-1 ESEGUITO E CHIUSO in S-80.0.8 (verdetto MACCHINA, KH81-3)** —
 `wp80-harness/gate-dr1-module-immut.sh`, PASS a git 6910767:
@@ -231,7 +278,25 @@ Nuovi contatori (census/parity come UcStats esistenti): `main_probe`,
 | F11 | `__FILE__`/`__DIR__` (KS-DS-81-2): due spelling che canonicalizzano allo stesso file | byte-parity con oracolo su HIT — divergenza ⇒ REVERT immediato |
 | F12 | `declare(strict_types=1)` nel main cached | la coercion che deve fatal-are resta identica su HIT |
 | F-probe | probe-fail (A-SK12): canonicalize/stat che fallisce | esito PINNATO = MISS senza put, contatore `main_probe_fail` (§8) |
-| F-oneshot | CLI one-shot (§2, A-TH14) | `main_probe == 0` — il one-shot non ingaggia MAI il probe |
+| F-oneshot | CLI one-shot (§2, A-TH14) — TRE DENTI (A-SK16/KS-SK-82-2) | t1 canale uc_log VIVO sul one-shot (reqmark presente: assente≠zero); t2 `main_probe == 0`; t3 positivo gemello: `main_probe == nreq` sull'arm server nella stessa campagna |
+| F13 | ordine di include VARIATO tra richieste su HIT (A-DS13, classe 2 del §5): include condizionale A-poi-B vs B-poi-A, `new`/`instanceof`/`static::` su classi di entrambe le lib | body == ORACOLO su ≥3 richieste; controllo POSITIVO obbligatorio (variante che rompe il determinismo deve far mordere — auto-uguaglianza vietata KS-AH-80-2); body ≠ oracolo ⇒ leva RESPINTA (KS-DS-82-1) |
+
+**Nota F4 (deviazione DICHIARATA, S-81.0)**: sul tree attuale un main
+IMPURO non esiste per costruzione (il main lowera pre-Vm: niente
+autoload-mid-lower, niente seed condizionale) — `main_impure_skip` è
+difensivo (guard `!program.used_conditional_seed` al publish). F4 esercita
+la NON-interferenza dell'include impuro (body corretto, include non
+pubblicata) col pin `main_impure_skip == 0`; il wiring del contatore è
+provato a livello di guard, non da una fixture positiva end-to-end.
+Deviazione da giudicare al Concilio WP-83 (lezione goto-vs-Unsupported).
+
+**Nota S-81.0 su F8c/F5/F8b/F-oneshot**: ARMATE nello stesso commit della
+leva in `wp81-harness/gate-lever-fixtures.sh` (F8c in FORMA CONTATORI,
+A-PP17: doppio link-fatal ⇒ put==0/hit==0 e 500/banner byte-identico; fix ⇒
+put==1) — PASS al primo run. I pin strutturali (A-MS13 allowlist vm_new/
+park_main, A-PP16 put-dopo-link, KS-PP-82-3 SplitDrain-primo-return,
+A-TH14 probe un-parametro) sono macchina in
+`wp81-harness/gate-lever-pins.sh`.
 
 Più: gate_stateful, A-DS9 (static methods), include_gate, G-APERTURA-2 —
 tutti RILANCIATI sul path HIT (KS-PP-80-3: ogni verdetto di parità su HIT è

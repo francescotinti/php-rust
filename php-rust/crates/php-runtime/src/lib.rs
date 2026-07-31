@@ -42,6 +42,10 @@ pub use vm::{
     run_source, run_source_with, run_source_with_argv, run_source_with_ini,
     VmOutcome as Outcome, VmRunError,
 };
+// A-BB6 (design79): main-unit cache API — acquire/publish for the worker
+// SAPI, run_source_probed for the cli-server (probe = ONE parameter at the
+// SAPI boundary, A-TH14; call-sites grep-gated by gate-lever-pins.sh).
+pub use vm::{main_unit_acquire, run_source_probed, MainAcquireError, MainLever, MainUnit};
 
 // WP-77.6.5.2: Expose Vm lifecycle methods and construction for worker-pool integration
 pub use compile::{compile_program, CompileError};

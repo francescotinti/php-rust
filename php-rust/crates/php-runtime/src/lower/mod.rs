@@ -829,6 +829,69 @@ fn lower_prelude() -> LoweredPrelude {
     PRELUDE_CACHE.with(|c| c.get_or_init(lower_prelude_uncached).clone())
 }
 
+/// A-BB6/A-AH22 (Council WP-82): fingerprint of the VIRGIN compile chain the
+/// cached MAIN unit is keyed on — COMPUTED from the very bindings this module
+/// lowers ([`PRELUDE_SRC`] + every hoisted namespaced/global prelude unit),
+/// never a hand-maintained literal (KS-AH-81-2) and never a copy of the
+/// prelude (KS-AH-82-2: a constant copy would be the literal in disguise —
+/// the falsifier test below feeds a MUTATED prelude through the same seam
+/// and demands a different fp). `reg_mode` enters the fp defensively: the
+/// LOWERING does not depend on it today, but the cached Module's ops do,
+/// and the fp must dominate everything the cached artifact was built from
+/// (the UnitKey carries reg_mode too — belt and braces, declared).
+pub(crate) fn main_chain_fp(reg_mode: bool) -> u64 {
+    static FP: [std::sync::OnceLock<u64>; 2] =
+        [std::sync::OnceLock::new(), std::sync::OnceLock::new()];
+    *FP[reg_mode as usize].get_or_init(|| main_chain_fp_from(PRELUDE_SRC, reg_mode))
+}
+
+/// Hash seam shared by production ([`main_chain_fp`], which passes the real
+/// [`PRELUDE_SRC`] binding) and the A-AH22 falsifier test (which passes a
+/// mutated copy and asserts the fp moves). Production code MUST NOT call
+/// this with anything but `PRELUDE_SRC` — the single-binding rule.
+fn main_chain_fp_from(prelude: &[u8], reg_mode: bool) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    prelude.hash(&mut h);
+    // Every hoisted prelude unit lower_prelude_uncached consumes is part of
+    // the virgin chain (A-DS7: compile-relevant inputs ENUMERATED here).
+    PRELUDE_NS_SRC.hash(&mut h);
+    PRELUDE_BC_SRC.hash(&mut h);
+    PRELUDE_GMP_SRC.hash(&mut h);
+    PRELUDE_MYSQLI_SRC.hash(&mut h);
+    PRELUDE_GD_SRC.hash(&mut h);
+    PRELUDE_FILEINFO_SRC.hash(&mut h);
+    reg_mode.hash(&mut h);
+    h.finish()
+}
+
+#[cfg(test)]
+mod main_chain_fp_tests {
+    use super::*;
+
+    /// A-AH22 falsifier (KS-AH-82-2: no falsifier ⇒ lever rejected): a
+    /// mutated prelude through the same seam MUST move the fp; the real
+    /// binding is deterministic; reg_mode is a real input.
+    #[test]
+    fn main_chain_fp_falsifier_mutated_prelude_changes_fp() {
+        let base = main_chain_fp_from(PRELUDE_SRC, false);
+        let mut mutated = PRELUDE_SRC.to_vec();
+        mutated.extend_from_slice(b"\n// A-AH22 falsifier: injected mutation\n");
+        assert_ne!(
+            base,
+            main_chain_fp_from(&mutated, false),
+            "mutated prelude did not move MAIN_CHAIN_FP (A-AH22)"
+        );
+        assert_eq!(base, main_chain_fp_from(PRELUDE_SRC, false), "fp not deterministic");
+        assert_ne!(
+            base,
+            main_chain_fp_from(PRELUDE_SRC, true),
+            "reg_mode does not enter the fp (A-AH22)"
+        );
+        assert_eq!(base, main_chain_fp(false), "production path diverges from the seam");
+    }
+}
+
 /// The prelude's *functions* only (table + name→index), for the seeded
 /// (`include`/`eval`) lowering path — it takes its classes from the seed image,
 /// so cloning the cached prelude classes there would be pure waste.

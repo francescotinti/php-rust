@@ -440,11 +440,13 @@ mod implementation {
     ///
     /// Called with a &RetainSet created for THIS request;
     /// both die at the end of the caller's scope (Vm first, P-67.5).
-    /// Module is recompiled per-request from handler.meta.source; compiled
-    /// units are reused across requests by the thread-local unit cache.
+    /// A-BB6 (design79): the MAIN Module comes from `main_unit_acquire` —
+    /// thread-local unit-cache HIT on steady state (a1+a2 skipped), the
+    /// pre-lever lower+compile verbatim on a MISS; include units keep their
+    /// own probe. Bytecode/immutable data only — NEVER userland state.
     ///
     /// Lifecycle (Stogov order, per Council WP-77.5):
-    /// 1. Compile new Module from request source
+    /// 1. Acquire MAIN Module (cache HIT or fresh compile of request source)
     /// 2. Create Vm borrowing the request's RetainSet (unit pins — bytecode
     ///    only, never the object store or userland state)
     /// 3. request_start: setup superglobals, INI, session
@@ -517,13 +519,20 @@ mod implementation {
         #[cfg(feature = "census-instrumentation")]
         let mut split_drain = SplitDrain { emitted: false };
 
-        // Phase 1: Compile PHP source to bytecode (per-request Module).
-        // A-PP4/A-TH5/A-DS4 (Council WP-78): the HTTP boundary mirrors the PHP
-        // boundary — EVERY fatal (compile or runtime) is 500 with the same
-        // byte-parity body the CLI renders (FPM: 500 when headers not sent).
-        let program = match php_runtime::lower_source(name, source) {
-            Ok(p) => p,
-            Err(php_runtime::LowerError::Fatal { message, line }) => {
+        // Phase 1+2 (A-BB6, design79 §2): acquire the MAIN unit — cache
+        // probe on this long-lived SAPI (probe=true, A-TH14: the one
+        // parameter; the shared acquire IS the pre-lever lower+compile on a
+        // MISS). Error bodies unchanged (A-PP4/A-TH5/A-DS4 fatal contract):
+        // EVERY fatal (compile or runtime) is 500 with the same byte-parity
+        // body the CLI renders; the Parse-error ENVELOPE is the oracle's
+        // stdout form with phpr's own diagnostic inside — NO parity claim on
+        // that body (KS-DS-78-5, PHPR_DIVERGENCES_FROM_PHP.md §php-server).
+        let mut unit = match php_runtime::main_unit_acquire(name, source, reg, true) {
+            Ok(u) => u,
+            Err(php_runtime::MainAcquireError::Lower(php_runtime::LowerError::Fatal {
+                message,
+                line,
+            })) => {
                 let file_s = String::from_utf8_lossy(name);
                 let msg = format!(
                     "\nFatal error: {message} in {file_s} on line {line}\nStack trace:\n#0 {{main}}\n"
@@ -531,21 +540,11 @@ mod implementation {
                 .into_bytes();
                 return (msg, StatusCode::INTERNAL_SERVER_ERROR);
             }
-            Err(e) => {
-                // Parse error → 500. The ENVELOPE is the oracle's stdout form
-                // ("\nParse error: … on line N\n"); the message text inside is
-                // phpr's own parser diagnostic, which DIVERGES from Zend's
-                // (registered in PHPR_DIVERGENCES_FROM_PHP.md §php-server,
-                // A-DS10). NO parity claim on this body (KS-DS-78-5).
+            Err(php_runtime::MainAcquireError::Lower(e)) => {
                 let msg = format!("\nParse error: {e}\n").into_bytes();
                 return (msg, StatusCode::INTERNAL_SERVER_ERROR);
             }
-        };
-
-        // Phase 2: Compile to bytecode module
-        let module = match php_runtime::compile_program(&program, reg) {
-            Ok(m) => m,
-            Err(php_runtime::CompileError::Unsupported(what)) => {
+            Err(php_runtime::MainAcquireError::Unsupported(what)) => {
                 let msg = format!("PHP Unsupported: {}\n", what).into_bytes();
                 return (msg, StatusCode::INTERNAL_SERVER_ERROR);
             }
@@ -554,17 +553,28 @@ mod implementation {
         #[cfg(feature = "census-instrumentation")]
         let census_s1 = crate::census_alloc::snapshot();
 
-        // Phase 3: Create Vm borrowing the request's RetainSet (P-2 pin;
-        // S-78.1.5: pin and Vm die together at request end — cross-request
-        // unit reuse is the thread-local unit cache's job)
-        // - request_end() resets per-request state; statics die with the Vm (A-DS2)
-        let mut vm = php_runtime::vm_new(retain, &module, reg, Some(&program));
+        // Phase 3 (design79 §4): the MAIN module's clone parks in the
+        // request RetainSet BEFORE any borrow is lent (eviction/supersede
+        // mid-request can never leave the cache as unique owner; A-DS8
+        // pinned expectation moves 1→2 BY NAME: lib + main). The Program
+        // half of the pair is `unit` itself living on this stack frame
+        // (clone-on-stack, KS-PP-81-2). Then the Vm borrows the request's
+        // RetainSet (P-2 pin; statics die with the Vm — A-DS2).
+        let lever = unit.lever();
+        retain.park_main(std::rc::Rc::clone(&unit.module));
+        let mut vm = php_runtime::vm_new(retain, &unit.module, reg, Some(&unit.program));
 
         // Phase 3.5: link-time fatal check — the SAME sweep as the CLI main
         // (S-78.1.4/A-TH8: Zend's compile/link stage, e.g. an enum
         // implementing Serializable renders the plain banner).
-        let link_fatal = vm.link_fatal_check(&module);
+        let link_fatal = vm.link_fatal_check(&unit.module);
         let is_link_fatal = link_fatal.is_some();
+        // A-BB6 §6 (A-PP16/A-PP17): the put sits lexically AFTER
+        // link_fatal_check and fires on a clean link only — a link-fatal
+        // main is NEVER published (F8c: main_put==0, 500 byte-identical).
+        if !is_link_fatal {
+            lever.publish_if_armed();
+        }
 
         // Phase 4: Per-request lifecycle (Stogov order, Council WP-77.5)
         // 1. request_start: setup superglobals, INI, session
@@ -607,7 +617,7 @@ mod implementation {
         if let Some(err) = &fatal {
             vm.flush_all_output_buffers();
             if is_link_fatal {
-                let file = String::from_utf8_lossy(&module.file);
+                let file = String::from_utf8_lossy(&unit.module.file);
                 let block =
                     format!("\nFatal error: {} in {} on line {}\n", err.message(), file, line);
                 vm.rendered.extend_from_slice(block.as_bytes());
@@ -894,11 +904,16 @@ mod implementation {
                     b, b"12",
                     "request {req}: static in included unit must restart per request"
                 );
+                // A-BB6 (design79 §4, DECLARED BY NAME — never a silent
+                // bump): expected pins move 1 → 2 when the lever lands:
+                // the included lib + the MAIN module (park_main, one
+                // park-event per probed request).
                 assert_eq!(
                     retain.len(),
-                    1,
+                    2,
                     "request {req}: pin must hold EXACTLY the distinct included units \
-                     (0 = counter blind KG-79.A; >1 = duplicate parking KS-DS-78-4)"
+                     plus the parked MAIN (A-BB6: lib + main = 2; \
+                     0/1 = counter blind KG-79.A; >2 = duplicate parking KS-DS-78-4)"
                 );
             }
         }

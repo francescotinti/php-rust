@@ -655,8 +655,12 @@ fn run_php(
         .get()
         .map(|f| f())
         .unwrap_or((0, 0));
+    // A-BB6/A-TH14: this SAPI is long-lived — the main probe is ON (the one
+    // parameter at the SAPI boundary; the one-shot CLI keeps probe off via
+    // run_source_with_ini). This arm stays the honest A/B twin of the axum
+    // worker: same acquire, same park, same put-after-link_fatal_check.
     let result = catch_unwind(AssertUnwindSafe(|| {
-        php_runtime::run_source_with_ini(&name, &source, registry, &[])
+        php_runtime::run_source_probed(&name, &source, registry, &[], true)
     }));
     #[cfg(feature = "census-instrumentation")]
     {

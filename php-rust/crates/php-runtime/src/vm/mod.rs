@@ -252,7 +252,7 @@ pub fn run_source_with(
         .map_err(|crate::compile::CompileError::Unsupported(what)| VmRunError::Unsupported(what))?;
     // Retain the lowered HIR so an `eval()` in the script can be compiled against
     // the image (step 57, Phase 1c-2c): both borrows outlive the run.
-    Ok(run_module_with_hir(&module, registry, Some(&program), None, &[]))
+    Ok(run_module_with_hir(&module, registry, Some(&program), None, &[], None))
 }
 
 /// Like [`run_source_with`], with `php -d`-style INI overrides applied before
@@ -265,22 +265,71 @@ pub fn run_source_with_ini(
     registry: &Registry,
     ini_overrides: &[(Vec<u8>, Vec<u8>)],
 ) -> Result<VmOutcome, VmRunError> {
+    // A-TH14: the one-shot CLI (corpus, `phpr script.php`, phpt) NEVER
+    // engages the main probe — same path as the server, probe parameter off.
+    run_source_probed(name, source, registry, ini_overrides, false)
+}
+
+/// A-BB6: the ONE main entry point under the lever — `probe` is the single
+/// on/off parameter at the SAPI boundary (A-TH14: two call-sites with their
+/// own logic would be a second compile path in waiting; grep-gated by
+/// wp81-harness/gate-lever-pins.sh). cli-server passes true, everything
+/// one-shot passes false through [`run_source_with_ini`].
+pub fn run_source_probed(
+    name: &[u8],
+    source: &[u8],
+    registry: &Registry,
+    ini_overrides: &[(Vec<u8>, Vec<u8>)],
+    probe: bool,
+) -> Result<VmOutcome, VmRunError> {
     // WP-67 G-67.1/K-67.5: request-begin marker — server probes segment the
     // uc_log stream on this event (offset+sleep segmentation DEPRECATED).
     // The per-thread buffer preserves emission order, so the marker is a
     // correct boundary even when a previous request's tail lines are still
     // buffered: they flush BEFORE it, in order.
     uc_log("reqmark", name);
-    let program = match crate::lower_source(name, source) {
-        Ok(p) => p,
-        Err(crate::LowerError::Fatal { message, line }) => {
+    // A-DS14 choice (i), PINNED (Council WP-82): the compile-relevant ini
+    // vector is asserted EMPTY on the probed path — an EXECUTABLE assert,
+    // not a fold into the fp. Rationale: every probed SAPI passes `&[]`
+    // today; if a probed caller ever carries ini overrides this trips
+    // fail-loud instead of serving a unit compiled under other directives.
+    // (Choice (ii) is pinned too: autoload-mid-compile is IMPOSSIBLE for
+    // the main — it lowers pre-Vm — and fixture F10 falsifies stale
+    // early-binding rather than folding autoload state into the fp.)
+    if probe {
+        assert!(
+            ini_overrides.is_empty(),
+            "A-DS14: probed main path with non-empty ini overrides — \
+             the cached-main key does not carry ini state; refuse loudly"
+        );
+    }
+    let mut unit = match main_unit_acquire(name, source, registry, probe) {
+        Ok(u) => u,
+        Err(MainAcquireError::Lower(crate::LowerError::Fatal { message, line })) => {
             return Ok(compile_fatal_outcome(name, &message, line))
         }
-        Err(e) => return Err(VmRunError::Lower(e)),
+        Err(MainAcquireError::Lower(e)) => return Err(VmRunError::Lower(e)),
+        Err(MainAcquireError::Unsupported(what)) => return Err(VmRunError::Unsupported(what)),
     };
-    let module = crate::compile::compile_program(&program, registry)
-        .map_err(|crate::compile::CompileError::Unsupported(what)| VmRunError::Unsupported(what))?;
-    Ok(run_module_with_hir(&module, registry, Some(&program), None, ini_overrides))
+    let lever = probe.then(|| unit.lever());
+    let outcome = run_module_with_hir(
+        &unit.module,
+        registry,
+        Some(&unit.program),
+        None,
+        ini_overrides,
+        lever,
+    );
+    // Request boundary flush (BOTH arms): the F5/F8c/F-oneshot fixture
+    // teeth read main_* events per-request from the uc_log — a no-include
+    // workload would otherwise buffer them until process exit, and the
+    // one-shot arm's exit path drops the buffer entirely (F-oneshot t1
+    // needs the reqmark to PROVE the channel alive where zero probes is
+    // the claim — absent must never read as zero, KS-SK-82-2). No-op
+    // unless PHPR_UNIT_CACHE_LOG is armed (never during a census
+    // measurement run), outside every timed window.
+    uc_log_flush();
+    Ok(outcome)
 }
 
 /// Like [`run_source_with`] but for a real CLI invocation: seed the CLI
@@ -295,6 +344,11 @@ pub fn run_source_with_argv(
     ini_overrides: &[(Vec<u8>, Vec<u8>)],
 ) -> Result<VmOutcome, VmRunError> {
     log::info!(target: "phpr::run", "run {} ({} bytes)", String::from_utf8_lossy(name), source.len());
+    // F-oneshot t1 (KS-SK-82-2): the one-shot arm emits the reqmark too —
+    // the fixture pins `main_probe == 0` HERE, and a zero on a dead channel
+    // proves nothing; the reqmark is the aliveness proof. Flushed at the
+    // end of this fn (no-op unless PHPR_UNIT_CACHE_LOG is armed).
+    uc_log("reqmark", name);
     let program = match crate::lower_source(name, source) {
         Ok(p) => p,
         Err(crate::LowerError::Fatal { message, line }) => {
@@ -305,7 +359,9 @@ pub fn run_source_with_argv(
     let module = crate::compile::compile_program(&program, registry)
         .map_err(|crate::compile::CompileError::Unsupported(what)| VmRunError::Unsupported(what))?;
     log::debug!(target: "phpr::compile", "compiled {}: {} functions, {} classes", String::from_utf8_lossy(name), module.functions.len(), module.classes.len());
-    Ok(run_module_with_hir(&module, registry, Some(&program), Some(argv), ini_overrides))
+    let outcome = run_module_with_hir(&module, registry, Some(&program), Some(argv), ini_overrides, None);
+    uc_log_flush();
+    Ok(outcome)
 }
 
 /// Lower `source`, compile it, and run it on the VM with no builtins registered.
@@ -348,7 +404,7 @@ fn compile_fatal_outcome(file: &[u8], message: &str, line: Line) -> VmOutcome {
 /// already-compiled module and executes its `main`. Started without a retained
 /// HIR, so an `eval()` here lowers standalone (no compile-against-image).
 pub fn run_module(module: &Module, registry: &Registry) -> VmOutcome {
-    run_module_with_hir(module, registry, None, None, &[])
+    run_module_with_hir(module, registry, None, None, &[], None)
 }
 
 /// Seed the CLI superglobals into the VM superglobal store (`$_SERVER` with the
@@ -449,6 +505,18 @@ impl RetainSet {
     pub fn len(&self) -> usize {
         self.0.len()
     }
+
+    /// A-BB6 (design79 §4): park the MAIN module's clone for this request —
+    /// the same pin the includes get via `Vm::park_module`, so an eviction/
+    /// supersede mid-request can never leave the cache as the module's
+    /// unique owner. Called ONLY on the probed SAPI path (one park-event
+    /// per probed request: F6's `retain.len()` = include park-events + 1).
+    /// pub because the worker SAPI owns its RetainSet — the call-site is
+    /// allowlisted by wp81-harness/gate-lever-pins.sh (A-MS13 discipline).
+    pub fn park_main(&self, module: Rc<Module>) {
+        uc_stat(|s| s.parked_modules += 1);
+        self.0.push(module);
+    }
     fn park(&self, rc: Rc<Module>) -> &Module {
         self.0.push_get(rc)
     }
@@ -488,6 +556,12 @@ pub fn vm_new<'m>(
     // ... and a fresh class-id space: the shared op payloads' inline caches
     // (PropIc) must not resurrect (class_id → slot) pairs from a previous
     // run where the same numeric id named another class (WP-29).
+    // A-DS15 (Council WP-82) DECLARED: this is THE pinned ==1 call-site and
+    // it runs only at request boundary — `Vm::new` never executes
+    // MID-request on any SAPI path (eval/include re-enter the LIVE Vm;
+    // host-callback re-entry — pdo createFunction, bcmath call_method_sync —
+    // goes through the ACTIVE_VM pointer, never a fresh Vm). Were that ever
+    // violated, the bump direction is safe (it only INVALIDATES caches).
     crate::bytecode::bump_ic_epoch();
     // WP-62 M1: new VM = new epoch — unit-cache hits from entries inserted
     // by an earlier VM on this thread are cross-VM (server replay) hits.
@@ -729,6 +803,7 @@ pub fn run_module_with_hir<'m>(
     main_hir: Option<&'m Program>,
     argv: Option<&[&[u8]]>,
     ini_overrides: &[(Vec<u8>, Vec<u8>)],
+    main_lever: Option<MainLever>,
 ) -> VmOutcome {
     // S-77.6.4.1: Use vm_new to create and initialize Vm with all 150+ fields.
     // WP-67 P-2 (P-67.5): RetainSet must be held by run_module_with_hir so it
@@ -737,12 +812,29 @@ pub fn run_module_with_hir<'m>(
     // S-77.6.4.1+S-77.6.4.2: single-request (CLI) lifecycle of the same
     // vm_new → request_* sequence the worker pool drives per-request.
     let retain = RetainSet::new();
+    // A-BB6 (design79 §4): on the probed SAPI path the MAIN module's clone
+    // parks in the request RetainSet BEFORE any borrow is lent — an
+    // eviction/supersede mid-request can never leave the cache as unique
+    // owner (KS-PP-80-2 extended to the pair; the Program half is the
+    // caller's clone-on-stack, KS-PP-81-2).
+    if let Some(l) = &main_lever {
+        retain.park_main(Rc::clone(&l.module));
+    }
     let mut vm = vm_new(&retain, module, registry, main_hir);
 
     // S-77.6.4.2a: Link-time fatal check (part of per-request setup) —
     // extracted to link_fatal_check so the worker-pool SAPI runs the SAME
     // sweep (S-78.1.4, A-TH8).
     let link_fatal = vm.link_fatal_check(module);
+    // A-BB6 §6 (A-PP16/A-PP17): the main-unit put sits lexically AFTER
+    // link_fatal_check and is consumed only on a clean link — a main that
+    // compiles but link-fatals is NEVER published (F8c: main_put==0 across
+    // two link-fatal requests, 500 byte-identical).
+    if let Some(l) = main_lever {
+        if link_fatal.is_none() {
+            l.publish_if_armed();
+        }
+    }
     // Frame already pushed by vm_new()
 
     // S-77.6.4.2b: request_start (setup INI, superglobals, session)
@@ -1356,7 +1448,9 @@ pub fn run_module_with_hir<'m>(
                      elide_align_hit={} miss_dc_base={} miss_dc_remap={} miss_dc_locals={} \
                      seed_prefix_short={} parked_modules={} parked_bytes={} \
                      defer_relowers={} defer_relower_ns={} \
-                     stranded_keys_superseded={} stranded_entries_dropped={}",
+                     stranded_keys_superseded={} stranded_entries_dropped={} \
+                     main_probe={} main_hit={} main_put={} main_impure_skip={} \
+                     main_probe_fail={}",
                     st.hit_intra,
                     st.hit_cross,
                     st.miss_cold,
@@ -1381,6 +1475,11 @@ pub fn run_module_with_hir<'m>(
                     st.defer_relower_ns,
                     st.stranded_keys_superseded,
                     st.stranded_entries_dropped,
+                    st.main_probe,
+                    st.main_hit,
+                    st.main_put,
+                    st.main_impure_skip,
+                    st.main_probe_fail,
                 ));
                 // WP-67 P-67.3: the cross-request bounded sets OUTSIDE
                 // cache+RetainSet — the per-worker metric counts them
@@ -2677,8 +2776,14 @@ pub struct Vm<'m> {
     /// created BEFORE the Vm). [`Vm::park_module`] is THE unique
     /// constructor of `&'m Module` for unit modules (M-67.1) — every path
     /// (hit, compile, eval, deferred) transits it; `module` below (main) is
-    /// the one exception: a caller-owned borrow that dies with the request
-    /// (M-67.2 audit: never leaked, never cached).
+    /// the one exception: a caller-owned borrow that dies with the request.
+    /// M-67.2 audit RE-DONE for A-BB6 (Council WP-82, same commit as the
+    /// main put): the main module may now ALSO be owned by the thread-local
+    /// unit cache — the borrow below still never outlives the request, and
+    /// its safety no longer rests on "never cached" but on the pinned pair:
+    /// the SAPI's clone-on-stack `Rc<Module>`/`Rc<Program>` (KS-PP-81-2)
+    /// plus the `park_main` clone in THIS RetainSet (design79 §4), so an
+    /// eviction/supersede mid-request can never free it.
     retain: &'m RetainSet,
     module: &'m Module,
     /// The **global class table** (step 57, Phase 1c): every loaded module's
@@ -6936,10 +7041,14 @@ impl<'m> Vm<'m> {
         let rc = Rc::new(module);
         #[cfg(feature = "mem-census")]
         census_unit_note(&rc);
-        // M-68.5: the MAIN module can never reach this put — the key is the
-        // *included* file's UnitKey and this whole path runs under
-        // `run_include`; main stays the caller-owned borrow of M-67.2
-        // (eccezione documentata sul campo `Vm::module`).
+        // M-68.5 SUPERSEDED DELIBERATELY (A-BB6/A-DS11, Council WP-82, same
+        // commit as the main put): the MAIN unit is now cached too — through
+        // its OWN path (`MainLever::publish_if_armed`, §6: after
+        // link_fatal_check), never through THIS put, whose key is the
+        // *included* file's UnitKey under `run_include`. M-67.2 re-audited:
+        // the main transits `park_main` (unique constructor, no second
+        // path — A-MS5c); `Vm::module` stays the caller-owned borrow, the
+        // caller's Rc (clone-on-stack, KS-PP-81-2) is what outlives it.
         if pure && self.main_hir.is_some() {
             if let Some(uk) = unit_key {
                 unit_cache_put(
@@ -6953,6 +7062,7 @@ impl<'m> Vm<'m> {
                         seed_delta: Rc::clone(&seed_delta),
                         module: Rc::clone(&rc),
                         owner_epoch: VM_EPOCH.with(|e| e.get()),
+                        main_program: None,
                     },
                 );
             }
@@ -15074,6 +15184,16 @@ struct CachedUnit {
     /// from a newer epoch a cross-VM (server replay) hit. The two boundaries
     /// have different contracts and are counted separately.
     owner_epoch: u64,
+    /// A-BB6 (design79 §2): the MAIN unit cached in this SAME cache (A-DS5:
+    /// never a second cache). `Some` marks a main entry: it carries the
+    /// lowered `Program` too (eval-against-image needs the HIR), its
+    /// relocation fields are vacuously empty (the main DEFINES the base id
+    /// space: no remap, `static_off`/`reserved_base` 0, empty `seed_delta`),
+    /// and its `fp` lives in the MAIN_CHAIN_FP domain (virgin chain + source
+    /// content hash), never the include `unit_fp` domain — a main entry can
+    /// therefore never satisfy an include probe, nor vice versa. `None` =
+    /// ordinary include entry (the pre-lever shape, unchanged).
+    main_program: Option<Rc<Program>>,
 }
 
 /// What a unit contributes to the accumulating seed image — the retained
@@ -15221,6 +15341,17 @@ struct UcStats {
     /// read 0 — it is the negative control of this counter.
     stranded_keys_superseded: u64,
     stranded_entries_dropped: u64,
+    /// A-BB6 (design79 §8): MAIN-unit probe counters. `main_probe` counts
+    /// every probed request; `main_hit`/`main_put` the cache traffic;
+    /// `main_impure_skip` a main classified impure (never published);
+    /// `main_probe_fail` a canonicalize/stat failure (pinned MISS-no-put,
+    /// F-probe). The one-shot CLI never probes: all five stay 0 there
+    /// (F-oneshot, A-TH14).
+    main_probe: u64,
+    main_hit: u64,
+    main_put: u64,
+    main_impure_skip: u64,
+    main_probe_fail: u64,
 }
 
 impl UcStats {
@@ -15249,6 +15380,11 @@ impl UcStats {
         defer_relower_ns: 0,
         stranded_keys_superseded: 0,
         stranded_entries_dropped: 0,
+        main_probe: 0,
+        main_hit: 0,
+        main_put: 0,
+        main_impure_skip: 0,
+        main_probe_fail: 0,
     };
 }
 
@@ -15353,7 +15489,16 @@ fn census_nested_lc_pop() -> u64 {
 /// silently). Gate detectors match the anchored form `^unitcache <event> `
 /// only; the cargo test `uc_log_event_vocabulary_is_prefix_free` pins that
 /// no anchored event is a prefix of another. Extend the array to add one.
-pub(crate) const UC_LOG_EVENTS: [&str; 12] = [
+pub(crate) const UC_LOG_EVENTS: [&str; 17] = [
+    // A-BB6 (design79 §8): MAIN-unit probe observables — the fixture teeth
+    // for F5/F8c/F-probe/F-oneshot live on these events (any build,
+    // PHPR_UNIT_CACHE_LOG-gated): counters that only a census build could
+    // see would make the union-binary fixtures vacuous (KS-SK-82-2).
+    "main_probe",
+    "main_hit",
+    "main_put",
+    "main_impure_skip",
+    "main_probe_fail",
     // WP-71 B-70.1 (Bak B-71.3): PER-EVENT eviction record — the ways/fp
     // council must see cron-ON evictions per-evento, never reconstructed
     // from the cumulative counter.
@@ -15575,6 +15720,192 @@ fn unit_cache_get(key: &UnitKey, fp: u64) -> Option<CachedUnit> {
         return None;
     }
     UNIT_CACHE.with(|c| c.borrow().get(key)?.iter().find(|cu| cu.fp == fp).cloned())
+}
+
+// ======================= A-BB6: MAIN unit in the SAME cache =================
+// design79 (EMENDED S-80.0.7 + Council WP-82): the thread-local unit cache
+// extended to the MAIN unit — never a second cache (A-DS5). The probe is ONE
+// parameter at the SAPI boundary (A-TH14): the worker pool and the cli-server
+// pass true, the one-shot CLI (corpus, `phpr script.php`) never probes — a
+// put there is dead weight (single-request process) and F-oneshot pins
+// `main_probe == 0` on that arm.
+
+/// One acquired MAIN unit. The caller keeps this value ON THE STACK for the
+/// whole request: it owns the `Rc<Program>` (the pinned clone-on-stack form
+/// of KS-PP-81-2 — the RetainSet is `FrozenVec<Rc<Module>>` and cannot park
+/// a Program) and the `Rc<Module>` whose clone the SAPI parks via
+/// [`RetainSet::park_main`] before `vm_new`.
+pub struct MainUnit {
+    pub program: Rc<Program>,
+    pub module: Rc<Module>,
+    /// Served from cache (a1+a2 skipped this request).
+    pub hit: bool,
+    publish: Option<MainPublishTicket>,
+}
+
+/// The deferred put: armed by a probed MISS on a pure main, consumed ONLY
+/// after `link_fatal_check` came back clean (§6 contract, A-PP16/A-PP17:
+/// a main that compiles but link-fatals is NEVER published — F8c pins
+/// `main_put==0` across two link-fatal requests).
+pub struct MainPublishTicket {
+    key: UnitKey,
+    fp: u64,
+}
+
+/// Park + deferred-publish bundle for [`run_module_with_hir`], detached from
+/// the [`MainUnit`] so the unit itself can keep lending `&Module`/`&Program`.
+pub struct MainLever {
+    module: Rc<Module>,
+    program: Rc<Program>,
+    publish: Option<MainPublishTicket>,
+}
+
+impl MainUnit {
+    /// Detach the lever half (park + publish); the borrows the caller passes
+    /// to [`run_module_with_hir`] keep pointing into `self`.
+    pub fn lever(&mut self) -> MainLever {
+        MainLever {
+            module: Rc::clone(&self.module),
+            program: Rc::clone(&self.program),
+            publish: self.publish.take(),
+        }
+    }
+}
+
+pub enum MainAcquireError {
+    Lower(crate::LowerError),
+    Unsupported(String),
+}
+
+/// Probe key for the main: canonicalize (F3: a docroot symlink swap changes
+/// the canonical path ⇒ MISS, opcache `revalidate_path=1` semantics, pinned
+/// by fixture) + stat. `None` = probe failure: pinned MISS-without-put
+/// (F-probe/A-SK12), never a fallback into a different keying.
+fn main_unit_key(name: &[u8]) -> Option<UnitKey> {
+    use std::os::unix::ffi::OsStrExt;
+    let p = std::path::Path::new(std::ffi::OsStr::from_bytes(name));
+    let canon = std::fs::canonicalize(p).ok()?;
+    let meta = std::fs::metadata(&canon).ok()?;
+    uc_stat(|s| s.metadata_calls += 1);
+    unit_key_for(canon.as_os_str().as_bytes(), &meta)
+}
+
+/// Acquire the MAIN unit for a request: cache probe (when `probe`) or the
+/// pre-lever lower+compile, verbatim. The content fingerprint hashes
+/// `source` against the VIRGIN chain fp ([`crate::lower::main_chain_fp`],
+/// computed — KS-AH-81-2/A-AH22): an edit invalidates via fp even when
+/// (mtime,size) did not move (F2, KH80-1), and the put's supersede-per-path
+/// drops the stale keys (S-79.0.7).
+pub fn main_unit_acquire(
+    name: &[u8],
+    source: &[u8],
+    registry: &Registry,
+    probe: bool,
+) -> Result<MainUnit, MainAcquireError> {
+    let probe_state: Option<(UnitKey, u64)> = if probe {
+        uc_stat(|s| s.main_probe += 1);
+        uc_log("main_probe", name);
+        match main_unit_key(name) {
+            Some(key) => {
+                let fp = fp_mix(crate::lower::main_chain_fp(key.reg_mode), b"main", source);
+                Some((key, fp))
+            }
+            None => {
+                uc_stat(|s| s.main_probe_fail += 1);
+                uc_log("main_probe_fail", name);
+                None
+            }
+        }
+    } else {
+        None
+    };
+    if let Some((key, fp)) = &probe_state {
+        if let Some(cu) = unit_cache_get(key, *fp) {
+            // Defensive: fp domains (main-chain vs include-chain) are
+            // disjoint by construction; a collision would surface an
+            // include entry here — refuse it, never fall through into
+            // include relocation state (A-DS12: the main entry's ids are
+            // deterministic from the virgin chain, an include's are not).
+            if let Some(prog) = &cu.main_program {
+                uc_stat(|s| s.main_hit += 1);
+                uc_log("main_hit", name);
+                return Ok(MainUnit {
+                    program: Rc::clone(prog),
+                    module: Rc::clone(&cu.module),
+                    hit: true,
+                    publish: None,
+                });
+            }
+        }
+    }
+    // MISS (or unprobed one-shot): the pre-lever path, verbatim.
+    let program = crate::lower_source(name, source).map_err(MainAcquireError::Lower)?;
+    let module = crate::compile::compile_program(&program, registry)
+        .map_err(|crate::compile::CompileError::Unsupported(w)| MainAcquireError::Unsupported(w))?;
+    // Purity, same policy as the includes (design79 §2): an impure main is
+    // never published. The main lowers PRE-Vm (no autoload can fire, no
+    // seed exists), so `used_conditional_seed` is structurally false today —
+    // the check is defensive and the counter makes a legitimate hit-rate 0
+    // distinguishable from a broken cache (F4; deviation declared: no
+    // impure-main path exists on the current tree).
+    let pure = !program.used_conditional_seed;
+    let publish = match (probe_state, pure) {
+        (Some((key, fp)), true) => Some(MainPublishTicket { key, fp }),
+        (Some(_), false) => {
+            uc_stat(|s| s.main_impure_skip += 1);
+            uc_log("main_impure_skip", name);
+            None
+        }
+        (None, _) => None,
+    };
+    Ok(MainUnit {
+        program: Rc::new(program),
+        module: Rc::new(module),
+        hit: false,
+        publish,
+    })
+}
+
+/// The put core. A main entry re-uses the include entry shape with vacuously
+/// empty relocation state (the main DEFINES the base id space) and carries
+/// the Program (eval-against-image on HIT).
+fn main_publish_ticket(t: MainPublishTicket, module: &Rc<Module>, program: &Rc<Program>) {
+    uc_stat(|s| s.main_put += 1);
+    uc_log("main_put", &t.key.path);
+    #[cfg(feature = "mem-census")]
+    census_unit_note(module);
+    unit_cache_put(
+        t.key,
+        CachedUnit {
+            fp: t.fp,
+            static_off: 0,
+            reserved_base: 0,
+            class_remap: Vec::new(),
+            new_locals: Vec::new(),
+            seed_delta: Rc::new(SeedDelta {
+                new_classes: Vec::new(),
+                static_count: 0,
+                new_slots: Vec::new(),
+                traits: Vec::new(),
+                conditional_names: Vec::new(),
+            }),
+            module: Rc::clone(module),
+            owner_epoch: VM_EPOCH.with(|e| e.get()),
+            main_program: Some(Rc::clone(program)),
+        },
+    );
+}
+
+impl MainLever {
+    /// THE publish call — one method, both SAPIs (worker pool and
+    /// [`run_module_with_hir`]): consumes the ticket if armed. Every
+    /// call-site MUST sit lexically after `link_fatal_check` and fire on a
+    /// clean link only (A-PP16 pin, wp81-harness/gate-lever-pins.sh).
+    pub fn publish_if_armed(mut self) {
+        if let Some(t) = self.publish.take() {
+            main_publish_ticket(t, &self.module, &self.program);
+        }
+    }
 }
 
 fn unit_cache_put(key: UnitKey, cu: CachedUnit) {
