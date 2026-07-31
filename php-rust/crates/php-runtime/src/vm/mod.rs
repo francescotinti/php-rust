@@ -2005,10 +2005,11 @@ fn census_walk_frame(f: &Frame<'_>, seen: &mut rustc_hash::FxHashSet<usize>) -> 
     b
 }
 
-/// WP-60 P2(a): the running VM parks a raw pointer to itself here (from
-/// `run_loop` entry, census builds only) so the memcensus window dump can
-/// name the PHP frame stack in-process (`tag=ctx`) — never via child stdout
-/// (Gregg R1/V4). Cleared by the census `Drop for Vm`.
+// WP-60 P2(a): the running VM parks a raw pointer to itself here (from
+// `run_loop` entry, census builds only) so the memcensus window dump can
+// name the PHP frame stack in-process (`tag=ctx`) — never via child stdout
+// (Gregg R1/V4). Cleared by the census `Drop for Vm`. (Plain comment: a
+// doc comment on a macro invocation is dead — S-81.0 sestetto -D debt.)
 #[cfg(feature = "mem-census")]
 thread_local! {
     static CENSUS_VM: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
@@ -2019,9 +2020,9 @@ pub(super) fn census_vm_park(p: usize) {
     CENSUS_VM.with(|c| c.set(p));
 }
 
-/// WP-60 P3(c): census-only registry of every LEAKED unit (include/eval) —
-/// `Vm::modules` is populated lazily by `module_id` and misses most units,
-/// so the per-path histogram feeds from the leak sites themselves.
+// WP-60 P3(c): census-only registry of every LEAKED unit (include/eval) —
+// `Vm::modules` is populated lazily by `module_id` and misses most units,
+// so the per-path histogram feeds from the leak sites themselves.
 #[cfg(feature = "mem-census")]
 thread_local! {
     /// WP-61 P2 (+WP-67 P-2): rows are (file, counted_v1, net_compile,
@@ -2047,12 +2048,12 @@ thread_local! {
     static CENSUS_NESTED_WINDOWS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
 }
 
-/// WP-70 P70-D (E-70.2): cumulative (calls, net bytes) of the DECL-deferred
-/// path — every `run_deferred` execution measured whole (re-lower + compile
-/// + link + declare drive) via raw alloc counters, no window nesting. The
-/// per-call net is clamped at zero (a drive that frees MORE than it
-/// allocates reads as 0 — bias declared upward). Dumped as `tag=defermini`;
-/// per-request rates come from consecutive dumps.
+// WP-70 P70-D (E-70.2): cumulative (calls, net bytes) of the DECL-deferred
+// path — every `run_deferred` execution measured whole (re-lower + compile
+// + link + declare drive) via raw alloc counters, no window nesting. The
+// per-call net is clamped at zero (a drive that frees MORE than it
+// allocates reads as 0 — bias declared upward). Dumped as `tag=defermini`;
+// per-request rates come from consecutive dumps.
 #[cfg(feature = "mem-census")]
 thread_local! {
     static DEFER_MINI: std::cell::Cell<(u64, u64)> = const { std::cell::Cell::new((0, 0)) };
@@ -15411,9 +15412,9 @@ fn uc_stat(f: impl FnOnce(&mut UcStats)) {
     UC_STATS.with(|s| f(&mut s.borrow_mut()));
 }
 
-/// WP-63 B7 (census-only): cumulative lower/compile wall-ns over the include
-/// path, dumped as `tag=compilens` — the bordo check that elision moves the
-/// COMPILE window and leaves lex/parse/lower flat.
+// WP-63 B7 (census-only): cumulative lower/compile wall-ns over the include
+// path, dumped as `tag=compilens` — the bordo check that elision moves the
+// COMPILE window and leaves lex/parse/lower flat.
 #[cfg(feature = "mem-census")]
 thread_local! {
     static COMPILE_NS: std::cell::Cell<(u64, u64, u64)> = const { std::cell::Cell::new((0, 0, 0)) };
@@ -15430,9 +15431,9 @@ pub(crate) fn census_compile_ns_take() -> (u64, u64, u64) {
     COMPILE_NS.with(|c| c.get())
 }
 
-/// WP-66 E-66.2 (Hejlsberg c): per-path (lower, compile) wall-ns + compile
-/// count over the include path. The E6 re-quota is judged on the MEASURED
-/// per-path dup cost (KS66-1) — never on cross-path averages (G-65.3).
+// WP-66 E-66.2 (Hejlsberg c): per-path (lower, compile) wall-ns + compile
+// count over the include path. The E6 re-quota is judged on the MEASURED
+// per-path dup cost (KS66-1) — never on cross-path averages (G-65.3).
 #[cfg(feature = "mem-census")]
 thread_local! {
     static PATH_NS: std::cell::RefCell<std::collections::HashMap<Vec<u8>, (u64, u64, u64, u64)>> =
@@ -15454,14 +15455,14 @@ fn census_path_ns_snapshot() -> Vec<(Vec<u8>, (u64, u64, u64, u64))> {
     PATH_NS.with(|m| m.borrow().iter().map(|(k, v)| (k.clone(), *v)).collect())
 }
 
-/// WP-67 E-67.1 (Hejlsberg a): per-include stack of NESTED autoload wall-ns.
-/// The lower window of a unit whose lowering autoloads a supertype contains
-/// the supertype's whole read+lower+compile+run, already booked on the
-/// supertype's own lcpath row — without this subtraction Σ lcsum
-/// double-counts and dup_lc_ns is inflated. NOTE: PATH_NS and this stack
-/// are thread_local — on a multi-worker server the dump must aggregate
-/// cross-thread before summing (E-67.3); the census binary is
-/// single-worker today.
+// WP-67 E-67.1 (Hejlsberg a): per-include stack of NESTED autoload wall-ns.
+// The lower window of a unit whose lowering autoloads a supertype contains
+// the supertype's whole read+lower+compile+run, already booked on the
+// supertype's own lcpath row — without this subtraction Σ lcsum
+// double-counts and dup_lc_ns is inflated. NOTE: PATH_NS and this stack
+// are thread_local — on a multi-worker server the dump must aggregate
+// cross-thread before summing (E-67.3); the census binary is
+// single-worker today.
 #[cfg(feature = "mem-census")]
 thread_local! {
     static NESTED_LC_NS: std::cell::RefCell<Vec<u64>> =
@@ -15961,9 +15962,9 @@ fn unit_cache_put(key: UnitKey, cu: CachedUnit) {
     })
 }
 
-/// WP-62 (Matsakis M2): relocation-skip observability. Counts land in the
-/// census (`tag=reloc`) so `reloc_skipped` reconciles with the expected
-/// prelude+stub population per unit; no cost in parity builds.
+// WP-62 (Matsakis M2): relocation-skip observability. Counts land in the
+// census (`tag=reloc`) so `reloc_skipped` reconciles with the expected
+// prelude+stub population per unit; no cost in parity builds.
 #[cfg(feature = "mem-census")]
 thread_local! {
     static RELOC_SKIPPED: std::cell::Cell<(u64, u64, u64)> =
@@ -16524,11 +16525,11 @@ fn ref_array_keys(cell: &Zval) -> Vec<Key> {
     }
 }
 
-/// M-70.2 (WP-70): count of skip-routes taken because a cell on a walk path
-/// was already borrowed — a reference CYCLE closing back onto a cell that is
-/// mid-write on this very statement. Cycle statements are the only expected
-/// source (K-M70.2: a census wpdev run where `tag=cellskip` moves outside
-/// the cycle fixtures falsifies the declared H-69.2 semantics).
+// M-70.2 (WP-70): count of skip-routes taken because a cell on a walk path
+// was already borrowed — a reference CYCLE closing back onto a cell that is
+// mid-write on this very statement. Cycle statements are the only expected
+// source (K-M70.2: a census wpdev run where `tag=cellskip` moves outside
+// the cycle fixtures falsifies the declared H-69.2 semantics).
 #[cfg(feature = "mem-census")]
 thread_local! {
     static CELL_SKIP: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };

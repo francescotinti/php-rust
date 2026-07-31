@@ -144,10 +144,19 @@ build "census" --features census-instrumentation
 #    a measurement identity.
 build "census-axum-only" --no-default-features --features census-instrumentation
 
+# 4b. mem-census — S-81.0 (KS-AH-82-4, Council WP-82): the SIXTH
+#     configuration — the retained-size instrument (module/Program walker,
+#     tag=unitcache dump). A retained figure cited from a binary without
+#     this row is NULL; the CI lane is the same-commit twin of this row.
+build "mem-census" --features mem-census
+
 # 5. Cross-crate census lint (A-AH15): php-runtime and php-cli carry the
-#    bracket/emitter code since S-79.0.3/6.
+#    bracket/emitter code since S-79.0.3/6. S-81.0 (KS-AH-82-4): same
+#    discipline for the mem-census perimeter (8 dead doc-comments paid).
 lint_crate php-runtime --features census-instrumentation
 lint_crate php-cli --lib --features census-instrumentation
+lint_crate php-runtime --features mem-census
+lint_crate php-cli --lib --features mem-census
 
 # 6. union (deployed dual-mode binary) — built LAST so the binary on disk is
 #    the measured one; positive control for the nm detector.

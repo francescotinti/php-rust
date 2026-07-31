@@ -31,3 +31,9 @@ axum-server = ["tokio", "axum", "tower", "hyper", "php-builtins", "num_cpus"]
 # line when php-cli is in the build (the union census binary), so A-BB1
 # gets per-request counters on BOTH arms.
 census-instrumentation = ["axum-server", "php-runtime/census-instrumentation", "php-cli?/census-instrumentation"]
+# S-81.0 (KS-AH-82-4, Council WP-82): the retained-size instrument (walker
+# module_census_bytes + tag=unitcache dump) — SIXTH matrix configuration.
+# Same discipline as census-instrumentation: any retained figure cited from
+# a binary without its matrix row + CI lane is NULL. Counters/bytes only,
+# never footprint verdicts (KB-78-5 applies unchanged).
+mem-census = ["axum-server", "php-runtime/mem-census", "php-cli?/mem-census"]
