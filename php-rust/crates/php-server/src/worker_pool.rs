@@ -124,6 +124,16 @@ mod implementation {
         pub static OUTSTANDING_MAX: AtomicUsize = AtomicUsize::new(0);
         /// Requests completed pool-wide.
         pub static REQUESTS: AtomicU64 = AtomicU64::new(0);
+        /// A-PP14 (Council WP-82): churn of requests whose census line was
+        /// never emitted (fatal early-returns) — the SplitDrain guard books
+        /// the s0→drop window here instead of discarding it silently, so
+        /// the global identity reconciles WITH fatals too:
+        /// Δglobal = Σ(a+b+c+resid over lines) + drained. Reported at pool
+        /// teardown (`census-drained:` line); KS-PP-82-1 still VOIDs any
+        /// figure from a run containing a fatal — these accumulators make
+        /// the void VISIBLE in the ledger, they never bless such a run.
+        pub static DRAINED_CALLS: AtomicU64 = AtomicU64::new(0);
+        pub static DRAINED_BYTES: AtomicU64 = AtomicU64::new(0);
 
         /// S-80.0.3 tripwire (A-TH10/KH81-2): `d` arrives as fetch_add()+1,
         /// which is >=1 in true arithmetic — d==0 is reachable ONLY through a
@@ -358,6 +368,18 @@ mod implementation {
             eprintln!(
                 "php-server: all {n} workers joined — exit stats are authoritative (KL-78-4)"
             );
+            // A-PP14: the drained ledger — nonzero means at least one
+            // request's line is missing (rows==N catches it; the figure
+            // makes the gap reconcilable instead of silent).
+            #[cfg(feature = "census-instrumentation")]
+            {
+                use std::sync::atomic::Ordering;
+                eprintln!(
+                    "census-drained: calls={} bytes={} gross=1 (A-PP14: fatal-request churn; 0 on a clean run)",
+                    census::DRAINED_CALLS.load(Ordering::Relaxed),
+                    census::DRAINED_BYTES.load(Ordering::Relaxed),
+                );
+            }
         }
 
         /// Dispatch task to next available worker (round-robin).
@@ -505,6 +527,10 @@ mod implementation {
         #[cfg(feature = "census-instrumentation")]
         struct SplitDrain {
             emitted: bool,
+            /// A-PP14: the request's s0 — the drop books the s0→drop window
+            /// into the DRAINED_* accumulators (a fatal's churn used to
+            /// vanish from the denominator entirely).
+            s0: (u64, u64),
         }
         #[cfg(feature = "census-instrumentation")]
         impl Drop for SplitDrain {
@@ -512,12 +538,20 @@ mod implementation {
                 if !self.emitted {
                     let _ = php_runtime::alloc_census::take_split();
                     let s = crate::census_alloc::snapshot();
+                    census::DRAINED_CALLS.fetch_add(
+                        s.0.saturating_sub(self.s0.0),
+                        std::sync::atomic::Ordering::Relaxed,
+                    );
+                    census::DRAINED_BYTES.fetch_add(
+                        s.1.saturating_sub(self.s0.1),
+                        std::sync::atomic::Ordering::Relaxed,
+                    );
                     census::LAST_S3.with(|c| c.set(Some((s.0, s.1))));
                 }
             }
         }
         #[cfg(feature = "census-instrumentation")]
-        let mut split_drain = SplitDrain { emitted: false };
+        let mut split_drain = SplitDrain { emitted: false, s0: census_s0 };
 
         // Phase 1+2 (A-BB6, design79 §2): acquire the MAIN unit — cache
         // probe on this long-lived SAPI (probe=true, A-TH14: the one
@@ -658,8 +692,12 @@ mod implementation {
             // unit-cache miss (booked during the b window: includes compile
             // at run time; a3 is the compile share within b, what a cache
             // hit skips). resid = s3(prev)→s0(now) gap: the per-request
-            // traffic OUTSIDE every phase window, reported so the
-            // denominator reconciles (Δglobal/req = a+b+c+resid).
+            // traffic OUTSIDE every phase window. A-PP14 (Council WP-82):
+            // the identity Δglobal = Σ(a+b+c+resid) holds on FATAL-FREE
+            // runs only — a fatal request emits no line and its s0→drop
+            // churn goes to the DRAINED_* accumulators (census-drained:
+            // teardown line): Δglobal = Σlines + drained, and the run is
+            // VOID for census figures regardless (KS-PP-82-1).
             let ((a1_calls, a1_bytes), (a3_calls, a3_bytes)) =
                 php_runtime::alloc_census::take_split();
             split_drain.emitted = true;
@@ -732,6 +770,11 @@ mod implementation {
         // so watermark resets and end-of-drain assertions cannot race with
         // another test's pool traffic.
         static DEPTH_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+        // A-PP14/A-MS14 class: the DRAINED_* ledger is process-global — the
+        // two fatal-generating tests serialize here so the positive control
+        // (after > before) can never be satisfied by a CONCURRENT drain.
+        static DRAIN_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
         fn meta(src: &str) -> WorkerHandlerMeta {
             WorkerHandlerMeta {
@@ -1179,6 +1222,7 @@ mod implementation {
         #[cfg(feature = "census-instrumentation")]
         #[test]
         fn fatal_early_return_drains_split_residue() {
+            let _guard = DRAIN_TEST_LOCK.lock().unwrap();
             let _ = php_runtime::alloc_census::SNAPSHOT_FN.set(crate::census_alloc::snapshot);
             let reg = registry();
             // r1: clean hello pins the per-request a1 baseline.
@@ -1211,6 +1255,27 @@ mod implementation {
             assert!(
                 a1_after <= a1_clean + a1_clean / 2,
                 "a1 after a fatal request carries residue: {a1_after} vs clean {a1_clean} (A-PP11)"
+            );
+        }
+
+        /// A-PP14 (Council WP-82) positive control: a fatal request's churn
+        /// must LAND in the DRAINED_* ledger, not vanish from the
+        /// denominator (Δglobal = Σlines + drained).
+        #[cfg(feature = "census-instrumentation")]
+        #[test]
+        fn drained_ledger_books_fatal_request_churn() {
+            let _guard = DRAIN_TEST_LOCK.lock().unwrap();
+            let _ = php_runtime::alloc_census::SNAPSHOT_FN.set(crate::census_alloc::snapshot);
+            let reg = registry();
+            use std::sync::atomic::Ordering;
+            let before = census::DRAINED_CALLS.load(Ordering::Relaxed);
+            let r = php_runtime::RetainSet::new();
+            let (_, s) = execute_with_retain(&r, &reg, &meta("<?php goto x;"));
+            assert_eq!(s, StatusCode::INTERNAL_SERVER_ERROR);
+            let after = census::DRAINED_CALLS.load(Ordering::Relaxed);
+            assert!(
+                after > before,
+                "fatal request churn not booked in DRAINED_CALLS (A-PP14): {before} -> {after}"
             );
         }
 
