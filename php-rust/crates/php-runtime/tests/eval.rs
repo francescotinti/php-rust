@@ -4768,3 +4768,6 @@ fn binary_fast_long_spaceship_and_bitwise() {
         "-1 1 0 275"
     );
 }
+// A-AH29 (Council WP-83): force-link mimalloc — php_types::memcensus mi_*
+// externs resolve only against it in mem-census test builds (dev-dep only).
+use mimalloc as _;

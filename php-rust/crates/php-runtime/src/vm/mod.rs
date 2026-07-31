@@ -1407,11 +1407,12 @@ pub fn run_module_with_hir<'m>(
             // `stranded_keys_superseded`/`stranded_entries_dropped`.
             {
                 let st = UC_STATS.with(|s| *s.borrow());
-                let (entries, bytes, paths, superseded_paths, superseded_entries, rw_bytes, rw_nodes) =
+                let (entries, bytes, paths, superseded_paths, superseded_entries, rw_bytes, rw_nodes, rw_main_net) =
                     UNIT_CACHE.with(|c| {
                         let cache = c.borrow();
                         let mut entries = 0u64;
                         let mut bytes = 0u64;
+                        let mut main_net = 0u64;
                         let mut by_path: rustc_hash::FxHashMap<&[u8], u32> = Default::default();
                         // A-DL12: ONE walker over the WHOLE cache — the
                         // visited-set dedups nodes shared BETWEEN entries
@@ -1426,6 +1427,9 @@ pub fn run_module_with_hir<'m>(
                                 rw.add_module(&cu.module);
                                 if let Some(p) = &cu.main_program {
                                     rw.add_program(p);
+                                    // A-DL15: the MEASURED deep figure rides
+                                    // next to the structural FLOOR walk.
+                                    main_net += cu.main_program_net;
                                 }
                             }
                             *by_path.entry(&k.path[..]).or_insert(0) += 1;
@@ -1433,7 +1437,7 @@ pub fn run_module_with_hir<'m>(
                         let sup = by_path.values().filter(|&&n| n > 1).count() as u64;
                         let sup_e: u64 =
                             by_path.values().filter(|&&n| n > 1).map(|&n| (n - 1) as u64).sum();
-                        (entries, bytes, by_path.len() as u64, sup, sup_e, rw.bytes, rw.nodes)
+                        (entries, bytes, by_path.len() as u64, sup, sup_e, rw.bytes, rw.nodes, main_net)
                     });
                 // A-DL17 (Council WP-83): the row carries TWO byte-ownership
                 // rules, both declared IN-BAND — `retained_walk_bytes` uses
@@ -1457,7 +1461,9 @@ pub fn run_module_with_hir<'m>(
                      retained_walk_bytes={rw_bytes} \
                      retained_walk_nodes={rw_nodes} \
                      stranded_bytes_dropped={} uclog={} \
-                     rw_rule=cache-as-owner stranded_rule=unique-at-drop gross=1",
+                     rw_main_net={rw_main_net} \
+                     rw_rule=cache-as-owner-FLOOR rw_main_net_rule=net-at-lower \
+                     stranded_rule=unique-at-drop gross=1",
                     st.hit_intra,
                     st.hit_cross,
                     st.miss_cold,
@@ -7096,6 +7102,7 @@ impl<'m> Vm<'m> {
                         module: Rc::clone(&rc),
                         owner_epoch: VM_EPOCH.with(|e| e.get()),
                         main_program: None,
+                        main_program_net: 0,
                     },
                 );
             }
@@ -15227,6 +15234,13 @@ struct CachedUnit {
     /// therefore never satisfy an include probe, nor vice versa. `None` =
     /// ordinary include entry (the pre-lever shape, unchanged).
     main_program: Option<Rc<Program>>,
+    /// A-DL15 (Council WP-83): the MEASURED deep retained of the main
+    /// Program — net-alloc bracket (`CensusNetWindow`) around the lower on
+    /// the MISS that published this entry. 0 on include entries and on
+    /// non-mem-census builds. This is the honest figure the ×W budget uses;
+    /// the structural `add_program` walk stays a FLOOR (its HIR body mass
+    /// is size_of-flat by construction).
+    main_program_net: u64,
 }
 
 /// What a unit contributes to the accumulating seed image — the retained
@@ -15804,6 +15818,9 @@ pub struct MainUnit {
     /// Served from cache (a1+a2 skipped this request).
     pub hit: bool,
     publish: Option<MainPublishTicket>,
+    /// A-DL15: net-alloc bracket of the lower that built `program`
+    /// (mem-census MISS only; 0 elsewhere). Travels with the publish.
+    lower_net: u64,
 }
 
 /// The deferred put: armed by a probed MISS on a pure main, consumed ONLY
@@ -15821,6 +15838,8 @@ pub struct MainLever {
     module: Rc<Module>,
     program: Rc<Program>,
     publish: Option<MainPublishTicket>,
+    /// A-DL15: measured lower net of the Program, forwarded to the put.
+    lower_net: u64,
 }
 
 impl MainUnit {
@@ -15831,6 +15850,7 @@ impl MainUnit {
             module: Rc::clone(&self.module),
             program: Rc::clone(&self.program),
             publish: self.publish.take(),
+            lower_net: self.lower_net,
         }
     }
 }
@@ -15902,12 +15922,25 @@ pub fn main_unit_acquire(
                     module: Rc::clone(&cu.module),
                     hit: true,
                     publish: None,
+                    lower_net: 0,
                 });
             }
         }
     }
     // MISS (or unprobed one-shot): the pre-lever path, verbatim.
+    // A-DL15 (Council WP-83): net-alloc bracket around the lower — the
+    // MEASURED deep retained of the Program (the shallow add_program walk
+    // is a declared FLOOR: its HIR body mass is size_of-flat). `finish()`,
+    // never `close()`: CENSUS_COMPILE_NET belongs to the include windows.
+    // Declared: the net includes lower-retained side tables (interner
+    // residue), so it leans UPPER — the selftest pins bracket >= floor.
+    #[cfg(feature = "mem-census")]
+    let lower_w = CensusNetWindow::open();
     let program = crate::lower_source(name, source).map_err(MainAcquireError::Lower)?;
+    #[cfg(feature = "mem-census")]
+    let lower_net = lower_w.finish();
+    #[cfg(not(feature = "mem-census"))]
+    let lower_net: u64 = 0;
     let module = crate::compile::compile_program(&program, registry)
         .map_err(|crate::compile::CompileError::Unsupported(w)| MainAcquireError::Unsupported(w))?;
     // Purity, same policy as the includes (design79 §2): an impure main is
@@ -15931,6 +15964,7 @@ pub fn main_unit_acquire(
         module: Rc::new(module),
         hit: false,
         publish,
+        lower_net,
     })
 }
 
@@ -15964,7 +15998,12 @@ pub fn uc_main_key_in_cache(name: &[u8], source: &[u8]) -> bool {
 /// The put core. A main entry re-uses the include entry shape with vacuously
 /// empty relocation state (the main DEFINES the base id space) and carries
 /// the Program (eval-against-image on HIT).
-fn main_publish_ticket(t: MainPublishTicket, module: &Rc<Module>, program: &Rc<Program>) {
+fn main_publish_ticket(
+    t: MainPublishTicket,
+    module: &Rc<Module>,
+    program: &Rc<Program>,
+    lower_net: u64,
+) {
     uc_stat(|s| s.main_put += 1);
     uc_log("main_put", &t.key.path);
     #[cfg(feature = "mem-census")]
@@ -15987,6 +16026,7 @@ fn main_publish_ticket(t: MainPublishTicket, module: &Rc<Module>, program: &Rc<P
             module: Rc::clone(module),
             owner_epoch: VM_EPOCH.with(|e| e.get()),
             main_program: Some(Rc::clone(program)),
+            main_program_net: lower_net,
         },
     );
 }
@@ -15998,7 +16038,7 @@ impl MainLever {
     /// clean link only (A-PP16 pin, wp81-harness/gate-lever-pins.sh).
     pub fn publish_if_armed(mut self) {
         if let Some(t) = self.publish.take() {
-            main_publish_ticket(t, &self.module, &self.program);
+            main_publish_ticket(t, &self.module, &self.program, self.lower_net);
         }
     }
 }
@@ -17062,24 +17102,47 @@ impl RetainedWalk {
         if !self.first_visit(p) {
             return;
         }
+        // A-DL15 (Council WP-83): this walk is a STRUCTURAL FLOOR, declared
+        // — Stmt/Expr own heap (nested Box/Vec/strings) is NOT descended.
+        // The MEASURED deep figure per main entry is the net-at-lower
+        // bracket (`CachedUnit::main_program_net`, emitted as rw_main_net):
+        // budgets read THAT; this walk exists for dedup algebra (S1+S2−Ssh)
+        // and as the floor the bracket must dominate (selftest tooth).
+        // Extended S-82.0 to fn/closure body+param+slot mass (one order
+        // closer than size_of-flat), still a floor by construction.
         self.bytes += std::mem::size_of::<Program>() as u64;
         self.bytes += (p.body.capacity() * std::mem::size_of::<crate::hir::Stmt>()) as u64;
         self.bytes += p.slots.iter().map(|s| s.len() + 16).sum::<usize>() as u64;
         for f in &p.functions {
             if self.first_visit(f) {
-                self.bytes += std::mem::size_of::<crate::hir::FnDecl>() as u64;
+                self.bytes += std::mem::size_of::<crate::hir::FnDecl>() as u64 + hir_fn_heap(f);
             }
         }
         for c in &p.classes {
             if self.first_visit(c) {
-                self.bytes += std::mem::size_of::<crate::hir::ClassDecl>() as u64;
+                self.bytes += std::mem::size_of::<crate::hir::ClassDecl>() as u64
+                    + (c.methods.capacity() * std::mem::size_of::<crate::hir::MethodDecl>())
+                        as u64;
             }
         }
         self.bytes +=
             (p.closures.capacity() * std::mem::size_of::<crate::hir::FnDecl>()) as u64;
+        for cl in &p.closures {
+            self.bytes += hir_fn_heap(cl);
+        }
         self.bytes +=
             (p.deferred.capacity() * std::mem::size_of::<crate::hir::DeferredDecl>()) as u64;
     }
+}
+
+/// A-DL15/A-DL16: the FnDecl HEAP floor share (struct itself excluded —
+/// callers add it for boxed decls, the Vec capacity term covers inline
+/// ones). Shared by `add_program` and the selftest's Sshared computation.
+#[cfg(feature = "mem-census")]
+fn hir_fn_heap(f: &crate::hir::FnDecl) -> u64 {
+    (f.body.capacity() * std::mem::size_of::<crate::hir::Stmt>()
+        + f.params.capacity() * std::mem::size_of::<crate::hir::Param>()
+        + f.slots.iter().map(|s| s.len() + 16).sum::<usize>()) as u64
 }
 
 /// KL-82-2 (Council WP-82): the POSITIVE control the mono-module form
@@ -17135,6 +17198,101 @@ pub fn retained_walk_selftest() {
         let b = both.bytes;
         both.add_module(&m1);
         assert_eq!(both.bytes, b, "re-walk of a visited module added bytes");
+    }
+    // A-DL16 (Council WP-83): `add_program` was the ONLY S-81.0 walker code
+    // with NO positive control. Program-side dedup algebra with a KNOWN
+    // composition: p2 is a shallow clone of p1 — every FnDecl/ClassDecl Rc
+    // is SHARED (this is real: two lowered programs share the whole hoisted
+    // prelude), only the struct + body + slots + closures + deferred are
+    // p2's own. The exact law: both == s1 + own2, where own2 is computed
+    // with the walker's OWN formulas. A walker that double-counts shared
+    // nodes reads ~2×s1 here; one that skips them undercounts own2.
+    {
+        let p1 = Rc::new(
+            crate::lower_source(
+                b"rw_p1.php",
+                b"<?php function rw_pf1() { return 1; } echo rw_pf1();",
+            )
+            .unwrap(),
+        );
+        let p2 = Rc::new(p1.as_ref().clone());
+        let own2 = std::mem::size_of::<Program>() as u64
+            + (p2.body.capacity() * std::mem::size_of::<crate::hir::Stmt>()) as u64
+            + p2.slots.iter().map(|s| s.len() + 16).sum::<usize>() as u64
+            + (p2.closures.capacity() * std::mem::size_of::<crate::hir::FnDecl>()) as u64
+            + p2.closures.iter().map(hir_fn_heap).sum::<u64>()
+            + (p2.deferred.capacity() * std::mem::size_of::<crate::hir::DeferredDecl>()) as u64;
+
+        let mut w1 = RetainedWalk::new();
+        w1.add_program(&p1);
+        let s1 = w1.bytes;
+        assert!(s1 > 0, "solo program walk is zero — vacuous control");
+        assert!(
+            s1 > own2,
+            "shared share is empty (s1={s1} <= own2={own2}) — control would be vacuous"
+        );
+        let mut both = RetainedWalk::new();
+        both.add_program(&p1);
+        both.add_program(&p2);
+        assert_eq!(
+            both.bytes,
+            s1 + own2,
+            "program dedup algebra broken: both != s1 + own2 (A-DL16; \
+             ~2x s1 = double-count of shared Rc decls)"
+        );
+        let b = both.bytes;
+        both.add_program(&p1);
+        assert_eq!(both.bytes, b, "re-walk of a visited program added bytes (A-DL16)");
+    }
+    // A-DL15 differential control: the net-at-lower BRACKET must dominate
+    // the structural FLOOR (that is what makes "floor" an honest label),
+    // be deterministic within a declared band (10% — interner warm), and
+    // move with the source size.
+    {
+        // Warm the interner/side tables so the brackets compare lowering,
+        // not first-use initialisation.
+        let _warm = crate::lower_source(b"rw_w.php", b"<?php echo 1;").unwrap();
+        let small = b"<?php function rw_b1() { $a = 1; return $a; } echo rw_b1();";
+        let big = b"<?php function rw_b2() { $a = 1; $b = 2; $c = 3; $d = 4; \
+            $e = [1,2,3,4,5,6,7,8]; return $a + $b + $c + $d + count($e); } \
+            function rw_b3() { return rw_b2(); } function rw_b4() { return rw_b3(); } \
+            echo rw_b4();";
+        let w = CensusNetWindow::open();
+        let ps = crate::lower_source(b"rw_s.php", small).unwrap();
+        let n1 = w.finish();
+        // The bracket measures what THIS lower newly allocated: on a warm
+        // lower the prelude decls are Rc-shared (never re-allocated), so
+        // the comparable floor is the program's OWN share (struct + body +
+        // slots), NOT the full walk (which counts the shared prelude too).
+        let ps = Rc::new(ps);
+        let own_floor = std::mem::size_of::<Program>() as u64
+            + (ps.body.capacity() * std::mem::size_of::<crate::hir::Stmt>()) as u64
+            + ps.slots.iter().map(|s| s.len() + 16).sum::<usize>() as u64;
+        assert!(
+            n1 >= own_floor,
+            "bracket {} < own-share structural floor {} — the floor is NOT a floor (A-DL15)",
+            n1,
+            own_floor
+        );
+        let w = CensusNetWindow::open();
+        let _ps2 = crate::lower_source(b"rw_s2.php", small).unwrap();
+        let n2 = w.finish();
+        let band = n1.max(n2) / 10;
+        assert!(
+            n1.abs_diff(n2) <= band.max(512),
+            "bracket not deterministic within the declared 10% band: {} vs {} (A-DL15)",
+            n1,
+            n2
+        );
+        let w = CensusNetWindow::open();
+        let _pb = crate::lower_source(b"rw_big.php", big).unwrap();
+        let nb = w.finish();
+        assert!(
+            nb > n1,
+            "bracket does not move with source size: big {} <= small {} (A-DL15)",
+            nb,
+            n1
+        );
     }
 }
 

@@ -169,8 +169,17 @@ fi
 # run header (archived in $RUN.summary) AND appended to the raw log at the
 # end of the run — KS-AH-82-1: a summary from a script whose sha does not
 # match the committed rev's is NULL and gets recomputed from the raws.
+# A-AH30 (Council WP-83): the campaign WRAPPER orders the runs — it is
+# protocol too. A campaign exports PHPR_CAMPAIGN_SCRIPT=<path to itself>;
+# the sha covers it and the header names it. Unset = direct single run
+# (legitimate), named as "none" so the reader can tell the two apart.
+CAMPAIGN_SCRIPT="${PHPR_CAMPAIGN_SCRIPT:-}"
+if [ -n "$CAMPAIGN_SCRIPT" ] && [ ! -f "$CAMPAIGN_SCRIPT" ]; then
+  echo "FAIL: PHPR_CAMPAIGN_SCRIPT set but not a file: $CAMPAIGN_SCRIPT (A-AH30)"
+  exit 1
+fi
 DRIVER_SHA="$(shasum -a 256 "$HERE/measure78.sh" "$HERE/gate-feature-matrix.sh" \
-  | shasum -a 256 | cut -c1-16)"
+  ${CAMPAIGN_SCRIPT:+"$CAMPAIGN_SCRIPT"} | shasum -a 256 | cut -c1-16)"
 # A-SK11: EXACT row match — `^bin\[<row>\] ` with bracket+space anchored.
 EXPECTED_HASH="$(awk -F= -v row="$ROW" '$0 ~ ("^bin\\[" row "\\] ") {print $2}' "$MATRIX_LOG" | tail -1)"
 if [ -z "$EXPECTED_HASH" ]; then
@@ -207,7 +216,7 @@ case "$MODE" in
   *) echo "unknown mode $MODE"; exit 2 ;;
 esac
 
-echo "== measure78 mode=$MODE label=$LABEL fixture=$FIXTURE bin=$HASH git=$GIT_REV driver_sha=$DRIVER_SHA warmup=$WARMUP measured=$MEASURED idle_secs=$IDLE_SECS =="
+echo "== measure78 mode=$MODE label=$LABEL fixture=$FIXTURE bin=$HASH git=$GIT_REV driver_sha=$DRIVER_SHA campaign=${CAMPAIGN_SCRIPT:-none} warmup=$WARMUP measured=$MEASURED idle_secs=$IDLE_SECS =="
 find "$FIX" -name '._*' -delete
 
 pkill -f "php-server" 2>/dev/null && sleep 1

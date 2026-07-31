@@ -90,6 +90,14 @@ jobs:
           cargo rustc --release -p php-server --features mem-census -- -D warnings
           cargo rustc --release -p php-runtime --features mem-census -- -D warnings
           cargo rustc --release -p php-cli --lib --features mem-census -- -D warnings
+      # A-AH29 (Council WP-83): the rustc lint above does NOT compile
+      # cfg(test) code — the mem-census TEST targets of the library crates
+      # get their compile pin here (the php-server one compiles via the
+      # retained-walk control below).
+      - name: mem-census test-target compile pins (A-AH29)
+        run: |
+          cargo test --release -p php-runtime --features mem-census --no-run
+          cargo test --release -p php-cli --lib --features mem-census --no-run
       # KL-82-2: the retained-walk positive control (shared subgraph =
       # S1+S2-Sshared exactly) — a retained figure without this green is
       # NULL and the A/B is VOID.

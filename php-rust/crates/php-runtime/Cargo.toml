@@ -46,3 +46,11 @@ rusqlite = { version = "0.40.1", features = ["bundled", "column_decltype", "colu
 mysql = "28.0.0"
 elsa = "=1.11.2"
 static_assertions.workspace = true
+
+# A-AH29 (Council WP-83): the mem-census lib-test target could not LINK
+# (php_types::memcensus calls mi_* symbols that only the bin crates'
+# mimalloc provided) — the compile pin was structurally impossible and the
+# selftests had to live as pub fns run from bin tests. Dev-only: production
+# builds are untouched; the CI --no-run lane now bites for real.
+[dev-dependencies]
+mimalloc.workspace = true

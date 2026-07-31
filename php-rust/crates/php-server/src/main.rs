@@ -38,9 +38,47 @@
 use std::ffi::OsString;
 use std::process::ExitCode;
 
-#[cfg(not(feature = "census-instrumentation"))]
+#[cfg(not(any(feature = "census-instrumentation", feature = "mem-census")))]
 #[global_allocator]
 static GLOBAL_ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
+// A-DL15 (Council WP-83): the mem-census instrument gained a NET bracket
+// (net-at-lower → `main_program_net`/`rw_main_net`). With plain mimalloc the
+// mem-census build left `php_types::memcensus::alloc_counters()` frozen at
+// (0,0) — the bracket (and every CensusNetWindow in this binary) was
+// silently DEAD. This wrapper feeds the (alloc, free) pair; it produces
+// counters only — footprint/peak verdicts still come EXCLUSIVELY from the
+// non-instrumented twin (KB-78-5/KL-78-5 unchanged).
+#[cfg(all(feature = "mem-census", not(feature = "census-instrumentation")))]
+#[global_allocator]
+static GLOBAL_ALLOC: mem_alloc::MemCountingMi = mem_alloc::MemCountingMi;
+
+#[cfg(all(feature = "mem-census", not(feature = "census-instrumentation")))]
+pub mod mem_alloc {
+    use std::alloc::{GlobalAlloc, Layout};
+
+    pub struct MemCountingMi;
+
+    unsafe impl GlobalAlloc for MemCountingMi {
+        unsafe fn alloc(&self, l: Layout) -> *mut u8 {
+            php_types::memcensus::galloc_note(l.size());
+            unsafe { mimalloc::MiMalloc.alloc(l) }
+        }
+        unsafe fn dealloc(&self, p: *mut u8, l: Layout) {
+            php_types::memcensus::gfree_note(l.size());
+            unsafe { mimalloc::MiMalloc.dealloc(p, l) }
+        }
+        unsafe fn alloc_zeroed(&self, l: Layout) -> *mut u8 {
+            php_types::memcensus::galloc_note(l.size());
+            unsafe { mimalloc::MiMalloc.alloc_zeroed(l) }
+        }
+        unsafe fn realloc(&self, p: *mut u8, l: Layout, n: usize) -> *mut u8 {
+            php_types::memcensus::galloc_note(n);
+            php_types::memcensus::gfree_note(l.size());
+            unsafe { mimalloc::MiMalloc.realloc(p, l, n) }
+        }
+    }
+}
 
 // S-78.1.6 (A-BB7): the census build swaps in a COUNTING wrapper around
 // mimalloc. KB-78-5/KL-78-5: any footprint/peak figure from this build is
@@ -67,22 +105,36 @@ pub mod census_alloc {
     pub struct CountingAlloc;
 
     unsafe impl GlobalAlloc for CountingAlloc {
+        // A-DL15 (Council WP-83): on the UNION build (census + mem-census)
+        // the net pair feeds the memcensus counters too — the census gross
+        // semantics (ALLOC_* untouched by dealloc) stay EXACTLY as before.
         unsafe fn alloc(&self, l: Layout) -> *mut u8 {
             ALLOC_CALLS.fetch_add(1, Ordering::Relaxed);
             ALLOC_BYTES.fetch_add(l.size() as u64, Ordering::Relaxed);
+            #[cfg(feature = "mem-census")]
+            php_types::memcensus::galloc_note(l.size());
             unsafe { mimalloc::MiMalloc.alloc(l) }
         }
         unsafe fn dealloc(&self, p: *mut u8, l: Layout) {
+            #[cfg(feature = "mem-census")]
+            php_types::memcensus::gfree_note(l.size());
             unsafe { mimalloc::MiMalloc.dealloc(p, l) }
         }
         unsafe fn alloc_zeroed(&self, l: Layout) -> *mut u8 {
             ALLOC_CALLS.fetch_add(1, Ordering::Relaxed);
             ALLOC_BYTES.fetch_add(l.size() as u64, Ordering::Relaxed);
+            #[cfg(feature = "mem-census")]
+            php_types::memcensus::galloc_note(l.size());
             unsafe { mimalloc::MiMalloc.alloc_zeroed(l) }
         }
         unsafe fn realloc(&self, p: *mut u8, l: Layout, n: usize) -> *mut u8 {
             ALLOC_CALLS.fetch_add(1, Ordering::Relaxed);
             ALLOC_BYTES.fetch_add(n as u64, Ordering::Relaxed);
+            #[cfg(feature = "mem-census")]
+            {
+                php_types::memcensus::galloc_note(n);
+                php_types::memcensus::gfree_note(l.size());
+            }
             unsafe { mimalloc::MiMalloc.realloc(p, l, n) }
         }
     }

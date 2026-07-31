@@ -53,6 +53,11 @@ pub use vm::{uc_main_key_in_cache, uc_main_stats};
 // (php-runtime lib tests cannot link the mem-census dump).
 #[cfg(feature = "mem-census")]
 pub use vm::retained_walk_selftest;
+// A-AH29 (Council WP-83): force-link mimalloc into the LIB-test binary —
+// php_types::memcensus's mi_* externs resolve only against it. Dev-only
+// (dev-dependency): production binaries own their allocator, unchanged.
+#[cfg(test)]
+use mimalloc as _;
 
 // WP-77.6.5.2: Expose Vm lifecycle methods and construction for worker-pool integration
 pub use compile::{compile_program, CompileError};

@@ -433,3 +433,7 @@ fn conditional_function_declaration_lowers_to_declare_fn() {
     }
     assert!(has_declare(&p.body, f_idx), "a DeclareFn(f) must be emitted");
 }
+
+// A-AH29 (Council WP-83): force-link mimalloc — php_types::memcensus mi_*
+// externs resolve only against it in mem-census test builds (dev-dep only).
+use mimalloc as _;

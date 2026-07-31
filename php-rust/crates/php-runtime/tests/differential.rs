@@ -192,3 +192,7 @@ fn evaluator_matches_oracle() {
         mismatches.join("\n")
     );
 }
+
+// A-AH29 (Council WP-83): force-link mimalloc — php_types::memcensus mi_*
+// externs resolve only against it in mem-census test builds (dev-dep only).
+use mimalloc as _;

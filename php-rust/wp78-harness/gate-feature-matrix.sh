@@ -174,18 +174,23 @@ build "union" --features axum-server && {
 #    must never reappear on the local disk). cargo scopes the summary line per
 #    crate, so grepping for the php-server summary keeps dependency warnings
 #    out of scope, same as the cargo-rustc -D pass above.
-echo "== test-target warnings (A-AH6) ==" | tee -a "$LOG"
-TESTLOG="$OUT/feature-matrix-testbuild.log"
-if ! ( cd "$REPO" && cargo test --release -p php-server --features axum-server --no-run ) \
-    > "$TESTLOG" 2>&1; then
-  echo "FAIL [test-targets]: test build failed (see $TESTLOG)" | tee -a "$LOG"
-  FAILS=$((FAILS+1))
-elif grep -E 'warning: `php-server`.*generated [0-9]+ warning' "$TESTLOG"; then
-  echo "FAIL [test-targets]: php-server test build generated warnings (A-AH6)" | tee -a "$LOG"
-  FAILS=$((FAILS+1))
-else
-  echo "OK  [test-targets]: php-server test build warning-free" | tee -a "$LOG"
-fi
+#    A-AH29 (Council WP-83): the step used to compile the test targets ONLY
+#    for axum-server — warnings in census/mem-census test builds were
+#    invisible locally (the asymmetry Hejlsberg named). All three now.
+echo "== test-target warnings (A-AH6/A-AH29) ==" | tee -a "$LOG"
+for TFEAT in axum-server census-instrumentation mem-census; do
+  TESTLOG="$OUT/feature-matrix-testbuild.$TFEAT.log"
+  if ! ( cd "$REPO" && cargo test --release -p php-server --features "$TFEAT" --no-run ) \
+      > "$TESTLOG" 2>&1; then
+    echo "FAIL [test-targets/$TFEAT]: test build failed (see $TESTLOG)" | tee -a "$LOG"
+    FAILS=$((FAILS+1))
+  elif grep -E 'warning: `php-server`.*generated [0-9]+ warning' "$TESTLOG"; then
+    echo "FAIL [test-targets/$TFEAT]: php-server test build generated warnings (A-AH6/A-AH29)" | tee -a "$LOG"
+    FAILS=$((FAILS+1))
+  else
+    echo "OK  [test-targets/$TFEAT]: php-server test build warning-free" | tee -a "$LOG"
+  fi
+done
 
 # 8. A-AH12 (Council WP-80): the test build above runs AFTER the union build —
 #    assert the binary on disk still carries the union hash, so the bin[union]
