@@ -32,7 +32,10 @@ BASE_REV="7593d8e"
 BASEWT="/Volumes/Extreme Pro/Claude/wp82-basewt"
 BASE_TARGET="/Volumes/Extreme Pro/Claude/phpr-old-target"
 export PHPR_CAMPAIGN_SCRIPT="$HERE/measure82-campaign.sh"   # A-AH30
-VOID_RUNS=0
+# KH83-2: campaign-1 (f22ff0b) died at the base-arm build (worktree subdir
+# bug) — its 81 raws are QUARANTINED with manifest, never rm'd:
+#   wp82-harness/evidence/void/20260731T225158Z-f22ff0b/MANIFEST.txt
+VOID_RUNS=81
 FAILS=0
 NC=$(sysctl -n hw.ncpu)
 GIT_REV="$(git -C "$REPO" rev-parse --short HEAD)"
@@ -110,9 +113,13 @@ echo "== Base arm build: $BASE_REV (--locked, external target, WP-65 rule) =="
 if [ ! -d "$BASEWT" ]; then
   git -C "$REPO" worktree add "$BASEWT" "$BASE_REV" > /dev/null 2>&1 || { echo "FAIL: worktree add"; exit 1; }
 fi
-cp "$REPO/Cargo.lock" "$BASEWT/Cargo.lock"
-( cd "$BASEWT" && CARGO_TARGET_DIR="$BASE_TARGET" cargo build --release --locked -p php-server --features axum-server ) \
-  > "$OUT/m82.base-build.log" 2>&1 || { echo "FAIL: base build"; exit 1; }
+# The GIT root is php-rust-experiment; the crate workspace lives in the
+# php-rust subdir (campaign-1 died here: Cargo.toml not at worktree root).
+BASECRATE="$BASEWT/php-rust"
+[ -f "$BASECRATE/Cargo.toml" ] || { echo "FAIL: no Cargo.toml at $BASECRATE"; exit 1; }
+cp "$REPO/Cargo.lock" "$BASECRATE/Cargo.lock"
+( cd "$BASECRATE" && CARGO_TARGET_DIR="$BASE_TARGET" cargo build --release --locked -p php-server --features axum-server ) \
+  > "$OUT/m82.base-build.log" 2>&1 || { echo "FAIL: base build"; tail -5 "$OUT/m82.base-build.log"; exit 1; }
 BASE_BIN="$BASE_TARGET/release/php-server"
 BASE_HASH=$(shasum -a 256 "$BASE_BIN" | cut -c1-16)
 echo "base php-server=$BASE_HASH (rev $BASE_REV)"
@@ -170,6 +177,10 @@ for f in $HFIX; do
 done
 [ $RBODYFAIL = 0 ] && echo "OK phaseR: full-body battery vs oracle PASS on mem-census binary ($MEM_HASH)"
 for f in $HFIX; do for _ in $(seq 1 5); do curl -s -m 10 -o /dev/null "http://127.0.0.1:$PORT/$f"; done; done
+# The tag=unitcache row is emitted to the server's stderr BY the
+# __census_global dump — without this probe the retained log would carry
+# no row at all (campaign-1 lesson, caught pre-run on re-read).
+curl -s -m 10 -o /dev/null "http://127.0.0.1:$PORT/__census_global"
 kill -TERM "$MPID" 2>/dev/null; wait "$MPID" 2>/dev/null
 echo "mem_hash=$MEM_HASH campaign=$PHPR_CAMPAIGN_SCRIPT" >> "$OUT/m82.retained.log"
 
