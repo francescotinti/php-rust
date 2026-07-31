@@ -1,0 +1,29 @@
+warning: function `xmlCanonicPath` is never used
+  --> crates/php-types/src/xsltio.rs:61:8
+   |
+61 |     fn xmlCanonicPath(path: *const c_char) -> *mut c_char;
+   |        ^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `php-types` (lib) generated 1 warning
+warning: variable does not need to be mutable
+     --> crates/php-runtime/src/vm/mod.rs:18806:13
+      |
+18806 |         let mut cost_at = |k: usize, base: usize| -> f64 {
+      |             ----^^^^^^^
+      |             |
+      |             help: remove this `mut`
+      |
+      = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: `php-runtime` (lib test) generated 1 warning (run `cargo fix --lib -p php-runtime --tests` to apply 1 suggestion)
+    Finished `release` profile [optimized] target(s) in 0.63s
+     Running unittests src/lib.rs (/Users/francescotinti/Claude/php-rust-output/release/deps/php_runtime-42500955abc43af6)
+
+running 1 test
+scan bound: put(K=8)=308ns put(K=64)=503ns coeff=3ns/key
+test vm::tests::a_ds9_supersede_scan_cost_bound ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 632 filtered out; finished in 0.07s
+

@@ -45,25 +45,55 @@ porta vm_new/park_main ALLOWLISTED. 4. **Panic = FAIL-FAST**. 5. **Un
 body ≠ oracolo sulla leva ⇒ git revert, mai fix-forward** (KS-DS-80-3,
 mai innescata). 6. **Mai rm di raw: quarantena + manifest** (KS-AH-83-2).
 
-## ⚖️ Concilio WP-84: DA CONVOCARE / verbale in `wp84-harness/COUNCIL_WP84_REVIEWS.md`
+## ⚖️ Concilio WP-84 ESEGUITO (2026-08-01, verbali VINCOLANTI): `wp84-harness/COUNCIL_WP84_REVIEWS.md`
 
-(blocco aggiornato alla chiusura — se manca, primo atto di WP-83 =
-convocarlo, regola [[php-rust-council-rule]])
+**9× CONCORDO CON EMENDAMENTI, 0 opposizioni.** Le MISURE sono confermate a
+ricomputo indipendente (Gregg: V2/peak/slope/witness ESATTE; Bak riconferma
+le slope). REFUTATI: **il programma "slope a N-doppio" è aritmeticamente
+incapace di chiudere KB-83-3** (fattore (N₂+N₁)/(N₂−N₁)=3 invariante,
+floor f·S≈352>125,7 — serve forma per-request e/o min-of-R/R≥9, A-BG32/
+A-BB31); **il budget retained 20,65MB è VIZIATO da doppio conteggio**
+(floor Program in rw_bytes risommato col net — ri-etichettato UPPER,
+A-DL21; per-entry obbligatorio A-DL20; cifra PER-ARM A-PP25); **decimo
+sito lower_source fuori pin** (phpt-runner:287, A-TH23) + troncatura `as
+u32` non gateata (A-TH24); **a_ds17 cieco per costruzione** (FxHash seed
+fisso, A-DS22); **A-MS17 = violazione d'ordine** (atterra al PRIMO commit
+WP-83, KS-MS-84-1); **equivalenza battery a conteggio bandita** (per NOME,
+A-SK30/A-AH34); header void BOCCIATO e retro-corretto (45 run/185 file/15
+refusal); scan retro-corretto da raw committato (3 ns/key). DELIBERE:
+mitigazione peak = **main ESENTE da ways nella forma partizione-per-TIPO**
+(Stogov+Matsakis, mai skip-per-tag) con F15b; registry condivisa = stima
+25-31MB (Bak) ma tocca le IC ⇒ riapre KH81-3 (KH84-4). Ordine vincolante
+S-83.0 = verbale §Sintesi (8 punti) + 31 KS nuovi (KH84 · KS-MS-84 ·
+KS-SK-84 · KS-AH-84 · KB-84 · KS-PP-84 · KL-84 · KS-DS-84 · KG-84).
 
-## §WP-83 (prossima sessione) — verdetti APERTI della leva + riprese
+## §WP-83 (prossima sessione) — S-83.0 "denti di verbale" poi misure (ordine Concilio WP-84 §Sintesi, non rinegoziare)
 
-1. **VC slope CPU a N=2000/4000** (KB-83-3: la risoluzione ex-ante decide;
-   grezzi WP-82: lever 150 vs base 7043 µs/req — il segnale è ~×47 ma il
-   claim aspetta la banda). Stesso protocollo campagna (measure82 phase C
-   con N raddoppiato; base 7593d8e --offline).
-2. **VP peak ×W**: eseguire il DELIBERATO del Concilio WP-84 (accettazione
-   del costo retained ×W ~3,44MB/worker vs churn −13MB/req, o mitigazione
-   — candidata storica: registry/cache condivisa read-only tra worker).
-3. Deferred WP-83+: A-TH4 request_end(self); A-AH5/A-BB4 superglobali
-   reali axum (KS-DS-82-3 attivo); A-MS17 token ZST + newtype
-   PreludeBinding (al prossimo tocco dei file); ORM/hk perf SOLO
-   build-adiacente se citati (KS-AH-83-4).
-4. Poi: ripresa ROADMAP FOOTPRINT+CPU da [[php-rust-todo-master]].
+1. Debiti di sigillo: **A-MS17 token ZST al PRIMO commit** (KS-MS-84-1) ·
+   A-MS22 lower_net→ticket · A-TH23 pin lower di CLASSE (phpt-runner:287
+   nominato; prod==2/selftest==7 separati) · A-TH24 dente cast epoch ·
+   A-DS23 grep-gate iterazioni esteso · A-TH25.
+2. Onestà verdetto/equivalenza: A-SK30/A-AH34 (per NOME, mai conteggio) ·
+   A-SK29 (supplementi normati) · A-SK26/A-PP23 (twin-pair: sentinella
+   in-band + head-positivo + union_hash vs matrix + flush a macchina) ·
+   A-PP22 (enumerazione entries main).
+3. Retained SCOMPONIBILE prima della delibera peak: A-DL20 (per-entry +
+   ordinale) · A-DL21 (scorporo program_floor_share) · A-DL22 (quadratura
+   hello-only W=1 + frazione condivisibile) · A-AH33 (alloc_id) · A-PP25.
+4. Fixture: F14b (pin-HIT, A-DS21/A-SK31) · F15b interleavata (A-DS24) ·
+   path≥384B (KB-83-1/KB-84-2) · register-senza-trigger (A-BB33/A-SK28) ·
+   A-DS22 (bracci a_ds17).
+5. Slope CPU in FORMA NUOVA (mai solo N-doppio, KB-84-1/KG-84-3):
+   per-request timestamps (A-BG32) e/o min-of-R / multi-N R≥9 (A-BB31) ·
+   base-arm-build.sh (A-AH31) + lock-cmp (A-AH32) + pin measure78 nel
+   base_run (A-BG31) + rustc/lock-sha e arm interleaved (A-TH26).
+6. Delibera peak ×W (solo DOPO il punto 3): main-esente partizione-per-TIPO
+   con F15b verde (KS-DS-84-3/4); registry solo con budget ex-ante A-BB35
+   + riapertura esplicita KH81-3 (KH84-4); pin identità 232±1MB (A-BB34).
+7. A-PP18 PRIMA di ogni riconciliazione Δglobal a W>1 (A-PP24).
+8. Poi: ripresa ROADMAP da [[php-rust-todo-master]]. Deferred: A-TH4;
+   A-AH5/A-BB4 superglobali axum (KS-DS-82-3); ORM/hk perf solo
+   build-adiacente (KS-AH-83-4). Revert policy KS-DS-80-3 invariata.
 
 **Kill-switch di rotta**: tabella WP-83 (30 KS, verbale
 `wp83-harness/COUNCIL_WP83_REVIEWS.md`) TUTTI onorati o chiusi in S-82.0

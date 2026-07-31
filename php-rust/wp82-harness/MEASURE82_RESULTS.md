@@ -10,10 +10,16 @@ vincolato al corpus committato da `gate-measure-cifre.sh` (KG-83-3).
 - Campagna-4 a git **e2990b3**, matrix stesso-chain senza commit intermedi;
   binari nel matrix log per riga (union/census/mem-census); driver_sha con
   campaign script incluso (A-AH30) nell'header di OGNI run measure78.
-- **void_runs=162+23** (KH83-2): campaign-1/2/3 QUARANTINATE con manifest
-  (mai `rm` — KS-AH-83-2): worktree-subdir, `--locked` vs dev-dep p5,
-  chain-HEAD; 46 delle 23+46−23 erano REFUSAL 287B del tripwire KG-81-2
-  (manifests in `wp82-harness/evidence/void/`).
+- **Contabilità VOID (A-BG29, ricomputata dai manifest — run e FILE
+  separati)**: 3 quarantene (mai `rm` — KS-AH-83-2), per-manifest:
+  campaign-1 (worktree-subdir): 15 run measure78 / 81 file; campaign-2
+  (`--locked` vs dev-dep p5): 15 run / 81 file; campaign-3 (chain-HEAD):
+  15 refusal-summary da 287 B ciascuno (tripwire KG-81-2, zero dati) / 23
+  file. Totale: **45 slot-run VOID, 185 file** in
+  `wp82-harness/evidence/void/*/MANIFEST.txt`. ⚠️ L'header v1 di questo
+  documento diceva «void_runs=162+23» e «46 REFUSAL» — cifre MAI
+  ricomputate, BOCCIATE dal Concilio WP-84 (Gregg): questa è la forma
+  riconciliata.
 - Fase R (retained): supplemento `phaseR-supplement.sh` (campagna-4 aveva lo
   strumento NON ARMATO — `PHPR_MEM_CENSUS` è l'interruttore, la feature è
   solo il compilato; e il dump vive nel teardown di `run_module_with_hir` ⇒
@@ -58,9 +64,11 @@ vincolato al corpus committato da `gate-measure-cifre.sh` (KG-83-3).
   esso stesso un cache-HIT — «il HIT salta a3» vale anche per l'autoload
   runtime; la quota RUN vive in b: [derivata] 787−731 = **+56 call/req**
   vs hello (register+closure+link dell'include-HIT).
-- **Scan supersede (Bak, in-cargo `a_ds9_...bound`, campaign-only)**:
-  put(K=8)=300 ns, put(K=64)=419 ns ⇒ **coefficiente 2 ns/key** — bound
-  1 µs/key con margine 500× (bound-check, mai win-claim: WP-38).
+- **Scan supersede (Bak, in-cargo `a_ds9_...bound`, campaign-only)**: dal
+  raw COMMITTATO `measure-out/m82.scanbound.raw` (A-BG30 — la run v1 era
+  citata senza raw, bocciata): put(K=8)=308 ns, put(K=64)=503 ns ⇒
+  **coefficiente 3 ns/key** — bound 1 µs/key con margine ~300×
+  (bound-check, mai win-claim: WP-38).
 
 ## Aperture dichiarate (per NOME — mai chiusure in silenzio)
 
