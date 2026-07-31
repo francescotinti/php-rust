@@ -202,15 +202,17 @@ echo "OK  one-shot wrappers (with/with_ini/with_argv) all delegate with probe=fa
 # compile. NAMED sites (bump = same-commit, named — KS-AH-81-3 class):
 #   1. main_unit_acquire        (the ONE main lower path)
 #   2. include-lower fallback   (Vm include path, main_hir.is_none() arm)
-#   3+4. retained_walk_selftest (mem-census PUB selftest — outside mod tests
+#   3..9. retained_walk_selftest (mem-census PUB selftest — outside mod tests
 #        by design: lib-tests of an allocator-linking instrument live as
-#        pub-selftests called from the bin, WP-81 lesson)
+#        pub-selftests called from the bin, WP-81 lesson): 2 module-dedup
+#        lowers + 1 program-dedup lower (A-DL16) + 4 bracket-control lowers
+#        (warm, small, small2, big — A-DL15). Bumped 4->9 S-82.0 p5/p6.
 n=$(count_nontest "$VMMOD" 'crate::lower_source[(]')
-if [ "$n" -ne 4 ]; then
-  echo "FAIL: vm/mod.rs has $n non-test 'crate::lower_source(' sites, pinned 4 NAMED (A-TH21)"
+if [ "$n" -ne 9 ]; then
+  echo "FAIL: vm/mod.rs has $n non-test 'crate::lower_source(' sites, pinned 9 NAMED (A-TH21)"
   FAILS=$((FAILS+1))
 else
-  echo "OK  vm/mod.rs: crate::lower_source( == 4 named sites (acquire, include-fallback, selftest x2)"
+  echo "OK  vm/mod.rs: crate::lower_source( == 9 named sites (acquire, include-fallback, selftest x7)"
 fi
 
 # --- 4a2. A-AH26/KS-AH-83-3: MAIN_CHAIN_FP single-binding pins ----------------

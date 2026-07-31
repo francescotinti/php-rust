@@ -18762,6 +18762,84 @@ mod tests {
         assert_eq!(sig(&m1), other, "fresh-thread compile diverges (A-DS17/KS-DS-83-2)");
     }
 
+    /// A-DS9/KB (Council WP-83, campaign-run only — `--ignored` in the
+    /// measure82 campaign, never CI: micro-timings under CI load lie): the
+    /// supersede scan at put is O(entries) over the whole map. Bak bound:
+    /// coefficient <= 1 us/key between K=8 and K=64 seeded entries, and
+    /// put(K=64) <= put(K=8) x 10 as the gross-shape belt. Bound check,
+    /// never a win-claim (WP-38 lesson declared).
+    #[test]
+    #[ignore = "campaign-run micro-bound (measure82); CI timing lies"]
+    fn a_ds9_supersede_scan_cost_bound() {
+        let reg = Registry::default();
+        let p = crate::lower_source(b"sc.php", b"<?php echo 1;").expect("lower");
+        let m = std::rc::Rc::new(crate::compile::compile_program(&p, &reg).expect("compile"));
+        let seed = std::rc::Rc::new(super::SeedDelta {
+            new_classes: Vec::new(),
+            static_count: 0,
+            new_slots: Vec::new(),
+            traits: Vec::new(),
+            conditional_names: Vec::new(),
+        });
+        let key = |i: usize| super::UnitKey {
+            path: format!("/sc82/{i}.php").into_bytes(),
+            mtime: (1, 0),
+            size: 10,
+            reg_mode: false,
+        };
+        let cu = |fp: u64| super::CachedUnit {
+            fp,
+            static_off: 0,
+            reserved_base: 0,
+            class_remap: Vec::new(),
+            new_locals: Vec::new(),
+            seed_delta: std::rc::Rc::clone(&seed),
+            module: std::rc::Rc::clone(&m),
+            owner_epoch: 0,
+            main_program: None,
+            main_program_net: 0,
+        };
+        let mut cost_at = |k: usize, base: usize| -> f64 {
+            // fresh population of k entries at distinct paths (stable)
+            for i in 0..k {
+                super::unit_cache_put(key(base + i), cu(i as u64));
+            }
+            // positive control: the cache must actually hold what we put
+            // (a disabled cache would time no-ops — vacuous bound)
+            assert!(
+                super::unit_cache_get(&key(base), 0).is_some(),
+                "seeded entry not retrievable — cache disabled, timing vacuous"
+            );
+            // M puts at ONE path with a MOVING (mtime) => each put is a new
+            // key, the supersede scan fires and DROPS the previous stale key:
+            // the population stays ~K+1, so the timing isolates K.
+            const M: usize = 2000;
+            let hot = |j: usize| super::UnitKey {
+                path: format!("/sc82/hot{base}.php").into_bytes(),
+                mtime: (j as u64 + 2, 0),
+                size: 10,
+                reg_mode: false,
+            };
+            let t0 = std::time::Instant::now();
+            for j in 0..M {
+                super::unit_cache_put(hot(j), cu(0xbeef + j as u64));
+            }
+            t0.elapsed().as_nanos() as f64 / M as f64
+        };
+        let c8 = cost_at(8, 100_000);
+        let c64 = cost_at(64, 200_000);
+        let coeff_ns_per_key = (c64 - c8) / (64.0 - 8.0);
+        assert!(
+            coeff_ns_per_key <= 1000.0,
+            "supersede scan coefficient {coeff_ns_per_key:.0} ns/key > 1 us/key (Bak bound)"
+        );
+        assert!(
+            c64 <= c8 * 10.0 + 10_000.0,
+            "put at K=64 ({c64:.0} ns) blew the gross shape vs K=8 ({c8:.0} ns)"
+        );
+        println!("scan bound: put(K=8)={c8:.0}ns put(K=64)={c64:.0}ns coeff={coeff_ns_per_key:.0}ns/key");
+    }
+
     #[test]
     #[should_panic(expected = "tail∩seed")]
     fn seed_tail_shadow_tripwire_fires() {

@@ -1,0 +1,54 @@
+    Blocking waiting for file lock on build directory
+warning: function `xmlCanonicPath` is never used
+  --> crates/php-types/src/xsltio.rs:61:8
+   |
+61 |     fn xmlCanonicPath(path: *const c_char) -> *mut c_char;
+   |        ^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `php-types` (lib) generated 1 warning
+   Compiling php-runtime v0.1.0 (/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/crates/php-runtime)
+warning: `php-types` (lib test) generated 1 warning (1 duplicate)
+error[E0433]: cannot find type `Rc` in this scope
+     --> crates/php-runtime/src/vm/mod.rs:18776:17
+      |
+18776 |         let m = Rc::new(crate::compile::compile_program(&p, &reg).expect("compile"));
+      |                 ^^ use of undeclared type `Rc`
+      |
+help: consider importing one of these structs
+      |
+17595 +     use crate::vm::Rc;
+      |
+17595 +     use std::rc::Rc;
+      |
+
+error[E0433]: cannot find type `Rc` in this scope
+     --> crates/php-runtime/src/vm/mod.rs:18797:21
+      |
+18797 |             module: Rc::clone(&m),
+      |                     ^^ use of undeclared type `Rc`
+      |
+help: consider importing one of these structs
+      |
+17595 +     use crate::vm::Rc;
+      |
+17595 +     use std::rc::Rc;
+      |
+
+warning: field `main_program_net` is never read
+     --> crates/php-runtime/src/vm/mod.rs:15243:5
+      |
+15205 | struct CachedUnit {
+      |        ---------- field in this struct
+...
+15243 |     main_program_net: u64,
+      |     ^^^^^^^^^^^^^^^^
+      |
+      = note: `CachedUnit` has a derived impl for the trait `Clone`, but this is intentionally ignored during dead code analysis
+      = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+For more information about this error, try `rustc --explain E0433`.
+error: could not compile `php-runtime` (lib test) due to 2 previous errors
+warning: build failed, waiting for other jobs to finish...
+warning: `php-runtime` (lib) generated 1 warning

@@ -37,7 +37,13 @@ FAILS=0
 # full-body battery against the census binary judges the substituted site's
 # BEHAVIOR. Accepted, not closed — a reviewer of a census diff must eyeball
 # `grep -nE "$CFG_RE"` on any file whose count did not move.
-CFG_RE='cfg\((not\()?feature = "census-instrumentation"'
+# S-82.0 p5 (A-DL15 allocator, named forms — KS-AH-81-3 class): main.rs
+# gained two COMBINED cfg shapes around the allocator choice:
+#   cfg(not(any(feature = "census-instrumentation", feature = "mem-census")))
+#   cfg(all(feature = "mem-census", not(feature = "census-instrumentation")))
+# Both are admitted as CANONICAL FORMS here (decoys below); any other
+# combinator spelling stays a raw!=form FAIL.
+CFG_RE='cfg\((not\()?feature = "census-instrumentation"|cfg\(not\(any\(feature = "census-instrumentation"|cfg\(all\(feature = "mem-census", not\(feature = "census-instrumentation"'
 PINS="
 crates/php-server/src/main.rs:5
 crates/php-server/src/worker_pool.rs:23
@@ -86,6 +92,15 @@ DECOY="$(mktemp -d)"
 trap 'rm -rf "$DECOY"' EXIT
 printf '#[cfg(feature = "census-instrumentation")]\nfn x() {}\n' > "$DECOY/d.rs"
 printf '// census-instrumentation mentioned in a comment only\nfn y() {}\n' > "$DECOY/c.rs"
+# S-82.0: the two combined forms must ALSO count 1 each (named canonical)
+printf '#[cfg(not(any(feature = "census-instrumentation", feature = "mem-census")))]\nfn z() {}\n' > "$DECOY/e.rs"
+printf '#[cfg(all(feature = "mem-census", not(feature = "census-instrumentation")))]\nfn w() {}\n' > "$DECOY/f.rs"
+ne=$(grep -EIc "$CFG_RE" "$DECOY/e.rs")
+nf=$(grep -EIc "$CFG_RE" "$DECOY/f.rs")
+if [ "$ne" -ne 1 ] || [ "$nf" -ne 1 ]; then
+  echo "FAIL: combined-form decoys not counted (not-any=$ne all-not=$nf, want 1/1)"
+  FAILS=$((FAILS+1))
+fi
 n=$(grep -EIc "$CFG_RE" "$DECOY/d.rs")
 m=$(grep -EIc "$CFG_RE" "$DECOY/c.rs")
 mraw=$(grep -Ic 'census-instrumentation' "$DECOY/c.rs")
