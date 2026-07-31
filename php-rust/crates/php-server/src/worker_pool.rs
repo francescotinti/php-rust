@@ -45,10 +45,11 @@ mod implementation {
     }
 
     /// Per-request handler metadata (sent to worker, not the Vm).
+    /// A-BB5 (Council WP-78): deliberately minimal — HTTP method/body have no
+    /// channel into the Vm yet (superglobal seeding is SAPI-layer work, WP-79+);
+    /// dead fields here would be counted as pool overhead by the alloc census.
     pub struct WorkerHandlerMeta {
         pub path: String,
-        pub method: String,
-        pub body: Vec<u8>,
         pub source: Vec<u8>,
     }
 
@@ -64,7 +65,6 @@ mod implementation {
 
     /// Worker pool: N OS threads, each managing 1 persistent Vm + RetainSet.
     pub struct WorkerPool {
-        context: Arc<WorkerPoolContext>,
         senders: Vec<mpsc::UnboundedSender<WorkerTask>>,
         next_worker: std::sync::atomic::AtomicUsize,
     }
@@ -108,7 +108,6 @@ mod implementation {
             }
 
             Arc::new(WorkerPool {
-                context,
                 senders,
                 next_worker: std::sync::atomic::AtomicUsize::new(0),
             })

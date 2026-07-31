@@ -29,3 +29,17 @@ jobs:
         run: cargo build --release --workspace
       - name: Unit tests
         run: cargo test --release --workspace
+      # A-AH2/A-AH3 (Council WP-78): the php-server feature matrix is a TRIPLE
+      # (default / axum-only / union) and the crate must be warning-free in
+      # every configuration (KS-AH-78-2). `cargo rustc` scopes -D warnings to
+      # the php-server crate alone (dependency warnings stay warnings).
+      - name: php-server feature matrix (fatal warnings)
+        run: |
+          cargo rustc --release -p php-server -- -D warnings
+          cargo rustc --release -p php-server --no-default-features --features axum-server -- -D warnings
+          cargo rustc --release -p php-server --features axum-server -- -D warnings
+      # A-SK4 (Council WP-78): worker_pool.rs and the axum handler only compile
+      # under the feature — the default workspace test run above covers 0% of
+      # that code. This step compiles AND runs the feature-gated gate tests.
+      - name: php-server axum tests
+        run: cargo test --release -p php-server --features axum-server
