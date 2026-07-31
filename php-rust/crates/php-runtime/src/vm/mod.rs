@@ -435,7 +435,8 @@ pub struct RetainSet(elsa::FrozenVec<Rc<Module>>);
 static_assertions::assert_not_impl_any!(RetainSet: Send, Sync);
 
 impl RetainSet {
-    /// S-77.6.5.2: Public constructor for worker-pool persistent Vm lifecycle.
+    /// S-77.6.5.2: Public constructor for the worker-pool lifecycle: the
+    /// RetainSet outlives every per-request Vm that borrows it (P-67.5).
     pub fn new() -> Self {
         RetainSet(elsa::FrozenVec::new())
     }
@@ -444,12 +445,12 @@ impl RetainSet {
     }
 }
 
-/// S-77.6.4.1: Vm constructor for persistent-Vm worker-pool integration.
+/// S-77.6.4.1: Vm constructor for worker-pool integration.
 /// Initializes Vm with all 150+ fields, resets epoch counters, and establishes
 /// the main frame. The RetainSet must be held by the caller across the Vm's
 /// lifetime (WP-67 P-2: RetainSet must drop after Vm). Called per-request;
 /// lifecycle is: vm_new → request_start → vm.run() → request_shutdown →
-/// request_end (repeated for persistent Vm).
+/// request_end → Vm DEATH (statics die with the Vm — A-DS2/A-MS6).
 pub fn vm_new<'m>(
     retain: &'m RetainSet,
     module: &'m Module,
@@ -712,7 +713,7 @@ pub fn vm_new<'m>(
 
 /// [`run_module`] with the caller's lowered HIR retained (`main_hir`), so an
 /// `eval()` in the script compiles against the image (step 57, Phase 1c-2c).
-/// WP-77.6: Exposed as pub for worker-pool persistent Vm integration.
+/// WP-77.6: Exposed as pub for worker-pool integration (per-request Vm).
 pub fn run_module_with_hir<'m>(
     module: &'m Module,
     registry: &'m Registry,
@@ -724,8 +725,8 @@ pub fn run_module_with_hir<'m>(
     // WP-67 P-2 (P-67.5): RetainSet must be held by run_module_with_hir so it
     // drops AFTER vm — Rust's drop order is load-bearing (RetainSet declared
     // here stays in scope until the end of run_module_with_hir).
-    // S-77.6.4.1+S-77.6.4.2: Persistent Vm lifecycle
-    // WP-67 P-2: RetainSet held by run_module_with_hir, drops after vm.
+    // S-77.6.4.1+S-77.6.4.2: single-request (CLI) lifecycle of the same
+    // vm_new → request_* sequence the worker pool drives per-request.
     let retain = RetainSet::new();
     let mut vm = vm_new(&retain, module, registry, main_hir);
 
@@ -3414,10 +3415,14 @@ impl<'m> Vm<'m> {
         uc_log_flush();
     }
 
-    /// M1: Per-request VM state reset (WP-77.3). Clears all ephemeral state
-    /// accumulated during a request while preserving persistent data (statics,
-    /// module code, class table). Called at the end of each Axum handler to
-    /// prepare the Vm for the next request.
+    /// M1: Per-request VM state reset (WP-77.3). Clears all EPHEMERAL state
+    /// accumulated during a request (streams, superglobals, handlers, OB
+    /// stack, resource ids, per-request caches). Function statics, closure
+    /// statics and class static props are NOT in its scope: they are per-Vm
+    /// fields and die with the Vm (A-DS2 — FPM isolation by Vm death, A-DS6).
+    /// The only cross-request survivor is the caller-held RetainSet arena of
+    /// compiled unit modules (bytecode, never userland state). Called at the
+    /// end of each request, before the Vm is dropped.
     ///
     /// Follows Bak specification: ~25-field reset categorized by lifecycle.
     /// Council binding amendments applied (WP-77.3 COUNCIL_WP77_REVIEWS.md):

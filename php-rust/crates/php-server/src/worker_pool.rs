@@ -3,7 +3,7 @@
 //! Architecture:
 //! - N OS threads, each owning 1 persistent RetainSet; a FRESH Vm is created
 //!   per request and borrows the worker's RetainSet (no Vm reuse — the N=1
-//!   persistent-Vm architecture was REJECTED in WP-77.2)
+//!   reused-Vm architecture was REJECTED in WP-77.2)
 //! - Axum → mpsc → Worker → execute_with_retain() → Response → Axum
 //! - Vm and RetainSet never leave the owning worker thread (!Send)
 //!
@@ -63,7 +63,9 @@ mod implementation {
     // check): the only value that crosses the Axum→worker channel MUST be Send.
     static_assertions::assert_impl_all!(WorkerTask: Send);
 
-    /// Worker pool: N OS threads, each managing 1 persistent Vm + RetainSet.
+    /// Worker pool: N OS threads, each owning 1 thread-persistent RetainSet
+    /// (arena of compiled unit modules); a FRESH Vm is created per request
+    /// and dies at request end (A-MS6 — isolation by Vm death, A-DS2).
     pub struct WorkerPool {
         senders: Vec<mpsc::UnboundedSender<WorkerTask>>,
         next_worker: std::sync::atomic::AtomicUsize,
@@ -73,10 +75,10 @@ mod implementation {
         /// Create pool with N worker threads (default: CPU count).
         ///
         /// Each worker thread:
-        /// - Declares RetainSet (server-lifetime arena, P-67.5)
-        /// - Creates persistent Vm bound to RetainSet
+        /// - Declares RetainSet (server-lifetime arena of unit modules, P-67.5)
+        /// - Creates a FRESH Vm per request that borrows the RetainSet
         /// - Receives WorkerTask via mpsc channel
-        /// - Executes handler closure in FnOnce context
+        /// - Runs the request lifecycle to completion, then drops the Vm
         ///
         /// Lifecycle inside worker (P-67.5 drop order):
         /// ```ignore
@@ -116,7 +118,8 @@ mod implementation {
         /// Worker thread main loop (P-67.5 drop order enforced).
         ///
         /// S-77.6.5.2.2: Persistent RetainSet per worker thread (php-fpm-style actor).
-        /// - RetainSet is declared ONCE (server-lifetime arena for object table, class cache)
+        /// - RetainSet is declared ONCE (server-lifetime arena of compiled unit
+        ///   modules — bytecode only, NEVER userland state; A-DS6)
         /// - Vm is created per-request but borrows persistent RetainSet
         /// - Per-request: request_start → run → request_shutdown → request_end
         /// - RetainSet lifetime: entire worker thread (never Send/migrated)
@@ -169,7 +172,8 @@ mod implementation {
         }
     }
 
-    /// S-77.6.5.2.2: Execute PHP with persistent RetainSet (per-thread persistent object table).
+    /// S-77.6.5.2.2: Execute PHP with persistent RetainSet (per-thread arena
+    /// of compiled unit modules — bytecode only; A-DS6).
     ///
     /// Called from worker_loop with &RetainSet that persists across all requests in this thread.
     /// Vm is created per-request but borrows the thread-persistent RetainSet.
@@ -177,7 +181,8 @@ mod implementation {
     ///
     /// Lifecycle (Stogov order, per Council WP-77.5):
     /// 1. Compile new Module from request source
-    /// 2. Create Vm from persistent RetainSet (object table, class cache persist)
+    /// 2. Create Vm from persistent RetainSet (parked unit modules persist —
+    ///    bytecode only, never the object store or userland state)
     /// 3. request_start: setup superglobals, INI, session
     /// 4. Execute user handler (PHP code via vm.run())
     /// 5. request_shutdown: shutdown functions, flush buffers, destructors
@@ -191,8 +196,8 @@ mod implementation {
     ///   ids, per-request caches → `request_end()` reset (vm/mod.rs).
     /// - function statics, closure statics, class static props → Vm DEATH:
     ///   they are fields of the per-request Vm and `request_end()` does NOT
-    ///   touch them. They MUST remain per-request even if the Vm ever became
-    ///   persistent (KS-DS-78-3: any persistent-Vm proposal requires the
+    ///   touch them. They MUST remain per-request even if a Vm were ever
+    ///   reused across requests (KS-DS-78-3: any Vm-reuse proposal requires the
     ///   stateful gate A-DS3 green first; KS-DS-78-1: static counter printing
     ///   ≠1 on request N≥2 is FATAL). Gate: wp78-harness/gate-axum
     ///   gate_stateful.php.
