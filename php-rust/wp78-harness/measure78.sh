@@ -233,11 +233,16 @@ check_census_fields() { # $1 = field regex (e.g. a3_trip), $2 = max allowed
 }
 
 report_idle() {
+  # S-80.0.6 fix: the BOOT probe is census-global too since A-BG19 (out of
+  # the census-line channel, but it DOES emit a census-global line), so the
+  # bracket probes are the LAST THREE lines — the old head-anchored awk read
+  # boot→p1 as "self-cost" (i.e. the whole warm-up) and threw the true idle
+  # window away.
   if [ -s "$RUN.idle" ]; then
-    awk -F'[= ]' 'NR==1{c1=$3;b1=$5} NR==2{c2=$3;b2=$5} NR==3{c3=$3;b3=$5}
+    tail -3 "$RUN.idle" | awk -F'[= ]' 'NR==1{c1=$3;b1=$5} NR==2{c2=$3;b2=$5} NR==3{c3=$3;b3=$5}
       END{ if (NR>=3) printf "idle: probe_self_cost calls=%d bytes=%d | idle_window(+self) calls=%d bytes=%d (A-AH13/A-DL5; churn-only, KL-81-3)\n",
            c2-c1, b2-b1, c3-c2, b3-b2;
-           else print "idle: FEWER THAN 3 PROBES — idle window not measured" }' "$RUN.idle"
+           else print "idle: FEWER THAN 3 PROBES — idle window not measured" }'
   else
     echo "idle: NO census-global probes in log — idle window not measured (A-AH13)"
   fi

@@ -1,0 +1,476 @@
+[Fri Jul 31 15:19:04 2026] PHP 8.5.7 Development Server (http://127.0.0.1:8194) started
+[Fri Jul 31 15:19:04 2026] 127.0.0.1:60995 Accepted
+census-global: calls=608 bytes=99806
+[Fri Jul 31 15:19:04 2026] 127.0.0.1:60995 [200]: GET /__census_global
+[Fri Jul 31 15:19:04 2026] 127.0.0.1:60995 Closing
+[Fri Jul 31 15:19:04 2026] 127.0.0.1:60996 Accepted
+census-cli: req=1 gross=1 total_calls=165626 total_bytes=64942041 a1_calls=121823 a1_bytes=58874923 a3_calls=8717 a3_bytes=1592244 a3_trip=0
+[Fri Jul 31 15:19:05 2026] 127.0.0.1:60996 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:05 2026] 127.0.0.1:60996 Closing
+[Fri Jul 31 15:19:05 2026] 127.0.0.1:60997 Accepted
+census-cli: req=2 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:05 2026] 127.0.0.1:60997 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:05 2026] 127.0.0.1:60997 Closing
+[Fri Jul 31 15:19:05 2026] 127.0.0.1:60998 Accepted
+census-cli: req=3 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:05 2026] 127.0.0.1:60998 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:05 2026] 127.0.0.1:60998 Closing
+[Fri Jul 31 15:19:05 2026] 127.0.0.1:60999 Accepted
+census-cli: req=4 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:05 2026] 127.0.0.1:60999 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:05 2026] 127.0.0.1:60999 Closing
+[Fri Jul 31 15:19:05 2026] 127.0.0.1:61000 Accepted
+census-cli: req=5 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:05 2026] 127.0.0.1:61000 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:05 2026] 127.0.0.1:61000 Closing
+[Fri Jul 31 15:19:05 2026] 127.0.0.1:61001 Accepted
+census-cli: req=6 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:05 2026] 127.0.0.1:61001 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:05 2026] 127.0.0.1:61001 Closing
+[Fri Jul 31 15:19:05 2026] 127.0.0.1:61002 Accepted
+census-cli: req=7 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:05 2026] 127.0.0.1:61002 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:05 2026] 127.0.0.1:61002 Closing
+[Fri Jul 31 15:19:05 2026] 127.0.0.1:61003 Accepted
+census-cli: req=8 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:05 2026] 127.0.0.1:61003 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:05 2026] 127.0.0.1:61003 Closing
+[Fri Jul 31 15:19:05 2026] 127.0.0.1:61004 Accepted
+census-cli: req=9 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:05 2026] 127.0.0.1:61004 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:05 2026] 127.0.0.1:61004 Closing
+[Fri Jul 31 15:19:05 2026] 127.0.0.1:61005 Accepted
+census-cli: req=10 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:05 2026] 127.0.0.1:61005 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:05 2026] 127.0.0.1:61005 Closing
+[Fri Jul 31 15:19:06 2026] 127.0.0.1:61007 Accepted
+census-global: calls=1151728 bytes=202802601
+[Fri Jul 31 15:19:06 2026] 127.0.0.1:61007 [200]: GET /__census_global
+[Fri Jul 31 15:19:06 2026] 127.0.0.1:61007 Closing
+[Fri Jul 31 15:19:06 2026] 127.0.0.1:61008 Accepted
+census-global: calls=1151777 bytes=202812240
+[Fri Jul 31 15:19:06 2026] 127.0.0.1:61008 [200]: GET /__census_global
+[Fri Jul 31 15:19:06 2026] 127.0.0.1:61008 Closing
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61016 Accepted
+census-global: calls=1151826 bytes=202821879
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61016 [200]: GET /__census_global
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61016 Closing
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61017 Accepted
+census-cli: req=11 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61017 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61017 Closing
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61018 Accepted
+census-cli: req=12 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61018 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61018 Closing
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61019 Accepted
+census-cli: req=13 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61019 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61019 Closing
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61020 Accepted
+census-cli: req=14 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61020 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61020 Closing
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61021 Accepted
+census-cli: req=15 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61021 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61021 Closing
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61022 Accepted
+census-cli: req=16 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61022 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61022 Closing
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61023 Accepted
+census-cli: req=17 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61023 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61023 Closing
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61024 Accepted
+census-cli: req=18 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61024 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61024 Closing
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61025 Accepted
+census-cli: req=19 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61025 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61025 Closing
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61026 Accepted
+census-cli: req=20 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61026 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61026 Closing
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61027 Accepted
+census-cli: req=21 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61027 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61027 Closing
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61028 Accepted
+census-cli: req=22 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61028 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61028 Closing
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61029 Accepted
+census-cli: req=23 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61029 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61029 Closing
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61030 Accepted
+census-cli: req=24 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61030 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61030 Closing
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61031 Accepted
+census-cli: req=25 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61031 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61031 Closing
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61032 Accepted
+census-cli: req=26 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61032 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61032 Closing
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61033 Accepted
+census-cli: req=27 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61033 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61033 Closing
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61034 Accepted
+census-cli: req=28 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61034 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61034 Closing
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61035 Accepted
+census-cli: req=29 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61035 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61035 Closing
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61036 Accepted
+census-cli: req=30 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61036 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61036 Closing
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61037 Accepted
+census-cli: req=31 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61037 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61037 Closing
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61038 Accepted
+census-cli: req=32 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61038 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61038 Closing
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61039 Accepted
+census-cli: req=33 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61039 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61039 Closing
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61040 Accepted
+census-cli: req=34 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61040 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:16 2026] 127.0.0.1:61040 Closing
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61041 Accepted
+census-cli: req=35 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61041 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61041 Closing
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61042 Accepted
+census-cli: req=36 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61042 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61042 Closing
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61043 Accepted
+census-cli: req=37 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61043 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61043 Closing
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61044 Accepted
+census-cli: req=38 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61044 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61044 Closing
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61045 Accepted
+census-cli: req=39 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61045 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61045 Closing
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61046 Accepted
+census-cli: req=40 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61046 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61046 Closing
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61047 Accepted
+census-cli: req=41 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61047 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61047 Closing
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61048 Accepted
+census-cli: req=42 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61048 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61048 Closing
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61049 Accepted
+census-cli: req=43 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61049 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61049 Closing
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61050 Accepted
+census-cli: req=44 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61050 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61050 Closing
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61051 Accepted
+census-cli: req=45 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61051 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61051 Closing
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61052 Accepted
+census-cli: req=46 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61052 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61052 Closing
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61053 Accepted
+census-cli: req=47 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61053 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61053 Closing
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61054 Accepted
+census-cli: req=48 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61054 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61054 Closing
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61055 Accepted
+census-cli: req=49 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61055 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61055 Closing
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61056 Accepted
+census-cli: req=50 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61056 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61056 Closing
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61057 Accepted
+census-cli: req=51 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61057 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61057 Closing
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61058 Accepted
+census-cli: req=52 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61058 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61058 Closing
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61059 Accepted
+census-cli: req=53 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61059 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61059 Closing
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61060 Accepted
+census-cli: req=54 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61060 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61060 Closing
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61061 Accepted
+census-cli: req=55 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61061 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61061 Closing
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61062 Accepted
+census-cli: req=56 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61062 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61062 Closing
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61063 Accepted
+census-cli: req=57 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61063 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61063 Closing
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61064 Accepted
+census-cli: req=58 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61064 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61064 Closing
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61065 Accepted
+census-cli: req=59 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61065 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61065 Closing
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61066 Accepted
+census-cli: req=60 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61066 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61066 Closing
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61067 Accepted
+census-cli: req=61 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61067 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61067 Closing
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61068 Accepted
+census-cli: req=62 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61068 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61068 Closing
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61069 Accepted
+census-cli: req=63 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61069 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61069 Closing
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61070 Accepted
+census-cli: req=64 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61070 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61070 Closing
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61071 Accepted
+census-cli: req=65 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61071 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61071 Closing
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61072 Accepted
+census-cli: req=66 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61072 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61072 Closing
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61073 Accepted
+census-cli: req=67 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61073 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61073 Closing
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61074 Accepted
+census-cli: req=68 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61074 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61074 Closing
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61075 Accepted
+census-cli: req=69 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61075 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61075 Closing
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61076 Accepted
+census-cli: req=70 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61076 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61076 Closing
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61077 Accepted
+census-cli: req=71 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61077 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61077 Closing
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61078 Accepted
+census-cli: req=72 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61078 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61078 Closing
+[Fri Jul 31 15:19:17 2026] 127.0.0.1:61079 Accepted
+census-cli: req=73 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61079 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61079 Closing
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61080 Accepted
+census-cli: req=74 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61080 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61080 Closing
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61081 Accepted
+census-cli: req=75 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61081 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61081 Closing
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61082 Accepted
+census-cli: req=76 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61082 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61082 Closing
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61083 Accepted
+census-cli: req=77 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61083 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61083 Closing
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61084 Accepted
+census-cli: req=78 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61084 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61084 Closing
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61085 Accepted
+census-cli: req=79 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61085 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61085 Closing
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61086 Accepted
+census-cli: req=80 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61086 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61086 Closing
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61087 Accepted
+census-cli: req=81 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61087 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61087 Closing
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61088 Accepted
+census-cli: req=82 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61088 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61088 Closing
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61089 Accepted
+census-cli: req=83 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61089 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61089 Closing
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61090 Accepted
+census-cli: req=84 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61090 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61090 Closing
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61091 Accepted
+census-cli: req=85 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61091 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61091 Closing
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61092 Accepted
+census-cli: req=86 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61092 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61092 Closing
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61093 Accepted
+census-cli: req=87 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61093 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61093 Closing
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61094 Accepted
+census-cli: req=88 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61094 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61094 Closing
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61095 Accepted
+census-cli: req=89 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61095 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61095 Closing
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61100 Accepted
+census-cli: req=90 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61100 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61100 Closing
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61101 Accepted
+census-cli: req=91 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61101 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61101 Closing
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61102 Accepted
+census-cli: req=92 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61102 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61102 Closing
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61103 Accepted
+census-cli: req=93 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61103 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61103 Closing
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61104 Accepted
+census-cli: req=94 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61104 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61104 Closing
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61105 Accepted
+census-cli: req=95 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61105 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61105 Closing
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61106 Accepted
+census-cli: req=96 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61106 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61106 Closing
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61107 Accepted
+census-cli: req=97 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61107 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61107 Closing
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61108 Accepted
+census-cli: req=98 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61108 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61108 Closing
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61109 Accepted
+census-cli: req=99 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61109 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61109 Closing
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61116 Accepted
+census-cli: req=100 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61116 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61116 Closing
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61117 Accepted
+census-cli: req=101 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61117 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61117 Closing
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61118 Accepted
+census-cli: req=102 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61118 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61118 Closing
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61119 Accepted
+census-cli: req=103 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61119 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61119 Closing
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61120 Accepted
+census-cli: req=104 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61120 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61120 Closing
+[Fri Jul 31 15:19:18 2026] 127.0.0.1:61121 Accepted
+census-cli: req=105 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:19 2026] 127.0.0.1:61121 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:19 2026] 127.0.0.1:61121 Closing
+[Fri Jul 31 15:19:19 2026] 127.0.0.1:61122 Accepted
+census-cli: req=106 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:19 2026] 127.0.0.1:61122 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:19 2026] 127.0.0.1:61122 Closing
+[Fri Jul 31 15:19:19 2026] 127.0.0.1:61123 Accepted
+census-cli: req=107 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:19 2026] 127.0.0.1:61123 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:19 2026] 127.0.0.1:61123 Closing
+[Fri Jul 31 15:19:19 2026] 127.0.0.1:61133 Accepted
+census-cli: req=108 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:19 2026] 127.0.0.1:61133 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:19 2026] 127.0.0.1:61133 Closing
+[Fri Jul 31 15:19:19 2026] 127.0.0.1:61134 Accepted
+census-cli: req=109 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:19 2026] 127.0.0.1:61134 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:19 2026] 127.0.0.1:61134 Closing
+[Fri Jul 31 15:19:19 2026] 127.0.0.1:61136 Accepted
+census-cli: req=110 gross=1 total_calls=109415 total_bytes=15290995 a1_calls=74288 a1_bytes=10825612 a3_calls=0 a3_bytes=0 a3_trip=0
+[Fri Jul 31 15:19:19 2026] 127.0.0.1:61136 [200]: GET /include_heavy.php
+[Fri Jul 31 15:19:19 2026] 127.0.0.1:61136 Closing
+time: command terminated abnormally
+       16.08 real         1.44 user         0.20 sys
+            56360960  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+                4485  page reclaims
+                   2  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                 114  messages sent
+                 114  messages received
+                   0  signals received
+                 676  voluntary context switches
+                8115  involuntary context switches
+         10316441961  instructions retired
+          3646401226  cycles elapsed
+            37159440  peak memory footprint
