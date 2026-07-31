@@ -1,0 +1,12 @@
+# A-AH23 evidence — ORM + http-kernel on phpr ef90cb19 (pre-lever, S-81.0 step 2)
+date: 2026-07-31_18:51:56
+phpr sha256[0:16]: ef90cb19b0cf93ea
+git HEAD at run: 88ea8ee (workspaces from wp9-harness/gates tarballs)
+
+## doctrine/orm (watchdog, exit 0)
+Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, Skipped: 59, Incomplete: 2.
+fail-set BY NAME vs wp77-harness/gate-baseline/orm7742-fails.txt: IDENTICAL 16/16 (diff empty)
+
+## symfony/http-kernel (watchdog, exit 0)
+Tests: 1665, Assertions: 3850, PHPUnit Warnings: 2, Warnings: 5, Deprecations: 128.
+0 Errors / 0 Failures (OK, but there were issues = warnings+deprecations only)
