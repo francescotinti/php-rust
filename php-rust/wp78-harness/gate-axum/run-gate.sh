@@ -168,6 +168,57 @@ for i in 1 2 3; do
 done
 [ "$FAILS" = 0 ] && echo "OK  stateful: 3 bodies byte-identical and == oracle"
 
+# --- A-TH8 fatal contract (S-78.1.4, Council WP-79) — KH79-2/KS-DS-78-5 ------
+# Every fatal (compile AND runtime) → HTTP 500 with the FULL oracle-CLI stdout
+# as body; exit() → 200 with captured output; parse error → 500 with the
+# "\nParse error: " envelope (message text is a REGISTERED divergence, no
+# oracle cmp — PHPR_DIVERGENCES_FROM_PHP.md 3.9). Each fatal runs TWICE:
+# byte-parity across requests AND worker survival.
+req_st() { # req_st <fixture> <bodyfile> -> echoes http status
+  curl -s -m 5 -o "$2" -w '%{http_code}' -X POST "http://127.0.0.1:$PORT/$1"
+}
+
+fatal_check() { # fatal_check <name> <want_status> <oracle_cmp:yes|no>
+  local name="$1" want="$2" cmp_oracle="$3" st1 st2
+  st1=$(req_st "$name.php" "$OUTDIR/$name.1")
+  st2=$(req_st "$name.php" "$OUTDIR/$name.2")
+  if [ "$st1" != "$want" ] || [ "$st2" != "$want" ]; then
+    echo "FAIL $name: status $st1/$st2 != $want (A-TH8)"
+    FAILS=$((FAILS+1))
+  fi
+  if ! cmp -s "$OUTDIR/$name.1" "$OUTDIR/$name.2"; then
+    echo "FAIL $name: bodies differ across requests (KS-SK-78.2)"
+    FAILS=$((FAILS+1))
+  fi
+  if [ "$cmp_oracle" = yes ]; then
+    "$ORACLE" "$HERE/fixtures/$name.php" > "$OUTDIR/$name.expected" 2>/dev/null
+    if ! cmp -s "$OUTDIR/$name.1" "$OUTDIR/$name.expected"; then
+      echo "FAIL $name: body != oracle CLI stdout (KH79-2 full-body cmp):"
+      diff "$OUTDIR/$name.expected" "$OUTDIR/$name.1" | head -8
+      FAILS=$((FAILS+1))
+    fi
+  fi
+}
+
+fatal_check fatal_runtime 500 yes
+fatal_check fatal_compile 500 yes
+fatal_check exit_code     200 yes
+fatal_check parse_err     500 no
+# parse envelope form (the only assert parity allows here — KS-DS-78-5)
+if ! head -c 14 "$OUTDIR/parse_err.1" | cmp -s - <(printf '\nParse error: '); then
+  echo "FAIL parse_err: body does not start with the '\\nParse error: ' envelope:"
+  head -2 "$OUTDIR/parse_err.1"
+  FAILS=$((FAILS+1))
+fi
+# Worker survival after the fatal batch (boundary discipline)
+req hello.php > "$OUTDIR/hello.after-fatals"
+if cmp -s "$OUTDIR/hello.after-fatals" "$OUTDIR/hello.expected"; then
+  echo "OK  fatal contract: 4 fixtures conform (500/500/200/500), workers alive"
+else
+  echo "FAIL: hello diverges after fatal batch — worker state polluted"
+  FAILS=$((FAILS+1))
+fi
+
 # Teardown
 kill "$SRV" 2>/dev/null
 wait "$SRV" 2>/dev/null

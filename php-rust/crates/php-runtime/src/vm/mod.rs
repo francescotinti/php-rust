@@ -730,17 +730,10 @@ pub fn run_module_with_hir<'m>(
     let retain = RetainSet::new();
     let mut vm = vm_new(&retain, module, registry, main_hir);
 
-    // S-77.6.4.2a: Link-time fatal check (part of per-request setup)
-    let mut link_fatal = None;
-    for cid in 0..vm.classes.len() {
-        if module.conditional_classes.contains(&cid) {
-            continue;
-        }
-        if let Err(e) = vm.serializable_link_check(cid) {
-            link_fatal = Some(e);
-            break;
-        }
-    }
+    // S-77.6.4.2a: Link-time fatal check (part of per-request setup) —
+    // extracted to link_fatal_check so the worker-pool SAPI runs the SAME
+    // sweep (S-78.1.4, A-TH8).
+    let link_fatal = vm.link_fatal_check(module);
     // Frame already pushed by vm_new()
 
     // S-77.6.4.2b: request_start (setup INI, superglobals, session)
@@ -5007,6 +5000,23 @@ impl<'m> Vm<'m> {
         Ok(total)
     }
 
+
+    /// S-78.1.4 (A-TH8): link-time fatal sweep shared by the CLI main and the
+    /// worker-pool SAPI — every non-conditional class gets the serializable
+    /// link check before the first opcode runs (Zend's compile/link stage).
+    /// Single source: `run_module_with_hir` and `execute_with_retain` both
+    /// call THIS (the main's machinery is the faithful form — WP-68).
+    pub fn link_fatal_check(&mut self, module: &Module) -> Option<PhpError> {
+        for cid in 0..self.classes.len() {
+            if module.conditional_classes.contains(&cid) {
+                continue;
+            }
+            if let Err(e) = self.serializable_link_check(cid) {
+                return Some(e);
+            }
+        }
+        None
+    }
 
     /// PHP 8.1 link-time policy for the legacy `Serializable` interface
     /// (zend_inheritance.c): a class implementing it — directly or through an

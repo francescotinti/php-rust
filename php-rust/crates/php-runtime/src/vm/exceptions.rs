@@ -15,7 +15,10 @@ impl<'m> Vm<'m> {
     /// `eval::render_fatal`). A user-thrown object carries its own class, message,
     /// line and trace; an engine error uses its variant name and the captured
     /// `fault_line`.
-    pub(super) fn render_fatal(&mut self, err: &PhpError, fault_line: Line) {
+    /// S-78.1.4 (A-TH8): `pub` SAPI surface — the worker pool renders fatals
+    /// through THIS function so HTTP error bodies stay byte-identical to the
+    /// CLI/oracle form (never a hand-rolled banner in the SAPI layer).
+    pub fn render_fatal(&mut self, err: &PhpError, fault_line: Line) {
         // A hard (non-throwable) fatal renders Zend's plain E_ERROR banner:
         // no `Uncaught`, located at the site it carries. PHP 8.5 appends the
         // live stack trace (fatal_error_backtraces=On by default) — in the
@@ -322,7 +325,10 @@ impl<'m> Vm<'m> {
     /// `true` when a handler ran to completion (the script then ends with no fatal
     /// banner); `false` if there is no handler, the error is not a throwable, or the
     /// handler itself errored (the original fatal is reported instead).
-    pub(super) fn handle_uncaught_exception(&mut self, e: &PhpError) -> bool {
+    /// S-78.1.4 (A-TH8): `pub` SAPI surface — the worker pool routes uncaught
+    /// throwables through the same path as the CLI main (a script with a
+    /// set_exception_handler must not grow a banner over HTTP).
+    pub fn handle_uncaught_exception(&mut self, e: &PhpError) -> bool {
         let Some(handler) = self.exception_handlers.last().cloned() else {
             return false;
         };

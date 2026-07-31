@@ -61,6 +61,9 @@ mod implementation {
     /// channel into the Vm yet (superglobal seeding is SAPI-layer work, WP-79+);
     /// dead fields here would be counted as pool overhead by the alloc census.
     pub struct WorkerHandlerMeta {
+        /// Resolved FILESYSTEM path of the script (FPM's SCRIPT_FILENAME) —
+        /// error banners render it, and the full-body oracle cmp in run-gate
+        /// requires it to be the same path the oracle CLI sees (A-TH8).
         pub path: String,
         pub source: Vec<u8>,
     }
@@ -294,7 +297,12 @@ mod implementation {
                 return (msg, StatusCode::INTERNAL_SERVER_ERROR);
             }
             Err(e) => {
-                let msg = format!("PHP Parse error: {e}\n").into_bytes();
+                // Parse error → 500. The ENVELOPE is the oracle's stdout form
+                // ("\nParse error: … on line N\n"); the message text inside is
+                // phpr's own parser diagnostic, which DIVERGES from Zend's
+                // (registered in PHPR_DIVERGENCES_FROM_PHP.md §php-server,
+                // A-DS10). NO parity claim on this body (KS-DS-78-5).
+                let msg = format!("\nParse error: {e}\n").into_bytes();
                 return (msg, StatusCode::INTERNAL_SERVER_ERROR);
             }
         };
@@ -316,18 +324,41 @@ mod implementation {
         // - request_end() resets per-request state; statics die with the Vm (A-DS2)
         let mut vm = php_runtime::vm_new(retain, &module, reg, Some(&program));
 
+        // Phase 3.5: link-time fatal check — the SAME sweep as the CLI main
+        // (S-78.1.4/A-TH8: Zend's compile/link stage, e.g. an enum
+        // implementing Serializable renders the plain banner).
+        let link_fatal = vm.link_fatal_check(&module);
+        let is_link_fatal = link_fatal.is_some();
+
         // Phase 4: Per-request lifecycle (Stogov order, Council WP-77.5)
         // 1. request_start: setup superglobals, INI, session
         vm.request_start(None, &[]);
 
         // 2. Execute PHP code
         vm.final_flush = false;
-        let run_result = vm.run();
+        let run_result = match link_fatal {
+            Some(e) => Err(e),
+            None => vm.run(),
+        };
+        // Routing off for everything past the main run (flush, fatal render,
+        // shutdown destructors) — mirrors run_module_with_hir exactly.
+        vm.final_flush = true;
 
-        // Handle exit/fatal
+        // Epilogue mirrors run_module_with_hir (A-TH8 fatal contract):
+        // - exit()/die() is a CLEAN termination → HTTP 200, body = captured
+        //   output (FPM semantics; the CLI surfaces the code, HTTP cannot)
+        // - an uncaught throwable routed to set_exception_handler is NOT a
+        //   fatal (no banner, 200 — same as the CLI main)
+        // - a link fatal renders the plain banner (no throwable wrapping)
+        // - any other fatal renders via render_fatal: the CLI-faithful form
+        //   the corpus verifies byte-identical to the oracle
+        //   ("Uncaught …\nStack trace:\n…  thrown in …")
         let (fatal, _return_value) = match run_result {
             Ok(v) => (None, v),
             Err(php_runtime::PhpError::Exit(_code)) => (None, php_runtime::Zval::Null),
+            Err(e) if !is_link_fatal && vm.handle_uncaught_exception(&e) => {
+                (None, php_runtime::Zval::Null)
+            }
             Err(e) => (Some(e), php_runtime::Zval::Null),
         };
 
@@ -335,16 +366,21 @@ mod implementation {
         let line = vm.fatal_line;
         let _ = vm.flush_diags(line);
 
-        // Render fatal if present
+        // Render fatal if present (PHP flushes active output buffers BEFORE
+        // the fatal banner, so buffered script output precedes it)
         if let Some(err) = &fatal {
             vm.flush_all_output_buffers();
-            let file = String::from_utf8_lossy(&module.file);
-            let block = format!("\nFatal error: {} in {} on line {}\n", err.message(), file, line);
-            vm.rendered.extend_from_slice(block.as_bytes());
+            if is_link_fatal {
+                let file = String::from_utf8_lossy(&module.file);
+                let block =
+                    format!("\nFatal error: {} in {} on line {}\n", err.message(), file, line);
+                vm.rendered.extend_from_slice(block.as_bytes());
+            } else {
+                vm.render_fatal(err, line);
+            }
         }
 
         // 3. request_shutdown: shutdown functions, flush buffers, destructors
-        vm.final_flush = true;
         vm.request_shutdown();
 
         // SAFETY (A-PP1): Output capture MUST precede request_end() reset boundary.
@@ -461,19 +497,26 @@ mod implementation {
             );
         }
 
-        /// A-PP4/A-TH5/A-DS4: every fatal is HTTP 500 — runtime fatal and
-        /// compile fatal alike — with the CLI's byte-parity `Fatal error:` body.
+        /// A-PP4/A-TH5/A-DS4 + A-TH8 (S-78.1.4): every fatal is HTTP 500 with
+        /// the FULL CLI-faithful body — asserted as absolute content, never a
+        /// `contains()` probe (KH79-2: parity claims on error bodies require
+        /// the full body; the old `contains("Fatal error:")` was the same
+        /// class of hole as `head -1`).
         #[test]
         fn fatal_maps_to_http_500_compile_and_runtime() {
             let reg = registry();
             let retain = php_runtime::RetainSet::new();
-            // Runtime fatal: undefined function.
+            // Runtime fatal: undefined function — render_fatal's uncaught-Error
+            // form (the one the corpus pins byte-identical to the oracle).
             let (body, status) =
                 execute_with_retain(&retain, &reg, &meta("<?php nope_missing_fn();"));
             assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
-            assert!(
-                String::from_utf8_lossy(&body).contains("Fatal error:"),
-                "runtime fatal body not byte-parity: {:?}",
+            assert_eq!(
+                body,
+                b"\nFatal error: Uncaught Error: Call to undefined function nope_missing_fn() \
+                  in /gate.php:1\nStack trace:\n#0 {main}\n  thrown in /gate.php on line 1\n"
+                    .to_vec(),
+                "runtime fatal body != CLI-faithful full body (A-TH8): {:?}",
                 String::from_utf8_lossy(&body)
             );
             // The worker survives a fatal: next request on the same RetainSet
@@ -482,6 +525,42 @@ mod implementation {
                 execute_with_retain(&retain, &reg, &meta("<?php echo \"alive\";"));
             assert_eq!(ok_status, StatusCode::OK);
             assert_eq!(ok_body, b"alive");
+        }
+
+        /// A-TH8 contract: exit()/die() is a CLEAN termination — HTTP 200 with
+        /// the captured output (FPM semantics: the exit code has no HTTP
+        /// channel; it is NOT a fatal).
+        #[test]
+        fn exit_is_clean_termination_http_200() {
+            let reg = registry();
+            let retain = php_runtime::RetainSet::new();
+            let (body, status) = execute_with_retain(
+                &retain,
+                &reg,
+                &meta("<?php echo \"out\"; exit(3); echo \"never\";"),
+            );
+            assert_eq!(status, StatusCode::OK, "exit() must not map to an error status");
+            assert_eq!(body, b"out");
+        }
+
+        /// A-TH8 contract: an uncaught throwable routed to a
+        /// set_exception_handler is NOT a fatal — no banner, HTTP 200, same as
+        /// the CLI main's epilogue (the worker mirrors run_module_with_hir).
+        #[test]
+        fn uncaught_routed_to_exception_handler_no_banner() {
+            let reg = registry();
+            let retain = php_runtime::RetainSet::new();
+            let src = "<?php set_exception_handler(function ($e) { \
+                       echo \"handled:\" . $e->getMessage(); }); \
+                       throw new Exception(\"boom\");";
+            let (body, status) = execute_with_retain(&retain, &reg, &meta(src));
+            assert_eq!(status, StatusCode::OK);
+            assert_eq!(
+                body,
+                b"handled:boom".to_vec(),
+                "exception-handler output wrong or banner leaked: {:?}",
+                String::from_utf8_lossy(&body)
+            );
         }
 
         /// A-MS7/A-DL6 (KS-MS-5): shutdown() drops the senders and JOINS

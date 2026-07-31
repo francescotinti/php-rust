@@ -571,6 +571,29 @@ output osservabile (il gate lo asserisce):
   (concilio: forma vincolata publish+dep-list+dep-replay vs
   defer-always da rivalutare alla luce di questa prova).
 
+### 3.9 php-server (Axum SAPI): corpi d'errore HTTP (S-78.1.4, A-DS10 Council WP-79)
+- **Contratto A-TH8** (gate: `wp78-harness/gate-axum/run-gate.sh` fixture
+  fatal + test cargo `fatal_maps_to_http_500_compile_and_runtime`): ogni
+  fatal (compile E runtime) → **HTTP 500** con body = STDOUT CLI byte-parity
+  (il worker rende via `Vm::render_fatal`, la stessa funzione del main;
+  script name = path FILESYSTEM risolto, come SCRIPT_FILENAME FPM).
+  `exit()/die()` → **200** con l'output catturato (terminazione pulita FPM;
+  il codice di uscita non ha canale HTTP). Throwable non catturato con
+  `set_exception_handler` attivo → **200** senza banner (epilogo del main).
+- **DIVERGENZA 1 — html_errors** (A-DS10): php-fpm/cli-server di default ha
+  `html_errors=1` e serve l'error-page con markup (`<br />\n<b>Fatal
+  error</b>: …`); phpr in modalità `--axum` serve la forma PIANA del CLI
+  (`\nFatal error: … Stack trace…`). Scelta deliberata: la parità
+  byte-per-byte è ancorata all'oracle CLI (display_errors=On), il canale
+  html_errors del web SAPI non è ancora cablato nel worker Axum.
+- **DIVERGENZA 2 — messaggio dei Parse error**: il testo del diagnostico
+  del parser phpr NON è quello Zend (`syntax error, unexpected token …`)
+  ma il dump del parser interno (`UnexpectedToken(…Span…)`). L'ENVELOPE è
+  quello dell'oracolo (`\nParse error: {msg}\n`, HTTP 500), il testo dentro
+  DIVERGE. **Nessun claim di parity su questi body** (KS-DS-78-5); vale
+  anche per il CLI phpr (stderr `PHP Parse error: {dump}`; l'oracolo con
+  display_errors=On stampa il Parse error anche su stdout, phpr no).
+
 ## 4. Punti di forza da NON toccare (invarianti verificati byte-identici)
 
 Per evitare regressioni, questi comportamenti sono **già** byte-identici con

@@ -100,8 +100,11 @@ mod axum_handler {
         // here); carrying dead allocs across the channel would be counted as
         // "Axum overhead" by the census. Wiring real request metadata into the
         // superglobals is WP-79+ scope.
+        // S-78.1.4 (A-TH8): the script name is the resolved FILESYSTEM path
+        // (FPM's SCRIPT_FILENAME), not the request URI — error banners must
+        // carry the same path the oracle renders for full-body cmp.
         let meta = crate::worker_pool::WorkerHandlerMeta {
-            path: request_path.clone(),
+            path: file_path.clone(),
             source,
         };
 
