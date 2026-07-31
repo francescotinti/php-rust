@@ -1322,9 +1322,11 @@ pub fn run_module_with_hir<'m>(
                 ));
             }
             // WP-62 M1: unit-cache observability (design62). `superseded_*`
-            // is computed at dump time by grouping keys per path — an edited
-            // file re-keys and strands its old entries (Leijen R5; de-leak is
-            // a TODO(port), not WP-62).
+            // is computed at dump time by grouping keys per path. S-79.0.7
+            // (A-DS2/KS-DS-80-1): unit_cache_put now supersedes stale keys
+            // per path at publish, so this grouping is the NEGATIVE control
+            // of the de-leak — it must read 0; the event counters are
+            // `stranded_keys_superseded`/`stranded_entries_dropped`.
             {
                 let st = UC_STATS.with(|s| *s.borrow());
                 let (entries, bytes, paths, superseded_paths, superseded_entries) =
@@ -1353,7 +1355,8 @@ pub fn run_module_with_hir<'m>(
                      stub_elided_units={} stub_classes_elided={} elide_align_miss={} \
                      elide_align_hit={} miss_dc_base={} miss_dc_remap={} miss_dc_locals={} \
                      seed_prefix_short={} parked_modules={} parked_bytes={} \
-                     defer_relowers={} defer_relower_ns={}",
+                     defer_relowers={} defer_relower_ns={} \
+                     stranded_keys_superseded={} stranded_entries_dropped={}",
                     st.hit_intra,
                     st.hit_cross,
                     st.miss_cold,
@@ -1376,6 +1379,8 @@ pub fn run_module_with_hir<'m>(
                     st.parked_bytes,
                     st.defer_relowers,
                     st.defer_relower_ns,
+                    st.stranded_keys_superseded,
+                    st.stranded_entries_dropped,
                 ));
                 // WP-67 P-67.3: the cross-request bounded sets OUTSIDE
                 // cache+RetainSet — the per-worker metric counts them
@@ -15207,6 +15212,15 @@ struct UcStats {
     defer_relowers: u64,
     #[cfg_attr(not(feature = "mem-census"), allow(dead_code))]
     defer_relower_ns: u64,
+    /// S-79.0.7 (A-DS2/KS-DS-80-1, Council WP-80): supersede-per-path at
+    /// put — an edited file re-keys (path,mtime,size) and used to STRAND
+    /// its old entries in the map (append-only growth on a long-lived
+    /// worker; opcache bounds the same waste via max_wasted_percentage →
+    /// restart). Stale keys for the path are dropped at the next publish;
+    /// events counted here. The dump-time superseded_* grouping must now
+    /// read 0 — it is the negative control of this counter.
+    stranded_keys_superseded: u64,
+    stranded_entries_dropped: u64,
 }
 
 impl UcStats {
@@ -15233,6 +15247,8 @@ impl UcStats {
         parked_bytes: 0,
         defer_relowers: 0,
         defer_relower_ns: 0,
+        stranded_keys_superseded: 0,
+        stranded_entries_dropped: 0,
     };
 }
 
@@ -15571,6 +15587,29 @@ fn unit_cache_put(key: UnitKey, cu: CachedUnit) {
         // after `key` moves into the entry — cloned only when the event log
         // is armed (probe runs), never on the plain path.
         let kpath = if uc_log_path().is_some() { Some(key.path.clone()) } else { None };
+        // S-79.0.7 (A-DS2/KS-DS-80-1): supersede-per-path — publishing under
+        // a NEW key for a path drops every stale key of the same path (the
+        // file was edited: its old (mtime,size) variants can never hit again
+        // by construction, they were pure stranded growth). Same-key puts
+        // skip the scan and go through the fp/ways logic below.
+        if !cache.contains_key(&key) {
+            let stale: Vec<UnitKey> = cache
+                .keys()
+                .filter(|k| k.path == key.path)
+                .cloned()
+                .collect();
+            for sk in stale {
+                if let Some(slot) = cache.remove(&sk) {
+                    uc_stat(|s| {
+                        s.stranded_keys_superseded += 1;
+                        s.stranded_entries_dropped += slot.len() as u64;
+                    });
+                    if let Some(p) = &kpath {
+                        uc_log(&format!("supersede entries {}", slot.len()), p);
+                    }
+                }
+            }
+        }
         let slot = cache.entry(key).or_default();
         if let Some(pos) = slot.iter().position(|e| e.fp == cu.fp) {
             slot[pos] = cu;
@@ -16798,6 +16837,52 @@ mod tests {
         let out = run_module(&module, reg);
         assert!(out.fatal.is_none(), "unexpected fatal: {:?}", out.fatal);
         out
+    }
+
+    /// S-79.0.7 (A-DS2/KS-DS-80-1, Council WP-80): an edited include re-keys
+    /// (path,mtime,size) — the put must SUPERSEDE the path's stale keys, not
+    /// strand them (append-only growth on a long-lived worker; opcache
+    /// bounds the same waste via max_wasted_percentage). Edit workload: 3
+    /// publishes for the SAME path with size-distinct contents; exactly ONE
+    /// key must remain and the event counter must have moved (a counter
+    /// never seen moving is blind — KG-79.A). Thread-local cache: this test
+    /// sees only its own traffic.
+    #[test]
+    fn unit_cache_supersede_per_path_drops_stranded_keys() {
+        use std::os::unix::ffi::OsStrExt;
+        let reg = Registry::default();
+        let dir = std::env::temp_dir().join("phpr_uc_supersede");
+        std::fs::create_dir_all(&dir).unwrap();
+        let lib = dir.join("edit_lib.php");
+        let main_src = format!("<?php require '{}'; echo edit_v();", lib.display());
+        let base = super::UC_STATS.with(|s| s.borrow().stranded_keys_superseded);
+        for v in 1..=3usize {
+            // Size-distinct contents: the key changes even within one mtime
+            // tick (the granularity hole the council flagged on mtime-only).
+            std::fs::write(
+                &lib,
+                format!("<?php function edit_v() {{ return {v}; }} {}", "#".repeat(v)),
+            )
+            .unwrap();
+            let out = super::run_source_with(b"main.php", main_src.as_bytes(), &reg)
+                .expect("run");
+            assert!(out.fatal.is_none(), "edit {v}: fatal: {:?}", out.fatal);
+            assert_eq!(out.stdout, v.to_string().into_bytes(), "edit {v}: body");
+        }
+        let canon = std::fs::canonicalize(&lib).unwrap();
+        let lib_bytes = canon.as_os_str().as_bytes().to_vec();
+        let keys_for_path = super::UNIT_CACHE
+            .with(|c| c.borrow().keys().filter(|k| k.path == lib_bytes).count());
+        assert_eq!(
+            keys_for_path, 1,
+            "stale keys stranded for the edited path (KS-DS-80-1)"
+        );
+        let moved =
+            super::UC_STATS.with(|s| s.borrow().stranded_keys_superseded) - base;
+        assert!(
+            moved >= 2,
+            "supersede counter moved only {moved} times over 3 edits — blind counter (KG-79.A)"
+        );
     }
 
     /// Regression guard for the property-metadata consolidation: the unified
