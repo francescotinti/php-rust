@@ -386,7 +386,9 @@ mod implementation {
         }
 
         /// A-SK3: in-cargo form of G-APERTURA-2 — two requests on the SAME
-        /// RetainSet must produce non-empty, byte-identical bodies.
+        /// RetainSet must produce byte-identical bodies AND match the absolute
+        /// expected content (A-SK7/KS-SK-79.2: a parity assert may never stand
+        /// alone — self-equality blessed the doubled-body bug).
         #[test]
         fn gate_apertura2_two_requests_same_retainset_byte_parity() {
             let reg = registry();
@@ -395,7 +397,10 @@ mod implementation {
             let (b2, s2) = execute_with_retain(&retain, &reg, &meta("<?php echo \"hello axum\\n\";"));
             assert_eq!(s1, StatusCode::OK);
             assert_eq!(s2, StatusCode::OK);
-            assert!(!b1.is_empty(), "first body empty (KS-PP-1)");
+            assert_eq!(
+                b1, b"hello axum\n",
+                "body != absolute expected content (A-SK7, KS-SK-79.2)"
+            );
             assert_eq!(b1, b2, "bodies diverge (KS-SK-78.2 → REJECT)");
         }
 
