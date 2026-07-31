@@ -12,6 +12,15 @@
 #   4. NEGATIVE control: same request UNARMED (no env var) is an ordinary
 #      docroot lookup (body == file content), server stays alive; SIGTERM
 #      teardown must log the KL-78-4 join line ("all N workers joined").
+#
+# S-79.0.5 hardening (Council WP-80):
+#   - A-SK4: exit code != 134 (SIGABRT) is a FAIL, never a WARN; the join
+#     line pins N ("all 2 workers joined" — "all 0 workers joined" passed
+#     the old grep).
+#   - A-PP4 Phase C: a panic in the DISPATCHER (axum task) must abort too —
+#     tokio used to swallow it (dead task, hung request, live process = the
+#     "silently dead" KS-PP-6 bans, other side). Distinct magic path
+#     /__phpr_panic_dispatcher, same env arm; unarmed negative included.
 # Exit: 0 = PASS, 1 = FAIL, 2 = harness error.
 export PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin:$PATH
 set -u
@@ -40,6 +49,7 @@ DOCROOT="$(mktemp -d)"
 trap 'rm -rf "$DOCROOT"' EXIT
 printf '<?php echo "alive\n";' > "$DOCROOT/hello.php"
 printf 'inert\n' > "$DOCROOT/__phpr_panic"
+printf 'inert-dispatcher\n' > "$DOCROOT/__phpr_panic_dispatcher"
 
 pkill -f "php-server --axum --port $PORT" 2>/dev/null && sleep 1
 
@@ -74,18 +84,22 @@ for _ in $(seq 1 100); do
 done
 if [ "$dead" = 0 ]; then
   wait "$SRV"; RC=$?
-  echo "OK  armed panic killed the process (exit=$RC)"
-  if [ "$RC" -ne 134 ]; then
-    echo "WARN exit code $RC != 134 (SIGABRT) — checking log line instead"
+  if [ "$RC" -eq 134 ]; then
+    echo "OK  armed panic aborted the process (exit=134 SIGABRT)"
+  else
+    # A-SK4 (Council WP-80): a non-SIGABRT death is NOT the fail-fast
+    # contract — the old WARN downgrade let any exit pass on the log line.
+    echo "FAIL: exit code $RC != 134 (SIGABRT) — not the abort contract (A-SK4)"
+    FAILS=$((FAILS+1))
   fi
 else
   echo "FAIL: process SURVIVED a worker panic — silently dead worker (KS-PP-6)"
   kill -9 "$SRV" 2>/dev/null; FAILS=$((FAILS+1))
 fi
-if grep -q "A-PP9 fail-fast" "$OUTDIR/panic-armed.log"; then
-  echo "OK  A-PP9 fail-fast line present in log"
+if grep -q "fail-fast, KS-PP-6" "$OUTDIR/panic-armed.log"; then
+  echo "OK  fail-fast abort line present in log"
 else
-  echo "FAIL: A-PP9 fail-fast line missing from panic-armed.log"; FAILS=$((FAILS+1))
+  echo "FAIL: fail-fast line missing from panic-armed.log"; FAILS=$((FAILS+1))
 fi
 
 # --- Phase B: UNARMED — trigger path is inert, teardown joins -------------
@@ -98,22 +112,60 @@ if ! wait_up "http://127.0.0.1:$PORT/hello.php"; then
 fi
 BODY=$(curl -s -m 5 "http://127.0.0.1:$PORT/__phpr_panic")
 if [ "$BODY" = "inert" ]; then
-  echo "OK  negative control: unarmed trigger path is an ordinary lookup"
+  echo "OK  negative control: unarmed worker trigger is an ordinary lookup"
 else
   echo "FAIL negative control: body '$BODY' != 'inert'"; FAILS=$((FAILS+1))
 fi
+BODY=$(curl -s -m 5 "http://127.0.0.1:$PORT/__phpr_panic_dispatcher")
+if [ "$BODY" = "inert-dispatcher" ]; then
+  echo "OK  negative control: unarmed dispatcher trigger is an ordinary lookup"
+else
+  echo "FAIL negative control: dispatcher body '$BODY' != 'inert-dispatcher'"; FAILS=$((FAILS+1))
+fi
 if kill -0 "$SRV" 2>/dev/null; then
-  echo "OK  negative control: server alive after unarmed trigger"
+  echo "OK  negative control: server alive after unarmed triggers"
 else
   echo "FAIL negative control: server died unarmed"; FAILS=$((FAILS+1))
 fi
 kill -TERM "$SRV" 2>/dev/null
 wait "$SRV" 2>/dev/null
-if grep -q "workers joined" "$OUTDIR/panic-unarmed.log"; then
-  echo "OK  KL-78-4: SIGTERM teardown logged the worker join line"
+# A-SK4: the join line pins N — "all 0 workers joined" satisfied the old grep.
+if grep -q "all 2 workers joined" "$OUTDIR/panic-unarmed.log"; then
+  echo "OK  KL-78-4: SIGTERM teardown logged 'all 2 workers joined' (N pinned)"
 else
-  echo "FAIL KL-78-4: join line missing after SIGTERM (stats would be ADVISORY)"
+  echo "FAIL KL-78-4: pinned join line 'all 2 workers joined' missing after SIGTERM"
   FAILS=$((FAILS+1))
+fi
+
+# --- Phase C (A-PP4, Council WP-80): DISPATCHER panic must abort too --------
+PHPR_TEST_WORKER_PANIC=1 "$BIN" --axum --port "$PORT" --workers 2 -t "$DOCROOT" \
+  > /dev/null 2> "$OUTDIR/panic-dispatcher.log" &
+SRV=$!
+if ! wait_up "http://127.0.0.1:$PORT/hello.php"; then
+  echo "FAIL: phase-C server did not come up"; kill "$SRV" 2>/dev/null
+  echo "FAIL server-up-C [git $GIT_REV]" > "$VERDICT"; exit 2
+fi
+curl -s -o /dev/null -m 5 "http://127.0.0.1:$PORT/__phpr_panic_dispatcher" || true
+dead=1
+for _ in $(seq 1 100); do
+  if ! kill -0 "$SRV" 2>/dev/null; then dead=0; break; fi
+  sleep 0.1
+done
+if [ "$dead" = 0 ]; then
+  wait "$SRV"; RC=$?
+  if [ "$RC" -eq 134 ]; then
+    echo "OK  dispatcher panic aborted the process (exit=134, A-PP4)"
+  else
+    echo "FAIL: dispatcher panic exit $RC != 134 (A-PP4/A-SK4)"; FAILS=$((FAILS+1))
+  fi
+else
+  echo "FAIL: process SURVIVED a dispatcher panic — tokio swallowed it (A-PP4/KS-PP-6)"
+  kill -9 "$SRV" 2>/dev/null; FAILS=$((FAILS+1))
+fi
+if grep -q "fail-fast, KS-PP-6" "$OUTDIR/panic-dispatcher.log"; then
+  echo "OK  fail-fast abort line present in dispatcher log"
+else
+  echo "FAIL: fail-fast line missing from panic-dispatcher.log"; FAILS=$((FAILS+1))
 fi
 
 if [ "$FAILS" = 0 ]; then

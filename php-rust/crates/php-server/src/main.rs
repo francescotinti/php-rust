@@ -115,6 +115,11 @@ mod axum_handler {
     pub struct AppState {
         pool: Arc<crate::worker_pool::WorkerPool>,
         docroot: String,
+        /// A-PP4 gate hook (Council WP-80): DISPATCHER-side panic trigger,
+        /// armed only by PHPR_TEST_WORKER_PANIC (same env as the worker
+        /// trigger, distinct magic path). Unarmed, the path is an ordinary
+        /// docroot lookup. Read once at startup, never per request.
+        test_panic: bool,
     }
 
     /// PHP handler accepting path.php requests
@@ -141,6 +146,16 @@ mod axum_handler {
             let (calls, bytes) = crate::census_alloc::snapshot();
             eprintln!("census-global: calls={calls} bytes={bytes}");
             return (StatusCode::OK, b"census-global\n".to_vec());
+        }
+
+        // A-PP4 (Council WP-80): a panic in the AXUM task used to be caught
+        // by tokio — dead task, hung request, LIVE process: the "silently
+        // dead" state KS-PP-6 bans, on the dispatcher side. The abort
+        // panic-hook (main) turns it into the same fail-fast abort as a
+        // worker panic; this trigger lets gate-worker-panic Phase C PROVE
+        // it on the real binary. ends_with-anchored (S-78.1 lesson).
+        if state.test_panic && request_path.ends_with("/__phpr_panic_dispatcher") {
+            panic!("PHPR_TEST_WORKER_PANIC armed: deliberate dispatcher panic (A-PP4 gate)");
         }
 
         // Read PHP source from disk (docroot + request_path)
@@ -251,6 +266,7 @@ mod axum_handler {
         let app_state = Arc::new(AppState {
             pool: Arc::clone(&pool),
             docroot: docroot_str.clone(),
+            test_panic: std::env::var_os("PHPR_TEST_WORKER_PANIC").is_some(),
         });
 
         // Router: use fallback to catch-all paths
@@ -371,6 +387,20 @@ fn main() -> ExitCode {
 
     #[cfg(feature = "axum-server")]
     if use_axum {
+        // A-MS4 (strong form) + A-PP4 (Council WP-80): fail-fast lives in
+        // the panic HOOK — no unwind survives anywhere in the server. A
+        // panic inside an axum task was otherwise swallowed by tokio (dead
+        // task, hung request, live process — KS-PP-6's "silently dead" on
+        // the dispatcher side). The default hook prints report + backtrace
+        // first, then abort. The worker catch_unwind stays as belt and
+        // braces (a dependency could swap the hook). Axum mode only: the
+        // CLI server keeps stock panic behavior.
+        let default_hook = std::panic::take_hook();
+        std::panic::set_hook(Box::new(move |info| {
+            default_hook(info);
+            eprintln!("php-server: panic — aborting (A-PP9/A-PP4 fail-fast, KS-PP-6)");
+            std::process::abort();
+        }));
         let rt = match tokio::runtime::Runtime::new() {
             Ok(r) => r,
             Err(e) => {

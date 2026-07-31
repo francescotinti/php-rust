@@ -91,7 +91,38 @@ if detect "$TMPD/bad_marker.rs" > /dev/null 2>&1; then
   echo "SELF-TEST BROKEN: malformed marker was treated as sanctioned [git $GIT_REV]"
   exit 2
 fi
-echo "self-test PASS: next-line, same-line and malformed-marker snippets all flagged"
+
+# A-PP1 (Council WP-80) position control: a well-formed marker on a line that
+# is a real CAPTURE (no is_empty(), or outside any #[cfg(test)] region) must
+# be flagged by the position check below — moving the sanctioned marker to a
+# production capture kept NMARK==1 and the old gate blessed it.
+cat > "$TMPD/bad_position.rs" <<'EOF'
+fn production() {
+    vm.request_end();
+    let out = vm.rendered.clone(); // grep-gate-allow: post-reset-emptiness-check
+}
+EOF
+check_marker_position() { # <file...> -> violations on stdout, rc 1 if any
+  awk '
+    /#\[cfg\(test\)\]/ { in_test = 1 }
+    /grep-gate-allow: post-reset-emptiness-check/ {
+      if (!in_test) {
+        printf "%s:%d: sanctioned marker OUTSIDE any #[cfg(test)] region (A-PP1)\n", FILENAME, FNR
+        v = 1
+      }
+      if ($0 !~ /is_empty\(\)/) {
+        printf "%s:%d: sanctioned marker on a line without is_empty() — that is a capture, not an emptiness assert (A-PP1)\n", FILENAME, FNR
+        v = 1
+      }
+    }
+    END { exit v }
+  ' "$@"
+}
+if check_marker_position "$TMPD/bad_position.rs" > /dev/null 2>&1; then
+  echo "SELF-TEST BROKEN: marker on a production capture line not flagged (A-PP1) [git $GIT_REV]"
+  exit 2
+fi
+echo "self-test PASS: next-line, same-line, malformed-marker and marker-position snippets all flagged"
 
 # --- real scan (recursive, A-TH7; space-safe: find -print0 + array) ---------
 FAIL=0
@@ -119,6 +150,18 @@ NMARK=$(grep -F "$ALLOW_FORM" "${FILES[@]}" | grep -c .)
 if [ "$NMARK" -ne "$ALLOW_CENSUS" ]; then
   grep -Hn -F "$ALLOW_FORM" "${FILES[@]}"
   echo "FAIL: $NMARK allow-markers found, census pins $ALLOW_CENSUS (KS-PP-4)"
+  FAIL=1
+fi
+
+# --- marker POSITION (A-PP1, Council WP-80) ----------------------------------
+# The count alone let the one sanctioned marker MIGRATE to a production
+# capture while keeping NMARK==1. Pin the position by form: the marker line
+# must contain is_empty() (it sanctions an emptiness ASSERT, never a capture)
+# and must sit inside a #[cfg(test)] region of its file.
+POSOUT=$(check_marker_position "${FILES[@]}")
+if [ -n "$POSOUT" ]; then
+  echo "$POSOUT"
+  echo "FAIL: sanctioned marker in a non-conforming position (A-PP1)"
   FAIL=1
 fi
 
