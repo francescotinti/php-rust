@@ -2,20 +2,38 @@
 # gate-feature-matrix.sh (A-AH2, Council WP-78) — KS-AH-78-1 / KS-AH-78-2.
 #
 # Cargo features UNION with default = ["cli-server"], so the REAL build matrix
-# of php-server is a TRIPLE (the old A-AH1 comment described a pair that does
-# not exist):
-#   1. default                                       → cli-server only
-#   2. --no-default-features --features axum-server  → axum only
-#   3. --features axum-server                        → union (deployed binary)
+# of php-server is a QUINTET (S-80.0.1, Council WP-81 A-AH16 — the fifth
+# configuration existed in feature-space but was compiled by NOBODY):
+#   1. default                                        → cli-server only
+#   2. --no-default-features --features axum-server   → axum only
+#   3. --features census-instrumentation              → census (union+counters)
+#   4. --no-default-features
+#        --features census-instrumentation            → census-axum-only
+#      (weak dep php-cli?/census-instrumentation off — PINNED here and in CI
+#       so it cannot bit-rot in silence; the measure driver never uses it)
+#   5. --features axum-server                         → union (deployed binary)
 #
 # Each configuration builds with -D warnings scoped to the php-server crate
 # (cargo rustc: dependency warnings stay warnings; a single php-server warning
-# is a red gate — KS-AH-78-2). The default binary must contain ZERO axum
-# symbols (nm), with the union build as positive control (WP-72 lesson: a
-# detector that can never fire proves nothing).
+# is a red gate — KS-AH-78-2). S-80.0.1 (A-AH15): the census bracket code now
+# lives in php-runtime and php-cli too — BOTH get their own -D warnings pass
+# under census-instrumentation, or that code never sees -D at all.
+# The default binary must contain ZERO axum symbols (nm), with the union build
+# as positive control (WP-72 lesson: a detector that can never fire proves
+# nothing).
 #
-# Output: hash + feature set of every binary, logged to out/feature-matrix.log.
-# KS-AH-78-1: any WP-78 measurement without this log = NULL (unidentified binary).
+# Output: hash + feature set of every binary, logged to out/feature-matrix.log
+# AND archived per-run to matrix-archive/ (tracked — A-SK11/KS-SK-81-2: the
+# live log is overwritten every run, so a figure whose hash lives only there
+# is NULL once the next build runs).
+# KS-AH-78-1: any measurement without this log = NULL (unidentified binary).
+#
+# S-80.0.1 identity (A-AH14/KS-AH-81-1, Council WP-81): the log certifies
+# `git=$GIT_REV` as the compiled source — that is a LIE on a dirty tree. The
+# gate now refuses to run unless `git status --porcelain` is EMPTY (the whole
+# repo: raws and harness outputs are tracked or gitignored by design, so a
+# clean tree is achievable at all times). A matrix log produced on a dirty
+# tree is NULL and every measurement citing it is VOID.
 #
 # S-78.1.3 hardening (Council WP-79):
 # - A-AH7: the symbol assert covers the WHOLE optional net stack
@@ -32,11 +50,25 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$HERE/.." && pwd)"
 BIN="$HOME/Claude/php-rust-output/release/php-server"
 OUT="$HERE/gate-axum/out"
-mkdir -p "$OUT"
+ARCHIVE="$HERE/matrix-archive"
+mkdir -p "$OUT" "$ARCHIVE"
 LOG="$OUT/feature-matrix.log"
-: > "$LOG"
 GIT_REV="$(git -C "$REPO" rev-parse --short HEAD 2>/dev/null || echo 'no-git')"
+
+# --- S-80.0.1: clean-tree assert BEFORE any row is written (A-AH14) ---------
+DIRTY="$(git -C "$REPO" status --porcelain 2>/dev/null)"
+if [ -n "$DIRTY" ]; then
+  echo "FAIL [tree]: working tree is DIRTY — a matrix log on a dirty tree"
+  echo "  certifies a rev that is not the compiled source (KS-AH-81-1: log"
+  echo "  NULL, downstream measurements VOID). Commit or stash first:"
+  echo "$DIRTY" | head -20
+  # Poison the live log so a stale PASS log cannot be mistaken for current.
+  echo "NULL: matrix run refused on dirty tree at git=$GIT_REV" > "$LOG"
+  exit 1
+fi
+: > "$LOG"
 echo "git=$GIT_REV" | tee -a "$LOG"
+echo "tree=clean (git status --porcelain empty at gate start, A-AH14)" | tee -a "$LOG"
 FAILS=0
 
 build() { # $1 label, rest: cargo flags
@@ -60,6 +92,21 @@ build() { # $1 label, rest: cargo flags
   local h
   h=$(shasum -a 256 "$BIN" | cut -c1-16)
   echo "bin[$label] sha256[0:16]=$h" | tee -a "$LOG"
+}
+
+# S-80.0.1 (A-AH15): -D warnings pass on a NON-php-server crate that carries
+# census code. No hash row: these are library crates — the check is that the
+# census-instrumentation source in them is warning-free, which the
+# php-server-scoped passes above never prove.
+lint_crate() { # $1 crate, rest: cargo flags
+  local crate="$1"; shift
+  echo "== lint [$crate] $* -- -D warnings ==" | tee -a "$LOG"
+  if ! ( cd "$REPO" && cargo rustc --release -p "$crate" "$@" -- -D warnings ) \
+      >> "$OUT/feature-matrix-build.log" 2>&1; then
+    echo "FAIL [lint-$crate]: -D warnings failed (A-AH15: census code outside php-server was never under -D)" | tee -a "$LOG"
+    FAILS=$((FAILS+1)); return 1
+  fi
+  echo "OK  [lint-$crate]: warning-free under census-instrumentation (A-AH15)" | tee -a "$LOG"
 }
 
 # A-AH7: whole optional net stack, not just axum.
@@ -86,7 +133,20 @@ build "axum-only" --no-default-features --features axum-server
 #    bin[census] row the measure driver ENFORCES for census-mode runs.
 build "census" --features census-instrumentation
 
-# 4. union (deployed dual-mode binary) — built LAST so the binary on disk is
+# 4. census-axum-only — S-80.0.1 (A-AH16/KS-AH-81-4, Council WP-81): the
+#    weak-dep configuration (axum+census WITHOUT cli) exists precisely so
+#    php-cli can stay out of a census build; compiled by nobody it bit-rots
+#    in silence. PINNED here (and in CI): compile + hash row. The measure
+#    driver never selects this row — its presence is a build guarantee, not
+#    a measurement identity.
+build "census-axum-only" --no-default-features --features census-instrumentation
+
+# 5. Cross-crate census lint (A-AH15): php-runtime and php-cli carry the
+#    bracket/emitter code since S-79.0.3/6.
+lint_crate php-runtime --features census-instrumentation
+lint_crate php-cli --features census-instrumentation
+
+# 6. union (deployed dual-mode binary) — built LAST so the binary on disk is
 #    the measured one; positive control for the nm detector.
 build "union" --features axum-server && {
   n=$(net_syms)
@@ -98,7 +158,7 @@ build "union" --features axum-server && {
   fi
 }
 
-# 5. A-AH6: warnings fatal on TEST targets (release profile — the debug/ dir
+# 7. A-AH6: warnings fatal on TEST targets (release profile — the debug/ dir
 #    must never reappear on the local disk). cargo scopes the summary line per
 #    crate, so grepping for the php-server summary keeps dependency warnings
 #    out of scope, same as the cargo-rustc -D pass above.
@@ -115,11 +175,11 @@ else
   echo "OK  [test-targets]: php-server test build warning-free" | tee -a "$LOG"
 fi
 
-# 6. A-AH12 (Council WP-80): the test build above runs AFTER the union build —
+# 8. A-AH12 (Council WP-80): the test build above runs AFTER the union build —
 #    assert the binary on disk still carries the union hash, so the bin[union]
 #    row keeps describing the file the measure driver will hash. (cargo build
 #    vs cargo rustc identity is otherwise "reproducible luck", not an assert.)
-UNION_HASH="$(awk -F= '/^bin\[union\]/ {print $2}' "$LOG" | tail -1)"
+UNION_HASH="$(awk -F= '/^bin\[union\] /{print $2}' "$LOG" | tail -1)"
 FINAL_HASH="$(shasum -a 256 "$BIN" | cut -c1-16)"
 if [ -n "$UNION_HASH" ] && [ "$FINAL_HASH" != "$UNION_HASH" ]; then
   echo "FAIL [identity]: binary on disk changed after the union build ($FINAL_HASH != $UNION_HASH, A-AH12)" | tee -a "$LOG"
@@ -127,6 +187,15 @@ if [ -n "$UNION_HASH" ] && [ "$FINAL_HASH" != "$UNION_HASH" ]; then
 else
   echo "OK  [identity]: on-disk binary == bin[union] after all steps (A-AH12)" | tee -a "$LOG"
 fi
+
+# --- S-80.0.1: per-run archive (A-SK11/KS-SK-81-2) --------------------------
+# The live log is overwritten by the next run; the archive copy is the
+# durable identity record measurements may cite. Tracked in git — commit it
+# with the campaign raws (KG-81-1).
+STAMP="$(date +%Y%m%d-%H%M%S)"
+ARCHIVED="$ARCHIVE/feature-matrix.$GIT_REV.$STAMP.log"
+cp "$LOG" "$ARCHIVED"
+echo "archive: $ARCHIVED"
 
 if [ "$FAILS" = 0 ]; then
   echo "== FEATURE-MATRIX PASS (log: $LOG) [git $GIT_REV] =="; exit 0
