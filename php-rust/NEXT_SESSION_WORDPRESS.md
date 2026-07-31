@@ -1,100 +1,76 @@
-# NEXT_SESSION_WORDPRESS.md — WP-77.6.5.2.4 Complete → WP-78 Measurement Phase
+# NEXT_SESSION_WORDPRESS.md — S-78.0 sanatoria CHIUSA → WP-78 fase misura
 
-**Completed Session**: WP-77.6.5.2.4 (2026-07-31 01:33–02:05 UTC+2)
-**Baseline Binary**: 02aa2ad8 (phpr-Axum, stable; amendments documentation-only)
-**Baseline Commit**: 7763a68 (S-77.6.5.2.3, unanimous CONCORDO from 9-chair council)
-**Closure Commit**: fed30ce (S-77.6.5.2.4 amendments + merged to main)
+**Ultima sessione**: S-78.0 SANATORIA (2026-07-31, commit 31201ba…022c8d2 +
+chiusura) — tutti i 9 punti dell'ordine vincolante del Concilio WP-78
+eseguiti; **bug reale trovato+fixato: body HTTP raddoppiato** (rendered+stdout;
+rendered contiene già stdout — invisibile ai check di auto-uguaglianza e a
+`head -1`). Dettaglio: `sessions/WP_SESSION_78.md`.
 
----
+## Stato gate
 
-## WP-77.6.5.2.4 Verdict: CLOSED ✅
+- **phpr (CLI, parità release)**: **02aa2ad8** — NON ricompilato in S-78.0.
+  ⚠️ Al primo rebuild l'hash CAMBIERÀ (dep compile-time `static_assertions`
+  aggiunta a php-runtime): non è un allarme; a quel punto rifare il gate
+  corpus per NOME e ri-verbalizzare la parità (stash additivo phpr-old-target).
+- **php-server (Axum, union build)**: **d98b531e6b5ee306** — baseline Axum
+  (A-SK5: MAI citare phpr per lavoro Axum). Hash stampato da run-gate.sh.
+- **Suite**: 1651/0/1 (=1652) su albero 022c8d2; +4 test feature-gated
+  (`cargo test -p php-server --features axum-server`).
+- **Gate eseguibili (repo, `wp78-harness/`)**: `gate-axum/run-gate.sh`
+  (G-APERTURA-2, PASS) · `gate-capture-order.sh` (KS-PP-2, PASS) ·
+  `gate-feature-matrix.sh` (terna, PASS: default faacd79d / axum-only
+  5a293aa3 / union b5a19fc5). CI estesa (terna -D warnings + test feature).
+- **Harness**: canonico NEL REPO (`wp77-harness/`, `wp78-harness/`); la dir
+  esterna `/Volumes/Extreme Pro/Claude/wp77-harness/` è archivio superseded.
+- GATE72 (corpus 1418 · refl 290 · ORM 3E/13F · hk 1665) resta la baseline
+  CLI: non toccato da S-78.0 (phpr invariato).
 
-**All 6 binding council amendments implemented**:
-- A-MS1 (Matsakis): Send/Sync invariant documented
-- A-SK1 (Klabnik): G-APERTURA-2 gate contract formalized
-- A-AH1 (Hejlsberg): Feature-gating verification documented
-- A-PP1 (Pedersen): Output-capture-before-request_end() ordering documented
-- A-DS1 (Stogov): Zend semantics isolation contract formalized
-- A-BG1 (Gregg): G-APERTURA-2 measurement scope clarified
+## Permanent Binding Rules (aggiornate dal Concilio WP-78)
 
-**Verification**: 
-- `cargo test --release`: 1651 passed, 1 ignored, 0 failed (1652 total) ✅
-- G-APERTURA-2 gate: PASS (byte-parity verified) ✅
-- Binary: Unchanged 02aa2ad8... (no unintended changes) ✅
+1. **Output capture BEFORE request_end()** (Pedersen/Stogov) — enforcement:
+   `gate-capture-order.sh` (KS-PP-2) + test A-PP3 con controllo positivo
+   (KS-PP-1). Il body HTTP è SOLO `vm.rendered` (contiene già stdout).
+2. **Isolamento = semantica FPM** (Stogov A-DS2): statics/closure_statics/
+   static_props per-richiesta per MORTE del Vm (`request_end()` non li tocca);
+   restano per-richiesta anche con un eventuale Vm persistente
+   (KS-DS-78-1/-3). Gate: fixture stateful ×3 + test cargo.
+3. **RetainSet thread-affine** (Matsakis A-MS2/A-MS3): `!Send+!Sync` per
+   costruzione; static assert in php-runtime (KS-MS-1: rimozione solo per
+   delibera Concilio); solo `WorkerTask: Send` attraversa il canale.
 
-**Status**: Ready for WP-78 footprint census phase.
+## ⚖️ Concilio WP-78 (verbali VINCOLANTI): `wp78-harness/COUNCIL_WP78_REVIEWS.md`
+S-78.0 chiusa; kill-switch di misura (KB-78-*, KL-78-*, KG-78.*, KH78-*)
+ATTIVI per la fase misura. ⚖️ Concilio WP-79 (su S-78.0 + programma misura):
+`wp79-harness/COUNCIL_WP79_REVIEWS.md` — da convocare/leggere in apertura.
 
-See: `sessions/WP_SESSION_77_6_5_2_4.md` for full verdict record.
+## §WP-78 (prossima sessione) — FASE MISURA (protocollo: `wp78-harness/design78.md`)
 
----
+Ordine (dal design78, TUTTO già deliberato — non rinegoziare):
+1. **KH78-1 PRIMA di tutto**: creare+eseguire il gate CONCORRENTE (richieste
+   parallele su N worker, fixture stateful); panic/divergenza ⇒ HALT.
+2. Gate della build da misurare: feature-matrix + run-gate (hash a verbale).
+3. Tier-0 baseline (Axum runtime senza pool, riferimento WP-77.1).
+4. Census per-fase `--workers 1` (compile/run/shutdown SEPARATI — KB-78-1):
+   qui si giudicano **A-BB1** (≤+2% alloc, denominatore A-BG4: stesso binario
+   `--cli-server` vs `--axum`) e **A-DL1** (frammentazione).
+5. Probe amplificazione RSS(N)vs(2N) + linearità footprint(W) (A-BG5/A-DL2).
+6. R-G4 CPU attribution SOLO se commissionato (contatori owner-level, mai
+   solo `sample`).
 
-## Permanent Binding Rules (From Council Verdicts — aggiornate dal Concilio WP-78)
+**Kill-switch di rotta**: KG-78.D/KL-78-3 (nessuna cifra senza run tracciato /
+PURGE_DELAY=0 / mai ps RSS) · KB-78-3/KG-78.A (workers≠1 o R<3 ⇒ VOID) ·
+KH78-2/KB-78-2 (depth coda >1 ⇒ VOID) · KS-PP-3 (tocchi a request_* ⇒
+G-APERTURA-2 per NOME).
 
-1. **Output Capture Before request_end() Reset Boundary** (Pedersen/Stogov joint mandate)
-   - All per-request PHP execution MUST capture output BEFORE invoking request_end()
-   - Reset boundary clears per-request state; output capture reads buffered state
-   - Violation → silent state leakage → rejection
-   - Enforcement: `wp78-harness/gate-capture-order.sh` (KS-PP-2) + test A-PP3
-     con controllo positivo (KS-PP-1)
+**NON riproporre**: N=1 Vm persistente (respinto WP-77.2, KS-DS-78-3);
+RetainSet condiviso/Send (KS-MS-3); cache Module PRIMA del censimento
+(A-BB6); "matches CLI" come contratto server; check a auto-uguaglianza o
+`head -1` come controllo positivo (lezione S-78.0).
 
-2. **Per-Request Isolation = semantica FPM** (Stogov, A-DS2 — la vecchia riga
-   "statics persist (Zend-correct)" era FALSA)
-   - superglobals/constants/handlers/OB → reset da `request_end()`
-   - function statics, closure statics, static props → per-richiesta per MORTE
-     del Vm (`request_end()` non li tocca); devono restare per-richiesta anche
-     con un eventuale Vm persistente (KS-DS-78-1/-3)
-   - Gate: fixture stateful ≥3 richieste in `gate-axum/run-gate.sh` + test cargo
-
-3. **RetainSet Thread-Affinity** (Matsakis/Hoare, A-MS2 — la vecchia riga
-   "Send/Sync" era FALSA)
-   - RetainSet è `!Send + !Sync` per costruzione (Rc + FrozenVec non-sync);
-     vive e muore nel worker thread; static assert `assert_not_impl_any!`
-     in php-runtime (KS-MS-1: rimozione solo per delibera del Concilio)
-   - Solo `WorkerTask: Send` attraversa il canale (assert positivo)
-
----
-
-## ⚖️ CONCILIO WP-78 — ESEGUITO 2026-07-31, verbali VINCOLANTI
-
-**Verbali integrali + sintesi**: `wp78-harness/COUNCIL_WP78_REVIEWS.md`.
-**Verdetto: NON unanime — 8× CONCORDO CON EMENDAMENTI, 1× MI OPPONGO (Klabnik).**
-
-Refutazioni accolte a verbale (rettifiche alla chiusura S-77.6.5.2.4):
-- **A-MS1 era FALSO**: RetainSet è `!Send + !Sync` (Rc + elsa::FrozenVec); il commento afferma il contrario (errore nell'emendamento originale, trascritto fedelmente). → A-MS2/A-MS3 (riscrittura + static assert).
-- **A-DS1 era NON conforme**: contratto = PHP-FPM (statics per-richiesta), non CLI; oggi l'isolamento avviene per morte del Vm, `request_end()` NON tocca statics. → A-DS2/A-DS3.
-- **A-AH1 NON implementato**: comandi bash semanticamente errati (union dei default), matrice reale a terna. → A-AH2/A-AH3.
-- **PASS di G-APERTURA-2 VACUO**: nessuno script eseguibile (gate-axum/ vuota); `cargo test` non compila il codice feature-gated; ⚠️ **baseline binaria 02aa2ad8 = phpr CLI (SBAGLIATA per lavoro Axum — A-SK5)**: il binario pertinente è **php-server** (sha256 10729e94…, ricompilato in sessione senza verbale hash). → A-SK2/A-SK3/A-SK4.
-- Legacy `execute()` viola la regola permanente capture-before-request_end → RIMUOVERE (A-TH1/A-PP2/A-MS4).
-- Doc stale N=1 in main.rs (architettura respinta WP-77.2) → purge (A-TH3/A-BG2/A-DL5).
-- "≤+1.5% misurato" nel verbale .3 = predizione travestita da misura → rietichettare (A-BG4).
-
-### WP-78 = S-78.0 SANATORIA (bloccante, pre-misura) → poi misura
-
-**S-78.0 — ordine vincolante** (dettaglio §Sintesi del verbale):
-1. A-SK2: `wp78-harness/gate-axum/run-gate.sh` eseguibile + hash php-server [KS-SK-78.1]
-2. A-MS2/A-MS3: SAFETY comment vero + `assert_not_impl_any!(RetainSet: Send, Sync)` + controllo positivo WorkerTask: Send
-3. A-DS2/A-DS3: matrice FPM corretta + fixture STATEFUL ≥3 richieste nel gate [KS-DS-78-1]
-4. A-TH1/A-PP2: rimozione legacy `execute()` + grep-gate capture-post-reset [KS-PP-2]
-5. A-TH3/A-BG2/A-DL5: purge doc N=1; `reg` morto sanato
-6. A-AH2/A-AH3/A-SK4: gate-feature-matrix.sh (terna, -D warnings, nm/strings) + CI step [KS-AH-78-2]
-7. A-BB3/A-DL2: flag `--workers N`; A-BB5: body morto risolto; A-DL3: shutdown pulito (SIGTERM) + protocollo misura in design78.md (A-BG3)
-8. A-PP3: test capture-before-reset con controllo positivo
-9. A-PP4/A-TH5/A-DS4: fatal → HTTP 500 (prima del freeze contratto HTTP)
-
-**Misura (solo dopo S-78.0 verde)**: Tier-0 + census PER-FASE (compile/run/shutdown separati — lezione WP-59), `--workers 1`, R≥3, warm-up escluso, denominatore A-BB1 = stesso binario `--cli-server` vs `--axum` (A-BG4), peak /usr/bin/time -l + vmmap, PURGE_DELAY=0, probe amplificazione RSS(N)vs(2N) (A-BG5). A-BB1 (Bak) e A-DL1 (Leijen) si giudicano QUI.
-**Deferiti WP-79+**: A-TH4 (request_end(self)→CapturedOutput, tocca API Vm ⇒ gate ORM/hk), A-BB6/cache Module (frequenza×taglia prima), A-AH5/A-BB4 (igiene + backpressure/limiti body).
-
-**Kill-switch consolidati**: tabella nel verbale (KS-SK-78.*, KS-MS-*, KS-DS-78-*, KS-PP-*, KS-AH-78-*, KB-78-*, KL-78-*, KG-78.*, KH78-*). Regola trasversale: nessuna cifra senza run tracciato; nessuna misura senza binario identificato.
-
-**Pre-Flight Checklist (WP-78 start)**:
-- ✅ Disk space: ≥15G both volumes
-- ✅ MySQL: wp, wp_o, wp_p, wptests ready
-- ⚠️ Binary baseline: phpr 02aa2ad8 vale SOLO per il CLI; per Axum il riferimento è php-server (hash da ri-verbalizzare con run-gate.sh — A-SK5)
-- ✅ Processes: None (cleaned at WP-77.6.5.2.4 closure)
-- ❌ Gate G-APERTURA-2: PASS precedente ANNULLATO dal concilio (vacuo) — ri-eseguire via run-gate.sh come primo atto
-- 📋 Reading order (WP-78): wp78-harness/COUNCIL_WP78_REVIEWS.md (sintesi + kill-switch) → sessions/WP_SESSION_77_6_5_2_4.md → codice worker_pool.rs+main.rs
+**Deferiti WP-79+**: A-TH4 (request_end(self)→CapturedOutput, gate ORM/hk),
+A-BB6 cache Module, A-AH5/A-BB4 (igiene, backpressure, limiti body,
+superglobali reali da metadata HTTP).
 
 ---
-
-**Session Closed**: 2026-07-31 02:05 UTC+2 (concilio eseguito in coda: 2026-07-31 mattina)
-**Ready for**: WP-78 = S-78.0 sanatoria (bloccante) → fase misura
+**Chiusura**: 2026-07-31. Apertura/chiusura sessioni = skill
+`apri-sessione` / `chiudi-sessione`.
