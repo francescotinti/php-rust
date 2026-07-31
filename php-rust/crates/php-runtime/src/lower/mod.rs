@@ -298,13 +298,15 @@ fn lower_source_impl(
         None => {
             // S-79.0.3 (A-TH2): the prelude lowering is the a1 sub-channel —
             // the census must not book it to the main script's account.
+            // S-80.0.3 (A-MS11): RAII window — an early return between open
+            // and close would silently lose the booking; Drop closes it.
             #[cfg(feature = "census-instrumentation")]
-            let a1s = crate::alloc_census::a1_open();
+            let mut a1w = crate::alloc_census::A1Window::open();
             let (pclasses, pindex, pfunctions, pfn_index, pstatic) = lower_prelude();
             #[cfg(feature = "census-instrumentation")]
             {
                 crate::alloc_census::note_prelude_counts(pfunctions.len(), pclasses.len());
-                crate::alloc_census::a1_close(a1s);
+                a1w.close();
             }
             low.classes = pclasses;
             low.class_index = pindex;

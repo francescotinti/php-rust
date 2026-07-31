@@ -465,6 +465,30 @@ fn handle_client(
         String::from_utf8_lossy(&req.target)
     );
 
+    // S-80.0.3 (A-BG20/A-AH20/KL-81-3, Council WP-81): idle-window probe on
+    // the cli arm too — the arm that makes A-BB1 judgeable had NO idle probe,
+    // so its idle drift was undeclared. Accept-side, produces NO census-cli
+    // line (out of the counted channel, A-BG19), same line shape as the axum
+    // dispatcher probe. Anchored ends_with (S-78.1 lesson: magic paths are
+    // anchored at the END, never by equality — the docroot prefix varies).
+    #[cfg(feature = "census-instrumentation")]
+    if decoded.ends_with(b"/__census_global") {
+        let (calls, bytes) = php_runtime::alloc_census::SNAPSHOT_FN
+            .get()
+            .map(|f| f())
+            .unwrap_or((0, 0));
+        eprintln!("census-global: calls={calls} bytes={bytes}");
+        let body: &[u8] = b"census-global\n";
+        let mut out = response_head(req.protocol, 200, "OK", host.as_deref());
+        out.extend_from_slice(format!("Content-Length: {}\r\n\r\n", body.len()).as_bytes());
+        if !head {
+            out.extend_from_slice(body);
+        }
+        let _ = stream.write_all(&out);
+        log_request(&peer, 200, &uri_label, None);
+        return;
+    }
+
     // Router script first: any return value other than boolean false ends the
     // request; false falls through to the normal docroot resolution. Anything
     // the router ECHOED before returning false is NOT discarded (oracle-pinned
@@ -643,11 +667,15 @@ fn run_php(
         let ((a1_calls, a1_bytes), (a3_calls, a3_bytes)) =
             php_runtime::alloc_census::take_split();
         let req = CLI_REQS.fetch_add(1, Ordering::Relaxed) + 1;
+        // gross=1 (A-DL10): gross churn, upper bound. a3_trip (KS-MS-81-2):
+        // split-integrity tripwire — the driver VOIDs the run on any nonzero.
         eprintln!(
-            "census-cli: req={req} total_calls={} total_bytes={} \
-             a1_calls={a1_calls} a1_bytes={a1_bytes} a3_calls={a3_calls} a3_bytes={a3_bytes}",
+            "census-cli: req={req} gross=1 total_calls={} total_bytes={} \
+             a1_calls={a1_calls} a1_bytes={a1_bytes} a3_calls={a3_calls} a3_bytes={a3_bytes} \
+             a3_trip={}",
             census_s1.0 - census_s0.0,
             census_s1.1 - census_s0.1,
+            php_runtime::alloc_census::trip_count(),
         );
     }
     php_types::sapi::clear_web_request();

@@ -561,7 +561,7 @@ impl<'m> Vm<'m> {
                 if !self.classes[cid].methods.is_empty() {
                     let m_mod = self.class_mod(cid);
                     let func = &self.classes[cid].methods[0].func;
-                    let mut frame = self.pooled_frame(func, m_mod);
+                    let frame = self.pooled_frame(func, m_mod);
                     self.frames.push(frame);
                     found_frame = true;
                     break;

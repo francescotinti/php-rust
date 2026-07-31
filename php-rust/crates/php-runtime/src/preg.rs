@@ -124,11 +124,12 @@ impl SubjectText<'_> {
     }
 }
 
-/// See [`SubjectText`]. `None` = invalid UTF-8 under `/u` (PHP: `false`).
-/// Without `/u`, PCRE is BYTE-oriented: a valid-UTF-8 subject with high bytes
-/// still matches per byte (`[\x80-\xff]` hits each half of a UTF-8 pair —
-/// WP's esc_url keeps its `\x80-\xff` allowlist working this way), so
-/// anything non-ASCII goes through the 1-byte-per-char Latin1 view.
+// See `SubjectText`. `None` = invalid UTF-8 under `/u` (PHP: `false`).
+// Without `/u`, PCRE is BYTE-oriented: a valid-UTF-8 subject with high bytes
+// still matches per byte (`[\x80-\xff]` hits each half of a UTF-8 pair —
+// WP's esc_url keeps its `\x80-\xff` allowlist working this way), so
+// anything non-ASCII goes through the 1-byte-per-char Latin1 view.
+// (Plain comment: doc comments on macro invocations warn under -D warnings.)
 thread_local! {
     /// `preg_last_error`: 0 = PREG_NO_ERROR, 1 = PREG_INTERNAL_ERROR (pattern
     /// invalido), 4 = PREG_BAD_UTF8_ERROR (subject non-UTF-8 sotto `/u`).
@@ -1535,9 +1536,8 @@ fn rewrite_branch_reset(body: &str) -> Option<(String, Vec<usize>, usize)> {
     let mut out = String::with_capacity(body.len());
     let mut stack: Vec<Frame> = Vec::new();
     let mut in_br = false; // any Br frame on the stack (at most one; nested bails)
-    let mut phys = 0usize; // physical capturing groups emitted so far
     let mut logical = 0usize; // logical group counter outside/after `(?|`
-    let mut map: Vec<usize> = vec![0]; // map[phys] = logical
+    let mut map: Vec<usize> = vec![0]; // map[phys] = logical (push order = phys order)
     let mut found = false;
     let mut i = 0;
     while i < b.len() {
@@ -1598,7 +1598,6 @@ fn rewrite_branch_reset(body: &str) -> Option<(String, Vec<usize>, usize)> {
                     (true, false)
                 };
                 if capturing {
-                    phys += 1;
                     if in_br {
                         if named {
                             return None; // names across alternatives: not modelled

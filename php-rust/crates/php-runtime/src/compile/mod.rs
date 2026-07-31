@@ -255,15 +255,19 @@ fn compile_program_impl(
     // the leading fn/class indices are the prelude bodies compiled FRESH —
     // that cost is the a1 sub-channel. Seeded paths share them (fnshare ≈ 0
     // alloc) or elide them, so only this path opens the window.
+    // S-80.0.3 (A-MS11): RAII — close() books at the prefix boundary, Drop
+    // is the backstop on the `?` early-returns below (compile_body), which
+    // under the manual pair silently lost the window and inflated a2.
     #[cfg(feature = "census-instrumentation")]
-    let mut a1w: Option<(u64, u64)> = (prelude.is_empty() && link.is_none())
-        .then(crate::alloc_census::a1_open);
+    let mut a1w: Option<crate::alloc_census::A1Window> = (prelude.is_empty()
+        && link.is_none())
+    .then(crate::alloc_census::A1Window::open);
     let mut functions: Vec<std::rc::Rc<Func>> = Vec::with_capacity(program.functions.len());
     for (idx, fd) in program.functions.iter().enumerate() {
         #[cfg(feature = "census-instrumentation")]
         if idx == crate::alloc_census::prelude_fn_count() {
-            if let Some(s) = a1w.take() {
-                crate::alloc_census::a1_close(s);
+            if let Some(mut w) = a1w.take() {
+                w.close();
             }
         }
         // Prelude reuse (WP-20): a seeded unit's leading function indices are
@@ -300,8 +304,8 @@ fn compile_program_impl(
     // a1 tail: a program whose functions are ALL prelude (bare `<?php`)
     // never crosses the prefix boundary inside the loop.
     #[cfg(feature = "census-instrumentation")]
-    if let Some(s) = a1w.take() {
-        crate::alloc_census::a1_close(s);
+    if let Some(mut w) = a1w.take() {
+        w.close();
     }
     // Closure bodies compile tolerantly (like functions): an unsupported body
     // becomes a stub that fatals only if the closure is actually invoked. Same
@@ -344,15 +348,17 @@ fn compile_program_impl(
     if link.is_none() {
         classes.reserve(program.classes.len());
     }
-    // a1 prefix for classes — same contract as the functions loop above.
+    // a1 prefix for classes — same contract as the functions loop above
+    // (RAII per A-MS11, S-80.0.3).
     #[cfg(feature = "census-instrumentation")]
-    let mut a1cw: Option<(u64, u64)> = (prelude.is_empty() && link.is_none())
-        .then(crate::alloc_census::a1_open);
+    let mut a1cw: Option<crate::alloc_census::A1Window> = (prelude.is_empty()
+        && link.is_none())
+    .then(crate::alloc_census::A1Window::open);
     for (cid, cd) in program.classes.iter().enumerate() {
         #[cfg(feature = "census-instrumentation")]
         if cid == crate::alloc_census::prelude_class_count() {
-            if let Some(s) = a1cw.take() {
-                crate::alloc_census::a1_close(s);
+            if let Some(mut w) = a1cw.take() {
+                w.close();
             }
         }
         if let Some(link) = link {
@@ -389,8 +395,8 @@ fn compile_program_impl(
         }
     }
     #[cfg(feature = "census-instrumentation")]
-    if let Some(s) = a1cw.take() {
-        crate::alloc_census::a1_close(s);
+    if let Some(mut w) = a1cw.take() {
+        w.close();
     }
     let classes = classes;
 

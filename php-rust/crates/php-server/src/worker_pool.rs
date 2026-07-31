@@ -9,7 +9,9 @@
 //! - Cross-request reuse of compiled units is the THREAD-LOCAL unit cache
 //!   (WP-63/66, Rc-owned, fingerprinted, ways-evicted — the opcache analogy);
 //!   the RetainSet never was a lookup structure (write-only pin)
-//! - Axum → mpsc → Worker → execute_with_retain() → Response → Axum
+//! - Axum → mpsc → Worker → execute_request() → Response → Axum (S-80.0.4:
+//!   the RetainSet is constructed INSIDE the sealed entry-point — the
+//!   &RetainSet form is module-private, KS-MS-81-3)
 //! - Vm and RetainSet never leave the owning worker thread (!Send)
 //!
 //! Binding constraints (Council WP-77.5, P-67.5):
@@ -92,18 +94,57 @@ mod implementation {
     pub mod census {
         use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
-        /// In-flight tasks across the pool channels. Protocol (A-TH1/KH80-4):
+        /// QUEUED tasks across the pool channels. Protocol (A-TH1/KH80-4):
         /// increment in dispatch BEFORE send, decrement in the worker AFTER
         /// recv — the decrement can then never precede its increment, so the
-        /// counter cannot underflow and the watermark cannot under-count.
+        /// counter cannot underflow. SEMANTICS (A-TH9, Council WP-81): with
+        /// the decrement at PICKUP this counts the QUEUE, not the requests in
+        /// flight — one request EXECUTING plus one just picked up shows a
+        /// watermark of 1, so pipelined overlap is invisible here. Any
+        /// closed-sequential claim from this watermark alone is ADVISORY
+        /// (KH81-1); the verdict-grade observable is OUTSTANDING below.
         pub static QUEUE_DEPTH: AtomicUsize = AtomicUsize::new(0);
         /// High-watermark of QUEUE_DEPTH since process start.
         pub static QUEUE_DEPTH_MAX: AtomicUsize = AtomicUsize::new(0);
+        /// S-80.0.3 (A-TH9/KH81-1): requests inside the server — increment in
+        /// dispatch BEFORE the channel send, decrement in the worker AFTER
+        /// the response send. A truly closed-sequential client (request N+1
+        /// only after response N read) can never have two requests inside the
+        /// server at once, so a watermark >1 REFUTES the mechanism — queued
+        /// AND executing both count, which is exactly what the queue-only
+        /// watermark missed.
+        pub static OUTSTANDING: AtomicUsize = AtomicUsize::new(0);
+        /// High-watermark of OUTSTANDING since process start (census line
+        /// field `inflight_max`; the measure driver enforces <=1).
+        pub static OUTSTANDING_MAX: AtomicUsize = AtomicUsize::new(0);
         /// Requests completed pool-wide.
         pub static REQUESTS: AtomicU64 = AtomicU64::new(0);
 
+        /// S-80.0.3 tripwire (A-TH10/KH81-2): `d` arrives as fetch_add()+1,
+        /// which is >=1 in true arithmetic — d==0 is reachable ONLY through a
+        /// release-mode wrap (MAX+1 -> 0), i.e. the inc-after-send regression
+        /// the anti-wrap test alone could NOT falsify (its inc/dec balance
+        /// out and the drain==0 assert passes WITH the bug). The panic
+        /// escalates to abort in production via the global hook (A-PP9/A-PP4).
         pub fn note_depth(d: usize) {
+            if d == 0 {
+                panic!(
+                    "census depth tripwire: observed depth 0 after an increment — \
+                     usize wrap, the inc-before-send protocol is broken (KH81-2)"
+                );
+            }
             QUEUE_DEPTH_MAX.fetch_max(d, Ordering::Relaxed);
+        }
+
+        /// Same tripwire contract for the OUTSTANDING watermark.
+        pub fn note_outstanding(d: usize) {
+            if d == 0 {
+                panic!(
+                    "census outstanding tripwire: observed 0 after an increment — \
+                     usize wrap (KH81-2)"
+                );
+            }
+            OUTSTANDING_MAX.fetch_max(d, Ordering::Relaxed);
         }
 
         thread_local! {
@@ -124,11 +165,12 @@ mod implementation {
 
         /// A-SK8 (Council WP-80): tests observing the depth watermark must
         /// start from a clean one — without a reset, a PASS can be inherited
-        /// from another test's traffic. Test-only: the production watermark
-        /// is process-lifetime by design and is never reset.
+        /// from another test's traffic. Test-only: the production watermarks
+        /// are process-lifetime by design and are never reset.
         #[cfg(test)]
         pub fn reset_depth_stats() {
             QUEUE_DEPTH_MAX.store(0, Ordering::Relaxed);
+            OUTSTANDING_MAX.store(0, Ordering::Relaxed);
         }
     }
 
@@ -180,13 +222,17 @@ mod implementation {
                 // process — the default panic hook has already printed the
                 // payload and backtrace by the time catch_unwind sees it.
                 let handle = std::thread::spawn(move || {
-                    // SAFETY (A-MS4, Council WP-80): AssertUnwindSafe is sound
-                    // here because the Err arm NEVER resumes — it aborts the
-                    // process, so no code can observe state broken mid-panic.
-                    // The unwind itself still runs drops for the in-flight
-                    // request's Vm/RetainSet before abort() is reached; those
-                    // types own per-request state only, and any panic-in-drop
-                    // escalates to an immediate abort anyway.
+                    // SAFETY (A-MS4 Council WP-80, corrected A-TH11 Council
+                    // WP-81): AssertUnwindSafe is sound here because the Err
+                    // arm NEVER resumes — it aborts the process, so no code
+                    // can observe state broken mid-panic. In axum mode the
+                    // GLOBAL abort hook (main.rs) fires BEFORE any unwind:
+                    // the process dies inside the hook and NO drops run —
+                    // this catch_unwind is the belt for the non-axum/test
+                    // contexts where the hook is not installed (there the
+                    // unwind DOES run the in-flight request's Vm/RetainSet
+                    // drops before abort()). Either way nothing resumes past
+                    // a broken invariant.
                     let unwind =
                         std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                             Self::worker_loop(ctx, rx);
@@ -244,8 +290,20 @@ mod implementation {
 
             // Main request loop: each request gets a fresh RetainSet + fresh Vm
             while let Some(task) = rx.blocking_recv() {
+                // Pickup: the task leaves the QUEUE (it stays OUTSTANDING
+                // until its response is sent). S-80.0.3 tripwire (KH81-2): a
+                // decrement finding 0 has no matching increment — wrap.
                 #[cfg(feature = "census-instrumentation")]
-                census::QUEUE_DEPTH.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+                {
+                    let old = census::QUEUE_DEPTH
+                        .fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+                    if old == 0 {
+                        panic!(
+                            "census depth tripwire: pickup decrement on 0 — \
+                             unmatched dec, inc-before-send protocol broken (KH81-2)"
+                        );
+                    }
+                }
                 if test_panic && task.meta.path.ends_with("/__phpr_panic") {
                     panic!("PHPR_TEST_WORKER_PANIC armed: deliberate worker panic (A-PP9 gate)");
                 }
@@ -255,9 +313,22 @@ mod implementation {
                 // thread boundary (assert_not_impl_any, php-runtime); dropped
                 // after the Vm at the end of this iteration (P-67.5), which
                 // is what makes include parking leak-free (KS-DS-78-4).
-                let retain = php_runtime::RetainSet::new();
-                let (response, status) = execute_with_retain(&retain, &reg, &task.meta);
+                let (response, status) = execute_request(&reg, &task.meta);
                 let _ = task.response_tx.send((response, status));
+                // Response sent: the request leaves the server — only now
+                // does OUTSTANDING drop (A-TH9: dec-after-send is what makes
+                // the closed-sequential watermark verdict-grade).
+                #[cfg(feature = "census-instrumentation")]
+                {
+                    let old = census::OUTSTANDING
+                        .fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+                    if old == 0 {
+                        panic!(
+                            "census outstanding tripwire: decrement on 0 — \
+                             unmatched dec (KH81-2)"
+                        );
+                    }
+                }
             }
         }
 
@@ -299,19 +370,26 @@ mod implementation {
             // watermark that can UNDER-count — a fail-open observable for
             // KH78-2. Inc → send → recv → dec makes underflow impossible:
             // every decrement is preceded by its own increment (the channel
-            // provides the happens-before edge).
+            // provides the happens-before edge). S-80.0.3: OUTSTANDING gets
+            // the same inc-before-send edge; its dec is after the response
+            // send in the worker (A-TH9).
             #[cfg(feature = "census-instrumentation")]
             {
                 use std::sync::atomic::Ordering;
                 let d = census::QUEUE_DEPTH.fetch_add(1, Ordering::Relaxed) + 1;
                 census::note_depth(d);
+                let o = census::OUTSTANDING.fetch_add(1, Ordering::Relaxed) + 1;
+                census::note_outstanding(o);
             }
 
             if self.senders[idx].send(task).is_err() {
                 // Failed send: no worker will ever pick this task up, so no
-                // decrement will pair with the increment above — undo it.
+                // decrement will pair with the increments above — undo both.
                 #[cfg(feature = "census-instrumentation")]
-                census::QUEUE_DEPTH.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+                {
+                    census::QUEUE_DEPTH.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+                    census::OUTSTANDING.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+                }
                 return Err("worker channel closed".to_string());
             }
 
@@ -319,11 +397,38 @@ mod implementation {
         }
     }
 
+    /// S-80.0.4 (A-MS8/KS-MS-81-3, Council WP-81): the SEALED entry-point —
+    /// the RetainSet is constructed INSIDE, lives exactly one request, and no
+    /// caller can hand in (or hold on to) one. With A-BB6 the main module
+    /// parked in the RetainSet becomes the largest per-request object: a
+    /// caller reusing a RetainSet across requests would accumulate one main
+    /// per request — KS-DS-78-4 in aggravated form. The `&RetainSet` shape
+    /// below is module-private (tests introspect the pin through it; nothing
+    /// outside this module can), so the invariant lives in the type system,
+    /// not in reviewer vigilance (the S-78.0 lesson).
+    pub fn execute_request(
+        reg: &php_runtime::Registry,
+        meta: &WorkerHandlerMeta,
+    ) -> (Vec<u8>, StatusCode) {
+        // S-78.1.5: request-lifetime RetainSet (P-2 pin, the CLI main's
+        // machinery). SAFETY (A-MS2): !Send + !Sync — constructed HERE on
+        // the calling worker's stack, never crosses a thread boundary
+        // (assert_not_impl_any, php-runtime); dropped after the Vm at the
+        // end of this call (P-67.5), which is what makes include parking
+        // leak-free (KS-DS-78-4).
+        let retain = php_runtime::RetainSet::new();
+        execute_with_retain(&retain, reg, meta)
+    }
+
     /// S-77.6.5.2.2 (retimed S-78.1.5): Execute PHP with a REQUEST-lifetime
     /// RetainSet — the P-2 pin for unit modules (bytecode only; A-DS6).
     ///
-    /// Called from worker_loop with the &RetainSet created for THIS request;
-    /// both die at the end of the loop iteration (Vm first, P-67.5).
+    /// MODULE-PRIVATE since S-80.0.4 (KS-MS-81-3): production traffic enters
+    /// through [`execute_request`]; this form exists so the in-module gate
+    /// tests can inspect the pin (`retain.len()`) after the call.
+    ///
+    /// Called with a &RetainSet created for THIS request;
+    /// both die at the end of the caller's scope (Vm first, P-67.5).
     /// Module is recompiled per-request from handler.meta.source; compiled
     /// units are reused across requests by the thread-local unit cache.
     ///
@@ -357,7 +462,7 @@ mod implementation {
     ///   fired). The opcache analogy belongs to the THREAD-LOCAL unit cache
     ///   (WP-63/66): bytecode/immutable data only — NEVER userland state.
     /// Rule: output capture before request_end() (Pedersen/Stogov permanent rule).
-    pub fn execute_with_retain(
+    fn execute_with_retain(
         retain: &php_runtime::RetainSet,
         reg: &php_runtime::Registry,
         meta: &WorkerHandlerMeta,
@@ -376,6 +481,30 @@ mod implementation {
         // (WP-64: never meter a window that contains its own logging).
         #[cfg(feature = "census-instrumentation")]
         let census_s0 = crate::census_alloc::snapshot();
+
+        // S-80.0.3 (A-PP11/KS-PP-81-1): drain guard — the fatal early-returns
+        // below exit BEFORE the census emitter, leaving take_split residue
+        // and a stale LAST_S3 that pollute the NEXT request's line (exactly
+        // fixture F8's sequence: fatal → fix → 200). The CLI arm drains
+        // unconditionally; this guard replicates that form on EVERY exit —
+        // the emitter marks itself done, all other paths drain-and-discard
+        // (rows==N still flags the missing line itself, A-PP5).
+        #[cfg(feature = "census-instrumentation")]
+        struct SplitDrain {
+            emitted: bool,
+        }
+        #[cfg(feature = "census-instrumentation")]
+        impl Drop for SplitDrain {
+            fn drop(&mut self) {
+                if !self.emitted {
+                    let _ = php_runtime::alloc_census::take_split();
+                    let s = crate::census_alloc::snapshot();
+                    census::LAST_S3.with(|c| c.set(Some((s.0, s.1))));
+                }
+            }
+        }
+        #[cfg(feature = "census-instrumentation")]
+        let mut split_drain = SplitDrain { emitted: false };
 
         // Phase 1: Compile PHP source to bytecode (per-request Module).
         // A-PP4/A-TH5/A-DS4 (Council WP-78): the HTTP boundary mirrors the PHP
@@ -512,10 +641,22 @@ mod implementation {
             // denominator reconciles (Δglobal/req = a+b+c+resid).
             let ((a1_calls, a1_bytes), (a3_calls, a3_bytes)) =
                 php_runtime::alloc_census::take_split();
+            split_drain.emitted = true;
             census::LAST_SPLIT
                 .with(|c| c.set(((a1_calls, a1_bytes), (a3_calls, a3_bytes))));
             let a_calls = census_s1.0 - census_s0.0;
             let a_bytes = census_s1.1 - census_s0.1;
+            // S-80.0.3 (A-TH12): a1 is a sub-channel of a — a1>a means a
+            // runtime compile satisfied the main-path classification and
+            // accumulated into the WRONG request phase; the saturating_sub
+            // below would silently floor a2 at 0 and mask it. FATAL in the
+            // census build: a mis-attributed split is worse than no split.
+            assert!(
+                a1_calls <= a_calls && a1_bytes <= a_bytes,
+                "census split violation: a1 ({a1_calls} calls/{a1_bytes} B) exceeds \
+                 phase a ({a_calls} calls/{a_bytes} B) — a1 accumulated outside \
+                 the s0..s1 window (A-TH12)"
+            );
             let (resid_calls, resid_bytes) = census::LAST_S3.with(|c| {
                 let gap = match c.get() {
                     Some((pc, pb)) => (census_s0.0 - pc, census_s0.1 - pb),
@@ -524,12 +665,15 @@ mod implementation {
                 c.set(Some((census_s3.0, census_s3.1)));
                 gap
             });
+            // gross=1 (A-DL10): every byte figure on this line is GROSS churn
+            // (realloc at full size, deallocs never netted) — upper bound.
             eprintln!(
-                "census: req={req} a_calls={a_calls} a_bytes={a_bytes} \
+                "census: req={req} gross=1 a_calls={a_calls} a_bytes={a_bytes} \
                  a1_calls={a1_calls} a1_bytes={a1_bytes} a2_calls={} a2_bytes={} \
                  a3_calls={a3_calls} a3_bytes={a3_bytes} b_calls={} b_bytes={} \
                  c_calls={} c_bytes={} resid_calls={resid_calls} \
-                 resid_bytes={resid_bytes} retain_len={} live_objs={} depth_max={}",
+                 resid_bytes={resid_bytes} retain_len={} live_objs={} depth_max={} \
+                 inflight_max={} a3_trip={}",
                 a_calls.saturating_sub(a1_calls),
                 a_bytes.saturating_sub(a1_bytes),
                 census_s2.0 - census_s1.0,
@@ -539,6 +683,8 @@ mod implementation {
                 retain.len(),
                 vm.live_objects(),
                 census::QUEUE_DEPTH_MAX.load(Ordering::Relaxed),
+                census::OUTSTANDING_MAX.load(Ordering::Relaxed),
+                php_runtime::alloc_census::trip_count(),
             );
         }
 
@@ -927,14 +1073,17 @@ mod implementation {
             );
         }
 
-        /// A-TH1/A-BB13/A-MS1 anti-wrap (KH80-4): with the inc-BEFORE-send
-        /// protocol the pickup decrement can never precede its increment, so
-        /// QUEUE_DEPTH cannot underflow. This hammers the raciest shape (one
-        /// worker, dispatch→await cycles, depth oscillating 1→0 at the exact
-        /// send/recv boundary) and asserts depth drains to 0 with a sane
-        /// watermark. Under the old inc-after-send ordering an early pickup
-        /// wrapped QUEUE_DEPTH to usize::MAX and poisoned the watermark —
-        /// which is what the bounds below would catch.
+        /// A-TH1/A-BB13/A-MS1 anti-wrap (KH80-4), re-scoped S-80.0.3 per
+        /// A-TH10 (Council WP-81): this test alone is NOT the falsifier — in
+        /// release, a wrap is modular arithmetic that self-cancels (balanced
+        /// inc/dec drain to 0 and MAX+1 wraps back through the watermark
+        /// unchanged), so these asserts pass WITH the inc-after-send
+        /// regression installed. The falsifier is the d==0 TRIPWIRE in
+        /// note_depth/the pickup dec (see census_depth_tripwire_bites_on_zero
+        /// for the negative control): under the regression the wrapped 0/MAX
+        /// values hit the tripwire and abort. This test remains as the
+        /// exercise rig (200 dispatch→await cycles across the exact
+        /// send/recv boundary) plus the drain==0 sanity floor.
         #[cfg(feature = "census-instrumentation")]
         #[test]
         fn census_queue_depth_no_underflow_inc_before_send() {
@@ -963,6 +1112,79 @@ mod implementation {
             assert!(
                 (1..=N).contains(&peak),
                 "watermark out of sane bounds: {peak} (usize wrap poisons it to ~MAX)"
+            );
+            // S-80.0.3: OUTSTANDING drains too, and its watermark must show
+            // exactly 1 on a strictly awaited dispatch loop (A-TH9 — this is
+            // the closed-sequential observable, not the queue watermark).
+            let out = census::OUTSTANDING.load(std::sync::atomic::Ordering::Relaxed);
+            let opeak = census::OUTSTANDING_MAX.load(std::sync::atomic::Ordering::Relaxed);
+            assert_eq!(out, 0, "outstanding did not drain to 0: {out}");
+            assert_eq!(
+                opeak, 1,
+                "closed-sequential loop must watermark OUTSTANDING at exactly 1: {opeak}"
+            );
+        }
+
+        /// S-80.0.3 (KH81-2) NEGATIVE control: the depth tripwire must BITE
+        /// on d==0 — reachable only through a release-mode wrap, which the
+        /// anti-wrap drain test above provably cannot see (A-TH10). A
+        /// tripwire never seen firing is a failed check (WP-72 lesson).
+        #[cfg(feature = "census-instrumentation")]
+        #[test]
+        #[should_panic(expected = "census depth tripwire")]
+        fn census_depth_tripwire_bites_on_zero() {
+            census::note_depth(0);
+        }
+
+        /// KH81-2: same negative control for the OUTSTANDING watermark.
+        #[cfg(feature = "census-instrumentation")]
+        #[test]
+        #[should_panic(expected = "census outstanding tripwire")]
+        fn census_outstanding_tripwire_bites_on_zero() {
+            census::note_outstanding(0);
+        }
+
+        /// S-80.0.3 (A-PP11/KS-PP-81-1): a fatal early-return must DRAIN the
+        /// split — its a1 residue polluted the NEXT request's line (exactly
+        /// fixture F8's sequence: fatal → fix → 200). `goto x;` with no label
+        /// is a LOWER-time fatal raised AFTER the prelude is lowered
+        /// (validate_goto runs post-seeding), so the fatal request is
+        /// GUARANTEED to have a1 residue pending when it early-returns.
+        #[cfg(feature = "census-instrumentation")]
+        #[test]
+        fn fatal_early_return_drains_split_residue() {
+            let _ = php_runtime::alloc_census::SNAPSHOT_FN.set(crate::census_alloc::snapshot);
+            let reg = registry();
+            // r1: clean hello pins the per-request a1 baseline.
+            let r1 = php_runtime::RetainSet::new();
+            let (_, s) = execute_with_retain(&r1, &reg, &meta("<?php echo \"a\";"));
+            assert_eq!(s, StatusCode::OK);
+            let ((a1_clean, _), _) = census::LAST_SPLIT.with(|c| c.get());
+            assert!(a1_clean > 0, "clean hello did not move a1 (KG-79.A)");
+            // r2: lower-time fatal — early-returns BEFORE the census emitter.
+            let r2 = php_runtime::RetainSet::new();
+            let (_, s) = execute_with_retain(&r2, &reg, &meta("<?php goto x;"));
+            assert_eq!(
+                s,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "goto-to-undefined-label must be a lower-time fatal"
+            );
+            // Direct falsifier: with the drain guard removed, the fatal
+            // request's prelude a1 would still sit in the accumulator here.
+            let ((undrained, _), _) = php_runtime::alloc_census::take_split();
+            assert_eq!(
+                undrained, 0,
+                "fatal early-return left a1 residue undrained (A-PP11): {undrained}"
+            );
+            // r3: the next request's split must be its OWN, not clean+residue.
+            let r3 = php_runtime::RetainSet::new();
+            let (b, s) = execute_with_retain(&r3, &reg, &meta("<?php echo \"a\";"));
+            assert_eq!(s, StatusCode::OK);
+            assert_eq!(b, b"a");
+            let ((a1_after, _), _) = census::LAST_SPLIT.with(|c| c.get());
+            assert!(
+                a1_after <= a1_clean + a1_clean / 2,
+                "a1 after a fatal request carries residue: {a1_after} vs clean {a1_clean} (A-PP11)"
             );
         }
 

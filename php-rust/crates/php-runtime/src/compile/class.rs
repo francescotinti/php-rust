@@ -536,14 +536,16 @@ pub(super) fn builtin_iface_for(name: &[u8]) -> Option<BuiltinIface> {
     }
 }
 
-/// An inert [`CompiledClass`] for a *seed* class the running VM already links by
-/// name: `drive_unit`'s remap dedups it to the existing global id, so this
-/// stub's only consumer is that name lookup. `ok: false` makes an accidental
-/// `Op::Alloc` on it fatal (fail-loud) rather than silently misbehaving.
-/// Interned [`stub_class`] per class name (WP-20): a require storm compiles a
-/// stub for EVERY already-linked seed class into EVERY unit module — the same
-/// (name-only) content each time. One shared `Rc` per name bounds that cost by
-/// the number of distinct classes instead of files × classes.
+// An inert `CompiledClass` for a *seed* class the running VM already links by
+// name: `drive_unit`'s remap dedups it to the existing global id, so this
+// stub's only consumer is that name lookup. `ok: false` makes an accidental
+// `Op::Alloc` on it fatal (fail-loud) rather than silently misbehaving.
+// Interned `stub_class` per class name (WP-20): a require storm compiles a
+// stub for EVERY already-linked seed class into EVERY unit module — the same
+// (name-only) content each time. One shared `Rc` per name bounds that cost by
+// the number of distinct classes instead of files × classes.
+// (Plain comment: a doc comment on a macro invocation is dropped by rustdoc
+// and warns under -D warnings, A-AH15.)
 thread_local! {
     /// See [`stub_class_shared`]. Thread-local and NEVER cleared: survives
     /// requests by design (bounded by distinct class names, not by traffic).

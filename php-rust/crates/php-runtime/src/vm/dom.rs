@@ -1394,13 +1394,6 @@ fn find_sub(haystack: &[u8], needle: &[u8]) -> Option<usize> {
     haystack.windows(needle.len()).position(|w| w == needle)
 }
 
-/// Decode numeric character references plus the core named set; an unmatched
-/// `&` stays literal, as the HTML5 tokenizer specifies. (The full 2 200-entry
-/// named table is a documented scope-out.)
-fn html_decode_entities(text: &[u8]) -> Vec<u8> {
-    html_decode_entities_err(text, 0, None)
-}
-
 /// Error kinds the HTML4 (libxml2-flavored) parse records, keyed by the byte
 /// offset of the parser cursor when libxml2 would raise them.
 pub(super) enum HtmlErrKind {

@@ -144,7 +144,7 @@ build "census-axum-only" --no-default-features --features census-instrumentation
 # 5. Cross-crate census lint (A-AH15): php-runtime and php-cli carry the
 #    bracket/emitter code since S-79.0.3/6.
 lint_crate php-runtime --features census-instrumentation
-lint_crate php-cli --features census-instrumentation
+lint_crate php-cli --lib --features census-instrumentation
 
 # 6. union (deployed dual-mode binary) — built LAST so the binary on disk is
 #    the measured one; positive control for the nm detector.
