@@ -40,3 +40,4 @@ libc = "0.2"
 rusqlite = { version = "0.40.1", features = ["bundled", "column_decltype", "column_metadata", "functions"] }
 mysql = "28.0.0"
 elsa = "=1.11.2"
+static_assertions.workspace = true

@@ -31,3 +31,7 @@ mimalloc = "0.1"
 # class/function/constant tables): stands in for Zend's precomputed
 # zend_string hashes. NOT used by Vm::unit_fp (own DefaultHasher).
 rustc-hash = "2"
+# Compile-time (only) thread-safety invariants: RetainSet must stay !Send+!Sync
+# (A-MS3, Council WP-78); removing an assert requires a Council deliberation
+# (KS-MS-1), never an in-session edit.
+static_assertions = "1.1"

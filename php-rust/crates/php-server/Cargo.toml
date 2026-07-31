@@ -15,6 +15,7 @@ axum = { version = "0.7", optional = true }
 tower = { version = "0.4", optional = true }
 hyper = { version = "1", optional = true }
 num_cpus = { version = "1", optional = true }
+static_assertions.workspace = true
 
 [features]
 default = ["cli-server"]

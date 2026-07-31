@@ -10,12 +10,16 @@
 //! - request_start() → handler → request_shutdown() → request_end()
 //! - request_shutdown() MUST precede request_end() (Stogov order)
 //!
-//! Send/Sync Safety (A-MS1, Matsakis Council mandate):
-//! - RetainSet is Send + Sync: refcount-only fields, thread-local storage per worker
-//! - Module is immutable for dispatch duration: swapped only at dispatch boundary
-//! - No Vm references held across await points; module immutable prevents aliasing
-//! - Exception handlers stored in per-request module, not RetainSet
-//! - Drop thread-affinity preserved: Vm dropped in owning worker thread context
+//! Send/Sync Safety (A-MS2, Council WP-78 — supersedes the FALSE A-MS1 text):
+//! - RetainSet is `!Send + !Sync` (`Rc<Module>` refcounts are non-atomic and
+//!   elsa's FrozenVec is the non-sync variant). Safety comes from thread-affine
+//!   CONSTRUCTION: each RetainSet is created inside worker_loop, lives on that
+//!   worker's stack and never crosses a thread boundary — the compiler rejects
+//!   any migration (assert_not_impl_any in php-runtime, KS-MS-1).
+//! - The ONLY value crossing the Axum→worker channel is WorkerTask
+//!   (String/Vec/oneshot::Sender), positively asserted Send below (A-MS3).
+//! - Vm borrows the worker-local RetainSet and drops in the owning worker
+//!   thread before it (borrowck-enforced drop order, P-67.5).
 
 #[cfg(feature = "axum-server")]
 mod implementation {
@@ -51,6 +55,10 @@ mod implementation {
         pub meta: WorkerHandlerMeta,
         pub response_tx: oneshot::Sender<(Vec<u8>, StatusCode)>,
     }
+
+    // A-MS3 positive control (WP-72 lesson: an all-negative counter is a failed
+    // check): the only value that crosses the Axum→worker channel MUST be Send.
+    static_assertions::assert_impl_all!(WorkerTask: Send);
 
     /// Worker pool: N OS threads, each managing 1 persistent Vm + RetainSet.
     pub struct WorkerPool {
@@ -126,9 +134,9 @@ mod implementation {
 
             // P-67.5: RetainSet for entire thread (MUST be declared first so Vm dies first)
             // This persists: object table, class cache, string interning pool
-            // SAFETY (A-MS1): RetainSet is Send + Sync per thread-local storage.
-            // Module is immutable for dispatch duration; no references leak across await.
-            // Exception handlers stored in per-request module, not RetainSet; drop thread-affinity preserved.
+            // SAFETY (A-MS2): RetainSet is !Send + !Sync — it is constructed HERE,
+            // on this worker's stack, and never crosses a thread boundary; the
+            // compiler enforces the affinity (assert_not_impl_any, php-runtime).
             let retain = php_runtime::RetainSet::new();
 
             // Main request loop: each request gets fresh Vm that borrows persistent RetainSet

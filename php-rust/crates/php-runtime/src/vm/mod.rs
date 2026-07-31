@@ -426,6 +426,14 @@ fn seed_cli_superglobals(
 /// (`StableDeref`), so parking never invalidates previously lent refs.
 pub struct RetainSet(elsa::FrozenVec<Rc<Module>>);
 
+// A-MS3 (Council WP-78, KS-MS-1): the whole worker-pool safety argument rests
+// on RetainSet being thread-affine BY CONSTRUCTION — `Rc<Module>` refcounts are
+// non-atomic and `elsa::FrozenVec` is the non-sync variant, so the compiler
+// itself rejects any cross-thread migration or sharing. If a future change
+// makes RetainSet Send or Sync these asserts break the build: removing them
+// requires a Council deliberation, never an in-session edit.
+static_assertions::assert_not_impl_any!(RetainSet: Send, Sync);
+
 impl RetainSet {
     /// S-77.6.5.2: Public constructor for worker-pool persistent Vm lifecycle.
     pub fn new() -> Self {
