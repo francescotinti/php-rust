@@ -38,24 +38,35 @@ rendered contiene già stdout — invisibile ai check di auto-uguaglianza e a
    costruzione; static assert in php-runtime (KS-MS-1: rimozione solo per
    delibera Concilio); solo `WorkerTask: Send` attraversa il canale.
 
-## ⚖️ Concilio WP-78 (verbali VINCOLANTI): `wp78-harness/COUNCIL_WP78_REVIEWS.md`
-S-78.0 chiusa; kill-switch di misura (KB-78-*, KL-78-*, KG-78.*, KH78-*)
-ATTIVI per la fase misura. ⚖️ Concilio WP-79 (su S-78.0 + programma misura):
-`wp79-harness/COUNCIL_WP79_REVIEWS.md` — da convocare/leggere in apertura.
+## ⚖️ Concilio WP-79 ESEGUITO (2026-07-31, verbali VINCOLANTI): `wp79-harness/COUNCIL_WP79_REVIEWS.md`
+**9× CONCORDO CON EMENDAMENTI, 0 opposizioni — l'opposizione Klabnik di WP-78
+è SOLLEVATA.** S-78.0 giudicata sanatoria REALE; ma il programma misura è
+dichiarato **NON ESEGUIBILE così com'è** (Gregg): i kill-switch di misura non
+hanno osservabili nel codice. La prossima sessione apre con **S-78.1
+"hardening pre-census"** (ordine vincolante in §Sintesi del verbale WP-79),
+POI esegue la misura. Kill-switch WP-78 + WP-79 tutti ATTIVI.
 
-## §WP-78 (prossima sessione) — FASE MISURA (protocollo: `wp78-harness/design78.md`)
+## §WP-78 (prossima sessione) — S-78.1 HARDENING → FASE MISURA
 
-Ordine (dal design78, TUTTO già deliberato — non rinegoziare):
-1. **KH78-1 PRIMA di tutto**: creare+eseguire il gate CONCORRENTE (richieste
-   parallele su N worker, fixture stateful); panic/divergenza ⇒ HALT.
-2. Gate della build da misurare: feature-matrix + run-gate (hash a verbale).
-3. Tier-0 baseline (Axum runtime senza pool, riferimento WP-77.1).
-4. Census per-fase `--workers 1` (compile/run/shutdown SEPARATI — KB-78-1):
-   qui si giudicano **A-BB1** (≤+2% alloc, denominatore A-BG4: stesso binario
-   `--cli-server` vs `--axum`) e **A-DL1** (frammentazione).
-5. Probe amplificazione RSS(N)vs(2N) + linearità footprint(W) (A-BG5/A-DL2).
-6. R-G4 CPU attribution SOLO se commissionato (contatori owner-level, mai
-   solo `sample`).
+**S-78.1 (ordine vincolante, dal verbale WP-79 §Sintesi — non rinegoziare)**:
+1. Doc purge residua (A-MS6/A-AH8/A-DS6: "persistent Vm"/"object table" in
+   worker_pool.rs + vm/mod.rs:3417-3420) + gate KS-MS-2 eseguibile (A-MS5)
+2. Lifecycle worker: JoinHandle+`shutdown()` join (A-MS7/A-DL6) + politica
+   panic worker (A-PP9) [KS-MS-5, KL-78-4, KS-PP-6]
+3. Gate hardening (A-TH7/A-PP6/A-PP7/A-SK7/A-SK8/A-SK9/A-SK10/A-AH6/A-AH7)
+4. Contratto fatal full-body vs oracolo + formato unificato (A-TH8/A-PP10/
+   A-DS7) [KH79-2, KS-DS-78-5] + divergenza html_errors (A-DS10) + A-PP8
+5. Fixture estese: include/require + static metodo/ereditati (A-DS8/A-DS9)
+6. Strumentazione census feature-gated con controlli positivi (A-BB7/A-BB8/
+   A-BG7/A-DL7) — verdetti footprint SOLO dal gemello non strumentato
+7. design78 emendato (A-DL8/A-BG8/A-BG9/A-BG10/A-BG11/A-BB9)
+8. KH78-1 gate concorrente secondo contratto A-SK6 [KS-SK-79.3]
+
+**Misura (solo dopo S-78.1 verde)**: Tier-0 (config tracciata o esce —
+KG-79.D) → census per-fase `--workers 1` (A-BB1/A-DL1 si giudicano qui) →
+probe amplificazione + linearità W → R-G4 solo se commissionato.
+Al primo rebuild phpr: audit Cargo.lock = solo static_assertions (A-AH9)
+[KS-AH-78-4], poi corpus per NOME.
 
 **Kill-switch di rotta**: KG-78.D/KL-78-3 (nessuna cifra senza run tracciato /
 PURGE_DELAY=0 / mai ps RSS) · KB-78-3/KG-78.A (workers≠1 o R<3 ⇒ VOID) ·
