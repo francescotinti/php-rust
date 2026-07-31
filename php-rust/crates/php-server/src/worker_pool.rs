@@ -122,8 +122,9 @@ mod implementation {
         ///
         /// Architecture (Council WP-77.5 P-77.5.2, P-77.5.3, P-77.5.4):
         /// - Each request gets new Vm instance, new Module from source
-        /// - But Vm borrows same RetainSet → object table, class cache persist
-        /// - request_end() resets ephemeral state (globals, statics, etc)
+        /// - But Vm borrows same RetainSet → parked unit modules persist
+        /// - request_end() resets per-request state (statics are NOT in its
+        ///   scope: they die with the Vm — A-DS2)
         /// - Two sequential requests on same RetainSet → byte-identical output (G-APERTURA-2 gate)
         fn worker_loop(
             _context: Arc<WorkerPoolContext>,
@@ -133,7 +134,8 @@ mod implementation {
             let reg = php_builtins::registry();
 
             // P-67.5: RetainSet for entire thread (MUST be declared first so Vm dies first)
-            // This persists: object table, class cache, string interning pool
+            // This persists: parked unit modules (compiled bytecode; a module
+            // survives only while the Rc-owned unit cache still holds it)
             // SAFETY (A-MS2): RetainSet is !Send + !Sync — it is constructed HERE,
             // on this worker's stack, and never crosses a thread boundary; the
             // compiler enforces the affinity (assert_not_impl_any, php-runtime).
@@ -189,11 +191,24 @@ mod implementation {
         /// 6. request_end: reset ephemeral state for next request (byte-parity via G2)
         /// 7. Vm dropped (returns to stack), but objects in RetainSet persist
         ///
-        /// ZEND SEMANTICS (A-DS1, Stogov Council mandate):
-        /// Per-request isolation contract (module swap + request_end() reset):
-        /// ✅ Reset per-request: superglobals ($_SERVER, $_GET, $_POST), constants, handlers, OB, generators
-        /// ⚠️  Persist cross-request: statics, closure_statics (matches PHP CLI behavior)
-        /// Rule: Output capture before request_end() ensures OB isolation (P-Pedersen mandate)
+        /// ZEND SEMANTICS (A-DS2, Council WP-78 — supersedes the non-conform A-DS1):
+        /// Contract = PHP-FPM (full RINIT→RSHUTDOWN per request), NOT the CLI:
+        /// userland state NEVER survives a request. Mechanism per row:
+        /// - superglobals, constants, handlers, OB stack, generators, resource
+        ///   ids, per-request caches → `request_end()` reset (vm/mod.rs).
+        /// - function statics, closure statics, class static props → Vm DEATH:
+        ///   they are fields of the per-request Vm and `request_end()` does NOT
+        ///   touch them. They MUST remain per-request even if the Vm ever became
+        ///   persistent (KS-DS-78-3: any persistent-Vm proposal requires the
+        ///   stateful gate A-DS3 green first; KS-DS-78-1: static counter printing
+        ///   ≠1 on request N≥2 is FATAL). Gate: wp78-harness/gate-axum
+        ///   gate_stateful.php.
+        /// - object store → emptied by the WP-72 mass-teardown break phase at
+        ///   request teardown (signature: used_n=0 after request_end, KS-DS-78-2).
+        /// - RetainSet (FrozenVec<Rc<Module>>) → persists across requests as the
+        ///   arena of compiled unit modules: bytecode/immutable data only (the
+        ///   opcache analogy) — NEVER userland state.
+        /// Rule: output capture before request_end() (Pedersen/Stogov permanent rule).
         pub fn execute_with_retain(
             retain: &php_runtime::RetainSet,
             meta: &WorkerHandlerMeta,
@@ -228,8 +243,8 @@ mod implementation {
             // S-77.6.5.2.2: This is the KEY architectural change
             // - Vm is created per-request (fresh instance)
             // - But it borrows thread-persistent RetainSet
-            // - Object table, class cache, string interning persist across requests
-            // - request_end() resets ephemeral state (globals, statics, etc)
+            // - Parked unit modules persist across requests (bytecode only)
+            // - request_end() resets per-request state; statics die with the Vm (A-DS2)
             let mut vm = php_runtime::vm_new(retain, &module, &reg, Some(&program));
 
             // Phase 4: Per-request lifecycle (Stogov order, Council WP-77.5)
