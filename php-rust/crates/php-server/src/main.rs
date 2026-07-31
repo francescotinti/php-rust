@@ -9,6 +9,33 @@
 //! - Each request borrows from thread-local, calls handler, releases
 //! - Vm::reset() clears state between requests (M1 alloc parity target)
 //! - Avoids Arc<Mutex> contention (domain-web: stateless HTTP)
+//!
+//! Gate: G-APERTURA-2 (A-SK1, Klabnik Council mandate)
+//! =====================================================
+//! **Scope**: Correctness (bytewise output parity), NOT alloc/CPU/footprint
+//! **Input**: Two sequential HTTP POST requests (hello-world PHP script)
+//! **Output**: Byte-identical response bodies ✓
+//! **Verification**: Compare two request outputs; REJECT if divergent
+//! **Kill-switch**: If bodies differ, REJECT S-77.6.5.2.3 architectural change
+//! **Contract**: Persistent RetainSet per thread MUST produce byte-parity on two sequential requests
+//!
+//! Measurement Scope (A-BG1, Gregg Council mandate)
+//! =================================================
+//! Gate G-APERTURA-2 measures **correctness only**, NOT alloc/CPU/footprint.
+//! - Correctness: Bytewise output parity (deterministic diff, binary match)
+//! - NOT measured: Allocation overhead, CPU attribution, footprint baseline
+//! - Future WP-78+: Will measure alloc/CPU/warmup separately with distinct methodology
+//! - Boot variance: Controlled via sequential request pattern (no JIT warm-up confusion)
+//!
+//! Feature-Gating Verification (A-AH1, Hejlsberg Council mandate)
+//! ==============================================================
+//! CLI-mode and Axum-mode builds MUST NOT overlap:
+//! ```bash
+//! cargo build --features cli-server      # no axum-server (default)
+//! cargo build --features axum-server     # explicit axum flag
+//! # Assert: no duplicate symbols, no binary section overlap
+//! ```
+//! Verification: CLI-mode crate unaffected by Axum feature flag; codegen bloat ≤500 bytes
 
 use std::ffi::OsString;
 use std::process::ExitCode;

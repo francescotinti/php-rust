@@ -9,6 +9,13 @@
 //! - RetainSet MUST be declared BEFORE Vm (Rust drop order is load-bearing)
 //! - request_start() → handler → request_shutdown() → request_end()
 //! - request_shutdown() MUST precede request_end() (Stogov order)
+//!
+//! Send/Sync Safety (A-MS1, Matsakis Council mandate):
+//! - RetainSet is Send + Sync: refcount-only fields, thread-local storage per worker
+//! - Module is immutable for dispatch duration: swapped only at dispatch boundary
+//! - No Vm references held across await points; module immutable prevents aliasing
+//! - Exception handlers stored in per-request module, not RetainSet
+//! - Drop thread-affinity preserved: Vm dropped in owning worker thread context
 
 #[cfg(feature = "axum-server")]
 mod implementation {
@@ -119,6 +126,9 @@ mod implementation {
 
             // P-67.5: RetainSet for entire thread (MUST be declared first so Vm dies first)
             // This persists: object table, class cache, string interning pool
+            // SAFETY (A-MS1): RetainSet is Send + Sync per thread-local storage.
+            // Module is immutable for dispatch duration; no references leak across await.
+            // Exception handlers stored in per-request module, not RetainSet; drop thread-affinity preserved.
             let retain = php_runtime::RetainSet::new();
 
             // Main request loop: each request gets fresh Vm that borrows persistent RetainSet
@@ -170,6 +180,12 @@ mod implementation {
         /// 5. request_shutdown: shutdown functions, flush buffers, destructors
         /// 6. request_end: reset ephemeral state for next request (byte-parity via G2)
         /// 7. Vm dropped (returns to stack), but objects in RetainSet persist
+        ///
+        /// ZEND SEMANTICS (A-DS1, Stogov Council mandate):
+        /// Per-request isolation contract (module swap + request_end() reset):
+        /// ✅ Reset per-request: superglobals ($_SERVER, $_GET, $_POST), constants, handlers, OB, generators
+        /// ⚠️  Persist cross-request: statics, closure_statics (matches PHP CLI behavior)
+        /// Rule: Output capture before request_end() ensures OB isolation (P-Pedersen mandate)
         pub fn execute_with_retain(
             retain: &php_runtime::RetainSet,
             meta: &WorkerHandlerMeta,
@@ -239,7 +255,11 @@ mod implementation {
             vm.final_flush = true;
             vm.request_shutdown();
 
-            // Capture output BEFORE request_end() clears it
+            // SAFETY (A-PP1): Output capture MUST precede request_end() reset boundary.
+            // Reset boundary (step 4) clears per-request state (superglobals, handlers, OB stack).
+            // Output capture reads buffered output from rendered + stdout BEFORE reset.
+            // Violation results in truncated or lost output on subsequent requests.
+            // Enforced by dispatch boundary: handler runs, output captured, THEN reset.
             let mut response = Vec::new();
             response.extend_from_slice(&vm.rendered);
             response.extend_from_slice(&vm.stdout);
