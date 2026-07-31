@@ -1,0 +1,9 @@
+[Fri Jul 31 13:04:59 2026] PHP 8.5.7 Development Server (http://127.0.0.1:8321) started
+[Fri Jul 31 13:05:00 2026] 127.0.0.1:51783 Accepted
+census-cli: req=1 total_calls=129148 total_bytes=61191412 a1_calls=121823 a1_bytes=58874923 a3_calls=0 a3_bytes=0
+[Fri Jul 31 13:05:00 2026] 127.0.0.1:51783 [200]: GET /hello.php
+[Fri Jul 31 13:05:00 2026] 127.0.0.1:51783 Closing
+[Fri Jul 31 13:05:00 2026] 127.0.0.1:51784 Accepted
+census-cli: req=2 total_calls=83834 total_bytes=13363875 a1_calls=74288 a1_bytes=10825612 a3_calls=2156 a3_bytes=198569
+[Fri Jul 31 13:05:00 2026] 127.0.0.1:51784 [200]: GET /include_gate.php
+[Fri Jul 31 13:05:00 2026] 127.0.0.1:51784 Closing

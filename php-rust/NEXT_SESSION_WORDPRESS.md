@@ -42,31 +42,61 @@ giudicabile). Dettaglio: `sessions/WP_SESSION_79.md`.
 4. **Panic = FAIL-FAST via HOOK globale** (A-PP9+A-PP4): abort su OGNI
    thread del server, dispatcher incluso; gate-worker-panic 3 fasi.
 
-## §WP-80 (prossima sessione) — FASE MISURA pre-A/B poi IMPLEMENTAZIONE A-BB6
+## ⚖️ Concilio WP-81 ESEGUITO (2026-07-31, verbali VINCOLANTI): `wp81-harness/COUNCIL_WP81_REVIEWS.md`
+**9× CONCORDO CON EMENDAMENTI, 0 opposizioni.** S-79.0 verificata NEL CODICE
+da ogni sedia. MA: **identità ancora bucata sull'asse GIT/tree** (driver non
+confronta il git del matrix; log sovrascritto; tree sporco non rilevato — 3
+sedie), **design79 §1 = cifra senza run tracciato** (Gregg, ADVISORY
+bloccante: i numeri citati non stanno in alcun raw del repo), **anti-wrap
+vacuo in release** (Hoare: il test passa CON la regressione; dissenso
+Matsakis/Klabnik registrato — prevale la dimostrazione), **off-by-one
+righe==N** (boot-probe = 1 riga extra: il check VOID-erebbe ogni run
+legittima), **A-MS3 non sigillato** (bloccante pre-leva), **pin del Program
+mancante** (il RetainSet non può parcheggiarlo; walker retained salta le
+entry Rc-shared ⇒ sottostima proprio il prelude condiviso), **early-return
+fatal non drena lo split** (F8 produrrebbe esattamente la sequenza
+inquinante). Refutazioni RESPINTE dal collegio: doppio-pass warning-free
+(Hejlsberg), supersede-vs-opcache (Stogov), soglie overlap (Klabnik — ma il
+claim si riduce a "≥2 worker").
 
-Contratto = `wp79-harness/design79.md` (vincoli Council WP-80 già mappati).
-⚖️ Il Concilio WP-81 sul S-79.0 è in `wp81-harness/COUNCIL_WP81_REVIEWS.md`
-(vincolante: leggerne la sintesi PRIMA di iniziare).
+## §WP-80 (prossima sessione) — S-80.0 "IDENTITY & CHANNEL REPAIR" poi misura poi leva
 
-1. **Misura census di riferimento R≥3** (KB-80-1/A-BG13): modi `census` E
-   `censuscli`, fixture hello + include_gate + **include_heavy**, driver
-   ENFORCE attivo; citare ASSOLUTI a1/a2/a3/resid; finestra idle nel
-   verbale. (Le cifre S-79.0 sono smoke R=1, dichiarate tali.)
-2. **DR-1 (bloccante)**: audit interior-mutability del grafo Module
-   (PropIc/MethodIc — design79 §5); esito (a) assert o (b) fixture F7 verde.
-3. Implementazione leva per design79 §2-8 (chiave/fp §3, pin §4, fixture
-   F1-F9 §9 TUTTE verdi prima dell'A/B, contatori main_probe/hit/put/
-   impure_skip + bump marker census-twin nello stesso commit).
-4. **A/B design79 §11**: coppia churn+retained (retained profondo del main
-   cached misurato PRIMA, ×W) + peak W=num_cpus (>2% ⇒ non passa) + CPU +
-   corpus per NOME + battery completa. Predizioni §10 dichiarate PRIMA.
-5. Su qualunque body ≠ oracolo: **REVERT, mai fix-forward** (KS-DS-80-3).
+Ordine vincolante = verbale WP-81 §Sintesi (9 punti, non rinegoziare):
+1. Identità GIT/tree nel driver+matrix (archivio per-run, tree pulito,
+   match esatto) [KG-81-2, KS-AH-81-1, KS-SK-81-2]
+2. Driver: fix off-by-one righe==N (A-BG19) · split rifiutato a W>1
+   (A-BB17) · idle probe su censuscli + run idle ≥60s · etichetta gross
+3. Canale: drain split su OGNI uscita + assert a1≤a + A3Window !Send/LIFO/
+   tripwire + a1 RAII [KS-PP-81-1, KS-MS-81-2] · tripwire depth d==0⇒abort
+   + test negativo + IN_FLIGHT o declassamento [KH81-1/2]
+4. Sigillo A-MS3 (newtype/costruzione interna o grep-gate) [KS-MS-81-3]
+5. Gate: -D warnings cross-crate census + quinta config pinnata/bandita
+   [KS-AH-81-4] · pin marker per-FILE [KS-SK-81-3] · SAFETY catch_unwind
+   corretta (A-TH11) · near-miss dispatcher (A-PP12) · esca ramo FAIL +
+   body W=1 concurrent (A-SK9) · censimento letture post-request_end
+   [KS-PP-81-3]
+6. Misura riferimento R≥3 (census E censuscli; hello+include_gate+
+   include_heavy) che SOSTITUISCE il §1 ADVISORY + floor non-compile
+   ex-ante [KB-81-2, KG-81-1]
+7. design79 emendato stesso commit: MAIN_CHAIN_FP computato (A-AH19/A-DS7)
+   [KS-AH-81-2] · pin coppia (Module,Program) + DR-1 esteso al Program
+   [KS-PP-81-2] · F10-F12 + F-probe-fail + F8b + link-fatal + main_probe==0
+   one-shot [KS-DS-81-1/2] · KS-AH-80-4 su UNA quantità [KS-SK-81-4] ·
+   predizioni resid+b [KG-81-3] · KS-MS-80-2/F6 su park-eventi · strumento
+   retained con regola Rc-shared + controllo positivo [KL-81-2] · budget
+   ×W ex-ante · supersede bytes+probe twin [KL-81-1] + filtro reg_mode
+8. DR-1 (Module E Program): IC fuori dal Module o reset-on-hit con
+   contatore; audit = check macchina, mai prosa/solo-F7 [KH81-3]
+9. SOLO POI leva + fixture verdi + A/B (CPU slope due-N, peak W=num_cpus,
+   floor numerici; body ≠ oracolo ⇒ REVERT, KS-DS-80-3)
 
-**Kill-switch di rotta (attivi)**: tutti quelli della mappa design79
-§Kill-switch (KH80-1/2/3/4 · KB-80-1..5 · KS-SK-80-1..4 · KS-AH-80-1..4 ·
-KS-MS-80-1..3 · KS-PP-80-1..3 · KL-80-1..3 · KS-DS-80-1..3 · KG-80-1..3) +
-gli storici KG-78.D · KB-78-5/KL-78-5 · KB-78-3/KG-78.A · KH78-2/KB-78-2 ·
-KS-PP-3 · KS-SK-79.2 · KS-AH-78-1 (ora ENFORCED dal driver).
+**Kill-switch di rotta (attivi)**: la tabella NUOVA WP-81 (KH81-1..3 ·
+KS-MS-81-1..3 · KS-SK-81-1..4 · KS-AH-81-1..4 · KB-81-1..5 · KS-PP-81-1..3 ·
+KL-81-1..3 · KS-DS-81-1..3 · KG-81-1..3 — verbale §Kill-switch) + la mappa
+design79 (KH80-* · KB-80-* · KS-SK-80-* · KS-AH-80-* · KS-MS-80-* ·
+KS-PP-80-* · KL-80-* · KS-DS-80-* · KG-80-*) + gli storici KG-78.D ·
+KB-78-5/KL-78-5 · KB-78-3/KG-78.A · KH78-2/KB-78-2 (ora ADVISORY per KH81-1
+finché IN_FLIGHT non atterra) · KS-PP-3 · KS-SK-79.2 · KS-AH-78-1.
 
 **NON riproporre**: N=1 Vm persistente (KS-DS-78-3); RetainSet condiviso/
 Send/persistente; seconda cache Module separata dalla unit cache (A-DS5);
