@@ -1,0 +1,56 @@
+php-server (Axum) listening on http://127.0.0.1:8194 (docroot: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/gate-axum/fixtures)
+php-server: shutdown signal received, draining
+php-server: all 10 workers joined — exit stats are authoritative (KL-78-4)
+subproc 0
+ pages           peak       total     current       block      total#   
+  touched   :     0           0           0                                ok
+  pages     :     2.3 K     129.3 K      13      
+  abandoned :     1.3 K      61.6 K       8      
+  reclaima  :     0      
+  reclaimf  :    61.5 K  
+  reabandon :     0      
+  waits     :     0      
+  extended  :     0      
+  retire    :     0      
+  searches  :     2.7 avg
+
+ arenas          peak       total     current       block      total#   
+  reserved  :     1.0 GiB     1.0 GiB     1.0 GiB                          
+  committed :   223.9 MiB   223.9 MiB   223.9 MiB                          
+  reset     :     0      
+  purged    :     8.8 GiB
+  arenas    :     1      
+  rollback  :     0      
+  mmaps     :     3      
+  commits   :     0      
+  resets    :     0      
+  purges    :   129.3 K  
+  guarded   :     0      
+  theaps    :    20          20           0      
+  heaps     :     1           1           1      
+  heap waits:     0      
+
+ process         peak       total     current       block      total#   
+  threads   :    21          21           1      
+  numa nodes:     1
+  elapsed   :    24.739 s
+  process   : user: 7.653 s, system: 1.275 s, faults: 0, peak rss: 202.1 MiB, peak commit: 223.9 MiB
+
+       24.75 real         7.65 user         1.27 sys
+           211992576  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+               14452  page reclaims
+                   0  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                1012  messages sent
+                2023  messages received
+                   1  signals received
+                   0  voluntary context switches
+               29831  involuntary context switches
+         39571696964  instructions retired
+         18995867712  cycles elapsed
+           169575024  peak memory footprint

@@ -1,0 +1,167 @@
+php-server (Axum) listening on http://127.0.0.1:8194 (docroot: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/gate-axum/fixtures)
+census: req=1 a_calls=128011 a_bytes=61065271 b_calls=736 b_bytes=95912 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=2 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=3 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=4 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=5 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=6 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=7 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=8 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=9 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=10 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=11 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=12 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=13 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=14 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=15 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=16 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=17 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=18 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=19 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=20 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=21 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=22 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=23 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=24 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=25 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=26 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=27 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=28 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=29 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=30 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=31 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=32 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=33 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=34 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=35 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=36 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=37 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=38 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=39 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=40 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=41 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=42 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=43 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=44 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=45 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=46 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=47 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=48 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=49 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=50 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=51 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=52 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=53 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=54 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=55 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=56 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=57 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=58 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=59 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=60 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=61 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=62 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=63 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=64 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=65 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=66 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=67 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=68 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=69 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=70 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=71 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=72 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=73 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=74 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=75 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=76 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=77 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=78 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=79 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=80 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=81 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=82 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=83 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=84 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=85 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=86 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=87 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=88 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=89 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=90 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=91 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=92 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=93 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=94 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=95 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=96 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=97 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=98 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=99 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=100 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=101 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=102 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=103 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=104 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=105 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=106 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=107 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=108 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=109 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=110 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+census: req=111 a_calls=80476 a_bytes=13015960 b_calls=730 b_bytes=95627 c_calls=0 c_bytes=0 retain_len=0 live_objs=0 depth_max=1
+php-server: shutdown signal received, draining
+php-server: all 1 workers joined — exit stats are authoritative (KL-78-4)
+subproc 0
+ pages           peak       total     current       block      total#   
+  touched   :     0           0           0                                ok
+  pages     :   242          14.3 K      14      
+  abandoned :   146           6.6 K      11      
+  reclaima  :     0      
+  reclaimf  :     6.6 K  
+  reabandon :     0      
+  waits     :     0      
+  extended  :     0      
+  retire    :     0      
+  searches  :     2.7 avg
+
+ arenas          peak       total     current       block      total#   
+  reserved  :     1.0 GiB     1.0 GiB     1.0 GiB                          
+  committed :    64.5 MiB    64.5 MiB    64.5 MiB                          
+  reset     :     0      
+  purged    :  1003.3 MiB
+  arenas    :     1      
+  rollback  :     0      
+  mmaps     :     4      
+  commits   :     0      
+  resets    :     0      
+  purges    :    14.3 K  
+  guarded   :     0      
+  theaps    :    11          11           0      
+  heaps     :     1           1           1      
+  heap waits:     0      
+
+ process         peak       total     current       block      total#   
+  threads   :    12          12           1      
+  numa nodes:     1
+  elapsed   :     4.925 s
+  process   : user: 0.894 s, system: 0.174 s, faults: 37, peak rss: 57.0 MiB, peak commit: 64.5 MiB
+
+        5.58 real         0.89 user         0.17 sys
+            59834368  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+                3942  page reclaims
+                  37  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                 112  messages sent
+                 223  messages received
+                   1  signals received
+                  19  voluntary context switches
+                3649  involuntary context switches
+          4542331694  instructions retired
+          2260864491  cycles elapsed
+            38388216  peak memory footprint

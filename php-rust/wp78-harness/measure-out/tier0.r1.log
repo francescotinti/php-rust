@@ -1,0 +1,55 @@
+php-server (Axum TIER-0) listening on http://127.0.0.1:8194 (no pool, no Vm)
+php-server: shutdown signal received, draining
+subproc 0
+ pages           peak       total     current       block      total#   
+  touched   :     0           0           0                                ok
+  pages     :    34          84          14      
+  abandoned :    11          20          11      
+  reclaima  :     0      
+  reclaimf  :     0      
+  reabandon :     0      
+  waits     :     0      
+  extended  :     0      
+  retire    :     0      
+  searches  :     0.8 avg
+
+ arenas          peak       total     current       block      total#   
+  reserved  :     1.0 GiB     1.0 GiB     1.0 GiB                          
+  committed :    11.4 MiB    11.4 MiB    11.4 MiB                          
+  reset     :     0      
+  purged    :     6.1 MiB
+  arenas    :     1      
+  rollback  :     0      
+  mmaps     :     3      
+  commits   :     0      
+  resets    :     0      
+  purges    :    70      
+  guarded   :     0      
+  theaps    :    10          10           0      
+  heaps     :     1           1           1      
+  heap waits:     0      
+
+ process         peak       total     current       block      total#   
+  threads   :    11          11           1      
+  numa nodes:     1
+  elapsed   :     4.638 s
+  process   : user: 0.021 s, system: 0.018 s, faults: 0, peak rss: 10.1 MiB, peak commit: 11.4 MiB
+
+        5.27 real         0.02 user         0.01 sys
+            10665984  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+                 970  page reclaims
+                   0  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                 112  messages sent
+                 223  messages received
+                   1  signals received
+                   0  voluntary context switches
+                 984  involuntary context switches
+           122905177  instructions retired
+            85534163  cycles elapsed
+             4456904  peak memory footprint

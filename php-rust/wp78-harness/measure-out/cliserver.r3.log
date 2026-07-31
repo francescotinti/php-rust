@@ -1,0 +1,353 @@
+[Fri Jul 31 11:38:55 2026] PHP 8.5.7 Development Server (http://127.0.0.1:8194) started
+[Fri Jul 31 11:38:55 2026] 127.0.0.1:58710 Accepted
+[Fri Jul 31 11:38:55 2026] 127.0.0.1:58710 [200]: GET /hello.php
+[Fri Jul 31 11:38:55 2026] 127.0.0.1:58710 Closing
+[Fri Jul 31 11:38:55 2026] 127.0.0.1:58711 Accepted
+[Fri Jul 31 11:38:55 2026] 127.0.0.1:58711 [200]: GET /hello.php
+[Fri Jul 31 11:38:55 2026] 127.0.0.1:58711 Closing
+[Fri Jul 31 11:38:55 2026] 127.0.0.1:58712 Accepted
+[Fri Jul 31 11:38:55 2026] 127.0.0.1:58712 [200]: GET /hello.php
+[Fri Jul 31 11:38:55 2026] 127.0.0.1:58712 Closing
+[Fri Jul 31 11:38:55 2026] 127.0.0.1:58713 Accepted
+[Fri Jul 31 11:38:55 2026] 127.0.0.1:58713 [200]: GET /hello.php
+[Fri Jul 31 11:38:55 2026] 127.0.0.1:58713 Closing
+[Fri Jul 31 11:38:55 2026] 127.0.0.1:58714 Accepted
+[Fri Jul 31 11:38:55 2026] 127.0.0.1:58714 [200]: GET /hello.php
+[Fri Jul 31 11:38:55 2026] 127.0.0.1:58714 Closing
+[Fri Jul 31 11:38:55 2026] 127.0.0.1:58715 Accepted
+[Fri Jul 31 11:38:55 2026] 127.0.0.1:58715 [200]: GET /hello.php
+[Fri Jul 31 11:38:55 2026] 127.0.0.1:58715 Closing
+[Fri Jul 31 11:38:55 2026] 127.0.0.1:58716 Accepted
+[Fri Jul 31 11:38:55 2026] 127.0.0.1:58716 [200]: GET /hello.php
+[Fri Jul 31 11:38:55 2026] 127.0.0.1:58716 Closing
+[Fri Jul 31 11:38:55 2026] 127.0.0.1:58717 Accepted
+[Fri Jul 31 11:38:55 2026] 127.0.0.1:58717 [200]: GET /hello.php
+[Fri Jul 31 11:38:55 2026] 127.0.0.1:58717 Closing
+[Fri Jul 31 11:38:55 2026] 127.0.0.1:58718 Accepted
+[Fri Jul 31 11:38:55 2026] 127.0.0.1:58718 [200]: GET /hello.php
+[Fri Jul 31 11:38:55 2026] 127.0.0.1:58718 Closing
+[Fri Jul 31 11:38:55 2026] 127.0.0.1:58719 Accepted
+[Fri Jul 31 11:38:55 2026] 127.0.0.1:58719 [200]: GET /hello.php
+[Fri Jul 31 11:38:55 2026] 127.0.0.1:58719 Closing
+[Fri Jul 31 11:38:55 2026] 127.0.0.1:58720 Accepted
+[Fri Jul 31 11:38:55 2026] 127.0.0.1:58720 [200]: GET /hello.php
+[Fri Jul 31 11:38:55 2026] 127.0.0.1:58720 Closing
+[Fri Jul 31 11:38:56 2026] 127.0.0.1:58722 Accepted
+[Fri Jul 31 11:38:56 2026] 127.0.0.1:58722 [200]: GET /hello.php
+[Fri Jul 31 11:38:56 2026] 127.0.0.1:58722 Closing
+[Fri Jul 31 11:38:56 2026] 127.0.0.1:58723 Accepted
+[Fri Jul 31 11:38:56 2026] 127.0.0.1:58723 [200]: GET /hello.php
+[Fri Jul 31 11:38:56 2026] 127.0.0.1:58723 Closing
+[Fri Jul 31 11:38:56 2026] 127.0.0.1:58724 Accepted
+[Fri Jul 31 11:38:56 2026] 127.0.0.1:58724 [200]: GET /hello.php
+[Fri Jul 31 11:38:56 2026] 127.0.0.1:58724 Closing
+[Fri Jul 31 11:38:56 2026] 127.0.0.1:58725 Accepted
+[Fri Jul 31 11:38:56 2026] 127.0.0.1:58725 [200]: GET /hello.php
+[Fri Jul 31 11:38:56 2026] 127.0.0.1:58725 Closing
+[Fri Jul 31 11:38:56 2026] 127.0.0.1:58726 Accepted
+[Fri Jul 31 11:38:56 2026] 127.0.0.1:58726 [200]: GET /hello.php
+[Fri Jul 31 11:38:56 2026] 127.0.0.1:58726 Closing
+[Fri Jul 31 11:38:56 2026] 127.0.0.1:58727 Accepted
+[Fri Jul 31 11:38:56 2026] 127.0.0.1:58727 [200]: GET /hello.php
+[Fri Jul 31 11:38:56 2026] 127.0.0.1:58727 Closing
+[Fri Jul 31 11:38:56 2026] 127.0.0.1:58728 Accepted
+[Fri Jul 31 11:38:56 2026] 127.0.0.1:58728 [200]: GET /hello.php
+[Fri Jul 31 11:38:56 2026] 127.0.0.1:58728 Closing
+[Fri Jul 31 11:38:56 2026] 127.0.0.1:58729 Accepted
+[Fri Jul 31 11:38:56 2026] 127.0.0.1:58729 [200]: GET /hello.php
+[Fri Jul 31 11:38:56 2026] 127.0.0.1:58729 Closing
+[Fri Jul 31 11:38:56 2026] 127.0.0.1:58730 Accepted
+[Fri Jul 31 11:38:56 2026] 127.0.0.1:58730 [200]: GET /hello.php
+[Fri Jul 31 11:38:56 2026] 127.0.0.1:58730 Closing
+[Fri Jul 31 11:38:56 2026] 127.0.0.1:58731 Accepted
+[Fri Jul 31 11:38:56 2026] 127.0.0.1:58731 [200]: GET /hello.php
+[Fri Jul 31 11:38:56 2026] 127.0.0.1:58731 Closing
+[Fri Jul 31 11:38:56 2026] 127.0.0.1:58732 Accepted
+[Fri Jul 31 11:38:56 2026] 127.0.0.1:58732 [200]: GET /hello.php
+[Fri Jul 31 11:38:56 2026] 127.0.0.1:58732 Closing
+[Fri Jul 31 11:38:56 2026] 127.0.0.1:58733 Accepted
+[Fri Jul 31 11:38:56 2026] 127.0.0.1:58733 [200]: GET /hello.php
+[Fri Jul 31 11:38:56 2026] 127.0.0.1:58733 Closing
+[Fri Jul 31 11:38:56 2026] 127.0.0.1:58734 Accepted
+[Fri Jul 31 11:38:56 2026] 127.0.0.1:58734 [200]: GET /hello.php
+[Fri Jul 31 11:38:56 2026] 127.0.0.1:58734 Closing
+[Fri Jul 31 11:38:56 2026] 127.0.0.1:58735 Accepted
+[Fri Jul 31 11:38:56 2026] 127.0.0.1:58735 [200]: GET /hello.php
+[Fri Jul 31 11:38:56 2026] 127.0.0.1:58735 Closing
+[Fri Jul 31 11:38:56 2026] 127.0.0.1:58736 Accepted
+[Fri Jul 31 11:38:56 2026] 127.0.0.1:58736 [200]: GET /hello.php
+[Fri Jul 31 11:38:56 2026] 127.0.0.1:58736 Closing
+[Fri Jul 31 11:38:56 2026] 127.0.0.1:58737 Accepted
+[Fri Jul 31 11:38:56 2026] 127.0.0.1:58737 [200]: GET /hello.php
+[Fri Jul 31 11:38:56 2026] 127.0.0.1:58737 Closing
+[Fri Jul 31 11:38:56 2026] 127.0.0.1:58738 Accepted
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58738 [200]: GET /hello.php
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58738 Closing
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58739 Accepted
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58739 [200]: GET /hello.php
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58739 Closing
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58740 Accepted
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58740 [200]: GET /hello.php
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58740 Closing
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58741 Accepted
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58741 [200]: GET /hello.php
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58741 Closing
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58742 Accepted
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58742 [200]: GET /hello.php
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58742 Closing
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58743 Accepted
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58743 [200]: GET /hello.php
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58743 Closing
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58744 Accepted
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58744 [200]: GET /hello.php
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58744 Closing
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58745 Accepted
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58745 [200]: GET /hello.php
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58745 Closing
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58746 Accepted
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58746 [200]: GET /hello.php
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58746 Closing
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58747 Accepted
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58747 [200]: GET /hello.php
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58747 Closing
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58748 Accepted
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58748 [200]: GET /hello.php
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58748 Closing
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58749 Accepted
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58749 [200]: GET /hello.php
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58749 Closing
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58750 Accepted
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58750 [200]: GET /hello.php
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58750 Closing
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58751 Accepted
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58751 [200]: GET /hello.php
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58751 Closing
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58752 Accepted
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58752 [200]: GET /hello.php
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58752 Closing
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58753 Accepted
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58753 [200]: GET /hello.php
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58753 Closing
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58754 Accepted
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58754 [200]: GET /hello.php
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58754 Closing
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58755 Accepted
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58755 [200]: GET /hello.php
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58755 Closing
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58756 Accepted
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58756 [200]: GET /hello.php
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58756 Closing
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58757 Accepted
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58757 [200]: GET /hello.php
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58757 Closing
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58758 Accepted
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58758 [200]: GET /hello.php
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58758 Closing
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58759 Accepted
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58759 [200]: GET /hello.php
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58759 Closing
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58760 Accepted
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58760 [200]: GET /hello.php
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58760 Closing
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58761 Accepted
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58761 [200]: GET /hello.php
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58761 Closing
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58762 Accepted
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58762 [200]: GET /hello.php
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58762 Closing
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58763 Accepted
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58763 [200]: GET /hello.php
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58763 Closing
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58764 Accepted
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58764 [200]: GET /hello.php
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58764 Closing
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58765 Accepted
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58765 [200]: GET /hello.php
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58765 Closing
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58766 Accepted
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58766 [200]: GET /hello.php
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58766 Closing
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58767 Accepted
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58767 [200]: GET /hello.php
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58767 Closing
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58768 Accepted
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58768 [200]: GET /hello.php
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58768 Closing
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58769 Accepted
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58769 [200]: GET /hello.php
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58769 Closing
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58770 Accepted
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58770 [200]: GET /hello.php
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58770 Closing
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58771 Accepted
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58771 [200]: GET /hello.php
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58771 Closing
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58772 Accepted
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58772 [200]: GET /hello.php
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58772 Closing
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58773 Accepted
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58773 [200]: GET /hello.php
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58773 Closing
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58774 Accepted
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58774 [200]: GET /hello.php
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58774 Closing
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58775 Accepted
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58775 [200]: GET /hello.php
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58775 Closing
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58776 Accepted
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58776 [200]: GET /hello.php
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58776 Closing
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58777 Accepted
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58777 [200]: GET /hello.php
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58777 Closing
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58778 Accepted
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58778 [200]: GET /hello.php
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58778 Closing
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58779 Accepted
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58779 [200]: GET /hello.php
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58779 Closing
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58780 Accepted
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58780 [200]: GET /hello.php
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58780 Closing
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58781 Accepted
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58781 [200]: GET /hello.php
+[Fri Jul 31 11:38:57 2026] 127.0.0.1:58781 Closing
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58782 Accepted
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58782 [200]: GET /hello.php
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58782 Closing
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58783 Accepted
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58783 [200]: GET /hello.php
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58783 Closing
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58784 Accepted
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58784 [200]: GET /hello.php
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58784 Closing
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58785 Accepted
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58785 [200]: GET /hello.php
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58785 Closing
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58786 Accepted
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58786 [200]: GET /hello.php
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58786 Closing
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58787 Accepted
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58787 [200]: GET /hello.php
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58787 Closing
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58788 Accepted
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58788 [200]: GET /hello.php
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58788 Closing
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58789 Accepted
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58789 [200]: GET /hello.php
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58789 Closing
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58790 Accepted
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58790 [200]: GET /hello.php
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58790 Closing
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58791 Accepted
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58791 [200]: GET /hello.php
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58791 Closing
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58792 Accepted
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58792 [200]: GET /hello.php
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58792 Closing
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58793 Accepted
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58793 [200]: GET /hello.php
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58793 Closing
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58794 Accepted
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58794 [200]: GET /hello.php
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58794 Closing
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58795 Accepted
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58795 [200]: GET /hello.php
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58795 Closing
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58796 Accepted
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58796 [200]: GET /hello.php
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58796 Closing
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58797 Accepted
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58797 [200]: GET /hello.php
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58797 Closing
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58798 Accepted
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58798 [200]: GET /hello.php
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58798 Closing
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58799 Accepted
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58799 [200]: GET /hello.php
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58799 Closing
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58800 Accepted
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58800 [200]: GET /hello.php
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58800 Closing
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58801 Accepted
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58801 [200]: GET /hello.php
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58801 Closing
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58802 Accepted
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58802 [200]: GET /hello.php
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58802 Closing
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58803 Accepted
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58803 [200]: GET /hello.php
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58803 Closing
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58804 Accepted
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58804 [200]: GET /hello.php
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58804 Closing
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58805 Accepted
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58805 [200]: GET /hello.php
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58805 Closing
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58806 Accepted
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58806 [200]: GET /hello.php
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58806 Closing
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58807 Accepted
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58807 [200]: GET /hello.php
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58807 Closing
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58808 Accepted
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58808 [200]: GET /hello.php
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58808 Closing
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58809 Accepted
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58809 [200]: GET /hello.php
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58809 Closing
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58810 Accepted
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58810 [200]: GET /hello.php
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58810 Closing
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58811 Accepted
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58811 [200]: GET /hello.php
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58811 Closing
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58812 Accepted
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58812 [200]: GET /hello.php
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58812 Closing
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58813 Accepted
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58813 [200]: GET /hello.php
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58813 Closing
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58814 Accepted
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58814 [200]: GET /hello.php
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58814 Closing
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58815 Accepted
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58815 [200]: GET /hello.php
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58815 Closing
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58816 Accepted
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58816 [200]: GET /hello.php
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58816 Closing
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58817 Accepted
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58817 [200]: GET /hello.php
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58817 Closing
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58818 Accepted
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58818 [200]: GET /hello.php
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58818 Closing
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58819 Accepted
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58819 [200]: GET /hello.php
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58819 Closing
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58820 Accepted
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58820 [200]: GET /hello.php
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58820 Closing
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58821 Accepted
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58821 [200]: GET /hello.php
+[Fri Jul 31 11:38:58 2026] 127.0.0.1:58821 Closing
+time: command terminated abnormally
+        4.74 real         0.85 user         0.14 sys
+            53985280  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+                3605  page reclaims
+                   0  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                 111  messages sent
+                 111  messages received
+                   0  signals received
+                 115  voluntary context switches
+                3202  involuntary context switches
+          4425886971  instructions retired
+          2138258951  cycles elapsed
+            37061160  peak memory footprint
