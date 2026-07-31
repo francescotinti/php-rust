@@ -774,6 +774,9 @@ mod implementation {
         // A-PP14/A-MS14 class: the DRAINED_* ledger is process-global — the
         // two fatal-generating tests serialize here so the positive control
         // (after > before) can never be satisfied by a CONCURRENT drain.
+        // (census-gated like its two users: unused in the axum-only test
+        // build, and A-AH6 makes that warning a red matrix.)
+        #[cfg(feature = "census-instrumentation")]
         static DRAIN_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
         fn meta(src: &str) -> WorkerHandlerMeta {
