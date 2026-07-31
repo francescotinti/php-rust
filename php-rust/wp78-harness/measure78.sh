@@ -152,12 +152,25 @@ fi
 # KS-AH-81-1 (measure-side): source dirs clean — an edit after the matrix run
 # means the certified rev is no longer the source on disk. Campaign raws in
 # the harness dirs are expected to be untracked mid-campaign and do not count.
-SRC_DIRTY="$(git -C "$REPO" status --porcelain -- crates Cargo.toml Cargo.lock 2>/dev/null)"
+# A-AH21 (Council WP-82): the PROTOCOL is this script + the gates — an edit
+# to a harness .sh/.pl between matrix and measure produces figures under an
+# identity that does not describe the executed protocol (the S-80.0.6 idle
+# episode proved it: raws right, derived summary wrong — from the SCRIPT).
+# The porcelain therefore covers the harness scripts too (never measure-out).
+SRC_DIRTY="$(git -C "$REPO" status --porcelain -- crates Cargo.toml Cargo.lock \
+  'wp7*-harness/*.sh' 'wp7*-harness/*.pl' 'wp8*-harness/*.sh' 'wp8*-harness/*.pl' 2>/dev/null)"
 if [ -n "$SRC_DIRTY" ]; then
-  echo "FAIL: source tree dirty since the matrix run (KS-AH-81-1) — refuse:"
+  echo "FAIL: source tree or harness scripts dirty since the matrix run (KS-AH-81-1/A-AH21) — refuse:"
   echo "$SRC_DIRTY" | head -10
   exit 1
 fi
+# A-AH21: driver_sha = fingerprint of the protocol scripts actually executed
+# (this driver + the matrix gate that certified the identity). Emitted in the
+# run header (archived in $RUN.summary) AND appended to the raw log at the
+# end of the run — KS-AH-82-1: a summary from a script whose sha does not
+# match the committed rev's is NULL and gets recomputed from the raws.
+DRIVER_SHA="$(shasum -a 256 "$HERE/measure78.sh" "$HERE/gate-feature-matrix.sh" \
+  | shasum -a 256 | cut -c1-16)"
 # A-SK11: EXACT row match — `^bin\[<row>\] ` with bracket+space anchored.
 EXPECTED_HASH="$(awk -F= -v row="$ROW" '$0 ~ ("^bin\\[" row "\\] ") {print $2}' "$MATRIX_LOG" | tail -1)"
 if [ -z "$EXPECTED_HASH" ]; then
@@ -194,7 +207,7 @@ case "$MODE" in
   *) echo "unknown mode $MODE"; exit 2 ;;
 esac
 
-echo "== measure78 mode=$MODE label=$LABEL fixture=$FIXTURE bin=$HASH git=$GIT_REV warmup=$WARMUP measured=$MEASURED idle_secs=$IDLE_SECS =="
+echo "== measure78 mode=$MODE label=$LABEL fixture=$FIXTURE bin=$HASH git=$GIT_REV driver_sha=$DRIVER_SHA warmup=$WARMUP measured=$MEASURED idle_secs=$IDLE_SECS =="
 find "$FIX" -name '._*' -delete
 
 pkill -f "php-server" 2>/dev/null && sleep 1
@@ -352,6 +365,9 @@ case "$MODE" in
       echo "exit_stats=ADVISORY (no join line!)"
     fi ;;
 esac
-echo "raw: $RUN.log | vmmap: $RUN.vmmap.V1/V2 | matrix: $RUN.matrix"
-echo "== measure78 done mode=$MODE label=$LABEL bin=$HASH git=$GIT_REV rc=$RC =="
+# A-AH21: the raw log carries the protocol fingerprint too (grep-anchored
+# lines are untouched — this is an appended driver line, not a census line).
+echo "driver_sha=$DRIVER_SHA git=$GIT_REV bin=$HASH" >> "$RUN.log"
+echo "raw: $RUN.log | vmmap: $RUN.vmmap.V1/V2 | matrix: $RUN.matrix | summary: $RUN.summary"
+echo "== measure78 done mode=$MODE label=$LABEL bin=$HASH git=$GIT_REV driver_sha=$DRIVER_SHA rc=$RC =="
 exit "$RC"
