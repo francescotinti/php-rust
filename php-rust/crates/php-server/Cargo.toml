@@ -21,3 +21,8 @@ static_assertions.workspace = true
 default = ["cli-server"]
 cli-server = ["php-cli"]
 axum-server = ["tokio", "axum", "tower", "hyper", "php-builtins", "num_cpus"]
+# S-78.1.6 (Council WP-79 A-BB7/A-BB8/A-BG7/A-DL7): census counters — alloc
+# per phase, per-worker requests/RetainSet len/live objects, mpsc queue depth.
+# KB-78-5/KL-78-5: footprint/peak verdicts come ONLY from the non-instrumented
+# twin; this build produces counters, never figures.
+census-instrumentation = ["axum-server"]

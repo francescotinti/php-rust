@@ -2,11 +2,12 @@
 //!
 //! Two modes:
 //! 1. `--cli-server` (default): Reuses the CLI SAPI from `phpr -S`
-//! 2. `--axum`: Axum HTTP front end + worker-actor pool (WP-77.6):
-//!    N OS worker threads, each owning a thread-persistent RetainSet (arena of
-//!    compiled unit modules); a FRESH Vm is created per request and borrows the
-//!    worker's RetainSet. There is NO `Vm::reset()` and NO N=1 thread-local Vm
-//!    reuse — that architecture was REJECTED in WP-77.2 (A-TH3/A-BG2 purge).
+//! 2. `--axum`: Axum HTTP front end + worker-actor pool (WP-77.6, retimed
+//!    S-78.1.5): N OS worker threads; each REQUEST gets a fresh RetainSet
+//!    (P-2 unit-module pin, dies with the request — the per-worker arena
+//!    leaked, KS-DS-78-4) and a FRESH Vm. Cross-request unit reuse is the
+//!    thread-local unit cache (WP-63/66). There is NO `Vm::reset()` and NO
+//!    N=1 thread-local Vm reuse — REJECTED in WP-77.2 (A-TH3/A-BG2 purge).
 //!    Request isolation: `request_end()` reset + Vm death (A-DS2 matrix in
 //!    worker_pool.rs).
 //!
@@ -37,14 +38,62 @@
 use std::ffi::OsString;
 use std::process::ExitCode;
 
+#[cfg(not(feature = "census-instrumentation"))]
 #[global_allocator]
 static GLOBAL_ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
+// S-78.1.6 (A-BB7): the census build swaps in a COUNTING wrapper around
+// mimalloc. KB-78-5/KL-78-5: any footprint/peak figure from this build is
+// NULL — verdicts come from the non-instrumented twin; this build only
+// produces counters.
+#[cfg(feature = "census-instrumentation")]
+#[global_allocator]
+static GLOBAL_ALLOC: census_alloc::CountingAlloc = census_alloc::CountingAlloc;
+
+#[cfg(feature = "census-instrumentation")]
+pub mod census_alloc {
+    use std::alloc::{GlobalAlloc, Layout};
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    pub static ALLOC_CALLS: AtomicU64 = AtomicU64::new(0);
+    pub static ALLOC_BYTES: AtomicU64 = AtomicU64::new(0);
+
+    /// (calls, bytes) since process start — phase attribution diffs these at
+    /// the phase boundaries declared in design78 §Contatori.
+    pub fn snapshot() -> (u64, u64) {
+        (ALLOC_CALLS.load(Ordering::Relaxed), ALLOC_BYTES.load(Ordering::Relaxed))
+    }
+
+    pub struct CountingAlloc;
+
+    unsafe impl GlobalAlloc for CountingAlloc {
+        unsafe fn alloc(&self, l: Layout) -> *mut u8 {
+            ALLOC_CALLS.fetch_add(1, Ordering::Relaxed);
+            ALLOC_BYTES.fetch_add(l.size() as u64, Ordering::Relaxed);
+            unsafe { mimalloc::MiMalloc.alloc(l) }
+        }
+        unsafe fn dealloc(&self, p: *mut u8, l: Layout) {
+            unsafe { mimalloc::MiMalloc.dealloc(p, l) }
+        }
+        unsafe fn alloc_zeroed(&self, l: Layout) -> *mut u8 {
+            ALLOC_CALLS.fetch_add(1, Ordering::Relaxed);
+            ALLOC_BYTES.fetch_add(l.size() as u64, Ordering::Relaxed);
+            unsafe { mimalloc::MiMalloc.alloc_zeroed(l) }
+        }
+        unsafe fn realloc(&self, p: *mut u8, l: Layout, n: usize) -> *mut u8 {
+            ALLOC_CALLS.fetch_add(1, Ordering::Relaxed);
+            ALLOC_BYTES.fetch_add(n as u64, Ordering::Relaxed);
+            unsafe { mimalloc::MiMalloc.realloc(p, l, n) }
+        }
+    }
+}
 
 #[cfg(feature = "axum-server")]
 mod worker_pool;
 
-const USAGE: &str = "usage: php-server [--host HOST] [--port PORT] [--docroot|-t DIR] [--axum] [--workers N] [ROUTER.php]\n\
-       defaults: --host 127.0.0.1 --port 8080 --docroot . --cli-server --workers 0 (= CPU count, axum mode only)";
+const USAGE: &str = "usage: php-server [--host HOST] [--port PORT] [--docroot|-t DIR] [--axum] [--workers N] [--tier0] [ROUTER.php]\n\
+       defaults: --host 127.0.0.1 --port 8080 --docroot . --cli-server --workers 0 (= CPU count, axum mode only)\n\
+       --tier0: axum floor baseline (KG-79.D) — static 200 \"tier0\", no pool, no Vm";
 
 fn missing(flag: &str) -> ExitCode {
     eprintln!("php-server: {flag} requires a value\n{USAGE}");
@@ -134,6 +183,7 @@ mod axum_handler {
         port: u16,
         docroot: Option<&std::ffi::OsStr>,
         workers: usize,
+        tier0: bool,
     ) -> ExitCode {
         let addr = format!("{host}:{port}");
         let listener = match tokio::net::TcpListener::bind(&addr).await {
@@ -143,6 +193,35 @@ mod axum_handler {
                 return ExitCode::from(1);
             }
         };
+
+        // Tier-0 (KG-79.D, S-78.1.6): the Axum FLOOR — tokio runtime +
+        // listener + router only. NO pool, NO worker, NO Vm: the handler
+        // answers from the router task. This is the traced executable
+        // configuration design78 §Tier-0 requires for the baseline.
+        if tier0 {
+            let app = Router::new().fallback(|| async {
+                (axum::http::StatusCode::OK, b"tier0\n".to_vec())
+            });
+            eprintln!("php-server (Axum TIER-0) listening on http://{addr} (no pool, no Vm)");
+            let shutdown = async {
+                let mut term =
+                    tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+                        .expect("install SIGTERM handler");
+                tokio::select! {
+                    _ = tokio::signal::ctrl_c() => {}
+                    _ = term.recv() => {}
+                }
+                eprintln!("php-server: shutdown signal received, draining");
+            };
+            if let Err(e) = axum::serve(listener, app)
+                .with_graceful_shutdown(shutdown)
+                .await
+            {
+                eprintln!("php-server: server error: {e}");
+                return ExitCode::from(1);
+            }
+            return ExitCode::SUCCESS;
+        }
 
         // Resolve docroot
         let docroot_str = docroot
@@ -214,6 +293,8 @@ fn main() -> ExitCode {
     let mut use_axum = false;
     // 0 = num_cpus (axum mode only; ignored by the cli-server path)
     let mut workers: usize = 0;
+    // KG-79.D: Tier-0 axum-floor baseline (axum mode only)
+    let mut tier0 = false;
 
     let mut args = std::env::args_os().skip(1);
     while let Some(arg) = args.next() {
@@ -240,6 +321,8 @@ fn main() -> ExitCode {
             // it when the feature is off) — keeps use_axum read+mutated in every
             // build, so -D warnings holds on the whole triple (A-AH2).
             "--axum" => use_axum = true,
+            // Uniform in both feature configs, same rationale as --axum.
+            "--tier0" => tier0 = true,
             "--workers" => {
                 // A-BB3/A-DL2 (Council WP-78): pool size must be controllable —
                 // every alloc/footprint measurement runs --workers 1 (steady
@@ -282,6 +365,7 @@ fn main() -> ExitCode {
             port,
             docroot.as_deref(),
             workers,
+            tier0,
         ));
     }
 
@@ -294,9 +378,9 @@ fn main() -> ExitCode {
     // Default: CLI server mode (M7: no CLI breakage)
     #[cfg(feature = "cli-server")]
     {
-        // Pool size is an axum-only concept; consumed here so the default
-        // (cli-only) build stays clean under -D warnings (A-AH2 triple).
-        let _ = workers;
+        // Pool size and Tier-0 are axum-only concepts; consumed here so the
+        // default (cli-only) build stays clean under -D warnings (A-AH2 triple).
+        let _ = (workers, tier0);
         let mut rest: Vec<OsString> = Vec::new();
         if let Some(d) = docroot {
             rest.push("-t".into());
