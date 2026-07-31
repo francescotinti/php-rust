@@ -477,7 +477,9 @@ fn handle_client(
             .get()
             .map(|f| f())
             .unwrap_or((0, 0));
-        eprintln!("census-global: calls={calls} bytes={bytes}");
+        // A-DL14 (Council WP-82): gross-churn tag in-band, appended LAST
+        // (the idle parser reads fields $3/$5 positionally).
+        eprintln!("census-global: calls={calls} bytes={bytes} gross=1");
         let body: &[u8] = b"census-global\n";
         let mut out = response_head(req.protocol, 200, "OK", host.as_deref());
         out.extend_from_slice(format!("Content-Length: {}\r\n\r\n", body.len()).as_bytes());

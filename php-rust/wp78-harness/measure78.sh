@@ -76,6 +76,61 @@ BIN="$HOME/Claude/php-rust-output/release/php-server"
 HASH=$(shasum -a 256 "$BIN" | cut -c1-16)
 RC=0
 
+# A-BG24 (Council WP-82): the summary this driver emits must survive in a
+# COMMITTED raw — the campaign .log files are the server's stderr, so the
+# driver's own stdout (identity line, verdicts, idle summary) is archived
+# per-run as $RUN.summary and committed with the raws (KG-81-1). Without
+# this, every derived figure in the summary is recomputable-only (KG-82-3).
+exec > >(tee "$RUN.summary")
+
+# --- A-SK14 (KS-SK-82-1): idle-channel parser = cardinality pin + self-test --
+# On a census arm the idle channel is EXACTLY 4 census-global lines: the
+# boot probe (A-BG19, out of the census-line channel but IN this one) plus
+# the 3 bracket probes. Any other count means a line source moved and every
+# positional consumer is unanchored (the S-80.0.6 off-by-one class).
+IDLE_EXPECTED=4
+
+idle_cardinality_ok() { # <file> -> rc 0 iff exactly IDLE_EXPECTED lines
+  [ "$(wc -l < "$1" | tr -d ' ')" -eq "$IDLE_EXPECTED" ]
+}
+
+idle_summary_from() { # <file> -> summary computed from the LAST THREE probes
+  tail -3 "$1" | awk -F'[= ]' 'NR==1{c1=$3;b1=$5} NR==2{c2=$3;b2=$5} NR==3{c3=$3;b3=$5}
+    END{ if (NR>=3) printf "idle: probe_self_cost calls=%d bytes=%d | idle_window(+self) calls=%d bytes=%d (A-AH13/A-DL5; churn-only, KL-81-3)\n",
+         c2-c1, b2-b1, c3-c2, b3-b2;
+         else print "idle: FEWER THAN 3 PROBES — idle window not measured" }'
+}
+
+# Self-test on a SYNTHETIC log BEFORE any real log is parsed (A-SK14/A-BG24):
+# 4 known lines must yield the exact expected deltas; a 5th line must be
+# rejected by the cardinality pin.
+IDLE_ST=$(mktemp)
+{
+  echo "census-global: calls=100 bytes=1000 gross=1"
+  echo "census-global: calls=150 bytes=1500 gross=1"
+  echo "census-global: calls=160 bytes=1600 gross=1"
+  echo "census-global: calls=190 bytes=1900 gross=1"
+} > "$IDLE_ST"
+WANT_ST="idle: probe_self_cost calls=10 bytes=100 | idle_window(+self) calls=30 bytes=300 (A-AH13/A-DL5; churn-only, KL-81-3)"
+GOT_ST=$(idle_summary_from "$IDLE_ST")
+if [ "$GOT_ST" != "$WANT_ST" ]; then
+  echo "SELF-TEST BROKEN: idle parser wrong on synthetic 4-line log (A-SK14):"
+  echo "  want: $WANT_ST"
+  echo "  got:  $GOT_ST"
+  rm -f "$IDLE_ST"; exit 2
+fi
+if ! idle_cardinality_ok "$IDLE_ST"; then
+  echo "SELF-TEST BROKEN: 4-line synthetic rejected by the cardinality pin (A-SK14)"
+  rm -f "$IDLE_ST"; exit 2
+fi
+echo "census-global: calls=200 bytes=2000 gross=1" >> "$IDLE_ST"
+if idle_cardinality_ok "$IDLE_ST"; then
+  echo "SELF-TEST BROKEN: 5-line synthetic PASSED the cardinality pin (A-SK14)"
+  rm -f "$IDLE_ST"; exit 2
+fi
+rm -f "$IDLE_ST"
+echo "self-test PASS: idle parser exact on synthetic 4-line log; 5-line rejected (A-SK14)"
+
 # --- Identity quaterna+git ENFORCE (KS-AH-80-1/KS-SK-80-4, KG-81-2) ---------
 MATRIX_LOG="$HERE/gate-axum/out/feature-matrix.log"
 case "$MODE" in
@@ -233,19 +288,22 @@ check_census_fields() { # $1 = field regex (e.g. a3_trip), $2 = max allowed
 }
 
 report_idle() {
-  # S-80.0.6 fix: the BOOT probe is census-global too since A-BG19 (out of
-  # the census-line channel, but it DOES emit a census-global line), so the
-  # bracket probes are the LAST THREE lines — the old head-anchored awk read
-  # boot→p1 as "self-cost" (i.e. the whole warm-up) and threw the true idle
-  # window away.
-  if [ -s "$RUN.idle" ]; then
-    tail -3 "$RUN.idle" | awk -F'[= ]' 'NR==1{c1=$3;b1=$5} NR==2{c2=$3;b2=$5} NR==3{c3=$3;b3=$5}
-      END{ if (NR>=3) printf "idle: probe_self_cost calls=%d bytes=%d | idle_window(+self) calls=%d bytes=%d (A-AH13/A-DL5; churn-only, KL-81-3)\n",
-           c2-c1, b2-b1, c3-c2, b3-b2;
-           else print "idle: FEWER THAN 3 PROBES — idle window not measured" }'
-  else
-    echo "idle: NO census-global probes in log — idle window not measured (A-AH13)"
+  # S-80.0.6 fix (boot probe is census-global too, A-BG19: bracket probes =
+  # LAST THREE lines) + A-SK14 pin: the count itself is now ENFORCED at
+  # exactly $IDLE_EXPECTED — a positional parser without a cardinality pin
+  # regresses in silence exactly like the original off-by-one (KS-SK-82-1:
+  # unpinned positional summary = ADVISORY, never verdict-grade).
+  if [ ! -s "$RUN.idle" ]; then
+    echo "FAIL: NO census-global probes in log — idle window not measured (A-AH13) — run VOID"
+    RC=1; return
   fi
+  local nl
+  nl=$(wc -l < "$RUN.idle" | tr -d ' ')
+  if [ "$nl" -ne "$IDLE_EXPECTED" ]; then
+    echo "FAIL: $nl census-global lines != pinned $IDLE_EXPECTED (boot + 3 probes) — idle summary VOID (A-SK14/KS-SK-82-1)"
+    RC=1; return
+  fi
+  idle_summary_from "$RUN.idle"
 }
 
 echo "peak_rss_bytes=$PEAK (whole process, time -l)"

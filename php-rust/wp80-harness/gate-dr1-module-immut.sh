@@ -50,9 +50,12 @@ FAILS=0
 TOKEN_RE='(Cell<|RefCell<|UnsafeCell|OnceCell|OnceLock|Mutex<|RwLock<|Atomic(U|I|Bool|Usize)|FrozenVec)'
 
 count_tokens() { # <file> -> "count" (comment lines excluded)
+  # A-TH17 (Council WP-82): count OCCURRENCES via gsub, not matching lines —
+  # a second mutability token smuggled onto an already-allowlisted line
+  # passed both the line count ==3 and the per-line allowlist.
   awk -v re="$TOKEN_RE" '
     /^[[:space:]]*\/\// { next }
-    $0 ~ re { n++ }
+    { n += gsub(re, "&") }
     END { print n + 0 }
   ' "$1"
 }
@@ -65,7 +68,14 @@ n=$(count_tokens "$TMPD/decoy.rs")
 if [ "$n" -ne 1 ]; then
   echo "SELF-TEST BROKEN: decoy counted $n != 1 (comment must not count)"; exit 2
 fi
-echo "OK  self-test: token scan bites (decoy=1, comment excluded)"
+# A-TH17 decoy: TWO tokens on ONE line must count 2 (the smuggled-second-token
+# case the line-based count blessed).
+printf 'pub struct Bad2 { a: Cell<u32>, b: RefCell<u32> } // PropIc\n' > "$TMPD/decoy2.rs"
+n=$(count_tokens "$TMPD/decoy2.rs")
+if [ "$n" -ne 2 ]; then
+  echo "SELF-TEST BROKEN: two-token line counted $n != 2 (A-TH17 gsub)"; exit 2
+fi
+echo "OK  self-test: token scan bites (decoy=1 comment excluded; two-token line=2, A-TH17)"
 
 # --- 1. token census ---------------------------------------------------------
 n=$(count_tokens "$BYTECODE")
@@ -115,8 +125,10 @@ else
 fi
 
 # --- 3. wiring: bump called in non-test Vm construction ----------------------
+# A-PP15 class (same commit): the arming line is ANCHORED to a real module
+# declaration — an unanchored /mod tests/ is blinded by a comment mentioning it.
 NCALL=$(awk '
-  /mod tests/ { in_tests = 1 }
+  /^[[:space:]]*(pub[[:space:]]+)?mod tests/ { in_tests = 1 }
   in_tests { next }
   /^[[:space:]]*\/\// { next }
   /bump_ic_epoch\(\);/ { n++ }

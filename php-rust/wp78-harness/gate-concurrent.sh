@@ -219,6 +219,9 @@ else
   # overlap detector and DEMAND it fails — a detector whose FAIL branch is
   # never exercised could rot into always-pass (WP-72: a detector never seen
   # firing proves nothing).
+  # DECLARED SCOPE (A-SK18, Council WP-82): the bait exercises the shared
+  # PREDICATE (overlap_check), not the main verdict's shell call-site — an
+  # inverted `if` at the real call-site would still pass this bait.
   if overlap_check "$ELAPSED1"; then
     echo "FAIL: bait — the overlap detector PASSED on serial W=1 data (${ELAPSED1}s < ${OVERLAP_THRESH}s): detector broken"
     FAILS=$((FAILS+1))

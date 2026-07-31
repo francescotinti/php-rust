@@ -31,6 +31,12 @@ FAILS=0
 # (c) any UNPINNED .rs file mentioning the feature at all is a FAIL.
 # Bump rule (KS-AH-81-3): a bump lands ONLY with the site list named in the
 # same commit — `grep -nE "$CFG_RE" <file>` is the enumerable diff.
+# DECLARED RESIDUAL (A-SK15, Council WP-82): the per-file pin is a COUNT —
+# an intra-file substitution at equal count (one site removed, another added
+# in the same file) is invisible to tooth 1. The backstop is tooth 2: the
+# full-body battery against the census binary judges the substituted site's
+# BEHAVIOR. Accepted, not closed — a reviewer of a census diff must eyeball
+# `grep -nE "$CFG_RE"` on any file whose count did not move.
 CFG_RE='cfg\((not\()?feature = "census-instrumentation"'
 PINS="
 crates/php-server/src/main.rs:5

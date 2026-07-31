@@ -177,8 +177,13 @@ fi
 # request_end( in NON-test code is PINNED per file: a new read lands ONLY
 # with a same-commit bump here (KS-PP-81-3: no bump => gate FAIL).
 count_postend_reads() { # <file> -> count on stdout
+  # A-PP15 (Council WP-82): the arming line is ANCHORED to the real form of a
+  # module declaration — an UNanchored /mod tests/ let a comment or string
+  # mentioning "mod tests" blind the census for the rest of the file (the
+  # exact defect A-PP10 fixed in check_marker_position, reintroduced here in
+  # the same commit).
   awk '
-    /mod tests/ { in_tests = 1 }
+    /^[[:space:]]*(pub[[:space:]]+)?mod tests/ { in_tests = 1 }
     in_tests { next }
     /^[[:space:]]*\/\// { next }
     /fn [A-Za-z0-9_]+ *(<[^>]*>)? *\(/ { seen = 0 }
@@ -211,6 +216,20 @@ EOF
 n=$(count_postend_reads "$TMPD/postend_read.rs")
 if [ "$n" -ne 1 ]; then
   echo "SELF-TEST BROKEN: post-end read census counted $n != 1 on control snippet"
+  exit 2
+fi
+# A-PP15 NEGATIVE control: "mod tests" inside a comment must NOT blind the
+# census — the read after it still counts.
+cat > "$TMPD/postend_blind.rs" <<'EOF'
+fn f() {
+    // this comment mentions mod tests and must not arm the skip
+    vm.request_end();
+    let n = retain.len();
+}
+EOF
+n=$(count_postend_reads "$TMPD/postend_blind.rs")
+if [ "$n" -ne 1 ]; then
+  echo "SELF-TEST BROKEN: comment mentioning 'mod tests' blinded the census ($n != 1, A-PP15)"
   exit 2
 fi
 echo "post-request_end read census: worker_pool.rs==$POSTEND_PIN_WORKER, others==0 (pinned, A-PP10)"

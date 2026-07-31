@@ -144,7 +144,10 @@ mod axum_handler {
         #[cfg(feature = "census-instrumentation")]
         if request_path.ends_with("/__census_global") {
             let (calls, bytes) = crate::census_alloc::snapshot();
-            eprintln!("census-global: calls={calls} bytes={bytes}");
+            // A-DL14 (Council WP-82): same gross-churn bytes as the census
+            // line — same in-band tag (A-DL10). Appended LAST: the idle
+            // parser reads fields $3/$5 positionally.
+            eprintln!("census-global: calls={calls} bytes={bytes} gross=1");
             return (StatusCode::OK, b"census-global\n".to_vec());
         }
 

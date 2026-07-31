@@ -108,11 +108,16 @@ mod implementation {
         pub static QUEUE_DEPTH_MAX: AtomicUsize = AtomicUsize::new(0);
         /// S-80.0.3 (A-TH9/KH81-1): requests inside the server — increment in
         /// dispatch BEFORE the channel send, decrement in the worker AFTER
-        /// the response send. A truly closed-sequential client (request N+1
-        /// only after response N read) can never have two requests inside the
-        /// server at once, so a watermark >1 REFUTES the mechanism — queued
-        /// AND executing both count, which is exactly what the queue-only
-        /// watermark missed.
+        /// the response send. Queued AND executing both count, which is
+        /// exactly what the queue-only watermark missed. A-TH15 re-scope
+        /// (Council WP-82): the decrement is sequenced-after the response
+        /// send but NOT atomic with it — a worker descheduled in the
+        /// send→dec window lets a genuinely closed-sequential client show 2.
+        /// A watermark >1 therefore means "run VOID: overlap OR the send→dec
+        /// window" — fail-closed (it can invalidate a good run, never bless
+        /// overlap), and it is never by itself a proof of overlap; the judge
+        /// of the closed-sequential claim stays the driver's inflight_max<=1
+        /// enforcement.
         pub static OUTSTANDING: AtomicUsize = AtomicUsize::new(0);
         /// High-watermark of OUTSTANDING since process start (census line
         /// field `inflight_max`; the measure driver enforces <=1).
@@ -385,6 +390,12 @@ mod implementation {
             if self.senders[idx].send(task).is_err() {
                 // Failed send: no worker will ever pick this task up, so no
                 // decrement will pair with the increments above — undo both.
+                // A-MS16 (Council WP-82) DECLARED: the note_* watermarks ran
+                // BEFORE the send and are NOT undone here — a failed dispatch
+                // leaves a ghost in QUEUE_DEPTH_MAX/OUTSTANDING_MAX. A run
+                // containing a dispatch Err is VOID by declaration; the
+                // driver's rows==N check already catches it (the request
+                // emits no census line), this comment makes the rule NAMED.
                 #[cfg(feature = "census-instrumentation")]
                 {
                     census::QUEUE_DEPTH.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);

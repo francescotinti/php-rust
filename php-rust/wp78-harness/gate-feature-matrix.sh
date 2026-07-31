@@ -30,10 +30,13 @@
 #
 # S-80.0.1 identity (A-AH14/KS-AH-81-1, Council WP-81): the log certifies
 # `git=$GIT_REV` as the compiled source — that is a LIE on a dirty tree. The
-# gate now refuses to run unless `git status --porcelain` is EMPTY (the whole
-# repo: raws and harness outputs are tracked or gitignored by design, so a
-# clean tree is achievable at all times). A matrix log produced on a dirty
-# tree is NULL and every measurement citing it is VOID.
+# gate refuses to run unless `git status --porcelain` is EMPTY over the WHOLE
+# repo. A-AH25 (Council WP-82) doc coherence: campaign raws ARE expected to
+# be untracked mid-campaign (the measure driver tolerates them, checking only
+# crates/Cargo.*) — therefore a matrix RE-RUN mid-campaign is REFUSED by
+# design (fail-closed): commit the campaign raws first (KG-81-1 wants them
+# committed anyway), then re-run the matrix. A matrix log produced on a
+# dirty tree is NULL and every measurement citing it is VOID.
 #
 # S-78.1.3 hardening (Council WP-79):
 # - A-AH7: the symbol assert covers the WHOLE optional net stack

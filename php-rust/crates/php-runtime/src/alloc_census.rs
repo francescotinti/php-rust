@@ -63,6 +63,12 @@ fn trip() {
 }
 
 thread_local! {
+    /// A-MS15 (Council WP-82): "a1 windows never nest" was PROSE — this flag
+    /// makes it a tripwire. An `open()` while another a1 window is open on
+    /// this thread trips and leaves the new window INERT (it books nothing
+    /// and does not touch the flag), so the outer window's accounting stays
+    /// coherent and the violation is loud (KS-MS-81-2 voids the run).
+    static A1_OPEN: Cell<bool> = const { Cell::new(false) };
     /// a1 accumulator (calls, bytes) since the last `take_split`.
     static A1: Cell<(u64, u64)> = const { Cell::new((0, 0)) };
     /// a3 accumulator (calls, bytes) since the last `take_split`.
@@ -109,6 +115,19 @@ pub struct A1Window {
 
 impl A1Window {
     pub fn open() -> Self {
+        // A-MS15: non-nesting enforced, not assumed. `replace(true)` returning
+        // true means a window is already open on this thread — trip and hand
+        // back an inert window (start=None: close/Drop are no-ops and the
+        // flag, owned by the OUTER window, is left alone).
+        let already_open = A1_OPEN.with(|f| f.replace(true));
+        if already_open {
+            trip();
+            return A1Window {
+                start: None,
+                installed: provider_installed(),
+                _not_send: PhantomData,
+            };
+        }
         A1Window {
             start: Some(snap()),
             installed: provider_installed(),
@@ -120,6 +139,9 @@ impl A1Window {
     /// Drop becomes a no-op.
     pub fn close(&mut self) {
         let Some(s) = self.start.take() else { return };
+        // This window owned the open-flag (inert nested windows have
+        // start=None and never reach here) — release it before booking.
+        A1_OPEN.with(|f| f.set(false));
         // Provider guard (A-MS11): installed mid-window ⇒ the end snapshot is
         // the whole process history, not a delta. Discard, count, stay loud.
         if !self.installed && provider_installed() {
@@ -232,12 +254,17 @@ mod tests {
     use super::*;
 
     // The tripwire tests mutate the process-wide SPLIT_TRIP; they assert on
-    // DELTAS so they compose with each other and with any future test.
+    // DELTAS so they compose with each other — but the CLEAN assert below
+    // (delta == 0) cannot tolerate a concurrent tripper. A-MS14 (Council
+    // WP-82): every test that trips or asserts cleanliness on SPLIT_TRIP
+    // serializes here, same contract as worker_pool's DEPTH_TEST_LOCK.
+    static TRIP_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     /// S-80.0.3 negative control: an out-of-order (non-LIFO) drop must TRIP,
     /// not silently swap deltas between windows (A-MS7).
     #[test]
     fn a3_window_non_lifo_drop_trips() {
+        let _guard = TRIP_TEST_LOCK.lock().unwrap();
         let before = trip_count();
         let w1 = A3Window::open();
         let w2 = A3Window::open();
@@ -251,6 +278,7 @@ mod tests {
     /// S-80.0.3: pop-on-empty (foreign interference) trips.
     #[test]
     fn a3_window_pop_on_empty_trips() {
+        let _guard = TRIP_TEST_LOCK.lock().unwrap();
         let w = A3Window::open();
         A3_STACK.with(|st| st.borrow_mut().clear());
         let before = trip_count();
@@ -262,6 +290,7 @@ mod tests {
     /// and a well-ordered open/close/drop sequence must NOT trip.
     #[test]
     fn a1_window_close_is_idempotent_and_clean() {
+        let _guard = TRIP_TEST_LOCK.lock().unwrap();
         let before_trip = trip_count();
         let mut w = A1Window::open();
         w.close();
@@ -270,6 +299,36 @@ mod tests {
             trip_count(),
             before_trip,
             "a clean close/drop sequence tripped the split tripwire"
+        );
+    }
+
+    /// A-MS15 (Council WP-82) negative control: a1 open-while-open must TRIP
+    /// and leave the nested window inert; after the outer window closes, a
+    /// fresh open/close must be clean again (the inert window must not have
+    /// released the outer's flag).
+    #[test]
+    fn a1_window_open_while_open_trips_and_recovers() {
+        let _guard = TRIP_TEST_LOCK.lock().unwrap();
+        let before = trip_count();
+        let mut outer = A1Window::open();
+        let nested = A1Window::open(); // violation: must trip, stay inert
+        assert!(
+            trip_count() > before,
+            "a1 open-while-open did not trip (A-MS15)"
+        );
+        let after_trip = trip_count();
+        drop(nested); // inert: no booking, no trip, flag untouched
+        outer.close();
+        drop(outer);
+        // Clean reopen: the flag was released by the OUTER close, so a
+        // well-ordered sequence must not trip.
+        let mut w = A1Window::open();
+        w.close();
+        drop(w);
+        assert_eq!(
+            trip_count(),
+            after_trip,
+            "post-recovery clean open/close tripped (A-MS15 flag leak)"
         );
     }
 }
