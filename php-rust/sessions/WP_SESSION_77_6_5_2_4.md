@@ -6,6 +6,16 @@
 **Closure Commit**: fed30ce (S-77.6.5.2.4 amendments implemented + pushed)
 **Binary Baseline**: 02aa2ad8... (unchanged; amendments documentation-only)
 
+> ⚖️ **RETTIFICA (Concilio WP-78, A-SK5)**: la riga "Binary Baseline 02aa2ad8
+> unchanged" è **vacua** per il lavoro Axum: 02aa2ad8 è **phpr** (CLI), che non
+> contiene main.rs/worker_pool.rs — la sua invarianza non dimostra nulla. Il
+> binario pertinente è **php-server** (all'epoca sha256 10729e94…, ricompilato
+> in sessione senza hash pre/post a verbale). Da S-78.0 ogni baseline Axum cita
+> l'hash php-server loggato da `wp78-harness/gate-axum/run-gate.sh`. Inoltre la
+> chiusura "6/6 amendments IMPLEMENTED" è stata parzialmente REFUTATA dal
+> Concilio WP-78 (A-MS1 falso, A-DS1 non conforme, A-AH1 non implementato,
+> PASS G-APERTURA-2 vacuo) — sanatoria eseguita in S-78.0.
+
 ---
 
 ## Verdicts

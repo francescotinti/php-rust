@@ -28,20 +28,29 @@ See: `sessions/WP_SESSION_77_6_5_2_4.md` for full verdict record.
 
 ---
 
-## Permanent Binding Rules (From Council Verdicts)
+## Permanent Binding Rules (From Council Verdicts — aggiornate dal Concilio WP-78)
 
 1. **Output Capture Before request_end() Reset Boundary** (Pedersen/Stogov joint mandate)
    - All per-request PHP execution MUST capture output BEFORE invoking request_end()
    - Reset boundary clears per-request state; output capture reads buffered state
    - Violation → silent state leakage → rejection
+   - Enforcement: `wp78-harness/gate-capture-order.sh` (KS-PP-2) + test A-PP3
+     con controllo positivo (KS-PP-1)
 
-2. **Per-Request Module Isolation** (Stogov mandate)
-   - Module swapped per request; superglobals, constants, handlers reset
-   - Statics persist (Zend-correct); verified by gate
+2. **Per-Request Isolation = semantica FPM** (Stogov, A-DS2 — la vecchia riga
+   "statics persist (Zend-correct)" era FALSA)
+   - superglobals/constants/handlers/OB → reset da `request_end()`
+   - function statics, closure statics, static props → per-richiesta per MORTE
+     del Vm (`request_end()` non li tocca); devono restare per-richiesta anche
+     con un eventuale Vm persistente (KS-DS-78-1/-3)
+   - Gate: fixture stateful ≥3 richieste in `gate-axum/run-gate.sh` + test cargo
 
-3. **RetainSet Thread-Local Persistence** (Matsakis/Hoare joint mandate)
-   - RetainSet persists per worker thread; never migrated across threads
-   - No Vm references held across await points; module is immutable
+3. **RetainSet Thread-Affinity** (Matsakis/Hoare, A-MS2 — la vecchia riga
+   "Send/Sync" era FALSA)
+   - RetainSet è `!Send + !Sync` per costruzione (Rc + FrozenVec non-sync);
+     vive e muore nel worker thread; static assert `assert_not_impl_any!`
+     in php-runtime (KS-MS-1: rimozione solo per delibera del Concilio)
+   - Solo `WorkerTask: Send` attraversa il canale (assert positivo)
 
 ---
 

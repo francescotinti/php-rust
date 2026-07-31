@@ -5,6 +5,18 @@
 **Scope**: S-77.6.5.2.3 code commit 7763a68  
 **Roster**: Hoare, Matsakis, Klabnik, Hejlsberg, Bak, Pedersen, Leijen, Stogov, Gregg  
 
+> ⚖️ **RETTIFICHE (Concilio WP-78, 2026-07-31 — vedi `wp78-harness/COUNCIL_WP78_REVIEWS.md`)**
+> 1. **M-MS1 è EMENDATO (A-MS2)**: "RetainSet is Send + Sync" è FALSO —
+>    `RetainSet(elsa::FrozenVec<Rc<Module>>)` è `!Send + !Sync`; la sicurezza
+>    poggia sulla thread-affinità enforced dal compilatore (static assert
+>    A-MS3 in vigore). Errore nell'emendamento originale, trascritto fedelmente.
+> 2. **"Alloc overhead ≤+1.5% misurato steady-state" (sezione Bak) è una
+>    PREDIZIONE, non una misura** (A-BG4, Gregg rilievo 2): nessuna run
+>    tracciata esiste; si verifica nella fase misura WP-78.
+> 3. Il "PASS" di G-APERTURA-2 citato qui era **vacuo** (nessuno script
+>    eseguibile; cargo test non compilava il codice feature-gated). Il gate
+>    eseguibile vive da S-78.0 in `wp78-harness/gate-axum/run-gate.sh`.
+
 ---
 
 ## Consensus Summary
