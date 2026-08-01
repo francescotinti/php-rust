@@ -162,8 +162,14 @@ while (my $line = <$fh>) {
   if ($bytes_first) {
     my $work = $line;
     # (1) verified pairs "N B = X <unit>": check numerically, then blank out
-    while ($work =~ /((\d[\d.,]*)\s*B\s*=\s*(\d[\d.,]*)\s*([KMGTkmgt])i?[Bb]\b)/) {
-      my ($whole, $braw, $fraw, $u) = ($1, $2, $3, $4);
+    while ($work =~ /((\d[\d.,]*)\s*B\s*=\s*(\d[\d.,]*)\s*([KMGTkmgt])(i?)[Bb]\b)/) {
+      my ($whole, $braw, $fraw, $u, $ii) = ($1, $2, $3, $4, $5);
+      # A-SK43 (Council WP-87, Klabnik Q2): the corpus does BINARY math —
+      # "MB" under SI reading lies to the outside reader. MEASURE8[4-9]
+      # docs must spell the i (MiB/KiB/GiB/TiB).
+      if ($ii eq '') {
+        push @miss, "line $ln: unit '${u}B' without the i — MiB-only in MEASURE8[4-9] (A-SK43): $line";
+      }
       my $bytes = it_num($braw);
       my $fig   = it_num($fraw);
       my $dec   = ($fig =~ /\.(\d+)$/) ? length($1) : 0;
@@ -176,8 +182,17 @@ while (my $line = <$fh>) {
       my $blank = ' ' x length($whole);
       $work =~ s/\Q$whole\E/$blank/;
     }
-    # (2) per-FIGURE exception: pin band "N±M <unit>" — blank out
-    $work =~ s/\d[\d.,]*\s*±\s*\d[\d.,]*\s*[KMGTkmgt]i?[Bb]\b/' ' x length($&)/ge;
+    # (2) per-FIGURE band ALLOWLIST (A-SK43/KS-SK-87-2): the old rule
+    # blanked ANY "N±M <unit>" — with a 1-2 digit M a doc could widen a
+    # pin at will ("232±16 MiB" passed companion, band and corpus). Only
+    # the NAMED legal bands survive; today that is 232±1 MiB, e basta.
+    while ($work =~ /(\d[\d.,]*\s*±\s*\d[\d.,]*\s*[KMGTkmgt]i?[Bb])\b/g) {
+      my $band = $1;
+      (my $norm = $band) =~ s/\s+//g;
+      push @miss, "line $ln: ± band '$band' not in the A-SK43 allowlist (KS-SK-87-2): $line"
+        unless $norm eq '232±1MiB';
+    }
+    $work =~ s/232\s*±\s*1\s*MiB\b/' ' x length($&)/ge;
     # (3) any remaining unit figure lacks its bytes companion
     while ($work =~ /(\d[\d.,]*\s*[KMGTkmgt]i?[Bb])\b/g) {
       push @miss, "line $ln: memory figure '$1' without VERIFIED bytes-first companion (A-DL26/KL-85-2/A-SK40): $line";

@@ -71,6 +71,11 @@ if [ -n "$DIRTY" ]; then
 fi
 : > "$LOG"
 echo "git=$GIT_REV" | tee -a "$LOG"
+# A-AH41 (Council WP-87, Hejlsberg): two same-rev archives built by
+# different toolchains are otherwise indistinguishable — every hash motion
+# of class b55e2f78/15fb6b46 needs its toolchain attributed in-band.
+echo "rustc=$(rustc -V 2>/dev/null || echo unknown)" | tee -a "$LOG"
+echo "cargo=$(cargo -V 2>/dev/null || echo unknown)" | tee -a "$LOG"
 echo "tree=clean (git status --porcelain empty at gate start, A-AH14)" | tee -a "$LOG"
 FAILS=0
 

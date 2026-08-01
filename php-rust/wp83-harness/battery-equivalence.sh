@@ -4,7 +4,11 @@
 # ANCORATO alla riga terminale + .done solo-PASS con sha256(OUT) ricomputato,
 # corner index (staged) nel check ledger, claim PROVVISORIO fino al commit
 # dell'append, manifest lever-fixtures2 nomina l'oggetto in-cargo
-# (crates/php-runtime/). Storia v2: KH82-2 REWRITTEN, poi le TRE elusioni di
+# (crates/php-runtime/). v4 A-SK41 (Council WP-87): OUT↔.done coherence
+# alone proves only SELF-consistency (a hand-written OUT with a recomputed
+# sha passes it) — the stamp must ALSO exist in the COMMITTED canonical
+# battery-stamps ledger, appended by the battery itself at run time
+# (KS-SK-87-1: stamp not ledgered => battery VOID). Storia v2: KH82-2 REWRITTEN, poi le TRE elusioni di
 # Klabnik chiuse nel CODICE (non nel commento) e il buco trascluso di
 # Hejlsberg:
 #   (a) OUT mai legato a BREV -> ora il summary DEVE portare `git=$BREV` e
@@ -118,6 +122,16 @@ else
     fail "(A-SK36) .done carries no sha256= — pre-v3 or forged stamp (KS-SK-86-1)"
   elif [ "$DSHA" != "$OSHA" ]; then
     fail "(A-SK36) sha256(OUT)=$OSHA != .done sha256=$DSHA — OUT is not the file the battery completed"
+  else
+    # A-SK41 (v4): the stamp must be in the COMMITTED battery-stamps
+    # ledger — batteries from 86pre on append it at run time. Batteries
+    # older than the ledger (rev not reachable from a ledgered line) are
+    # pre-v4 evidence: refuse, re-run the battery.
+    BLEDGER_REL="wp83-harness/evidence/battery-stamps.ledger"
+    if ! git -C "$REPO" show "HEAD:$BLEDGER_REL" 2>/dev/null | \
+         grep -q "rev=$BREV sha256=$DSHA"; then
+      fail "(A-SK41) stamp rev=$BREV sha256=$DSHA not in the COMMITTED $BLEDGER_REL — battery not ledgered (KS-SK-87-1)"
+    fi
   fi
 fi
 

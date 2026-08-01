@@ -35,8 +35,21 @@ CAL_HASH=$(sed -n 's/^mem_hash=\([0-9a-f]*\) .*/\1/p' "$OUT/m85.cal-h.memcensus"
   > "$OUT/m85s.build.mem-census.log" 2>&1 || { echo "FAIL: build mem-census"; exit 1; }
 MEM_HASH=$(shasum -a 256 "$OUTBIN/php-server" | cut -c1-16)
 [ "$MEM_HASH" = "$CAL_HASH" ] || { echo "FAIL: mem-census hash $MEM_HASH != campaign CAL $CAL_HASH — calibration not transferable"; exit 1; }
-MTX=$(/bin/ls "$REPO/wp78-harness/matrix-archive"/feature-matrix.$GIT_REV.*.log 2>/dev/null | tail -1)
-[ -n "$MTX" ] || { echo "FAIL: no archived matrix at $GIT_REV"; exit 1; }
+# A-AH40 (Council WP-87): the matrix is resolved FROM THE BATTERY .done —
+# `tail -1` on a sorted ls picked the lexicographically-last archive, so a
+# relaunched battery (or a standalone matrix run) at the same rev could
+# ENFORCE against a matrix that is NOT the one inside the k/k
+# (KS-AH-87-1: campaign VOID). Batteries from 86pre stamp matrix=/matrix_sha256=.
+BATT_DONE="${BATT_DONE:-/Volumes/Extreme Pro/Claude/wp86-battery-out/.done}"
+[ -f "$BATT_DONE" ] || { echo "FAIL: battery .done missing at $BATT_DONE (A-AH40)"; exit 1; }
+MTX_NAME=$(sed -n 's/.*matrix=\([^ ]*\).*/\1/p' "$BATT_DONE" | head -1)
+MTX_WANT_SHA=$(sed -n 's/.*matrix_sha256=\([0-9a-f]*\).*/\1/p' "$BATT_DONE" | head -1)
+[ -n "$MTX_NAME" ] && [ -n "$MTX_WANT_SHA" ] || { echo "FAIL: battery .done carries no matrix=/matrix_sha256= (pre-v4 battery — re-run, A-AH40)"; exit 1; }
+MTX="$REPO/wp78-harness/matrix-archive/$MTX_NAME"
+[ -f "$MTX" ] || { echo "FAIL: ledgered matrix archive missing: $MTX_NAME (A-AH40)"; exit 1; }
+MTX_GOT_SHA=$(shasum -a 256 "$MTX" | cut -d' ' -f1)
+[ "$MTX_GOT_SHA" = "$MTX_WANT_SHA" ] || { echo "FAIL: matrix archive sha $MTX_GOT_SHA != .done $MTX_WANT_SHA (A-AH40/KS-AH-87-1)"; exit 1; }
+case "$MTX_NAME" in feature-matrix.$GIT_REV.*) : ;; *) echo "FAIL: ledgered matrix $MTX_NAME is not at rev $GIT_REV (A-AH40)"; exit 1;; esac
 WANT=$(tr -d '\0' < "$MTX" | sed -n "s/^bin\[mem-census\] sha256\[0:16\]=\([0-9a-f]*\).*/\1/p")
 bash "$HERE/gate-binary-noprobe.sh" "$OUTBIN/php-server" "$WANT" || { echo "FAIL: KH86-1"; exit 1; }
 

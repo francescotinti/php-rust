@@ -1,0 +1,7 @@
+# battery-stamps.ledger — A-SK41 (Council WP-87): canonical TRACKED
+# evidence of every battery PASS. The battery itself appends one line
+# `battery=<name> rev=<rev> sha256=<sha256(OUT)> matrix=<archive>
+# matrix_sha256=<sha>` at run time; the append is committed immediately
+# (A-SK37 law: claim PROVISIONAL until at HEAD). battery-equivalence v4
+# refuses any OUT/.done pair whose stamp is not ledgered HERE at HEAD
+# (KS-SK-87-1). Never touch-edit; append-only via the battery.
