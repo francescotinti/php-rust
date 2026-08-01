@@ -729,6 +729,43 @@ if [ "$n" -ne 1 ]; then
 fi
 echo "OK  self-test: A-PP23 region decoy bites (flush outside body excluded)"
 
+# --- 5. A-PP31/KS-PP-86-1 + KG-86-1 (Council WP-86): mechanical INHERITANCE
+# of the verdict guards — a refusal living only in one campaign's verdict
+# does not inherit by itself (three blind zeros already paid for this).
+# (a) A-PP31: every wp8[4-9]/wp9x harness script that PARSES `reqns: ` lines
+#     must contain the fail-closed w!=1 rejection in its own body.
+#     verdict83.sh is EXCLUDED BY NAME: pre-A-PP28 archive (the w= stamp
+#     did not exist), its VC figure is binario-bound to 7a610457 (A-BB43).
+PP31_SWEEP=$(grep -ln 'reqns: ' "$REPO"/wp8[4-9]-harness/*.sh "$REPO"/wp9[0-9]-harness/*.sh 2>/dev/null |
+  grep -v '/\._' |
+  while IFS= read -r f; do
+    grep -q 'w=1' "$f" || echo "${f#"$REPO"/}"
+  done)
+if [ -n "$PP31_SWEEP" ]; then
+  echo "FAIL: script parses 'reqns: ' without the w!=1 fail-closed rejection (A-PP31/KS-PP-86-1 — verdict illegittimo):"
+  echo "$PP31_SWEEP"
+  FAILS=$((FAILS+1))
+else
+  echo "OK  sweep: every wp84+ reqns-parsing script carries the w!=1 rejection (A-PP31)"
+fi
+# decoy: a parser without the rejection must be caught
+printf 'while (<$fh>) { push @s, $1 if /^reqns: (\\d+)/ }\n' > "$TMPD/pp31decoy.sh"
+if grep -q 'reqns: ' "$TMPD/pp31decoy.sh" && ! grep -q 'w=1' "$TMPD/pp31decoy.sh"; then
+  echo "OK  self-test: A-PP31 decoy discriminates (parser without rejection detected)"
+else
+  echo "SELF-TEST BROKEN: A-PP31 decoy not detected"; exit 2
+fi
+# (b) KG-86-1: the slope-verdict checker must EXIST and be tracked — the
+#     next verdict slope is born fail-closed or is illegitimate (any slope
+#     claim without gate-slope-verdict PASS is VERDICT NULL d'ufficio).
+SLOPEGATE="$REPO/wp85-harness/gate-slope-verdict.sh"
+if [ -f "$SLOPEGATE" ] && git -C "$REPO" ls-files --error-unmatch "wp85-harness/gate-slope-verdict.sh" >/dev/null 2>&1; then
+  echo "OK  KG-86-1: gate-slope-verdict.sh exists and is tracked (slope verdicts born fail-closed)"
+else
+  echo "FAIL: gate-slope-verdict.sh missing/untracked (KG-86-1 — future slope verdicts have no machine)"
+  FAILS=$((FAILS+1))
+fi
+
 if [ "$FAILS" = 0 ]; then
   echo "== GATE-LEVER-PINS PASS (A-MS13 + A-PP16 + KS-PP-82-3 + A-TH14) [git $GIT_REV] =="
   exit 0

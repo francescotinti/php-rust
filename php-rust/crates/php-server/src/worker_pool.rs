@@ -1055,19 +1055,51 @@ mod implementation {
             let src = "<?php\nenum LF implements Serializable { case A; }\necho \"never-reached\";";
             std::fs::write(&file, src).unwrap();
             let path = file.display().to_string();
+            // A-PP30 (Council WP-86, Pedersen): PRE-WARM — a clean request
+            // FIRST seeds the prelude include entries, so the once-only-req1
+            // window is CLOSED: an insert-if-absent inserter publishing the
+            // fatal main in include form DURING request 1 can no longer hide
+            // inside the legitimate seeding (the old pin only said "request
+            // 2 adds ZERO"). Residual blindness NAMED: an in-place
+            // fp-replace keeps every count unchanged — counts see PRESENCE,
+            // not content (declared, outside this tooth's scope).
+            // NB (A-PP30 pin bite, S-85.0): a trivial clean request seeds NO
+            // include-lane entry — the historical comment "request 1 seeds
+            // the prelude include entries" was false for this fixture. The
+            // pre-warm therefore performs a REAL include, so the include
+            // lane is provably counted by the total below.
+            let warm_lib = dir.join("warm_pp30_lib.php");
+            std::fs::write(&warm_lib, "<?php $warm_pp30 = 1;").unwrap();
+            let warm_file = dir.join("warm_pp30.php");
+            let warm_src = format!("<?php include '{}'; echo \"w\";", warm_lib.display());
+            std::fs::write(&warm_file, &warm_src).unwrap();
+            {
+                let retain = php_runtime::RetainSet::new();
+                let (body, status) = execute_with_retain(
+                    &retain,
+                    &reg,
+                    &WorkerHandlerMeta {
+                        path: warm_file.display().to_string(),
+                        source: warm_src.as_bytes().to_vec(),
+                    },
+                );
+                assert_eq!(status, StatusCode::OK, "pre-warm request failed (A-PP30)");
+                assert_eq!(body, b"w", "pre-warm body diverged (A-PP30)");
+            }
             let (p0, h0, u0) = php_runtime::uc_main_stats();
             // A-PP22: enumeration snapshot — key-blind, catches an inserter
             // publishing under a DIVERGENT key that the canonicalized
             // uc_main_key_in_cache probe below cannot see (RETENTION class).
             let e0 = php_runtime::uc_main_entry_count();
-            // A-PP26 (Council WP-85): the main-only enumerator is blind to a
-            // divergent inserter publishing the fatal main in INCLUDE form
-            // (main_program=None). Pin the TOTAL entry count too: request 1
-            // legitimately seeds the prelude include entries on this fresh
-            // test thread, so the steady-state pin is "request 2 adds ZERO
-            // entries of ANY lane" (KS-PP-85-2). Same-thread precondition
-            // of both enumerators documented on the probe.
-            let mut t_mid = 0usize;
+            let t_warm = php_runtime::uc_entry_count();
+            // A-PP30 pin: the TOTAL enumerator has counted AT LEAST one
+            // include entry (before, the total was never SEEN counting the
+            // include lane — a lane-blind total would pass every delta).
+            assert!(
+                t_warm > e0,
+                "total {t_warm} <= main entries {e0}: the include lane was \
+                 never counted (A-PP30)"
+            );
             for req in 1..=2 {
                 let retain = php_runtime::RetainSet::new();
                 let (body, status) = execute_with_retain(
@@ -1084,16 +1116,16 @@ mod implementation {
                     String::from_utf8_lossy(&body).contains("Fatal error"),
                     "request {req}: body must carry the fatal banner"
                 );
-                if req == 1 {
-                    t_mid = php_runtime::uc_entry_count();
-                }
+                // A-PP30: delta==0 on BOTH fatal requests, each judged
+                // against the pre-warm snapshot — never only on request 2.
+                assert_eq!(
+                    php_runtime::uc_entry_count(),
+                    t_warm,
+                    "link-fatal request {req} grew TOTAL cache entries — \
+                     include-form retention of a fatal main \
+                     (A-PP26/A-PP30/KS-PP-85-2)"
+                );
             }
-            assert_eq!(
-                php_runtime::uc_entry_count(),
-                t_mid,
-                "link-fatal request 2 grew TOTAL cache entries — include-form \
-                 retention of a fatal main (A-PP26/KS-PP-85-2)"
-            );
             let (p1, h1, u1) = php_runtime::uc_main_stats();
             assert_eq!(p1 - p0, 2, "positive control: both requests must PROBE (vitality)");
             assert_eq!(u1 - u0, 0, "link-fatal main was PUT (A-PP16/A-PP20)");

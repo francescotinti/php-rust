@@ -16194,6 +16194,13 @@ pub fn uc_main_key_in_cache(name: &[u8], source: &[u8]) -> bool {
     }
 }
 
+/// A-PP30 (Council WP-86) blindness ledger for the entry enumerators: the
+/// once-only-req1 window (an insert-if-absent publish absorbed into request
+/// 1's legitimate prelude seeding) is CLOSED by the a_pp20 PRE-WARM; the
+/// NAMED residual is in-place fp-replace — counts see PRESENCE, not
+/// content, so a same-key same-lane replace is invisible to every count
+/// (declared; content identity is the fp domain's job).
+///
 /// A-PP22 (Council WP-84): number of unit-cache entries CARRYING a main
 /// Program — the ENUMERATION tooth. [`uc_main_key_in_cache`] canonicalizes,
 /// so an inserter publishing under a DIVERGENT key would be invisible to it
@@ -17664,6 +17671,25 @@ pub fn retained_walk_selftest() {
             nb,
             n1
         );
+    }
+    // A-DL29 (Council WP-86, Leijen): POSITIVE CONTROL of window pollution.
+    // The net window is declared process-wide (`net_window=process-counters`
+    // — GA_ALLOC/GA_FREE are process atomics), i.e. POLLUTABLE by other
+    // threads; a window blind to a concurrent foreign burst would make the
+    // VDL24 byte-identity unfalsifiable. The burst thread's 1 MiB (1.048.576
+    // B) allocation is HELD across finish(): the net MUST count it.
+    {
+        let w = CensusNetWindow::open();
+        let held = std::thread::spawn(|| vec![0xA5u8; 1 << 20])
+            .join()
+            .expect("burst thread panicked (A-DL29)");
+        let nburst = w.finish();
+        assert!(
+            nburst >= (1u64 << 20),
+            "concurrent 1 MiB burst invisible to the net window ({nburst} B) — \
+             the counter does not count foreign threads (A-DL29)"
+        );
+        drop(held);
     }
 }
 
