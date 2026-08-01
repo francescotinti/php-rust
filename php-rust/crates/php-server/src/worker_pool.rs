@@ -988,6 +988,10 @@ mod implementation {
             std::fs::write(&file, src).unwrap();
             let path = file.display().to_string();
             let (p0, h0, u0) = php_runtime::uc_main_stats();
+            // A-PP22: enumeration snapshot — key-blind, catches an inserter
+            // publishing under a DIVERGENT key that the canonicalized
+            // uc_main_key_in_cache probe below cannot see (RETENTION class).
+            let e0 = php_runtime::uc_main_entry_count();
             for req in 1..=2 {
                 let retain = php_runtime::RetainSet::new();
                 let (body, status) = execute_with_retain(
@@ -1013,6 +1017,36 @@ mod implementation {
                 !php_runtime::uc_main_key_in_cache(path.as_bytes(), src.as_bytes()),
                 "link-fatal main's (key, fp) is IN the entries — a second \
                  insertion path exists (A-PP20)"
+            );
+            // A-PP22: the ENUMERATION delta — zero new main entries under
+            // ANY key, divergent ones included (KS-PP-84-2: a "never
+            // published" claim without this delta is insufficient).
+            let e1 = php_runtime::uc_main_entry_count();
+            assert_eq!(
+                e1 - e0,
+                0,
+                "link-fatal main RETAINED under some key: main-entry count \
+                 moved {e0} -> {e1} (A-PP22 retention class)"
+            );
+            // Positive control (KG-79.A: an enumerator never seen counting
+            // is a blind enumerator): a CLEAN main published on this same
+            // thread must move the count by exactly 1.
+            let ok_file = dir.join("ok_pp22.php");
+            std::fs::write(&ok_file, "<?php echo \"ok\";").unwrap();
+            let ok_path = ok_file.display().to_string();
+            let retain = php_runtime::RetainSet::new();
+            let (body, status) = execute_with_retain(
+                &retain,
+                &reg,
+                &WorkerHandlerMeta { path: ok_path, source: b"<?php echo \"ok\";".to_vec() },
+            );
+            assert_eq!(status, StatusCode::OK, "positive control request failed");
+            assert_eq!(body, b"ok", "positive control body diverged");
+            assert_eq!(
+                php_runtime::uc_main_entry_count() - e1,
+                1,
+                "positive control: a clean main did not move the enumeration \
+                 (blind enumerator, KG-79.A)"
             );
         }
 

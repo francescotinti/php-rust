@@ -491,6 +491,47 @@ if [ "$n" -ne 1 ]; then
 fi
 echo "OK  self-test: A-TH24 epoch-cast decoy bites"
 
+# --- 7. A-PP23 (Council WP-84): flush-before-response, pinned LEXICALLY ------
+# The twin-pair MARK cut relied on "end-of-run flush precedes send" as
+# DISCIPLINE (comments only — Pedersen Q2). Machine form here:
+#   (a) request_shutdown() carries the end-of-run uc_log_flush ==1 in its
+#       body (the worker captures the response AFTER request_shutdown, so
+#       flush precedes the response's very existence);
+#   (b) worker loop: response_tx.send( sits lexically AFTER the
+#       execute_request( call (same style as the A-PP16 put-after-link pin).
+# The head-segment positive control is the CAMPAIGN half (verdict83).
+RS_FLUSH=$(awk '/^    pub fn request_shutdown\(/{on=1; next}
+  on && /^    pub fn /{exit}
+  on && !/^[[:space:]]*\/\//{n+=gsub(/uc_log_flush\(\)/,"&")} END{print n+0}' "$VMMOD")
+if [ "$RS_FLUSH" -ne 1 ]; then
+  echo "FAIL: request_shutdown() carries $RS_FLUSH uc_log_flush() (want ==1) — flush-before-response unpinned (A-PP23)"
+  FAILS=$((FAILS+1))
+else
+  echo "OK  vm/mod.rs: request_shutdown() end-of-run uc_log_flush ==1 (A-PP23)"
+fi
+EXEC_LN=$(grep -n 'execute_request(&reg, &task.meta)' "$WORKER" | head -1 | cut -d: -f1)
+SEND_LN=$(grep -n 'response_tx\.send(' "$WORKER" | head -1 | cut -d: -f1)
+if [ -z "$EXEC_LN" ] || [ -z "$SEND_LN" ] || [ "$EXEC_LN" -ge "$SEND_LN" ]; then
+  echo "FAIL: worker loop order execute_request (line ${EXEC_LN:-absent}) !< response_tx.send (line ${SEND_LN:-absent}) (A-PP23)"
+  FAILS=$((FAILS+1))
+else
+  echo "OK  worker_pool.rs: A-PP23 send-after-execute (line $SEND_LN after $EXEC_LN)"
+fi
+# decoy: the region counter must bite (flush OUTSIDE the fn body != inside)
+cat > "$TMPD/pp23.rs" <<'EOF'
+    pub fn request_shutdown(&mut self) {
+        uc_log_flush();
+    }
+    pub fn other() { uc_log_flush(); }
+EOF
+n=$(awk '/^    pub fn request_shutdown\(/{on=1; next}
+  on && /^    pub fn /{exit}
+  on{n+=gsub(/uc_log_flush\(\)/,"&")} END{print n+0}' "$TMPD/pp23.rs")
+if [ "$n" -ne 1 ]; then
+  echo "SELF-TEST BROKEN: A-PP23 region decoy count $n != 1"; exit 2
+fi
+echo "OK  self-test: A-PP23 region decoy bites (flush outside body excluded)"
+
 if [ "$FAILS" = 0 ]; then
   echo "== GATE-LEVER-PINS PASS (A-MS13 + A-PP16 + KS-PP-82-3 + A-TH14) [git $GIT_REV] =="
   exit 0

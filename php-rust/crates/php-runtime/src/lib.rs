@@ -48,7 +48,7 @@ pub use vm::{
 pub use vm::{main_unit_acquire, run_source_probed, MainAcquireError, MainLever, MainUnit};
 // A-PP20 (Council WP-83): entry-probe test surface for the worker's
 // link-fatal-never-published tooth (counters + direct key probe).
-pub use vm::{uc_main_key_in_cache, uc_main_stats};
+pub use vm::{uc_main_entry_count, uc_main_key_in_cache, uc_main_stats};
 // KL-82-2: the retained-walk positive control — run by a php-server test
 // (php-runtime lib tests cannot link the mem-census dump).
 #[cfg(feature = "mem-census")]

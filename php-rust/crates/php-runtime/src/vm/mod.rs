@@ -16051,6 +16051,19 @@ pub fn uc_main_key_in_cache(name: &[u8], source: &[u8]) -> bool {
     }
 }
 
+/// A-PP22 (Council WP-84): number of unit-cache entries CARRYING a main
+/// Program — the ENUMERATION tooth. [`uc_main_key_in_cache`] canonicalizes,
+/// so an inserter publishing under a DIVERGENT key would be invisible to it
+/// (the RETENTION class Pedersen named: a fatal main retained for the
+/// thread's life, never served). This counts entries directly, key-blind:
+/// the a_pp20 tooth pins delta==0 across link-fatal requests. Probe API.
+#[doc(hidden)]
+pub fn uc_main_entry_count() -> usize {
+    UNIT_CACHE.with(|c| {
+        c.borrow().values().flat_map(|ways| ways.iter()).filter(|cu| cu.main_program.is_some()).count()
+    })
+}
+
 /// The put core. A main entry re-uses the include entry shape with vacuously
 /// empty relocation state (the main DEFINES the base id space) and carries
 /// the Program (eval-against-image on HIT).
