@@ -288,6 +288,29 @@ else
   okf "F14 positive control: comparator bites on the varied conditional arm"
 fi
 
+# --- F14b (A-DS21/A-SK31, Council WP-84): pin-HIT + full (o,c) matrix --------
+# A-SK31/KS-SK-84-4: the c=n control above proves inequality only — it would
+# pass on ANY body, a fatal included. Pin the EXPECTED C2 body: it is W14
+# with the one delta the c=n arm declares (F14C::w() returns C2, not C1).
+W14N="${W14/C1/C2}"
+B5=$(req "f14.php?o=ab&c=n"); B6=$(req "f14.php?o=ba&c=n")
+if [ -n "$W14N" ] && [ "$W14N" != "$W14" ] && [ "$B5" = "$W14N" ] && [ "$B6" = "$W14N" ]; then
+  okf "F14b: (o,c) matrix complete — c=n arms == PINNED expected C2 body, both orders (A-SK31)"
+else
+  kof "F14b: c=n arms '$B5'/'$B6' != pinned expected '$W14N' (A-SK31/KS-SK-84-4)"
+fi
+# A-DS21/KS-DS-84-1: pin-HIT — without this a silent per-URL re-MISS makes
+# the whole F14 parity green and VACUOUS w.r.t. the lever. One put (first
+# request), everything after is a REAL cache HIT on the same (key, fp):
+# B2 B3 B4 BX B5 B6 = 6 hits minimum.
+NP14=$(count_ev "$ULOG" main_put f14.php)
+NH14=$(count_ev "$ULOG" main_hit f14.php)
+if [ "$NP14" -eq 1 ] && [ "$NH14" -ge 6 ]; then
+  okf "F14b: pin-HIT main_put==1 / main_hit==$NH14>=6 — the parity matrix ran on REAL HITs (A-DS21)"
+else
+  kof "F14b: main_put=$NP14/main_hit=$NH14 (want 1/>=6) — silent re-MISS per URL: F14 vacuous, class 2 REOPENED (KS-DS-84-1)"
+fi
+
 # --- F15 (A-DS20, Council WP-83): same file as MAIN and as include under
 # >=4 distinct chain-fps — 5 fps on 4 FIFO ways WITHOUT refresh evicts the
 # hot main in a cycle. The counter (main_evicted, wired at the eviction
@@ -319,10 +342,45 @@ else
   kof "F15: bodies '$BM1'/'$BM2' != 'T15' under ways-thrash"
 fi
 
+# --- F15b (A-DS24, Council WP-84): INTERLEAVED thrash — discriminates
+# FIFO / LRU / main-exemption. The main is TOUCHED between every include-fp
+# insert: an LRU (or refresh-on-hit, or exemption) would SAVE the recently
+# used main; FIFO evicts it regardless of recency. Current tree = FIFO by
+# design ⇒ main_evicted MUST still fire interleaved. After the p6
+# mitigation (main EXEMPT, partition-by-TYPE — KS-MS-84-3) this pin FLIPS
+# to ==0 with the counter proven alive by F15 above (KS-DS-84-3/4).
+cat > "$DOCROOT/t15b.php" <<'EOF'
+<?php echo "T15B";
+EOF
+for i in 1 2 3 4; do
+  cat > "$DOCROOT/f15bh$i.php" <<EOF
+<?php class F15BH$i { public static function h() { return "b$i"; } }
+EOF
+  cat > "$DOCROOT/f15bw$i.php" <<EOF
+<?php include "f15bh$i.php"; include "t15b.php"; echo F15BH$i::h();
+EOF
+done
+BM1=$(req t15b.php)
+for i in 1 2 3 4; do
+  req "f15bw$i.php" > /dev/null
+  req t15b.php > /dev/null        # touch the main between inserts (recency)
+done
+NEVB=$(count_ev "$ULOG" main_evicted t15b.php)
+BM2=$(req t15b.php)
+if [ "$BM1" = "T15B" ] && [ "$BM2" = "T15B" ]; then
+  if [ "$NEVB" -ge 1 ]; then
+    okf "F15b: interleaved thrash still evicts the TOUCHED main ($NEVB) — FIFO confirmed, recency does not save it (A-DS24 discriminant; flips to ==0 after main-exemption)"
+  else
+    kof "F15b: interleaved main_evicted==0 — the eviction form is NOT the declared FIFO (LRU/refresh/exemption appeared unannounced — re-pin A-DS24)"
+  fi
+else
+  kof "F15b: bodies '$BM1'/'$BM2' != 'T15B' under interleaved thrash"
+fi
+
 kill -TERM "$SRVPID" 2>/dev/null; wait "$SRVPID" 2>/dev/null; SRVPID=""
 
 if [ "$FAILS" = 0 ]; then
-  echo "== GATE-LEVER-FIXTURES2 PASS (F1-F4, F7, F9-F15 + positive controls) [git $GIT_REV] =="
+  echo "== GATE-LEVER-FIXTURES2 PASS (F1-F4, F7, F9-F15 + F14b/F15b + positive controls) [git $GIT_REV] =="
   exit 0
 else
   echo "== GATE-LEVER-FIXTURES2 FAIL($FAILS) [git $GIT_REV] =="

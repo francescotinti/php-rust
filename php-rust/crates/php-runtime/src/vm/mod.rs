@@ -18852,9 +18852,28 @@ mod tests {
     #[test]
     fn a_ds17_compile_program_pure_double_compile() {
         fn sig(m: &crate::bytecode::Module) -> String {
-            let mut s = format!("main:{:?};", m.main.ops);
+            // A-DS22 arm 3 finding (S-83.0 p4): the original sig covered
+            // main + top-level fn OPS only — a real mutation in a class
+            // method compared EQUAL twice over: method bodies were not in
+            // the sig at all, and the changed literal lives in the CONST
+            // POOL (same PushConst index, different pooled value), which
+            // no ops-only comparator can see. Ops AND consts of main,
+            // functions and class methods are all in the sig now; the
+            // historical a_ds17 PASS is re-judged under this stronger
+            // comparator by this same test.
+            fn func_sig(s: &mut String, tag: &str, f: &crate::bytecode::Func) {
+                s.push_str(&format!("{tag}:{:?}|{:?};", f.ops, f.consts));
+            }
+            let mut s = String::new();
+            func_sig(&mut s, "main", &m.main);
             for f in &m.functions {
-                s.push_str(&format!("f:{}:{:?};", f.ops.len(), f.ops));
+                func_sig(&mut s, "f", f);
+            }
+            for c in &m.classes {
+                s.push_str(&format!("c:{}:", String::from_utf8_lossy(&c.name)));
+                for meth in &c.methods {
+                    func_sig(&mut s, &format!("m:{}", String::from_utf8_lossy(&meth.name)), &meth.func);
+                }
             }
             s.push_str(&format!("classes:{};fns:{}", m.classes.len(), m.functions.len()));
             s
@@ -18876,6 +18895,69 @@ mod tests {
         .join()
         .expect("cross-thread compile panicked");
         assert_eq!(sig(&m1), other, "fresh-thread compile diverges (A-DS17/KS-DS-83-2)");
+
+        // A-DS22 (Council WP-84, KS-DS-84-2): the two arms above are BLIND
+        // to order-baking by construction — FxHash has a FIXED seed on this
+        // tree, so identical insertion histories can never diverge. Only a
+        // DIFFERENT insertion history can move a baked hash order.
+        const SRC2: &[u8] = b"<?php class Dx1 { public function m() { return 9; } } \
+            class Dx2 extends Dx1 {} function dxf() { return new Dx2(); } \
+            echo dxf()->m();";
+        // Arm 1 — POLLUTED thread: a decoy compile first (interner/id
+        // thread-locals loaded differently), then SRC — sig must equal the
+        // virgin one.
+        let polluted = std::thread::spawn(|| {
+            let reg = Registry::default();
+            let decoy = crate::lower_source(b"decoy.php", SRC2).unwrap();
+            let _ = crate::compile::compile_program(&decoy, &reg).unwrap();
+            let p = crate::lower_source(b"dc.php", SRC).unwrap();
+            let m = crate::compile::compile_program(&p, &reg).unwrap();
+            sig(&m)
+        })
+        .join()
+        .expect("polluted-thread compile panicked");
+        assert_eq!(sig(&m1), polluted, "polluted-thread compile diverges (A-DS22)");
+        // Arm 2 — PERMUTED order, compared per NAME (never an aggregate):
+        // AB vs BA on two fresh threads; each module's sig must be
+        // order-independent individually.
+        let ab = std::thread::spawn(|| {
+            let reg = Registry::default();
+            let pa = crate::lower_source(b"dc.php", SRC).unwrap();
+            let ma = crate::compile::compile_program(&pa, &reg).unwrap();
+            let pb = crate::lower_source(b"decoy.php", SRC2).unwrap();
+            let mb = crate::compile::compile_program(&pb, &reg).unwrap();
+            (sig(&ma), sig(&mb))
+        })
+        .join()
+        .expect("AB compile panicked");
+        let ba = std::thread::spawn(|| {
+            let reg = Registry::default();
+            let pb = crate::lower_source(b"decoy.php", SRC2).unwrap();
+            let mb = crate::compile::compile_program(&pb, &reg).unwrap();
+            let pa = crate::lower_source(b"dc.php", SRC).unwrap();
+            let ma = crate::compile::compile_program(&pa, &reg).unwrap();
+            (sig(&ma), sig(&mb))
+        })
+        .join()
+        .expect("BA compile panicked");
+        assert_eq!(ab.0, ba.0, "dc.php sig differs AB vs BA (A-DS22, per-NAME)");
+        assert_eq!(ab.1, ba.1, "decoy.php sig differs AB vs BA (A-DS22, per-NAME)");
+        // Arm 3 — MUTATION of the comparator: sig() must BITE on a truly
+        // different module (a comparator never seen failing is not a
+        // comparator — KS-AH-80-2 class).
+        let pmut = crate::lower_source(
+            b"dc.php",
+            b"<?php class Dc1 { public function m() { return 2; } } \
+              class Dc2 extends Dc1 {} function dcf() { return new Dc2(); } \
+              echo dcf()->m();",
+        )
+        .unwrap();
+        let mmut = crate::compile::compile_program(&pmut, &reg).unwrap();
+        assert_ne!(
+            sig(&m1),
+            sig(&mmut),
+            "sig comparator BLIND: a different body compared EQUAL (A-DS22 mutation)"
+        );
     }
 
     /// A-DS9/KB (Council WP-83, campaign-run only — `--ignored` in the
