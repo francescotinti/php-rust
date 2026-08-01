@@ -1,47 +1,63 @@
 #!/bin/bash
-# battery-equivalence.sh — A-SK30/A-AH34 (Council WP-84): KH82-2 REWRITTEN.
-# The old form (`grep -cE '^OK'` >= 14 + matrix-at-HEAD) was refuted twice:
-# a count admits one always-FAIL gate never named (Klabnik Q3, KS-SK-84-1),
-# and the matrix at HEAD certifies the BUILD, not the equivalence
-# (Hejlsberg Q4). An equivalence claim ("the battery at rev B certifies
-# HEAD") is legal IFF, all computed HERE:
+# battery-equivalence.sh — A-SK30/A-AH34 (Council WP-84), v2 A-SK32/A-SK33/
+# A-AH36 (Council WP-85): KH82-2 REWRITTEN, poi le TRE elusioni di Klabnik
+# chiuse nel CODICE (non nel commento) e il buco trascluso di Hejlsberg:
+#   (a) OUT mai legato a BREV -> ora il summary DEVE portare `git=$BREV` e
+#       il `.done` accanto a OUT deve portare `rev=$BREV` (A-SK32);
+#   (b) ledger parametrico touch-creato -> ora il ledger è CANONICO, path
+#       pinnato QUI, tracked in git, e la copia di lavoro deve essere
+#       IDENTICA alla versione a HEAD prima del claim (append poi committato
+#       nella campagna) (A-SK33, KS-SK-85-2);
+#   (c) FAIL smerciato come "assente con motivo" -> un `^FAIL <name>` per un
+#       gate del set rifiuta SEMPRE, il named-absent non lo copre (A-SK32,
+#       KS-SK-85-1).
+# An equivalence claim ("the battery at rev B certifies HEAD") is legal IFF,
+# all computed HERE:
 #   (i)   `git diff B..HEAD -- crates/ Cargo.toml Cargo.lock` is EMPTY;
 #   (ii)  every expected gate is present as `OK <name>` BY NAME in the
 #         battery output; gates ABSENT form a NAMED set with a caller-
 #         supplied reason — and {parity-full, lever-fixtures,
-#         lever-fixtures2, measure-cifre} may NEVER be absent;
+#         lever-fixtures2, measure-cifre} may NEVER be absent; a gate that
+#         FAILED in the battery refuses outright (never "absent");
 #   (iii) at most ONE equivalence per chain: ledger line per battery rev —
 #         a second claim on the same rev REFUSES (never transitive: B must
 #         be an ancestor whose battery RAN, not itself an equivalence);
-#   (iv)  never for a gate whose SCRIPT is among the changed files B..HEAD
-#         (its object changed: re-run it, don't equivalence it).
-# Usage:
-#   battery-equivalence.sh <battery.out> <battery_rev> <ledger-file> \
-#       [absent-gate:reason ...]
+#   (iv)  never for a gate whose OBJECT changed in B..HEAD — object = the
+#         gate SCRIPT plus its NAMED transcluded helpers/fixtures (A-AH36:
+#         manifest per-gate below; census-twin declares run-gate.sh +
+#         fixtures/, the two run-gates declare their fixture .php).
+# Usage (v2 — the ledger is NO LONGER a parameter, A-SK33):
+#   battery-equivalence.sh <battery.out> <battery_rev> [absent-gate:reason ...]
 # Exit 0 = equivalence LEGAL; !=0 = precondition FAIL (campaign VOID,
-# KS-SK-84-1/KS-AH-84-3).
+# KS-SK-84-1/KS-AH-84-3/KS-SK-85-1/KS-SK-85-2).
 export PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin:$PATH
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$HERE/.." && pwd)"
-OUT="${1:?battery.out}"; BREV="${2:?battery rev}"; LEDGER="${3:?ledger file}"
-shift 3
+OUT="${1:?battery.out}"; BREV="${2:?battery rev}"
+shift 2
 FAILS=0
 fail() { echo "FAIL: $*"; FAILS=$((FAILS+1)); }
 
 HEADREV=$(git -C "$REPO" rev-parse --short HEAD)
 
-# The named gate set (mirror of battery-83pre.sh) with each gate's SCRIPT
-# for tooth (iv). Bump = same-commit, named.
+# A-SK33: the ONE canonical ledger — pinned here, never a parameter.
+LEDGER="$HERE/evidence/equivalence.ledger"
+LEDGER_REL="wp83-harness/evidence/equivalence.ledger"
+
+# The named gate set (mirror of battery-83pre.sh). Format per line:
+#   name:script[,transcluded-object ...]   (A-AH36 — a trailing / marks a
+# directory prefix; every object is part of tooth (iv)'s change surface).
+# Bump = same-commit, named.
 GATES="feature-matrix:wp78-harness/gate-feature-matrix.sh
-census-twin:wp78-harness/gate-census-twin.sh
-doc-purge:wp78-harness/gate-doc-purge.sh
+census-twin:wp78-harness/gate-census-twin.sh,wp78-harness/gate-axum/run-gate.sh,wp78-harness/gate-axum/fixtures/
+doc-purge:wp78-harness/gate-doc-purge.sh,wp78-harness/gate-axum/fixtures/
 capture-order:wp78-harness/gate-capture-order.sh
 concurrent:wp78-harness/gate-concurrent.sh
 stdout-tandem:wp78-harness/gate-stdout-tandem.sh
 worker-panic:wp78-harness/gate-worker-panic.sh
-run-gate-cli:wp77-harness/run_gate_g_apertura_2.sh
-run-gate-axum:wp77-harness/run_gate_g_apertura_2_axum.sh
+run-gate-cli:wp77-harness/run_gate_g_apertura_2.sh,wp77-harness/fixtures/gate_two_reqs_same_vm.php
+run-gate-axum:wp77-harness/run_gate_g_apertura_2_axum.sh,wp77-harness/fixtures/gate_two_reqs_same_vm.php
 dr1:wp80-harness/gate-dr1-module-immut.sh
 lever-pins:wp81-harness/gate-lever-pins.sh
 lever-fixtures:wp81-harness/gate-lever-fixtures.sh
@@ -59,16 +75,48 @@ fi
 # changed files for tooth (iv)
 CHANGED=$(git -C "$REPO" diff --name-only "$BREV..HEAD" 2>/dev/null)
 
-# (ii) per-NAME presence; absent = named set with reason
+# object_changed <path-or-dirprefix> -> 0 if any changed file matches it
+# (git -C <subdir> emits paths relative to the GIT root, so the php-rust/
+# prefixed form is the operative one; the bare form is an inert fallback).
+object_changed() {
+  local obj="$1"
+  case "$obj" in
+    */) echo "$CHANGED" | grep -qE "^(php-rust/)?${obj}" ;;
+    *)  echo "$CHANGED" | grep -qxF "php-rust/$obj" || echo "$CHANGED" | grep -qxF "$obj" ;;
+  esac
+}
+
+# (ii)+(iv) per-NAME presence; absent = named set with reason; FAIL refuses
 [ -f "$OUT" ] || { fail "(ii) battery output missing: $OUT"; echo "== EQUIVALENCE REFUSED =="; exit 1; }
+
+# A-SK32: OUT is legal evidence ONLY if it is the battery OF rev B — the
+# summary must stamp git=$BREV and the .done next to OUT must stamp rev=$BREV.
+if ! grep -q "git=$BREV" "$OUT"; then
+  fail "(A-SK32) battery output carries no 'git=$BREV' summary stamp — OUT is not tied to rev $BREV"
+fi
+DONE="$(dirname "$OUT")/.done"
+if [ ! -f "$DONE" ] || ! grep -qx "rev=$BREV" "$DONE"; then
+  fail "(A-SK32) .done next to OUT missing or not 'rev=$BREV' — the battery of rev $BREV never COMPLETED there"
+fi
+
 for entry in $GATES; do
-  name="${entry%%:*}"; script="${entry#*:}"
+  name="${entry%%:*}"; objects="${entry#*:}"
+  # A-SK32/KS-SK-85-1: a FAILED gate can never be sold as "absent with
+  # reason" — refuse outright, battery must re-run.
+  if grep -qE "^FAIL[[:space:]]+$name(:|[[:space:]]|\$)" "$OUT"; then
+    fail "(ii) gate '$name' FAILED in the battery — a FAIL is never 'absent' (KS-SK-85-1)"
+    continue
+  fi
   if grep -qE "^OK[[:space:]]+$name( |\$)" "$OUT"; then
-    # (iv) present-and-OK but its SCRIPT changed since B: the recorded OK
-    # certifies the OLD object — refuse the equivalence for this gate.
-    if echo "$CHANGED" | grep -qxF "php-rust/$script" || echo "$CHANGED" | grep -qxF "$script"; then
-      fail "(iv) gate '$name' OK at $BREV but its script changed since ($script) — re-run, don't equivalence"
-    fi
+    # (iv) present-and-OK but its OBJECT (script or a named transcluded
+    # helper/fixture, A-AH36) changed since B: the recorded OK certifies
+    # the OLD object — refuse the equivalence for this gate.
+    IFS=',' read -ra OBJS <<< "$objects"
+    for obj in "${OBJS[@]}"; do
+      if object_changed "$obj"; then
+        fail "(iv) gate '$name' OK at $BREV but its object changed since ($obj) — re-run, don't equivalence (KS-AH-85-2)"
+      fi
+    done
     continue
   fi
   # not OK in the battery output: must be in the caller's named-absent set
@@ -86,21 +134,31 @@ for entry in $GATES; do
   fi
 done
 
-# (iii) one equivalence per chain, ledger-enforced; never transitive
-mkdir -p "$(dirname "$LEDGER")"
-touch "$LEDGER"
-if grep -q "^battery_rev=$BREV " "$LEDGER"; then
-  fail "(iii) an equivalence on battery rev $BREV is ALREADY ledgered — one per chain (KS-AH-84-3)"
+# (iii) one equivalence per chain, CANONICAL ledger only (A-SK33):
+# tracked in git, working copy identical to HEAD's version before the claim
+# (a fresh/untracked/regenerated ledger erases the anti-transitive history —
+# KS-SK-85-2: every equivalence of the chain VOID).
+if [ ! -f "$LEDGER" ]; then
+  fail "(iii) canonical ledger missing at $LEDGER_REL (KS-SK-85-2 — never touch-create it)"
+elif ! git -C "$REPO" ls-files --error-unmatch "$LEDGER_REL" >/dev/null 2>&1; then
+  fail "(iii) canonical ledger is UNTRACKED (KS-SK-85-2)"
+elif ! git -C "$REPO" diff --quiet HEAD -- "$LEDGER_REL" 2>/dev/null; then
+  fail "(iii) working ledger DIVERGES from HEAD's version — history not canonical (KS-SK-85-2)"
 fi
-if grep -q " head=$BREV\$" "$LEDGER"; then
-  fail "(iii) rev $BREV was itself certified BY equivalence — transitive chain refused (KS-AH-84-3)"
+if [ -f "$LEDGER" ]; then
+  if grep -q "^battery_rev=$BREV " "$LEDGER"; then
+    fail "(iii) an equivalence on battery rev $BREV is ALREADY ledgered — one per chain (KS-AH-84-3)"
+  fi
+  if grep -q " head=$BREV\$" "$LEDGER"; then
+    fail "(iii) rev $BREV was itself certified BY equivalence — transitive chain refused (KS-AH-84-3)"
+  fi
 fi
 
 if [ "$FAILS" = 0 ]; then
   echo "battery_rev=$BREV head=$HEADREV" >> "$LEDGER"
-  echo "== EQUIVALENCE LEGAL ($BREV certifies $HEADREV; ledgered) =="
+  echo "== EQUIVALENCE LEGAL ($BREV certifies $HEADREV; ledgered — commit the ledger append in this campaign, A-SK33) =="
   exit 0
 else
-  echo "== EQUIVALENCE REFUSED ($FAILS) — battery must re-run (KS-SK-84-1/KS-AH-84-3) =="
+  echo "== EQUIVALENCE REFUSED ($FAILS) — battery must re-run (KS-SK-84-1/KS-AH-84-3/KS-SK-85-1/KS-SK-85-2) =="
   exit 1
 fi
