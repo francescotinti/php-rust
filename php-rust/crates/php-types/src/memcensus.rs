@@ -827,6 +827,14 @@ fn phys_check() {
 /// `win == 0` is the exit snapshot.
 fn phys_window_dump(win: u32, phys: u64, tag: &str) {
     use std::io::Write;
+    // A-DL32 (Council WP-87, Leijen — A-DL30 closed): PHYS_PEAK is only
+    // advanced by the throttled phys_check (every 16384 events), so a dump
+    // printing a FRESH phys next to a STALE peak produced the impossible
+    // phys_peak<phys rows (dl28s: 38.732.304 < 74.711.544 — a sampling
+    // artifact, not an accounting error). Fold the fresh phys into the
+    // peak BEFORE printing; mi_proc rows re-enter the corpus from here on
+    // (KL-87-3 lifts post-fix).
+    PHYS_PEAK.fetch_max(phys as i64, Relaxed);
     if let Ok(path) = std::env::var("PHPR_MEM_CENSUS") {
         if let Ok(mut f) =
             std::fs::OpenOptions::new().create(true).append(true).open(path)
