@@ -598,6 +598,11 @@ type MiBlockVisitFun = unsafe extern "C" fn(
 
 extern "C" {
     fn mi_heap_main() -> *mut std::os::raw::c_void;
+    // A-DL31 (Council WP-87): the heap OWNING a pointer — this tree's
+    // mimalloc v3 does not export mi_heap_get_default (same pruning class
+    // as the known mi_heap_set_default absence), so the calling thread's
+    // default heap is recovered from a probe allocation it just made.
+    fn mi_heap_of(p: *const std::os::raw::c_void) -> *mut std::os::raw::c_void;
     fn mi_heap_new() -> *mut std::os::raw::c_void;
     fn mi_heap_malloc_aligned(
         heap: *mut std::os::raw::c_void,
@@ -992,6 +997,15 @@ pub fn mono_ms() -> u64 {
     T0.get_or_init(std::time::Instant::now).elapsed().as_millis() as u64
 }
 
+/// A-BB47 (Council WP-87): monotonic MICROseconds — the lowering spans of
+/// the overlap canary are ~100 µs–3 ms, below ms resolution. Own epoch
+/// (first call); only span-vs-span comparisons within one process are
+/// meaningful — never join against mono_ms.
+pub fn mono_us() -> u64 {
+    static T0: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+    T0.get_or_init(std::time::Instant::now).elapsed().as_micros() as u64
+}
+
 /// Window context hook (Gregg R1): the VM registers a renderer that formats
 /// its current PHP stack top; [`phys_window_dump`] calls it in-process on
 /// every window so each window has a test/frame address.
@@ -1032,7 +1046,68 @@ pub fn census_line(line: &str) {
     let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) else {
         return;
     };
-    let _ = writeln!(f, "pid={} {}", std::process::id(), line);
+    // S-86.0 (found by the A-PP36 smoke): writeln! issues one write PER
+    // FORMAT FRAGMENT — two threads tearing down concurrently interleave
+    // MID-LINE ("pid=pid=90234..."), garbling both rows for every parser.
+    // O_APPEND makes a SINGLE write atomic: format first, write once.
+    let buf = format!("pid={} {}\n", std::process::id(), line);
+    let _ = f.write_all(buf.as_bytes());
+}
+
+/// A-DL31 (Council WP-87, Leijen): per-THREAD bin occupancy — MUST be
+/// called ON the thread whose heap is being read (mimalloc default heaps
+/// are thread-local; a foreign thread cannot visit them). Emits
+/// `tag=mi_bin thr=<n> src=tls` rows with the window-dump columns plus a
+/// `tag=mi_bin_thr_sum` closing row. The physical half of the ×W budget
+/// joins the committed sum against the time -l per-worker delta
+/// (3.605.572 B ±5% predicted).
+pub fn mi_bin_thread_rows(thr: usize) {
+    // Probe allocation: freshly boxed by THIS thread => mi_heap_of returns
+    // this thread's default heap (mi_heap_get_default is not exported by
+    // the tree's mimalloc v3).
+    let probe = Box::new(0u8);
+    let heap = unsafe { mi_heap_of(&*probe as *const u8 as *const std::os::raw::c_void) };
+    if heap.is_null() {
+        census_line(&format!("tag=mi_bin thr={thr} src=tls visit=NULLHEAP"));
+        return;
+    }
+    let mut t = BinTab::boxed();
+    let ok = unsafe {
+        mi_heap_visit_blocks(
+            heap,
+            false,
+            area_visitor,
+            &mut *t as *mut BinTab as *mut std::os::raw::c_void,
+        )
+    };
+    drop(probe);
+    if !ok {
+        census_line(&format!("tag=mi_bin thr={thr} src=tls visit=FAILED"));
+        return;
+    }
+    let (mut committed, mut reserved, mut used) = (0u64, 0u64, 0u64);
+    for i in 0..N_BINS {
+        if t.size[i] == 0 {
+            continue;
+        }
+        reserved += t.reserved[i];
+        committed += t.committed[i];
+        used += t.used_b[i];
+        census_line(&format!(
+            "tag=mi_bin thr={thr} src=tls size={} reserved={} committed={} used_b={} used_n={} areas={}",
+            t.size[i], t.reserved[i], t.committed[i], t.used_b[i], t.used_n[i], t.areas[i],
+        ));
+    }
+    if t.overflow > 0 {
+        census_line(&format!("tag=mi_bin thr={thr} src=tls size=OVERFLOW areas={}", t.overflow));
+    }
+    // heap=<ptr> in-band: if two threads ever report the SAME heap pointer
+    // the per-thread reading is reading ONE heap twice — the verdict must
+    // refuse the split (honesty tooth, S-86.0 smoke showed near-identical
+    // sums across threads).
+    census_line(&format!(
+        "tag=mi_bin_thr_sum thr={thr} heap={heap:p} reserved={reserved} committed={committed} used_b={used} alloc_id={ALLOC_ID}"
+    ));
 }
 
 /// WP-60 P2(b): positive control of the abandoned-blocks visitor (Gregg

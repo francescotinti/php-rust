@@ -220,7 +220,17 @@ echo "== measure78 mode=$MODE label=$LABEL fixture=$FIXTURE bin=$HASH git=$GIT_R
 find "$FIX" -name '._*' -delete
 
 pkill -f "php-server" 2>/dev/null && sleep 1
-MIMALLOC_PURGE_DELAY=0 MIMALLOC_SHOW_STATS=1 \
+# A-BB46 (Council WP-87, Bak): the purge delay is the EXPERIMENTAL variable
+# of the VP spread attribution — PHPR_PURGE_DELAY=default drops the
+# override (mimalloc's own default), any other value is exported verbatim.
+# Historical protocol (all campaigns <= 85) = hardwired 0; that stays the
+# default here. MIMALLOC_VERBOSE=1 prints the EFFECTIVE option table to
+# stderr => the run log carries the real purge_delay IN-BAND (intent line
+# purge_env= below is the label; the option line is the effect).
+PURGE_DELAY="${PHPR_PURGE_DELAY:-0}"
+MIMENV=(MIMALLOC_SHOW_STATS=1 MIMALLOC_VERBOSE=1)
+[ "$PURGE_DELAY" != "default" ] && MIMENV+=("MIMALLOC_PURGE_DELAY=$PURGE_DELAY")
+env "${MIMENV[@]}" \
   /usr/bin/time -l "$BIN" "${ARGS[@]}" \
   > /dev/null 2> "$RUN.log" &
 TIMEPID=$!
@@ -284,6 +294,10 @@ vmmap "$SRVPID" 2>/dev/null > "$RUN.vmmap.V2"
 
 kill -TERM "$SRVPID" 2>/dev/null
 wait "$TIMEPID" 2>/dev/null
+# A-BB46: label AFTER the wait (a mid-run append would be overwritten by
+# the server's O_TRUNC stderr fd); the EFFECT evidence is mimalloc's own
+# verbose option table earlier in this same log.
+echo "purge_env=$PURGE_DELAY" >> "$RUN.log"
 
 V1=$(awk '/^Physical footprint:/ {print $3}' "$RUN.vmmap.V1")
 V2=$(awk '/^Physical footprint:/ {print $3}' "$RUN.vmmap.V2")

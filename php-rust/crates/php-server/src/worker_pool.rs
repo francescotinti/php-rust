@@ -328,6 +328,12 @@ mod implementation {
                                         php_types::memcensus::ALLOC_ID
                                     ));
                                     php_runtime::memcensus_unitcache_main_rows(worker_idx);
+                                    // A-DL31 (Council WP-87): per-thread bin
+                                    // occupancy — read HERE because the
+                                    // default heap is only visitable from
+                                    // its owner thread; the physical half
+                                    // of the ×W budget joins on these rows.
+                                    php_types::memcensus::mi_bin_thread_rows(worker_idx);
                                 });
                                 CENSUS_PROBE_ACTIVE
                                     .store(false, std::sync::atomic::Ordering::SeqCst);

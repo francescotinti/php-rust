@@ -16192,6 +16192,12 @@ pub fn main_unit_acquire(
     // residue), so it leans UPPER — the selftest pins bracket >= floor.
     #[cfg(feature = "mem-census")]
     let lower_w = CensusNetWindow::open();
+    // A-BB47 (Council WP-87, Bak): the lowering SPAN in µs — the overlap
+    // canary's evidence channel. Two spans that intersect prove the two
+    // lowerings ran concurrently; without this the sequential canary's
+    // per-thread claim cannot transfer to concurrency (KL-87-2/KB-87-3).
+    #[cfg(feature = "mem-census")]
+    let lower_t0_us = php_types::memcensus::mono_us();
     // A-DL33 (Council WP-87, Leijen): pipeline fail-closed control. With
     // PHPR_MEMCENSUS_TEST_BURST set, a HELD 1 MiB burst lands INSIDE the
     // production bracket: the published net row must move >= 1.048.576 B
@@ -16207,6 +16213,13 @@ pub fn main_unit_acquire(
     let program = crate::lower_source(name, source).map_err(MainAcquireError::Lower)?;
     #[cfg(feature = "mem-census")]
     let lower_net = lower_w.finish();
+    #[cfg(feature = "mem-census")]
+    php_types::memcensus::census_line(&format!(
+        "tag=lower_span tid={:?} t0_us={lower_t0_us} t1_us={} {}",
+        std::thread::current().id(),
+        php_types::memcensus::mono_us(),
+        String::from_utf8_lossy(name)
+    ));
     #[cfg(not(feature = "mem-census"))]
     let lower_net: u64 = 0;
     let module = crate::compile::compile_program(&program, registry)
@@ -16343,18 +16356,23 @@ pub fn memcensus_unitcache_main_rows(thr: usize) {
     let rows: Vec<String> = UNIT_CACHE.with(|c| {
         let cache = c.borrow();
         let mut rw = RetainedWalk::new();
-        let mut mains: Vec<(u64, Vec<u8>, u64, Rc<Program>)> = Vec::new();
+        let mut mains: Vec<(u64, Vec<u8>, u64, Rc<Program>, usize)> = Vec::new();
         let mut entries = 0u64;
         for (k, slot) in cache.iter() {
             entries += slot.len() as u64;
             for cu in slot.iter() {
                 rw.add_module(&cu.module);
                 if let Some(p) = &cu.main_program {
+                    // A-DL35 (Council WP-87): fixture COMPOSITION rides the
+                    // row — the 31×/50× own-cost ratios are fixture-shaped
+                    // (statement-dense vs literal-pad), never general
+                    // constants; fns/stmts make the shape auditable.
                     mains.push((
                         cu.main_put_ordinal,
                         k.path.clone(),
                         cu.main_program_net,
                         Rc::clone(p),
+                        cu.module.functions.len(),
                     ));
                 }
             }
@@ -16365,14 +16383,16 @@ pub fn memcensus_unitcache_main_rows(thr: usize) {
         // the strong refs, the count cannot reach 0, no destructor runs.
         mains.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
         let mut out = Vec::with_capacity(mains.len() + 1);
-        for (ord, path, net, p) in &mains {
+        for (ord, path, net, p, fns) in &mains {
             let before = rw.bytes;
             rw.add_program(p);
             let floor_inc = rw.bytes - before;
             out.push(format!(
                 "tag=unitcache_main_entry thr={thr} ord={ord} net={net} floor_inc={floor_inc} \
+                 fns={fns} stmts={} \
                  net_rule=net-at-lower net_window=process-counters \
                  floor_rule=walk-increment-in-put-order arm=axum-worker alloc_id={} {}",
+                p.body.len(),
                 php_types::memcensus::ALLOC_ID,
                 String::from_utf8_lossy(path)
             ));
