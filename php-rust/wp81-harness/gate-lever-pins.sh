@@ -884,24 +884,46 @@ echo "OK  self-test: A-PP23 region decoy bites (flush outside body excluded)"
 #     must contain the fail-closed w!=1 rejection in its own body.
 #     verdict83.sh is EXCLUDED BY NAME: pre-A-PP28 archive (the w= stamp
 #     did not exist), its VC figure is binario-bound to 7a610457 (A-BB43).
+# A-PP35 (Council WP-87, KS-PP-87-1): the old sweep was `grep -q 'w=1'` —
+# satisfied by `w=10` or a `# TODO w=1` comment: token-presence is not a
+# rejection. Two-tier form: (via A, closure) a script that SOURCES the
+# shared tracked parser wp86-harness/reqns-guard.pl (own bite-test:
+# synthetic w=2 => VOID) is compliant BY NAME; (immediate) otherwise the
+# script must carry the DIGIT-GUARDED rejection `w=1[^0-9]` in its body.
 PP31_SWEEP=$(grep -ln 'reqns: ' "$REPO"/wp8[4-9]-harness/*.sh "$REPO"/wp9[0-9]-harness/*.sh 2>/dev/null |
   grep -v '/\._' |
   while IFS= read -r f; do
-    grep -q 'w=1' "$f" || echo "${f#"$REPO"/}"
+    if grep -q 'reqns-guard[.]pl' "$f"; then :
+    elif grep -qE 'w=1([^0-9]|$)' "$f"; then :
+    else echo "${f#"$REPO"/}"; fi
   done)
 if [ -n "$PP31_SWEEP" ]; then
-  echo "FAIL: script parses 'reqns: ' without the w!=1 fail-closed rejection (A-PP31/KS-PP-86-1 — verdict illegittimo):"
+  echo "FAIL: script parses 'reqns: ' without digit-guarded w=1 rejection nor reqns-guard.pl (A-PP31/A-PP35/KS-PP-87-1):"
   echo "$PP31_SWEEP"
   FAILS=$((FAILS+1))
 else
-  echo "OK  sweep: every wp84+ reqns-parsing script carries the w!=1 rejection (A-PP31)"
+  echo "OK  sweep: every wp84+ reqns-parsing script rejects w!=1 (digit-guard or shared parser, A-PP35)"
 fi
-# decoy: a parser without the rejection must be caught
+# decoys: (a) parser without any rejection; (b) parser whose only token is
+# w=10 — BOTH must be caught (the WP-87 vacuity finding).
 printf 'while (<$fh>) { push @s, $1 if /^reqns: (\\d+)/ }\n' > "$TMPD/pp31decoy.sh"
-if grep -q 'reqns: ' "$TMPD/pp31decoy.sh" && ! grep -q 'w=1' "$TMPD/pp31decoy.sh"; then
-  echo "OK  self-test: A-PP31 decoy discriminates (parser without rejection detected)"
+printf 'while (<$fh>) { push @s, $1 if /^reqns: (\\d+)/ && / w=10 / }\n' > "$TMPD/pp35decoy.sh"
+pp35_ok() { # <file> -> 0 if the two-tier sweep would accept it
+  grep -q 'reqns-guard[.]pl' "$1" || grep -qE 'w=1([^0-9]|$)' "$1"
+}
+if ! pp35_ok "$TMPD/pp31decoy.sh" && ! pp35_ok "$TMPD/pp35decoy.sh"; then
+  echo "OK  self-test: A-PP35 decoys discriminate (no-rejection AND w=10-only both caught)"
 else
-  echo "SELF-TEST BROKEN: A-PP31 decoy not detected"; exit 2
+  echo "SELF-TEST BROKEN: A-PP35 decoy accepted (w=10 satisfies the sweep — vacuity regressed)"; exit 2
+fi
+# The shared parser must exist, be tracked, and its own bite-test must bite.
+RGUARD="$REPO/wp86-harness/reqns-guard.pl"
+if [ -f "$RGUARD" ] && git -C "$REPO" ls-files --error-unmatch "wp86-harness/reqns-guard.pl" >/dev/null 2>&1 \
+   && perl "$RGUARD" --selftest >/dev/null 2>&1; then
+  echo "OK  shared reqns-guard.pl exists, tracked, selftest bites (A-PP35)"
+else
+  echo "FAIL: reqns-guard.pl missing/untracked/selftest-failing (A-PP35/KS-PP-87-1)"
+  FAILS=$((FAILS+1))
 fi
 # (b) KG-86-1: the slope-verdict checker must EXIST and be tracked — the
 #     next verdict slope is born fail-closed or is illegitimate (any slope

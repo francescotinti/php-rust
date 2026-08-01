@@ -484,7 +484,17 @@ fn main() -> ExitCode {
         let default_hook = std::panic::take_hook();
         std::panic::set_hook(Box::new(move |info| {
             default_hook(info);
-            eprintln!("php-server: panic — aborting (A-PP9/A-PP4 fail-fast, KS-PP-6)");
+            // A-MS34 (Council WP-87): the hook fires BEFORE any unwind, so
+            // the census probe's catch_unwind (A-MS31) can never attribute
+            // in this mode — the flag carries the instrument-vs-measurand
+            // attribution into the hook (KS-MS-87-3).
+            if crate::worker_pool::census_probe_active() {
+                eprintln!(
+                    "php-server: census probe panicked — aborting (A-MS31/A-MS34; instrument, not worker)"
+                );
+            } else {
+                eprintln!("php-server: panic — aborting (A-PP9/A-PP4 fail-fast, KS-PP-6)");
+            }
             std::process::abort();
         }));
         let rt = match tokio::runtime::Runtime::new() {

@@ -46,6 +46,20 @@
 mod implementation {
     use std::sync::Arc;
     use tokio::sync::{mpsc, oneshot};
+
+    /// A-MS34 (Council WP-87, Matsakis): in axum mode the GLOBAL abort
+    /// hook fires BEFORE any unwind, so the census probe's own
+    /// catch_unwind (A-MS31) never gets to print its distinct message —
+    /// the attribution instrument-vs-measurand was dead exactly in the
+    /// arm it was built for. The teardown sets this flag around the probe
+    /// window; the global hook reads it and prints the DISTINCT
+    /// census-probe attribution (KS-MS-87-3: a "census probe panicked"
+    /// line in an axum run is attribution-valid only via this flag).
+    pub static CENSUS_PROBE_ACTIVE: std::sync::atomic::AtomicBool =
+        std::sync::atomic::AtomicBool::new(false);
+    pub fn census_probe_active() -> bool {
+        CENSUS_PROBE_ACTIVE.load(std::sync::atomic::Ordering::SeqCst)
+    }
     use axum::http::StatusCode;
     use php_builtins::registry;
 
@@ -280,7 +294,8 @@ mod implementation {
                     // a broken invariant.
                     let unwind =
                         std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                            Self::worker_loop(ctx, rx);
+                            #[cfg_attr(not(feature = "mem-census"), allow(unused_variables))]
+                            let dispatched = Self::worker_loop(ctx, rx);
                             // A-DL24 (Council WP-85): worker teardown — the
                             // channel is closed and THIS thread's unit cache
                             // is about to die: dump its main-entry rows
@@ -294,9 +309,28 @@ mod implementation {
                             // verdict rejects partial rows by exit code.
                             #[cfg(feature = "mem-census")]
                             {
+                                // A-MS34: flag armed for the probe window —
+                                // the global abort hook (main.rs) attributes
+                                // a panic here to the INSTRUMENT even though
+                                // it fires before the unwind reaches the
+                                // catch_unwind below.
+                                CENSUS_PROBE_ACTIVE
+                                    .store(true, std::sync::atomic::Ordering::SeqCst);
                                 let probe = std::panic::catch_unwind(|| {
+                                    // A-PP36: dispatch count in-band FIRST —
+                                    // the verdict of a dl28-class run is
+                                    // fail-closed on sum/per-thread counts
+                                    // (phantom dispatches shift the mapping
+                                    // without rows; KS-PP-87-3).
+                                    php_types::memcensus::census_line(&format!(
+                                        "tag=worker_dispatch thr={worker_idx} count={dispatched} \
+                                         arm=axum-worker alloc_id={}",
+                                        php_types::memcensus::ALLOC_ID
+                                    ));
                                     php_runtime::memcensus_unitcache_main_rows(worker_idx);
                                 });
+                                CENSUS_PROBE_ACTIVE
+                                    .store(false, std::sync::atomic::Ordering::SeqCst);
                                 if probe.is_err() {
                                     eprintln!(
                                         "php-server: census probe panicked — aborting (A-MS31; instrument, not worker)"
@@ -343,7 +377,14 @@ mod implementation {
         fn worker_loop(
             _context: Arc<WorkerPoolContext>,
             mut rx: mpsc::UnboundedReceiver<WorkerTask>,
-        ) {
+        ) -> u64 {
+            // A-PP36 (Council WP-87, Pedersen): per-thread DISPATCH COUNT,
+            // returned to the teardown for the in-band census row — a
+            // phantom dispatch (connect accepted, aborted pre-publish)
+            // consumes round-robin without emitting rows: request-ordinal
+            // claims from a raw whose dispatch counts don't match the
+            // protocol's expectation are VOID (KS-PP-87-3).
+            let mut dispatched: u64 = 0;
             // Build the PHP builtins registry ONCE per worker (A-DL5/A-PP5:
             // registry() is NOT cached — building it per request was pure churn
             // that would have polluted the WP-78 alloc census).
@@ -358,6 +399,7 @@ mod implementation {
 
             // Main request loop: each request gets a fresh RetainSet + fresh Vm
             while let Some(task) = rx.blocking_recv() {
+                dispatched += 1; // A-PP36: counted at pickup, before any outcome
                 // Pickup: the task leaves the QUEUE (it stays OUTSTANDING
                 // until its response is sent). S-80.0.3 tripwire (KH81-2): a
                 // decrement finding 0 has no matching increment — wrap.
@@ -411,6 +453,7 @@ mod implementation {
                     }
                 }
             }
+            dispatched // A-PP36: handed to the teardown's in-band row
         }
 
         /// A-MS7/A-DL6 (Council WP-79): deterministic teardown — drop every
@@ -1089,6 +1132,11 @@ mod implementation {
                 assert_eq!(body, b"w", "pre-warm body diverged (A-PP30)");
             }
             let (p0, h0, u0) = php_runtime::uc_main_stats();
+            // A-PP34 (Council WP-87): membership, not cardinality — the
+            // count pins below are blind to a COMPENSATED insert+evict
+            // (+1−1 leaves uc_entry_count unchanged). Zero-delta on every
+            // displacement channel across the fatals closes that window.
+            let d0 = php_runtime::uc_displacement_stats();
             // A-PP22: enumeration snapshot — key-blind, catches an inserter
             // publishing under a DIVERGENT key that the canonicalized
             // uc_main_key_in_cache probe below cannot see (RETENTION class).
@@ -1132,6 +1180,16 @@ mod implementation {
             assert_eq!(p1 - p0, 2, "positive control: both requests must PROBE (vitality)");
             assert_eq!(u1 - u0, 0, "link-fatal main was PUT (A-PP16/A-PP20)");
             assert_eq!(h1 - h0, 0, "link-fatal main was served from cache (A-PP20)");
+            // A-PP34: no displacement channel moved across the fatals — an
+            // inserter that evicted the warm entry while publishing the
+            // fatal (count-compensated) can no longer pass on cardinality.
+            let d1 = php_runtime::uc_displacement_stats();
+            assert_eq!(
+                d1, d0,
+                "displacement counters moved across the fatal requests \
+                 (main_evicted/ways/fp_replaced/stranded {d0:?} -> {d1:?}) — \
+                 compensated insert+evict (A-PP34/KS-PP-87-2)"
+            );
             assert!(
                 !php_runtime::uc_main_key_in_cache(path.as_bytes(), src.as_bytes()),
                 "link-fatal main's (key, fp) is IN the entries — a second \
@@ -1175,6 +1233,70 @@ mod implementation {
                 "positive control: the TOTAL enumerator did not count the \
                  clean main (A-PP26/KG-79.A)"
             );
+        }
+
+        /// A-PP33 (Council WP-87, Pedersen): the pre-warm (A-PP30) CONSUMED
+        /// the thread's first-request status — a once-per-thread inserter
+        /// publishing the fatal main on the TRUE request 1 left a_pp20's
+        /// coverage. This arm runs the link-fatal as the VERY FIRST request
+        /// of a FRESH thread: baseline empty, and (S-85.0 discovery 4: a
+        /// request that includes nothing seeds NOTHING — legitimate seeding
+        /// is 0 for this fixture) delta==0 already on request 1. Enabled
+        /// exactly by that discovery: before it, the fatal-as-req1 window
+        /// was indistinguishable from legitimate seeding.
+        #[test]
+        fn a_pp33_link_fatal_as_true_req1_no_warm_arm() {
+            let h = std::thread::spawn(|| {
+                let reg = registry();
+                let dir = std::env::temp_dir().join("phpr_gate_a_pp33");
+                std::fs::create_dir_all(&dir).unwrap();
+                let file = dir.join("lf33.php");
+                let src = "<?php\nenum LF33 implements Serializable { case A; }\necho \"never-reached\";";
+                std::fs::write(&file, src).unwrap();
+                // Anti-vacuity: the fresh thread's cache MUST start empty —
+                // a warmed cache here would silently re-create a_pp20's arm.
+                assert_eq!(
+                    php_runtime::uc_entry_count(),
+                    0,
+                    "fresh thread cache not empty — no-warm arm vacuous (A-PP33)"
+                );
+                let (p0, h0, u0) = php_runtime::uc_main_stats();
+                let d0 = php_runtime::uc_displacement_stats();
+                let retain = php_runtime::RetainSet::new();
+                let (body, status) = execute_with_retain(
+                    &retain,
+                    &reg,
+                    &WorkerHandlerMeta {
+                        path: file.display().to_string(),
+                        source: src.as_bytes().to_vec(),
+                    },
+                );
+                assert_eq!(
+                    status,
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "true-req1 link-fatal must 500 (A-PP33)"
+                );
+                assert!(
+                    String::from_utf8_lossy(&body).contains("Fatal error"),
+                    "true-req1 body must carry the fatal banner (A-PP33)"
+                );
+                assert_eq!(
+                    php_runtime::uc_entry_count(),
+                    0,
+                    "true-req1 fatal grew the EMPTY cache — first-request \
+                     publish window (A-PP33/KS-PP-87-2)"
+                );
+                let (p1, h1, u1) = php_runtime::uc_main_stats();
+                assert_eq!(p1 - p0, 1, "positive control: req1 must PROBE (vitality, A-PP33)");
+                assert_eq!(u1 - u0, 0, "true-req1 fatal main was PUT (A-PP33)");
+                assert_eq!(h1 - h0, 0, "true-req1 fatal main HIT the cache (A-PP33)");
+                let d1 = php_runtime::uc_displacement_stats();
+                assert_eq!(
+                    d1, d0,
+                    "displacement moved on the true req1 fatal (A-PP33/A-PP34)"
+                );
+            });
+            h.join().expect("A-PP33 no-warm arm thread panicked");
         }
 
         /// A-DS9 (S-78.1.5): statics in methods and in INHERITED methods (PHP
@@ -1587,5 +1709,6 @@ mod implementation {
 
 #[cfg(feature = "axum-server")]
 pub use implementation::{
-    REQ_NS, WorkerHandlerMeta, WorkerPool, WorkerPoolContext, WorkerTask, req_ns_armed,
+    REQ_NS, WorkerHandlerMeta, WorkerPool, WorkerPoolContext, WorkerTask, census_probe_active,
+    req_ns_armed,
 };

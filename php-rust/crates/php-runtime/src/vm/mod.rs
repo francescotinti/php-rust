@@ -2290,6 +2290,16 @@ impl CensusNetWindow {
     }
 
     /// Net delta of the window (consumes it; depth released by Drop).
+    ///
+    /// A-DL34 (Council WP-87, Leijen) — DECLARED semantics: frees landing
+    /// in the window SUBTRACT, including frees of blocks allocated BEFORE
+    /// the window opened (deflation is real and counted: a drop-deferred
+    /// cross-request teardown deflates the next bracket's net). When the
+    /// window's frees exceed its allocs the net CLAMPS AT ZERO
+    /// (saturating) — it never wraps and never goes negative; a clamped
+    /// window is indistinguishable from a zero-net window BY DESIGN. Both
+    /// halves are pinned by the positive controls in the A-DL29/A-DL34
+    /// selftest block.
     fn finish(self) -> u64 {
         let (a1, f1) = php_types::memcensus::alloc_counters();
         a1.saturating_sub(self.net0.0).saturating_sub(f1.saturating_sub(self.net0.1))
@@ -16182,6 +16192,18 @@ pub fn main_unit_acquire(
     // residue), so it leans UPPER — the selftest pins bracket >= floor.
     #[cfg(feature = "mem-census")]
     let lower_w = CensusNetWindow::open();
+    // A-DL33 (Council WP-87, Leijen): pipeline fail-closed control. With
+    // PHPR_MEMCENSUS_TEST_BURST set, a HELD 1 MiB burst lands INSIDE the
+    // production bracket: the published net row must move >= 1.048.576 B
+    // and the dl28-class verdict must DECLASSIFY that run (calibration
+    // mismatch is the tooth — this proves the PIPELINE rejects a polluted
+    // row, not merely that the counter counts). Leaked on purpose: the
+    // burst must survive finish(). mem-census builds only, armed by env —
+    // never on a measurement run.
+    #[cfg(feature = "mem-census")]
+    if std::env::var_os("PHPR_MEMCENSUS_TEST_BURST").is_some() {
+        std::mem::forget(std::hint::black_box(vec![0xB5u8; 1 << 20]));
+    }
     let program = crate::lower_source(name, source).map_err(MainAcquireError::Lower)?;
     #[cfg(feature = "mem-census")]
     let lower_net = lower_w.finish();
@@ -16238,6 +16260,21 @@ pub fn uc_main_stats() -> (u64, u64, u64) {
     UC_STATS.with(|s| {
         let s = s.borrow();
         (s.main_probe, s.main_hit, s.main_put)
+    })
+}
+
+/// A-PP34 (Council WP-87, Pedersen) test surface: snapshot of the
+/// DISPLACEMENT counters `(main_evicted, ways_evictions, fp_replaced,
+/// stranded_entries_dropped)`. The a_pp20 cardinality pins see PRESENCE,
+/// not membership: an inserter that publishes a fatal main WHILE evicting
+/// the warm entry leaves every count unchanged (+1−1). Zero-delta on all
+/// four displacement channels across the fatal requests closes the
+/// compensated-insert window. Probe API, not runtime API.
+#[doc(hidden)]
+pub fn uc_displacement_stats() -> (u64, u64, u64, u64) {
+    UC_STATS.with(|s| {
+        let s = s.borrow();
+        (s.main_evicted, s.ways_evictions, s.fp_replaced, s.stranded_entries_dropped)
     })
 }
 
@@ -17714,36 +17751,55 @@ pub fn retained_walk_selftest() {
             $e = [1,2,3,4,5,6,7,8]; return $a + $b + $c + $d + count($e); } \
             function rw_b3() { return rw_b2(); } function rw_b4() { return rw_b3(); } \
             echo rw_b4();";
-        let w = CensusNetWindow::open();
-        let ps = crate::lower_source(b"rw_s.php", small).unwrap();
-        let n1 = w.finish();
-        // The bracket measures what THIS lower newly allocated: on a warm
-        // lower the prelude decls are Rc-shared (never re-allocated), so
-        // the comparable floor is the program's OWN share (struct + body +
-        // slots), NOT the full walk (which counts the shared prelude too).
-        let ps = Rc::new(ps);
-        let own_floor = std::mem::size_of::<Program>() as u64
-            + (ps.body.capacity() * std::mem::size_of::<crate::hir::Stmt>()) as u64
-            + ps.slots.iter().map(|s| s.len() + 16).sum::<usize>() as u64;
-        assert!(
-            n1 >= own_floor,
-            "bracket {} < own-share structural floor {} — the floor is NOT a floor (A-DL15)",
-            n1,
-            own_floor
-        );
-        let w = CensusNetWindow::open();
-        let _ps2 = crate::lower_source(b"rw_s2.php", small).unwrap();
-        let n2 = w.finish();
-        let band = n1.max(n2) / 10;
-        assert!(
-            n1.abs_diff(n2) <= band.max(512),
-            "bracket not deterministic within the declared 10% band: {} vs {} (A-DL15)",
-            n1,
-            n2
-        );
-        let w = CensusNetWindow::open();
-        let _pb = crate::lower_source(b"rw_big.php", big).unwrap();
-        let nb = w.finish();
+        // A-DL15 determinism + monotonicity — RETRIED with quiesce waits
+        // (S-86.0): the window is PROCESS-WIDE and A-DL29 below proves
+        // foreign traffic is COUNTED in BOTH directions (allocs inflate,
+        // frees deflate through the A-DL34 clamp — observed: 144.185 vs
+        // 32.195, then n1==0, under the parallel harness). Each dirty
+        // attempt sleeps so late attempts run after the sibling tests
+        // drain; a systematically non-deterministic bracket still fails
+        // every attempt, quiet process included (the single-thread run is
+        // the reference: it passes on attempt 1).
+        let mut clean = None;
+        for i in 0..8 {
+            if i > 0 {
+                std::thread::sleep(std::time::Duration::from_millis(250));
+            }
+            let name1 = format!("rw_s_{i}.php");
+            let name2 = format!("rw_s2_{i}.php");
+            let nameb = format!("rw_big_{i}.php");
+            let w = CensusNetWindow::open();
+            let ps = crate::lower_source(name1.as_bytes(), small).unwrap();
+            let n1 = w.finish();
+            // Floor check per attempt — INSIDE the retry: pollution cuts
+            // BOTH ways (foreign allocs inflate; foreign frees DEFLATE via
+            // the declared A-DL34 clamp — observed: n1==0 under the
+            // parallel harness). A systematically broken floor still
+            // fails all 5 attempts.
+            let own_floor = std::mem::size_of::<crate::hir::Program>() as u64
+                + (ps.body.capacity() * std::mem::size_of::<crate::hir::Stmt>()) as u64
+                + ps.slots.iter().map(|s| s.len() + 16).sum::<usize>() as u64;
+            if n1 < own_floor {
+                continue;
+            }
+            let w = CensusNetWindow::open();
+            let _ps2 = crate::lower_source(name2.as_bytes(), small).unwrap();
+            let n2 = w.finish();
+            let w = CensusNetWindow::open();
+            let _pb = crate::lower_source(nameb.as_bytes(), big).unwrap();
+            let nb = w.finish();
+            let band = n1.max(n2) / 10;
+            if n1.abs_diff(n2) <= band.max(512) && nb > n1 {
+                clean = Some((n1, n2, nb));
+                break;
+            }
+        }
+        let Some((n1, _n2, nb)) = clean else {
+            panic!(
+                "no clean bracket triple in 8 quiesce-waited attempts — \
+                 bracket non-deterministic beyond foreign-burst interference (A-DL15)"
+            );
+        };
         assert!(
             nb > n1,
             "bracket does not move with source size: big {} <= small {} (A-DL15)",
@@ -17769,6 +17825,45 @@ pub fn retained_walk_selftest() {
              the counter does not count foreign threads (A-DL29)"
         );
         drop(held);
+    }
+    // A-DL34 (Council WP-87, Leijen): DEFLATION controls — the declared
+    // finish() semantics must be the measured ones.
+    // (a) A free-in-window of a PRE-window block subtracts from in-window
+    //     allocs: alloc 2 MiB inside, free a pre-window 1 MiB inside =>
+    //     net lands near 1 MiB, provably BELOW the 2 MiB gross (the free
+    //     was counted) and near the predicted difference.
+    {
+        // black_box: in release LLVM elides an unobserved alloc/free pair
+        // — the first run of this control measured net 0 exactly because
+        // both vecs vanished (the tooth bit its own fixture).
+        let pre = std::hint::black_box(vec![0x5Au8; 1 << 20]);
+        let w = CensusNetWindow::open();
+        let gross = std::hint::black_box(vec![0xC3u8; 2 << 20]);
+        drop(std::hint::black_box(pre));
+        let net = w.finish();
+        assert!(
+            net < (2u64 << 20),
+            "pre-window free NOT subtracted: net {net} B >= gross 2 MiB — \
+             deflation is not counted (A-DL34)"
+        );
+        assert!(
+            net >= (1u64 << 20) - (64 << 10) && net <= (1u64 << 20) + (64 << 10),
+            "deflation net {net} B far from predicted 1 MiB ±64 KiB (A-DL34)"
+        );
+        drop(std::hint::black_box(gross));
+    }
+    // (b) Frees exceeding allocs CLAMP AT ZERO — never wrap: free a
+    //     pre-window 2 MiB with (almost) no in-window allocs.
+    {
+        let pre = std::hint::black_box(vec![0x5Au8; 2 << 20]);
+        let w = CensusNetWindow::open();
+        drop(std::hint::black_box(pre));
+        let net = w.finish();
+        assert!(
+            net < (64 << 10),
+            "clamp control: net {net} B not ~0 after free-only window — \
+             underflow semantics diverged from the declaration (A-DL34)"
+        );
     }
 }
 

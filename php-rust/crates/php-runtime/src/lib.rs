@@ -49,6 +49,9 @@ pub use vm::{main_unit_acquire, run_source_probed, MainAcquireError, MainLever, 
 // A-PP20 (Council WP-83): entry-probe test surface for the worker's
 // link-fatal-never-published tooth (counters + direct key probe).
 pub use vm::{uc_entry_count, uc_main_entry_count, uc_main_key_in_cache, uc_main_stats};
+// A-PP34 (Council WP-87): displacement counters — the compensated
+// insert+evict window of the a_pp20 tooth (membership, not cardinality).
+pub use vm::uc_displacement_stats;
 // A-DL24 (Council WP-85): per-thread unit-cache rows for the worker arm's
 // teardown dump — mem-census instrumentation builds only.
 #[cfg(feature = "mem-census")]
