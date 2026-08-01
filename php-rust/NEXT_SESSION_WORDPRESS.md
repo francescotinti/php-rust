@@ -1,39 +1,34 @@
-# NEXT_SESSION_WORDPRESS.md — S-82.0: HONEST INSTRUMENTS + MISURE RESIDUE fatte (verdict82 PASS) → WP-83 (slope N-doppio + verdetto peak ×W)
+# NEXT_SESSION_WORDPRESS.md — S-83.0: DENTI DI VERBALE + MISURE (verdict83 PASS, VC CHIUSA ~63×, partizione-per-TIPO) → WP-84
 
-**Ultima sessione**: S-82.0 (2026-07-31→08-01, commit 2a883e8…5b668d0) —
-ordine vincolante Concilio WP-83 eseguito p1-p8: strumenti di verdetto
-FAIL-CLOSED (verdict81 v2 su medie R=3 + md5-gate, gate-measure-cifre
-KG-83-3), **fold one-shot su acquire (A-TH21)** con parità integrale,
-denti macchina sui sigilli (u64 mutation-tested KH83-1, publish==2,
-include-hit guard, uclog in-band, A-PP20 entries-probe, drain-sync),
-quarantena raw (ESERCITATA: 3 campagne void → manifest, mai rm),
-**retained ONESTO** (bracket net-at-lower; 🔴 strumento net era MORTO nel
-build mem-census — allocatore sanato), fixture F14/F15 (thrash FIFO reale,
-main_evicted contato) + F2 same-key a macchina, **misure residue A/B a
-verdetto macchina (verdict82.out PASS)**: dettaglio in
-`wp82-harness/MEASURE82_RESULTS.md`; KB-83-2 chiusa ad aritmetica esatta.
-Dettaglio: `sessions/WP_SESSION_82.md`.
+**Ultima sessione**: S-83.0 (2026-08-01, commit 050c891…857da59) — gli 8
+punti del Concilio WP-84 eseguiti INTEGRALI: A-MS17 VmGate al PRIMO commit
+(KS-MS-84-1), A-MS22, A-TH23/24/25, A-DS23, A-PP22/23, A-SK29/30, A-AH33/34,
+A-DL20/21, fixture F14b/F15b/path415B/reg-only, A-DS22 (comparatore era
+DOPPIO-cieco: metodi+const pool — rafforzato), slope in FORMA NUOVA
+(min-of-R R=9 + probe per-request __reqns), **campagna-2 VERDICT83 PASS**
+(`wp83-harness/MEASURE83_RESULTS.md`), **partizione-per-TIPO
+UnitSlot{main, includes} IMPLEMENTATA** (main esente per corsia, F15/F15b
+FLIPPATI verdi). Tre denti nuovi hanno MORSO al primo giro (A-DS23,
+A-DS22, A-AH32 → emendato PRUNE-ONLY, giudizio WP-85). Dettaglio:
+`sessions/WP_SESSION_83.md`.
 
 ## Stato gate
 
-- **phpr (CLI, parità release)**: **c84bb425f007a52d** (stash additivo
-  `phpr-wp82`; bit mossi dal fold A-TH21) — corpus Zend per NOME: **1418
-  IDENTICO** + refl 290 IDENTICO (verificato 2× in sessione,
-  `wp82-harness/p2-parity/` + battery-5); workspace 0 fail.
-- **php-server sestetto**: matrix a **e2990b3** (riga per binario nel
-  matrix-archive; union 318853ca · mem-census **b620d64c89abb584**).
-  Battery 15/15 in forma equivalenza KH82-2 (14 gate a 83a1d67 + matrix a
-  HEAD, crates-diff vuoto, check A MACCHINA nel precondition di campagna):
-  run-gate ×2 · census-twin (main.rs pin 5→7 NOMINATO, forme cfg combinate
-  canoniche) · concurrent · worker-panic · stdout-tandem · capture-order ·
-  doc-purge · DR-1 (dente u64 + mutation) · lever-pins (lower_source ==9
-  NOMINATO, A-TH20/A-AH26, sweep classe, A-DS17) · lever-fixtures 1+2
-  (F1-F15 + F-oneshot t2b) · measure-cifre · parity-full.
-- **Misure residue**: `wp82-harness/MEASURE82_RESULTS.md` + verdict82.out —
-  VF no-leak PASS · VP peak W=10 DECLARED-WORSE (+34,4MB ×W, APERTA) ·
-  VC NULL (KB-83-3) · VH twin-pair PASS (path misto CHIUSO) · VR retained
-  20,65MB ×W · VA autoload PASS forte · void_runs=162+23 (manifest in
-  `wp82-harness/evidence/void/`).
+- **phpr (CLI, parità release)**: **7a6104575134de27** (stash additivo
+  `phpr-wp83`; bit mossi da A-MS17/A-MS22/partizione A-MS24) — corpus
+  Zend per NOME: **1418 IDENTICO** + refl 290 IDENTICO (verificato DUE
+  volte: p1a e p6, `wp83-battery-out/` fuori repo); workspace 1655/1655.
+- **php-server**: battery-83pre 15/15 a 925da3b + equivalenza LEGALE
+  925da3b→e5f2a5e (prima uscita reale di battery-equivalence.sh, per
+  NOME, ledgerata); matrix-final a **e5f2a5e**; campagna-2 stesso-chain
+  senza commit intermedi. Gate lever: pins/fixtures/fixtures2 PASS con
+  F15/F15b FLIPPATI (main_evicted==0 con macchina evizione VIVA).
+- **Misure**: `wp83-harness/MEASURE83_RESULTS.md` + verdict83.out — VC
+  **PASS verdict-grade** (slope 110,0 vs 6920,0 µs/req, min-of-R risolto)
+  · VR algebra ESATTA (budget scorporato **19,69MB ×W**; one-time 1°
+  lower 7,00MB=35,6%; condivisibile ~69%) · VA split (+4 reg / ≤+52
+  include-HIT upper) · VW **2×len FALSIFICATO** al confine (esito
+  nominato). Void: 1 quarantena, 21 slot-run, 108 file (lock-cmp bite).
 - GATE72 CLI resta baseline trasversale (corpus 1418 · refl 290 · ORM
   3E/13F · hk 1665).
 
@@ -41,77 +36,47 @@ Dettaglio: `sessions/WP_SESSION_82.md`.
 
 1. **Output capture BEFORE request_end()**. 2. **Isolamento = semantica
 FPM** (A-DS2). 3. **RetainSet thread-affine PER-RICHIESTA, sigillato**;
-porta vm_new/park_main ALLOWLISTED. 4. **Panic = FAIL-FAST**. 5. **Un
-body ≠ oracolo sulla leva ⇒ git revert, mai fix-forward** (KS-DS-80-3,
-mai innescata). 6. **Mai rm di raw: quarantena + manifest** (KS-AH-83-2).
+porta vm_new/park_main = token `VmGate` (A-MS17, rustc giudice). 4.
+**Panic = FAIL-FAST**. 5. **Un body ≠ oracolo sulla leva ⇒ git revert,
+mai fix-forward** (KS-DS-80-3, mai innescata). 6. **Mai rm di raw:
+quarantena + manifest** (KS-AH-83-2).
 
-## ⚖️ Concilio WP-84 ESEGUITO (2026-08-01, verbali VINCOLANTI): `wp84-harness/COUNCIL_WP84_REVIEWS.md`
+## §WP-84 (prossima sessione) — aperture S-83.0 (per NOME) + ripresa ROADMAP
 
-**9× CONCORDO CON EMENDAMENTI, 0 opposizioni.** Le MISURE sono confermate a
-ricomputo indipendente (Gregg: V2/peak/slope/witness ESATTE; Bak riconferma
-le slope). REFUTATI: **il programma "slope a N-doppio" è aritmeticamente
-incapace di chiudere KB-83-3** (fattore (N₂+N₁)/(N₂−N₁)=3 invariante,
-floor f·S≈352>125,7 — serve forma per-request e/o min-of-R/R≥9, A-BG32/
-A-BB31); **il budget retained 20,65MB è VIZIATO da doppio conteggio**
-(floor Program in rw_bytes risommato col net — ri-etichettato UPPER,
-A-DL21; per-entry obbligatorio A-DL20; cifra PER-ARM A-PP25); **decimo
-sito lower_source fuori pin** (phpt-runner:287, A-TH23) + troncatura `as
-u32` non gateata (A-TH24); **a_ds17 cieco per costruzione** (FxHash seed
-fisso, A-DS22); **A-MS17 = violazione d'ordine** (atterra al PRIMO commit
-WP-83, KS-MS-84-1); **equivalenza battery a conteggio bandita** (per NOME,
-A-SK30/A-AH34); header void BOCCIATO e retro-corretto (45 run/185 file/15
-refusal); scan retro-corretto da raw committato (3 ns/key). DELIBERE:
-mitigazione peak = **main ESENTE da ways nella forma partizione-per-TIPO**
-(Stogov+Matsakis, mai skip-per-tag) con F15b; registry condivisa = stima
-25-31MB (Bak) ma tocca le IC ⇒ riapre KH81-3 (KH84-4). Ordine vincolante
-S-83.0 = verbale §Sintesi (8 punti) + 31 KS nuovi (KH84 · KS-MS-84 ·
-KS-SK-84 · KS-AH-84 · KB-84 · KS-PP-84 · KL-84 · KS-DS-84 · KG-84).
+1. **A-PP18** (ledger drained esatto): PRIMA di ogni riconciliazione
+   Δglobal a W>1 (A-PP24 — in S-83.0 nessuna tentata, vincolo onorato
+   dall'ordine).
+2. **A-BB34 pin identità peak** (232±1MB W=10) da rieseguire su matrix
+   fresca post-partizione + VP formale della campagna WP-84.
+3. **VW modello nuovo**: nominare il SITO della 4ª copia (a len=415:
+   a_bytes = 2×len + 2×(len+1), a_calls=4) e pinnare il modello a soglia.
+4. **Emendamento lock-cmp PRUNE-ONLY** (A-AH32): giudizio del Concilio
+   WP-85 (verbale in wp85-harness quando convocato).
+5. Registry condivisa read-only (condivisibile ~69% MISURATO): SOLO con
+   A-BB35 budget ex-ante + costo sync sul path HIT + riapertura ESPLICITA
+   KH81-3 (KH84-4).
+6. Poi: **ripresa ROADMAP da [[php-rust-todo-master]]**. Deferred
+   invariati: A-TH4; A-AH5/A-BB4 superglobali axum (KS-DS-82-3); ORM/hk
+   perf solo build-adiacente (KS-AH-83-4).
 
-## §WP-83 (prossima sessione) — S-83.0 "denti di verbale" poi misure (ordine Concilio WP-84 §Sintesi, non rinegoziare)
+**Kill-switch di rotta**: tabella WP-84 (31 KS, verbale
+`wp84-harness/COUNCIL_WP84_REVIEWS.md`) TUTTI onorati o chiusi in S-83.0
+(KS-MS-84-1 ✓ primo commit; KH84-1 ✓ split; KH84-3 ✓ dente cast;
+KS-SK-84-1/KS-AH-84-3 ✓ equivalenza per NOME esercitata; KS-AH-84-1 ✓ il
+dente ha MORSO (emendamento dichiarato); KB-84-1 ✓ forma cambiata, mai
+rieseguito N-doppio; KB-84-2 ✓ fixture 415B (falsificazione onesta);
+KB-84-3 ✓ fixture di controllo; KL-84-1/2 ✓ scorporo+scomposizione;
+KS-DS-84-1 ✓ pin-HIT; KS-DS-84-2 ✓ A-DS22; KS-DS-84-3/4 ✓ F15b verde +
+tripwire cablato; KG-84-1 ✓ void per-manifest; KG-84-2 ✓ refusal nel
+base_run; KG-84-3 ✓ forma per-request presente; KS-PP-84-2 ✓ delta
+enumerazione in a_pp20; KS-PP-84-3/KL-84-3 ✓ cifre per-ARM/etichette.
+KS-PP-84-1 non innescato (nessun nuovo segmento twin-pair).
 
-1. Debiti di sigillo: **A-MS17 token ZST al PRIMO commit** (KS-MS-84-1) ·
-   A-MS22 lower_net→ticket · A-TH23 pin lower di CLASSE (phpt-runner:287
-   nominato; prod==2/selftest==7 separati) · A-TH24 dente cast epoch ·
-   A-DS23 grep-gate iterazioni esteso · A-TH25.
-2. Onestà verdetto/equivalenza: A-SK30/A-AH34 (per NOME, mai conteggio) ·
-   A-SK29 (supplementi normati) · A-SK26/A-PP23 (twin-pair: sentinella
-   in-band + head-positivo + union_hash vs matrix + flush a macchina) ·
-   A-PP22 (enumerazione entries main).
-3. Retained SCOMPONIBILE prima della delibera peak: A-DL20 (per-entry +
-   ordinale) · A-DL21 (scorporo program_floor_share) · A-DL22 (quadratura
-   hello-only W=1 + frazione condivisibile) · A-AH33 (alloc_id) · A-PP25.
-4. Fixture: F14b (pin-HIT, A-DS21/A-SK31) · F15b interleavata (A-DS24) ·
-   path≥384B (KB-83-1/KB-84-2) · register-senza-trigger (A-BB33/A-SK28) ·
-   A-DS22 (bracci a_ds17).
-5. Slope CPU in FORMA NUOVA (mai solo N-doppio, KB-84-1/KG-84-3):
-   per-request timestamps (A-BG32) e/o min-of-R / multi-N R≥9 (A-BB31) ·
-   base-arm-build.sh (A-AH31) + lock-cmp (A-AH32) + pin measure78 nel
-   base_run (A-BG31) + rustc/lock-sha e arm interleaved (A-TH26).
-6. Delibera peak ×W (solo DOPO il punto 3): main-esente partizione-per-TIPO
-   con F15b verde (KS-DS-84-3/4); registry solo con budget ex-ante A-BB35
-   + riapertura esplicita KH81-3 (KH84-4); pin identità 232±1MB (A-BB34).
-7. A-PP18 PRIMA di ogni riconciliazione Δglobal a W>1 (A-PP24).
-8. Poi: ripresa ROADMAP da [[php-rust-todo-master]]. Deferred: A-TH4;
-   A-AH5/A-BB4 superglobali axum (KS-DS-82-3); ORM/hk perf solo
-   build-adiacente (KS-AH-83-4). Revert policy KS-DS-80-3 invariata.
-
-**Kill-switch di rotta**: tabella WP-83 (30 KS, verbale
-`wp83-harness/COUNCIL_WP83_REVIEWS.md`) TUTTI onorati o chiusi in S-82.0
-(KH83-1 mutation ✓, KH83-2/KS-AH-83-2 esercitati ×3, KH83-3/KS-SK-83-4 a
-macchina, KS-SK-83-1/2/3 ✓, KS-AH-83-1 full-body-first ✓, KB-83-1 aperto
-[fixture path-lungo non eseguita — dichiarato], KB-83-2 chiusa aritmetica,
-KB-83-3 APPLICATA (VC NULL), KB-83-4 pin in tabella, KS-PP-83-1/2/3 ✓,
-KL-83-1 soddisfatta (budget con rw_main_net), KL-83-3 applicata (VP forma
-dichiarativa), KS-DS-83-1 ✓ (main_evicted==0 dichiarato), KS-DS-83-2 ✓
-(double-compile verde), KS-DS-83-3 ✓ (F14 verde), KG-83-1/2/3 ✓.
-
-**NON riproporre**: tutti i NON-riproporre WP-82 restano; in più — battery
-/gate output DENTRO il repo (il porcelain whole-tree del matrix li rifiuta:
-dir esterna `wp82-battery-out`); matrix non-ULTIMO prima di una campagna o
-commit tra matrix e campagna (KG-81-2 rifiuta); claim di strumento senza
-prova che è ARMATO (feature ≠ env ≠ allocatore — controllo positivo del
-canale in OGNI build citato); --locked su worktree vecchio con lock vivo
-che porta dev-dep nuovi (--offline + lock copiato, deviazione dichiarata).
+**NON riproporre**: tutti i NON-riproporre WP-83 restano; in più — slope
+su coppie a fattore 3 "chiudibile per N" (KB-84-1: SOLO forma
+per-request/min-of-R); byte-cmp del lock su manifest divergenti per
+dev-dep (forma = PRUNE-ONLY, salvo diverso giudizio WP-85); seconda
+equivalenza sulla stessa battery rev (ledger morde: si rifà la battery).
 
 ---
 **Chiusura**: 2026-08-01. Apertura/chiusura sessioni = skill
