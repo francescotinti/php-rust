@@ -1006,6 +1006,16 @@ fn ctx_render() -> Option<String> {
     Some(s)
 }
 
+/// A-AH33 (Council WP-84, KS-AH-84-2): SEMANTIC identity of the counting
+/// surface — a binary hash discriminates everything and therefore nothing;
+/// retained/net figures are cross-campaign comparable ONLY between raws
+/// carrying the SAME alloc_id. Bump = same-commit, named, at every change
+/// of the counting surface (allocator wrapper, deep_size coverage,
+/// net-window semantics). History: v1 = pre-S82 (net instrument DEAD in
+/// mem-census builds, allocator bare); v2 = S-82.0 MemCountingMi.
+/// Pinned by gate-census-twin.sh (source-const tooth).
+pub const ALLOC_ID: &str = "memcount-v2-s82";
+
 /// Raw appended census line (pid-prefixed) for census-build reporters that
 /// live outside this crate (seed split, unit-per-path histogram).
 pub fn census_line(line: &str) {

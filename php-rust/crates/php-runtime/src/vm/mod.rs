@@ -1438,7 +1438,7 @@ pub fn run_module_with_hir<'m>(
             // `stranded_keys_superseded`/`stranded_entries_dropped`.
             {
                 let st = UC_STATS.with(|s| *s.borrow());
-                let (entries, bytes, paths, superseded_paths, superseded_entries, rw_bytes, rw_nodes, rw_main_net) =
+                let (entries, bytes, paths, superseded_paths, superseded_entries, rw_bytes, rw_nodes, rw_main_net, program_floor_share, main_entry_rows) =
                     UNIT_CACHE.with(|c| {
                         let cache = c.borrow();
                         let mut entries = 0u64;
@@ -1451,13 +1451,24 @@ pub fn run_module_with_hir<'m>(
                         // contribute their Program too. Figure label:
                         // ">= bytes, Const excluded".
                         let mut rw = RetainedWalk::new();
+                        // A-DL20 (Council WP-84): mains collected for a
+                        // SECOND, put-ordinal-ordered pass — per-entry net
+                        // in-band, plus the INCREMENTAL floor share (the
+                        // first put pays the shared prelude: deterministic
+                        // attribution in put order, never hash order).
+                        let mut mains: Vec<(u64, Vec<u8>, u64, Rc<Program>)> = Vec::new();
                         for (k, slot) in cache.iter() {
                             entries += slot.len() as u64;
                             for cu in slot {
                                 bytes += module_census_bytes(&cu.module) as u64;
                                 rw.add_module(&cu.module);
                                 if let Some(p) = &cu.main_program {
-                                    rw.add_program(p);
+                                    mains.push((
+                                        cu.main_put_ordinal,
+                                        k.path.clone(),
+                                        cu.main_program_net,
+                                        Rc::clone(p),
+                                    ));
                                     // A-DL15: the MEASURED deep figure rides
                                     // next to the structural FLOOR walk.
                                     main_net += cu.main_program_net;
@@ -1465,11 +1476,36 @@ pub fn run_module_with_hir<'m>(
                             }
                             *by_path.entry(&k.path[..]).or_insert(0) += 1;
                         }
-                        let sup = by_path.values().filter(|&&n| n > 1).count() as u64;
-                        let sup_e: u64 =
-                            by_path.values().filter(|&&n| n > 1).map(|&n| (n - 1) as u64).sum();
-                        (entries, bytes, by_path.len() as u64, sup, sup_e, rw.bytes, rw.nodes, main_net)
+                        mains.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
+                        let mut pfs = 0u64;
+                        let mut rows: Vec<String> = Vec::new();
+                        for (ord, path, net, p) in &mains {
+                            let before = rw.bytes;
+                            rw.add_program(p);
+                            let floor_inc = rw.bytes - before;
+                            pfs += floor_inc;
+                            // Declared IN-BAND: net comes from a PROCESS-
+                            // global counter window (other threads can
+                            // pollute it — A-DL20), floor_inc is the
+                            // structural walk increment (shared subgraphs
+                            // land on the FIRST ordinal that reaches them).
+                            rows.push(format!(
+                                "tag=unitcache_main_entry ord={ord} net={net} floor_inc={floor_inc} \
+                                 net_rule=net-at-lower net_window=process-counters \
+                                 floor_rule=walk-increment-in-put-order alloc_id={} {}",
+                                php_types::memcensus::ALLOC_ID,
+                                String::from_utf8_lossy(path)
+                            ));
+                        }
+                        (entries, bytes, by_path.len() as u64,
+                         by_path.values().filter(|&&n| n > 1).count() as u64,
+                         by_path.values().filter(|&&n| n > 1).map(|&n| (n - 1) as u64).sum::<u64>(),
+                         rw.bytes, rw.nodes, main_net, pfs, rows)
                     });
+                // A-DL20: one row PER main entry, put-ordinal order.
+                for r in &main_entry_rows {
+                    mc::census_line(r);
+                }
                 // A-DL17 (Council WP-83): the row carries TWO byte-ownership
                 // rules, both declared IN-BAND — `retained_walk_bytes` uses
                 // CACHE-AS-OWNER (visited-set walker, shared subgraphs
@@ -1477,6 +1513,12 @@ pub fn run_module_with_hir<'m>(
                 // (strong_count>1 skipped: deferred-freed/shared EXCLUDED —
                 // a lower bound, never "bytes freed"; the resident verdict
                 // is the vmmap twin, KL-83-2).
+                // A-DL21 (Council WP-84, KL-84-1): the ×W budget is the
+                // SCOMPOSED form — rw_bytes contains the Program floor via
+                // add_program, which the net figure re-counts deep; the
+                // share is emitted so the subtraction is auditable. The
+                // plain sum (rw_bytes + rw_main_net) stays an UPPER bound.
+                let rw_budget = rw_bytes - program_floor_share + rw_main_net;
                 mc::census_line(&format!(
                     "tag=unitcache hit_intra={} hit_cross={} miss_cold={} miss_fp={} \
                      miss_dc={} miss_nostat={} inserts={} fp_replaced={} ways_evictions={} \
@@ -1493,6 +1535,9 @@ pub fn run_module_with_hir<'m>(
                      retained_walk_nodes={rw_nodes} \
                      stranded_bytes_dropped={} uclog={} \
                      rw_main_net={rw_main_net} \
+                     program_floor_share={program_floor_share} rw_budget={rw_budget} \
+                     rw_budget_rule=rw_bytes-program_floor_share+rw_main_net \
+                     arm=cli-server alloc_id={} \
                      rw_rule=cache-as-owner-FLOOR rw_main_net_rule=net-at-lower \
                      stranded_rule=unique-at-drop gross=1",
                     st.hit_intra,
@@ -1532,6 +1577,9 @@ pub fn run_module_with_hir<'m>(
                     // SELF-DECLARES an armed PHPR_UNIT_CACHE_LOG in-band;
                     // the campaign driver rejects uclog=1 (KS-PP-83-1).
                     u8::from(uc_log_path().is_some()),
+                    // A-AH33: semantic identity of the counting surface —
+                    // cross-campaign comparability gate (KS-AH-84-2).
+                    php_types::memcensus::ALLOC_ID,
                 ));
                 // WP-67 P-67.3: the cross-request bounded sets OUTSIDE
                 // cache+RetainSet — the per-worker metric counts them
@@ -7134,6 +7182,7 @@ impl<'m> Vm<'m> {
                         owner_epoch: VM_EPOCH.with(|e| e.get()),
                         main_program: None,
                         main_program_net: 0,
+                        main_put_ordinal: 0,
                     },
                 );
             }
@@ -15276,6 +15325,15 @@ struct CachedUnit {
     // census-only perimeter, S-82.0).
     #[cfg_attr(not(feature = "mem-census"), allow(dead_code))]
     main_program_net: u64,
+    /// A-DL20 (Council WP-84): 1-based ordinal of the main_put that
+    /// published this entry (0 = include entry / never a main put). The
+    /// per-entry census rows are emitted in THIS order, so the incremental
+    /// floor attribution is deterministic in put order — the first put pays
+    /// the shared prelude, exactly the asymmetry A-DL20 hunts (a FLAT
+    /// per-entry net would expose a per-lower residue the entry does not
+    /// own, KL-84-2).
+    #[cfg_attr(not(feature = "mem-census"), allow(dead_code))]
+    main_put_ordinal: u64,
 }
 
 /// What a unit contributes to the accumulating seed image — the retained
@@ -16069,7 +16127,13 @@ pub fn uc_main_entry_count() -> usize {
 /// the Program (eval-against-image on HIT).
 fn main_publish_ticket(t: MainPublishTicket, module: &Rc<Module>, program: &Rc<Program>) {
     // A-MS22/KS-MS-84-4: `t.lower_net` is read HERE and nowhere else.
-    uc_stat(|s| s.main_put += 1);
+    // A-DL20: capture the 1-based put ordinal — it rides the entry so the
+    // mem-census per-entry rows come out in put order.
+    let ordinal = UC_STATS.with(|s| {
+        let mut st = s.borrow_mut();
+        st.main_put += 1;
+        st.main_put
+    });
     uc_log("main_put", &t.key.path);
     #[cfg(feature = "mem-census")]
     census_unit_note(module);
@@ -16092,6 +16156,7 @@ fn main_publish_ticket(t: MainPublishTicket, module: &Rc<Module>, program: &Rc<P
             owner_epoch: VM_EPOCH.with(|e| e.get()),
             main_program: Some(Rc::clone(program)),
             main_program_net: t.lower_net,
+            main_put_ordinal: ordinal,
         },
     );
 }
@@ -18849,6 +18914,7 @@ mod tests {
             owner_epoch: 0,
             main_program: None,
             main_program_net: 0,
+            main_put_ordinal: 0,
         };
         let mut cost_at = |k: usize, base: usize| -> f64 {
             // fresh population of k entries at distinct paths (stable)

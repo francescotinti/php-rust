@@ -114,6 +114,20 @@ else
   echo "OK  marker-census self-test (cfg form counted, comment mention excluded from form)"
 fi
 
+# --- 1b. A-AH33 (Council WP-84, KS-AH-84-2): alloc_id source pin -------------
+# Cross-campaign retained comparisons are legal ONLY between raws carrying
+# the same alloc_id; the const is SEMANTIC (bump = same-commit, named).
+# Pin the current identity here — a silent change of the counting surface
+# without a bump FAILS this gate.
+MEMCENSUS_RS="$REPO/crates/php-types/src/memcensus.rs"
+WANT_ALLOC_ID='memcount-v2-s82'
+if grep -qE "pub const ALLOC_ID: &str = \"$WANT_ALLOC_ID\";" "$MEMCENSUS_RS"; then
+  echo "OK  alloc_id source pin: $WANT_ALLOC_ID (A-AH33)"
+else
+  echo "FAIL: ALLOC_ID != '$WANT_ALLOC_ID' in memcensus.rs — counting surface changed without a NAMED bump (A-AH33/KS-AH-84-2: bump the const AND this pin same-commit)"
+  FAILS=$((FAILS+1))
+fi
+
 if [ "$FAILS" -ne 0 ]; then
   echo "== CENSUS-TWIN FAIL($FAILS) at marker census [git $GIT_REV] =="
   exit 1
