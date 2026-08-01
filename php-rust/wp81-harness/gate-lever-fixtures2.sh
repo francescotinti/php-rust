@@ -311,16 +311,18 @@ else
   kof "F14b: main_put=$NP14/main_hit=$NH14 (want 1/>=6) — silent re-MISS per URL: F14 vacuous, class 2 REOPENED (KS-DS-84-1)"
 fi
 
-# --- F15 (A-DS20, Council WP-83): same file as MAIN and as include under
-# >=4 distinct chain-fps — 5 fps on 4 FIFO ways WITHOUT refresh evicts the
-# hot main in a cycle. The counter (main_evicted, wired at the eviction
-# site) must be SEEN firing; correctness must survive the thrash. An A/B
-# with main_evicted>0 undeclared is VOID (KS-DS-83-1) — this fixture is
-# the positive control of that counter.
+# --- F15 (A-DS20 -> FLIPPED per A-DS24, S-83.0 p6): same file as MAIN and
+# as include under 5 distinct include-chain-fps. PRE-mitigation this
+# evicted the hot main (FIFO, 5 fps on 4 mixed ways — the S-82.0 PASS
+# documented it). POST-mitigation (A-MS24 partition-by-TYPE: main lane
+# separate, includes keep the ways) the pins FLIP: main_evicted == 0
+# (KS-DS-84-4: >0 anywhere = campaign VOID) with the eviction machinery
+# PROVEN ALIVE on the include lane of the SAME key (5th fp evicts an
+# include: evict-fp event >= 1) — never a vacuous zero (KG-79.A).
 cat > "$DOCROOT/t15.php" <<'EOF'
 <?php echo "T15";
 EOF
-for i in 1 2 3 4; do
+for i in 1 2 3 4 5; do
   cat > "$DOCROOT/f15h$i.php" <<EOF
 <?php class F15H$i { public static function h() { return "h$i"; } }
 EOF
@@ -329,30 +331,32 @@ EOF
 EOF
 done
 BM1=$(req t15.php)                      # main entry for t15's UnitKey
-for i in 1 2 3 4; do req "f15w$i.php" > /dev/null; done   # 4 include-fps, same key
+for i in 1 2 3 4 5; do req "f15w$i.php" > /dev/null; done  # 5 include-fps, same key
 NEV=$(count_ev "$ULOG" main_evicted t15.php)
-BM2=$(req t15.php)                      # thrash: re-MISS + re-put, still correct
+NEVICT=$(count_ev "$ULOG" "evict fp" t15.php)
+BM2=$(req t15.php)                      # post-thrash: the main must be a HIT now
+NH15=$(count_ev "$ULOG" main_hit t15.php)
 if [ "$BM1" = "T15" ] && [ "$BM2" = "T15" ]; then
-  if [ "$NEV" -ge 1 ]; then
-    okf "F15: main_evicted SEEN ($NEV) — FIFO ways-thrash on shared main/include key documented, body correct (A-DS20)"
+  if [ "$NEV" -eq 0 ] && [ "$NEVICT" -ge 1 ] && [ "$NH15" -ge 1 ]; then
+    okf "F15 FLIPPED: main_evicted==0 with include-lane eviction ALIVE ($NEVICT evict-fp) and post-thrash main HIT ($NH15) — A-MS24 partition holds (A-DS24/KS-DS-84-4)"
   else
-    kof "F15: main_evicted never fired after 4 include-fps on the main's key (counter blind or ways changed — re-pin A-DS20)"
+    kof "F15: main_evicted=$NEV (want 0) evict-fp=$NEVICT (want >=1) main_hit=$NH15 (want >=1) — partition regressed or machinery blind (KS-DS-84-4)"
   fi
 else
-  kof "F15: bodies '$BM1'/'$BM2' != 'T15' under ways-thrash"
+  kof "F15: bodies '$BM1'/'$BM2' != 'T15' under include-lane thrash"
 fi
 
-# --- F15b (A-DS24, Council WP-84): INTERLEAVED thrash — discriminates
-# FIFO / LRU / main-exemption. The main is TOUCHED between every include-fp
-# insert: an LRU (or refresh-on-hit, or exemption) would SAVE the recently
-# used main; FIFO evicts it regardless of recency. Current tree = FIFO by
-# design ⇒ main_evicted MUST still fire interleaved. After the p6
-# mitigation (main EXEMPT, partition-by-TYPE — KS-MS-84-3) this pin FLIPS
-# to ==0 with the counter proven alive by F15 above (KS-DS-84-3/4).
+# --- F15b (A-DS24 -> FLIPPED, S-83.0 p6): INTERLEAVED discriminant — the
+# main is TOUCHED between every include-fp insert. PRE-mitigation the FIFO
+# evicted it regardless of recency (S-83.0 p4 documented main_evicted==1
+# interleaved). POST-mitigation the discriminant reads EXEMPTION: the main
+# survives BY LANE, not by recency — main_evicted==0, every touch after
+# the first is a HIT (main_put==1, main_hit>=5), include-lane eviction
+# alive on the same key (5th fp).
 cat > "$DOCROOT/t15b.php" <<'EOF'
 <?php echo "T15B";
 EOF
-for i in 1 2 3 4; do
+for i in 1 2 3 4 5; do
   cat > "$DOCROOT/f15bh$i.php" <<EOF
 <?php class F15BH$i { public static function h() { return "b$i"; } }
 EOF
@@ -361,17 +365,20 @@ EOF
 EOF
 done
 BM1=$(req t15b.php)
-for i in 1 2 3 4; do
+for i in 1 2 3 4 5; do
   req "f15bw$i.php" > /dev/null
   req t15b.php > /dev/null        # touch the main between inserts (recency)
 done
 NEVB=$(count_ev "$ULOG" main_evicted t15b.php)
+NEVICTB=$(count_ev "$ULOG" "evict fp" t15b.php)
+NPB=$(count_ev "$ULOG" main_put t15b.php)
+NHB=$(count_ev "$ULOG" main_hit t15b.php)
 BM2=$(req t15b.php)
 if [ "$BM1" = "T15B" ] && [ "$BM2" = "T15B" ]; then
-  if [ "$NEVB" -ge 1 ]; then
-    okf "F15b: interleaved thrash still evicts the TOUCHED main ($NEVB) — FIFO confirmed, recency does not save it (A-DS24 discriminant; flips to ==0 after main-exemption)"
+  if [ "$NEVB" -eq 0 ] && [ "$NPB" -eq 1 ] && [ "$NHB" -ge 5 ] && [ "$NEVICTB" -ge 1 ]; then
+    okf "F15b FLIPPED: exemption BY LANE — main_put==1/main_hit==$NHB>=5/main_evicted==0 with include eviction alive ($NEVICTB) (A-DS24/KS-DS-84-3)"
   else
-    kof "F15b: interleaved main_evicted==0 — the eviction form is NOT the declared FIFO (LRU/refresh/exemption appeared unannounced — re-pin A-DS24)"
+    kof "F15b: put=$NPB hit=$NHB evicted=$NEVB evict-fp=$NEVICTB (want 1/>=5/0/>=1) — exemption incomplete or machinery blind (KS-DS-84-3/4)"
   fi
 else
   kof "F15b: bodies '$BM1'/'$BM2' != 'T15B' under interleaved thrash"

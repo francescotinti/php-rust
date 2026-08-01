@@ -1459,7 +1459,7 @@ pub fn run_module_with_hir<'m>(
                         let mut mains: Vec<(u64, Vec<u8>, u64, Rc<Program>)> = Vec::new();
                         for (k, slot) in cache.iter() {
                             entries += slot.len() as u64;
-                            for cu in slot {
+                            for cu in slot.iter() {
                                 bytes += module_census_bytes(&cu.module) as u64;
                                 rw.add_module(&cu.module);
                                 if let Some(p) = &cu.main_program {
@@ -15400,11 +15400,37 @@ struct UnitKey {
 /// static offsets would otherwise grow its slot unboundedly.
 const UNIT_CACHE_WAYS: usize = 4;
 
+/// A-MS24/A-DS24 (Council WP-84 DELIBERA, S-83.0 p6 — KS-MS-84-3): the
+/// per-key slot PARTITIONED BY TYPE, never a skip-per-tag in an eviction
+/// loop. `main` is the ONE persistent_script per path (opcache-faithful,
+/// Stogov: a main put REPLACES it and it is never a ways victim — the F15
+/// thrash class dies by construction); `includes` keep the FIFO ways
+/// bound. Per-key bound = ways + 1 by construction. Post-mitigation,
+/// main_evicted > 0 anywhere = campaign VOID d'ufficio (KS-DS-84-4): the
+/// counter stays WIRED on the include lane as the fail-loud tripwire.
+#[derive(Default, Clone)]
+struct UnitSlot {
+    main: Option<CachedUnit>,
+    includes: Vec<CachedUnit>,
+}
+
+impl UnitSlot {
+    fn iter(&self) -> impl Iterator<Item = &CachedUnit> {
+        self.main.iter().chain(self.includes.iter())
+    }
+    fn len(&self) -> usize {
+        usize::from(self.main.is_some()) + self.includes.len()
+    }
+    fn is_empty(&self) -> bool {
+        self.main.is_none() && self.includes.is_empty()
+    }
+}
+
 thread_local! {
     /// The per-process (per-thread) unit cache. Entries hold leaked modules —
     /// memory the include path leaks TODAY on every load; caching makes that
     /// leak bounded by reusing the same module across requests.
-    static UNIT_CACHE: RefCell<HashMap<UnitKey, Vec<CachedUnit>>> =
+    static UNIT_CACHE: RefCell<HashMap<UnitKey, UnitSlot>> =
         RefCell::new(HashMap::default());
     /// WP-62 M1: monotone id of the VM currently running on this thread,
     /// bumped at every VM construction — distinguishes intra-VM re-include
@@ -16218,19 +16244,29 @@ fn unit_cache_put(key: UnitKey, cu: CachedUnit) {
             }
         }
         let slot = cache.entry(key).or_default();
-        if let Some(pos) = slot.iter().position(|e| e.fp == cu.fp) {
-            slot[pos] = cu;
+        if cu.main_program.is_some() {
+            // A-MS24 main lane: ONE persistent_script per path. Same fp =
+            // refresh (fp_replaced); different fp = the F2 same-key edit
+            // class — the old main can never hit again by construction
+            // (content fp is the judge), so replacement is supersede-class,
+            // NEVER an eviction: main_evicted stays 0 (KS-DS-84-4).
+            if slot.main.as_ref().is_some_and(|m| m.fp == cu.fp) {
+                uc_stat(|s| s.fp_replaced += 1);
+            } else {
+                uc_stat(|s| s.inserts += 1);
+            }
+            slot.main = Some(cu);
+        } else if let Some(pos) = slot.includes.iter().position(|e| e.fp == cu.fp) {
+            slot.includes[pos] = cu;
             uc_stat(|s| s.fp_replaced += 1);
         } else {
-            if slot.len() >= UNIT_CACHE_WAYS {
-                let victim = slot.remove(0);
+            if slot.includes.len() >= UNIT_CACHE_WAYS {
+                let victim = slot.includes.remove(0);
                 uc_stat(|s| s.ways_evictions += 1);
-                // A-DS20 (Council WP-83): FIFO without refresh-on-hit means
-                // the same UnitKey used as MAIN and as include under >=4
-                // chain-fps evicts the hot main in a cycle (5 fps on 4
-                // ways = permanent thrash). Count the main victims: an A/B
-                // with main_evicted>0 undeclared is VOID (KS-DS-83-1);
-                // fixture F15 is the positive control.
+                // KS-DS-84-4 tripwire: a main in the INCLUDE lane is
+                // structurally impossible after the A-MS24 partition — the
+                // counter stays WIRED so a regression fails LOUD (a fired
+                // main_evicted post-mitigation voids the campaign).
                 if victim.main_program.is_some() {
                     uc_stat(|s| s.main_evicted += 1);
                     if let Some(p) = &kpath {
@@ -16243,7 +16279,7 @@ fn unit_cache_put(key: UnitKey, cu: CachedUnit) {
                     uc_log(&format!("evict fp {:016x}", victim.fp), p);
                 }
             }
-            slot.push(cu);
+            slot.includes.push(cu);
             uc_stat(|s| s.inserts += 1);
         }
     })
