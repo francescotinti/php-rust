@@ -1,0 +1,100 @@
+[Sat Aug  1 03:50:49 2026] PHP 8.5.7 Development Server (http://127.0.0.1:8299) started
+[Sat Aug  1 03:50:49 2026] 127.0.0.1:60353 Accepted
+[Sat Aug  1 03:50:50 2026] 127.0.0.1:60353 [200]: GET /hello.php
+[Sat Aug  1 03:50:50 2026] 127.0.0.1:60353 Closing
+[Sat Aug  1 03:50:50 2026] 127.0.0.1:60354 Accepted
+[Sat Aug  1 03:50:50 2026] 127.0.0.1:60354 [200]: GET /hello.php
+[Sat Aug  1 03:50:50 2026] 127.0.0.1:60354 Closing
+[Sat Aug  1 03:50:50 2026] 127.0.0.1:60355 Accepted
+[Sat Aug  1 03:50:50 2026] 127.0.0.1:60355 [200]: GET /hello.php
+[Sat Aug  1 03:50:50 2026] 127.0.0.1:60355 Closing
+[Sat Aug  1 03:50:50 2026] 127.0.0.1:60356 Accepted
+[Sat Aug  1 03:50:50 2026] 127.0.0.1:60356 [200]: GET /hello.php
+[Sat Aug  1 03:50:50 2026] 127.0.0.1:60356 Closing
+[Sat Aug  1 03:50:50 2026] 127.0.0.1:60357 Accepted
+[Sat Aug  1 03:50:50 2026] 127.0.0.1:60357 [200]: GET /include_gate.php
+[Sat Aug  1 03:50:50 2026] 127.0.0.1:60357 Closing
+[Sat Aug  1 03:50:50 2026] 127.0.0.1:60358 Accepted
+[Sat Aug  1 03:50:50 2026] 127.0.0.1:60358 [200]: GET /include_gate.php
+[Sat Aug  1 03:50:50 2026] 127.0.0.1:60358 Closing
+[Sat Aug  1 03:50:50 2026] 127.0.0.1:60359 Accepted
+[Sat Aug  1 03:50:50 2026] 127.0.0.1:60359 [200]: GET /include_gate.php
+[Sat Aug  1 03:50:50 2026] 127.0.0.1:60359 Closing
+[Sat Aug  1 03:50:50 2026] 127.0.0.1:60360 Accepted
+[Sat Aug  1 03:50:50 2026] 127.0.0.1:60360 [200]: GET /include_heavy.php
+[Sat Aug  1 03:50:50 2026] 127.0.0.1:60360 Closing
+[Sat Aug  1 03:50:50 2026] 127.0.0.1:60361 Accepted
+[Sat Aug  1 03:50:50 2026] 127.0.0.1:60361 [200]: GET /include_heavy.php
+[Sat Aug  1 03:50:50 2026] 127.0.0.1:60361 Closing
+[Sat Aug  1 03:50:50 2026] 127.0.0.1:60362 Accepted
+[Sat Aug  1 03:50:50 2026] 127.0.0.1:60362 [200]: GET /include_heavy.php
+[Sat Aug  1 03:50:50 2026] 127.0.0.1:60362 Closing
+[Sat Aug  1 03:50:50 2026] 127.0.0.1:60363 Accepted
+[Sat Aug  1 03:50:50 2026] 127.0.0.1:60363 [200]: GET /bare.php
+[Sat Aug  1 03:50:50 2026] 127.0.0.1:60363 Closing
+[Sat Aug  1 03:50:51 2026] 127.0.0.1:60364 Accepted
+[Sat Aug  1 03:50:51 2026] 127.0.0.1:60364 [200]: GET /bare.php
+[Sat Aug  1 03:50:51 2026] 127.0.0.1:60364 Closing
+[Sat Aug  1 03:50:51 2026] 127.0.0.1:60365 Accepted
+[Sat Aug  1 03:50:51 2026] 127.0.0.1:60365 [200]: GET /bare.php
+[Sat Aug  1 03:50:51 2026] 127.0.0.1:60365 Closing
+[Sat Aug  1 03:50:51 2026] 127.0.0.1:60366 Accepted
+[Sat Aug  1 03:50:51 2026] 127.0.0.1:60366 [200]: GET /hello.php
+[Sat Aug  1 03:50:51 2026] 127.0.0.1:60366 Closing
+[Sat Aug  1 03:50:51 2026] 127.0.0.1:60367 Accepted
+[Sat Aug  1 03:50:51 2026] 127.0.0.1:60367 [200]: GET /hello.php
+[Sat Aug  1 03:50:51 2026] 127.0.0.1:60367 Closing
+[Sat Aug  1 03:50:51 2026] 127.0.0.1:60368 Accepted
+[Sat Aug  1 03:50:51 2026] 127.0.0.1:60368 [200]: GET /hello.php
+[Sat Aug  1 03:50:51 2026] 127.0.0.1:60368 Closing
+[Sat Aug  1 03:50:51 2026] 127.0.0.1:60369 Accepted
+[Sat Aug  1 03:50:51 2026] 127.0.0.1:60369 [200]: GET /hello.php
+[Sat Aug  1 03:50:51 2026] 127.0.0.1:60369 Closing
+[Sat Aug  1 03:50:51 2026] 127.0.0.1:60370 Accepted
+[Sat Aug  1 03:50:51 2026] 127.0.0.1:60370 [200]: GET /hello.php
+[Sat Aug  1 03:50:51 2026] 127.0.0.1:60370 Closing
+[Sat Aug  1 03:50:51 2026] 127.0.0.1:60371 Accepted
+[Sat Aug  1 03:50:51 2026] 127.0.0.1:60371 [200]: GET /include_gate.php
+[Sat Aug  1 03:50:51 2026] 127.0.0.1:60371 Closing
+[Sat Aug  1 03:50:51 2026] 127.0.0.1:60372 Accepted
+[Sat Aug  1 03:50:51 2026] 127.0.0.1:60372 [200]: GET /include_gate.php
+[Sat Aug  1 03:50:51 2026] 127.0.0.1:60372 Closing
+[Sat Aug  1 03:50:51 2026] 127.0.0.1:60373 Accepted
+[Sat Aug  1 03:50:51 2026] 127.0.0.1:60373 [200]: GET /include_gate.php
+[Sat Aug  1 03:50:51 2026] 127.0.0.1:60373 Closing
+[Sat Aug  1 03:50:51 2026] 127.0.0.1:60374 Accepted
+[Sat Aug  1 03:50:51 2026] 127.0.0.1:60374 [200]: GET /include_gate.php
+[Sat Aug  1 03:50:51 2026] 127.0.0.1:60374 Closing
+[Sat Aug  1 03:50:51 2026] 127.0.0.1:60375 Accepted
+[Sat Aug  1 03:50:51 2026] 127.0.0.1:60375 [200]: GET /include_gate.php
+[Sat Aug  1 03:50:51 2026] 127.0.0.1:60375 Closing
+[Sat Aug  1 03:50:51 2026] 127.0.0.1:60376 Accepted
+[Sat Aug  1 03:50:51 2026] 127.0.0.1:60376 [200]: GET /include_heavy.php
+[Sat Aug  1 03:50:51 2026] 127.0.0.1:60376 Closing
+[Sat Aug  1 03:50:51 2026] 127.0.0.1:60377 Accepted
+[Sat Aug  1 03:50:51 2026] 127.0.0.1:60377 [200]: GET /include_heavy.php
+[Sat Aug  1 03:50:51 2026] 127.0.0.1:60377 Closing
+[Sat Aug  1 03:50:51 2026] 127.0.0.1:60378 Accepted
+[Sat Aug  1 03:50:51 2026] 127.0.0.1:60378 [200]: GET /include_heavy.php
+[Sat Aug  1 03:50:51 2026] 127.0.0.1:60378 Closing
+[Sat Aug  1 03:50:51 2026] 127.0.0.1:60379 Accepted
+[Sat Aug  1 03:50:51 2026] 127.0.0.1:60379 [200]: GET /include_heavy.php
+[Sat Aug  1 03:50:51 2026] 127.0.0.1:60379 Closing
+[Sat Aug  1 03:50:51 2026] 127.0.0.1:60380 Accepted
+[Sat Aug  1 03:50:51 2026] 127.0.0.1:60380 [200]: GET /include_heavy.php
+[Sat Aug  1 03:50:51 2026] 127.0.0.1:60380 Closing
+[Sat Aug  1 03:50:51 2026] 127.0.0.1:60381 Accepted
+[Sat Aug  1 03:50:52 2026] 127.0.0.1:60381 [200]: GET /bare.php
+[Sat Aug  1 03:50:52 2026] 127.0.0.1:60381 Closing
+[Sat Aug  1 03:50:52 2026] 127.0.0.1:60382 Accepted
+[Sat Aug  1 03:50:52 2026] 127.0.0.1:60382 [200]: GET /bare.php
+[Sat Aug  1 03:50:52 2026] 127.0.0.1:60382 Closing
+[Sat Aug  1 03:50:52 2026] 127.0.0.1:60383 Accepted
+[Sat Aug  1 03:50:52 2026] 127.0.0.1:60383 [200]: GET /bare.php
+[Sat Aug  1 03:50:52 2026] 127.0.0.1:60383 Closing
+[Sat Aug  1 03:50:52 2026] 127.0.0.1:60384 Accepted
+[Sat Aug  1 03:50:52 2026] 127.0.0.1:60384 [200]: GET /bare.php
+[Sat Aug  1 03:50:52 2026] 127.0.0.1:60384 Closing
+[Sat Aug  1 03:50:52 2026] 127.0.0.1:60385 Accepted
+[Sat Aug  1 03:50:52 2026] 127.0.0.1:60385 [200]: GET /bare.php
+[Sat Aug  1 03:50:52 2026] 127.0.0.1:60385 Closing

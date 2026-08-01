@@ -65,6 +65,10 @@ push @sources, bsd_glob("$mout/*81*.summary"), bsd_glob("$mout/*81*.matrix"),
 push @sources, bsd_glob("$mout/*82*.summary"), bsd_glob("$mout/*82*.census"),
                bsd_glob("$mout/*82*.log"),     bsd_glob("$mout/m82*"),
                bsd_glob("$mout/axum.82*");
+# S-83.0: the measure83 campaign raws (83*/m83* labels) + verdict83
+push @sources, bsd_glob("$mout/*83*.summary"), bsd_glob("$mout/*83*.census"),
+               bsd_glob("$mout/*83*.log"),     bsd_glob("$mout/m83*"),
+               bsd_glob("$mout/axum.83*"),     bsd_glob("$here/../wp83-harness/*.out");
 push @sources, bsd_glob("$here/evidence/*");
 die "gate-measure-cifre: EMPTY corpus (no committed sources found)\n" unless @sources;
 my (%corpus, %corpus_count);

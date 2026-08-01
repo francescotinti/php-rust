@@ -1,0 +1,28 @@
+[Sat Aug  1 03:50:52 2026] PHP 8.5.7 Development Server (http://127.0.0.1:8299) started
+[Sat Aug  1 03:50:52 2026] 127.0.0.1:60387 Accepted
+[Sat Aug  1 03:50:52 2026] 127.0.0.1:60387 [200]: GET /hello.php
+[Sat Aug  1 03:50:52 2026] 127.0.0.1:60387 Closing
+[Sat Aug  1 03:50:52 2026] 127.0.0.1:60388 Accepted
+[Sat Aug  1 03:50:52 2026] 127.0.0.1:60388 [200]: GET /hello.php
+[Sat Aug  1 03:50:52 2026] 127.0.0.1:60388 Closing
+[Sat Aug  1 03:50:52 2026] 127.0.0.1:60389 Accepted
+[Sat Aug  1 03:50:52 2026] 127.0.0.1:60389 [200]: GET /hello.php
+[Sat Aug  1 03:50:52 2026] 127.0.0.1:60389 Closing
+[Sat Aug  1 03:50:52 2026] 127.0.0.1:60390 Accepted
+[Sat Aug  1 03:50:52 2026] 127.0.0.1:60390 [200]: GET /hello.php
+[Sat Aug  1 03:50:52 2026] 127.0.0.1:60390 Closing
+[Sat Aug  1 03:50:52 2026] 127.0.0.1:60391 Accepted
+[Sat Aug  1 03:50:52 2026] 127.0.0.1:60391 [200]: GET /hello.php
+[Sat Aug  1 03:50:52 2026] 127.0.0.1:60391 Closing
+[Sat Aug  1 03:50:52 2026] 127.0.0.1:60392 Accepted
+[Sat Aug  1 03:50:52 2026] 127.0.0.1:60392 [200]: GET /hello.php
+[Sat Aug  1 03:50:52 2026] 127.0.0.1:60392 Closing
+[Sat Aug  1 03:50:52 2026] 127.0.0.1:60393 Accepted
+[Sat Aug  1 03:50:52 2026] 127.0.0.1:60393 [200]: GET /hello.php
+[Sat Aug  1 03:50:52 2026] 127.0.0.1:60393 Closing
+[Sat Aug  1 03:50:52 2026] 127.0.0.1:60394 Accepted
+[Sat Aug  1 03:50:52 2026] 127.0.0.1:60394 [200]: GET /hello.php
+[Sat Aug  1 03:50:52 2026] 127.0.0.1:60394 Closing
+[Sat Aug  1 03:50:52 2026] 127.0.0.1:60395 Accepted
+[Sat Aug  1 03:50:52 2026] 127.0.0.1:60395 [200]: GET /hello.php
+[Sat Aug  1 03:50:52 2026] 127.0.0.1:60395 Closing

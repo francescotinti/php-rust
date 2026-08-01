@@ -1,0 +1,6 @@
+base_rev=7593d8e base_hash=75108f696feec495 features=axum-server
+rustc=rustc 1.96.0 (ac68faa20 2026-05-25)
+lock_live_sha=ddc9a15e5e1817aa lock_base_sha=1e6379efa3313d3f lock_cmp=PRUNE-ONLY pruned_lines=1 added_lines=0 version_drift=0
+lock_diff: 1909d1908
+<  "mimalloc",
+rustc_live=rustc 1.96.0 (ac68faa20 2026-05-25)

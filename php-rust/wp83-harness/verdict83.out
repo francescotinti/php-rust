@@ -1,0 +1,19 @@
+# verdict83 — WP-83 measures (Council WP-84 forms) — machine, fail-closed
+
+VC data lever N=1000: min=0.13s 3low-spread=10.0 us/req (all: 0.15/0.15/0.14/0.14/0.13/0.13/0.14/0.14/0.14)
+VC data lever N=2000: min=0.24s 3low-spread=5.0 us/req (all: 0.24/0.28/0.27/0.25/0.26/0.26/0.24/0.29/0.29)
+VC data base N=1000: min=6.91s 3low-spread=20.0 us/req (all: 6.96/6.94/6.93/6.95/6.92/7.10/6.91/7.03/6.99)
+VC data base N=2000: min=13.83s 3low-spread=15.0 us/req (all: 13.89/13.88/13.86/13.91/13.83/13.86/13.87/13.87/13.88)
+VC data: slope_lever=110.0 slope_base=6920.0 us/req banda=371.0 res=20.0 (f=5% ex-ante, min-of-R R=9)
+VC  PASS: slope_lever 110.0 <= slope_base*1.05+25 = 7291.0 us/req (min-of-R resolved: res 20.0 < banda/3 123.7) — scope: axum W=1 hello closed-seq, union arms, same evening
+VCR [derivata] r1: n=2000 regime median=360.1 min=167.0 p90=503.0 us/req (lever arm ONLY — base has no probe, DECLARED)
+VCR [derivata] r2: n=2000 regime median=344.8 min=184.2 p90=485.4 us/req (lever arm ONLY — base has no probe, DECLARED)
+VCR [derivata] r3: n=2000 regime median=330.0 min=169.1 p90=419.5 us/req (lever arm ONLY — base has no probe, DECLARED)
+VR  PASS: decomposition EXACT — rw_bytes=14250027 pfs=1009360 rw_main_net=7407810 rw_budget=20648477 (19.69 MB xW, arm=cli-server) main_evicted=0
+VR  [derivata] per-entry: ord1 net=7349977, median(others)=8208 => one-time first-lower residue ~ 7341769 B (7.00 MB) = 35.6% of budget — the S-82.0 'flat 1.85MB/main' dissolves: the residue is per-PROCESS, not per-entry (A-DL20 finding)
+VR  [derivata] A-DL22 hello-only W=1: rw_budget=10.14 MB vs VP marginal 3.44 MB/worker => ratio 2.95; shareable fraction upper est = 69.1% (candidate registry saving x(W-1))
+VA  PASS: steady a3==0 on all three arms
+VA  [derivata] register share = b(reg83)-b(hello) = +4 calls/req; include-HIT share <= b(autoload82)-b(reg83) = +52 calls/req — UPPER BOUND vs opcache inheritance-cache (A-DS25/A-BB33; the +56 composite is now split)
+VW  NAMED-DEVIATION: a_bytes=1662 vs 2 x len=830 (len=415, steady_n=30, a_calls=4.0) — the 2xlen floor model is FALSIFIED at the boundary; the model needs a new form (KB-84-2: outcome named, no silent claim)
+
+== VERDICT83 PASS ==

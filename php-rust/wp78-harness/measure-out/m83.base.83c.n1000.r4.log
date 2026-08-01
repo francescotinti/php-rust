@@ -1,0 +1,28 @@
+php-server (Axum) listening on http://127.0.0.1:8297 (docroot: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/gate-axum/fixtures)
+php-server: shutdown signal received, draining
+php-server: all 1 workers joined — exit stats are authoritative (KL-78-4)
+       19.01 real         6.95 user         0.24 sys
+            59604992  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+                3956  page reclaims
+                   2  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                1012  messages sent
+                2023  messages received
+                   1  signals received
+                   1  voluntary context switches
+               10385  involuntary context switches
+         35733251596  instructions retired
+         15037782888  cycles elapsed
+            50299408  peak memory footprint
+base_rev=7593d8e base_hash=75108f696feec495 label=83c.n1000.r4 W=1 N=1000 head=e5f2a5e driver_sha=be85aa3ac5dc0065 campaign=/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp83-harness/measure83-campaign.sh
+base_rev=7593d8e base_hash=75108f696feec495 features=axum-server
+rustc=rustc 1.96.0 (ac68faa20 2026-05-25)
+lock_live_sha=ddc9a15e5e1817aa lock_base_sha=1e6379efa3313d3f lock_cmp=PRUNE-ONLY pruned_lines=1 added_lines=0 version_drift=0
+lock_diff: 1909d1908
+<  "mimalloc",
+rustc_live=rustc 1.96.0 (ac68faa20 2026-05-25)

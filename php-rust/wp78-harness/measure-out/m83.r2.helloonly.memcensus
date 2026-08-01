@@ -1,0 +1,1108 @@
+pid=23910 tag=root name=created-dead-rc1[n=0] bytes=0
+pid=23910 tag=root name=lazy-init[n=0] bytes=0
+pid=23910 tag=root name=reflect-object-bound[n=0] bytes=0
+pid=23910 tag=root name=reflect-method-info-cache[n=0] bytes=0
+pid=23910 tag=root name=var-dump-debug[n=0] bytes=0
+pid=23910 tag=roots_total bytes=248964 truncated=0
+pid=23910 tag=walk_recon ch=str reached_n=4118 reached_b=244868 live_n=4523 live_b=268479
+pid=23910 tag=walk_recon ch=arr reached_n=7 reached_b=3328 live_n=7 live_b=3328
+pid=23910 tag=walk_recon ch=obj reached_n=0 reached_b=0 live_n=0 live_b=0
+pid=23910 tag=arr_shape repr=packed b=0 n=5 bytes=320
+pid=23910 tag=arr_shape repr=hashed b=5 n=1 bytes=864
+pid=23910 tag=arr_shape repr=hashed b=6 n=1 bytes=2144
+pid=23910 tag=seedclass name=PDOStatement full=261195 body=233290 doc=0
+pid=23910 tag=seedclass name=ReflectionClass full=214320 body=183473 doc=0
+pid=23910 tag=seedclass name=PDO full=195764 body=151775 doc=0
+pid=23910 tag=seedclass name=DateTime full=188233 body=173093 doc=0
+pid=23910 tag=seedclass name=BcMath\Number full=174633 body=153659 doc=0
+pid=23910 tag=seedclass name=SimpleXMLElement full=170672 body=150139 doc=0
+pid=23910 tag=seedclass name=mysqli full=159018 body=121757 doc=0
+pid=23910 tag=seedclass name=XSLTProcessor full=145731 body=110551 doc=0
+pid=23910 tag=seedclass name=ReflectionMethod full=133227 body=115602 doc=0
+pid=23910 tag=seedclass name=tidy full=108808 body=90284 doc=0
+pid=23910 tag=seedclass name=ReflectionProperty full=106996 body=88266 doc=0
+pid=23910 tag=seedclass name=ReflectionParameter full=106947 body=88683 doc=0
+pid=23910 tag=seedclass name=DOMNode full=101199 body=86529 doc=0
+pid=23910 tag=seedclass name=DateTimeImmutable full=94277 body=80891 doc=0
+pid=23910 tag=seedclass name=mysqli_stmt full=94123 body=72898 doc=0
+pid=23910 tag=seedclass name=ReflectionFunction full=87013 body=75329 doc=0
+pid=23910 tag=seedclass name=DOMDocument full=80601 body=58031 doc=0
+pid=23910 tag=seedclass name=mysqli_result full=78868 body=64429 doc=0
+pid=23910 tag=seedclass name=GMP full=75949 body=65382 doc=0
+pid=23910 tag=seedclass name=ZipArchive full=71030 body=48140 doc=0
+pid=23910 tag=seedclass name=SQLite3 full=62284 body=50324 doc=0
+pid=23910 tag=seedclass name=SplDoublyLinkedList full=60130 body=47567 doc=0
+pid=23910 tag=seedclass name=ReflectionAttribute full=57447 body=45647 doc=0
+pid=23910 tag=seedclass name=Dom\Node full=52765 body=49336 doc=0
+pid=23910 tag=seedclass name=DateTimeZone full=52293 body=44945 doc=0
+pid=23910 tag=seedclass name=SplPriorityQueue full=50701 body=42473 doc=0
+pid=23910 tag=seedclass name=DOMElement full=48245 body=40252 doc=0
+pid=23910 tag=seedclass name=DOMAttr full=48072 body=40234 doc=0
+pid=23910 tag=seedclass name=tidyNode full=47814 body=33630 doc=0
+pid=23910 tag=seedclass name=SplObjectStorage full=44530 body=31859 doc=0
+pid=23910 tag=seedclass name=ReflectionClassConstant full=42919 body=34441 doc=0
+pid=23910 tag=seedclass name=RecursiveDirectoryIterator full=40858 body=32953 doc=0
+pid=23910 tag=seedclass name=RegexIterator full=38502 body=27327 doc=0
+pid=23910 tag=seedclass name=SQLite3Stmt full=37983 body=28951 doc=0
+pid=23910 tag=seedclass name=FilesystemIterator full=36363 body=27084 doc=0
+pid=23910 tag=seedclass name=RecursiveIteratorIterator full=36161 body=26348 doc=0
+pid=23910 tag=seedclass name=DOMCharacterData full=35382 body=30025 doc=0
+pid=23910 tag=seedclass name=ReflectionExtension full=35379 body=31922 doc=0
+pid=23910 tag=seedclass name=SplFixedArray full=34877 body=26540 doc=0
+pid=23910 tag=seedclass name=DOMXPath full=33223 body=27067 doc=0
+pid=23910 tag=seedclass name=PhpToken full=28865 body=21911 doc=0
+pid=23910 tag=seedclass name=WeakMap full=28308 body=23879 doc=0
+pid=23910 tag=seedclass name=SQLite3Result full=25795 body=20322 doc=0
+pid=23910 tag=seedclass name=Exception full=24952 body=16262 doc=0
+pid=23910 tag=seedclass name=Error full=24948 body=16262 doc=0
+pid=23910 tag=seedclass name=SplFileObject full=22291 body=15329 doc=0
+pid=23910 tag=seedclass name=AppendIterator full=21436 body=17220 doc=0
+pid=23910 tag=seedclass name=DirectoryIterator full=21416 body=15622 doc=0
+pid=23910 tag=seedsum src=classes n=171 full=4185874 body=3335081 doc=844 firma=849949
+pid=23910 tag=seedsum src=traits n=0 full=0 body=0 doc=0 firma=0
+pid=23910 tag=seedsum src=main_hir n=1 full=5698 body=1696 doc=0 firma=4002
+pid=23910 tag=seedsum src=main_fns n=317 full=937476 body=757435 doc=0 firma=180041
+pid=23910 tag=seedlen units=1 distinct=1 top=0:1
+pid=23910 tag=unittop bytes_counted=2602679 net=0 pfx_tables=10901 pfx_stub=0 pfx_fnshare=0 proper=6959204 pfx_slotnames=0 pfx_fnvec=7608 sc=1 path=/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/gate-axum/fixtures/hello.php
+pid=23910 tag=prefixsum tables=10901 stub=0 fnshare=0 proper=6959204 prefix=10901 split_tot=6970105 slotnames_tot=0 fnvec_tot=7608 sc_tot=1
+pid=23910 tag=unitsum2 units=1 paths=1 dup_units=0 dup_bytes_counted=0 dup_net=0
+pid=23910 tag=netguard nested_windows=0
+pid=23910 tag=reloc skipped_fns=0 skipped_classes=0 unexpected=0
+pid=23910 tag=unitcache_main_entry ord=1 net=7349977 floor_inc=997878 net_rule=net-at-lower net_window=process-counters floor_rule=walk-increment-in-put-order alloc_id=memcount-v2-s82 /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/gate-axum/fixtures/hello.php
+pid=23910 tag=unitcache hit_intra=0 hit_cross=0 miss_cold=0 miss_fp=0 miss_dc=0 miss_nostat=0 inserts=1 fp_replaced=0 ways_evictions=0 metadata_calls=1 entries=1 bytes_counted=2602679 paths=1 superseded_paths=0 superseded_entries=0 stub_elided_units=0 stub_classes_elided=0 elide_align_miss=0 elide_align_hit=0 miss_dc_base=0 miss_dc_remap=0 miss_dc_locals=0 seed_prefix_short=0 parked_modules=1 parked_bytes=0 defer_relowers=0 defer_relower_ns=0 stranded_keys_superseded=0 stranded_entries_dropped=0 main_probe=1 main_hit=0 main_put=1 main_impure_skip=0 main_probe_fail=0 include_hit_main_reject=0 main_evicted=0 retained_walk_bytes=4283308 retained_walk_nodes=978 stranded_bytes_dropped=0 uclog=0 rw_main_net=7349977 program_floor_share=997878 rw_budget=10635407 rw_budget_rule=rw_bytes-program_floor_share+rw_main_net arm=cli-server alloc_id=memcount-v2-s82 rw_rule=cache-as-owner-FLOOR rw_main_net_rule=net-at-lower stranded_rule=unique-at-drop gross=1
+pid=23910 tag=boundset stubs_entries=0 prelude_classes=171 prelude_fns=317
+pid=23910 tag=compilens lower_ns=0 compile_ns=0 units=0 map_ns=22959 map_entries=171 remap_ns=0 remap_entries=0 read_ns=0 lexparse_ns=0 lowerhir_ns=0 lowers=0 lower_partial_ns=0 lower_partials=0
+pid=23910 tag=lcsum paths=0 compiles=0 lower_ns=0 compile_ns=0 dup_paths=0 dup_compiles=0 dup_lc_ns=0 dup_fp_ns=0 dup_cold_ns=0
+pid=23910 tag=opkind name=PushConst n=6430 owned=0
+pid=23910 tag=opkind name=Pop n=2923 owned=0
+pid=23910 tag=opkind name=Dup n=1604 owned=0
+pid=23910 tag=opkind name=LoadSlot n=363 owned=0
+pid=23910 tag=opkind name=LoadVar n=4275 owned=0
+pid=23910 tag=opkind name=StoreSlot n=1367 owned=0
+pid=23910 tag=opkind name=Swap n=35 owned=0
+pid=23910 tag=opkind name=FetchDimList n=43 owned=0
+pid=23910 tag=opkind name=FillDefault n=398 owned=0
+pid=23910 tag=opkind name=CoerceParam n=109 owned=0
+pid=23910 tag=opkind name=CheckArity n=710 owned=0
+pid=23910 tag=opkind name=IncDecSlot n=13 owned=0
+pid=23910 tag=opkind name=StaticGuard n=1 owned=0
+pid=23910 tag=opkind name=StaticStore n=1 owned=0
+pid=23910 tag=opkind name=StaticAlias n=1 owned=0
+pid=23910 tag=opkind name=PushRef n=106 owned=0
+pid=23910 tag=opkind name=MakeRef n=12 owned=0
+pid=23910 tag=opkind name=PushArgPlace n=11 owned=0
+pid=23910 tag=opkind name=BindRefTo n=7 owned=0
+pid=23910 tag=opkind name=CallValue n=3 owned=0
+pid=23910 tag=opkind name=CallNsFallback n=2 owned=0
+pid=23910 tag=opkind name=CallValueArgs n=2 owned=0
+pid=23910 tag=opkind name=Throw n=212 owned=0
+pid=23910 tag=opkind name=Rethrow n=8 owned=0
+pid=23910 tag=opkind name=CatchMatch n=8 owned=0
+pid=23910 tag=opkind name=Binary n=304 owned=0
+pid=23910 tag=opkind name=Unary n=291 owned=0
+pid=23910 tag=opkind name=Cast n=93 owned=0
+pid=23910 tag=opkind name=Jump n=1532 owned=0
+pid=23910 tag=opkind name=JumpIfFalse n=710 owned=0
+pid=23910 tag=opkind name=JumpIfTrue n=84 owned=0
+pid=23910 tag=opkind name=CmpJmp n=167 owned=0
+pid=23910 tag=opkind name=JumpIfNotNull n=54 owned=0
+pid=23910 tag=opkind name=Echo n=4 owned=0
+pid=23910 tag=opkind name=Stringify n=431 owned=0
+pid=23910 tag=opkind name=ArrayInit n=321 owned=0
+pid=23910 tag=opkind name=ArrayPush n=311 owned=0
+pid=23910 tag=opkind name=ArrayInsert n=182 owned=0
+pid=23910 tag=opkind name=ArrayAppendSpread n=12 owned=0
+pid=23910 tag=opkind name=FetchDim n=674 owned=0
+pid=23910 tag=opkind_sum n_ops=40034 owned=0 funcs=1842
+pid=23910 tag=modlit uniq_n=3987 uniq_bytes=170532 content_dup_n=2565 content_dup_bytes=92867
+pid=23910 tag=modrecon units=1 uniq_mods=1 dead_units=0 mod_owned=20897 fns_priv=0 fns_shared=876507 cls_priv=4180650 cls_shared=0 owned_priv=4201547 net_tot=0 counted_v1_tot=2602679 rc_residue=0
+pid=23910 tag=censusown bytes=546 hits_rows=0 hits_on=1
+pid=23910 tag=cellskip skips=0
+pid=23910 tag=cellpark parks=0 drainfails=0
+pid=23910 tag=teardown reg=0 broken=0 busy=0 alive_after=0
+pid=23910 tag=defermini calls=0 net_b=0
+pid=23910 tag=root name=created-dead-rc1[n=0] bytes=0
+pid=23910 tag=root name=lazy-init[n=0] bytes=0
+pid=23910 tag=root name=reflect-object-bound[n=0] bytes=0
+pid=23910 tag=root name=reflect-method-info-cache[n=0] bytes=0
+pid=23910 tag=root name=var-dump-debug[n=0] bytes=0
+pid=23910 tag=roots_total bytes=248964 truncated=0
+pid=23910 tag=walk_recon ch=str reached_n=4118 reached_b=244868 live_n=4523 live_b=268479
+pid=23910 tag=walk_recon ch=arr reached_n=7 reached_b=3328 live_n=7 live_b=3328
+pid=23910 tag=walk_recon ch=obj reached_n=0 reached_b=0 live_n=0 live_b=0
+pid=23910 tag=arr_shape repr=packed b=0 n=5 bytes=320
+pid=23910 tag=arr_shape repr=hashed b=5 n=1 bytes=864
+pid=23910 tag=arr_shape repr=hashed b=6 n=1 bytes=2144
+pid=23910 tag=seedclass name=PDOStatement full=261195 body=233290 doc=0
+pid=23910 tag=seedclass name=ReflectionClass full=214320 body=183473 doc=0
+pid=23910 tag=seedclass name=PDO full=195764 body=151775 doc=0
+pid=23910 tag=seedclass name=DateTime full=188233 body=173093 doc=0
+pid=23910 tag=seedclass name=BcMath\Number full=174633 body=153659 doc=0
+pid=23910 tag=seedclass name=SimpleXMLElement full=170672 body=150139 doc=0
+pid=23910 tag=seedclass name=mysqli full=159018 body=121757 doc=0
+pid=23910 tag=seedclass name=XSLTProcessor full=145731 body=110551 doc=0
+pid=23910 tag=seedclass name=ReflectionMethod full=133227 body=115602 doc=0
+pid=23910 tag=seedclass name=tidy full=108808 body=90284 doc=0
+pid=23910 tag=seedclass name=ReflectionProperty full=106996 body=88266 doc=0
+pid=23910 tag=seedclass name=ReflectionParameter full=106947 body=88683 doc=0
+pid=23910 tag=seedclass name=DOMNode full=101199 body=86529 doc=0
+pid=23910 tag=seedclass name=DateTimeImmutable full=94277 body=80891 doc=0
+pid=23910 tag=seedclass name=mysqli_stmt full=94123 body=72898 doc=0
+pid=23910 tag=seedclass name=ReflectionFunction full=87013 body=75329 doc=0
+pid=23910 tag=seedclass name=DOMDocument full=80601 body=58031 doc=0
+pid=23910 tag=seedclass name=mysqli_result full=78868 body=64429 doc=0
+pid=23910 tag=seedclass name=GMP full=75949 body=65382 doc=0
+pid=23910 tag=seedclass name=ZipArchive full=71030 body=48140 doc=0
+pid=23910 tag=seedclass name=SQLite3 full=62284 body=50324 doc=0
+pid=23910 tag=seedclass name=SplDoublyLinkedList full=60130 body=47567 doc=0
+pid=23910 tag=seedclass name=ReflectionAttribute full=57447 body=45647 doc=0
+pid=23910 tag=seedclass name=Dom\Node full=52765 body=49336 doc=0
+pid=23910 tag=seedclass name=DateTimeZone full=52293 body=44945 doc=0
+pid=23910 tag=seedclass name=SplPriorityQueue full=50701 body=42473 doc=0
+pid=23910 tag=seedclass name=DOMElement full=48245 body=40252 doc=0
+pid=23910 tag=seedclass name=DOMAttr full=48072 body=40234 doc=0
+pid=23910 tag=seedclass name=tidyNode full=47814 body=33630 doc=0
+pid=23910 tag=seedclass name=SplObjectStorage full=44530 body=31859 doc=0
+pid=23910 tag=seedclass name=ReflectionClassConstant full=42919 body=34441 doc=0
+pid=23910 tag=seedclass name=RecursiveDirectoryIterator full=40858 body=32953 doc=0
+pid=23910 tag=seedclass name=RegexIterator full=38502 body=27327 doc=0
+pid=23910 tag=seedclass name=SQLite3Stmt full=37983 body=28951 doc=0
+pid=23910 tag=seedclass name=FilesystemIterator full=36363 body=27084 doc=0
+pid=23910 tag=seedclass name=RecursiveIteratorIterator full=36161 body=26348 doc=0
+pid=23910 tag=seedclass name=DOMCharacterData full=35382 body=30025 doc=0
+pid=23910 tag=seedclass name=ReflectionExtension full=35379 body=31922 doc=0
+pid=23910 tag=seedclass name=SplFixedArray full=34877 body=26540 doc=0
+pid=23910 tag=seedclass name=DOMXPath full=33223 body=27067 doc=0
+pid=23910 tag=seedclass name=PhpToken full=28865 body=21911 doc=0
+pid=23910 tag=seedclass name=WeakMap full=28308 body=23879 doc=0
+pid=23910 tag=seedclass name=SQLite3Result full=25795 body=20322 doc=0
+pid=23910 tag=seedclass name=Exception full=24952 body=16262 doc=0
+pid=23910 tag=seedclass name=Error full=24948 body=16262 doc=0
+pid=23910 tag=seedclass name=SplFileObject full=22291 body=15329 doc=0
+pid=23910 tag=seedclass name=AppendIterator full=21436 body=17220 doc=0
+pid=23910 tag=seedclass name=DirectoryIterator full=21416 body=15622 doc=0
+pid=23910 tag=seedsum src=classes n=171 full=4185874 body=3335081 doc=844 firma=849949
+pid=23910 tag=seedsum src=traits n=0 full=0 body=0 doc=0 firma=0
+pid=23910 tag=seedsum src=main_hir n=1 full=5698 body=1696 doc=0 firma=4002
+pid=23910 tag=seedsum src=main_fns n=317 full=937476 body=757435 doc=0 firma=180041
+pid=23910 tag=seedlen units=1 distinct=1 top=0:1
+pid=23910 tag=unittop bytes_counted=2602679 net=0 pfx_tables=10901 pfx_stub=0 pfx_fnshare=0 proper=6959204 pfx_slotnames=0 pfx_fnvec=7608 sc=1 path=/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/gate-axum/fixtures/hello.php
+pid=23910 tag=prefixsum tables=10901 stub=0 fnshare=0 proper=6959204 prefix=10901 split_tot=6970105 slotnames_tot=0 fnvec_tot=7608 sc_tot=1
+pid=23910 tag=unitsum2 units=1 paths=1 dup_units=0 dup_bytes_counted=0 dup_net=0
+pid=23910 tag=netguard nested_windows=0
+pid=23910 tag=reloc skipped_fns=0 skipped_classes=0 unexpected=0
+pid=23910 tag=unitcache_main_entry ord=1 net=7349977 floor_inc=997878 net_rule=net-at-lower net_window=process-counters floor_rule=walk-increment-in-put-order alloc_id=memcount-v2-s82 /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/gate-axum/fixtures/hello.php
+pid=23910 tag=unitcache hit_intra=0 hit_cross=0 miss_cold=0 miss_fp=0 miss_dc=0 miss_nostat=0 inserts=1 fp_replaced=0 ways_evictions=0 metadata_calls=2 entries=1 bytes_counted=2602679 paths=1 superseded_paths=0 superseded_entries=0 stub_elided_units=0 stub_classes_elided=0 elide_align_miss=0 elide_align_hit=0 miss_dc_base=0 miss_dc_remap=0 miss_dc_locals=0 seed_prefix_short=0 parked_modules=2 parked_bytes=0 defer_relowers=0 defer_relower_ns=0 stranded_keys_superseded=0 stranded_entries_dropped=0 main_probe=2 main_hit=1 main_put=1 main_impure_skip=0 main_probe_fail=0 include_hit_main_reject=0 main_evicted=0 retained_walk_bytes=4283308 retained_walk_nodes=978 stranded_bytes_dropped=0 uclog=0 rw_main_net=7349977 program_floor_share=997878 rw_budget=10635407 rw_budget_rule=rw_bytes-program_floor_share+rw_main_net arm=cli-server alloc_id=memcount-v2-s82 rw_rule=cache-as-owner-FLOOR rw_main_net_rule=net-at-lower stranded_rule=unique-at-drop gross=1
+pid=23910 tag=boundset stubs_entries=0 prelude_classes=171 prelude_fns=317
+pid=23910 tag=compilens lower_ns=0 compile_ns=0 units=0 map_ns=22959 map_entries=171 remap_ns=0 remap_entries=0 read_ns=0 lexparse_ns=0 lowerhir_ns=0 lowers=0 lower_partial_ns=0 lower_partials=0
+pid=23910 tag=lcsum paths=0 compiles=0 lower_ns=0 compile_ns=0 dup_paths=0 dup_compiles=0 dup_lc_ns=0 dup_fp_ns=0 dup_cold_ns=0
+pid=23910 tag=opkind name=PushConst n=6430 owned=0
+pid=23910 tag=opkind name=Pop n=2923 owned=0
+pid=23910 tag=opkind name=Dup n=1604 owned=0
+pid=23910 tag=opkind name=LoadSlot n=363 owned=0
+pid=23910 tag=opkind name=LoadVar n=4275 owned=0
+pid=23910 tag=opkind name=StoreSlot n=1367 owned=0
+pid=23910 tag=opkind name=Swap n=35 owned=0
+pid=23910 tag=opkind name=FetchDimList n=43 owned=0
+pid=23910 tag=opkind name=FillDefault n=398 owned=0
+pid=23910 tag=opkind name=CoerceParam n=109 owned=0
+pid=23910 tag=opkind name=CheckArity n=710 owned=0
+pid=23910 tag=opkind name=IncDecSlot n=13 owned=0
+pid=23910 tag=opkind name=StaticGuard n=1 owned=0
+pid=23910 tag=opkind name=StaticStore n=1 owned=0
+pid=23910 tag=opkind name=StaticAlias n=1 owned=0
+pid=23910 tag=opkind name=PushRef n=106 owned=0
+pid=23910 tag=opkind name=MakeRef n=12 owned=0
+pid=23910 tag=opkind name=PushArgPlace n=11 owned=0
+pid=23910 tag=opkind name=BindRefTo n=7 owned=0
+pid=23910 tag=opkind name=CallValue n=3 owned=0
+pid=23910 tag=opkind name=CallNsFallback n=2 owned=0
+pid=23910 tag=opkind name=CallValueArgs n=2 owned=0
+pid=23910 tag=opkind name=Throw n=212 owned=0
+pid=23910 tag=opkind name=Rethrow n=8 owned=0
+pid=23910 tag=opkind name=CatchMatch n=8 owned=0
+pid=23910 tag=opkind name=Binary n=304 owned=0
+pid=23910 tag=opkind name=Unary n=291 owned=0
+pid=23910 tag=opkind name=Cast n=93 owned=0
+pid=23910 tag=opkind name=Jump n=1532 owned=0
+pid=23910 tag=opkind name=JumpIfFalse n=710 owned=0
+pid=23910 tag=opkind name=JumpIfTrue n=84 owned=0
+pid=23910 tag=opkind name=CmpJmp n=167 owned=0
+pid=23910 tag=opkind name=JumpIfNotNull n=54 owned=0
+pid=23910 tag=opkind name=Echo n=4 owned=0
+pid=23910 tag=opkind name=Stringify n=431 owned=0
+pid=23910 tag=opkind name=ArrayInit n=321 owned=0
+pid=23910 tag=opkind name=ArrayPush n=311 owned=0
+pid=23910 tag=opkind name=ArrayInsert n=182 owned=0
+pid=23910 tag=opkind name=ArrayAppendSpread n=12 owned=0
+pid=23910 tag=opkind name=FetchDim n=674 owned=0
+pid=23910 tag=opkind_sum n_ops=40034 owned=0 funcs=1842
+pid=23910 tag=modlit uniq_n=3987 uniq_bytes=170532 content_dup_n=2565 content_dup_bytes=92867
+pid=23910 tag=modrecon units=1 uniq_mods=1 dead_units=0 mod_owned=20897 fns_priv=0 fns_shared=876507 cls_priv=4180650 cls_shared=0 owned_priv=4201547 net_tot=0 counted_v1_tot=2602679 rc_residue=0
+pid=23910 tag=censusown bytes=546 hits_rows=0 hits_on=1
+pid=23910 tag=cellskip skips=0
+pid=23910 tag=cellpark parks=0 drainfails=0
+pid=23910 tag=teardown reg=0 broken=0 busy=0 alive_after=0
+pid=23910 tag=defermini calls=0 net_b=0
+pid=23910 tag=root name=created-dead-rc1[n=0] bytes=0
+pid=23910 tag=root name=lazy-init[n=0] bytes=0
+pid=23910 tag=root name=reflect-object-bound[n=0] bytes=0
+pid=23910 tag=root name=reflect-method-info-cache[n=0] bytes=0
+pid=23910 tag=root name=var-dump-debug[n=0] bytes=0
+pid=23910 tag=roots_total bytes=248964 truncated=0
+pid=23910 tag=walk_recon ch=str reached_n=4118 reached_b=244868 live_n=4523 live_b=268479
+pid=23910 tag=walk_recon ch=arr reached_n=7 reached_b=3328 live_n=7 live_b=3328
+pid=23910 tag=walk_recon ch=obj reached_n=0 reached_b=0 live_n=0 live_b=0
+pid=23910 tag=arr_shape repr=packed b=0 n=5 bytes=320
+pid=23910 tag=arr_shape repr=hashed b=5 n=1 bytes=864
+pid=23910 tag=arr_shape repr=hashed b=6 n=1 bytes=2144
+pid=23910 tag=seedclass name=PDOStatement full=261195 body=233290 doc=0
+pid=23910 tag=seedclass name=ReflectionClass full=214320 body=183473 doc=0
+pid=23910 tag=seedclass name=PDO full=195764 body=151775 doc=0
+pid=23910 tag=seedclass name=DateTime full=188233 body=173093 doc=0
+pid=23910 tag=seedclass name=BcMath\Number full=174633 body=153659 doc=0
+pid=23910 tag=seedclass name=SimpleXMLElement full=170672 body=150139 doc=0
+pid=23910 tag=seedclass name=mysqli full=159018 body=121757 doc=0
+pid=23910 tag=seedclass name=XSLTProcessor full=145731 body=110551 doc=0
+pid=23910 tag=seedclass name=ReflectionMethod full=133227 body=115602 doc=0
+pid=23910 tag=seedclass name=tidy full=108808 body=90284 doc=0
+pid=23910 tag=seedclass name=ReflectionProperty full=106996 body=88266 doc=0
+pid=23910 tag=seedclass name=ReflectionParameter full=106947 body=88683 doc=0
+pid=23910 tag=seedclass name=DOMNode full=101199 body=86529 doc=0
+pid=23910 tag=seedclass name=DateTimeImmutable full=94277 body=80891 doc=0
+pid=23910 tag=seedclass name=mysqli_stmt full=94123 body=72898 doc=0
+pid=23910 tag=seedclass name=ReflectionFunction full=87013 body=75329 doc=0
+pid=23910 tag=seedclass name=DOMDocument full=80601 body=58031 doc=0
+pid=23910 tag=seedclass name=mysqli_result full=78868 body=64429 doc=0
+pid=23910 tag=seedclass name=GMP full=75949 body=65382 doc=0
+pid=23910 tag=seedclass name=ZipArchive full=71030 body=48140 doc=0
+pid=23910 tag=seedclass name=SQLite3 full=62284 body=50324 doc=0
+pid=23910 tag=seedclass name=SplDoublyLinkedList full=60130 body=47567 doc=0
+pid=23910 tag=seedclass name=ReflectionAttribute full=57447 body=45647 doc=0
+pid=23910 tag=seedclass name=Dom\Node full=52765 body=49336 doc=0
+pid=23910 tag=seedclass name=DateTimeZone full=52293 body=44945 doc=0
+pid=23910 tag=seedclass name=SplPriorityQueue full=50701 body=42473 doc=0
+pid=23910 tag=seedclass name=DOMElement full=48245 body=40252 doc=0
+pid=23910 tag=seedclass name=DOMAttr full=48072 body=40234 doc=0
+pid=23910 tag=seedclass name=tidyNode full=47814 body=33630 doc=0
+pid=23910 tag=seedclass name=SplObjectStorage full=44530 body=31859 doc=0
+pid=23910 tag=seedclass name=ReflectionClassConstant full=42919 body=34441 doc=0
+pid=23910 tag=seedclass name=RecursiveDirectoryIterator full=40858 body=32953 doc=0
+pid=23910 tag=seedclass name=RegexIterator full=38502 body=27327 doc=0
+pid=23910 tag=seedclass name=SQLite3Stmt full=37983 body=28951 doc=0
+pid=23910 tag=seedclass name=FilesystemIterator full=36363 body=27084 doc=0
+pid=23910 tag=seedclass name=RecursiveIteratorIterator full=36161 body=26348 doc=0
+pid=23910 tag=seedclass name=DOMCharacterData full=35382 body=30025 doc=0
+pid=23910 tag=seedclass name=ReflectionExtension full=35379 body=31922 doc=0
+pid=23910 tag=seedclass name=SplFixedArray full=34877 body=26540 doc=0
+pid=23910 tag=seedclass name=DOMXPath full=33223 body=27067 doc=0
+pid=23910 tag=seedclass name=PhpToken full=28865 body=21911 doc=0
+pid=23910 tag=seedclass name=WeakMap full=28308 body=23879 doc=0
+pid=23910 tag=seedclass name=SQLite3Result full=25795 body=20322 doc=0
+pid=23910 tag=seedclass name=Exception full=24952 body=16262 doc=0
+pid=23910 tag=seedclass name=Error full=24948 body=16262 doc=0
+pid=23910 tag=seedclass name=SplFileObject full=22291 body=15329 doc=0
+pid=23910 tag=seedclass name=AppendIterator full=21436 body=17220 doc=0
+pid=23910 tag=seedclass name=DirectoryIterator full=21416 body=15622 doc=0
+pid=23910 tag=seedsum src=classes n=171 full=4185874 body=3335081 doc=844 firma=849949
+pid=23910 tag=seedsum src=traits n=0 full=0 body=0 doc=0 firma=0
+pid=23910 tag=seedsum src=main_hir n=1 full=5698 body=1696 doc=0 firma=4002
+pid=23910 tag=seedsum src=main_fns n=317 full=937476 body=757435 doc=0 firma=180041
+pid=23910 tag=seedlen units=1 distinct=1 top=0:1
+pid=23910 tag=unittop bytes_counted=2602679 net=0 pfx_tables=10901 pfx_stub=0 pfx_fnshare=0 proper=6959204 pfx_slotnames=0 pfx_fnvec=7608 sc=1 path=/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/gate-axum/fixtures/hello.php
+pid=23910 tag=prefixsum tables=10901 stub=0 fnshare=0 proper=6959204 prefix=10901 split_tot=6970105 slotnames_tot=0 fnvec_tot=7608 sc_tot=1
+pid=23910 tag=unitsum2 units=1 paths=1 dup_units=0 dup_bytes_counted=0 dup_net=0
+pid=23910 tag=netguard nested_windows=0
+pid=23910 tag=reloc skipped_fns=0 skipped_classes=0 unexpected=0
+pid=23910 tag=unitcache_main_entry ord=1 net=7349977 floor_inc=997878 net_rule=net-at-lower net_window=process-counters floor_rule=walk-increment-in-put-order alloc_id=memcount-v2-s82 /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/gate-axum/fixtures/hello.php
+pid=23910 tag=unitcache hit_intra=0 hit_cross=0 miss_cold=0 miss_fp=0 miss_dc=0 miss_nostat=0 inserts=1 fp_replaced=0 ways_evictions=0 metadata_calls=3 entries=1 bytes_counted=2602679 paths=1 superseded_paths=0 superseded_entries=0 stub_elided_units=0 stub_classes_elided=0 elide_align_miss=0 elide_align_hit=0 miss_dc_base=0 miss_dc_remap=0 miss_dc_locals=0 seed_prefix_short=0 parked_modules=3 parked_bytes=0 defer_relowers=0 defer_relower_ns=0 stranded_keys_superseded=0 stranded_entries_dropped=0 main_probe=3 main_hit=2 main_put=1 main_impure_skip=0 main_probe_fail=0 include_hit_main_reject=0 main_evicted=0 retained_walk_bytes=4283308 retained_walk_nodes=978 stranded_bytes_dropped=0 uclog=0 rw_main_net=7349977 program_floor_share=997878 rw_budget=10635407 rw_budget_rule=rw_bytes-program_floor_share+rw_main_net arm=cli-server alloc_id=memcount-v2-s82 rw_rule=cache-as-owner-FLOOR rw_main_net_rule=net-at-lower stranded_rule=unique-at-drop gross=1
+pid=23910 tag=boundset stubs_entries=0 prelude_classes=171 prelude_fns=317
+pid=23910 tag=compilens lower_ns=0 compile_ns=0 units=0 map_ns=22959 map_entries=171 remap_ns=0 remap_entries=0 read_ns=0 lexparse_ns=0 lowerhir_ns=0 lowers=0 lower_partial_ns=0 lower_partials=0
+pid=23910 tag=lcsum paths=0 compiles=0 lower_ns=0 compile_ns=0 dup_paths=0 dup_compiles=0 dup_lc_ns=0 dup_fp_ns=0 dup_cold_ns=0
+pid=23910 tag=opkind name=PushConst n=6430 owned=0
+pid=23910 tag=opkind name=Pop n=2923 owned=0
+pid=23910 tag=opkind name=Dup n=1604 owned=0
+pid=23910 tag=opkind name=LoadSlot n=363 owned=0
+pid=23910 tag=opkind name=LoadVar n=4275 owned=0
+pid=23910 tag=opkind name=StoreSlot n=1367 owned=0
+pid=23910 tag=opkind name=Swap n=35 owned=0
+pid=23910 tag=opkind name=FetchDimList n=43 owned=0
+pid=23910 tag=opkind name=FillDefault n=398 owned=0
+pid=23910 tag=opkind name=CoerceParam n=109 owned=0
+pid=23910 tag=opkind name=CheckArity n=710 owned=0
+pid=23910 tag=opkind name=IncDecSlot n=13 owned=0
+pid=23910 tag=opkind name=StaticGuard n=1 owned=0
+pid=23910 tag=opkind name=StaticStore n=1 owned=0
+pid=23910 tag=opkind name=StaticAlias n=1 owned=0
+pid=23910 tag=opkind name=PushRef n=106 owned=0
+pid=23910 tag=opkind name=MakeRef n=12 owned=0
+pid=23910 tag=opkind name=PushArgPlace n=11 owned=0
+pid=23910 tag=opkind name=BindRefTo n=7 owned=0
+pid=23910 tag=opkind name=CallValue n=3 owned=0
+pid=23910 tag=opkind name=CallNsFallback n=2 owned=0
+pid=23910 tag=opkind name=CallValueArgs n=2 owned=0
+pid=23910 tag=opkind name=Throw n=212 owned=0
+pid=23910 tag=opkind name=Rethrow n=8 owned=0
+pid=23910 tag=opkind name=CatchMatch n=8 owned=0
+pid=23910 tag=opkind name=Binary n=304 owned=0
+pid=23910 tag=opkind name=Unary n=291 owned=0
+pid=23910 tag=opkind name=Cast n=93 owned=0
+pid=23910 tag=opkind name=Jump n=1532 owned=0
+pid=23910 tag=opkind name=JumpIfFalse n=710 owned=0
+pid=23910 tag=opkind name=JumpIfTrue n=84 owned=0
+pid=23910 tag=opkind name=CmpJmp n=167 owned=0
+pid=23910 tag=opkind name=JumpIfNotNull n=54 owned=0
+pid=23910 tag=opkind name=Echo n=4 owned=0
+pid=23910 tag=opkind name=Stringify n=431 owned=0
+pid=23910 tag=opkind name=ArrayInit n=321 owned=0
+pid=23910 tag=opkind name=ArrayPush n=311 owned=0
+pid=23910 tag=opkind name=ArrayInsert n=182 owned=0
+pid=23910 tag=opkind name=ArrayAppendSpread n=12 owned=0
+pid=23910 tag=opkind name=FetchDim n=674 owned=0
+pid=23910 tag=opkind_sum n_ops=40034 owned=0 funcs=1842
+pid=23910 tag=modlit uniq_n=3987 uniq_bytes=170532 content_dup_n=2565 content_dup_bytes=92867
+pid=23910 tag=modrecon units=1 uniq_mods=1 dead_units=0 mod_owned=20897 fns_priv=0 fns_shared=876507 cls_priv=4180650 cls_shared=0 owned_priv=4201547 net_tot=0 counted_v1_tot=2602679 rc_residue=0
+pid=23910 tag=censusown bytes=546 hits_rows=0 hits_on=1
+pid=23910 tag=cellskip skips=0
+pid=23910 tag=cellpark parks=0 drainfails=0
+pid=23910 tag=teardown reg=0 broken=0 busy=0 alive_after=0
+pid=23910 tag=defermini calls=0 net_b=0
+pid=23910 tag=root name=created-dead-rc1[n=0] bytes=0
+pid=23910 tag=root name=lazy-init[n=0] bytes=0
+pid=23910 tag=root name=reflect-object-bound[n=0] bytes=0
+pid=23910 tag=root name=reflect-method-info-cache[n=0] bytes=0
+pid=23910 tag=root name=var-dump-debug[n=0] bytes=0
+pid=23910 tag=roots_total bytes=248964 truncated=0
+pid=23910 tag=walk_recon ch=str reached_n=4118 reached_b=244868 live_n=4523 live_b=268479
+pid=23910 tag=walk_recon ch=arr reached_n=7 reached_b=3328 live_n=7 live_b=3328
+pid=23910 tag=walk_recon ch=obj reached_n=0 reached_b=0 live_n=0 live_b=0
+pid=23910 tag=arr_shape repr=packed b=0 n=5 bytes=320
+pid=23910 tag=arr_shape repr=hashed b=5 n=1 bytes=864
+pid=23910 tag=arr_shape repr=hashed b=6 n=1 bytes=2144
+pid=23910 tag=seedclass name=PDOStatement full=261195 body=233290 doc=0
+pid=23910 tag=seedclass name=ReflectionClass full=214320 body=183473 doc=0
+pid=23910 tag=seedclass name=PDO full=195764 body=151775 doc=0
+pid=23910 tag=seedclass name=DateTime full=188233 body=173093 doc=0
+pid=23910 tag=seedclass name=BcMath\Number full=174633 body=153659 doc=0
+pid=23910 tag=seedclass name=SimpleXMLElement full=170672 body=150139 doc=0
+pid=23910 tag=seedclass name=mysqli full=159018 body=121757 doc=0
+pid=23910 tag=seedclass name=XSLTProcessor full=145731 body=110551 doc=0
+pid=23910 tag=seedclass name=ReflectionMethod full=133227 body=115602 doc=0
+pid=23910 tag=seedclass name=tidy full=108808 body=90284 doc=0
+pid=23910 tag=seedclass name=ReflectionProperty full=106996 body=88266 doc=0
+pid=23910 tag=seedclass name=ReflectionParameter full=106947 body=88683 doc=0
+pid=23910 tag=seedclass name=DOMNode full=101199 body=86529 doc=0
+pid=23910 tag=seedclass name=DateTimeImmutable full=94277 body=80891 doc=0
+pid=23910 tag=seedclass name=mysqli_stmt full=94123 body=72898 doc=0
+pid=23910 tag=seedclass name=ReflectionFunction full=87013 body=75329 doc=0
+pid=23910 tag=seedclass name=DOMDocument full=80601 body=58031 doc=0
+pid=23910 tag=seedclass name=mysqli_result full=78868 body=64429 doc=0
+pid=23910 tag=seedclass name=GMP full=75949 body=65382 doc=0
+pid=23910 tag=seedclass name=ZipArchive full=71030 body=48140 doc=0
+pid=23910 tag=seedclass name=SQLite3 full=62284 body=50324 doc=0
+pid=23910 tag=seedclass name=SplDoublyLinkedList full=60130 body=47567 doc=0
+pid=23910 tag=seedclass name=ReflectionAttribute full=57447 body=45647 doc=0
+pid=23910 tag=seedclass name=Dom\Node full=52765 body=49336 doc=0
+pid=23910 tag=seedclass name=DateTimeZone full=52293 body=44945 doc=0
+pid=23910 tag=seedclass name=SplPriorityQueue full=50701 body=42473 doc=0
+pid=23910 tag=seedclass name=DOMElement full=48245 body=40252 doc=0
+pid=23910 tag=seedclass name=DOMAttr full=48072 body=40234 doc=0
+pid=23910 tag=seedclass name=tidyNode full=47814 body=33630 doc=0
+pid=23910 tag=seedclass name=SplObjectStorage full=44530 body=31859 doc=0
+pid=23910 tag=seedclass name=ReflectionClassConstant full=42919 body=34441 doc=0
+pid=23910 tag=seedclass name=RecursiveDirectoryIterator full=40858 body=32953 doc=0
+pid=23910 tag=seedclass name=RegexIterator full=38502 body=27327 doc=0
+pid=23910 tag=seedclass name=SQLite3Stmt full=37983 body=28951 doc=0
+pid=23910 tag=seedclass name=FilesystemIterator full=36363 body=27084 doc=0
+pid=23910 tag=seedclass name=RecursiveIteratorIterator full=36161 body=26348 doc=0
+pid=23910 tag=seedclass name=DOMCharacterData full=35382 body=30025 doc=0
+pid=23910 tag=seedclass name=ReflectionExtension full=35379 body=31922 doc=0
+pid=23910 tag=seedclass name=SplFixedArray full=34877 body=26540 doc=0
+pid=23910 tag=seedclass name=DOMXPath full=33223 body=27067 doc=0
+pid=23910 tag=seedclass name=PhpToken full=28865 body=21911 doc=0
+pid=23910 tag=seedclass name=WeakMap full=28308 body=23879 doc=0
+pid=23910 tag=seedclass name=SQLite3Result full=25795 body=20322 doc=0
+pid=23910 tag=seedclass name=Exception full=24952 body=16262 doc=0
+pid=23910 tag=seedclass name=Error full=24948 body=16262 doc=0
+pid=23910 tag=seedclass name=SplFileObject full=22291 body=15329 doc=0
+pid=23910 tag=seedclass name=AppendIterator full=21436 body=17220 doc=0
+pid=23910 tag=seedclass name=DirectoryIterator full=21416 body=15622 doc=0
+pid=23910 tag=seedsum src=classes n=171 full=4185874 body=3335081 doc=844 firma=849949
+pid=23910 tag=seedsum src=traits n=0 full=0 body=0 doc=0 firma=0
+pid=23910 tag=seedsum src=main_hir n=1 full=5698 body=1696 doc=0 firma=4002
+pid=23910 tag=seedsum src=main_fns n=317 full=937476 body=757435 doc=0 firma=180041
+pid=23910 tag=seedlen units=1 distinct=1 top=0:1
+pid=23910 tag=unittop bytes_counted=2602679 net=0 pfx_tables=10901 pfx_stub=0 pfx_fnshare=0 proper=6959204 pfx_slotnames=0 pfx_fnvec=7608 sc=1 path=/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/gate-axum/fixtures/hello.php
+pid=23910 tag=prefixsum tables=10901 stub=0 fnshare=0 proper=6959204 prefix=10901 split_tot=6970105 slotnames_tot=0 fnvec_tot=7608 sc_tot=1
+pid=23910 tag=unitsum2 units=1 paths=1 dup_units=0 dup_bytes_counted=0 dup_net=0
+pid=23910 tag=netguard nested_windows=0
+pid=23910 tag=reloc skipped_fns=0 skipped_classes=0 unexpected=0
+pid=23910 tag=unitcache_main_entry ord=1 net=7349977 floor_inc=997878 net_rule=net-at-lower net_window=process-counters floor_rule=walk-increment-in-put-order alloc_id=memcount-v2-s82 /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/gate-axum/fixtures/hello.php
+pid=23910 tag=unitcache hit_intra=0 hit_cross=0 miss_cold=0 miss_fp=0 miss_dc=0 miss_nostat=0 inserts=1 fp_replaced=0 ways_evictions=0 metadata_calls=4 entries=1 bytes_counted=2602679 paths=1 superseded_paths=0 superseded_entries=0 stub_elided_units=0 stub_classes_elided=0 elide_align_miss=0 elide_align_hit=0 miss_dc_base=0 miss_dc_remap=0 miss_dc_locals=0 seed_prefix_short=0 parked_modules=4 parked_bytes=0 defer_relowers=0 defer_relower_ns=0 stranded_keys_superseded=0 stranded_entries_dropped=0 main_probe=4 main_hit=3 main_put=1 main_impure_skip=0 main_probe_fail=0 include_hit_main_reject=0 main_evicted=0 retained_walk_bytes=4283308 retained_walk_nodes=978 stranded_bytes_dropped=0 uclog=0 rw_main_net=7349977 program_floor_share=997878 rw_budget=10635407 rw_budget_rule=rw_bytes-program_floor_share+rw_main_net arm=cli-server alloc_id=memcount-v2-s82 rw_rule=cache-as-owner-FLOOR rw_main_net_rule=net-at-lower stranded_rule=unique-at-drop gross=1
+pid=23910 tag=boundset stubs_entries=0 prelude_classes=171 prelude_fns=317
+pid=23910 tag=compilens lower_ns=0 compile_ns=0 units=0 map_ns=22959 map_entries=171 remap_ns=0 remap_entries=0 read_ns=0 lexparse_ns=0 lowerhir_ns=0 lowers=0 lower_partial_ns=0 lower_partials=0
+pid=23910 tag=lcsum paths=0 compiles=0 lower_ns=0 compile_ns=0 dup_paths=0 dup_compiles=0 dup_lc_ns=0 dup_fp_ns=0 dup_cold_ns=0
+pid=23910 tag=opkind name=PushConst n=6430 owned=0
+pid=23910 tag=opkind name=Pop n=2923 owned=0
+pid=23910 tag=opkind name=Dup n=1604 owned=0
+pid=23910 tag=opkind name=LoadSlot n=363 owned=0
+pid=23910 tag=opkind name=LoadVar n=4275 owned=0
+pid=23910 tag=opkind name=StoreSlot n=1367 owned=0
+pid=23910 tag=opkind name=Swap n=35 owned=0
+pid=23910 tag=opkind name=FetchDimList n=43 owned=0
+pid=23910 tag=opkind name=FillDefault n=398 owned=0
+pid=23910 tag=opkind name=CoerceParam n=109 owned=0
+pid=23910 tag=opkind name=CheckArity n=710 owned=0
+pid=23910 tag=opkind name=IncDecSlot n=13 owned=0
+pid=23910 tag=opkind name=StaticGuard n=1 owned=0
+pid=23910 tag=opkind name=StaticStore n=1 owned=0
+pid=23910 tag=opkind name=StaticAlias n=1 owned=0
+pid=23910 tag=opkind name=PushRef n=106 owned=0
+pid=23910 tag=opkind name=MakeRef n=12 owned=0
+pid=23910 tag=opkind name=PushArgPlace n=11 owned=0
+pid=23910 tag=opkind name=BindRefTo n=7 owned=0
+pid=23910 tag=opkind name=CallValue n=3 owned=0
+pid=23910 tag=opkind name=CallNsFallback n=2 owned=0
+pid=23910 tag=opkind name=CallValueArgs n=2 owned=0
+pid=23910 tag=opkind name=Throw n=212 owned=0
+pid=23910 tag=opkind name=Rethrow n=8 owned=0
+pid=23910 tag=opkind name=CatchMatch n=8 owned=0
+pid=23910 tag=opkind name=Binary n=304 owned=0
+pid=23910 tag=opkind name=Unary n=291 owned=0
+pid=23910 tag=opkind name=Cast n=93 owned=0
+pid=23910 tag=opkind name=Jump n=1532 owned=0
+pid=23910 tag=opkind name=JumpIfFalse n=710 owned=0
+pid=23910 tag=opkind name=JumpIfTrue n=84 owned=0
+pid=23910 tag=opkind name=CmpJmp n=167 owned=0
+pid=23910 tag=opkind name=JumpIfNotNull n=54 owned=0
+pid=23910 tag=opkind name=Echo n=4 owned=0
+pid=23910 tag=opkind name=Stringify n=431 owned=0
+pid=23910 tag=opkind name=ArrayInit n=321 owned=0
+pid=23910 tag=opkind name=ArrayPush n=311 owned=0
+pid=23910 tag=opkind name=ArrayInsert n=182 owned=0
+pid=23910 tag=opkind name=ArrayAppendSpread n=12 owned=0
+pid=23910 tag=opkind name=FetchDim n=674 owned=0
+pid=23910 tag=opkind_sum n_ops=40034 owned=0 funcs=1842
+pid=23910 tag=modlit uniq_n=3987 uniq_bytes=170532 content_dup_n=2565 content_dup_bytes=92867
+pid=23910 tag=modrecon units=1 uniq_mods=1 dead_units=0 mod_owned=20897 fns_priv=0 fns_shared=876507 cls_priv=4180650 cls_shared=0 owned_priv=4201547 net_tot=0 counted_v1_tot=2602679 rc_residue=0
+pid=23910 tag=censusown bytes=546 hits_rows=0 hits_on=1
+pid=23910 tag=cellskip skips=0
+pid=23910 tag=cellpark parks=0 drainfails=0
+pid=23910 tag=teardown reg=0 broken=0 busy=0 alive_after=0
+pid=23910 tag=defermini calls=0 net_b=0
+pid=23910 tag=root name=created-dead-rc1[n=0] bytes=0
+pid=23910 tag=root name=lazy-init[n=0] bytes=0
+pid=23910 tag=root name=reflect-object-bound[n=0] bytes=0
+pid=23910 tag=root name=reflect-method-info-cache[n=0] bytes=0
+pid=23910 tag=root name=var-dump-debug[n=0] bytes=0
+pid=23910 tag=roots_total bytes=248964 truncated=0
+pid=23910 tag=walk_recon ch=str reached_n=4118 reached_b=244868 live_n=4523 live_b=268479
+pid=23910 tag=walk_recon ch=arr reached_n=7 reached_b=3328 live_n=7 live_b=3328
+pid=23910 tag=walk_recon ch=obj reached_n=0 reached_b=0 live_n=0 live_b=0
+pid=23910 tag=arr_shape repr=packed b=0 n=5 bytes=320
+pid=23910 tag=arr_shape repr=hashed b=5 n=1 bytes=864
+pid=23910 tag=arr_shape repr=hashed b=6 n=1 bytes=2144
+pid=23910 tag=seedclass name=PDOStatement full=261195 body=233290 doc=0
+pid=23910 tag=seedclass name=ReflectionClass full=214320 body=183473 doc=0
+pid=23910 tag=seedclass name=PDO full=195764 body=151775 doc=0
+pid=23910 tag=seedclass name=DateTime full=188233 body=173093 doc=0
+pid=23910 tag=seedclass name=BcMath\Number full=174633 body=153659 doc=0
+pid=23910 tag=seedclass name=SimpleXMLElement full=170672 body=150139 doc=0
+pid=23910 tag=seedclass name=mysqli full=159018 body=121757 doc=0
+pid=23910 tag=seedclass name=XSLTProcessor full=145731 body=110551 doc=0
+pid=23910 tag=seedclass name=ReflectionMethod full=133227 body=115602 doc=0
+pid=23910 tag=seedclass name=tidy full=108808 body=90284 doc=0
+pid=23910 tag=seedclass name=ReflectionProperty full=106996 body=88266 doc=0
+pid=23910 tag=seedclass name=ReflectionParameter full=106947 body=88683 doc=0
+pid=23910 tag=seedclass name=DOMNode full=101199 body=86529 doc=0
+pid=23910 tag=seedclass name=DateTimeImmutable full=94277 body=80891 doc=0
+pid=23910 tag=seedclass name=mysqli_stmt full=94123 body=72898 doc=0
+pid=23910 tag=seedclass name=ReflectionFunction full=87013 body=75329 doc=0
+pid=23910 tag=seedclass name=DOMDocument full=80601 body=58031 doc=0
+pid=23910 tag=seedclass name=mysqli_result full=78868 body=64429 doc=0
+pid=23910 tag=seedclass name=GMP full=75949 body=65382 doc=0
+pid=23910 tag=seedclass name=ZipArchive full=71030 body=48140 doc=0
+pid=23910 tag=seedclass name=SQLite3 full=62284 body=50324 doc=0
+pid=23910 tag=seedclass name=SplDoublyLinkedList full=60130 body=47567 doc=0
+pid=23910 tag=seedclass name=ReflectionAttribute full=57447 body=45647 doc=0
+pid=23910 tag=seedclass name=Dom\Node full=52765 body=49336 doc=0
+pid=23910 tag=seedclass name=DateTimeZone full=52293 body=44945 doc=0
+pid=23910 tag=seedclass name=SplPriorityQueue full=50701 body=42473 doc=0
+pid=23910 tag=seedclass name=DOMElement full=48245 body=40252 doc=0
+pid=23910 tag=seedclass name=DOMAttr full=48072 body=40234 doc=0
+pid=23910 tag=seedclass name=tidyNode full=47814 body=33630 doc=0
+pid=23910 tag=seedclass name=SplObjectStorage full=44530 body=31859 doc=0
+pid=23910 tag=seedclass name=ReflectionClassConstant full=42919 body=34441 doc=0
+pid=23910 tag=seedclass name=RecursiveDirectoryIterator full=40858 body=32953 doc=0
+pid=23910 tag=seedclass name=RegexIterator full=38502 body=27327 doc=0
+pid=23910 tag=seedclass name=SQLite3Stmt full=37983 body=28951 doc=0
+pid=23910 tag=seedclass name=FilesystemIterator full=36363 body=27084 doc=0
+pid=23910 tag=seedclass name=RecursiveIteratorIterator full=36161 body=26348 doc=0
+pid=23910 tag=seedclass name=DOMCharacterData full=35382 body=30025 doc=0
+pid=23910 tag=seedclass name=ReflectionExtension full=35379 body=31922 doc=0
+pid=23910 tag=seedclass name=SplFixedArray full=34877 body=26540 doc=0
+pid=23910 tag=seedclass name=DOMXPath full=33223 body=27067 doc=0
+pid=23910 tag=seedclass name=PhpToken full=28865 body=21911 doc=0
+pid=23910 tag=seedclass name=WeakMap full=28308 body=23879 doc=0
+pid=23910 tag=seedclass name=SQLite3Result full=25795 body=20322 doc=0
+pid=23910 tag=seedclass name=Exception full=24952 body=16262 doc=0
+pid=23910 tag=seedclass name=Error full=24948 body=16262 doc=0
+pid=23910 tag=seedclass name=SplFileObject full=22291 body=15329 doc=0
+pid=23910 tag=seedclass name=AppendIterator full=21436 body=17220 doc=0
+pid=23910 tag=seedclass name=DirectoryIterator full=21416 body=15622 doc=0
+pid=23910 tag=seedsum src=classes n=171 full=4185874 body=3335081 doc=844 firma=849949
+pid=23910 tag=seedsum src=traits n=0 full=0 body=0 doc=0 firma=0
+pid=23910 tag=seedsum src=main_hir n=1 full=5698 body=1696 doc=0 firma=4002
+pid=23910 tag=seedsum src=main_fns n=317 full=937476 body=757435 doc=0 firma=180041
+pid=23910 tag=seedlen units=1 distinct=1 top=0:1
+pid=23910 tag=unittop bytes_counted=2602679 net=0 pfx_tables=10901 pfx_stub=0 pfx_fnshare=0 proper=6959204 pfx_slotnames=0 pfx_fnvec=7608 sc=1 path=/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/gate-axum/fixtures/hello.php
+pid=23910 tag=prefixsum tables=10901 stub=0 fnshare=0 proper=6959204 prefix=10901 split_tot=6970105 slotnames_tot=0 fnvec_tot=7608 sc_tot=1
+pid=23910 tag=unitsum2 units=1 paths=1 dup_units=0 dup_bytes_counted=0 dup_net=0
+pid=23910 tag=netguard nested_windows=0
+pid=23910 tag=reloc skipped_fns=0 skipped_classes=0 unexpected=0
+pid=23910 tag=unitcache_main_entry ord=1 net=7349977 floor_inc=997878 net_rule=net-at-lower net_window=process-counters floor_rule=walk-increment-in-put-order alloc_id=memcount-v2-s82 /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/gate-axum/fixtures/hello.php
+pid=23910 tag=unitcache hit_intra=0 hit_cross=0 miss_cold=0 miss_fp=0 miss_dc=0 miss_nostat=0 inserts=1 fp_replaced=0 ways_evictions=0 metadata_calls=5 entries=1 bytes_counted=2602679 paths=1 superseded_paths=0 superseded_entries=0 stub_elided_units=0 stub_classes_elided=0 elide_align_miss=0 elide_align_hit=0 miss_dc_base=0 miss_dc_remap=0 miss_dc_locals=0 seed_prefix_short=0 parked_modules=5 parked_bytes=0 defer_relowers=0 defer_relower_ns=0 stranded_keys_superseded=0 stranded_entries_dropped=0 main_probe=5 main_hit=4 main_put=1 main_impure_skip=0 main_probe_fail=0 include_hit_main_reject=0 main_evicted=0 retained_walk_bytes=4283308 retained_walk_nodes=978 stranded_bytes_dropped=0 uclog=0 rw_main_net=7349977 program_floor_share=997878 rw_budget=10635407 rw_budget_rule=rw_bytes-program_floor_share+rw_main_net arm=cli-server alloc_id=memcount-v2-s82 rw_rule=cache-as-owner-FLOOR rw_main_net_rule=net-at-lower stranded_rule=unique-at-drop gross=1
+pid=23910 tag=boundset stubs_entries=0 prelude_classes=171 prelude_fns=317
+pid=23910 tag=compilens lower_ns=0 compile_ns=0 units=0 map_ns=22959 map_entries=171 remap_ns=0 remap_entries=0 read_ns=0 lexparse_ns=0 lowerhir_ns=0 lowers=0 lower_partial_ns=0 lower_partials=0
+pid=23910 tag=lcsum paths=0 compiles=0 lower_ns=0 compile_ns=0 dup_paths=0 dup_compiles=0 dup_lc_ns=0 dup_fp_ns=0 dup_cold_ns=0
+pid=23910 tag=opkind name=PushConst n=6430 owned=0
+pid=23910 tag=opkind name=Pop n=2923 owned=0
+pid=23910 tag=opkind name=Dup n=1604 owned=0
+pid=23910 tag=opkind name=LoadSlot n=363 owned=0
+pid=23910 tag=opkind name=LoadVar n=4275 owned=0
+pid=23910 tag=opkind name=StoreSlot n=1367 owned=0
+pid=23910 tag=opkind name=Swap n=35 owned=0
+pid=23910 tag=opkind name=FetchDimList n=43 owned=0
+pid=23910 tag=opkind name=FillDefault n=398 owned=0
+pid=23910 tag=opkind name=CoerceParam n=109 owned=0
+pid=23910 tag=opkind name=CheckArity n=710 owned=0
+pid=23910 tag=opkind name=IncDecSlot n=13 owned=0
+pid=23910 tag=opkind name=StaticGuard n=1 owned=0
+pid=23910 tag=opkind name=StaticStore n=1 owned=0
+pid=23910 tag=opkind name=StaticAlias n=1 owned=0
+pid=23910 tag=opkind name=PushRef n=106 owned=0
+pid=23910 tag=opkind name=MakeRef n=12 owned=0
+pid=23910 tag=opkind name=PushArgPlace n=11 owned=0
+pid=23910 tag=opkind name=BindRefTo n=7 owned=0
+pid=23910 tag=opkind name=CallValue n=3 owned=0
+pid=23910 tag=opkind name=CallNsFallback n=2 owned=0
+pid=23910 tag=opkind name=CallValueArgs n=2 owned=0
+pid=23910 tag=opkind name=Throw n=212 owned=0
+pid=23910 tag=opkind name=Rethrow n=8 owned=0
+pid=23910 tag=opkind name=CatchMatch n=8 owned=0
+pid=23910 tag=opkind name=Binary n=304 owned=0
+pid=23910 tag=opkind name=Unary n=291 owned=0
+pid=23910 tag=opkind name=Cast n=93 owned=0
+pid=23910 tag=opkind name=Jump n=1532 owned=0
+pid=23910 tag=opkind name=JumpIfFalse n=710 owned=0
+pid=23910 tag=opkind name=JumpIfTrue n=84 owned=0
+pid=23910 tag=opkind name=CmpJmp n=167 owned=0
+pid=23910 tag=opkind name=JumpIfNotNull n=54 owned=0
+pid=23910 tag=opkind name=Echo n=4 owned=0
+pid=23910 tag=opkind name=Stringify n=431 owned=0
+pid=23910 tag=opkind name=ArrayInit n=321 owned=0
+pid=23910 tag=opkind name=ArrayPush n=311 owned=0
+pid=23910 tag=opkind name=ArrayInsert n=182 owned=0
+pid=23910 tag=opkind name=ArrayAppendSpread n=12 owned=0
+pid=23910 tag=opkind name=FetchDim n=674 owned=0
+pid=23910 tag=opkind_sum n_ops=40034 owned=0 funcs=1842
+pid=23910 tag=modlit uniq_n=3987 uniq_bytes=170532 content_dup_n=2565 content_dup_bytes=92867
+pid=23910 tag=modrecon units=1 uniq_mods=1 dead_units=0 mod_owned=20897 fns_priv=0 fns_shared=876507 cls_priv=4180650 cls_shared=0 owned_priv=4201547 net_tot=0 counted_v1_tot=2602679 rc_residue=0
+pid=23910 tag=censusown bytes=546 hits_rows=0 hits_on=1
+pid=23910 tag=cellskip skips=0
+pid=23910 tag=cellpark parks=0 drainfails=0
+pid=23910 tag=teardown reg=0 broken=0 busy=0 alive_after=0
+pid=23910 tag=defermini calls=0 net_b=0
+pid=23910 tag=root name=created-dead-rc1[n=0] bytes=0
+pid=23910 tag=root name=lazy-init[n=0] bytes=0
+pid=23910 tag=root name=reflect-object-bound[n=0] bytes=0
+pid=23910 tag=root name=reflect-method-info-cache[n=0] bytes=0
+pid=23910 tag=root name=var-dump-debug[n=0] bytes=0
+pid=23910 tag=roots_total bytes=248964 truncated=0
+pid=23910 tag=walk_recon ch=str reached_n=4118 reached_b=244868 live_n=4523 live_b=268479
+pid=23910 tag=walk_recon ch=arr reached_n=7 reached_b=3328 live_n=7 live_b=3328
+pid=23910 tag=walk_recon ch=obj reached_n=0 reached_b=0 live_n=0 live_b=0
+pid=23910 tag=arr_shape repr=packed b=0 n=5 bytes=320
+pid=23910 tag=arr_shape repr=hashed b=5 n=1 bytes=864
+pid=23910 tag=arr_shape repr=hashed b=6 n=1 bytes=2144
+pid=23910 tag=seedclass name=PDOStatement full=261195 body=233290 doc=0
+pid=23910 tag=seedclass name=ReflectionClass full=214320 body=183473 doc=0
+pid=23910 tag=seedclass name=PDO full=195764 body=151775 doc=0
+pid=23910 tag=seedclass name=DateTime full=188233 body=173093 doc=0
+pid=23910 tag=seedclass name=BcMath\Number full=174633 body=153659 doc=0
+pid=23910 tag=seedclass name=SimpleXMLElement full=170672 body=150139 doc=0
+pid=23910 tag=seedclass name=mysqli full=159018 body=121757 doc=0
+pid=23910 tag=seedclass name=XSLTProcessor full=145731 body=110551 doc=0
+pid=23910 tag=seedclass name=ReflectionMethod full=133227 body=115602 doc=0
+pid=23910 tag=seedclass name=tidy full=108808 body=90284 doc=0
+pid=23910 tag=seedclass name=ReflectionProperty full=106996 body=88266 doc=0
+pid=23910 tag=seedclass name=ReflectionParameter full=106947 body=88683 doc=0
+pid=23910 tag=seedclass name=DOMNode full=101199 body=86529 doc=0
+pid=23910 tag=seedclass name=DateTimeImmutable full=94277 body=80891 doc=0
+pid=23910 tag=seedclass name=mysqli_stmt full=94123 body=72898 doc=0
+pid=23910 tag=seedclass name=ReflectionFunction full=87013 body=75329 doc=0
+pid=23910 tag=seedclass name=DOMDocument full=80601 body=58031 doc=0
+pid=23910 tag=seedclass name=mysqli_result full=78868 body=64429 doc=0
+pid=23910 tag=seedclass name=GMP full=75949 body=65382 doc=0
+pid=23910 tag=seedclass name=ZipArchive full=71030 body=48140 doc=0
+pid=23910 tag=seedclass name=SQLite3 full=62284 body=50324 doc=0
+pid=23910 tag=seedclass name=SplDoublyLinkedList full=60130 body=47567 doc=0
+pid=23910 tag=seedclass name=ReflectionAttribute full=57447 body=45647 doc=0
+pid=23910 tag=seedclass name=Dom\Node full=52765 body=49336 doc=0
+pid=23910 tag=seedclass name=DateTimeZone full=52293 body=44945 doc=0
+pid=23910 tag=seedclass name=SplPriorityQueue full=50701 body=42473 doc=0
+pid=23910 tag=seedclass name=DOMElement full=48245 body=40252 doc=0
+pid=23910 tag=seedclass name=DOMAttr full=48072 body=40234 doc=0
+pid=23910 tag=seedclass name=tidyNode full=47814 body=33630 doc=0
+pid=23910 tag=seedclass name=SplObjectStorage full=44530 body=31859 doc=0
+pid=23910 tag=seedclass name=ReflectionClassConstant full=42919 body=34441 doc=0
+pid=23910 tag=seedclass name=RecursiveDirectoryIterator full=40858 body=32953 doc=0
+pid=23910 tag=seedclass name=RegexIterator full=38502 body=27327 doc=0
+pid=23910 tag=seedclass name=SQLite3Stmt full=37983 body=28951 doc=0
+pid=23910 tag=seedclass name=FilesystemIterator full=36363 body=27084 doc=0
+pid=23910 tag=seedclass name=RecursiveIteratorIterator full=36161 body=26348 doc=0
+pid=23910 tag=seedclass name=DOMCharacterData full=35382 body=30025 doc=0
+pid=23910 tag=seedclass name=ReflectionExtension full=35379 body=31922 doc=0
+pid=23910 tag=seedclass name=SplFixedArray full=34877 body=26540 doc=0
+pid=23910 tag=seedclass name=DOMXPath full=33223 body=27067 doc=0
+pid=23910 tag=seedclass name=PhpToken full=28865 body=21911 doc=0
+pid=23910 tag=seedclass name=WeakMap full=28308 body=23879 doc=0
+pid=23910 tag=seedclass name=SQLite3Result full=25795 body=20322 doc=0
+pid=23910 tag=seedclass name=Exception full=24952 body=16262 doc=0
+pid=23910 tag=seedclass name=Error full=24948 body=16262 doc=0
+pid=23910 tag=seedclass name=SplFileObject full=22291 body=15329 doc=0
+pid=23910 tag=seedclass name=AppendIterator full=21436 body=17220 doc=0
+pid=23910 tag=seedclass name=DirectoryIterator full=21416 body=15622 doc=0
+pid=23910 tag=seedsum src=classes n=171 full=4185874 body=3335081 doc=844 firma=849949
+pid=23910 tag=seedsum src=traits n=0 full=0 body=0 doc=0 firma=0
+pid=23910 tag=seedsum src=main_hir n=1 full=5698 body=1696 doc=0 firma=4002
+pid=23910 tag=seedsum src=main_fns n=317 full=937476 body=757435 doc=0 firma=180041
+pid=23910 tag=seedlen units=1 distinct=1 top=0:1
+pid=23910 tag=unittop bytes_counted=2602679 net=0 pfx_tables=10901 pfx_stub=0 pfx_fnshare=0 proper=6959204 pfx_slotnames=0 pfx_fnvec=7608 sc=1 path=/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/gate-axum/fixtures/hello.php
+pid=23910 tag=prefixsum tables=10901 stub=0 fnshare=0 proper=6959204 prefix=10901 split_tot=6970105 slotnames_tot=0 fnvec_tot=7608 sc_tot=1
+pid=23910 tag=unitsum2 units=1 paths=1 dup_units=0 dup_bytes_counted=0 dup_net=0
+pid=23910 tag=netguard nested_windows=0
+pid=23910 tag=reloc skipped_fns=0 skipped_classes=0 unexpected=0
+pid=23910 tag=unitcache_main_entry ord=1 net=7349977 floor_inc=997878 net_rule=net-at-lower net_window=process-counters floor_rule=walk-increment-in-put-order alloc_id=memcount-v2-s82 /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/gate-axum/fixtures/hello.php
+pid=23910 tag=unitcache hit_intra=0 hit_cross=0 miss_cold=0 miss_fp=0 miss_dc=0 miss_nostat=0 inserts=1 fp_replaced=0 ways_evictions=0 metadata_calls=6 entries=1 bytes_counted=2602679 paths=1 superseded_paths=0 superseded_entries=0 stub_elided_units=0 stub_classes_elided=0 elide_align_miss=0 elide_align_hit=0 miss_dc_base=0 miss_dc_remap=0 miss_dc_locals=0 seed_prefix_short=0 parked_modules=6 parked_bytes=0 defer_relowers=0 defer_relower_ns=0 stranded_keys_superseded=0 stranded_entries_dropped=0 main_probe=6 main_hit=5 main_put=1 main_impure_skip=0 main_probe_fail=0 include_hit_main_reject=0 main_evicted=0 retained_walk_bytes=4283308 retained_walk_nodes=978 stranded_bytes_dropped=0 uclog=0 rw_main_net=7349977 program_floor_share=997878 rw_budget=10635407 rw_budget_rule=rw_bytes-program_floor_share+rw_main_net arm=cli-server alloc_id=memcount-v2-s82 rw_rule=cache-as-owner-FLOOR rw_main_net_rule=net-at-lower stranded_rule=unique-at-drop gross=1
+pid=23910 tag=boundset stubs_entries=0 prelude_classes=171 prelude_fns=317
+pid=23910 tag=compilens lower_ns=0 compile_ns=0 units=0 map_ns=22959 map_entries=171 remap_ns=0 remap_entries=0 read_ns=0 lexparse_ns=0 lowerhir_ns=0 lowers=0 lower_partial_ns=0 lower_partials=0
+pid=23910 tag=lcsum paths=0 compiles=0 lower_ns=0 compile_ns=0 dup_paths=0 dup_compiles=0 dup_lc_ns=0 dup_fp_ns=0 dup_cold_ns=0
+pid=23910 tag=opkind name=PushConst n=6430 owned=0
+pid=23910 tag=opkind name=Pop n=2923 owned=0
+pid=23910 tag=opkind name=Dup n=1604 owned=0
+pid=23910 tag=opkind name=LoadSlot n=363 owned=0
+pid=23910 tag=opkind name=LoadVar n=4275 owned=0
+pid=23910 tag=opkind name=StoreSlot n=1367 owned=0
+pid=23910 tag=opkind name=Swap n=35 owned=0
+pid=23910 tag=opkind name=FetchDimList n=43 owned=0
+pid=23910 tag=opkind name=FillDefault n=398 owned=0
+pid=23910 tag=opkind name=CoerceParam n=109 owned=0
+pid=23910 tag=opkind name=CheckArity n=710 owned=0
+pid=23910 tag=opkind name=IncDecSlot n=13 owned=0
+pid=23910 tag=opkind name=StaticGuard n=1 owned=0
+pid=23910 tag=opkind name=StaticStore n=1 owned=0
+pid=23910 tag=opkind name=StaticAlias n=1 owned=0
+pid=23910 tag=opkind name=PushRef n=106 owned=0
+pid=23910 tag=opkind name=MakeRef n=12 owned=0
+pid=23910 tag=opkind name=PushArgPlace n=11 owned=0
+pid=23910 tag=opkind name=BindRefTo n=7 owned=0
+pid=23910 tag=opkind name=CallValue n=3 owned=0
+pid=23910 tag=opkind name=CallNsFallback n=2 owned=0
+pid=23910 tag=opkind name=CallValueArgs n=2 owned=0
+pid=23910 tag=opkind name=Throw n=212 owned=0
+pid=23910 tag=opkind name=Rethrow n=8 owned=0
+pid=23910 tag=opkind name=CatchMatch n=8 owned=0
+pid=23910 tag=opkind name=Binary n=304 owned=0
+pid=23910 tag=opkind name=Unary n=291 owned=0
+pid=23910 tag=opkind name=Cast n=93 owned=0
+pid=23910 tag=opkind name=Jump n=1532 owned=0
+pid=23910 tag=opkind name=JumpIfFalse n=710 owned=0
+pid=23910 tag=opkind name=JumpIfTrue n=84 owned=0
+pid=23910 tag=opkind name=CmpJmp n=167 owned=0
+pid=23910 tag=opkind name=JumpIfNotNull n=54 owned=0
+pid=23910 tag=opkind name=Echo n=4 owned=0
+pid=23910 tag=opkind name=Stringify n=431 owned=0
+pid=23910 tag=opkind name=ArrayInit n=321 owned=0
+pid=23910 tag=opkind name=ArrayPush n=311 owned=0
+pid=23910 tag=opkind name=ArrayInsert n=182 owned=0
+pid=23910 tag=opkind name=ArrayAppendSpread n=12 owned=0
+pid=23910 tag=opkind name=FetchDim n=674 owned=0
+pid=23910 tag=opkind_sum n_ops=40034 owned=0 funcs=1842
+pid=23910 tag=modlit uniq_n=3987 uniq_bytes=170532 content_dup_n=2565 content_dup_bytes=92867
+pid=23910 tag=modrecon units=1 uniq_mods=1 dead_units=0 mod_owned=20897 fns_priv=0 fns_shared=876507 cls_priv=4180650 cls_shared=0 owned_priv=4201547 net_tot=0 counted_v1_tot=2602679 rc_residue=0
+pid=23910 tag=censusown bytes=546 hits_rows=0 hits_on=1
+pid=23910 tag=cellskip skips=0
+pid=23910 tag=cellpark parks=0 drainfails=0
+pid=23910 tag=teardown reg=0 broken=0 busy=0 alive_after=0
+pid=23910 tag=defermini calls=0 net_b=0
+pid=23910 tag=root name=created-dead-rc1[n=0] bytes=0
+pid=23910 tag=root name=lazy-init[n=0] bytes=0
+pid=23910 tag=root name=reflect-object-bound[n=0] bytes=0
+pid=23910 tag=root name=reflect-method-info-cache[n=0] bytes=0
+pid=23910 tag=root name=var-dump-debug[n=0] bytes=0
+pid=23910 tag=roots_total bytes=248964 truncated=0
+pid=23910 tag=walk_recon ch=str reached_n=4118 reached_b=244868 live_n=4523 live_b=268479
+pid=23910 tag=walk_recon ch=arr reached_n=7 reached_b=3328 live_n=7 live_b=3328
+pid=23910 tag=walk_recon ch=obj reached_n=0 reached_b=0 live_n=0 live_b=0
+pid=23910 tag=arr_shape repr=packed b=0 n=5 bytes=320
+pid=23910 tag=arr_shape repr=hashed b=5 n=1 bytes=864
+pid=23910 tag=arr_shape repr=hashed b=6 n=1 bytes=2144
+pid=23910 tag=seedclass name=PDOStatement full=261195 body=233290 doc=0
+pid=23910 tag=seedclass name=ReflectionClass full=214320 body=183473 doc=0
+pid=23910 tag=seedclass name=PDO full=195764 body=151775 doc=0
+pid=23910 tag=seedclass name=DateTime full=188233 body=173093 doc=0
+pid=23910 tag=seedclass name=BcMath\Number full=174633 body=153659 doc=0
+pid=23910 tag=seedclass name=SimpleXMLElement full=170672 body=150139 doc=0
+pid=23910 tag=seedclass name=mysqli full=159018 body=121757 doc=0
+pid=23910 tag=seedclass name=XSLTProcessor full=145731 body=110551 doc=0
+pid=23910 tag=seedclass name=ReflectionMethod full=133227 body=115602 doc=0
+pid=23910 tag=seedclass name=tidy full=108808 body=90284 doc=0
+pid=23910 tag=seedclass name=ReflectionProperty full=106996 body=88266 doc=0
+pid=23910 tag=seedclass name=ReflectionParameter full=106947 body=88683 doc=0
+pid=23910 tag=seedclass name=DOMNode full=101199 body=86529 doc=0
+pid=23910 tag=seedclass name=DateTimeImmutable full=94277 body=80891 doc=0
+pid=23910 tag=seedclass name=mysqli_stmt full=94123 body=72898 doc=0
+pid=23910 tag=seedclass name=ReflectionFunction full=87013 body=75329 doc=0
+pid=23910 tag=seedclass name=DOMDocument full=80601 body=58031 doc=0
+pid=23910 tag=seedclass name=mysqli_result full=78868 body=64429 doc=0
+pid=23910 tag=seedclass name=GMP full=75949 body=65382 doc=0
+pid=23910 tag=seedclass name=ZipArchive full=71030 body=48140 doc=0
+pid=23910 tag=seedclass name=SQLite3 full=62284 body=50324 doc=0
+pid=23910 tag=seedclass name=SplDoublyLinkedList full=60130 body=47567 doc=0
+pid=23910 tag=seedclass name=ReflectionAttribute full=57447 body=45647 doc=0
+pid=23910 tag=seedclass name=Dom\Node full=52765 body=49336 doc=0
+pid=23910 tag=seedclass name=DateTimeZone full=52293 body=44945 doc=0
+pid=23910 tag=seedclass name=SplPriorityQueue full=50701 body=42473 doc=0
+pid=23910 tag=seedclass name=DOMElement full=48245 body=40252 doc=0
+pid=23910 tag=seedclass name=DOMAttr full=48072 body=40234 doc=0
+pid=23910 tag=seedclass name=tidyNode full=47814 body=33630 doc=0
+pid=23910 tag=seedclass name=SplObjectStorage full=44530 body=31859 doc=0
+pid=23910 tag=seedclass name=ReflectionClassConstant full=42919 body=34441 doc=0
+pid=23910 tag=seedclass name=RecursiveDirectoryIterator full=40858 body=32953 doc=0
+pid=23910 tag=seedclass name=RegexIterator full=38502 body=27327 doc=0
+pid=23910 tag=seedclass name=SQLite3Stmt full=37983 body=28951 doc=0
+pid=23910 tag=seedclass name=FilesystemIterator full=36363 body=27084 doc=0
+pid=23910 tag=seedclass name=RecursiveIteratorIterator full=36161 body=26348 doc=0
+pid=23910 tag=seedclass name=DOMCharacterData full=35382 body=30025 doc=0
+pid=23910 tag=seedclass name=ReflectionExtension full=35379 body=31922 doc=0
+pid=23910 tag=seedclass name=SplFixedArray full=34877 body=26540 doc=0
+pid=23910 tag=seedclass name=DOMXPath full=33223 body=27067 doc=0
+pid=23910 tag=seedclass name=PhpToken full=28865 body=21911 doc=0
+pid=23910 tag=seedclass name=WeakMap full=28308 body=23879 doc=0
+pid=23910 tag=seedclass name=SQLite3Result full=25795 body=20322 doc=0
+pid=23910 tag=seedclass name=Exception full=24952 body=16262 doc=0
+pid=23910 tag=seedclass name=Error full=24948 body=16262 doc=0
+pid=23910 tag=seedclass name=SplFileObject full=22291 body=15329 doc=0
+pid=23910 tag=seedclass name=AppendIterator full=21436 body=17220 doc=0
+pid=23910 tag=seedclass name=DirectoryIterator full=21416 body=15622 doc=0
+pid=23910 tag=seedsum src=classes n=171 full=4185874 body=3335081 doc=844 firma=849949
+pid=23910 tag=seedsum src=traits n=0 full=0 body=0 doc=0 firma=0
+pid=23910 tag=seedsum src=main_hir n=1 full=5698 body=1696 doc=0 firma=4002
+pid=23910 tag=seedsum src=main_fns n=317 full=937476 body=757435 doc=0 firma=180041
+pid=23910 tag=seedlen units=1 distinct=1 top=0:1
+pid=23910 tag=unittop bytes_counted=2602679 net=0 pfx_tables=10901 pfx_stub=0 pfx_fnshare=0 proper=6959204 pfx_slotnames=0 pfx_fnvec=7608 sc=1 path=/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/gate-axum/fixtures/hello.php
+pid=23910 tag=prefixsum tables=10901 stub=0 fnshare=0 proper=6959204 prefix=10901 split_tot=6970105 slotnames_tot=0 fnvec_tot=7608 sc_tot=1
+pid=23910 tag=unitsum2 units=1 paths=1 dup_units=0 dup_bytes_counted=0 dup_net=0
+pid=23910 tag=netguard nested_windows=0
+pid=23910 tag=reloc skipped_fns=0 skipped_classes=0 unexpected=0
+pid=23910 tag=unitcache_main_entry ord=1 net=7349977 floor_inc=997878 net_rule=net-at-lower net_window=process-counters floor_rule=walk-increment-in-put-order alloc_id=memcount-v2-s82 /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/gate-axum/fixtures/hello.php
+pid=23910 tag=unitcache hit_intra=0 hit_cross=0 miss_cold=0 miss_fp=0 miss_dc=0 miss_nostat=0 inserts=1 fp_replaced=0 ways_evictions=0 metadata_calls=7 entries=1 bytes_counted=2602679 paths=1 superseded_paths=0 superseded_entries=0 stub_elided_units=0 stub_classes_elided=0 elide_align_miss=0 elide_align_hit=0 miss_dc_base=0 miss_dc_remap=0 miss_dc_locals=0 seed_prefix_short=0 parked_modules=7 parked_bytes=0 defer_relowers=0 defer_relower_ns=0 stranded_keys_superseded=0 stranded_entries_dropped=0 main_probe=7 main_hit=6 main_put=1 main_impure_skip=0 main_probe_fail=0 include_hit_main_reject=0 main_evicted=0 retained_walk_bytes=4283308 retained_walk_nodes=978 stranded_bytes_dropped=0 uclog=0 rw_main_net=7349977 program_floor_share=997878 rw_budget=10635407 rw_budget_rule=rw_bytes-program_floor_share+rw_main_net arm=cli-server alloc_id=memcount-v2-s82 rw_rule=cache-as-owner-FLOOR rw_main_net_rule=net-at-lower stranded_rule=unique-at-drop gross=1
+pid=23910 tag=boundset stubs_entries=0 prelude_classes=171 prelude_fns=317
+pid=23910 tag=compilens lower_ns=0 compile_ns=0 units=0 map_ns=22959 map_entries=171 remap_ns=0 remap_entries=0 read_ns=0 lexparse_ns=0 lowerhir_ns=0 lowers=0 lower_partial_ns=0 lower_partials=0
+pid=23910 tag=lcsum paths=0 compiles=0 lower_ns=0 compile_ns=0 dup_paths=0 dup_compiles=0 dup_lc_ns=0 dup_fp_ns=0 dup_cold_ns=0
+pid=23910 tag=opkind name=PushConst n=6430 owned=0
+pid=23910 tag=opkind name=Pop n=2923 owned=0
+pid=23910 tag=opkind name=Dup n=1604 owned=0
+pid=23910 tag=opkind name=LoadSlot n=363 owned=0
+pid=23910 tag=opkind name=LoadVar n=4275 owned=0
+pid=23910 tag=opkind name=StoreSlot n=1367 owned=0
+pid=23910 tag=opkind name=Swap n=35 owned=0
+pid=23910 tag=opkind name=FetchDimList n=43 owned=0
+pid=23910 tag=opkind name=FillDefault n=398 owned=0
+pid=23910 tag=opkind name=CoerceParam n=109 owned=0
+pid=23910 tag=opkind name=CheckArity n=710 owned=0
+pid=23910 tag=opkind name=IncDecSlot n=13 owned=0
+pid=23910 tag=opkind name=StaticGuard n=1 owned=0
+pid=23910 tag=opkind name=StaticStore n=1 owned=0
+pid=23910 tag=opkind name=StaticAlias n=1 owned=0
+pid=23910 tag=opkind name=PushRef n=106 owned=0
+pid=23910 tag=opkind name=MakeRef n=12 owned=0
+pid=23910 tag=opkind name=PushArgPlace n=11 owned=0
+pid=23910 tag=opkind name=BindRefTo n=7 owned=0
+pid=23910 tag=opkind name=CallValue n=3 owned=0
+pid=23910 tag=opkind name=CallNsFallback n=2 owned=0
+pid=23910 tag=opkind name=CallValueArgs n=2 owned=0
+pid=23910 tag=opkind name=Throw n=212 owned=0
+pid=23910 tag=opkind name=Rethrow n=8 owned=0
+pid=23910 tag=opkind name=CatchMatch n=8 owned=0
+pid=23910 tag=opkind name=Binary n=304 owned=0
+pid=23910 tag=opkind name=Unary n=291 owned=0
+pid=23910 tag=opkind name=Cast n=93 owned=0
+pid=23910 tag=opkind name=Jump n=1532 owned=0
+pid=23910 tag=opkind name=JumpIfFalse n=710 owned=0
+pid=23910 tag=opkind name=JumpIfTrue n=84 owned=0
+pid=23910 tag=opkind name=CmpJmp n=167 owned=0
+pid=23910 tag=opkind name=JumpIfNotNull n=54 owned=0
+pid=23910 tag=opkind name=Echo n=4 owned=0
+pid=23910 tag=opkind name=Stringify n=431 owned=0
+pid=23910 tag=opkind name=ArrayInit n=321 owned=0
+pid=23910 tag=opkind name=ArrayPush n=311 owned=0
+pid=23910 tag=opkind name=ArrayInsert n=182 owned=0
+pid=23910 tag=opkind name=ArrayAppendSpread n=12 owned=0
+pid=23910 tag=opkind name=FetchDim n=674 owned=0
+pid=23910 tag=opkind_sum n_ops=40034 owned=0 funcs=1842
+pid=23910 tag=modlit uniq_n=3987 uniq_bytes=170532 content_dup_n=2565 content_dup_bytes=92867
+pid=23910 tag=modrecon units=1 uniq_mods=1 dead_units=0 mod_owned=20897 fns_priv=0 fns_shared=876507 cls_priv=4180650 cls_shared=0 owned_priv=4201547 net_tot=0 counted_v1_tot=2602679 rc_residue=0
+pid=23910 tag=censusown bytes=546 hits_rows=0 hits_on=1
+pid=23910 tag=cellskip skips=0
+pid=23910 tag=cellpark parks=0 drainfails=0
+pid=23910 tag=teardown reg=0 broken=0 busy=0 alive_after=0
+pid=23910 tag=defermini calls=0 net_b=0
+pid=23910 tag=root name=created-dead-rc1[n=0] bytes=0
+pid=23910 tag=root name=lazy-init[n=0] bytes=0
+pid=23910 tag=root name=reflect-object-bound[n=0] bytes=0
+pid=23910 tag=root name=reflect-method-info-cache[n=0] bytes=0
+pid=23910 tag=root name=var-dump-debug[n=0] bytes=0
+pid=23910 tag=roots_total bytes=248964 truncated=0
+pid=23910 tag=walk_recon ch=str reached_n=4118 reached_b=244868 live_n=4523 live_b=268479
+pid=23910 tag=walk_recon ch=arr reached_n=7 reached_b=3328 live_n=7 live_b=3328
+pid=23910 tag=walk_recon ch=obj reached_n=0 reached_b=0 live_n=0 live_b=0
+pid=23910 tag=arr_shape repr=packed b=0 n=5 bytes=320
+pid=23910 tag=arr_shape repr=hashed b=5 n=1 bytes=864
+pid=23910 tag=arr_shape repr=hashed b=6 n=1 bytes=2144
+pid=23910 tag=seedclass name=PDOStatement full=261195 body=233290 doc=0
+pid=23910 tag=seedclass name=ReflectionClass full=214320 body=183473 doc=0
+pid=23910 tag=seedclass name=PDO full=195764 body=151775 doc=0
+pid=23910 tag=seedclass name=DateTime full=188233 body=173093 doc=0
+pid=23910 tag=seedclass name=BcMath\Number full=174633 body=153659 doc=0
+pid=23910 tag=seedclass name=SimpleXMLElement full=170672 body=150139 doc=0
+pid=23910 tag=seedclass name=mysqli full=159018 body=121757 doc=0
+pid=23910 tag=seedclass name=XSLTProcessor full=145731 body=110551 doc=0
+pid=23910 tag=seedclass name=ReflectionMethod full=133227 body=115602 doc=0
+pid=23910 tag=seedclass name=tidy full=108808 body=90284 doc=0
+pid=23910 tag=seedclass name=ReflectionProperty full=106996 body=88266 doc=0
+pid=23910 tag=seedclass name=ReflectionParameter full=106947 body=88683 doc=0
+pid=23910 tag=seedclass name=DOMNode full=101199 body=86529 doc=0
+pid=23910 tag=seedclass name=DateTimeImmutable full=94277 body=80891 doc=0
+pid=23910 tag=seedclass name=mysqli_stmt full=94123 body=72898 doc=0
+pid=23910 tag=seedclass name=ReflectionFunction full=87013 body=75329 doc=0
+pid=23910 tag=seedclass name=DOMDocument full=80601 body=58031 doc=0
+pid=23910 tag=seedclass name=mysqli_result full=78868 body=64429 doc=0
+pid=23910 tag=seedclass name=GMP full=75949 body=65382 doc=0
+pid=23910 tag=seedclass name=ZipArchive full=71030 body=48140 doc=0
+pid=23910 tag=seedclass name=SQLite3 full=62284 body=50324 doc=0
+pid=23910 tag=seedclass name=SplDoublyLinkedList full=60130 body=47567 doc=0
+pid=23910 tag=seedclass name=ReflectionAttribute full=57447 body=45647 doc=0
+pid=23910 tag=seedclass name=Dom\Node full=52765 body=49336 doc=0
+pid=23910 tag=seedclass name=DateTimeZone full=52293 body=44945 doc=0
+pid=23910 tag=seedclass name=SplPriorityQueue full=50701 body=42473 doc=0
+pid=23910 tag=seedclass name=DOMElement full=48245 body=40252 doc=0
+pid=23910 tag=seedclass name=DOMAttr full=48072 body=40234 doc=0
+pid=23910 tag=seedclass name=tidyNode full=47814 body=33630 doc=0
+pid=23910 tag=seedclass name=SplObjectStorage full=44530 body=31859 doc=0
+pid=23910 tag=seedclass name=ReflectionClassConstant full=42919 body=34441 doc=0
+pid=23910 tag=seedclass name=RecursiveDirectoryIterator full=40858 body=32953 doc=0
+pid=23910 tag=seedclass name=RegexIterator full=38502 body=27327 doc=0
+pid=23910 tag=seedclass name=SQLite3Stmt full=37983 body=28951 doc=0
+pid=23910 tag=seedclass name=FilesystemIterator full=36363 body=27084 doc=0
+pid=23910 tag=seedclass name=RecursiveIteratorIterator full=36161 body=26348 doc=0
+pid=23910 tag=seedclass name=DOMCharacterData full=35382 body=30025 doc=0
+pid=23910 tag=seedclass name=ReflectionExtension full=35379 body=31922 doc=0
+pid=23910 tag=seedclass name=SplFixedArray full=34877 body=26540 doc=0
+pid=23910 tag=seedclass name=DOMXPath full=33223 body=27067 doc=0
+pid=23910 tag=seedclass name=PhpToken full=28865 body=21911 doc=0
+pid=23910 tag=seedclass name=WeakMap full=28308 body=23879 doc=0
+pid=23910 tag=seedclass name=SQLite3Result full=25795 body=20322 doc=0
+pid=23910 tag=seedclass name=Exception full=24952 body=16262 doc=0
+pid=23910 tag=seedclass name=Error full=24948 body=16262 doc=0
+pid=23910 tag=seedclass name=SplFileObject full=22291 body=15329 doc=0
+pid=23910 tag=seedclass name=AppendIterator full=21436 body=17220 doc=0
+pid=23910 tag=seedclass name=DirectoryIterator full=21416 body=15622 doc=0
+pid=23910 tag=seedsum src=classes n=171 full=4185874 body=3335081 doc=844 firma=849949
+pid=23910 tag=seedsum src=traits n=0 full=0 body=0 doc=0 firma=0
+pid=23910 tag=seedsum src=main_hir n=1 full=5698 body=1696 doc=0 firma=4002
+pid=23910 tag=seedsum src=main_fns n=317 full=937476 body=757435 doc=0 firma=180041
+pid=23910 tag=seedlen units=1 distinct=1 top=0:1
+pid=23910 tag=unittop bytes_counted=2602679 net=0 pfx_tables=10901 pfx_stub=0 pfx_fnshare=0 proper=6959204 pfx_slotnames=0 pfx_fnvec=7608 sc=1 path=/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/gate-axum/fixtures/hello.php
+pid=23910 tag=prefixsum tables=10901 stub=0 fnshare=0 proper=6959204 prefix=10901 split_tot=6970105 slotnames_tot=0 fnvec_tot=7608 sc_tot=1
+pid=23910 tag=unitsum2 units=1 paths=1 dup_units=0 dup_bytes_counted=0 dup_net=0
+pid=23910 tag=netguard nested_windows=0
+pid=23910 tag=reloc skipped_fns=0 skipped_classes=0 unexpected=0
+pid=23910 tag=unitcache_main_entry ord=1 net=7349977 floor_inc=997878 net_rule=net-at-lower net_window=process-counters floor_rule=walk-increment-in-put-order alloc_id=memcount-v2-s82 /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/gate-axum/fixtures/hello.php
+pid=23910 tag=unitcache hit_intra=0 hit_cross=0 miss_cold=0 miss_fp=0 miss_dc=0 miss_nostat=0 inserts=1 fp_replaced=0 ways_evictions=0 metadata_calls=8 entries=1 bytes_counted=2602679 paths=1 superseded_paths=0 superseded_entries=0 stub_elided_units=0 stub_classes_elided=0 elide_align_miss=0 elide_align_hit=0 miss_dc_base=0 miss_dc_remap=0 miss_dc_locals=0 seed_prefix_short=0 parked_modules=8 parked_bytes=0 defer_relowers=0 defer_relower_ns=0 stranded_keys_superseded=0 stranded_entries_dropped=0 main_probe=8 main_hit=7 main_put=1 main_impure_skip=0 main_probe_fail=0 include_hit_main_reject=0 main_evicted=0 retained_walk_bytes=4283308 retained_walk_nodes=978 stranded_bytes_dropped=0 uclog=0 rw_main_net=7349977 program_floor_share=997878 rw_budget=10635407 rw_budget_rule=rw_bytes-program_floor_share+rw_main_net arm=cli-server alloc_id=memcount-v2-s82 rw_rule=cache-as-owner-FLOOR rw_main_net_rule=net-at-lower stranded_rule=unique-at-drop gross=1
+pid=23910 tag=boundset stubs_entries=0 prelude_classes=171 prelude_fns=317
+pid=23910 tag=compilens lower_ns=0 compile_ns=0 units=0 map_ns=22959 map_entries=171 remap_ns=0 remap_entries=0 read_ns=0 lexparse_ns=0 lowerhir_ns=0 lowers=0 lower_partial_ns=0 lower_partials=0
+pid=23910 tag=lcsum paths=0 compiles=0 lower_ns=0 compile_ns=0 dup_paths=0 dup_compiles=0 dup_lc_ns=0 dup_fp_ns=0 dup_cold_ns=0
+pid=23910 tag=opkind name=PushConst n=6430 owned=0
+pid=23910 tag=opkind name=Pop n=2923 owned=0
+pid=23910 tag=opkind name=Dup n=1604 owned=0
+pid=23910 tag=opkind name=LoadSlot n=363 owned=0
+pid=23910 tag=opkind name=LoadVar n=4275 owned=0
+pid=23910 tag=opkind name=StoreSlot n=1367 owned=0
+pid=23910 tag=opkind name=Swap n=35 owned=0
+pid=23910 tag=opkind name=FetchDimList n=43 owned=0
+pid=23910 tag=opkind name=FillDefault n=398 owned=0
+pid=23910 tag=opkind name=CoerceParam n=109 owned=0
+pid=23910 tag=opkind name=CheckArity n=710 owned=0
+pid=23910 tag=opkind name=IncDecSlot n=13 owned=0
+pid=23910 tag=opkind name=StaticGuard n=1 owned=0
+pid=23910 tag=opkind name=StaticStore n=1 owned=0
+pid=23910 tag=opkind name=StaticAlias n=1 owned=0
+pid=23910 tag=opkind name=PushRef n=106 owned=0
+pid=23910 tag=opkind name=MakeRef n=12 owned=0
+pid=23910 tag=opkind name=PushArgPlace n=11 owned=0
+pid=23910 tag=opkind name=BindRefTo n=7 owned=0
+pid=23910 tag=opkind name=CallValue n=3 owned=0
+pid=23910 tag=opkind name=CallNsFallback n=2 owned=0
+pid=23910 tag=opkind name=CallValueArgs n=2 owned=0
+pid=23910 tag=opkind name=Throw n=212 owned=0
+pid=23910 tag=opkind name=Rethrow n=8 owned=0
+pid=23910 tag=opkind name=CatchMatch n=8 owned=0
+pid=23910 tag=opkind name=Binary n=304 owned=0
+pid=23910 tag=opkind name=Unary n=291 owned=0
+pid=23910 tag=opkind name=Cast n=93 owned=0
+pid=23910 tag=opkind name=Jump n=1532 owned=0
+pid=23910 tag=opkind name=JumpIfFalse n=710 owned=0
+pid=23910 tag=opkind name=JumpIfTrue n=84 owned=0
+pid=23910 tag=opkind name=CmpJmp n=167 owned=0
+pid=23910 tag=opkind name=JumpIfNotNull n=54 owned=0
+pid=23910 tag=opkind name=Echo n=4 owned=0
+pid=23910 tag=opkind name=Stringify n=431 owned=0
+pid=23910 tag=opkind name=ArrayInit n=321 owned=0
+pid=23910 tag=opkind name=ArrayPush n=311 owned=0
+pid=23910 tag=opkind name=ArrayInsert n=182 owned=0
+pid=23910 tag=opkind name=ArrayAppendSpread n=12 owned=0
+pid=23910 tag=opkind name=FetchDim n=674 owned=0
+pid=23910 tag=opkind_sum n_ops=40034 owned=0 funcs=1842
+pid=23910 tag=modlit uniq_n=3987 uniq_bytes=170532 content_dup_n=2565 content_dup_bytes=92867
+pid=23910 tag=modrecon units=1 uniq_mods=1 dead_units=0 mod_owned=20897 fns_priv=0 fns_shared=876507 cls_priv=4180650 cls_shared=0 owned_priv=4201547 net_tot=0 counted_v1_tot=2602679 rc_residue=0
+pid=23910 tag=censusown bytes=546 hits_rows=0 hits_on=1
+pid=23910 tag=cellskip skips=0
+pid=23910 tag=cellpark parks=0 drainfails=0
+pid=23910 tag=teardown reg=0 broken=0 busy=0 alive_after=0
+pid=23910 tag=defermini calls=0 net_b=0
+pid=23910 tag=root name=created-dead-rc1[n=0] bytes=0
+pid=23910 tag=root name=lazy-init[n=0] bytes=0
+pid=23910 tag=root name=reflect-object-bound[n=0] bytes=0
+pid=23910 tag=root name=reflect-method-info-cache[n=0] bytes=0
+pid=23910 tag=root name=var-dump-debug[n=0] bytes=0
+pid=23910 tag=roots_total bytes=248964 truncated=0
+pid=23910 tag=walk_recon ch=str reached_n=4118 reached_b=244868 live_n=4523 live_b=268479
+pid=23910 tag=walk_recon ch=arr reached_n=7 reached_b=3328 live_n=7 live_b=3328
+pid=23910 tag=walk_recon ch=obj reached_n=0 reached_b=0 live_n=0 live_b=0
+pid=23910 tag=arr_shape repr=packed b=0 n=5 bytes=320
+pid=23910 tag=arr_shape repr=hashed b=5 n=1 bytes=864
+pid=23910 tag=arr_shape repr=hashed b=6 n=1 bytes=2144
+pid=23910 tag=seedclass name=PDOStatement full=261195 body=233290 doc=0
+pid=23910 tag=seedclass name=ReflectionClass full=214320 body=183473 doc=0
+pid=23910 tag=seedclass name=PDO full=195764 body=151775 doc=0
+pid=23910 tag=seedclass name=DateTime full=188233 body=173093 doc=0
+pid=23910 tag=seedclass name=BcMath\Number full=174633 body=153659 doc=0
+pid=23910 tag=seedclass name=SimpleXMLElement full=170672 body=150139 doc=0
+pid=23910 tag=seedclass name=mysqli full=159018 body=121757 doc=0
+pid=23910 tag=seedclass name=XSLTProcessor full=145731 body=110551 doc=0
+pid=23910 tag=seedclass name=ReflectionMethod full=133227 body=115602 doc=0
+pid=23910 tag=seedclass name=tidy full=108808 body=90284 doc=0
+pid=23910 tag=seedclass name=ReflectionProperty full=106996 body=88266 doc=0
+pid=23910 tag=seedclass name=ReflectionParameter full=106947 body=88683 doc=0
+pid=23910 tag=seedclass name=DOMNode full=101199 body=86529 doc=0
+pid=23910 tag=seedclass name=DateTimeImmutable full=94277 body=80891 doc=0
+pid=23910 tag=seedclass name=mysqli_stmt full=94123 body=72898 doc=0
+pid=23910 tag=seedclass name=ReflectionFunction full=87013 body=75329 doc=0
+pid=23910 tag=seedclass name=DOMDocument full=80601 body=58031 doc=0
+pid=23910 tag=seedclass name=mysqli_result full=78868 body=64429 doc=0
+pid=23910 tag=seedclass name=GMP full=75949 body=65382 doc=0
+pid=23910 tag=seedclass name=ZipArchive full=71030 body=48140 doc=0
+pid=23910 tag=seedclass name=SQLite3 full=62284 body=50324 doc=0
+pid=23910 tag=seedclass name=SplDoublyLinkedList full=60130 body=47567 doc=0
+pid=23910 tag=seedclass name=ReflectionAttribute full=57447 body=45647 doc=0
+pid=23910 tag=seedclass name=Dom\Node full=52765 body=49336 doc=0
+pid=23910 tag=seedclass name=DateTimeZone full=52293 body=44945 doc=0
+pid=23910 tag=seedclass name=SplPriorityQueue full=50701 body=42473 doc=0
+pid=23910 tag=seedclass name=DOMElement full=48245 body=40252 doc=0
+pid=23910 tag=seedclass name=DOMAttr full=48072 body=40234 doc=0
+pid=23910 tag=seedclass name=tidyNode full=47814 body=33630 doc=0
+pid=23910 tag=seedclass name=SplObjectStorage full=44530 body=31859 doc=0
+pid=23910 tag=seedclass name=ReflectionClassConstant full=42919 body=34441 doc=0
+pid=23910 tag=seedclass name=RecursiveDirectoryIterator full=40858 body=32953 doc=0
+pid=23910 tag=seedclass name=RegexIterator full=38502 body=27327 doc=0
+pid=23910 tag=seedclass name=SQLite3Stmt full=37983 body=28951 doc=0
+pid=23910 tag=seedclass name=FilesystemIterator full=36363 body=27084 doc=0
+pid=23910 tag=seedclass name=RecursiveIteratorIterator full=36161 body=26348 doc=0
+pid=23910 tag=seedclass name=DOMCharacterData full=35382 body=30025 doc=0
+pid=23910 tag=seedclass name=ReflectionExtension full=35379 body=31922 doc=0
+pid=23910 tag=seedclass name=SplFixedArray full=34877 body=26540 doc=0
+pid=23910 tag=seedclass name=DOMXPath full=33223 body=27067 doc=0
+pid=23910 tag=seedclass name=PhpToken full=28865 body=21911 doc=0
+pid=23910 tag=seedclass name=WeakMap full=28308 body=23879 doc=0
+pid=23910 tag=seedclass name=SQLite3Result full=25795 body=20322 doc=0
+pid=23910 tag=seedclass name=Exception full=24952 body=16262 doc=0
+pid=23910 tag=seedclass name=Error full=24948 body=16262 doc=0
+pid=23910 tag=seedclass name=SplFileObject full=22291 body=15329 doc=0
+pid=23910 tag=seedclass name=AppendIterator full=21436 body=17220 doc=0
+pid=23910 tag=seedclass name=DirectoryIterator full=21416 body=15622 doc=0
+pid=23910 tag=seedsum src=classes n=171 full=4185874 body=3335081 doc=844 firma=849949
+pid=23910 tag=seedsum src=traits n=0 full=0 body=0 doc=0 firma=0
+pid=23910 tag=seedsum src=main_hir n=1 full=5698 body=1696 doc=0 firma=4002
+pid=23910 tag=seedsum src=main_fns n=317 full=937476 body=757435 doc=0 firma=180041
+pid=23910 tag=seedlen units=1 distinct=1 top=0:1
+pid=23910 tag=unittop bytes_counted=2602679 net=0 pfx_tables=10901 pfx_stub=0 pfx_fnshare=0 proper=6959204 pfx_slotnames=0 pfx_fnvec=7608 sc=1 path=/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/gate-axum/fixtures/hello.php
+pid=23910 tag=prefixsum tables=10901 stub=0 fnshare=0 proper=6959204 prefix=10901 split_tot=6970105 slotnames_tot=0 fnvec_tot=7608 sc_tot=1
+pid=23910 tag=unitsum2 units=1 paths=1 dup_units=0 dup_bytes_counted=0 dup_net=0
+pid=23910 tag=netguard nested_windows=0
+pid=23910 tag=reloc skipped_fns=0 skipped_classes=0 unexpected=0
+pid=23910 tag=unitcache_main_entry ord=1 net=7349977 floor_inc=997878 net_rule=net-at-lower net_window=process-counters floor_rule=walk-increment-in-put-order alloc_id=memcount-v2-s82 /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/gate-axum/fixtures/hello.php
+pid=23910 tag=unitcache hit_intra=0 hit_cross=0 miss_cold=0 miss_fp=0 miss_dc=0 miss_nostat=0 inserts=1 fp_replaced=0 ways_evictions=0 metadata_calls=9 entries=1 bytes_counted=2602679 paths=1 superseded_paths=0 superseded_entries=0 stub_elided_units=0 stub_classes_elided=0 elide_align_miss=0 elide_align_hit=0 miss_dc_base=0 miss_dc_remap=0 miss_dc_locals=0 seed_prefix_short=0 parked_modules=9 parked_bytes=0 defer_relowers=0 defer_relower_ns=0 stranded_keys_superseded=0 stranded_entries_dropped=0 main_probe=9 main_hit=8 main_put=1 main_impure_skip=0 main_probe_fail=0 include_hit_main_reject=0 main_evicted=0 retained_walk_bytes=4283308 retained_walk_nodes=978 stranded_bytes_dropped=0 uclog=0 rw_main_net=7349977 program_floor_share=997878 rw_budget=10635407 rw_budget_rule=rw_bytes-program_floor_share+rw_main_net arm=cli-server alloc_id=memcount-v2-s82 rw_rule=cache-as-owner-FLOOR rw_main_net_rule=net-at-lower stranded_rule=unique-at-drop gross=1
+pid=23910 tag=boundset stubs_entries=0 prelude_classes=171 prelude_fns=317
+pid=23910 tag=compilens lower_ns=0 compile_ns=0 units=0 map_ns=22959 map_entries=171 remap_ns=0 remap_entries=0 read_ns=0 lexparse_ns=0 lowerhir_ns=0 lowers=0 lower_partial_ns=0 lower_partials=0
+pid=23910 tag=lcsum paths=0 compiles=0 lower_ns=0 compile_ns=0 dup_paths=0 dup_compiles=0 dup_lc_ns=0 dup_fp_ns=0 dup_cold_ns=0
+pid=23910 tag=opkind name=PushConst n=6430 owned=0
+pid=23910 tag=opkind name=Pop n=2923 owned=0
+pid=23910 tag=opkind name=Dup n=1604 owned=0
+pid=23910 tag=opkind name=LoadSlot n=363 owned=0
+pid=23910 tag=opkind name=LoadVar n=4275 owned=0
+pid=23910 tag=opkind name=StoreSlot n=1367 owned=0
+pid=23910 tag=opkind name=Swap n=35 owned=0
+pid=23910 tag=opkind name=FetchDimList n=43 owned=0
+pid=23910 tag=opkind name=FillDefault n=398 owned=0
+pid=23910 tag=opkind name=CoerceParam n=109 owned=0
+pid=23910 tag=opkind name=CheckArity n=710 owned=0
+pid=23910 tag=opkind name=IncDecSlot n=13 owned=0
+pid=23910 tag=opkind name=StaticGuard n=1 owned=0
+pid=23910 tag=opkind name=StaticStore n=1 owned=0
+pid=23910 tag=opkind name=StaticAlias n=1 owned=0
+pid=23910 tag=opkind name=PushRef n=106 owned=0
+pid=23910 tag=opkind name=MakeRef n=12 owned=0
+pid=23910 tag=opkind name=PushArgPlace n=11 owned=0
+pid=23910 tag=opkind name=BindRefTo n=7 owned=0
+pid=23910 tag=opkind name=CallValue n=3 owned=0
+pid=23910 tag=opkind name=CallNsFallback n=2 owned=0
+pid=23910 tag=opkind name=CallValueArgs n=2 owned=0
+pid=23910 tag=opkind name=Throw n=212 owned=0
+pid=23910 tag=opkind name=Rethrow n=8 owned=0
+pid=23910 tag=opkind name=CatchMatch n=8 owned=0
+pid=23910 tag=opkind name=Binary n=304 owned=0
+pid=23910 tag=opkind name=Unary n=291 owned=0
+pid=23910 tag=opkind name=Cast n=93 owned=0
+pid=23910 tag=opkind name=Jump n=1532 owned=0
+pid=23910 tag=opkind name=JumpIfFalse n=710 owned=0
+pid=23910 tag=opkind name=JumpIfTrue n=84 owned=0
+pid=23910 tag=opkind name=CmpJmp n=167 owned=0
+pid=23910 tag=opkind name=JumpIfNotNull n=54 owned=0
+pid=23910 tag=opkind name=Echo n=4 owned=0
+pid=23910 tag=opkind name=Stringify n=431 owned=0
+pid=23910 tag=opkind name=ArrayInit n=321 owned=0
+pid=23910 tag=opkind name=ArrayPush n=311 owned=0
+pid=23910 tag=opkind name=ArrayInsert n=182 owned=0
+pid=23910 tag=opkind name=ArrayAppendSpread n=12 owned=0
+pid=23910 tag=opkind name=FetchDim n=674 owned=0
+pid=23910 tag=opkind_sum n_ops=40034 owned=0 funcs=1842
+pid=23910 tag=modlit uniq_n=3987 uniq_bytes=170532 content_dup_n=2565 content_dup_bytes=92867
+pid=23910 tag=modrecon units=1 uniq_mods=1 dead_units=0 mod_owned=20897 fns_priv=0 fns_shared=876507 cls_priv=4180650 cls_shared=0 owned_priv=4201547 net_tot=0 counted_v1_tot=2602679 rc_residue=0
+pid=23910 tag=censusown bytes=546 hits_rows=0 hits_on=1
+pid=23910 tag=cellskip skips=0
+pid=23910 tag=cellpark parks=0 drainfails=0
+pid=23910 tag=teardown reg=0 broken=0 busy=0 alive_after=0
+pid=23910 tag=defermini calls=0 net_b=0
+mem_hash=865652c1f607d875 git=e5f2a5e campaign=/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp83-harness/measure83-campaign.sh arm=cli-server

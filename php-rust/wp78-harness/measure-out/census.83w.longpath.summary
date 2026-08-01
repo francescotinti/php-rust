@@ -1,0 +1,13 @@
+self-test PASS: idle parser exact on synthetic 4-line log; 5-line rejected (A-SK14)
+identity: bin=0b0ccd4a88e1b41f == matrix bin[census] (git=e5f2a5e == matrix git) — ENFORCED; archived: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/census.83w.longpath.matrix
+== measure78 mode=census label=83w.longpath fixture=lp83_segment_padding_0123456789_0123456789_0123456789_x1/lp83_segment_padding_0123456789_0123456789_0123456789_x2/lp83_segment_padding_0123456789_0123456789_0123456789_x3/lp83_segment_padding_0123456789_0123456789_0123456789_x4/lp83_segment_padding_0123456789_0123456789_0123456789_x5/bare_longpath_384_kb831_kb842_fixture.php bin=0b0ccd4a88e1b41f git=e5f2a5e driver_sha=054bfae28977d999 campaign=/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp83-harness/measure83-campaign.sh warmup=10 measured=30 idle_secs=10 ==
+peak_rss_bytes=56262656 (whole process, time -l)
+vmmap_V1=20.1M vmmap_V2=20.1M (Physical footprint)
+NOTE: footprint figures from this run are NULL (KB-78-5) — counters only in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/census.83w.longpath.census
+NOTE: all census byte figures are GROSS churn, upper bound (A-DL1/A-DL10)
+census_lines=40 == expected (A-PP5 OK)
+OK: inflight_max <= 1 on all 40 lines
+OK: a3_trip <= 0 on all 40 lines
+idle: probe_self_cost calls=38 bytes=41524 | idle_window(+self) calls=38 bytes=41524 (A-AH13/A-DL5; churn-only, KL-81-3)
+raw: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/census.83w.longpath.log | vmmap: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/census.83w.longpath.vmmap.V1/V2 | matrix: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/census.83w.longpath.matrix | summary: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/census.83w.longpath.summary
+== measure78 done mode=census label=83w.longpath bin=0b0ccd4a88e1b41f git=e5f2a5e driver_sha=054bfae28977d999 rc=0 ==

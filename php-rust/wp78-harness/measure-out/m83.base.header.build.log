@@ -1,0 +1,44 @@
+warning: function `xmlCanonicPath` is never used
+  --> crates/php-types/src/xsltio.rs:61:8
+   |
+61 |     fn xmlCanonicPath(path: *const c_char) -> *mut c_char;
+   |        ^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `php-types` (lib) generated 1 warning
+warning: function `gc_enable` is never used
+  --> crates/php-builtins/src/env.rs:19:8
+   |
+19 | pub fn gc_enable(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+   |        ^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `gc_enabled` is never used
+  --> crates/php-builtins/src/env.rs:24:8
+   |
+24 | pub fn gc_enabled(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+   |        ^^^^^^^^^^
+
+warning: function `gc_status` is never used
+  --> crates/php-builtins/src/env.rs:38:8
+   |
+38 | pub fn gc_status(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+   |        ^^^^^^^^^
+
+warning: unused `Result` that must be used
+   --> crates/php-builtins/src/net.rs:151:13
+    |
+151 |             out.append(Zval::Str(PhpStr::new(v4.ip().to_string().into_bytes())));
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+    = note: `#[warn(unused_must_use)]` (part of `#[warn(unused)]`) on by default
+help: use `let _ = ...` to ignore the resulting value
+    |
+151 |             let _ = out.append(Zval::Str(PhpStr::new(v4.ip().to_string().into_bytes())));
+    |             +++++++
+
+warning: `php-builtins` (lib) generated 4 warnings
+    Finished `release` profile [optimized] target(s) in 1.12s
