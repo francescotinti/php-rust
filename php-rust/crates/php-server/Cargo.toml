@@ -17,6 +17,13 @@ hyper = { version = "1", optional = true }
 num_cpus = { version = "1", optional = true }
 static_assertions.workspace = true
 
+# A-MS26 (Council WP-85): the two hand-replicated lifecycle tests in
+# worker_pool.rs `mod tests` call php_runtime::vm_gate_probe — the probe
+# mint exists ONLY behind this feature, lit here for TEST targets alone
+# (dev-dep feature unification; `cargo build --release` never sees it).
+[dev-dependencies]
+php-runtime = { workspace = true, features = ["vm-gate-probe"] }
+
 [features]
 default = ["cli-server"]
 cli-server = ["php-cli"]

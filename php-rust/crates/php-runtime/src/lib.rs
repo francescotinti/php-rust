@@ -61,5 +61,10 @@ use mimalloc as _;
 
 // WP-77.6.5.2: Expose Vm lifecycle methods and construction for worker-pool integration
 pub use compile::{compile_program, CompileError};
-pub use vm::{RetainSet, Vm, VmGate, vm_gate_probe, vm_new};
+pub use vm::{RetainSet, Vm, VmGate, vm_new};
+// A-MS26/A-TH28 (Council WP-85): the probe mint is re-exported ONLY in
+// test/feature builds — a campaign/parity build has no reachable pub mint
+// (KH85-1 closed by cfg, belt pins the alias surface ==0).
+#[cfg(any(test, feature = "vm-gate-probe"))]
+pub use vm::vm_gate_probe;
 pub use php_types::{Zval, PhpError};

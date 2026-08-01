@@ -23,6 +23,11 @@ relbase-probe = []
 # convention as the other census features: instrumentation builds only —
 # verdict-grade figures never come from a build with this feature on.
 census-instrumentation = []
+# A-MS26/A-TH28 (Council WP-85): compile in the vm_gate_probe mint (mint 3,
+# hand-replicated lifecycle tests in php-server's worker_pool.rs). Never a
+# parity/campaign feature: a build without it does not CONTAIN the probe
+# symbol, so KH85-1's "pub mint reachable outside tests" cannot recur.
+vm-gate-probe = []
 
 [dependencies]
 php-types.workspace = true

@@ -476,29 +476,43 @@ pub struct RetainSet(elsa::FrozenVec<Rc<Module>>);
 // requires a Council deliberation, never an in-session edit.
 static_assertions::assert_not_impl_any!(RetainSet: Send, Sync);
 
-/// A-MS17 (Council WP-83 Q3, landed per KS-MS-84-1/A-MS23): capability token
-/// for the vm_new/park_main door. Zero-sized, private constructor — rustc is
-/// the judge of the allowlist; the awk sweep in gate-lever-pins.sh is demoted
-/// to BELT (it still pins the mint sites BY NAME). A new call-site of the
-/// door cannot compile without one of the three mints:
-///   1. the in-module mint in `run_module_with_hir` (the ONE production
-///      CLI/cli-server lifecycle);
-///   2. [`MainUnit::vm_gate`] — the worker SAPI enters the door only while
-///      holding an ACQUIRED main unit (the sealed lifecycle, design79 §4);
-///   3. [`vm_gate_probe`] — probe API for the two hand-replicated lifecycle
-///      tests in worker_pool.rs (positive controls that must NOT go through
-///      the sealed path); non-test call-sites pinned ==0 by the belt.
+/// A-MS17 v2 (Council WP-85, A-MS25/A-TH27): capability token for the
+/// vm_new/park_main door — zero-sized, private constructor AND
+/// lifetime-bound. v1's owned ZST was capability-EXISTENCE without a
+/// temporal binding (a caller could bank the token beyond the acquire —
+/// KS-MS-85-1); v2's `'gate` ties every token to the borrow of its mint
+/// origin, so rustc judges both WHO can mint and HOW LONG the key lives:
+///   1. `RetainSet::production_gate` (private, in-module) — the ONE
+///      production CLI/cli-server lifecycle: the token borrows the request
+///      RetainSet and dies with it;
+///   2. [`MainUnit::vm_gate`] — the worker SAPI's key borrows the ACQUIRED
+///      main unit, so it cannot outlive the acquire stack-frame (the sealed
+///      lifecycle, design79 §4);
+///   3. [`vm_gate_probe`] — probe mint for the two hand-replicated
+///      lifecycle tests in worker_pool.rs; cfg-gated behind
+///      `any(test, feature = "vm-gate-probe")` (A-MS26/A-TH28): in a
+///      campaign/parity build the symbol DOES NOT EXIST, so the KH85-1
+///      hole (pub mint reachable outside tests, judge silently back to
+///      awk) is closed by rustc itself.
 /// Closes Q3 holes a–d (renamed test mod / out-of-line `mod tests` /
-/// prefix-armed `in_tests` / `use vm_new as x` alias): none of them can
-/// mint a token.
-pub struct VmGate(());
+/// prefix-armed `in_tests` / `use vm_new as x` alias) AND the WP-85 holes
+/// (banked token, aliased probe): none of them can mint or keep a token.
+/// The gate-lever-pins.sh belt still pins the mint sites BY NAME and the
+/// alias surface (`vm_gate_probe as`) ==0.
+pub struct VmGate<'gate>(std::marker::PhantomData<&'gate ()>);
 
-/// A-MS17 mint 3: probe API for in-cargo teeth that replicate the
+/// A-MS17 mint 3 (v2): probe API for in-cargo teeth that replicate the
 /// vm_new → request_* lifecycle BY HAND (worker_pool.rs positive controls).
-/// Never a runtime API: gate-lever-pins.sh pins non-test call-sites ==0.
+/// Never a runtime API: cfg-gated (A-MS26/A-TH28) so a campaign/parity
+/// build does not even contain the symbol (KS-MS-85-2: a non-test
+/// call-site without the declared feature is build-VOID); the belt pins
+/// non-test call-sites ==0 and the alias surface (`vm_gate_probe as`) ==0.
+/// The `'static` is honest: a probe token has no acquire to bind to —
+/// which is exactly why this mint must not exist outside test builds.
+#[cfg(any(test, feature = "vm-gate-probe"))]
 #[doc(hidden)]
-pub fn vm_gate_probe() -> VmGate {
-    VmGate(())
+pub fn vm_gate_probe() -> VmGate<'static> {
+    VmGate(std::marker::PhantomData)
 }
 
 impl RetainSet {
@@ -526,9 +540,18 @@ impl RetainSet {
     /// allowlisted by wp81-harness/gate-lever-pins.sh (A-MS13 discipline);
     /// since A-MS17 the door also demands the [`VmGate`] token (rustc is
     /// the judge, the awk sweep is belt).
-    pub fn park_main(&self, module: Rc<Module>, _gate: &VmGate) {
+    pub fn park_main(&self, module: Rc<Module>, _gate: &VmGate<'_>) {
         uc_stat(|s| s.parked_modules += 1);
         self.0.push(module);
+    }
+
+    /// A-MS25 mint 1 (v2, Council WP-85): the production CLI/cli-server
+    /// mint — PRIVATE (in-module only, rustc rejects external callers) and
+    /// lifetime-bound to the request RetainSet, so the token cannot outlive
+    /// the single-request lifecycle that minted it (KS-MS-85-1 closed:
+    /// no banking beyond the acquire stack-frame).
+    fn production_gate(&self) -> VmGate<'_> {
+        VmGate(std::marker::PhantomData)
     }
     fn park(&self, rc: Rc<Module>) -> &Module {
         self.0.push_get(rc)
@@ -547,7 +570,7 @@ pub fn vm_new<'m>(
     registry: &'m Registry,
     main_hir: Option<&'m Program>,
     // A-MS17: the door demands the capability token — see [`VmGate`].
-    _gate: &VmGate,
+    _gate: &VmGate<'_>,
 ) -> Vm<'m> {
     // WP-65 M-65.3 (Matsakis): the M1'' pun check extended to the bootstrap
     // main — `phpr prelude` (a relative CLI path, never canonicalized here)
@@ -832,8 +855,9 @@ pub fn run_module_with_hir<'m>(
     // eviction/supersede mid-request can never leave the cache as unique
     // owner (KS-PP-80-2 extended to the pair; the Program half is the
     // caller's clone-on-stack, KS-PP-81-2).
-    // A-MS17 mint 1 (in-module): the ONE production CLI/cli-server lifecycle.
-    let gate = VmGate(());
+    // A-MS17 mint 1 (v2, A-MS25): the ONE production CLI/cli-server
+    // lifecycle — the token borrows the request RetainSet (dies with it).
+    let gate = retain.production_gate();
     if let Some(l) = &main_lever {
         retain.park_main(Rc::clone(&l.module), &gate);
     }
@@ -15972,11 +15996,12 @@ impl MainUnit {
         }
     }
 
-    /// A-MS17 mint 2: the worker SAPI's door key — obtainable ONLY while
-    /// holding an acquired main unit, so the vm_new/park_main door is
-    /// enterable only from inside the sealed acquire lifecycle.
-    pub fn vm_gate(&self) -> VmGate {
-        VmGate(())
+    /// A-MS17 mint 2 (v2, A-MS25/A-TH27): the worker SAPI's door key —
+    /// obtainable ONLY while holding an acquired main unit, AND
+    /// lifetime-bound to that borrow: the key cannot outlive the acquire
+    /// stack-frame (KS-MS-85-1 closed by rustc, not by discipline).
+    pub fn vm_gate(&self) -> VmGate<'_> {
+        VmGate(std::marker::PhantomData)
     }
 }
 
