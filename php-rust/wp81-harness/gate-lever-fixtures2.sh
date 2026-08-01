@@ -408,14 +408,22 @@ kill -TERM "$SRVPID" 2>/dev/null; wait "$SRVPID" 2>/dev/null; SRVPID=""
 # blind zero). The in-cargo test injects a main-tagged entry into the
 # include lane and forces the eviction; run here with the log channel
 # ARMED so the uc_log event half is exercised mechanically.
+# A-SK39 (Council WP-86) DECLARED SCOPE: F16 certifies the TEST-bin (the
+# cargo test target with the dev-dep feature unified), NOT the campaign
+# binary; the campaign binary is judged by KH86-1 (nm on the binary).
+# Teeth: `test result: ok. 1 passed` pinned in a_ds26.out (a renamed test
+# or an empty filter can no longer pass silently) + rustc -V in-band.
 DS26LOG="$TMPD/a_ds26.uclog"; rm -f "$DS26LOG"
+( cd "$REPO" && rustc -V ) > "$TMPD/a_ds26.out" 2>&1
 if ( cd "$REPO" && PHPR_UNIT_CACHE_LOG="$DS26LOG" cargo test --release -p php-runtime --lib \
        vm::tests::a_ds26_main_evicted_tripwire_bites_on_injection -- --exact ) \
-     > "$TMPD/a_ds26.out" 2>&1 \
+     >> "$TMPD/a_ds26.out" 2>&1 \
+   && grep -q "^test result: ok. 1 passed" "$TMPD/a_ds26.out" \
+   && grep -q "^rustc " "$TMPD/a_ds26.out" \
    && grep -q "^unitcache main_evicted " "$DS26LOG"; then
-  okf "F16: a_ds26 injection BITES armed — counter +1 and 'unitcache main_evicted' event on file (A-DS26/KS-DS-85-2)"
+  okf "F16: a_ds26 injection BITES armed — '1 passed' pinned, rustc in-band, 'unitcache main_evicted' event on file (A-DS26/A-SK39)"
 else
-  kof "F16: a_ds26 armed run failed or event missing — main_evicted pins are ADVISORY (KS-DS-85-2)"
+  kof "F16: a_ds26 armed run failed, '1 passed' pin missed, or event missing — main_evicted pins are ADVISORY (KS-DS-85-2/A-SK39)"
   tail -5 "$TMPD/a_ds26.out"
 fi
 

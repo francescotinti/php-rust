@@ -20,6 +20,22 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 TARGET="${1:-$HERE/MEASURE81_RESULTS.md}"
 MOUT="$HERE/../wp78-harness/measure-out"
 
+# A-SK40 (Council WP-86, sana il buco GRAVE KS-SK-86-3): --all loops over the
+# default target PLUS every MEASURE8[4-9]/MEASURE9x results doc in the wpNN
+# harnesses — the battery must call THIS mode, never the bare default (which
+# targets MEASURE81 only and left MEASURE84 outside the 15/15 perimeter).
+if [ "${1:-}" = "--all" ]; then
+  rc=0
+  bash "$0" "$HERE/MEASURE81_RESULTS.md" || rc=1
+  for f in "$HERE"/../wp8[4-9]-harness/MEASURE8[4-9]*_RESULTS.md \
+           "$HERE"/../wp9[0-9]-harness/MEASURE9[0-9]*_RESULTS.md; do
+    [ -f "$f" ] || continue
+    bash "$0" "$f" || rc=1
+  done
+  [ "$rc" = 0 ] && echo "PASS gate-measure-cifre --all (A-SK40): every MEASURE doc in perimeter"
+  exit $rc
+fi
+
 if [ "${1:-}" = "--selftest" ]; then
   TMP=$(mktemp -d)
   cp "$HERE/MEASURE81_RESULTS.md" "$TMP/doctored.md"
@@ -28,8 +44,26 @@ if [ "${1:-}" = "--selftest" ]; then
     echo "SELFTEST FAIL: smuggled 123457 was NOT caught (KG-83-3)"
     rm -rf "$TMP"; exit 1
   fi
+  # A-SK40 bytes-first teeth on a MEASURE84-class copy: (a) a unit figure
+  # with NO companion, lowercase unit (the old check was case-sensitive and
+  # line-wide); (b) a companion that does NOT verify numerically.
+  M84="$HERE/../wp84-harness/MEASURE84_RESULTS.md"
+  if [ -f "$M84" ]; then
+    cp "$M84" "$TMP/MEASURE84_doctored.md"
+    echo "note: the cache costs 5,00 mib steady, honest." >> "$TMP/MEASURE84_doctored.md"
+    if bash "$0" "$TMP/MEASURE84_doctored.md" >/dev/null 2>&1; then
+      echo "SELFTEST FAIL: naked lowercase 'mib' figure NOT caught (A-SK40)"
+      rm -rf "$TMP"; exit 1
+    fi
+    cp "$M84" "$TMP/MEASURE84_doctored2.md"
+    echo "note: 1.048.576 B = 2,00 MiB [derivata: selftest]" >> "$TMP/MEASURE84_doctored2.md"
+    if bash "$0" "$TMP/MEASURE84_doctored2.md" >/dev/null 2>&1; then
+      echo "SELFTEST FAIL: mismatching bytes companion NOT caught (A-SK40)"
+      rm -rf "$TMP"; exit 1
+    fi
+  fi
   rm -rf "$TMP"
-  echo "SELFTEST PASS: smuggled figure caught (KG-83-3 bites)"
+  echo "SELFTEST PASS: smuggled figure caught (KG-83-3 bites) + bytes-first teeth bite (A-SK40)"
   exit 0
 fi
 
@@ -75,6 +109,12 @@ push @sources, bsd_glob("$mout/*84*.summary"), bsd_glob("$mout/*84*.census"),
                bsd_glob("$mout/*84*.log"),     bsd_glob("$mout/m84*"),
                bsd_glob("$mout/axum.84*"),     bsd_glob("$here/../wp84-harness/*.out"),
                bsd_glob("$here/../wp84-harness/evidence/*");
+# S-85.0: the measure85 campaign raws (85*/m85* labels) + verdict85 + the
+# wp85 evidence dir
+push @sources, bsd_glob("$mout/*85*.summary"), bsd_glob("$mout/*85*.census"),
+               bsd_glob("$mout/*85*.log"),     bsd_glob("$mout/m85*"),
+               bsd_glob("$mout/axum.85*"),     bsd_glob("$here/../wp85-harness/*.out"),
+               bsd_glob("$here/../wp85-harness/evidence/*");
 push @sources, bsd_glob("$here/evidence/*");
 die "gate-measure-cifre: EMPTY corpus (no committed sources found)\n" unless @sources;
 my (%corpus, %corpus_count);
@@ -106,18 +146,42 @@ for my $f (bsd_glob("$here/evidence/*.fails")) {
 # ---- scan target -----------------------------------------------------------
 open my $fh, '<', $target or die "cannot open $target\n";
 my ($ln, @miss) = (0);
-# A-DL26 (Council WP-85, KL-85-2): from MEASURE84 on, every MEMORY figure
-# must print BYTES FIRST ("N B = X MiB") — an MB/MiB figure on a line with
-# no exact-bytes companion makes the document non-publishable. Target-gated
-# to MEASURE84+ (retro-applying would fail the archived documents).
+# A-DL26 (Council WP-85, KL-85-2) + A-SK40 (Council WP-86): from MEASURE84
+# on, every MEMORY figure must print BYTES FIRST ("N B = X MiB") — and the
+# companion is VERIFIED: bytes/scale must round to the displayed figure.
+# Units are [KMGT]i?B case-INSENSITIVE (mb/mib no longer evade); the check
+# is per-FIGURE, not per-line (a stray "x W" in prose no longer exempts the
+# whole line). Per-FIGURE exceptions: a protocol pin band "N±M <unit>"
+# (a cited identity band, not a measure). Project convention: MB==MiB
+# (this corpus has always done binary math; K/G/T likewise binary).
 my $bytes_first = $target =~ /MEASURE8[4-9]|MEASURE9\d/;
+sub it_num { my $s = shift; $s =~ s/\.(?=\d{3}\b)//g; $s =~ s/,/./; return $s; }
+my %SCALE = (k => 1024, m => 1024**2, g => 1024**3, t => 1024**4);
 while (my $line = <$fh>) {
   $ln++;
-  if ($bytes_first
-      && $line =~ /\d[\d.,]*\s*Mi?B\b/
-      && $line !~ /\d[\d.,]*\s*B\s*=/
-      && $line !~ /MB\/worker|Mi?B\s*×|x\s*W/) {
-    push @miss, "line $ln: memory figure without bytes-first companion (A-DL26/KL-85-2): $line";
+  if ($bytes_first) {
+    my $work = $line;
+    # (1) verified pairs "N B = X <unit>": check numerically, then blank out
+    while ($work =~ /((\d[\d.,]*)\s*B\s*=\s*(\d[\d.,]*)\s*([KMGTkmgt])i?[Bb]\b)/) {
+      my ($whole, $braw, $fraw, $u) = ($1, $2, $3, $4);
+      my $bytes = it_num($braw);
+      my $fig   = it_num($fraw);
+      my $dec   = ($fig =~ /\.(\d+)$/) ? length($1) : 0;
+      my $tol   = 0.5 * 10 ** (-$dec) + 1e-9;
+      my $calc  = $bytes / $SCALE{lc $u};
+      if (abs($calc - $fig) > $tol) {
+        push @miss, sprintf("line %d: companion MISMATCH (A-SK40): %s B / %s = %.4f, displayed %s: %s",
+                            $ln, $bytes, lc($u)."iB-scale", $calc, $fig, $line);
+      }
+      my $blank = ' ' x length($whole);
+      $work =~ s/\Q$whole\E/$blank/;
+    }
+    # (2) per-FIGURE exception: pin band "N±M <unit>" — blank out
+    $work =~ s/\d[\d.,]*\s*±\s*\d[\d.,]*\s*[KMGTkmgt]i?[Bb]\b/' ' x length($&)/ge;
+    # (3) any remaining unit figure lacks its bytes companion
+    while ($work =~ /(\d[\d.,]*\s*[KMGTkmgt]i?[Bb])\b/g) {
+      push @miss, "line $ln: memory figure '$1' without VERIFIED bytes-first companion (A-DL26/KL-85-2/A-SK40): $line";
+    }
   }
   next if $line =~ /\[derivata/;                 # A-BG26 tagged line
   my $probe = $line;

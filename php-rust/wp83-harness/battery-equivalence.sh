@@ -1,7 +1,12 @@
 #!/bin/bash
 # battery-equivalence.sh — A-SK30/A-AH34 (Council WP-84), v2 A-SK32/A-SK33/
-# A-AH36 (Council WP-85): KH82-2 REWRITTEN, poi le TRE elusioni di Klabnik
-# chiuse nel CODICE (non nel commento) e il buco trascluso di Hejlsberg:
+# A-AH36 (Council WP-85), v3 A-SK36/A-SK37/A-AH39 (Council WP-86): stamp
+# ANCORATO alla riga terminale + .done solo-PASS con sha256(OUT) ricomputato,
+# corner index (staged) nel check ledger, claim PROVVISORIO fino al commit
+# dell'append, manifest lever-fixtures2 nomina l'oggetto in-cargo
+# (crates/php-runtime/). Storia v2: KH82-2 REWRITTEN, poi le TRE elusioni di
+# Klabnik chiuse nel CODICE (non nel commento) e il buco trascluso di
+# Hejlsberg:
 #   (a) OUT mai legato a BREV -> ora il summary DEVE portare `git=$BREV` e
 #       il `.done` accanto a OUT deve portare `rev=$BREV` (A-SK32);
 #   (b) ledger parametrico touch-creato -> ora il ledger è CANONICO, path
@@ -61,7 +66,7 @@ run-gate-axum:wp77-harness/run_gate_g_apertura_2_axum.sh,wp77-harness/fixtures/g
 dr1:wp80-harness/gate-dr1-module-immut.sh
 lever-pins:wp81-harness/gate-lever-pins.sh
 lever-fixtures:wp81-harness/gate-lever-fixtures.sh
-lever-fixtures2:wp81-harness/gate-lever-fixtures2.sh
+lever-fixtures2:wp81-harness/gate-lever-fixtures2.sh,crates/php-runtime/
 measure-cifre:wp81-harness/gate-measure-cifre.sh
 parity-full:wp83-harness/gate-parity-83p1.sh"
 NEVER_ABSENT="parity-full lever-fixtures lever-fixtures2 measure-cifre"
@@ -89,14 +94,31 @@ object_changed() {
 # (ii)+(iv) per-NAME presence; absent = named set with reason; FAIL refuses
 [ -f "$OUT" ] || { fail "(ii) battery output missing: $OUT"; echo "== EQUIVALENCE REFUSED =="; exit 1; }
 
-# A-SK32: OUT is legal evidence ONLY if it is the battery OF rev B — the
-# summary must stamp git=$BREV and the .done next to OUT must stamp rev=$BREV.
-if ! grep -q "git=$BREV" "$OUT"; then
-  fail "(A-SK32) battery output carries no 'git=$BREV' summary stamp — OUT is not tied to rev $BREV"
+# A-SK36 (v3, Council WP-86 — supersedes the A-SK32 substring stamp): OUT is
+# legal evidence ONLY with the ANCHORED terminal pass line
+#   == BATTERY-<N>PRE PASS (k/k) git=$BREV ==
+# unique in the file AND its last line (an appended `git=<rev>` on a stale
+# OUT, or a prefix-match like git=${BREV}xx, no longer passes). The .done
+# next to OUT must carry rev=$BREV AND sha256=<sha256(OUT)>, which this
+# checker RECOMPUTES — a copied OUT with a hand-forged .done is refused.
+PASSRE="^== BATTERY-[0-9]+PRE PASS \([0-9]+/[0-9]+\) git=$BREV ==\$"
+NPASS=$(grep -cE "$PASSRE" "$OUT" || true)
+if [ "$NPASS" != 1 ] || ! tail -1 "$OUT" | grep -qE "$PASSRE"; then
+  fail "(A-SK36) anchored terminal PASS line for rev $BREV absent/duplicated/not-final in OUT (count=$NPASS) — KS-SK-86-1"
 fi
 DONE="$(dirname "$OUT")/.done"
-if [ ! -f "$DONE" ] || ! grep -qx "rev=$BREV" "$DONE"; then
-  fail "(A-SK32) .done next to OUT missing or not 'rev=$BREV' — the battery of rev $BREV never COMPLETED there"
+if [ ! -f "$DONE" ]; then
+  fail "(A-SK36) .done next to OUT missing — the battery of rev $BREV never COMPLETED there (a PASS-only stamp)"
+else
+  grep -q "^rev=$BREV " "$DONE" || grep -qx "rev=$BREV" "$DONE" || \
+    fail "(A-SK36) .done does not stamp rev=$BREV"
+  DSHA=$(sed -n 's/.*sha256=\([0-9a-f]*\).*/\1/p' "$DONE" | head -1)
+  OSHA=$(shasum -a 256 "$OUT" | cut -d' ' -f1)
+  if [ -z "$DSHA" ]; then
+    fail "(A-SK36) .done carries no sha256= — pre-v3 or forged stamp (KS-SK-86-1)"
+  elif [ "$DSHA" != "$OSHA" ]; then
+    fail "(A-SK36) sha256(OUT)=$OSHA != .done sha256=$DSHA — OUT is not the file the battery completed"
+  fi
 fi
 
 for entry in $GATES; do
@@ -144,6 +166,10 @@ elif ! git -C "$REPO" ls-files --error-unmatch "$LEDGER_REL" >/dev/null 2>&1; th
   fail "(iii) canonical ledger is UNTRACKED (KS-SK-85-2)"
 elif ! git -C "$REPO" diff --quiet HEAD -- "$LEDGER_REL" 2>/dev/null; then
   fail "(iii) working ledger DIVERGES from HEAD's version — history not canonical (KS-SK-85-2)"
+elif ! git -C "$REPO" diff --quiet --cached HEAD -- "$LEDGER_REL" 2>/dev/null; then
+  # A-SK37 (Council WP-86): the worktree==HEAD!=index corner — a staged
+  # ledger edit restored in the worktree would evade the HEAD diff above.
+  fail "(iii) INDEX ledger diverges from HEAD (staged edit) — history not canonical (A-SK37/KS-SK-85-2)"
 fi
 if [ -f "$LEDGER" ]; then
   if grep -q "^battery_rev=$BREV " "$LEDGER"; then
@@ -156,7 +182,12 @@ fi
 
 if [ "$FAILS" = 0 ]; then
   echo "battery_rev=$BREV head=$HEADREV" >> "$LEDGER"
-  echo "== EQUIVALENCE LEGAL ($BREV certifies $HEADREV; ledgered — commit the ledger append in this campaign, A-SK33) =="
+  # A-SK37 (Council WP-86): the claim is PROVISIONAL until the append is
+  # COMMITTED — an uncommitted append vanishes with a worktree restore and
+  # re-opens one-per-chain. The campaign must commit it and CITE the
+  # commit-id next to any equivalence claim (KS-SK-86-2: append not at
+  # HEAD at campaign close => every equivalence of the campaign VOID).
+  echo "== EQUIVALENCE LEGAL ($BREV certifies $HEADREV) — PROVISIONAL: commit the ledger append NOW and cite the commit-id in the claim (A-SK37/KS-SK-86-2) =="
   exit 0
 else
   echo "== EQUIVALENCE REFUSED ($FAILS) — battery must re-run (KS-SK-84-1/KS-AH-84-3/KS-SK-85-1/KS-SK-85-2) =="
