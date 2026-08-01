@@ -49,7 +49,9 @@ print "# verdict85 — S-85.0 discrimination measures (Council WP-86 forms) — 
     open my $fh, '<', $f or do { $bf->("VDL28: missing $f"); return undef };
     my (%rows, $meta);
     while (<$fh>) {
-      if (/tag=unitcache_main_entry thr=(\d+) ord=1 net=(\d+).*alloc_id=(\S+) (\S+)$/) {
+      # NB (S-85.0 parser fix, declared): the fixture path is the LAST field
+      # and the repo path contains a SPACE ("Extreme Pro") — (.+)$ not (\S+)$.
+      if (/tag=unitcache_main_entry thr=(\d+) ord=1 net=(\d+).*alloc_id=(\S+) (.+)$/) {
         my ($thr, $net, $aid, $path) = ($1, $2, $3, $4);
         $bf->("VDL28[$label]: alloc_id $aid != memcount-v2-s82 (KS-AH-85-3)") unless $aid eq 'memcount-v2-s82';
         $bf->("VDL28[$label]: row without arm label") unless /arm=axum-worker/;
@@ -69,7 +71,15 @@ print "# verdict85 — S-85.0 discrimination measures (Council WP-86 forms) — 
   };
   my $calh = $parse->('cal-h', 1);
   my $calp = $parse->('cal-p', 1);
-  my $dl   = $parse->('dl28', 2);
+  # S-85.0 DECLARED SUPERSEDE: the campaign's m85.dl28 raw is VOID by
+  # protocol break (hello dispatched twice: up-probe + oracle check, so
+  # both workers' request 1 was hello and the pad landed as thr0's SECOND
+  # main, ord=2 net=460.146 B — which incidentally CLOSED the additive
+  # algebra: residue 7.343.135 + hello-own 6.842 = NET_H, residue +
+  # pad-own 460.146 = NET_P, byte-exact). The canary verdict reads the
+  # ONE-DISPATCH-PER-WORKER rerun (dl28-supplement.sh, label m85s.dl28);
+  # the superseded raw stays in place, never rm'd (KS-AH-83-2).
+  my $dl   = $parse->('dl28s', 2);
   if (!$bfail && $calh && $calp && $dl) {
     my $neth = $calh->{'hello.php'}{net};
     my $netp = $calp->{'hello_pad85.php'}{net};

@@ -1,0 +1,3 @@
+php-server (Axum) listening on http://127.0.0.1:8297 (docroot: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/gate-axum/fixtures)
+php-server: shutdown signal received, draining
+php-server: all 2 workers joined — exit stats are authoritative (KL-78-4)

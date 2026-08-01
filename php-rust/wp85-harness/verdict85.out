@@ -1,0 +1,13 @@
+# verdict85 — S-85.0 discrimination measures (Council WP-86 forms) — machine, fail-closed
+
+VDL28 cal: NET_H = 7349977 B = 7.01 MiB (hello, W=1) · NET_P = 7803281 B = 7.44 MiB (pad, W=1)
+VDL28 bands [derivata: 0.1x/0.5x of record residue 7.349.977 B, A-BB42]: 734.998 B / 3.674.989 B — SUPERSEDED here by exact calibration match
+VDL28 W=2: hello thr=0 net=7349977 B = 7.01 MiB · pad thr=1 net=7803281 B = 7.44 MiB
+VDL28 PASS: PER-THREAD CONFIRMED by the monolateral canary — each thread nets EXACTLY its own fixture's calibrated figure (byte-exact); the x W budget formula is PROMOTED from IPOTESI CANDIDATA (KL-86-2 satisfied, KB-86-2 unblocked on this precondition; registry still needs A-MS27, KS-MS-86-2)
+VP data: peaks = 232079360/243433472/252526592/238157824/241844224/242384896/243384320/235634688/250085376 B (W=10, R=9, arm=union, fixture=hello.php, driver_sha=54717a9afe6ccb96 — A-BG38 scope)
+VP r1 NAMED (KB-86-1/KL-86-1 cold-start attribution): peak 232079360 B = 221.3 MiB, wall 4.94s; r2..r9 walls: 3.34/3.31/3.31/3.34/3.35/3.40/3.28/3.35
+VP min-of-R = 232079360 B = 221.3 MiB · envelope max = 252526592 B = 240.8 MiB · r2..r9 spread = 16891904 B = 16.11 MiB [derivata: max-min of r2..r9]
+VP NAMED-OUTCOME: pin 232±1 MiB MOVED at R=9 — deliberation uses THESE nine values (KB-86-1 satisfied: R=9, first run named; driver_sha of both sides required for any cross-campaign comparison, KG-86-2)
+guard KS-PP-85-1: 0 unlabeled reqns lines in campaign raws (no slope phase ran)
+
+== VERDICT85 PASS ==
