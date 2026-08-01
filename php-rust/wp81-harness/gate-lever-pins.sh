@@ -282,6 +282,154 @@ else
   echo "OK  sweep: no eluded main_program producer spellings (A-TH33)"
 fi
 
+# --- 1d. Sigilli v4 (Council WP-87): mint-per-METHOD + anchor + literal ------
+# A-MS32/KS-MS-87-1: the probe anchor is `&mut ()` — `&()` is subject to
+# constant promotion (Matsakis, compiled proof: vm_gate_probe(&()) minted a
+# legal 'static token without the spelling). Pin the fixed signature ==1 and
+# the promotable spelling ==0.
+check_pin "$VMMOD" 'vm_gate_probe[(]anchor: &mut [(][)][)]' 1 'vm_gate_probe(anchor: &mut ()) (A-MS32)'
+cat > "$TMPD/decoy_ms32.rs" <<'EOF'
+fn f() {
+    let g = vm_gate_probe(&());
+}
+fn vm_gate_probe(anchor: &()) -> u8 { 0 }
+EOF
+n=$(count_nontest "$TMPD/decoy_ms32.rs" 'vm_gate_probe[(]&[(][)][)]|anchor: &[(][)]')
+if [ "$n" -ne 2 ]; then
+  echo "SELF-TEST BROKEN: A-MS32 promotable-anchor decoy count $n != 2"; exit 2
+fi
+echo "OK  self-test: A-MS32 promotable-anchor decoy bites (2/2)"
+MS32_SWEEP=$(find "$REPO/crates" -name '*.rs' ! -name '._*' -print0 |
+  while IFS= read -r -d '' f; do
+    n=$(count_nontest "$f" 'vm_gate_probe[(]&[(][)][)]|anchor: &[(][)]')
+    [ "$n" -gt 0 ] && echo "${f#"$REPO"/}: $n"
+  done)
+if [ -n "$MS32_SWEEP" ]; then
+  echo "FAIL: promotable probe anchor spelling (&()) found (A-MS32/KS-MS-87-1):"
+  echo "$MS32_SWEEP"
+  FAILS=$((FAILS+1))
+else
+  echo "OK  sweep: no promotable &() probe anchor in the workspace (A-MS32)"
+fi
+# A-TH38/KH87-1: the leaf module closed the LITERAL mint; the mint-by-METHOD
+# spellings `.production_gate(` / `.vm_gate(` are visible beyond the leaf
+# (pub(super)/pub) and were BLIND to every sweep above. Named sites:
+#   .production_gate( : vm/mod.rs == 1 (run_module_with_hir), 0 elsewhere
+#   .vm_gate(         : worker_pool.rs == 1 (execute_with_retain), 0 elsewhere
+cat > "$TMPD/decoy_th38.rs" <<'EOF'
+fn f() {
+    let g = retain.production_gate();
+    let h = unit.vm_gate();
+    let t: VmGate = unsafe { std::mem::transmute(()) };
+}
+impl Copy for VmGate<'_> {}
+EOF
+n=$(count_nontest "$TMPD/decoy_th38.rs" '[.]production_gate[(]')
+m=$(count_nontest "$TMPD/decoy_th38.rs" '[.]vm_gate[(]')
+if [ "$n" -ne 1 ] || [ "$m" -ne 1 ]; then
+  echo "SELF-TEST BROKEN: A-TH38 method-mint decoy counts $n/$m != 1/1"; exit 2
+fi
+echo "OK  self-test: A-TH38 method-mint decoy bites (1/1)"
+check_pin "$VMMOD"  '[.]production_gate[(]' 1 '.production_gate( method mint (A-TH38)'
+check_pin "$WORKER" '[.]production_gate[(]' 0 '.production_gate( method mint (A-TH38)'
+check_pin "$VMMOD"  '[.]vm_gate[(]' 0 '.vm_gate( method mint (A-TH38)'
+check_pin "$WORKER" '[.]vm_gate[(]' 1 '.vm_gate( method mint (A-TH38)'
+TH38_SWEEP=$(find "$REPO/crates" -name '*.rs' ! -name '._*' \
+          ! -path "$VMMOD" ! -path "$WORKER" -print0 |
+  while IFS= read -r -d '' f; do
+    n=$(count_nontest "$f" '[.]production_gate[(]|[.]vm_gate[(]')
+    [ "$n" -gt 0 ] && echo "${f#"$REPO"/}: $n"
+  done)
+if [ -n "$TH38_SWEEP" ]; then
+  echo "FAIL: mint-by-method outside the named sites (A-TH38/KH87-1):"
+  echo "$TH38_SWEEP"
+  FAILS=$((FAILS+1))
+else
+  echo "OK  sweep: no .production_gate(/.vm_gate( outside the named sites (A-TH38)"
+fi
+# A-TH38 second half: no transmute involving VmGate and no impl of
+# Copy/Clone/Send/Sync for VmGate — anywhere, TESTS INCLUDED (a test-side
+# token duplicator forges positive controls; KS-MS-87-2: such an impl is a
+# Council deliberation, never a session edit). grep, not count_nontest.
+if ! grep -q -E 'transmute' "$TMPD/decoy_th38.rs" || \
+   ! grep -q -E 'impl[^{]*(Copy|Clone|Send|Sync)[^{]*for[[:space:]]*VmGate' "$TMPD/decoy_th38.rs"; then
+  echo "SELF-TEST BROKEN: A-TH38 transmute/impl decoy not detected"; exit 2
+fi
+echo "OK  self-test: A-TH38 transmute/impl decoy bites"
+TH38B_SWEEP=$(find "$REPO/crates" -name '*.rs' ! -name '._*' -print0 |
+  xargs -0 grep -l -E 'transmute[^;]*VmGate|VmGate[^;]*transmute|impl[^{]*(Copy|Clone|Send|Sync)[^{]*for[[:space:]]*VmGate' 2>/dev/null)
+if [ -n "$TH38B_SWEEP" ]; then
+  echo "FAIL: transmute/forbidden-impl on VmGate (A-TH38/KS-MS-87-2):"
+  echo "$TH38B_SWEEP"
+  FAILS=$((FAILS+1))
+else
+  echo "OK  sweep: no transmute/Copy/Clone/Send/Sync impl on VmGate (A-TH38)"
+fi
+# A-TH39: (a) functional update `..` inside a CachedUnit literal copies
+# main_program:Some without ANY pinned spelling — 0 in the workspace,
+# tests included (struct decl excluded by the `struct` guard);
+# (b) TH33RE extended: the carrier spelling `main_program: <var>`, the
+# no-space `main_program:Some(` and the `main_program :` variants elude
+# both the producer pin and TH33RE — 0 non-test.
+cat > "$TMPD/decoy_th39.rs" <<'EOF'
+struct CachedUnit { main_program: Option<u8> }
+fn f() {
+    let a = CachedUnit { fp, ..other };
+    let b = CachedUnit {
+        module,
+        ..base
+    };
+    let c = CachedUnit { main_program: mp };
+    let d = CachedUnit { main_program:Some(p) };
+    let e = CachedUnit { main_program : Some(p) };
+}
+EOF
+cu_functional_update() { # <file> -> count of `..` inside CachedUnit literals
+  awk '/struct CachedUnit/ { next }
+       /CachedUnit[[:space:]]*\{/ { depth = 1; n += gsub(/[.][.]/, "&"); next }
+       depth > 0 {
+         n += gsub(/[.][.]/, "&")
+         open = gsub(/\{/, "&"); close_ = gsub(/\}/, "&")
+         depth += open - close_
+         if (depth <= 0) depth = 0
+       }
+       END { print n + 0 }' "$1"
+}
+n=$(cu_functional_update "$TMPD/decoy_th39.rs")
+if [ "$n" -ne 2 ]; then
+  echo "SELF-TEST BROKEN: A-TH39 functional-update decoy count $n != 2"; exit 2
+fi
+TH39RE='main_program:[^[:space:]]|main_program[[:space:]]+:|main_program:[[:space:]]+[a-z_]'
+n=$(count_nontest "$TMPD/decoy_th39.rs" "$TH39RE")
+if [ "$n" -ne 3 ]; then
+  echo "SELF-TEST BROKEN: A-TH39 eluded-spelling decoy count $n != 3"; exit 2
+fi
+echo "OK  self-test: A-TH39 decoys bite (functional-update 2/2, eluded spellings 3/3)"
+TH39A_SWEEP=$(find "$REPO/crates" -name '*.rs' ! -name '._*' -print0 |
+  while IFS= read -r -d '' f; do
+    n=$(cu_functional_update "$f")
+    [ "$n" -gt 0 ] && echo "${f#"$REPO"/}: $n"
+  done)
+if [ -n "$TH39A_SWEEP" ]; then
+  echo "FAIL: functional update (..) inside a CachedUnit literal (A-TH39):"
+  echo "$TH39A_SWEEP"
+  FAILS=$((FAILS+1))
+else
+  echo "OK  sweep: no functional update inside CachedUnit literals (A-TH39)"
+fi
+TH39B_SWEEP=$(find "$REPO/crates" -name '*.rs' ! -name '._*' -print0 |
+  while IFS= read -r -d '' f; do
+    n=$(count_nontest "$f" "$TH39RE")
+    [ "$n" -gt 0 ] && echo "${f#"$REPO"/}: $n"
+  done)
+if [ -n "$TH39B_SWEEP" ]; then
+  echo "FAIL: eluded main_program spelling — carrier/no-space/pre-colon (A-TH39):"
+  echo "$TH39B_SWEEP"
+  FAILS=$((FAILS+1))
+else
+  echo "OK  sweep: no carrier/no-space/pre-colon main_program spellings (A-TH39)"
+fi
+
 # --- 2. A-PP16: publish AFTER link_fatal_check, in both SAPI files -----------
 # NOTE (A-TH20): this lexical order pin is POSITION only — it is guard-blind
 # (an unconditional publish lexically after the check would pass). The

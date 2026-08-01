@@ -501,7 +501,42 @@ pub(crate) mod gate {
     ///      `any(test, feature = "vm-gate-probe")` (A-MS26/A-TH28): in a
     ///      campaign/parity build the symbol DOES NOT EXIST (KH85-1 closed
     ///      by rustc; the campaign BINARY is judged by nm — KH86-1).
-    pub struct VmGate<'gate>(std::marker::PhantomData<&'gate ()>);
+    /// A-MS33 (Council WP-87): the `*mut ()` in the marker makes the token
+    /// `!Send`/`!Sync` — even an EVADED token (promotion, leak) cannot
+    /// cross threads. The negative controls are the `compile_fail`
+    /// doctests below — fn-checks with a generic lifetime, exempt from the
+    /// `'static` sweep by construction (KS-MS-87-2: any impl making this
+    /// Send/Sync/Clone/Copy is a Council deliberation, never a session
+    /// edit).
+    ///
+    /// ```compile_fail,E0277
+    /// // A-MS33 negative control 1: VmGate must NOT be Send. The pinned
+    /// // E0277 makes the tooth non-vacuous: a path typo (E0433) would
+    /// // FAIL this doctest instead of passing it silently.
+    /// fn require_send<T: Send>() {}
+    /// fn check<'a>() { require_send::<php_runtime::VmGate<'a>>(); }
+    /// ```
+    ///
+    /// ```compile_fail,E0277
+    /// // A-MS33 negative control 2: VmGate must NOT be Sync.
+    /// fn require_sync<T: Sync>() {}
+    /// fn check<'a>() { require_sync::<php_runtime::VmGate<'a>>(); }
+    /// ```
+    pub struct VmGate<'gate>(std::marker::PhantomData<(&'gate (), *mut ())>);
+
+    /// A-TH37 (Council WP-87, Hoare): INTRINSIC binary judge. When the
+    /// probe feature is compiled in, this `#[used]` byte-string marker
+    /// survives `-dead_strip` (llvm.used) even though the probe fn itself
+    /// has no caller in the bin and dead-strips (the S-85.0 finding that
+    /// left nm necessary-but-not-sufficient). With the marker, the
+    /// nm/strings half of gate-binary-noprobe is SUFFICIENT again; the
+    /// hash-vs-matrix ENFORCE stays as belt. Positive control KH87-2: a
+    /// build with the feature ON must FAIL the gate — verified in S-86.0.
+    /// (lowercase so the existing `strings | grep vm_gate_probe` tooth
+    /// matches the payload, and the symbol name matches `nm -i`.)
+    #[cfg(feature = "vm-gate-probe")]
+    #[used]
+    pub static VM_GATE_PROBE_TAINT: [u8; 33] = *b"phpr_vm_gate_probe_tainted_a_th37";
 
     impl super::RetainSet {
         /// A-MS25 mint 1 (v2, Council WP-85): the production CLI/cli-server
@@ -523,17 +558,22 @@ pub(crate) mod gate {
         }
     }
 
-    /// A-MS17 mint 3 (v2) + A-MS29 (Council WP-86): probe API for in-cargo
-    /// teeth that replicate the vm_new → request_* lifecycle BY HAND
-    /// (worker_pool.rs positive controls). Now ALSO lifetime-bound: the
-    /// token borrows `anchor` and dies with it — no `VmGate<'static>`
-    /// exists anywhere in the workspace (KS-MS-86-3). Never a runtime API:
-    /// cfg-gated (A-MS26/A-TH28) so a campaign/parity build does not even
-    /// contain the symbol; the belt pins non-test call-sites ==0 and the
-    /// alias surface (`vm_gate_probe as`) ==0.
+    /// A-MS17 mint 3 (v2) + A-MS29 (Council WP-86) + A-MS32 (Council
+    /// WP-87): probe API for in-cargo teeth that replicate the vm_new →
+    /// request_* lifecycle BY HAND (worker_pool.rs positive controls).
+    /// Lifetime-bound to `anchor` — and the anchor is `&mut ()` because
+    /// `&()` was REFUTED (Matsakis, compiled proof): a shared `&()` is
+    /// subject to CONSTANT PROMOTION, so `vm_gate_probe(&())` minted a
+    /// legal `'static` token without the spelling ever being written. A
+    /// `&mut` of a temporary is never promoted — the same proof dies in
+    /// E0716 (KS-MS-87-1). Residual irreducible mint: `Box::leak` (named
+    /// class, WP-86). Never a runtime API: cfg-gated (A-MS26/A-TH28) so a
+    /// campaign/parity build does not even contain the symbol; the belt
+    /// pins non-test call-sites ==0 and the alias surface
+    /// (`vm_gate_probe as`) ==0.
     #[cfg(any(test, feature = "vm-gate-probe"))]
     #[doc(hidden)]
-    pub fn vm_gate_probe(anchor: &()) -> VmGate<'_> {
+    pub fn vm_gate_probe(anchor: &mut ()) -> VmGate<'_> {
         let _ = anchor;
         VmGate(std::marker::PhantomData)
     }
@@ -15951,6 +15991,15 @@ fn unit_cache_key_present(key: &UnitKey) -> bool {
     if !unit_cache_enabled() {
         return false;
     }
+    // A-MS35 (Council WP-87, Matsakis Q3): key_present sits on the acquire
+    // lane — today its one prod caller runs after a get (transitively
+    // guarded), but a future caller without a get upstream would re-open
+    // the silent interleave. Same class as the get/put checks.
+    UC_EMIT_GUARD.with(|g| {
+        if g.get() {
+            panic!("unit_cache_key_present re-entered during put emission (A-MS35/A-TH35)");
+        }
+    });
     UNIT_CACHE.with(|c| c.borrow().get(key).is_some_and(|v| !v.is_empty()))
 }
 
@@ -16393,13 +16442,16 @@ fn unit_cache_put(key: UnitKey, cu: CachedUnit) {
     if !unit_cache_enabled() {
         return;
     }
-    // A-TH35: a put arriving from a Drop that runs inside another put's
-    // emission window is the exact silent-interleave Hoare named — panic.
-    UC_EMIT_GUARD.with(|g| {
-        if g.get() {
-            panic!("unit_cache_put re-entered during emission (A-TH35/KH86-3)");
-        }
-    });
+    // A-TH35 + A-TH36 (Council WP-87, Hoare): the guard is armed at the
+    // TOP of put — BEFORE kpath/superseded/victim/replaced — so under
+    // unwind the displaced entries (declared LATER, dropped EARLIER in
+    // unwind's reverse order) always drop with the guard STILL ARMED.
+    // This closes both unwind windows the WP-87 audit named: a panic in
+    // the emission phase and a panic in the mutation phase (the old
+    // arm-site was after the displaced vecs, so its "declared FIRST"
+    // comment was FALSE in the text). arm() panics on re-entry, which
+    // subsumes the old pre-check.
+    let _emit_guard = UcEmitGuard::arm();
     // A-MS28 (Council WP-85, Matsakis Q4): COLLECT-THEN-EMIT. The borrow_mut
     // window below only MUTATES the cache — every uc_stat/uc_log emission
     // AND every drop of a displaced entry (superseded slots, ways victims,
@@ -16468,10 +16520,9 @@ fn unit_cache_put(key: UnitKey, cu: CachedUnit) {
         }
     });
     // ---- emission phase: the UNIT_CACHE borrow is CLOSED from here on ----
-    // A-TH35: armed for the whole emission+drop window; declared FIRST so
-    // it drops LAST (after the explicit drops below) — a Drop of a
-    // displaced entry that re-enters the cache panics loudly.
-    let _emit_guard = UcEmitGuard::arm();
+    // (the guard has been armed at the TOP of put since A-TH36 — a Drop of
+    // a displaced entry that re-enters the cache panics loudly, on the
+    // normal path AND under unwind.)
     for slot in &superseded {
         // KL-81-1/A-DL6: supersede in BYTE — the dropped entries' census
         // size lands in the ledger BEFORE the drop (mem-census builds; the

@@ -10,13 +10,18 @@
 #
 # 🔵 MEASURED LIMIT (S-85.0, positive control): a php-server binary built
 # WITH php-runtime/vm-gate-probe hashes DIFFERENT (b55e2f78 vs 15fb6b46)
-# yet carries NO vm_gate_probe symbol/string — the probe fn has no caller
-# in the bin target and the linker dead-strips it. So the nm tooth is
-# NECESSARY (if the symbol ever appears => VOID) but NOT SUFFICIENT; the
-# discriminator that actually bites is the hash-vs-matrix ENFORCE (matrix
-# built by clean `cargo build`). This gate therefore takes the expected
-# hash as its second half; finding to be reported to Council WP-87
-# (partial refutation of KH86-1's mechanism, not of its intent).
+# yet carried NO vm_gate_probe symbol/string — the probe fn has no caller
+# in the bin target and the linker dead-strips it. So the nm tooth alone
+# was NECESSARY but NOT SUFFICIENT.
+#
+# A-TH37 (Council WP-87, S-86.0): the leaf module now carries a `#[used]`
+# static marker (`phpr_vm_gate_probe_tainted_a_th37`, symbol
+# VM_GATE_PROBE_TAINT) cfg-gated under the probe feature — llvm.used
+# survives -dead_strip, so the nm/strings half is SUFFICIENT again as an
+# INTRINSIC judge of the binary. KH87-2 positive control VERIFIED in
+# S-86.0: tainted build => this gate FAILS (both halves detect: nm symbol
+# + strings payload); clean rebuild => PASS. The hash-vs-matrix ENFORCE
+# stays as belt (KS-AH-87-1 pins WHICH matrix).
 #
 # Usage: gate-binary-noprobe.sh <binary> [expected-sha256-prefix]
 #        gate-binary-noprobe.sh --selftest
