@@ -15727,10 +15727,24 @@ fn census_nested_lc_pop() -> u64 {
 /// A-DS31 (Council WP-86): the per-put EMISSION ORDER is probe API too
 /// (WP-64: event names are API — so is their sequence). For one
 /// `unit_cache_put` the sequence is `supersede*` → `main_evicted` →
-/// `evict fp`. Supersede (new-key put) and eviction (same-key overflow)
-/// are mutually exclusive per put today; the co-occurring pair
-/// (main_evicted before its evict-fp) is pinned by the armed half of
-/// `a_ds26_main_evicted_tripwire_bites_on_injection` (run armed by F16).
+/// `evict fp`.
+///
+/// A-DS36 (Council WP-87, Stogov) — three honesty amendments to the line
+/// above:
+/// (a) the `supersede*` prefix is NOT falsifiable by any test today:
+///     supersede (new-key put ⇒ fresh slot) and eviction (same-key
+///     overflow) are mutually exclusive PER CONSTRUCTION, so no put can
+///     ever emit both — the prefix is documentation of intent, not a
+///     pinned order (KS-DS-87-3: making them co-occur without a new
+///     order pin in the same battery degrades the order to ADVISORY);
+/// (b) a main entry inside a SUPERSEDED slot dies WITHOUT `main_evicted`
+///     — only stranded mains are counted; do not read the sequence as
+///     "every dying main emits main_evicted";
+/// (c) ordering is guaranteed only WITHIN one put's buffer — the
+///     co-occurring pair (main_evicted before its evict-fp) is pinned by
+///     the armed half of `a_ds26_main_evicted_tripwire_bites_on_injection`
+///     (run armed by F16), and the rows carry `putord=` in-band so a
+///     cross-put reorder (e.g. a future batched flush) is detectable.
 pub(crate) const UC_LOG_EVENTS: [&str; 21] = [
     // S-82.0 (Council WP-83): the acquire-vitality + rejection observables.
     // `acquire_oneshot` (A-SK23) makes F-oneshot t2's zero non-vacuous;
@@ -16351,6 +16365,11 @@ impl MainLever {
 // put's emission+drop window panics (Binding Rule 4: panic = FAIL-FAST).
 thread_local! {
     static UC_EMIT_GUARD: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    // A-DS36 (Council WP-87): per-thread put ordinal, stamped in-band on
+    // the main_evicted/evict-fp rows — a cross-put reorder (e.g. a future
+    // batched flush) becomes detectable; the a_ds26 armed half pins
+    // same-putord ADJACENCY for the co-occurring pair.
+    static UC_PUT_ORD: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
 }
 struct UcEmitGuard;
 impl UcEmitGuard {
@@ -16391,6 +16410,14 @@ fn unit_cache_put(key: UnitKey, cu: CachedUnit) {
     // `key` moves into the entry — cloned only when the event log is armed
     // (probe runs), never on the plain path.
     let kpath = if uc_log_path().is_some() { Some(key.path.clone()) } else { None };
+    // A-DS36: this put's per-thread ordinal (monotonic from 1) — only the
+    // armed-log rows consume it, but the counter always advances so the
+    // ordinal is a property of the PUT, not of the probe.
+    let putord = UC_PUT_ORD.with(|o| {
+        let n = o.get() + 1;
+        o.set(n);
+        n
+    });
     let mut superseded: Vec<UnitSlot> = Vec::new();
     let mut victim: Option<CachedUnit> = None;
     let mut replaced: Option<CachedUnit> = None;
@@ -16481,13 +16508,14 @@ fn unit_cache_put(key: UnitKey, cu: CachedUnit) {
         if v.main_program.is_some() {
             uc_stat(|s| s.main_evicted += 1);
             if let Some(p) = &kpath {
-                uc_log("main_evicted", p);
+                uc_log(&format!("main_evicted putord={putord}"), p);
             }
         }
         // Probe-API event (UC_LOG_EVENTS): victim fp, path = the slot's
-        // file (the ways are per-key).
+        // file (the ways are per-key). putord= binds the row to ITS put
+        // (A-DS36).
         if let Some(p) = &kpath {
-            uc_log(&format!("evict fp {:016x}", v.fp), p);
+            uc_log(&format!("evict fp {:016x} putord={putord}", v.fp), p);
         }
     }
     // Displaced entries (superseded slots, the ways victim, a replaced
@@ -19202,6 +19230,31 @@ mod tests {
                 idx_me < idx_ev,
                 "per-put event order violated: main_evicted after evict-fp (A-DS31)"
             );
+            // A-DS36 (Council WP-87): same-put identity + ADJACENCY — the
+            // pair carries the SAME putord and the evict-fp row is the
+            // NEXT unitcache line, so a cross-put reorder (batched flush)
+            // cannot pass on mere global ordering.
+            let lines: Vec<&str> = buffered.lines().collect();
+            let li_me = lines
+                .iter()
+                .position(|l| l.starts_with("unitcache main_evicted"))
+                .expect("checked above");
+            let ord_of = |l: &str| -> u64 {
+                l.split_whitespace()
+                    .find_map(|t| t.strip_prefix("putord="))
+                    .expect("row lacks putord= in-band (A-DS36)")
+                    .parse()
+                    .expect("putord= not numeric (A-DS36)")
+            };
+            assert!(
+                lines[li_me + 1].starts_with("unitcache evict fp"),
+                "evict-fp row not ADJACENT to its main_evicted (A-DS36)"
+            );
+            assert_eq!(
+                ord_of(lines[li_me]),
+                ord_of(lines[li_me + 1]),
+                "main_evicted and evict-fp carry DIFFERENT putord (A-DS36)"
+            );
             super::uc_log_flush();
         }
         // Leave no rogue state behind: drop the whole injected key.
@@ -19257,6 +19310,16 @@ mod tests {
             // fields; the WP-86 finding was fields that already EXISTED:
             // deferred, strict, enum_cases, final/abstract, own_prop_vis,
             // uses_traits, hook bodies in prop_info — all covered below.)
+            //
+            // A-DS34 (Council WP-87, Stogov) — DOMAIN NOTE: this
+            // exhaustiveness claim holds for the a_ds17 domain ONLY
+            // (compile_program fresh, fresh Registry, NO elision). On an
+            // ELIDED unit (`elided: Some(n)`) `methods_ci` is baked
+            // leaf-wins from the VM's ACCUMULATED class image, which lives
+            // in no covered field — two Modules with identical sig can
+            // carry different methods_ci. Citing "sig esaustiva" for
+            // elided units without this note is an in-domain-only claim
+            // (KS-DS-87-1).
             // DERIVED fields — recomputed from the covered ones, cannot
             // diverge alone — are bound and EXCLUDED BY NAME:
             //   Module: fn_ci, class_index;
