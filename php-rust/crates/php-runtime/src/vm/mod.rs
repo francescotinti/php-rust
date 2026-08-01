@@ -16191,6 +16191,66 @@ pub fn uc_entry_count() -> usize {
     UNIT_CACHE.with(|c| c.borrow().values().map(|slot| slot.len()).sum())
 }
 
+/// A-DL24 (Council WP-85, Leijen Q2 — the measure that DECIDES the ×W
+/// budget formula): per-THREAD `unitcache_main_entry` rows for the WORKER
+/// arm, emitted at worker teardown (the axum arm has no per-request dump —
+/// the cli-server dump lives in `run_module_with_hir`). Same fields and
+/// same algebra as that dump (net = the bracket stored at publish,
+/// floor_inc = RetainedWalk increment in put order), plus `thr=` and
+/// `arm=axum-worker` IN-BAND so the verdict can attribute rows per thread
+/// (KS-AH-85-3: alloc_id rides every row). EMISSION-only surface: the
+/// counting surface (alloc_id memcount-v2-s82, A-AH33) is untouched.
+/// Collect-then-emit (A-MS28 discipline): census_line I/O runs AFTER the
+/// UNIT_CACHE borrow closes.
+#[cfg(feature = "mem-census")]
+pub fn memcensus_unitcache_main_rows(thr: usize) {
+    let rows: Vec<String> = UNIT_CACHE.with(|c| {
+        let cache = c.borrow();
+        let mut rw = RetainedWalk::new();
+        let mut mains: Vec<(u64, Vec<u8>, u64, Rc<Program>)> = Vec::new();
+        let mut entries = 0u64;
+        for (k, slot) in cache.iter() {
+            entries += slot.len() as u64;
+            for cu in slot.iter() {
+                rw.add_module(&cu.module);
+                if let Some(p) = &cu.main_program {
+                    mains.push((
+                        cu.main_put_ordinal,
+                        k.path.clone(),
+                        cu.main_program_net,
+                        Rc::clone(p),
+                    ));
+                }
+            }
+        }
+        mains.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
+        let mut out = Vec::with_capacity(mains.len() + 1);
+        for (ord, path, net, p) in &mains {
+            let before = rw.bytes;
+            rw.add_program(p);
+            let floor_inc = rw.bytes - before;
+            out.push(format!(
+                "tag=unitcache_main_entry thr={thr} ord={ord} net={net} floor_inc={floor_inc} \
+                 net_rule=net-at-lower net_window=process-counters \
+                 floor_rule=walk-increment-in-put-order arm=axum-worker alloc_id={} {}",
+                php_types::memcensus::ALLOC_ID,
+                String::from_utf8_lossy(path)
+            ));
+        }
+        out.push(format!(
+            "tag=unitcache_thr thr={thr} entries={entries} mains={} \
+             retained_walk_bytes={} arm=axum-worker alloc_id={}",
+            mains.len(),
+            rw.bytes,
+            php_types::memcensus::ALLOC_ID,
+        ));
+        out
+    });
+    for r in &rows {
+        php_types::memcensus::census_line(r);
+    }
+}
+
 /// The put core. A main entry re-uses the include entry shape with vacuously
 /// empty relocation state (the main DEFINES the base id space) and carries
 /// the Program (eval-against-image on HIT).

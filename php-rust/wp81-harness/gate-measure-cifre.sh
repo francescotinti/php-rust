@@ -69,6 +69,12 @@ push @sources, bsd_glob("$mout/*82*.summary"), bsd_glob("$mout/*82*.census"),
 push @sources, bsd_glob("$mout/*83*.summary"), bsd_glob("$mout/*83*.census"),
                bsd_glob("$mout/*83*.log"),     bsd_glob("$mout/m83*"),
                bsd_glob("$mout/axum.83*"),     bsd_glob("$here/../wp83-harness/*.out");
+# S-84.0: the measure84 campaign raws (84*/m84* labels) + verdict84 + the
+# A-DS29 fixture-oracle ledger
+push @sources, bsd_glob("$mout/*84*.summary"), bsd_glob("$mout/*84*.census"),
+               bsd_glob("$mout/*84*.log"),     bsd_glob("$mout/m84*"),
+               bsd_glob("$mout/axum.84*"),     bsd_glob("$here/../wp84-harness/*.out"),
+               bsd_glob("$here/../wp84-harness/evidence/*");
 push @sources, bsd_glob("$here/evidence/*");
 die "gate-measure-cifre: EMPTY corpus (no committed sources found)\n" unless @sources;
 my (%corpus, %corpus_count);
@@ -100,8 +106,19 @@ for my $f (bsd_glob("$here/evidence/*.fails")) {
 # ---- scan target -----------------------------------------------------------
 open my $fh, '<', $target or die "cannot open $target\n";
 my ($ln, @miss) = (0);
+# A-DL26 (Council WP-85, KL-85-2): from MEASURE84 on, every MEMORY figure
+# must print BYTES FIRST ("N B = X MiB") — an MB/MiB figure on a line with
+# no exact-bytes companion makes the document non-publishable. Target-gated
+# to MEASURE84+ (retro-applying would fail the archived documents).
+my $bytes_first = $target =~ /MEASURE8[4-9]|MEASURE9\d/;
 while (my $line = <$fh>) {
   $ln++;
+  if ($bytes_first
+      && $line =~ /\d[\d.,]*\s*Mi?B\b/
+      && $line !~ /\d[\d.,]*\s*B\s*=/
+      && $line !~ /MB\/worker|Mi?B\s*×|x\s*W/) {
+    push @miss, "line $ln: memory figure without bytes-first companion (A-DL26/KL-85-2): $line";
+  }
   next if $line =~ /\[derivata/;                 # A-BG26 tagged line
   my $probe = $line;
   # remove hex identities and alphanumeric IDs so their digits don't tokenize

@@ -1,0 +1,6 @@
+# A-DS29 (Council WP-85, Stogov Q4): per-fixture full-body oracle ledger —
+# one line per (fixture, campaign rev): the body of EVERY fixture cited in
+# a per-fixture figure was compared to the oracle on the UNION arm at the
+# SAME rev, BEFORE the counted window (outside the census channel).
+# KS-DS-85-1: a per-fixture figure without its PASS line here is VOID.
+# Tracked in git; appends are committed in-campaign (A-SK33 discipline).

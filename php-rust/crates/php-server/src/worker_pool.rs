@@ -264,6 +264,8 @@ mod implementation {
                 // A-PP9 FAIL-FAST (KS-PP-6): any worker panic aborts the
                 // process — the default panic hook has already printed the
                 // payload and backtrace by the time catch_unwind sees it.
+                #[cfg_attr(not(feature = "mem-census"), allow(unused_variables))]
+                let worker_idx = _i;
                 let handle = std::thread::spawn(move || {
                     // SAFETY (A-MS4 Council WP-80, corrected A-TH11 Council
                     // WP-81): AssertUnwindSafe is sound here because the Err
@@ -279,6 +281,13 @@ mod implementation {
                     let unwind =
                         std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                             Self::worker_loop(ctx, rx);
+                            // A-DL24 (Council WP-85): worker teardown — the
+                            // channel is closed and THIS thread's unit cache
+                            // is about to die: dump its main-entry rows
+                            // per-thread (mem-census builds only; shutdown()
+                            // joins workers, so rows land before exit stats).
+                            #[cfg(feature = "mem-census")]
+                            php_runtime::memcensus_unitcache_main_rows(worker_idx);
                         }));
                     if unwind.is_err() {
                         eprintln!(
