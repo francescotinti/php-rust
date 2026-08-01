@@ -476,6 +476,31 @@ pub struct RetainSet(elsa::FrozenVec<Rc<Module>>);
 // requires a Council deliberation, never an in-session edit.
 static_assertions::assert_not_impl_any!(RetainSet: Send, Sync);
 
+/// A-MS17 (Council WP-83 Q3, landed per KS-MS-84-1/A-MS23): capability token
+/// for the vm_new/park_main door. Zero-sized, private constructor — rustc is
+/// the judge of the allowlist; the awk sweep in gate-lever-pins.sh is demoted
+/// to BELT (it still pins the mint sites BY NAME). A new call-site of the
+/// door cannot compile without one of the three mints:
+///   1. the in-module mint in `run_module_with_hir` (the ONE production
+///      CLI/cli-server lifecycle);
+///   2. [`MainUnit::vm_gate`] — the worker SAPI enters the door only while
+///      holding an ACQUIRED main unit (the sealed lifecycle, design79 §4);
+///   3. [`vm_gate_probe`] — probe API for the two hand-replicated lifecycle
+///      tests in worker_pool.rs (positive controls that must NOT go through
+///      the sealed path); non-test call-sites pinned ==0 by the belt.
+/// Closes Q3 holes a–d (renamed test mod / out-of-line `mod tests` /
+/// prefix-armed `in_tests` / `use vm_new as x` alias): none of them can
+/// mint a token.
+pub struct VmGate(());
+
+/// A-MS17 mint 3: probe API for in-cargo teeth that replicate the
+/// vm_new → request_* lifecycle BY HAND (worker_pool.rs positive controls).
+/// Never a runtime API: gate-lever-pins.sh pins non-test call-sites ==0.
+#[doc(hidden)]
+pub fn vm_gate_probe() -> VmGate {
+    VmGate(())
+}
+
 impl RetainSet {
     /// S-77.6.5.2: Public constructor for the worker-pool lifecycle: the
     /// RetainSet outlives every per-request Vm that borrows it (P-67.5).
@@ -498,8 +523,10 @@ impl RetainSet {
     /// unique owner. Called ONLY on the probed SAPI path (one park-event
     /// per probed request: F6's `retain.len()` = include park-events + 1).
     /// pub because the worker SAPI owns its RetainSet — the call-site is
-    /// allowlisted by wp81-harness/gate-lever-pins.sh (A-MS13 discipline).
-    pub fn park_main(&self, module: Rc<Module>) {
+    /// allowlisted by wp81-harness/gate-lever-pins.sh (A-MS13 discipline);
+    /// since A-MS17 the door also demands the [`VmGate`] token (rustc is
+    /// the judge, the awk sweep is belt).
+    pub fn park_main(&self, module: Rc<Module>, _gate: &VmGate) {
         uc_stat(|s| s.parked_modules += 1);
         self.0.push(module);
     }
@@ -519,6 +546,8 @@ pub fn vm_new<'m>(
     module: &'m Module,
     registry: &'m Registry,
     main_hir: Option<&'m Program>,
+    // A-MS17: the door demands the capability token — see [`VmGate`].
+    _gate: &VmGate,
 ) -> Vm<'m> {
     // WP-65 M-65.3 (Matsakis): the M1'' pun check extended to the bootstrap
     // main — `phpr prelude` (a relative CLI path, never canonicalized here)
@@ -803,10 +832,12 @@ pub fn run_module_with_hir<'m>(
     // eviction/supersede mid-request can never leave the cache as unique
     // owner (KS-PP-80-2 extended to the pair; the Program half is the
     // caller's clone-on-stack, KS-PP-81-2).
+    // A-MS17 mint 1 (in-module): the ONE production CLI/cli-server lifecycle.
+    let gate = VmGate(());
     if let Some(l) = &main_lever {
-        retain.park_main(Rc::clone(&l.module));
+        retain.park_main(Rc::clone(&l.module), &gate);
     }
-    let mut vm = vm_new(&retain, module, registry, main_hir);
+    let mut vm = vm_new(&retain, module, registry, main_hir, &gate);
 
     // S-77.6.4.2a: Link-time fatal check (part of per-request setup) —
     // extracted to link_fatal_check so the worker-pool SAPI runs the SAME
@@ -15822,9 +15853,6 @@ pub struct MainUnit {
     /// Served from cache (a1+a2 skipped this request).
     pub hit: bool,
     publish: Option<MainPublishTicket>,
-    /// A-DL15: net-alloc bracket of the lower that built `program`
-    /// (mem-census MISS only; 0 elsewhere). Travels with the publish.
-    lower_net: u64,
 }
 
 /// The deferred put: armed by a probed MISS on a pure main, consumed ONLY
@@ -15834,6 +15862,11 @@ pub struct MainUnit {
 pub struct MainPublishTicket {
     key: UnitKey,
     fp: u64,
+    /// A-DL15/A-MS22 (Council WP-84, KS-MS-84-4): net-alloc bracket of the
+    /// lower that built the Program (mem-census MISS only; 0 elsewhere).
+    /// Lives IN the ticket — the one value with the one lifetime of the
+    /// publish it belongs to; read ONLY by `main_publish_ticket`.
+    lower_net: u64,
 }
 
 /// Park + deferred-publish bundle for [`run_module_with_hir`], detached from
@@ -15842,8 +15875,6 @@ pub struct MainLever {
     module: Rc<Module>,
     program: Rc<Program>,
     publish: Option<MainPublishTicket>,
-    /// A-DL15: measured lower net of the Program, forwarded to the put.
-    lower_net: u64,
 }
 
 impl MainUnit {
@@ -15854,8 +15885,14 @@ impl MainUnit {
             module: Rc::clone(&self.module),
             program: Rc::clone(&self.program),
             publish: self.publish.take(),
-            lower_net: self.lower_net,
         }
+    }
+
+    /// A-MS17 mint 2: the worker SAPI's door key — obtainable ONLY while
+    /// holding an acquired main unit, so the vm_new/park_main door is
+    /// enterable only from inside the sealed acquire lifecycle.
+    pub fn vm_gate(&self) -> VmGate {
+        VmGate(())
     }
 }
 
@@ -15926,7 +15963,6 @@ pub fn main_unit_acquire(
                     module: Rc::clone(&cu.module),
                     hit: true,
                     publish: None,
-                    lower_net: 0,
                 });
             }
         }
@@ -15954,13 +15990,12 @@ pub fn main_unit_acquire(
     // distinguishable from a broken cache (F4; deviation declared: no
     // impure-main path exists on the current tree).
     let pure = !program.used_conditional_seed;
-    let publish = main_publish_decision(probe_state, pure, name);
+    let publish = main_publish_decision(probe_state, pure, name, lower_net);
     Ok(MainUnit {
         program: Rc::new(program),
         module: Rc::new(module),
         hit: false,
         publish,
-        lower_net,
     })
 }
 
@@ -15974,9 +16009,12 @@ fn main_publish_decision(
     probe_state: Option<(UnitKey, u64)>,
     pure: bool,
     name: &[u8],
+    // A-MS22: the lower's net-alloc bracket rides the ticket from here on —
+    // no field outside the publish lifetime may carry it (KS-MS-84-4).
+    lower_net: u64,
 ) -> Option<MainPublishTicket> {
     match (probe_state, pure) {
-        (Some((key, fp)), true) => Some(MainPublishTicket { key, fp }),
+        (Some((key, fp)), true) => Some(MainPublishTicket { key, fp, lower_net }),
         (Some(_), false) => {
             uc_stat(|s| s.main_impure_skip += 1);
             uc_log("main_impure_skip", name);
@@ -16016,12 +16054,8 @@ pub fn uc_main_key_in_cache(name: &[u8], source: &[u8]) -> bool {
 /// The put core. A main entry re-uses the include entry shape with vacuously
 /// empty relocation state (the main DEFINES the base id space) and carries
 /// the Program (eval-against-image on HIT).
-fn main_publish_ticket(
-    t: MainPublishTicket,
-    module: &Rc<Module>,
-    program: &Rc<Program>,
-    lower_net: u64,
-) {
+fn main_publish_ticket(t: MainPublishTicket, module: &Rc<Module>, program: &Rc<Program>) {
+    // A-MS22/KS-MS-84-4: `t.lower_net` is read HERE and nowhere else.
     uc_stat(|s| s.main_put += 1);
     uc_log("main_put", &t.key.path);
     #[cfg(feature = "mem-census")]
@@ -16044,7 +16078,7 @@ fn main_publish_ticket(
             module: Rc::clone(module),
             owner_epoch: VM_EPOCH.with(|e| e.get()),
             main_program: Some(Rc::clone(program)),
-            main_program_net: lower_net,
+            main_program_net: t.lower_net,
         },
     );
 }
@@ -16056,7 +16090,7 @@ impl MainLever {
     /// clean link only (A-PP16 pin, wp81-harness/gate-lever-pins.sh).
     pub fn publish_if_armed(mut self) {
         if let Some(t) = self.publish.take() {
-            main_publish_ticket(t, &self.module, &self.program, self.lower_net);
+            main_publish_ticket(t, &self.module, &self.program);
         }
     }
 }
@@ -18722,12 +18756,12 @@ mod tests {
         let key = super::main_unit_key(name).expect("real file must key");
         let fp = 0x5eed_u64;
         let before = super::UC_STATS.with(|s| s.borrow().main_impure_skip);
-        let t = super::main_publish_decision(Some((key.clone(), fp)), false, name);
+        let t = super::main_publish_decision(Some((key.clone(), fp)), false, name, 0);
         assert!(t.is_none(), "impure main produced a publish ticket (A-DS19)");
         let after = super::UC_STATS.with(|s| s.borrow().main_impure_skip);
         assert_eq!(after - before, 1, "main_impure_skip did not move (A-DS19)");
         // Positive twin: the pure arm still arms the ticket.
-        let t = super::main_publish_decision(Some((key, fp)), true, name);
+        let t = super::main_publish_decision(Some((key, fp)), true, name, 0);
         assert!(t.is_some(), "pure main lost its publish ticket (A-DS19 control)");
     }
 

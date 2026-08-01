@@ -7,6 +7,10 @@
 #      NON-TEST call-sites are ALLOWLISTED per file — the vm_new door is the
 #      only way to reuse a RetainSet, so a new caller outside the sealed
 #      SAPI paths = lever rejected until re-audit (bump = same-commit, named).
+#      A-MS17 (Council WP-84, KS-MS-84-1): the door now also demands the
+#      VmGate ZST token — rustc is the JUDGE (a new call-site cannot
+#      compile without a mint); this awk sweep is demoted to BELT and pins
+#      the three mint sites BY NAME (section 1b).
 #   2. A-PP16: in BOTH SAPI files the publish call (`publish_if_armed()`)
 #      sits lexically AFTER the `link_fatal_check(` call — the put position
 #      relative to link is PART of the design79 §6 contract (F8c).
@@ -96,6 +100,36 @@ if [ -n "$SWEEP" ]; then
   FAILS=$((FAILS+1))
 else
   echo "OK  sweep: no vm_new(/park_main( non-test sites outside the allowlist"
+fi
+
+# --- 1b. A-MS17 belt: the VmGate mints, pinned BY NAME -----------------------
+# rustc is the judge (private constructor); this belt pins WHERE tokens are
+# minted so a new mint is a named bump, never silent:
+#   VmGate(()) tokens: vm/mod.rs == 4 (the `struct VmGate(());` DECLARATION
+#     itself + run_module_with_hir mint 1 + MainUnit::vm_gate mint 2 +
+#     vm_gate_probe mint 3); 0 everywhere else.
+#   vm_gate_probe( non-test: vm/mod.rs == 1 (the fn def itself); 0 elsewhere
+#     (its only call-sites are the two hand-replicated lifecycle tests in
+#     worker_pool.rs `mod tests` — non-test callers are banned).
+#   .vm_gate( production call: worker_pool.rs == 1 (execute_with_retain).
+check_pin "$VMMOD"  'VmGate[(][(][)][)]' 4 'VmGate(())'
+check_pin "$WORKER" 'VmGate[(][(][)][)]' 0 'VmGate(())'
+check_pin "$CLISRV" 'VmGate[(][(][)][)]' 0 'VmGate(())'
+check_pin "$VMMOD"  'vm_gate_probe[(]'   1 'vm_gate_probe('
+check_pin "$WORKER" 'vm_gate_probe[(]'   0 'vm_gate_probe('
+check_pin "$WORKER" 'vm_gate[(]'         1 'vm_gate('
+GATE_SWEEP=$(find "$REPO/crates" -name '*.rs' ! -name '._*' \
+          ! -path "$VMMOD" ! -path "$WORKER" ! -path "$CLISRV" -print0 |
+  while IFS= read -r -d '' f; do
+    n=$(count_nontest "$f" 'VmGate[(][(][)][)]|vm_gate_probe[(]')
+    [ "$n" -gt 0 ] && echo "${f#"$REPO"/}: $n"
+  done)
+if [ -n "$GATE_SWEEP" ]; then
+  echo "FAIL: VmGate mint outside the allowlist (A-MS17):"
+  echo "$GATE_SWEEP"
+  FAILS=$((FAILS+1))
+else
+  echo "OK  sweep: no VmGate mint outside the allowlist (A-MS17)"
 fi
 
 # --- 2. A-PP16: publish AFTER link_fatal_check, in both SAPI files -----------

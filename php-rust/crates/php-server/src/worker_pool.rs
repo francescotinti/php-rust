@@ -595,8 +595,11 @@ mod implementation {
         // (clone-on-stack, KS-PP-81-2). Then the Vm borrows the request's
         // RetainSet (P-2 pin; statics die with the Vm — A-DS2).
         let lever = unit.lever();
-        retain.park_main(std::rc::Rc::clone(&unit.module));
-        let mut vm = php_runtime::vm_new(retain, &unit.module, reg, Some(&unit.program));
+        // A-MS17 mint 2: the door key exists only while holding the acquired
+        // main unit — a bypass of `main_unit_acquire` cannot compile.
+        let gate = unit.vm_gate();
+        retain.park_main(std::rc::Rc::clone(&unit.module), &gate);
+        let mut vm = php_runtime::vm_new(retain, &unit.module, reg, Some(&unit.program), &gate);
 
         // Phase 3.5: link-time fatal check — the SAME sweep as the CLI main
         // (S-78.1.4/A-TH8: Zend's compile/link stage, e.g. an enum
@@ -850,7 +853,9 @@ mod implementation {
             let name = b"/gate.php".to_vec();
             let program = php_runtime::lower_source(&name, b"<?php echo \"payload\";").unwrap();
             let module = php_runtime::compile_program(&program, &reg).unwrap();
-            let mut vm = php_runtime::vm_new(&retain, &module, &reg, Some(&program));
+            // A-MS17 mint 3: hand-replicated lifecycle — the probe mint, by name.
+            let gate = php_runtime::vm_gate_probe();
+            let mut vm = php_runtime::vm_new(&retain, &module, &reg, Some(&program), &gate);
             vm.request_start(None, &[]);
             vm.final_flush = false;
             let _ = vm.run();
@@ -1141,7 +1146,9 @@ mod implementation {
                         $s = str_repeat('x', 65536); echo strlen($s); });";
             let program = php_runtime::lower_source(&name, src).unwrap();
             let module = php_runtime::compile_program(&program, &reg).unwrap();
-            let mut vm = php_runtime::vm_new(&retain, &module, &reg, Some(&program));
+            // A-MS17 mint 3: hand-replicated lifecycle — the probe mint, by name.
+            let gate = php_runtime::vm_gate_probe();
+            let mut vm = php_runtime::vm_new(&retain, &module, &reg, Some(&program), &gate);
             vm.request_start(None, &[]);
             vm.final_flush = false;
             let _ = vm.run();

@@ -61,5 +61,5 @@ use mimalloc as _;
 
 // WP-77.6.5.2: Expose Vm lifecycle methods and construction for worker-pool integration
 pub use compile::{compile_program, CompileError};
-pub use vm::{RetainSet, Vm, vm_new};
+pub use vm::{RetainSet, Vm, VmGate, vm_gate_probe, vm_new};
 pub use php_types::{Zval, PhpError};
