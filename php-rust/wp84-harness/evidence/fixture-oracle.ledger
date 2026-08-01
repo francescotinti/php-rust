@@ -4,3 +4,8 @@
 # SAME rev, BEFORE the counted window (outside the census channel).
 # KS-DS-85-1: a per-fixture figure without its PASS line here is VOID.
 # Tracked in git; appends are committed in-campaign (A-SK33 discipline).
+fixture=autoload82.php rev=937e79d arm=union union_hash=d440c3411c12401a body_sha=fd6ba60d08e25966 verdict=PASS
+fixture=autoload83_reg.php rev=937e79d arm=union union_hash=d440c3411c12401a body_sha=57a90dec87f15213 verdict=PASS
+fixture=hello.php rev=937e79d arm=union union_hash=d440c3411c12401a body_sha=8174c528d302d5be verdict=PASS
+fixture=vw84_bisect_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/vw84_pad_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/fccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc.php rev=937e79d arm=union union_hash=d440c3411c12401a body_sha=2a585cc394705bff verdict=PASS
+fixture=vw84_bisect_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/vw84_pad_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/fcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc.php rev=937e79d arm=union union_hash=d440c3411c12401a body_sha=3419b091073a6082 verdict=PASS

@@ -1,0 +1,15 @@
+# verdict84 — S-84.0 peak-deliberation measures (Council WP-85 forms) — machine, fail-closed
+
+VP data: peaks = 228278272/239878144/240287744 B = 217.7/228.8/229.2 MiB (W=10, R=3, union post-partition)
+VP  NAMED-OUTCOME: pin MOVED — peaks outside 232±1 MiB; the deliberation uses THESE values (KB-85-2 satisfied by the rerun; no silent claim)
+VDL24 data: net(ord1) first=7349977 B = 7.01 MiB, second=7349977 B = 7.01 MiB (thr 0/1)
+VDL24 PER-THREAD: the second worker RE-PAYS the first lower (7349977 B = 7.01 MiB >= 3,000,000 B) — the ×W budget formula HOLDS: budget × W (KL-85-1 satisfied)
+VA2 PASS: steady a3==0 on all three arms, EVERY fixture body ledger-PASS at the campaign rev (KS-DS-85-1 lifted — the WP-83 VOID is cured)
+VA2 [derivata] register share = b(reg83)-b(hello) = +4.0 calls/req; include-HIT share <= b(autoload82)-b(reg83) = +52.0 calls/req — UPPER BOUND vs opcache inheritance-cache (A-DS25/A-BB33)
+VW2 data len383: len=383 a_calls=2.0 a_bytes=766 (model expects calls=2 bytes=766)
+VW2 data len384: len=384 a_calls=4.0 a_bytes=1538 (model expects calls=4 bytes=1538)
+VW2 control hello: len=98 a_calls=2.0 a_bytes=196 (floor model: 2/196)
+VW2 PASS: piecewise model CONFIRMED at the bisection — site NAMED: std run_path_with_cstr MAX_STACK_ALLOCATION=384 heap-CString(len+1) fallback, reached by fs::canonicalize + fs::metadata in main_unit_key; a_calls=2+2*[len>=384], a_bytes=2*len+2*(len+1)*[len>=384] (A-BB38 pin ARMED; KB-84-2 model retired->replaced)
+guard KS-PP-85-1: 0 unlabeled reqns lines in campaign raws (no slope phase ran)
+
+== VERDICT84 PASS ==
