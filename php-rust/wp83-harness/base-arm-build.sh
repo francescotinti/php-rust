@@ -38,9 +38,31 @@ cp "$REPO/Cargo.lock" "$BASECRATE/Cargo.lock" || { echo "FAIL: lock copy"; exit 
     -p php-server --features "$FEATURES" ) > "$HDR.build.log" 2>&1 \
   || { echo "FAIL: base build (see $HDR.build.log)"; tail -5 "$HDR.build.log"; exit 1; }
 
-# A-AH32: the tooth Hejlsberg ordered — one line, byte-exact.
-if ! cmp -s "$REPO/Cargo.lock" "$BASECRATE/Cargo.lock"; then
-  echo "FAIL: Cargo.lock re-resolved during the base build — arm VOID (A-AH32/KS-AH-84-1)"
+# A-AH32 (form AMENDED S-83.0, DECLARED — the byte-exact tooth BIT on its
+# first real run and the diff was the PRUNE of the one "mimalloc" dev-dep
+# EDGE the 7593d8e manifest lacks: zero version drift, structurally
+# unavoidable across manifests that differ by a dev-dep — a tooth that can
+# never pass certifies nothing, WP-72 class). The INTENT (Hejlsberg Q2:
+# detect a silent re-resolve) is kept in a two-tooth machine form:
+#   (a) the byte-diff live->post-build may contain ONLY DELETED lines
+#       (prune); ANY added/changed line = re-resolve = arm VOID;
+#   (b) the (name, version) pairs of the post-build lock must ALL appear
+#       IDENTICAL in the live lock (subset; drift/addition = VOID).
+# Council WP-85 judges this amendment; the raw diff is archived in-header.
+LOCK_DIFF=$(diff "$REPO/Cargo.lock" "$BASECRATE/Cargo.lock" || true)
+LOCK_ADDED=$(printf '%s\n' "$LOCK_DIFF" | grep -c '^>' || true)
+LOCK_PRUNED=$(printf '%s\n' "$LOCK_DIFF" | grep -c '^<' || true)
+if [ "$LOCK_ADDED" -gt 0 ]; then
+  echo "FAIL: Cargo.lock gained/changed lines during the base build — re-resolve, arm VOID (A-AH32/KS-AH-84-1):"
+  printf '%s\n' "$LOCK_DIFF" | grep '^>' | head -5
+  exit 1
+fi
+VERS_DRIFT=$(awk '/^name = /{n=$3} /^version = /{if (n) {print n, $3; n=""}}' "$BASECRATE/Cargo.lock" | sort > /tmp/base-arm-lock-base.$$;
+  awk '/^name = /{n=$3} /^version = /{if (n) {print n, $3; n=""}}' "$REPO/Cargo.lock" | sort > /tmp/base-arm-lock-live.$$;
+  comm -23 /tmp/base-arm-lock-base.$$ /tmp/base-arm-lock-live.$$; rm -f /tmp/base-arm-lock-base.$$ /tmp/base-arm-lock-live.$$)
+if [ -n "$VERS_DRIFT" ]; then
+  echo "FAIL: base lock carries (name, version) pairs ABSENT from the live lock — version drift, arm VOID (A-AH32):"
+  echo "$VERS_DRIFT" | head -5
   exit 1
 fi
 
@@ -53,7 +75,8 @@ RUSTC_V=$(rustc -V)
 {
   echo "base_rev=$BASE_REV base_hash=$BASE_HASH features=$FEATURES"
   echo "rustc=$RUSTC_V"
-  echo "lock_live_sha=$LOCK_LIVE_SHA lock_base_sha=$LOCK_BASE_SHA lock_cmp=IDENTICAL"
+  echo "lock_live_sha=$LOCK_LIVE_SHA lock_base_sha=$LOCK_BASE_SHA lock_cmp=PRUNE-ONLY pruned_lines=$LOCK_PRUNED added_lines=0 version_drift=0"
+  [ -n "$LOCK_DIFF" ] && printf 'lock_diff: %s\n' "$LOCK_DIFF" | head -6
 } >> "$HDR"
-echo "OK base-arm: $BASE_HASH ($BASE_REV, lock-cmp IDENTICAL, rustc + lock shas in $HDR)"
+echo "OK base-arm: $BASE_HASH ($BASE_REV, lock-cmp PRUNE-ONLY pruned=$LOCK_PRUNED, rustc + lock shas in $HDR)"
 exit 0
