@@ -286,8 +286,24 @@ mod implementation {
                             // is about to die: dump its main-entry rows
                             // per-thread (mem-census builds only; shutdown()
                             // joins workers, so rows land before exit stats).
+                            // A-MS31 (Council WP-86): the probe gets its OWN
+                            // catch_unwind with a DISTINCT message — a panic
+                            // of the instrument must never be attributed to
+                            // the measurand (the worker). Same outcome:
+                            // abort, never partial rows in silence; the
+                            // verdict rejects partial rows by exit code.
                             #[cfg(feature = "mem-census")]
-                            php_runtime::memcensus_unitcache_main_rows(worker_idx);
+                            {
+                                let probe = std::panic::catch_unwind(|| {
+                                    php_runtime::memcensus_unitcache_main_rows(worker_idx);
+                                });
+                                if probe.is_err() {
+                                    eprintln!(
+                                        "php-server: census probe panicked — aborting (A-MS31; instrument, not worker)"
+                                    );
+                                    std::process::abort();
+                                }
+                            }
                         }));
                     if unwind.is_err() {
                         eprintln!(

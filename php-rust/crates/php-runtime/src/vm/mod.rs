@@ -16223,6 +16223,10 @@ pub fn memcensus_unitcache_main_rows(thr: usize) {
                 }
             }
         }
+        // Drop-order note (A-MS31/Matsakis WP-86): `mains` holds Rc<Program>
+        // clones and drops at the end of this closure BEFORE the read `Ref`
+        // — Rc decrements inside an open read borrow. Sound: the cache keeps
+        // the strong refs, the count cannot reach 0, no destructor runs.
         mains.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
         let mut out = Vec::with_capacity(mains.len() + 1);
         for (ord, path, net, p) in &mains {
@@ -19092,9 +19096,15 @@ mod tests {
             super::uc_log_flush();
         }
         // Leave no rogue state behind: drop the whole injected key.
-        super::UNIT_CACHE.with(|c| {
-            c.borrow_mut().remove(&key);
-        });
+        // A-DS33 (Council WP-86): bind the removed slot so it drops AFTER
+        // the RefMut — the temporary-order form `borrow_mut().remove(&key)`
+        // dropped the UnitSlot with the borrow still alive, violating the
+        // very letter of A-MS28 this test celebrates.
+        let removed = super::UNIT_CACHE.with(|c| c.borrow_mut().remove(&key));
+        drop(removed);
+        // Declared residue (A-DS33): UC_STATS.main_evicted stays at +1 on
+        // this test thread — any future ABSOLUTE ==0 pin in-cargo would be
+        // poisoned; only deltas are legitimate here.
     }
 
     /// A-DS17/KS-DS-83-2 (Council WP-83): `compile_program` purity at

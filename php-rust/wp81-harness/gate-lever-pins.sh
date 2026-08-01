@@ -122,6 +122,10 @@ fi
 #   cfg gate `any(test, feature = "vm-gate-probe")`: vm/mod.rs == 1 (fn) and
 #     lib.rs == 1 (re-export) — a probe reachable in a campaign build is
 #     KH85-1 (sigillo declassato ad ADVISORY) — plus lib.rs re-export == 1.
+#   A-MS30 (Council WP-86, declared rename): Council WP-85 ordered the
+#     feature name `lifecycle-probe`; it was implemented as `vm-gate-probe`.
+#     Substance equal, ONE name in the corpus: the old name must never
+#     appear in crates/ (pinned below at 0).
 #   .vm_gate( production call: worker_pool.rs == 1 (execute_with_retain).
 LIBRS="$REPO/crates/php-runtime/src/lib.rs"
 check_pin "$VMMOD"  'VmGate[(]std::marker::PhantomData[)]' 3 'VmGate(PhantomData)'
@@ -148,6 +152,17 @@ if [ -n "$ALIAS_SWEEP" ]; then
   FAILS=$((FAILS+1))
 else
   echo "OK  sweep: no vm_gate_probe alias/use outside lib.rs (A-TH28)"
+fi
+# A-MS30: the superseded feature name must not exist anywhere in crates/
+# (one name in the corpus — a second spelling would blind the cfg pins).
+RENAME_SWEEP=$(find "$REPO/crates" \( -name '*.rs' -o -name '*.toml' \) ! -name '._*' -print0 |
+  xargs -0 grep -l 'lifecycle-probe' 2>/dev/null)
+if [ -n "$RENAME_SWEEP" ]; then
+  echo "FAIL: superseded feature name lifecycle-probe found in crates/ (A-MS30):"
+  echo "$RENAME_SWEEP"
+  FAILS=$((FAILS+1))
+else
+  echo "OK  sweep: one feature name only — no lifecycle-probe in crates/ (A-MS30)"
 fi
 GATE_SWEEP=$(find "$REPO/crates" -name '*.rs' ! -name '._*' \
           ! -path "$VMMOD" ! -path "$WORKER" ! -path "$CLISRV" ! -path "$LIBRS" -print0 |

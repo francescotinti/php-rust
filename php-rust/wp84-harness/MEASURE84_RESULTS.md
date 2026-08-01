@@ -30,8 +30,10 @@ memoria BYTES-FIRST (A-DL26/KL-85-2). Verdetto macchina:
   di campagna-83: il residuo one-time è di THREAD — prelude/interner
   thread-local — non di processo). **La formula del budget ×W REGGE:
   rw_budget × W** (20.648.477 B = 19,69 MiB per worker, dal record
-  WP-83). Il gap col marginale fisico (3,44 MB/worker, vmmap) resta
-  materia A-DL27 (addendi opachi) — sorgenti DIVERSE, mai «⇒» (A-DL25).
+  WP-83). Il gap col marginale fisico — 3.605.572 B = 3,44 MiB/worker [derivata: (243.204.096+243.367.936+243.236.864 − 198.868.992−211.861.504−210.911.232) B / 30; record S-82.0 VP, /usr/bin/time -l peak RSS W=10 R=3] —
+  resta materia A-DL27 (addendi opachi) — sorgenti DIVERSE, mai «⇒»
+  (A-DL25). Sanatoria KL-85-2 (Concilio WP-86): la v1 diceva «3,44
+  MB/worker, vmmap» — sorgente errata (è il VP time -l) e senza byte.
 - **VP — A-BB34 rerun: pin MOSSO, esito NOMINATO (mai silente)**: peak
   W=10 R=3 post-partizione:
   228.278.272 B = 217,7 MiB · 239.878.144 B = 228,8 MiB ·
@@ -75,8 +77,8 @@ memoria BYTES-FIRST (A-DL26/KL-85-2). Verdetto macchina:
    240.287.744 B = 229,2 MiB, contro il pin 232±1 MiB) — la delibera è
    del Concilio WP-86 sui valori nuovi.
 2. **A-DL27**: gli addendi di rw_bytes−bytes_counted restano opachi; il
-   gap 7,01 MiB (net per-thread) ↔ 3,44 MB/worker (marginale fisico) è
-   la stessa domanda vista da due sorgenti.
+   gap 7.349.977 B = 7,01 MiB (net per-thread) ↔ 3.605.572 B = 3,44 MiB/worker [derivata: v. VDL24 sopra, sanatoria KL-85-2] (marginale fisico, S-82.0 VP time -l)
+   è la stessa domanda vista da due sorgenti.
 3. **A-PP18**: APERTA, NON ingaggiata in questa campagna (nessuna
    riconciliazione Δglobal a W>1: la VDL24 legge net per-entry
    depositati al publish per-thread, richieste sequenziali; A-PP24

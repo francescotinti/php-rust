@@ -122,8 +122,11 @@ PHPR_MEM_CENSUS="$MC" "$OUTBIN/php-server" --axum --workers 2 --port $PORT -t "$
 DPID=$!
 up=0
 for _ in $(seq 1 100); do
-  # the FIRST SUCCESSFUL probe IS worker 0's first request (round-robin);
-  # failed connects never dispatch.
+  # A-PP32 (Council WP-86): the request->worker mapping claim is ADVISORY
+  # only — a REFUSED connect never dispatches, but a connect that succeeds
+  # and then times out on -m 1 HAS dispatched (fetch_add consumed).
+  # Attribution is NEVER taken from request order: only thr= in-band rows
+  # count (KS-PP-86-3), and the verdict fail-closes on thread cardinality.
   curl -s -o /dev/null -m 1 "http://127.0.0.1:$PORT/hello.php" && { up=1; break; }
   sleep 0.1
 done
@@ -176,8 +179,11 @@ done
 
 # --- Phase W2: VW bisection at the named site's threshold ----------------------
 echo "== Phase W2: bisection len=383/384 (census arm, MEASURED=30) =="
+# A-BG37 (Council WP-86): head_unmoved before EVERY driver invocation —
+# one refusal must never cover two runs.
 head_unmoved
 bash "$M78" census "84w.len383" "$REL383" 30 || fail "phaseW2 len383 rc"
+head_unmoved
 bash "$M78" census "84w.len384" "$REL384" 30 || fail "phaseW2 len384 rc"
 
 # --- restore the union binary on disk ------------------------------------------
