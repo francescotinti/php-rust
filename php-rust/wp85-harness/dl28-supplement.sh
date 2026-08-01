@@ -21,7 +21,12 @@ FIXDIR="$REPO/wp78-harness/gate-axum/fixtures"
 export PHPR_CAMPAIGN_SCRIPT="$HERE/dl28-supplement.sh"   # A-AH30
 FAILS=0
 GIT_REV="$(git -C "$REPO" rev-parse --short HEAD)"
+HEAD_AT_START="$GIT_REV"
 fail() { echo "FAIL: $*"; FAILS=$((FAILS+1)); }
+head_unmoved() { # A-BG40 (Council WP-87): KG-84-2 chain refusal, same form
+  local now; now="$(git -C "$REPO" rev-parse --short HEAD)"
+  [ "$now" = "$HEAD_AT_START" ] || { echo "FAIL: HEAD moved mid-supplement ($now != $HEAD_AT_START, A-BG40/KG-84-2)"; exit 1; }
+}
 
 # ENFORCE: same mem-census binary as the campaign's CAL runs (the
 # calibration NET_H/NET_P is binary-bound).
@@ -35,9 +40,25 @@ MTX=$(/bin/ls "$REPO/wp78-harness/matrix-archive"/feature-matrix.$GIT_REV.*.log 
 WANT=$(tr -d '\0' < "$MTX" | sed -n "s/^bin\[mem-census\] sha256\[0:16\]=\([0-9a-f]*\).*/\1/p")
 bash "$HERE/gate-binary-noprobe.sh" "$OUTBIN/php-server" "$WANT" || { echo "FAIL: KH86-1"; exit 1; }
 
+head_unmoved   # A-BG40: post-build — the ENFORCEd binary belongs to THIS rev
+
 MC="$OUT/m85.dl28s.memcensus"
+# A-BG39/KG-87-1 attempt ledger: a substitute script declares attempt=N
+# in-band and KEEPS every prior attempt's raw (KS-AH-83-2 — archived by
+# copy, never rm'd/truncated in silence).
+LEDGER="$OUT/m85.dl28s.attempts.ledger"
+ATTEMPT=1
+[ -s "$MC" ] && ATTEMPT=2
+for f in "$MC".attempt*; do [ -e "$f" ] && ATTEMPT=$((ATTEMPT+1)); done
+PRIOR="none"
+if [ -s "$MC" ]; then
+  cp "$MC" "$MC.attempt$((ATTEMPT-1))"
+  PRIOR=$(cd "$OUT" && /bin/ls m85.dl28s.memcensus.attempt* 2>/dev/null | tr '\n' ',' | sed 's/,$//')
+fi
+echo "attempt=$ATTEMPT git=$GIT_REV prior=$PRIOR supersedes=m85.dl28.memcensus" >> "$LEDGER"
 : > "$MC"
 PORT=8298
+head_unmoved   # A-BG40: pre-launch
 PHPR_MEM_CENSUS="$MC" "$OUTBIN/php-server" --axum --workers 2 --port $PORT -t "$FIXDIR" \
   > /dev/null 2> "$OUT/m85.dl28s.log" &
 DPID=$!
@@ -59,7 +80,7 @@ GOT_P=$(curl -s -m 10 "http://127.0.0.1:$PORT/hello_pad85.php")
 kill -TERM "$DPID" 2>/dev/null
 wait "$DPID" 2>/dev/null
 rc=$?
-echo "mem_hash=$MEM_HASH git=$GIT_REV campaign=$PHPR_CAMPAIGN_SCRIPT arm=axum-worker w=2 phase=dl28s server_exit=$rc" >> "$MC"
+echo "mem_hash=$MEM_HASH git=$GIT_REV campaign=$PHPR_CAMPAIGN_SCRIPT arm=axum-worker w=2 phase=dl28s server_exit=$rc attempt=$ATTEMPT" >> "$MC"
 if grep -qE "panicked|aborting" "$OUT/m85.dl28s.log"; then
   fail "m85.dl28s stderr carries panic/abort markers (KS-MS-86-1)"
 fi

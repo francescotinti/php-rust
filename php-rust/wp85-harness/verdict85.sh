@@ -3,6 +3,15 @@
 # Fail-closed (A-SK19). A-SK38 (Council WP-86): per-BLOCK fail flags — a
 # PASS/derivata line is emitted ONLY from a block with zero fails; controls
 # get the same validity checks as measures (KS-SK-86-4).
+# A-SK44 (Council WP-87, KS-SK-87-3): the VDL28 block is COLLECT-THEN-EMIT
+# (A-MS28 pattern) — every PASS/derivata line is buffered and flushed only
+# when the block closes with bfail==0; a fail anywhere in the block
+# suppresses the whole buffer. (The WP-87 audit found the old elsif chain
+# could print "VDL28 PASS" after the same-thr check had already raised
+# bfail — a greppable PASS from a dirty block.)
+# A-SK45 (Council WP-87): direct tooth — any unitcache_main_entry row with
+# ord!=1 in a parsed raw fails the block (the failure mode that voided
+# m85.dl28 is now detected DIRECTLY, not via missing-row side effects).
 # A-DL26/A-SK40: memory figures BYTES-FIRST with verified companions.
 # Verdicts:
 #   VDL28 (A-DL28≡A-BB41, the discriminator KL-86-2/KB-86-2 demand):
@@ -28,7 +37,7 @@ export PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin:$PATH
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$HERE/.." && pwd)"
-MOUT="$REPO/wp78-harness/measure-out"
+MOUT="${MOUT85:-$REPO/wp78-harness/measure-out}"   # override only for bite-tests
 
 perl - "$MOUT" <<'PERL'
 use strict; use warnings;
@@ -41,7 +50,9 @@ print "# verdict85 — S-85.0 discrimination measures (Council WP-86 forms) — 
 # ---- VDL28: the discriminator --------------------------------------------------
 {
   my $bfail = 0;
-  my $bf = sub { print "FAIL: @_\n"; $fails++; $bfail++ };
+  my @emit;   # A-SK44: collect-then-emit — flushed ONLY if the block closes clean
+  my $bf  = sub { print "FAIL: @_\n"; $fails++; $bfail++ };
+  my $say = sub { push @emit, join('', @_) };
   # parse one memcensus file -> { path_suffix => {thr, net}, meta }
   my $parse = sub {
     my ($label, $wexp) = @_;
@@ -49,6 +60,12 @@ print "# verdict85 — S-85.0 discrimination measures (Council WP-86 forms) — 
     open my $fh, '<', $f or do { $bf->("VDL28: missing $f"); return undef };
     my (%rows, $meta);
     while (<$fh>) {
+      # A-SK45 direct tooth: NO main-entry row may carry ord!=1 in any
+      # parsed raw (one-dispatch-per-worker protocol) — the ord=2 break
+      # that voided m85.dl28 must be caught here, not by side effects.
+      if (/tag=unitcache_main_entry thr=\d+ ord=(\d+) net=/ && $1 != 1) {
+        $bf->("VDL28[$label]: A-SK45 tooth — main-entry row with ord=$1 (!=1): protocol break, raw VOID");
+      }
       # NB (S-85.0 parser fix, declared): the fixture path is the LAST field
       # and the repo path contains a SPACE ("Extreme Pro") — (.+)$ not (\S+)$.
       if (/tag=unitcache_main_entry thr=(\d+) ord=1 net=(\d+).*alloc_id=(\S+) (.+)$/) {
@@ -88,24 +105,24 @@ print "# verdict85 — S-85.0 discrimination measures (Council WP-86 forms) — 
     $bf->("VDL28: cal-h carries foreign rows") if scalar(keys %$calh) != 1;
     $bf->("VDL28: cal-p carries foreign rows") if scalar(keys %$calp) != 1;
     if (defined $neth && defined $netp) {
-      printf "VDL28 cal: NET_H = %d B = %.2f MiB (hello, W=1) · NET_P = %d B = %.2f MiB (pad, W=1)\n",
-        $neth, $neth/1048576, $netp, $netp/1048576;
+      $say->(sprintf "VDL28 cal: NET_H = %d B = %.2f MiB (hello, W=1) · NET_P = %d B = %.2f MiB (pad, W=1)",
+        $neth, $neth/1048576, $netp, $netp/1048576);
       $bf->("VDL28: canary VACUOUS — NET_P == NET_H, the fixtures do not discriminate") if $netp == $neth;
       # A-BB42 bands, re-anchored to the record residue (derivata):
-      printf "VDL28 bands [derivata: 0.1x/0.5x of record residue 7.349.977 B, A-BB42]: 734.998 B / 3.674.989 B — SUPERSEDED here by exact calibration match\n";
+      $say->("VDL28 bands [derivata: 0.1x/0.5x of record residue 7.349.977 B, A-BB42]: 734.998 B / 3.674.989 B — SUPERSEDED here by exact calibration match");
       my $dh = $dl->{'hello.php'};
       my $dp = $dl->{'hello_pad85.php'};
       $bf->("VDL28: W=2 run lacks the hello row") unless $dh;
       $bf->("VDL28: W=2 run lacks the pad row")   unless $dp;
       if ($dh && $dp && !$bfail) {
-        printf "VDL28 W=2: hello thr=%s net=%d B = %.2f MiB · pad thr=%s net=%d B = %.2f MiB\n",
-          $dh->{thr}, $dh->{net}, $dh->{net}/1048576, $dp->{thr}, $dp->{net}, $dp->{net}/1048576;
+        $say->(sprintf "VDL28 W=2: hello thr=%s net=%d B = %.2f MiB · pad thr=%s net=%d B = %.2f MiB",
+          $dh->{thr}, $dh->{net}, $dh->{net}/1048576, $dp->{thr}, $dp->{net}, $dp->{net}/1048576);
         $bf->("VDL28: both fixtures landed on thr=$dh->{thr} — protocol break, rerun (fail-closed, never classified)")
           if $dh->{thr} eq $dp->{thr};
         if ($dh->{net} == $dp->{net}) {
           $bf->("VDL28: FROZEN WINDOW — the two threads net IDENTICALLY under DIFFERENT fixtures: the window does not attribute; VDL24 PER-THREAD RITIRATA (KL-86-2/KB-86-2)");
         } elsif ($dh->{net} == $neth && $dp->{net} == $netp) {
-          print "VDL28 PASS: PER-THREAD CONFIRMED by the monolateral canary — each thread nets EXACTLY its own fixture's calibrated figure (byte-exact); the x W budget formula is PROMOTED from IPOTESI CANDIDATA (KL-86-2 satisfied, KB-86-2 unblocked on this precondition; registry still needs A-MS27, KS-MS-86-2)\n";
+          $say->("VDL28 PASS: PER-THREAD CONFIRMED by the monolateral canary — each thread nets EXACTLY its own fixture's calibrated figure (byte-exact); the x W budget formula is PROMOTED from IPOTESI CANDIDATA (KL-86-2 satisfied, KB-86-2 unblocked on this precondition; registry still needs A-MS27, KS-MS-86-2)");
         } else {
           $bf->(sprintf "VDL28: calibration MISMATCH — hello %d vs NET_H %d, pad %d vs NET_P %d: the window is not attributable per-thread as-is; VDL24 stays CANDIDATE",
             $dh->{net}, $neth, $dp->{net}, $netp);
@@ -113,6 +130,9 @@ print "# verdict85 — S-85.0 discrimination measures (Council WP-86 forms) — 
       }
     }
   }
+  # A-SK44 flush: PASS/derivata lines leave the block ONLY when it is clean.
+  if ($bfail == 0) { print "$_\n" for @emit }
+  else { print "VDL28: $bfail fail(s) in block — buffered PASS/derivata lines SUPPRESSED (A-SK44/KS-SK-87-3)\n" }
 }
 
 # ---- VP: A-BB40 R=9 -------------------------------------------------------------

@@ -7,8 +7,15 @@ VERIFICATO (A-DL26/A-SK40). Verdetto macchina: `wp85-harness/verdict85.out`
 
 ## Identità
 
-- git campagna: 368c91d (nessun commit mid-campaign; head_unmoved per-run,
-  A-BG37 anche in supplement)
+- git campagna: 368c91d (nessun commit mid-campaign; head_unmoved per-run
+  nel campaign script). **CORREZIONE S-86.0 (A-BG40, Concilio WP-87)**: la
+  dichiarazione originale «A-BG37 anche in supplement» era un OVERCLAIM —
+  al momento del run dl28-supplement.sh aveva ZERO occorrenze di
+  head_unmoved (GIT_REV letto una volta, poi una build intera senza
+  ricontrollo). Mitigazione a posteriori: il filesystem mostra un solo
+  tentativo e la catena rev è confermata da git=368c91d in-band + enforce
+  mem_hash==CAL. head_unmoved (post-build, pre-launch) e l'attempt-ledger
+  A-BG39 sono ora NELLO script per ogni run futuro (KG-87-1).
 - battery-85pre: PASS 15/15 a 368c91d per NOME, riga terminale ANCORATA +
   `.done` rev+sha256 (A-SK36) — **con `gate-measure-cifre --all` DENTRO il
   15/15 (A-SK40: il buco GRAVE KS-SK-86-3 è sanato NEL perimetro)**;
@@ -37,13 +44,23 @@ VERIFICATO (A-DL26/A-SK40). Verdetto macchina: `wp85-harness/verdict85.out`
   verdict-grade**. NET_H identico al byte al record WP-83/84. Bande
   A-BB42 (ri-ancorate al residuo: 734.998 B / 3.674.989 B [derivata:
   0,1×/0,5× di 7.349.977 B]) SUPERATE dal match esatto.
-- **🔵 SCOMPOSIZIONE ADDITIVA (dal raw VOID m85.dl28, ord=2)**: il run a
-  protocollo rotto (hello dispatchato due volte) ha prodotto il pad come
-  SECONDO main di thr0: net(ord2) = 460.146 B — e l'algebra chiude AL
-  BYTE: residuo one-time del THREAD = 7.343.135 B [derivata: 7.803.281−460.146]
-  · hello-own = 6.842 B [derivata: 7.349.977−7.343.135]
-  · pad-own = 460.146 B · verifica: 7.343.135+460.146 = 7.803.281 B = NET_P ESATTO [derivata: somma dei due addendi]. La domanda A-DL27 («di chi è il residuo») ha ora la metà
-  CONTATA scomposta per costruzione; resta la metà FISICA (A-DL31).
+- **🔵 SCOMPOSIZIONE ADDITIVA — MODEL-GRADE(src=m85.dl28) (A-BG42,
+  Concilio WP-87)**: il run a protocollo rotto (hello dispatchato due
+  volte) ha prodotto il pad come SECONDO main di thr0: net(ord2) =
+  460.146 B — e l'algebra chiude AL BYTE: residuo one-time del THREAD =
+  7.343.135 B [derivata: 7.803.281−460.146, MODEL-GRADE(src=m85.dl28)]
+  · hello-own = 6.842 B [derivata: 7.349.977−7.343.135, MODEL-GRADE(src=m85.dl28)]
+  · pad-own = 460.146 B [MODEL-GRADE(src=m85.dl28)] · verifica:
+  7.343.135+460.146 = 7.803.281 B = NET_P ESATTO [derivata: somma dei due
+  addendi]. **Classe**: cifre da raw VOID — legali SOLO come MODELLO con
+  tag di provenienza, MAI load-bearing in una delibera (KS-SK-87-4/
+  KG-87-2). Confound noto (Bak WP-87): il walk a 2 entry mostra
+  996.838 B [derivata: standalone 4.283.308+4.633.332=8.916.640 −
+  retained_walk(2 entry) 7.919.802] condivisi ⇒ pad-own a ord=2 può
+  sottostimare lo standalone; contro-prova A-BB45 (ordine invertito,
+  predizione hello-own(ord2)=6.842 B [derivata: v. algebra sopra]) prima
+  di ogni promozione. La domanda A-DL27 («di chi è il residuo») ha ora la
+  metà CONTATA scomposta per costruzione; resta la metà FISICA (A-DL31).
 - **VP — R=9, pin 232±1 MOSSO confermato; NESSUN pin nuovo deliberabile
   (KL-86-1)**: peaks 232.079.360 / 243.433.472 / 252.526.592 /
   238.157.824 / 241.844.224 / 242.384.896 / 243.384.320 / 235.634.688 /
@@ -53,20 +70,38 @@ VERIFICATO (A-DL26/A-SK40). Verdetto macchina: `wp85-harness/verdict85.out`
   MINIMO; spread r2..r9 = 16.891.904 B = 16,11 MiB [derivata: max−min di
   r2..r9] NON attribuito ⇒ per KL-86-1 la delibera di un pin identità è
   NULLA. Citazione legale: **envelope max = 252.526.592 B = 240,8 MiB**
-  (sostituisce l'envelope 240.287.744 B = 229,2 MiB della campagna-84:
-  l'envelope è SALITO). KB-86-1 soddisfatta nella forma (R=9, primo run
-  nominato); l'attribuzione dello spread è materia A-DL30/A-DL31 (purge
-  timing, first-touch — candidati nominati dal Concilio).
+  (sostituisce l'envelope 240.287.744 B = 229,2 MiB della campagna-84).
+  **EMENDATA S-86.0 (A-BG41/KG-87-3)**: il confronto cross-campagna è
+  legale solo coi lati NOMINATI — lato-85: driver_sha=54717a9afe6ccb96,
+  R=9; lato-84: driver_sha=fe6983d8fee7d0c2, R=3 (delta driver = solo il
+  wrapper di campagna, measure78.sh invariato — sanatoria Gregg a
+  ricomputo). «SALITO» NON è un regress dimostrato: max su R=9 domina
+  stocasticamente max su R=3 e la
+  differenza 12.238.848 B = 11,67 MiB [derivata: 252.526.592−240.287.744]
+  è DENTRO lo spread non attribuito
+  16.891.904 B = 16,11 MiB [derivata: max−min di r2..r9]. KB-86-1
+  soddisfatta nella forma (R=9, primo
+  run nominato); l'attribuzione dello spread è materia A-DL30/A-DL31
+  (purge timing, first-touch — candidati nominati dal Concilio).
 - **Guardia KS-PP-85-1/A-PP31**: 0 righe reqns senza `w=1` nei raw.
 
 ## ⚖️ Delibera peak (eseguita QUI, nelle forme del Concilio WP-86 punto 5)
 
-1. **×W ACCETTATO, verdict-grade**: il costo retained del main cache è
-   PER-THREAD per misura discriminata (canary) — ogni worker ripaga il
-   residuo 7.343.135 B [derivata: v. scomposizione sopra] + il proprio main-own; budget upper
-   20.648.477 B = 19,69 MiB × W (record WP-83) REGGE. Il trade resta
-   quello di WP-82 (costo ×W contro il churn per-richiesta risparmiato
-   dal HIT — record WP-81; VC ~55–75× su 7a610457).
+1. **×W ACCETTATO, verdict-grade — RIFORMULATA S-86.0 (A-BG42): la
+   delibera si appoggia SOLO a m85.dl28s (VERDICT-GRADE)**: nel run W=2
+   una-richiesta-per-worker ogni thread netta ESATTAMENTE la cifra
+   calibrata della PROPRIA fixture (hello→thr0 = NET_H 7.349.977 B, pad→
+   thr1 = NET_P 7.803.281 B, byte-exact) ⇒ il costo retained del main
+   cache è PER-THREAD e il budget upper 20.648.477 B = 19,69 MiB × W
+   (record WP-83) REGGE. La scomposizione «residuo 7.343.135 B [derivata:
+   7.803.281−460.146] + own» è SOLO illustrazione
+   MODEL-GRADE(src=m85.dl28) — mai addendo di questa delibera
+   (KB-87-1/KS-SK-87-4). Perimetro (KL-87-2/A-BB47): PER-THREAD
+   è provato per il protocollo SEQUENZIALE — l'estensione a dispatch
+   concorrente, W>2 o fixture con distruttori cross-richiesta esige
+   re-canary sotto overlap. Il trade resta quello di WP-82 (costo ×W
+   contro il churn per-richiesta risparmiato dal HIT — record WP-81; VC
+   ~55–75× su 7a610457).
 2. **Pin identità peak: RITIRATO** — non rifondabile oggi (KL-86-1:
    spread 16.891.904 B = 16,11 MiB a R=9 non attribuito; il vecchio
    232/232/232 era con ogni probabilità quantizzazione d'arena, Bak
@@ -96,3 +131,15 @@ VERIFICATO (A-DL26/A-SK40). Verdetto macchina: `wp85-harness/verdict85.out`
    → Concilio WP-87.
 6. **ROADMAP (p8)**: non ripresa in S-85.0 (campagna+sigilli hanno
    esaurito la sessione, dichiarato).
+7. **A-AH42 (retro-dichiarazione S-86.0, Concilio WP-87)**: A-AH38
+   (scope-file su split_lock) + dry-run KS-AH-86-1 legittimamente NON
+   eseguiti in S-85.0 (nessuna fase slope/base-arm, A-BB43) ma NON
+   dichiarati — la disciplina «mai chiusure in silenzio» vale anche per
+   le NON-esecuzioni ereditate. Vincolo: il dry-run resta OBBLIGATORIO
+   prima del prossimo uso base-arm, e A-AH38 deve atterrare PRIMA del
+   dry-run (un dry-run sulla v2 vecchia certifica l'oggetto sbagliato).
+8. **A-BB48 (retro-dichiarazione S-86.0, Concilio WP-87)**: A-BB44
+   (terzo punto VW len≥500) NON eseguito in S-85.0 NÉ dichiarato —
+   chiusura silente, sanata qui. Esecuzione ordinata in S-86.0 con
+   predizione nominata ex-ante: len=500 ⇒ a_calls=4, a_bytes =
+   2.002 B [derivata: 2·500+2·501].
