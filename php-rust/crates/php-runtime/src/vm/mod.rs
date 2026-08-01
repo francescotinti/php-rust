@@ -15723,6 +15723,14 @@ fn census_nested_lc_pop() -> u64 {
 /// silently). Gate detectors match the anchored form `^unitcache <event> `
 /// only; the cargo test `uc_log_event_vocabulary_is_prefix_free` pins that
 /// no anchored event is a prefix of another. Extend the array to add one.
+///
+/// A-DS31 (Council WP-86): the per-put EMISSION ORDER is probe API too
+/// (WP-64: event names are API — so is their sequence). For one
+/// `unit_cache_put` the sequence is `supersede*` → `main_evicted` →
+/// `evict fp`. Supersede (new-key put) and eviction (same-key overflow)
+/// are mutually exclusive per put today; the co-occurring pair
+/// (main_evicted before its evict-fp) is pinned by the armed half of
+/// `a_ds26_main_evicted_tripwire_bites_on_injection` (run armed by F16).
 pub(crate) const UC_LOG_EVENTS: [&str; 21] = [
     // S-82.0 (Council WP-83): the acquire-vitality + rejection observables.
     // `acquire_oneshot` (A-SK23) makes F-oneshot t2's zero non-vacuous;
@@ -19153,6 +19161,21 @@ mod tests {
                 buffered.contains("unitcache main_evicted"),
                 "armed log lacks the main_evicted event (A-DS26)"
             );
+            // A-DS31 (Council WP-86): the per-put emission ORDER is probe
+            // API — the collect-then-emit rewrite (A-MS28) must keep
+            // main_evicted BEFORE its evict-fp record. The first overflow
+            // put evicts the injected main, so the first `evict fp` line
+            // belongs to the same put as the main_evicted line.
+            let idx_me = buffered
+                .find("unitcache main_evicted")
+                .expect("checked above");
+            let idx_ev = buffered
+                .find("unitcache evict fp")
+                .expect("armed log lacks the evict-fp event of the same put (A-DS31)");
+            assert!(
+                idx_me < idx_ev,
+                "per-put event order violated: main_evicted after evict-fp (A-DS31)"
+            );
             super::uc_log_flush();
         }
         // Leave no rogue state behind: drop the whole injected key.
@@ -19201,53 +19224,120 @@ mod tests {
     #[test]
     fn a_ds17_compile_program_pure_double_compile() {
         fn sig(m: &crate::bytecode::Module) -> String {
-            // A-DS22 arm 3 finding (S-83.0 p4): the original sig covered
-            // main + top-level fn OPS only — a real mutation in a class
-            // method compared EQUAL twice over: method bodies were not in
-            // the sig at all, and the changed literal lives in the CONST
-            // POOL (same PushConst index, different pooled value), which
-            // no ops-only comparator can see. Ops AND consts of main,
-            // functions and class methods are all in the sig now; the
-            // historical a_ds17 PASS is re-judged under this stronger
-            // comparator by this same test.
-            fn func_sig(s: &mut String, tag: &str, f: &crate::bytecode::Func) {
-                // A-DS28: static_vars is a SEPARATE Func field — in the sig.
-                s.push_str(&format!("{tag}:{:?}|{:?}|{:?};", f.ops, f.consts, f.static_vars));
+            // A-DS30 (Council WP-86, Stogov Q2): EXHAUSTIVE destructuring,
+            // no `..` — rustc breaks THIS build on every new field of
+            // Module/CompiledClass, so a new emitted surface can never stay
+            // out of the comparator in silence. (KS-DS-85-3 bound NEW
+            // fields; the WP-86 finding was fields that already EXISTED:
+            // deferred, strict, enum_cases, final/abstract, own_prop_vis,
+            // uses_traits, hook bodies in prop_info — all covered below.)
+            // DERIVED fields — recomputed from the covered ones, cannot
+            // diverge alone — are bound and EXCLUDED BY NAME:
+            //   Module: fn_ci, class_index;
+            //   CompiledClass: class_name, info, props_layout, methods_ci,
+            //     has_prop_hooks, all_props_public, plain_set_props,
+            //     has_asym_set.
+            // Map/set fields are SORTED before formatting (Debug order of a
+            // hash container is not part of the module's identity).
+            use std::fmt::Write as _;
+            fn sorted_set(s: &std::collections::HashSet<usize>) -> Vec<usize> {
+                let mut v: Vec<usize> = s.iter().copied().collect();
+                v.sort_unstable();
+                v
             }
+            fn class_sig(out: &mut String, c: &crate::bytecode::CompiledClass) {
+                let crate::bytecode::CompiledClass {
+                    name,
+                    file,
+                    line,
+                    end_line,
+                    doc,
+                    class_name: _,
+                    parent,
+                    interfaces,
+                    instantiable,
+                    is_final,
+                    is_abstract,
+                    prop_defaults,
+                    info: _,
+                    props_layout: _,
+                    methods,
+                    methods_ci: _,
+                    abstract_methods,
+                    abstract_sigs,
+                    own_prop_vis,
+                    static_props,
+                    prop_init,
+                    consts,
+                    enum_cases,
+                    attributes,
+                    prop_attributes,
+                    uses_traits,
+                    uninit_props,
+                    ok,
+                    prop_info,
+                    has_prop_hooks: _,
+                    all_props_public: _,
+                    plain_set_props: _,
+                    has_asym_set: _,
+                } = c;
+                let mut pattr: Vec<_> = prop_attributes.iter().collect();
+                pattr.sort_by(|a, b| a.0.cmp(b.0));
+                let mut pinfo: Vec<_> = prop_info.iter().collect();
+                pinfo.sort_by(|a, b| a.0.cmp(b.0));
+                write!(
+                    out,
+                    "c:{name:?}|{file:?}|{line}|{end_line}|{doc:?}|p:{parent:?}|i:{interfaces:?}|\
+                     inst:{instantiable:?}|fin:{is_final}|abs:{is_abstract}|pd:{prop_defaults:?}|\
+                     m:{methods:?}|am:{abstract_methods:?}|asig:{abstract_sigs:?}|\
+                     opv:{own_prop_vis:?}|sp:{static_props:?}|pinit:{prop_init:?}|cc:{consts:?}|\
+                     ec:{enum_cases:?}|attr:{attributes:?}|pattr:{pattr:?}|ut:{uses_traits:?}|\
+                     up:{uninit_props:?}|ok:{ok}|pinfo:{pinfo:?};"
+                )
+                .unwrap();
+            }
+            let crate::bytecode::Module {
+                main,
+                functions,
+                conditional_fns,
+                fn_ci: _,
+                conditional_classes,
+                conditional_traits,
+                deferred,
+                closures,
+                classes,
+                file,
+                class_index: _,
+                static_count,
+                strict,
+                const_attributes,
+                elided,
+            } = m;
             let mut s = String::new();
-            func_sig(&mut s, "main", &m.main);
-            for f in &m.functions {
-                func_sig(&mut s, "f", f);
+            write!(s, "main:{main:?};").unwrap();
+            for f in functions {
+                write!(s, "f:{f:?};").unwrap();
             }
             // A-DS28 finding (verified BY NAME, S-84.0): closures do NOT
             // land in m.functions — they compile into the SEPARATE
-            // `m.closures` table (index space of Program::closures,
-            // Op::MakeClosure). A comparator without this loop is blind to
-            // every closure body.
-            for f in &m.closures {
-                func_sig(&mut s, "clo", f);
+            // `m.closures` table.
+            for f in closures {
+                write!(s, "clo:{f:?};").unwrap();
             }
-            for c in &m.classes {
-                s.push_str(&format!("c:{}:", String::from_utf8_lossy(&c.name)));
-                // A-DS28 (Council WP-85, Stogov Q3): the WP-84 comparator
-                // covered ops+consts of main/functions/methods ONLY — a
-                // mutation in a property default, a class constant, the
-                // parent edge, the interface list or a static prop compared
-                // EQUAL. All of them are in the sig now; KS-DS-85-3 binds
-                // every NEW Module-emitted surface to a same-commit sig
-                // extension plus a mutant that bites.
-                s.push_str(&format!(
-                    "p:{:?}|i:{:?}|pd:{:?}|cc:{:?}|sp:{:?};",
-                    c.parent, c.interfaces, c.prop_defaults, c.consts, c.static_props
-                ));
-                if let Some(pi) = &c.prop_init {
-                    func_sig(&mut s, "pi", pi);
-                }
-                for meth in &c.methods {
-                    func_sig(&mut s, &format!("m:{}", String::from_utf8_lossy(&meth.name)), &meth.func);
-                }
+            for c in classes {
+                class_sig(&mut s, c);
             }
-            s.push_str(&format!("classes:{};fns:{}", m.classes.len(), m.functions.len()));
+            let mut cattr: Vec<_> = const_attributes.iter().collect();
+            cattr.sort_by(|a, b| a.0.cmp(b.0));
+            write!(
+                s,
+                "cfns:{:?};ccls:{:?};ctraits:{conditional_traits:?};def:{deferred:?};\
+                 file:{file:?};sc:{static_count};strict:{strict};cattr:{cattr:?};\
+                 elided:{elided:?}",
+                sorted_set(conditional_fns),
+                sorted_set(conditional_classes),
+            )
+            .unwrap();
             s
         }
         // A-DS28: the source exercises every sig surface — prop default,
@@ -19383,6 +19473,45 @@ mod tests {
             sig(&mmut3),
             "sig comparator BLIND: a mutated closure body compared EQUAL (A-DS28 mutant 3)"
         );
+        // A-DS30 mutants (Council WP-86) — the three surfaces Stogov named
+        // as EXISTING-but-uncovered, each made to bite with a minimal pair.
+        // Mutant 4: DEFERRED body — the parent is declared AFTER the class,
+        // so the class compiles late-bound into m.deferred (the same
+        // separate-table blindness class as the closures finding).
+        let sig_of = |src: &[u8]| {
+            let p = crate::lower_source(b"dd.php", src).unwrap();
+            let m = crate::compile::compile_program(&p, &reg).unwrap();
+            (sig(&m), m)
+        };
+        let (sd1, md1) = sig_of(
+            b"<?php if (true) { class LateP {} } \
+              class DefC extends LateP { public function b() { return 1; } } echo 1;",
+        );
+        assert!(
+            !md1.deferred.is_empty(),
+            "fixture did not land in m.deferred — late binding not exercised (A-DS30 mutant 4 vacuous)"
+        );
+        let (sd2, _) = sig_of(
+            b"<?php if (true) { class LateP {} } \
+              class DefC extends LateP { public function b() { return 2; } } echo 1;",
+        );
+        assert_ne!(sd1, sd2, "sig BLIND: deferred body mutation compared EQUAL (A-DS30 mutant 4)");
+        // Mutant 5: ENUM CASE VALUE only.
+        let (se1, me1) = sig_of(b"<?php enum DsE: int { case A = 1; } echo 1;");
+        assert!(
+            me1.classes.iter().any(|c| !c.enum_cases.is_empty()),
+            "fixture has no enum_cases — enum surface not exercised (A-DS30 mutant 5 vacuous)"
+        );
+        let (se2, _) = sig_of(b"<?php enum DsE: int { case A = 2; } echo 1;");
+        assert_ne!(se1, se2, "sig BLIND: enum case value mutation compared EQUAL (A-DS30 mutant 5)");
+        // Mutant 6: FINAL flag only.
+        let (sf1, _) = sig_of(b"<?php class DsF {} echo 1;");
+        let (sf2, mf2) = sig_of(b"<?php final class DsF {} echo 1;");
+        assert!(
+            mf2.classes.iter().any(|c| c.is_final),
+            "fixture is_final never set — flag surface not exercised (A-DS30 mutant 6 vacuous)"
+        );
+        assert_ne!(sf1, sf2, "sig BLIND: final-flag mutation compared EQUAL (A-DS30 mutant 6)");
     }
 
     /// A-DS9/KB (Council WP-83, campaign-run only — `--ignored` in the
