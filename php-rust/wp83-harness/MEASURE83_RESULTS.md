@@ -37,10 +37,16 @@ esteso ai raw m83/83*).
   min-of-R, R=9 per cella, f=5% ex-ante; risoluzione 20,0 µs/req <
   banda/3 (123,7) ⇒ il claim è verdict-grade: **slope_lever = 110,0
   µs/req vs slope_base = 6920,0 µs/req** (bound 7291,0) — la leva taglia
-  la pendenza compile-side di **~63×**. Scope NOMINATO: axum W=1 hello
-  closed-sequential, binari union non strumentati, bracci interleaved
-  stessa sera (A-TH26). Il programma "N-doppio" refutato dal Concilio non
-  è mai stato rieseguito: ha chiuso il CAMBIO DI FORMA (A-BB31).
+  la pendenza compile-side di **~55–75×** (retro-quotato A-BB37, Concilio
+  WP-85: lo spread lever è 1 tick del timer da 10ms — res_eff col
+  tick-floor; il centro resta ~63×). Scope NOMINATO: axum W=1 hello
+  closed-sequential, binari union non strumentati, **bracci in blocchi
+  ADIACENTI stessa sera** (retro-corretto A-BG34: i mtime dei raw provano
+  blocchi lever→CR→base in ~14 min, NON alternanza per-R — la dicitura
+  "interleaved" dell'header v1 era falsa alla lettera, BOCCIATA dal
+  Concilio WP-85). Il programma "N-doppio" refutato dal Concilio non
+  è mai stato rieseguito: ha chiuso il CAMBIO DI FORMA (A-BB31). VC
+  confermato a ricomputo 36/36 (Gregg) per la via (b) di KG-85-1.
 - **VCR per-request [derivata]** (A-BG32, braccio lever SOLO — il binario
   base pre-leva non ha il probe, DICHIARATO): regime su N=2000 ×3:
   median 330-360 µs/req, min 167-184, p90 420-503 — la distribuzione
@@ -61,10 +67,13 @@ esteso ai raw m83/83*).
   marginale VP 3,44 MB/worker ⇒ ratio 2,95; **frazione condivisibile
   (upper est) ≈ 69%** — input della delibera peak ×W (KL-84-2
   soddisfatta: la delibera ora HA la scomposizione).
-- **VA register split — PASS**: steady a3==0 ESATTO sui tre bracci;
-  [derivata] **register = +4 call/req**, **include-HIT ≤ +52 call/req**
-  (upper bound vs opcache inheritance-cache, A-DS25) — il composito +56
-  di S-82.0 è SPLITTATO (A-BB33/KB-84-3 soddisfatte).
+- **VA register split — a3==0 PASS come VITALITÀ; le derivate sono VOID
+  (retro-marcato KS-DS-85-1, Concilio WP-85)**: steady a3==0 ESATTO sui
+  tre bracci; ⚠️ le cifre [derivata] «register = +4» / «include-HIT ≤ +52»
+  poggiano su un body MAI osservato (measure78 scarta ogni body; il
+  full-body oracle copriva solo la fase R) — **VOID d'ufficio**, rimisura
+  in WP-84 con oracle per-fixture ledgerato (A-DS29). Lo split resta
+  l'obiettivo (A-BB33/KB-84-3), non ancora una cifra.
 - **VW path≥384B — NAMED-DEVIATION (KB-84-2: esito nominato, mai claim
   silenzioso)**: sul path canonico da 415 B, **a_bytes=1662 ≠ 2×len=830**
   e **a_calls=4,0** (non 2): il modello-floor "2 allocazioni da len" è
