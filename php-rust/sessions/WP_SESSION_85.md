@@ -1,5 +1,11 @@
 # WP_SESSION_85.md — S-85.0 "IL CANARY CHE DISCRIMINA" — ✅ 8 punti Concilio WP-86 + VERDICT85 PASS + ×W verdict-grade + pin peak RITIRATO
 
+**In una frase**: abbiamo dimostrato con un esperimento mirato che ogni
+worker del server PHP-in-Rust paga la propria quota fissa di memoria
+(~7 MB a testa, quindi il consumo cresce in modo prevedibile col numero
+di worker), e nel farlo abbiamo reso più severi i controlli automatici
+che impediscono di pubblicare misure o conclusioni sbagliate.
+
 **Data**: 2026-08-01 sera
 **Scope**: ordine vincolante Concilio WP-86 §Sintesi (8 punti) eseguito.
 Modello verificato all'apertura: Fable 5.
