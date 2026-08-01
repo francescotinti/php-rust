@@ -47,24 +47,48 @@ fix-forward** (KS-DS-80-3, mai innescata). 6. **Mai rm di raw:
 quarantena + manifest** (KS-AH-83-2). 7. **Cifre memoria BYTES-FIRST**
 (A-DL26/KL-85-2, gate-cifre morde dal MEASURE84 in poi).
 
-## §WP-85(sessione) — prossimo lavoro
+## ⚖️ Concilio WP-86 ESEGUITO (2026-08-01, verbali VINCOLANTI): `wp86-harness/COUNCIL_WP86_REVIEWS.md`
 
-1. **Delibera peak ×W** (Concilio WP-86, input completi): VDL24 dice
-   PER-THREAD; pin VP mosso a 217,7–229,2 MiB (spread tornato) — la
-   delibera decide accettazione del costo ×W e l'eventuale via registry
-   (SOLO con A-BB35 budget ex-ante + riapertura ESPLICITA KH81-3,
-   KH84-4; frazione condivisibile walk 69,1% / footprint 66,1%).
-2. **A-DL27**: scomporre gli addendi opachi (3.057.613 B) e il gap
-   7,01 MiB per-thread ↔ 3,44 MB/worker fisico.
-3. **A-MS27** (backlog nominato): partizione-per-TIPO vera
-   (CachedMain/CachedInclude) — "per costruzione" si scrive ancora "per
-   disciplina + tripwire" (KS-MS-85-3), ma il tripwire ora HA morso.
-4. **Slope futura** (quando servirà): A-BG33 (base per-request via
-   curl -w) + A-BG35 (regime nel verdict) — A-PP28 già nel binario.
-5. **A-PP27** PRIMA di ogni nuovo segmento twin-pair (KS-PP-85-3).
-6. Poi: **ripresa ROADMAP da [[php-rust-todo-master]]**. Deferred
+**9× CONCORDO/CONFERMATO CON EMENDAMENTI, 0 opposizioni; 26 KS nuovi.**
+CIFRE confermate a ricomputo indipendente (Gregg al byte; Bak 39/39
+righe/cella; Leijen ha trovato il primo addendo del gap NEL RAW:
+7.349.977−4.283.308 = 3.066.669 B fuori-walk). REFUTATI: KH85-1 chiuso a
+metà (cargo test unifica la feature; mint in-module senza giudice —
+A-TH32/KH86-1 dente sul BINARIO); certificato di partizione = SPELLING
+(A-TH33; A-MS27 → PRECONDIZIONE via registry, KS-MS-86-2≡KH86-2); **buco
+GRAVE Klabnik: la battery invoca il cifre-gate sul default 81 — MEASURE84
+mai coperto dal 15/15** (A-SK40/KS-SK-86-3); **VDL24 PER-THREAD =
+VALIDA-CONDIZIONATA** (identità al byte non discrimina — canary
+monolaterale A-DL28≡A-BB41; senza: budget ×W = IPOTESI, KL-86-2/KB-86-2);
+**VP non deliberabile così** (r1 freddo, R=3 basta per "mosso" non per un
+pin nuovo — envelope max 240.287.744 B = 229,2 MiB; driver_sha diverso da
+82p: attribuzione CANDIDATA, A-BG36); sig() scoperta su campi ESISTENTI
+(m.deferred/strict/enum_cases/hook — A-DS30 destructuring esaustivo); i
+rifiuti non si ereditano da soli (A-PP31/KG-86-1 fail-closed); A-AH35
+possiede i blocchi non il file + mai un positive-control live
+(A-AH38/KS-AH-86-1).
+
+## §WP-85(sessione) — S-85.0 = ordine Concilio WP-86 §Sintesi (non rinegoziare)
+
+1. **Sanatorie immediate**: 3,44 MB/worker coi byte esatti (KL-85-2) ·
+   A-PP32 · A-MS30 · A-BG37 · A-DS33 · A-MS31.
+2. **Battery/equivalenza v3**: A-SK36 (stamp ancorato, .done solo-PASS
+   con sha256(OUT)) · A-SK37 · **A-SK40 (cifre-gate su TUTTI i
+   MEASURE8[4-9] in battery — sana il buco GRAVE)** · A-SK38/39 · A-AH39.
+3. **Sigilli v3**: A-TH32 (micro-modulo `gate`) · A-TH33 · A-MS29 ·
+   KH86-1 cablato (dente `nm` sul binario) · A-TH34 · A-TH35.
+4. **sig() esaustiva**: A-DS30 (senza `..`, 3 mutanti nuovi) · A-DS31.
+5. **Discriminazione VDL24 + VP deliberabile**: A-DL28≡A-BB41 (canary
+   monolaterale, Δ predetto dal piecewise) · A-DL29 · VP R≥9 min-of-R
+   primo-run nominato (A-BB40) + A-DL30 + A-BB42 · POI delibera peak
+   (fino ad allora: envelope max 229,2 MiB, ×W = IPOTESI CANDIDATA;
+   registry SOLO con A-MS27 + A-BB35 + riapertura KH81-3).
+6. **Eredità meccanica**: A-PP31/KS-PP-86-1 · KG-86-1 · A-PP30 · A-DS32.
+7. **A-DL27 eseguibile** (A-DL31): W=1/2/3, chiusura additiva ±5%.
+8. Poi: **ripresa ROADMAP da [[php-rust-todo-master]]**. Deferred
    invariati: A-TH4; A-AH5/A-BB4 superglobali axum (KS-DS-82-3); ORM/hk
-   perf solo build-adiacente (KS-AH-83-4).
+   perf solo build-adiacente (KS-AH-83-4); A-PP27 prima di ogni nuovo
+   twin-pair; smoke-slope A-BB43 a ogni trasferimento di cifra slope.
 
 **Kill-switch di rotta (ereditati WP-85, attivi)**: KH85-1/2/3,
 KS-MS-85-1..4, KS-SK-85-1..3, KS-AH-85-1..3, KB-85-1..3, KS-PP-85-1..3,
