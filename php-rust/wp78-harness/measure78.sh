@@ -248,6 +248,15 @@ SRVPID="$(lsof -nP -tiTCP:"$PORT" -sTCP:LISTEN | head -1)"
 for _ in $(seq 1 "$WARMUP"); do
   curl -s -m 10 -o /dev/null "http://127.0.0.1:$PORT/$FIXTURE"
 done
+# A-BG32 (Council WP-84): per-request ns drain 1 — DISCARDS the warmup
+# samples from the buffer (the drained line lands in $RUN.log, labeled;
+# the verdict reads the LAST reqns line = the measured window only).
+# Armed only when the campaign exports PHPR_REQ_NS=1 (server inherits);
+# the __reqns probe answers from the ROUTER, no worker sample is added.
+# Sits OUTSIDE both timed loops (WP-64).
+if [ "${PHPR_REQ_NS:-}" = "1" ]; then
+  curl -s -m 5 -o /dev/null "http://127.0.0.1:$PORT/__reqns"
+fi
 vmmap "$SRVPID" 2>/dev/null > "$RUN.vmmap.V1"
 
 # S-79.0.3 (A-AH13/A-DL5), extended S-80.0.2 (A-DL8/A-BG20/A-AH20): idle
@@ -267,6 +276,10 @@ fi
 for _ in $(seq 1 "$MEASURED"); do
   curl -s -m 10 -o /dev/null "http://127.0.0.1:$PORT/$FIXTURE"
 done
+# A-BG32 drain 2: the MEASURED-window samples — the verdict's reqns line.
+if [ "${PHPR_REQ_NS:-}" = "1" ]; then
+  curl -s -m 5 -o /dev/null "http://127.0.0.1:$PORT/__reqns"
+fi
 vmmap "$SRVPID" 2>/dev/null > "$RUN.vmmap.V2"
 
 kill -TERM "$SRVPID" 2>/dev/null
