@@ -81,6 +81,19 @@ mod implementation {
         pub response_tx: oneshot::Sender<(Vec<u8>, StatusCode)>,
     }
 
+    /// A-BG32 (Council WP-84): per-request timing probe, armed once by
+    /// PHPR_REQ_NS=1. Samples land in [`REQ_NS`]; the `__reqns` router
+    /// probe drains them to stderr OUTSIDE any timed window (WP-64: a
+    /// timed window must never contain its own logging I/O).
+    pub fn req_ns_armed() -> bool {
+        static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+        *ON.get_or_init(|| std::env::var("PHPR_REQ_NS").is_ok_and(|v| v == "1"))
+    }
+
+    /// A-BG32 sample buffer — global (workers push, the router drains);
+    /// contended only when armed, and the slope campaign runs W=1.
+    pub static REQ_NS: std::sync::Mutex<Vec<u64>> = std::sync::Mutex::new(Vec::new());
+
     // A-MS3 positive control (WP-72 lesson: an all-negative counter is a failed
     // check): the only value that crosses the Axum→worker channel MUST be Send.
     static_assertions::assert_impl_all!(WorkerTask: Send);
@@ -328,7 +341,20 @@ mod implementation {
                 // thread boundary (assert_not_impl_any, php-runtime); dropped
                 // after the Vm at the end of this iteration (P-67.5), which
                 // is what makes include parking leak-free (KS-DS-78-4).
+                // A-BG32 (Council WP-84): per-request monotonic sample —
+                // armed by PHPR_REQ_NS=1, one predictable branch when off
+                // (declared). The slope claim moves from `time -l` totals
+                // (noise ∝ runtime, KG-84-3) to per-request samples in the
+                // regime window; no I/O here (WP-64): samples buffer in
+                // memory, the campaign drains them via the __reqns probe
+                // AFTER the timed window.
+                let req_t0 = req_ns_armed().then(std::time::Instant::now);
                 let (response, status) = execute_request(&reg, &task.meta);
+                if let Some(t0) = req_t0 {
+                    if let Ok(mut v) = REQ_NS.lock() {
+                        v.push(t0.elapsed().as_nanos() as u64);
+                    }
+                }
                 let _ = task.response_tx.send((response, status));
                 // Response sent: the request leaves the server — only now
                 // does OUTSTANDING drop (A-TH9: dec-after-send is what makes
@@ -1455,4 +1481,6 @@ mod implementation {
 }
 
 #[cfg(feature = "axum-server")]
-pub use implementation::{WorkerPool, WorkerPoolContext, WorkerTask, WorkerHandlerMeta};
+pub use implementation::{
+    REQ_NS, WorkerHandlerMeta, WorkerPool, WorkerPoolContext, WorkerTask, req_ns_armed,
+};

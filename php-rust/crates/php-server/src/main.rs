@@ -203,6 +203,33 @@ mod axum_handler {
             return (StatusCode::OK, b"census-global\n".to_vec());
         }
 
+        // A-BG32 (Council WP-84): drain the per-request ns samples to
+        // stderr — called by the slope campaign AFTER the timed window
+        // (WP-64: no timed window contains its own logging I/O). Lives in
+        // the UNION arm (env-gated, one branch per request when unarmed,
+        // declared): the slope is measured on the union binary, never a
+        // census build (KL-84-3). ends_with-anchored (S-78.1 lesson).
+        if request_path.ends_with("/__reqns") {
+            if !crate::worker_pool::req_ns_armed() {
+                return (StatusCode::OK, b"reqns: unarmed\n".to_vec());
+            }
+            let mut v = crate::worker_pool::REQ_NS
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let n = v.len();
+            let mut line = format!("reqns: n={n} arm=axum-worker unit=ns ns=");
+            for (i, x) in v.iter().enumerate() {
+                if i > 0 {
+                    line.push(',');
+                }
+                line.push_str(&x.to_string());
+            }
+            v.clear();
+            drop(v);
+            eprintln!("{line}");
+            return (StatusCode::OK, format!("reqns-drained n={n}\n").into_bytes());
+        }
+
         // A-PP4 (Council WP-80): a panic in the AXUM task used to be caught
         // by tokio — dead task, hung request, LIVE process: the "silently
         // dead" state KS-PP-6 bans, on the dispatcher side. The abort
