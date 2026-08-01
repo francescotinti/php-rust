@@ -91,7 +91,12 @@ mod implementation {
     }
 
     /// A-BG32 sample buffer — global (workers push, the router drains);
-    /// contended only when armed, and the slope campaign runs W=1.
+    /// contended only when armed. A-PP28 (Council WP-85, Pedersen Q3): at
+    /// W>1 samples from different workers INTERLEAVE in this Mutex — the
+    /// "slope campaign runs W=1" line above this used to be discipline, not
+    /// machine. The `__reqns` drain now stamps `w=<W>` IN-BAND on the
+    /// `reqns:` line and the slope verdict refuses w!=1 fail-closed
+    /// (KS-PP-85-1: per-request slope samples without w=1 in-band = VOID).
     pub static REQ_NS: std::sync::Mutex<Vec<u64>> = std::sync::Mutex::new(Vec::new());
 
     // A-MS3 positive control (WP-72 lesson: an all-negative counter is a failed
@@ -207,6 +212,8 @@ mod implementation {
     /// death, A-DS2; leak-freedom by RetainSet death, KS-DS-78-4).
     pub struct WorkerPool {
         senders: Vec<mpsc::UnboundedSender<WorkerTask>>,
+        // (worker_count() = senders.len(): the EFFECTIVE W after the
+        //  0 = CPU-count default resolves — the A-PP28 in-band stamp.)
         next_worker: std::sync::atomic::AtomicUsize,
         // A-MS7/A-DL6 (Council WP-79): join handles retained so shutdown()
         // can prove worker teardown before process-exit stats are read
@@ -215,6 +222,14 @@ mod implementation {
     }
 
     impl WorkerPool {
+        /// A-PP28 (Council WP-85): the EFFECTIVE worker count (after the
+        /// `0 = CPU count` default resolved) — stamped `w=<W>` in-band on
+        /// every `reqns:` drain line so the slope verdict can refuse W>1
+        /// samples mechanically (KS-PP-85-1).
+        pub fn worker_count(&self) -> usize {
+            self.senders.len()
+        }
+
         /// Create pool with N worker threads (default: CPU count).
         ///
         /// Each worker thread:
@@ -1018,6 +1033,14 @@ mod implementation {
             // publishing under a DIVERGENT key that the canonicalized
             // uc_main_key_in_cache probe below cannot see (RETENTION class).
             let e0 = php_runtime::uc_main_entry_count();
+            // A-PP26 (Council WP-85): the main-only enumerator is blind to a
+            // divergent inserter publishing the fatal main in INCLUDE form
+            // (main_program=None). Pin the TOTAL entry count too: request 1
+            // legitimately seeds the prelude include entries on this fresh
+            // test thread, so the steady-state pin is "request 2 adds ZERO
+            // entries of ANY lane" (KS-PP-85-2). Same-thread precondition
+            // of both enumerators documented on the probe.
+            let mut t_mid = 0usize;
             for req in 1..=2 {
                 let retain = php_runtime::RetainSet::new();
                 let (body, status) = execute_with_retain(
@@ -1034,7 +1057,16 @@ mod implementation {
                     String::from_utf8_lossy(&body).contains("Fatal error"),
                     "request {req}: body must carry the fatal banner"
                 );
+                if req == 1 {
+                    t_mid = php_runtime::uc_entry_count();
+                }
             }
+            assert_eq!(
+                php_runtime::uc_entry_count(),
+                t_mid,
+                "link-fatal request 2 grew TOTAL cache entries — include-form \
+                 retention of a fatal main (A-PP26/KS-PP-85-2)"
+            );
             let (p1, h1, u1) = php_runtime::uc_main_stats();
             assert_eq!(p1 - p0, 2, "positive control: both requests must PROBE (vitality)");
             assert_eq!(u1 - u0, 0, "link-fatal main was PUT (A-PP16/A-PP20)");
@@ -1060,6 +1092,7 @@ mod implementation {
             let ok_file = dir.join("ok_pp22.php");
             std::fs::write(&ok_file, "<?php echo \"ok\";").unwrap();
             let ok_path = ok_file.display().to_string();
+            let t2 = php_runtime::uc_entry_count();
             let retain = php_runtime::RetainSet::new();
             let (body, status) = execute_with_retain(
                 &retain,
@@ -1073,6 +1106,13 @@ mod implementation {
                 1,
                 "positive control: a clean main did not move the enumeration \
                  (blind enumerator, KG-79.A)"
+            );
+            // A-PP26 positive twin: the TOTAL enumerator counts it too.
+            assert_eq!(
+                php_runtime::uc_entry_count() - t2,
+                1,
+                "positive control: the TOTAL enumerator did not count the \
+                 clean main (A-PP26/KG-79.A)"
             );
         }
 

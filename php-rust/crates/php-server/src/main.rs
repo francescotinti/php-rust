@@ -217,7 +217,11 @@ mod axum_handler {
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
             let n = v.len();
-            let mut line = format!("reqns: n={n} arm=axum-worker unit=ns ns=");
+            // A-PP28 (Council WP-85): `w=` is IN-BAND — at W>1 the samples
+            // of different workers interleave in the global Mutex and the
+            // slope verdict refuses them fail-closed (KS-PP-85-1).
+            let w = state.pool.worker_count();
+            let mut line = format!("reqns: n={n} w={w} arm=axum-worker unit=ns ns=");
             for (i, x) in v.iter().enumerate() {
                 if i > 0 {
                     line.push(',');

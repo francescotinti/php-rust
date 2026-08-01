@@ -14,8 +14,12 @@
 #     live one after the build, or the arm is VOID (KS-AH-84-1);
 #   - A-TH26 header: base_rev, bin hash, rustc -V, sha256 of BOTH locks
 #     (equal or the arm is VOID) — appended to <header_out>.
-# Usage: base-arm-build.sh <base_rev> <worktree_dir> <target_dir> \
-#            <features> <header_out>
+# Usage (v2, A-TH30 — the expected pruned-set is NAMED per campaign):
+#   base-arm-build.sh <base_rev> <worktree_dir> <target_dir> \
+#            <features> <header_out> <expected_pruned_pkgs>
+# <expected_pruned_pkgs> = comma-list of package names the campaign EXPECTS
+# the prune to touch (e.g. "mimalloc"); "-" declares NO prune expected.
+# A deletion touching any package outside the named set = arm VOID.
 # Exit 0 = base binary at <target_dir>/release/php-server, header written.
 export PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin:$HOME/.cargo/bin:$PATH
 set -u
@@ -23,6 +27,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$HERE/.." && pwd)"
 BASE_REV="${1:?base rev}"; BASEWT="${2:?worktree dir}"; TGT="${3:?target dir}"
 FEATURES="${4:?features}"; HDR="${5:?header out}"
+EXPECTED_PRUNED="${6:?expected pruned pkgs (comma-list or - for none) — A-TH30}"
 
 if [ ! -d "$BASEWT" ]; then
   git -C "$REPO" worktree add "$BASEWT" "$BASE_REV" > /dev/null 2>&1 \
@@ -38,17 +43,24 @@ cp "$REPO/Cargo.lock" "$BASECRATE/Cargo.lock" || { echo "FAIL: lock copy"; exit 
     -p php-server --features "$FEATURES" ) > "$HDR.build.log" 2>&1 \
   || { echo "FAIL: base build (see $HDR.build.log)"; tail -5 "$HDR.build.log"; exit 1; }
 
-# A-AH32 (form AMENDED S-83.0, DECLARED — the byte-exact tooth BIT on its
-# first real run and the diff was the PRUNE of the one "mimalloc" dev-dep
-# EDGE the 7593d8e manifest lacks: zero version drift, structurally
-# unavoidable across manifests that differ by a dev-dep — a tooth that can
-# never pass certifies nothing, WP-72 class). The INTENT (Hejlsberg Q2:
-# detect a silent re-resolve) is kept in a two-tooth machine form:
+# A-AH32 (PRUNE-ONLY, judged and ACCEPTED WITH REINFORCEMENT by Council
+# WP-85 — Hejlsberg A-AH35/A-AH37, Hoare A-TH30): the byte-exact tooth was
+# structurally unsatisfiable across manifests that differ by a dev-dep
+# (WP-72 class); the honest form distinguishes the legitimate prune from a
+# re-resolve AND from a provenance-strip. Teeth, all machine:
 #   (a) the byte-diff live->post-build may contain ONLY DELETED lines
 #       (prune); ANY added/changed line = re-resolve = arm VOID;
 #   (b) the (name, version) pairs of the post-build lock must ALL appear
-#       IDENTICAL in the live lock (subset; drift/addition = VOID).
-# Council WP-85 judges this amendment; the raw diff is archived in-header.
+#       IDENTICAL in the live lock (subset; drift/addition = VOID);
+#   (c) A-AH35: deletions are legal ONLY as (c1) dependency-EDGE lines
+#       (quoted list elements) inside a SURVIVING package's block, or (c2)
+#       whole [[package]] blocks whose name@version is ABSENT from the
+#       post-build lock. A deleted version=/source=/checksum= line with the
+#       package SURVIVING = provenance-strip = arm VOID (KS-AH-85-1);
+#   (d) A-TH30: resolver = "2" pinned in BOTH manifests (under resolver v1
+#       dev-dep edges unify features into `cargo build` — the prune would
+#       then be a CPU-bias vector; KH85-2), the expected pruned-set is
+#       NAMED per campaign, and the diff is archived INTEGRAL on file.
 LOCK_DIFF=$(diff "$REPO/Cargo.lock" "$BASECRATE/Cargo.lock" || true)
 LOCK_ADDED=$(printf '%s\n' "$LOCK_DIFF" | grep -c '^>' || true)
 LOCK_PRUNED=$(printf '%s\n' "$LOCK_DIFF" | grep -c '^<' || true)
@@ -66,6 +78,77 @@ if [ -n "$VERS_DRIFT" ]; then
   exit 1
 fi
 
+# (d) A-TH30/KH85-2: resolver pinned "2" in BOTH manifests, or the
+# prune-only innocuousness argument does not hold.
+RES_LIVE=$(grep -c '^resolver = "2"' "$REPO/Cargo.toml" || true)
+RES_BASE=$(grep -c '^resolver = "2"' "$BASECRATE/Cargo.toml" || true)
+if [ "$RES_LIVE" -ne 1 ] || [ "$RES_BASE" -ne 1 ]; then
+  echo "FAIL: resolver=\"2\" not pinned in both manifests (live=$RES_LIVE base=$RES_BASE) — arm VOID (A-TH30/KH85-2)"
+  exit 1
+fi
+
+# (c) A-AH35: per-package legality of every deleted line.
+# Split each lock into [[package]] blocks keyed name@version.
+split_lock() { # <lockfile> <outdir>
+  awk -v d="$2" '
+    function flush() { if (key != "") printf "%s", buf > (d "/" key); key=""; buf="" }
+    /^\[\[package\]\]/ { flush(); collecting=1; next }
+    collecting {
+      buf = buf $0 "\n"
+      if ($1 == "name")    { n = $3; gsub(/"/, "", n) }
+      if ($1 == "version") { v = $3; gsub(/"/, "", v); key = n "@" v }
+    }
+    END { flush() }
+  ' "$1"
+}
+BD=$(mktemp -d); mkdir -p "$BD/live" "$BD/base"
+split_lock "$REPO/Cargo.lock" "$BD/live"
+split_lock "$BASECRATE/Cargo.lock" "$BD/base"
+PRUNED_PKGS=""; VIOL=""
+for f in "$BD/live"/*; do
+  k=${f##*/}
+  if [ ! -f "$BD/base/$k" ]; then
+    # (c2) whole-block prune — legal; record the package name for (d).
+    PRUNED_PKGS="$PRUNED_PKGS ${k%@*}"
+    continue
+  fi
+  PKG_DIFF=$(diff "$f" "$BD/base/$k" || true)
+  [ -z "$PKG_DIFF" ] && continue
+  # (c1) surviving package: every deleted line must be a quoted dependency-
+  # edge list element; anything else (version=/source=/checksum=/brackets)
+  # is a provenance-strip or a structural edit — VOID.
+  BAD=$(printf '%s\n' "$PKG_DIFF" | grep '^<' | grep -vE '^< *"[^"]*",?$' || true)
+  if [ -n "$BAD" ]; then
+    VIOL="$VIOL$k: $(printf '%s\n' "$BAD" | head -2 | tr '\n' ' ')"$'\n'
+  else
+    # legal edge deletions: record the EDGE TARGET name (the S-83.0 real
+    # case names "mimalloc", the pruned dev-dep — not the surviving owner).
+    EDGES=$(printf '%s\n' "$PKG_DIFF" | grep '^<' | sed -E 's/^< *"([A-Za-z0-9_.-]+).*/\1/')
+    PRUNED_PKGS="$PRUNED_PKGS $EDGES"
+  fi
+done
+rm -rf "$BD"
+if [ -n "$VIOL" ]; then
+  echo "FAIL: non-edge deletion inside a SURVIVING package — provenance-strip class, arm VOID (A-AH35/KS-AH-85-1):"
+  printf '%s' "$VIOL" | head -5
+  exit 1
+fi
+# (d) A-TH30: the pruned-set must be NAMED per campaign — nothing outside it.
+PRUNED_PKGS=$(printf '%s\n' $PRUNED_PKGS | sort -u | tr '\n' ' ')
+UNEXPECTED=""
+for p in $PRUNED_PKGS; do
+  case ",$EXPECTED_PRUNED," in
+    *",$p,"*) ;;
+    *) UNEXPECTED="$UNEXPECTED $p";;
+  esac
+done
+if [ -n "$UNEXPECTED" ]; then
+  echo "FAIL: prune touched packages OUTSIDE the campaign-named set '$EXPECTED_PRUNED':$UNEXPECTED — arm VOID (A-TH30)"
+  exit 1
+fi
+# (d) diff archived INTEGRAL on file — never head-truncated evidence.
+printf '%s\n' "$LOCK_DIFF" > "$HDR.lockdiff"
+
 BASE_BIN="$TGT/release/php-server"
 [ -x "$BASE_BIN" ] || { echo "FAIL: no binary at $BASE_BIN"; exit 1; }
 BASE_HASH=$(shasum -a 256 "$BASE_BIN" | cut -c1-16)
@@ -74,9 +157,9 @@ LOCK_BASE_SHA=$(shasum -a 256 "$BASECRATE/Cargo.lock" | cut -c1-16)
 RUSTC_V=$(rustc -V)
 {
   echo "base_rev=$BASE_REV base_hash=$BASE_HASH features=$FEATURES"
-  echo "rustc=$RUSTC_V"
-  echo "lock_live_sha=$LOCK_LIVE_SHA lock_base_sha=$LOCK_BASE_SHA lock_cmp=PRUNE-ONLY pruned_lines=$LOCK_PRUNED added_lines=0 version_drift=0"
-  [ -n "$LOCK_DIFF" ] && printf 'lock_diff: %s\n' "$LOCK_DIFF" | head -6
+  echo "rustc=$RUSTC_V resolver=2 resolver_base=2"
+  echo "lock_live_sha=$LOCK_LIVE_SHA lock_base_sha=$LOCK_BASE_SHA lock_cmp=PRUNE-ONLY pruned_lines=$LOCK_PRUNED added_lines=0 version_drift=0 provenance_strip=0"
+  echo "pruned_set='$PRUNED_PKGS' expected_pruned='$EXPECTED_PRUNED' lock_diff_file=$HDR.lockdiff"
 } >> "$HDR"
-echo "OK base-arm: $BASE_HASH ($BASE_REV, lock-cmp PRUNE-ONLY pruned=$LOCK_PRUNED, rustc + lock shas in $HDR)"
+echo "OK base-arm: $BASE_HASH ($BASE_REV, lock-cmp PRUNE-ONLY+A-AH35 pruned=$LOCK_PRUNED set='$PRUNED_PKGS', integral diff at $HDR.lockdiff)"
 exit 0

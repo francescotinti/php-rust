@@ -351,7 +351,26 @@ check_class() { # <file> <want> <label>
     echo "OK  ${1##*/}: $n lower/compile CLASS sites (pinned: $3)"
   fi
 }
-check_class "$VMMOD"    14 "2 prod ls + 2 seeded (include/eval) + 1 acquire compile + 7 selftest ls + 2 selftest compile"
+# A-TH29 (Council WP-85, Hoare Q2 — closes KH84-1 at CLASS level): the old
+# `check_class $VMMOD 14` was ONE count over prod+selftest — a selftest
+# compile removed plus a seeded prod added kept 14 invariant and the 2/7
+# lower-only split could not see it (it counts only crate::lower_source().
+# The WHOLE CLASSRE is now split on the same anchor: prod==5 / selftest==9,
+# each region NAMED, never one number.
+#   prod (head..anchor) == 5: 2 prod ls + 2 seeded (include/eval) + 1
+#     acquire compile.
+#   selftest (anchor..mod tests) == 9: 7 selftest ls + 2 selftest compile.
+CPROD=$(awk -v re="$CLASSRE" '/^pub fn retained_walk_selftest/{exit}
+  /^[[:space:]]*\/\//{next} {n+=gsub(re,"&")} END{print n+0}' "$VMMOD")
+CSELF=$(awk -v re="$CLASSRE" '/^pub fn retained_walk_selftest/{on=1}
+  on && /^[[:space:]]*(pub[[:space:]]+)?mod tests/{exit}
+  !on{next} /^[[:space:]]*\/\//{next} {n+=gsub(re,"&")} END{print n+0}' "$VMMOD")
+if [ "$CPROD" -ne 5 ] || [ "$CSELF" -ne 9 ]; then
+  echo "FAIL: vm/mod.rs CLASSRE split prod=$CPROD/selftest=$CSELF, pinned 5/9 SEPARATE (A-TH29)"
+  FAILS=$((FAILS+1))
+else
+  echo "OK  vm/mod.rs: CLASSRE split prod==5 / selftest==9 SEPARATE (A-TH29, whole class)"
+fi
 check_class "$LOWERDEFS" 2 "the two fn defs"
 check_class "$COMPDEF"   1 "the fn def"
 check_class "$PHPTLIB"   1 "capability scan (discards Program, feeds no cache — Hoare 10th site)"

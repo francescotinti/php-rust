@@ -292,6 +292,15 @@ fi
 # A-SK31/KS-SK-84-4: the c=n control above proves inequality only — it would
 # pass on ANY body, a fatal included. Pin the EXPECTED C2 body: it is W14
 # with the one delta the c=n arm declares (F14C::w() returns C2, not C1).
+# A-SK35 (Council WP-85, Klabnik Q2): `${W14/C1/C2}` substitutes the FIRST
+# occurrence ONLY — if the fixture ever echoed C1 twice, the pinned W14N
+# would go silently wrong. Pin occurrences(C1 in W14) == 1, declared.
+NC1=$(printf '%s' "$W14" | awk '{n+=gsub(/C1/,"&")} END{print n+0}')
+if [ "$NC1" -eq 1 ]; then
+  okf "F14b: occurrences(C1 in W14)==1 — the C1->C2 pin substitutes the ONE declared site (A-SK35)"
+else
+  kof "F14b: occurrences(C1 in oracle W14)==$NC1, pinned 1 — first-occurrence substitution would silently mis-pin (A-SK35)"
+fi
 W14N="${W14/C1/C2}"
 B5=$(req "f14.php?o=ab&c=n"); B6=$(req "f14.php?o=ba&c=n")
 if [ -n "$W14N" ] && [ "$W14N" != "$W14" ] && [ "$B5" = "$W14N" ] && [ "$B6" = "$W14N" ]; then
@@ -319,6 +328,13 @@ fi
 # (KS-DS-84-4: >0 anywhere = campaign VOID) with the eviction machinery
 # PROVEN ALIVE on the include lane of the SAME key (5th fp evicts an
 # include: evict-fp event >= 1) — never a vacuous zero (KG-79.A).
+# A-DS27 (Council WP-85, Stogov Q2): the discriminant is PAIR-WISE — a
+# mixed-lane LRU would pass F15b (the touched main is always recent) but
+# FAIL F15 (main never re-touched, 5 inserts evict it); a mixed FIFO fails
+# both. Only lane-exemption passes F15 AND F15b: neither fixture alone
+# certifies the partition. Scope EXCLUDED, declared: the include-lane
+# replacement policy (FIFO vs LRU) is a bound, not semantics (opcache has
+# no ways) — in F15b every include-fp is touched once, FIFO==LRU there.
 cat > "$DOCROOT/t15.php" <<'EOF'
 <?php echo "T15";
 EOF
@@ -386,8 +402,25 @@ fi
 
 kill -TERM "$SRVPID" 2>/dev/null; wait "$SRVPID" 2>/dev/null; SRVPID=""
 
+# --- F16 (A-DS26, Council WP-85): the main_evicted tooth bites once in life --
+# Every main_evicted==0 pin above certifies the partition ONLY while this
+# tooth is green (KS-DS-85-2: the zero of a tripwire never seen firing is a
+# blind zero). The in-cargo test injects a main-tagged entry into the
+# include lane and forces the eviction; run here with the log channel
+# ARMED so the uc_log event half is exercised mechanically.
+DS26LOG="$TMPD/a_ds26.uclog"; rm -f "$DS26LOG"
+if ( cd "$REPO" && PHPR_UNIT_CACHE_LOG="$DS26LOG" cargo test --release -p php-runtime --lib \
+       vm::tests::a_ds26_main_evicted_tripwire_bites_on_injection -- --exact ) \
+     > "$TMPD/a_ds26.out" 2>&1 \
+   && grep -q "^unitcache main_evicted " "$DS26LOG"; then
+  okf "F16: a_ds26 injection BITES armed — counter +1 and 'unitcache main_evicted' event on file (A-DS26/KS-DS-85-2)"
+else
+  kof "F16: a_ds26 armed run failed or event missing — main_evicted pins are ADVISORY (KS-DS-85-2)"
+  tail -5 "$TMPD/a_ds26.out"
+fi
+
 if [ "$FAILS" = 0 ]; then
-  echo "== GATE-LEVER-FIXTURES2 PASS (F1-F4, F7, F9-F15 + F14b/F15b + positive controls) [git $GIT_REV] =="
+  echo "== GATE-LEVER-FIXTURES2 PASS (F1-F4, F7, F9-F15 + F14b/F15b + F16 + positive controls) [git $GIT_REV] =="
   exit 0
 else
   echo "== GATE-LEVER-FIXTURES2 FAIL($FAILS) [git $GIT_REV] =="

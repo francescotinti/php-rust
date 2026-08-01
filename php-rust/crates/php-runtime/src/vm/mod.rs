@@ -15432,6 +15432,11 @@ const UNIT_CACHE_WAYS: usize = 4;
 /// bound. Per-key bound = ways + 1 by construction. Post-mitigation,
 /// main_evicted > 0 anywhere = campaign VOID d'ufficio (KS-DS-84-4): the
 /// counter stays WIRED on the include lane as the fail-loud tripwire.
+/// A-PP29 (Council WP-85): replace-in-uso is COVERED — the cache clones on
+/// get (K-M67.2: callers own their Rc) and the parked clone survives any
+/// fp-replace/ways-eviction mid-request (H-67.4, `RetainSet::park_main` on
+/// the probed path BEFORE any borrow is lent): a main replaced same-key/
+/// different-fp can never leave a running request behind a dangling module.
 #[derive(Default, Clone)]
 struct UnitSlot {
     main: Option<CachedUnit>,
@@ -16173,6 +16178,19 @@ pub fn uc_main_entry_count() -> usize {
     })
 }
 
+/// A-PP26 (Council WP-85, Pedersen Q1): TOTAL entry count (main + include
+/// lanes). The main-only enumerator above is blind to a divergent inserter
+/// that published a fatal main in INCLUDE form (`main_program: None`) — the
+/// module would stay retained, invisible to `uc_main_entry_count`. The
+/// a_pp20 tooth therefore pins delta==0 on THIS count too (KS-PP-85-2).
+/// PRECONDITION (both enumerators): `UNIT_CACHE` is thread-local — the
+/// count is meaningful ONLY on the thread whose lifecycle is under test;
+/// calling from another thread reads a different (empty) cache and returns
+/// a vacuous 0.
+pub fn uc_entry_count() -> usize {
+    UNIT_CACHE.with(|c| c.borrow().values().map(|slot| slot.len()).sum())
+}
+
 /// The put core. A main entry re-uses the include entry shape with vacuously
 /// empty relocation state (the main DEFINES the base id space) and carries
 /// the Program (eval-against-image on HIT).
@@ -16228,12 +16246,24 @@ fn unit_cache_put(key: UnitKey, cu: CachedUnit) {
     if !unit_cache_enabled() {
         return;
     }
+    // A-MS28 (Council WP-85, Matsakis Q4): COLLECT-THEN-EMIT. The borrow_mut
+    // window below only MUTATES the cache — every uc_stat/uc_log emission
+    // AND every drop of a displaced entry (superseded slots, ways victims,
+    // replaced mains/includes) happens AFTER the borrow ends. No I/O and no
+    // foreign Drop can ever run against an open UNIT_CACHE borrow: the
+    // KS-MS-85-4 exposure is closed STRUCTURALLY, not positionally.
+    // B-70.1 (WP-71): per-event eviction record needs the slot's file after
+    // `key` moves into the entry — cloned only when the event log is armed
+    // (probe runs), never on the plain path.
+    let kpath = if uc_log_path().is_some() { Some(key.path.clone()) } else { None };
+    let mut superseded: Vec<UnitSlot> = Vec::new();
+    let mut victim: Option<CachedUnit> = None;
+    let mut replaced: Option<CachedUnit> = None;
+    let mut fp_replace = false;
+    let mut insert = false;
+    let is_main_put = cu.main_program.is_some();
     UNIT_CACHE.with(|c| {
         let mut cache = c.borrow_mut();
-        // B-70.1 (WP-71): per-event eviction record needs the slot's file
-        // after `key` moves into the entry — cloned only when the event log
-        // is armed (probe runs), never on the plain path.
-        let kpath = if uc_log_path().is_some() { Some(key.path.clone()) } else { None };
         // S-79.0.7 (A-DS2/KS-DS-80-1): supersede-per-path — publishing under
         // a NEW key for a path drops every stale key of the same path (the
         // file was edited: its old (mtime,size) variants can never hit again
@@ -16247,67 +16277,85 @@ fn unit_cache_put(key: UnitKey, cu: CachedUnit) {
                 .collect();
             for sk in stale {
                 if let Some(slot) = cache.remove(&sk) {
-                    // KL-81-1/A-DL6: supersede in BYTE — the dropped
-                    // entries' census size lands in the ledger BEFORE the
-                    // drop (mem-census builds; the resident-side proof is
-                    // the untampered twin's vmmap probe, design79 §7).
-                    #[cfg(feature = "mem-census")]
-                    let dropped_bytes: u64 =
-                        slot.iter().map(|cu| module_census_bytes(&cu.module) as u64).sum();
-                    uc_stat(|s| {
-                        s.stranded_keys_superseded += 1;
-                        s.stranded_entries_dropped += slot.len() as u64;
-                        #[cfg(feature = "mem-census")]
-                        {
-                            s.stranded_bytes_dropped += dropped_bytes;
-                        }
-                    });
-                    if let Some(p) = &kpath {
-                        uc_log(&format!("supersede entries {}", slot.len()), p);
-                    }
+                    superseded.push(slot);
                 }
             }
         }
         let slot = cache.entry(key).or_default();
-        if cu.main_program.is_some() {
+        if is_main_put {
             // A-MS24 main lane: ONE persistent_script per path. Same fp =
             // refresh (fp_replaced); different fp = the F2 same-key edit
             // class — the old main can never hit again by construction
             // (content fp is the judge), so replacement is supersede-class,
             // NEVER an eviction: main_evicted stays 0 (KS-DS-84-4).
             if slot.main.as_ref().is_some_and(|m| m.fp == cu.fp) {
-                uc_stat(|s| s.fp_replaced += 1);
+                fp_replace = true;
             } else {
-                uc_stat(|s| s.inserts += 1);
+                insert = true;
             }
-            slot.main = Some(cu);
+            replaced = std::mem::replace(&mut slot.main, Some(cu));
         } else if let Some(pos) = slot.includes.iter().position(|e| e.fp == cu.fp) {
-            slot.includes[pos] = cu;
-            uc_stat(|s| s.fp_replaced += 1);
+            replaced = Some(std::mem::replace(&mut slot.includes[pos], cu));
+            fp_replace = true;
         } else {
             if slot.includes.len() >= UNIT_CACHE_WAYS {
-                let victim = slot.includes.remove(0);
-                uc_stat(|s| s.ways_evictions += 1);
-                // KS-DS-84-4 tripwire: a main in the INCLUDE lane is
-                // structurally impossible after the A-MS24 partition — the
-                // counter stays WIRED so a regression fails LOUD (a fired
-                // main_evicted post-mitigation voids the campaign).
-                if victim.main_program.is_some() {
-                    uc_stat(|s| s.main_evicted += 1);
-                    if let Some(p) = &kpath {
-                        uc_log("main_evicted", p);
-                    }
-                }
-                // Probe-API event (UC_LOG_EVENTS): victim fp, path = the
-                // slot's file (the ways are per-key).
-                if let Some(p) = &kpath {
-                    uc_log(&format!("evict fp {:016x}", victim.fp), p);
-                }
+                victim = Some(slot.includes.remove(0));
             }
             slot.includes.push(cu);
-            uc_stat(|s| s.inserts += 1);
+            insert = true;
         }
-    })
+    });
+    // ---- emission phase: the UNIT_CACHE borrow is CLOSED from here on ----
+    for slot in &superseded {
+        // KL-81-1/A-DL6: supersede in BYTE — the dropped entries' census
+        // size lands in the ledger BEFORE the drop (mem-census builds; the
+        // resident-side proof is the untampered twin's vmmap probe,
+        // design79 §7).
+        #[cfg(feature = "mem-census")]
+        let dropped_bytes: u64 =
+            slot.iter().map(|cu| module_census_bytes(&cu.module) as u64).sum();
+        uc_stat(|s| {
+            s.stranded_keys_superseded += 1;
+            s.stranded_entries_dropped += slot.len() as u64;
+            #[cfg(feature = "mem-census")]
+            {
+                s.stranded_bytes_dropped += dropped_bytes;
+            }
+        });
+        if let Some(p) = &kpath {
+            uc_log(&format!("supersede entries {}", slot.len()), p);
+        }
+    }
+    if fp_replace {
+        uc_stat(|s| s.fp_replaced += 1);
+    }
+    if insert {
+        uc_stat(|s| s.inserts += 1);
+    }
+    if let Some(v) = &victim {
+        uc_stat(|s| s.ways_evictions += 1);
+        // KS-DS-84-4 tripwire: a main in the INCLUDE lane is structurally
+        // impossible after the A-MS24 partition — the counter stays WIRED so
+        // a regression fails LOUD (a fired main_evicted post-mitigation
+        // voids the campaign). A-DS26 (Council WP-85): the in-cargo
+        // injection test makes this tooth BITE once in its life.
+        if v.main_program.is_some() {
+            uc_stat(|s| s.main_evicted += 1);
+            if let Some(p) = &kpath {
+                uc_log("main_evicted", p);
+            }
+        }
+        // Probe-API event (UC_LOG_EVENTS): victim fp, path = the slot's
+        // file (the ways are per-key).
+        if let Some(p) = &kpath {
+            uc_log(&format!("evict fp {:016x}", v.fp), p);
+        }
+    }
+    // Displaced entries (superseded slots, the ways victim, a replaced
+    // main/include) drop HERE — after the borrow, never inside it.
+    drop(superseded);
+    drop(victim);
+    drop(replaced);
 }
 
 // WP-62 (Matsakis M2): relocation-skip observability. Counts land in the
@@ -18904,6 +18952,91 @@ mod tests {
         assert!(t.is_some(), "pure main lost its publish ticket (A-DS19 control)");
     }
 
+    /// A-DS26 (Council WP-85, Stogov Q2b): post-partition, main_evicted is a
+    /// tripwire that cannot trip through the PUBLIC put path (a main routes
+    /// to the main lane by tag — that is the point of A-MS24). Classe
+    /// A-DS19: a detector never seen firing proves nothing — so this test
+    /// INJECTS a rogue main-tagged entry directly into the INCLUDE lane
+    /// (bypassing unit_cache_put on purpose; KH85-3 pins the one legit
+    /// producer), forces a ways-eviction, and pins the counter +1: the
+    /// tooth bites once in its life (KS-DS-85-2 lifted). The uc_log event
+    /// half is asserted whenever the log channel is armed —
+    /// gate-lever-fixtures2.sh (F16) runs THIS test with
+    /// PHPR_UNIT_CACHE_LOG set so the event pin bites mechanically.
+    #[test]
+    fn a_ds26_main_evicted_tripwire_bites_on_injection() {
+        let reg = Registry::default();
+        let p = crate::lower_source(b"ds26.php", b"<?php echo 1;").expect("lower");
+        let m = std::rc::Rc::new(crate::compile::compile_program(&p, &reg).expect("compile"));
+        let prog = std::rc::Rc::new(p);
+        let seed = std::rc::Rc::new(super::SeedDelta {
+            new_classes: Vec::new(),
+            static_count: 0,
+            new_slots: Vec::new(),
+            traits: Vec::new(),
+            conditional_names: Vec::new(),
+        });
+        let key = super::UnitKey {
+            path: b"/ds26/inj.php".to_vec(),
+            mtime: (1, 0),
+            size: 10,
+            reg_mode: false,
+        };
+        let cu = |fp: u64, main: Option<std::rc::Rc<crate::hir::Program>>| super::CachedUnit {
+            fp,
+            static_off: 0,
+            reserved_base: 0,
+            class_remap: Vec::new(),
+            new_locals: Vec::new(),
+            seed_delta: std::rc::Rc::clone(&seed),
+            module: std::rc::Rc::clone(&m),
+            owner_epoch: 0,
+            main_program: main,
+            main_program_net: 0,
+            main_put_ordinal: 0,
+        };
+        // INJECTION: a main-tagged entry sits at the HEAD of the include
+        // lane — unreachable via unit_cache_put, which is exactly why this
+        // test reaches into UNIT_CACHE directly.
+        super::UNIT_CACHE.with(|c| {
+            c.borrow_mut()
+                .entry(key.clone())
+                .or_default()
+                .includes
+                .push(cu(0xd526, Some(std::rc::Rc::clone(&prog))));
+        });
+        let (ev_before, we_before) = super::UC_STATS.with(|s| {
+            let s = s.borrow();
+            (s.main_evicted, s.ways_evictions)
+        });
+        // Fill the ways with plain include puts: the first overflow FIFO-
+        // evicts the injected head — the tripwire MUST fire exactly once.
+        for i in 0..super::UNIT_CACHE_WAYS as u64 {
+            super::unit_cache_put(key.clone(), cu(0x1000 + i, None));
+        }
+        let (ev_after, we_after) = super::UC_STATS.with(|s| {
+            let s = s.borrow();
+            (s.main_evicted, s.ways_evictions)
+        });
+        assert_eq!(ev_after - ev_before, 1, "main_evicted did not BITE on the injected main (A-DS26)");
+        assert_eq!(we_after - we_before, 1, "expected exactly one ways-eviction (A-DS26)");
+        // Event half (KS-DS-85-2): pinned whenever the channel is armed;
+        // the harness gate arms it (PHPR_UNIT_CACHE_LOG) and greps the file.
+        if super::uc_log_path().is_some() {
+            let buffered =
+                super::UC_LOG_BUF.with(|b| String::from_utf8_lossy(&b.borrow()).into_owned());
+            assert!(
+                buffered.contains("unitcache main_evicted"),
+                "armed log lacks the main_evicted event (A-DS26)"
+            );
+            super::uc_log_flush();
+        }
+        // Leave no rogue state behind: drop the whole injected key.
+        super::UNIT_CACHE.with(|c| {
+            c.borrow_mut().remove(&key);
+        });
+    }
+
     /// A-DS17/KS-DS-83-2 (Council WP-83): `compile_program` purity at
     /// MACHINE level — the §5 claim "pura di (Program, Registry, reg_mode)"
     /// was a claim of READING. Double-compile of the same Program must be
@@ -18923,15 +19056,38 @@ mod tests {
             // historical a_ds17 PASS is re-judged under this stronger
             // comparator by this same test.
             fn func_sig(s: &mut String, tag: &str, f: &crate::bytecode::Func) {
-                s.push_str(&format!("{tag}:{:?}|{:?};", f.ops, f.consts));
+                // A-DS28: static_vars is a SEPARATE Func field — in the sig.
+                s.push_str(&format!("{tag}:{:?}|{:?}|{:?};", f.ops, f.consts, f.static_vars));
             }
             let mut s = String::new();
             func_sig(&mut s, "main", &m.main);
             for f in &m.functions {
                 func_sig(&mut s, "f", f);
             }
+            // A-DS28 finding (verified BY NAME, S-84.0): closures do NOT
+            // land in m.functions — they compile into the SEPARATE
+            // `m.closures` table (index space of Program::closures,
+            // Op::MakeClosure). A comparator without this loop is blind to
+            // every closure body.
+            for f in &m.closures {
+                func_sig(&mut s, "clo", f);
+            }
             for c in &m.classes {
                 s.push_str(&format!("c:{}:", String::from_utf8_lossy(&c.name)));
+                // A-DS28 (Council WP-85, Stogov Q3): the WP-84 comparator
+                // covered ops+consts of main/functions/methods ONLY — a
+                // mutation in a property default, a class constant, the
+                // parent edge, the interface list or a static prop compared
+                // EQUAL. All of them are in the sig now; KS-DS-85-3 binds
+                // every NEW Module-emitted surface to a same-commit sig
+                // extension plus a mutant that bites.
+                s.push_str(&format!(
+                    "p:{:?}|i:{:?}|pd:{:?}|cc:{:?}|sp:{:?};",
+                    c.parent, c.interfaces, c.prop_defaults, c.consts, c.static_props
+                ));
+                if let Some(pi) = &c.prop_init {
+                    func_sig(&mut s, "pi", pi);
+                }
                 for meth in &c.methods {
                     func_sig(&mut s, &format!("m:{}", String::from_utf8_lossy(&meth.name)), &meth.func);
                 }
@@ -18939,8 +19095,14 @@ mod tests {
             s.push_str(&format!("classes:{};fns:{}", m.classes.len(), m.functions.len()));
             s
         }
-        const SRC: &[u8] = b"<?php class Dc1 { public function m() { return 1; } } \
-            class Dc2 extends Dc1 {} function dcf() { return new Dc2(); } \
+        // A-DS28: the source exercises every sig surface — prop default,
+        // class const, static prop, static var, closure (verified BY NAME
+        // in m.functions), parent edge.
+        const SRC: &[u8] = b"<?php class Dc1 { public $p = \"A\"; const K = 7; \
+            public static $sp = 3; \
+            public function m() { static $sv = 1; return 1; } } \
+            class Dc2 extends Dc1 {} \
+            function dcf() { $g = function () { return 5; }; return new Dc2(); } \
             echo dcf()->m();";
         let reg = Registry::default();
         let p = crate::lower_source(b"dc.php", SRC).unwrap();
@@ -19005,11 +19167,14 @@ mod tests {
         assert_eq!(ab.1, ba.1, "decoy.php sig differs AB vs BA (A-DS22, per-NAME)");
         // Arm 3 — MUTATION of the comparator: sig() must BITE on a truly
         // different module (a comparator never seen failing is not a
-        // comparator — KS-AH-80-2 class).
+        // comparator — KS-AH-80-2 class). Mutant 1 = method body (A-DS22).
         let pmut = crate::lower_source(
             b"dc.php",
-            b"<?php class Dc1 { public function m() { return 2; } } \
-              class Dc2 extends Dc1 {} function dcf() { return new Dc2(); } \
+            b"<?php class Dc1 { public $p = \"A\"; const K = 7; \
+              public static $sp = 3; \
+              public function m() { static $sv = 1; return 2; } } \
+              class Dc2 extends Dc1 {} \
+              function dcf() { $g = function () { return 5; }; return new Dc2(); } \
               echo dcf()->m();",
         )
         .unwrap();
@@ -19018,6 +19183,50 @@ mod tests {
             sig(&m1),
             sig(&mmut),
             "sig comparator BLIND: a different body compared EQUAL (A-DS22 mutation)"
+        );
+        // Arm 4 (A-DS28, Council WP-85) — mutant 2 = PROP DEFAULT only
+        // ("A" -> "B"): lives in class metadata, not in any method's ops —
+        // the exact surface the WP-84 comparator was blind to. Must bite.
+        let pmut2 = crate::lower_source(
+            b"dc.php",
+            b"<?php class Dc1 { public $p = \"B\"; const K = 7; \
+              public static $sp = 3; \
+              public function m() { static $sv = 1; return 1; } } \
+              class Dc2 extends Dc1 {} \
+              function dcf() { $g = function () { return 5; }; return new Dc2(); } \
+              echo dcf()->m();",
+        )
+        .unwrap();
+        let mmut2 = crate::compile::compile_program(&pmut2, &reg).unwrap();
+        assert_ne!(
+            sig(&m1),
+            sig(&mmut2),
+            "sig comparator BLIND: a mutated prop default compared EQUAL (A-DS28 mutant 2)"
+        );
+        // A-DS28: closures verified BY NAME — Stogov's hypothesis was
+        // m.functions; the machine says m.closures (separate table, same
+        // index space as Program::closures). The sig covers that table,
+        // and this pin anchors on the PHP 8.4 `{closure` naming.
+        assert!(
+            m1.closures.iter().any(|f| f.name.windows(8).any(|w| w == b"{closure")),
+            "closure did not land in m.closures BY NAME (A-DS28)"
+        );
+        // Mutant 3 (same finding made to BITE): closure body 5 -> 6 only.
+        let pmut3 = crate::lower_source(
+            b"dc.php",
+            b"<?php class Dc1 { public $p = \"A\"; const K = 7; \
+              public static $sp = 3; \
+              public function m() { static $sv = 1; return 1; } } \
+              class Dc2 extends Dc1 {} \
+              function dcf() { $g = function () { return 6; }; return new Dc2(); } \
+              echo dcf()->m();",
+        )
+        .unwrap();
+        let mmut3 = crate::compile::compile_program(&pmut3, &reg).unwrap();
+        assert_ne!(
+            sig(&m1),
+            sig(&mmut3),
+            "sig comparator BLIND: a mutated closure body compared EQUAL (A-DS28 mutant 3)"
         );
     }
 
