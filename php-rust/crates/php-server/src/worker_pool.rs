@@ -1232,12 +1232,24 @@ mod implementation {
                 // that recv can complete while the worker sits between send
                 // and the OUTSTANDING decrement — without this drain-sync
                 // the opeak==1 assert below contradicts that doc and can
-                // legitimately flake to 2. Bounded spin until drained.
-                let mut spins: u64 = 0;
+                // legitimately flake to 2.
+                // A-TH25 (Council WP-84): bound = DECLARED timeout, elapsed
+                // time in the fail message, polarity documented —
+                // OUTSTANDING > 0 here means the worker sits between send
+                // and its decrement; the spin WAITS for the decrement (exit
+                // condition == 0, "drained"); a trip means the decrement
+                // was LOST ("never drained"), not "drained too slowly".
+                let drain_t0 = std::time::Instant::now();
+                let drain_timeout = std::time::Duration::from_secs(2);
                 while census::OUTSTANDING.load(std::sync::atomic::Ordering::Relaxed) != 0 {
                     std::thread::yield_now();
-                    spins += 1;
-                    assert!(spins < 10_000_000, "OUTSTANDING never drained after recv (A-TH22)");
+                    assert!(
+                        drain_t0.elapsed() < drain_timeout,
+                        "OUTSTANDING never drained after recv (A-TH22/A-TH25): \
+                         waited {:?} of declared timeout {:?} — the decrement was lost",
+                        drain_t0.elapsed(),
+                        drain_timeout
+                    );
                 }
             }
             let depth = census::QUEUE_DEPTH.load(std::sync::atomic::Ordering::Relaxed);

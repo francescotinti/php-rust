@@ -231,23 +231,78 @@ for pat in \
   fi
 done
 echo "OK  one-shot wrappers (with/with_ini/with_argv) all delegate with probe=false (A-TH21)"
-# The old duplicate bodies are BANNED: pin the non-test 'crate::lower_source('
-# count in vm/mod.rs so a new wrapper cannot quietly re-grow its own main
-# compile. NAMED sites (bump = same-commit, named — KS-AH-81-3 class):
-#   1. main_unit_acquire        (the ONE main lower path)
-#   2. include-lower fallback   (Vm include path, main_hir.is_none() arm)
-#   3..9. retained_walk_selftest (mem-census PUB selftest — outside mod tests
-#        by design: lib-tests of an allocator-linking instrument live as
-#        pub-selftests called from the bin, WP-81 lesson): 2 module-dedup
-#        lowers + 1 program-dedup lower (A-DL16) + 4 bracket-control lowers
-#        (warm, small, small2, big — A-DL15). Bumped 4->9 S-82.0 p5/p6.
-n=$(count_nontest "$VMMOD" 'crate::lower_source[(]')
-if [ "$n" -ne 9 ]; then
-  echo "FAIL: vm/mod.rs has $n non-test 'crate::lower_source(' sites, pinned 9 NAMED (A-TH21)"
+# A-TH23 (Council WP-84, KH84-1 — replaces the ==9 CONFLATED pin): the old
+# single count admitted compensating swaps (a new prod lower + a removed
+# selftest = same 9). SPLIT counts, anchored on the selftest fn marker
+# (`pub fn retained_walk_selftest` — a renamed/moved anchor breaks LOUDLY):
+#   prod region (file head .. anchor) == 2, NAMED:
+#     1. main_unit_acquire        (the ONE main lower path)
+#     2. include-lower fallback   (Vm include path, main_hir.is_none() arm)
+#   selftest region (anchor .. mod tests) == 7, NAMED (mem-census PUB
+#     selftest, WP-81 lesson): 2 module-dedup + 1 program-dedup (A-DL16)
+#     + 4 bracket-control lowers (warm, small, small2, big — A-DL15).
+ANCH=$(grep -c '^pub fn retained_walk_selftest' "$VMMOD")
+if [ "$ANCH" -ne 1 ]; then
+  echo "FAIL: A-TH23 anchor 'pub fn retained_walk_selftest' count $ANCH != 1 — split pin is blind"
+  FAILS=$((FAILS+1))
+fi
+PROD_N=$(awk '/^pub fn retained_walk_selftest/{exit}
+  /^[[:space:]]*\/\//{next} {n+=gsub(/crate::lower_source[(]/,"&")} END{print n+0}' "$VMMOD")
+SELF_N=$(awk '/^pub fn retained_walk_selftest/{on=1}
+  on && /^[[:space:]]*(pub[[:space:]]+)?mod tests/{exit}
+  !on{next} /^[[:space:]]*\/\//{next} {n+=gsub(/crate::lower_source[(]/,"&")} END{print n+0}' "$VMMOD")
+if [ "$PROD_N" -ne 2 ] || [ "$SELF_N" -ne 7 ]; then
+  echo "FAIL: vm/mod.rs crate::lower_source( split prod=$PROD_N/selftest=$SELF_N, pinned 2/7 SEPARATE (A-TH23)"
   FAILS=$((FAILS+1))
 else
-  echo "OK  vm/mod.rs: crate::lower_source( == 9 named sites (acquire, include-fallback, selftest x7)"
+  echo "OK  vm/mod.rs: crate::lower_source( prod==2 / selftest==7 SEPARATE (A-TH23, anchor-split)"
 fi
+
+# A-TH23(b): workspace CLASS sweep on lower_source(/lower_source_seeded(/
+# compile_program( — per-file NAMED allowlist (the Hoare 10th site is
+# NAMED here, not folded: the phpt-runner capability scan discards the
+# Program and feeds no cache). A new file/count = FAIL until named.
+CLASSRE='(lower_source_seeded|lower_source|compile_program)[(]'
+LOWERDEFS="$REPO/crates/php-runtime/src/lower/mod.rs"
+COMPDEF="$REPO/crates/php-runtime/src/compile/mod.rs"
+PHPTLIB="$REPO/crates/phpt-runner/src/lib.rs"
+check_class() { # <file> <want> <label>
+  local n
+  n=$(count_nontest "$1" "$CLASSRE")
+  if [ "$n" -ne "$2" ]; then
+    echo "FAIL: ${1##*/} has $n non-test lower/compile CLASS sites, pinned $2 NAMED (A-TH23)"
+    FAILS=$((FAILS+1))
+  else
+    echo "OK  ${1##*/}: $n lower/compile CLASS sites (pinned: $3)"
+  fi
+}
+check_class "$VMMOD"    14 "2 prod ls + 2 seeded (include/eval) + 1 acquire compile + 7 selftest ls + 2 selftest compile"
+check_class "$LOWERDEFS" 2 "the two fn defs"
+check_class "$COMPDEF"   1 "the fn def"
+check_class "$PHPTLIB"   1 "capability scan (discards Program, feeds no cache — Hoare 10th site)"
+# crates/*/tests/*.rs are cargo INTEGRATION tests — test-by-construction
+# (the whole file is a test target, count_nontest's `mod tests` arm never
+# fires there); excluded DECLARED, same rationale as the in-file test arm.
+CLASS_SWEEP=$(find "$REPO/crates" -name '*.rs' ! -name '._*' ! -path '*/tests/*' \
+    ! -path "$VMMOD" ! -path "$LOWERDEFS" ! -path "$COMPDEF" ! -path "$PHPTLIB" -print0 |
+  while IFS= read -r -d '' f; do
+    n=$(count_nontest "$f" "$CLASSRE")
+    [ "$n" -gt 0 ] && echo "${f#"$REPO"/}: $n"
+  done)
+if [ -n "$CLASS_SWEEP" ]; then
+  echo "FAIL: lower/compile CLASS call-site outside the named allowlist (A-TH23):"
+  echo "$CLASS_SWEEP"
+  FAILS=$((FAILS+1))
+else
+  echo "OK  sweep: lower/compile CLASS confined to the 4 named files (A-TH23)"
+fi
+# decoy: the class regex must bite on every spelling
+printf 'fn f() { let p = my::lower_source_seeded(a, b); let m = xx::compile_program(&p, r); }\n' > "$TMPD/cls.rs"
+n=$(count_nontest "$TMPD/cls.rs" "$CLASSRE")
+if [ "$n" -ne 2 ]; then
+  echo "SELF-TEST BROKEN: class-sweep decoy count $n != 2 (A-TH23)"; exit 2
+fi
+echo "OK  self-test: A-TH23 class decoy bites (seeded+compile == 2)"
 
 # --- 4a2. A-AH26/KS-AH-83-3: MAIN_CHAIN_FP single-binding pins ----------------
 # `main_chain_fp_from` is module-private with a doc contract ("MUST NOT call
@@ -347,6 +402,94 @@ if ! grep -qE '(_index|_map|_set)\.(iter|keys|values)\(' "$TMPD/hi.rs"; then
   echo "SELF-TEST BROKEN: hash-iteration decoy not matched (A-DS17)"; exit 2
 fi
 echo "OK  self-test: hash-iteration decoy matched (A-DS17)"
+
+# --- 5b. A-DS23 (Council WP-84): map INVENTORY by name + extended verbs ------
+# Stogov: the suffix regex above sees neither `for … in &mappa` nor
+# drain/retain/into_iter, nor maps outside the suffix convention (prop_info,
+# mtab, labels…). Two teeth:
+#   (i) INVENTORY: every Hash*/FxHash*/IndexMap declaration in compile/ is
+#       NAMED here — a new container = FAIL until named;
+#   (ii) ITERATION allowlist over the inventory names with the FULL verb set:
+#       class.rs == 6 named ORDER-INSENSITIVE sites (audited S-83.0 p1b:
+#       1 keyed join `for (name, hooks) in &prop_hooks` + 1 per-entry stamp
+#       `prop_info.values_mut()` + 4 boolean folds `prop_info.values()`
+#       any/all — none feeds an emission in iteration order); 0 elsewhere.
+MAPS_GOT=$(grep -rhE '(FxHashMap|FxHashSet|HashMap|HashSet|IndexMap)<' "$COMPILE_DIR" --include='*.rs' \
+  | sed -E 's/^[[:space:]]+//; s/^(pub )?(let mut |let |static )?//; s/:.*$//' | LC_ALL=C sort -u | tr '\n' ' ')
+MAPS_WANT="STUBS backed_seen class_index cond_retained conditional_fns labels mtab prop_attributes prop_hooks prop_info "
+if [ "$MAPS_GOT" != "$MAPS_WANT" ]; then
+  echo "FAIL: compile/ map inventory drifted (A-DS23 — name the new/renamed container):"
+  echo "  got:  $MAPS_GOT"
+  echo "  want: $MAPS_WANT"
+  FAILS=$((FAILS+1))
+else
+  echo "OK  compile/: map inventory == 10 named containers (A-DS23)"
+fi
+INVNAMES='STUBS|backed_seen|class_index|cond_retained|conditional_fns|labels|mtab|prop_attributes|prop_hooks|prop_info'
+ITER_RE="($INVNAMES)\.(iter|keys|values|values_mut|into_iter|drain|retain)\(|for [^;{]* in &($INVNAMES)"
+CLASSRS="$COMPILE_DIR/class.rs"
+n=$(grep -cE "$ITER_RE" "$CLASSRS")
+if [ "$n" -ne 6 ]; then
+  echo "FAIL: class.rs has $n inventory-map iterations, pinned 6 NAMED order-insensitive (A-DS23)"
+  FAILS=$((FAILS+1))
+else
+  echo "OK  class.rs: 6 named order-insensitive inventory iterations (A-DS23)"
+fi
+DS23_SWEEP=$(find "$COMPILE_DIR" -name '*.rs' ! -name '._*' ! -path "$CLASSRS" -print0 |
+  while IFS= read -r -d '' f; do
+    m=$(grep -cE "$ITER_RE" "$f")
+    [ "$m" -gt 0 ] && echo "${f#"$REPO"/}: $m"
+  done)
+if [ -n "$DS23_SWEEP" ]; then
+  echo "FAIL: inventory-map iteration outside class.rs allowlist (A-DS23):"
+  echo "$DS23_SWEEP"
+  FAILS=$((FAILS+1))
+else
+  echo "OK  compile/: no inventory-map iteration outside the class.rs allowlist (A-DS23)"
+fi
+# decoys: for-in-& and drain must bite
+printf 'fn f() { for k in &class_index { emit(k); } prop_hooks.drain(); }\n' > "$TMPD/ds23.rs"
+n=$(grep -cE "$ITER_RE" "$TMPD/ds23.rs")
+if [ "$n" -lt 1 ]; then
+  echo "SELF-TEST BROKEN: A-DS23 decoy not matched"; exit 2
+fi
+echo "OK  self-test: A-DS23 decoy bites (for-in-& / drain)"
+
+# --- 6. A-TH24 (Council WP-84, KH84-3): epoch narrowing-cast tooth -----------
+# Reintroducing `as u32` on the OBSERVED epoch at a fill/get site keeps
+# Cell<u64> and passes the 1w declaration tooth — wrap in the value domain,
+# invisible ("nessun as u32" in WP-83 was a hand check, never a gate).
+# Pins: zero epoch-narrowing casts in bytecode.rs + vm/mod.rs; the IC cell
+# tuples stay u64-FIRST (PropIc + MethodIc == 2) and IC_EPOCH stays
+# Cell<u64> (==1).
+BYTEC="$REPO/crates/php-runtime/src/bytecode.rs"
+EPOCH_CAST='(ic_epoch[(][)][[:space:]]*|[a-z_0-9]*epoch[a-z_0-9]*[[:space:]]+)as[[:space:]]+u(32|16|8)'
+for f in "$BYTEC" "$VMMOD"; do
+  HITS=$(grep -inE "$EPOCH_CAST" "$f" || true)
+  if [ -n "$HITS" ]; then
+    echo "FAIL: epoch narrowing cast (A-TH24/KH84-3 — u64 tooth bypassed in the value domain):"
+    echo "$HITS" | head -5
+    FAILS=$((FAILS+1))
+  else
+    echo "OK  ${f##*/}: zero epoch narrowing casts (A-TH24)"
+  fi
+done
+CELLN=$(grep -cE 'Cell<[(]u64, u32, u32, u32[)]>' "$BYTEC")
+EPN=$(grep -cE 'Cell<u64>' "$BYTEC")
+if [ "$CELLN" -ne 2 ] || [ "$EPN" -ne 1 ]; then
+  echo "FAIL: IC cell shape drifted (A-TH24): Cell<(u64,u32,u32,u32)>=$CELLN (want 2: PropIc+MethodIc), Cell<u64>=$EPN (want 1: IC_EPOCH)"
+  FAILS=$((FAILS+1))
+else
+  echo "OK  bytecode.rs: IC cells u64-first (PropIc+MethodIc==2) + IC_EPOCH Cell<u64>==1 (A-TH24)"
+fi
+# decoys: both narrowing spellings must bite
+printf 'fn f() { let a = ic_epoch() as u32; let b = my_epoch as u16; }\n' > "$TMPD/ep.rs"
+n=$(grep -cE "$EPOCH_CAST" "$TMPD/ep.rs")
+if [ "$n" -ne 1 ]; then
+  # one LINE with two matches counts once under grep -c; require the line found
+  echo "SELF-TEST BROKEN: A-TH24 decoy not matched (n=$n)"; exit 2
+fi
+echo "OK  self-test: A-TH24 epoch-cast decoy bites"
 
 if [ "$FAILS" = 0 ]; then
   echo "== GATE-LEVER-PINS PASS (A-MS13 + A-PP16 + KS-PP-82-3 + A-TH14) [git $GIT_REV] =="
