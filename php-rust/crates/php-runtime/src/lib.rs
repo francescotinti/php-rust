@@ -70,5 +70,5 @@ pub use vm::{RetainSet, Vm, VmGate, vm_new};
 // test/feature builds — a campaign/parity build has no reachable pub mint
 // (KH85-1 closed by cfg, belt pins the alias surface ==0).
 #[cfg(any(test, feature = "vm-gate-probe"))]
-pub use vm::vm_gate_probe;
+pub use vm::gate::vm_gate_probe;
 pub use php_types::{Zval, PhpError};

@@ -128,7 +128,35 @@ fi
 #     appear in crates/ (pinned below at 0).
 #   .vm_gate( production call: worker_pool.rs == 1 (execute_with_retain).
 LIBRS="$REPO/crates/php-runtime/src/lib.rs"
-check_pin "$VMMOD"  'VmGate[(]std::marker::PhantomData[)]' 3 'VmGate(PhantomData)'
+# A-TH32 (Council WP-86): the mint CLASS `VmGate(` — every spelling, not
+# just `VmGate(std::marker::PhantomData)` (a `use std::marker::PhantomData`
+# made the old pin blind) — is ==3 in vm/mod.rs AND all three sit INSIDE
+# the leaf `mod gate` (where the field is private: rustc judges in-module).
+check_pin "$VMMOD"  'VmGate[(]' 3 'VmGate( (mint class, every spelling)'
+GATE_MINTS=$(awk '/^pub\(crate\) mod gate \{/{on=1}
+  on && /^\}/{on=0}
+  !on{next} /^[[:space:]]*\/\//{next}
+  {n+=gsub(/VmGate[(]/,"&")} END{print n+0}' "$VMMOD")
+if [ "$GATE_MINTS" -ne 3 ]; then
+  echo "FAIL: VmGate( mints inside mod gate == $GATE_MINTS, pinned 3 — a mint escaped the leaf module (A-TH32)"
+  FAILS=$((FAILS+1))
+else
+  echo "OK  vm/mod.rs: all 3 VmGate( mints live inside the leaf mod gate (A-TH32)"
+fi
+# A-MS29/KS-MS-86-3: no VmGate<'static> anywhere in the workspace — the
+# probe mint is lifetime-bound too (anchor borrow).
+STATIC_SWEEP=$(find "$REPO/crates" -name '*.rs' ! -name '._*' -print0 |
+  while IFS= read -r -d '' f; do
+    n=$(count_nontest "$f" "VmGate<'static>")
+    [ "$n" -gt 0 ] && echo "${f#"$REPO"/}: $n"
+  done)
+if [ -n "$STATIC_SWEEP" ]; then
+  echo "FAIL: VmGate<'static> found — sigillo ADVISORY (A-MS29/KS-MS-86-3):"
+  echo "$STATIC_SWEEP"
+  FAILS=$((FAILS+1))
+else
+  echo "OK  sweep: no VmGate<'static> in the workspace (A-MS29/KS-MS-86-3)"
+fi
 check_pin "$WORKER" 'VmGate[(]' 0 'VmGate('
 check_pin "$CLISRV" 'VmGate[(]' 0 'VmGate('
 check_pin "$VMMOD"  'struct VmGate<' 1 'struct VmGate<'
@@ -220,6 +248,38 @@ if [ -n "$PROD_SWEEP" ]; then
   FAILS=$((FAILS+1))
 else
   echo "OK  sweep: no main_program:Some producer outside vm/mod.rs (KH85-3)"
+fi
+# A-TH33 (Council WP-86, Hoare Q2): the pin above sees ONE spelling. The
+# eluded producer spellings — post-hoc assignment `.main_program = Some(`
+# and field-shorthand `main_program,` in construction — are 0 in the whole
+# workspace. True closure remains A-MS27 (typed CachedMain/CachedInclude);
+# until then "partition by construction" reads "discipline + tripwire"
+# (KH86-2).
+cat > "$TMPD/decoy5.rs" <<'EOF'
+fn f() {
+    cu.main_program = Some(p);
+    let main_program = Some(p);
+    let e = CachedUnit { main_program, fp };
+}
+EOF
+# NB: awk -v processes backslash escapes, so the dot is written [.]
+TH33RE='[.]main_program[[:space:]]*=[[:space:]]*Some[(]|[^.[:alnum:]_]main_program,'
+n=$(count_nontest "$TMPD/decoy5.rs" "$TH33RE")
+if [ "$n" -ne 2 ]; then
+  echo "SELF-TEST BROKEN: A-TH33 decoy count $n != 2 (assignment + shorthand)"; exit 2
+fi
+echo "OK  self-test: A-TH33 eluded-spelling decoy bites (2/2)"
+TH33_SWEEP=$(find "$REPO/crates" -name '*.rs' ! -name '._*' -print0 |
+  while IFS= read -r -d '' f; do
+    n=$(count_nontest "$f" "$TH33RE")
+    [ "$n" -gt 0 ] && echo "${f#"$REPO"/}: $n"
+  done)
+if [ -n "$TH33_SWEEP" ]; then
+  echo "FAIL: eluded main_program producer spelling in workspace (A-TH33/KH85-3):"
+  echo "$TH33_SWEEP"
+  FAILS=$((FAILS+1))
+else
+  echo "OK  sweep: no eluded main_program producer spellings (A-TH33)"
 fi
 
 # --- 2. A-PP16: publish AFTER link_fatal_check, in both SAPI files -----------
@@ -366,26 +426,54 @@ check_class() { # <file> <want> <label>
     echo "OK  ${1##*/}: $n lower/compile CLASS sites (pinned: $3)"
   fi
 }
-# A-TH29 (Council WP-85, Hoare Q2 — closes KH84-1 at CLASS level): the old
-# `check_class $VMMOD 14` was ONE count over prod+selftest — a selftest
-# compile removed plus a seeded prod added kept 14 invariant and the 2/7
-# lower-only split could not see it (it counts only crate::lower_source().
-# The WHOLE CLASSRE is now split on the same anchor: prod==5 / selftest==9,
-# each region NAMED, never one number.
-#   prod (head..anchor) == 5: 2 prod ls + 2 seeded (include/eval) + 1
-#     acquire compile.
-#   selftest (anchor..mod tests) == 9: 7 selftest ls + 2 selftest compile.
-CPROD=$(awk -v re="$CLASSRE" '/^pub fn retained_walk_selftest/{exit}
-  /^[[:space:]]*\/\//{next} {n+=gsub(re,"&")} END{print n+0}' "$VMMOD")
-CSELF=$(awk -v re="$CLASSRE" '/^pub fn retained_walk_selftest/{on=1}
-  on && /^[[:space:]]*(pub[[:space:]]+)?mod tests/{exit}
-  !on{next} /^[[:space:]]*\/\//{next} {n+=gsub(re,"&")} END{print n+0}' "$VMMOD")
-if [ "$CPROD" -ne 5 ] || [ "$CSELF" -ne 9 ]; then
-  echo "FAIL: vm/mod.rs CLASSRE split prod=$CPROD/selftest=$CSELF, pinned 5/9 SEPARATE (A-TH29)"
+# A-TH29 (Council WP-85) + A-TH34 (Council WP-86, Hoare Q3): the 5/9
+# region aggregates killed prod↔selftest compensation, but INSIDE a region
+# a seeded↔compile swap kept the aggregate invariant. Split per-SPELLING —
+# three counters per region, never one number:
+#   prod     (head..anchor):    seeded==2  lower_source==2  compile==1
+#   selftest (anchor..mod tests): seeded==0  lower_source==7  compile==2
+region_split() { # <file> <prod|self> -> "seeded plain compile"
+  awk -v want="$2" '
+    /^pub fn retained_walk_selftest/{infl=1}
+    infl && /^[[:space:]]*(pub[[:space:]]+)?mod tests/{exit}
+    /^[[:space:]]*\/\//{next}
+    {
+      reg = infl ? "self" : "prod"
+      if (reg != want) next
+      s += gsub(/lower_source_seeded[(]/, "S")
+      p += gsub(/lower_source[(]/, "P")
+      c += gsub(/compile_program[(]/, "C")
+    }
+    END { printf "%d %d %d\n", s+0, p+0, c+0 }' "$1"
+}
+read -r PS PP PC <<< "$(region_split "$VMMOD" prod)"
+read -r SS SP SC <<< "$(region_split "$VMMOD" self)"
+if [ "$PS" -ne 2 ] || [ "$PP" -ne 2 ] || [ "$PC" -ne 1 ]; then
+  echo "FAIL: vm/mod.rs prod region per-spelling seeded=$PS/ls=$PP/compile=$PC, pinned 2/2/1 (A-TH34)"
   FAILS=$((FAILS+1))
 else
-  echo "OK  vm/mod.rs: CLASSRE split prod==5 / selftest==9 SEPARATE (A-TH29, whole class)"
+  echo "OK  vm/mod.rs: prod region seeded==2 / lower_source==2 / compile==1 (A-TH34)"
 fi
+if [ "$SS" -ne 0 ] || [ "$SP" -ne 7 ] || [ "$SC" -ne 2 ]; then
+  echo "FAIL: vm/mod.rs selftest region per-spelling seeded=$SS/ls=$SP/compile=$SC, pinned 0/7/2 (A-TH34)"
+  FAILS=$((FAILS+1))
+else
+  echo "OK  vm/mod.rs: selftest region seeded==0 / lower_source==7 / compile==2 (A-TH34)"
+fi
+# decoy: an intra-region seeded->compile swap keeps the aggregate (3) but
+# must fail the per-spelling pins.
+cat > "$TMPD/swapdecoy.rs" <<'EOF'
+fn prod() {
+    let a = crate::lower_source(x, y);
+    let b = crate::lower_source_seeded(x, y);
+    let c = compile_program(&p, r);
+}
+EOF
+read -r DS DP DC <<< "$(region_split "$TMPD/swapdecoy.rs" prod)"
+if [ "$DS" -ne 1 ] || [ "$DP" -ne 1 ] || [ "$DC" -ne 1 ]; then
+  echo "SELF-TEST BROKEN: A-TH34 decoy split $DS/$DP/$DC != 1/1/1"; exit 2
+fi
+echo "OK  self-test: A-TH34 per-spelling split discriminates (decoy 1/1/1)"
 check_class "$LOWERDEFS" 2 "the two fn defs"
 check_class "$COMPDEF"   1 "the fn def"
 check_class "$PHPTLIB"   1 "capability scan (discards Program, feeds no cache — Hoare 10th site)"

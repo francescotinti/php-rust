@@ -476,44 +476,69 @@ pub struct RetainSet(elsa::FrozenVec<Rc<Module>>);
 // requires a Council deliberation, never an in-session edit.
 static_assertions::assert_not_impl_any!(RetainSet: Send, Sync);
 
-/// A-MS17 v2 (Council WP-85, A-MS25/A-TH27): capability token for the
-/// vm_new/park_main door — zero-sized, private constructor AND
-/// lifetime-bound. v1's owned ZST was capability-EXISTENCE without a
-/// temporal binding (a caller could bank the token beyond the acquire —
-/// KS-MS-85-1); v2's `'gate` ties every token to the borrow of its mint
-/// origin, so rustc judges both WHO can mint and HOW LONG the key lives:
-///   1. `RetainSet::production_gate` (private, in-module) — the ONE
-///      production CLI/cli-server lifecycle: the token borrows the request
-///      RetainSet and dies with it;
-///   2. [`MainUnit::vm_gate`] — the worker SAPI's key borrows the ACQUIRED
-///      main unit, so it cannot outlive the acquire stack-frame (the sealed
-///      lifecycle, design79 §4);
-///   3. [`vm_gate_probe`] — probe mint for the two hand-replicated
-///      lifecycle tests in worker_pool.rs; cfg-gated behind
-///      `any(test, feature = "vm-gate-probe")` (A-MS26/A-TH28): in a
-///      campaign/parity build the symbol DOES NOT EXIST, so the KH85-1
-///      hole (pub mint reachable outside tests, judge silently back to
-///      awk) is closed by rustc itself.
-/// Closes Q3 holes a–d (renamed test mod / out-of-line `mod tests` /
-/// prefix-armed `in_tests` / `use vm_new as x` alias) AND the WP-85 holes
-/// (banked token, aliased probe): none of them can mint or keep a token.
-/// The gate-lever-pins.sh belt still pins the mint sites BY NAME and the
-/// alias surface (`vm_gate_probe as`) ==0.
-pub struct VmGate<'gate>(std::marker::PhantomData<&'gate ()>);
+/// A-TH32 (Council WP-86): the capability LEAF module — the only code that
+/// can construct a [`VmGate`] token lives in these few lines, because the
+/// tuple field is private to THIS module. Before, the field was private to
+/// the whole `vm` module: inside vm/mod.rs (~16k lines) anyone could mint
+/// `VmGate(PhantomData)` with a `use` that evaded the spelling belt
+/// (Hoare, KH85-1 half-closure). Now rustc judges IN-module too; the
+/// gate-lever-pins.sh belt pins the mint CLASS `VmGate(` ==3 in this file.
+pub(crate) mod gate {
+    /// A-MS17 v2 (Council WP-85, A-MS25/A-TH27): capability token for the
+    /// vm_new/park_main door — zero-sized, private constructor AND
+    /// lifetime-bound. v1's owned ZST was capability-EXISTENCE without a
+    /// temporal binding (a caller could bank the token beyond the acquire —
+    /// KS-MS-85-1); v2's `'gate` ties every token to the borrow of its mint
+    /// origin, so rustc judges both WHO can mint and HOW LONG the key lives:
+    ///   1. `RetainSet::production_gate` (pub(super), vm-module only) — the
+    ///      ONE production CLI/cli-server lifecycle: the token borrows the
+    ///      request RetainSet and dies with it;
+    ///   2. `MainUnit::vm_gate` — the worker SAPI's key borrows the
+    ///      ACQUIRED main unit, so it cannot outlive the acquire
+    ///      stack-frame (the sealed lifecycle, design79 §4);
+    ///   3. [`vm_gate_probe`] — probe mint for the two hand-replicated
+    ///      lifecycle tests in worker_pool.rs; cfg-gated behind
+    ///      `any(test, feature = "vm-gate-probe")` (A-MS26/A-TH28): in a
+    ///      campaign/parity build the symbol DOES NOT EXIST (KH85-1 closed
+    ///      by rustc; the campaign BINARY is judged by nm — KH86-1).
+    pub struct VmGate<'gate>(std::marker::PhantomData<&'gate ()>);
 
-/// A-MS17 mint 3 (v2): probe API for in-cargo teeth that replicate the
-/// vm_new → request_* lifecycle BY HAND (worker_pool.rs positive controls).
-/// Never a runtime API: cfg-gated (A-MS26/A-TH28) so a campaign/parity
-/// build does not even contain the symbol (KS-MS-85-2: a non-test
-/// call-site without the declared feature is build-VOID); the belt pins
-/// non-test call-sites ==0 and the alias surface (`vm_gate_probe as`) ==0.
-/// The `'static` is honest: a probe token has no acquire to bind to —
-/// which is exactly why this mint must not exist outside test builds.
-#[cfg(any(test, feature = "vm-gate-probe"))]
-#[doc(hidden)]
-pub fn vm_gate_probe() -> VmGate<'static> {
-    VmGate(std::marker::PhantomData)
+    impl super::RetainSet {
+        /// A-MS25 mint 1 (v2, Council WP-85): the production CLI/cli-server
+        /// mint — pub(super) (vm-module only, rustc rejects external
+        /// callers) and lifetime-bound to the request RetainSet, so the
+        /// token cannot outlive the single-request lifecycle that minted it
+        /// (KS-MS-85-1 closed: no banking beyond the acquire stack-frame).
+        pub(super) fn production_gate(&self) -> VmGate<'_> {
+            VmGate(std::marker::PhantomData)
+        }
+    }
+
+    impl super::MainUnit {
+        /// A-BB6/A-MS17 mint 2 (v2): the ONE worker-SAPI mint — the token
+        /// borrows the acquired MainUnit and dies with the acquire
+        /// stack-frame (design79 §4 sealed lifecycle).
+        pub fn vm_gate(&self) -> VmGate<'_> {
+            VmGate(std::marker::PhantomData)
+        }
+    }
+
+    /// A-MS17 mint 3 (v2) + A-MS29 (Council WP-86): probe API for in-cargo
+    /// teeth that replicate the vm_new → request_* lifecycle BY HAND
+    /// (worker_pool.rs positive controls). Now ALSO lifetime-bound: the
+    /// token borrows `anchor` and dies with it — no `VmGate<'static>`
+    /// exists anywhere in the workspace (KS-MS-86-3). Never a runtime API:
+    /// cfg-gated (A-MS26/A-TH28) so a campaign/parity build does not even
+    /// contain the symbol; the belt pins non-test call-sites ==0 and the
+    /// alias surface (`vm_gate_probe as`) ==0.
+    #[cfg(any(test, feature = "vm-gate-probe"))]
+    #[doc(hidden)]
+    pub fn vm_gate_probe(anchor: &()) -> VmGate<'_> {
+        let _ = anchor;
+        VmGate(std::marker::PhantomData)
+    }
 }
+pub use gate::VmGate;
 
 impl RetainSet {
     /// S-77.6.5.2: Public constructor for the worker-pool lifecycle: the
@@ -545,14 +570,8 @@ impl RetainSet {
         self.0.push(module);
     }
 
-    /// A-MS25 mint 1 (v2, Council WP-85): the production CLI/cli-server
-    /// mint — PRIVATE (in-module only, rustc rejects external callers) and
-    /// lifetime-bound to the request RetainSet, so the token cannot outlive
-    /// the single-request lifecycle that minted it (KS-MS-85-1 closed:
-    /// no banking beyond the acquire stack-frame).
-    fn production_gate(&self) -> VmGate<'_> {
-        VmGate(std::marker::PhantomData)
-    }
+    // A-MS25 mint 1 moved into `mod gate` (A-TH32, Council WP-86): the
+    // constructor lives where the field is private.
     fn park(&self, rc: Rc<Module>) -> &Module {
         self.0.push_get(rc)
     }
@@ -15944,6 +15963,13 @@ fn unit_cache_get(key: &UnitKey, fp: u64) -> Option<CachedUnit> {
     if !unit_cache_enabled() {
         return None;
     }
+    // A-TH35/KH86-3: a get from a Drop inside put's emission window would
+    // read stats-inconsistent state in silence — panic instead.
+    UC_EMIT_GUARD.with(|g| {
+        if g.get() {
+            panic!("unit_cache_get re-entered during put emission (A-TH35/KH86-3)");
+        }
+    });
     UNIT_CACHE.with(|c| c.borrow().get(key)?.iter().find(|cu| cu.fp == fp).cloned())
 }
 
@@ -16001,13 +16027,8 @@ impl MainUnit {
         }
     }
 
-    /// A-MS17 mint 2 (v2, A-MS25/A-TH27): the worker SAPI's door key —
-    /// obtainable ONLY while holding an acquired main unit, AND
-    /// lifetime-bound to that borrow: the key cannot outlive the acquire
-    /// stack-frame (KS-MS-85-1 closed by rustc, not by discipline).
-    pub fn vm_gate(&self) -> VmGate<'_> {
-        VmGate(std::marker::PhantomData)
-    }
+    // A-MS17 mint 2 moved into `mod gate` (A-TH32, Council WP-86): the
+    // constructor lives where the field is private.
 }
 
 pub enum MainAcquireError {
@@ -16306,10 +16327,45 @@ impl MainLever {
     }
 }
 
+// A-TH35/KH86-3 (Council WP-86, Hoare Q4): re-entrancy tripwire. A-MS28's
+// collect-then-emit made a re-entering Drop LEGAL for the borrow checker
+// (drops run after the borrow closes) — trading the old loud double-borrow
+// panic for silent interleaving between the mutation phase and the stats
+// emitted from pre-computed state. This guard restores the loud failure:
+// any unit_cache_put/unit_cache_get entered while THIS thread is inside
+// put's emission+drop window panics (Binding Rule 4: panic = FAIL-FAST).
+thread_local! {
+    static UC_EMIT_GUARD: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+struct UcEmitGuard;
+impl UcEmitGuard {
+    fn arm() -> UcEmitGuard {
+        UC_EMIT_GUARD.with(|g| {
+            if g.get() {
+                panic!("unit_cache_put re-entered during emission (A-TH35/KH86-3)");
+            }
+            g.set(true);
+        });
+        UcEmitGuard
+    }
+}
+impl Drop for UcEmitGuard {
+    fn drop(&mut self) {
+        UC_EMIT_GUARD.with(|g| g.set(false));
+    }
+}
+
 fn unit_cache_put(key: UnitKey, cu: CachedUnit) {
     if !unit_cache_enabled() {
         return;
     }
+    // A-TH35: a put arriving from a Drop that runs inside another put's
+    // emission window is the exact silent-interleave Hoare named — panic.
+    UC_EMIT_GUARD.with(|g| {
+        if g.get() {
+            panic!("unit_cache_put re-entered during emission (A-TH35/KH86-3)");
+        }
+    });
     // A-MS28 (Council WP-85, Matsakis Q4): COLLECT-THEN-EMIT. The borrow_mut
     // window below only MUTATES the cache — every uc_stat/uc_log emission
     // AND every drop of a displaced entry (superseded slots, ways victims,
@@ -16370,6 +16426,10 @@ fn unit_cache_put(key: UnitKey, cu: CachedUnit) {
         }
     });
     // ---- emission phase: the UNIT_CACHE borrow is CLOSED from here on ----
+    // A-TH35: armed for the whole emission+drop window; declared FIRST so
+    // it drops LAST (after the explicit drops below) — a Drop of a
+    // displaced entry that re-enters the cache panics loudly.
+    let _emit_guard = UcEmitGuard::arm();
     for slot in &superseded {
         // KL-81-1/A-DL6: supersede in BYTE — the dropped entries' census
         // size lands in the ledger BEFORE the drop (mem-census builds; the
@@ -19105,6 +19165,31 @@ mod tests {
         // Declared residue (A-DS33): UC_STATS.main_evicted stays at +1 on
         // this test thread — any future ABSOLUTE ==0 pin in-cargo would be
         // poisoned; only deltas are legitimate here.
+    }
+
+    /// A-TH35/KH86-3 (Council WP-86): the re-entrancy tripwire BITES — a
+    /// unit_cache_put/get entered while the emission guard is armed (the
+    /// state a re-entering Drop would find) must panic, never interleave in
+    /// silence. Armed by hand here: hooking a real Drop into cache entries
+    /// would need test-only machinery in the entry types; the guard state
+    /// is exactly what such a Drop observes.
+    #[test]
+    fn a_th35_reentrancy_guard_bites() {
+        let key = super::UnitKey {
+            path: b"/th35.php".to_vec(),
+            mtime: (1, 0),
+            size: 1,
+            reg_mode: false,
+        };
+        super::UC_EMIT_GUARD.with(|g| g.set(true));
+        let put_panics = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            super::unit_cache_get(&key, 0xdead);
+        }))
+        .is_err();
+        super::UC_EMIT_GUARD.with(|g| g.set(false));
+        assert!(put_panics, "unit_cache_get did not panic under armed guard (A-TH35)");
+        // Disarmed: same call is legal and returns None.
+        assert!(super::unit_cache_get(&key, 0xdead).is_none());
     }
 
     /// A-DS17/KS-DS-83-2 (Council WP-83): `compile_program` purity at

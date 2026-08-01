@@ -919,8 +919,10 @@ mod implementation {
             let name = b"/gate.php".to_vec();
             let program = php_runtime::lower_source(&name, b"<?php echo \"payload\";").unwrap();
             let module = php_runtime::compile_program(&program, &reg).unwrap();
-            // A-MS17 mint 3: hand-replicated lifecycle — the probe mint, by name.
-            let gate = php_runtime::vm_gate_probe();
+            // A-MS17 mint 3: hand-replicated lifecycle — the probe mint, by
+            // name; A-MS29: lifetime-bound to a local anchor (no 'static).
+            let probe_anchor = ();
+            let gate = php_runtime::vm_gate_probe(&probe_anchor);
             let mut vm = php_runtime::vm_new(&retain, &module, &reg, Some(&program), &gate);
             vm.request_start(None, &[]);
             vm.final_flush = false;
@@ -1271,8 +1273,10 @@ mod implementation {
                         $s = str_repeat('x', 65536); echo strlen($s); });";
             let program = php_runtime::lower_source(&name, src).unwrap();
             let module = php_runtime::compile_program(&program, &reg).unwrap();
-            // A-MS17 mint 3: hand-replicated lifecycle — the probe mint, by name.
-            let gate = php_runtime::vm_gate_probe();
+            // A-MS17 mint 3: hand-replicated lifecycle — the probe mint, by
+            // name; A-MS29: lifetime-bound to a local anchor (no 'static).
+            let probe_anchor = ();
+            let gate = php_runtime::vm_gate_probe(&probe_anchor);
             let mut vm = php_runtime::vm_new(&retain, &module, &reg, Some(&program), &gate);
             vm.request_start(None, &[]);
             vm.final_flush = false;
