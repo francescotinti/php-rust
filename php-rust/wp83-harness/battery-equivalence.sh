@@ -131,7 +131,11 @@ else
     # older than the ledger (rev not reachable from a ledgered line) are
     # pre-v4 evidence: refuse, re-run the battery.
     BLEDGER_REL="wp83-harness/evidence/battery-stamps.ledger"
-    if ! git -C "$REPO" show "HEAD:$BLEDGER_REL" 2>/dev/null | \
+    # git show paths are relative to the GIT ROOT, which sits ABOVE $REPO
+    # (the object_changed comment already knew: the php-rust/ prefixed
+    # form is the operative one; the bare form is an inert fallback).
+    if ! { git -C "$REPO" show "HEAD:php-rust/$BLEDGER_REL" 2>/dev/null; \
+           git -C "$REPO" show "HEAD:$BLEDGER_REL" 2>/dev/null; } | \
          grep -q "rev=$BREV sha256=$DSHA"; then
       fail "(A-SK41) stamp rev=$BREV sha256=$DSHA not in the COMMITTED $BLEDGER_REL — battery not ledgered (KS-SK-87-1)"
     fi
