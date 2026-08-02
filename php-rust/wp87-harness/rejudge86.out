@@ -1,0 +1,76 @@
+== rejudge86 (S-87.0 p1) — raw campaign git=c259bc6 driver_sha=699db00a9808489e — analysis-only, no new runs ==
+date=2026-08-02T12:12:52Z analysis_git=8070e62
+
+== PART A — A-BB49: overlap re-judgment, NUMERIC qualifier (t+0), raws m86.ovl.a1..a10 ==
+metric=lower_span t0_us/t1_us (in-band, per-fixture) — qualifier bug: post-sub() awk compared STRINGS
+attempt=1 h=[1,13300]us tid_h=tid=ThreadId(13)  p=[4,13887]us tid_p=tid=ThreadId(12)  overlap=YES ov_dur_us=13296  hello_net=57156572 pad_net=15153408 pad_net==NET_H+NET_P+150_EXACT
+attempt=2 h=[0,13756]us tid_h=tid=ThreadId(12)  p=[2,14395]us tid_p=tid=ThreadId(13)  overlap=YES ov_dur_us=13754  hello_net=57165942 pad_net=15153408 pad_net==NET_H+NET_P+150_EXACT
+attempt=3 h=[1,13863]us tid_h=tid=ThreadId(12)  p=[4,14265]us tid_p=tid=ThreadId(13)  overlap=YES ov_dur_us=13859  hello_net=57434318 pad_net=15153408 pad_net==NET_H+NET_P+150_EXACT
+attempt=4 h=[0,13474]us tid_h=tid=ThreadId(12)  p=[3,13974]us tid_p=tid=ThreadId(13)  overlap=YES ov_dur_us=13471  hello_net=57341170 pad_net=15153408 pad_net==NET_H+NET_P+150_EXACT
+attempt=5 h=[1,13802]us tid_h=tid=ThreadId(13)  p=[4,14468]us tid_p=tid=ThreadId(12)  overlap=YES ov_dur_us=13798  hello_net=57083229 pad_net=15153408 pad_net==NET_H+NET_P+150_EXACT
+attempt=6 h=[3,13522]us tid_h=tid=ThreadId(12)  p=[1,14035]us tid_p=tid=ThreadId(13)  overlap=YES ov_dur_us=13519  hello_net=57367918 pad_net=15153408 pad_net==NET_H+NET_P+150_EXACT
+attempt=7 h=[0,13875]us tid_h=tid=ThreadId(13)  p=[3,14323]us tid_p=tid=ThreadId(12)  overlap=YES ov_dur_us=13872  hello_net=57397509 pad_net=15153408 pad_net==NET_H+NET_P+150_EXACT
+attempt=8 h=[3,13885]us tid_h=tid=ThreadId(12)  p=[1,14250]us tid_p=tid=ThreadId(13)  overlap=YES ov_dur_us=13882  hello_net=17887038 pad_net=15153408 pad_net==NET_H+NET_P+150_EXACT
+attempt=9 h=[0,13778]us tid_h=tid=ThreadId(13)  p=[3,14265]us tid_p=tid=ThreadId(12)  overlap=YES ov_dur_us=13775  hello_net=57397317 pad_net=15153408 pad_net==NET_H+NET_P+150_EXACT
+attempt=10 h=[3,13766]us tid_h=tid=ThreadId(13)  p=[1,14217]us tid_p=tid=ThreadId(12)  overlap=YES ov_dur_us=13763  hello_net=57397509 pad_net=15153408 pad_net==NET_H+NET_P+150_EXACT
+
+hello lowering t1 range across 10 attempts: 13.3-13.9 ms (derived: t1_us/1000)
+A-BB49 VERDICT: overlap_qualified=10/10 (campaign ledger said 0/10 — FALSO-DAI-RAW confirmed)
+  swallow signature pad_net==NET_H+NET_P+150 exact: 10/10 attempts
+  KB-88-1: ALL net= readings from these 10 raws are VOID as per-thread figures (net_window=process-counters, spans intersect)
+  VOVL RE-VERDICT: per-thread net under concurrency = REFUTED-BY-RAWS (not OPEN). xW remains SEQUENTIAL-ONLY (KL-87-2 hard).
+
+== PART B — A-BB51: VABBA re-judged on metric=peak_memory_footprint (time -l bytes, .log) ==
+arms: A=pa (MIMALLOC_PURGE_DELAY=0)  B=pd (default). r1 NOMINATO excluded (warm-up), stats on r2..r9 (R=8/arm).
+arm=pa r=1 peak_memory_footprint_bytes=206717600 max_rss_bytes=240320512
+arm=pa r=2 peak_memory_footprint_bytes=213828232 max_rss_bytes=231456768
+arm=pa r=3 peak_memory_footprint_bytes=211927736 max_rss_bytes=236470272
+arm=pa r=4 peak_memory_footprint_bytes=210731728 max_rss_bytes=252772352
+arm=pa r=5 peak_memory_footprint_bytes=204341920 max_rss_bytes=238469120
+arm=pa r=6 peak_memory_footprint_bytes=203457208 max_rss_bytes=240599040
+arm=pa r=7 peak_memory_footprint_bytes=211616416 max_rss_bytes=238338048
+arm=pa r=8 peak_memory_footprint_bytes=210911880 max_rss_bytes=235503616
+arm=pa r=9 peak_memory_footprint_bytes=210551432 max_rss_bytes=236732416
+arm=pd r=1 peak_memory_footprint_bytes=233652920 max_rss_bytes=243171328
+arm=pd r=2 peak_memory_footprint_bytes=226722440 max_rss_bytes=236273664
+arm=pd r=3 peak_memory_footprint_bytes=231998136 max_rss_bytes=241516544
+arm=pd r=4 peak_memory_footprint_bytes=228704928 max_rss_bytes=238239744
+arm=pd r=5 peak_memory_footprint_bytes=230032032 max_rss_bytes=239566848
+arm=pd r=6 peak_memory_footprint_bytes=226132640 max_rss_bytes=235667456
+arm=pd r=7 peak_memory_footprint_bytes=240288440 max_rss_bytes=249806848
+arm=pd r=8 peak_memory_footprint_bytes=232309432 max_rss_bytes=241827840
+arm=pd r=9 peak_memory_footprint_bytes=228590216 max_rss_bytes=238141440
+
+A(purge=0) r2..r9: mean=209670819 B (199.96 MiB) min=203457208 max=213828232 spread_ADVISORY=10371024 B (9.89 MiB) var=1.380e+13
+B(default) r2..r9: mean=230597283 B (219.91 MiB) min=226132640 max=240288440 spread_ADVISORY=14155800 B (13.50 MiB) var=2.024e+13
+SEPARATION on peak_memory_footprint: 8/8 runs of A below min(B) (maxA=213828232 < minB=226132640)
+mean delta B-A = 20926464 B (19.96 MiB): purge=0 LOWERS physical footprint
+
+KB-88-3 note: spread(max-min) at R=8 is ADVISORY-only, never the judge; the judge here is per-run SEPARATION + mean delta.
+
+== PART C — A-BB51: per-region DIRTY diff (vmmap V2, mean r2..r9 per arm, metric=vmmap_region_dirty) ==
+NOTE: V2 = post-idle snapshot (NOT peak); mean over r2..r9 per arm; rows with mean dirty >64KiB.
+region_type | mean_dirty_A(purge=0) B | mean_dirty_B(default) B | delta B-A (B)
+unused but dirty shlib __DATA |        72704 |        72704 |           +0
+__DATA_DIRTY                 |       352256 |       352256 |           +0
+__DATA_CONST                 |       638976 |       638976 |           +0
+__DATA                       |       354304 |       354304 |           +0
+Stack                        |      1423360 |      1423360 |           +0
+MALLOC_TINY                  |        81920 |        81920 |           +0
+MALLOC_SMALL                 |       311296 |       311296 |           +0
+MALLOC metadata              |       262144 |       262144 |           +0
+IOAccelerator                |    182045931 |    226466250 |    +44420319
+page table in kernel         |       480256 |       478208 |        -2048
+NOTE: the entire inter-arm dirty delta lives in the big anonymous arena region (vmmap tags it 'IOAccelerator' on this system = mimalloc arena VM tag); stacks/MALLOC_* are byte-identical across arms.
+arena region dirty delta B-A at V2: 44420319 B (42.36 MiB)
+
+== PART D — VW123 re-read on metric=peak_memory_footprint (m86.w123.w*.log, KS-PP-88-2 tag context) ==
+w=1 peak_memory_footprint_bytes=38552056 max_rss_bytes=56033280
+w=2 peak_memory_footprint_bytes=55263784 max_rss_bytes=79659008
+w=3 peak_memory_footprint_bytes=78561808 max_rss_bytes=94699520
+footprint deltas: w1->w2 = 16711728 B (15.94 MiB), w2->w3 = 23298024 B (22.22 MiB)
+max_rss deltas:   w1->w2 = 23625728 B (22.53 MiB), w2->w3 = 15040512 B (14.34 MiB)
+TREND INVERSION: rss deltas decrease (22.53 -> 14.34 MiB) while footprint deltas increase (15.94 -> 22.22 MiB)
+KS-PP-88-2: union arm has NO dispatch row in-band => per-worker attribution is an ENVELOPE claim; replacement protocol = A-DL38 (committed steady-state slope).
+
+== rejudge86 DONE (analysis-only; raws untouched) ==

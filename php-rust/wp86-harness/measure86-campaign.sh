@@ -206,10 +206,13 @@ ovl_attempt() { # <n> -> 0 if spans intersect on distinct tids
   echo "mem_hash=$MEM_HASH git=$GIT_REV campaign=$PHPR_CAMPAIGN_SCRIPT arm=axum-worker w=2 phase=ovl.a$n server_exit=$rc attempt=$n" >> "$MC"
   # qualify: two lower_span rows (hello+pad fixtures), distinct tids,
   # intervals intersect
+  # A-BB49 (WP-88): +0 coercion — after sub() awk fields lose strnum status
+  # and '<' compares STRINGS ("4"<"13300" is false); this qualifier reported
+  # 0/10 overlaps on a campaign whose raws intersect 10/10.
   tr -d '\0' < "$MC" | awk '
     /tag=lower_span/ {
-      for (i=1;i<=NF;i++) { if ($i ~ /^tid=/) tid=$i; if ($i ~ /^t0_us=/) {sub("t0_us=","",$i); t0=$i}
-                            if ($i ~ /^t1_us=/) {sub("t1_us=","",$i); t1=$i} }
+      for (i=1;i<=NF;i++) { if ($i ~ /^tid=/) tid=$i; if ($i ~ /^t0_us=/) {sub("t0_us=","",$i); t0=$i+0}
+                            if ($i ~ /^t1_us=/) {sub("t1_us=","",$i); t1=$i+0} }
       if ($NF ~ /hello_pad85[.]php$/) { pt0=t0; pt1=t1; ptid=tid }
       else if ($NF ~ /hello[.]php$/)  { ht0=t0; ht1=t1; htid=tid }
     }
