@@ -853,19 +853,28 @@ fn phys_window_dump(win: u32, phys: u64, tag: &str) {
                     &mut flt,
                 )
             };
-            let _ = writeln!(
-                f,
-                "pid={pid} tag=mi_proc win={win} mono_ms={} phys={phys} phys_peak={} rss={rss} peak_rss={prss} commit={cm} peak_commit={pcm}",
-                mono_ms(),
-                PHYS_PEAK.load(Relaxed),
+            // A-DL37 (Council WP-88, Leijen): the census_line atomicity fix
+            // covered census_line only — these rows still went out one write
+            // PER FORMAT FRAGMENT and two concurrent teardowns garble them
+            // MID-LINE exactly like the pid=pid= smoke. Same cure for every
+            // row of this dump: format first, ONE write_all on O_APPEND.
+            let _ = f.write_all(
+                format!(
+                    "pid={pid} tag=mi_proc win={win} mono_ms={} phys={phys} phys_peak={} rss={rss} peak_rss={prss} commit={cm} peak_commit={pcm}\n",
+                    mono_ms(),
+                    PHYS_PEAK.load(Relaxed),
+                )
+                .as_bytes(),
             );
             // WP-60 P2(a): in-process window context (Gregg R1/V4) — the VM's
             // registered renderer names the frame stack; never child stdout.
-            let _ = writeln!(
-                f,
-                "pid={pid} tag=ctx win={win} mono_ms={} top={}",
-                mono_ms(),
-                ctx_render().unwrap_or_else(|| "none".into()),
+            let _ = f.write_all(
+                format!(
+                    "pid={pid} tag=ctx win={win} mono_ms={} top={}\n",
+                    mono_ms(),
+                    ctx_render().unwrap_or_else(|| "none".into()),
+                )
+                .as_bytes(),
             );
             let mut main_t = BinTab::boxed();
             let main_ok = unsafe {
@@ -892,7 +901,9 @@ fn phys_window_dump(win: u32, phys: u64, tag: &str) {
             let mut defer_t = BinTab::boxed();
             let defer_heap = DEFER_HEAP.with(|h| h.get());
             let defer_ok = if defer_heap.is_null() {
-                let _ = writeln!(f, "pid={pid} tag=mi_bin win={win} src=defer visit=NULLHEAP");
+                let _ = f.write_all(
+                    format!("pid={pid} tag=mi_bin win={win} src=defer visit=NULLHEAP\n").as_bytes(),
+                );
                 false
             } else {
                 unsafe {
@@ -914,25 +925,32 @@ fn phys_window_dump(win: u32, phys: u64, tag: &str) {
                     continue;
                 }
                 if !ok {
-                    let _ = writeln!(f, "pid={pid} tag=mi_bin win={win} src={src} visit=FAILED");
+                    let _ = f.write_all(
+                        format!("pid={pid} tag=mi_bin win={win} src={src} visit=FAILED\n")
+                            .as_bytes(),
+                    );
                     continue;
                 }
                 for i in 0..N_BINS {
                     if t.size[i] == 0 {
                         continue;
                     }
-                    let _ = writeln!(
-                        f,
-                        "pid={pid} tag=mi_bin win={win} src={src} size={} reserved={} committed={} used_b={} used_n={} areas={}",
-                        t.size[i], t.reserved[i], t.committed[i], t.used_b[i], t.used_n[i],
-                        t.areas[i],
+                    let _ = f.write_all(
+                        format!(
+                            "pid={pid} tag=mi_bin win={win} src={src} size={} reserved={} committed={} used_b={} used_n={} areas={}\n",
+                            t.size[i], t.reserved[i], t.committed[i], t.used_b[i], t.used_n[i],
+                            t.areas[i],
+                        )
+                        .as_bytes(),
                     );
                 }
                 if t.overflow > 0 {
-                    let _ = writeln!(
-                        f,
-                        "pid={pid} tag=mi_bin win={win} src={src} size=OVERFLOW areas={}",
-                        t.overflow
+                    let _ = f.write_all(
+                        format!(
+                            "pid={pid} tag=mi_bin win={win} src={src} size=OVERFLOW areas={}\n",
+                            t.overflow
+                        )
+                        .as_bytes(),
                     );
                 }
             }
@@ -944,7 +962,10 @@ fn phys_window_dump(win: u32, phys: u64, tag: &str) {
         if let Ok(mut f) =
             std::fs::OpenOptions::new().create(true).append(true).open(path)
         {
-            let _ = writeln!(f, "== pid={} win={} phys={} ==", std::process::id(), win, phys);
+            // A-DL37 same class: single write for the stats header too.
+            let _ = f.write_all(
+                format!("== pid={} win={} phys={} ==\n", std::process::id(), win, phys).as_bytes(),
+            );
             let _ = f.flush();
             unsafe {
                 mi_stats_print_out(

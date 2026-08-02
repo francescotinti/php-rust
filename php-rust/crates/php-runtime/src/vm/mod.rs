@@ -1539,7 +1539,7 @@ pub fn run_module_with_hir<'m>(
                         // in-band, plus the INCREMENTAL floor share (the
                         // first put pays the shared prelude: deterministic
                         // attribution in put order, never hash order).
-                        let mut mains: Vec<(u64, Vec<u8>, u64, Rc<Program>)> = Vec::new();
+                        let mut mains: Vec<(u64, Vec<u8>, u64, bool, Rc<Program>)> = Vec::new();
                         for (k, slot) in cache.iter() {
                             entries += slot.len() as u64;
                             for cu in slot.iter() {
@@ -1550,6 +1550,7 @@ pub fn run_module_with_hir<'m>(
                                         cu.main_put_ordinal,
                                         k.path.clone(),
                                         cu.main_program_net,
+                                        cu.main_program_net_clamped,
                                         Rc::clone(p),
                                     ));
                                     // A-DL15: the MEASURED deep figure rides
@@ -1562,7 +1563,7 @@ pub fn run_module_with_hir<'m>(
                         mains.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
                         let mut pfs = 0u64;
                         let mut rows: Vec<String> = Vec::new();
-                        for (ord, path, net, p) in &mains {
+                        for (ord, path, net, clamped, p) in &mains {
                             let before = rw.bytes;
                             rw.add_program(p);
                             let floor_inc = rw.bytes - before;
@@ -1573,9 +1574,10 @@ pub fn run_module_with_hir<'m>(
                             // structural walk increment (shared subgraphs
                             // land on the FIRST ordinal that reaches them).
                             rows.push(format!(
-                                "tag=unitcache_main_entry ord={ord} net={net} floor_inc={floor_inc} \
+                                "tag=unitcache_main_entry ord={ord} net={net} clamped={} floor_inc={floor_inc} \
                                  net_rule=net-at-lower net_window=process-counters \
                                  floor_rule=walk-increment-in-put-order alloc_id={} {}",
+                                *clamped as u8,
                                 php_types::memcensus::ALLOC_ID,
                                 String::from_utf8_lossy(path)
                             ));
@@ -2301,8 +2303,19 @@ impl CensusNetWindow {
     /// halves are pinned by the positive controls in the A-DL29/A-DL34
     /// selftest block.
     fn finish(self) -> u64 {
+        self.finish_parts().0
+    }
+
+    /// A-DL36 (Council WP-88, Leijen): the clamp is no longer mute —
+    /// returns `(net, da, df, clamped)` where `da`/`df` are the window's
+    /// alloc/free deltas and `clamped == df > da` marks a window whose net
+    /// saturated at zero. A production row carrying `clamped=1` may NEVER
+    /// be cited as zero-cost (KL-88-3): net=0 legal-and-mute is over.
+    fn finish_parts(self) -> (u64, u64, u64, bool) {
         let (a1, f1) = php_types::memcensus::alloc_counters();
-        a1.saturating_sub(self.net0.0).saturating_sub(f1.saturating_sub(self.net0.1))
+        let da = a1.saturating_sub(self.net0.0);
+        let df = f1.saturating_sub(self.net0.1);
+        (da.saturating_sub(df), da, df, df > da)
     }
 
     fn close(self) {
@@ -7275,6 +7288,7 @@ impl<'m> Vm<'m> {
                         owner_epoch: VM_EPOCH.with(|e| e.get()),
                         main_program: None,
                         main_program_net: 0,
+                        main_program_net_clamped: false,
                         main_put_ordinal: 0,
                     },
                 );
@@ -15418,6 +15432,11 @@ struct CachedUnit {
     // census-only perimeter, S-82.0).
     #[cfg_attr(not(feature = "mem-census"), allow(dead_code))]
     main_program_net: u64,
+    /// A-DL36 (Council WP-88): true when the lower bracket clamped at zero
+    /// (window frees exceeded window allocs). Published on the per-entry
+    /// census row so a net=0 can never be cited as zero-cost (KL-88-3).
+    #[cfg_attr(not(feature = "mem-census"), allow(dead_code))]
+    main_program_net_clamped: bool,
     /// A-DL20 (Council WP-84): 1-based ordinal of the main_put that
     /// published this entry (0 = include entry / never a main put). The
     /// per-entry census rows are emitted in THIS order, so the incremental
@@ -16087,6 +16106,9 @@ pub struct MainPublishTicket {
     /// Lives IN the ticket — the one value with the one lifetime of the
     /// publish it belongs to; read ONLY by `main_publish_ticket`.
     lower_net: u64,
+    /// A-DL36: whether the lower bracket clamped at zero (df > da). Rides
+    /// the same one-lifetime lane as `lower_net` into the published entry.
+    lower_clamped: bool,
 }
 
 /// Park + deferred-publish bundle for [`run_module_with_hir`], detached from
@@ -16211,17 +16233,24 @@ pub fn main_unit_acquire(
         std::mem::forget(std::hint::black_box(vec![0xB5u8; 1 << 20]));
     }
     let program = crate::lower_source(name, source).map_err(MainAcquireError::Lower)?;
+    // A-DL36: parts, not just net — da/df/clamped ride the lower_span row
+    // (inserted BEFORE the trailing path: $NF stays the path for every
+    // field-scanning parser) and the clamp flag rides the ticket into the
+    // published entry row.
     #[cfg(feature = "mem-census")]
-    let lower_net = lower_w.finish();
+    let (lower_net, lower_da, lower_df, lower_clamped) = lower_w.finish_parts();
     #[cfg(feature = "mem-census")]
     php_types::memcensus::census_line(&format!(
-        "tag=lower_span tid={:?} t0_us={lower_t0_us} t1_us={} {}",
+        "tag=lower_span tid={:?} t0_us={lower_t0_us} t1_us={} da={lower_da} df={lower_df} clamped={} {}",
         std::thread::current().id(),
         php_types::memcensus::mono_us(),
+        lower_clamped as u8,
         String::from_utf8_lossy(name)
     ));
     #[cfg(not(feature = "mem-census"))]
     let lower_net: u64 = 0;
+    #[cfg(not(feature = "mem-census"))]
+    let lower_clamped: bool = false;
     let module = crate::compile::compile_program(&program, registry)
         .map_err(|crate::compile::CompileError::Unsupported(w)| MainAcquireError::Unsupported(w))?;
     // Purity, same policy as the includes (design79 §2): an impure main is
@@ -16231,7 +16260,7 @@ pub fn main_unit_acquire(
     // distinguishable from a broken cache (F4; deviation declared: no
     // impure-main path exists on the current tree).
     let pure = !program.used_conditional_seed;
-    let publish = main_publish_decision(probe_state, pure, name, lower_net);
+    let publish = main_publish_decision(probe_state, pure, name, lower_net, lower_clamped);
     Ok(MainUnit {
         program: Rc::new(program),
         module: Rc::new(module),
@@ -16253,9 +16282,11 @@ fn main_publish_decision(
     // A-MS22: the lower's net-alloc bracket rides the ticket from here on —
     // no field outside the publish lifetime may carry it (KS-MS-84-4).
     lower_net: u64,
+    // A-DL36: the clamp flag rides the same lane.
+    lower_clamped: bool,
 ) -> Option<MainPublishTicket> {
     match (probe_state, pure) {
-        (Some((key, fp)), true) => Some(MainPublishTicket { key, fp, lower_net }),
+        (Some((key, fp)), true) => Some(MainPublishTicket { key, fp, lower_net, lower_clamped }),
         (Some(_), false) => {
             uc_stat(|s| s.main_impure_skip += 1);
             uc_log("main_impure_skip", name);
@@ -16356,7 +16387,7 @@ pub fn memcensus_unitcache_main_rows(thr: usize) {
     let rows: Vec<String> = UNIT_CACHE.with(|c| {
         let cache = c.borrow();
         let mut rw = RetainedWalk::new();
-        let mut mains: Vec<(u64, Vec<u8>, u64, Rc<Program>, usize)> = Vec::new();
+        let mut mains: Vec<(u64, Vec<u8>, u64, bool, Rc<Program>, usize)> = Vec::new();
         let mut entries = 0u64;
         for (k, slot) in cache.iter() {
             entries += slot.len() as u64;
@@ -16371,6 +16402,7 @@ pub fn memcensus_unitcache_main_rows(thr: usize) {
                         cu.main_put_ordinal,
                         k.path.clone(),
                         cu.main_program_net,
+                        cu.main_program_net_clamped,
                         Rc::clone(p),
                         cu.module.functions.len(),
                     ));
@@ -16383,15 +16415,16 @@ pub fn memcensus_unitcache_main_rows(thr: usize) {
         // the strong refs, the count cannot reach 0, no destructor runs.
         mains.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
         let mut out = Vec::with_capacity(mains.len() + 1);
-        for (ord, path, net, p, fns) in &mains {
+        for (ord, path, net, clamped, p, fns) in &mains {
             let before = rw.bytes;
             rw.add_program(p);
             let floor_inc = rw.bytes - before;
             out.push(format!(
-                "tag=unitcache_main_entry thr={thr} ord={ord} net={net} floor_inc={floor_inc} \
+                "tag=unitcache_main_entry thr={thr} ord={ord} net={net} clamped={} floor_inc={floor_inc} \
                  fns={fns} stmts={} \
                  net_rule=net-at-lower net_window=process-counters \
                  floor_rule=walk-increment-in-put-order arm=axum-worker alloc_id={} {}",
+                *clamped as u8,
                 p.body.len(),
                 php_types::memcensus::ALLOC_ID,
                 String::from_utf8_lossy(path)
@@ -16445,6 +16478,7 @@ fn main_publish_ticket(t: MainPublishTicket, module: &Rc<Module>, program: &Rc<P
             owner_epoch: VM_EPOCH.with(|e| e.get()),
             main_program: Some(Rc::clone(program)),
             main_program_net: t.lower_net,
+            main_program_net_clamped: t.lower_clamped,
             main_put_ordinal: ordinal,
         },
     );
@@ -17874,15 +17908,23 @@ pub fn retained_walk_selftest() {
     }
     // (b) Frees exceeding allocs CLAMP AT ZERO — never wrap: free a
     //     pre-window 2 MiB with (almost) no in-window allocs.
+    //     A-DL36 (Council WP-88): the clamp is no longer mute — the same
+    //     window must REPORT clamped=true (positive control: the new tooth
+    //     bites before its first zero in production).
     {
         let pre = std::hint::black_box(vec![0x5Au8; 2 << 20]);
         let w = CensusNetWindow::open();
         drop(std::hint::black_box(pre));
-        let net = w.finish();
+        let (net, da, df, clamped) = w.finish_parts();
         assert!(
             net < (64 << 10),
             "clamp control: net {net} B not ~0 after free-only window — \
              underflow semantics diverged from the declaration (A-DL34)"
+        );
+        assert!(
+            clamped && df > da,
+            "clamp control: free-only window did not report clamped \
+             (da={da} df={df} clamped={clamped}) — A-DL36 flag is mute"
         );
     }
 }
@@ -19295,12 +19337,12 @@ mod tests {
         let key = super::main_unit_key(name).expect("real file must key");
         let fp = 0x5eed_u64;
         let before = super::UC_STATS.with(|s| s.borrow().main_impure_skip);
-        let t = super::main_publish_decision(Some((key.clone(), fp)), false, name, 0);
+        let t = super::main_publish_decision(Some((key.clone(), fp)), false, name, 0, false);
         assert!(t.is_none(), "impure main produced a publish ticket (A-DS19)");
         let after = super::UC_STATS.with(|s| s.borrow().main_impure_skip);
         assert_eq!(after - before, 1, "main_impure_skip did not move (A-DS19)");
         // Positive twin: the pure arm still arms the ticket.
-        let t = super::main_publish_decision(Some((key, fp)), true, name, 0);
+        let t = super::main_publish_decision(Some((key, fp)), true, name, 0, false);
         assert!(t.is_some(), "pure main lost its publish ticket (A-DS19 control)");
     }
 
@@ -19345,6 +19387,7 @@ mod tests {
             owner_epoch: 0,
             main_program: main,
             main_program_net: 0,
+            main_program_net_clamped: false,
             main_put_ordinal: 0,
         };
         // INJECTION: a main-tagged entry sits at the HEAD of the include
@@ -19805,6 +19848,7 @@ mod tests {
             owner_epoch: 0,
             main_program: None,
             main_program_net: 0,
+            main_program_net_clamped: false,
             main_put_ordinal: 0,
         };
         let mut cost_at = |k: usize, base: usize| -> f64 {

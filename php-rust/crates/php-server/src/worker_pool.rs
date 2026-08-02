@@ -55,10 +55,22 @@ mod implementation {
     /// window; the global hook reads it and prints the DISTINCT
     /// census-probe attribution (KS-MS-87-3: a "census probe panicked"
     /// line in an axum run is attribution-valid only via this flag).
-    pub static CENSUS_PROBE_ACTIVE: std::sync::atomic::AtomicBool =
-        std::sync::atomic::AtomicBool::new(false);
+    ///
+    /// A-MS36 (Council WP-88, Matsakis — refutation of the A-MS34 GLOBAL
+    /// bool): teardown probes run on EVERY worker thread CONCURRENTLY
+    /// (the W=2 garbling of S-86.0 proves the windows overlap). With one
+    /// shared bool, A(true) B(true) A(false) leaves B's live probe window
+    /// reading FALSE (false negative), and a dispatcher panic during any
+    /// window reads TRUE (false positive). The panic hook runs ON the
+    /// panicking thread, so the flag belongs to the thread: thread_local.
+    /// The attribution is exact per-thread by construction (KS-MS-88-1
+    /// lifted for runs at this revision on).
+    thread_local! {
+        pub static CENSUS_PROBE_ACTIVE: std::cell::Cell<bool> =
+            const { std::cell::Cell::new(false) };
+    }
     pub fn census_probe_active() -> bool {
-        CENSUS_PROBE_ACTIVE.load(std::sync::atomic::Ordering::SeqCst)
+        CENSUS_PROBE_ACTIVE.with(|f| f.get())
     }
     use axum::http::StatusCode;
     use php_builtins::registry;
@@ -294,8 +306,19 @@ mod implementation {
                     // a broken invariant.
                     let unwind =
                         std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                            #[cfg_attr(not(feature = "mem-census"), allow(unused_variables))]
                             let dispatched = Self::worker_loop(ctx, rx);
+                            // A-PP39 (Council WP-88, Pedersen): the dispatch
+                            // row exists on EVERY arm — W123/ABBA ran on the
+                            // union arm where the census emission below is
+                            // compiled out, so "one hello per worker" was an
+                            // unverified protocol ASSUMPTION (KS-PP-88-2).
+                            // The counter is unconditional; one stderr line
+                            // at teardown costs nothing and gives the
+                            // verdict its per-thread mapping in-band.
+                            #[cfg(not(feature = "mem-census"))]
+                            eprintln!(
+                                "tag=worker_dispatch thr={worker_idx} count={dispatched} arm=union"
+                            );
                             // A-DL24 (Council WP-85): worker teardown — the
                             // channel is closed and THIS thread's unit cache
                             // is about to die: dump its main-entry rows
@@ -313,9 +336,10 @@ mod implementation {
                                 // the global abort hook (main.rs) attributes
                                 // a panic here to the INSTRUMENT even though
                                 // it fires before the unwind reaches the
-                                // catch_unwind below.
-                                CENSUS_PROBE_ACTIVE
-                                    .store(true, std::sync::atomic::Ordering::SeqCst);
+                                // catch_unwind below. A-MS36: per-THREAD —
+                                // armed on this worker only; the hook runs
+                                // on the panicking thread and reads ITS flag.
+                                CENSUS_PROBE_ACTIVE.with(|f| f.set(true));
                                 let probe = std::panic::catch_unwind(|| {
                                     // A-PP36: dispatch count in-band FIRST —
                                     // the verdict of a dl28-class run is
@@ -335,8 +359,7 @@ mod implementation {
                                     // of the ×W budget joins on these rows.
                                     php_types::memcensus::mi_bin_thread_rows(worker_idx);
                                 });
-                                CENSUS_PROBE_ACTIVE
-                                    .store(false, std::sync::atomic::Ordering::SeqCst);
+                                CENSUS_PROBE_ACTIVE.with(|f| f.set(false));
                                 if probe.is_err() {
                                     eprintln!(
                                         "php-server: census probe panicked — aborting (A-MS31; instrument, not worker)"

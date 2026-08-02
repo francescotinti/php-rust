@@ -487,7 +487,10 @@ fn main() -> ExitCode {
             // A-MS34 (Council WP-87): the hook fires BEFORE any unwind, so
             // the census probe's catch_unwind (A-MS31) can never attribute
             // in this mode — the flag carries the instrument-vs-measurand
-            // attribution into the hook (KS-MS-87-3).
+            // attribution into the hook (KS-MS-87-3). A-MS36: the flag is
+            // thread_local and this hook runs ON the panicking thread —
+            // the read is exact per-thread even under concurrent teardown
+            // probe windows (the A-MS34 global bool lied under W>=2).
             if crate::worker_pool::census_probe_active() {
                 eprintln!(
                     "php-server: census probe panicked — aborting (A-MS31/A-MS34; instrument, not worker)"
