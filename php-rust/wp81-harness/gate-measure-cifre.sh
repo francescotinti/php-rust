@@ -26,12 +26,18 @@ MOUT="$HERE/../wp78-harness/measure-out"
 # targets MEASURE81 only and left MEASURE84 outside the 15/15 perimeter).
 if [ "${1:-}" = "--all" ]; then
   rc=0
+  # A-SK55 perf note: the committed corpus is identical for every doc at
+  # the same HEAD — build it once and share it (cache file keyed to the
+  # HEAD rev inside; a different rev invalidates it, fail-closed).
+  GATE_CIFRE_CORPUS_CACHE=$(mktemp /tmp/gate-cifre-corpus.XXXXXX)
+  export GATE_CIFRE_CORPUS_CACHE
   bash "$0" "$HERE/MEASURE81_RESULTS.md" || rc=1
   for f in "$HERE"/../wp8[4-9]-harness/MEASURE8[4-9]*_RESULTS.md \
            "$HERE"/../wp9[0-9]-harness/MEASURE9[0-9]*_RESULTS.md; do
     [ -f "$f" ] || continue
     bash "$0" "$f" || rc=1
   done
+  rm -f "$GATE_CIFRE_CORPUS_CACHE"
   [ "$rc" = 0 ] && echo "PASS gate-measure-cifre --all (A-SK40): every MEASURE doc in perimeter"
   exit $rc
 fi
@@ -62,8 +68,42 @@ if [ "${1:-}" = "--selftest" ]; then
       rm -rf "$TMP"; exit 1
     fi
   fi
+  # A-SK55 bite (Council WP-90, Klabnik's live forge re-armed forever): an
+  # UNCOMMITTED file in measure-out matching a corpus glob must NOT
+  # legalize a figure — the corpus is HEAD-only.
+  FORGE="$MOUT/m88.zzforge-selftest.tmp"
+  echo "committed=987654321" > "$FORGE"
+  cp "$HERE/MEASURE81_RESULTS.md" "$TMP/doctored55.md"
+  echo "smuggled: campaign committed was 987654321 flat" >> "$TMP/doctored55.md"
+  if bash "$0" "$TMP/doctored55.md" >/dev/null 2>&1; then
+    rm -f "$FORGE"; rm -rf "$TMP"
+    echo "SELFTEST FAIL: working-tree forge in measure-out legalized a figure (A-SK55/KS-SK-90-1)"
+    exit 1
+  fi
+  rm -f "$FORGE"
+  if [ -f "$M84" ]; then
+    # A-SK56 bite: fabricated "N B = X MiB [derivata: companion]" — the
+    # companion self-verifies; the MEASURED byte token must still be
+    # judged against the corpus (figure-scope, not row-scope).
+    cp "$M84" "$TMP/MEASURE84_doctored3.md"
+    echo "W=9 999.948.288 B = 953,56 MiB [derivata: companion /1048576]" >> "$TMP/MEASURE84_doctored3.md"
+    if bash "$0" "$TMP/MEASURE84_doctored3.md" >/dev/null 2>&1; then
+      rm -rf "$TMP"
+      echo "SELFTEST FAIL: fabricated byte token on [derivata] row NOT caught (A-SK56/KS-SK-90-2)"
+      exit 1
+    fi
+    # A-SK53-bis bite: a '±' band on a line with NO [KMGT] unit escaped
+    # the old row-scope tooth entirely — window scope must catch it.
+    cp "$M84" "$TMP/MEASURE84_doctored4.md"
+    echo "tolleranza dichiarata ±7% sul floor, onesta" >> "$TMP/MEASURE84_doctored4.md"
+    if bash "$0" "$TMP/MEASURE84_doctored4.md" >/dev/null 2>&1; then
+      rm -rf "$TMP"
+      echo "SELFTEST FAIL: unitless ± band NOT caught (A-SK53-bis/KS-SK-87-2)"
+      exit 1
+    fi
+  fi
   rm -rf "$TMP"
-  echo "SELFTEST PASS: smuggled figure caught (KG-83-3 bites) + bytes-first teeth bite (A-SK40)"
+  echo "SELFTEST PASS: smuggled figure caught (KG-83-3) + bytes-first teeth (A-SK40) + committed-only corpus (A-SK55) + figure-scope derivata (A-SK56) + window ± (A-SK53-bis) all bite"
   exit 0
 fi
 
@@ -82,55 +122,99 @@ my %ALLOW = map { $_ => 1 } qw(
   4000
   8048
   5000
+  9276
 );
 # 110    = righe-per-run ENFORCE del protocollo (design78 driver)
 # 384    = bound del buffer CString di stack in std (A-BB27, costante di libreria)
 # 6910767= git rev baseline WP-80 (identita', enforced dal driver MEASURE80)
 # 4000/8048/5000 = soglie ex-ante design79 par.10 (P1a/P1b/P5b) — anche nel
 #                  corpus via verdict81.out, tenute qui per robustezza
+# 9276   = wc -c del fixture hello_pad85 COMMITTATO (MEASURE85 riga sorgente;
+#          A-SK56 lo espone: era esente per scope-di-riga, ora nominato)
 
 # ---- corpus: committed machine outputs -------------------------------------
+# A-SK55 (Council WP-90, Klabnik FORGE BITTEN LIVE): the corpus is read
+# from the COMMITTED tree at HEAD (git ls-tree + git show HEAD:), never
+# from the working tree — an uncommitted forge file in measure-out used
+# to legalize any figure (KS-SK-90-1: a figure legalized by a file not
+# reachable from HEAD voids the gate's PASS). bsd_glob is kept ONLY to
+# express the patterns; matching runs against the HEAD file list.
+my $root = qx(git -C "$here" rev-parse --show-toplevel 2>/dev/null);
+chomp $root;
+die "gate-measure-cifre: not in a git repo (A-SK55 needs HEAD)\n" unless $root;
+my @headtree = split /\n/, qx(git -C "$root" ls-tree -r --name-only HEAD);
+my %headset = map { $_ => 1 } @headtree;
+sub committed_glob {
+  my ($absglob) = @_;
+  my $pat = $absglob;
+  1 while $pat =~ s{/[^/]+/\.\./}{/};      # normalize dir/../
+  return () unless index($pat, "$root/") == 0;
+  $pat = substr($pat, length("$root/"));
+  my $rx = join '', map { $_ eq '*' ? '[^/]*' : $_ eq '?' ? '[^/]' : quotemeta $_ }
+                    split /(\*|\?)/, $pat;
+  return grep { /^$rx$/ } @headtree;
+}
 my @sources;
-push @sources, bsd_glob("$here/*.out"), bsd_glob("$here/../wp82-harness/*.out");
-push @sources, bsd_glob("$mout/*81*.summary"), bsd_glob("$mout/*81*.matrix"),
-               bsd_glob("$mout/*81*.idle"),    bsd_glob("$mout/*81*.census"),
-               bsd_glob("$mout/*81*.log");
+push @sources, committed_glob("$here/*.out"), committed_glob("$here/../wp82-harness/*.out");
+push @sources, committed_glob("$mout/*81*.summary"), committed_glob("$mout/*81*.matrix"),
+               committed_glob("$mout/*81*.idle"),    committed_glob("$mout/*81*.census"),
+               committed_glob("$mout/*81*.log");
 # S-82.0: the measure82 campaign raws (82*/m82*/m82r* labels)
-push @sources, bsd_glob("$mout/*82*.summary"), bsd_glob("$mout/*82*.census"),
-               bsd_glob("$mout/*82*.log"),     bsd_glob("$mout/m82*"),
-               bsd_glob("$mout/axum.82*");
+push @sources, committed_glob("$mout/*82*.summary"), committed_glob("$mout/*82*.census"),
+               committed_glob("$mout/*82*.log"),     committed_glob("$mout/m82*"),
+               committed_glob("$mout/axum.82*");
 # S-83.0: the measure83 campaign raws (83*/m83* labels) + verdict83
-push @sources, bsd_glob("$mout/*83*.summary"), bsd_glob("$mout/*83*.census"),
-               bsd_glob("$mout/*83*.log"),     bsd_glob("$mout/m83*"),
-               bsd_glob("$mout/axum.83*"),     bsd_glob("$here/../wp83-harness/*.out");
+push @sources, committed_glob("$mout/*83*.summary"), committed_glob("$mout/*83*.census"),
+               committed_glob("$mout/*83*.log"),     committed_glob("$mout/m83*"),
+               committed_glob("$mout/axum.83*"),     committed_glob("$here/../wp83-harness/*.out");
 # S-84.0: the measure84 campaign raws (84*/m84* labels) + verdict84 + the
 # A-DS29 fixture-oracle ledger
-push @sources, bsd_glob("$mout/*84*.summary"), bsd_glob("$mout/*84*.census"),
-               bsd_glob("$mout/*84*.log"),     bsd_glob("$mout/m84*"),
-               bsd_glob("$mout/axum.84*"),     bsd_glob("$here/../wp84-harness/*.out"),
-               bsd_glob("$here/../wp84-harness/evidence/*");
+push @sources, committed_glob("$mout/*84*.summary"), committed_glob("$mout/*84*.census"),
+               committed_glob("$mout/*84*.log"),     committed_glob("$mout/m84*"),
+               committed_glob("$mout/axum.84*"),     committed_glob("$here/../wp84-harness/*.out"),
+               committed_glob("$here/../wp84-harness/evidence/*");
 # S-86.0: the measure86 campaign raws (86*/m86* labels) + verdict86 + the
 # wp86 harness outs
-push @sources, bsd_glob("$mout/*86*.summary"), bsd_glob("$mout/*86*.census"),
-               bsd_glob("$mout/*86*.log"),     bsd_glob("$mout/m86*"),
-               bsd_glob("$mout/axum.86*"),     bsd_glob("$here/../wp86-harness/*.out");
+push @sources, committed_glob("$mout/*86*.summary"), committed_glob("$mout/*86*.census"),
+               committed_glob("$mout/*86*.log"),     committed_glob("$mout/m86*"),
+               committed_glob("$mout/axum.86*"),     committed_glob("$here/../wp86-harness/*.out");
 # S-87.0: the WP-88 re-judgment machine outputs (rejudge86 & friends)
-push @sources, bsd_glob("$here/../wp87-harness/*.out");
+push @sources, committed_glob("$here/../wp87-harness/*.out");
 # S-88.0: the measure88 campaign raws (m88* labels) + verdict88 (per-attempt,
 # per-generation .out) in wp88-harness
-push @sources, bsd_glob("$mout/m88*"), bsd_glob("$here/../wp88-harness/*.out");
+push @sources, committed_glob("$mout/m88*"), committed_glob("$here/../wp88-harness/*.out");
 # S-85.0: the measure85 campaign raws (85*/m85* labels) + verdict85 + the
 # wp85 evidence dir
-push @sources, bsd_glob("$mout/*85*.summary"), bsd_glob("$mout/*85*.census"),
-               bsd_glob("$mout/*85*.log"),     bsd_glob("$mout/m85*"),
-               bsd_glob("$mout/axum.85*"),     bsd_glob("$here/../wp85-harness/*.out"),
-               bsd_glob("$here/../wp85-harness/evidence/*");
-push @sources, bsd_glob("$here/evidence/*");
+push @sources, committed_glob("$mout/*85*.summary"), committed_glob("$mout/*85*.census"),
+               committed_glob("$mout/*85*.log"),     committed_glob("$mout/m85*"),
+               committed_glob("$mout/axum.85*"),     committed_glob("$here/../wp85-harness/*.out"),
+               committed_glob("$here/../wp85-harness/evidence/*");
+push @sources, committed_glob("$here/evidence/*");
 die "gate-measure-cifre: EMPTY corpus (no committed sources found)\n" unless @sources;
 my (%corpus, %corpus_count);
+# corpus cache (--all mode): first line = HEAD rev; C<token> / N<count>.
+my $cache = $ENV{GATE_CIFRE_CORPUS_CACHE} || '';
+my $headrev = qx(git -C "$root" rev-parse HEAD); chomp $headrev;
+my $cache_loaded = 0;
+if ($cache && -s $cache) {
+  open my $ch, '<', $cache or die "cannot read corpus cache\n";
+  my $first = <$ch> // ''; chomp $first;
+  if ($first eq $headrev) {
+    while (my $r = <$ch>) {
+      chomp $r;
+      if    ($r =~ s/^C//) { $corpus{$r} = 1 }
+      elsif ($r =~ s/^N//) { $corpus_count{$r} = 1 }
+    }
+    $cache_loaded = 1;
+  }
+  close $ch;
+}
+if (!$cache_loaded) {
 for my $f (@sources) {
   next if $f =~ m{/\._};             # AppleDouble
-  open my $fh, '<', $f or next;
+  # A-SK55: content from HEAD, never the working tree (list-form pipe:
+  # no shell quoting issues under "/Volumes/Extreme Pro/")
+  open my $fh, '-|', 'git', '-C', $root, 'show', "HEAD:$f" or next;
   while (my $l = <$fh>) {
     while ($l =~ /(\d[\d.]*\d|\d)/g) {
       my $t = $1;
@@ -146,16 +230,25 @@ for my $f (@sources) {
 
 # Line counts of committed evidence sets are machine-derivable figures
 # (corpus 1418 = wc -l corpus81.fails, refl 290 = wc -l refl81.fails):
-for my $f (bsd_glob("$here/evidence/*.fails")) {
+for my $f (committed_glob("$here/evidence/*.fails")) {
   next if $f =~ m{/\._};
-  open my $cfh, '<', $f or next;
+  open my $cfh, '-|', 'git', '-C', $root, 'show', "HEAD:$f" or next;
   my $n = 0; $n++ while <$cfh>; close $cfh;
   $corpus_count{$n} = 1;
 }
+if ($cache) {
+  open my $ch, '>', $cache or die "cannot write corpus cache\n";
+  print $ch "$headrev\n";
+  print $ch "C$_\n" for keys %corpus;
+  print $ch "N$_\n" for keys %corpus_count;
+  close $ch;
+}
+}  # !$cache_loaded
 
 # ---- scan target -----------------------------------------------------------
 open my $fh, '<', $target or die "cannot open $target\n";
 my ($ln, @miss) = (0);
+my %derived_ok;   # A-SK56: byte tokens legalized by verified arithmetic
 # A-DL26 (Council WP-85, KL-85-2) + A-SK40 (Council WP-86): from MEASURE84
 # on, every MEMORY figure must print BYTES FIRST ("N B = X MiB") — and the
 # companion is VERIFIED: bytes/scale must round to the displayed figure.
@@ -203,13 +296,33 @@ while (my $line = <$fh>) {
         unless $norm eq '232±1MiB';
     }
     $work =~ s/232\s*±\s*1\s*MiB\b/' ' x length($&)/ge;
-    # (2b) A-SK48 (Council WP-88, Klabnik): band at ROW scope — the
-    # adjacency regex above let "pin 232 ± 16 (MiB)" through (unit not
-    # adjacent, M 2-digit, N in corpus). On a line carrying ANY memory
-    # unit, every '±' must have resolved into an allowlisted band: a
-    # surviving '±' here is an unlisted band by construction.
-    if ($work =~ /±/ && $line =~ /[KMGTkmgt]i?[Bb]\b/) {
-      push @miss, "line $ln: '±' on a memory-unit line not resolved to an allowlisted band (A-SK48/KS-SK-87-2): $line";
+    # (2b) A-SK53-bis (Council WP-90, Klabnik — re-issued after being
+    # DROPPED from the WP-89 synthesis; supersedes the A-SK48 row-scope
+    # tooth): ± judged at WINDOW scope on the WHOLE line, allowlist-only.
+    # The old tooth fired only when the line carried a [KMGT] unit — a
+    # percent band on a bare-B line ("… B ±5%") escaped unjudged. Now:
+    # strip every allowlisted band (normalized, whitespace-free) from the
+    # line; ANY surviving '±' in a bytes-first doc is an unlisted band.
+    # Allowlist (each entry NAMED):
+    #   232±1MiB        = axum W1 identity pin band (A-SK43)
+    #   3.605.572B±5%   = banda KL-85-2 — RITIRATA (KB-90-2): legal ONLY
+    #                     as the target of a NAMED-DEVIATION citation in
+    #                     MEASURE87/88 (historical record); never as a
+    #                     live protocol band in future docs.
+    # Per-DOC entries (named, historical prose forms in FROZEN docs —
+    # never granted to future MEASURE docs):
+    #   MEASURE85: '232±1' (the axum pin cited unitless in prose),
+    #              '±5%'   (bare tolerance operator, no figure attached)
+    {
+      (my $flat = $line) =~ s/\s+//g;
+      my @bands = ('232±1MiB', '3.605.572B±5%');
+      push @bands, '232±1', '±5%' if $target =~ /MEASURE85/;
+      for my $band (sort { length($b) <=> length($a) } @bands) {
+        $flat =~ s/\Q$band\E(?!\d)//g;
+      }
+      if ($flat =~ /±/) {
+        push @miss, "line $ln: '±' band not in the A-SK53-bis window allowlist (KS-SK-87-2): $line";
+      }
     }
     # (2c) A-SK48 cosmetic tooth: "Mib" (bits sold as bytes) never legal.
     if ($line =~ /\b\d[\d.,]*\s*[KMGT]ib\b/) {
@@ -220,7 +333,43 @@ while (my $line = <$fh>) {
       push @miss, "line $ln: memory figure '$1' without VERIFIED bytes-first companion (A-DL26/KL-85-2/A-SK40): $line";
     }
   }
-  next if $line =~ /\[derivata/;                 # A-BG26 tagged line
+  if ($line =~ /\[derivata/) {                   # A-BG26 tagged line
+    # A-SK56 (Council WP-90, Klabnik FORGE BITTEN LIVE): the tag is at
+    # FIGURE scope, not row scope — it exempts DERIVED figures (verified
+    # companions, ratios, deltas WITHOUT unit) but NEVER a measured-form
+    # byte token: every ">=3-digit N B" on a tagged line stays
+    # corpus-bound (a fabricated "N B = X MiB [derivata: companion]"
+    # self-verifies its companion and used to pass whole — KS-SK-90-2).
+    if ($bytes_first) {
+      # A derived BYTE figure is legal iff its derivation is VERIFIED at
+      # machine: the tag on the line carries an "X−Y" (or X-Y) expression
+      # whose operands are BOTH in the committed corpus and whose result
+      # equals the token exactly. Once legalized, later citations of the
+      # SAME token in this doc are legal (wrapped repeats carry the tag
+      # but not the expression). Everything else: corpus-bound.
+      my %eval_ok;
+      if ($line =~ /\[derivata:([^\]]*)/) {
+        my $expr = $1;
+        # U+2212 MINUS is multibyte: a [−-] class would split it into
+        # bytes under non-utf8 perl — spell the sequence out.
+        while ($expr =~ /(\d(?:[\d.,]*\d)?)\s*(?:\xE2\x88\x92|-)\s*(\d(?:[\d.,]*\d)?)/g) {
+          my ($xa, $xb) = (it_num($1), it_num($2));
+          next unless ($corpus{$xa} || $ALLOW{$xa}) && ($corpus{$xb} || $ALLOW{$xb});
+          $eval_ok{$xa - $xb} = 1;
+        }
+      }
+      my $probe2 = $line;
+      $probe2 =~ s/\b(?=[0-9a-f]*[a-f])[0-9a-f]{7,}\b//gi;
+      while ($probe2 =~ /(?<![\dA-Za-z,.±])(\d{1,3}(?:\.\d{3})+|\d{3,})\s*B(?![A-Za-z0-9])/g) {
+        my $raw = $1;
+        (my $norm = $raw) =~ s/\.(?=\d{3}\b)//g;
+        next if $ALLOW{$norm} || $corpus{$norm} || $corpus_count{$norm};
+        if ($eval_ok{$norm} || $derived_ok{$norm}) { $derived_ok{$norm} = 1; next; }
+        push @miss, "line $ln: byte token '$raw B' on a [derivata] line NOT in corpus and NOT machine-verified from corpus operands — the tag is figure-scope (A-SK56/KS-SK-90-2): $line";
+      }
+    }
+    next;
+  }
   my $probe = $line;
   # remove hex identities and alphanumeric IDs so their digits don't tokenize
   $probe =~ s/\b(?=[0-9a-f]*[a-f])[0-9a-f]{7,}\b//gi;   # git/sha fragments (7+ hex with a letter)

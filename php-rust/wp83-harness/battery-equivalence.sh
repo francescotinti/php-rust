@@ -61,6 +61,29 @@ set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$HERE/.." && pwd)"
 SAME_REV=0
+# A-SK57 bite-test (same-commit, Council WP-90): the row-granularity
+# prefix logic must bite on (a) non-prefix rewrite, (b) last-row
+# EXTENSION smuggled as append; and pass (c) a legal row append. Pure
+# string check — no git state needed, so the tooth is testable anywhere.
+if [ "${1:-}" = "--selftest-prefix" ]; then
+  st_judge() { # <old> <new> -> echoes REWRITE | EXTEND | OK
+    local old="$1" new="$2" rem
+    rem="${new#"$old"}"
+    if [ -n "$old" ] && [ "$rem" = "$new" ] && [ "$old" != "$new" ]; then echo REWRITE
+    elif [ -n "$old" ] && [ -n "$rem" ] && [ "${rem#$'\n'}" = "$rem" ]; then echo EXTEND
+    else echo OK; fi
+  }
+  OLDL=$'rev=aaa sha=111\nrev=bbb sha=222'
+  R1=$(st_judge "$OLDL" $'rev=zzz sha=999\nrev=bbb sha=222')   # history rewritten
+  R2=$(st_judge "$OLDL" "${OLDL}X")                            # last row extended
+  R3=$(st_judge "$OLDL" "${OLDL}"$'\nrev=ccc sha=333')         # legal append
+  if [ "$R1" = REWRITE ] && [ "$R2" = EXTEND ] && [ "$R3" = OK ]; then
+    echo "SELFTEST-PREFIX PASS: rewrite/extension bite, legal append passes (A-SK57)"
+    exit 0
+  fi
+  echo "SELFTEST-PREFIX FAIL: got R1=$R1 R2=$R2 R3=$R3 (want REWRITE/EXTEND/OK) — A-SK57 tooth does not bite"
+  exit 1
+fi
 if [ "${1:-}" = "--same-rev" ]; then SAME_REV=1; shift; fi
 OUT="${1:?battery.out}"; BREV="${2:?battery rev}"
 shift 2
@@ -281,10 +304,18 @@ if [ "$SAME_REV" = 1 ]; then
   # ledger@BREV must be a PREFIX of ledger@HEAD (append-only in-window:
   # a rewrite that keeps the stamp but edits history escapes the 4-field
   # grep — the prefix check kills it).
+  # A-SK57 (Council WP-90, Klabnik): prefix at ROW granularity — a bare
+  # prefix test lets an EXTENSION of the last committed line pass as an
+  # append ("rev=abc" -> "rev=abcX" is a rewrite). The remainder must be
+  # empty or START with a newline (command substitution strips the old
+  # trailing newline, so a legal append remainder is "\n<rows>").
   BL_OLD=$(git -C "$REPO" show "$BREV:${GITPREFIX}${BLEDGER_REL}" 2>/dev/null)
   BL_NEW=$(git -C "$REPO" show "HEAD:${GITPREFIX}${BLEDGER_REL}" 2>/dev/null)
-  if [ -n "$BL_OLD" ] && [ "${BL_NEW#"$BL_OLD"}" = "$BL_NEW" ] && [ "$BL_OLD" != "$BL_NEW" ]; then
+  BL_REM="${BL_NEW#"$BL_OLD"}"
+  if [ -n "$BL_OLD" ] && [ "$BL_REM" = "$BL_NEW" ] && [ "$BL_OLD" != "$BL_NEW" ]; then
     fail "(A-SK50) battery-stamps ledger at $BREV is NOT a prefix of HEAD's — in-window rewrite (KS-SK-89-1)"
+  elif [ -n "$BL_OLD" ] && [ -n "$BL_REM" ] && [ "${BL_REM#$'\n'}" = "$BL_REM" ]; then
+    fail "(A-SK57) ledger delta EXTENDS the last committed row — row-granularity append violated (KS-SK-89-1)"
   fi
   if [ "$FAILS" = 0 ]; then
     echo "== SAME-REV CONSUMPTION LEGAL (battery at $BREV == HEAD, v6 teeth verified: anchored PASS, sha256(OUT), 4-field committed stamp, committed matrix, toolchain -Vv in-repo, window allowlist + ledger-prefix A-SK50) =="
