@@ -290,9 +290,15 @@ if [ "$SAME_REV" = 1 ]; then
   # session docs — refuses the consumption: those belong AFTER the verdict,
   # not inside the evidence window.
   BLEDGER_REL="wp83-harness/evidence/battery-stamps.ledger"
+  # A-AH50 (Council WP-90): the battery-attempts ledger writes INSIDE the
+  # evidence window BY CONSTRUCTION (every attempt rows there before the
+  # stamp commit) — it belongs to the window allowlist like the stamps
+  # ledger. Bitten in S-89.0: the first stamp commit carrying the PASS
+  # row would have been refused as a non-allowlisted delta.
+  ATTLEDGER_REL="wp83-harness/evidence/battery-attempts.ledger"
   FULLDELTA=$(git -C "$REPO" diff --name-only "$BREV..HEAD" 2>/dev/null)
   if [ -n "$FULLDELTA" ]; then
-    BAD_DELTA=$(echo "$FULLDELTA" | grep -vE "^${GITPREFIX}(${BLEDGER_REL}|wp78-harness/matrix-archive/|wp78-harness/measure-out/)" || true)
+    BAD_DELTA=$(echo "$FULLDELTA" | grep -vE "^${GITPREFIX}(${BLEDGER_REL}|${ATTLEDGER_REL}|wp78-harness/matrix-archive/|wp78-harness/measure-out/)" || true)
     if [ -n "$BAD_DELTA" ]; then
       echo "$BAD_DELTA" | head -5
       fail "(A-SK50) same-rev window $BREV..$HEADREV touches NON-allowlisted paths — evidence-only window violated (KS-SK-89-1)"
