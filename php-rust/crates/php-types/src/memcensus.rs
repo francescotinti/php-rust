@@ -649,6 +649,27 @@ extern "C" {
     /// WP-65 L-65.2: force-collect for the exit STANDING checkpoint —
     /// census builds only (the module is feature-gated), never parity.
     fn mi_collect(force: bool);
+    // A-DL41 (Council WP-89, Leijen KL-89-1): environment-arm read-back —
+    // an arm without an in-band `mi_option_get` echo is a MUTE arm and its
+    // delta is VOID. Ordinals pinned against the VENDORED v3 header
+    // (libmimalloc-sys 0.1.49 c_src/mimalloc/v3/include/mimalloc.h enum
+    // mi_option_e): arena_eager_commit=4, purge_delay=15. The positive
+    // control is in-band: campaigns run MIMALLOC_PURGE_DELAY=0, so
+    // purge_delay MUST read back 0 (default 10) — a wrong ordinal or a
+    // dead env path both surface as a wrong read-back, never silently.
+    fn mi_option_get(option: i32) -> std::os::raw::c_long;
+    // A-BB55≡A-DL42 (Council WP-89, Bak Q2 + Leijen Q2): the committed of
+    // process at low W is a 64 KiB-granular STEP function — the arena/commit
+    // term must be named in-band. mi_stats_get_json builds the full
+    // mi_stats_t INSIDE mimalloc (no struct layout duplicated in Rust — a
+    // hand-computed offset is a silent-lie channel) and writes into OUR
+    // buffer; we then emit it through the atomic census channel. Per-arena
+    // enumeration is not public in v3 (mi_arena_id_t is an opaque void*),
+    // so the NAMED substitution is: process-level arena stats
+    // (arena_count, committed, reserved, purged, commit_calls) + chunk_bins
+    // census — declared in the campaign header.
+    fn mi_stats_get_json(buf_size: usize, buf: *mut std::os::raw::c_char)
+        -> *mut std::os::raw::c_char;
 }
 
 /// Per-size-class occupancy table filled by [`area_visitor`]. Fixed arrays:
@@ -954,9 +975,110 @@ fn phys_window_dump(win: u32, phys: u64, tag: &str) {
                     );
                 }
             }
+            // --- A-DL41 (KL-89-1): environment-arm read-back, in-band ----
+            // A mute arm (env exported but never consumed) is
+            // indistinguishable from a no-effect arm without these rows.
+            let eager = unsafe { mi_option_get(4) };
+            let purge = unsafe { mi_option_get(15) };
+            let _ = f.write_all(
+                format!(
+                    "pid={pid} tag=mi_option win={win} name=arena_eager_commit ord=4 val={eager}\npid={pid} tag=mi_option win={win} name=purge_delay ord=15 val={purge}\n"
+                )
+                .as_bytes(),
+            );
+            for name in
+                ["MIMALLOC_ARENA_EAGER_COMMIT", "MIMALLOC_PURGE_DELAY", "RUST_MIN_STACK"]
+            {
+                let val = std::env::var(name).unwrap_or_else(|_| "unset".into());
+                let _ = f.write_all(
+                    format!("pid={pid} tag=env_readback win={win} name={name} val={val}\n")
+                        .as_bytes(),
+                );
+            }
+            // --- A-BB55≡A-DL42: arena/commit term named in-band ----------
+            // The 64 KiB probe buffer is allocated AFTER the mi_proc row of
+            // this window was read and written — the commit= figure above
+            // does not include it (same class as the BinTab boxes).
+            let mut jbuf = vec![0u8; 64 * 1024];
+            let jret = unsafe {
+                mi_stats_get_json(jbuf.len(), jbuf.as_mut_ptr() as *mut std::os::raw::c_char)
+            };
+            if jret.is_null() {
+                let _ = f.write_all(
+                    format!("pid={pid} tag=mi_arena win={win} visit=FAILED\n").as_bytes(),
+                );
+            } else {
+                let nul = jbuf.iter().position(|&b| b == 0).unwrap_or(jbuf.len());
+                let json =
+                    String::from_utf8_lossy(&jbuf[..nul]).replace(['\n', '\r'], " ");
+                // The full-JSON row is the AUTHORITY (mimalloc's own field
+                // names, no struct layout duplicated in Rust); the extracted
+                // rows below are awk-friendly conveniences the verdict can
+                // cross-check against it.
+                let _ = f.write_all(
+                    format!("pid={pid} tag=mi_arena_json win={win} json={json}\n").as_bytes(),
+                );
+                let sep = |c: char| c == ',' || c == ' ' || c == '}';
+                let counter = |key: &str| -> Option<i64> {
+                    let pat = format!("\"{key}\": ");
+                    let i = json.find(&pat)? + pat.len();
+                    let rest = &json[i..];
+                    rest[..rest.find(sep)?].trim().parse().ok()
+                };
+                let count3 = |key: &str| -> Option<(i64, i64, i64)> {
+                    let pat = format!("\"{key}\": {{");
+                    let i = json.find(&pat)?;
+                    let seg = &json[i..i + json[i..].find('}')? + 1];
+                    let g = |k: &str| -> Option<i64> {
+                        let p = format!("\"{k}\": ");
+                        let j = seg.find(&p)? + p.len();
+                        let r = &seg[j..];
+                        r[..r.find(sep)?].trim().parse().ok()
+                    };
+                    Some((g("total")?, g("peak")?, g("current")?))
+                };
+                for key in ["committed", "reserved", "pages", "page_committed"] {
+                    let row = match count3(key) {
+                        Some((t, p, c)) => format!(
+                            "pid={pid} tag=mi_arena win={win} key={key} total={t} peak={p} current={c}\n"
+                        ),
+                        None => format!(
+                            "pid={pid} tag=mi_arena win={win} key={key} parse=FAILED\n"
+                        ),
+                    };
+                    let _ = f.write_all(row.as_bytes());
+                }
+                for key in
+                    ["arena_count", "purged", "reset", "commit_calls", "purge_calls", "mmap_calls"]
+                {
+                    let row = match counter(key) {
+                        Some(v) => format!(
+                            "pid={pid} tag=mi_arena win={win} key={key} val={v}\n"
+                        ),
+                        None => format!(
+                            "pid={pid} tag=mi_arena win={win} key={key} parse=FAILED\n"
+                        ),
+                    };
+                    let _ = f.write_all(row.as_bytes());
+                }
+                if let Some(i) = json.find("\"chunk_bins\": [") {
+                    if let Some(e) = json[i..].find(']') {
+                        let seg = &json[i..i + e + 1];
+                        let _ = f.write_all(
+                            format!("pid={pid} tag=mi_arena_chunk_bins win={win} {seg}\n")
+                                .as_bytes(),
+                        );
+                    }
+                }
+            }
         }
     }
     dump_line(tag);
+    // A-DL40 (Council WP-89, Leijen KL-89-4): this channel is NON-CORPUS.
+    // mi_stats_print_out streams via the mimalloc fragment callback — the
+    // writes are NOT atomic per row and concurrent teardowns can garble
+    // them mid-line. No verdict may parse $PHPR_MI_STATS as evidence; the
+    // atomic equivalents live in the census file (tag=mi_arena* rows).
     if let Ok(path) = std::env::var("PHPR_MI_STATS") {
         use std::os::unix::io::AsRawFd;
         if let Ok(mut f) =
