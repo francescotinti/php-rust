@@ -1,0 +1,4 @@
+self-test PASS: idle parser exact on synthetic 4-line log; 5-line rejected (A-SK14)
+FAIL: feature-matrix.log git=9d50b47 != current HEAD 70824ea (KG-81-2)
+      (re-run gate-feature-matrix.sh on this tree — a binary from an
+       older tree must not be attributed to the current rev)
