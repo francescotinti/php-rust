@@ -1,0 +1,211 @@
+pid=17064 tag=lower_span tid=ThreadId(12) t0_us=0 t1_us=13311 da=48105327 df=40755350 clamped=0 /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/gate-axum/fixtures/hello.php
+pid=17064 tag=lower_span tid=ThreadId(13) t0_us=36203 t1_us=49342 da=48105327 df=40755350 clamped=0 /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/gate-axum/fixtures/hello.php
+pid=17064 tag=lower_span tid=ThreadId(14) t0_us=74237 t1_us=88433 da=48105327 df=40755350 clamped=0 /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/gate-axum/fixtures/hello.php
+pid=17064 tag=worker_dispatch thr=0 count=100 arm=axum-worker alloc_id=memcount-v2-s82
+pid=17064 tag=worker_dispatch thr=1 count=100 arm=axum-worker alloc_id=memcount-v2-s82
+pid=17064 tag=worker_dispatch thr=2 count=100 arm=axum-worker alloc_id=memcount-v2-s82
+pid=17064 tag=unitcache_main_entry thr=0 ord=1 net=7349977 clamped=0 floor_inc=997878 fns=317 stmts=2 net_rule=net-at-lower net_window=process-counters floor_rule=walk-increment-in-put-order arm=axum-worker alloc_id=memcount-v2-s82 /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/gate-axum/fixtures/hello.php
+pid=17064 tag=unitcache_main_entry thr=1 ord=1 net=7349977 clamped=0 floor_inc=997878 fns=317 stmts=2 net_rule=net-at-lower net_window=process-counters floor_rule=walk-increment-in-put-order arm=axum-worker alloc_id=memcount-v2-s82 /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/gate-axum/fixtures/hello.php
+pid=17064 tag=unitcache_main_entry thr=2 ord=1 net=7349977 clamped=0 floor_inc=997878 fns=317 stmts=2 net_rule=net-at-lower net_window=process-counters floor_rule=walk-increment-in-put-order arm=axum-worker alloc_id=memcount-v2-s82 /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/gate-axum/fixtures/hello.php
+pid=17064 tag=unitcache_thr thr=0 entries=1 mains=1 retained_walk_bytes=4283308 arm=axum-worker alloc_id=memcount-v2-s82
+pid=17064 tag=unitcache_thr thr=1 entries=1 mains=1 retained_walk_bytes=4283308 arm=axum-worker alloc_id=memcount-v2-s82
+pid=17064 tag=unitcache_thr thr=2 entries=1 mains=1 retained_walk_bytes=4283308 arm=axum-worker alloc_id=memcount-v2-s82
+pid=17064 tag=mi_bin thr=0 src=tls size=8 reserved=851864 committed=606136 used_b=578488 used_n=72311 areas=13
+pid=17064 tag=mi_bin thr=2 src=tls size=8 reserved=851864 committed=606136 used_b=578488 used_n=72311 areas=13
+pid=17064 tag=mi_bin thr=1 src=tls size=8 reserved=851864 committed=606136 used_b=578488 used_n=72311 areas=13
+pid=17064 tag=mi_bin thr=0 src=tls size=64 reserved=1702272 committed=916736 used_b=678400 used_n=10600 areas=26
+pid=17064 tag=mi_bin thr=2 src=tls size=64 reserved=1702272 committed=916736 used_b=678400 used_n=10600 areas=26
+pid=17064 tag=mi_bin thr=1 src=tls size=64 reserved=1702272 committed=916736 used_b=678400 used_n=10600 areas=26
+pid=17064 tag=mi_bin thr=0 src=tls size=640 reserved=5548800 committed=5164800 used_b=5153920 used_n=8053 areas=85
+pid=17064 tag=mi_bin thr=1 src=tls size=640 reserved=5548800 committed=5164800 used_b=5153920 used_n=8053 areas=85
+pid=17064 tag=mi_bin thr=2 src=tls size=640 reserved=5548800 committed=5164800 used_b=5153920 used_n=8053 areas=85
+pid=17064 tag=mi_bin thr=0 src=tls size=16 reserved=1310400 committed=585632 used_b=510272 used_n=31892 areas=20
+pid=17064 tag=mi_bin thr=2 src=tls size=16 reserved=1310400 committed=585632 used_b=510272 used_n=31892 areas=20
+pid=17064 tag=mi_bin thr=1 src=tls size=16 reserved=1310400 committed=585632 used_b=510272 used_n=31892 areas=20
+pid=17064 tag=mi_bin thr=0 src=tls size=224 reserved=850304 committed=541632 used_b=112672 used_n=503 areas=13
+pid=17064 tag=mi_bin thr=2 src=tls size=224 reserved=850304 committed=541632 used_b=112672 used_n=503 areas=13
+pid=17064 tag=mi_bin thr=1 src=tls size=224 reserved=850304 committed=541632 used_b=112896 used_n=504 areas=13
+pid=17064 tag=mi_bin thr=2 src=tls size=96 reserved=654720 committed=273024 used_b=252192 used_n=2627 areas=10
+pid=17064 tag=mi_bin thr=0 src=tls size=96 reserved=654720 committed=273024 used_b=252192 used_n=2627 areas=10
+pid=17064 tag=mi_bin thr=1 src=tls size=96 reserved=654720 committed=273024 used_b=252192 used_n=2627 areas=10
+pid=17064 tag=mi_bin thr=2 src=tls size=128 reserved=523264 committed=400640 used_b=374912 used_n=2929 areas=8
+pid=17064 tag=mi_bin thr=0 src=tls size=128 reserved=523264 committed=400640 used_b=374912 used_n=2929 areas=8
+pid=17064 tag=mi_bin thr=1 src=tls size=128 reserved=523264 committed=400640 used_b=374912 used_n=2929 areas=8
+pid=17064 tag=mi_bin thr=2 src=tls size=40960 reserved=1966080 committed=655360 used_b=655360 used_n=16 areas=4
+pid=17064 tag=mi_bin thr=1 src=tls size=40960 reserved=1966080 committed=655360 used_b=655360 used_n=16 areas=4
+pid=17064 tag=mi_bin thr=0 src=tls size=40960 reserved=1966080 committed=655360 used_b=655360 used_n=16 areas=4
+pid=17064 tag=mi_bin thr=2 src=tls size=384 reserved=979200 committed=714240 used_b=695040 used_n=1810 areas=15
+pid=17064 tag=mi_bin thr=1 src=tls size=384 reserved=979200 committed=714240 used_b=694656 used_n=1809 areas=15
+pid=17064 tag=mi_bin thr=0 src=tls size=384 reserved=979200 committed=714240 used_b=695424 used_n=1811 areas=15
+pid=17064 tag=mi_bin thr=1 src=tls size=7168 reserved=645120 committed=458752 used_b=437248 used_n=61 areas=10
+pid=17064 tag=mi_bin thr=2 src=tls size=7168 reserved=645120 committed=458752 used_b=437248 used_n=61 areas=10
+pid=17064 tag=mi_bin thr=0 src=tls size=7168 reserved=645120 committed=458752 used_b=437248 used_n=61 areas=10
+pid=17064 tag=mi_bin thr=1 src=tls size=32 reserved=1375584 committed=958080 used_b=906528 used_n=28329 areas=21
+pid=17064 tag=mi_bin thr=0 src=tls size=32 reserved=1375584 committed=958080 used_b=906528 used_n=28329 areas=21
+pid=17064 tag=mi_bin thr=2 src=tls size=32 reserved=1375584 committed=958080 used_b=906528 used_n=28329 areas=21
+pid=17064 tag=mi_bin thr=1 src=tls size=320 reserved=456960 committed=49920 used_b=35520 used_n=111 areas=7
+pid=17064 tag=mi_bin thr=0 src=tls size=320 reserved=456960 committed=49920 used_b=35520 used_n=111 areas=7
+pid=17064 tag=mi_bin thr=2 src=tls size=320 reserved=456960 committed=49920 used_b=35520 used_n=111 areas=7
+pid=17064 tag=mi_bin thr=1 src=tls size=192 reserved=458304 committed=124992 used_b=99840 used_n=520 areas=7
+pid=17064 tag=mi_bin thr=0 src=tls size=192 reserved=458304 committed=124992 used_b=100224 used_n=522 areas=7
+pid=17064 tag=mi_bin thr=1 src=tls size=1536 reserved=1999872 committed=1873920 used_b=1849344 used_n=1204 areas=31
+pid=17064 tag=mi_bin thr=2 src=tls size=192 reserved=458304 committed=124992 used_b=100032 used_n=521 areas=7
+pid=17064 tag=mi_bin thr=0 src=tls size=1536 reserved=1999872 committed=1873920 used_b=1849344 used_n=1204 areas=31
+pid=17064 tag=mi_bin thr=1 src=tls size=2048 reserved=1245184 committed=942080 used_b=921600 used_n=450 areas=19
+pid=17064 tag=mi_bin thr=0 src=tls size=2048 reserved=1245184 committed=942080 used_b=921600 used_n=450 areas=19
+pid=17064 tag=mi_bin thr=2 src=tls size=1536 reserved=1999872 committed=1873920 used_b=1849344 used_n=1204 areas=31
+pid=17064 tag=mi_bin thr=1 src=tls size=48 reserved=1441440 committed=1170480 used_b=1159824 used_n=24163 areas=22
+pid=17064 tag=mi_bin thr=0 src=tls size=48 reserved=1441440 committed=1170480 used_b=1159920 used_n=24165 areas=22
+pid=17064 tag=mi_bin thr=2 src=tls size=2048 reserved=1245184 committed=942080 used_b=921600 used_n=450 areas=19
+pid=17064 tag=mi_bin thr=0 src=tls size=1792 reserved=258048 committed=175616 used_b=168448 used_n=94 areas=4
+pid=17064 tag=mi_bin thr=1 src=tls size=1792 reserved=258048 committed=175616 used_b=168448 used_n=94 areas=4
+pid=17064 tag=mi_bin thr=0 src=tls size=256 reserved=2872320 committed=2701568 used_b=2691072 used_n=10512 areas=44
+pid=17064 tag=mi_bin thr=2 src=tls size=48 reserved=1441440 committed=1170480 used_b=1159872 used_n=24164 areas=22
+pid=17064 tag=mi_bin thr=1 src=tls size=256 reserved=2872320 committed=2701568 used_b=2691072 used_n=10512 areas=44
+pid=17064 tag=mi_bin thr=0 src=tls size=80 reserved=262080 committed=138720 used_b=125360 used_n=1567 areas=4
+pid=17064 tag=mi_bin thr=2 src=tls size=1792 reserved=258048 committed=175616 used_b=168448 used_n=94 areas=4
+pid=17064 tag=mi_bin thr=1 src=tls size=80 reserved=262080 committed=138720 used_b=125360 used_n=1567 areas=4
+pid=17064 tag=mi_bin thr=0 src=tls size=160 reserved=5562400 committed=5276320 used_b=5253120 used_n=32832 areas=85
+pid=17064 tag=mi_bin thr=2 src=tls size=256 reserved=2872320 committed=2701568 used_b=2691072 used_n=10512 areas=44
+pid=17064 tag=mi_bin thr=1 src=tls size=160 reserved=5562400 committed=5276320 used_b=5253440 used_n=32834 areas=85
+pid=17064 tag=mi_bin thr=0 src=tls size=1024 reserved=4587520 committed=4415488 used_b=4381696 used_n=4279 areas=70
+pid=17064 tag=mi_bin thr=1 src=tls size=1024 reserved=4587520 committed=4415488 used_b=4381696 used_n=4279 areas=70
+pid=17064 tag=mi_bin thr=2 src=tls size=80 reserved=262080 committed=138720 used_b=125360 used_n=1567 areas=4
+pid=17064 tag=mi_bin thr=0 src=tls size=512 reserved=2405888 committed=2028544 used_b=2011136 used_n=3928 areas=37
+pid=17064 tag=mi_bin thr=1 src=tls size=512 reserved=2405888 committed=2028544 used_b=2011136 used_n=3928 areas=37
+pid=17064 tag=mi_bin thr=2 src=tls size=160 reserved=5562400 committed=5276320 used_b=5253280 used_n=32833 areas=85
+pid=17064 tag=mi_bin thr=0 src=tls size=1280 reserved=1240320 committed=1017600 used_b=1011200 used_n=790 areas=19
+pid=17064 tag=mi_bin thr=2 src=tls size=1024 reserved=4587520 committed=4415488 used_b=4381696 used_n=4279 areas=70
+pid=17064 tag=mi_bin thr=1 src=tls size=1280 reserved=1240320 committed=1017600 used_b=1011200 used_n=790 areas=19
+pid=17064 tag=mi_bin thr=0 src=tls size=10240 reserved=1843200 committed=1781760 used_b=1761280 used_n=172 areas=30
+pid=17064 tag=mi_bin thr=2 src=tls size=512 reserved=2405888 committed=2028544 used_b=2011136 used_n=3928 areas=37
+pid=17064 tag=mi_bin thr=1 src=tls size=10240 reserved=1843200 committed=1781760 used_b=1781760 used_n=174 areas=30
+pid=17064 tag=mi_bin thr=0 src=tls size=3584 reserved=967680 committed=838656 used_b=827904 used_n=231 areas=15
+pid=17064 tag=mi_bin thr=1 src=tls size=3584 reserved=967680 committed=838656 used_b=827904 used_n=231 areas=15
+pid=17064 tag=mi_bin thr=2 src=tls size=1280 reserved=1240320 committed=1017600 used_b=1011200 used_n=790 areas=19
+pid=17064 tag=mi_bin thr=1 src=tls size=768 reserved=1958400 committed=1824000 used_b=1819392 used_n=2369 areas=30
+pid=17064 tag=mi_bin thr=0 src=tls size=768 reserved=1958400 committed=1824000 used_b=1819392 used_n=2369 areas=30
+pid=17064 tag=mi_bin thr=2 src=tls size=10240 reserved=1843200 committed=1781760 used_b=1771520 used_n=173 areas=30
+pid=17064 tag=mi_bin thr=0 src=tls size=4096 reserved=589824 committed=446464 used_b=434176 used_n=106 areas=9
+pid=17064 tag=mi_bin thr=1 src=tls size=4096 reserved=589824 committed=446464 used_b=434176 used_n=106 areas=9
+pid=17064 tag=mi_bin thr=2 src=tls size=3584 reserved=967680 committed=838656 used_b=827904 used_n=231 areas=15
+pid=17064 tag=mi_bin thr=1 src=tls size=8192 reserved=983040 committed=688128 used_b=663552 used_n=81 areas=15
+pid=17064 tag=mi_bin thr=0 src=tls size=8192 reserved=983040 committed=688128 used_b=663552 used_n=81 areas=15
+pid=17064 tag=mi_bin thr=2 src=tls size=768 reserved=1958400 committed=1824000 used_b=1819392 used_n=2369 areas=30
+pid=17064 tag=mi_bin thr=0 src=tls size=2560 reserved=576000 committed=430080 used_b=422400 used_n=165 areas=9
+pid=17064 tag=mi_bin thr=1 src=tls size=2560 reserved=576000 committed=430080 used_b=422400 used_n=165 areas=9
+pid=17064 tag=mi_bin thr=0 src=tls size=112 reserved=393120 committed=84672 used_b=65632 used_n=586 areas=6
+pid=17064 tag=mi_bin thr=2 src=tls size=4096 reserved=589824 committed=446464 used_b=434176 used_n=106 areas=9
+pid=17064 tag=mi_bin thr=0 src=tls size=896 reserved=392448 committed=43008 used_b=24192 used_n=27 areas=6
+pid=17064 tag=mi_bin thr=1 src=tls size=112 reserved=393120 committed=84672 used_b=65632 used_n=586 areas=6
+pid=17064 tag=mi_bin thr=2 src=tls size=8192 reserved=983040 committed=688128 used_b=663552 used_n=81 areas=15
+pid=17064 tag=mi_bin thr=1 src=tls size=896 reserved=392448 committed=43008 used_b=24192 used_n=27 areas=6
+pid=17064 tag=mi_bin thr=0 src=tls size=49152 reserved=1474560 committed=294912 used_b=147456 used_n=3 areas=3
+pid=17064 tag=mi_bin thr=2 src=tls size=2560 reserved=576000 committed=430080 used_b=422400 used_n=165 areas=9
+pid=17064 tag=mi_bin thr=1 src=tls size=49152 reserved=1474560 committed=294912 used_b=147456 used_n=3 areas=3
+pid=17064 tag=mi_bin thr=0 src=tls size=16384 reserved=3145728 committed=294912 used_b=294912 used_n=18 areas=6
+pid=17064 tag=mi_bin thr=1 src=tls size=16384 reserved=3145728 committed=294912 used_b=294912 used_n=18 areas=6
+pid=17064 tag=mi_bin thr=2 src=tls size=112 reserved=393120 committed=84672 used_b=65744 used_n=587 areas=6
+pid=17064 tag=mi_bin thr=0 src=tls size=6144 reserved=2027520 committed=1972224 used_b=1953792 used_n=318 areas=33
+pid=17064 tag=mi_bin thr=2 src=tls size=896 reserved=392448 committed=43008 used_b=24192 used_n=27 areas=6
+pid=17064 tag=mi_bin thr=1 src=tls size=6144 reserved=2027520 committed=1972224 used_b=1953792 used_n=318 areas=33
+pid=17064 tag=mi_bin thr=0 src=tls size=3072 reserved=2128896 committed=2009088 used_b=1999872 used_n=651 areas=33
+pid=17064 tag=mi_bin thr=2 src=tls size=49152 reserved=1474560 committed=294912 used_b=147456 used_n=3 areas=3
+pid=17064 tag=mi_bin thr=1 src=tls size=3072 reserved=2128896 committed=2009088 used_b=1999872 used_n=651 areas=33
+pid=17064 tag=mi_bin thr=0 src=tls size=5120 reserved=1474560 committed=1443840 used_b=1428480 used_n=279 areas=24
+pid=17064 tag=mi_bin thr=2 src=tls size=16384 reserved=3145728 committed=294912 used_b=294912 used_n=18 areas=6
+pid=17064 tag=mi_bin thr=1 src=tls size=5120 reserved=1474560 committed=1443840 used_b=1428480 used_n=279 areas=24
+pid=17064 tag=mi_bin thr=0 src=tls size=65536 reserved=1572864 committed=196608 used_b=196608 used_n=3 areas=3
+pid=17064 tag=mi_bin thr=2 src=tls size=6144 reserved=2027520 committed=1972224 used_b=1953792 used_n=318 areas=33
+pid=17064 tag=mi_bin thr=0 src=tls size=14336 reserved=1548288 committed=473088 used_b=473088 used_n=33 areas=3
+pid=17064 tag=mi_bin thr=1 src=tls size=65536 reserved=1572864 committed=196608 used_b=196608 used_n=3 areas=3
+pid=17064 tag=mi_bin thr=2 src=tls size=3072 reserved=2128896 committed=2009088 used_b=1999872 used_n=651 areas=33
+pid=17064 tag=mi_bin thr=0 src=tls size=32768 reserved=1572864 committed=196608 used_b=196608 used_n=6 areas=3
+pid=17064 tag=mi_bin thr=1 src=tls size=14336 reserved=1548288 committed=473088 used_b=473088 used_n=33 areas=3
+pid=17064 tag=mi_bin thr=0 src=tls size=28672 reserved=1548288 committed=344064 used_b=344064 used_n=12 areas=3
+pid=17064 tag=mi_bin thr=2 src=tls size=5120 reserved=1474560 committed=1443840 used_b=1428480 used_n=279 areas=24
+pid=17064 tag=mi_bin thr=1 src=tls size=32768 reserved=1572864 committed=196608 used_b=196608 used_n=6 areas=3
+pid=17064 tag=mi_bin thr=0 src=tls size=20480 reserved=1536000 committed=1167360 used_b=1105920 used_n=54 areas=3
+pid=17064 tag=mi_bin thr=2 src=tls size=65536 reserved=1572864 committed=196608 used_b=196608 used_n=3 areas=3
+pid=17064 tag=mi_bin thr=1 src=tls size=28672 reserved=1548288 committed=344064 used_b=344064 used_n=12 areas=3
+pid=17064 tag=mi_bin thr=0 src=tls size=12288 reserved=1548288 committed=1474560 used_b=1437696 used_n=117 areas=3
+pid=17064 tag=mi_bin thr=1 src=tls size=20480 reserved=1536000 committed=1167360 used_b=1105920 used_n=54 areas=3
+pid=17064 tag=mi_bin thr=2 src=tls size=14336 reserved=1548288 committed=473088 used_b=473088 used_n=33 areas=3
+pid=17064 tag=mi_bin thr=1 src=tls size=12288 reserved=1548288 committed=1474560 used_b=1437696 used_n=117 areas=3
+pid=17064 tag=mi_bin thr=0 src=tls size=24576 reserved=1548288 committed=589824 used_b=516096 used_n=21 areas=3
+pid=17064 tag=mi_bin thr=2 src=tls size=32768 reserved=1572864 committed=196608 used_b=196608 used_n=6 areas=3
+pid=17064 tag=mi_bin thr=1 src=tls size=24576 reserved=1548288 committed=589824 used_b=516096 used_n=21 areas=3
+pid=17064 tag=mi_bin thr=0 src=tls size=448 reserved=196224 committed=12096 used_b=8064 used_n=18 areas=3
+pid=17064 tag=mi_bin thr=2 src=tls size=28672 reserved=1548288 committed=344064 used_b=344064 used_n=12 areas=3
+pid=17064 tag=mi_bin thr=1 src=tls size=448 reserved=196224 committed=12096 used_b=8064 used_n=18 areas=3
+pid=17064 tag=mi_bin_thr_sum thr=0 heap=0x1055a6e80 reserved=68224024 committed=47796232 used_b=46185240 alloc_id=memcount-v2-s82
+pid=17064 tag=mi_bin thr=2 src=tls size=20480 reserved=1536000 committed=1167360 used_b=1105920 used_n=54 areas=3
+pid=17064 tag=mi_bin_thr_sum thr=1 heap=0x1055a6e80 reserved=68224024 committed=47796232 used_b=46205016 alloc_id=memcount-v2-s82
+pid=17064 tag=mi_bin thr=2 src=tls size=12288 reserved=1548288 committed=1474560 used_b=1437696 used_n=117 areas=3
+pid=17064 tag=mi_bin thr=2 src=tls size=24576 reserved=1548288 committed=589824 used_b=516096 used_n=21 areas=3
+pid=17064 tag=mi_bin thr=2 src=tls size=448 reserved=196224 committed=12096 used_b=8064 used_n=18 areas=3
+pid=17064 tag=mi_bin_thr_sum thr=2 heap=0x1055a6e80 reserved=68224024 committed=47796232 used_b=46195128 alloc_id=memcount-v2-s82
+pid=17064 tag=exit str.live=0 str.peak=773971 str.cum=1270782 str.cum_n=22335 str.live_n=0 arr.live=0 arr.peak=0 arr.cum=0 arr.cum_n=0 arr.live_n=0 obj.live=0 obj.peak=0 obj.cum=0 obj.cum_n=0 obj.live_n=0 unit.live=0 unit.peak=0 unit.cum=0 unit.cum_n=0 unit.live_n=0 created=0 units=0 unit_slack=0 proxy_peak=773971
+pid=17064 tag=mi_proc win=0 mono_ms=5753 phys=3768848 phys_peak=51135016 rss=95125504 peak_rss=95666176 commit=116785152 peak_commit=116785152
+pid=17064 tag=ctx win=0 mono_ms=5753 top=none
+pid=17064 tag=mi_bin win=0 src=defer visit=NULLHEAP
+pid=17064 tag=mi_bin win=0 src=main size=8 reserved=65528 committed=4096 used_b=3168 used_n=396 areas=1
+pid=17064 tag=mi_bin win=0 src=main size=64 reserved=130944 committed=8192 used_b=576 used_n=9 areas=2
+pid=17064 tag=mi_bin win=0 src=main size=640 reserved=65280 committed=3840 used_b=1280 used_n=2 areas=1
+pid=17064 tag=mi_bin win=0 src=main size=16 reserved=65520 committed=4096 used_b=48 used_n=3 areas=1
+pid=17064 tag=mi_bin win=0 src=main size=224 reserved=130816 committed=8064 used_b=3584 used_n=16 areas=2
+pid=17064 tag=mi_bin win=0 src=main size=96 reserved=65472 committed=4032 used_b=192 used_n=2 areas=1
+pid=17064 tag=mi_bin win=0 src=main size=128 reserved=130816 committed=8192 used_b=1536 used_n=12 areas=2
+pid=17064 tag=mi_bin win=0 src=main size=40960 reserved=491520 committed=40960 used_b=40960 used_n=1 areas=1
+pid=17064 tag=mi_bin win=0 src=main size=384 reserved=65280 committed=15360 used_b=12672 used_n=33 areas=1
+pid=17064 tag=mi_bin win=0 src=main size=7168 reserved=64512 committed=7168 used_b=7168 used_n=1 areas=1
+pid=17064 tag=mi_bin win=0 src=main size=32 reserved=327520 committed=81888 used_b=704 used_n=22 areas=5
+pid=17064 tag=mi_bin win=0 src=main size=320 reserved=65280 committed=3840 used_b=0 used_n=0 areas=1
+pid=17064 tag=mi_bin win=0 src=main size=192 reserved=65472 committed=4032 used_b=3264 used_n=17 areas=1
+pid=17064 tag=mi_bin win=0 src=main size=1536 reserved=64512 committed=3072 used_b=1536 used_n=1 areas=1
+pid=17064 tag=mi_bin win=0 src=main size=2048 reserved=131072 committed=36864 used_b=30720 used_n=15 areas=2
+pid=17064 tag=mi_bin win=0 src=main size=48 reserved=65520 committed=4080 used_b=1440 used_n=30 areas=1
+pid=17064 tag=mi_bin win=0 src=main size=1792 reserved=64512 committed=3584 used_b=1792 used_n=1 areas=1
+pid=17064 tag=mi_bin win=0 src=main size=256 reserved=65280 committed=4096 used_b=3072 used_n=12 areas=1
+pid=17064 tag=mi_bin win=0 src=main size=80 reserved=65520 committed=4080 used_b=800 used_n=10 areas=1
+pid=17064 tag=mi_bin win=0 src=main size=160 reserved=65440 committed=4000 used_b=0 used_n=0 areas=1
+pid=17064 tag=mi_bin win=0 src=main size=10240 reserved=61440 committed=10240 used_b=10240 used_n=1 areas=1
+pid=17064 tag=mi_bin win=0 src=main size=1024 reserved=65536 committed=4096 used_b=1024 used_n=1 areas=1
+pid=17064 tag=mi_bin win=0 src=main size=512 reserved=65024 committed=4096 used_b=2048 used_n=4 areas=1
+pid=17064 tag=mi_bin win=0 src=main size=112 reserved=65520 committed=4032 used_b=112 used_n=1 areas=1
+pid=17064 tag=mi_bin win=0 src=main size=4096 reserved=65536 committed=65536 used_b=4096 used_n=1 areas=1
+pid=17064 tag=mi_bin win=0 src=main size=1280 reserved=65280 committed=3840 used_b=1280 used_n=1 areas=1
+pid=17064 tag=mi_bin win=0 src=aband size=32 reserved=262016 committed=77792 used_b=224 used_n=7 areas=4
+pid=17064 tag=mi_bin win=0 src=aband size=64 reserved=65472 committed=4096 used_b=192 used_n=3 areas=1
+pid=17064 tag=mi_bin win=0 src=aband size=128 reserved=65408 committed=4096 used_b=128 used_n=1 areas=1
+pid=17064 tag=mi_bin win=0 src=aband size=224 reserved=65408 committed=4032 used_b=224 used_n=1 areas=1
+pid=17064 tag=mi_bin win=0 src=aband size=1024 reserved=65536 committed=4096 used_b=1024 used_n=1 areas=1
+pid=17064 tag=mi_bin win=0 src=aband size=2048 reserved=65536 committed=4096 used_b=2048 used_n=1 areas=1
+pid=17064 tag=mi_bin win=0 src=aband size=4096 reserved=65536 committed=65536 used_b=4096 used_n=1 areas=1
+pid=17064 tag=exit_mi str.live=0 str.peak=773971 str.cum=1270782 str.cum_n=22335 str.live_n=0 arr.live=0 arr.peak=0 arr.cum=0 arr.cum_n=0 arr.live_n=0 obj.live=0 obj.peak=0 obj.cum=0 obj.cum_n=0 obj.live_n=0 unit.live=0 unit.peak=0 unit.cum=0 unit.cum_n=0 unit.live_n=0 created=0 units=0 unit_slack=0 proxy_peak=773971
+pid=17064 tag=mi_proc win=0 mono_ms=5754 phys=3457552 phys_peak=51135016 rss=95141888 peak_rss=95666176 commit=116785152 peak_commit=116785152
+pid=17064 tag=ctx win=0 mono_ms=5754 top=none
+pid=17064 tag=mi_bin win=0 src=defer visit=NULLHEAP
+pid=17064 tag=mi_bin win=0 src=main size=192 reserved=65472 committed=4032 used_b=0 used_n=0 areas=1
+pid=17064 tag=mi_bin win=0 src=main size=64 reserved=130944 committed=8192 used_b=320 used_n=5 areas=2
+pid=17064 tag=mi_bin win=0 src=main size=640 reserved=65280 committed=3840 used_b=640 used_n=1 areas=1
+pid=17064 tag=mi_bin win=0 src=main size=16 reserved=65520 committed=4096 used_b=16 used_n=1 areas=1
+pid=17064 tag=mi_bin win=0 src=main size=8 reserved=65528 committed=4096 used_b=0 used_n=0 areas=1
+pid=17064 tag=mi_bin win=0 src=main size=10240 reserved=61440 committed=10240 used_b=10240 used_n=1 areas=1
+pid=17064 tag=mi_bin win=0 src=main size=384 reserved=65280 committed=15360 used_b=12672 used_n=33 areas=1
+pid=17064 tag=mi_bin win=0 src=main size=1024 reserved=65536 committed=4096 used_b=1024 used_n=1 areas=1
+pid=17064 tag=mi_bin win=0 src=main size=32 reserved=262016 committed=77792 used_b=224 used_n=7 areas=4
+pid=17064 tag=mi_bin win=0 src=main size=2048 reserved=65536 committed=4096 used_b=2048 used_n=1 areas=1
+pid=17064 tag=mi_bin win=0 src=main size=112 reserved=65520 committed=4032 used_b=112 used_n=1 areas=1
+pid=17064 tag=mi_bin win=0 src=main size=128 reserved=65408 committed=4096 used_b=128 used_n=1 areas=1
+pid=17064 tag=mi_bin win=0 src=main size=224 reserved=65408 committed=4032 used_b=224 used_n=1 areas=1
+pid=17064 tag=mi_bin win=0 src=main size=4096 reserved=65536 committed=65536 used_b=4096 used_n=1 areas=1
+pid=17064 tag=mi_bin win=0 src=aband size=32 reserved=262016 committed=77792 used_b=224 used_n=7 areas=4
+pid=17064 tag=mi_bin win=0 src=aband size=64 reserved=65472 committed=4096 used_b=192 used_n=3 areas=1
+pid=17064 tag=mi_bin win=0 src=aband size=128 reserved=65408 committed=4096 used_b=128 used_n=1 areas=1
+pid=17064 tag=mi_bin win=0 src=aband size=224 reserved=65408 committed=4032 used_b=224 used_n=1 areas=1
+pid=17064 tag=mi_bin win=0 src=aband size=1024 reserved=65536 committed=4096 used_b=1024 used_n=1 areas=1
+pid=17064 tag=mi_bin win=0 src=aband size=2048 reserved=65536 committed=4096 used_b=2048 used_n=1 areas=1
+pid=17064 tag=mi_bin win=0 src=aband size=4096 reserved=65536 committed=65536 used_b=4096 used_n=1 areas=1
+pid=17064 tag=exit_collect_mi str.live=0 str.peak=773971 str.cum=1270782 str.cum_n=22335 str.live_n=0 arr.live=0 arr.peak=0 arr.cum=0 arr.cum_n=0 arr.live_n=0 obj.live=0 obj.peak=0 obj.cum=0 obj.cum_n=0 obj.live_n=0 unit.live=0 unit.peak=0 unit.cum=0 unit.cum_n=0 unit.live_n=0 created=0 units=0 unit_slack=0 proxy_peak=773971
+mem_hash=2a15f2085d4dcdf8 git=38961f0 campaign_sha=99e41a4560a6ab7f arm=mem-census phase=slope.w3.r4 attempt=3 w=3 nreq=300 envtag=none server_exit=0 seq=14 epoch=1785677181

@@ -1,70 +1,51 @@
-== verdict87 — campaign git=a9e18fc attempt=1 mem_hash=2a15f2085d4dcdf8 (judged at HEAD=a9e18fc) ==
-VIDENT PASS: 32 raws present, NUL-free, identity-uniform (mem_hash=2a15f2085d4dcdf8 git=a9e18fc attempt=1)
-FAIL VDISP: m87.slope.w1.r1.a1.memcensus has 0 dispatch rows, expected 1 (A-PP37)
-FAIL VDISP: m87.slope.w1.r2.a1.memcensus has 0 dispatch rows, expected 1 (A-PP37)
-FAIL VDISP: m87.slope.w1.r3.a1.memcensus has 0 dispatch rows, expected 1 (A-PP37)
-FAIL VDISP: m87.slope.w1.r4.a1.memcensus has 0 dispatch rows, expected 1 (A-PP37)
-FAIL VDISP: m87.slope.w1.r5.a1.memcensus has 0 dispatch rows, expected 1 (A-PP37)
-FAIL VDISP: m87.slope.w2.r1.a1.memcensus has 0 dispatch rows, expected 2 (A-PP37)
-FAIL VDISP: m87.slope.w2.r2.a1.memcensus has 0 dispatch rows, expected 2 (A-PP37)
-FAIL VDISP: m87.slope.w2.r3.a1.memcensus has 0 dispatch rows, expected 2 (A-PP37)
-FAIL VDISP: m87.slope.w2.r4.a1.memcensus has 0 dispatch rows, expected 2 (A-PP37)
-FAIL VDISP: m87.slope.w2.r5.a1.memcensus has 0 dispatch rows, expected 2 (A-PP37)
-FAIL VDISP: m87.slope.w3.r1.a1.memcensus has 0 dispatch rows, expected 3 (A-PP37)
-FAIL VDISP: m87.slope.w3.r2.a1.memcensus has 0 dispatch rows, expected 3 (A-PP37)
-FAIL VDISP: m87.slope.w3.r3.a1.memcensus has 0 dispatch rows, expected 3 (A-PP37)
-FAIL VDISP: m87.slope.w3.r4.a1.memcensus has 0 dispatch rows, expected 3 (A-PP37)
-FAIL VDISP: m87.slope.w3.r5.a1.memcensus has 0 dispatch rows, expected 3 (A-PP37)
-FAIL VDISP: m87.slope.w4.r1.a1.memcensus has 0 dispatch rows, expected 4 (A-PP37)
-FAIL VDISP: m87.slope.w4.r2.a1.memcensus has 0 dispatch rows, expected 4 (A-PP37)
-FAIL VDISP: m87.slope.w4.r3.a1.memcensus has 0 dispatch rows, expected 4 (A-PP37)
-FAIL VDISP: m87.slope.w4.r4.a1.memcensus has 0 dispatch rows, expected 4 (A-PP37)
-FAIL VDISP: m87.slope.w4.r5.a1.memcensus has 0 dispatch rows, expected 4 (A-PP37)
-FAIL VDISP: m87.eager.w2.r1.a1.memcensus has 0 dispatch rows, expected 2 (A-PP37)
-FAIL VDISP: m87.minstack.w2.r1.a1.memcensus has 0 dispatch rows, expected 2 (A-PP37)
-FAIL VDISP: m87.eager.w2.r2.a1.memcensus has 0 dispatch rows, expected 2 (A-PP37)
-FAIL VDISP: m87.minstack.w2.r2.a1.memcensus has 0 dispatch rows, expected 2 (A-PP37)
-FAIL VDISP: m87.eager.w2.r3.a1.memcensus has 0 dispatch rows, expected 2 (A-PP37)
-FAIL VDISP: m87.minstack.w2.r3.a1.memcensus has 0 dispatch rows, expected 2 (A-PP37)
-FAIL VDISP: m87.cala.r1.a1.memcensus has 0 dispatch rows, expected 1 (A-PP37)
-FAIL VDISP: m87.cala.r2.a1.memcensus has 0 dispatch rows, expected 1 (A-PP37)
-FAIL VDISP: m87.calb.r1.a1.memcensus has 0 dispatch rows, expected 1 (A-PP37)
-FAIL VDISP: m87.calb.r2.a1.memcensus has 0 dispatch rows, expected 1 (A-PP37)
-FAIL VDISP: m87.conc.r1.a1.memcensus has 0 dispatch rows, expected 2 (A-PP37)
-FAIL VDISP: m87.conc.r2.a1.memcensus has 0 dispatch rows, expected 2 (A-PP37)
-FAIL VORD: m87.slope.w1.r1.a1.memcensus has 0 main-entry rows, expected 1
-FAIL VORD: m87.slope.w1.r2.a1.memcensus has 0 main-entry rows, expected 1
-FAIL VORD: m87.slope.w1.r3.a1.memcensus has 0 main-entry rows, expected 1
-FAIL VORD: m87.slope.w1.r4.a1.memcensus has 0 main-entry rows, expected 1
-FAIL VORD: m87.slope.w1.r5.a1.memcensus has 0 main-entry rows, expected 1
-FAIL VORD: m87.slope.w2.r1.a1.memcensus has 0 main-entry rows, expected 2
-FAIL VORD: m87.slope.w2.r2.a1.memcensus has 0 main-entry rows, expected 2
-FAIL VORD: m87.slope.w2.r3.a1.memcensus has 0 main-entry rows, expected 2
-FAIL VORD: m87.slope.w2.r4.a1.memcensus has 0 main-entry rows, expected 2
-FAIL VORD: m87.slope.w2.r5.a1.memcensus has 0 main-entry rows, expected 2
-FAIL VORD: m87.slope.w3.r1.a1.memcensus has 0 main-entry rows, expected 3
-FAIL VORD: m87.slope.w3.r2.a1.memcensus has 0 main-entry rows, expected 3
-FAIL VORD: m87.slope.w3.r3.a1.memcensus has 0 main-entry rows, expected 3
-FAIL VORD: m87.slope.w3.r4.a1.memcensus has 0 main-entry rows, expected 3
-FAIL VORD: m87.slope.w3.r5.a1.memcensus has 0 main-entry rows, expected 3
-FAIL VORD: m87.slope.w4.r1.a1.memcensus has 0 main-entry rows, expected 4
-FAIL VORD: m87.slope.w4.r2.a1.memcensus has 0 main-entry rows, expected 4
-FAIL VORD: m87.slope.w4.r3.a1.memcensus has 0 main-entry rows, expected 4
-FAIL VORD: m87.slope.w4.r4.a1.memcensus has 0 main-entry rows, expected 4
-FAIL VORD: m87.slope.w4.r5.a1.memcensus has 0 main-entry rows, expected 4
-FAIL VORD: m87.eager.w2.r1.a1.memcensus has 0 main-entry rows, expected 2
-FAIL VORD: m87.minstack.w2.r1.a1.memcensus has 0 main-entry rows, expected 2
-FAIL VORD: m87.eager.w2.r2.a1.memcensus has 0 main-entry rows, expected 2
-FAIL VORD: m87.minstack.w2.r2.a1.memcensus has 0 main-entry rows, expected 2
-FAIL VORD: m87.eager.w2.r3.a1.memcensus has 0 main-entry rows, expected 2
-FAIL VORD: m87.minstack.w2.r3.a1.memcensus has 0 main-entry rows, expected 2
-FAIL VORD: m87.cala.r1.a1.memcensus has 0 main-entry rows, expected 1
-FAIL VORD: m87.cala.r2.a1.memcensus has 0 main-entry rows, expected 1
-FAIL VORD: m87.calb.r1.a1.memcensus has 0 main-entry rows, expected 1
-FAIL VORD: m87.calb.r2.a1.memcensus has 0 main-entry rows, expected 1
-FAIL VORD: m87.conc.r1.a1.memcensus has 0 main-entry rows, expected 2
-FAIL VORD: m87.conc.r2.a1.memcensus has 0 main-entry rows, expected 2
-VSLOPE SKIPPED: upstream blocks not clean (KS-SK-88-2)
-VARMS SKIPPED: upstream not clean (KS-SK-88-2)
-VDISJ SKIPPED: upstream not clean (KS-SK-88-2)
-== VERDICT87 FAIL(67) ==
+== verdict87 — campaign git=38961f0 attempt=3 mem_hash=2a15f2085d4dcdf8 (judged at HEAD=38961f0) ==
+VIDENT PASS: 32 raws present, NUL-free, identity-uniform (mem_hash=2a15f2085d4dcdf8 git=38961f0 attempt=3)
+VDISP PASS: per-thread dispatch MAP exact on every raw (each thread == nreq/W; A-PP37)
+VORD PASS: every main-entry row ord=1 clamped=0, every thread cache entries=1 mains=1 (A-SK45/A-DL36/A-DS39)
+slope w=1 r=1 committed_postcollect_win0_bytes=69140480 slack_committed_minus_used_bytes=87712 peak_memory_footprint_bytes=38683152
+slope w=1 r=2 committed_postcollect_win0_bytes=69009408 slack_committed_minus_used_bytes=330464 peak_memory_footprint_bytes=38601208
+slope w=1 r=3 committed_postcollect_win0_bytes=68747264 slack_committed_minus_used_bytes=83712 peak_memory_footprint_bytes=38552080
+slope w=1 r=4 committed_postcollect_win0_bytes=68747264 slack_committed_minus_used_bytes=91776 peak_memory_footprint_bytes=38535672
+slope w=1 r=5 committed_postcollect_win0_bytes=68681728 slack_committed_minus_used_bytes=76576 peak_memory_footprint_bytes=38535672
+slope w=2 r=1 committed_postcollect_win0_bytes=103153664 slack_committed_minus_used_bytes=68416 peak_memory_footprint_bytes=55132712
+slope w=2 r=2 committed_postcollect_win0_bytes=103219200 slack_committed_minus_used_bytes=83712 peak_memory_footprint_bytes=55198248
+slope w=2 r=3 committed_postcollect_win0_bytes=103153664 slack_committed_minus_used_bytes=84768 peak_memory_footprint_bytes=54936104
+slope w=2 r=4 committed_postcollect_win0_bytes=103153664 slack_committed_minus_used_bytes=87840 peak_memory_footprint_bytes=55198248
+slope w=2 r=5 committed_postcollect_win0_bytes=103153664 slack_committed_minus_used_bytes=322272 peak_memory_footprint_bytes=55214632
+slope w=3 r=1 committed_postcollect_win0_bytes=116785152 slack_committed_minus_used_bytes=110240 peak_memory_footprint_bytes=78479912
+slope w=3 r=2 committed_postcollect_win0_bytes=125435904 slack_committed_minus_used_bytes=118560 peak_memory_footprint_bytes=83804712
+slope w=3 r=3 committed_postcollect_win0_bytes=116850688 slack_committed_minus_used_bytes=76448 peak_memory_footprint_bytes=78529040
+slope w=3 r=4 committed_postcollect_win0_bytes=116785152 slack_committed_minus_used_bytes=337600 peak_memory_footprint_bytes=78463528
+slope w=3 r=5 committed_postcollect_win0_bytes=124321792 slack_committed_minus_used_bytes=83712 peak_memory_footprint_bytes=83870224
+slope w=4 r=1 committed_postcollect_win0_bytes=150405120 slack_committed_minus_used_bytes=330464 peak_memory_footprint_bytes=92029504
+slope w=4 r=2 committed_postcollect_win0_bytes=150405120 slack_committed_minus_used_bytes=330336 peak_memory_footprint_bytes=91996712
+slope w=4 r=3 committed_postcollect_win0_bytes=150405120 slack_committed_minus_used_bytes=76576 peak_memory_footprint_bytes=91980328
+slope w=4 r=4 committed_postcollect_win0_bytes=150405120 slack_committed_minus_used_bytes=330464 peak_memory_footprint_bytes=92013120
+slope w=4 r=5 committed_postcollect_win0_bytes=152829952 slack_committed_minus_used_bytes=345792 peak_memory_footprint_bytes=99025472
+W=1 min-of-R: committed=68681728 B (65.50 MiB) slack=76576 B peak_footprint=38535672 B
+W=2 min-of-R: committed=103153664 B (98.38 MiB) slack=68416 B peak_footprint=54936104 B
+W=3 min-of-R: committed=116785152 B (111.38 MiB) slack=76448 B peak_footprint=78463528 B
+W=4 min-of-R: committed=150405120 B (143.44 MiB) slack=76576 B peak_footprint=91980328 B
+delta committed W1->W2 = 34471936 B (32.88 MiB)
+delta committed W2->W3 = 13631488 B (13.00 MiB)
+delta committed W3->W4 = 33619968 B (32.06 MiB)
+VSLOPE LSQ slope (metric=committed_postcollect_win0, min-of-R, W=1..4): 25880166 B/worker (24.68 MiB)
+VSLOPE verdict: NAMED-DEVIATION — slope 25880166 B outside 3605572 B +/-5% [3425293, 3785851] (protocol clean; the physics answer is the answer)
+slack delta W1->W2 = -8160 B (named term of the A-DL38 closure)
+slack delta W2->W3 = 8032 B (named term of the A-DL38 closure)
+slack delta W3->W4 = 128 B (named term of the A-DL38 closure)
+VSLOPE PASS: protocol clean (collect armed, min-of-R, LSQ; KB-88-3 respected — no max-min judged)
+VARMS eager: min-of-R committed W=2 = 103153664 B vs base 103153664 B — delta 0 B (metric=committed_postcollect_win0; ADVISORY: R=3 arm vs R=5 base, candidate named, never a pin)
+VARMS minstack: min-of-R committed W=2 = 103153664 B vs base 103153664 B — delta 0 B (metric=committed_postcollect_win0; ADVISORY: R=3 arm vs R=5 base, candidate named, never a pin)
+VARMS PASS (advisory candidate arms reported by name)
+VDISJ cal: pad87a net=7801102 B floor_inc=1161206 B | pad87b net=7801102 B floor_inc=1161206 B (metric=net-at-lower, net_window=process-counters, W=1 sequential — legal per KL-87-2)
+VDISJ conc r1: spans=OVERLAP padA net=18748620 floor_inc=1161206 | padB net=15602514 floor_inc=1161206 | calA+calB=15602204 B
+VDISJ conc r1: nets under concurrency are VOID as per-thread figures (KB-88-1) — reported only to scope the decomposition
+VDISJ conc r1 prediction check (ex-ante): |netX-(calA+calB)| -> padA delta=3146416 B, padB delta=310 B (swallow signature on a NEST-FREE pair)
+VDISJ conc r1 floor prediction (ex-ante): floor_inc==cal floor_inc per side -> padA delta=0 B, padB delta=0 B (nest-free => no shared-node discount)
+VDISJ conc r2: spans=OVERLAP padA net=18748924 floor_inc=1161206 | padB net=15602514 floor_inc=1161206 | calA+calB=15602204 B
+VDISJ conc r2: nets under concurrency are VOID as per-thread figures (KB-88-1) — reported only to scope the decomposition
+VDISJ conc r2 prediction check (ex-ante): |netX-(calA+calB)| -> padA delta=3146720 B, padB delta=310 B (swallow signature on a NEST-FREE pair)
+VDISJ conc r2 floor prediction (ex-ante): floor_inc==cal floor_inc per side -> padA delta=0 B, padB delta=0 B (nest-free => no shared-node discount)
+VDISJ PASS: calibrations byte-reproduced; concurrency observations reported with KB-88-1 tags
+== VERDICT87 PASS (git=38961f0 attempt=3) ==
