@@ -183,6 +183,9 @@ push @sources, committed_glob("$here/../wp87-harness/*.out");
 # S-88.0: the measure88 campaign raws (m88* labels) + verdict88 (per-attempt,
 # per-generation .out) in wp88-harness
 push @sources, committed_glob("$mout/m88*"), committed_glob("$here/../wp88-harness/*.out");
+# S-89.0: the measure89 campaign raws (m89* labels) + verdict89 (per-attempt,
+# per-generation .out) + ds35/ds40 verify pins in wp89-harness
+push @sources, committed_glob("$mout/m89*"), committed_glob("$here/../wp89-harness/*.out");
 # S-85.0: the measure85 campaign raws (85*/m85* labels) + verdict85 + the
 # wp85 evidence dir
 push @sources, committed_glob("$mout/*85*.summary"), committed_glob("$mout/*85*.census"),
