@@ -441,7 +441,7 @@ if ( cd "$REPO" && PHPR_UNIT_CACHE_LOG="$DS38LOG" cargo test --release -p php-ru
      >> "$TMPD/a_ds38.out" 2>&1 \
    && grep -q "^test result: ok. 1 passed" "$TMPD/a_ds38.out" \
    && grep -q "^rustc " "$TMPD/a_ds38.out" \
-   && [ "$(grep -c "^unitcache main_evicted " "$DS38LOG")" -ge 2 ]; then
+   && [ "$(grep -c "^unitcache main_evicted " "$DS38LOG" 2>/dev/null || echo 0)" -ge 2 ]; then
   okf "F16b: a_ds38 ARMED — all-pairs invariant executed ('1 passed' pinned, >=2 main_evicted on file; A-DS42/KS-DS-89-1)"
 else
   kof "F16b: a_ds38 armed run failed, pin missed, or <2 main_evicted — all-pairs invariant ADVISORY (KS-DS-89-1)"

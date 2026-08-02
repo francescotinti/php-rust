@@ -19619,6 +19619,10 @@ mod tests {
                 ords.windows(2).all(|w| w[0] < w[1]),
                 "putord not strictly increasing across evictions ({ords:?}) — per-thread ordinal space violated (A-TH46/KH89-1)"
             );
+            // F16b (A-DS42): the gate consumes the LOG FILE — flush the
+            // thread buffer like a_ds26 does, or the armed run leaves an
+            // empty file and the gate refuses.
+            super::uc_log_flush();
         }
         for key in &keys {
             let removed = super::UNIT_CACHE.with(|c| c.borrow_mut().remove(key));
