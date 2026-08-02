@@ -1,0 +1,112 @@
+== ds35-verify — oracle 8.5.7 · phpr 520e1b56708ee678 · git 1021162 ==
+branches: plain=opcache-loaded/enable_cli=Off · persist=enable_cli=1+file_cache_only=1 (run1) · phpr
+
+fixture=n1_return_incompat.php
+  plain  : exit=255 stdout=PHP Fatal error:  Declaration of C::m(): string must be compatible with P::m(): int in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/n1_return_incompat.php on line 3|Stack trace:|#0 {main}|
+  persist: exit=255 stdout=PHP Fatal error:  Declaration of C::m(): string must be compatible with P::m(): int in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/n1_return_incompat.php on line 3|Stack trace:|#0 {main}|
+  binchk : ok-via-probe nbin=0 nprobe=1 (fixture compile-fatal: .bin N/A; braccio NON monco)
+  phpr   : exit=0 stdout=alive|
+
+fixture=n2_param_narrow.php
+  plain  : exit=255 stdout=PHP Fatal error:  Declaration of C::m(int $x) must be compatible with P::m($x) in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/n2_param_narrow.php on line 3|Stack trace:|#0 {main}|
+  persist: exit=255 stdout=PHP Fatal error:  Declaration of C::m(int $x) must be compatible with P::m($x) in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/n2_param_narrow.php on line 3|Stack trace:|#0 {main}|
+  binchk : ok-via-probe nbin=0 nprobe=1 (fixture compile-fatal: .bin N/A; braccio NON monco)
+  phpr   : exit=0 stdout=alive|
+
+fixture=n3_static_widen.php
+  plain  : exit=255 stdout=PHP Fatal error:  Declaration of C::m(): P must be compatible with P::m(): static in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/n3_static_widen.php on line 3|Stack trace:|#0 {main}|
+  persist: exit=255 stdout=PHP Fatal error:  Declaration of C::m(): P must be compatible with P::m(): static in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/n3_static_widen.php on line 3|Stack trace:|#0 {main}|
+  binchk : ok-via-probe nbin=0 nprobe=1 (fixture compile-fatal: .bin N/A; braccio NON monco)
+  phpr   : exit=0 stdout=alive|
+
+fixture=n4_union_superset.php
+  plain  : exit=255 stdout=PHP Fatal error:  Declaration of C::m(): string|int|float must be compatible with P::m(): string|int in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/n4_union_superset.php on line 3|Stack trace:|#0 {main}|
+  persist: exit=255 stdout=PHP Fatal error:  Declaration of C::m(): string|int|float must be compatible with P::m(): string|int in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/n4_union_superset.php on line 3|Stack trace:|#0 {main}|
+  binchk : ok-via-probe nbin=0 nprobe=1 (fixture compile-fatal: .bin N/A; braccio NON monco)
+  phpr   : exit=0 stdout=alive|
+
+fixture=n5_static_mismatch.php
+  plain  : exit=255 stdout=PHP Fatal error:  Cannot make non static method P::m() static in class C in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/n5_static_mismatch.php on line 3|Stack trace:|#0 {main}|
+  persist: exit=255 stdout=PHP Fatal error:  Cannot make non static method P::m() static in class C in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/n5_static_mismatch.php on line 3|Stack trace:|#0 {main}|
+  binchk : ok-via-probe nbin=0 nprobe=1 (fixture compile-fatal: .bin N/A; braccio NON monco)
+  phpr   : exit=0 stdout=alive|
+
+fixture=n6_visibility.php
+  plain  : exit=255 stdout=PHP Fatal error:  Access level to C::m() must be public (as in class P) in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/n6_visibility.php on line 3|Stack trace:|#0 {main}|
+  persist: exit=255 stdout=PHP Fatal error:  Access level to C::m() must be public (as in class P) in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/n6_visibility.php on line 3|Stack trace:|#0 {main}|
+  binchk : ok-via-probe nbin=0 nprobe=1 (fixture compile-fatal: .bin N/A; braccio NON monco)
+  phpr   : exit=0 stdout=alive|
+
+fixture=n7_final.php
+  plain  : exit=255 stdout=PHP Fatal error:  Cannot override final method P::m() in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/n7_final.php on line 3|Stack trace:|#0 {main}|
+  persist: exit=255 stdout=PHP Fatal error:  Cannot override final method P::m() in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/n7_final.php on line 3|Stack trace:|#0 {main}|
+  binchk : ok-via-probe nbin=0 nprobe=1 (fixture compile-fatal: .bin N/A; braccio NON monco)
+  phpr   : exit=255 stdout=|Fatal error: Cannot override final method P::m() in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/n7_final.php on line 3|Stack trace:|
+
+fixture=n8_prop_type.php
+  plain  : exit=255 stdout=PHP Fatal error:  Type of C::$x must be int (as in class P) in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/n8_prop_type.php on line 3|Stack trace:|#0 {main}|
+  persist: exit=255 stdout=PHP Fatal error:  Type of C::$x must be int (as in class P) in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/n8_prop_type.php on line 3|Stack trace:|#0 {main}|
+  binchk : ok-via-probe nbin=0 nprobe=1 (fixture compile-fatal: .bin N/A; braccio NON monco)
+  phpr   : exit=0 stdout=alive|
+
+fixture=n9_trait_abstract.php
+  plain  : exit=255 stdout=PHP Fatal error:  Declaration of C::f(): int must be compatible with T::f(): string in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/n9_trait_abstract.php on line 3|Stack trace:|#0 {main}|
+  persist: exit=255 stdout=PHP Fatal error:  Declaration of C::f(): int must be compatible with T::f(): string in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/n9_trait_abstract.php on line 3|Stack trace:|#0 {main}|
+  binchk : ok nbin=1 (A-DS47: persist ANCORATO)
+  phpr   : exit=0 stdout=alive|
+
+fixture=p1_covariant_return.php
+  plain  : exit=0 stdout=B|
+  persist: exit=0 stdout=B|
+  binchk : ok nbin=1 (A-DS47: persist ANCORATO)
+  phpr   : exit=0 stdout=B|
+
+fixture=p2_param_widen.php
+  plain  : exit=0 stdout=42|
+  persist: exit=0 stdout=42|
+  binchk : ok nbin=1 (A-DS47: persist ANCORATO)
+  phpr   : exit=0 stdout=42|
+
+fixture=p3_static_return.php
+  plain  : exit=0 stdout=C|
+  persist: exit=0 stdout=C|
+  binchk : ok nbin=1 (A-DS47: persist ANCORATO)
+  phpr   : exit=0 stdout=C|
+
+fixture=p4_union_subset.php
+  plain  : exit=0 stdout=int(7)|
+  persist: exit=0 stdout=int(7)|
+  binchk : ok nbin=1 (A-DS47: persist ANCORATO)
+  phpr   : exit=0 stdout=int(7)|
+
+fixture=p5_tentative_return.php
+  plain  : exit=0 stdout=PHP Deprecated:  Return type of J::jsonSerialize() should either be compatible with JsonSerializable::jsonSerialize(): mixed, or the #[\ReturnTypeWillChange] attribute should be used to temporarily suppress the notice in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/p5_tentative_return.php on line 2||Deprecated: Return type of J::jsonSerialize() should either be compatible with JsonSerializable::jsonSerialize(): mixed, or the #[\ReturnTypeWillChange] attribute should be used to temporarily suppress the notice in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/p5_tentative_return.php on line 2|
+  persist: exit=0 stdout=PHP Deprecated:  Return type of J::jsonSerialize() should either be compatible with JsonSerializable::jsonSerialize(): mixed, or the #[\ReturnTypeWillChange] attribute should be used to temporarily suppress the notice in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/p5_tentative_return.php on line 2||Deprecated: Return type of J::jsonSerialize() should either be compatible with JsonSerializable::jsonSerialize(): mixed, or the #[\ReturnTypeWillChange] attribute should be used to temporarily suppress the notice in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/p5_tentative_return.php on line 2|
+  binchk : ok nbin=1 (A-DS47: persist ANCORATO)
+  phpr   : exit=0 stdout={"a":1}|
+
+fixture=p6_rtwc_suppress.php
+  plain  : exit=0 stdout={"a":1}|
+  persist: exit=0 stdout={"a":1}|
+  binchk : ok nbin=1 (A-DS47: persist ANCORATO)
+  phpr   : exit=0 stdout={"a":1}|
+
+fixture=p7_never_covariant.php
+  plain  : exit=0 stdout=declared|
+  persist: exit=0 stdout=declared|
+  binchk : ok nbin=1 (A-DS47: persist ANCORATO)
+  phpr   : exit=0 stdout=declared|
+
+fixture=p8_ctor_exempt.php
+  plain  : exit=0 stdout=ctor-exempt|
+  persist: exit=0 stdout=ctor-exempt|
+  binchk : ok nbin=1 (A-DS47: persist ANCORATO)
+  phpr   : exit=0 stdout=ctor-exempt|
+
+fixture=p9_private_exempt.php
+  plain  : exit=0 stdout=p|private-exempt|
+  persist: exit=0 stdout=p|private-exempt|
+  binchk : ok nbin=1 (A-DS47: persist ANCORATO)
+  phpr   : exit=0 stdout=p|private-exempt|
+
+== ds35-verify DONE ==
