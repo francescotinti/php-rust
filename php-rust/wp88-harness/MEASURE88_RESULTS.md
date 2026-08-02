@@ -45,9 +45,14 @@ SEMPRE nominata (KB-88-2); mai max−min (KB-88-3).
   **residue_dominant = 0 B a OGNI W**: ogni modo dominante è multiplo
   ESATTO di 65.536 B (named-constant: granulo d'arena) — la
   quantizzazione predetta da Bak/Leijen è confermata al byte.
-  **Cross-check A-BB55 riuscito**: `tag=mi_arena key=committed current`
-  == `tag=mi_proc commit` AL BYTE su ogni run (il committed di processo
-  è INTERAMENTE arena mimalloc; arena_count=1). Delta dominanti:
+  **Identità di read-path A-BB55 — RIQUALIFICATA (A-DL45, Concilio
+  WP-90)**: `tag=mi_arena key=committed current` == `tag=mi_proc commit`
+  AL BYTE su ogni run. NON è un cross-check indipendente:
+  mi_stats_get_json e mi_process_info leggono la STESSA atomica subproc
+  (il termine heap dell'aggregato è zero) — l'uguaglianza al byte prova
+  la fedeltà di EMISSIONE/PARSE, non una seconda misura (citarla come
+  cross-check ⇒ claim VOID, KL-90-2). La lettura fisica resta: il
+  committed di processo è INTERAMENTE arena mimalloc; arena_count=1. Delta dominanti:
   W4→8 82.640.896 B = 78,81 MiB, per worker 20.660.224 B = 19,70 MiB [derivata: Δ/4]
   W8→12 93.454.336 B = 89,12 MiB, per worker 23.363.584 B = 22,28 MiB [derivata: Δ/4]
   W12→16 75.366.400 B = 71,88 MiB, per worker 18.841.600 B = 17,97 MiB [derivata: Δ/4]
@@ -87,6 +92,13 @@ SEMPRE nominata (KB-88-2); mai max−min (KB-88-3).
   la formula era tarata sulla firma m87 (surplus su A in base) che non
   si è riprodotta; in regime di floor-collapse dA = net−(calA+calB) non
   misura più il surplus. Ri-giudizio al Concilio WP-90.
+  **Nota A-BG52-forma (Concilio WP-90)**: il label «PER-REQUEST» sta in
+  verdict88.a1.g1.out SENZA qualificatore di regime (il raw è
+  immutabile: resta lì) — va letto SOLO con questa riqualifica: in
+  regime floor-collapse il label è VOID-di-significato. Dal giudice
+  della prossima campagna ogni label di discriminatore porta il REGIME
+  di validità IN-BAND nel verdict (A-BG52) e `spans=` è GIUDICATO
+  (A-SK58: stag⇒NO-OVERLAP, base/warm⇒OVERLAP, INVALID⇒FAIL).
   (c) **concstag (20 ms) — CONTROLLO POSITIVO PERFETTO**:
   spans=NO-OVERLAP e net == cal **AL BYTE** su entrambi i lati
   (7.801.102 B, 2/2; floor_inc 1.161.206 B idem): con finestre

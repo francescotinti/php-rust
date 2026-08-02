@@ -16531,13 +16531,18 @@ thread_local! {
     static UC_PUT_ORD: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
 }
 struct UcEmitGuard;
-// A-TH47 (Council WP-89, Hoare): TLS-teardown window, DECLARED. `arm()`
-// and this guard's Drop both run `LocalKey::with`, which PANICS if the
-// thread's TLS has already been destroyed (a put issued from a TLS
-// destructor during thread teardown). In `arm()` that panic drops the
-// caller's parameters unguarded (they never crossed the rebind);
-// in Drop-during-unwind it is a panic-in-panic => abort. Both paths are
-// fail-fast by Binding Rule 4 — no emission, no partial pair — and no
+// A-TH50 (Council WP-90, Hoare — corrects the inexact A-TH47 declaration):
+// TLS-teardown window, DECLARED. `UC_EMIT_GUARD`/`UC_PUT_ORD` are
+// `const { Cell::new(..) }` of types WITHOUT Drop: std registers NO TLS
+// destructor for these keys, so `LocalKey::with` NEVER panics for them —
+// not even during thread teardown. A put issued from a TLS destructor
+// therefore PASSES `arm()` and fails fast at the first TLS key WITH a
+// destructor it touches (UNIT_CACHE / UC_STATS / UC_LOG_BUF: RefCell) —
+// with the guard already ARMED, parameters past the rebind. That RefCell
+// TLS panic is the REAL fail-fast seat (Binding Rule 4). The guard's
+// Drop cannot panic via this path (no-Drop key), so the previously
+// declared panic-in-panic abort is UNREACHABLE by that route (KH90-2:
+// any fail-fast claim built on the pre-A-TH50 wording is VOID). No
 // production put site runs from a TLS destructor today.
 impl UcEmitGuard {
     fn arm() -> UcEmitGuard {

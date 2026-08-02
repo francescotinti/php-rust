@@ -86,8 +86,21 @@ if [ "$NDEL" != 0 ]; then
 fi
 # A-AH48: any PERSISTENT name whose sha mutated inside the window is a
 # same-name swap — the endpoint comm above cannot see it (KS-AH-89-2).
+# A-AH52 (Council WP-90) — DECLARED LIMIT: this tooth compares snapshots
+# taken at the battery's ENDPOINTS only; a swap-in + restore fully inside
+# the window is invisible to it (no gate re-reads the archive in-window
+# today; the limit is declared, not closed).
 MTX_SHA_AFTER="$W/.mtx-sha-after"
 ( cd "$MTXDIR" 2>/dev/null && shasum -a 256 -- * 2>/dev/null | sort -k2 ) > "$MTX_SHA_AFTER" || : > "$MTX_SHA_AFTER"
+# A-AH52 guard: archive NAMES with whitespace would cross-join below
+# (join splits on the first token) and produce a MISLEADING swap FAIL —
+# make it a FAIL per NOME instead (names are space-free by construction).
+BADNAME=$(awk 'NF > 2 {for (i=2;i<=NF;i++) printf "%s%s", $i, (i<NF?" ":"\n")}' "$MTX_SHA_BEFORE" "$MTX_SHA_AFTER" | sort -u)
+if [ -n "$BADNAME" ]; then
+  say "FAIL: matrix archive name(s) with whitespace — A-AH48 join undefined on these (A-AH52):"
+  printf '%s\n' "$BADNAME" | head -3 | tee -a "$OUTF"
+  FAILS=$((FAILS+1))
+fi
 SWAPPED=$(join -j 2 -o 1.2,1.1,2.1 "$MTX_SHA_BEFORE" "$MTX_SHA_AFTER" 2>/dev/null | awk '$2 != $3 {print $1}')
 if [ -n "$SWAPPED" ]; then
   say "FAIL: persistent matrix archive(s) with MUTATED sha mid-battery — same-name swap (A-AH48/KS-AH-89-2):"

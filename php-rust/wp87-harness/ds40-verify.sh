@@ -7,6 +7,13 @@
 #   phpr    = binario di parità corrente
 # Output: wp87-harness/ds40-verify.out (stdout troncato a 3 righe + exit code per braccio).
 # KS-DS-88-2: queste fixture committate sono l'ANCORA delle entry §3.3-ter/quater.
+# A-DS47 (Concilio WP-90, Stogov): il braccio persist dichiara SEMPRE le TRE
+# flag per NOME (opcache.enable_cli=1 + opcache.file_cache_only=1 +
+# opcache.file_cache=<dir>) E verifica che il run1 abbia SCRITTO >=1 file
+# `.bin` nel file_cache — il braccio-monco (enable_cli caduta) è SILENZIOSO
+# e mima plain (recidiva Stogov WP-89). Senza .bin-check o senza le tre
+# flag esplicite l'observable è UNANCHORED (KS-DS-90-2). Fail-closed:
+# .bin assente => exit 1.
 set -eu
 
 REPO="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust"
@@ -36,6 +43,33 @@ for f in t_hoist_plain t_hoist_parent_earlier t_hoist_parent_later t_hoist_const
   # fresh file-cache dir per fixture: run1 of the persist pass
   rm -rf "$FC"; mkdir -p "$FC"
   run_branch "persist" "$ORACLE" -d opcache.enable_cli=1 -d opcache.file_cache_only=1 -d "opcache.file_cache=$FC" "$FIX/$f.php" | tee -a "$OUT"
+  # A-DS47 .bin-check: run1 persist DEVE aver scritto il payload nel
+  # file_cache; 0 file .bin = braccio-monco silenzioso => FAIL per NOME.
+  # Lane dichiarata (morso dal vivo su tC_lsp_covariance): una fixture che
+  # fatala a COMPILE/link time non viene persistita da opcache (nbin=0
+  # LEGITTIMO) — lì il monco-check passa a un PROBE persistabile con le
+  # STESSE tre flag: probe senza .bin = braccio monco => FAIL.
+  NBIN=$(find "$FC" -name '*.bin' -type f | wc -l | tr -d ' ')
+  if [ "$NBIN" -ge 1 ]; then
+    say "  binchk : ok nbin=$NBIN (A-DS47: persist ANCORATO)"
+  else
+    PFC=$(mktemp -d /tmp/ds40-probecache.XXXXXX)
+    PSD=$(mktemp -d /tmp/ds40-probesrc.XXXXXX)
+    echo '<?php echo "probe";' > "$PSD/probe.php"
+    # scoperta dal vivo S-89.0: opcache.file_update_protection (default 2s)
+    # NON cachea file appena scritti — il probe va retrodatato o il check
+    # monco darebbe FAIL spurio su braccio SANO.
+    touch -t 202601010000 "$PSD/probe.php"
+    "$ORACLE" -d opcache.enable_cli=1 -d opcache.file_cache_only=1 -d "opcache.file_cache=$PFC" "$PSD/probe.php" >/dev/null 2>&1 || true
+    NPRB=$(find "$PFC" -name '*.bin' -type f | wc -l | tr -d ' ')
+    rm -rf "$PFC" "$PSD"
+    if [ "$NPRB" -ge 1 ]; then
+      say "  binchk : ok-via-probe nbin=0 nprobe=$NPRB (fixture compile-fatal: .bin N/A; braccio NON monco)"
+    else
+      say "  binchk : FAIL nbin=0 nprobe=0 — braccio-persist-monco (KS-DS-90-2): observable UNANCHORED"
+      exit 1
+    fi
+  fi
   run_branch "phpr   " "$PHPR" "$FIX/$f.php" | tee -a "$OUT"
   say ""
 done

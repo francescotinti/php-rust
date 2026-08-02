@@ -439,8 +439,11 @@ parent-later):
    php 8.5.7 brew: run1 file_cache fresco, run2 cache calda, SHM-only
    `enable_cli=1` — TUTTI `C` exit 0; `ds40-verify.out`). Testata anche
    l'ipotesi di causa (file_cache rotto ⇒ fallback silenzioso a plain):
-   REFUTATA — opcache fatala RUMOROSO su dir inaccessibile; l'origine del
-   risultato del verbale resta non attribuita. Corollario: la riqualifica
+   REFUTATA — opcache fatala RUMOROSO su dir inaccessibile; **origine
+   TROVATA A MACCHINA (Stogov, Concilio WP-90, ratifica)**: la flag
+   `opcache.enable_cli=1` CADUTA con file_cache_only+file_cache validi ⇒
+   opcache spento in silenzio ⇒ braccio-persist-MONCO che mima plain
+   (fatal identico al verbale WP-89). Corollario: la riqualifica
    «const-folding» dell'observable 4 DECADE — poggiava sulla premessa
    `new`-not-found-sotto-persist, falsa; il meccanismo resta hoist.
 **Negativo anti-vacuità (A-DS43)**: classe in blocco condizionale NON
@@ -457,6 +460,18 @@ CLI-oracle, FEDELI al braccio persist. Classe: fedeltà-a-opcache-persist,
 non bug; ogni corpus test che distingua i bracci va pinnato sul braccio
 persist (KS-DS-88-2: entry senza fixture committata o citata con innesco
 `enable_cli` = UNANCHORED).
+⚠️ **Ricetta persist VINCOLANTE (A-DS47, Concilio WP-90)**: ogni run
+«persist» citato in questo catalogo dichiara SEMPRE le TRE flag per NOME
+(`opcache.enable_cli=1` + `opcache.file_cache_only=1` +
+`opcache.file_cache=<dir>`) **E** verifica che il run1 abbia scritto ≥1
+file `.bin` nel file_cache (il braccio-monco senza `enable_cli` è
+SILENZIOSO e mima plain — la recidiva WP-89). Fixture compile-fatal
+(nessun `.bin` per costruzione): il monco-check passa a un PROBE
+persistabile con le stesse tre flag e mtime retrodatato
+(`opcache.file_update_protection` default 2s non cachea file appena
+scritti — scoperta S-89.0). Meccanizzata in `wp87-harness/ds40-verify.sh`
+(binchk fail-closed). Run persist senza `.bin`-check o senza le tre flag
+esplicite ⇒ observable UNANCHORED (**KS-DS-90-2**).
 
 ### 3.3-quater 🔴 Covariance/contravariance LSP NON verificata — correct-or-absent VIOLATO (gap engine, PRIMO item ROADMAP)
 Scoperta GRAVE (Stogov, Concilio WP-87, fuori perimetro di sessione):
