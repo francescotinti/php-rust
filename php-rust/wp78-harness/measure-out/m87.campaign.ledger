@@ -71,3 +71,6 @@ attempt_epoch=1785677258 git=38961f0 campaign_sha=99e41a4560a6ab7f attempt=3 pha
 attempt_epoch=1785677259 git=38961f0 campaign_sha=99e41a4560a6ab7f attempt=3 phase=conc.r1 raw=m87.conc.r1.a3.memcensus esito=ok
 attempt_epoch=1785677261 git=38961f0 campaign_sha=99e41a4560a6ab7f attempt=3 phase=conc.r2 raw=m87.conc.r2.a3.memcensus esito=ok
 attempt_epoch=1785677261 git=38961f0 campaign_sha=99e41a4560a6ab7f attempt=3 phase=done esito=ok
+attempt_epoch=1785694354 git=5392153 campaign_sha=a7c6ed43a44eba38 attempt=1 verdict=VOID reason=orphan-server-wrapper-time-was-dollarbang-VERDICT87-FAIL67-committed-at-d0132fb note=A-BG46-forma-S-88.0-append-only
+attempt_epoch=1785694354 git=5392153 campaign_sha=4d2a7776fe7db3a1 attempt=2 verdict=VOID reason=anti-orphan-tooth-bit-own-wrapper-pgrep-f-matched-usr-bin-time note=A-BG46-forma-S-88.0-append-only
+attempt_epoch=1785694354 git=5392153 campaign_sha=99e41a4560a6ab7f attempt=3 verdict=PASS verdict_file=wp87-harness/verdict87.out note=A-BG46-forma-S-88.0-append-only

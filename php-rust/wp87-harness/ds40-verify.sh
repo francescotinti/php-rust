@@ -30,7 +30,7 @@ run_branch() { # <label> <cmd...>
   echo "  $label: exit=$rc stdout=$(echo "$body" | head -3 | tr '\n' '|')"
 }
 
-for f in t_hoist_plain t_hoist_parent_earlier t_hoist_parent_later t_hoist_const t_hoist_declared t_redeclare tC_lsp_covariance; do
+for f in t_hoist_plain t_hoist_parent_earlier t_hoist_parent_later t_hoist_const t_hoist_declared t_hoist_new_predecl t_hoist_conditional t_redeclare tC_lsp_covariance; do
   say "fixture=$f.php"
   run_branch "plain  " "$ORACLE" "$FIX/$f.php" | tee -a "$OUT"
   # fresh file-cache dir per fixture: run1 of the persist pass

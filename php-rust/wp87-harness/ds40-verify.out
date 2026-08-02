@@ -1,4 +1,4 @@
-== ds40-verify — oracle 8.5.7 · phpr ea56b874c76d3558 · git d50f3b5 ==
+== ds40-verify — oracle 8.5.7 · phpr eff98c88eb95c254 · git 5392153 ==
 branches: plain=opcache-loaded/enable_cli=Off · persist=enable_cli=1+file_cache_only=1 (run1) · phpr
 
 fixture=t_hoist_plain.php
@@ -25,6 +25,16 @@ fixture=t_hoist_declared.php
   plain  : exit=0 stdout=bool(false)|
   persist: exit=0 stdout=bool(true)|
   phpr   : exit=0 stdout=bool(true)|
+
+fixture=t_hoist_new_predecl.php
+  plain  : exit=255 stdout=PHP Fatal error:  Uncaught Error: Class "C" not found in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp87-harness/fixtures-ds40/t_hoist_new_predecl.php:2|Stack trace:|#0 {main}|
+  persist: exit=0 stdout=C|
+  phpr   : exit=0 stdout=C|
+
+fixture=t_hoist_conditional.php
+  plain  : exit=0 stdout=bool(false)|
+  persist: exit=0 stdout=bool(false)|
+  phpr   : exit=0 stdout=bool(false)|
 
 fixture=t_redeclare.php
   plain  : exit=255 stdout=out|PHP Fatal error:  Cannot redeclare class C (previously declared in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp87-harness/fixtures-ds40/t_redeclare.php:3) in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp87-harness/fixtures-ds40/t_redeclare.php on line 4|Stack trace:|

@@ -46,7 +46,14 @@ VERIFICATO; metrica SEMPRE nominata (KB-88-2); mai max−min (KB-88-3).
   post-collect è PIATTO: la chiusura contata-vs-fisica NON si gioca sullo
   slack ma sulla granularità di commit dell'arena. Companion
   metric=peak_memory_footprint (min-of-R): 38.535.672 · 54.936.104 ·
-  78.463.528 · 91.980.328 B.
+  78.463.528 · 91.980.328 B — **DECLARED-DEVIATION (A-SK52-forma,
+  S-88.0)**: queste righe (e le omologhe `peak_memory_footprint_bytes`
+  in verdict87.out) provengono dai .log di `/usr/bin/time -l` parsati
+  con `tr -d '\0'` (verdict87.sh:116) — canale NUL-strippato,
+  KS-SK-88-3 violata in lettera (Klabnik WP-89 Q2); VOID-a-rischio
+  finché il canale .log non entra in nul_free con REFUSE o conteggio
+  NUL in-band (KS-SK-89-2). Le cifre committed_postcollect_win0 NON
+  sono toccate (canale .memcensus, nul_free verificato).
 - **VARMS — candidati sottratti per NOME (ADVISORY R=3)**: braccio
   MIMALLOC_ARENA_EAGER_COMMIT=1 delta **0 B** e braccio
   RUST_MIN_STACK=1048576 delta **0 B** sul committed min-of-R W=2 —

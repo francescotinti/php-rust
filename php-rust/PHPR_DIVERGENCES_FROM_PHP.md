@@ -430,15 +430,33 @@ parent-later):
 4. **costante di classe pre-decl** (`C::K`): oracle plain Error «Class "C"
    not found» exit 255 → persist/phpr `7` exit 0 (`t_hoist_const.php`);
 5. **`get_declared_classes()` pre-decl**: `false` → `true`
-   (`t_hoist_declared.php`).
+   (`t_hoist_declared.php`);
+6. **`new C` pre-decl (A-DS43, EMENDATA S-88.0)**: oracle plain Error
+   «Class "C" not found» exit 255 → **persist/phpr `C` exit 0**
+   (`t_hoist_new_predecl.php`). ⚠️ Il verbale Stogov WP-89 sosteneva che
+   il persist fatalasse anche qui («phpr diverge da ENTRAMBI i bracci»,
+   hoisting più ampio): **REFUTATO-DALL'ORACLE dal vivo** (2026-08-02,
+   php 8.5.7 brew: run1 file_cache fresco, run2 cache calda, SHM-only
+   `enable_cli=1` — TUTTI `C` exit 0; `ds40-verify.out`). Testata anche
+   l'ipotesi di causa (file_cache rotto ⇒ fallback silenzioso a plain):
+   REFUTATA — opcache fatala RUMOROSO su dir inaccessibile; l'origine del
+   risultato del verbale resta non attribuita. Corollario: la riqualifica
+   «const-folding» dell'observable 4 DECADE — poggiava sulla premessa
+   `new`-not-found-sotto-persist, falsa; il meccanismo resta hoist.
+**Negativo anti-vacuità (A-DS43)**: classe in blocco condizionale NON
+dichiarata in NESSUNO dei tre bracci — `bool(false)`×3
+(`t_hoist_conditional.php`): l'hoisting copre solo le decl top-level
+incondizionate, in tutti i bracci allo stesso modo.
 **Redeclare NON diverge**: `Cannot redeclare class C` con timing identico
 (output già emesso) ed exit 255 su plain/persist/phpr (`t_redeclare.php`).
 **phpr riproduce ESATTAMENTE il braccio PERSIST** (unit cache = persistent
-script). Il gate di parità CLI usa brew php con opcache_cli OFF ⇒ questi
-observable sono divergenze OSSERVABILI dal CLI-oracle, FEDELI al braccio
-persist. Classe: fedeltà-a-opcache-persist, non bug; ogni corpus test che
-distingua i bracci va pinnato sul braccio persist (KS-DS-88-2: entry senza
-fixture committata o citata con innesco `enable_cli` = UNANCHORED).
+script) — claim ora ANCORATO anche sulla forma `new` pre-decl
+(KS-DS-89-2 soddisfatta). Il gate di parità CLI usa brew php con
+opcache_cli OFF ⇒ questi observable sono divergenze OSSERVABILI dal
+CLI-oracle, FEDELI al braccio persist. Classe: fedeltà-a-opcache-persist,
+non bug; ogni corpus test che distingua i bracci va pinnato sul braccio
+persist (KS-DS-88-2: entry senza fixture committata o citata con innesco
+`enable_cli` = UNANCHORED).
 
 ### 3.3-quater 🔴 Covariance/contravariance LSP NON verificata — correct-or-absent VIOLATO (gap engine, PRIMO item ROADMAP)
 Scoperta GRAVE (Stogov, Concilio WP-87, fuori perimetro di sessione):
