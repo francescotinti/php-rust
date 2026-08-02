@@ -109,6 +109,11 @@ push @sources, bsd_glob("$mout/*84*.summary"), bsd_glob("$mout/*84*.census"),
                bsd_glob("$mout/*84*.log"),     bsd_glob("$mout/m84*"),
                bsd_glob("$mout/axum.84*"),     bsd_glob("$here/../wp84-harness/*.out"),
                bsd_glob("$here/../wp84-harness/evidence/*");
+# S-86.0: the measure86 campaign raws (86*/m86* labels) + verdict86 + the
+# wp86 harness outs
+push @sources, bsd_glob("$mout/*86*.summary"), bsd_glob("$mout/*86*.census"),
+               bsd_glob("$mout/*86*.log"),     bsd_glob("$mout/m86*"),
+               bsd_glob("$mout/axum.86*"),     bsd_glob("$here/../wp86-harness/*.out");
 # S-85.0: the measure85 campaign raws (85*/m85* labels) + verdict85 + the
 # wp85 evidence dir
 push @sources, bsd_glob("$mout/*85*.summary"), bsd_glob("$mout/*85*.census"),
