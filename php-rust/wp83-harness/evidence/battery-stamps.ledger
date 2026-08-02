@@ -5,3 +5,4 @@
 # (A-SK37 law: claim PROVISIONAL until at HEAD). battery-equivalence v4
 # refuses any OUT/.done pair whose stamp is not ledgered HERE at HEAD
 # (KS-SK-87-1). Never touch-edit; append-only via the battery.
+battery=86pre rev=3818edd sha256=cf12ecd6946d0f63702f874464bfc61c0c88e02f20729c1ba46831824b6c0f45 matrix=feature-matrix.3818edd.20260802-104004.log matrix_sha256=7afb02850e576b7854968998c5dc6b3baf609bf385135314243f834c911db6c7
