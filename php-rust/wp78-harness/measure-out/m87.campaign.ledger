@@ -33,3 +33,6 @@ attempt_epoch=1785676874 git=a9e18fc campaign_sha=a7c6ed43a44eba38 attempt=1 pha
 attempt_epoch=1785676875 git=a9e18fc campaign_sha=a7c6ed43a44eba38 attempt=1 phase=conc.r1 raw=m87.conc.r1.a1.memcensus esito=ok
 attempt_epoch=1785676876 git=a9e18fc campaign_sha=a7c6ed43a44eba38 attempt=1 phase=conc.r2 raw=m87.conc.r2.a1.memcensus esito=ok
 attempt_epoch=1785676876 git=a9e18fc campaign_sha=a7c6ed43a44eba38 attempt=1 phase=done esito=ok
+attempt_epoch=1785677059 git=d0132fb campaign_sha=4d2a7776fe7db3a1 attempt=2 phase=start
+attempt_epoch=1785677060 git=d0132fb campaign_sha=4d2a7776fe7db3a1 attempt=2 phase=identity mem_hash=2a15f2085d4dcdf8 matrix=feature-matrix.6d9a80f.20260802-150846.log
+attempt_epoch=1785677061 git=d0132fb campaign_sha=4d2a7776fe7db3a1 abort: m87.slope.w1.r1 MULTIPLE php-server processes (anti-orphan b)

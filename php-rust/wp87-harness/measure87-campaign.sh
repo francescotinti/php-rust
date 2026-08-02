@@ -129,7 +129,10 @@ assert_single_server() { # <label> <owner-pid> -> echoes the server pid
   # NB: runs inside $() — diagnostics go to stderr, stdout is the pid only;
   # the caller's `|| exit 1` propagates the subshell's failure.
   local label="$1" owner="$2" pids srv
-  pids=$(pgrep -f "php-server --axum" || true)
+  # -x on the PROCESS NAME: a -f cmdline match also catches /usr/bin/time,
+  # whose argv CONTAINS "php-server --axum" (bit attempt=2 on run 1 —
+  # the tooth fired on its own wrapper).
+  pids=$(pgrep -x php-server || true)
   [ -n "$pids" ] || { fail "m87.$label no php-server process after up (anti-orphan a)" 1>&2; }
   [ "$(echo "$pids" | grep -c .)" = 1 ] || { echo "$pids" 1>&2; fail "m87.$label MULTIPLE php-server processes (anti-orphan b)" 1>&2; }
   srv="$pids"
@@ -142,7 +145,7 @@ assert_single_server() { # <label> <owner-pid> -> echoes the server pid
 assert_server_gone() { # <label>
   local i
   for i in 1 2 3 4 5 6 7 8 9 10; do
-    pgrep -f "php-server --axum" >/dev/null || return 0
+    pgrep -x php-server >/dev/null || return 0
     sleep 0.5
   done
   fail "m87.$1 php-server still alive after teardown (anti-orphan c)"
