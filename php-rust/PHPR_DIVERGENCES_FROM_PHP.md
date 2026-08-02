@@ -410,7 +410,31 @@ trait-di-trait nel DebugClassLoader. Da chiudere aggiungendo `uses` a
 `class_implements(enum)` non include l'interfaccia implementata esplicitamente
 (solo UnitEnum/BackedEnum).
 
-### 3.4 `$this` nello scope-bridge delle classi anonime differite
+### 3.3-ter Hoisting delle dichiarazioni = semantica OPCACHE (divergenza dal CLI-oracle, S-86.0/Concilio WP-87)
+Verificato empiricamente sull'oracle vivo (php 8.5.7, Stogov WP-87): senza
+opcache `class_exists('C')` PRIMA dello statement di dichiarazione è `false`,
+un `return;` prima della decl lascia la classe MAI dichiarata, e il fatal LSP
+arriva DOPO l'output già emesso; con `opcache.enable_cli=1` i tre observable
+si invertono (`true` / dichiarata / fatal PRIMA dell'output). **phpr riproduce
+ESATTAMENTE il braccio opcache** (unit cache = persistent script, coerente col
+modello dichiarato). Il gate di parità CLI usa brew php con opcache_cli OFF ⇒
+i tre observable sono divergenze OSSERVABILI dal CLI-oracle, FEDELI a
+opcache_cli. Classe: fedeltà-a-opcache, non bug; i corpus test che
+distinguessero i due bracci vanno pinnati sul braccio opcache.
+
+### 3.3-quater 🔴 Covariance/contravariance LSP NON verificata — correct-or-absent VIOLATO (gap engine, PRIMO item ROADMAP)
+Scoperta GRAVE (Stogov, Concilio WP-87, fuori perimetro di sessione):
+`class C extends P { function m(): int {} }` con `P::m(): string` in phpr
+COMPILA e GIRA (exit 0, anche parent-first); l'oracle fatala «Declaration of
+C::m(): int must be compatible with P::m(): string». Nessuna verifica di
+varianza dei return type (covariance), dei parametri (contravariance) né dei
+property type (invariance) esiste nel linker di classe. Violazione del
+principio correct-or-absent: la classe è SBAGLIATA invece che assente — un
+programma che l'oracle rifiuta gira in silenzio. **Decisione (A-DS35,
+S-86.0): CORRECT** — la verifica LSP va implementata (fatal fedele al
+messaggio Zend, al timing del braccio opcache per §3.3-ter), NON aggirata:
+è il PRIMO item engine della ROADMAP ripresa ([[php-rust-todo-master]]).
+Fino ad allora questo è il gap engine più grave a catalogo.
 Gli argomenti del costruttore di una `new class(...)` differita rieseguono nello
 scope del chiamante via bridge per-nome dei named slots; `$this` non è un named
 slot, quindi `new class($this->x) extends Irrisolvibile {}` dentro un metodo
