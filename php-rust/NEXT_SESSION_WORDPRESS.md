@@ -68,11 +68,56 @@ footprint vincolante, mai RSS nudo** (KB-88-2). 10. **Una battery si
 consuma SOLO via battery-equivalence (path equivalence O --same-rev), mai
 a mano** (A-SK46/KS-SK-88-1).
 
+## ⚖️ Concilio WP-89 ESEGUITO (2026-08-02, verbali VINCOLANTI): `wp89-harness/COUNCIL_WP89_REVIEWS.md`
+
+**9× CONCORDO/PASS CON EMENDAMENTI, 0 opposizioni; 28 KS nuovi.** CIFRE
+confermate a ricomputo (Bak al byte su OVL/slope/disjoint; Leijen sui raw
+win=0; Stogov sull'oracle vivo). REFUTAZIONI CAPITALI: **«phpr ≡ persist»
+FALSO per new-pre-decl** (phpr diverge da ENTRAMBI i bracci — hoisting PIÙ
+ampio; il 4° observable è probabilmente const-folding); **contratto A-DS41
+con due buchi vivi** (trait-abstract non classificato; tentative return
+types = deprecation, mai fatal); **il committed è a GRADINI di 64 KiB**
+(min-of-R tutti multipli esatti di 65.536 B, W=3 bimodale ⇒ LSQ W1..4
+declassata ADVISORY; riconciliazione = W∈{4..16} + mode-census + mi_arena
+in-band, banda solo su b); **--same-rev cieco su checker/ledger/matrix/
+toolchain nella finestra evidence-only**; **KS-SK-88-3 violata in lettera
+dentro verdict87** (NUL-strip sui .log di time -l ⇒ righe peak
+DECLARED-DEVIATION); **VDISP senza unicità del thr-set**; **artefatti di
+2° ordine mono-generazione** (verdict/done same-name; VOID di a1 non
+in-band nel ledger); **l'orfano aveva server_exit=143 in-band mai
+consumato**; **a_pp38/a_ds38 denti fuori dal perimetro battery**;
+**scope «annidato» non falsificabile** (serve nested-guard macchina);
+**una refutazione refutata in assemblaggio** (la sonda sedia 9 senza
+prefisso GIT ROOT: il FAIL(67) È a d0132fb).
+
 ## §WP-88(sessione) — S-88.0 = ordine Concilio WP-89 §Sintesi (non rinegoziare)
 
-(compilato alla convocazione del Concilio WP-89 — v.
-`wp89-harness/COUNCIL_WP89_REVIEWS.md` §Sintesi; il blocco ⚖️ sotto lo
-dichiara VINCOLANTE.)
+1. **Sanatorie forma/catalogo (nessuna campagna)**: A-DS43 (6° observable
+   new-pre-decl + negativo condizionale + riqualifica const-folding,
+   fixture committate) · A-SK52-forma (righe peak ri-etichettate
+   DECLARED-DEVIATION) · A-BG46-forma (VOID per-attempt append-only nel
+   ledger).
+2. **Fix strumenti**: A-SK51 · A-PP42 (thr-set esatto) · A-BG48 (mai
+   default nei min/LSQ) · A-DL41 (read-back bracci) · A-DL40 · A-BG47
+   (identity contract v2) · A-PP43 (port-owner assert).
+3. **Catena evidenza**: A-SK50 (allowlist delta --same-rev) · A-AH46/47/48
+   · A-SK54/A-BG46 (artefatti per-attempt) · A-AH49.
+4. **Sigilli v6**: A-TH44/45/46/47 · A-MS40/41/42 · A-PP41 (battery gate
+   axum-server ESEGUITO) · A-PP45 · A-DS42 (F16b a_ds38 armato).
+5. **Misura (una campagna)**: A-BB55≡A-DL42 (slope W∈{4,8,12,16},
+   mode-census, tag=mi_arena, banda solo su b) · A-BB56
+   (warm-both-then-pair + stagger) · A-DS45 (fase con uc_log armato).
+6. **Delibere**: A-BB54 (nested-guard) · A-DL43 (design87 integrato) ·
+   A-PP44 (design parser dispatch-union).
+7. **ROADMAP**: A-DS44 (contratto A-DS41 emendato) — implementazione
+   A-DS35 SOLO dopo (KS-DS-88-3 + KS-DS-89-3).
+8. Deferred invariati: A-MS27 · A-PP18/27 · A-AH38+dry-run; KS-DS-80-3
+   invariata.
+
+**Kill-switch di rotta (WP-89, attivi)**: KH89-1..3, KS-MS-89-1..3,
+KS-SK-89-1..3, KS-AH-89-1..2, KB-89-1..3, KS-PP-89-1..4, KL-89-1..4,
+KS-DS-89-1..3, KG-89-1..3 — tabella in
+`wp89-harness/COUNCIL_WP89_REVIEWS.md`.
 
 **Kill-switch di rotta ereditati ancora attivi**: KH88-1..4,
 KS-MS-88-1..3 (KS-MS-88-1 sollevata per i run ≥ rev 400fa10: flag
