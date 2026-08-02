@@ -98,7 +98,10 @@ if [ "$FAILS" = 0 ]; then
   # commit it NOW and cite the commit-id.
   LEDGER="$REPO/wp83-harness/evidence/battery-stamps.ledger"
   echo "battery=86pre rev=$GIT_REV sha256=$SHA matrix=$NEWMTX matrix_sha256=$MTX_SHA" >> "$LEDGER"
-  say "stamp ledgered (A-SK41): commit $LEDGER NOW — the claim is PROVISIONAL until the append is at HEAD"
+  # STDOUT ONLY — never say/tee: the anchored PASS line must stay the
+  # FINAL line of OUT (A-SK36; the first 86pre run violated this and the
+  # checker refused its own battery — the tooth worked).
+  echo "stamp ledgered (A-SK41): commit $LEDGER NOW — the claim is PROVISIONAL until the append is at HEAD"
 else
   say "== BATTERY-86PRE FAIL($FAILS/$TOTAL) git=$GIT_REV =="
 fi

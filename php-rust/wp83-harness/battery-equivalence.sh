@@ -116,7 +116,10 @@ if [ ! -f "$DONE" ]; then
 else
   grep -q "^rev=$BREV " "$DONE" || grep -qx "rev=$BREV" "$DONE" || \
     fail "(A-SK36) .done does not stamp rev=$BREV"
-  DSHA=$(sed -n 's/.*sha256=\([0-9a-f]*\).*/\1/p' "$DONE" | head -1)
+  # v4 .done format (A-AH40) carries TWO sha fields (sha256= of OUT and
+  # matrix_sha256=): the old greedy `.*sha256=` matched the LAST one and
+  # compared the MATRIX sha against sha256(OUT) — anchored parse.
+  DSHA=$(sed -n 's/^rev=[0-9a-f]* sha256=\([0-9a-f]*\).*/\1/p' "$DONE" | head -1)
   OSHA=$(shasum -a 256 "$OUT" | cut -d' ' -f1)
   if [ -z "$DSHA" ]; then
     fail "(A-SK36) .done carries no sha256= — pre-v3 or forged stamp (KS-SK-86-1)"
