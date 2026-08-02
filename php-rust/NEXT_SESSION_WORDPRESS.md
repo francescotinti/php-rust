@@ -1,51 +1,58 @@
-# NEXT_SESSION_WORDPRESS.md — S-87.0: I-RI-GIUDIZI-E-LA-CAMPAGNA-CHE-SI-È-DIFESA-DA-SOLA (VERDICT87 PASS attempt=3) → WP-88(sessione)
+# NEXT_SESSION_WORDPRESS.md — S-88.0: LE-DUE-LETTERE-REFUTATE-E-LA-CAMPAGNA-PULITA-AL-PRIMO-COLPO (VERDICT88 PASS attempt=1) → WP-89(sessione)
 
-**Ultima sessione**: S-87.0 (2026-08-02, commit d50f3b5…8793d65 + chiusura)
-— gli 8 punti del Concilio WP-88 eseguiti: ri-giudizi DAI RAW (A-BB49:
-**VOVL ribaltato — overlap 10/10**, per-thread sotto concorrenza
-REFUTATO-DAI-RAW; A-BB51: VABBA su peak footprint **SEPARA 8/8**, purge=0
-abbassa 20.926.464 B = 19,96 MiB, delta tutto nella regione arena;
-correzione MEASURE86 + A-BG44-forma; A-DS40: §3.3-ter EMENDATA innesco
-PERSIST + 7 fixture-ancora live), fix strumenti (A-DL37 dump atomico ·
-A-DL36 clamped end-to-end con dente positivo · A-MS36 flag thread_local ·
-A-PP39 dispatch row su union), catena evidenza (A-SK46 --same-rev coi
-denti PIENI · A-AH43/44/45 · A-BG44/45), sigilli v5 (A-TH40/41/42/43 con
-positive-control tainted same-commit · A-MS37/38/39 · A-SK48 · A-PP37/38/
-40 · A-DS38 putord-pair-guard + A-DS39), **CAMPAGNA measure87**:
-battery-87pre 15/15 → consumo --same-rev verificato da MACCHINA (prima
-volta) → a1 VOID (server ORFANO: $! era /usr/bin/time — VERDICT87 FAIL(67)
-ha MORSO) → a2 VOID (dente anti-orphan morso sul PROPRIO wrapper) →
-**attempt=3 PULITO, VERDICT87 PASS**: VSLOPE NAMED-DEVIATION (slope LSQ
-committed = 25.880.166 B = 24,68 MiB per worker, FUORI banda KL-85-2),
-VARMS 0 B (eager/minstack sottratti per NOME), VDISJ predizioni ex-ante
-CONFERMATE (firma inghiottimento nest-free +310 B; floor_inc
-byte-invariante cal↔conc); delibere p6 (promozione scomposizione
-VERDICT-GRADE **SCOPED alle ANNIDATE**; A-DL39+A-BB50 = DESIGN in
-design87.md); contratto A-DS41 in todo-master.
-Dettaglio: `sessions/WP_SESSION_87.md` + `wp87-harness/MEASURE87_RESULTS.md`.
+**Ultima sessione**: S-88.0 (2026-08-02, commit 456c1b0…c0f00d0 + chiusura)
+— gli 8 punti del Concilio WP-89 eseguiti, con DUE lettere refutate a
+MACCHINA prima dell'esecuzione: (p1) il 6° observable `new` pre-decl dal
+vivo dà **persist `C` exit 0 ≡ phpr** (la refutazione capitale n.1 del
+Concilio era falsa; claim «phpr ≡ persist» ANCORATO, KS-DS-89-2
+soddisfatta; riqualifica const-folding DECADUTA); (p5) la lettera A-DS45
+«≥1 coppia main_evicted in produzione» è INSODDISFACIBILE (main_evicted =
+tripwire A-MS24, scatto ⇒ VOID per KS-DS-84-4) — riqualificata su lane
+SUPERSEDE con smoke a macchina. Fix strumenti (mi_option read-back
+A-DL41 col positivo che morde da solo, mi_arena in-band A-BB55,
+identity v2 A-BG47, thr-set esatto A-PP42, port-owner A-PP43), catena
+evidenza v6 (A-SK50 allowlist finestra + ledger-prefix, A-AH46/47),
+sigilli v6 (ProbeWindow RAII A-MS40/41, sweep A-TH44/45, F16b A-DS42,
+gate-axum-tests A-PP41 — F16b ha morso sul PROPRIO harness al 1° giro),
+**CAMPAGNA measure88**: battery-88pre 16/16 → consumo --same-rev v6
+(prima volta con allowlist) → **attempt=1 PULITO, VERDICT88 PASS g1**:
+b = 21.195.981 B = 20,21 MiB/worker sui MODI DOMINANTI W∈{4, 8, 12, 16}
+(NAMED-DEVIATION: banda KL-85-2 non torna in NESSUN regime; granuli
+64 KiB residuo 0; mi_arena==mi_proc commit AL BYTE), VWARM (surplus
+timing-attached con INVERSIONE di lato; floor-collapse in warm
+1.161.206→164.368 B; **STAG = zero-swallow al byte: l'inghiottimento è
+PURO artefatto di overlap**), VUCLOG PASS in forma riqualificata;
+delibere design88 (A-BB54 nested-guard, A-PP44 parser dispatch-union) +
+design87 integrato (A-DL43); contratto A-DS41 EMENDATO (A-DS44: trait
+regola 9 DENTRO, tentative-return = deprecation-lane, lattice nominato)
+— **A-DS35 pronto a partire**.
+Dettaglio: `sessions/WP_SESSION_88.md` + `wp88-harness/MEASURE88_RESULTS.md`.
 
 ## Stato gate
 
-- **phpr (CLI, parità release)**: **eff98c88eb95c254** (stash additivo
-  `phpr-wp87`; bit mossi da A-TH40 rebind + campo
-  main_program_net_clamped A-DL36 + A-MS36/A-PP39) — corpus Zend per
-  NOME: **1418 IDENTICO** + refl 290 IDENTICO (parity-full verde in
-  battery-87pre, doctest VmGate CONTATI ==2 A-MS37).
-- **php-server**: battery-87pre **15/15 CONTATO a 6d9a80f** (stamp
-  ledgerato committed a9e18fc; matrix COMMITTED; A-AH45 snapshot
-  bidirezionale); campagna measure87 a 38961f0 **attempt=3** (a1/a2 VOID
-  nominati, ledger campagna APPEND-only) consumata via
-  **battery-equivalence --same-rev** (A-SK46: anchored PASS + sha256 +
-  stamp 4 campi + matrix committed + toolchain A-AH44 — KS-SK-88-1
-  CHIUSA). mem-census 2a15f2085d4dcdf8. Gate lever: pins v5 (A-TH41/42)
-  / fixtures / fixtures2 tutti PASS.
-- **Misure**: `wp87-harness/MEASURE87_RESULTS.md` + verdict87.out —
-  VSLOPE min-of-R committed 68.681.728 / 103.153.664 / 116.785.152 /
-  150.405.120 B (W=1..4), slope 25.880.166 B = 24,68 MiB per worker
-  (NAMED-DEVIATION vs 3.605.572 B ±5%) · VDISJ cal gemelle 7.801.102 B
-  ESATTE, conc padB=calA+calB+310 B (2/2), floor_inc delta=0 (2/2) ·
-  VARMS delta 0 B. ⚠️ nets concorrenti VOID come cifre per-thread
-  (KB-88-1) fino ad A-BB50 attuato.
+- **phpr (CLI, parità release)**: **520e1b56708ee678** (stash additivo
+  `phpr-wp88`; bit mossi dai sorgenti php-types/php-runtime di p2/p4 —
+  parità certificata dalla battery: corpus Zend per NOME **1418
+  IDENTICO** + refl 290 IDENTICO in parity-full, doctest VmGate CONTATI
+  ==2).
+- **php-server**: battery-88pre **16/16 CONTATO a 0b83f2b** (stamp
+  ledgerato committed 202f8b1; matrix COMMITTED con snapshot NOME+sha
+  A-AH48; 16° gate NUOVO axum-tests A-PP41 con a_pp38+A-PP45 pinnato;
+  F16b a_ds38 ARMATO); campagna measure88 a 202f8b1 **attempt=1**
+  (nessun VOID — prima campagna pulita al primo colpo) consumata via
+  **battery-equivalence --same-rev v6** (A-SK50: allowlist finestra
+  evidence-only + matrix-solo-.done + ledger-prefix + toolchain -Vv
+  in-repo). mem-census b2fe7a43e62166da. Gate lever: pins v6
+  (A-TH44/45 + A-MS41) / fixtures / fixtures2 (F16/F16b) tutti PASS.
+- **Misure**: `wp88-harness/MEASURE88_RESULTS.md` + verdict88.a1.g1.out
+  — VSLOPE-HI modi dominanti 148.307.968 / 230.948.864 / 324.403.200 /
+  399.769.600 B (W=4/8/12/16), b = 21.195.981 B = 20,21 MiB/worker
+  (NAMED-DEVIATION vs 3.605.572 B ±5%, Delta monotoni, KB-89-1/2 ok) ·
+  VWARM cal 7.801.102 B (3ª campagna al byte), concbase padA
+  =calA+calB+314 B (2/2), surplus su padB instabile, concwarm
+  floor_inc 164.368 B, concstag net==cal AL BYTE (zero swallow) ·
+  VUCLOG supersede=2 putord in-band, main_evicted=0. ⚠️ nets
+  concorrenti VOID come cifre per-thread (KB-88-1) fino ad A-BB50.
 - GATE72 CLI resta baseline trasversale (corpus 1418 · refl 290 · ORM
   3E/13F · hk 1665).
 
@@ -59,82 +66,46 @@ compile_fail E0277 CONTATI ==2 in parity-full, A-MS37/KS-MS-88-2).
 4. **Panic = FAIL-FAST**. 5. **Un body ≠ oracolo sulla leva ⇒ git revert,
 mai fix-forward** (KS-DS-80-3, mai innescata). 6. **Mai rm di raw:
 quarantena + manifest; mai RIUSARE un filename — attempt= nel nome, ledger
-campagna APPEND-only** (KS-AH-83-2/KG-88-1/A-BG43). 7. **Cifre memoria
-BYTES-FIRST con companion VERIFICATO, MiB-only, bande da allowlist a
-scope di RIGA** (A-DL26/A-SK40/A-SK43/A-SK48). 8. **Cifra da binario =
-hash contro matrix + marker #[used] con coupling pinnato** (KH86-1+
-A-TH37/A-TH41). 9. **Peak/spread SEMPRE con NOME della metrica —
-footprint vincolante, mai RSS nudo** (KB-88-2). 10. **Una battery si
-consuma SOLO via battery-equivalence (path equivalence O --same-rev), mai
-a mano** (A-SK46/KS-SK-88-1).
+campagna APPEND-only; VOID per-attempt IN-BAND nel ledger; verdetti
+PER-ATTEMPT e PER-GENERAZIONE** (KS-AH-83-2/KG-88-1/A-BG43/A-BG46/
+KG-89-1). 7. **Cifre memoria BYTES-FIRST con companion VERIFICATO sulla
+STESSA riga, [derivata] a scope di riga, MiB-only, bande da allowlist**
+(A-DL26/A-SK40/A-SK43/A-SK48). 8. **Cifra da binario = hash contro
+matrix + marker #[used] con coupling pinnato a TRE copie** (KH86-1+
+A-TH37/A-TH41/A-TH45/KH89-2). 9. **Peak/spread SEMPRE con NOME della
+metrica — footprint vincolante, mai RSS nudo** (KB-88-2). 10. **Una
+battery si consuma SOLO via battery-equivalence (path equivalence O
+--same-rev v6 con allowlist di finestra)** (A-SK46/A-SK50/KS-SK-89-1).
+11. **Companion mancante = FAIL del raw, mai default dentro un
+aggregato** (A-BG48/KG-89-3). 12. **Un ordine di concilio con premessa
+fattuale va VERIFICATO contro oracle/emitter PRIMA dell'esecuzione; la
+refutazione si committa con le prove** (lezione S-88.0 ⭐⭐).
 
-## ⚖️ Concilio WP-89 ESEGUITO (2026-08-02, verbali VINCOLANTI): `wp89-harness/COUNCIL_WP89_REVIEWS.md`
+## ⚖️ Concilio WP-90 (da convocare/assemblare in chiusura S-88.0): `wp90-harness/COUNCIL_WP90_REVIEWS.md`
 
-**9× CONCORDO/PASS CON EMENDAMENTI, 0 opposizioni; 28 KS nuovi.** CIFRE
-confermate a ricomputo (Bak al byte su OVL/slope/disjoint; Leijen sui raw
-win=0; Stogov sull'oracle vivo). REFUTAZIONI CAPITALI: **«phpr ≡ persist»
-FALSO per new-pre-decl** (phpr diverge da ENTRAMBI i bracci — hoisting PIÙ
-ampio; il 4° observable è probabilmente const-folding); **contratto A-DS41
-con due buchi vivi** (trait-abstract non classificato; tentative return
-types = deprecation, mai fatal); **il committed è a GRADINI di 64 KiB**
-(min-of-R tutti multipli esatti di 65.536 B, W=3 bimodale ⇒ LSQ W1..4
-declassata ADVISORY; riconciliazione = W∈{4..16} + mode-census + mi_arena
-in-band, banda solo su b); **--same-rev cieco su checker/ledger/matrix/
-toolchain nella finestra evidence-only**; **KS-SK-88-3 violata in lettera
-dentro verdict87** (NUL-strip sui .log di time -l ⇒ righe peak
-DECLARED-DEVIATION); **VDISP senza unicità del thr-set**; **artefatti di
-2° ordine mono-generazione** (verdict/done same-name; VOID di a1 non
-in-band nel ledger); **l'orfano aveva server_exit=143 in-band mai
-consumato**; **a_pp38/a_ds38 denti fuori dal perimetro battery**;
-**scope «annidato» non falsificabile** (serve nested-guard macchina);
-**una refutazione refutata in assemblaggio** (la sonda sedia 9 senza
-prefisso GIT ROOT: il FAIL(67) È a d0132fb).
+(placeholder — il blocco vincolante e il §WP-89(sessione) vengono
+scritti all'assemblaggio dei 9 verbali)
 
-## §WP-88(sessione) — S-88.0 = ordine Concilio WP-89 §Sintesi (non rinegoziare)
+## §WP-89(sessione) — S-89.0 (ordine dal Concilio WP-90, non rinegoziare)
 
-1. **Sanatorie forma/catalogo (nessuna campagna)**: A-DS43 (6° observable
-   new-pre-decl + negativo condizionale + riqualifica const-folding,
-   fixture committate) · A-SK52-forma (righe peak ri-etichettate
-   DECLARED-DEVIATION) · A-BG46-forma (VOID per-attempt append-only nel
-   ledger).
-2. **Fix strumenti**: A-SK51 · A-PP42 (thr-set esatto) · A-BG48 (mai
-   default nei min/LSQ) · A-DL41 (read-back bracci) · A-DL40 · A-BG47
-   (identity contract v2) · A-PP43 (port-owner assert).
-3. **Catena evidenza**: A-SK50 (allowlist delta --same-rev) · A-AH46/47/48
-   · A-SK54/A-BG46 (artefatti per-attempt) · A-AH49.
-4. **Sigilli v6**: A-TH44/45/46/47 · A-MS40/41/42 · A-PP41 (battery gate
-   axum-server ESEGUITO) · A-PP45 · A-DS42 (F16b a_ds38 armato).
-5. **Misura (una campagna)**: A-BB55≡A-DL42 (slope W∈{4,8,12,16},
-   mode-census, tag=mi_arena, banda solo su b) · A-BB56
-   (warm-both-then-pair + stagger) · A-DS45 (fase con uc_log armato).
-6. **Delibere**: A-BB54 (nested-guard) · A-DL43 (design87 integrato) ·
-   A-PP44 (design parser dispatch-union).
-7. **ROADMAP**: A-DS44 (contratto A-DS41 emendato) — implementazione
-   A-DS35 SOLO dopo (KS-DS-88-3 + KS-DS-89-3).
-8. Deferred invariati: A-MS27 · A-PP18/27 · A-AH38+dry-run; KS-DS-80-3
-   invariata.
+(da compilare all'assemblaggio)
 
-**Kill-switch di rotta (WP-89, attivi)**: KH89-1..3, KS-MS-89-1..3,
-KS-SK-89-1..3, KS-AH-89-1..2, KB-89-1..3, KS-PP-89-1..4, KL-89-1..4,
-KS-DS-89-1..3, KG-89-1..3 — tabella in
-`wp89-harness/COUNCIL_WP89_REVIEWS.md`.
+**Kill-switch di rotta ereditati ancora attivi**: tutti i KS WP-89
+(tabella in `wp89-harness/COUNCIL_WP89_REVIEWS.md`) + KH88-1..4,
+KS-MS-88-1..3 (KS-MS-88-1 sollevata ≥400fa10), KS-SK-88-1..4,
+KS-AH-88-1..2, KB-88-1..3, KS-PP-88-1..3, KL-88-1..3, KS-DS-88-1..3
+(KS-DS-88-1 consumata su log di PRODUZIONE in m88), KG-88-1..3 + gli
+ereditati WP-87. KS-DS-80-3 invariata.
 
-**Kill-switch di rotta ereditati ancora attivi**: KH88-1..4,
-KS-MS-88-1..3 (KS-MS-88-1 sollevata per i run ≥ rev 400fa10: flag
-thread_local), KS-SK-88-1..4, KS-AH-88-1..2, KB-88-1..3, KS-PP-88-1..3,
-KL-88-1..3, KS-DS-88-1..3, KG-88-1..3 — tabella in
-`wp88-harness/COUNCIL_WP88_REVIEWS.md`; più gli ereditati WP-87 come da
-tabella. KS-DS-80-3 invariata.
-
-**NON riproporre**: tutti i NON-riproporre WP-83/84/85/86 restano; in più
-— "VOVL OPEN / per-thread sotto concorrenza CANDIDATO" (REFUTATO dai raw,
-ri-giudicato S-87.0); "purge refutato come driver" su metrica RSS (su
-footprint purge=0 ABBASSA, separazione 8/8); Δpeak d'avvio come metà
-fisica (la forma è slope committed — che a W∈{1..4} dà NAMED-DEVIATION:
-non riproporre la banda KL-85-2 su quel protocollo senza riconciliazione);
-canary concorrenti come cifre per-thread PRIMA di A-BB50 attuato;
-`pgrep -f` per contare processi wrappati (una cmdline di wrapper matcha);
-`$!` come pid del server sotto /usr/bin/time.
+**NON riproporre**: tutti i NON-riproporre WP-83/84/85/86/87 restano;
+in più — «≥1 coppia main_evicted su log di produzione» (insoddisfacibile
+per costruzione: tripwire A-MS24/KS-DS-84-4); «riqualifica const-folding
+dell'observable 4» (premessa refutata dall'oracle: persist hoista anche
+new-pre-decl); «surplus concorrente come proprietà del LATO» (inverte
+fra campagne: timing-attached); «formula discriminatore dA su regime
+floor-collapse» (label VOID-di-significato); «banda KL-85-2 come banda
+del protocollo slope» (non torna in nessun regime: b reale ~20-25 MiB/
+worker — ri-derivare o ritirare la banda, mai riproporla tal quale).
 
 ---
 **Chiusura**: 2026-08-02. Apertura/chiusura sessioni = skill
