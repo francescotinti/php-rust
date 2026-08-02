@@ -6,3 +6,4 @@
 # refuses any OUT/.done pair whose stamp is not ledgered HERE at HEAD
 # (KS-SK-87-1). Never touch-edit; append-only via the battery.
 battery=86pre rev=3818edd sha256=cf12ecd6946d0f63702f874464bfc61c0c88e02f20729c1ba46831824b6c0f45 matrix=feature-matrix.3818edd.20260802-104004.log matrix_sha256=7afb02850e576b7854968998c5dc6b3baf609bf385135314243f834c911db6c7
+battery=86pre rev=9d50b47 sha256=22aa745f471d59c8f0e622ac1b9381ae9c8d87fe200936212417d2e399a15547 matrix=feature-matrix.9d50b47.20260802-105208.log matrix_sha256=c818e825828f97f4af9a32568712ba8428de40a304f10e2bc31ea89e9182695a
