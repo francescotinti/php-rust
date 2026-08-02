@@ -320,6 +320,22 @@ if [ "$SAME_REV" = 1 ]; then
   elif [ -n "$BL_OLD" ] && [ -n "$BL_REM" ] && [ "${BL_REM#$'\n'}" = "$BL_REM" ]; then
     fail "(A-SK57) ledger delta EXTENDS the last committed row — row-granularity append violated (KS-SK-89-1)"
   fi
+  # A-AH50≡A-BG49 (Council WP-90, KS-AH-90-1/KG-90-1): the consumed PASS
+  # must have its own row in the COMMITTED battery-attempts ledger — an
+  # attempt that left no in-band row makes this PASS non-consumable.
+  # Scoped to 89pre+ batteries (the ledger was born at WP-89; historical
+  # 88pre verdicts stand as judged, they are never re-consumed).
+  ATTL_REL="wp83-harness/evidence/battery-attempts.ledger"
+  BATTERY_NAME=$(basename "$OUT" .out)
+  case "$BATTERY_NAME" in
+    battery-8[0-8]*) : ;;  # pre-ledger batteries, declared exempt
+    *)
+      NATT=$(git -C "$REPO" show "HEAD:${GITPREFIX}${ATTL_REL}" 2>/dev/null | grep -c "battery=${BATTERY_NAME#battery-} rev=$BREV .*esito=PASS" || true)
+      if [ "$NATT" -lt 1 ]; then
+        fail "(A-AH50/KS-AH-90-1) no committed esito=PASS row for $BATTERY_NAME rev=$BREV in battery-attempts.ledger — attempt not in-band, PASS non-consumable"
+      fi
+      ;;
+  esac
   if [ "$FAILS" = 0 ]; then
     echo "== SAME-REV CONSUMPTION LEGAL (battery at $BREV == HEAD, v6 teeth verified: anchored PASS, sha256(OUT), 4-field committed stamp, committed matrix, toolchain -Vv in-repo, window allowlist + ledger-prefix A-SK50) =="
     exit 0
