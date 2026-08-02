@@ -77,7 +77,10 @@ ledger "attempt=$ATT phase=start"
 BOUT="$BATW/battery-87pre.out"
 [ -f "$BOUT" ] || fail "battery-87pre.out missing — run the battery first"
 BREV=$(sed -n 's/^== battery-87pre git=\([0-9a-f]*\) ==$/\1/p' "$BOUT" | head -1)
-[ "$BREV" = "$GIT_REV" ] || fail "battery rev $BREV != HEAD $GIT_REV (same-rev protocol)"
+# Same-CODE protocol: the checker's teeth (i)/(iv) judge that BREV..HEAD
+# moved no crates/Cargo and no gate object (the A-SK41 stamp commit is the
+# one legal delta); everything else (anchored PASS, sha256, 4-field
+# committed stamp, committed matrix, toolchain) runs in full.
 bash "$REPO/wp83-harness/battery-equivalence.sh" --same-rev "$BOUT" "$BREV" \
   || fail "same-rev consumption REFUSED (A-SK46/KS-SK-88-1)"
 DONE="$BATW/.done"

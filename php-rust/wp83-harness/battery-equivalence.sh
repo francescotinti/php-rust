@@ -68,8 +68,12 @@ FAILS=0
 fail() { echo "FAIL: $*"; FAILS=$((FAILS+1)); }
 
 HEADREV=$(git -C "$REPO" rev-parse --short HEAD)
-if [ "$SAME_REV" = 1 ] && [ "$BREV" != "$HEADREV" ]; then
-  fail "(--same-rev) battery rev $BREV != HEAD $HEADREV — use the equivalence path"
+# --same-rev semantics: same CODE revision, not same commit id — the A-SK41
+# stamp commit itself moves HEAD by one evidence-only commit. Teeth (i)
+# (crates/Cargo delta EMPTY) and (iv) (gate objects unchanged) below are
+# the judges of "same code"; BREV must still be an ancestor.
+if [ "$SAME_REV" = 1 ] && ! git -C "$REPO" merge-base --is-ancestor "$BREV" HEAD 2>/dev/null; then
+  fail "(--same-rev) battery rev $BREV is not an ancestor of HEAD $HEADREV"
 fi
 # A-AH43: ONE canonical git path for every `git show` in this checker.
 GITPREFIX="$(git -C "$REPO" rev-parse --show-prefix)"
