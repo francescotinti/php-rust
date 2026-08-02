@@ -74,7 +74,13 @@ echo "git=$GIT_REV" | tee -a "$LOG"
 # A-AH41 (Council WP-87, Hejlsberg): two same-rev archives built by
 # different toolchains are otherwise indistinguishable — every hash motion
 # of class b55e2f78/15fb6b46 needs its toolchain attributed in-band.
-echo "rustc=$(rustc -V 2>/dev/null || echo unknown)" | tee -a "$LOG"
+# A-AH47 (Council WP-89, Hejlsberg): sample the toolchain IN-REPO (the repo
+# pins rust-toolchain.toml — a fuori-repo sample records the rustup default,
+# while cargo below compiles with the pin: two wrong-but-equal samples) and
+# with -Vv (host triple included; arch drift at equal version is invisible
+# to -V). Single line, newlines joined with ';' — KS-AH-89-2 demands
+# EXACTLY one rustc= row per archive.
+echo "rustc=$( (cd "$REPO" && rustc -Vv 2>/dev/null | tr '\n' ';') || echo unknown)" | tee -a "$LOG"
 echo "cargo=$(cargo -V 2>/dev/null || echo unknown)" | tee -a "$LOG"
 echo "tree=clean (git status --porcelain empty at gate start, A-AH14)" | tee -a "$LOG"
 FAILS=0

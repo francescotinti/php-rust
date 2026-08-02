@@ -104,23 +104,28 @@ parity-full:wp83-harness/gate-parity-83p1.sh"
 NEVER_ABSENT="parity-full lever-fixtures lever-fixtures2 measure-cifre"
 
 # (i) crates/lock delta EMPTY, computed here (same-rev: trivially empty,
-# still computed — a wrong BREV would show here too)
-DELTA=$(git -C "$REPO" diff --name-only "$BREV..HEAD" -- crates Cargo.toml Cargo.lock 2>/dev/null)
+# still computed — a wrong BREV would show here too).
+# v6 A-AH47 (Council WP-89): rust-toolchain.toml JOINS the pathspec — a
+# toolchain-pin change between BREV and HEAD compiles ANOTHER compiler
+# while every source file is byte-identical (KS-AH-89-1).
+DELTA=$(git -C "$REPO" diff --name-only "$BREV..HEAD" -- crates Cargo.toml Cargo.lock rust-toolchain.toml 2>/dev/null)
 if [ -n "$DELTA" ]; then
-  fail "(i) crates/Cargo delta $BREV..$HEADREV NOT empty:"; echo "$DELTA" | head -5
+  fail "(i) crates/Cargo/toolchain delta $BREV..$HEADREV NOT empty:"; echo "$DELTA" | head -5
 fi
 
 # changed files for tooth (iv)
 CHANGED=$(git -C "$REPO" diff --name-only "$BREV..HEAD" 2>/dev/null)
 
-# object_changed <path-or-dirprefix> -> 0 if any changed file matches it
-# (git -C <subdir> emits paths relative to the GIT root, so the php-rust/
-# prefixed form is the operative one; the bare form is an inert fallback).
+# object_changed <path-or-dirprefix> -> 0 if any changed file matches it.
+# v6 A-AH46 (Council WP-89, Hejlsberg): ONE source for the prefix — the
+# ${GITPREFIX} already resolved above. The old hardcoded `php-rust/` plus
+# bare fallback was the two-source pathology A-AH43 banned: on a checkout
+# with a different directory name tooth (iv) went vacuous in silence.
 object_changed() {
   local obj="$1"
   case "$obj" in
-    */) echo "$CHANGED" | grep -qE "^(php-rust/)?${obj}" ;;
-    *)  echo "$CHANGED" | grep -qxF "php-rust/$obj" || echo "$CHANGED" | grep -qxF "$obj" ;;
+    */) echo "$CHANGED" | grep -qE "^${GITPREFIX}${obj}" ;;
+    *)  echo "$CHANGED" | grep -qxF "${GITPREFIX}${obj}" ;;
   esac
 }
 
@@ -184,12 +189,20 @@ else
         # A-AH44: toolchain comparator — the archive records the compiling
         # rustc; the consuming campaign must run the SAME one, or the
         # binary identity argument breaks BY NAME (KS-AH-87-2 mechanical).
+        # v6 A-AH47/KS-AH-89-2: EXACTLY one rustc= row (head -1 on a
+        # multi-row archive judged the first in silence); comparator
+        # samples IN-REPO with -Vv (host triple included) to match the
+        # recorder. Pre-v6 single-line `-V` archives fail the equality
+        # against the richer sample BY NAME — re-run the battery.
+        NRUSTC=$(git -C "$REPO" show "HEAD:${GITPREFIX}${MTX_REL}" | tr -d '\0' | grep -c '^rustc=' || true)
         MTX_RUSTC=$(git -C "$REPO" show "HEAD:${GITPREFIX}${MTX_REL}" | tr -d '\0' | sed -n 's/^rustc=//p' | head -1)
-        CUR_RUSTC=$(rustc -V 2>/dev/null)
-        if [ -z "$MTX_RUSTC" ]; then
+        CUR_RUSTC=$( (cd "$REPO" && rustc -Vv 2>/dev/null | tr '\n' ';') )
+        if [ "$NRUSTC" != 1 ]; then
+          fail "(A-AH47) matrix archive carries $NRUSTC rustc= rows, expected exactly 1 (KS-AH-89-2)"
+        elif [ -z "$MTX_RUSTC" ]; then
           fail "(A-AH44) matrix archive carries no rustc= header (A-AH41 pre-v4 archive) — re-run the battery"
         elif [ "$MTX_RUSTC" != "$CUR_RUSTC" ]; then
-          fail "(A-AH44) toolchain drift: matrix rustc='$MTX_RUSTC' != current rustc='$CUR_RUSTC' — battery certifies ANOTHER compiler (KS-AH-87-2)"
+          fail "(A-AH44/A-AH47) toolchain drift: matrix rustc='$MTX_RUSTC' != current in-repo rustc -Vv='$CUR_RUSTC' — battery certifies ANOTHER compiler (KS-AH-87-2/KS-AH-89-1)"
         fi
       fi
     fi
@@ -238,11 +251,45 @@ done
 # v5 A-SK46: same-rev consumption is NOT an equivalence — tooth (iii) and
 # the append do not apply; the verdict line names the mode.
 if [ "$SAME_REV" = 1 ]; then
+  # v6 A-SK50 (Council WP-89, Klabnik — tooth (i-bis)): the evidence-only
+  # window BREV..HEAD was BLIND on three surfaces: the checker itself, the
+  # ledger+matrix (forgeable in one commit on paths no tooth watched), and
+  # the gate-measure-cifre .out corpus. Now the WHOLE delta must be a
+  # SUBSET of a named allowlist (KS-SK-89-1):
+  #   - the battery-stamps ledger (append-only, prefix-checked below);
+  #   - matrix-archive/ but ONLY the archive named by .done;
+  #   - measure-out/ raws (VOIDed attempts of the same campaign).
+  # Anything else — checker/verdict/campaign scripts, harness .out files,
+  # session docs — refuses the consumption: those belong AFTER the verdict,
+  # not inside the evidence window.
+  BLEDGER_REL="wp83-harness/evidence/battery-stamps.ledger"
+  FULLDELTA=$(git -C "$REPO" diff --name-only "$BREV..HEAD" 2>/dev/null)
+  if [ -n "$FULLDELTA" ]; then
+    BAD_DELTA=$(echo "$FULLDELTA" | grep -vE "^${GITPREFIX}(${BLEDGER_REL}|wp78-harness/matrix-archive/|wp78-harness/measure-out/)" || true)
+    if [ -n "$BAD_DELTA" ]; then
+      echo "$BAD_DELTA" | head -5
+      fail "(A-SK50) same-rev window $BREV..$HEADREV touches NON-allowlisted paths — evidence-only window violated (KS-SK-89-1)"
+    fi
+    # matrix-archive delta may contain ONLY the archive the .done names
+    BAD_MTX=$(echo "$FULLDELTA" | grep -E "^${GITPREFIX}wp78-harness/matrix-archive/" | grep -vxF "${GITPREFIX}wp78-harness/matrix-archive/${DMTX_NAME:-__none__}" || true)
+    if [ -n "$BAD_MTX" ]; then
+      echo "$BAD_MTX" | head -5
+      fail "(A-SK50) same-rev window commits a matrix archive NOT named by .done (KS-SK-89-1)"
+    fi
+  fi
+  # ledger@BREV must be a PREFIX of ledger@HEAD (append-only in-window:
+  # a rewrite that keeps the stamp but edits history escapes the 4-field
+  # grep — the prefix check kills it).
+  BL_OLD=$(git -C "$REPO" show "$BREV:${GITPREFIX}${BLEDGER_REL}" 2>/dev/null)
+  BL_NEW=$(git -C "$REPO" show "HEAD:${GITPREFIX}${BLEDGER_REL}" 2>/dev/null)
+  if [ -n "$BL_OLD" ] && [ "${BL_NEW#"$BL_OLD"}" = "$BL_NEW" ] && [ "$BL_OLD" != "$BL_NEW" ]; then
+    fail "(A-SK50) battery-stamps ledger at $BREV is NOT a prefix of HEAD's — in-window rewrite (KS-SK-89-1)"
+  fi
   if [ "$FAILS" = 0 ]; then
-    echo "== SAME-REV CONSUMPTION LEGAL (battery at $BREV == HEAD, v4 teeth verified: anchored PASS, sha256(OUT), 4-field committed stamp, committed matrix, toolchain) =="
+    echo "== SAME-REV CONSUMPTION LEGAL (battery at $BREV == HEAD, v6 teeth verified: anchored PASS, sha256(OUT), 4-field committed stamp, committed matrix, toolchain -Vv in-repo, window allowlist + ledger-prefix A-SK50) =="
     exit 0
   else
-    echo "== SAME-REV CONSUMPTION REFUSED ($FAILS) — battery must re-run (KS-SK-88-1) =="
+    echo "== SAME-REV CONSUMPTION REFUSED ($FAILS) — battery must re-run (KS-SK-88-1/KS-SK-89-1) =="
     exit 1
   fi
 fi
