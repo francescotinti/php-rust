@@ -188,7 +188,24 @@ if [ "$IDENT_CLEAN" = 1 ]; then
     NME=$(grep -c "tag=unitcache_main_entry" "$F" || true)
     WANTME=$((W * EXP_PER_THR))
     if [ "$NME" != "$WANTME" ]; then emit "FAIL VORD: $raw has $NME main-entry rows, expected $WANTME"; bf=$((bf+1)); continue; fi
-    BADORD=$(awk -v maxo=$EXP_PER_THR '/tag=unitcache_main_entry/ { ok=0; cl=""; for (i=1;i<=NF;i++) { if ($i ~ /^ord=/) { o=$i; sub("ord=","",o); if (o+0>=1 && o+0<=maxo) ok=1 } if ($i ~ /^clamped=/) cl=$i } if (!ok || cl!="clamped=0") print NR": "$0 }' "$F")
+    # g2 REQUALIFICATION (S-89.0, bitten by attempt=1 raws): at
+    # INTERMEDIATE sweep dts (1..10 ms) the SECOND-fired side's
+    # process-counter net can go NEGATIVE (teardown/purge deflation from
+    # the first side inside the second window) and arrives clamped=1 —
+    # a regime m88 never entered (only dt0 full-overlap and dt20
+    # disjoint). Sweep nets are ALREADY VOID as per-thread figures
+    # (KB-88-1); clamped rows are ACCEPTED there, DECLARED in-band, and
+    # VSWEEP excludes those runs from the P-ORD tally. Everywhere else
+    # (slope/cal/eager, dt0/dt20) clamped=0 stays REQUIRED.
+    case "$raw" in
+      m89.sweep.dt1.*|m89.sweep.dt2.*|m89.sweep.dt5.*|m89.sweep.dt10.*) ALLOWCLAMP=1 ;;
+      *) ALLOWCLAMP=0 ;;
+    esac
+    NCLAMP=$(grep -c "tag=unitcache_main_entry.*clamped=1" "$F" || true)
+    if [ "$ALLOWCLAMP" = 1 ] && [ "$NCLAMP" -gt 0 ]; then
+      emit "VORD note: $raw carries $NCLAMP clamped=1 main-entry row(s) — intermediate-dt deflation regime, DECLARED (nets VOID per-thread, KB-88-1; run excluded from P-ORD)"
+    fi
+    BADORD=$(awk -v maxo=$EXP_PER_THR -v ac=$ALLOWCLAMP '/tag=unitcache_main_entry/ { ok=0; cl=""; for (i=1;i<=NF;i++) { if ($i ~ /^ord=/) { o=$i; sub("ord=","",o); if (o+0>=1 && o+0<=maxo) ok=1 } if ($i ~ /^clamped=/) cl=$i } if (!ok || (cl!="clamped=0" && !(ac==1 && cl=="clamped=1"))) print NR": "$0 }' "$F")
     if [ -n "$BADORD" ]; then emit "FAIL VORD: $raw main-entry row outside ord profile (1..$EXP_PER_THR) or clamped!=0:"; emit "$BADORD"; bf=$((bf+1)); fi
     BADQ=$(awk -v e="entries=$EXP_PER_THR" -v m="mains=$EXP_PER_THR" '/tag=unitcache_thr/ { ee=""; mm=""; for (i=1;i<=NF;i++) { if ($i ~ /^entries=/) ee=$i; if ($i ~ /^mains=/) mm=$i } if (ee!=e || mm!=m) print NR": "$0 }' "$F")
     if [ -n "$BADQ" ]; then emit "FAIL VORD: $raw thread cache not at expected profile ($EXP_PER_THR/$EXP_PER_THR):"; emit "$BADQ"; bf=$((bf+1)); fi
@@ -278,9 +295,9 @@ judge_slope() { # <ARM> <raw-prefix>   (usa emit/bf globali; setta B_LAST)
       # A-BG50/KG-90-2: presence-guard BEFORE extraction — an absent row
       # used to become a silent 0 inside TMP and the LSQ (`v+0`).
       NPR=$(grep -c "tag=mi_proc win=0 " "$F" || true)
-      [ "$NPR" = 1 ] || { emit "FAIL VSLOPE-$ARM: $F tag=mi_proc win=0 rows == $NPR, expected exactly 1 (A-BG50/KG-90-2)"; bf=$((bf+1)); continue; }
+      [ "$NPR" = 2 ] || { emit "FAIL VSLOPE-$ARM: $F tag=mi_proc win=0 rows == $NPR, expected exactly 2 — the channel emits a pre/post-collect PAIR and the extractor consumes the LAST (postcollect); any other count = wiring drift (A-BG50/KG-90-2, g2: pin calibrated on the REAL channel shape, m88 identical)"; bf=$((bf+1)); continue; }
       NAC=$(grep -c "tag=mi_arena win=0 key=committed " "$F" || true)
-      [ "$NAC" = 1 ] || { emit "FAIL VSLOPE-$ARM: $F mi_arena committed rows == $NAC, expected exactly 1 (A-BG50/KG-90-2)"; bf=$((bf+1)); continue; }
+      [ "$NAC" = 2 ] || { emit "FAIL VSLOPE-$ARM: $F mi_arena committed rows == $NAC, expected exactly 2 — pre/post-collect PAIR, extractor consumes the LAST (A-BG50/KG-90-2, g3 pin on the REAL shape)"; bf=$((bf+1)); continue; }
       C=$(awk '/tag=mi_proc win=0/ { for (i=1;i<=NF;i++) if ($i ~ /^commit=/) {v=$i; sub("commit=","",v)} } END { print v+0 }' "$F")
       [ "$C" -gt 0 ] || { emit "FAIL VSLOPE-$ARM: $F extracted C=$C not > 0 (A-BG50/KG-90-2)"; bf=$((bf+1)); continue; }
       SL=$(awk 'BEGIN{inpost=0} /tag=mi_proc win=0/ { inpost=1; s=0 } inpost && /tag=mi_bin win=0/ { c=0; u=0; for (i=1;i<=NF;i++) { if ($i ~ /^committed=/) {c=$i; sub("committed=","",c)} if ($i ~ /^used_b=/) {u=$i; sub("used_b=","",u)} } s += c-u } END { print s+0 }' "$F")
@@ -449,6 +466,15 @@ if [ "$IDENT_CLEAN" = 1 ] && [ "$DISP_CLEAN" = 1 ] && [ "$ORD_CLEAN" = 1 ]; then
         NA_NET=${NA%% *}; NB_NET=${NB%% *}
         DA=$((NA_NET - SUM)); DB=$((NB_NET - SUM))
         FIRSTPAD=a; [ "$o" = bfirst ] && FIRSTPAD=b
+        # g2: a clamped=1 row means the side's net was DEFLATED below
+        # zero (intermediate-dt regime) — the dA/dB comparison is
+        # VOID-of-meaning there; the run is reported, declared, and
+        # excluded from the P-ORD tally (A-BG52: regime in-band).
+        NCL=$(grep -c "tag=unitcache_main_entry.*clamped=1" "$F" || true)
+        if [ "$NCL" -gt 0 ]; then
+          emit "VSWEEP dt$dt $o: spans=$OV padA net=$NA_NET B | padB net=$NB_NET B | first=$FIRSTPAD CLAMPED($NCL row) — deflation regime, surplus label VOID-of-meaning, excluded from P-ORD [declared; nets VOID per-thread KB-88-1]"
+          continue
+        fi
         ABSA=${DA#-}; ABSB=${DB#-}
         SURPLUS=a; [ "$ABSB" -gt "$ABSA" ] && SURPLUS=b
         emit "VSWEEP dt$dt $o: spans=$OV padA net=$NA_NET B dA=$DA B | padB net=$NB_NET B dB=$DB B | first=$FIRSTPAD surplus_side=$SURPLUS [nets VOID per-thread, KB-88-1]"

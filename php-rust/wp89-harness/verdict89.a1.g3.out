@@ -1,0 +1,136 @@
+== verdict89 — campaign git=ed427f4 attempt=1 mem_hash=e2f27c9c671b737a (judge_sha=294898431ef72d16, judged at HEAD=418def8, generation g3) ==
+generation g3 SUPERSEDES g1..g2 on attempt=1 (KS-SK-90-3: docs must cite the MAXIMUM generation)
+matrix tether: mem_hash==bin[mem-census] of COMMITTED feature-matrix.30f5a87.20260803-000923.log (A-SK59)
+VIDENT PASS: 57 raws present, NUL-free, identity v2 (count==1, server_exit==0, srv_pid reconciled; mem_hash=e2f27c9c671b737a git=ed427f4 attempt=1)
+VDISP PASS: thr-set == {0..W-1} exact and per-thread count == nreq/W on every raw (A-PP37+A-PP42)
+VORD note: m89.sweep.dt1.afirst.a1.memcensus carries 1 clamped=1 main-entry row(s) — intermediate-dt deflation regime, DECLARED (nets VOID per-thread, KB-88-1; run excluded from P-ORD)
+VORD note: m89.sweep.dt1.bfirst.a1.memcensus carries 1 clamped=1 main-entry row(s) — intermediate-dt deflation regime, DECLARED (nets VOID per-thread, KB-88-1; run excluded from P-ORD)
+VORD note: m89.sweep.dt2.afirst.a1.memcensus carries 1 clamped=1 main-entry row(s) — intermediate-dt deflation regime, DECLARED (nets VOID per-thread, KB-88-1; run excluded from P-ORD)
+VORD note: m89.sweep.dt2.bfirst.a1.memcensus carries 1 clamped=1 main-entry row(s) — intermediate-dt deflation regime, DECLARED (nets VOID per-thread, KB-88-1; run excluded from P-ORD)
+VORD note: m89.sweep.dt5.afirst.a1.memcensus carries 1 clamped=1 main-entry row(s) — intermediate-dt deflation regime, DECLARED (nets VOID per-thread, KB-88-1; run excluded from P-ORD)
+VORD PASS: main-entry ord profile + clamped=0 + thread-cache profile hold on every judged raw (warm profile 2/2 declared)
+VARENA PASS: mi_arena_json + extracted rows present, no parse failures, on every slope-arm raw (arena==proc = READ-PATH IDENTITY, never a cross-check — A-DL45/KL-90-2)
+VARMS PASS: per-arm mi_option read-back judged on EVERY raw (purge=0 all; ord36: 0 on ret0 / 2 elsewhere; ord4: 1 on eagerpos — A-DL41/A-DL44/KL-90-4)
+VTHEAP PASS: per-theap page census in-band on every slope-arm raw (heap-by-visit-index + win0-postteardown DECLARED, KL-90-3)
+slope-BASE w=4 r=1 committed_postcollect_win0_bytes=162594816 slack_committed_minus_used_bytes=83512 peak_memory_footprint_bytes=91390528 arena_committed_current_bytes=162594816 arena_count=1
+slope-BASE w=4 r=2 committed_postcollect_win0_bytes=157745152 slack_committed_minus_used_bytes=76376 peak_memory_footprint_bytes=92095040 arena_committed_current_bytes=157745152 arena_count=1
+slope-BASE w=4 r=3 committed_postcollect_win0_bytes=156762112 slack_committed_minus_used_bytes=330392 peak_memory_footprint_bytes=93504064 arena_committed_current_bytes=156762112 arena_count=1
+slope-BASE w=4 r=4 committed_postcollect_win0_bytes=156762112 slack_committed_minus_used_bytes=84696 peak_memory_footprint_bytes=93487680 arena_committed_current_bytes=156762112 arena_count=1
+slope-BASE w=4 r=5 committed_postcollect_win0_bytes=157745152 slack_committed_minus_used_bytes=76376 peak_memory_footprint_bytes=92095040 arena_committed_current_bytes=157745152 arena_count=1
+slope-BASE w=8 r=1 committed_postcollect_win0_bytes=228065280 slack_committed_minus_used_bytes=330392 peak_memory_footprint_bytes=176652912 arena_committed_current_bytes=228065280 arena_count=1
+slope-BASE w=8 r=2 committed_postcollect_win0_bytes=228065280 slack_committed_minus_used_bytes=87640 peak_memory_footprint_bytes=176636528 arena_committed_current_bytes=228065280 arena_count=1
+slope-BASE w=8 r=3 committed_postcollect_win0_bytes=227999744 slack_committed_minus_used_bytes=330392 peak_memory_footprint_bytes=178324080 arena_committed_current_bytes=227999744 arena_count=1
+slope-BASE w=8 r=4 committed_postcollect_win0_bytes=227344384 slack_committed_minus_used_bytes=92792 peak_memory_footprint_bytes=173277784 arena_committed_current_bytes=227344384 arena_count=1
+slope-BASE w=8 r=5 committed_postcollect_win0_bytes=228589568 slack_committed_minus_used_bytes=337528 peak_memory_footprint_bytes=176669296 arena_committed_current_bytes=228589568 arena_count=1
+slope-BASE w=12 r=1 committed_postcollect_win0_bytes=327417856 slack_committed_minus_used_bytes=256600 peak_memory_footprint_bytes=243008232 arena_committed_current_bytes=327417856 arena_count=1
+slope-BASE w=12 r=2 committed_postcollect_win0_bytes=326565888 slack_committed_minus_used_bytes=295544 peak_memory_footprint_bytes=242795240 arena_committed_current_bytes=326565888 arena_count=1
+slope-BASE w=12 r=3 committed_postcollect_win0_bytes=316473344 slack_committed_minus_used_bytes=271928 peak_memory_footprint_bytes=243286760 arena_committed_current_bytes=316473344 arena_count=1
+slope-BASE w=12 r=4 committed_postcollect_win0_bytes=329318400 slack_committed_minus_used_bytes=281176 peak_memory_footprint_bytes=257983184 arena_committed_current_bytes=329318400 arena_count=1
+slope-BASE w=12 r=5 committed_postcollect_win0_bytes=316276736 slack_committed_minus_used_bytes=256504 peak_memory_footprint_bytes=240829112 arena_committed_current_bytes=316276736 arena_count=1
+slope-BASE w=16 r=1 committed_postcollect_win0_bytes=388366336 slack_committed_minus_used_bytes=255416 peak_memory_footprint_bytes=325665560 arena_committed_current_bytes=388366336 arena_count=1
+slope-BASE w=16 r=2 committed_postcollect_win0_bytes=389939200 slack_committed_minus_used_bytes=255544 peak_memory_footprint_bytes=321962752 arena_committed_current_bytes=389939200 arena_count=1
+slope-BASE w=16 r=3 committed_postcollect_win0_bytes=389414912 slack_committed_minus_used_bytes=263736 peak_memory_footprint_bytes=319472360 arena_committed_current_bytes=389414912 arena_count=1
+slope-BASE w=16 r=4 committed_postcollect_win0_bytes=390594560 slack_committed_minus_used_bytes=303736 peak_memory_footprint_bytes=312263424 arena_committed_current_bytes=390594560 arena_count=1
+slope-BASE w=16 r=5 committed_postcollect_win0_bytes=392626176 slack_committed_minus_used_bytes=314968 peak_memory_footprint_bytes=319161088 arena_committed_current_bytes=392626176 arena_count=1
+mode-census BASE W=4: committed=162594816 B x1
+mode-census BASE W=4: committed=157745152 B x2
+mode-census BASE W=4: committed=156762112 B x2
+mode-census BASE W=4: modes=3 dominant=156762112 B (x2) min-of-R=156762112 B [min-of-R ADVISORY: >=2 modes, KB-89-2]
+BASE W=4 granules64k: dominant=2392.00 residue_dominant=0 B | arena_count=1
+mode-census BASE W=8: committed=228589568 B x1
+mode-census BASE W=8: committed=227999744 B x1
+mode-census BASE W=8: committed=227344384 B x1
+mode-census BASE W=8: committed=228065280 B x2
+mode-census BASE W=8: modes=4 dominant=228065280 B (x2) min-of-R=227344384 B [min-of-R ADVISORY: >=2 modes, KB-89-2]
+BASE W=8 granules64k: dominant=3480.00 residue_dominant=0 B | arena_count=1
+mode-census BASE W=12: committed=326565888 B x1
+mode-census BASE W=12: committed=316276736 B x1
+mode-census BASE W=12: committed=329318400 B x1
+mode-census BASE W=12: committed=327417856 B x1
+mode-census BASE W=12: committed=316473344 B x1
+mode-census BASE W=12: modes=5 dominant=316276736 B (x1) min-of-R=316276736 B [A-BB58: modes==R, census NON-informative => point ADVISORY]
+BASE W=12 granules64k: dominant=4826.00 residue_dominant=0 B | arena_count=1
+mode-census BASE W=16: committed=390594560 B x1
+mode-census BASE W=16: committed=389939200 B x1
+mode-census BASE W=16: committed=389414912 B x1
+mode-census BASE W=16: committed=388366336 B x1
+mode-census BASE W=16: committed=392626176 B x1
+mode-census BASE W=16: modes=5 dominant=388366336 B (x1) min-of-R=388366336 B [A-BB58: modes==R, census NON-informative => point ADVISORY]
+BASE W=16 granules64k: dominant=5926.00 residue_dominant=0 B | arena_count=1
+delta BASE W4->W8 = 71303168 B, marginal 17825792 B/worker [IN ex-ante band b*(1+/-0.15)]
+delta BASE W8->W12 = 88211456 B, marginal 22052864 B/worker [IN ex-ante band b*(1+/-0.15)]
+delta BASE W12->W16 = 72089600 B, marginal 18022400 B/worker [IN ex-ante band b*(1+/-0.15)]
+VSLOPE-BASE b (LSQ dominant-mode, metric=committed_postcollect_win0, W in {4, 8, 12, 16}): 19575603 B/worker se=584723 B twosigma=[18406157, 20745049] a=76611584 B grade=verdict-grade-candidate
+VSLOPE-BASE PASS: protocol clean (collect armed, presence-guarded extractors, mode-census + b+/-2sigma + delta-fascia in-band)
+slope-RET0 w=4 r=1 committed_postcollect_win0_bytes=157810688 slack_committed_minus_used_bytes=84568 peak_memory_footprint_bytes=92095040 arena_committed_current_bytes=157810688 arena_count=1
+slope-RET0 w=4 r=2 committed_postcollect_win0_bytes=157876224 slack_committed_minus_used_bytes=76504 peak_memory_footprint_bytes=92127808 arena_committed_current_bytes=157876224 arena_count=1
+slope-RET0 w=4 r=3 committed_postcollect_win0_bytes=154992640 slack_committed_minus_used_bytes=76536 peak_memory_footprint_bytes=91259456 arena_committed_current_bytes=154992640 arena_count=1
+slope-RET0 w=4 r=4 committed_postcollect_win0_bytes=156106752 slack_committed_minus_used_bytes=83640 peak_memory_footprint_bytes=94011968 arena_committed_current_bytes=156106752 arena_count=1
+slope-RET0 w=4 r=5 committed_postcollect_win0_bytes=157745152 slack_committed_minus_used_bytes=337400 peak_memory_footprint_bytes=92111424 arena_committed_current_bytes=157745152 arena_count=1
+slope-RET0 w=8 r=1 committed_postcollect_win0_bytes=228065280 slack_committed_minus_used_bytes=76376 peak_memory_footprint_bytes=178504304 arena_committed_current_bytes=228065280 arena_count=1
+slope-RET0 w=8 r=2 committed_postcollect_win0_bytes=228261888 slack_committed_minus_used_bytes=83512 peak_memory_footprint_bytes=174621296 arena_committed_current_bytes=228261888 arena_count=1
+slope-RET0 w=8 r=3 committed_postcollect_win0_bytes=227999744 slack_committed_minus_used_bytes=76504 peak_memory_footprint_bytes=178438744 arena_committed_current_bytes=227999744 arena_count=1
+slope-RET0 w=8 r=4 committed_postcollect_win0_bytes=252575744 slack_committed_minus_used_bytes=91832 peak_memory_footprint_bytes=164856456 arena_committed_current_bytes=252575744 arena_count=1
+slope-RET0 w=8 r=5 committed_postcollect_win0_bytes=252575744 slack_committed_minus_used_bytes=76536 peak_memory_footprint_bytes=164823688 arena_committed_current_bytes=252575744 arena_count=1
+slope-RET0 w=12 r=1 committed_postcollect_win0_bytes=326172672 slack_committed_minus_used_bytes=248408 peak_memory_footprint_bytes=243253968 arena_committed_current_bytes=326172672 arena_count=1
+slope-RET0 w=12 r=2 committed_postcollect_win0_bytes=323944448 slack_committed_minus_used_bytes=263608 peak_memory_footprint_bytes=243794616 arena_committed_current_bytes=323944448 arena_count=1
+slope-RET0 w=12 r=3 committed_postcollect_win0_bytes=325451776 slack_committed_minus_used_bytes=303736 peak_memory_footprint_bytes=243024616 arena_committed_current_bytes=325451776 arena_count=1
+slope-RET0 w=12 r=4 committed_postcollect_win0_bytes=323485696 slack_committed_minus_used_bytes=256600 peak_memory_footprint_bytes=240665320 arena_committed_current_bytes=323485696 arena_count=1
+slope-RET0 w=12 r=5 committed_postcollect_win0_bytes=330760192 slack_committed_minus_used_bytes=306648 peak_memory_footprint_bytes=251069136 arena_committed_current_bytes=330760192 arena_count=1
+slope-RET0 w=16 r=1 committed_postcollect_win0_bytes=391512064 slack_committed_minus_used_bytes=256600 peak_memory_footprint_bytes=317522688 arena_committed_current_bytes=391512064 arena_count=1
+slope-RET0 w=16 r=2 committed_postcollect_win0_bytes=389349376 slack_committed_minus_used_bytes=248408 peak_memory_footprint_bytes=317309696 arena_committed_current_bytes=389349376 arena_count=1
+slope-RET0 w=16 r=3 committed_postcollect_win0_bytes=401473536 slack_committed_minus_used_bytes=256472 peak_memory_footprint_bytes=319095552 arena_committed_current_bytes=401473536 arena_count=1
+slope-RET0 w=16 r=4 committed_postcollect_win0_bytes=389087232 slack_committed_minus_used_bytes=255544 peak_memory_footprint_bytes=313574144 arena_committed_current_bytes=389087232 arena_count=1
+slope-RET0 w=16 r=5 committed_postcollect_win0_bytes=403243008 slack_committed_minus_used_bytes=314968 peak_memory_footprint_bytes=328565528 arena_committed_current_bytes=403243008 arena_count=1
+mode-census RET0 W=4: committed=156106752 B x1
+mode-census RET0 W=4: committed=157810688 B x1
+mode-census RET0 W=4: committed=157745152 B x1
+mode-census RET0 W=4: committed=154992640 B x1
+mode-census RET0 W=4: committed=157876224 B x1
+mode-census RET0 W=4: modes=5 dominant=154992640 B (x1) min-of-R=154992640 B [A-BB58: modes==R, census NON-informative => point ADVISORY]
+RET0 W=4 granules64k: dominant=2365.00 residue_dominant=0 B | arena_count=1
+mode-census RET0 W=8: committed=227999744 B x1
+mode-census RET0 W=8: committed=228065280 B x1
+mode-census RET0 W=8: committed=228261888 B x1
+mode-census RET0 W=8: committed=252575744 B x2
+mode-census RET0 W=8: modes=4 dominant=252575744 B (x2) min-of-R=227999744 B [min-of-R ADVISORY: >=2 modes, KB-89-2]
+RET0 W=8 granules64k: dominant=3854.00 residue_dominant=0 B | arena_count=1
+mode-census RET0 W=12: committed=326172672 B x1
+mode-census RET0 W=12: committed=325451776 B x1
+mode-census RET0 W=12: committed=330760192 B x1
+mode-census RET0 W=12: committed=323485696 B x1
+mode-census RET0 W=12: committed=323944448 B x1
+mode-census RET0 W=12: modes=5 dominant=323485696 B (x1) min-of-R=323485696 B [A-BB58: modes==R, census NON-informative => point ADVISORY]
+RET0 W=12 granules64k: dominant=4936.00 residue_dominant=0 B | arena_count=1
+mode-census RET0 W=16: committed=389349376 B x1
+mode-census RET0 W=16: committed=401473536 B x1
+mode-census RET0 W=16: committed=403243008 B x1
+mode-census RET0 W=16: committed=389087232 B x1
+mode-census RET0 W=16: committed=391512064 B x1
+mode-census RET0 W=16: modes=5 dominant=389087232 B (x1) min-of-R=389087232 B [A-BB58: modes==R, census NON-informative => point ADVISORY]
+RET0 W=16 granules64k: dominant=5937.00 residue_dominant=0 B | arena_count=1
+delta RET0 W4->W8 = 97583104 B, marginal 24395776 B/worker [OUT ex-ante band b*(1+/-0.15)]
+delta RET0 W8->W12 = 70909952 B, marginal 17727488 B/worker [IN ex-ante band b*(1+/-0.15)]
+delta RET0 W12->W16 = 65601536 B, marginal 16400384 B/worker [OUT ex-ante band b*(1+/-0.15)]
+VSLOPE-RET0 b (LSQ dominant-mode, metric=committed_postcollect_win0, W in {4, 8, 12, 16}): 19329843 B/worker se=1319393 B twosigma=[16691057, 21968630] a=86736896 B grade=ADVISORY (marginal outside the ex-ante delta=0.15 band, KB-90-1)
+VSLOPE-RET0 PASS: protocol clean (collect armed, presence-guarded extractors, mode-census + b+/-2sigma + delta-fascia in-band)
+VATTR: b_base=19575603 B/worker | b_ret0=19329843 B/worker -> NOT-attributed-to-retention (P-RET0 REFUTED: b survives retain=0 — residual driver OPEN, to be NAMED at council) [verdict-grade: theap census + retain arm both in-band, KL-90-4; grade inherits the slope grades above]
+VATTR PASS: attribution judged against the ex-ante P-RET0 thresholds
+VSWEEP cal: pad87a net=7801102 B floor_inc=1161206 B | pad87b net=7801102 B floor_inc=1161206 B [metric=net-at-lower, net_window=process-counters, W=1 sequential]
+VSWEEP dt0 afirst: spans=OVERLAP padA net=16376252 B dA=774048 B | padB net=15602306 B dB=102 B | first=a surplus_side=a [nets VOID per-thread, KB-88-1]
+VSWEEP dt0 bfirst: spans=OVERLAP padA net=18635789 B dA=3033585 B | padB net=15602523 B dB=319 B | first=b surplus_side=a [nets VOID per-thread, KB-88-1]
+VSWEEP dt1 afirst: spans=OVERLAP padA net=34024441 B | padB net=0 B | first=a CLAMPED(1 row) — deflation regime, surplus label VOID-of-meaning, excluded from P-ORD [declared; nets VOID per-thread KB-88-1]
+VSWEEP dt1 bfirst: spans=OVERLAP padA net=0 B | padB net=34017082 B | first=b CLAMPED(1 row) — deflation regime, surplus label VOID-of-meaning, excluded from P-ORD [declared; nets VOID per-thread KB-88-1]
+VSWEEP dt2 afirst: spans=OVERLAP padA net=31937745 B | padB net=0 B | first=a CLAMPED(1 row) — deflation regime, surplus label VOID-of-meaning, excluded from P-ORD [declared; nets VOID per-thread KB-88-1]
+VSWEEP dt2 bfirst: spans=OVERLAP padA net=0 B | padB net=31102648 B | first=b CLAMPED(1 row) — deflation regime, surplus label VOID-of-meaning, excluded from P-ORD [declared; nets VOID per-thread KB-88-1]
+VSWEEP dt5 afirst: spans=OVERLAP padA net=20696983 B | padB net=0 B | first=a CLAMPED(1 row) — deflation regime, surplus label VOID-of-meaning, excluded from P-ORD [declared; nets VOID per-thread KB-88-1]
+VSWEEP dt5 bfirst: spans=OVERLAP padA net=11065292 B dA=-4536912 B | padB net=11046695 B dB=-4555509 B | first=b surplus_side=b [nets VOID per-thread, KB-88-1]
+VSWEEP dt10 afirst: spans=NO-OVERLAP padA net=7801102 B dA=-7801102 B | padB net=10495116 B dB=-5107088 B | first=a surplus_side=a [nets VOID per-thread, KB-88-1]
+VSWEEP dt10 bfirst: spans=NO-OVERLAP padA net=10764860 B dA=-4837344 B | padB net=7801102 B dB=-7801102 B | first=b surplus_side=b [nets VOID per-thread, KB-88-1]
+VSWEEP dt20 afirst: spans=NO-OVERLAP padA net=7801102 B dA=-7801102 B | padB net=7801102 B dB=-7801102 B | first=a surplus_side=a [nets VOID per-thread, KB-88-1]
+VSWEEP dt20 bfirst: spans=NO-OVERLAP padA net=7801102 B dA=-7801102 B | padB net=7801102 B dB=-7801102 B | first=b surplus_side=a [nets VOID per-thread, KB-88-1]
+VSWEEP P-DT20 CONFIRMED: net==cal AL BYTE on 4/4 dt=20 sides (zero-swallow reproduced)
+VSWEEP discrimination: UNSTABLE (order-match 2/3, padA-side 2/3 — timing-attached, m87/m88 class) [regime=OVERLAP-only (A-BG52); overlap runs=3]
+VSWEEP PASS: calibrations byte-reproduced, spans judged (A-SK58 mapping), predictions judged against the ex-ante header (A-BB59)
+VUCLOG DECLARED-ABSENT: no armed-log phase in measure89 BY DESIGN (A-DS45 consumed in m88; >=1-pair positive lives in F16b)
+== VERDICT89 PASS (git=ed427f4 attempt=1, generation g3, judge_sha=294898431ef72d16) ==

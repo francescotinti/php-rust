@@ -1,0 +1,73 @@
+== verdict89 — campaign git=ed427f4 attempt=1 mem_hash=e2f27c9c671b737a (judge_sha=24cd290ae0a9fc2b, judged at HEAD=418def8, generation g2) ==
+generation g2 SUPERSEDES g1..g1 on attempt=1 (KS-SK-90-3: docs must cite the MAXIMUM generation)
+matrix tether: mem_hash==bin[mem-census] of COMMITTED feature-matrix.30f5a87.20260803-000923.log (A-SK59)
+VIDENT PASS: 57 raws present, NUL-free, identity v2 (count==1, server_exit==0, srv_pid reconciled; mem_hash=e2f27c9c671b737a git=ed427f4 attempt=1)
+VDISP PASS: thr-set == {0..W-1} exact and per-thread count == nreq/W on every raw (A-PP37+A-PP42)
+VORD note: m89.sweep.dt1.afirst.a1.memcensus carries 1 clamped=1 main-entry row(s) — intermediate-dt deflation regime, DECLARED (nets VOID per-thread, KB-88-1; run excluded from P-ORD)
+VORD note: m89.sweep.dt1.bfirst.a1.memcensus carries 1 clamped=1 main-entry row(s) — intermediate-dt deflation regime, DECLARED (nets VOID per-thread, KB-88-1; run excluded from P-ORD)
+VORD note: m89.sweep.dt2.afirst.a1.memcensus carries 1 clamped=1 main-entry row(s) — intermediate-dt deflation regime, DECLARED (nets VOID per-thread, KB-88-1; run excluded from P-ORD)
+VORD note: m89.sweep.dt2.bfirst.a1.memcensus carries 1 clamped=1 main-entry row(s) — intermediate-dt deflation regime, DECLARED (nets VOID per-thread, KB-88-1; run excluded from P-ORD)
+VORD note: m89.sweep.dt5.afirst.a1.memcensus carries 1 clamped=1 main-entry row(s) — intermediate-dt deflation regime, DECLARED (nets VOID per-thread, KB-88-1; run excluded from P-ORD)
+VORD PASS: main-entry ord profile + clamped=0 + thread-cache profile hold on every judged raw (warm profile 2/2 declared)
+VARENA PASS: mi_arena_json + extracted rows present, no parse failures, on every slope-arm raw (arena==proc = READ-PATH IDENTITY, never a cross-check — A-DL45/KL-90-2)
+VARMS PASS: per-arm mi_option read-back judged on EVERY raw (purge=0 all; ord36: 0 on ret0 / 2 elsewhere; ord4: 1 on eagerpos — A-DL41/A-DL44/KL-90-4)
+VTHEAP PASS: per-theap page census in-band on every slope-arm raw (heap-by-visit-index + win0-postteardown DECLARED, KL-90-3)
+FAIL VSLOPE-BASE: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/m89.slope.w4.r1.a1.memcensus tag=mi_proc win=0 rows == 2, expected exactly 1 (A-BG50/KG-90-2)
+FAIL VSLOPE-BASE: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/m89.slope.w4.r2.a1.memcensus tag=mi_proc win=0 rows == 2, expected exactly 1 (A-BG50/KG-90-2)
+FAIL VSLOPE-BASE: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/m89.slope.w4.r3.a1.memcensus tag=mi_proc win=0 rows == 2, expected exactly 1 (A-BG50/KG-90-2)
+FAIL VSLOPE-BASE: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/m89.slope.w4.r4.a1.memcensus tag=mi_proc win=0 rows == 2, expected exactly 1 (A-BG50/KG-90-2)
+FAIL VSLOPE-BASE: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/m89.slope.w4.r5.a1.memcensus tag=mi_proc win=0 rows == 2, expected exactly 1 (A-BG50/KG-90-2)
+FAIL VSLOPE-BASE: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/m89.slope.w8.r1.a1.memcensus tag=mi_proc win=0 rows == 2, expected exactly 1 (A-BG50/KG-90-2)
+FAIL VSLOPE-BASE: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/m89.slope.w8.r2.a1.memcensus tag=mi_proc win=0 rows == 2, expected exactly 1 (A-BG50/KG-90-2)
+FAIL VSLOPE-BASE: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/m89.slope.w8.r3.a1.memcensus tag=mi_proc win=0 rows == 2, expected exactly 1 (A-BG50/KG-90-2)
+FAIL VSLOPE-BASE: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/m89.slope.w8.r4.a1.memcensus tag=mi_proc win=0 rows == 2, expected exactly 1 (A-BG50/KG-90-2)
+FAIL VSLOPE-BASE: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/m89.slope.w8.r5.a1.memcensus tag=mi_proc win=0 rows == 2, expected exactly 1 (A-BG50/KG-90-2)
+FAIL VSLOPE-BASE: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/m89.slope.w12.r1.a1.memcensus tag=mi_proc win=0 rows == 2, expected exactly 1 (A-BG50/KG-90-2)
+FAIL VSLOPE-BASE: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/m89.slope.w12.r2.a1.memcensus tag=mi_proc win=0 rows == 2, expected exactly 1 (A-BG50/KG-90-2)
+FAIL VSLOPE-BASE: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/m89.slope.w12.r3.a1.memcensus tag=mi_proc win=0 rows == 2, expected exactly 1 (A-BG50/KG-90-2)
+FAIL VSLOPE-BASE: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/m89.slope.w12.r4.a1.memcensus tag=mi_proc win=0 rows == 2, expected exactly 1 (A-BG50/KG-90-2)
+FAIL VSLOPE-BASE: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/m89.slope.w12.r5.a1.memcensus tag=mi_proc win=0 rows == 2, expected exactly 1 (A-BG50/KG-90-2)
+FAIL VSLOPE-BASE: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/m89.slope.w16.r1.a1.memcensus tag=mi_proc win=0 rows == 2, expected exactly 1 (A-BG50/KG-90-2)
+FAIL VSLOPE-BASE: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/m89.slope.w16.r2.a1.memcensus tag=mi_proc win=0 rows == 2, expected exactly 1 (A-BG50/KG-90-2)
+FAIL VSLOPE-BASE: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/m89.slope.w16.r3.a1.memcensus tag=mi_proc win=0 rows == 2, expected exactly 1 (A-BG50/KG-90-2)
+FAIL VSLOPE-BASE: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/m89.slope.w16.r4.a1.memcensus tag=mi_proc win=0 rows == 2, expected exactly 1 (A-BG50/KG-90-2)
+FAIL VSLOPE-BASE: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/m89.slope.w16.r5.a1.memcensus tag=mi_proc win=0 rows == 2, expected exactly 1 (A-BG50/KG-90-2)
+FAIL VSLOPE-RET0: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/m89.slope0.w4.r1.a1.memcensus tag=mi_proc win=0 rows == 2, expected exactly 1 (A-BG50/KG-90-2)
+FAIL VSLOPE-RET0: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/m89.slope0.w4.r2.a1.memcensus tag=mi_proc win=0 rows == 2, expected exactly 1 (A-BG50/KG-90-2)
+FAIL VSLOPE-RET0: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/m89.slope0.w4.r3.a1.memcensus tag=mi_proc win=0 rows == 2, expected exactly 1 (A-BG50/KG-90-2)
+FAIL VSLOPE-RET0: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/m89.slope0.w4.r4.a1.memcensus tag=mi_proc win=0 rows == 2, expected exactly 1 (A-BG50/KG-90-2)
+FAIL VSLOPE-RET0: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/m89.slope0.w4.r5.a1.memcensus tag=mi_proc win=0 rows == 2, expected exactly 1 (A-BG50/KG-90-2)
+FAIL VSLOPE-RET0: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/m89.slope0.w8.r1.a1.memcensus tag=mi_proc win=0 rows == 2, expected exactly 1 (A-BG50/KG-90-2)
+FAIL VSLOPE-RET0: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/m89.slope0.w8.r2.a1.memcensus tag=mi_proc win=0 rows == 2, expected exactly 1 (A-BG50/KG-90-2)
+FAIL VSLOPE-RET0: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/m89.slope0.w8.r3.a1.memcensus tag=mi_proc win=0 rows == 2, expected exactly 1 (A-BG50/KG-90-2)
+FAIL VSLOPE-RET0: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/m89.slope0.w8.r4.a1.memcensus tag=mi_proc win=0 rows == 2, expected exactly 1 (A-BG50/KG-90-2)
+FAIL VSLOPE-RET0: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/m89.slope0.w8.r5.a1.memcensus tag=mi_proc win=0 rows == 2, expected exactly 1 (A-BG50/KG-90-2)
+FAIL VSLOPE-RET0: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/m89.slope0.w12.r1.a1.memcensus tag=mi_proc win=0 rows == 2, expected exactly 1 (A-BG50/KG-90-2)
+FAIL VSLOPE-RET0: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/m89.slope0.w12.r2.a1.memcensus tag=mi_proc win=0 rows == 2, expected exactly 1 (A-BG50/KG-90-2)
+FAIL VSLOPE-RET0: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/m89.slope0.w12.r3.a1.memcensus tag=mi_proc win=0 rows == 2, expected exactly 1 (A-BG50/KG-90-2)
+FAIL VSLOPE-RET0: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/m89.slope0.w12.r4.a1.memcensus tag=mi_proc win=0 rows == 2, expected exactly 1 (A-BG50/KG-90-2)
+FAIL VSLOPE-RET0: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/m89.slope0.w12.r5.a1.memcensus tag=mi_proc win=0 rows == 2, expected exactly 1 (A-BG50/KG-90-2)
+FAIL VSLOPE-RET0: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/m89.slope0.w16.r1.a1.memcensus tag=mi_proc win=0 rows == 2, expected exactly 1 (A-BG50/KG-90-2)
+FAIL VSLOPE-RET0: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/m89.slope0.w16.r2.a1.memcensus tag=mi_proc win=0 rows == 2, expected exactly 1 (A-BG50/KG-90-2)
+FAIL VSLOPE-RET0: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/m89.slope0.w16.r3.a1.memcensus tag=mi_proc win=0 rows == 2, expected exactly 1 (A-BG50/KG-90-2)
+FAIL VSLOPE-RET0: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/m89.slope0.w16.r4.a1.memcensus tag=mi_proc win=0 rows == 2, expected exactly 1 (A-BG50/KG-90-2)
+FAIL VSLOPE-RET0: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/measure-out/m89.slope0.w16.r5.a1.memcensus tag=mi_proc win=0 rows == 2, expected exactly 1 (A-BG50/KG-90-2)
+VATTR SKIPPED: slope arms not both clean (KL-90-4: without census+arm the attribution stays envelope)
+VSWEEP cal: pad87a net=7801102 B floor_inc=1161206 B | pad87b net=7801102 B floor_inc=1161206 B [metric=net-at-lower, net_window=process-counters, W=1 sequential]
+VSWEEP dt0 afirst: spans=OVERLAP padA net=16376252 B dA=774048 B | padB net=15602306 B dB=102 B | first=a surplus_side=a [nets VOID per-thread, KB-88-1]
+VSWEEP dt0 bfirst: spans=OVERLAP padA net=18635789 B dA=3033585 B | padB net=15602523 B dB=319 B | first=b surplus_side=a [nets VOID per-thread, KB-88-1]
+VSWEEP dt1 afirst: spans=OVERLAP padA net=34024441 B | padB net=0 B | first=a CLAMPED(1 row) — deflation regime, surplus label VOID-of-meaning, excluded from P-ORD [declared; nets VOID per-thread KB-88-1]
+VSWEEP dt1 bfirst: spans=OVERLAP padA net=0 B | padB net=34017082 B | first=b CLAMPED(1 row) — deflation regime, surplus label VOID-of-meaning, excluded from P-ORD [declared; nets VOID per-thread KB-88-1]
+VSWEEP dt2 afirst: spans=OVERLAP padA net=31937745 B | padB net=0 B | first=a CLAMPED(1 row) — deflation regime, surplus label VOID-of-meaning, excluded from P-ORD [declared; nets VOID per-thread KB-88-1]
+VSWEEP dt2 bfirst: spans=OVERLAP padA net=0 B | padB net=31102648 B | first=b CLAMPED(1 row) — deflation regime, surplus label VOID-of-meaning, excluded from P-ORD [declared; nets VOID per-thread KB-88-1]
+VSWEEP dt5 afirst: spans=OVERLAP padA net=20696983 B | padB net=0 B | first=a CLAMPED(1 row) — deflation regime, surplus label VOID-of-meaning, excluded from P-ORD [declared; nets VOID per-thread KB-88-1]
+VSWEEP dt5 bfirst: spans=OVERLAP padA net=11065292 B dA=-4536912 B | padB net=11046695 B dB=-4555509 B | first=b surplus_side=b [nets VOID per-thread, KB-88-1]
+VSWEEP dt10 afirst: spans=NO-OVERLAP padA net=7801102 B dA=-7801102 B | padB net=10495116 B dB=-5107088 B | first=a surplus_side=a [nets VOID per-thread, KB-88-1]
+VSWEEP dt10 bfirst: spans=NO-OVERLAP padA net=10764860 B dA=-4837344 B | padB net=7801102 B dB=-7801102 B | first=b surplus_side=b [nets VOID per-thread, KB-88-1]
+VSWEEP dt20 afirst: spans=NO-OVERLAP padA net=7801102 B dA=-7801102 B | padB net=7801102 B dB=-7801102 B | first=a surplus_side=a [nets VOID per-thread, KB-88-1]
+VSWEEP dt20 bfirst: spans=NO-OVERLAP padA net=7801102 B dA=-7801102 B | padB net=7801102 B dB=-7801102 B | first=b surplus_side=a [nets VOID per-thread, KB-88-1]
+VSWEEP P-DT20 CONFIRMED: net==cal AL BYTE on 4/4 dt=20 sides (zero-swallow reproduced)
+VSWEEP discrimination: UNSTABLE (order-match 2/3, padA-side 2/3 — timing-attached, m87/m88 class) [regime=OVERLAP-only (A-BG52); overlap runs=3]
+VSWEEP PASS: calibrations byte-reproduced, spans judged (A-SK58 mapping), predictions judged against the ex-ante header (A-BB59)
+VUCLOG DECLARED-ABSENT: no armed-log phase in measure89 BY DESIGN (A-DS45 consumed in m88; >=1-pair positive lives in F16b)
+== VERDICT89 FAIL(41) ==

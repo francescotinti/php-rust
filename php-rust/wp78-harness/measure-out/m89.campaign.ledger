@@ -58,3 +58,6 @@ attempt_epoch=1785709740 git=ed427f4 campaign_sha=c064d54e59f02bca attempt=1 pha
 attempt_epoch=1785709741 git=ed427f4 campaign_sha=c064d54e59f02bca attempt=1 phase=sweep.dt20.afirst raw=m89.sweep.dt20.afirst.a1.memcensus esito=ok dt_ms=20 first=a
 attempt_epoch=1785709743 git=ed427f4 campaign_sha=c064d54e59f02bca attempt=1 phase=sweep.dt20.bfirst raw=m89.sweep.dt20.bfirst.a1.memcensus esito=ok dt_ms=20 first=b
 attempt_epoch=1785709743 git=ed427f4 campaign_sha=c064d54e59f02bca attempt=1 phase=done esito=ok
+attempt_epoch=1785709773 git=418def8 judge_sha=ae4f528f93095979 attempt=1 phase=verdict esito=FAIL fails=9 generation=g1 verdict_file=wp89-harness/verdict89.a1.g1.out
+attempt_epoch=1785709892 git=418def8 judge_sha=24cd290ae0a9fc2b attempt=1 phase=verdict esito=FAIL fails=41 generation=g2 verdict_file=wp89-harness/verdict89.a1.g2.out
+attempt_epoch=1785709962 git=418def8 judge_sha=294898431ef72d16 attempt=1 phase=verdict esito=PASS generation=g3 verdict_file=wp89-harness/verdict89.a1.g3.out

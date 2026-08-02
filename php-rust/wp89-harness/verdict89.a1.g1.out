@@ -1,0 +1,23 @@
+== verdict89 — campaign git=ed427f4 attempt=1 mem_hash=e2f27c9c671b737a (judge_sha=ae4f528f93095979, judged at HEAD=418def8, generation g1) ==
+matrix tether: mem_hash==bin[mem-census] of COMMITTED feature-matrix.30f5a87.20260803-000923.log (A-SK59)
+VIDENT PASS: 57 raws present, NUL-free, identity v2 (count==1, server_exit==0, srv_pid reconciled; mem_hash=e2f27c9c671b737a git=ed427f4 attempt=1)
+VDISP PASS: thr-set == {0..W-1} exact and per-thread count == nreq/W on every raw (A-PP37+A-PP42)
+FAIL VORD: m89.sweep.dt1.afirst.a1.memcensus main-entry row outside ord profile (1..1) or clamped!=0:
+5: pid=29108 tag=unitcache_main_entry thr=1 ord=1 net=0 clamped=1 floor_inc=1161206 fns=377 stmts=1 net_rule=net-at-lower net_window=process-counters floor_rule=walk-increment-in-put-order arm=axum-worker alloc_id=memcount-v2-s82 /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/gate-axum/fixtures/pad87b.php
+FAIL VORD: m89.sweep.dt1.bfirst.a1.memcensus main-entry row outside ord profile (1..1) or clamped!=0:
+6: pid=29147 tag=unitcache_main_entry thr=1 ord=1 net=0 clamped=1 floor_inc=1161206 fns=377 stmts=1 net_rule=net-at-lower net_window=process-counters floor_rule=walk-increment-in-put-order arm=axum-worker alloc_id=memcount-v2-s82 /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/gate-axum/fixtures/pad87a.php
+FAIL VORD: m89.sweep.dt2.afirst.a1.memcensus main-entry row outside ord profile (1..1) or clamped!=0:
+5: pid=29186 tag=unitcache_main_entry thr=1 ord=1 net=0 clamped=1 floor_inc=1161206 fns=377 stmts=1 net_rule=net-at-lower net_window=process-counters floor_rule=walk-increment-in-put-order arm=axum-worker alloc_id=memcount-v2-s82 /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/gate-axum/fixtures/pad87b.php
+FAIL VORD: m89.sweep.dt2.bfirst.a1.memcensus main-entry row outside ord profile (1..1) or clamped!=0:
+7: pid=29225 tag=unitcache_main_entry thr=1 ord=1 net=0 clamped=1 floor_inc=1161206 fns=377 stmts=1 net_rule=net-at-lower net_window=process-counters floor_rule=walk-increment-in-put-order arm=axum-worker alloc_id=memcount-v2-s82 /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/gate-axum/fixtures/pad87a.php
+FAIL VORD: m89.sweep.dt5.afirst.a1.memcensus main-entry row outside ord profile (1..1) or clamped!=0:
+5: pid=29351 tag=unitcache_main_entry thr=1 ord=1 net=0 clamped=1 floor_inc=1161206 fns=377 stmts=1 net_rule=net-at-lower net_window=process-counters floor_rule=walk-increment-in-put-order arm=axum-worker alloc_id=memcount-v2-s82 /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/gate-axum/fixtures/pad87b.php
+VARENA PASS: mi_arena_json + extracted rows present, no parse failures, on every slope-arm raw (arena==proc = READ-PATH IDENTITY, never a cross-check — A-DL45/KL-90-2)
+VARMS PASS: per-arm mi_option read-back judged on EVERY raw (purge=0 all; ord36: 0 on ret0 / 2 elsewhere; ord4: 1 on eagerpos — A-DL41/A-DL44/KL-90-4)
+VTHEAP PASS: per-theap page census in-band on every slope-arm raw (heap-by-visit-index + win0-postteardown DECLARED, KL-90-3)
+VSLOPE-BASE SKIPPED: upstream blocks not clean (KS-SK-88-2)
+VSLOPE-RET0 SKIPPED: upstream blocks not clean (KS-SK-88-2)
+VATTR SKIPPED: slope arms not both clean (KL-90-4: without census+arm the attribution stays envelope)
+VSWEEP SKIPPED: upstream not clean (KS-SK-88-2)
+VUCLOG DECLARED-ABSENT: no armed-log phase in measure89 BY DESIGN (A-DS45 consumed in m88; >=1-pair positive lives in F16b)
+== VERDICT89 FAIL(9) ==
