@@ -72,5 +72,10 @@ else
 fi
 
 if [ "$FAILS" = 0 ]; then echo "== GATE-PARITY-83P1 PASS =="; else echo "== GATE-PARITY-83P1 FAIL($FAILS) =="; fi
+# A-MS42 (Council WP-89, Matsakis): `.done` is NOT an outcome — it is a
+# completion timestamp touched on FAIL too. The ONLY outcome of this gate
+# is its exit code; a consumer reading `.done` as PASS makes the whole
+# gate die in silence (KS-MS-89-2: gate-parity consumed via .done => PASS
+# VOID).
 touch "$W/.done"
 exit $FAILS

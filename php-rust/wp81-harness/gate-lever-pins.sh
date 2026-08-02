@@ -1046,8 +1046,76 @@ else
   echo "OK  sweep: no multiline CachedUnit-literal opener nor joined transmute/impl on VmGate (A-TH42)"
 fi
 
+# --- 7. Sigilli v6 (Council WP-89: A-TH44/A-TH45/A-MS41) --------------------
+# A-TH44: grafie che bucavano ENTRAMBI gli sweep v5, PER NOME (Hoare Q3):
+# (1) `.vm_gate (` — spazio SOLO pre-parentesi (il pin di sede esige `(`
+#     adiacente, lo sweep spaced esigeva spazio DOPO il punto);
+# (2) alias PATH-QUALIFIED `type CU = vm::CachedUnit;` (la regex v5 esige
+#     CachedUnit adiacente all'uguale);
+# (3) `use …::CachedUnit as CU;` / `use …::VmGate as G;` (il belt A-TH28
+#     copre solo vm_gate_probe, mai i TIPI).
+cat > "$TMPD/decoy_th44.rs" <<'EOF'
+fn g() {
+    let a = retain.production_gate ();
+    let b = u.vm_gate  (x);
+    type CU = vm::CachedUnit;
+    type CU2 = crate::vm::CachedUnit;
+    use crate::vm::CachedUnit as AliasedCU;
+    use vm::gate::VmGate as AliasedG;
+}
+EOF
+sp=$(count_nontest "$TMPD/decoy_th44.rs" '[.][[:space:]]*(production_gate|vm_gate)[[:space:]]+[(]')
+pq=$(count_nontest "$TMPD/decoy_th44.rs" '=[[:space:]]*([A-Za-z_][A-Za-z0-9_]*::)+(CachedUnit|VmGate)')
+ua=$(count_nontest "$TMPD/decoy_th44.rs" 'use[[:space:]].*::(CachedUnit|VmGate)[[:space:]]+as[[:space:]]')
+if [ "$sp" -ne 2 ] || [ "$pq" -ne 2 ] || [ "$ua" -ne 2 ]; then
+  echo "SELF-TEST BROKEN: A-TH44 decoy counts spaced-paren=$sp path-alias=$pq use-as=$ua (expected 2/2/2)"; exit 2
+fi
+echo "OK  self-test: A-TH44 decoys bite (spaced-paren 2, path-qualified alias 2, use-as 2)"
+TH44_SWEEP=$(find "$REPO/crates" -name '*.rs' ! -name '._*' -print0 |
+  while IFS= read -r -d '' f; do
+    n=$(count_nontest "$f" '[.][[:space:]]*(production_gate|vm_gate)[[:space:]]+[(]|=[[:space:]]*([A-Za-z_][A-Za-z0-9_]*::)+(CachedUnit|VmGate)|use[[:space:]].*::(CachedUnit|VmGate)[[:space:]]+as[[:space:]]')
+    [ "$n" -gt 0 ] && echo "${f#"$REPO"/}: $n"
+  done)
+if [ -n "$TH44_SWEEP" ]; then
+  echo "FAIL: A-TH44 eluded spelling (spaced-paren / path-qualified alias / use-as) found:"
+  echo "$TH44_SWEEP"
+  FAILS=$((FAILS+1))
+else
+  echo "OK  sweep: no spaced-paren mint, path-qualified type alias, nor use-as alias of CachedUnit/VmGate (A-TH44)"
+fi
+
+# A-TH45 (Hoare Q2): the v5 pin verified the literal on a non-comment line
+# of noprobe — an `echo "<payload>"` satisfied it while the DETECTION grep
+# used another string. Pin the literal as the ARGUMENT of a grep/strings
+# invocation. THIRD COPY DECLARED: this script's TH41_PAYLOAD variable is
+# copy #3 of the literal (vm/mod.rs #1, noprobe #2) — a three-way rename
+# without th41-positive re-run in the same commit is KH89-2 (campaigns
+# VOID); the coupling comment in vm/mod.rs names all three.
+if grep -qE "^[^#]*(grep|strings)[^#]*${TH41_PAYLOAD}" "$NOPROBE"; then
+  echo "OK  noprobe payload literal is an ARGUMENT of the detection grep/strings line (A-TH45)"
+else
+  echo "FAIL: noprobe payload literal not on a grep/strings invocation line — detection decoupled (A-TH45/KH89-2)"
+  FAILS=$((FAILS+1))
+fi
+
+# A-MS41 (Matsakis): the probe flag has EXACTLY one arm/disarm pair, both
+# inside the ProbeWindow RAII (A-MS40) — a second probe site or a manual
+# arm dies here, not in a review.
+WPOOL="$REPO/crates/php-server/src/worker_pool.rs"
+nset=$(grep -c 'CENSUS_PROBE_ACTIVE\.with(|f| f\.set(' "$WPOOL" || true)
+ntrue=$(grep -c 'CENSUS_PROBE_ACTIVE\.with(|f| f\.set(true))' "$WPOOL" || true)
+nfalse=$(grep -c 'CENSUS_PROBE_ACTIVE\.with(|f| f\.set(false))' "$WPOOL" || true)
+armctx=$(awk '/fn arm\(\) -> ProbeWindow/{w=3; next} w>0 { if (/CENSUS_PROBE_ACTIVE\.with\(\|f\| f\.set\(true\)\)/) found=1; w-- } END{print found+0}' "$WPOOL")
+dropctx=$(awk '/impl Drop for ProbeWindow/{w=4; next} w>0 { if (/CENSUS_PROBE_ACTIVE\.with\(\|f\| f\.set\(false\)\)/) found=1; w-- } END{print found+0}' "$WPOOL")
+if [ "$nset" = 2 ] && [ "$ntrue" = 1 ] && [ "$nfalse" = 1 ] && [ "$armctx" = 1 ] && [ "$dropctx" = 1 ]; then
+  echo "OK  probe flag sites ==2 (one pair), arm in ProbeWindow::arm, disarm in its Drop (A-MS40/A-MS41)"
+else
+  echo "FAIL: probe flag sites set=$nset true=$ntrue false=$nfalse arm-in-ctor=$armctx clear-in-drop=$dropctx (expected 2/1/1/1/1) — arm outside the unique constructor (A-MS41/KS-MS-89-1)"
+  FAILS=$((FAILS+1))
+fi
+
 if [ "$FAILS" = 0 ]; then
-  echo "== GATE-LEVER-PINS PASS (A-MS13 + A-PP16 + KS-PP-82-3 + A-TH14 + v5 A-TH41/42) [git $GIT_REV] =="
+  echo "== GATE-LEVER-PINS PASS (A-MS13 + A-PP16 + KS-PP-82-3 + A-TH14 + v5 A-TH41/42 + v6 A-TH44/45 A-MS41) [git $GIT_REV] =="
   exit 0
 else
   echo "== GATE-LEVER-PINS FAIL($FAILS) [git $GIT_REV] =="

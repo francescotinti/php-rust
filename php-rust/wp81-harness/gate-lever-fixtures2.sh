@@ -427,8 +427,29 @@ else
   tail -5 "$TMPD/a_ds26.out"
 fi
 
+# --- F16b (A-DS42, Council WP-89): a_ds38 ARMED — the all-pairs invariant ---
+# Stogov Q4: a_ds38 ran in parity-full with its tooth DISARMED (the
+# all-pairs loop is gated on uc_log_path() and the battery exports no
+# PHPR_UNIT_CACHE_LOG to cargo test; F16 armed ONLY a_ds26) — a PASS
+# partially vacuous, class A-SK39. F16b arms it: env + --exact + '1
+# passed' pin + >=2 main_evicted in the log file (KS-DS-89-1 lifted for
+# batteries that run this gate).
+DS38LOG="$TMPD/a_ds38.uclog"; rm -f "$DS38LOG"
+( cd "$REPO" && rustc -V ) > "$TMPD/a_ds38.out" 2>&1
+if ( cd "$REPO" && PHPR_UNIT_CACHE_LOG="$DS38LOG" cargo test --release -p php-runtime --lib \
+       vm::tests::a_ds38_two_evictions_all_pairs_invariant -- --exact ) \
+     >> "$TMPD/a_ds38.out" 2>&1 \
+   && grep -q "^test result: ok. 1 passed" "$TMPD/a_ds38.out" \
+   && grep -q "^rustc " "$TMPD/a_ds38.out" \
+   && [ "$(grep -c "^unitcache main_evicted " "$DS38LOG")" -ge 2 ]; then
+  okf "F16b: a_ds38 ARMED — all-pairs invariant executed ('1 passed' pinned, >=2 main_evicted on file; A-DS42/KS-DS-89-1)"
+else
+  kof "F16b: a_ds38 armed run failed, pin missed, or <2 main_evicted — all-pairs invariant ADVISORY (KS-DS-89-1)"
+  tail -5 "$TMPD/a_ds38.out"
+fi
+
 if [ "$FAILS" = 0 ]; then
-  echo "== GATE-LEVER-FIXTURES2 PASS (F1-F4, F7, F9-F15 + F14b/F15b + F16 + positive controls) [git $GIT_REV] =="
+  echo "== GATE-LEVER-FIXTURES2 PASS (F1-F4, F7, F9-F15 + F14b/F15b + F16/F16b + positive controls) [git $GIT_REV] =="
   exit 0
 else
   echo "== GATE-LEVER-FIXTURES2 FAIL($FAILS) [git $GIT_REV] =="

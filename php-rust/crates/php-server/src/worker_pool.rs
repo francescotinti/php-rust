@@ -72,6 +72,29 @@ mod implementation {
     pub fn census_probe_active() -> bool {
         CENSUS_PROBE_ACTIVE.with(|f| f.get())
     }
+    /// A-MS40 (Council WP-89, Matsakis): the probe arm is a RAII window.
+    /// This constructor is the UNIQUE legal setter of the flag; Drop
+    /// clears it on every exit path (early return, unwind) — a future
+    /// early-return inside the armed block can no longer leave the flag
+    /// sticky-true and blame every later worker panic on the instrument.
+    /// KS-MS-89-1: a probe site arming the flag outside this constructor
+    /// voids the attribution; the belt pins the two `.with(|f| f.set(`
+    /// sites to exactly this pair (A-MS41).
+    #[cfg(feature = "mem-census")]
+    pub(crate) struct ProbeWindow;
+    #[cfg(feature = "mem-census")]
+    impl ProbeWindow {
+        pub(crate) fn arm() -> ProbeWindow {
+            CENSUS_PROBE_ACTIVE.with(|f| f.set(true));
+            ProbeWindow
+        }
+    }
+    #[cfg(feature = "mem-census")]
+    impl Drop for ProbeWindow {
+        fn drop(&mut self) {
+            CENSUS_PROBE_ACTIVE.with(|f| f.set(false));
+        }
+    }
     use axum::http::StatusCode;
     use php_builtins::registry;
 
@@ -339,7 +362,11 @@ mod implementation {
                                 // catch_unwind below. A-MS36: per-THREAD —
                                 // armed on this worker only; the hook runs
                                 // on the panicking thread and reads ITS flag.
-                                CENSUS_PROBE_ACTIVE.with(|f| f.set(true));
+                                // A-MS40: RAII window — the guard's Drop clears the flag on every
+                                // exit path; the hook still reads true DURING the probe's panic
+                                // (hook runs on the panicking thread before unwind reaches the
+                                // catch below).
+                                let probe_window = ProbeWindow::arm();
                                 let probe = std::panic::catch_unwind(|| {
                                     // A-PP36: dispatch count in-band FIRST —
                                     // the verdict of a dl28-class run is
@@ -359,7 +386,7 @@ mod implementation {
                                     // of the ×W budget joins on these rows.
                                     php_types::memcensus::mi_bin_thread_rows(worker_idx);
                                 });
-                                CENSUS_PROBE_ACTIVE.with(|f| f.set(false));
+                                drop(probe_window); // A-MS40: disarm via Drop — the ONLY clear site
                                 if probe.is_err() {
                                     eprintln!(
                                         "php-server: census probe panicked — aborting (A-MS31; instrument, not worker)"
@@ -1369,6 +1396,33 @@ mod implementation {
             assert!(
                 String::from_utf8_lossy(&body).contains("Fatal error"),
                 "first dispatched fatal body must carry the banner (A-PP38)"
+            );
+            // A-PP45 (Council WP-89, Pedersen): the publish observable via a
+            // SECOND discriminating request on the SAME worker — the cache is
+            // thread-local and invisible from the test thread, but whatever
+            // the first dispatch PUBLISHED serves the second one: an inserter
+            // between recv and execute that published garbage instead of the
+            // fatal now changes an asserted observable (status/banner of
+            // request 2), not just the covered path.
+            let (tx2, rx2) = oneshot::channel();
+            pool.dispatch(WorkerTask {
+                meta: meta(
+                    "<?php\nenum LF38 implements Serializable { case A; }\necho \"never-reached\";",
+                ),
+                response_tx: tx2,
+            })
+            .expect("dispatch of second task failed (A-PP45)");
+            let (body2, status2) =
+                rx2.blocking_recv().expect("worker dropped response 2 (A-PP45)");
+            assert_eq!(
+                status2,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "second request must serve the SAME published fatal (A-PP45)"
+            );
+            assert_eq!(
+                String::from_utf8_lossy(&body),
+                String::from_utf8_lossy(&body2),
+                "published fatal must be byte-stable across requests (A-PP45)"
             );
             let Ok(pool) = Arc::try_unwrap(pool) else {
                 panic!("pool still shared — cannot exercise shutdown (A-PP38)");

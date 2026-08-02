@@ -534,6 +534,11 @@ pub(crate) mod gate {
     /// build with the feature ON must FAIL the gate — verified in S-86.0.
     /// (lowercase so the existing `strings | grep vm_gate_probe` tooth
     /// matches the payload, and the symbol name matches `nm -i`.)
+    /// A-TH45 (Council WP-89): the literal exists in THREE coupled copies —
+    /// (1) this static's payload, (2) the detection grep in
+    /// wp85-harness/gate-binary-noprobe.sh, (3) the TH41_PAYLOAD pin in
+    /// wp81-harness/gate-lever-pins.sh. Renaming ANY copy without re-running
+    /// th41-positive in the SAME commit voids campaigns (KH89-2).
     #[cfg(feature = "vm-gate-probe")]
     #[used]
     pub static VM_GATE_PROBE_TAINT: [u8; 33] = *b"phpr_vm_gate_probe_tainted_a_th37";
@@ -16526,6 +16531,14 @@ thread_local! {
     static UC_PUT_ORD: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
 }
 struct UcEmitGuard;
+// A-TH47 (Council WP-89, Hoare): TLS-teardown window, DECLARED. `arm()`
+// and this guard's Drop both run `LocalKey::with`, which PANICS if the
+// thread's TLS has already been destroyed (a put issued from a TLS
+// destructor during thread teardown). In `arm()` that panic drops the
+// caller's parameters unguarded (they never crossed the rebind);
+// in Drop-during-unwind it is a panic-in-panic => abort. Both paths are
+// fail-fast by Binding Rule 4 — no emission, no partial pair — and no
+// production put site runs from a TLS destructor today.
 impl UcEmitGuard {
     fn arm() -> UcEmitGuard {
         UC_EMIT_GUARD.with(|g| {
@@ -19593,6 +19606,19 @@ mod tests {
                     "main_evicted/evict-fp pair at #{li} carries DIFFERENT putord (A-DS38)"
                 );
             }
+            // A-TH46 (Council WP-89, Hoare/KH89-1): EXECUTED single-thread
+            // precondition — putord is a PER-THREAD ordinal space; this
+            // consumer joins pairs on it, which is opposable only at W=1.
+            // The buffer read above is THIS thread's (UC_LOG_BUF is
+            // thread_local — W==1 by construction for the rows seen), and
+            // the ordinals must be STRICTLY increasing across the observed
+            // evictions: a cross-thread collision (or a wrap) would break
+            // monotonicity here instead of passing in silence.
+            let ords: Vec<u64> = me_rows.iter().map(|&li| ord_of(lines[li])).collect();
+            assert!(
+                ords.windows(2).all(|w| w[0] < w[1]),
+                "putord not strictly increasing across evictions ({ords:?}) — per-thread ordinal space violated (A-TH46/KH89-1)"
+            );
         }
         for key in &keys {
             let removed = super::UNIT_CACHE.with(|c| c.borrow_mut().remove(key));

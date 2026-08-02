@@ -100,6 +100,7 @@ lever-pins:wp81-harness/gate-lever-pins.sh
 lever-fixtures:wp81-harness/gate-lever-fixtures.sh
 lever-fixtures2:wp81-harness/gate-lever-fixtures2.sh,crates/php-runtime/
 measure-cifre:wp81-harness/gate-measure-cifre.sh
+axum-tests:wp88-harness/gate-axum-tests.sh
 parity-full:wp83-harness/gate-parity-83p1.sh"
 NEVER_ABSENT="parity-full lever-fixtures lever-fixtures2 measure-cifre"
 
