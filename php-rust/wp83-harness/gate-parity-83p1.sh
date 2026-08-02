@@ -73,9 +73,10 @@ fi
 
 if [ "$FAILS" = 0 ]; then echo "== GATE-PARITY-83P1 PASS =="; else echo "== GATE-PARITY-83P1 FAIL($FAILS) =="; fi
 # A-MS42 (Council WP-89, Matsakis): `.done` is NOT an outcome — it is a
-# completion timestamp touched on FAIL too. The ONLY outcome of this gate
-# is its exit code; a consumer reading `.done` as PASS makes the whole
-# gate die in silence (KS-MS-89-2: gate-parity consumed via .done => PASS
-# VOID).
-touch "$W/.done"
+# completion marker written on FAIL too. The ONLY outcome of this gate
+# is its exit code (KS-MS-89-2: gate-parity consumed via .done => PASS
+# VOID). A-MS45 (Council WP-90): the marker now carries the outcome
+# IN-BAND (`rc=`) — so even the WRONG consumer reads the truth; the
+# procedure-only protection becomes belt.
+echo "rc=$FAILS git=$(git -C "$REPO" rev-parse --short HEAD 2>/dev/null || echo unknown) epoch=$(date +%s)" > "$W/.done"
 exit $FAILS

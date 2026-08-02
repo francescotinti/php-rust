@@ -19506,6 +19506,21 @@ mod tests {
                 ord_of(lines[li_me + 1]),
                 "main_evicted and evict-fp carry DIFFERENT putord (A-DS36)"
             );
+            // A-TH51 (Council WP-90, Hoare): the same-putord JOIN gets
+            // the preconditions a_ds38 already executes — putord
+            // strictly increasing across EVERY row carrying one (a wrap
+            // or cross-put reorder bites here), and W==1 holds by
+            // construction (the buffer is thread_local: no other
+            // thread's rows can appear) — declared AND consumed: the
+            // monotonicity below is exactly the single-writer witness.
+            let mut prev_ord: Option<u64> = None;
+            for l in lines.iter().filter(|l| l.contains("putord=")) {
+                let o = ord_of(l);
+                if let Some(p) = prev_ord {
+                    assert!(o > p, "putord not strictly increasing: {p} -> {o} (A-TH51)");
+                }
+                prev_ord = Some(o);
+            }
             super::uc_log_flush();
         }
         // Leave no rogue state behind: drop the whole injected key.

@@ -90,5 +90,11 @@ for my $f (@ARGV) {
     $tp += $p;
     $tf += $x;
 }
-print "putord-pair-guard: $tp pair(s) verified, $tf violation(s)\n";
+# A-TH51 (Council WP-90, Hoare): the W-regime of the consumed log is
+# DECLARED in-band on the guard's own output — uc_log rows carry no
+# thr= (KH88-4), so putord collisions across threads make any W>1 log
+# non-opposable (KS-DS-90-1: a W>1 uclog phase without thr= is VOID).
+# This guard is only evidence for logs produced at W==1; the caller
+# owns that precondition (VUCLOG judges w=1 from the identity row).
+print "putord-pair-guard: $tp pair(s) verified, $tf violation(s) [regime: W==1 required by caller — rows carry no thr=, KH88-4/KS-DS-90-1]\n";
 exit($tf ? 1 : 0);

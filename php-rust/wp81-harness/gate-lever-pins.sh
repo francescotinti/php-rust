@@ -1114,8 +1114,117 @@ else
   FAILS=$((FAILS+1))
 fi
 
+# --- 8. Sigilli v7 (Council WP-90: A-TH48/A-TH49 + A-MS43/44/45 + A-PP48) ---
+# A-TH48(a): the noprobe behavioral positive (tainted2.bin) lived in a
+# --selftest NOBODY ran in the ledgered chain — run it HERE (KH90-1's
+# machine half: a payload rename without this PASS in the same commit
+# voids campaigns).
+if bash "$REPO/wp85-harness/gate-binary-noprobe.sh" --selftest >/dev/null 2>&1; then
+  echo "OK  noprobe --selftest PASS in the ledgered chain (A-TH48/KH90-1)"
+else
+  echo "FAIL: gate-binary-noprobe --selftest failed — behavioral positive dead (A-TH48/KH90-1)"
+  FAILS=$((FAILS+1))
+fi
+# A-TH48(b): the A-TH45 literal-as-grep-argument pin, SCOPED to probe_in()
+# — a decoy `grep -q 'payload' /dev/null` elsewhere in noprobe no longer
+# satisfies it.
+PROBE_IN_BODY=$(awk '/^probe_in\(\)/{w=1} w{print} w && /^}/{exit}' "$NOPROBE")
+if echo "$PROBE_IN_BODY" | grep -qE "^[^#]*(grep|strings)[^#]*${TH41_PAYLOAD}"; then
+  echo "OK  payload literal is a grep/strings ARGUMENT inside probe_in() (A-TH48 scoped)"
+else
+  echo "FAIL: payload literal not on a grep/strings line INSIDE probe_in() (A-TH48/KH89-2)"
+  FAILS=$((FAILS+1))
+fi
+
+# A-TH49 (Hoare Q1 WP-90): the five graphies that STILL evaded A-TH42/44,
+# with decoys that must bite in this same commit:
+# (1) raw identifier `r#production_gate`; (2) call split across lines;
+# (3) interposed comment `./*x*/production_gate(`; (4) spaced/global `::`
+# alias; (5) use-GROUP alias.
+cat > "$TMPD/decoy_th49.rs" <<'EOF'
+fn h() {
+    let a = retain.r#production_gate();
+    let b = u.vm_gate
+        (x);
+    let c = retain./*x*/production_gate();
+    type CU5 = vm :: CachedUnit;
+    type CU6 = ::vm::CachedUnit;
+    use crate::vm::{CachedUnit as GroupCU};
+}
+EOF
+r1=$(count_nontest "$TMPD/decoy_th49.rs" 'r#(production_gate|vm_gate)')
+r3=$(count_nontest "$TMPD/decoy_th49.rs" '[.]/[*].*[*]/[[:space:]]*(production_gate|vm_gate)')
+r4=$(count_nontest "$TMPD/decoy_th49.rs" '=[[:space:]]*([A-Za-z_][A-Za-z0-9_]*)?[[:space:]]*::[[:space:]]+(CachedUnit|VmGate)|=[[:space:]]*::([A-Za-z_][A-Za-z0-9_]*::)*(CachedUnit|VmGate)')
+r5=$(count_nontest "$TMPD/decoy_th49.rs" 'use[[:space:]][^;]*[{][^}]*(CachedUnit|VmGate)[[:space:]]+as[[:space:]]')
+r2=$(awk '/[.][[:space:]]*(production_gate|vm_gate)[[:space:]]*$/ { pend=1; next }
+          pend && /^[[:space:]]*[(]/ { n++ } { pend=0 } END { print n+0 }' "$TMPD/decoy_th49.rs")
+if [ "$r1" -ne 1 ] || [ "$r2" -ne 1 ] || [ "$r3" -ne 1 ] || [ "$r4" -ne 2 ] || [ "$r5" -ne 1 ]; then
+  echo "SELF-TEST BROKEN: A-TH49 decoy counts raw=$r1 multiline=$r2 comment=$r3 colons=$r4 usegroup=$r5 (expected 1/1/1/2/1)"; exit 2
+fi
+echo "OK  self-test: A-TH49 decoys bite (raw-ident 1, split-call 1, interposed-comment 1, spaced/global :: 2, use-group 1)"
+TH49_SWEEP=$(find "$REPO/crates" -name '*.rs' ! -name '._*' -print0 |
+  while IFS= read -r -d '' f; do
+    n=$(count_nontest "$f" 'r#(production_gate|vm_gate)|[.]/[*].*[*]/[[:space:]]*(production_gate|vm_gate)|=[[:space:]]*([A-Za-z_][A-Za-z0-9_]*)?[[:space:]]*::[[:space:]]+(CachedUnit|VmGate)|=[[:space:]]*::([A-Za-z_][A-Za-z0-9_]*::)*(CachedUnit|VmGate)|use[[:space:]][^;]*[{][^}]*(CachedUnit|VmGate)[[:space:]]+as[[:space:]]')
+    ml=$(awk '/[.][[:space:]]*(production_gate|vm_gate)[[:space:]]*$/ { pend=1; next }
+              pend && /^[[:space:]]*[(]/ { n++ } { pend=0 } END { print n+0 }' "$f")
+    t=$((n + ml))
+    [ "$t" -gt 0 ] && echo "${f#"$REPO"/}: n=$n ml=$ml"
+  done)
+if [ -n "$TH49_SWEEP" ]; then
+  echo "FAIL: A-TH49 eluded spelling (raw/split/comment/spaced-::/use-group) found:"
+  echo "$TH49_SWEEP"
+  FAILS=$((FAILS+1))
+else
+  echo "OK  sweep: none of the five A-TH49 graphies in the workspace"
+fi
+
+# A-MS43 (KS-MS-90-1): the probe flag is PRIVATE — visibility is the seal,
+# this check is the belt's confirmation.
+npub=$(grep -c 'pub static CENSUS_PROBE_ACTIVE' "$WPOOL" || true)
+npriv=$(grep -c '^[[:space:]]*static CENSUS_PROBE_ACTIVE' "$WPOOL" || true)
+CPA_OUT=$(find "$REPO/crates" -name '*.rs' ! -name '._*' ! -path '*worker_pool.rs' -print0 |
+  while IFS= read -r -d '' f; do
+    grep -l 'CENSUS_PROBE_ACTIVE' "$f" 2>/dev/null || true
+  done)
+if [ "$npub" = 0 ] && [ "$npriv" = 1 ] && [ -z "$CPA_OUT" ]; then
+  echo "OK  probe flag PRIVATE to worker_pool (pub=0, decl=1, external refs=0 — A-MS43/KS-MS-90-1)"
+else
+  echo "FAIL: probe flag visibility broken: pub=$npub priv-decl=$npriv external=[$CPA_OUT] (A-MS43/KS-MS-90-1)"
+  FAILS=$((FAILS+1))
+fi
+# A-MS44: #[must_use] pinned on ProbeWindow (empty-window guard).
+nmu=$(grep -c 'must_use = "bind the window' "$WPOOL" || true)
+if [ "$nmu" = 1 ]; then
+  echo "OK  ProbeWindow carries #[must_use] (A-MS44/KS-MS-90-3)"
+else
+  echo "FAIL: ProbeWindow #[must_use] count=$nmu != 1 (A-MS44)"
+  FAILS=$((FAILS+1))
+fi
+# A-MS45: belt extended to today's AND tomorrow's write graphies on the
+# flag (LocalKey::set / replace / update, direct or in-closure).
+nbad=$(grep -cE 'CENSUS_PROBE_ACTIVE[[:space:]]*\.[[:space:]]*(set|replace|update)[[:space:]]*\(' "$WPOOL" || true)
+nrepl=$(grep -cE '\.with\(\|[a-z]+\|[[:space:]]*[a-z]+\.(replace|update)\(' "$WPOOL" || true)
+if [ "$nbad" = 0 ] && [ "$nrepl" = 0 ]; then
+  echo "OK  no LocalKey::set/replace/update graphy on the probe flag (A-MS45)"
+else
+  echo "FAIL: probe-flag write graphy found: direct=$nbad closure-replace=$nrepl (A-MS45)"
+  FAILS=$((FAILS+1))
+fi
+
+# A-PP48(b): the a_pp38 teeth are counted in the SOURCE — a gutting of the
+# A-PP45/A-PP47 asserts passes the name-grep of gate-axum-tests (class
+# A-DS30); these pins die instead. Bump same-commit when teeth evolve.
+npp45=$(grep -c 'A-PP45' "$WPOOL" || true)
+npp47=$(grep -c 'A-PP47' "$WPOOL" || true)
+if [ "$npp45" = 5 ] && [ "$npp47" = 13 ]; then
+  echo "OK  a_pp38 teeth counted in source: A-PP45=5 A-PP47=13 (A-PP48)"
+else
+  echo "FAIL: a_pp38 teeth counts A-PP45=$npp45 (want 5) A-PP47=$npp47 (want 13) — gutted or unpinned bump (A-PP48)"
+  FAILS=$((FAILS+1))
+fi
+
 if [ "$FAILS" = 0 ]; then
-  echo "== GATE-LEVER-PINS PASS (A-MS13 + A-PP16 + KS-PP-82-3 + A-TH14 + v5 A-TH41/42 + v6 A-TH44/45 A-MS41) [git $GIT_REV] =="
+  echo "== GATE-LEVER-PINS PASS (A-MS13 + A-PP16 + KS-PP-82-3 + A-TH14 + v5 A-TH41/42 + v6 A-TH44/45 A-MS41 + v7 A-TH48/49 A-MS43/44/45 A-PP48) [git $GIT_REV] =="
   exit 0
 else
   echo "== GATE-LEVER-PINS FAIL($FAILS) [git $GIT_REV] =="

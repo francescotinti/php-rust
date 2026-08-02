@@ -65,8 +65,14 @@ mod implementation {
     // panicking thread, so the flag belongs to the thread: thread_local.
     // The attribution is exact per-thread by construction (KS-MS-88-1
     // lifted for runs at this revision on).
+    // A-MS43 (Council WP-90, Matsakis — KS-MS-90-1): the flag is PRIVATE
+    // to this module. `LocalKey::set` bypasses `.with` without touching
+    // the belt's counted graphies, and a `pub static` was writable from
+    // ANY module the belt never scans — the seal is VISIBILITY, not
+    // regex: every external writer now dies at COMPILATION. Exported
+    // surface: census_probe_active() (read) + ProbeWindow (RAII arm).
     thread_local! {
-        pub static CENSUS_PROBE_ACTIVE: std::cell::Cell<bool> =
+        static CENSUS_PROBE_ACTIVE: std::cell::Cell<bool> =
             const { std::cell::Cell::new(false) };
     }
     pub fn census_probe_active() -> bool {
@@ -80,7 +86,18 @@ mod implementation {
     /// KS-MS-89-1: a probe site arming the flag outside this constructor
     /// voids the attribution; the belt pins the two `.with(|f| f.set(`
     /// sites to exactly this pair (A-MS41).
+    /// A-MS44 (Council WP-90, Matsakis): `let _ = ProbeWindow::arm()`
+    /// drops IMMEDIATELY — an empty window that attributes every probe
+    /// panic to the worker; #[must_use] makes the unbound form a lint
+    /// error at the site (KS-MS-90-3: an arm() not bound to a live
+    /// binding until past the probe voids the run for attribution).
+    /// TLS-teardown window (class A-TH50, declared IN THE TYPE): the
+    /// flag's key is a no-Drop const Cell — std registers no destructor
+    /// for it, so `.with` never panics here, not even at teardown; a
+    /// probe running from a TLS destructor fails fast at the first
+    /// RefCell TLS it touches, with this window still armed.
     #[cfg(feature = "mem-census")]
+    #[must_use = "bind the window: let _w = ProbeWindow::arm(); an unbound arm() drops immediately (empty window, A-MS44)"]
     pub(crate) struct ProbeWindow;
     #[cfg(feature = "mem-census")]
     impl ProbeWindow {
@@ -1424,6 +1441,79 @@ mod implementation {
                 String::from_utf8_lossy(&body2),
                 "published fatal must be byte-stable across requests (A-PP45)"
             );
+            // A-PP47 (Council WP-90, Pedersen — KS-PP-90-2), REQUALIFIED AT
+            // THE COUNTER (S-89.0, machine bite): the letter asked put=1/
+            // hit=1 on the FATAL lane — but a unit that compiles and
+            // link-fatals is NEVER published BY DESIGN (F8c invariant:
+            // main_put==0 across fatal requests). The armed log proved it
+            // live: main_probe/main_probe_fail x2, zero puts. So the honest
+            // counter form has TWO lanes:
+            //   fatal lane (the two requests above): put==0 AND
+            //     probe_fail==2 — F8c judged at counter; the byte-stability
+            //     of request 2 is RECOMPUTATION, and now that label is
+            //     proven, not assumed;
+            //   publish lane (two CLEAN requests below): put==1 (request 3
+            //     publishes) and hit==1 (request 4 served FROM the published
+            //     unit) — the real publish observable of the letter.
+            // Armed by the gate via PHPR_UNIT_CACHE_LOG (F16b pattern);
+            // unarmed runs skip. The worker flushes at end of every run,
+            // before the response is sent — the file is complete here.
+            if let Some(logf) = std::env::var_os("PHPR_UNIT_CACHE_LOG") {
+                let log = std::fs::read_to_string(&logf)
+                    .expect("armed uc_log file unreadable (A-PP47)");
+                let nput = log.lines().filter(|l| l.starts_with("unitcache main_put ")).count();
+                let npfail =
+                    log.lines().filter(|l| l.starts_with("unitcache main_probe_fail ")).count();
+                assert_eq!(
+                    nput, 0,
+                    "F8c at the counter: the link-fatal unit must NEVER be published (A-PP47); log:\n{log}"
+                );
+                assert_eq!(
+                    npfail, 2,
+                    "F8c at the counter: both fatal requests must probe-fail (A-PP47); log:\n{log}"
+                );
+                // publish lane: a CLEAN unit on the same worker — request 3
+                // publishes, request 4 hits the published entry. The main
+                // probe stats the PATH (main_probe_fail = canonicalize/stat
+                // failure, the F-probe pin — bitten live on /gate.php), so
+                // the clean fixture must be a REAL file on disk.
+                let cf = std::env::temp_dir()
+                    .join(format!("phpr_a_pp47_{}.php", std::process::id()));
+                std::fs::write(&cf, "<?php echo \"pp47-clean\";")
+                    .expect("write clean fixture (A-PP47)");
+                for _ in 0..2 {
+                    let (txc, rxc) = oneshot::channel();
+                    pool.dispatch(WorkerTask {
+                        meta: WorkerHandlerMeta {
+                            path: cf.to_string_lossy().into_owned(),
+                            source: std::fs::read(&cf).expect("read clean fixture (A-PP47)"),
+                        },
+                        response_tx: txc,
+                    })
+                    .expect("dispatch of clean task failed (A-PP47)");
+                    let (bodyc, statusc) =
+                        rxc.blocking_recv().expect("worker dropped clean response (A-PP47)");
+                    assert_eq!(statusc, StatusCode::OK, "clean request must 200 (A-PP47)");
+                    assert_eq!(
+                        String::from_utf8_lossy(&bodyc),
+                        "pp47-clean",
+                        "clean body mismatch (A-PP47)"
+                    );
+                }
+                let _ = std::fs::remove_file(&cf);
+                let log = std::fs::read_to_string(&logf)
+                    .expect("armed uc_log file unreadable (A-PP47)");
+                let nput = log.lines().filter(|l| l.starts_with("unitcache main_put ")).count();
+                let nhit = log.lines().filter(|l| l.starts_with("unitcache main_hit ")).count();
+                assert_eq!(
+                    nput, 1,
+                    "publish observable: exactly 1 main_put from the clean lane (A-PP47/KS-PP-90-2); log:\n{log}"
+                );
+                assert_eq!(
+                    nhit, 1,
+                    "publish observable: exactly 1 main_hit from the clean lane (A-PP47/KS-PP-90-2); log:\n{log}"
+                );
+            }
             let Ok(pool) = Arc::try_unwrap(pool) else {
                 panic!("pool still shared — cannot exercise shutdown (A-PP38)");
             };
