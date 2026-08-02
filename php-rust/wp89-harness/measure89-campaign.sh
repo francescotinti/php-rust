@@ -1,46 +1,44 @@
 #!/bin/bash
-# measure89-campaign.sh — S-88.0 p5: ordine Concilio WP-89 §Sintesi p5.
-#   SLOPE-HI (A-BB55≡A-DL42): il committed di processo a W∈{1..4} è una
-#     FUNZIONE A GRADINI da 64 KiB (Bak+Leijen WP-89: min-of-R tutti multipli
-#     esatti di 65.536 B; W=3 bimodale) — la LSQ W1..4 è ADVISORY (KB-89-1).
-#     Qui: W∈{4,8,12,16}, N=100·W hello sequenziali, R=5 per W; giudice a
-#     valle = mode-census per W (KB-89-2) + LSQ di b sul segmento alto;
-#     banda KL-85-2 3.605.572 B ±5% confrontata SOLO con b (KL-89-2), mai
-#     con la slope grezza. Righe tag=mi_arena/tag=mi_arena_json in-band
-#     (A-BB55) nominano il termine quantizzato c(W): SOSTITUZIONE NOMINATA —
-#     per-arena non enumerabile pubblicamente (mi_arena_id_t opaco in v3) ⇒
-#     stats di processo mimalloc (arena_count, committed, reserved, purged,
-#     commit_calls) + chunk_bins census, via mi_stats_get_json (struct
-#     costruita DENTRO mimalloc, canale atomico nostro).
-#   WARMPAIR (A-BB56, Bak Q3): surplus padA ~3.146.416 B = 3 MiB + resto.
-#     PREDIZIONI EX-ANTE (nominate PRIMA dei run):
-#       P-BASE: concbase riproduce la firma measure87 — padB ≈ calA+calB+~310 B,
-#               padA ≈ calA+calB+~3,15 MB (intra-campagna, stessa rev).
-#       P-WARM: warm-both-then-pair (1 hello per worker PRIMA della coppia):
-#               se il driver del surplus è il FIRST-TOUCH del 2° worker,
-#               dA(warm) CROLLA all'ordine di dB (~centinaia di B); se resta
-#               ~3 MiB il driver è per-richiesta (buffer axum/tokio).
-#       P-STAG: stagger 20 ms su pad87b: il first-touch di B esce dalla
-#               finestra process-counters di A ⇒ dA(stag) << dA(base).
-#     I net concorrenti restano VOID come cifre per-thread (KB-88-1) fino
-#     ad A-BB50 attuato: i run esistono per DISCRIMINARE il driver.
-#   UCLOG (A-DS45, Stogov — LETTERA RIQUALIFICATA A CODICE, S-88.0): UNA
-#     fase W=1 con PHPR_UNIT_CACHE_LOG ARMATO su log di PRODUZIONE.
-#     ⚠️ REFUTAZIONE della lettera «≥1 coppia main_evicted su log di
-#     produzione»: dopo la partizione A-MS24 un main nella include-lane è
-#     STRUTTURALMENTE impossibile — main_evicted in produzione è un
-#     TRIPWIRE il cui scatto VOIDA la campagna (KS-DS-84-4, vm/mod.rs
-#     emitter: main_evicted solo su victim con main_program). Il touch
-#     del fixture produce SUPERSEDE (`supersede entries N putord=`,
-#     putord in-band da A-TH43), NON coppie. Positivo NON-vacuo
-#     soddisfacibile: ≥2 righe supersede con putord + pair-guard PASS
-#     (nessun orfano) + main_evicted==0 VERIFICATO. Il positivo ≥1-coppia
-#     vive in F16b (A-DS42: a_ds38 ARMATO in battery, stesso perimetro
-#     ledgerato). W=1-only: putord senza thr= non è opponibile a W>1
-#     (KH89-1). Da ri-giudicare al Concilio WP-90.
-#   DECLARED DEVIATION (per NOME): mi_collect all'atexit gira sull'heap
-#     CONDIVISO v3, non per-theap (A-DL39 = design); il canale
-#     $PHPR_MI_STATS è NON-CORPUS (A-DL40/KL-89-4) e QUI NON viene armato.
+# measure89-campaign.sh — S-89.0 p6: ordine Concilio WP-90 Sintesi p6 —
+# UNA campagna, ATTRIBUZIONE di b (~21.195.981 B = 20,21 MiB/worker di
+# committed marginale, reale e non attribuito in m88).
+#   SLOPE-BASE: W in {4,8,12,16}, N=100*W hello, R=5 — protocollo m88
+#     invariato (baseline dell attribuzione).
+#   SLOPE-RET0 (A-DL46-census/KL-90-4): stesso protocollo con
+#     MIMALLOC_PAGE_FULL_RETAIN=0 e read-back ord 36 in-band (default 2 =>
+#     il positivo morde da solo, classe A-DL41). Candidato n.1 di Leijen:
+#     ogni theap ritiene fino a 2 pagine small PIENE per size-class,
+#     committed e mai-free anche a purge_delay=0.
+#   EAGER-POS (A-DL44): un run con MIMALLOC_ARENA_EAGER_COMMIT=1 e
+#     read-back ord 4 atteso val=1 — il positivo che mancava all ordinale
+#     4 (la meta mai armata del read-back v88).
+#   CENSUS PER-THEAP (A-DL46-census): ogni raw porta tag=mi_theap_pages/
+#     tag=mi_theap_bin al collect — pagine live/free-ritenute per heap,
+#     binnate per block_size. DICHIARATO (KL-90-3): identita heap =
+#     indice di visita (mapping heap->thread non pubblico); a win=0 il
+#     collect e post-teardown (il grosso vive negli abandoned, censiti
+#     da tag=mi_bin src=aband).
+#   SWEEP (A-BB59, Bak): stagger-sweep INVERTITO — coppie {pad87a,pad87b}
+#     con dt in {0,1,2,5,10,20} ms e ordine afirst/bfirst (il flip
+#     dell ordine e anche lo swap-fixture control: sotto round-robin
+#     inverte il binding fixture<->prima-lane).
+#   PREDIZIONI EX-ANTE (nominate PRIMA dei run):
+#     P-RET0: se b e ritenzione full-page, b_ret0 <= 0,5*b_base
+#             (soglia EX-ANTE; se b_ret0 ~ b_base la ritenzione e
+#             esclusa e il residuo va nominato).
+#     P-DT0:  a dt=0 le finestre si sovrappongono (spans=OVERLAP
+#             OBBLIGATORIO — mapping A-SK58 dichiarato).
+#     P-DT20: a dt=20 ms spans=NO-OVERLAP e net==cal AL BYTE su entrambi
+#             i lati (ancora m88: zero-swallow a finestre disgiunte).
+#     P-ORD:  in regime overlap il surplus sta sul lato che ha SPARATO
+#             PER PRIMO (finestra aperta durante il first-touch
+#             dell altro) — segue l ORDINE, non il fixture (afirst vs
+#             bfirst lo discrimina; m87/m88 hanno mostrato instabilita:
+#             una refutazione di P-ORD e essa stessa informazione).
+#   DECLARED DEVIATION (per NOME): mi_collect all atexit gira sull heap
+#     CONDIVISO v3 (A-DL39 = design); canale $PHPR_MI_STATS NON-CORPUS
+#     (A-DL40/KL-89-4) e QUI NON armato; nessuna fase uclog (A-DS45
+#     consumata in m88; positivo >=1-coppia in F16b battery).
 # Catena evidenza:
 #   A-SK46/A-SK50: battery consumata SOLO via battery-equivalence
 #     --same-rev (denti pieni + allowlist delta BREV..HEAD).
@@ -135,8 +133,8 @@ WANTH=$(cd "$FIXDIR" && "$ORACLE" -n hello.php 2>/dev/null)
 WANTA=$(cd "$FIXDIR" && "$ORACLE" -n pad87a.php 2>/dev/null)
 WANTB=$(cd "$FIXDIR" && "$ORACLE" -n pad87b.php 2>/dev/null)
 
-echo "MEASURED ex-ante: slope N=100*W R=5 W in {4,8,12,16} | cal 1 req R=2/side | concbase/concwarm/concstag 2 attempts each | uclog W=1 (armed)"
-echo "PREDICTIONS ex-ante (A-BB56): P-BASE padB=calA+calB+~310 B, padA=calA+calB+~3,15 MB | P-WARM first-touch => dA(warm) collapses to O(dB) | P-STAG dA(stag) << dA(base)"
+echo "MEASURED ex-ante: slope-base + slope-ret0 N=100*W R=5 W in {4,8,12,16} | eagerpos 1 run | cal 1 req R=2/side | sweep dt in {0,1,2,5,10,20} ms x {afirst,bfirst}"
+echo "PREDICTIONS ex-ante (A-BB59/KL-90-4): P-RET0 b_ret0<=0,5*b_base se ritenzione full-page | P-DT0 OVERLAP obbligatorio | P-DT20 NO-OVERLAP e net==cal AL BYTE | P-ORD surplus sul lato che spara PER PRIMO (ordine, non fixture)"
 
 wait_up() {
   local up=0
@@ -298,9 +296,9 @@ run_pad() {
   ledger "attempt=$ATT phase=$label raw=m89.$label.a$ATT.memcensus esito=ok"
 }
 
-# run_conc <label> <mode> — W=2 pair; mode=base|warm|stag (A-BB56)
-run_conc() {
-  local label="$1" mode="$2"
+# run_sweep <label> <dt_ms> <first:a|b> — W=2 pair, A-BB59 stagger-sweep
+run_sweep() {
+  local label="$1" dt="$2" first="$3"
   SEQ=$((SEQ+1))
   local MC="$OUT/m89.$label.a$ATT.memcensus"
   local LOG="$OUT/m89.$label.a$ATT.log"
@@ -316,98 +314,41 @@ run_conc() {
   SRV=$(assert_single_server "$label" "$DPID") || subshell_failpath "$DPID" "$label"
   BOOT_EPOCH=$(date +%s)
   assert_http_pid "$label" "$SRV"
-  local nreq=2
-  if [ "$mode" = warm ]; then
-    # P-WARM: one hello PER WORKER (round-robin W=2 => exactly one each,
-    # judged by VDISP) BEFORE the pair: the first-touch happens OUTSIDE
-    # the pair's lower windows.
-    local BW; BW=$(mktemp)
-    curl -s -m 10 -o "$BW" "http://127.0.0.1:$PORT/hello.php"
-    [ "$(cat "$BW")" = "$WANTH" ] || { rm -f "$BW"; teardown_fail "$SRV" "$DPID" "$label" "m89.$label warm body 1 != oracle"; }
-    curl -s -m 10 -o "$BW" "http://127.0.0.1:$PORT/hello.php"
-    [ "$(cat "$BW")" = "$WANTH" ] || { rm -f "$BW"; teardown_fail "$SRV" "$DPID" "$label" "m89.$label warm body 2 != oracle"; }
-    rm -f "$BW"
-    nreq=4
-    sleep 0.3
-  fi
+  # A-BB59 (Council WP-90, Bak): inverted asymmetric stagger-sweep. The
+  # pair is always {pad87a, pad87b}; `first` names WHICH pad fires first
+  # (afirst/bfirst = the swap-fixture control: flipping the order also
+  # flips the fixture<->first-lane binding under round-robin), `dt` the
+  # delay in ms before the second fire.
+  local FF WF SS WS
+  if [ "$first" = a ]; then FF=pad87a.php; WF="$WANTA"; SS=pad87b.php; WS="$WANTB"
+  else FF=pad87b.php; WF="$WANTB"; SS=pad87a.php; WS="$WANTA"; fi
   local BA BB
   BA=$(mktemp); BB=$(mktemp)
-  curl -s -m 10 -o "$BA" "http://127.0.0.1:$PORT/pad87a.php" &
+  curl -s -m 10 -o "$BA" "http://127.0.0.1:$PORT/$FF" &
   local C1=$!
-  if [ "$mode" = stag ]; then sleep 0.02; fi   # P-STAG: 20 ms
-  curl -s -m 10 -o "$BB" "http://127.0.0.1:$PORT/pad87b.php" &
+  if [ "$dt" != 0 ]; then sleep "$(awk -v d="$dt" 'BEGIN{printf "%.3f", d/1000}')"; fi
+  curl -s -m 10 -o "$BB" "http://127.0.0.1:$PORT/$SS" &
   local C2=$!
   wait "$C1" "$C2"
-  if [ "$(cat "$BA")" != "$WANTA" ]; then teardown_fail "$SRV" "$DPID" "$label" "m89.$label pad87a body != oracle"; fi
-  if [ "$(cat "$BB")" != "$WANTB" ]; then teardown_fail "$SRV" "$DPID" "$label" "m89.$label pad87b body != oracle"; fi
+  if [ "$(cat "$BA")" != "$WF" ]; then teardown_fail "$SRV" "$DPID" "$label" "m89.$label $FF body != oracle"; fi
+  if [ "$(cat "$BB")" != "$WS" ]; then teardown_fail "$SRV" "$DPID" "$label" "m89.$label $SS body != oracle"; fi
   rm -f "$BA" "$BB"
-  sleep 1
-  kill -TERM "$SRV" 2>/dev/null
-  wait "$DPID" 2>/dev/null
-  local rc=$?
-  assert_server_gone "$label"   # A-PP43(2): the 87 run_conc lacked this
-  grep -qE "panicked|aborting" "$LOG" && fail "m89.$label panic in server log (KH88-3)"
-  identity_row "$MC" "$label" 2 "$nreq" "$rc" "fixture=pad87a+pad87b mode=$mode"
-  ledger "attempt=$ATT phase=$label raw=m89.$label.a$ATT.memcensus esito=ok mode=$mode"
-}
-
-# run_uclog <label> — A-DS45: W=1, PHPR_UNIT_CACHE_LOG armed, PRODUCTION
-# pairs via supersede (mtime bump between requests). W=1-only (KH89-1).
-run_uclog() {
-  local label="$1"
-  SEQ=$((SEQ+1))
-  local MC="$OUT/m89.$label.a$ATT.memcensus"
-  local LOG="$OUT/m89.$label.a$ATT.log"
-  local UCL="$OUT/m89.$label.a$ATT.uclog"
-  for f in "$MC" "$UCL"; do
-    [ -e "$f" ] && fail "raw $f already exists — name reuse refused (KG-88-1)"
-  done
-  : > "$MC"
-  head_unmoved
-  PHPR_MEM_CENSUS="$MC" PHPR_UNIT_CACHE_LOG="$UCL" PHPR_MI_COLLECT_EXIT=1 \
-      MIMALLOC_PURGE_DELAY=0 PHPR_CAMPAIGN_SEQ=$SEQ \
-    /usr/bin/time -l "$OUTBIN/php-server" --axum --workers 1 --port $PORT -t "$FIXDIR" \
-    > /dev/null 2> "$LOG" &
-  local DPID=$!
-  wait_up || { kill_server_tree $DPID; fail "m89.$label server not up"; }
-  local SRV BOOT_EPOCH
-  SRV=$(assert_single_server "$label" "$DPID") || subshell_failpath "$DPID" "$label"
-  BOOT_EPOCH=$(date +%s)
-  assert_http_pid "$label" "$SRV"
-  local B; B=$(mktemp)
-  # 3 generations of hello.php: 2 supersedes => >=2 production pairs.
-  local g
-  for g in 1 2 3; do
-    curl -s -m 10 -o "$B" "http://127.0.0.1:$PORT/hello.php"
-    [ "$(cat "$B")" = "$WANTH" ] || { rm -f "$B"; teardown_fail "$SRV" "$DPID" "$label" "m89.$label gen$g body != oracle"; }
-    [ "$g" = 3 ] || { sleep 1.1; touch "$FIXDIR/hello.php"; }
-  done
-  rm -f "$B"
   sleep 1
   kill -TERM "$SRV" 2>/dev/null
   wait "$DPID" 2>/dev/null
   local rc=$?
   assert_server_gone "$label"
   grep -qE "panicked|aborting" "$LOG" && fail "m89.$label panic in server log (KH88-3)"
-  identity_row "$MC" "$label" 1 3 "$rc" "uclog=m89.$label.a$ATT.uclog"
-  # In-campaign positive (fail-closed), lane SUPERSEDE (v. header):
-  #   (a) pair-guard PASS sul log di produzione (nessun main_evicted
-  #       orfano, nessun NUL — KS-DS-88-1 consumato su NON-selftest);
-  #   (b) >=2 righe `supersede entries` con putord= in-band (i due touch);
-  #   (c) main_evicted == 0 — uno scatto del tripwire KS-DS-84-4 in
-  #       produzione VOIDA l'attempt QUI, non a valle.
-  local GOUT NSUP NME
-  GOUT=$("$REPO/wp87-harness/putord-pair-guard.pl" "$UCL") || fail "m89.$label putord-pair-guard VOID on production log (A-DS45)"
-  echo "$GOUT"
-  NSUP=$(grep -c "^unitcache supersede entries .*putord=" "$UCL" || true)
-  NME=$(grep -c "^unitcache main_evicted " "$UCL" || true)
-  [ "$NME" = 0 ] || fail "m89.$label $NME main_evicted in PRODUCTION — A-MS24 partition tripwire fired (KS-DS-84-4: campaign VOID)"
-  [ "$NSUP" -ge 2 ] || fail "m89.$label only $NSUP supersede rows with putord, expected >=2 — phase vacuous (A-DS45)"
-  ledger "attempt=$ATT phase=$label raw=m89.$label.a$ATT.memcensus uclog=m89.$label.a$ATT.uclog esito=ok supersede=$NSUP main_evicted=$NME pairs=$(echo "$GOUT" | sed -n 's/^putord-pair-guard: \([0-9]*\) pair.*/\1/p')"
+  identity_row "$MC" "$label" 2 2 "$rc" "fixture=$FF+$SS dt_ms=$dt first=$first"
+  ledger "attempt=$ATT phase=$label raw=m89.$label.a$ATT.memcensus esito=ok dt_ms=$dt first=$first"
 }
 
-# --- Phase SLOPE-HI (A-BB55≡A-DL42) -----------------------------------------
-echo "== Phase SLOPE-HI (A-BB55: W in {4,8,12,16}, mode-census downstream) =="
+# (fase UCLOG RIMOSSA in measure89 — A-DS45 consumata in m88; DICHIARATO:
+# nessun canale PHPR_UNIT_CACHE_LOG armato in questa campagna, il positivo
+# >=1-coppia vive in F16b in battery. KS-DS-90-1 non innescabile.)
+
+# --- Phase SLOPE-BASE (baseline arm, come m88) -------------------------------
+echo "== Phase SLOPE-BASE (W in {4,8,12,16}, R=5, env default) =="
 ENVTAG=none
 for w in 4 8 12 16; do
   for r in 1 2 3 4 5; do
@@ -415,20 +356,36 @@ for w in 4 8 12 16; do
   done
 done
 
-# --- Phase WARMPAIR (A-BB56) ------------------------------------------------
-echo "== Phase WARMPAIR CAL =="
+# --- Phase SLOPE-RET0 (braccio discriminante KL-90-4) -------------------------
+# MIMALLOC_PAGE_FULL_RETAIN=0 con read-back ord 36 atteso val=0 (default 2:
+# il positivo morde da solo, classe A-DL41). P-RET0 ex-ante nel header.
+echo "== Phase SLOPE-RET0 (MIMALLOC_PAGE_FULL_RETAIN=0, read-back ord 36) =="
+ENVTAG=ret0
+for w in 4 8 12 16; do
+  for r in 1 2 3 4 5; do
+    run_arm "slope0.w$w.r$r" "$w" $((100*w)) MIMALLOC_PAGE_FULL_RETAIN=0
+  done
+done
+
+# --- Phase EAGER-POS (A-DL44: positivo dell'ordinale 4) -----------------------
+echo "== Phase EAGER-POS (MIMALLOC_ARENA_EAGER_COMMIT=1, read-back ord 4) =="
+ENVTAG=eager1
+run_arm "eagerpos.w4.r1" 4 400 MIMALLOC_ARENA_EAGER_COMMIT=1
+ENVTAG=none
+
+# --- Phase CAL (calibrazioni per lo sweep) ------------------------------------
+echo "== Phase CAL =="
 for r in 1 2; do
   run_pad "cala.r$r" pad87a.php "$WANTA"
   run_pad "calb.r$r" pad87b.php "$WANTB"
 done
-echo "== Phase WARMPAIR CONC (base | warm | stag) =="
-for a in 1 2; do run_conc "concbase.r$a" base; done
-for a in 1 2; do run_conc "concwarm.r$a" warm; done
-for a in 1 2; do run_conc "concstag.r$a" stag; done
 
-# --- Phase UCLOG (A-DS45) ---------------------------------------------------
-echo "== Phase UCLOG (armed, production pairs) =="
-run_uclog "uclog"
+# --- Phase SWEEP (A-BB59: stagger invertito + swap-fixture) -------------------
+echo "== Phase SWEEP (dt in {0,1,2,5,10,20} ms x {afirst,bfirst}) =="
+for dt in 0 1 2 5 10 20; do
+  run_sweep "sweep.dt$dt.afirst" "$dt" a
+  run_sweep "sweep.dt$dt.bfirst" "$dt" b
+done
 
 head_unmoved
 ledger "attempt=$ATT phase=done esito=ok"

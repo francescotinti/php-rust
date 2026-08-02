@@ -577,6 +577,13 @@ pub fn phys_footprint() -> u64 {
 
 // mimalloc v3 public API (statically linked via the `mimalloc` crate; no
 // bindings in libmimalloc-sys for these, so they are declared here).
+/// mi_subproc_id_t: `typedef struct { void* _mi_subproc_id; }` — passed
+/// BY VALUE (A-DL46-census).
+#[repr(C)]
+struct MiSubprocId {
+    _p: *mut std::os::raw::c_void,
+}
+
 #[repr(C)]
 struct MiHeapArea {
     blocks: *mut std::os::raw::c_void,
@@ -670,6 +677,22 @@ extern "C" {
     // declared in the campaign header. commit_calls BANNED (A-DL46).
     fn mi_stats_get_json(buf_size: usize, buf: *mut std::os::raw::c_char)
         -> *mut std::os::raw::c_char;
+    // A-DL46-census (Council WP-90, Leijen — KL-90-4): per-theap page
+    // census for the b-attribution. mi_subproc_visit_heaps walks every
+    // live heap of the subprocess; combined with the area walk
+    // (mi_heap_visit_blocks, visit_blocks=false: one callback per AREA,
+    // block==NULL) it shows WHERE the committed lives — per heap, with
+    // retained-free pages (used==0, still committed: the
+    // page_full_retain candidates, ord 36) binned by block_size.
+    fn mi_subproc_current() -> MiSubprocId;
+    fn mi_subproc_visit_heaps(
+        subproc: MiSubprocId,
+        visitor: unsafe extern "C" fn(
+            *mut std::os::raw::c_void,
+            *mut std::os::raw::c_void,
+        ) -> bool,
+        arg: *mut std::os::raw::c_void,
+    ) -> bool;
 }
 
 /// Per-size-class occupancy table filled by [`area_visitor`]. Fixed arrays:
@@ -980,19 +1003,120 @@ fn phys_window_dump(win: u32, phys: u64, tag: &str) {
             // indistinguishable from a no-effect arm without these rows.
             let eager = unsafe { mi_option_get(4) };
             let purge = unsafe { mi_option_get(15) };
+            // A-DL46-census (Council WP-90): page_full_retain ord=36
+            // (verified against the vendored enum with the SAME offset
+            // that maps purge_delay to its live-bitten 15). The retain=0
+            // discrimination arm reads back 0 against default 2 — a
+            // positive that bites on its own (A-DL41 class).
+            let retain = unsafe { mi_option_get(36) };
             let _ = f.write_all(
                 format!(
-                    "pid={pid} tag=mi_option win={win} name=arena_eager_commit ord=4 val={eager}\npid={pid} tag=mi_option win={win} name=purge_delay ord=15 val={purge}\n"
+                    "pid={pid} tag=mi_option win={win} name=arena_eager_commit ord=4 val={eager}\npid={pid} tag=mi_option win={win} name=purge_delay ord=15 val={purge}\npid={pid} tag=mi_option win={win} name=page_full_retain ord=36 val={retain}\n"
                 )
                 .as_bytes(),
             );
-            for name in
-                ["MIMALLOC_ARENA_EAGER_COMMIT", "MIMALLOC_PURGE_DELAY", "RUST_MIN_STACK"]
-            {
+            for name in [
+                "MIMALLOC_ARENA_EAGER_COMMIT",
+                "MIMALLOC_PURGE_DELAY",
+                "MIMALLOC_PAGE_FULL_RETAIN",
+                "RUST_MIN_STACK",
+            ] {
                 let val = std::env::var(name).unwrap_or_else(|_| "unset".into());
                 let _ = f.write_all(
                     format!("pid={pid} tag=env_readback win={win} name={name} val={val}\n")
                         .as_bytes(),
+                );
+            }
+            // --- A-DL46-census (Council WP-90, Leijen — KL-90-4): per-theap
+            // page census: one area-walk per live heap of the subprocess.
+            // DECLARED (KL-90-3): heap identity is the VISIT INDEX (the
+            // heap->thread mapping is not public API); at win=0 the census
+            // runs post-teardown — abandoned/merged pages sit where the
+            // visitor finds them. free_* fields = areas with used==0 that
+            // are still committed: the page_full_retain (ord 36)
+            // candidates, binned by block_size.
+            {
+                #[derive(Default)]
+                struct HeapAgg {
+                    pages: usize,
+                    committed: usize,
+                    used_blocks: usize,
+                    free_pages: usize,
+                    free_committed: usize,
+                    bins: std::collections::BTreeMap<usize, (usize, usize)>,
+                }
+                struct Acc {
+                    heaps: Vec<HeapAgg>,
+                }
+                unsafe extern "C" fn theap_area_cb(
+                    _h: *const std::os::raw::c_void,
+                    area: *const MiHeapArea,
+                    _block: *mut std::os::raw::c_void,
+                    _bs: usize,
+                    arg: *mut std::os::raw::c_void,
+                ) -> bool {
+                    let acc = unsafe { &mut *(arg as *mut Acc) };
+                    let a = unsafe { &*area };
+                    if let Some(h) = acc.heaps.last_mut() {
+                        h.pages += 1;
+                        h.committed += a.committed;
+                        h.used_blocks += a.used;
+                        if a.used == 0 {
+                            h.free_pages += 1;
+                            h.free_committed += a.committed;
+                            let e = h.bins.entry(a.block_size).or_insert((0, 0));
+                            e.0 += 1;
+                            e.1 += a.committed;
+                        }
+                    }
+                    true
+                }
+                unsafe extern "C" fn theap_heap_cb(
+                    heap: *mut std::os::raw::c_void,
+                    arg: *mut std::os::raw::c_void,
+                ) -> bool {
+                    let acc = unsafe { &mut *(arg as *mut Acc) };
+                    acc.heaps.push(HeapAgg::default());
+                    unsafe { mi_heap_visit_blocks(heap, false, theap_area_cb, arg) };
+                    true
+                }
+                let mut acc = Acc { heaps: Vec::new() };
+                let vok = unsafe {
+                    mi_subproc_visit_heaps(
+                        mi_subproc_current(),
+                        theap_heap_cb,
+                        &mut acc as *mut Acc as *mut std::os::raw::c_void,
+                    )
+                };
+                if !vok {
+                    let _ = f.write_all(
+                        format!("pid={pid} tag=mi_theap_pages win={win} visit=FAILED\n")
+                            .as_bytes(),
+                    );
+                }
+                for (i, h) in acc.heaps.iter().enumerate() {
+                    let _ = f.write_all(
+                        format!(
+                            "pid={pid} tag=mi_theap_pages win={win} heap={i} pages={} committed={} used_blocks={} free_pages={} free_committed={}\n",
+                            h.pages, h.committed, h.used_blocks, h.free_pages, h.free_committed
+                        )
+                        .as_bytes(),
+                    );
+                    for (bs, (fp, fc)) in &h.bins {
+                        let _ = f.write_all(
+                            format!(
+                                "pid={pid} tag=mi_theap_bin win={win} heap={i} bin={bs} free_pages={fp} free_committed={fc}\n"
+                            )
+                            .as_bytes(),
+                        );
+                    }
+                }
+                let _ = f.write_all(
+                    format!(
+                        "pid={pid} tag=mi_theap_pages win={win} heaps_total={} declared=heap-by-visit-index,win0-postteardown (KL-90-3)\n",
+                        acc.heaps.len()
+                    )
+                    .as_bytes(),
                 );
             }
             // --- A-BB55≡A-DL42: arena/commit term named in-band ----------

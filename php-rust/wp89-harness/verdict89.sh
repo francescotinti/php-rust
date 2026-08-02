@@ -23,8 +23,9 @@
 #   A-SK54/A-BG46: verdetto PER-ATTEMPT e PER-GENERAZIONE
 #     (verdict89.aN.gG.out, name-reuse rifiutato); coerenza pointer<->
 #     suffixed .done giudicata; esito appeso al LEDGER (A-AH49/KG-89-1).
-#   A-SK51: identity line count==1; (VARMS assente in questa campagna —
-#     nessun braccio d'ambiente: KL-89-1 non innescabile).
+#   A-SK51: identity line count==1; VARMS TORNA (m89 ha TRE bracci
+#     d'ambiente: default / ret0 / eagerpos) — read-back giudicato
+#     per-braccio su OGNI raw (A-DL41/A-DL44/KL-90-4).
 #   A-BG47/KG-89-2: identity v2 giudicata — server_exit==0, srv_pid=
 #     riconciliato con TUTTE le righe pid= del raw.
 #   A-PP42/KS-PP-89-2: VDISP esige thr-set == {0..W-1} ESATTO
@@ -32,17 +33,20 @@
 #   A-BG48/KG-89-3: companion mancante = FAIL del raw — mai 0/NA dentro
 #     min/LSQ; righe peak dai .log con nul_count= IN-BAND (A-SK52: canale
 #     DECLARED-DEVIATION quando nul_count>0, mai strip silenzioso).
-#   A-BB55/KB-89-1/2, KL-89-2: mode-census per W; LSQ di b sul segmento
-#     W in {4,8,12,16} sui valori del MODO DOMINANTE; min-of-R ADVISORY
-#     quando i modi sono >=2; banda KL-85-2 confrontata SOLO con b;
-#     monotonia dei Delta giudicata (non monotoni => slope ADVISORY).
+#   A-BB57/A-BB58 (KB-90-1/2): mode-census per W; LSQ di b sui MODI
+#     DOMINANTI con se(b) e b±2σ IN-BAND + fascia δ=0,15 EX-ANTE sul
+#     MARGINALE (fuori fascia => grade ADVISORY); modes==R = census
+#     NON-informativo, punto ADVISORY. Banda KL-85-2 RITIRATA (KB-90-2):
+#     NESSUN confronto di banda cross-protocollo.
+#   VATTR (KL-90-4): attribuzione di b — b_base vs b_ret0 contro le
+#     soglie ex-ante P-RET0; verdict-grade SOLO con census per-theap +
+#     braccio retain armato entrambi in-band.
 #   A-BB55: blocco VARENA — righe tag=mi_arena obbligatorie, parse=FAILED
-#     = FAIL; granuli 64 KiB nominati.
-#   A-BB56: blocco VWARM — discriminazione MECCANICA del surplus padA
-#     (base vs warm vs stag) contro le predizioni ex-ante del header
-#     campagna; net concorrenti TAGGATI VOID per-thread (KB-88-1).
-#   A-DS45/KS-DS-88-1: blocco VUCLOG — putord-pair-guard su log di
-#     PRODUZIONE (>=1 coppia, >=2 main_evicted, W==1).
+#     = FAIL; arena==proc = identita di read-path (A-DL45/KL-90-2).
+#   A-BB59: blocco VSWEEP — stagger invertito con spans GIUDICATO
+#     (dt0=>OVERLAP, dt20=>NO-OVERLAP, INVALID=>FAIL) e discriminatore
+#     ordine-vs-fixture con regime in-band (A-BG52).
+#   VUCLOG: DECLARED-ABSENT (A-DS45 consumata in m88; F16b in battery).
 export PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin:$PATH
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -97,13 +101,16 @@ nul_free() { perl -0777 -ne 'exit(index($_,"\0")>=0?1:0)' "$1"; }
 nul_count() { perl -0777 -ne 'my $c=()=/\0/g; print $c' "$1"; }
 
 WS="4 8 12 16"
+DTS="0 1 2 5 10 20"
 SLOPE_RAWS=""
 for w in $WS; do for r in 1 2 3 4 5; do SLOPE_RAWS="$SLOPE_RAWS m89.slope.w$w.r$r.a$ATT.memcensus"; done; done
+SLOPE0_RAWS=""
+for w in $WS; do for r in 1 2 3 4 5; do SLOPE0_RAWS="$SLOPE0_RAWS m89.slope0.w$w.r$r.a$ATT.memcensus"; done; done
+EAGER_RAW="m89.eagerpos.w4.r1.a$ATT.memcensus"
 CAL_RAWS="m89.cala.r1.a$ATT.memcensus m89.cala.r2.a$ATT.memcensus m89.calb.r1.a$ATT.memcensus m89.calb.r2.a$ATT.memcensus"
-CONC_RAWS=""
-for m in base warm stag; do for r in 1 2; do CONC_RAWS="$CONC_RAWS m89.conc$m.r$r.a$ATT.memcensus"; done; done
-UCLOG_RAW="m89.uclog.a$ATT.memcensus"
-ALL_RAWS="$SLOPE_RAWS $CAL_RAWS $CONC_RAWS $UCLOG_RAW"
+SWEEP_RAWS=""
+for dt in $DTS; do for o in afirst bfirst; do SWEEP_RAWS="$SWEEP_RAWS m89.sweep.dt$dt.$o.a$ATT.memcensus"; done; done
+ALL_RAWS="$SLOPE_RAWS $SLOPE0_RAWS $EAGER_RAW $CAL_RAWS $SWEEP_RAWS"
 
 bf=0; buf=""
 emit() { buf="$buf$*
@@ -173,14 +180,11 @@ flushb
 ORD_CLEAN=0
 bf=0
 if [ "$IDENT_CLEAN" = 1 ]; then
-  for raw in $SLOPE_RAWS $CAL_RAWS $CONC_RAWS; do
+  for raw in $SLOPE_RAWS $SLOPE0_RAWS $EAGER_RAW $CAL_RAWS $SWEEP_RAWS; do
     F="$OUT/$raw"
     ID=$(grep "^mem_hash=" "$F")
     W=$(echo "$ID" | sed -n 's/.* w=\([0-9]*\) .*/\1/p')
-    case "$raw" in
-      *concwarm*) EXP_PER_THR=2 ;;   # hello(ord=1) + pad(ord=2) per worker
-      *)          EXP_PER_THR=1 ;;
-    esac
+    EXP_PER_THR=1   # m89: nessuna fase warm (una richiesta per worker ovunque)
     NME=$(grep -c "tag=unitcache_main_entry" "$F" || true)
     WANTME=$((W * EXP_PER_THR))
     if [ "$NME" != "$WANTME" ]; then emit "FAIL VORD: $raw has $NME main-entry rows, expected $WANTME"; bf=$((bf+1)); continue; fi
@@ -199,41 +203,92 @@ flushb
 ARENA_CLEAN=0
 bf=0
 if [ "$IDENT_CLEAN" = 1 ]; then
-  for raw in $SLOPE_RAWS; do
+  for raw in $SLOPE_RAWS $SLOPE0_RAWS $EAGER_RAW; do
     F="$OUT/$raw"
     grep -q "tag=mi_arena_json win=0" "$F" || { emit "FAIL VARENA: $raw lacks mi_arena_json win=0 row (A-BB55)"; bf=$((bf+1)); continue; }
     grep -q "tag=mi_arena win=0 .*parse=FAILED" "$F" && { emit "FAIL VARENA: $raw has parse=FAILED mi_arena rows"; bf=$((bf+1)); continue; }
     grep -q "tag=mi_arena win=0 key=committed " "$F" || { emit "FAIL VARENA: $raw lacks extracted committed row"; bf=$((bf+1)); continue; }
   done
-  if [ "$bf" = 0 ]; then emit "VARENA PASS: mi_arena_json + extracted rows present, no parse failures, on every slope raw"; ARENA_CLEAN=1; fi
+  if [ "$bf" = 0 ]; then emit "VARENA PASS: mi_arena_json + extracted rows present, no parse failures, on every slope-arm raw (arena==proc = READ-PATH IDENTITY, never a cross-check — A-DL45/KL-90-2)"; ARENA_CLEAN=1; fi
 else
   emit "VARENA SKIPPED: upstream VIDENT not clean (KS-SK-88-2)"; bf=1
 fi
 flushb
 
-# --- Block VSLOPE-HI (A-BB55≡A-DL42; KB-89-1/2; KL-89-2; A-BG48) ------------
+# --- Block VARMS (A-DL41/A-DL44/KL-90-4: per-arm read-back judged) -----------
+ARMS_CLEAN=0
 bf=0
-if [ "$IDENT_CLEAN" = 1 ] && [ "$DISP_CLEAN" = 1 ] && [ "$ORD_CLEAN" = 1 ] && [ "$ARENA_CLEAN" = 1 ]; then
-  TMP=$(mktemp)
+if [ "$IDENT_CLEAN" = 1 ]; then
+  for raw in $ALL_RAWS; do
+    F="$OUT/$raw"
+    PD=$(sed -n 's/.*tag=mi_option win=0 name=purge_delay ord=15 val=\([0-9-]*\).*/\1/p' "$F" | head -1)
+    RT=$(sed -n 's/.*tag=mi_option win=0 name=page_full_retain ord=36 val=\([0-9-]*\).*/\1/p' "$F" | head -1)
+    EG=$(sed -n 's/.*tag=mi_option win=0 name=arena_eager_commit ord=4 val=\([0-9-]*\).*/\1/p' "$F" | head -1)
+    [ "$PD" = 0 ] || { emit "FAIL VARMS: $raw purge_delay read-back '$PD' != 0 (A-DL41)"; bf=$((bf+1)); continue; }
+    case "$raw" in
+      *slope0.*)
+        # discrimination arm: ord 36 must read 0 against default 2 —
+        # the positive that bites on its own (KL-90-4).
+        [ "$RT" = 0 ] || { emit "FAIL VARMS: $raw page_full_retain read-back '$RT' != 0 on the RET0 arm — mute arm (A-DL41/KL-90-4)"; bf=$((bf+1)); continue; }
+        ;;
+      *eagerpos.*)
+        # A-DL44: the ordinal-4 positive — armed value 1 vs default 2.
+        [ "$EG" = 1 ] || { emit "FAIL VARMS: $raw arena_eager_commit read-back '$EG' != 1 on the EAGER arm (A-DL44)"; bf=$((bf+1)); continue; }
+        [ "$RT" = 2 ] || { emit "FAIL VARMS: $raw page_full_retain read-back '$RT' != default 2 (A-DL41)"; bf=$((bf+1)); continue; }
+        ;;
+      *)
+        [ "$RT" = 2 ] || { emit "FAIL VARMS: $raw page_full_retain read-back '$RT' != default 2 on a default-arm raw (A-DL41)"; bf=$((bf+1)); continue; }
+        ;;
+    esac
+  done
+  if [ "$bf" = 0 ]; then emit "VARMS PASS: per-arm mi_option read-back judged on EVERY raw (purge=0 all; ord36: 0 on ret0 / 2 elsewhere; ord4: 1 on eagerpos — A-DL41/A-DL44/KL-90-4)"; ARMS_CLEAN=1; fi
+else
+  emit "VARMS SKIPPED: upstream VIDENT not clean (KS-SK-88-2)"; bf=1
+fi
+flushb
+
+# --- Block VTHEAP (A-DL46-census/KL-90-4: per-theap census present) ----------
+THEAP_CLEAN=0
+bf=0
+if [ "$IDENT_CLEAN" = 1 ]; then
+  for raw in $SLOPE_RAWS $SLOPE0_RAWS $EAGER_RAW; do
+    F="$OUT/$raw"
+    grep -q "tag=mi_theap_pages win=0 .*visit=FAILED" "$F" && { emit "FAIL VTHEAP: $raw theap census visit=FAILED"; bf=$((bf+1)); continue; }
+    grep -q "tag=mi_theap_pages win=0 heap=" "$F" || { emit "FAIL VTHEAP: $raw lacks mi_theap_pages rows (A-DL46-census/KL-90-4)"; bf=$((bf+1)); continue; }
+    grep -q "tag=mi_theap_pages win=0 heaps_total=" "$F" || { emit "FAIL VTHEAP: $raw lacks the declared heaps_total trailer (KL-90-3)"; bf=$((bf+1)); continue; }
+  done
+  if [ "$bf" = 0 ]; then emit "VTHEAP PASS: per-theap page census in-band on every slope-arm raw (heap-by-visit-index + win0-postteardown DECLARED, KL-90-3)"; THEAP_CLEAN=1; fi
+else
+  emit "VTHEAP SKIPPED: upstream VIDENT not clean (KS-SK-88-2)"; bf=1
+fi
+flushb
+
+# --- Blocks VSLOPE-{BASE,RET0} (A-BB57/A-BB58; KB-90-1/2; A-BG48/50) ---------
+# La banda KL-85-2 è RITIRATA (KB-90-2): nessun confronto di banda
+# cross-protocollo — il giudizio di m89 è l'ATTRIBUZIONE (VATTR, P-RET0).
+B_BASE=""; B_RET0=""
+judge_slope() { # <ARM> <raw-prefix>   (usa emit/bf globali; setta B_LAST)
+  local ARM="$1" PFX="$2"
+  local TMP; TMP=$(mktemp)
+  local w r F L NC FP DEVTAG C SL AC AN NPR NAC
   for w in $WS; do
     for r in 1 2 3 4 5; do
-      F="$OUT/m89.slope.w$w.r$r.a$ATT.memcensus"
-      grep -q "exit_collect_mi" "$F" || { emit "FAIL VSLOPE: $F lacks exit_collect_mi marker"; bf=$((bf+1)); continue; }
+      F="$OUT/m89.$PFX.w$w.r$r.a$ATT.memcensus"
+      grep -q "exit_collect_mi" "$F" || { emit "FAIL VSLOPE-$ARM: $F lacks exit_collect_mi marker"; bf=$((bf+1)); continue; }
       # A-BG50/KG-90-2: presence-guard BEFORE extraction — an absent row
-      # used to become a silent 0 inside TMP and the LSQ (`v+0`). Row
-      # counted ==1, value >0, or the raw FAILS by name.
+      # used to become a silent 0 inside TMP and the LSQ (`v+0`).
       NPR=$(grep -c "tag=mi_proc win=0 " "$F" || true)
-      [ "$NPR" = 1 ] || { emit "FAIL VSLOPE: $F tag=mi_proc win=0 rows == $NPR, expected exactly 1 (A-BG50/KG-90-2)"; bf=$((bf+1)); continue; }
+      [ "$NPR" = 1 ] || { emit "FAIL VSLOPE-$ARM: $F tag=mi_proc win=0 rows == $NPR, expected exactly 1 (A-BG50/KG-90-2)"; bf=$((bf+1)); continue; }
       NAC=$(grep -c "tag=mi_arena win=0 key=committed " "$F" || true)
-      [ "$NAC" = 1 ] || { emit "FAIL VSLOPE: $F mi_arena committed rows == $NAC, expected exactly 1 (A-BG50/KG-90-2)"; bf=$((bf+1)); continue; }
+      [ "$NAC" = 1 ] || { emit "FAIL VSLOPE-$ARM: $F mi_arena committed rows == $NAC, expected exactly 1 (A-BG50/KG-90-2)"; bf=$((bf+1)); continue; }
       C=$(awk '/tag=mi_proc win=0/ { for (i=1;i<=NF;i++) if ($i ~ /^commit=/) {v=$i; sub("commit=","",v)} } END { print v+0 }' "$F")
-      [ "$C" -gt 0 ] || { emit "FAIL VSLOPE: $F extracted C=$C not > 0 (A-BG50/KG-90-2)"; bf=$((bf+1)); continue; }
+      [ "$C" -gt 0 ] || { emit "FAIL VSLOPE-$ARM: $F extracted C=$C not > 0 (A-BG50/KG-90-2)"; bf=$((bf+1)); continue; }
       SL=$(awk 'BEGIN{inpost=0} /tag=mi_proc win=0/ { inpost=1; s=0 } inpost && /tag=mi_bin win=0/ { c=0; u=0; for (i=1;i<=NF;i++) { if ($i ~ /^committed=/) {c=$i; sub("committed=","",c)} if ($i ~ /^used_b=/) {u=$i; sub("used_b=","",u)} } s += c-u } END { print s+0 }' "$F")
       AC=$(awk '/tag=mi_arena win=0 key=committed /{ for (i=1;i<=NF;i++) if ($i ~ /^current=/) {v=$i; sub("current=","",v)} } END { print v+0 }' "$F")
-      [ "$AC" -gt 0 ] || { emit "FAIL VSLOPE: $F extracted arena committed=$AC not > 0 (A-BG50/KG-90-2)"; bf=$((bf+1)); continue; }
+      [ "$AC" -gt 0 ] || { emit "FAIL VSLOPE-$ARM: $F extracted arena committed=$AC not > 0 (A-BG50/KG-90-2)"; bf=$((bf+1)); continue; }
       AN=$(awk '/tag=mi_arena win=0 key=arena_count /{ for (i=1;i<=NF;i++) if ($i ~ /^val=/) {v=$i; sub("val=","",v)} } END { print v+0 }' "$F")
-      L="$OUT/m89.slope.w$w.r$r.a$ATT.log"
-      [ -f "$L" ] || { emit "FAIL VSLOPE: companion log missing for w=$w r=$r — raw FAILS, never defaulted (A-BG48)"; bf=$((bf+1)); continue; }
+      L="$OUT/m89.$PFX.w$w.r$r.a$ATT.log"
+      [ -f "$L" ] || { emit "FAIL VSLOPE-$ARM: companion log missing for w=$w r=$r — raw FAILS, never defaulted (A-BG48)"; bf=$((bf+1)); continue; }
       NC=$(nul_count "$L")
       if [ "$NC" = 0 ]; then
         FP=$(awk '/peak memory footprint/{print $1}' "$L")
@@ -242,23 +297,20 @@ if [ "$IDENT_CLEAN" = 1 ] && [ "$DISP_CLEAN" = 1 ] && [ "$ORD_CLEAN" = 1 ] && [ 
         FP=$(tr -d '\0' < "$L" | awk '/peak memory footprint/{print $1}')
         DEVTAG=" DECLARED-DEVIATION nul_count=$NC (A-SK52/KS-SK-89-2: parsed via strip, deviation in-band)"
       fi
-      [ -n "$FP" ] || { emit "FAIL VSLOPE: peak companion MISSING for w=$w r=$r — FAIL, never 0/NA in an aggregate (A-BG48/KG-89-3)"; bf=$((bf+1)); continue; }
+      [ -n "$FP" ] || { emit "FAIL VSLOPE-$ARM: peak companion MISSING for w=$w r=$r — FAIL, never 0/NA in an aggregate (A-BG48/KG-89-3)"; bf=$((bf+1)); continue; }
       echo "$w $r $C $SL $FP $AC $AN" >> "$TMP"
-      emit "slope w=$w r=$r committed_postcollect_win0_bytes=$C slack_committed_minus_used_bytes=$SL peak_memory_footprint_bytes=$FP arena_committed_current_bytes=$AC arena_count=$AN$DEVTAG"
+      emit "slope-$ARM w=$w r=$r committed_postcollect_win0_bytes=$C slack_committed_minus_used_bytes=$SL peak_memory_footprint_bytes=$FP arena_committed_current_bytes=$AC arena_count=$AN$DEVTAG"
     done
   done
   if [ "$bf" = 0 ]; then
-    SLOPE_REPORT=$(awk '
+    local REPORT
+    REPORT=$(awk -v arm="$ARM" '
       { vals[$1] = vals[$1] " " $3
         if (minc[$1]=="" || $3<minc[$1]) minc[$1]=$3
-        if (minsl[$1]=="" || $4<minsl[$1]) minsl[$1]=$4
-        if (minfp[$1]=="" || $5<minfp[$1]) minfp[$1]=$5
-        if (minac[$1]=="" || $6<minac[$1]) minac[$1]=$6
         an[$1]=$7 }
       END {
         nws=split("4 8 12 16", wsarr, " ")
-        # mode census per W (KB-89-2): distinct byte values + multiplicity
-        multi_mode=0
+        R=5
         for (i=1;i<=nws;i++) {
           w=wsarr[i]
           n=split(vals[w], vv, " ")
@@ -267,46 +319,86 @@ if [ "$IDENT_CLEAN" = 1 ] && [ "$DISP_CLEAN" = 1 ] && [ "$ORD_CLEAN" = 1 ] && [ 
           best=""; bestn=0; nm=0
           for (v in cnt) {
             nm++
-            printf "mode-census W=%d: committed=%d B x%d\n", w, v, cnt[v]
+            printf "mode-census %s W=%d: committed=%d B x%d\n", arm, w, v, cnt[v]
             if (cnt[v]>bestn || (cnt[v]==bestn && (best=="" || v+0<best+0))) { best=v; bestn=cnt[v] }
           }
-          if (nm>=2) multi_mode=1
           dom[w]=best
-          printf "mode-census W=%d: modes=%d dominant=%d B (x%d) min-of-R=%d B%s\n", w, nm, best, bestn, minc[w], (nm>=2 ? " [min-of-R ADVISORY: >=2 byte-distinct modes, KB-89-2]" : "")
-          printf "W=%d granules64k: dominant=%.2f min=%.2f residue_dominant=%d B | arena committed min=%d B arena_count=%d\n", w, dom[w]/65536, minc[w]/65536, dom[w]%65536, minac[w], an[w]
+          # A-BB58 (KB-90-1): modes==R = census NON-informativo, punto ADVISORY
+          adv = (nm==R ? " [A-BB58: modes==R, census NON-informative => point ADVISORY]" : (nm>=2 ? " [min-of-R ADVISORY: >=2 modes, KB-89-2]" : ""))
+          printf "mode-census %s W=%d: modes=%d dominant=%d B (x%d) min-of-R=%d B%s\n", arm, w, nm, best, bestn, minc[w], adv
+          printf "%s W=%d granules64k: dominant=%.2f residue_dominant=%d B | arena_count=%d\n", arm, w, dom[w]/65536, dom[w]%65536, an[w]
         }
-        # LSQ of b over W in {4,8,12,16} on DOMINANT-mode values (KL-89-2)
+        # LSQ b on dominant modes + A-BB57: se(b), b +/- 2sigma, delta-fascia
         n=0; sx=0; sy=0; sxx=0; sxy=0
         for (i=1;i<=nws;i++) { w=wsarr[i]; n++; sx+=w; sy+=dom[w]; sxx+=w*w; sxy+=w*dom[w] }
         b=(n*sxy-sx*sy)/(n*sxx-sx*sx)
         a=(sy-b*sx)/n
-        mono=1
+        sse=0
+        for (i=1;i<=nws;i++) { w=wsarr[i]; rres=dom[w]-(a+b*w); sse+=rres*rres }
+        wbar=sx/n; sww=0
+        for (i=1;i<=nws;i++) { w=wsarr[i]; sww+=(w-wbar)*(w-wbar) }
+        seb=sqrt((sse/(n-2))/sww)
+        grade="verdict-grade-candidate"
+        # A-BB57 fascia del marginale, delta=0,15 EX-ANTE (KB-90-1)
         for (i=2;i<=nws;i++) {
           d=dom[wsarr[i]]-dom[wsarr[i-1]]
-          printf "delta dominant W%d->W%d = %d B (%.2f MiB) over %d workers = %.0f B/worker\n", wsarr[i-1], wsarr[i], d, d/1048576, wsarr[i]-wsarr[i-1], d/(wsarr[i]-wsarr[i-1])
-          if (d<=0) mono=0
+          m=d/(wsarr[i]-wsarr[i-1])
+          inband = (m >= b*0.85 && m <= b*1.15) ? "IN" : "OUT"
+          if (inband=="OUT") grade="ADVISORY (marginal outside the ex-ante delta=0.15 band, KB-90-1)"
+          printf "delta %s W%d->W%d = %d B, marginal %.0f B/worker [%s ex-ante band b*(1+/-0.15)]\n", arm, wsarr[i-1], wsarr[i], d, m, inband
         }
-        printf "VSLOPE-HI b (LSQ dominant-mode, metric=committed_postcollect_win0, W in {4,8,12,16}): %.0f B/worker (%.2f MiB) a=%.0f B\n", b, b/1048576, a
-        # advisory min-based for continuity
-        n=0; sx=0; sy=0; sxx=0; sxy=0
-        for (i=1;i<=nws;i++) { w=wsarr[i]; n++; sx+=w; sy+=minc[w]; sxx+=w*w; sxy+=w*minc[w] }
-        bm=(n*sxy-sx*sy)/(n*sxx-sx*sx)
-        printf "VSLOPE-HI b_min (LSQ min-of-R, ADVISORY under multi-mode): %.0f B/worker (%.2f MiB)\n", bm, bm/1048576
-        band=3605572; lo=band*0.95; hi=band*1.05
-        grade=(mono ? "monotone deltas" : "NON-MONOTONE deltas => slope ADVISORY, never verdict-grade (KB-89-1)")
-        if (b>=lo && b<=hi) printf "VSLOPE-HI verdict: b WITHIN the KL-85-2 band 3605572 B +/-5%% [%.0f, %.0f] — %s\n", lo, hi, grade
-        else printf "VSLOPE-HI verdict: b NAMED-DEVIATION — %.0f B outside 3605572 B +/-5%% [%.0f, %.0f] (band compared with b ONLY, KL-89-2) — %s\n", b, lo, hi, grade
+        printf "VSLOPE-%s b (LSQ dominant-mode, metric=committed_postcollect_win0, W in {4, 8, 12, 16}): %.0f B/worker se=%.0f B twosigma=[%.0f, %.0f] a=%.0f B grade=%s\n", arm, b, seb, b-2*seb, b+2*seb, a, grade
       }' "$TMP")
-    emit "$SLOPE_REPORT"
-    emit "VSLOPE-HI PASS: protocol clean (collect armed, mode-census in-band, b on dominant modes, companions never defaulted)"
+    emit "$REPORT"
+    B_LAST=$(echo "$REPORT" | sed -n "s/^VSLOPE-$ARM b (LSQ[^:]*): \([0-9]*\) B\/worker.*/\1/p")
+    emit "VSLOPE-$ARM PASS: protocol clean (collect armed, presence-guarded extractors, mode-census + b+/-2sigma + delta-fascia in-band)"
   fi
   rm -f "$TMP"
+}
+bf=0
+if [ "$IDENT_CLEAN" = 1 ] && [ "$DISP_CLEAN" = 1 ] && [ "$ORD_CLEAN" = 1 ] && [ "$ARENA_CLEAN" = 1 ] && [ "$ARMS_CLEAN" = 1 ] && [ "$THEAP_CLEAN" = 1 ]; then
+  judge_slope BASE slope
+  [ "$bf" = 0 ] && B_BASE="$B_LAST"
 else
-  emit "VSLOPE-HI SKIPPED: upstream blocks not clean (KS-SK-88-2)"; bf=$((bf+1))
+  emit "VSLOPE-BASE SKIPPED: upstream blocks not clean (KS-SK-88-2)"; bf=$((bf+1))
+fi
+flushb
+bf=0
+if [ "$IDENT_CLEAN" = 1 ] && [ "$DISP_CLEAN" = 1 ] && [ "$ORD_CLEAN" = 1 ] && [ "$ARENA_CLEAN" = 1 ] && [ "$ARMS_CLEAN" = 1 ] && [ "$THEAP_CLEAN" = 1 ]; then
+  judge_slope RET0 slope0
+  [ "$bf" = 0 ] && B_RET0="$B_LAST"
+else
+  emit "VSLOPE-RET0 SKIPPED: upstream blocks not clean (KS-SK-88-2)"; bf=$((bf+1))
 fi
 flushb
 
-# --- Block VWARM (A-BB56: mechanical discrimination) ------------------------
+# --- Block VATTR (KL-90-4: l'attribuzione di b, P-RET0 ex-ante) --------------
+bf=0
+if [ -n "$B_BASE" ] && [ -n "$B_RET0" ]; then
+  HALF=$((B_BASE / 2))
+  EIGHT=$((B_BASE * 8 / 10))
+  if [ "$B_RET0" -le "$HALF" ]; then
+    ATTR="ATTRIBUTED-to-page_full_retain (P-RET0 CONFIRMED at the ex-ante threshold b_ret0 <= 0,5*b_base)"
+  elif [ "$B_RET0" -ge "$EIGHT" ]; then
+    ATTR="NOT-attributed-to-retention (P-RET0 REFUTED: b survives retain=0 — residual driver OPEN, to be NAMED at council)"
+  else
+    ATTR="PARTIAL (between the ex-ante thresholds 0,5 and 0,8 — mixed drivers, decomposition needed)"
+  fi
+  emit "VATTR: b_base=$B_BASE B/worker | b_ret0=$B_RET0 B/worker -> $ATTR [verdict-grade: theap census + retain arm both in-band, KL-90-4; grade inherits the slope grades above]"
+  emit "VATTR PASS: attribution judged against the ex-ante P-RET0 thresholds"
+else
+  emit "VATTR SKIPPED: slope arms not both clean (KL-90-4: without census+arm the attribution stays envelope)"; bf=$((bf+1))
+fi
+flushb
+
+# --- Block VSWEEP (A-BB59 + A-SK58 + A-BG52) ---------------------------------
+# Lo sweep sostituisce il blocco conc di m88: coppie {pad87a,pad87b} a
+# dt in {0,1,2,5,10,20} ms, ordine afirst/bfirst. Mapping A-SK58
+# DICHIARATO: dt=0 => OVERLAP obbligatorio; dt=20 => NO-OVERLAP
+# obbligatorio; INVALID => FAIL ovunque; dt intermedi = stato EMPIRICO
+# riportato. Ogni label di discriminazione porta il REGIME in-band
+# (A-BG52). I net concorrenti restano VOID come cifre per-thread
+# (KB-88-1): qui discriminano il DRIVER, mai una cifra.
 bf=0
 if [ "$IDENT_CLEAN" = 1 ] && [ "$DISP_CLEAN" = 1 ] && [ "$ORD_CLEAN" = 1 ]; then
   getnet() { awk -v pat="$2" '/tag=unitcache_main_entry/ && $0 ~ pat { for (i=1;i<=NF;i++) { if ($i ~ /^net=/) {n=$i; sub("net=","",n)} if ($i ~ /^floor_inc=/) {f=$i; sub("floor_inc=","",f)} } print n" "f }' "$1"; }
@@ -314,17 +406,18 @@ if [ "$IDENT_CLEAN" = 1 ] && [ "$DISP_CLEAN" = 1 ] && [ "$ORD_CLEAN" = 1 ]; then
   CA2=$(getnet "$OUT/m89.cala.r2.a$ATT.memcensus" "pad87a[.]php")
   CB1=$(getnet "$OUT/m89.calb.r1.a$ATT.memcensus" "pad87b[.]php")
   CB2=$(getnet "$OUT/m89.calb.r2.a$ATT.memcensus" "pad87b[.]php")
-  if [ -z "$CA1" ] || [ -z "$CB1" ]; then emit "FAIL VWARM: calibration rows missing"; bf=$((bf+1)); fi
-  [ "$CA1" = "$CA2" ] || { emit "FAIL VWARM: cala r1 ($CA1) != r2 ($CA2) — not byte-reproduced"; bf=$((bf+1)); }
-  [ "$CB1" = "$CB2" ] || { emit "FAIL VWARM: calb r1 ($CB1) != r2 ($CB2) — not byte-reproduced"; bf=$((bf+1)); }
+  if [ -z "$CA1" ] || [ -z "$CB1" ]; then emit "FAIL VSWEEP: calibration rows missing"; bf=$((bf+1)); fi
+  [ "$CA1" = "$CA2" ] || { emit "FAIL VSWEEP: cala r1 ($CA1) != r2 ($CA2) — not byte-reproduced"; bf=$((bf+1)); }
+  [ "$CB1" = "$CB2" ] || { emit "FAIL VSWEEP: calb r1 ($CB1) != r2 ($CB2) — not byte-reproduced"; bf=$((bf+1)); }
   if [ "$bf" = 0 ]; then
     CALA_NET=${CA1%% *}; CALA_FI=${CA1##* }
     CALB_NET=${CB1%% *}; CALB_FI=${CB1##* }
     SUM=$((CALA_NET + CALB_NET))
-    emit "VWARM cal: pad87a net=$CALA_NET B floor_inc=$CALA_FI B | pad87b net=$CALB_NET B floor_inc=$CALB_FI B [metric=net-at-lower, net_window=process-counters, W=1 sequential]"
-    for m in base warm stag; do
-      for r in 1 2; do
-        F="$OUT/m89.conc$m.r$r.a$ATT.memcensus"
+    emit "VSWEEP cal: pad87a net=$CALA_NET B floor_inc=$CALA_FI B | pad87b net=$CALB_NET B floor_inc=$CALB_FI B [metric=net-at-lower, net_window=process-counters, W=1 sequential]"
+    NOVERLAP=0; NORDMATCH=0; NAPAD=0; DT20OK=0; DT20N=0
+    for dt in $DTS; do
+      for o in afirst bfirst; do
+        F="$OUT/m89.sweep.dt$dt.$o.a$ATT.memcensus"
         OV=$(awk '
           /tag=lower_span/ {
             tid=""; t0=""; t1=""
@@ -340,78 +433,71 @@ if [ "$IDENT_CLEAN" = 1 ] && [ "$DISP_CLEAN" = 1 ] && [ "$ORD_CLEAN" = 1 ]; then
             if (atid=="" || btid=="" || atid==btid) { print "INVALID"; exit }
             print (a0<b1 && b0<a1) ? "OVERLAP" : "NO-OVERLAP"
           }' "$F")
-        # A-SK58 (Council WP-90, Klabnik): spans= is JUDGED, no longer
-        # reported-only — the stag "zero-swallow" claim rests on
-        # NO-OVERLAP and the base/warm discrimination rests on OVERLAP.
-        case "$m" in
-          stag) WANT_OV="NO-OVERLAP" ;;
-          *)    WANT_OV="OVERLAP" ;;
+        case "$dt" in
+          0)  WANT_OV="OVERLAP" ;;
+          20) WANT_OV="NO-OVERLAP" ;;
+          *)  WANT_OV="REPORT" ;;
         esac
-        if [ "$OV" != "$WANT_OV" ]; then
-          emit "FAIL VWARM: conc$m.r$r spans=$OV, protocol requires $WANT_OV (A-SK58; INVALID always fails)"; bf=$((bf+1)); continue
+        if [ "$OV" = "INVALID" ]; then
+          emit "FAIL VSWEEP: dt$dt.$o spans=INVALID (A-SK58: INVALID always fails)"; bf=$((bf+1)); continue
+        fi
+        if [ "$WANT_OV" != "REPORT" ] && [ "$OV" != "$WANT_OV" ]; then
+          emit "FAIL VSWEEP: dt$dt.$o spans=$OV, protocol requires $WANT_OV (A-SK58 mapping declared in campaign header)"; bf=$((bf+1)); continue
         fi
         NA=$(getnet "$F" "pad87a[.]php"); NB=$(getnet "$F" "pad87b[.]php")
-        [ -n "$NA" ] && [ -n "$NB" ] || { emit "FAIL VWARM: conc$m.r$r pad entries missing"; bf=$((bf+1)); continue; }
-        NA_NET=${NA%% *}; NA_FI=${NA##* }
-        NB_NET=${NB%% *}; NB_FI=${NB##* }
+        [ -n "$NA" ] && [ -n "$NB" ] || { emit "FAIL VSWEEP: dt$dt.$o pad entries missing"; bf=$((bf+1)); continue; }
+        NA_NET=${NA%% *}; NB_NET=${NB%% *}
         DA=$((NA_NET - SUM)); DB=$((NB_NET - SUM))
-        eval "DA_${m}_${r}=$DA"
-        eval "FIA_${m}_${r}=$NA_FI"
-        emit "VWARM conc$m r$r: spans=$OV (judged: want $WANT_OV, A-SK58) padA net=$NA_NET B floor_inc=$NA_FI B | padB net=$NB_NET B floor_inc=$NB_FI B | dA=$DA B dB=$DB B [nets under concurrency VOID as per-thread figures, KB-88-1 — reported to discriminate the driver only]"
+        FIRSTPAD=a; [ "$o" = bfirst ] && FIRSTPAD=b
+        ABSA=${DA#-}; ABSB=${DB#-}
+        SURPLUS=a; [ "$ABSB" -gt "$ABSA" ] && SURPLUS=b
+        emit "VSWEEP dt$dt $o: spans=$OV padA net=$NA_NET B dA=$DA B | padB net=$NB_NET B dB=$DB B | first=$FIRSTPAD surplus_side=$SURPLUS [nets VOID per-thread, KB-88-1]"
+        if [ "$OV" = "OVERLAP" ]; then
+          NOVERLAP=$((NOVERLAP+1))
+          [ "$SURPLUS" = "$FIRSTPAD" ] && NORDMATCH=$((NORDMATCH+1))
+          [ "$SURPLUS" = a ] && NAPAD=$((NAPAD+1))
+        fi
+        if [ "$dt" = 20 ]; then
+          DT20N=$((DT20N+2))
+          [ "$NA_NET" = "$CALA_NET" ] && DT20OK=$((DT20OK+1))
+          [ "$NB_NET" = "$CALB_NET" ] && DT20OK=$((DT20OK+1))
+        fi
       done
     done
     if [ "$bf" = 0 ]; then
-      DAB=$(( (DA_base_1 + DA_base_2) / 2 ))
-      DAW=$(( (DA_warm_1 + DA_warm_2) / 2 ))
-      DAS=$(( (DA_stag_1 + DA_stag_2) / 2 ))
-      VER="UNRESOLVED"
-      ABSW=${DAW#-}; ABSB=${DAB#-}
-      if [ "$ABSB" -gt 0 ] && [ $((ABSW * 5)) -lt "$ABSB" ]; then VER="FIRST-TOUCH (dA collapses when both workers are warmed — P-WARM confirmed)"
-      elif [ "$ABSB" -gt 0 ] && [ $((ABSW * 10)) -gt $((ABSB * 8)) ]; then VER="PER-REQUEST (dA survives warm — P-WARM refuted)"
-      fi
-      # A-BG52 (Council WP-90, Gregg): the dA formula was calibrated on
-      # the base-floor regime — under floor-collapse (warm floor_inc well
-      # under the calibration floor) its label is VOID-of-meaning. The
-      # REGIME rides IN-BAND on the label, judged, not prose.
-      if [ "${FIA_warm_1:-0}" -lt $((CALA_FI / 2)) ]; then
-        VER="$VER [regime=floor-collapse: dA label VOID-of-meaning — formula valid only at base-floor (A-BG52)]"
+      # P-DT20 (ancora m88): net==cal AL BYTE a finestre disgiunte.
+      if [ "$DT20OK" = "$DT20N" ] && [ "$DT20N" -gt 0 ]; then
+        emit "VSWEEP P-DT20 CONFIRMED: net==cal AL BYTE on $DT20OK/$DT20N dt=20 sides (zero-swallow reproduced)"
       else
-        VER="$VER [regime=base-floor: dA formula in its calibrated regime (A-BG52)]"
+        emit "VSWEEP P-DT20 REFUTED: net==cal only $DT20OK/$DT20N at dt=20 — the m88 anchor did not reproduce (label, not gate)"
       fi
-      emit "VWARM discrimination: mean dA base=$DAB B | warm=$DAW B | stag=$DAS B -> $VER"
-      emit "VWARM PASS: calibrations byte-reproduced; discrimination reported against the ex-ante predictions (P-BASE/P-WARM/P-STAG in campaign header)"
+      # P-ORD (A-BB59): il surplus segue l'ORDINE, non il fixture.
+      # Regime in-band (A-BG52): il discriminatore vale SOLO sui run in
+      # OVERLAP (a finestre disgiunte non esiste un surplus da attribuire).
+      if [ "$NOVERLAP" -gt 0 ]; then
+        if [ "$NORDMATCH" = "$NOVERLAP" ]; then ORDVER="ORDER-DRIVEN (P-ORD confirmed $NORDMATCH/$NOVERLAP)"
+        elif [ "$NAPAD" = "$NOVERLAP" ]; then ORDVER="FIXTURE-DRIVEN-padA (P-ORD refuted: surplus sticks to pad87a $NAPAD/$NOVERLAP)"
+        elif [ "$NAPAD" = 0 ]; then ORDVER="FIXTURE-DRIVEN-padB (P-ORD refuted: surplus sticks to pad87b)"
+        else ORDVER="UNSTABLE (order-match $NORDMATCH/$NOVERLAP, padA-side $NAPAD/$NOVERLAP — timing-attached, m87/m88 class)"
+        fi
+        emit "VSWEEP discrimination: $ORDVER [regime=OVERLAP-only (A-BG52); overlap runs=$NOVERLAP]"
+      else
+        emit "VSWEEP discrimination: NO overlap runs — discriminator not applicable [regime declared, A-BG52]"
+      fi
+      emit "VSWEEP PASS: calibrations byte-reproduced, spans judged (A-SK58 mapping), predictions judged against the ex-ante header (A-BB59)"
     fi
   fi
 else
-  emit "VWARM SKIPPED: upstream not clean (KS-SK-88-2)"; bf=$((bf+1))
+  emit "VSWEEP SKIPPED: upstream not clean (KS-SK-88-2)"; bf=$((bf+1))
 fi
 flushb
 
-# --- Block VUCLOG (A-DS45/KS-DS-88-1) ---------------------------------------
+# --- Block VUCLOG: NESSUNA fase armata in m89 (DICHIARATO) -------------------
+# A-DS45 consumata in m88 (VUCLOG PASS su log di produzione); il positivo
+# >=1-coppia vive in F16b (battery, ARMATO). Nessun canale
+# PHPR_UNIT_CACHE_LOG in questa campagna => KS-DS-90-1 non innescabile.
+emit "VUCLOG DECLARED-ABSENT: no armed-log phase in measure89 BY DESIGN (A-DS45 consumed in m88; >=1-pair positive lives in F16b)"
 bf=0
-if [ "$IDENT_CLEAN" = 1 ]; then
-  F="$OUT/$UCLOG_RAW"
-  UCL="$OUT/m89.uclog.a$ATT.uclog"
-  ID=$(grep "^mem_hash=" "$F")
-  W=$(echo "$ID" | sed -n 's/.* w=\([0-9]*\) .*/\1/p')
-  [ "$W" = 1 ] || { emit "FAIL VUCLOG: armed-log phase ran at W=$W != 1 (KH89-1: putord not opposable at W>1 without thr=)"; bf=$((bf+1)); }
-  [ -f "$UCL" ] || { emit "FAIL VUCLOG: production uclog missing: $UCL"; bf=$((bf+1)); }
-  if [ "$bf" = 0 ]; then
-    # Lettera A-DS45 RIQUALIFICATA A CODICE (v. header campagna): dopo la
-    # partizione A-MS24, main_evicted in produzione è un tripwire il cui
-    # scatto VOIDA (KS-DS-84-4) — il positivo non-vacuo vive sulla lane
-    # SUPERSEDE (putord in-band, A-TH43); il positivo >=1-coppia vive in
-    # F16b (battery, armed). Da ri-giudicare al Concilio WP-90.
-    NEV=$(grep -c "^unitcache main_evicted " "$UCL" || true)
-    NSUP=$(grep -c "^unitcache supersede entries .*putord=" "$UCL" || true)
-    [ "$NEV" = 0 ] || { emit "FAIL VUCLOG: $NEV main_evicted in PRODUCTION log — A-MS24 partition tripwire fired (KS-DS-84-4)"; bf=$((bf+1)); }
-    [ "$NSUP" -ge 2 ] || { emit "FAIL VUCLOG: only $NSUP supersede-with-putord rows, expected >=2 — positive vacuous (A-DS45)"; bf=$((bf+1)); }
-    GOUT=$("$REPO/wp87-harness/putord-pair-guard.pl" "$UCL" 2>&1) || { emit "FAIL VUCLOG: putord-pair-guard VOID on production log: $GOUT"; bf=$((bf+1)); }
-    if [ "$bf" = 0 ]; then emit "VUCLOG PASS: production log W=1, supersede-with-putord=$NSUP, main_evicted=0 (tripwire respected), pair-guard consumed on NON-selftest log — 0 main_evicted pairs EXPECTED by construction (A-MS24; the >=1-pair positive lives in F16b)"; fi
-  fi
-else
-  emit "VUCLOG SKIPPED: upstream VIDENT not clean (KS-SK-88-2)"; bf=$((bf+1))
-fi
 flushb
 
 LEDGER="$OUT/m89.campaign.ledger"
