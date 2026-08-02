@@ -122,11 +122,17 @@ memrun86() { # <label> <workers> <burst:0|1> <fx...>
   : > "$MC"
   local PORT=8296
   head_unmoved
-  local envburst=()
-  [ "$burst" = 1 ] && envburst=(PHPR_MEMCENSUS_TEST_BURST=1)
-  env "${envburst[@]}" PHPR_MEM_CENSUS="$MC" \
-    "$OUTBIN/php-server" --axum --workers "$workers" --port $PORT -t "$FIXDIR" \
-    > /dev/null 2> "$OUT/m86.$label.log" &
+  # NB: no empty-array expansion — macOS bash 3.2 + set -u aborts on
+  # "${arr[@]}" when arr is empty (bit the first campaign launch).
+  if [ "$burst" = 1 ]; then
+    PHPR_MEMCENSUS_TEST_BURST=1 PHPR_MEM_CENSUS="$MC" \
+      "$OUTBIN/php-server" --axum --workers "$workers" --port $PORT -t "$FIXDIR" \
+      > /dev/null 2> "$OUT/m86.$label.log" &
+  else
+    PHPR_MEM_CENSUS="$MC" \
+      "$OUTBIN/php-server" --axum --workers "$workers" --port $PORT -t "$FIXDIR" \
+      > /dev/null 2> "$OUT/m86.$label.log" &
+  fi
   local DPID=$!
   local up=0
   for _ in $(seq 1 100); do
