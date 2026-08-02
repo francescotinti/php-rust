@@ -1,0 +1,22 @@
+# verdict86 — S-86.0 attribution measures (Council WP-87 forms) — machine, fail-closed
+
+VCAL: NET_H = 7349977 B = 7.01 MiB · NET_P = 7803281 B = 7.44 MiB (W=1, this binary)
+VCAL reproduction vs WP-85 record: hello IDENTICAL (7.349.977 B) · pad IDENTICAL (7.803.281 B)
+VINV data: pad ord=1 net=7803281 B · hello ord=2 net=6842 B · prediction (named ex-ante): 6842 B [derivata: NET_H−NET_P+460.146, pad-own MODEL-GRADE(src=m85.dl28) under test]
+VINV PASS: INVERTED-ORDER counter-proof CONFIRMS the additive decomposition — hello-own(ord2) matches the named prediction byte-exact; the shared-node confound (996.838 B) did not bite on this pair (A-BB45; promotion of the decomposition is a Council WP-88 deliberation, KB-87-1 until then)
+VBURST data: net=8398553 B · NET_H+1 MiB = 8398553 B
+VBURST PASS: the 1 MiB in-bracket burst moved the row EXACTLY +1.048.576 B AND the calibration tooth DECLASSIFIES it (net != NET_H) — the pipeline rejects a polluted row, fail-closed PROVEN (A-DL33); this run is never a measurement
+VOVL OPEN: no qualifying overlap in the ledgered attempts — A-BB47 stays OPEN by name; per-thread under concurrency remains CANDIDATE (KB-87-3/KL-87-2)
+VW123 data: peaks 56033280 / 79659008 / 94699520 B · Δw2=23625728 B = 22.53 MiB · Δw3=15040512 B = 14.34 MiB [derivata: differenze fra i tre peak]
+VW123 NOTE: per-thread heap split REFUTED BY INSTRUMENT (mimalloc v3 shared default heap, heap= tooth) — reduced Δpeak form; full counted-vs-physical closure to Council WP-88
+VW123 NAMED-DEVIATION: Δ per added worker OUTSIDE 3.605.572 B ±5% [3425293; 3785851] — physical prediction does not hold in this form; to Council WP-88 (A-DL31)
+VW500 data: len=500 a_calls=4.0 a_bytes=2002 (named ex-ante: 4 / 2.002 B [derivata: 2·500+2·501])
+VW500 PASS: third point len=500 ON the piecewise model — a_calls=4, a_bytes=2.002 B exact (A-BB44 executed, A-BB48 retro-declaration closed)
+VW500 control hello: len=98 a_calls=2.0 a_bytes=196 (floor model: 2 / 196)
+VABBA data: arm A (purge=0) peaks r1..r9 = 240320512/231456768/236470272/252772352/238469120/240599040/238338048/235503616/236732416 B · arm B (default) = 243171328/236273664/241516544/238239744/239566848/235667456/249806848/241827840/238141440 B (W in-band, R=9 per arm, arm=union, fixture=hello.php, driver_sha=699db00a9808489e — A-BG38 scope; interleaved ABBA)
+VABBA spreads (r2..r9): spread(A)=21315584 B = 20.33 MiB · spread(B)=14139392 B = 13.48 MiB [derivata: max−min r2..r9 per braccio]
+VABBA NOTE (A-BG41): driver_sha of THIS campaign differs from measure85 (measure78.sh gained the purge parameter) — cross-campaign comparisons must name both sides and both R
+VABBA INCONCLUSIVE: neither arm halves the other's spread — purge timing NOT attributed; spread stays unattributed, pin stays RETIRED (envelope-only, KL-87-1)
+guard A-PP35: every campaign raw passes the shared reqns-guard (0 violations)
+
+== VERDICT86 PASS ==
