@@ -71,3 +71,25 @@ intersecare senza inghiottimento.
    questa campagna). La coppia fixture è il positivo/negativo del design.
 **Precondizione di ogni canary concorrente futuro** (Concilio WP-88 p5):
 nessun claim per-thread sotto concorrenza prima di questo design attuato.
+## A-DL43 — integrazione (Concilio WP-89, Leijen Q4): i due costi MANCANTI
+
+**(a) A-DL39, boundary PRE-PROLOGO (KL-89-3)**: `mi_theap_set_default`
+nel prologo del worker non riscrive il passato — le allocazioni del
+worker PRIMA del prologo (spawn std, bookkeeping del thread, TLS init)
+restano sul heap CONDIVISO: il per-worker heap SOTTOCONTA di un termine
+non nominato. Obbligo di design: marker `heap=` emesso AL PROLOGO
+(puntatore del heap nuovo + timestamp mono) così il boundary è
+DICHIARATO in-band; ogni cifra per-worker-heap senza boundary dichiarato
+è VOID (KL-89-3).
+
+**(b) A-BB50, semantica TEMPORALE dei delayed-free (KL-89-1 classe)**:
+in mimalloc il free di un blocco altrui va in delayed-free list ed è
+ESEGUITO dall'owner PIÙ TARDI (a un alloc/collect successivo) — «free
+eseguiti dal thread» slitta nel TEMPO, non solo di thread: una finestra
+può chiudersi PRIMA che l'owner processi i delayed ⇒ net gonfiato in
+modo silente e non-deterministico (il flag clamped A-DL36 copre solo il
+lato deflattivo). Obbligo di design: la semantica dichiarata diventa
+«net per-thread = alloc del thread − free ESEGUITI dal thread DENTRO la
+finestra», con UNA delle due mitigazioni nominate: (i) quiesce+collect
+del thread PRIMA della chiusura della finestra, o (ii) contatore
+delayed-pending in-band alla chiusura (delta ≠0 ⇒ riga marcata).
