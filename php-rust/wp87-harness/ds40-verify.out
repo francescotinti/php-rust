@@ -1,0 +1,39 @@
+== ds40-verify — oracle 8.5.7 · phpr ea56b874c76d3558 · git d50f3b5 ==
+branches: plain=opcache-loaded/enable_cli=Off · persist=enable_cli=1+file_cache_only=1 (run1) · phpr
+
+fixture=t_hoist_plain.php
+  plain  : exit=0 stdout=bool(true)|
+  persist: exit=0 stdout=bool(true)|
+  phpr   : exit=0 stdout=bool(true)|
+
+fixture=t_hoist_parent_earlier.php
+  plain  : exit=0 stdout=bool(true)|
+  persist: exit=0 stdout=bool(true)|
+  phpr   : exit=0 stdout=bool(true)|
+
+fixture=t_hoist_parent_later.php
+  plain  : exit=0 stdout=bool(false)|
+  persist: exit=0 stdout=bool(true)|
+  phpr   : exit=0 stdout=bool(true)|
+
+fixture=t_hoist_const.php
+  plain  : exit=255 stdout=PHP Fatal error:  Uncaught Error: Class "C" not found in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp87-harness/fixtures-ds40/t_hoist_const.php:2|Stack trace:|#0 {main}|
+  persist: exit=0 stdout=7|
+  phpr   : exit=0 stdout=7|
+
+fixture=t_hoist_declared.php
+  plain  : exit=0 stdout=bool(false)|
+  persist: exit=0 stdout=bool(true)|
+  phpr   : exit=0 stdout=bool(true)|
+
+fixture=t_redeclare.php
+  plain  : exit=255 stdout=out|PHP Fatal error:  Cannot redeclare class C (previously declared in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp87-harness/fixtures-ds40/t_redeclare.php:3) in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp87-harness/fixtures-ds40/t_redeclare.php on line 4|Stack trace:|
+  persist: exit=255 stdout=out|PHP Fatal error:  Cannot redeclare class C (previously declared in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp87-harness/fixtures-ds40/t_redeclare.php:3) in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp87-harness/fixtures-ds40/t_redeclare.php on line 4|Stack trace:|
+  phpr   : exit=255 stdout=out||Fatal error: Cannot redeclare class C (previously declared in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp87-harness/fixtures-ds40/t_redeclare.php:3) in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp87-harness/fixtures-ds40/t_redeclare.php on line 4|
+
+fixture=tC_lsp_covariance.php
+  plain  : exit=255 stdout=PHP Fatal error:  Declaration of C::m(): int must be compatible with P::m(): string in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp87-harness/fixtures-ds40/tC_lsp_covariance.php on line 4|Stack trace:|#0 {main}|
+  persist: exit=255 stdout=PHP Fatal error:  Declaration of C::m(): int must be compatible with P::m(): string in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp87-harness/fixtures-ds40/tC_lsp_covariance.php on line 4|Stack trace:|#0 {main}|
+  phpr   : exit=0 stdout=out|
+
+== ds40-verify DONE ==

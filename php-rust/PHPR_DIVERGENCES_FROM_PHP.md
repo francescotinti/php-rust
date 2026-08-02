@@ -410,17 +410,35 @@ trait-di-trait nel DebugClassLoader. Da chiudere aggiungendo `uses` a
 `class_implements(enum)` non include l'interfaccia implementata esplicitamente
 (solo UnitEnum/BackedEnum).
 
-### 3.3-ter Hoisting delle dichiarazioni = semantica OPCACHE (divergenza dal CLI-oracle, S-86.0/Concilio WP-87)
-Verificato empiricamente sull'oracle vivo (php 8.5.7, Stogov WP-87): senza
-opcache `class_exists('C')` PRIMA dello statement di dichiarazione è `false`,
-un `return;` prima della decl lascia la classe MAI dichiarata, e il fatal LSP
-arriva DOPO l'output già emesso; con `opcache.enable_cli=1` i tre observable
-si invertono (`true` / dichiarata / fatal PRIMA dell'output). **phpr riproduce
-ESATTAMENTE il braccio opcache** (unit cache = persistent script, coerente col
-modello dichiarato). Il gate di parità CLI usa brew php con opcache_cli OFF ⇒
-i tre observable sono divergenze OSSERVABILI dal CLI-oracle, FEDELI a
-opcache_cli. Classe: fedeltà-a-opcache, non bug; i corpus test che
-distinguessero i due bracci vanno pinnati sul braccio opcache.
+### 3.3-ter Hoisting delle dichiarazioni = semantica PERSIST di opcache (divergenza dal CLI-oracle; EMENDATA A-DS40, Concilio WP-88)
+⚠️ **Ricetta d'innesco CORRETTA (Stogov WP-88, refuta la versione WP-87)**:
+l'inversione degli observable NON appare con il solo `opcache.enable_cli=1`
+(SHM, prima esecuzione); appare **SOLO col branch PERSIST** —
+`opcache.file_cache_only=1` (già al run1) ≡ richiesta calda FPM. Inoltre
+`class C {}` semplice e parent-EARLIER sono early-bound in **ENTRAMBI** i
+bracci (`class_exists` pre-decl = `true` anche a opcache OFF): la divergenza
+esiste solo per le forme che l'early binding non copre (parent-LATER e
+affini). Observable divergenti verificati dal vivo (php 8.5.7, ancore
+committate in `wp87-harness/fixtures-ds40/` + `ds40-verify.out`, forma
+parent-later):
+1. `class_exists('C', false)` pre-decl: oracle plain `false` → persist/phpr
+   `true` (`t_hoist_parent_later.php`);
+2. `return;` prima della decl ⇒ classe mai dichiarata (plain) vs dichiarata
+   (persist/phpr) — forma WP-87, stessa classe;
+3. timing del fatal LSP (v. §3.3-quater; su phpr osservabile solo post
+   A-DS35);
+4. **costante di classe pre-decl** (`C::K`): oracle plain Error «Class "C"
+   not found» exit 255 → persist/phpr `7` exit 0 (`t_hoist_const.php`);
+5. **`get_declared_classes()` pre-decl**: `false` → `true`
+   (`t_hoist_declared.php`).
+**Redeclare NON diverge**: `Cannot redeclare class C` con timing identico
+(output già emesso) ed exit 255 su plain/persist/phpr (`t_redeclare.php`).
+**phpr riproduce ESATTAMENTE il braccio PERSIST** (unit cache = persistent
+script). Il gate di parità CLI usa brew php con opcache_cli OFF ⇒ questi
+observable sono divergenze OSSERVABILI dal CLI-oracle, FEDELI al braccio
+persist. Classe: fedeltà-a-opcache-persist, non bug; ogni corpus test che
+distingua i bracci va pinnato sul braccio persist (KS-DS-88-2: entry senza
+fixture committata o citata con innesco `enable_cli` = UNANCHORED).
 
 ### 3.3-quater 🔴 Covariance/contravariance LSP NON verificata — correct-or-absent VIOLATO (gap engine, PRIMO item ROADMAP)
 Scoperta GRAVE (Stogov, Concilio WP-87, fuori perimetro di sessione):
@@ -435,6 +453,13 @@ S-86.0): CORRECT** — la verifica LSP va implementata (fatal fedele al
 messaggio Zend, al timing del braccio opcache per §3.3-ter), NON aggirata:
 è il PRIMO item engine della ROADMAP ripresa ([[php-rust-todo-master]]).
 Fino ad allora questo è il gap engine più grave a catalogo.
+**Ancora committata (A-DS40)**: `wp87-harness/fixtures-ds40/
+tC_lsp_covariance.php` — oracle fatala PRE-output («Declaration of C::m():
+int must be compatible with P::m(): string», exit 255) su ENTRAMBI i bracci
+(plain e persist: parent-earlier ⇒ early binding ⇒ check a compile time);
+phpr stampa `out` ed esce 0 (verifica dal vivo in
+`wp87-harness/ds40-verify.out`). La spec di chiusura è A-DS35 fase 1
+(contratto A-DS41 in todo-master; merge vincolato da KS-DS-88-3).
 Gli argomenti del costruttore di una `new class(...)` differita rieseguono nello
 scope del chiamante via bridge per-nome dei named slots; `$this` non è un named
 slot, quindi `new class($this->x) extends Irrisolvibile {}` dentro un metodo
