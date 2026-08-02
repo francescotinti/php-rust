@@ -5,3 +5,4 @@
 attempt_epoch=1785707336 battery=89pre rev=692c697 esito=FAIL fails=1/16 first_fail=lever-fixtures2
 attempt_epoch=1785707387 battery=89pre rev=65086e6 esito=REFUSE reason=tree-not-porcelain
 attempt_epoch=1785708475 battery=89pre rev=05726aa esito=PASS k=16/16 sha256=b17fb148ff7f17053a2cf2ce07eb99e8f097db7cb959a73b156b1489e7cec183
+attempt_epoch=1785709061 battery=89pre rev=30f5a87 esito=PASS k=16/16 sha256=9ff9d11f38b70cc0a40f9d25a15bfd7e728fdbc6ac2589f1eab4ae34c789baf6
