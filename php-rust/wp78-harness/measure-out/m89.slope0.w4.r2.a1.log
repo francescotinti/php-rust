@@ -1,0 +1,21 @@
+php-server (Axum) listening on http://127.0.0.1:8297 (docroot: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/gate-axum/fixtures)
+php-server: shutdown signal received, draining
+php-server: all 4 workers joined — exit stats are authoritative (KL-78-4)
+        7.95 real         0.19 user         0.11 sys
+           134037504  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+                8517  page reclaims
+                   0  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                 403  messages sent
+                 805  messages received
+                   1  signals received
+                 693  voluntary context switches
+                4990  involuntary context switches
+          1024676701  instructions retired
+           656080104  cycles elapsed
+            92127808  peak memory footprint
