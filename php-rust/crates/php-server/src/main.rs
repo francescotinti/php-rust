@@ -356,8 +356,27 @@ mod axum_handler {
         });
 
         // Router: use fallback to catch-all paths
+        // A-BG51 (Council WP-90, Gregg): pid-echo on the HTTP channel —
+        // every response carries `x-phpr-pid: <pid>`; the campaign asserts
+        // it on the FIRST request of every phase against the LISTEN-owner
+        // pid (a stale/orphan server cannot echo the fresh pid). Value
+        // computed once (OnceLock): no per-request syscall in any timed
+        // window (WP-64).
         let app = Router::new()
             .fallback(php_handler)
+            .layer(axum::middleware::map_response(
+                |mut res: axum::response::Response| async move {
+                    static PID: std::sync::OnceLock<axum::http::HeaderValue> =
+                        std::sync::OnceLock::new();
+                    let v = PID.get_or_init(|| {
+                        axum::http::HeaderValue::from_str(&std::process::id().to_string())
+                            .expect("pid digits are a valid header value")
+                    });
+                    res.headers_mut()
+                        .insert(axum::http::HeaderName::from_static("x-phpr-pid"), v.clone());
+                    res
+                },
+            ))
             .with_state(app_state);
 
         eprintln!("php-server (Axum) listening on http://{addr} (docroot: {docroot_str})");

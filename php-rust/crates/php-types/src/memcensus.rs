@@ -666,8 +666,8 @@ extern "C" {
     // buffer; we then emit it through the atomic census channel. Per-arena
     // enumeration is not public in v3 (mi_arena_id_t is an opaque void*),
     // so the NAMED substitution is: process-level arena stats
-    // (arena_count, committed, reserved, purged, commit_calls) + chunk_bins
-    // census — declared in the campaign header.
+    // (arena_count, committed, reserved, purged) + chunk_bins census —
+    // declared in the campaign header. commit_calls BANNED (A-DL46).
     fn mi_stats_get_json(buf_size: usize, buf: *mut std::os::raw::c_char)
         -> *mut std::os::raw::c_char;
 }
@@ -1048,8 +1048,14 @@ fn phys_window_dump(win: u32, phys: u64, tag: &str) {
                     };
                     let _ = f.write_all(row.as_bytes());
                 }
+                // A-DL46 (Council WP-90, Leijen): `commit_calls` BANNED from
+                // emission — the substring parse below is section-blind
+                // (first occurrence GLOBAL) and the extracted val=0 against
+                // a 150 MB committed was auto-incoherent: a row that can
+                // lie silently is worse than no row. Re-admit only with a
+                // section-aware parse (scoped to the arena JSON section).
                 for key in
-                    ["arena_count", "purged", "reset", "commit_calls", "purge_calls", "mmap_calls"]
+                    ["arena_count", "purged", "reset", "purge_calls", "mmap_calls"]
                 {
                     let row = match counter(key) {
                         Some(v) => format!(

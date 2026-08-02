@@ -224,7 +224,10 @@ else
         if [ "$NRUSTC" != 1 ]; then
           fail "(A-AH47) matrix archive carries $NRUSTC rustc= rows, expected exactly 1 (KS-AH-89-2)"
         elif [ -z "$MTX_RUSTC" ]; then
-          fail "(A-AH44) matrix archive carries no rustc= header (A-AH41 pre-v4 archive) — re-run the battery"
+          # A-AH53 (Council WP-90): correct diagnosis — the header EXISTS
+          # (NRUSTC==1 above), it is the VALUE that is empty (masked
+          # recorder failure, now refused at record time too).
+          fail "(A-AH44/A-AH53) matrix rustc= header present but VALUE EMPTY — recorder sampled a broken toolchain; re-run the battery"
         elif [ "$MTX_RUSTC" != "$CUR_RUSTC" ]; then
           fail "(A-AH44/A-AH47) toolchain drift: matrix rustc='$MTX_RUSTC' != current in-repo rustc -Vv='$CUR_RUSTC' — battery certifies ANOTHER compiler (KS-AH-87-2/KS-AH-89-1)"
         fi

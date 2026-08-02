@@ -80,7 +80,17 @@ echo "git=$GIT_REV" | tee -a "$LOG"
 # with -Vv (host triple included; arch drift at equal version is invisible
 # to -V). Single line, newlines joined with ';' — KS-AH-89-2 demands
 # EXACTLY one rustc= row per archive.
-echo "rustc=$( (cd "$REPO" && rustc -Vv 2>/dev/null | tr '\n' ';') || echo unknown)" | tee -a "$LOG"
+# A-AH53 (Council WP-90, Hejlsberg): the `|| echo unknown` fallback was
+# QUASI-DEAD — with rustc missing, the pipeline's status is tr's (0 on
+# empty input), the fallback never fired and the row became `rustc=`
+# EMPTY (masked failure, misdiagnosed downstream as "no header"). The
+# check is now explicit: sample first, refuse an empty value HERE.
+RUSTC_VV=$( (cd "$REPO" && rustc -Vv 2>/dev/null | tr '\n' ';') || true)
+if [ -z "$RUSTC_VV" ]; then
+  echo "FAIL: rustc -Vv produced NO output (toolchain missing/broken) — a rustc= row is never written empty (A-AH53)" | tee -a "$LOG"
+  exit 1
+fi
+echo "rustc=$RUSTC_VV" | tee -a "$LOG"
 echo "cargo=$(cargo -V 2>/dev/null || echo unknown)" | tee -a "$LOG"
 echo "tree=clean (git status --porcelain empty at gate start, A-AH14)" | tee -a "$LOG"
 FAILS=0
