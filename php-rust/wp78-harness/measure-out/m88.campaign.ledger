@@ -1,0 +1,35 @@
+attempt_epoch=1785698872 git=202f8b1 campaign_sha=8cdf64506001c1fa attempt=1 phase=start
+attempt_epoch=1785698873 git=202f8b1 campaign_sha=8cdf64506001c1fa attempt=1 phase=identity mem_hash=b2fe7a43e62166da matrix=feature-matrix.0b83f2b.20260802-211724.log
+attempt_epoch=1785698882 git=202f8b1 campaign_sha=8cdf64506001c1fa attempt=1 phase=slope.w4.r1 raw=m88.slope.w4.r1.a1.memcensus esito=ok nreq=400
+attempt_epoch=1785698890 git=202f8b1 campaign_sha=8cdf64506001c1fa attempt=1 phase=slope.w4.r2 raw=m88.slope.w4.r2.a1.memcensus esito=ok nreq=400
+attempt_epoch=1785698898 git=202f8b1 campaign_sha=8cdf64506001c1fa attempt=1 phase=slope.w4.r3 raw=m88.slope.w4.r3.a1.memcensus esito=ok nreq=400
+attempt_epoch=1785698906 git=202f8b1 campaign_sha=8cdf64506001c1fa attempt=1 phase=slope.w4.r4 raw=m88.slope.w4.r4.a1.memcensus esito=ok nreq=400
+attempt_epoch=1785698914 git=202f8b1 campaign_sha=8cdf64506001c1fa attempt=1 phase=slope.w4.r5 raw=m88.slope.w4.r5.a1.memcensus esito=ok nreq=400
+attempt_epoch=1785698927 git=202f8b1 campaign_sha=8cdf64506001c1fa attempt=1 phase=slope.w8.r1 raw=m88.slope.w8.r1.a1.memcensus esito=ok nreq=800
+attempt_epoch=1785698940 git=202f8b1 campaign_sha=8cdf64506001c1fa attempt=1 phase=slope.w8.r2 raw=m88.slope.w8.r2.a1.memcensus esito=ok nreq=800
+attempt_epoch=1785698952 git=202f8b1 campaign_sha=8cdf64506001c1fa attempt=1 phase=slope.w8.r3 raw=m88.slope.w8.r3.a1.memcensus esito=ok nreq=800
+attempt_epoch=1785698965 git=202f8b1 campaign_sha=8cdf64506001c1fa attempt=1 phase=slope.w8.r4 raw=m88.slope.w8.r4.a1.memcensus esito=ok nreq=800
+attempt_epoch=1785698978 git=202f8b1 campaign_sha=8cdf64506001c1fa attempt=1 phase=slope.w8.r5 raw=m88.slope.w8.r5.a1.memcensus esito=ok nreq=800
+attempt_epoch=1785698997 git=202f8b1 campaign_sha=8cdf64506001c1fa attempt=1 phase=slope.w12.r1 raw=m88.slope.w12.r1.a1.memcensus esito=ok nreq=1200
+attempt_epoch=1785699015 git=202f8b1 campaign_sha=8cdf64506001c1fa attempt=1 phase=slope.w12.r2 raw=m88.slope.w12.r2.a1.memcensus esito=ok nreq=1200
+attempt_epoch=1785699033 git=202f8b1 campaign_sha=8cdf64506001c1fa attempt=1 phase=slope.w12.r3 raw=m88.slope.w12.r3.a1.memcensus esito=ok nreq=1200
+attempt_epoch=1785699051 git=202f8b1 campaign_sha=8cdf64506001c1fa attempt=1 phase=slope.w12.r4 raw=m88.slope.w12.r4.a1.memcensus esito=ok nreq=1200
+attempt_epoch=1785699070 git=202f8b1 campaign_sha=8cdf64506001c1fa attempt=1 phase=slope.w12.r5 raw=m88.slope.w12.r5.a1.memcensus esito=ok nreq=1200
+attempt_epoch=1785699093 git=202f8b1 campaign_sha=8cdf64506001c1fa attempt=1 phase=slope.w16.r1 raw=m88.slope.w16.r1.a1.memcensus esito=ok nreq=1600
+attempt_epoch=1785699117 git=202f8b1 campaign_sha=8cdf64506001c1fa attempt=1 phase=slope.w16.r2 raw=m88.slope.w16.r2.a1.memcensus esito=ok nreq=1600
+attempt_epoch=1785699140 git=202f8b1 campaign_sha=8cdf64506001c1fa attempt=1 phase=slope.w16.r3 raw=m88.slope.w16.r3.a1.memcensus esito=ok nreq=1600
+attempt_epoch=1785699164 git=202f8b1 campaign_sha=8cdf64506001c1fa attempt=1 phase=slope.w16.r4 raw=m88.slope.w16.r4.a1.memcensus esito=ok nreq=1600
+attempt_epoch=1785699187 git=202f8b1 campaign_sha=8cdf64506001c1fa attempt=1 phase=slope.w16.r5 raw=m88.slope.w16.r5.a1.memcensus esito=ok nreq=1600
+attempt_epoch=1785699189 git=202f8b1 campaign_sha=8cdf64506001c1fa attempt=1 phase=cala.r1 raw=m88.cala.r1.a1.memcensus esito=ok
+attempt_epoch=1785699190 git=202f8b1 campaign_sha=8cdf64506001c1fa attempt=1 phase=calb.r1 raw=m88.calb.r1.a1.memcensus esito=ok
+attempt_epoch=1785699192 git=202f8b1 campaign_sha=8cdf64506001c1fa attempt=1 phase=cala.r2 raw=m88.cala.r2.a1.memcensus esito=ok
+attempt_epoch=1785699193 git=202f8b1 campaign_sha=8cdf64506001c1fa attempt=1 phase=calb.r2 raw=m88.calb.r2.a1.memcensus esito=ok
+attempt_epoch=1785699194 git=202f8b1 campaign_sha=8cdf64506001c1fa attempt=1 phase=concbase.r1 raw=m88.concbase.r1.a1.memcensus esito=ok mode=base
+attempt_epoch=1785699196 git=202f8b1 campaign_sha=8cdf64506001c1fa attempt=1 phase=concbase.r2 raw=m88.concbase.r2.a1.memcensus esito=ok mode=base
+attempt_epoch=1785699197 git=202f8b1 campaign_sha=8cdf64506001c1fa attempt=1 phase=concwarm.r1 raw=m88.concwarm.r1.a1.memcensus esito=ok mode=warm
+attempt_epoch=1785699199 git=202f8b1 campaign_sha=8cdf64506001c1fa attempt=1 phase=concwarm.r2 raw=m88.concwarm.r2.a1.memcensus esito=ok mode=warm
+attempt_epoch=1785699200 git=202f8b1 campaign_sha=8cdf64506001c1fa attempt=1 phase=concstag.r1 raw=m88.concstag.r1.a1.memcensus esito=ok mode=stag
+attempt_epoch=1785699202 git=202f8b1 campaign_sha=8cdf64506001c1fa attempt=1 phase=concstag.r2 raw=m88.concstag.r2.a1.memcensus esito=ok mode=stag
+attempt_epoch=1785699206 git=202f8b1 campaign_sha=8cdf64506001c1fa attempt=1 phase=uclog raw=m88.uclog.a1.memcensus uclog=m88.uclog.a1.uclog esito=ok supersede=2 main_evicted=0 pairs=0
+attempt_epoch=1785699206 git=202f8b1 campaign_sha=8cdf64506001c1fa attempt=1 phase=done esito=ok
+attempt_epoch=1785699233 git=202f8b1 campaign_sha=judge attempt=1 phase=verdict esito=PASS verdict_file=wp88-harness/verdict88.a1.g1.out

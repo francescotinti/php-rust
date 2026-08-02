@@ -1,0 +1,67 @@
+== verdict88 — campaign git=202f8b1 attempt=1 mem_hash=b2fe7a43e62166da (judged at HEAD=202f8b1, generation g1) ==
+VIDENT PASS: 31 raws present, NUL-free, identity v2 (count==1, server_exit==0, srv_pid reconciled; mem_hash=b2fe7a43e62166da git=202f8b1 attempt=1)
+VDISP PASS: thr-set == {0..W-1} exact and per-thread count == nreq/W on every raw (A-PP37+A-PP42)
+VORD PASS: main-entry ord profile + clamped=0 + thread-cache profile hold on every judged raw (warm profile 2/2 declared)
+VARENA PASS: mi_arena_json + extracted rows present, no parse failures, on every slope raw
+slope w=4 r=1 committed_postcollect_win0_bytes=150011904 slack_committed_minus_used_bytes=337600 peak_memory_footprint_bytes=96551488 arena_committed_current_bytes=150011904 arena_count=1
+slope w=4 r=2 committed_postcollect_win0_bytes=150339584 slack_committed_minus_used_bytes=76576 peak_memory_footprint_bytes=91996712 arena_committed_current_bytes=150339584 arena_count=1
+slope w=4 r=3 committed_postcollect_win0_bytes=148307968 slack_committed_minus_used_bytes=76576 peak_memory_footprint_bytes=95928896 arena_committed_current_bytes=148307968 arena_count=1
+slope w=4 r=4 committed_postcollect_win0_bytes=150339584 slack_committed_minus_used_bytes=330336 peak_memory_footprint_bytes=92029504 arena_committed_current_bytes=150339584 arena_count=1
+slope w=4 r=5 committed_postcollect_win0_bytes=148307968 slack_committed_minus_used_bytes=76576 peak_memory_footprint_bytes=95879744 arena_committed_current_bytes=148307968 arena_count=1
+slope w=8 r=1 committed_postcollect_win0_bytes=232194048 slack_committed_minus_used_bytes=330464 peak_memory_footprint_bytes=176980592 arena_committed_current_bytes=232194048 arena_count=1
+slope w=8 r=2 committed_postcollect_win0_bytes=230752256 slack_committed_minus_used_bytes=83584 peak_memory_footprint_bytes=176407152 arena_committed_current_bytes=230752256 arena_count=1
+slope w=8 r=3 committed_postcollect_win0_bytes=231997440 slack_committed_minus_used_bytes=330464 peak_memory_footprint_bytes=176620144 arena_committed_current_bytes=231997440 arena_count=1
+slope w=8 r=4 committed_postcollect_win0_bytes=230948864 slack_committed_minus_used_bytes=83712 peak_memory_footprint_bytes=176292464 arena_committed_current_bytes=230948864 arena_count=1
+slope w=8 r=5 committed_postcollect_win0_bytes=230948864 slack_committed_minus_used_bytes=91776 peak_memory_footprint_bytes=176259696 arena_committed_current_bytes=230948864 arena_count=1
+slope w=12 r=1 committed_postcollect_win0_bytes=324403200 slack_committed_minus_used_bytes=259616 peak_memory_footprint_bytes=243843816 arena_committed_current_bytes=324403200 arena_count=1
+slope w=12 r=2 committed_postcollect_win0_bytes=330760192 slack_committed_minus_used_bytes=288256 peak_memory_footprint_bytes=249561808 arena_committed_current_bytes=330760192 arena_count=1
+slope w=12 r=3 committed_postcollect_win0_bytes=329580544 slack_committed_minus_used_bytes=502368 peak_memory_footprint_bytes=245842616 arena_committed_current_bytes=329580544 arena_count=1
+slope w=12 r=4 committed_postcollect_win0_bytes=326893568 slack_committed_minus_used_bytes=298656 peak_memory_footprint_bytes=243516088 arena_committed_current_bytes=326893568 arena_count=1
+slope w=12 r=5 committed_postcollect_win0_bytes=324468736 slack_committed_minus_used_bytes=306848 peak_memory_footprint_bytes=237355728 arena_committed_current_bytes=324468736 arena_count=1
+slope w=16 r=1 committed_postcollect_win0_bytes=399769600 slack_committed_minus_used_bytes=502240 peak_memory_footprint_bytes=309216000 arena_committed_current_bytes=399769600 arena_count=1
+slope w=16 r=2 committed_postcollect_win0_bytes=399376384 slack_committed_minus_used_bytes=248480 peak_memory_footprint_bytes=309428992 arena_committed_current_bytes=399376384 arena_count=1
+slope w=16 r=3 committed_postcollect_win0_bytes=389087232 slack_committed_minus_used_bytes=303680 peak_memory_footprint_bytes=314835688 arena_committed_current_bytes=389087232 arena_count=1
+slope w=16 r=4 committed_postcollect_win0_bytes=399769600 slack_committed_minus_used_bytes=303808 peak_memory_footprint_bytes=308790016 arena_committed_current_bytes=399769600 arena_count=1
+slope w=16 r=5 committed_postcollect_win0_bytes=394067968 slack_committed_minus_used_bytes=263808 peak_memory_footprint_bytes=323846912 arena_committed_current_bytes=394067968 arena_count=1
+mode-census W=4: committed=150011904 B x1
+mode-census W=4: committed=150339584 B x2
+mode-census W=4: committed=148307968 B x2
+mode-census W=4: modes=3 dominant=148307968 B (x2) min-of-R=148307968 B [min-of-R ADVISORY: >=2 byte-distinct modes, KB-89-2]
+W=4 granules64k: dominant=2263.00 min=2263.00 residue_dominant=0 B | arena committed min=148307968 B arena_count=1
+mode-census W=8: committed=230752256 B x1
+mode-census W=8: committed=231997440 B x1
+mode-census W=8: committed=230948864 B x2
+mode-census W=8: committed=232194048 B x1
+mode-census W=8: modes=4 dominant=230948864 B (x2) min-of-R=230752256 B [min-of-R ADVISORY: >=2 byte-distinct modes, KB-89-2]
+W=8 granules64k: dominant=3524.00 min=3521.00 residue_dominant=0 B | arena committed min=230752256 B arena_count=1
+mode-census W=12: committed=324468736 B x1
+mode-census W=12: committed=326893568 B x1
+mode-census W=12: committed=330760192 B x1
+mode-census W=12: committed=324403200 B x1
+mode-census W=12: committed=329580544 B x1
+mode-census W=12: modes=5 dominant=324403200 B (x1) min-of-R=324403200 B [min-of-R ADVISORY: >=2 byte-distinct modes, KB-89-2]
+W=12 granules64k: dominant=4950.00 min=4950.00 residue_dominant=0 B | arena committed min=324403200 B arena_count=1
+mode-census W=16: committed=399769600 B x2
+mode-census W=16: committed=399376384 B x1
+mode-census W=16: committed=389087232 B x1
+mode-census W=16: committed=394067968 B x1
+mode-census W=16: modes=4 dominant=399769600 B (x2) min-of-R=389087232 B [min-of-R ADVISORY: >=2 byte-distinct modes, KB-89-2]
+W=16 granules64k: dominant=6100.00 min=5937.00 residue_dominant=0 B | arena committed min=389087232 B arena_count=1
+delta dominant W4->W8 = 82640896 B (78.81 MiB) over 4 workers = 20660224 B/worker
+delta dominant W8->W12 = 93454336 B (89.12 MiB) over 4 workers = 23363584 B/worker
+delta dominant W12->W16 = 75366400 B (71.88 MiB) over 4 workers = 18841600 B/worker
+VSLOPE-HI b (LSQ dominant-mode, metric=committed_postcollect_win0, W in {4,8,12,16}): 21195981 B/worker (20.21 MiB) a=63897600 B
+VSLOPE-HI b_min (LSQ min-of-R, ADVISORY under multi-mode): 20399718 B/worker (19.45 MiB)
+VSLOPE-HI verdict: b NAMED-DEVIATION — 21195981 B outside 3605572 B +/-5% [3425293, 3785851] (band compared with b ONLY, KL-89-2) — monotone deltas
+VSLOPE-HI PASS: protocol clean (collect armed, mode-census in-band, b on dominant modes, companions never defaulted)
+VWARM cal: pad87a net=7801102 B floor_inc=1161206 B | pad87b net=7801102 B floor_inc=1161206 B [metric=net-at-lower, net_window=process-counters, W=1 sequential]
+VWARM concbase r1: spans=OVERLAP padA net=15602518 B floor_inc=1161206 B | padB net=17162668 B floor_inc=1161206 B | dA=314 B dB=1560464 B [nets under concurrency VOID as per-thread figures, KB-88-1 — reported to discriminate the driver only]
+VWARM concbase r2: spans=OVERLAP padA net=15602518 B floor_inc=1161206 B | padB net=18778233 B floor_inc=1161206 B | dA=314 B dB=3176029 B [nets under concurrency VOID as per-thread figures, KB-88-1 — reported to discriminate the driver only]
+VWARM concwarm r1: spans=OVERLAP padA net=4092062 B floor_inc=164368 B | padB net=819340 B floor_inc=164368 B | dA=-11510142 B dB=-14782864 B [nets under concurrency VOID as per-thread figures, KB-88-1 — reported to discriminate the driver only]
+VWARM concwarm r2: spans=OVERLAP padA net=4092062 B floor_inc=164368 B | padB net=893036 B floor_inc=164368 B | dA=-11510142 B dB=-14709168 B [nets under concurrency VOID as per-thread figures, KB-88-1 — reported to discriminate the driver only]
+VWARM concstag r1: spans=NO-OVERLAP padA net=7801102 B floor_inc=1161206 B | padB net=7801102 B floor_inc=1161206 B | dA=-7801102 B dB=-7801102 B [nets under concurrency VOID as per-thread figures, KB-88-1 — reported to discriminate the driver only]
+VWARM concstag r2: spans=NO-OVERLAP padA net=7801102 B floor_inc=1161206 B | padB net=7801102 B floor_inc=1161206 B | dA=-7801102 B dB=-7801102 B [nets under concurrency VOID as per-thread figures, KB-88-1 — reported to discriminate the driver only]
+VWARM discrimination: mean dA base=314 B | warm=-11510142 B | stag=-7801102 B -> PER-REQUEST (dA survives warm — P-WARM refuted)
+VWARM PASS: calibrations byte-reproduced; discrimination reported against the ex-ante predictions (P-BASE/P-WARM/P-STAG in campaign header)
+VUCLOG PASS: production log W=1, supersede-with-putord=2, main_evicted=0 (tripwire respected), pair-guard consumed on NON-selftest log — 0 main_evicted pairs EXPECTED by construction (A-MS24; the >=1-pair positive lives in F16b)
+== VERDICT88 PASS (git=202f8b1 attempt=1, generation g1) ==

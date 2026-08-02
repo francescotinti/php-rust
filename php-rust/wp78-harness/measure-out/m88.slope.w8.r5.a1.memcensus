@@ -1,0 +1,490 @@
+pid=96849 tag=lower_span tid=ThreadId(12) t0_us=0 t1_us=13326 da=48105327 df=40755350 clamped=0 /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/gate-axum/fixtures/hello.php
+pid=96849 tag=lower_span tid=ThreadId(13) t0_us=35731 t1_us=48764 da=48105327 df=40755350 clamped=0 /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/gate-axum/fixtures/hello.php
+pid=96849 tag=lower_span tid=ThreadId(14) t0_us=73350 t1_us=88723 da=48105327 df=40755350 clamped=0 /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/gate-axum/fixtures/hello.php
+pid=96849 tag=lower_span tid=ThreadId(15) t0_us=114638 t1_us=129046 da=48105327 df=40755350 clamped=0 /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/gate-axum/fixtures/hello.php
+pid=96849 tag=lower_span tid=ThreadId(16) t0_us=153282 t1_us=168207 da=48105327 df=40755350 clamped=0 /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/gate-axum/fixtures/hello.php
+pid=96849 tag=lower_span tid=ThreadId(17) t0_us=193362 t1_us=208259 da=48105327 df=40755350 clamped=0 /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/gate-axum/fixtures/hello.php
+pid=96849 tag=lower_span tid=ThreadId(18) t0_us=231685 t1_us=244480 da=48105327 df=40755350 clamped=0 /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/gate-axum/fixtures/hello.php
+pid=96849 tag=lower_span tid=ThreadId(19) t0_us=265908 t1_us=280050 da=48105327 df=40755350 clamped=0 /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/gate-axum/fixtures/hello.php
+pid=96849 tag=worker_dispatch thr=5 count=100 arm=axum-worker alloc_id=memcount-v2-s82
+pid=96849 tag=worker_dispatch thr=1 count=100 arm=axum-worker alloc_id=memcount-v2-s82
+pid=96849 tag=worker_dispatch thr=2 count=100 arm=axum-worker alloc_id=memcount-v2-s82
+pid=96849 tag=worker_dispatch thr=6 count=100 arm=axum-worker alloc_id=memcount-v2-s82
+pid=96849 tag=worker_dispatch thr=7 count=100 arm=axum-worker alloc_id=memcount-v2-s82
+pid=96849 tag=worker_dispatch thr=3 count=100 arm=axum-worker alloc_id=memcount-v2-s82
+pid=96849 tag=worker_dispatch thr=4 count=100 arm=axum-worker alloc_id=memcount-v2-s82
+pid=96849 tag=worker_dispatch thr=0 count=100 arm=axum-worker alloc_id=memcount-v2-s82
+pid=96849 tag=unitcache_main_entry thr=6 ord=1 net=7349977 clamped=0 floor_inc=997878 fns=317 stmts=2 net_rule=net-at-lower net_window=process-counters floor_rule=walk-increment-in-put-order arm=axum-worker alloc_id=memcount-v2-s82 /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/gate-axum/fixtures/hello.php
+pid=96849 tag=unitcache_main_entry thr=5 ord=1 net=7349977 clamped=0 floor_inc=997878 fns=317 stmts=2 net_rule=net-at-lower net_window=process-counters floor_rule=walk-increment-in-put-order arm=axum-worker alloc_id=memcount-v2-s82 /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/gate-axum/fixtures/hello.php
+pid=96849 tag=unitcache_main_entry thr=4 ord=1 net=7349977 clamped=0 floor_inc=997878 fns=317 stmts=2 net_rule=net-at-lower net_window=process-counters floor_rule=walk-increment-in-put-order arm=axum-worker alloc_id=memcount-v2-s82 /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/gate-axum/fixtures/hello.php
+pid=96849 tag=unitcache_thr thr=6 entries=1 mains=1 retained_walk_bytes=4283308 arm=axum-worker alloc_id=memcount-v2-s82
+pid=96849 tag=unitcache_thr thr=5 entries=1 mains=1 retained_walk_bytes=4283308 arm=axum-worker alloc_id=memcount-v2-s82
+pid=96849 tag=unitcache_main_entry thr=3 ord=1 net=7349977 clamped=0 floor_inc=997878 fns=317 stmts=2 net_rule=net-at-lower net_window=process-counters floor_rule=walk-increment-in-put-order arm=axum-worker alloc_id=memcount-v2-s82 /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/gate-axum/fixtures/hello.php
+pid=96849 tag=unitcache_main_entry thr=0 ord=1 net=7349977 clamped=0 floor_inc=997878 fns=317 stmts=2 net_rule=net-at-lower net_window=process-counters floor_rule=walk-increment-in-put-order arm=axum-worker alloc_id=memcount-v2-s82 /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/gate-axum/fixtures/hello.php
+pid=96849 tag=unitcache_main_entry thr=7 ord=1 net=7349977 clamped=0 floor_inc=997878 fns=317 stmts=2 net_rule=net-at-lower net_window=process-counters floor_rule=walk-increment-in-put-order arm=axum-worker alloc_id=memcount-v2-s82 /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/gate-axum/fixtures/hello.php
+pid=96849 tag=unitcache_main_entry thr=2 ord=1 net=7349977 clamped=0 floor_inc=997878 fns=317 stmts=2 net_rule=net-at-lower net_window=process-counters floor_rule=walk-increment-in-put-order arm=axum-worker alloc_id=memcount-v2-s82 /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/gate-axum/fixtures/hello.php
+pid=96849 tag=unitcache_main_entry thr=1 ord=1 net=7349977 clamped=0 floor_inc=997878 fns=317 stmts=2 net_rule=net-at-lower net_window=process-counters floor_rule=walk-increment-in-put-order arm=axum-worker alloc_id=memcount-v2-s82 /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/gate-axum/fixtures/hello.php
+pid=96849 tag=unitcache_thr thr=4 entries=1 mains=1 retained_walk_bytes=4283308 arm=axum-worker alloc_id=memcount-v2-s82
+pid=96849 tag=unitcache_thr thr=3 entries=1 mains=1 retained_walk_bytes=4283308 arm=axum-worker alloc_id=memcount-v2-s82
+pid=96849 tag=unitcache_thr thr=0 entries=1 mains=1 retained_walk_bytes=4283308 arm=axum-worker alloc_id=memcount-v2-s82
+pid=96849 tag=unitcache_thr thr=2 entries=1 mains=1 retained_walk_bytes=4283308 arm=axum-worker alloc_id=memcount-v2-s82
+pid=96849 tag=unitcache_thr thr=7 entries=1 mains=1 retained_walk_bytes=4283308 arm=axum-worker alloc_id=memcount-v2-s82
+pid=96849 tag=mi_bin thr=5 src=tls size=8 reserved=1834784 committed=1589056 used_b=1537160 used_n=192145 areas=28
+pid=96849 tag=mi_bin thr=6 src=tls size=8 reserved=1834784 committed=1589056 used_b=1537160 used_n=192145 areas=28
+pid=96849 tag=unitcache_thr thr=1 entries=1 mains=1 retained_walk_bytes=4283308 arm=axum-worker alloc_id=memcount-v2-s82
+pid=96849 tag=mi_bin thr=6 src=tls size=64 reserved=3339072 committed=2369536 used_b=1802112 used_n=28158 areas=51
+pid=96849 tag=mi_bin thr=5 src=tls size=64 reserved=3339072 committed=2369536 used_b=1802112 used_n=28158 areas=51
+pid=96849 tag=mi_bin thr=3 src=tls size=8 reserved=1834784 committed=1589056 used_b=1537160 used_n=192145 areas=28
+pid=96849 tag=mi_bin thr=4 src=tls size=8 reserved=1834784 committed=1589056 used_b=1537168 used_n=192146 areas=28
+pid=96849 tag=mi_bin thr=6 src=tls size=640 reserved=14361600 committed=13747200 used_b=13734400 used_n=21460 areas=220
+pid=96849 tag=mi_bin thr=2 src=tls size=8 reserved=1834784 committed=1589056 used_b=1537160 used_n=192145 areas=28
+pid=96849 tag=mi_bin thr=7 src=tls size=8 reserved=1834784 committed=1589056 used_b=1537160 used_n=192145 areas=28
+pid=96849 tag=mi_bin thr=0 src=tls size=8 reserved=1834784 committed=1589056 used_b=1537160 used_n=192145 areas=28
+pid=96849 tag=mi_bin thr=1 src=tls size=8 reserved=1834784 committed=1589056 used_b=1537160 used_n=192145 areas=28
+pid=96849 tag=mi_bin thr=5 src=tls size=640 reserved=14361600 committed=13747200 used_b=13734400 used_n=21460 areas=220
+pid=96849 tag=mi_bin thr=6 src=tls size=16 reserved=2293200 committed=1486592 used_b=1351936 used_n=84496 areas=35
+pid=96849 tag=mi_bin thr=2 src=tls size=64 reserved=3339072 committed=2369536 used_b=1802112 used_n=28158 areas=51
+pid=96849 tag=mi_bin thr=3 src=tls size=64 reserved=3339072 committed=2369536 used_b=1802112 used_n=28158 areas=51
+pid=96849 tag=mi_bin thr=7 src=tls size=64 reserved=3339072 committed=2369536 used_b=1802112 used_n=28158 areas=51
+pid=96849 tag=mi_bin thr=4 src=tls size=64 reserved=3339072 committed=2369536 used_b=1802112 used_n=28158 areas=51
+pid=96849 tag=mi_bin thr=3 src=tls size=640 reserved=14361600 committed=13747200 used_b=13734400 used_n=21460 areas=220
+pid=96849 tag=mi_bin thr=0 src=tls size=64 reserved=3339072 committed=2369536 used_b=1802048 used_n=28157 areas=51
+pid=96849 tag=mi_bin thr=1 src=tls size=64 reserved=3339072 committed=2369536 used_b=1802112 used_n=28158 areas=51
+pid=96849 tag=mi_bin thr=4 src=tls size=640 reserved=14361600 committed=13747200 used_b=13734400 used_n=21460 areas=220
+pid=96849 tag=mi_bin thr=2 src=tls size=640 reserved=14361600 committed=13747200 used_b=13734400 used_n=21460 areas=220
+pid=96849 tag=mi_bin thr=5 src=tls size=16 reserved=2293200 committed=1486592 used_b=1351936 used_n=84496 areas=35
+pid=96849 tag=mi_bin thr=6 src=tls size=224 reserved=1831424 committed=1417472 used_b=290752 used_n=1298 areas=28
+pid=96849 tag=mi_bin thr=7 src=tls size=640 reserved=14361600 committed=13747200 used_b=13734400 used_n=21460 areas=220
+pid=96849 tag=mi_bin thr=3 src=tls size=16 reserved=2293200 committed=1486592 used_b=1351936 used_n=84496 areas=35
+pid=96849 tag=mi_bin thr=0 src=tls size=640 reserved=14361600 committed=13747200 used_b=13734400 used_n=21460 areas=220
+pid=96849 tag=mi_bin thr=4 src=tls size=16 reserved=2293200 committed=1486592 used_b=1351936 used_n=84496 areas=35
+pid=96849 tag=mi_bin thr=1 src=tls size=640 reserved=14361600 committed=13747200 used_b=13734400 used_n=21460 areas=220
+pid=96849 tag=mi_bin thr=2 src=tls size=16 reserved=2293200 committed=1486592 used_b=1351936 used_n=84496 areas=35
+pid=96849 tag=mi_bin thr=6 src=tls size=96 reserved=1309440 committed=701184 used_b=671616 used_n=6996 areas=20
+pid=96849 tag=mi_bin thr=5 src=tls size=224 reserved=1831424 committed=1417472 used_b=290752 used_n=1298 areas=28
+pid=96849 tag=mi_bin thr=7 src=tls size=16 reserved=2293200 committed=1486592 used_b=1351936 used_n=84496 areas=35
+pid=96849 tag=mi_bin thr=2 src=tls size=224 reserved=1831424 committed=1417472 used_b=290752 used_n=1298 areas=28
+pid=96849 tag=mi_bin thr=4 src=tls size=224 reserved=1831424 committed=1417472 used_b=290752 used_n=1298 areas=28
+pid=96849 tag=mi_bin thr=3 src=tls size=224 reserved=1831424 committed=1417472 used_b=290752 used_n=1298 areas=28
+pid=96849 tag=mi_bin thr=0 src=tls size=16 reserved=2293200 committed=1486592 used_b=1351936 used_n=84496 areas=35
+pid=96849 tag=mi_bin thr=1 src=tls size=16 reserved=2293200 committed=1486592 used_b=1351936 used_n=84496 areas=35
+pid=96849 tag=mi_bin thr=5 src=tls size=96 reserved=1309440 committed=701184 used_b=671616 used_n=6996 areas=20
+pid=96849 tag=mi_bin thr=6 src=tls size=128 reserved=1177344 committed=1054720 used_b=996992 used_n=7789 areas=18
+pid=96849 tag=mi_bin thr=7 src=tls size=224 reserved=1831424 committed=1417472 used_b=290752 used_n=1298 areas=28
+pid=96849 tag=mi_bin thr=1 src=tls size=224 reserved=1831424 committed=1417472 used_b=290752 used_n=1298 areas=28
+pid=96849 tag=mi_bin thr=0 src=tls size=224 reserved=1831424 committed=1417472 used_b=290752 used_n=1298 areas=28
+pid=96849 tag=mi_bin thr=2 src=tls size=96 reserved=1309440 committed=701184 used_b=671616 used_n=6996 areas=20
+pid=96849 tag=mi_bin thr=5 src=tls size=128 reserved=1177344 committed=1054720 used_b=996992 used_n=7789 areas=18
+pid=96849 tag=mi_bin thr=4 src=tls size=96 reserved=1309440 committed=701184 used_b=671616 used_n=6996 areas=20
+pid=96849 tag=mi_bin thr=3 src=tls size=96 reserved=1309440 committed=701184 used_b=671616 used_n=6996 areas=20
+pid=96849 tag=mi_bin thr=1 src=tls size=96 reserved=1309440 committed=701184 used_b=671616 used_n=6996 areas=20
+pid=96849 tag=mi_bin thr=6 src=tls size=40960 reserved=4423680 committed=1679360 used_b=1679360 used_n=41 areas=9
+pid=96849 tag=mi_bin thr=2 src=tls size=128 reserved=1177344 committed=1054720 used_b=996992 used_n=7789 areas=18
+pid=96849 tag=mi_bin thr=7 src=tls size=96 reserved=1309440 committed=701184 used_b=671616 used_n=6996 areas=20
+pid=96849 tag=mi_bin thr=0 src=tls size=96 reserved=1309440 committed=701184 used_b=671616 used_n=6996 areas=20
+pid=96849 tag=mi_bin thr=1 src=tls size=128 reserved=1177344 committed=1054720 used_b=996992 used_n=7789 areas=18
+pid=96849 tag=mi_bin thr=5 src=tls size=40960 reserved=4423680 committed=1679360 used_b=1679360 used_n=41 areas=9
+pid=96849 tag=mi_bin thr=4 src=tls size=128 reserved=1177344 committed=1054720 used_b=996992 used_n=7789 areas=18
+pid=96849 tag=mi_bin thr=3 src=tls size=128 reserved=1177344 committed=1054720 used_b=996992 used_n=7789 areas=18
+pid=96849 tag=mi_bin thr=6 src=tls size=384 reserved=2284800 committed=1866240 used_b=1829376 used_n=4764 areas=35
+pid=96849 tag=mi_bin thr=2 src=tls size=40960 reserved=4423680 committed=1679360 used_b=1679360 used_n=41 areas=9
+pid=96849 tag=mi_bin thr=7 src=tls size=128 reserved=1177344 committed=1054720 used_b=996992 used_n=7789 areas=18
+pid=96849 tag=mi_bin thr=4 src=tls size=40960 reserved=4423680 committed=1679360 used_b=1679360 used_n=41 areas=9
+pid=96849 tag=mi_bin thr=6 src=tls size=7168 reserved=1612800 committed=1211392 used_b=1154048 used_n=161 areas=25
+pid=96849 tag=mi_bin thr=0 src=tls size=128 reserved=1177344 committed=1054720 used_b=996992 used_n=7789 areas=18
+pid=96849 tag=mi_bin thr=3 src=tls size=40960 reserved=4423680 committed=1679360 used_b=1679360 used_n=41 areas=9
+pid=96849 tag=mi_bin thr=1 src=tls size=40960 reserved=4423680 committed=1679360 used_b=1679360 used_n=41 areas=9
+pid=96849 tag=mi_bin thr=7 src=tls size=40960 reserved=4423680 committed=1679360 used_b=1679360 used_n=41 areas=9
+pid=96849 tag=mi_bin thr=4 src=tls size=384 reserved=2284800 committed=1866240 used_b=1828224 used_n=4761 areas=35
+pid=96849 tag=mi_bin thr=2 src=tls size=384 reserved=2284800 committed=1866240 used_b=1827840 used_n=4760 areas=35
+pid=96849 tag=mi_bin thr=6 src=tls size=32 reserved=3078688 committed=2518016 used_b=2413696 used_n=75428 areas=47
+pid=96849 tag=mi_bin thr=5 src=tls size=384 reserved=2284800 committed=1866240 used_b=1829760 used_n=4765 areas=35
+pid=96849 tag=mi_bin thr=0 src=tls size=40960 reserved=4423680 committed=1679360 used_b=1679360 used_n=41 areas=9
+pid=96849 tag=mi_bin thr=7 src=tls size=384 reserved=2284800 committed=1866240 used_b=1828224 used_n=4761 areas=35
+pid=96849 tag=mi_bin thr=3 src=tls size=384 reserved=2284800 committed=1866240 used_b=1828992 used_n=4763 areas=35
+pid=96849 tag=mi_bin thr=6 src=tls size=320 reserved=783360 committed=107520 used_b=87680 used_n=274 areas=12
+pid=96849 tag=mi_bin thr=1 src=tls size=384 reserved=2284800 committed=1866240 used_b=1827456 used_n=4759 areas=35
+pid=96849 tag=mi_bin thr=4 src=tls size=7168 reserved=1612800 committed=1211392 used_b=1154048 used_n=161 areas=25
+pid=96849 tag=mi_bin thr=2 src=tls size=7168 reserved=1612800 committed=1211392 used_b=1154048 used_n=161 areas=25
+pid=96849 tag=mi_bin thr=5 src=tls size=7168 reserved=1612800 committed=1211392 used_b=1154048 used_n=161 areas=25
+pid=96849 tag=mi_bin thr=0 src=tls size=384 reserved=2284800 committed=1866240 used_b=1827072 used_n=4758 areas=35
+pid=96849 tag=mi_bin thr=1 src=tls size=7168 reserved=1612800 committed=1211392 used_b=1154048 used_n=161 areas=25
+pid=96849 tag=mi_bin thr=2 src=tls size=32 reserved=3078688 committed=2518016 used_b=2413696 used_n=75428 areas=47
+pid=96849 tag=mi_bin thr=4 src=tls size=32 reserved=3078688 committed=2518016 used_b=2413696 used_n=75428 areas=47
+pid=96849 tag=mi_bin thr=7 src=tls size=7168 reserved=1612800 committed=1211392 used_b=1154048 used_n=161 areas=25
+pid=96849 tag=mi_bin thr=6 src=tls size=192 reserved=785664 committed=306432 used_b=261312 used_n=1361 areas=12
+pid=96849 tag=mi_bin thr=0 src=tls size=7168 reserved=1612800 committed=1211392 used_b=1154048 used_n=161 areas=25
+pid=96849 tag=mi_bin thr=7 src=tls size=32 reserved=3078688 committed=2518016 used_b=2413696 used_n=75428 areas=47
+pid=96849 tag=mi_bin thr=5 src=tls size=32 reserved=3078688 committed=2518016 used_b=2413696 used_n=75428 areas=47
+pid=96849 tag=mi_bin thr=3 src=tls size=7168 reserved=1612800 committed=1211392 used_b=1154048 used_n=161 areas=25
+pid=96849 tag=mi_bin thr=2 src=tls size=320 reserved=783360 committed=107520 used_b=87680 used_n=274 areas=12
+pid=96849 tag=mi_bin thr=4 src=tls size=320 reserved=783360 committed=107520 used_b=87680 used_n=274 areas=12
+pid=96849 tag=mi_bin thr=6 src=tls size=1536 reserved=5225472 committed=4992000 used_b=4929024 used_n=3209 areas=81
+pid=96849 tag=mi_bin thr=1 src=tls size=32 reserved=3078688 committed=2518016 used_b=2413696 used_n=75428 areas=47
+pid=96849 tag=mi_bin thr=0 src=tls size=32 reserved=3078688 committed=2518016 used_b=2413696 used_n=75428 areas=47
+pid=96849 tag=mi_bin thr=5 src=tls size=320 reserved=783360 committed=107520 used_b=87680 used_n=274 areas=12
+pid=96849 tag=mi_bin thr=7 src=tls size=320 reserved=783360 committed=107520 used_b=87680 used_n=274 areas=12
+pid=96849 tag=mi_bin thr=6 src=tls size=2048 reserved=2883584 committed=2457600 used_b=2416640 used_n=1180 areas=44
+pid=96849 tag=mi_bin thr=3 src=tls size=32 reserved=3078688 committed=2518016 used_b=2413696 used_n=75428 areas=47
+pid=96849 tag=mi_bin thr=4 src=tls size=192 reserved=785664 committed=306432 used_b=260736 used_n=1358 areas=12
+pid=96849 tag=mi_bin thr=0 src=tls size=320 reserved=783360 committed=107520 used_b=87680 used_n=274 areas=12
+pid=96849 tag=mi_bin thr=5 src=tls size=192 reserved=785664 committed=306432 used_b=261504 used_n=1362 areas=12
+pid=96849 tag=mi_bin thr=2 src=tls size=192 reserved=785664 committed=306432 used_b=260544 used_n=1357 areas=12
+pid=96849 tag=mi_bin thr=7 src=tls size=192 reserved=785664 committed=306432 used_b=260736 used_n=1358 areas=12
+pid=96849 tag=mi_bin thr=6 src=tls size=48 reserved=3407040 committed=3094080 used_b=3078864 used_n=64143 areas=52
+pid=96849 tag=mi_bin thr=5 src=tls size=1536 reserved=5225472 committed=4992000 used_b=4929024 used_n=3209 areas=81
+pid=96849 tag=mi_bin thr=4 src=tls size=1536 reserved=5225472 committed=4992000 used_b=4929024 used_n=3209 areas=81
+pid=96849 tag=mi_bin thr=0 src=tls size=192 reserved=785664 committed=306432 used_b=260160 used_n=1355 areas=12
+pid=96849 tag=mi_bin thr=1 src=tls size=320 reserved=783360 committed=107520 used_b=87680 used_n=274 areas=12
+pid=96849 tag=mi_bin thr=3 src=tls size=320 reserved=783360 committed=107520 used_b=87680 used_n=274 areas=12
+pid=96849 tag=mi_bin thr=6 src=tls size=1792 reserved=580608 committed=462336 used_b=446208 used_n=249 areas=9
+pid=96849 tag=mi_bin thr=2 src=tls size=1536 reserved=5225472 committed=4992000 used_b=4929024 used_n=3209 areas=81
+pid=96849 tag=mi_bin thr=4 src=tls size=2048 reserved=2883584 committed=2457600 used_b=2416640 used_n=1180 areas=44
+pid=96849 tag=mi_bin thr=7 src=tls size=1536 reserved=5225472 committed=4992000 used_b=4929024 used_n=3209 areas=81
+pid=96849 tag=mi_bin thr=0 src=tls size=1536 reserved=5225472 committed=4992000 used_b=4929024 used_n=3209 areas=81
+pid=96849 tag=mi_bin thr=3 src=tls size=192 reserved=785664 committed=306432 used_b=261120 used_n=1360 areas=12
+pid=96849 tag=mi_bin thr=5 src=tls size=2048 reserved=2883584 committed=2457600 used_b=2416640 used_n=1180 areas=44
+pid=96849 tag=mi_bin thr=0 src=tls size=2048 reserved=2883584 committed=2457600 used_b=2416640 used_n=1180 areas=44
+pid=96849 tag=mi_bin thr=4 src=tls size=48 reserved=3407040 committed=3094080 used_b=3078720 used_n=64140 areas=52
+pid=96849 tag=mi_bin thr=6 src=tls size=256 reserved=7441920 committed=7190528 used_b=7172096 used_n=28016 areas=114
+pid=96849 tag=mi_bin thr=1 src=tls size=192 reserved=785664 committed=306432 used_b=260352 used_n=1356 areas=12
+pid=96849 tag=mi_bin thr=2 src=tls size=2048 reserved=2883584 committed=2457600 used_b=2416640 used_n=1180 areas=44
+pid=96849 tag=mi_bin thr=0 src=tls size=48 reserved=3407040 committed=3094080 used_b=3078624 used_n=64138 areas=52
+pid=96849 tag=mi_bin thr=7 src=tls size=2048 reserved=2883584 committed=2457600 used_b=2416640 used_n=1180 areas=44
+pid=96849 tag=mi_bin thr=3 src=tls size=1536 reserved=5225472 committed=4992000 used_b=4929024 used_n=3209 areas=81
+pid=96849 tag=mi_bin thr=1 src=tls size=1536 reserved=5225472 committed=4992000 used_b=4929024 used_n=3209 areas=81
+pid=96849 tag=mi_bin thr=5 src=tls size=48 reserved=3407040 committed=3094080 used_b=3078912 used_n=64144 areas=52
+pid=96849 tag=mi_bin thr=6 src=tls size=80 reserved=589680 committed=363120 used_b=332960 used_n=4162 areas=9
+pid=96849 tag=mi_bin thr=4 src=tls size=1792 reserved=580608 committed=462336 used_b=446208 used_n=249 areas=9
+pid=96849 tag=mi_bin thr=2 src=tls size=48 reserved=3407040 committed=3094080 used_b=3078672 used_n=64139 areas=52
+pid=96849 tag=mi_bin thr=0 src=tls size=1792 reserved=580608 committed=462336 used_b=446208 used_n=249 areas=9
+pid=96849 tag=mi_bin thr=3 src=tls size=2048 reserved=2883584 committed=2457600 used_b=2416640 used_n=1180 areas=44
+pid=96849 tag=mi_bin thr=5 src=tls size=1792 reserved=580608 committed=462336 used_b=446208 used_n=249 areas=9
+pid=96849 tag=mi_bin thr=7 src=tls size=48 reserved=3407040 committed=3094080 used_b=3078720 used_n=64140 areas=52
+pid=96849 tag=mi_bin thr=4 src=tls size=256 reserved=7441920 committed=7190528 used_b=7171584 used_n=28014 areas=114
+pid=96849 tag=mi_bin thr=1 src=tls size=2048 reserved=2883584 committed=2457600 used_b=2416640 used_n=1180 areas=44
+pid=96849 tag=mi_bin thr=6 src=tls size=160 reserved=14396800 committed=14043520 used_b=14008480 used_n=87553 areas=220
+pid=96849 tag=mi_bin thr=3 src=tls size=48 reserved=3407040 committed=3094080 used_b=3078816 used_n=64142 areas=52
+pid=96849 tag=mi_bin thr=0 src=tls size=256 reserved=7441920 committed=7190528 used_b=7172352 used_n=28017 areas=114
+pid=96849 tag=mi_bin thr=5 src=tls size=256 reserved=7441920 committed=7190528 used_b=7171584 used_n=28014 areas=114
+pid=96849 tag=mi_bin thr=3 src=tls size=1792 reserved=580608 committed=462336 used_b=446208 used_n=249 areas=9
+pid=96849 tag=mi_bin thr=2 src=tls size=1792 reserved=580608 committed=462336 used_b=446208 used_n=249 areas=9
+pid=96849 tag=mi_bin thr=1 src=tls size=48 reserved=3407040 committed=3094080 used_b=3078624 used_n=64138 areas=52
+pid=96849 tag=mi_bin thr=7 src=tls size=1792 reserved=580608 committed=462336 used_b=446208 used_n=249 areas=9
+pid=96849 tag=mi_bin thr=4 src=tls size=80 reserved=589680 committed=363120 used_b=332960 used_n=4162 areas=9
+pid=96849 tag=mi_bin thr=5 src=tls size=80 reserved=589680 committed=363120 used_b=332960 used_n=4162 areas=9
+pid=96849 tag=mi_bin thr=0 src=tls size=80 reserved=589680 committed=363120 used_b=332960 used_n=4162 areas=9
+pid=96849 tag=mi_bin thr=6 src=tls size=1024 reserved=12255232 committed=11776000 used_b=11682816 used_n=11409 areas=187
+pid=96849 tag=mi_bin thr=3 src=tls size=256 reserved=7441920 committed=7190528 used_b=7172352 used_n=28017 areas=114
+pid=96849 tag=mi_bin thr=1 src=tls size=1792 reserved=580608 committed=462336 used_b=446208 used_n=249 areas=9
+pid=96849 tag=mi_bin thr=2 src=tls size=256 reserved=7441920 committed=7190528 used_b=7172096 used_n=28016 areas=114
+pid=96849 tag=mi_bin thr=7 src=tls size=256 reserved=7441920 committed=7190528 used_b=7171584 used_n=28014 areas=114
+pid=96849 tag=mi_bin thr=6 src=tls size=4096 reserved=1638400 committed=1183744 used_b=1150976 used_n=281 areas=25
+pid=96849 tag=mi_bin thr=1 src=tls size=256 reserved=7441920 committed=7190528 used_b=7172096 used_n=28016 areas=114
+pid=96849 tag=mi_bin thr=4 src=tls size=160 reserved=14396800 committed=14043520 used_b=14008800 used_n=87555 areas=220
+pid=96849 tag=mi_bin thr=5 src=tls size=160 reserved=14396800 committed=14043520 used_b=14008320 used_n=87552 areas=220
+pid=96849 tag=mi_bin thr=0 src=tls size=160 reserved=14396800 committed=14043520 used_b=14009440 used_n=87559 areas=220
+pid=96849 tag=mi_bin thr=3 src=tls size=80 reserved=589680 committed=363120 used_b=332960 used_n=4162 areas=9
+pid=96849 tag=mi_bin thr=7 src=tls size=80 reserved=589680 committed=363120 used_b=332960 used_n=4162 areas=9
+pid=96849 tag=mi_bin thr=2 src=tls size=80 reserved=589680 committed=363120 used_b=332960 used_n=4162 areas=9
+pid=96849 tag=mi_bin thr=5 src=tls size=1024 reserved=12255232 committed=11776000 used_b=11682816 used_n=11409 areas=187
+pid=96849 tag=mi_bin thr=1 src=tls size=80 reserved=589680 committed=363120 used_b=332960 used_n=4162 areas=9
+pid=96849 tag=mi_bin thr=6 src=tls size=512 reserved=5982208 committed=5386240 used_b=5362176 used_n=10473 areas=92
+pid=96849 tag=mi_bin thr=7 src=tls size=160 reserved=14396800 committed=14043520 used_b=14008960 used_n=87556 areas=220
+pid=96849 tag=mi_bin thr=4 src=tls size=1024 reserved=12255232 committed=11776000 used_b=11682816 used_n=11409 areas=187
+pid=96849 tag=mi_bin thr=0 src=tls size=1024 reserved=12255232 committed=11776000 used_b=11682816 used_n=11409 areas=187
+pid=96849 tag=mi_bin thr=2 src=tls size=160 reserved=14396800 committed=14043520 used_b=14009120 used_n=87557 areas=220
+pid=96849 tag=mi_bin thr=3 src=tls size=160 reserved=14396800 committed=14043520 used_b=14008640 used_n=87554 areas=220
+pid=96849 tag=mi_bin thr=5 src=tls size=4096 reserved=1638400 committed=1183744 used_b=1150976 used_n=281 areas=25
+pid=96849 tag=mi_bin thr=6 src=tls size=1280 reserved=3198720 committed=2707200 used_b=2696960 used_n=2107 areas=49
+pid=96849 tag=mi_bin thr=1 src=tls size=160 reserved=14396800 committed=14043520 used_b=14009120 used_n=87557 areas=220
+pid=96849 tag=mi_bin thr=0 src=tls size=4096 reserved=1638400 committed=1183744 used_b=1150976 used_n=281 areas=25
+pid=96849 tag=mi_bin thr=7 src=tls size=1024 reserved=12255232 committed=11776000 used_b=11682816 used_n=11409 areas=187
+pid=96849 tag=mi_bin thr=5 src=tls size=512 reserved=5982208 committed=5386240 used_b=5362176 used_n=10473 areas=92
+pid=96849 tag=mi_bin thr=2 src=tls size=1024 reserved=12255232 committed=11776000 used_b=11682816 used_n=11409 areas=187
+pid=96849 tag=mi_bin thr=4 src=tls size=4096 reserved=1638400 committed=1183744 used_b=1150976 used_n=281 areas=25
+pid=96849 tag=mi_bin thr=3 src=tls size=1024 reserved=12255232 committed=11776000 used_b=11682816 used_n=11409 areas=187
+pid=96849 tag=mi_bin thr=6 src=tls size=768 reserved=5222400 committed=4861440 used_b=4849920 used_n=6315 areas=80
+pid=96849 tag=mi_bin thr=7 src=tls size=4096 reserved=1638400 committed=1183744 used_b=1150976 used_n=281 areas=25
+pid=96849 tag=mi_bin thr=4 src=tls size=512 reserved=5982208 committed=5386240 used_b=5362176 used_n=10473 areas=92
+pid=96849 tag=mi_bin thr=2 src=tls size=4096 reserved=1638400 committed=1183744 used_b=1150976 used_n=281 areas=25
+pid=96849 tag=mi_bin thr=1 src=tls size=1024 reserved=12255232 committed=11776000 used_b=11682816 used_n=11409 areas=187
+pid=96849 tag=mi_bin thr=5 src=tls size=1280 reserved=3198720 committed=2707200 used_b=2696960 used_n=2107 areas=49
+pid=96849 tag=mi_bin thr=0 src=tls size=512 reserved=5982208 committed=5386240 used_b=5362176 used_n=10473 areas=92
+pid=96849 tag=mi_bin thr=4 src=tls size=1280 reserved=3198720 committed=2707200 used_b=2696960 used_n=2107 areas=49
+pid=96849 tag=mi_bin thr=3 src=tls size=4096 reserved=1638400 committed=1183744 used_b=1150976 used_n=281 areas=25
+pid=96849 tag=mi_bin thr=7 src=tls size=512 reserved=5982208 committed=5386240 used_b=5362176 used_n=10473 areas=92
+pid=96849 tag=mi_bin thr=5 src=tls size=768 reserved=5222400 committed=4861440 used_b=4850688 used_n=6316 areas=80
+pid=96849 tag=mi_bin thr=6 src=tls size=8192 reserved=2293760 committed=1753088 used_b=1728512 used_n=211 areas=35
+pid=96849 tag=mi_bin thr=2 src=tls size=512 reserved=5982208 committed=5386240 used_b=5362176 used_n=10473 areas=92
+pid=96849 tag=mi_bin thr=4 src=tls size=768 reserved=5222400 committed=4861440 used_b=4849920 used_n=6315 areas=80
+pid=96849 tag=mi_bin thr=0 src=tls size=1280 reserved=3198720 committed=2707200 used_b=2696960 used_n=2107 areas=49
+pid=96849 tag=mi_bin thr=1 src=tls size=4096 reserved=1638400 committed=1183744 used_b=1150976 used_n=281 areas=25
+pid=96849 tag=mi_bin thr=7 src=tls size=1280 reserved=3198720 committed=2707200 used_b=2696960 used_n=2107 areas=49
+pid=96849 tag=mi_bin thr=3 src=tls size=512 reserved=5982208 committed=5386240 used_b=5362176 used_n=10473 areas=92
+pid=96849 tag=mi_bin thr=6 src=tls size=2560 reserved=1536000 committed=1146880 used_b=1126400 used_n=440 areas=24
+pid=96849 tag=mi_bin thr=5 src=tls size=8192 reserved=2293760 committed=1753088 used_b=1728512 used_n=211 areas=35
+pid=96849 tag=mi_bin thr=1 src=tls size=512 reserved=5982208 committed=5386240 used_b=5362176 used_n=10473 areas=92
+pid=96849 tag=mi_bin thr=0 src=tls size=768 reserved=5222400 committed=4861440 used_b=4849920 used_n=6315 areas=80
+pid=96849 tag=mi_bin thr=2 src=tls size=1280 reserved=3198720 committed=2707200 used_b=2696960 used_n=2107 areas=49
+pid=96849 tag=mi_bin thr=3 src=tls size=1280 reserved=3198720 committed=2707200 used_b=2696960 used_n=2107 areas=49
+pid=96849 tag=mi_bin thr=4 src=tls size=8192 reserved=2293760 committed=1753088 used_b=1728512 used_n=211 areas=35
+pid=96849 tag=mi_bin thr=1 src=tls size=1280 reserved=3198720 committed=2707200 used_b=2696960 used_n=2107 areas=49
+pid=96849 tag=mi_bin thr=7 src=tls size=768 reserved=5222400 committed=4861440 used_b=4849920 used_n=6315 areas=80
+pid=96849 tag=mi_bin thr=6 src=tls size=112 reserved=720720 committed=205632 used_b=176176 used_n=1573 areas=11
+pid=96849 tag=mi_bin thr=0 src=tls size=8192 reserved=2293760 committed=1753088 used_b=1728512 used_n=211 areas=35
+pid=96849 tag=mi_bin thr=5 src=tls size=2560 reserved=1536000 committed=1146880 used_b=1126400 used_n=440 areas=24
+pid=96849 tag=mi_bin thr=2 src=tls size=768 reserved=5222400 committed=4861440 used_b=4849920 used_n=6315 areas=80
+pid=96849 tag=mi_bin thr=3 src=tls size=768 reserved=5222400 committed=4861440 used_b=4849920 used_n=6315 areas=80
+pid=96849 tag=mi_bin thr=1 src=tls size=768 reserved=5222400 committed=4861440 used_b=4849920 used_n=6315 areas=80
+pid=96849 tag=mi_bin thr=4 src=tls size=2560 reserved=1536000 committed=1146880 used_b=1126400 used_n=440 areas=24
+pid=96849 tag=mi_bin thr=3 src=tls size=8192 reserved=2293760 committed=1753088 used_b=1728512 used_n=211 areas=35
+pid=96849 tag=mi_bin thr=6 src=tls size=3584 reserved=2580480 committed=2236416 used_b=2207744 used_n=616 areas=40
+pid=96849 tag=mi_bin thr=0 src=tls size=2560 reserved=1536000 committed=1146880 used_b=1126400 used_n=440 areas=24
+pid=96849 tag=mi_bin thr=7 src=tls size=8192 reserved=2293760 committed=1753088 used_b=1728512 used_n=211 areas=35
+pid=96849 tag=mi_bin thr=2 src=tls size=8192 reserved=2293760 committed=1753088 used_b=1728512 used_n=211 areas=35
+pid=96849 tag=mi_bin thr=5 src=tls size=112 reserved=720720 committed=205632 used_b=176288 used_n=1574 areas=11
+pid=96849 tag=mi_bin thr=1 src=tls size=8192 reserved=2293760 committed=1753088 used_b=1728512 used_n=211 areas=35
+pid=96849 tag=mi_bin thr=0 src=tls size=112 reserved=720720 committed=205632 used_b=176176 used_n=1573 areas=11
+pid=96849 tag=mi_bin thr=3 src=tls size=2560 reserved=1536000 committed=1146880 used_b=1126400 used_n=440 areas=24
+pid=96849 tag=mi_bin thr=6 src=tls size=49152 reserved=3932160 committed=786432 used_b=393216 used_n=8 areas=8
+pid=96849 tag=mi_bin thr=2 src=tls size=2560 reserved=1536000 committed=1146880 used_b=1126400 used_n=440 areas=24
+pid=96849 tag=mi_bin thr=7 src=tls size=2560 reserved=1536000 committed=1146880 used_b=1126400 used_n=440 areas=24
+pid=96849 tag=mi_bin thr=1 src=tls size=2560 reserved=1536000 committed=1146880 used_b=1126400 used_n=440 areas=24
+pid=96849 tag=mi_bin thr=4 src=tls size=112 reserved=720720 committed=205632 used_b=176400 used_n=1575 areas=11
+pid=96849 tag=mi_bin thr=5 src=tls size=3584 reserved=2580480 committed=2236416 used_b=2207744 used_n=616 areas=40
+pid=96849 tag=mi_bin thr=3 src=tls size=112 reserved=720720 committed=205632 used_b=176176 used_n=1573 areas=11
+pid=96849 tag=mi_bin thr=0 src=tls size=3584 reserved=2580480 committed=2236416 used_b=2207744 used_n=616 areas=40
+pid=96849 tag=mi_bin thr=7 src=tls size=112 reserved=720720 committed=205632 used_b=176512 used_n=1576 areas=11
+pid=96849 tag=mi_bin thr=6 src=tls size=3072 reserved=5677056 committed=5357568 used_b=5332992 used_n=1736 areas=88
+pid=96849 tag=mi_bin thr=2 src=tls size=112 reserved=720720 committed=205632 used_b=176176 used_n=1573 areas=11
+pid=96849 tag=mi_bin thr=3 src=tls size=3584 reserved=2580480 committed=2236416 used_b=2207744 used_n=616 areas=40
+pid=96849 tag=mi_bin thr=1 src=tls size=112 reserved=720720 committed=205632 used_b=176288 used_n=1574 areas=11
+pid=96849 tag=mi_bin thr=5 src=tls size=49152 reserved=3932160 committed=786432 used_b=393216 used_n=8 areas=8
+pid=96849 tag=mi_bin thr=7 src=tls size=3584 reserved=2580480 committed=2236416 used_b=2207744 used_n=616 areas=40
+pid=96849 tag=mi_bin thr=0 src=tls size=49152 reserved=3932160 committed=786432 used_b=393216 used_n=8 areas=8
+pid=96849 tag=mi_bin thr=4 src=tls size=3584 reserved=2580480 committed=2236416 used_b=2207744 used_n=616 areas=40
+pid=96849 tag=mi_bin thr=1 src=tls size=3584 reserved=2580480 committed=2236416 used_b=2207744 used_n=616 areas=40
+pid=96849 tag=mi_bin thr=6 src=tls size=5120 reserved=3932160 committed=3850240 used_b=3809280 used_n=744 areas=64
+pid=96849 tag=mi_bin thr=3 src=tls size=49152 reserved=3932160 committed=786432 used_b=393216 used_n=8 areas=8
+pid=96849 tag=mi_bin thr=2 src=tls size=3584 reserved=2580480 committed=2236416 used_b=2207744 used_n=616 areas=40
+pid=96849 tag=mi_bin thr=1 src=tls size=49152 reserved=3932160 committed=786432 used_b=393216 used_n=8 areas=8
+pid=96849 tag=mi_bin thr=5 src=tls size=3072 reserved=5677056 committed=5357568 used_b=5332992 used_n=1736 areas=88
+pid=96849 tag=mi_bin thr=0 src=tls size=3072 reserved=5677056 committed=5357568 used_b=5332992 used_n=1736 areas=88
+pid=96849 tag=mi_bin thr=2 src=tls size=49152 reserved=3932160 committed=786432 used_b=393216 used_n=8 areas=8
+pid=96849 tag=mi_bin thr=7 src=tls size=49152 reserved=3932160 committed=786432 used_b=393216 used_n=8 areas=8
+pid=96849 tag=mi_bin thr=4 src=tls size=49152 reserved=3932160 committed=786432 used_b=393216 used_n=8 areas=8
+pid=96849 tag=mi_bin thr=6 src=tls size=16384 reserved=5767168 committed=704512 used_b=704512 used_n=43 areas=11
+pid=96849 tag=mi_bin thr=3 src=tls size=3072 reserved=5677056 committed=5357568 used_b=5332992 used_n=1736 areas=88
+pid=96849 tag=mi_bin thr=5 src=tls size=5120 reserved=3932160 committed=3850240 used_b=3809280 used_n=744 areas=64
+pid=96849 tag=mi_bin thr=0 src=tls size=5120 reserved=3932160 committed=3850240 used_b=3809280 used_n=744 areas=64
+pid=96849 tag=mi_bin thr=1 src=tls size=3072 reserved=5677056 committed=5357568 used_b=5332992 used_n=1736 areas=88
+pid=96849 tag=mi_bin thr=2 src=tls size=3072 reserved=5677056 committed=5357568 used_b=5332992 used_n=1736 areas=88
+pid=96849 tag=mi_bin thr=7 src=tls size=3072 reserved=5677056 committed=5357568 used_b=5332992 used_n=1736 areas=88
+pid=96849 tag=mi_bin thr=6 src=tls size=896 reserved=719488 committed=96768 used_b=64512 used_n=72 areas=11
+pid=96849 tag=mi_bin thr=3 src=tls size=5120 reserved=3932160 committed=3850240 used_b=3809280 used_n=744 areas=64
+pid=96849 tag=mi_bin thr=5 src=tls size=16384 reserved=5767168 committed=704512 used_b=704512 used_n=43 areas=11
+pid=96849 tag=mi_bin thr=4 src=tls size=3072 reserved=5677056 committed=5357568 used_b=5332992 used_n=1736 areas=88
+pid=96849 tag=mi_bin thr=0 src=tls size=16384 reserved=5767168 committed=704512 used_b=704512 used_n=43 areas=11
+pid=96849 tag=mi_bin thr=2 src=tls size=5120 reserved=3932160 committed=3850240 used_b=3809280 used_n=744 areas=64
+pid=96849 tag=mi_bin thr=1 src=tls size=5120 reserved=3932160 committed=3850240 used_b=3809280 used_n=744 areas=64
+pid=96849 tag=mi_bin thr=3 src=tls size=16384 reserved=5767168 committed=704512 used_b=704512 used_n=43 areas=11
+pid=96849 tag=mi_bin thr=7 src=tls size=5120 reserved=3932160 committed=3850240 used_b=3809280 used_n=744 areas=64
+pid=96849 tag=mi_bin thr=5 src=tls size=896 reserved=719488 committed=96768 used_b=64512 used_n=72 areas=11
+pid=96849 tag=mi_bin thr=4 src=tls size=5120 reserved=3932160 committed=3850240 used_b=3809280 used_n=744 areas=64
+pid=96849 tag=mi_bin thr=0 src=tls size=896 reserved=719488 committed=96768 used_b=64512 used_n=72 areas=11
+pid=96849 tag=mi_bin thr=6 src=tls size=6144 reserved=5406720 committed=5259264 used_b=5210112 used_n=848 areas=88
+pid=96849 tag=mi_bin thr=0 src=tls size=6144 reserved=5406720 committed=5259264 used_b=5210112 used_n=848 areas=88
+pid=96849 tag=mi_bin thr=2 src=tls size=16384 reserved=5767168 committed=704512 used_b=704512 used_n=43 areas=11
+pid=96849 tag=mi_bin thr=4 src=tls size=16384 reserved=5767168 committed=704512 used_b=704512 used_n=43 areas=11
+pid=96849 tag=mi_bin thr=1 src=tls size=16384 reserved=5767168 committed=704512 used_b=704512 used_n=43 areas=11
+pid=96849 tag=mi_bin thr=5 src=tls size=6144 reserved=5406720 committed=5259264 used_b=5210112 used_n=848 areas=88
+pid=96849 tag=mi_bin thr=7 src=tls size=16384 reserved=5767168 committed=704512 used_b=704512 used_n=43 areas=11
+pid=96849 tag=mi_bin thr=3 src=tls size=896 reserved=719488 committed=96768 used_b=64512 used_n=72 areas=11
+pid=96849 tag=mi_bin thr=2 src=tls size=896 reserved=719488 committed=96768 used_b=64512 used_n=72 areas=11
+pid=96849 tag=mi_bin thr=6 src=tls size=10240 reserved=4915200 committed=4751360 used_b=4689920 used_n=458 areas=80
+pid=96849 tag=mi_bin thr=4 src=tls size=896 reserved=719488 committed=96768 used_b=64512 used_n=72 areas=11
+pid=96849 tag=mi_bin thr=5 src=tls size=10240 reserved=4915200 committed=4751360 used_b=4679680 used_n=457 areas=80
+pid=96849 tag=mi_bin thr=1 src=tls size=896 reserved=719488 committed=96768 used_b=64512 used_n=72 areas=11
+pid=96849 tag=mi_bin thr=2 src=tls size=6144 reserved=5406720 committed=5259264 used_b=5210112 used_n=848 areas=88
+pid=96849 tag=mi_bin thr=7 src=tls size=896 reserved=719488 committed=96768 used_b=64512 used_n=72 areas=11
+pid=96849 tag=mi_bin thr=0 src=tls size=10240 reserved=4915200 committed=4751360 used_b=4751360 used_n=464 areas=80
+pid=96849 tag=mi_bin thr=5 src=tls size=20480 reserved=4096000 committed=3112960 used_b=2949120 used_n=144 areas=8
+pid=96849 tag=mi_bin thr=3 src=tls size=6144 reserved=5406720 committed=5259264 used_b=5210112 used_n=848 areas=88
+pid=96849 tag=mi_bin thr=4 src=tls size=6144 reserved=5406720 committed=5259264 used_b=5210112 used_n=848 areas=88
+pid=96849 tag=mi_bin thr=1 src=tls size=6144 reserved=5406720 committed=5259264 used_b=5210112 used_n=848 areas=88
+pid=96849 tag=mi_bin thr=2 src=tls size=10240 reserved=4915200 committed=4751360 used_b=4730880 used_n=462 areas=80
+pid=96849 tag=mi_bin thr=6 src=tls size=20480 reserved=4096000 committed=3112960 used_b=2949120 used_n=144 areas=8
+pid=96849 tag=mi_bin thr=0 src=tls size=20480 reserved=4096000 committed=3112960 used_b=2949120 used_n=144 areas=8
+pid=96849 tag=mi_bin thr=4 src=tls size=10240 reserved=4915200 committed=4751360 used_b=4720640 used_n=461 areas=80
+pid=96849 tag=mi_bin thr=1 src=tls size=10240 reserved=4915200 committed=4751360 used_b=4741120 used_n=463 areas=80
+pid=96849 tag=mi_bin thr=5 src=tls size=32768 reserved=4194304 committed=524288 used_b=524288 used_n=16 areas=8
+pid=96849 tag=mi_bin thr=3 src=tls size=10240 reserved=4915200 committed=4751360 used_b=4700160 used_n=459 areas=80
+pid=96849 tag=mi_bin thr=2 src=tls size=20480 reserved=4096000 committed=3112960 used_b=2949120 used_n=144 areas=8
+pid=96849 tag=mi_bin thr=7 src=tls size=6144 reserved=5406720 committed=5259264 used_b=5210112 used_n=848 areas=88
+pid=96849 tag=mi_bin thr=6 src=tls size=32768 reserved=4194304 committed=524288 used_b=524288 used_n=16 areas=8
+pid=96849 tag=mi_bin thr=0 src=tls size=32768 reserved=4194304 committed=524288 used_b=524288 used_n=16 areas=8
+pid=96849 tag=mi_bin thr=3 src=tls size=20480 reserved=4096000 committed=3112960 used_b=2949120 used_n=144 areas=8
+pid=96849 tag=mi_bin thr=5 src=tls size=28672 reserved=4128768 committed=917504 used_b=917504 used_n=32 areas=8
+pid=96849 tag=mi_bin thr=2 src=tls size=32768 reserved=4194304 committed=524288 used_b=524288 used_n=16 areas=8
+pid=96849 tag=mi_bin thr=1 src=tls size=20480 reserved=4096000 committed=3112960 used_b=2949120 used_n=144 areas=8
+pid=96849 tag=mi_bin thr=6 src=tls size=28672 reserved=4128768 committed=917504 used_b=917504 used_n=32 areas=8
+pid=96849 tag=mi_bin thr=4 src=tls size=20480 reserved=4096000 committed=3112960 used_b=2949120 used_n=144 areas=8
+pid=96849 tag=mi_bin thr=5 src=tls size=14336 reserved=4128768 committed=1261568 used_b=1261568 used_n=88 areas=8
+pid=96849 tag=mi_bin thr=0 src=tls size=28672 reserved=4128768 committed=917504 used_b=917504 used_n=32 areas=8
+pid=96849 tag=mi_bin thr=7 src=tls size=10240 reserved=4915200 committed=4751360 used_b=4720640 used_n=461 areas=80
+pid=96849 tag=mi_bin thr=3 src=tls size=32768 reserved=4194304 committed=524288 used_b=524288 used_n=16 areas=8
+pid=96849 tag=mi_bin thr=6 src=tls size=14336 reserved=4128768 committed=1261568 used_b=1261568 used_n=88 areas=8
+pid=96849 tag=mi_bin thr=2 src=tls size=28672 reserved=4128768 committed=917504 used_b=917504 used_n=32 areas=8
+pid=96849 tag=mi_bin thr=1 src=tls size=32768 reserved=4194304 committed=524288 used_b=524288 used_n=16 areas=8
+pid=96849 tag=mi_bin thr=4 src=tls size=32768 reserved=4194304 committed=524288 used_b=524288 used_n=16 areas=8
+pid=96849 tag=mi_bin thr=7 src=tls size=20480 reserved=4096000 committed=3112960 used_b=2949120 used_n=144 areas=8
+pid=96849 tag=mi_bin thr=0 src=tls size=14336 reserved=4128768 committed=1261568 used_b=1261568 used_n=88 areas=8
+pid=96849 tag=mi_bin thr=3 src=tls size=28672 reserved=4128768 committed=917504 used_b=917504 used_n=32 areas=8
+pid=96849 tag=mi_bin thr=6 src=tls size=12288 reserved=4128768 committed=3932160 used_b=3833856 used_n=312 areas=8
+pid=96849 tag=mi_bin thr=2 src=tls size=14336 reserved=4128768 committed=1261568 used_b=1261568 used_n=88 areas=8
+pid=96849 tag=mi_bin thr=1 src=tls size=28672 reserved=4128768 committed=917504 used_b=917504 used_n=32 areas=8
+pid=96849 tag=mi_bin thr=4 src=tls size=28672 reserved=4128768 committed=917504 used_b=917504 used_n=32 areas=8
+pid=96849 tag=mi_bin thr=7 src=tls size=32768 reserved=4194304 committed=524288 used_b=524288 used_n=16 areas=8
+pid=96849 tag=mi_bin thr=5 src=tls size=12288 reserved=4128768 committed=3932160 used_b=3833856 used_n=312 areas=8
+pid=96849 tag=mi_bin thr=1 src=tls size=14336 reserved=4128768 committed=1261568 used_b=1261568 used_n=88 areas=8
+pid=96849 tag=mi_bin thr=3 src=tls size=14336 reserved=4128768 committed=1261568 used_b=1261568 used_n=88 areas=8
+pid=96849 tag=mi_bin thr=7 src=tls size=28672 reserved=4128768 committed=917504 used_b=917504 used_n=32 areas=8
+pid=96849 tag=mi_bin thr=6 src=tls size=24576 reserved=4128768 committed=1572864 used_b=1376256 used_n=56 areas=8
+pid=96849 tag=mi_bin thr=0 src=tls size=12288 reserved=4128768 committed=3932160 used_b=3833856 used_n=312 areas=8
+pid=96849 tag=mi_bin thr=2 src=tls size=12288 reserved=4128768 committed=3932160 used_b=3833856 used_n=312 areas=8
+pid=96849 tag=mi_bin thr=4 src=tls size=14336 reserved=4128768 committed=1261568 used_b=1261568 used_n=88 areas=8
+pid=96849 tag=mi_bin thr=3 src=tls size=12288 reserved=4128768 committed=3932160 used_b=3833856 used_n=312 areas=8
+pid=96849 tag=mi_bin thr=7 src=tls size=14336 reserved=4128768 committed=1261568 used_b=1261568 used_n=88 areas=8
+pid=96849 tag=mi_bin thr=1 src=tls size=12288 reserved=4128768 committed=3932160 used_b=3833856 used_n=312 areas=8
+pid=96849 tag=mi_bin thr=5 src=tls size=24576 reserved=4128768 committed=1572864 used_b=1376256 used_n=56 areas=8
+pid=96849 tag=mi_bin thr=6 src=tls size=448 reserved=523264 committed=32256 used_b=21504 used_n=48 areas=8
+pid=96849 tag=mi_bin thr=2 src=tls size=24576 reserved=4128768 committed=1572864 used_b=1376256 used_n=56 areas=8
+pid=96849 tag=mi_bin thr=7 src=tls size=12288 reserved=4128768 committed=3932160 used_b=3833856 used_n=312 areas=8
+pid=96849 tag=mi_bin thr=6 src=tls size=65536 reserved=4194304 committed=524288 used_b=524288 used_n=8 areas=8
+pid=96849 tag=mi_bin thr=0 src=tls size=24576 reserved=4128768 committed=1572864 used_b=1376256 used_n=56 areas=8
+pid=96849 tag=mi_bin thr=3 src=tls size=24576 reserved=4128768 committed=1572864 used_b=1376256 used_n=56 areas=8
+pid=96849 tag=mi_bin thr=4 src=tls size=12288 reserved=4128768 committed=3932160 used_b=3833856 used_n=312 areas=8
+pid=96849 tag=mi_bin thr=5 src=tls size=448 reserved=523264 committed=32256 used_b=21504 used_n=48 areas=8
+pid=96849 tag=mi_bin thr=1 src=tls size=24576 reserved=4128768 committed=1572864 used_b=1376256 used_n=56 areas=8
+pid=96849 tag=mi_bin thr=7 src=tls size=24576 reserved=4128768 committed=1572864 used_b=1376256 used_n=56 areas=8
+pid=96849 tag=mi_bin thr=2 src=tls size=448 reserved=523264 committed=32256 used_b=21504 used_n=48 areas=8
+pid=96849 tag=mi_bin_thr_sum thr=6 heap=0x105be2e80 reserved=168941776 committed=126598576 used_b=122789320 alloc_id=memcount-v2-s82
+pid=96849 tag=mi_bin thr=3 src=tls size=448 reserved=523264 committed=32256 used_b=21504 used_n=48 areas=8
+pid=96849 tag=mi_bin thr=0 src=tls size=448 reserved=523264 committed=32256 used_b=21504 used_n=48 areas=8
+pid=96849 tag=mi_bin thr=4 src=tls size=24576 reserved=4128768 committed=1572864 used_b=1376256 used_n=56 areas=8
+pid=96849 tag=mi_bin thr=5 src=tls size=65536 reserved=4194304 committed=524288 used_b=524288 used_n=8 areas=8
+pid=96849 tag=mi_bin thr=1 src=tls size=448 reserved=523264 committed=32256 used_b=21504 used_n=48 areas=8
+pid=96849 tag=mi_bin thr=2 src=tls size=65536 reserved=4194304 committed=524288 used_b=524288 used_n=8 areas=8
+pid=96849 tag=mi_bin thr=7 src=tls size=448 reserved=523264 committed=32256 used_b=21504 used_n=48 areas=8
+pid=96849 tag=mi_bin thr=3 src=tls size=65536 reserved=4194304 committed=524288 used_b=524288 used_n=8 areas=8
+pid=96849 tag=mi_bin thr=0 src=tls size=65536 reserved=4194304 committed=524288 used_b=524288 used_n=8 areas=8
+pid=96849 tag=mi_bin_thr_sum thr=5 heap=0x105be2e80 reserved=168941776 committed=126598576 used_b=122779912 alloc_id=memcount-v2-s82
+pid=96849 tag=mi_bin_thr_sum thr=2 heap=0x105be2e80 reserved=168941776 committed=126598576 used_b=122828424 alloc_id=memcount-v2-s82
+pid=96849 tag=mi_bin thr=4 src=tls size=448 reserved=523264 committed=32256 used_b=21504 used_n=48 areas=8
+pid=96849 tag=mi_bin thr=1 src=tls size=65536 reserved=4194304 committed=524288 used_b=524288 used_n=8 areas=8
+pid=96849 tag=mi_bin_thr_sum thr=0 heap=0x105be2e80 reserved=168941776 committed=126598576 used_b=122848216 alloc_id=memcount-v2-s82
+pid=96849 tag=mi_bin_thr_sum thr=3 heap=0x105be2e80 reserved=168941776 committed=126598576 used_b=122799352 alloc_id=memcount-v2-s82
+pid=96849 tag=mi_bin thr=7 src=tls size=65536 reserved=4194304 committed=524288 used_b=524288 used_n=8 areas=8
+pid=96849 tag=mi_bin thr=4 src=tls size=65536 reserved=4194304 committed=524288 used_b=524288 used_n=8 areas=8
+pid=96849 tag=mi_bin_thr_sum thr=1 heap=0x105be2e80 reserved=168941776 committed=126598576 used_b=122838152 alloc_id=memcount-v2-s82
+pid=96849 tag=mi_bin_thr_sum thr=4 heap=0x105be2e80 reserved=168941776 committed=126598576 used_b=122818208 alloc_id=memcount-v2-s82
+pid=96849 tag=mi_bin_thr_sum thr=7 heap=0x105be2e80 reserved=168941776 committed=126598576 used_b=122818472 alloc_id=memcount-v2-s82
+pid=96849 tag=exit str.live=0 str.peak=2063646 str.cum=3388752 str.cum_n=59560 str.live_n=0 arr.live=0 arr.peak=0 arr.cum=0 arr.cum_n=0 arr.live_n=0 obj.live=0 obj.peak=0 obj.cum=0 obj.cum_n=0 obj.live_n=0 unit.live=0 unit.peak=0 unit.cum=0 unit.cum_n=0 unit.live_n=0 created=0 units=0 unit_slack=0 proxy_peak=2063646
+pid=96849 tag=mi_proc win=0 mono_ms=12610 phys=4096600 phys_peak=130794072 rss=197115904 peak_rss=198230016 commit=230948864 peak_commit=230948864
+pid=96849 tag=ctx win=0 mono_ms=12610 top=none
+pid=96849 tag=mi_bin win=0 src=defer visit=NULLHEAP
+pid=96849 tag=mi_bin win=0 src=main size=8 reserved=65528 committed=4096 used_b=3000 used_n=375 areas=1
+pid=96849 tag=mi_bin win=0 src=main size=64 reserved=130944 committed=8192 used_b=960 used_n=15 areas=2
+pid=96849 tag=mi_bin win=0 src=main size=640 reserved=65280 committed=3840 used_b=1280 used_n=2 areas=1
+pid=96849 tag=mi_bin win=0 src=main size=16 reserved=65520 committed=4096 used_b=48 used_n=3 areas=1
+pid=96849 tag=mi_bin win=0 src=main size=224 reserved=130816 committed=8064 used_b=1568 used_n=7 areas=2
+pid=96849 tag=mi_bin win=0 src=main size=96 reserved=65472 committed=4032 used_b=192 used_n=2 areas=1
+pid=96849 tag=mi_bin win=0 src=main size=128 reserved=130816 committed=8192 used_b=1536 used_n=12 areas=2
+pid=96849 tag=mi_bin win=0 src=main size=40960 reserved=491520 committed=40960 used_b=40960 used_n=1 areas=1
+pid=96849 tag=mi_bin win=0 src=main size=384 reserved=65280 committed=15360 used_b=12672 used_n=33 areas=1
+pid=96849 tag=mi_bin win=0 src=main size=7168 reserved=64512 committed=7168 used_b=7168 used_n=1 areas=1
+pid=96849 tag=mi_bin win=0 src=main size=32 reserved=327520 committed=20480 used_b=864 used_n=27 areas=5
+pid=96849 tag=mi_bin win=0 src=main size=320 reserved=65280 committed=3840 used_b=0 used_n=0 areas=1
+pid=96849 tag=mi_bin win=0 src=main size=192 reserved=65472 committed=4032 used_b=3072 used_n=16 areas=1
+pid=96849 tag=mi_bin win=0 src=main size=1536 reserved=64512 committed=3072 used_b=1536 used_n=1 areas=1
+pid=96849 tag=mi_bin win=0 src=main size=2048 reserved=131072 committed=49152 used_b=40960 used_n=20 areas=2
+pid=96849 tag=mi_bin win=0 src=main size=48 reserved=65520 committed=4080 used_b=1440 used_n=30 areas=1
+pid=96849 tag=mi_bin win=0 src=main size=1792 reserved=64512 committed=3584 used_b=1792 used_n=1 areas=1
+pid=96849 tag=mi_bin win=0 src=main size=256 reserved=65280 committed=4096 used_b=3072 used_n=12 areas=1
+pid=96849 tag=mi_bin win=0 src=main size=80 reserved=65520 committed=4080 used_b=800 used_n=10 areas=1
+pid=96849 tag=mi_bin win=0 src=main size=160 reserved=65440 committed=4000 used_b=0 used_n=0 areas=1
+pid=96849 tag=mi_bin win=0 src=main size=10240 reserved=61440 committed=10240 used_b=10240 used_n=1 areas=1
+pid=96849 tag=mi_bin win=0 src=main size=1024 reserved=131072 committed=8192 used_b=1024 used_n=1 areas=2
+pid=96849 tag=mi_bin win=0 src=main size=4096 reserved=65536 committed=4096 used_b=4096 used_n=1 areas=1
+pid=96849 tag=mi_bin win=0 src=main size=512 reserved=65024 committed=8192 used_b=4608 used_n=9 areas=1
+pid=96849 tag=mi_bin win=0 src=main size=112 reserved=65520 committed=4032 used_b=112 used_n=1 areas=1
+pid=96849 tag=mi_bin win=0 src=main size=1280 reserved=65280 committed=3840 used_b=3840 used_n=3 areas=1
+pid=96849 tag=mi_bin win=0 src=aband size=32 reserved=262016 committed=16384 used_b=224 used_n=7 areas=4
+pid=96849 tag=mi_bin win=0 src=aband size=64 reserved=65472 committed=4096 used_b=256 used_n=4 areas=1
+pid=96849 tag=mi_bin win=0 src=aband size=128 reserved=65408 committed=4096 used_b=128 used_n=1 areas=1
+pid=96849 tag=mi_bin win=0 src=aband size=224 reserved=65408 committed=4032 used_b=224 used_n=1 areas=1
+pid=96849 tag=mi_bin win=0 src=aband size=1024 reserved=65536 committed=4096 used_b=1024 used_n=1 areas=1
+pid=96849 tag=mi_bin win=0 src=aband size=2048 reserved=65536 committed=4096 used_b=2048 used_n=1 areas=1
+pid=96849 tag=mi_bin win=0 src=aband size=4096 reserved=65536 committed=4096 used_b=4096 used_n=1 areas=1
+pid=96849 tag=mi_option win=0 name=arena_eager_commit ord=4 val=2
+pid=96849 tag=mi_option win=0 name=purge_delay ord=15 val=0
+pid=96849 tag=env_readback win=0 name=MIMALLOC_ARENA_EAGER_COMMIT val=unset
+pid=96849 tag=env_readback win=0 name=MIMALLOC_PURGE_DELAY val=0
+pid=96849 tag=env_readback win=0 name=RUST_MIN_STACK val=unset
+pid=96849 tag=mi_arena_json win=0 json={   "stat_version": 5,   "mimalloc_version": 30302,   "process": {     "elapsed_msecs": 12818,     "user_msecs": 529,     "system_msecs": 221,     "page_faults": 0,     "rss_current": 197197824,     "rss_peak": 198230016,     "commit_current": 230948864,     "commit_peak": 230948864   },   "pages": { "total": 2615, "peak": 1928, "current": 36 },   "reserved": { "total": 1078263808, "peak": 1078263808, "current": 1078263808 },   "committed": { "total": 230948864, "peak": 230948864, "current": 230948864 },   "reset": 0,   "purged": 585105408,   "page_committed": { "total": 0, "peak": 0, "current": 0 },   "pages_abandoned": { "total": 1260, "peak": 1131, "current": 10 },   "threads": { "total": 19, "peak": 19, "current": 1 },   "malloc_normal": { "total": 0, "peak": 0, "current": 0 },   "malloc_huge": { "total": 319291392, "peak": 319291392, "current": 319291392 },   "malloc_requested": { "total": 0, "peak": 0, "current": 0 },   "mmap_calls": 3,   "commit_calls": 0,   "reset_calls": 0,   "purge_calls": 2579,   "arena_count": 1,   "malloc_normal_count": 0,   "malloc_huge_count": 48,   "malloc_guarded_count": 0,   "arena_rollback_count": 0,   "arena_purges": 0,   "pages_extended": 0,   "pages_retire": 0,   "page_searches": 74489,   "page_searches_count": 31862,   "segments": { "total": 0, "peak": 0, "current": 0 },   "segments_abandoned": { "total": 0, "peak": 0, "current": 0 },   "segments_cache": { "total": 0, "peak": 0, "current": 0 },   "_segments_reserved": { "total": 0, "peak": 0, "current": 0 },   "heaps": { "total": 1, "peak": 1, "current": 1 },   "theaps": { "total": 18, "peak": 18, "current": 0 },   "pages_reclaim_on_alloc": 1,   "pages_reclaim_on_free": 1193,   "pages_reabandon_full": 0,   "pages_unabandon_busy_wait": 0,   "heaps_delete_wait": 0,   "malloc_bins": [     { "total": 0, "peak": 0, "current": 0, "block_size": 8, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 8, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 16, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 24, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 32, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 40, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 48, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 56, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 64, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 80, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 96, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 112, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 128, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 160, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 192, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 224, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 256, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 320, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 384, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 448, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 512, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 640, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 768, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 896, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 1024, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 1280, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 1536, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 1792, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 2048, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 2560, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 3072, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 3584, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 4096, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 5120, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 6144, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 7168, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 8192, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 10240, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 12288, "page_size": 524288 },     { "total": 0, "peak": 0, "current": 0, "block_size": 14336, "page_size": 524288 },     { "total": 0, "peak": 0, "current": 0, "block_size": 16384, "page_size": 524288 },     { "total": 0, "peak": 0, "current": 0, "block_size": 20480, "page_size": 524288 },     { "total": 0, "peak": 0, "current": 0, "block_size": 24576, "page_size": 524288 },     { "total": 0, "peak": 0, "current": 0, "block_size": 28672, "page_size": 524288 },     { "total": 0, "peak": 0, "current": 0, "block_size": 32768, "page_size": 524288 },     { "total": 0, "peak": 0, "current": 0, "block_size": 40960, "page_size": 524288 },     { "total": 0, "peak": 0, "current": 0, "block_size": 49152, "page_size": 524288 },     { "total": 0, "peak": 0, "current": 0, "block_size": 57344, "page_size": 524288 },     { "total": 0, "peak": 0, "current": 0, "block_size": 65536, "page_size": 524288 },     { "total": 0, "peak": 0, "current": 0, "block_size": 81920, "page_size": 524288 },     { "total": 0, "peak": 0, "current": 0, "block_size": 98304, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 114688, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 131072, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 163840, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 196608, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 229376, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 262144, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 327680, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 393216, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 458752, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 524288, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 655360, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 786432, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 917504, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 1048576, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 1310720, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 1572864, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 1835008, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 2097152, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 2621440, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 3145728, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 3670016, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 4194304, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 524296, "page_size": 0 }   ],   "page_bins": [     { "total": 0, "peak": 0, "current": 0, "block_size": 8, "page_size": 65536 },     { "total": 28, "peak": 24, "current": 1, "block_size": 8, "page_size": 65536 },     { "total": 35, "peak": 24, "current": 1, "block_size": 16, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 24, "page_size": 65536 },     { "total": 47, "peak": 40, "current": 5, "block_size": 32, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 40, "page_size": 65536 },     { "total": 52, "peak": 48, "current": 1, "block_size": 48, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 56, "page_size": 65536 },     { "total": 51, "peak": 40, "current": 2, "block_size": 64, "page_size": 65536 },     { "total": 9, "peak": 8, "current": 1, "block_size": 80, "page_size": 65536 },     { "total": 20, "peak": 16, "current": 1, "block_size": 96, "page_size": 65536 },     { "total": 11, "peak": 8, "current": 1, "block_size": 112, "page_size": 65536 },     { "total": 18, "peak": 16, "current": 2, "block_size": 128, "page_size": 65536 },     { "total": 228, "peak": 216, "current": 1, "block_size": 160, "page_size": 65536 },     { "total": 20, "peak": 8, "current": 1, "block_size": 192, "page_size": 65536 },     { "total": 44, "peak": 24, "current": 2, "block_size": 224, "page_size": 65536 },     { "total": 114, "peak": 112, "current": 1, "block_size": 256, "page_size": 65536 },     { "total": 12, "peak": 8, "current": 1, "block_size": 320, "page_size": 65536 },     { "total": 139, "peak": 32, "current": 1, "block_size": 384, "page_size": 65536 },     { "total": 16, "peak": 8, "current": 0, "block_size": 448, "page_size": 65536 },     { "total": 92, "peak": 88, "current": 1, "block_size": 512, "page_size": 65536 },     { "total": 236, "peak": 216, "current": 1, "block_size": 640, "page_size": 65536 },     { "total": 107, "peak": 80, "current": 0, "block_size": 768, "page_size": 65536 },     { "total": 11, "peak": 8, "current": 0, "block_size": 896, "page_size": 65536 },     { "total": 187, "peak": 184, "current": 2, "block_size": 1024, "page_size": 65536 },     { "total": 49, "peak": 48, "current": 1, "block_size": 1280, "page_size": 65536 },     { "total": 161, "peak": 80, "current": 1, "block_size": 1536, "page_size": 65536 },     { "total": 9, "peak": 8, "current": 1, "block_size": 1792, "page_size": 65536 },     { "total": 44, "peak": 40, "current": 2, "block_size": 2048, "page_size": 65536 },     { "total": 24, "peak": 24, "current": 0, "block_size": 2560, "page_size": 65536 },     { "total": 160, "peak": 88, "current": 0, "block_size": 3072, "page_size": 65536 },     { "total": 40, "peak": 40, "current": 0, "block_size": 3584, "page_size": 65536 },     { "total": 49, "peak": 24, "current": 1, "block_size": 4096, "page_size": 65536 },     { "total": 136, "peak": 64, "current": 0, "block_size": 5120, "page_size": 65536 },     { "total": 120, "peak": 88, "current": 0, "block_size": 6144, "page_size": 65536 },     { "total": 25, "peak": 24, "current": 1, "block_size": 7168, "page_size": 65536 },     { "total": 35, "peak": 32, "current": 0, "block_size": 8192, "page_size": 65536 },     { "total": 89, "peak": 80, "current": 1, "block_size": 10240, "page_size": 65536 },     { "total": 24, "peak": 8, "current": 0, "block_size": 12288, "page_size": 524288 },     { "total": 8, "peak": 8, "current": 0, "block_size": 14336, "page_size": 524288 },     { "total": 19, "peak": 8, "current": 0, "block_size": 16384, "page_size": 524288 },     { "total": 24, "peak": 8, "current": 0, "block_size": 20480, "page_size": 524288 },     { "total": 16, "peak": 8, "current": 0, "block_size": 24576, "page_size": 524288 },     { "total": 8, "peak": 8, "current": 0, "block_size": 28672, "page_size": 524288 },     { "total": 8, "peak": 8, "current": 0, "block_size": 32768, "page_size": 524288 },     { "total": 9, "peak": 8, "current": 1, "block_size": 40960, "page_size": 524288 },     { "total": 8, "peak": 8, "current": 0, "block_size": 49152, "page_size": 524288 },     { "total": 0, "peak": 0, "current": 0, "block_size": 57344, "page_size": 524288 },     { "total": 17, "peak": 8, "current": 1, "block_size": 65536, "page_size": 524288 },     { "total": 0, "peak": 0, "current": 0, "block_size": 81920, "page_size": 524288 },     { "total": 0, "peak": 0, "current": 0, "block_size": 98304, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 114688, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 131072, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 163840, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 196608, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 229376, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 262144, "page_size": 4194304 },     { "total": 8, "peak": 1, "current": 0, "block_size": 327680, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 393216, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 458752, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 524288, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 655360, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 786432, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 917504, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 1048576, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 1310720, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 1572864, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 1835008, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 2097152, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 2621440, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 3145728, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 3670016, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 4194304, "page_size": 0 },     { "total": 48, "peak": 0, "current": 0, "block_size": 524296, "page_size": 0 }   ],   "chunk_bins": [     { "total": 7, "peak": 5, "current": 0, "bin": "S" },     { "total": 4, "peak": 2, "current": 0, "bin": "X" },     { "total": 0, "peak": 0, "current": 0, "bin": "M" },     { "total": 0, "peak": 0, "current": 0, "bin": "L" },     { "total": 0, "peak": 0, "current": 0, "bin": "H" },     { "total": 0, "peak": 0, "current": 0, "bin": " " }   ] } 
+pid=96849 tag=mi_arena win=0 key=committed total=230948864 peak=230948864 current=230948864
+pid=96849 tag=mi_arena win=0 key=reserved total=1078263808 peak=1078263808 current=1078263808
+pid=96849 tag=mi_arena win=0 key=pages total=2615 peak=1928 current=36
+pid=96849 tag=mi_arena win=0 key=page_committed total=0 peak=0 current=0
+pid=96849 tag=mi_arena win=0 key=arena_count val=1
+pid=96849 tag=mi_arena win=0 key=purged val=585105408
+pid=96849 tag=mi_arena win=0 key=reset val=0
+pid=96849 tag=mi_arena win=0 key=commit_calls val=0
+pid=96849 tag=mi_arena win=0 key=purge_calls val=2579
+pid=96849 tag=mi_arena win=0 key=mmap_calls val=3
+pid=96849 tag=mi_arena_chunk_bins win=0 "chunk_bins": [     { "total": 7, "peak": 5, "current": 0, "bin": "S" },     { "total": 4, "peak": 2, "current": 0, "bin": "X" },     { "total": 0, "peak": 0, "current": 0, "bin": "M" },     { "total": 0, "peak": 0, "current": 0, "bin": "L" },     { "total": 0, "peak": 0, "current": 0, "bin": "H" },     { "total": 0, "peak": 0, "current": 0, "bin": " " }   ]
+pid=96849 tag=exit_mi str.live=0 str.peak=2063646 str.cum=3388752 str.cum_n=59560 str.live_n=0 arr.live=0 arr.peak=0 arr.cum=0 arr.cum_n=0 arr.live_n=0 obj.live=0 obj.peak=0 obj.cum=0 obj.cum_n=0 obj.live_n=0 unit.live=0 unit.peak=0 unit.cum=0 unit.cum_n=0 unit.live_n=0 created=0 units=0 unit_slack=0 proxy_peak=2063646
+pid=96849 tag=mi_proc win=0 mono_ms=12611 phys=3752536 phys_peak=130794072 rss=197214208 peak_rss=198230016 commit=230948864 peak_commit=230948864
+pid=96849 tag=ctx win=0 mono_ms=12611 top=none
+pid=96849 tag=mi_bin win=0 src=defer visit=NULLHEAP
+pid=96849 tag=mi_bin win=0 src=main size=192 reserved=65472 committed=4032 used_b=0 used_n=0 areas=1
+pid=96849 tag=mi_bin win=0 src=main size=64 reserved=130944 committed=8192 used_b=384 used_n=6 areas=2
+pid=96849 tag=mi_bin win=0 src=main size=640 reserved=65280 committed=3840 used_b=640 used_n=1 areas=1
+pid=96849 tag=mi_bin win=0 src=main size=16 reserved=65520 committed=4096 used_b=16 used_n=1 areas=1
+pid=96849 tag=mi_bin win=0 src=main size=8 reserved=65528 committed=4096 used_b=0 used_n=0 areas=1
+pid=96849 tag=mi_bin win=0 src=main size=10240 reserved=61440 committed=10240 used_b=10240 used_n=1 areas=1
+pid=96849 tag=mi_bin win=0 src=main size=384 reserved=65280 committed=15360 used_b=12672 used_n=33 areas=1
+pid=96849 tag=mi_bin win=0 src=main size=1024 reserved=65536 committed=4096 used_b=1024 used_n=1 areas=1
+pid=96849 tag=mi_bin win=0 src=main size=32 reserved=262016 committed=16384 used_b=224 used_n=7 areas=4
+pid=96849 tag=mi_bin win=0 src=main size=2048 reserved=65536 committed=4096 used_b=2048 used_n=1 areas=1
+pid=96849 tag=mi_bin win=0 src=main size=4096 reserved=65536 committed=4096 used_b=4096 used_n=1 areas=1
+pid=96849 tag=mi_bin win=0 src=main size=112 reserved=65520 committed=4032 used_b=112 used_n=1 areas=1
+pid=96849 tag=mi_bin win=0 src=main size=128 reserved=65408 committed=4096 used_b=128 used_n=1 areas=1
+pid=96849 tag=mi_bin win=0 src=main size=224 reserved=65408 committed=4032 used_b=224 used_n=1 areas=1
+pid=96849 tag=mi_bin win=0 src=aband size=32 reserved=262016 committed=16384 used_b=224 used_n=7 areas=4
+pid=96849 tag=mi_bin win=0 src=aband size=64 reserved=65472 committed=4096 used_b=256 used_n=4 areas=1
+pid=96849 tag=mi_bin win=0 src=aband size=128 reserved=65408 committed=4096 used_b=128 used_n=1 areas=1
+pid=96849 tag=mi_bin win=0 src=aband size=224 reserved=65408 committed=4032 used_b=224 used_n=1 areas=1
+pid=96849 tag=mi_bin win=0 src=aband size=1024 reserved=65536 committed=4096 used_b=1024 used_n=1 areas=1
+pid=96849 tag=mi_bin win=0 src=aband size=2048 reserved=65536 committed=4096 used_b=2048 used_n=1 areas=1
+pid=96849 tag=mi_bin win=0 src=aband size=4096 reserved=65536 committed=4096 used_b=4096 used_n=1 areas=1
+pid=96849 tag=mi_option win=0 name=arena_eager_commit ord=4 val=2
+pid=96849 tag=mi_option win=0 name=purge_delay ord=15 val=0
+pid=96849 tag=env_readback win=0 name=MIMALLOC_ARENA_EAGER_COMMIT val=unset
+pid=96849 tag=env_readback win=0 name=MIMALLOC_PURGE_DELAY val=0
+pid=96849 tag=env_readback win=0 name=RUST_MIN_STACK val=unset
+pid=96849 tag=mi_arena_json win=0 json={   "stat_version": 5,   "mimalloc_version": 30302,   "process": {     "elapsed_msecs": 12819,     "user_msecs": 529,     "system_msecs": 221,     "page_faults": 0,     "rss_current": 197246976,     "rss_peak": 198230016,     "commit_current": 230948864,     "commit_peak": 230948864   },   "pages": { "total": 2631, "peak": 1928, "current": 22 },   "reserved": { "total": 1078263808, "peak": 1078263808, "current": 1078263808 },   "committed": { "total": 230948864, "peak": 230948864, "current": 230948864 },   "reset": 0,   "purged": 589824000,   "page_committed": { "total": 0, "peak": 0, "current": 0 },   "pages_abandoned": { "total": 1260, "peak": 1131, "current": 9 },   "threads": { "total": 19, "peak": 19, "current": 1 },   "malloc_normal": { "total": 0, "peak": 0, "current": 0 },   "malloc_huge": { "total": 319291392, "peak": 319291392, "current": 319291392 },   "malloc_requested": { "total": 0, "peak": 0, "current": 0 },   "mmap_calls": 3,   "commit_calls": 0,   "reset_calls": 0,   "purge_calls": 2609,   "arena_count": 1,   "malloc_normal_count": 0,   "malloc_huge_count": 48,   "malloc_guarded_count": 0,   "arena_rollback_count": 0,   "arena_purges": 0,   "pages_extended": 0,   "pages_retire": 0,   "page_searches": 74491,   "page_searches_count": 31881,   "segments": { "total": 0, "peak": 0, "current": 0 },   "segments_abandoned": { "total": 0, "peak": 0, "current": 0 },   "segments_cache": { "total": 0, "peak": 0, "current": 0 },   "_segments_reserved": { "total": 0, "peak": 0, "current": 0 },   "heaps": { "total": 1, "peak": 1, "current": 1 },   "theaps": { "total": 18, "peak": 18, "current": 0 },   "pages_reclaim_on_alloc": 2,   "pages_reclaim_on_free": 1193,   "pages_reabandon_full": 0,   "pages_unabandon_busy_wait": 0,   "heaps_delete_wait": 0,   "malloc_bins": [     { "total": 0, "peak": 0, "current": 0, "block_size": 8, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 8, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 16, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 24, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 32, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 40, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 48, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 56, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 64, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 80, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 96, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 112, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 128, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 160, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 192, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 224, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 256, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 320, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 384, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 448, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 512, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 640, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 768, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 896, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 1024, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 1280, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 1536, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 1792, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 2048, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 2560, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 3072, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 3584, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 4096, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 5120, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 6144, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 7168, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 8192, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 10240, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 12288, "page_size": 524288 },     { "total": 0, "peak": 0, "current": 0, "block_size": 14336, "page_size": 524288 },     { "total": 0, "peak": 0, "current": 0, "block_size": 16384, "page_size": 524288 },     { "total": 0, "peak": 0, "current": 0, "block_size": 20480, "page_size": 524288 },     { "total": 0, "peak": 0, "current": 0, "block_size": 24576, "page_size": 524288 },     { "total": 0, "peak": 0, "current": 0, "block_size": 28672, "page_size": 524288 },     { "total": 0, "peak": 0, "current": 0, "block_size": 32768, "page_size": 524288 },     { "total": 0, "peak": 0, "current": 0, "block_size": 40960, "page_size": 524288 },     { "total": 0, "peak": 0, "current": 0, "block_size": 49152, "page_size": 524288 },     { "total": 0, "peak": 0, "current": 0, "block_size": 57344, "page_size": 524288 },     { "total": 0, "peak": 0, "current": 0, "block_size": 65536, "page_size": 524288 },     { "total": 0, "peak": 0, "current": 0, "block_size": 81920, "page_size": 524288 },     { "total": 0, "peak": 0, "current": 0, "block_size": 98304, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 114688, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 131072, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 163840, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 196608, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 229376, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 262144, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 327680, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 393216, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 458752, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 524288, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 655360, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 786432, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 917504, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 1048576, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 1310720, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 1572864, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 1835008, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 2097152, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 2621440, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 3145728, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 3670016, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 4194304, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 524296, "page_size": 0 }   ],   "page_bins": [     { "total": 0, "peak": 0, "current": 0, "block_size": 8, "page_size": 65536 },     { "total": 29, "peak": 24, "current": 1, "block_size": 8, "page_size": 65536 },     { "total": 35, "peak": 24, "current": 1, "block_size": 16, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 24, "page_size": 65536 },     { "total": 47, "peak": 40, "current": 4, "block_size": 32, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 40, "page_size": 65536 },     { "total": 52, "peak": 48, "current": 0, "block_size": 48, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 56, "page_size": 65536 },     { "total": 51, "peak": 40, "current": 2, "block_size": 64, "page_size": 65536 },     { "total": 10, "peak": 8, "current": 1, "block_size": 80, "page_size": 65536 },     { "total": 21, "peak": 16, "current": 1, "block_size": 96, "page_size": 65536 },     { "total": 11, "peak": 8, "current": 1, "block_size": 112, "page_size": 65536 },     { "total": 18, "peak": 16, "current": 1, "block_size": 128, "page_size": 65536 },     { "total": 229, "peak": 216, "current": 1, "block_size": 160, "page_size": 65536 },     { "total": 21, "peak": 8, "current": 1, "block_size": 192, "page_size": 65536 },     { "total": 44, "peak": 24, "current": 1, "block_size": 224, "page_size": 65536 },     { "total": 114, "peak": 112, "current": 0, "block_size": 256, "page_size": 65536 },     { "total": 12, "peak": 8, "current": 0, "block_size": 320, "page_size": 65536 },     { "total": 139, "peak": 32, "current": 1, "block_size": 384, "page_size": 65536 },     { "total": 17, "peak": 8, "current": 0, "block_size": 448, "page_size": 65536 },     { "total": 92, "peak": 88, "current": 0, "block_size": 512, "page_size": 65536 },     { "total": 236, "peak": 216, "current": 1, "block_size": 640, "page_size": 65536 },     { "total": 108, "peak": 80, "current": 0, "block_size": 768, "page_size": 65536 },     { "total": 12, "peak": 8, "current": 0, "block_size": 896, "page_size": 65536 },     { "total": 187, "peak": 184, "current": 1, "block_size": 1024, "page_size": 65536 },     { "total": 49, "peak": 48, "current": 0, "block_size": 1280, "page_size": 65536 },     { "total": 161, "peak": 80, "current": 0, "block_size": 1536, "page_size": 65536 },     { "total": 9, "peak": 8, "current": 0, "block_size": 1792, "page_size": 65536 },     { "total": 44, "peak": 40, "current": 1, "block_size": 2048, "page_size": 65536 },     { "total": 24, "peak": 24, "current": 0, "block_size": 2560, "page_size": 65536 },     { "total": 161, "peak": 88, "current": 0, "block_size": 3072, "page_size": 65536 },     { "total": 40, "peak": 40, "current": 0, "block_size": 3584, "page_size": 65536 },     { "total": 49, "peak": 24, "current": 1, "block_size": 4096, "page_size": 65536 },     { "total": 136, "peak": 64, "current": 0, "block_size": 5120, "page_size": 65536 },     { "total": 121, "peak": 88, "current": 0, "block_size": 6144, "page_size": 65536 },     { "total": 25, "peak": 24, "current": 0, "block_size": 7168, "page_size": 65536 },     { "total": 35, "peak": 32, "current": 0, "block_size": 8192, "page_size": 65536 },     { "total": 90, "peak": 80, "current": 1, "block_size": 10240, "page_size": 65536 },     { "total": 25, "peak": 8, "current": 0, "block_size": 12288, "page_size": 524288 },     { "total": 8, "peak": 8, "current": 0, "block_size": 14336, "page_size": 524288 },     { "total": 20, "peak": 8, "current": 0, "block_size": 16384, "page_size": 524288 },     { "total": 24, "peak": 8, "current": 0, "block_size": 20480, "page_size": 524288 },     { "total": 17, "peak": 8, "current": 0, "block_size": 24576, "page_size": 524288 },     { "total": 8, "peak": 8, "current": 0, "block_size": 28672, "page_size": 524288 },     { "total": 9, "peak": 8, "current": 0, "block_size": 32768, "page_size": 524288 },     { "total": 9, "peak": 8, "current": 0, "block_size": 40960, "page_size": 524288 },     { "total": 8, "peak": 8, "current": 0, "block_size": 49152, "page_size": 524288 },     { "total": 0, "peak": 0, "current": 0, "block_size": 57344, "page_size": 524288 },     { "total": 18, "peak": 8, "current": 1, "block_size": 65536, "page_size": 524288 },     { "total": 0, "peak": 0, "current": 0, "block_size": 81920, "page_size": 524288 },     { "total": 0, "peak": 0, "current": 0, "block_size": 98304, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 114688, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 131072, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 163840, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 196608, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 229376, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 262144, "page_size": 4194304 },     { "total": 8, "peak": 1, "current": 0, "block_size": 327680, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 393216, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 458752, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 524288, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 655360, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 786432, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 917504, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 1048576, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 1310720, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 1572864, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 1835008, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 2097152, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 2621440, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 3145728, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 3670016, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 4194304, "page_size": 0 },     { "total": 48, "peak": 0, "current": 0, "block_size": 524296, "page_size": 0 }   ],   "chunk_bins": [     { "total": 7, "peak": 5, "current": 0, "bin": "S" },     { "total": 4, "peak": 2, "current": 0, "bin": "X" },     { "total": 0, "peak": 0, "current": 0, "bin": "M" },     { "total": 0, "peak": 0, "current": 0, "bin": "L" },     { "total": 0, "peak": 0, "current": 0, "bin": "H" },     { "total": 0, "peak": 0, "current": 0, "bin": " " }   ] } 
+pid=96849 tag=mi_arena win=0 key=committed total=230948864 peak=230948864 current=230948864
+pid=96849 tag=mi_arena win=0 key=reserved total=1078263808 peak=1078263808 current=1078263808
+pid=96849 tag=mi_arena win=0 key=pages total=2631 peak=1928 current=22
+pid=96849 tag=mi_arena win=0 key=page_committed total=0 peak=0 current=0
+pid=96849 tag=mi_arena win=0 key=arena_count val=1
+pid=96849 tag=mi_arena win=0 key=purged val=589824000
+pid=96849 tag=mi_arena win=0 key=reset val=0
+pid=96849 tag=mi_arena win=0 key=commit_calls val=0
+pid=96849 tag=mi_arena win=0 key=purge_calls val=2609
+pid=96849 tag=mi_arena win=0 key=mmap_calls val=3
+pid=96849 tag=mi_arena_chunk_bins win=0 "chunk_bins": [     { "total": 7, "peak": 5, "current": 0, "bin": "S" },     { "total": 4, "peak": 2, "current": 0, "bin": "X" },     { "total": 0, "peak": 0, "current": 0, "bin": "M" },     { "total": 0, "peak": 0, "current": 0, "bin": "L" },     { "total": 0, "peak": 0, "current": 0, "bin": "H" },     { "total": 0, "peak": 0, "current": 0, "bin": " " }   ]
+pid=96849 tag=exit_collect_mi str.live=0 str.peak=2063646 str.cum=3388752 str.cum_n=59560 str.live_n=0 arr.live=0 arr.peak=0 arr.cum=0 arr.cum_n=0 arr.live_n=0 obj.live=0 obj.peak=0 obj.cum=0 obj.cum_n=0 obj.live_n=0 unit.live=0 unit.peak=0 unit.cum=0 unit.cum_n=0 unit.live_n=0 created=0 units=0 unit_slack=0 proxy_peak=2063646
+mem_hash=b2fe7a43e62166da git=202f8b1 campaign_sha=8cdf64506001c1fa arm=mem-census phase=slope.w8.r5 attempt=1 w=8 nreq=800 envtag=none srv_pid=96849 srv_boot_epoch=1785698966 server_exit=0 seq=10 epoch=1785698978
