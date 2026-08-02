@@ -116,6 +116,9 @@ push @sources, bsd_glob("$mout/*86*.summary"), bsd_glob("$mout/*86*.census"),
                bsd_glob("$mout/axum.86*"),     bsd_glob("$here/../wp86-harness/*.out");
 # S-87.0: the WP-88 re-judgment machine outputs (rejudge86 & friends)
 push @sources, bsd_glob("$here/../wp87-harness/*.out");
+# S-88.0: the measure88 campaign raws (m88* labels) + verdict88 (per-attempt,
+# per-generation .out) in wp88-harness
+push @sources, bsd_glob("$mout/m88*"), bsd_glob("$here/../wp88-harness/*.out");
 # S-85.0: the measure85 campaign raws (85*/m85* labels) + verdict85 + the
 # wp85 evidence dir
 push @sources, bsd_glob("$mout/*85*.summary"), bsd_glob("$mout/*85*.census"),
