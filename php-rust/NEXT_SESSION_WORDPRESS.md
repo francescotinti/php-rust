@@ -81,14 +81,62 @@ aggregato** (A-BG48/KG-89-3). 12. **Un ordine di concilio con premessa
 fattuale va VERIFICATO contro oracle/emitter PRIMA dell'esecuzione; la
 refutazione si committa con le prove** (lezione S-88.0 ⭐⭐).
 
-## ⚖️ Concilio WP-90 (da convocare/assemblare in chiusura S-88.0): `wp90-harness/COUNCIL_WP90_REVIEWS.md`
+## ⚖️ Concilio WP-90 ESEGUITO (2026-08-02, verbali VINCOLANTI): `wp90-harness/COUNCIL_WP90_REVIEWS.md`
 
-(placeholder — il blocco vincolante e il §WP-89(sessione) vengono
-scritti all'assemblaggio dei 9 verbali)
+**9× PASS/CONCORDO CON EMENDAMENTI, 0 opposizioni; 27 KS nuovi; UNA
+RATIFICA piena** (Stogov ratifica ENTRAMBE le refutazioni S-88.0
+rieseguendo l'oracle; origine del suo errore WP-89 trovata: flag
+`enable_cli` caduta = braccio-persist-monco SILENZIOSO). Cifre confermate
+a ricomputo (Bak al byte sui 20 raw). REFUTAZIONI CAPITALI: **DUE FORGE
+MORSI DAL VIVO sul gate cifre** (Klabnik: corpus letto dal WORKING TREE,
+non dal committed — un raw non committato legalizza qualunque cifra;
+`[derivata]` a scope di RIGA esenta anche i token MISURATI); **le battery
+FALLITE non lasciano traccia in nessun ledger** (Hejlsberg+Gregg); **il
+fail-path del port-owner PRODUCE l'orfano che dovrebbe prevenire**
+(Pedersen: fail in command-substitution non uccide il server);
+**arena==proc è identità di read-path, non cross-check** (Leijen; e
+commit_calls=0 auto-incoerente); **monotonia degli assoluti vacua sul
+marginale** (Bak: b=21,20M±1,17M 2σ; **banda KL-85-2 RITIRATA**);
+**dichiarazione A-TH47 inesatta** (Hoare: chiavi const-Cell no-Drop non
+panicano mai a TLS-teardown); **flag probe pub + LocalKey::set bypassa
+la belt** (Matsakis: il fix è di visibilità, non di regex); **publish
+observable ancora path-repetition** (Pedersen); **spans= mai giudicato
+in VWARM** (Klabnik); **A-DS44 regge dal vivo ma manca l'EMISSIONE del
+Deprecated** (Stogov: A-DS46 + ricetta 3-flag/.bin-check A-DS47).
+Dropped WP-89 dichiarato: A-SK53 → ri-emesso A-SK53-bis.
 
-## §WP-89(sessione) — S-89.0 (ordine dal Concilio WP-90, non rinegoziare)
+## §WP-89(sessione) — S-89.0 = ordine Concilio WP-90 §Sintesi (non rinegoziare)
 
-(da compilare all'assemblaggio)
+1. **Sanatorie forma/dichiarazioni**: A-TH50 (doc TLS corretta) ·
+   A-DL45-forma (arena==proc riqualificato in MEASURE88) · A-DS47
+   (ricetta persist 3-flag + .bin-check) · A-AH52-forma · A-BG52-forma.
+2. **Fix gate cifre (i due forge)**: A-SK55 (corpus COMMITTED-only) ·
+   A-SK56 ([derivata] a scope di FIGURA) · A-SK57 (prefix per riga) ·
+   A-SK53-bis — ogni fix con bite-test stesso-commit.
+3. **Fix strumenti**: A-PP46 (failpath kill subshell) · A-SK58 (spans
+   giudicato) · A-BG50 (mai v+0 in aggregato) · A-DL46-parse ·
+   A-AH51+A-SK59 (judge_sha + governo gG) · A-BG51 · A-AH53.
+4. **Catena evidenza**: A-AH50≡A-BG49 (battery-attempts ledger per OGNI
+   esito, incluso REFUSE).
+5. **Sigilli v7**: A-MS43 (flag PRIVATO = sigillo di tipo) · A-MS44
+   (#[must_use]) · A-MS45 · A-TH48 (--selftest in catena) · A-TH49
+   (5 grafie) · A-TH51 (a_ds36) · A-PP47 (publish a contatore) · A-PP48.
+6. **Misura (una campagna, ATTRIBUZIONE di b)**: census per-theap
+   tag=mi_theap_pages + braccio MIMALLOC_PAGE_FULL_RETAIN=0 con
+   read-back ord 36 (KL-90-4) · A-DL44 (braccio eager armato) · A-BB57
+   (b±2σ + fascia δ ex-ante) · A-BB58 · A-BB59 (stagger-sweep invertito
+   + swap-fixture).
+7. **ROADMAP — A-DS35 fase 1 IMPLEMENTAZIONE** col contratto
+   A-DS44+A-DS46 (emissione Deprecated byte-fedele +
+   ReturnTypeWillChange + esenzioni ctor/private); gate KS-DS-88-3 +
+   KS-DS-89-3; fixture PRIMA del codice.
+8. **Delibere/deferred**: KL-85-2 RITIRATA a registro (KB-90-2) ·
+   A-BB60/A-PP49 = DESIGN · A-MS27/A-PP18/27/A-AH38 invariati.
+
+**Kill-switch di rotta (WP-90, attivi)**: KH90-1..3, KS-MS-90-1..3,
+KS-SK-90-1..3, KS-AH-90-1..2, KB-90-1..3, KS-PP-90-1..4, KL-90-1..4,
+KS-DS-90-1..2, KG-90-1..3 — tabella in
+`wp90-harness/COUNCIL_WP90_REVIEWS.md`.
 
 **Kill-switch di rotta ereditati ancora attivi**: tutti i KS WP-89
 (tabella in `wp89-harness/COUNCIL_WP89_REVIEWS.md`) + KH88-1..4,
