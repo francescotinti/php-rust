@@ -216,7 +216,17 @@ case "$MODE" in
   *) echo "unknown mode $MODE"; exit 2 ;;
 esac
 
-echo "== measure78 mode=$MODE label=$LABEL fixture=$FIXTURE bin=$HASH git=$GIT_REV driver_sha=$DRIVER_SHA campaign=${CAMPAIGN_SCRIPT:-none} warmup=$WARMUP measured=$MEASURED idle_secs=$IDLE_SECS =="
+# A-BG45 (Council WP-88, Gregg): protocol labels print ONLY when armed —
+# IDLE_SECS is consumed by the census idle window alone; on every other
+# mode the label said "idle_secs=10" for a knob that never fired.
+case "$MODE" in
+  census|censuscli) IDLE_LABEL="$IDLE_SECS" ;;
+  *)                IDLE_LABEL="n/a" ;;
+esac
+# A-BG44 (Council WP-88, Gregg): order belongs to the VERSIONED content,
+# never to mtimes — every label line carries epoch (+ campaign seq when the
+# campaign exports PHPR_CAMPAIGN_SEQ).
+echo "== measure78 mode=$MODE label=$LABEL fixture=$FIXTURE bin=$HASH git=$GIT_REV driver_sha=$DRIVER_SHA campaign=${CAMPAIGN_SCRIPT:-none} warmup=$WARMUP measured=$MEASURED idle_secs=$IDLE_LABEL seq=${PHPR_CAMPAIGN_SEQ:-n/a} epoch=$(date +%s) =="
 find "$FIX" -name '._*' -delete
 
 pkill -f "php-server" 2>/dev/null && sleep 1
@@ -405,5 +415,7 @@ esac
 # lines are untouched — this is an appended driver line, not a census line).
 echo "driver_sha=$DRIVER_SHA git=$GIT_REV bin=$HASH" >> "$RUN.log"
 echo "raw: $RUN.log | vmmap: $RUN.vmmap.V1/V2 | matrix: $RUN.matrix | summary: $RUN.summary"
-echo "== measure78 done mode=$MODE label=$LABEL bin=$HASH git=$GIT_REV driver_sha=$DRIVER_SHA rc=$RC =="
+# A-BG44: the closing line carries epoch too — begin/end order of every
+# run is reconstructible from versioned content alone (KG-88-2).
+echo "== measure78 done mode=$MODE label=$LABEL bin=$HASH git=$GIT_REV driver_sha=$DRIVER_SHA rc=$RC seq=${PHPR_CAMPAIGN_SEQ:-n/a} epoch=$(date +%s) =="
 exit "$RC"

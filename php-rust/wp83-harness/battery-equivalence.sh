@@ -35,20 +35,44 @@
 #         gate SCRIPT plus its NAMED transcluded helpers/fixtures (A-AH36:
 #         manifest per-gate below; census-twin declares run-gate.sh +
 #         fixtures/, the two run-gates declare their fixture .php).
+# v5 A-SK46/A-AH43/A-AH44 (Council WP-88):
+#   --same-rev: the campaign fast-path (BREV == HEAD) used to bypass this
+#     checker ENTIRELY (S-86.0 consumed its battery with no machine
+#     recomputing sha256(OUT) nor checking the ledgered stamp — KS-SK-88-1).
+#     With --same-rev the OUT/.done/ledger teeth run in full; the
+#     equivalence-only teeth (delta, one-per-chain, object-change) are
+#     skipped and NO ledger append happens.
+#   A-SK46: the committed stamp is matched on ALL FOUR fields (rev, sha256,
+#     matrix, matrix_sha256) and the matrix archive named in .done must be
+#     COMMITTED at HEAD with a matching sha.
+#   A-AH43: the ledger is read from ONE canonical git path resolved via
+#     `git rev-parse --show-prefix` — never a two-source concatenation (a
+#     tracked twin at the git root could certify a stamp only IT carries).
+#   A-AH44: toolchain comparator — the matrix archive records `rustc=`;
+#     it must equal the CURRENT `rustc -V` or the claim fails BY NAME
+#     (KS-AH-87-2 made mechanical).
 # Usage (v2 — the ledger is NO LONGER a parameter, A-SK33):
-#   battery-equivalence.sh <battery.out> <battery_rev> [absent-gate:reason ...]
-# Exit 0 = equivalence LEGAL; !=0 = precondition FAIL (campaign VOID,
-# KS-SK-84-1/KS-AH-84-3/KS-SK-85-1/KS-SK-85-2).
+#   battery-equivalence.sh [--same-rev] <battery.out> <battery_rev> [absent-gate:reason ...]
+# Exit 0 = equivalence LEGAL (or same-rev consumption LEGAL); !=0 =
+# precondition FAIL (campaign VOID, KS-SK-84-1/KS-AH-84-3/KS-SK-85-1/
+# KS-SK-85-2/KS-SK-88-1).
 export PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin:$PATH
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$HERE/.." && pwd)"
+SAME_REV=0
+if [ "${1:-}" = "--same-rev" ]; then SAME_REV=1; shift; fi
 OUT="${1:?battery.out}"; BREV="${2:?battery rev}"
 shift 2
 FAILS=0
 fail() { echo "FAIL: $*"; FAILS=$((FAILS+1)); }
 
 HEADREV=$(git -C "$REPO" rev-parse --short HEAD)
+if [ "$SAME_REV" = 1 ] && [ "$BREV" != "$HEADREV" ]; then
+  fail "(--same-rev) battery rev $BREV != HEAD $HEADREV — use the equivalence path"
+fi
+# A-AH43: ONE canonical git path for every `git show` in this checker.
+GITPREFIX="$(git -C "$REPO" rev-parse --show-prefix)"
 
 # A-SK33: the ONE canonical ledger — pinned here, never a parameter.
 LEDGER="$HERE/evidence/equivalence.ledger"
@@ -75,7 +99,8 @@ measure-cifre:wp81-harness/gate-measure-cifre.sh
 parity-full:wp83-harness/gate-parity-83p1.sh"
 NEVER_ABSENT="parity-full lever-fixtures lever-fixtures2 measure-cifre"
 
-# (i) crates/lock delta EMPTY, computed here
+# (i) crates/lock delta EMPTY, computed here (same-rev: trivially empty,
+# still computed — a wrong BREV would show here too)
 DELTA=$(git -C "$REPO" diff --name-only "$BREV..HEAD" -- crates Cargo.toml Cargo.lock 2>/dev/null)
 if [ -n "$DELTA" ]; then
   fail "(i) crates/Cargo delta $BREV..$HEADREV NOT empty:"; echo "$DELTA" | head -5
@@ -130,14 +155,39 @@ else
     # ledger — batteries from 86pre on append it at run time. Batteries
     # older than the ledger (rev not reachable from a ledgered line) are
     # pre-v4 evidence: refuse, re-run the battery.
+    # v5 A-AH43: ONE source of proof — the canonical path resolved with
+    # the git prefix; never a concatenation of two `git show` outputs (a
+    # tracked twin at the git root could otherwise certify alone).
+    # v5 A-SK46: the committed line must match ALL FOUR fields, and the
+    # matrix archive it names must be COMMITTED with a matching sha.
     BLEDGER_REL="wp83-harness/evidence/battery-stamps.ledger"
-    # git show paths are relative to the GIT ROOT, which sits ABOVE $REPO
-    # (the object_changed comment already knew: the php-rust/ prefixed
-    # form is the operative one; the bare form is an inert fallback).
-    if ! { git -C "$REPO" show "HEAD:php-rust/$BLEDGER_REL" 2>/dev/null; \
-           git -C "$REPO" show "HEAD:$BLEDGER_REL" 2>/dev/null; } | \
-         grep -q "rev=$BREV sha256=$DSHA"; then
-      fail "(A-SK41) stamp rev=$BREV sha256=$DSHA not in the COMMITTED $BLEDGER_REL — battery not ledgered (KS-SK-87-1)"
+    DMTX=$(sed -n 's/^rev=[0-9a-f]* sha256=[0-9a-f]* matrix=\([^ ]*\) matrix_sha256=\([0-9a-f]*\).*/\1 \2/p' "$DONE" | head -1)
+    DMTX_NAME="${DMTX%% *}"; DMTX_SHA="${DMTX#* }"
+    if [ -z "$DMTX_NAME" ] || [ -z "$DMTX_SHA" ] || [ "$DMTX_NAME" = "$DMTX_SHA" ]; then
+      fail "(A-SK46) .done carries no matrix=/matrix_sha256= pair (A-AH40 stamp incomplete)"
+    else
+      if ! git -C "$REPO" show "HEAD:${GITPREFIX}${BLEDGER_REL}" 2>/dev/null | \
+           grep -q "rev=$BREV sha256=$DSHA matrix=$DMTX_NAME matrix_sha256=$DMTX_SHA"; then
+        fail "(A-SK41/A-SK46) 4-field stamp rev=$BREV sha256=$DSHA matrix=$DMTX_NAME matrix_sha256=$DMTX_SHA not in the COMMITTED ${GITPREFIX}${BLEDGER_REL} (canonical path, A-AH43) — battery not ledgered (KS-SK-87-1/KS-SK-88-1)"
+      fi
+      MTX_REL="wp78-harness/matrix-archive/$DMTX_NAME"
+      MTX_COMMITTED_SHA=$(git -C "$REPO" show "HEAD:${GITPREFIX}${MTX_REL}" 2>/dev/null | shasum -a 256 | cut -d' ' -f1)
+      if [ -z "$MTX_COMMITTED_SHA" ] || ! git -C "$REPO" cat-file -e "HEAD:${GITPREFIX}${MTX_REL}" 2>/dev/null; then
+        fail "(A-SK46) matrix archive $DMTX_NAME not COMMITTED at HEAD — the stamp's matrix is unanchored"
+      elif [ "$MTX_COMMITTED_SHA" != "$DMTX_SHA" ]; then
+        fail "(A-SK46) committed matrix sha $MTX_COMMITTED_SHA != .done matrix_sha256=$DMTX_SHA"
+      else
+        # A-AH44: toolchain comparator — the archive records the compiling
+        # rustc; the consuming campaign must run the SAME one, or the
+        # binary identity argument breaks BY NAME (KS-AH-87-2 mechanical).
+        MTX_RUSTC=$(git -C "$REPO" show "HEAD:${GITPREFIX}${MTX_REL}" | tr -d '\0' | sed -n 's/^rustc=//p' | head -1)
+        CUR_RUSTC=$(rustc -V 2>/dev/null)
+        if [ -z "$MTX_RUSTC" ]; then
+          fail "(A-AH44) matrix archive carries no rustc= header (A-AH41 pre-v4 archive) — re-run the battery"
+        elif [ "$MTX_RUSTC" != "$CUR_RUSTC" ]; then
+          fail "(A-AH44) toolchain drift: matrix rustc='$MTX_RUSTC' != current rustc='$CUR_RUSTC' — battery certifies ANOTHER compiler (KS-AH-87-2)"
+        fi
+      fi
     fi
   fi
 fi
@@ -181,6 +231,17 @@ done
 # tracked in git, working copy identical to HEAD's version before the claim
 # (a fresh/untracked/regenerated ledger erases the anti-transitive history —
 # KS-SK-85-2: every equivalence of the chain VOID).
+# v5 A-SK46: same-rev consumption is NOT an equivalence — tooth (iii) and
+# the append do not apply; the verdict line names the mode.
+if [ "$SAME_REV" = 1 ]; then
+  if [ "$FAILS" = 0 ]; then
+    echo "== SAME-REV CONSUMPTION LEGAL (battery at $BREV == HEAD, v4 teeth verified: anchored PASS, sha256(OUT), 4-field committed stamp, committed matrix, toolchain) =="
+    exit 0
+  else
+    echo "== SAME-REV CONSUMPTION REFUSED ($FAILS) — battery must re-run (KS-SK-88-1) =="
+    exit 1
+  fi
+fi
 if [ ! -f "$LEDGER" ]; then
   fail "(iii) canonical ledger missing at $LEDGER_REL (KS-SK-85-2 — never touch-create it)"
 elif ! git -C "$REPO" ls-files --error-unmatch "$LEDGER_REL" >/dev/null 2>&1; then
