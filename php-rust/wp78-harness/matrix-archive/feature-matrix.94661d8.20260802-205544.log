@@ -1,0 +1,31 @@
+git=94661d8
+rustc=rustc 1.96.0 (ac68faa20 2026-05-25);binary: rustc;commit-hash: ac68faa20c58cbccd01ee7208bf3b6e93a7d7f96;commit-date: 2026-05-25;host: aarch64-apple-darwin;release: 1.96.0;LLVM version: 22.1.2;
+cargo=cargo 1.96.0 (30a34c682 2026-05-25)
+tree=clean (git status --porcelain empty at gate start, A-AH14)
+== build [default]  ==
+bin[default] sha256[0:16]=1e348417298c241a
+OK  [default]: 0 axum/tokio/hyper/tower symbols
+== build [axum-only] --no-default-features --features axum-server ==
+bin[axum-only] sha256[0:16]=7566b6b691f3d4d1
+== build [census] --features census-instrumentation ==
+bin[census] sha256[0:16]=f8f486bade73eb2e
+== build [census-axum-only] --no-default-features --features census-instrumentation ==
+bin[census-axum-only] sha256[0:16]=209fe951d10c2307
+== build [mem-census] --features mem-census ==
+bin[mem-census] sha256[0:16]=b2fe7a43e62166da
+== lint [php-runtime] --features census-instrumentation -- -D warnings ==
+OK  [lint-php-runtime]: warning-free under census-instrumentation (A-AH15)
+== lint [php-cli] --lib --features census-instrumentation -- -D warnings ==
+OK  [lint-php-cli]: warning-free under census-instrumentation (A-AH15)
+== lint [php-runtime] --features mem-census -- -D warnings ==
+OK  [lint-php-runtime]: warning-free under census-instrumentation (A-AH15)
+== lint [php-cli] --lib --features mem-census -- -D warnings ==
+OK  [lint-php-cli]: warning-free under census-instrumentation (A-AH15)
+== build [union] --features axum-server ==
+bin[union] sha256[0:16]=96c3500454e24b21
+OK  [union]: 1235 net-stack symbols (positive control for nm detector)
+== test-target warnings (A-AH6/A-AH29) ==
+OK  [test-targets/axum-server]: php-server test build warning-free
+OK  [test-targets/census-instrumentation]: php-server test build warning-free
+OK  [test-targets/mem-census]: php-server test build warning-free
+OK  [identity]: on-disk binary == bin[union] after all steps (A-AH12)
