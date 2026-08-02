@@ -1,0 +1,14 @@
+== th41-positive (KH88-1): tainted-build positive control for the A-TH41 token change, same-commit ==
+date=2026-08-02T12:44:02Z git_dirty_run=pre-commit-of-same-change
+SELFTEST PASS: probe marker detection bites (generic + full payload) and clean passes (KH86-1/A-TH41)
+--- tainted build (php-runtime/vm-gate-probe) ---
+5b422973c294e69c
+FAIL: vm_gate_probe present in /Users/francescotinti/Claude/php-rust-output/release/php-server — campaign VOID (KH86-1)
+note: no expected hash supplied — only the necessary (nm) half ran; pair with the matrix ENFORCE
+tainted => gate FAIL (rc!=0) as REQUIRED (KH87-2/KH88-1 positive)
+--- clean rebuild (default features) ---
+2e468e355d954f3a
+OK  no vm_gate_probe symbol/string in /Users/francescotinti/Claude/php-rust-output/release/php-server (KH86-1, necessary half)
+note: no expected hash supplied — only the necessary (nm) half ran; pair with the matrix ENFORCE
+clean => gate PASS as required (negative twin)
+== th41-positive DONE ==

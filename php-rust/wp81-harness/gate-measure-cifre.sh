@@ -200,6 +200,18 @@ while (my $line = <$fh>) {
         unless $norm eq '232±1MiB';
     }
     $work =~ s/232\s*±\s*1\s*MiB\b/' ' x length($&)/ge;
+    # (2b) A-SK48 (Council WP-88, Klabnik): band at ROW scope — the
+    # adjacency regex above let "pin 232 ± 16 (MiB)" through (unit not
+    # adjacent, M 2-digit, N in corpus). On a line carrying ANY memory
+    # unit, every '±' must have resolved into an allowlisted band: a
+    # surviving '±' here is an unlisted band by construction.
+    if ($work =~ /±/ && $line =~ /[KMGTkmgt]i?[Bb]\b/) {
+      push @miss, "line $ln: '±' on a memory-unit line not resolved to an allowlisted band (A-SK48/KS-SK-87-2): $line";
+    }
+    # (2c) A-SK48 cosmetic tooth: "Mib" (bits sold as bytes) never legal.
+    if ($line =~ /\b\d[\d.,]*\s*[KMGT]ib\b/) {
+      push @miss, "line $ln: unit spelled '<X>ib' (bit, not byte) on a figure (A-SK48): $line";
+    }
     # (3) any remaining unit figure lacks its bytes companion
     while ($work =~ /(\d[\d.,]*\s*[KMGTkmgt]i?[Bb])\b/g) {
       push @miss, "line $ln: memory figure '$1' without VERIFIED bytes-first companion (A-DL26/KL-85-2/A-SK40): $line";

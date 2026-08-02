@@ -566,10 +566,15 @@ pub(crate) mod gate {
     /// subject to CONSTANT PROMOTION, so `vm_gate_probe(&())` minted a
     /// legal `'static` token without the spelling ever being written. A
     /// `&mut` of a temporary is never promoted — the same proof dies in
-    /// E0716 (KS-MS-87-1). Residual irreducible mint: `Box::leak` (named
-    /// class, WP-86). Never a runtime API: cfg-gated (A-MS26/A-TH28) so a
-    /// campaign/parity build does not even contain the symbol; the belt
-    /// pins non-test call-sites ==0 and the alias surface
+    /// E0716 (KS-MS-87-1). Residual irreducible mint: the LEAK FAMILY
+    /// (A-MS39, Council WP-88 — not the one spelling `Box::leak`:
+    /// `Vec::leak`/`Box::leak`/`slice::leak` and every ally that returns
+    /// `&'static mut` are the same class), and the leaked token stays
+    /// BANKABLE same-thread (a thread_local can park it: !Send blocks the
+    /// cross-thread bank only). Named residue until A-MS27 closes the
+    /// carrier-by-value lane. Never a runtime API: cfg-gated (A-MS26/
+    /// A-TH28) so a campaign/parity build does not even contain the
+    /// symbol; the belt pins non-test call-sites ==0 and the alias surface
     /// (`vm_gate_probe as`) ==0.
     #[cfg(any(test, feature = "vm-gate-probe"))]
     #[doc(hidden)]
@@ -16506,9 +16511,18 @@ impl MainLever {
 thread_local! {
     static UC_EMIT_GUARD: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
     // A-DS36 (Council WP-87): per-thread put ordinal, stamped in-band on
-    // the main_evicted/evict-fp rows — a cross-put reorder (e.g. a future
-    // batched flush) becomes detectable; the a_ds26 armed half pins
-    // same-putord ADJACENCY for the co-occurring pair.
+    // the main_evicted/evict-fp rows (and, since A-TH43, the supersede
+    // rows) — a cross-put reorder (e.g. a future batched flush) becomes
+    // detectable; the a_ds26 armed half pins same-putord ADJACENCY for the
+    // co-occurring pair.
+    // A-TH43 (Council WP-88, Hoare) — DECLARED limits of this ordinal:
+    // (a) it is PER-THREAD and the uc_log rows carry no thr= — under W>1
+    //     putord values COLLIDE across threads: any cross-thread putord
+    //     claim, and any join with `UC_STATS.main_put` (a DIFFERENT
+    //     ordinal space: main puts only vs all puts, no mapping exists),
+    //     is ADVISORY at best (KH88-4);
+    // (b) `o.get()+1` would wrap silently in release at 2^64 —
+    //     unreachable, declared.
     static UC_PUT_ORD: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
 }
 struct UcEmitGuard;
@@ -16543,6 +16557,13 @@ fn unit_cache_put(key: UnitKey, cu: CachedUnit) {
     // comment was FALSE in the text). arm() panics on re-entry, which
     // subsumes the old pre-check.
     let _emit_guard = UcEmitGuard::arm();
+    // A-TH40 (Council WP-88, Hoare): fn PARAMETERS drop AFTER every local
+    // — a panic between arm and the mutation closure would drop `cu` (and
+    // `key`) with the guard ALREADY DISARMED. Rebinding them as locals
+    // right after the guard puts them back inside the guarded drop order:
+    // the guarantee is structural again, not positional. (The early-return
+    // above drops `cu` unguarded — benign: the cache was never touched.)
+    let (key, cu) = (key, cu);
     // A-MS28 (Council WP-85, Matsakis Q4): COLLECT-THEN-EMIT. The borrow_mut
     // window below only MUTATES the cache — every uc_stat/uc_log emission
     // AND every drop of a displaced entry (superseded slots, ways victims,
@@ -16631,7 +16652,10 @@ fn unit_cache_put(key: UnitKey, cu: CachedUnit) {
             }
         });
         if let Some(p) = &kpath {
-            uc_log(&format!("supersede entries {}", slot.len()), p);
+            // A-TH43/A-DS38 (Council WP-88): putord rides the supersede row
+            // too — the doc's "cross-put reorder detectable" claim held only
+            // for the evict lane before this.
+            uc_log(&format!("supersede entries {} putord={putord}", slot.len()), p);
         }
     }
     if fp_replace {
@@ -19478,6 +19502,105 @@ mod tests {
         // poisoned; only deltas are legitimate here.
     }
 
+    /// A-DS38 (Council WP-88, Stogov): a_ds26 pins the FIRST pair via
+    /// position() — a batched flush preserving pair 1 and reordering from
+    /// pair 2 passes it. This fixture forces TWO evictions (two keys, two
+    /// injected mains) and loops the invariant over EVERY main_evicted
+    /// row: next unitcache row is its evict-fp with the SAME putord.
+    #[test]
+    fn a_ds38_two_evictions_all_pairs_invariant() {
+        let reg = Registry::default();
+        let p = crate::lower_source(b"ds38.php", b"<?php echo 1;").expect("lower");
+        let m = std::rc::Rc::new(crate::compile::compile_program(&p, &reg).expect("compile"));
+        let prog = std::rc::Rc::new(p);
+        let seed = std::rc::Rc::new(super::SeedDelta {
+            new_classes: Vec::new(),
+            static_count: 0,
+            new_slots: Vec::new(),
+            traits: Vec::new(),
+            conditional_names: Vec::new(),
+        });
+        let cu = |fp: u64, main: Option<std::rc::Rc<crate::hir::Program>>| super::CachedUnit {
+            fp,
+            static_off: 0,
+            reserved_base: 0,
+            class_remap: Vec::new(),
+            new_locals: Vec::new(),
+            seed_delta: std::rc::Rc::clone(&seed),
+            module: std::rc::Rc::clone(&m),
+            owner_epoch: 0,
+            main_program: main,
+            main_program_net: 0,
+            main_program_net_clamped: false,
+            main_put_ordinal: 0,
+        };
+        let keys: Vec<super::UnitKey> = (0..2u64)
+            .map(|i| super::UnitKey {
+                path: format!("/ds38/inj{i}.php").into_bytes(),
+                mtime: (1, 0),
+                size: 10 + i,
+                reg_mode: false,
+            })
+            .collect();
+        for (i, key) in keys.iter().enumerate() {
+            super::UNIT_CACHE.with(|c| {
+                c.borrow_mut()
+                    .entry(key.clone())
+                    .or_default()
+                    .includes
+                    .push(cu(0xd838 + i as u64, Some(std::rc::Rc::clone(&prog))));
+            });
+        }
+        let ev_before = super::UC_STATS.with(|s| s.borrow().main_evicted);
+        for (ki, key) in keys.iter().enumerate() {
+            for i in 0..super::UNIT_CACHE_WAYS as u64 {
+                super::unit_cache_put(key.clone(), cu(0x3800 + (ki as u64) * 100 + i, None));
+            }
+        }
+        let ev_after = super::UC_STATS.with(|s| s.borrow().main_evicted);
+        assert_eq!(ev_after - ev_before, 2, "expected exactly TWO main evictions (A-DS38)");
+        if super::uc_log_path().is_some() {
+            let buffered =
+                super::UC_LOG_BUF.with(|b| String::from_utf8_lossy(&b.borrow()).into_owned());
+            let lines: Vec<&str> = buffered.lines().collect();
+            let ord_of = |l: &str| -> u64 {
+                l.split_whitespace()
+                    .find_map(|t| t.strip_prefix("putord="))
+                    .expect("row lacks putord= in-band (A-DS38)")
+                    .parse()
+                    .expect("putord= not numeric (A-DS38)")
+            };
+            let me_rows: Vec<usize> = lines
+                .iter()
+                .enumerate()
+                .filter(|(_, l)| l.starts_with("unitcache main_evicted") && l.contains("/ds38/"))
+                .map(|(i, _)| i)
+                .collect();
+            assert!(
+                me_rows.len() >= 2,
+                "armed log carries {} ds38 main_evicted rows, expected >=2 (A-DS38)",
+                me_rows.len()
+            );
+            // The invariant holds for ALL pairs, never just the first.
+            for &li in &me_rows {
+                assert!(
+                    lines[li + 1].starts_with("unitcache evict fp"),
+                    "row after main_evicted #{li} is not its evict-fp — pair broken (A-DS38/KS-DS-88-1)"
+                );
+                assert_eq!(
+                    ord_of(lines[li]),
+                    ord_of(lines[li + 1]),
+                    "main_evicted/evict-fp pair at #{li} carries DIFFERENT putord (A-DS38)"
+                );
+            }
+        }
+        for key in &keys {
+            let removed = super::UNIT_CACHE.with(|c| c.borrow_mut().remove(key));
+            drop(removed);
+        }
+        // Declared residue (A-DS33 class): main_evicted +2 on this thread.
+    }
+
     /// A-TH35/KH86-3 (Council WP-86): the re-entrancy tripwire BITES — a
     /// unit_cache_put/get entered while the emission guard is armed (the
     /// state a re-entering Drop would find) must panic, never interleave in
@@ -19501,6 +19624,29 @@ mod tests {
         assert!(put_panics, "unit_cache_get did not panic under armed guard (A-TH35)");
         // Disarmed: same call is legal and returns None.
         assert!(super::unit_cache_get(&key, 0xdead).is_none());
+    }
+
+    /// A-MS38 (Council WP-88, Matsakis): the key_present guard (A-MS35) had
+    /// never been made to BITE — a tooth that never fired is presumption,
+    /// not evidence. Mirror of a_th35_reentrancy_guard_bites on the
+    /// key_present lane.
+    #[test]
+    fn a_ms38_key_present_guard_bites() {
+        let key = super::UnitKey {
+            path: b"/ms38.php".to_vec(),
+            mtime: (1, 0),
+            size: 1,
+            reg_mode: false,
+        };
+        super::UC_EMIT_GUARD.with(|g| g.set(true));
+        let panics = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            super::unit_cache_key_present(&key);
+        }))
+        .is_err();
+        super::UC_EMIT_GUARD.with(|g| g.set(false));
+        assert!(panics, "unit_cache_key_present did not panic under armed guard (A-MS38/A-MS35)");
+        // Disarmed: same call is legal and returns false.
+        assert!(!super::unit_cache_key_present(&key));
     }
 
     /// A-DS17/KS-DS-83-2 (Council WP-83): `compile_program` purity at

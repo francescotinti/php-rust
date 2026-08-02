@@ -29,9 +29,14 @@
 export PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin:$PATH
 set -u
 
+# A-TH41 (Council WP-88, Hoare): the detector names the FULL A-TH37 marker
+# payload on an EXECUTABLE line — the coupling marker<->grep is no longer a
+# convention (a payload rename now fails the lever-pins coupling check AND
+# this gate's positive control). The generic token stays as the wider net.
 probe_in() { # <file> -> 0 if the probe marker is present
   nm -- "$1" 2>/dev/null | grep -qi 'vm_gate_probe' && return 0
   strings -- "$1" 2>/dev/null | grep -q 'vm_gate_probe' && return 0
+  strings -- "$1" 2>/dev/null | grep -q 'phpr_vm_gate_probe_tainted_a_th37' && return 0
   return 1
 }
 
@@ -39,8 +44,15 @@ if [ "${1:-}" = "--selftest" ]; then
   TMP=$(mktemp -d)
   printf 'GARBAGE\x00vm_gate_probe\x00MORE' > "$TMP/tainted.bin"
   printf 'GARBAGE\x00clean_symbol\x00MORE' > "$TMP/clean.bin"
+  # A-TH41: a bin carrying ONLY the full payload (generic token stripped by
+  # some future mangling) must still be detected.
+  printf 'GARBAGE\x00phpr_vm_gate_probe_tainted_a_th37\x00MORE' > "$TMP/tainted2.bin"
   if ! probe_in "$TMP/tainted.bin"; then
     echo "SELFTEST FAIL: embedded vm_gate_probe marker NOT detected (KH86-1)"
+    rm -rf "$TMP"; exit 1
+  fi
+  if ! probe_in "$TMP/tainted2.bin"; then
+    echo "SELFTEST FAIL: full A-TH37 payload NOT detected (A-TH41)"
     rm -rf "$TMP"; exit 1
   fi
   if probe_in "$TMP/clean.bin"; then
@@ -48,7 +60,7 @@ if [ "${1:-}" = "--selftest" ]; then
     rm -rf "$TMP"; exit 1
   fi
   rm -rf "$TMP"
-  echo "SELFTEST PASS: probe marker detection bites and clean passes (KH86-1)"
+  echo "SELFTEST PASS: probe marker detection bites (generic + full payload) and clean passes (KH86-1/A-TH41)"
   exit 0
 fi
 

@@ -47,24 +47,24 @@ mod implementation {
     use std::sync::Arc;
     use tokio::sync::{mpsc, oneshot};
 
-    /// A-MS34 (Council WP-87, Matsakis): in axum mode the GLOBAL abort
-    /// hook fires BEFORE any unwind, so the census probe's own
-    /// catch_unwind (A-MS31) never gets to print its distinct message —
-    /// the attribution instrument-vs-measurand was dead exactly in the
-    /// arm it was built for. The teardown sets this flag around the probe
-    /// window; the global hook reads it and prints the DISTINCT
-    /// census-probe attribution (KS-MS-87-3: a "census probe panicked"
-    /// line in an axum run is attribution-valid only via this flag).
-    ///
-    /// A-MS36 (Council WP-88, Matsakis — refutation of the A-MS34 GLOBAL
-    /// bool): teardown probes run on EVERY worker thread CONCURRENTLY
-    /// (the W=2 garbling of S-86.0 proves the windows overlap). With one
-    /// shared bool, A(true) B(true) A(false) leaves B's live probe window
-    /// reading FALSE (false negative), and a dispatcher panic during any
-    /// window reads TRUE (false positive). The panic hook runs ON the
-    /// panicking thread, so the flag belongs to the thread: thread_local.
-    /// The attribution is exact per-thread by construction (KS-MS-88-1
-    /// lifted for runs at this revision on).
+    // A-MS34 (Council WP-87, Matsakis): in axum mode the GLOBAL abort
+    // hook fires BEFORE any unwind, so the census probe's own
+    // catch_unwind (A-MS31) never gets to print its distinct message —
+    // the attribution instrument-vs-measurand was dead exactly in the
+    // arm it was built for. The teardown sets this flag around the probe
+    // window; the global hook reads it and prints the DISTINCT
+    // census-probe attribution (KS-MS-87-3: a "census probe panicked"
+    // line in an axum run is attribution-valid only via this flag).
+    //
+    // A-MS36 (Council WP-88, Matsakis — refutation of the A-MS34 GLOBAL
+    // bool): teardown probes run on EVERY worker thread CONCURRENTLY
+    // (the W=2 garbling of S-86.0 proves the windows overlap). With one
+    // shared bool, A(true) B(true) A(false) leaves B's live probe window
+    // reading FALSE (false negative), and a dispatcher panic during any
+    // window reads TRUE (false positive). The panic hook runs ON the
+    // panicking thread, so the flag belongs to the thread: thread_local.
+    // The attribution is exact per-thread by construction (KS-MS-88-1
+    // lifted for runs at this revision on).
     thread_local! {
         pub static CENSUS_PROBE_ACTIVE: std::cell::Cell<bool> =
             const { std::cell::Cell::new(false) };
@@ -550,6 +550,12 @@ mod implementation {
             if self.senders[idx].send(task).is_err() {
                 // Failed send: no worker will ever pick this task up, so no
                 // decrement will pair with the increments above — undo both.
+                // A-PP37 (Council WP-88) DECLARED: `next_worker` is NOT
+                // restored either — a failed send leaves a round-robin
+                // ghost (the next dispatch skips one slot). Marginal by
+                // construction (sends fail only at teardown when channels
+                // close), but any per-thread dispatch-map verdict on a run
+                // containing a dispatch Err is VOID (KS-PP-88-2 context).
                 // A-MS16 (Council WP-82) DECLARED: the note_* watermarks ran
                 // BEFORE the send and are NOT undone here — a failed dispatch
                 // leaves a ghost in QUEUE_DEPTH_MAX/OUTSTANDING_MAX. A run
@@ -1273,6 +1279,14 @@ mod implementation {
         /// is 0 for this fixture) delta==0 already on request 1. Enabled
         /// exactly by that discovery: before it, the fatal-as-req1 window
         /// was indistinguishable from legitimate seeding.
+        ///
+        /// A-PP38 (Council WP-88, Pedersen) — DECLARED APPROXIMATION: this
+        /// arm calls `execute_with_retain` directly and BYPASSES the
+        /// worker_loop pickup path (recv → execute_request): it is a
+        /// unit-surface, "true req1 of a production worker" transfers by
+        /// SURFACE, not by path. The full-path twin is
+        /// `a_pp38_link_fatal_first_dispatched_task` below (KS-PP-88-3:
+        /// extending the req1 claim to the pickup path requires that arm).
         #[test]
         fn a_pp33_link_fatal_as_true_req1_no_warm_arm() {
             let h = std::thread::spawn(|| {
@@ -1326,6 +1340,40 @@ mod implementation {
                 );
             });
             h.join().expect("A-PP33 no-warm arm thread panicked");
+        }
+
+        /// A-PP38 (Council WP-88, Pedersen): the FULL-PATH twin of a_pp33 —
+        /// a REAL W=1 pool, the link-fatal dispatched as the VERY FIRST
+        /// task, so the worker_loop pickup path (recv → dispatched+=1 →
+        /// execute_request) is the surface under test, not an
+        /// approximation of it. A future inserter between recv and
+        /// execute_request lands INSIDE this arm's coverage.
+        #[test]
+        fn a_pp38_link_fatal_first_dispatched_task() {
+            let ctx = WorkerPoolContext::new();
+            let pool = WorkerPool::new(ctx, 1);
+            let (tx, rx) = oneshot::channel();
+            pool.dispatch(WorkerTask {
+                meta: meta(
+                    "<?php\nenum LF38 implements Serializable { case A; }\necho \"never-reached\";",
+                ),
+                response_tx: tx,
+            })
+            .expect("dispatch of first task failed (A-PP38)");
+            let (body, status) = rx.blocking_recv().expect("worker dropped response (A-PP38)");
+            assert_eq!(
+                status,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "first dispatched link-fatal must 500 (A-PP38)"
+            );
+            assert!(
+                String::from_utf8_lossy(&body).contains("Fatal error"),
+                "first dispatched fatal body must carry the banner (A-PP38)"
+            );
+            let Ok(pool) = Arc::try_unwrap(pool) else {
+                panic!("pool still shared — cannot exercise shutdown (A-PP38)");
+            };
+            pool.shutdown();
         }
 
         /// A-DS9 (S-78.1.5): statics in methods and in INHERITED methods (PHP

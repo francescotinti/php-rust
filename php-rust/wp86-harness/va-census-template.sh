@@ -42,6 +42,13 @@
 #   8. FIGURES: BYTES-FIRST with verified companion, MiB-only, ± bands
 #      from the A-SK43 allowlist; VOID-sourced figures only as
 #      MODEL-GRADE(src=<raw>), never load-bearing (A-BG42/KG-87-2).
+#   9. PUT-PATH QUIESCENCE (A-DS39, Council WP-88): the window's
+#      main_evicted/supersede DELTAS are declared IN-BAND — a steady
+#      window with main_evicted>0 or supersede>0 moved the retained
+#      mid-window and must SAY so (KS-DS-83-1 class); AND every armed
+#      uc_log of the run passes wp87-harness/putord-pair-guard.pl on ALL
+#      pairs (KS-DS-88-1: unchecked main_evicted rows = order ADVISORY,
+#      raw not verdict-grade).
 export PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin:$HOME/.cargo/bin:$PATH
 set -u
 echo "TEMPLATE ONLY (A-DS37): copy, fill the TODOs, and wire every tooth" >&2

@@ -890,10 +890,16 @@ echo "OK  self-test: A-PP23 region decoy bites (flush outside body excluded)"
 # shared tracked parser wp86-harness/reqns-guard.pl (own bite-test:
 # synthetic w=2 => VOID) is compliant BY NAME; (immediate) otherwise the
 # script must carry the DIGIT-GUARDED rejection `w=1[^0-9]` in its body.
-PP31_SWEEP=$(grep -ln 'reqns: ' "$REPO"/wp8[4-9]-harness/*.sh "$REPO"/wp9[0-9]-harness/*.sh 2>/dev/null |
-  grep -v '/\._' |
+# A-PP40 (Council WP-88, KS-PP-88-1): tier A is EXECUTIVE — a `# TODO
+# reqns-guard.pl` comment satisfied the old token-presence check (the
+# KS-PP-87-1 class one level up). The invocation must be a NON-comment
+# line that runs perl with the guard; scan extended to .pl helpers
+# (reqns-guard.pl itself excluded BY NAME: it IS the shared parser).
+PP31_SWEEP=$(grep -ln 'reqns: ' "$REPO"/wp8[4-9]-harness/*.sh "$REPO"/wp9[0-9]-harness/*.sh \
+    "$REPO"/wp8[4-9]-harness/*.pl "$REPO"/wp9[0-9]-harness/*.pl 2>/dev/null |
+  grep -v '/\._' | grep -v '/reqns-guard[.]pl$' |
   while IFS= read -r f; do
-    if grep -q 'reqns-guard[.]pl' "$f"; then :
+    if grep -qE '^[^#]*perl[^#]*reqns-guard[.]pl' "$f"; then :
     elif grep -qE 'w=1([^0-9]|$)' "$f"; then :
     else echo "${f#"$REPO"/}"; fi
   done)
@@ -905,16 +911,20 @@ else
   echo "OK  sweep: every wp84+ reqns-parsing script rejects w!=1 (digit-guard or shared parser, A-PP35)"
 fi
 # decoys: (a) parser without any rejection; (b) parser whose only token is
-# w=10 — BOTH must be caught (the WP-87 vacuity finding).
+# w=10; (c) A-PP40: parser whose only reqns-guard occurrence is a COMMENT
+# — ALL must be caught (the WP-87 vacuity finding + its WP-88 recidiva).
 printf 'while (<$fh>) { push @s, $1 if /^reqns: (\\d+)/ }\n' > "$TMPD/pp31decoy.sh"
 printf 'while (<$fh>) { push @s, $1 if /^reqns: (\\d+)/ && / w=10 / }\n' > "$TMPD/pp35decoy.sh"
+printf '# TODO reqns-guard.pl\nwhile (<$fh>) { push @s, $1 if /^reqns: (\\d+)/ }\n' > "$TMPD/pp40decoy.sh"
+printf 'perl "$HERE/reqns-guard.pl" "$raw" || exit 1\nwhile (<$fh>) { push @s, $1 if /^reqns: (\\d+)/ }\n' > "$TMPD/pp40positive.sh"
 pp35_ok() { # <file> -> 0 if the two-tier sweep would accept it
-  grep -q 'reqns-guard[.]pl' "$1" || grep -qE 'w=1([^0-9]|$)' "$1"
+  grep -qE '^[^#]*perl[^#]*reqns-guard[.]pl' "$1" || grep -qE 'w=1([^0-9]|$)' "$1"
 }
-if ! pp35_ok "$TMPD/pp31decoy.sh" && ! pp35_ok "$TMPD/pp35decoy.sh"; then
-  echo "OK  self-test: A-PP35 decoys discriminate (no-rejection AND w=10-only both caught)"
+if ! pp35_ok "$TMPD/pp31decoy.sh" && ! pp35_ok "$TMPD/pp35decoy.sh" \
+   && ! pp35_ok "$TMPD/pp40decoy.sh" && pp35_ok "$TMPD/pp40positive.sh"; then
+  echo "OK  self-test: A-PP35/A-PP40 decoys discriminate (no-rejection, w=10-only, comment-only ALL caught; real invocation accepted)"
 else
-  echo "SELF-TEST BROKEN: A-PP35 decoy accepted (w=10 satisfies the sweep — vacuity regressed)"; exit 2
+  echo "SELF-TEST BROKEN: A-PP35/A-PP40 decoy accepted or positive rejected (vacuity regressed)"; exit 2
 fi
 # The shared parser must exist, be tracked, and its own bite-test must bite.
 RGUARD="$REPO/wp86-harness/reqns-guard.pl"
@@ -923,6 +933,17 @@ if [ -f "$RGUARD" ] && git -C "$REPO" ls-files --error-unmatch "wp86-harness/req
   echo "OK  shared reqns-guard.pl exists, tracked, selftest bites (A-PP35)"
 else
   echo "FAIL: reqns-guard.pl missing/untracked/selftest-failing (A-PP35/KS-PP-87-1)"
+  FAILS=$((FAILS+1))
+fi
+# A-DS38 (Council WP-88): the shared eviction-pair checker must exist, be
+# tracked, and its own bite-test must bite (KS-DS-88-1: an armed log with
+# main_evicted rows that has not passed it is order-ADVISORY).
+PGUARD="$REPO/wp87-harness/putord-pair-guard.pl"
+if [ -f "$PGUARD" ] && git -C "$REPO" ls-files --error-unmatch "wp87-harness/putord-pair-guard.pl" >/dev/null 2>&1 \
+   && perl "$PGUARD" --selftest >/dev/null 2>&1; then
+  echo "OK  shared putord-pair-guard.pl exists, tracked, selftest bites (A-DS38)"
+else
+  echo "FAIL: putord-pair-guard.pl missing/untracked/selftest-failing (A-DS38/KS-DS-88-1)"
   FAILS=$((FAILS+1))
 fi
 # (b) KG-86-1: the slope-verdict checker must EXIST and be tracked — the
@@ -936,8 +957,97 @@ else
   FAILS=$((FAILS+1))
 fi
 
+# --- 6. Sigilli v5 (Council WP-88, Hoare A-TH41/A-TH42) ---------------------
+# A-TH41/KH88-1: the A-TH37 marker payload and the noprobe gate's grep are
+# coupled by CONVENTION only — a rename of either side compiles green,
+# selftest green, and the tooth dies in silence. Pin the coupling:
+#   (a) the payload literal appears EXACTLY once in vm/mod.rs;
+#   (b) gate-binary-noprobe.sh carries the SAME literal on an EXECUTABLE
+#       (non-comment) line — single-source, machine-checked.
+TH41_PAYLOAD='phpr_vm_gate_probe_tainted_a_th37'
+NOPROBE="$REPO/wp85-harness/gate-binary-noprobe.sh"
+n=$(grep -c "$TH41_PAYLOAD" "$VMMOD" || true)
+if [ "$n" -ne 1 ]; then
+  echo "FAIL: A-TH37 marker payload count in vm/mod.rs == $n, expected 1 (A-TH41/KH88-1)"
+  FAILS=$((FAILS+1))
+else
+  echo "OK  A-TH37 marker payload ==1 in vm/mod.rs (A-TH41)"
+fi
+if grep -qE "^[^#]*${TH41_PAYLOAD}" "$NOPROBE"; then
+  echo "OK  gate-binary-noprobe.sh greps the FULL marker payload on an executable line (A-TH41 single-source)"
+else
+  echo "FAIL: gate-binary-noprobe.sh has no executable grep of the marker payload — coupling by convention only (A-TH41/KH88-1)"
+  FAILS=$((FAILS+1))
+fi
+
+# A-TH42: grafie residue del WP-88 audit, PER NOME.
+# (1) UFCS mint: `::production_gate(` / `::vm_gate(` — the method pins
+#     demand the dot; UFCS is the same call without it. ==0 workspace-wide
+#     (definitions spell `fn production_gate`, never `::production_gate(`).
+# (2) spacing-tolerant method mint: `. vm_gate (` etc. ==0 outside the
+#     named sites (the exact-adjacency pins above stay as the site pins).
+# (3) alias mints: `= CachedUnit;` / `= VmGate` (type alias) and
+#     `transmute as` (renamed transmute) ==0 non-test.
+# (4) multiline: `CachedUnit` at end-of-line with `{` opening on the NEXT
+#     line (the awk line-based functional-update guard cannot arm depth
+#     there) ==0; transmute/impl-Copy joined across lines ==0.
+cat > "$TMPD/decoy_th42.rs" <<'EOF'
+fn f() {
+    let a = RetainSet::production_gate(&rs);
+    let b = MainUnit::vm_gate(&u);
+    let c = retain . production_gate ();
+    type CU = CachedUnit;
+    type G<'a> = VmGate<'a>;
+    use std::mem::transmute as tm;
+    let d = CachedUnit
+    { fp, ..o };
+    let e: VmGate = unsafe { std::mem::
+        transmute(()) };
+}
+impl Copy
+for VmGate<'_> {}
+EOF
+n=$(count_nontest "$TMPD/decoy_th42.rs" '::production_gate[(]|::vm_gate[(]')
+m=$(count_nontest "$TMPD/decoy_th42.rs" '[.][[:space:]]+production_gate|[.][[:space:]]+vm_gate')
+a=$(count_nontest "$TMPD/decoy_th42.rs" '=[[:space:]]*CachedUnit|=[[:space:]]*VmGate|transmute[[:space:]]+as[[:space:]]')
+ml=$(awk '/CachedUnit[[:space:]]*$/ { pend=1; next } pend && /^[[:space:]]*\{/ { n++ } { pend=0 } END { print n+0 }' "$TMPD/decoy_th42.rs")
+tj=$(tr '\n' ' ' < "$TMPD/decoy_th42.rs" | grep -cE 'transmute[^;]{0,200}[(][)][^;]{0,40};|impl[[:space:]]+Copy[[:space:]]+for[[:space:]]+VmGate' || true)
+if [ "$n" -ne 2 ] || [ "$m" -ne 1 ] || [ "$a" -lt 3 ] || [ "$ml" -ne 1 ] || [ "$tj" -lt 1 ]; then
+  echo "SELF-TEST BROKEN: A-TH42 decoy counts ufcs=$n spaced=$m alias=$a multiline=$ml joined=$tj (expected 2/1/>=3/1/>=1)"; exit 2
+fi
+echo "OK  self-test: A-TH42 decoys bite (UFCS 2, spaced 1, alias >=3, multiline 1, joined >=1)"
+TH42_SWEEP=$(find "$REPO/crates" -name '*.rs' ! -name '._*' -print0 |
+  while IFS= read -r -d '' f; do
+    n=$(count_nontest "$f" '::production_gate[(]|::vm_gate[(]|[.][[:space:]]+production_gate|[.][[:space:]]+vm_gate|=[[:space:]]*CachedUnit;|=[[:space:]]*VmGate|transmute[[:space:]]+as[[:space:]]')
+    [ "$n" -gt 0 ] && echo "${f#"$REPO"/}: $n"
+  done)
+if [ -n "$TH42_SWEEP" ]; then
+  echo "FAIL: A-TH42 eluded spelling (UFCS/spaced/alias) found:"
+  echo "$TH42_SWEEP"
+  FAILS=$((FAILS+1))
+else
+  echo "OK  sweep: no UFCS/spaced/alias mint spellings in the workspace (A-TH42)"
+fi
+TH42_ML=$(find "$REPO/crates" -name '*.rs' ! -name '._*' -print0 |
+  while IFS= read -r -d '' f; do
+    ml=$(awk '/struct CachedUnit/ { next }
+              /CachedUnit[[:space:]]*$/ { pend=1; next }
+              pend && /^[[:space:]]*\{/ { n++ } { pend=0 }
+              END { print n+0 }' "$f")
+    tj=$(tr '\n' ' ' < "$f" | grep -cE 'transmute[^;]{0,200}VmGate|VmGate[^;]{0,200}transmute|impl[[:space:]]+Copy[[:space:]]+for[[:space:]]+(VmGate|G<)' || true)
+    t=$((ml + tj))
+    [ "$t" -gt 0 ] && echo "${f#"$REPO"/}: ml=$ml joined=$tj"
+  done)
+if [ -n "$TH42_ML" ]; then
+  echo "FAIL: A-TH42 multiline/joined spelling found:"
+  echo "$TH42_ML"
+  FAILS=$((FAILS+1))
+else
+  echo "OK  sweep: no multiline CachedUnit-literal opener nor joined transmute/impl on VmGate (A-TH42)"
+fi
+
 if [ "$FAILS" = 0 ]; then
-  echo "== GATE-LEVER-PINS PASS (A-MS13 + A-PP16 + KS-PP-82-3 + A-TH14) [git $GIT_REV] =="
+  echo "== GATE-LEVER-PINS PASS (A-MS13 + A-PP16 + KS-PP-82-3 + A-TH14 + v5 A-TH41/42) [git $GIT_REV] =="
   exit 0
 else
   echo "== GATE-LEVER-PINS FAIL($FAILS) [git $GIT_REV] =="

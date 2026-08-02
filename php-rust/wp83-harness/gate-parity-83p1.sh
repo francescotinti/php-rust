@@ -58,6 +58,19 @@ else
   echo "OK  workspace tests (rc=0)"
 fi
 
+# A-MS37 (Council WP-88, Matsakis): the VmGate !Send/!Sync doctests are
+# COUNTED, never presumed — if the pub re-export fell or VmGate went
+# doc(hidden), rustdoc would collect ZERO doctests and rc=0 would bless a
+# battery with the seal silently dead (KS-MS-88-2: parity-full PASS with
+# count != 2 => A-MS33 not proven, seal ADVISORY).
+NDOC=$(grep -cE 'vm::gate::VmGate.*compile fail.*ok' "$W/cargo-test.log" || true)
+if [ "$NDOC" = 2 ]; then
+  echo "OK  VmGate compile-fail doctests counted ==2 (A-MS37/KS-MS-88-2)"
+else
+  echo "FAIL: VmGate compile-fail doctests counted == $NDOC, expected 2 (A-MS37/KS-MS-88-2)"
+  FAILS=$((FAILS+1))
+fi
+
 if [ "$FAILS" = 0 ]; then echo "== GATE-PARITY-83P1 PASS =="; else echo "== GATE-PARITY-83P1 FAIL($FAILS) =="; fi
 touch "$W/.done"
 exit $FAILS
