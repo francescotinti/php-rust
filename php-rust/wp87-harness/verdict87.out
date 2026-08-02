@@ -1,0 +1,70 @@
+== verdict87 — campaign git=a9e18fc attempt=1 mem_hash=2a15f2085d4dcdf8 (judged at HEAD=a9e18fc) ==
+VIDENT PASS: 32 raws present, NUL-free, identity-uniform (mem_hash=2a15f2085d4dcdf8 git=a9e18fc attempt=1)
+FAIL VDISP: m87.slope.w1.r1.a1.memcensus has 0 dispatch rows, expected 1 (A-PP37)
+FAIL VDISP: m87.slope.w1.r2.a1.memcensus has 0 dispatch rows, expected 1 (A-PP37)
+FAIL VDISP: m87.slope.w1.r3.a1.memcensus has 0 dispatch rows, expected 1 (A-PP37)
+FAIL VDISP: m87.slope.w1.r4.a1.memcensus has 0 dispatch rows, expected 1 (A-PP37)
+FAIL VDISP: m87.slope.w1.r5.a1.memcensus has 0 dispatch rows, expected 1 (A-PP37)
+FAIL VDISP: m87.slope.w2.r1.a1.memcensus has 0 dispatch rows, expected 2 (A-PP37)
+FAIL VDISP: m87.slope.w2.r2.a1.memcensus has 0 dispatch rows, expected 2 (A-PP37)
+FAIL VDISP: m87.slope.w2.r3.a1.memcensus has 0 dispatch rows, expected 2 (A-PP37)
+FAIL VDISP: m87.slope.w2.r4.a1.memcensus has 0 dispatch rows, expected 2 (A-PP37)
+FAIL VDISP: m87.slope.w2.r5.a1.memcensus has 0 dispatch rows, expected 2 (A-PP37)
+FAIL VDISP: m87.slope.w3.r1.a1.memcensus has 0 dispatch rows, expected 3 (A-PP37)
+FAIL VDISP: m87.slope.w3.r2.a1.memcensus has 0 dispatch rows, expected 3 (A-PP37)
+FAIL VDISP: m87.slope.w3.r3.a1.memcensus has 0 dispatch rows, expected 3 (A-PP37)
+FAIL VDISP: m87.slope.w3.r4.a1.memcensus has 0 dispatch rows, expected 3 (A-PP37)
+FAIL VDISP: m87.slope.w3.r5.a1.memcensus has 0 dispatch rows, expected 3 (A-PP37)
+FAIL VDISP: m87.slope.w4.r1.a1.memcensus has 0 dispatch rows, expected 4 (A-PP37)
+FAIL VDISP: m87.slope.w4.r2.a1.memcensus has 0 dispatch rows, expected 4 (A-PP37)
+FAIL VDISP: m87.slope.w4.r3.a1.memcensus has 0 dispatch rows, expected 4 (A-PP37)
+FAIL VDISP: m87.slope.w4.r4.a1.memcensus has 0 dispatch rows, expected 4 (A-PP37)
+FAIL VDISP: m87.slope.w4.r5.a1.memcensus has 0 dispatch rows, expected 4 (A-PP37)
+FAIL VDISP: m87.eager.w2.r1.a1.memcensus has 0 dispatch rows, expected 2 (A-PP37)
+FAIL VDISP: m87.minstack.w2.r1.a1.memcensus has 0 dispatch rows, expected 2 (A-PP37)
+FAIL VDISP: m87.eager.w2.r2.a1.memcensus has 0 dispatch rows, expected 2 (A-PP37)
+FAIL VDISP: m87.minstack.w2.r2.a1.memcensus has 0 dispatch rows, expected 2 (A-PP37)
+FAIL VDISP: m87.eager.w2.r3.a1.memcensus has 0 dispatch rows, expected 2 (A-PP37)
+FAIL VDISP: m87.minstack.w2.r3.a1.memcensus has 0 dispatch rows, expected 2 (A-PP37)
+FAIL VDISP: m87.cala.r1.a1.memcensus has 0 dispatch rows, expected 1 (A-PP37)
+FAIL VDISP: m87.cala.r2.a1.memcensus has 0 dispatch rows, expected 1 (A-PP37)
+FAIL VDISP: m87.calb.r1.a1.memcensus has 0 dispatch rows, expected 1 (A-PP37)
+FAIL VDISP: m87.calb.r2.a1.memcensus has 0 dispatch rows, expected 1 (A-PP37)
+FAIL VDISP: m87.conc.r1.a1.memcensus has 0 dispatch rows, expected 2 (A-PP37)
+FAIL VDISP: m87.conc.r2.a1.memcensus has 0 dispatch rows, expected 2 (A-PP37)
+FAIL VORD: m87.slope.w1.r1.a1.memcensus has 0 main-entry rows, expected 1
+FAIL VORD: m87.slope.w1.r2.a1.memcensus has 0 main-entry rows, expected 1
+FAIL VORD: m87.slope.w1.r3.a1.memcensus has 0 main-entry rows, expected 1
+FAIL VORD: m87.slope.w1.r4.a1.memcensus has 0 main-entry rows, expected 1
+FAIL VORD: m87.slope.w1.r5.a1.memcensus has 0 main-entry rows, expected 1
+FAIL VORD: m87.slope.w2.r1.a1.memcensus has 0 main-entry rows, expected 2
+FAIL VORD: m87.slope.w2.r2.a1.memcensus has 0 main-entry rows, expected 2
+FAIL VORD: m87.slope.w2.r3.a1.memcensus has 0 main-entry rows, expected 2
+FAIL VORD: m87.slope.w2.r4.a1.memcensus has 0 main-entry rows, expected 2
+FAIL VORD: m87.slope.w2.r5.a1.memcensus has 0 main-entry rows, expected 2
+FAIL VORD: m87.slope.w3.r1.a1.memcensus has 0 main-entry rows, expected 3
+FAIL VORD: m87.slope.w3.r2.a1.memcensus has 0 main-entry rows, expected 3
+FAIL VORD: m87.slope.w3.r3.a1.memcensus has 0 main-entry rows, expected 3
+FAIL VORD: m87.slope.w3.r4.a1.memcensus has 0 main-entry rows, expected 3
+FAIL VORD: m87.slope.w3.r5.a1.memcensus has 0 main-entry rows, expected 3
+FAIL VORD: m87.slope.w4.r1.a1.memcensus has 0 main-entry rows, expected 4
+FAIL VORD: m87.slope.w4.r2.a1.memcensus has 0 main-entry rows, expected 4
+FAIL VORD: m87.slope.w4.r3.a1.memcensus has 0 main-entry rows, expected 4
+FAIL VORD: m87.slope.w4.r4.a1.memcensus has 0 main-entry rows, expected 4
+FAIL VORD: m87.slope.w4.r5.a1.memcensus has 0 main-entry rows, expected 4
+FAIL VORD: m87.eager.w2.r1.a1.memcensus has 0 main-entry rows, expected 2
+FAIL VORD: m87.minstack.w2.r1.a1.memcensus has 0 main-entry rows, expected 2
+FAIL VORD: m87.eager.w2.r2.a1.memcensus has 0 main-entry rows, expected 2
+FAIL VORD: m87.minstack.w2.r2.a1.memcensus has 0 main-entry rows, expected 2
+FAIL VORD: m87.eager.w2.r3.a1.memcensus has 0 main-entry rows, expected 2
+FAIL VORD: m87.minstack.w2.r3.a1.memcensus has 0 main-entry rows, expected 2
+FAIL VORD: m87.cala.r1.a1.memcensus has 0 main-entry rows, expected 1
+FAIL VORD: m87.cala.r2.a1.memcensus has 0 main-entry rows, expected 1
+FAIL VORD: m87.calb.r1.a1.memcensus has 0 main-entry rows, expected 1
+FAIL VORD: m87.calb.r2.a1.memcensus has 0 main-entry rows, expected 1
+FAIL VORD: m87.conc.r1.a1.memcensus has 0 main-entry rows, expected 2
+FAIL VORD: m87.conc.r2.a1.memcensus has 0 main-entry rows, expected 2
+VSLOPE SKIPPED: upstream blocks not clean (KS-SK-88-2)
+VARMS SKIPPED: upstream not clean (KS-SK-88-2)
+VDISJ SKIPPED: upstream not clean (KS-SK-88-2)
+== VERDICT87 FAIL(67) ==

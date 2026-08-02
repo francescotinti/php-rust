@@ -117,6 +117,37 @@ wait_up() {
   [ $up = 1 ]
 }
 
+# ANTI-ORPHAN teeth (attempt=1 lesson, S-87.0): /usr/bin/time was the $! —
+# TERMing it left the FIRST server alive on the port for the whole
+# campaign; every later server died at bind and wait_up was answered by
+# the orphan (bodies identical, rows landing in run 1's raw). The
+# fail-closed verdict caught it (VDISP/VORD zero rows). From attempt=2:
+#   (a) the process we own must be ALIVE after wait_up;
+#   (b) exactly ONE php-server may exist, and it must be OUR descendant;
+#   (c) after teardown NO php-server may remain.
+assert_single_server() { # <label> <owner-pid> -> echoes the server pid
+  # NB: runs inside $() — diagnostics go to stderr, stdout is the pid only;
+  # the caller's `|| exit 1` propagates the subshell's failure.
+  local label="$1" owner="$2" pids srv
+  pids=$(pgrep -f "php-server --axum" || true)
+  [ -n "$pids" ] || { fail "m87.$label no php-server process after up (anti-orphan a)" 1>&2; }
+  [ "$(echo "$pids" | grep -c .)" = 1 ] || { echo "$pids" 1>&2; fail "m87.$label MULTIPLE php-server processes (anti-orphan b)" 1>&2; }
+  srv="$pids"
+  # our descendant: either the pid we spawned or a direct child of it
+  if [ "$srv" != "$owner" ] && [ "$(ps -o ppid= -p "$srv" | tr -d ' ')" != "$owner" ]; then
+    fail "m87.$label the live php-server ($srv) is not ours ($owner) — orphan serving (anti-orphan b)" 1>&2
+  fi
+  echo "$srv"
+}
+assert_server_gone() { # <label>
+  local i
+  for i in 1 2 3 4 5 6 7 8 9 10; do
+    pgrep -f "php-server --axum" >/dev/null || return 0
+    sleep 0.5
+  done
+  fail "m87.$1 php-server still alive after teardown (anti-orphan c)"
+}
+
 # run_arm <label> <workers> <nreq> <extra-env...>
 run_arm() {
   local label="$1" workers="$2" nreq="$3"; shift 3
@@ -132,6 +163,9 @@ run_arm() {
     > /dev/null 2> "$LOG" &
   local DPID=$!
   wait_up || { kill -TERM $DPID 2>/dev/null; fail "m87.$label server not up"; }
+  # under /usr/bin/time the server is DPID's CHILD: TERM must target IT.
+  local SRV
+  SRV=$(assert_single_server "$label" "$DPID") || exit 1
   local ok=0 i=0 B
   B=$(mktemp)
   while [ $i -lt "$nreq" ]; do
@@ -140,11 +174,12 @@ run_arm() {
     i=$((i+1))
   done
   rm -f "$B"
-  [ "$ok" = "$nreq" ] || { kill -TERM $DPID 2>/dev/null; fail "m87.$label bodies $ok/$nreq != oracle"; }
+  [ "$ok" = "$nreq" ] || { kill -TERM "$SRV" 2>/dev/null; fail "m87.$label bodies $ok/$nreq != oracle"; }
   sleep 2   # quiesce before teardown (drain + purge_delay=0 already active)
-  kill -TERM "$DPID" 2>/dev/null
+  kill -TERM "$SRV" 2>/dev/null
   wait "$DPID" 2>/dev/null
   local rc=$?
+  assert_server_gone "$label"
   grep -qE "panicked|aborting" "$LOG" && fail "m87.$label panic in server log (KH88-3)"
   echo "mem_hash=$MEM_HASH git=$GIT_REV campaign_sha=$CAMPAIGN_SHA arm=mem-census phase=$label attempt=$ATT w=$workers nreq=$nreq envtag=${ENVTAG:-none} server_exit=$rc seq=$SEQ epoch=$(date +%s)" >> "$MC"
   ledger "attempt=$ATT phase=$label raw=m87.$label.a$ATT.memcensus esito=ok nreq=$nreq"
@@ -164,14 +199,17 @@ run_pad() {
     > /dev/null 2> "$LOG" &
   local DPID=$!
   wait_up || { kill -TERM $DPID 2>/dev/null; fail "m87.$label server not up"; }
+  local SRV
+  SRV=$(assert_single_server "$label" "$DPID") || exit 1
   local B; B=$(mktemp)
   curl -s -m 10 -o "$B" "http://127.0.0.1:$PORT/$fixture"
-  if [ "$(cat "$B")" != "$want" ]; then kill -TERM "$DPID" 2>/dev/null; fail "m87.$label body != oracle"; fi
+  if [ "$(cat "$B")" != "$want" ]; then kill -TERM "$SRV" 2>/dev/null; fail "m87.$label body != oracle"; fi
   rm -f "$B"
   sleep 1
-  kill -TERM "$DPID" 2>/dev/null
+  kill -TERM "$SRV" 2>/dev/null
   wait "$DPID" 2>/dev/null
   local rc=$?
+  assert_server_gone "$label"
   grep -qE "panicked|aborting" "$LOG" && fail "m87.$label panic in server log (KH88-3)"
   echo "mem_hash=$MEM_HASH git=$GIT_REV campaign_sha=$CAMPAIGN_SHA arm=mem-census phase=$label attempt=$ATT w=1 nreq=1 fixture=$fixture server_exit=$rc seq=$SEQ epoch=$(date +%s)" >> "$MC"
   ledger "attempt=$ATT phase=$label raw=m87.$label.a$ATT.memcensus esito=ok"
@@ -191,6 +229,8 @@ run_conc() {
     > /dev/null 2> "$LOG" &
   local DPID=$!
   wait_up || { kill -TERM $DPID 2>/dev/null; fail "m87.$label server not up"; }
+  local SRV
+  SRV=$(assert_single_server "$label" "$DPID") || exit 1
   local BA BB
   BA=$(mktemp); BB=$(mktemp)
   curl -s -m 10 -o "$BA" "http://127.0.0.1:$PORT/pad87a.php" &

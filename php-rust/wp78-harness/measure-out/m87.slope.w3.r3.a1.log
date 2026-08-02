@@ -1,0 +1,19 @@
+php-server: failed to bind 127.0.0.1:8296: Address already in use (os error 48)
+        0.01 real         0.00 user         0.00 sys
+             9519104  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+                 905  page reclaims
+                   0  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                   0  voluntary context switches
+                  56  involuntary context switches
+            93613071  instructions retired
+            27051856  cycles elapsed
+             3834336  peak memory footprint

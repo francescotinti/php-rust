@@ -1,0 +1,35 @@
+attempt_epoch=1785676737 git=a9e18fc campaign_sha=a7c6ed43a44eba38 attempt=1 phase=start
+attempt_epoch=1785676739 git=a9e18fc campaign_sha=a7c6ed43a44eba38 attempt=1 phase=identity mem_hash=2a15f2085d4dcdf8 matrix=feature-matrix.6d9a80f.20260802-150846.log
+attempt_epoch=1785676743 git=a9e18fc campaign_sha=a7c6ed43a44eba38 attempt=1 phase=slope.w1.r1 raw=m87.slope.w1.r1.a1.memcensus esito=ok nreq=100
+attempt_epoch=1785676746 git=a9e18fc campaign_sha=a7c6ed43a44eba38 attempt=1 phase=slope.w1.r2 raw=m87.slope.w1.r2.a1.memcensus esito=ok nreq=100
+attempt_epoch=1785676749 git=a9e18fc campaign_sha=a7c6ed43a44eba38 attempt=1 phase=slope.w1.r3 raw=m87.slope.w1.r3.a1.memcensus esito=ok nreq=100
+attempt_epoch=1785676753 git=a9e18fc campaign_sha=a7c6ed43a44eba38 attempt=1 phase=slope.w1.r4 raw=m87.slope.w1.r4.a1.memcensus esito=ok nreq=100
+attempt_epoch=1785676756 git=a9e18fc campaign_sha=a7c6ed43a44eba38 attempt=1 phase=slope.w1.r5 raw=m87.slope.w1.r5.a1.memcensus esito=ok nreq=100
+attempt_epoch=1785676761 git=a9e18fc campaign_sha=a7c6ed43a44eba38 attempt=1 phase=slope.w2.r1 raw=m87.slope.w2.r1.a1.memcensus esito=ok nreq=200
+attempt_epoch=1785676765 git=a9e18fc campaign_sha=a7c6ed43a44eba38 attempt=1 phase=slope.w2.r2 raw=m87.slope.w2.r2.a1.memcensus esito=ok nreq=200
+attempt_epoch=1785676770 git=a9e18fc campaign_sha=a7c6ed43a44eba38 attempt=1 phase=slope.w2.r3 raw=m87.slope.w2.r3.a1.memcensus esito=ok nreq=200
+attempt_epoch=1785676774 git=a9e18fc campaign_sha=a7c6ed43a44eba38 attempt=1 phase=slope.w2.r4 raw=m87.slope.w2.r4.a1.memcensus esito=ok nreq=200
+attempt_epoch=1785676779 git=a9e18fc campaign_sha=a7c6ed43a44eba38 attempt=1 phase=slope.w2.r5 raw=m87.slope.w2.r5.a1.memcensus esito=ok nreq=200
+attempt_epoch=1785676784 git=a9e18fc campaign_sha=a7c6ed43a44eba38 attempt=1 phase=slope.w3.r1 raw=m87.slope.w3.r1.a1.memcensus esito=ok nreq=300
+attempt_epoch=1785676790 git=a9e18fc campaign_sha=a7c6ed43a44eba38 attempt=1 phase=slope.w3.r2 raw=m87.slope.w3.r2.a1.memcensus esito=ok nreq=300
+attempt_epoch=1785676796 git=a9e18fc campaign_sha=a7c6ed43a44eba38 attempt=1 phase=slope.w3.r3 raw=m87.slope.w3.r3.a1.memcensus esito=ok nreq=300
+attempt_epoch=1785676802 git=a9e18fc campaign_sha=a7c6ed43a44eba38 attempt=1 phase=slope.w3.r4 raw=m87.slope.w3.r4.a1.memcensus esito=ok nreq=300
+attempt_epoch=1785676807 git=a9e18fc campaign_sha=a7c6ed43a44eba38 attempt=1 phase=slope.w3.r5 raw=m87.slope.w3.r5.a1.memcensus esito=ok nreq=300
+attempt_epoch=1785676814 git=a9e18fc campaign_sha=a7c6ed43a44eba38 attempt=1 phase=slope.w4.r1 raw=m87.slope.w4.r1.a1.memcensus esito=ok nreq=400
+attempt_epoch=1785676821 git=a9e18fc campaign_sha=a7c6ed43a44eba38 attempt=1 phase=slope.w4.r2 raw=m87.slope.w4.r2.a1.memcensus esito=ok nreq=400
+attempt_epoch=1785676828 git=a9e18fc campaign_sha=a7c6ed43a44eba38 attempt=1 phase=slope.w4.r3 raw=m87.slope.w4.r3.a1.memcensus esito=ok nreq=400
+attempt_epoch=1785676835 git=a9e18fc campaign_sha=a7c6ed43a44eba38 attempt=1 phase=slope.w4.r4 raw=m87.slope.w4.r4.a1.memcensus esito=ok nreq=400
+attempt_epoch=1785676842 git=a9e18fc campaign_sha=a7c6ed43a44eba38 attempt=1 phase=slope.w4.r5 raw=m87.slope.w4.r5.a1.memcensus esito=ok nreq=400
+attempt_epoch=1785676847 git=a9e18fc campaign_sha=a7c6ed43a44eba38 attempt=1 phase=eager.w2.r1 raw=m87.eager.w2.r1.a1.memcensus esito=ok nreq=200
+attempt_epoch=1785676852 git=a9e18fc campaign_sha=a7c6ed43a44eba38 attempt=1 phase=eager.w2.r2 raw=m87.eager.w2.r2.a1.memcensus esito=ok nreq=200
+attempt_epoch=1785676856 git=a9e18fc campaign_sha=a7c6ed43a44eba38 attempt=1 phase=eager.w2.r3 raw=m87.eager.w2.r3.a1.memcensus esito=ok nreq=200
+attempt_epoch=1785676861 git=a9e18fc campaign_sha=a7c6ed43a44eba38 attempt=1 phase=minstack.w2.r1 raw=m87.minstack.w2.r1.a1.memcensus esito=ok nreq=200
+attempt_epoch=1785676865 git=a9e18fc campaign_sha=a7c6ed43a44eba38 attempt=1 phase=minstack.w2.r2 raw=m87.minstack.w2.r2.a1.memcensus esito=ok nreq=200
+attempt_epoch=1785676870 git=a9e18fc campaign_sha=a7c6ed43a44eba38 attempt=1 phase=minstack.w2.r3 raw=m87.minstack.w2.r3.a1.memcensus esito=ok nreq=200
+attempt_epoch=1785676871 git=a9e18fc campaign_sha=a7c6ed43a44eba38 attempt=1 phase=cala.r1 raw=m87.cala.r1.a1.memcensus esito=ok
+attempt_epoch=1785676872 git=a9e18fc campaign_sha=a7c6ed43a44eba38 attempt=1 phase=calb.r1 raw=m87.calb.r1.a1.memcensus esito=ok
+attempt_epoch=1785676873 git=a9e18fc campaign_sha=a7c6ed43a44eba38 attempt=1 phase=cala.r2 raw=m87.cala.r2.a1.memcensus esito=ok
+attempt_epoch=1785676874 git=a9e18fc campaign_sha=a7c6ed43a44eba38 attempt=1 phase=calb.r2 raw=m87.calb.r2.a1.memcensus esito=ok
+attempt_epoch=1785676875 git=a9e18fc campaign_sha=a7c6ed43a44eba38 attempt=1 phase=conc.r1 raw=m87.conc.r1.a1.memcensus esito=ok
+attempt_epoch=1785676876 git=a9e18fc campaign_sha=a7c6ed43a44eba38 attempt=1 phase=conc.r2 raw=m87.conc.r2.a1.memcensus esito=ok
+attempt_epoch=1785676876 git=a9e18fc campaign_sha=a7c6ed43a44eba38 attempt=1 phase=done esito=ok
