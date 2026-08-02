@@ -2,3 +2,4 @@
 # one row per battery attempt, EVERY outcome (PASS/FAIL/REFUSE incluso il
 # porcelain-refuse) with the reason BY NAME. KS-AH-90-1/KG-90-1: an
 # attempt without a row here makes the next same-rev PASS non-consumable.
+attempt_epoch=1785707336 battery=89pre rev=692c697 esito=FAIL fails=1/16 first_fail=lever-fixtures2
