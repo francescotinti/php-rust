@@ -24,11 +24,20 @@
 #               finestra process-counters di A ⇒ dA(stag) << dA(base).
 #     I net concorrenti restano VOID come cifre per-thread (KB-88-1) fino
 #     ad A-BB50 attuato: i run esistono per DISCRIMINARE il driver.
-#   UCLOG (A-DS45, Stogov): UNA fase W=1 con PHPR_UNIT_CACHE_LOG ARMATO su
-#     log di PRODUZIONE: touch del fixture fra richieste ⇒ supersede ⇒
-#     coppie main_evicted/evict-fp; putord-pair-guard su log NON-selftest
-#     (≥1 coppia, KS-DS-88-1). W=1-only: putord senza thr= in-band non è
-#     opponibile a W>1 (KH89-1).
+#   UCLOG (A-DS45, Stogov — LETTERA RIQUALIFICATA A CODICE, S-88.0): UNA
+#     fase W=1 con PHPR_UNIT_CACHE_LOG ARMATO su log di PRODUZIONE.
+#     ⚠️ REFUTAZIONE della lettera «≥1 coppia main_evicted su log di
+#     produzione»: dopo la partizione A-MS24 un main nella include-lane è
+#     STRUTTURALMENTE impossibile — main_evicted in produzione è un
+#     TRIPWIRE il cui scatto VOIDA la campagna (KS-DS-84-4, vm/mod.rs
+#     emitter: main_evicted solo su victim con main_program). Il touch
+#     del fixture produce SUPERSEDE (`supersede entries N putord=`,
+#     putord in-band da A-TH43), NON coppie. Positivo NON-vacuo
+#     soddisfacibile: ≥2 righe supersede con putord + pair-guard PASS
+#     (nessun orfano) + main_evicted==0 VERIFICATO. Il positivo ≥1-coppia
+#     vive in F16b (A-DS42: a_ds38 ARMATO in battery, stesso perimetro
+#     ledgerato). W=1-only: putord senza thr= non è opponibile a W>1
+#     (KH89-1). Da ri-giudicare al Concilio WP-90.
 #   DECLARED DEVIATION (per NOME): mi_collect all'atexit gira sull'heap
 #     CONDIVISO v3, non per-theap (A-DL39 = design); il canale
 #     $PHPR_MI_STATS è NON-CORPUS (A-DL40/KL-89-4) e QUI NON viene armato.
@@ -329,14 +338,20 @@ run_uclog() {
   assert_server_gone "$label"
   grep -qE "panicked|aborting" "$LOG" && fail "m88.$label panic in server log (KH88-3)"
   identity_row "$MC" "$label" 1 3 "$rc" "uclog=m88.$label.a$ATT.uclog"
-  # In-campaign positive (fail-closed): the guard must verify >=1 pair on
-  # this PRODUCTION log (KS-DS-88-1 lifted from vacuous-selftest-only).
-  local GOUT
+  # In-campaign positive (fail-closed), lane SUPERSEDE (v. header):
+  #   (a) pair-guard PASS sul log di produzione (nessun main_evicted
+  #       orfano, nessun NUL — KS-DS-88-1 consumato su NON-selftest);
+  #   (b) >=2 righe `supersede entries` con putord= in-band (i due touch);
+  #   (c) main_evicted == 0 — uno scatto del tripwire KS-DS-84-4 in
+  #       produzione VOIDA l'attempt QUI, non a valle.
+  local GOUT NSUP NME
   GOUT=$("$REPO/wp87-harness/putord-pair-guard.pl" "$UCL") || fail "m88.$label putord-pair-guard VOID on production log (A-DS45)"
   echo "$GOUT"
-  echo "$GOUT" | grep -qE "^putord-pair-guard: [1-9][0-9]* pair" \
-    || fail "m88.$label production log has ZERO pairs — phase vacuous (A-DS45)"
-  ledger "attempt=$ATT phase=$label raw=m88.$label.a$ATT.memcensus uclog=m88.$label.a$ATT.uclog esito=ok pairs=$(echo "$GOUT" | sed -n 's/^putord-pair-guard: \([0-9]*\) pair.*/\1/p')"
+  NSUP=$(grep -c "^unitcache supersede entries .*putord=" "$UCL" || true)
+  NME=$(grep -c "^unitcache main_evicted " "$UCL" || true)
+  [ "$NME" = 0 ] || fail "m88.$label $NME main_evicted in PRODUCTION — A-MS24 partition tripwire fired (KS-DS-84-4: campaign VOID)"
+  [ "$NSUP" -ge 2 ] || fail "m88.$label only $NSUP supersede rows with putord, expected >=2 — phase vacuous (A-DS45)"
+  ledger "attempt=$ATT phase=$label raw=m88.$label.a$ATT.memcensus uclog=m88.$label.a$ATT.uclog esito=ok supersede=$NSUP main_evicted=$NME pairs=$(echo "$GOUT" | sed -n 's/^putord-pair-guard: \([0-9]*\) pair.*/\1/p')"
 }
 
 # --- Phase SLOPE-HI (A-BB55≡A-DL42) -----------------------------------------

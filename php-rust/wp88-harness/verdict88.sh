@@ -321,14 +321,17 @@ if [ "$IDENT_CLEAN" = 1 ]; then
   [ "$W" = 1 ] || { emit "FAIL VUCLOG: armed-log phase ran at W=$W != 1 (KH89-1: putord not opposable at W>1 without thr=)"; bf=$((bf+1)); }
   [ -f "$UCL" ] || { emit "FAIL VUCLOG: production uclog missing: $UCL"; bf=$((bf+1)); }
   if [ "$bf" = 0 ]; then
+    # Lettera A-DS45 RIQUALIFICATA A CODICE (v. header campagna): dopo la
+    # partizione A-MS24, main_evicted in produzione è un tripwire il cui
+    # scatto VOIDA (KS-DS-84-4) — il positivo non-vacuo vive sulla lane
+    # SUPERSEDE (putord in-band, A-TH43); il positivo >=1-coppia vive in
+    # F16b (battery, armed). Da ri-giudicare al Concilio WP-90.
     NEV=$(grep -c "^unitcache main_evicted " "$UCL" || true)
-    [ "$NEV" -ge 2 ] || { emit "FAIL VUCLOG: only $NEV main_evicted rows in production log, expected >=2 (A-DS45)"; bf=$((bf+1)); }
+    NSUP=$(grep -c "^unitcache supersede entries .*putord=" "$UCL" || true)
+    [ "$NEV" = 0 ] || { emit "FAIL VUCLOG: $NEV main_evicted in PRODUCTION log — A-MS24 partition tripwire fired (KS-DS-84-4)"; bf=$((bf+1)); }
+    [ "$NSUP" -ge 2 ] || { emit "FAIL VUCLOG: only $NSUP supersede-with-putord rows, expected >=2 — positive vacuous (A-DS45)"; bf=$((bf+1)); }
     GOUT=$("$REPO/wp87-harness/putord-pair-guard.pl" "$UCL" 2>&1) || { emit "FAIL VUCLOG: putord-pair-guard VOID on production log: $GOUT"; bf=$((bf+1)); }
-    NP=$(echo "$GOUT" | sed -n 's/^putord-pair-guard: \([0-9]*\) pair.*/\1/p')
-    if [ "$bf" = 0 ]; then
-      [ -n "$NP" ] && [ "$NP" -ge 1 ] || { emit "FAIL VUCLOG: zero pairs verified — positive is vacuous (A-DS45)"; bf=$((bf+1)); }
-    fi
-    if [ "$bf" = 0 ]; then emit "VUCLOG PASS: production log W=1, main_evicted=$NEV, putord pairs verified=$NP (first NON-selftest bite of the pair-guard; KS-DS-88-1 satisfied on production)"; fi
+    if [ "$bf" = 0 ]; then emit "VUCLOG PASS: production log W=1, supersede-with-putord=$NSUP, main_evicted=0 (tripwire respected), pair-guard consumed on NON-selftest log — 0 main_evicted pairs EXPECTED by construction (A-MS24; the >=1-pair positive lives in F16b)"; fi
   fi
 else
   emit "VUCLOG SKIPPED: upstream VIDENT not clean (KS-SK-88-2)"; bf=$((bf+1))
