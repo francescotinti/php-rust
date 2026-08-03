@@ -33,7 +33,12 @@ VERIFICATO; banda KL-85-2 RITIRATA (KB-90-2): nessun confronto di banda.
 ## Verdetti (da verdict89.a1.g3.out)
 
 - **VSLOPE-BASE — b con incertezza in-band (A-BB57)**: modi dominanti
-  su metric=committed_postcollect_win0:
+  su metric=committed_postcollect_win0 (⚠️ metrica RIQUALIFICATA
+  **PEAK-metric** — A-DL48/KL-91-1, Concilio WP-91: commit_current ≡
+  commit_peak su macOS; ri-verificato S-90.0 a macchina: commit ==
+  peak_commit su 80/80 righe win=0 dei 40 raw slope BASE+RET0; **b è la
+  pendenza del PICCO di commit**, non del residente, finché la
+  separazione non è provata):
   W=4 156.762.112 B = 149,50 MiB [derivata: companion /1048576] (×2 su R=5)
   W=8 228.065.280 B = 217,50 MiB [derivata: companion /1048576] (×2)
   W=12 316.276.736 B = 301,62 MiB [derivata: companion /1048576] (modes==R: punto ADVISORY, A-BB58)
@@ -47,15 +52,25 @@ VERIFICATO; banda KL-85-2 RITIRATA (KB-90-2): nessun confronto di banda.
   grade=verdict-grade-candidate.
 - **VSLOPE-RET0 (braccio retain=0)**:
   b_ret0 = 19.329.843 B = 18,43 MiB [derivata: companion /1048576] per worker, se(b) = 1.319.393 B,
-  2σ = [16.691.057, 21.968.630] B — grade ADVISORY (un marginale fuori
-  fascia: 24.395.776 B = 23,27 MiB [derivata: companion /1048576] su
-  W4→8).
+  2σ = [16.691.057, 21.968.630] B — grade ADVISORY (**DUE marginali
+  fuori fascia, per nome e byte — sanatoria A-BB64≡A-BG56, Concilio
+  WP-91**: 24.395.776 B = 23,27 MiB [derivata: companion /1048576] su
+  W4→8 E 16.400.384 B = 15,64 MiB [derivata: companion /1048576] su
+  W12→16).
 - **VATTR — l'ATTRIBUZIONE, esito NEGATIVO nominato (KL-90-4)**:
   b_ret0 ≈ b_base (i due 2σ largamente sovrapposti) ⇒ **P-RET0
   REFUTATA: b SOPRAVVIVE a MIMALLOC_PAGE_FULL_RETAIN=0** — la
   ritenzione di pagine piene per size-class (candidato n.1, Leijen) NON
-  è il driver del costo marginale per-worker. Verdict-grade: census
-  per-theap + braccio retain entrambi in-band (KL-90-4). Il driver
+  è il driver del costo marginale per-worker. **Citazione corretta
+  (A-BB64 + KB-91-1/2, Concilio WP-91): NOT-attributed, verdict-grade
+  PREVIA ROBUSTEZZA — ora mostrata: 2σ-floor b_ret0 =
+  16.691.057 B = 15,92 MiB [derivata: companion /1048576] ≥ soglia
+  DICHIARATA 0,8·b_base; stimatore anti-moda W8 insensibile (ratio
+  1,019); tie-alt immateriale. Il label del g3 «verdict-grade … grade
+  inherits the slope grades above» va letto ADVISORY-inherited (se
+  eredita, eredita il min dei bracci: b_ret0 è ADVISORY).** KL-90-4
+  (census per-theap + braccio retain in-band) resta condizione
+  NECESSARIA, non sufficiente. Il driver
   residuo resta APERTO, da nominare al Concilio WP-91 (candidati
   residui Leijen: pagine per-theap PARZIALMENTE usate — W×bins×pagina —
   pagine abandoned con blocchi vivi, minimal_purge_size ord 44).

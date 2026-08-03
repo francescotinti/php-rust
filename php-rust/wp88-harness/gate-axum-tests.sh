@@ -51,6 +51,10 @@ grep "^rustc " "$LOG" || { echo "FAIL: rustc header missing from log"; FAILS=$((
 # the worker's flushed log must show put=1 (request 1 published) and
 # hit=1 (request 2 served FROM the published unit). Byte-equality alone
 # is path-repetition on a deterministic fatal.
+# A-PP53 (Council WP-91, Pedersen) — DECLARED constraint of the clean
+# lane: the ARMED run is TARGETED-only (--test-threads=1, filter a_pp38).
+# A full/parallel suite with PHPR_UNIT_CACHE_LOG in the environment
+# pollutes the shared log and FAILs spuriously (fail-closed by design).
 UCL="$TMPD/a_pp38.uclog"
 if ! ( cd "$REPO" && PHPR_UNIT_CACHE_LOG="$UCL" cargo test --release -p php-server --features axum-server a_pp38 -- --test-threads=1 ) >> "$LOG" 2>&1; then
   echo "FAIL: armed a_pp38 run failed (A-PP47)"

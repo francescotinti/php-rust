@@ -123,6 +123,8 @@ my %ALLOW = map { $_ => 1 } qw(
   8048
   5000
   9276
+  0.8
+  1.019
 );
 # 110    = righe-per-run ENFORCE del protocollo (design78 driver)
 # 384    = bound del buffer CString di stack in std (A-BB27, costante di libreria)
@@ -131,6 +133,12 @@ my %ALLOW = map { $_ => 1 } qw(
 #                  corpus via verdict81.out, tenute qui per robustezza
 # 9276   = wc -c del fixture hello_pad85 COMMITTATO (MEASURE85 riga sorgente;
 #          A-SK56 lo espone: era esente per scope-di-riga, ora nominato)
+# 0.8    = soglia alta ex-ante VATTR (verdict89.sh r.402 COMMITTED pre-run;
+#          dichiarata nei doc per sanatoria KB-91-2/A-BB64 — dal verdict90
+#          in poi la soglia vive nel header pre-run del giudice)
+# 1.019  = ratio anti-moda W8, ricomputo Bak (Concilio WP-91 verbale sedia 5
+#          COMMITTED) — robustezza mostrata FUORI banda per la sanatoria
+#          A-BB64; entra in-band dal verdict90 (A-BB62)
 
 # ---- corpus: committed machine outputs -------------------------------------
 # A-SK55 (Council WP-90, Klabnik FORGE BITTEN LIVE): the corpus is read

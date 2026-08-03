@@ -357,11 +357,16 @@ mod axum_handler {
 
         // Router: use fallback to catch-all paths
         // A-BG51 (Council WP-90, Gregg): pid-echo on the HTTP channel —
-        // every response carries `x-phpr-pid: <pid>`; the campaign asserts
-        // it on the FIRST request of every phase against the LISTEN-owner
-        // pid (a stale/orphan server cannot echo the fresh pid). Value
-        // computed once (OnceLock): no per-request syscall in any timed
-        // window (WP-64).
+        // every response OF THIS MAIN ROUTER carries `x-phpr-pid: <pid>`.
+        // A-PP53 (Council WP-91, Pedersen) — DECLARED exclusion by NAME:
+        // the TIER-0 router above has NO pid-echo layer; any campaign
+        // exercising tier0 must not assert x-phpr-pid there. Wording
+        // corrected: the campaign asserts the header on the first
+        // ASSERTED request of every phase — post-wait_up (the wait_up
+        // probes on /__reqns PRECEDE it), pre-workload — against the
+        // LISTEN-owner pid (a stale/orphan server cannot echo the fresh
+        // pid). Value computed once (OnceLock): no per-request syscall
+        // in any timed window (WP-64).
         let app = Router::new()
             .fallback(php_handler)
             .layer(axum::middleware::map_response(

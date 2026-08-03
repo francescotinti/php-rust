@@ -16535,15 +16535,24 @@ struct UcEmitGuard;
 // TLS-teardown window, DECLARED. `UC_EMIT_GUARD`/`UC_PUT_ORD` are
 // `const { Cell::new(..) }` of types WITHOUT Drop: std registers NO TLS
 // destructor for these keys, so `LocalKey::with` NEVER panics for them —
-// not even during thread teardown. A put issued from a TLS destructor
-// therefore PASSES `arm()` and fails fast at the first TLS key WITH a
-// destructor it touches (UNIT_CACHE / UC_STATS / UC_LOG_BUF: RefCell) —
-// with the guard already ARMED, parameters past the rebind. That RefCell
-// TLS panic is the REAL fail-fast seat (Binding Rule 4). The guard's
-// Drop cannot panic via this path (no-Drop key), so the previously
-// declared panic-in-panic abort is UNREACHABLE by that route (KH90-2:
-// any fail-fast claim built on the pre-A-TH50 wording is VOID). No
-// production put site runs from a TLS destructor today.
+// not even during thread teardown — on the `target_thread_local` path
+// (macOS/Linux/Windows). A-TH54 (Council WP-91, Hoare — corrects the
+// second half of A-TH50): the RefCell fail-fast is ORDER-DEPENDENT, not
+// guaranteed. TLS destructor order is UNSPECIFIED (std: "may panic if
+// the destructor has previously been run"): a put issued from a TLS
+// destructor PASSES `arm()` and then panics at the first RefCell key it
+// touches (UNIT_CACHE / UC_STATS / UC_LOG_BUF) ONLY IF that key's
+// destructor has ALREADY run; in the other order those keys are still
+// alive and the put COMPLETES SILENTLY, guard armed and disarmed
+// regularly (KH91-1: any claim of a deterministic fail-fast on this
+// path is VOID). os-TLS caveat: on the fallback path (platforms without
+// `target_thread_local`) even these no-Drop keys register a destructor
+// that frees their box, so `with` can panic for them too after
+// teardown. The guard's Drop cannot panic via this path (no-Drop key),
+// so the previously declared panic-in-panic abort is UNREACHABLE by
+// that route (KH90-2: any fail-fast claim built on the pre-A-TH50
+// wording is VOID). The REAL seal is unchanged: no production put site
+// runs from a TLS destructor today.
 impl UcEmitGuard {
     fn arm() -> UcEmitGuard {
         UC_EMIT_GUARD.with(|g| {

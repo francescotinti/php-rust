@@ -27,9 +27,9 @@ mem-census e2f27c9c671b737a.
 |---|---|---|
 | 1 | Sanatorie: A-TH50 doc TLS corretta (sede reale del fail-fast = primo TLS con distruttore RefCell; KH90-2) · A-DL45 arena==proc riqualificata IDENTITÀ di read-path in MEASURE88 · A-BG52 nota regime sul label VWARM · A-DS47 ricetta persist 3-flag + binchk in ds40-verify (lane compile-fatal via PROBE retrodatato — 🔵 opcache.file_update_protection 2s non cachea file freschi; negativo monco morde: nbin=0 senza enable_cli) + catalogo §3.3-ter con origine errore Stogov · A-AH52 limite estremi-only + guard nomi-con-spazi (testata) | 32eb49b |
 | 2 | Gate cifre, i due forge CHIUSI con bite-test stesso-commit: A-SK55 corpus COMMITTED-only (ls-tree+git show HEAD:, cache per-HEAD nel --all) · A-SK56 [derivata] a scope di FIGURA (byte-token corpus-bound O machine-verificato dall'aritmetica dichiarata X−Y con operandi in corpus; U+2212 gestito a byte; dedup ripetizioni wrappate) · A-SK53-bis ± a FINESTRA allowlist-only (per-doc M85) · A-SK57 prefix ledger a granularità di RIGA (--selftest-prefix REWRITE/EXTEND/OK). --selftest: 5 denti mordono | 3bc4f09 |
-| 3 | Fix strumenti (wp89-harness v89): A-PP46 subshell_failpath + teardown_fail con server_gone LEDGERATO su 7 siti (KS-PP-90-1) · A-BG51 pid-echo x-phpr-pid su ogni risposta axum (map_response, OnceLock; match vivo) + assert prima-request-per-fase + lane preflight + boot_epoch GIUDICATO (KG-90-3) · A-SK58 spans GIUDICATO · A-BG50 presence-guard estrattori (KG-90-2) · A-AH51 judge_sha (KS-AH-90-2) · A-SK59 tether matrix committed lato giudice + governo gG · A-DL46 commit_calls BANDITO · A-AH53 recorder rustc mai riga vuota + diagnosi corretta | 8257ba8 |
+| 3 | Fix strumenti (wp89-harness v89): A-PP46 subshell_failpath + teardown_fail con server_gone LEDGERATO su 8 siti (censimento Pedersen WP-91: r.196/245/256/282/287/314/333/334 — sanatoria A-PP53, il «7» era off-by-one) · A-BG51 pid-echo x-phpr-pid su ogni risposta del router PRINCIPALE (map_response, OnceLock; match vivo; tier0 SENZA layer, esclusione dichiarata per NOME A-PP53) + assert prima-request-ASSERITA (post-wait_up, pre-workload — A-PP53) + lane preflight + boot_epoch GIUDICATO (KG-90-3) · A-SK58 spans GIUDICATO · A-BG50 presence-guard estrattori (KG-90-2) · A-AH51 judge_sha (KS-AH-90-2) · A-SK59 tether matrix committed lato giudice + governo gG · A-DL46 commit_calls BANDITO · A-AH53 recorder rustc mai riga vuota + diagnosi corretta | 8257ba8 |
 | 4 | Catena evidenza: battery-attempts.ledger NUOVO (APPEND-only, OGNI esito con motivo per NOME) + dente KS-AH-90-1/KG-90-1 in --same-rev; ⚠️ EMENDATO in corsa: il ledger scrive DENTRO la finestra per costruzione ⇒ allowlist (morso a secco pre-consumo, fix 30f5a87) | ceb5f82 + 30f5a87 |
-| 5 | Sigilli v7: A-MS43 flag probe PRIVATO (sigillo di VISIBILITÀ; belt=conferma) · A-MS44 #[must_use] + doc TLS nel tipo · A-MS45 belt grafie set/replace/update + .done rc= in-band · A-TH48 noprobe --selftest in catena + pin scoped a probe_in · A-TH49 sweep 5 grafie (decoy 1/1/1/2/1) · A-TH51 monotonia putord + W==1 in a_ds36 (⚠️ RIQUALIFICATA dal morso in battery: la coppia main_evicted/evict-fp CONDIVIDE il putord per design ⇒ non-decrescente, 65086e6) · A-PP47 publish a contatore RIQUALIFICATO A MACCHINA (v. Scoperte 1) · A-PP48 NPASS unit-suite pinnato ==13 + denti A-PP45==5/A-PP47==13 contati | 756f82f + 65086e6 |
+| 5 | Sigilli v7: A-MS43 flag probe PRIVATO (sigillo di VISIBILITÀ; belt=conferma) · A-MS44 #[must_use] + doc TLS nel tipo · A-MS45 belt grafie set/replace/update + .done rc= in-band · A-TH48 noprobe --selftest in catena + pin scoped a probe_in · A-TH49 sweep 5 grafie (decoy 1/1/1/2/1) · A-TH51 monotonia putord + W==1 in a_ds26, test dell'invariante A-DS36 (sanatoria nome A-TH54; ⚠️ RIQUALIFICATA dal morso in battery: la coppia main_evicted/evict-fp CONDIVIDE il putord per design ⇒ non-decrescente, 65086e6) · A-PP47 publish a contatore RIQUALIFICATO A MACCHINA (v. Scoperte 1) · A-PP48 NPASS unit-suite pinnato ==13 + denti A-PP45==5/A-PP47==13 contati | 756f82f + 65086e6 |
 | 6 | CAMPAGNA m89 (attribuzione di b): battery-89pre 4 tentativi TUTTI ledgerati (FAIL morso A-TH51 → REFUSE porcelain → PASS 05726aa → PASS 30f5a87 16/16) · consumo --same-rev LEGALE con attempts-ledger allowlistato · attempt=1 PULITO (57 raw) · VERDICT89 PASS g3 (g1 morso dal regime clamped NUOVO, g2 morso dal pin forma-canale — governance gG con judge_sha consumata al primo giro reale) · MEASURE89 + gate cifre PASS | ed427f4…254a478 |
 | 7 | A-DS35 fase 1 — FIXTURE PRIMA DEL CODICE: 18 fixture + ds35-verify.sh (ricetta A-DS47) + PIN oracle (9 negativi fatal 255; phpr diverge su 8 — n7 final GIÀ fedele; positivi/esenzioni 9/9 GIÀ fedeli; p5 = Deprecated mancante, A-DS46). IMPLEMENTAZIONE = residuo per NOME (sede: lower/class.rs accanto al final-check; modellistica TypeHint/ReflectType con display_name Zend-canonico; appendice ricognizione in questo file) | 4a94cc7 |
 | 8 | Delibere: design89.md — KL-85-2 RITIRATA a registro (KB-90-2; in gate cifre = allowlist storica-only) · A-BB60 nested-guard v2 (lowercase + closure-hash + witness derivato dalla calibrazione di L) · A-PP49 path= in-band = DESIGN | 692c697 |
@@ -40,12 +40,16 @@ mem-census e2f27c9c671b737a.
   se(b) = 584.723 B, 2σ = [18.406.157, 20.745.049] B — PRIMA slope con
   incertezza e fascia δ=0,15 ex-ante IN-BAND (A-BB57); marginali 3/3
   dentro fascia; grade verdict-grade-candidate; W=12/16 modes==R ⇒
-  punti census-ADVISORY (A-BB58).
+  punti census-ADVISORY (A-BB58). ⚠️ Metrica RIQUALIFICATA PEAK
+  (A-DL48/KL-91-1 WP-91): commit≡peak_commit su macOS — b è pendenza
+  del PICCO di commit, non del residente.
 - **VATTR — P-RET0 REFUTATA**: b_ret0 = 19.329.843 B = 18,43 MiB [derivata: companion /1048576]
-  per worker ≈ b_base (2σ largamente sovrapposti) ⇒ **b SOPRAVVIVE a
+  per worker (grade **ADVISORY**: DUE marginali fuori fascia, sanatoria
+  A-BG56) ≈ b_base (2σ largamente sovrapposti) ⇒ **b SOPRAVVIVE a
   MIMALLOC_PAGE_FULL_RETAIN=0**: la ritenzione full-page per size-class
-  NON è il driver. Verdict-grade (census per-theap + braccio armato
-  entrambi in-band, KL-90-4). Driver residuo APERTO per il concilio.
+  NON è il driver. Citazione corretta (KB-91-1): NOT-attributed,
+  verdict-grade PREVIA robustezza (mostrata in MEASURE89); il label g3
+  va letto ADVISORY-inherited. Driver residuo APERTO per il concilio.
 - **VSWEEP**: cal byte-riprodotte QUARTA campagna consecutiva
   (7.801.102 B, entrambi i lati); P-DT20 CONFERMATA (net==cal AL BYTE
   4/4); 🔵 regime clamped NUOVO ai dt 1-5 ms (transizione 5→10 ms);

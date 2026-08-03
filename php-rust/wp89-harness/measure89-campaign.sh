@@ -186,9 +186,13 @@ teardown_fail() { # <srv> <dpid> <label> <msg...>
   ledger "attempt=$ATT phase=$label failpath=teardown server_gone=$gone"
   fail "$*"
 }
-# A-BG51 (Council WP-90, Gregg): pid-echo — the FIRST request of every
-# phase must return `x-phpr-pid` equal to the asserted LISTEN-owner pid
-# (a stale or foreign server cannot echo the fresh pid). Uses the caller's
+# A-BG51 (Council WP-90, Gregg): pid-echo — the first ASSERTED request of
+# every phase (post-wait_up, pre-workload: the wait_up probes on /__reqns
+# PRECEDE this assert — A-PP53 wording sanatoria, Council WP-91) must
+# return `x-phpr-pid` equal to the asserted LISTEN-owner pid (a stale or
+# foreign server cannot echo the fresh pid). DECLARED by NAME (A-PP53):
+# the TIER-0 router carries NO pid-echo layer — this campaign never
+# exercises tier0, so no assert runs against it. Uses the caller's
 # DPID (bash dynamic scoping) for the teardown path.
 assert_http_pid() { # <label> <srv>
   local hp
