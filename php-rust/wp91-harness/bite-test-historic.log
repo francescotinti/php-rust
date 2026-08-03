@@ -1,0 +1,23 @@
+# bite-test-historic.log — A-SK-68 (Concilio WP-92, team-cifre P2): i 5 doc storici M84-M88 rigiudicati col resolver emendato (A-SK-69/A-SK-73) e SENZA legacy_frozen, PRIMA della collocazione manifest (stesso commit).
+# head=c71bf9e6b0154e6503265d6d263cf39bcd711534 (gate nel working tree = candidato committato in questo stesso commit)
+== MEASURE84 ==
+corpus cardinality=24221 budget=24221 (A-SK61, budget from HEAD)
+FAIL gate-measure-cifre (KG-83-3): 2 unmatched figure(s) in wp84-harness/MEASURE84_RESULTS.md:
+  line 45: token '12.009.472' on a [derivata] line NOT in corpus and NOT provenance-verified (A-SK56/A-SK60/A-SK62):   12.009.472 B = 11,5 MiB [derivata: 240.287.744−228.278.272]) — il pin
+  line 91: token '66,1' on a [derivata] line NOT in corpus and NOT provenance-verified (A-SK56/A-SK60/A-SK62):    footprint 66,1% [derivata: net(ord1)/rw_budget e 1−1/2,95, A-DL25]).
+== MEASURE85 ==
+corpus cardinality=24221 budget=24221 (A-SK61, budget from HEAD)
+FAIL gate-measure-cifre (KG-83-3): 4 unmatched figure(s) in wp85-harness/MEASURE85_RESULTS.md:
+  line 51: token '7.343.135' on a [derivata] line NOT in corpus and NOT provenance-verified (A-SK56/A-SK60/A-SK62):   7.343.135 B [derivata: 7.803.281−460.146, MODEL-GRADE(src=m85.dl28)]
+  line 54: token '7.343.135' on a [derivata] line NOT in corpus and NOT provenance-verified (A-SK56/A-SK60/A-SK62):   7.343.135+460.146 = 7.803.281 B = NET_P ESATTO [derivata: somma dei due
+  line 80: token '12.238.848' on a [derivata] line NOT in corpus and NOT provenance-verified (A-SK56/A-SK60/A-SK62):   differenza 12.238.848 B = 11,67 MiB [derivata: 252.526.592−240.287.744]
+  line 96: token '7.343.135' on a [derivata] line NOT in corpus and NOT provenance-verified (A-SK56/A-SK60/A-SK62):    (record WP-83) REGGE. La scomposizione «residuo 7.343.135 B [derivata:
+== MEASURE86 ==
+corpus cardinality=24221 budget=24221 (A-SK61, budget from HEAD)
+ADVISORY-PASS gate-measure-cifre (KG-83-3, NEVER verdict-grade — T2/A-SK-67): every bound figure in wp86-harness/MEASURE86_RESULTS.md matches committed machine output (or carries [derivata]/named-constant)
+== MEASURE87 ==
+corpus cardinality=24221 budget=24221 (A-SK61, budget from HEAD)
+ADVISORY-PASS gate-measure-cifre (KG-83-3, NEVER verdict-grade — T2/A-SK-67): every bound figure in wp87-harness/MEASURE87_RESULTS.md matches committed machine output (or carries [derivata]/named-constant)
+== MEASURE88 ==
+corpus cardinality=24221 budget=24221 (A-SK61, budget from HEAD)
+ADVISORY-PASS gate-measure-cifre (KG-83-3, NEVER verdict-grade — T2/A-SK-67): every bound figure in wp88-harness/MEASURE88_RESULTS.md matches committed machine output (or carries [derivata]/named-constant)

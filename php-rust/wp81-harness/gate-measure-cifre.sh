@@ -508,8 +508,8 @@ my @man_rows;
 for my $row (head_content($MANIFEST_REL)) {
   chomp $row;
   next if $row =~ /^\s*(#|$)/;
-  my ($mpath, $msha, $mjudge, $mbf, $mbands) = split /\t/, $row;
-  push @man_rows, [$mpath, $msha, $mjudge, $mbf, $mbands];
+  my ($mpath, $msha, $mjudge, $mbf, $mbands, $mverd) = split /\t/, $row;
+  push @man_rows, [$mpath, $msha, $mjudge, $mbf, $mbands, $mverd];
 }
 
 # ---- resolve target list ---------------------------------------------------
@@ -517,12 +517,36 @@ my @targets;   # [abs-or-rel display name, repo-rel path or '', source: head|wor
 my $all_rc = 0;
 if ($target_arg eq '--all') {
   for my $r (@man_rows) {
-    my ($mpath, $msha, $mjudge, $mbf, $mbands) = @$r;
+    my ($mpath, $msha, $mjudge, $mbf, $mbands, $mverd) = @$r;
     if (!$headset{$mpath}) {
       print "FAIL gate-measure-cifre --all: manifest doc MISSING from HEAD: $mpath (A-SK64/A-SK-67)\n"; $all_rc = 1; next;
     }
     if ($mjudge eq 'no') {
-      print "SKIP $mpath (declared judge=no in manifest — A-SK64)\n"; next;
+      # A-SK-68 (Council WP-92): judge=no is NOT "cifra libera" (Gregg's
+      # condition) — a FROZEN row keeps its doc sha-pinned (drift at HEAD
+      # = FAIL) and anchors its truth to the EPOCH VERDICT blob
+      # (verdict=<repo-path>@<sha16>, resolvable at HEAD). The blob
+      # comparisons ride the same HEAD-authority code path exercised by
+      # T11/T13 (a committed drift cannot be simulated in a selftest).
+      my $ok = 1;
+      if (defined $msha && $msha ne '-') {
+        my $h = head_blob_sha($mpath);
+        if ($h ne $msha) {
+          print "FAIL gate-measure-cifre --all: frozen judge=no doc $mpath DRIFTED from its manifest pin (A-SK-68): $h vs $msha\n";
+          $all_rc = 1; $ok = 0;
+        }
+      }
+      my $anch = '';
+      if (defined $mverd && $mverd =~ /^verdict=([^\@\s]+)\@([0-9a-f]{16})$/) {
+        my ($vp, $vs) = ($1, $2);
+        my $vh = head_blob_sha($vp);
+        if (substr($vh, 0, 16) ne $vs) {
+          print "FAIL gate-measure-cifre --all: epoch verdict anchor for $mpath does NOT resolve at HEAD ($vp \@ $vs) (A-SK-68)\n";
+          $all_rc = 1; $ok = 0;
+        } else { $anch = ", epoch verdict anchored: $vp (A-SK-68)" }
+      }
+      print "SKIP $mpath (declared judge=no in manifest — A-SK64$anch)\n" if $ok;
+      next;
     }
     push @targets, [$mpath, $mpath, 'head'];
   }
@@ -574,14 +598,18 @@ for my $t (@targets) {
     @lines = <$fh>; close $fh;
   }
 
-  # manifest row lookup (from HEAD rows)
+  # manifest row lookup (from HEAD rows). A-SK-68 (Council WP-92): the
+  # legacy_frozen branch is ABOLISHED — "doc STORICO CONGELATO" was a
+  # comment, not a predicate (no committed-ness test, no membership test;
+  # Klabnik's forge (a) rode it through an uncommitted manifest row). The
+  # 5 historical docs are now judge=no rows anchored to their EPOCH
+  # VERDICT blobs (see the --all branch above); no new row may ever grant
+  # the pre-WP-91 evaluator semantics — the code is gone.
   my $bytes_first = 1;
   my @doc_bands;
-  my $legacy_frozen = 0;   # sha-pinned UNMODIFIED historical doc: keeps the
-                           # pre-WP-91 derivata semantics (see below)
   if ($rel) {
     for my $r (@man_rows) {
-      my ($mpath, $msha, $mjudge, $mbf, $mbands) = @$r;
+      my ($mpath, $msha, $mjudge, $mbf, $mbands, $mverd) = @$r;
       next unless defined $mpath && $mpath eq $rel;
       $bytes_first = (defined $mbf && $mbf eq 'no') ? 0 : 1;
       my $sha_match = 0;
@@ -590,16 +618,9 @@ for my $t (@targets) {
         # verdict/all mode, working blob in advisory mode
         my $tsha = ($src eq 'head') ? head_blob_sha($rel) : work_blob_sha("$root/$rel");
         $sha_match = ($tsha eq $msha) ? 1 : 0;
-        print "line 0: NOTE — $rel edited since its manifest pin: ± graces and legacy derivata REVOKED (A-SK63)\n"
+        print "line 0: NOTE — $rel edited since its manifest pin: ± graces REVOKED (A-SK63)\n"
           unless $sha_match;
       }
-      # A-SK60 attuazione (Concilio WP-91): i doc STORICI CONGELATI il
-      # cui blob coincide con lo sha pinnato conservano la semantica
-      # derivata pre-WP-91 (evaluator X−Y su operandi in corpus, scan
-      # limitato ai token "N B") — storia già giudicata, blob immutabile.
-      # QUALSIASI edit rompe lo sha e fa cadere il doc sulle regole
-      # nuove: il forge per-edit resta morso.
-      $legacy_frozen = $sha_match;
       if (defined $mbands && $mbands ne '-' && $mbands ne '') {
         @doc_bands = split /,/, $mbands
           if !defined($msha) || $msha eq '-' || $sha_match;
@@ -689,33 +710,6 @@ for my $t (@targets) {
       }
     }
     if ($line =~ /\[derivata/) {                   # A-BG26 tagged line
-      if ($legacy_frozen) {
-        # FROZEN sha-pinned historical doc (manifest): pre-WP-91 semantics
-        # verbatim — X−Y evaluator over corpus-present operands, scan bound
-        # to "N B" tokens only. Granted ONLY while the blob matches its
-        # pin; any edit falls through to the A-SK60/A-SK62 rules below.
-        if ($bytes_first) {
-          my %eval_ok_l;
-          if ($line =~ /\[derivata:([^\]]*)/) {
-            my $expr = $1;
-            while ($expr =~ /(\d(?:[\d.,]*\d)?)\s*(?:\xE2\x88\x92|-)\s*(\d(?:[\d.,]*\d)?)/g) {
-              my ($xa, $xb) = (it_num($1), it_num($2));
-              next unless ($corpus{$xa} || $ALLOW{$xa}) && ($corpus{$xb} || $ALLOW{$xb});
-              $eval_ok_l{$xa - $xb} = 1;
-            }
-          }
-          my $probe2 = $line;
-          $probe2 =~ s/\b(?=[0-9a-f]*[a-f])[0-9a-f]{7,}\b//gi;
-          while ($probe2 =~ /(?<![\dA-Za-z,.±])(\d{1,3}(?:\.\d{3})+|\d{3,})\s*B(?![A-Za-z0-9])/g) {
-            my $raw = $1;
-            (my $norm = $raw) =~ s/\.(?=\d{3}\b)//g;
-            next if $ALLOW{$norm} || $corpus{$norm} || $corpus_count{$norm};
-            if ($eval_ok_l{$norm} || $derived_ok{$norm}) { $derived_ok{$norm} = 1; next; }
-            push @miss, "line $ln: byte token '$raw B' on a [derivata] line NOT in corpus and NOT machine-verified from corpus operands — the tag is figure-scope (A-SK56/KS-SK-90-2): $line";
-          }
-        }
-        next;
-      }
       # A-SK60 (Council WP-91) + A-SK-69/A-SK-73 (Council WP-92, Klabnik
       # forge (b) LANDED — the free evaluator was not abolished, it was
       # ANNOTATED: 36.573 addressable operands vs 24.042 corpus tokens,
