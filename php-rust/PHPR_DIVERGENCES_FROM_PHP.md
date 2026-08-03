@@ -499,6 +499,35 @@ slot, quindi `new class($this->x) extends Irrisolvibile {}` dentro un metodo
 non vede `$this` alla ri-esecuzione. Caso non osservato (i test Symfony usano
 solo locals); da chiudere se emerge.
 
+### 3.3-quinquies Fatal LSP: canali di emissione e contratto EMENDATO (A-DS48/A-DS50, Concilio WP-91 — S-90.0)
+1. **Log-copy stderr NON modellata (divergenza per NOME)**: sul fatal LSP
+   l'oracle CLI emette DUE blocchi — display su stdout («\nFatal
+   error: …») E log-copy su stderr («PHP Fatal error:  …», doppio
+   spazio). phpr emette SOLO il blocco display su stdout (stderr VUOTO;
+   n7 byte-identico via od, S-89.0). Il bersaglio byte-fedele
+   dell'implementazione A-DS35 è lo STDOUT integrale dell'oracle; la
+   log-copy resta divergenza dichiarata. Pin a canali SEPARATI e
+   INTEGRALI in `wp90-harness/ds35-verify2.out` (A-DS50 — il vecchio pin
+   `2>&1|head -3` era un bersaglio byte-IMPOSSIBILE: teneva solo il
+   blocco stderr che phpr non emette; KS-DS-91-3).
+2. **Contratto r2 by-ref EMENDATO (A-DS48, refutazione oracle-viva)**:
+   esatta è la REF-NESS (aggiungere O togliere `&` = fatal in entrambe
+   le direzioni: fixture v3/v4); il TIPO del parametro by-ref resta
+   contravariante (widening LEGALE: `int &$x`→`int|string &$x` alive,
+   fixture v1). I messaggi portano le union nell'ordine canonico Zend
+   («P::m(string|int &$x)»).
+3. **Nome irrisolvibile nel check (fixture v15)**: l'oracle NON usa la
+   forma «must be compatible» (lettera del verbale WP-91 imprecisa,
+   ri-morso S-90.0): emette «Could not check compatibility between
+   C::m(): B and P::m(): A, because class B is not available» (fatal,
+   rc=255). La sede duale A-DS51 decide per NOME: fatal fedele a questo
+   messaggio oppure divergenza a catalogo (mai skip silenzioso).
+4. **Timing (fixture t1-t4, KS-DS-91-1)**: hoisted (t1/t4) = fatal al
+   bind del set hoisted (persist: PRE-output; plain: post «pre|»);
+   condizionale ESEGUITA (t2) = fatal DOPO l'output precedente su
+   entrambi i bracci; condizionale NON eseguita (t3) = exit 0 —
+   un'implementazione lowering-only che fatala t3 è REJECT.
+
 ### 3.5 INI table parziale (filone ext/session, 2026-07-12)
 La tabella INI (`vm/ini.rs`) registra solo le direttive modellate: 31 `session.*`
 (+ `session.trans_sid_tags`/`hosts`, esenti dal freeze headers-sent e dal listing
