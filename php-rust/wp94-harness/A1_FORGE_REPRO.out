@@ -1,0 +1,51 @@
+A1_FORGE_REPRO: i tre canali Klabnik RIPRODOTTI A MACCHINA prima della cura (S-94.0 A1)
+grade=VERDICT  # riproduzione di comportamento: rc esatto + riga terminale, non una stima
+formato=ascii-nudo  # A-BG66
+head-al-momento-della-riproduzione=fc12992361e6
+giudice-pristino=php-rust/wp81-harness/gate-measure-cifre.sh blob 2f37f386d153d6ea
+bash=3.2.57(1)-release arm64-apple-darwin25
+esca=php-rust/wp94-harness/A1_BAIT.md (UNCOMMITTED, una cifra legata) — rimossa a fine prova
+patch-del-testo=perl -pe 's/\$all_rc = 1;//g if /UNCOMMITTED/'  # 2 righe cambiate: rende NON FATALE il dente di perimetro
+
+== controllo positivo: il giudice PRISTINO boccia ==
+cmd=bash wp81-harness/gate-measure-cifre.sh --all
+rc=1  righe-UNCOMMITTED=1
+
+== F-K2 — bash -c + BASH_SOURCE iniettato ==
+cmd=BASH_SOURCE="$SELF" bash -c "$(cat patched.sh)" "$SELF" --all
+rc=0  righe-REFUSE=0
+riga-terminale=PASS gate-measure-cifre --all (A-SK64/A-SK-67): manifest perimeter, bidirectional, authorities from HEAD [judge_sha=2f37f386d153d6ea manifest_sha=1888d41e1db49f50 budget_sha=306303af9563b4df revs_sha=7797b9d7ebd5b880 head=fc12992361e6]
+lettura=PASS verdict-grade rc=0 FIRMATO col judge_sha PRISTINO mentre gira testo PATCHATO
+primitiva=bash 3.2 esporta BASH_SOURCE come SCALARE (declare -x): la guardia A-SK-82
+  confrontava la stringa del chiamante con se stessa e concordava
+
+== F-K3/K4 — symlink + risoluzione LOGICA (riprodotto END-TO-END, prima volta) ==
+setup=ln -s <scratchpad>/fake/x php-rust/wp81-harness/L ; <scratchpad>/fake/gate-measure-cifre.sh = copia PATCHATA
+cmd=bash "$REPO/wp81-harness/L/../gate-measure-cifre.sh" --all
+kernel-legge=<scratchpad>/fake/gate-measure-cifre.sh (PATCHATA)
+rc=0  righe-REFUSE-o-NOTE=0
+riga-terminale=PASS gate-measure-cifre --all (…) [judge_sha=2f37f386d153d6ea … head=fc12992361e6]
+lettura=`cd`/`pwd` LOGICI collassano L/.. lessicalmente sulla dir pristina: SELF_ABS nomina il
+  file pristino, il kernel ne legge un altro. (Il relatore team-cifre lo aveva dichiarato NON
+  riprodotto end-to-end: qui lo e.)
+
+== F-K7 — BASH_ENV + funzione git esportata ==
+setup=evil.sh definisce git() che ingoia `ls-files` ed esporta la funzione
+cmd=BASH_ENV=evil.sh bash "$SELF" --all
+rc=0  righe-UNCOMMITTED=0
+lettura=testo PRISTINO, AMBIENTE del chiamante: l'esca non viene nemmeno vista
+
+== primitive della cura, verificate a macchina ==
+bash -p con BASH_ENV + funzione esportata: SHELLOPTS contiene privileged, declare -F VUOTO
+  => ne il file di startup ne le funzioni ereditate entrano (canale F-K7 chiuso)
+bash normale con funzione esportata: declare -F = "declare -fx g"  => canale APERTO
+bash -c con BASH_SOURCE iniettata: declare -x BASH_SOURCE="…"  => A-SK-88 discrimina
+bash -c nudo: declare -a BASH_SOURCE='()' => ${BASH_SOURCE[0]:-} vuoto, guardia A-SK-82
+
+== dopo la cura (stesso HEAD di lavoro, giudice curato NON ancora committato) ==
+F-K2  rc=1  riga-1=REFUSE … BASH_SOURCE is not a genuine array … (A-SK-88/KS-SK-95-1)   PASS--all=0
+F-K3  rc=1  riga-2=FAIL … not in a git repo (il re-exec riparte dal file FISICO, fuori repo)  PASS--all=0
+F-K7  advisory: il curato supera il primo `git` (la funzione NON e importata), lo strippato
+  muore su "not in a git repo" => canale chiuso dal re-exec, non dal testo
+nota=le tre righe qui sopra sono lo SCREEN pre-commit; la ricevuta verdict-grade e il
+  --selftest (denti T24/T25/T26, rc esatti + morso sul giudice pre-WP-95) a giudice COMMITTATO

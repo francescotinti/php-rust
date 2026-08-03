@@ -55,23 +55,73 @@
 # repeated as permanent teeth.
 export PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin:$PATH
 set -u
-# A-SK-82-GUARD (Council WP-94, Klabnik forge — KS-SK-94-1): the caller
-# CHOOSES $0. `bash -c "$(cat patched-judge)" /path/to/pristine-judge --all`
-# runs the PATCHED text while $0 names the pristine HEAD blob: A-SK-78
-# hashed a namesake again, one level up (the door was closed, the window
-# left open). BASH_SOURCE[0] is bash's own record of the FILE it is
-# reading: empty under `bash -c` (no file is read), and != $0 when this
-# script is sourced from another. REFUSE both, in EVERY mode — an identity
-# that cannot be established is not an advisory identity either. Every
-# $0-derived path below (HERE, SELF_ABS) is legitimate ONLY because this
-# guard has already proved $0 == the file bash reads.
+# A-SK-82-GUARD (Council WP-94 → WP-95: A-SK-88/89/90, KS-SK-95-1..4).
+# A-SK-82 tethered BASH_SOURCE[0] to $0 and was AGGIRATA: all three Klabnik
+# channels were reproduced at HEAD fc12992 (wp94-harness/A1_FORGE_REPRO.out),
+# each printing a verdict-grade `PASS --all` rc=0 signed with the PRISTINE
+# judge_sha while the kernel ran PATCHED text or a hijacked environment:
+#   F-K2  `BASH_SOURCE=$SELF bash -c "$(cat patched)" $SELF --all`
+#         (bash 3.2 exports BASH_SOURCE as a SCALAR: both sides of the old
+#          test are the SAME caller-chosen string, so the tether agreed)
+#   F-K3/4 `bash "$REPO/wp81-harness/L/../gate-measure-cifre.sh" --all` with
+#         L a symlink out of the repo: LOGICAL `cd`/`pwd` collapse `L/..`
+#         lexically onto the pristine dir while the kernel reads through
+#   F-K7  `BASH_ENV=evil bash judge --all` with an exported `git` function:
+#         the text is pristine, the ENVIRONMENT is the caller's
+# The class of the defect is one, not three: the judge authenticated STRINGS
+# the caller chooses and ran inside an ENVIRONMENT the caller chooses. So is
+# the cure — re-establish a sanitized context anchored on the PHYSICAL self,
+# as the first executable act, before git/perl/HERE or any other read.
+#
+# A-SK-88 — BASH_SOURCE must be a genuine ARRAY. An exported scalar is an
+#   env injection, never bash's record of the file it reads: REFUSE by name.
+# A-SK-89 — the self path is PHYSICAL (`cd -P`/`pwd -P`), so it names the
+#   file the kernel opens; logical resolution names a namesake (F-K3/4).
+# A-SK-90 — sanitizing re-exec through `bash -p`, which is what closes F-K7
+#   (verified on this machine: an exported function IS imported by plain
+#   `bash` and is NOT under `bash -p`). The anti-loop marker is NOT an env
+#   var the caller may pre-set to skip the re-exec — that would be the same
+#   defect one level up. The marker is the SANITIZED STATE ITSELF, which
+#   cannot be asserted without actually holding it: privileged on, no
+#   inherited functions, no BASH_ENV/ENV, self already physical. The depth
+#   counter is fail-CLOSED: pre-setting it buys a REFUSE, never a skip.
+BS_DECL="$(declare -p BASH_SOURCE 2>/dev/null || true)"
+case "$BS_DECL" in
+  "declare -a "*) ;;
+  *) echo "REFUSE gate-measure-cifre: BASH_SOURCE is not a genuine array (declare says '${BS_DECL%%=*}') — an exported scalar is an ENV INJECTION under \`bash -c\`, never bash's record of the file it READS (A-SK-88/KS-SK-95-1)"; exit 1;;
+esac
 SELF_SRC="${BASH_SOURCE[0]:-}"
 if [ -z "$SELF_SRC" ] || [ "$SELF_SRC" != "$0" ]; then
-  echo "REFUSE gate-measure-cifre: BASH_SOURCE[0]='$SELF_SRC' != \$0='$0' (empty = bash -c channel) — the tether must hash the file bash READS, never the name the caller supplies (A-SK-82/KS-SK-94-1)"
+  echo "REFUSE gate-measure-cifre: BASH_SOURCE[0]='$SELF_SRC' != \$0='$0' (empty = bash -c channel) — the tether must hash the file bash READS, never the name the caller supplies (A-SK-82/A-SK-88/KS-SK-95-1)"
   exit 1
 fi
+SELF_DIR_PHYS="$(cd -P "$(dirname -- "$SELF_SRC")" 2>/dev/null && pwd -P)" || SELF_DIR_PHYS=""
+if [ -z "$SELF_DIR_PHYS" ] || [ ! -f "$SELF_DIR_PHYS/$(basename -- "$SELF_SRC")" ]; then
+  echo "REFUSE gate-measure-cifre: cannot resolve the PHYSICAL self of '$SELF_SRC' — a judge that cannot name the file the kernel opened cannot tether it (A-SK-89/KS-SK-95-2)"; exit 1
+fi
+SELF_PHYS="$SELF_DIR_PHYS/$(basename -- "$SELF_SRC")"
+GATE_SANE=1
+case ":${SHELLOPTS:-}:" in *:privileged:*) ;; *) GATE_SANE=0;; esac
+[ -z "${BASH_ENV:-}" ] || GATE_SANE=0
+[ -z "${ENV:-}" ] || GATE_SANE=0
+[ -z "$(declare -F)" ] || GATE_SANE=0
+[ "$SELF_SRC" = "$SELF_PHYS" ] || GATE_SANE=0
+if [ "$GATE_SANE" != 1 ]; then
+  if [ "${PHPR_GATE_REEXEC_DEPTH:-0}" != 0 ]; then
+    echo "REFUSE gate-measure-cifre: execution context STILL unsanitized after the re-exec (privileged/BASH_ENV/ENV/inherited-functions/physical-self) — fail-closed: the marker is the STATE, never an env var the caller may pre-set (A-SK-90/KS-SK-95-1)"; exit 1
+  fi
+  PHPR_GATE_REEXEC_DEPTH=1; export PHPR_GATE_REEXEC_DEPTH
+  exec /usr/bin/env -u BASH_ENV -u ENV -u SHELLOPTS -u BASHOPTS -u CDPATH -u GLOBIGNORE /bin/bash -p "$SELF_PHYS" ${@+"$@"}
+fi
+# The depth counter is consumed here, never inherited: the teeth run copies
+# of this judge as CHILDREN, and an inherited depth=1 would fail-close them
+# before their own re-exec (the counter is per-process, like the state it
+# guards).
+unset PHPR_GATE_REEXEC_DEPTH
 # A-SK-82-GUARD-END
-HERE="$(cd "$(dirname "$0")" && pwd)"
+# (`${SELF_DIR_PHYS:-...}`: the T23 arm-b bite strips the whole guard region,
+# and a stripped copy must still run far enough to prove the forge is real)
+HERE="${SELF_DIR_PHYS:-$(cd -P "$(dirname -- "$0")" && pwd -P)}"
 ROOT="$(git -C "$HERE" rev-parse --show-toplevel)" || { echo "FAIL gate-measure-cifre: not in a git repo (A-SK55/A-SK-67 need HEAD)"; exit 1; }
 MOUT="$HERE/../wp78-harness/measure-out"
 MANIFEST_REL="php-rust/wp81-harness/gate-cifre-manifest.tsv"
@@ -99,7 +149,7 @@ if [ "${1:-}" = "--all" ]; then MODE=all; fi
 # mismatch is a NOTE (an advisory result is never verdict-grade anyway).
 # ($0 can be relative: hash the ABSOLUTE self path — `git -C` would resolve
 # a relative $0 against ROOT, yielding an empty sha and a vacuous tether)
-SELF_ABS="$HERE/$(basename "$0")"
+SELF_ABS="${SELF_PHYS:-$HERE/$(basename -- "$0")}"
 RUN_SHA=$(git -C "$ROOT" hash-object -- "$SELF_ABS" 2>/dev/null)
 JHEAD_SHA=$(git -C "$ROOT" rev-parse -q --verify "HEAD:$JUDGE_REL" 2>/dev/null)
 if [ -z "$JHEAD_SHA" ]; then
@@ -443,8 +493,71 @@ if [ "${1:-}" = "--selftest" ]; then
   if [ "$T23RC2" != 64 ]; then
     echo "SELFTEST FAIL: guard-stripped judge via bash -c did NOT would-have-passed (rc=$T23RC2, want 64) — T23 bite is vacuous, the forge no longer reproduces"; rm -rf "$TMP"; exit 1
   fi
+  # ── A-SK-91 (Council WP-95): the tether is proved on BEHAVIOUR, on all
+  # THREE channels, at the EXACT rc. Each tooth carries its own BITE: the
+  # pre-WP-95 judge (guard region stripped, `cd -P`/`pwd -P` back to
+  # logical) must still ESCALATE through the channel, or arm (a) is
+  # denying something that no longer happens. All three were reproduced at
+  # HEAD fc12992 before the cure — wp94-harness/A1_FORGE_REPRO.out.
+  PRE95="$TMP/pre95.sh"
+  perl -ne 'print unless /A-SK-82-GUARD/../A-SK-82-GUARD-END/' "$SELF_ABS" \
+    | perl -pe 's/cd -P /cd /g; s/pwd -P/pwd/g' > "$PRE95"
+  # T24 — channel F-K2: `BASH_SOURCE=<pristine> bash -c "$(cat patched)"
+  # <pristine> --all`. bash 3.2 exports BASH_SOURCE as a SCALAR, so the old
+  # A-SK-82 test compared the caller's string with itself and agreed.
+  T24OUT=$(BASH_SOURCE="$SELF_ABS" bash -c "$(cat "$SELF_ABS")" "$SELF_ABS" --all 2>&1); T24RC=$?
+  if [ "$T24RC" != 1 ] || ! printf '%s\n' "$T24OUT" | grep -q 'A-SK-88'; then
+    echo "SELFTEST FAIL: F-K2 channel (BASH_SOURCE injected as a scalar) not refused by NAME (rc=$T24RC, want 1 + A-SK-88) — KS-SK-95-1"; rm -rf "$TMP"; exit 1
+  fi
+  if printf '%s\n' "$T24OUT" | grep -q '^PASS gate-measure-cifre --all'; then
+    echo "SELFTEST FAIL: F-K2 channel still produced a signed verdict-grade PASS — KS-SK-95-1"; rm -rf "$TMP"; exit 1
+  fi
+  # T24 bite: the pre-WP-95 judge, perimeter tooth patched out, with an
+  # UNCOMMITTED forge doc planted, must reach rc=0 AND print the signed
+  # `PASS --all` — the escalation arm (a) denies.
+  T24FORGE="$TMP/t24-forge.sh"
+  perl -pe 's/\$all_rc = 1;//g if /UNCOMMITTED/' "$PRE95" > "$T24FORGE"
+  T24DOC="$ROOT/php-rust/sessions/zzforge-t24.md"
+  echo "cifra fuori perimetro: il picco era 123458 B, fidatevi" > "$T24DOC"
+  T24OUT2=$(BASH_SOURCE="$SELF_ABS" bash -c "$(cat "$T24FORGE")" "$SELF_ABS" --all 2>&1); T24RC2=$?
+  rm -f "$T24DOC"
+  if [ "$T24RC2" != 0 ] || ! printf '%s\n' "$T24OUT2" | grep -q '^PASS gate-measure-cifre --all'; then
+    echo "SELFTEST FAIL: the F-K2 escalation no longer reproduces on the pre-WP-95 judge (rc=$T24RC2, want 0 + signed PASS) — T24 arm (a) would be vacuous"; rm -rf "$TMP"; exit 1
+  fi
+  # T25 — channel F-K3/K4: a symlink whose LOGICAL `L/..` collapses onto the
+  # pristine directory while the kernel reads the patched file through it.
+  T25FAKE="$TMP/fake"; mkdir -p "$T25FAKE/sub"
+  T25LINK="$HERE/zzforge-L-t25"; rm -f "$T25LINK"; ln -s "$T25FAKE/sub" "$T25LINK"
+  perl -pe 's/\$all_rc = 1;//g if /UNCOMMITTED/' "$SELF_ABS" > "$T25FAKE/gate-measure-cifre.sh"
+  T25OUT=$(bash "$T25LINK/../gate-measure-cifre.sh" --all 2>&1); T25RC=$?
+  if [ "$T25RC" != 1 ] || printf '%s\n' "$T25OUT" | grep -q '^PASS gate-measure-cifre --all'; then
+    rm -f "$T25LINK"; echo "SELFTEST FAIL: F-K3/K4 channel (symlink, logical collapse) not refused (rc=$T25RC, want 1, no signed PASS) — KS-SK-95-2"; rm -rf "$TMP"; exit 1
+  fi
+  # T25 bite: the pre-WP-95 judge read through the SAME link must run as if
+  # it were the pristine file — advisory rc=64 with NO A-SK-78 note, i.e.
+  # the tether hashed the namesake instead of the file the kernel opened.
+  cp "$PRE95" "$T25FAKE/gate-measure-cifre.sh"
+  T25OUT2=$(bash "$T25LINK/../gate-measure-cifre.sh" "$TMP/baseline.md" 2>&1); T25RC2=$?
+  rm -f "$T25LINK"
+  if [ "$T25RC2" != 64 ] || printf '%s\n' "$T25OUT2" | grep -q 'A-SK-78'; then
+    echo "SELFTEST FAIL: the F-K3/K4 namesake no longer reproduces on the pre-WP-95 judge (rc=$T25RC2, want 64 with no A-SK-78 note) — T25 arm (a) would be vacuous"; rm -rf "$TMP"; exit 1
+  fi
+  # T26 — channel F-K7: the text is pristine, the ENVIRONMENT is the
+  # caller's. A `git` function that always fails is the probe: inherited,
+  # the judge dies at its first `git`; under the sanitizing re-exec
+  # (`bash -p`) it is never imported and the judge runs for real.
+  T26ENV="$TMP/t26-hostile.sh"
+  printf 'git() { return 1; }\nexport -f git\n' > "$T26ENV"
+  T26OUT=$(BASH_ENV="$T26ENV" bash "$SELF_ABS" "$TMP/baseline.md" 2>&1); T26RC=$?
+  if [ "$T26RC" != 64 ]; then
+    echo "SELFTEST FAIL: F-K7 channel (BASH_ENV + exported git function) subverted the CURED judge (rc=$T26RC, want 64) — KS-SK-95-1"; rm -rf "$TMP"; exit 1
+  fi
+  T26OUT2=$(BASH_ENV="$T26ENV" bash "$PRE95" "$TMP/baseline.md" 2>&1); T26RC2=$?
+  if [ "$T26RC2" != 1 ] || ! printf '%s\n' "$T26OUT2" | grep -q 'not in a git repo'; then
+    echo "SELFTEST FAIL: the F-K7 hijack no longer reproduces on the pre-WP-95 judge (rc=$T26RC2, want 1 + 'not in a git repo') — T26 arm (a) would be vacuous"; rm -rf "$TMP"; exit 1
+  fi
   rm -rf "$TMP"
-  echo "SELFTEST PASS: KG-83-3 smuggle + A-SK40 companions + A-SK55 committed-only + A-SK60 provenance (positive+bite) + A-SK62 every-token + A-SK63 manifest graces + A-SK65 env-cache ignored + A-SK53-bis window + A-SK-67 HEAD-authorities (budget tamper, forge-a manifest row) + A-SK-69 strict prov (forge-b: cross-file, non-minus operator, address-range, positive same-file) + A-SK-70 cache abolished (forge-c) + A-SK-71 perimeter (forge-d) + A-SK-72 ledger-proved supersession (.out optional) + A-SK-73 pool=corpus + A-SK-74 named-rev identities (forge F1, T18+control) + A-SK-75 ALLOW-as-authority, 2.8/46.25 revoked (forge F2, T19) + A-SK-76 glued-run refused (forge F3, T20) + A-SK-77 budget-history out of corpus (forge F4, T21+control) + A-SK-78 self-tether (forge F6, T17) + A-SK-79 exit-code grades (every tooth rc-exact) + A-SK-80 complement perimeter + A-SK-81 labeled prov operands (forge F5, T22) + A-SK-82 BASH_SOURCE tether (WP-94 forge, T23 arm-a REFUSE + arm-b bite-of-the-stripped-copy) all bite"
+  echo "SELFTEST PASS: KG-83-3 smuggle + A-SK40 companions + A-SK55 committed-only + A-SK60 provenance (positive+bite) + A-SK62 every-token + A-SK63 manifest graces + A-SK65 env-cache ignored + A-SK53-bis window + A-SK-67 HEAD-authorities (budget tamper, forge-a manifest row) + A-SK-69 strict prov (forge-b: cross-file, non-minus operator, address-range, positive same-file) + A-SK-70 cache abolished (forge-c) + A-SK-71 perimeter (forge-d) + A-SK-72 ledger-proved supersession (.out optional) + A-SK-73 pool=corpus + A-SK-74 named-rev identities (forge F1, T18+control) + A-SK-75 ALLOW-as-authority, 2.8/46.25 revoked (forge F2, T19) + A-SK-76 glued-run refused (forge F3, T20) + A-SK-77 budget-history out of corpus (forge F4, T21+control) + A-SK-78 self-tether (forge F6, T17) + A-SK-79 exit-code grades (every tooth rc-exact) + A-SK-80 complement perimeter + A-SK-81 labeled prov operands (forge F5, T22) + A-SK-82 BASH_SOURCE tether (WP-94 forge, T23 arm-a REFUSE + arm-b bite-of-the-stripped-copy) + A-SK-88/89/90 sanitizing re-exec on the PHYSICAL self, proved by A-SK-91 on all three WP-95 channels (T24 bash -c + injected BASH_SOURCE, T25 symlink + logical collapse, T26 BASH_ENV + exported functions), each with the escalation reproduced on the pre-WP-95 judge, all bite"
   exit 0
 fi
 
