@@ -6,3 +6,4 @@
 # di uno sha40 elencato qui (riga rev=<sha40>, letta da HEAD — A-SK-67).
 # Ogni riga è un'AUTORITÀ dichiarata per NOME: «non è una misura».
 rev=6910767e179108b6b92c0f241f16a4a6f3fd7741 baseline WP-80 (WP_SESSION_80/81, driver MEASURE80)
+rev=92952364c45e21e7d1f4c13712faeaab4ac62c42 commit p4/strumento S-92.0 (WP_SESSION_92 — prefisso corto tutto-decimale)
