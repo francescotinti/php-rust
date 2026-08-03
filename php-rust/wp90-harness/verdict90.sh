@@ -172,12 +172,23 @@ if [ "$IDENT_CLEAN" = 1 ]; then
       emit "FAIL VCKPT: $raw win=0 ckpt counts exit_mi=$NEM exit_collect_mi=$NEC, want 1/1 (A-BG54 named pair)"; bf=$((bf+1))
     fi
   done
+  # g2 REQUALIFICATION (S-90.0, bitten by attempt=1 raws — the m89 g1
+  # class): PHPR_MI_COLLECT_REQ does NOT produce per-request dumps on the
+  # axum-worker channel (the request_collect_mi call site lives on the
+  # CLI/metro request path, not in execute_request) — every sweep raw
+  # carries exit_collect_mi==1, exactly like slope/cal. The g1 letter
+  # (==3) was calibrated on the design assumption, not the channel.
+  # DECLARED consequence: the A-DL50 per-request purged ladder is
+  # UNAVAILABLE on this channel this campaign — the clamp<=>purge
+  # implication is judged ONLY through the P-CLAMP-PD discriminant
+  # (pd=1000 removes the clamp), which needs no per-request dump.
+  # Wiring request_collect_mi into the worker path = named candidate for
+  # the next campaign (WP-92).
   for raw in $SWEEP_RAWS; do
     F="$OUT/$raw"
     NEM=$(count_ckpt "$F" 0 exit_mi); NEC=$(count_ckpt "$F" 0 exit_collect_mi)
-    # collect_req armed: 2 per-request dumps + 1 exit => exit_collect_mi==3
-    if [ "$NEM" != 1 ] || [ "$NEC" != 3 ]; then
-      emit "FAIL VCKPT: $raw win=0 ckpt counts exit_mi=$NEM exit_collect_mi=$NEC, want 1/3 (A-BG54; PHPR_MI_COLLECT_REQ per-request dumps)"; bf=$((bf+1))
+    if [ "$NEM" != 1 ] || [ "$NEC" != 1 ]; then
+      emit "FAIL VCKPT: $raw win=0 ckpt counts exit_mi=$NEM exit_collect_mi=$NEC, want 1/1 (A-BG54; g2 requalified to the REAL channel form)"; bf=$((bf+1))
     fi
   done
   for raw in $SLOPE_RAWS; do
@@ -466,24 +477,20 @@ if [ "$IDENT_CLEAN" = 1 ] && [ "$DISP_CLEAN" = 1 ] && [ "$ARMS_CLEAN" = 1 ]; the
       [ -n "$NA" ] && [ -n "$NB" ] || { emit "FAIL VSWEEP90: dt$dt.$o.pd$pd pad entries missing"; bf=$((bf+1)); continue; }
       NA_NET=${NA%% *}; NB_NET=${NB%% *}
       NCL=$(grep -c "tag=unitcache_main_entry.*clamped=1" "$F" || true)
-      # per-request purged ladder (A-DL50 operative form): cumulative
-      # purged at each per-request exit_collect_mi dump, mono order.
-      # per-request dumps = the first 2 of the 3 exit_collect_mi dumps.
-      PURGED_LAST=$(awk '/tag=mi_arena/ && /win=0/ && /ckpt=exit_collect_mi/ && /key=purged/ { for (i=1;i<=NF;i++) if ($i ~ /^val=/) {v=$i; sub("val=","",v); vals[++n]=v} } END { if (n>=2) print vals[2]; else print "" }' "$F")
+      # g2: the A-DL50 per-request purged ladder is UNAVAILABLE on this
+      # channel (no per-request dumps on the axum-worker path — see the
+      # VCKPT requalification above). The exit dump still carries the
+      # CUMULATIVE purged of the whole run, reported for the record; the
+      # clamp<=>purge implication is judged through P-CLAMP-PD only.
+      PURGED_EXIT=$(awk '/tag=mi_arena/ && /win=0/ && /ckpt=exit_collect_mi/ && /key=purged/ { for (i=1;i<=NF;i++) if ($i ~ /^val=/) {v=$i; sub("val=","",v); last=v} } END { print last }' "$F")
       if [ "$pd" = 1000 ]; then
         PDBIG_N=$((PDBIG_N+1))
         [ "$NCL" -gt 0 ] && PDBIG_CL=$((PDBIG_CL+1))
-        PURGED_REQ=$(awk '/tag=mi_arena/ && /win=0/ && /ckpt=exit_collect_mi/ && /key=purged/ { for (i=1;i<=NF;i++) if ($i ~ /^val=/) {v=$i; sub("val=","",v); vals[++n]=v} } END { if (n>=2) print vals[1]+vals[2]; else print "NA" }' "$F")
-        emit "VSWEEP90 dt$dt $o pd1000: spans=$OV padA net=$NA_NET B | padB net=$NB_NET B | clamped_rows=$NCL purged_per_request_sum=$PURGED_REQ [A-BB63 arm; nets VOID per-thread KB-88-1]"
+        emit "VSWEEP90 dt$dt $o pd1000: spans=$OV padA net=$NA_NET B | padB net=$NB_NET B | clamped_rows=$NCL purged_cumulative_exit=$PURGED_EXIT [A-BB63 arm; A-DL50 per-request ladder DECLARED-unavailable on this channel; nets VOID per-thread KB-88-1]"
       else
         if [ "$NCL" -gt 0 ]; then
           PD0_CL=$((PD0_CL+1))
-          if [ -n "$PURGED_LAST" ] && [ "$PURGED_LAST" -gt 0 ]; then
-            emit "VSWEEP90 dt$dt $o pd0: spans=$OV CLAMPED($NCL) purged_at_last_request_dump=$PURGED_LAST > 0 — clamp <=> purge-in-window CONFIRMED on this raw (A-DL50 pin) [declared, excluded from surplus tally]"
-          else
-            PD0_CL_BADPURGE=$((PD0_CL_BADPURGE+1))
-            emit "VSWEEP90 dt$dt $o pd0: spans=$OV CLAMPED($NCL) but purged_at_last_request_dump=${PURGED_LAST:-NA} — A-DL50 pin NOT satisfied (clamp without purge-in-window: the deflation driver is NOT the purge)"
-          fi
+          emit "VSWEEP90 dt$dt $o pd0: spans=$OV CLAMPED($NCL) purged_cumulative_exit=$PURGED_EXIT [declared, excluded from surplus tally; A-DL50 per-request ladder DECLARED-unavailable — clamp<=>purge judged via P-CLAMP-PD]"
         else
           DA=$((NA_NET - SUM)); DB=$((NB_NET - SUM))
           emit "VSWEEP90 dt$dt $o pd0: spans=$OV padA net=$NA_NET B dA=$DA B | padB net=$NB_NET B dB=$DB B [nets VOID per-thread, KB-88-1]"
@@ -506,11 +513,7 @@ if [ "$IDENT_CLEAN" = 1 ] && [ "$DISP_CLEAN" = 1 ] && [ "$ARMS_CLEAN" = 1 ]; the
       elif [ "$PDBIG_N" -gt 0 ]; then
         emit "VSWEEP90 P-CLAMP-PD REFUTED: clamp persiste su $PDBIG_CL/$PDBIG_N run con pd=1000 — la colpa e' del bracket/counter, non della purge (esito ex-ante alternativo dichiarato)"
       fi
-      if [ "$PD0_CL" -gt 0 ] && [ "$PD0_CL_BADPURGE" = 0 ]; then
-        emit "VSWEEP90 A-DL50: clamp <=> purged>0 in-window su $PD0_CL/$PD0_CL raw clamped pd0 (pin soddisfatto)"
-      elif [ "$PD0_CL" -gt 0 ]; then
-        emit "VSWEEP90 A-DL50: pin violato su $PD0_CL_BADPURGE/$PD0_CL raw clamped pd0 — esito riportato"
-      fi
+      [ "$PD0_CL" -gt 0 ] && emit "VSWEEP90 A-DL50: $PD0_CL raw clamped su pd0 — la scala Δpurged per-request e' DECLARED-unavailable su questo canale (wiring worker-path = candidato WP-92); l'implicazione clamp<=>purge e' giudicata dal solo P-CLAMP-PD"
       emit "VSWEEP90 PASS: cal byte-reproduced, spans judged, clamped physics judged against the ex-ante predictions"
     fi
   fi

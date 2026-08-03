@@ -37,3 +37,4 @@ attempt_epoch=1785747844 git=bb4b388 campaign_sha=aa37730264fcf2fe attempt=1 pha
 attempt_epoch=1785747846 git=bb4b388 campaign_sha=aa37730264fcf2fe attempt=1 phase=sweep.dt5.afirst.pd1000 raw=m90.sweep.dt5.afirst.pd1000.a1.memcensus esito=ok dt_ms=5 first=a pd=1000
 attempt_epoch=1785747847 git=bb4b388 campaign_sha=aa37730264fcf2fe attempt=1 phase=sweep.dt5.bfirst.pd1000 raw=m90.sweep.dt5.bfirst.pd1000.a1.memcensus esito=ok dt_ms=5 first=b pd=1000
 attempt_epoch=1785747847 git=bb4b388 campaign_sha=aa37730264fcf2fe attempt=1 phase=done esito=ok
+attempt_epoch=1785748022 git=5d3ec7b attempt=1 phase=verdict generation=g1 judge_sha=1b1e9e96f5019bc0 esito=FAIL fails=13 verdict_file=verdict90.a1.g1.out reason=see-verdict-file supersede_of=none
