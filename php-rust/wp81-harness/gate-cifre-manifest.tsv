@@ -178,6 +178,7 @@ php-rust/wp91-harness/design91-ledger.md	-	no	no	-
 php-rust/wp91-harness/design91.md	-	no	no	-
 php-rust/sessions/WP_SESSION_91.md	-	yes	no	-
 php-rust/wp93-harness/COUNCIL_WP93_REVIEWS.md	-	no	no	-
+php-rust/wp93-harness/GIUDIZIO_C_AXUM.md	-	no	no	-
 # --- A-SK-80 (Concilio WP-93, Klabnik): PERIMETRO PER COMPLEMENTO ---
 # Ogni .md committato sotto php-rust/ esige una riga. Le 87 righe qui
 # sotto sono ESCLUSIONI DICHIARATE per NOME (judge=no): archivi storici
