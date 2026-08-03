@@ -90,4 +90,6 @@ protocollo).
 
 ## ⚖️ Concilio WP-94 (eseguito in chiusura, verbali VINCOLANTI)
 
-Vedi `wp94-harness/COUNCIL_WP94_REVIEWS.md` (§Sintesi = ordine S-93.0).
+Vedi `wp94-harness/COUNCIL_WP94_REVIEWS.md` (§Sintesi = ordine S-93.0):
+9 sedie CON EMENDAMENTI, UNDICI refutazioni capitali in cinque classi,
+22 KS nuovi; **S-92.0 consumabile SOLO in ADVISORY** (condizioni C1-C6).
