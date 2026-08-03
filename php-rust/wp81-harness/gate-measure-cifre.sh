@@ -177,6 +177,19 @@ if [ "${1:-}" = "--selftest" ]; then
   if bash "$0" "$TMP/t10b.md" >/dev/null 2>&1; then
     echo "SELFTEST FAIL: provenance derivata legalized a WRONG value (A-SK60)"; rm -rf "$TMP"; exit 1
   fi
+  # T12 — A-SK66: citing a NON-max generation without naming the
+  # supersession on the line must FAIL; the same citation WITH the
+  # supersession named must not add a miss (checked via max-gen cite).
+  cp "$TMP/baseline.md" "$TMP/t12.md"
+  echo "verdetto: verdict89.a1.g1.out dice la verita, fidatevi" >> "$TMP/t12.md"
+  if bash "$0" "$TMP/t12.md" >/dev/null 2>&1; then
+    echo "SELFTEST FAIL: NON-max generation citation NOT caught (A-SK66/KS-SK-91-4)"; rm -rf "$TMP"; exit 1
+  fi
+  cp "$TMP/baseline.md" "$TMP/t12b.md"
+  echo "storia: verdict89.a1.g1.out superseded da g3, ledgerato" >> "$TMP/t12b.md"
+  if ! bash "$0" "$TMP/t12b.md" >/dev/null 2>&1; then
+    echo "SELFTEST FAIL: max-gen-declared supersession citation wrongly refused (A-SK66)"; rm -rf "$TMP"; exit 1
+  fi
   # T11 — A-SK61: the corpus cardinality budget must bite (tamper the
   # budget below the real cardinality, expect FAIL, restore).
   BUDGET_FILE="$HERE/gate-cifre-corpus.budget"
@@ -288,6 +301,27 @@ push @sources, committed_glob("$mout/*85*.summary"), committed_glob("$mout/*85*.
                committed_glob("$here/../wp85-harness/evidence/*");
 push @sources, committed_glob("$here/evidence/*");
 die "gate-measure-cifre: EMPTY corpus (no committed sources found)\n" unless @sources;
+# A-SK66 (Council WP-91, Klabnik — the gG hole made LATENT-proof): for
+# every per-generation verdict family verdict<NN>.a<A>.g<G>.out only the
+# MAX generation stays in the corpus — figures of FAILed/superseded
+# judges must not legalize doc tokens.
+my %gen_max;   # "dir|NN|A" -> max G (needed again for the citation tooth)
+for my $s (@sources) {
+  if ($s =~ m{^(.*/)verdict(\d+)\.a(\d+)\.g(\d+)\.out$}) {
+    my ($k, $g) = ("$1|$2|$3", $4);
+    $gen_max{$k} = $g if !exists $gen_max{$k} || $g > $gen_max{$k};
+  }
+}
+@sources = grep {
+  !(m{^(.*/)verdict(\d+)\.a(\d+)\.g(\d+)\.out$} && $4 < $gen_max{"$1|$2|$3"})
+} @sources;
+# citation map for the target scan (keyed WITHOUT dir: docs cite by name)
+my %cite_max;
+for my $k (keys %gen_max) {
+  my (undef, $nn, $a) = split /\|/, $k;
+  my $ck = "$nn|$a";
+  $cite_max{$ck} = $gen_max{$k} if !exists $cite_max{$ck} || $gen_max{$k} > $cite_max{$ck};
+}
 my (%corpus, %corpus_count);
 # A-SK65 (Council WP-91, Klabnik): corpus cache ONLY via argv + parent
 # nonce — the env var GATE_CIFRE_CORPUS_CACHE is DEAD and IGNORED (it was
@@ -444,6 +478,21 @@ while (my $line = <$fh>) {
   my %companion_ok;   # per-line: VERIFIED companion figures (the "X MiB"
                       # halves) — machine-recomputable, exempt in A-SK62;
                       # the BYTE halves stay corpus-bound (A-SK56).
+  # A-SK66 citation tooth (Council WP-91): naming a NON-max generation
+  # verdict file without declaring the supersession on the same line, or
+  # naming an uncommitted generation, is never verdict-grade
+  # (KS-SK-91-4/KS-AH-91-2).
+  while ($line =~ /verdict(\d+)\.a(\d+)\.g(\d+)\.out/g) {
+    my ($nn, $a, $g) = ($1, $2, $3);
+    my $mx = $cite_max{"$nn|$a"};
+    if (!defined $mx) {
+      push @miss, "line $ln: cites verdict$nn.a$a.g$g.out but NO committed generation exists for that family (A-SK66/KS-SK-91-4): $line";
+    } elsif ($g < $mx && $line !~ /supersed|judge-unrecoverable/i) {
+      push @miss, "line $ln: cites NON-max generation g$g (max committed g$mx) without naming the supersession on the line (A-SK66/KS-SK-91-4): $line";
+    } elsif ($g > $mx) {
+      push @miss, "line $ln: cites generation g$g NOT committed for that family (max g$mx) (A-SK66): $line";
+    }
+  }
   if ($bytes_first) {
     # (1) verified pairs "N B = X <unit>": check numerically, then blank out
     while ($work =~ /((\d[\d.,]*)\s*B\s*=\s*(\d[\d.,]*)\s*([KMGTkmgt])(i?)[Bb]\b)/) {

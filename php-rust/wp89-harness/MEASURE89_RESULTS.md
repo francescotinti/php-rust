@@ -14,7 +14,14 @@ VERIFICATO; banda KL-85-2 RITIRATA (KB-90-2): nessun confronto di banda.
 - git campagna: ed427f4 · **attempt=1 PULITO** (nessun VOID in-run; le
   due generazioni di giudice rifiutate — g1 FAIL su regime clamped
   NUOVO, g2 FAIL su pin di forma-canale — sono FAIL del GIUDICE,
-  ledgerate per generazione con judge_sha, non VOID della campagna)
+  ledgerate per generazione con judge_sha, non VOID della campagna).
+  **Annotazione A-AH56 (Concilio WP-91)**: g1 e g3 risolvono a blob
+  COMMITTATI; il judge_sha di g2 NON risolve ad alcun blob committato
+  (giudice emendato fra g2 e g3 mai committato prima del run) — g2 è
+  citabile SOLO come «superseded/judge-unrecoverable» (KS-AH-91-2); il
+  suo esito FAIL(41) è ricostruibile dal solo OUTPUT superseded, non dal
+  codice. Dal verdict90: giudice committato PRE-run per OGNI generazione
+  (A-BG53), reason=/supersede_of= nel ledger.
 - battery-89pre: **PASS (16/16 CONTATO) a 30f5a87** (attempt 4 — i
   quattro tentativi TUTTI ledgerati per esito nel battery-attempts
   ledger A-AH50: FAIL 1/16 a 692c697 su morso A-TH51, REFUSE porcelain

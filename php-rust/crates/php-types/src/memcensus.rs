@@ -904,7 +904,7 @@ fn phys_window_dump(win: u32, phys: u64, tag: &str) {
             // row of this dump: format first, ONE write_all on O_APPEND.
             let _ = f.write_all(
                 format!(
-                    "pid={pid} tag=mi_proc win={win} mono_ms={} phys={phys} phys_peak={} rss={rss} peak_rss={prss} commit={cm} peak_commit={pcm}\n",
+                    "pid={pid} tag=mi_proc win={win} ckpt={tag} mono_ms={} phys={phys} phys_peak={} rss={rss} peak_rss={prss} commit={cm} peak_commit={pcm}\n",
                     mono_ms(),
                     PHYS_PEAK.load(Relaxed),
                 )
@@ -914,7 +914,7 @@ fn phys_window_dump(win: u32, phys: u64, tag: &str) {
             // registered renderer names the frame stack; never child stdout.
             let _ = f.write_all(
                 format!(
-                    "pid={pid} tag=ctx win={win} mono_ms={} top={}\n",
+                    "pid={pid} tag=ctx win={win} ckpt={tag} mono_ms={} top={}\n",
                     mono_ms(),
                     ctx_render().unwrap_or_else(|| "none".into()),
                 )
@@ -946,7 +946,7 @@ fn phys_window_dump(win: u32, phys: u64, tag: &str) {
             let defer_heap = DEFER_HEAP.with(|h| h.get());
             let defer_ok = if defer_heap.is_null() {
                 let _ = f.write_all(
-                    format!("pid={pid} tag=mi_bin win={win} src=defer visit=NULLHEAP\n").as_bytes(),
+                    format!("pid={pid} tag=mi_bin win={win} ckpt={tag} src=defer visit=NULLHEAP\n").as_bytes(),
                 );
                 false
             } else {
@@ -970,7 +970,7 @@ fn phys_window_dump(win: u32, phys: u64, tag: &str) {
                 }
                 if !ok {
                     let _ = f.write_all(
-                        format!("pid={pid} tag=mi_bin win={win} src={src} visit=FAILED\n")
+                        format!("pid={pid} tag=mi_bin win={win} ckpt={tag} src={src} visit=FAILED\n")
                             .as_bytes(),
                     );
                     continue;
@@ -981,7 +981,7 @@ fn phys_window_dump(win: u32, phys: u64, tag: &str) {
                     }
                     let _ = f.write_all(
                         format!(
-                            "pid={pid} tag=mi_bin win={win} src={src} size={} reserved={} committed={} used_b={} used_n={} areas={}\n",
+                            "pid={pid} tag=mi_bin win={win} ckpt={tag} src={src} size={} reserved={} committed={} used_b={} used_n={} areas={}\n",
                             t.size[i], t.reserved[i], t.committed[i], t.used_b[i], t.used_n[i],
                             t.areas[i],
                         )
@@ -991,7 +991,7 @@ fn phys_window_dump(win: u32, phys: u64, tag: &str) {
                 if t.overflow > 0 {
                     let _ = f.write_all(
                         format!(
-                            "pid={pid} tag=mi_bin win={win} src={src} size=OVERFLOW areas={}\n",
+                            "pid={pid} tag=mi_bin win={win} ckpt={tag} src={src} size=OVERFLOW areas={}\n",
                             t.overflow
                         )
                         .as_bytes(),
@@ -1011,7 +1011,7 @@ fn phys_window_dump(win: u32, phys: u64, tag: &str) {
             let retain = unsafe { mi_option_get(36) };
             let _ = f.write_all(
                 format!(
-                    "pid={pid} tag=mi_option win={win} name=arena_eager_commit ord=4 val={eager}\npid={pid} tag=mi_option win={win} name=purge_delay ord=15 val={purge}\npid={pid} tag=mi_option win={win} name=page_full_retain ord=36 val={retain}\n"
+                    "pid={pid} tag=mi_option win={win} ckpt={tag} name=arena_eager_commit ord=4 val={eager}\npid={pid} tag=mi_option win={win} ckpt={tag} name=purge_delay ord=15 val={purge}\npid={pid} tag=mi_option win={win} ckpt={tag} name=page_full_retain ord=36 val={retain}\n"
                 )
                 .as_bytes(),
             );
@@ -1023,7 +1023,7 @@ fn phys_window_dump(win: u32, phys: u64, tag: &str) {
             ] {
                 let val = std::env::var(name).unwrap_or_else(|_| "unset".into());
                 let _ = f.write_all(
-                    format!("pid={pid} tag=env_readback win={win} name={name} val={val}\n")
+                    format!("pid={pid} tag=env_readback win={win} ckpt={tag} name={name} val={val}\n")
                         .as_bytes(),
                 );
             }
@@ -1090,14 +1090,14 @@ fn phys_window_dump(win: u32, phys: u64, tag: &str) {
                 };
                 if !vok {
                     let _ = f.write_all(
-                        format!("pid={pid} tag=mi_theap_pages win={win} visit=FAILED\n")
+                        format!("pid={pid} tag=mi_theap_pages win={win} ckpt={tag} visit=FAILED\n")
                             .as_bytes(),
                     );
                 }
                 for (i, h) in acc.heaps.iter().enumerate() {
                     let _ = f.write_all(
                         format!(
-                            "pid={pid} tag=mi_theap_pages win={win} heap={i} pages={} committed={} used_blocks={} free_pages={} free_committed={}\n",
+                            "pid={pid} tag=mi_theap_pages win={win} ckpt={tag} heap={i} pages={} committed={} used_blocks={} free_pages={} free_committed={}\n",
                             h.pages, h.committed, h.used_blocks, h.free_pages, h.free_committed
                         )
                         .as_bytes(),
@@ -1105,7 +1105,7 @@ fn phys_window_dump(win: u32, phys: u64, tag: &str) {
                     for (bs, (fp, fc)) in &h.bins {
                         let _ = f.write_all(
                             format!(
-                                "pid={pid} tag=mi_theap_bin win={win} heap={i} bin={bs} free_pages={fp} free_committed={fc}\n"
+                                "pid={pid} tag=mi_theap_bin win={win} ckpt={tag} heap={i} bin={bs} free_pages={fp} free_committed={fc}\n"
                             )
                             .as_bytes(),
                         );
@@ -1113,7 +1113,7 @@ fn phys_window_dump(win: u32, phys: u64, tag: &str) {
                 }
                 let _ = f.write_all(
                     format!(
-                        "pid={pid} tag=mi_theap_pages win={win} heaps_total={} declared=heap-by-visit-index,win0-postteardown (KL-90-3)\n",
+                        "pid={pid} tag=mi_theap_pages win={win} ckpt={tag} heaps_total={} declared=heap-by-visit-index,win0-postteardown (KL-90-3)\n",
                         acc.heaps.len()
                     )
                     .as_bytes(),
@@ -1129,7 +1129,7 @@ fn phys_window_dump(win: u32, phys: u64, tag: &str) {
             };
             if jret.is_null() {
                 let _ = f.write_all(
-                    format!("pid={pid} tag=mi_arena win={win} visit=FAILED\n").as_bytes(),
+                    format!("pid={pid} tag=mi_arena win={win} ckpt={tag} visit=FAILED\n").as_bytes(),
                 );
             } else {
                 let nul = jbuf.iter().position(|&b| b == 0).unwrap_or(jbuf.len());
@@ -1140,7 +1140,7 @@ fn phys_window_dump(win: u32, phys: u64, tag: &str) {
                 // rows below are awk-friendly conveniences the verdict can
                 // cross-check against it.
                 let _ = f.write_all(
-                    format!("pid={pid} tag=mi_arena_json win={win} json={json}\n").as_bytes(),
+                    format!("pid={pid} tag=mi_arena_json win={win} ckpt={tag} json={json}\n").as_bytes(),
                 );
                 let sep = |c: char| c == ',' || c == ' ' || c == '}';
                 let counter = |key: &str| -> Option<i64> {
@@ -1164,10 +1164,10 @@ fn phys_window_dump(win: u32, phys: u64, tag: &str) {
                 for key in ["committed", "reserved", "pages", "page_committed"] {
                     let row = match count3(key) {
                         Some((t, p, c)) => format!(
-                            "pid={pid} tag=mi_arena win={win} key={key} total={t} peak={p} current={c}\n"
+                            "pid={pid} tag=mi_arena win={win} ckpt={tag} key={key} total={t} peak={p} current={c}\n"
                         ),
                         None => format!(
-                            "pid={pid} tag=mi_arena win={win} key={key} parse=FAILED\n"
+                            "pid={pid} tag=mi_arena win={win} ckpt={tag} key={key} parse=FAILED\n"
                         ),
                     };
                     let _ = f.write_all(row.as_bytes());
@@ -1183,10 +1183,10 @@ fn phys_window_dump(win: u32, phys: u64, tag: &str) {
                 {
                     let row = match counter(key) {
                         Some(v) => format!(
-                            "pid={pid} tag=mi_arena win={win} key={key} val={v}\n"
+                            "pid={pid} tag=mi_arena win={win} ckpt={tag} key={key} val={v}\n"
                         ),
                         None => format!(
-                            "pid={pid} tag=mi_arena win={win} key={key} parse=FAILED\n"
+                            "pid={pid} tag=mi_arena win={win} ckpt={tag} key={key} parse=FAILED\n"
                         ),
                     };
                     let _ = f.write_all(row.as_bytes());
@@ -1195,7 +1195,7 @@ fn phys_window_dump(win: u32, phys: u64, tag: &str) {
                     if let Some(e) = json[i..].find(']') {
                         let seg = &json[i..i + e + 1];
                         let _ = f.write_all(
-                            format!("pid={pid} tag=mi_arena_chunk_bins win={win} {seg}\n")
+                            format!("pid={pid} tag=mi_arena_chunk_bins win={win} ckpt={tag} {seg}\n")
                                 .as_bytes(),
                         );
                     }

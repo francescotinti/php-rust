@@ -231,6 +231,21 @@ else
         elif [ "$MTX_RUSTC" != "$CUR_RUSTC" ]; then
           fail "(A-AH44/A-AH47) toolchain drift: matrix rustc='$MTX_RUSTC' != current in-repo rustc -Vv='$CUR_RUSTC' — battery certifies ANOTHER compiler (KS-AH-87-2/KS-AH-89-1)"
         fi
+        # A-AH55 (Council WP-91): cargo= declared at least ADVISORY —
+        # value empty/unknown makes the matrix NULL for cargo-citing
+        # identities (KS-AH-91-3); a missing row is a declared pre-v7
+        # archive (ADVISORY, not silent); drift is ADVISORY (rustc= stays
+        # the primary judge).
+        NCARGO=$(git -C "$REPO" show "HEAD:${GITPREFIX}${MTX_REL}" | tr -d '\0' | grep -c '^cargo=' || true)
+        MTX_CARGO=$(git -C "$REPO" show "HEAD:${GITPREFIX}${MTX_REL}" | tr -d '\0' | sed -n 's/^cargo=//p' | head -1)
+        if [ "$NCARGO" = 0 ]; then
+          echo "ADVISORY (A-AH55): matrix archive carries no cargo= row (pre-v7 recorder) — cargo identity unjudged"
+        elif [ -z "$MTX_CARGO" ] || [ "$MTX_CARGO" = "unknown" ]; then
+          fail "(A-AH55/KS-AH-91-3) matrix cargo= is empty/unknown — matrix NULL for cargo-citing identities; re-run the battery"
+        else
+          CUR_CARGO=$( (cd "$REPO" && cargo -V 2>/dev/null) || true)
+          [ "$MTX_CARGO" = "$CUR_CARGO" ] || echo "ADVISORY (A-AH55): cargo drift matrix='$MTX_CARGO' vs current='$CUR_CARGO' (rustc= is the primary judge)"
+        fi
       fi
     fi
   fi
@@ -326,6 +341,19 @@ if [ "$SAME_REV" = 1 ]; then
   elif [ -n "$BL_OLD" ] && [ -n "$BL_REM" ] && [ "${BL_REM#$'\n'}" = "$BL_REM" ]; then
     fail "(A-SK57) ledger delta EXTENDS the last committed row — row-granularity append violated (KS-SK-89-1)"
   fi
+  # A-AH54 (Council WP-91, Hejlsberg — KS-AH-91-1): the battery-attempts
+  # ledger, once allowlisted in-window (A-SK50 emendation), was
+  # REWRITABLE in-window: delete a FAIL/REFUSE, fabricate the PASS row
+  # the A-AH50 tooth demands, and no tooth bit. Same A-SK57 discipline,
+  # row granularity: prefix at BREV + remainder empty-or-newline-first.
+  AL_OLD=$(git -C "$REPO" show "$BREV:${GITPREFIX}${ATTLEDGER_REL}" 2>/dev/null)
+  AL_NEW=$(git -C "$REPO" show "HEAD:${GITPREFIX}${ATTLEDGER_REL}" 2>/dev/null)
+  AL_REM="${AL_NEW#"$AL_OLD"}"
+  if [ -n "$AL_OLD" ] && [ "$AL_REM" = "$AL_NEW" ] && [ "$AL_OLD" != "$AL_NEW" ]; then
+    fail "(A-AH54) battery-attempts ledger at $BREV is NOT a prefix of HEAD's — in-window rewrite (KS-AH-91-1)"
+  elif [ -n "$AL_OLD" ] && [ -n "$AL_REM" ] && [ "${AL_REM#$'\n'}" = "$AL_REM" ]; then
+    fail "(A-AH54) attempts-ledger delta EXTENDS the last committed row — row-granularity append violated (KS-AH-91-1)"
+  fi
   # A-AH50≡A-BG49 (Council WP-90, KS-AH-90-1/KG-90-1): the consumed PASS
   # must have its own row in the COMMITTED battery-attempts ledger — an
   # attempt that left no in-band row makes this PASS non-consumable.
@@ -339,6 +367,16 @@ if [ "$SAME_REV" = 1 ]; then
       NATT=$(git -C "$REPO" show "HEAD:${GITPREFIX}${ATTL_REL}" 2>/dev/null | grep -c "battery=${BATTERY_NAME#battery-} rev=$BREV .*esito=PASS" || true)
       if [ "$NATT" -lt 1 ]; then
         fail "(A-AH50/KS-AH-90-1) no committed esito=PASS row for $BATTERY_NAME rev=$BREV in battery-attempts.ledger — attempt not in-band, PASS non-consumable"
+      else
+        # A-AH54 triangle (Council WP-91, Hejlsberg — KS-AH-91-1): the
+        # consumed PASS row must carry sha256 == DSHA (the stamp's
+        # sha256(OUT), itself recomputed against OUT above): the
+        # attempts↔stamp↔OUT triangle closes — a fabricated PASS row
+        # with a foreign or absent sha no longer feeds the tooth.
+        NATT_SHA=$(git -C "$REPO" show "HEAD:${GITPREFIX}${ATTL_REL}" 2>/dev/null | grep -c "battery=${BATTERY_NAME#battery-} rev=$BREV .*esito=PASS.*sha256=${DSHA:-__nodsha__}" || true)
+        if [ "$NATT_SHA" -lt 1 ]; then
+          fail "(A-AH54/KS-AH-91-1) committed PASS row for $BATTERY_NAME rev=$BREV carries NO sha256==DSHA($DSHA) — attempts↔stamp↔OUT triangle open, consumption VOID"
+        fi
       fi
       ;;
   esac

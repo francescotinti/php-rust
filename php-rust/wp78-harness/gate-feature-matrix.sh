@@ -91,7 +91,17 @@ if [ -z "$RUSTC_VV" ]; then
   exit 1
 fi
 echo "rustc=$RUSTC_VV" | tee -a "$LOG"
-echo "cargo=$(cargo -V 2>/dev/null || echo unknown)" | tee -a "$LOG"
+# A-AH55 (Council WP-91, Hejlsberg): cargo= gets the SAME sample-first
+# discipline as rustc= — the `|| echo unknown` fallback wrote
+# `cargo=unknown` without failing and NO downstream tooth read it
+# (asymmetric discipline). A matrix with empty/unknown cargo= is NULL
+# for cargo-citing identities (KS-AH-91-3).
+CARGO_V=$( (cd "$REPO" && cargo -V 2>/dev/null) || true)
+if [ -z "$CARGO_V" ]; then
+  echo "FAIL: cargo -V produced NO output (toolchain missing/broken) — a cargo= row is never written empty or unknown (A-AH55)" | tee -a "$LOG"
+  exit 1
+fi
+echo "cargo=$CARGO_V" | tee -a "$LOG"
 echo "tree=clean (git status --porcelain empty at gate start, A-AH14)" | tee -a "$LOG"
 FAILS=0
 
