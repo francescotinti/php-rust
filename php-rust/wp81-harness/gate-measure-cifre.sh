@@ -305,6 +305,35 @@ if [ "${1:-}" = "--selftest" ]; then
     echo "SELFTEST FAIL: perimeter-class doc without manifest row NOT caught by --all (WP-92 forge d / A-SK-71/KS-SK-92-3)"; exit 1
   fi
   rm -f "$T16DOC"
+  # T18 — WP-93 forge F1 REPEATED (Klabnik, A-SK-74): a figure colliding
+  # with the DECIMAL prefix of an ancestor commit must FAIL — the
+  # rev-parse door is abolished; only committed rev= rows name identities.
+  # (loop over candidates: a prefix that happens to live in the corpus is
+  # legitimately citable and proves nothing — try the next one)
+  T18OK=0
+  for T18TOK in $(git -C "$ROOT" rev-list HEAD | cut -c1-7 | grep -E '^[0-9]{7}$' | grep -v '^6910767$' | head -5); do
+    cp "$TMP/baseline.md" "$TMP/t18.md"
+    T18IT=$(printf '%s' "$T18TOK" | sed -E 's/^([0-9])([0-9]{3})([0-9]{3})$/\1.\2.\3/')
+    echo "b_peak rivisto = $T18IT B per worker, fidatevi" >> "$TMP/t18.md"
+    if [ "$(rc_of "$TMP/t18.md")" = 1 ]; then T18OK=1; break; fi
+  done
+  if [ "$T18OK" != 1 ]; then
+    echo "SELFTEST FAIL: decimal ancestor-prefix figure NOT caught on any candidate (WP-93 forge F1 / A-SK-74)"; rm -rf "$TMP"; exit 1
+  fi
+  # negative control: the rev NAMED by a committed rev= row stays citable.
+  cp "$TMP/baseline.md" "$TMP/t18b.md"
+  echo "baseline WP-80 a git 6910767 (identita' nominata dal revs)" >> "$TMP/t18b.md"
+  if [ "$(rc_of "$TMP/t18b.md")" != 64 ]; then
+    echo "SELFTEST FAIL: NAMED rev= identity 6910767 wrongly refused (A-SK-74 negative control)"; rm -rf "$TMP"; exit 1
+  fi
+  # T19 — WP-93 forge F2 REPEATED (Klabnik, A-SK-75/KS-SK-93-3): the ALLOW
+  # laundering — 2,8 and 46,25 were council-verbale figures promoted to
+  # legal constants everywhere. REVOKED: both must FAIL now.
+  cp "$TMP/baseline.md" "$TMP/t19.md"
+  echo "regressione CPU full: 2,8 volte la media, tolleranza 46,25 percento" >> "$TMP/t19.md"
+  if [ "$(rc_of "$TMP/t19.md")" != 1 ]; then
+    echo "SELFTEST FAIL: revoked ALLOW constants 2,8/46,25 still legalize figures (WP-93 forge F2 / A-SK-75/KS-SK-93-3)"; rm -rf "$TMP"; exit 1
+  fi
   # T17 — WP-93 forge F6 REPEATED (Klabnik, A-SK-78/KS-SK-93-1): a PATCHED
   # copy of the judge (perimeter tooth disabled — exactly the
   # zzforge-judge93 forge) run --all with a forge doc present must NEVER
@@ -327,7 +356,7 @@ if [ "${1:-}" = "--selftest" ]; then
     echo "SELFTEST FAIL: patched judge copy did not die on the SELF-TETHER (A-SK-78)"; rm -rf "$TMP"; exit 1
   fi
   rm -rf "$TMP"
-  echo "SELFTEST PASS: KG-83-3 smuggle + A-SK40 companions + A-SK55 committed-only + A-SK60 provenance (positive+bite) + A-SK62 every-token + A-SK63 manifest graces + A-SK65 env-cache ignored + A-SK53-bis window + A-SK-67 HEAD-authorities (budget tamper, forge-a manifest row) + A-SK-69 strict prov (forge-b: cross-file, non-minus operator, address-range, positive same-file) + A-SK-70 cache abolished (forge-c) + A-SK-71 perimeter (forge-d) + A-SK-72 ledger-proved supersession (.out optional) + A-SK-73 pool=corpus + A-SK-78 self-tether (forge F6, T17) + A-SK-79 exit-code grades (every tooth rc-exact) all bite"
+  echo "SELFTEST PASS: KG-83-3 smuggle + A-SK40 companions + A-SK55 committed-only + A-SK60 provenance (positive+bite) + A-SK62 every-token + A-SK63 manifest graces + A-SK65 env-cache ignored + A-SK53-bis window + A-SK-67 HEAD-authorities (budget tamper, forge-a manifest row) + A-SK-69 strict prov (forge-b: cross-file, non-minus operator, address-range, positive same-file) + A-SK-70 cache abolished (forge-c) + A-SK-71 perimeter (forge-d) + A-SK-72 ledger-proved supersession (.out optional) + A-SK-73 pool=corpus + A-SK-74 named-rev identities (forge F1, T18+control) + A-SK-75 ALLOW-as-authority, 2.8/46.25 revoked (forge F2, T19) + A-SK-78 self-tether (forge F6, T17) + A-SK-79 exit-code grades (every tooth rc-exact) all bite"
   exit 0
 fi
 
@@ -349,6 +378,7 @@ my ($root, $here, $mout, $mode, $target_arg) = @ARGV;
 my $MANIFEST_REL = "php-rust/wp81-harness/gate-cifre-manifest.tsv";
 my $BUDGET_REL   = "php-rust/wp81-harness/gate-cifre-corpus.budget";
 my $JUDGE_REL    = "php-rust/wp81-harness/gate-measure-cifre.sh";
+my $REVS_REL     = "php-rust/wp81-harness/gate-cifre-revs.txt";
 
 my $headrev = qx(git -C "$root" rev-parse HEAD); chomp $headrev;
 
@@ -370,7 +400,7 @@ sub head_content { # repo-relative path -> list of lines from HEAD
 }
 my $authority_dirty = 0;
 my %ASHA;
-for my $a ([$JUDGE_REL, 'judge'], [$MANIFEST_REL, 'manifest'], [$BUDGET_REL, 'budget']) {
+for my $a ([$JUDGE_REL, 'judge'], [$MANIFEST_REL, 'manifest'], [$BUDGET_REL, 'budget'], [$REVS_REL, 'revs']) {
   my ($rel, $name) = @$a;
   my $h = head_blob_sha($rel);
   my $w = work_blob_sha("$root/$rel");
@@ -387,40 +417,44 @@ for my $a ([$JUDGE_REL, 'judge'], [$MANIFEST_REL, 'manifest'], [$BUDGET_REL, 'bu
   }
 }
 
-# NAMED protocol constants (>=3 digits) that are neither measures nor
-# derivates — each with its reason:
-my %ALLOW = map { $_ => 1 } qw(
-  110
-  384
-  6910767
-  4000
-  8048
-  5000
-  9276
-  0.8
-  1.019
-  2.8
-  46.25
+# A-SK-75 (Council WP-93, Klabnik forge F2 LANDED — KS-SK-93-3): a NAMED
+# protocol constant is an AUTHORITY, not a measure — every entry carries
+# the path@line of a COMMITTED blob that STATES it («non è una misura»),
+# and the resolution is VERIFIED at HEAD before any judgment: an entry
+# whose provenance line does not carry the token is a FAIL of the judge
+# itself, never a silent grace.
+# REVOKED (KS-SK-93-3): 2.8 and 46.25 — council-verbale figures (judge=no
+# sources) promoted to legal constants everywhere; a verbale can carry a
+# MANDATE, never mint a citable figure. 110 dropped (no committed
+# provenance line names it). 6910767 moved to the revs authority
+# (A-SK-74: it is an identity, not a constant).
+my %ALLOW_AUTH = (
+  '384'   => ['php-rust/wp83-harness/COUNCIL_WP83_REVIEWS.md', 271,
+              'bound buffer CString stack std (A-BB27)'],
+  '4000'  => ['php-rust/wp81-harness/verdict81.out', 32, 'soglia ex-ante P1a design79 par.10'],
+  '8048'  => ['php-rust/wp81-harness/verdict81.out', 33, 'soglia ex-ante P1b design79 par.10'],
+  '5000'  => ['php-rust/wp81-harness/verdict81.out', 38, 'soglia ex-ante P5b design79 par.10'],
+  '9276'  => ['php-rust/wp85-harness/MEASURE85_RESULTS.md', 39, 'wc -c fixture hello_pad85 (A-SK56)'],
+  '0.8'   => ['php-rust/wp89-harness/verdict89.sh', 402, 'soglia alta ex-ante VATTR (KL-90-4)'],
+  '1.019' => ['php-rust/wp91-harness/COUNCIL_WP91_REVIEWS.md', 355,
+              'ratio anti-moda W8, ricomputo Bak (A-BB62)'],
 );
-# 110    = righe-per-run ENFORCE del protocollo (design78 driver)
-# 384    = bound del buffer CString di stack in std (A-BB27, costante di libreria)
-# 6910767= git rev baseline WP-80 (identita', enforced dal driver MEASURE80)
-# 4000/8048/5000 = soglie ex-ante design79 par.10 (P1a/P1b/P5b) — anche nel
-#                  corpus via verdict81.out, tenute qui per robustezza
-# 9276   = wc -c del fixture hello_pad85 COMMITTATO (MEASURE85 riga sorgente;
-#          A-SK56 lo espone: era esente per scope-di-riga, ora nominato)
-# 0.8    = soglia alta ex-ante VATTR (verdict89.sh r.402 COMMITTED pre-run;
-#          dichiarata nei doc per sanatoria KB-91-2/A-BB64 — dal verdict90
-#          in poi la soglia vive nel header pre-run del giudice)
-# 1.019  = ratio anti-moda W8, ricomputo Bak (Concilio WP-91 verbale sedia 5
-#          COMMITTED) — robustezza mostrata FUORI banda per la sanatoria
-#          A-BB64; entra in-band dal verdict90 (A-BB62)
-# 2.8    = scostamento % min-vs-mediana su b_peak, ricomputo Bak (Concilio
-#          WP-92 verbale sedia 5 COMMITTED; il ratio macchina 0.972 vive in
-#          repair90-estimators.out — stesso precedente di 1.019)
-# 46.25  = chiusura % del pool prov pre-A-SK-69, misura Klabnik (Concilio
-#          WP-92 verbale sedia 3 COMMITTED — la cifra che ha motivato
-#          A-SK-69/A-SK-73; citata nei doc di rotazione)
+my %ALLOW;
+for my $tok (sort keys %ALLOW_AUTH) {
+  my ($ap, $al) = @{$ALLOW_AUTH{$tok}};
+  my @blob = head_content($ap);
+  my $l = $blob[$al-1] // '';
+  my $found = 0;
+  while ($l =~ /(\d[\d.,]*\d|\d)/g) {
+    my $c = $1; (my $n = $c) =~ s/\.(?=\d{3}\b)//g; $n =~ s/,/./;
+    if ($n eq $tok || $c eq $tok) { $found = 1; last }
+  }
+  if (!$found) {
+    print "FAIL gate-measure-cifre: ALLOW constant '$tok' — provenance $ap:$al does NOT state it at HEAD (A-SK-75/KS-SK-93-3)\n";
+    exit 1;
+  }
+  $ALLOW{$tok} = 1;
+}
 
 # ---- corpus: committed machine outputs -------------------------------------
 # A-SK55 (Council WP-90, Klabnik FORGE BITTEN LIVE): the corpus is read
@@ -602,23 +636,23 @@ for my $row (head_content($MANIFEST_REL)) {
 }
 
 # ---- identity/citation helpers ---------------------------------------------
-# Digit-only short revs (e.g. 9130859) are IDENTITIES, not figures — the
-# hex-strip needs a letter and cannot see them. A token of 7-40 digits that
-# rev-parses to a COMMIT ANCESTOR of HEAD is exempt (same class as hex revs:
-# git itself is the truth authority). Declared residual: a fabricated figure
-# colliding with a decimal object-prefix of an ancestor commit would slip —
-# prefix space makes this rare, and the collision is machine-checkable.
-my %rev_id_cache;
-sub is_commit_identity {
+# A-SK-74 (Council WP-93, Klabnik forge F1 LANDED): the rev-parse door is
+# ABOLISHED — 53 ancestor commits have 7-digit all-decimal prefixes and 32
+# have 8, exactly the byte window (1-99 M): the "rare residual" declared by
+# the old exemption was a known population, and Italian normalization
+# (23.330.397 -> 23330397) carried a fabricated figure straight through the
+# door. A decimal token of >=7 digits is an identity ONLY if it is a prefix
+# of a sha40 NAMED by a committed rev= row in the revs authority (read from
+# HEAD like every authority — A-SK-67).
+my @REV_IDS;
+for my $l (head_content($REVS_REL)) {
+  push @REV_IDS, $1 if $l =~ /^rev=([0-9a-f]{40})\b/;
+}
+sub is_named_rev_identity {
   my ($tok) = @_;
-  return $rev_id_cache{$tok} if exists $rev_id_cache{$tok};
-  my $r = 0;
-  if ($tok =~ /^\d{7,40}$/) {
-    my $c = qx(git -C "$root" rev-parse -q --verify "$tok^{commit}" 2>/dev/null);
-    chomp $c;
-    $r = ($c && system('git', '-C', $root, 'merge-base', '--is-ancestor', $c, 'HEAD') == 0) ? 1 : 0;
-  }
-  return $rev_id_cache{$tok} = $r;
+  return 0 unless $tok =~ /^\d{7,40}$/;
+  for my $r (@REV_IDS) { return 1 if index($r, $tok) == 0 }
+  return 0;
 }
 # A-SK-72 (Council WP-92): the supersession of a verdict generation is
 # PROVED by a committed campaign-ledger row (esito=FAIL for that
@@ -942,7 +976,7 @@ for my $t (@targets) {
         (my $noint = $norm) =~ s/\.0$//;
         next if $corpus{$noint};
         if ($eval_ok{$norm} || $derived_ok{$norm}) { $derived_ok{$norm} = 1; next; }
-        next if is_commit_identity($norm);
+        next if is_named_rev_identity($norm);
         push @miss, "line $ln: token '$raw' on a [derivata] line NOT in corpus and NOT provenance-verified (A-SK56/A-SK60/A-SK62): $line";
       }
       next;
@@ -961,7 +995,7 @@ for my $t (@targets) {
       next if $corpus_count{$norm};
       (my $noint = $norm) =~ s/\.0$//;
       next if $corpus{$noint};
-      next if is_commit_identity($norm);
+      next if is_named_rev_identity($norm);
       push @miss, "line $ln: '$raw' (norm '$norm') not in committed corpus: $line";
     }
   }
@@ -975,11 +1009,11 @@ for my $t (@targets) {
   if ($mode eq 'advisory') {
     print "ADVISORY-PASS gate-measure-cifre (KG-83-3, NEVER verdict-grade — T2/A-SK-67; exit=64 A-SK-79): every bound figure in $disp matches committed machine output (or carries [derivata]/named-constant)\n";
   } else {
-    print "PASS gate-measure-cifre (KG-83-3): every bound figure in $disp matches committed machine output (or carries [derivata]/named-constant) [judge_sha=$ASHA{judge} manifest_sha=$ASHA{manifest} budget_sha=$ASHA{budget} head=".substr($headrev,0,12)."]\n";
+    print "PASS gate-measure-cifre (KG-83-3): every bound figure in $disp matches committed machine output (or carries [derivata]/named-constant) [judge_sha=$ASHA{judge} manifest_sha=$ASHA{manifest} budget_sha=$ASHA{budget} revs_sha=$ASHA{revs} head=".substr($headrev,0,12)."]\n";
   }
 }
 if ($target_arg eq '--all' && $grand_rc == 0) {
-  print "PASS gate-measure-cifre --all (A-SK64/A-SK-67): manifest perimeter, bidirectional, authorities from HEAD [judge_sha=$ASHA{judge} manifest_sha=$ASHA{manifest} budget_sha=$ASHA{budget} head=".substr($headrev,0,12)."]\n";
+  print "PASS gate-measure-cifre --all (A-SK64/A-SK-67): manifest perimeter, bidirectional, authorities from HEAD [judge_sha=$ASHA{judge} manifest_sha=$ASHA{manifest} budget_sha=$ASHA{budget} revs_sha=$ASHA{revs} head=".substr($headrev,0,12)."]\n";
 }
 # A-SK-79 (Council WP-93, Klabnik Q4 — KS-SK-93-4): the GRADE lives in the
 # exit code. An advisory CLEAN result exits 64 (ADVISORY-PASS), never 0:

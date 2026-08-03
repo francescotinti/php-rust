@@ -1,0 +1,8 @@
+# gate-cifre-revs.txt — A-SK-74 (Concilio WP-93, Klabnik forge F1 LANDED):
+# identità di commit citabili in FORMA DECIMALE. La porta rev-parse è
+# ABOLITA: 53 antenati hanno prefissi decimali a 7 cifre e 32 a 8 —
+# esattamente la finestra dei byte (1-99 M): ognuno era una cifra
+# coniabile. Un token decimale >=7 cifre è un'identità SOLO se prefisso
+# di uno sha40 elencato qui (riga rev=<sha40>, letta da HEAD — A-SK-67).
+# Ogni riga è un'AUTORITÀ dichiarata per NOME: «non è una misura».
+rev=6910767e179108b6b92c0f241f16a4a6f3fd7741 baseline WP-80 (WP_SESSION_80/81, driver MEASURE80)
