@@ -69,7 +69,10 @@ if [ "${1:-}" = "--all" ]; then MODE=all; fi
 # namesake, not the code that ran. hash-object($0) must equal the HEAD blob
 # of JUDGE_REL before any verdict-grade output; in advisory mode the
 # mismatch is a NOTE (an advisory result is never verdict-grade anyway).
-RUN_SHA=$(git -C "$ROOT" hash-object -- "$0" 2>/dev/null)
+# ($0 can be relative: hash the ABSOLUTE self path — `git -C` would resolve
+# a relative $0 against ROOT, yielding an empty sha and a vacuous tether)
+SELF_ABS="$HERE/$(basename "$0")"
+RUN_SHA=$(git -C "$ROOT" hash-object -- "$SELF_ABS" 2>/dev/null)
 JHEAD_SHA=$(git -C "$ROOT" rev-parse -q --verify "HEAD:$JUDGE_REL" 2>/dev/null)
 if [ -z "$JHEAD_SHA" ]; then
   echo "FAIL gate-measure-cifre: judge $JUDGE_REL NOT committed at HEAD (A-SK-67/A-SK-78)"; exit 1
@@ -307,12 +310,14 @@ if [ "${1:-}" = "--selftest" ]; then
   # zzforge-judge93 forge) run --all with a forge doc present must NEVER
   # print a verdict-grade PASS: the self-tether refuses any runner whose
   # hash-object differs from the HEAD blob of JUDGE_REL.
-  T17JUDGE="$TMP/zzforge-judge-t17.sh"
+  # (the copy lives INSIDE the repo like the original forge: from a tmpdir
+  # it would die on "not in a git repo" before the tether ever fired)
+  T17JUDGE="$HERE/zzforge-judge-t17.sh"
   perl -pe 's/\$all_rc = 1;//g if /UNCOMMITTED/' "$0" > "$T17JUDGE"
   T17DOC="$ROOT/php-rust/sessions/zzforge-t17.md"
   echo "cifra fuori perimetro: il picco era 123457 B, fidatevi" > "$T17DOC"
   T17OUT=$(bash "$T17JUDGE" --all 2>&1); T17RC=$?
-  rm -f "$T17DOC"
+  rm -f "$T17DOC" "$T17JUDGE"
   if [ "$T17RC" = 0 ] || printf '%s\n' "$T17OUT" | grep -q '^PASS gate-measure-cifre --all'; then
     echo "SELFTEST FAIL: a PATCHED judge copy produced a PASS (WP-93 forge F6 / A-SK-78/KS-SK-93-1)"; rm -rf "$TMP"; exit 1
   fi
