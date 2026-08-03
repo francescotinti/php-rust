@@ -593,6 +593,10 @@ push @sources, committed_glob("$mout/m90*"), committed_glob("$here/../wp90-harne
 # P2: A-BB64..68 + A-BG57/60/61 recomputed on the committed m90 raws, zero
 # new runs) + future wp91 judges — budget raised in the SAME commit (A-SK61)
 push @sources, committed_glob("$here/../wp91-harness/*.out");
+# S-92.0: the wp92 machine outputs (ds35-verify4 length-prefixed pins on 51
+# fixtures, dl59-join ADVISORY analysis) — budget raised in the SAME commit
+# (A-SK61 deliberate-growth discipline)
+push @sources, committed_glob("$here/../wp92-harness/*.out");
 # S-85.0: the measure85 campaign raws (85*/m85* labels) + verdict85 + the
 # wp85 evidence dir
 push @sources, committed_glob("$mout/*85*.summary"), committed_glob("$mout/*85*.census"),
