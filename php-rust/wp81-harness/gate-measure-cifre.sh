@@ -741,28 +741,43 @@ for my $t (@targets) {
         push @miss, "line $ln: cites NON-max generation g$g (max committed g$mx) with NO committed ledger row proving the supersession (A-SK66/A-SK-72): $line";
       }
     }
-    if ($bytes_first) {
-      # (1) verified pairs "N B = X <unit>": check numerically, then blank out
-      while ($work =~ /((\d[\d.,]*)\s*B\s*=\s*(\d[\d.,]*)\s*([KMGTkmgt])(i?)[Bb]\b)/) {
-        my ($whole, $braw, $fraw, $u, $ii) = ($1, $2, $3, $4, $5);
+    # (1) verified pairs "N B = X <unit>": ALWAYS attempted — a pair that
+    # verifies arithmetically exempts its companion half in ANY doc class
+    # (the rotation docs are bytes_first=no but still write verified pairs).
+    # ENFORCEMENT (mismatch = miss, A-SK43 unit-i) only in bytes-first
+    # docs: for bytes_first=no the pair check is purely an EXEMPTION —
+    # fail-open to the corpus scan, no new failure mode on legacy docs.
+    while ($work =~ /((\d[\d.,]*)\s*B\s*=\s*(\d[\d.,]*)\s*([KMGTkmgt])(i?)[Bb]\b)/) {
+      my ($whole, $braw, $fraw, $u, $ii) = ($1, $2, $3, $4, $5);
+      my $bytes = it_num($braw);
+      my $fig   = it_num($fraw);
+      my $dec   = ($fig =~ /\.(\d+)$/) ? length($1) : 0;
+      my $tol   = 0.5 * 10 ** (-$dec) + 1e-9;
+      my $calc  = $bytes / $SCALE{lc $u};
+      my $pair_ok = (abs($calc - $fig) <= $tol) ? 1 : 0;
+      if ($bytes_first) {
         # A-SK43 (Council WP-87, Klabnik Q2): the corpus does BINARY math —
         # "MB" under SI reading lies to the outside reader.
         if ($ii eq '') {
           push @miss, "line $ln: unit '${u}B' without the i — MiB-only in MEASURE8[4-9] (A-SK43): $line";
         }
-        my $bytes = it_num($braw);
-        my $fig   = it_num($fraw);
-        my $dec   = ($fig =~ /\.(\d+)$/) ? length($1) : 0;
-        my $tol   = 0.5 * 10 ** (-$dec) + 1e-9;
-        my $calc  = $bytes / $SCALE{lc $u};
-        if (abs($calc - $fig) > $tol) {
+        if (!$pair_ok) {
           push @miss, sprintf("line %d: companion MISMATCH (A-SK40): %s B / %s = %.4f, displayed %s: %s",
                               $ln, $bytes, lc($u)."iB-scale", $calc, $fig, $line);
         }
-        $companion_ok{$fig} = 1;       # the verified MiB half only (A-SK62)
+      }
+      if (!$bytes_first && !$pair_ok) {
+        # unverified pair in a no-BF doc: blank to advance, NO exemption —
+        # its halves stay bound to the corpus scan
         my $blank = ' ' x length($whole);
         $work =~ s/\Q$whole\E/$blank/;
+        next;
       }
+      $companion_ok{$fig} = 1;       # the verified MiB half only (A-SK62)
+      my $blank = ' ' x length($whole);
+      $work =~ s/\Q$whole\E/$blank/;
+    }
+    if ($bytes_first) {
       # (2) per-FIGURE band check (A-SK43/KS-SK-87-2, allowlist from the
       # MANIFEST — A-SK63): only the bands GRANTED to this doc survive.
       while ($work =~ /(\d[\d.,]*\s*±\s*\d[\d.,]*\s*[KMGTkmgt]i?[Bb])\b/g) {
