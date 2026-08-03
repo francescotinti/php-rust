@@ -165,18 +165,22 @@ if [ "${1:-}" = "--selftest" ]; then
   if bash "$0" "$TMP/t10b.md" >/dev/null 2>&1; then
     echo "SELFTEST FAIL: provenance derivata legalized a WRONG value (A-SK60)"; rm -rf "$TMP"; exit 1
   fi
-  # T12 — A-SK66: citing a NON-max generation without naming the
-  # supersession on the line must FAIL; the same citation WITH the
-  # supersession named must not add a miss (checked via max-gen cite).
+  # T12 v2 — A-SK66/A-SK-72: the supersession proof lives in the COMMITTED
+  # campaign ledger, never in the wording of the citing line (the keyword
+  # test was satisfied by «NON e superseded»). Citing a generation with NO
+  # ledger proof (g0 never existed) must FAIL regardless of wording; the
+  # citation may omit `.out` and is still seen. Citing a superseded
+  # generation WITH proof (m89 g1 has an esito=FAIL ledger row) is legal
+  # as history even with neutral wording.
   cp "$TMP/baseline.md" "$TMP/t12.md"
-  echo "verdetto: verdict89.a1.g1.out dice la verita, fidatevi" >> "$TMP/t12.md"
+  echo "verdetto: verdict89.a1.g0 dice la verita, fidatevi" >> "$TMP/t12.md"
   if bash "$0" "$TMP/t12.md" >/dev/null 2>&1; then
-    echo "SELFTEST FAIL: NON-max generation citation NOT caught (A-SK66/KS-SK-91-4)"; rm -rf "$TMP"; exit 1
+    echo "SELFTEST FAIL: citation of an unproved generation (no .out suffix) NOT caught (A-SK66/A-SK-72)"; rm -rf "$TMP"; exit 1
   fi
   cp "$TMP/baseline.md" "$TMP/t12b.md"
-  echo "storia: verdict89.a1.g1.out superseded da g3, ledgerato" >> "$TMP/t12b.md"
+  echo "storia: verdict89.a1.g1.out — generazione citata, esito nel ledger" >> "$TMP/t12b.md"
   if ! bash "$0" "$TMP/t12b.md" >/dev/null 2>&1; then
-    echo "SELFTEST FAIL: max-gen-declared supersession citation wrongly refused (A-SK66)"; rm -rf "$TMP"; exit 1
+    echo "SELFTEST FAIL: ledger-proved superseded citation wrongly refused (A-SK-72)"; rm -rf "$TMP"; exit 1
   fi
   # T11 v2 — A-SK-67/KS-SK-92-1: a TAMPERED working-tree budget must FAIL
   # in verdict mode (the authority is HEAD; working!=HEAD is itself the
@@ -261,8 +265,19 @@ if [ "${1:-}" = "--selftest" ]; then
   if bash "$0" --cache "$TMP/x" --nonce deadbeef "$TMP/baseline.md" >/dev/null 2>&1; then
     echo "SELFTEST FAIL: invoker-supplied --cache/--nonce NOT refused (WP-92 forge c / A-SK-70/KS-SK-92-4)"; rm -rf "$TMP"; exit 1
   fi
+  # T16 — WP-92 forge (d) REPEATED (Klabnik Q4, KS-SK-92-3/A-SK-71): a
+  # figure-bearing doc born in a perimeter class (sessions/) WITHOUT a
+  # manifest row must FAIL --all — the cifre that reach the human live in
+  # the rotation docs, not only in MEASURE.
+  T16DOC="$ROOT/php-rust/sessions/zzforge-t16.md"
+  echo "cifra fuori perimetro: il picco era 123457 B, fidatevi" > "$T16DOC"
+  if bash "$0" --all >/dev/null 2>&1; then
+    rm -f "$T16DOC"; rm -rf "$TMP"
+    echo "SELFTEST FAIL: perimeter-class doc without manifest row NOT caught by --all (WP-92 forge d / A-SK-71/KS-SK-92-3)"; exit 1
+  fi
+  rm -f "$T16DOC"
   rm -rf "$TMP"
-  echo "SELFTEST PASS: KG-83-3 smuggle + A-SK40 companions + A-SK55 committed-only + A-SK60 provenance (positive+bite) + A-SK62 every-token + A-SK63 manifest graces + A-SK65 env-cache ignored + A-SK53-bis window + A-SK-67 HEAD-authorities (budget tamper, forge-a manifest row) + A-SK-69 strict prov (forge-b: cross-file, non-minus operator, address-range, positive same-file) + A-SK-70 cache abolished (forge-c) + A-SK-73 pool=corpus all bite"
+  echo "SELFTEST PASS: KG-83-3 smuggle + A-SK40 companions + A-SK55 committed-only + A-SK60 provenance (positive+bite) + A-SK62 every-token + A-SK63 manifest graces + A-SK65 env-cache ignored + A-SK53-bis window + A-SK-67 HEAD-authorities (budget tamper, forge-a manifest row) + A-SK-69 strict prov (forge-b: cross-file, non-minus operator, address-range, positive same-file) + A-SK-70 cache abolished (forge-c) + A-SK-71 perimeter (forge-d) + A-SK-72 ledger-proved supersession (.out optional) + A-SK-73 pool=corpus all bite"
   exit 0
 fi
 
@@ -334,6 +349,8 @@ my %ALLOW = map { $_ => 1 } qw(
   9276
   0.8
   1.019
+  2.8
+  46.25
 );
 # 110    = righe-per-run ENFORCE del protocollo (design78 driver)
 # 384    = bound del buffer CString di stack in std (A-BB27, costante di libreria)
@@ -348,6 +365,12 @@ my %ALLOW = map { $_ => 1 } qw(
 # 1.019  = ratio anti-moda W8, ricomputo Bak (Concilio WP-91 verbale sedia 5
 #          COMMITTED) — robustezza mostrata FUORI banda per la sanatoria
 #          A-BB64; entra in-band dal verdict90 (A-BB62)
+# 2.8    = scostamento % min-vs-mediana su b_peak, ricomputo Bak (Concilio
+#          WP-92 verbale sedia 5 COMMITTED; il ratio macchina 0.972 vive in
+#          repair90-estimators.out — stesso precedente di 1.019)
+# 46.25  = chiusura % del pool prov pre-A-SK-69, misura Klabnik (Concilio
+#          WP-92 verbale sedia 3 COMMITTED — la cifra che ha motivato
+#          A-SK-69/A-SK-73; citata nei doc di rotazione)
 
 # ---- corpus: committed machine outputs -------------------------------------
 # A-SK55 (Council WP-90, Klabnik FORGE BITTEN LIVE): the corpus is read
@@ -487,6 +510,22 @@ for my $f (committed_glob("$here/evidence/*.fails")) {
   $corpus_count{$n} = 1;
 }
 
+# A-SK-71 (Council WP-92): budget HISTORY as a corpus source — the budget
+# transitions (20097 -> 20098 -> 23999 -> 24042 -> ...) are DELIBERATE
+# COMMITTED ACTS cited by the rotation docs; their machine truth is the
+# git history of the budget file itself (every HEAD-reachable blob).
+{
+  my @revs = split /\n/, qx(git -C "$root" log --format=%H HEAD -- "$BUDGET_REL");
+  my %bseen;
+  for my $r (@revs) {
+    my $b = qx(git -C "$root" rev-parse -q --verify "$r:$BUDGET_REL" 2>/dev/null);
+    chomp $b; next if !$b || $bseen{$b}++;
+    for my $l (split /\n/, qx(git -C "$root" show "$r:$BUDGET_REL")) {
+      while ($l =~ /(\d{3,})/g) { $corpus{$1} = 1 }
+    }
+  }
+}
+
 # A-SK61 (Council WP-91): corpus cardinality PRINTED and PINNED against the
 # COMMITTED budget (A-SK-67: read from HEAD, never the working tree) — a
 # silent corpus explosion multiplies the forge surface; growth must be a
@@ -510,6 +549,45 @@ for my $row (head_content($MANIFEST_REL)) {
   next if $row =~ /^\s*(#|$)/;
   my ($mpath, $msha, $mjudge, $mbf, $mbands, $mverd) = split /\t/, $row;
   push @man_rows, [$mpath, $msha, $mjudge, $mbf, $mbands, $mverd];
+}
+
+# ---- identity/citation helpers ---------------------------------------------
+# Digit-only short revs (e.g. 9130859) are IDENTITIES, not figures — the
+# hex-strip needs a letter and cannot see them. A token of 7-40 digits that
+# rev-parses to a COMMIT ANCESTOR of HEAD is exempt (same class as hex revs:
+# git itself is the truth authority). Declared residual: a fabricated figure
+# colliding with a decimal object-prefix of an ancestor commit would slip —
+# prefix space makes this rare, and the collision is machine-checkable.
+my %rev_id_cache;
+sub is_commit_identity {
+  my ($tok) = @_;
+  return $rev_id_cache{$tok} if exists $rev_id_cache{$tok};
+  my $r = 0;
+  if ($tok =~ /^\d{7,40}$/) {
+    my $c = qx(git -C "$root" rev-parse -q --verify "$tok^{commit}" 2>/dev/null);
+    chomp $c;
+    $r = ($c && system('git', '-C', $root, 'merge-base', '--is-ancestor', $c, 'HEAD') == 0) ? 1 : 0;
+  }
+  return $rev_id_cache{$tok} = $r;
+}
+# A-SK-72 (Council WP-92): the supersession of a verdict generation is
+# PROVED by a committed campaign-ledger row (esito=FAIL for that
+# generation, or supersede_of=g<G>) — never by wording on the citing line
+# («NON e superseded» passed the old keyword test).
+my %sup_cache;
+sub ledger_supersession_proved {
+  my ($nn, $g) = @_;
+  my $k = "$nn|$g";
+  return $sup_cache{$k} if exists $sup_cache{$k};
+  my $lrel = "php-rust/wp78-harness/measure-out/m$nn.campaign.ledger";
+  my $ok = 0;
+  if ($headset{$lrel}) {
+    for my $l (head_content($lrel)) {
+      $l =~ s/\0//g;
+      if ($l =~ /supersede_of=g$g\b/ || ($l =~ /generation=g$g\b/ && $l =~ /esito=FAIL\b/)) { $ok = 1; last }
+    }
+  }
+  return $sup_cache{$k} = $ok;
 }
 
 # ---- resolve target list ---------------------------------------------------
@@ -550,18 +628,24 @@ if ($target_arg eq '--all') {
     }
     push @targets, [$mpath, $mpath, 'head'];
   }
-  # reverse direction: every MEASURE*_RESULTS.md at HEAD and in the working
-  # tree must be manifested (a doc can be born in the working tree)
+  # reverse direction — A-SK-71 (Council WP-92, KS-SK-92-3): the perimeter
+  # is every committed .md that PUBLISHES session figures, not just the
+  # MEASURE docs (43 cifre in NEXT_SESSION + WP_SESSION_90 arrivavano
+  # all'umano NON giudicate contro 28 giudicate). Classes (declared):
+  # MEASURE docs, NEXT_SESSION_WORDPRESS.md, sessions/, design docs,
+  # council verbali, gap reports. A class member without a manifest row is
+  # a FAIL — at HEAD and in the working tree alike (a doc can be born
+  # uncommitted: WP-92 forge (d)).
   my %manset = map { $_->[0] => 1 } @man_rows;
-  for my $f (grep { m{^php-rust/wp\d+-harness/MEASURE\d+_RESULTS\.md$} } @headtree) {
+  my $class_rx = qr{^php-rust/(?:wp\d+-harness/MEASURE\d+_RESULTS\.md|NEXT_SESSION_WORDPRESS\.md|sessions/[^/]+\.md|wp\d+-harness/design[^/]*\.md|wp\d+-harness/COUNCIL_[^/]+\.md|gaps/[^/]+\.md)$};
+  for my $f (grep { /$class_rx/ } @headtree) {
     next if $manset{$f};
-    print "FAIL gate-measure-cifre --all: $f has NO manifest entry (A-SK64 bidirectional)\n"; $all_rc = 1;
+    print "FAIL gate-measure-cifre --all: $f has NO manifest entry (A-SK64/A-SK-71 bidirectional)\n"; $all_rc = 1;
   }
-  for my $f (glob("$here/../wp*-harness/MEASURE*_RESULTS.md")) {
-    next unless -f $f;
-    my $rel = abs_path($f); $rel = substr($rel, length("$root/")) if index($rel, "$root/") == 0;
-    next if $manset{$rel};
-    print "FAIL gate-measure-cifre --all: $rel has NO manifest entry (A-SK64 bidirectional, working tree)\n"; $all_rc = 1;
+  for my $f (split /\n/, qx(git -C "$root" ls-files --others --exclude-standard -- php-rust)) {
+    next unless $f =~ /$class_rx/;
+    next if $manset{$f};
+    print "FAIL gate-measure-cifre --all: UNCOMMITTED $f in a perimeter class with NO manifest entry (A-SK-71/KS-SK-92-3): a figure-bearing doc born outside the perimeter is never verdict-grade\n"; $all_rc = 1;
   }
 } else {
   my $rt = abs_path($target_arg) // $target_arg;
@@ -640,19 +724,21 @@ for my $t (@targets) {
     $ln++;
     my $work = $line;   # verified pairs and granted bands get blanked here
     my %companion_ok;
-    # A-SK66 citation tooth (Council WP-91): naming a NON-max generation
-    # verdict file without declaring the supersession on the same line, or
-    # naming an uncommitted generation, is never verdict-grade
-    # (KS-SK-91-4/KS-AH-91-2).
-    while ($line =~ /verdict(\d+)\.a(\d+)\.g(\d+)\.out/g) {
+    # A-SK66 (Council WP-91) + A-SK-72 (Council WP-92) citation tooth:
+    # naming a NON-max generation is legal ONLY if the supersession is
+    # PROVED by a committed campaign-ledger row — the old keyword test
+    # («supersed|judge-unrecoverable») was satisfied by «NON e superseded»
+    # (word, not proof). The `.out` suffix is OPTIONAL in the citation
+    # regex: a citation without it used to be invisible.
+    while ($line =~ /verdict(\d+)\.a(\d+)\.g(\d+)(?:\.out)?\b/g) {
       my ($nn, $a, $g) = ($1, $2, $3);
       my $mx = $cite_max{"$nn|$a"};
       if (!defined $mx) {
-        push @miss, "line $ln: cites verdict$nn.a$a.g$g.out but NO committed generation exists for that family (A-SK66/KS-SK-91-4): $line";
-      } elsif ($g < $mx && $line !~ /supersed|judge-unrecoverable/i) {
-        push @miss, "line $ln: cites NON-max generation g$g (max committed g$mx) without naming the supersession on the line (A-SK66/KS-SK-91-4): $line";
+        push @miss, "line $ln: cites verdict$nn.a$a.g$g but NO committed generation exists for that family (A-SK66/KS-SK-91-4): $line";
       } elsif ($g > $mx) {
         push @miss, "line $ln: cites generation g$g NOT committed for that family (max g$mx) (A-SK66): $line";
+      } elsif ($g < $mx && !ledger_supersession_proved($nn, $g)) {
+        push @miss, "line $ln: cites NON-max generation g$g (max committed g$mx) with NO committed ledger row proving the supersession (A-SK66/A-SK-72): $line";
       }
     }
     if ($bytes_first) {
@@ -791,6 +877,7 @@ for my $t (@targets) {
         (my $noint = $norm) =~ s/\.0$//;
         next if $corpus{$noint};
         if ($eval_ok{$norm} || $derived_ok{$norm}) { $derived_ok{$norm} = 1; next; }
+        next if is_commit_identity($norm);
         push @miss, "line $ln: token '$raw' on a [derivata] line NOT in corpus and NOT provenance-verified (A-SK56/A-SK60/A-SK62): $line";
       }
       next;
@@ -809,6 +896,7 @@ for my $t (@targets) {
       next if $corpus_count{$norm};
       (my $noint = $norm) =~ s/\.0$//;
       next if $corpus{$noint};
+      next if is_commit_identity($norm);
       push @miss, "line $ln: '$raw' (norm '$norm') not in committed corpus: $line";
     }
   }

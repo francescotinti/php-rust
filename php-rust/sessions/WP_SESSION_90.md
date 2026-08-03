@@ -111,7 +111,7 @@ parity-full 16/16) · campagna m90 a bb4b388 attempt=1 · mem-census
   gate di merge KS-DS-88-3 + KS-DS-89-3 + KS-DS-91-1..3. PRIMO item di
   WP-91(sessione). Staging completo: contratto emendato, fixture v2,
   pin canali separati, sede in appendice WP_SESSION_89.
-- **Attribuzione di b, iterazione 3**: b_work ~16,48 MiB attribuito
+- **Attribuzione di b, iterazione 3**: b_work 17.276.928 B attribuito
   alla FASE, non al DETENTORE — servono canali per-worker riparati
   (candidati per NOME in MEASURE90 §Aperture).
 - **Wiring request_collect_mi sul worker axum** (Scoperta 3) + **A-BB50
