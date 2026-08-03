@@ -16554,10 +16554,22 @@ struct UcEmitGuard;
 // And the silent path is not only a missed panic: a put that COMPLETES
 // during teardown emits uc_log into a TLS buffer that dies WITHOUT
 // flush — a LOST-WRITE channel (the row never reaches any reader), not
-// a mere absence of fail-fast. os-TLS caveat: on the fallback path
-// (platforms without `target_thread_local`) even these no-Drop keys
-// register a destructor that frees their box, so `with` can panic for
-// them too after teardown. The guard's Drop cannot panic via this path
+// a mere absence of fail-fast. A-TH-66 (Council WP-93, Hoare): the
+// lost-write channel is NOT uc_log-only — UC_STATS rides the same TLS
+// list and a completing put mutates counters that die unflushed with
+// the thread (same channel, second victim). Case placement DECLARED
+// with the std cite: an access DURING the key's OWN destructor is
+// SUBSUMED under already-destroyed — std marks the key destroyed
+// BEFORE running its destructor (LocalKey: "may panic if the
+// destructor has previously been run"), so the three-state enumeration
+// stays complete and there is no fourth state. os-TLS caveat: on the
+// fallback path (platforms without `target_thread_local`) even these
+// no-Drop keys register a destructor that frees their box, so `with`
+// can panic for them too after teardown. A-TH-66: on that same
+// fallback path the never-initialized-at-teardown case does not merely
+// lose the write — the lazy init allocates a box whose destructor may
+// never run: a LEAKED box (write lost AND memory retained) is the
+// declared outcome. The guard's Drop cannot panic via this path
 // (no-Drop key), so the previously declared panic-in-panic abort is
 // UNREACHABLE by that route (KH90-2: any fail-fast claim built on the
 // pre-A-TH50 wording is VOID). The REAL seal is unchanged: no

@@ -48,6 +48,24 @@ count_nontest() { # <file> <token-regex> -> count
   ' "$1"
 }
 
+# A-TH-64 (Council WP-93, Hoare Q3 — generalizes the v9 guard at the a/ml
+# site): EVERY awk/grep-c capture passes through this fail-closed assert
+# before any `-ne` test. `[ "" -ne N ]` errors with status 2 and the if
+# treats it as FALSE: a broken program used to turn its teeth VACUOUS
+# silently (the S-91.0 macOS-awk lesson: a count that is not a number is
+# a broken judge). KS-TH-93-2: a non-numeric count escaping this = gate
+# VOID.
+num_or_void() { # <label> <value>... — exit 2 on any non-numeric capture
+  local lbl="$1"; shift
+  local v
+  for v in "$@"; do
+    case "$v" in ''|*[!0-9]*)
+      echo "SELF-TEST BROKEN: non-numeric count in $lbl ('$v') — awk/grep program broken, gate VOID (A-TH-64/KS-TH-93-2)"
+      exit 2;;
+    esac
+  done
+}
+
 # --- self-test: the counter must bite (and respect test/comment arms) --------
 TMPD=$(mktemp -d)
 trap 'rm -rf "$TMPD"' EXIT
@@ -137,6 +155,7 @@ GATE_MINTS=$(awk '/^pub\(crate\) mod gate \{/{on=1}
   on && /^\}/{on=0}
   !on{next} /^[[:space:]]*\/\//{next}
   {n+=gsub(/VmGate[(]/,"&")} END{print n+0}' "$VMMOD")
+num_or_void "A-TH32 GATE_MINTS" "$GATE_MINTS"
 if [ "$GATE_MINTS" -ne 3 ]; then
   echo "FAIL: VmGate( mints inside mod gate == $GATE_MINTS, pinned 3 — a mint escaped the leaf module (A-TH32)"
   FAILS=$((FAILS+1))
@@ -549,6 +568,7 @@ PROD_N=$(awk '/^pub fn retained_walk_selftest/{exit}
 SELF_N=$(awk '/^pub fn retained_walk_selftest/{on=1}
   on && /^[[:space:]]*(pub[[:space:]]+)?mod tests/{exit}
   !on{next} /^[[:space:]]*\/\//{next} {n+=gsub(/crate::lower_source[(]/,"&")} END{print n+0}' "$VMMOD")
+num_or_void "A-TH23 PROD_N/SELF_N" "$PROD_N" "$SELF_N"
 if [ "$PROD_N" -ne 2 ] || [ "$SELF_N" -ne 7 ]; then
   echo "FAIL: vm/mod.rs crate::lower_source( split prod=$PROD_N/selftest=$SELF_N, pinned 2/7 SEPARATE (A-TH23)"
   FAILS=$((FAILS+1))
@@ -848,6 +868,7 @@ echo "OK  self-test: A-TH24 epoch-cast decoy bites"
 RS_FLUSH=$(awk '/^    pub fn request_shutdown\(/{on=1; next}
   on && /^    pub fn /{exit}
   on && !/^[[:space:]]*\/\//{n+=gsub(/uc_log_flush\(\)/,"&")} END{print n+0}' "$VMMOD")
+num_or_void "A-PP23 RS_FLUSH" "$RS_FLUSH"
 if [ "$RS_FLUSH" -ne 1 ]; then
   echo "FAIL: request_shutdown() carries $RS_FLUSH uc_log_flush() (want ==1) — flush-before-response unpinned (A-PP23)"
   FAILS=$((FAILS+1))
@@ -1012,6 +1033,7 @@ m=$(count_nontest "$TMPD/decoy_th42.rs" '[.][[:space:]]+production_gate|[.][[:sp
 a=$(count_nontest "$TMPD/decoy_th42.rs" '=[[:space:]]*CachedUnit|=[[:space:]]*VmGate|transmute[[:space:]]+as[[:space:]]')
 ml=$(awk '/CachedUnit[[:space:]]*$/ { pend=1; next } pend && /^[[:space:]]*\{/ { n++ } { pend=0 } END { print n+0 }' "$TMPD/decoy_th42.rs")
 tj=$(tr '\n' ' ' < "$TMPD/decoy_th42.rs" | grep -cE 'transmute[^;]{0,200}[(][)][^;]{0,40};|impl[[:space:]]+Copy[[:space:]]+for[[:space:]]+VmGate' || true)
+num_or_void "A-TH42 decoys" "$n" "$m" "$a" "$ml" "$tj"
 if [ "$n" -ne 2 ] || [ "$m" -ne 1 ] || [ "$a" -lt 3 ] || [ "$ml" -ne 1 ] || [ "$tj" -lt 1 ]; then
   echo "SELF-TEST BROKEN: A-TH42 decoy counts ufcs=$n spaced=$m alias=$a multiline=$ml joined=$tj (expected 2/1/>=3/1/>=1)"; exit 2
 fi
@@ -1158,6 +1180,7 @@ r4=$(count_nontest "$TMPD/decoy_th49.rs" '=[[:space:]]*([A-Za-z_][A-Za-z0-9_]*)?
 r5=$(count_nontest "$TMPD/decoy_th49.rs" 'use[[:space:]][^;]*[{][^}]*(CachedUnit|VmGate)[[:space:]]+as[[:space:]]')
 r2=$(awk '/[.][[:space:]]*(production_gate|vm_gate)[[:space:]]*$/ { pend=1; next }
           pend && /^[[:space:]]*[(]/ { n++ } { pend=0 } END { print n+0 }' "$TMPD/decoy_th49.rs")
+num_or_void "A-TH49 decoys" "$r1" "$r2" "$r3" "$r4" "$r5"
 if [ "$r1" -ne 1 ] || [ "$r2" -ne 1 ] || [ "$r3" -ne 1 ] || [ "$r4" -ne 2 ] || [ "$r5" -ne 1 ]; then
   echo "SELF-TEST BROKEN: A-TH49 decoy counts raw=$r1 multiline=$r2 comment=$r3 colons=$r4 usegroup=$r5 (expected 1/1/1/2/1)"; exit 2
 fi
@@ -1242,23 +1265,29 @@ fi
 # demanded `=`); A-TH-59 extends the awk with comment/blank tolerance on
 # the DOT branch, the THREE-line split (dot / name / paren) and the
 # trailing-`//` name (the pend rule demanded name at EOL).
-TH49RE_V8='r[#](production_gate|vm_gate|CachedUnit|VmGate)|[.][[:space:]]*[/][*].*[*][/][[:space:]]*(production_gate|vm_gate)|[.](production_gate|vm_gate)[[:space:]]*[/][*].*[*][/][[:space:]]*[(]|=[[:space:]]*([A-Za-z_][A-Za-z0-9_]*)?[[:space:]]*(::[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*)*::[[:space:]]+(r[#])?(CachedUnit|VmGate)|=[[:space:]]*::[[:space:]]*([A-Za-z_][A-Za-z0-9_]*[[:space:]]*::[[:space:]]*)*(r[#])?(CachedUnit|VmGate)|::[[:space:]]*r[#](CachedUnit|VmGate)|use[[:space:]][^;]*[{][^}]*(CachedUnit|VmGate)[[:space:]]+as[[:space:]]|use[[:space:]][^;{]*(CachedUnit|VmGate)[[:space:]]+as[[:space:]]'
+# v10 (Council WP-93, Hoare — A-TH-65): ProbeWindow alias/type-alias
+# branches added (the net covered ONLY CachedUnit|VmGate: `use …
+# ProbeWindow as PW` and `type P = ProbeWindow` eluded it and left the
+# A-TH-57 2==2 pin green with an aliased third site). Invariant DECLARED
+# (awk-slash audit): TH49RE_V8 contains NO backslash — -v would eat it.
+TH49RE_V8='r[#](production_gate|vm_gate|CachedUnit|VmGate)|[.][[:space:]]*[/][*].*[*][/][[:space:]]*(production_gate|vm_gate)|[.](production_gate|vm_gate)[[:space:]]*[/][*].*[*][/][[:space:]]*[(]|=[[:space:]]*([A-Za-z_][A-Za-z0-9_]*)?[[:space:]]*(::[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*)*::[[:space:]]+(r[#])?(CachedUnit|VmGate)|=[[:space:]]*::[[:space:]]*([A-Za-z_][A-Za-z0-9_]*[[:space:]]*::[[:space:]]*)*(r[#])?(CachedUnit|VmGate)|::[[:space:]]*r[#](CachedUnit|VmGate)|use[[:space:]][^;]*[{][^}]*(CachedUnit|VmGate)[[:space:]]+as[[:space:]]|use[[:space:]][^;{]*(CachedUnit|VmGate)[[:space:]]+as[[:space:]]|use[[:space:]][^;]*ProbeWindow[[:space:]]+as[[:space:]]|type[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*=[^;]*ProbeWindow'
 TH49ML_PROG='
   /[.][[:space:]]*(production_gate|vm_gate)[[:space:]]*(\/\/.*)?$/ { pend=1; dot=0; nmp=0; next }
-  /[.][[:space:]]*$/ { dot=1; pend=0; nmp=0; next }
+  /[.][[:space:]]*(\/\/.*)?$/ { dot=1; pend=0; nmp=0; next }
   /^[[:space:]]*use[[:space:]]/ && /;[[:space:]]*$/ { pend=0; dot=0; nmp=0; next }
   /^[[:space:]]*use[[:space:]]/ { useopen=1; seen=0 }
   useopen && /(CachedUnit|VmGate)/ { seen=1 }
   useopen && seen && /[[:space:]]as[[:space:]]/ { n++; seen=0 }
+  useopen && seen && /[[:space:]]as[[:space:]]*$/ { n++; seen=0 }
   useopen && /;/ { useopen=0; seen=0 }
-  pend && (/^[[:space:]]*\/\// || /^[[:space:]]*$/) { next }
+  pend && (/^[[:space:]]*\/\// || /^[[:space:]]*$/ || /^[[:space:]]*\/[*].*[*]\/[[:space:]]*$/) { next }
   pend && /^[[:space:]]*[(]/ { n++; pend=0; next }
   { pend=0 }
-  dot && (/^[[:space:]]*\/\// || /^[[:space:]]*$/) { next }
+  dot && (/^[[:space:]]*\/\// || /^[[:space:]]*$/ || /^[[:space:]]*\/[*].*[*]\/[[:space:]]*$/) { next }
   dot && /^[[:space:]]*(production_gate|vm_gate)[[:space:]]*[(]/ { n++ }
   dot && /^[[:space:]]*(production_gate|vm_gate)[[:space:]]*(\/\/.*)?$/ { nmp=1; dot=0; next }
   { dot=0 }
-  nmp && (/^[[:space:]]*\/\// || /^[[:space:]]*$/) { next }
+  nmp && (/^[[:space:]]*\/\// || /^[[:space:]]*$/ || /^[[:space:]]*\/[*].*[*]\/[[:space:]]*$/) { next }
   nmp && /^[[:space:]]*[(]/ { n++ }
   { nmp=0 }
   END { print n+0 }'
@@ -1293,6 +1322,15 @@ fn h() {
         (x);
     let h3 = u.production_gate // trailing comment (A-TH-59)
         (x);
+    let i1 = u. // trailing comment on the NAKED dot (A-TH-62)
+        vm_gate(x);
+    let i2 = u.vm_gate
+        /* whole-line block comment interposed (A-TH-62) */
+        (x);
+    use crate::vm::{CachedUnit as
+        CU93};
+    use crate::probe::ProbeWindow as PW93;
+    type PW94 = crate::probe::ProbeWindow;
 }
 EOF
 v8n=$(count_nontest "$TMPD/decoy_th52.rs" "$TH49RE_V8")
@@ -1303,10 +1341,10 @@ v8ml=$(awk "$TH49ML_PROG" "$TMPD/decoy_th52.rs" 2>/dev/null)
 # status 2, the || treats it as false, and every ml tooth downstream
 # went VACUOUS silently. A count that is not a number is a broken judge.
 case "${v8n}x${v8ml}" in *[!0-9x]*|x*|*x) echo "SELF-TEST BROKEN: non-numeric decoy counts v8n='$v8n' v8ml='$v8ml' — awk/regex program is broken, gate VOID"; exit 2;; esac
-if [ "$v8n" -ne 10 ] || [ "$v8ml" -ne 8 ]; then
-  echo "SELF-TEST BROKEN: A-TH52/A-TH-58/A-TH-59 decoys against the PRODUCTION regex/awk: single-line=$v8n (want 10) multiline=$v8ml (want 8)"; exit 2
+if [ "$v8n" -ne 12 ] || [ "$v8ml" -ne 11 ]; then
+  echo "SELF-TEST BROKEN: A-TH52/58/59/62/65/67 decoys against the PRODUCTION regex/awk: single-line=$v8n (want 12) multiline=$v8ml (want 11)"; exit 2
 fi
-echo "OK  self-test: A-TH52 v9 decoys bite through the SINGLE-SOURCE production regex (10 single-line + 8 multiline — A-TH-58 one-line use-as, A-TH-59 dot-comment/three-line/trailing-comment)"
+echo "OK  self-test: A-TH52 v10 decoys bite through the SINGLE-SOURCE production regex (12 single-line + 11 multiline — A-TH-62 naked-dot-comment/block-line, A-TH-65 ProbeWindow alias/type-alias, A-TH-67 use-as at EOL)"
 TH52_SWEEP=$(find "$REPO/crates" -name '*.rs' ! -name '._*' -print0 |
   while IFS= read -r -d '' f; do
     n=$(count_nontest "$f" "$TH49RE_V8")
@@ -1346,6 +1384,7 @@ d1=$(grep -cE "$MS48_ANYBIND" "$TMPD/decoy_ms48.rs" || true)
 d2=$(grep -cE "$MS48_DIRECT" "$TMPD/decoy_ms48.rs" || true)
 d3=$(grep -cE "$MS48_UFCS" "$TMPD/decoy_ms48.rs" || true)
 d4=$(awk "$MS48_SPLIT_PROG" "$TMPD/decoy_ms48.rs")
+num_or_void "A-MS48 decoys" "$d1" "$d2" "$d3" "$d4"
 if [ "$d1" -ne 1 ] || [ "$d2" -ne 1 ] || [ "$d3" -ne 1 ] || [ "$d4" -ne 1 ]; then
   echo "SELF-TEST BROKEN: A-MS48 decoys anybind=$d1 direct=$d2 ufcs=$d3 split=$d4 (want 1/1/1/1)"; exit 2
 fi
@@ -1412,7 +1451,9 @@ else
   FAILS=$((FAILS+1))
 fi
 
-# --- 10. Sigilli v9 (Council WP-92: A-TH-57..61 + quinta rete A-MS48 + A-TH53)
+# --- 10. Sigilli v9+v10 (WP-92: A-TH-57..61 + quinta rete A-MS48 + A-TH53;
+# WP-93: A-TH-62..67 — KS-TH-93-1: nessuna cifra m91 con probe
+# VERDICT-grade finché A-TH-63/65 non mordono)
 # A-TH-57 (KS-TH-92-1) — census TOTALE dei siti arm, in forma PREFISSO:
 # narm counts only `let <nome> = ProbeWindow::arm()` — a third site
 # spelled `let mut w =`, `let w: ProbeWindow =`, `let (w,_) =`,
@@ -1423,12 +1464,81 @@ fi
 # future `arm(&'static str)` signature (A-MS-52, design) would break an
 # empty-paren pin; the prefix census survives it; narm's own regex must
 # be updated in the SAME commit as any signature change).
-ntot=$(grep -vE '^[[:space:]]*(//|#\[)' "$WPOOL" | grep -c 'ProbeWindow::arm' || true)
+# A-TH-65 (Council WP-93, Hoare Q2): the fixed-string census was TOTAL on
+# ONE spelling in ONE file — `ProbeWindow :: arm` spaced, aliases and
+# out-of-file sites all eluded it while 2==2 stayed green. The census is
+# now an ERE (spaces tolerated) + a WORKSPACE sweep; alias/type-alias
+# spellings are routed to TH49RE_V8 (branches added, decoys above). The
+# wording is emended accordingly: total ON THE ERE NET, per file + sweep.
+TH65_RX='ProbeWindow[[:space:]]*::[[:space:]]*arm'
+d65=$(printf 'let w = ProbeWindow :: arm();\n' | grep -cE "$TH65_RX" || true)
+num_or_void "A-TH-65 decoy" "$d65"
+if [ "$d65" -ne 1 ]; then
+  echo "SELF-TEST BROKEN: A-TH-65 spaced-ERE decoy=$d65 (want 1)"; exit 2
+fi
+ntot=$(grep -vE '^[[:space:]]*(//|#\[)' "$WPOOL" | grep -cE "$TH65_RX" || true)
+num_or_void "A-TH-57/65 ntot" "$ntot" "$narm"
 if [ "$ntot" = 2 ] && [ "$ntot" = "$narm" ]; then
-  echo "OK  ProbeWindow::arm TOTAL census (prefix form) ==2 == narm (A-TH-57/KS-TH-92-1)"
+  echo "OK  ProbeWindow::arm census on the ERE net (prefix form, spaces tolerated) ==2 == narm (A-TH-57/A-TH-65/KS-TH-92-1)"
 else
-  echo "FAIL: ProbeWindow::arm total census ntot=$ntot (want 2, == narm=$narm) — an arm site invisible to the named-binding pin exists (A-TH-57/KS-TH-92-1: campaign figures with probe VOID)"
+  echo "FAIL: ProbeWindow::arm ERE census ntot=$ntot (want 2, == narm=$narm) — an arm site invisible to the named-binding pin exists (A-TH-57/A-TH-65/KS-TH-92-1: campaign figures with probe VOID)"
   FAILS=$((FAILS+1))
+fi
+TH65_SWEEP=$(find "$REPO/crates" -name '*.rs' ! -name '._*' ! -path '*php-server/src/worker_pool.rs' -print0 |
+  while IFS= read -r -d '' f; do
+    c=$(grep -vE '^[[:space:]]*(//|#\[)' "$f" | grep -cE "$TH65_RX" || true)
+    case "$c" in (''|*[!0-9]*) echo "${f#"$REPO"/}: NON-NUMERIC"; continue;; esac
+    [ "$c" -gt 0 ] && echo "${f#"$REPO"/}: $c"
+  done)
+if [ -n "$TH65_SWEEP" ]; then
+  echo "FAIL: ProbeWindow::arm site(s) OUTSIDE worker_pool.rs (A-TH-65 workspace sweep):"
+  echo "$TH65_SWEEP"
+  FAILS=$((FAILS+1))
+else
+  echo "OK  workspace sweep: ProbeWindow::arm lives only in worker_pool.rs (A-TH-65)"
+fi
+
+# A-TH-63 (Council WP-93, Hoare Q1.3 — the widest v9 hole): single-line
+# name-space-paren (`retain.production_gate (x)`) and turbofish
+# (`.vm_gate::<>(x)`) eluded EVERY v9 net — each spelling demanded an
+# adjacent `(` or an inline comment; a third call site in those grafie
+# left the ==2 pin GREEN. New net in PREFIX form (A-TH-57 model, no call
+# anchor): TOTAL census of `.name` on code lines, per file, plus the
+# workspace sweep. Multi-line dot splits stay with the ML program.
+cat > "$TMPD/decoy_th63.rs" <<'EOF'
+fn h() {
+    let a = retain.production_gate (x);
+    let b = u.vm_gate::<>(x);
+}
+EOF
+TH63_RX='[.][[:space:]]*(production_gate|vm_gate)([^A-Za-z0-9_]|$)'
+d63=$(grep -vE '^[[:space:]]*(//|#\[)' "$TMPD/decoy_th63.rs" | grep -cE "$TH63_RX" || true)
+num_or_void "A-TH-63 decoys" "$d63"
+if [ "$d63" -ne 2 ]; then
+  echo "SELF-TEST BROKEN: A-TH-63 prefix decoys name-space-paren/turbofish=$d63 (want 2)"; exit 2
+fi
+echo "OK  self-test: A-TH-63 prefix net bites (name-space-paren, turbofish)"
+n63v=$(grep -vE '^[[:space:]]*(//|#\[)' "$VMMOD" | grep -cE "$TH63_RX" || true)
+n63w=$(grep -vE '^[[:space:]]*(//|#\[)' "$WPOOL" | grep -cE "$TH63_RX" || true)
+num_or_void "A-TH-63 census" "$n63v" "$n63w"
+if [ "$n63v" = 1 ] && [ "$n63w" = 1 ]; then
+  echo "OK  .production_gate/.vm_gate PREFIX census: vm/mod.rs==1 worker_pool.rs==1 (A-TH-63)"
+else
+  echo "FAIL: dot-name PREFIX census vm/mod=$n63v (want 1) worker_pool=$n63w (want 1) — a call site in an eluded spelling exists (A-TH-63)"
+  FAILS=$((FAILS+1))
+fi
+TH63_SWEEP=$(find "$REPO/crates" -name '*.rs' ! -name '._*' ! -path '*php-runtime/src/vm/mod.rs' ! -path '*php-server/src/worker_pool.rs' -print0 |
+  while IFS= read -r -d '' f; do
+    c=$(grep -vE '^[[:space:]]*(//|#\[)' "$f" | grep -cE "$TH63_RX" || true)
+    case "$c" in (''|*[!0-9]*) echo "${f#"$REPO"/}: NON-NUMERIC"; continue;; esac
+    [ "$c" -gt 0 ] && echo "${f#"$REPO"/}: $c"
+  done)
+if [ -n "$TH63_SWEEP" ]; then
+  echo "FAIL: dot-name PREFIX found outside the two pinned files (A-TH-63):"
+  echo "$TH63_SWEEP"
+  FAILS=$((FAILS+1))
+else
+  echo "OK  workspace sweep: dot-name PREFIX only in the two pinned files (A-TH-63)"
 fi
 
 # Quinta rete A-MS48 (Hoare Q2.2, WP-92): point-free `with(Cell::set)`,
@@ -1444,6 +1554,7 @@ fn h() {
 }
 EOF
 d5=$(grep -cE "$MS48_NET5" "$TMPD/decoy_ms48v9.rs" || true)
+num_or_void "A-MS48 net5 decoys" "$d5"
 if [ "$d5" -ne 3 ]; then
   echo "SELF-TEST BROKEN: A-MS48 fifth-net decoys point-free/Cell-call/braced=$d5 (want 3)"; exit 2
 fi
@@ -1482,12 +1593,20 @@ else
 fi
 
 # A-TH-61 — the TLS doc carries the THIRD state (never-initialized at
-# teardown) and the lost-write channel; presence-pinned like A-PP48.
+# teardown) and the lost-write channel. A-TH-66 (Council WP-93, Hoare Q4):
+# the -ge 1 presence pin was satisfiable by an EMPTIED doc keeping the
+# marker; the pin is now ==1 on the marker PLUS the distinctive phrases of
+# the emendation (UC_STATS second victim, fallback leaked box, own-dtor
+# subsumption) — content-pinned, not marker-pinned.
 nth61=$(grep -c 'A-TH-61' "$REPO/crates/php-runtime/src/vm/mod.rs" || true)
-if [ "$nth61" -ge 1 ]; then
-  echo "OK  vm/mod.rs TLS doc carries the A-TH-61 emendation (third state + lost write)"
+nth66a=$(grep -c 'same channel, second victim' "$REPO/crates/php-runtime/src/vm/mod.rs" || true)
+nth66b=$(grep -c 'write lost AND memory retained' "$REPO/crates/php-runtime/src/vm/mod.rs" || true)
+nth66c=$(grep -c 'SUBSUMED under already-destroyed' "$REPO/crates/php-runtime/src/vm/mod.rs" || true)
+num_or_void "A-TH-61/66 doc pins" "$nth61" "$nth66a" "$nth66b" "$nth66c"
+if [ "$nth61" = 1 ] && [ "$nth66a" = 1 ] && [ "$nth66b" = 1 ] && [ "$nth66c" = 1 ]; then
+  echo "OK  vm/mod.rs TLS doc carries A-TH-61 (==1) + A-TH-66 phrases (UC_STATS lost-write, fallback leaked box, own-dtor subsumption)"
 else
-  echo "FAIL: A-TH-61 emendation absent from the vm/mod.rs TLS doc"
+  echo "FAIL: TLS doc pins A-TH-61=$nth61 (want 1) UC_STATS-victim=$nth66a leak=$nth66b own-dtor=$nth66c (want 1/1/1) — emendation absent or doc emptied around the marker (A-TH-66)"
   FAILS=$((FAILS+1))
 fi
 
@@ -1503,7 +1622,7 @@ else
 fi
 
 if [ "$FAILS" = 0 ]; then
-  echo "== GATE-LEVER-PINS PASS (A-MS13 + A-PP16 + KS-PP-82-3 + A-TH14 + v5 A-TH41/42 + v6 A-TH44/45 A-MS41 + v7 A-TH48/49 A-MS43/44/45 A-PP48 + v8 A-TH52/56 A-MS47/48 + v9 A-TH-57/58/59/60/61 A-MS48-net5 A-TH53) [git $GIT_REV] =="
+  echo "== GATE-LEVER-PINS PASS (A-MS13 + A-PP16 + KS-PP-82-3 + A-TH14 + v5 A-TH41/42 + v6 A-TH44/45 A-MS41 + v7 A-TH48/49 A-MS43/44/45 A-PP48 + v8 A-TH52/56 A-MS47/48 + v9 A-TH-57/58/59/60/61 A-MS48-net5 A-TH53 + v10 A-TH-62/63/64/65/66/67) [git $GIT_REV] =="
   exit 0
 else
   echo "== GATE-LEVER-PINS FAIL($FAILS) [git $GIT_REV] =="
