@@ -380,6 +380,28 @@ if [ "$SAME_REV" = 1 ]; then
       fi
       ;;
   esac
+  # A-AH58/A-AH59 (Council WP-92, DELIBERA UNICA di formato ledger —
+  # wp91-harness/design91-ledger.md): grammar v2 enforced on 91pre+
+  # batteries, ALL rows of the battery family (KS-AH-92-1/2). 89pre/90pre
+  # rows stand as written (grammar v1, declared — history is never
+  # re-graded). Checker updated in the SAME commit as the delibera (T5
+  # team-cifre: one format revision, not three).
+  case "$BATTERY_NAME" in
+    battery-9[1-9]*)
+      BNAME="${BATTERY_NAME#battery-}"
+      V2ROWS=$(git -C "$REPO" show "HEAD:${GITPREFIX}${ATTL_REL}" 2>/dev/null | grep "battery=$BNAME " || true)
+      if [ -n "$V2ROWS" ]; then
+        BADW=$(printf '%s\n' "$V2ROWS" | grep -cvE "writer=(script:[0-9a-f]{16}|operator)( |$)" || true)
+        [ "$BADW" -gt 0 ] && fail "(A-AH58/KS-AH-92-1) $BADW attempts row(s) for battery=$BNAME without a valid writer= — consumption VOID"
+        BADA=$(printf '%s\n' "$V2ROWS" | grep "esito=ABORT" | grep -cv "writer=operator" || true)
+        [ "$BADA" -gt 0 ] && fail "(A-AH58/KS-AH-92-1) $BADA esito=ABORT row(s) without writer=operator — an ABORT is an operator act"
+        BADE=$(printf '%s\n' "$V2ROWS" | grep -cvE "esito=(PASS|FAIL|REFUSE|ABORT)( |$)" || true)
+        [ "$BADE" -gt 0 ] && fail "(A-AH58) $BADE row(s) with esito outside {PASS,FAIL,REFUSE,ABORT}"
+        BADS=$(printf '%s\n' "$V2ROWS" | grep -E "esito=(FAIL|REFUSE|ABORT)" | grep -cvE "sha256=[0-9a-f]{64}" || true)
+        [ "$BADS" -gt 0 ] && fail "(A-AH59/KS-AH-92-2) $BADS FAIL/REFUSE/ABORT row(s) without a sha256 OUT anchor — battery VOID (never 'assente con motivo')"
+      fi
+      ;;
+  esac
   if [ "$FAILS" = 0 ]; then
     echo "== SAME-REV CONSUMPTION LEGAL (battery at $BREV == HEAD, v6 teeth verified: anchored PASS, sha256(OUT), 4-field committed stamp, committed matrix, toolchain -Vv in-repo, window allowlist + ledger-prefix A-SK50) =="
     exit 0
