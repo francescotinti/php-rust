@@ -118,7 +118,7 @@ php-rust/sessions/WP_SESSION_86.md	-	no	no	-
 php-rust/sessions/WP_SESSION_87.md	-	no	no	-
 php-rust/sessions/WP_SESSION_88.md	-	no	no	-
 php-rust/sessions/WP_SESSION_89.md	-	no	no	-
-php-rust/sessions/WP_SESSION_90.md	-	yes	no	-
+php-rust/sessions/WP_SESSION_90.md	-	no	no	-
 php-rust/gaps/GAP_TREND.md	-	no	no	-
 php-rust/gaps/REPORT_GAP_40.md	-	no	no	-
 php-rust/gaps/REPORT_GAP_41.md	-	no	no	-
@@ -176,3 +176,4 @@ php-rust/wp91-harness/COUNCIL_WP91_REVIEWS.md	-	no	no	-
 php-rust/wp92-harness/COUNCIL_WP92_REVIEWS.md	-	no	no	-
 php-rust/wp91-harness/design91-ledger.md	-	no	no	-
 php-rust/wp91-harness/design91.md	-	no	no	-
+php-rust/sessions/WP_SESSION_91.md	-	yes	no	-
