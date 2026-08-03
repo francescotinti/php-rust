@@ -635,6 +635,11 @@ push @sources, committed_glob("$here/../wp91-harness/*.out");
 # fixtures, dl59-join ADVISORY analysis) — budget raised in the SAME commit
 # (A-SK61 deliberate-growth discipline)
 push @sources, committed_glob("$here/../wp92-harness/*.out");
+# S-93.0: the wp93 machine outputs (huge-sites: the six per-worker huge
+# blocks NAMED live — bumpalo prelude-parse arena chunks, freed at first
+# request; LEVER-2 refuted with measure) — budget raised in the SAME
+# commit (A-SK61 deliberate-growth discipline)
+push @sources, committed_glob("$here/../wp93-harness/*.out");
 # S-85.0: the measure85 campaign raws (85*/m85* labels) + verdict85 + the
 # wp85 evidence dir
 push @sources, committed_glob("$mout/*85*.summary"), committed_glob("$mout/*85*.census"),

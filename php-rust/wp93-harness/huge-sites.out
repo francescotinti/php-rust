@@ -1,0 +1,101 @@
+huge-sites: i sei blocchi huge per worker NOMINATI dal vivo (S-93.0 B1/B2/B3)
+grade=ADVISORY  # probe diagnostico, NON campagna; verdict-grade solo dal canale m91
+formato=ascii-nudo  # A-BG66: nessun separatore di migliaia nei token numerici
+metodo=hook env-gated PHPR_HUGE_TRACE=1 nel GlobalAlloc del build mem-census
+  (huge_note: size>=524288 => backtrace std su stderr; guardia di rientranza)
+build-identita: trace=b048b697a4c10688 trace+lever=8e966efd6b3d3e69
+  trace+lever+stats=8f87af977b4c0ad3 (tutte --features mem-census, parent 2859c81)
+binari-parita: phpr d5ce86e3342f3926 INVARIATO (mai ricompilato) ·
+  release/php-server RIPRISTINATO d45b57843eeb1375 dopo il probe
+carico=hello.php (fixtures gate-axum), W=1, porta 8199
+
+== B1: le sei allocazioni (una richiesta, un worker, ordine di nascita) ==
+kind=alloc size=622576 thr=worker
+kind=alloc size=1245168 thr=worker
+kind=alloc size=2490352 thr=worker
+kind=alloc size=4980720 thr=worker
+kind=alloc size=9961456 thr=worker
+kind=alloc size=19922928 thr=worker
+somma=39423200
+relazione=catena di RADDOPPIO bumpalo (size_next = 2*size_prev + 16)
+conteggio dopo richiesta 1: 6 huge; dopo richiesta 3: 6 huge (numero FISSO
+  riprodotto: nessuna nuova huge oltre la prima richiesta)
+nota-somma: il termine m90 malloc_huge 39911424 conta mi_page_block_size
+  (arrotondamento os-good-size di mi_huge_page_alloc), da cui il residuo
+  contro la somma raw 39423200
+
+== B1: il NOME (frame comuni dei sei backtrace, dal log del trace) ==
+sito=bumpalo::Bump::alloc_layout_slow  # crescita chunk dell'arena
+via=mago_syntax::parser (TokenStream::fill_buffer_slow, parse_array,
+  parse_if, create_assignment_expression, parse_block/method, parse_switch)
+radice=php_runtime::lower::lower_prelude_uncached
+  -> core::cell::once::OnceCell::try_init (cache per-thread del preludio)
+  -> php_runtime::lower::lower_source_impl
+  -> php_runtime::vm::main_unit_acquire
+  -> php_server::worker_pool::implementation::WorkerPool::worker_loop
+identita=UNA sola arena bumpalo (l'arena AST del parse del PRELUDIO stdlib,
+  sorgenti concatenate ~406 KB), sei chunk in raddoppio, tutti vivi
+  simultaneamente durante il parse
+falsificati-per-NOME=UNIT_CACHE, STUBS, arena dei Module: nessuno dei sei
+  backtrace li attraversa — non sono i proprietari dei blocchi huge
+
+== B2: la NATURA (controllo positivo del decremento, lato Rust) ==
+kind=dealloc size=19922928
+kind=dealloc size=9961456
+kind=dealloc size=4980720
+kind=dealloc size=2490352
+kind=dealloc size=1245168
+kind=dealloc size=622576
+esito=TUTTI E SEI liberati (Drop della Bump, ordine inverso) DENTRO la prima
+  richiesta, appena il lowering del preludio completa
+conseguenza-1=la lettura "riserva fissa mai liberata" di huge-worker.out e
+  REFUTATA nella conclusione: la free ESISTE; e la statistica malloc_huge
+  dei dump m90 a non decrementare MAI (current==total==peak su ogni
+  checkpoint, incluso exit_collect_mi) — contatore di fatto CUMULATIVO
+conseguenza-2=il controllo positivo del decremento chiesto dal Concilio
+  WP-94 (E2) e ESEGUITO dal lato Rust con esito: il decremento NON morde
+  sul canale stat
+natura=SPIKE TRANSIENTE per-thread alla prima richiesta (e a OGNI processo
+  phpr CLI), non riserva ne leak dei sei blocchi
+
+== B3: leva LEVER-2 (mi_collect on-thread post-preludio) — REFUTATA con misura ==
+protocollo=slope-probe ridotto (NON campagna): W in {1,4}, N=25*W hello
+  sequenziali, /usr/bin/time -l, un run per W, stessa binaria 8e966efd6b3d3e69,
+  arm da env PHPR_PRELUDE_COLLECT=1, MIMALLOC_PURGE_DELAY=0
+ctrl w=1 max_rss=57294848 peak_footprint=38355472
+ctrl w=4 max_rss=131219456 peak_footprint=94798400
+lever w=1 max_rss=57262080 peak_footprint=38322680
+lever w=4 max_rss=131235840 peak_footprint=94700096
+slope ctrl (94798400-38355472)/3=18814309 B/worker
+slope lever (94700096-38322680)/3=18792472 B/worker
+delta slope=21837 B/worker (0.12 per cento: NULLO)
+coerenza=nei raw m90 arena committed resta 151781376 (W4) e 399638528 (W16)
+  anche a exit_collect_mi: mi_collect non decommitta queste pagine — la
+  refutazione del probe e coerente con l'evidenza m90 gia committata
+baseline build precedente (b048b697a4c10688): w1 peak_footprint=38339088
+  w4 peak_footprint=94896704 (slope (94896704-38339088)/3=18852538)
+
+== B3: il canale della LEVA VERA, quantificato (contatore PRIMA, WP-48) ==
+contatore=PHPR_PRELUDE_STATS=1 in lower_prelude_uncached (committato)
+prelude-arena allocated_bytes=39534144 chunk_capacity=13738592
+lettura=capacita totale allocata dall'arena 39534144 B; 13738592 B di coda
+  MAI usata nell'ultimo chunk; le copie morte dei buffer in raddoppio
+  vivono DENTRO i chunk (touched fisico)
+costo-CLI (binario di parita d5ce86e3342f3926, pinnato, non toccato):
+  phpr hi.php max_rss=53035008 peak_footprint=44630520
+  phpr refl.php max_rss=53329920 peak_footprint=44597728
+  oracle php -n hi.php max_rss=26066944 peak_footprint=10093048
+  rapporto footprint phpr/oracle su hello = 44630520/10093048 = 4.42
+leva-nominata-per-la-prossima-sessione=arene PER-FILE nel preludio (peak
+  arena = max file ~74 KB reflection.php invece del cumulativo ~39.5 MB);
+  tocca l'ordine di hoist => gate parita COMPLETI obbligatori (corpus 1418 +
+  refl 290 + ORM 3E/13F + hk 1665) e ricertificazione della baseline phpr
+
+== VERDETTO (advisory) ==
+B1 CHIUSO: i sei siti hanno UN nome — sei chunk di raddoppio di UNA arena
+  bumpalo del parse del preludio stdlib, per thread, alla prima richiesta.
+B2 CHIUSO: transiente, liberata; il "mai liberata" era la statistica monca.
+B3: LEVER-2 refutata con misura (delta nullo); leva per-file nominata e il
+  suo canale quantificato; lo slope fisico ~18.8 MB/worker resta l'oggetto
+  della prossima misura (composizione: residuo committed per-thread post
+  spike + retained vive per-worker — attribuzione al canale m91).

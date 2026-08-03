@@ -1009,6 +1009,21 @@ fn lower_prelude_uncached() -> LoweredPrelude {
             low.hoist_function(func).expect("fileinfo prelude function must lower");
         }
     }
+    // S-93.0 B1/B3 (contatore del canale, predizione-misurata WP-48): con
+    // PHPR_PRELUDE_STATS=1 stampa il consumo dell'arena del preludio.
+    // allocated_bytes INCLUDE le copie morte dei buffer che raddoppiano
+    // dentro i chunk (è il touched fisico, non il live): è il numeratore
+    // della leva per-file-arena (i sei chunk huge di
+    // wp92-harness/huge-worker.out sono i raddoppi di QUESTA arena,
+    // liberati al ritorno di questa funzione — trace S-93.0). Una lettura
+    // env per init per-thread, zero costo a regime.
+    if std::env::var_os("PHPR_PRELUDE_STATS").is_some_and(|v| v == "1") {
+        eprintln!(
+            "prelude-arena allocated_bytes={} chunk_capacity={}",
+            arena.allocated_bytes(),
+            arena.chunk_capacity()
+        );
+    }
     (low.classes, low.class_index, low.functions, low.fn_index, low.static_count)
 }
 

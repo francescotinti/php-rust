@@ -218,6 +218,16 @@ fn collect_mi_standing() {
     phys_window_dump(0, phys_footprint(), "exit_collect_mi");
 }
 
+/// S-93.0 B3 (LEVER-2, arm A/B del probe): force-collect ON-THREAD,
+/// pubblico per il worker del server. I sei blocchi huge del preludio
+/// (wp92-harness/huge-worker.out) sono LIBERATI dal drop dell'arena
+/// bumpalo alla prima richiesta (provato col trace S-93.0), ma il theap
+/// li tiene committed — questo collect li decommitta sul thread che li
+/// possiede. Census builds only (il modulo è feature-gated), mai parity.
+pub fn mi_collect_on_thread() {
+    unsafe { mi_collect(true) }
+}
+
 /// A-DL49 (Council WP-91, Leijen): the IN-REQUEST census at the PEAK —
 /// workers ALIVE, RetainSet retained. On macOS commit==peak_commit
 /// (A-DL48): any post-workload pre-shutdown snapshot reads the peak

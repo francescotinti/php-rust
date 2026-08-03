@@ -512,6 +512,19 @@ mod implementation {
             // an ordinary docroot lookup.
             let test_panic = std::env::var_os("PHPR_TEST_WORKER_PANIC").is_some();
 
+            // S-93.0 B3 (LEVER-2, arm A/B same-binary): PHPR_PRELUDE_COLLECT=1
+            // arma un mi_collect(true) ON-THREAD dopo la PRIMA richiesta del
+            // worker — il preludio è appena stato parsato e la sua arena
+            // bumpalo droppata (sei chunk huge, 39.4MB, LIBERATI: trace
+            // S-93.0); senza collect il theap li tiene committed e lo slope
+            // fisico paga ~19MB/worker. Disarmato = binaria identica al
+            // controllo (una branch per richiesta).
+            #[cfg(feature = "mem-census")]
+            let prelude_collect =
+                std::env::var_os("PHPR_PRELUDE_COLLECT").map(|v| v == "1").unwrap_or(false);
+            #[cfg(feature = "mem-census")]
+            let mut prelude_collected = false;
+
             // Main request loop: each request gets a fresh RetainSet + fresh Vm
             while let Some(task) = rx.blocking_recv() {
                 dispatched += 1; // A-PP36: counted at pickup, before any outcome
@@ -612,6 +625,13 @@ mod implementation {
                              unmatched dec (KH81-2)"
                         );
                     }
+                }
+                // S-93.0 B3 LEVER-2: collect DOPO la send (nessuna latenza
+                // aggiunta alla risposta), una sola volta per thread.
+                #[cfg(feature = "mem-census")]
+                if prelude_collect && !prelude_collected {
+                    prelude_collected = true;
+                    php_types::memcensus::mi_collect_on_thread();
                 }
             }
             dispatched // A-PP36: handed to the teardown's in-band row

@@ -59,22 +59,69 @@ pub mod mem_alloc {
 
     pub struct MemCountingMi;
 
+    // S-93.0 B1 (huge-trace): con PHPR_HUGE_TRACE=1 ogni allocazione
+    // >= 512 KiB stampa size + backtrace su stderr — il canale che NOMINA
+    // i sei blocchi huge per worker (wp92-harness/huge-worker.out:
+    // 39.911.424 B in 6 blocchi, mai liberati). Env-gated: senza la env il
+    // costo è un confronto su size per le sole allocazioni sopra soglia.
+    // La guardia di rientranza evita la ricorsione del force_capture (che
+    // alloca a sua volta, ma sotto soglia).
+    use std::sync::atomic::{AtomicU8, Ordering};
+    static HUGE_TRACE: AtomicU8 = AtomicU8::new(2); // 2=da-leggere, 1=on, 0=off
+    const HUGE_MIN: usize = 512 * 1024;
+    thread_local! {
+        static IN_TRACE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    }
+    #[inline]
+    fn huge_note(kind: &str, size: usize) {
+        if size < HUGE_MIN {
+            return;
+        }
+        let mode = HUGE_TRACE.load(Ordering::Relaxed);
+        let on = if mode == 2 {
+            let v = std::env::var_os("PHPR_HUGE_TRACE").map(|v| v == "1").unwrap_or(false);
+            HUGE_TRACE.store(v as u8, Ordering::Relaxed);
+            v
+        } else {
+            mode == 1
+        };
+        if !on {
+            return;
+        }
+        IN_TRACE.with(|f| {
+            if f.get() {
+                return;
+            }
+            f.set(true);
+            let bt = std::backtrace::Backtrace::force_capture();
+            eprintln!(
+                "HUGE-TRACE kind={kind} size={size} thr={:?}\n{bt}",
+                std::thread::current().id()
+            );
+            f.set(false);
+        });
+    }
+
     unsafe impl GlobalAlloc for MemCountingMi {
         unsafe fn alloc(&self, l: Layout) -> *mut u8 {
             php_types::memcensus::galloc_note(l.size());
+            huge_note("alloc", l.size());
             unsafe { mimalloc::MiMalloc.alloc(l) }
         }
         unsafe fn dealloc(&self, p: *mut u8, l: Layout) {
             php_types::memcensus::gfree_note(l.size());
+            huge_note("dealloc", l.size());
             unsafe { mimalloc::MiMalloc.dealloc(p, l) }
         }
         unsafe fn alloc_zeroed(&self, l: Layout) -> *mut u8 {
             php_types::memcensus::galloc_note(l.size());
+            huge_note("alloc_zeroed", l.size());
             unsafe { mimalloc::MiMalloc.alloc_zeroed(l) }
         }
         unsafe fn realloc(&self, p: *mut u8, l: Layout, n: usize) -> *mut u8 {
             php_types::memcensus::galloc_note(n);
             php_types::memcensus::gfree_note(l.size());
+            huge_note("realloc", n);
             unsafe { mimalloc::MiMalloc.realloc(p, l, n) }
         }
     }

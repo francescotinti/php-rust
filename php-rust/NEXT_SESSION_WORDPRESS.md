@@ -46,7 +46,7 @@ permanente).
   (ogni `.md` sotto php-rust/ esige riga manifest: judge=yes per
   MEASURE + NEXT_SESSION/WP_SESSION_91/92, +87 esclusioni dichiarate
   per NOME); 4 autorità da HEAD (giudice+manifest+budget+revs) col
-  self-tether A-SK-78; budget in vigore 24330 (valori storici del
+  self-tether A-SK-78; budget in vigore 24363 (valori storici del
   budget FUORI dal corpus, A-SK-77); selftest T13..T16 (forge WP-92) +
   T17..T22 (forge WP-93) — **⚠️ il Concilio WP-94 ha morso QUATTRO
   forge nuovi contro questo v3: vedi §WP-93 p1**.
