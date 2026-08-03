@@ -63,34 +63,60 @@ MODE=advisory
 if [ "${1:-}" = "--verdict" ]; then MODE=verdict; shift; fi
 if [ "${1:-}" = "--all" ]; then MODE=all; fi
 
+# A-SK-78 (Council WP-93, Klabnik forge F6 LANDED — KS-SK-93-1): SELF-TETHER
+# of the RUNNING judge. A patched COPY of this script printed a verdict-grade
+# PASS carrying the judge_sha of the PRISTINE HEAD blob — the sha signed a
+# namesake, not the code that ran. hash-object($0) must equal the HEAD blob
+# of JUDGE_REL before any verdict-grade output; in advisory mode the
+# mismatch is a NOTE (an advisory result is never verdict-grade anyway).
+RUN_SHA=$(git -C "$ROOT" hash-object -- "$0" 2>/dev/null)
+JHEAD_SHA=$(git -C "$ROOT" rev-parse -q --verify "HEAD:$JUDGE_REL" 2>/dev/null)
+if [ -z "$JHEAD_SHA" ]; then
+  echo "FAIL gate-measure-cifre: judge $JUDGE_REL NOT committed at HEAD (A-SK-67/A-SK-78)"; exit 1
+fi
+if [ "$RUN_SHA" != "$JHEAD_SHA" ]; then
+  if [ "$MODE" = advisory ]; then
+    echo "NOTE: RUNNING judge (hash-object \$0) != HEAD blob of $JUDGE_REL — result is ADVISORY anyway (A-SK-78)"
+  else
+    echo "REFUSE gate-measure-cifre: RUNNING judge (hash-object \$0 = $(printf '%.16s' "$RUN_SHA")) != HEAD blob $(printf '%.16s' "$JHEAD_SHA") of $JUDGE_REL (A-SK-78/KS-SK-93-1) — the judge_sha signs the code that RUNS, never a namesake"
+    exit 1
+  fi
+fi
+
 if [ "${1:-}" = "--selftest" ]; then
   TMP=$(mktemp -d)
   M89DOC="$HERE/../wp89-harness/MEASURE89_RESULTS.md"
   M85DOC="$HERE/../wp85-harness/MEASURE85_RESULTS.md"
-  # T0 — baseline: an INTACT copy of MEASURE89 must PASS from scratch
-  # space (bytes-first fail-closed, zero graces): otherwise every FAIL
-  # tooth below is vacuous (a gate that fails everything bites nothing).
+  # A-SK-79 (Council WP-93, Klabnik Q4): the GRADE lives in the EXIT CODE —
+  # ADVISORY-PASS exits 64, FAIL exits 1, verdict PASS exits 0. Every tooth
+  # asserts the EXACT rc: a plain `if bash` cannot tell a FAIL (1) from an
+  # advisory pass (64), and a tooth "satisfied" by rc 64 is vacuous.
+  rc_of() { bash "$0" "$@" >/dev/null 2>&1; echo $?; }
+  # T0 — baseline: an INTACT copy of MEASURE89 must ADVISORY-PASS (rc 64)
+  # from scratch space (bytes-first fail-closed, zero graces): otherwise
+  # every FAIL tooth below is vacuous (a gate that fails everything bites
+  # nothing).
   cp "$M89DOC" "$TMP/baseline.md"
-  if ! bash "$0" "$TMP/baseline.md" >/dev/null 2>&1; then
-    echo "SELFTEST FAIL: intact MEASURE89 copy does NOT pass — teeth below would be vacuous"
+  if [ "$(rc_of "$TMP/baseline.md")" != 64 ]; then
+    echo "SELFTEST FAIL: intact MEASURE89 copy rc != 64 (ADVISORY-PASS must exit 64 — A-SK-79)"
     rm -rf "$TMP"; exit 1
   fi
   # T1 — KG-83-3 smuggle
   cp "$TMP/baseline.md" "$TMP/t1.md"
   echo "smuggled figure: a_calls was 123457 on a good day" >> "$TMP/t1.md"
-  if bash "$0" "$TMP/t1.md" >/dev/null 2>&1; then
+  if [ "$(rc_of "$TMP/t1.md")" != 1 ]; then
     echo "SELFTEST FAIL: smuggled 123457 was NOT caught (KG-83-3)"; rm -rf "$TMP"; exit 1
   fi
   # T2 — A-SK40: naked lowercase unit figure without companion
   cp "$TMP/baseline.md" "$TMP/t2.md"
   echo "note: the cache costs 5,00 mib steady, honest." >> "$TMP/t2.md"
-  if bash "$0" "$TMP/t2.md" >/dev/null 2>&1; then
+  if [ "$(rc_of "$TMP/t2.md")" != 1 ]; then
     echo "SELFTEST FAIL: naked lowercase 'mib' figure NOT caught (A-SK40)"; rm -rf "$TMP"; exit 1
   fi
   # T3 — A-SK40: companion that does not verify
   cp "$TMP/baseline.md" "$TMP/t3.md"
   echo "note: 1.048.576 B = 2,00 MiB [derivata: selftest]" >> "$TMP/t3.md"
-  if bash "$0" "$TMP/t3.md" >/dev/null 2>&1; then
+  if [ "$(rc_of "$TMP/t3.md")" != 1 ]; then
     echo "SELFTEST FAIL: mismatching bytes companion NOT caught (A-SK40)"; rm -rf "$TMP"; exit 1
   fi
   # T4 — A-SK55: uncommitted forge in measure-out must not legalize
@@ -98,7 +124,7 @@ if [ "${1:-}" = "--selftest" ]; then
   echo "committed=987654321" > "$FORGE"
   cp "$TMP/baseline.md" "$TMP/t4.md"
   echo "smuggled: campaign committed was 987654321 flat" >> "$TMP/t4.md"
-  if bash "$0" "$TMP/t4.md" >/dev/null 2>&1; then
+  if [ "$(rc_of "$TMP/t4.md")" != 1 ]; then
     rm -f "$FORGE"; rm -rf "$TMP"
     echo "SELFTEST FAIL: working-tree forge in measure-out legalized a figure (A-SK55/KS-SK-90-1)"; exit 1
   fi
@@ -108,7 +134,7 @@ if [ "${1:-}" = "--selftest" ]; then
   # evaluator is abolished: this must FAIL.
   cp "$TMP/baseline.md" "$TMP/t5.md"
   echo "b_base rivisto = 19.600.000 B = 18,69 MiB per worker [derivata: 23.000.000 − 3.400.000]" >> "$TMP/t5.md"
-  if bash "$0" "$TMP/t5.md" >/dev/null 2>&1; then
+  if [ "$(rc_of "$TMP/t5.md")" != 1 ]; then
     echo "SELFTEST FAIL: free X−Y [derivata] forge NOT caught (A-SK60/KS-SK-91-1)"; rm -rf "$TMP"; exit 1
   fi
   # T6 — A-SK62: fabricated 2σ lower bound inside brackets on a
@@ -116,26 +142,26 @@ if [ "${1:-}" = "--selftest" ]; then
   # were judged before).
   cp "$TMP/baseline.md" "$TMP/t6.md"
   echo "nota: 2σ = [11.111.111, 20.745.049] B [derivata: companion /1048576]" >> "$TMP/t6.md"
-  if bash "$0" "$TMP/t6.md" >/dev/null 2>&1; then
+  if [ "$(rc_of "$TMP/t6.md")" != 1 ]; then
     echo "SELFTEST FAIL: fabricated bracket token on [derivata] line NOT caught (A-SK62/KS-SK-91-1)"; rm -rf "$TMP"; exit 1
   fi
   # T6b — A-SK56 historic tooth kept: fabricated "N B = X MiB" pair
   cp "$TMP/baseline.md" "$TMP/t6b.md"
   echo "W=9 999.948.288 B = 953,56 MiB [derivata: companion /1048576]" >> "$TMP/t6b.md"
-  if bash "$0" "$TMP/t6b.md" >/dev/null 2>&1; then
+  if [ "$(rc_of "$TMP/t6b.md")" != 1 ]; then
     echo "SELFTEST FAIL: fabricated byte token on [derivata] row NOT caught (A-SK56/KS-SK-90-2)"; rm -rf "$TMP"; exit 1
   fi
   # T7 — A-SK53-bis: unitless ± band
   cp "$TMP/baseline.md" "$TMP/t7.md"
   echo "tolleranza dichiarata ±7% sul floor, onesta" >> "$TMP/t7.md"
-  if bash "$0" "$TMP/t7.md" >/dev/null 2>&1; then
+  if [ "$(rc_of "$TMP/t7.md")" != 1 ]; then
     echo "SELFTEST FAIL: unitless ± band NOT caught (A-SK53-bis/KS-SK-87-2)"; rm -rf "$TMP"; exit 1
   fi
   # T8 — A-SK63: a forged NAME must inherit NOTHING — a copy of
   # MEASURE85 (whose committed row grants '±5%' and '232±1') under a
   # forged name gets fail-closed defaults and must FAIL on its bands.
   cp "$M85DOC" "$TMP/MEASURE85_zzforge_RESULTS.md"
-  if bash "$0" "$TMP/MEASURE85_zzforge_RESULTS.md" >/dev/null 2>&1; then
+  if [ "$(rc_of "$TMP/MEASURE85_zzforge_RESULTS.md")" != 1 ]; then
     echo "SELFTEST FAIL: forged-name copy inherited the M85 graces (A-SK63/KS-SK-91-2)"; rm -rf "$TMP"; exit 1
   fi
   # T9 — A-SK65 kept: a POISONED cache inherited via env must be IGNORED
@@ -145,7 +171,7 @@ if [ "${1:-}" = "--selftest" ]; then
   { echo "$HEADREV"; echo "C777444111"; } > "$POISON"
   cp "$TMP/baseline.md" "$TMP/t9.md"
   echo "smuggled: threshold hit 777444111 flat" >> "$TMP/t9.md"
-  if GATE_CIFRE_CORPUS_CACHE="$POISON" bash "$0" "$TMP/t9.md" >/dev/null 2>&1; then
+  if [ "$(GATE_CIFRE_CORPUS_CACHE="$POISON" bash "$0" "$TMP/t9.md" >/dev/null 2>&1; echo $?)" != 1 ]; then
     echo "SELFTEST FAIL: poisoned env cache legalized a figure (A-SK65/KS-SK-91-3)"; rm -rf "$TMP"; exit 1
   fi
   # T10 — A-SK60 POSITIVE control + bite: a provenance-resolved derivata
@@ -157,12 +183,12 @@ if [ "${1:-}" = "--selftest" ]; then
   if ! bash "$0" "$TMP/t10.md" 2>&1 | grep -q "(A-SK60 provenance-verified"; then
     echo "SELFTEST FAIL: provenance resolver never fired on a legal derivata (A-SK60 positive control)"; rm -rf "$TMP"; exit 1
   fi
-  if ! bash "$0" "$TMP/t10.md" >/dev/null 2>&1; then
-    echo "SELFTEST FAIL: legal provenance derivata did NOT pass (A-SK60 positive control)"; rm -rf "$TMP"; exit 1
+  if [ "$(rc_of "$TMP/t10.md")" != 64 ]; then
+    echo "SELFTEST FAIL: legal provenance derivata rc != 64 (A-SK60 positive control / A-SK-79)"; rm -rf "$TMP"; exit 1
   fi
   cp "$TMP/baseline.md" "$TMP/t10b.md"
   echo "delta se: 734.671 B [derivata: prov 1.319.393@$G3REL:115 − 584.723@$G3REL:63]" >> "$TMP/t10b.md"
-  if bash "$0" "$TMP/t10b.md" >/dev/null 2>&1; then
+  if [ "$(rc_of "$TMP/t10b.md")" != 1 ]; then
     echo "SELFTEST FAIL: provenance derivata legalized a WRONG value (A-SK60)"; rm -rf "$TMP"; exit 1
   fi
   # T12 v2 — A-SK66/A-SK-72: the supersession proof lives in the COMMITTED
@@ -174,13 +200,13 @@ if [ "${1:-}" = "--selftest" ]; then
   # as history even with neutral wording.
   cp "$TMP/baseline.md" "$TMP/t12.md"
   echo "verdetto: verdict89.a1.g0 dice la verita, fidatevi" >> "$TMP/t12.md"
-  if bash "$0" "$TMP/t12.md" >/dev/null 2>&1; then
+  if [ "$(rc_of "$TMP/t12.md")" != 1 ]; then
     echo "SELFTEST FAIL: citation of an unproved generation (no .out suffix) NOT caught (A-SK66/A-SK-72)"; rm -rf "$TMP"; exit 1
   fi
   cp "$TMP/baseline.md" "$TMP/t12b.md"
   echo "storia: verdict89.a1.g1.out — generazione citata, esito nel ledger" >> "$TMP/t12b.md"
-  if ! bash "$0" "$TMP/t12b.md" >/dev/null 2>&1; then
-    echo "SELFTEST FAIL: ledger-proved superseded citation wrongly refused (A-SK-72)"; rm -rf "$TMP"; exit 1
+  if [ "$(rc_of "$TMP/t12b.md")" != 64 ]; then
+    echo "SELFTEST FAIL: ledger-proved superseded citation wrongly refused (A-SK-72/A-SK-79)"; rm -rf "$TMP"; exit 1
   fi
   # T11 v2 — A-SK-67/KS-SK-92-1: a TAMPERED working-tree budget must FAIL
   # in verdict mode (the authority is HEAD; working!=HEAD is itself the
@@ -191,7 +217,7 @@ if [ "${1:-}" = "--selftest" ]; then
   BUDGET_FILE="$HERE/gate-cifre-corpus.budget"
   BUDGET_BKP=$(cat "$BUDGET_FILE")
   echo "max_tokens=10" > "$BUDGET_FILE"
-  if bash "$0" --verdict "$HERE/../wp89-harness/MEASURE89_RESULTS.md" >/dev/null 2>&1; then
+  if [ "$(rc_of --verdict "$HERE/../wp89-harness/MEASURE89_RESULTS.md")" != 1 ]; then
     echo "$BUDGET_BKP" > "$BUDGET_FILE"
     echo "SELFTEST FAIL: tampered working-tree budget NOT refused in verdict mode (A-SK-67/KS-SK-92-1)"; rm -rf "$TMP"; exit 1
   fi
@@ -211,11 +237,11 @@ if [ "${1:-}" = "--selftest" ]; then
   MANIFEST_FILE="$HERE/gate-cifre-manifest.tsv"
   MAN_BKP=$(cat "$MANIFEST_FILE")
   printf 'php-rust/wp81-harness/zzforge-t13.md\t%s\tyes\tyes\t-\n' "$T13SHA" >> "$MANIFEST_FILE"
-  if bash "$0" --verdict "$T13DOC" >/dev/null 2>&1; then
+  if [ "$(rc_of --verdict "$T13DOC")" != 1 ]; then
     printf '%s\n' "$MAN_BKP" > "$MANIFEST_FILE"; rm -f "$T13DOC"; rm -rf "$TMP"
     echo "SELFTEST FAIL: verdict mode accepted a TAMPERED working-tree manifest (WP-92 forge a / A-SK-67)"; exit 1
   fi
-  if bash "$0" "$T13DOC" >/dev/null 2>&1; then
+  if [ "$(rc_of "$T13DOC")" != 1 ]; then
     printf '%s\n' "$MAN_BKP" > "$MANIFEST_FILE"; rm -f "$T13DOC"; rm -rf "$TMP"
     echo "SELFTEST FAIL: an UNCOMMITTED manifest row was honored (WP-92 forge a / A-SK-67)"; exit 1
   fi
@@ -228,7 +254,7 @@ if [ "${1:-}" = "--selftest" ]; then
   V82="php-rust/wp78-harness/measure-out/axum.82c.lever.n1000.r1.vmmap.V1"
   cp "$TMP/baseline.md" "$TMP/t14.md"
   echo "b_base rivisto: 19.600.000 B [derivata: prov 23.000.000@$V83:1963 − 3.400.000@$V82:1964]" >> "$TMP/t14.md"
-  if bash "$0" "$TMP/t14.md" >/dev/null 2>&1; then
+  if [ "$(rc_of "$TMP/t14.md")" != 1 ]; then
     echo "SELFTEST FAIL: cross-file prov operands NOT refused (WP-92 forge b / A-SK-69/KS-SK-92-2)"; rm -rf "$TMP"; exit 1
   fi
   # T14b — A-SK-69 operator: 'diviso' between operands used to pass
@@ -240,7 +266,7 @@ if [ "${1:-}" = "--selftest" ]; then
   if bash "$0" "$TMP/t14b.md" 2>&1 | grep -q "(A-SK60 provenance-verified"; then
     echo "SELFTEST FAIL: non-minus operator printed provenance-verified (A-SK-69)"; rm -rf "$TMP"; exit 1
   fi
-  if bash "$0" "$TMP/t14b.md" >/dev/null 2>&1; then
+  if [ "$(rc_of "$TMP/t14b.md")" != 1 ]; then
     echo "SELFTEST FAIL: non-minus prov operator NOT refused (A-SK-69)"; rm -rf "$TMP"; exit 1
   fi
   # T14c — A-SK-69: prov citing ADDRESS-RANGE lines (same file, in-pool)
@@ -248,7 +274,7 @@ if [ "${1:-}" = "--selftest" ]; then
   # re-entered through the prov door.
   cp "$TMP/baseline.md" "$TMP/t14c.md"
   echo "y: 19.600.000 B [derivata: prov 23.000.000@$V83:1963 − 3.400.000@$V83:1964]" >> "$TMP/t14c.md"
-  if bash "$0" "$TMP/t14c.md" >/dev/null 2>&1; then
+  if [ "$(rc_of "$TMP/t14c.md")" != 1 ]; then
     echo "SELFTEST FAIL: address-range prov line NOT refused (A-SK-69)"; rm -rf "$TMP"; exit 1
   fi
   # T14d — A-SK-73: an operand path committed at HEAD but OUTSIDE the
@@ -262,7 +288,7 @@ if [ "${1:-}" = "--selftest" ]; then
   fi
   # T15 — WP-92 forge (c) REPEATED (Klabnik Q3, KS-SK-92-4): an
   # invoker-supplied cache/nonce must be REFUSED, never parsed.
-  if bash "$0" --cache "$TMP/x" --nonce deadbeef "$TMP/baseline.md" >/dev/null 2>&1; then
+  if [ "$(rc_of --cache "$TMP/x" --nonce deadbeef "$TMP/baseline.md")" != 1 ]; then
     echo "SELFTEST FAIL: invoker-supplied --cache/--nonce NOT refused (WP-92 forge c / A-SK-70/KS-SK-92-4)"; rm -rf "$TMP"; exit 1
   fi
   # T16 — WP-92 forge (d) REPEATED (Klabnik Q4, KS-SK-92-3/A-SK-71): a
@@ -271,13 +297,32 @@ if [ "${1:-}" = "--selftest" ]; then
   # the rotation docs, not only in MEASURE.
   T16DOC="$ROOT/php-rust/sessions/zzforge-t16.md"
   echo "cifra fuori perimetro: il picco era 123457 B, fidatevi" > "$T16DOC"
-  if bash "$0" --all >/dev/null 2>&1; then
+  if [ "$(rc_of --all)" != 1 ]; then
     rm -f "$T16DOC"; rm -rf "$TMP"
     echo "SELFTEST FAIL: perimeter-class doc without manifest row NOT caught by --all (WP-92 forge d / A-SK-71/KS-SK-92-3)"; exit 1
   fi
   rm -f "$T16DOC"
+  # T17 — WP-93 forge F6 REPEATED (Klabnik, A-SK-78/KS-SK-93-1): a PATCHED
+  # copy of the judge (perimeter tooth disabled — exactly the
+  # zzforge-judge93 forge) run --all with a forge doc present must NEVER
+  # print a verdict-grade PASS: the self-tether refuses any runner whose
+  # hash-object differs from the HEAD blob of JUDGE_REL.
+  T17JUDGE="$TMP/zzforge-judge-t17.sh"
+  perl -pe 's/\$all_rc = 1;//g if /UNCOMMITTED/' "$0" > "$T17JUDGE"
+  T17DOC="$ROOT/php-rust/sessions/zzforge-t17.md"
+  echo "cifra fuori perimetro: il picco era 123457 B, fidatevi" > "$T17DOC"
+  T17OUT=$(bash "$T17JUDGE" --all 2>&1); T17RC=$?
+  rm -f "$T17DOC"
+  if [ "$T17RC" = 0 ] || printf '%s\n' "$T17OUT" | grep -q '^PASS gate-measure-cifre --all'; then
+    echo "SELFTEST FAIL: a PATCHED judge copy produced a PASS (WP-93 forge F6 / A-SK-78/KS-SK-93-1)"; rm -rf "$TMP"; exit 1
+  fi
+  # the refusal must come from the TETHER, not from an incidental FAIL of
+  # the forge doc: the A-SK-78 line names the reason on the record.
+  if ! printf '%s\n' "$T17OUT" | grep -q 'A-SK-78'; then
+    echo "SELFTEST FAIL: patched judge copy did not die on the SELF-TETHER (A-SK-78)"; rm -rf "$TMP"; exit 1
+  fi
   rm -rf "$TMP"
-  echo "SELFTEST PASS: KG-83-3 smuggle + A-SK40 companions + A-SK55 committed-only + A-SK60 provenance (positive+bite) + A-SK62 every-token + A-SK63 manifest graces + A-SK65 env-cache ignored + A-SK53-bis window + A-SK-67 HEAD-authorities (budget tamper, forge-a manifest row) + A-SK-69 strict prov (forge-b: cross-file, non-minus operator, address-range, positive same-file) + A-SK-70 cache abolished (forge-c) + A-SK-71 perimeter (forge-d) + A-SK-72 ledger-proved supersession (.out optional) + A-SK-73 pool=corpus all bite"
+  echo "SELFTEST PASS: KG-83-3 smuggle + A-SK40 companions + A-SK55 committed-only + A-SK60 provenance (positive+bite) + A-SK62 every-token + A-SK63 manifest graces + A-SK65 env-cache ignored + A-SK53-bis window + A-SK-67 HEAD-authorities (budget tamper, forge-a manifest row) + A-SK-69 strict prov (forge-b: cross-file, non-minus operator, address-range, positive same-file) + A-SK-70 cache abolished (forge-c) + A-SK-71 perimeter (forge-d) + A-SK-72 ledger-proved supersession (.out optional) + A-SK-73 pool=corpus + A-SK-78 self-tether (forge F6, T17) + A-SK-79 exit-code grades (every tooth rc-exact) all bite"
   exit 0
 fi
 
@@ -923,7 +968,7 @@ for my $t (@targets) {
     next;
   }
   if ($mode eq 'advisory') {
-    print "ADVISORY-PASS gate-measure-cifre (KG-83-3, NEVER verdict-grade — T2/A-SK-67): every bound figure in $disp matches committed machine output (or carries [derivata]/named-constant)\n";
+    print "ADVISORY-PASS gate-measure-cifre (KG-83-3, NEVER verdict-grade — T2/A-SK-67; exit=64 A-SK-79): every bound figure in $disp matches committed machine output (or carries [derivata]/named-constant)\n";
   } else {
     print "PASS gate-measure-cifre (KG-83-3): every bound figure in $disp matches committed machine output (or carries [derivata]/named-constant) [judge_sha=$ASHA{judge} manifest_sha=$ASHA{manifest} budget_sha=$ASHA{budget} head=".substr($headrev,0,12)."]\n";
   }
@@ -931,5 +976,10 @@ for my $t (@targets) {
 if ($target_arg eq '--all' && $grand_rc == 0) {
   print "PASS gate-measure-cifre --all (A-SK64/A-SK-67): manifest perimeter, bidirectional, authorities from HEAD [judge_sha=$ASHA{judge} manifest_sha=$ASHA{manifest} budget_sha=$ASHA{budget} head=".substr($headrev,0,12)."]\n";
 }
+# A-SK-79 (Council WP-93, Klabnik Q4 — KS-SK-93-4): the GRADE lives in the
+# exit code. An advisory CLEAN result exits 64 (ADVISORY-PASS), never 0:
+# rc=0 means verdict-grade PASS and nothing else — run_gate used to treat
+# an advisory 0 as a closed battery row.
+exit 64 if $mode eq 'advisory' && $grand_rc == 0;
 exit $grand_rc;
 PERL

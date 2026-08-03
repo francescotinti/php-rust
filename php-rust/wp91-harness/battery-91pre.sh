@@ -113,6 +113,13 @@ run_gate lever-pins       bash "$REPO/wp81-harness/gate-lever-pins.sh"
 run_gate lever-fixtures   bash "$REPO/wp81-harness/gate-lever-fixtures.sh"
 run_gate lever-fixtures2  bash "$REPO/wp81-harness/gate-lever-fixtures2.sh"
 run_gate measure-cifre    bash "$REPO/wp81-harness/gate-measure-cifre.sh" --all
+# A-SK-79/KS-SK-93-4 (Council WP-93): rc=0 alone no longer closes the cifre
+# row — the log must carry the VERDICT-grade PASS line signed judge_sha=
+# (ADVISORY-PASS now exits 64 and is a FAIL above by construction).
+if ! grep -q '^PASS gate-measure-cifre --all.*judge_sha=' "$W/measure-cifre.log"; then
+  say "FAIL: measure-cifre closed with NO verdict-grade PASS line (judge_sha=) in the log (A-SK-79/KS-SK-93-4)"
+  FAILS=$((FAILS+1))
+fi
 run_gate axum-tests       bash "$REPO/wp88-harness/gate-axum-tests.sh"
 run_gate parity-full      bash "$REPO/wp83-harness/gate-parity-83p1.sh"
 
