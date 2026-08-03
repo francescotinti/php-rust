@@ -488,7 +488,7 @@ if [ "${1:-}" = "--selftest" ]; then
   # names the pristine on-disk judge; the escalation to a signed
   # verdict-grade --all PASS is exactly T17's forge one level up, blocked
   # by the same guard asserted in arm (a).)
-  T23STRIP=$(perl -ne 'print unless /A-SK-82-GUARD/../A-SK-82-GUARD-END/' "$SELF_ABS")
+  T23STRIP=$(perl -ne 'print unless /^# A-SK-82-GUARD \(/../^# A-SK-82-GUARD-END/' "$SELF_ABS")
   T23OUT2=$(bash -c "$T23STRIP" "$SELF_ABS" "$TMP/baseline.md" 2>&1); T23RC2=$?
   if [ "$T23RC2" != 64 ]; then
     echo "SELFTEST FAIL: guard-stripped judge via bash -c did NOT would-have-passed (rc=$T23RC2, want 64) — T23 bite is vacuous, the forge no longer reproduces"; rm -rf "$TMP"; exit 1
@@ -500,7 +500,7 @@ if [ "${1:-}" = "--selftest" ]; then
   # denying something that no longer happens. All three were reproduced at
   # HEAD fc12992 before the cure — wp94-harness/A1_FORGE_REPRO.out.
   PRE95="$TMP/pre95.sh"
-  perl -ne 'print unless /A-SK-82-GUARD/../A-SK-82-GUARD-END/' "$SELF_ABS" \
+  perl -ne 'print unless /^# A-SK-82-GUARD \(/../^# A-SK-82-GUARD-END/' "$SELF_ABS" \
     | perl -pe 's/cd -P /cd /g; s/pwd -P/pwd/g' > "$PRE95"
   # T24 — channel F-K2: `BASH_SOURCE=<pristine> bash -c "$(cat patched)"
   # <pristine> --all`. bash 3.2 exports BASH_SOURCE as a SCALAR, so the old
