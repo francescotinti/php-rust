@@ -100,18 +100,37 @@ if [ -z "$SELF_DIR_PHYS" ] || [ ! -f "$SELF_DIR_PHYS/$(basename -- "$SELF_SRC")"
   echo "REFUSE gate-measure-cifre: cannot resolve the PHYSICAL self of '$SELF_SRC' — a judge that cannot name the file the kernel opened cannot tether it (A-SK-89/KS-SK-95-2)"; exit 1
 fi
 SELF_PHYS="$SELF_DIR_PHYS/$(basename -- "$SELF_SRC")"
+# A-SK-90 completed by its own tooth (T26 BIT, S-94.0): `bash -p` stops the
+# shell from IMPORTING an exported function — it does NOT remove the
+# environment VARIABLE that carries it, and that variable is inherited by
+# every child. This judge reaches `git` and `perl` through subprocesses
+# (perl's `qx()` runs /bin/sh, which is NOT privileged and DOES import),
+# so a hostile `git` survived the re-exec and still bit, in a run where the
+# shell itself was clean. Sanitizing the shell is not sanitizing the
+# CHILDREN: the function-carrying variables must be stripped from the
+# environment that is handed down, and their ABSENCE is part of the state
+# predicate — otherwise the predicate is blind on exactly this channel.
+# (computed into a VARIABLE, never a shell function: the predicate below
+# demands that `declare -F` be empty, and a helper function defined here
+# would falsify it forever — verified, it fail-closed every run.)
+FN_ENV_NAMES="$(/usr/bin/env | /usr/bin/grep -E '^[A-Za-z_][A-Za-z0-9_%]*=\(\) \{' | /usr/bin/sed 's/=.*//')"
 GATE_SANE=1
 case ":${SHELLOPTS:-}:" in *:privileged:*) ;; *) GATE_SANE=0;; esac
 [ -z "${BASH_ENV:-}" ] || GATE_SANE=0
 [ -z "${ENV:-}" ] || GATE_SANE=0
 [ -z "$(declare -F)" ] || GATE_SANE=0
+[ -z "$FN_ENV_NAMES" ] || GATE_SANE=0
 [ "$SELF_SRC" = "$SELF_PHYS" ] || GATE_SANE=0
 if [ "$GATE_SANE" != 1 ]; then
   if [ "${PHPR_GATE_REEXEC_DEPTH:-0}" != 0 ]; then
-    echo "REFUSE gate-measure-cifre: execution context STILL unsanitized after the re-exec (privileged/BASH_ENV/ENV/inherited-functions/physical-self) — fail-closed: the marker is the STATE, never an env var the caller may pre-set (A-SK-90/KS-SK-95-1)"; exit 1
+    echo "REFUSE gate-measure-cifre: execution context STILL unsanitized after the re-exec (privileged/BASH_ENV/ENV/inherited-functions/function-carrying env vars/physical-self) — fail-closed: the marker is the STATE, never an env var the caller may pre-set (A-SK-90/KS-SK-95-1)"; exit 1
   fi
+  UNSET_FN=""
+  for n in $FN_ENV_NAMES; do UNSET_FN="$UNSET_FN -u $n"; done
   PHPR_GATE_REEXEC_DEPTH=1; export PHPR_GATE_REEXEC_DEPTH
-  exec /usr/bin/env -u BASH_ENV -u ENV -u SHELLOPTS -u BASHOPTS -u CDPATH -u GLOBIGNORE /bin/bash -p "$SELF_PHYS" ${@+"$@"}
+  # $UNSET_FN is deliberately unquoted: it is a list of -u/NAME words, and a
+  # variable NAME cannot contain whitespace.
+  exec /usr/bin/env -u BASH_ENV -u ENV -u SHELLOPTS -u BASHOPTS -u CDPATH -u GLOBIGNORE $UNSET_FN /bin/bash -p "$SELF_PHYS" ${@+"$@"}
 fi
 # The depth counter is consumed here, never inherited: the teeth run copies
 # of this judge as CHILDREN, and an inherited depth=1 would fail-close them
