@@ -17,6 +17,12 @@ EV="$REPO/wp81-harness/evidence"
 # churn that would dirty the whole-tree porcelain of the next feature matrix.
 W="/Volumes/Extreme Pro/Claude/wp83-battery-out/p1-parity"
 mkdir -p "$W"
+# A-MS49 (Council WP-91, Matsakis): a run killed before the terminal
+# marker write left a STALE .done (old rc/git) for the next consumer —
+# remove it at start, fail-closed. Any consumer of this marker MUST
+# compare its git= against HEAD (and read rc=): a .done whose git= is not
+# HEAD certifies ANOTHER tree.
+rm -f "$W/.done"
 FAILS=0
 
 extract_fails() { # <runner-log> -> sorted fail paths on stdout

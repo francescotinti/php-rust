@@ -510,7 +510,7 @@ mod implementation {
                         v.push(t0.elapsed().as_nanos() as u64);
                     }
                 }
-                let _ = task.response_tx.send((response, status));
+                task.response_tx.send((response, status)).ok();
                 // Response sent: the request leaves the server — only now
                 // does OUTSTANDING drop (A-TH9: dec-after-send is what makes
                 // the closed-sequential watermark verdict-grade).
@@ -835,7 +835,7 @@ mod implementation {
 
         // Flush diagnostics before shutdown
         let line = vm.fatal_line;
-        let _ = vm.flush_diags(line);
+        vm.flush_diags(line).ok();
 
         // Render fatal if present (PHP flushes active output buffers BEFORE
         // the fatal banner, so buffered script output precedes it)

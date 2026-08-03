@@ -72,6 +72,19 @@ else
     echo "FAIL: a_pp38 armed log main_put=$NPUT main_hit=$NHIT, expected 1/1 (A-PP47/KS-PP-90-2)"
     FAILS=$((FAILS+1))
   fi
+  # A-PP52 (Council WP-91, Pedersen — KS-PP-91-2): EXTERNAL counter on the
+  # fatal lane — the F8c pin (put==0 AND probe_fail==2) lived only inside
+  # the test source, where a comment-preserving gutting keeps the sigla
+  # census green (A-PP48(b) hole). The armed UCL is the external witness:
+  # exactly 2 main_probe_fail rows (the F8c probe stats the inline path
+  # twice, once per request).
+  NPFAIL=$(grep -c "^unitcache main_probe_fail " "$UCL" || true)
+  if [ "$NPFAIL" = 2 ]; then
+    echo "OK  a_pp38 fatal-lane external counter main_probe_fail==2 from the armed UCL (A-PP52/KS-PP-91-2 lifted)"
+  else
+    echo "FAIL: a_pp38 armed log main_probe_fail=$NPFAIL, expected 2 — fatal-lane tooth gutted or channel changed (A-PP52/KS-PP-91-2)"
+    FAILS=$((FAILS+1))
+  fi
 fi
 
 if [ "$FAILS" = 0 ]; then

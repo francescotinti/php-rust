@@ -1223,8 +1223,179 @@ else
   FAILS=$((FAILS+1))
 fi
 
+# --- 9. Sigilli v8 (Council WP-91: A-TH52/A-TH56 + A-MS47/48) ---------------
+# A-TH52≡A-MS48 (team-sigilli convergence 1): SINGLE-SOURCE — the
+# self-test exercises the SAME composed regex/awk variables production
+# uses (model TH33RE). The v7 self-test exercised per-graphy regexes
+# while the sweep used a RE-TYPED alternation: a branch lost in the sweep
+# left the self-test green (class A-PP48).
+# Extended v8 branches (Hoare WP-91 Q1 graphies 1-6): dot-at-EOL with
+# name on the NEXT line; interposed comment/blank lines inside a split
+# call; comment not adjacent to the dot / between name and paren
+# (single-line); spaced multi-segment `::` and global spaced `::`;
+# use-group MULTILINE and `use …\n as`; r# on TYPES.
+# DECLARED residuals (out of lexical reach, A-TH53/A-MS27 lane):
+# multi-LINE block comments inside a path, and ident-pasting macros.
+TH49RE_V8='r[#](production_gate|vm_gate|CachedUnit|VmGate)|[.][[:space:]]*[/][*].*[*][/][[:space:]]*(production_gate|vm_gate)|[.](production_gate|vm_gate)[[:space:]]*[/][*].*[*][/][[:space:]]*[(]|=[[:space:]]*([A-Za-z_][A-Za-z0-9_]*)?[[:space:]]*(::[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*)*::[[:space:]]+(r[#])?(CachedUnit|VmGate)|=[[:space:]]*::[[:space:]]*([A-Za-z_][A-Za-z0-9_]*[[:space:]]*::[[:space:]]*)*(r[#])?(CachedUnit|VmGate)|::[[:space:]]*r[#](CachedUnit|VmGate)|use[[:space:]][^;]*[{][^}]*(CachedUnit|VmGate)[[:space:]]+as[[:space:]]'
+TH49ML_PROG='
+  /[.][[:space:]]*(production_gate|vm_gate)[[:space:]]*$/ { pend=1; dot=0; next }
+  /[.][[:space:]]*$/ { dot=1; pend=0; next }
+  /^[[:space:]]*use[[:space:]]/ && /;[[:space:]]*$/ { pend=0; dot=0; next }
+  /^[[:space:]]*use[[:space:]]/ { useopen=1; seen=0 }
+  useopen && /(CachedUnit|VmGate)/ { seen=1 }
+  useopen && seen && /[[:space:]]as[[:space:]]/ { n++; seen=0 }
+  useopen && /;/ { useopen=0; seen=0 }
+  pend && (/^[[:space:]]*\/\// || /^[[:space:]]*$/) { next }
+  pend && /^[[:space:]]*[(]/ { n++; pend=0; next }
+  { pend=0 }
+  dot && /^[[:space:]]*(production_gate|vm_gate)[[:space:]]*[(]/ { n++ }
+  { dot=0 }
+  END { print n+0 }'
+cat > "$TMPD/decoy_th52.rs" <<'EOF'
+fn h() {
+    let a = retain.r#production_gate();
+    let b = u.vm_gate
+        (x);
+    let c = retain./*x*/production_gate();
+    type CU5 = vm :: CachedUnit;
+    type CU6 = ::vm::CachedUnit;
+    use crate::vm::{CachedUnit as GroupCU};
+    let d = u.
+        vm_gate(x);
+    let e = u.vm_gate
+        // interposed comment keeps the split alive
+        (x);
+    let f = retain. /*c*/ production_gate();
+    let g = retain.production_gate/*c*/(x);
+    type CU7 = crate :: vm :: CachedUnit;
+    type CU8 = vm::r#CachedUnit;
+    use crate::vm::{Other,
+        CachedUnit as MLGroupCU};
+    use crate::vm::CachedUnit
+        as MLCU;
+}
+EOF
+v8n=$(count_nontest "$TMPD/decoy_th52.rs" "$TH49RE_V8")
+v8ml=$(awk "$TH49ML_PROG" "$TMPD/decoy_th52.rs")
+if [ "$v8n" -ne 9 ] || [ "$v8ml" -ne 5 ]; then
+  echo "SELF-TEST BROKEN: A-TH52 decoys against the PRODUCTION regex/awk: single-line=$v8n (want 9) multiline=$v8ml (want 5)"; exit 2
+fi
+echo "OK  self-test: A-TH52 decoys bite through the SINGLE-SOURCE production regex (9 single-line + 5 multiline)"
+TH52_SWEEP=$(find "$REPO/crates" -name '*.rs' ! -name '._*' -print0 |
+  while IFS= read -r -d '' f; do
+    n=$(count_nontest "$f" "$TH49RE_V8")
+    ml=$(awk "$TH49ML_PROG" "$f")
+    t=$((n + ml))
+    [ "$t" -gt 0 ] && echo "${f#"$REPO"/}: n=$n ml=$ml"
+  done)
+if [ -n "$TH52_SWEEP" ]; then
+  echo "FAIL: A-TH52 eluded spelling found (v8 single-source sweep):"
+  echo "$TH52_SWEEP"
+  FAILS=$((FAILS+1))
+else
+  echo "OK  sweep: no A-TH52 v8 graphy in the workspace (single-source with the self-test)"
+fi
+
+# A-MS48: belt on the probe flag closes the four NAMED holes (generic
+# closure binder, take/swap, UFCS LocalKey, multiline split) — decoys
+# bite through the SAME composed production regexes, same-commit.
+MS48_ANYBIND='CENSUS_PROBE_ACTIVE[[:space:]]*\.[[:space:]]*with[[:space:]]*[(][|][A-Za-z_][A-Za-z0-9_]*[|][[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\.[[:space:]]*(set|replace|update|take|swap)[[:space:]]*[(]'
+MS48_DIRECT='CENSUS_PROBE_ACTIVE[[:space:]]*\.[[:space:]]*(set|replace|update|take|swap)[[:space:]]*[(]'
+MS48_UFCS='LocalKey[[:space:]]*::[[:space:]]*(set|replace|update|take|swap)[^;]*CENSUS_PROBE_ACTIVE|CENSUS_PROBE_ACTIVE[^;]*LocalKey[[:space:]]*::[[:space:]]*(set|replace|update|take|swap)'
+MS48_SPLIT_PROG='
+  /CENSUS_PROBE_ACTIVE[[:space:],.&)]*$/ { pend=1; next }
+  pend && /(\.|::)[[:space:]]*(with|set|replace|update|take|swap)[[:space:]]*[(]/ { n++ }
+  { pend=0 }
+  END { print n+0 }'
+cat > "$TMPD/decoy_ms48.rs" <<'EOF'
+fn h() {
+    CENSUS_PROBE_ACTIVE.with(|g| g.set(true));
+    CENSUS_PROBE_ACTIVE.take();
+    LocalKey::set(&CENSUS_PROBE_ACTIVE, true);
+    CENSUS_PROBE_ACTIVE
+        .with(|q| q.set(false));
+}
+EOF
+d1=$(grep -cE "$MS48_ANYBIND" "$TMPD/decoy_ms48.rs" || true)
+d2=$(grep -cE "$MS48_DIRECT" "$TMPD/decoy_ms48.rs" || true)
+d3=$(grep -cE "$MS48_UFCS" "$TMPD/decoy_ms48.rs" || true)
+d4=$(awk "$MS48_SPLIT_PROG" "$TMPD/decoy_ms48.rs")
+if [ "$d1" -ne 1 ] || [ "$d2" -ne 1 ] || [ "$d3" -ne 1 ] || [ "$d4" -ne 1 ]; then
+  echo "SELF-TEST BROKEN: A-MS48 decoys anybind=$d1 direct=$d2 ufcs=$d3 split=$d4 (want 1/1/1/1)"; exit 2
+fi
+echo "OK  self-test: A-MS48 decoys bite (generic binder, take, UFCS, multiline split)"
+nany=$(grep -cE "$MS48_ANYBIND" "$WPOOL" || true)
+ndir=$(grep -cE "$MS48_DIRECT" "$WPOOL" || true)
+nufcs=$(grep -cE "$MS48_UFCS" "$WPOOL" || true)
+nsplit=$(awk "$MS48_SPLIT_PROG" "$WPOOL")
+if [ "$nany" = 2 ] && [ "$ndir" = 0 ] && [ "$nufcs" = 0 ] && [ "$nsplit" = 0 ]; then
+  echo "OK  probe-flag write graphies: with-closure==2 (the legal pair, binder-checked by A-MS41), direct/UFCS/split==0 (A-MS48/KS-MS-91-1)"
+else
+  echo "FAIL: probe-flag graphy census any-binder=$nany (want 2) direct=$ndir ufcs=$nufcs split=$nsplit (want 0/0/0) (A-MS48/KS-MS-91-1)"
+  FAILS=$((FAILS+1))
+fi
+
+# A-MS47: the #[must_use] seal is machine-distinguishable only at the USE
+# site — `let _ = arm()` SILENCES the lint AND drops immediately (the
+# wildcard does not bind). Pin the named binding, ban the silencers.
+# comment/attribute lines carry the SPELLING as documentation (the
+# must_use message itself says `let _w = …`) — only CODE lines count.
+narm=$(grep -vE '^[[:space:]]*(//|#\[)' "$WPOOL" | grep -cE 'let (_[a-z0-9][a-z0-9_]*|[a-z][a-z0-9_]*) = ProbeWindow::arm\(\)' || true)
+nsil=$(grep -vE '^[[:space:]]*(//|#\[)' "$WPOOL" | grep -cE 'let _ = ProbeWindow::arm|^[[:space:]]*ProbeWindow::arm\(\);' || true)
+if [ "$narm" = 1 ] && [ "$nsil" = 0 ]; then
+  echo "OK  ProbeWindow::arm bound to a NAMED binding (==1) and never silenced (A-MS47/KS-MS-90-3)"
+else
+  echo "FAIL: ProbeWindow::arm sites named=$narm (want 1) silenced/nude=$nsil (want 0) (A-MS47)"
+  FAILS=$((FAILS+1))
+fi
+# A-MS47 clippy half: -D clippy::let_underscore_must_use in the chain —
+# a future `let _ = ProbeWindow::arm()` dies at lint, not at review.
+# Scoped --no-deps: lints only this workspace's crates (cached after the
+# first run; the clippy profile never touches the parity binaries).
+if ( cd "$REPO" && cargo clippy -q -p php-server --features axum-server --release --no-deps -- -D clippy::let_underscore_must_use -A warnings ) >/dev/null 2>&1; then
+  echo "OK  clippy -D let_underscore_must_use clean on php-server (A-MS47)"
+else
+  echo "FAIL: cargo clippy -D clippy::let_underscore_must_use refused php-server (A-MS47)"
+  FAILS=$((FAILS+1))
+fi
+
+# A-TH56 (KH91-3): noprobe structural pins — the double-definition and
+# open-window evasions die BEFORE the verdict.
+npdef=$(grep -c '^probe_in()' "$NOPROBE" || true)
+if [ "$npdef" = 1 ]; then
+  echo "OK  noprobe carries EXACTLY one column-0 probe_in() definition (A-TH56/KH91-3)"
+else
+  echo "FAIL: noprobe probe_in() definitions ==$npdef, want 1 — decoy-front/gutting-behind double definition (A-TH56/KH91-3)"
+  FAILS=$((FAILS+1))
+fi
+PROBE_IN_V8=$(awk '/^probe_in\(\)/{w=1} w{print} w && /^}/{exit}' "$NOPROBE")
+if [ "$(echo "$PROBE_IN_V8" | tail -1)" = "}" ]; then
+  echo "OK  probe_in() window CLOSED by a column-0 brace (A-TH56/KH91-3)"
+else
+  echo "FAIL: probe_in() awk window never closed — the extraction swallowed the file (A-TH56/KH91-3)"
+  FAILS=$((FAILS+1))
+fi
+nform=$(echo "$PROBE_IN_V8" | grep -cE "^[^#]*strings[[:space:]]+--[[:space:]]+\"\\\$1\"[^#]*grep -q '${TH41_PAYLOAD}'" || true)
+if [ "$nform" = 1 ]; then
+  echo "OK  detection line FORM-pinned inside probe_in(): strings -- \"\$1\" | grep -q '<full payload>' ==1 (A-TH56)"
+else
+  echo "FAIL: full-payload detection line form-pin count=$nform, want 1 (A-TH56 — an echo/decoy inside probe_in no longer satisfies A-TH45)"
+  FAILS=$((FAILS+1))
+fi
+
+# A-PP52 belt note: the external npfail==2 counter lives in
+# gate-axum-tests.sh (the armed-UCL consumer); here we only pin that the
+# tooth exists there — a gutting of that gate's counter dies here.
+npf=$(grep -c 'main_probe_fail' "$REPO/wp88-harness/gate-axum-tests.sh" || true)
+if [ "$npf" -ge 1 ]; then
+  echo "OK  gate-axum-tests carries the A-PP52 npfail counter (KS-PP-91-2 lift armed)"
+else
+  echo "FAIL: gate-axum-tests has NO main_probe_fail counter — A-PP52 not armed (KS-PP-91-2)"
+  FAILS=$((FAILS+1))
+fi
+
 if [ "$FAILS" = 0 ]; then
-  echo "== GATE-LEVER-PINS PASS (A-MS13 + A-PP16 + KS-PP-82-3 + A-TH14 + v5 A-TH41/42 + v6 A-TH44/45 A-MS41 + v7 A-TH48/49 A-MS43/44/45 A-PP48) [git $GIT_REV] =="
+  echo "== GATE-LEVER-PINS PASS (A-MS13 + A-PP16 + KS-PP-82-3 + A-TH14 + v5 A-TH41/42 + v6 A-TH44/45 A-MS41 + v7 A-TH48/49 A-MS43/44/45 A-PP48 + v8 A-TH52/56 A-MS47/48) [git $GIT_REV] =="
   exit 0
 else
   echo "== GATE-LEVER-PINS FAIL($FAILS) [git $GIT_REV] =="

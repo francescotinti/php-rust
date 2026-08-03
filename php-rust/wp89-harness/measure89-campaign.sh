@@ -161,30 +161,55 @@ kill_server_tree() { # <wrapper-pid>
 # the port-owner assert's own fail-path PRODUCED the orphan it exists to
 # prevent. The parent-side handler kills the tree, verifies the server is
 # GONE (best-effort, 5s), LEDGERS the outcome in-band, then exits.
-subshell_failpath() { # <dpid> <label>
-  local dpid="$1" label="$2" gone=no i
-  kill_server_tree "$dpid"
+# A-PP51 (Council WP-91, Pedersen): shared gone-verifier with KILL
+# escalation — a TERM ignored used to leave the survivor alive with an
+# honest-but-useless `server_gone=no` (the NEXT campaign's pre-flight
+# paid it with a VOID). After the 5s TERM loop: kill -KILL the tree,
+# re-verify, report yes|killed9|no.
+ensure_gone() { # -> echoes yes|killed9|no
+  local gone=no i p
   for i in 1 2 3 4 5 6 7 8 9 10; do
     pgrep -x php-server >/dev/null || { gone=yes; break; }
     sleep 0.5
   done
+  if [ "$gone" = no ]; then
+    for p in $(pgrep -x php-server 2>/dev/null); do kill -KILL "$p" 2>/dev/null; done
+    for i in 1 2 3 4; do
+      pgrep -x php-server >/dev/null || { gone=killed9; break; }
+      sleep 0.5
+    done
+  fi
+  echo "$gone"
+}
+subshell_failpath() { # <dpid> <label>
+  local dpid="$1" label="$2" gone
+  kill_server_tree "$dpid"
+  gone=$(ensure_gone)
   ledger "attempt=$ATT phase=$label failpath=assert_single_server server_gone=$gone"
   exit 1
 }
 # A-PP46(2): body-mismatch teardown — a TERM alone can be ignored and the
 # survivor would ambush the NEXT campaign's pre-flight. Kill the tree,
-# verify server-gone best-effort, LEDGER it, then fail in-band.
+# verify server-gone (A-PP51 escalation), LEDGER it, then fail in-band.
 teardown_fail() { # <srv> <dpid> <label> <msg...>
   local srv="$1" dpid="$2" label="$3"; shift 3
   kill -TERM "$srv" 2>/dev/null
   kill_server_tree "$dpid"
-  local gone=no i
-  for i in 1 2 3 4 5 6 7 8 9 10; do
-    pgrep -x php-server >/dev/null || { gone=yes; break; }
-    sleep 0.5
-  done
+  local gone
+  gone=$(ensure_gone)
   ledger "attempt=$ATT phase=$label failpath=teardown server_gone=$gone"
   fail "$*"
+}
+# A-PP50 (Council WP-91, Pedersen — KS-PP-91-1): the wait_up fail-path was
+# the LAST blind abandonment branch (TERM only, no gone-verify, no
+# server_gone= row) — exactly the class A-PP46 declared closed. No m90+
+# campaign is consumable while any abandonment branch lacks its row.
+wait_up_fail() { # <dpid> <label>
+  local dpid="$1" label="$2" gone
+  kill_server_tree "$dpid"
+  gone=$(ensure_gone)
+  ledger "attempt=$ATT phase=$label failpath=wait_up server_gone=$gone"
+  fail "m89.$label server not up (A-PP50)"
 }
 # A-BG51 (Council WP-90, Gregg): pid-echo — the first ASSERTED request of
 # every phase (post-wait_up, pre-workload: the wait_up probes on /__reqns
@@ -244,7 +269,7 @@ run_arm() {
     /usr/bin/time -l "$OUTBIN/php-server" --axum --workers "$workers" --port $PORT -t "$FIXDIR" \
     > /dev/null 2> "$LOG" &
   local DPID=$!
-  wait_up || { kill_server_tree $DPID; fail "m89.$label server not up"; }
+  wait_up || wait_up_fail "$DPID" "$label"
   local SRV BOOT_EPOCH
   SRV=$(assert_single_server "$label" "$DPID") || subshell_failpath "$DPID" "$label"
   BOOT_EPOCH=$(date +%s)
@@ -281,7 +306,7 @@ run_pad() {
     /usr/bin/time -l "$OUTBIN/php-server" --axum --workers 1 --port $PORT -t "$FIXDIR" \
     > /dev/null 2> "$LOG" &
   local DPID=$!
-  wait_up || { kill_server_tree $DPID; fail "m89.$label server not up"; }
+  wait_up || wait_up_fail "$DPID" "$label"
   local SRV BOOT_EPOCH
   SRV=$(assert_single_server "$label" "$DPID") || subshell_failpath "$DPID" "$label"
   BOOT_EPOCH=$(date +%s)
@@ -313,7 +338,7 @@ run_sweep() {
     /usr/bin/time -l "$OUTBIN/php-server" --axum --workers 2 --port $PORT -t "$FIXDIR" \
     > /dev/null 2> "$LOG" &
   local DPID=$!
-  wait_up || { kill_server_tree $DPID; fail "m89.$label server not up"; }
+  wait_up || wait_up_fail "$DPID" "$label"
   local SRV BOOT_EPOCH
   SRV=$(assert_single_server "$label" "$DPID") || subshell_failpath "$DPID" "$label"
   BOOT_EPOCH=$(date +%s)

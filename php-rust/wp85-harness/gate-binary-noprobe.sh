@@ -46,6 +46,12 @@ if [ "${1:-}" = "--selftest" ]; then
   printf 'GARBAGE\x00clean_symbol\x00MORE' > "$TMP/clean.bin"
   # A-TH41: a bin carrying ONLY the full payload (generic token stripped by
   # some future mangling) must still be detected.
+  # A-TH56 (Council WP-91, Hoare) — DECLASSED to a DECLARED FORWARD-GUARD:
+  # the payload CONTAINS `vm_gate_probe` as a substring, so today the
+  # generic line detects tainted2 even with the payload line gutted —
+  # this case does NOT falsify the payload line; it guards the future
+  # where the generic token is renamed/mangled. The falsifier for the
+  # payload line is the A-TH56 form-pin in gate-lever-pins.
   printf 'GARBAGE\x00phpr_vm_gate_probe_tainted_a_th37\x00MORE' > "$TMP/tainted2.bin"
   if ! probe_in "$TMP/tainted.bin"; then
     echo "SELFTEST FAIL: embedded vm_gate_probe marker NOT detected (KH86-1)"
