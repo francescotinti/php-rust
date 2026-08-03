@@ -34,7 +34,9 @@ Dettaglio: `sessions/WP_SESSION_91.md` + `wp91-harness/`.
 - **Gate cifre v2**: --all PASS sul perimetro ESTESO (manifest per
   NOME: MEASURE + NEXT_SESSION/WP_SESSION_91 judge=yes + storici/
   deliberativi judge=no dichiarati; M84/85 ancorati verdict= a HEAD);
-  budget 24232; selftest con T13/T14/T15/T16 = i quattro forge WP-92.
+  budget in vigore 24329 (S-92.0: valori storici del budget FUORI dal
+  corpus, A-SK-77); selftest con T13..T16 (forge WP-92) + T17..T22
+  (forge WP-93).
   Gate lever-pins v9 PASS; gate-axum-tests PASS.
 - **Misure (gradi WP-92, sanatoria ESEGUITA; emende A-BG62/63/64
   WP-93)**: b_boot 2.252.800 B
