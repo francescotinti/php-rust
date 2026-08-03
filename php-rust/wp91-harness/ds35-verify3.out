@@ -1,0 +1,710 @@
+== ds35-verify3 — oracle 8.5.7 · phpr d5ce86e3342f3926 · git c638362 ==
+persist flags (A-DS52, single vector): opcache.enable_cli=1 opcache.file_cache_only=1 opcache.file_cache=<fresh-dir>
+pin format (A-DS54/KS-DS-92-1): LENGTH-PREFIXED channels — stdout_bytes/stderr_bytes on the header, payload read by OFFSET; marker-scanning comparators BANNED
+t4 target arm (A-DS55, per NOME): PERSIST (plain diverges: pre| before the fatal)
+declared by NAME: phpr does NOT model the oracle stderr log-copy — phpr stderr expected EMPTY (catalogo §3.3-quinquies)
+
+fixture=n1_return_incompat.php set=v1
+--branch=plain exit=255 stdout_bytes=223 stderr_bytes=227
+
+Fatal error: Declaration of C::m(): string must be compatible with P::m(): int in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/n1_return_incompat.php on line 3
+Stack trace:
+#0 {main}
+PHP Fatal error:  Declaration of C::m(): string must be compatible with P::m(): int in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/n1_return_incompat.php on line 3
+Stack trace:
+#0 {main}
+--branch=persist exit=255 stdout_bytes=223 stderr_bytes=227
+
+Fatal error: Declaration of C::m(): string must be compatible with P::m(): int in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/n1_return_incompat.php on line 3
+Stack trace:
+#0 {main}
+PHP Fatal error:  Declaration of C::m(): string must be compatible with P::m(): int in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/n1_return_incompat.php on line 3
+Stack trace:
+#0 {main}
+  binchk : ok-via-probe nbin=0 nprobe=1 (compile-fatal fixture: .bin N/A; arm NOT crippled)
+--branch=phpr exit=0 stdout_bytes=5 stderr_bytes=0
+alive
+fixture=n2_param_narrow.php set=v1
+--branch=plain exit=255 stdout_bytes=215 stderr_bytes=219
+
+Fatal error: Declaration of C::m(int $x) must be compatible with P::m($x) in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/n2_param_narrow.php on line 3
+Stack trace:
+#0 {main}
+PHP Fatal error:  Declaration of C::m(int $x) must be compatible with P::m($x) in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/n2_param_narrow.php on line 3
+Stack trace:
+#0 {main}
+--branch=persist exit=255 stdout_bytes=215 stderr_bytes=219
+
+Fatal error: Declaration of C::m(int $x) must be compatible with P::m($x) in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/n2_param_narrow.php on line 3
+Stack trace:
+#0 {main}
+PHP Fatal error:  Declaration of C::m(int $x) must be compatible with P::m($x) in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/n2_param_narrow.php on line 3
+Stack trace:
+#0 {main}
+  binchk : ok-via-probe nbin=0 nprobe=1 (compile-fatal fixture: .bin N/A; arm NOT crippled)
+--branch=phpr exit=0 stdout_bytes=5 stderr_bytes=0
+alive
+fixture=n3_static_widen.php set=v1
+--branch=plain exit=255 stdout_bytes=218 stderr_bytes=222
+
+Fatal error: Declaration of C::m(): P must be compatible with P::m(): static in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/n3_static_widen.php on line 3
+Stack trace:
+#0 {main}
+PHP Fatal error:  Declaration of C::m(): P must be compatible with P::m(): static in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/n3_static_widen.php on line 3
+Stack trace:
+#0 {main}
+--branch=persist exit=255 stdout_bytes=218 stderr_bytes=222
+
+Fatal error: Declaration of C::m(): P must be compatible with P::m(): static in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/n3_static_widen.php on line 3
+Stack trace:
+#0 {main}
+PHP Fatal error:  Declaration of C::m(): P must be compatible with P::m(): static in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/n3_static_widen.php on line 3
+Stack trace:
+#0 {main}
+  binchk : ok-via-probe nbin=0 nprobe=1 (compile-fatal fixture: .bin N/A; arm NOT crippled)
+--branch=phpr exit=0 stdout_bytes=5 stderr_bytes=0
+alive
+fixture=n4_union_superset.php set=v1
+--branch=plain exit=255 stdout_bytes=239 stderr_bytes=243
+
+Fatal error: Declaration of C::m(): string|int|float must be compatible with P::m(): string|int in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/n4_union_superset.php on line 3
+Stack trace:
+#0 {main}
+PHP Fatal error:  Declaration of C::m(): string|int|float must be compatible with P::m(): string|int in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/n4_union_superset.php on line 3
+Stack trace:
+#0 {main}
+--branch=persist exit=255 stdout_bytes=239 stderr_bytes=243
+
+Fatal error: Declaration of C::m(): string|int|float must be compatible with P::m(): string|int in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/n4_union_superset.php on line 3
+Stack trace:
+#0 {main}
+PHP Fatal error:  Declaration of C::m(): string|int|float must be compatible with P::m(): string|int in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/n4_union_superset.php on line 3
+Stack trace:
+#0 {main}
+  binchk : ok-via-probe nbin=0 nprobe=1 (compile-fatal fixture: .bin N/A; arm NOT crippled)
+--branch=phpr exit=0 stdout_bytes=5 stderr_bytes=0
+alive
+fixture=n5_static_mismatch.php set=v1
+--branch=plain exit=255 stdout_bytes=212 stderr_bytes=216
+
+Fatal error: Cannot make non static method P::m() static in class C in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/n5_static_mismatch.php on line 3
+Stack trace:
+#0 {main}
+PHP Fatal error:  Cannot make non static method P::m() static in class C in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/n5_static_mismatch.php on line 3
+Stack trace:
+#0 {main}
+--branch=persist exit=255 stdout_bytes=212 stderr_bytes=216
+
+Fatal error: Cannot make non static method P::m() static in class C in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/n5_static_mismatch.php on line 3
+Stack trace:
+#0 {main}
+PHP Fatal error:  Cannot make non static method P::m() static in class C in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/n5_static_mismatch.php on line 3
+Stack trace:
+#0 {main}
+  binchk : ok-via-probe nbin=0 nprobe=1 (compile-fatal fixture: .bin N/A; arm NOT crippled)
+--branch=phpr exit=0 stdout_bytes=5 stderr_bytes=0
+alive
+fixture=n6_visibility.php set=v1
+--branch=plain exit=255 stdout_bytes=206 stderr_bytes=210
+
+Fatal error: Access level to C::m() must be public (as in class P) in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/n6_visibility.php on line 3
+Stack trace:
+#0 {main}
+PHP Fatal error:  Access level to C::m() must be public (as in class P) in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/n6_visibility.php on line 3
+Stack trace:
+#0 {main}
+--branch=persist exit=255 stdout_bytes=206 stderr_bytes=210
+
+Fatal error: Access level to C::m() must be public (as in class P) in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/n6_visibility.php on line 3
+Stack trace:
+#0 {main}
+PHP Fatal error:  Access level to C::m() must be public (as in class P) in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/n6_visibility.php on line 3
+Stack trace:
+#0 {main}
+  binchk : ok-via-probe nbin=0 nprobe=1 (compile-fatal fixture: .bin N/A; arm NOT crippled)
+--branch=phpr exit=0 stdout_bytes=5 stderr_bytes=0
+alive
+fixture=n7_final.php set=v1
+--branch=plain exit=255 stdout_bytes=183 stderr_bytes=187
+
+Fatal error: Cannot override final method P::m() in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/n7_final.php on line 3
+Stack trace:
+#0 {main}
+PHP Fatal error:  Cannot override final method P::m() in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/n7_final.php on line 3
+Stack trace:
+#0 {main}
+--branch=persist exit=255 stdout_bytes=183 stderr_bytes=187
+
+Fatal error: Cannot override final method P::m() in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/n7_final.php on line 3
+Stack trace:
+#0 {main}
+PHP Fatal error:  Cannot override final method P::m() in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/n7_final.php on line 3
+Stack trace:
+#0 {main}
+  binchk : ok-via-probe nbin=0 nprobe=1 (compile-fatal fixture: .bin N/A; arm NOT crippled)
+--branch=phpr exit=255 stdout_bytes=183 stderr_bytes=0
+
+Fatal error: Cannot override final method P::m() in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/n7_final.php on line 3
+Stack trace:
+#0 {main}
+
+fixture=n8_prop_type.php set=v1
+--branch=plain exit=255 stdout_bytes=193 stderr_bytes=197
+
+Fatal error: Type of C::$x must be int (as in class P) in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/n8_prop_type.php on line 3
+Stack trace:
+#0 {main}
+PHP Fatal error:  Type of C::$x must be int (as in class P) in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/n8_prop_type.php on line 3
+Stack trace:
+#0 {main}
+--branch=persist exit=255 stdout_bytes=193 stderr_bytes=197
+
+Fatal error: Type of C::$x must be int (as in class P) in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/n8_prop_type.php on line 3
+Stack trace:
+#0 {main}
+PHP Fatal error:  Type of C::$x must be int (as in class P) in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/n8_prop_type.php on line 3
+Stack trace:
+#0 {main}
+  binchk : ok-via-probe nbin=0 nprobe=1 (compile-fatal fixture: .bin N/A; arm NOT crippled)
+--branch=phpr exit=0 stdout_bytes=5 stderr_bytes=0
+alive
+fixture=n9_trait_abstract.php set=v1
+--branch=plain exit=255 stdout_bytes=222 stderr_bytes=226
+
+Fatal error: Declaration of C::f(): int must be compatible with T::f(): string in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/n9_trait_abstract.php on line 3
+Stack trace:
+#0 {main}
+PHP Fatal error:  Declaration of C::f(): int must be compatible with T::f(): string in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/n9_trait_abstract.php on line 3
+Stack trace:
+#0 {main}
+--branch=persist exit=255 stdout_bytes=222 stderr_bytes=226
+
+Fatal error: Declaration of C::f(): int must be compatible with T::f(): string in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/n9_trait_abstract.php on line 3
+Stack trace:
+#0 {main}
+PHP Fatal error:  Declaration of C::f(): int must be compatible with T::f(): string in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/n9_trait_abstract.php on line 3
+Stack trace:
+#0 {main}
+  binchk : ok nbin=1 (A-DS47 persist ANCORATO; A-DS52 single vector)
+--branch=phpr exit=0 stdout_bytes=5 stderr_bytes=0
+alive
+fixture=p1_covariant_return.php set=v1
+--branch=plain exit=0 stdout_bytes=1 stderr_bytes=0
+B--branch=persist exit=0 stdout_bytes=1 stderr_bytes=0
+B  binchk : ok nbin=1 (A-DS47 persist ANCORATO; A-DS52 single vector)
+--branch=phpr exit=0 stdout_bytes=1 stderr_bytes=0
+B
+fixture=p2_param_widen.php set=v1
+--branch=plain exit=0 stdout_bytes=2 stderr_bytes=0
+42--branch=persist exit=0 stdout_bytes=2 stderr_bytes=0
+42  binchk : ok nbin=1 (A-DS47 persist ANCORATO; A-DS52 single vector)
+--branch=phpr exit=0 stdout_bytes=2 stderr_bytes=0
+42
+fixture=p3_static_return.php set=v1
+--branch=plain exit=0 stdout_bytes=1 stderr_bytes=0
+C--branch=persist exit=0 stdout_bytes=1 stderr_bytes=0
+C  binchk : ok nbin=1 (A-DS47 persist ANCORATO; A-DS52 single vector)
+--branch=phpr exit=0 stdout_bytes=1 stderr_bytes=0
+C
+fixture=p4_union_subset.php set=v1
+--branch=plain exit=0 stdout_bytes=7 stderr_bytes=0
+int(7)
+--branch=persist exit=0 stdout_bytes=7 stderr_bytes=0
+int(7)
+  binchk : ok nbin=1 (A-DS47 persist ANCORATO; A-DS52 single vector)
+--branch=phpr exit=0 stdout_bytes=7 stderr_bytes=0
+int(7)
+
+fixture=p5_tentative_return.php set=v1
+--branch=plain exit=0 stdout_bytes=342 stderr_bytes=339
+
+Deprecated: Return type of J::jsonSerialize() should either be compatible with JsonSerializable::jsonSerialize(): mixed, or the #[\ReturnTypeWillChange] attribute should be used to temporarily suppress the notice in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/p5_tentative_return.php on line 2
+{"a":1}PHP Deprecated:  Return type of J::jsonSerialize() should either be compatible with JsonSerializable::jsonSerialize(): mixed, or the #[\ReturnTypeWillChange] attribute should be used to temporarily suppress the notice in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/p5_tentative_return.php on line 2
+--branch=persist exit=0 stdout_bytes=342 stderr_bytes=339
+
+Deprecated: Return type of J::jsonSerialize() should either be compatible with JsonSerializable::jsonSerialize(): mixed, or the #[\ReturnTypeWillChange] attribute should be used to temporarily suppress the notice in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/p5_tentative_return.php on line 2
+{"a":1}PHP Deprecated:  Return type of J::jsonSerialize() should either be compatible with JsonSerializable::jsonSerialize(): mixed, or the #[\ReturnTypeWillChange] attribute should be used to temporarily suppress the notice in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp89-harness/fixtures-ds35/p5_tentative_return.php on line 2
+  binchk : ok nbin=1 (A-DS47 persist ANCORATO; A-DS52 single vector)
+--branch=phpr exit=0 stdout_bytes=7 stderr_bytes=0
+{"a":1}
+fixture=p6_rtwc_suppress.php set=v1
+--branch=plain exit=0 stdout_bytes=7 stderr_bytes=0
+{"a":1}--branch=persist exit=0 stdout_bytes=7 stderr_bytes=0
+{"a":1}  binchk : ok nbin=1 (A-DS47 persist ANCORATO; A-DS52 single vector)
+--branch=phpr exit=0 stdout_bytes=7 stderr_bytes=0
+{"a":1}
+fixture=p7_never_covariant.php set=v1
+--branch=plain exit=0 stdout_bytes=8 stderr_bytes=0
+declared--branch=persist exit=0 stdout_bytes=8 stderr_bytes=0
+declared  binchk : ok nbin=1 (A-DS47 persist ANCORATO; A-DS52 single vector)
+--branch=phpr exit=0 stdout_bytes=8 stderr_bytes=0
+declared
+fixture=p8_ctor_exempt.php set=v1
+--branch=plain exit=0 stdout_bytes=11 stderr_bytes=0
+ctor-exempt--branch=persist exit=0 stdout_bytes=11 stderr_bytes=0
+ctor-exempt  binchk : ok nbin=1 (A-DS47 persist ANCORATO; A-DS52 single vector)
+--branch=phpr exit=0 stdout_bytes=11 stderr_bytes=0
+ctor-exempt
+fixture=p9_private_exempt.php set=v1
+--branch=plain exit=0 stdout_bytes=16 stderr_bytes=0
+p|private-exempt--branch=persist exit=0 stdout_bytes=16 stderr_bytes=0
+p|private-exempt  binchk : ok nbin=1 (A-DS47 persist ANCORATO; A-DS52 single vector)
+--branch=phpr exit=0 stdout_bytes=16 stderr_bytes=0
+p|private-exempt
+fixture=v1_byref_widen.php set=v2
+--branch=plain exit=0 stdout_bytes=2 stderr_bytes=0
+42--branch=persist exit=0 stdout_bytes=2 stderr_bytes=0
+42  binchk : ok nbin=1 (A-DS47 persist ANCORATO; A-DS52 single vector)
+--branch=phpr exit=0 stdout_bytes=2 stderr_bytes=0
+42
+fixture=v2_byref_narrow.php set=v2
+--branch=plain exit=255 stdout_bytes=231 stderr_bytes=235
+
+Fatal error: Declaration of C::m(int &$x) must be compatible with P::m(string|int &$x) in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp90-harness/fixtures-ds35-v2/v2_byref_narrow.php on line 3
+Stack trace:
+#0 {main}
+PHP Fatal error:  Declaration of C::m(int &$x) must be compatible with P::m(string|int &$x) in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp90-harness/fixtures-ds35-v2/v2_byref_narrow.php on line 3
+Stack trace:
+#0 {main}
+--branch=persist exit=255 stdout_bytes=231 stderr_bytes=235
+
+Fatal error: Declaration of C::m(int &$x) must be compatible with P::m(string|int &$x) in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp90-harness/fixtures-ds35-v2/v2_byref_narrow.php on line 3
+Stack trace:
+#0 {main}
+PHP Fatal error:  Declaration of C::m(int &$x) must be compatible with P::m(string|int &$x) in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp90-harness/fixtures-ds35-v2/v2_byref_narrow.php on line 3
+Stack trace:
+#0 {main}
+  binchk : ok-via-probe nbin=0 nprobe=1 (compile-fatal fixture: .bin N/A; arm NOT crippled)
+--branch=phpr exit=0 stdout_bytes=5 stderr_bytes=0
+alive
+fixture=v3_ref_removed.php set=v2
+--branch=plain exit=255 stdout_bytes=222 stderr_bytes=226
+
+Fatal error: Declaration of C::m(int $x) must be compatible with P::m(int &$x) in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp90-harness/fixtures-ds35-v2/v3_ref_removed.php on line 3
+Stack trace:
+#0 {main}
+PHP Fatal error:  Declaration of C::m(int $x) must be compatible with P::m(int &$x) in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp90-harness/fixtures-ds35-v2/v3_ref_removed.php on line 3
+Stack trace:
+#0 {main}
+--branch=persist exit=255 stdout_bytes=222 stderr_bytes=226
+
+Fatal error: Declaration of C::m(int $x) must be compatible with P::m(int &$x) in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp90-harness/fixtures-ds35-v2/v3_ref_removed.php on line 3
+Stack trace:
+#0 {main}
+PHP Fatal error:  Declaration of C::m(int $x) must be compatible with P::m(int &$x) in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp90-harness/fixtures-ds35-v2/v3_ref_removed.php on line 3
+Stack trace:
+#0 {main}
+  binchk : ok-via-probe nbin=0 nprobe=1 (compile-fatal fixture: .bin N/A; arm NOT crippled)
+--branch=phpr exit=0 stdout_bytes=5 stderr_bytes=0
+alive
+fixture=v4_ref_added.php set=v2
+--branch=plain exit=255 stdout_bytes=220 stderr_bytes=224
+
+Fatal error: Declaration of C::m(int &$x) must be compatible with P::m(int $x) in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp90-harness/fixtures-ds35-v2/v4_ref_added.php on line 3
+Stack trace:
+#0 {main}
+PHP Fatal error:  Declaration of C::m(int &$x) must be compatible with P::m(int $x) in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp90-harness/fixtures-ds35-v2/v4_ref_added.php on line 3
+Stack trace:
+#0 {main}
+--branch=persist exit=255 stdout_bytes=220 stderr_bytes=224
+
+Fatal error: Declaration of C::m(int &$x) must be compatible with P::m(int $x) in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp90-harness/fixtures-ds35-v2/v4_ref_added.php on line 3
+Stack trace:
+#0 {main}
+PHP Fatal error:  Declaration of C::m(int &$x) must be compatible with P::m(int $x) in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp90-harness/fixtures-ds35-v2/v4_ref_added.php on line 3
+Stack trace:
+#0 {main}
+  binchk : ok-via-probe nbin=0 nprobe=1 (compile-fatal fixture: .bin N/A; arm NOT crippled)
+--branch=phpr exit=0 stdout_bytes=5 stderr_bytes=0
+alive
+fixture=v5_required_grows.php set=v2
+--branch=plain exit=255 stdout_bytes=220 stderr_bytes=224
+
+Fatal error: Declaration of C::m($a, $b) must be compatible with P::m($a) in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp90-harness/fixtures-ds35-v2/v5_required_grows.php on line 3
+Stack trace:
+#0 {main}
+PHP Fatal error:  Declaration of C::m($a, $b) must be compatible with P::m($a) in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp90-harness/fixtures-ds35-v2/v5_required_grows.php on line 3
+Stack trace:
+#0 {main}
+--branch=persist exit=255 stdout_bytes=220 stderr_bytes=224
+
+Fatal error: Declaration of C::m($a, $b) must be compatible with P::m($a) in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp90-harness/fixtures-ds35-v2/v5_required_grows.php on line 3
+Stack trace:
+#0 {main}
+PHP Fatal error:  Declaration of C::m($a, $b) must be compatible with P::m($a) in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp90-harness/fixtures-ds35-v2/v5_required_grows.php on line 3
+Stack trace:
+#0 {main}
+  binchk : ok-via-probe nbin=0 nprobe=1 (compile-fatal fixture: .bin N/A; arm NOT crippled)
+--branch=phpr exit=0 stdout_bytes=5 stderr_bytes=0
+alive
+fixture=v6_variadic_absorbs.php set=v2
+--branch=plain exit=0 stdout_bytes=2 stderr_bytes=0
+42--branch=persist exit=0 stdout_bytes=2 stderr_bytes=0
+42  binchk : ok nbin=1 (A-DS47 persist ANCORATO; A-DS52 single vector)
+--branch=phpr exit=0 stdout_bytes=2 stderr_bytes=0
+42
+fixture=v7_nullable_grafia.php set=v2
+--branch=plain exit=0 stdout_bytes=2 stderr_bytes=0
+42--branch=persist exit=0 stdout_bytes=2 stderr_bytes=0
+42  binchk : ok nbin=1 (A-DS47 persist ANCORATO; A-DS52 single vector)
+--branch=phpr exit=0 stdout_bytes=2 stderr_bytes=0
+42
+fixture=v8_mixed_narrow.php set=v2
+--branch=plain exit=0 stdout_bytes=2 stderr_bytes=0
+42--branch=persist exit=0 stdout_bytes=2 stderr_bytes=0
+42  binchk : ok nbin=1 (A-DS47 persist ANCORATO; A-DS52 single vector)
+--branch=phpr exit=0 stdout_bytes=2 stderr_bytes=0
+42
+fixture=v9_void_exact.php set=v2
+--branch=plain exit=255 stdout_bytes=219 stderr_bytes=223
+
+Fatal error: Declaration of C::m(): int must be compatible with P::m(): void in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp90-harness/fixtures-ds35-v2/v9_void_exact.php on line 3
+Stack trace:
+#0 {main}
+PHP Fatal error:  Declaration of C::m(): int must be compatible with P::m(): void in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp90-harness/fixtures-ds35-v2/v9_void_exact.php on line 3
+Stack trace:
+#0 {main}
+--branch=persist exit=255 stdout_bytes=219 stderr_bytes=223
+
+Fatal error: Declaration of C::m(): int must be compatible with P::m(): void in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp90-harness/fixtures-ds35-v2/v9_void_exact.php on line 3
+Stack trace:
+#0 {main}
+PHP Fatal error:  Declaration of C::m(): int must be compatible with P::m(): void in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp90-harness/fixtures-ds35-v2/v9_void_exact.php on line 3
+Stack trace:
+#0 {main}
+  binchk : ok-via-probe nbin=0 nprobe=1 (compile-fatal fixture: .bin N/A; arm NOT crippled)
+--branch=phpr exit=0 stdout_bytes=5 stderr_bytes=0
+alive
+fixture=v10_static_inverse.php set=v2
+--branch=plain exit=255 stdout_bytes=215 stderr_bytes=219
+
+Fatal error: Cannot make static method P::m() non static in class C in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp90-harness/fixtures-ds35-v2/v10_static_inverse.php on line 3
+Stack trace:
+#0 {main}
+PHP Fatal error:  Cannot make static method P::m() non static in class C in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp90-harness/fixtures-ds35-v2/v10_static_inverse.php on line 3
+Stack trace:
+#0 {main}
+--branch=persist exit=255 stdout_bytes=215 stderr_bytes=219
+
+Fatal error: Cannot make static method P::m() non static in class C in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp90-harness/fixtures-ds35-v2/v10_static_inverse.php on line 3
+Stack trace:
+#0 {main}
+PHP Fatal error:  Cannot make static method P::m() non static in class C in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp90-harness/fixtures-ds35-v2/v10_static_inverse.php on line 3
+Stack trace:
+#0 {main}
+  binchk : ok-via-probe nbin=0 nprobe=1 (compile-fatal fixture: .bin N/A; arm NOT crippled)
+--branch=phpr exit=0 stdout_bytes=5 stderr_bytes=0
+alive
+fixture=v11_readonly.php set=v2
+--branch=plain exit=255 stdout_bytes=217 stderr_bytes=221
+
+Fatal error: Cannot redeclare readonly property P::$x as non-readonly C::$x in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp90-harness/fixtures-ds35-v2/v11_readonly.php on line 3
+Stack trace:
+#0 {main}
+PHP Fatal error:  Cannot redeclare readonly property P::$x as non-readonly C::$x in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp90-harness/fixtures-ds35-v2/v11_readonly.php on line 3
+Stack trace:
+#0 {main}
+--branch=persist exit=255 stdout_bytes=217 stderr_bytes=221
+
+Fatal error: Cannot redeclare readonly property P::$x as non-readonly C::$x in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp90-harness/fixtures-ds35-v2/v11_readonly.php on line 3
+Stack trace:
+#0 {main}
+PHP Fatal error:  Cannot redeclare readonly property P::$x as non-readonly C::$x in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp90-harness/fixtures-ds35-v2/v11_readonly.php on line 3
+Stack trace:
+#0 {main}
+  binchk : ok-via-probe nbin=0 nprobe=1 (compile-fatal fixture: .bin N/A; arm NOT crippled)
+--branch=phpr exit=0 stdout_bytes=5 stderr_bytes=0
+alive
+fixture=v12_prop_typed_on_untyped.php set=v2
+--branch=plain exit=255 stdout_bytes=239 stderr_bytes=243
+
+Fatal error: Type of C::$x must be omitted to match the parent definition in class P in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp90-harness/fixtures-ds35-v2/v12_prop_typed_on_untyped.php on line 3
+Stack trace:
+#0 {main}
+PHP Fatal error:  Type of C::$x must be omitted to match the parent definition in class P in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp90-harness/fixtures-ds35-v2/v12_prop_typed_on_untyped.php on line 3
+Stack trace:
+#0 {main}
+--branch=persist exit=255 stdout_bytes=239 stderr_bytes=243
+
+Fatal error: Type of C::$x must be omitted to match the parent definition in class P in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp90-harness/fixtures-ds35-v2/v12_prop_typed_on_untyped.php on line 3
+Stack trace:
+#0 {main}
+PHP Fatal error:  Type of C::$x must be omitted to match the parent definition in class P in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp90-harness/fixtures-ds35-v2/v12_prop_typed_on_untyped.php on line 3
+Stack trace:
+#0 {main}
+  binchk : ok-via-probe nbin=0 nprobe=1 (compile-fatal fixture: .bin N/A; arm NOT crippled)
+--branch=phpr exit=0 stdout_bytes=5 stderr_bytes=0
+alive
+fixture=v13_iface_ctor.php set=v2
+--branch=plain exit=255 stdout_bytes=244 stderr_bytes=248
+
+Fatal error: Declaration of C::__construct(string $y) must be compatible with I::__construct(int $x) in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp90-harness/fixtures-ds35-v2/v13_iface_ctor.php on line 3
+Stack trace:
+#0 {main}
+PHP Fatal error:  Declaration of C::__construct(string $y) must be compatible with I::__construct(int $x) in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp90-harness/fixtures-ds35-v2/v13_iface_ctor.php on line 3
+Stack trace:
+#0 {main}
+--branch=persist exit=255 stdout_bytes=244 stderr_bytes=248
+
+Fatal error: Declaration of C::__construct(string $y) must be compatible with I::__construct(int $x) in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp90-harness/fixtures-ds35-v2/v13_iface_ctor.php on line 3
+Stack trace:
+#0 {main}
+PHP Fatal error:  Declaration of C::__construct(string $y) must be compatible with I::__construct(int $x) in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp90-harness/fixtures-ds35-v2/v13_iface_ctor.php on line 3
+Stack trace:
+#0 {main}
+  binchk : ok nbin=1 (A-DS47 persist ANCORATO; A-DS52 single vector)
+--branch=phpr exit=0 stdout_bytes=5 stderr_bytes=0
+alive
+fixture=v14_abstract_ctor.php set=v2
+--branch=plain exit=255 stdout_bytes=247 stderr_bytes=251
+
+Fatal error: Declaration of C::__construct(string $y) must be compatible with P::__construct(int $x) in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp90-harness/fixtures-ds35-v2/v14_abstract_ctor.php on line 3
+Stack trace:
+#0 {main}
+PHP Fatal error:  Declaration of C::__construct(string $y) must be compatible with P::__construct(int $x) in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp90-harness/fixtures-ds35-v2/v14_abstract_ctor.php on line 3
+Stack trace:
+#0 {main}
+--branch=persist exit=255 stdout_bytes=247 stderr_bytes=251
+
+Fatal error: Declaration of C::__construct(string $y) must be compatible with P::__construct(int $x) in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp90-harness/fixtures-ds35-v2/v14_abstract_ctor.php on line 3
+Stack trace:
+#0 {main}
+PHP Fatal error:  Declaration of C::__construct(string $y) must be compatible with P::__construct(int $x) in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp90-harness/fixtures-ds35-v2/v14_abstract_ctor.php on line 3
+Stack trace:
+#0 {main}
+  binchk : ok-via-probe nbin=0 nprobe=1 (compile-fatal fixture: .bin N/A; arm NOT crippled)
+--branch=phpr exit=0 stdout_bytes=5 stderr_bytes=0
+alive
+fixture=v15_unresolvable.php set=v2
+--branch=plain exit=255 stdout_bytes=254 stderr_bytes=258
+
+Fatal error: Could not check compatibility between C::m(): B and P::m(): A, because class B is not available in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp90-harness/fixtures-ds35-v2/v15_unresolvable.php on line 3
+Stack trace:
+#0 {main}
+PHP Fatal error:  Could not check compatibility between C::m(): B and P::m(): A, because class B is not available in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp90-harness/fixtures-ds35-v2/v15_unresolvable.php on line 3
+Stack trace:
+#0 {main}
+--branch=persist exit=255 stdout_bytes=254 stderr_bytes=258
+
+Fatal error: Could not check compatibility between C::m(): B and P::m(): A, because class B is not available in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp90-harness/fixtures-ds35-v2/v15_unresolvable.php on line 3
+Stack trace:
+#0 {main}
+PHP Fatal error:  Could not check compatibility between C::m(): B and P::m(): A, because class B is not available in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp90-harness/fixtures-ds35-v2/v15_unresolvable.php on line 3
+Stack trace:
+#0 {main}
+  binchk : ok nbin=1 (A-DS47 persist ANCORATO; A-DS52 single vector)
+--branch=phpr exit=0 stdout_bytes=5 stderr_bytes=0
+alive
+fixture=t1_parent_after.php set=v2
+--branch=plain exit=255 stdout_bytes=223 stderr_bytes=227
+
+Fatal error: Declaration of C::m(): int must be compatible with P::m(): string in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp90-harness/fixtures-ds35-v2/t1_parent_after.php on line 2
+Stack trace:
+#0 {main}
+PHP Fatal error:  Declaration of C::m(): int must be compatible with P::m(): string in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp90-harness/fixtures-ds35-v2/t1_parent_after.php on line 2
+Stack trace:
+#0 {main}
+--branch=persist exit=255 stdout_bytes=223 stderr_bytes=227
+
+Fatal error: Declaration of C::m(): int must be compatible with P::m(): string in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp90-harness/fixtures-ds35-v2/t1_parent_after.php on line 2
+Stack trace:
+#0 {main}
+PHP Fatal error:  Declaration of C::m(): int must be compatible with P::m(): string in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp90-harness/fixtures-ds35-v2/t1_parent_after.php on line 2
+Stack trace:
+#0 {main}
+  binchk : ok nbin=1 (A-DS47 persist ANCORATO; A-DS52 single vector)
+--branch=phpr exit=0 stdout_bytes=5 stderr_bytes=0
+alive
+fixture=t2_conditional_executed.php set=v2
+--branch=plain exit=255 stdout_bytes=241 stderr_bytes=241
+pre|
+Fatal error: Declaration of C::m(int $x) must be compatible with P::m(string|int $x) in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp90-harness/fixtures-ds35-v2/t2_conditional_executed.php on line 4
+Stack trace:
+#0 {main}
+PHP Fatal error:  Declaration of C::m(int $x) must be compatible with P::m(string|int $x) in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp90-harness/fixtures-ds35-v2/t2_conditional_executed.php on line 4
+Stack trace:
+#0 {main}
+--branch=persist exit=255 stdout_bytes=241 stderr_bytes=241
+pre|
+Fatal error: Declaration of C::m(int $x) must be compatible with P::m(string|int $x) in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp90-harness/fixtures-ds35-v2/t2_conditional_executed.php on line 4
+Stack trace:
+#0 {main}
+PHP Fatal error:  Declaration of C::m(int $x) must be compatible with P::m(string|int $x) in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp90-harness/fixtures-ds35-v2/t2_conditional_executed.php on line 4
+Stack trace:
+#0 {main}
+  binchk : ok nbin=1 (A-DS47 persist ANCORATO; A-DS52 single vector)
+--branch=phpr exit=0 stdout_bytes=8 stderr_bytes=0
+pre|post
+fixture=t3_conditional_skipped.php set=v2
+--branch=plain exit=0 stdout_bytes=8 stderr_bytes=0
+pre|post--branch=persist exit=0 stdout_bytes=8 stderr_bytes=0
+pre|post  binchk : ok nbin=1 (A-DS47 persist ANCORATO; A-DS52 single vector)
+--branch=phpr exit=0 stdout_bytes=8 stderr_bytes=0
+pre|post
+fixture=t4_hoisted_with_output.php set=v2
+--branch=plain exit=255 stdout_bytes=234 stderr_bytes=234
+pre|
+Fatal error: Declaration of C::m(): int must be compatible with P::m(): string in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp90-harness/fixtures-ds35-v2/t4_hoisted_with_output.php on line 3
+Stack trace:
+#0 {main}
+PHP Fatal error:  Declaration of C::m(): int must be compatible with P::m(): string in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp90-harness/fixtures-ds35-v2/t4_hoisted_with_output.php on line 3
+Stack trace:
+#0 {main}
+--branch=persist exit=255 stdout_bytes=230 stderr_bytes=234
+
+Fatal error: Declaration of C::m(): int must be compatible with P::m(): string in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp90-harness/fixtures-ds35-v2/t4_hoisted_with_output.php on line 3
+Stack trace:
+#0 {main}
+PHP Fatal error:  Declaration of C::m(): int must be compatible with P::m(): string in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp90-harness/fixtures-ds35-v2/t4_hoisted_with_output.php on line 3
+Stack trace:
+#0 {main}
+  binchk : ok nbin=1 (A-DS47 persist ANCORATO; A-DS52 single vector)
+--branch=phpr exit=0 stdout_bytes=8 stderr_bytes=0
+pre|post
+fixture=w1_multi_iface.php set=v3
+--branch=plain exit=255 stdout_bytes=223 stderr_bytes=227
+
+Fatal error: Declaration of C::m(): int must be compatible with I2::m(): string in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp91-harness/fixtures-ds35-v3/w1_multi_iface.php on line 4
+Stack trace:
+#0 {main}
+PHP Fatal error:  Declaration of C::m(): int must be compatible with I2::m(): string in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp91-harness/fixtures-ds35-v3/w1_multi_iface.php on line 4
+Stack trace:
+#0 {main}
+--branch=persist exit=255 stdout_bytes=223 stderr_bytes=227
+
+Fatal error: Declaration of C::m(): int must be compatible with I2::m(): string in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp91-harness/fixtures-ds35-v3/w1_multi_iface.php on line 4
+Stack trace:
+#0 {main}
+PHP Fatal error:  Declaration of C::m(): int must be compatible with I2::m(): string in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp91-harness/fixtures-ds35-v3/w1_multi_iface.php on line 4
+Stack trace:
+#0 {main}
+  binchk : ok nbin=1 (A-DS47 persist ANCORATO; A-DS52 single vector)
+--branch=phpr exit=0 stdout_bytes=11 stderr_bytes=0
+unreachable
+fixture=w2_iface_extends.php set=v3
+--branch=plain exit=255 stdout_bytes=236 stderr_bytes=240
+
+Fatal error: Declaration of B::m(string $x): int must be compatible with A::m(int $x): int in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp91-harness/fixtures-ds35-v3/w2_iface_extends.php on line 3
+Stack trace:
+#0 {main}
+PHP Fatal error:  Declaration of B::m(string $x): int must be compatible with A::m(int $x): int in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp91-harness/fixtures-ds35-v3/w2_iface_extends.php on line 3
+Stack trace:
+#0 {main}
+--branch=persist exit=255 stdout_bytes=236 stderr_bytes=240
+
+Fatal error: Declaration of B::m(string $x): int must be compatible with A::m(int $x): int in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp91-harness/fixtures-ds35-v3/w2_iface_extends.php on line 3
+Stack trace:
+#0 {main}
+PHP Fatal error:  Declaration of B::m(string $x): int must be compatible with A::m(int $x): int in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp91-harness/fixtures-ds35-v3/w2_iface_extends.php on line 3
+Stack trace:
+#0 {main}
+  binchk : ok nbin=1 (A-DS47 persist ANCORATO; A-DS52 single vector)
+--branch=phpr exit=0 stdout_bytes=11 stderr_bytes=0
+unreachable
+fixture=w3_enum_implements.php set=v3
+--branch=plain exit=255 stdout_bytes=238 stderr_bytes=242
+
+Fatal error: Declaration of E::m(string $x): int must be compatible with I::m(int $x): int in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp91-harness/fixtures-ds35-v3/w3_enum_implements.php on line 3
+Stack trace:
+#0 {main}
+PHP Fatal error:  Declaration of E::m(string $x): int must be compatible with I::m(int $x): int in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp91-harness/fixtures-ds35-v3/w3_enum_implements.php on line 3
+Stack trace:
+#0 {main}
+--branch=persist exit=255 stdout_bytes=238 stderr_bytes=242
+
+Fatal error: Declaration of E::m(string $x): int must be compatible with I::m(int $x): int in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp91-harness/fixtures-ds35-v3/w3_enum_implements.php on line 3
+Stack trace:
+#0 {main}
+PHP Fatal error:  Declaration of E::m(string $x): int must be compatible with I::m(int $x): int in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp91-harness/fixtures-ds35-v3/w3_enum_implements.php on line 3
+Stack trace:
+#0 {main}
+  binchk : ok nbin=1 (A-DS47 persist ANCORATO; A-DS52 single vector)
+--branch=phpr exit=0 stdout_bytes=11 stderr_bytes=0
+unreachable
+fixture=w4_self_vs_static.php set=v3
+--branch=plain exit=255 stdout_bytes=223 stderr_bytes=227
+
+Fatal error: Declaration of C::m(): C must be compatible with P::m(): static in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp91-harness/fixtures-ds35-v3/w4_self_vs_static.php on line 3
+Stack trace:
+#0 {main}
+PHP Fatal error:  Declaration of C::m(): C must be compatible with P::m(): static in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp91-harness/fixtures-ds35-v3/w4_self_vs_static.php on line 3
+Stack trace:
+#0 {main}
+--branch=persist exit=255 stdout_bytes=223 stderr_bytes=227
+
+Fatal error: Declaration of C::m(): C must be compatible with P::m(): static in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp91-harness/fixtures-ds35-v3/w4_self_vs_static.php on line 3
+Stack trace:
+#0 {main}
+PHP Fatal error:  Declaration of C::m(): C must be compatible with P::m(): static in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp91-harness/fixtures-ds35-v3/w4_self_vs_static.php on line 3
+Stack trace:
+#0 {main}
+  binchk : ok-via-probe nbin=0 nprobe=1 (compile-fatal fixture: .bin N/A; arm NOT crippled)
+--branch=phpr exit=0 stdout_bytes=11 stderr_bytes=0
+unreachable
+fixture=w5_hook_subtype.php set=v3
+--branch=plain exit=255 stdout_bytes=235 stderr_bytes=239
+
+Fatal error: Declaration of C::$x::get(): string must be compatible with P::$x::get(): int in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp91-harness/fixtures-ds35-v3/w5_hook_subtype.php on line 3
+Stack trace:
+#0 {main}
+PHP Fatal error:  Declaration of C::$x::get(): string must be compatible with P::$x::get(): int in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp91-harness/fixtures-ds35-v3/w5_hook_subtype.php on line 3
+Stack trace:
+#0 {main}
+--branch=persist exit=255 stdout_bytes=235 stderr_bytes=239
+
+Fatal error: Declaration of C::$x::get(): string must be compatible with P::$x::get(): int in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp91-harness/fixtures-ds35-v3/w5_hook_subtype.php on line 3
+Stack trace:
+#0 {main}
+PHP Fatal error:  Declaration of C::$x::get(): string must be compatible with P::$x::get(): int in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp91-harness/fixtures-ds35-v3/w5_hook_subtype.php on line 3
+Stack trace:
+#0 {main}
+  binchk : ok-via-probe nbin=0 nprobe=1 (compile-fatal fixture: .bin N/A; arm NOT crippled)
+--branch=phpr exit=0 stdout_bytes=11 stderr_bytes=0
+unreachable
+fixture=w6_final_const.php set=v3
+--branch=plain exit=255 stdout_bytes=197 stderr_bytes=201
+
+Fatal error: C::X cannot override final constant P::X in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp91-harness/fixtures-ds35-v3/w6_final_const.php on line 3
+Stack trace:
+#0 {main}
+PHP Fatal error:  C::X cannot override final constant P::X in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp91-harness/fixtures-ds35-v3/w6_final_const.php on line 3
+Stack trace:
+#0 {main}
+--branch=persist exit=255 stdout_bytes=197 stderr_bytes=201
+
+Fatal error: C::X cannot override final constant P::X in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp91-harness/fixtures-ds35-v3/w6_final_const.php on line 3
+Stack trace:
+#0 {main}
+PHP Fatal error:  C::X cannot override final constant P::X in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp91-harness/fixtures-ds35-v3/w6_final_const.php on line 3
+Stack trace:
+#0 {main}
+  binchk : ok-via-probe nbin=0 nprobe=1 (compile-fatal fixture: .bin N/A; arm NOT crippled)
+--branch=phpr exit=0 stdout_bytes=11 stderr_bytes=0
+unreachable
+fixture=w7_readonly_promoted.php set=v3
+--branch=plain exit=255 stdout_bytes=225 stderr_bytes=229
+
+Fatal error: Cannot redeclare readonly property P::$x as non-readonly C::$x in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp91-harness/fixtures-ds35-v3/w7_readonly_promoted.php on line 3
+Stack trace:
+#0 {main}
+PHP Fatal error:  Cannot redeclare readonly property P::$x as non-readonly C::$x in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp91-harness/fixtures-ds35-v3/w7_readonly_promoted.php on line 3
+Stack trace:
+#0 {main}
+--branch=persist exit=255 stdout_bytes=225 stderr_bytes=229
+
+Fatal error: Cannot redeclare readonly property P::$x as non-readonly C::$x in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp91-harness/fixtures-ds35-v3/w7_readonly_promoted.php on line 3
+Stack trace:
+#0 {main}
+PHP Fatal error:  Cannot redeclare readonly property P::$x as non-readonly C::$x in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp91-harness/fixtures-ds35-v3/w7_readonly_promoted.php on line 3
+Stack trace:
+#0 {main}
+  binchk : ok-via-probe nbin=0 nprobe=1 (compile-fatal fixture: .bin N/A; arm NOT crippled)
+--branch=phpr exit=0 stdout_bytes=4 stderr_bytes=0
+live
+fixture=w8_dnf_positive.php set=v3
+--branch=plain exit=0 stdout_bytes=7 stderr_bytes=0
+c|alive--branch=persist exit=0 stdout_bytes=7 stderr_bytes=0
+c|alive  binchk : ok nbin=1 (A-DS47 persist ANCORATO; A-DS52 single vector)
+--branch=phpr exit=0 stdout_bytes=7 stderr_bytes=0
+c|alive
+== ds35-verify3 DONE (45 fixtures = 18 v1 + 19 v2 + 8 v3, length-prefixed channel pins) ==

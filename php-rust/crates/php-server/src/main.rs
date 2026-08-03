@@ -255,6 +255,21 @@ mod axum_handler {
                     && suffix[1..].chars().all(|c| c.is_ascii_alphanumeric() || c == '_'));
             if phase_ok {
                 let w = state.pool.worker_count();
+                // A-PP-63 (Council WP-92, Pedersen — KS-PP-92-1): quiescence
+                // witness IN-BAND, adjacent to the checkpoint rows and keyed
+                // by the SAME ckpt name (extractors by name, KG-91-2).
+                // HTTP-complete ≠ request_end-complete: the sequential curl
+                // proves the response left, not that the worker finished its
+                // teardown — outstanding==0 here is the proof that no request
+                // teardown can leak into the phase Δ; ≠0 ⇒ the judge grades
+                // the Δ ADVISORY (mai verdict-grade senza testimone).
+                let outstanding = crate::worker_pool::census_outstanding_now();
+                eprintln!(
+                    "pid={} tag=mi_quiesce win=9 ckpt=peak_inreq{} outstanding={}",
+                    std::process::id(),
+                    suffix,
+                    outstanding
+                );
                 php_types::memcensus::peak_census_dump(suffix);
                 return (
                     StatusCode::OK,

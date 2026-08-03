@@ -174,7 +174,14 @@ mod implementation {
     /// sample shows depth >1 is VOID (KB-78-2). Alloc phase counters live in
     /// crate::census_alloc; verdict-grade footprint figures come ONLY from
     /// the non-instrumented twin (KB-78-5/KL-78-5).
-    #[cfg(feature = "census-instrumentation")]
+    // A-PP-63 (Council WP-92, Pedersen — KS-PP-92-1): the module compiles on
+    // BOTH instrumented channels — the mem-census campaign needs the
+    // OUTSTANDING quiescence witness on its checkpoint rows (HTTP-complete ≠
+    // request_end-complete). Under mem-census ONLY the OUTSTANDING pair runs
+    // (inc at dispatch, dec after response send); QUEUE_DEPTH ops and the
+    // per-request census row stay census-instrumentation-only, so the
+    // mem-census stderr stream gains exactly ONE new row per census dump.
+    #[cfg(any(feature = "census-instrumentation", feature = "mem-census"))]
     pub mod census {
         use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
@@ -271,6 +278,17 @@ mod implementation {
             QUEUE_DEPTH_MAX.store(0, Ordering::Relaxed);
             OUTSTANDING_MAX.store(0, Ordering::Relaxed);
         }
+    }
+
+    /// A-PP-63 (Council WP-92, Pedersen — KS-PP-92-1): quiescence witness
+    /// for the phase-checkpoint rows. Reads the pool's OUTSTANDING (inc
+    /// before send, dec AFTER the response send — A-TH9): 0 at the census
+    /// dump proves request_end-complete, not merely HTTP-complete; ≠0 means
+    /// the phase Δ may absorb a live teardown and the judge grades it
+    /// ADVISORY. Read-only: the witness never perturbs the counter.
+    #[cfg(any(feature = "census-instrumentation", feature = "mem-census"))]
+    pub fn census_outstanding_now() -> usize {
+        census::OUTSTANDING.load(std::sync::atomic::Ordering::Relaxed)
     }
 
     /// Worker pool: N OS threads; each request gets a fresh RetainSet (P-2
@@ -554,8 +572,10 @@ mod implementation {
                 task.response_tx.send((response, status)).ok();
                 // Response sent: the request leaves the server — only now
                 // does OUTSTANDING drop (A-TH9: dec-after-send is what makes
-                // the closed-sequential watermark verdict-grade).
-                #[cfg(feature = "census-instrumentation")]
+                // the closed-sequential watermark verdict-grade; A-PP-63:
+                // this same edge is what makes outstanding==0 the teardown
+                // quiescence witness on the mem-census channel).
+                #[cfg(any(feature = "census-instrumentation", feature = "mem-census"))]
                 {
                     let old = census::OUTSTANDING
                         .fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
@@ -623,11 +643,14 @@ mod implementation {
             // provides the happens-before edge). S-80.0.3: OUTSTANDING gets
             // the same inc-before-send edge; its dec is after the response
             // send in the worker (A-TH9).
-            #[cfg(feature = "census-instrumentation")]
+            #[cfg(any(feature = "census-instrumentation", feature = "mem-census"))]
             {
                 use std::sync::atomic::Ordering;
-                let d = census::QUEUE_DEPTH.fetch_add(1, Ordering::Relaxed) + 1;
-                census::note_depth(d);
+                #[cfg(feature = "census-instrumentation")]
+                {
+                    let d = census::QUEUE_DEPTH.fetch_add(1, Ordering::Relaxed) + 1;
+                    census::note_depth(d);
+                }
                 let o = census::OUTSTANDING.fetch_add(1, Ordering::Relaxed) + 1;
                 census::note_outstanding(o);
             }
@@ -647,8 +670,9 @@ mod implementation {
                 // containing a dispatch Err is VOID by declaration; the
                 // driver's rows==N check already catches it (the request
                 // emits no census line), this comment makes the rule NAMED.
-                #[cfg(feature = "census-instrumentation")]
+                #[cfg(any(feature = "census-instrumentation", feature = "mem-census"))]
                 {
+                    #[cfg(feature = "census-instrumentation")]
                     census::QUEUE_DEPTH.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
                     census::OUTSTANDING.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
                 }
@@ -1974,3 +1998,5 @@ pub use implementation::{
     REQ_NS, WorkerHandlerMeta, WorkerPool, WorkerPoolContext, WorkerTask, census_probe_active,
     req_ns_armed,
 };
+#[cfg(any(feature = "census-instrumentation", feature = "mem-census"))]
+pub use implementation::census_outstanding_now;
