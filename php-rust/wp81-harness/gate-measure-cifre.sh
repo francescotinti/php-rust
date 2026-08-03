@@ -217,13 +217,52 @@ if [ "${1:-}" = "--selftest" ]; then
   fi
   printf '%s\n' "$MAN_BKP" > "$MANIFEST_FILE"
   rm -f "$T13DOC"
+  # T14 — WP-92 forge (b) REPEATED (Klabnik Q2, KS-SK-92-2): the EXACT
+  # cross-campaign prov forge — operands from TWO DIFFERENT vmmap files
+  # (axum.83c vs axum.82c) — must FAIL on commensurability.
+  V83="php-rust/wp78-harness/measure-out/axum.83c.lever.n1000.r1.vmmap.V1"
+  V82="php-rust/wp78-harness/measure-out/axum.82c.lever.n1000.r1.vmmap.V1"
+  cp "$TMP/baseline.md" "$TMP/t14.md"
+  echo "b_base rivisto: 19.600.000 B [derivata: prov 23.000.000@$V83:1963 − 3.400.000@$V82:1964]" >> "$TMP/t14.md"
+  if bash "$0" "$TMP/t14.md" >/dev/null 2>&1; then
+    echo "SELFTEST FAIL: cross-file prov operands NOT refused (WP-92 forge b / A-SK-69/KS-SK-92-2)"; rm -rf "$TMP"; exit 1
+  fi
+  # T14b — A-SK-69 operator: 'diviso' between operands used to pass
+  # because a '-' inside 'wp89-harness' satisfied the /−|-/ test. The
+  # masked-expression parser must refuse it and NEVER print
+  # provenance-verified.
+  cp "$TMP/baseline.md" "$TMP/t14b.md"
+  echo "x: 734.670 B [derivata: prov 1.319.393@$G3REL:115 diviso 584.723@$G3REL:63]" >> "$TMP/t14b.md"
+  if bash "$0" "$TMP/t14b.md" 2>&1 | grep -q "provenance-verified"; then
+    echo "SELFTEST FAIL: non-minus operator printed provenance-verified (A-SK-69)"; rm -rf "$TMP"; exit 1
+  fi
+  if bash "$0" "$TMP/t14b.md" >/dev/null 2>&1; then
+    echo "SELFTEST FAIL: non-minus prov operator NOT refused (A-SK-69)"; rm -rf "$TMP"; exit 1
+  fi
+  # T14c — A-SK-69: prov citing ADDRESS-RANGE lines (same file, in-pool)
+  # must be refused — the vmmap fragments A-SK61 strips from the corpus
+  # re-entered through the prov door.
+  cp "$TMP/baseline.md" "$TMP/t14c.md"
+  echo "y: 19.600.000 B [derivata: prov 23.000.000@$V83:1963 − 3.400.000@$V83:1964]" >> "$TMP/t14c.md"
+  if bash "$0" "$TMP/t14c.md" >/dev/null 2>&1; then
+    echo "SELFTEST FAIL: address-range prov line NOT refused (A-SK-69)"; rm -rf "$TMP"; exit 1
+  fi
+  # T14d — A-SK-73: an operand path committed at HEAD but OUTSIDE the
+  # corpus source set (the budget file itself) must be refused — the
+  # prov pool is the budgeted corpus, not the whole tree.
+  BREL="php-rust/wp81-harness/gate-cifre-corpus.budget"
+  cp "$TMP/baseline.md" "$TMP/t14d.md"
+  echo "z: 000 B [derivata: prov 24221@$BREL:1 − 24221@$BREL:1]" >> "$TMP/t14d.md"
+  if bash "$0" "$TMP/t14d.md" 2>&1 | grep -q "provenance-verified"; then
+    echo "SELFTEST FAIL: out-of-pool prov path resolved (A-SK-73)"; rm -rf "$TMP"; exit 1
+  fi
   # T15 — WP-92 forge (c) REPEATED (Klabnik Q3, KS-SK-92-4): an
   # invoker-supplied cache/nonce must be REFUSED, never parsed.
   if bash "$0" --cache "$TMP/x" --nonce deadbeef "$TMP/baseline.md" >/dev/null 2>&1; then
     echo "SELFTEST FAIL: invoker-supplied --cache/--nonce NOT refused (WP-92 forge c / A-SK-70/KS-SK-92-4)"; rm -rf "$TMP"; exit 1
   fi
   rm -rf "$TMP"
-  echo "SELFTEST PASS: KG-83-3 smuggle + A-SK40 companions + A-SK55 committed-only + A-SK60 provenance (positive+bite) + A-SK62 every-token + A-SK63 manifest graces + A-SK65 env-cache ignored + A-SK53-bis window + A-SK-67 HEAD-authorities (budget tamper, forge-a manifest row) + A-SK-70 cache abolished (forge-c) all bite"
+  echo "SELFTEST PASS: KG-83-3 smuggle + A-SK40 companions + A-SK55 committed-only + A-SK60 provenance (positive+bite) + A-SK62 every-token + A-SK63 manifest graces + A-SK65 env-cache ignored + A-SK53-bis window + A-SK-67 HEAD-authorities (budget tamper, forge-a manifest row) + A-SK-69 strict prov (forge-b: cross-file, non-minus operator, address-range, positive same-file) + A-SK-70 cache abolished (forge-c) + A-SK-73 pool=corpus all bite"
   exit 0
 fi
 
@@ -389,6 +428,11 @@ for my $s (@sources) {
 @sources = grep {
   !(m{^(.*/)verdict(\d+)\.a(\d+)\.g(\d+)\.out$} && $4 < $gen_max{"$1|$2|$3"})
 } @sources;
+# A-SK-73 (Council WP-92): the prov operand pool IS the corpus source set —
+# governed by the same committed A-SK61 budget. Before this, any figure on
+# any line of any HEAD blob was an operand (36.573 addressable vs 24.042
+# budgeted): the budget measured the wrong surface.
+my %src_set = map { $_ => 1 } @sources;
 # citation map for the target scan (keyed WITHOUT dir: docs cite by name)
 my %cite_max;
 for my $k (keys %gen_max) {
@@ -672,42 +716,67 @@ for my $t (@targets) {
         }
         next;
       }
-      # A-SK60 (Council WP-91, Klabnik — the free X−Y evaluator was REFUTED
-      # LIVE): a derived value legalizes a token ONLY by PROVENANCE:
+      # A-SK60 (Council WP-91) + A-SK-69/A-SK-73 (Council WP-92, Klabnik
+      # forge (b) LANDED — the free evaluator was not abolished, it was
+      # ANNOTATED: 36.573 addressable operands vs 24.042 corpus tokens,
+      # 46,25% closure of the plausible window, cross-campaign operands,
+      # operator satisfied by a '-' inside 'wp89-harness'). A derived
+      # value legalizes a token ONLY by STRICT provenance:
       #   [derivata: prov <N>@<repo/path>:<line> − <M>@<repo/path>:<line>]
-      # Each operand is re-read from the COMMITTED blob at HEAD at exactly
-      # that line, and the gate PRINTS the resolution. Label-only tags
-      # ([derivata: companion /1048576], [derivata: Δ/4], …) legalize
-      # NOTHING by themselves — companions are verified in step (1).
+      # with ALL of (fail-closed):
+      #   - exactly two operands and a MINUS operator verified on the
+      #     MASKED expression (paths blanked first — A-SK-69);
+      #   - both operands from the SAME file (KS-SK-92-2 commensurability);
+      #   - the file is a member of the BUDGETED corpus source set — the
+      #     prov pool is the corpus, governed by the same A-SK61 budget
+      #     (A-SK-73);
+      #   - the cited line REFUSED if it carries an address range (hex or
+      #     long pure-digit — vmmap fragments re-entered through this
+      #     door), and A-SK61-stripped before the operand search.
       my %eval_ok;
       my $tagtext = ($line =~ /\[derivata:([^\]]*)/) ? $1 : '';
       if ($tagtext =~ /^\s*prov\s/) {
-        my (@ops, $bad);
+        my @ops_info;
         while ($tagtext =~ /(\d(?:[\d.,]*\d)?)\@([^\s:\]]+):(\d+)/g) {
-          my ($tok, $rp, $rl) = ($1, $2, $3);
-          my $ntok = it_num($tok);
-          if (!$headset{$rp}) {
-            push @miss, "line $ln: derivata operand $tok \@ $rp:$rl — path NOT committed at HEAD (A-SK60): $line";
-            $bad = 1; last;
-          }
-          my @blob = head_content($rp);
-          my $srcline = $blob[$rl-1] // ''; $srcline =~ s/\0//g;
-          my $found = 0;
-          while ($srcline =~ /(\d[\d.]*\d|\d)/g) {
-            my $c = $1; (my $nd = $c) =~ s/\.(?=\d{3}\b)//g;
-            if ($c eq $ntok || $nd eq $ntok) { $found = 1; last; }
-          }
-          if (!$found) {
-            push @miss, "line $ln: derivata operand $ntok NOT found at $rp:$rl (A-SK60): $line";
-            $bad = 1; last;
-          }
-          print "line $ln: derivata operand $ntok <= $rp:$rl resolved at HEAD (A-SK60)\n";
-          push @ops, $ntok;
+          push @ops_info, [$1, $2, $3];
         }
-        if (!$bad && @ops == 2 && $tagtext =~ /\xE2\x88\x92|-/) {
-          $eval_ok{$ops[0] - $ops[1]} = 1;
-          printf "line %d: derivata value %s = %s − %s (A-SK60 provenance-verified)\n",
-                 $ln, $ops[0] - $ops[1], $ops[0], $ops[1];
+        (my $opmask = $tagtext) =~ s/\d(?:[\d.,]*\d)?\@[^\s:\]]+:\d+/OPERAND/g;
+        my $op_ok = ($opmask =~ /^\s*prov\s+OPERAND\s*(?:\xE2\x88\x92|-)\s*OPERAND\s*$/) ? 1 : 0;
+        if (@ops_info != 2 || !$op_ok) {
+          push @miss, "line $ln: [derivata: prov] tag malformed or operator not a verified MINUS on the masked expression (A-SK-69): $line";
+        } elsif ($ops_info[0][1] ne $ops_info[1][1]) {
+          push @miss, "line $ln: prov operands from DIFFERENT files ($ops_info[0][1] vs $ops_info[1][1]) — not commensurable (A-SK-69/KS-SK-92-2): $line";
+        } elsif (!$src_set{$ops_info[0][1]}) {
+          push @miss, "line $ln: prov operand path $ops_info[0][1] OUTSIDE the budgeted corpus source set (A-SK-73): $line";
+        } else {
+          my (@ops, $bad);
+          for my $oi (@ops_info) {
+            my ($tok, $rp, $rl) = @$oi;
+            my $ntok = it_num($tok);
+            my @blob = head_content($rp);
+            my $srcline = $blob[$rl-1] // ''; $srcline =~ s/\0//g;
+            if ($srcline =~ /\b(?:(?=[0-9a-f]*[a-f])[0-9a-f]{6,}-[0-9a-f]{6,}|[0-9a-f]{6,}-(?=[0-9a-f]*[a-f])[0-9a-f]{6,}|\d{6,}-\d{6,})\b/) {
+              push @miss, "line $ln: prov operand cites an ADDRESS-RANGE line ($rp:$rl) — refused (A-SK-69): $line";
+              $bad = 1; last;
+            }
+            $srcline =~ s/\b(?:(?=[0-9a-f]*[a-f])[0-9a-f]{6,}-[0-9a-f]{6,}|[0-9a-f]{6,}-(?=[0-9a-f]*[a-f])[0-9a-f]{6,})\b/ /g;
+            my $found = 0;
+            while ($srcline =~ /(\d[\d.]*\d|\d)/g) {
+              my $c = $1; (my $nd = $c) =~ s/\.(?=\d{3}\b)//g;
+              if ($c eq $ntok || $nd eq $ntok) { $found = 1; last; }
+            }
+            if (!$found) {
+              push @miss, "line $ln: derivata operand $ntok NOT found at $rp:$rl (A-SK60): $line";
+              $bad = 1; last;
+            }
+            print "line $ln: derivata operand $ntok <= $rp:$rl resolved at HEAD (A-SK60/A-SK-69)\n";
+            push @ops, $ntok;
+          }
+          if (!$bad && @ops == 2) {
+            $eval_ok{$ops[0] - $ops[1]} = 1;
+            printf "line %d: derivata value %s = %s − %s (A-SK60 provenance-verified, same-file+in-pool — A-SK-69/A-SK-73)\n",
+                   $ln, $ops[0] - $ops[1], $ops[0], $ops[1];
+          }
         }
       }
       # A-SK62 (Council WP-91): on a [derivata] line EVERY token >=3 digits
