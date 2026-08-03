@@ -1,0 +1,114 @@
+repair90-estimators identity: head=5c7543f0f5bafd1291a34c173f2c3b8a8cf67fda script_sha=048d90de69635e98
+thresholds ex-ante: marginal band=slope*(1+/-0.15) robustness=0.8 mad_factor=2 t975_df2=4.303 t975_df18=2.101 R=5 W={4,8,12,16}
+ladder raws extracted: 20/20 (from HEAD)
+tag=ladder w=4 r=1 pboot=21626880 pwork=151781376 exit=151781376 dwork=130154496 dpost=0 vis=63876416
+tag=ladder w=4 r=2 pboot=21364736 pwork=153878528 exit=153878528 dwork=132513792 dpost=0 vis=63894832
+tag=ladder w=4 r=3 pboot=21364736 pwork=154009600 exit=154009600 dwork=132644864 dpost=0 vis=63890736
+tag=ladder w=4 r=4 pboot=21299200 pwork=153812992 exit=153812992 dwork=132513792 dpost=0 vis=63886640
+tag=ladder w=4 r=5 pboot=21561344 pwork=153681920 exit=158728192 dwork=132120576 dpost=5046272 vis=63872320
+tag=ladder w=8 r=1 pboot=30474240 pwork=230555648 exit=230555648 dwork=200081408 dpost=0 vis=126878288
+tag=ladder w=8 r=2 pboot=30474240 pwork=232914944 exit=232914944 dwork=202440704 dpost=0 vis=126866192
+tag=ladder w=8 r=3 pboot=30539776 pwork=229572608 exit=229572608 dwork=199032832 dpost=0 vis=126847584
+tag=ladder w=8 r=4 pboot=30474240 pwork=228589568 exit=228589568 dwork=198115328 dpost=0 vis=126882384
+tag=ladder w=8 r=5 pboot=30736384 pwork=230424576 exit=230424576 dwork=199688192 dpost=0 vis=126898768
+tag=ladder w=12 r=1 pboot=39518208 pwork=327942144 exit=327942144 dwork=288423936 dpost=0 vis=189837440
+tag=ladder w=12 r=2 pboot=39452672 pwork=324993024 exit=324993024 dwork=285540352 dpost=0 vis=189829248
+tag=ladder w=12 r=3 pboot=39649280 pwork=303431680 exit=303431680 dwork=263782400 dpost=0 vis=189864240
+tag=ladder w=12 r=4 pboot=39387136 pwork=333709312 exit=333709312 dwork=294322176 dpost=0 vis=189813056
+tag=ladder w=12 r=5 pboot=39387136 pwork=334561280 exit=334561280 dwork=295174144 dpost=0 vis=189813056
+tag=ladder w=16 r=1 pboot=48758784 pwork=399638528 exit=399638528 dwork=350879744 dpost=0 vis=253254560
+tag=ladder w=16 r=2 pboot=48431104 pwork=390856704 exit=391905280 dwork=342425600 dpost=1048576 vis=253285264
+tag=ladder w=16 r=3 pboot=48627712 pwork=389611520 exit=394788864 dwork=340983808 dpost=5177344 vis=253244320
+tag=ladder w=16 r=4 pboot=48431104 pwork=389808128 exit=389808128 dwork=341377024 dpost=0 vis=253250464
+tag=ladder w=16 r=5 pboot=48693248 pwork=390201344 exit=390201344 dwork=341508096 dpost=0 vis=253258656
+census BOOT W=4: modes=4 mode_min=21364736 median=21364736 mean=21443379 min=21299200
+census BOOT W=8: modes=3 mode_min=30474240 median=30474240 mean=30539776 min=30474240
+census BOOT W=12: modes=4 mode_min=39387136 median=39452672 mean=39478886 min=39387136
+census BOOT W=16: modes=4 mode_min=48431104 median=48627712 mean=48588390 min=48431104
+census WORK W=4: modes=4 mode_min=132513792 median=132513792 mean=131989504 min=130154496
+census WORK W=8: modes=5 mode_min=198115328 median=199688192 mean=199871693 min=198115328 [modes==R: point ADVISORY per NOME — A-BG60]
+census WORK W=12: modes=5 mode_min=263782400 median=288423936 mean=285448602 min=263782400 [modes==R: point ADVISORY per NOME — A-BG60]
+census WORK W=16: modes=5 mode_min=340983808 median=341508096 mean=343434854 min=340983808 [modes==R: point ADVISORY per NOME — A-BG60]
+census PEAK W=4: modes=5 mode_min=151781376 median=153878528 mean=154442138 min=151781376 [modes==R: point ADVISORY per NOME — A-BG60]
+census PEAK W=8: modes=5 mode_min=228589568 median=230424576 mean=230411469 min=228589568 [modes==R: point ADVISORY per NOME — A-BG60]
+census PEAK W=12: modes=5 mode_min=303431680 median=327942144 mean=324927488 min=303431680 [modes==R: point ADVISORY per NOME — A-BG60]
+census PEAK W=16: modes=5 mode_min=389808128 median=391905280 mean=393268429 min=389808128 [modes==R: point ADVISORY per NOME — A-BG60]
+ADVISORY points per NOME (A-BG60): count=7 names=[ WORK-W8 WORK-W12 WORK-W16 PEAK-W4 PEAK-W8 PEAK-W12 PEAK-W16 ]
+slope BOOT est=mode_min: b=2252800.0 B/worker se=6345.5 a=12386304.0 band_2se=[2240109.0, 2265491.0] band_t2=[2225495.3, 2280104.7] [df=2: 2se~82%, t=4.303 for 95% — A-BB68]
+marginal BOOT est=mode_min W4->W8 = 2277376 B/worker [IN]
+marginal BOOT est=mode_min W8->W12 = 2228224 B/worker [IN]
+marginal BOOT est=mode_min W12->W16 = 2260992 B/worker [IN]
+marginals-OUT BOOT est=mode_min: count=0 names=[ ]
+slope BOOT est=median: b=2269184.0 B/worker se=6345.5 a=12288000.0 band_2se=[2256493.0, 2281875.0] band_t2=[2241879.3, 2296488.7] [df=2: 2se~82%, t=4.303 for 95% — A-BB68]
+marginal BOOT est=median W4->W8 = 2277376 B/worker [IN]
+marginal BOOT est=median W8->W12 = 2244608 B/worker [IN]
+marginal BOOT est=median W12->W16 = 2293760 B/worker [IN]
+marginals-OUT BOOT est=median: count=0 names=[ ]
+slope BOOT est=mean: b=2259353.6 B/worker se=5815.7 a=12419072.0 band_2se=[2247722.1, 2270985.1] band_t2=[2234328.5, 2284378.7] [df=2: 2se~82%, t=4.303 for 95% — A-BB68]
+marginal BOOT est=mean W4->W8 = 2274099 B/worker [IN]
+marginal BOOT est=mean W8->W12 = 2234778 B/worker [IN]
+marginal BOOT est=mean W12->W16 = 2277376 B/worker [IN]
+marginals-OUT BOOT est=mean: count=0 names=[ ]
+slope WORK est=mode_min: b=17276928.0 B/worker se=501347.7 a=61079552.0 band_2se=[16274232.6, 18279623.4] band_t2=[15119628.7, 19434227.3] [df=2: 2se~82%, t=4.303 for 95% — A-BB68]
+marginal WORK est=mode_min W4->W8 = 16400384 B/worker [IN]
+marginal WORK est=mode_min W8->W12 = 16416768 B/worker [IN]
+marginal WORK est=mode_min W12->W16 = 19300352 B/worker [IN]
+marginals-OUT WORK est=mode_min: count=0 names=[ ]
+slope WORK est=median: b=17892966.4 B/worker se=1154609.4 a=61603840.0 band_2se=[15583747.5, 20202185.3] band_t2=[12924682.0, 22861250.8] [df=2: 2se~82%, t=4.303 for 95% — A-BB68]
+marginal WORK est=median W4->W8 = 16793600 B/worker [IN]
+marginal WORK est=median W8->W12 = 22183936 B/worker [OUT]
+marginal WORK est=median W12->W16 = 13271040 B/worker [OUT]
+marginals-OUT WORK est=median: count=2 names=[ 22183936(W8->W12) 13271040(W12->W16) ]
+slope WORK est=mean: b=17997824.0 B/worker se=890998.9 a=60207923.2 band_2se=[16215826.2, 19779821.8] band_t2=[14163855.7, 21831792.3] [df=2: 2se~82%, t=4.303 for 95% — A-BB68]
+marginal WORK est=mean W4->W8 = 16970547 B/worker [IN]
+marginal WORK est=mean W8->W12 = 21394227 B/worker [OUT]
+marginal WORK est=mean W12->W16 = 14496563 B/worker [OUT]
+marginals-OUT WORK est=mean: count=2 names=[ 21394227(W8->W12) 14496563(W12->W16) ]
+slope PEAK est=mode_min: b=19723059.2 B/worker se=447220.2 a=71172096.0 band_2se=[18828618.8, 20617499.6] band_t2=[17798670.8, 21647447.6] [df=2: 2se~82%, t=4.303 for 95% — A-BB68]
+marginal PEAK est=mode_min W4->W8 = 19202048 B/worker [IN]
+marginal PEAK est=mode_min W8->W12 = 18710528 B/worker [IN]
+marginal PEAK est=mode_min W12->W16 = 21594112 B/worker [IN]
+marginals-OUT PEAK est=mode_min: count=0 names=[ ]
+slope PEAK est=median: b=20289945.6 B/worker se=1084655.4 a=73138176.0 band_2se=[18120634.7, 22459256.5] band_t2=[15622673.2, 24957218.0] [df=2: 2se~82%, t=4.303 for 95% — A-BB68]
+marginal PEAK est=median W4->W8 = 19136512 B/worker [IN]
+marginal PEAK est=median W8->W12 = 24379392 B/worker [OUT]
+marginal PEAK est=median W12->W16 = 15990784 B/worker [OUT]
+marginals-OUT PEAK est=median: count=2 names=[ 24379392(W8->W12) 15990784(W12->W16) ]
+slope PEAK est=mean: b=20274872.3 B/worker se=846130.5 a=73013657.6 band_2se=[18582611.2, 21967133.4] band_t2=[16633972.6, 23915772.1] [df=2: 2se~82%, t=4.303 for 95% — A-BB68]
+marginal PEAK est=mean W4->W8 = 18992333 B/worker [IN]
+marginal PEAK est=mean W8->W12 = 23629005 B/worker [OUT]
+marginal PEAK est=mean W12->W16 = 17085235 B/worker [OUT]
+marginals-OUT PEAK est=mean: count=2 names=[ 23629005(W8->W12) 17085235(W12->W16) ]
+tether g2 (byte-reproduction of the committed verdict): b_peak=19723059.2 b_boot=2252800.0 b_work=17276928.0 residuo=193331.2 => PASS
+slope BOOT est=pooled_per_run(n=20,df=18): b=2259353.6 B/worker se=6438.8 a=12419072.0 band_2se=[2246476.0, 2272231.2] band_t=[2245825.6, 2272881.6] [t(0.975;18)=2.101 — A-BB68]
+slope WORK est=pooled_per_run(n=20,df=18): b=17997824.0 B/worker se=436517.9 a=60207923.2 band_2se=[17124788.3, 18870859.7] band_t=[17080700.0, 18914948.0] [t(0.975;18)=2.101 — A-BB68]
+slope PEAK est=pooled_per_run(n=20,df=18): b=20274872.3 B/worker se=427627.9 a=73013657.6 band_2se=[19419616.4, 21130128.2] band_t=[19376426.0, 21173318.6] [t(0.975;18)=2.101 — A-BB68]
+robustness PEAK (A-BB66): min/median=0.972 mean/median=0.999 mode_min/median=0.972 [threshold 0.8; tautology=no — control can fail]
+REPAIRED b_peak (A-BB64, est=median): 20289946 B/worker se=1084655 band_2se=[18120635, 22459256]
+headline sum b_boot+b_work (est=mode_min, grade=ADVISORY inherited): 19529728 B/worker
+continuity vs b_m89: 19529728 vs 19575603 delta=-45875 B [suggestive, NOT verdict-grade — two ADVISORY figures]
+within-run additivity (A-BB65): pboot+dwork+dpost==exit on 20/20 [arithmetic identity, exact by construction]
+cross-lane residual per-W (est=mode_min) [SELECTION MISMATCH, not physics — A-BB65; census/self label RITIRATA]: W4=-2097152 W8=0 W12=262144 W16=393216
+cross-lane residual per-W (est=median): W4=0 W8=262144 W12=65536 W16=1769472
+dpost (exit_collect - pwork) census: zero on 17/20 raws, nonzero:[ w4.r5=+5046272 w16.r2=+1048576 w16.r3=+5177344 ] [self+census commit cost is ZERO in the typical case — label refuted]
+run-outlier (A-BB67): w4.r1 — ALL 3 counters beyond 2*MAD from sisters [flagged per NOME; can never become its W point via min]
+run-outlier (A-BB67): w12.r3 — ALL 3 counters beyond 2*MAD from sisters [flagged per NOME; can never become its W point via min]
+VCOV per-W (A-BG57) W=4: ratio_min=0.415 ratio_max=0.421 ratio_mean=0.416
+VCOV per-W (A-BG57) W=8: ratio_min=0.545 ratio_max=0.555 ratio_mean=0.551
+VCOV per-W (A-BG57) W=12: ratio_min=0.567 ratio_max=0.626 ratio_mean=0.585
+VCOV per-W (A-BG57) W=16: ratio_min=0.634 ratio_max=0.650 ratio_mean=0.646
+VCOV pooled (as g2): mean_vis=158462223 mean_tot=275198771 ratio=0.576 [exists in NO raw — per-W table is the citable form, KS-BG-92-1]
+VCOV marginal coverage (A-BG57): slope_vis=15777004 B/worker se=6526 a_vis=692184 => marginal_ratio vs b_peak(median)=0.778
+VCOV invisible mass (A-BG57): slope_invisible=4480174 B/worker intercept_invisible=71934811 B [pooled OLS of pwork-commit minus vis: the invisible mass is intercept-dominated]
+sweep dt1.afirst.pd0: spans=OVERLAP clamped_rows=1 law_clamp_iff_overlap=yes
+sweep dt1.bfirst.pd0: spans=OVERLAP clamped_rows=1 law_clamp_iff_overlap=yes
+sweep dt5.afirst.pd0: spans=NO-OVERLAP clamped_rows=0 law_clamp_iff_overlap=yes
+sweep dt5.bfirst.pd0: spans=OVERLAP clamped_rows=1 law_clamp_iff_overlap=yes
+sweep dt20.afirst.pd0: spans=NO-OVERLAP clamped_rows=0 law_clamp_iff_overlap=yes
+sweep dt20.bfirst.pd0: spans=NO-OVERLAP clamped_rows=0 law_clamp_iff_overlap=yes
+sweep dt1.afirst.pd1000: spans=OVERLAP clamped_rows=1 law_clamp_iff_overlap=yes
+sweep dt1.bfirst.pd1000: spans=OVERLAP clamped_rows=1 law_clamp_iff_overlap=yes
+sweep dt5.afirst.pd1000: spans=NO-OVERLAP clamped_rows=0 law_clamp_iff_overlap=yes
+sweep dt5.bfirst.pd1000: spans=OVERLAP clamped_rows=1 law_clamp_iff_overlap=yes
+clamp<=>overlap law (A-BG61): 10/10 agree [negative NOT controlled: no pd1000+forced-overlap run exists — A-DL-54 is the controlled negative]
+REPAIR90 PASS: estimators repaired on the 30 committed raws (20 slope + 10 sweep), zero new runs (Concilio WP-92 team-misura P2)

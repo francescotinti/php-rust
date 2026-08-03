@@ -297,6 +297,10 @@ push @sources, committed_glob("$mout/m89*"), committed_glob("$here/../wp89-harne
 # per-generation .out) in wp90-harness — the corpus budget MUST be raised in
 # the same commit that lands these (A-SK61 deliberate-growth discipline)
 push @sources, committed_glob("$mout/m90*"), committed_glob("$here/../wp90-harness/*.out");
+# S-91.0: the repair90-estimators machine output (Concilio WP-92 team-misura
+# P2: A-BB64..68 + A-BG57/60/61 recomputed on the committed m90 raws, zero
+# new runs) + future wp91 judges — budget raised in the SAME commit (A-SK61)
+push @sources, committed_glob("$here/../wp91-harness/*.out");
 # S-85.0: the measure85 campaign raws (85*/m85* labels) + verdict85 + the
 # wp85 evidence dir
 push @sources, committed_glob("$mout/*85*.summary"), committed_glob("$mout/*85*.census"),
