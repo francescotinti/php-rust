@@ -1,9 +1,12 @@
 #!/bin/bash
 # gate-measure-cifre.sh — KG-83-3 (Council WP-83): every numeric figure in a
 # MEASURE document must match a line of COMMITTED machine output (.out,
-# .summary, .matrix, .idle, raw .census/.log) or carry the A-BG26 tag
-# `[derivata: ...]` on its line, or be a NAMED protocol constant in the
-# allowlist below. Machine check, not promise.
+# .summary, .matrix, .idle, raw .census/.log), or be a verified bytes-first
+# companion, or be legalized by a PROVENANCE-resolved [derivata: prov ...]
+# (A-SK60, Council WP-91 — the free X−Y evaluator is abolished; label-only
+# tags legalize nothing), or be a NAMED protocol constant in the allowlist
+# below. Perimeter, bytes-first flags and ± graces come from the committed
+# manifest (A-SK63/64). Machine check, not promise.
 #
 # SCOPE (declared): tokens of >=3 digits (after normalizing the Italian
 # formatting: thousands '.' stripped, decimal ',' -> '.'). 1-2 digit tokens
@@ -17,101 +20,184 @@
 export PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin:$PATH
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
+# A-SK65: cache ONLY via argv (+nonce); the env var is dead and IGNORED.
+CACHE_ARG=""
+NONCE_ARG=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --cache) CACHE_ARG="${2:-}"; shift 2;;
+    --nonce) NONCE_ARG="${2:-}"; shift 2;;
+    *) break;;
+  esac
+done
 TARGET="${1:-$HERE/MEASURE81_RESULTS.md}"
 MOUT="$HERE/../wp78-harness/measure-out"
 
-# A-SK40 (Council WP-86, sana il buco GRAVE KS-SK-86-3): --all loops over the
-# default target PLUS every MEASURE8[4-9]/MEASURE9x results doc in the wpNN
-# harnesses — the battery must call THIS mode, never the bare default (which
-# targets MEASURE81 only and left MEASURE84 outside the 15/15 perimeter).
+# A-SK64 (Council WP-91, Klabnik — supersedes the A-SK40 name-glob perimeter):
+# --all takes its perimeter from the COMMITTED MANIFEST, never from filename
+# regexes (a forged name inherited graces; MEASURE100 would have dropped out
+# of bytes-first at WP-100 — KS-SK-91-2). Bidirectional FAIL: an entry whose
+# file is missing FAILS; a MEASURE*_RESULTS.md in the tree without a manifest
+# entry FAILS. judge=no rows are DECLARED exclusions (named, with reason in
+# the manifest comments), no longer silent glob gaps.
+MANIFEST="$HERE/gate-cifre-manifest.tsv"
 if [ "${1:-}" = "--all" ]; then
   rc=0
-  # A-SK55 perf note: the committed corpus is identical for every doc at
-  # the same HEAD — build it once and share it (cache file keyed to the
-  # HEAD rev inside; a different rev invalidates it, fail-closed).
-  GATE_CIFRE_CORPUS_CACHE=$(mktemp /tmp/gate-cifre-corpus.XXXXXX)
-  export GATE_CIFRE_CORPUS_CACHE
-  bash "$0" "$HERE/MEASURE81_RESULTS.md" || rc=1
-  for f in "$HERE"/../wp8[4-9]-harness/MEASURE8[4-9]*_RESULTS.md \
-           "$HERE"/../wp9[0-9]-harness/MEASURE9[0-9]*_RESULTS.md; do
+  [ -f "$MANIFEST" ] || { echo "FAIL gate-measure-cifre --all: manifest $MANIFEST missing (A-SK64)"; exit 1; }
+  # A-SK65 (Council WP-91, Klabnik): the corpus cache travels via ARGV with a
+  # parent-generated NONCE; the env var is IGNORED by the child (a poisoned
+  # inherited GATE_CIFRE_CORPUS_CACHE used to legalize any figure —
+  # KS-SK-91-3). The parent creates the file itself: no pre-existing path.
+  CACHE=$(mktemp /tmp/gate-cifre-corpus.XXXXXX)
+  NONCE=$(LC_ALL=C tr -dc 'a-f0-9' < /dev/urandom | head -c 16)
+  while IFS=$'\t' read -r mpath msha mjudge mbf mbands; do
+    case "$mpath" in ''|'#'*) continue;; esac
+    f="$(git -C "$HERE" rev-parse --show-toplevel)/$mpath"
+    if [ ! -f "$f" ]; then
+      echo "FAIL gate-measure-cifre --all: manifest doc MISSING from tree: $mpath (A-SK64)"; rc=1; continue
+    fi
+    if [ "$mjudge" = "no" ]; then
+      echo "SKIP $mpath (declared judge=no in manifest — A-SK64)"; continue
+    fi
+    bash "$0" --cache "$CACHE" --nonce "$NONCE" "$f" || rc=1
+  done < "$MANIFEST"
+  # reverse direction: every MEASURE*_RESULTS.md in the tree must be manifested
+  ROOT="$(git -C "$HERE" rev-parse --show-toplevel)"
+  for f in "$HERE"/../wp*-harness/MEASURE*_RESULTS.md; do
     [ -f "$f" ] || continue
-    bash "$0" "$f" || rc=1
+    rel="${f#"$ROOT/"}"
+    # normalize wp81-harness/../wpNN-harness → wpNN-harness
+    rel=$(printf '%s\n' "$rel" | sed 's|[^/]*/\.\./||')
+    grep -q "^$rel	" "$MANIFEST" || {
+      echo "FAIL gate-measure-cifre --all: $rel has NO manifest entry (A-SK64 bidirectional)"; rc=1; }
   done
-  rm -f "$GATE_CIFRE_CORPUS_CACHE"
-  [ "$rc" = 0 ] && echo "PASS gate-measure-cifre --all (A-SK40): every MEASURE doc in perimeter"
+  rm -f "$CACHE"
+  [ "$rc" = 0 ] && echo "PASS gate-measure-cifre --all (A-SK64): manifest perimeter, bidirectional"
   exit $rc
 fi
 
 if [ "${1:-}" = "--selftest" ]; then
   TMP=$(mktemp -d)
-  cp "$HERE/MEASURE81_RESULTS.md" "$TMP/doctored.md"
-  echo "smuggled figure: a_calls was 123457 on a good day" >> "$TMP/doctored.md"
-  if bash "$0" "$TMP/doctored.md" >/dev/null 2>&1; then
-    echo "SELFTEST FAIL: smuggled 123457 was NOT caught (KG-83-3)"
+  M89DOC="$HERE/../wp89-harness/MEASURE89_RESULTS.md"
+  M85DOC="$HERE/../wp85-harness/MEASURE85_RESULTS.md"
+  # T0 — baseline: an INTACT copy of MEASURE89 must PASS from scratch
+  # space (bytes-first fail-closed, zero graces): otherwise every FAIL
+  # tooth below is vacuous (a gate that fails everything bites nothing).
+  cp "$M89DOC" "$TMP/baseline.md"
+  if ! bash "$0" "$TMP/baseline.md" >/dev/null 2>&1; then
+    echo "SELFTEST FAIL: intact MEASURE89 copy does NOT pass — teeth below would be vacuous"
     rm -rf "$TMP"; exit 1
   fi
-  # A-SK40 bytes-first teeth on a MEASURE84-class copy: (a) a unit figure
-  # with NO companion, lowercase unit (the old check was case-sensitive and
-  # line-wide); (b) a companion that does NOT verify numerically.
-  M84="$HERE/../wp84-harness/MEASURE84_RESULTS.md"
-  if [ -f "$M84" ]; then
-    cp "$M84" "$TMP/MEASURE84_doctored.md"
-    echo "note: the cache costs 5,00 mib steady, honest." >> "$TMP/MEASURE84_doctored.md"
-    if bash "$0" "$TMP/MEASURE84_doctored.md" >/dev/null 2>&1; then
-      echo "SELFTEST FAIL: naked lowercase 'mib' figure NOT caught (A-SK40)"
-      rm -rf "$TMP"; exit 1
-    fi
-    cp "$M84" "$TMP/MEASURE84_doctored2.md"
-    echo "note: 1.048.576 B = 2,00 MiB [derivata: selftest]" >> "$TMP/MEASURE84_doctored2.md"
-    if bash "$0" "$TMP/MEASURE84_doctored2.md" >/dev/null 2>&1; then
-      echo "SELFTEST FAIL: mismatching bytes companion NOT caught (A-SK40)"
-      rm -rf "$TMP"; exit 1
-    fi
+  # T1 — KG-83-3 smuggle
+  cp "$TMP/baseline.md" "$TMP/t1.md"
+  echo "smuggled figure: a_calls was 123457 on a good day" >> "$TMP/t1.md"
+  if bash "$0" "$TMP/t1.md" >/dev/null 2>&1; then
+    echo "SELFTEST FAIL: smuggled 123457 was NOT caught (KG-83-3)"; rm -rf "$TMP"; exit 1
   fi
-  # A-SK55 bite (Council WP-90, Klabnik's live forge re-armed forever): an
-  # UNCOMMITTED file in measure-out matching a corpus glob must NOT
-  # legalize a figure — the corpus is HEAD-only.
+  # T2 — A-SK40: naked lowercase unit figure without companion
+  cp "$TMP/baseline.md" "$TMP/t2.md"
+  echo "note: the cache costs 5,00 mib steady, honest." >> "$TMP/t2.md"
+  if bash "$0" "$TMP/t2.md" >/dev/null 2>&1; then
+    echo "SELFTEST FAIL: naked lowercase 'mib' figure NOT caught (A-SK40)"; rm -rf "$TMP"; exit 1
+  fi
+  # T3 — A-SK40: companion that does not verify
+  cp "$TMP/baseline.md" "$TMP/t3.md"
+  echo "note: 1.048.576 B = 2,00 MiB [derivata: selftest]" >> "$TMP/t3.md"
+  if bash "$0" "$TMP/t3.md" >/dev/null 2>&1; then
+    echo "SELFTEST FAIL: mismatching bytes companion NOT caught (A-SK40)"; rm -rf "$TMP"; exit 1
+  fi
+  # T4 — A-SK55: uncommitted forge in measure-out must not legalize
   FORGE="$MOUT/m88.zzforge-selftest.tmp"
   echo "committed=987654321" > "$FORGE"
-  cp "$HERE/MEASURE81_RESULTS.md" "$TMP/doctored55.md"
-  echo "smuggled: campaign committed was 987654321 flat" >> "$TMP/doctored55.md"
-  if bash "$0" "$TMP/doctored55.md" >/dev/null 2>&1; then
+  cp "$TMP/baseline.md" "$TMP/t4.md"
+  echo "smuggled: campaign committed was 987654321 flat" >> "$TMP/t4.md"
+  if bash "$0" "$TMP/t4.md" >/dev/null 2>&1; then
     rm -f "$FORGE"; rm -rf "$TMP"
-    echo "SELFTEST FAIL: working-tree forge in measure-out legalized a figure (A-SK55/KS-SK-90-1)"
-    exit 1
+    echo "SELFTEST FAIL: working-tree forge in measure-out legalized a figure (A-SK55/KS-SK-90-1)"; exit 1
   fi
   rm -f "$FORGE"
-  if [ -f "$M84" ]; then
-    # A-SK56 bite: fabricated "N B = X MiB [derivata: companion]" — the
-    # companion self-verifies; the MEASURED byte token must still be
-    # judged against the corpus (figure-scope, not row-scope).
-    cp "$M84" "$TMP/MEASURE84_doctored3.md"
-    echo "W=9 999.948.288 B = 953,56 MiB [derivata: companion /1048576]" >> "$TMP/MEASURE84_doctored3.md"
-    if bash "$0" "$TMP/MEASURE84_doctored3.md" >/dev/null 2>&1; then
-      rm -rf "$TMP"
-      echo "SELFTEST FAIL: fabricated byte token on [derivata] row NOT caught (A-SK56/KS-SK-90-2)"
-      exit 1
-    fi
-    # A-SK53-bis bite: a '±' band on a line with NO [KMGT] unit escaped
-    # the old row-scope tooth entirely — window scope must catch it.
-    cp "$M84" "$TMP/MEASURE84_doctored4.md"
-    echo "tolleranza dichiarata ±7% sul floor, onesta" >> "$TMP/MEASURE84_doctored4.md"
-    if bash "$0" "$TMP/MEASURE84_doctored4.md" >/dev/null 2>&1; then
-      rm -rf "$TMP"
-      echo "SELFTEST FAIL: unitless ± band NOT caught (A-SK53-bis/KS-SK-87-2)"
-      exit 1
-    fi
+  # T5 — A-SK60: the EXACT Klabnik live forge (WP-91 Q1b) — fabricated
+  # b_base with a free X−Y over corpus-present vmmap fragments. The
+  # evaluator is abolished: this must FAIL.
+  cp "$TMP/baseline.md" "$TMP/t5.md"
+  echo "b_base rivisto = 19.600.000 B = 18,69 MiB per worker [derivata: 23.000.000 − 3.400.000]" >> "$TMP/t5.md"
+  if bash "$0" "$TMP/t5.md" >/dev/null 2>&1; then
+    echo "SELFTEST FAIL: free X−Y [derivata] forge NOT caught (A-SK60/KS-SK-91-1)"; rm -rf "$TMP"; exit 1
   fi
+  # T6 — A-SK62: fabricated 2σ lower bound inside brackets on a
+  # [derivata] line (the second Klabnik bite: only "N B"-shaped tokens
+  # were judged before).
+  cp "$TMP/baseline.md" "$TMP/t6.md"
+  echo "nota: 2σ = [11.111.111, 20.745.049] B [derivata: companion /1048576]" >> "$TMP/t6.md"
+  if bash "$0" "$TMP/t6.md" >/dev/null 2>&1; then
+    echo "SELFTEST FAIL: fabricated bracket token on [derivata] line NOT caught (A-SK62/KS-SK-91-1)"; rm -rf "$TMP"; exit 1
+  fi
+  # T6b — A-SK56 historic tooth kept: fabricated "N B = X MiB" pair
+  cp "$TMP/baseline.md" "$TMP/t6b.md"
+  echo "W=9 999.948.288 B = 953,56 MiB [derivata: companion /1048576]" >> "$TMP/t6b.md"
+  if bash "$0" "$TMP/t6b.md" >/dev/null 2>&1; then
+    echo "SELFTEST FAIL: fabricated byte token on [derivata] row NOT caught (A-SK56/KS-SK-90-2)"; rm -rf "$TMP"; exit 1
+  fi
+  # T7 — A-SK53-bis: unitless ± band
+  cp "$TMP/baseline.md" "$TMP/t7.md"
+  echo "tolleranza dichiarata ±7% sul floor, onesta" >> "$TMP/t7.md"
+  if bash "$0" "$TMP/t7.md" >/dev/null 2>&1; then
+    echo "SELFTEST FAIL: unitless ± band NOT caught (A-SK53-bis/KS-SK-87-2)"; rm -rf "$TMP"; exit 1
+  fi
+  # T8 — A-SK63: a forged NAME must inherit NOTHING — a copy of
+  # MEASURE85 (whose committed row grants '±5%' and '232±1') under a
+  # forged name gets fail-closed defaults and must FAIL on its bands.
+  cp "$M85DOC" "$TMP/MEASURE85_zzforge_RESULTS.md"
+  if bash "$0" "$TMP/MEASURE85_zzforge_RESULTS.md" >/dev/null 2>&1; then
+    echo "SELFTEST FAIL: forged-name copy inherited the M85 graces (A-SK63/KS-SK-91-2)"; rm -rf "$TMP"; exit 1
+  fi
+  # T9 — A-SK65: a POISONED cache inherited via env must be IGNORED.
+  HEADREV=$(git -C "$HERE" rev-parse HEAD)
+  POISON="$TMP/poison.cache"
+  { echo "$HEADREV"; echo "C777444111"; } > "$POISON"
+  cp "$TMP/baseline.md" "$TMP/t9.md"
+  echo "smuggled: threshold hit 777444111 flat" >> "$TMP/t9.md"
+  if GATE_CIFRE_CORPUS_CACHE="$POISON" bash "$0" "$TMP/t9.md" >/dev/null 2>&1; then
+    echo "SELFTEST FAIL: poisoned env cache legalized a figure (A-SK65/KS-SK-91-3)"; rm -rf "$TMP"; exit 1
+  fi
+  # T10 — A-SK60 POSITIVE control + bite: a provenance-resolved derivata
+  # must legalize its exact value (positive: the resolver is not dead
+  # code) and must NOT legalize a different value (negative).
+  G3REL="php-rust/wp89-harness/verdict89.a1.g3.out"
+  cp "$TMP/baseline.md" "$TMP/t10.md"
+  echo "delta se: 734.670 B [derivata: prov 1.319.393@$G3REL:115 − 584.723@$G3REL:63]" >> "$TMP/t10.md"
+  if ! bash "$0" "$TMP/t10.md" 2>&1 | grep -q "provenance-verified"; then
+    echo "SELFTEST FAIL: provenance resolver never fired on a legal derivata (A-SK60 positive control)"; rm -rf "$TMP"; exit 1
+  fi
+  if ! bash "$0" "$TMP/t10.md" >/dev/null 2>&1; then
+    echo "SELFTEST FAIL: legal provenance derivata did NOT pass (A-SK60 positive control)"; rm -rf "$TMP"; exit 1
+  fi
+  cp "$TMP/baseline.md" "$TMP/t10b.md"
+  echo "delta se: 734.671 B [derivata: prov 1.319.393@$G3REL:115 − 584.723@$G3REL:63]" >> "$TMP/t10b.md"
+  if bash "$0" "$TMP/t10b.md" >/dev/null 2>&1; then
+    echo "SELFTEST FAIL: provenance derivata legalized a WRONG value (A-SK60)"; rm -rf "$TMP"; exit 1
+  fi
+  # T11 — A-SK61: the corpus cardinality budget must bite (tamper the
+  # budget below the real cardinality, expect FAIL, restore).
+  BUDGET_FILE="$HERE/gate-cifre-corpus.budget"
+  BUDGET_BKP=$(cat "$BUDGET_FILE")
+  echo "max_tokens=10" > "$BUDGET_FILE"
+  if bash "$0" "$TMP/baseline.md" >/dev/null 2>&1; then
+    echo "$BUDGET_BKP" > "$BUDGET_FILE"
+    echo "SELFTEST FAIL: corpus cardinality over budget NOT caught (A-SK61)"; rm -rf "$TMP"; exit 1
+  fi
+  echo "$BUDGET_BKP" > "$BUDGET_FILE"
   rm -rf "$TMP"
-  echo "SELFTEST PASS: smuggled figure caught (KG-83-3) + bytes-first teeth (A-SK40) + committed-only corpus (A-SK55) + figure-scope derivata (A-SK56) + window ± (A-SK53-bis) all bite"
+  echo "SELFTEST PASS: KG-83-3 smuggle + A-SK40 companions + A-SK55 committed-only + A-SK60 provenance (positive+bite) + A-SK62 every-token + A-SK63 manifest graces + A-SK65 env-cache ignored + A-SK61 budget + A-SK53-bis window all bite"
   exit 0
 fi
 
-perl - "$TARGET" "$HERE" "$MOUT" <<'PERL'
+perl - "$TARGET" "$HERE" "$MOUT" "$CACHE_ARG" "$NONCE_ARG" <<'PERL'
 use strict; use warnings;
 use File::Glob qw(bsd_glob);   # plain glob() splits patterns on spaces — the
                                # repo lives under "/Volumes/Extreme Pro/"
-my ($target, $here, $mout) = @ARGV;
+use Cwd qw(abs_path);
+my ($target, $here, $mout, $cache_arg, $nonce_arg) = @ARGV;
 
 # NAMED protocol constants (>=3 digits) that are neither measures nor
 # derivates — each with its reason:
@@ -203,14 +289,19 @@ push @sources, committed_glob("$mout/*85*.summary"), committed_glob("$mout/*85*.
 push @sources, committed_glob("$here/evidence/*");
 die "gate-measure-cifre: EMPTY corpus (no committed sources found)\n" unless @sources;
 my (%corpus, %corpus_count);
-# corpus cache (--all mode): first line = HEAD rev; C<token> / N<count>.
-my $cache = $ENV{GATE_CIFRE_CORPUS_CACHE} || '';
+# A-SK65 (Council WP-91, Klabnik): corpus cache ONLY via argv + parent
+# nonce — the env var GATE_CIFRE_CORPUS_CACHE is DEAD and IGNORED (it was
+# an unauthenticated input: a poisoned inherited cache legalized any
+# figure, KS-SK-91-3). Cache header = "<headrev> <nonce>": a pre-existing
+# or foreign file cannot match the parent's fresh nonce.
+my $cache = (defined $cache_arg && $cache_arg ne '' && defined $nonce_arg && $nonce_arg ne '')
+            ? $cache_arg : '';
 my $headrev = qx(git -C "$root" rev-parse HEAD); chomp $headrev;
 my $cache_loaded = 0;
 if ($cache && -s $cache) {
   open my $ch, '<', $cache or die "cannot read corpus cache\n";
   my $first = <$ch> // ''; chomp $first;
-  if ($first eq $headrev) {
+  if ($first eq "$headrev $nonce_arg") {
     while (my $r = <$ch>) {
       chomp $r;
       if    ($r =~ s/^C//) { $corpus{$r} = 1 }
@@ -227,13 +318,27 @@ for my $f (@sources) {
   # no shell quoting issues under "/Volumes/Extreme Pro/")
   open my $fh, '-|', 'git', '-C', $root, 'show', "HEAD:$f" or next;
   while (my $l = <$fh>) {
-    while ($l =~ /(\d[\d.]*\d|\d)/g) {
+    # A-SK61 (Council WP-91, Klabnik — the A-SK56 forge was built from
+    # here): digit-runs inside vmmap ADDRESS RANGES are not measures —
+    # 5.262/22.399 tokens (23,5%) of the corpus existed ONLY as address
+    # fragments and fed the X−Y closure. Strip every hex-range substring
+    # (>=6 hex chars per side, at least one side carrying a letter) BEFORE
+    # tokenizing. Declared residual: a pure-digit range on both sides is
+    # indistinguishable from a numeric interval and survives.
+    my $src = $l;
+    $src =~ s/\b(?:(?=[0-9a-f]*[a-f])[0-9a-f]{6,}-[0-9a-f]{6,}|[0-9a-f]{6,}-(?=[0-9a-f]*[a-f])[0-9a-f]{6,})\b/ /g;
+    while ($src =~ /(\d[\d.]*\d|\d)/g) {
       my $t = $1;
       $corpus{$t} = 1;
       (my $noint = $t) =~ s/\.0$//;  # 43463.0 -> 43463
       $corpus{$noint} = 1;
-      (my $nodot = $t) =~ s/\.//g;   # tolerate grouped copies
-      $corpus{$nodot} = 1;
+      # A-SK61: the nodot flatten is legal ONLY for thousands-grouped
+      # tokens (1.234.567 -> 1234567); flattening a DECIMAL (3.14 -> 314)
+      # fabricated tokens that exist in no machine output.
+      if ($t =~ /^\d{1,3}(?:\.\d{3})+$/) {
+        (my $nodot = $t) =~ s/\.//g;
+        $corpus{$nodot} = 1;
+      }
     }
   }
   close $fh;
@@ -249,12 +354,29 @@ for my $f (committed_glob("$here/evidence/*.fails")) {
 }
 if ($cache) {
   open my $ch, '>', $cache or die "cannot write corpus cache\n";
-  print $ch "$headrev\n";
+  print $ch "$headrev $nonce_arg\n";
   print $ch "C$_\n" for keys %corpus;
   print $ch "N$_\n" for keys %corpus_count;
   close $ch;
 }
 }  # !$cache_loaded
+
+# A-SK61 (Council WP-91): corpus cardinality PRINTED and PINNED against a
+# committed budget — a silent corpus explosion (a new glob swallowing a
+# huge file) multiplies the forge surface; growth must be a conscious,
+# committed act (raise the budget in the same commit that adds sources).
+my $card = scalar(keys %corpus);
+my $budget_file = "$here/gate-cifre-corpus.budget";
+open my $bf, '<', $budget_file
+  or die "gate-measure-cifre: corpus budget file MISSING ($budget_file) — A-SK61 fail-closed\n";
+my $budget = <$bf> // ''; close $bf;
+$budget =~ s/^\s+|\s+$//g; $budget =~ s/^max_tokens=//;
+die "gate-measure-cifre: malformed budget '$budget' (A-SK61)\n" unless $budget =~ /^\d+$/;
+print "corpus cardinality=$card budget=$budget (A-SK61)\n";
+if ($card > $budget) {
+  print "FAIL gate-measure-cifre: corpus cardinality $card EXCEEDS committed budget $budget (A-SK61) — raise the budget deliberately with the new sources\n";
+  exit 1;
+}
 
 # ---- scan target -----------------------------------------------------------
 open my $fh, '<', $target or die "cannot open $target\n";
@@ -268,13 +390,61 @@ my %derived_ok;   # A-SK56: byte tokens legalized by verified arithmetic
 # whole line). Per-FIGURE exceptions: a protocol pin band "N±M <unit>"
 # (a cited identity band, not a measure). Project convention: MB==MiB
 # (this corpus has always done binary math; K/G/T likewise binary).
-my $bytes_first = $target =~ /MEASURE8[4-9]|MEASURE9\d/;
+# A-SK63/A-SK64 (Council WP-91, Klabnik): the bytes-first flag and the ±
+# graces come from the COMMITTED MANIFEST, keyed by repo-relative path —
+# never from a filename regex (a copy named MEASURE85_zzforge inherited
+# the M85 graces; MEASURE100 would have dropped out of bytes-first at
+# WP-100, KS-SK-91-2). A grace-carrying row pins the doc's blob sha:
+# editing the FROZEN doc revokes its graces until the manifest row is
+# consciously updated. A target with NO manifest row (scratch copy,
+# forged name, out-of-tree file) gets FAIL-CLOSED defaults: bytes-first
+# ON, ZERO graces.
+my $bytes_first = 1;
+my @doc_bands;
+my $legacy_frozen = 0;   # sha-pinned UNMODIFIED historical doc: keeps the
+                         # pre-WP-91 derivata semantics (see below)
+{
+  my $rt = abs_path($target) // $target;
+  my $rel = (index($rt, "$root/") == 0) ? substr($rt, length("$root/")) : '';
+  if ($rel && open my $mfh, '<', "$here/gate-cifre-manifest.tsv") {
+    while (my $row = <$mfh>) {
+      chomp $row;
+      next if $row =~ /^\s*(#|$)/;
+      my ($mpath, $msha, $mjudge, $mbf, $mbands) = split /\t/, $row;
+      next unless defined $mpath && $mpath eq $rel;
+      $bytes_first = (defined $mbf && $mbf eq 'no') ? 0 : 1;
+      my $sha_match = 0;
+      if (defined $msha && $msha ne '-') {
+        my $wsha = qx(git -C "$root" hash-object -- "$rt"); chomp $wsha;
+        $sha_match = ($wsha eq $msha) ? 1 : 0;
+        print "line 0: NOTE — $rel edited since its manifest pin: ± graces and legacy derivata REVOKED (A-SK63)\n"
+          unless $sha_match;
+      }
+      # A-SK60 attuazione (Concilio WP-91): i doc STORICI CONGELATI il
+      # cui blob coincide con lo sha pinnato conservano la semantica
+      # derivata pre-WP-91 (evaluator X−Y su operandi in corpus, scan
+      # limitato ai token "N B") — storia già giudicata, blob immutabile.
+      # QUALSIASI edit rompe lo sha e fa cadere il doc sulle regole
+      # nuove: il forge per-edit resta morso.
+      $legacy_frozen = $sha_match;
+      if (defined $mbands && $mbands ne '-' && $mbands ne '') {
+        @doc_bands = split /,/, $mbands
+          if !defined($msha) || $msha eq '-' || $sha_match;
+      }
+      last;
+    }
+    close $mfh;
+  }
+}
 sub it_num { my $s = shift; $s =~ s/\.(?=\d{3}\b)//g; $s =~ s/,/./; return $s; }
 my %SCALE = (k => 1024, m => 1024**2, g => 1024**3, t => 1024**4);
 while (my $line = <$fh>) {
   $ln++;
+  my $work = $line;   # verified pairs and granted bands get blanked here
+  my %companion_ok;   # per-line: VERIFIED companion figures (the "X MiB"
+                      # halves) — machine-recomputable, exempt in A-SK62;
+                      # the BYTE halves stay corpus-bound (A-SK56).
   if ($bytes_first) {
-    my $work = $line;
     # (1) verified pairs "N B = X <unit>": check numerically, then blank out
     while ($work =~ /((\d[\d.,]*)\s*B\s*=\s*(\d[\d.,]*)\s*([KMGTkmgt])(i?)[Bb]\b)/) {
       my ($whole, $braw, $fraw, $u, $ii) = ($1, $2, $3, $4, $5);
@@ -293,46 +463,34 @@ while (my $line = <$fh>) {
         push @miss, sprintf("line %d: companion MISMATCH (A-SK40): %s B / %s = %.4f, displayed %s: %s",
                             $ln, $bytes, lc($u)."iB-scale", $calc, $fig, $line);
       }
+      $companion_ok{$fig} = 1;       # the verified MiB half only (A-SK62)
       my $blank = ' ' x length($whole);
       $work =~ s/\Q$whole\E/$blank/;
     }
-    # (2) per-FIGURE band ALLOWLIST (A-SK43/KS-SK-87-2): the old rule
-    # blanked ANY "N±M <unit>" — with a 1-2 digit M a doc could widen a
-    # pin at will ("232±16 MiB" passed companion, band and corpus). Only
-    # the NAMED legal bands survive; today that is 232±1 MiB, e basta.
+    # (2) per-FIGURE band check (A-SK43/KS-SK-87-2, allowlist now from the
+    # MANIFEST — A-SK63): only the bands GRANTED to this doc survive; the
+    # global name-keyed list is gone ("3.605.572B±5%" lives only in the
+    # M86/87/88 rows as a NAMED-DEVIATION historical target, KB-90-2).
     while ($work =~ /(\d[\d.,]*\s*±\s*\d[\d.,]*\s*[KMGTkmgt]i?[Bb])\b/g) {
       my $band = $1;
       (my $norm = $band) =~ s/\s+//g;
-      push @miss, "line $ln: ± band '$band' not in the A-SK43 allowlist (KS-SK-87-2): $line"
-        unless $norm eq '232±1MiB';
+      push @miss, "line $ln: ± band '$band' not granted by the manifest (A-SK63/KS-SK-87-2): $line"
+        unless grep { $_ eq $norm } @doc_bands;
     }
-    $work =~ s/232\s*±\s*1\s*MiB\b/' ' x length($&)/ge;
-    # (2b) A-SK53-bis (Council WP-90, Klabnik — re-issued after being
-    # DROPPED from the WP-89 synthesis; supersedes the A-SK48 row-scope
-    # tooth): ± judged at WINDOW scope on the WHOLE line, allowlist-only.
-    # The old tooth fired only when the line carried a [KMGT] unit — a
-    # percent band on a bare-B line ("… B ±5%") escaped unjudged. Now:
-    # strip every allowlisted band (normalized, whitespace-free) from the
-    # line; ANY surviving '±' in a bytes-first doc is an unlisted band.
-    # Allowlist (each entry NAMED):
-    #   232±1MiB        = axum W1 identity pin band (A-SK43)
-    #   3.605.572B±5%   = banda KL-85-2 — RITIRATA (KB-90-2): legal ONLY
-    #                     as the target of a NAMED-DEVIATION citation in
-    #                     MEASURE87/88 (historical record); never as a
-    #                     live protocol band in future docs.
-    # Per-DOC entries (named, historical prose forms in FROZEN docs —
-    # never granted to future MEASURE docs):
-    #   MEASURE85: '232±1' (the axum pin cited unitless in prose),
-    #              '±5%'   (bare tolerance operator, no figure attached)
+    for my $b (@doc_bands) {
+      my $pat = join '\s*', map { quotemeta } split //, $b;
+      $work =~ s/$pat/' ' x length($&)/ge;
+    }
+    # (2b) A-SK53-bis window tooth (unchanged force, manifest-driven
+    # grants): strip every GRANTED band (normalized, whitespace-free)
+    # from the line; ANY surviving '±' in a bytes-first doc is unlisted.
     {
       (my $flat = $line) =~ s/\s+//g;
-      my @bands = ('232±1MiB', '3.605.572B±5%');
-      push @bands, '232±1', '±5%' if $target =~ /MEASURE85/;
-      for my $band (sort { length($b) <=> length($a) } @bands) {
+      for my $band (sort { length($b) <=> length($a) } @doc_bands) {
         $flat =~ s/\Q$band\E(?!\d)//g;
       }
       if ($flat =~ /±/) {
-        push @miss, "line $ln: '±' band not in the A-SK53-bis window allowlist (KS-SK-87-2): $line";
+        push @miss, "line $ln: '±' band not granted by the manifest (A-SK63/A-SK53-bis/KS-SK-87-2): $line";
       }
     }
     # (2c) A-SK48 cosmetic tooth: "Mib" (bits sold as bytes) never legal.
@@ -345,39 +503,100 @@ while (my $line = <$fh>) {
     }
   }
   if ($line =~ /\[derivata/) {                   # A-BG26 tagged line
-    # A-SK56 (Council WP-90, Klabnik FORGE BITTEN LIVE): the tag is at
-    # FIGURE scope, not row scope — it exempts DERIVED figures (verified
-    # companions, ratios, deltas WITHOUT unit) but NEVER a measured-form
-    # byte token: every ">=3-digit N B" on a tagged line stays
-    # corpus-bound (a fabricated "N B = X MiB [derivata: companion]"
-    # self-verifies its companion and used to pass whole — KS-SK-90-2).
-    if ($bytes_first) {
-      # A derived BYTE figure is legal iff its derivation is VERIFIED at
-      # machine: the tag on the line carries an "X−Y" (or X-Y) expression
-      # whose operands are BOTH in the committed corpus and whose result
-      # equals the token exactly. Once legalized, later citations of the
-      # SAME token in this doc are legal (wrapped repeats carry the tag
-      # but not the expression). Everything else: corpus-bound.
-      my %eval_ok;
-      if ($line =~ /\[derivata:([^\]]*)/) {
-        my $expr = $1;
-        # U+2212 MINUS is multibyte: a [−-] class would split it into
-        # bytes under non-utf8 perl — spell the sequence out.
-        while ($expr =~ /(\d(?:[\d.,]*\d)?)\s*(?:\xE2\x88\x92|-)\s*(\d(?:[\d.,]*\d)?)/g) {
-          my ($xa, $xb) = (it_num($1), it_num($2));
-          next unless ($corpus{$xa} || $ALLOW{$xa}) && ($corpus{$xb} || $ALLOW{$xb});
-          $eval_ok{$xa - $xb} = 1;
+    if ($legacy_frozen) {
+      # FROZEN sha-pinned historical doc (manifest): pre-WP-91 semantics
+      # verbatim — X−Y evaluator over corpus-present operands, scan bound
+      # to "N B" tokens only. Granted ONLY while the blob matches its
+      # pin; any edit falls through to the A-SK60/A-SK62 rules below.
+      if ($bytes_first) {
+        my %eval_ok_l;
+        if ($line =~ /\[derivata:([^\]]*)/) {
+          my $expr = $1;
+          while ($expr =~ /(\d(?:[\d.,]*\d)?)\s*(?:\xE2\x88\x92|-)\s*(\d(?:[\d.,]*\d)?)/g) {
+            my ($xa, $xb) = (it_num($1), it_num($2));
+            next unless ($corpus{$xa} || $ALLOW{$xa}) && ($corpus{$xb} || $ALLOW{$xb});
+            $eval_ok_l{$xa - $xb} = 1;
+          }
+        }
+        my $probe2 = $line;
+        $probe2 =~ s/\b(?=[0-9a-f]*[a-f])[0-9a-f]{7,}\b//gi;
+        while ($probe2 =~ /(?<![\dA-Za-z,.±])(\d{1,3}(?:\.\d{3})+|\d{3,})\s*B(?![A-Za-z0-9])/g) {
+          my $raw = $1;
+          (my $norm = $raw) =~ s/\.(?=\d{3}\b)//g;
+          next if $ALLOW{$norm} || $corpus{$norm} || $corpus_count{$norm};
+          if ($eval_ok_l{$norm} || $derived_ok{$norm}) { $derived_ok{$norm} = 1; next; }
+          push @miss, "line $ln: byte token '$raw B' on a [derivata] line NOT in corpus and NOT machine-verified from corpus operands — the tag is figure-scope (A-SK56/KS-SK-90-2): $line";
         }
       }
-      my $probe2 = $line;
-      $probe2 =~ s/\b(?=[0-9a-f]*[a-f])[0-9a-f]{7,}\b//gi;
-      while ($probe2 =~ /(?<![\dA-Za-z,.±])(\d{1,3}(?:\.\d{3})+|\d{3,})\s*B(?![A-Za-z0-9])/g) {
-        my $raw = $1;
-        (my $norm = $raw) =~ s/\.(?=\d{3}\b)//g;
-        next if $ALLOW{$norm} || $corpus{$norm} || $corpus_count{$norm};
-        if ($eval_ok{$norm} || $derived_ok{$norm}) { $derived_ok{$norm} = 1; next; }
-        push @miss, "line $ln: byte token '$raw B' on a [derivata] line NOT in corpus and NOT machine-verified from corpus operands — the tag is figure-scope (A-SK56/KS-SK-90-2): $line";
+      next;
+    }
+    # A-SK60 (Council WP-91, Klabnik — the free X−Y evaluator was REFUTED
+    # LIVE): with existential operands over a 22k-token corpus (23,5% of
+    # which were vmmap address fragments) the closure of differences
+    # reached ~11,5% of any plausible neighborhood — a fabricated b_base
+    # PASSED. The evaluator is ABOLISHED. A derived value legalizes a
+    # token ONLY by PROVENANCE:
+    #   [derivata: prov <N>@<repo/path>:<line> − <M>@<repo/path>:<line>]
+    # Each operand is re-read from the COMMITTED blob at HEAD at exactly
+    # that line, and the gate PRINTS the resolution. Label-only tags
+    # ([derivata: companion /1048576], [derivata: Δ/4], …) legalize
+    # NOTHING by themselves — companions are verified in step (1).
+    my %eval_ok;
+    my $tagtext = ($line =~ /\[derivata:([^\]]*)/) ? $1 : '';
+    if ($tagtext =~ /^\s*prov\s/) {
+      my (@ops, $bad);
+      while ($tagtext =~ /(\d(?:[\d.,]*\d)?)\@([^\s:\]]+):(\d+)/g) {
+        my ($tok, $rp, $rl) = ($1, $2, $3);
+        my $ntok = it_num($tok);
+        if (!$headset{$rp}) {
+          push @miss, "line $ln: derivata operand $tok \@ $rp:$rl — path NOT committed at HEAD (A-SK60): $line";
+          $bad = 1; last;
+        }
+        my @blob = qx(git -C "$root" show "HEAD:$rp");
+        my $srcline = $blob[$rl-1] // ''; $srcline =~ s/\0//g;
+        my $found = 0;
+        while ($srcline =~ /(\d[\d.]*\d|\d)/g) {
+          my $c = $1; (my $nd = $c) =~ s/\.(?=\d{3}\b)//g;
+          if ($c eq $ntok || $nd eq $ntok) { $found = 1; last; }
+        }
+        if (!$found) {
+          push @miss, "line $ln: derivata operand $ntok NOT found at $rp:$rl (A-SK60): $line";
+          $bad = 1; last;
+        }
+        print "line $ln: derivata operand $ntok <= $rp:$rl resolved at HEAD (A-SK60)\n";
+        push @ops, $ntok;
       }
+      if (!$bad && @ops == 2 && $tagtext =~ /\xE2\x88\x92|-/) {
+        $eval_ok{$ops[0] - $ops[1]} = 1;
+        printf "line %d: derivata value %s = %s − %s (A-SK60 provenance-verified)\n",
+               $ln, $ops[0] - $ops[1], $ops[0], $ops[1];
+      }
+    }
+    # A-SK62 (Council WP-91): on a [derivata] line EVERY token >=3 digits
+    # is judged — 2σ brackets, se, counts included (the old tooth bound
+    # only "N B"-shaped tokens: a fabricated 2σ lower bound inside
+    # brackets PASSED). The scan runs on the RAW line — a verified
+    # companion pair does NOT shelter its byte half (A-SK56: the pair
+    # self-verifies on any fabricated N). Exempt ONLY the
+    # machine-recomputable: the verified companion FIGURES
+    # (%companion_ok), provenance-resolved values, and their wrapped
+    # repeats. The tag bracket content itself is judged by A-SK60 above,
+    # not harvested here.
+    my $probe2 = $line;
+    $probe2 =~ s/\[derivata:[^\]]*\]?/ /g;
+    $probe2 =~ s/\b(?=[0-9a-f]*[a-f])[0-9a-f]{7,}\b//gi;
+    $probe2 =~ s/[A-Za-z_][A-Za-z0-9_-]*[0-9][A-Za-z0-9_-]*//g;
+    while ($probe2 =~ /(?<![\dA-Za-z,.±])(\d{1,3}(?:\.\d{3})+(?:,\d+)?|\d+,\d+|\d{3,})(?![\dA-Za-z])/g) {
+      my $raw = $1;
+      my $norm = $raw;
+      $norm =~ s/\.(?=\d{3}\b)//g;
+      $norm =~ s/,/./;
+      next if $companion_ok{$norm};
+      next if $ALLOW{$norm} || $corpus{$norm} || $corpus_count{$norm};
+      (my $noint = $norm) =~ s/\.0$//;
+      next if $corpus{$noint};
+      if ($eval_ok{$norm} || $derived_ok{$norm}) { $derived_ok{$norm} = 1; next; }
+      push @miss, "line $ln: token '$raw' on a [derivata] line NOT in corpus and NOT provenance-verified (A-SK56/A-SK60/A-SK62): $line";
     }
     next;
   }

@@ -1,0 +1,25 @@
+# gate-cifre-manifest.tsv — A-SK63/A-SK64 (Concilio WP-91, Klabnik).
+# UNICA autorità di perimetro e grazie del gate cifre: niente regex di nome.
+# Colonne (TAB): path-relativo-alla-root-git  blob-sha|-  judge(yes|no)  bytes_first(yes|no)  bande-±-concesse(,)|-
+# - blob-sha ≠ '-' PINNA il doc: se il file cambia, le grazie ± decadono
+#   finché la riga non è aggiornata con delibera (A-SK63).
+# - judge=no = esclusione DICHIARATA per NOME (mai più glob silenziosi):
+#   MEASURE78/80/82/83 sono doc storici pre-KG-83-3 — le loro cifre
+#   precedono la registrazione del corpus (le campagne 78/80/82/83 non
+#   hanno sorgenti registrate complete) e la loro verità è fissata dai
+#   verdetti d'epoca; MEASURE81 resta giudicato (corpus 81 registrato)
+#   ma senza bytes-first (pre-A-DL26).
+# - bande: forme FLAT normalizzate (senza spazi) come da A-SK53-bis;
+#   3.605.572B±5% = banda KL-85-2 RITIRATA (KB-90-2) — concessa SOLO a
+#   M86/87/88 come bersaglio storico di NAMED-DEVIATION già giudicata.
+php-rust/wp78-harness/MEASURE78_RESULTS.md	-	no	no	-
+php-rust/wp80-harness/MEASURE80_RESULTS.md	-	no	no	-
+php-rust/wp81-harness/MEASURE81_RESULTS.md	-	yes	no	-
+php-rust/wp82-harness/MEASURE82_RESULTS.md	-	no	no	-
+php-rust/wp83-harness/MEASURE83_RESULTS.md	-	no	no	-
+php-rust/wp84-harness/MEASURE84_RESULTS.md	4b5d3e1921c39631500ba643d8ca11e7256b97af	yes	yes	232±1MiB
+php-rust/wp85-harness/MEASURE85_RESULTS.md	373cc99f337e5e02c523923af1ce0aa3be93606f	yes	yes	232±1,±5%
+php-rust/wp86-harness/MEASURE86_RESULTS.md	255e0f0aea31c3e2badf5984cd1e872f41ecc53a	yes	yes	3.605.572B±5%
+php-rust/wp87-harness/MEASURE87_RESULTS.md	68d8ef8e406ba10bece2146fa4af7f07949bdc92	yes	yes	3.605.572B±5%
+php-rust/wp88-harness/MEASURE88_RESULTS.md	529c34ca6a701109342264018be2461a4943775d	yes	yes	3.605.572B±5%
+php-rust/wp89-harness/MEASURE89_RESULTS.md	-	yes	yes	-
