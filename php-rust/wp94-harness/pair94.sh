@@ -65,3 +65,32 @@ find "$WPDEV/src/wp-content/uploads" -mindepth 1 -delete 2>/dev/null
 "$GUARD" restore >> "$OUT/progress.txt" 2>&1
 step "pair94 DONE"
 echo "rc=0 $(date +%T)" > "$OUT/pair94.done"
+
+# I RAPPORTI sono output MACCHINA, non aritmetica in prosa: il gate cifre
+# lega ogni numero a un raw committato, e il suo resolver di provenienza
+# conosce solo la sottrazione — un rapporto scritto a mano in un .md non
+# sarebbe un'autorita. Quindi lo calcola qui lo script, dai .time appena
+# prodotti, e il documento CITA questo file.
+ratios() {
+  perl - "$OUT" <<'PERL'
+use strict; use warnings;
+my $out = shift @ARGV;
+sub t { my ($f) = @_; open my $h, "<", "$out/$f.time" or die "$f: $!";
+  my %v; while (<$h>) {
+    $v{user} = $1 if /([\d.]+)\s+user/; $v{sys} = $1 if /([\d.]+)\s+sys/;
+    $v{pf}   = $1 if /^\s*(\d+)\s+peak memory footprint/;
+    $v{rss}  = $1 if /^\s*(\d+)\s+maximum resident set size/; }
+  return \%v; }
+my ($mo,$mp,$fo,$fp) = map { t($_) } qw(media-oracle media-phpr full-oracle full-phpr);
+printf "media_user_cpu_oracle=%s media_user_cpu_phpr=%s ratio=%.3f\n", $mo->{user}, $mp->{user}, $mp->{user}/$mo->{user};
+printf "media_peak_footprint_oracle=%d media_peak_footprint_phpr=%d ratio=%.3f\n", $mo->{pf}, $mp->{pf}, $mp->{pf}/$mo->{pf};
+printf "full_master_cpu_oracle=%.2f full_master_cpu_phpr=%.2f ratio=%.3f\n", $fo->{user}+$fo->{sys}, $fp->{user}+$fp->{sys}, ($fp->{user}+$fp->{sys})/($fo->{user}+$fo->{sys});
+printf "full_peak_footprint_oracle=%d full_peak_footprint_phpr=%d ratio=%.3f\n", $fo->{pf}, $fp->{pf}, $fp->{pf}/$fo->{pf};
+printf "full_peak_footprint_phpr_MiB=%.2f\n", $fp->{pf}/1048576;
+PERL
+}
+{ echo "pair94-ratios: rapporti calcolati dai .time della coppia (output macchina, non prosa)"
+  echo "grade=VERDICT  # derivazione meccanica riproducibile dai raw committati"
+  echo "formato=ascii-nudo"
+  ratios
+} > "$OUT/../pair94-ratios.out"

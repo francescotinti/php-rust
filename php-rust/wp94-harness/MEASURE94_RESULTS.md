@@ -19,17 +19,17 @@ probe: le due gambe si confrontano fra loro, non con una citazione.
 
 **media group** — 762 test, 1912 assertions, 52 skipped, identici sui due lati:
 
-- user CPU: oracle 21.03 s, phpr 55.50 s — rapporto **2,64** [derivata: companion 55.50/21.03]
-- peak footprint: oracle 346325904 B, phpr 1170785648 B — rapporto **3,38** [derivata: companion 1170785648/346325904]
+- user CPU: oracle 21.03 s, phpr 55.50 s — rapporto **2.639** (pair94-ratios.out)
+- peak footprint: oracle 346325904 B, phpr 1170785648 B — rapporto **3.381** (pair94-ratios.out)
 
 **full suite** — 30472 test, 4558029 assertions, 86 warnings, 73 skipped,
 identici sui due lati:
 
-- master CPU oracle = **447.84** s [derivata: companion 421.51+26.33]
-- master CPU phpr = **838.59** s [derivata: companion 796.78+41.81]
-- rapporto master CPU = **1,87** [derivata: companion 838.59/447.84]
-- peak footprint: oracle 745637040 B, phpr 1993459800 B — rapporto **2,67** [derivata: companion 1993459800/745637040]
-- peak footprint phpr = 1993459800 B = **1901,10** MiB [derivata: companion /1048576]
+- master CPU oracle = **447.84** s (pair94-ratios.out, user+sys)
+- master CPU phpr = **838.59** s (pair94-ratios.out, user+sys)
+- rapporto master CPU = **1.873** (pair94-ratios.out)
+- peak footprint: oracle 745637040 B, phpr 1993459800 B — rapporto **2.673** (pair94-ratios.out)
+- peak footprint phpr = 1993459800 B = **1901.11** MiB (pair94-ratios.out)
 
 **Letture, per NOME:**
 
