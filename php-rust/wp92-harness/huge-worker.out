@@ -1,0 +1,126 @@
+huge-worker: termine malloc_huge PER WORKER dai raw m90 committati
+grade=ADVISORY  # raw gia consumati; verdict-grade solo dal canale barriera A-DL-57/58 (PT-1)
+formato=ascii-nudo  # A-BG66: nessun separatore di migliaia nei token numerici
+fonte=wp78-harness/measure-out/m90.slope.w{4,8,12,16}.r{1..5}.a1.memcensus (20 raw)
+sorgente-riga=tag=mi_arena_json campo malloc_huge{current,total,peak} + malloc_huge_count
+nota-canale: in mimalloc v3 il decremento della statistica huge ESISTE
+  (v3/src/free.c mi_theap_stat_decrease(theap, malloc_huge, bpsize) e v3/src/theap.c),
+  quindi current==total NON e un contatore monco: e assenza di free.
+
+== per-run, per-checkpoint: current / count / current-diviso-W ==
+W  run ckpt                 huge_current    count  perW      cnt_perW
+4  r1  peak_inreq_pboot                0        0         0         0
+4  r1  peak_inreq_pwork        159645696       24  39911424         6
+4  r1  peak_inreq              159645696       24  39911424         6
+4  r1  exit_mi                 159645696       24  39911424         6
+4  r1  exit_collect_mi         159645696       24  39911424         6
+4  r2  peak_inreq_pboot                0        0         0         0
+4  r2  peak_inreq_pwork        159645696       24  39911424         6
+4  r2  peak_inreq              159645696       24  39911424         6
+4  r2  exit_mi                 159645696       24  39911424         6
+4  r2  exit_collect_mi         159645696       24  39911424         6
+4  r3  peak_inreq_pboot                0        0         0         0
+4  r3  peak_inreq_pwork        159645696       24  39911424         6
+4  r3  peak_inreq              159645696       24  39911424         6
+4  r3  exit_mi                 159645696       24  39911424         6
+4  r3  exit_collect_mi         159645696       24  39911424         6
+4  r4  peak_inreq_pboot                0        0         0         0
+4  r4  peak_inreq_pwork        159645696       24  39911424         6
+4  r4  peak_inreq              159645696       24  39911424         6
+4  r4  exit_mi                 159645696       24  39911424         6
+4  r4  exit_collect_mi         159645696       24  39911424         6
+4  r5  peak_inreq_pboot                0        0         0         0
+4  r5  peak_inreq_pwork        159645696       24  39911424         6
+4  r5  peak_inreq              159645696       24  39911424         6
+4  r5  exit_mi                 159645696       24  39911424         6
+4  r5  exit_collect_mi         159645696       24  39911424         6
+8  r1  peak_inreq_pboot                0        0         0         0
+8  r1  peak_inreq_pwork        319291392       48  39911424         6
+8  r1  peak_inreq              319291392       48  39911424         6
+8  r1  exit_mi                 319291392       48  39911424         6
+8  r1  exit_collect_mi         319291392       48  39911424         6
+8  r2  peak_inreq_pboot                0        0         0         0
+8  r2  peak_inreq_pwork        319291392       48  39911424         6
+8  r2  peak_inreq              319291392       48  39911424         6
+8  r2  exit_mi                 319291392       48  39911424         6
+8  r2  exit_collect_mi         319291392       48  39911424         6
+8  r3  peak_inreq_pboot                0        0         0         0
+8  r3  peak_inreq_pwork        319291392       48  39911424         6
+8  r3  peak_inreq              319291392       48  39911424         6
+8  r3  exit_mi                 319291392       48  39911424         6
+8  r3  exit_collect_mi         319291392       48  39911424         6
+8  r4  peak_inreq_pboot                0        0         0         0
+8  r4  peak_inreq_pwork        319291392       48  39911424         6
+8  r4  peak_inreq              319291392       48  39911424         6
+8  r4  exit_mi                 319291392       48  39911424         6
+8  r4  exit_collect_mi         319291392       48  39911424         6
+8  r5  peak_inreq_pboot                0        0         0         0
+8  r5  peak_inreq_pwork        319291392       48  39911424         6
+8  r5  peak_inreq              319291392       48  39911424         6
+8  r5  exit_mi                 319291392       48  39911424         6
+8  r5  exit_collect_mi         319291392       48  39911424         6
+12 r1  peak_inreq_pboot                0        0         0         0
+12 r1  peak_inreq_pwork        478937088       72  39911424         6
+12 r1  peak_inreq              478937088       72  39911424         6
+12 r1  exit_mi                 478937088       72  39911424         6
+12 r1  exit_collect_mi         478937088       72  39911424         6
+12 r2  peak_inreq_pboot                0        0         0         0
+12 r2  peak_inreq_pwork        478937088       72  39911424         6
+12 r2  peak_inreq              478937088       72  39911424         6
+12 r2  exit_mi                 478937088       72  39911424         6
+12 r2  exit_collect_mi         478937088       72  39911424         6
+12 r3  peak_inreq_pboot                0        0         0         0
+12 r3  peak_inreq_pwork        478937088       72  39911424         6
+12 r3  peak_inreq              478937088       72  39911424         6
+12 r3  exit_mi                 478937088       72  39911424         6
+12 r3  exit_collect_mi         478937088       72  39911424         6
+12 r4  peak_inreq_pboot                0        0         0         0
+12 r4  peak_inreq_pwork        478937088       72  39911424         6
+12 r4  peak_inreq              478937088       72  39911424         6
+12 r4  exit_mi                 478937088       72  39911424         6
+12 r4  exit_collect_mi         478937088       72  39911424         6
+12 r5  peak_inreq_pboot                0        0         0         0
+12 r5  peak_inreq_pwork        478937088       72  39911424         6
+12 r5  peak_inreq              478937088       72  39911424         6
+12 r5  exit_mi                 478937088       72  39911424         6
+12 r5  exit_collect_mi         478937088       72  39911424         6
+16 r1  peak_inreq_pboot                0        0         0         0
+16 r1  peak_inreq_pwork        638582784       96  39911424         6
+16 r1  peak_inreq              638582784       96  39911424         6
+16 r1  exit_mi                 638582784       96  39911424         6
+16 r1  exit_collect_mi         638582784       96  39911424         6
+16 r2  peak_inreq_pboot                0        0         0         0
+16 r2  peak_inreq_pwork        638582784       96  39911424         6
+16 r2  peak_inreq              638582784       96  39911424         6
+16 r2  exit_mi                 638582784       96  39911424         6
+16 r2  exit_collect_mi         638582784       96  39911424         6
+16 r3  peak_inreq_pboot                0        0         0         0
+16 r3  peak_inreq_pwork        638582784       96  39911424         6
+16 r3  peak_inreq              638582784       96  39911424         6
+16 r3  exit_mi                 638582784       96  39911424         6
+16 r3  exit_collect_mi         638582784       96  39911424         6
+16 r4  peak_inreq_pboot                0        0         0         0
+16 r4  peak_inreq_pwork        638582784       96  39911424         6
+16 r4  peak_inreq              638582784       96  39911424         6
+16 r4  exit_mi                 638582784       96  39911424         6
+16 r4  exit_collect_mi         638582784       96  39911424         6
+16 r5  peak_inreq_pboot                0        0         0         0
+16 r5  peak_inreq_pwork        638582784       96  39911424         6
+16 r5  peak_inreq              638582784       96  39911424         6
+16 r5  exit_mi                 638582784       96  39911424         6
+16 r5  exit_collect_mi         638582784       96  39911424         6
+
+== INVARIANTI sui 20 raw ==
+run considerate: 20
+per-worker distinti al pwork (byte): [39911424]
+blocchi per-worker distinti al pwork: [6]
+valori distinti al pboot (byte): [0]
+checkpoint non-boot con current!=total!=peak: 0  (0 = mai liberata)
+run in cui il termine al exit_collect_mi EGUAGLIA il picco: 20/20
+
+== VERDETTO (advisory) ==
+per worker: 39911424 byte in 6 blocchi huge, media 6651904 byte a blocco
+nasce nella fase di LAVORO (zero al boot), non cresce col numero di richieste,
+non viene MAI liberata e sopravvive alla collect finale del processo.
+carico della campagna: hello + pad (NON WordPress) — il termine e quindi
+indipendente dal carico, cioe una riserva FISSA per worker.
