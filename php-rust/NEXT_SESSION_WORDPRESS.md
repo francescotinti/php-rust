@@ -38,7 +38,7 @@ l'oggetto (timebox mezza sessione, permanente).
   huge-sites.out). La riga testimone unificata (S-92.0 p4) entra nel
   binario alla RICOMPILA in-campagna. **battery-91pre.sh MAI girata**.
 - **Gate cifre v3**: --all PASS a HEAD sul perimetro per COMPLEMENTO;
-  budget in vigore **24371**. **⚠️⚠️ A-SK-82 è AGGIRATA (Concilio WP-95,
+  budget in vigore: il valore vive in `wp81-harness/gate-cifre-corpus.budget`, MAI citato qui (A-SK-77). **⚠️⚠️ A-SK-82 è AGGIRATA (Concilio WP-95,
   Klabnik 7/9 forge RIPRODOTTI a macchina)**: tre canali (env BASH_SOURCE,
   symlink, BASH_ENV) producono un `PASS --all` rc=0 firmato col judge_sha
   pristino su codice NON pristino — **prima voce di apparato di S-94.0**,
@@ -77,7 +77,7 @@ Sintesi §FONDAMENTALI + ordine in `SYNTHESIS_WP95.md`.
 ## §WP-94(sessione) — ordine dal Concilio WP-95 (FONDAMENTALI-first)
 
 **P0 (già fatto in chiusura S-93.0)**: sanatorie applicate. Verificare a
-inizio S-94.0 che `--all` PASS a HEAD col budget 24371.
+inizio S-94.0 che `--all` PASS a HEAD col budget committato.
 
 ### Mezza sessione d'apparato (tetto duro, ordine di taglio A3→A2, A1 mai)
 

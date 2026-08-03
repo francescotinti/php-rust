@@ -18,7 +18,7 @@ pushati.
 **Binari**: phpr **d5ce86e3342f3926 INVARIATO** (mai ricompilato) ·
 release/php-server **d45b57843eeb1375 INVARIATO** (RIPRISTINATO dal pin
 dopo i probe; i build strumentati mem-census sono identità dichiarate in
-huge-sites.out). Budget corpus in vigore 24371 (alzato stesso-commit col
+huge-sites.out). Budget corpus alzato nello stesso commit col
 glob wp93, A-SK61).
 
 ## Ordine eseguito (direttiva A/B/C)
