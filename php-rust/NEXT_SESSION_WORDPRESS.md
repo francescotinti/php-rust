@@ -36,10 +36,12 @@ Dettaglio: `sessions/WP_SESSION_91.md` + `wp91-harness/`.
   deliberativi judge=no dichiarati; M84/85 ancorati verdict= a HEAD);
   budget 24232; selftest con T13/T14/T15/T16 = i quattro forge WP-92.
   Gate lever-pins v9 PASS; gate-axum-tests PASS.
-- **Misure (gradi WP-92, sanatoria ESEGUITA)**: b_boot 2.252.800 B
-  (se 6.345 B) VERDICT-GRADE come MAGNITUDINE · b_work 17.276.928 B
+- **Misure (gradi WP-92, sanatoria ESEGUITA; emende A-BG62/63/64
+  WP-93)**: b_boot 2.252.800 B
+  (se 6.345,5 B) VERDICT-GRADE come MAGNITUDINE · b_work 17.276.928 B
   (se 501.348 B) ADVISORY · somma 19.529.728 B ADVISORY (continuità
-  con b m89: delta 45.875 B, suggestiva) · b_peak(mediana) 20.289.946 B
+  con b m89: delta −45.875 B, suggestiva) · b_peak(mediana)
+  20.289.946 B ADVISORY-RIPUBBLICATA, testata DA RIFARE (A-BG64)
   (se 1.084.655 B, banda 2se [18.120.635, 22.459.256] B) — fonte
   `wp91-harness/repair90-estimators.out`; VCOV marginale 15.777.004
   B/worker = 0,778 di b_peak(mediana); cal 7.801.102 B invariante di

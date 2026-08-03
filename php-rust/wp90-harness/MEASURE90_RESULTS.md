@@ -24,7 +24,9 @@ STORICO della campagna, con le label ritirate qui nominate.
 ## GRADI DELLE CIFRE (delibera team-misura WP-92, composta a strati)
 
 - **b_boot = 2.252.800 B = 2,15 MiB [derivata: companion /1048576] per
-  worker (se 6.345 B): VERDICT-GRADE come MAGNITUDINE** — modi dominanti
+  worker (se 6.345,5 B — A-BG62: regola di trascrizione DICHIARATA
+  half-up; dove la macchina stampa il decimale, il doc lo cita col
+  decimale): VERDICT-GRADE come MAGNITUDINE** — modi dominanti
   reali (non min-statistic), quiescenza triviale al pboot, semantica del
   contatore convalidata. NON è verdict-grade come COMPOSIZIONE:
   «bootstrap theap + stato phpr» resta ipotesi finché non gira il
@@ -41,7 +43,8 @@ STORICO della campagna, con le label ritirate qui nominate.
 - **somma b_boot+b_work = 19.529.728 B = 18,63 MiB [derivata: companion
   /1048576] per worker: ADVISORY** (eredita il grado della lane più
   debole) — è la FORMA di testata onesta (lane pre-census-finale). La
-  continuità col b m89 (19.575.603 B, delta 45.875 B) è SUGGESTIVA,
+  continuità col b m89 (19.575.603 B, delta −45.875 B col SEGNO —
+  A-BG63) è SUGGESTIVA,
   non verdict-grade: due cifre ADVISORY che si somigliano non fanno
   una conferma.
 - **b_peak: DA RIFARE come testata (KS-BB-92-1)** — tutti e 4 i punti
@@ -51,8 +54,17 @@ STORICO della campagna, con le label ritirate qui nominate.
   resta nel g2 come storia; ripubblicato a MEDIANA (A-BB64):
   **b_peak(mediana) = 20.289.946 B = 19,35 MiB [derivata: companion
   /1048576] per worker** (se 1.084.655 B, banda 2se dichiarata
-  [18.120.635, 22.459.256] B). Lo stimatore pooled per-run (n=20,
-  df=18, CI onesto) è pubblicato in repair90-estimators.out.
+  [18.120.635, 22.459.256] B) — **grado: ADVISORY, RIPUBBLICATA a
+  mediana; testata DA RIFARE (KS-BB-92-1; A-BG64: il token di grado
+  viaggia su OGNI citazione, mai ereditato dal silenzio)**. Lo
+  stimatore pooled per-run (n=20, df=18) è pubblicato in
+  repair90-estimators.out — **grado ADVISORY-CONDITIONAL (A-BB71,
+  refuta la vecchia dicitura «CI onesto»)**: le 5 run per W NON sono
+  rumore scambiabile attorno alla retta (F-test intra-W significativo,
+  ricomputo Bak WP-93) e la banda pooled NON è citabile come 95%;
+  l'unica banda citabile come 95% è la df=2 sulle medie per-W
+  (t = 4,303). Qualunque banda su n>W punti esige l'F-test di
+  scambiabilità ex-ante SUPERATO (KS-BB-93-1).
 - **ADVISORY per NOME = 7, non 4 (A-BG60)**: PEAK-W4/W8/W12/W16 E
   WORK-W8/W12/W16 (tutti modes==R nel g2). La dicitura «lane forti»
   è SCOPATA alla sola scala Δcommit di BOOT/WORK — il censimento
@@ -60,15 +72,26 @@ STORICO della campagna, con le label ritirate qui nominate.
 - **CI onesti (A-BB68)**: con 4 punti (df=2) «2σ⇒95%» è falso
   (t(0,975;2) = 4,303 ⇒ la banda 2se copre ~82%). Tutte le bande di
   questo doc sono dichiarate «2se»; le bande t sono in
-  repair90-estimators.out (pooled df=18: t = 2,101).
+  repair90-estimators.out (pooled df=18: t = 2,101 —
+  ADVISORY-conditional, A-BB71: mai 95% senza F-test di
+  scambiabilità).
 - **Robustezza non tautologica (A-BB66)**: il vecchio ratio min-of-R
   ==1,000 era VOID per costruzione (min≡dominante con tie totale —
   KS-BB-92-2). Robustezza REALE misurata: min/mediana = 0,972 ·
   media/mediana = 0,999 (soglia 0,8: entrambe IN).
 - **Run-outlier per NOME (A-BB67)**: w12.r3 E w4.r1 — TUTTI i
-  contatori oltre 2·MAD dalle sorelle; nessuna delle due può diventare
-  il punto della sua W via min (il residuo W4 nasceva proprio da
-  PEAK-min che pescava w4.r1).
+  contatori oltre 2·MAD dalle sorelle. **NORMA (A-BB72): un outlier
+  flaggato NON DEVE diventare il punto della sua W via min** — come
+  ASSERZIONE era refutata da questo stesso doc (PEAK-min HA pescato
+  w4.r1: il residuo W4 nasceva proprio da lì). **A-BB69 (LOO,
+  KS-BB-93-2)**: il criterio inclusivo MASCHERA w16.r1 (flaggata per
+  NOME dal ricomputo leave-one-out di Bak, WP-93; effetto ZERO sulle
+  testate — outlier alto: né min né mediana lo pescano); dalla
+  prossima campagna il MAD flag è in forma LEAVE-ONE-OUT (sorelle =
+  R−1, run giudicata fuori) e MAD==0 è stato DEGENERE dichiarato in
+  output, mai silenzio. **Politica di testata (A-BB70)**: outlier
+  DENTRO la mediana; esclusione pre-stimatore BANDITA salvo delibera,
+  e allora TUTTI i flaggati con Δb dichiarato.
 
 ## Identità
 
@@ -95,7 +118,8 @@ STORICO della campagna, con le label ritirate qui nominate.
 - **VLADDER — attribuzione di b per FASE (braccio 2 Leijen, scala
   Δcommitted su contatore monotono)**: scala monotone 20/20;
   additività WITHIN-RUN esatta 20/20 (identità aritmetica
-  pboot+Δwork+Δpost==exit — A-BB65). Decomposizione nei gradi sopra:
+  pboot+Δwork+Δpost==exit — A-BB65; etichetta A-BB72: TAUTOLOGIA,
+  mai contarla come verifica). Decomposizione nei gradi sopra:
   **b_boot** (VERDICT-GRADE come magnitudine) + **b_work** (ADVISORY) =
   somma ADVISORY 19.529.728 B (vedi §GRADI); b_peak DA RIFARE
   (ripubblicata a mediana). **Il driver di b resta la FASE DI LAVORO**

@@ -1,5 +1,5 @@
 # bite-test-historic.log — A-SK-68 (Concilio WP-92, team-cifre P2): i 5 doc storici M84-M88 rigiudicati col resolver emendato (A-SK-69/A-SK-73) e SENZA legacy_frozen, PRIMA della collocazione manifest (stesso commit).
-# head=c71bf9e6b0154e6503265d6d263cf39bcd711534 (gate nel working tree = candidato committato in questo stesso commit)
+# head=c71bf9e6b0154e6503265d6d263cf39bcd711534 (gate nel working tree = candidato; atterraggio nel commit FIGLIO di head — A-BG65: un log non può nominare il proprio sha; l'atterraggio verificato è ce1ee27, parent==head. Regola per i log futuri: dichiarare «commit figlio di head=<sha>», mai «questo stesso commit».)
 == MEASURE84 ==
 corpus cardinality=24221 budget=24221 (A-SK61, budget from HEAD)
 FAIL gate-measure-cifre (KG-83-3): 2 unmatched figure(s) in wp84-harness/MEASURE84_RESULTS.md:
