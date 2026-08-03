@@ -1340,12 +1340,15 @@ fi
 # wildcard does not bind). Pin the named binding, ban the silencers.
 # comment/attribute lines carry the SPELLING as documentation (the
 # must_use message itself says `let _w = …`) — only CODE lines count.
+# ==2 NAMED sites (bump S-90.0, same-commit discipline A-PP48): the
+# teardown probe (A-DL24 block) and the A-DL49 v2 per-worker self-census
+# probe — both `let probe_window = ProbeWindow::arm()`.
 narm=$(grep -vE '^[[:space:]]*(//|#\[)' "$WPOOL" | grep -cE 'let (_[a-z0-9][a-z0-9_]*|[a-z][a-z0-9_]*) = ProbeWindow::arm\(\)' || true)
 nsil=$(grep -vE '^[[:space:]]*(//|#\[)' "$WPOOL" | grep -cE 'let _ = ProbeWindow::arm|^[[:space:]]*ProbeWindow::arm\(\);' || true)
-if [ "$narm" = 1 ] && [ "$nsil" = 0 ]; then
-  echo "OK  ProbeWindow::arm bound to a NAMED binding (==1) and never silenced (A-MS47/KS-MS-90-3)"
+if [ "$narm" = 2 ] && [ "$nsil" = 0 ]; then
+  echo "OK  ProbeWindow::arm bound to NAMED bindings (==2: teardown probe + A-DL49 self-census) and never silenced (A-MS47/KS-MS-90-3)"
 else
-  echo "FAIL: ProbeWindow::arm sites named=$narm (want 1) silenced/nude=$nsil (want 0) (A-MS47)"
+  echo "FAIL: ProbeWindow::arm sites named=$narm (want 2) silenced/nude=$nsil (want 0) (A-MS47)"
   FAILS=$((FAILS+1))
 fi
 # A-MS47 clippy half: -D clippy::let_underscore_must_use in the chain —

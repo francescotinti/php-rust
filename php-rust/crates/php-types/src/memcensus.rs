@@ -218,6 +218,31 @@ fn collect_mi_standing() {
     phys_window_dump(0, phys_footprint(), "exit_collect_mi");
 }
 
+/// A-DL49 (Council WP-91, Leijen): the IN-REQUEST census at the PEAK —
+/// workers ALIVE, RetainSet retained. On macOS commit==peak_commit
+/// (A-DL48): any post-workload pre-shutdown snapshot reads the peak
+/// commit; the per-heap/per-bin distribution it captures is the LIVE one
+/// the attribution needs (the win=0 exit census only ever saw the
+/// post-teardown corpse). win=9 is RESERVED for this checkpoint
+/// (ckpt=peak_inreq); the judge pins commit>=0.9*peak_commit (KL-91-3)
+/// and heaps_total against W+1. QUIESCENZA (KS-MS-91-2) is the CALLER's
+/// contract: the campaign asserts zero outstanding requests before
+/// hitting the trigger — the serving thread allocates only outside the
+/// visit (visitors are no-alloc, A-MS50).
+pub fn peak_census_dump(phase: &str) {
+    // `phase` names the campaign checkpoint by NAME (A-BG54/KG-91-2:
+    // extractors select per ckpt, never positionally): ckpt=peak_inreq
+    // for the peak proper, ckpt=peak_inreq_p<phase> for the Δcommitted
+    // phase ladder (A-DL50 braccio 2 — the commit counter is monotone on
+    // macOS, so per-phase deltas are exact, WP-88 lesson).
+    if phase.is_empty() {
+        phys_window_dump(9, phys_footprint(), "peak_inreq");
+    } else {
+        let tag = format!("peak_inreq{phase}");
+        phys_window_dump(9, phys_footprint(), &tag);
+    }
+}
+
 /// WP-67 (probe N={1,100,1000}, L-67.4): a killed `-S` server never reaches
 /// atexit, so the per-request census dump invokes the SAME standing
 /// checkpoint behind `PHPR_MI_COLLECT_REQ=1`. The metro reads the LAST
@@ -1036,17 +1061,48 @@ fn phys_window_dump(win: u32, phys: u64, tag: &str) {
             // are still committed: the page_full_retain (ord 36)
             // candidates, binned by block_size.
             {
-                #[derive(Default)]
-                struct HeapAgg {
+                // A-MS50 (Council WP-91, Matsakis — KS-MS-91-3): the v89
+                // visitors ALLOCATED (Vec::push growth, BTreeMap::entry)
+                // via mimalloc while mi_subproc_visit_heaps enumerated the
+                // heaps and while mi_heap_visit_blocks walked the visiting
+                // thread's own default heap — mutation under C-side
+                // iteration; "it did not crash" is not soundness. v90:
+                // capacity pre-reserved BEFORE the visit (one upfront
+                // reserve, pushes never reallocate), per-heap free-page
+                // bins on the BinTab fixed-slot scheme, capacity overflows
+                // DECLARED in-band, and the &mut re-derivation from `arg`
+                // scoped so no Rust reference lives across the nested
+                // visit (Stacked/Tree Borrows margin).
+                const MAX_THEAPS: usize = 64;
+                struct TheapAgg {
                     pages: usize,
                     committed: usize,
                     used_blocks: usize,
                     free_pages: usize,
                     free_committed: usize,
-                    bins: std::collections::BTreeMap<usize, (usize, usize)>,
+                    bin_size: [usize; N_BINS],
+                    bin_fp: [u32; N_BINS],
+                    bin_fc: [u64; N_BINS],
+                    bin_overflow: u32,
+                }
+                impl TheapAgg {
+                    fn zeroed() -> TheapAgg {
+                        TheapAgg {
+                            pages: 0,
+                            committed: 0,
+                            used_blocks: 0,
+                            free_pages: 0,
+                            free_committed: 0,
+                            bin_size: [0; N_BINS],
+                            bin_fp: [0; N_BINS],
+                            bin_fc: [0; N_BINS],
+                            bin_overflow: 0,
+                        }
+                    }
                 }
                 struct Acc {
-                    heaps: Vec<HeapAgg>,
+                    heaps: Vec<TheapAgg>,   // reserved to MAX_THEAPS BEFORE the visit
+                    heap_overflow: u32,
                 }
                 unsafe extern "C" fn theap_area_cb(
                     _h: *const std::os::raw::c_void,
@@ -1064,9 +1120,20 @@ fn phys_window_dump(win: u32, phys: u64, tag: &str) {
                         if a.used == 0 {
                             h.free_pages += 1;
                             h.free_committed += a.committed;
-                            let e = h.bins.entry(a.block_size).or_insert((0, 0));
-                            e.0 += 1;
-                            e.1 += a.committed;
+                            let key = if a.block_size > 65536 { LARGE_BUCKET } else { a.block_size };
+                            let mut placed = false;
+                            for i in 0..N_BINS {
+                                if h.bin_size[i] == key || h.bin_size[i] == 0 {
+                                    h.bin_size[i] = key;
+                                    h.bin_fp[i] += 1;
+                                    h.bin_fc[i] += a.committed as u64;
+                                    placed = true;
+                                    break;
+                                }
+                            }
+                            if !placed {
+                                h.bin_overflow += 1;
+                            }
                         }
                     }
                     true
@@ -1075,12 +1142,19 @@ fn phys_window_dump(win: u32, phys: u64, tag: &str) {
                     heap: *mut std::os::raw::c_void,
                     arg: *mut std::os::raw::c_void,
                 ) -> bool {
-                    let acc = unsafe { &mut *(arg as *mut Acc) };
-                    acc.heaps.push(HeapAgg::default());
+                    {
+                        let acc = unsafe { &mut *(arg as *mut Acc) };
+                        if acc.heaps.len() == acc.heaps.capacity() {
+                            acc.heap_overflow += 1;
+                            return true;   // declared below, never silent
+                        }
+                        acc.heaps.push(TheapAgg::zeroed());
+                    }   // &mut dropped BEFORE the nested visit (A-MS50)
                     unsafe { mi_heap_visit_blocks(heap, false, theap_area_cb, arg) };
                     true
                 }
-                let mut acc = Acc { heaps: Vec::new() };
+                let mut acc = Acc { heaps: Vec::new(), heap_overflow: 0 };
+                acc.heaps.reserve_exact(MAX_THEAPS);   // the ONLY allocation, pre-visit
                 let vok = unsafe {
                     mi_subproc_visit_heaps(
                         mi_subproc_current(),
@@ -1102,7 +1176,11 @@ fn phys_window_dump(win: u32, phys: u64, tag: &str) {
                         )
                         .as_bytes(),
                     );
-                    for (bs, (fp, fc)) in &h.bins {
+                    for b in 0..N_BINS {
+                        if h.bin_size[b] == 0 {
+                            continue;
+                        }
+                        let (bs, fp, fc) = (h.bin_size[b], h.bin_fp[b], h.bin_fc[b]);
                         let _ = f.write_all(
                             format!(
                                 "pid={pid} tag=mi_theap_bin win={win} ckpt={tag} heap={i} bin={bs} free_pages={fp} free_committed={fc}\n"
@@ -1110,11 +1188,21 @@ fn phys_window_dump(win: u32, phys: u64, tag: &str) {
                             .as_bytes(),
                         );
                     }
+                    if h.bin_overflow > 0 {
+                        let _ = f.write_all(
+                            format!(
+                                "pid={pid} tag=mi_theap_bin win={win} ckpt={tag} heap={i} bin=OVERFLOW areas={} (A-MS50 declared cap)\n",
+                                h.bin_overflow
+                            )
+                            .as_bytes(),
+                        );
+                    }
                 }
                 let _ = f.write_all(
                     format!(
-                        "pid={pid} tag=mi_theap_pages win={win} ckpt={tag} heaps_total={} declared=heap-by-visit-index,win0-postteardown (KL-90-3)\n",
-                        acc.heaps.len()
+                        "pid={pid} tag=mi_theap_pages win={win} ckpt={tag} heaps_total={} heap_overflow={} declared=heap-by-visit-index,noalloc-visitors-A-MS50 (KL-90-3)\n",
+                        acc.heaps.len(),
+                        acc.heap_overflow
                     )
                     .as_bytes(),
                 );

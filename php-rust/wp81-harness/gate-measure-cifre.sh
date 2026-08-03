@@ -293,6 +293,10 @@ push @sources, committed_glob("$mout/m88*"), committed_glob("$here/../wp88-harne
 # S-89.0: the measure89 campaign raws (m89* labels) + verdict89 (per-attempt,
 # per-generation .out) + ds35/ds40 verify pins in wp89-harness
 push @sources, committed_glob("$mout/m89*"), committed_glob("$here/../wp89-harness/*.out");
+# S-90.0: the measure90 campaign raws (m90* labels) + verdict90 (per-attempt,
+# per-generation .out) in wp90-harness — the corpus budget MUST be raised in
+# the same commit that lands these (A-SK61 deliberate-growth discipline)
+push @sources, committed_glob("$mout/m90*"), committed_glob("$here/../wp90-harness/*.out");
 # S-85.0: the measure85 campaign raws (85*/m85* labels) + verdict85 + the
 # wp85 evidence dir
 push @sources, committed_glob("$mout/*85*.summary"), committed_glob("$mout/*85*.census"),

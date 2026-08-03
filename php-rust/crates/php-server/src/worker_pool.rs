@@ -346,7 +346,7 @@ mod implementation {
                     // a broken invariant.
                     let unwind =
                         std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                            let dispatched = Self::worker_loop(ctx, rx);
+                            let dispatched = Self::worker_loop(ctx, rx, worker_idx);
                             // A-PP39 (Council WP-88, Pedersen): the dispatch
                             // row exists on EVERY arm — W123/ABBA ran on the
                             // union arm where the census emission below is
@@ -450,6 +450,7 @@ mod implementation {
         fn worker_loop(
             _context: Arc<WorkerPoolContext>,
             mut rx: mpsc::UnboundedReceiver<WorkerTask>,
+            #[cfg_attr(not(feature = "mem-census"), allow(unused_variables))] worker_idx: usize,
         ) -> u64 {
             // A-PP36 (Council WP-87, Pedersen): per-thread DISPATCH COUNT,
             // returned to the teardown for the in-band census row — a
@@ -504,7 +505,47 @@ mod implementation {
                 // memory, the campaign drains them via the __reqns probe
                 // AFTER the timed window.
                 let req_t0 = req_ns_armed().then(std::time::Instant::now);
-                let (response, status) = execute_request(&reg, &task.meta);
+                let (response, status) = {
+                    // A-DL49 v2 (Council WP-91, requalified LIVE S-90.0):
+                    // the peak census is PER-WORKER SELF — this worker
+                    // walks its OWN default heap from its own thread
+                    // (A-DL31 machinery: probe alloc → mi_heap_of; heap
+                    // pointer in-band, the judge refuses duplicate heaps).
+                    // No cross-thread heap visit exists on this channel
+                    // (KS-MS-91-2 satisfied by construction). Instrument
+                    // discipline as the teardown probe: ProbeWindow +
+                    // catch_unwind + abort (A-MS31/A-MS34/A-MS40).
+                    #[cfg(feature = "mem-census")]
+                    {
+                        if task.meta.path.ends_with("/__census_self") {
+                            let probe_window = ProbeWindow::arm();
+                            let probe = std::panic::catch_unwind(|| {
+                                php_types::memcensus::census_line(&format!(
+                                    "tag=peak_self thr={worker_idx} ckpt=peak_inreq alloc_id={}",
+                                    php_types::memcensus::ALLOC_ID
+                                ));
+                                php_types::memcensus::mi_bin_thread_rows(worker_idx);
+                            });
+                            drop(probe_window); // A-MS40: disarm via Drop
+                            if probe.is_err() {
+                                eprintln!(
+                                    "php-server: census probe panicked — aborting (A-MS31; instrument, not worker)"
+                                );
+                                std::process::abort();
+                            }
+                            (
+                                format!("census-self thr={worker_idx}\n").into_bytes(),
+                                StatusCode::OK,
+                            )
+                        } else {
+                            execute_request(&reg, &task.meta)
+                        }
+                    }
+                    #[cfg(not(feature = "mem-census"))]
+                    {
+                        execute_request(&reg, &task.meta)
+                    }
+                };
                 if let Some(t0) = req_t0 {
                     if let Ok(mut v) = REQ_NS.lock() {
                         v.push(t0.elapsed().as_nanos() as u64);

@@ -234,6 +234,35 @@ mod axum_handler {
             return (StatusCode::OK, format!("reqns-drained n={n}\n").into_bytes());
         }
 
+        // A-DL49 (Council WP-91, Leijen): in-request census at the PEAK —
+        // the campaign hits this AFTER the workload and BEFORE shutdown
+        // (workers alive, RetainSet retained; quiescence asserted by the
+        // caller — KS-MS-91-2). Emits the win=9 ckpt=peak_inreq dump into
+        // $PHPR_MEM_CENSUS (no-op when that env is unarmed). mem-census
+        // builds only; the union/slope binary never carries this branch's
+        // census code (the path check alone is one branch per request,
+        // same class as /__reqns, declared).
+        #[cfg(feature = "mem-census")]
+        if let Some(pos) = request_path.rfind("/__census") {
+            let suffix = &request_path[pos + "/__census".len()..];
+            // "/__census" bare, or "/__census_p<name>" for the Δcommitted
+            // phase ladder — checkpoints named in-band (KG-91-2). The
+            // "_self" suffix is NOT handled here: it dispatches through
+            // the pool (per-worker self census, below).
+            let phase_ok = suffix.is_empty()
+                || (suffix.starts_with("_p")
+                    && suffix.len() <= 16
+                    && suffix[1..].chars().all(|c| c.is_ascii_alphanumeric() || c == '_'));
+            if phase_ok {
+                let w = state.pool.worker_count();
+                php_types::memcensus::peak_census_dump(suffix);
+                return (
+                    StatusCode::OK,
+                    format!("census-dumped win=9 ckpt=peak_inreq{suffix} w={w}\n").into_bytes(),
+                );
+            }
+        }
+
         // A-PP4 (Council WP-80): a panic in the AXUM task used to be caught
         // by tokio — dead task, hung request, LIVE process: the "silently
         // dead" state KS-PP-6 bans, on the dispatcher side. The abort
@@ -244,13 +273,26 @@ mod axum_handler {
             panic!("PHPR_TEST_WORKER_PANIC armed: deliberate dispatcher panic (A-PP4 gate)");
         }
 
+        // A-DL49 v2 (Council WP-91, requalified LIVE in S-90.0): the
+        // per-worker SELF census travels THROUGH the pool so it runs ON a
+        // worker thread (the subproc heap-visit cannot see live foreign
+        // theaps — smoke: heaps_total=1, 42% coverage at peak). W
+        // sequential calls cover the W workers under round-robin; the
+        // judge pins DISTINCT heap pointers, never the order. No
+        // filesystem behind it; union builds fall through to a plain 404.
+        let census_self =
+            cfg!(feature = "mem-census") && request_path.ends_with("/__census_self");
         // Read PHP source from disk (docroot + request_path)
         let file_path = format!("{}{}", state.docroot, request_path);
-        let source = match std::fs::read(&file_path) {
-            Ok(s) => s,
-            Err(e) => {
-                let msg = format!("404: {} ({})\n", file_path, e);
-                return (StatusCode::NOT_FOUND, msg.into_bytes());
+        let source = if census_self {
+            Vec::new()
+        } else {
+            match std::fs::read(&file_path) {
+                Ok(s) => s,
+                Err(e) => {
+                    let msg = format!("404: {} ({})\n", file_path, e);
+                    return (StatusCode::NOT_FOUND, msg.into_bytes());
+                }
             }
         };
 
@@ -267,7 +309,7 @@ mod axum_handler {
         // (FPM's SCRIPT_FILENAME), not the request URI — error banners must
         // carry the same path the oracle renders for full-body cmp.
         let meta = crate::worker_pool::WorkerHandlerMeta {
-            path: file_path.clone(),
+            path: if census_self { "/__census_self".to_string() } else { file_path.clone() },
             source,
         };
 
