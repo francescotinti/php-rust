@@ -1236,11 +1236,17 @@ fi
 # use-group MULTILINE and `use …\n as`; r# on TYPES.
 # DECLARED residuals (out of lexical reach, A-TH53/A-MS27 lane):
 # multi-LINE block comments inside a path, and ident-pasting macros.
-TH49RE_V8='r[#](production_gate|vm_gate|CachedUnit|VmGate)|[.][[:space:]]*[/][*].*[*][/][[:space:]]*(production_gate|vm_gate)|[.](production_gate|vm_gate)[[:space:]]*[/][*].*[*][/][[:space:]]*[(]|=[[:space:]]*([A-Za-z_][A-Za-z0-9_]*)?[[:space:]]*(::[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*)*::[[:space:]]+(r[#])?(CachedUnit|VmGate)|=[[:space:]]*::[[:space:]]*([A-Za-z_][A-Za-z0-9_]*[[:space:]]*::[[:space:]]*)*(r[#])?(CachedUnit|VmGate)|::[[:space:]]*r[#](CachedUnit|VmGate)|use[[:space:]][^;]*[{][^}]*(CachedUnit|VmGate)[[:space:]]+as[[:space:]]'
+# v9 (Council WP-92, Hoare Q1): A-TH-58 adds the SINGLE-LINE `use … as`
+# branch (the most natural spelling was the only uncovered one: the use
+# branch demanded `{`, the awk `next`ed on one-line use, the alias net
+# demanded `=`); A-TH-59 extends the awk with comment/blank tolerance on
+# the DOT branch, the THREE-line split (dot / name / paren) and the
+# trailing-`//` name (the pend rule demanded name at EOL).
+TH49RE_V8='r[#](production_gate|vm_gate|CachedUnit|VmGate)|[.][[:space:]]*[/][*].*[*][/][[:space:]]*(production_gate|vm_gate)|[.](production_gate|vm_gate)[[:space:]]*[/][*].*[*][/][[:space:]]*[(]|=[[:space:]]*([A-Za-z_][A-Za-z0-9_]*)?[[:space:]]*(::[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*)*::[[:space:]]+(r[#])?(CachedUnit|VmGate)|=[[:space:]]*::[[:space:]]*([A-Za-z_][A-Za-z0-9_]*[[:space:]]*::[[:space:]]*)*(r[#])?(CachedUnit|VmGate)|::[[:space:]]*r[#](CachedUnit|VmGate)|use[[:space:]][^;]*[{][^}]*(CachedUnit|VmGate)[[:space:]]+as[[:space:]]|use[[:space:]][^;{]*(CachedUnit|VmGate)[[:space:]]+as[[:space:]]'
 TH49ML_PROG='
-  /[.][[:space:]]*(production_gate|vm_gate)[[:space:]]*$/ { pend=1; dot=0; next }
-  /[.][[:space:]]*$/ { dot=1; pend=0; next }
-  /^[[:space:]]*use[[:space:]]/ && /;[[:space:]]*$/ { pend=0; dot=0; next }
+  /[.][[:space:]]*(production_gate|vm_gate)[[:space:]]*(\/\/.*)?$/ { pend=1; dot=0; nmp=0; next }
+  /[.][[:space:]]*$/ { dot=1; pend=0; nmp=0; next }
+  /^[[:space:]]*use[[:space:]]/ && /;[[:space:]]*$/ { pend=0; dot=0; nmp=0; next }
   /^[[:space:]]*use[[:space:]]/ { useopen=1; seen=0 }
   useopen && /(CachedUnit|VmGate)/ { seen=1 }
   useopen && seen && /[[:space:]]as[[:space:]]/ { n++; seen=0 }
@@ -1248,8 +1254,13 @@ TH49ML_PROG='
   pend && (/^[[:space:]]*\/\// || /^[[:space:]]*$/) { next }
   pend && /^[[:space:]]*[(]/ { n++; pend=0; next }
   { pend=0 }
+  dot && (/^[[:space:]]*\/\// || /^[[:space:]]*$/) { next }
   dot && /^[[:space:]]*(production_gate|vm_gate)[[:space:]]*[(]/ { n++ }
+  dot && /^[[:space:]]*(production_gate|vm_gate)[[:space:]]*(\/\/.*)?$/ { nmp=1; dot=0; next }
   { dot=0 }
+  nmp && (/^[[:space:]]*\/\// || /^[[:space:]]*$/) { next }
+  nmp && /^[[:space:]]*[(]/ { n++ }
+  { nmp=0 }
   END { print n+0 }'
 cat > "$TMPD/decoy_th52.rs" <<'EOF'
 fn h() {
@@ -1273,14 +1284,29 @@ fn h() {
         CachedUnit as MLGroupCU};
     use crate::vm::CachedUnit
         as MLCU;
+    use crate::vm::CachedUnit as CU9;
+    let h1 = u.
+        // comment on the dot path (A-TH-59)
+        vm_gate(x);
+    let h2 = u.
+        vm_gate
+        (x);
+    let h3 = u.production_gate // trailing comment (A-TH-59)
+        (x);
 }
 EOF
 v8n=$(count_nontest "$TMPD/decoy_th52.rs" "$TH49RE_V8")
-v8ml=$(awk "$TH49ML_PROG" "$TMPD/decoy_th52.rs")
-if [ "$v8n" -ne 9 ] || [ "$v8ml" -ne 5 ]; then
-  echo "SELF-TEST BROKEN: A-TH52 decoys against the PRODUCTION regex/awk: single-line=$v8n (want 9) multiline=$v8ml (want 5)"; exit 2
+v8ml=$(awk "$TH49ML_PROG" "$TMPD/decoy_th52.rs" 2>/dev/null)
+# fail-closed on non-numeric: a BROKEN awk program (e.g. an unescaped /
+# inside a bracket class — macOS awk terminates the pattern there) used
+# to print errors and leave the count EMPTY; `[ "" -ne 8 ]` errors with
+# status 2, the || treats it as false, and every ml tooth downstream
+# went VACUOUS silently. A count that is not a number is a broken judge.
+case "${v8n}x${v8ml}" in *[!0-9x]*|x*|*x) echo "SELF-TEST BROKEN: non-numeric decoy counts v8n='$v8n' v8ml='$v8ml' — awk/regex program is broken, gate VOID"; exit 2;; esac
+if [ "$v8n" -ne 10 ] || [ "$v8ml" -ne 8 ]; then
+  echo "SELF-TEST BROKEN: A-TH52/A-TH-58/A-TH-59 decoys against the PRODUCTION regex/awk: single-line=$v8n (want 10) multiline=$v8ml (want 8)"; exit 2
 fi
-echo "OK  self-test: A-TH52 decoys bite through the SINGLE-SOURCE production regex (9 single-line + 5 multiline)"
+echo "OK  self-test: A-TH52 v9 decoys bite through the SINGLE-SOURCE production regex (10 single-line + 8 multiline — A-TH-58 one-line use-as, A-TH-59 dot-comment/three-line/trailing-comment)"
 TH52_SWEEP=$(find "$REPO/crates" -name '*.rs' ! -name '._*' -print0 |
   while IFS= read -r -d '' f; do
     n=$(count_nontest "$f" "$TH49RE_V8")
@@ -1386,6 +1412,85 @@ else
   FAILS=$((FAILS+1))
 fi
 
+# --- 10. Sigilli v9 (Council WP-92: A-TH-57..61 + quinta rete A-MS48 + A-TH53)
+# A-TH-57 (KS-TH-92-1) — census TOTALE dei siti arm, in forma PREFISSO:
+# narm counts only `let <nome> = ProbeWindow::arm()` — a third site
+# spelled `let mut w =`, `let w: ProbeWindow =`, `let (w,_) =`,
+# `drop(ProbeWindow::arm())` or in expression position was invisible to
+# narm AND nsil (the pin bit on converting the 2 known sites, not on
+# adding one). ntot counts EVERY code-line occurrence of the PREFIX
+# `ProbeWindow::arm` (no parens — SEQUENCE CONSTRAINT, team-sigilli: a
+# future `arm(&'static str)` signature (A-MS-52, design) would break an
+# empty-paren pin; the prefix census survives it; narm's own regex must
+# be updated in the SAME commit as any signature change).
+ntot=$(grep -vE '^[[:space:]]*(//|#\[)' "$WPOOL" | grep -c 'ProbeWindow::arm' || true)
+if [ "$ntot" = 2 ] && [ "$ntot" = "$narm" ]; then
+  echo "OK  ProbeWindow::arm TOTAL census (prefix form) ==2 == narm (A-TH-57/KS-TH-92-1)"
+else
+  echo "FAIL: ProbeWindow::arm total census ntot=$ntot (want 2, == narm=$narm) — an arm site invisible to the named-binding pin exists (A-TH-57/KS-TH-92-1: campaign figures with probe VOID)"
+  FAILS=$((FAILS+1))
+fi
+
+# Quinta rete A-MS48 (Hoare Q2.2, WP-92): point-free `with(Cell::set)`,
+# closure calling `Cell::set(f, true)`, and BRACED closure body
+# `|f| { f.set(true) }` evaded the four v8 nets (anybind demands
+# `|b| b.set`; UFCS demands `LocalKey::`). Same-commit decoys.
+MS48_NET5='CENSUS_PROBE_ACTIVE[^;]*Cell[[:space:]]*::[[:space:]]*(set|replace|update|take|swap)|CENSUS_PROBE_ACTIVE[[:space:]]*\.[[:space:]]*with[[:space:]]*[(][|][A-Za-z_][A-Za-z0-9_]*[|][[:space:]]*[{][[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\.[[:space:]]*(set|replace|update|take|swap)'
+cat > "$TMPD/decoy_ms48v9.rs" <<'EOF'
+fn h() {
+    CENSUS_PROBE_ACTIVE.with(Cell::set);
+    CENSUS_PROBE_ACTIVE.with(|f| Cell::set(f, true));
+    CENSUS_PROBE_ACTIVE.with(|f| { f.set(true) });
+}
+EOF
+d5=$(grep -cE "$MS48_NET5" "$TMPD/decoy_ms48v9.rs" || true)
+if [ "$d5" -ne 3 ]; then
+  echo "SELF-TEST BROKEN: A-MS48 fifth-net decoys point-free/Cell-call/braced=$d5 (want 3)"; exit 2
+fi
+echo "OK  self-test: A-MS48 fifth net bites (point-free, Cell-call, braced body)"
+n5=$(grep -cE "$MS48_NET5" "$WPOOL" || true)
+if [ "$n5" = 0 ]; then
+  echo "OK  probe-flag fifth-net graphies ==0 in production (A-MS48 v9)"
+else
+  echo "FAIL: probe-flag fifth-net graphy found in worker_pool ($n5) (A-MS48 v9)"
+  FAILS=$((FAILS+1))
+fi
+
+# A-TH-60 (KS-TH-92-2) — probe_in DEFINITION census in ANY spelling:
+# npdef counted only column-0 `probe_in()`; an INDENTED redefinition or a
+# `function probe_in {` form after the decoy passed npdef==1 while bash
+# used the LAST (gutted) definition. Call sites start with `if` and do
+# not match the anchored definition census (verified on the real file).
+npdef2=$(grep -cE '^[[:space:]]*(function[[:space:]]+)?probe_in' "$NOPROBE" || true)
+if [ "$npdef2" = 1 ]; then
+  echo "OK  noprobe probe_in DEFINITION census ==1 in any spelling (A-TH-60/KS-TH-92-2)"
+else
+  echo "FAIL: noprobe probe_in definition census ==$npdef2, want 1 — indented/function-form redefinition (A-TH-60/KS-TH-92-2: VERDICTs leaning on noprobe VOID)"
+  FAILS=$((FAILS+1))
+fi
+
+# A-TH53 (design90, attuazione v9) — ident-pasting macros are beyond ANY
+# lexical seal (grafia 7): pin ==0 occurrences of paste/concat_idents in
+# the Cargo.toml of the two probe-bearing crates until A-MS27 (rustc as
+# judge) closes the lane for real. Lexical limit DECLARED, not closed.
+npaste=$(grep -cE 'paste|concat_idents' "$REPO/crates/php-runtime/Cargo.toml" "$REPO/crates/php-server/Cargo.toml" 2>/dev/null | awk -F: '{s+=$2} END{print s+0}')
+if [ "$npaste" = 0 ]; then
+  echo "OK  no paste/concat_idents in php-runtime/php-server Cargo.toml (A-TH53 pin; closure = A-MS27)"
+else
+  echo "FAIL: paste/concat_idents occurrence(s) in probe-crate Cargo.toml ($npaste) (A-TH53)"
+  FAILS=$((FAILS+1))
+fi
+
+# A-TH-61 — the TLS doc carries the THIRD state (never-initialized at
+# teardown) and the lost-write channel; presence-pinned like A-PP48.
+nth61=$(grep -c 'A-TH-61' "$REPO/crates/php-runtime/src/vm/mod.rs" || true)
+if [ "$nth61" -ge 1 ]; then
+  echo "OK  vm/mod.rs TLS doc carries the A-TH-61 emendation (third state + lost write)"
+else
+  echo "FAIL: A-TH-61 emendation absent from the vm/mod.rs TLS doc"
+  FAILS=$((FAILS+1))
+fi
+
 # A-PP52 belt note: the external npfail==2 counter lives in
 # gate-axum-tests.sh (the armed-UCL consumer); here we only pin that the
 # tooth exists there — a gutting of that gate's counter dies here.
@@ -1398,7 +1503,7 @@ else
 fi
 
 if [ "$FAILS" = 0 ]; then
-  echo "== GATE-LEVER-PINS PASS (A-MS13 + A-PP16 + KS-PP-82-3 + A-TH14 + v5 A-TH41/42 + v6 A-TH44/45 A-MS41 + v7 A-TH48/49 A-MS43/44/45 A-PP48 + v8 A-TH52/56 A-MS47/48) [git $GIT_REV] =="
+  echo "== GATE-LEVER-PINS PASS (A-MS13 + A-PP16 + KS-PP-82-3 + A-TH14 + v5 A-TH41/42 + v6 A-TH44/45 A-MS41 + v7 A-TH48/49 A-MS43/44/45 A-PP48 + v8 A-TH52/56 A-MS47/48 + v9 A-TH-57/58/59/60/61 A-MS48-net5 A-TH53) [git $GIT_REV] =="
   exit 0
 else
   echo "== GATE-LEVER-PINS FAIL($FAILS) [git $GIT_REV] =="

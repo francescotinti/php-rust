@@ -16545,14 +16545,23 @@ struct UcEmitGuard;
 // destructor has ALREADY run; in the other order those keys are still
 // alive and the put COMPLETES SILENTLY, guard armed and disarmed
 // regularly (KH91-1: any claim of a deterministic fail-fast on this
-// path is VOID). os-TLS caveat: on the fallback path (platforms without
-// `target_thread_local`) even these no-Drop keys register a destructor
-// that frees their box, so `with` can panic for them too after
-// teardown. The guard's Drop cannot panic via this path (no-Drop key),
-// so the previously declared panic-in-panic abort is UNREACHABLE by
-// that route (KH90-2: any fail-fast claim built on the pre-A-TH50
-// wording is VOID). The REAL seal is unchanged: no production put site
-// runs from a TLS destructor today.
+// path is VOID). A-TH-61 (Council WP-92, Hoare — the A-TH54 dichotomy
+// omitted a THIRD state): a RefCell key NEVER INITIALIZED on that
+// thread — first access DURING teardown triggers the lazy init, and std
+// does NOT guarantee the outcome (init with a destructor that may never
+// run, or panic, per platform): the enumeration is
+// already-destroyed / still-alive / never-initialized-at-teardown.
+// And the silent path is not only a missed panic: a put that COMPLETES
+// during teardown emits uc_log into a TLS buffer that dies WITHOUT
+// flush — a LOST-WRITE channel (the row never reaches any reader), not
+// a mere absence of fail-fast. os-TLS caveat: on the fallback path
+// (platforms without `target_thread_local`) even these no-Drop keys
+// register a destructor that frees their box, so `with` can panic for
+// them too after teardown. The guard's Drop cannot panic via this path
+// (no-Drop key), so the previously declared panic-in-panic abort is
+// UNREACHABLE by that route (KH90-2: any fail-fast claim built on the
+// pre-A-TH50 wording is VOID). The REAL seal is unchanged: no
+// production put site runs from a TLS destructor today.
 impl UcEmitGuard {
     fn arm() -> UcEmitGuard {
         UC_EMIT_GUARD.with(|g| {
