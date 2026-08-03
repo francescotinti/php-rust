@@ -1,0 +1,33 @@
+pair94: la COPPIA FULL stessa-sera di S-94.0 (oracle vs phpr) — PRIMA misura dopo otto sessioni
+grade=VERDICT  # coppia stessa-sera, stesso metodo di GAP_TREND, ordine oracle-prima, R=1 per gamba (e il metodo ricorrente, non un probe)
+formato=ascii-nudo  # A-BG66: nessun separatore di migliaia
+metodo=/usr/bin/time -l, MIMALLOC_PURGE_DELAY=0, DB wptests ricreato e uploads azzerati PRIMA DI OGNI run (guardia Gregg R7)
+head=93721a5870ea
+phpr=d5ce86e3342f3926  # PIN BASELINE INVARIATO (mai ricompilato in S-94.0)
+oracle=PHP 8.5.7 (cli) (built: Jun 2 2026 20:59:56) (NTS)
+rustc=1.96.0 ac68faa20 2026-05-25 aarch64-apple-darwin
+epoch=1785799229
+uploads=backup uploads-20260804-012029.tar.gz, restore verificato count=3
+
+== media group (762 test, 1912 assertions, 52 skipped — IDENTICI sui due lati) ==
+media-oracle real=35.06 user=21.03 sys=2.74 max_rss=402292736 peak_footprint=346325904
+media-phpr   real=72.24 user=55.50 sys=5.41 max_rss=1027964928 peak_footprint=1170785648
+
+== full suite (30472 test, 4558029 assertions, 86 warnings, 73 skipped — IDENTICI sui due lati) ==
+full-oracle real=579.89 user=421.51 sys=26.33 max_rss=817790976 peak_footprint=745637040 failures=1
+full-phpr   real=1007.93 user=796.78 sys=41.81 max_rss=1623867392 peak_footprint=1993459800 failures=2
+
+== failure PER NOME (mai per conteggio) ==
+comune-a-entrambi=Tests_Admin_wpPostsListTable::test_search_hierarchical_pages_first_page
+  # presente ANCHE sull'oracle: non e una divergenza phpr
+solo-phpr=Tests_Functions::test_wp_is_stream (data set #2 'ftp://example.com')
+  causa NOMINATA: stream_get_wrappers() di phpr non elenca ftp
+  oracle=compress.bzip2,compress.zlib,data,file,ftp,ftps,glob,http,https,phar,php,zip
+  phpr=data,file,http,https,php
+  lettura=correct-or-absent: i wrapper non implementati non sono dichiarati (onesto),
+    ma wp_is_stream interroga la LISTA, quindi la reticenza diventa una divergenza osservabile
+
+== nota di metodo ==
+le full escono rc=1 su ENTRAMBI i lati (la suite WordPress fallisce anche sull'oracle):
+il rc del runner NON e il giudice della coppia — lo sono i conteggi identici e i due
+nomi qui sopra.

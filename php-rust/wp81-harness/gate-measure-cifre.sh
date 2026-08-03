@@ -772,6 +772,12 @@ push @sources, committed_glob("$here/../wp92-harness/*.out");
 # request; LEVER-2 refuted with measure) — budget raised in the SAME
 # commit (A-SK61 deliberate-growth discipline)
 push @sources, committed_glob("$here/../wp93-harness/*.out");
+# S-94.0: the wp94 machine outputs — the same-evening FULL PAIR (pair94.out:
+# the first full/media measurement after eight sessions, Council WP-95 order)
+# and the A1 forge reproduction. The corpus budget is raised in the SAME
+# commit that adds this glob (A-SK61/A-SK-77: the CURRENT value is the
+# authority, its history is out of the corpus).
+push @sources, committed_glob("$here/../wp94-harness/*.out");
 # S-85.0: the measure85 campaign raws (85*/m85* labels) + verdict85 + the
 # wp85 evidence dir
 push @sources, committed_glob("$mout/*85*.summary"), committed_glob("$mout/*85*.census"),
