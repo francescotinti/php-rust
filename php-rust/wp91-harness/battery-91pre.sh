@@ -55,7 +55,23 @@ out_sha() { shasum -a 256 "$OUTF" | cut -d' ' -f1; }
 # ABORT writer=operator with the partial-OUT anchor (A-AH59), never leave
 # the ledger silent (the S-90.0 ABORT was a hand-written row).
 on_signal() {
-  att_row "esito=ABORT reason=signal writer=operator sha256=$(out_sha)"
+  # A-AH62 (Council WP-93, Hejlsberg): the trap can fire AFTER a
+  # mid-battery HEAD move — reason=signal alone would MASK it (the row
+  # prints rev=$GIT_REV of the START). The head state is checked HERE too
+  # and lands ON the row (inline, never the recursive assert: the trap is
+  # the last writer).
+  local now reason gif defer
+  now="$(git -C "$REPO" rev-parse --short HEAD 2>/dev/null)"
+  reason="signal"
+  [ "$now" != "$GIT_REV" ] && reason="signal+head-moved:$GIT_REV-to-$now"
+  # A-PP-68 (Council WP-93, Pedersen): bash DEFERS traps while a foreground
+  # gate runs — an "aborted" battery may have COMPLETED its gate before the
+  # trap fired. The temporal semantics is a FIELD, not a convention:
+  # gate_in_flight names the gate the signal landed on (none = between
+  # gates), deferred=1 says the trap ran at gate end (KS-PP-93-2).
+  gif="${GATE_IN_FLIGHT:-none}"; defer=0
+  [ "$gif" != none ] && defer=1
+  att_row "esito=ABORT reason=$reason gate_in_flight=$gif deferred=$defer writer=operator sha256=$(out_sha)"
   exit 1
 }
 trap on_signal INT TERM HUP
@@ -65,15 +81,19 @@ assert_head_unmoved() {
   local now; now="$(git -C "$REPO" rev-parse --short HEAD)"
   if [ "$now" != "$GIT_REV" ]; then
     say "ABORT: HEAD moved mid-battery ($GIT_REV -> $now) — battery VOID (A-AH58)"
-    att_row "esito=ABORT reason=head-moved writer=operator sha256=$(out_sha)"
+    att_row "esito=ABORT reason=head-moved gate_in_flight=${GATE_IN_FLIGHT:-none} deferred=0 writer=operator sha256=$(out_sha)"
     exit 1
   fi
 }
+GATE_IN_FLIGHT=""
 
 DIRTY="$(git -C "$REPO" status --porcelain 2>/dev/null)"
 if [ -n "$DIRTY" ]; then
   say "FAIL: tree not porcelain at battery start — battery VOID (A-SK42/KS-SK-87-1):"
   echo "$DIRTY" | head -10 | tee -a "$OUTF"
+  # A-AH62 (Council WP-93): the head-move check runs before EVERY terminal
+  # row — the delibera says OGNI, the code said "before PASS/FAIL only".
+  assert_head_unmoved
   say "== BATTERY-91PRE REFUSED git=$GIT_REV =="
   att_row "esito=REFUSE reason=tree-not-porcelain sha256=$(out_sha)"
   exit 1
@@ -83,6 +103,9 @@ say "== battery-91pre git=$GIT_REV =="
 run_gate() { # <label> <cmd...>
   local label="$1"; shift
   TOTAL=$((TOTAL+1))
+  # A-PP-68: the trap reads this to stamp gate_in_flight=/deferred= on the
+  # ABORT row (bash defers traps while the foreground gate runs).
+  GATE_IN_FLIGHT="$label"
   say "== $label =="
   if "$@" > "$W/$label.log" 2>&1; then
     say "OK  $label ($(tail -1 "$W/$label.log"))"
@@ -90,6 +113,7 @@ run_gate() { # <label> <cmd...>
     say "FAIL $label:"; tail -5 "$W/$label.log" | tee -a "$OUTF"
     FAILS=$((FAILS+1))
   fi
+  GATE_IN_FLIGHT=""
 }
 
 MTXDIR="$REPO/wp78-harness/matrix-archive"
@@ -112,6 +136,9 @@ run_gate dr1              bash "$REPO/wp80-harness/gate-dr1-module-immut.sh"
 run_gate lever-pins       bash "$REPO/wp81-harness/gate-lever-pins.sh"
 run_gate lever-fixtures   bash "$REPO/wp81-harness/gate-lever-fixtures.sh"
 run_gate lever-fixtures2  bash "$REPO/wp81-harness/gate-lever-fixtures2.sh"
+# A-AH63 (Council WP-93): the campaign-v2 grammar checker bites on its own
+# harness in every battery — the pre-birth tooth for any m91+ ledger.
+run_gate campaign-v2      bash "$REPO/wp91-harness/check-campaign-v2.sh" --selftest
 run_gate measure-cifre    bash "$REPO/wp81-harness/gate-measure-cifre.sh" --all
 # A-SK-79/KS-SK-93-4 (Council WP-93): rc=0 alone no longer closes the cifre
 # row — the log must carry the VERDICT-grade PASS line signed judge_sha=

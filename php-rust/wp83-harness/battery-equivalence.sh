@@ -292,6 +292,66 @@ done
 # KS-SK-85-2: every equivalence of the chain VOID).
 # v5 A-SK46: same-rev consumption is NOT an equivalence — tooth (iii) and
 # the append do not apply; the verdict line names the mode.
+# A-AH61 (Council WP-93, Hejlsberg — KS-AH-93-1): the attempts discipline
+# (A-AH50/54 PASS-row + triangle, A-AH58/59 grammar v2) used to live ONLY
+# inside the --same-rev branch: a consumption in EQUIVALENCE mode of a 9x
+# battery skipped writer=, anchors and the attempts triangle — «la
+# delibera dice alla consumazione, il codice diceva alla consumazione
+# same-rev». Hoisted HERE so BOTH consumption paths bite.
+# A-AH50≡A-BG49 (Council WP-90, KS-AH-90-1/KG-90-1): the consumed PASS
+# must have its own row in the COMMITTED battery-attempts ledger — an
+# attempt that left no in-band row makes this PASS non-consumable.
+# Scoped to 89pre+ batteries (the ledger was born at WP-89; historical
+# 88pre verdicts stand as judged, they are never re-consumed).
+ATTL_REL="wp83-harness/evidence/battery-attempts.ledger"
+BATTERY_NAME=$(basename "$OUT" .out)
+case "$BATTERY_NAME" in
+  battery-8[0-8]*) : ;;  # pre-ledger batteries, declared exempt
+  *)
+    NATT=$(git -C "$REPO" show "HEAD:${GITPREFIX}${ATTL_REL}" 2>/dev/null | grep -c "battery=${BATTERY_NAME#battery-} rev=$BREV .*esito=PASS" || true)
+    if [ "$NATT" -lt 1 ]; then
+      fail "(A-AH50/KS-AH-90-1) no committed esito=PASS row for $BATTERY_NAME rev=$BREV in battery-attempts.ledger — attempt not in-band, PASS non-consumable"
+    else
+      # A-AH54 triangle (Council WP-91, Hejlsberg — KS-AH-91-1): the
+      # consumed PASS row must carry sha256 == DSHA (the stamp's
+      # sha256(OUT), itself recomputed against OUT above): the
+      # attempts↔stamp↔OUT triangle closes — a fabricated PASS row
+      # with a foreign or absent sha no longer feeds the tooth.
+      NATT_SHA=$(git -C "$REPO" show "HEAD:${GITPREFIX}${ATTL_REL}" 2>/dev/null | grep -c "battery=${BATTERY_NAME#battery-} rev=$BREV .*esito=PASS.*sha256=${DSHA:-__nodsha__}" || true)
+      if [ "$NATT_SHA" -lt 1 ]; then
+        fail "(A-AH54/KS-AH-91-1) committed PASS row for $BATTERY_NAME rev=$BREV carries NO sha256==DSHA($DSHA) — attempts↔stamp↔OUT triangle open, consumption VOID"
+      fi
+    fi
+    ;;
+esac
+# A-AH58/A-AH59 (Council WP-92, DELIBERA UNICA di formato ledger —
+# wp91-harness/design91-ledger.md): grammar v2 enforced on 91pre+
+# batteries, ALL rows of the battery family (KS-AH-92-1/2). 89pre/90pre
+# rows stand as written (grammar v1, declared — history is never
+# re-graded). A-AH61: the family pattern covers 3-digit batteries too
+# (battery-9[1-9]* left 100pre+ out of the discipline by name).
+case "$BATTERY_NAME" in
+  battery-9[1-9]*|battery-[1-9][0-9][0-9]*)
+    BNAME="${BATTERY_NAME#battery-}"
+    V2ROWS=$(git -C "$REPO" show "HEAD:${GITPREFIX}${ATTL_REL}" 2>/dev/null | grep "battery=$BNAME " || true)
+    if [ -n "$V2ROWS" ]; then
+      BADW=$(printf '%s\n' "$V2ROWS" | grep -cvE "writer=(script:[0-9a-f]{16}|operator)( |$)" || true)
+      [ "$BADW" -gt 0 ] && fail "(A-AH58/KS-AH-92-1) $BADW attempts row(s) for battery=$BNAME without a valid writer= — consumption VOID"
+      BADA=$(printf '%s\n' "$V2ROWS" | grep "esito=ABORT" | grep -cv "writer=operator" || true)
+      [ "$BADA" -gt 0 ] && fail "(A-AH58/KS-AH-92-1) $BADA esito=ABORT row(s) without writer=operator — an ABORT is an operator act"
+      BADE=$(printf '%s\n' "$V2ROWS" | grep -cvE "esito=(PASS|FAIL|REFUSE|ABORT)( |$)" || true)
+      [ "$BADE" -gt 0 ] && fail "(A-AH58) $BADE row(s) with esito outside {PASS,FAIL,REFUSE,ABORT}"
+      # A-AH61: sha256 ANCHORED — the unanchored {64} accepted 65 hex.
+      BADS=$(printf '%s\n' "$V2ROWS" | grep -E "esito=(FAIL|REFUSE|ABORT)" | grep -cvE "sha256=[0-9a-f]{64}( |\$)" || true)
+      [ "$BADS" -gt 0 ] && fail "(A-AH59/KS-AH-92-2) $BADS FAIL/REFUSE/ABORT row(s) without a sha256 OUT anchor — battery VOID (never 'assente con motivo')"
+      # A-PP-68 (Council WP-93, KS-PP-93-2): the trap's temporal semantics
+      # is a FIELD — an ABORT row without gate_in_flight=/deferred= is VOID.
+      BADG=$(printf '%s\n' "$V2ROWS" | grep "esito=ABORT" | grep -cvE "gate_in_flight=[^ ]+ deferred=[01]( |\$)" || true)
+      [ "$BADG" -gt 0 ] && fail "(A-PP-68/KS-PP-93-2) $BADG esito=ABORT row(s) without gate_in_flight=/deferred= fields"
+    fi
+    ;;
+esac
+
 if [ "$SAME_REV" = 1 ]; then
   # v6 A-SK50 (Council WP-89, Klabnik — tooth (i-bis)): the evidence-only
   # window BREV..HEAD was BLIND on three surfaces: the checker itself, the
@@ -354,54 +414,8 @@ if [ "$SAME_REV" = 1 ]; then
   elif [ -n "$AL_OLD" ] && [ -n "$AL_REM" ] && [ "${AL_REM#$'\n'}" = "$AL_REM" ]; then
     fail "(A-AH54) attempts-ledger delta EXTENDS the last committed row — row-granularity append violated (KS-AH-91-1)"
   fi
-  # A-AH50≡A-BG49 (Council WP-90, KS-AH-90-1/KG-90-1): the consumed PASS
-  # must have its own row in the COMMITTED battery-attempts ledger — an
-  # attempt that left no in-band row makes this PASS non-consumable.
-  # Scoped to 89pre+ batteries (the ledger was born at WP-89; historical
-  # 88pre verdicts stand as judged, they are never re-consumed).
-  ATTL_REL="wp83-harness/evidence/battery-attempts.ledger"
-  BATTERY_NAME=$(basename "$OUT" .out)
-  case "$BATTERY_NAME" in
-    battery-8[0-8]*) : ;;  # pre-ledger batteries, declared exempt
-    *)
-      NATT=$(git -C "$REPO" show "HEAD:${GITPREFIX}${ATTL_REL}" 2>/dev/null | grep -c "battery=${BATTERY_NAME#battery-} rev=$BREV .*esito=PASS" || true)
-      if [ "$NATT" -lt 1 ]; then
-        fail "(A-AH50/KS-AH-90-1) no committed esito=PASS row for $BATTERY_NAME rev=$BREV in battery-attempts.ledger — attempt not in-band, PASS non-consumable"
-      else
-        # A-AH54 triangle (Council WP-91, Hejlsberg — KS-AH-91-1): the
-        # consumed PASS row must carry sha256 == DSHA (the stamp's
-        # sha256(OUT), itself recomputed against OUT above): the
-        # attempts↔stamp↔OUT triangle closes — a fabricated PASS row
-        # with a foreign or absent sha no longer feeds the tooth.
-        NATT_SHA=$(git -C "$REPO" show "HEAD:${GITPREFIX}${ATTL_REL}" 2>/dev/null | grep -c "battery=${BATTERY_NAME#battery-} rev=$BREV .*esito=PASS.*sha256=${DSHA:-__nodsha__}" || true)
-        if [ "$NATT_SHA" -lt 1 ]; then
-          fail "(A-AH54/KS-AH-91-1) committed PASS row for $BATTERY_NAME rev=$BREV carries NO sha256==DSHA($DSHA) — attempts↔stamp↔OUT triangle open, consumption VOID"
-        fi
-      fi
-      ;;
-  esac
-  # A-AH58/A-AH59 (Council WP-92, DELIBERA UNICA di formato ledger —
-  # wp91-harness/design91-ledger.md): grammar v2 enforced on 91pre+
-  # batteries, ALL rows of the battery family (KS-AH-92-1/2). 89pre/90pre
-  # rows stand as written (grammar v1, declared — history is never
-  # re-graded). Checker updated in the SAME commit as the delibera (T5
-  # team-cifre: one format revision, not three).
-  case "$BATTERY_NAME" in
-    battery-9[1-9]*)
-      BNAME="${BATTERY_NAME#battery-}"
-      V2ROWS=$(git -C "$REPO" show "HEAD:${GITPREFIX}${ATTL_REL}" 2>/dev/null | grep "battery=$BNAME " || true)
-      if [ -n "$V2ROWS" ]; then
-        BADW=$(printf '%s\n' "$V2ROWS" | grep -cvE "writer=(script:[0-9a-f]{16}|operator)( |$)" || true)
-        [ "$BADW" -gt 0 ] && fail "(A-AH58/KS-AH-92-1) $BADW attempts row(s) for battery=$BNAME without a valid writer= — consumption VOID"
-        BADA=$(printf '%s\n' "$V2ROWS" | grep "esito=ABORT" | grep -cv "writer=operator" || true)
-        [ "$BADA" -gt 0 ] && fail "(A-AH58/KS-AH-92-1) $BADA esito=ABORT row(s) without writer=operator — an ABORT is an operator act"
-        BADE=$(printf '%s\n' "$V2ROWS" | grep -cvE "esito=(PASS|FAIL|REFUSE|ABORT)( |$)" || true)
-        [ "$BADE" -gt 0 ] && fail "(A-AH58) $BADE row(s) with esito outside {PASS,FAIL,REFUSE,ABORT}"
-        BADS=$(printf '%s\n' "$V2ROWS" | grep -E "esito=(FAIL|REFUSE|ABORT)" | grep -cvE "sha256=[0-9a-f]{64}" || true)
-        [ "$BADS" -gt 0 ] && fail "(A-AH59/KS-AH-92-2) $BADS FAIL/REFUSE/ABORT row(s) without a sha256 OUT anchor — battery VOID (never 'assente con motivo')"
-      fi
-      ;;
-  esac
+  # (A-AH61: the attempts discipline — A-AH50/54 + grammar v2 — is HOISTED
+  # above the branch: it bites on BOTH consumption paths now.)
   if [ "$FAILS" = 0 ]; then
     echo "== SAME-REV CONSUMPTION LEGAL (battery at $BREV == HEAD, v6 teeth verified: anchored PASS, sha256(OUT), 4-field committed stamp, committed matrix, toolchain -Vv in-repo, window allowlist + ledger-prefix A-SK50) =="
     exit 0

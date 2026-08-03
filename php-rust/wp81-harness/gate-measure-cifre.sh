@@ -513,6 +513,36 @@ for my $tok (sort keys %ALLOW_AUTH) {
 # to legalize any figure (KS-SK-90-1).
 my @headtree = split /\n/, qx(git -C "$root" ls-tree -r --name-only HEAD);
 my %headset = map { $_ => 1 } @headtree;
+
+# ---- A-AH63 (Council WP-93, Hejlsberg): campaign grammar v2 PRE-BIRTH
+# tooth. Any committed m9[1-9]+ campaign ledger is validated against the
+# v2 checker BEFORE anything of that campaign is consumed (corpus tokens,
+# supersession proofs): ONE non-conformant row voids the whole campaign
+# (KS-AH-93-2). Both the LEDGER and the CHECKER run from their HEAD blobs
+# — a patched working-tree checker judges nothing (same authority
+# discipline as A-SK-67/A-SK-78).
+{
+  my $CHECKER_REL = "php-rust/wp91-harness/check-campaign-v2.sh";
+  my @v2ledgers = grep { m{^php-rust/wp78-harness/measure-out/m9[1-9]\d*\.campaign\.ledger$} } @headtree;
+  if (@v2ledgers) {
+    if (!$headset{$CHECKER_REL}) {
+      print "FAIL gate-measure-cifre: m91+ campaign ledger at HEAD but checker $CHECKER_REL NOT committed (A-AH63)\n";
+      exit 1;
+    }
+    my $tdir = qx(mktemp -d); chomp $tdir;
+    qx(git -C "$root" show "HEAD:$CHECKER_REL" > "$tdir/chk.sh");
+    for my $lg (@v2ledgers) {
+      qx(git -C "$root" show "HEAD:$lg" > "$tdir/l.ledger");
+      my $rc = system('bash', "$tdir/chk.sh", "$tdir/l.ledger");
+      if ($rc != 0) {
+        qx(rm -rf "$tdir");
+        print "FAIL gate-measure-cifre: campaign ledger $lg violates grammar v2 (A-AH63/KS-AH-93-2) — campagna VOID alla consumazione\n";
+        exit 1;
+      }
+    }
+    qx(rm -rf "$tdir");
+  }
+}
 sub committed_glob {
   my ($absglob) = @_;
   my $pat = $absglob;
@@ -582,8 +612,32 @@ for my $s (@sources) {
     $gen_max{$k} = $g if !exists $gen_max{$k} || $g > $gen_max{$k};
   }
 }
+# A-AH64 (Council WP-93, Hejlsberg): the corpus admits the MAX generation
+# ONLY with a committed esito=PASS row in its campaign ledger — the old
+# filter kept "max by number G" with no outcome check: a campaign ending
+# in an unsuperseded FAIL would have legalized its figures as truth
+# (max-FAIL = history, never truth — KS-AH-93-3). Families with NO
+# campaign ledger at HEAD predate the ledger era and stand as judged
+# (declared; today m88/m89/m90 all carry their PASS rows, verified).
+my %max_unproven;
+for my $k (keys %gen_max) {
+  my ($dir, $nn, $a) = split /\|/, $k;
+  my $lrel = "php-rust/wp78-harness/measure-out/m$nn.campaign.ledger";
+  next unless $headset{$lrel};
+  my $g = $gen_max{$k};
+  my $ok = 0;
+  for my $l (head_content($lrel)) {
+    $l =~ s/\0//g;
+    next unless $l =~ /esito=PASS\b/;
+    if ($l =~ /generation=g$g\b/ || $l =~ /verdict\Q$nn\E\.a\Q$a\E\.g\Q$g\E\.out/) { $ok = 1; last }
+  }
+  if (!$ok) {
+    $max_unproven{$k} = 1;
+    print "NOTE: verdict$nn.a$a.g$g is MAX by number but has NO committed esito=PASS ledger row — its figures are OUT of the corpus (A-AH64/KS-AH-93-3: max-FAIL is history, never truth)\n";
+  }
+}
 @sources = grep {
-  !(m{^(.*/)verdict(\d+)\.a(\d+)\.g(\d+)\.out$} && $4 < $gen_max{"$1|$2|$3"})
+  !(m{^(.*/)verdict(\d+)\.a(\d+)\.g(\d+)\.out$} && ($4 < $gen_max{"$1|$2|$3"} || $max_unproven{"$1|$2|$3"}))
 } @sources;
 # A-SK-73 (Council WP-92): the prov operand pool IS the corpus source set —
 # governed by the same committed A-SK61 budget. Before this, any figure on
