@@ -22,6 +22,10 @@ pub mod hir;
 pub mod json;
 pub mod logging;
 pub mod lower;
+// A-DS51 fase 1 (Council WP-92): PURE model of the Zend inheritance /
+// Liskov signature checks over hand-built signature models. NOT WIRED —
+// nothing calls it yet; fase 2 does the wiring.
+pub mod lsp_check;
 pub mod vm;
 
 // WP-77.6 Phase B: Expose Vm construction for worker-pool integration.
