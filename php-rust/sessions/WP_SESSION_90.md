@@ -118,3 +118,18 @@ parity-full 16/16) · campagna m90 a bb4b388 attempt=1 · mem-census
   net per-thread** (P-CLAMP-PD lo rimette in cima).
 - **Design invariati**: A-MS46/A-TH53/A-TH55 (design90) · A-BB60/A-PP49
   (design89) · A-MS27/A-PP18/A-PP27/A-AH38 (backlog).
+
+## ⚖️ Concilio WP-92 (eseguito in chiusura, verbali VINCOLANTI)
+
+9× CON EMENDAMENTI, 0 opposizioni; 22 KS nuovi. QUATTRO refutazioni
+capitali morse a macchina: (1) **quattro forge PASSATI dal gate cifre
+vivo** — la classe A-SK56 NON è chiusa (prov re-legalizza con chiusura
+46,25%, legacy_frozen da manifest working-tree, cache avvelenabile
+dall'invocante, 43 cifre fuori perimetro); (2) **quiescenza al census
+non provata** (HTTP-complete ≠ request_end-complete); (3) **residuo
+VLADDER = mismatch di selezione** (Δpost-work=0 su 17/20) e **b_peak
+min-statistic** (−2,8% vs mediana); (4) **marcatore pin `--stderr`
+forgiabile** + t4 senza braccio. **Gradi deliberati: b_boot
+verdict-grade come magnitudine · b_work ADVISORY · somma ADVISORY ·
+b_peak DA RIFARE** — sanatoria = punto 1 di S-91.0. Ordine completo in
+`wp92-harness/COUNCIL_WP92_REVIEWS.md` §Sintesi.

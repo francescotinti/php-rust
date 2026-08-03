@@ -42,10 +42,15 @@ Dettaglio: `sessions/WP_SESSION_90.md` + `wp90-harness/MEASURE90_RESULTS.md`.
   fixtures2 / axum-tests (NPASS==13 + npfail==2) tutti PASS.
 - **Misure**: `wp90-harness/MEASURE90_RESULTS.md` + verdict90.a1.g2.out
   — b_peak 19.723.059 B se=447.220 2σ=[18.828.619, 20.617.500]
-  (PEAK-metric; punti A-BB58 census-ADVISORY) = b_boot 2.252.800
-  (se=6.345) + b_work 17.276.928 (se=501.348) + residuo 193.331 ·
-  VSELF split REFUSED (A-DL31) · VCOV 0,576 ADVISORY (KL-91-3) · cal
-  7.801.102 al byte ×2 pad (5ª campagna) · P-CLAMP-PD REFUTATA.
+  (PEAK-metric) = b_boot 2.252.800 (se=6.345) + b_work 17.276.928
+  (se=501.348) + residuo 193.331 · VSELF split REFUSED (A-DL31) · VCOV
+  0,576 ADVISORY (KL-91-3) · cal 7.801.102 al byte ×2 pad (5ª campagna)
+  · P-CLAMP-PD REFUTATA. ⚠️ **GRADI RIQUALIFICATI dal Concilio WP-92
+  (vincolanti, sanatoria = punto 1 di S-91.0): b_boot VERDICT-GRADE
+  come MAGNITUDINE · b_work ADVISORY (quiescenza non provata,
+  KS-PP-92-1) · somma ADVISORY · b_peak DA RIFARE (min-statistic su
+  punti modes==R, KS-BB-92-1); ADVISORY per NOME = 7, non 4; il residuo
+  è mismatch di selezione, non «census/self».**
 - **Corpus cifre**: budget 24042 (A-SK61); manifest con MEASURE90.
 - GATE72 CLI resta baseline trasversale (corpus 1418 · refl 290 · ORM
   3E/13F · hk 1665).
@@ -59,33 +64,71 @@ per-worker mi_heap_of, dump per-request). NUOVA regola operativa dalla
 lezione 1: **mai commit non-evidence con una battery in volo — prima
 tutti i commit, poi battery, poi campagna (finestra evidence-only)**.
 
-## §WP-91(sessione) — prossimo lavoro (ordine dal Concilio WP-92 quando emesso; bozza dai residui per NOME)
+## ⚖️ Concilio WP-92 ESEGUITO (2026-08-03, verbali VINCOLANTI): `wp92-harness/COUNCIL_WP92_REVIEWS.md`
 
-1. **A-DS35 IMPLEMENTAZIONE sede DUALE (A-DS51)** — PRIMO item engine:
-   lowering per le hoisted + bind-in-registry per condizionali/
-   dinamiche; bersaglio = stdout integrale oracle in
-   `wp90-harness/ds35-verify2.out` (37 fixture per NOME); esenzioni:
-   ctor SOLO ereditario (v13/v14 iface/abstract-ctor SI controllano),
-   private; by-ref = ref-ness esatta, tipo contravariante; t3 exit 0
-   OBBLIGATORIO (KS-DS-91-1); gate di merge KS-DS-88-3 + KS-DS-89-3 +
-   KS-DS-91-1..3 (ORM 3E/13F · hk 1665 · corpus/refl per NOME).
-   Sede+modellistica: appendice WP_SESSION_89 + §3.3-quinquies.
-2. **Attribuzione b iterazione 3**: b_work al DETENTORE — canali da
-   riparare per NOME: wiring request_collect_mi sul worker axum
-   (Scoperta 3), API census per-worker (collisione mi_heap_of,
-   Scoperta 2), A-BB50 net per-thread (P-CLAMP-PD lo rimette in cima).
-3. **Design da attuare**: A-MS46 mod probe annidato · A-TH53 bando
-   paste/concat_idents (pin Cargo.toml) · A-TH55 ordine KIND
-   intra-putord · A-BB60/A-PP49 (design89).
-4. ⚖️ Blocco Concilio WP-92: verbali in
-   `wp92-harness/COUNCIL_WP92_REVIEWS.md` — VINCOLANTI per l'ordine
-   S-91.0 (se il file esiste, il §Sintesi SOSTITUISCE questa bozza).
+**9× CON EMENDAMENTI, 0 opposizioni; protocollo A DUE FASI (9 verbali
+indipendenti + 4 team con relatore); 22 KS nuovi.** QUATTRO refutazioni
+capitali, tutte morse a macchina: **quattro forge PASSATI dal gate cifre
+vivo** (Klabnik: prov re-legalizza il forge WP-91 con chiusura 46,25%;
+legacy_frozen concesso da manifest letto dal working tree; cache
+avvelenabile dall'invocante; 43 cifre fuori perimetro); **quiescenza al
+census NON provata** (Pedersen: HTTP-complete ≠ request_end-complete);
+**il residuo VLADDER è mismatch di selezione** (Bak: Δpost-work=0 su
+17/20 raw) e **b_peak è min-statistic** (−2,8% vs mediana); **marcatore
+`--stderr` del pin FORGIABILE** da PHP legale e t4 senza braccio
+(Stogov). Convergenze: collisione heap spiegata a meccanismo (TLS del
+chiamante su heap statico ⇒ census ON-THREAD, Leijen); legge
+clamp⇔overlap 10/10 (Gregg) e 6/6 (Leijen); catena judge_sha g1/g2
+verificata e TIENE (Hejlsberg); cifre del doc riprodotte al byte
+(Gregg). **GRADO deliberato delle cifre S-90.0 (team-misura): b_boot
+VERDICT-GRADE come magnitudine · b_work ADVISORY · somma ADVISORY ·
+b_peak DA RIFARE.**
+
+## §WP-91(sessione) — S-91.0 = ordine Concilio WP-92 §Sintesi (non rinegoziare)
+
+1. **Sanatorie di grado e forma PRIMA di ogni nuova misura**: MEASURE90
+   riscritto coi gradi deliberati (b_boot magnitudine · b_work e somma
+   ADVISORY · b_peak DA RIFARE · ADVISORY per NOME = 7, non 4 · VCOV
+   tabella per-W + coverage marginale · residuo ri-attribuito, label
+   census/self RITIRATA) — A-BG60/A-BB65/A-BG57.
+2. **Gate cifre, l'AUTORITÀ (blocca tutto il resto)**: A-SK-67+A-SK-70
+   (manifest/budget/giudice da HEAD; cache abolita o rifiutata) coi
+   QUATTRO forge ripetuti come denti che DEVONO fallire → A-SK-69+A-SK-73
+   (prov commensurabile + budget sul pool) → bite-test dei 5 doc storici
+   → A-SK-68 (abolizione legacy_frozen: MAI prima di aver collocato i
+   doc) → A-SK-71 (43 cifre) → A-SK-72.
+3. **Delibera UNICA di formato ledger** (tre grammatiche insieme):
+   A-AH58 writer= · A-AH59 ancora sha su FAIL/REFUSE · A-AH60
+   campaign_sha · A-BG58 reason= autosufficiente · A-SK-72 · A-PP-65.
+4. **Sigilli v9**: A-TH-57 in forma PREFISSO (vincolo di sequenza: una
+   firma `arm(&'static str)` romperebbe il pin a parentesi vuote) ·
+   A-TH-60 · quinta rete A-MS48 · A-TH-58/59 · pin A-TH53 · A-TH-61.
+5. **Canale misura iterazione 3**: A-DL-52 census ON-THREAD alla
+   BARRIERA (che È il testimone di A-PP-63) · A-DL-53 purged ai bordi ·
+   A-DL-54 overlap forzato · A-DL-55 huge/abandoned · A-DL-56
+   bare-thread · A-PP-60/61/62/64 · **A-BB64/66/67/68 stimatori
+   riparati SUI 20 RAW GIÀ COMMITTATI** (nessuna rimisura necessaria).
+6. **ROADMAP A-DS51 in QUATTRO fasi (team-engine)**: fase 0 fixture v3
+   (A-DS53) + pin v3 byte-count (A-DS54) committati PRIMA · fase 1
+   checker LSP PURO + 45 unit sui messaggi (solo cargo test) · fase 2
+   lowering HOISTED con esenzioni nello STESSO commit (t3 exit 0, t4
+   braccio PERSIST) + gate ORM/hk/corpus per NOME · fase 3
+   bind-registry + gate. **Rischio dichiarato: la fase 2 può solo
+   AGGIUNGERE fatal su ORM/hk — ogni esenzione mancante è regressione.**
+7. **Design/deferred**: A-MS46 · A-MS-51/52+54/53/55 · A-TH55 ·
+   A-BB60/A-PP49 · A-MS27/A-PP18/A-PP27/A-AH38 invariati.
+
+**Kill-switch di rotta (WP-92, attivi)**: KS-TH-92-1/2 · KS-MS-92-1..3 ·
+KS-SK-92-1..4 · KS-AH-92-1/2 · KS-BB-92-1/2 · KS-PP-92-1/2 ·
+KS-DL-92-1/2 · KS-DS-92-1..3 · KS-BG-92-1/2 — tabella in
+`wp92-harness/COUNCIL_WP92_REVIEWS.md` §Sintesi (22).
 
 **Kill-switch di rotta ereditati ancora attivi**: tutti i KS WP-91
 (tabella in `wp91-harness/COUNCIL_WP91_REVIEWS.md` §Sintesi — 27) + gli
 ereditati WP-88/89/90. KS-DS-80-3 invariata. Attuati/sollevati in
-S-90.0: KS-SK-91-1 (A-SK60/62 atterrati), KS-PP-91-1 (A-PP50),
-KS-PP-91-2 (npfail armato), KS-MS-91-3 (A-MS50 sul canale v90).
+S-90.0: KS-PP-91-1 (A-PP50), KS-PP-91-2 (npfail armato), KS-MS-91-3
+(A-MS50 sul canale v90). ⚠️ KS-SK-91-1 NON sollevabile: i forge vivono
+ancora (WP-92 refutazione 1).
 
 **NON riproporre**: tutti i NON-riproporre WP-83..89 restano; in più —
 «heaps_total==W+1 al picco» (subproc-visit NON vede theap vivi);
