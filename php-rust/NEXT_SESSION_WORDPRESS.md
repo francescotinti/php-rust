@@ -20,6 +20,14 @@ formattazione); **A-DL-59: ipotesi page-slack REFUTATA** (i dump tls
 m90 erano W VISTE di UN heap condiviso). Dettaglio:
 `sessions/WP_SESSION_92.md` + `wp92-harness/`.
 
+**⏱ FONDAMENTALI (regola utente 2026-08-03, aggiornare a OGNI
+rotazione)**: ultima misura full/media = WP-85 (7 sessioni fa) ·
+ultima campagna sull'oggetto = m90 in WP-90 (2 sessioni fa) ·
+S-91.0/S-92.0 = zero misure nuove (solo ri-analisi di raw committati).
+Il concilio apre la sintesi con §FONDAMENTALI su questo contatore;
+apparato in ordine SOLO se blocca l'oggetto (timebox mezza sessione,
+permanente).
+
 ## Stato gate
 
 - **phpr (CLI, parità release)**: **d5ce86e3342f3926 INVARIATO** (mai
