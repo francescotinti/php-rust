@@ -38,7 +38,7 @@ m90 erano W VISTE di UN heap condiviso). Dettaglio:
   (ogni `.md` sotto php-rust/ esige riga manifest: judge=yes per
   MEASURE + NEXT_SESSION/WP_SESSION_91/92, +87 esclusioni dichiarate
   per NOME); 4 autorità da HEAD (giudice+manifest+budget+revs) col
-  self-tether A-SK-78; budget in vigore 24329 (valori storici del
+  self-tether A-SK-78; budget in vigore 24330 (valori storici del
   budget FUORI dal corpus, A-SK-77); selftest T13..T16 (forge WP-92) +
   T17..T22 (forge WP-93) — **⚠️ il Concilio WP-94 ha morso QUATTRO
   forge nuovi contro questo v3: vedi §WP-93 p1**.
@@ -93,46 +93,102 @@ would-have-allowed (nessun forge committato, albero porcelain), ma una
 superficie di fabbricazione è VIVA a HEAD e la verifica al byte è
 parziale. Condizioni C1-C6 nella §Sintesi.
 
-## §WP-93(sessione) — S-93.0 = ordine Concilio WP-94 §Sintesi (non rinegoziare)
+## §WP-93(sessione) — S-93.0 = DIRETTIVA UTENTE 2026-08-03 (supera l'ordine del Concilio WP-94)
 
-1. **Identità, di nuovo — il tether che il chiamante non sceglie**:
-   A-SK-82 (`BASH_SOURCE[0]`, REFUSE se vuoto o ≠ `$0`) + A-AH68
-   (BATTERY_NAME dal CONTENUTO ancorato) → dente T23 + tabella di
-   scope. Falla di autorità massima: blocca ogni PASS verdict-grade
-   (KS-SK-94-1, KS-AH-94-2).
-2. **Ancoraggi di campo ovunque**: A-AH65 (tipi di riga CHIUSI, campi
-   `( |$)`, 16/64 hex esatti) + A-AH66 (matcher solo su
-   `phase=verdict`, A-SK57 esteso ai campaign) + A-SK-85 + A-SK-84
-   (operandi prov dalla STESSA RIGA) — KS-AH-94-1/3, KS-SK-94-2/3.
-3. **Wiring fail-closed + bite-test end-to-end**: A-AH67 (sha(chk)==
-   blob HEAD + selftest della COPIA + canary m91 malformato) + A-SK-87
-   (ogni dente `--all` asserisce la RIGA FAIL) + T16 riscritto con
-   baseline misurata — KS-SK-94-4/5.
-4. **Perimetro e corpus**: A-SK-86 (ogni `.md` del REPO,
-   case-insensitive, 22 esclusioni per NOME) + A-SK-83 ≡ A-BG66/67
-   unificati su **REFUSE** (CF-2: mai fusione silenziosa) + sanatoria
-   `dl59-join.out` + **budget RICOMPUTATO** (headroom 0) —
-   KS-BG-94-1/2.
-5. **Sigilli E1→E3**: A-TH-70 (guardia numericità UNIVERSALE +
-   meta-dente su `-ne`/`-gt`) + A-TH-72 (emendare «OGNI cattura» →
-   «12 catture per NOME») → A-TH-68/69 con decoy stesso-commit →
-   A-TH-71. Estingue KS-TH-94-1/2/3.
-6. **Misura**: sanatorie A-BG68/69/70 + A-BB73-1/2/3 (chiusa declassata
-   a «fuori dai BIN», drift dump#1 con cifre, identità come test
-   committed-vs-used) + le CINQUE condizioni del testimone (A-MS-59/60/
-   61 + A-PP-70..73): enforcement driver in-band · trigger VOID
-   dispatch-Err su mem-census · universo = sole richieste dispatched ·
-   residuo body dichiarato · grammatica ledger sana. Δ di fase ADVISORY
-   finché non sono tutte in banda (KS-MS-94-1/2, KS-PP-94-1..3).
-7. **Canale (E2→E6) e checker (D1→D4), tracce PARALLELE**: E2 controllo
-   positivo del decremento malloc_huge → E4 termine T-HUGE sui 30 raw
-   (parse SECTION-AWARE, KS-DL-94-3) → E5 **PT-1 pluralità heap** poi
-   A-DL-62/63/64 (barriera SOLO dopo PT-1, KS-DL-94-2) → E6 join
-   INV(W). In parallelo: D1 A-DS61 (iterable-desugar) + A-DS62
-   (ctor_proto da ctor abstract) → D2 A-DS63/64 → D3 A-DS65 registry
-   seed → **D4 wiring fase 2 + gate ORM/hk MAI prima di D3**
-   (KS-DS-94-2); ogni emendamento nasce con fixture oracle-morsa e pin
-   PRIMA del codice (KS-DS-94-1).
+**Decisione dell'utente, vincolante e sopra il concilio**: (1) prima si
+RISOLVE LA QUESTIONE DEI WORKER; (2) WordPress su Axum viene DOPO, e
+prima ancora va deciso SE ha senso. L'ordine in 7 punti del Concilio
+WP-94 resta agli atti e VALIDO nel merito — ma si esegue DIETRO
+l'oggetto, con la sola eccezione nominata al punto A qui sotto. Motivo
+della deroga: sei sessioni consecutive senza una misura dell'oggetto e
+due (WP-91, WP-92) senza alcuna misura; l'apparato ha iniziato a
+giudicare sé stesso.
+
+### A. Riparazione di autorità — TIMEBOX mezza sessione, unica quota di apparato
+
+Solo la falla che invalida i PASS futuri: **A-SK-82** (tether su
+`BASH_SOURCE[0]`, REFUSE se vuoto o diverso da `$0` — il forge di
+Klabnik passa da `bash -c`) + **A-AH68** (BATTERY_NAME dal CONTENUTO
+ancorato, mai dal basename scelto dal chiamante), col dente T23 e il
+proprio bite-test. Tutto il resto dell'ordine WP-94 (ancoraggi di campo,
+perimetro, sigilli, sanatorie doc, checker LSP) **NON si tocca in
+S-93.0**: nessun gate nuovo mentre si lavora sull'oggetto (condizione 4
+della chiusura del fronte).
+
+### B. LA QUESTIONE DEI WORKER — il corpo della sessione
+
+**Punto di partenza già acquisito** (`wp92-harness/huge-worker.out`,
+grade ADVISORY, invarianti su 20/20 raw m90 committati): ogni worker
+tiene **39911424 byte in 6 blocchi huge** (media 6651904 a blocco), zero
+al boot, nati nella fase di lavoro, **numero di blocchi FISSO** (non
+cresce con le richieste), `current==total==peak` su ogni checkpoint
+non-boot e **sopravvivenza alla collect finale 20/20**. Il decremento
+della statistica huge esiste in mimalloc v3 (`v3/src/free.c`,
+`v3/src/theap.c`): non è un contatore monco, è assenza di free. La
+riserva SOPRAVANZA l'intero costo per worker misurato (~20,3 MB/worker
+fisico) e il carico era hello+pad, non WordPress: è una riserva FISSA
+per worker, indipendente dal carico.
+
+B1. **Nominare i sei siti**. Sono sei allocazioni > 512 KiB per thread
+   (soglia huge di mimalloc). Nessuna costante statica grande esiste nel
+   runtime (verificato): sono strutture per-thread cresciute o
+   pre-dimensionate. Sospetti da falsificare per NOME, non da assumere:
+   `UNIT_CACHE` (vm/mod.rs — la doc dichiara «entries hold LEAKED
+   modules»), `STUBS` (compile/class.rs — «NEVER cleared»), gli arena
+   dei Module. Metodo: hook sulle allocazioni huge con backtrace, o
+   probe a 1 worker con censimento differenziale — la scelta è del
+   primo che apre.
+B2. **Decidere la natura**: riserva legittima per-thread (cache calda) o
+   leak per-thread. La doc di `UNIT_CACHE` usa già la parola «leak»:
+   se i moduli sono leaked per costruzione, il costo scala col numero di
+   worker per definizione e la leva è architetturale.
+B3. **Applicare la leva e misurarla**: campagna nuova con b **fuori
+   dalla banda** di m90, oppure refutazione motivata del perché non si
+   può ridurre. Vale il no-revert: anche l'esito negativo chiude, purché
+   misurato.
+B4. Solo se B1-B3 richiedono il canale per-worker: **PT-1** (pluralità
+   heap, KS-DL-94-2) prima di qualunque barriera, e `heap=<ptr>` in
+   banda (A-MS-53 ≺ A-DL-57). NON è un prerequisito di B1: i sei blocchi
+   si nominano dal processo, non dal per-worker census.
+
+### C. WordPress su Axum — DECISIONE prima dell'implementazione, e solo dopo B
+
+Non si apre finché B non è chiuso. Quando si apre, il primo atto è un
+**giudizio di SENSO scritto**, non una riga di codice. I termini noti:
+
+- WordPress su php-server **modo nativo** è già accettato (WP-61: 5/6
+  probe BYTE-ID + admin NORM-ID; comando nel README). Il modo nativo
+  delega a `php_cli::server::serve`, SAPI maturo (`WebRequest` completo:
+  method, header, body, query, PATH_INFO, multipart, Set-Cookie).
+- Il modo `--axum` è un CANALE DI MISURA: l'handler riceve solo `Uri` —
+  niente metodo, header, body; la query è scartata; la risposta non ha
+  header in uscita. Con WordPress non supera la home anonima.
+- **Il debito vero, per NOME**: `battery61.sh` NON è mai stato
+  committato — l'accettazione WordPress è un verdetto storico SENZA
+  harness riproducibile, mai rilanciato in 31 sessioni.
+
+Domande a cui il giudizio di senso deve rispondere: il worker pool
+persistente serve a WordPress o solo alla misura? il modo nativo e il
+modo axum devono convergere o restare due prodotti? il costo del
+portage (WebRequest dal task axum al worker — attenzione:
+`set_web_request` è thread-local, va installato SUL worker — header di
+risposta di ritorno, file statici, query string) si giustifica col
+guadagno? Se la risposta è sì, l'implementazione è una sessione; se è
+no, si scrive perché e si chiude la voce.
+
+**Debito indipendente dalla decisione C**: ricommittare la batteria
+WP-61 come gate riproducibile sul modo nativo (mezza sessione). Va fatto
+comunque — è il quinto criterio di chiusura del fronte.
+
+### Criteri di CHIUSURA del fronte Axum/php-server (delibera con l'utente)
+
+1. I ~20 MB/worker attribuiti per NOME a siti di allocazione, non a fasi.
+2. Almeno una leva applicata e misurata (b fuori banda) o refutazione
+   motivata.
+3. Parità intatta: corpus 1418 + refl 290, ORM 3E/13F, hk 1665, battery.
+4. Apparato CONGELATO nelle sessioni di chiusura: nessun gate nuovo.
+5. Chiusura funzionale: batteria WordPress riproducibile e verde (modo
+   nativo obbligatorio; modo axum solo se la decisione C dice di sì).
 
 **Kill-switch di rotta (WP-94, 22 nuovi)**: KS-TH-94-1/2/3 ·
 KS-MS-94-1/2 · KS-SK-94-1..5 · KS-AH-94-1..3 · KS-BB-94-* (A-BB73) ·
