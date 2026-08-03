@@ -260,17 +260,37 @@ mod axum_handler {
                 // by the SAME ckpt name (extractors by name, KG-91-2).
                 // HTTP-complete ≠ request_end-complete: the sequential curl
                 // proves the response left, not that the worker finished its
-                // teardown — outstanding==0 here is the proof that no request
-                // teardown can leak into the phase Δ; ≠0 ⇒ the judge grades
-                // the Δ ADVISORY (mai verdict-grade senza testimone).
-                let outstanding = crate::worker_pool::census_outstanding_now();
+                // teardown. A-PP-66≡A-MS-57 + A-PP-67 + A-MS-56 (Council
+                // WP-93, team-misura UNIFIED row): the witness is a PAIR
+                // around the dump, not an instant — outstanding==0 at a
+                // single load certifies teardown-complete AT THAT INSTANT
+                // only; a request can enter (and even fully complete)
+                // DURING the dump and the outstanding counter alone cannot
+                // see it. The row carries outstanding_pre/post (dec Release,
+                // these loads Acquire — the formal dec→load edge) AND the
+                // monotone arrivals arr_pre/post (a window-contained request
+                // returns outstanding to 0 but never decrements ARRIVALS).
+                // pre==post==0 ∧ arr_pre==arr_post ⇒ window clean; anything
+                // else ⇒ the judge grades the phase Δ ADVISORY (KS-PP-93-1:
+                // a single-read witness is never verdict-grade). Declared
+                // out-of-witness residual (A-PP-69): the response body
+                // Vec<u8> crosses the channel and is freed on the axum task
+                // AFTER the socket write — one Vec per request, invisible
+                // to this counter pair.
+                let outstanding_pre = crate::worker_pool::census_outstanding_now();
+                let arr_pre = crate::worker_pool::census_arrivals_now();
+                php_types::memcensus::peak_census_dump(suffix);
+                let outstanding_post = crate::worker_pool::census_outstanding_now();
+                let arr_post = crate::worker_pool::census_arrivals_now();
                 eprintln!(
-                    "pid={} tag=mi_quiesce win=9 ckpt=peak_inreq{} outstanding={}",
+                    "pid={} tag=mi_quiesce win=9 ckpt=peak_inreq{} outstanding_pre={} outstanding_post={} arr_pre={} arr_post={}",
                     std::process::id(),
                     suffix,
-                    outstanding
+                    outstanding_pre,
+                    outstanding_post,
+                    arr_pre,
+                    arr_post
                 );
-                php_types::memcensus::peak_census_dump(suffix);
                 return (
                     StatusCode::OK,
                     format!("census-dumped win=9 ckpt=peak_inreq{suffix} w={w}\n").into_bytes(),

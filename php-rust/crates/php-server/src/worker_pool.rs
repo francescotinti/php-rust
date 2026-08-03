@@ -213,6 +213,17 @@ mod implementation {
         /// High-watermark of OUTSTANDING since process start (census line
         /// field `inflight_max`; the measure driver enforces <=1).
         pub static OUTSTANDING_MAX: AtomicUsize = AtomicUsize::new(0);
+        /// A-PP-67 (Council WP-93, Pedersen — KS-PP-93-1): MONOTONE arrival
+        /// counter, compiled on BOTH instrumented channels (REQUESTS below
+        /// counts completions and its inc is census-instrumentation-only,
+        /// so the mem-census channel had NO monotone at all). A request
+        /// fully contained in the witness window returns OUTSTANDING to 0,
+        /// but it can never decrement ARRIVALS: arr_pre==arr_post on the
+        /// unified mi_quiesce row closes the window that the outstanding
+        /// pair alone cannot. Inc in dispatch, never undone (monotone by
+        /// contract — a run with a dispatch Err is VOID by declaration,
+        /// A-MS16).
+        pub static ARRIVALS: AtomicU64 = AtomicU64::new(0);
         /// Requests completed pool-wide.
         pub static REQUESTS: AtomicU64 = AtomicU64::new(0);
         /// A-PP14 (Council WP-82): churn of requests whose census line was
@@ -283,12 +294,24 @@ mod implementation {
     /// A-PP-63 (Council WP-92, Pedersen — KS-PP-92-1): quiescence witness
     /// for the phase-checkpoint rows. Reads the pool's OUTSTANDING (inc
     /// before send, dec AFTER the response send — A-TH9): 0 at the census
-    /// dump proves request_end-complete, not merely HTTP-complete; ≠0 means
-    /// the phase Δ may absorb a live teardown and the judge grades it
-    /// ADVISORY. Read-only: the witness never perturbs the counter.
+    /// dump proves request_end-complete AT THE INSTANT OF THE LOAD, not
+    /// merely HTTP-complete; ≠0 means the phase Δ may absorb a live
+    /// teardown and the judge grades it ADVISORY. A-MS-56 (Council WP-93):
+    /// the load is ACQUIRE, pairing with the Release dec — the formal
+    /// dec→load edge. The INSTANT is not a WINDOW (Pedersen/Matsakis,
+    /// KS-PP-93-1): only the pre/post pair PLUS arr_pre==arr_post makes a
+    /// clean-window claim. Read-only: the witness never perturbs the
+    /// counter.
     #[cfg(any(feature = "census-instrumentation", feature = "mem-census"))]
     pub fn census_outstanding_now() -> usize {
-        census::OUTSTANDING.load(std::sync::atomic::Ordering::Relaxed)
+        census::OUTSTANDING.load(std::sync::atomic::Ordering::Acquire)
+    }
+
+    /// A-PP-67 (Council WP-93): monotone arrivals, read-only for the
+    /// unified witness row (arr_pre/arr_post).
+    #[cfg(any(feature = "census-instrumentation", feature = "mem-census"))]
+    pub fn census_arrivals_now() -> u64 {
+        census::ARRIVALS.load(std::sync::atomic::Ordering::Relaxed)
     }
 
     /// Worker pool: N OS threads; each request gets a fresh RetainSet (P-2
@@ -574,11 +597,15 @@ mod implementation {
                 // does OUTSTANDING drop (A-TH9: dec-after-send is what makes
                 // the closed-sequential watermark verdict-grade; A-PP-63:
                 // this same edge is what makes outstanding==0 the teardown
-                // quiescence witness on the mem-census channel).
+                // quiescence witness on the mem-census channel). A-MS-56
+                // (Council WP-93, Matsakis): the dec is RELEASE and the
+                // witness load is ACQUIRE — the formal dec→load edge; with
+                // Relaxed the "proof" was protocol-only paper (zero cost:
+                // x86-64 stores are release anyway).
                 #[cfg(any(feature = "census-instrumentation", feature = "mem-census"))]
                 {
                     let old = census::OUTSTANDING
-                        .fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+                        .fetch_sub(1, std::sync::atomic::Ordering::Release);
                     if old == 0 {
                         panic!(
                             "census outstanding tripwire: decrement on 0 — \
@@ -653,6 +680,10 @@ mod implementation {
                 }
                 let o = census::OUTSTANDING.fetch_add(1, Ordering::Relaxed) + 1;
                 census::note_outstanding(o);
+                // A-PP-67: monotone arrival mark — inc at dispatch, never
+                // decremented; pairs with arr_pre/arr_post on the unified
+                // witness row (Council WP-93, team-misura).
+                census::ARRIVALS.fetch_add(1, Ordering::Relaxed);
             }
 
             if self.senders[idx].send(task).is_err() {
@@ -2000,3 +2031,5 @@ pub use implementation::{
 };
 #[cfg(any(feature = "census-instrumentation", feature = "mem-census"))]
 pub use implementation::census_outstanding_now;
+#[cfg(any(feature = "census-instrumentation", feature = "mem-census"))]
+pub use implementation::census_arrivals_now;
