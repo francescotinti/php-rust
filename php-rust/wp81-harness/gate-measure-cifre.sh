@@ -38,9 +38,21 @@
 # sha fingerprints containing [a-f]) are excluded here: their truth is
 # enforced by the feature-matrix/driver identity gates, not by this one.
 #
+# v3 (Council WP-93, Klabnik — SIX new forges 6/6 through v2, three capital
+# refutations): A-SK-78 self-tether of the RUNNING judge (F6 judge-copy);
+# A-SK-79 grade in the exit code (ADVISORY-PASS=64); A-SK-74 rev-parse door
+# abolished (F1 decimal ancestor prefixes → committed rev= rows); A-SK-75
+# ALLOW entries are authorities with HEAD-verified provenance (F2 — 2.8/
+# 46.25 revoked); A-SK-76 glued digit-runs refused, never truncated (F3);
+# A-SK-77 budget history out of the corpus (F4); A-SK-80 perimeter by
+# complement (every committed .md under php-rust/); A-SK-81 labeled
+# same-key prov operands (F5). The six forges are permanent teeth T17-T22
+# (KS-SK-93-1..4).
+#
 # Self-test: --selftest plants fabricated figures and forged authorities in
-# copies and expects FAIL (a gate that cannot bite is vacuous). The four
-# Klabnik WP-92 forges are repeated as permanent teeth.
+# copies and expects FAIL at the EXACT rc (a gate that cannot bite is
+# vacuous). The four Klabnik WP-92 forges and the six WP-93 forges are
+# repeated as permanent teeth.
 export PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin:$PATH
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -334,6 +346,44 @@ if [ "${1:-}" = "--selftest" ]; then
   if [ "$(rc_of "$TMP/t19.md")" != 1 ]; then
     echo "SELFTEST FAIL: revoked ALLOW constants 2,8/46,25 still legalize figures (WP-93 forge F2 / A-SK-75/KS-SK-93-3)"; rm -rf "$TMP"; exit 1
   fi
+  # T20 — WP-93 forge F3 REPEATED (Klabnik, A-SK-76): glued unit — the
+  # tokenizer must REFUSE `1.024.999B`, never judge its truncation `1.024`;
+  # the FAIL must name the glue, not the value.
+  cp "$TMP/baseline.md" "$TMP/t20.md"
+  echo "b_work rivisto = 1.024.999B per worker" >> "$TMP/t20.md"
+  if [ "$(rc_of "$TMP/t20.md")" != 1 ]; then
+    echo "SELFTEST FAIL: glued-unit figure NOT refused (WP-93 forge F3 / A-SK-76)"; rm -rf "$TMP"; exit 1
+  fi
+  if ! bash "$0" "$TMP/t20.md" 2>&1 | grep -q 'A-SK-76'; then
+    echo "SELFTEST FAIL: glued-unit figure died for the WRONG reason (want the A-SK-76 refusal, not a truncation verdict)"; rm -rf "$TMP"; exit 1
+  fi
+  # T21 — WP-93 forge F4 REPEATED (Klabnik, A-SK-77): historic budget
+  # values are authorities' history, not machine truth — 23.999 must FAIL.
+  cp "$TMP/baseline.md" "$TMP/t21.md"
+  echo "outstanding al checkpoint: 23.999 allocazioni" >> "$TMP/t21.md"
+  if [ "$(rc_of "$TMP/t21.md")" != 1 ]; then
+    echo "SELFTEST FAIL: historic budget value 23.999 still legalized (WP-93 forge F4 / A-SK-77)"; rm -rf "$TMP"; exit 1
+  fi
+  # negative control: the CURRENT committed budget value stays citable as a
+  # named authority.
+  BUDNOW=$(git -C "$ROOT" show "HEAD:php-rust/wp81-harness/gate-cifre-corpus.budget" | head -1 | sed 's/max_tokens=//')
+  cp "$TMP/baseline.md" "$TMP/t21b.md"
+  echo "budget corpus in vigore: $BUDNOW token" >> "$TMP/t21b.md"
+  if [ "$(rc_of "$TMP/t21b.md")" != 64 ]; then
+    echo "SELFTEST FAIL: CURRENT budget value $BUDNOW wrongly refused (A-SK-77 negative control)"; rm -rf "$TMP"; exit 1
+  fi
+  # T22 — WP-93 forge F5 REPEATED (Klabnik, A-SK-81): prov on a round-MiB
+  # value built from two NAKED digit-runs of the same reqns log line —
+  # operands must be labeled key=value and share the key.
+  V83LOG="php-rust/wp78-harness/measure-out/axum.83cr.lever.n2000.r1.log"
+  cp "$TMP/baseline.md" "$TMP/t22.md"
+  echo "massa: 18.000.000 B [derivata: prov 18287875@$V83LOG:3 − 287875@$V83LOG:3]" >> "$TMP/t22.md"
+  if [ "$(rc_of "$TMP/t22.md")" != 1 ]; then
+    echo "SELFTEST FAIL: naked-run prov operands NOT refused (WP-93 forge F5 / A-SK-81)"; rm -rf "$TMP"; exit 1
+  fi
+  if ! bash "$0" "$TMP/t22.md" 2>&1 | grep -q 'A-SK-81'; then
+    echo "SELFTEST FAIL: F5 forge died for the WRONG reason (want the A-SK-81 label refusal)"; rm -rf "$TMP"; exit 1
+  fi
   # T17 — WP-93 forge F6 REPEATED (Klabnik, A-SK-78/KS-SK-93-1): a PATCHED
   # copy of the judge (perimeter tooth disabled — exactly the
   # zzforge-judge93 forge) run --all with a forge doc present must NEVER
@@ -356,7 +406,7 @@ if [ "${1:-}" = "--selftest" ]; then
     echo "SELFTEST FAIL: patched judge copy did not die on the SELF-TETHER (A-SK-78)"; rm -rf "$TMP"; exit 1
   fi
   rm -rf "$TMP"
-  echo "SELFTEST PASS: KG-83-3 smuggle + A-SK40 companions + A-SK55 committed-only + A-SK60 provenance (positive+bite) + A-SK62 every-token + A-SK63 manifest graces + A-SK65 env-cache ignored + A-SK53-bis window + A-SK-67 HEAD-authorities (budget tamper, forge-a manifest row) + A-SK-69 strict prov (forge-b: cross-file, non-minus operator, address-range, positive same-file) + A-SK-70 cache abolished (forge-c) + A-SK-71 perimeter (forge-d) + A-SK-72 ledger-proved supersession (.out optional) + A-SK-73 pool=corpus + A-SK-74 named-rev identities (forge F1, T18+control) + A-SK-75 ALLOW-as-authority, 2.8/46.25 revoked (forge F2, T19) + A-SK-78 self-tether (forge F6, T17) + A-SK-79 exit-code grades (every tooth rc-exact) all bite"
+  echo "SELFTEST PASS: KG-83-3 smuggle + A-SK40 companions + A-SK55 committed-only + A-SK60 provenance (positive+bite) + A-SK62 every-token + A-SK63 manifest graces + A-SK65 env-cache ignored + A-SK53-bis window + A-SK-67 HEAD-authorities (budget tamper, forge-a manifest row) + A-SK-69 strict prov (forge-b: cross-file, non-minus operator, address-range, positive same-file) + A-SK-70 cache abolished (forge-c) + A-SK-71 perimeter (forge-d) + A-SK-72 ledger-proved supersession (.out optional) + A-SK-73 pool=corpus + A-SK-74 named-rev identities (forge F1, T18+control) + A-SK-75 ALLOW-as-authority, 2.8/46.25 revoked (forge F2, T19) + A-SK-76 glued-run refused (forge F3, T20) + A-SK-77 budget-history out of corpus (forge F4, T21+control) + A-SK-78 self-tether (forge F6, T17) + A-SK-79 exit-code grades (every tooth rc-exact) + A-SK-80 complement perimeter + A-SK-81 labeled prov operands (forge F5, T22) all bite"
   exit 0
 fi
 
@@ -594,21 +644,13 @@ for my $f (committed_glob("$here/evidence/*.fails")) {
   $corpus_count{$n} = 1;
 }
 
-# A-SK-71 (Council WP-92): budget HISTORY as a corpus source — the budget
-# transitions (20097 -> 20098 -> 23999 -> 24042 -> ...) are DELIBERATE
-# COMMITTED ACTS cited by the rotation docs; their machine truth is the
-# git history of the budget file itself (every HEAD-reachable blob).
-{
-  my @revs = split /\n/, qx(git -C "$root" log --format=%H HEAD -- "$BUDGET_REL");
-  my %bseen;
-  for my $r (@revs) {
-    my $b = qx(git -C "$root" rev-parse -q --verify "$r:$BUDGET_REL" 2>/dev/null);
-    chomp $b; next if !$b || $bseen{$b}++;
-    for my $l (split /\n/, qx(git -C "$root" show "$r:$BUDGET_REL")) {
-      while ($l =~ /(\d{3,})/g) { $corpus{$1} = 1 }
-    }
-  }
-}
+# A-SK-77 (Council WP-93, Klabnik forge F4 LANDED): the budget HISTORY is
+# OUT of the corpus. It is an AUTHORITY, not machine output — F4 minted
+# «23.999 allocazioni» from a historic budget blob — and it was already
+# excluded from the prov pool (A-SK-73): keeping it as a token source was
+# an internal contradiction («autorità E sorgente di corpus»). Only the
+# CURRENT committed budget value is citable, as a named authority (added
+# to %ALLOW below, after the HEAD parse; the gate prints it every run).
 
 # A-SK61 (Council WP-91): corpus cardinality PRINTED and PINNED against the
 # COMMITTED budget (A-SK-67: read from HEAD, never the working tree) — a
@@ -620,7 +662,10 @@ my ($budget_line) = head_content($BUDGET_REL);
 my $budget = defined $budget_line ? $budget_line : '';
 $budget =~ s/^\s+|\s+$//g; $budget =~ s/^max_tokens=//;
 die "gate-measure-cifre: malformed HEAD budget '$budget' (A-SK61/A-SK-67)\n" unless $budget =~ /^\d+$/;
-print "corpus cardinality=$card budget=$budget (A-SK61, budget from HEAD)\n";
+# A-SK-77: the CURRENT committed budget value is a named authority — its
+# provenance is the HEAD budget file itself, parsed and printed right here.
+$ALLOW{$budget} = 1;
+print "corpus cardinality=$card budget=$budget (A-SK61, budget from HEAD; A-SK-77: history OUT of corpus, current value = named authority)\n";
 if ($card > $budget) {
   print "FAIL gate-measure-cifre: corpus cardinality $card EXCEEDS committed budget $budget (A-SK61) — raise the budget deliberately with the new sources\n";
   exit 1;
@@ -721,7 +766,13 @@ if ($target_arg eq '--all') {
   # a FAIL — at HEAD and in the working tree alike (a doc can be born
   # uncommitted: WP-92 forge (d)).
   my %manset = map { $_->[0] => 1 } @man_rows;
-  my $class_rx = qr{^php-rust/(?:wp\d+-harness/MEASURE\d+_RESULTS\.md|NEXT_SESSION_WORDPRESS\.md|sessions/[^/]+\.md|wp\d+-harness/design[^/]*\.md|wp\d+-harness/COUNCIL_[^/]+\.md|gaps/[^/]+\.md)$};
+  # A-SK-80 (Council WP-93, Klabnik): perimeter by COMPLEMENT, not by
+  # allowlist of classes — every committed .md under php-rust/
+  # (subdirectories INCLUDED) requires a manifest row. The old class list
+  # left 153 figures in the four most-read GitHub docs (FOOTPRINT_CPU_
+  # ROADMAP/COVERAGE/TODO/README) and the council verbali dirs outside
+  # the perimeter. A committed or untracked .md with no row is a FAIL.
+  my $class_rx = qr{^php-rust/.*\.md$};
   for my $f (grep { /$class_rx/ } @headtree) {
     next if $manset{$f};
     print "FAIL gate-measure-cifre --all: $f has NO manifest entry (A-SK64/A-SK-71 bidirectional)\n"; $all_rc = 1;
@@ -928,7 +979,7 @@ for my $t (@targets) {
         } elsif (!$src_set{$ops_info[0][1]}) {
           push @miss, "line $ln: prov operand path $ops_info[0][1] OUTSIDE the budgeted corpus source set (A-SK-73): $line";
         } else {
-          my (@ops, $bad);
+          my (@ops, @opkeys, $bad);
           for my $oi (@ops_info) {
             my ($tok, $rp, $rl) = @$oi;
             my $ntok = it_num($tok);
@@ -939,17 +990,27 @@ for my $t (@targets) {
               $bad = 1; last;
             }
             $srcline =~ s/\b(?:(?=[0-9a-f]*[a-f])[0-9a-f]{6,}-[0-9a-f]{6,}|[0-9a-f]{6,}-(?=[0-9a-f]*[a-f])[0-9a-f]{6,})\b/ /g;
-            my $found = 0;
-            while ($srcline =~ /(\d[\d.]*\d|\d)/g) {
-              my $c = $1; (my $nd = $c) =~ s/\.(?=\d{3}\b)//g;
-              if ($c eq $ntok || $nd eq $ntok) { $found = 1; last; }
+            # A-SK-81 (Council WP-93, Klabnik forge F5 LANDED): an operand is
+            # a LABELED key=value on the cited line — any naked digit-run of
+            # the line is NOT an operand (F5 picked two naked runs from a
+            # reqns list and closed 100% of the publishable MiB-round space).
+            my $okey = '';
+            while ($srcline =~ /([A-Za-z_][A-Za-z0-9_-]*)=(\d[\d.,]*\d|\d)\b/g) {
+              my ($k, $v) = ($1, $2);
+              (my $nv = $v) =~ s/\.(?=\d{3}\b)//g; $nv =~ s/,/./;
+              if ($nv eq $ntok || $v eq $ntok) { $okey = $k; last; }
             }
-            if (!$found) {
-              push @miss, "line $ln: derivata operand $ntok NOT found at $rp:$rl (A-SK60): $line";
+            if (!$okey) {
+              push @miss, "line $ln: prov operand $ntok is NOT a labeled key=value on $rp:$rl (A-SK-81): $line";
               $bad = 1; last;
             }
-            print "line $ln: derivata operand $ntok <= $rp:$rl resolved at HEAD (A-SK60/A-SK-69)\n";
-            push @ops, $ntok;
+            print "line $ln: derivata operand $ntok <= $rp:$rl resolved at HEAD as $okey= (A-SK60/A-SK-69/A-SK-81)\n";
+            push @ops, $ntok; push @opkeys, $okey;
+          }
+          # A-SK-81: both operands must share the key — same magnitude.
+          if (!$bad && @ops == 2 && $opkeys[0] ne $opkeys[1]) {
+            push @miss, "line $ln: prov operands carry DIFFERENT keys ($opkeys[0]= vs $opkeys[1]=) — not the same magnitude (A-SK-81): $line";
+            $bad = 1;
           }
           if (!$bad && @ops == 2) {
             $eval_ok{$ops[0] - $ops[1]} = 1;
@@ -966,6 +1027,13 @@ for my $t (@targets) {
       $probe2 =~ s/\[derivata:[^\]]*\]?/ /g;
       $probe2 =~ s/\b(?=[0-9a-f]*[a-f])[0-9a-f]{7,}\b//gi;
       $probe2 =~ s/[A-Za-z_][A-Za-z0-9_-]*[0-9][A-Za-z0-9_-]*//g;
+      # A-SK-76: the glued-run refusal bites on [derivata] lines too.
+      while ($probe2 =~ /(?<![\dA-Za-z,.±])(\d[\d.,]*\d|\d)(?=[A-Za-z])/g) {
+        my $glue = $1;
+        (my $gd = $glue) =~ s/[.,]//g;
+        next if length($gd) < 3;
+        push @miss, "line $ln: digit-run '$glue' GLUED to a letter on a [derivata] line — refused, never truncated (A-SK-76): $line";
+      }
       while ($probe2 =~ /(?<![\dA-Za-z,.±])(\d{1,3}(?:\.\d{3})+(?:,\d+)?|\d+,\d+|\d{3,})(?![\dA-Za-z])/g) {
         my $raw = $1;
         my $norm = $raw;
@@ -985,6 +1053,16 @@ for my $t (@targets) {
     # remove hex identities and alphanumeric IDs so their digits don't tokenize
     $probe =~ s/\b(?=[0-9a-f]*[a-f])[0-9a-f]{7,}\b//gi;   # git/sha fragments (7+ hex with a letter)
     $probe =~ s/[A-Za-z_][A-Za-z0-9_-]*[0-9][A-Za-z0-9_-]*//g; # KS-AH-83-1, F13, wp81...
+    # A-SK-76 (Council WP-93, Klabnik forge F3 LANDED): a digit-run GLUED to
+    # a letter is REFUSED, never truncated — the token alternation used to
+    # backtrack `1.024.999B` down to a legal `1.024` and judge THAT. Scope:
+    # >=3 digits, same as the gate.
+    while ($probe =~ /(?<![\dA-Za-z,.±])(\d[\d.,]*\d|\d)(?=[A-Za-z])/g) {
+      my $glue = $1;
+      (my $gd = $glue) =~ s/[.,]//g;
+      next if length($gd) < 3;
+      push @miss, "line $ln: digit-run '$glue' GLUED to a letter — refused, never truncated (A-SK-76): $line";
+    }
     while ($probe =~ /(?<![\dA-Za-z,.])(\d{1,3}(?:\.\d{3})+(?:,\d+)?|\d+,\d+|\d{3,})(?![\dA-Za-z])/g) {
       my $raw = $1;
       my $norm = $raw;
