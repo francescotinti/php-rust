@@ -154,7 +154,7 @@ if [ "${1:-}" = "--selftest" ]; then
   G3REL="php-rust/wp89-harness/verdict89.a1.g3.out"
   cp "$TMP/baseline.md" "$TMP/t10.md"
   echo "delta se: 734.670 B [derivata: prov 1.319.393@$G3REL:115 − 584.723@$G3REL:63]" >> "$TMP/t10.md"
-  if ! bash "$0" "$TMP/t10.md" 2>&1 | grep -q "provenance-verified"; then
+  if ! bash "$0" "$TMP/t10.md" 2>&1 | grep -q "(A-SK60 provenance-verified"; then
     echo "SELFTEST FAIL: provenance resolver never fired on a legal derivata (A-SK60 positive control)"; rm -rf "$TMP"; exit 1
   fi
   if ! bash "$0" "$TMP/t10.md" >/dev/null 2>&1; then
@@ -233,7 +233,7 @@ if [ "${1:-}" = "--selftest" ]; then
   # provenance-verified.
   cp "$TMP/baseline.md" "$TMP/t14b.md"
   echo "x: 734.670 B [derivata: prov 1.319.393@$G3REL:115 diviso 584.723@$G3REL:63]" >> "$TMP/t14b.md"
-  if bash "$0" "$TMP/t14b.md" 2>&1 | grep -q "provenance-verified"; then
+  if bash "$0" "$TMP/t14b.md" 2>&1 | grep -q "(A-SK60 provenance-verified"; then
     echo "SELFTEST FAIL: non-minus operator printed provenance-verified (A-SK-69)"; rm -rf "$TMP"; exit 1
   fi
   if bash "$0" "$TMP/t14b.md" >/dev/null 2>&1; then
@@ -253,7 +253,7 @@ if [ "${1:-}" = "--selftest" ]; then
   BREL="php-rust/wp81-harness/gate-cifre-corpus.budget"
   cp "$TMP/baseline.md" "$TMP/t14d.md"
   echo "z: 000 B [derivata: prov 24221@$BREL:1 − 24221@$BREL:1]" >> "$TMP/t14d.md"
-  if bash "$0" "$TMP/t14d.md" 2>&1 | grep -q "provenance-verified"; then
+  if bash "$0" "$TMP/t14d.md" 2>&1 | grep -q "(A-SK60 provenance-verified"; then
     echo "SELFTEST FAIL: out-of-pool prov path resolved (A-SK-73)"; rm -rf "$TMP"; exit 1
   fi
   # T15 — WP-92 forge (c) REPEATED (Klabnik Q3, KS-SK-92-4): an
