@@ -1,0 +1,39 @@
+== verdict90 — campaign git=bb4b388 attempt=1 mem_hash=73e6d13f048d1610 (judge_sha=1b1e9e96f5019bc0 COMMITTED-at-HEAD, judged at HEAD=5d3ec7b, generation g1) ==
+thresholds (KB-91-2, declared): delta-fascia=0.15 coverage=0.9 robustness=0.8 pd_discriminant=1000
+matrix tether: mem_hash==bin[mem-census] of COMMITTED feature-matrix.4c99520.20260803-104804.log (A-SK59)
+battery consumption LEDGERED (A-AH57: phase=consume row present)
+VIDENT PASS: 34 raws present, NUL-free, identity v2 + boot_src=ps-lstart (A-BG55)
+VPEAK PASS: commit==peak_commit on EVERY mi_proc row of every raw — committed_postcollect_win0 is PEAK-metric as declared (A-DL48/KL-91-1)
+FAIL VCKPT: m90.sweep.dt1.afirst.pd0.a1.memcensus win=0 ckpt counts exit_mi=1 exit_collect_mi=1, want 1/3 (A-BG54; PHPR_MI_COLLECT_REQ per-request dumps)
+FAIL VCKPT: m90.sweep.dt1.bfirst.pd0.a1.memcensus win=0 ckpt counts exit_mi=1 exit_collect_mi=1, want 1/3 (A-BG54; PHPR_MI_COLLECT_REQ per-request dumps)
+FAIL VCKPT: m90.sweep.dt5.afirst.pd0.a1.memcensus win=0 ckpt counts exit_mi=1 exit_collect_mi=1, want 1/3 (A-BG54; PHPR_MI_COLLECT_REQ per-request dumps)
+FAIL VCKPT: m90.sweep.dt5.bfirst.pd0.a1.memcensus win=0 ckpt counts exit_mi=1 exit_collect_mi=1, want 1/3 (A-BG54; PHPR_MI_COLLECT_REQ per-request dumps)
+FAIL VCKPT: m90.sweep.dt20.afirst.pd0.a1.memcensus win=0 ckpt counts exit_mi=1 exit_collect_mi=1, want 1/3 (A-BG54; PHPR_MI_COLLECT_REQ per-request dumps)
+FAIL VCKPT: m90.sweep.dt20.bfirst.pd0.a1.memcensus win=0 ckpt counts exit_mi=1 exit_collect_mi=1, want 1/3 (A-BG54; PHPR_MI_COLLECT_REQ per-request dumps)
+FAIL VCKPT: m90.sweep.dt1.afirst.pd1000.a1.memcensus win=0 ckpt counts exit_mi=1 exit_collect_mi=1, want 1/3 (A-BG54; PHPR_MI_COLLECT_REQ per-request dumps)
+FAIL VCKPT: m90.sweep.dt1.bfirst.pd1000.a1.memcensus win=0 ckpt counts exit_mi=1 exit_collect_mi=1, want 1/3 (A-BG54; PHPR_MI_COLLECT_REQ per-request dumps)
+FAIL VCKPT: m90.sweep.dt5.afirst.pd1000.a1.memcensus win=0 ckpt counts exit_mi=1 exit_collect_mi=1, want 1/3 (A-BG54; PHPR_MI_COLLECT_REQ per-request dumps)
+FAIL VCKPT: m90.sweep.dt5.bfirst.pd1000.a1.memcensus win=0 ckpt counts exit_mi=1 exit_collect_mi=1, want 1/3 (A-BG54; PHPR_MI_COLLECT_REQ per-request dumps)
+VDISP PASS: thr-set exact and per-thr counts (nreq/W, +1 self on slope) on every raw
+VARMS90 PASS: MIMALLOC_PURGE_DELAY read back (env + ord15) with the arm's value on every raw
+VORD90 PASS: clamped=0 on every non-sweep raw (scope DECLARED: putord invariants live in battery a_ds26/a_ds38)
+VLADDER SKIPPED: upstream blocks not clean (KS-SK-88-2)
+VSELF SKIPPED
+VCOV SKIPPED: ladder not clean
+VSWEEP90 cal: pad87a net=7801102 B | pad87b net=7801102 B [byte-reproduced r1==r2 per side; the m89 anchor 7801102 is a NAMED-ADVISORY comparison only — the census binary CHANGED (A-MS50/ckpt/self)]
+VSWEEP90 cal note: pad87a net EQUALS the m89 anchor (5th campaign byte-repro)
+VSWEEP90 dt1  pd0: spans=OVERLAP CLAMPED(1) but purged_at_last_request_dump=NA — A-DL50 pin NOT satisfied (clamp without purge-in-window: the deflation driver is NOT the purge)
+VSWEEP90 dt1  pd0: spans=OVERLAP CLAMPED(1) but purged_at_last_request_dump=NA — A-DL50 pin NOT satisfied (clamp without purge-in-window: the deflation driver is NOT the purge)
+VSWEEP90 dt5  pd0: spans=NO-OVERLAP padA net=7840541 B dA=-7761663 B | padB net=14047297 B dB=-1554907 B [nets VOID per-thread, KB-88-1]
+VSWEEP90 dt5  pd0: spans=OVERLAP CLAMPED(1) but purged_at_last_request_dump=NA — A-DL50 pin NOT satisfied (clamp without purge-in-window: the deflation driver is NOT the purge)
+VSWEEP90 dt20  pd0: spans=NO-OVERLAP padA net=7801102 B dA=-7801102 B | padB net=7801102 B dB=-7801102 B [nets VOID per-thread, KB-88-1]
+VSWEEP90 dt20  pd0: spans=NO-OVERLAP padA net=7801102 B dA=-7801102 B | padB net=7801102 B dB=-7801102 B [nets VOID per-thread, KB-88-1]
+VSWEEP90 dt1  pd1000: spans=OVERLAP padA net=33474898 B | padB net=0 B | clamped_rows=1 purged_per_request_sum=NA [A-BB63 arm; nets VOID per-thread KB-88-1]
+VSWEEP90 dt1  pd1000: spans=OVERLAP padA net=0 B | padB net=33195874 B | clamped_rows=1 purged_per_request_sum=NA [A-BB63 arm; nets VOID per-thread KB-88-1]
+VSWEEP90 dt5  pd1000: spans=NO-OVERLAP padA net=7840541 B | padB net=14047309 B | clamped_rows=0 purged_per_request_sum=NA [A-BB63 arm; nets VOID per-thread KB-88-1]
+VSWEEP90 dt5  pd1000: spans=OVERLAP padA net=0 B | padB net=11980743 B | clamped_rows=1 purged_per_request_sum=NA [A-BB63 arm; nets VOID per-thread KB-88-1]
+VSWEEP90 P-DT20 CONFIRMED: net==cal AL BYTE on 4/4 dt=20 sides
+VSWEEP90 P-CLAMP-PD REFUTED: clamp persiste su 3/4 run con pd=1000 — la colpa e' del bracket/counter, non della purge (esito ex-ante alternativo dichiarato)
+VSWEEP90 A-DL50: pin violato su 3/3 raw clamped pd0 — esito riportato
+VSWEEP90 PASS: cal byte-reproduced, spans judged, clamped physics judged against the ex-ante predictions
+== VERDICT90 FAIL(13) (attempt=1, generation g1) ==

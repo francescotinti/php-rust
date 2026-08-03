@@ -1,0 +1,62 @@
+== verdict90 — campaign git=bb4b388 attempt=1 mem_hash=73e6d13f048d1610 (judge_sha=97a8eff0d9783ee4 COMMITTED-at-HEAD, judged at HEAD=564e7ac, generation g2) ==
+thresholds (KB-91-2, declared): delta-fascia=0.15 coverage=0.9 robustness=0.8 pd_discriminant=1000
+generation g2 SUPERSEDES g1..g1 on attempt=1 (KS-SK-90-3: docs must cite the MAXIMUM generation)
+matrix tether: mem_hash==bin[mem-census] of COMMITTED feature-matrix.4c99520.20260803-104804.log (A-SK59)
+battery consumption LEDGERED (A-AH57: phase=consume row present)
+VIDENT PASS: 34 raws present, NUL-free, identity v2 + boot_src=ps-lstart (A-BG55)
+VPEAK PASS: commit==peak_commit on EVERY mi_proc row of every raw — committed_postcollect_win0 is PEAK-metric as declared (A-DL48/KL-91-1)
+VCKPT PASS: every win=0/win=9 checkpoint selected and counted BY NAME (A-BG54/KG-91-2)
+VDISP PASS: thr-set exact and per-thr counts (nreq/W, +1 self on slope) on every raw
+VARMS90 PASS: MIMALLOC_PURGE_DELAY read back (env + ord15) with the arm's value on every raw
+VORD90 PASS: clamped=0 on every non-sweep raw (scope DECLARED: putord invariants live in battery a_ds26/a_ds38)
+mode-census BOOT W=4: modes=4 dominant=21364736 B (x2)
+mode-census BOOT W=8: modes=3 dominant=30474240 B (x3)
+mode-census BOOT W=12: modes=4 dominant=39387136 B (x2)
+mode-census BOOT W=16: modes=4 dominant=48431104 B (x2)
+mode-census WORK W=4: modes=4 dominant=132513792 B (x2)
+mode-census WORK W=8: modes=5 dominant=198115328 B (x1) tie=4 tiebreak=min (A-BB61, declared in-band) [A-BB58: modes==R, point ADVISORY]
+mode-census WORK W=12: modes=5 dominant=263782400 B (x1) tie=4 tiebreak=min (A-BB61, declared in-band) [A-BB58: modes==R, point ADVISORY]
+mode-census WORK W=16: modes=5 dominant=340983808 B (x1) tie=4 tiebreak=min (A-BB61, declared in-band) [A-BB58: modes==R, point ADVISORY]
+mode-census PEAK W=4: modes=5 dominant=151781376 B (x1) tie=4 tiebreak=min (A-BB61, declared in-band) [A-BB58: modes==R, point ADVISORY]
+mode-census PEAK W=8: modes=5 dominant=228589568 B (x1) tie=4 tiebreak=min (A-BB61, declared in-band) [A-BB58: modes==R, point ADVISORY]
+mode-census PEAK W=12: modes=5 dominant=303431680 B (x1) tie=4 tiebreak=min (A-BB61, declared in-band) [A-BB58: modes==R, point ADVISORY]
+mode-census PEAK W=16: modes=5 dominant=389808128 B (x1) tie=4 tiebreak=min (A-BB61, declared in-band) [A-BB58: modes==R, point ADVISORY]
+delta BOOT W4->W8 = 9109504 B, marginal 2277376 B/worker [IN ex-ante band b*(1+/-0.15)]
+delta BOOT W8->W12 = 8912896 B, marginal 2228224 B/worker [IN ex-ante band b*(1+/-0.15)]
+delta BOOT W12->W16 = 9043968 B, marginal 2260992 B/worker [IN ex-ante band b*(1+/-0.15)]
+marginals-OUT BOOT: count=0 names=[ ]
+VSLOPE-BOOT b (LSQ dominant-mode, metric=commit_pboot_win9 (PEAK-metric), W in {4, 8, 12, 16}): 2252800 B/worker se=6345 B twosigma=[2240109, 2265491] a=12386304 B grade=verdict-grade-candidate
+delta WORK W4->W8 = 65601536 B, marginal 16400384 B/worker [IN ex-ante band b*(1+/-0.15)]
+delta WORK W8->W12 = 65667072 B, marginal 16416768 B/worker [IN ex-ante band b*(1+/-0.15)]
+delta WORK W12->W16 = 77201408 B, marginal 19300352 B/worker [IN ex-ante band b*(1+/-0.15)]
+marginals-OUT WORK: count=0 names=[ ]
+VSLOPE-WORK b (LSQ dominant-mode, metric=delta_commit_pwork_minus_pboot_win9, W in {4, 8, 12, 16}): 17276928 B/worker se=501348 B twosigma=[16274233, 18279623] a=61079552 B grade=verdict-grade-candidate
+delta PEAK W4->W8 = 76808192 B, marginal 19202048 B/worker [IN ex-ante band b*(1+/-0.15)]
+delta PEAK W8->W12 = 74842112 B, marginal 18710528 B/worker [IN ex-ante band b*(1+/-0.15)]
+delta PEAK W12->W16 = 86376448 B, marginal 21594112 B/worker [IN ex-ante band b*(1+/-0.15)]
+marginals-OUT PEAK: count=0 names=[ ]
+VSLOPE-PEAK b (LSQ dominant-mode, metric=committed_postcollect_win0 (PEAK-metric, A-DL48), W in {4, 8, 12, 16}): 19723059 B/worker se=447220 B twosigma=[18828619, 20617500] a=71172096 B grade=verdict-grade-candidate
+robustness PEAK (A-BB62): b_minR=19723059 B/worker ratio_minR=1.000 [insensitivity vs dominant-mode; threshold 0.8 declared]
+VLADDER additivity: b_peak=19723059 = b_boot=2252800 + b_work=17276928 + residuo_post=193331 B/worker [residuo IN ex-ante band 0.15*b; the residue is the post-work segment: self+final census allocs]
+VLADDER PASS: ladder monotone on 20/20 raws; b decomposed by PHASE on the exact monotone counter (braccio 2, Leijen)
+VSELF: per-worker split REFUSED on 20/20 slope raws — mi_heap_of returns a SHARED heap on mimalloc v3 (A-DL31 honesty tooth: same heap pointer across workers => the per-thread reading reads ONE heap W times). DECLARED ex-ante in the campaign header; the per-worker decomposition of b stays OPEN for the council (channel structural limit, not a campaign FAIL)
+VSELF PASS: thr coverage exact on every slope raw; heap-collision judged per A-DL31 (refused, never blessed)
+VCOV: census at peak covers mean 158462223 of 275198771 B commit (ratio=0.576 < 0.9) => the census half of the attribution is ADVISORY (KL-91-3, DECLARED — never a mute census blessed; the exact half is the VLADDER commit deltas)
+VCOV PASS: coverage computed and declared against the 0.9 threshold (KL-91-3)
+VSWEEP90 cal: pad87a net=7801102 B | pad87b net=7801102 B [byte-reproduced r1==r2 per side; the m89 anchor 7801102 is a NAMED-ADVISORY comparison only — the census binary CHANGED (A-MS50/ckpt/self)]
+VSWEEP90 cal note: pad87a net EQUALS the m89 anchor (5th campaign byte-repro)
+VSWEEP90 dt1  pd0: spans=OVERLAP CLAMPED(1) purged_cumulative_exit=189530112 [declared, excluded from surplus tally; A-DL50 per-request ladder DECLARED-unavailable — clamp<=>purge judged via P-CLAMP-PD]
+VSWEEP90 dt1  pd0: spans=OVERLAP CLAMPED(1) purged_cumulative_exit=189857792 [declared, excluded from surplus tally; A-DL50 per-request ladder DECLARED-unavailable — clamp<=>purge judged via P-CLAMP-PD]
+VSWEEP90 dt5  pd0: spans=NO-OVERLAP padA net=7840541 B dA=-7761663 B | padB net=14047297 B dB=-1554907 B [nets VOID per-thread, KB-88-1]
+VSWEEP90 dt5  pd0: spans=OVERLAP CLAMPED(1) purged_cumulative_exit=190054400 [declared, excluded from surplus tally; A-DL50 per-request ladder DECLARED-unavailable — clamp<=>purge judged via P-CLAMP-PD]
+VSWEEP90 dt20  pd0: spans=NO-OVERLAP padA net=7801102 B dA=-7801102 B | padB net=7801102 B dB=-7801102 B [nets VOID per-thread, KB-88-1]
+VSWEEP90 dt20  pd0: spans=NO-OVERLAP padA net=7801102 B dA=-7801102 B | padB net=7801102 B dB=-7801102 B [nets VOID per-thread, KB-88-1]
+VSWEEP90 dt1  pd1000: spans=OVERLAP padA net=33474898 B | padB net=0 B | clamped_rows=1 purged_cumulative_exit=127467520 [A-BB63 arm; A-DL50 per-request ladder DECLARED-unavailable on this channel; nets VOID per-thread KB-88-1]
+VSWEEP90 dt1  pd1000: spans=OVERLAP padA net=0 B | padB net=33195874 B | clamped_rows=1 purged_cumulative_exit=156237824 [A-BB63 arm; A-DL50 per-request ladder DECLARED-unavailable on this channel; nets VOID per-thread KB-88-1]
+VSWEEP90 dt5  pd1000: spans=NO-OVERLAP padA net=7840541 B | padB net=14047309 B | clamped_rows=0 purged_cumulative_exit=113639424 [A-BB63 arm; A-DL50 per-request ladder DECLARED-unavailable on this channel; nets VOID per-thread KB-88-1]
+VSWEEP90 dt5  pd1000: spans=OVERLAP padA net=0 B | padB net=11980743 B | clamped_rows=1 purged_cumulative_exit=113508352 [A-BB63 arm; A-DL50 per-request ladder DECLARED-unavailable on this channel; nets VOID per-thread KB-88-1]
+VSWEEP90 P-DT20 CONFIRMED: net==cal AL BYTE on 4/4 dt=20 sides
+VSWEEP90 P-CLAMP-PD REFUTED: clamp persiste su 3/4 run con pd=1000 — la colpa e' del bracket/counter, non della purge (esito ex-ante alternativo dichiarato)
+VSWEEP90 A-DL50: 3 raw clamped su pd0 — la scala Δpurged per-request e' DECLARED-unavailable su questo canale (wiring worker-path = candidato WP-92); l'implicazione clamp<=>purge e' giudicata dal solo P-CLAMP-PD
+VSWEEP90 PASS: cal byte-reproduced, spans judged, clamped physics judged against the ex-ante predictions
+== VERDICT90 PASS (attempt=1, generation g2, judge committed at HEAD) ==
