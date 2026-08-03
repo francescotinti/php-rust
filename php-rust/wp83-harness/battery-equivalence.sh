@@ -61,6 +61,44 @@ set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$HERE/.." && pwd)"
 SAME_REV=0
+# A-AH68 (Council WP-94, Hejlsberg — KS-AH-94-*): battery identity comes
+# from the CONTENT, never from the basename the CALLER chooses. The old
+# `basename "$OUT" .out` keyed the SCOPE of the attempts discipline
+# (pre-ledger exemption battery-8[0-8]*, grammar-v2 family) off a name the
+# invoker picks: an .out renamed battery-88x.out walked out of the whole
+# discipline. Identity = the anchored terminal PASS line (which A-SK36
+# proves unique, final, rev-bound and sha-recomputed); the basename must
+# AGREE or the consumption refuses — a file whose name disputes its
+# content has no identity at all. ONE predicate, consumed by the real
+# path AND by --selftest-identity (the tooth bites the same code object).
+bname_of() { # <out-file> -> battery-<n>pre from the anchored terminal line, or ""
+  tail -1 "$1" | sed -n 's/^== BATTERY-\([0-9][0-9]*\)PRE PASS ([0-9][0-9]*\/[0-9][0-9]*) git=[0-9a-f][0-9a-f]* ==$/battery-\1pre/p'
+}
+bnc_judge() { # <out-file> -> OK:<name> | MISMATCH:<content-name> | NONE
+  local cn; cn=$(bname_of "$1")
+  if [ -z "$cn" ]; then echo NONE
+  elif [ "$(basename "$1" .out)" != "$cn" ]; then echo "MISMATCH:$cn"
+  else echo "OK:$cn"; fi
+}
+if [ "${1:-}" = "--selftest-identity" ]; then
+  T=$(mktemp -d)
+  printf '== BATTERY-91PRE PASS (16/16) git=abc1234 ==\n' > "$T/battery-91pre.out"
+  R1=$(bnc_judge "$T/battery-91pre.out")                    # agree -> OK
+  # THE BITE (Hejlsberg forge WP-94): the same content renamed into the
+  # pre-ledger exemption scope — the caller-chosen basename must no longer
+  # select the scope; content identity wins and the mismatch refuses.
+  cp "$T/battery-91pre.out" "$T/battery-88pre.out"
+  R2=$(bnc_judge "$T/battery-88pre.out")                    # forged name -> MISMATCH
+  printf 'battery said pass, trust me\n' > "$T/noline.out"
+  R3=$(bnc_judge "$T/noline.out")                           # no anchor -> NONE
+  rm -rf "$T"
+  if [ "$R1" = "OK:battery-91pre" ] && [ "$R2" = "MISMATCH:battery-91pre" ] && [ "$R3" = NONE ]; then
+    echo "SELFTEST-IDENTITY PASS: content-derived name, forged basename bites, anchorless OUT has no identity (A-AH68)"
+    exit 0
+  fi
+  echo "SELFTEST-IDENTITY FAIL: got R1=$R1 R2=$R2 R3=$R3 (want OK:battery-91pre / MISMATCH:battery-91pre / NONE) — A-AH68 tooth does not bite"
+  exit 1
+fi
 # A-SK57 bite-test (same-commit, Council WP-90): the row-granularity
 # prefix logic must bite on (a) non-prefix rewrite, (b) last-row
 # EXTENSION smuggled as append; and pass (c) a legal row append. Pure
@@ -168,6 +206,17 @@ NPASS=$(grep -cE "$PASSRE" "$OUT" || true)
 if [ "$NPASS" != 1 ] || ! tail -1 "$OUT" | grep -qE "$PASSRE"; then
   fail "(A-SK36) anchored terminal PASS line for rev $BREV absent/duplicated/not-final in OUT (count=$NPASS) — KS-SK-86-1"
 fi
+# A-AH68: identity derived HERE, from the content just anchored above —
+# every scope decision below (stamp match, attempts discipline, grammar
+# family) keys off BATTERY_NAME, so it is born from the terminal line and
+# never from the caller's filename.
+BATTERY_NAME=""
+case "$(bnc_judge "$OUT")" in
+  OK:*)       BATTERY_NAME="$(bname_of "$OUT")";;
+  MISMATCH:*) BATTERY_NAME="$(bname_of "$OUT")"
+              fail "(A-AH68/KS-AH-94) basename '$(basename "$OUT" .out)' disputes content identity '$BATTERY_NAME' — the caller does not choose the scope";;
+  NONE)       fail "(A-AH68) battery identity underivable from CONTENT (no anchored terminal PASS line) — the basename is never a fallback";;
+esac
 DONE="$(dirname "$OUT")/.done"
 if [ ! -f "$DONE" ]; then
   fail "(A-SK36) .done next to OUT missing — the battery of rev $BREV never COMPLETED there (a PASS-only stamp)"
@@ -199,9 +248,12 @@ else
     if [ -z "$DMTX_NAME" ] || [ -z "$DMTX_SHA" ] || [ "$DMTX_NAME" = "$DMTX_SHA" ]; then
       fail "(A-SK46) .done carries no matrix=/matrix_sha256= pair (A-AH40 stamp incomplete)"
     else
+      # A-AH68: the committed stamp row must ALSO carry the content-derived
+      # battery name at line start — a stamp of a DIFFERENT battery with a
+      # colliding rev+sha can no longer certify this OUT.
       if ! git -C "$REPO" show "HEAD:${GITPREFIX}${BLEDGER_REL}" 2>/dev/null | \
-           grep -q "rev=$BREV sha256=$DSHA matrix=$DMTX_NAME matrix_sha256=$DMTX_SHA"; then
-        fail "(A-SK41/A-SK46) 4-field stamp rev=$BREV sha256=$DSHA matrix=$DMTX_NAME matrix_sha256=$DMTX_SHA not in the COMMITTED ${GITPREFIX}${BLEDGER_REL} (canonical path, A-AH43) — battery not ledgered (KS-SK-87-1/KS-SK-88-1)"
+           grep -q "^battery=${BATTERY_NAME#battery-} rev=$BREV sha256=$DSHA matrix=$DMTX_NAME matrix_sha256=$DMTX_SHA"; then
+        fail "(A-SK41/A-SK46/A-AH68) 5-field stamp battery=${BATTERY_NAME#battery-} rev=$BREV sha256=$DSHA matrix=$DMTX_NAME matrix_sha256=$DMTX_SHA not in the COMMITTED ${GITPREFIX}${BLEDGER_REL} (canonical path, A-AH43) — battery not ledgered (KS-SK-87-1/KS-SK-88-1)"
       fi
       MTX_REL="wp78-harness/matrix-archive/$DMTX_NAME"
       MTX_COMMITTED_SHA=$(git -C "$REPO" show "HEAD:${GITPREFIX}${MTX_REL}" 2>/dev/null | shasum -a 256 | cut -d' ' -f1)
@@ -304,7 +356,9 @@ done
 # Scoped to 89pre+ batteries (the ledger was born at WP-89; historical
 # 88pre verdicts stand as judged, they are never re-consumed).
 ATTL_REL="wp83-harness/evidence/battery-attempts.ledger"
-BATTERY_NAME=$(basename "$OUT" .out)
+# A-AH68: BATTERY_NAME was hoisted next to the A-SK36 anchor and is
+# content-derived — the old `basename "$OUT" .out` let the caller pick the
+# scope of every case below (Hejlsberg forge WP-94).
 case "$BATTERY_NAME" in
   battery-8[0-8]*) : ;;  # pre-ledger batteries, declared exempt
   *)

@@ -55,6 +55,22 @@
 # repeated as permanent teeth.
 export PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin:$PATH
 set -u
+# A-SK-82-GUARD (Council WP-94, Klabnik forge — KS-SK-94-1): the caller
+# CHOOSES $0. `bash -c "$(cat patched-judge)" /path/to/pristine-judge --all`
+# runs the PATCHED text while $0 names the pristine HEAD blob: A-SK-78
+# hashed a namesake again, one level up (the door was closed, the window
+# left open). BASH_SOURCE[0] is bash's own record of the FILE it is
+# reading: empty under `bash -c` (no file is read), and != $0 when this
+# script is sourced from another. REFUSE both, in EVERY mode — an identity
+# that cannot be established is not an advisory identity either. Every
+# $0-derived path below (HERE, SELF_ABS) is legitimate ONLY because this
+# guard has already proved $0 == the file bash reads.
+SELF_SRC="${BASH_SOURCE[0]:-}"
+if [ -z "$SELF_SRC" ] || [ "$SELF_SRC" != "$0" ]; then
+  echo "REFUSE gate-measure-cifre: BASH_SOURCE[0]='$SELF_SRC' != \$0='$0' (empty = bash -c channel) — the tether must hash the file bash READS, never the name the caller supplies (A-SK-82/KS-SK-94-1)"
+  exit 1
+fi
+# A-SK-82-GUARD-END
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(git -C "$HERE" rev-parse --show-toplevel)" || { echo "FAIL gate-measure-cifre: not in a git repo (A-SK55/A-SK-67 need HEAD)"; exit 1; }
 MOUT="$HERE/../wp78-harness/measure-out"
@@ -405,8 +421,30 @@ if [ "${1:-}" = "--selftest" ]; then
   if ! printf '%s\n' "$T17OUT" | grep -q 'A-SK-78'; then
     echo "SELFTEST FAIL: patched judge copy did not die on the SELF-TETHER (A-SK-78)"; rm -rf "$TMP"; exit 1
   fi
+  # T23 — WP-94 forge REPEATED (Klabnik, A-SK-82/KS-SK-94-1): the bash -c
+  # channel. `bash -c "$(cat text)" $SELF_ABS <doc>` runs whatever TEXT the
+  # caller feeds while $0 names the pristine judge — A-SK-78 hashes $0 and
+  # signs the namesake. Arm (a): the GUARDED judge text through the -c
+  # channel must REFUSE rc=1 naming A-SK-82 (never any grade of PASS).
+  T23OUT=$(bash -c "$(cat "$SELF_ABS")" "$SELF_ABS" "$TMP/baseline.md" 2>&1); T23RC=$?
+  if [ "$T23RC" != 1 ] || ! printf '%s\n' "$T23OUT" | grep -q 'A-SK-82'; then
+    echo "SELFTEST FAIL: bash -c channel not refused by name (rc=$T23RC, want 1 + A-SK-82 line) — WP-94 forge / KS-SK-94-1"; rm -rf "$TMP"; exit 1
+  fi
+  # Arm (b), the BITE of the copy (law WP-92: a self-tether is proved by
+  # the bite, never by reading the code): the SAME channel against the
+  # judge with the A-SK-82 guard stripped — the pre-WP-94 judge — must
+  # ADVISORY-PASS rc=64 on an intact doc, i.e. the forge is REAL and the
+  # tooth is not vacuous. (A-SK-78 does not fire: it hashes $0, which
+  # names the pristine on-disk judge; the escalation to a signed
+  # verdict-grade --all PASS is exactly T17's forge one level up, blocked
+  # by the same guard asserted in arm (a).)
+  T23STRIP=$(perl -ne 'print unless /A-SK-82-GUARD/../A-SK-82-GUARD-END/' "$SELF_ABS")
+  T23OUT2=$(bash -c "$T23STRIP" "$SELF_ABS" "$TMP/baseline.md" 2>&1); T23RC2=$?
+  if [ "$T23RC2" != 64 ]; then
+    echo "SELFTEST FAIL: guard-stripped judge via bash -c did NOT would-have-passed (rc=$T23RC2, want 64) — T23 bite is vacuous, the forge no longer reproduces"; rm -rf "$TMP"; exit 1
+  fi
   rm -rf "$TMP"
-  echo "SELFTEST PASS: KG-83-3 smuggle + A-SK40 companions + A-SK55 committed-only + A-SK60 provenance (positive+bite) + A-SK62 every-token + A-SK63 manifest graces + A-SK65 env-cache ignored + A-SK53-bis window + A-SK-67 HEAD-authorities (budget tamper, forge-a manifest row) + A-SK-69 strict prov (forge-b: cross-file, non-minus operator, address-range, positive same-file) + A-SK-70 cache abolished (forge-c) + A-SK-71 perimeter (forge-d) + A-SK-72 ledger-proved supersession (.out optional) + A-SK-73 pool=corpus + A-SK-74 named-rev identities (forge F1, T18+control) + A-SK-75 ALLOW-as-authority, 2.8/46.25 revoked (forge F2, T19) + A-SK-76 glued-run refused (forge F3, T20) + A-SK-77 budget-history out of corpus (forge F4, T21+control) + A-SK-78 self-tether (forge F6, T17) + A-SK-79 exit-code grades (every tooth rc-exact) + A-SK-80 complement perimeter + A-SK-81 labeled prov operands (forge F5, T22) all bite"
+  echo "SELFTEST PASS: KG-83-3 smuggle + A-SK40 companions + A-SK55 committed-only + A-SK60 provenance (positive+bite) + A-SK62 every-token + A-SK63 manifest graces + A-SK65 env-cache ignored + A-SK53-bis window + A-SK-67 HEAD-authorities (budget tamper, forge-a manifest row) + A-SK-69 strict prov (forge-b: cross-file, non-minus operator, address-range, positive same-file) + A-SK-70 cache abolished (forge-c) + A-SK-71 perimeter (forge-d) + A-SK-72 ledger-proved supersession (.out optional) + A-SK-73 pool=corpus + A-SK-74 named-rev identities (forge F1, T18+control) + A-SK-75 ALLOW-as-authority, 2.8/46.25 revoked (forge F2, T19) + A-SK-76 glued-run refused (forge F3, T20) + A-SK-77 budget-history out of corpus (forge F4, T21+control) + A-SK-78 self-tether (forge F6, T17) + A-SK-79 exit-code grades (every tooth rc-exact) + A-SK-80 complement perimeter + A-SK-81 labeled prov operands (forge F5, T22) + A-SK-82 BASH_SOURCE tether (WP-94 forge, T23 arm-a REFUSE + arm-b bite-of-the-stripped-copy) all bite"
   exit 0
 fi
 
