@@ -80,6 +80,50 @@ bnc_judge() { # <out-file> -> OK:<name> | MISMATCH:<content-name> | NONE
   elif [ "$(basename "$1" .out)" != "$cn" ]; then echo "MISMATCH:$cn"
   else echo "OK:$cn"; fi
 }
+# A-AH-69 / A-AH-71 (Council WP-95, A3/A2). ONE predicate each, consumed by
+# the real path AND by --selftest-stamp, so the tooth bites the same code
+# object the campaign runs.
+#   drow_judge — the four stamp fields must come from the ONE row that
+#     carries rev=$BREV. The presence test and the field extraction used to
+#     be coupled only by luck (`grep -q "^rev=$BREV "` proved SOME row has
+#     the rev; `sed … | head -1` read the FIRST rev= row): on a two-row
+#     .done the rev is asserted of one row and the shas read from another,
+#     and the .done is written entirely by the battery, i.e. by the forger.
+#   writer_foreign — `writer=script:<h16>` is AUTHENTICATED against the
+#     battery script AS COMMITTED AT HEAD, not merely well-formed: a 16-hex
+#     run is a SHAPE anyone can type, while the row claims an ORIGIN.
+drow_judge() { # <done-file> <brev> -> OK:<row> | NREV:<n> | NOROW
+  local n row
+  n=$(grep -c "^rev=" "$1" || true)
+  if [ "$n" != 1 ]; then echo "NREV:$n"; return; fi
+  row=$(grep "^rev=$2 " "$1" || grep -x "rev=$2" "$1" || true)
+  if [ -z "$row" ]; then echo NOROW; else echo "OK:$row"; fi
+}
+writer_foreign() { # <rows> <script-h16> -> count of rows claiming a FOREIGN script sha
+  printf '%s\n' "$1" | grep "writer=script:" | grep -cvE "writer=script:$2( |\$)" || true
+}
+if [ "${1:-}" = "--selftest-stamp" ]; then
+  T=$(mktemp -d)
+  printf 'rev=abc1234 sha256=deadbeef matrix=m.tsv matrix_sha256=cafe\n' > "$T/one"
+  S1=$(drow_judge "$T/one" abc1234)
+  # THE BITE (A-AH-69): a second rev= row — the rev anchor would be proved
+  # of one row while the shas are read from the other.
+  printf 'rev=999aaaa sha256=0000 matrix=x.tsv matrix_sha256=0000\nrev=abc1234 sha256=deadbeef matrix=m.tsv matrix_sha256=cafe\n' > "$T/two"
+  S2=$(drow_judge "$T/two" abc1234)
+  printf 'rev=other11 sha256=deadbeef matrix=m.tsv matrix_sha256=cafe\n' > "$T/wrong"
+  S3=$(drow_judge "$T/wrong" abc1234)
+  ROWS=$'attempt_epoch=1 battery=91pre rev=aaa esito=PASS writer=script:0123456789abcdef\nattempt_epoch=2 battery=91pre rev=bbb esito=PASS writer=script:ffffffffffffffff'
+  S4=$(writer_foreign "$ROWS" 0123456789abcdef)   # one row claims a FOREIGN origin
+  S5=$(writer_foreign "$ROWS" ffffffffffffffff)   # the other one does
+  rm -rf "$T"
+  if [ "$S1" = "OK:rev=abc1234 sha256=deadbeef matrix=m.tsv matrix_sha256=cafe" ] && \
+     [ "$S2" = "NREV:2" ] && [ "$S3" = NOROW ] && [ "$S4" = 1 ] && [ "$S5" = 1 ]; then
+    echo "SELFTEST-STAMP PASS: four fields from ONE rev row, multi-row .done refused, writer= authenticated against the HEAD battery script (A-AH-69/A-AH-71)"
+    exit 0
+  fi
+  echo "SELFTEST-STAMP FAIL: got S1=$S1 S2=$S2 S3=$S3 S4=$S4 S5=$S5 (want OK:<row> / NREV:2 / NOROW / 1 / 1) — A-AH-69/A-AH-71 teeth do not bite"
+  exit 1
+fi
 if [ "${1:-}" = "--selftest-identity" ]; then
   T=$(mktemp -d)
   printf '== BATTERY-91PRE PASS (16/16) git=abc1234 ==\n' > "$T/battery-91pre.out"
@@ -221,12 +265,16 @@ DONE="$(dirname "$OUT")/.done"
 if [ ! -f "$DONE" ]; then
   fail "(A-SK36) .done next to OUT missing — the battery of rev $BREV never COMPLETED there (a PASS-only stamp)"
 else
-  grep -q "^rev=$BREV " "$DONE" || grep -qx "rev=$BREV" "$DONE" || \
-    fail "(A-SK36) .done does not stamp rev=$BREV"
+  DJ="$(drow_judge "$DONE" "$BREV")"
+  case "$DJ" in
+    NREV:*) fail "(A-AH-69/KS-AH-95-2) .done carries ${DJ#NREV:} rev= rows — the rev anchor and the sha/matrix fields would be read from DIFFERENT rows; a stamp is one row or it is not a stamp";;
+    NOROW)  fail "(A-SK36) .done does not stamp rev=$BREV";;
+  esac
+  DROW="${DJ#OK:}"
   # v4 .done format (A-AH40) carries TWO sha fields (sha256= of OUT and
   # matrix_sha256=): the old greedy `.*sha256=` matched the LAST one and
   # compared the MATRIX sha against sha256(OUT) — anchored parse.
-  DSHA=$(sed -n 's/^rev=[0-9a-f]* sha256=\([0-9a-f]*\).*/\1/p' "$DONE" | head -1)
+  DSHA=$(printf '%s\n' "$DROW" | sed -n 's/^rev=[0-9a-f]* sha256=\([0-9a-f]*\).*/\1/p' | head -1)
   OSHA=$(shasum -a 256 "$OUT" | cut -d' ' -f1)
   if [ -z "$DSHA" ]; then
     fail "(A-SK36) .done carries no sha256= — pre-v3 or forged stamp (KS-SK-86-1)"
@@ -243,7 +291,7 @@ else
     # v5 A-SK46: the committed line must match ALL FOUR fields, and the
     # matrix archive it names must be COMMITTED with a matching sha.
     BLEDGER_REL="wp83-harness/evidence/battery-stamps.ledger"
-    DMTX=$(sed -n 's/^rev=[0-9a-f]* sha256=[0-9a-f]* matrix=\([^ ]*\) matrix_sha256=\([0-9a-f]*\).*/\1 \2/p' "$DONE" | head -1)
+    DMTX=$(printf '%s\n' "$DROW" | sed -n 's/^rev=[0-9a-f]* sha256=[0-9a-f]* matrix=\([^ ]*\) matrix_sha256=\([0-9a-f]*\).*/\1 \2/p' | head -1)
     DMTX_NAME="${DMTX%% *}"; DMTX_SHA="${DMTX#* }"
     if [ -z "$DMTX_NAME" ] || [ -z "$DMTX_SHA" ] || [ "$DMTX_NAME" = "$DMTX_SHA" ]; then
       fail "(A-SK46) .done carries no matrix=/matrix_sha256= pair (A-AH40 stamp incomplete)"
@@ -391,6 +439,16 @@ case "$BATTERY_NAME" in
     if [ -n "$V2ROWS" ]; then
       BADW=$(printf '%s\n' "$V2ROWS" | grep -cvE "writer=(script:[0-9a-f]{16}|operator)( |$)" || true)
       [ "$BADW" -gt 0 ] && fail "(A-AH58/KS-AH-92-1) $BADW attempts row(s) for battery=$BNAME without a valid writer= — consumption VOID"
+      # A-AH-71 (Council WP-95, A2) — see writer_foreign above. Same move
+      # A-SK-75 made for the ALLOW entries: a field that names its author is
+      # an authority or it is decoration.
+      BSCRIPT_REL="wp${BNAME%%pre*}-harness/battery-${BNAME}.sh"
+      BSCRIPT_SHA=$(git -C "$REPO" show "HEAD:${GITPREFIX}${BSCRIPT_REL}" 2>/dev/null | shasum -a 256 | cut -c1-16)
+      if [ -z "$BSCRIPT_SHA" ]; then
+        fail "(A-AH-71/KS-AH-95-1) battery script ${GITPREFIX}${BSCRIPT_REL} is NOT committed at HEAD — writer=script:<h16> cannot be authenticated against anything, consumption VOID"
+      fi
+      BADWS=$(writer_foreign "$V2ROWS" "$BSCRIPT_SHA")
+      [ "$BADWS" -gt 0 ] && fail "(A-AH-71/KS-AH-95-1) $BADWS attempts row(s) for battery=$BNAME carry a writer=script:<h16> that is NOT sha256(HEAD:${BSCRIPT_REL})=$BSCRIPT_SHA — the ledger records an ORIGIN, never a shape"
       BADA=$(printf '%s\n' "$V2ROWS" | grep "esito=ABORT" | grep -cv "writer=operator" || true)
       [ "$BADA" -gt 0 ] && fail "(A-AH58/KS-AH-92-1) $BADA esito=ABORT row(s) without writer=operator — an ABORT is an operator act"
       BADE=$(printf '%s\n' "$V2ROWS" | grep -cvE "esito=(PASS|FAIL|REFUSE|ABORT)( |$)" || true)

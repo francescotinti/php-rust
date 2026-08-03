@@ -66,38 +66,59 @@ pub mod mem_alloc {
     // costo è un confronto su size per le sole allocazioni sopra soglia.
     // La guardia di rientranza evita la ricorsione del force_capture (che
     // alloca a sua volta, ma sotto soglia).
-    use std::sync::atomic::{AtomicU8, Ordering};
-    static HUGE_TRACE: AtomicU8 = AtomicU8::new(2); // 2=da-leggere, 1=on, 0=off
+    // A-TH-73/A-TH-74 (Concilio WP-95, A4): dentro un GlobalAlloc non si
+    // legge l'ambiente e non si prende un percorso che possa panicare —
+    // `std::env::var_os` prende il lock dell'environment (e allocare mentre
+    // quel lock è tenuto è un deadlock latente), e `thread::current()`
+    // panica se il TLS del thread è già in distruzione. Un panic in un
+    // GlobalAlloc è UB da contratto, e questo è il canale che genera le
+    // MISURE: qui un difetto non produce un errore, produce una cifra.
+    // Quindi: la env si legge UNA volta in `main()` prima di ogni spawn
+    // (`init_huge_trace`), e il thread si nomina con un id numerico
+    // assegnato dal thread_local già presente, letto con `try_with` (mai
+    // `with`: su TLS distrutto `with` panica, `try_with` restituisce Err).
+    use std::sync::atomic::{AtomicU64, AtomicU8, Ordering};
+    static HUGE_TRACE: AtomicU8 = AtomicU8::new(0); // 1=on, 0=off (fail-closed finché main non decide)
+    static NEXT_THR_ID: AtomicU64 = AtomicU64::new(0);
     const HUGE_MIN: usize = 512 * 1024;
     thread_local! {
         static IN_TRACE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+        static THR_ID: std::cell::Cell<u64> = const { std::cell::Cell::new(u64::MAX) };
+    }
+    /// Da chiamare in `main()` PRIMA di qualunque spawn: è l'unico punto in
+    /// cui si legge `PHPR_HUGE_TRACE`. Senza questa chiamata il trace resta
+    /// spento — un canale di misura muto è un fatto dichiarato nel banner,
+    /// una env letta dall'allocatore è un deadlock che non si dichiara.
+    pub fn init_huge_trace() {
+        let on = std::env::var_os("PHPR_HUGE_TRACE").map(|v| v == "1").unwrap_or(false);
+        HUGE_TRACE.store(on as u8, Ordering::Relaxed);
+        if on {
+            eprintln!("HUGE-TRACE armed: threshold={HUGE_MIN} B (PHPR_HUGE_TRACE=1, read in main before spawn — A-TH-73)");
+        }
     }
     #[inline]
     fn huge_note(kind: &str, size: usize) {
         if size < HUGE_MIN {
             return;
         }
-        let mode = HUGE_TRACE.load(Ordering::Relaxed);
-        let on = if mode == 2 {
-            let v = std::env::var_os("PHPR_HUGE_TRACE").map(|v| v == "1").unwrap_or(false);
-            HUGE_TRACE.store(v as u8, Ordering::Relaxed);
-            v
-        } else {
-            mode == 1
-        };
-        if !on {
+        if HUGE_TRACE.load(Ordering::Relaxed) != 1 {
             return;
         }
-        IN_TRACE.with(|f| {
+        let _ = IN_TRACE.try_with(|f| {
             if f.get() {
                 return;
             }
             f.set(true);
+            let id = THR_ID
+                .try_with(|t| {
+                    if t.get() == u64::MAX {
+                        t.set(NEXT_THR_ID.fetch_add(1, Ordering::Relaxed));
+                    }
+                    t.get()
+                })
+                .unwrap_or(u64::MAX);
             let bt = std::backtrace::Backtrace::force_capture();
-            eprintln!(
-                "HUGE-TRACE kind={kind} size={size} thr={:?}\n{bt}",
-                std::thread::current().id()
-            );
+            eprintln!("HUGE-TRACE kind={kind} size={size} thr={id}\n{bt}");
             f.set(false);
         });
     }
@@ -548,6 +569,10 @@ mod axum_handler {
 
 fn main() -> ExitCode {
     php_runtime::logging::init();
+
+    // A-TH-73: la sola lettura di PHPR_HUGE_TRACE, qui, prima di ogni spawn.
+    #[cfg(all(feature = "mem-census", not(feature = "census-instrumentation")))]
+    mem_alloc::init_huge_trace();
 
     // S-79.0.3: hand the runtime-side census brackets (a1/a3 split) the
     // counting allocator's snapshot. Install-once; a duplicate set is a no-op.
