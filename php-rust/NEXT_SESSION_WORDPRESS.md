@@ -57,41 +57,70 @@ operator e head-move a macchina). NUOVE regole operative dalle lezioni:
 numericità fail-closed)**; **il bite-test decide la collocazione dei
 doc storici, mai la previsione**.
 
-## ⚖️ Concilio WP-93 (eseguito in chiusura, verbali VINCOLANTI): `wp93-harness/COUNCIL_WP93_REVIEWS.md`
+## ⚖️ Concilio WP-93 ESEGUITO (2026-08-03, verbali VINCOLANTI): `wp93-harness/COUNCIL_WP93_REVIEWS.md`
 
-(vedi §Sintesi per l'ordine S-92.0 e i kill-switch nuovi — bloccante
-per il design WP-92.)
+**9× CON EMENDAMENTI, 0 opposizioni; due fasi (9 verbali + 3 team);
+23 KS nuovi. DIECI refutazioni capitali in sei classi**: SEI forge
+NUOVI passati dal gate v2 (Klabnik — la falla massima è il
+GIUDICE-COPIA che stampa PASS col judge_sha pristine; poi porta
+rev-decimali, ALLOW senza autorità, unità incollata, storia-budget,
+prov su MiB tondi); delibera ledger v2 applicata A METÀ (Hejlsberg:
+grammar solo nel ramo same-rev, head-check assente su REFUSE/trap,
+campaign v2 senza dente); testimone A-PP-63 = ISTANTE non finestra
+(Pedersen+Matsakis: serve coppia pre/post + contatore arrivi +
+Release/Acquire — attuazione PARZIALE, Δ fase ADVISORY); design
+A-DL-52 IRREALIZZABILE come scritto (Leijen: API non esportata,
+serve Barrier(W) 2 fasi — canale iter-3 BLOCCATO fino ad A-DL-57/58);
+banda pooled NON è 95% (Bak: run correlate — citabile solo df=2; LOO
+trova anche w16.r1); esenzione abstract-ctor SBAGLIATA (Stogov: chiave
+= prototipo, non classe). Gregg: doc==macchina AL BYTE, zero capitali.
+**Delibera: S-91.0 resta CONSUMABILE** a condizione che ALLOW
+2.8/46.25 siano revocate/motivate entro S-92.0, ogni citazione di
+b_peak(mediana) porti il token di grado, e i consumi futuri passino
+dal gate v3 coi denti T17-T22.
 
 ## §WP-92(sessione) — S-92.0 = ordine Concilio WP-93 §Sintesi (non rinegoziare)
 
-Candidati per NOME (residui S-91.0, sede design91.md — l'ordine esatto
-lo fissa il Concilio WP-93):
+1. **Gate cifre v3 (blocca ogni consumo futuro)**: A-SK-78 self-tether
+   del giudice in esecuzione + A-SK-79 grado nell'exit-code →
+   A-SK-74 (porta rev abolita) → A-SK-75 (ALLOW con autorità; revoca
+   2.8/46.25) → A-SK-76 (tokenizzazione fail-closed) → A-SK-77
+   (budget fuori corpus) → A-SK-80 (perimetro per complemento) →
+   A-SK-81 (prov etichettata) → **T17-T22 = i sei forge come denti che
+   DEVONO fallire** (KS-SK-93-1..4).
+2. **Ledger, la metà mancante (pre-m91)**: A-AH61 (grammar v2 su
+   ENTRAMBI i percorsi) + A-AH62 (head-check su REFUSE/trap) + A-AH63
+   (dente pre-nascita campaign v2 committato PRIMA di measure91) +
+   A-AH64 (corpus solo max-PASS) — KS-AH-93-1..3.
+3. **Sigilli v10**: A-TH-63/65 (prerequisito cifre probe m91,
+   KS-TH-93-1) + A-TH-62/64/66/67 + KS-TH-93-2.
+4. **Riga testimone UNIFICATA + emende misura**: A-PP-66/67 +
+   A-MS-56/57 + A-PP-68/69 + A-MS-58 · emende doc A-BB69/70/71/72 +
+   A-BG62/63/64/65 — KS-PP-93-1/2, KS-BB-93-1/2, KS-BG-93-1/2.
+   Promozione b_work a portata (coppia testimone = l'ultima
+   condizione insieme ad A-DL-52 riscritta).
+5. **A-DS51 fase 1 (checker PURO)**: A-DS59 esenzione riformulata
+   (prototipo, non classe — KS-DS-93-2) + A-DS58 sei fixture v4 per
+   NOME + A-DS60 regole di formattazione — KS-DS-93-1..3; poi fase 2
+   come da A-DS57.
+6. **Canale iter-3 (SBLOCCO)**: A-DL-59 join sui raw ESISTENTI prima
+   di ogni strumento nuovo → A-DL-57 (probe on-thread + mi_heap_of) +
+   A-DL-58 (Barrier(W) 2 fasi) → A-DL-60 — KS-DL-93-1..3; solo dopo:
+   measure91 con grammar v2.
+7. **Design/deferred**: A-MS46 · A-TH55 · A-BB60/A-PP49 · A-MS-51/
+   52+54/53/55 (invariati, si compongono col canale) · backlog.
 
-1. **Canale iterazione 3 (engine)**: A-DL-52 census ON-THREAD alla
-   barriera (P1 team-misura: cambia la NATURA della stima; la barriera
-   È il testimone, si compone con A-PP-63 già VIVO) · A-DL-53/54/55/56
-   · A-PP-60/61/62/64 · measure91-campaign/verdict91 con grammatica
-   ledger v2 (NESSUNA campagna m91 con la v1). Promozione b_work:
-   manca solo A-DL-52 (2/3 condizioni consumate).
-2. **A-DS51 fasi 1-3** (ordine A-DS57 vincolante): checker LSP PURO +
-   45 unit (vincoli di modellistica w4 self-risolto, w5 forma
-   `C::$x::get()`) → lowering HOISTED + esenzioni STESSO commit + gate
-   ORM/hk/corpus per NOME (rischio dichiarato: solo-AGGIUNGE fatal) →
-   bind-registry. Merge = KS-DS-92-1..3 + ereditati.
-3. **A-MS-51/52+54/53/55** engine probe/census (vincolo di sequenza
-   A-TH-57-PREFISSO già rispettato).
-4. Design invariati: A-MS46 · A-TH55 · A-BB60/A-PP49 · backlog.
-
-**Kill-switch di rotta (WP-92, 22)**: tutti ATTIVI; attuati/armati in
-S-91.0 per NOME: KS-SK-92-1..4 (denti T11-T16), KS-BB-92-1/2
-(consumati in repair90/MEASURE90), KS-TH-92-1/2 (sigilli v9),
-KS-AH-92-1/2 (armati su battery 9x), KS-DS-92-1 (pin v3), KS-PP-92-1
-(testimone vivo; la REGOLA di grado resta), KS-BG-92-1 (tabella per-W
-nel doc). Restano da attuare: KS-DL-92-1/2 (con A-DL-52/54),
-KS-PP-92-2 (con verdict91), KS-DS-92-2/3 (al merge A-DS51), KS-MS-92-*
-(con gli A-MS-5x). **Ereditati WP-91 (27) + WP-88/89/90 attivi;
-KS-SK-91-1: i quattro forge ora MUOIONO nei denti — sollevamento =
-delibera del Concilio WP-93.** KS-DS-80-3 invariata.
+**Kill-switch di rotta (WP-93, 23 nuovi)**: KS-TH-93-1/2 ·
+KS-MS-93-1/2 · KS-SK-93-1..4 · KS-AH-93-1..3 · KS-BB-93-1/2 ·
+KS-PP-93-1/2 · KS-DL-93-1..3 · KS-DS-93-1..3 · KS-BG-93-1/2 — tabella
+in `wp93-harness/COUNCIL_WP93_REVIEWS.md` §Sintesi. **Ereditati
+ATTIVI**: WP-92 (22 — attuati/armati in S-91.0 per NOME: KS-SK-92-1..4
+denti T11-T16, KS-BB-92-1/2 consumati, KS-TH-92-1/2 sigilli v9,
+KS-AH-92-1/2 su battery 9x, KS-DS-92-1 pin v3, KS-PP-92-1 regola di
+grado, KS-BG-92-1 tabella per-W; da attuare KS-DL-92-1/2, KS-PP-92-2,
+KS-DS-92-2/3, KS-MS-92-*) + WP-91 (27) + WP-88/89/90.
+**KS-SK-91-1 NON sollevabile (refutazione 1 WP-93: sei forge nuovi
+6/6 dal v2).** KS-DS-80-3 invariata.
 
 **NON riproporre**: tutti i NON-riproporre WP-83..90 restano; in più —
 «comparatore a marcatori nei pin ds35» (bandito, KS-DS-92-1);
