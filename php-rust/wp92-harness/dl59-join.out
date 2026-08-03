@@ -1,0 +1,133 @@
+A-DL-59 dl59-join: per-theap PAGE SLACK vs invisible per-worker slope (m90 census)
+grade=ADVISORY  # analysis on already-consumed m90 raws; lane carries the declared
+                # selection-mismatch caveats of repair90 (A-BB65); VERDICT-grade only
+                # via the future barrier channel A-DL-57/58
+inputs: 20 committed raws wp78-harness/measure-out/m90.slope.w{4,8,12,16}.r{1..5}.a1.memcensus
+        + wp91-harness/repair90-estimators.out (authority for invisible slope/intercept)
+machine truth (parsed from repair90-estimators.out, not hardcoded):
+  slope_invisible=4480174 B/worker  intercept_invisible=71934811 B
+  slope_vis=15777004 B/worker  a_vis=692184  marginal_ratio_vs_b_peak_median=0.778
+
+row grammar found (field names per NOME):
+  tag=mi_bin thr=<k> src=tls size=<bin> reserved= committed= used_b= used_n= areas=
+    (NO ckpt= field on these rows; attribution below)
+  tag=peak_self thr=<k> ckpt=peak_inreq alloc_id=memcount-v2-s82   # dump announcement
+  tag=mi_bin_thr_sum thr=<k> heap=<ptr> reserved= committed= used_b=  # per-thread SUM of
+    its tls rows; SAME heap ptr and SAME committed for every thr => the tls dumps are
+    per-thread VIEWS of the ONE shared heap (arena json: heaps=1, theaps=W+extras)
+  tag=mi_theap_pages ... ckpt=<c> heap=0 pages= committed= used_blocks= free_pages= free_committed=
+    (+ trailer heaps_total=1 heap_overflow=0 declared=heap-by-visit-index,noalloc-visitors-A-MS50)
+  tag=mi_theap_bin ... ckpt=<c> heap=0 bin=<b> free_pages= free_committed=
+
+chosen checkpoint (per NOME): ckpt=peak_inreq, per-thread tls dump #1
+  There is NO per-thread tls dump at ckpt=peak_inreq_pwork: each thread emits exactly TWO
+  tls dumps per run — dump#1 announced by 'tag=peak_self thr=k ckpt=peak_inreq' (between the
+  tag=peak_inreq_pwork summary row and the 'mi_proc win=9 ckpt=peak_inreq' marker), and
+  dump#2 just before tag=exit (exit-side). dump#1 = the WORK-side in-request-peak snapshot,
+  a few hundred ms after pwork with near-identical commit — the closest snapshot to the
+  pwork window on which the invisible slope was estimated (VCOV A-BG57, 'pooled OLS of
+  pwork-commit minus vis'). dump#2 is reported as a control column.
+  ATTRIBUTION rule: last-seen-ckpt is unreliable (peak_self rows poison it; writer
+  interleaving differs across raws). Rule used per NOME: per-thread TEMPORAL order — each
+  thread's tls rows are split at the first repeated size class into dump#1 / dump#2;
+  positional sanity (d1 before / d2 after the 'mi_proc win=9 ckpt=peak_inreq' marker) is
+  verified and printed per run.
+
+SLACK formulas (per NOME, declared):
+  SLACK_naive(run)  = sum over thr=0..W-1, over size classes, of (committed - used_b)
+                      from tag=mi_bin src=tls dump#1 rows  [the task's literal formula]
+  SLACK_global(run) = mean over thr of Sum_size (committed - used_b) of that thr's dump#1
+                      [deduplicated: the tls dumps all describe the ONE shared heap, so the
+                       naive Sum over thr counts the same heap W times — see refutation]
+  free_committed of retained pages is NOT a field on src=tls rows; retained fully-free
+  pages (page_full_retain=2) stay committed with used_b=0 and land in (committed-used_b)
+  (rows with used_n=0 & committed>0 are counted per run below). The explicit free_committed
+  fields (mi_theap_pages/mi_theap_bin) cover ONLY the single visited heap (heaps_total=1,
+  noalloc-visitor A-MS50/KL-90-3); the visited-heap value at pwork is an advisory column.
+
+per-run SLACK, dump#1 = work-side ckpt=peak_inreq per-thread snapshot (B):
+run        SLACK_naive SLACK_global SLACK_glob_d2  heap_commit pwork_commit freePgRows  freePg_c visheap_free_c thrSumMatch d1mispl d2mispl
+w4.r1           7970672      1992668       2478240     63745344    151781376          0         0         120560         4/4       0       0
+w4.r2           8185392      2046348       2464326     63804656    153878528          0         0         143072         4/4       0       0
+w4.r3           8182960      2045740       2461716     63804656    154009600          0         0         138976         4/4       0       0
+w4.r4           8169200      2042300       2452888     63800560    153812992          0         0         130784         4/4       0       0
+w4.r5           7983600      1995900       2479068     63749440    153681920          0         0         120560         4/4       0       0
+w8.r1          28292160      3536520       4186867    126792208    230555648          0         0         138976         8/8       0       0
+w8.r2          28216128      3527016       4197278    126780112    232914944          0         0         130848         8/8       0       0
+w8.r3          27909632      3488704       4220872    126728800    229572608          0         0         108272         8/8       0       0
+w8.r4          28363776      3545472       4318413    126796304    228589568          0         0         143072         8/8       0       0
+w8.r5          28523904      3565488       4354786    126812688    230424576          0         0         163552         8/8       0       0
+w12.r1          59472736      4956061       6007493    189706368    327942144          0         0         108272       12/12       0       0
+w12.r2          59415376      4951281       5937459    189698176    324993024          0         0          95984       12/12       0       0
+w12.r3          60351568      5029297       6081511    189778160    303431680          0         0         143136       12/12       0       0
+w12.r4          59427088      4952257       5964389    189690176    333709312          0         0          95792       12/12       0       0
+w12.r5          59399824      4949985       5990901    189690176    334561280          0         0          91952       12/12       0       0
+w16.r1         110196896      6887306       8078924    253123488    399638528         16   4194304         370416       16/16       0       0
+w16.r2         111306784      6956674       8258310    253199184    390856704         16   4194304         405216       16/16       0       0
+w16.r3         110022496      6876406       8045763    253113248    389611520         16   4194304         362352       16/16       0       0
+w16.r4         110077536      6879846       8168022    253119392    389808128         16   4194304         370416       16/16       0       0
+w16.r5         110325280      6895330       8184450    253127584    390201344         16   4194304         378608       16/16       0       0
+  (thrSumMatch: threads whose mi_bin_thr_sum dump#1 committed == Sum of its tls dump#1
+   committed — validates dump splitting; d1mispl/d2mispl: dump rows on the wrong side of
+   the 'mi_proc win=9 ckpt=peak_inreq' marker — 0 = positional attribution confirmed)
+
+shared-heap refutation of the naive Sum (per NOME):
+  every mi_bin_thr_sum row of a dump carries the SAME heap=<ptr> and SAME committed for
+  all thr; e.g. w16.r1 dump#1: heap_commit=253123488 for each of 16 thr =>
+  Sum_thr committed = 4,049,975,808 >> pwork process commit = 399,638,528.
+  The tls dumps are W views of ONE shared heap; Sum over thr counts it W times.
+  SLACK_global (mean over thr) is the physical page slack of the process heap.
+
+identity check — census coverage vs heap bin committed (per NOME, decisive for Leijen Q3):
+  W=4   vis_model=  63,800,200  heap_commit min..max = 63,745,344 .. 63,804,656  (vis_model/median = 1.0000)
+  W=8   vis_model= 126,908,216  heap_commit min..max = 126,728,800 .. 126,812,688  (vis_model/median = 1.0009)
+  W=12  vis_model= 190,016,232  heap_commit min..max = 189,690,176 .. 189,778,160  (vis_model/median = 1.0017)
+  W=16  vis_model= 253,124,248  heap_commit min..max = 253,113,248 .. 253,199,184  (vis_model/median = 1.0000)
+  => vis(W) = slope_vis*W + a_vis coincides with the heap BIN-COMMITTED bytes to <0.5%.
+  The census coverage already counts committed bin pages (used + slack). Page slack is
+  therefore INSIDE the visible mass, NOT inside the invisible mass = pwork_commit - vis
+  (which lives at arena/chunk level and outside mimalloc bins).
+
+per-W mean SLACK (over 5 runs each):
+W        mean_naive   mean_global    global/W
+4         8098364.8     2024591.2      506148
+8        28261120.0     3532640.0      441580
+12       59613318.4     4967776.5      413981
+16      110385798.4     6899112.4      431195
+
+least-squares SLACK_naive vs W:
+  over 4 W-means : slope=8,455,362.5 B/worker  intercept=-32,963,974.4 B
+  over 20 points : slope=8,455,362.5 B/worker  intercept=-32,963,974.4 B
+  (balanced design: the two fits coincide by construction on slope/intercept)
+  ratio slope_SLACK_naive/slope_invisible(4480174) : 4-means=1.887  20-pt=1.887
+  intercept vs invisible intercept 71,934,811 B : -32,963,974.4 B (ratio -0.458)
+
+least-squares SLACK_global vs W:
+  over 4 W-means : slope=401,467.5 B/worker  intercept=341,355.0 B
+  over 20 points : slope=401,467.5 B/worker  intercept=341,355.0 B
+  (balanced design: the two fits coincide by construction on slope/intercept)
+  ratio slope_SLACK_global/slope_invisible(4480174) : 4-means=0.090  20-pt=0.090
+  intercept vs invisible intercept 71,934,811 B : 341,355.0 B (ratio 0.005)
+
+anomalies per NOME (flagged runs of repair90 A-BB67 seen through SLACK):
+  w4.r1: SLACK_global=1,992,668 (sisters 1,995,900..2,046,348)  pwork_commit=151,781,376 (sisters 153,681,920..154,009,600)
+  w12.r3: SLACK_global=5,029,297 (sisters 4,949,985..4,956,061)  pwork_commit=303,431,680 (sisters 324,993,024..334,561,280)
+  w16.r1: SLACK_global=6,887,306 (sisters 6,876,406..6,956,674)  pwork_commit=399,638,528 (sisters 389,611,520..390,856,704)
+  - w4.r1: low pair with w4.r5 in SLACK_global (-2.5% vs the r2..r4 cluster) and lowest
+    pwork_commit (-1.4%); mild in SLACK — its A-BB67 outlier flag is not slack-driven.
+  - w12.r3: HIGHEST SLACK_global of its W (+1.6%) while its pwork_commit is ~25-30MB BELOW
+    the sisters: the run is an outlier in the invisible (arena-level) mass, in the opposite
+    direction of its slack — further evidence slack and invisible mass are different bodies.
+  - w16.r1: unremarkable in SLACK (mid-pack). All W=16 runs (only they) show the retained
+    free pages: 16 view-rows x 262,144 B = 4,194,304 B naive (262,144 B deduplicated).
+
+VERDICT (ADVISORY): the page-slack hypothesis does NOT hold.
+  - The task-literal Sum-over-theaps SLACK_naive gives slope ~1.9x the invisible slope with
+    a NEGATIVE intercept (wrong shape AND wrong sign), but it is invalid per NOME: the tls
+    dumps are W per-thread views of one shared heap (identical heap ptr + identical
+    committed across thr; Sum_thr committed >> process commit).
+  - The physical (deduplicated) SLACK_global slope is ~9% of the invisible slope: page
+    slack cannot be 'first explanation' of the invisible per-worker slope.
+  - Decisive identity: vis_model(W) == heap bin-committed (<0.5%): bin page slack is
+    already counted INSIDE the census coverage; the invisible mass = pwork_commit - vis
+    sits at arena/chunk level, outside the bins the slack lives in.
