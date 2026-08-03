@@ -1,220 +1,157 @@
-# NEXT_SESSION_WORDPRESS.md — S-92.0: IL-GIUDICE-CHE-FIRMA-SOLO-IL-CODICE-CHE-GIRA-E-L'HEAP-CHE-ERA-UNO-SOLO → WP-93(sessione)
+# NEXT_SESSION_WORDPRESS.md — S-93.0: L'ARENA-CHE-MORIVA-IN-SILENZIO → WP-94(sessione)
 
-**Ultima sessione**: S-92.0 (2026-08-03, commit 1090ad1…69bb924 +
-chiusura) — i 7 punti del Concilio WP-93 eseguiti: **gate cifre v3**
-(A-SK-78 self-tether del giudice in esecuzione, A-SK-79 grado
-nell'exit-code ADVISORY-PASS=64, A-SK-74 porta rev abolita → autorità
-`gate-cifre-revs.txt`, A-SK-75 ALLOW=autorità con provenienza
-verificata e **2.8/46.25 REVOCATE**, A-SK-76 run+lettera rifiutato,
-A-SK-77 storia del budget fuori corpus, A-SK-80 perimetro per
-COMPLEMENTO, A-SK-81 prov etichettata; i sei forge WP-93 = denti
-T17-T22); **ledger, la metà mancante** (A-AH61 hoist su ENTRAMBI i
-percorsi, A-AH62 head-check su REFUSE/trap, A-AH63 checker
-campaign-v2 pre-nascita, A-AH64 corpus solo max-PASS, A-PP-68 campi
-ABORT); **sigilli v10** (A-TH-62..67, num_or_void, KS-TH-93-1
-sbloccato); **riga testimone UNIFICATA** (outstanding_pre/post +
-ARRIVALS arr_pre/post, dec Release / load Acquire) + emende misura
-(A-BB69..72, A-BG62..65); **A-DS51 fase 1** (6 fixture v4 oracle-morse
-+ checker LSP PURO 56 unit, esenzione ctor sul PROTOTIPO, 5 regole di
-formattazione); **A-DL-59: ipotesi page-slack REFUTATA** (i dump tls
-m90 erano W VISTE di UN heap condiviso). Dettaglio:
-`sessions/WP_SESSION_92.md` + `wp92-harness/`.
+**Ultima sessione**: S-93.0 (2026-08-03, commit 2859c81 → 070fabf →
+d011a86 + chiusura sanatorie) — DIRETTIVA UTENTE A/B/C eseguita. **A**:
+riparazione di autorità (A-SK-82 tether su BASH_SOURCE[0] + A-AH68
+identità dal contenuto, dente T23 col morso della copia). **B**, la
+questione dei worker: i sei blocchi huge per worker NOMINATI dal vivo =
+sei chunk di raddoppio di UNA arena bumpalo del parse del PRELUDIO stdlib
+(per-thread, prima richiesta), TUTTI liberati alla prima richiesta;
+`malloc_huge` di m90 è cumulativo per costruzione (MI_STAT=0); LEVER-2
+(mi_collect) = EFFETTO NON RILEVATO (probe R=1 = SCREEN); leva vera
+nominata = arene PER-FILE del preludio (CLI 4,42× oracle su hello).
+**C**: giudizio di senso WordPress-su-Axum (no portage oggi). Dettaglio:
+`sessions/WP_SESSION_93.md` + `wp93-harness/huge-sites.out` (gradi
+post-Concilio WP-95).
 
 **⏱ FONDAMENTALI (regola utente 2026-08-03, aggiornare a OGNI
-rotazione)**: ultima misura full/media = WP-85 (7 sessioni fa) ·
-ultima campagna sull'oggetto = m90 in WP-90 (2 sessioni fa) ·
-S-91.0/S-92.0 = zero misure nuove (solo ri-analisi di raw committati).
-Il concilio apre la sintesi con §FONDAMENTALI su questo contatore;
-apparato in ordine SOLO se blocca l'oggetto (timebox mezza sessione,
-permanente).
+rotazione)**: ultima misura full/media = **WP-85 (8 sessioni fa)** ·
+ultima campagna sull'oggetto = m90 in WP-90 (3 sessioni fa) · S-91.0…S-93.0
+= zero campagne verdict-grade (S-93.0 ha prodotto SOLO probe R=1). **Il
+Concilio WP-95 ha eletto la COPPIA FULL a prima misura di S-94.0**: la
+leva footprint non ha giudice senza un «prima» fresco (WP-48). Il concilio
+apre la sintesi con §FONDAMENTALI; apparato in ordine SOLO se blocca
+l'oggetto (timebox mezza sessione, permanente).
 
 ## Stato gate
 
 - **phpr (CLI, parità release)**: **d5ce86e3342f3926 INVARIATO** (mai
-  ricompilato in S-91.0 né in S-92.0; stash `phpr-wp90` resta la
-  baseline; corpus Zend per NOME 1418 + refl 290).
+  ricompilato in S-91.0…S-93.0; stash `phpr-wp90` resta la baseline;
+  corpus Zend per NOME 1418 + refl 290). ⚠️ **Concilio WP-95/Pedersen**:
+  il RIPRISTINO del pin php-server dopo i probe S-93.0 è DICHIARATO, non
+  ricevutato in-band (nessun ri-run del gate lever-pins DOPO il probe):
+  ogni claim di parità che vi poggia è ADVISORY finché S-94.0 non lo
+  ri-certifica.
 - **php-server**: release/php-server = build axum-server
-  **d45b57843eeb1375 INVARIATO** (gate-axum-tests PASS 13 test a
-  2ab2780; `cargo test` non rilinca il bin) — la riga testimone
-  UNIFICATA (S-92.0 p4) entra nel binario alla RICOMPILA in-campagna
-  m91 con identity matrix, da protocollo. Il mem-census candidato v91
-  5420d519 è ANTECEDENTE alla riga nuova: va ricompilato.
-  **battery-91pre.sh (grammar v2 + dente campaign-v2 + campi ABORT),
-  MAI girata**: la prima campagna m91 la usa al posto della 90pre.
-  Ultima battery consumata: battery-90pre 16/16 a 4c99520 (storica).
-- **Gate cifre v3**: --all PASS a HEAD sul perimetro per COMPLEMENTO
-  (ogni `.md` sotto php-rust/ esige riga manifest: judge=yes per
-  MEASURE + NEXT_SESSION/WP_SESSION_91/92, +87 esclusioni dichiarate
-  per NOME); 4 autorità da HEAD (giudice+manifest+budget+revs) col
-  self-tether A-SK-78; budget in vigore 24363 (valori storici del
-  budget FUORI dal corpus, A-SK-77); selftest T13..T16 (forge WP-92) +
-  T17..T22 (forge WP-93) — **⚠️ il Concilio WP-94 ha morso QUATTRO
-  forge nuovi contro questo v3: vedi §WP-93 p1**.
-  Gate lever-pins **v10** PASS; gate-axum-tests PASS 13.
-- **Misure (gradi WP-92, sanatoria ESEGUITA; emende A-BG62/63/64
-  WP-93)**: b_boot 2.252.800 B
-  (se 6.345,5 B) VERDICT-GRADE come MAGNITUDINE · b_work 17.276.928 B
-  (se 501.348 B) ADVISORY · somma 19.529.728 B ADVISORY (continuità
-  con b m89: delta −45.875 B, suggestiva) · b_peak(mediana)
-  20.289.946 B ADVISORY-RIPUBBLICATA, testata DA RIFARE (A-BG64)
-  (se 1.084.655 B, banda 2se [18.120.635, 22.459.256] B) — fonte
-  `wp91-harness/repair90-estimators.out`; VCOV marginale 15.777.004
-  B/worker = 0,778 di b_peak(mediana); cal 7.801.102 B invariante di
-  protocollo (quinta campagna).
+  **d45b57843eeb1375 INVARIATO** (ripristinato dal pin dopo i probe; i
+  build strumentati mem-census di S-93.0 sono identità dichiarate in
+  huge-sites.out). La riga testimone unificata (S-92.0 p4) entra nel
+  binario alla RICOMPILA in-campagna. **battery-91pre.sh MAI girata**.
+- **Gate cifre v3**: --all PASS a HEAD sul perimetro per COMPLEMENTO;
+  budget in vigore **24371**. **⚠️⚠️ A-SK-82 è AGGIRATA (Concilio WP-95,
+  Klabnik 7/9 forge RIPRODOTTI a macchina)**: tre canali (env BASH_SOURCE,
+  symlink, BASH_ENV) producono un `PASS --all` rc=0 firmato col judge_sha
+  pristino su codice NON pristino — **prima voce di apparato di S-94.0**,
+  §WP-94 A1.
+- **Misure (gradi post-Concilio WP-95)**: TUTTE le cifre S-93.0 sono
+  ADVISORY/SCREEN, nessuna verdict-grade (salvo la catena di raddoppio
+  come identità aritmetica). Slope fisico probe 18814309 B/worker =
+  SCREEN. Contatore full/media fermo a WP-85.
 - GATE72 CLI resta baseline trasversale (corpus 1418 · refl 290 · ORM
   3E/13F · hk 1665).
 
-## Permanent Binding Rules (emendate WP-93/94; attuazioni S-92.0)
+## Permanent Binding Rules (emendate WP-95; attuazioni S-93.0)
 
-Le 12 regole della rotazione WP-91 restano; attuate in S-92.0: n.7
-(perimetro per COMPLEMENTO, autorità = 4 file da HEAD col self-tether),
-n.12 + evidence-only (dente campaign-v2 pre-nascita). NUOVE regole
-operative dalle lezioni: **un self-tether si prova col MORSO della
-copia, mai con la lettura**; **senza `heap=<ptr>` in banda ogni Σ
-per-thread è una moltiplicazione silenziosa**; **l'exit-code è il
-grado** (rc ESATTO in ogni dente). Restano: un conteggio non-numerico è
-un giudice rotto; il bite-test decide la collocazione.
+Le regole della rotazione restano; NUOVE dalle lezioni S-93.0 (Concilio
+WP-95): **un contatore stat non prova retention senza leggere il #if di
+build** (MI_STAT, Leijen); **un probe R=1 SCREENA, non refuta** (delta
+sotto lo spread inter-build = effetto non rilevato, mai refutato);
+**«committed invariata ⇒ nessun decommit» è REFUTATA** (in release
+committed non scende su purge); **il tether deve legare l'artefatto che il
+kernel legge, mai la stringa che il chiamante sceglie** ($0/BASH_SOURCE da
+soli non bastano); **nessuna leva footprint prima di una coppia full
+fresca**.
 
-## ⚖️ Concilio WP-94 ESEGUITO (2026-08-03, verbali VINCOLANTI): `wp94-harness/COUNCIL_WP94_REVIEWS.md`
+## ⚖️ Concilio WP-95 ESEGUITO (2026-08-03, verbali VINCOLANTI): `wp95-harness/COUNCIL_WP95_REVIEWS.md`
 
-**9 sedie CON EMENDAMENTI, 0 opposizioni; due fasi (9 verbali + 3
-team); 22 KS nuovi. UNDICI refutazioni capitali in cinque classi**:
-QUATTRO forge nuovi passati dal gate **v3** (Klabnik — **A-SK-78
-AGGIRATO**: `bash -c` col giudice patchato stampa PASS FIRMATO, perché
-il tether legge `$0` che il chiamante sceglie; colla a SINISTRA; prov
-stessa-chiave a istanti diversi; `.MD` evade il perimetro; T16 VACUO);
-checker campaign-v2 **fail-open** (Hejlsberg: 6 ledger forgiati
-passano, file vuoto rc=0, matcher A-AH64 nutribile, scope dal
-basename, `$DSHA` unbound); testimone a coppia **non prova la
-finestra** (Matsakis capitale + Pedersen: esiste un'esecuzione
-stale-coerente — la coppia è NECESSARIA non sufficiente, serve
-l'enforcement sequenziale IN BANDA); **A-DL-57 assume il proprio
-esito** (Leijen: heaps_total=1 ⇒ serve PT-1 pluralità heap PRIMA della
-barriera — ma la PENDENZA ha un nome nei raw: **malloc_huge 39.911.424
-B × W esatto, count 6×W**); checker LSP **under-fatal** (Stogov, 33
-probe: `iterable` desugara a Traversable+array; il ctor-prototype nasce
-ANCHE da ctor abstract e PROPAGA); due claim di S-92.0 **falsi come
-scritti** (Gregg: token di grado NON ovunque; le virgole US di
-dl59-join.out entrano nel corpus come SCHEGGE).
-**Delibera: S-92.0 è consumabile SOLO in ADVISORY** — buchi
-would-have-allowed (nessun forge committato, albero porcelain), ma una
-superficie di fabbricazione è VIVA a HEAD e la verifica al byte è
-parziale. Condizioni C1-C6 nella §Sintesi.
+**9 sedie (8 CON EMENDAMENTI + Klabnik REFUTATO), due fasi (9 verbali + 3
+team: cifre/misura/leva); ~25 KS nuovi. DUE refutazioni capitali**: (1)
+A-SK-82 aggirata da tre canali (PASS forgiati verificati a macchina); (2)
+`malloc_huge` cumulativa PER COSTRUZIONE a MI_STAT=0 (Leijen, meccanismo
+per NOME free.c:612/page.c:935), con «committed⇒decommit» refutata.
+**Retrocessione 4/4**: il probe B3 è SCREEN, non refutazione. **Sanatorie
+APPLICATE in chiusura S-93.0** (13 atti team-misura: somma 39423200→
+39223200, residuo→688224, B3→SCREEN, huge-worker.out→SUPERSEDED-IN-PART).
+Sintesi §FONDAMENTALI + ordine in `SYNTHESIS_WP95.md`.
 
-## §WP-93(sessione) — S-93.0 = DIRETTIVA UTENTE 2026-08-03 (supera l'ordine del Concilio WP-94)
+## §WP-94(sessione) — ordine dal Concilio WP-95 (FONDAMENTALI-first)
 
-**Decisione dell'utente, vincolante e sopra il concilio**: (1) prima si
-RISOLVE LA QUESTIONE DEI WORKER; (2) WordPress su Axum viene DOPO, e
-prima ancora va deciso SE ha senso. L'ordine in 7 punti del Concilio
-WP-94 resta agli atti e VALIDO nel merito — ma si esegue DIETRO
-l'oggetto, con la sola eccezione nominata al punto A qui sotto. Motivo
-della deroga: sei sessioni consecutive senza una misura dell'oggetto e
-due (WP-91, WP-92) senza alcuna misura; l'apparato ha iniziato a
-giudicare sé stesso.
+**P0 (già fatto in chiusura S-93.0)**: sanatorie applicate. Verificare a
+inizio S-94.0 che `--all` PASS a HEAD col budget 24371.
 
-### A. Riparazione di autorità — TIMEBOX mezza sessione, unica quota di apparato
+### Mezza sessione d'apparato (tetto duro, ordine di taglio A3→A2, A1 mai)
 
-Solo la falla che invalida i PASS futuri: **A-SK-82** (tether su
-`BASH_SOURCE[0]`, REFUSE se vuoto o diverso da `$0` — il forge di
-Klabnik passa da `bash -c`) + **A-AH68** (BATTERY_NAME dal CONTENUTO
-ancorato, mai dal basename scelto dal chiamante), col dente T23 e il
-proprio bite-test. Tutto il resto dell'ordine WP-94 (ancoraggi di campo,
-perimetro, sigilli, sanatorie doc, checker LSP) **NON si tocca in
-S-93.0**: nessun gate nuovo mentre si lavora sull'oggetto (condizione 4
-della chiusura del fronte).
+Solo l'apparato che BLOCCA l'oggetto (una cifra futura nasce da questo rc):
+- **A1** (indivisibile, un commit): **A-SK-89** path fisici (`cd -P`/`pwd
+  -P`) + **A-SK-90** re-exec sanificante `exec env -u BASH_ENV -u ENV -u
+  SHELLOPTS bash -p "$SELF_PHYS" "$@"` come PRIMO atto, marker anti-loop
+  VALIDATO (mai una env che salta il re-exec) + **A-SK-88** `declare -a`
+  come asserzione del marker + **A-SK-91** falsificatore rc-esatto sui tre
+  canali (assorbe la sotto-portata di T23: arm-b deve asserire l'assenza
+  dell'escalation a rc=0 firmato). KS-SK-95-1..4.
+- **A2** = **A-AH-71** writer= autenticato contro lo sha del battery a HEAD.
+- **A3** = **A-AH-69** `.done` per-RIGA (4 campi dalla riga con rev=$BREV).
+- **A4** = **A-TH-73 + A-TH-74** env-read fuori dall'allocatore, nessun
+  panic-path nel GlobalAlloc (UB latente nel canale di misura, non apparato).
 
-### B. LA QUESTIONE DEI WORKER — il corpo della sessione
+### L'OGGETTO (corpo della sessione, non conta nel timebox)
 
-**Punto di partenza già acquisito** (`wp92-harness/huge-worker.out`,
-grade ADVISORY, invarianti su 20/20 raw m90 committati): ogni worker
-tiene **39911424 byte in 6 blocchi huge** (media 6651904 a blocco), zero
-al boot, nati nella fase di lavoro, **numero di blocchi FISSO** (non
-cresce con le richieste), `current==total==peak` su ogni checkpoint
-non-boot e **sopravvivenza alla collect finale 20/20**. Il decremento
-della statistica huge esiste in mimalloc v3 (`v3/src/free.c`,
-`v3/src/theap.c`): non è un contatore monco, è assenza di free. La
-riserva SOPRAVANZA l'intero costo per worker misurato (~20,3 MB/worker
-fisico) e il carico era hello+pad, non WordPress: è una riserva FISSA
-per worker, indipendente dal carico.
+1. **COPPIA FULL stessa-sera** (media + peak footprint + CPU): PRIMA
+   misura, verdict-grade, precondizione della leva (contatore fermo a
+   WP-85). Ri-certifica anche il pin php-server (ricevuta in-band).
+2. **battery61 riproducibile in modo nativo** (criterio 5, debito 31
+   sessioni). *Dissenso ordinale registrato (Bak/Pedersen la vogliono al
+   posto 1): se il tempo basta per una sola, decide il plenario/utente.*
+3. **Probe slope v2 FUSO** = canale unico di m91 (i 4 emendamenti in UN
+   strumento): MI_STAT=1 dichiarato nel banner (mai TRACE nello stesso
+   run) + coppia alloc/free in-band nel GlobalAlloc (soglia ≥524288) + eco
+   d'arm `fired==W` (raw senza ⇒ VOID) + R≥5 interleaved W∈{1,2,4}
+   mediana±2se (NULLO solo come test di equivalenza) + doppia metrica
+   peak+residency post-warmup + `huge_note` simmetrico su realloc.
+4. **Attribuzione slope ~18,8 MB/worker per NOME**: SOLO dal probe fisico
+   on-thread (A-DL-55), MAI da committed (A-DL-66).
 
-B1. **Nominare i sei siti**. Sono sei allocazioni > 512 KiB per thread
-   (soglia huge di mimalloc). Nessuna costante statica grande esiste nel
-   runtime (verificato): sono strutture per-thread cresciute o
-   pre-dimensionate. Sospetti da falsificare per NOME, non da assumere:
-   `UNIT_CACHE` (vm/mod.rs — la doc dichiara «entries hold LEAKED
-   modules»), `STUBS` (compile/class.rs — «NEVER cleared»), gli arena
-   dei Module. Metodo: hook sulle allocazioni huge con backtrace, o
-   probe a 1 worker con censimento differenziale — la scelta è del
-   primo che apre.
-B2. **Decidere la natura**: riserva legittima per-thread (cache calda) o
-   leak per-thread. La doc di `UNIT_CACHE` usa già la parola «leak»:
-   se i moduli sono leaked per costruzione, il costo scala col numero di
-   worker per definizione e la leva è architetturale.
-B3. **Applicare la leva e misurarla**: campagna nuova con b **fuori
-   dalla banda** di m90, oppure refutazione motivata del perché non si
-   può ridurre. Vale il no-revert: anche l'esito negativo chiude, purché
-   misurato.
-B4. Solo se B1-B3 richiedono il canale per-worker: **PT-1** (pluralità
-   heap, KS-DL-94-2) prima di qualunque barriera, e `heap=<ptr>` in
-   banda (A-MS-53 ≺ A-DL-57). NON è un prerequisito di B1: i sei blocchi
-   si nominano dal processo, non dal per-worker census.
+### S-95.0 (NON S-94.0) — la leva
 
-### C. WordPress su Axum — DECISIONE prima dell'implementazione, e solo dopo B
+Leva **arene PER-FILE del preludio** con i 16 obblighi del team-leva
+(`wp95-harness/verbali/team-leva.md` §5): contatore per-unità parse-only
+col controllo positivo `Σ T_i ≈ 25795552 B` (touched reale ±10%), dente
+sulla semantica bumpalo (touched 25795552, non 39534144), fixture F1-F8
+oracle-morse, sentinella `b"prelude"` migrata in TUTTI i ~20 siti (mai a
+metà), predizione ex-ante firmata (rapporto ben sotto il 4.42× attuale,
+banda in `team-leva.md`), gate parità COMPLETI +
+ricert. baseline phpr nello STESSO commit. Rank leve: 1 per-file, 2
+precompilato embedded, 3 condiviso Arc, 4 lazy (tie-break 2↔3 da misura).
 
-Non si apre finché B non è chiuso. Quando si apre, il primo atto è un
-**giudizio di SENSO scritto**, non una riga di codice. I termini noti:
+### BACKLOG PER NOME (non «più avanti»)
 
-- WordPress su php-server **modo nativo** è già accettato (WP-61: 5/6
-  probe BYTE-ID + admin NORM-ID; comando nel README). Il modo nativo
-  delega a `php_cli::server::serve`, SAPI maturo (`WebRequest` completo:
-  method, header, body, query, PATH_INFO, multipart, Set-Cookie).
-- Il modo `--axum` è un CANALE DI MISURA: l'handler riceve solo `Uri` —
-  niente metodo, header, body; la query è scartata; la risposta non ha
-  header in uscita. Con WordPress non supera la home anonima.
-- **Il debito vero, per NOME**: `battery61.sh` NON è mai stato
-  committato — l'accettazione WordPress è un verdetto storico SENZA
-  harness riproducibile, mai rilanciato in 31 sessioni.
+A-SK-92-PROBE (grado rc=65) · A-AH-70/74/75 (ancore ledger) · A-AH-73 (HIR
+plain-data, precond. leva #2) · audit A-BG-72 (derivate m90 che consumarono
+malloc_huge come retained: repair90-estimators, VCOV 0,778, decomposizione
+b) · debito WP-94 non-A ereditato (ancoraggi campo, perimetro root, sigilli
+E1→E3, checker LSP D1→D4) · residui A-DS51 fasi 2-3 · canale iter-3 restante.
 
-Domande a cui il giudizio di senso deve rispondere: il worker pool
-persistente serve a WordPress o solo alla misura? il modo nativo e il
-modo axum devono convergere o restare due prodotti? il costo del
-portage (WebRequest dal task axum al worker — attenzione:
-`set_web_request` è thread-local, va installato SUL worker — header di
-risposta di ritorno, file statici, query string) si giustifica col
-guadagno? Se la risposta è sì, l'implementazione è una sessione; se è
-no, si scrive perché e si chiude la voce.
+### Criteri di CHIUSURA del fronte Axum/php-server (invariati, delibera utente)
 
-**Debito indipendente dalla decisione C**: ricommittare la batteria
-WP-61 come gate riproducibile sul modo nativo (mezza sessione). Va fatto
-comunque — è il quinto criterio di chiusura del fronte.
+1. Slope ~18,8 MB/worker attribuito per NOME (probe fisico on-thread) —
+   PARZIALE. 2. Leva applicata e misurata o refutazione motivata — B3 è
+   SCREEN, non ancora chiuso. 3. Parità intatta (+ ricevuta pin). 4.
+   Apparato CONGELATO fuori dalla quota. 5. Batteria WordPress riproducibile
+   (modo nativo obbligatorio).
 
-### Criteri di CHIUSURA del fronte Axum/php-server (delibera con l'utente)
+**Kill-switch di rotta (WP-95, ~25 nuovi)**: KS-TH-95-1/2/3 · KS-MS-95-1/2/3
+· KS-SK-95-1..4 · KS-AH-95-1/2/3 · KS-BB-95-1/2 · KS-PP-95-1/2/3 ·
+KS-DL-95-1/2 · KS-DS-95-1/2/3 · KS-BG-95-1/2 — tabelle nei verbali.
+**Ereditati ATTIVI**: WP-94 (22) + WP-93 (23) + WP-92 (22) + WP-91 (27) +
+WP-88..90. **KS-SK-91-1 NON sollevabile.**
 
-1. I ~20 MB/worker attribuiti per NOME a siti di allocazione, non a fasi.
-2. Almeno una leva applicata e misurata (b fuori banda) o refutazione
-   motivata.
-3. Parità intatta: corpus 1418 + refl 290, ORM 3E/13F, hk 1665, battery.
-4. Apparato CONGELATO nelle sessioni di chiusura: nessun gate nuovo.
-5. Chiusura funzionale: batteria WordPress riproducibile e verde (modo
-   nativo obbligatorio; modo axum solo se la decisione C dice di sì).
-
-**Kill-switch di rotta (WP-94, 22 nuovi)**: KS-TH-94-1/2/3 ·
-KS-MS-94-1/2 · KS-SK-94-1..5 · KS-AH-94-1..3 · KS-BB-94-* (A-BB73) ·
-KS-PP-94-1/2/3 · KS-DL-94-1..3 · KS-DS-94-1/2 · KS-BG-94-1/2 — tabella
-in `wp94-harness/COUNCIL_WP94_REVIEWS.md` §Sintesi. **Ereditati
-ATTIVI**: WP-93 (23 — attuati in S-92.0 per NOME: KS-SK-93-1..4 denti
-T17-T22, KS-AH-93-1..3, KS-TH-93-1/2 sigilli v10, KS-PP-93-1/2,
-KS-BB-93-1/2 nei doc, KS-DS-93-1..3 fixture v4+checker, KS-DL-93-1..3 e
-KS-MS-93-1/2 nel design92) + WP-92 (22) + WP-91 (27) + WP-88..90.
-**KS-SK-91-1 NON sollevabile.**
-
-**NON riproporre**: tutti i NON-riproporre WP-83..92 restano; in più —
-«tether ancorato a `$0`» (aggirabile dal chiamante, KS-SK-94-1);
-«fusione silenziosa di un token malformato» (solo REFUSE, CF-2);
-«SeqCst o rafforzamenti di ordering come via al verdict-grade del
-testimone» (NEGATI dal team-misura: la freschezza non si compra con
-l'ordering); «barriera W prima di PT-1» (KS-DL-94-2); «page-slack come
-spiegazione della pendenza» (REFUTATA, A-DL-59).
+**NON riproporre**: tutti i NON-riproporre WP-83..94 restano; in più —
+«tether su una stringa che il chiamante sceglie» ($0/BASH_SOURCE da soli,
+KS-SK-95-1); «un contatore stat come prova di retention senza leggere il
+#if di build» (MI_STAT, KS-DL-95-1); «committed invariata ⇒ nessun
+decommit» (REFUTATA); «refutare una leva con un probe R=1» (SCREEN,
+KS-BB-95-1); «peak arena = taglia sorgente» (confonde sorgente e arena);
+«leva footprint prima di una coppia full fresca».
 
 ---
 **Chiusura**: 2026-08-03. Apertura/chiusura sessioni = skill

@@ -1,4 +1,13 @@
 huge-worker: termine malloc_huge PER WORKER dai raw m90 committati
+SUPERSEDED-IN-PART (Concilio WP-95, atto A-BG-71 — vedi wp93-harness/huge-sites.out B1/B2):
+  clausola-1 REFUTATA: "riserva FISSA mai liberata" — i sei chunk sono TUTTI
+    deallocati dentro la prima richiesta (coppia in-band Rust, huge-sites.out B2).
+  clausola-2 REFUTATA: nota-canale righe sotto "il decremento ESISTE ... quindi
+    current==total NON e un contatore monco: e assenza di free" — a MI_STAT=0
+    (ogni build census) il decremento e compilato VIA (free.c:612, stub 635-637)
+    e theap.c:362 e dead code; il contatore E monco per costruzione in release.
+  RESTANO VALIDI: 39911424 B e 6 blocchi per worker, come CUMULATIVO di nascite
+    di pagine huge (mai come retained). Corpo sotto intatto (evidenza storica).
 grade=ADVISORY  # raw gia consumati; verdict-grade solo dal canale barriera A-DL-57/58 (PT-1)
 formato=ascii-nudo  # A-BG66: nessun separatore di migliaia nei token numerici
 fonte=wp78-harness/measure-out/m90.slope.w{4,8,12,16}.r{1..5}.a1.memcensus (20 raw)
