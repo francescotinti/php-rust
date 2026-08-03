@@ -9,3 +9,4 @@ attempt_epoch=1785709061 battery=89pre rev=30f5a87 esito=PASS k=16/16 sha256=9ff
 attempt_epoch=1785745856 battery=90pre rev=8da340c esito=ABORT reason=head-moved-mid-battery-non-evidence-p6-commit-operator-error
 attempt_epoch=1785746766 battery=90pre rev=83f0cfc esito=FAIL fails=1/16 first_fail=measure-cifre
 attempt_epoch=1785746816 battery=90pre rev=5f5ab4e esito=REFUSE reason=tree-not-porcelain
+attempt_epoch=1785747418 battery=90pre rev=4c99520 esito=PASS k=16/16 sha256=e81ce60da181d90766e3a4e4cb57000218d2ac3e2b0501f26a5d18b0972f126e
