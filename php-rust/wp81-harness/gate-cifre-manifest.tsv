@@ -32,6 +32,7 @@ php-rust/wp87-harness/MEASURE87_RESULTS.md	68d8ef8e406ba10bece2146fa4af7f07949bd
 php-rust/wp88-harness/MEASURE88_RESULTS.md	529c34ca6a701109342264018be2461a4943775d	yes	yes	3.605.572B±5%
 php-rust/wp89-harness/MEASURE89_RESULTS.md	-	yes	yes	-
 php-rust/wp90-harness/MEASURE90_RESULTS.md	-	yes	yes	-
+php-rust/wp94-harness/MEASURE94_RESULTS.md	-	yes	yes	-
 
 # --- A-SK-71 (Concilio WP-92): perimetro esteso alle classi che pubblicano
 # cifre di sessione (KS-SK-92-3). judge=yes per i doc di ROTAZIONE ATTIVI
