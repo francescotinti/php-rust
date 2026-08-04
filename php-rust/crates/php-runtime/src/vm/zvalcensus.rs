@@ -60,11 +60,25 @@ pub fn dump_line() -> String {
     )
 }
 
-/// Stampa i contatori su stderr se `PHPR_ZVAL_CENSUS=1`. La env si legge QUI,
-/// a fine processo, mai nel percorso caldo (lezione A-TH-73 di S-94.0: una
-/// env letta in un punto caldo è un costo — e nell'allocatore un deadlock).
+/// Scrive i contatori a fine processo. `PHPR_ZVAL_CENSUS` è un **path**: la
+/// riga viene APPESA a quel file.
+///
+/// Perché non su stderr (misurato, non temuto): il workload reale lancia
+/// processi figli e i test ne catturano lo stderr — la riga di census del
+/// figlio diventava `PHPUnit\Framework\Exception` e la prima misura è uscita
+/// con 15 errori spuri. Uno strumento che parla sul canale che il misurato
+/// legge non misura: partecipa. L'append da più processi è voluto: la somma
+/// del workload include i figli, che eseguono PHP quanto il padre.
+///
+/// La env si legge QUI, a fine processo, mai nel percorso caldo (lezione
+/// A-TH-73 di S-94.0).
 pub fn dump_exit() {
-    if std::env::var_os("PHPR_ZVAL_CENSUS").map(|v| v == "1").unwrap_or(false) {
-        eprintln!("{}", dump_line());
+    use std::io::Write;
+    let Some(path) = std::env::var_os("PHPR_ZVAL_CENSUS") else { return };
+    if path.is_empty() {
+        return;
+    }
+    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
+        let _ = writeln!(f, "{}", dump_line());
     }
 }

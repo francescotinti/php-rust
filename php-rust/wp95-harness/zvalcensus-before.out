@@ -1,0 +1,22 @@
+zvalcensus-before: il MECCANISMO della leva A-ZV1, misurato PRIMA di toccarla
+grade=VERDICT  # conteggi esatti (non campionamento), su una suite che passa IDENTICA al riferimento
+formato=ascii-nudo
+workload=vendor/bin/phpunit --group media
+esito-suite=762 test, 1912 assertions, 52 skipped — IDENTICO a pair94.out (nessun errore)
+binario=build di STRUMENTAZIONE (--features zval-census) in target-dir separato;
+  il binario di parita d5ce86e3342f3926 e VERIFICATO INVARIATO
+processi-che-hanno-scritto=16  # 1 master + 15 figli: gli stessi che nel profilo
+  tenevano il master in attesa su ChildStderr::read (40% del wall)
+slot_reads=60598149
+slot_reads_rc=53561241
+slot_reads_avoided=0  # zero PER COSTRUZIONE finche la leva non esiste
+rc_su_letture_pct=88.4  [derivata: companion 53561241/60598149]
+
+lettura=88,4% delle materializzazioni da slot portano un Rc, cioe pagano
+  refcount++ e — quando la copia muore subito dopo — refcount--: 53,5 MILIONI
+  di coppie a lavoro netto zero in una sola esecuzione del gruppo media.
+nota-di-metodo=la prima stesura del census scriveva su STDERR e ha prodotto 15
+  errori spuri: i test che lanciano processi figli ne catturano lo stderr e
+  PHPUnit leggeva la riga come eccezione. Uno strumento che parla sul canale che
+  il misurato ascolta non misura: partecipa. Ora scrive su file (append per
+  processo, somma del workload).
