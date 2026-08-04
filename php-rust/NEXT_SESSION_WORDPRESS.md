@@ -66,9 +66,10 @@ binario cambia prima della misura, la predizione perde il suo «prima»).
    parse-only col controllo positivo `Σ T_i ≈ 25795552 B` (touched reale
    ±10%), dente sulla semantica bumpalo, fixture F1-F8 oracle-morse,
    sentinella `b"prelude"` migrata in TUTTI i ~20 siti (mai a metà),
-   **predizione ex-ante firmata 2,3-2,7× oracle** (falsificata se
-   peak_post >40MB o <21MB), gate parità COMPLETI + ricertificazione
-   baseline phpr NELLO STESSO commit.
+   **predizione ex-ante firmata** nella banda fissata dal team-leva (la
+   banda e la sua condizione di falsificazione vivono in `team-leva.md`,
+   non qui), gate parità COMPLETI + ricertificazione baseline phpr NELLO
+   STESSO commit.
 2. **Probe slope v2 FUSO** (slittato da S-94.0, invariato nel disegno):
    MI_STAT=1 dichiarato nel banner (mai TRACE nello stesso run) + coppia
    alloc/free in-band nel GlobalAlloc (soglia ≥524288) + eco d'arm
