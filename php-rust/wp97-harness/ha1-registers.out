@@ -1,0 +1,86 @@
+ha1-registers: H-A1 ESEGUITA E CADUTA SUL SUO CRITERIO — il v3 di WP-44 riarmato vince il micro ma non abbastanza
+grade=VERDICT  # conteggi esatti di opcode (op-census) + coppia stessa-sera R=3 sullo STESSO binario
+formato=ascii-nudo
+ipotesi=H-A1 (NEXT_SESSION): «gli operandi transitano dalla pila; cablare l'indirizzamento
+  a registro su Binary/CmpJmp attacca ENTRAMBI i fattori insieme»
+criterio-di-caduta-scritto-prima=cade se opcode/iterazione non scende sotto 12, OPPURE
+  se scende ma arith non migliora di almeno il 40%
+binario=0dd98ebbb7eb2d96 (HEAD bd5f208; flag OFF = parita', flag ON = esperimento)
+census=phpr-opcensus-target (php-cli --features php-runtime/op-census), MAI un binario di parita'
+
+# ---- CHE COSA E' STATO COSTRUITO ----
+# Ripresa dalla storia git (f4c80cf) della forma v3 "raw registers" di WP-44:
+# 7 shape monomorfe u16 (BinarySS/SSDst/SC/SCDst/Dst, CmpJmpSS/SC), pass a
+# finestre con remap totale in compile/reg_lower.rs, handler con fast-path a
+# borrow su binary_fast. Tutto dietro PHPR_REG_LOWER (unit-cache gia' con
+# reg_mode nella chiave). Adattamenti alla deriva: liveness esaustiva
+# classificata a mano (S-96.0), reg_load_slot seed-aware via unit_slot_name
+# (WP-65), census a 185 righe.
+#
+# ⚠️ DIVERGENZA DI SOUNDNESS DALLA v3 ORIGINALE: il fold commutativo
+# const-lhs (3+$x -> $x+3) e' stato RIMOSSO. "Unsupported operand types"
+# nomina gli operandi in ORDINE (int + array vs array + int): lo swap e'
+# osservabile quando lo slot regge un non-numerico a runtime. Il corpus
+# WP-44 non lo prese — «corretto per fortuna del corpus» non e' «corretto».
+# Resta il solo mirror dei confronti (Lt<->Gt, Le<->Ge, Eq-family;
+# Spaceship escluso). Test negativo dedicato in reg_lower.rs.
+
+# ---- BRACCIO 1: QUANTI OPCODE (arith_small, 100000 iterazioni) ----
+opcodi_dispatchati_flag_off=1900020   # 19/iter, identico a ha2-sweep.out
+opcodi_dispatchati_flag_on=1100019
+opcodi_per_iterazione_flag_on=11  [derivata: companion (1100019-19)/100000]
+# Per iterazione: 2 BinarySC ($i*3, $i>>2) + 1 Binary(Sub) + LoadSlot+Swap+
+# BinaryDst (coda dell'AssignOp +=) + Sweep + IncDecSlot+Pop + CmpJmpSC + Jump.
+braccio_1=PASSATO (11 < 12)
+
+# ---- BRACCIO 2: IL TEMPO (arith.php 50M iter, R=3, stesso binario, al netto dei pavimenti) ----
+arith_phpr_netto_flag_off_s=7.83   # rapporto 18.2 (coerente con 7.88/18.3 di ha2-sweep)
+arith_phpr_netto_flag_on_s=5.43    # rapporto 12.6
+calo_tempo_arith_pct=30.7  [derivata: companion (7.83-5.43)/7.83]
+soglia_criterio_pct=40
+braccio_2=NON RAGGIUNTO (30.7 < 40)
+
+verdetto=H-A1 CADUTA sul criterio scritto. Nessuna negoziazione (regola di
+  metodo n.3): niente fold aggiuntivi per inseguire la soglia. E' comunque il
+  singolo calo di arith piu' grande mai misurato sul progetto, e a differenza
+  di WP-44 il flag-on VINCE il suo micro — il verdetto WP-44 (aggregato) e
+  questo (micro) coesistono senza contraddizione: giudici diversi, claim diversi.
+
+# ---- COLLATERALI (stessa coppia; run integrali in micro-ha1-off.out / micro-ha1-on.out) ----
+rapporto_arith_flag_off=18.2   # da micro-ha1-off.out
+rapporto_arith_flag_on=12.6    # da micro-ha1-on.out
+calo_prop_pct=12.3   [derivata: companion (6.27-5.50)/6.27]
+calo_calls_pct=15.7  [derivata: companion (4.02-3.39)/4.02]
+calo_arr_pct=11.5    [derivata: companion (1.48-1.31)/1.48]
+# str (1.12->1.08) e re (1.35->1.33): dentro lo spread, rumore.
+
+# ---- ⭐⭐ IL DATO CHE DECIDE LA PROSSIMA MOSSA ----
+ns_per_opcode_flag_off=8.24   [derivata: companion 7.83/(50000000*19/1e9)]
+ns_per_opcode_flag_on=9.87    [derivata: companion 5.43/(50000000*11/1e9)]
+# Togliendo il 42% degli opcode (i piu' economici), il costo MEDIO per opcode
+# SALE del 20%: terza conferma (dopo ha2-sweep) che il costo e' concentrato
+# negli opcode che lavorano su Zval, e ora e' pinnato sul residuo: 11 opcode
+# a ~9.9 ns contro i 7 a 1.23 ns dell'oracle = fattore ~8 PER OPCODE.
+# Il conteggio e' quasi chiuso (11 vs 7); il divario vive nel COSTO.
+# => l'asse e' H-B1 (preambolo del dispatch: 4 indicizzazioni con bounds
+# check + 2 len() per opcode, Frame 176B) e H-B2 (specializzazione per tipo),
+# esattamente come il piano le aveva ordinate.
+
+# ---- RESIDUO NOMINATO (per il concilio, NON eseguito: il criterio era gia' scattato) ----
+# La coda AssignOp (LoadSlot+Swap+BinaryDst = 3 opcode) e' l'ultima idraulica
+# di pila per iterazione: una forma fusa slot-diretta la porterebbe a 1
+# (11->9 opcode/iter). Non e' stata scritta: sarebbe stato negoziare il
+# criterio a misura gia' vista. Se un concilio la vorra', il posto e'
+# fuse_window + una BinarySlotDst con la semantica INTEGRALE di StoreSlot.
+
+# ---- PARITA' (flag OFF) ----
+test_cargo_release=1214 passati, 0 falliti (batteria v3 13 snippet + test
+  negativo const-first; sentinelle distruttori comprese)
+corpus_zend_fail_baseline=1418
+corpus_zend_fail_ha1=1418
+# Non solo il conteggio: insieme dei fallimenti PER NOME identico (1418 nomi,
+# diff vuoto) e log --list-fails confrontati riga per riga al netto dei NUL:
+# SEI righe diverse soltanto, tutte string(8) "<8 hex>" dei tre test
+# settype_{bool,int,string}_nan_with_error_handler3.phpt che usano
+# bin2hex(random_bytes(4)) — CASUALI PER COSTRUZIONE. Stessa firma del gate
+# di ha2-sweep.out. totali: 5305/2649/1418/1238 identici.

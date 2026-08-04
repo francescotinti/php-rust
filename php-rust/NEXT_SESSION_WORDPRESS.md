@@ -80,27 +80,30 @@ Dettaglio in `wp97-harness/arith-decomposition.out`.
 
 Entrambi i fattori sono grandi: chiuderne uno solo lascia l'altro intatto.
 
-### ▶️ H-A1 — LA PROSSIMA, ed è il pezzo grosso: gli operandi transitano dalla PILA
+### ~~H-A1 — gli operandi transitano dalla PILA~~ → **ESEGUITA E CADUTA sul suo criterio** (S-97.1, `wp97-harness/ha1-registers.out`)
 
-Dodici opcode su venti, per iterazione, sono idraulica di pila e GC:
-caricamenti di operando, `PushConst`, `Pop`, `Dup`, `Swap`. L'oracle non ne ha
-NESSUNO, perché i suoi opcode sono indirizzati a registro
-(`T3 = MUL CV1($i) int(3)`).
-**L'infrastruttura in phpr ESISTE GIÀ ed è codice morto**: `enum Operand
-{ Stack, Slot(u16), Temp(u16), Const(u16) }` in `bytecode.rs`, commentato
-«stage 2 wires it into Binary/CmpJmp», con UN SOLO riferimento nel repo — la
-propria definizione.
+Riarmata la forma v3 «raw registers» di WP-44 dalla storia git (f4c80cf):
+7 shape monomorfe u16, pass a finestre con remap totale, dietro
+`PHPR_REG_LOWER`. **Braccio 1 passato**: opcode/iterazione 19 → **11** (< 12).
+**Braccio 2 no**: `arith` 7,83 → 5,43 s = **−30,7%**, sotto il −40% richiesto
+→ il criterio scatta e la sessione l'ha abbandonata senza negoziare (regola
+n.3): il fold ulteriore della coda AssignOp (11→9 possibile) è NOMINATO nel
+`.out` ma non scritto.
 
-- **faccio**: cablo `Operand` su `Binary` (e `CmpJmp`) — lo «stage 2» mai fatto
-  — così gli operandi si leggono per riferimento da slot/temp/const senza
-  passare dalla pila. Misuro `arith`.
-- **falsificata se**: il conteggio di opcode per iterazione non scende sotto
-  12, **oppure** scende ma `arith` non migliora di almeno il 40%.
-- **attenzione**: è la strada che l'arco WP-39..44 chiuse come fallita. Ma quel
-  verdetto fu dato sull'aggregato WordPress, dove un fattore quasi 3 sul
-  conteggio di opcode è invisibile. Qui il giudice vede.
-- **tetto**: attacca ENTRAMBI i fattori insieme (meno opcode E meno traffico di
-  pila per opcode), quindi è la candidata a resa più alta.
+È comunque il singolo calo di `arith` più grande mai misurato (rapporto
+18,2→12,6; collaterali: prop −12,3%, calls −15,7%, arr −11,5%), e il flag-on
+**vince** il suo micro — WP-44 (aggregato) e S-97.1 (micro) coesistono:
+giudici diversi, claim diversi. Il codice resta in albero dietro il flag
+(flag-off zero-delta; no-revert). ⚠️ Soundness, divergenza dalla v3: il fold
+commutativo const-lhs è stato RIMOSSO (`3+$x`→`$x+3` inverte l'ordine dei
+nomi in "Unsupported operand types"; il corpus WP-44 non lo prese).
+
+**⭐⭐ Il dato che decide la prossima mossa**: tolto il 42% degli opcode, il
+costo MEDIO per opcode è SALITO da 8,24 a 9,87 ns. Il conteggio è quasi
+chiuso (11 contro 7 dell'oracle); il divario vive nel **COSTO per opcode**
+(~8× sul residuo). L'asse è H-B1/H-B2.
+
+### ▶️ H-B1 — LA PROSSIMA: ogni opcode costa troppo, il preambolo
 
 ### ~~H-A2 — `Sweep`~~ → **CONFERMATA E SPEDITA** (`wp97-harness/ha2-sweep.out`)
 
@@ -122,16 +125,20 @@ fanno traffico di pila e lavoro su `Zval`. Il fattore «costo per opcode» è un
 MEDIA su opcode molto diversi — e i costosi sono esattamente il bersaglio di
 H-A1, che quindi dovrebbe rendere più del suo peso nominale.
 
-### H-B1 — Ogni opcode costa troppo: il preambolo
-
 Quattro indicizzazioni con bounds check di `self.frames[top]` più due `len()`
 a OGNI opcode, e `Frame` è 176 byte. Documentato in `prof95-media.out`
 §PREAMBOLO, mai affrontato. (`Op` è 48 byte contro i 32 di `zend_op`: lo
-stream di istruzioni è una volta e mezza più largo.)
+stream di istruzioni è una volta e mezza più largo.) Dopo S-97.1 il bersaglio
+è pinnato: ~9,9 ns per opcode sul residuo di `arith` contro 1,23 dell'oracle.
 
 - **faccio**: frame corrente tenuto in un registro, ricaricato SOLO ai confini
   (call/ret/throw); guardia di profondità spostata dove `frames` cresce.
-- **si attiva**: in parallelo a H-A1 — è indipendente e attacca l'altro fattore.
+- **criterio di caduta (da scrivere ESATTO in apertura di sessione, prima di
+  toccare codice)**: il costo per opcode su `arith` flag-off deve scendere in
+  modo netto rispetto agli 8,24 ns misurati — se il guadagno è sotto il
+  rumore della coppia R=3, cade.
+- **nota**: si misura flag-OFF (la strada di parità); il flag-on resta
+  strumento di misura, non baseline.
 
 ### H-B2 — Ogni opcode costa troppo: manca la specializzazione per tipo
 
@@ -168,12 +175,15 @@ il tipo a runtime a ogni esecuzione.
    timebox di mezza sessione resta, e vale anche per riparare l'apparato dopo
    un concilio.
 
-## Stato gate (invariato da S-96.0)
+## Stato gate
 
-- **phpr (parità release)**: **2f6c1a696b560755** — NUOVO, ricostruito dopo
-  H-A2 (il precedente d5ce86e3342f3926 è stato la baseline fino a S-96.0).
-  Stash additivo in `phpr-old-target/release/phpr-s97-ha2`. Corpus Zend per
-  NOME **1418 invariato**, riverificato sul binario ricostruito.
+- **phpr (parità release)**: **0dd98ebbb7eb2d96** — NUOVO da S-97.1 (contiene
+  le 7 varianti registro DORMIENTI dietro `PHPR_REG_LOWER`; flag-off
+  zero-delta). Il precedente 2f6c1a696b560755 (H-A2) resta in stash
+  `phpr-s97-ha2`; stash additivo nuovo `phpr-old-target/release/phpr-s97-ha1`.
+  Corpus Zend per NOME **1418 invariato**: insieme dei nomi identico e log
+  riga-per-riga identico salvo le sei righe `random_bytes` note
+  (`wp97-harness/ha1-registers.out` §PARITA').
 - **php-server**: f8f4295a1dcdb627 (⚠️ pin storico d45b578 NON riproducibile —
   voce aperta).
 - **Gate cifre**: `--all` PASS a HEAD · **SELFTEST PASS rc=0** con i denti

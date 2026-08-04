@@ -1,0 +1,36 @@
+micro-baseline: il rapporto phpr/oracle PER CATEGORIA (la spina dorsale, S-97.0)
+grade=VERDICT  # R=3 ripetizioni per lato, mediana E spread pubblicati; l'effetto misurato
+  e' di ordine 10x, cioe' tre ordini di grandezza sopra la risoluzione del cronometro
+formato=ascii-nudo
+oracle=8.5.7 jit=disable
+phpr=0dd98ebbb7eb2d96
+ripetizioni=3
+metodo=user CPU di /usr/bin/time -p, AL NETTO del pavimento di avvio misurato
+  sullo stesso binario con uno script vuoto (i due pavimenti sono DIVERSI)
+pavimento_oracle_s=0.05
+pavimento_phpr_s=0.02
+
+arith_oracle_netto_s=0.43
+arith_phpr_netto_s=5.43
+rapporto_arith=12.6  [derivata: companion 5.43/0.43]
+arith_spread_oracle_s=0.00  arith_spread_phpr_s=0.04
+prop_oracle_netto_s=0.42
+prop_phpr_netto_s=5.50
+rapporto_prop=13.1  [derivata: companion 5.50/0.42]
+prop_spread_oracle_s=0.00  prop_spread_phpr_s=0.04
+calls_oracle_netto_s=0.43
+calls_phpr_netto_s=3.39
+rapporto_calls=7.9  [derivata: companion 3.39/0.43]
+calls_spread_oracle_s=0.06  calls_spread_phpr_s=0.05
+str_oracle_netto_s=0.16
+str_phpr_netto_s=1.08
+rapporto_str=6.8  [derivata: companion 1.08/0.16]
+str_spread_oracle_s=0.01  str_spread_phpr_s=0.01
+arr_oracle_netto_s=0.29
+arr_phpr_netto_s=1.31
+rapporto_arr=4.5  [derivata: companion 1.31/0.29]
+arr_spread_oracle_s=0.00  arr_spread_phpr_s=0.01
+re_oracle_netto_s=0.37
+re_phpr_netto_s=1.33
+rapporto_re=3.6  [derivata: companion 1.33/0.37]
+re_spread_oracle_s=0.01  re_spread_phpr_s=0.00
