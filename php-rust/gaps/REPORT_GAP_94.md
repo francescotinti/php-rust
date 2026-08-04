@@ -13,21 +13,31 @@ lettura in `wp94-harness/MEASURE94_RESULTS.md`.
 OGNI run (guardia Gregg R7, backup verificato). phpr `d5ce86e3342f3926` —
 il pin baseline, mai ricompilato in questa sessione.
 
-## Il gap, per metrica
+## ⚠️ SANATORIA (Concilio WP-96: Bak, Hoare, Gregg in convergenza indipendente)
 
-| metrica | rapporto phpr/oracle | contro il riferimento WP-85 |
-|---|---|---|
-| media group, user CPU | 2,639× | 2,58× → **leggermente peggio** |
-| media group, peak footprint | 3,381× | ~3,0-3,1 → **REGRESSO** |
-| full suite, master CPU | 1,873× | 2,06-2,11× → **MEGLIO, nettamente** |
-| full suite, peak footprint | 2,673× (1901,11 MiB) | ~1,98-2,03 GB → **MEGLIO** |
+**La prima stesura di questo report leggeva tre metriche su quattro come
+«MEGLIO» o «REGRESSO» rispetto ai riferimenti storici. Quelle letture sono
+RITIRATE**: erano artefatti del denominatore, non fatti su phpr.
 
-**Il full è migliorato su entrambi gli assi; il media group è peggiorato sul
-footprint.** Le due cose non si compensano e non vanno mediate: sono
-workload diversi. Il regresso del media footprint è la voce che questa
-sessione lascia aperta, ed è nominata senza attribuzione — attribuirla
-richiede un canale di misura, non una congettura, e il probe slope v2 di
-S-94.0 è slittato.
+- La ricetta storica di `GAP_TREND` §Metodo divide il master-CPU per un
+  oracle **congelato a 5:39 = 339 s**. Con quel denominatore il numeratore
+  di stasera dà **838,59/339 = 2,474**, non 1,873.
+- Sul media group il rapporto peggiora perché **l'oracle è sceso**, non
+  perché phpr sia cresciuto.
+- Incrociando i raw con le sessioni precedenti, **la gamba phpr è PIATTA su
+  ogni asse**, dentro lo spread. Questa coppia non mostra movimento di phpr.
+
+## Il gap, per metrica (rapporti SAME-EVENING: le due gambe fra loro)
+
+| metrica | rapporto phpr/oracle di stasera |
+|---|---|
+| media group, user CPU | 2,639× |
+| media group, peak footprint | 3,381× |
+| full suite, master CPU | 1,873× (con la ricetta storica: 2,474×) |
+| full suite, peak footprint | 2,673× = 1901,11 MiB |
+
+Nessun giudizio di miglioramento o regresso è affermato: per averlo serve
+un denominatore omogeneo, che è lavoro di S-95.0.
 
 ## Fedeltà: i conteggi e i nomi
 

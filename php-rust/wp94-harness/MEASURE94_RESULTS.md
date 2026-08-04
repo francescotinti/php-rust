@@ -31,19 +31,37 @@ identici sui due lati:
 - peak footprint: oracle 745637040 B, phpr 1993459800 B — rapporto **2,673** (pair94-ratios.out)
 - peak footprint phpr = 1993459800 B = **1901,11** MiB (pair94-ratios.out)
 
-**Letture, per NOME:**
+## ⚠️ SANATORIA (Concilio WP-96, Bak e Hoare in convergenza indipendente)
 
-1. **Il full CPU è MIGLIORATO in modo netto** rispetto alla banda di
-   riferimento in vigore (WP-85, otto sessioni fa; la banda vive in
-   GAP_TREND, non qui): è il rapporto più basso mai registrato sul
-   full-suite da quando la tabella esiste.
-2. **Il peak footprint del full è SCESO** sotto il riferimento.
-3. **Il footprint del media group è PEGGIORATO**. È l'unica metrica in
-   regresso e va nominata come tale, non annegata nelle tre buone. Nessuna
-   attribuzione è offerta qui: attribuirla richiederebbe un canale di
-   misura, non una congettura, e questa sessione non l'ha eseguito.
-4. **I conteggi sono IDENTICI sui due lati**: la coppia confronta due run
-   che hanno fatto lo stesso lavoro, non due lavori diversi.
+**Le letture comparative della prima stesura sono RITIRATE.** Dicevano «il
+full CPU è MIGLIORATO nettamente», «il peak è SCESO», «il media footprint è
+PEGGIORATO». Erano **artefatti del denominatore**, non fatti su phpr:
+
+- la ricetta storica di `GAP_TREND` §Metodo divide il master-CPU per un
+  oracle **congelato a 5:39 = 339 s**. Io ho diviso per l'oracle misurato
+  stasera (447,84 s). Stesso numeratore, due denominatori: **838,59/339 =
+  2,474** con la ricetta della tabella, **838,59/447,84 = 1,873** con il
+  denominatore vivo. Il «rapporto più basso mai registrato» confrontava
+  regimi diversi;
+- sul media group, il rapporto peggiora perché **l'oracle è sceso**, non
+  perché phpr sia cresciuto (Bak: phpr in banda, oracle −11,9%). Chiamarlo
+  «regresso di phpr» era una lettura sbagliata di una frazione.
+
+**Che cosa resta valido**: le otto cifre misurate (sono misure, e i raw non
+si toccano) e i due rapporti **same-evening**, che confrontano le due gambe
+FRA LORO — l'unica comparazione omogenea che questa coppia autorizza.
+**Che cosa NON è più affermato**: qualunque giudizio di miglioramento o
+regresso rispetto alle bande storiche. Per averlo serve un denominatore
+omogeneo, che è lavoro di S-95.0 (A-TH-76/A-BB-67).
+
+**Letture superstiti, per NOME:**
+
+1. **I rapporti same-evening sono quelli in tabella** e valgono come
+   fotografia di stasera: nessun confronto con altre sere è autorizzato
+   finché il denominatore non è reso omogeneo.
+2. **I conteggi sono IDENTICI sui due lati**: la coppia confronta due run
+   che hanno fatto lo stesso lavoro, non due lavori diversi. Questo regge
+   indipendentemente dalla sanatoria.
 
 ## Le divergenze, per NOME (mai per conteggio)
 

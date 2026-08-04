@@ -443,11 +443,23 @@ case "$BATTERY_NAME" in
       # A-SK-75 made for the ALLOW entries: a field that names its author is
       # an authority or it is decoration.
       BSCRIPT_REL="wp${BNAME%%pre*}-harness/battery-${BNAME}.sh"
-      BSCRIPT_SHA=$(git -C "$REPO" show "HEAD:${GITPREFIX}${BSCRIPT_REL}" 2>/dev/null | shasum -a 256 | cut -c1-16)
-      if [ -z "$BSCRIPT_SHA" ]; then
+      # A-AH-76 (Concilio WP-96, Hejlsberg — refutazione MISURATA): l'esistenza
+      # si prova con `cat-file -e`, MAI dal vuoto della pipe. `git show` di un
+      # path assente stampa NULLA, e sha256 del vuoto e e3b0c44298fc1c14…: la
+      # guardia `[ -z "$BSCRIPT_SHA" ]` non poteva scattare mai (codice morto) e
+      # un writer che dichiarasse quel valore sarebbe passato. Una guardia che
+      # non puo scattare non e una guardia — e una riga che rassicura.
+      if ! git -C "$REPO" cat-file -e "HEAD:${GITPREFIX}${BSCRIPT_REL}" 2>/dev/null; then
         fail "(A-AH-71/KS-AH-95-1) battery script ${GITPREFIX}${BSCRIPT_REL} is NOT committed at HEAD — writer=script:<h16> cannot be authenticated against anything, consumption VOID"
       fi
+      BSCRIPT_SHA=$(git -C "$REPO" show "HEAD:${GITPREFIX}${BSCRIPT_REL}" | shasum -a 256 | cut -c1-16)
       BADWS=$(writer_foreign "$V2ROWS" "$BSCRIPT_SHA")
+      # A-AH-77 (Concilio WP-96, Hejlsberg): una riga PASS con writer=operator
+      # SALTA l'autenticazione — `writer_foreign` guarda solo le righe
+      # `writer=script:`. Un PASS e l'atto dello SCRIPT: se lo firma un
+      # operatore, l'origine non e verificabile da nessuno.
+      BADPW=$(printf '%s\n' "$V2ROWS" | grep "esito=PASS" | grep -cv "writer=script:" || true)
+      [ "$BADPW" -gt 0 ] && fail "(A-AH-77/KS-AH-96-2) $BADPW riga/e esito=PASS per battery=$BNAME senza writer=script: — un PASS e l'atto dello SCRIPT, e la sua origine dev'essere autenticabile"
       [ "$BADWS" -gt 0 ] && fail "(A-AH-71/KS-AH-95-1) $BADWS attempts row(s) for battery=$BNAME carry a writer=script:<h16> that is NOT sha256(HEAD:${BSCRIPT_REL})=$BSCRIPT_SHA — the ledger records an ORIGIN, never a shape"
       BADA=$(printf '%s\n' "$V2ROWS" | grep "esito=ABORT" | grep -cv "writer=operator" || true)
       [ "$BADA" -gt 0 ] && fail "(A-AH58/KS-AH-92-1) $BADA esito=ABORT row(s) without writer=operator — an ABORT is an operator act"
