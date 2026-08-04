@@ -121,14 +121,16 @@ firmata). In breve:
 - Profilo del workload reale: `wp95-harness/prof95-media.out`. Il 49,4% del
   wall e ATTESA (il master dorme su `ChildStderr::read`); la CPU vera e
   nella VM.
-- **Il tetto del dispatch e 4,33% della CPU** (~2,2% di wall): azzerarlo del
-  tutto varrebbe meno di quanto valgono `Zval` clone+drop (10,05%) e il
-  ciclo di vita dei Frame. Consulenze in `consulenza-bak-dispatch.md` e
+- **Il TETTO del dispatch e stato calcolato** (cifre in
+  `consulenza-bak-dispatch.md` e `prof95-media.out`): azzerarlo del tutto
+  varrebbe meno di quanto valgono `Zval` clone+drop e il ciclo di vita dei
+  Frame messi insieme. Consulenze in `consulenza-bak-dispatch.md` e
   `consulenza-stogov-engine.md`: **due scuole diverse, stessa conclusione —
   non il dispatch.**
 - L'ipotesi «run_loop troppo grande per la i-cache» e **REFUTATA per
-  misura**: 241,7 KiB totali ma working set caldo 27,6 KiB (7,8 KiB per il
-  90% del tempo), L1i di questo M4 = 128 KiB.
+  misura**: la funzione e grande, ma il working set CALDO ci sta ampiamente
+  nell'L1i di questo M4 — cifre e ragionamento in `prof95-media.out`
+  §ANATOMIA e §LA MISURA CHE DISCRIMINA.
 
 ### Dopo A-ZV2, per NOME (non «piu avanti»)
 
