@@ -723,6 +723,35 @@ output osservabile (il gate lo asserisce):
   anche per il CLI phpr (stderr `PHP Parse error: {dump}`; l'oracolo con
   display_errors=On stampa il Parse error anche su stdout, phpr no).
 
+### 3.10 🔴 Argomenti `string` dei builtin: coercizione con warning invece di `TypeError` (S-96.0)
+
+Trovata di lato mentre si costruivano le fixture di liveness A-ZV2 (la
+fixture voleva un builtin che LANCIASSE prima di scrivere il suo out-param, e
+non lanciava). Verificata sul binario di PARITÀ, non su una build strumentata.
+
+Passando un `array` (o un oggetto senza `__toString`) dove il builtin dichiara
+`string`, PHP 8 solleva
+`TypeError: f(): Argument #N ($x) must be of type string, array given`;
+phpr invece **coercizza**, emette `Warning: Array to string conversion` (o
+`Warning: Object of class X could not be converted to string`) e **prosegue**.
+
+Sonda (`preg_match`, `preg_split`, `explode`, `substr`, `strtoupper` con un
+array): l'oracle lancia su tutte, phpr su nessuna. `strlen` è già CORRETTO
+(lancia), quindi il difetto non è nel motore dei tipi ma nel **parsing dei
+parametri dei singoli builtin**: chi passa dal percorso stringente lancia, chi
+usa la conversione generica no.
+
+- **Perché conta oltre al messaggio**: cambia il FLUSSO, non solo il testo. Un
+  `try/catch (\TypeError)` che l'oracle prende, phpr lo salta; e l'out-param
+  che l'oracle lascia INTATTO, phpr lo sovrascrive. È la classe di divergenza
+  che i test di parità testuale non vedono, perché il programma non stampa
+  niente di diverso finché qualcuno non guarda la variabile.
+- **Perimetro non misurato**: la sonda è di poche funzioni, scelte a mano. La
+  cardinalità reale (quanti builtin sbagliano) NON è stata misurata: chiamarla
+  «alcuni builtin» sarebbe una stima travestita da conteggio.
+- **Stato**: APERTA, non affrontata in S-96.0 (fuori dall'oggetto della
+  sessione). Voce nella lista master.
+
 ## 4. Punti di forza da NON toccare (invarianti verificati byte-identici)
 
 Per evitare regressioni, questi comportamenti sono **già** byte-identici con
@@ -753,6 +782,9 @@ l'oracle e vanno preservati:
 
 ### Changelog di questo documento
 
+- 2026-08-04: §3.10 — argomenti `string` dei builtin: coercizione con warning
+  invece di `TypeError` (trovata di lato in S-96.0 costruendo le fixture di
+  liveness; verificata sul binario di parità; perimetro NON misurato).
 - 2026-07-27: §3.8 — famiglia opcache/unit-cache (voci (i)-(iv) di
   design62 §3 depositate in apertura WP-63, K5-Klabnik; + nota KE-a
   sull'ordine di enumerazione).
