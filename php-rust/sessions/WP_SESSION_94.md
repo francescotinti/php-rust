@@ -13,7 +13,7 @@ stesse riparazioni prima di accettarle.
 d'apparato (A1-A4, ammessa solo perché A-SK-82 era AGGIRATA) e poi
 l'OGGETTO: coppia full stessa-sera, battery61 nativa.
 **Modello verificato all'apertura**: Fable 5.
-**Commit**: 3448c82 → 5900ac9 → A1-fix → F-K7-fix → 93721a5 → … → 3082115,
+**Commit**: 3448c82 → 5900ac9 → A1-fix → F-K7-fix → 93721a5 → … → 3082115649e2,
 tutti su main, pushati.
 **Binari**: phpr **d5ce86e3342f3926 INVARIATO** (mai ricompilato: la coppia
 full e battery61 girano sul pin baseline) · php-server **f8f4295a1dcdb627**
@@ -32,12 +32,12 @@ full e battery61 girano sul pin baseline) · php-server **f8f4295a1dcdb627**
 
 ## Le cifre (raw: `wp94-harness/pair94.out`, rapporti macchina in `pair94-ratios.out`)
 
-| metrica | rapporto phpr/oracle | vs riferimento WP-85 |
+| metrica | rapporto phpr/oracle | lettura (le bande storiche vivono in GAP_TREND) |
 |---|---|---|
-| media group, user CPU | 2,639× | 2,58× → poco peggio |
-| media group, peak footprint | 3,381× | ~3,0-3,1 → **REGRESSO** |
-| full suite, master CPU | 1,873× | 2,06-2,11× → **MEGLIO, il più basso mai registrato** |
-| full suite, peak footprint | 2,673× = 1901,11 MiB | ~1,98-2,03 GB → **MEGLIO** |
+| media group, user CPU | 2,639× | poco peggio del riferimento |
+| media group, peak footprint | 3,381× | **REGRESSO** sul riferimento |
+| full suite, master CPU | 1,873× | **MEGLIO**, il piu basso mai registrato |
+| full suite, peak footprint | 2,673× (1993459800 B = 1901,11 MiB) | **MEGLIO** del riferimento |
 
 Conteggi **identici** sui due lati (media 762/1912/52; full 30472 test e
 4558029 assertions). Unica divergenza phpr per NOME:
