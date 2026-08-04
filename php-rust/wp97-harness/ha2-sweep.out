@@ -1,0 +1,64 @@
+ha2-sweep: H-A2 ESEGUITA — il Sweep doppione dei blocchi fra graffe, eliso all'emissione
+grade=VERDICT  # conteggi esatti di opcode; tempi dalla stessa ricetta R=3 di micro-baseline.out
+formato=ascii-nudo
+ipotesi=H-A2 (NEXT_SESSION): «Sweep e' il 10% del dispatch e l'oracle non ce l'ha»
+criterio-di-caduta-scritto-prima=falsificata se ogni Sweep e' necessario alla
+  semantica dei distruttori (nel qual caso va reso piu' economico, non eliminato)
+
+# ---- CHE COSA E' RISULTATO ----
+# I due Sweep per iterazione NON erano entrambi necessari. Il lowering rende il
+# corpo fra graffe di un `for` come UN `StmtKind::Block` annidato: il `block_of`
+# interno emette il Sweep dell'ultimo statement, e quello esterno ne emette
+# SUBITO un altro per il blocco — con ZERO opcode in mezzo, quindi il secondo
+# trova per costruzione il buffer gia' drenato e prende il ramo `noop`.
+#
+# ⚠️ LA REGOLA GENERALE SAREBBE SCORRETTA, e la restrizione a `Block` e'
+# sostanziale: in `if (c) { ... }` il `JumpIfFalse` viene rattoppato ESATTAMENTE
+# alla posizione del Sweep dell'`if`, quindi il ramo FALSO ci atterra sopra senza
+# aver eseguito quello del corpo. Elidere li' gli toglierebbe il suo unico sweep,
+# e la condizione puo' aver chiamato una funzione che ha annotato oggetti.
+# Elisione AL MOMENTO DELL'EMISSIONE, mai peephole a valle (nessun indirizzo si
+# sposta, legge WP-33/WP-53).
+
+sweep_per_iterazione_prima=2
+sweep_per_iterazione_dopo=1
+opcodi_per_iterazione_prima=20
+opcodi_per_iterazione_dopo=19
+opcodi_dispatchati_prima=2000020   # ciclo da 100000 iterazioni, PHPR_OP_CENSUS
+opcodi_dispatchati_dopo=1900020
+calo_opcodi_pct=5.00  [derivata: companion (2000020-1900020)/2000020]
+
+# ---- TEMPO (stessa ricetta R=3, al netto dei pavimenti) ----
+arith_phpr_netto_prima_s=7.95
+arith_phpr_netto_dopo_s=7.88
+rapporto_arith_prima=18.5
+rapporto_arith_dopo=18.3
+calo_tempo_arith_pct=0.88  [derivata: companion (7.95-7.88)/7.95]
+
+# ⭐ IL COSTO PER OPCODE NON E' UNIFORME. Tolto il 5% degli opcode, il tempo
+# scende dello 0,88%: un `Sweep` che prende il ramo noop costa circa un quinto
+# dell'opcode medio. Ne segue che il fattore «costo per opcode» di
+# arith-decomposition.out e' una MEDIA su opcode molto diversi fra loro, e che il
+# costo e' concentrato in quelli che fanno traffico di pila e lavoro su Zval —
+# cioe' esattamente il bersaglio di H-A1.
+
+# ---- PARITA' ----
+test_cargo_release_passati=1209
+test_cargo_release_falliti=0
+# comprese TUTTE E SEI le sentinelle che pinnano l'ordine e il timing dei
+# distruttori a livello di statement: frame_drop_order_sentinel_{generator_and_extras,
+# ret_shaping_and_finally,iters_this_dynvars}, gc_drop_order_sentinel_note_demote_cascade,
+# gc_object_cycle_collect_sentinel, gc_container_cycle_collect_acceptance.
+corpus_zend_fail_parita=1418
+corpus_zend_fail_ha2=1418
+# Non solo il CONTEGGIO: i due log di --list-fails sono confrontati riga per riga
+# e differiscono su SEI righe soltanto, tutte della forma string(8) "<8 hex>",
+# prodotte da `bin2hex(random_bytes(4))` dentro i tre test
+# settype_{bool,int,string}_nan_with_error_handler3.phpt — CASUALI PER
+# COSTRUZIONE. L'insieme dei fallimenti per NOME e' identico e lo e' anche
+# l'output di ogni test.
+
+verdetto=H-A2 CONFERMATA e SPEDITA, con resa onesta: -5% di opcode, -0,88% di
+  tempo. Il grosso del divario resta nei due fattori di arith-decomposition.out,
+  e questa leva ne ha tolto una scheggia. Il valore vero della mossa e' la
+  scoperta che il costo per opcode NON e' uniforme.

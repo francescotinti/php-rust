@@ -907,7 +907,41 @@ impl<'a> FnCompiler<'a> {
             // removed after — no address ever shifts, WP-33) for a statement
             // that provably cannot feed the note buffer nor release an
             // object's last reference — see `sweep_elidable`.
-            if !self.sweep_elidable(&s.kind, start) {
+            // S-97.0 H-A2: il Sweep di un BLOCCO FRA GRAFFE il cui ultimo
+            // statement ha appena emesso il proprio Sweep dello stesso grado e'
+            // un no-op PER COSTRUZIONE — fra i due non viene eseguito NESSUN
+            // opcode, quindi lo stato del GC non puo' essere cambiato: il primo
+            // ha drenato il buffer (anche riprendendo attraverso i distruttori
+            // che schedula), e il secondo troverebbe `gc_buf_head >=
+            // gc_buf.len()` e prenderebbe il ramo `noop`.
+            //
+            // Non e' un caso di laboratorio: OGNI corpo fra graffe lo paga. Il
+            // lowering rende `for (...) { ... }` come UNO `StmtKind::Block`
+            // (mago restituisce il blocco come singolo statement), quindi il
+            // `block_of` interno emette il Sweep dell'ultimo statement e quello
+            // esterno ne emette subito un altro per il blocco. Misurato sul
+            // ciclo aritmetico: DUE Sweep per iterazione, il 10% degli opcode
+            // dispatchati, di cui META' e' questo doppione.
+            //
+            // ⚠️ LA REGOLA VALE SOLO PER `Block`, e la restrizione e'
+            // SOSTANZIALE, non prudenza. La versione generale «elidi qualunque
+            // Sweep preceduto da un Sweep» e' SCORRETTA: in
+            // `if (c) { ... }` il `JumpIfFalse` viene rattoppato ESATTAMENTE
+            // alla posizione del Sweep dell'`if`, quindi il ramo FALSO ci
+            // atterra sopra senza aver eseguito quello del corpo — eliderlo gli
+            // toglierebbe il suo unico sweep, e la condizione puo' aver chiamato
+            // una funzione che ha annotato oggetti. Un `Block` invece non
+            // rattoppa nulla alla propria coda, e i costrutti che lo contengono
+            // prendono `here()` DOPO l'intero blocco (il `continue` di un `for`
+            // salta al passo, oltre entrambi i sweep, prima come dopo).
+            //
+            // Come per WP-53, l'elisione e' AL MOMENTO DELL'EMISSIONE e mai un
+            // peephole a valle: nessun indirizzo si sposta. Il grado (`main`)
+            // deve coincidere: un `main: true` fa anche il re-seed delle
+            // demozioni leggere, che un `main: false` non farebbe.
+            let dup_block_sweep = matches!(s.kind, StmtKind::Block(_))
+                && matches!(self.ops.last(), Some(Op::Sweep { main }) if *main == self.is_main);
+            if !dup_block_sweep && !self.sweep_elidable(&s.kind, start) {
                 self.emit(Op::Sweep { main: self.is_main });
             }
         }
