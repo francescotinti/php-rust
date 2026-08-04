@@ -1,0 +1,61 @@
+arith-decomposition: PERCHE' l'aritmetica pura e' 18,5x — il fattore si scompone in due
+grade=VERDICT  # conteggi ESATTI di opcode (op-census + dump dell'ottimizzatore
+  dell'oracle), tempi dalla coppia R=3 di micro-baseline.out
+formato=ascii-nudo
+sorgente=wp97-harness/micro/arith_small.php (stesso corpo del ciclo di arith.php)
+oracle=8.5.7, opcode POST-OTTIMIZZATORE via -d opcache.opt_debug_level=0x20000
+phpr_census=build --features op-census (PHPR_OP_CENSUS), MAI un binario di parita'
+
+# ---- QUANTI OPCODE, PER ITERAZIONE DEL CICLO ----
+opcodi_per_iterazione_oracle=7
+  # MUL, SR, SUB, ASSIGN_OP(ADD), PRE_INC, IS_SMALLER, JMPNZ — indirizzati a
+  # REGISTRO: `T3 = MUL CV1($i) int(3)` nomina gli operandi nell'istruzione,
+  # nessun transito dalla pila
+opcodi_per_iterazione_phpr=20
+rapporto_conteggio_opcodi=2.86  [derivata: companion 20/7]
+
+# I 13 opcode in piu' di phpr, per iterazione (dal census):
+#   4  caricamenti di operando (LoadVar x3 + LoadSlot x1)  <- l'oracle: ZERO
+#   2  PushConst (literal sulla pila)                      <- l'oracle: ZERO
+#   2  Sweep                                               <- l'oracle: NON ESISTE
+#   2  Pop                                                 <- l'oracle: ZERO
+#   1  Dup + 1 Swap (rimescolamento di pila)               <- l'oracle: ZERO
+#   1  StoreSlot (l'oracle lo fonde in ASSIGN_OP)
+#   + phpr VINCE sul salto: CmpJmpConst fuso (1) contro IS_SMALLER+JMPNZ (2)
+# => dodici opcode per iterazione sono IDRAULICA DI PILA E GC, non calcolo.
+
+# ---- QUANTO COSTA UN OPCODE ----
+ns_per_opcode_oracle=1.23  [derivata: 0.43 s / (50000000 iterazioni x 7)]
+ns_per_opcode_phpr=7.95  [derivata: 7.95 s / (50000000 iterazioni x 20)]
+rapporto_costo_per_opcode=6.5  [derivata: companion 7.95/1.23]
+
+# ---- IL PRODOTTO TORNA ----
+prodotto_dei_due_fattori=18.6  [derivata: companion 2.86*6.5]
+rapporto_arith_misurato=18.5   # da micro-baseline.out, misura indipendente
+# I due fattori sono ENTRAMBI grandi: nessuno dei due da solo spiega il divario,
+# e chiudere solo uno lascia l'altro intatto.
+
+# ---- SWEEP: il 10% del dispatch che l'oracle non ha ----
+sweep_per_iterazione=2
+sweep_quota_dispatch_pct=10.00  # dal census, su 2000020 opcode
+# La documentazione di `Op::Sweep` (bytecode.rs) dice «Emitted by the compiler
+# after each top-level (main) statement […] never inside a function/method
+# body». MISURATO FALSO: lo stesso ciclo dentro una funzione emette lo STESSO
+# numero di Sweep (arith_fn.php: 200003, identico al globale). L'invariante
+# scritta non descrive il comportamento.
+
+# ---- L'INFRASTRUTTURA PER LA CURA ESISTE GIA', ED E' CODICE MORTO ----
+# bytecode.rs definisce `enum Operand { Stack, Slot(u16), Temp(u16), Const(u16) }`
+# con il commento «Not consumed by any op yet — stage 2 wires it into
+# Binary/CmpJmp». `findReferences` restituisce UN SOLO riferimento: la
+# definizione. E' esattamente l'indirizzamento a registro che l'oracle usa, mai
+# cablato. L'arco WP-39..44 che lo chiuse come fallito fu giudicato
+# sull'AGGREGATO WordPress, dove un fattore 2,86 sul conteggio opcode e'
+# invisibile.
+
+# ---- CONSEGUENZA SU H1 (A-ZV1) ----
+# `Op::Binary` prende gli operandi dalla PILA (bytecode.rs: «pop rhs then lhs»),
+# quindi quando `binary_value_ab` gira il clone e' GIA' avvenuto in LoadSlot: un
+# fast-path per riferimento LI' non risparmia nulla. E in questo carico tutti i
+# valori sono interi, quindi il clone di read_slot non e' nemmeno un refcount.
+# H1 come scritta NON PUO' muovere arith: e' REFUTATA prima di essere eseguita.
