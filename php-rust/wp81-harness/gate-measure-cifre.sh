@@ -657,11 +657,14 @@ if [ "${1:-}" = "--selftest" ]; then
   # tooth caught its own stale construction, which is what it is for.)
   PRE96="$TMP/pre96.sh"
   perl -pe 's{^.*# A-SK-98-LISTING$}{                  split /\\n/, qx(git -C "\$root" ls-files --others --exclude-standard -- php-rust);}' "$PRE95" > "$PRE96"
-  # The check is on the LISTING, not on the anchor string: the anchor also
-  # appears in this comment and in the substitution above, so counting it would
-  # be a false positive. What must be true is that the cured listing (`-z`) is
-  # gone and the pre-cure one is there.
-  if ! grep -q -- '--exclude-standard -- php-rust' "$PRE96" || grep -q -- 'ls-files --others -z' "$PRE96"; then
+  # The checks are anchored to the SHAPE OF THE LISTING LINE, not to any
+  # substring: PRE96 is a copy of this judge, so it contains this very selftest
+  # code — every literal we might grep for (the anchor name, `--exclude-standard`,
+  # `ls-files --others -z`) also appears in the lines that BUILD and CHECK the
+  # revert, and matches itself. A predicate must not be satisfied by its own
+  # text. (Third iteration of this tooth; each one caught a real self-reference.)
+  if ! grep -qE '^[[:space:]]+split /\\n/, qx\(git .*--exclude-standard -- php-rust\);$' "$PRE96" \
+     || grep -qE '^[[:space:]]+split /\\0/, qx\(git .*ls-files' "$PRE96"; then
     echo "SELFTEST FAIL: could not build the pre-A-SK-96 judge (the --others listing was not reverted) — T27's bite would be vacuous"; rm -rf "$TMP"; exit 1
   fi
   # T27 (KS-SK-96-1) — channel F-K10: `GIT_CONFIG_COUNT/KEY_0/VALUE_0` set
