@@ -20,7 +20,7 @@ PORT=${PORT:-8080}   # = la porta di siteurl (http://127.0.0.1:8080): servire al
 BASE="http://127.0.0.1:$PORT"
 OUT="${OUT:-/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp94-harness/battery61-out}"
 WPUSER=${WPUSER:-admin}
-WPPASS=${WPPASS:-phpr-wp8-Secret}
+WPPASS=${WPPASS:-wp-secret-Pass1}   # credenziale dell installazione viva wpdev (WP_SESSION_61)
 mkdir -p "$OUT"
 rm -f "$OUT/battery61.done"
 
@@ -30,7 +30,11 @@ serve_and_capture() { # $1 = oracle|phpr, $2 = outdir
   [ "$who" = oracle ] && bin="$ORACLE" || bin="$PHPR"
   pkill -f "127.0.0.1:$PORT" 2>/dev/null; sleep 1
   if pgrep -f "127.0.0.1:$PORT" >/dev/null; then echo "STALE SERVER on $PORT"; exit 3; fi
-  ( cd "$WPDEV" && "$bin" -S "127.0.0.1:$PORT" -t "$WPDEV" >/dev/null 2>"$d/server.log" ) &
+  # `php -S` e MONO-PROCESSO e WordPress fa richieste HTTP verso SE STESSO
+  # (Requests/Curl): con un solo worker il server si auto-blocca fino al
+  # "Maximum execution time exceeded" — osservato, non temuto. PHP_CLI_SERVER_WORKERS
+  # e la sola ragione per cui questa batteria puo esistere sul modo nativo.
+  ( cd "$WPDEV" && PHP_CLI_SERVER_WORKERS=4 "$bin" -S "127.0.0.1:$PORT" -t "$WPDEV" >/dev/null 2>"$d/server.log" ) &
   local srv=$!
   # attesa ATTIVA del servizio: un sleep fisso e una scommessa, non un gate
   local i=0

@@ -1,0 +1,14 @@
+battery61 — accettazione WordPress sul MODO NATIVO (phpr -S vs php -S)
+porta=8080 docroot=/Users/francescotinti/Claude/wpdev/src
+oracle=PHP 8.5.7 (cli) (built: Jun  2 2026 20:59:56) (NTS)
+phpr=d5ce86e3342f3926
+epoch=1785801803
+
+1-front BYTE-ID status='HTTP/1.1 200 OK' bytes=57428
+2-asset BYTE-ID status='HTTP/1.1 200 OK' bytes=13031
+3-permalink BYTE-ID status='HTTP/1.1 200 OK' bytes=71093
+4-login BYTE-ID status='HTTP/1.1 200 OK' bytes=6758
+5-loginpost BYTE-ID status='HTTP/1.1 302 Found' bytes=0
+6-admin NORM-ID status='HTTP/1.1 200 OK' bytes=142385/142385 (differisce SOLO nei nonce a 10 hex — sessioni di login distinte per costruzione)
+
+battery61 rc=0
