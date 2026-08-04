@@ -69,6 +69,18 @@ da ciò che esso stesso introduce**. **Un confronto identico non è valido se
 entrambi i lati stanno fallendo.** **Il rc del runner non è il giudice di
 una coppia** (la suite WordPress fallisce anche sull'oracle).
 
+## ⚖️ Concilio WP-96 ESEGUITO (2026-08-04, verbali VINCOLANTI): `wp96-harness/COUNCIL_WP96_REVIEWS.md`
+
+**9 sedie, NESSUNA benedizione. TRE refutazioni capitali riprodotte a
+macchina**: (1) le letture comparative erano artefatti del denominatore
+(Bak+Hoare+Gregg, convergenza indipendente) → **sanatoria APPLICATA in
+chiusura**; (2) **il gate è di NUOVO aggirato** dalle env di git
+(Klabnik); (3) A-AH-71 era forma e non origine (Hejlsberg, misurato) →
+A-AH-76/77 **applicati in chiusura**. Leijen è CONTRARIO al grado VERDICT
+sul footprint (picco R=1 = SCREEN; α da ri-derivare: l'albero è mimalloc
+v3.0.2 e sotto PURGE_DELAY=0 decommitta). Sintesi §FONDAMENTALI + ordine
+in `wp96-harness/SYNTHESIS_WP96.md`.
+
 ## §WP-95(sessione) — la leva, finalmente con un giudice
 
 **P0**: verificare `--all` PASS a HEAD e che il pin phpr sia ancora
