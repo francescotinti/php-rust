@@ -778,6 +778,11 @@ push @sources, committed_glob("$here/../wp93-harness/*.out");
 # commit that adds this glob (A-SK61/A-SK-77: the CURRENT value is the
 # authority, its history is out of the corpus).
 push @sources, committed_glob("$here/../wp94-harness/*.out");
+# S-95.0: i raw della RICOGNIZIONE di profiling (prof95-media.out: dove va
+# davvero la CPU sul workload reale; zvalcensus-before.out: il MECCANISMO
+# della leva A-ZV2 misurato PRIMA di toccarla). Budget alzato nello stesso
+# commit che aggiunge il glob (A-SK61).
+push @sources, committed_glob("$here/../wp95-harness/*.out");
 # S-85.0: the measure85 campaign raws (85*/m85* labels) + verdict85 + the
 # wp85 evidence dir
 push @sources, committed_glob("$mout/*85*.summary"), committed_glob("$mout/*85*.census"),
