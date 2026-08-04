@@ -1,0 +1,1 @@
+zvalcensus-recount processes=16 slot_reads=60598093 slot_reads_rc=53561185 slot_reads_avoided=0 would_take=28628306 would_take_rc=25233473 would_take_safe=25826594 would_take_safe_rc=22674644 would_take_safe_str=9989963 would_take_safe_ref=3307 sites_total=181839 sites_movable=72819 sites_safe=51691

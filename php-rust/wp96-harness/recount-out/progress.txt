@@ -1,0 +1,5 @@
+uploads-guard: backup OK (3 file → /Volumes/Extreme Pro/Claude/uploads-backups/uploads-20260804-112035.tar.gz), uploads azzerata
+11:20:35 media phpr-census RECOUNT
+11:21:49 media phpr-census rc=0
+uploads-guard: restore verificato (count=3) — backup conservato in /Volumes/Extreme Pro/Claude/uploads-backups/uploads-20260804-112035.tar.gz
+11:21:50 RECOUNT DONE rc=0

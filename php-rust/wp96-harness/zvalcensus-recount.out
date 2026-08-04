@@ -1,0 +1,72 @@
+zvalcensus-recount: A-ZV2 — RICONTEGGIO di F1+F2 dopo il fix di soundness (S-96.0, passo 1 del Concilio WP-97)
+grade=VERDICT  # conteggi esatti (non campionamento), suite identica al riferimento
+grade-per-campo=i contatori slot_reads*/would_take*/sites_* sono VERDICT; le righe
+  guadagno_cpu_atteso_* sono SCREEN — il moltiplicatore (valore del canale §P1) viene
+  da un profilo campionato R=1 (A-BG-97-1/A-SK-97-4, Concilio WP-97)
+formato=ascii-nudo
+workload=vendor/bin/phpunit --group media
+esito-suite=762 test, 1912 assertions, 52 skipped — IDENTICO a zvalcensus-f1.out e -f2.out
+binario=build di STRUMENTAZIONE 3e0e861c5fdbcb9b (--features zval-census); provenienza
+  TRASCRITTA dall'identity (A-PP-97-1): head=7847cc0ba13a con albero di lavoro SPORCO
+  (tree_dirty=6 — le modifiche di liveness.rs/zvalcensus.rs non erano ancora
+  committate al lancio; committate subito dopo). La corrispondenza albero-commit e'
+  DICHIARATA, non provata: il giudice della provenienza resta l'identity, non questa riga.
+binario-parita=d5ce86e3342f3926 VERIFICATO INVARIATO PRIMA e DOPO il run (recount.identity)
+processi-che-hanno-scritto=16
+che-cosa-e-cambiato-nell-analisi=A-TH-97-1 (la def non e' piu' sottratta sul contributo
+  dell'arco eccezionale) + match ESAUSTIVI senza wildcard in effect()/renounce()
+  (A-TH-97-2 / A-SK-97-2) + rinuncia intera su NewAnonDeferred e DeclareDeferred
+  (A-SK-97-1) + debug_zval_refcount e debug_zval_dump fra i builtin che osservano lo
+  scope (A-DS-97-5 / A-MS-97-5) + contatore nuovo would_take_safe_ref (A-MS-97-1)
+slot_reads=60598093
+slot_reads_rc=53561185
+would_take=28628306
+would_take_rc=25233473
+would_take_safe=25826594
+would_take_safe_rc=22674644
+would_take_safe_str=9989963
+would_take_safe_ref=3307
+sites_total=181839
+sites_movable=72819
+sites_safe=51691
+would_take_rc_su_slot_reads_rc_pct=47.11  [derivata: companion 25233473/53561185]
+safe_rc_su_slot_reads_rc_pct=42.33  [derivata: companion 22674644/53561185]
+str_su_slot_reads_rc_pct=18.65  [derivata: companion 9989963/53561185]
+safe_su_would_take_pct=90.21  [derivata: companion 25826594/28628306]  # P2 chiede >=60
+safe_ref_su_safe_pct=0.0128  [derivata: companion 3307/25826594]
+guadagno_cpu_atteso_f1_pct_min=2.12  [derivata: 0.4711*4.5, frazione per estremo basso del canale §P1]
+guadagno_cpu_atteso_f1_pct_max=3.06  [derivata: 0.4711*6.5, frazione per estremo alto del canale §P1]
+guadagno_cpu_atteso_safe_pct_min=1.91  [derivata: frazione safe_rc per 4.5]
+guadagno_cpu_atteso_safe_pct_max=2.75  [derivata: frazione safe_rc per 6.5]
+guadagno_cpu_atteso_str_pct_min=0.84  [derivata: frazione str per 4.5]
+guadagno_cpu_atteso_str_pct_max=1.21  [derivata: frazione str per 6.5]
+
+# ---- CHE COSA HA CAMBIATO IL FIX, SU QUESTO WORKLOAD ----
+delta_would_take_vs_f2=0
+delta_would_take_rc_vs_f2=0
+delta_sites_movable_vs_f2=0
+delta_would_take_safe_vs_f2=-21
+delta_would_take_safe_rc_vs_f2=-21
+delta_would_take_safe_str_vs_f2=-18
+delta_sites_safe_vs_f2=-6
+delta_slot_reads_rc_vs_f2=-14
+verdetto-fix=IL FIX DI SOUNDNESS NON CAMBIA NESSUN CONTEGGIO F1 SU QUESTO CORPUS.
+  Il difetto e' REALE — provato a macchina dalla fixture wp96-harness/fixtures/
+  t4-first-op-def.php, dove would_take passa da 6 a 4 e sites_movable da 8 a 6 fra
+  binario pre-fix e post-fix — ma la FORMA che lo espone (l'op che definisce lo slot
+  e' il PRIMO della regione protetta) non ricorre nel media group di WordPress. Se un
+  op senza def lo precede dentro la regione, quell'op ri-inietta il live-set
+  dell'handler e il difetto resta mascherato. Le bande F1 di S-95.0 erano dunque
+  corrette per fortuna del corpus, non per correttezza dell'analisi: la distinzione
+  va tenuta, perche' un corpus diverso non offre la stessa fortuna.
+verdetto-P2=SODDISFATTA (safe_su_would_take_pct sopra la soglia) — KS-TH-97-3 NON
+  scatta: non si va al confronto col piano B per caduta di P2.
+verdetto-banda=F1 intero e perimetro F2 restano in banda ALTA; il solo nucleo stringhe
+  resta in banda MEDIA ⇒ per la regola a tre bande di design95-liveness.md §P1 il
+  perimetro Str-first OBBLIGA il confronto esplicito col piano B (A-TH-97-3).
+nota-guard-di-tipo=would_take_safe_ref e' il numero che mancava a KS-SK-97-2: gli slot
+  che a RUNTIME reggono un Zval::Ref pur essendo sopravvissuti alla rinuncia statica
+  sono una frazione minuscola del perimetro safe (safe_ref_su_safe_pct). Il guard di
+  tipo di un eventuale TakeSlot avrebbe quindi un ramo di fallback praticamente mai
+  preso — il che lo rende poco costoso, e NON lo rende superfluo: la correttezza non
+  si misura in frequenza.

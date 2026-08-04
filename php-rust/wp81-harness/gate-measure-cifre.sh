@@ -964,6 +964,10 @@ push @sources, committed_glob("$here/../wp94-harness/*.out");
 # della leva A-ZV2 misurato PRIMA di toccarla). Budget alzato nello stesso
 # commit che aggiunge il glob (A-SK61).
 push @sources, committed_glob("$here/../wp95-harness/*.out");
+# S-96.0: il RICONTEGGIO di F1/F2 dopo il fix di soundness A-TH-97-1 (passo 1
+# dell'ordine del Concilio WP-97). Budget alzato nello stesso commit che
+# aggiunge il glob (A-SK61).
+push @sources, committed_glob("$here/../wp96-harness/*.out");
 # S-85.0: the measure85 campaign raws (85*/m85* labels) + verdict85 + the
 # wp85 evidence dir
 push @sources, committed_glob("$mout/*85*.summary"), committed_glob("$mout/*85*.census"),

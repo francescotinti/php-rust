@@ -260,10 +260,143 @@ fn effect(op: &Op, park_targets: &[usize]) -> Effect {
         // ----- terminatori -----
         Op::Ret | Op::Throw | Op::Rethrow | Op::Exit { .. } | Op::Fatal(_) => e.fall = false,
 
-        // ----- tutto il resto: nessun effetto sugli slot, fall-through -----
-        // (include Yield/YieldFrom, Eval/Include, LoadVarDyn/StoreVarDyn,
-        // CallHostBuiltin — perimetro F2 per costruzione, vedi testata)
-        _ => {}
+        // ----- nessun effetto sugli slot PER INDICE, fall-through -----
+        // A-TH-97-2 / A-SK-97-2 (Concilio WP-97): l'elenco e' ESPLICITO e il
+        // match ESAUSTIVO. Il vecchio `_ => {}` era un buco di soundness a
+        // futura memoria: qualunque variante NUOVA di `Op` che leggesse o
+        // scrivesse uno slot sarebbe stata classificata «nessun effetto» in
+        // silenzio, e l'invariante di testata non era presidiata da nulla.
+        // Ora una variante nuova NON COMPILA finche' qualcuno non la
+        // classifica a mano — il decadimento silenzioso diventa rumoroso.
+        //
+        // Audit una-tantum dell'elenco di oggi (A-TH-97-2, richiesto):
+        // `CallBuiltinRefCell` NON porta uno slot — la cella by-ref sta sulla
+        // pila, prodotta da `MakeRef`, la cui base e' gia' marcata in
+        // `renounce()`; `NewAnonDeferred`/`DeclareDeferred` rileggono i
+        // locali del chiamante per NOME e non per indice, quindi la loro
+        // sede e' la rinuncia INTERA (A-SK-97-1); `Yield`/`YieldFrom`,
+        // `Eval`/`Include`, `LoadVarDyn`/`StoreVarDyn` sono qui perche' il
+        // loro effetto e' sull'intera funzione, non su uno slot nominato, e
+        // vive anch'esso in `renounce()`.
+        Op::Alloc { .. }
+        | Op::AllocDynamic { .. }
+        | Op::AllocStatic { .. }
+        | Op::ArrayAppendSpread { .. }
+        | Op::ArrayInit { .. }
+        | Op::ArrayInsert { .. }
+        | Op::ArrayPush { .. }
+        | Op::Binary { .. }
+        | Op::Call { .. }
+        | Op::CallArgs { .. }
+        | Op::CallBuiltin { .. }
+        | Op::CallBuiltinRefCell { .. }
+        | Op::CallBuiltinSpread { .. }
+        | Op::CallHostBuiltin { .. }
+        | Op::CallNamed { .. }
+        | Op::CallNsFallback { .. }
+        | Op::CallNsFallbackArgs { .. }
+        | Op::CallSpread { .. }
+        | Op::CallValue { .. }
+        | Op::CallValueArgs { .. }
+        | Op::Cast { .. }
+        | Op::CheckArity { .. }
+        | Op::ClassConst { .. }
+        | Op::ClassConstDyn { .. }
+        | Op::ClassConstDynamic { .. }
+        | Op::ClassConstFromValue { .. }
+        | Op::ClassNameScope { .. }
+        | Op::ClassNameStatic { .. }
+        | Op::Clone { .. }
+        | Op::ClosureStatic { .. }
+        | Op::CoalesceFetchDim { .. }
+        | Op::ConcatN { .. }
+        | Op::ConstFetch { .. }
+        | Op::DeclareClass { .. }
+        | Op::DeclareDeferred { .. }
+        | Op::DeclareFn { .. }
+        | Op::DeclareTrait { .. }
+        | Op::DefineConst { .. }
+        | Op::DerefTop { .. }
+        | Op::Dup { .. }
+        | Op::Echo { .. }
+        | Op::EmitNotice { .. }
+        | Op::EnumCase { .. }
+        | Op::Eval { .. }
+        | Op::FetchDim { .. }
+        | Op::FetchDimList { .. }
+        | Op::HookCall { .. }
+        | Op::IncDecSuperglobal { .. }
+        | Op::Include { .. }
+        | Op::InitProps { .. }
+        | Op::InstanceOf { .. }
+        | Op::InstanceOfBuiltin { .. }
+        | Op::InstanceOfDynamic { .. }
+        | Op::InstanceOfStatic { .. }
+        | Op::InvokeCtor { .. }
+        | Op::InvokeCtorArgs { .. }
+        | Op::InvokeMethod { .. }
+        | Op::IterInit { .. }
+        | Op::IterPop { .. }
+        | Op::LoadSuperglobal { .. }
+        | Op::LoadVarDyn { .. }
+        | Op::MakeFcc { .. }
+        | Op::MethodCall { .. }
+        | Op::MethodCallArgs { .. }
+        | Op::MethodCallDynamic { .. }
+        | Op::MethodCallDynamicArgs { .. }
+        | Op::MethodCallNamed { .. }
+        | Op::NewAnonDeferred { .. }
+        | Op::Nop { .. }
+        | Op::ParkReturn { .. }
+        | Op::Pop { .. }
+        | Op::Print { .. }
+        | Op::PropGet { .. }
+        | Op::PropGetDynamic { .. }
+        | Op::PropGetDynamicSilent { .. }
+        | Op::PropGetSilent { .. }
+        | Op::PropIncDec { .. }
+        | Op::PropIsset { .. }
+        | Op::PropIssetDyn { .. }
+        | Op::PropIssetFetchGate { .. }
+        | Op::PropOpSet { .. }
+        | Op::PropSet { .. }
+        | Op::PropUnset { .. }
+        | Op::PushConst { .. }
+        | Op::PushUndef { .. }
+        | Op::StampThrowable { .. }
+        | Op::StaticCall { .. }
+        | Op::StaticCallArgs { .. }
+        | Op::StaticCallDynamic { .. }
+        | Op::StaticCallDynamicArgs { .. }
+        | Op::StaticCallDynamicMethod { .. }
+        | Op::StaticCallDynamicMethodArgs { .. }
+        | Op::StaticCallTargetDynamicMethod { .. }
+        | Op::StaticCallTargetDynamicMethodArgs { .. }
+        | Op::StaticPropGet { .. }
+        | Op::StaticPropGetDynName { .. }
+        | Op::StaticPropGetDynamic { .. }
+        | Op::StaticPropIncDec { .. }
+        | Op::StaticPropIncDecDynamic { .. }
+        | Op::StaticPropOpSet { .. }
+        | Op::StaticPropOpSetDynamic { .. }
+        | Op::StaticPropRef { .. }
+        | Op::StaticPropSet { .. }
+        | Op::StaticPropSetDynName { .. }
+        | Op::StaticPropSetDynamic { .. }
+        | Op::StaticStore { .. }
+        | Op::StoreSuperglobal { .. }
+        | Op::StoreVarDyn { .. }
+        | Op::Stringify { .. }
+        | Op::SuppressBegin { .. }
+        | Op::SuppressEnd { .. }
+        | Op::Swap { .. }
+        | Op::Sweep { .. }
+        | Op::This { .. }
+        | Op::ThisMethodCall { .. }
+        | Op::ThisPropGet { .. }
+        | Op::Unary { .. }
+        | Op::Yield { .. }
+        | Op::YieldFrom { .. } => {}
     }
     e
 }
@@ -271,12 +404,18 @@ fn effect(op: &Op, park_targets: &[usize]) -> Effect {
 /// Builtin che OSSERVANO lo scope del chiamante per nome: la loro presenza
 /// rinuncia all'intera funzione (design95-liveness.md, elenco F2).
 fn observes_scope(name: &[u8]) -> bool {
-    const NAMES: [&[u8]; 7] = [
+    // A-DS-97-5 / A-MS-97-5 (Concilio WP-97): `debug_zval_refcount` mancava
+    // pur essendo nell'elenco F2 di design95-liveness.md — osserva il
+    // refcount di un valore, che e' esattamente cio' che lo spostamento
+    // cambia. `debug_zval_dump` per la stessa ragione.
+    const NAMES: [&[u8]; 9] = [
         b"compact",
         b"extract",
         b"get_defined_vars",
         b"debug_backtrace",
         b"debug_print_backtrace",
+        b"debug_zval_refcount",
+        b"debug_zval_dump",
         b"func_get_args",
         b"func_get_arg",
     ];
@@ -316,6 +455,14 @@ fn renounce(func: &Func) -> (bool, Bits) {
             Op::LoadVarDyn | Op::StoreVarDyn | Op::BindGlobalDyn | Op::GlobalsDynAssign | Op::LoadGlobals => {
                 whole = true
             }
+            // A-SK-97-1 (Klabnik, Concilio WP-97 — buco di matrice): gli
+            // argomenti del costruttore di `NewAnonDeferred` si RI-VALUTANO
+            // «nel bridged scope del chiamante» (bytecode.rs §deferred): legge
+            // i locali per NOME a runtime, esattamente come `eval`, e cadeva
+            // nel wildcard di entrambe le funzioni. `DeclareDeferred` e' la
+            // stessa strada di ri-lowering: rinuncia per prudenza, non perche'
+            // sia provato che legga lo scope.
+            Op::NewAnonDeferred { .. } | Op::DeclareDeferred { .. } => whole = true,
             Op::CallBuiltin { name, .. }
             | Op::CallBuiltinSpread { name, .. }
             | Op::CallHostBuiltin { name, .. }
@@ -359,7 +506,160 @@ fn renounce(func: &Func) -> (bool, Bits) {
                     }
                 }
             }
-            _ => {}
+            // A-TH-97-2 / A-SK-97-2: esaustivo anche qui. Una variante nuova
+            // che rende CONDIVISO uno slot non deve poter entrare in silenzio
+            // dal wildcard — il perimetro conservativo e' proprio la cosa che
+            // non si accorge di essere diventata meno conservativa.
+            Op::Alloc { .. }
+            | Op::AllocDynamic { .. }
+            | Op::AllocStatic { .. }
+            | Op::ArrayAppendSpread { .. }
+            | Op::ArrayInit { .. }
+            | Op::ArrayInsert { .. }
+            | Op::ArrayPush { .. }
+            | Op::AssignOpPath { .. }
+            | Op::AssignPath { .. }
+            | Op::Binary { .. }
+            | Op::Call { .. }
+            | Op::CallArgs { .. }
+            | Op::CallArrayMultisort { .. }
+            | Op::CallNamed { .. }
+            | Op::CallNsFallback { .. }
+            | Op::CallNsFallbackArgs { .. }
+            | Op::CallSpread { .. }
+            | Op::CallValue { .. }
+            | Op::CallValueArgs { .. }
+            | Op::Cast { .. }
+            | Op::CatchMatch { .. }
+            | Op::CheckArity { .. }
+            | Op::ClassConst { .. }
+            | Op::ClassConstDyn { .. }
+            | Op::ClassConstDynamic { .. }
+            | Op::ClassConstFromValue { .. }
+            | Op::ClassNameScope { .. }
+            | Op::ClassNameStatic { .. }
+            | Op::Clone { .. }
+            | Op::ClosureStatic { .. }
+            | Op::CmpJmp { .. }
+            | Op::CmpJmpConst { .. }
+            | Op::CoalesceFetchDim { .. }
+            | Op::CoerceParam { .. }
+            | Op::ConcatAssignSlot { .. }
+            | Op::ConcatN { .. }
+            | Op::ConstFetch { .. }
+            | Op::DeclareClass { .. }
+            | Op::DeclareFn { .. }
+            | Op::DeclareTrait { .. }
+            | Op::DefineConst { .. }
+            | Op::DerefTop { .. }
+            | Op::Dup { .. }
+            | Op::Echo { .. }
+            | Op::EmitNotice { .. }
+            | Op::EmptyPath { .. }
+            | Op::EndFinally { .. }
+            | Op::EnumCase { .. }
+            | Op::Exit { .. }
+            | Op::Fatal { .. }
+            | Op::FetchDim { .. }
+            | Op::FetchDimList { .. }
+            | Op::FieldAssign { .. }
+            | Op::FieldAssignOp { .. }
+            | Op::FieldEmpty { .. }
+            | Op::FieldIncDec { .. }
+            | Op::FieldIsset { .. }
+            | Op::FieldUnset { .. }
+            | Op::FillDefault { .. }
+            | Op::HookCall { .. }
+            | Op::IncDecGlobal { .. }
+            | Op::IncDecPath { .. }
+            | Op::IncDecSlot { .. }
+            | Op::IncDecSuperglobal { .. }
+            | Op::InitProps { .. }
+            | Op::InstanceOf { .. }
+            | Op::InstanceOfBuiltin { .. }
+            | Op::InstanceOfDynamic { .. }
+            | Op::InstanceOfStatic { .. }
+            | Op::InvokeCtor { .. }
+            | Op::InvokeCtorArgs { .. }
+            | Op::InvokeMethod { .. }
+            | Op::IssetPath { .. }
+            | Op::IterInit { .. }
+            | Op::IterNext { .. }
+            | Op::IterPop { .. }
+            | Op::Jump { .. }
+            | Op::JumpIfFalse { .. }
+            | Op::JumpIfNotNull { .. }
+            | Op::JumpIfNull { .. }
+            | Op::JumpIfTrue { .. }
+            | Op::LoadGlobal { .. }
+            | Op::LoadSlot { .. }
+            | Op::LoadSuperglobal { .. }
+            | Op::LoadVar { .. }
+            | Op::MakeFcc { .. }
+            | Op::MatchError { .. }
+            | Op::MethodCall { .. }
+            | Op::MethodCallArgs { .. }
+            | Op::MethodCallDynamic { .. }
+            | Op::MethodCallDynamicArgs { .. }
+            | Op::MethodCallNamed { .. }
+            | Op::Nop { .. }
+            | Op::ParkJump { .. }
+            | Op::ParkReturn { .. }
+            | Op::Pop { .. }
+            | Op::Print { .. }
+            | Op::PropGet { .. }
+            | Op::PropGetDynamic { .. }
+            | Op::PropGetDynamicSilent { .. }
+            | Op::PropGetSilent { .. }
+            | Op::PropIncDec { .. }
+            | Op::PropIsset { .. }
+            | Op::PropIssetDyn { .. }
+            | Op::PropIssetFetchGate { .. }
+            | Op::PropOpSet { .. }
+            | Op::PropSet { .. }
+            | Op::PropUnset { .. }
+            | Op::PushConst { .. }
+            | Op::PushUndef { .. }
+            | Op::Ret { .. }
+            | Op::Rethrow { .. }
+            | Op::StampThrowable { .. }
+            | Op::StaticCall { .. }
+            | Op::StaticCallArgs { .. }
+            | Op::StaticCallDynamic { .. }
+            | Op::StaticCallDynamicArgs { .. }
+            | Op::StaticCallDynamicMethod { .. }
+            | Op::StaticCallDynamicMethodArgs { .. }
+            | Op::StaticCallTargetDynamicMethod { .. }
+            | Op::StaticCallTargetDynamicMethodArgs { .. }
+            | Op::StaticGuard { .. }
+            | Op::StaticPropGet { .. }
+            | Op::StaticPropGetDynName { .. }
+            | Op::StaticPropGetDynamic { .. }
+            | Op::StaticPropIncDec { .. }
+            | Op::StaticPropIncDecDynamic { .. }
+            | Op::StaticPropOpSet { .. }
+            | Op::StaticPropOpSetDynamic { .. }
+            | Op::StaticPropRef { .. }
+            | Op::StaticPropSet { .. }
+            | Op::StaticPropSetDynName { .. }
+            | Op::StaticPropSetDynamic { .. }
+            | Op::StaticStore { .. }
+            | Op::StoreGlobal { .. }
+            | Op::StoreSlot { .. }
+            | Op::StoreSuperglobal { .. }
+            | Op::Stringify { .. }
+            | Op::SuppressBegin { .. }
+            | Op::SuppressEnd { .. }
+            | Op::Swap { .. }
+            | Op::Sweep { .. }
+            | Op::This { .. }
+            | Op::ThisMethodCall { .. }
+            | Op::ThisPropGet { .. }
+            | Op::Throw { .. }
+            | Op::Unary { .. }
+            | Op::UnsetPath { .. }
+            | Op::Yield { .. }
+            | Op::YieldFrom { .. } => {}
         }
     }
     (whole, slots)
@@ -424,14 +724,26 @@ pub fn analyze(func: &Func) -> Analysis {
                     out.or_assign(&t);
                 }
             }
-            for tgt in &exc_edges[i] {
-                if *tgt < n {
-                    out.or_assign(&live_in[*tgt]);
-                }
-            }
+            // A-TH-97-1 (Hoare, Concilio WP-97 — REFUTAZIONE CAPITALE): il
+            // contributo dell'arco eccezionale NON deve subire il kill delle
+            // def di `i`. Quando l'eccezione parte, la def puo' non essere
+            // ancora avvenuta: `CallHostBuiltinOut { out_slot: $m }` che lancia
+            // un TypeError PRIMA di scrivere l'out lascia `$m` col vecchio
+            // valore, e il `catch` lo legge. Fondendo il contributo exc DENTRO
+            // `out` e poi sottraendo le def, `$m` spariva da `live_out` del
+            // lettore precedente e diventava «spostabile»: con `TakeSlot` il
+            // catch avrebbe visto `Undef` dove Zend stampa il valore.
+            // Quindi: `out` (che e' il giudice della movibilita') porta il
+            // contributo exc, ma `inb` lo riceve DOPO il kill, mai prima.
             let mut inb = out.clone();
             for d in &e.defs {
                 inb.clear(*d);
+            }
+            for tgt in &exc_edges[i] {
+                if *tgt < n {
+                    out.or_assign(&live_in[*tgt]);
+                    inb.or_assign(&live_in[*tgt]);
+                }
             }
             if e.uses_all {
                 inb.set_all();
