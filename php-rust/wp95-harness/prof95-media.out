@@ -73,3 +73,9 @@ per coprire il 90% del tempo bastano 124 cache-line = 7,8 KiB di codice
    check, piu una guardia che non puo cambiare fra due istruzioni della stessa
    funzione. Candidato: tenere il frame corrente in un registro (riferimento/raw
    index gia validato) e ricaricarlo SOLO ai confini (call/ret/throw).
+macchina=Apple M4 — L1i=131072 B (128 KiB), L1d=65536 B, L2=4194304 B
+=> il working set CALDO di run_loop (27,6 KiB toccati; 7,8 KiB per il 90% del tempo)
+   sta nel 21,6% dell'L1i. L'argomento «241,7 KiB non ci stanno in L1i» e vero per la
+   funzione INTERA ma irrilevante: l'88,6% di quel codice non viene mai eseguito in
+   questo workload. Estrarre gli arm freddi resta difendibile per altri motivi
+   (layout, iTLB, tempo di compilazione) ma il guadagno CPU atteso e BASSO.
