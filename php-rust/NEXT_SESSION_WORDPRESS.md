@@ -58,54 +58,97 @@ Ogni ipotesi si misura sulla SUA micro-categoria PRIMA di toccare WordPress, e
 si abbandona sul criterio scritto prima. Il concilio giudica le ipotesi e i
 criteri, non il residuo della sessione precedente.
 
-### H1 — Il costo è la lettura degli operandi
+### ~~H1 — Il costo è la lettura degli operandi~~ → **REFUTATA senza scrivere codice**
 
-`read_slot()` clona SEMPRE, e il clone muore subito dentro l'operazione:
-incremento e decremento di refcount per lavoro netto ZERO. Lo dice già il
-profilo (`wp95-harness/prof95-media.out`, sezione ATTRIBUZIONE), e il
-meccanismo è stato contato nel riconteggio di S-96.0.
+Era A-ZV1, il «piano B» rimandato per tre sessioni. `Op::Binary` prende gli
+operandi dalla **PILA** («pop rhs then lhs»): quando `binary_value_ab` gira il
+clone è GIÀ avvenuto in `LoadSlot`, quindi un fast-path per riferimento **lì**
+non risparmia nulla. E in un ciclo aritmetico i valori sono interi, quindi il
+clone di `read_slot` non è nemmeno un refcount. Era mal indirizzata dall'inizio.
+Dettaglio in `wp97-harness/arith-decomposition.out`.
 
-- **faccio**: il fast-path per riferimento in `binary_value_ab` — cioè **A-ZV1,
-  il «piano B» mai eseguito** — e misuro `arith` da solo.
-- **falsificata se**: `arith` non migliora di almeno il 30%.
-- **costo**: mezza sessione.
+### Il divario si scompone in DUE fattori, entrambi misurati
 
-### H2 — Il costo è l'assenza di handler specializzati per tipo
+`wp97-harness/arith-decomposition.out` (VERDICT, conteggi esatti):
 
-PHP 8 genera migliaia di handler specializzati per combinazione
-opcode × tipo × classe di operando; phpr ha UN braccio generico per opcode che
-discrimina il tipo a runtime, a ogni esecuzione. È una differenza
-ARCHITETTURALE, non una leva.
+- **conteggio di opcode**: `opcodi_per_iterazione_oracle` contro
+  `opcodi_per_iterazione_phpr` → fattore `rapporto_conteggio_opcodi`
+- **costo per opcode**: `ns_per_opcode_oracle` contro `ns_per_opcode_phpr` →
+  fattore `rapporto_costo_per_opcode`
+- il prodotto (`prodotto_dei_due_fattori`) riproduce il `rapporto_arith`
+  misurato in modo indipendente: **la decomposizione torna**.
 
-- **faccio**: specializzo **un solo** opcode (`Binary` Add sul caso
-  intero-intero) deciso a COMPILAZIONE, e misuro `arith`.
-- **falsificata se**: `arith` non si muove.
-- **si attiva se**: H1 chiude meno di metà del divario.
-- Se regge, è il filone principale e ridefinisce il resto della roadmap.
+Entrambi i fattori sono grandi: chiuderne uno solo lascia l'altro intatto.
 
-### H3 — Il costo è il preambolo per-istruzione
+### H-A1 — Gli opcode sono troppi perché gli operandi transitano dalla PILA
 
-Quattro riletture dello stesso frame con altrettanti bounds check a OGNI
-opcode, più una guardia di profondità che non può cambiare fra due istruzioni
-della stessa funzione. Documentato in `prof95-media.out` §PREAMBOLO, mai
-affrontato.
+Dodici opcode su venti, per iterazione, sono idraulica di pila e GC:
+caricamenti di operando, `PushConst`, `Pop`, `Dup`, `Swap`. L'oracle non ne ha
+NESSUNO, perché i suoi opcode sono indirizzati a registro
+(`T3 = MUL CV1($i) int(3)`).
+**L'infrastruttura in phpr ESISTE GIÀ ed è codice morto**: `enum Operand
+{ Stack, Slot(u16), Temp(u16), Const(u16) }` in `bytecode.rs`, commentato
+«stage 2 wires it into Binary/CmpJmp», con UN SOLO riferimento nel repo — la
+propria definizione.
+
+- **faccio**: cablo `Operand` su `Binary` (e `CmpJmp`) — lo «stage 2» mai fatto
+  — così gli operandi si leggono per riferimento da slot/temp/const senza
+  passare dalla pila. Misuro `arith`.
+- **falsificata se**: il conteggio di opcode per iterazione non scende sotto
+  12, **oppure** scende ma `arith` non migliora di almeno il 40%.
+- **attenzione**: è la strada che l'arco WP-39..44 chiuse come fallita. Ma quel
+  verdetto fu dato sull'aggregato WordPress, dove un fattore quasi 3 sul
+  conteggio di opcode è invisibile. Qui il giudice vede.
+- **tetto**: attacca ENTRAMBI i fattori insieme (meno opcode E meno traffico di
+  pila per opcode), quindi è la candidata a resa più alta.
+
+### H-A2 — `Sweep` è il 10% del dispatch e l'oracle non ce l'ha
+
+Due `Sweep` per iterazione. La documentazione di `Op::Sweep` dichiara «never
+inside a function/method body»: **misurato FALSO** — lo stesso ciclo dentro una
+funzione ne emette lo stesso identico numero. L'invariante scritta non descrive
+il comportamento.
+
+- **faccio**: capisco perché ne servono due per iterazione e se siano
+  ridondanti; se lo sono, cambio la politica di emissione.
+- **falsificata se**: ogni `Sweep` è necessario alla semantica dei distruttori
+  (nel qual caso va reso più economico, non eliminato).
+- **è l'esperimento più economico dei due**: politica del compilatore, nessuna
+  modifica al motore.
+
+### H-B1 — Ogni opcode costa troppo: il preambolo
+
+Quattro indicizzazioni con bounds check di `self.frames[top]` più due `len()`
+a OGNI opcode, e `Frame` è 176 byte. Documentato in `prof95-media.out`
+§PREAMBOLO, mai affrontato. (`Op` è 48 byte contro i 32 di `zend_op`: lo
+stream di istruzioni è una volta e mezza più largo.)
 
 - **faccio**: frame corrente tenuto in un registro, ricaricato SOLO ai confini
-  (call/ret/throw).
-- **si attiva**: in parallelo a H2 — è indipendente.
+  (call/ret/throw); guardia di profondità spostata dove `frames` cresce.
+- **si attiva**: in parallelo a H-A1 — è indipendente e attacca l'altro fattore.
 
-### H4 — Il costo dell'accesso a proprietà è la risoluzione ripetuta
+### H-B2 — Ogni opcode costa troppo: manca la specializzazione per tipo
+
+PHP 8 genera migliaia di handler specializzati per combinazione
+opcode × tipo × classe di operando; phpr ha UN braccio generico che discrimina
+il tipo a runtime a ogni esecuzione.
+
+- **faccio**: specializzo **un solo** opcode (`Binary` Add intero-intero)
+  deciso a COMPILAZIONE, e misuro `arith`.
+- **si attiva se**: dopo H-A1 e H-B1 il costo per opcode resta sopra 3 ns.
+
+### H-C — Il costo dell'accesso a proprietà è la risoluzione ripetuta
 
 `rapporto_prop` è la seconda categoria peggiore, con `PropsLayout::slot_of` e
 `resolve_method_runtime` nel profilo, nonostante le PropIc esistenti.
 
-- **si attiva se**: dopo H1–H3 `prop` resta sopra 5×.
+- **si attiva se**: dopo H-A1 e H-B1 `prop` resta sopra 5×.
 
-### H5 — Il costo è l'ABI di chiamata
+### H-D — Il costo è l'ABI di chiamata
 
 `enter_callee` + `recycle_frame` + `bind_params` + drop del `Frame`.
 
-- **si attiva se**: dopo H1–H3 `calls` resta sopra 5×.
+- **si attiva se**: dopo H-A1 e H-B1 `calls` resta sopra 5×.
 
 ## Regole di metodo (sostituiscono la prassi precedente)
 
