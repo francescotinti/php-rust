@@ -752,8 +752,40 @@ if [ "${1:-}" = "--selftest" ]; then
   if [ "$T30RC2" != 64 ]; then
     echo "SELFTEST FAIL: an extra env name was not stripped by the env -i re-exec (rc=$T30RC2, want 64) — the closed list must CONSTRUCT the context, not refuse every caller (A-SK-93)"; rm -rf "$TMP"; exit 1
   fi
+  # T31 (KS-SK-98-1) — WP-98 forge LANDED (Klabnik): a doc-figure whose NAME
+  # carries a non-ASCII byte left the perimeter untouched while its ASCII twin
+  # was named. git QUOTES such paths when printing one per line
+  # ("php-rust/…perimetr\303\262.md"), and the leading double quote makes the
+  # `^php-rust/` anchor fail. The perimeter trusted the FORM git chose to
+  # PRINT. Cure A-SK-98-1: ask for the BYTES (-z, NUL-separated). Both twins
+  # must now be named, and the pre-cure listing must still name only one — or
+  # this tooth is guarding a hole that closed by accident.
+  T31A="$ROOT/php-rust/wp98-harness/zzforge-t31-ascii.md"
+  T31U="$ROOT/php-rust/wp98-harness/zzforge-t31-perimetrò.md"
+  mkdir -p "$ROOT/php-rust/wp98-harness"
+  echo "cifra fuori perimetro: il picco era 123480 B, fidatevi" > "$T31A"
+  echo "cifra fuori perimetro: il picco era 123472 B, fidatevi" > "$T31U"
+  T31OUT=$(bash "$SELF_ABS" --all 2>&1); T31RC=$?
+  T31N=$(printf '%s\n' "$T31OUT" | grep -c 'zzforge-t31')
+  if [ "$T31RC" != 1 ] || [ "$T31N" -lt 2 ]; then
+    rm -f "$T31A" "$T31U"; echo "SELFTEST FAIL: the perimeter named $T31N/2 of the planted doc-figures (rc=$T31RC, want 1 and 2) — a name git chooses to QUOTE must not leave the perimeter (A-SK-98-1/KS-SK-98-1)"; rm -rf "$TMP"; exit 1
+  fi
+  # T31 bite: the pre-A-SK-98 listing (one path per LINE, git free to quote)
+  # must still name only the ASCII twin — the forge is real.
+  T31PRE="$TMP/pre98-listing.pl"
+  cat > "$T31PRE" <<'T31PERL'
+my $root = shift;
+my @u = grep { m{^php-rust/.*\.md$} }
+        split /\n/, qx(git -C "$root" ls-files --others -- php-rust);
+print scalar(grep { /zzforge-t31/ } @u), "\n";
+T31PERL
+  T31PRECOUNT=$(perl "$T31PRE" "$ROOT")
+  rm -f "$T31A" "$T31U"
+  if [ "$T31PRECOUNT" != 1 ]; then
+    echo "SELFTEST FAIL: the pre-A-SK-98 listing saw $T31PRECOUNT/2 twins (want exactly 1, the ASCII one) — the WP-98 forge no longer reproduces and T31 would be vacuous"; rm -rf "$TMP"; exit 1
+  fi
   rm -rf "$TMP"
-  echo "SELFTEST PASS: KG-83-3 smuggle + A-SK40 companions + A-SK55 committed-only + A-SK60 provenance (positive+bite) + A-SK62 every-token + A-SK63 manifest graces + A-SK65 env-cache ignored + A-SK53-bis window + A-SK-67 HEAD-authorities (budget tamper, forge-a manifest row) + A-SK-69 strict prov (forge-b: cross-file, non-minus operator, address-range, positive same-file) + A-SK-70 cache abolished (forge-c) + A-SK-71 perimeter (forge-d) + A-SK-72 ledger-proved supersession (.out optional) + A-SK-73 pool=corpus + A-SK-74 named-rev identities (forge F1, T18+control) + A-SK-75 ALLOW-as-authority, 2.8/46.25 revoked (forge F2, T19) + A-SK-76 glued-run refused (forge F3, T20) + A-SK-77 budget-history out of corpus (forge F4, T21+control) + A-SK-78 self-tether (forge F6, T17) + A-SK-79 exit-code grades (every tooth rc-exact) + A-SK-80 complement perimeter + A-SK-81 labeled prov operands (forge F5, T22) + A-SK-82 BASH_SOURCE tether (WP-94 forge, T23 arm-a REFUSE + arm-b bite-of-the-stripped-copy) + A-SK-88/89/90 sanitizing re-exec on the PHYSICAL self, proved by A-SK-91 on all three WP-95 channels (T24 bash -c + injected BASH_SOURCE, T25 symlink + logical collapse, T26 BASH_ENV + exported functions), each with the escalation reproduced on the pre-WP-95 judge, all bite + A-SK-93..97 CONSTRUCTED environment (env -i, closed list) proving the three WP-96 channels shut: T27 GIT_CONFIG_*→core.excludesFile with the perimeter forge named, T28 injected clean filter vs the A-SK-95 --no-filters tether, T29 PERL5OPT/PERL5LIB into the corpus process, each with its bite on the pre-WP-96 judge, plus T30 — the tooth that does not age — refusing any env name outside the closed list while its positive arm proves the list CONSTRUCTS instead of refusing"
+  echo "SELFTEST PASS: KG-83-3 smuggle + A-SK40 companions + A-SK55 committed-only + A-SK60 provenance (positive+bite) + A-SK62 every-token + A-SK63 manifest graces + A-SK65 env-cache ignored + A-SK53-bis window + A-SK-67 HEAD-authorities (budget tamper, forge-a manifest row) + A-SK-69 strict prov (forge-b: cross-file, non-minus operator, address-range, positive same-file) + A-SK-70 cache abolished (forge-c) + A-SK-71 perimeter (forge-d) + A-SK-72 ledger-proved supersession (.out optional) + A-SK-73 pool=corpus + A-SK-74 named-rev identities (forge F1, T18+control) + A-SK-75 ALLOW-as-authority, 2.8/46.25 revoked (forge F2, T19) + A-SK-76 glued-run refused (forge F3, T20) + A-SK-77 budget-history out of corpus (forge F4, T21+control) + A-SK-78 self-tether (forge F6, T17) + A-SK-79 exit-code grades (every tooth rc-exact) + A-SK-80 complement perimeter + A-SK-81 labeled prov operands (forge F5, T22) + A-SK-82 BASH_SOURCE tether (WP-94 forge, T23 arm-a REFUSE + arm-b bite-of-the-stripped-copy) + A-SK-88/89/90 sanitizing re-exec on the PHYSICAL self, proved by A-SK-91 on all three WP-95 channels (T24 bash -c + injected BASH_SOURCE, T25 symlink + logical collapse, T26 BASH_ENV + exported functions), each with the escalation reproduced on the pre-WP-95 judge, all bite + A-SK-98-1 perimeter by BYTES not by the form git prints (T31, non-ASCII twin) + A-SK-93..97 CONSTRUCTED environment (env -i, closed list) proving the three WP-96 channels shut: T27 GIT_CONFIG_*→core.excludesFile with the perimeter forge named, T28 injected clean filter vs the A-SK-95 --no-filters tether, T29 PERL5OPT/PERL5LIB into the corpus process, each with its bite on the pre-WP-96 judge, plus T30 — the tooth that does not age — refusing any env name outside the closed list while its positive arm proves the list CONSTRUCTS instead of refusing"
   exit 0
 fi
 
@@ -862,7 +894,14 @@ for my $tok (sort keys %ALLOW_AUTH) {
 # from the COMMITTED tree at HEAD (git ls-tree + git show HEAD:), never
 # from the working tree — an uncommitted forge file in measure-out used
 # to legalize any figure (KS-SK-90-1).
-my @headtree = split /\n/, qx(git -C "$root" ls-tree -r --name-only HEAD);
+# A-SK-98-1 (Council WP-98, team-catena): the SAME class as the untracked
+# listing, on the other side of the perimeter. `ls-tree --name-only` quotes
+# non-ASCII paths exactly like `ls-files`, so a COMMITTED .md with an accent
+# in its name would be quoted, fail the `^php-rust/` anchor of the class
+# regex, and slip out of the bidirectional check — the committed half of the
+# perimeter had the same blind spot as the untracked half. Ask for the bytes.
+my @headtree = grep { length }
+               split /\0/, qx(git -C "$root" -c core.quotePath=false ls-tree -r --name-only -z HEAD);
 my %headset = map { $_ => 1 } @headtree;
 
 # ---- A-AH63 (Council WP-93, Hejlsberg): campaign grammar v2 PRE-BIRTH
@@ -1219,14 +1258,34 @@ if ($target_arg eq '--all') {
   # Everything untracked in the class is listed; a path leaves the perimeter
   # only when git ITSELF (whose matcher we do not reimplement) attributes
   # the exclusion, with -v, to such a .gitignore.
+  # A-SK-98-1 (Council WP-98, Klabnik — FORGE LANDED, KS-SK-98-1): git QUOTES
+  # any path with non-ASCII or control bytes when it prints one per line —
+  # `"php-rust/…perimetr\303\262.md"` — and the leading double quote makes the
+  # `^php-rust/` anchor of the class regex fail. A doc-figure with an accent in
+  # its NAME walked straight out of the perimeter while its ASCII twin was
+  # named. The defect is not the regex: it is that the perimeter trusted the
+  # FORM git chose to PRINT. Cure: ask for the bytes (`-z`, NUL-separated, and
+  # `core.quotePath=false` for belt and braces) and split on NUL, so no path
+  # can be re-shaped on its way into the judge.
   my @untracked = grep { /$class_rx/ }
-                  split /\n/, qx(git -C "$root" ls-files --others -- php-rust);
+                  grep { length }
+                  split /\0/, qx(git -C "$root" -c core.quotePath=false ls-files --others -z -- php-rust);
   my %ign_src;
   if (@untracked) {
     # core.excludesFile is pinned to /dev/null on the command line as well:
     # the closed env list already keeps GIT_CONFIG_* out, and .git/config is
     # local and uncommitted, so neither may name a source here.
+    # A-SK-98-1 continued: `check-ignore -v` quotes its <pathname> field on the
+    # SAME rule as ls-files, so keying %ign_src by the printed name missed
+    # every non-ASCII path and left it looking un-ignored. (Found by following
+    # the first fix through: the AppleDouble sidecar of an accented file — a
+    # path the committed .gitignore DOES cover — was reported as a perimeter
+    # violation.) `-z` gives four NUL-separated fields per record —
+    # source, linenum, pattern, pathname. (`-z` is NOT available here: git
+    # refuses it without `--stdin`. `core.quotePath=false` is what turns the
+    # quoting off, and it is verified by T31 rather than assumed.)
     if (open my $ci, '-|', 'git', '-C', $root, '-c', 'core.excludesFile=/dev/null',
+                           '-c', 'core.quotePath=false',
                            'check-ignore', '-v', '--', @untracked) {
       while (my $l = <$ci>) {
         chomp $l;
