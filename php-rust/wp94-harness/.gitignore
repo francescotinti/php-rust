@@ -1,0 +1,6 @@
+# Gli output GREZZI delle run (junit txt interi, catture HTTP della battery)
+# NON si committano: pesano e non sono autorita. Le autorita sono i .out in
+# formato ascii-nudo (pair94.out, pair94-ratios.out, battery61-accettazione.out)
+# e i .time, tutti gia in repo.
+pair-out/*.txt
+battery61-out/
