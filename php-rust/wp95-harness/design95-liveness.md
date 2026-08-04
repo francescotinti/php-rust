@@ -83,14 +83,50 @@ per lo spread inter-build.
 
 ## PREDIZIONE EX-ANTE (firmata prima di F1)
 
-- **P1 (meccanismo, F1)**: `would_take` ≥ **20%** di `slot_reads_rc`. Sotto
-  il 20% → si abbandona per il piano B, e lo si scrive.
+- **P1 (meccanismo, F1) — RIVISTA il 2026-08-04 su obiezione dell'utente.**
+  La prima stesura diceva «≥20% di `slot_reads_rc`, sotto si abbandona». Due
+  difetti, entrambi reali: (a) il 20% era **scelto, non derivato**; (b) era
+  **incoerente con P3** — il conto sotto mostra che −2,0…−4,0% di CPU
+  richiederebbe di spostare il 31%…88% delle letture, non il 20%.
+
+  Il conto, dai dati di oggi: il canale slot→stack→binary vale circa
+  **4,5%…6,5%** della CPU userland (quota di `Zval` clone+drop attribuibile
+  a `run_loop`/`binary_value_ab`). Quindi:
+
+  | letture spostabili | guadagno CPU atteso |
+  |---|---|
+  | 15% | 0,68%…0,98% |
+  | 20% | 0,90%…1,31% |
+  | 30% | 1,36%…1,96% |
+  | 50% | 2,26%…3,27% |
+
+  **Regola di decisione nuova — sul GUADAGNO, non sulla percentuale**, e a
+  tre bande invece che a soglia secca (una soglia secca butta via lavoro
+  buono per un punto percentuale):
+
+  - guadagno atteso **≥ 1,3%** → si prosegue con la strada lunga: vale il
+    suo costo e batte il piano B;
+  - **0,6%…1,3%** → si **confrontano** i due piani a parità di conto (il
+    piano B ha guadagno simile ma rischio medio, perché aggiunge un corpo
+    caldo): a parità di guadagno si preferisce la strada lunga, che non
+    aggiunge opcode e resta riusabile per tutti i siti di lettura;
+  - **< 0,6%** → si abbandonano ENTRAMBI e si passa al prossimo bersaglio
+    del profilo (GC 5,2%, hash cachato, ciclo di vita dei Frame 6,7%),
+    perché il problema non è la strada, è che questo canale non paga.
+
+  Il numero che decide resta scritto PRIMA; ciò che cambia è che ora è
+  **derivato** e che una banda intermedia non forza una rinuncia automatica.
 - **P2 (costo della prudenza, F2)**: `would_take_safe` ≥ **60%** di
   `would_take`. Se il perimetro conservativo taglia più del 40%, la leva
   vale meno della sua complessità.
-- **P3 (tempo, F4)**: user CPU **−2,0…−4,0%** sul gruppo media (banda più
-  alta della superistruzione perché agisce su TUTTI i siti di lettura, non
-  su una coppia di opcode). Falsificata se peggiora o se supera −8%.
+- **P3 (tempo, F4) — RIVISTA insieme a P1**: user CPU sul gruppo media,
+  nella banda che F1 avrà predetto dalla tabella qui sopra (il numero esatto
+  si scrive alla fine di F1, quando `would_take` è noto: è una predizione
+  *derivata da una misura*, non un auspicio). La banda −2,0…−4,0% della
+  prima stesura resta valida SOLO se F1 trova ≥31% di letture spostabili.
+  Falsificata se il tempo peggiora, o se il guadagno supera del doppio la
+  banda predetta — un guadagno molto più grande del previsto non è una
+  vittoria, è un effetto non capito, e va nominato prima di rivendicarlo.
 - **P4 (parità)**: corpus per NOME invariato; `battery61` rc=0 con gli stessi
   sei esiti; media group 762/1912/52 identici.
 
