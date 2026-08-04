@@ -12,6 +12,12 @@ op-census = []
 # WP-39 leva E: GC-pipeline counters (PHPR_GC_CENSUS). Same convention as
 # op-census: only ever compiled into dedicated instrumentation builds.
 gc-census = []
+# S-95.0 leva A-ZV1: contatori del MECCANISMO per «il clone che muore subito»
+# (PHPR_ZVAL_CENSUS). Contano quanti valori vengono materializzati da uno slot
+# e quanti di quelli portano un `Rc` (cioè pagano refcount++ / refcount--).
+# Stessa convenzione delle altre census: SOLO build di strumentazione — una
+# cifra verdict-grade non nasce mai da un binario con questa feature accesa.
+zval-census = []
 # WP-45 Fase 0: byte-attribution census (PHPR_MEM_CENSUS) — see
 # FOOTPRINT_CPU_ROADMAP.md. Instrumentation builds only.
 mem-census = ["php-types/mem-census"]

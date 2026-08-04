@@ -14,6 +14,9 @@ path = "src/main.rs"
 mem-census = ["php-runtime/mem-census", "php-types/mem-census"]
 # WP-62 M2.3: form-B arm-cost diagnostic (see php-runtime/relbase-probe).
 relbase-probe = ["php-runtime/relbase-probe"]
+# S-95.0 leva A-ZV1: contatori del meccanismo «clone che muore subito»
+# (PHPR_ZVAL_CENSUS=1 stampa la riga a fine processo). Strumentazione soltanto.
+zval-census = ["php-runtime/zval-census"]
 # S-79.0.6 (Council WP-80 A-BG16): per-request census line on the cli-server
 # arm — the prerequisite for judging A-BB1 (the alloc A/B needed counters on
 # BOTH arms; exit stats were never going to exist on this one, KG-79.B).

@@ -827,10 +827,31 @@ fn field_unset_prop_step(
 /// Read a local cell's value, following a reference and mapping an unset slot to
 /// NULL.
 pub(super) fn read_slot(cell: &Zval) -> Zval {
+    // S-95.0 A-ZV1: qui si MATERIALIZZA un valore che nello slot resta vivo.
+    // Per le varianti che portano un `Rc` è refcount++ e, quando la copia muore
+    // subito dopo (il caso caldo: operando di un'operazione binaria),
+    // refcount--: lavoro netto zero pagato a ogni esecuzione. Il contatore
+    // misura il MECCANISMO prima dell'orologio ed è compilato via fuori dalle
+    // build di strumentazione.
+    #[cfg(feature = "zval-census")]
+    super::zvalcensus::note_slot_read(zval_holds_rc(cell));
     match cell {
         Zval::Undef => Zval::Null,
         Zval::Ref(r) => r.borrow().clone(),
         other => other.clone(),
+    }
+}
+
+/// Il valore porta un `Rc`? Solo per queste varianti clone/drop costano un
+/// aggiornamento di refcount; sulle altre sono una copia di parola. Discrimina
+/// il numeratore della predizione A-ZV1: `slot_reads_rc`, non `slot_reads`.
+#[cfg(feature = "zval-census")]
+fn zval_holds_rc(v: &Zval) -> bool {
+    match v {
+        Zval::Undef | Zval::Null | Zval::Bool(_) | Zval::Long(_) | Zval::Double(_) => false,
+        // `Ref` clona il valore INTERNO: il costo sta lì, non nel wrapper.
+        Zval::Ref(r) => zval_holds_rc(&r.borrow()),
+        _ => true,
     }
 }
 

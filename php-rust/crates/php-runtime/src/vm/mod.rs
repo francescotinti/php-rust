@@ -55,6 +55,10 @@ mod census;
 // builds only, mirror of the op-census conventions.
 #[cfg(feature = "gc-census")]
 mod gc_census;
+// S-95.0 leva A-ZV1: contatori del meccanismo per «il clone che muore subito»
+// (design95-leva-zval.md). Stessa convenzione: build di strumentazione soltanto.
+#[cfg(feature = "zval-census")]
+pub mod zvalcensus;
 mod coroutines;
 mod dom;
 mod exceptions;
