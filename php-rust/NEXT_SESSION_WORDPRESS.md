@@ -131,14 +131,15 @@ EMENDAMENTI, sette refutazioni capitali). Le TRE che riscrivono l'ordine:
 2. **Il tetto di H-B1 è ~1,4 ns/op (−17%, banda 8–27%)** (Bak+Gregg dal
    dispatch noop già pinnato in ha2-sweep): il fattore ~8 vive nei CORPI ⇒
    **H-B1 declassata a sotto-passo, H-B2 promossa ad asse**. Prima di ogni
-   codice: misura M1 (noop 200M + census + ASM) e predizione P scritta nel
+   codice: misura M1 (noop da duecento milioni di iterazioni + census + ASM)
+   e predizione P scritta nel
    .out — P < 10% ⇒ H-B1 cade a tavolino.
 3. **Parità server DOVUTA** (Pedersen): il pin php-server 832568a72b925dd1
    contiene H-A2 incondizionata e NON è verificato — restapi+option per
    NOME sotto env -i prima di ogni uso del server.
 
-**ORDINE S-98.0**: M1 → decisione H-B1 dal numero (criterio max(P/2, 0,7
-ns/op), caduta se arith flag-off > 7,2 s) → H-B2 (UN opcode: Binary Add
+**ORDINE S-98.0**: M1 → decisione H-B1 dal numero (criterio max(P/2, sette
+decimi di ns per opcode), caduta se arith flag-off > 7,2 s) → H-B2 (UN opcode: Binary Add
 int-int deciso a compilazione, guardia contata) · debiti ammessi in timebox
 ½ sessione: parità server per NOME, smoke flag-ON con controllo positivo,
 assert {main} nella batteria del pass · BACKLOG per NOME: delibera manifest
@@ -179,7 +180,8 @@ stream di istruzioni è una volta e mezza più largo.) Dopo S-97.1 il bersaglio
 - **criterio di caduta (fissato dal Concilio WP-99, team tetto-misura)**:
   PRIMA di ogni codice la misura M1 produce la predizione P nel `.out`;
   P < 10% ⇒ cade a tavolino. Se si esegue: cade se il risparmio è sotto
-  max(P/2, 0,7 ns/op), cioè se `arith` flag-off resta sopra 7,2 s.
+  max(P/2, sette decimi di ns per opcode), cioè se `arith` flag-off resta
+  sopra 7,2 s.
 - **nota**: si misura flag-OFF (la strada di parità); il flag-on resta
   strumento di misura, non baseline. Forma vincolata: split-borrow del
   team forma-hb1 (KS: no unsafe/raw ptr, no mem::take, no ip locale).
