@@ -79,3 +79,15 @@ macchina=Apple M4 — L1i=131072 B (128 KiB), L1d=65536 B, L2=4194304 B
    funzione INTERA ma irrilevante: l'88,6% di quel codice non viene mai eseguito in
    questo workload. Estrarre gli arm freddi resta difendibile per altri motivi
    (layout, iTLB, tempo di compilazione) ma il guadagno CPU atteso e BASSO.
+
+== ATTRIBUZIONE DEI CLONE/DROP DI Zval (la leva scelta) ==
+Zval::drop=2804 campioni = 7,20% CPU userland   Zval::clone=1110 = 2,85%   (somma 10,05%)
+chi chiama Zval::drop:  run_loop 29,6% · binary_value_ab 24,6% (=1,77% CPU) · Repr drop 5,3%
+  · coerce_or_check_hint 3,8% · recycle_frame 3,7% · fancy_regex 3,7% · Frame drop 3,4%
+chi chiama Zval::clone: run_loop 58,1% · coerce_or_check_hint 14,9% · Vec::resize 3,4%
+binary_value_ab totale=1030 campioni = 2,64% CPU; il 91,7% dei suoi campioni arriva dal
+  percorso run_loop (slot/const/ConcatN), non dal percorso pop
+=> due terzi del costo di un'operazione binaria sono il DROP degli operandi
+meccanismo NOMINATO: read_slot() clona SEMPRE (arrays.rs:826-834) e il clone muore
+  dentro binary_value_ab; per le varianti con Rc e incremento+decremento del refcount,
+  lavoro netto ZERO. 15 siti di chiamata di read_slot (run.rs x9, mod.rs x5, session.rs x1)
