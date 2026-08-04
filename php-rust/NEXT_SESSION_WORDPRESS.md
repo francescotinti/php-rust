@@ -118,7 +118,35 @@ costo MEDIO per opcode è SALITO da 8,24 a 9,87 ns. Il conteggio è quasi
 chiuso (11 contro 7 dell'oracle); il divario vive nel **COSTO per opcode**
 (~8× sul residuo). L'asse è H-B1/H-B2.
 
-### ▶️ H-B1 — LA PROSSIMA: ogni opcode costa troppo, il preambolo
+### ⚖️ Concilio WP-99 (2026-08-05, su S-97.0+S-97.1 e programma S-98.0) — VINCOLANTE
+
+Verbali integrali + note di team + sintesi in `wp99-harness/` (9/9 CON
+EMENDAMENTI, sette refutazioni capitali). Le TRE che riscrivono l'ordine:
+
+1. **La forma letterale di H-B1 è FALSA** (Hoare+Matsakis): gli archi di
+   ri-entrata (gc_note, flush_diags, __toString, dtor) attraversano quasi
+   ogni handler e ogni diag legge `frames[top].ip`. Forma safe possibile:
+   loop interno su split-borrow, confine = ogni opcode con metodi
+   `&mut self`. KS: no unsafe/raw ptr, no mem::take, no ip locale.
+2. **Il tetto di H-B1 è ~1,4 ns/op (−17%, banda 8–27%)** (Bak+Gregg dal
+   dispatch noop già pinnato in ha2-sweep): il fattore ~8 vive nei CORPI ⇒
+   **H-B1 declassata a sotto-passo, H-B2 promossa ad asse**. Prima di ogni
+   codice: misura M1 (noop 200M + census + ASM) e predizione P scritta nel
+   .out — P < 10% ⇒ H-B1 cade a tavolino.
+3. **Parità server DOVUTA** (Pedersen): il pin php-server 832568a72b925dd1
+   contiene H-A2 incondizionata e NON è verificato — restapi+option per
+   NOME sotto env -i prima di ogni uso del server.
+
+**ORDINE S-98.0**: M1 → decisione H-B1 dal numero (criterio max(P/2, 0,7
+ns/op), caduta se arith flag-off > 7,2 s) → H-B2 (UN opcode: Binary Add
+int-int deciso a compilazione, guardia contata) · debiti ammessi in timebox
+½ sessione: parità server per NOME, smoke flag-ON con controllo positivo,
+assert {main} nella batteria del pass · BACKLOG per NOME: delibera manifest
+94/95, property-test antisimmetria mirror + GMP/Number, flag eager + dente
+anti-putenv, dente N_OPS<256, coppia peak al prossimo collaudo WP, bande
+str/re, fold coda AssignOp (dopo le sette trappole di Stogov).
+
+### H-B1 — ogni opcode costa troppo, il preambolo (DECLASSATA a sotto-passo dal Concilio WP-99; si esegue SOLO se M1 le dà P ≥ 10%)
 
 ### ~~H-A2 — `Sweep`~~ → **CONFERMATA E SPEDITA** (`wp97-harness/ha2-sweep.out`)
 
@@ -148,12 +176,13 @@ stream di istruzioni è una volta e mezza più largo.) Dopo S-97.1 il bersaglio
 
 - **faccio**: frame corrente tenuto in un registro, ricaricato SOLO ai confini
   (call/ret/throw); guardia di profondità spostata dove `frames` cresce.
-- **criterio di caduta (da scrivere ESATTO in apertura di sessione, prima di
-  toccare codice)**: il costo per opcode su `arith` flag-off deve scendere in
-  modo netto rispetto agli 8,24 ns misurati — se il guadagno è sotto il
-  rumore della coppia R=3, cade.
+- **criterio di caduta (fissato dal Concilio WP-99, team tetto-misura)**:
+  PRIMA di ogni codice la misura M1 produce la predizione P nel `.out`;
+  P < 10% ⇒ cade a tavolino. Se si esegue: cade se il risparmio è sotto
+  max(P/2, 0,7 ns/op), cioè se `arith` flag-off resta sopra 7,2 s.
 - **nota**: si misura flag-OFF (la strada di parità); il flag-on resta
-  strumento di misura, non baseline.
+  strumento di misura, non baseline. Forma vincolata: split-borrow del
+  team forma-hb1 (KS: no unsafe/raw ptr, no mem::take, no ip locale).
 
 ### H-B2 — Ogni opcode costa troppo: manca la specializzazione per tipo
 

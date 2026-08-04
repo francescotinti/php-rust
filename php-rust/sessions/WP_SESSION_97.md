@@ -54,7 +54,7 @@ pass); census a 185 righe.
 stesso binario 0dd98ebbb7eb2d96):**
 
 - braccio 1 (opcode/iter < 12): **PASSATO** — 19 → **11** (census esatto:
-  1.900.020 → 1.100.019 dispatch su 100k iterazioni);
+  1.900.020 → 1.100.019 dispatch su 100000 iterazioni);
 - braccio 2 (arith −40%): **NON RAGGIUNTO** — 7,83 → 5,43 s netti =
   **−30,7%** (rapporto 18,2 → 12,6);
 - ⇒ **il criterio scatta, H-A1 abbandonata senza negoziare** (regola di
