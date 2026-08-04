@@ -1025,6 +1025,10 @@ push @sources, committed_glob("$here/../wp95-harness/*.out");
 # dell'ordine del Concilio WP-97). Budget alzato nello stesso commit che
 # aggiunge il glob (A-SK61).
 push @sources, committed_glob("$here/../wp96-harness/*.out");
+# S-97.0: la SPINA DORSALE — il rapporto phpr/oracle PER CATEGORIA di lavoro
+# dell'interprete (micro-baseline.out). E' il nuovo giudice del progresso: la
+# suite WordPress torna a essere un collaudo di parita', non un cronometro.
+push @sources, committed_glob("$here/../wp97-harness/*.out");
 # S-85.0: the measure85 campaign raws (85*/m85* labels) + verdict85 + the
 # wp85 evidence dir
 push @sources, committed_glob("$mout/*85*.summary"), committed_glob("$mout/*85*.census"),
