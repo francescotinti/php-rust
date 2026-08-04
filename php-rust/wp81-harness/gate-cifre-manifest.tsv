@@ -354,7 +354,10 @@ php-rust/wp98-harness/verbali/verbale-6-pedersen.md	-	no	no	-
 php-rust/wp98-harness/verbali/verbale-7-leijen.md	-	no	no	-
 php-rust/wp98-harness/verbali/verbale-8-stogov.md	-	no	no	-
 php-rust/wp98-harness/verbali/verbale-9-gregg.md	-	no	no	-
-php-rust/sessions/WP_SESSION_97.md	-	no	no	-
+php-rust/sessions/WP_SESSION_97.md	-	yes	no	-
 php-rust/wp97-harness/ha1-registers.out	-	no	no	-
 php-rust/wp97-harness/micro-ha1-off.out	-	no	no	-
 php-rust/wp97-harness/micro-ha1-on.out	-	no	no	-
+php-rust/wp97-harness/arith-decomposition.out	-	no	no	-
+php-rust/wp97-harness/ha2-sweep.out	-	no	no	-
+php-rust/wp97-harness/micro-baseline.out	-	no	no	-
