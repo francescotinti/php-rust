@@ -13,10 +13,15 @@ SODDISFATTO). Dettaglio: `sessions/WP_SESSION_94.md`,
 **⏱ FONDAMENTALI (regola utente 2026-08-03, aggiornare a OGNI rotazione)**:
 ultima misura full/media = **WP-94 (QUESTA sessione — il contatore è
 AZZERATO dopo otto sessioni)** · ultima campagna sull'oggetto = m90 in
-WP-90 (4 sessioni fa) · S-94.0 ha prodotto misure **verdict-grade** sulla
-coppia full e un gate di accettazione WordPress riproducibile. **Restano
-non misurati**: il probe slope v2 e l'attribuzione dello slope per NOME
-(criterio 1 PARZIALE) — sono la prima voce d'oggetto di S-95.0.
+WP-90 (4 sessioni fa). ⚠️ **Ma il Concilio WP-96 (Bak, Hoare, Gregg in
+convergenza indipendente) ha stabilito che la coppia NON mostra movimento
+di phpr**: la gamba phpr è PIATTA su ogni asse, dentro lo spread; il
+«record» e il «regresso» della prima lettura erano la gamba ORACLE.
+**Nove sessioni di roadmap footprint senza movimento misurabile su phpr**:
+questo è il numero da guardare in faccia. Il guadagno vero di S-94.0 è il
+METRO rimesso in funzione + la batteria WordPress nativa. **Restano non
+misurati**: probe slope v2 e attribuzione dello slope (criterio 1
+PARZIALE).
 
 ## Stato gate
 
@@ -34,9 +39,12 @@ non misurati**: il probe slope v2 e l'attribuzione dello slope per NOME
   (A-SK-77 ha morso per la terza volta). **A-SK-82 non è più aggirabile
   dai tre canali WP-95**: T24/T25/T26 lo provano per comportamento a rc
   esatto, ognuno col morso sul giudice pre-cura.
-- **Misure**: coppia full S-94.0 = **VERDICT** (raw `pair94.out`, rapporti
-  macchina `pair94-ratios.out`). Slope per-worker: nessuna cifra nuova, lo
-  SCREEN di S-93.0 resta tale.
+- **Misure**: coppia full S-94.0 — le CIFRE sono verdict-grade (raw
+  `pair94.out`, rapporti macchina `pair94-ratios.out`), ma **ogni confronto
+  con le bande storiche è RITIRATO** (sanatoria Concilio WP-96: la ricetta
+  storica divide per un oracle CONGELATO a 5:39 → 838,59/339 = 2,474, non
+  1,873; sul media il rapporto peggiora perché l'oracle è sceso). Valgono
+  solo i rapporti **same-evening**. Slope per-worker: nessuna cifra nuova.
 - GATE72 CLI resta baseline trasversale (corpus 1418 · refl 290 · ORM
   3E/13F · hk 1665).
 
@@ -60,8 +68,13 @@ binario cambia prima della misura, la predizione perde il suo «prima»).
 
 ### L'OGGETTO (il corpo della sessione)
 
-1. **LEVA arene PER-FILE del preludio** — è ora legittima: il «prima»
-   fresco esiste ed è di S-94.0, sullo stesso pin. I 16 obblighi del
+0. **PRIMA DELLA LEVA (KS-BG-96-3 + A-TH-76/A-BB-67)**: rendere OMOGENEO
+   il denominatore del trend — pubblicare in GAP_TREND le quattro cifre
+   ASSOLUTE per gamba e il Δ sulla **gamba phpr**, mai sulla frazione. Un
+   claim sul numeratore si fa sulla gamba. Senza questo, la leva verrebbe
+   giudicata di nuovo da una frazione.
+1. **LEVA arene PER-FILE del preludio** — il «prima» fresco esiste ed è di
+   S-94.0, sullo stesso pin. I 16 obblighi del
    team-leva (`wp95-harness/verbali/team-leva.md` §5): contatore per-unità
    parse-only col controllo positivo `Σ T_i ≈ 25795552 B` (touched reale
    ±10%), dente sulla semantica bumpalo, fixture F1-F8 oracle-morse,
