@@ -40,6 +40,19 @@ pub static WOULD_TAKE_RC: AtomicU64 = AtomicU64::new(0);
 pub static SITES_TOTAL: AtomicU64 = AtomicU64::new(0);
 /// Quanti di quei siti sono ultimi usi.
 pub static SITES_MOVABLE: AtomicU64 = AtomicU64::new(0);
+// ----- F2: il perimetro conservativo (design95-liveness.md, predizione P2) -----
+/// Esecuzioni movibili che SOPRAVVIVONO ai predicati di rinuncia F2.
+pub static WOULD_TAKE_SAFE: AtomicU64 = AtomicU64::new(0);
+/// Il sottoinsieme rc di [`WOULD_TAKE_SAFE`]: il numeratore di P2 contro
+/// `would_take_rc` (≥60% o la leva vale meno della sua complessità).
+pub static WOULD_TAKE_SAFE_RC: AtomicU64 = AtomicU64::new(0);
+/// Il sottoinsieme di [`WOULD_TAKE_SAFE`] il cui valore è una STRINGA: le
+/// stringhe non hanno distruttori osservabili, quindi è la parte del canale
+/// che un eventuale `TakeSlot` ristretto per tipo (F3) prenderebbe senza
+/// toccare l'ordine dei `__destruct` — il rischio più insidioso dell'elenco.
+pub static WOULD_TAKE_SAFE_STR: AtomicU64 = AtomicU64::new(0);
+/// Siti che restano movibili sotto il perimetro F2.
+pub static SITES_SAFE: AtomicU64 = AtomicU64::new(0);
 
 std::thread_local! {
     /// Cache per-funzione dell'analisi di ultimo uso. Chiave: (indirizzo della
@@ -67,6 +80,7 @@ pub fn note_slot_load_site(func: &crate::bytecode::Func, ip: usize, cell: &Zval)
             let a = super::liveness::analyze(func);
             SITES_TOTAL.fetch_add(a.sites_total, Ordering::Relaxed);
             SITES_MOVABLE.fetch_add(a.sites_movable, Ordering::Relaxed);
+            SITES_SAFE.fetch_add(a.sites_safe, Ordering::Relaxed);
             std::rc::Rc::new(a)
         }))
     });
@@ -74,6 +88,15 @@ pub fn note_slot_load_site(func: &crate::bytecode::Func, ip: usize, cell: &Zval)
         WOULD_TAKE.fetch_add(1, Ordering::Relaxed);
         if zval_holds_rc(cell) {
             WOULD_TAKE_RC.fetch_add(1, Ordering::Relaxed);
+        }
+        if analysis.movable_safe.get(ip).copied().unwrap_or(false) {
+            WOULD_TAKE_SAFE.fetch_add(1, Ordering::Relaxed);
+            if zval_holds_rc(cell) {
+                WOULD_TAKE_SAFE_RC.fetch_add(1, Ordering::Relaxed);
+            }
+            if matches!(cell, Zval::Str(_)) {
+                WOULD_TAKE_SAFE_STR.fetch_add(1, Ordering::Relaxed);
+            }
         }
     }
 }
@@ -119,14 +142,18 @@ pub fn note_avoided() {
 /// così il raw entra nel corpus del gate cifre senza post-elaborazione.
 pub fn dump_line() -> String {
     format!(
-        "zvalcensus slot_reads={} slot_reads_rc={} slot_reads_avoided={} would_take={} would_take_rc={} sites_total={} sites_movable={}",
+        "zvalcensus slot_reads={} slot_reads_rc={} slot_reads_avoided={} would_take={} would_take_rc={} would_take_safe={} would_take_safe_rc={} would_take_safe_str={} sites_total={} sites_movable={} sites_safe={}",
         SLOT_READS.load(Ordering::Relaxed),
         SLOT_READS_RC.load(Ordering::Relaxed),
         SLOT_READS_AVOIDED.load(Ordering::Relaxed),
         WOULD_TAKE.load(Ordering::Relaxed),
         WOULD_TAKE_RC.load(Ordering::Relaxed),
+        WOULD_TAKE_SAFE.load(Ordering::Relaxed),
+        WOULD_TAKE_SAFE_RC.load(Ordering::Relaxed),
+        WOULD_TAKE_SAFE_STR.load(Ordering::Relaxed),
         SITES_TOTAL.load(Ordering::Relaxed),
         SITES_MOVABLE.load(Ordering::Relaxed),
+        SITES_SAFE.load(Ordering::Relaxed),
     )
 }
 

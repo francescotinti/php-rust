@@ -29,13 +29,18 @@
 use crate::bytecode::{DimBase, FieldBase, Func, Op};
 
 /// Esito dell'analisi su una funzione: `movable[i]` è vero sse `ops[i]` è un
-/// `LoadSlot`/`LoadVar` la cui lettura è un ultimo uso (F1, senza rinunce F2).
+/// `LoadSlot`/`LoadVar` la cui lettura è un ultimo uso (F1, senza rinunce F2);
+/// `movable_safe[i]` applica in più il PERIMETRO CONSERVATIVO F2.
 pub struct Analysis {
     pub movable: Vec<bool>,
+    /// F2: movibile E fuori da ogni predicato di rinuncia (vedi [`renounce`]).
+    pub movable_safe: Vec<bool>,
     /// Siti statici `LoadSlot`/`LoadVar` totali nella funzione.
     pub sites_total: u64,
     /// Quanti di quei siti sono marcati movibili.
     pub sites_movable: u64,
+    /// Quanti restano movibili sotto il perimetro F2.
+    pub sites_safe: u64,
 }
 
 /// Insieme di slot come bitset a parole. Le funzioni PHP hanno decine di slot,
@@ -53,8 +58,10 @@ impl Bits {
     fn clear(&mut self, i: u32) {
         self.0[(i / 64) as usize] &= !(1 << (i % 64));
     }
+    /// Fuori intervallo = falso (i bitset F2 possono essere più stretti di
+    /// quelli dell'analisi: mai indicizzare nel vuoto in una build di misura).
     fn get(&self, i: u32) -> bool {
-        self.0[(i / 64) as usize] & (1 << (i % 64)) != 0
+        self.0.get((i / 64) as usize).is_some_and(|w| w & (1 << (i % 64)) != 0)
     }
     fn set_all(&mut self) {
         for w in &mut self.0 {
@@ -261,6 +268,103 @@ fn effect(op: &Op, park_targets: &[usize]) -> Effect {
     e
 }
 
+/// Builtin che OSSERVANO lo scope del chiamante per nome: la loro presenza
+/// rinuncia all'intera funzione (design95-liveness.md, elenco F2).
+fn observes_scope(name: &[u8]) -> bool {
+    const NAMES: [&[u8]; 7] = [
+        b"compact",
+        b"extract",
+        b"get_defined_vars",
+        b"debug_backtrace",
+        b"debug_print_backtrace",
+        b"func_get_args",
+        b"func_get_arg",
+    ];
+    NAMES.iter().any(|n| name.eq_ignore_ascii_case(n))
+}
+
+/// F2 — il perimetro conservativo. Restituisce `(rinuncia_funzione,
+/// slot_rinunciati)`: la prima scatta sui modi in cui PHP vede TUTTI i locali
+/// fuori dal flusso (eval/include, `$$x`, `compact` & co., generatori — lo
+/// stato sopravvive alla sospensione); il secondo sui singoli slot che
+/// possono diventare CONDIVISI (`Zval::Ref`): `&$x`, `global $x`, `static $x`,
+/// closure `use (&$x)`, `foreach ... as &$v`, parametri by-ref — spostare un
+/// valore da uno slot condiviso sarebbe osservabile altrove.
+fn renounce(func: &Func) -> (bool, Bits) {
+    let mut nbits = (func.n_slots + func.max_temps) as usize;
+    // Le stesse difese di larghezza di `analyze`.
+    for op in &func.ops {
+        if let Op::LoadSlot(s) | Op::LoadVar { slot: s, .. } = op {
+            nbits = nbits.max(*s as usize + 1);
+        }
+    }
+    let mut slots = Bits::new(nbits.max(func.param_by_ref.len()));
+    let mut whole = func.is_generator;
+    let mut mark = |s: u32, b: &mut Bits| {
+        if (s as usize) < nbits.max(func.param_by_ref.len()) {
+            b.set(s);
+        }
+    };
+    for (i, by_ref) in func.param_by_ref.iter().enumerate() {
+        if *by_ref {
+            mark(i as u32, &mut slots);
+        }
+    }
+    for op in &func.ops {
+        match op {
+            Op::Eval | Op::Include { .. } => whole = true,
+            Op::LoadVarDyn | Op::StoreVarDyn | Op::BindGlobalDyn | Op::GlobalsDynAssign | Op::LoadGlobals => {
+                whole = true
+            }
+            Op::CallBuiltin { name, .. }
+            | Op::CallBuiltinSpread { name, .. }
+            | Op::CallHostBuiltin { name, .. }
+            | Op::CallHostBuiltinRef { name, .. }
+            | Op::CallHostBuiltinOut { name, .. }
+            | Op::CallHostBuiltinScanf { name, .. }
+            | Op::CallBuiltinRef { name, .. }
+            | Op::CallBuiltinRefSpread { name, .. }
+            | Op::CallBuiltinRefCell { name, .. } => {
+                if observes_scope(name) {
+                    whole = true;
+                }
+            }
+            Op::PushRef(s) | Op::IterInitRef(s) => mark(*s, &mut slots),
+            Op::StaticAlias { slot, .. } => mark(*slot, &mut slots),
+            Op::IterNextRef { value, key, .. } => {
+                mark(*value, &mut slots);
+                if let Some(k) = key {
+                    mark(*k, &mut slots);
+                }
+            }
+            Op::BindRef { target, source } => {
+                for b in [target, source] {
+                    if let DimBase::Local(s) = b {
+                        mark(*s, &mut slots);
+                    }
+                }
+            }
+            Op::MakeRef { base, .. }
+            | Op::PushArgPlace { base, .. }
+            | Op::BindRefTo { base, .. }
+            | Op::BindRefToChecked { base, .. } => {
+                if let FieldBase::Local(s) = base {
+                    mark(*s, &mut slots);
+                }
+            }
+            Op::MakeClosure { captures, .. } => {
+                for c in captures.iter() {
+                    if c.by_ref {
+                        mark(c.src, &mut slots);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    (whole, slots)
+}
+
 /// Analizza una funzione compilata. Costo O(ops × slot-words × iterazioni):
 /// build di misura, la semplicità è un pregio.
 pub fn analyze(func: &Func) -> Analysis {
@@ -343,9 +447,25 @@ pub fn analyze(func: &Func) -> Analysis {
         }
     }
 
+    // F2: il perimetro conservativo sopra il dataflow F1. `in_region[i]` è la
+    // rinuncia sulle regioni protette (design95: un salto non locale può
+    // rendere vivo ciò che il flusso lineare dava per morto — l'analisi QUI
+    // modella già quegli archi, ma la prudenza F2 rinuncia lo stesso e la
+    // differenza F1−F2 dice quanto costa).
+    let (whole_renounced, slots_renounced) = renounce(func);
+    let mut in_region = vec![false; n];
+    for r in &func.exc_table {
+        let (start, end) = (r.start as usize, (r.end as usize).min(n));
+        for f in in_region.iter_mut().take(end).skip(start) {
+            *f = true;
+        }
+    }
+
     let mut movable = vec![false; n];
+    let mut movable_safe = vec![false; n];
     let mut sites_total = 0u64;
     let mut sites_movable = 0u64;
+    let mut sites_safe = 0u64;
     for (i, op) in ops.iter().enumerate() {
         let s = match op {
             Op::LoadSlot(s) => *s,
@@ -356,7 +476,11 @@ pub fn analyze(func: &Func) -> Analysis {
         if !live_out[i].get(s) {
             movable[i] = true;
             sites_movable += 1;
+            if !whole_renounced && !slots_renounced.get(s) && !in_region[i] {
+                movable_safe[i] = true;
+                sites_safe += 1;
+            }
         }
     }
-    Analysis { movable, sites_total, sites_movable }
+    Analysis { movable, movable_safe, sites_total, sites_movable, sites_safe }
 }
