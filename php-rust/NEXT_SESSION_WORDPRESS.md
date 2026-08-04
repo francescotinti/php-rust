@@ -80,7 +80,7 @@ Dettaglio in `wp97-harness/arith-decomposition.out`.
 
 Entrambi i fattori sono grandi: chiuderne uno solo lascia l'altro intatto.
 
-### H-A1 — Gli opcode sono troppi perché gli operandi transitano dalla PILA
+### ▶️ H-A1 — LA PROSSIMA, ed è il pezzo grosso: gli operandi transitano dalla PILA
 
 Dodici opcode su venti, per iterazione, sono idraulica di pila e GC:
 caricamenti di operando, `PushConst`, `Pop`, `Dup`, `Swap`. L'oracle non ne ha
@@ -102,19 +102,25 @@ propria definizione.
 - **tetto**: attacca ENTRAMBI i fattori insieme (meno opcode E meno traffico di
   pila per opcode), quindi è la candidata a resa più alta.
 
-### H-A2 — `Sweep` è il 10% del dispatch e l'oracle non ce l'ha
+### ~~H-A2 — `Sweep`~~ → **CONFERMATA E SPEDITA** (`wp97-harness/ha2-sweep.out`)
 
-Due `Sweep` per iterazione. La documentazione di `Op::Sweep` dichiara «never
-inside a function/method body»: **misurato FALSO** — lo stesso ciclo dentro una
-funzione ne emette lo stesso identico numero. L'invariante scritta non descrive
-il comportamento.
+Il doppione era il blocco fra graffe: il lowering lo rende un `StmtKind::Block`
+annidato, quindi il `block_of` interno emette il Sweep dell'ultimo statement e
+quello esterno ne emette subito un altro — con ZERO opcode in mezzo. Eliso
+all'emissione, **solo per `Block`**: la regola generale sarebbe SCORRETTA
+(in `if (c) {...}` il ramo falso atterra sulla posizione del Sweep dell'`if`
+senza aver eseguito quello del corpo).
 
-- **faccio**: capisco perché ne servono due per iterazione e se siano
-  ridondanti; se lo sono, cambio la politica di emissione.
-- **falsificata se**: ogni `Sweep` è necessario alla semantica dei distruttori
-  (nel qual caso va reso più economico, non eliminato).
-- **è l'esperimento più economico dei due**: politica del compilatore, nessuna
-  modifica al motore.
+Resa: `opcodi_per_iterazione_prima` → `opcodi_per_iterazione_dopo`, tempo
+`calo_tempo_arith_pct`. Parità provata per NOME (corpus identico salvo tre test
+che usano `random_bytes`; tutte e sei le sentinelle dei distruttori verdi).
+
+**⭐ La scoperta che conta è di lato**: tolto il 5% degli opcode il tempo scende
+meno dell'1%, quindi un `Sweep` noop costa circa **un quinto** dell'opcode
+medio. **Il costo per opcode NON è uniforme**: è concentrato negli opcode che
+fanno traffico di pila e lavoro su `Zval`. Il fattore «costo per opcode» è una
+MEDIA su opcode molto diversi — e i costosi sono esattamente il bersaglio di
+H-A1, che quindi dovrebbe rendere più del suo peso nominale.
 
 ### H-B1 — Ogni opcode costa troppo: il preambolo
 
@@ -164,8 +170,10 @@ il tipo a runtime a ogni esecuzione.
 
 ## Stato gate (invariato da S-96.0)
 
-- **phpr (parità release)**: **d5ce86e3342f3926 INVARIATO**. Corpus Zend per
-  NOME 1418 + refl 290.
+- **phpr (parità release)**: **2f6c1a696b560755** — NUOVO, ricostruito dopo
+  H-A2 (il precedente d5ce86e3342f3926 è stato la baseline fino a S-96.0).
+  Stash additivo in `phpr-old-target/release/phpr-s97-ha2`. Corpus Zend per
+  NOME **1418 invariato**, riverificato sul binario ricostruito.
 - **php-server**: f8f4295a1dcdb627 (⚠️ pin storico d45b578 NON riproducibile —
   voce aperta).
 - **Gate cifre**: `--all` PASS a HEAD · **SELFTEST PASS rc=0** con i denti
