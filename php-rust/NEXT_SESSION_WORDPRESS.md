@@ -81,39 +81,61 @@ sul footprint (picco R=1 = SCREEN; α da ri-derivare: l'albero è mimalloc
 v3.0.2 e sotto PURGE_DELAY=0 decommitta). Sintesi §FONDAMENTALI + ordine
 in `wp96-harness/SYNTHESIS_WP96.md`.
 
-## §WP-95(sessione) — la leva, finalmente con un giudice
+## §WP-95(sessione) — la CPU della VM, con la mappa in mano
 
-**P0**: verificare `--all` PASS a HEAD e che il pin phpr sia ancora
-d5ce86e3342f3926 (la coppia full di S-94.0 è la baseline della leva: se il
-binario cambia prima della misura, la predizione perde il suo «prima»).
+**Riscritto il 2026-08-04 dopo la ricognizione di profiling** (decisione
+utente: «misurare la lentezza l'abbiamo compreso, ora serve invertire la
+rotta e migliorare le prestazioni»). L'ordine del Concilio WP-96 su
+denominatore/leva del preludio resta valido ma **scende di priorita**: la
+misura ha mostrato dove sta davvero il costo.
 
-### L'OGGETTO (il corpo della sessione)
+**P0**: pre-flight standard + `--all` PASS a HEAD + pin phpr
+d5ce86e3342f3926 invariato.
 
-0. **PRIMA DELLA LEVA (KS-BG-96-3 + A-TH-76/A-BB-67)**: rendere OMOGENEO
-   il denominatore del trend — pubblicare in GAP_TREND le quattro cifre
-   ASSOLUTE per gamba e il Δ sulla **gamba phpr**, mai sulla frazione. Un
-   claim sul numeratore si fa sulla gamba. Senza questo, la leva verrebbe
-   giudicata di nuovo da una frazione.
-1. **LEVA arene PER-FILE del preludio** — il «prima» fresco esiste ed è di
-   S-94.0, sullo stesso pin. I 16 obblighi del
-   team-leva (`wp95-harness/verbali/team-leva.md` §5): contatore per-unità
-   parse-only col controllo positivo `Σ T_i ≈ 25795552 B` (touched reale
-   ±10%), dente sulla semantica bumpalo, fixture F1-F8 oracle-morse,
-   sentinella `b"prelude"` migrata in TUTTI i ~20 siti (mai a metà),
-   **predizione ex-ante firmata** nella banda fissata dal team-leva (la
-   banda e la sua condizione di falsificazione vivono in `team-leva.md`,
-   non qui), gate parità COMPLETI + ricertificazione baseline phpr NELLO
-   STESSO commit.
-2. **Probe slope v2 FUSO** (slittato da S-94.0, invariato nel disegno):
-   MI_STAT=1 dichiarato nel banner (mai TRACE nello stesso run) + coppia
-   alloc/free in-band nel GlobalAlloc (soglia ≥524288) + eco d'arm
-   `fired==W` (raw senza ⇒ VOID) + R≥5 interleaved W∈{1,2,4} mediana±2se +
-   doppia metrica peak+residency + `huge_note` simmetrico su realloc.
-3. **Attribuzione slope ~18,8 MB/worker per NOME** — SOLO dal probe fisico
-   on-thread (A-DL-55), MAI da committed (A-DL-66). Criterio 1 del fronte.
-4. **Il pin php-server che non torna**: decidere fra le due ipotesi con una
-   misura (rebuild ripetuto a parità di albero → riproducibilità; oppure
-   ricostruzione dell'albero storico → provenienza).
+### L'OGGETTO: A-ZV2 fase F1 (analisi di ultimo uso, SOLA MISURA)
+
+Contratto completo in `wp95-harness/design95-liveness.md` (predizione
+firmata). In breve:
+
+1. **F1 — calcolare l'analisi e CONTARLA, senza usarla.** Ultimo uso per
+   slot su ogni funzione compilata; contatore `would_take` dietro la feature
+   `zval-census`. **Rischio zero**: nessun bit del binario di parita cambia.
+   **Criterio di prosecuzione scritto PRIMA: se le letture spostabili sono
+   < 20% di `slot_reads_rc` (=53561241, misurato in
+   `wp95-harness/zvalcensus-before.out`), la leva NON vale la sua
+   complessita e si passa al PIANO B** (superistruzione LoadSlot+Binary,
+   `design95-leva-zval.md` §Correzione).
+2. **F2 — il perimetro conservativo** (compact/extract/get_defined_vars/
+   variabili variabili/eval/closure by-ref/generatori/Ref/try-finally e
+   soprattutto i DISTRUTTORI: spostare un valore ANTICIPA un `__destruct`,
+   che e osservabile e non fallisce in modo rumoroso). Ri-contare: se la
+   prudenza taglia piu del 40%, fermarsi.
+3. **F3 — l'opcode `TakeSlot`** con gate di parita COMPLETI nello stesso
+   commit + i test delle trappole (`$a .= $a`, distruttore che osserva
+   l'ordine, generatore sospeso, `compact()` dopo l'ultimo uso apparente).
+4. **F4 — la misura**: coppia oracle-vs-phpr stessa sera con l'oracle
+   RIMISURATO (mai il denominatore congelato) + coppia A/A per lo spread.
+
+### Il contesto che rende questo l'ordine giusto (ricognizione 2026-08-04)
+
+- Profilo del workload reale: `wp95-harness/prof95-media.out`. Il 49,4% del
+  wall e ATTESA (il master dorme su `ChildStderr::read`); la CPU vera e
+  nella VM.
+- **Il tetto del dispatch e 4,33% della CPU** (~2,2% di wall): azzerarlo del
+  tutto varrebbe meno di quanto valgono `Zval` clone+drop (10,05%) e il
+  ciclo di vita dei Frame. Consulenze in `consulenza-bak-dispatch.md` e
+  `consulenza-stogov-engine.md`: **due scuole diverse, stessa conclusione —
+  non il dispatch.**
+- L'ipotesi «run_loop troppo grande per la i-cache» e **REFUTATA per
+  misura**: 241,7 KiB totali ma working set caldo 27,6 KiB (7,8 KiB per il
+  90% del tempo), L1i di questo M4 = 128 KiB.
+
+### Dopo A-ZV2, per NOME (non «piu avanti»)
+
+Denominatore omogeneo in GAP_TREND (KS-BG-96-3, era P0 del Concilio WP-96) ·
+leva arene per-file del preludio con α RI-DERIVATO (Leijen: l'albero e
+mimalloc v3.0.2 e sotto PURGE_DELAY=0 decommitta) · probe slope v2 fuso ·
+attribuzione dello slope · il pin php-server che non torna.
 
 ### BACKLOG PER NOME (non «più avanti»)
 
