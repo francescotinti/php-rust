@@ -40,3 +40,36 @@ cpu_userland=38965 pct=50.6   # QUESTA e la parte che corrisponde alla user CPU 
   0.91%  __ZN11php_runtime2vm4host37_$LT$impl$u20$php_runtime..vm..Vm$GT$15ho_get_declared17h35818ab2b3a8737cE
   0.88%  __ZN9php_types5array8PhpArray6insert17hd16da0a57f1573edE
   0.80%  __ZN9hashbrown3map28HashMap$LT$K$C$V$C$S$C$A$GT$3get17h05a5573ca2907ce8E
+
+== ANATOMIA DI run_loop (la funzione piu calda: 19,16% della CPU) ==
+dimensione=247452 byte (241,7 KiB) in UNA funzione
+indirizzi distinti colpiti=931; primi 10 = 27,8% / primi 50 = 51,0% del tempo di run_loop
+le 6 zone piu calde stanno TUTTE in +0x250..+0x2bc (finestra di ~110 byte) = ~22,6% di run_loop
+disassemblato della finestra (arm64):
+  ldrb  w9, [x21]                 # discriminante dell'Op
+  ldrh  w11, [x12, x9, lsl #1]    # +0x2b0 = 6,66% di run_loop — load dalla JUMP TABLE
+  add   x10, x10, x11, lsl #2
+  br    x10                       # UNICO salto indiretto per TUTTI gli opcode
+  (nella stessa finestra: madd x21,x20,#48,x10 => sizeof(Op)=48 byte; str dell'ip+1)
+
+== LA MISURA CHE DISCRIMINA FRA LE IPOTESI ==
+cache-line distinte toccate=442 su 3866 => superficie CALDA 27,6 KiB su 241,7 (11,4%)
+le 8 cache-line piu calde = 36,6% del tempo in 0,5 KiB
+per coprire il 90% del tempo bastano 124 cache-line = 7,8 KiB di codice
+=> IPOTESI i-CACHE **REFUTATA**: il codice caldo entra largamente in L1i; i 241 KiB
+   sono quasi tutti FREDDI. Restano in piedi: (a) il PREAMBOLO ridondante eseguito a
+   ogni istruzione, (b) la misprediction del salto indiretto condiviso.
+
+== IL PREAMBOLO, DAL CODICE (run.rs:459-526, eseguito a OGNI istruzione) ==
+1. `if self.frames.len() > MAX_CALL_DEPTH` — guardia di profondita a OGNI op
+   (cambia solo su push/pop di frame)
+2. `let top = self.frames.len() - 1`        — len + sottrazione
+3. `let ip = self.frames[top].ip`           — indicizzazione + bounds check
+4. `let func = self.frames[top].func`       — indicizzazione + bounds check
+5. `let op = &func.ops[ip]`                 — indicizzazione + bounds check
+6. `self.frames[top].ip = ip + 1`           — indicizzazione + bounds check + store
+7. `match op { … }`                         — la jump table
+=> quattro rilettura dello STESSO frame per istruzione, ognuna con il suo bounds
+   check, piu una guardia che non puo cambiare fra due istruzioni della stessa
+   funzione. Candidato: tenere il frame corrente in un registro (riferimento/raw
+   index gia validato) e ricaricarlo SOLO ai confini (call/ret/throw).
