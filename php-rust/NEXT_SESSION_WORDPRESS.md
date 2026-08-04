@@ -102,10 +102,12 @@ firmata). In breve:
    `zval-census`. **Rischio zero**: nessun bit del binario di parita cambia.
    **Criterio di prosecuzione scritto PRIMA e DERIVATO** (regola a tre bande
    sul GUADAGNO atteso, non sulla percentuale di letture: tabella e conto in
-   `design95-liveness.md` §P1). In sintesi: >=1,3% di CPU attesa si prosegue;
-   fra 0,6% e 1,3% si confrontano i due piani; sotto 0,6% si abbandonano
-   ENTRAMBI e si passa al prossimo bersaglio del profilo, perche non e la
-   strada a essere sbagliata — e il canale che non paga. Il PIANO B resta
+   `design95-liveness.md` §P1). In sintesi: banda ALTA si prosegue con la
+   strada lunga; banda MEDIA si confrontano i due piani; banda BASSA si
+   abbandonano ENTRAMBI e si passa al prossimo bersaglio del profilo, perche
+   non e la strada a essere sbagliata — e il canale che non paga. Le tre
+   bande in cifre stanno SOLO in `design95-liveness.md` §P1 (la rotazione
+   non ripete i numeri: A-SK-77). Il PIANO B resta
    la superistruzione LoadSlot+Binary (`design95-leva-zval.md` §Correzione).
 2. **F2 — il perimetro conservativo** (compact/extract/get_defined_vars/
    variabili variabili/eval/closure by-ref/generatori/Ref/try-finally e
