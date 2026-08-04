@@ -116,6 +116,12 @@ prosegue (`preg_match`, `preg_split`, `explode`, `substr`, `strtoupper`;
   usarla, entrambe le metà erano false e il riferimento al piano B era pendente.
   Le regole di decisione vanno ri-verificate contro gli artefatti quando si
   applicano, non quando si scrivono.
+- ⭐⭐ **Il perimetro di un giudice non deve fidarsi della forma che un
+  programma sceglie di STAMPARE.** git quota i path non-ASCII, e la virgoletta
+  iniziale è bastata a far uscire un documento dal perimetro. La cura non è una
+  regex migliore: è chiedere i BYTE (`-z`). La stessa classe si è ripresentata
+  due volte nello stesso pomeriggio — in `check-ignore` e in `ls-tree` — e
+  ciascuna è stata trovata solo seguendo la precedente fino in fondo.
 - ⭐ **Un dente nuovo va collaudato in isolamento prima di pagare il selftest
   intero.** Tre run di selftest da ~70 minuti persi (uno ucciso dalla chiusura
   della chiamata, uno su una forgia rotta, uno su testo che avevo modificato
@@ -123,6 +129,37 @@ prosegue (`preg_match`, `preg_split`, `explode`, `substr`, `strtoupper`;
   pochi secondi ciascuno hanno reso il quarto run l'unico necessario.
 - ⭐ **Modificare il giudice mentre il suo selftest gira invalida il run**: le
   autorità si leggono da HEAD e il self-tether hasha il testo su disco.
+
+## Coda della sessione — il Concilio WP-98 ha morso il lavoro appena spedito
+
+Il concilio (`wp98-harness/`) ha prodotto OTTO refutazioni capitali. Tre sono
+state APPLICATE in sessione, e due di esse riguardano l'apparato spedito poche
+ore prima:
+
+- **Klabnik ha fatto ATTERRARE una forgia**: un doc-cifra con un accento nel
+  NOME è uscito dal perimetro mentre il gemello ASCII veniva nominato — git
+  QUOTA i path non-ASCII e la virgoletta iniziale rompe l'ancoraggio
+  `^php-rust/`. **Chiuso**: `-z` + `core.quotePath=false` su `ls-files`; la
+  STESSA correzione su `check-ignore -v` (che quotava a sua volta, e faceva
+  sembrare non-ignorati i sidecar AppleDouble accentati — trovato seguendo il
+  primo fix); e su `ls-tree`, perché il lato COMMITTATO del perimetro aveva lo
+  stesso punto cieco (team-catena). Dente permanente **T31** col suo morso.
+  La CLASSE resta aperta: ~20 siti `git status --porcelain`, che quotano E
+  collassano le directory untracked.
+- **Hoare**: il raw contiene un delta che il changeset non può produrre
+  (`slot_reads_rc` si conta al sito di lettura). Ne segue che le attribuzioni
+  −21/−18/−6 sono state scritte **senza controllare il pavimento di rumore**.
+  Accolta e annotata nel raw. Resta in piedi ciò che non ne dipende:
+  `would_take`, `would_take_rc` e `sites_movable` sono identici AL BYTE fra F1,
+  F2 e riconteggio.
+- **Bak**: il tetto sui corpi caldi è stato usato come una **tariffa**, e non lo
+  è — in WP-44 passare da 2 a 9 corpi costò MENO che passare da 2 a 4. La
+  chiusura del passo 2 è **declassata a SOSPENSIONE**.
+
+E il dente T27 ha morso la propria costruzione: aggiungendo `-z` alla riga di
+elenco, la sostituzione che ricostruiva il giudice pre-cura ha smesso di
+trovare il testo che cercava, e il morso è diventato muto pur continuando a
+stampare il proprio nome. Ora la riga porta un'ancora e si sostituisce INTERA.
 
 ## NON fatti (dichiarati)
 
