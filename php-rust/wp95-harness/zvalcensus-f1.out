@@ -1,0 +1,22 @@
+zvalcensus-f1: A-ZV2 fase F1 — quante letture di slot sono un ULTIMO USO (sola misura)
+grade=VERDICT  # conteggi esatti (non campionamento), suite identica al riferimento
+formato=ascii-nudo
+workload=vendor/bin/phpunit --group media
+esito-suite=762 test, 1912 assertions, 52 skipped — IDENTICO a zvalcensus-before.out
+binario=build di STRUMENTAZIONE 6728f8826e60a59e (--features zval-census, HEAD b82c4461fb57);
+  il binario di parita d5ce86e3342f3926 e VERIFICATO INVARIATO (f1-out/f1.identity)
+processi-che-hanno-scritto=16
+slot_reads=60598107
+slot_reads_rc=53561199
+would_take=28628306
+would_take_rc=25233473
+sites_total=181839
+sites_movable=72819
+would_take_rc_su_slot_reads_rc_pct=47.11  [derivata: companion 25233473/53561199]
+would_take_su_slot_reads_pct=47.24  [derivata: companion 28628306/60598107]
+siti_movibili_pct=40.05  [derivata: companion 72819/181839]
+guadagno_cpu_atteso_pct_min=2.12  [derivata: 0.4711*4.5, frazione per estremo basso del canale §P1]
+guadagno_cpu_atteso_pct_max=3.06  [derivata: 0.4711*6.5, frazione per estremo alto del canale §P1]
+banda=ALTA  # entrambi gli estremi sopra la soglia alta di design95-liveness.md §P1
+verdetto=si prosegue con la strada lunga (F2 perimetro conservativo -> F3 TakeSlot -> F4 coppia)
+nota=slot_reads_rc differisce dal before di 42 su 53,5M (rumore di suite, stessa cardinalita di processi)

@@ -127,6 +127,18 @@ per lo spread inter-build.
   Falsificata se il tempo peggiora, o se il guadagno supera del doppio la
   banda predetta — un guadagno molto più grande del previsto non è una
   vittoria, è un effetto non capito, e va nominato prima di rivendicarlo.
+
+  **P3 DERIVATA (scritta alla fine di F1, 2026-08-04, come promesso qui
+  sopra)**: F1 ha misurato la frazione di letture spostabili in
+  `wp95-harness/zvalcensus-f1.out` (would_take_rc su slot_reads_rc, suite
+  identica al riferimento, 16 processi). La frazione supera il 31%: la banda
+  della prima stesura resta valida, e la predizione P3 per F4 è la banda
+  DERIVATA che sta nello stesso file (`guadagno_cpu_atteso_pct_min`/`_max`),
+  cioè frazione × il valore del canale (4,5%…6,5%). Banda di decisione: ALTA
+  su entrambi gli estremi → si prosegue con la strada lunga F2→F3→F4.
+  Falsificatori invariati; in più: se F2 (perimetro conservativo) taglia più
+  del 40% di would_take (P2), la banda va RI-derivata prima di scrivere
+  l'opcode, non difesa.
 - **P4 (parità)**: corpus per NOME invariato; `battery61` rc=0 con gli stessi
   sei esiti; media group 762/1912/52 identici.
 
