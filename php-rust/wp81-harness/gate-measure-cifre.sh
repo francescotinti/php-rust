@@ -648,9 +648,20 @@ if [ "${1:-}" = "--selftest" ]; then
   # It is driven through the `bash -c` channel with $0 naming the pristine
   # judge, so the A-SK-78 tether agrees and the escalation can actually be
   # observed instead of being blocked one level too early.
+  # The pre-cure listing is rebuilt by replacing the WHOLE line carrying the
+  # `# A-SK-98-LISTING` anchor, never by patching its text: a substitution that
+  # matches yesterday's wording stops matching the day the line is edited, the
+  # revert silently does nothing, and the bite goes quiet while still printing
+  # its name. (That is exactly what happened when A-SK-98-1 added `-z` to the
+  # listing: T27's bite reported "the escalation no longer reproduces" — the
+  # tooth caught its own stale construction, which is what it is for.)
   PRE96="$TMP/pre96.sh"
-  perl -pe 's/ls-files --others -- php-rust/ls-files --others --exclude-standard -- php-rust/' "$PRE95" > "$PRE96"
-  if ! grep -q -- '--exclude-standard -- php-rust' "$PRE96"; then
+  perl -pe 's{^.*# A-SK-98-LISTING$}{                  split /\\n/, qx(git -C "\$root" ls-files --others --exclude-standard -- php-rust);}' "$PRE95" > "$PRE96"
+  # The check is on the LISTING, not on the anchor string: the anchor also
+  # appears in this comment and in the substitution above, so counting it would
+  # be a false positive. What must be true is that the cured listing (`-z`) is
+  # gone and the pre-cure one is there.
+  if ! grep -q -- '--exclude-standard -- php-rust' "$PRE96" || grep -q -- 'ls-files --others -z' "$PRE96"; then
     echo "SELFTEST FAIL: could not build the pre-A-SK-96 judge (the --others listing was not reverted) — T27's bite would be vacuous"; rm -rf "$TMP"; exit 1
   fi
   # T27 (KS-SK-96-1) — channel F-K10: `GIT_CONFIG_COUNT/KEY_0/VALUE_0` set
@@ -1269,7 +1280,7 @@ if ($target_arg eq '--all') {
   # can be re-shaped on its way into the judge.
   my @untracked = grep { /$class_rx/ }
                   grep { length }
-                  split /\0/, qx(git -C "$root" -c core.quotePath=false ls-files --others -z -- php-rust);
+                  split /\0/, qx(git -C "$root" -c core.quotePath=false ls-files --others -z -- php-rust); # A-SK-98-LISTING
   my %ign_src;
   if (@untracked) {
     # core.excludesFile is pinned to /dev/null on the command line as well:
