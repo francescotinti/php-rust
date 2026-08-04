@@ -53,7 +53,13 @@
 # copies and expects FAIL at the EXACT rc (a gate that cannot bite is
 # vacuous). The four Klabnik WP-92 forges and the six WP-93 forges are
 # repeated as permanent teeth.
-export PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin:$PATH
+# A-SK-93 (Council WP-96): PATH is a FIXED literal, not a fixed prefix in
+# front of the caller's. The old `:$PATH` tail left an unbounded, unchecked
+# tail of directories in the search path of every child, and a value the
+# closed-list predicate below could not state. All the binaries this judge
+# and its children reach (git, perl, grep, sed, cut, sort, mktemp, basename,
+# dirname, awk, tr) resolve inside these four directories — verified.
+export PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin
 set -u
 # A-SK-82-GUARD (Council WP-94 → WP-95: A-SK-88/89/90, KS-SK-95-1..4).
 # A-SK-82 tethered BASH_SOURCE[0] to $0 and was AGGIRATA: all three Klabnik
@@ -113,6 +119,45 @@ SELF_PHYS="$SELF_DIR_PHYS/$(basename -- "$SELF_SRC")"
 # (computed into a VARIABLE, never a shell function: the predicate below
 # demands that `declare -F` be empty, and a helper function defined here
 # would falsify it forever — verified, it fail-closed every run.)
+#
+# A-SK-93 (Council WP-96, Klabnik — F-K10/F-K11/F-K12 LANDED, KS-SK-96-1..4):
+# THE ENVIRONMENT IS CONSTRUCTED, NEVER SUBTRACTED. The cure above sanitized
+# by DENIAL LIST (`env -u BASH_ENV -u ENV -u SHELLOPTS -u BASHOPTS -u CDPATH
+# -u GLOBIGNORE $UNSET_FN`), and a denial list is vacuous by construction: it
+# can only name what someone already thought of. Three prefixes nobody had
+# named walked straight through it at HEAD 9373382:
+#   F-K10 `GIT_CONFIG_COUNT/KEY_0/VALUE_0` setting core.excludesFile — an
+#         entire harness directory left the perimeter and the judge printed
+#         rc=0 with a SIGNED `PASS --all` over a fabricated figure
+#   F-K11 core.attributesFile + filter.<f>.clean — `git hash-object` returned
+#         the PRISTINE blob sha for PATCHED text, so the A-SK-78 self-tether
+#         signed code that was not running
+#   F-K12 `PERL5OPT=-MHack PERL5LIB=...` — a hostile BEGIN block inside the
+#         very perl process that BUILDS the corpus, owner of %corpus, qx and
+#         CORE::GLOBAL::exit
+# The class of the defect is one: an enumerable cure against a non-enumerable
+# attack. So the re-exec now goes through `env -i` and hands down EXACTLY the
+# names below. Anything else — known or not yet invented — simply is not
+# there, and T30 refuses to run if it somehow is.
+#
+# A-SK-94 — the git hardening rides IN that closed list rather than in a
+# shell wrapper: `GIT_CONFIG_NOSYSTEM/GLOBAL/SYSTEM` are inherited by every
+# descendant, including the `git` perl reaches through `qx()` → /bin/sh,
+# which is where a wrapper defined in this shell would not have followed.
+# (A shell function would also have falsified the `declare -F` predicate.)
+#
+# A-SK-97 — `perl -T` was considered and REJECTED: @ARGV is tainted, every
+# `qx(git -C "$root" ...)` would die, and untainting each call by hand
+# re-introduces exactly the trust the taint mode was meant to remove. The
+# closed list delivers the same guarantee in a form the predicate can CHECK:
+# PERL5OPT/PERL5LIB/PERLLIB/PERL5DB are absent because only these names exist.
+GATE_ENV_PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin
+GATE_ENV_HOME=/var/empty
+GATE_ENV_TMPDIR=/tmp
+# The closed list, plus the three names bash writes about ITS OWN process
+# (PWD/SHLVL/_) — those are the shell's record, not inherited state.
+GATE_ENV_ALLOWED='PATH|HOME|TMPDIR|LC_ALL|GIT_CONFIG_NOSYSTEM|GIT_CONFIG_GLOBAL|GIT_CONFIG_SYSTEM|PHPR_GATE_REEXEC_DEPTH|PWD|SHLVL|_'
+GATE_ENV_EXTRA="$(/usr/bin/env | /usr/bin/sed 's/=.*//' | /usr/bin/grep -vxE "$GATE_ENV_ALLOWED" | /usr/bin/tr '\n' ' ')"
 FN_ENV_NAMES="$(/usr/bin/env | /usr/bin/grep -E '^[A-Za-z_][A-Za-z0-9_%]*=\(\) \{' | /usr/bin/sed 's/=.*//')"
 GATE_SANE=1
 case ":${SHELLOPTS:-}:" in *:privileged:*) ;; *) GATE_SANE=0;; esac
@@ -121,16 +166,30 @@ case ":${SHELLOPTS:-}:" in *:privileged:*) ;; *) GATE_SANE=0;; esac
 [ -z "$(declare -F)" ] || GATE_SANE=0
 [ -z "$FN_ENV_NAMES" ] || GATE_SANE=0
 [ "$SELF_SRC" = "$SELF_PHYS" ] || GATE_SANE=0
+# A-SK-93/KS-SK-96-4 (T30, the only tooth that does not age): one NAME in
+# more than the closed list and the judge refuses instead of running. This is
+# what makes the cure hold against the forge WP-98 has not invented yet.
+[ -z "$GATE_ENV_EXTRA" ] || GATE_SANE=0
+# ...and the names that ARE there must carry the values this judge chose, or
+# a caller could pre-set `GIT_CONFIG_GLOBAL=/his/config` and be waved through
+# by a predicate that only counted names.
+[ "${PATH:-}" = "$GATE_ENV_PATH" ] || GATE_SANE=0
+[ "${HOME:-}" = "$GATE_ENV_HOME" ] || GATE_SANE=0
+[ "${TMPDIR:-}" = "$GATE_ENV_TMPDIR" ] || GATE_SANE=0
+[ "${LC_ALL:-}" = C ] || GATE_SANE=0
+[ "${GIT_CONFIG_NOSYSTEM:-}" = 1 ] || GATE_SANE=0
+[ "${GIT_CONFIG_GLOBAL:-}" = /dev/null ] || GATE_SANE=0
+[ "${GIT_CONFIG_SYSTEM:-}" = /dev/null ] || GATE_SANE=0
 if [ "$GATE_SANE" != 1 ]; then
   if [ "${PHPR_GATE_REEXEC_DEPTH:-0}" != 0 ]; then
-    echo "REFUSE gate-measure-cifre: execution context STILL unsanitized after the re-exec (privileged/BASH_ENV/ENV/inherited-functions/function-carrying env vars/physical-self) — fail-closed: the marker is the STATE, never an env var the caller may pre-set (A-SK-90/KS-SK-95-1)"; exit 1
+    echo "REFUSE gate-measure-cifre: execution context STILL unsanitized after the re-exec (privileged/BASH_ENV/ENV/inherited-functions/function-carrying env vars/physical-self/closed-list) — extra env names: [${GATE_ENV_EXTRA:-none}] — fail-closed: the marker is the STATE, never an env var the caller may pre-set (A-SK-90/A-SK-93/KS-SK-95-1/KS-SK-96-4)"; exit 1
   fi
-  UNSET_FN=""
-  for n in $FN_ENV_NAMES; do UNSET_FN="$UNSET_FN -u $n"; done
-  PHPR_GATE_REEXEC_DEPTH=1; export PHPR_GATE_REEXEC_DEPTH
-  # $UNSET_FN is deliberately unquoted: it is a list of -u/NAME words, and a
-  # variable NAME cannot contain whitespace.
-  exec /usr/bin/env -u BASH_ENV -u ENV -u SHELLOPTS -u BASHOPTS -u CDPATH -u GLOBIGNORE $UNSET_FN /bin/bash -p "$SELF_PHYS" ${@+"$@"}
+  exec /usr/bin/env -i \
+    PATH="$GATE_ENV_PATH" HOME="$GATE_ENV_HOME" TMPDIR="$GATE_ENV_TMPDIR" \
+    LC_ALL=C \
+    GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null \
+    PHPR_GATE_REEXEC_DEPTH=1 \
+    /bin/bash -p "$SELF_PHYS" ${@+"$@"}
 fi
 # The depth counter is consumed here, never inherited: the teeth run copies
 # of this judge as CHILDREN, and an inherited depth=1 would fail-close them
@@ -169,7 +228,13 @@ if [ "${1:-}" = "--all" ]; then MODE=all; fi
 # ($0 can be relative: hash the ABSOLUTE self path — `git -C` would resolve
 # a relative $0 against ROOT, yielding an empty sha and a vacuous tether)
 SELF_ABS="${SELF_PHYS:-$HERE/$(basename -- "$0")}"
-RUN_SHA=$(git -C "$ROOT" hash-object -- "$SELF_ABS" 2>/dev/null)
+# A-SK-95 (Council WP-96, Klabnik F-K11): `--no-filters`. `git hash-object`
+# applies the clean filter by default, and the filter is chosen by
+# core.attributesFile + filter.<f>.clean — so a PATCHED file hashed to the
+# PRISTINE blob sha and the tether signed text that was not running. The
+# closed env list already stops the injection; this stops the delegation
+# itself, which is the part that does not depend on remembering a prefix.
+RUN_SHA=$(git -C "$ROOT" hash-object --no-filters -- "$SELF_ABS" 2>/dev/null)
 JHEAD_SHA=$(git -C "$ROOT" rev-parse -q --verify "HEAD:$JUDGE_REL" 2>/dev/null)
 if [ -z "$JHEAD_SHA" ]; then
   echo "FAIL gate-measure-cifre: judge $JUDGE_REL NOT committed at HEAD (A-SK-67/A-SK-78)"; exit 1
@@ -575,8 +640,120 @@ if [ "${1:-}" = "--selftest" ]; then
   if [ "$T26RC2" != 1 ] || ! printf '%s\n' "$T26OUT2" | grep -q 'not in a git repo'; then
     echo "SELFTEST FAIL: the F-K7 hijack no longer reproduces on the pre-WP-95 judge (rc=$T26RC2, want 1 + 'not in a git repo') — T26 arm (a) would be vacuous"; rm -rf "$TMP"; exit 1
   fi
+  # ── A-SK-93..97 (Council WP-96, Klabnik): the three channels that walked
+  # through the DENIAL LIST of S-94.0, each with its own bite. The pre-cure
+  # judge here is PRE96: the A-SK-82 guard region stripped (so the caller's
+  # environment reaches git and perl untouched, exactly as before A-SK-93)
+  # and the perimeter reverted to --exclude-standard (as before A-SK-96).
+  # It is driven through the `bash -c` channel with $0 naming the pristine
+  # judge, so the A-SK-78 tether agrees and the escalation can actually be
+  # observed instead of being blocked one level too early.
+  PRE96="$TMP/pre96.sh"
+  perl -pe 's/ls-files --others -- php-rust/ls-files --others --exclude-standard -- php-rust/' "$PRE95" > "$PRE96"
+  if ! grep -q -- '--exclude-standard -- php-rust' "$PRE96"; then
+    echo "SELFTEST FAIL: could not build the pre-A-SK-96 judge (the --others listing was not reverted) — T27's bite would be vacuous"; rm -rf "$TMP"; exit 1
+  fi
+  # T27 (KS-SK-96-1) — channel F-K10: `GIT_CONFIG_COUNT/KEY_0/VALUE_0` set
+  # core.excludesFile, an entire harness directory left the perimeter, and a
+  # fabricated figure inside it rode a SIGNED `PASS --all` to rc=0. Two
+  # independent cures must now each suffice: the closed env list (the
+  # variables never reach git) and A-SK-96 (an ignore rule the caller wrote
+  # is not an authority). rc EXACTLY 1, never any grade of PASS.
+  T27EX="$TMP/t27-excludes"; printf 'wp96-harness/\n' > "$T27EX"
+  T27DOC="$ROOT/php-rust/wp96-harness/zzforge-t27.md"
+  echo "cifra fuori perimetro: il picco era 123461 B, fidatevi" > "$T27DOC"
+  T27OUT=$(GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.excludesFile GIT_CONFIG_VALUE_0="$T27EX" \
+    bash "$SELF_ABS" --all 2>&1); T27RC=$?
+  if [ "$T27RC" != 1 ] || printf '%s\n' "$T27OUT" | grep -q '^PASS gate-measure-cifre --all'; then
+    rm -f "$T27DOC"; echo "SELFTEST FAIL: F-K10 channel (GIT_CONFIG_* → core.excludesFile) subverted the CURED judge (rc=$T27RC, want 1, no signed PASS) — KS-SK-96-1"; rm -rf "$TMP"; exit 1
+  fi
+  if ! printf '%s\n' "$T27OUT" | grep -q 'zzforge-t27.md'; then
+    rm -f "$T27DOC"; echo "SELFTEST FAIL: the cured judge refused for some other reason — the forge doc zzforge-t27.md was never named (A-SK-96/KS-SK-96-1)"; rm -rf "$TMP"; exit 1
+  fi
+  # T27 bite: the SAME injection against PRE96 must reach rc=0 AND print the
+  # signed `PASS --all` — the forge is real and arm (a) denies something that
+  # still happens.
+  T27OUT2=$(GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.excludesFile GIT_CONFIG_VALUE_0="$T27EX" \
+    bash -c "$(cat "$PRE96")" "$SELF_ABS" --all 2>&1); T27RC2=$?
+  rm -f "$T27DOC"
+  if [ "$T27RC2" != 0 ] || ! printf '%s\n' "$T27OUT2" | grep -q '^PASS gate-measure-cifre --all'; then
+    echo "SELFTEST FAIL: the F-K10 escalation no longer reproduces on the pre-WP-96 judge (rc=$T27RC2, want 0 + signed PASS) — T27 arm (a) would be vacuous"; rm -rf "$TMP"; exit 1
+  fi
+  # T28 (KS-SK-96-2) — channel F-K11: core.attributesFile + filter.<f>.clean
+  # made `git hash-object` return the PRISTINE blob sha for PATCHED bytes, so
+  # the A-SK-78 self-tether signed code that was not running. Arm (a): the
+  # cured judge REFUSES the patched copy by name.
+  T28JUDGE="$HERE/zzforge-judge-t28.sh"
+  perl -pe 's/\$all_rc = 1;//g if /UNCOMMITTED/' "$SELF_ABS" > "$T28JUDGE"
+  T28ATTR="$TMP/t28-attrs"; printf 'zzforge-judge-t28.sh filter=pristine\n' > "$T28ATTR"
+  T28INJ0=core.attributesFile; T28INJ1=filter.pristine.clean
+  T28OUT=$(GIT_CONFIG_COUNT=2 GIT_CONFIG_KEY_0="$T28INJ0" GIT_CONFIG_VALUE_0="$T28ATTR" \
+    GIT_CONFIG_KEY_1="$T28INJ1" GIT_CONFIG_VALUE_1="cat '$SELF_ABS'" \
+    bash "$T28JUDGE" --all 2>&1); T28RC=$?
+  if [ "$T28RC" != 1 ] || ! printf '%s\n' "$T28OUT" | grep -q 'A-SK-78'; then
+    rm -f "$T28JUDGE"; echo "SELFTEST FAIL: F-K11 channel (injected clean filter) did not REFUSE by name on the cured judge (rc=$T28RC, want 1 + A-SK-78) — KS-SK-96-2"; rm -rf "$TMP"; exit 1
+  fi
+  # T28 bite, the PRIMITIVE isolated (the whole escalation is arm (a)'s
+  # subject; what must be proved here is that the CHANNEL exists): with the
+  # filter injected, git's own hash-object returns the PRISTINE sha for the
+  # patched file, and `--no-filters` — A-SK-95 — is what refuses to delegate.
+  # (The single quotes around $SELF_ABS are load-bearing: this repo's path
+  # contains a space, and an unquoted `cat …/Extreme Pro/…` makes the clean
+  # filter FAIL. git then falls back to the original bytes, the patched file
+  # hashes to its own real sha, and the forge looks cured when it was merely
+  # broken. Caught by demanding the EXACT pristine sha rather than "differs".)
+  T28SHA_F=$(GIT_CONFIG_COUNT=2 GIT_CONFIG_KEY_0="$T28INJ0" GIT_CONFIG_VALUE_0="$T28ATTR" \
+    GIT_CONFIG_KEY_1="$T28INJ1" GIT_CONFIG_VALUE_1="cat '$SELF_ABS'" \
+    git -C "$ROOT" hash-object -- "$T28JUDGE" 2>/dev/null)
+  T28SHA_R=$(git -C "$ROOT" hash-object --no-filters -- "$T28JUDGE" 2>/dev/null)
+  T28SHA_SELF=$(git -C "$ROOT" hash-object --no-filters -- "$SELF_ABS" 2>/dev/null)
+  rm -f "$T28JUDGE"
+  if [ "$T28SHA_F" != "$T28SHA_SELF" ]; then
+    echo "SELFTEST FAIL: the F-K11 primitive no longer reproduces — filtered hash-object of the PATCHED copy is $T28SHA_F, want the pristine $T28SHA_SELF — T28 arm (a) would be vacuous"; rm -rf "$TMP"; exit 1
+  fi
+  if [ "$T28SHA_R" = "$T28SHA_SELF" ]; then
+    echo "SELFTEST FAIL: --no-filters returned the PRISTINE sha for patched bytes — A-SK-95 is not the cure it claims to be"; rm -rf "$TMP"; exit 1
+  fi
+  # T29 (KS-SK-96-3) — channel F-K12: `PERL5OPT=-MHack PERL5LIB=...` runs a
+  # hostile BEGIN inside the very perl process that BUILDS the corpus, which
+  # owns %corpus, qx and CORE::GLOBAL::exit. The closed list means those two
+  # names do not exist for any descendant.
+  T29LIB="$TMP/t29lib"; mkdir -p "$T29LIB"
+  printf 'package Hack;\nBEGIN { print "ZZFORGED-BY-PERL5OPT\\n"; exit 0 }\n1;\n' > "$T29LIB/Hack.pm"
+  T29OUT=$(PERL5LIB="$T29LIB" PERL5OPT=-MHack bash "$SELF_ABS" --all 2>&1); T29RC=$?
+  if printf '%s\n' "$T29OUT" | grep -q 'ZZFORGED-BY-PERL5OPT'; then
+    echo "SELFTEST FAIL: F-K12 channel (PERL5OPT/PERL5LIB) reached the corpus process of the CURED judge — KS-SK-96-3/A-SK-97"; rm -rf "$TMP"; exit 1
+  fi
+  # ...and the absence of the marker must mean the corpus process RAN, not that
+  # the judge died earlier for an unrelated reason: an arm satisfied by any
+  # early exit is satisfied by everything.
+  if ! printf '%s\n' "$T29OUT" | grep -qE '^(PASS|FAIL) gate-measure-cifre --all'; then
+    echo "SELFTEST FAIL: the cured judge never reached its --all verdict under PERL5OPT (rc=$T29RC) — T29 arm (a) would be satisfied by any early exit, i.e. vacuous"; rm -rf "$TMP"; exit 1
+  fi
+  # T29 bite: the same two variables against PRE96 must land the hostile
+  # BEGIN — the channel is real and arm (a) is not denying a ghost.
+  T29OUT2=$(PERL5LIB="$T29LIB" PERL5OPT=-MHack bash -c "$(cat "$PRE96")" "$SELF_ABS" --all 2>&1)
+  if ! printf '%s\n' "$T29OUT2" | grep -q 'ZZFORGED-BY-PERL5OPT'; then
+    echo "SELFTEST FAIL: the F-K12 channel no longer reproduces on the pre-WP-96 judge — T29 arm (a) would be vacuous"; rm -rf "$TMP"; exit 1
+  fi
+  # T30 (KS-SK-96-4) — THE TOOTH THAT DOES NOT AGE. T27/T28/T29 each name a
+  # prefix; this one names none. Arm (a): a variable outside the closed list
+  # that SURVIVES into the sanitized context (the depth counter pre-set, so
+  # the re-exec may not fire again) must REFUSE, never run.
+  T30OUT=$(PHPR_GATE_REEXEC_DEPTH=1 ZZ_T30_EXTRA=1 bash "$SELF_ABS" "$TMP/baseline.md" 2>&1); T30RC=$?
+  if [ "$T30RC" != 1 ] || ! printf '%s\n' "$T30OUT" | grep -q 'A-SK-93'; then
+    echo "SELFTEST FAIL: an env name OUTSIDE the closed list did not fail-close after the re-exec (rc=$T30RC, want 1 + A-SK-93) — KS-SK-96-4"; rm -rf "$TMP"; exit 1
+  fi
+  # Arm (b), the positive control: the SAME variable WITHOUT the pre-set
+  # counter is simply constructed away by `env -i`, and the judge runs
+  # normally. The tooth denies an unsanitized STATE, not the caller's
+  # attempt — without this arm, a judge that refused everything would pass.
+  T30OUT2=$(ZZ_T30_EXTRA=1 bash "$SELF_ABS" "$TMP/baseline.md" 2>&1); T30RC2=$?
+  if [ "$T30RC2" != 64 ]; then
+    echo "SELFTEST FAIL: an extra env name was not stripped by the env -i re-exec (rc=$T30RC2, want 64) — the closed list must CONSTRUCT the context, not refuse every caller (A-SK-93)"; rm -rf "$TMP"; exit 1
+  fi
   rm -rf "$TMP"
-  echo "SELFTEST PASS: KG-83-3 smuggle + A-SK40 companions + A-SK55 committed-only + A-SK60 provenance (positive+bite) + A-SK62 every-token + A-SK63 manifest graces + A-SK65 env-cache ignored + A-SK53-bis window + A-SK-67 HEAD-authorities (budget tamper, forge-a manifest row) + A-SK-69 strict prov (forge-b: cross-file, non-minus operator, address-range, positive same-file) + A-SK-70 cache abolished (forge-c) + A-SK-71 perimeter (forge-d) + A-SK-72 ledger-proved supersession (.out optional) + A-SK-73 pool=corpus + A-SK-74 named-rev identities (forge F1, T18+control) + A-SK-75 ALLOW-as-authority, 2.8/46.25 revoked (forge F2, T19) + A-SK-76 glued-run refused (forge F3, T20) + A-SK-77 budget-history out of corpus (forge F4, T21+control) + A-SK-78 self-tether (forge F6, T17) + A-SK-79 exit-code grades (every tooth rc-exact) + A-SK-80 complement perimeter + A-SK-81 labeled prov operands (forge F5, T22) + A-SK-82 BASH_SOURCE tether (WP-94 forge, T23 arm-a REFUSE + arm-b bite-of-the-stripped-copy) + A-SK-88/89/90 sanitizing re-exec on the PHYSICAL self, proved by A-SK-91 on all three WP-95 channels (T24 bash -c + injected BASH_SOURCE, T25 symlink + logical collapse, T26 BASH_ENV + exported functions), each with the escalation reproduced on the pre-WP-95 judge, all bite"
+  echo "SELFTEST PASS: KG-83-3 smuggle + A-SK40 companions + A-SK55 committed-only + A-SK60 provenance (positive+bite) + A-SK62 every-token + A-SK63 manifest graces + A-SK65 env-cache ignored + A-SK53-bis window + A-SK-67 HEAD-authorities (budget tamper, forge-a manifest row) + A-SK-69 strict prov (forge-b: cross-file, non-minus operator, address-range, positive same-file) + A-SK-70 cache abolished (forge-c) + A-SK-71 perimeter (forge-d) + A-SK-72 ledger-proved supersession (.out optional) + A-SK-73 pool=corpus + A-SK-74 named-rev identities (forge F1, T18+control) + A-SK-75 ALLOW-as-authority, 2.8/46.25 revoked (forge F2, T19) + A-SK-76 glued-run refused (forge F3, T20) + A-SK-77 budget-history out of corpus (forge F4, T21+control) + A-SK-78 self-tether (forge F6, T17) + A-SK-79 exit-code grades (every tooth rc-exact) + A-SK-80 complement perimeter + A-SK-81 labeled prov operands (forge F5, T22) + A-SK-82 BASH_SOURCE tether (WP-94 forge, T23 arm-a REFUSE + arm-b bite-of-the-stripped-copy) + A-SK-88/89/90 sanitizing re-exec on the PHYSICAL self, proved by A-SK-91 on all three WP-95 channels (T24 bash -c + injected BASH_SOURCE, T25 symlink + logical collapse, T26 BASH_ENV + exported functions), each with the escalation reproduced on the pre-WP-95 judge, all bite + A-SK-93..97 CONSTRUCTED environment (env -i, closed list) proving the three WP-96 channels shut: T27 GIT_CONFIG_*→core.excludesFile with the perimeter forge named, T28 injected clean filter vs the A-SK-95 --no-filters tether, T29 PERL5OPT/PERL5LIB into the corpus process, each with its bite on the pre-WP-96 judge, plus T30 — the tooth that does not age — refusing any env name outside the closed list while its positive arm proves the list CONSTRUCTS instead of refusing"
   exit 0
 fi
 
@@ -609,9 +786,13 @@ sub head_blob_sha { # repo-relative path -> blob sha at HEAD ('' if absent)
   chomp $s; return $s;
 }
 sub work_blob_sha { # absolute path -> git hash-object of working file
+  # A-SK-95 (Klabnik F-K11): --no-filters here too. This is the sha that
+  # decides whether an AUTHORITY (judge, manifest, budget, revs) matches its
+  # HEAD blob; with the clean filter in play a patched authority hashed to
+  # its pristine sha and every A-SK-67 check agreed with a lie.
   my ($abs) = @_;
   return '' unless -f $abs;
-  my $s = qx(git -C "$root" hash-object -- "$abs"); chomp $s; return $s;
+  my $s = qx(git -C "$root" hash-object --no-filters -- "$abs"); chomp $s; return $s;
 }
 sub head_content { # repo-relative path -> list of lines from HEAD
   my ($rel) = @_;
@@ -1021,9 +1202,50 @@ if ($target_arg eq '--all') {
     next if $manset{$f};
     print "FAIL gate-measure-cifre --all: $f has NO manifest entry (A-SK64/A-SK-71 bidirectional)\n"; $all_rc = 1;
   }
-  for my $f (split /\n/, qx(git -C "$root" ls-files --others --exclude-standard -- php-rust)) {
-    next unless $f =~ /$class_rx/;
+  # A-SK-96 (Council WP-96, Klabnik F-K10): the untracked side of the
+  # perimeter is listed WITHOUT --exclude-standard. `--exclude-standard`
+  # obeys three authorities the CALLER can write and none of which is
+  # committed: core.excludesFile (the F-K10 forge — one env-injected line
+  # took a whole harness directory out of the perimeter and the run still
+  # printed a signed `PASS --all`), .git/info/exclude, and the WORKING-TREE
+  # .gitignore. An ignore rule is an authority of this judge, so it obeys
+  # the A-SK-67 law like every other one: it counts only if it is COMMITTED
+  # at HEAD and byte-identical in the working tree.
+  #
+  # Everything untracked in the class is listed; a path leaves the perimeter
+  # only when git ITSELF (whose matcher we do not reimplement) attributes
+  # the exclusion, with -v, to such a .gitignore.
+  my @untracked = grep { /$class_rx/ }
+                  split /\n/, qx(git -C "$root" ls-files --others -- php-rust);
+  my %ign_src;
+  if (@untracked) {
+    # core.excludesFile is pinned to /dev/null on the command line as well:
+    # the closed env list already keeps GIT_CONFIG_* out, and .git/config is
+    # local and uncommitted, so neither may name a source here.
+    if (open my $ci, '-|', 'git', '-C', $root, '-c', 'core.excludesFile=/dev/null',
+                           'check-ignore', '-v', '--', @untracked) {
+      while (my $l = <$ci>) {
+        chomp $l;
+        # <source>:<linenum>:<pattern>\t<pathname>
+        if ($l =~ /^(.*?):(\d+):(.*?)\t(.*)$/) { $ign_src{$4} = $1 }
+      }
+      close $ci; # rc=1 simply means "nothing was ignored"
+    }
+  }
+  my %ign_ok;
+  for my $f (@untracked) {
     next if $manset{$f};
+    my $src = $ign_src{$f};
+    if (defined $src) {
+      my $srel = $src; $srel =~ s{^\Q$root\E/}{};
+      if (!exists $ign_ok{$srel}) {
+        my $h = head_blob_sha($srel);
+        my $w = work_blob_sha("$root/$srel");
+        $ign_ok{$srel} = ($h && $w eq $h) ? 1 : 0;
+      }
+      next if $ign_ok{$srel};
+      print "FAIL gate-measure-cifre --all: UNCOMMITTED $f left the perimeter through '$src', which is NOT a .gitignore committed at HEAD and unmodified (A-SK-96/KS-SK-96-1): an ignore rule the caller may write is not an authority\n"; $all_rc = 1; next;
+    }
     print "FAIL gate-measure-cifre --all: UNCOMMITTED $f in a perimeter class with NO manifest entry (A-SK-71/KS-SK-92-3): a figure-bearing doc born outside the perimeter is never verdict-grade\n"; $all_rc = 1;
   }
 } else {
