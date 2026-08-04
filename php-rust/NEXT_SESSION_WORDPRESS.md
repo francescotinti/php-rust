@@ -1,5 +1,20 @@
 # NEXT_SESSION — LA SPINA DORSALE: il nucleo interprete, misurato per categoria
 
+⏱ **FONDAMENTALI**: ultima misura full/media WordPress = **WP-94 (3 sessioni
+fa)** · ultima campagna sull'OGGETTO = **S-97.1 (questa: micro `arith`
+misurato due volte, coppia R=3 stessa-sera)** — sotto la spina dorsale il
+cronometro dell'oggetto è il micro, e ha girato; WordPress torna quando
+cambia l'emissione di parità.
+
+**Ultima sessione (S-97.1, 2026-08-05)**: H-A1 eseguita per intero e CADUTA
+sul suo criterio — v3 «raw registers» di WP-44 riarmata dietro
+`PHPR_REG_LOWER`: opcode/iter 19→11 (braccio 1 ✓) ma `arith` −30,7% < −40%
+(braccio 2 ✗) → abbandonata senza negoziare; codice DORMIENTE in albero,
+flag-off zero-delta, parità corpus 1418 per NOME identica. ⭐⭐ il costo per
+opcode è SALITO a 9,87 ns togliendo gli op economici: il conteggio è quasi
+chiuso (11 vs 7), **il divario vive nel COSTO per opcode** → ▶️ H-B1.
+Dettaglio: `sessions/WP_SESSION_97.md` + `wp97-harness/ha1-registers.out`.
+
 **Cambio di rotta deciso dall'utente (2026-08-04, a valle di S-96.0)**: il
 progetto stava andando «a tentoni», con l'agenda di ogni sessione fatta dal
 residuo della precedente. Ora c'è un OBIETTIVO, un GIUDICE e una sequenza di
