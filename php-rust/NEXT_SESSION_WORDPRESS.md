@@ -36,9 +36,18 @@ PARZIALE).
   deciso, ogni claim che vi poggia è ADVISORY.
 - **Gate cifre v3+A1**: `--all` **PASS a HEAD**; il budget in vigore vive
   in `wp81-harness/gate-cifre-corpus.budget`, MAI citato nelle prose
-  (A-SK-77 ha morso per la terza volta). **A-SK-82 non è più aggirabile
-  dai tre canali WP-95**: T24/T25/T26 lo provano per comportamento a rc
-  esatto, ognuno col morso sul giudice pre-cura.
+  (A-SK-77 ha morso per la terza volta). I tre canali WP-95 sono chiusi e
+  provati (T24/T25/T26, rc esatti, ognuno col morso sul giudice pre-cura).
+  ⚠️⚠️ **MA il gate è di NUOVO AGGIRATO da un canale NUOVO** (Concilio
+  WP-96/Klabnik, riprodotto a macchina): le variabili d'ambiente di **git**
+  — `GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.excludesFile …` produce un
+  `PASS --all` rc=0 firmato col judge_sha pristino mentre un doc con cifre
+  inventate sta nel perimetro; e un clean filter iniettato per env sconfigge
+  anche il self-tether A-SK-78. **Classe del difetto**: la sanificazione
+  SOTTRAE variabili note (`env -u`), ma l'insieme delle variabili pericolose
+  non è enumerabile. La cura è COSTRUIRE l'ambiente (`env -i` + allowlist
+  chiusa), non sottrarre — **prima voce di apparato di S-95.0**
+  (A-SK-93..97, denti T27-T30).
 - **Misure**: coppia full S-94.0 — le CIFRE sono verdict-grade (raw
   `pair94.out`, rapporti macchina `pair94-ratios.out`), ma **ogni confronto
   con le bande storiche è RITIRATO** (sanatoria Concilio WP-96: la ricetta
