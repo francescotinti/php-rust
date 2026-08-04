@@ -6,3 +6,4 @@ media_peak_footprint_oracle=346325904 media_peak_footprint_phpr=1170785648 ratio
 full_master_cpu_oracle=447.84 full_master_cpu_phpr=838.59 ratio=1.873
 full_peak_footprint_oracle=745637040 full_peak_footprint_phpr=1993459800 ratio=2.673
 full_peak_footprint_phpr_MiB=1901.11
+full_master_cpu_phpr_over_frozen_oracle_339=2.474  # ricetta storica GAP_TREND §Metodo: denominatore CONGELATO a 5:39 = 339 s

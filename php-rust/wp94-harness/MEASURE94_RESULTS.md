@@ -7,10 +7,11 @@ fresco: senza una baseline della stessa sera, nessuna cifra della leva
 avrebbe un giudice. Raw macchina: `wp94-harness/pair94.out` (+ i quattro
 `pair-out/*.time` grezzi).
 
-**Grado**: VERDICT per i rapporti (coppia stessa-sera, stesso metodo di
-`gaps/GAP_TREND.md` §Metodo, ordine oracle-prima, DB e uploads resettati
-prima di ogni run). R=1 per gamba, che è il metodo ricorrente e non un
-probe: le due gambe si confrontano fra loro, non con una citazione.
+**Grado**: le CIFRE sono verdict-grade come misure (coppia stessa-sera,
+metodo di `gaps/GAP_TREND.md` §Metodo, ordine oracle-prima, DB e uploads
+resettati prima di ogni run). ⚠️ **Leijen (Concilio WP-96) è CONTRARIO al
+grado VERDICT sul PICCO**: a R=1 il peak è uno SCREEN. E ogni confronto
+con altre sere è ritirato (vedi §SANATORIA).
 
 **Identità**: phpr `d5ce86e3342f3926` — il PIN BASELINE, **invariato**
 (mai ricompilato in S-94.0); oracle PHP 8.5.7; head `93721a5870ea`.
@@ -39,13 +40,14 @@ PEGGIORATO». Erano **artefatti del denominatore**, non fatti su phpr:
 
 - la ricetta storica di `GAP_TREND` §Metodo divide il master-CPU per un
   oracle **congelato a 5:39 = 339 s**. Io ho diviso per l'oracle misurato
-  stasera (447,84 s). Stesso numeratore, due denominatori: **838,59/339 =
-  2,474** con la ricetta della tabella, **838,59/447,84 = 1,873** con il
-  denominatore vivo. Il «rapporto più basso mai registrato» confrontava
-  regimi diversi;
+  stasera. Stesso numeratore, due denominatori — i due valori sono in
+  `pair94-ratios.out` (`ratio` e
+  `full_master_cpu_phpr_over_frozen_oracle_339`). Il «rapporto più basso
+  mai registrato» confrontava regimi diversi;
 - sul media group, il rapporto peggiora perché **l'oracle è sceso**, non
-  perché phpr sia cresciuto (Bak: phpr in banda, oracle −11,9%). Chiamarlo
-  «regresso di phpr» era una lettura sbagliata di una frazione.
+  perché phpr sia cresciuto (Bak e Gregg, coi raw storici: la gamba phpr è
+  in banda). Chiamarlo «regresso di phpr» era una lettura sbagliata di una
+  frazione.
 
 **Che cosa resta valido**: le otto cifre misurate (sono misure, e i raw non
 si toccano) e i due rapporti **same-evening**, che confrontano le due gambe
@@ -80,8 +82,11 @@ sull'oracle**, quindi il rc del runner non è il giudice della coppia.
 
 ## Che cosa questa misura AUTORIZZA e che cosa no
 
-- **Autorizza** la leva delle arene per-file del preludio (S-95.0) ad avere
-  un giudice: il «prima» esiste, è di stasera, ed è sullo stesso binario
-  pinnato che la leva modificherà.
-- **NON autorizza** alcuna attribuzione del regresso sul footprint media né
-  alcun pin dello slope per-worker: nessuna delle due è stata misurata qui.
+- **Autorizza** un «prima» same-evening sullo stesso binario pinnato che la
+  leva di S-95.0 modificherà.
+- **NON autorizza**: alcun confronto con le bande storiche (denominatore
+  non omogeneo); alcun pin del PICCO (R=1 = SCREEN, Leijen); alcun pin
+  dello slope per-worker; e — soprattutto — **alcun claim di movimento di
+  phpr**: incrociati coi raw storici, i valori della gamba phpr sono dentro
+  lo spread (Gregg, mandato inverso). Questa coppia dice che il METRO
+  funziona, non che il prodotto sia cambiato.

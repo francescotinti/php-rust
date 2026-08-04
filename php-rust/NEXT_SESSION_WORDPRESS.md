@@ -51,8 +51,8 @@ PARZIALE).
 - **Misure**: coppia full S-94.0 — le CIFRE sono verdict-grade (raw
   `pair94.out`, rapporti macchina `pair94-ratios.out`), ma **ogni confronto
   con le bande storiche è RITIRATO** (sanatoria Concilio WP-96: la ricetta
-  storica divide per un oracle CONGELATO a 5:39 → 838,59/339 = 2,474, non
-  1,873; sul media il rapporto peggiora perché l'oracle è sceso). Valgono
+  storica divide per un oracle CONGELATO a 5:39, e con quel denominatore lo
+  stesso numeratore da un rapporto tutt'altro (valore in `pair94-ratios.out`); sul media il rapporto peggiora perché l'oracle è sceso). Valgono
   solo i rapporti **same-evening**. Slope per-worker: nessuna cifra nuova.
 - GATE72 CLI resta baseline trasversale (corpus 1418 · refl 290 · ORM
   3E/13F · hk 1665).
