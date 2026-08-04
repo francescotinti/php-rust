@@ -1,0 +1,28 @@
+zvalcensus-f2: A-ZV2 fase F2 — quanto COSTA la prudenza (perimetro conservativo, sola misura)
+grade=VERDICT  # conteggi esatti, suite identica al riferimento
+formato=ascii-nudo
+workload=vendor/bin/phpunit --group media
+esito-suite=762 test, 1912 assertions, 52 skipped — IDENTICO a zvalcensus-f1.out
+binario=build di STRUMENTAZIONE 2a321e3b345ba799 (--features zval-census, HEAD ee3f551);
+  il binario di parita d5ce86e3342f3926 e VERIFICATO INVARIATO (f2-out/f2.identity)
+processi-che-hanno-scritto=16
+would_take=28628306
+would_take_rc=25233473
+would_take_safe=25826615
+would_take_safe_rc=22674665
+would_take_safe_str=9989981
+sites_movable=72819
+sites_safe=51697
+nota-determinismo=slot_reads/would_take* della parte F1 riprodotti IDENTICI al run F1
+safe_su_would_take_pct=90.21  [derivata: companion 25826615/28628306]  # P2 chiede >=60
+safe_rc_su_slot_reads_rc_pct=42.33  [derivata: companion 22674665/53561199]
+guadagno_cpu_atteso_safe_pct_min=1.91  [derivata: frazione safe_rc per 4.5, estremo basso del canale §P1]
+guadagno_cpu_atteso_safe_pct_max=2.75  [derivata: frazione safe_rc per 6.5, estremo alto del canale §P1]
+str_su_slot_reads_rc_pct=18.65  [derivata: companion 9989981/53561199]  # il nucleo a rischio-distruttori ZERO
+guadagno_cpu_atteso_str_pct_min=0.84  [derivata: frazione str per 4.5]
+guadagno_cpu_atteso_str_pct_max=1.21  [derivata: frazione str per 6.5]
+verdetto-P2=SODDISFATTA  # la prudenza taglia meno del 40% (vedi safe_su_would_take_pct)
+verdetto-banda=il perimetro F2 INTERO resta in banda ALTA; il solo nucleo stringhe cade in banda MEDIA
+nota-F3=uno slot che a RUNTIME regge un Ref sfugge alla rinuncia statica (lato interno closure by-ref):
+  TakeSlot dovra' guardare il TIPO a runtime — il Ref si de-referenzia, mai si sposta; il taglio _str
+  e' anche l'unico che NON anticipa mai un __destruct (le stringhe non ne hanno)
