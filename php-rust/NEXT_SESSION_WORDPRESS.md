@@ -1,186 +1,119 @@
-# NEXT_SESSION_WORDPRESS.md — S-94.0: IL FALSIFICATORE CHE HA MORSO CHI LO SCRIVEVA → WP-95(sessione)
+# NEXT_SESSION_WORDPRESS.md — S-95.0: IL CONTATORE HA DETTO SÌ → WP-96(sessione)
 
-**Ultima sessione**: S-94.0 (2026-08-04) — ordine del Concilio WP-95
-eseguito. **Apparato A1-A4**: i tre canali di Klabnik RIPRODOTTI a macchina
-(ognuno firmava un `PASS --all` rc=0 col judge_sha pristino), chiusi con un
-re-exec sanificante sul self FISICO il cui marker anti-loop è **lo stato
-sanificato stesso**; falsificatore A-SK-91 = denti T24/T25/T26, **selftest
-PASS rc=0**. **OGGETTO**: la **coppia full stessa-sera** è tornata a
-esistere e la **battery61** è riproducibile sul modo nativo (criterio 5
-SODDISFATTO). Dettaglio: `sessions/WP_SESSION_94.md`,
-`wp94-harness/MEASURE94_RESULTS.md`, `gaps/REPORT_GAP_94.md`.
+**Ultima sessione**: S-95.0 (2026-08-04, pomeriggio) — **A-ZV2 F1+F2
+ESEGUITE, entrambe in SOLA MISURA**. F1: analisi di ultimo uso per slot
+(`vm/liveness.rs`, dietro `zval-census`), contatore `would_take` sul media
+group strumentato — la regola a tre bande di design95-liveness.md §P1 esce
+in **banda ALTA su entrambi gli estremi** (cifre e derivazioni in
+`wp95-harness/zvalcensus-f1.out`). F2: perimetro conservativo (rinunce per
+funzione/slot/regione) — la prudenza taglia molto meno del 40% → **P2
+SODDISFATTA**; il nucleo stringhe da solo sta in banda MEDIA
+(`wp95-harness/zvalcensus-f2.out`). Determinismo pieno fra i due run.
+Binario di parità INVARIATO a ogni passo. Dettaglio:
+`sessions/WP_SESSION_95.md`.
 
 **⏱ FONDAMENTALI (regola utente 2026-08-03, aggiornare a OGNI rotazione)**:
-ultima misura full/media = **WP-94 (QUESTA sessione — il contatore è
-AZZERATO dopo otto sessioni)** · ultima campagna sull'oggetto = m90 in
-WP-90 (4 sessioni fa). ⚠️ **Ma il Concilio WP-96 (Bak, Hoare, Gregg in
-convergenza indipendente) ha stabilito che la coppia NON mostra movimento
-di phpr**: la gamba phpr è PIATTA su ogni asse, dentro lo spread; il
-«record» e il «regresso» della prima lettura erano la gamba ORACLE.
-**Nove sessioni di roadmap footprint senza movimento misurabile su phpr**:
-questo è il numero da guardare in faccia. Il guadagno vero di S-94.0 è il
-METRO rimesso in funzione + la batteria WordPress nativa. **Restano non
-misurati**: probe slope v2 e attribuzione dello slope (criterio 1
-PARZIALE).
+ultima misura full/media = **WP-94 (1 sessione fa)** · ultima campagna
+sull'oggetto = m90 in WP-90 (5 sessioni fa). S-95.0 non ha cronometrato:
+ha contato il MECCANISMO della leva CPU scelta (conteggi esatti, non
+campioni) e la decisione di prosecuzione è DERIVATA, non voluta. Il
+cronometro torna in F4 (coppia stessa-sera, obbligatoria nel §WP-96).
 
 ## Stato gate
 
-- **phpr (CLI, parità release)**: **d5ce86e3342f3926 INVARIATO** — la
-  coppia full E battery61 girano su questo pin. Corpus Zend per NOME 1418
-  + refl 290 (non rimisurato in S-94.0: nessuna ricompilazione).
-- **php-server**: **f8f4295a1dcdb627** (stash additivo `php-server-wp94`).
-  ⚠️ **Il pin dichiarato d45b57843eeb1375 NON è riproducibile a HEAD** e
-  **A4 è esclusa per differenza misurata** (stesso sha con e senza la
-  patch). Voce APERTA: o il pin nacque da un albero diverso da quello
-  dichiarato, o la build non è riproducibile byte-a-byte. Finché non è
-  deciso, ogni claim che vi poggia è ADVISORY.
-- **Gate cifre v3+A1**: `--all` **PASS a HEAD**; il budget in vigore vive
-  in `wp81-harness/gate-cifre-corpus.budget`, MAI citato nelle prose
-  (A-SK-77 ha morso per la terza volta). I tre canali WP-95 sono chiusi e
-  provati (T24/T25/T26, rc esatti, ognuno col morso sul giudice pre-cura).
-  ⚠️⚠️ **MA il gate è di NUOVO AGGIRATO da un canale NUOVO** (Concilio
-  WP-96/Klabnik, riprodotto a macchina): le variabili d'ambiente di **git**
-  — `GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.excludesFile …` produce un
-  `PASS --all` rc=0 firmato col judge_sha pristino mentre un doc con cifre
-  inventate sta nel perimetro; e un clean filter iniettato per env sconfigge
-  anche il self-tether A-SK-78. **Classe del difetto**: la sanificazione
-  SOTTRAE variabili note (`env -u`), ma l'insieme delle variabili pericolose
-  non è enumerabile. La cura è COSTRUIRE l'ambiente (`env -i` + allowlist
-  chiusa), non sottrarre — **prima voce di apparato di S-95.0**
-  (A-SK-93..97, denti T27-T30).
-- **Misure**: coppia full S-94.0 — le CIFRE sono verdict-grade (raw
-  `pair94.out`, rapporti macchina `pair94-ratios.out`), ma **ogni confronto
-  con le bande storiche è RITIRATO** (sanatoria Concilio WP-96: la ricetta
-  storica divide per un oracle CONGELATO a 5:39, e con quel denominatore lo
-  stesso numeratore da un rapporto tutt'altro (valore in `pair94-ratios.out`); sul media il rapporto peggiora perché l'oracle è sceso). Valgono
-  solo i rapporti **same-evening**. Slope per-worker: nessuna cifra nuova.
+- **phpr (CLI, parità release)**: **d5ce86e3342f3926 INVARIATO** (nessuna
+  ricompilazione di parità in S-95.0; le build strumentate vivono in
+  `phpr-census-target/`, sha in banda nei `.identity` dei run). Corpus
+  Zend per NOME 1418 + refl 290 (non rimisurato: nessun cambio al binario).
+- **php-server**: **f8f4295a1dcdb627** (invariato, non toccato in S-95.0).
+  ⚠️ Il pin storico d45b57843eeb1375 resta NON riproducibile — voce APERTA.
+- **Gate cifre v3+A1**: `--all` **PASS a HEAD** (verificato dopo OGNI
+  commit di S-95.0; budget corpus alzato con delibera due volte, nello
+  stesso commit dei nuovi raw — mai un PASS pre-commit letto come
+  post-commit). ⚠️⚠️ **Resta APERTO il canale env di git** (Concilio
+  WP-96/Klabnik): la cura è COSTRUIRE l'ambiente (`env -i` + allowlist
+  chiusa, A-SK-93..97, denti T27-T30) — **prima voce d'apparato di
+  S-96.0, NON eseguita in S-95.0** (dichiarato: non bloccava l'oggetto,
+  i PASS di sessione sono nati in ambiente pulito).
 - GATE72 CLI resta baseline trasversale (corpus 1418 · refl 290 · ORM
   3E/13F · hk 1665).
 
-## Permanent Binding Rules (nuove da S-94.0)
+## Permanent Binding Rules (da S-94.0, invariate)
 
-**Un privilegio che vale per il processo non vale per la sua discendenza**:
-se il giudice delega a sottoprocessi, si sanifica l'AMBIENTE CONSEGNATO,
-non la shell (`bash -p` non rimuove `BASH_FUNC_*`). **Un dente che smette
-di mordere non lo annuncia**: un range che si apre su un pattern presente
-anche nella riga che lo usa tronca in silenzio, e il dente diventa vacuo,
-non fallito — solo l'rc ESATTO lo rivela. **Un predicato non deve dipendere
-da ciò che esso stesso introduce**. **Un confronto identico non è valido se
-entrambi i lati stanno fallendo.** **Il rc del runner non è il giudice di
-una coppia** (la suite WordPress fallisce anche sull'oracle).
+**Un privilegio che vale per il processo non vale per la sua discendenza**
+(sanificare l'AMBIENTE CONSEGNATO, non la shell). **Un dente che smette di
+mordere non lo annuncia** (pretendere l'rc ESATTO). **Un predicato non deve
+dipendere da ciò che esso stesso introduce.** **Un confronto identico non è
+valido se entrambi i lati stanno fallendo.** **Il rc del runner non è il
+giudice di una coppia.**
 
-## ⚖️ Concilio WP-96 ESEGUITO (2026-08-04, verbali VINCOLANTI): `wp96-harness/COUNCIL_WP96_REVIEWS.md`
-
-**9 sedie, NESSUNA benedizione. TRE refutazioni capitali riprodotte a
-macchina**: (1) le letture comparative erano artefatti del denominatore
-(Bak+Hoare+Gregg, convergenza indipendente) → **sanatoria APPLICATA in
-chiusura**; (2) **il gate è di NUOVO aggirato** dalle env di git
-(Klabnik); (3) A-AH-71 era forma e non origine (Hejlsberg, misurato) →
-A-AH-76/77 **applicati in chiusura**. Leijen è CONTRARIO al grado VERDICT
-sul footprint (picco R=1 = SCREEN; α da ri-derivare: l'albero è mimalloc
-v3.0.2 e sotto PURGE_DELAY=0 decommitta). Sintesi §FONDAMENTALI + ordine
-in `wp96-harness/SYNTHESIS_WP96.md`.
-
-## §WP-95(sessione) — la CPU della VM, con la mappa in mano
-
-**Riscritto il 2026-08-04 dopo la ricognizione di profiling** (decisione
-utente: «misurare la lentezza l'abbiamo compreso, ora serve invertire la
-rotta e migliorare le prestazioni»). L'ordine del Concilio WP-96 su
-denominatore/leva del preludio resta valido ma **scende di priorita**: la
-misura ha mostrato dove sta davvero il costo.
+## §WP-96(sessione) — F3: l'opcode `TakeSlot`, coi denti già pronti
 
 **P0**: pre-flight standard + `--all` PASS a HEAD + pin phpr
-d5ce86e3342f3926 invariato.
+d5ce86e3342f3926 invariato + **apparato A-SK-93..97 in timebox** (mezza
+sessione MASSIMO, regola permanente; se sfora, si spedisce l'oggetto e
+l'apparato torna in coda).
 
-### L'OGGETTO: A-ZV2 fase F1 (analisi di ultimo uso, SOLA MISURA)
+### L'OGGETTO: A-ZV2 fase F3 (+F4 nella stessa sessione se il tempo regge)
 
-Contratto completo in `wp95-harness/design95-liveness.md` (predizione
-firmata). In breve:
+Contratto in `wp95-harness/design95-liveness.md` (§Le fasi, §P3 DERIVATA,
+§P4). I numeri che giustificano l'ordine stanno nei due raw di S-95.0
+(`zvalcensus-f1.out`, `zvalcensus-f2.out`); la P3 per F4 è la banda
+derivata scritta in fondo a §P1 del design. Punti fermi per F3, decisi
+dalle misure e dagli smoke di S-95.0:
 
-1. **F1 — calcolare l'analisi e CONTARLA, senza usarla.** Ultimo uso per
-   slot su ogni funzione compilata; contatore `would_take` dietro la feature
-   `zval-census`. **Rischio zero**: nessun bit del binario di parita cambia.
-   **Criterio di prosecuzione scritto PRIMA e DERIVATO** (regola a tre bande
-   sul GUADAGNO atteso, non sulla percentuale di letture: tabella e conto in
-   `design95-liveness.md` §P1). In sintesi: banda ALTA si prosegue con la
-   strada lunga; banda MEDIA si confrontano i due piani; banda BASSA si
-   abbandonano ENTRAMBI e si passa al prossimo bersaglio del profilo, perche
-   non e la strada a essere sbagliata — e il canale che non paga. Le tre
-   bande in cifre stanno SOLO in `design95-liveness.md` §P1 (la rotazione
-   non ripete i numeri: A-SK-77). Il PIANO B resta
-   la superistruzione LoadSlot+Binary (`design95-leva-zval.md` §Correzione).
-2. **F2 — il perimetro conservativo** (compact/extract/get_defined_vars/
-   variabili variabili/eval/closure by-ref/generatori/Ref/try-finally e
-   soprattutto i DISTRUTTORI: spostare un valore ANTICIPA un `__destruct`,
-   che e osservabile e non fallisce in modo rumoroso). Ri-contare: se la
-   prudenza taglia piu del 40%, fermarsi.
-3. **F3 — l'opcode `TakeSlot`** con gate di parita COMPLETI nello stesso
-   commit + i test delle trappole (`$a .= $a`, distruttore che osserva
-   l'ordine, generatore sospeso, `compact()` dopo l'ultimo uso apparente).
-4. **F4 — la misura**: coppia oracle-vs-phpr stessa sera con l'oracle
-   RIMISURATO (mai il denominatore congelato) + coppia A/A per lo spread.
+1. **Il guard è a RUNTIME oltre che statico**: l'emissione usa
+   `movable_safe` (F2), ma il handler di `TakeSlot` DEVE guardare il tipo
+   della cella — un `Zval::Ref` si de-referenzia (fallback clone), mai si
+   sposta (lo smoke ha mostrato che il lato interno di una closure by-ref
+   sfugge alla rinuncia statica).
+2. **La scelta del perimetro di tipo è una decisione di design da
+   prendere A INIZIO F3**: perimetro F2 intero (banda ALTA, ma un take di
+   un oggetto/array può ANTICIPARE un `__destruct` osservabile rispetto
+   all'oracle Zend, che i CV non li consuma mai) vs nucleo stringhe
+   (banda MEDIA, rischio distruttori ZERO per costruzione). Il conto per
+   confrontare le due opzioni sta nei raw; la trappola distruttori è
+   descritta in design95-liveness.md §Perché e §punto 10.
+3. **Gate di parità COMPLETI nello stesso commit dell'opcode** (corpus
+   1418 + refl 290 + ORM + hk + battery61) + i test delle trappole:
+   `$a .= $a`, distruttore che osserva l'ordine, generatore sospeso,
+   `compact()` dopo l'ultimo uso apparente, `use (&$x)` letto dopo il
+   take apparente.
+4. **F4 = coppia oracle-vs-phpr della stessa sera** con oracle RIMISURATO
+   (mai denominatore congelato) + controllo positivo del meccanismo:
+   `slot_reads_avoided` deve muoversi della quantità predetta dai
+   contatori F2, o il Δ tempo viene da altro (Bak).
 
-### Il contesto che rende questo l'ordine giusto (ricognizione 2026-08-04)
+### Dopo A-ZV2, per NOME (non «più avanti»)
 
-- Profilo del workload reale: `wp95-harness/prof95-media.out`. Il 49,4% del
-  wall e ATTESA (il master dorme su `ChildStderr::read`); la CPU vera e
-  nella VM.
-- **Il TETTO del dispatch e stato calcolato** (cifre in
-  `consulenza-bak-dispatch.md` e `prof95-media.out`): azzerarlo del tutto
-  varrebbe meno di quanto valgono `Zval` clone+drop e il ciclo di vita dei
-  Frame messi insieme. Consulenze in `consulenza-bak-dispatch.md` e
-  `consulenza-stogov-engine.md`: **due scuole diverse, stessa conclusione —
-  non il dispatch.**
-- L'ipotesi «run_loop troppo grande per la i-cache» e **REFUTATA per
-  misura**: la funzione e grande, ma il working set CALDO ci sta ampiamente
-  nell'L1i di questo M4 — cifre e ragionamento in `prof95-media.out`
-  §ANATOMIA e §LA MISURA CHE DISCRIMINA.
+Denominatore omogeneo in GAP_TREND (KS-BG-96-3) · leva arene per-file del
+preludio con α RI-DERIVATO (Leijen) · probe slope v2 fuso · attribuzione
+dello slope · il pin php-server che non torna.
 
-### Dopo A-ZV2, per NOME (non «piu avanti»)
+### BACKLOG PER NOME (invariato da WP-95, più le voci nuove)
 
-Denominatore omogeneo in GAP_TREND (KS-BG-96-3, era P0 del Concilio WP-96) ·
-leva arene per-file del preludio con α RI-DERIVATO (Leijen: l'albero e
-mimalloc v3.0.2 e sotto PURGE_DELAY=0 decommitta) · probe slope v2 fuso ·
-attribuzione dello slope · il pin php-server che non torna.
+A-AH-78/79 · A-MS-65/66 · A-DS-96-1/2/3 (registry wrapper) · A-PP-83
+(battery61 senza reset fra le gambe) · A-SK-92-PROBE · A-AH-70/74/75 ·
+A-AH-73 · audit A-BG-72 · debito WP-94 non-A (ancoraggi campo, perimetro
+root, sigilli E1→E3, checker LSP D1→D4) · residui A-DS51 fasi 2-3 ·
+`stream_get_wrappers` incompleto · **gc_note_frame bitmask per-funzione
+(Stogov §3, consulenza S-95.0)** · **hash cachato in PhpStr (Stogov §4)**.
 
-### BACKLOG PER NOME (non «più avanti»)
+### Criteri di CHIUSURA del fronte Axum/php-server (invariati da WP-94)
 
-Il «regresso» del media footprint è **RITIRATO** (era la gamba oracle) ·
-A-AH-78/79 (writer ancorato al commit, BREV fail-closed) · A-MS-65/66
-(eprintln! panicante nel GlobalAlloc, drop-guard sul flag di rientranza) ·
-A-DS-96-1/2/3 (registry unica dei wrapper: `is_builtin_scheme` ne rivendica
-12 mentre la lista ne dichiara 5 — incoerenza fra tabelle) · A-PP-83
-(battery61 non resetta lo stato fra le due gambe) · A-SK-92-PROBE (grado rc=65) ·
-A-AH-70/74/75 (ancore ledger) · A-AH-73 (HIR plain-data, precond. leva
-#2) · audit A-BG-72 (derivate m90 che consumarono malloc_huge come
-retained) · debito WP-94 non-A (ancoraggi campo, perimetro root, sigilli
-E1→E3, checker LSP D1→D4) · residui A-DS51 fasi 2-3 ·
-`stream_get_wrappers` incompleto (divergenza confermata dalla full).
-
-### Criteri di CHIUSURA del fronte Axum/php-server
-
-1. Slope attribuito per NOME — **PARZIALE** (invariato). 2. Leva applicata
-e misurata o refutazione motivata — **la leva per-file è ora eseguibile**.
-3. Parità intatta + ricevuta pin — **APERTA** (il pin php-server non
-torna; e Pedersen osserva che anche il pin phpr è uno sha di CONTENUTO
-senza provenienza: la stessa malattia non è esclusa). 4. Apparato
-CONGELATO fuori dalla quota. 5. Batteria WordPress riproducibile —
-**SODDISFATTO con riserva**: Hoare e Stogov chiedono un predicato POSITIVO
-(la batteria passò anche con login fallito su entrambi i lati) e il
-reset di stato fra le gambe; senza bite-test il criterio 5 torna PARZIALE
-(KS-DS-96-3).
+1. Slope attribuito per NOME — PARZIALE. 2. Leva per-file eseguibile.
+3. Parità + ricevuta pin — APERTA (pin php-server). 4. Apparato CONGELATO
+fuori quota. 5. Batteria riproducibile — SODDISFATTO con riserva
+(KS-DS-96-3: predicato positivo + reset fra le gambe).
 
 **NON riproporre**: tutti i NON-riproporre WP-83..95 restano; in più —
-«sanificare la shell e credere sanificati i figli»; «un dente che non
-fallisce sta mordendo» (può essere vacuo: pretendere l'rc esatto);
-«un predicato che dipende da ciò che introduce»; «due lati identici =
-confronto valido» (possono fallire entrambi); «il rc del runner come
-giudice di una coppia»; «citare il budget corpus in una prosa»;
-**«leggere un miglioramento in un rapporto»** — un rapporto peggiora anche
-quando il denominatore migliora: il claim si fa sulla GAMBA, mai sulla
-frazione (Bak/Hoare/Gregg, WP-96); **«provare l'esistenza dal vuoto di una
-pipe»** — sha256 del vuoto è e3b0c44298fc1c14 e la guardia non scatta mai
-(Hejlsberg, misurato).
+**«un PASS del gate letto PRIMA del commit vale per lo stato DOPO»** (il
+corpus si legge da HEAD: la sequenza è commit locale → morso → budget nello
+stesso commit → push a PASS); **«spostare un valore da uno slot che a
+runtime regge un Ref»** (si de-referenzia, mai si sposta); «leggere un
+miglioramento in un rapporto»; «una soglia di rinuncia non derivata»;
+«ottimizzare il dispatch» (tetto calcolato, consulenze Bak/Stogov);
+«run_loop non ci sta in i-cache» (refutato per misura).
 
 ---
 **Chiusura**: 2026-08-04. Apertura/chiusura sessioni = skill
