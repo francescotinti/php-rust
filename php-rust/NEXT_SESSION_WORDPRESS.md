@@ -100,11 +100,13 @@ firmata). In breve:
 1. **F1 — calcolare l'analisi e CONTARLA, senza usarla.** Ultimo uso per
    slot su ogni funzione compilata; contatore `would_take` dietro la feature
    `zval-census`. **Rischio zero**: nessun bit del binario di parita cambia.
-   **Criterio di prosecuzione scritto PRIMA: se le letture spostabili sono
-   < 20% di `slot_reads_rc` (=53561241, misurato in
-   `wp95-harness/zvalcensus-before.out`), la leva NON vale la sua
-   complessita e si passa al PIANO B** (superistruzione LoadSlot+Binary,
-   `design95-leva-zval.md` §Correzione).
+   **Criterio di prosecuzione scritto PRIMA e DERIVATO** (regola a tre bande
+   sul GUADAGNO atteso, non sulla percentuale di letture: tabella e conto in
+   `design95-liveness.md` §P1). In sintesi: >=1,3% di CPU attesa si prosegue;
+   fra 0,6% e 1,3% si confrontano i due piani; sotto 0,6% si abbandonano
+   ENTRAMBI e si passa al prossimo bersaglio del profilo, perche non e la
+   strada a essere sbagliata — e il canale che non paga. Il PIANO B resta
+   la superistruzione LoadSlot+Binary (`design95-leva-zval.md` §Correzione).
 2. **F2 — il perimetro conservativo** (compact/extract/get_defined_vars/
    variabili variabili/eval/closure by-ref/generatori/Ref/try-finally e
    soprattutto i DISTRUTTORI: spostare un valore ANTICIPA un `__destruct`,

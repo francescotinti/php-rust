@@ -61,10 +61,10 @@ slot; l'ordine dei distruttori è semantica PHP osservabile.
 **F1 — L'analisi, senza usarla.** Calcolare l'ultimo uso per slot su ogni
 funzione compilata e *contare* quante letture sarebbero spostabili, senza
 cambiare una sola emissione. Giudice: il contatore `would_take` confrontato
-con `slot_reads_rc=53561241`. **Criterio di prosecuzione: se le letture
-spostabili sono meno del 20% delle `slot_reads_rc`, la leva non vale la sua
-complessità e si passa al piano B.** Questa fase è a rischio ZERO: nessun
-bit del binario di parità cambia (feature di sola misura).
+con `slot_reads_rc=53561241`. **Criterio di prosecuzione: la regola a tre
+bande di P1** (sul GUADAGNO atteso, non sulla percentuale di letture — vedi
+la tabella lì). Questa fase è a rischio ZERO: nessun bit del binario di
+parità cambia (feature di sola misura).
 
 **F2 — Il perimetro conservativo.** Implementare i predicati di rinuncia
 (l'elenco sopra) e ri-contare. La differenza fra F1 e F2 dice **quanto costa
