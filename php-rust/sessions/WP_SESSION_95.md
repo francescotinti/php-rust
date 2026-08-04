@@ -42,8 +42,10 @@ La banda è risultata ALTA su entrambi gli estremi → eseguita anche F2
   40% → **P2 SODDISFATTA**; il perimetro F2 intero resta in banda ALTA
   (`guadagno_cpu_atteso_safe_pct_min/_max`); il solo nucleo stringhe
   (`guadagno_cpu_atteso_str_pct_min/_max`) cade in banda MEDIA.
-- **Determinismo**: i contatori F1 sono riprodotti IDENTICI nel run F2
+- **Riproducibilità**: i contatori F1 sono riprodotti IDENTICI nel run F2
   (`nota-determinismo` in zvalcensus-f2.out) — conteggi, non campioni.
+  [Declassato da «determinismo pieno» a RIPRODUZIONE SU UNA COPPIA (N=1)
+  per A-PP-97-5, Concilio WP-97.]
 - **Controlli del meccanismo** (Bak: il contatore prima dell'orologio):
   smoke a mano con negativo che MORDE (slot vivo sul back-edge di un
   loop NON contato; `global`/`use(&$x)`/`compact` tolgono esattamente i

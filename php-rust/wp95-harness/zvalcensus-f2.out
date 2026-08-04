@@ -1,10 +1,16 @@
 zvalcensus-f2: A-ZV2 fase F2 — quanto COSTA la prudenza (perimetro conservativo, sola misura)
-grade=VERDICT  # conteggi esatti, suite identica al riferimento
+grade=VERDICT  # conteggi esatti, suite identica al riferimento; le righe guadagno_* sono SCREEN (vedi sotto)
 formato=ascii-nudo
 workload=vendor/bin/phpunit --group media
 esito-suite=762 test, 1912 assertions, 52 skipped — IDENTICO a zvalcensus-f1.out
-binario=build di STRUMENTAZIONE 2a321e3b345ba799 (--features zval-census, HEAD ee3f551);
-  il binario di parita d5ce86e3342f3926 e VERIFICATO INVARIATO (f2-out/f2.identity)
+binario=build di STRUMENTAZIONE 2a321e3b345ba799; provenienza TRASCRITTA dall'identity
+  (A-PP-97-1, Concilio WP-97): al lancio del run l'identity registra head=fb0599b e il
+  binario era costruito dall'albero di lavoro con le modifiche F2 NON ancora committate,
+  committate subito dopo come ee3f551 — la corrispondenza albero↔commit e' DICHIARATA,
+  non provata. Il binario di parita d5ce86e3342f3926 e VERIFICATO INVARIATO (f2.identity)
+grade-per-campo=i contatori would_take*/sites_* sono VERDICT (conteggi esatti); le righe
+  guadagno_cpu_atteso_* sono SCREEN — il moltiplicatore (il valore del canale in §P1)
+  viene da un profilo campionato R=1 (A-BG-97-1/A-SK-97-4, Concilio WP-97)
 processi-che-hanno-scritto=16
 would_take=28628306
 would_take_rc=25233473

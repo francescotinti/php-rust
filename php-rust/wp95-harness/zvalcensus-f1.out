@@ -1,5 +1,8 @@
 zvalcensus-f1: A-ZV2 fase F1 — quante letture di slot sono un ULTIMO USO (sola misura)
-grade=VERDICT  # conteggi esatti (non campionamento), suite identica al riferimento
+grade=VERDICT  # conteggi esatti (non campionamento), suite identica al riferimento; le righe guadagno_* sono SCREEN (vedi sotto)
+grade-per-campo=i contatori slot_reads*/would_take*/sites_* sono VERDICT; le righe
+  guadagno_cpu_atteso_* sono SCREEN — il moltiplicatore (valore del canale §P1) viene
+  da un profilo campionato R=1 (A-BG-97-1/A-SK-97-4, Concilio WP-97)
 formato=ascii-nudo
 workload=vendor/bin/phpunit --group media
 esito-suite=762 test, 1912 assertions, 52 skipped — IDENTICO a zvalcensus-before.out

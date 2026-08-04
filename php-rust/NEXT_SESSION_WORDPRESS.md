@@ -8,7 +8,8 @@ in **banda ALTA su entrambi gli estremi** (cifre e derivazioni in
 `wp95-harness/zvalcensus-f1.out`). F2: perimetro conservativo (rinunce per
 funzione/slot/regione) — la prudenza taglia molto meno del 40% → **P2
 SODDISFATTA**; il nucleo stringhe da solo sta in banda MEDIA
-(`wp95-harness/zvalcensus-f2.out`). Determinismo pieno fra i due run.
+(`wp95-harness/zvalcensus-f2.out`). Contatori F1 riprodotti identici nel
+run F2 (riproduzione su UNA coppia, N=1 — declassato da A-PP-97-5).
 Binario di parità INVARIATO a ogni passo. Dettaglio:
 `sessions/WP_SESSION_95.md`.
 
@@ -47,42 +48,63 @@ dipendere da ciò che esso stesso introduce.** **Un confronto identico non è
 valido se entrambi i lati stanno fallendo.** **Il rc del runner non è il
 giudice di una coppia.**
 
-## §WP-96(sessione) — F3: l'opcode `TakeSlot`, coi denti già pronti
+## ⚖️ Concilio WP-97 ESEGUITO (2026-08-04, verbali VINCOLANTI): `wp97-harness/COUNCIL_WP97_REVIEWS.md`
+
+9 sedie, protocollo due fasi (3 team: engine, misura, catena), NESSUNA
+benedizione. **Sei refutazioni capitali**, tre già APPLICATE in chiusura:
+(1) Hoare: `movable_safe` INSOUND per emissione (def sottratta anche sul
+contributo dell'arco exc — un catch può vedere `Undef`); bande F1/F2 salve,
+**F3 bloccata finché transfer corretto e conteggi rifatti**; (2) Stogov: in
+Zend i CV non si consumano MAI e la morte anticipata è osservabile anche
+senza `__destruct` → F3 fedele = **move SOLO Str, banda MEDIA, P3
+ri-derivata**; (3) Bak: «non aggiunge opcode al percorso caldo» è FALSO —
+`TakeSlot` è un braccio nuovo, tetto WP-39..44; (4) Gregg: le righe
+`guadagno_*` erano VERDICT ma il canale è SCREEN [APPLICATO: grade-per-campo
+nei raw]; (5) Pedersen: header del raw F2 con HEAD nato dopo l'avvio del run
+[APPLICATO: provenienza trascritta dall'identity; determinismo declassato a
+N=1]; (6) Hejlsberg: F3 col riuso dell'analisi lazy/pointer-key = corruzione
+semantica → **analisi nel COMPILATORE, identità strutturale**. Sintesi
+§FONDAMENTALI + ordine emendato in `wp97-harness/verbali/SYNTHESIS.md`.
+
+## §WP-96(sessione) — F3 EMENDATA dal Concilio WP-97: prima la soundness, poi il perimetro, poi l'opcode
 
 **P0**: pre-flight standard + `--all` PASS a HEAD + pin phpr
-d5ce86e3342f3926 invariato + **apparato A-SK-93..97 in timebox** (mezza
-sessione MASSIMO, regola permanente; se sfora, si spedisce l'oggetto e
-l'apparato torna in coda).
+d5ce86e3342f3926 invariato + **apparato A-SK-93..97 SUBITO in timebox**
+(mezza sessione MASSIMO; ora è precondizione del grado di parità di F3 —
+KS-SK-97-1: senza ambiente COSTRUITO i PASS futuri non sono verdict-grade).
 
-### L'OGGETTO: A-ZV2 fase F3 (+F4 nella stessa sessione se il tempo regge)
+### L'OGGETTO: A-ZV2 verso F3, nell'ORDINE del Concilio WP-97
 
-Contratto in `wp95-harness/design95-liveness.md` (§Le fasi, §P3 DERIVATA,
-§P4). I numeri che giustificano l'ordine stanno nei due raw di S-95.0
-(`zvalcensus-f1.out`, `zvalcensus-f2.out`); la P3 per F4 è la banda
-derivata scritta in fondo a §P1 del design. Punti fermi per F3, decisi
-dalle misure e dagli smoke di S-95.0:
+Contratto in `wp95-harness/design95-liveness.md` + ordine emendato in
+`wp97-harness/verbali/SYNTHESIS.md` (vincolante). In sequenza:
 
-1. **Il guard è a RUNTIME oltre che statico**: l'emissione usa
-   `movable_safe` (F2), ma il handler di `TakeSlot` DEVE guardare il tipo
-   della cella — un `Zval::Ref` si de-referenzia (fallback clone), mai si
-   sposta (lo smoke ha mostrato che il lato interno di una closure by-ref
-   sfugge alla rinuncia statica).
-2. **La scelta del perimetro di tipo è una decisione di design da
-   prendere A INIZIO F3**: perimetro F2 intero (banda ALTA, ma un take di
-   un oggetto/array può ANTICIPARE un `__destruct` osservabile rispetto
-   all'oracle Zend, che i CV non li consuma mai) vs nucleo stringhe
-   (banda MEDIA, rischio distruttori ZERO per costruzione). Il conto per
-   confrontare le due opzioni sta nei raw; la trappola distruttori è
-   descritta in design95-liveness.md §Perché e §punto 10.
-3. **Gate di parità COMPLETI nello stesso commit dell'opcode** (corpus
-   1418 + refl 290 + ORM + hk + battery61) + i test delle trappole:
-   `$a .= $a`, distruttore che osserva l'ordine, generatore sospeso,
-   `compact()` dopo l'ultimo uso apparente, `use (&$x)` letto dopo il
-   take apparente.
-4. **F4 = coppia oracle-vs-phpr della stessa sera** con oracle RIMISURATO
-   (mai denominatore congelato) + controllo positivo del meccanismo:
-   `slot_reads_avoided` deve muoversi della quantità predetta dai
-   contatori F2, o il Δ tempo viene da altro (Bak).
+1. **Fix di soundness PRIMA di tutto** (A-TH-97-1): la def NON va sottratta
+   sul contributo dell'arco eccezionale; match ESAUSTIVI senza wildcard in
+   `effect()`/`renounce()` (A-TH-97-2 ≡ A-SK-97-2); varianti mancanti:
+   `NewAnonDeferred` (A-SK-97-1), `CallBuiltinRefCell` + `debug_zval_refcount`
+   (A-DS-97-5 ≡ A-MS-97-5); contatore `WOULD_TAKE_SAFE_REF` (A-MS-97-1).
+   Poi **RICONTEGGIO F1/F2** (run media strumentato): se P2 scende sotto la
+   soglia del design, stop e confronto piano B (KS-TH-97-3).
+2. **Perimetro: whitelist Str-first** (A-MS-97-2 ≡ A-DS-97-1 — mai oggetti
+   né array). P3 RI-DERIVATA sul nucleo (banda attesa MEDIA) ⇒ per la regola
+   a tre bande: **confronto ESPLICITO col piano B** (A-TH-97-3), al NETTO
+   del corpo caldo nuovo (tetto A-LB-97-1: Δ corpi caldi ≤0 o compensato,
+   taglia `nm -S` predetta prima).
+3. **Solo se la strada lunga vince il confronto**: `TakeSlot` con emissione
+   SOLO compile-time (A-TH-97-5 ≡ A-AH-97-1; identità strutturale, mai
+   puntatori, A-AH-97-3; assert sulla taglia di `Op` a 48 byte nello stesso
+   commit, A-AH-97-4), contratto Undef+warning (A-DS-97-2), `gc_note` sul
+   valore preso (A-TH-97-4 ≡ A-MS-97-3), trappole promosse a TEST COMMITTATI
+   (A-SK-97-3 ≡ A-PP-97-4: `$a .= $a`, distruttore che osserva l'ordine,
+   generatore sospeso, `compact()` dopo l'ultimo uso apparente, `use (&$x)`),
+   gate di parità COMPLETI nello stesso commit (corpus 1418 + refl 290 +
+   ORM + hk + battery61).
+4. **F4** (se il tempo regge): coppia oracle-vs-phpr stessa sera con oracle
+   RIMISURATO; census su BINARIO SEPARATO; controllo positivo a TRE
+   contatori (A-LB-97-2: takes + fallback = safe predetto); coppia A/A con
+   tetto spread ex-ante (A-BG-97-3); sanity ns/evento (A-BG-97-2);
+   predizione footprint FIRMATA (A-DL-97-1; il peak a R=1 resta SCREEN,
+   KS-DL-97-2); suite per NOME (A-PP-97-3).
 
 ### Dopo A-ZV2, per NOME (non «più avanti»)
 
