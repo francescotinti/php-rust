@@ -59,6 +59,10 @@ mod gc_census;
 // (design95-leva-zval.md). Stessa convenzione: build di strumentazione soltanto.
 #[cfg(feature = "zval-census")]
 pub mod zvalcensus;
+// S-95.0 leva A-ZV2 fase F1: analisi di ultimo uso in sola misura
+// (design95-liveness.md). Stessa convenzione: build di strumentazione soltanto.
+#[cfg(feature = "zval-census")]
+pub mod liveness;
 mod coroutines;
 mod dom;
 mod exceptions;

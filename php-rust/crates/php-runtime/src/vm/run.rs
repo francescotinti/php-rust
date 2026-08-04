@@ -587,6 +587,10 @@ impl<'m> super::Vm<'m> {
                     // An unset local reads as NULL (silent — used for compiler
                     // temporaries and PHP's warning-free contexts). A reference
                     // slot is followed. Source-level `$x` reads use `LoadVar`.
+                    // S-95.0 A-ZV2 F1: conta se QUESTO sito è un ultimo uso
+                    // (sola misura, design95-liveness.md).
+                    #[cfg(feature = "zval-census")]
+                    super::zvalcensus::note_slot_load_site(func, ip, &self.frames[top].slots[*s as usize]);
                     let v = read_slot(&self.frames[top].slots[*s as usize]);
                     self.frames[top].stack.push(v);
                 }
@@ -602,6 +606,10 @@ impl<'m> super::Vm<'m> {
                             self.diags.push(Diag::Warning(msg));
                         }
                     }
+                    // S-95.0 A-ZV2 F1: conta se QUESTO sito è un ultimo uso
+                    // (sola misura, design95-liveness.md).
+                    #[cfg(feature = "zval-census")]
+                    super::zvalcensus::note_slot_load_site(func, ip, &self.frames[top].slots[*slot as usize]);
                     let v = read_slot(&self.frames[top].slots[*slot as usize]);
                     self.frames[top].stack.push(v);
                 }

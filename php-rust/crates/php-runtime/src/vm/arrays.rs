@@ -834,24 +834,11 @@ pub(super) fn read_slot(cell: &Zval) -> Zval {
     // misura il MECCANISMO prima dell'orologio ed è compilato via fuori dalle
     // build di strumentazione.
     #[cfg(feature = "zval-census")]
-    super::zvalcensus::note_slot_read(zval_holds_rc(cell));
+    super::zvalcensus::note_slot_read(super::zvalcensus::zval_holds_rc(cell));
     match cell {
         Zval::Undef => Zval::Null,
         Zval::Ref(r) => r.borrow().clone(),
         other => other.clone(),
-    }
-}
-
-/// Il valore porta un `Rc`? Solo per queste varianti clone/drop costano un
-/// aggiornamento di refcount; sulle altre sono una copia di parola. Discrimina
-/// il numeratore della predizione A-ZV1: `slot_reads_rc`, non `slot_reads`.
-#[cfg(feature = "zval-census")]
-fn zval_holds_rc(v: &Zval) -> bool {
-    match v {
-        Zval::Undef | Zval::Null | Zval::Bool(_) | Zval::Long(_) | Zval::Double(_) => false,
-        // `Ref` clona il valore INTERNO: il costo sta lì, non nel wrapper.
-        Zval::Ref(r) => zval_holds_rc(&r.borrow()),
-        _ => true,
     }
 }
 
