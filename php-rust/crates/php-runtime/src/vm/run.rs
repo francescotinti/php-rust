@@ -217,6 +217,46 @@ impl<'m> super::Vm<'m> {
         self.binary_value_ab(b, lhs, rhs)
     }
 
+    /// Owned slot read with the semantics of the `LoadVar` the lowering pass
+    /// folded away (WP-44 v3, re-armed S-97.1): queue the PHP 8 "Undefined
+    /// variable" warning on `Undef` — the pass folds a slot only after
+    /// proving the slot's name equals the LoadVar's name const, so the
+    /// message is byte-identical — and deref-clone a Ref. The name resolves
+    /// seed-aware (`unit_slot_name`): a linked `{main}` cedes its
+    /// `slot_names` table to the VM seed prefix (WP-65) AFTER the pass ran,
+    /// and the seed prefix is byte-identical to the ceded table by contract.
+    fn reg_load_slot(&mut self, top: usize, f: &crate::bytecode::Func, slot: u16) -> Zval {
+        let i = slot as usize;
+        if matches!(self.frames[top].slots[i], Zval::Undef) {
+            let msg = format!(
+                "Undefined variable ${}",
+                String::from_utf8_lossy(
+                    super::unit_slot_name(&self.seed_globals, f, i).unwrap_or(b"")
+                )
+            );
+            self.diags.push(Diag::Warning(msg));
+        }
+        read_slot(&self.frames[top].slots[i])
+    }
+
+    /// Sink a fused result into a slot, replicating `Op::StoreSlot` in full:
+    /// typed-ref coercion guard, write-through via [`store_slot`], `gc_note`
+    /// on the overwritten value.
+    fn reg_store_slot(&mut self, top: usize, dst: u16, v: Zval) -> Result<(), PhpError> {
+        let i = dst as usize;
+        let mut v = v;
+        if !self.typed_refs.is_empty() {
+            if let Zval::Ref(cell) = &self.frames[top].slots[i] {
+                let cell = Rc::clone(cell);
+                let strict = self.frames[top].module.strict;
+                v = self.typed_ref_assign(&cell, v, strict)?;
+            }
+        }
+        let old = store_slot(&mut self.frames[top].slots[i], v);
+        self.gc_note(&old);
+        Ok(())
+    }
+
     /// Fused `$slot .= rhs` (WP-55, [`Op::ConcatAssignSlot`]): in-place
     /// append when the slot holds a directly-owned UNIQUE Str and the rhs is
     /// a Str (`Rc::get_mut` — an alias, the const pool, or a Ref slot makes
@@ -927,6 +967,133 @@ impl<'m> super::Vm<'m> {
                     let (lhs, rhs) = if *const_lhs { (c, x) } else { (x, c) };
                     let r = self.binary_value_ab(*op, lhs, rhs)?;
                     if convert::to_bool(&r, &mut self.diags) == *when {
+                        self.frames[top].ip = *addr as usize;
+                    }
+                }
+                Op::BinarySS { op: b, l, r } => {
+                    // Raw-register fusion (WP-44 v3, re-armed S-97.1): bare
+                    // u16 slot indices, zero runtime operand dispatch. Fast
+                    // path borrows both slots into binary_fast; Undef
+                    // (LoadVar warning), Ref (deref) and tag-pair misses
+                    // take the owned funnel.
+                    let res = 'r: {
+                        {
+                            let fr = &self.frames[top];
+                            let lv = &fr.slots[*l as usize];
+                            let rv = &fr.slots[*r as usize];
+                            if !matches!(lv, Zval::Undef | Zval::Ref(_))
+                                && !matches!(rv, Zval::Undef | Zval::Ref(_))
+                            {
+                                if let Some(v) = binary_fast(*b, lv, rv) {
+                                    break 'r v;
+                                }
+                            }
+                        }
+                        let lhs = self.reg_load_slot(top, func, *l);
+                        let rhs = self.reg_load_slot(top, func, *r);
+                        self.binary_value_ab(*b, lhs, rhs)?
+                    };
+                    self.frames[top].stack.push(res);
+                }
+                Op::BinarySSDst { op: b, l, r, dst } => {
+                    let res = 'r: {
+                        {
+                            let fr = &self.frames[top];
+                            let lv = &fr.slots[*l as usize];
+                            let rv = &fr.slots[*r as usize];
+                            if !matches!(lv, Zval::Undef | Zval::Ref(_))
+                                && !matches!(rv, Zval::Undef | Zval::Ref(_))
+                            {
+                                if let Some(v) = binary_fast(*b, lv, rv) {
+                                    break 'r v;
+                                }
+                            }
+                        }
+                        let lhs = self.reg_load_slot(top, func, *l);
+                        let rhs = self.reg_load_slot(top, func, *r);
+                        self.binary_value_ab(*b, lhs, rhs)?
+                    };
+                    self.reg_store_slot(top, *dst, res)?;
+                }
+                Op::BinarySC { op: b, slot, cidx } => {
+                    // Const materialised ONCE (ZStr = refcount bump) and
+                    // reused by the miss path.
+                    let cv = func.consts[*cidx as usize].to_zval();
+                    let res = 'r: {
+                        {
+                            let lv = &self.frames[top].slots[*slot as usize];
+                            if !matches!(lv, Zval::Undef | Zval::Ref(_)) {
+                                if let Some(v) = binary_fast(*b, lv, &cv) {
+                                    break 'r v;
+                                }
+                            }
+                        }
+                        let lhs = self.reg_load_slot(top, func, *slot);
+                        self.binary_value_ab(*b, lhs, cv)?
+                    };
+                    self.frames[top].stack.push(res);
+                }
+                Op::BinarySCDst { op: b, slot, cidx, dst } => {
+                    let cv = func.consts[*cidx as usize].to_zval();
+                    let res = 'r: {
+                        {
+                            let lv = &self.frames[top].slots[*slot as usize];
+                            if !matches!(lv, Zval::Undef | Zval::Ref(_)) {
+                                if let Some(v) = binary_fast(*b, lv, &cv) {
+                                    break 'r v;
+                                }
+                            }
+                        }
+                        let lhs = self.reg_load_slot(top, func, *slot);
+                        self.binary_value_ab(*b, lhs, cv)?
+                    };
+                    self.reg_store_slot(top, *dst, res)?;
+                }
+                Op::BinaryDst { op: b, dst } => {
+                    // Assign-and-discard tail: operands pop exactly like
+                    // binary_value (rhs first), result sinks into the slot.
+                    let rhs = self.frames[top].stack.pop().expect("BinaryDst rhs");
+                    let lhs = self.frames[top].stack.pop().expect("BinaryDst lhs");
+                    let res = self.binary_value_ab(*b, lhs, rhs)?;
+                    self.reg_store_slot(top, *dst, res)?;
+                }
+                Op::CmpJmpSS { op, l, r, addr, when } => {
+                    let res = 'r: {
+                        {
+                            let fr = &self.frames[top];
+                            let lv = &fr.slots[*l as usize];
+                            let rv = &fr.slots[*r as usize];
+                            if !matches!(lv, Zval::Undef | Zval::Ref(_))
+                                && !matches!(rv, Zval::Undef | Zval::Ref(_))
+                            {
+                                if let Some(v) = binary_fast(*op, lv, rv) {
+                                    break 'r v;
+                                }
+                            }
+                        }
+                        let lhs = self.reg_load_slot(top, func, *l);
+                        let rhs = self.reg_load_slot(top, func, *r);
+                        self.binary_value_ab(*op, lhs, rhs)?
+                    };
+                    if convert::to_bool(&res, &mut self.diags) == *when {
+                        self.frames[top].ip = *addr as usize;
+                    }
+                }
+                Op::CmpJmpSC { op, slot, cidx, addr, when } => {
+                    let cv = func.consts[*cidx as usize].to_zval();
+                    let res = 'r: {
+                        {
+                            let lv = &self.frames[top].slots[*slot as usize];
+                            if !matches!(lv, Zval::Undef | Zval::Ref(_)) {
+                                if let Some(v) = binary_fast(*op, lv, &cv) {
+                                    break 'r v;
+                                }
+                            }
+                        }
+                        let lhs = self.reg_load_slot(top, func, *slot);
+                        self.binary_value_ab(*op, lhs, cv)?
+                    };
+                    if convert::to_bool(&res, &mut self.diags) == *when {
                         self.frames[top].ip = *addr as usize;
                     }
                 }

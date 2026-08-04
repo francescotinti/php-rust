@@ -120,6 +120,33 @@ fn effect(op: &Op, park_targets: &[usize]) -> Effect {
         // ----- letture di slot (i due bersagli della leva + i lettori puri) -----
         Op::LoadSlot(s) => e.uses.push(*s),
         Op::LoadVar { slot, .. } => e.uses.push(*slot),
+        // Forme registro (WP-44 v3, riarmate S-97.1): leggono gli operandi
+        // per indice (uso) e le forme *Dst scrivono `dst` per intero (def,
+        // stessa classificazione di StoreSlot). Le CmpJmp* portano un arco.
+        Op::BinarySS { l, r, .. } => {
+            e.uses.push(*l as u32);
+            e.uses.push(*r as u32);
+        }
+        Op::BinarySSDst { l, r, dst, .. } => {
+            e.uses.push(*l as u32);
+            e.uses.push(*r as u32);
+            e.defs.push(*dst as u32);
+        }
+        Op::BinarySC { slot, .. } => e.uses.push(*slot as u32),
+        Op::BinarySCDst { slot, dst, .. } => {
+            e.uses.push(*slot as u32);
+            e.defs.push(*dst as u32);
+        }
+        Op::BinaryDst { dst, .. } => e.defs.push(*dst as u32),
+        Op::CmpJmpSS { l, r, addr, .. } => {
+            e.uses.push(*l as u32);
+            e.uses.push(*r as u32);
+            e.edges.push((*addr as usize, Vec::new()));
+        }
+        Op::CmpJmpSC { slot, addr, .. } => {
+            e.uses.push(*slot as u32);
+            e.edges.push((*addr as usize, Vec::new()));
+        }
         Op::MatchError(s) => {
             e.uses.push(*s);
             e.fall = false;
@@ -520,6 +547,17 @@ fn renounce(func: &Func) -> (bool, Bits) {
             | Op::AssignOpPath { .. }
             | Op::AssignPath { .. }
             | Op::Binary { .. }
+            // Forme registro (S-97.1): leggono per VALORE e scrivono per
+            // intero via il write-through di StoreSlot — nessuna delle
+            // sette rende uno slot CONDIVISO (il Ref-handling resta dentro
+            // il funnel generico, che non installa alias).
+            | Op::BinarySS { .. }
+            | Op::BinarySSDst { .. }
+            | Op::BinarySC { .. }
+            | Op::BinarySCDst { .. }
+            | Op::BinaryDst { .. }
+            | Op::CmpJmpSS { .. }
+            | Op::CmpJmpSC { .. }
             | Op::Call { .. }
             | Op::CallArgs { .. }
             | Op::CallArrayMultisort { .. }

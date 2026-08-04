@@ -13,7 +13,7 @@ use crate::bytecode::Op;
 use crate::hir::BinOp;
 use php_types::Zval;
 
-pub const N_OPS: usize = 178;
+pub const N_OPS: usize = 185;
 
 pub const OP_NAMES: [&str; N_OPS] = [
     "PushConst", "Pop", "Dup", "LoadSlot", "LoadVar", "PushUndef", "StoreSlot", "Swap",
@@ -39,6 +39,7 @@ pub const OP_NAMES: [&str; N_OPS] = [
     "FieldAssign", "FieldAssignOp", "FieldIncDec", "FieldIsset", "FieldEmpty", "FieldUnset", "Fatal", "EmitNotice",
     "Exit", "SuppressBegin", "SuppressEnd", "Sweep", "ThisPropGet", "CmpJmpConst", "ConcatN",
     "ThisMethodCall", "Nop", "ConcatAssignSlot",
+    "BinarySS", "BinarySSDst", "BinarySC", "BinarySCDst", "BinaryDst", "CmpJmpSS", "CmpJmpSC",
 ];
 
 pub fn op_index(op: &Op) -> usize {
@@ -224,6 +225,17 @@ pub fn op_index(op: &Op) -> usize {
         Op::ThisMethodCall { .. } => 175,
         Op::Nop => 176,
         Op::ConcatAssignSlot(..) => 177,
+        // Register-form fusions (WP-44 v3, re-armed S-97.1): counted in
+        // ops/bigram; like CmpJmpConst they keep operands OFF the stack, so
+        // none of them feeds the Binary type-pair matrix (the stack peek
+        // would misattribute the pair).
+        Op::BinarySS { .. } => 178,
+        Op::BinarySSDst { .. } => 179,
+        Op::BinarySC { .. } => 180,
+        Op::BinarySCDst { .. } => 181,
+        Op::BinaryDst { .. } => 182,
+        Op::CmpJmpSS { .. } => 183,
+        Op::CmpJmpSC { .. } => 184,
     }
 }
 
@@ -616,8 +628,20 @@ mod tests {
             assert!(i < N_OPS, "{name} index {i} out of range");
             assert_eq!(OP_NAMES[i], *name, "OP_NAMES row mismatch for {name}");
         }
-        // ConcatAssignSlot is the last table row (WP-55).
-        assert_eq!(op_index(&Op::ConcatAssignSlot(0)), N_OPS - 1);
+        // The register-form block (S-97.1) closes the table: CmpJmpSC is the
+        // last row, ConcatAssignSlot (WP-55) sits just before it.
+        assert_eq!(op_index(&Op::ConcatAssignSlot(0)), N_OPS - 8);
+        assert_eq!(
+            op_index(&Op::CmpJmpSC {
+                op: crate::hir::BinOp::Lt,
+                slot: 0,
+                cidx: 0,
+                addr: 0,
+                when: true
+            }),
+            N_OPS - 1
+        );
+        assert_eq!(OP_NAMES[N_OPS - 1], "CmpJmpSC");
     }
 
     #[test]
