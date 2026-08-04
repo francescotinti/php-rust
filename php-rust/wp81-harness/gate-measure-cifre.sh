@@ -791,7 +791,11 @@ if [ "${1:-}" = "--selftest" ]; then
 my $root = shift;
 my @u = grep { m{^php-rust/.*\.md$} }
         split /\n/, qx(git -C "$root" ls-files --others -- php-rust);
-print scalar(grep { /zzforge-t31/ } @u), "\n";
+# The AppleDouble sidecars macOS drops next to each file on this volume
+# (`._name`) are counted out: the ASCII twin's sidecar is itself an unquoted
+# ASCII path, so leaving them in made the pre-cure listing see 2 and the bite
+# read as "the forge no longer reproduces" when it reproduces perfectly.
+print scalar(grep { /zzforge-t31/ && !m{/\._} } @u), "\n";
 T31PERL
   T31PRECOUNT=$(perl "$T31PRE" "$ROOT")
   rm -f "$T31A" "$T31U"
