@@ -1,0 +1,42 @@
+prof95-media: dove va il tempo di phpr sul MEDIA GROUP (ricognizione pre-S-95.0)
+grade=SCREEN  # profilo sampling R=1: serve a ORDINARE le leve, non a pinnare cifre
+formato=ascii-nudo
+strumento=samply record -r 997, binario di PARITA d5ce86e3342f3926 (simboli gia presenti, NESSUNA ricompilazione)
+workload=vendor/bin/phpunit --group media (762 test, 1912 assertions, 52 skipped — identico alla coppia S-94.0)
+condizioni=MIMALLOC_PURGE_DELAY=0, DB wptests ricreato, uploads dalla guardia
+campioni_totali=76998
+attesa_in_kernel=38033 pct=49.4
+cpu_userland=38965 pct=50.6   # QUESTA e la parte che corrisponde alla user CPU misurata
+
+== L'ATTESA (100% in kernel: il processo DORME, non brucia CPU) ==
+ 40.36%_del_wall  __RNvXse_NtCsaLOjE9VYtxK_3std7processNtB5_11ChildStderrNtNtB7_2io4Read4read
+  4.58%_del_wall  __RNvXs_NtNtCsaLOjE9VYtxK_3std3net3tcpNtB4_9TcpStreamNtNtB8_2io4Read4read
+  0.95%_del_wall  __RNvMNtNtNtCsaLOjE9VYtxK_3std3sys2fd4unixNtB2_8FileDesc11read_to_end
+  0.71%_del_wall  __RINvNvNtCsaLOjE9VYtxK_3std2io19default_read_to_end16small_probe_readRNtNtNtNtB6_3sys2fd4unix8FileDescEB6_
+  0.54%_del_wall  __RNvXsa_NtCsaLOjE9VYtxK_3std2fsNtB5_4FileNtNtB7_2io4Read4read
+
+== LA CPU VERA (solo campioni userland; percentuali sul totale CPU) ==
+ 19.16%  __ZN11php_runtime2vm3run37_$LT$impl$u20$php_runtime..vm..Vm$GT$8run_loop17h151eaabdf744b727E
+  5.71%  __ZN11php_runtime2vm2gd37_$LT$impl$u20$php_runtime..vm..Vm$GT$10ho_gd_copy17h6e6ee98d77b07c8cE
+  5.36%  __ZN4core3ptr42drop_in_place$LT$php_types..zval..Zval$GT$17h20ae5de29e7d6f17E
+  3.51%  __ZN9php_types4gdio5GdImg6encode17h750620a2a4df3b09E
+  2.85%  __ZN60_$LT$php_types..zval..Zval$u20$as$u20$core..clone..Clone$GT$5clone17hefb90639ec540639E
+  2.68%  __ZN11php_runtime2vm5calls37_$LT$impl$u20$php_runtime..vm..Vm$GT$12enter_callee17h9ec79622d14a3746E
+  2.36%  __ZN11php_runtime2vm2Vm13recycle_frame17h2cabdd3644063f3eE
+  2.19%  __ZN11php_runtime2vm3run13concat_n_join17h240293f0f03212ebE
+  2.03%  __ZN11php_runtime2vm2Vm7gc_note17h207b6c58cdc8a87aE
+  1.65%  __ZN11php_runtime2vm2Vm13gc_sweep_impl17h44521e063ccc3a5fE
+  1.63%  __ZN4core3ptr43drop_in_place$LT$php_runtime..vm..Frame$GT$17h238e93eb6e168b31E
+  1.61%  _mi_free
+  1.51%  __ZN9php_types5array8KeyIndex6lookup17h903381d04e9247cfE
+  1.50%  __ZN11fancy_regex2vm3run17h72bcdc851e3ab278E
+  1.48%  __ZN11php_runtime2vm2Vm13gc_note_frame17h80cb63521aae4e7eE
+  1.37%  _mi_malloc_aligned
+  1.24%  __ZN9php_types4gdio5GdImg6decode17h93852a8695e5a363E
+  1.18%  __ZN9php_types6object11PropsLayout7slot_of17h9c951169cfbc95ecE
+  1.14%  __ZN71_$LT$core..hash..sip..Hasher$LT$S$GT$$u20$as$u20$core..hash..Hasher$GT$5write17h760868571bbbd84fE
+  1.08%  __ZN11php_runtime2vm3oop22resolve_method_runtime17ha8397738066cc789E
+  1.06%  __ZN11php_runtime2vm5calls11bind_params17h0a76ec323f9a5facE
+  0.91%  __ZN11php_runtime2vm4host37_$LT$impl$u20$php_runtime..vm..Vm$GT$15ho_get_declared17h35818ab2b3a8737cE
+  0.88%  __ZN9php_types5array8PhpArray6insert17hd16da0a57f1573edE
+  0.80%  __ZN9hashbrown3map28HashMap$LT$K$C$V$C$S$C$A$GT$3get17h05a5573ca2907ce8E
