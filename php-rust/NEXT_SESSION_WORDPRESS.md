@@ -1,4 +1,4 @@
-# NEXT_SESSION_WORDPRESS.md — S-96.0: A-ZV2 SI È CHIUSA DA SOLA → WP-97(sessione)
+# NEXT_SESSION_WORDPRESS.md — S-96.0: A-ZV2 SOSPESA (non chiusa) → WP-97(sessione)
 
 **Ultima sessione**: S-96.0 (2026-08-04, sera) — **l'ordine del Concilio WP-97
 eseguito nei suoi passi, e chiuso da un verdetto invece che dal tempo**. Passo 0:
@@ -8,7 +8,7 @@ mancanti + contatore `would_take_safe_ref`, poi RICONTEGGIO — P2 soddisfatta,
 bande invariate, e **i delta F1 esattamente ZERO**: il difetto è reale (provato
 a macchina dalla fixture `t4-first-op-def.php`) ma la forma che lo espone non
 ricorre in questo corpus. Passo 2: il confronto col piano B — **la strada lunga
-NON vince sul perimetro fedele**, quindi `TakeSlot` non è stato scritto e F4 non
+NON vince sul perimetro fedele**, quindi `TakeSlot` non e' stato scritto e F4 non
 è applicabile. Dettaglio: `sessions/WP_SESSION_96.md`.
 
 **⏱ FONDAMENTALI (regola utente 2026-08-03, aggiornare a OGNI rotazione)**:
@@ -50,7 +50,37 @@ apparato.**
 vacua per costruzione**: l'ambiente di un giudice si COSTRUISCE (lista chiusa),
 non si sottrae (lista di negazione).
 
-## §WP-97(sessione) — la rotta CPU-VM ha perso il suo passo: sceglierne uno, sull'OGGETTO
+## ⚖️ Concilio WP-98 ESEGUITO (2026-08-04, verbali VINCOLANTI): `wp98-harness/COUNCIL_WP98_REVIEWS.md`
+
+9 sedie, protocollo due fasi (team: oggetto, analisi, catena), NESSUNA
+benedizione. **§FONDAMENTALI (Gregg, mandato inverso): l'OGGETTO NON è
+avanzato** — due soli fatti sul motore (di cui uno, §3.10, trovato per caso)
+contro sei sull'apparato, e zero misure di tempo. **Otto refutazioni capitali**,
+tre già APPLICATE in sessione: (1) Klabnik FORGIA ATTERRATA — il perimetro era
+cieco ai nomi non-ASCII, perché git li QUOTA e la virgoletta rompe l'ancoraggio
+[APPLICATA: `-z`+`core.quotePath=false` su `ls-files`, `check-ignore` e
+`ls-tree`, dente T31 col morso]; (2) Hoare — il raw contiene un delta che il
+changeset non può produrre, quindi le attribuzioni sono state scritte senza
+controllare il pavimento di rumore [APPLICATA: annotata nel raw]; (3) Bak — il
+tetto sui corpi caldi usato come TARIFFA, ma in WP-44 passare da 2 a 9 corpi
+costò MENO che passare da 2 a 4 ⇒ la chiusura del passo 2 è declassata a
+SOSPENSIONE; (4) Matsakis — `current_frame_args` legge gli slot vivi di OGNI
+frame, canale che il test di tipo non vede; (5) Stogov — `namespace X;
+extract($a)` sfugge alla rinuncia (provato a macchina): `observes_scope` è
+indicizzata sul nome SCRITTO; (6) Leijen — `would_take_safe_str` conta
+`Rc::clone` elisi, ZERO allocazioni: nessuna lettura in chiave footprint;
+(7) Pedersen — **P-AMEND-ORFANO**: un artefatto registra `head=`, poi un
+`--amend` sostituisce l'oggetto e al primo `gc` la provenienza diventa
+IRRISOLVIBILE; (8) Hejlsberg — `LoadSlot{take}` è la peggiore delle due forme
+(layout neutro, e tasserebbe TUTTE le letture di slot per servirne la sola quota `would_take_safe_str`).
+Sintesi + ordine in `wp98-harness/verbali/SYNTHESIS.md`.
+
+## §WP-97(sessione) — RIMETTERE IN MOTO IL CRONOMETRO (ordine del Concilio WP-98)
+
+L'ordine qui sotto SOSTITUISCE le tre candidate che questa sessione aveva
+proposto: il concilio le ha riordinate e ne ha refutata la motivazione (il
+punto «forma dell'emissione» era primo, ora è quarto e la sua motivazione
+scritta è falsa).
 
 **P0**: pre-flight standard + `--all` PASS a HEAD + pin phpr invariato.
 ⚠️ `~/Claude/php-rust-output/debug/` si RIGENERA da rust-analyzer (rimossa DUE
@@ -60,35 +90,57 @@ sul momento con `du -sh`, non si cita a memoria.
 
 ### Il fatto da cui partire
 
-A-ZV2 non è stata abbandonata: è stato **archiviato un PERIMETRO**. La strada
-lunga sul solo nucleo stringhe, con un braccio nuovo, non ha un netto
-difendibile (`wp96-harness/design96-confronto-piano-b.md` §5). Restano tre
-strade, e la prima ha la precedenza perché è quella che potrebbe RIAPRIRE A-ZV2
-a costo quasi nullo:
+A-ZV2 non è archiviata: è **SOSPESA** (declassamento imposto da Bak — la
+derivazione che la chiudeva usa il tetto sui corpi caldi come una tariffa, e
+non lo è). Il problema che la sessione ha davvero portato alla luce non è
+quale leva scegliere: è che **la rotta CPU-VM decide su un denominatore che
+nessuno ha mai rimisurato**, e che il cronometro è fermo da due sessioni.
 
-1. **La FORMA dell'emissione, che nessuno ha valutato.** Hejlsberg (RC-1): «o
-   corpo handler nuovo (WP-43) o branch in un arm esistente (WP-38)». Le due
-   forme hanno pedaggi DIVERSI: un branch in testa al `run_loop` si paga a OGNI
-   opcode, un branch dentro il braccio `LoadSlot`/`LoadVar` si paga solo sulle
-   letture di slot ed è per-sito, quindi ben predetto. **Un `LoadSlot` che porta
-   un flag `take` deciso a compilazione non è un corpo caldo in più** — e se
-   così fosse, il verdetto del passo 2 cambierebbe. Da istruire con la taglia
-   `nm -S` PREDETTA prima (A-LB-97-1), su un binario adiacente.
+1. **Ri-profilo R≥3, stesso workload, ZERO cambi di codice.** Mispredict
+   indiretti/op e L1I-miss/op normalizzati su `op-census`, peak registrato
+   insieme (costo zero, Leijen), regola di lettura scritta PRIMA, mediana **e
+   spread** pubblicati — un intervallo, non un punto. È l'unica voce che serve
+   i tre mandati insieme: rimette in moto il cronometro, ripara il
+   denominatore da cui dipendono TUTTE le bande di due sessioni, e dice se O1
+   ha un canale prima di scriverla. *Finché manca l'intervallo vale Gregg: una
+   decisione senza intervallo non è una decisione, è una preferenza.*
 2. **O1 di Bak — outlining dei bracci freddi** (i ~140 opcode rari
-   `#[inline(never)]`, restano inline i ~40 caldi). È l'unica leva che ABBASSA
-   il numero di corpi caldi, quindi è il prerequisito dichiarato di qualunque
-   leva che ne aggiunga uno, ed è a rischio quasi nullo perché meccanica e
-   parity-preserving. Il tetto A-LB-97-1 («Δ netto bracci caldi ≤ 0») non è
-   soddisfacibile da costruzione finché O1 non è fatta.
-3. **Il piano B vero (A-ZV1)**: fast path per riferimento in
-   `binary_value_ab`, che NON aggiunge bracci. Ha già il suo design e le sue
-   predizioni; ciò che gli manca è la sezione «Correzione» che non è mai stata
-   scritta — **se lo si riprende, il primo atto è scriverla, non citarla**.
+   `#[inline(never)]`, restano inline i ~40 caldi), con **controllo positivo
+   DOPPIO**: taglia predetta + outlineati ∩ `op-census` da un lato; L1I-miss/op
+   in calo con `op-census` INVARIANTE dall'altro. Coppia stessa-sera. È
+   l'unica leva che ABBASSA il numero di corpi caldi, quindi il prerequisito
+   di qualunque leva che ne aggiunga uno.
+3. **Braccio NULL cronometrato, nelle DUE forme**: dentro `run_loop` (Gregg,
+   per leggere il pedaggio reale) e come Δ di taglia equivalente FUORI da
+   `run_loop` (Bak, per separare i-cache da dispatch). Sono due esperimenti
+   diversi ed entrambi necessari: è ciò che rende decidibile il conto del
+   passo 2 di S-96.0.
+4. **La forma dell'emissione — SOLO DOPO che l'entropia del bit è misurata.**
+   La motivazione scritta in S-96.0 («per-sito, quindi ben predetto») è
+   REFUTATA da Bak: il bit sarebbe preso il 42,33% delle volte. E Hejlsberg
+   aggiunge che il layout è neutro, quindi il flag non compra nulla e tasserebbe
+   tutte le letture di slot per servirne la sola quota `would_take_safe_str`. Klabnik dissente sul GRADO (è un
+   argomento, non una misura): il conflitto è registrato.
+5. **P-AMEND-ORFANO** (unica voce d'apparato ammessa, perché rende
+   IRRISOLVIBILE la provenienza di ogni misura FUTURA): `refs/measure/<run>`
+   piantata prima del run, oppure `head=` scritto DOPO l'ultimo amend.
+6. **Footprint**: nessuna leva nominata. Il falsificatore T_max di Leijen in
+   timebox; se non è misurato entro la sessione, **la leva arene si dichiara
+   CHIUSA** invece di slittare per la quarta volta.
 
 **Vincolo di grado**: il moltiplicatore del canale (§P1) viene da un profilo
 R=1 ed è SCREEN. Qualunque banda derivata da lì eredita quel grado, comprese
-quelle di `design96-confronto-piano-b.md`. Il cronometro fermo da due sessioni
-è il problema, non il numero.
+quelle di `design96-confronto-piano-b.md`. La voce 1 esiste per togliere
+questo vincolo, non per aggirarlo.
+
+**Debito ISCRITTO qui perché non evapori** (Hejlsberg A-AH-98-3 + team-catena):
+l'analisi di liveness usa oggi una cache con chiave per PUNTATORE
+(`zvalcensus.rs`), accettabile in sola misura e VIETATA in emissione; serve
+identità STRUTTURALE. E i buchi di soundness che il concilio ha nominato e che
+nessuna fixture prova ancora — canale cross-frame `current_frame_args`
+(Matsakis, Stogov), fallback di namespace su `extract` (Stogov, provato a
+macchina), arco di ri-lancio `EndFinally` (Hoare) — vanno chiusi PRIMA di
+qualunque emissione, non insieme.
 
 ### Dopo, per NOME (non «più avanti»)
 

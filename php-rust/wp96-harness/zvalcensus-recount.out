@@ -50,6 +50,21 @@ delta_would_take_safe_rc_vs_f2=-21
 delta_would_take_safe_str_vs_f2=-18
 delta_sites_safe_vs_f2=-6
 delta_slot_reads_rc_vs_f2=-14
+# A-TH-98 (Concilio WP-98, Hoare — REFUTAZIONE ACCOLTA): questo delta il
+# changeset NON PUO' produrlo. `slot_reads`/`slot_reads_rc` si contano al SITO
+# DI LETTURA e non dipendono dall'analisi di liveness: un delta li' e' RUMORE
+# DI SUITE, dello stesso segno e ordine dei -42 gia' documentati fra
+# zvalcensus-before.out e zvalcensus-f1.out. Ne segue che le attribuzioni
+# delta_would_take_safe*/delta_sites_safe qui sopra sono state scritte SENZA
+# controllare il pavimento di rumore: non sono attribuibili al solo changeset,
+# e vanno lette come «cambiamento osservato», non come «effetto delle rinunce
+# nuove». Per attribuirle davvero servirebbe una coppia A/A (stesso binario,
+# due run) che misuri il pavimento, e non e' stata fatta.
+# Cio' che NON dipende da questa correzione: `would_take`, `would_take_rc` e
+# `sites_movable` sono IDENTICI AL BYTE fra F1, F2 e questo riconteggio
+# (delta esattamente zero), quindi la conclusione «il fix di soundness non
+# cambia i conteggi F1 su questo corpus» resta in piedi; e P2 e' soddisfatta
+# con un margine che nessun rumore di questo ordine puo' spostare.
 verdetto-fix=IL FIX DI SOUNDNESS NON CAMBIA NESSUN CONTEGGIO F1 SU QUESTO CORPUS.
   Il difetto e' REALE — provato a macchina dalla fixture wp96-harness/fixtures/
   t4-first-op-def.php, dove would_take passa da 6 a 4 e sites_movable da 8 a 6 fra
