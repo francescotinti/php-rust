@@ -10,6 +10,22 @@
 # Il secondo argomento e' facoltativo: se c'e', si verifica anche il MORSO del
 # fix A-TH-97-1 (i contatori DEVONO cambiare fra pre e post, e l'output del
 # programma DEVE restare identico — la fase e' di sola misura).
+#
+# COME SI RICOSTRUISCE IL BINARIO PRE-FIX (un controllo la cui riproduzione non
+# e' scritta e' un controllo che scade). Il fix di liveness e' atterrato nel
+# commit «S-96.0 A-ZV2 passo 1+2»; il commit PRECEDENTE (l'apparato
+# A-SK-93..97) e' quindi lo stato pre-fix:
+#
+#   git worktree add --detach /tmp/phpr-prefix <commit-apparato-A-SK-93..97>
+#   cd /tmp/phpr-prefix/php-rust
+#   cargo build --release --features zval-census \
+#       --target-dir "/Volumes/Extreme Pro/Claude/phpr-pre-target"
+#
+# Il binario cosi' ottenuto in S-96.0 aveva sha e318fbfc248a8e35, e il post-fix
+# 3e0e861c5fdbcb9b. Le due sha NON sono un contratto (dipendono dal toolchain e
+# da tutto cio' che sta nel mezzo): il contratto e' che i contatori di t4
+# DIFFERISCANO. Se un giorno coincidono, questo script FALLISCE, ed e' quello
+# che deve fare.
 set -u
 export PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin:$PATH
 H="$(cd -P "$(dirname -- "$0")" && pwd -P)"
