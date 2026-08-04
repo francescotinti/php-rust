@@ -96,8 +96,12 @@ binario cambia prima della misura, la predizione perde il suo «prima»).
 
 ### BACKLOG PER NOME (non «più avanti»)
 
-Regresso del **media footprint** (nominato in S-94.0, NON attribuito:
-serve un canale, non una congettura) · A-SK-92-PROBE (grado rc=65) ·
+Il «regresso» del media footprint è **RITIRATO** (era la gamba oracle) ·
+A-AH-78/79 (writer ancorato al commit, BREV fail-closed) · A-MS-65/66
+(eprintln! panicante nel GlobalAlloc, drop-guard sul flag di rientranza) ·
+A-DS-96-1/2/3 (registry unica dei wrapper: `is_builtin_scheme` ne rivendica
+12 mentre la lista ne dichiara 5 — incoerenza fra tabelle) · A-PP-83
+(battery61 non resetta lo stato fra le due gambe) · A-SK-92-PROBE (grado rc=65) ·
 A-AH-70/74/75 (ancore ledger) · A-AH-73 (HIR plain-data, precond. leva
 #2) · audit A-BG-72 (derivate m90 che consumarono malloc_huge come
 retained) · debito WP-94 non-A (ancoraggi campo, perimetro root, sigilli
@@ -109,15 +113,25 @@ E1→E3, checker LSP D1→D4) · residui A-DS51 fasi 2-3 ·
 1. Slope attribuito per NOME — **PARZIALE** (invariato). 2. Leva applicata
 e misurata o refutazione motivata — **la leva per-file è ora eseguibile**.
 3. Parità intatta + ricevuta pin — **APERTA** (il pin php-server non
-torna). 4. Apparato CONGELATO fuori dalla quota. 5. Batteria WordPress
-riproducibile — ✅ **SODDISFATTO** in S-94.0.
+torna; e Pedersen osserva che anche il pin phpr è uno sha di CONTENUTO
+senza provenienza: la stessa malattia non è esclusa). 4. Apparato
+CONGELATO fuori dalla quota. 5. Batteria WordPress riproducibile —
+**SODDISFATTO con riserva**: Hoare e Stogov chiedono un predicato POSITIVO
+(la batteria passò anche con login fallito su entrambi i lati) e il
+reset di stato fra le gambe; senza bite-test il criterio 5 torna PARZIALE
+(KS-DS-96-3).
 
 **NON riproporre**: tutti i NON-riproporre WP-83..95 restano; in più —
 «sanificare la shell e credere sanificati i figli»; «un dente che non
 fallisce sta mordendo» (può essere vacuo: pretendere l'rc esatto);
 «un predicato che dipende da ciò che introduce»; «due lati identici =
 confronto valido» (possono fallire entrambi); «il rc del runner come
-giudice di una coppia»; «citare il budget corpus in una prosa».
+giudice di una coppia»; «citare il budget corpus in una prosa»;
+**«leggere un miglioramento in un rapporto»** — un rapporto peggiora anche
+quando il denominatore migliora: il claim si fa sulla GAMBA, mai sulla
+frazione (Bak/Hoare/Gregg, WP-96); **«provare l'esistenza dal vuoto di una
+pipe»** — sha256 del vuoto è e3b0c44298fc1c14 e la guardia non scatta mai
+(Hejlsberg, misurato).
 
 ---
 **Chiusura**: 2026-08-04. Apertura/chiusura sessioni = skill
