@@ -1,4 +1,4 @@
-# WP_SESSION_94.md — S-94.0 "IL FALSIFICATORE CHE HA MORSO TRE VOLTE CHI LO SCRIVEVA"
+# WP_SESSION_94.md — S-94.0 "IL FALSIFICATORE CHE HA MORSO TRE VOLTE CHI LO SCRIVEVA, E IL CONCILIO CHE HA MORSO LA QUARTA"
 
 **In una frase**: abbiamo rimesso in funzione il metro che mancava da otto
 sessioni — misurando di nuovo, nella stessa sera, quanto il nostro PHP
@@ -34,10 +34,18 @@ full e battery61 girano sul pin baseline) · php-server **f8f4295a1dcdb627**
 
 | metrica | rapporto phpr/oracle | lettura (le bande storiche vivono in GAP_TREND) |
 |---|---|---|
-| media group, user CPU | 2,639× | poco peggio del riferimento |
-| media group, peak footprint | 3,381× | **REGRESSO** sul riferimento |
-| full suite, master CPU | 1,873× | **MEGLIO**, il piu basso mai registrato |
-| full suite, peak footprint | 2,673× (1993459800 B = 1901,11 MiB) | **MEGLIO** del riferimento |
+| media group, user CPU | 2,639× | fotografia di stasera |
+| media group, peak footprint | 3,381× | fotografia di stasera |
+| full suite, master CPU | 1,873× (ricetta storica: 2,474×) | fotografia di stasera |
+| full suite, peak footprint | 2,673× (1993459800 B = 1901,11 MiB) | fotografia di stasera |
+
+⚠️ **SANATORIA (Concilio WP-96 — Bak, Hoare, Gregg in convergenza
+indipendente)**: le letture «MEGLIO/REGRESSO» della prima stesura sono
+**RITIRATE**. La ricetta storica divide per un oracle CONGELATO a 5:39
+(838,59/339 = 2,474, non 1,873); sul media il rapporto peggiora perche
+l'ORACLE e sceso, non perche phpr sia cresciuto. **Incrociando i raw con le
+sessioni precedenti, la gamba phpr e PIATTA su ogni asse.** Questa coppia
+NON mostra movimento di phpr: mostra che il metro funziona di nuovo.
 
 Conteggi **identici** sui due lati (media 762/1912/52; full 30472 test e
 4558029 assertions). Unica divergenza phpr per NOME:
@@ -46,8 +54,8 @@ Conteggi **identici** sui due lati (media 762/1912/52; full 30472 test e
 (`test_search_hierarchical_pages_first_page`) fallisce **anche
 sull'oracle**: non è nostro.
 
-**Il regresso del media footprint è nominato e NON attribuito**: attribuirlo
-richiede un canale di misura, e questa sessione non l'ha eseguito.
+**Non e affermato alcun miglioramento ne alcun regresso di phpr**: per un
+confronto con le bande storiche serve un denominatore omogeneo (S-95.0).
 
 ## 🔵 Scoperte
 
