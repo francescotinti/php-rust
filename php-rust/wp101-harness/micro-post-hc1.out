@@ -1,0 +1,45 @@
+micro-baseline: il rapporto phpr/oracle PER CATEGORIA (la spina dorsale, S-97.0)
+grade=VERDICT  # R=5 ripetizioni per lato, mediana E spread pubblicati; l'effetto misurato
+  e' di ordine 10x, cioe' tre ordini di grandezza sopra la risoluzione del cronometro
+formato=ascii-nudo
+oracle=8.5.7 jit=disable
+phpr=48a5d4384970d8ff
+ripetizioni=5
+metodo=user CPU di /usr/bin/time -p, AL NETTO del pavimento di avvio misurato
+  sullo stesso binario con uno script vuoto (i due pavimenti sono DIVERSI)
+pavimento_oracle_s=0.05
+pavimento_phpr_s=0.02
+
+arith_oracle_netto_s=0.43
+arith_phpr_netto_s=5.25
+rapporto_arith=12.2  [derivata: companion 5.25/0.43]
+arith_spread_oracle_s=0.00  arith_spread_phpr_s=0.03
+prop_oracle_netto_s=0.42
+prop_phpr_netto_s=4.83
+rapporto_prop=11.5  [derivata: companion 4.83/0.42]
+prop_spread_oracle_s=0.00  prop_spread_phpr_s=0.03
+calls_oracle_netto_s=0.45
+calls_phpr_netto_s=3.27
+rapporto_calls=7.3  [derivata: companion 3.27/0.45]
+calls_spread_oracle_s=0.02  calls_spread_phpr_s=0.01
+str_oracle_netto_s=0.15
+str_phpr_netto_s=1.05
+rapporto_str=7.0  [derivata: companion 1.05/0.15]
+str_spread_oracle_s=0.01  str_spread_phpr_s=0.02
+arr_oracle_netto_s=0.29
+arr_phpr_netto_s=1.26
+rapporto_arr=4.3  [derivata: companion 1.26/0.29]
+arr_spread_oracle_s=0.02  arr_spread_phpr_s=0.01
+re_oracle_netto_s=0.37
+re_phpr_netto_s=1.31
+rapporto_re=3.5  [derivata: companion 1.31/0.37]
+re_spread_oracle_s=0.01  re_spread_phpr_s=0.03
+
+# ---- VERDETTO di CHIUSURA S-101 (binario CUMULATIVO H-C1a+b, HEAD c7815c2) ----
+# finestra 02:0x, spread <=0.03 su tutte le categorie (macchina quieta)
+# pre-H-C1 (stessa sera, stesso strumento): arith 12.7 prop 12.4 calls 7.9
+#   str 7.1 arr 4.6 re 3.6  =>  post: 12.2 / 11.5 / 7.3 / 7.0 / 4.3 / 3.5
+# coerenza: prop 4.83 netto == braccio A dell'A/B H-C1b (4.81, +-0.02);
+# la guardia scalari H-C1a morde TRASVERSALMENTE (calls -0.6: 5 gc_note/iter
+# scalari censite in hd-census-primo.out; arith -0.5; arr -0.3) — il move del
+# ricevitore morde solo prop, com'era atteso dal perimetro.
