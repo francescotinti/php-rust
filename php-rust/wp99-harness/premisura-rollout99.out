@@ -1,0 +1,84 @@
+premisura-rollout99: S-99.0 punto 4 — la pre-misura del rollout, SOLO misura (A-ST-100-1 + A-BA-100-1 + baseline flag-on; il criterio del rollout nasce QUI, mai da D=6,07)
+grade=VERDICT  # tre gambe: controfattuale statico del percorso registro + build intermedia di decomposizione + baseline flag-on stessa finestra; nessuna riga del rollout scritta
+formato=ascii-nudo
+sessione=S-99.0 (2026-08-05 pomeriggio)
+binario_parita=4e268c3f61e6573d (C2, INTATTO: build INT1 in target-dir separato)
+oracle=8.5.7 brew (gamba oracle fresca in micro-rebaseline99.out, stessa finestra)
+
+# ---- GAMBA 4c: BASELINE FLAG-ON del giudice registro (R=5, macchina
+# ---- quieta, due processi con env fissato allo spawn — KS-PE-99-2) ----
+pavimento_off=0.02  pavimento_on=0.02
+add_off_s=4.68 4.68 4.69 4.68 4.66      # mediana 4.68, netto 4.66
+add_on_s=3.55 3.55 3.54 3.56 3.56      # mediana 3.55, netto 3.53
+arith_off_s=7.49 7.45 7.46 7.46 7.44   # mediana 7.46, netto 7.44
+arith_on_s=5.49 5.47 5.44 5.43 5.46    # mediana 5.46, netto 5.44
+# La gamba flag-on e' INVARIATA da S-97.1 (arith on 5.43 -> 5.44: l'emissione
+# sotto PHPR_REG_LOWER e' davvero bit-identica, H-B2 non la tocca); la
+# flag-off e' scesa con H-B2 (7.83 -> 7.44). Il vantaggio flag-on su arith
+# oggi: -26.9% (era -30.7% su baseline pre-H-B2. A-GR-100-1: MISURATI
+# INSIEME per la prima volta dopo H-B2 — la composizione flag-off/flag-on
+# non e' piu' nominale ma fotografata).
+rapporto_arith_flag_on=12.7  [derivata: companion 5.44/0.43, oracle stessa finestra]
+
+# ---- GAMBA 4a: CONTROFATTUALE STATICO del percorso registro (A-ST-100-1) ----
+# Corpo BinarySS (run.rs:1004-1028, letto a HEAD; SSDst :1029-1048, SC :1049+):
+#   hit path (Long,Long): 2 borrow di slot con bounds check + 2 guardie
+#   matches!(Undef|Ref) + binary_fast #[inline(always)] SU PRESTITI
+#   (zero call, zero marshalling, zero pop) + Option + push del risultato
+#   (SS) / reg_store_slot (SSDst).
+# Che cosa rimuoverebbe una specializzazione Add (BinaryAddSS):
+#   SOLO il carico del payload BinOp + il `match b` dentro binary_fast.
+#   Il ramo e' COSTANTE per sito (lo stesso ip porta sempre lo stesso b):
+#   pasto per il predittore indiretto, verifica fuori dal cammino del
+#   valore — la STESSA classe di istruzioni che M1 ha mostrato GRATIS su
+#   questo core OoO (lezione S-98: mai criteri dal conteggio senza cammino
+#   critico).
+predizione_D_registro_ns_occ=0.0  banda=[0, 0.5]
+# La banda e' sotto 2x il pavimento della sonda (1.0 ns, KS-BA-100-2):
+# qualunque esito futuro si pubblica come BANDA. Criterio pre-registrato
+# per un eventuale rollout nelle forme registro (KS-MA-100-1/KS-BA-100-1
+# soddisfatti: derivato dal percorso REGISTRO, non da D):
+#   CADE A TAVOLINO se una sonda/misura preliminare non mostra D_registro
+#   >= 0.7 ns/occ — e la predizione statica dice che NON lo mostrera'.
+verdetto_4a=La specializzazione Add DENTRO BinarySS/SC/Dst ha guadagno
+  previsto ~ZERO: il plumbing che H-B2 rimuove sul percorso pila (call +
+  marshalling + pop/push) NELLE FORME REGISTRO NON ESISTE GIA'. Il
+  "compone col -30.7%" via specializzazione-nei-corpi-registro e' REFUTATO
+  come predizione; la composizione vera resta: (a) flag-off, rollout
+  Sub/Mul/cmp sul percorso PILA (meccanismo provato, vedi 4b); (b) flag-on,
+  il residuo ~9.9 ns/op vive altrove (slots/store/push/corpi non-Binary).
+
+# ---- GAMBA 4b: BUILD INTERMEDIA DI DECOMPOSIZIONE DI D (A-BA-100-1) ----
+# INT1 = albero HEAD + patch SOLO-MISURA sul handler BinaryAdd: stesso
+# inline-add ma traffico di pila PIENO (pop rhs, pop lhs, push res) al posto
+# dell'in-place. Patch: wp99-harness/int1-decomposition.patch (albero
+# RIPRISTINATO dopo la build; smoke semantico INT1==pin byte-identico su
+# overflow/coercizioni/union). Build in target-dir separato: il binario di
+# parita' non e' MAI stato toccato.
+#   C0   = 0dd98ebbb7eb2d96 (stash phpr-s97-ha1, Binary(Add) generico)
+#   INT1 = 7c8053a1144f039c (inline-add, pop/pop/push)
+#   C2   = 4e268c3f61e6573d (pin: inline-add, pop + in-place)
+# add.php (3 occ/iter x 50M), R=5, stessa finestra, netto 0.02:
+add_C0_s=5.62 5.64 5.63 5.62 5.61     # mediana 5.62, netto 5.60
+add_INT1_s=5.10 5.08 5.06 5.09 5.05   # mediana 5.08, netto 5.06
+add_C2_s=4.68 4.68 4.68 4.68 4.68     # mediana 4.68, netto 4.66
+D_stessa_finestra_ns_occ=6.27   [derivata: companion (5.60-4.66)/(3*50000000)*1e9]  # S-98: 6.07, deriva in banda
+D_call_marshalling_ns_occ=3.60  [derivata: companion (5.60-5.06)/(3*50000000)*1e9]  # (i)+(ii)+match BinOp = 57%
+D_traffico_vec_ns_occ=2.67      [derivata: companion (5.06-4.66)/(3*50000000)*1e9]  # (iii) pop lhs+push vs in-place = 43%
+# La stima di Bak (quota call/marshalling 50-70%) e' CONFERMATA a 57%.
+# Nota di composizione: le due meta' spariscono INSIEME solo nella forma
+# in-place; un rollout Sub/Mul/cmp sul percorso pila eredita il MECCANISMO
+# (~6 ns/occ dove la guardia e' sempre-hit) ma OGNI occorrenza porta il suo
+# criterio pre-registrato dal SUO controfattuale (KS-BA-100-1), con la
+# frequenza dell'op nel giudice a scalare l'atteso.
+
+verdetto=PRE-MISURA COMPLETA. Il criterio del rollout e' ora DERIVABILE e
+  la direzione e' netta: (1) forme registro = predizione ZERO, banda
+  [0,0.5] ns/occ — un rollout li' cadrebbe a tavolino sul criterio
+  pre-registrato; (2) percorso pila = meccanismo decomposto e confermato
+  (57% call/marshalling + 43% traffico Vec), Sub/Mul/cmp int-int sono le
+  occorrenze candidate CON criterio proprio per occorrenza; (3) il
+  residuo flag-on (9.9 ns/op su arith) NON e' aggredibile con la
+  specializzazione Binary: prossime ipotesi sui corpi non-Binary e
+  sull'addressing degli slot (H-C prop 13.8 e H-D calls 8.6 rianimate
+  dalla ri-baseline). Nessuna riga del rollout scritta (ordine rispettato).

@@ -1,0 +1,37 @@
+diff --git a/php-rust/crates/php-runtime/src/vm/run.rs b/php-rust/crates/php-runtime/src/vm/run.rs
+index 7118959..3824c1b 100644
+--- a/php-rust/crates/php-runtime/src/vm/run.rs
++++ b/php-rust/crates/php-runtime/src/vm/run.rs
+@@ -949,9 +949,14 @@ impl<'m> super::Vm<'m> {
+                     // from `binary_fast`); any miss re-enters the generic
+                     // funnel — same diags, overloads and errors by
+                     // construction.
++                    // INT1 (S-99.0, A-BA-100-1, build di SOLA MISURA — mai
++                    // spedita): stesso inline-add dello spedito ma con
++                    // traffico di pila PIENO (pop rhs, pop lhs, push res):
++                    // C0-INT1 = call+marshalling; INT1-C2 = in-place vs Vec.
+                     let rhs = self.frames[top].stack.pop().expect("BinaryAdd rhs");
+-                    let fast = match (self.frames[top].stack.last(), &rhs) {
+-                        (Some(Zval::Long(l)), Zval::Long(r)) => Some((*l, *r)),
++                    let lhs = self.frames[top].stack.pop().expect("BinaryAdd lhs");
++                    let fast = match (&lhs, &rhs) {
++                        (Zval::Long(l), Zval::Long(r)) => Some((*l, *r)),
+                         _ => None,
+                     };
+                     match fast {
+@@ -960,14 +965,9 @@ impl<'m> super::Vm<'m> {
+                                 Some(s) => Zval::Long(s),
+                                 None => Zval::Double(l as f64 + r as f64),
+                             };
+-                            *self.frames[top]
+-                                .stack
+-                                .last_mut()
+-                                .expect("BinaryAdd lhs") = v;
++                            self.frames[top].stack.push(v);
+                         }
+                         None => {
+-                            let lhs =
+-                                self.frames[top].stack.pop().expect("BinaryAdd lhs");
+                             let r = self.binary_value_ab(BinOp::Add, lhs, rhs)?;
+                             self.frames[top].stack.push(r);
+                         }
