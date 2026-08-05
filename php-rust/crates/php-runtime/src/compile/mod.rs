@@ -743,6 +743,18 @@ impl<'a> FnCompiler<'a> {
         at
     }
 
+    /// Emit a binary operator, specializing `+` into [`Op::BinaryAdd`]
+    /// (H-B2, S-98.0) — but ONLY when the register-lowering pass is off:
+    /// its windows match `Op::Binary(Add)` and must keep fusing it (the
+    /// mode already keys the unit cache, so the two emissions never mix).
+    fn emit_binary(&mut self, op: crate::hir::BinOp) -> Addr {
+        if op == crate::hir::BinOp::Add && !reg_lower::enabled() {
+            self.emit(Op::BinaryAdd)
+        } else {
+            self.emit(Op::Binary(op))
+        }
+    }
+
     /// The address the next emitted op will occupy.
     fn here(&self) -> Addr {
         self.ops.len() as Addr

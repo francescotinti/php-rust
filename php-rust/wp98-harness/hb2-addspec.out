@@ -1,0 +1,145 @@
+hb2-addspec: H-B2 (ASSE, ordine Concilio WP-99 punto 3) — Binary Add int-int deciso all'EMISSIONE, guardia contata
+grade=PRE-REGISTRAZIONE (criterio scritto PRIMA del codice; le misure si aggiungono sotto, stessa sera)
+formato=ascii-nudo
+sessione=S-98.0 (2026-08-05)
+flag_stato=misura FLAG-OFF (la strada di parita'); il flag-on NON cambia (v. FORMA)
+binario_baseline=0dd98ebbb7eb2d96 (parita', HEAD 48b1763)
+
+# ---- IPOTESI (H-B2, NEXT_SESSION) ----
+# PHP 8 genera handler specializzati per opcode x tipo; phpr ha UN braccio
+# generico che discrimina TUTTO a runtime. Specializzo UN opcode — `+` —
+# decidendolo all'emissione, e misuro dove il meccanismo DOMINA (regola di
+# metodo n.1): micro `add` (3 Binary(Add)/iterazione), con `arith` come
+# collaterale (1 Add/iter su 19 op: diluito per costruzione).
+
+# ---- FORMA (vincoli KS-ST-99-3 + protezione del -30,7%) ----
+# - nuovo opcode BinaryAdd SENZA payload, emesso al posto di Binary(Add)
+#   SOLO quando il pass registro e' OFF (reg_lower::enabled() e' gia' nella
+#   chiave della unit-cache: nessun ibrido possibile). Sotto PHPR_REG_LOWER
+#   l'emissione resta IDENTICA a oggi: le finestre di reg_lower fondono
+#   Binary(Add) e il -30,7% non e' toccato; il pass NON evolve (B1 del
+#   team-giudice non blocca questo passo).
+# - handler: pop rhs; GUARDIA sui tag (Long,Long) -> checked_add con
+#   promozione overflow->Double IDENTICA a binary_fast, scrittura in-place
+#   sulla cima della pila; MISS -> pop lhs e fallback INTEGRALE a
+#   binary_value_ab(Add, lhs, rhs) — stesso funnel, stessi diags, stessi
+#   overload GMP/Number, per costruzione.
+# - la GUARDIA e' CONTATA (KS-ST-99-3): D_add si misura dal tempo TOTALE,
+#   guardia inclusa; nei micro la guardia e' sempre-hit per costruzione
+#   (nessun overflow: s < 4e15).
+
+# ---- CRITERIO DI CADUTA (scritto PRIMA, derivato dal controfattuale statico) ----
+# Che cosa rimuove la specializzazione, per occorrenza: il carico+match del
+# payload BinOp, la chiamata `bl binary_value_ab` con DUE Zval da 24B
+# passati per valore (marshalling ~48B: catene store->load con latenza di
+# forwarding 4-5 cicli — la classe NON gratis, a differenza del preambolo
+# di M1), il tag-check Option/Result. Tetto statico: ~1,4-2,8 ns/occ se le
+# catene di forwarding legano; ~0 se l'OoO nasconde anche queste (lezione
+# M1). Criterio, stile A-BA-99-1 (meta' del tetto basso):
+#   CADE se D_add < 0,7 ns per occorrenza specializzata
+#     (= calo di add.php < 0,105 s = 1,9%; add ha 3 occ/iter x 50M).
+#   NULLO ogni claim < 3x lo spread relativo della coppia (KS-GR-99-2):
+#     alla misura si usano R=5 per lato e si pubblica lo spread.
+#   Se cade: il codice NON si spedisce (via stash nel harness), il verdetto
+#     resta, e l'attribuzione del costo si sposta sui CORPI non-plumbing
+#     (traffico di pila Zval / addressing) — che e' il dominio delle forme
+#     registro gia' dormienti.
+# Gate di spedizione (se il criterio passa): cargo test --release TUTTI
+# verdi + corpus Zend per NOME identico (1418) + census flag-off invariato
+# nel CONTEGGIO TOTALE (1600020 add_small / 1900020 arith_small: la
+# sostituzione 1:1 non cambia il conteggio) + BinaryAdd PRESENTE nel censo
+# nuovo (controllo positivo che la forgia morde).
+
+# ---- BASELINE (binario 0dd98ebbb7eb2d96, R=3, user CPU, netto del pavimento 0,02) ----
+census_add_small_flag_off=1600020   # 16 op/iter: 5 LoadVar, 3 Binary(Add), 2 Pop, Sweep, Dup, StoreSlot, CmpJmpConst, IncDecSlot, Jump
+add_phpr_s=5.75 5.65 5.66           # mediana 5.66, spread 0.10 (primo run caldo di avvio)
+add_phpr_netto_s=5.64
+ns_per_op_add=7.05   [derivata: companion 5.64/(50000000*16/1e9)]
+add_oracle_s=0.44 0.43 0.44         # netto 0.39
+rapporto_add=14.5    [derivata: companion 5.64/0.39]
+arith_phpr_s=7.92 7.90 7.94         # mediana 7.90 netto 7.88
+deriva_same_binary_vs_pin_pct=0.6   [derivata: companion (7.88-7.83)/7.83]  # pin ha1-registers 7.83, stesso binario: deriva termica/ambiente dichiarata (A-GR-99-4)
+
+# ---- MISURE POST-BUILD (stessa sera, macchina quieta; COPPIA rimisurata
+# ---- da zero su ENTRAMBI i binari nella stessa finestra) ----
+binario_hb2=1e752c74c237ec4c
+binario_baseline_stash=/Volumes/Extreme Pro/Claude/phpr-old-target/release/phpr-s97-ha1 (0dd98ebbb7eb2d96, verificato)
+# ⚠️ IGIENE: una prima serie era girata CON la build census viva in
+# background (bimodale 4,8/6,5) ed e' stata SCARTATA; tutte le cifre qui
+# sotto sono a macchina quieta, run sequenziali. Lezione ribadita: mai
+# misurare con una build concorrente.
+
+# GIUDICE: micro add (3 occorrenze/iter x 50M, R=5 per lato, netto 0,02)
+add_base_s=5.63 5.65 5.70 5.69 5.65     # mediana 5.65, netto 5.63, spread 0.07
+add_hb2_s=4.74 4.77 4.73 4.72 4.85      # mediana 4.74, netto 4.72, spread 0.13
+calo_add_pct=16.2   [derivata: companion (5.63-4.72)/5.63]
+D_add_ns_per_occorrenza=6.07  [derivata: companion (5.63-4.72)/(3*50000000)*1e9]
+criterio=0.7 ns/occ -> SUPERATO (8,7x la soglia); claim 0,91 s > 3x spread 0,39 (KS-GR-99-2: VALIDO)
+ns_per_op_add_dopo=5.90   [derivata: companion 4.72/(50000000*16/1e9)]  # era 7.04
+rapporto_add_dopo=12.1    [derivata: companion 4.72/0.39]               # era 14.5
+
+# COLLATERALE: arith (1 occorrenza/iter, R=5 per lato)
+arith_base_s=7.94 7.92 7.89 7.88 7.93   # mediana 7.92, netto 7.90, spread 0.06
+arith_hb2_s=7.58 7.51 7.50 7.66 7.50    # mediana 7.51, netto 7.49, spread 0.16 (outlier 7.66)
+calo_arith_banda_pct=[3,5]   # nominale -5,2%; Δ 0,41 < 3x spread 0,48 => si
+# riporta come BANDA, non come claim (KS-GR-99-2). Il rapporto arith scende
+# nominalmente 18,1 -> 17,1 (flag-off; oracle non rimisurato, pavimenti noti).
+
+# DERIVA INTER-BUILD (noop: ZERO Add per costruzione, stesso attese nei due binari)
+noop_base_s=6.25 6.25 6.30              # netto 6.23
+noop_hb2_s=6.28 6.28 6.36               # netto 6.26
+deriva_inter_build_pct=0.5   [derivata: companion (6.26-6.23)/6.23]  # dentro la nota 0,6% (A-GR-99-4)
+
+# ---- CONTROLLI POSITIVI (la forgia morde) ----
+# binario: strings | grep BinaryAdd = 3 (>0)
+census_add_small_dopo=1600020 totale IDENTICO; BinaryAdd=300000 (3/iter), bigrammi LoadVar->BinaryAdd 300000
+census_arith_small_dopo=1900020 totale IDENTICO; BinaryAdd=100000 (Swap->BinaryAdd = coda del +=), Binary=300000 (Mul,Shr,Sub)
+census_flag_on_arith_small=1100019 IDENTICO al pin, ZERO BinaryAdd: l'emissione
+#   sotto PHPR_REG_LOWER e' bit-identica, il -30,7% non e' toccato.
+# smoke semantico: PHP_INT_MAX+1 -> float, "2"+3, 2.5+1, [1]+[2] (union via
+#   fallback), concat con (1+2): output IDENTICO all'oracle; i 5 micro small
+#   byte-identici all'oracle.
+
+# ---- GATE DI SPEDIZIONE ----
+# Catena binari DICHIARATA: 1e752c74c237ec4c = binario MISURATO (handler+
+# emissione H-B2); 39e0a3594c748db0 = binario FINALE spedito (in piu': il
+# matcher del pass vede BinaryAdd come Binary(Add) — bin_op_of — che NON
+# tocca il percorso flag-off a runtime; il pass gira solo flag-on).
+# La batteria aveva COLTO il disallineamento di pipeline alla prima corsa:
+# stage2v3_rewrites_hot_windows compila senza flag (emissione BinaryAdd) e
+# applica il pass A MANO -> la finestra Binary(Add) non matchava. E' il
+# buco RC-1 di Hejlsberg dal lato opposto; chiuso con bin_op_of nel matcher
+# + test d'integrazione al funnel VERO (reg_lower_funnel.rs, B1+M3) che
+# spawna il binario con PHPR_REG_LOWER=1 e PRETENDE BinarySC/CmpJmpSC/
+# BinaryDst nel dump del {main} — piu' M5: il test flag-off ora FALLISCE
+# rumorosamente se l'ambiente esporta il flag.
+# ⭐ seconda occorrenza in sessione della lezione S-97.1: un `| tail` aveva
+# mascherato l'exit della prima corsa di batteria (2 FAIL letti dal file).
+cargo_test_release=1722 passati, 0 falliti, exit 0 (dopo bin_op_of + aggiornamento
+#   del test census: BinaryAdd chiude la tabella, N_OPS 185->186)
+corpus_zend_flag_off=1418 fail, insieme dei NOMI IDENTICO alla lista tracked
+#   wp82-harness/p2-parity/corpus82p2.fails (cmp byte-uguale dopo sort;
+#   catena di identita' del set wp82->ha2->ha1 verificata a ogni anello).
+#   Totali 5305 / 2649 / 1418 / 1238 = pin invariato. Evidenza:
+#   wp98-harness/evidence/corpus-hb2-flagoff.fails.
+# ⭐ il primo confronto usciva TUTTO diverso: awk '{print $1}' troncava i
+#   path allo SPAZIO di "Extreme Pro" (lezione WP-96 ribadita: i path del
+#   progetto contengono spazi; estrazione rifatta con sed).
+
+verdetto=H-B2 CONFERMATA E SPEDITA sul criterio pre-registrato: D_add=6,07
+  ns/occorrenza (soglia 0,7), parita' flag-off per NOME intatta, flag-on
+  bit-identico. La specializzazione per tipo e' la prima leva che MORDE il
+  fattore costo-per-opcode: il plumbing generico (call + marshalling Zval +
+  pop/push) vale ~6 ns su ~8-10 del corpo di un Binary. Prossime occorrenze
+  della stessa famiglia (Sub/Mul int-int, la coda AssignOp fusa) COMPONGONO
+  sopra il -30,7% flag-on per la promozione.
+corpus_zend_flag_on=(vedi sotto, M4)
+
+verdetto_provvisorio=H-B2 SUPERA il suo criterio sul giudice (D_add 6,07
+  ns/occ >= 0,7): la specializzazione per tipo PAGA — 6 ns/occorrenza e' il
+  costo del solo PLUMBING generico (call binary_value/binary_value_ab con
+  due Zval da 24B per valore + pop/push contro scrittura in-place + match
+  BinOp). Assieme a M1 (preambolo ~0) l'attribuzione del fattore ~8 sul
+  costo per opcode e' ora: CORPI, e dentro i corpi il plumbing di chiamata
+  e il traffico di pila — esattamente la sede che H-B2 doveva provare.
+  Spedizione condizionata ai gate qui sotto.

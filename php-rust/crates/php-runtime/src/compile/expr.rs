@@ -100,7 +100,7 @@ impl<'a> super::FnCompiler<'a> {
                 } else {
                     self.emit(Op::LoadSlot(*slot));
                     self.emit(Op::Swap); // [target, rhs]
-                    self.emit(Op::Binary(*op));
+                    self.emit_binary(*op);
                     self.emit(Op::Dup);
                     self.emit(Op::StoreSlot(*slot));
                 }
@@ -157,7 +157,7 @@ impl<'a> super::FnCompiler<'a> {
                 }
                 self.expr(a)?;
                 self.expr(b)?;
-                self.emit(Op::Binary(*op));
+                self.emit_binary(*op);
             }
             ExprKind::Unary(op, a) => {
                 self.expr(a)?;

@@ -181,6 +181,19 @@ enum BinKind {
     Stack,
 }
 
+/// The binary operator an op carries, seeing through the emission-time
+/// `+` specialization (H-B2): `BinaryAdd` IS `Binary(Add)` by construction,
+/// so the windows fuse both spellings — the production flag-on pipeline
+/// only ever emits `Binary(Add)`, but the test battery (and any future
+/// mixed pipeline) compiles with the specialized emission.
+fn bin_op_of(op: &Op) -> Option<BinOp> {
+    match op {
+        Op::Binary(b) => Some(*b),
+        Op::BinaryAdd => Some(BinOp::Add),
+        _ => None,
+    }
+}
+
 /// Recognise the longest fusable window starting at `i`; `(op, width)` —
 /// width 1 with the original op when nothing fuses.
 fn fuse_window(f: &Func, blocked: &[bool], i: usize) -> (Op, usize) {
@@ -192,8 +205,10 @@ fn fuse_window(f: &Func, blocked: &[bool], i: usize) -> (Op, usize) {
         if free(i + 1) && free(i + 2) {
             // [LoadVar, LoadVar, Binary|CmpJmp]
             if let Some(b) = fold_slot(f, i + 1) {
+                if let Some(op) = bin_op_of(&f.ops[i + 2]) {
+                    return bin_dst(f, &free, i, 3, BinKind::SS(a, b), op);
+                }
                 match &f.ops[i + 2] {
-                    Op::Binary(op) => return bin_dst(f, &free, i, 3, BinKind::SS(a, b), *op),
                     Op::CmpJmp { op, addr, when } => {
                         return (
                             Op::CmpJmpSS { op: *op, l: a, r: b, addr: *addr, when: *when },
@@ -205,8 +220,8 @@ fn fuse_window(f: &Func, blocked: &[bool], i: usize) -> (Op, usize) {
             }
             // [LoadVar, PushConst, Binary]
             if let Some(c) = fold_const(f, i + 1) {
-                if let Op::Binary(op) = &f.ops[i + 2] {
-                    return bin_dst(f, &free, i, 3, BinKind::SC(a, c), *op);
+                if let Some(op) = bin_op_of(&f.ops[i + 2]) {
+                    return bin_dst(f, &free, i, 3, BinKind::SC(a, c), op);
                 }
             }
         }
@@ -237,8 +252,8 @@ fn fuse_window(f: &Func, blocked: &[bool], i: usize) -> (Op, usize) {
     if let Some(c) = fold_const(f, i) {
         if free(i + 1) && free(i + 2) {
             if let Some(a) = fold_slot(f, i + 1) {
-                if let Op::Binary(op) = &f.ops[i + 2] {
-                    if let Some(m) = mirror_cmp(*op) {
+                if let Some(op) = bin_op_of(&f.ops[i + 2]) {
+                    if let Some(m) = mirror_cmp(op) {
                         return bin_dst(f, &free, i, 3, BinKind::SC(a, c), m);
                     }
                 }
@@ -246,8 +261,8 @@ fn fuse_window(f: &Func, blocked: &[bool], i: usize) -> (Op, usize) {
         }
     }
     // Bare Binary: wins only with an assign-and-discard tail.
-    if let Op::Binary(op) = &f.ops[i] {
-        return bin_dst(f, &free, i, 1, BinKind::Stack, *op);
+    if let Some(op) = bin_op_of(&f.ops[i]) {
+        return bin_dst(f, &free, i, 1, BinKind::Stack, op);
     }
     (f.ops[i].clone(), 1)
 }
@@ -576,9 +591,14 @@ mod tests {
     /// stays byte-identical to stage 1 — proven end-to-end by the dump diff).
     #[test]
     fn stage2v3_flag_off_emits_no_register_forms() {
-        if enabled() {
-            return; // an exported PHPR_REG_LOWER would invert the premise
-        }
+        // M5 (A-KL-99-5): an exported PHPR_REG_LOWER inverts the premise of
+        // every flag-off test in this battery — fail LOUDLY instead of
+        // skipping in silence and letting a green run lie.
+        assert!(
+            !enabled(),
+            "PHPR_REG_LOWER is exported in this environment: the flag-off \
+             battery premise is inverted — unset it and re-run"
+        );
         let m = compile(br#"<?php function f($a,$b){ $c=$a+$b; if($c>3){$c=$c*2;} return $c; } echo f(1,2);"#);
         for f in all_funcs(&m) {
             assert_eq!(f.max_temps, 0);

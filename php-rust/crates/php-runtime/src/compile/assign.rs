@@ -958,7 +958,7 @@ impl<'a> super::FnCompiler<'a> {
             self.emit(Op::Swap); // [obj, rhs, obj]
             self.emit(Op::PropGet { name: name.clone().into(), ic: PropIc::default() }); // [obj, rhs, val]
             self.emit(Op::Swap); // [obj, val, rhs]
-            self.emit(Op::Binary(op));
+            self.emit_binary(op);
             self.emit(Op::PropSet { name: name.into(), ic: PropIc::default() });
             return Ok(());
         }
@@ -974,7 +974,7 @@ impl<'a> super::FnCompiler<'a> {
                 self.expr(rhs)?;
                 self.emit(Op::LoadGlobal(s));
                 self.emit(Op::Swap);
-                self.emit(Op::Binary(op));
+                self.emit_binary(op);
                 self.emit(Op::Dup);
                 self.emit(Op::StoreGlobal(s));
                 return Ok(());
@@ -986,7 +986,7 @@ impl<'a> super::FnCompiler<'a> {
                 self.expr(rhs)?;
                 self.emit(Op::LoadSuperglobal(i));
                 self.emit(Op::Swap);
-                self.emit(Op::Binary(op));
+                self.emit_binary(op);
                 self.emit(Op::Dup);
                 self.emit(Op::StoreSuperglobal(i));
                 return Ok(());

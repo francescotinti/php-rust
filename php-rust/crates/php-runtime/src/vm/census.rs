@@ -13,7 +13,7 @@ use crate::bytecode::Op;
 use crate::hir::BinOp;
 use php_types::Zval;
 
-pub const N_OPS: usize = 185;
+pub const N_OPS: usize = 186;
 
 pub const OP_NAMES: [&str; N_OPS] = [
     "PushConst", "Pop", "Dup", "LoadSlot", "LoadVar", "PushUndef", "StoreSlot", "Swap",
@@ -40,6 +40,7 @@ pub const OP_NAMES: [&str; N_OPS] = [
     "Exit", "SuppressBegin", "SuppressEnd", "Sweep", "ThisPropGet", "CmpJmpConst", "ConcatN",
     "ThisMethodCall", "Nop", "ConcatAssignSlot",
     "BinarySS", "BinarySSDst", "BinarySC", "BinarySCDst", "BinaryDst", "CmpJmpSS", "CmpJmpSC",
+    "BinaryAdd",
 ];
 
 pub fn op_index(op: &Op) -> usize {
@@ -236,6 +237,7 @@ pub fn op_index(op: &Op) -> usize {
         Op::BinaryDst { .. } => 182,
         Op::CmpJmpSS { .. } => 183,
         Op::CmpJmpSC { .. } => 184,
+        Op::BinaryAdd => 185,
     }
 }
 
@@ -628,9 +630,10 @@ mod tests {
             assert!(i < N_OPS, "{name} index {i} out of range");
             assert_eq!(OP_NAMES[i], *name, "OP_NAMES row mismatch for {name}");
         }
-        // The register-form block (S-97.1) closes the table: CmpJmpSC is the
-        // last row, ConcatAssignSlot (WP-55) sits just before it.
-        assert_eq!(op_index(&Op::ConcatAssignSlot(0)), N_OPS - 8);
+        // BinaryAdd (H-B2, S-98.0) closes the table; the register-form block
+        // (S-97.1) sits just before it, with ConcatAssignSlot (WP-55) ahead
+        // of that block.
+        assert_eq!(op_index(&Op::ConcatAssignSlot(0)), N_OPS - 9);
         assert_eq!(
             op_index(&Op::CmpJmpSC {
                 op: crate::hir::BinOp::Lt,
@@ -639,9 +642,11 @@ mod tests {
                 addr: 0,
                 when: true
             }),
-            N_OPS - 1
+            N_OPS - 2
         );
-        assert_eq!(OP_NAMES[N_OPS - 1], "CmpJmpSC");
+        assert_eq!(OP_NAMES[N_OPS - 2], "CmpJmpSC");
+        assert_eq!(op_index(&Op::BinaryAdd), N_OPS - 1);
+        assert_eq!(OP_NAMES[N_OPS - 1], "BinaryAdd");
     }
 
     #[test]

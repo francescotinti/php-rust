@@ -562,6 +562,13 @@ pub enum Op {
     // ----- operators (semantics delegated to php_types::ops / ::convert) -----
     /// `[lhs, rhs] -> [result]` — pop rhs then lhs, push `lhs <op> rhs`.
     Binary(BinOp),
+    /// `[lhs, rhs] -> [result]` — `Binary(Add)` specialized at emission
+    /// (H-B2, S-98.0): the Long+Long pair adds in place on the stack top
+    /// (overflow promotes to Double exactly like `binary_fast`); any other
+    /// tag pair falls back to the full `binary_value_ab` funnel. Emitted
+    /// only when the register-lowering pass is OFF — under `PHPR_REG_LOWER`
+    /// the emission stays `Binary(Add)` so the pass windows keep fusing it.
+    BinaryAdd,
     /// `[v] -> [result]` — unary `-`, `+`, `!`, `~`.
     Unary(UnOp),
     /// `[v] -> [result]` — a type cast like `(int)$x`.

@@ -941,6 +941,38 @@ impl<'m> super::Vm<'m> {
                     let r = self.binary_value(top, *b)?;
                     self.frames[top].stack.push(r);
                 }
+                Op::BinaryAdd => {
+                    // H-B2 (S-98.0): `+` specialized at emission. Tag guard
+                    // with FULL fallback (KS-ST-99-3): the Long+Long hit
+                    // writes the sum in place on the stack top (overflow
+                    // promotes to Double on the ORIGINAL operands, verbatim
+                    // from `binary_fast`); any miss re-enters the generic
+                    // funnel — same diags, overloads and errors by
+                    // construction.
+                    let rhs = self.frames[top].stack.pop().expect("BinaryAdd rhs");
+                    let fast = match (self.frames[top].stack.last(), &rhs) {
+                        (Some(Zval::Long(l)), Zval::Long(r)) => Some((*l, *r)),
+                        _ => None,
+                    };
+                    match fast {
+                        Some((l, r)) => {
+                            let v = match l.checked_add(r) {
+                                Some(s) => Zval::Long(s),
+                                None => Zval::Double(l as f64 + r as f64),
+                            };
+                            *self.frames[top]
+                                .stack
+                                .last_mut()
+                                .expect("BinaryAdd lhs") = v;
+                        }
+                        None => {
+                            let lhs =
+                                self.frames[top].stack.pop().expect("BinaryAdd lhs");
+                            let r = self.binary_value_ab(BinOp::Add, lhs, rhs)?;
+                            self.frames[top].stack.push(r);
+                        }
+                    }
+                }
                 Op::ConcatAssignSlot(s) => {
                     // Fused `$s .= rhs` (WP-55): body out of the loop
                     // (WP-33 discipline), arm = one call + push.
