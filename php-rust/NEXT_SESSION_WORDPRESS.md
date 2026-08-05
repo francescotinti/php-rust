@@ -148,26 +148,43 @@ EMENDAMENTI, sette refutazioni capitali). Le TRE che riscrivono l'ordine:
 (spedita, D=6,07 ns/occ) · debiti: smoke flag-ON ✓ + assert {main} ✓ +
 M5 ✓ · parità server NON eseguita (oggetto rimasto CLI) → S-99.
 
-**ORDINE S-99.0 (BOZZA — il Concilio WP-100 la giudica; il suo verbale
-sostituisce questa riga)**:
+### ⚖️ Concilio WP-100 (2026-08-05, su S-98.0 e programma S-99.0) — VINCOLANTE
 
-1. **Collaudo di parità WordPress** — DOVUTO, non rinviabile: l'emissione
-   flag-off è cambiata (H-B2). Full+media stessa-sera col launcher
-   integrato (backup/wipe/restore uploads), conteggi per NOME sui due
-   lati; coppia peak nello stesso giro (chiude il debito Leijen).
-2. **Parità server** — le suite restapi e option per NOME sotto `env -i`
-   sul pin nuovo **365f4d4069513de3** + sentinella output-capture
-   (KS-PE-99-1 resta VOID fino ad allora: nessun uso/misura del server).
-3. **Rollout H-B2, prima occorrenza flag-ON** (l'asse che compone col
-   −30,7%): specializzare Add int-int DENTRO le forme registro
-   (BinaryDst/SS/SC), criterio pre-registrato in ns/occorrenza derivato
-   da D=6,07, giudice `add`/`arith` flag-on.
-4. **Gate di promozione residui** (timebox ½ sessione): property-test
-   antisimmetria mirror + fixture GMP/Number (A-ST-99-2), flag eager +
-   dente anti-putenv (Pedersen).
-   BACKLOG per NOME invariato: delibera manifest 94/95, dente N_OPS<256,
-   bande str/re, fold coda AssignOp (dopo le sette trappole di Stogov),
-   Sub/Mul int-int stack-path.
+Verbali integrali + note di team + sintesi in `wp100-harness/` (9/9 CON
+EMENDAMENTI; cinque refutazioni capitali, `verbali/SYNTHESIS.md`). Le TRE
+che riscrivono l'ordine: (1) **D=6,07 NON è ereditabile come criterio del
+rollout** (SEI sedie convergenti: è plumbing del percorso PILA; le forme
+registro inlineano già `binary_fast` su prestiti — il criterio nasce da
+controfattuale+misura DEL percorso registro, ogni spedizione col criterio
+ereditato è VOID); (2) **la bozza era VOID al punto 1** (il collaudo WP
+passa da php-server NON collaudato ⇒ parità server = prima gamba, stessa
+sessione; sigillo eager + anti-putenv promossi a GATE DI PROMOZIONE);
+(3) **evidenza sovradichiarata** (il funnel non pinna stdout/exit; il gate
+per NOME è un bit/fail — la promozione esige il diff riga-per-riga; peak
+solo con `/usr/bin/time -l` + env mimalloc WP-94; N_OPS 186/256 senza
+gate; terzo rialzo di budget senza delibera = gate non-mordente).
+
+**ORDINE S-99.0 (fissato dal Concilio WP-100)**:
+
+1. **Parità server** (prima gamba, precondizione): restapi+option per
+   NOME sotto `env -i` sul pin **365f4d4069513de3** + sentinella
+   output-capture.
+2. **Collaudo WordPress full+media stessa-sera** (parità per NOME,
+   launcher con backup/wipe/restore uploads) **+ coppia peak** con
+   `/usr/bin/time -l` + env mimalloc pinnate da WP-94. Nessun claim CPU
+   nuovo e nessun rollout prima della chiusura per NOME (KS-GR-100-1).
+3. **Ri-baseline delle sei categorie** su ENTRAMBI i motori stessa
+   finestra (sana la gamba oracle stantia; rianima i criteri H-C/H-D).
+4. **Pre-misura del rollout, SOLO misura** (niente codice del rollout in
+   S-99): controfattuale statico del percorso registro (A-ST-100-1) +
+   build intermedia che decompone D in call/marshalling vs pop/push
+   (A-BA-100-1) + baseline flag-on → il criterio del rollout nasce QUI,
+   mai da 6,07. Se il timebox regge: sigillo eager + test anti-putenv.
+
+Precondizioni per NOME e BACKLOG: in `wp100-harness/verbali/SYNTHESIS.md`
+§Ordine (diff riga-per-riga, N_OPS≤255, matrice Add, tripwire
+zero-BinaryAdd, visit_addrs esaustivo, trappole A-ST-99-3, registro pin
+`collaudato:`, sanatoria dump/lowered, ecc.).
 
 **⭐ DECISIONE UTENTE (2026-08-05, post-chiusura S-97.1): il −30,7% SI TIENE
 e ci si costruisce sopra.** La caduta di H-A1 sul criterio decide dove
