@@ -1,0 +1,34 @@
+hc-census-predizioni: S-101 punto 2 — census dinamico specie×sito×canale su prop.php, TRE PREDIZIONI PRE-REGISTRATE (team hc-canale WP-102; scritte PRIMA di ogni strumento e di ogni conteggio)
+grade=CRITERIO
+formato=ascii-nudo
+sessione=S-101 (2026-08-06)
+giudice=wp97-harness/micro/prop.php (for 30M: $o->x = $o->y + 1; $s += $o->x)
+strumento_previsto=build di misura con contatori (prior art: feature zval-census
+  di WP-95, php-cli Cargo.toml:18), target-dir ISOLATO, patch conservata,
+  MAI spedita (convenzione INT1). Lato oracle: census opcache gia' fatto
+  (S-100) + eventuale phpspy/dtrace NON richiesto (i canali Zend sono noti
+  dagli handler SPEC del profilo S-100).
+
+# Le tre predizioni (dal ragionamento statico sul dump S-100 e dal profilo
+# co-equale; il census le CONFERMA o le REFUTA — ogni refutazione ri-apre
+# la forma di H-C1):
+P1_specie_valori=su prop.php il 100% dei VALORI transitati da PropGet/
+  PropSet/BinaryDst e' specie Long (0 refcounted): il «clone del valore»
+  non alloca e non tocca refcount su questo giudice. (Se P1 cade, H-C1a
+  cambia perimetro.)
+P2_ricevitore=per ITERAZIONE il canale refcounted e' interamente il
+  RICEVITORE: >=2 clone+drop dell'handle Rc dell'oggetto $o (i due
+  LoadVar slot 0 -> push dell'handle in pila -> pop/drop), 0 clone
+  refcounted di valori. (Se P2 cade — es. l'handle viaggia in prestito
+  gia' oggi — H-C1b e' senza canale e va refutata PRIMA di scriverla.)
+P3_gc_note=>=1 gc_note per iterazione, attribuito alla SCRITTURA
+  (write_property_at / PropSet), 0 ai Long letti. (Se P3 cade, la quota
+  5,3% del profilo ha un'altra sorgente e va ri-attribuita.)
+
+# CRITERI DI PUBBLICAZIONE:
+# - i conteggi si pubblicano ESATTI (per 30M iterazioni: n/iter derivato);
+# - il census DINAMICO valida lo statico (A-GR-102-1): ogni discrepanza
+#   conteggio-statico vs conteggio-dinamico e' un finding, non un arrotondamento;
+# - nessuna riga di H-C1a/b/c si scrive prima del verdetto sulle tre
+#   predizioni; il criterio di ogni stadio nasce dal SUO controfattuale
+#   coi conteggi del census (KS-GR-102-1), soglia >= pavimento sonda.
