@@ -1,0 +1,48 @@
+micro-baseline: il rapporto phpr/oracle PER CATEGORIA (la spina dorsale, S-97.0)
+grade=VERDICT  # R=5 ripetizioni per lato, mediana E spread pubblicati; l'effetto misurato
+  e' di ordine 10x, cioe' tre ordini di grandezza sopra la risoluzione del cronometro
+formato=ascii-nudo
+oracle=8.5.7 jit=disable
+phpr=f29883eb432806ce
+ripetizioni=5
+metodo=user CPU di /usr/bin/time -p, AL NETTO del pavimento di avvio misurato
+  sullo stesso binario con uno script vuoto (i due pavimenti sono DIVERSI)
+pavimento_oracle_s=0.05
+pavimento_phpr_s=0.02
+
+arith_oracle_netto_s=0.43
+arith_phpr_netto_s=5.47
+rapporto_arith=12.7  [derivata: companion 5.47/0.43]
+arith_spread_oracle_s=0.01  arith_spread_phpr_s=0.08
+prop_oracle_netto_s=0.42
+prop_phpr_netto_s=5.22
+rapporto_prop=12.4  [derivata: companion 5.22/0.42]
+prop_spread_oracle_s=0.00  prop_spread_phpr_s=0.07
+calls_oracle_netto_s=0.43
+calls_phpr_netto_s=3.39
+rapporto_calls=7.9  [derivata: companion 3.39/0.43]
+calls_spread_oracle_s=0.01  calls_spread_phpr_s=0.03
+str_oracle_netto_s=0.15
+str_phpr_netto_s=1.07
+rapporto_str=7.1  [derivata: companion 1.07/0.15]
+str_spread_oracle_s=0.01  str_spread_phpr_s=0.03
+arr_oracle_netto_s=0.29
+arr_phpr_netto_s=1.34
+rapporto_arr=4.6  [derivata: companion 1.34/0.29]
+arr_spread_oracle_s=0.01  arr_spread_phpr_s=0.03
+re_oracle_netto_s=0.37
+re_phpr_netto_s=1.32
+rapporto_re=3.6  [derivata: companion 1.32/0.37]
+re_spread_oracle_s=0.01  re_spread_phpr_s=0.01
+
+# ---- VERDETTO S-101 punto 1 (ri-baseline in MODO DEFAULT, ordine WP-102 §1) ----
+# binario=f29883eb432806ce (pin S-100 post-fix, HEAD b618e3a) — DEFAULT flag-on, env non toccato
+# finestra=2026-08-06 00:1x, R=5, seconda finestra (la prima e' VOID: spread arith 2.53s
+#   e prop 1.90s sotto burst Chrome Remote Desktop; regola KS-GR-102-2 banda<rumore=>VOID;
+#   conservata in micro-baseline-s101-r1-VOID.out — le mediane concordavano comunque)
+# rapporti: arith 12.7 · prop 12.4 · calls 7.9 · str 7.1 · arr 4.6 · re 3.6
+# confronto S-99/S-100: prop 12.4 == S-100 (5.22/0.42 IDENTICO); arith 12.7 == S-99 on;
+#   calls 8.6(off S-99) -> 7.9 (default on); str 6.9->7.1; arr 4.9->4.6; re 3.8->3.6
+# ns/op dove il conteggio e' censito (KS-BA-102-2, banda a 2 punti):
+#   prop: phpr 5.22/(30e6*18)=9.67 ns/op vs oracle 0.42/(30e6*9)=1.56 ns/op
+#   le altre categorie: ns/op DOPO census dei conteggi (il terzo punto manca ancora)
