@@ -23,6 +23,9 @@ OUT="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp100-harness/corp
 mkdir -p "$OUT"
 step(){ echo "$(date +%H:%M:%S) $1" | tee -a "$OUT/progress.txt"; }
 
+# S100_COMPARE_ONLY=1: salta le run e ri-giudica i .norm esistenti (per
+# iterare sul CONFRONTO senza ripagare due passate di corpus).
+if [ "${S100_COMPARE_ONLY:-0}" != 1 ]; then
 for mode in off on; do
   case "$mode" in off) reg=0 ;; on) reg=1 ;; esac
   step "corpus $mode (PHPR_REG_LOWER=$reg esplicito): run --list-fails"
@@ -30,6 +33,7 @@ for mode in off on; do
     > "$OUT/corpus-diff-$mode.log" 2>&1
   tr -d '\0' < "$OUT/corpus-diff-$mode.log" > "$OUT/corpus-diff-$mode.norm"
 done
+fi
 
 step "confronto per-test dei chunk FAIL"
 set -o pipefail  # il rc del gate e' quello del perl, non del tee
@@ -51,6 +55,17 @@ sub chunks {
 }
 my ($off, $n_off) = chunks($f_off);
 my ($on,  $n_on)  = chunks($f_on);
+# Carve-out PER NOME (lista CHIUSA, S-100): questi FAIL stampano
+# `bin2hex(random_bytes(4))` nel loro output — due run dello STESSO modo
+# differiscono (provato a macchina: 8bdbc200 vs 70cfe091 flag-off). Il
+# diff byte-wise non può giudicarli; restano gateati dall'INSIEME dei
+# nomi. Un QUARTO nome nondeterministico NON è in lista e urla.
+# NB: i path contengono SPAZI (lezione WP-96): niente qw().
+my %nondet = map { $_ => 1 } (
+  '/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_coercion/settype/settype_bool_nan_with_error_handler3.phpt',
+  '/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_coercion/settype/settype_int_nan_with_error_handler3.phpt',
+  '/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_coercion/settype/settype_string_nan_with_error_handler3.phpt',
+);
 my $void = 0;
 for ([$n_off, scalar keys %$off, 'off'], [$n_on, scalar keys %$on, 'on']) {
   my ($decl, $extr, $m) = @$_;
@@ -59,12 +74,15 @@ for ([$n_off, scalar keys %$off, 'off'], [$n_on, scalar keys %$on, 'on']) {
 exit 65 if $void;
 my @only_off = sort grep { !exists $on->{$_} } keys %$off;
 my @only_on  = sort grep { !exists $off->{$_} } keys %$on;
-my @differ   = sort grep { exists $on->{$_} && $off->{$_} ne $on->{$_} } keys %$off;
+my @raw_diff = sort grep { exists $on->{$_} && $off->{$_} ne $on->{$_} } keys %$off;
+my @differ   = grep { !$nondet{$_} } @raw_diff;
+my @nd_seen  = grep {  $nondet{$_} } @raw_diff;
 print "fail solo OFF: ", scalar @only_off, "\n";  print "  $_\n" for @only_off;
 print "fail solo ON: ",  scalar @only_on,  "\n";  print "  $_\n" for @only_on;
+print "nondet attesi (carve-out per NOME): ", scalar @nd_seen, "\n";  print "  $_\n" for @nd_seen;
 print "diff per-test DIVERSO: ", scalar @differ, "\n";  print "  $_\n" for @differ;
 if (@only_off + @only_on + @differ) { print "CORPUS-DIFF: DIVERSO\n"; exit 1 }
-print "CORPUS-DIFF: ZERO differenze per-test off<->on (criterio A-KL-101-4 SODDISFATTO)\n";
+print "CORPUS-DIFF: ZERO differenze per-test off<->on fuori carve-out (criterio A-KL-101-4 SODDISFATTO)\n";
 PERL
 rc=$?
 step "CORPUS-DIFF DONE rc=$rc"

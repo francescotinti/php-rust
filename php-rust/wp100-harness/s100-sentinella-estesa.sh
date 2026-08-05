@@ -61,11 +61,15 @@ for round in 1 2 3 4; do
 done
 echo "sequenza interleaved: $n richieste"
 
-# burst concorrente (workers=2 esercitati davvero)
+# burst concorrente (workers=2 esercitati davvero). `wait` NUDO aspetterebbe
+# anche la subshell del SERVER (che non esce mai — morso in smoke S-100):
+# si aspettano SOLO i pid dei curl.
+CURL_PIDS=""
 for c in 1 2 3 4; do
   curl -s -m 10 "$(url p1)" > "$OUTDIR/conc-$c.out" &
+  CURL_PIDS="$CURL_PIDS $!"
 done
-wait
+wait $CURL_PIDS
 for c in 1 2 3 4; do
   if ! cmp -s "$OUTDIR/p1-1.out" "$OUTDIR/conc-$c.out"; then
     echo "FAIL conc-$c: risposta concorrente diversa dalla riferimento"

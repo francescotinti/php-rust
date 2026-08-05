@@ -1,0 +1,10 @@
+20:41:46 confronto per-test dei chunk FAIL
+fail solo OFF: 0
+fail solo ON: 0
+nondet attesi (carve-out per NOME): 3
+  /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_coercion/settype/settype_bool_nan_with_error_handler3.phpt
+  /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_coercion/settype/settype_int_nan_with_error_handler3.phpt
+  /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_coercion/settype/settype_string_nan_with_error_handler3.phpt
+diff per-test DIVERSO: 0
+CORPUS-DIFF: ZERO differenze per-test off<->on fuori carve-out (criterio A-KL-101-4 SODDISFATTO)
+20:41:46 CORPUS-DIFF DONE rc=0

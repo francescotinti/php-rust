@@ -61,7 +61,8 @@ unset S100_PARITY_REEXEC
 # per MODO (A-PE-101-1): questo run copre la gamba dichiarata nel .done.
 # Ricetta pin server: cargo build --release -p php-server --features axum-server
 # AGGIORNARE PIN_SRV_ATTESO a ogni rotazione (mai pin effetto-collaterale).
-PIN_SRV_ATTESO=a838866e134b6a20
+# Candidato S-100 (post-estensione BinaryAdd, ricetta axum-server, HEAD aecaf32+)
+PIN_SRV_ATTESO=9db61be0c11cedea
 PHPSRV="$HOME/Claude/php-rust-output/release/php-server"
 PHPR="$HOME/Claude/php-rust-output/release/phpr"
 ORACLE=/opt/homebrew/opt/php/bin/php
