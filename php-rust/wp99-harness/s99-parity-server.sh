@@ -38,7 +38,11 @@ fi
 unset S99_PARITY_REEXEC
 
 # ---- pin e strumenti ----
-PIN_SRV_ATTESO=365f4d4069513de3
+# 365f4d4069513de3 REFUTATO in S-99: compilato SENZA la feature axum-server
+# (recidiva WP-77.6.5.2.3) — non può servire --axum, collaudo impossibile.
+# Pin nuovo costruito DELIBERATAMENTE da HEAD 8d1de3b (stesso sorgente S-98):
+#   cargo build --release -p php-server --features axum-server
+PIN_SRV_ATTESO=48a46c690fb85005
 PHPSRV="$HOME/Claude/php-rust-output/release/php-server"
 PHPR="$HOME/Claude/php-rust-output/release/phpr"
 ORACLE=/opt/homebrew/opt/php/bin/php
