@@ -43,13 +43,44 @@
 use crate::bytecode::{Addr, Const, Func, Op};
 use crate::hir::BinOp;
 
-/// Whether `PHPR_REG_LOWER` is set: per-process opt-in for the
-/// register-lowering pass. Read once (mirrors `gc_verify_enabled`); the
-/// unit-cache key carries this mode, so a unit compiled in one mode can never
-/// serve a process running the other.
+/// CONTRATTO DI MODO di `PHPR_REG_LOWER` (S-100 punto 1 — KS-MA-101-1,
+/// A-HO-101-2, A-HE-101-1, A-PE-101-4). Grafia VALUE-PARSED, lista CHIUSA:
+///
+///   - variabile ASSENTE   -> `DEFAULT_ON` (il flip del default cambia SOLO
+///     quella costante, mai questa funzione)
+///   - `PHPR_REG_LOWER=1`  -> ON  (opt-in esplicito)
+///   - `PHPR_REG_LOWER=0`  -> OFF (opt-out esplicito; prima del contratto
+///     `=0` ACCENDEVA il pass — `is_some()` presence-based, refutazione
+///     capitale n.1 del Concilio WP-101)
+///   - qualunque altro valore -> `DEFAULT_ON` + warning su stderr che nomina
+///     la grammatica (mai un fallback silenzioso)
+///
+/// Letto UNA volta (OnceLock) e sigillato EAGER dai main via
+/// `seal_reg_lower_mode()`; la unit-cache key porta il modo, così un'unità
+/// compilata in un modo non può mai servire un processo nell'altro.
 pub(crate) fn enabled() -> bool {
     static V: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *V.get_or_init(|| std::env::var_os("PHPR_REG_LOWER").is_some())
+    *V.get_or_init(|| mode_from_env(std::env::var_os("PHPR_REG_LOWER").as_deref()))
+}
+
+/// Default di processo quando `PHPR_REG_LOWER` è ASSENTE. Il flip della
+/// promozione (S-100 punto 5) inverte QUESTA costante e nient'altro.
+pub const DEFAULT_ON: bool = false;
+
+/// La grammatica del contratto, pura e testabile senza toccare l'ambiente.
+pub fn mode_from_env(raw: Option<&std::ffi::OsStr>) -> bool {
+    let Some(v) = raw else { return DEFAULT_ON };
+    match v.to_str() {
+        Some("1") => true,
+        Some("0") => false,
+        _ => {
+            eprintln!(
+                "phpr: PHPR_REG_LOWER={v:?} fuori grammatica (accetta `1`=on, \
+                 `0`=off, assente=default): uso il default"
+            );
+            DEFAULT_ON
+        }
+    }
 }
 
 /// Visit every jump address the op carries. The single authority both the
@@ -591,13 +622,17 @@ mod tests {
     /// stays byte-identical to stage 1 — proven end-to-end by the dump diff).
     #[test]
     fn stage2v3_flag_off_emits_no_register_forms() {
-        // M5 (A-KL-99-5): an exported PHPR_REG_LOWER inverts the premise of
-        // every flag-off test in this battery — fail LOUDLY instead of
-        // skipping in silence and letting a green run lie.
+        // M5 (A-KL-99-5, ri-derivata sul contratto di modo S-100): la
+        // premessa di OGNI test flag-off di questa batteria è «modo di
+        // processo OFF» secondo la grammatica value-parsed (assente col
+        // default attuale, oppure `=0`). Se il modo risulta ON — flag `=1`
+        // esportato, o default flippato senza ri-derivare la batteria
+        // (KS-HO-101-3) — fallire FORTE, mai skippare in silenzio.
         assert!(
             !enabled(),
-            "PHPR_REG_LOWER is exported in this environment: the flag-off \
-             battery premise is inverted — unset it and re-run"
+            "il modo register-lowering di questo processo è ON: la premessa \
+             flag-off della batteria è invertita — esporta PHPR_REG_LOWER=0 \
+             (o ri-deriva la batteria se il default è stato flippato)"
         );
         let m = compile(br#"<?php function f($a,$b){ $c=$a+$b; if($c>3){$c=$c*2;} return $c; } echo f(1,2);"#);
         for f in all_funcs(&m) {
@@ -607,5 +642,28 @@ mod tests {
                 "flag-off compile must stay stack-based"
             );
         }
+    }
+
+    /// Il contratto di modo (S-100 punto 1): grammatica value-parsed, lista
+    /// chiusa, testata PURA (nessun ambiente toccato). Il caso `=0` è la
+    /// trappola che ha motivato il contratto: sotto `is_some()` accendeva.
+    #[test]
+    fn mode_contract_grammar_is_value_parsed() {
+        use std::ffi::OsStr;
+        assert_eq!(mode_from_env(None), DEFAULT_ON, "assente => default nominato");
+        assert!(mode_from_env(Some(OsStr::new("1"))), "`=1` => ON");
+        assert!(!mode_from_env(Some(OsStr::new("0"))), "`=0` => OFF, MAI presence");
+        // Fuori grammatica: default (con warning su stderr, non asseribile qui).
+        assert_eq!(mode_from_env(Some(OsStr::new(""))), DEFAULT_ON);
+        assert_eq!(mode_from_env(Some(OsStr::new("on"))), DEFAULT_ON);
+        assert_eq!(mode_from_env(Some(OsStr::new("true"))), DEFAULT_ON);
+    }
+
+    /// Pre-flip il default nominato è OFF: il flip della promozione (S-100
+    /// punto 5) inverte la costante E questo test INSIEME — churn voluto:
+    /// il flip non può passare di qui senza dichiararsi (KS-HO-101-3).
+    #[test]
+    fn mode_contract_default_is_off_pre_flip() {
+        assert!(!DEFAULT_ON, "default flippato: ri-derivare batteria M5, denti anti-putenv e launcher PRIMA (S-100 punti 1-4)");
     }
 }

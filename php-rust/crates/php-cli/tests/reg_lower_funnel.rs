@@ -35,7 +35,10 @@ fn flag_on_folds_the_main_toplevel_and_matches_flag_off_output() {
     let file = dir.join(format!("reg-funnel-{}.php", std::process::id()));
     std::fs::write(&file, src.as_slice()).expect("write test php");
 
-    let (off_out, _) = run_phpr(&[], &file);
+    // Braccio OFF con valore ESPLICITO della lista chiusa (contratto di modo
+    // S-100): un braccio scritto sulla sola assenza girerebbe nel modo NUOVO
+    // dopo il flip del default — falso verde stesso-modo (R1 Hejlsberg).
+    let (off_out, _) = run_phpr(&[("PHPR_REG_LOWER", "0")], &file);
     let (on_out, on_err) =
         run_phpr(&[("PHPR_REG_LOWER", "1"), ("PHPR_DUMP_OPS", "1")], &file);
     let _ = std::fs::remove_file(&file);

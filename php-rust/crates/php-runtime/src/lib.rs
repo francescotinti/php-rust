@@ -49,6 +49,12 @@ pub use builtin::{Builtin, BuiltinFn, BuiltinRefFn, Ctx, Registry};
 pub fn seal_reg_lower_mode() {
     let _ = compile::reg_lower::enabled();
 }
+
+/// Il default nominato del contratto di modo (S-100 punto 1): ciò che vale
+/// quando `PHPR_REG_LOWER` è ASSENTE. Esportato perché i denti fuori-crate
+/// (anti-putenv, funnel, launcher) derivino i bracci dal CONTRATTO invece
+/// che da una premessa cablata che il flip del default renderebbe falsa.
+pub use compile::reg_lower::DEFAULT_ON as REG_LOWER_DEFAULT_ON;
 // Session F: the bytecode VM is the sole production engine. `run_source` /
 // `run_source_with` / `Outcome` resolve to the VM; the tree-walking `eval` module
 // was deleted once every construct it handled became VM-native (F2).
