@@ -790,6 +790,22 @@ non lo si dichiara assenza consapevole). Fixture:
 
 - **Stato**: APERTA (S-100, trovata di lato — fuori dall'oggetto promozione).
 
+### 3.13 🔴 Warning «Undefined property» attribuito alla RIGA SUCCESSIVA (S-101)
+
+Trovata costruendo la fixture 09 di H-C1 (unset-durante-lettura). Verificata
+sul binario di parità con repro minimo, identica flag-off e flag-on (NON è
+del pass): `$v = $o->x;` su proprietà rimossa — l'oracle emette
+`Warning: Undefined property` **con la riga della lettura**; phpr con la riga
+dello **statement successivo** (il warning è accodato in `diags` durante il
+PropGet e flushato al prossimo emit point CON LA RIGA DI QUELL'OP, non con
+quella dell'op che legge — stessa meccanica documentata in `Op::LoadVar`, che
+però per le VARIABILI la riga giusta la prende). Testo e valore a parità;
+diverge SOLO il numero di riga. Famiglia fetch-undef (A-ST-102-2). Fixture:
+`wp101-harness/hc1-fixtures/09-unset-during-read.php` (carve-out per NOME a
+diff ESATTO in `hc1-fixtures.sh`).
+
+- **Stato**: APERTA (S-101, trovata di lato — fuori dall'oggetto H-C).
+
 ## 4. Punti di forza da NON toccare (invarianti verificati byte-identici)
 
 Per evitare regressioni, questi comportamenti sono **già** byte-identici con
@@ -820,6 +836,9 @@ l'oracle e vanno preservati:
 
 ### Changelog di questo documento
 
+- 2026-08-06 (S-101): §3.13 — warning «Undefined property» attribuito alla
+  riga dello statement successivo (famiglia fetch-undef, trovata dalla
+  fixture 09 di H-C1; identica nei due modi).
 - 2026-08-05 (S-100): §3.11 — AssignOp con lhs indefinito senza warning
   «Undefined variable» (famiglia di §3(c), percorso compound-assign);
   §3.12 — typed-ref azzerato da Zend dopo AssignOp fallito, phpr conserva.

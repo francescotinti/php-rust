@@ -1,0 +1,4 @@
+5c5
+< Warning: Undefined property: U::$x in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp101-harness/hc1-fixtures/09-unset-during-read.php on line 18
+---
+> Warning: Undefined property: U::$x in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp101-harness/hc1-fixtures/09-unset-during-read.php on line 19

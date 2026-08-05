@@ -1,0 +1,5 @@
+E1:Typed property T::$n must not be accessed before initialization
+3
+8
+E2:Cannot modify readonly property RO::$v
+8
