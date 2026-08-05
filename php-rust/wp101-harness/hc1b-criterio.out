@@ -43,3 +43,16 @@ sessione=S-101 (2026-08-06 00:5x)
 # NON chiude H-C.
 
 # ---- ESITO (compilato DOPO la misura) ----
+binario_A=d6c3057d734f6ec7 (H-C1a+b)  binario_B=0ef9498dba804083 (H-C1a solo, stash phpr-s101-hc1a)
+A_prop_s=4.88 4.81 4.83 4.88 4.82 4.83 4.81   # mediana 4.83, netto 4.81, spread 0.07
+B_prop_s=4.99 5.04 5.01 5.02 4.99 5.00 5.03   # mediana 5.01, netto 4.99, spread 0.05
+# B riproduce il verdetto H-C1a (4.99~5.00): braccio di controllo sano.
+Delta_ns_iter=6.0  [derivata: companion (4.99-4.81)/30e6*1e9]
+verdetto=PROMOSSA per criterio (Delta 6.0 >= 1.0 pavimento) MA SOTTO la banda
+  attesa [7,20]: il controfattuale contabile SOVRASTIMAVA il costo della
+  coppia clone+drop del ricevitore (~2,0 ns/coppia effettivi contro i 4,4
+  stimati dal profilo — l'attribuzione a campioni sui simboli inlined
+  sovraconta la coppia; refutazione della banda REGISTRATA, non nascosta).
+  Cumulato a+b: prop 12,4 -> 11,5 (Delta_cum ~13,3 ns/iter su 174).
+  Il rapporto resta LONTANO dal tetto ~9x dichiarato: coerente col TETTO
+  WP-102 (H-C1 non chiude H-C). Seguono census-control + gate cumulativi.
