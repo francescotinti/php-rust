@@ -277,6 +277,19 @@ pub(super) fn lower_func(f: &mut Func) {
             }
         }
     }
+    // S-100 A-MA-101-3, DECISIONE MISURATA (wp100-harness/hb2flip-premisura
+    // .out: L=12,9 ns/occ, banda, sopra il pavimento 1,0; add.php del giudice
+    // ha 1 residuo per iterazione): il flip del default non deve RITIRARE la
+    // specializzazione H-B2 dai siti stack che le finestre non coprono — ogni
+    // `Binary(Add)` sopravvissuto alle finestre diventa la forma
+    // specializzata. Equivalenza provata da reg_lower_differential
+    // (A-HE-100-3); tripwire: flag-on l'emissione non contiene MAI un
+    // `Binary(Add)` generico (o forma fusa o `BinaryAdd`).
+    for op in &mut new_ops {
+        if matches!(op, Op::Binary(BinOp::Add)) {
+            *op = Op::BinaryAdd;
+        }
+    }
     f.ops = new_ops;
     f.lines = new_lines;
 }

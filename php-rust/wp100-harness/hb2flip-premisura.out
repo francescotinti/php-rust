@@ -1,0 +1,68 @@
+hb2flip-premisura: S-100 punto 3 — decisione H-B2-sotto-flip CON MISURA (A-MA-101-3)
+grade=CRITERIO  # pre-registrato PRIMA di ogni run di timing (regola n.3)
+formato=ascii-nudo
+sessione=S-100 (2026-08-05 sera)
+
+# CONTESTO (dal censo statico di questa sessione, dump {main} same-tree):
+# - Gli add a operandi stack COL risultato in uno slot fondono comunque
+#   (bin_dst -> BinaryDst): il flip NON li perde.
+# - La classe residua che il flip ritira da H-B2 = add il cui risultato
+#   RESTA in pila (nested expr, argomenti, echo, return): flag-on emissione
+#   Binary(Add), flag-off BinaryAdd.
+# - Micro ISOLANTE costruito (scratchpad nonfused3.php): i due {main}
+#   differiscono di UN SOLO op — off BinaryAdd, on Binary(Add); tutto il
+#   resto byte-identico (verificato dal dump, non dal cronometro).
+
+# MISURA: R=5 per braccio, N=200_000_000 iterazioni, 1 occorrenza/iter,
+# stessa finestra, macchina quieta, env fissato allo spawn, mediana, netto
+# pavimento della sonda. L = (T_on - T_off) / N * 1e9 ns/occ.
+
+# CRITERIO PRE-REGISTRATO (KS-BA-101-1: soglia >= pavimento sonda 1.0 ns):
+#   - L >= 1.0 ns/occ  => la perdita e' REALE e misurabile: si ESTENDE
+#     l'emissione BinaryAdd ai siti stack residui della pipeline on
+#     (riscrittura post-pass Binary(Add)->BinaryAdd), coi denti:
+#     equivalenza gia' provata da reg_lower_differential (A-HE-100-3),
+#     corpus off<->on diff ZERO resta il gate finale.
+#   - L < 1.0 ns/occ   => la perdita per occorrenza siede SOTTO il
+#     pavimento della sonda: RINUNCIA PRE-REGISTRATA (nessuna estensione
+#     "per igiene" senza misura che la giustifichi — stessa regola che ha
+#     chiuso il rollout registro). Si riapre SOLO con una misura su stream
+#     misto >= pavimento (A-MA-101-4).
+#   - In ogni caso il numero si pubblica come BANDA (mai tariffa), e la
+#     frequenza dei siti residui sul GIUDICE scala l'atteso: census
+#     Binary(Add) flag-on sui sei micro del giudice ALLEGATO SOTTO prima
+#     del verdetto.
+
+# ---- ESITO (compilato DOPO la misura) ----
+binario=52330330873f0132 (pin parita' S-99, PRE-estensione)
+# censo giudice (dump {main} flag-on, stesso albero): add.php ha 1
+# Binary(Add) RESIDUO per iterazione nel loop caldo — la catena
+# `$s=$s+$i+$i+$i` fonde solo il primo (BinarySS) e l'ultimo (BinaryDst);
+# il centrale (lhs stack) resta generico. Frequenza sul giudice != 0.
+# (Censo ampio: BinaryDst fonde ANCHE gli add a operandi stack con store —
+# la classe residua e' solo "risultato che resta in pila".)
+nonfused3_off_user_s=36.89 37.04 36.72 36.74 37.26   # mediana 36.89, netto 36.86
+nonfused3_on_user_s=39.48 39.50 39.70 39.22 39.42    # mediana 39.48, netto 39.45
+pavimento_s=0.03
+L_ns_occ=12.9  [derivata: companion (39.45-36.86)/200000000*1e9]  # BANDA, non tariffa:
+# un solo shape (Unary-operandi, compare-consumatore), IPC di contesto suo;
+# coerente in segno e ordine col D del percorso pila (C0->C2 6.27 cross-tree).
+verdetto=L=12.9 >= 1.0 (pavimento): la perdita e' REALE e la frequenza sul
+  giudice e' non-zero => DECISIONE MISURATA: ESTENDERE l'emissione BinaryAdd
+  ai siti stack residui della pipeline on (riscrittura post-finestre
+  Binary(Add)->BinaryAdd in lower_func). Equivalenza semantica gia' provata
+  da reg_lower_differential; tripwire aggiornato: flag-on ZERO Binary(Add)
+  generici (ogni add e' forma fusa O BinaryAdd), il corpus off<->on diff
+  ZERO resta il gate finale. Contro-misura POST-estensione qui sotto.
+
+# ---- CONTRO-MISURA POST-ESTENSIONE (binario a2772e625156ed7f) ----
+# dump: nonfused3 {main} = 1 BinaryAdd in ENTRAMBI i modi (unico op, come prima).
+nonfused3_post_off_user_s=37.02 37.12 36.64   # mediana 37.02
+nonfused3_post_on_user_s=36.65 37.26 36.81    # mediana 36.81
+L_post_ns_occ=[-1, 0]  # bande sovrapposte: la perdita da 12.9 e' RECUPERATA
+# giudice add.php (3 occ/iter x 50M, R=5, stessa finestra):
+add_post_off_user_s=4.75 4.72 4.78 4.85 4.76  # mediana 4.76 (S-99: 4.68 — in banda, emissione off INTATTA)
+add_post_on_user_s=3.27 3.26 3.27 3.27 3.26   # mediana 3.27, netto 3.25 (S-99: 3.55/3.53)
+# il residuo Binary(Add) del loop (1 occ/iter) ora e' BinaryAdd:
+# -0.28 s / 50M = -5.6 ns sull'occorrenza residua (banda coerente con L).
+# Vantaggio flag-on su add oggi: -31% (era -24%). BANDE, non tariffe.

@@ -565,9 +565,12 @@ pub enum Op {
     /// `[lhs, rhs] -> [result]` — `Binary(Add)` specialized at emission
     /// (H-B2, S-98.0): the Long+Long pair adds in place on the stack top
     /// (overflow promotes to Double exactly like `binary_fast`); any other
-    /// tag pair falls back to the full `binary_value_ab` funnel. Emitted
-    /// only when the register-lowering pass is OFF — under `PHPR_REG_LOWER`
-    /// the emission stays `Binary(Add)` so the pass windows keep fusing it.
+    /// tag pair falls back to the full `binary_value_ab` funnel. Two
+    /// producers: the flag-off emission specializes every `+` here (H-B2);
+    /// flag-on the emission stays `Binary(Add)` so the pass windows keep
+    /// fusing it, and the PASS itself rewrites every window-surviving
+    /// `Binary(Add)` into this form (S-100 A-MA-101-3, decisione misurata:
+    /// il flip non ritira H-B2 dai siti stack non coperti).
     BinaryAdd,
     /// `[v] -> [result]` — unary `-`, `+`, `!`, `~`.
     Unary(UnOp),

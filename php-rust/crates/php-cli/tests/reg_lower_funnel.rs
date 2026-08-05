@@ -33,8 +33,12 @@ fn flag_on_folds_the_main_toplevel_and_matches_flag_off_output() {
     // The arith_small shape twice: a top-level tight loop in `{main}` AND la
     // stessa forma dentro una FUNZIONE — la probe fuori dal `{main}`
     // (A-HE-101-4: il punto cieco del dump erano proprio i corpi non-main).
+    // La catena a TRE add `$t+$j+$j+$j` lascia il sito CENTRALE a lhs-stack
+    // col risultato in pila (il primo fonde in BinarySS, l'ultimo in
+    // BinaryDst): flag-on deve diventare `BinaryAdd` (estensione
+    // A-MA-101-3), mai restare `Binary(Add)` generico.
     let src = br#"<?php
-function probe($n){ $t=0; for($j=0;$j<$n;$j++){ $t += $j*3 - ($j>>2); } return $t; }
+function probe($n){ $t=0; for($j=0;$j<$n;$j++){ $t = $t + $j + $j + $j; $t -= 2*$j; $t += $j*3 - ($j>>2); } return $t; }
 $s=0; for($i=0;$i<1000;$i++){ $s += $i*3 - ($i>>2); } echo $s,"\n"; echo probe(1000),"\n";"#;
     let dir = std::env::temp_dir();
     let file = dir.join(format!("reg-funnel-{}.php", std::process::id()));
@@ -56,8 +60,10 @@ $s=0; for($i=0;$i<1000;$i++){ $s += $i*3 - ($i>>2); } echo $s,"\n"; echo probe(1
     // passa più per parità.
     assert!(off_ok, "flag-off exit non-zero");
     assert!(on_ok, "flag-on exit non-zero");
-    let expected: i64 = (0..1000i64).map(|i| i * 3 - (i >> 2)).sum();
-    let expected = format!("{expected}\n{expected}\n");
+    let main_sum: i64 = (0..1000i64).map(|i| i * 3 - (i >> 2)).sum();
+    let probe_sum: i64 = (0..1000i64).map(|j| j * 4 - (j >> 2)).sum();
+    // probe: t += 3j; t -= 2j; t += 3j - (j>>2)  =>  Σ(4j - (j>>2)) — come sopra.
+    let expected = format!("{main_sum}\n{probe_sum}\n");
     assert_eq!(off_out, expected, "flag-off stdout != atteso");
     assert_eq!(on_out, expected, "flag-on stdout != atteso");
 
@@ -100,14 +106,22 @@ $s=0; for($i=0;$i<1000;$i++){ $s += $i*3 - ($i>>2); } echo $s,"\n"; echo probe(1
                 "no {form} in the `{label}` dump: the pass did not rewrite it\n{chunk}"
             );
         }
-        // A-HE-100-1: l'emissione flag-on non contiene MAI `BinaryAdd` (la
-        // specializzazione vive solo flag-off; un BinaryAdd residuo qui è il
-        // tripwire che bin_op_of aveva neutralizzato).
+        // A-HE-100-1 ri-derivato sull'estensione A-MA-101-3: flag-on ogni
+        // add è forma FUSA oppure `BinaryAdd` — un `Binary(Add)` generico
+        // residuo è il tripwire (finestre o estensione morte).
         assert!(
-            !chunk.contains("BinaryAdd"),
-            "BinaryAdd nel dump flag-on di `{label}`\n{chunk}"
+            !chunk.contains("Binary(Add)"),
+            "Binary(Add) generico nel dump flag-on di `{label}`\n{chunk}"
         );
     }
+    // Controllo positivo dell'estensione: il sito lhs-stack della catena
+    // `$t+$j+$j` nella probe deve mostrare la forma specializzata flag-on.
+    assert!(
+        chunk_of(&on_err, "fn probe").contains("BinaryAdd"),
+        "nessun BinaryAdd nel dump flag-on della probe: l'estensione \
+         A-MA-101-3 non morde\n{}",
+        chunk_of(&on_err, "fn probe")
+    );
     // Braccio OFF, controllo positivo speculare: emissione stack-based con la
     // specializzazione H-B2 (`BinaryAdd`) e ZERO forme registro.
     for label in ["{main}", "fn probe"] {

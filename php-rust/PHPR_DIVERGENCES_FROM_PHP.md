@@ -752,6 +752,44 @@ usa la conversione generica no.
 - **Stato**: APERTA, non affrontata in S-96.0 (fuori dall'oggetto della
   sessione). Voce nella lista master.
 
+### 3.11 🔴 AssignOp con lhs indefinito: manca il warning «Undefined variable» (S-100)
+
+Trovata costruendo la trappola (e) di A-ST-99-3 (ordine warning undef-lhs).
+Verificata sul binario di parità, identica flag-off e flag-on (NON è del pass).
+
+`$u += expr;` con `$u` mai definito: l'oracle valuta il rhs, emette
+`Warning: Undefined variable $u`, poi applica l'op (null + …); phpr valuta il
+rhs e applica l'op **senza alcun warning** — in funzione E a toplevel (il
+catalogo §3(c) copriva solo l'`echo` a toplevel: questa è la stessa famiglia
+ma sul percorso compound-assign, più ampia). Il VALORE risultante è a parità;
+manca il diagnostico. Fixture: `wp100-harness/assignop-traps/e-undef-warning-order.php`
+(attesa-divergente per NOME in `s100-assignop-oracle.sh`).
+
+- **Stato**: APERTA (S-100, trovata di lato — fuori dall'oggetto promozione).
+  L'ordine rhs→warning→errore-op non è collaudabile finché il warning non esiste.
+
+### 3.12 🔴 Typed-ref: AssignOp fallito — Zend AZZERA il referente, phpr lo conserva (S-100)
+
+Trovata costruendo la trappola (b) di A-ST-99-3. Verificata sul binario di
+parità, identica nei due modi (NON è del pass).
+
+```php
+class T { public int $i = 1; }
+$t = new T; $r = &$t->i;
+try { $r += "abc"; } catch (\TypeError $e) {}   // Unsupported operand types
+echo $t->i;   // oracle 8.5.7: 0 (!) — phpr: 1
+```
+
+Dopo il `TypeError` dell'op, l'oracle lascia il typed-ref **azzerato** (int 0:
+plausibilmente UNDEF ri-coercizzato dal type-check del ref); phpr conserva il
+valore precedente. Il messaggio del TypeError è a parità; diverge lo STATO
+post-errore. phpr qui è «più ragionevole», ma la policy è byte-parity con
+l'oracle: la voce resta aperta finché non si replica il comportamento Zend (o
+non lo si dichiara assenza consapevole). Fixture:
+`wp100-harness/assignop-traps/b-typed-ref.php` (attesa-divergente per NOME).
+
+- **Stato**: APERTA (S-100, trovata di lato — fuori dall'oggetto promozione).
+
 ## 4. Punti di forza da NON toccare (invarianti verificati byte-identici)
 
 Per evitare regressioni, questi comportamenti sono **già** byte-identici con
@@ -782,6 +820,10 @@ l'oracle e vanno preservati:
 
 ### Changelog di questo documento
 
+- 2026-08-05 (S-100): §3.11 — AssignOp con lhs indefinito senza warning
+  «Undefined variable» (famiglia di §3(c), percorso compound-assign);
+  §3.12 — typed-ref azzerato da Zend dopo AssignOp fallito, phpr conserva.
+  Entrambe trovate dalle trappole A-ST-99-3 (b)/(e), identiche nei due modi.
 - 2026-08-04: §3.10 — argomenti `string` dei builtin: coercizione con warning
   invece di `TypeError` (trovata di lato in S-96.0 costruendo le fixture di
   liveness; verificata sul binario di parità; perimetro NON misurato).
