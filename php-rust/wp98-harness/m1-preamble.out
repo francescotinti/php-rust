@@ -1,0 +1,114 @@
+m1-preamble: M1 — la misura del preambolo di dispatch PRIMA di ogni codice (ordine Concilio WP-99, punto 1)
+grade=VERDICT  # noop 200M R=3 su binario di parita' + census esatto + ASM del loop head + sonda A/B compilata e disassemblata
+formato=ascii-nudo
+sessione=S-98.0 (2026-08-05)
+binario_di_parita=0dd98ebbb7eb2d96 (flag OFF; HEAD 05febbf)
+census=phpr-opcensus-target (MAI un binario di parita')
+oracle=8.5.7 brew, jit off
+macchina=Apple Silicon (arm64, core OoO largo; le conclusioni di hiding valgono per QUESTO core)
+
+# ---- PERCHE' ESISTE ----
+# H-B1 dice: «ogni opcode paga un preambolo — 2 len() + indicizzazioni di
+# frames[top] con bounds check — e tenere il frame in un registro lo elimina».
+# Il Concilio WP-99 (Bak+Gregg) ha dato un TETTO di ~1,4 ns/op (-17%, banda
+# 8-27%) dal marginale del Sweep-noop di ha2-sweep, e ha ORDINATO: prima di
+# ogni codice, misura M1 + predizione P scritta qui; P<10% => H-B1 cade a
+# tavolino. P = 19*D/156,6 dove D = ns/op risparmiati e 156,6 = ns/iterazione
+# di arith flag-off (7,83 s / 50M iter).
+
+# ---- CONTROLLO POSITIVO DELLO STRUMENTO (per primo, regola S-97.1) ----
+census_arith_small_flag_off=1900020   # IDENTICO al pin di ha2-sweep/ha1-registers: lo strumento morde
+
+# ---- CENSUS (100000 iterazioni ciascuno) ----
+census_noop_small=500015    # 5/iter: LoadVar, CmpJmpConst, IncDecSlot, Pop, Jump (bigrammi puliti)
+census_prop_small=2200029   # 22/iter
+census_calls_small=1700020  # 17/iter
+opcodi_per_iterazione_noop_oracle=3   # PRE_INC, IS_SMALLER, JMPNZ (opcache opt_debug_level=0x10000)
+
+# ---- NOOP 200M (R=3, user CPU, al netto dei pavimenti 0,02/0,05) ----
+noop_phpr_s=6.28 6.29 6.32          # mediana 6.29, spread 0.04
+noop_phpr_netto_s=6.27
+ns_per_op_noop_phpr=6.27   [derivata: companion 6.27/(200000000*5/1e9)]
+noop_oracle_s=0.69 0.69 0.71        # mediana 0.69, spread 0.02
+noop_oracle_netto_s=0.64
+ns_per_op_noop_oracle=1.07  [derivata: companion 0.64/(200000000*3/1e9)]
+rapporto_noop_per_iterazione=9.8   [derivata: companion 31.35/3.20]
+# Anche gli op "economici" di phpr (5 op del ciclo) costano in MEDIA 6,27 ns:
+# 4,5 volte il marginale del Sweep-noop (1,4). I CORPI (traffico stack Vec,
+# clone Zval, bounds check sugli slot) dominano gia' negli op piu' piccoli.
+
+# ---- ASM DEL PREAMBOLO CORRENTE (objdump del binario di parita', run_loop+0x258) ----
+# 28 istruzioni dal loop head al `br` del jump table (estratto integrale in
+# m1-runloop-preamble.asm). Composizione:
+#   RIMOVIBILI da H-B1 (11): ldr [sp,#0x2c0] (spill dell'indirizzo di
+#     frames.len) + ldr len + mov #25000 + cmp + b.hi (guardia) + sub top +
+#     cbz + ldr [sp,#0x2c8] (spill di frames.ptr) + ldr ptr + mov #176 +
+#     madd (indirizzo frame).
+#   RESTANO (17): ldr ip, ldr func (dal frame, comunque letti), ldr ops.len +
+#     cmp + b.hs (bounds check su ops[ip]: resta per KS "no ip locale"),
+#     ldr ops.ptr + mov #48 + madd (indirizzo op), add+str (ip+1),
+#     ldrb tag + adrp+add+adr+ldrh+add+br (jump table).
+# NOTA: gli indirizzi di frames.len/ptr sono SPILLATI ([sp,#...]) dalla
+# pressione di registri del match a 185 bracci: il reload per-op costa 2
+# load L1 in piu' rispetto alla forma con tutto in registro.
+
+# ---- LA SONDA (m1-probe/, ordine del Concilio: "M1 e' la sonda") ----
+# Replica le DUE forme del dispatch su un interprete sintetico col programma
+# ESATTO del noop-loop (stessi 5 op/iter, stessi bigrammi, OpS=48B,
+# FrameS=176B, ramo freddo #[inline(never)] che forza il confine del borrow):
+#   forma A = preambolo di oggi (reload per-op);
+#   forma B = H-B1 split-borrow (frame tenuto, guardia al confine; KS: no
+#     unsafe, no raw ptr, no mem::take, ip campo del frame).
+# Fedelta' verificata sull'ASM DELLA SONDA (controllo positivo della forgia,
+# regola WP-96): A ricarica ptr+madd per-op, B tiene il frame in registro;
+# nella build 2 il dispatch e' jump table (`br x`) come nel binario vero.
+#
+# build 1 (valori caldi in registro, dispatch a catena di cmp):
+probe1_forma_a_ns_op=3.942 3.934 3.938   # mediana 3.938
+probe1_forma_b_ns_op=3.951 3.946 3.961   # mediana 3.951
+probe1_delta_ns_op=-0.013   # B piu' LENTA di 0,013; |delta| ~ spread (0,008/0,015): ZERO dentro la banda
+# build 2 (16 invarianti freddi vivi -> jump table + spill dei freddi):
+probe2_forma_a_ns_op=3.991 3.918 3.916   # mediana 3.918
+probe2_forma_b_ns_op=4.454 4.444 4.451   # mediana 4.451
+probe2_delta_ns_op=-0.53    # B piu' LENTA di 0,53 ns/op, 3 round su 3, fuori banda (spread 0,075/0,010)
+# La B della build 2 NON e' degenere: il suo loop caldo e' ESATTAMENTE la
+# forma H-B1 (8 istruzioni di preambolo contro 13, frame in x20, niente
+# guardia ne' reload) — e perde comunque. Su questo core OoO il reload
+# L1-resident fuori dal cammino critico e' GRATIS, e la ristrutturazione
+# puo' costare (layout/BTB).
+#
+# LIMITE DICHIARATO della sonda: LLVM le alloca i valori CALDI in registro
+# anche sotto pressione (spilla i freddi), mentre il run_loop vero spilla
+# ANCHE i caldi. La differenza vera A_reale-B_reale contiene quindi 2 load
+# L1 da slot [sp,#costante] in piu' di quella misurata: istruzioni della
+# stessa classe di quelle che la sonda mostra gratuite (indirizzo costante,
+# fuori dal cammino critico). Bracket statico anti-hiding qui sotto.
+
+# ---- PREDIZIONE P (scritta PRIMA di ogni codice H-B1) ----
+# D = risparmio previsto in ns/op della forma split-borrow nel run_loop vero.
+#   stima centrale (dalla sonda, entrambe le build): D = 0,0 ns/op
+#     (banda misurata: da -0,53 a +0,01)
+#   tetto statico anti-hiding (nega TUTTO l'hiding OoO dimostrato dalla
+#     sonda): il marginale del Sweep-noop (1,4 ns, ha2-sweep) ripartito
+#     sulla quota di istruzioni rimovibili del preambolo, 11/28:
+#     D_tetto = 1,4 * 11/28 = 0,55 ns/op
+predizione_D_ns_op=0.0  banda=[-0.53, +0.55]
+predizione_P_pct=0.0    [derivata: companion 100*19*0.0/156.6]
+predizione_P_tetto_pct=6.7  [derivata: companion 100*19*0.55/156.6]
+soglia_concilio_pct=10
+
+verdetto=P < 10% SU TUTTA LA BANDA, tetto anti-hiding compreso (6,7%).
+  H-B1 CADE A TAVOLINO per il criterio scritto dal Concilio WP-99 (punto 1
+  dell'ordine): nessuna riga di codice del VM viene scritta. Il tetto
+  "1,4 ns/op = -17%" di Bak/Gregg era il CEILING (tutto il marginale del
+  noop); la sonda mostra che la parte rimovibile di quel marginale e'
+  nascosta dal core OoO, e che la forma split-borrow puo' perfino perdere.
+  Coerente con la lezione di ha2/S-97.1: il divario vive nei CORPI degli
+  handler (Zval, stack Vec, slot), non nel preambolo => si passa a H-B2
+  (specializzazione per tipo), l'ASSE, senza consumare sessione su H-B1.
+
+# ---- ARTEFATTI ----
+# m1-probe/            sorgente della sonda (Cargo.toml + src/main.rs)
+# m1-runloop-preamble.asm   estratto objdump del loop head del binario di parita'
+# m1-probe-loops.asm        estratti dei loop caldi A/B della sonda (build 2)
+# wp97-harness/micro/noop.php noop_small.php prop_small.php calls_small.php (nuovi micro)
