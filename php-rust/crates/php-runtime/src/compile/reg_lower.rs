@@ -1011,25 +1011,25 @@ echo g(1), ($h)(2), C::K;"#;
                 .map(|f| f.ops.iter().filter(|o| pred(o)).count())
                 .sum()
         };
+        // Produzione OFF (H-B2, S-98): emit_binary emette DIRETTAMENTE
+        // `BinaryAdd` quando `!ctx.reg_lower` — il bug A-HO-102-1 (lettura
+        // di `enabled()` col default ON) faceva cadere il sito nel ramo
+        // `Binary(Add)` generico. Il dente pinna la polarità VERA.
         let off = compile(src);
         assert!(
-            count(&off, &|o| matches!(o, Op::Binary(BinOp::Add))) >= 1,
-            "OFF: l'add di pila deve restare Binary(Add) di produzione"
+            count(&off, &|o| matches!(o, Op::BinaryAdd)) >= 1,
+            "OFF: l'add di pila e' BinaryAdd di produzione (H-B2 flag-off)"
         );
         assert_eq!(
-            count(&off, &|o| matches!(o, Op::BinaryAdd)),
+            count(&off, &|o| matches!(o, Op::Binary(BinOp::Add))),
             0,
-            "OFF: nessun BinaryAdd da estensione deve trapelare"
+            "OFF: nessun Binary(Add) generico (il sintomo del bug emit_binary)"
         );
         let on = compile_on(src);
         assert_eq!(
             count(&on, &|o| matches!(o, Op::Binary(BinOp::Add))),
             0,
-            "ON: tripwire zero-Binary(Add) (ogni add è forma fusa o BinaryAdd)"
-        );
-        assert!(
-            count(&on, &|o| matches!(o, Op::BinaryAdd)) >= 1,
-            "ON: l'add di pila residuo deve essere BinaryAdd"
+            "ON: tripwire zero-Binary(Add) (ogni add e' forma fusa o BinaryAdd)"
         );
     }
 

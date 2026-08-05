@@ -8,3 +8,13 @@ pass rate (of runnable): 65.1% (2649/4067)
 failures: 1418
 01:01:10 corpus on: 1418 fail, insieme IDENTICO alla lista wp82
 01:01:10 CORPUS GATE DONE fails=0
+phpr=48a5d4384970d8ff
+01:21:09 corpus off (PHPR_REG_LOWER=0 esplicito): run
+pass rate (of runnable): 65.1% (2649/4067)
+failures: 1418
+01:27:55 corpus off: 1418 fail, insieme IDENTICO alla lista wp82
+01:27:55 corpus on (PHPR_REG_LOWER=1 esplicito): run
+pass rate (of runnable): 65.1% (2649/4067)
+failures: 1418
+01:34:40 corpus on: 1418 fail, insieme IDENTICO alla lista wp82
+01:34:40 CORPUS GATE DONE fails=0

@@ -1,0 +1,23 @@
+hd-census-primo: S-101 punto 6 (timebox) — H-D prima misura: gamba CENSUS su
+calls.php (A-ST-102-5, tavola parziale: canali zval; il census bi-regime
+completo call-path resta alla prossima sessione)
+grade=CENSUS  # conteggi esatti, non-timing
+formato=ascii-nudo
+sessione=S-101 (2026-08-06 01:5x)
+strumento=build zval-census (contatori S-101, stato H-C1a+b)
+giudice=wp97-harness/micro/calls.php: function f($a,$b){return $a+$b;}
+  for(20M){ $s = f($s,1); }
+
+# calls.php 20M (census-calls-s101.txt):
+#   gcnote_total=100000004 (5/iter!) gcnote_scalar=100000004 (100%) gcnote_obj=0
+#   gcnote_site_pop=40000002 (2/iter) gcnote_site_propset_old=0
+#   residuo NON taggato = 3/iter (siti da nominare: passaggio argomenti /
+#     teardown frame / store slot — census call-path della prossima sessione)
+#   slot_reads=20000001 (1/iter) slot_reads_rc=0 — il grosso dei transiti
+#     del percorso chiamata NON passa da read_slot: canale da censire a parte
+#   canali proprieta'/ricevitore tutti 0 (atteso: nessun oggetto nel giudice)
+# LETTURA: anche il percorso CHIAMATA paga gc_note su soli scalari (5/iter);
+# la guardia H-C1a (inline scalar fast-out) morde ANCHE qui per costruzione —
+# il rapporto calls (7,9 pre-H-C1) va RIMISURATO sul binario cumulativo nella
+# ri-baseline di chiusura; l'attribuzione fine (3/iter non taggate) e il
+# census bi-regime restano il primo atto della tavola H-D vera.
