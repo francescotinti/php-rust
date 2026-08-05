@@ -90,18 +90,20 @@ blocca; timebox mezza sessione.
 
 ## Stato gate
 
-- **phpr (pin release)**: **725a2ffad763bbc4** @ HEAD fb861e4 (l'hash
-  churna col relink del test-funnel: fa fede HEAD). **DEFAULT = flag-ON**;
-  opt-out `PHPR_REG_LOWER=0` (value-parsed; altro valore ⇒ default +
-  warning). Corpus Zend **1418 per NOME IDENTICO con `=0` E `=1` SUL PIN**
-  (`wp100-harness/corpus-gate/`); diff per-test off↔on ZERO fuori carve-out
-  (`wp100-harness/evidence/corpus-diff-verdetto.txt`). Batteria **1735/0**.
-  Stash additivo `phpr-s100-flip`.
-- **php-server**: **f2ab06369239f389** — ricetta OBBLIGATORIA
+- **phpr (pin release)**: **f29883eb432806ce** @ HEAD b618e3a (col fix
+  emit_binary A-HO-102-1; l'hash churna col relink: fa fede HEAD).
+  **DEFAULT = flag-ON**; opt-out `PHPR_REG_LOWER=0` (value-parsed; altro
+  valore ⇒ default + warning). Corpus **1418 per NOME nei 2 modi + diff
+  per-test ZERO fuori carve-out, RI-GIUDICATO SUL PIN** (A-KL-102-1,
+  `wp100-harness/corpus-diff/corpus-s100pin-{off,on}.fails`). Batteria
+  **1735/0** post-fix. Stash additivo `phpr-s100-fix`.
+- **php-server**: **62b978c51c62e108** — ricetta OBBLIGATORIA
   `cargo build --release -p php-server --features axum-server`.
-  **collaudato: sì, GRADUATO** (emissione-CLI 2 modi · sentinella estesa 2
-  modi · option+restapi per NOME 2 modi, `wp100-harness/parity-out-*`).
-  Stash `php-server-s100-flip`. Registro = `PIN_REGISTRY.md`.
+  **collaudato: sì, GRADUATO, col MODE-PROBE** (A-PE-102-1: il modo
+  effettivo del server è PROVATO dal dump dell'unità nel suo log, nei 2
+  modi; sentinella estesa + option 413 + restapi 3508 per NOME,
+  `wp100-harness/parity-out-*`). Stash `php-server-s100-fix`.
+  Registro = `PIN_REGISTRY.md`.
 - **Launcher bimodali S-100** (`wp100-harness/`): `s100-parity-server.sh
   <off|on>` (aggiornare PIN_SRV_ATTESO a ogni rotazione) ·
   `s100-corpus-gate.sh` (2 modi espliciti) · `s100-corpus-diff.sh`

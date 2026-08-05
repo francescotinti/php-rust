@@ -1,0 +1,20 @@
+== 23:37:41 [S100-PARITY-on] modo=on (PHPR_REG_LOWER=1 esplicito) hash php-server=62b978c51c62e108 (atteso 62b978c51c62e108) phpr=f29883eb432806ce (churna col relink: registrato, non gate)
+== 23:37:41 [S100-PARITY-on] sentinella estesa (16 interleaved + 4 concorrenti, workers=2) sul pin, modo=on
+== 23:37:48 [S100-PARITY-on] sentinella: PASS (byte-identiche)
+uploads-guard: backup OK (3 file → /Volumes/Extreme Pro/Claude/uploads-backups/uploads-20260805-233748.tar.gz), uploads azzerata
+== 23:37:48 [S100-PARITY-on] gruppo option: oracle
+WARNINGS!
+Tests: 413, Assertions: 1061, Warnings: 1, Skipped: 3.
+== 23:37:54 [S100-PARITY-on] gruppo option: phpr (watchdog 900s, modo=on)
+WARNINGS!
+Tests: 413, Assertions: 1061, Warnings: 1, Skipped: 3.
+== 23:38:24 [S100-PARITY-on] option: IDENTICO per NOME (413 nomi)
+== 23:38:24 [S100-PARITY-on] gruppo restapi: oracle
+ERRORS!
+Tests: 3508, Assertions: 15947, Errors: 1, Warnings: 4, Skipped: 6.
+== 23:41:05 [S100-PARITY-on] gruppo restapi: phpr (watchdog 2400s, modo=on)
+ERRORS!
+Tests: 3508, Assertions: 15947, Errors: 1, Warnings: 4, Skipped: 6.
+== 23:45:31 [S100-PARITY-on] restapi: IDENTICO per NOME (3508 nomi)
+uploads-guard: restore verificato (count=3) — backup conservato in /Volumes/Extreme Pro/Claude/uploads-backups/uploads-20260805-233748.tar.gz
+== 23:45:31 [S100-PARITY-on] S100-PARITY-on DONE fails=0
