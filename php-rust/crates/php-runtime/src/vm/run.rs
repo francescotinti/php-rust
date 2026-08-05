@@ -421,6 +421,9 @@ impl<'m> super::Vm<'m> {
                             // read_property).
                             let v = v.deref_clone();
                             drop(b);
+                            // S-101 census: specie del valore letto (P1).
+                            #[cfg(feature = "zval-census")]
+                            super::zvalcensus::note_prop_val(0, &v);
                             self.frames[top].stack.push(v);
                             return Ok(());
                         }
@@ -492,6 +495,9 @@ impl<'m> super::Vm<'m> {
             }
         }
         let v = read_property_at(&target, &key, slot_idx, &mut self.diags);
+        // S-101 census: specie del valore letto (P1, percorso generale).
+        #[cfg(feature = "zval-census")]
+        super::zvalcensus::note_prop_val(0, &v);
         self.frames[top].stack.push(v);
         Ok(())
     }
@@ -611,6 +617,9 @@ impl<'m> super::Vm<'m> {
                 }
                 Op::Pop => {
                     if let Some(v) = self.frames[top].stack.pop() {
+                        // S-101 census: sito Pop taggato (P2 drop-handle, P3 gc_note).
+                        #[cfg(feature = "zval-census")]
+                        super::zvalcensus::note_pop(&v);
                         self.gc_note(&v);
                     }
                 }
@@ -631,6 +640,9 @@ impl<'m> super::Vm<'m> {
                     // (sola misura, design95-liveness.md).
                     #[cfg(feature = "zval-census")]
                     super::zvalcensus::note_slot_load_site(func, ip, &self.frames[top].slots[*s as usize]);
+                    // S-101 census: clone di un handle Object in pila (P2).
+                    #[cfg(feature = "zval-census")]
+                    super::zvalcensus::note_recv_load(&self.frames[top].slots[*s as usize]);
                     let v = read_slot(&self.frames[top].slots[*s as usize]);
                     self.frames[top].stack.push(v);
                 }
@@ -650,6 +662,9 @@ impl<'m> super::Vm<'m> {
                     // (sola misura, design95-liveness.md).
                     #[cfg(feature = "zval-census")]
                     super::zvalcensus::note_slot_load_site(func, ip, &self.frames[top].slots[*slot as usize]);
+                    // S-101 census: clone di un handle Object in pila (P2).
+                    #[cfg(feature = "zval-census")]
+                    super::zvalcensus::note_recv_load(&self.frames[top].slots[*slot as usize]);
                     let v = read_slot(&self.frames[top].slots[*slot as usize]);
                     self.frames[top].stack.push(v);
                 }
@@ -1086,6 +1101,12 @@ impl<'m> super::Vm<'m> {
                     // binary_value (rhs first), result sinks into the slot.
                     let rhs = self.frames[top].stack.pop().expect("BinaryDst rhs");
                     let lhs = self.frames[top].stack.pop().expect("BinaryDst lhs");
+                    // S-101 census: specie degli operandi transitati (P1).
+                    #[cfg(feature = "zval-census")]
+                    {
+                        super::zvalcensus::note_prop_val(2, &lhs);
+                        super::zvalcensus::note_prop_val(2, &rhs);
+                    }
                     let res = self.binary_value_ab(*b, lhs, rhs)?;
                     self.reg_store_slot(top, *dst, res)?;
                 }
@@ -3393,6 +3414,9 @@ impl<'m> super::Vm<'m> {
                     let obj = self.frames[top].stack.pop().expect("PropGet object");
                     let sk = crate::bytecode::PropIc::scope_key(self.frames[top].class);
                     let target = obj.deref_clone();
+                    // S-101 census: bump Rc del ricevitore (P2).
+                    #[cfg(feature = "zval-census")]
+                    super::zvalcensus::note_recv_clone_prop(&target);
                     // INLINE CACHE (WP-29): the site's last cacheable
                     // resolution — a PUBLIC hook-free backed slot on this
                     // class — reads with zero hashing. A present non-`Undef`
@@ -3407,6 +3431,9 @@ impl<'m> super::Vm<'m> {
                                     if !matches!(v, Zval::Undef) {
                                         let v = v.deref_clone();
                                         drop(b);
+                                        // S-101 census: specie del valore letto (P1).
+                                        #[cfg(feature = "zval-census")]
+                                        super::zvalcensus::note_prop_val(0, &v);
                                         self.frames[top].stack.push(v);
                                         continue;
                                     }
@@ -3437,6 +3464,10 @@ impl<'m> super::Vm<'m> {
                         }
                     }
                     if let Some(v) = hit {
+                        // S-101 census: specie del valore letto (P1); l'hit
+                        // fuso NON clona il ricevitore (prior art H-C1b).
+                        #[cfg(feature = "zval-census")]
+                        super::zvalcensus::note_prop_val(0, &v);
                         self.frames[top].stack.push(v);
                         continue;
                     }
@@ -3448,6 +3479,9 @@ impl<'m> super::Vm<'m> {
                             ))
                         }
                     };
+                    // S-101 census: bump Rc del ricevitore (P2, solo fallback).
+                    #[cfg(feature = "zval-census")]
+                    super::zvalcensus::note_recv_clone_prop(&target);
                     self.prop_get_fallback(top, target, name, ic)?;
                 }
                 Op::PropGetSilent { name } => {
@@ -3536,6 +3570,13 @@ impl<'m> super::Vm<'m> {
                     let obj = self.frames[top].stack.pop().expect("PropSet object");
                     let cur = self.frames[top].class;
                     let target = obj.deref_clone();
+                    // S-101 census: bump Rc del ricevitore (P2) + specie del
+                    // valore scritto (P1).
+                    #[cfg(feature = "zval-census")]
+                    {
+                        super::zvalcensus::note_recv_clone_prop(&target);
+                        super::zvalcensus::note_prop_val(1, &value);
+                    }
                     // A write to a lazy object initializes it first (PHP 8.4) —
                     // unless a set hook/`__set` serves it; a no-op during the
                     // object's own construction (it is no longer lazy then).
@@ -3555,6 +3596,8 @@ impl<'m> super::Vm<'m> {
                             None => Cow::Borrowed(&name[..]),
                         };
                         if let Some(old) = write_property(&target, &key, value.clone())? {
+                            #[cfg(feature = "zval-census")]
+                            super::zvalcensus::note_gcnote_site_propset_old();
                             self.gc_note(&old);
                         }
                         self.frames[top].stack.push(value);
@@ -3583,6 +3626,8 @@ impl<'m> super::Vm<'m> {
                                 if let Some(old) =
                                     write_property_at(&target, &name, Some(slot), value.clone())?
                                 {
+                                    #[cfg(feature = "zval-census")]
+                                    super::zvalcensus::note_gcnote_site_propset_old();
                                     self.gc_note(&old);
                                 }
                                 self.frames[top].stack.push(value);
@@ -3625,6 +3670,8 @@ impl<'m> super::Vm<'m> {
                                 ic.fill(fcid, crate::bytecode::PropIc::scope_key(cur), i);
                             }
                             if let Some(old) = write_property_at(&target, &name, slot, value.clone())? {
+                                #[cfg(feature = "zval-census")]
+                                super::zvalcensus::note_gcnote_site_propset_old();
                                 self.gc_note(&old);
                             }
                             self.frames[top].stack.push(value);

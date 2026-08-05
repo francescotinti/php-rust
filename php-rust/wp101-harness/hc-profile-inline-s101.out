@@ -1,0 +1,55 @@
+hc-profile-inline-s101: S-101 punto 2b — decomposizione INLINE-AWARE del 50%
+run_loop su prop.php (A-BA-102-2/A-GR-102-2; Bak R3: nessun verdetto H-C1x
+contro una baseline sfocata)
+grade=PROFILE  # attribuzione a campioni, non verdict-grade; i CONTEGGI del
+  census (hc-census-s101.out) restano il giudice dei canali
+formato=ascii-nudo
+sessione=S-101 (2026-08-06 00:3x)
+strumento=samply 2000 Hz su build release+debuginfo (CARGO_PROFILE_RELEASE_DEBUG=2,
+  target ISOLATO phpr-s101dbg-target, dSYM via dsymutil, atos -i per le catene
+  inline; 11883 campioni, 11870 self in phpr; leaf-addr -> catena inline 1:1
+  verificata, 426 indirizzi, 1 irrisolto)
+giudice=prop.php 30M iter (~5,9 s wall della build debuginfo)
+
+# ---- ATTRIBUZIONE OUTERMOST (cosa il sample vede come funzione fisica) ----
+# run_loop 57,4% · drop_in_place<Zval> 12,9% · Zval::clone 8,3% · gc_note 5,0%
+# · Vec::push_mut 3,9% · write_property_at 2,9% · binary_value_ab 2,1%
+# · lazy_prop_access 2,0% · deref_clone 2,0% · reg_store_slot 1,3%
+# (coerente col profilo co-equale S-100: drop 12,6 clone 7,6 gc_note 5,3 —
+#  il pavimento «~27% ciclo di vita Zval» si conferma ~28,2% qui:
+#  12,9+8,3+5,0+2,0)
+
+# ---- IL 50% DI run_loop APERTO (innermost dei campioni con outermost=run_loop) ----
+# percentuali sul TOTALE phpr:
+#   run_loop corpo proprio (dispatch+handler non ulteriormente attribuibili) 21,2%
+#   Vec::as_slice 9,5% + Vec::len 4,4% + Vec::pop 4,0% + as_mut_slice 3,0%
+#     + slice::index 2,0% + ptr::read 2,0% + push_mut(inl) 1,4% + non_null 0,3%
+#     = ~26,6% TRAFFICO DELLA PILA OPERANDI (accessor Vec inlined nel loop)
+#   Option::expect 3,0% (gli expect dei pop) · read_slot 1,3% · Const::to_zval 0,7%
+#   · Cell::get 0,7% · try_with(TLS) 0,6% · binary_fast 0,4% · PropIc::get 0,4%
+#   · Props::get_slot 0,2%
+# LETTURA: dentro run_loop il costo nominato NON e' un handler: e' la MECCANICA
+# della pila operandi (push/pop/len/as_slice su Vec<Zval>) — piu' grande del
+# ciclo di vita Zval stesso. La «tariffa» ~9-10 ns/op ha ora un terzo punto
+# d'appoggio MECCANICO: ogni op paga in media 2-3 accessi Vec + il dispatch.
+
+# ---- COSTO PER EVENTO (dal census + cronometro S-101 punto 1, bande non tariffe) ----
+# T_netto prop phpr = 5,22 s / 30M iter = 174 ns/iter su 18 op = 9,67 ns/op.
+# clone Zval 8,3% ~= 14,4 ns/iter / 6 clone ricevitore ~= 2,4 ns/clone
+# drop_in_place 12,9% ~= 22,4 ns/iter / ~11 drop (6 handle + ~5 Long temporanei)
+#   ~= 2,0 ns/drop  (drop-glue ANCHE sui Long: discriminante incondizionato — Bak)
+# gc_note 5,0% ~= 8,7 ns/iter / 4 call ~= 2,2 ns/call (100% braccio banale)
+# => ATTESO CONTABILE per gli stadi H-C1 (dal canale contato, MAI da quota%xT):
+#   H-C1a (niente gc_note per scalari ai 4 siti): -4 call/iter ~= -8,7 ns/iter
+#     ~= -5% del tempo phpr => prop ~12,4 -> ~11,8 [banda, da misurare da sola]
+#   H-C1b (move del ricevitore al posto di deref_clone nei 3 Prop-op: l'handle
+#     poppato E' owned — clone+drop coppia intera): -3 coppie/iter ~= -13 ns/iter
+#     ~= -7,5% => ~11,4 [banda]; i 3 clone da LoadVar/LoadSlot restano (emissione)
+#   TETTO WP-102 confermato dalla contabilita': H-C1a+b+c pieno ~= -27% =>
+#     prop ~9x — H-C1 NON chiude H-C (il traffico Vec della pila e il dispatch
+#     restano fuori dal suo perimetro).
+verdetto=Il 50% e' aperto: 21,2% dispatch/corpi + ~26,6% meccanica della pila
+  operandi + briciole nominate. Il ciclo di vita Zval (28,2%) e' CONFERMATO
+  come seconda gamba. Le tre predizioni di sedia convivono: Bak (drop-glue
+  scalari) + Matsakis (ricevitore Rc, 6 coppie/iter) + Stogov (gc_note su
+  non-refcounted, 4/iter) sono TUTTE vere e sommano coerentemente.

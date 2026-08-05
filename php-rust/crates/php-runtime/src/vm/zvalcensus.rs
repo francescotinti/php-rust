@@ -126,6 +126,143 @@ pub(super) fn zval_holds_rc(v: &Zval) -> bool {
     }
 }
 
+// ----- S-101 punto 2 (ordine WP-102 §2): census dinamico specie×sito×canale
+// sul percorso PROPRIETÀ. Arbitra le TRE predizioni pre-registrate di
+// `wp101-harness/hc-census-predizioni.out` (P1 specie dei valori, P2 canale
+// ricevitore, P3 attribuzione gc_note) — scritte PRIMA di questi contatori.
+// Stessa convenzione del resto del modulo: SOLO build di strumentazione.
+
+/// Valori transitati dal canale di LETTURA proprietà (`PropGet`/`ThisPropGet`,
+/// IC-hit + fallback + fast-path WP-25 + lettura generale). P1.
+pub static PROPGET_VAL: AtomicU64 = AtomicU64::new(0);
+/// Il sottoinsieme refcounted ([`zval_holds_rc`]) di [`PROPGET_VAL`].
+pub static PROPGET_VAL_RC: AtomicU64 = AtomicU64::new(0);
+/// Valori transitati dal canale di SCRITTURA proprietà (`PropSet`, IC-hit +
+/// fast-path WP-25 + prop_init). P1.
+pub static PROPSET_VAL: AtomicU64 = AtomicU64::new(0);
+/// Il sottoinsieme refcounted di [`PROPSET_VAL`].
+pub static PROPSET_VAL_RC: AtomicU64 = AtomicU64::new(0);
+/// Operandi (lhs+rhs) transitati da `BinaryDst`. P1.
+pub static BINDST_OPND: AtomicU64 = AtomicU64::new(0);
+/// Il sottoinsieme refcounted di [`BINDST_OPND`].
+pub static BINDST_OPND_RC: AtomicU64 = AtomicU64::new(0);
+
+/// Canale RICEVITORE (P2): clone di un handle `Rc<Object>` fatti da
+/// `LoadVar`/`LoadSlot` (il push di `$o` in pila via `read_slot`).
+pub static RECV_CLONE_LOAD: AtomicU64 = AtomicU64::new(0);
+/// Canale RICEVITORE (P2): `obj.deref_clone()` dentro `PropGet`/`PropSet`/
+/// fallback quando il target è un `Object` (bump Rc del ricevitore).
+/// I DROP corrispondenti non hanno un sito contabile (fine-arm): per
+/// conservazione drop_handle = clone_handle su un micro stazionario.
+pub static RECV_CLONE_PROP: AtomicU64 = AtomicU64::new(0);
+/// `Op::Pop` che droppa un handle `Object` (la parte del traffico ricevitore
+/// che muore esplicitamente in pila, con la sua `gc_note`).
+pub static RECV_DROP_POP: AtomicU64 = AtomicU64::new(0);
+
+/// Ogni chiamata a `Vm::gc_note` (contata NEL corpo: cattura tutti i siti). P3.
+pub static GCNOTE_TOTAL: AtomicU64 = AtomicU64::new(0);
+/// Chiamate a `gc_note` con argomento NON-refcounted (braccio `_ => {}`:
+/// il costo è la chiamata+match, non il bookkeeping). Predizione Stogov.
+pub static GCNOTE_SCALAR: AtomicU64 = AtomicU64::new(0);
+/// Chiamate a `gc_note` con argomento `Object` (borrow + flag DESTRUCTED +
+/// eventuale insert nel gc_buf). Predizione Matsakis.
+pub static GCNOTE_OBJ: AtomicU64 = AtomicU64::new(0);
+/// Le chiamate taggate al sito `Op::Pop` (una per pop riuscito).
+pub static GCNOTE_SITE_POP: AtomicU64 = AtomicU64::new(0);
+/// Le chiamate taggate al sito `PropSet` sul VECCHIO valore sovrascritto.
+/// Il residuo `total - pop - propset_old` = altri siti (Sweep, teardown, …).
+pub static GCNOTE_SITE_PROPSET_OLD: AtomicU64 = AtomicU64::new(0);
+
+/// Specie×canale sul percorso proprietà: `chan` 0=PropGet, 1=PropSet,
+/// 2=BinaryDst (operando).
+#[inline]
+pub fn note_prop_val(chan: u8, v: &Zval) {
+    REGISTERED.call_once(|| unsafe {
+        libc::atexit(dump_at_exit);
+    });
+    let rc = zval_holds_rc(v);
+    let (t, trc) = match chan {
+        0 => (&PROPGET_VAL, &PROPGET_VAL_RC),
+        1 => (&PROPSET_VAL, &PROPSET_VAL_RC),
+        _ => (&BINDST_OPND, &BINDST_OPND_RC),
+    };
+    t.fetch_add(1, Ordering::Relaxed);
+    if rc {
+        trc.fetch_add(1, Ordering::Relaxed);
+    }
+}
+
+/// `LoadVar`/`LoadSlot`: la cella che sta per essere clonata in pila.
+#[inline]
+pub fn note_recv_load(cell: &Zval) {
+    if matches!(cell, Zval::Object(_)) {
+        RECV_CLONE_LOAD.fetch_add(1, Ordering::Relaxed);
+    }
+}
+
+/// `PropGet`/`PropSet`/fallback: il target APPENA clonato con `deref_clone`.
+#[inline]
+pub fn note_recv_clone_prop(target: &Zval) {
+    if matches!(target, Zval::Object(_)) {
+        RECV_CLONE_PROP.fetch_add(1, Ordering::Relaxed);
+    }
+}
+
+/// `Op::Pop`: il valore appena poppato (che sta per essere `gc_note`'d).
+#[inline]
+pub fn note_pop(v: &Zval) {
+    GCNOTE_SITE_POP.fetch_add(1, Ordering::Relaxed);
+    if matches!(v, Zval::Object(_)) {
+        RECV_DROP_POP.fetch_add(1, Ordering::Relaxed);
+    }
+}
+
+/// Corpo di `Vm::gc_note`: ogni chiamata, con la specie dell'argomento.
+#[inline]
+pub fn note_gcnote(v: &Zval) {
+    REGISTERED.call_once(|| unsafe {
+        libc::atexit(dump_at_exit);
+    });
+    GCNOTE_TOTAL.fetch_add(1, Ordering::Relaxed);
+    match v {
+        Zval::Undef | Zval::Null | Zval::Bool(_) | Zval::Long(_) | Zval::Double(_) => {
+            GCNOTE_SCALAR.fetch_add(1, Ordering::Relaxed);
+        }
+        Zval::Object(_) => {
+            GCNOTE_OBJ.fetch_add(1, Ordering::Relaxed);
+        }
+        _ => {}
+    }
+}
+
+/// Sito `PropSet`: la `gc_note` sul vecchio valore sovrascritto.
+#[inline]
+pub fn note_gcnote_site_propset_old() {
+    GCNOTE_SITE_PROPSET_OLD.fetch_add(1, Ordering::Relaxed);
+}
+
+/// Riga S-101 SEPARATA (il formato della riga storica resta intatto: il
+/// gate cifre la parsa così com'è).
+pub fn dump_line_s101() -> String {
+    format!(
+        "zvalcensus_s101 propget_val={} propget_val_rc={} propset_val={} propset_val_rc={} bindst_opnd={} bindst_opnd_rc={} recv_clone_load={} recv_clone_prop={} recv_drop_pop={} gcnote_total={} gcnote_scalar={} gcnote_obj={} gcnote_site_pop={} gcnote_site_propset_old={}",
+        PROPGET_VAL.load(Ordering::Relaxed),
+        PROPGET_VAL_RC.load(Ordering::Relaxed),
+        PROPSET_VAL.load(Ordering::Relaxed),
+        PROPSET_VAL_RC.load(Ordering::Relaxed),
+        BINDST_OPND.load(Ordering::Relaxed),
+        BINDST_OPND_RC.load(Ordering::Relaxed),
+        RECV_CLONE_LOAD.load(Ordering::Relaxed),
+        RECV_CLONE_PROP.load(Ordering::Relaxed),
+        RECV_DROP_POP.load(Ordering::Relaxed),
+        GCNOTE_TOTAL.load(Ordering::Relaxed),
+        GCNOTE_SCALAR.load(Ordering::Relaxed),
+        GCNOTE_OBJ.load(Ordering::Relaxed),
+        GCNOTE_SITE_POP.load(Ordering::Relaxed),
+        GCNOTE_SITE_PROPSET_OLD.load(Ordering::Relaxed),
+    )
+}
+
 static REGISTERED: std::sync::Once = std::sync::Once::new();
 
 extern "C" fn dump_at_exit() {
@@ -191,5 +328,6 @@ pub fn dump_exit() {
     }
     if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
         let _ = writeln!(f, "{}", dump_line());
+        let _ = writeln!(f, "{}", dump_line_s101());
     }
 }

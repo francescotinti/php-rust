@@ -3899,6 +3899,9 @@ impl<'m> Vm<'m> {
     fn gc_note(&mut self, v: &Zval) {
         #[cfg(feature = "gc-census")]
         gc_census::note();
+        // S-101 census: ogni chiamata, con la specie dell'argomento (P3).
+        #[cfg(feature = "zval-census")]
+        zvalcensus::note_gcnote(v);
         match v {
             Zval::Object(rc) => {
                 // One borrow serves the whole note: the DESTRUCTED mirror

@@ -1,0 +1,92 @@
+hc-census-s101: S-101 punto 2 — census DINAMICO specie×sito×canale su prop.php
+(ordine WP-102 §2; predizioni pre-registrate in hc-census-predizioni.out,
+scritte 2026-08-06 00:0x PRIMA di ogni strumento, commit 8683a10)
+grade=CENSUS  # conteggi esatti, non-timing; nessuna cifra cronometrica qui
+formato=ascii-nudo
+sessione=S-101 (2026-08-06)
+strumento=build zval-census (feature-only, target-dir ISOLATO phpr-census-target;
+  contatori S-101 in vm/zvalcensus.rs: riga separata zvalcensus_s101, la riga
+  storica del modulo resta byte-identica per il gate cifre)
+giudice=wp97-harness/micro/prop.php: for(30M){ $o->x = $o->y + 1; $s += $o->x; }
+
+# ---- GAMBA STATICA (attese derivate dal dump {main} S-100, PRIMA del run) ----
+# loop flag-on (op 18-35): CmpJmpSC, LoadSlot, LoadVar, PropGet(y), PushConst,
+#   BinaryAdd, PropSet(x), Pop, Sweep, LoadVar, PropGet(x), LoadSlot, Swap,
+#   BinaryDst, Sweep, IncDecSlot, Pop, Jump
+# Attese PER ITERAZIONE (dinamico atteso = 30e6 x questi, + coda costante):
+att_propget_val=2      # PropGet(y) + PropGet(x), entrambi Long => rc=0
+att_propset_val=1      # PropSet(x), Long => rc=0
+att_bindst_opnd=2      # BinaryDst lhs+rhs, entrambi Long => rc=0
+att_recv_clone_load=2  # i 2 LoadVar clonano l'handle Rc di $o (i 2 LoadSlot
+                       #   caricano $s/$i Long e non contano)
+att_recv_clone_prop=3  # deref_clone del ricevitore: PropGet x2 + PropSet x1
+att_recv_drop_pop=0    # i 2 Pop droppano Long (valore di PropSet e di IncDecSlot);
+                       #   gli handle ricevitore muoiono a FINE BRACCIO (drop Rust
+                       #   senza gc_note) => bilancio: 5 clone + 5 drop Rc/iter
+att_gcnote_total=3     # Pop x2 + PropSet(old) x1 — Sweep a buffer vuoto non nota
+att_gcnote_scalar=3    # tutti Long
+att_gcnote_obj=0
+att_gcnote_site_pop=2
+att_gcnote_site_propset_old=1
+# LETTURA delle predizioni contro la gamba statica (il DINAMICO arbitra):
+#   P1 (100% valori Long): attesa CONFERMA (rc=0 su tutti e tre i canali).
+#   P2 (canale refcounted = ricevitore, >=2 clone+drop/iter): attesa CONFERMA
+#      con conteggio 5/iter (2 load + 3 deref_clone) — piu' del minimo >=2.
+#   P3 (>=1 gc_note/iter attribuita alla SCRITTURA, 0 ai Long letti): attesa
+#      CONFERMA sul primo corno (1/iter da PropSet-old) MA il conteggio
+#      dominante e' il sito Pop (2/iter su Long): se il dinamico conferma,
+#      la quota 5,3% del profilo va attribuita ~2/3 a traffico-di-pila e
+#      ~1/3 alla scrittura — rilevante per la mira di H-C1a.
+#   Predizioni rivali di sedia: Stogov (gc_note su non-refcounted) attesa
+#      CONFERMA al 100% (3/3 scalar); Matsakis (ricevitore Rc) CONFERMA sul
+#      canale clone (5/iter) ma SENZA gc_note del ricevitore (0 gcnote_obj);
+#      Bak (drop-glue su scalari) da leggere nel profilo inline-aware.
+
+# ---- GAMBA DINAMICA (run del binario census, target isolato phpr-census-target) ----
+# binario_census=build zval-census su HEAD 725d5a1 (fix liveness.rs BinaryAdd incluso)
+# output PHP corretto in entrambi i run (60000000 / 200000 = parita' funzionale del
+#   binario strumentato sul giudice)
+# prop.php 30M (census-prop-raw.txt):
+#   propget_val=60000000 (2/iter) propget_val_rc=0
+#   propset_val=30000000 (1/iter) propset_val_rc=0
+#   bindst_opnd=60000000 (2/iter) bindst_opnd_rc=0
+#   recv_clone_load=90000000 (3/iter!)  recv_clone_prop=90000000 (3/iter)
+#   recv_drop_pop=1 (costante)
+#   gcnote_total=120000010 (4/iter!) gcnote_scalar=120000008 gcnote_obj=2 (costante)
+#   gcnote_site_pop=60000004 (2/iter) gcnote_site_propset_old=30000000 (1/iter)
+# prop_small 100K: stessi rapporti ESATTI (linearita' 300:1 verificata, code costanti
+#   +1/+2/+4/+8 identiche nei due run)
+#
+# IL DINAMICO HA MORSO LO STATICO DUE VOLTE (A-GR-102-1, finding non arrotondamento):
+#   F1: recv_clone_load=3/iter, NON 2 — il primo LoadSlot del loop carica $o
+#       (il target dell'assegnamento viaggia in pila PRIMA del RHS), non $s;
+#       lo statico l'aveva attribuito a $s. Canale ricevitore TOTALE:
+#       6 clone + 6 drop Rc/iter (3 load + 3 deref_clone) = 12 refcount-op/iter
+#       contro 0 dell'oracle (ZVAL_COPY_DEREF su Long = copia pura; verificato
+#       per NOME su zend_jit_zval_copy_deref: addref SOLO sotto Z_OPT_REFCOUNTED).
+#   F2: gcnote_total=4/iter, NON 3 — il residuo total-pop-propset_old = 1/iter
+#       viene dallo store dello slot dst di BinaryDst (reg_store_slot che
+#       gc_nota il vecchio valore Long). Sito ora NOMINATO.
+#
+# ---- VERDETTO SULLE TRE PREDIZIONI ----
+# P1 CONFERMATA: 0 valori refcounted su TUTTI e tre i canali (5 valori Long/iter).
+#    Il «clone del valore» non alloca e non tocca refcount su questo giudice.
+# P2 CONFERMATA (e piu' grande del previsto): il canale refcounted e'
+#    INTERAMENTE il ricevitore — 6 clone+drop/iter (minimo predetto: >=2).
+#    H-C1b HA il suo canale, con conteggio esatto per il controfattuale.
+# P3 CONFERMATA sul corno della scrittura (1 gc_note/iter da PropSet-old) e
+#    RAFFINATA sul totale: 4 gc_note/iter TUTTE su Long (100% braccio banale);
+#    attribuzione: 2 Pop + 1 PropSet-old + 1 reg_store_slot. La quota 5,0% del
+#    profilo e' quindi ~3/4 traffico-di-pila/slot e ~1/4 scrittura proprieta'.
+# Predizioni rivali di sedia: Stogov CONFERMATA (gc_note al 100% su
+#    non-refcounted); Matsakis CONFERMATA sul canale clone del ricevitore
+#    (6/iter, ma SENZA gc_note del ricevitore: gcnote_obj=2 costante); Bak
+#    CONFERMATA dal profilo inline-aware (drop-glue su scalari: drop_in_place
+#    12,9% con quasi soli Long in circolo — vedi hc-profile-inline-s101.out).
+#
+# ---- GAMBA ALLOC (MIMALLOC_SHOW_STATS, binario pin f29883eb) ----
+# prop_small 100K vs empty: stats mimalloc IDENTICHE a meno di 4 pages totali e
+# rumore purge — NESSUN canale di allocazione per-iterazione. alloc/iter ~= 0
+# CONFERMATO (Bak: il meccanismo si RI-NOMINA — non e' allocazione, e':
+#   12 refcount-op/iter + 4 gc_note-call/iter + drop-glue/discriminante + traffico
+#   Vec della pila operandi).

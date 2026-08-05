@@ -313,6 +313,9 @@ fn effect(op: &Op, park_targets: &[usize]) -> Effect {
         | Op::ArrayInsert { .. }
         | Op::ArrayPush { .. }
         | Op::Binary { .. }
+        // S-101: `BinaryAdd` (S-100, H-B2) è la forma pura-pila di
+        // `Binary(Add)`: stessi effetti (nessuno slot per indice).
+        | Op::BinaryAdd
         | Op::Call { .. }
         | Op::CallArgs { .. }
         | Op::CallBuiltin { .. }
@@ -547,6 +550,9 @@ fn renounce(func: &Func) -> (bool, Bits) {
             | Op::AssignOpPath { .. }
             | Op::AssignPath { .. }
             | Op::Binary { .. }
+            // S-101: forma pura-pila di `Binary(Add)` (S-100, H-B2) — opera
+            // solo sulla pila, non rende CONDIVISO alcuno slot.
+            | Op::BinaryAdd
             // Forme registro (S-97.1): leggono per VALORE e scrivono per
             // intero via il write-through di StoreSlot — nessuna delle
             // sette rende uno slot CONDIVISO (il Ref-handling resta dentro
