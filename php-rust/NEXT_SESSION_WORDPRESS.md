@@ -32,7 +32,7 @@ pure**; giudice = le sei micro-categorie di `wp97-harness/micro/`.
 
 | categoria | rapporto (default on) | ipotesi attiva |
 |---|---|---|
-| proprietà | **12,4** (misurata S-100; decomposta: 2,0 conteggio × 6,2 costo/op) | **H-C ATTIVA** — candidata H-C1 (clone→prestito su PropGet) da iscrivere col SUO controfattuale |
+| proprietà | **12,4** (misurata S-100; decomposta: 2,0 conteggio × 6,2 costo/op) | **H-C ATTIVA** — H-C1 a STADI (a: bypass scalari; b: prestito ricevitore; c: copy+addref condizionale), tetto ~9× dichiarato |
 | aritmetica | ~12,7 flag-on (S-99; add on −31% post-estensione; da ri-baseline completa) | residuo ~9,9 ns/op nei corpi non-Binary e slot |
 | chiamate | 8,6 (S-99 flag-off; da rimisurare in modo on) | **H-D ATTIVA**, in coda dopo H-C |
 | stringhe | 6,9 · array 4,9 · regex 3,8 (S-99) | — (regex = parte sana) |
@@ -54,8 +54,14 @@ di S-101.
   la gamba dominante è il COSTO PER OPCODE (6,2×), non il conteggio (2,0×);
   ~27% del tempo nel ciclo di vita Zval (clone/drop/gc_note su
   PropGet/Pop), simboli per NOME in `wp100-harness/hc-premisura100.out`.
-  **H-C1 candidata**: lettura proprietà in prestito/refcount senza clone.
-  Si iscrive SOLO con criterio pre-registrato dal SUO controfattuale.
+  **H-C1 RIFORMULATA dal Concilio WP-102** (la forma «prestito al posto
+  del clone del valore» è REFUTATA: su prop.php i valori sono Long, il
+  clone non alloca; il churn è il RICEVITORE Rc+gc_note): forma A STADI
+  H-C1a (bypass bookkeeping scalari) → H-C1b (prestito/addref del
+  ricevitore à la ThisPropGet, sigillo di tipo) → H-C1c (copy+addref
+  condizionale stile Zend); borrow nudo dello slot valore VIETATO;
+  tetto dichiarato: successo pieno ⇒ resta ~9×. Prerequisiti: census
+  dinamico specie×sito×canale + fixture semantiche PRIMA di ogni riga.
 - **H-D (chiamate)**: attiva, in coda dopo H-C; prima mossa = stessa tavola
   (census × costo + profilo co-equale su calls.php).
 
@@ -151,23 +157,46 @@ Tutti i NON-riproporre WP-83..99 restano. Nuovi da S-100:
 **Riscritto**: rotazione S-100 il 2026-08-05. Apertura/chiusura = skill
 `apri-sessione`/`chiudi-sessione`. Harness di sessione: `wp100-harness/`.
 
-## §S-101 — BOZZA (da giudicare dal Concilio WP-102, `wp102-harness/`)
+## §S-101 — ORDINE DEFINITIVO (fissato dal Concilio WP-102, `wp102-harness/verbali/SYNTHESIS.md` §Ordine)
+
+⚖️ **Concilio WP-102 (2026-08-05/06, su S-100 e programma S-101) —
+VINCOLANTE.** Verbali integrali + 3 note di team + sintesi in
+`wp102-harness/COUNCIL_WP102_REVIEWS.md`. 9/9, nessun MI OPPONGO al
+lavoro fatto; capitali 1-3 (emit_binary ambientale; evidenza-sul-pin;
+mode-probe server) **SALDATE IN SESSIONE** (fix b618e3a + ri-gate sul pin);
+capitali 4-5 riscrivono l'ordine: **H-C1 riformulata A STADI** (il borrow
+nudo dello slot valore è VIETATO all'unanimità; il churn nominato è il
+RICEVITORE Rc+gc_note, prior art `ThisPropGet`; su prop.php i valori sono
+Long: il «clone del valore» non alloca) e **l'attribuzione peak esige A/B
+pin stessa-sera prima del bisect** (voce rinominata: crescita d'albero
+OFF+95 / ON+36,5 MiB; ogni cifra peak nomina l'HASH del binario).
 
 Oggetto: **H-C — il costo per opcode del percorso proprietà** (12,4× di
-cui 6,2× è costo/op; ~27% ciclo di vita Zval). Bozza d'ordine:
+cui 6,2× costo/op; TETTO dichiarato: il successo pieno di H-C1a-c lascia
+~9× — H-C1 non chiude H-C da sola). Ordine:
 
-1. **Ri-baseline sei categorie IN MODO DEFAULT (on)** sui due motori,
-   stessa finestra (S-100 ha misurato solo prop e add): i numeri che
-   giudicheranno H-C nascono qui.
-2. **H-C1 iscritta col SUO controfattuale**: che cosa rimuove il
-   prestito/refcount sul PropGet (clone+drop+gc_note del valore letto);
-   criterio di caduta pre-registrato PRIMA di ogni riga (soglia ≥
-   pavimento sonda), fixture di semantica (hook, __get, ref, readonly,
-   visibilità) PRIMA del codice.
-3. Se H-C1 si scrive: corpus per NOME nei 2 modi + diff per-test + WP
-   collaudo di parità (l'emissione non cambia, cambia il runtime: batteria
-   + corpus bastano salvo cambi d'emissione).
-4. **Attribuzione voce aperta full-peak OFF +95 MiB** (bisect S-98→S-100 o
-   census): mezza sessione max, è d'apparato ma la gamba di rollback deve
-   restare sana.
-5. (timebox) H-D prima misura: stessa tavola su calls.php.
+1. **Ri-baseline sei categorie IN MODO DEFAULT** sui due motori, stessa
+   finestra (i numeri che giudicano tutto il resto).
+2. **Census dinamico specie×sito×canale su prop.php** (due motori, TRE
+   predizioni pre-registrate) + decomposizione inline-aware del 50%
+   `run_loop` (A-BA-102-2/A-GR-102-2): il census dinamico VALIDA lo
+   statico; la «tariffa» 9-10 ns/op resta BANDA a 2 punti finché non
+   esiste il terzo punto.
+3. **H-C1 a stadi**: H-C1a bypass bookkeeping SCALARI (misurabile da
+   sola) → H-C1b prestito/addref del RICEVITORE à la ThisPropGet (sigillo
+   di tipo; fixture aliasing/hook/__get/ref/readonly PRIMA) → H-C1c
+   copy+addref condizionale stile Zend. Criterio per stadio dal SUO
+   controfattuale; gate cumulativi a ogni stadio (batteria + corpus 2
+   modi + diff per-test); WP pair di parità NON derogabile se cambia il
+   runtime (KS-KL-102-3/KS-MA-102-4).
+4. **Attribuzione crescita d'albero**: A/B pin S-99↔S-100 stessa-sera
+   PRIMA del bisect + census allocatore; bande peak UNILATERALI calibrate
+   sul rumore misurato per-motore (R≥5, mediana, spread pubblicato;
+   banda < rumore ⇒ VOID, KS-GR-102-2).
+5. **Denti residui di rotazione** (piccoli): dente in-process BinaryAdd
+   braccio OFF (A-HE-102-1); dente absent≡`=1` (A-KL-102-3); smoke peak
+   sul pin quando una cifra peak entra nel registro (A-LE-102-4).
+6. (timebox) **H-D prima misura**: stessa tavola su calls.php col census
+   bi-regime (A-ST-102-5).
+
+BACKLOG per NOME e conflitti registrati: `wp102-harness/verbali/SYNTHESIS.md`.
