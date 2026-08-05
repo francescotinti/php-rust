@@ -58,12 +58,23 @@ fn run_case(spawn_flag_on: bool, putenv_stmt: &str) -> (String, String, String) 
 }
 
 /// Il chunk di dump dell'unità INCLUSA (compilata DOPO il putenv).
+///
+/// Morso Klabnik R1 (Concilio WP-101, CONFERMATO a macchina): il path
+/// dell'unità inclusa appare come COSTANTE (`cst… Str("…/inc.php")`)
+/// dentro il chunk del `{main}`, e un match a substring aggancia il chunk
+/// SBAGLIATO (first-match sul main). Il chunk giusto è quello il cui
+/// HEADER è il path: dopo `split("== unit ")` ogni chunk INIZIA col path
+/// della propria unit.
 fn included_chunk<'a>(stderr: &'a str, inc_name: &str) -> &'a str {
     stderr
         .split("== unit ")
-        .find(|u| u.contains(inc_name))
+        .find(|u| {
+            u.split_whitespace()
+                .next()
+                .is_some_and(|p| p.ends_with(inc_name))
+        })
         .unwrap_or_else(|| {
-            panic!("no dump chunk for {inc_name} — PHPR_DUMP_OPS dead?\n{stderr}")
+            panic!("no dump chunk HEADED by {inc_name} — PHPR_DUMP_OPS dead?\n{stderr}")
         })
 }
 
