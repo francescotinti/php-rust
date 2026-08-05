@@ -776,8 +776,12 @@ impl<'a> FnCompiler<'a> {
     /// (H-B2, S-98.0) — but ONLY when the register-lowering pass is off:
     /// its windows match `Op::Binary(Add)` and must keep fusing it (the
     /// mode already keys the unit cache, so the two emissions never mix).
+    /// A-HO-102-1 (Concilio WP-102): il modo si legge da `ctx.reg_lower`,
+    /// MAI da `enabled()` — questo era l'ultimo sito ambientale residuo e
+    /// falsificava «il modo è un INPUT del funnel» per il braccio OFF
+    /// in-process dei test (che emetteva Binary(Add) sotto default ON).
     fn emit_binary(&mut self, op: crate::hir::BinOp) -> Addr {
-        if op == crate::hir::BinOp::Add && !reg_lower::enabled() {
+        if op == crate::hir::BinOp::Add && !self.ctx.reg_lower {
             self.emit(Op::BinaryAdd)
         } else {
             self.emit(Op::Binary(op))

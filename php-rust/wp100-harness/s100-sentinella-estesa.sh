@@ -28,7 +28,12 @@ cp "$H77/fixtures/gate_two_reqs_same_vm.php" "$DOC/g2.php"
 cp "$H/sentinella-fixtures/payload.php" "$DOC/p1.php"
 cp "$H/sentinella-fixtures/json.php" "$DOC/j1.php"
 
-( "$PHPSRV" --axum --workers 2 --port $PORT -t "$DOC" >/dev/null 2>"$OUTDIR/srv.log" ) &
+# A-PE-102-1 (Concilio WP-102): il MODO EFFETTIVO del server si PROVA, non
+# si presume dall'env del launcher — il server gira con PHPR_DUMP_OPS=1 e
+# a fine sentinella si asserisce che il dump dell'unità p1.php nel suo log
+# mostri (modo on) o non mostri (modo off) le forme registro. fails=0 nei
+# due bracci senza questa prova è indistinguibile da env mai propagato.
+( PHPR_DUMP_OPS=1 "$PHPSRV" --axum --workers 2 --port $PORT -t "$DOC" >/dev/null 2>"$OUTDIR/srv.log" ) &
 SRV=$!
 sleep 2
 
@@ -79,6 +84,28 @@ done
 
 kill $SRV 2>/dev/null || true
 pkill -f "127.0.0.1:$PORT" 2>/dev/null || true
+sleep 0.3
+
+# ---- prova del modo effettivo (A-PE-102-1) ----
+# atteso dal CONTRATTO value-parsed: =0 => off; =1 o assente (post-flip) => on.
+case "${PHPR_REG_LOWER:-__absent__}" in
+  0) EXPECT_ON=0 ;;
+  *) EXPECT_ON=1 ;;
+esac
+P1CHUNK="$(tr -d '\0' < "$OUTDIR/srv.log" | awk '/^== unit .*\/p1\.php/{f=1;next} /^== unit /{f=0} f')"
+if [ -z "$P1CHUNK" ]; then
+  echo "FAIL mode-probe: nessun dump dell'unita' p1.php nel log del server (PHPR_DUMP_OPS morto?)"
+  FAILS=$((FAILS+1))
+else
+  HAS_REG=0
+  printf '%s' "$P1CHUNK" | grep -qE "BinarySS|BinarySC|BinaryDst|CmpJmpSC|CmpJmpSS" && HAS_REG=1
+  if [ "$HAS_REG" != "$EXPECT_ON" ]; then
+    echo "FAIL mode-probe: forme registro=$HAS_REG ma modo atteso on=$EXPECT_ON (PHPR_REG_LOWER=${PHPR_REG_LOWER:-assente}) — il server NON gira nel modo del launcher"
+    FAILS=$((FAILS+1))
+  else
+    echo "mode-probe: OK (server nel modo atteso: on=$EXPECT_ON, provato dal dump dell'unita')"
+  fi
+fi
 rm -rf "$DOC"
 if [ "$FAILS" = 0 ]; then echo "SENTINELLA-ESTESA PASS (16 interleaved + 4 concorrenti, workers=2)"; else echo "SENTINELLA-ESTESA FAIL fails=$FAILS"; fi
 exit "$FAILS"
