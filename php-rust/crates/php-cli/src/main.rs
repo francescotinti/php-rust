@@ -83,6 +83,9 @@ fn panic_message(payload: &(dyn std::any::Any + Send)) -> String {
 
 fn main() -> ExitCode {
     php_runtime::logging::init();
+    // A-PE-100-2: il modo register-lowering si sigilla QUI, prima che
+    // qualunque codice PHP (putenv incluso) possa girare.
+    php_runtime::seal_reg_lower_mode();
     // Leading `php`-style options before the script path. `-d key[=value]`
     // (separate or attached form) collects ini overrides — PHPUnit's
     // process-isolation runner spawns `PHP_BINARY -d k=v … <file>`.

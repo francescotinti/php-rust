@@ -38,6 +38,17 @@ pub mod scanf;
 pub mod unserialize;
 
 pub use builtin::{Builtin, BuiltinFn, BuiltinRefFn, Ctx, Registry};
+
+/// A-PE-100-2 (Concilio WP-100): sigillo EAGER del modo register-lowering a
+/// un confine NOMINATO — il primo atto dei due main (CLI e server), mai lazy
+/// alla prima compile. PHP `putenv()` chiama `std::env::set_var` in-process:
+/// senza sigillo, il modo di un processo server long-lived sarebbe deciso
+/// dalla prima richiesta che compila (stato di richiesta promosso a
+/// configurazione di motore). Col sigillo l'autore del modo è SOLO
+/// l'ambiente allo spawn del processo.
+pub fn seal_reg_lower_mode() {
+    let _ = compile::reg_lower::enabled();
+}
 // Session F: the bytecode VM is the sole production engine. `run_source` /
 // `run_source_with` / `Outcome` resolve to the VM; the tree-walking `eval` module
 // was deleted once every construct it handled became VM-native (F2).

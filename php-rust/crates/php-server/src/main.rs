@@ -569,6 +569,11 @@ mod axum_handler {
 
 fn main() -> ExitCode {
     php_runtime::logging::init();
+    // A-PE-100-2: sigillo eager del modo register-lowering al bootstrap del
+    // processo — nel server la finestra lazy era REALE (una richiesta con
+    // putenv("PHPR_REG_LOWER=1") prima della prima compile avrebbe deciso
+    // il modo dell'intero processo per sempre).
+    php_runtime::seal_reg_lower_mode();
 
     // A-TH-73: la sola lettura di PHPR_HUGE_TRACE, qui, prima di ogni spawn.
     #[cfg(all(feature = "mem-census", not(feature = "census-instrumentation")))]
