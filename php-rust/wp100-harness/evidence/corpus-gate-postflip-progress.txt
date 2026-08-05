@@ -1,0 +1,10 @@
+phpr=725a2ffad763bbc4
+22:27:14 corpus off (PHPR_REG_LOWER=0 esplicito): run
+pass rate (of runnable): 65.1% (2649/4067)
+failures: 1418
+22:33:45 corpus off: 1418 fail, insieme IDENTICO alla lista wp82
+22:33:45 corpus on (PHPR_REG_LOWER=1 esplicito): run
+pass rate (of runnable): 65.1% (2649/4067)
+failures: 1418
+22:40:12 corpus on: 1418 fail, insieme IDENTICO alla lista wp82
+22:40:12 CORPUS GATE DONE fails=0

@@ -1,0 +1,72 @@
+hc-premisura100: S-100 punto 6 — H-C (proprietà, 13,8×) PRIMA MISURA: decomposizione conteggio × costo/opcode (A-BA-101-2; strumento oracle NOMINATO = census opcache, A-GR-101-4)
+grade=CRITERIO+CENSUS  # census già eseguito (non-timing); cronometri DOPO, macchina quieta
+formato=ascii-nudo
+sessione=S-100 (2026-08-05 sera)
+binario=725a2ffad763bbc4 (pin post-flip, HEAD fb861e4)
+oracle=8.5.7 brew; census con opcache.enable_cli=1 opcache.jit=off opt_debug_level=0x20000 (after optimizer)
+
+# ---- GAMBA CONTEGGIO (dump/census, non-timing — ESEGUITA) ----
+# giudice prop.php: for(30M){ $o->x = $o->y + 1; $s += $o->x; }
+# oracle $_main loop body (op 0006-0014): FETCH_OBJ_R, ADD, ASSIGN_OBJ,
+#   OP_DATA, FETCH_OBJ_R, ASSIGN_OP(ADD), PRE_INC, IS_SMALLER, JMPNZ
+opcount_oracle_per_iter=9
+# phpr flag-ON {main} loop (op 18-35): CmpJmpSC, LoadSlot, LoadVar,
+#   PropGet(y), PushConst, BinaryAdd, PropSet(x), Pop, Sweep, LoadVar,
+#   PropGet(x), LoadSlot, Swap, BinaryDst, Sweep, IncDecSlot, Pop, Jump
+opcount_phpr_on_per_iter=18
+# phpr flag-OFF (op 18-39): come sopra ma compare non fuso (LoadVar+
+#   CmpJmpConst) e coda add non fusa (BinaryAdd+Dup+StoreSlot+Pop)
+opcount_phpr_off_per_iter=22
+rapporto_conteggio_on=2.0   [derivata: companion 18/9]
+# Le specie di puro TRAFFICO phpr assenti nell'oracle: 2x Sweep
+# (per-statement), 2x Pop, Swap, LoadSlot/LoadVar doppioni; Zend fonde
+# assegnamento (ASSIGN_OBJ+OP_DATA) e compound (ASSIGN_OP) in un handler.
+
+# ---- GAMBA COSTO (cronometri R=5, macchina QUIETA — criteri PRIMA) ----
+# ns/op = T_netto / (30e6 * opcount). Rapporto categoria S-99: 13,8 (flag-off).
+# PREDIZIONE CONTABILE pre-registrata (da refutare con la misura):
+#   costo/op_on = 13,8_ratio_equivalente => se il rapporto totale on ~= off
+#   (prop non è arith: le finestre toccano solo compare+coda add),
+#   costo/op phpr-on ≈ (T_on/9/oracle_ns) / 2.0 — attesa banda 6-8x.
+# CRITERI:
+#   - la decomposizione si pubblica come (rapporto_conteggio, rapporto_
+#     costo/op) con rapporto_totale = prodotto (sanity: deve ricostruire
+#     il rapporto misurato della stessa finestra, ±5%);
+#   - profilo a campioni CO-EQUALE (sample su ENTRAMBI i motori durante
+#     prop, stessa durata): i simboli TOP phpr si pubblicano per NOME —
+#     nessuna ipotesi H-C1/H-C2 si apre senza un simbolo nominato.
+# ---- ESITO CRONOMETRI (macchina quieta, 23:0x, R=5, mediane, netto pavimento) ----
+pavimento_oracle_s=0.05  pavimento_phpr_s=0.02
+prop_oracle_s=0.47 0.47 0.47 0.47 0.48       # mediana 0.47, netto 0.42
+prop_phpr_on_s=5.24 5.27 5.22 5.23 5.29      # mediana 5.24, netto 5.22 (DEFAULT nuovo, flag assente)
+prop_phpr_off_s=5.88 5.86 5.90 5.96 5.90     # mediana 5.90, netto 5.88 (=0 esplicito)
+rapporto_prop_on=12.4   [derivata: companion 5.22/0.42]
+rapporto_prop_off=14.0  [derivata: companion 5.88/0.42]  # S-99: 13.8 — in banda
+# DECOMPOSIZIONE (flag-on, il default): 12.4 = conteggio 2.0 x costo/op 6.2
+ns_op_oracle=1.56   [derivata: companion 0.42/(30e6*9)*1e9]
+ns_op_phpr_on=9.67  [derivata: companion 5.22/(30e6*18)*1e9]
+ns_op_phpr_off=8.91 [derivata: companion 5.88/(30e6*22)*1e9]
+# NB: ns/op phpr ~9-10 su prop COME sul residuo arith flag-on (9.9, S-99):
+# il costo per opcode phpr e' quasi invariante di categoria; l'oracle su
+# prop scende a 1.56 ns/op con handler TAILCALL SPECIALIZZATI per operando.
+
+# ---- PROFILO A CAMPIONI CO-EQUALE (sample 4s per lato, durate comparate:
+# ---- oracle su 300M iter ~4.7s, phpr su 30M ~5.2s) ----
+# phpr top-of-stack (~3400 campioni): run_loop 1702 (50%: dispatch+handler
+#   inline); POI per NOME: drop_in_place<Zval> 430 (12.6%) + Zval::clone
+#   259 (7.6%) + gc_note 179 (5.3%) + deref_clone 71 (2.1%) = ~27% di
+#   CICLO DI VITA Zval; Vec::push_mut 149 (4.4%); write_property_at 146
+#   (4.3%); lazy_prop_access 84; binary_value_ab 57; reg_store_slot 52.
+# oracle top-of-stack: ZEND_FETCH_OBJ_R_SPEC_CV_CONST 935,
+#   ZEND_ASSIGN_OBJ_SPEC_CV_CONST_OP_DATA_TMP 755, ZEND_ADD_SPEC_TMPVARCV_
+#   CONST 393, ZEND_ASSIGN_OP_SPEC_CV_TMPVAR 355, add_function 283,
+#   IS_SMALLER_SPEC..JMPNZ 265, PRE_INC 153 — nessun simbolo di
+#   allocazione/refcount visibile (borrow inline negli handler).
+verdetto=H-C PRIMA MISURA COMPLETA. La gamba dominante e' il COSTO PER
+  OPCODE (6.2x), non il conteggio (2.0x). Meccanismo NOMINATO dal profilo:
+  il percorso proprieta' phpr CLONA il valore (PropGet -> push clone ->
+  Pop/drop + gc_note), ~27% del tempo nel ciclo di vita Zval, mentre Zend
+  fa borrow/refcount dentro handler specializzati per forma di operando.
+  Candidata H-C1 (da iscrivere in S-101 CON criterio pre-registrato dal
+  SUO controfattuale): lettura di proprieta' in prestito/refcount senza
+  clone sul percorso PropGet/BinaryDst. Nessuna riga scritta qui.
