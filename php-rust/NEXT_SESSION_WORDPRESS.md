@@ -1,19 +1,25 @@
 # NEXT_SESSION — LA SPINA DORSALE: il nucleo interprete, misurato per categoria
 
-⏱ **FONDAMENTALI**: ultima misura full/media WordPress = **WP-94 (3 sessioni
-fa)** · ultima campagna sull'OGGETTO = **S-97.1 (questa: micro `arith`
-misurato due volte, coppia R=3 stessa-sera)** — sotto la spina dorsale il
-cronometro dell'oggetto è il micro, e ha girato; WordPress torna quando
-cambia l'emissione di parità.
+⏱ **FONDAMENTALI**: ultima misura full/media WordPress = **WP-94 (4 sessioni
+fa)** — ⚠️ e ora il collaudo di parità WordPress è **DOVUTO** (S-98.0 ha
+cambiato l'emissione flag-off: regola n.2) · ultima campagna sull'OGGETTO =
+**S-98.0 (questa: M1 tre-strumenti + coppia add/arith R=5 stessa-sera,
+due corpus per NOME)**.
 
-**Ultima sessione (S-97.1, 2026-08-05)**: H-A1 eseguita per intero e CADUTA
-sul suo criterio — v3 «raw registers» di WP-44 riarmata dietro
-`PHPR_REG_LOWER`: opcode/iter 19→11 (braccio 1 ✓) ma `arith` −30,7% < −40%
-(braccio 2 ✗) → abbandonata senza negoziare; codice DORMIENTE in albero,
-flag-off zero-delta, parità corpus 1418 per NOME identica. ⭐⭐ il costo per
-opcode è SALITO a 9,87 ns togliendo gli op economici: il conteggio è quasi
-chiuso (11 vs 7), **il divario vive nel COSTO per opcode** → ▶️ H-B1.
-Dettaglio: `sessions/WP_SESSION_97.md` + `wp97-harness/ha1-registers.out`.
+**Ultima sessione (S-98.0, 2026-08-05)**: l'ordine del Concilio WP-99
+eseguito per intero. **M1 → H-B1 CADUTA A TAVOLINO senza una riga di
+codice** (`wp98-harness/m1-preamble.out`: P = 0%, banda [0–6,7%] < 10% —
+la sonda A/B mostra il reload del preambolo GRATIS sul core OoO, la forma
+split-borrow perfino −0,53 ns/op sotto pressione). **H-B2 CONFERMATA E
+SPEDITA** (`hb2-addspec.out`: `Op::BinaryAdd` all'emissione, solo
+flag-off; giudice `add` −16,2%, **D = 6,07 ns/occorrenza = 8,7× la soglia
+pre-registrata**, guardia contata; flag-on bit-identico). Corpus 1418 per
+NOME identico flag-OFF e flag-ON sullo stesso albero (M4 ✓); B1+M3+M5
+saldati (test al funnel vero con controllo positivo sul `{main}`).
+⭐⭐ il fattore ~8 del costo per opcode vive nel PLUMBING dei corpi (call +
+marshalling Zval + pop/push ≈ 6 ns), non nel preambolo → l'asse resta la
+specializzazione, che COMPONE col −30,7%.
+Dettaglio: `sessions/WP_SESSION_98.md` + i due `.out` di `wp98-harness/`.
 
 **Cambio di rotta deciso dall'utente (2026-08-04, a valle di S-96.0)**: il
 progetto stava andando «a tentoni», con l'agenda di ogni sessione fatta dal
@@ -118,7 +124,7 @@ costo MEDIO per opcode è SALITO da 8,24 a 9,87 ns. Il conteggio è quasi
 chiuso (11 contro 7 dell'oracle); il divario vive nel **COSTO per opcode**
 (~8× sul residuo). L'asse è H-B1/H-B2.
 
-### ⚖️ Concilio WP-99 (2026-08-05, su S-97.0+S-97.1 e programma S-98.0) — VINCOLANTE
+### ⚖️ Concilio WP-99 (2026-08-05, su S-97.0+S-97.1 e programma S-98.0) — ESEGUITO in S-98.0 (punti 1-3 + debiti B1/M3/M5; resta la parità server)
 
 Verbali integrali + note di team + sintesi in `wp99-harness/` (9/9 CON
 EMENDAMENTI, sette refutazioni capitali). Le TRE che riscrivono l'ordine:
@@ -138,14 +144,30 @@ EMENDAMENTI, sette refutazioni capitali). Le TRE che riscrivono l'ordine:
    contiene H-A2 incondizionata e NON è verificato — restapi+option per
    NOME sotto env -i prima di ogni uso del server.
 
-**ORDINE S-98.0**: M1 → decisione H-B1 dal numero (criterio max(P/2, sette
-decimi di ns per opcode), caduta se arith flag-off > 7,2 s) → H-B2 (UN opcode: Binary Add
-int-int deciso a compilazione, guardia contata) · debiti ammessi in timebox
-½ sessione: parità server per NOME, smoke flag-ON con controllo positivo,
-assert {main} nella batteria del pass · BACKLOG per NOME: delibera manifest
-94/95, property-test antisimmetria mirror + GMP/Number, flag eager + dente
-anti-putenv, dente N_OPS<256, coppia peak al prossimo collaudo WP, bande
-str/re, fold coda AssignOp (dopo le sette trappole di Stogov).
+**ORDINE S-98.0 (eseguito)**: M1 ✓ (P=0% ⇒ H-B1 a tavolino) → H-B2 ✓
+(spedita, D=6,07 ns/occ) · debiti: smoke flag-ON ✓ + assert {main} ✓ +
+M5 ✓ · parità server NON eseguita (oggetto rimasto CLI) → S-99.
+
+**ORDINE S-99.0 (BOZZA — il Concilio WP-100 la giudica; il suo verbale
+sostituisce questa riga)**:
+
+1. **Collaudo di parità WordPress** — DOVUTO, non rinviabile: l'emissione
+   flag-off è cambiata (H-B2). Full+media stessa-sera col launcher
+   integrato (backup/wipe/restore uploads), conteggi per NOME sui due
+   lati; coppia peak nello stesso giro (chiude il debito Leijen).
+2. **Parità server** restapi 3508 + option 413 per NOME sotto `env -i`
+   sul pin nuovo **365f4d4069513de3** + sentinella output-capture
+   (KS-PE-99-1 resta VOID fino ad allora: nessun uso/misura del server).
+3. **Rollout H-B2, prima occorrenza flag-ON** (l'asse che compone col
+   −30,7%): specializzare Add int-int DENTRO le forme registro
+   (BinaryDst/SS/SC), criterio pre-registrato in ns/occorrenza derivato
+   da D=6,07, giudice `add`/`arith` flag-on.
+4. **Gate di promozione residui** (timebox ½ sessione): property-test
+   antisimmetria mirror + fixture GMP/Number (A-ST-99-2), flag eager +
+   dente anti-putenv (Pedersen).
+   BACKLOG per NOME invariato: delibera manifest 94/95, dente N_OPS<256,
+   bande str/re, fold coda AssignOp (dopo le sette trappole di Stogov),
+   Sub/Mul int-int stack-path.
 
 **⭐ DECISIONE UTENTE (2026-08-05, post-chiusura S-97.1): il −30,7% SI TIENE
 e ci si costruisce sopra.** La caduta di H-A1 sul criterio decide dove
@@ -158,7 +180,15 @@ costo (H-B1/H-B2, fold coda AssignOp) si COMPONGONO col −30,7% — meno
 opcode × opcode più economici — e si indagano con la promozione come
 SBOCCO, non in alternativa ad essa.
 
-### H-B1 — ogni opcode costa troppo, il preambolo (DECLASSATA a sotto-passo dal Concilio WP-99; si esegue SOLO se M1 le dà P ≥ 10%)
+### ~~H-B1 — ogni opcode costa troppo, il preambolo~~ → **CADUTA A TAVOLINO in S-98.0, zero codice** (`wp98-harness/m1-preamble.out`)
+
+M1 eseguita come da ordine (noop 200M + census + ASM + sonda A/B):
+P = 0% su tutta la banda (tetto anti-hiding 6,7%) < 10% ⇒ KS-GR-99-1
+scatta. Il dato che chiude: su questo core OoO le istruzioni del preambolo
+(reload L1 a indirizzo costante, fuori dal cammino critico) sono GRATIS, e
+la forma split-borrow sotto pressione di registri è risultata PIÙ LENTA di
+0,53 ns/op. ⭐⭐ mai più criteri derivati dal CONTEGGIO di istruzioni senza
+chiedersi se stanno sul cammino critico.
 
 ### ~~H-A2 — `Sweep`~~ → **CONFERMATA E SPEDITA** (`wp97-harness/ha2-sweep.out`)
 
@@ -197,15 +227,21 @@ stream di istruzioni è una volta e mezza più largo.) Dopo S-97.1 il bersaglio
   strumento di misura, non baseline. Forma vincolata: split-borrow del
   team forma-hb1 (KS: no unsafe/raw ptr, no mem::take, no ip locale).
 
-### H-B2 — Ogni opcode costa troppo: manca la specializzazione per tipo
+### ~~H-B2 — manca la specializzazione per tipo~~ → **CONFERMATA E SPEDITA su UN opcode** (S-98.0, `wp98-harness/hb2-addspec.out`)
 
-PHP 8 genera migliaia di handler specializzati per combinazione
-opcode × tipo × classe di operando; phpr ha UN braccio generico che discrimina
-il tipo a runtime a ogni esecuzione.
+`Op::BinaryAdd` emesso al posto di `Binary(Add)` SOLO flag-off (il modo è
+nella chiave della unit-cache; flag-on bit-identico, census 1.100.019
+invariato). Handler: guardia tag (Long,Long) → checked_add in-place sulla
+cima della pila; MISS → fallback integrale a `binary_value_ab`
+(KS-ST-99-3 ✓, guardia contata). **D = 6,07 ns/occorrenza** (add −16,2%;
+arith in banda [−3,−5]%). Corpus 1418 per NOME flag-off E flag-on.
 
-- **faccio**: specializzo **un solo** opcode (`Binary` Add intero-intero)
-  deciso a COMPILAZIONE, e misuro `arith`.
-- **si attiva se**: dopo H-A1 e H-B1 il costo per opcode resta sopra 3 ns.
+**Il meccanismo è provato; la CODA di H-B2 è il rollout** (per NOME, ogni
+occorrenza col suo criterio pre-registrato): Sub/Mul/compare int-int sul
+percorso stack; le stesse specializzazioni DENTRO le forme registro
+flag-on (BinarySS/SC/Dst hanno lo stesso plumbing generico da togliere —
+è lì che compone col −30,7%); la coda AssignOp fusa (11→9 op/iter) SOLO
+dopo le sette fixture-trappola di Stogov (A-ST-99-3).
 
 ### H-C — Il costo dell'accesso a proprietà è la risoluzione ripetuta
 
@@ -234,15 +270,20 @@ il tipo a runtime a ogni esecuzione.
 
 ## Stato gate
 
-- **phpr (parità release)**: **0dd98ebbb7eb2d96** — NUOVO da S-97.1 (contiene
-  le 7 varianti registro DORMIENTI dietro `PHPR_REG_LOWER`; flag-off
-  zero-delta). Il precedente 2f6c1a696b560755 (H-A2) resta in stash
-  `phpr-s97-ha2`; stash additivo nuovo `phpr-old-target/release/phpr-s97-ha1`.
-  Corpus Zend per NOME **1418 invariato**: insieme dei nomi identico e log
-  riga-per-riga identico salvo le sei righe `random_bytes` note
-  (`wp97-harness/ha1-registers.out` §PARITA').
-- **php-server**: f8f4295a1dcdb627 (⚠️ pin storico d45b578 NON riproducibile —
-  voce aperta).
+- **phpr (parità release)**: **4e268c3f61e6573d** — NUOVO da S-98.0
+  (contiene H-B2 `BinaryAdd` incondizionato flag-off + le 7 varianti
+  registro dormienti dietro `PHPR_REG_LOWER`; il bin viene rilinkato dal
+  test d'integrazione del funnel: l'hash cambia a ogni `cargo test`, il
+  SORGENTE è HEAD). Stash additivo `phpr-old-target/release/phpr-s98-hb2`;
+  precedenti 0dd98ebbb7eb2d96 (`phpr-s97-ha1`), 2f6c1a696b560755
+  (`phpr-s97-ha2`). Corpus Zend per NOME **1418 invariato** flag-OFF e
+  flag-ON sullo stesso albero (evidenze in `wp98-harness/evidence/`).
+- **php-server**: **365f4d4069513de3** — ricostruito con H-A2+H-B2,
+  parità MAI verificata (KS-PE-99-1: VOID ogni uso/misura del server
+  prima di restapi+option per NOME sotto env -i). Pin precedenti
+  832568a72b925dd1 (`php-server-s97`, mai collaudato), f8f4295a1dcdb627
+  (`php-server-wp94`); ⚠️ pin storico d45b578 NON riproducibile — voce
+  aperta.
 - **Gate cifre**: `--all` PASS a HEAD · **SELFTEST PASS rc=0** con i denti
   T0–T31 (il canale env di git è chiuso; il perimetro guarda i BYTE e non la
   forma che git sceglie di stampare).
@@ -274,7 +315,22 @@ il tipo a runtime a ogni esecuzione.
 
 ## NON riproporre
 
-Tutti i NON-riproporre WP-83..96 restano. In più:
+Tutti i NON-riproporre WP-83..97 restano. Nuovi da S-98.0:
+
+- **H-B1 in ogni forma** («frame in registro», split-borrow, riduzione del
+  preambolo): refutata per MISURA su questo hardware — il reload
+  L1-resident fuori dal cammino critico è gratis e la ristrutturazione può
+  perdere. Si riapre SOLO con hardware diverso o con un dato nuovo di
+  cammino critico.
+- **criteri derivati dal conteggio di istruzioni** senza analisi del
+  cammino critico (il tetto 1,4 ns «da 11/28 istruzioni» sbagliava
+  direzione).
+- **misurare con una build o altro carico concorrente** (serie bimodale
+  4,8/6,5 scartata in sessione).
+- **uccidere un processo su UNA sola evidenza** (`ps | grep` mentiva,
+  `pgrep -fl` vedeva il runner: un corpus perso al 90%).
+
+Ereditati e ribaditi:
 
 - **«il rapporto sulla suite WordPress misura la velocità del motore»** — è un
   aggregato diluito: nasconde un nucleo interprete oltre un ordine di
@@ -295,5 +351,6 @@ Tutti i NON-riproporre WP-83..96 restano. In più:
   proprio testo.
 
 ---
-**Riscritto**: 2026-08-04, su decisione dell'utente. Apertura/chiusura sessioni
-= skill `apri-sessione` / `chiudi-sessione`.
+**Riscritto**: 2026-08-04 (spina dorsale, decisione utente); rotazione
+S-98.0 il 2026-08-05. Apertura/chiusura sessioni = skill `apri-sessione` /
+`chiudi-sessione`. Harness di sessione: `wp98-harness/`.
