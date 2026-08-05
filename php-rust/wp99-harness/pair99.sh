@@ -78,11 +78,14 @@ ratios() {
 use strict; use warnings;
 my $out = shift @ARGV;
 sub t { my ($f) = @_; open my $h, "<", "$out/$f.time" or die "$f: $!";
-  my %v; while (<$h>) {
-    $v{user} = $1 if /([\d.]+)\s+user/; $v{sys} = $1 if /([\d.]+)\s+sys/;
-    $v{pf}   = $1 if /^\s*(\d+)\s+peak memory footprint/;
-    $v{rss}  = $1 if /^\s*(\d+)\s+maximum resident set size/; }
+  my %v; while (my $l = <$h>) {
+    $v{user} = $1 if $l =~ /([\d.]+)\s+user/; $v{sys} = $1 if $l =~ /([\d.]+)\s+sys/;
+    $v{pf}   = $1 if $l =~ /^\s*(\d+)\s+peak memory footprint/;
+    $v{rss}  = $1 if $l =~ /^\s*(\d+)\s+maximum resident set size/; }
   return \%v; }
+# NB: mai `while (<$h>)` dentro `map { t($_) }`: $_ e' alias read-only dei
+# letterali qw() e perl muore con "Modification of a read-only value"
+# (morso in S-99: pair99-ratios.out uscito col solo header).
 my ($mo,$mp,$fo,$fp) = map { t($_) } qw(media-oracle media-phpr full-oracle full-phpr);
 printf "media_user_cpu_oracle=%s media_user_cpu_phpr=%s ratio=%.3f\n", $mo->{user}, $mp->{user}, $mp->{user}/$mo->{user};
 printf "media_peak_footprint_oracle=%d media_peak_footprint_phpr=%d ratio=%.3f\n", $mo->{pf}, $mp->{pf}, $mp->{pf}/$mo->{pf};

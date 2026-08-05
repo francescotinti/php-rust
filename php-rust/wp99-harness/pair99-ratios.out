@@ -1,0 +1,8 @@
+pair99-ratios: rapporti dai .time della coppia S-99 (output macchina, non prosa)
+grade=VERDICT  # derivazione meccanica riproducibile dai raw
+formato=ascii-nudo
+media_user_cpu_oracle=21.04 media_user_cpu_phpr=55.34 ratio=2.630
+media_peak_footprint_oracle=445809528 media_peak_footprint_phpr=1202701752 ratio=2.698
+full_master_cpu_oracle=446.26 full_master_cpu_phpr=844.65 ratio=1.893
+full_peak_footprint_oracle=836044000 full_peak_footprint_phpr=1984497752 ratio=2.374
+full_peak_footprint_phpr_MiB=1892.56

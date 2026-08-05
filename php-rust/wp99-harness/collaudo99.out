@@ -1,0 +1,45 @@
+collaudo99: S-99.0 punto 2 — collaudo WordPress full+media stessa-sera + coppia peak (regola n.2; KS-GR-100-1)
+grade=VERDICT  # ricetta pair94 INVARIATA (time -l, MIMALLOC_PURGE_DELAY=0, DB reset + guardia uploads, oracle prima); raw in wp99-harness/pair-out (volume)
+formato=ascii-nudo
+sessione=S-99.0 (2026-08-05 pomeriggio, 13:04-13:33)
+phpr=4e268c3f61e6573d (pin parita' S-98, flag-off)
+php_server=48a46c690fb85005 (collaudato in punto 1 — il collaudo non e' VOID: KS-PE-100-1 soddisfatta PRIMA)
+oracle=8.5.7 brew
+identita=pair-out/pair99.identity
+
+# ---- PARITA' PER NOME (il giudice del collaudo; i rapporti vengono DOPO) ----
+media_conteggi=762 test / 1912 assertions / 52 skipped IDENTICI sui due lati
+media_failure_per_nome=IDENTICI (0 nomi, entrambi i lati verdi)
+full_conteggi=30472 test / 4558029 assertions / 86 warnings / 73 skipped IDENTICI
+full_failure_oracle=1 (test_search_hierarchical_pages_first_page — fallisce ANCHE sull'oracle: non nostro)
+full_failure_phpr=2 (lo stesso + Tests_Functions::test_wp_is_stream ftp)
+divergenza_unica=Tests_Functions::test_wp_is_stream data set #2 ftp — stream_get_wrappers() non elenca ftp: GIA' A CATALOGO (WP-94, PHPR_DIVERGENCES_FROM_PHP.md), CONFERMATA, non nuova
+verdetto_parita=COLLAUDO CHIUSO PER NOME: l'emissione flag-off cambiata da
+  H-A2 (S-97.1) + H-B2 (S-98.0) NON introduce alcuna divergenza WordPress
+  nuova. Il debito "collaudo DOVUTO" della regola n.2 e' SALDATO.
+
+# ---- COPPIA PEAK + CPU (fotografia stessa-sera; da pair99-ratios.out,
+# ---- output macchina) ----
+media_user_cpu=2.630x   (WP-94: 2.639x)
+media_peak_footprint=2.698x   (WP-94: 3.381x — il rapporto scende; gamba phpr 1202701752 B, confronto storico solo via raw GAP_TREND)
+full_master_cpu=1.893x   (WP-94: 1.873x)
+full_peak_footprint=2.374x  phpr=1984497752 B = 1892.56 MiB   (WP-94: 2.673x, 1993459800 B = 1901.11 MiB — gamba phpr PIATTA, -0.45% nominale)
+# Nessun claim MEGLIO/REGRESSO: lezione WP-94/Concilio WP-96 — i rapporti
+# sono fotografie; il movimento si legge solo dai raw in GAP_TREND con
+# denominatore omogeneo. La gamba phpr e' piatta su full CPU e full peak;
+# i rapporti media/full peak si muovono per la gamba ORACLE.
+
+# ---- IGIENE ----
+# macchina quieta (nessuna build/test concorrente; MCP server IDE inattivi);
+# uploads: guard backup-wipe/restore verificato (count=3, tar conservato);
+# run sequenziali oracle->phpr per gamba; wall full phpr 1023s (17m).
+# ⭐ morso in sessione: il perl dei rapporti moriva su `while (<$h>)` dentro
+# `map { t($_) }` ($_ alias read-only dei qw()) — pair99-ratios.out era
+# uscito col SOLO header; corretto nel launcher e rigenerato. Il difetto
+# era presente IDENTICO in pair94.sh (che pero' genero' il suo .out: da
+# chiarire mai — evidenza: il codice attuale muore, exit 25).
+
+verdetto=PUNTO 2 CHIUSO. Collaudo di parita' WordPress full+media saldato
+  per NOME sull'emissione H-A2+H-B2; coppia peak fotografata con lo
+  strumento pinnato (/usr/bin/time -l + MIMALLOC_PURGE_DELAY=0, A-LE-100-1).
+  Contatore sessioni-senza-misura full/media: AZZERATO (era 4).
