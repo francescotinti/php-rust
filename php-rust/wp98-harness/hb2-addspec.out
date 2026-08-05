@@ -65,7 +65,7 @@ deriva_same_binary_vs_pin_pct=0.6   [derivata: companion (7.88-7.83)/7.83]  # pi
 binario_hb2=1e752c74c237ec4c
 binario_baseline_stash=/Volumes/Extreme Pro/Claude/phpr-old-target/release/phpr-s97-ha1 (0dd98ebbb7eb2d96, verificato)
 # ⚠️ IGIENE: una prima serie era girata CON la build census viva in
-# background (bimodale 4,8/6,5) ed e' stata SCARTATA; tutte le cifre qui
+# background (bimodale: cluster a 4.8 e a 6.5) ed e' stata SCARTATA; tutte le cifre qui
 # sotto sono a macchina quieta, run sequenziali. Lezione ribadita: mai
 # misurare con una build concorrente.
 
@@ -74,7 +74,8 @@ add_base_s=5.63 5.65 5.70 5.69 5.65     # mediana 5.65, netto 5.63, spread 0.07
 add_hb2_s=4.74 4.77 4.73 4.72 4.85      # mediana 4.74, netto 4.72, spread 0.13
 calo_add_pct=16.2   [derivata: companion (5.63-4.72)/5.63]
 D_add_ns_per_occorrenza=6.07  [derivata: companion (5.63-4.72)/(3*50000000)*1e9]
-criterio=0.7 ns/occ -> SUPERATO (8,7x la soglia); claim 0,91 s > 3x spread 0,39 (KS-GR-99-2: VALIDO)
+criterio=0.7 ns/occ -> SUPERATO; rapporto_su_soglia=8.7  [derivata: companion 6.07/0.7]
+#   claim 0.91 s > 3x spread 0.39 (KS-GR-99-2: VALIDO)
 ns_per_op_add_dopo=5.90   [derivata: companion 4.72/(50000000*16/1e9)]  # era 7.04
 rapporto_add_dopo=12.1    [derivata: companion 4.72/0.39]               # era 14.5
 
