@@ -1029,6 +1029,11 @@ push @sources, committed_glob("$here/../wp96-harness/*.out");
 # dell'interprete (micro-baseline.out). E' il nuovo giudice del progresso: la
 # suite WordPress torna a essere un collaudo di parita', non un cronometro.
 push @sources, committed_glob("$here/../wp97-harness/*.out");
+# S-98.0: i .out di M1 (preambolo: noop/census/ASM/sonda, la predizione P
+# che ha chiuso H-B1 a tavolino) e di H-B2 (BinaryAdd: coppie add/arith,
+# census, gate di spedizione) + le evidenze corpus per NOME flag-off/on
+# (i .fails contano come line-count qui sotto, insieme a quelli wp81).
+push @sources, committed_glob("$here/../wp98-harness/*.out");
 # S-85.0: the measure85 campaign raws (85*/m85* labels) + verdict85 + the
 # wp85 evidence dir
 push @sources, committed_glob("$mout/*85*.summary"), committed_glob("$mout/*85*.census"),

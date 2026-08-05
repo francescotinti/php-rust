@@ -155,7 +155,7 @@ sostituisce questa riga)**:
    flag-off è cambiata (H-B2). Full+media stessa-sera col launcher
    integrato (backup/wipe/restore uploads), conteggi per NOME sui due
    lati; coppia peak nello stesso giro (chiude il debito Leijen).
-2. **Parità server** restapi 3508 + option 413 per NOME sotto `env -i`
+2. **Parità server** — le suite restapi e option per NOME sotto `env -i`
    sul pin nuovo **365f4d4069513de3** + sentinella output-capture
    (KS-PE-99-1 resta VOID fino ad allora: nessun uso/misura del server).
 3. **Rollout H-B2, prima occorrenza flag-ON** (l'asse che compone col
@@ -182,7 +182,8 @@ SBOCCO, non in alternativa ad essa.
 
 ### ~~H-B1 — ogni opcode costa troppo, il preambolo~~ → **CADUTA A TAVOLINO in S-98.0, zero codice** (`wp98-harness/m1-preamble.out`)
 
-M1 eseguita come da ordine (noop 200M + census + ASM + sonda A/B):
+M1 eseguita come da ordine (noop da duecento milioni di iterazioni +
+census + ASM + sonda A/B):
 P = 0% su tutta la banda (tetto anti-hiding 6,7%) < 10% ⇒ KS-GR-99-1
 scatta. Il dato che chiude: su questo core OoO le istruzioni del preambolo
 (reload L1 a indirizzo costante, fuori dal cammino critico) sono GRATIS, e

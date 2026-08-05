@@ -15,7 +15,8 @@ leve si compongono).
 
 `wp98-harness/m1-preamble.out` (VERDICT). Tre strumenti convergenti:
 
-- **noop 200M** (5 op/iter: LoadVar, CmpJmpConst, IncDecSlot, Pop, Jump):
+- **noop da duecento milioni di iterazioni** (5 op/iter: LoadVar,
+  CmpJmpConst, IncDecSlot, Pop, Jump):
   phpr 6,27 ns/op contro oracle 1,07 (3 op/iter) — anche gli op "economici"
   hanno corpi che dominano (4,5× il marginale del Sweep-noop).
 - **ASM del loop head** (binario di parità, `m1-runloop-preamble.asm`):
@@ -24,8 +25,9 @@ leve si compongono).
   frame); 17 restano (fetch op, bounds check ops[ip], store ip+1, jump
   table).
 - **La sonda** (`m1-probe/`, arbitrata dal Concilio: «M1 è la sonda»):
-  interprete sintetico col programma ESATTO del noop (OpS 48B, FrameS
-  176B), forma A = reload per-op, forma B = split-borrow H-B1. Build 1
+  interprete sintetico col programma ESATTO del noop (OpS a 48 byte,
+  FrameS a 176 byte), forma A = reload per-op, forma B = split-borrow
+  H-B1. Build 1
   (registri): Δ = +0,01 ns/op (zero in banda). Build 2 (pressione, jump
   table come il vero): **B più LENTA di 0,53 ns/op** — su questo core OoO
   il reload L1 fuori dal cammino critico è GRATIS e la ristrutturazione
@@ -83,7 +85,7 @@ all'oracle.
 
 ## NON fatti (dichiarati)
 
-- **Parità server** (restapi 3508 + option 413 per NOME sotto env -i):
+- **Parità server** (le suite restapi e option per NOME sotto env -i):
   NON eseguita — l'oggetto è rimasto CLI (la clausola di Pedersen la fa
   rientrare in ordine al primo uso del server). php-server è stato
   ricostruito con H-A2+H-B2: **pin 365f4d4069513de3, parità MAI
