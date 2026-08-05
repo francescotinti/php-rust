@@ -22,7 +22,10 @@ leg() { # $1=off|on
   else
     /usr/bin/env -u PHPR_REG_LOWER "$RUNNER" --isolate "$CORPUS" > "$logf" 2>&1
   fi
-  tr -d '\0' < "$logf" | sed -n 's|^\(/Volumes/.*\.phpt\)$|\1|p' | sort > "$names"
+  # I path dei fail sono INDENTATI di due spazi sotto "failures: N" (morso
+  # in S-99: la prima forma senza indent estraeva ZERO righe e il gate
+  # urlava DIVERSO su un artefatto).
+  tr -d '\0' < "$logf" | sed -n 's|^  \(/Volumes/.*\.phpt\)$|\1|p' | sort > "$names"
   tr -d '\0' < "$logf" | grep -E "pass rate|failures:" | tail -2 | tee -a "$OUT/progress.txt"
   if cmp -s "$names" <(sort "$REF"); then
     step "corpus $mode: $(wc -l < "$names" | tr -d ' ') fail, insieme IDENTICO alla lista wp82"

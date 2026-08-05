@@ -40,9 +40,10 @@ unset S99_PARITY_REEXEC
 # ---- pin e strumenti ----
 # 365f4d4069513de3 REFUTATO in S-99: compilato SENZA la feature axum-server
 # (recidiva WP-77.6.5.2.3) — non può servire --axum, collaudo impossibile.
-# Pin nuovo costruito DELIBERATAMENTE da HEAD 8d1de3b (stesso sorgente S-98):
-#   cargo build --release -p php-server --features axum-server
-PIN_SRV_ATTESO=48a46c690fb85005
+# Ricetta del pin: cargo build --release -p php-server --features axum-server
+# Storia collaudi S-99: 48a46c690fb85005 (HEAD 8d1de3b, rc=0 13:03) →
+# a838866e134b6a20 (HEAD 4c34f61, col sigillo eager A-PE-100-2).
+PIN_SRV_ATTESO=a838866e134b6a20
 PHPSRV="$HOME/Claude/php-rust-output/release/php-server"
 PHPR="$HOME/Claude/php-rust-output/release/phpr"
 ORACLE=/opt/homebrew/opt/php/bin/php
