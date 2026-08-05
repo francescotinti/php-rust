@@ -1,0 +1,43 @@
+s99-parity-server: S-99.0 punto 1 — parita' server (KS-PE-99-1, KS-PE-100-1/3, A-PE-100-1)
+grade=VERDICT  # run unico rc=0 sotto env -i lista chiusa; evidenze in wp99-harness/parity-out (volume)
+formato=ascii-nudo
+sessione=S-99.0 (2026-08-05)
+oracle=8.5.7 brew
+
+# ---- IL PIN DICHIARATO ERA INCOLLAUDABILE PER COSTRUZIONE ----
+# 365f4d4069513de3 (rotazione S-98, "effetto collaterale di una build") e'
+# compilato SENZA la feature `axum-server`: `--axum` rifiuta all'avvio
+# ("php-server: --axum requires 'axum-server' feature"). RECIDIVA di
+# WP-77.6.5.2.3 (la feature e' esclusa dai default di php-server).
+# Il sospetto di Pedersen (WP-100 R1: pin nato come effetto collaterale,
+# due rotazioni senza collaudo) e' CONFERMATO nel modo piu' forte: il pin
+# non poteva passare NESSUN collaudo axum, mai.
+pin_365f4d4069513de3=REFUTATO (manca axum-server)
+
+# ---- PIN NUOVO, COSTRUITO CON LA SUA RICETTA (A-PE-100-3) ----
+# cargo build --release -p php-server --features axum-server @ HEAD 8d1de3b
+# (8d1de3b = S-98 HEAD + il solo launcher .sh: sorgente motore IDENTICO al
+# pin phpr 4e268c3f61e6573d di parita').
+pin_php_server=48a46c690fb85005
+pin_phpr_alla_prova=4e268c3f61e6573d
+
+# ---- COLLAUDO (run unico, launcher env -i lista chiusa: PATH,HOME,TMPDIR,
+# ---- LC_ALL=C,MIMALLOC_PURGE_DELAY=0 — PHPR_REG_LOWER ASSENTE per
+# ---- costruzione; re-exec fail-closed) ----
+sentinella_output_capture=PASS   # G-APERTURA-2 axum: 2 richieste sequenziali byte-identiche, G2:PASS (GLOBALS/static/object_id reset su RetainSet persistente)
+option_per_nome=IDENTICO 413/1061 (skipped 3, warnings 1 = oracle)
+restapi_per_nome=IDENTICO 3508/15947 (errors 1 = oracle, skipped 6, warnings 4)
+uploads=guard backup-wipe/restore verificato (count=3)
+rc=0
+
+# NOTA DI METODO: le suite girano via phpr CLI (phpunit non attraversa HTTP);
+# collaudano l'EMISSIONE cambiata (H-A2+H-B2) sullo stesso albero sorgente
+# dei due binari. La gamba specifica del server (lifecycle per-richiesta,
+# binding output-capture) e' la sentinella sul pin. Un primo run (archiviato
+# in parity-out-run1-pin365-refutato) aveva la sola sentinella FAIL sul pin
+# vecchio; option/restapi erano gia' IDENTICI per NOME anche li'.
+
+verdetto=PARITA' SERVER CHIUSA sul pin 48a46c690fb85005 (registro:
+  collaudato: si'). KS-PE-99-1 soddisfatta; il collaudo WordPress del
+  punto 2 non e' piu' VOID per costruzione. La ricetta e' scriptata e
+  ri-eseguibile per la ri-parita' post-sigillo (team-ordine §4).

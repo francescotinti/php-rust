@@ -9,7 +9,7 @@ Nessuna cifra è attribuibile a un pin `collaudato: no` (KS-PE-100-3).
 
 | pin (sha256/16) | sessione | ricetta | collaudato | evidenza |
 |---|---|---|---|---|
-| 48a46c690fb85005 | S-99.0 | `cargo build --release -p php-server --features axum-server` @ HEAD 8d1de3b (stesso sorgente phpr S-98) | **in corso** | sentinella output-capture G-APERTURA-2 axum PASS (byte-id); option 413 IDENTICO per NOME; restapi in corso (`wp99-harness/parity-out/`) |
+| 48a46c690fb85005 | S-99.0 | `cargo build --release -p php-server --features axum-server` @ HEAD 8d1de3b (stesso sorgente phpr S-98) | **sì** | run unico rc=0 sotto env -i (2026-08-05 13:03): sentinella output-capture G-APERTURA-2 axum PASS (byte-id) + option 413 IDENTICO per NOME + restapi 3508 IDENTICO per NOME (`wp99-harness/parity-out/`, script `s99-parity-server.sh`) |
 | 365f4d4069513de3 | S-98.0 | effetto collaterale build S-98 (vietato d'ora in poi) | **NO — REFUTATO** | manca la feature `axum-server`: `--axum` rifiuta all'avvio (recidiva WP-77.6.5.2.3); il collaudo era impossibile per costruzione |
 | 832568a72b925dd1 | S-97 | effetto collaterale | NO | mai collaudato (KS-PE-99-1) |
 | f8f4295a1dcdb627 | WP-94 | stash `php-server-wp94` | parziale | battery61 riproducibile + coppia full WP-94; mai restapi/option per NOME sotto env -i |
