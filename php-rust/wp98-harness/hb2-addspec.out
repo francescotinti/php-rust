@@ -133,7 +133,23 @@ verdetto=H-B2 CONFERMATA E SPEDITA sul criterio pre-registrato: D_add=6,07
   pop/push) vale ~6 ns su ~8-10 del corpo di un Binary. Prossime occorrenze
   della stessa famiglia (Sub/Mul int-int, la coda AssignOp fusa) COMPONGONO
   sopra il -30,7% flag-on per la promozione.
-corpus_zend_flag_on=(vedi sotto, M4)
+corpus_zend_flag_on=1418 fail, insieme dei NOMI IDENTICO (M4/KS-KL-99-1:
+#   stesso albero, PHPR_REG_LOWER=1, cmp byte-uguale con la stessa lista;
+#   totali 5305/2649/1418/1238 identici). Evidenza:
+#   wp98-harness/evidence/corpus-hb2-flagon.fails.
+
+# ---- PIN FINALE (post-commit 6ee6310) ----
+# Il bin viene RILINKATO dal test d'integrazione (CARGO_BIN_EXE): l'hash
+# finale del binario di parita' e' 4e268c3f61e6573d (stesso sorgente del
+# 39e0a359; solo differenze cfg(test) negli intermedi). Stash additivo:
+# phpr-old-target/release/phpr-s98-hb2. MISURE RIPRODOTTE su questo hash:
+add_conferma_s=4.72 4.75 4.72     # mediana 4.72 = la coppia sta
+arith_conferma_s=7.51 7.52 7.51   # mediana 7.51 = la coppia sta
+# php-server ricostruito con H-A2+H-B2: 365f4d4069513de3 — parita' server
+# NON verificata (debito APERTO, eredita KS-PE-99-1: nessun uso/misura del
+# server prima di restapi+option per NOME sotto env -i).
+# Batteria finale (col test del funnel): 1723 passati, 0 falliti, exit 0;
+# reg_lower_funnel PASS al primo run (controllo positivo {main} morde).
 
 verdetto_provvisorio=H-B2 SUPERA il suo criterio sul giudice (D_add 6,07
   ns/occ >= 0,7): la specializzazione per tipo PAGA — 6 ns/occorrenza e' il
