@@ -73,3 +73,16 @@ su main, pushati.
   (count=3, backup tar conservati); MySQL wp8 su.
 - Harness di sessione: `wp100-harness/` (launcher bimodali, sentinella
   estesa, corpus-diff, trappole, `.out` di pre-misura/bande/H-C, evidence).
+
+## Post-scriptum di chiusura (Concilio WP-102 in sessione)
+
+Il concilio ha morso TRE volte a macchina e i morsi sono stati SALDATI
+prima della chiusura: (1) `emit_binary` leggeva `enabled()` invece di
+`ctx.reg_lower` (Hoare+Hejlsberg, indipendenti) — fix + batteria 1735/0;
+(2) l'evidenza del diff per-test andava giudicata SUL pin (Klabnik) —
+ri-eseguita: ZERO fuori carve-out + 1418×2; (3) la parità server non
+provava il modo effettivo (Pedersen) — mode-probe nella sentinella, OK
+nei due modi. **Pin FINALI: phpr f29883eb432806ce · php-server
+62b978c51c62e108 @ HEAD b618e3a** (stash `*-s100-fix`), registro
+graduato. H-C1 RIFORMULATA A STADI dal team hc-canale (il churn è il
+RICEVITORE, non il valore); ordine S-101 definitivo in NEXT_SESSION.
