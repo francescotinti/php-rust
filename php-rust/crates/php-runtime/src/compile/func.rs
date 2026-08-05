@@ -157,10 +157,12 @@ pub(super) fn compile_body(
         attributes: Vec::new(),
         exc_table: c.exc_regions,
     };
-    // Register-lowering pass (Leva B, doc/plans-archive/REGISTER_BYTECODE_PLAN.md §5): opt-in
-    // per process via PHPR_REG_LOWER; stage 1 ships it EMPTY so the dual-mode
-    // plumbing is proven zero-delta before any op is rewritten.
-    if super::reg_lower::enabled() {
+    // Register-lowering pass (Leva B, doc/plans-archive/REGISTER_BYTECODE_PLAN.md §5).
+    // S-100: il modo è un INPUT del funnel (ctx.reg_lower), stampato una sola
+    // volta dall'entry di produzione da `reg_lower::enabled()` (contratto
+    // value-parsed di PHPR_REG_LOWER); i test di emissione lo passano
+    // esplicito nei due valori via `compile_program_with_mode`.
+    if ctx.reg_lower {
         super::reg_lower::lower_func(&mut f);
     }
     Ok(f)

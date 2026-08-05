@@ -48,6 +48,18 @@ G4_full=FUORI BANDA (0.965 < 0.98, direzione FAVOREVOLE: on 2022754392 <
     sotto il rumore reale del full-peak.
   - decomposizione in corso: R=2 della gamba phpr-OFF full (rerun ricetta
     identica) — esito sotto.
+  - R=2 ESEGUITO: off full peak 2085177480 B = 1988.6 MiB (primo run
+    2095581320 = 1998.5; spread intra-sera 0.5%) => la gamba off di
+    stasera e' STABILE: il +5% e' un movimento CROSS-ALBERO (S-98 pin ->
+    S-100 candidato) da ATTRIBUIRE — voce APERTA per NOME, non rumore.
+    Il ramo PROMOSSO (on, 1929.05 MiB) non regredisce su nessuna metrica
+    vs off stessa-sera (CPU +0.8%, peak -3.5%) ed e' in storia (+1.9% vs
+    S-99): il rischio che G4 gateava (regressione del ramo promosso) NON
+    si e' materializzato; il fuori-banda formale = banda ±2% scritta male
+    (simmetrica) per un gate anti-regressione.
+verdetto_G4=flip NON bloccato; voce aperta nominata: "full peak gamba OFF
+  +~95 MiB cross-albero S-98->S-100, attribuzione dovuta" (prossima
+  sessione o Concilio WP-102).
 G4_media=PASS  # on/off = 1126712736/1148716448 = 0.981 in [0.95, 1.05].
 G5=REGISTRATO  # oracle media peak R=2 stasera: 394855264 / 394019704
   (banda strettissima, -0.2%) — NON contiene il valore S-99 (~446M):

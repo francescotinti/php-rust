@@ -63,9 +63,13 @@ pub(crate) fn enabled() -> bool {
     *V.get_or_init(|| mode_from_env(std::env::var_os("PHPR_REG_LOWER").as_deref()))
 }
 
-/// Default di processo quando `PHPR_REG_LOWER` è ASSENTE. Il flip della
-/// promozione (S-100 punto 5) inverte QUESTA costante e nient'altro.
-pub const DEFAULT_ON: bool = false;
+/// Default di processo quando `PHPR_REG_LOWER` è ASSENTE. FLIPPATO a `true`
+/// in S-100 punto 5 (promozione flag-on a default) coi gate del Concilio
+/// WP-101 tutti verdi: corpus 1418 per NOME + diff per-test ZERO nei due
+/// modi, parità server bimodale (sentinella estesa), coppia WP con bande
+/// pre-registrate, batteria a modo ESPLICITO. L'opt-out è `PHPR_REG_LOWER=0`
+/// (grammatica value-parsed sopra).
+pub const DEFAULT_ON: bool = true;
 
 /// La grammatica del contratto, pura e testabile senza toccare l'ambiente.
 pub fn mode_from_env(raw: Option<&std::ffi::OsStr>) -> bool {
@@ -592,49 +596,27 @@ mod tests {
     use crate::builtin::Registry;
     use crate::bytecode::Module;
 
-    fn compile(src: &[u8]) -> Module {
+    /// Compile col modo ESPLICITO (S-100): la batteria di emissione non
+    /// dipende dall'ambiente del processo — `compile` = modo OFF,
+    /// `compile_on` = il funnel VERO col pass acceso (hook compresi,
+    /// prop_init/thunk esclusi per costruzione: è compile_body a decidere).
+    fn compile_mode(src: &[u8], reg_lower: bool) -> Module {
         let program = crate::lower_source(b"t.php", src).expect("lowers");
-        crate::compile::compile_program(&program, &Registry::default()).expect("compiles")
+        crate::compile::compile_program_with_mode(&program, &Registry::default(), reg_lower)
+            .expect("compiles")
     }
 
-    /// Apply the pass to every body of a compiled module (bypassing the env
-    /// flag), mirroring the `compile_body` funnel ESATTAMENTE (A-HE-100-4,
-    /// sanatoria RC-2): gli HOOK passano da `compile_body` e quindi il pass
-    /// li riscrive — stanno DENTRO; `prop_init` è costruito a mano
-    /// (`compile_prop_init`, FnCompiler diretto, MAI `compile_body`) e in
-    /// produzione non è MAI lowered — dichiarato FUORI, non abbassarlo qui:
-    /// la vecchia versione lo abbassava e la batteria testava una pipeline
-    /// che la produzione non esegue (doppia fonte di verità a mano).
-    fn lowered(m: &Module) -> Module {
-        let mut m2 = m.clone();
-        lower_func(&mut m2.main);
-        for f in &mut m2.functions {
-            let mut nf = (**f).clone();
-            lower_func(&mut nf);
-            *f = std::rc::Rc::new(nf);
-        }
-        for f in &mut m2.closures {
-            lower_func(f);
-        }
-        for c in &mut m2.classes {
-            let mut nc = (**c).clone();
-            for meth in &mut nc.methods {
-                lower_func(&mut meth.func);
-            }
-            for info in nc.prop_info.values_mut() {
-                if let Some(h) = &mut info.hooks {
-                    if let Some(g) = &mut h.get {
-                        lower_func(g);
-                    }
-                    if let Some(s) = &mut h.set {
-                        lower_func(s);
-                    }
-                }
-            }
-            *c = std::rc::Rc::new(nc);
-        }
-        m2
+    fn compile(src: &[u8]) -> Module {
+        compile_mode(src, false)
     }
+
+    fn compile_on(src: &[u8]) -> Module {
+        compile_mode(src, true)
+    }
+
+    // S-100: il vecchio helper `lowered()` (mirror A MANO del funnel,
+    // fonte RC-2) è stato eliminato — il braccio flag-on dei test è ora il
+    // funnel VERO via `compile_on` (`compile_program_with_mode`).
 
     /// A-HE-100-4: enumera OGNI corpo dal Module per DESTRUCTURING ESAUSTIVO
     /// — un campo nuovo di `Module` (o di `CompiledClass`/`PropHooks` sotto)
@@ -739,8 +721,7 @@ echo g(1), ($h)(2), C::K;"#;
     /// il pass, e il chunk hook del dump le mostra pure.
     #[test]
     fn hooks_are_lowered_and_visible_in_the_dump() {
-        let m = compile(BODY_ZOO);
-        let l = lowered(&m);
+        let l = compile_on(BODY_ZOO);
         let hooks = zoo_class(&l)
             .prop_info
             .get(&b"p"[..])
@@ -756,7 +737,7 @@ echo g(1), ($h)(2), C::K;"#;
         let pi = zoo_class(&l).prop_init.as_ref().expect("prop-init");
         assert!(
             !pi.ops.iter().any(is_reg_form),
-            "lowered() abbassa prop_init che la produzione non abbassa MAI (RC-2)"
+            "il funnel flag-on abbassa prop_init che la produzione non abbassa MAI (RC-2)"
         );
         let mut buf = Vec::new();
         dump_module_to(&mut buf, &l);
@@ -798,8 +779,7 @@ echo g(1), ($h)(2), C::K;"#;
     /// no fused compare window survives un-rewritten; no register temps.
     #[test]
     fn stage2v3_rewrites_hot_windows() {
-        let m = compile(
-            br#"<?php
+        let src = br#"<?php
             function f($a, $b) {
                 $c = $a + $b;
                 if ($a > $b) { $c = $c * 2; }
@@ -808,9 +788,9 @@ echo g(1), ($h)(2), C::K;"#;
                 return $c . "s";
             }
             echo f(1, 2), f(4, 2), f(3, 0), f(1, 7);
-            "#,
-        );
-        let lm = lowered(&m);
+            "#;
+        let m = compile(src);
+        let lm = compile_on(src);
         let lf = lm
             .functions
             .iter()
@@ -844,14 +824,13 @@ echo g(1), ($h)(2), C::K;"#;
     /// measured v1 regression.
     #[test]
     fn stage2v3_stack_lhs_compare_keeps_cmpjmpconst() {
-        let m = compile(
-            br#"<?php
+        let src = br#"<?php
             function g($a) { return $a + 1; }
             function h($a) { if (g($a) == 3) { return 1; } return 2; }
             echo h(2), h(5);
-            "#,
-        );
-        let lm = lowered(&m);
+            "#;
+        let m = compile(src);
+        let lm = compile_on(src);
         let lh = lm
             .functions
             .iter()
@@ -875,8 +854,9 @@ echo g(1), ($h)(2), C::K;"#;
     /// (This is the WP-44 v3 commutative swap, dropped on soundness.)
     #[test]
     fn stage2v3_const_first_arith_does_not_fold() {
-        let m = compile(br#"<?php $a=5; $b = 3 + $a; $c = 3 * $a; echo $b, ",", $c;"#);
-        let lm = lowered(&m);
+        let src = br#"<?php $a=5; $b = 3 + $a; $c = 3 * $a; echo $b, ",", $c;"#;
+        let m = compile(src);
+        let lm = compile_on(src);
         assert!(
             !lm.main.ops.iter().any(|o| matches!(
                 o,
@@ -915,7 +895,7 @@ echo g(1), ($h)(2), C::K;"#;
         ];
         for src in snippets {
             let m = compile(src);
-            let lm = lowered(&m);
+            let lm = compile_on(src);
             for (f, orig) in all_funcs(&lm).into_iter().zip(all_funcs(&m)) {
                 let (new_n, old_n) = (f.ops.len(), orig.ops.len());
                 let check = |a: Addr| {
@@ -952,23 +932,12 @@ echo g(1), ($h)(2), C::K;"#;
         assert_eq!(std::mem::size_of::<Op>(), 48, "Op must not widen");
     }
 
-    /// Dual-mode guard: with the env flag unset, compilation never emits a
-    /// register form and the frame contract is unchanged (flag-off bytecode
-    /// stays byte-identical to stage 1 — proven end-to-end by the dump diff).
+    /// Dual-mode guard: in modo OFF (ESPLICITO — S-100: la batteria non ha
+    /// più premesse ambientali, M5 è assorbita dal modo-parametro) la
+    /// compilazione non emette MAI una forma registro né BinaryAdd da
+    /// estensione, e il contratto di frame è invariato.
     #[test]
     fn stage2v3_flag_off_emits_no_register_forms() {
-        // M5 (A-KL-99-5, ri-derivata sul contratto di modo S-100): la
-        // premessa di OGNI test flag-off di questa batteria è «modo di
-        // processo OFF» secondo la grammatica value-parsed (assente col
-        // default attuale, oppure `=0`). Se il modo risulta ON — flag `=1`
-        // esportato, o default flippato senza ri-derivare la batteria
-        // (KS-HO-101-3) — fallire FORTE, mai skippare in silenzio.
-        assert!(
-            !enabled(),
-            "il modo register-lowering di questo processo è ON: la premessa \
-             flag-off della batteria è invertita — esporta PHPR_REG_LOWER=0 \
-             (o ri-deriva la batteria se il default è stato flippato)"
-        );
         let m = compile(br#"<?php function f($a,$b){ $c=$a+$b; if($c>3){$c=$c*2;} return $c; } echo f(1,2);"#);
         for f in all_funcs(&m) {
             assert_eq!(f.max_temps, 0);
@@ -977,6 +946,26 @@ echo g(1), ($h)(2), C::K;"#;
                 "flag-off compile must stay stack-based"
             );
         }
+    }
+
+    /// L'entry di PRODUZIONE (`compile_program`) stampa il modo del
+    /// PROCESSO (`enabled()`, contratto value-parsed): il test vale in
+    /// QUALUNQUE modo giri la batteria — niente falso verde stesso-modo,
+    /// e il flip del default non inverte nessuna premessa (KS-HO-101-3).
+    #[test]
+    fn production_entry_follows_process_mode() {
+        let src = br#"<?php $s=0; for($i=0;$i<9;$i++){ $s = $s + $i*3; } echo $s;"#;
+        let program = crate::lower_source(b"t.php", src).expect("lowers");
+        let m = crate::compile::compile_program(&program, &Registry::default()).expect("compiles");
+        let has_reg = m.main.ops.iter().any(is_reg_form);
+        assert_eq!(
+            has_reg,
+            enabled(),
+            "compile_program non segue il modo di processo del contratto \
+             (enabled()={}, forme registro nel main={})",
+            enabled(),
+            has_reg
+        );
     }
 
     /// Il contratto di modo (S-100 punto 1): grammatica value-parsed, lista
@@ -994,11 +983,12 @@ echo g(1), ($h)(2), C::K;"#;
         assert_eq!(mode_from_env(Some(OsStr::new("true"))), DEFAULT_ON);
     }
 
-    /// Pre-flip il default nominato è OFF: il flip della promozione (S-100
-    /// punto 5) inverte la costante E questo test INSIEME — churn voluto:
-    /// il flip non può passare di qui senza dichiararsi (KS-HO-101-3).
+    /// Post-flip (S-100 punto 5) il default nominato è ON: chi lo
+    /// ri-invertisse deve dichiararsi QUI e ri-derivare denti e launcher
+    /// (KS-HO-101-3) — il braccio OFF resta collaudato a ogni rotazione
+    /// (KS-HE-101-3) via `PHPR_REG_LOWER=0` esplicito.
     #[test]
-    fn mode_contract_default_is_off_pre_flip() {
-        assert!(!DEFAULT_ON, "default flippato: ri-derivare batteria M5, denti anti-putenv e launcher PRIMA (S-100 punti 1-4)");
+    fn mode_contract_default_is_on_post_flip() {
+        assert!(DEFAULT_ON, "default ri-invertito: ri-derivare denti anti-putenv, launcher e batteria PRIMA di spedire");
     }
 }

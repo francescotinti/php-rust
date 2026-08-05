@@ -76,6 +76,12 @@ struct ProgramCtx<'a> {
     registry: &'a Registry,
     classes: &'a [std::rc::Rc<ClassDecl>],
     class_index: &'a rustc_hash::FxHashMap<Vec<u8>, ClassId>,
+    /// Whether the register-lowering pass runs on every `compile_body` of this
+    /// compile (S-100: il MODO è un input ESPLICITO del funnel, stampato una
+    /// volta dall'entry di produzione via `reg_lower::enabled()`; i test di
+    /// emissione lo passano a mano nei due valori — niente premesse ambientali
+    /// nella batteria, KS-HO-101-3).
+    reg_lower: bool,
 }
 
 /// Compile a lowered [`Program`] into an executable [`Module`].
@@ -210,6 +216,28 @@ fn compile_program_impl(
     prelude: &[std::rc::Rc<Func>],
     link: Option<&SeedLink>,
 ) -> R<Module> {
+    compile_program_impl_mode(program, registry, stub_mask, prelude, link, reg_lower::enabled())
+}
+
+/// Come [`compile_program_impl`] ma col modo register-lowering ESPLICITO:
+/// l'entry per i test di emissione (i due modi senza toccare l'ambiente del
+/// processo). La produzione passa sempre da `reg_lower::enabled()`.
+pub(crate) fn compile_program_with_mode(
+    program: &Program,
+    registry: &Registry,
+    reg_lower: bool,
+) -> R<Module> {
+    compile_program_impl_mode(program, registry, &[], &[], None, reg_lower)
+}
+
+fn compile_program_impl_mode(
+    program: &Program,
+    registry: &Registry,
+    stub_mask: &[bool],
+    prelude: &[std::rc::Rc<Func>],
+    link: Option<&SeedLink>,
+    reg_lower: bool,
+) -> R<Module> {
     #[cfg(feature = "mem-census")]
     let mut split = CompileSplit::default();
     #[cfg(feature = "mem-census")]
@@ -249,6 +277,7 @@ fn compile_program_impl(
         registry,
         classes: &program.classes,
         class_index: &class_index,
+        reg_lower,
     };
 
     // S-79.0.3 (A-TH2): on the MAIN path (no shared prelude, no elision link)
