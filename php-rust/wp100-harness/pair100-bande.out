@@ -33,3 +33,25 @@ candidato=phpr post-estensione (a2772e625156ed7f pre-batteria; fa fede l'hash
 # I rapporti oracle<->phpr si pubblicano come FOTOGRAFIE (lezione WP-94).
 
 # ---- ESITO (compilato DOPO le run, dai pair100-ratios-*.out) ----
+# run: off 20:58-21:26, on 21:27-21:55 (2026-08-05, sequenziali, stessa sera)
+G1=PASS  # media 0 fail due lati in ENTRAMBI i modi; full: unica differenza
+         # per NOME = test_wp_is_stream ftp (catalogo), identica a S-99.
+G2=PASS  # gate_void=0 su off e on (estratti==dichiarati, 87/88 = F+E+W).
+G3=PASS  # full CPU on/off = 846.00/839.23 = 1.008 <= 1.03;
+         # media CPU on/off = 55.63/55.43 = 1.004 <= 1.05.
+G4_full=FUORI BANDA (0.965 < 0.98, direzione FAVOREVOLE: on 2022754392 <
+  off 2095581320) => come pre-registrato, si DECOMPONE prima del verdetto:
+  - gambe vs storia: off stasera 1998.50 MiB (S-99: 1892.56, +5.6%) e'
+    la gamba ANOMALA; on 1929.05 MiB (+1.9% vs S-99) e' in storia.
+  - lo strumento e' rumoroso sul FULL anche lato oracle: 728368352 (off-run)
+    vs 834585824 (on-run) = +14.6% NELLA STESSA SERA — la banda ±2% era
+    sotto il rumore reale del full-peak.
+  - decomposizione in corso: R=2 della gamba phpr-OFF full (rerun ricetta
+    identica) — esito sotto.
+G4_media=PASS  # on/off = 1126712736/1148716448 = 0.981 in [0.95, 1.05].
+G5=REGISTRATO  # oracle media peak R=2 stasera: 394855264 / 394019704
+  (banda strettissima, -0.2%) — NON contiene il valore S-99 (~446M):
+  l'anomalia +28.7% di S-99 resta APERTA per NOME come varianza TRA-sere
+  della gamba oracle (intra-sera e' stabile); non blocca il flip (gate su
+  phpr). Fatto NUOVO: oracle FULL peak +14.6% intra-sera => il full-peak
+  ha varianza run-to-run grande su ENTRAMBI i motori.
