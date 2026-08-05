@@ -9,7 +9,7 @@ Nessuna cifra è attribuibile a un pin `collaudato: no` (KS-PE-100-3).
 
 | pin (sha256/16) | sessione | ricetta | collaudato | evidenza |
 |---|---|---|---|---|
-| a838866e134b6a20 | S-99.0 (sigillo eager) | `cargo build --release -p php-server --features axum-server` @ HEAD 4c34f61 | **in corso** | ri-parità con lo script 1a lanciata (sentinella + option + restapi sotto env -i) |
+| a838866e134b6a20 | S-99.0 (sigillo eager) | `cargo build --release -p php-server --features axum-server` @ HEAD 4c34f61 | **sì** | run unico rc=0 sotto env -i (2026-08-05 14:17): sentinella output-capture PASS + option 413 IDENTICO per NOME + restapi 3508 IDENTICO per NOME (`wp99-harness/parity-out/`); stash `php-server-s99-sigillo` |
 | 48a46c690fb85005 | S-99.0 | `cargo build --release -p php-server --features axum-server` @ HEAD 8d1de3b (stesso sorgente phpr S-98) | **sì** (superseded da a838866e) | run unico rc=0 sotto env -i (2026-08-05 13:03): sentinella output-capture G-APERTURA-2 axum PASS (byte-id) + option 413 IDENTICO per NOME + restapi 3508 IDENTICO per NOME (`wp99-harness/parity-out-run2-pin48a4/`, script `s99-parity-server.sh`); stash `php-server-s99` |
 | 365f4d4069513de3 | S-98.0 | effetto collaterale build S-98 (vietato d'ora in poi) | **NO — REFUTATO** | manca la feature `axum-server`: `--axum` rifiuta all'avvio (recidiva WP-77.6.5.2.3); il collaudo era impossibile per costruzione |
 | 832568a72b925dd1 | S-97 | effetto collaterale | NO | mai collaudato (KS-PE-99-1) |
