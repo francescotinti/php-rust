@@ -1,0 +1,2 @@
+zvalcensus slot_reads=120000001 slot_reads_rc=90000000 slot_reads_avoided=0 would_take=30000001 would_take_rc=0 would_take_safe=30000001 would_take_safe_rc=0 would_take_safe_str=0 would_take_safe_ref=0 sites_total=5 sites_movable=2 sites_safe=2
+zvalcensus_s101 propget_val=60000000 propget_val_rc=0 propset_val=30000000 propset_val_rc=0 bindst_opnd=60000000 bindst_opnd_rc=0 recv_clone_load=90000000 recv_clone_prop=90000000 recv_drop_pop=1 gcnote_total=120000010 gcnote_scalar=120000008 gcnote_obj=2 gcnote_site_pop=60000004 gcnote_site_propset_old=30000000

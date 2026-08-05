@@ -1,0 +1,50 @@
+hc1a-criterio: S-101 punto 3b — H-C1a «bypass del bookkeeping per scalari»,
+CRITERIO PRE-REGISTRATO (scritto PRIMA di ogni riga di codice e di ogni run)
+grade=CRITERIO
+formato=ascii-nudo
+sessione=S-101 (2026-08-06 00:5x)
+
+# FORMA (dal census, non dal profilo): gc_note viene chiamata 4 volte/iter su
+# prop.php, il 100% su Long (census: gcnote_scalar=120000008 su 120000010).
+# Il costo NON e' il bookkeeping (il braccio scalare e' `_ => {}`): e' la
+# CHIAMATA non-inlined + match (~2,2 ns/call dal profilo inline-aware).
+# LEVA: split di Vm::gc_note in guardia #[inline] (specie contenitore:
+# Object/Ref/Array/Closure => corpo; ogni altra specie => return immediato,
+# ESATTAMENTE il perimetro dell'attuale braccio `_ => {}` + scalari) + corpo
+# gc_note_slow. SEMANTICA-NEUTRA PER COSTRUZIONE: nessun ordine di distruttori
+# cambia, nessuna nota in piu' o in meno raggiunge il gc_buf.
+# CONTROLLO POSITIVO del meccanismo (regola A-ZV1): il census S101 NON cambia
+# i conteggi logici (la guardia conta come prima: gcnote_total resta 4/iter,
+# gcnote_obj resta costante) — se i conteggi si muovono, la leva ha cambiato
+# semantica e si RIGETTA.
+
+# CONTROFATTUALE CONTABILE (dal canale contato, MAI quota% x T):
+#   4 call/iter x ~2,2 ns/call = atteso ~8,7 ns/iter; BANDA PRE-REGISTRATA
+#   dell'atteso: [4, 13] ns/iter su T_iter=174 ns (prop, binario pin).
+# CRITERIO DI PROMOZIONE (soglia = pavimento della sonda, KS-GR-102-1):
+#   - misura DA SOLA (nessun'altra riga nel binario): R=5, mediana, netto
+#     pavimento, macchina quieta, stessa finestra col pin come braccio B;
+#   - Delta >= 1,0 ns/iter (pavimento sonda S-99/S-100) => la leva e' REALE:
+#     si tiene e si passa ai gate cumulativi (fixture 13 + batteria + corpus
+#     2 modi + diff per-test);
+#   - Delta < 1,0 ns/iter => RINUNCIA PRE-REGISTRATA (il revert della riga e'
+#     parte del criterio; nessuna estensione «per igiene»);
+#   - il Delta si pubblica come BANDA, mai tariffa; il rapporto prop atteso a
+#     valle (se banda centrale): ~12,4 -> ~11,8 (TETTO WP-102 invariato:
+#     H-C1a NON chiude H-C).
+# GATE CUMULATIVI DI STADIO (se promossa): hc1-fixtures.sh 13/13 nei 2 modi +
+#   batteria 1735 rc VERO (mai rc di pipe) + corpus 1418 per NOME nei 2 modi
+#   + diff per-test ZERO fuori carve-out; WP pair di parita' sul binario
+#   CUMULATIVO di fine sessione (KS-KL-102-3/KS-MA-102-4).
+
+# ---- ESITO (compilato DOPO la misura) ----
+binario_A=6c0889cd4eba6617 (H-C1a sola)  binario_B=f29883eb432806ce (pin S-100, stash)
+# A/B INTERLEAVED R=7 (contromisura ai burst Chrome-RD; stessa finestra 01:0x):
+A_prop_s=5.01 5.02 5.01 5.03 5.05 5.02 5.03   # mediana 5.02, netto 5.00, spread 0.04
+B_prop_s=5.24 5.24 5.22 5.26 5.22 5.26 5.19   # mediana 5.24, netto 5.22, spread 0.07
+# B riproduce il pin S-100/S-101-p1 al centesimo (5.22): braccio di controllo sano.
+Delta_ns_iter=7.3  [derivata: companion (5.22-5.00)/30e6*1e9]  # BANDA [4,13]: DENTRO; soglia 1.0: SOPRA
+ns_op_A=9.26  rapporto_prop_A=11.9  [derivata: companion 5.00/0.42]
+verdetto=PROMOSSA per criterio (Delta 7.3 >= 1.0, dentro la banda pre-registrata;
+  rapporto 12.4 -> 11.9, atteso contabile ~11.8). Seguono: controllo positivo
+  census (conteggi logici INVARIATI) + gate cumulativi di stadio.

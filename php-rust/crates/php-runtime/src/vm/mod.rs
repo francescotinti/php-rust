@@ -3896,12 +3896,25 @@ impl<'m> Vm<'m> {
     /// releases its contents. An `Object`'s own properties are *not* descended
     /// here: they only lose their references when the object is actually freed,
     /// which the sweep handles via its cascade.
+    #[inline]
     fn gc_note(&mut self, v: &Zval) {
         #[cfg(feature = "gc-census")]
         gc_census::note();
         // S-101 census: ogni chiamata, con la specie dell'argomento (P3).
         #[cfg(feature = "zval-census")]
         zvalcensus::note_gcnote(v);
+        // H-C1a (S-101): only a container species can reach the buffer — the
+        // guard inlines at every call site so a scalar/string note never pays
+        // the call (the body's `_ => {}` arm, hoisted; same perimeter).
+        if matches!(
+            v,
+            Zval::Object(_) | Zval::Ref(_) | Zval::Array(_) | Zval::Closure(_)
+        ) {
+            self.gc_note_slow(v);
+        }
+    }
+
+    fn gc_note_slow(&mut self, v: &Zval) {
         match v {
             Zval::Object(rc) => {
                 // One borrow serves the whole note: the DESTRUCTED mirror

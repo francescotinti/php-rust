@@ -1,0 +1,45 @@
+hc1b-criterio: S-101 punto 3c — H-C1b «canale ricevitore», CRITERIO
+PRE-REGISTRATO (scritto PRIMA di ogni riga; forma decisa dai CONTEGGI del
+census, come da composizione del team hc-canale §5.1)
+grade=CRITERIO
+formato=ascii-nudo
+sessione=S-101 (2026-08-06 00:5x)
+
+# FORMA SCELTA: MOVE del ricevitore, non prestito e non addref.
+# Il census ha mostrato che l'handle del ricevitore arriva a PropGet/PropSet
+# GIA' OWNED sulla pila (pop) e che deref_clone ne fabbrica un SECONDO handle
+# per poi droppare il primo a fine braccio (3 coppie clone+drop/iter).
+# La leva: `let target = if matches!(obj, Zval::Ref(_)) { obj.deref_clone() }
+# else { obj };` — trasferimento di PROPRIETA', zero alias, zero borrow-guard:
+# il sigillo di tipo A-MA-102-3 non serve perche' NESSUN prestito attraversa
+# un confine di op (la composizione di team prescriveva il sigillo per il
+# BORROW; il move e' strettamente piu' forte: l'handle e' unico).
+# Il braccio Ref conserva deref_clone (il wrapper non deve mai viaggiare).
+# OSSERVABILITA': durante il handler lo strong_count e' -1 rispetto a prima,
+# ma il valore assoluto non e' osservabile da PHP (i distruttori scattano a
+# count->0 e target e' vivo per l'intero braccio; l'ULTIMO drop non si
+# sposta). Guardie: fixture 04 (mutazione interlacciata re-entrante),
+# 12 (ordine __destruct), 13 (ciclo GC) — QUALUNQUE cambio d'ordine dei
+# distruttori = reject senza appello (KS-MA-102-3).
+# PERIMETRO: Op::PropGet + Op::PropSet (i siti del giudice). Le forme
+# Silent/Dynamic/OpSet/IncDec restano a clone (semantica identica per
+# costruzione); estensione SOLO per occorrenza contata (KS-BA-100-1 analogo).
+# CONTROLLO POSITIVO del meccanismo: census S101 recv_clone_prop (hook
+# spostato NEL braccio deref_clone) atteso 3/iter -> 0/iter sul giudice;
+# recv_clone_load resta 3/iter (canale emissione, fuori perimetro).
+
+# CONTROFATTUALE CONTABILE: 3 coppie clone+drop/iter x ~4,4 ns/coppia
+# (2,4 clone + 2,0 drop dal profilo inline-aware) ~= 13 ns/iter.
+# BANDA PRE-REGISTRATA: [7, 20] ns/iter.
+# CRITERIO DI PROMOZIONE: identico a H-C1a (Delta >= 1,0 ns/iter pavimento
+# sonda, R=5 mediana netto, misura CUMULATIVA dichiarata: braccio B = binario
+# H-C1a-solo, cosi' il Delta e' SOLO di H-C1b); rinuncia pre-registrata
+# altrimenti. Gate cumulativi: fixture 13/13 nei 2 modi + batteria rc vero +
+# corpus 1418 per NOME nei 2 modi + diff per-test + WP pair di parita' sul
+# binario cumulativo (KS-KL-102-3/KS-MA-102-4, non derogabile: il runtime
+# cambia).
+# Atteso a valle se banda centrale (a+b): ~174 -> ~152 ns/iter => prop ~10,8x
+# [banda, non tariffa]. TETTO WP-102 invariato: ~9x a successo pieno, H-C1
+# NON chiude H-C.
+
+# ---- ESITO (compilato DOPO la misura) ----
