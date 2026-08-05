@@ -18,6 +18,20 @@ Parità: media 0 failure sui due lati; full conteggi IDENTICI
 Binari: phpr 4e268c3f (S-98), oracle brew 8.5.7. Nessun claim di
 movimento: fotografie stessa-sera; per il movimento fanno fede i raw.
 
+### Gambe raw vs WP-94 (sanatoria Leijen/Gregg, Concilio WP-101 — quando
+### si attribuisce un movimento si pubblicano LE GAMBE, non i rapporti)
+
+| gamba | WP-94 | S-99 | Δ |
+|---|---|---|---|
+| full peak phpr | 1993459800 B | 1984497752 B | **−0,45% (piatta)** |
+| full peak oracle | 745846784* | 836044000 B | +12,1% |
+| media peak phpr | 1170785648 B | 1202701752 B | **+2,73% (+31,9 MB, NON piatta)** |
+| media peak oracle | 346325904 B | 445809528 B | **+28,7% — ANOMALIA SENZA NOME** (R=1 per lato: serve spread R≥2 prima di attribuire) |
+
+*full peak oracle WP-94 derivato dal rapporto (1993459800/2,673).
+La prima stesura diceva «i rapporti peak si muovono per la gamba oracle»:
+vero per il FULL, FALSO per il MEDIA (entrambe le gambe si muovono).
+
 ## Sei categorie, ENTRAMBI i motori stessa finestra (`wp99-harness/micro-rebaseline99.out`, pin 4e268c3f flag-off)
 
 arith **17,5** · prop **13,8** · calls **8,6** · str **6,9** · arr **4,9**

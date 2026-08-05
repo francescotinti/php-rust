@@ -94,7 +94,23 @@ A-KL-100-1/2/3, A-HE-100-1/2/3/4, A-ST-100-2/3 (sette trappole AssignOp),
 A-HO-100-4, A-LE-100-3 (N_OPS≤255: ora 186/256), A-BA-100-2/3,
 A-KL-100-4/5, A-PE-100-4, A-GR-100-3.
 
-### ⚖️ Concilio WP-101 (su S-99.0 e programma S-100) — vedi blocco in coda
+### ⚖️ Concilio WP-101 (2026-08-05, su S-99.0 e programma S-100) — VINCOLANTE
+
+Verbali integrali + note di 4 team + sintesi in `wp101-harness/`
+(`COUNCIL_WP101_REVIEWS.md`; 9/9, nessun MI OPPONGO al lavoro fatto, la
+BOZZA §S-100 refutata nei punti 1-2). Le refutazioni che riscrivono
+l'ordine: (1) **il contratto di modo non esiste** (5 sedie: `enabled()` è
+presence-based ⇒ `PHPR_REG_LOWER=0` ACCENDE — opt-out value-parsed
+PRIMA di ogni riga del flip, bracci anti-putenv/M5/funnel ri-derivati);
+(2) **bit-identità solo da dump-diff, mai dal cronometro** (KS-HO-101-2,
+KS-KL-101-2, KS-HE-101-4); (3) **server mai girato flag-on** + registro
+pin GRADUATO per gamba (KS-KL-101-1, KS-PE-101-1, A-PE-101-1); (4) **le
+cifre della pre-misura sono BANDE** (57/43→52-62%, C0 cross-tree;
+criterio 0,7 < pavimento sonda 1,0 = inaggiudicabile, KS-BA-101-1);
+(5) **il flip ritira H-B2 sui siti stack non fusi** (A-MA-101-3: si
+decide con misura pre-flip). Morsi già SALDATI in chiusura S-99: chunk
+anti-putenv (Klabnik R1, riparato per HEADER) e riga media-peak (Leijen:
+phpr +2,73% NON piatta — tabella gambe in REPORT_GAP_99).
 
 ## Regole di metodo (invariate)
 
@@ -161,21 +177,30 @@ Tutti i NON-riproporre WP-83..98 restano. Nuovi da S-99.0:
 skill `apri-sessione`/`chiudi-sessione`. Harness di sessione:
 `wp99-harness/`.
 
-## §S-100 — BOZZA d'ordine (da sottoporre al Concilio WP-101)
+## §S-100 — ORDINE DEFINITIVO (fissato dal Concilio WP-101, `wp101-harness/verbali/SYNTHESIS.md` §Ordine)
 
-Oggetto: **la PROMOZIONE di flag-on a default** (obiettivo nominato) con
-i suoi gate residui, e l'apertura di H-C con una misura.
+Oggetto: **la PROMOZIONE di flag-on a default** — coi gate che il
+concilio ha riscritto (la bozza era VOID nei punti 1-2: contratto di
+modo inesistente).
 
-1. **Gate residui della promozione, per NOME**: diff riga-per-riga dei
-   corpus off/on (A-KL-100-2) · stdout/exit pinnati nel funnel
-   (A-KL-100-1) · braccio flag-OFF nel funnel (A-PE-100-4) · sanatoria
-   dump/`lowered()` (A-HE-100-4).
-2. **Flip del default** (emissione: pass registro ON senza env) +
-   collaudo COMPLETO della nuova emissione: corpus per NOME nei DUE modi
-   + parità server (script 1a) + collaudo WP full+media + coppia peak
-   stessa-sera IN MODO nuovo (regola n.2).
-3. **H-C, prima misura** (solo misura): decomposizione conteggio ×
-   costo/opcode su `prop` + census del ciclo + confronto col profilo
-   oracle (dov'è il fattore 13,8: risoluzione slot, PropIc, hash?).
-4. Se il timebox regge: controfattuale + criterio della PRIMA occorrenza
-   stack-path della coda H-B2 (Sub o cmp int-int, scelta dal census).
+1. **Contratto di modo** (primo atto): opt-out value-parsed nominato e
+   documentato (oggi `=0` ACCENDE); bracci anti-putenv/M5/funnel
+   ri-derivati per il mondo post-flip; launcher parità BIMODALE.
+2. **Strumenti sanati in quest'ordine**: sanatoria dump/`lowered()`
+   (A-HE-100-4) in testa · match ESAUSTIVI `visit_addrs`+`bin_op_of` ·
+   funnel-probe oltre `{main}` · POI diff riga-per-riga (definizione
+   A-KL-101-4) + assert conteggi↔nomi.
+3. **Sette trappole AssignOp per NOME** (KS-ST-101-1 blocca il flip) +
+   **decisione H-B2-sotto-flip CON MISURA** (il flip perde BinaryAdd sui
+   siti non fusi: estendere o misurare la perdita, A-MA-101-3).
+4. **Collaudo flag-on completo PRE-flip**: diff per-test off↔on dei
+   corpus (zero attese) · parità server flag-on (bimodale + sentinella
+   estesa N≥16) · spread oracle peak R≥2 + nome all'anomalia +28,7% ·
+   coppia WP full+media+peak IN MODO on con BANDE PRE-REGISTRATE
+   (KS-GR-101-1; gate peak = phpr-off vs phpr-on, KS-LE-101-1).
+5. **Flip** + rotazione pin con braccio OFF collaudato a ogni rotazione
+   (KS-HE-101-3; registro graduato per gamba/modo).
+6. Se il timebox regge: **H-C prima misura** (conteggio×costo + profilo
+   a campioni CO-EQUALE; strumento oracle = census opcache, nominato).
+
+BACKLOG per NOME e KS integrali: `wp101-harness/verbali/SYNTHESIS.md`.
