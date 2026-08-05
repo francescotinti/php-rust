@@ -86,6 +86,12 @@ pub fn mode_from_env(raw: Option<&std::ffi::OsStr>) -> bool {
 /// Visit every jump address the op carries. The single authority both the
 /// target-collection and the remap phase use — a new `Addr`-bearing variant
 /// must be added HERE or the pass corrupts it.
+///
+/// A-HE-100-2 / KS-HE-101-2 (Concilio WP-101): match ESAUSTIVO, nessun
+/// wildcard su `Op` — una variante NUOVA non compila finché non viene
+/// classificata qui (stessa classe del dente S-96 in vm/liveness.rs). Il
+/// gruppo «senza Addr» è la lista CHIUSA verificata a mano contro i payload
+/// di bytecode.rs (unici campi `Addr` oggi: i 16 bracci sopra).
 fn visit_addrs(op: &mut Op, f: &mut impl FnMut(&mut Addr)) {
     match op {
         Op::FillDefault { skip, .. } | Op::StaticGuard { skip, .. } => f(skip),
@@ -102,7 +108,77 @@ fn visit_addrs(op: &mut Op, f: &mut impl FnMut(&mut Addr)) {
         | Op::CmpJmpSS { addr, .. }
         | Op::CmpJmpSC { addr, .. } => f(addr),
         Op::IterNext { end, .. } | Op::IterNextRef { end, .. } => f(end),
-        _ => {}
+        // ---- lista chiusa: varianti SENZA Addr (niente da visitare) ----
+        Op::PushConst { .. } | Op::Pop { .. } | Op::Dup { .. }
+        | Op::LoadSlot { .. } | Op::LoadVar { .. } | Op::PushUndef { .. }
+        | Op::StoreSlot { .. } | Op::ConcatAssignSlot { .. } | Op::Swap { .. }
+        | Op::LoadGlobal { .. } | Op::StoreGlobal { .. } | Op::IncDecGlobal { .. }
+        | Op::LoadSuperglobal { .. } | Op::StoreSuperglobal { .. }
+        | Op::IncDecSuperglobal { .. } | Op::FetchDimList { .. }
+        | Op::LoadGlobals { .. } | Op::GlobalsDynAssign { .. }
+        | Op::CoerceParam { .. } | Op::CheckArity { .. } | Op::IncDecSlot { .. }
+        | Op::BindRef { .. } | Op::StaticStore { .. } | Op::StaticAlias { .. }
+        | Op::PushRef { .. } | Op::MakeRef { .. } | Op::PushArgPlace { .. }
+        | Op::BindRefTo { .. } | Op::BindRefToChecked { .. } | Op::DerefTop { .. }
+        | Op::MakeClosure { .. } | Op::MakeFcc { .. } | Op::CallValue { .. }
+        | Op::CallNsFallback { .. } | Op::CallValueArgs { .. }
+        | Op::CallNsFallbackArgs { .. } | Op::Throw { .. } | Op::Rethrow { .. }
+        | Op::ParkReturn { .. } | Op::Binary { .. } | Op::BinaryAdd { .. }
+        | Op::Unary { .. } | Op::Cast { .. } | Op::BinarySS { .. }
+        | Op::BinarySSDst { .. } | Op::BinarySC { .. } | Op::BinarySCDst { .. }
+        | Op::BinaryDst { .. } | Op::ConcatN { .. } | Op::Echo { .. }
+        | Op::Print { .. } | Op::Stringify { .. } | Op::ArrayInit { .. }
+        | Op::ArrayPush { .. } | Op::ArrayInsert { .. }
+        | Op::ArrayAppendSpread { .. } | Op::CallArgs { .. } | Op::FetchDim { .. }
+        | Op::CoalesceFetchDim { .. } | Op::AssignPath { .. }
+        | Op::AssignOpPath { .. } | Op::IncDecPath { .. } | Op::IssetPath { .. }
+        | Op::EmptyPath { .. } | Op::UnsetPath { .. } | Op::Call { .. }
+        | Op::DeclareFn { .. } | Op::DeclareClass { .. } | Op::DeclareTrait { .. }
+        | Op::DeclareDeferred { .. } | Op::NewAnonDeferred { .. }
+        | Op::CallBuiltin { .. } | Op::CallBuiltinSpread { .. }
+        | Op::CallHostBuiltin { .. } | Op::CallHostBuiltinRef { .. }
+        | Op::CallHostBuiltinOut { .. } | Op::CallHostBuiltinScanf { .. }
+        | Op::CallArrayMultisort { .. } | Op::ConstFetch { .. }
+        | Op::DefineConst { .. } | Op::CallBuiltinRef { .. }
+        | Op::CallBuiltinRefSpread { .. } | Op::CallBuiltinRefCell { .. }
+        | Op::Ret { .. } | Op::Yield { .. } | Op::YieldFrom { .. }
+        | Op::IterInit { .. } | Op::IterInitRef { .. } | Op::IterPop { .. }
+        | Op::Alloc { .. } | Op::This { .. } | Op::Clone { .. } | Op::Eval { .. }
+        | Op::Include { .. } | Op::PropGet { .. } | Op::ThisPropGet { .. }
+        | Op::PropSet { .. } | Op::PropOpSet { .. } | Op::PropIncDec { .. }
+        | Op::PropIsset { .. } | Op::PropIssetFetchGate { .. }
+        | Op::PropIssetDyn { .. } | Op::LoadVarDyn { .. } | Op::StoreVarDyn { .. }
+        | Op::BindGlobalDyn { .. } | Op::ClassConstDynamic { .. }
+        | Op::PropGetSilent { .. } | Op::PropGetDynamic { .. }
+        | Op::PropGetDynamicSilent { .. } | Op::MatchError { .. }
+        | Op::PropUnset { .. } | Op::MethodCall { .. } | Op::ThisMethodCall { .. }
+        | Op::MethodCallArgs { .. } | Op::MethodCallDynamic { .. }
+        | Op::MethodCallDynamicArgs { .. } | Op::MethodCallNamed { .. }
+        | Op::CallNamed { .. } | Op::CallSpread { .. } | Op::InvokeMethod { .. }
+        | Op::InstanceOf { .. } | Op::InstanceOfStatic { .. }
+        | Op::InstanceOfDynamic { .. } | Op::InstanceOfBuiltin { .. }
+        | Op::StaticCall { .. } | Op::HookCall { .. } | Op::ClosureStatic { .. }
+        | Op::StaticCallArgs { .. } | Op::StaticCallDynamic { .. }
+        | Op::StaticCallDynamicArgs { .. } | Op::StaticCallDynamicMethod { .. }
+        | Op::StaticCallTargetDynamicMethod { .. }
+        | Op::StaticPropGetDynName { .. } | Op::StaticPropSetDynName { .. }
+        | Op::StaticCallDynamicMethodArgs { .. }
+        | Op::StaticCallTargetDynamicMethodArgs { .. } | Op::ClassConst { .. }
+        | Op::ClassConstDyn { .. } | Op::ClassConstFromValue { .. }
+        | Op::EnumCase { .. } | Op::ClassNameStatic { .. }
+        | Op::ClassNameScope { .. } | Op::AllocStatic { .. }
+        | Op::AllocDynamic { .. } | Op::InvokeCtor { .. }
+        | Op::InvokeCtorArgs { .. } | Op::InitProps { .. }
+        | Op::StampThrowable { .. } | Op::StaticPropGet { .. }
+        | Op::StaticPropSet { .. } | Op::StaticPropRef { .. }
+        | Op::StaticPropOpSet { .. } | Op::StaticPropIncDec { .. }
+        | Op::StaticPropGetDynamic { .. } | Op::StaticPropSetDynamic { .. }
+        | Op::StaticPropOpSetDynamic { .. } | Op::StaticPropIncDecDynamic { .. }
+        | Op::FieldAssign { .. } | Op::FieldAssignOp { .. }
+        | Op::FieldIncDec { .. } | Op::FieldIsset { .. } | Op::FieldEmpty { .. }
+        | Op::FieldUnset { .. } | Op::Fatal { .. } | Op::EmitNotice { .. }
+        | Op::Exit { .. } | Op::SuppressBegin { .. } | Op::SuppressEnd { .. }
+        | Op::Sweep { .. } | Op::Nop { .. } => {}
     }
 }
 
@@ -217,11 +293,93 @@ enum BinKind {
 /// so the windows fuse both spellings — the production flag-on pipeline
 /// only ever emits `Binary(Add)`, but the test battery (and any future
 /// mixed pipeline) compiles with the specialized emission.
+///
+/// A-MA-101-2 (Concilio WP-101, salda A-MA-100-2): match ESAUSTIVO — una
+/// variante NUOVA di `Op` (in particolare una futura specializzazione
+/// Binary-like tipo `BinarySub`) NON COMPILA finché non viene classificata
+/// qui: il ledger delle forme che le finestre fondono non decade in silenzio.
 fn bin_op_of(op: &Op) -> Option<BinOp> {
     match op {
         Op::Binary(b) => Some(*b),
         Op::BinaryAdd => Some(BinOp::Add),
-        _ => None,
+        // ---- lista chiusa: varianti che le finestre NON fondono ----
+        // (le forme registro già abbassate — BinarySS/SC/Dst/CmpJmpSS/SC —
+        // restano fuori PER SCELTA: il pass non ri-fonde il proprio output.)
+        Op::PushConst { .. } | Op::Pop { .. } | Op::Dup { .. }
+        | Op::LoadSlot { .. } | Op::LoadVar { .. } | Op::PushUndef { .. }
+        | Op::StoreSlot { .. } | Op::ConcatAssignSlot { .. } | Op::Swap { .. }
+        | Op::LoadGlobal { .. } | Op::StoreGlobal { .. } | Op::IncDecGlobal { .. }
+        | Op::LoadSuperglobal { .. } | Op::StoreSuperglobal { .. }
+        | Op::IncDecSuperglobal { .. } | Op::FetchDimList { .. }
+        | Op::LoadGlobals { .. } | Op::GlobalsDynAssign { .. }
+        | Op::FillDefault { .. } | Op::CoerceParam { .. } | Op::CheckArity { .. }
+        | Op::IncDecSlot { .. } | Op::BindRef { .. } | Op::StaticGuard { .. }
+        | Op::StaticStore { .. } | Op::StaticAlias { .. } | Op::PushRef { .. }
+        | Op::MakeRef { .. } | Op::PushArgPlace { .. } | Op::BindRefTo { .. }
+        | Op::BindRefToChecked { .. } | Op::DerefTop { .. }
+        | Op::MakeClosure { .. } | Op::MakeFcc { .. } | Op::CallValue { .. }
+        | Op::CallNsFallback { .. } | Op::CallValueArgs { .. }
+        | Op::CallNsFallbackArgs { .. } | Op::Throw { .. } | Op::Rethrow { .. }
+        | Op::CatchMatch { .. } | Op::EndFinally { .. } | Op::ParkReturn { .. }
+        | Op::ParkJump { .. } | Op::Unary { .. } | Op::Cast { .. }
+        | Op::Jump { .. } | Op::JumpIfFalse { .. } | Op::JumpIfTrue { .. }
+        | Op::CmpJmp { .. } | Op::CmpJmpConst { .. } | Op::BinarySS { .. }
+        | Op::BinarySSDst { .. } | Op::BinarySC { .. } | Op::BinarySCDst { .. }
+        | Op::BinaryDst { .. } | Op::CmpJmpSS { .. } | Op::CmpJmpSC { .. }
+        | Op::ConcatN { .. } | Op::JumpIfNotNull { .. } | Op::JumpIfNull { .. }
+        | Op::Echo { .. } | Op::Print { .. } | Op::Stringify { .. }
+        | Op::ArrayInit { .. } | Op::ArrayPush { .. } | Op::ArrayInsert { .. }
+        | Op::ArrayAppendSpread { .. } | Op::CallArgs { .. } | Op::FetchDim { .. }
+        | Op::CoalesceFetchDim { .. } | Op::AssignPath { .. }
+        | Op::AssignOpPath { .. } | Op::IncDecPath { .. } | Op::IssetPath { .. }
+        | Op::EmptyPath { .. } | Op::UnsetPath { .. } | Op::Call { .. }
+        | Op::DeclareFn { .. } | Op::DeclareClass { .. } | Op::DeclareTrait { .. }
+        | Op::DeclareDeferred { .. } | Op::NewAnonDeferred { .. }
+        | Op::CallBuiltin { .. } | Op::CallBuiltinSpread { .. }
+        | Op::CallHostBuiltin { .. } | Op::CallHostBuiltinRef { .. }
+        | Op::CallHostBuiltinOut { .. } | Op::CallHostBuiltinScanf { .. }
+        | Op::CallArrayMultisort { .. } | Op::ConstFetch { .. }
+        | Op::DefineConst { .. } | Op::CallBuiltinRef { .. }
+        | Op::CallBuiltinRefSpread { .. } | Op::CallBuiltinRefCell { .. }
+        | Op::Ret { .. } | Op::Yield { .. } | Op::YieldFrom { .. }
+        | Op::IterInit { .. } | Op::IterNext { .. } | Op::IterInitRef { .. }
+        | Op::IterNextRef { .. } | Op::IterPop { .. } | Op::Alloc { .. }
+        | Op::This { .. } | Op::Clone { .. } | Op::Eval { .. }
+        | Op::Include { .. } | Op::PropGet { .. } | Op::ThisPropGet { .. }
+        | Op::PropSet { .. } | Op::PropOpSet { .. } | Op::PropIncDec { .. }
+        | Op::PropIsset { .. } | Op::PropIssetFetchGate { .. }
+        | Op::PropIssetDyn { .. } | Op::LoadVarDyn { .. } | Op::StoreVarDyn { .. }
+        | Op::BindGlobalDyn { .. } | Op::ClassConstDynamic { .. }
+        | Op::PropGetSilent { .. } | Op::PropGetDynamic { .. }
+        | Op::PropGetDynamicSilent { .. } | Op::MatchError { .. }
+        | Op::PropUnset { .. } | Op::MethodCall { .. } | Op::ThisMethodCall { .. }
+        | Op::MethodCallArgs { .. } | Op::MethodCallDynamic { .. }
+        | Op::MethodCallDynamicArgs { .. } | Op::MethodCallNamed { .. }
+        | Op::CallNamed { .. } | Op::CallSpread { .. } | Op::InvokeMethod { .. }
+        | Op::InstanceOf { .. } | Op::InstanceOfStatic { .. }
+        | Op::InstanceOfDynamic { .. } | Op::InstanceOfBuiltin { .. }
+        | Op::StaticCall { .. } | Op::HookCall { .. } | Op::ClosureStatic { .. }
+        | Op::StaticCallArgs { .. } | Op::StaticCallDynamic { .. }
+        | Op::StaticCallDynamicArgs { .. } | Op::StaticCallDynamicMethod { .. }
+        | Op::StaticCallTargetDynamicMethod { .. }
+        | Op::StaticPropGetDynName { .. } | Op::StaticPropSetDynName { .. }
+        | Op::StaticCallDynamicMethodArgs { .. }
+        | Op::StaticCallTargetDynamicMethodArgs { .. } | Op::ClassConst { .. }
+        | Op::ClassConstDyn { .. } | Op::ClassConstFromValue { .. }
+        | Op::EnumCase { .. } | Op::ClassNameStatic { .. }
+        | Op::ClassNameScope { .. } | Op::AllocStatic { .. }
+        | Op::AllocDynamic { .. } | Op::InvokeCtor { .. }
+        | Op::InvokeCtorArgs { .. } | Op::InitProps { .. }
+        | Op::StampThrowable { .. } | Op::StaticPropGet { .. }
+        | Op::StaticPropSet { .. } | Op::StaticPropRef { .. }
+        | Op::StaticPropOpSet { .. } | Op::StaticPropIncDec { .. }
+        | Op::StaticPropGetDynamic { .. } | Op::StaticPropSetDynamic { .. }
+        | Op::StaticPropOpSetDynamic { .. } | Op::StaticPropIncDecDynamic { .. }
+        | Op::FieldAssign { .. } | Op::FieldAssignOp { .. }
+        | Op::FieldIncDec { .. } | Op::FieldIsset { .. } | Op::FieldEmpty { .. }
+        | Op::FieldUnset { .. } | Op::Fatal { .. } | Op::EmitNotice { .. }
+        | Op::Exit { .. } | Op::SuppressBegin { .. } | Op::SuppressEnd { .. }
+        | Op::Sweep { .. } | Op::Nop { .. } => None,
     }
 }
 
@@ -349,33 +507,58 @@ fn dump_enabled() -> bool {
 }
 
 /// Dump a compiled unit's bytecode to stderr (gated on `PHPR_DUMP_OPS`).
-/// Scope: main, functions, closures, class methods and prop-init thunks —
-/// the bodies the lowering pass can touch. Reflection/const/attribute thunks
-/// and property-hook bodies are NOT dumped (cold, or reachable only through
-/// reflection); a stage that rewrites those needs to widen this first.
+/// Scope (A-HE-100-4, sanatoria RC-1): main, functions, closures, class
+/// methods, property-HOOK bodies — every body that passes through the
+/// `compile_body` funnel and that the lowering pass therefore rewrites
+/// flag-on — plus the prop-init thunks (hand-built, NEVER lowered: declared
+/// OUT of the pass, RC-2; dumped anyway so the production truth is visible).
+/// Reflection/const/attribute thunks stay out: hand-built via `FnCompiler`
+/// (`compile_const_thunk`, attribute thunks), the pass cannot touch them.
+/// Hook order is sorted by property name — `prop_info` is a HashMap and the
+/// dump feeds diff-based gates, so iteration order must be deterministic.
 pub(super) fn dump_module_ops(m: &crate::bytecode::Module) {
     if !dump_enabled() {
         return;
     }
-    use std::io::Write;
     let err = std::io::stderr();
     let mut w = err.lock();
+    dump_module_to(&mut w, m);
+}
+
+/// The dump body, writer-parametric so the A-HE-100-4 coverage test can
+/// assert the scope against the Module without touching process stderr.
+pub(super) fn dump_module_to(w: &mut impl std::io::Write, m: &crate::bytecode::Module) {
     let _ = writeln!(w, "== unit {} ==", String::from_utf8_lossy(&m.file));
-    dump_func(&mut w, "{main}", &m.main);
+    dump_func(w, "{main}", &m.main);
     for f in &m.functions {
-        dump_func(&mut w, &format!("fn {}", String::from_utf8_lossy(&f.name)), f);
+        dump_func(w, &format!("fn {}", String::from_utf8_lossy(&f.name)), f);
     }
     for (i, f) in m.closures.iter().enumerate() {
-        dump_func(&mut w, &format!("closure#{i}"), f);
+        dump_func(w, &format!("closure#{i}"), f);
     }
     for c in &m.classes {
         let cname = String::from_utf8_lossy(&c.name);
         for meth in &c.methods {
             let label = format!("{cname}::{}", String::from_utf8_lossy(&meth.name));
-            dump_func(&mut w, &label, &meth.func);
+            dump_func(w, &label, &meth.func);
         }
         if let Some(pi) = &c.prop_init {
-            dump_func(&mut w, &format!("{cname}::{{prop-init}}"), pi);
+            dump_func(w, &format!("{cname}::{{prop-init}}"), pi);
+        }
+        let mut hooked: Vec<(&[u8], &crate::bytecode::PropHooks)> = c
+            .prop_info
+            .iter()
+            .filter_map(|(n, i)| i.hooks.as_ref().map(|h| (&n[..], h)))
+            .collect();
+        hooked.sort_by(|a, b| a.0.cmp(b.0));
+        for (pname, h) in hooked {
+            let p = String::from_utf8_lossy(pname);
+            if let Some(g) = &h.get {
+                dump_func(w, &format!("{cname}::${p}::get"), g);
+            }
+            if let Some(s) = &h.set {
+                dump_func(w, &format!("{cname}::${p}::set"), s);
+            }
         }
     }
 }
@@ -402,7 +585,13 @@ mod tests {
     }
 
     /// Apply the pass to every body of a compiled module (bypassing the env
-    /// flag), mirroring the `compile_body` funnel.
+    /// flag), mirroring the `compile_body` funnel ESATTAMENTE (A-HE-100-4,
+    /// sanatoria RC-2): gli HOOK passano da `compile_body` e quindi il pass
+    /// li riscrive — stanno DENTRO; `prop_init` è costruito a mano
+    /// (`compile_prop_init`, FnCompiler diretto, MAI `compile_body`) e in
+    /// produzione non è MAI lowered — dichiarato FUORI, non abbassarlo qui:
+    /// la vecchia versione lo abbassava e la batteria testava una pipeline
+    /// che la produzione non esegue (doppia fonte di verità a mano).
     fn lowered(m: &Module) -> Module {
         let mut m2 = m.clone();
         lower_func(&mut m2.main);
@@ -419,22 +608,155 @@ mod tests {
             for meth in &mut nc.methods {
                 lower_func(&mut meth.func);
             }
-            if let Some(pi) = &mut nc.prop_init {
-                lower_func(pi);
+            for info in nc.prop_info.values_mut() {
+                if let Some(h) = &mut info.hooks {
+                    if let Some(g) = &mut h.get {
+                        lower_func(g);
+                    }
+                    if let Some(s) = &mut h.set {
+                        lower_func(s);
+                    }
+                }
             }
             *c = std::rc::Rc::new(nc);
         }
         m2
     }
 
+    /// A-HE-100-4: enumera OGNI corpo dal Module per DESTRUCTURING ESAUSTIVO
+    /// — un campo nuovo di `Module` (o di `CompiledClass`/`PropHooks` sotto)
+    /// che portasse corpi NON COMPILA finché non viene classificato qui
+    /// (stessa classe del dente S-96 in vm/liveness.rs). Classificazione:
+    /// - IN funnel `compile_body` (il pass li riscrive flag-on): main,
+    ///   functions, closures, methods, hook get/set.
+    /// - FUORI (costruiti a mano, il pass non li vede MAI): prop_init (RC-2),
+    ///   const-thunk (`consts[].func`), attribute-thunk (new/args), enum-case.
+    /// - Senza corpi compilati nel Module: i campi bound a `_` qui sotto
+    ///   (hir non ancora compilato, indici, metadati).
     fn all_funcs(m: &Module) -> Vec<&Func> {
-        let mut all: Vec<&Func> = vec![&m.main];
-        all.extend(m.functions.iter().map(|f| f.as_ref()));
-        all.extend(m.closures.iter());
-        for c in &m.classes {
+        let Module {
+            main,
+            functions,
+            conditional_fns: _,
+            fn_ci: _,
+            conditional_classes: _,
+            // hir non compilato: i corpi nascono al Declare, via compile_body
+            conditional_traits: _,
+            // ri-lowered a runtime: ripassa da compile_body al suo punto di esecuzione
+            deferred: _,
+            closures,
+            classes,
+            file: _,
+            class_index: _,
+            static_count: _,
+            strict: _,
+            // attribute-thunk: FnCompiler a mano, FUORI dal funnel
+            const_attributes: _,
+            elided: _,
+        } = m;
+        let mut all: Vec<&Func> = vec![main];
+        all.extend(functions.iter().map(|f| f.as_ref()));
+        all.extend(closures.iter());
+        for c in classes {
             all.extend(c.methods.iter().map(|meth| &meth.func));
+            for info in c.prop_info.values() {
+                if let Some(crate::bytecode::PropHooks { get, set, backed: _ }) = &info.hooks {
+                    all.extend(get.iter());
+                    all.extend(set.iter());
+                }
+            }
+            // FUORI dal funnel ma corpi reali: inclusi comunque — la batteria
+            // flag-off asserisce «nessuna forma registro OVUNQUE», e per i
+            // corpi fuori-funnel l'assenza deve valere in ENTRAMBI i modi.
+            all.extend(c.prop_init.iter());
+            all.extend(c.consts.iter().map(|k| &k.func));
         }
         all
+    }
+
+    /// La classe della fixture (il Module include il prelude: si cerca per NOME).
+    fn zoo_class(m: &Module) -> &crate::bytecode::CompiledClass {
+        m.classes
+            .iter()
+            .find(|c| &*c.name == b"C")
+            .expect("fixture: classe C nel Module")
+    }
+
+    /// La fixture con UN corpo per specie: funzione, chiusura, metodo,
+    /// hook get/set, prop-init non costante, const di classe.
+    const BODY_ZOO: &[u8] = br#"<?php
+function g($a){ $s=0; for($i=0;$i<9;$i++){ $s = $s + $i*3; } return $s+$a; }
+$h = function($x){ return $x+1; };
+class C {
+  const K = 1;
+  public $d = self::K + 1;
+  public int $v = 0;
+  public int $p { get { $s=0; for($i=0;$i<9;$i++){ $s = $s + $i*3; } return $s; } set { $this->v = $value * 2; } }
+  public function m($a,$b){ $c=$a+$b; if($c>3){$c=$c*2;} return $c; }
+}
+echo g(1), ($h)(2), C::K;"#;
+
+    /// A-HE-100-4: il dump copre ogni corpo del funnel `compile_body`
+    /// (hook COMPRESI — il punto cieco refutato da RC-1) più il prop-init
+    /// dichiarato fuori. La lista dei corpi viene dal Module (all_funcs,
+    /// destructuring esaustivo), non da un elenco a mano.
+    #[test]
+    fn dump_scope_covers_every_funnel_body() {
+        let m = compile(BODY_ZOO);
+        assert!(zoo_class(&m).prop_init.is_some(), "fixture: il prop-init deve esistere");
+        let mut buf = Vec::new();
+        dump_module_to(&mut buf, &m);
+        let out = String::from_utf8(buf).expect("dump utf8");
+        for h in [
+            "-- {main} ",
+            "-- fn g ",
+            "-- closure#0 ",
+            "-- C::m ",
+            "-- C::$p::get ",
+            "-- C::$p::set ",
+            "-- C::{prop-init} ",
+        ] {
+            assert!(out.contains(h), "dump privo del corpo `{h}`:\n{out}");
+        }
+    }
+
+    /// RC-1 (Concilio WP-100): i corpi hook PASSANO da `compile_body`, il
+    /// pass li riscrive flag-on — helper e dump devono vederlo. Controllo
+    /// positivo: il get-hook con loop foldable mostra forme registro dopo
+    /// il pass, e il chunk hook del dump le mostra pure.
+    #[test]
+    fn hooks_are_lowered_and_visible_in_the_dump() {
+        let m = compile(BODY_ZOO);
+        let l = lowered(&m);
+        let hooks = zoo_class(&l)
+            .prop_info
+            .get(&b"p"[..])
+            .and_then(|i| i.hooks.as_ref())
+            .expect("fixture: hook su $p");
+        let get = hooks.get.as_ref().expect("fixture: get hook");
+        assert!(
+            get.ops.iter().any(is_reg_form),
+            "il pass non riscrive il corpo del get-hook: RC-1 di nuovo cieco\n{:?}",
+            get.ops
+        );
+        // E il prop-init resta NON lowered anche nel helper (RC-2: fuori).
+        let pi = zoo_class(&l).prop_init.as_ref().expect("prop-init");
+        assert!(
+            !pi.ops.iter().any(is_reg_form),
+            "lowered() abbassa prop_init che la produzione non abbassa MAI (RC-2)"
+        );
+        let mut buf = Vec::new();
+        dump_module_to(&mut buf, &l);
+        let out = String::from_utf8(buf).expect("dump utf8");
+        let chunk = out
+            .split("-- C::$p::get ")
+            .nth(1)
+            .and_then(|r| r.split("\n-- ").next())
+            .expect("chunk del get-hook nel dump");
+        assert!(
+            chunk.contains("BinarySC") || chunk.contains("BinarySS") || chunk.contains("CmpJmpSC"),
+            "nessuna forma registro nel chunk hook del dump:\n{chunk}"
+        );
     }
 
     /// Run and return the CLI-faithful stream (diagnostics inline) — the
@@ -583,7 +905,7 @@ mod tests {
             let lm = lowered(&m);
             for (f, orig) in all_funcs(&lm).into_iter().zip(all_funcs(&m)) {
                 let (new_n, old_n) = (f.ops.len(), orig.ops.len());
-                let mut check = |a: Addr| {
+                let check = |a: Addr| {
                     assert!(
                         (a as usize) <= new_n || (a as usize) > old_n,
                         "addr {a} out of range (new {new_n}, old {old_n}) in {:?}",

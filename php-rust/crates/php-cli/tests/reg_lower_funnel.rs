@@ -12,7 +12,7 @@
 
 use std::process::Command;
 
-fn run_phpr(envs: &[(&str, &str)], file: &std::path::Path) -> (String, String) {
+fn run_phpr(envs: &[(&str, &str)], file: &std::path::Path) -> (String, String, bool) {
     let mut c = Command::new(env!("CARGO_BIN_EXE_phpr"));
     // Start from a known flag state regardless of the caller's shell.
     c.env_remove("PHPR_REG_LOWER");
@@ -24,41 +24,103 @@ fn run_phpr(envs: &[(&str, &str)], file: &std::path::Path) -> (String, String) {
     (
         String::from_utf8_lossy(&out.stdout).into_owned(),
         String::from_utf8_lossy(&out.stderr).into_owned(),
+        out.status.success(),
     )
 }
 
 #[test]
 fn flag_on_folds_the_main_toplevel_and_matches_flag_off_output() {
-    // The arith_small shape: a top-level tight loop, all slots in `{main}`.
-    let src = br#"<?php $s=0; for($i=0;$i<1000;$i++){ $s += $i*3 - ($i>>2); } echo $s,"\n";"#;
+    // The arith_small shape twice: a top-level tight loop in `{main}` AND la
+    // stessa forma dentro una FUNZIONE — la probe fuori dal `{main}`
+    // (A-HE-101-4: il punto cieco del dump erano proprio i corpi non-main).
+    let src = br#"<?php
+function probe($n){ $t=0; for($j=0;$j<$n;$j++){ $t += $j*3 - ($j>>2); } return $t; }
+$s=0; for($i=0;$i<1000;$i++){ $s += $i*3 - ($i>>2); } echo $s,"\n"; echo probe(1000),"\n";"#;
     let dir = std::env::temp_dir();
     let file = dir.join(format!("reg-funnel-{}.php", std::process::id()));
     std::fs::write(&file, src.as_slice()).expect("write test php");
 
-    // Braccio OFF con valore ESPLICITO della lista chiusa (contratto di modo
+    // Bracci con valore ESPLICITO della lista chiusa (contratto di modo
     // S-100): un braccio scritto sulla sola assenza girerebbe nel modo NUOVO
     // dopo il flip del default — falso verde stesso-modo (R1 Hejlsberg).
-    let (off_out, _) = run_phpr(&[("PHPR_REG_LOWER", "0")], &file);
-    let (on_out, on_err) =
+    // ENTRAMBI i bracci col dump: la bit-identità/diversità d'emissione si
+    // giudica SOLO dal diff dei dump, mai dal cronometro (KS-HE-101-4).
+    let (off_out, off_err, off_ok) =
+        run_phpr(&[("PHPR_REG_LOWER", "0"), ("PHPR_DUMP_OPS", "1")], &file);
+    let (on_out, on_err, on_ok) =
         run_phpr(&[("PHPR_REG_LOWER", "1"), ("PHPR_DUMP_OPS", "1")], &file);
     let _ = std::fs::remove_file(&file);
 
-    // Parity first: the flag must not change the program's output.
-    assert_eq!(off_out, on_out, "flag-on output diverges from flag-off");
+    // A-KL-100-1: stdout ATTESO pinnato (derivato, non copiato da un run) ed
+    // exit status asseriti — un binario che sbaglia UGUALE nei due modi non
+    // passa più per parità.
+    assert!(off_ok, "flag-off exit non-zero");
+    assert!(on_ok, "flag-on exit non-zero");
+    let expected: i64 = (0..1000i64).map(|i| i * 3 - (i >> 2)).sum();
+    let expected = format!("{expected}\n{expected}\n");
+    assert_eq!(off_out, expected, "flag-off stdout != atteso");
+    assert_eq!(on_out, expected, "flag-on stdout != atteso");
 
-    // Positive control on the USER unit's dump chunk: the `{main}` body
-    // must show the fused register forms (BinarySC for `$i*3`/`$i>>2`,
-    // CmpJmpSC for the loop compare, BinaryDst for the `+=` tail).
+    // KS-HE-101-1: i due bracci devono provare emissione DIVERSA sulla probe
+    // — hash dei due dump pubblicati nel log del test, poi il diff.
+    let h = |s: &str| {
+        use std::hash::{Hash, Hasher};
+        let mut hs = std::collections::hash_map::DefaultHasher::new();
+        s.hash(&mut hs);
+        hs.finish()
+    };
+    eprintln!("dump-hash off={:016x} on={:016x}", h(&off_err), h(&on_err));
+    assert_ne!(
+        off_err, on_err,
+        "i dump dei due bracci sono IDENTICI: falso verde stesso-modo"
+    );
+
     let fname = file.file_name().unwrap().to_string_lossy().into_owned();
-    let chunk = on_err
-        .split("== unit ")
-        .find(|u| u.contains(&fname))
-        .unwrap_or_else(|| panic!("no dump chunk for {fname} — PHPR_DUMP_OPS dead?\n{on_err}"));
-    for form in ["BinarySC", "CmpJmpSC", "BinaryDst"] {
+    let chunk_of = |err: &str, label: &str| -> String {
+        let unit = err
+            .split("== unit ")
+            .find(|u| u.split_whitespace().next().is_some_and(|p| p.ends_with(&fname)))
+            .unwrap_or_else(|| panic!("no dump chunk for {fname} — PHPR_DUMP_OPS dead?\n{err}"));
+        unit.split(&format!("-- {label} "))
+            .nth(1)
+            .and_then(|r| r.split("\n-- ").next())
+            .unwrap_or_else(|| panic!("no body `{label}` in unit dump\n{unit}"))
+            .to_owned()
+    };
+
+    // Positive control flag-on: `{main}` AND the probe function both show the
+    // fused register forms (BinarySC for `*3`/`>>2`, BinaryDst for the `+=`
+    // tail; il compare del loop è slot-const nel main → CmpJmpSC, slot-slot
+    // nella probe `$j<$n` → CmpJmpSS).
+    for (label, cmp_form) in [("{main}", "CmpJmpSC"), ("fn probe", "CmpJmpSS")] {
+        let chunk = chunk_of(&on_err, label);
+        for form in ["BinarySC", cmp_form, "BinaryDst"] {
+            assert!(
+                chunk.contains(form),
+                "no {form} in the `{label}` dump: the pass did not rewrite it\n{chunk}"
+            );
+        }
+        // A-HE-100-1: l'emissione flag-on non contiene MAI `BinaryAdd` (la
+        // specializzazione vive solo flag-off; un BinaryAdd residuo qui è il
+        // tripwire che bin_op_of aveva neutralizzato).
         assert!(
-            chunk.contains(form),
-            "no {form} in the {{main}} dump of {fname}: the pass did not \
-             rewrite the top-level\n{chunk}"
+            !chunk.contains("BinaryAdd"),
+            "BinaryAdd nel dump flag-on di `{label}`\n{chunk}"
         );
+    }
+    // Braccio OFF, controllo positivo speculare: emissione stack-based con la
+    // specializzazione H-B2 (`BinaryAdd`) e ZERO forme registro.
+    for label in ["{main}", "fn probe"] {
+        let chunk = chunk_of(&off_err, label);
+        assert!(
+            chunk.contains("BinaryAdd"),
+            "flag-off senza BinaryAdd in `{label}`: la specializzazione H-B2 è sparita\n{chunk}"
+        );
+        for form in ["BinarySC", "CmpJmpSC", "BinaryDst", "BinarySS", "CmpJmpSS"] {
+            assert!(
+                !chunk.contains(form),
+                "{form} nel dump flag-off di `{label}`: il modo OFF non è off\n{chunk}"
+            );
+        }
     }
 }
