@@ -147,6 +147,17 @@ assert {main} nella batteria del pass · BACKLOG per NOME: delibera manifest
 anti-putenv, dente N_OPS<256, coppia peak al prossimo collaudo WP, bande
 str/re, fold coda AssignOp (dopo le sette trappole di Stogov).
 
+**⭐ DECISIONE UTENTE (2026-08-05, post-chiusura S-97.1): il −30,7% SI TIENE
+e ci si costruisce sopra.** La caduta di H-A1 sul criterio decide dove
+investire la prossima sessione, NON butta il guadagno misurato: la
+**PROMOZIONE del flag-on a default è un OBIETTIVO NOMINATO** (non backlog
+generico), coi gate che il concilio ha già elencato — corpus flag-ON per
+NOME sullo stesso albero, parità server, contingenze del mirror pinnate in
+fixture, smoke con controllo positivo, coppia peak stessa-sera. Le leve di
+costo (H-B1/H-B2, fold coda AssignOp) si COMPONGONO col −30,7% — meno
+opcode × opcode più economici — e si indagano con la promozione come
+SBOCCO, non in alternativa ad essa.
+
 ### H-B1 — ogni opcode costa troppo, il preambolo (DECLASSATA a sotto-passo dal Concilio WP-99; si esegue SOLO se M1 le dà P ≥ 10%)
 
 ### ~~H-A2 — `Sweep`~~ → **CONFERMATA E SPEDITA** (`wp97-harness/ha2-sweep.out`)
