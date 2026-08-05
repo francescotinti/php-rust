@@ -69,7 +69,9 @@ WPDEV="$HOME/Claude/wpdev"
 XJ="/Volumes/Extreme Pro/Claude/wp16-harness/extract-junit.pl"
 WD="/Volumes/Extreme Pro/Claude/wp13-harness/run-with-watchdog.sh"
 GUARD="/Volumes/Extreme Pro/Claude/wp62-harness/uploads-guard.sh"
-SENTINEL="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp77-harness/run_gate_g_apertura_2_axum.sh"
+# A-PE-101-3: sentinella ESTESA (N=16 interleaved su 3 endpoint + burst
+# concorrente, workers=2) — la 2-req di wp77 resta dentro come endpoint g2.
+SENTINEL="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp100-harness/s100-sentinella-estesa.sh"
 OUT="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp100-harness/parity-out-$MODE"
 mkdir -p "$OUT"
 step() { echo "== $(date +%H:%M:%S) [S100-PARITY-$MODE] $1" | tee -a "$OUT/progress.txt"; }
@@ -83,8 +85,8 @@ if [ "$H_SRV" != "$PIN_SRV_ATTESO" ]; then
   step "REFUSE: il binario php-server NON è il pin da collaudare"; echo "rc=65 $(date +%T)" > "$OUT/parity.done"; exit 65
 fi
 
-# ---- gamba A: sentinella output-capture sul pin ----
-step "sentinella output-capture (G-APERTURA-2 axum) sul pin, modo=$MODE"
+# ---- gamba A: sentinella ESTESA sul pin ----
+step "sentinella estesa (16 interleaved + 4 concorrenti, workers=2) sul pin, modo=$MODE"
 if PHPSRV="$PHPSRV" OUTDIR="$OUT" "$SENTINEL" >> "$OUT/sentinella.txt" 2>&1; then
   step "sentinella: PASS (byte-identiche)"
 else

@@ -1,0 +1,35 @@
+pair100-bande: S-100 punto 4 — BANDE PRE-REGISTRATE della coppia WP full+media in modo flag-on (KS-GR-101-1: senza banda = fotografia, non gate)
+grade=CRITERIO  # scritto PRIMA di lanciare pair100.sh; l'esito si giudica QUI
+formato=ascii-nudo
+sessione=S-100 (2026-08-05 sera)
+candidato=phpr post-estensione (a2772e625156ed7f pre-batteria; fa fede l'hash
+  nella pair100.identity delle run)
+
+# DISEGNO: pair100.sh off POI pair100.sh on, STESSA SERA, run sequenziali.
+# - gamba oracle girata due volte => spread R=2 (A-GR-101-2): serve la BANDA
+#   della gamba oracle peak media, per dare un nome (o una banda) all'anomalia
+#   +28,7% di S-99 (gamba oracle media-peak, R=1 per lato).
+# - gate peak/CPU della promozione = phpr-OFF vs phpr-ON stessa-sera
+#   (KS-LE-101-1): l'oracle NON entra nel gate del flip.
+
+# CRITERI (tutti per NOME prima di ogni rapporto):
+# G1 parita' per NOME, modo ON: media 0 failure sui due lati; full insieme
+#    IDENTICO a S-99 (1 fail oracle-only test_search_hierarchical_pages_first_page
+#    + il medesimo + test_wp_is_stream ftp lato phpr — GIA' a catalogo).
+#    Qualunque nome NUOVO => collaudo FALLITO, flip bloccato.
+# G2 conteggi=nomi (A-KL-101-3): estratti == dichiarati su ogni gamba, pena VOID.
+# G3 CPU, gate flip: full_user+sys phpr-ON <= phpr-OFF * 1.03 (stessa sera);
+#    media_user phpr-ON <= phpr-OFF * 1.05 (run corta, rumore maggiore).
+#    (Nessuna attesa di miglioramento: l'aggregato WP e' diluito — regola 2.)
+# G4 peak fisico, gate flip: full_peak phpr-ON in [phpr-OFF * 0.98, * 1.02]
+#    (gamba phpr storicamente piatta: -0,45% WP-94->99); media_peak phpr-ON
+#    in [phpr-OFF * 0.95, * 1.05] (gamba corta, S-99 ha mostrato +2,73%).
+#    Fuori banda => si ferma la promozione e si decompone, NIENTE flip.
+# G5 spread oracle (A-GR-101-2, solo REGISTRAZIONE, non gate del flip):
+#    pubblicare oracle media-peak R=2 (off-run e on-run) come banda; se la
+#    banda R=2 contiene il valore S-99 (1202701752/2.698 implicito), l'anomalia
+#    +28,7% ha nome = VARIANZA DELLA GAMBA ORACLE; se non lo contiene, resta
+#    APERTA per NOME (non blocca il flip: il gate e' G3/G4 su phpr).
+# I rapporti oracle<->phpr si pubblicano come FOTOGRAFIE (lezione WP-94).
+
+# ---- ESITO (compilato DOPO le run, dai pair100-ratios-*.out) ----
