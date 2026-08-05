@@ -991,4 +991,67 @@ echo g(1), ($h)(2), C::K;"#;
     fn mode_contract_default_is_on_post_flip() {
         assert!(DEFAULT_ON, "default ri-invertito: ri-derivare denti anti-putenv, launcher e batteria PRIMA di spedire");
     }
+
+    /// A-HE-102-1 (Concilio WP-102, S-101 punto 5): il braccio OFF
+    /// in-process emette l'emissione di PRODUZIONE anche per l'add RESIDUO
+    /// DI PILA — il sito che `emit_binary` decideva col globale `enabled()`
+    /// invece di `ctx.reg_lower` (fix A-HO-102-1 @ b618e3a). Sotto OFF il
+    /// sito è `Binary(Add)` generico e `BinaryAdd` NON esiste; sotto ON,
+    /// stesso sorgente, il generico scompare (tripwire zero-`Binary(Add)`).
+    #[test]
+    fn in_process_off_arm_emits_production_stack_add() {
+        use crate::hir::BinOp;
+        // `g($a+$b+$c)`: il primo add lascia il risultato in pila
+        // (argomento) — la classe residua che l'estensione H-B2 riscrive
+        // SOLO flag-on.
+        let src = br#"<?php function g($x){ return $x; } $a=1;$b=2;$c=3; echo g($a+$b+$c);"#;
+        let count = |m: &Module, pred: &dyn Fn(&Op) -> bool| -> usize {
+            all_funcs(m)
+                .iter()
+                .map(|f| f.ops.iter().filter(|o| pred(o)).count())
+                .sum()
+        };
+        let off = compile(src);
+        assert!(
+            count(&off, &|o| matches!(o, Op::Binary(BinOp::Add))) >= 1,
+            "OFF: l'add di pila deve restare Binary(Add) di produzione"
+        );
+        assert_eq!(
+            count(&off, &|o| matches!(o, Op::BinaryAdd)),
+            0,
+            "OFF: nessun BinaryAdd da estensione deve trapelare"
+        );
+        let on = compile_on(src);
+        assert_eq!(
+            count(&on, &|o| matches!(o, Op::Binary(BinOp::Add))),
+            0,
+            "ON: tripwire zero-Binary(Add) (ogni add è forma fusa o BinaryAdd)"
+        );
+        assert!(
+            count(&on, &|o| matches!(o, Op::BinaryAdd)) >= 1,
+            "ON: l'add di pila residuo deve essere BinaryAdd"
+        );
+    }
+
+    /// A-KL-102-3 (Concilio WP-102, S-101 punto 5): `assente ≡ =1` — non
+    /// solo entrambi VERI: la STESSA emissione. Il dente lega la grammatica
+    /// al funnel: i due modi risolti devono coincidere E produrre lo stesso
+    /// `{main}` compilato.
+    #[test]
+    fn absent_env_is_identical_to_explicit_one() {
+        use std::ffi::OsStr;
+        assert_eq!(
+            mode_from_env(None),
+            mode_from_env(Some(OsStr::new("1"))),
+            "assente e `=1` devono risolvere lo stesso modo"
+        );
+        let src = br#"<?php $s=0; for($i=0;$i<9;$i++){ $s = $s + $i*3; } echo $s;"#;
+        let a = compile_mode(src, mode_from_env(None));
+        let b = compile_mode(src, mode_from_env(Some(OsStr::new("1"))));
+        assert_eq!(
+            format!("{:?}", a.main.ops),
+            format!("{:?}", b.main.ops),
+            "assente e `=1` devono emettere lo stesso {{main}}"
+        );
+    }
 }

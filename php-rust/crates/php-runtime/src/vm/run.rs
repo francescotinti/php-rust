@@ -3413,10 +3413,19 @@ impl<'m> super::Vm<'m> {
                 Op::PropGet { name, ic } => {
                     let obj = self.frames[top].stack.pop().expect("PropGet object");
                     let sk = crate::bytecode::PropIc::scope_key(self.frames[top].class);
-                    let target = obj.deref_clone();
-                    // S-101 census: bump Rc del ricevitore (P2).
-                    #[cfg(feature = "zval-census")]
-                    super::zvalcensus::note_recv_clone_prop(&target);
+                    // H-C1b (S-101): the popped handle is OWNED — move it
+                    // instead of cloning a second handle that dies at arm end.
+                    // Only a Ref clones out its inner value (the wrapper never
+                    // travels past this point).
+                    let target = if matches!(obj, Zval::Ref(_)) {
+                        let t = obj.deref_clone();
+                        // S-101 census: bump Rc del ricevitore (P2, solo Ref).
+                        #[cfg(feature = "zval-census")]
+                        super::zvalcensus::note_recv_clone_prop(&t);
+                        t
+                    } else {
+                        obj
+                    };
                     // INLINE CACHE (WP-29): the site's last cacheable
                     // resolution — a PUBLIC hook-free backed slot on this
                     // class — reads with zero hashing. A present non-`Undef`
@@ -3569,14 +3578,19 @@ impl<'m> super::Vm<'m> {
                     let mut value = self.frames[top].stack.pop().expect("PropSet value");
                     let obj = self.frames[top].stack.pop().expect("PropSet object");
                     let cur = self.frames[top].class;
-                    let target = obj.deref_clone();
-                    // S-101 census: bump Rc del ricevitore (P2) + specie del
-                    // valore scritto (P1).
+                    // H-C1b (S-101): move the owned handle (see PropGet).
+                    let target = if matches!(obj, Zval::Ref(_)) {
+                        let t = obj.deref_clone();
+                        // S-101 census: bump Rc del ricevitore (P2, solo Ref).
+                        #[cfg(feature = "zval-census")]
+                        super::zvalcensus::note_recv_clone_prop(&t);
+                        t
+                    } else {
+                        obj
+                    };
+                    // S-101 census: specie del valore scritto (P1).
                     #[cfg(feature = "zval-census")]
-                    {
-                        super::zvalcensus::note_recv_clone_prop(&target);
-                        super::zvalcensus::note_prop_val(1, &value);
-                    }
+                    super::zvalcensus::note_prop_val(1, &value);
                     // A write to a lazy object initializes it first (PHP 8.4) —
                     // unless a set hook/`__set` serves it; a no-op during the
                     // object's own construction (it is no longer lazy then).

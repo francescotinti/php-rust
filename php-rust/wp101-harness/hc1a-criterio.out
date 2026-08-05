@@ -48,3 +48,11 @@ ns_op_A=9.26  rapporto_prop_A=11.9  [derivata: companion 5.00/0.42]
 verdetto=PROMOSSA per criterio (Delta 7.3 >= 1.0, dentro la banda pre-registrata;
   rapporto 12.4 -> 11.9, atteso contabile ~11.8). Seguono: controllo positivo
   census (conteggi logici INVARIATI) + gate cumulativi di stadio.
+# ---- GATE DI STADIO (tutti VERDI, 01:14) ----
+# controllo positivo census: riga zvalcensus_s101 BYTE-IDENTICA al pre-leva ✓
+# fixture hc1-fixtures.sh: 13/13 PASS nei 2 modi ✓
+# batteria: 1735 passed / 0 failed, rc=0 vero (somma su tutte le suite) ✓
+# corpus gate (binario 0ef9498d = stesso sorgente rilinkato dalla batteria,
+#   fa fede HEAD 5baa369): 1418 per NOME nei 2 modi, insieme IDENTICO wp82 ✓
+# diff per-test off<->on: ZERO fuori carve-out nominata (3 settype random_bytes) ✓
+# WP pair di parita': in coda sul binario CUMULATIVO di fine sessione (dichiarato).
