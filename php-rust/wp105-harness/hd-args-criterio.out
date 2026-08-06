@@ -1,0 +1,82 @@
+hd-args-criterio: ATTO ZERO della leva H-D args (S-105, ordine WP-106 §1a)
+— criterio SCRITTO E COMMITTATO PRIMA di ogni misura di gate o A/B.
+grade=CRITERIO
+sessione=S-105 (2026-08-06 sera)
+
+# ---- CANALE (inchiodato S-104, wp104-harness/hd-free-hist-verdetto.out) --
+# calls: 1 alloc × 32,0000 B + 1 free × 32,0000 B per chiamata, realloc ≡ 0;
+# ret_cell ESCLUSO (per layout E per misura); indiziato = args-Vec cap 2
+# (2 × 16 B = size_of::<Zval>() pinnato).
+# Sito indiziato nel codice (censito con Serena, S-105):
+#   run.rs `Op::Call { func, argc }` (~r.2586): `Vec::with_capacity(n)` →
+#   pop ×n → reverse → `bind_params(&mut frame, args)` [calls.rs:315] che
+#   CONSUMA il Vec nella finestra di chiamata. Chiamanti di bind_params
+#   censiti: 12 (run.rs ×6, calls.rs ×4, mod.rs metodi/closure/static ×5
+#   occorrenze in 3 simboli) — NESSUNO conserva il contenitore.
+
+# ---- LEVA: SmallVec<[Zval; 2]> (alias ArgsBuf) ----
+# Mandato concilio WP-106 (SYNTHESIS §3): inline-2; pool REFUTATO (duplica
+# la freelist TL di mimalloc). Scope della leva:
+#   - materializzazione args dei pop-loop caldi in run.rs: Op::Call,
+#     Op::CallValue, Op::CallNsFallback → ArgsBuf (arity ≤ 2: ZERO alloc);
+#   - firma di bind_params: Vec<Zval> → ArgsBuf;
+#   - siti freddi che oggi producono Vec (spread/named/array) convertono
+#     con SmallVec::from_vec (len>2: O(1) prende il buffer; len≤2: copia
+#     2 Zval + free del Vec preesistente — count-neutro o migliorativo).
+# FUORI perimetro (per NOME): canale args dei BUILTIN (sito distinto, mai
+# censito da hd-free-hist), spread/named in sé, invoke_value a valle se il
+# ripple supera la firma (conversione al confine ammessa).
+
+# ---- GATE D'APERTURA (tutti PRIMA di implementare la leva) ----
+# G1 · probe cap-bump 2→4 (Leijen, sostituto del SiteTag pieno):
+#   build CENSUS con `with_capacity(n.max(4))` SOLO al sito Op::Call;
+#   attesa PRE-REGISTRATA: la massa per-chiamata di allochist E freehist
+#   (delta calls↔calls_small ≈ 19,9M eventi) si SPOSTA da (16,32] a
+#   (32,64]. Se NON si sposta ⇒ il sito indiziato non è il canale ⇒ STOP:
+#   la leva NON si implementa (lettera NEXT_SESSION «se il costo non
+#   sale»: qui operazionalizzata sulla TAGLIA dell'evento censito — il
+#   timing di una build census non è leggibile per costruzione).
+#   Il probe è un edit di working-tree: NON si committa, si reverta.
+# G2 · censimento ARITÀ call-site (Bak): `arity_note(args.len())`
+#   census-gated in bind_params (choke-point ESATTO del perimetro della
+#   leva); istogramma bucket {0,1,2,3,4,5+}:
+#   (a) su calls.php — attesa: massa ≡ arity 2;
+#   (b) su un campione reale NOMINATO (test corpus non-triviali eseguiti
+#       col binario census, somma dei dump).
+#   Lettura: quota arity ≤ 2 MAGGIORITARIA ⇒ inline-2 ben dimensionato;
+#   se dominasse arity > 2 ⇒ si valuta inline-4 PRIMA dell'A/B (l'attesa
+#   Δ resta quella pre-registrata).
+# G3 · audit-fuga: (a) STATICO (fatto, sopra): il contenitore muore
+#   dentro bind_params — fast path: move nei slot; generic: extra_args =
+#   deref_clone (copia, non il contenitore); variadic: move in PhpArray.
+#   (b) FIXTURE fx21-args-window.php: func_get_args su surplus + param
+#   by-ref aliasing + variadic pack — byte-parity oracle↔phpr, PRE e POST
+#   leva (il contenitore non deve mai essere osservabile).
+
+# ---- ATTESA e VERDETTO A/B (pre-registrati) ----
+# - ATTESA: Δ ∈ [6,14] ns/iter su calls (concilio WP-106; banda NOMINALE:
+#   il numeratore per-alloc non è mai stato misurato in isolamento).
+# - CO-PRIMARI (ENTRAMBI necessari alla promozione):
+#   T · timing: Δ_A/B ≥ 6 ns/iter con R=5 ABAB stessa sera, netto
+#       pavimenti per-binario, giudice calls.php con N EMESSO dal
+#       sorgente (KS-GR-105-2), segno B<A stabile 5/5;
+#       A = stash phpr-s104 (pin 86a50d1c01c6f45a), B = HEAD+leva.
+#   C · census: alloc/chiamata → 0,0000 E free/chiamata → 0,0000 sul
+#       delta calls↔calls_small (entrambi gli istogrammi, stessa lettura
+#       di hd-free-hist-verdetto.out).
+# - Δ ∈ [4,6): serve R ≥ 9 E segno stabile su tutte le coppie.
+# - PAVIMENTO 4 ns/iter (feedback-keep-partial-wins): sotto, il guadagno
+#   si REGISTRA senza promozione.
+# - CADUTA: Δ < max(rumore run-to-run misurato la sera ~3, banda-layout
+#   0,67 [N=1: ogni claim in (0,67; 3] è VOID, INDETERMINATO ammesso]).
+# - ADMISSION (KS-GR-106-2, prerequisito del verdetto):
+#   admission-disasm PRIMA/DOPO — bl-count totale in run_loop + taglia di
+#   run_loop + bl verso i simboli alloc/free; se l'inliner FLIPPA
+#   (variazioni oltre i siti toccati) ⇒ NESSUNA componente di costo si
+#   cita (KS-BA-106-1), il Δ resta leggibile SOLO come totale timing+
+#   census; smoke R=2 prima del pieno R=5; sanity output identico o VOID.
+# - PROMOZIONE ⇒ trigger fedeltà STESSA SESSIONE (A-PE-106-1,
+#   KS-PE-106-2): rebuild php-server @ HEAD + grado PIENO + COPPIA WP
+#   bimodale (salda il debito WP-102) + gate PIN-106
+#   (build → hash₁ → batteria → re-hash₂ → STASH(hash₂) → fixture →
+#   corpus ×2; build dopo lo stash = gate VOID, churn documentato).
