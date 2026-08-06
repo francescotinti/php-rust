@@ -2591,14 +2591,33 @@ impl<'m> super::Vm<'m> {
                     // callee's leading slots. The caller's `ip` is already past
                     // the Call, so it resumes correctly once the callee returns.
                     let n = *argc as usize;
-                    let mut args = Vec::with_capacity(n);
-                    for _ in 0..n {
-                        args.push(self.frames[top].stack.pop().expect("call argument"));
+                    if callee.simple_call && n == callee.n_params as usize {
+                        // S-105 leva H-D (forma 2): simple-call ad arità esatta
+                        // — gli argomenti passano DIRETTAMENTE dalla pila del
+                        // chiamante ai primi slot del callee, in ordine inverso
+                        // di pop: nessun contenitore, nessuna alloc (canale
+                        // 1 alloc × 32 B/chiamata inchiodato da hd-free-hist).
+                        // Semantica = braccio fast di bind_params (decay_arg
+                        // è pure-read: l'ordine di decay non osserva effetti).
+                        #[cfg(feature = "mem-census")]
+                        php_types::memcensus::arity_note(n);
+                        let mut frame = self.pooled_frame(callee, m);
+                        frame.argc = n as u32;
+                        for i in (0..n).rev() {
+                            let a = self.frames[top].stack.pop().expect("call argument");
+                            frame.slots[i] = decay_arg(a);
+                        }
+                        self.enter_callee(frame)?;
+                    } else {
+                        let mut args = Vec::with_capacity(n);
+                        for _ in 0..n {
+                            args.push(self.frames[top].stack.pop().expect("call argument"));
+                        }
+                        args.reverse();
+                        let mut frame = self.pooled_frame(callee, m);
+                        bind_params(&mut frame, args);
+                        self.enter_callee(frame)?;
                     }
-                    args.reverse();
-                    let mut frame = self.pooled_frame(callee, m);
-                    bind_params(&mut frame, args);
-                    self.enter_callee(frame)?;
                 }
                 Op::CallArgs { func } => {
                     // Spread call `f(...$arr)` (PAR): integer keys bind positionally

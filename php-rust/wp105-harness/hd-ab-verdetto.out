@@ -1,0 +1,51 @@
+hd-ab-verdetto: S-105 §1c — VERDETTO della leva H-D args contro il
+criterio pre-registrato hd-args-criterio.out (commit 11cc23a).
+grade=VERDETTO
+sessione=S-105 (2026-08-06 ~22:3x–23:0x, ABAB stessa sera, giudice calls
+N=20M emesso dal run)
+
+# ---- DUE FORME misurate (A = phpr-s104 86a50d1c, pin S-104) ----
+# forma 1 (LETTERA del mandato: SmallVec<[Zval;2]> ArgsBuf, firma
+#   bind_params + .into() ai siti freddi), B=1317936c:
+#   smoke R=2: Δ=−15,00 (0/2) · pieno R=5: **Δ=−14,00 ns/iter, 0/5**,
+#   rumore ~3,5 ⇒ REGRESSIONE FIRMATA.
+#   admission: run_loop 257.632→258.372 (+740 B), bl 5408→5424,
+#   dropZval 1109→1109, rust_alloc 117→116, dealloc 363→370 — NESSUN
+#   flip, perturbazione localizzata: il Δ è della forma, non del codegen.
+#   census: alloc/chiamata=0,0000 E free/chiamata=0,0000 (183.929 =
+#   183.929 su entrambi i lati) ⇒ il MECCANISMO è atterrato e la forma
+#   perde comunque: il contenitore SmallVec (aggregato 40 B passato per
+#   valore attraverso il confine non-inlined di bind_params + IntoIter
+#   con check spilled per elemento) costa PIÙ della coppia alloc+free
+#   32 B che elimina. REVERT completo della forma 1 (git checkout,
+#   Cargo.lock incluso) prima di misurare la forma 2.
+# forma 2 (DIRECT-BIND: fast path inline in Op::Call per simple_call ad
+#   arità esatta — pop → decay_arg → frame.slots in ordine inverso,
+#   NESSUN contenitore; braccio else = sentiero Vec+bind_params di
+#   prima, byte-fedele), B=5e8c84c9:
+#   smoke R=2: Δ=+24,50 (2/2) · pieno R=5: **Δ=+23,00 ns/iter, B<A
+#   5/5**, rumore ~3,5 · ns/iter 164,00→141,00.
+#   admission: run_loop 257.632→257.956 (+324 B), bl 5408→5416 (+8),
+#   dropZval 1109→1111 (+2, il decay del braccio nuovo), rust_alloc
+#   117→117 e dealloc 363→363 IDENTICI ⇒ NESSUN flip (KS-BA-106-1
+#   rispettato: le componenti si possono citare).
+#   census: alloc/chiamata=**0,0000** E free/chiamata=**0,0000**
+#   (galloc_n 183.929=183.929, gfree_n 144.845=144.845, quarta cifra);
+#   argarity a2=20.000.000 (l'arity_note vive anche nel fast path).
+#   sanity: output giudice identico; fx21 PRE≡POST ✓; prop 2 coppie a
+#   segno misto entro rumore (nessun effetto collaterale di categoria).
+
+# ---- LETTURA (criterio 11cc23a) ----
+# CO-PRIMARI della forma 2: T ✓ (Δ=23,00 ≥ 6, segno 5/5, R=5) ∧ C ✓
+# (0,0000 su alloc E free) ⇒ **PROMOZIONE della forma 2**.
+# La banda pre-registrata [6,14] è SFORATA IN ALTO (+23): il direct-bind
+# elimina, oltre alla coppia alloc+free, anche reverse + costruzione/
+# distruzione del Vec + il transito per bind_params — la banda copriva il
+# solo canale alloc. La forma 1 è il CONTROLLO che nomina il costo del
+# contenitore: (T1=−14) − (T2=+23) ⇒ ~37 ns/iter di divario tra le due
+# forme A PARITÀ di census (entrambe 0,0000): la valuta di run_loop resta
+# il VOLUME di lavoro per op (S-104), non l'alloc in sé.
+# AZIONE: forma 2 SPEDITA ⇒ trigger fedeltà stessa sessione (A-PE-106-1):
+# gate PIN-106 (batteria → re-hash → stash → fixture → corpus ×2 → micro
+# sul pin) + rebuild php-server @ HEAD + grado PIENO + COPPIA WP bimodale.
+# raw: wp105-harness/hd-ab-out/ (fuori repo) · dis in scratch di sessione
