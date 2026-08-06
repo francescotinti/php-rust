@@ -1,0 +1,43 @@
+ab-r7-lettura: S-104 punto 1 — lettura del verdetto A/B peak R=7 con la
+REGOLA PRE-REGISTRATA (SYNTHESIS WP-105 §Regola-di-lettura, team-misura
+Leijen+Gregg, scritta PRIMA delle ~21:00; run daemonizzato 16:23, DONE
+20:41:14; ab.identity: A=s99-sigillo 52330330, B=s100-fix f29883eb,
+banda_fase1=34,64 tetto=51,96 pre-registrati nel launcher).
+grade=LETTURA
+sessione=S-104 (2026-08-06 ~20:45)
+
+# ---- i numeri del run (ab-verdetto.out, R=7 coppie ABAB, warmup escluso) --
+# delta B−A per coppia (MiB): +40,02 +22,47 +26,61 +17,98 +14,61 +15,70 +120,42
+# mediana_A=1934,69 (spread 98,22) · mediana_B=1972,63 (spread 99,16)
+# delta_mediane=+37,94 · coppie a segno opposto: 0/7
+# NOTA regime-shift infra-run: coppie 5-7 hanno pavimento A più basso di
+# ~90 MiB (1852-1863 vs 1935-1950) — su ENTRAMBI i bracci per 5-6, NON
+# per 7 (B risale a 1972,63 ⇒ delta 120,42 outlier di regime, non di leva).
+
+# ---- applicazione della regola (nell'ordine pre-registrato) ----
+# 1) TETTO: il verdetto meccanico «VOID (spread 99,16 > 51,96)» usa il
+#    range a R=7 contro un tetto tarato R=5: il range è monotono
+#    non-decrescente in R ⇒ il confronto range-vs-range è AUTO-VOID per
+#    costruzione (regola §1). La magnitudine si legge su mediane/IQR.
+# 2) CO-PRIMARI:
+#    - SIGN TEST: 7/7 coppie B>A ⇒ p one-sided = 0,0078 — **DIREZIONE
+#      FIRMATA: la crescita di peak di s100-fix su s99-sigillo è REALE**
+#      (l'indizio «5/5 stesso segno» di S-102/S-103 diventa firma).
+#    - MAGNITUDINE: mediana dei Δ ACCOPPIATI = **+22,47 MiB** (IQR
+#      ≈[15,7; 40,0]) — SOTTO la banda fase-1 34,64. Il delta_mediane
+#      +37,94 sfonda appena, ma è CONTAMINATO dal regime-shift (le
+#      mediane dei bracci pescano da regimi diversi); la coppia è il
+#      controllo del drift, quindi fa fede il Δ accoppiato.
+#    ⇒ DIREZIONE SENZA MAGNITUDINE: il bisect NON è autorizzato (§2).
+# 3) STOP (§3): R=7 era l'ULTIMO tentativo full-peak. VERDETTO FINALE
+#    della voce: **crescita B>A reale e firmata; magnitudine non
+#    quantificabile sopra banda con la metrica full-peak** — la metrica
+#    ha dato tutto quel che può. Il ridisegno PER-FASE (design
+#    A-LE-105-5) resta nel backlog per NOME, DOPO la leva H-C2;
+#    MAI un terzo rerun full-peak.
+#
+# Conseguenza pratica: la voce A/B peak si CHIUDE qui; ogni futura
+# attribuzione della crescita (~15-40 MiB) passa dal design per-fase,
+# non da rerun della metrica bocciata.
+# raw: wp103-harness/peak-ab-out/ (uploads-guard: restore verificato ×3,
+# backup conservato).
