@@ -56,3 +56,10 @@ verdetto=PROMOSSA per criterio (Delta 6.0 >= 1.0 pavimento) MA SOTTO la banda
   Cumulato a+b: prop 12,4 -> 11,5 (Delta_cum ~13,3 ns/iter su 174).
   Il rapporto resta LONTANO dal tetto ~9x dichiarato: coerente col TETTO
   WP-102 (H-C1 non chiude H-C). Seguono census-control + gate cumulativi.
+# ---- COPPIA WP DI PARITA' (binario cumulativo, 02:0x-02:50) ----
+# pair101 off: gate_void=0, media failure IDENTICI (0 nomi), full diff ==
+#   delta PRE-esistente S-100 (solo test_wp_is_stream ftp://, lato phpr)
+# pair101 on:  identico (stesso singleton, stesso verso)
+# => NESSUNA regressione di parita' dal runtime H-C1a+b (KS-KL-102-3/
+#    KS-MA-102-4 SODDISFATTI); ordine distruttori mai divergente (fixture 12
+#    + full suite == baseline per NOME).
