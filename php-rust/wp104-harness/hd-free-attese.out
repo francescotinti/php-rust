@@ -1,0 +1,33 @@
+hd-free-attese: S-104 punto 3 (A-LE-105-1/2) — le ATTESE byte-per-tipo del
+free-histogram di calls, PRE-REGISTRATE prima del run (il free della cifra
+S-103 era ASSUNTO bilanciato senza istogramma: qui l'attesa, il dinamico
+arbitra).
+grade=ATTESA  # pre-registrazione; nessun numero misurato qui sotto
+sessione=S-104 (2026-08-06, scritta PRIMA di ogni run free-hist)
+
+# ---- layout per-tipo A COMPILE-TIME (da size_of, non da memoria) ----
+# Zval = 16 B (pinnato, array.rs; align 8).
+# Rc<RefCell<Zval>>  → RcBox { strong: 8, weak: 8, RefCell: (Cell<isize> 8
+#                      + Zval 16) = 24 } = **40 B** → bucket (32,64]
+# Vec<Zval> cap=2    → buffer 2×16 = **32 B** → bucket (16,32]
+# Vec<Zval> cap=1    → 16 B → bucket (8,16]
+# Rc<PhpStr>         → 16 B header + PhpStr (inline header + payload):
+#                      variabile, MAI un multiplo fisso attribuibile qui.
+#
+# ---- LE ATTESE (arbitrate dal free-hist disaggregato) ----
+# A1. Il canale free di calls (delta grande/small ÷ N EMESSO dal run) è
+#     ~1 free/chiamata TUTTO nel bucket (16,32] — SIMMETRICO all'alloc
+#     32,0 B. Se l'istogramma free mostra massa in (32,64] ⇒ c'è un 40 B
+#     nel canale e ret_cell RIENTRA tra gli indiziati.
+# A2. ret_cell Rc<RefCell<Zval>> = 40 B ≠ 32 B ⇒ ESCLUSO PER LAYOUT come
+#     sorgente della 1×32,0 B (A-LE-105-2, verbale Leijen). L'indiziato
+#     principale resta **args-Vec da 2 Zval** (cap 2 → 32 B esatti).
+# A3. realloc free-side ≡ 0 (coerente con realloc_n=2 eventi totali S-103).
+# A4. Linearità 199:1 sul free-hist come sull'alloc (stessa quarta cifra).
+#
+# ---- che cosa il SiteTag deve poi chiudere (residuo ≡ 0) ----
+# L'attribuzione per-sito (SiteTag TL RAII, hd-prep-design.md §3) tagga
+# OGNI galloc/gfree del run di calls: somma dei siti = totale del census,
+# residuo non attribuito ≡ 0, o l'attribuzione è VOID (KS-LE-104-1).
+# Il tag DECIDE tra args-Vec e ogni altro sito; l'indizio di layout (A2)
+# non promuove da solo.
