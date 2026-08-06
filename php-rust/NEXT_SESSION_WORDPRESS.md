@@ -1,204 +1,176 @@
 # NEXT_SESSION — LA SPINA DORSALE: il nucleo interprete, misurato per categoria
 
-⏱ **FONDAMENTALI**: ultima misura full/media WordPress = **WP-100 (QUESTA
-sessione — coppia nei DUE modi, contatore 0)** · ultima campagna
-sull'OGGETTO = **S-100 (questa: FLIP eseguito + H-C prima misura)**.
+⏱ **FONDAMENTALI**: ultima misura full/media WordPress = **WP-101 (QUESTA
+sessione — coppia nei DUE modi sul binario cumulativo, contatore 0)** ·
+ultima campagna sull'OGGETTO = **S-101 (questa: H-C1a+b promosse e misurate)**.
 
-**Ultima sessione (S-100, 2026-08-05)**: l'ordine del Concilio WP-101
-eseguito 6/6, condizionale compreso. **LA PROMOZIONE È FATTA: flag-on è il
-DEFAULT** (`DEFAULT_ON=true` @ fb861e4; opt-out `PHPR_REG_LOWER=0`,
-grammatica VALUE-PARSED a lista chiusa — prima `=0` ACCENDEVA). Gate tutti
-verdi: corpus 1418 per NOME nei 2 modi SUL PIN + diff per-test ZERO fuori
-carve-out nominata (3 test `random_bytes`, nondeterminismo provato
-intra-modo); server bimodale fails=0 sul pin (sentinella ESTESA 16
-interleaved + 4 concorrenti, workers=2; option 413 + restapi 3508 per NOME
-— prima esecuzione assoluta del server flag-on); coppia WP nei due modi con
-bande pre-registrate (CPU on/off 1,008; peak on 0,965 = FAVOREVOLE);
-batteria **1735/0** senza premesse ambientali (modo = INPUT del funnel,
-`lowered()` eliminato). **H-B2 sotto flip decisa CON MISURA**: estensione
-BinaryAdd ai siti stack residui (L=12,9 ns/occ → [−1,0]); giudice add on
-3,25 netto (−31% vs off). **H-C prima misura**: prop on 12,4× = conteggio
-2,0× × costo/op 6,2×; profilo co-equale: ~27% del tempo phpr nel CICLO DI
-VITA Zval (drop 12,6 + clone 7,6 + gc_note 5,3 + deref_clone 2,1) vs
-handler TAILCALL specializzati dell'oracle; **candidata H-C1 nominata**
-(prestito/refcount al posto del clone su PropGet), nessuna riga scritta.
-Dettaglio: `sessions/WP_SESSION_100.md` + `wp100-harness/*.out`.
+**Ultima sessione (S-101, 2026-08-06)**: l'ordine del Concilio WP-102
+eseguito nei punti 1, 2, 3a, 3b, 3c, 5 e 6-parziale (il punto 4 —
+attribuzione crescita d'albero — è in handoff: nessuna finestra per ~10 run
+full dopo la coppia). **DUE LEVE PROMOSSE dai loro criteri pre-registrati**:
+H-C1a (guardia `#[inline]` scalari su `gc_note`: Δ=7,3 ns/iter, banda
+[4,13]) e H-C1b (**MOVE dell'handle ricevitore owned** — non prestito, non
+addref: l'handle poppato è già di proprietà; Δ=6,0 ≥ pavimento, SOTTO la
+banda attesa [7,20] — sovrastima contabile del profilo REGISTRATA).
+**prop 12,4 → 11,5**; trasversali: arith 12,7→12,2, calls 7,9→7,3, arr
+4,6→4,3. Census dinamico ha ARBITRATO le tre predizioni (P1 ✓ 0 refcounted;
+P2 aggravata: 6 coppie clone+drop Rc/iter; P3 raffinata: 4 gc_note/iter
+tutte Long, residuo = `reg_store_slot`; alloc/iter≈0); profilo inline-aware
+(samply+dSYM+atos -i): il 50% di run_loop è APERTO = 21,2% dispatch/corpi +
+**~26,6% meccanica della pila operandi** (accessor Vec inlined) — più
+grande del ciclo di vita Zval (28,2% confermato). Gate: 13 fixture
+semantiche 2-modi (attese PRIMA) + §3.13 catalogata; batteria **1737/0**
+(coi denti A-HE-102-1 a polarità corretta-dopo-morso e A-KL-102-3); corpus
+1418×2 per NOME + diff per-test ZERO per ENTRAMBI gli stadi; coppia WP
+bimodale: media 0 identici, full = SOLO delta pre-esistente wp_is_stream.
+Dettaglio: `sessions/WP_SESSION_101.md` + `wp101-harness/*.out`.
 
 **Rotta (utente 2026-08-04)**: dritti al PHP; WordPress = collaudo di
 PARITÀ. OBIETTIVO **X = nucleo interprete ≤ 3× l'oracle sulle categorie
 pure**; giudice = le sei micro-categorie di `wp97-harness/micro/`.
 
-## Baseline CORRENTE del giudice (S-100, post-flip: il DEFAULT è flag-on)
+## Baseline CORRENTE del giudice (S-101 chiusura, binario cumulativo, modo default)
 
-| categoria | rapporto (default on) | ipotesi attiva |
+| categoria | rapporto | ipotesi attiva |
 |---|---|---|
-| proprietà | **12,4** (misurata S-100; decomposta: 2,0 conteggio × 6,2 costo/op) | **H-C ATTIVA** — H-C1 a STADI (a: bypass scalari; b: prestito ricevitore; c: copy+addref condizionale), tetto ~9× dichiarato |
-| aritmetica | ~12,7 flag-on (S-99; add on −31% post-estensione; da ri-baseline completa) | residuo ~9,9 ns/op nei corpi non-Binary e slot |
-| chiamate | 8,6 (S-99 flag-off; da rimisurare in modo on) | **H-D ATTIVA**, in coda dopo H-C |
-| stringhe | 6,9 · array 4,9 · regex 3,8 (S-99) | — (regex = parte sana) |
+| aritmetica | **12,2** | residuo = corpi non-Binary + pila operandi |
+| proprietà | **11,5** (da 12,4; H-C1a+b spedite) | **H-C ATTIVA** — gambe residue NOMINATE: pila operandi ~26,6% + ciclo vita Zval residuo ~28% + 3 clone LoadVar/iter (canale EMISSIONE) |
+| chiamate | **7,3** (da 7,9) | **H-D ATTIVA** — census: 5 gc_note/iter scalari, 3/iter non taggate da nominare |
+| stringhe | 7,0 · array 4,3 · regex 3,5 | — (regex = parte sana) |
 
-NB: la ri-baseline completa delle sei categorie IN MODO DEFAULT (on) non è
-stata fatta in S-100 (misurate solo prop e add): è il primo passo di misura
-di S-101.
+## LE IPOTESI — stato dopo S-101
 
-## LE IPOTESI — stato dopo S-100
+- ~~H1, H-A1, H-B1, H-B2~~ — chiuse (rotazioni precedenti).
+- **H-C (proprietà, 11,5×)**: H-C1a e H-C1b SPEDITE E PROMOSSE (criteri,
+  census-control, gate cumulativi + coppia WP). **H-C1c (copy+addref
+  condizionale per refcounted) NON scritta**: su prop.php i valori sono
+  Long — serve un giudice/fixture per SPECIE (string/array in proprietà)
+  prima di aprirla (A-BA-102-3). Le gambe NUOVE nominate dal profilo:
+  (i) **meccanica della pila operandi** (~26,6% del tempo phpr dentro
+  run_loop: as_slice/len/pop/push su Vec<Zval>) — trasversale, non solo
+  prop; (ii) i **3 clone LoadVar/iter dell'handle** = canale EMISSIONE
+  (il compilatore sa che è lo stesso $o); (iii) drop-glue sui temporanei
+  scalari (Bak). Ognuna esige il SUO controfattuale contato.
+- **H-D (chiamate, 7,3×)**: prima pietra census fatta (`hd-census-primo.out`);
+  resta la tavola completa: census call-path bi-regime (nominare i 3
+  gc_note/iter residui + i canali che non passano da read_slot) + profilo
+  co-equale su calls.php.
 
-- ~~H1, H-A1, H-B1~~ — chiuse (rotazioni precedenti). ~~**H-B2**~~ —
-  **CHIUSA COL FLIP**: specializzazione Add sul percorso pila SPEDITA e
-  PROMOSSA (emissione flag-off + estensione post-finestre flag-on); la coda
-  Sub/Mul/cmp sul percorso pila resta AVVICINABILE per occorrenza col SUO
-  controfattuale (KS-BA-100-1); il perimetro compare esige la dichiarazione
-  scritta PRIMA (A-ST-101-2/KS-ST-101-2). Il rollout nelle forme registro
-  resta chiuso salvo misura ≥ pavimento (KS-ST-101-3).
-- **H-C (proprietà, 12,4× nel modo default)**: PRIMA MISURA FATTA (S-100):
-  la gamba dominante è il COSTO PER OPCODE (6,2×), non il conteggio (2,0×);
-  ~27% del tempo nel ciclo di vita Zval (clone/drop/gc_note su
-  PropGet/Pop), simboli per NOME in `wp100-harness/hc-premisura100.out`.
-  **H-C1 RIFORMULATA dal Concilio WP-102** (la forma «prestito al posto
-  del clone del valore» è REFUTATA: su prop.php i valori sono Long, il
-  clone non alloca; il churn è il RICEVITORE Rc+gc_note): forma A STADI
-  H-C1a (bypass bookkeeping scalari) → H-C1b (prestito/addref del
-  ricevitore à la ThisPropGet, sigillo di tipo) → H-C1c (copy+addref
-  condizionale stile Zend); borrow nudo dello slot valore VIETATO;
-  tetto dichiarato: successo pieno ⇒ resta ~9×. Prerequisiti: census
-  dinamico specie×sito×canale + fixture semantiche PRIMA di ogni riga.
-- **H-D (chiamate)**: attiva, in coda dopo H-C; prima mossa = stessa tavola
-  (census × costo + profilo co-equale su calls.php).
+### ⚖️ Concilio WP-102 — ESEGUITO in S-101 (punti 1-3, 5, 6-parziale; punto 4 in handoff)
 
-### ⚖️ Concilio WP-101 — ESEGUITO PER INTERO in S-100 (6/6)
-
-Verbali in `wp101-harness/`. KS del flip TUTTI soddisfatti: KS-MA-101-1
-(contratto value-parsed), KS-HO-101-1/2 (dump-diff, mai cronometro),
-KS-KL-101-1/KS-PE-101-1 (server bimodale sulla stessa rotazione),
-KS-ST-101-1 (sette trappole byte-id nei 2 modi), KS-HE-101-2 (match
-esaustivi), KS-HE-101-3 (braccio OFF collaudato alla rotazione),
-KS-GR-101-1/KS-LE-101-1 (bande pre-registrate, gate su phpr-off vs on).
-BACKLOG per NOME che resta (non slot di sessione se non bloccante):
-A-HO-101-1 (sigillo di tipo), A-HO-101-4+A-PE-101-5 (`--build-info`),
-A-PE-101-2 (census PHPR_* lazy), A-MA-101-1 (C0' same-tree), A-BA-101-3
-(census post-flip CmpJmp*), A-LE-101-2/3 (sonda taglia-unità, N_OPS
-const-assert), A-ST-101-2/4 (perimetro compare; mappa divergenze
-solo-flag-on), A-HE-101-3 (controllo positivo chiave unit-cache),
-A-LE-100-3 (N_OPS≤255: 186/256), A-KL-100-4/5, A-GR-100-3.
+Verbali in `wp102-harness/verbali/` (formato indice). KS soddisfatti in
+S-101: KS-ST-102-3/KS-BA-102-2 (ri-baseline con ns/op dove censito),
+KS-GR-102-1 (criteri dal controfattuale contato), KS-ST-102-2 (H-C1a
+misurata DA SOLA), KS-MA-102-1/KS-ST-102-1 (fixture attese-prima),
+KS-MA-102-3 (ordine distruttori mai divergente: fixture 12 + full per
+NOME), KS-KL-102-3/KS-MA-102-4 (coppia WP non derogata), KS-KL-101-3
+(assert conteggi↔nomi su ogni gamba). BACKLOG per NOME invariato in
+`wp102-harness/verbali/SYNTHESIS.md` + nuovi da S-101: sentinella server
+sul pin 2c4242b6 (NON collaudato); attribuzione dei 3 gc_note/iter di
+calls; fixture per specie (string/array in proprietà) per H-C1c.
 
 ## Regole di metodo (invariate)
 
 1. Il giudice è la micro-categoria. 2. WordPress è un collaudo di PARITÀ
-(si esegue quando cambia l'emissione). 3. Ogni ipotesi porta il criterio
-di caduta scritto PRIMA. 4. L'apparato non entra nell'ordine se non
-blocca; timebox mezza sessione.
+(si esegue quando cambia l'emissione O il runtime — S-101 l'ha eseguito
+per il runtime). 3. Ogni ipotesi porta il criterio di caduta scritto PRIMA.
+4. L'apparato non entra nell'ordine se non blocca; timebox mezza sessione.
 
 ## Stato gate
 
-- **phpr (pin release)**: **f29883eb432806ce** @ HEAD b618e3a (col fix
-  emit_binary A-HO-102-1; l'hash churna col relink: fa fede HEAD).
-  **DEFAULT = flag-ON**; opt-out `PHPR_REG_LOWER=0` (value-parsed; altro
-  valore ⇒ default + warning). Corpus **1418 per NOME nei 2 modi + diff
-  per-test ZERO fuori carve-out, RI-GIUDICATO SUL PIN** (A-KL-102-1,
-  `wp100-harness/corpus-diff/corpus-s100pin-{off,on}.fails`). Batteria
-  **1735/0** post-fix. Stash additivo `phpr-s100-fix`.
-- **php-server**: **62b978c51c62e108** — ricetta OBBLIGATORIA
-  `cargo build --release -p php-server --features axum-server`.
-  **collaudato: sì, GRADUATO, col MODE-PROBE** (A-PE-102-1: il modo
-  effettivo del server è PROVATO dal dump dell'unità nel suo log, nei 2
-  modi; sentinella estesa + option 413 + restapi 3508 per NOME,
-  `wp100-harness/parity-out-*`). Stash `php-server-s100-fix`.
-  Registro = `PIN_REGISTRY.md`.
-- **Launcher bimodali S-100** (`wp100-harness/`): `s100-parity-server.sh
-  <off|on>` (aggiornare PIN_SRV_ATTESO a ogni rotazione) ·
-  `s100-corpus-gate.sh` (2 modi espliciti) · `s100-corpus-diff.sh`
-  (diff per-test, carve-out per NOME, S100_COMPARE_ONLY per ri-giudicare) ·
-  `pair100.sh <off|on>` (assert conteggi↔nomi) · `s100-sentinella-estesa.sh`
-  · `s100-assignop-oracle.sh` (divergenze attese per NOME).
+- **phpr (pin release)**: **48a5d4384970d8ff** @ HEAD f808017 (hash churna
+  col relink: fa fede HEAD) — DEFAULT flag-ON; contiene H-C1a (split
+  gc_note) + H-C1b (move ricevitore su PropGet/PropSet). Batteria
+  **1737/0** (1735 + denti A-HE-102-1/A-KL-102-3). Corpus **1418 per NOME
+  nei 2 modi + diff per-test ZERO fuori carve-out** (entrambi gli stadi).
+  Stash ADDITIVO `phpr-s101`; braccio B degli A/B: `phpr-s100-fix`
+  (=f29883eb) e `phpr-s101-hc1a` (=0ef9498d).
+- **php-server**: **2c4242b6c8120b8e** — ricetta OBBLIGATORIA
+  `cargo build --release -p php-server --features axum-server` RISPETTATA.
+  **NON collaudato** (sentinella bimodale non eseguita in S-101; la
+  batteria/corpus/coppia coprono il runtime ma non il capture-boundary del
+  server): grado parziale, collaudo = primo atto se si tocca il server.
+  Stash `php-server-s101`. Registro = `PIN_REGISTRY.md`.
+- **Launcher S-101** (`wp101-harness/`): `hc1-fixtures.sh` (13 fixture +
+  carve-out §3.13 a diff esatto) · `s101-corpus-gate.sh` / `s101-corpus-diff.sh`
+  (OUT in wp101) · `pair101.sh <off|on>` · `hc1a-ab.sh` (A/B interleaved,
+  bracci via env A/B).
 - GATE72 CLI resta baseline trasversale (corpus 1418 · refl 290 · ORM
   3E/13F · hk 1665).
 - ⚠️ `~/Claude/php-rust-output/debug/` si RIGENERA (rust-analyzer):
-  rimuoverla nel pre-flight. Disco locale stretto (~13G).
+  rimuoverla nel pre-flight. Disco locale ~22G dopo la pulizia S-101.
 
 ## Voci APERTE per NOME (misura/attribuzione dovuta)
 
-- **full peak gamba phpr-OFF +~95 MiB CROSS-ALBERO** (WP-99 1892,56 →
-  S-100 1988,6/1998,5 MiB, R=2 intra-sera stabile 0,5%): attribuzione
-  dovuta (bisect o census; la gamba ON promossa è a +1,9%). NON è del flip.
-- **anomalia oracle media peak** (S-99 ~446 MB vs S-100 394 MB, −11,6%
-  tra-sere; intra-sera stabile): varianza della gamba oracle, aperta per
-  nome; il full peak oracle balla +14,6% INTRA-sera ⇒ ogni banda futura
-  sul full-peak va calibrata sul rumore MISURATO dello strumento.
-- divergenze §3.11 (AssignOp undef-lhs senza warning) e §3.12 (typed-ref
-  azzerato da Zend dopo AssignOp fallito) — catalogate, non urgenti.
+- **PUNTO 4 WP-102 NON ESEGUITO — attribuzione crescita d'albero peak**:
+  A/B pin S-99 (52330330, stash `phpr-s99-sigillo`) ↔ S-100 (f29883eb,
+  stash `phpr-s100-fix`) STESSA-SERA con R≥5 e bande UNILATERALI sul
+  rumore misurato per-motore, PRIMA del bisect (KS-GR-102-2). Il rumore
+  full-peak oracle è ~10% intra-sera (terza conferma stanotte:
+  720,9↔795,5 MiB) — la banda parte da lì.
+- **sentinella server sul pin 2c4242b6** (vedi Stato gate).
+- divergenze §3.11/§3.12/§3.13 — catalogate, non urgenti (famiglia
+  fetch-undef: A-ST-102-1/2).
 
 ## Che cosa è SOSPESO (non abbandonato)
 
-- **A-ZV2** (liveness+TakeSlot): invariata.
-- **Rollout Add nelle forme registro**: chiuso salvo misura ≥ pavimento
-  (KS-ST-101-3); la banda [0, 0,5] resta pre-registrata.
-- **Roadmap footprint**: ferma (full peak ora 1929,0 MiB nel modo default).
+- **A-ZV2** (liveness+TakeSlot): invariata. ⚠️ lezione S-101: `liveness.rs`
+  è feature-gated e NON è protetto dalla batteria senza feature — il fix
+  BinaryAdd è entrato in S-101; una `cargo check --features zval-census`
+  in batteria è a backlog.
+- **Rollout Add nelle forme registro**: chiuso salvo misura ≥ pavimento.
+- **Roadmap footprint**: ferma (full peak on 1863,8 MiB al riferimento).
 
 ## NON riproporre
 
-Tutti i NON-riproporre WP-83..99 restano. Nuovi da S-100:
+Tutti i NON-riproporre WP-83..100 restano. Nuovi da S-101:
 
-- **gate il cui rc è quello di `grep`/`tail` in coda a una pipe** (la
-  prima batteria S-100: rc del grep, non di cargo — log integrale + rc
-  vero, sempre).
-- **`wait` nudo con un server in background** (aspetta anche il server:
-  si aspettano i PID espliciti dei client).
-- **diff byte-wise su test che stampano entropia** senza carve-out per
-  NOME provata INTRA-modo (`random_bytes` nei settype_*_handler3).
-- **bande simmetriche strette su metriche col rumore non misurato** (il
-  full-peak balla +14,6% intra-sera SULL'ORACLE: prima si misura il
-  rumore dello strumento, poi si scrive la banda).
-- **premesse ambientali nella batteria** (M5-style): il modo è un INPUT
-  del funnel; un test di emissione che legge l'ambiente del processo è
-  un falso verde in attesa.
-- ereditati e ribaditi: pin effetto-collaterale; bit-identità dal
-  cronometro; criteri sotto il pavimento della sonda; 57/43 come tariffa;
-  misurare con build concorrente; aggregato WordPress come cronometro.
+- **denti scritti senza leggere il corpo che pinnano** (A-HE-102-1 prima
+  stesura: polarità di emit_binary dedotta dal riassunto ⇒ rosso; la
+  polarità si legge nel codice).
+- **atteso contabile dal costo/evento del profilo a campioni** senza
+  dichiararlo banda LARGA: i simboli inlined sovracontano (~2× su H-C1b);
+  il costo/evento fa fede solo dall'A/B.
+- **misure VERDICT in finestra con burst remoto senza interleave**: la
+  prima ri-baseline è stata VOID (spread 2,53 s); ABAB nella stessa
+  finestra o si ripete.
+- **`git add -u` a valle di edit multipli** (commit f9e9f22 ha mischiato
+  gate-evidence e righe H-C1b): staging per FILE nominati.
+- **borrow nudo dello slot valore** resta VIETATO (unanimità WP-102);
+  il MOVE dell'handle owned NON è un borrow e non lo riapre.
+- ereditati e ribaditi: pin effetto-collaterale; rc di pipe come gate;
+  bande < rumore dello strumento; premesse ambientali nella batteria.
 
 ---
-**Riscritto**: rotazione S-100 il 2026-08-05. Apertura/chiusura = skill
-`apri-sessione`/`chiudi-sessione`. Harness di sessione: `wp100-harness/`.
+**Riscritto**: rotazione S-101 il 2026-08-06. Apertura/chiusura = skill
+`apri-sessione`/`chiudi-sessione`. Harness di sessione: `wp101-harness/`.
 
-## §S-101 — ORDINE DEFINITIVO (fissato dal Concilio WP-102, `wp102-harness/verbali/SYNTHESIS.md` §Ordine)
+## §S-102 — ORDINE (BOZZA della rotazione; il Concilio WP-103 lo giudica e lo fissa in `wp103-harness/verbali/SYNTHESIS.md`)
 
-⚖️ **Concilio WP-102 (2026-08-05/06, su S-100 e programma S-101) —
-VINCOLANTE.** Verbali integrali + 3 note di team + sintesi in
-`wp102-harness/COUNCIL_WP102_REVIEWS.md`. 9/9, nessun MI OPPONGO al
-lavoro fatto; capitali 1-3 (emit_binary ambientale; evidenza-sul-pin;
-mode-probe server) **SALDATE IN SESSIONE** (fix b618e3a + ri-gate sul pin);
-capitali 4-5 riscrivono l'ordine: **H-C1 riformulata A STADI** (il borrow
-nudo dello slot valore è VIETATO all'unanimità; il churn nominato è il
-RICEVITORE Rc+gc_note, prior art `ThisPropGet`; su prop.php i valori sono
-Long: il «clone del valore» non alloca) e **l'attribuzione peak esige A/B
-pin stessa-sera prima del bisect** (voce rinominata: crescita d'albero
-OFF+95 / ON+36,5 MiB; ogni cifra peak nomina l'HASH del binario).
+Oggetto proposto: **le due gambe trasversali nominate dal profilo S-101 —
+la meccanica della pila operandi (~26,6%) e il canale emissione del
+ricevitore (3 clone LoadVar/iter)** — più il debito del punto 4.
 
-Oggetto: **H-C — il costo per opcode del percorso proprietà** (12,4× di
-cui 6,2× costo/op; TETTO dichiarato: il successo pieno di H-C1a-c lascia
-~9× — H-C1 non chiude H-C da sola). Ordine:
+1. **Punto 4 WP-102 (debito)**: A/B pin S-99↔S-100 stessa-sera (R≥5,
+   mediane, bande unilaterali sul rumore ~10% misurato) PRIMA del bisect.
+2. **Ipotesi PILA OPERANDI (da iscrivere col SUO nome)**: census del
+   traffico push/pop per categoria (contatore nel census build) +
+   controfattuale contato PRIMA di ogni forma (es. slot-diretti al posto
+   del round-trip in pila per gli operandi dei Prop-op — è EMISSIONE:
+   dump-diff, non cronometro, come primo giudice).
+3. **Canale emissione ricevitore**: i 3 clone LoadVar/iter dello stesso
+   `$o` — forma candidata: PropGet/PropSet a SLOT-OPERANDO (à la forme
+   registro) che leggono il ricevitore dallo slot senza transitare dalla
+   pila; controfattuale = 3 coppie × costo A/B (~2 ns/coppia MISURATO in
+   S-101, non stimato).
+4. **H-D tavola completa**: census call-path bi-regime (nominare i 3
+   gc_note/iter + i canali fuori read_slot) + profilo co-equale calls.
+5. **Denti residui**: sentinella server sul pin 2c4242b6 (se si tocca il
+   server); `cargo check --features zval-census` in batteria (protegge i
+   moduli feature-gated); fixture per specie per H-C1c (A-BA-102-3).
+6. (timebox) fix §3.13/§3.11 famiglia fetch-undef (A-ST-102-1/2) SE una
+   leva tocca quel percorso.
 
-1. **Ri-baseline sei categorie IN MODO DEFAULT** sui due motori, stessa
-   finestra (i numeri che giudicano tutto il resto).
-2. **Census dinamico specie×sito×canale su prop.php** (due motori, TRE
-   predizioni pre-registrate) + decomposizione inline-aware del 50%
-   `run_loop` (A-BA-102-2/A-GR-102-2): il census dinamico VALIDA lo
-   statico; la «tariffa» 9-10 ns/op resta BANDA a 2 punti finché non
-   esiste il terzo punto.
-3. **H-C1 a stadi**: H-C1a bypass bookkeeping SCALARI (misurabile da
-   sola) → H-C1b prestito/addref del RICEVITORE à la ThisPropGet (sigillo
-   di tipo; fixture aliasing/hook/__get/ref/readonly PRIMA) → H-C1c
-   copy+addref condizionale stile Zend. Criterio per stadio dal SUO
-   controfattuale; gate cumulativi a ogni stadio (batteria + corpus 2
-   modi + diff per-test); WP pair di parità NON derogabile se cambia il
-   runtime (KS-KL-102-3/KS-MA-102-4).
-4. **Attribuzione crescita d'albero**: A/B pin S-99↔S-100 stessa-sera
-   PRIMA del bisect + census allocatore; bande peak UNILATERALI calibrate
-   sul rumore misurato per-motore (R≥5, mediana, spread pubblicato;
-   banda < rumore ⇒ VOID, KS-GR-102-2).
-5. **Denti residui di rotazione** (piccoli): dente in-process BinaryAdd
-   braccio OFF (A-HE-102-1); dente absent≡`=1` (A-KL-102-3); smoke peak
-   sul pin quando una cifra peak entra nel registro (A-LE-102-4).
-6. (timebox) **H-D prima misura**: stessa tavola su calls.php col census
-   bi-regime (A-ST-102-5).
-
-BACKLOG per NOME e conflitti registrati: `wp102-harness/verbali/SYNTHESIS.md`.
+Pre-flight S-102: pin phpr **48a5d4384970d8ff** @ HEAD f808017 (fa fede
+HEAD) · php-server **2c4242b6c8120b8e** (NON collaudato) · corpus 1418 per
+NOME nei 2 modi SUL PIN · default flag-ON · debug/ si rigenera: rimuoverla.
