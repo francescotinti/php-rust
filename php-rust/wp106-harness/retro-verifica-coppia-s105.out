@@ -1,0 +1,40 @@
+S-106 punto 1 — RETRO-VERIFICA coppia WP S-105 (S-106-D-6 ≡
+T-MM-107-6 ∘ T-PS-107-5) — 2026-08-07 00:5x
+
+PRECONDIZIONI VERIFICATE SUGLI ARTEFATTI (wp105-harness/):
+- pair-chain.done: rc_off=0 rc_on=0 (00:01:20) ✓
+- 8 run: progress delle gambe già lette in coda a S-105
+  (pair105-lettura.out); nessun rc≠0 ✓
+- failnames MEDIA: diff VUOTO in off E on ✓
+- failnames FULL: diff = 1 NOME per modo, IDENTICO nei 2 modi:
+    Tests_Functions::test_wp_is_stream with data set #2
+  È il delta PRE-ESISTENTE già a verbale nella baseline WP-102
+  (WP_SESSION_102 «full = SOLO delta pre-esistente wp_is_stream
+  identico nei 2 modi») — cioè presente nelle STESSE condizioni in
+  cui il riferimento 1,89 è stato fissato.
+- identity: phpr=d4d0fa5217515dd9 ✓ (entrambe le gambe);
+  php_server=de67cb64 registrato come identità d'AMBIENTE (la coppia
+  è CLI: gradata dal pin phpr, KS-PE-107-1 — la decadenza del pin
+  server NON tocca la coppia); oracle: l'identity registra
+  versione+build («8.5.7 built Jun 2 2026 20:59:56»), non l'hash —
+  il binario corrente allo stesso path ha hash 07b0df8d63247695 e
+  stringa -v BYTE-IDENTICA ⇒ stesso binario (nessun brew upgrade
+  intervenuto). HEAD delle due gambe diverso (766d3d8 vs e809c48):
+  commit doc/harness della stessa notte, binari IDENTICI per hash —
+  registrato, non gate.
+
+VERDETTO: **SALDO CONFERMATO con UNA eccezione NOMINATA** — la
+lettera «failnames VUOTI» non è soddisfatta sul full per il solo
+wp_is_stream; l'eccezione è (i) pre-esistente, (ii) identica nei 2
+modi, (iii) presente anche nella baseline WP-102 che definisce il
+riferimento. Interpretare «VUOTI» alla lettera voiderebbe anche il
+riferimento stesso: la lettura adottata è «nessun delta rispetto
+alle condizioni della baseline». Con questo: **1,894 è CITABILE**
+come conferma del riferimento WP-102 (a 3 cifre), le voci aperte
+(full-off 1,947 = +0,056; media 2,697/2,734 fuori banda) restano
+aperte per NOME e si rileggono SOLO con le bande KS-GR-107-3
+(fuori banda ⇒ rerun, MAI bisect).
+
+NOTA per il prossimo launcher di coppia: registrare nell'identity
+ANCHE l'hash dell'oracle (la retro-verifica ha dovuto inferirlo da
+versione+build) — assorbe la sanatura 2 del launcher grado v2.
