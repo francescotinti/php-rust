@@ -80,7 +80,11 @@ if [ "$H_SRV" != "$PIN_SRV_ATTESO" ]; then
 fi
 
 # ---- DOC a path FISSO (deterministico cross-mode: i warning embeddano il path) ----
-DOC=/tmp/s103-cb-doc
+# CANONICO (/private/tmp, non /tmp): php -S canonicalizza il docroot
+# attraverso il symlink macOS, phpr no — col path letterale i warning
+# divergono per il SOLO prefisso (osservazione S-103, prima run off);
+# il collaudo giudica il motore, non la scelta di symlink dell'harness.
+DOC=/private/tmp/s103-cb-doc
 rm -rf "$DOC"; mkdir -p "$DOC"
 cp "$REPO/wp102-harness/fixtures/cb1.php" "$DOC/cb1.php"
 cp "$H/fixtures/cb2.php" "$DOC/cb2.php"

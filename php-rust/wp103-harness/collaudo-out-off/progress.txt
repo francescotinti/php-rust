@@ -1,0 +1,12 @@
+== 15:32:39 [S103-COLLAUDO-off] modo=off (PHPR_REG_LOWER=0 esplicito) hash php-server=da5c29485f811c45 (atteso da5c29485f811c45)
+== 15:32:40 [S103-COLLAUDO-off] gamba A: sentinella estesa sul pin, modo=off
+== 15:32:47 [S103-COLLAUDO-off] sentinella: PASS (con mode-probe)
+== 15:32:54 [S103-COLLAUDO-off] cb1: corpo identico all'oracle
+== 15:32:54 [S103-COLLAUDO-off] cb2: corpo identico all'oracle
+== 15:32:54 [S103-COLLAUDO-off] cb2: warning-line OK (2 warning, righe = oracle: on line 36;on line 41;)
+== 15:32:55 [S103-COLLAUDO-off] cb2: mode-probe OK (on=0 provato dal dump dell'unità)
+== 15:32:55 [S103-COLLAUDO-off] cbE: corpo identico all'oracle
+== 15:32:55 [S103-COLLAUDO-off] cbE: errore-poi-successo OK (cb2 post-errore byte-id alla referenza)
+== 15:32:57 [S103-COLLAUDO-off] interleave workers=2: OK (6×cb1 + 6×cb2 byte-id alle referenze)
+== 15:32:58 [S103-COLLAUDO-off] cross-mode: altro braccio non ancora eseguito (verrà giudicato lì)
+== 15:32:58 [S103-COLLAUDO-off] S103-COLLAUDO-off DONE fails=0

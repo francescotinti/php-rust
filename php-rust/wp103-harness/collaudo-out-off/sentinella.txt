@@ -1,0 +1,3 @@
+sequenza interleaved: 16 richieste
+mode-probe: OK (server nel modo atteso: on=0, provato dal dump dell'unita')
+SENTINELLA-ESTESA PASS (16 interleaved + 4 concorrenti, workers=2)

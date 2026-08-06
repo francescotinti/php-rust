@@ -1,0 +1,9 @@
+CB2:begin
+CB2:sum=4950
+
+Warning: Undefined property: W::$missing_a in /private/tmp/s103-cb-doc/cb2.php on line 36
+CB2:v1=1
+
+Warning: Undefined property: W::$missing_b in /private/tmp/s103-cb-doc/cb2.php on line 41
+CB2:v2=2
+CB2:body-done

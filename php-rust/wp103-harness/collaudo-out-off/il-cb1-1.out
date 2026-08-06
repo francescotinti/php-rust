@@ -1,0 +1,10 @@
+CB1:begin
+CB1:sum=4950
+DTOR:mid:x=50
+CB1:req=1
+CB1:body-done
+SHUTDOWN:1
+DTOR:shut:x=7
+DTOR:end:x=3
+DTOR:bag
+DTOR:inbag:x=9
