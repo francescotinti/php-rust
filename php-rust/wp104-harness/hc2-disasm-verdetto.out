@@ -1,0 +1,45 @@
+hc2-disasm-verdetto: prefisso A-BA-105-2 (S-104, ordine WP-105 §2b) —
+`drop_in_place::<Zval>` è OUTLINED nei siti caldi? SÌ. L'A/B della leva
+è quindi AMMESSO (KS-BA-105-3 soddisfatto) e la banda viene RINOMINATA.
+grade=DISASM  # analisi statica del pin, nessuna cifra cronometrica
+sessione=S-104 (2026-08-06, finestra d'attesa A/B R=7)
+binario=pin phpr f45a5d199ab34132 (release corrente, NESSUNA build nuova)
+strumento=nm + objdump (llvm) su range simbolico; nel contesto solo conteggi
+
+# ---- VERDETTO ----
+# 1) OUTLINED: 31 copie locali (per-CGU) di
+#    core::ptr::drop_in_place<php_types::zval::Zval> nel binario.
+# 2) run_loop (0x100337c30..0x100376a90, 257.632 B ≈ 64.408 istr) chiama
+#    le copie via `bl` in **1101 callsite statici** (1077 + 20 + 4 su tre
+#    copie; 0 tail-call `b`). I siti caldi del census (Pop, IncDecSlot,
+#    Binary*, CmpJmpSC, PropSet-old) pagano quindi CHIAMATA VERA per ogni
+#    morte di Zval — il canale della leva ESISTE nel codice macchina.
+# 3) Corpo del glue (copia calda 0x1003f89f8, 83 istr): testa =
+#    `ldrb w8,[x0]` (discriminante 1 B) + albero di cmp/branch.
+#    - ramo SCALARE (disc 0-4 = Undef/Null/Bool/Long/Double): 2 cmp +
+#      2 branch + ret ≈ 6 istruzioni eseguite;
+#    - Str (disc 5): decremento Rc inline + `b alloc::rc::Rc::drop_slow`
+#      se il conteggio azzera — conferma che il glue fa LAVORO VERO su
+#      Str: un fast-out che lo salti leaka (la refutazione capitale è
+#      visibile nel codice macchina).
+#
+# ---- RINOMINA della banda (il numeratore resta NON misurato) ----
+# La banda v1 [8,22] ns/iter presupponeva 0,7-2,0 ns/drop-scalare MAI
+# misurati. Il disasm stabilisce la FORMA del costo: per ogni DropS il
+# sito caldo paga bl + prologo/epilogo del glue + ldrb + 2 cmp/branch +
+# ret, più l'effetto call-clobber sui registri vivi del sito (1077
+# callsite dentro un loop già sotto pressione di registri). L'ipotesi
+# «LLVM inlinea ⇒ attesa 2-4 ns/iter» (R5-Bak) è REFUTATA: è outlined.
+# La banda [8,22] resta la banda di PLAUSIBILITÀ (≈0,7-2,0 ns/drop ×
+# 11 DropS/iter) — ora con meccanismo NOMINATO (costo ≈ chiamata +
+# dispatch, non il lavoro del drop che per gli scalari è nullo).
+# Il numeratore VERO lo dirà solo il Δ_A/B della leva ÷ i conteggi del
+# census (KS-GR-103-1 invariato).
+#
+# ---- Conseguenza per l'implementazione (coerente col criterio v2) ----
+# Il guadagno del fast-out sta nell'ELIMINARE la chiamata nei siti caldi
+# per le morti trivial (is_trivial_drop), sostituendola con un test
+# inline del discriminante (cmp+branch, spesso fondibile con conoscenza
+# già presente nel sito). I rami Str/Resource/… CONSERVANO il glue
+# (dispose: refcounted→glue; container→note+glue).
+# raw: /tmp/claude-501/rl.dis (transiente, fuori repo per convenzione)
