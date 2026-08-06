@@ -1,0 +1,49 @@
+hc2-ab-verdetto: S-104 §2d — VERDETTO della leva H-C2 (drop fast-out)
+contro il criterio pre-registrato hc2-criterio-v2.out (commit 8dbb16d).
+grade=VERDETTO
+sessione=S-104 (2026-08-06 ~21:0x, ABAB stessa sera, giudice prop N=30M
+emesso dal run)
+
+# ---- le due misure (s104-hc2-ab.sh, A=f45a5d19 pin S-103) ----
+# forma 1 (dispose #[inline] monolitico), B=b89153ea:
+#   ns/iter A=162,67 B=173,00  Δ=-10,33  segno B>A 5/5  rumore ~2,3
+# forma 2 (dispose #[inline(always)] + dispose_slow #[cold], B=post-fix):
+#   ns/iter A=161,00 B=172,33  Δ=-11,33  segno B>A 5/5  rumore ~2,0
+# Entrambe: |Δ| >> max(banda-layout 0,67 [N=1], rumore ~3) e SEGNO
+# NEGATIVO stabile: NON è zona indeterminata — è una REGRESSIONE firmata.
+
+# ---- il meccanismo, NOMINATO dal disasm (stesso strumento del prefisso) --
+# Nel binario B le chiamate `bl drop_in_place<Zval>` dentro run_loop sono
+# passate da 1101 a **0** e run_loop è cresciuto da 257.632 a 265.632 B
+# (+8.000 B): le modifiche hanno fatto FLIPPARE l'euristica di inlining di
+# LLVM — il glue è ora inline a TUTTI i siti, non solo ai 9 convertiti.
+# Cioè: B realizza un fast-out PIÙ aggressivo del progettato (zero
+# chiamate, dispatch inline ovunque)… ed è PIÙ LENTO di ~11 ns/iter.
+#
+# ---- LETTURA (criterio v2) ----
+# CADUTA — e più che caduta: REFUTAZIONE DEL CANALE. La banda [8,22]
+# presupponeva 0,7-2,0 ns/drop RISPARMIABILI eliminando chiamata+dispatch;
+# la misura dice che le 1101 chiamate erano quasi gratis (branch predetti,
+# glue caldo in cache) e che la valuta scarsa di run_loop è la ICACHE:
+# +8 KB di testo inline costano ~11 ns/iter, più di quanto il dispatch
+# eliminato renda. Il costo del ciclo di vita Zval su prop NON sta nel
+# canale drop-call.
+# - Attribuzione per sito×specie: NON applicabile — il Δ è dominato da un
+#   cambio GLOBALE di modo codegen (inlining flip), non dai siti.
+# - Niente terza forma: il criterio vieta le iterazioni cieche; due forme
+#   coerenti (-10,33 / -11,33) + meccanismo nominato bastano.
+# AZIONE: la leva NON si spedisce — revert dei 6 siti + dispose;
+# RESTANO (parity-null e utili): predicato is_trivial_drop + unit tooth,
+# align-assert, doc emendata, assert nested-Ref issato, denti per-corpo,
+# fx20 + braccio RSS (l'arbitro nuovo, col suo rosso archiviato).
+#
+# ---- che cosa questo INSEGNA (per le prossime leve) ----
+# 1. run_loop è ICACHE-BOUND: le leve devono RIDURRE il volume di codice/
+#    lavoro del sentiero caldo (meno op, meno bytes), non i micro-costi di
+#    chiamata. Coerente con S-100 («costo/op ~9-10 ns quasi invariante»).
+# 2. Un A/B su run_loop misura anche il TILT dell'inliner: ogni leva
+#    futura DEVE avere il disasm-prima/dopo nel suo protocollo (il
+#    confronto bl-count è costato 2 minuti e ha nominato il meccanismo).
+# 3. KS-GR-105-1: SALDATO — A/B eseguito (due volte), verdetto CADUTA
+#    con meccanismo. La sessione HA tentato la sua leva.
+# raw: wp104-harness/hc2-ab-out/ (fuori repo), /tmp/claude-501/rl2.dis

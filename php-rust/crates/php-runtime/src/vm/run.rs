@@ -293,9 +293,8 @@ impl<'m> super::Vm<'m> {
     }
 
     /// Sink a fused result into a slot, replicating `Op::StoreSlot` in full:
-    /// typed-ref coercion guard, write-through via [`store_slot`], and the
-    /// overwritten value's end-of-life through the `dispose` funnel (H-C2:
-    /// note iff container + glue, fused in one variant examination).
+    /// typed-ref coercion guard, write-through via [`store_slot`], `gc_note`
+    /// on the overwritten value.
     fn reg_store_slot(&mut self, top: usize, dst: u16, v: Zval) -> Result<(), PhpError> {
         let i = dst as usize;
         let mut v = v;
@@ -307,9 +306,7 @@ impl<'m> super::Vm<'m> {
             }
         }
         let old = store_slot(&mut self.frames[top].slots[i], v);
-        // H-C2 (S-104): nota+glue fusi nel funnel unico — stessa semantica
-        // del vecchio gc_note(&old) + drop implicito, un solo esame.
-        self.dispose(old);
+        self.gc_note(&old);
         Ok(())
     }
 
@@ -686,11 +683,8 @@ impl<'m> super::Vm<'m> {
                         // S-101 census: sito Pop taggato (P2 drop-handle, P3 gc_note).
                         #[cfg(feature = "zval-census")]
                         super::zvalcensus::note_pop(&v);
-                        dcn!(Pop: &v); // il valore scartato muore QUI, nel funnel
-                        // H-C2 (S-104): nota+glue fusi in UN esame della
-                        // variante — un Long poppato non paga più la chiamata
-                        // al glue outlined (hc2-disasm-verdetto.out).
-                        self.dispose(v);
+                        self.gc_note(&v);
+                        dcn!(Pop: &v); // il valore scartato muore a fine scope
                     }
                 }
                 Op::Dup => {
@@ -1013,13 +1007,7 @@ impl<'m> super::Vm<'m> {
                         if let Some(n) = l.checked_add(if *inc { 1 } else { -1 }) {
                             scn!(IncDecSlot: Push = 1);
                             dcn!(IncDecSlot: &self.frames[top].slots[i]); // old Long sovrascritto
-                            // H-C2 (S-104): morte provata Long dal guard —
-                            // dispose piega il glue a zero (niente chiamata).
-                            let old = std::mem::replace(
-                                &mut self.frames[top].slots[i],
-                                Zval::Long(n),
-                            );
-                            self.dispose(old);
+                            self.frames[top].slots[i] = Zval::Long(n);
                             self.frames[top].stack.push(Zval::Long(if *pre { n } else { l }));
                             continue;
                         }
@@ -1064,21 +1052,17 @@ impl<'m> super::Vm<'m> {
                     match fast {
                         Some((l, r)) => {
                             scn!(BinaryAdd: Peek = 1);
-                            dcn!(BinaryAdd: &rhs); // rhs consumato, muore QUI
-                            // H-C2 (S-104): rhs è Long provato dal guard —
-                            // dispose piega il glue a zero.
-                            self.dispose(rhs);
+                            dcn!(BinaryAdd: &rhs); // rhs consumato, muore a fine arm
                             let v = match l.checked_add(r) {
                                 Some(s) => Zval::Long(s),
                                 None => Zval::Double(l as f64 + r as f64),
                             };
                             // il vecchio top (Long, guardato) muore nell'overwrite
                             dcn!(BinaryAdd: self.frames[top].stack.last().expect("BinaryAdd lhs"));
-                            let old = std::mem::replace(
-                                self.frames[top].stack.last_mut().expect("BinaryAdd lhs"),
-                                v,
-                            );
-                            self.dispose(old);
+                            *self.frames[top]
+                                .stack
+                                .last_mut()
+                                .expect("BinaryAdd lhs") = v;
                         }
                         None => {
                             scn!(BinaryAdd: Pop = 1);
@@ -1246,31 +1230,20 @@ impl<'m> super::Vm<'m> {
                     scn!(CmpJmpSC: op);
                     let cv = func.consts[*cidx as usize].to_zval();
                     dcn!(CmpJmpSC: &cv); // il const materializzato muore nell'arm (fast o slow)
-                    let fast_v = {
-                        let lv = &self.frames[top].slots[*slot as usize];
-                        if !matches!(lv, Zval::Undef | Zval::Ref(_)) {
-                            binary_fast(*op, lv, &cv)
-                        } else {
-                            None
+                    let res = 'r: {
+                        {
+                            let lv = &self.frames[top].slots[*slot as usize];
+                            if !matches!(lv, Zval::Undef | Zval::Ref(_)) {
+                                if let Some(v) = binary_fast(*op, lv, &cv) {
+                                    break 'r v;
+                                }
+                            }
                         }
-                    };
-                    let res = match fast_v {
-                        Some(v) => {
-                            // H-C2 (S-104): cv muore qui nel fast path —
-                            // Const::to_zval non produce MAI container: il
-                            // dispose è parity-esatto (nota impossibile).
-                            self.dispose(cv);
-                            v
-                        }
-                        None => {
-                            let lhs = self.reg_load_slot(top, func, *slot);
-                            self.binary_value_ab(*op, lhs, cv)?
-                        }
+                        let lhs = self.reg_load_slot(top, func, *slot);
+                        self.binary_value_ab(*op, lhs, cv)?
                     };
                     dcn!(CmpJmpSC: &res); // il Bool temporaneo muore dopo to_bool
-                    let jump = convert::to_bool(&res, &mut self.diags) == *when;
-                    self.dispose(res);
-                    if jump {
+                    if convert::to_bool(&res, &mut self.diags) == *when {
                         self.frames[top].ip = *addr as usize;
                     }
                 }
@@ -3788,10 +3761,8 @@ impl<'m> super::Vm<'m> {
                                 {
                                     #[cfg(feature = "zval-census")]
                                     super::zvalcensus::note_gcnote_site_propset_old();
+                                    self.gc_note(&old);
                                     dcn!(PropSet: &old); // il vecchio valore muore qui
-                                    // H-C2 (S-104): nota+glue fusi (era
-                                    // gc_note + drop implicito a fine if-let).
-                                    self.dispose(old);
                                 }
                                 scn!(PropSet: Push = 1);
                                 self.frames[top].stack.push(value);
