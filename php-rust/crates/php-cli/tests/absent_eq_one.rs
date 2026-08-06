@@ -11,6 +11,10 @@
 //! un env mai propagato non può dare un verde).
 //! Nota di copertura: il corpus «nei 2 modi» esercita default(assente) e
 //! `=0`; la coppia assente↔`=1` end-to-end la esercita SOLO questo dente.
+//! Emendato S-103 (Concilio WP-104): braccio `=0` DISCRIMINANTE
+//! (A-HE-104-1: prova che l'env viaggia — dump diverso, stdout uguale),
+//! controllo positivo fuori-funnel `Z::{prop-init}` nel dump (A-HE-104-2)
+//! e residuo `Binary(Add)` pinnato `==1` ESATTO (A-HE-103-1 emendato).
 
 use std::process::Command;
 
@@ -54,6 +58,7 @@ fn absent_env_subprocess_dump_identical_to_explicit_one() {
 
     let (out_absent, dump_absent) = run_arm(&src, None);
     let (out_one, dump_one) = run_arm(&src, Some("1"));
+    let (out_zero, dump_zero) = run_arm(&src, Some("0"));
     let _ = std::fs::remove_dir_all(&dir);
 
     // Controllo positivo PRIMA del verdetto: il braccio assente e' davvero
@@ -71,6 +76,39 @@ fn absent_env_subprocess_dump_identical_to_explicit_one() {
     assert_eq!(
         out_absent, out_one,
         "stdout diverso tra assente e `=1` (parita' funzionale rotta)"
+    );
+    // A-HE-104-2 (Concilio WP-104): il claim «modulo intero» si PROVA —
+    // il dump deve contenere il corpo FUORI-FUNNEL dell'inizializzatore
+    // di proprieta' (`Z::{prop-init}`), non solo {main}/fn.
+    assert!(
+        d.contains("Z::{prop-init}"),
+        "controllo positivo fuori-funnel: il dump non contiene il corpo \
+         `Z::{{prop-init}}` — il «modulo intero» non e' provato\n{d}"
+    );
+    // A-HE-103-1 emendato «==1 ESATTO» (Concilio WP-104): il residuo
+    // `Binary(Add)` fuori-funnel e' ESATTAMENTE quello di Z::{prop-init}
+    // — zero significherebbe finestre estese in silenzio (attesa da
+    // aggiornare CON NOME), due+ un residuo nuovo non censito.
+    let n_generic_add = d.matches("Binary(Add)").count();
+    assert_eq!(
+        n_generic_add, 1,
+        "residuo `Binary(Add)` atteso ESATTAMENTE 1 (Z::{{prop-init}}), \
+         trovati {n_generic_add}"
+    );
+    // A-HE-104-1 (Concilio WP-104): braccio `=0` DISCRIMINANTE — due
+    // bracci uguali-per-costruzione non possono fallire per modo; il
+    // terzo braccio prova che l'env viaggia: stdout identico ma dump
+    // DIVERSO (emissione a pila, zero forme registro).
+    assert_eq!(out_zero, out_absent, "stdout `=0` diverso (parita' funzionale rotta)");
+    let dz = String::from_utf8_lossy(&dump_zero);
+    assert_ne!(
+        dump_zero, dump_absent,
+        "il dump `=0` e' IDENTICO all'assente: l'env non viaggia — il \
+         dente non discrimina il modo"
+    );
+    assert!(
+        !dz.contains("BinaryDst") && !dz.contains("CmpJmpSC") && !dz.contains("BinarySS"),
+        "forme registro nel dump `=0`: il modo OFF non e' off\n{dz}"
     );
     // Il VERDETTO: dump BYTE-identico sul modulo intero.
     assert_eq!(
