@@ -97,6 +97,15 @@ const _: () = assert!(std::mem::size_of::<Zval>() == 16);
 // (wp104-harness/hc2-criterio-v2.out); a repack at constant size must not
 // drift silently either.
 const _: () = assert!(std::mem::align_of::<Zval>() == 8);
+// A-HO-106-1 (Council WP-106, S-105): type-seal on the trivial arms — the
+// scalar payloads `is_trivial_drop` classifies as no-op MUST be `Copy`; a
+// future payload change (e.g. Bool -> boxed) fails here, not silently.
+const _: () = {
+    const fn _seal<T: Copy>() {}
+    _seal::<bool>();
+    _seal::<i64>();
+    _seal::<f64>();
+};
 
 /// Storage representation, mirroring Zend's packed/mixed hash split
 /// (invisible to programs; the split only changes memory/CPU costs).

@@ -255,6 +255,14 @@ impl Zval {
     /// would leak every popped string. Exhaustive by name: a new variant
     /// fails to compile here. `WeakHandle` and `ArgPlace` are EXPLICITLY
     /// non-trivial — dropping them decrements a `Weak`/`Rc` count.)
+    ///
+    /// A-HO-106-2 (Council WP-106): the H-C2 lever this predicate was born
+    /// for was MEASURED AND FELL in S-104 — Δ=−10,33/−11,33 ns/iter, 5/5,
+    /// channel refuted (run_loop is icache-bound; the 1101 outlined
+    /// drop-glue calls were nearly free — wp104-harness/hc2-ab-verdetto.out).
+    /// Do NOT re-propose a drop fast-out keyed on this predicate in the
+    /// dispatch loop; the predicate stays as documentation of the channel
+    /// and for its unit tooth.
     #[inline]
     pub fn is_trivial_drop(&self) -> bool {
         match self {

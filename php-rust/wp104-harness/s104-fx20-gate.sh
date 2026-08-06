@@ -53,7 +53,15 @@ fi
 # in-script (memory_get_usage di phpr e' uno stub costante — rosso del
 # mutation-check archiviato in denti-rossi/). ~1M Str trattenute ≈
 # +250 MiB: CAP pre-registrato 150 MiB (misure: clean ~<60, leaky 301).
+# S-105 (A-MA-106-3, R-MA-106-3): il cap fisso 150 lasciava passare un leak
+# PARZIALE (~+25-30 MiB, un solo sentiero Pop/overwrite ⇒ rss ~80). Banda a
+# due soglie: PASS solo sotto GUARDIA=CAP/2 (75); [75,150) = EROSIONE della
+# banda di guardia (FAIL: o leak parziale o pavimento clean cresciuto — in
+# entrambi i casi si guarda, non si archivia); ≥150 = LEAK capitale.
+# ⚠️ portabilità documentata: /usr/bin/time -l e ru_maxrss in BYTE sono
+# macOS-only — su altro OS rss esce vuoto ⇒ GATE VOID (fail-closed VOLUTO).
 CAP_MIB=150
+GUARDIA_MIB=$((CAP_MIB / 2))
 for mode in on off; do
   if [ "$mode" = on ]; then
     rss=$({ /usr/bin/time -l env -u PHPR_REG_LOWER "$PHPR" "$f" >/dev/null; } 2>&1 | awk '/maximum resident/{printf "%d", $1/1048576}')
@@ -61,8 +69,12 @@ for mode in on off; do
     rss=$({ /usr/bin/time -l env PHPR_REG_LOWER=0 "$PHPR" "$f" >/dev/null; } 2>&1 | awk '/maximum resident/{printf "%d", $1/1048576}')
   fi
   [ -n "$rss" ] || { echo "GATE VOID: RSS non misurabile ($mode)"; exit 66; }
-  echo "rss_${mode}_MiB=$rss (cap $CAP_MIB)"
-  if [ "$rss" -ge "$CAP_MIB" ]; then echo "FAIL $b:$mode (RSS $rss >= cap $CAP_MIB: LEAK)"; fails=1; fi
+  echo "rss_${mode}_MiB=$rss (guardia $GUARDIA_MIB, cap $CAP_MIB)"
+  if [ "$rss" -ge "$CAP_MIB" ]; then
+    echo "FAIL $b:$mode (RSS $rss >= cap $CAP_MIB: LEAK)"; fails=1
+  elif [ "$rss" -ge "$GUARDIA_MIB" ]; then
+    echo "FAIL $b:$mode (RSS $rss >= guardia $GUARDIA_MIB: EROSIONE — leak parziale o pavimento cresciuto)"; fails=1
+  fi
 done
 if [ "$fails" = 0 ]; then echo "PASS $b (2 modi byte-id + RSS sotto cap, oracle arbitro valido)"; exit 0; fi
 exit 1
