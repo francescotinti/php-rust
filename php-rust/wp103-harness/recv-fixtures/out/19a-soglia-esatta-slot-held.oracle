@@ -1,0 +1,8 @@
+begin
+y=slot-dropped
+collected:no
+W
+after
+~S
+final:yes
+end

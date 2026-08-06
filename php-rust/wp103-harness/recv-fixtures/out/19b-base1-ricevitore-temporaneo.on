@@ -1,0 +1,8 @@
+begin
+x=collected:no
+alive-in-get
+V
+after
+~C
+final-collect:yes
+end
