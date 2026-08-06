@@ -1,5 +1,0 @@
-php-server (Axum) listening on http://127.0.0.1:8213 (docroot: /private/tmp/s103-cb-doc)
-php-server: shutdown signal received, draining
-tag=worker_dispatch thr=0 count=6 arm=union
-tag=worker_dispatch thr=1 count=6 arm=union
-php-server: all 2 workers joined — exit stats are authoritative (KL-78-4)

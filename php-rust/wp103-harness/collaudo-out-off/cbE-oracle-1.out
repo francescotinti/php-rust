@@ -1,9 +1,0 @@
-CBE:begin
-
-Warning: Undefined property: E::$gone in /private/tmp/s103-cb-doc/cbE.php on line 24
-CBE:x=1
-
-Fatal error: Uncaught Error: Call to undefined function cbE_undefined_function_deliberata() in /private/tmp/s103-cb-doc/cbE.php:26
-Stack trace:
-#0 {main}
-  thrown in /private/tmp/s103-cb-doc/cbE.php on line 26

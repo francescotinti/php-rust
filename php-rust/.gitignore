@@ -23,3 +23,6 @@ php-8.5.7.code-workspace
 # with the repo root as cwd (dir1/dir2/dir3/workdir shape), plus bug fixtures.
 /*.dir/
 /bug*_x/
+wp103-harness/collaudo-out-off/
+wp103-harness/collaudo-out-on/
+wp103-harness/corpus-gate/
