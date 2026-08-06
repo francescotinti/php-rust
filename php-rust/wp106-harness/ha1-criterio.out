@@ -1,0 +1,81 @@
+S-106 punto 5 — CRITERIO PRE-REGISTRATO leva H-A1 (arith RMW-su-slot)
+Scritto e committato PRIMA di ogni implementazione e misura (atto zero).
+Data: 2026-08-07 01:1x. Pin di partenza phpr d4d0fa5217515dd9.
+
+SCELTA DELLA LEVA (S-106-D-18, verbalizzata — nessuna terza via):
+il braccio contatori L1I (checkout 4ea2cff) NON è stato eseguito prima
+del criterio ⇒ la leva di S-106 È ARITH 12,4 (default esplicito del
+concilio; prop H-C3 resta gated al braccio contatori).
+
+ISTRUTTORIA (dai dump, non da memoria):
+- Giudice arith (50M iter, `$s += $i*3 - ($i>>2)`), corpo del loop
+  flag-ON = 11 op/iter: CmpJmpSC · BinarySC(Mul) · BinarySC(Shr) ·
+  Binary(Sub) · LoadSlot(0) · Swap · BinaryDst{Add,0} · Sweep ·
+  IncDecSlot · Pop · Jump.
+- Il tris LoadSlot(l); Swap; BinaryDst{op,dst} è il compound assign
+  `$s += expr`: TRE dispatch per un RMW su slot locale.
+- Il doc del pass reg_lower dichiara «LoadSlot (silent, cold) is never
+  folded»: assunzione di FREDDEZZA refutata dal dump (il LoadSlot del
+  compound assign è nel corpo caldo del giudice peggiore, 12,4).
+  La lettura resta SILENZIOSA per contratto ⇒ il fold non ha warning
+  da risintetizzare: diagnostic-safe per costruzione.
+
+FORMA (unica, minima — niente forma value):
+finestra nuova nel pass: `LoadSlot(l); Swap; <Binary b>; <coda
+assign-and-discard>` → op monomorfa `BinarySTDst { op, l, dst }`
+(lhs = slot l via la STESSA read_slot, rhs = pop dalla pila, sink via
+lo STESSO reg_store_slot, op via la STESSA binary_value_ab del
+braccio BinaryDst: ZERO biforcazione semantica, la finestra elide
+solo dispatch e transiti di pila). Senza coda: NESSUNA fusione.
+Guardie finestra ereditate: stessa source line, nessun jump target
+mid-window (head può esserlo), indici u16. EMENDAMENTO DICHIARATO
+(S-106-R-3) della regola v3 «LoadSlot never folded», motivato sopra.
+
+ATTESA (D-3: segno + soglie; magnitudine SOLO orientativa, lezione
+S-105 «la banda pre-registrata era sbagliata in entrambe le
+direzioni»):
+- SEGNO: phpr_netto arith SCENDE (Δ ns/iter POSITIVO).
+- Orientativa, NON vincolo di lettura: −2 dispatch su 11 e −4
+  transiti di pila (push −1, pop −1, elem −2) per iter.
+- Struttura co-primaria (verificata PRIMA del timing): dump del
+  giudice flag-ON con corpo 11→9 op per NOME — spariti LoadSlot/
+  Swap/BinaryDst dal corpo, presente BinarySTDst{Add,0,0}; dump
+  flag-OFF INVARIATO al byte (la finestra vive solo nel pass).
+
+BASELINE DICHIARATA (micro-pin-s105.out, R=5, pin d4d0fa52):
+arith_phpr_netto = 5,33 s (106,6 ns/iter), spread 0,04 s (0,8
+ns/iter); oracle 0,43 s; rapporto 12,4.
+RUMORE per il verdetto = max(spread misurato nel run nuovo, 3,5
+ns/iter storico tra-run). Banda-layout nota: 0,67 ns/iter (N=1).
+
+VERDETTO (pre-registrato):
+- SMOKE R=2 (D-7/KS-GR-107-1): se 2/2 a segno OPPOSTO e |Δ| >
+  max(rumore, 0,67) ⇒ STOP, caduta indiziata, niente pieno.
+- PIENO R=5 per lato (mediana su user CPU netto, come run-micro.sh):
+  PROMOZIONE se Δ ≥ max(4 ns/iter [pavimento D-3 = 0,20 s su 50M],
+  rumore, 0,67) E segno concorde 5/5.
+  CADUTA se Δ < pavimento o segno misto ⇒ revert AL BYTE (protocollo
+  S-104) e verdetto registrato.
+- NIENTE componenti prezzate nel verdetto (D-1/D-2): nessun «costo
+  del dispatch» derivato da questo A/B.
+
+ADMISSION (D-4, KS-GR-106-2): admission-disasm PRIMA dello smoke —
+diff per-target COMPLETO del binario (bl-count e taglia di run_loop
+prima/dopo; la leva AGGIUNGE un braccio: la crescita attesa è
+dichiarata, si registra la taglia per R-2, riferimento S-104
+257.632 B; +4 KB cumulativi ⇒ sveglia PGO). Nessun claim «nessun
+flip» senza diff pulito fuori dal braccio nuovo.
+
+GATE DI CHIUSURA (PIN-106 + D-17 + R-1): build → hash₁ → batteria
+1740 (rc E conteggio dalla STESSA run) → re-hash₂ → stash → fixture
+13+5+19a/b+fx20v2+fx21-GATE (bilaterale) → corpus 1417×2 per NOME →
+micro R=5 sul pin di chiusura (e su hash₁ se churn, R-1) → taglia
+run_loop a verbale. Ogni altro rapporto micro fermo entro ±0,4
+(tra-sere) o la leva NON si promuove.
+
+RISCHI NOMINATI: (i) slot Ref — read_slot segue il ref e
+reg_store_slot è lo stesso di BinaryDst: parità per costruzione, la
+batteria arbitra; (ii) exc-region mid-window — guardia ereditata del
+pass; (iii) match esaustivi su Op — ogni sito NUOVO che non compila
+si classifica a mano (visit_addrs, bin_op_of, liveness, dump), è il
+dente che morde per costruzione.
