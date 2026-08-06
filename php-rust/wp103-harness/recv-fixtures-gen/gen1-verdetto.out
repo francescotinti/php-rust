@@ -1,0 +1,23 @@
+gen1-verdetto: A-HO-104-1 ≡ A-ST-104-3 (Concilio WP-104) — fixture di
+MORSO generator-in-cycle ESEGUITA in S-103.
+grade=FIXTURE-MORSO  # divergenza REGISTRATA, nessuna cifra
+pin=d0b01362433b3039 (2 modi, output identico on/off)
+oracle=/opt/homebrew/opt/php/bin/php 8.5.7
+
+VERDETTO: **MORDE.**
+  oracle:  begin / step:1 / after-unset / ~H / collected:yes / end
+  phpr:    begin / step:1 / after-unset / collected:no / end / ~H
+Il ciclo holder→(prop gen)→Generator→(closure use)→holder non viene MAI
+raccolto dal collector phpr: il dtor gira solo a shutdown (leak per la
+durata della richiesta). Buco A-HO-103-2 (is_gc_container: Generator)
+PROVATO reale — la terza deroga è NEGATA nei fatti.
+
+CONSEGUENZE:
+- La divergenza è ora NOMINATA con fixture rossa dedicata (questa NON
+  entra in alcun gate verde finché il fix non atterra).
+- Il fix (Generator container + descend delle catture / birth-track) è
+  lavoro di RUNTIME: entra nella finestra dei commit runtime di S-103
+  (con assert Ref A-ST-104-4) o, se non ci sta, voce d'ordine S-104 —
+  la fixture resta l'arbitro del quando.
+- Da catalogare anche in PHPR_DIVERGENCES_FROM_PHP.md al prossimo
+  aggiornamento del catalogo.
