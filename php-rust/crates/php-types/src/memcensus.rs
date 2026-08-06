@@ -1423,6 +1423,22 @@ pub fn free_histogram() -> [u64; 11] {
     std::array::from_fn(|i| GA_FHIST[i].load(Relaxed))
 }
 
+// S-105 H-D gate G2 (censimento ARITÀ): istogramma dell'arità vista da
+// bind_params — il choke-point esatto del perimetro della leva args.
+// Bucket {0,1,2,3,4,≥5}; il chiamante è feature-gated (mem-census), la
+// build di parità non contiene la chiamata.
+static GA_ARITY: [AtomicU64; 6] = [const { AtomicU64::new(0) }; 6];
+
+#[inline]
+pub fn arity_note(n: usize) {
+    GA_ARITY[n.min(5)].fetch_add(1, Relaxed);
+}
+
+/// L'istogramma dell'arità dei bind (bucket 0..4 esatti, ultimo = ≥5).
+pub fn arity_histogram() -> [u64; 6] {
+    std::array::from_fn(|i| GA_ARITY[i].load(Relaxed))
+}
+
 /// Snapshot of the cumulative (allocated, freed) counters — the clone-delta
 /// meter behind the seed deep-size split (design60 P3b): read before and
 /// after a `clone()`, the alloc difference is the clone's owned deep size in

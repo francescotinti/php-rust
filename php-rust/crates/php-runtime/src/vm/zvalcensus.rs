@@ -359,5 +359,13 @@ pub fn dump_exit() {
             "freehist le16={} le32={} le48={} le64={} le96={} le128={} le256={} le512={} le1k={} le4k={} gt4k={}",
             fh[0], fh[1], fh[2], fh[3], fh[4], fh[5], fh[6], fh[7], fh[8], fh[9], fh[10]
         );
+        // S-105 H-D gate G2: l'arità vista da bind_params — riga NUOVA, le
+        // righe storiche restano byte-identiche.
+        let ar = php_types::memcensus::arity_histogram();
+        let _ = writeln!(
+            f,
+            "argarity a0={} a1={} a2={} a3={} a4={} ge5={}",
+            ar[0], ar[1], ar[2], ar[3], ar[4], ar[5]
+        );
     }
 }

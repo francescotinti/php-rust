@@ -314,6 +314,10 @@ pub(super) fn decay_args(args: Vec<Zval>) -> Vec<Zval> {
 }
 
 pub(super) fn bind_params(frame: &mut Frame, args: Vec<Zval>) {
+    // S-105 H-D gate G2: arità al choke-point del perimetro della leva args.
+    // Solo build census: la build di parità non contiene la chiamata.
+    #[cfg(feature = "mem-census")]
+    php_types::memcensus::arity_note(args.len());
     // WP-37 fast path: a simple-call callee (no by-ref/variadic) receiving
     // EXACTLY its declared arity — every slot gets a by-value argument, no
     // surplus to snapshot, no `Undef` for the default prologue. Equal to the
