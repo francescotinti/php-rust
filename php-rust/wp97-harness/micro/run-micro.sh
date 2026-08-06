@@ -61,6 +61,10 @@ for c in $CATS; do
     to+=("$(user_cpu "$ORACLE" "$H/$c.php")")
     tp+=("$(user_cpu "$PHPR" "$H/$c.php")")
   done
+  # KS-GR-105-2 (Concilio WP-105): l'N del giudice si EMETTE dal sorgente
+  # a ogni run — mai denominatori dalla memoria di sessione (il 2x di calls).
+  N=$(awk 'match($0, /\$i<[0-9]+/) {print substr($0, RSTART+3, RLENGTH-3); exit}' "$H/$c.php")
+  echo "${c}_N_iter=${N:-nd}"
   MO=$(median "${to[@]}"); MP=$(median "${tp[@]}")
   read -r LO HO <<<"$(minmax "${to[@]}")"
   read -r LP HP <<<"$(minmax "${tp[@]}")"
