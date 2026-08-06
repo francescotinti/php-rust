@@ -1,0 +1,57 @@
+pin107-gate-verdetto: S-106 punto 5 — GATE PIN-106 (protocollo) della
+leva H-A1 arith RMW-su-slot (BinarySTDst, promossa da
+ha1-ab-verdetto.out su criterio pre-registrato ha1-criterio.out).
+grade=GATE
+sessione=S-106 (2026-08-07 01:1x–01:5x)
+
+# ---- SEQUENZA PIN-106 (KS-KL-106-3 + D-17): build → hash₁ →
+# ---- batteria → re-hash₂ → STASH(hash₂) → fixture → corpus ×2 →
+# ---- micro sul pin. NESSUNA build di release dopo lo stash.
+# build leva:                   hash₁ = fcda5e4fa2b529f5 (A/B su questo)
+# batteria cargo test --release: **1740 passed / 0 failed, rc=0 dalla
+#   STESSA run** (D-17; terza run — le prime due ROSSE su DUE
+#   lettere-gate emendate DICHIARATAMENTE, S-106-R-3:
+#   (i) reg_lower_funnel attendeva BinaryDst nel {main}: il += ora
+#       fonde OLTRE in BinarySTDst — attesa sostituita, controllo
+#       BinaryDst RI-COLLOCATO nella probe (sito lhs-stack vivo),
+#       BinarySTDst nei negativi OFF;
+#   (ii) census op_index: posizioni pinnate — BinarySTDst collocato
+#        NEL blocco forme-registro (185), BinaryAdd torna a chiudere
+#        (invariante del self-test preservato, N_OPS=187).
+#   ⚠️ prima run: rc perso da un PIPE (cargo test | tail) — beccato
+#   PRIMA della lettura, run rifatta con rc dal comando: la lezione
+#   «rc di gate mai da pipe» morde anche chi la conosce.)
+# re-hash₂ (churn di relink batteria + reindex census INERTE,
+#   DOCUMENTATO): fcda5e4f → **eb555106a3c7b718** = PIN S-106
+# STASH: /Volumes/Extreme Pro/Claude/phpr-old-target/release/phpr-s106
+#   (hash verificato identico al pin)
+# fixture (pin BILATERALE: PHPR eb555106 + ORACLE 07b0df8d):
+#   13 hc1 PASS · 5 move PASS · 19a/19b PASS (mode-probe ok) ·
+#   fx20 PASS (banda due soglie) · fx21-GATE PASS (golden §3.15
+#   pinnato, D-14) — rc=0 ×5
+# corpus: **1417 per NOME ×2 modi** (off 01:35, on 01:41), insieme
+#   IDENTICO alla lista wp82, assert conteggi↔nomi ok, rc=0
+#   (runner rilinkato dalla batteria: monta la leva — mtime 01:26)
+# micro SUL PIN (R=5, N emessi, micro-pin-s106.out):
+#   **arith 12,4 → 11,6** (netto 5,33→4,97; effetto leva CONFERMATO
+#     sul giudice di categoria; coerente con A/B su hash₁: 4,99)
+#   **prop 11,5 → 10,6** — NON anomalia: prop.php contiene
+#     `$s += $o->x` nel loop e il dump del pin mostra BinarySTDst nel
+#     corpo ⇒ SECONDO beneficiario NOMINATO della leva (la finestra
+#     morde ogni `$local <op>= expr`, trasversale alle categorie).
+#   calls 6,3 (=) · str 6,6 (−0,1) · arr 4,2 (−0,3) · re 3,5 (−0,1)
+#   — categorie non toccate ferme entro ±0,4 (banda tra-sere).
+# taglia run_loop sul pin (R-2): **257.828 B** (S-104: 257.632;
+#   +196 cumulativi, margine +4 KB lontano; NOTA: la leva ha
+#   ACCORCIATO run_loop di 128 B rispetto al pin S-105 257.956).
+# micro su hash₁ (R-1): braccio B dell'A/B = R=5 su fcda5e4f
+#   (arith netto 4,99 vs 4,97 del pin ⇒ churn di layout ≤0,4 ns/iter
+#   su questo contrasto — REGISTRATO, non cifra).
+
+# ---- VERDETTO ----
+# PIN-107: SALDO. La leva H-A1 (BinarySTDst) è SPEDITA sul pin
+# eb555106a3c7b718 con batteria, 5 gate fixture, corpus bimodale e
+# micro tutti verdi. Scoreboard S-106: arith 11,6 · prop 10,6 ·
+# calls 6,3 · str 6,6 · arr 4,2 · re 3,5. DEFAULT flag-ON.
+# HEAD al pin: cc75555 (+ questo verdetto e la rotazione a seguire:
+# doc/harness parity-null; fa fede HEAD, la prossima build churna).
