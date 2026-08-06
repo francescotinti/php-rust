@@ -27,6 +27,24 @@ macro_rules! scn {
     ($($t:tt)*) => {};
 }
 
+// S-103 drop-census (design in wp103-harness/hc2-prep-design.md §2):
+// `dcn!(Sito: &v)` conta UNA fine-vita di Zval al sito, classificata per
+// specie col predicato `is_gc_container` — si piazza dove la vita del
+// valore finisce, sul sentiero eseguito. Vuoto fuori dalla feature.
+#[cfg(feature = "zval-census")]
+macro_rules! dcn {
+    ($site:ident: $v:expr) => {
+        super::stackcensus::note_drop(
+            super::stackcensus::Site::$site,
+            ($v).is_gc_container(),
+        )
+    };
+}
+#[cfg(not(feature = "zval-census"))]
+macro_rules! dcn {
+    ($($t:tt)*) => {};
+}
+
 /// A file op that a userland stream wrapper (`stream_wrapper_register`) can
 /// service via its `stream_*` methods, if its first argument is a `UserStream`.
 fn is_user_stream_op(name: &[u8]) -> bool {
@@ -653,6 +671,7 @@ impl<'m> super::Vm<'m> {
                         #[cfg(feature = "zval-census")]
                         super::zvalcensus::note_pop(&v);
                         self.gc_note(&v);
+                        dcn!(Pop: &v); // il valore scartato muore a fine scope
                     }
                 }
                 Op::Dup => {
@@ -974,6 +993,7 @@ impl<'m> super::Vm<'m> {
                         let l = *l;
                         if let Some(n) = l.checked_add(if *inc { 1 } else { -1 }) {
                             scn!(IncDecSlot: Push = 1);
+                            dcn!(IncDecSlot: &self.frames[top].slots[i]); // old Long sovrascritto
                             self.frames[top].slots[i] = Zval::Long(n);
                             self.frames[top].stack.push(Zval::Long(if *pre { n } else { l }));
                             continue;
@@ -1019,10 +1039,13 @@ impl<'m> super::Vm<'m> {
                     match fast {
                         Some((l, r)) => {
                             scn!(BinaryAdd: Peek = 1);
+                            dcn!(BinaryAdd: &rhs); // rhs consumato, muore a fine arm
                             let v = match l.checked_add(r) {
                                 Some(s) => Zval::Long(s),
                                 None => Zval::Double(l as f64 + r as f64),
                             };
+                            // il vecchio top (Long, guardato) muore nell'overwrite
+                            dcn!(BinaryAdd: self.frames[top].stack.last().expect("BinaryAdd lhs"));
                             *self.frames[top]
                                 .stack
                                 .last_mut()
@@ -1033,6 +1056,8 @@ impl<'m> super::Vm<'m> {
                             scn!(BinaryAdd: Push = 1);
                             let lhs =
                                 self.frames[top].stack.pop().expect("BinaryAdd lhs");
+                            dcn!(BinaryAdd: &lhs); // consumati da binary_value_ab
+                            dcn!(BinaryAdd: &rhs);
                             let r = self.binary_value_ab(BinOp::Add, lhs, rhs)?;
                             self.frames[top].stack.push(r);
                         }
@@ -1159,7 +1184,11 @@ impl<'m> super::Vm<'m> {
                         super::zvalcensus::note_prop_val(2, &lhs);
                         super::zvalcensus::note_prop_val(2, &rhs);
                     }
+                    dcn!(BinaryDst: &lhs); // consumati da binary_value_ab
+                    dcn!(BinaryDst: &rhs);
                     let res = self.binary_value_ab(*b, lhs, rhs)?;
+                    // il valore corrente del dst muore nello store
+                    dcn!(BinaryDst: &self.frames[top].slots[*dst as usize]);
                     self.reg_store_slot(top, *dst, res)?;
                 }
                 Op::CmpJmpSS { op, l, r, addr, when } => {
@@ -1187,6 +1216,7 @@ impl<'m> super::Vm<'m> {
                 Op::CmpJmpSC { op, slot, cidx, addr, when } => {
                     scn!(CmpJmpSC: op);
                     let cv = func.consts[*cidx as usize].to_zval();
+                    dcn!(CmpJmpSC: &cv); // il const materializzato muore nell'arm (fast o slow)
                     let res = 'r: {
                         {
                             let lv = &self.frames[top].slots[*slot as usize];
@@ -1199,6 +1229,7 @@ impl<'m> super::Vm<'m> {
                         let lhs = self.reg_load_slot(top, func, *slot);
                         self.binary_value_ab(*op, lhs, cv)?
                     };
+                    dcn!(CmpJmpSC: &res); // il Bool temporaneo muore dopo to_bool
                     if convert::to_bool(&res, &mut self.diags) == *when {
                         self.frames[top].ip = *addr as usize;
                     }
@@ -3508,6 +3539,7 @@ impl<'m> super::Vm<'m> {
                                         super::zvalcensus::note_prop_val(0, &v);
                                         scn!(PropGet: Push = 1);
                                         self.frames[top].stack.push(v);
+                                        dcn!(PropGet: &target); // l'handle mosso muore a fine arm
                                         continue;
                                     }
                                 }
@@ -3717,9 +3749,11 @@ impl<'m> super::Vm<'m> {
                                     #[cfg(feature = "zval-census")]
                                     super::zvalcensus::note_gcnote_site_propset_old();
                                     self.gc_note(&old);
+                                    dcn!(PropSet: &old); // il vecchio valore muore qui
                                 }
                                 scn!(PropSet: Push = 1);
                                 self.frames[top].stack.push(value);
+                                dcn!(PropSet: &target); // l'handle mosso muore a fine arm
                                 continue;
                             }
                         }

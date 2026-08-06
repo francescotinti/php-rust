@@ -32,23 +32,25 @@ Canale mai contato = fuori dai criteri. Estensione MINIMA di
   contare le due classi separate dà direttamente il numeratore
   indirizzabile. Classificazione col predicato ESISTENTE
   `is_gc_container` (mai un secondo predicato: KS-MA-104-1).
-- Annotazioni `scn!(Sito: DropS/C = n)` SUL SENTIERO ESEGUITO nei punti
-  dove la vita di uno Zval finisce dentro l'arm. Enumerazione STATICA
-  (da arbitrare col dinamico, lezione S-102 «lo statico stavolta ha
-  retto»):
+- Annotazioni `dcn!(Sito: &v)` SUL SENTIERO ESEGUITO nei punti dove la
+  vita di uno Zval finisce dentro l'arm. Enumerazione STATICA — v2,
+  RAFFINATA in S-103 leggendo i corpi PRIMA del dinamico (la v1 da
+  memoria contava 11 e mancava gli OVERWRITE: anche un bersaglio
+  sovrascritto droppa il vecchio valore):
   | sito | drop attesi/iter | che cosa muore |
   |---|---|---|
-  | Pop ×2 | 2 | il valore scartato (650) |
-  | PropGet ×2 | 2 | l'handle ricevitore mosso, a fine arm |
-  | PropSet ×1 | 2 | l'handle ricevitore + il vecchio valore (post gc_note) |
-  | BinaryAdd ×1 | 1 | rhs poppato consumato (fast Long) |
-  | BinaryDst ×1 | 2 | rhs+lhs poppati consumati |
-  | CmpJmpSC ×1 | 1 | il const materializzato `cv` (1186) |
-  | IncDecSlot ×1 | 1 | il gemello non pushato di old/new (992) |
-  | **TOTALE statico** | **11** | — la stima «~11» esce ESATTA dalla conta |
-- ATTESA PRE-REGISTRATA da confermare dal dinamico: 11 drop/iter di cui
-  **DropC = 2-3** (handle ricevitore ×2, old di PropSet se container) e
-  il resto DropS. Linearità 300:1 obbligatoria (prop_small).
+  | Pop ×2 | 2 S | il valore scartato (scope end) |
+  | IncDecSlot ×1 (fast) | 1 S | il vecchio Long dello slot, sovrascritto |
+  | BinaryAdd ×1 (fast) | 2 S | rhs consumato + il vecchio top sovrascritto |
+  | BinaryDst ×1 | 3 S | lhs+rhs consumati + il dst sovrascritto |
+  | CmpJmpSC ×1 | 2 S | il const materializzato `cv` + il Bool `res` |
+  | PropGet ×2 | 2 C | l'handle ricevitore mosso, a fine arm |
+  | PropSet ×1 | 1 S + 1 C | il vecchio valore (Long nel giudice) + l'handle |
+  | **TOTALE statico v2** | **14 = 11 S + 3 C** | la stima «~11» combacia con i SOLI scalari |
+- ATTESA PRE-REGISTRATA (v2, da confermare dal dinamico): **DropS=11 e
+  DropC=3 per iter** — il canale della leva fast-out è esattamente il
+  DropS. Linearità 300:1 obbligatoria (prop_small). Se il dinamico
+  smentisce, fa fede il dinamico e la tavola si emenda CON NOME.
 - Il dump appende `drop_s=`/`drop_c=` alle righe stackcensus (formato
   census-only, nessuna build di parità la vede).
 

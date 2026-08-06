@@ -55,9 +55,16 @@ pub enum Prim {
     Peek = 2,
     Len = 3,
     Elem = 4,
+    // S-103 drop-census (KS-BA-104-3 ≡ RC-LE-104-1): la fine-vita di uno
+    // Zval nell'arm, per SPECIE — la specie è il canale della leva H-C2
+    // (fast-out scalare). Classificata col predicato ESISTENTE
+    // `is_gc_container` (KS-MA-104-1: mai un secondo predicato).
+    DropS = 5,
+    DropC = 6,
 }
-pub const PRIMS: usize = 5;
-pub const PRIM_NAMES: [&str; PRIMS] = ["push", "pop", "peek", "len", "elem"];
+pub const PRIMS: usize = 7;
+pub const PRIM_NAMES: [&str; PRIMS] =
+    ["push", "pop", "peek", "len", "elem", "drop_s", "drop_c"];
 
 /// Esecuzioni per sito-opcode (chiude il ledger: transiti = Σ conteggi e
 /// l'assert conteggi↔dump confronta ops/iter col dump `{main}`).
@@ -78,6 +85,16 @@ pub fn note(site: Site, prim: Prim, n: u64) {
     ST[site as usize][prim as usize].fetch_add(n, Ordering::Relaxed);
 }
 
+/// Una fine-vita di Zval al sito `site`, classificata per specie (S-103
+/// drop-census). Si annota nel punto dell'arm dove la vita del valore
+/// finisce (pop scartato, operando consumato, bersaglio sovrascritto,
+/// temporaneo a fine arm) — sul sentiero ESEGUITO.
+#[inline]
+pub fn note_drop(site: Site, is_container: bool) {
+    let p = if is_container { Prim::DropC } else { Prim::DropS };
+    ST[site as usize][p as usize].fetch_add(1, Ordering::Relaxed);
+}
+
 /// Righe di dump: una per sito eseguito (`stackcensus site=… ops=… push=…`)
 /// + una riga di totali per primitiva.
 pub fn dump_lines() -> String {
@@ -93,13 +110,13 @@ pub fn dump_lines() -> String {
             continue;
         }
         out.push_str(&format!(
-            "stackcensus site={} ops={} push={} pop={} peek={} len={} elem={}\n",
-            SITE_NAMES[s], ops, row[0], row[1], row[2], row[3], row[4]
+            "stackcensus site={} ops={} push={} pop={} peek={} len={} elem={} drop_s={} drop_c={}\n",
+            SITE_NAMES[s], ops, row[0], row[1], row[2], row[3], row[4], row[5], row[6]
         ));
     }
     out.push_str(&format!(
-        "stackcensus_tot push={} pop={} peek={} len={} elem={}",
-        tot[0], tot[1], tot[2], tot[3], tot[4]
+        "stackcensus_tot push={} pop={} peek={} len={} elem={} drop_s={} drop_c={}",
+        tot[0], tot[1], tot[2], tot[3], tot[4], tot[5], tot[6]
     ));
     out
 }
