@@ -1,212 +1,174 @@
 # NEXT_SESSION — LA SPINA DORSALE: il nucleo interprete, misurato per categoria
 
-⏱ **FONDAMENTALI**: ultima misura full/media WordPress = **WP-102 (1
-sessione fa)** · ultima campagna sull'OGGETTO = **S-103 (questa: prefissi
-H-C2 consumati + cifra netta H-D — misure dell'oggetto, nessuna leva)** ·
-**sessioni-senza-Δ-oggetto = 2** (S-102 guardie, S-103 prefissi — prezzo
-ordinato dai concili WP-103/104; ma ORA i prerequisiti della leva H-C2
-sono TUTTI consumati: S-104 non ha più prefissi davanti).
+⏱ **FONDAMENTALI**: ultima misura full/media WordPress = **WP-102 (2
+sessioni fa; il debito coppia ha SCADENZA: trigger = prima leva promossa,
+fallback = chiusura S-106 o il riferimento DECADE, KS-PE-106-2)** · ultima
+campagna sull'OGGETTO = **S-104 (leva H-C2 TENTATA: A/B eseguito ×2,
+verdetto CADUTA con canale refutato — ritmo-leve RISPETTATO)** ·
+**sessioni-senza-Δ-rapporti = 3** (contatore SDOPPIATO A-GR-106-1;
+**KS-GR-106-1: se S-105 chiude a Δ zero ⇒ contatore=4 ⇒ riallocazione di
+CATEGORIA in WP-107**).
 
-**Ultima sessione (S-103, 2026-08-06)**: l'ordine WP-104 consumato INTERO.
-1) **A/B peak: il verdetto meccanico «RUMORE» RIBALTATO dall'audit** —
-RUN VOID (spread 90/99 MiB > tetto 51,96; il launcher usava lo spread
-intra-run come banda); 5/5 coppie stesso segno B>A = indizio crescita;
-**rerun R=7 con warmup pre-registrato IN VOLO** (daemonizzato 16:23,
-verdetto con banda fase-1 NEL launcher: `wp103-harness/peak-ab-out/`).
-2) **Server 31aa7c2e GRADATO** col launcher EMENDATO (warning-line cb2:
-righe 36/41 = oracle al confine HTTP; errore-poi-successo; interleave
-workers=2; fails=0×2 + cross-mode). 3) **Pacchetto ricevitore**: fixture
-19a/19b PASS ×2 al primo colpo (soglia esatta + base=1), tavola emendata,
-OBS-1..12 in codice; assert A-ST-104-4 atterrato sull'invariante VERA
-(nested-Ref nel descend) — la premessa «il chiamante scartoccia sempre» è
-REFUTATA dai chiamanti reali. 4) **Prefissi H-C2 COMPLETI**: banda-layout
-0,67 ns/iter (leva-nulla, semantica nulla provata) · **drop-census 11
-DropS + 3 DropC/iter ESATTI** (attesa v2 confermata a zero scarti) ·
-criterio scritto (pavimento 4 ns/iter, `size_of::<Zval>()==16` a
-compile-time). 5) 🔵 **Cifra netta H-D: 1 alloc × 32,0 B + 1 free per
-chiamata, realloc≡0** — il denominatore S-102 era GONFIATO 2× (calls.php
-= 20M iter; anche i 10 gc_note/iter ⇒ ~5). 6) Igiene 8/8: 🔵 generator-
-in-cycle MORDE (fixture rossa, buco A-HO-103-2 provato); 🔵 §3.12
-rititolata typed-LVALUE (azzera anche SENZA ref, 4/4 specie); §3.11 =
-tutto il canale RMW; §3.13 chiusa (claim: famiglia PropGet, 5/~435);
-set-che-scende scritta; hash fail-closed+mode-probe nei 3 fixture-gate;
-dente sottoprocesso emendato (=0 discriminante, prop-init, ==1);
-gh-status-sync (2650/1417). Dettaglio: `sessions/WP_SESSION_103.md`.
+**Ultima sessione (S-104, 2026-08-06 sera)**: ordine WP-105 consumato.
+1) **A/B peak R=7 CHIUSO PER SEMPRE**: sign 7/7 B>A p=0,0078 = direzione
+FIRMATA (s100-fix cresce su s99-sigillo); magnitudine INDETERMINATA
+(l'estimatore accoppiato +22,47 MiB fu scelto post-hoc — emenda Leijen);
+metrica full-peak esaurita, futuro solo per-fase (A-LE-105-5, backlog).
+2) **LEVA H-C2 CADUTA CON CANALE REFUTATO**: implementata parity-esatta,
+Δ=−10,33/−11,33 ns/iter (due forme, 5/5, rumore ~2) ⇒ REVERT verificato
+(run_loop 257.632 B esatti, prop 4,87s); disasm: inliner flippato
+(bl a drop_in_place 1101→**0**, run_loop +8 KB) ⇒ le chiamate al glue
+erano quasi gratis. ⚠️ «icache-bound» = ipotesi forte N=1 NON firmata
+(l'A/B misurò leva+inliner insieme): si firma solo con contatori o
+inlining pinnato (KS congiunto WP-106). 3) **Denti col rosso VERO**:
+absent_eq_one per-corpo nato rosso e corretto con causa; 🔵 19a/19b NON
+arbitrano il meccanismo (2 perturbazioni senza rosso — la TERZA su OBS-8
+decide, A-MA-106-1); 🔵 **memory_get_usage phpr = STUB costante** (fx20
+ridisegnata col braccio RSS: clean 50 vs mutante 301 MiB, rosso
+archiviato). 4) **H-D INCHIODATO**: free-hist 4/4 attese — 1 alloc×32 B +
+1 free×32 B/chiamata ESATTI, realloc≡0, ret_cell ESCLUSO (layout E
+misura) ⇒ indiziato args-Vec cap 2. Dettaglio: `sessions/WP_SESSION_104.md`.
 
 **Rotta (utente 2026-08-04)**: dritti al PHP; WordPress = collaudo di
 PARITÀ. OBIETTIVO **X = nucleo interprete ≤ 3× l'oracle sulle categorie
 pure**; giudice = le sei micro-categorie di `wp97-harness/micro/`.
 
-## Baseline CORRENTE del giudice (S-103, sera-2 stesso-pin d0b01362, R=5)
+## Baseline CORRENTE del giudice (S-104, micro R=5 SUL PIN DI CHIUSURA 86a50d1c, N emessi)
 
 | categoria | rapporto | ipotesi attiva |
 |---|---|---|
-| aritmetica | **12,3** | residuo = corpi non-Binary + pila operandi |
-| proprietà | **11,5** | **H-C2 PRONTA AD APRIRSI: zero prefissi davanti** — canale contato 11 DropS/iter (+3 DropC fuori canale), criterio in `wp103-harness/hc2-criterio.out` (pavimento 4 ns/iter, banda [8,22], banda-layout 0,67, fast-out SOLO via is_gc_container, Δ per sito×specie) |
-| chiamate | **7,4** | **H-D: cifra netta NOMINATA (1 alloc × 32,0 B + 1 free/chiamata, realloc≡0, bucket (16,32] uniforme)** — leva GATED sul SiteTag per-sito (residuo≡0); indiziati ret_cell Rc O args Vec (UNO solo, non entrambi) |
-| stringhe 6,6 · array 4,4 · regex 3,7 | | — (regex = parte sana) |
+| aritmetica | **12,4** | corpi non-Binary + pila operandi; fusioni forme registro = H-C3 (backlog) |
+| proprietà | **11,5** | drop fast-out REFUTATO (S-104); prossima: fusione prop-RMW H-C3 (2° slot, porta §3.12-i; contatori = prerequisito di tesi) |
+| chiamate | **7,6** | **LEVA S-105: args SmallVec inline-2** — canale inchiodato (1×32 B alloc+free), attesa Δ∈[6,14] ns/iter, gate d'apertura probe cap-bump 2→4 + arità + audit-fuga |
+| stringhe 6,7 · array 4,5 · regex 3,6 | | — (regex = parte sana) |
 
-(banda tra-sere: 2/3 punti stesso-pin, Δ ≤±0,3 — il terzo punto la chiude)
-
-## LE IPOTESI — stato dopo S-103
-
-- ~~H1, H-A1, H-B1, H-B2~~ chiuse; H-C1a+b spedite e sotto guardia
-  COMPLETA (audit + fixture 14-18 + 19a/19b + OBS in codice).
-- **H-C2 (proprietà)**: prefissi TUTTI consumati — la sequenza residua è
-  SOLO: implementare il fast-out scalare → A/B da sola vs criterio →
-  gate pieno (fixture 13+5+19 + batteria + corpus 1417×2 + coppia WP).
-- **H-D (chiamate)**: cifra nominata; resta SiteTag TL RAII con
-  residuo≡0 (design `wp103-harness/hd-prep-design.md` §3) → attribuzione
-  → solo poi leva. ⚠️ tavola bi-regime S-102 da correggere ×½
-  (denominatore).
-- **Generator-in-cycle**: fixture rossa
-  (`wp103-harness/recv-fixtures-gen/`) = arbitro del fix (container +
-  descend delle catture, o birth-track). Divergenza REALE che perde
-  memoria per tutta la richiesta.
-- **H-C1c**: resta GATED su fixture/giudici per SPECIE (KS-ST-103-2).
+(banda tra-sere ±0,3 su 2 giorni-punto; il terzo punto su GIORNO distinto resta dovuto)
 
 ## Regole di metodo
 
-1. Il giudice è la micro-categoria. 2. WordPress è un collaudo di PARITÀ
-(si esegue quando cambia emissione O runtime — S-103: runtime parity-null
-PROVATO da corpus/batteria/server, coppia non rieseguita e debito
-NOMINATO: la prima leva vera la salda). 3. Criterio scritto PRIMA.
-4. Apparato solo se blocca; timebox ½ sessione.
-5. **⭐⭐ REGOLA UTENTE (2026-08-06, rango sopra i concili,
-[[feedback-scoreboard-lever-pacing]])**: (a) ogni report di fine
-sessione apre con lo **SCOREBOARD** (sei rapporti + frecce vs sessione
-precedente, CPU/RAM WordPress, riga «leve perf spedite: N»); (b) **ogni
-sessione DEVE tentare almeno una leva perf** (A/B ESEGUITO, qualunque
-verdetto) — i prerequisiti si COMPRIMONO nella finestra della leva; una
-sessione con N=0 dichiara l'anomalia in testa al report e la successiva
-apre con riallocazione fondamentali-first. Un ordine di concilio
-composto solo di prerequisiti non è un ordine valido.
+1. Il giudice è la micro-categoria. 2. WordPress è collaudo di PARITÀ —
+ora con SCADENZA (sopra). 3. Criterio scritto PRIMA. 4. Apparato solo se
+blocca; timebox ½ sessione. 5. **SCOREBOARD in testa a ogni report +
+almeno una leva TENTATA (A/B eseguito) per sessione**
+([[feedback-scoreboard-lever-pacing]]). 6. **PIN-106** (Klabnik, capitale
+WP-106): `build → hash₁ → batteria → re-hash₂ → STASH(hash₂) → fixture →
+corpus×2`; build dopo lo stash = gate VOID; churn documentato.
+7. **Admission di OGNI leva (KS-GR-106-2)**: admission-disasm (bl-count
+prima/dopo) + smoke R=2 prima del pieno; mai componenti di costo da un
+A/B che flippa il codegen (KS-BA-106-1). 8. Parity-null sempre col
+PERIMETRO nominato (KS-KL-106-1).
 
 ## Stato gate
 
-- **phpr (pin release)**: **f45a5d199ab34132** @ HEAD 56a2174 (hash
-  churna col relink: fa fede HEAD) — DEFAULT flag-ON; contiene OBS-1..12,
-  debug_assert nested-Ref, dcn!/null-lever/memcensus H-D (TUTTO
-  parity-null). Batteria **1739/0** · fixture **13+5+2 coi denti nuovi**
-  (i gate esigono `PHPR_PIN_ATTESO` o VOID) · corpus **1417 per NOME ×2
-  modi** (`wp103-harness/corpus-gate/`). Stash ADDITIVO `phpr-s103`.
-- **php-server**: pin **31aa7c2eef899cce** @ HEAD 37312e8 (ricetta piena)
-  GRADATO minimo-emendato fails=0×2 (`wp103-harness/collaudo-out-*/`,
-  launcher `s103-collaudo-server.sh`); stash `php-server-s103`. Il
-  da5c2948 di metà sessione: superseded (mai stashato, sovrascritto —
-  lezione: stash NEL momento del grading). Registro: `PIN_REGISTRY.md`.
-- **Launcher S-103** (`wp103-harness/`): `s103-collaudo-server.sh` ·
-  `s103-recv-fixtures.sh` (19a/b) · `s103-corpus-gate.sh` ·
-  `s103-stack-census.sh` (con drop) · `s103-peak-ab.sh` (R=7, banda
-  fase-1 nel verdetto) · fixture-gate 13/5 emendati (hash+mode-probe).
+- **phpr (pin release)**: **86a50d1c01c6f45a** @ HEAD di chiusura S-104
+  (fa fede HEAD; churn 66681884→86a50d1c documentato) — DEFAULT flag-ON.
+  Batteria **1740/0** (+1 dente trivial_drop) · fixture **13+5+19a/b+fx20**
+  (pin BILATERALE, braccio RSS) · corpus **1417 per NOME ×2** IDENTICO a
+  wp82 · micro sul pin (baseline sopra) = parity-null STRUMENTALE
+  misurato (perimetro: CLI due modi; server NON misurato). Stash ADDITIVO
+  `phpr-s104`. ⚠️ HEAD post-pin ha SOLO commit census/doc (freehist) —
+  parity-null per costruzione (feature-gated), ma la prossima build
+  churna l'hash: fa fede HEAD.
+- **php-server**: pin **31aa7c2eef899cce** @ 37312e8 INVARIATO — è
+  indietro rispetto a HEAD; cifre server SOLO da pin same-HEAD gradato
+  PIENO (KS-PE-106-1); si rigrada al trigger della leva promossa.
+- **Launcher S-104** (`wp104-harness/`): `s104-hc2-ab.sh` (modello A/B
+  con sanity output + N emesso) · `s104-fx20-gate.sh` (pin bilaterale +
+  braccio RSS) · fixture `fixtures/fx20-stringhe-in-pop.php` · rossi in
+  `denti-rossi/`. Census con freehist in `phpr-census-target`.
 - GATE72 CLI baseline trasversale (corpus 1417 · refl 290 · ORM 3E/13F ·
-  hk 1665). gh-status-sync ESEGUITO (2650 pass/1417 fail pubblicati).
-- ⚠️ `~/Claude/php-rust-output/debug/` si RIGENERA: rimuoverla nel
-  pre-flight.
+  hk 1665). ⚠️ `~/Claude/php-rust-output/debug/` si RIGENERA: rimuoverla
+  nel pre-flight.
 
 ## Voci APERTE per NOME
 
-- **A/B peak R=7 IN VOLO** (fine ~21:00 del 2026-08-06): `wp103-harness/
-  peak-ab-out/ab.done` + `ab-verdetto.out` (verdetto meccanico con banda
-  fase-1 34,64 e tetto 51,96 GIÀ nel launcher). **Lettura = primo atto
-  S-104**; se VOID anche a R=7 ⇒ la metrica full-peak va ridisegnata
-  (misura per fase?) prima di ogni bisect.
-- **Coppia WP** dovuta alla PRIMA leva vera (debito S-103 nominato).
-- **SiteTag H-D** (attribuzione della 1×32B) — design pronto.
-- **21,2% run_loop senza nome** — TERZA rotazione: il concilio WP-104 la
-  voleva candidata a ordine S-104.
-- divergenze §3.11/§3.12 (perimetri MISURATI, probe in
-  `wp103-harness/censimento-311-312/`) + generator-in-cycle (fixture
-  rossa) — da decidere: fedeltà o assenza consapevole.
+- **Coppia WP bimodale**: debito con SCADENZA (trigger leva promossa;
+  fallback S-106 o riferimento WP-102 decade — KS-PE-106-2/KS-KL-106-2).
+- **Terza mutazione 19a/19b su OBS-8** (A-MA-106-1): decide arbitri-del-
+  MOVE vs riclassifica per NOME.
+- **Contatori L1I/INST_RETIRED sulla coppia H-C2** (ricostruibile:
+  checkout 4ea2cff): braccio parallelo breve S-105 o backlog — finché
+  manca, «icache-bound» resta ipotesi NON citabile come premessa.
+- **memory_get_usage stub**: voce 🔴 a catalogo (KS-MA-106-1: nessun
+  verdetto vi si appoggi); cura a due gradini TLS/mi_* (A-ST-106-1) solo
+  post-leva.
+- **Generator get_gc** (fixture rossa arbitro) + **fixture §3.13 unit
+  include/eval**: primi in coda fedeltà.
+- divergenze §3.12 regime-i (viaggia con la fusione H-C3) · terzo punto
+  banda su GIORNO distinto · A-HE-105-3 zoo esteso (hook/arrow/static).
 
 ## Che cosa è SOSPESO (non abbandonato)
 
-- **A-ZV2** (liveness+TakeSlot); rollout Add forme registro (chiuso salvo
-  misura ≥ pavimento); roadmap footprint (riferimenti S-102: full peak
-  on 1942,05 / off 1989,88 MiB).
+- A-ZV2 (liveness+TakeSlot); design per-fase A-LE-105-5; PGO/outlining
+  A-HE-106-4; H-ICS cold-out (criterio firmato prima); 21,2% run_loop =
+  prefisso di targeting della futura leva icache (A-HE-106-5);
+  roadmap footprint (riferimenti S-102: full peak on 1942,05 / off
+  1989,88 MiB).
 
 ## NON riproporre
 
-Tutti i NON-riproporre WP-83..102 restano. Nuovi da S-103:
+Tutti i NON-riproporre WP-83..103 restano. Nuovi da S-104/WP-106:
 
-- **citare il verdetto meccanico di un launcher la cui banda non è
-  pre-registrata ALTROVE** (il verdetto «RUMORE» S-102 confrontava col
-  proprio spread: si assolveva da solo — la banda vive nel criterio,
-  mai nel run).
-- **denominatori di micro-giudici presi dalla memoria di sessione** (il
-  2× di calls: si rilegge il SORGENTE del giudice prima di firmare una
-  cifra per-iter).
-- **assert piazzato senza enumerare i chiamanti reali** (l'assert Ref nel
-  predicato avrebbe morso gc_note e le catture by-ref).
-- **pin gradato e non stashato NEL momento del grading** (da5c2948
-  sovrascritto).
-- **output di collaudo/run committati nel repo** (26 MB di srv.log
-  rimossi: prima di `git add -A` si guarda la convenzione).
-- ereditati: verdetti «≈0» estesi a giudici diversi; gamba alloc a
-  pagine; attesi in ns da conteggi; .rs nei comandi git (Write+commit
-  -F); narrazione cross-sessione di Δ non-A/B; .done rosso citato verde.
+- **leve che riducono micro-costi di chiamata su run_loop** (canale
+  drop-call REFUTATO dalla misura: due forme, 5/5) — la valuta è il
+  volume di codice/lavoro, non il costo della singola `bl`.
+- **claim architetturali («icache-bound», «chiamate gratis») da un A/B
+  che ha flippato il codegen**: si firmano SOLO con contatori o inlining
+  pinnato (KS-HO/HE/BA-106-1).
+- **fixture il cui verdetto poggia su memory_get_usage** finché è stub
+  (KS-MA-106-1).
+- **PIN-105 letterale** (stash prima della batteria): la batteria
+  relinka SEMPRE — vale PIN-106.
+- **estimatori A/B scelti post-hoc** (la lettura R=7 è sopravvissuta
+  solo per lo STOP): estimatore accoppiato pre-registrato o lettura VOID.
+- **pool per gli args** (refutato Leijen: duplica la freelist TL di
+  mimalloc) e **threaded-dispatch** (vietato Bak, A-BA-106-3).
+- ereditati: banda dal proprio run; denominatori a memoria; assert senza
+  chiamanti; output di run nel repo; .rs nei comandi git (Write +
+  commit -F).
 
 ---
-**Riscritto**: rotazione S-103 il 2026-08-06. Apertura/chiusura = skill
-`apri-sessione`/`chiudi-sessione`. Harness di sessione: `wp103-harness/`.
+**Riscritto**: rotazione S-104 il 2026-08-06 sera. Apertura/chiusura =
+skill `apri-sessione`/`chiudi-sessione`. Harness di sessione:
+`wp104-harness/`; concilio in `wp106-harness/`.
 
-## §S-104 — ORDINE DEFINITIVO (Concilio WP-105, `wp105-harness/verbali/SYNTHESIS.md` — VINCOLANTE)
+## §S-105 — ORDINE DEFINITIVO (Concilio WP-106, `wp106-harness/verbali/SYNTHESIS.md` — VINCOLANTE)
 
-⚖️ **Concilio WP-105 (2026-08-06, su S-103 e programma S-104)**. Indice +
-ricevute in `wp105-harness/COUNCIL_WP105_REVIEWS.md` (testi SOLO in
-`verbali/`). 9/9 CON EMENDAMENTI, nessun MI OPPONGO. **REFUTAZIONE
-CAPITALE CONVERGENTE (Hoare∧Bak, indipendenti): il criterio H-C2 chiavava
-il fast-out su `is_gc_container` — ma Str/Resource/Generator sono `false`
-con Drop NON banale ⇒ leak di ogni stringa poppata, invisibile al giudice
-prop.** Più: §3.12 ha TRE regimi e 🔵 la marca §3.13 perde l'UNITÀ su
-include/eval (divergenza NUOVA provata, Stogov); parity-null va PROVATO
-funzionale+strumentale sul pin di chiusura (Klabnik); 32,0 B è soffitto
-solo-alloc (Leijen); banda tra-sere 2 punti stesso giorno = 1 (Gregg);
-«un arbitro mai visto fallire non arbitra» (Matsakis). Ordine:
+⚖️ **Concilio WP-106 (2026-08-06 sera, su S-104 e programma S-105)**.
+Indice + ricevute in `wp106-harness/COUNCIL_WP106_REVIEWS.md` (testi SOLO
+in `verbali/`). 9/9 CON EMENDAMENTI; **capitale Klabnik: PIN-105
+insoddisfacibile ⇒ PIN-106**; «icache-bound» declassato a ipotesi N=1
+(KS congiunto); conflitto prop-RMW-prima composto: **args-calls è la
+leva #1**. Ordine:
 
-1. **Verdetto A/B R=7** con la regola di lettura PRE-REGISTRATA in
-   SYNTHESIS §Regola-di-lettura (tetto R-coerente/IQR; |Δ| E sign test
-   CO-PRIMARI; direzione senza magnitudine ≠ bisect; **R=7 = ULTIMO
-   tentativo full-peak: VOID ⇒ metrica inadatta, per-fase DOPO la leva,
-   MAI terzo rerun**).
-2. **LEVA H-C2 — NON NEGOZIABILE (KS-GR-105-1: senza il suo A/B ESEGUITO,
-   contatore anomalia = 3 ⇒ WP-106 riallocazione obbligatoria)**:
-   a. atto zero ~30′: emenda criterio — predicato **`is_trivial_drop`**
-      (true SOLO Undef/Null/Bool/Long/Double + ArgPlace/WeakHandle
-      classificati ESPLICITI, match esaustivo) + **`dispose(v)` unico**
-      + align/fingerprint Zval nel criterio (KS-HE-105-1);
-      **KS-HO-105-1 ≡ KS-BA-105-1: fast-out su `!is_gc_container` =
-      reject senza appello**;
-   b. prefisso disasm ~30′ (A-BA-105-2): drop_in_place outlined? l'esito
-      RINOMINA la banda [8,22] (mai misurata al numeratore); A/B senza
-      verdetto disasm = VOID;
-   c. denti DENTI-105 nella finestra: mutation-check 19a/19b col ROSSO
-      ARCHIVIATO (pre-atto, KS-MA-105-1) + `==1` per-corpo + `=0` col
-      controllo POSITIVO + dente panic-su-container nel fast path;
-   d. implementazione → **A/B DA SOLA** (Δ≥8 ns/iter ⇒ R=5; Δ∈[4,8) ⇒
-      R≥9 + segno stabile; sotto max(banda-layout, rumore ~3) ⇒ registra
-      e chiudi il braccio);
-   e. gate pieno con **regola PIN-105** (pin bilaterale ANCHE oracle;
-      sequenza atomica build→hash→STASH→batteria→fixture→corpus×2;
-      «gradato» senza stash contestuale = retroattivamente NON-gradato):
-      fixture 13+5+19 + stringhe-in-Pop + batteria + corpus 1417×2 +
-      **coppia WP bimodale** (salda il debito S-103).
-3. **H-D**: free-histogram + attese byte-per-tipo PRE-registrate
-   (A-LE-105-1/2; 40 B = Rc<RefCell<Zval>> ⇒ ret_cell escluso per
-   layout, indiziato = args-Vec) → SiteTag residuo≡0 → attribuzione;
-   ogni cifra per-iter cita l'N EMESSO dal run (KS-GR-105-2).
-4. **Igiene (timebox ½)**: catalogo SUBITO — tre regimi §3.12 (strict e
-   `.=` CONSERVANO), unit §3.13 + probe include/eval, symlink-docroot;
-   N emesso dal giudice micro; terzo punto banda su GIORNO distinto;
-   A-HO-105-2/3/4; fixture 19c/zoo hook se entra.
-5. **BACKLOG per NOME**: A-MA-105-3 ledger fine-vita; banda-layout N≥3
-   (solo se Δ marginale, dentro la campagna); rc 0/1/66; design per-fase
-   A-LE-105-5; grado PIENO server + A-PE-105-1/3/4 sul pin post-leva;
-   fix generator get_gc COMPLETO / fix §3.12 catena-UNDEF (solo se
-   punto-fedeltà scelto, coi loro KS); 21,2% run_loop (subordinato alla
-   leva).
+1. **LEVA H-D args (SmallVec inline-2 per gli args di calls) — NON
+   NEGOZIABILE**: a. atto zero ~30′: criterio SCRITTO (attesa Δ∈[6,14]
+   ns/iter su calls 7,6; co-primari timing E census alloc/chiamata→
+   **0,0000**; caduta sotto max(rumore ~3, layout); admission-disasm +
+   smoke R=2); b. gate d'apertura: **probe cap-bump 2→4** (se il costo
+   NON sale ⇒ il canale non è l'alloc: STOP prima di implementare) +
+   censimento ARITÀ call-site + audit-fuga (fixture: il Vec args non
+   sfugge alla finestra di chiamata); c. implementazione → smoke R=2 →
+   A/B R=5 ABAB stessa sera → verdetto; d. **PROMOZIONE ⇒ trigger
+   fedeltà STESSA SESSIONE**: rebuild php-server @ HEAD + grado PIENO
+   (A-PE-106-1) + **COPPIA WP bimodale** (salda il debito);
+   e. gate **PIN-106** completo.
+2. **Braccio parallelo BREVE (~30′, NON prerequisito)**: contatori
+   INST_RETIRED/L1I-miss sulla coppia H-C2 (checkout 4ea2cff); se non
+   entra ⇒ backlog, l'ipotesi icache resta non-firmata.
+3. **Denti/arbitri nella finestra del gate**: terza mutazione OBS-8 su
+   19a/19b (decide); fx20 cap→banda derivata + guardia erosione cap/2 +
+   mutante leak-parziale; sigillo Copy payload trivial + doc verdetto
+   S-104 nel predicato + «al byte»→«taglia+timing» (A-HO-106-1/2/3).
+4. **Fedeltà (timebox ½)**: memory_get_usage 🔴 a catalogo SUBITO;
+   gradino TLS solo post-leva (KS-ST-106-1); generator get_gc + fixture
+   §3.13 unit se entra.
+5. **BACKLOG per NOME** (non aprire): H-C3 fusioni prop-RMW (2° slot,
+   con §3.12-i e contatori-prerequisito); H-ICS cold-out; per-fase
+   A-LE-105-5; PGO/outlining; retention uploads (A-PE-106-3);
+   banda-layout N≥3; disposizione mutanti (A-MA-106-2); zoo A-HE-105-3.
 
-Pre-flight S-104: pin phpr **f45a5d199ab34132** @ HEAD (fa fede HEAD) ·
-server **31aa7c2e** gradato · corpus 1417 per NOME ×2 SUL PIN · default
-flag-ON · debug/ si rigenera: rimuoverla · **NON lanciare run pesanti se
-`wp103-harness/peak-ab-out/ab.done` manca**.
+Pre-flight S-105: pin phpr **86a50d1c01c6f45a** @ HEAD S-104 (fa fede
+HEAD, la build churna) · server 31aa7c2e (NON citarlo come HEAD) ·
+corpus 1417 per NOME ×2 SUL PIN · default flag-ON · debug/ si rigenera:
+rimuoverla · MySQL wp8 con l'elenco dei database · uploads sotto guardia.
