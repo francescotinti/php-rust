@@ -13,6 +13,27 @@ ORACLE="${ORACLE:-/opt/homebrew/opt/php/bin/php}"
 PHPR="${PHPR:-$HOME/Claude/php-rust-output/release/phpr}"
 OUT="${OUT:-$F/out}"
 mkdir -p "$OUT"
+
+# ---- A-KL-104-2: hash FAIL-CLOSED — il gate si rifiuta senza pin atteso ----
+if [ -z "${PHPR_PIN_ATTESO:-}" ]; then
+  echo "GATE VOID: PHPR_PIN_ATTESO assente (hash fail-closed A-KL-104-2)"; exit 66
+fi
+H_PHPR="$(shasum -a 256 "$PHPR" | cut -c1-16)"
+if [ "$H_PHPR" != "$PHPR_PIN_ATTESO" ]; then
+  echo "GATE VOID: phpr=$H_PHPR != atteso $PHPR_PIN_ATTESO (A-KL-104-2)"; exit 66
+fi
+echo "phpr_pin=$H_PHPR (verificato)"
+
+# ---- A-KL-104-3: MODE-PROBE — i due bracci PROVANO il loro modo o VOID ----
+PROBE="$OUT/mode-probe.php"
+printf '<?php\n$s=0; for ($i=0;$i<10;$i++) { $s = $s + $i; }\necho $s, "\\n";\n' > "$PROBE"
+ON_REG=0;  env -u PHPR_REG_LOWER PHPR_DUMP_OPS=1 "$PHPR" "$PROBE" 2>&1 | grep -qE "BinarySS|BinarySC|BinaryDst|CmpJmpSC|CmpJmpSS" && ON_REG=1
+OFF_REG=0; PHPR_REG_LOWER=0 PHPR_DUMP_OPS=1 "$PHPR" "$PROBE" 2>&1 | grep -qE "BinarySS|BinarySC|BinaryDst|CmpJmpSC|CmpJmpSS" && OFF_REG=1
+if [ "$ON_REG" != 1 ] || [ "$OFF_REG" != 0 ]; then
+  echo "GATE VOID: mode-probe fallita (on_reg=$ON_REG atteso 1, off_reg=$OFF_REG atteso 0) (A-KL-104-3)"; exit 66
+fi
+echo "mode-probe OK (on=registri, off=pila)"
+
 EXPECTED_NAMES="19a-soglia-esatta-slot-held 19b-base1-ricevitore-temporaneo"
 seen=""
 fails=0
