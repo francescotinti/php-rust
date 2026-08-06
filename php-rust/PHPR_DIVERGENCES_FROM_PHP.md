@@ -841,6 +841,48 @@ diff ESATTO in `hc1-fixtures.sh`).
   pseudo-file). La marca deve diventare (unit, line); fixture
   include+eval dovute prima di dichiarare §3.13 chiusa davvero.
 
+### 3.14 🔴 `memory_get_usage`/`memory_get_peak_usage` = STUB costante (scoperta S-104, mutation-check fx20)
+
+`memory_get_usage()` di phpr restituisce una **costante** (2.000.000),
+qualunque sia lo stato reale dell'heap; scoperto NON dalla review ma dal
+mutation-check della fixture fx20 (Str→forget: il leak indotto non muoveva
+la cifra ⇒ verdetto in-script VACUO). Conseguenze già vincolate:
+
+- **KS-MA-106-1 (Concilio WP-106): nessun verdetto di fixture o gate può
+  poggiare su `memory_get_usage` finché è stub** — il verdetto di leak
+  vive nel braccio RSS del gate (fx20: cap 150 MiB, clean ~50 vs mutante
+  ~301).
+- Cura pre-approvata a **due gradini** (Stogov A-ST-106-1, KS-ST-106-1):
+  contatore per-thread TLS oppure interrogazione mi_* on-demand;
+  functional-parity DICHIARATA (mai byte-parity con Zend, i due heap
+  contano cose diverse); REFUTATI gli atomics process-global in release
+  (conflazionano i worker del server e tassano calls). Da eseguire SOLO
+  fuori dalla finestra di una leva.
+- Violazione del principio **correct-or-absent**: uno stub che mente è
+  peggio di un'assenza — la voce resta 🔴 finché il contatore non è vero.
+
+### 3.15 🔴 Variadic **by-ref** in chiamata diretta: aliasa solo il PRIMO argomento del pack (scoperta S-105, fixture fx21)
+
+`function vref(&...$rs) { foreach ($rs as &$r) { $r++; } }` con chiamata
+diretta `vref($m, $n)`: dentro la funzione ENTRAMBI gli elementi risultano
+incrementati, ma al ritorno **solo `$m` è mutato nel chiamante** (oracle
+`2 3`, phpr `2 2`). Trovata dal gate G3 (audit-fuga) della leva H-D args —
+NON è un effetto della leva (diverge sul pin 86a50d1c PRE-leva).
+
+- **Indiziato** (da lettura del codice, non ancora provato): il
+  compilatore lato CHIAMANTE decide push-Ref/push-Val per posizione con
+  `param_by_ref.get(i)`, che oltre `vslot` risponde `None` → le posizioni
+  variadiche successive alla prima viaggiano **by-value**; il binder
+  (`bind_params`, ramo `variadic_by_ref`) è corretto e appenderebbe le
+  Ref se arrivassero. La cura sta nel chiamante: posizioni `i >= vslot`
+  usano il flag di `vslot`.
+- La voce §(d) della saga WordPress (spread by-ref, `SEND_VAR_EX` sui
+  componenti) copre lo **spread** `f(...$arr)` e il dispatch dinamico;
+  questo caso è la chiamata DIRETTA con pack by-ref, mai censito prima.
+- Fixture repro: `wp105-harness/fixtures/fx21-args-window.php` riga 5
+  (le altre 7 righe sono byte-identiche all'oracle e fanno da guardia
+  della leva args).
+
 ## 4. Punti di forza da NON toccare (invarianti verificati byte-identici)
 
 Per evitare regressioni, questi comportamenti sono **già** byte-identici con
