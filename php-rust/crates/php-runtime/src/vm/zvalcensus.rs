@@ -340,5 +340,16 @@ pub fn dump_exit() {
             f,
             "alloccensus galloc_bytes={ab} gfree_bytes={fb} galloc_n={an} gfree_n={fn_}"
         );
+        // S-103 H-D (A-LE-104-1): realloc DISAGGREGATO + istogramma
+        // size-class degli alloc puri — righe NUOVE, la riga storica resta
+        // byte-identica (da S-103 galloc/gfree NON includono più i realloc).
+        let (rn, ro, rnew) = php_types::memcensus::realloc_counters();
+        let _ = writeln!(f, "realloccensus n={rn} old_bytes={ro} new_bytes={rnew}");
+        let h = php_types::memcensus::alloc_histogram();
+        let _ = writeln!(
+            f,
+            "allochist le16={} le32={} le48={} le64={} le96={} le128={} le256={} le512={} le1k={} le4k={} gt4k={}",
+            h[0], h[1], h[2], h[3], h[4], h[5], h[6], h[7], h[8], h[9], h[10]
+        );
     }
 }

@@ -1350,12 +1350,55 @@ static GA_FREE_N: AtomicU64 = AtomicU64::new(0);
 pub fn galloc_note(bytes: usize) {
     GA_ALLOC.fetch_add(bytes as u64, Relaxed);
     GA_ALLOC_N.fetch_add(1, Relaxed);
+    hist_note(bytes);
 }
 
 #[inline]
 pub fn gfree_note(bytes: usize) {
     GA_FREE.fetch_add(bytes as u64, Relaxed);
     GA_FREE_N.fetch_add(1, Relaxed);
+}
+
+// S-103 H-D (A-LE-104-1, RC-LE-104-7): il realloc DISAGGREGATO — contarlo
+// come alloc+free pieni fa apparire un realloc in-place come churn doppio
+// («2 alloc/35B» era esistenza, non cifra). Famiglia separata.
+static GA_REALLOC_N: AtomicU64 = AtomicU64::new(0);
+static GA_REALLOC_OLD: AtomicU64 = AtomicU64::new(0);
+static GA_REALLOC_NEW: AtomicU64 = AtomicU64::new(0);
+// Istogramma size-class degli ALLOC puri (bucket: ≤16 ≤32 ≤48 ≤64 ≤96
+// ≤128 ≤256 ≤512 ≤1k ≤4k >4k): «~35 B medio» diventa una distribuzione.
+pub const HIST_BUCKETS: [usize; 10] = [16, 32, 48, 64, 96, 128, 256, 512, 1024, 4096];
+static GA_HIST: [AtomicU64; 11] = [const { AtomicU64::new(0) }; 11];
+
+#[inline]
+fn hist_note(bytes: usize) {
+    let mut i = 0;
+    while i < HIST_BUCKETS.len() && bytes > HIST_BUCKETS[i] {
+        i += 1;
+    }
+    GA_HIST[i].fetch_add(1, Relaxed);
+}
+
+/// Un realloc: NON passa più da galloc/gfree (disaggregazione A-LE-104-1).
+#[inline]
+pub fn grealloc_note(old: usize, new: usize) {
+    GA_REALLOC_N.fetch_add(1, Relaxed);
+    GA_REALLOC_OLD.fetch_add(old as u64, Relaxed);
+    GA_REALLOC_NEW.fetch_add(new as u64, Relaxed);
+}
+
+/// (realloc_n, old_bytes, new_bytes) cumulativi.
+pub fn realloc_counters() -> (u64, u64, u64) {
+    (
+        GA_REALLOC_N.load(Relaxed),
+        GA_REALLOC_OLD.load(Relaxed),
+        GA_REALLOC_NEW.load(Relaxed),
+    )
+}
+
+/// L'istogramma size-class degli alloc puri (11 bucket, vedi HIST_BUCKETS).
+pub fn alloc_histogram() -> [u64; 11] {
+    std::array::from_fn(|i| GA_HIST[i].load(Relaxed))
 }
 
 /// Snapshot of the cumulative (allocated, freed) counters — the clone-delta

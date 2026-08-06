@@ -60,8 +60,9 @@ unsafe impl std::alloc::GlobalAlloc for CountingMi {
         std::alloc::GlobalAlloc::alloc_zeroed(&mimalloc::MiMalloc, layout)
     }
     unsafe fn realloc(&self, ptr: *mut u8, layout: std::alloc::Layout, new_size: usize) -> *mut u8 {
-        php_types::memcensus::galloc_note(new_size);
-        php_types::memcensus::gfree_note(layout.size());
+        // S-103 (A-LE-104-1): realloc DISAGGREGATO — mai più contato come
+        // alloc+free pieni (un in-place appariva churn doppio).
+        php_types::memcensus::grealloc_note(layout.size(), new_size);
         if let Some(p) = php_types::memcensus::scoped_realloc(ptr, new_size, layout.align()) {
             return p;
         }

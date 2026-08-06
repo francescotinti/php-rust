@@ -1,0 +1,44 @@
+hd-cifra-netta: S-103 punto 4 (KS-LE-104-1 / A-LE-104-1) — la CIFRA NETTA
+del canale alloc di calls, con realloc disaggregato e istogramma.
+grade=CENSUS  # conteggi esatti event-level; nessuna cifra cronometrica
+sessione=S-103 (2026-08-06 16:2x)
+strumento=build census (zval-census+mem-census) con realloc DISAGGREGATO
+  (grealloc_note: da S-103 galloc/gfree NON includono più i realloc —
+  riga storica invariata) + istogramma size-class
+giudice=wp97-harness/micro/calls.php ↔ calls_small.php; delta sulle
+  chiamate (l'avvio si cancella)
+
+# 🔵 CORREZIONE DI DENOMINATORE (trovata rileggendo il SORGENTE del
+# giudice prima di firmare la cifra): calls.php fa **20M iterazioni**
+# (for i<20000000, 1 chiamata/iter; l'out=20000000 è $s, non un doppio),
+# calls_small 100K. La cifra S-102 (`hd-census-secondo.out`) usava 10M
+# come denominatore ⇒ «~2 alloc + ~2 free/chiamata» era GONFIATA 2×;
+# per la stessa ragione i suoi «10 gc_note/iter» sono ~5/chiamata.
+# La correzione va propagata alla tavola bi-regime quando si scriverà.
+
+# raw (hd-census-out/{calls,calls_small}.census):
+#   calls (20M):       galloc_n=20.183.929 gfree_n=20.144.845
+#                      bytes=703.897.244 realloc_n=12.762
+#                      hist: le32=20.015.123 (dominante)
+#   calls_small (100K): galloc_n=283.929 gfree_n=244.845
+#                      bytes=67.097.374 realloc_n=12.760 hist: le32=115.116
+#
+# ---- LA CIFRA (delta / 19.900.000 chiamate) ----
+#   alloc/chiamata  = 19.900.000 / 19,9M = **1,0000 ESATTO**
+#   free/chiamata   = 19.900.000 / 19,9M = **1,0000 ESATTO** (bilanciato)
+#   realloc/chiamata= 2 eventi TOTALI (avvio) = **≡ 0** — il canale NON è
+#                     realloc: è UNA allocazione VERA per chiamata (il
+#                     sospetto di doppio conteggio RC-LE-104-7 è fugato)
+#   byte/chiamata   = 636.799.870 / 19,9M = **32,0 B ESATTI**
+#   size-class      = TUTTO nel bucket (16,32] B (Δ le32 = 19.900.007;
+#                     ogni altro bucket ≈ 0) — UNA allocazione uniforme
+#                     da 32 B per chiamata, mai una distribuzione
+# Linearità: 199:1 con rapporti identici alla quarta cifra.
+#
+# ---- che cosa questo SBLOCCA e che cosa NO ----
+# - La CIFRA NETTA è nominata: **1 alloc × 32,0 B + 1 free per chiamata,
+#   realloc ≡ 0** — metà del canale creduto in S-102.
+# - La LEVA resta GATED: serve l'attribuzione PER-SITO con residuo ≡ 0
+#   (SiteTag TL RAII, hd-prep-design.md §3) — UNA sola allocazione da
+#   32 B restringe gli indiziati (ret_cell Rc O args Vec da 2 Zval, non
+#   entrambi); il tag decide, non l'indizio.

@@ -140,8 +140,8 @@ pub mod mem_alloc {
             unsafe { mimalloc::MiMalloc.alloc_zeroed(l) }
         }
         unsafe fn realloc(&self, p: *mut u8, l: Layout, n: usize) -> *mut u8 {
-            php_types::memcensus::galloc_note(n);
-            php_types::memcensus::gfree_note(l.size());
+            // S-103 (A-LE-104-1): realloc disaggregato, come in php-cli.
+            php_types::memcensus::grealloc_note(l.size(), n);
             huge_note("realloc", n);
             unsafe { mimalloc::MiMalloc.realloc(p, l, n) }
         }
@@ -199,10 +199,7 @@ pub mod census_alloc {
             ALLOC_CALLS.fetch_add(1, Ordering::Relaxed);
             ALLOC_BYTES.fetch_add(n as u64, Ordering::Relaxed);
             #[cfg(feature = "mem-census")]
-            {
-                php_types::memcensus::galloc_note(n);
-                php_types::memcensus::gfree_note(l.size());
-            }
+            php_types::memcensus::grealloc_note(l.size(), n);
             unsafe { mimalloc::MiMalloc.realloc(p, l, n) }
         }
     }
