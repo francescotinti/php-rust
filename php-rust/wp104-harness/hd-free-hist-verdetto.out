@@ -1,0 +1,33 @@
+hd-free-hist-verdetto: S-104 punto 3 (A-LE-105-1/2) — il free-hist MISURATO
+contro le attese pre-registrate (hd-free-attese.out, commit b106d3a PRIMA
+del run).
+grade=CENSUS  # conteggi esatti event-level
+sessione=S-104 (2026-08-06 21:2x)
+strumento=build census phpr-census-target (zval-census+mem-census) con
+  freehist NUOVO (GA_FHIST, stessa bucketizzazione, realloc esclusi)
+giudice=calls.php (N=20M dal sorgente) ↔ calls_small.php (100K);
+  denominatore delta = 19.900.000 chiamate
+
+# raw (wp104-harness/hd-census-out/{calls,calls_small}.census):
+#   calls:  galloc_n=20.183.917 gfree_n=20.144.841 realloc_n=12.762
+#           allochist le32=20.015.119 · freehist le32=20.013.307
+#   small:  galloc_n=283.917 gfree_n=244.841 realloc_n=12.760
+#           allochist le32=115.112 · freehist le32=113.304
+
+# ---- VERDETTO vs ATTESE (tutte e 4 CONFERMATE) ----
+# A1 ✓ free/chiamata = (20.013.307-113.304)/19,9M = 19.900.003/19,9M =
+#      **1,0000** — TUTTO nel bucket (16,32]; ogni altro bucket Δ∈[-3,0]
+#      ≈ 0. Byte: (699.990.401-63.190.425)/19,9M = **32,0000 B** —
+#      SIMMETRICO all'alloc (636.799.976 vs 636.799.870 lato alloc).
+# A2 ✓ NESSUNA massa in (32,64] ⇒ il 40 B di Rc<RefCell<Zval>> NON è nel
+#      canale: **ret_cell escluso per layout E ADESSO per misura** —
+#      l'indiziato resta args-Vec cap 2 (2×16 = 32 B esatti).
+# A3 ✓ realloc: 12.762-12.760 = 2 eventi totali (avvio) ≡ 0 sul canale.
+# A4 ✓ linearità: le32 alloc Δ=19.900.007, free Δ=19.900.003 — quarta
+#      cifra; gfree_n Δ = galloc_n Δ = 19.900.000 ESATTI.
+#
+# Il free NON è più assunto: il canale calls è INCHIODATO a
+# **1 alloc × 32 B + 1 free × 32 B per chiamata, realloc ≡ 0**.
+# Resta GATED per la leva: SiteTag TL RAII con residuo ≡ 0
+# (hd-prep-design.md §3) — il tag DECIDE il sito (args-Vec vs altro),
+# l'indizio di layout+misura non promuove da solo. → S-105.

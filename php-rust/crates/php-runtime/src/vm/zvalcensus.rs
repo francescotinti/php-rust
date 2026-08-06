@@ -351,5 +351,13 @@ pub fn dump_exit() {
             "allochist le16={} le32={} le48={} le64={} le96={} le128={} le256={} le512={} le1k={} le4k={} gt4k={}",
             h[0], h[1], h[2], h[3], h[4], h[5], h[6], h[7], h[8], h[9], h[10]
         );
+        // S-104 H-D (A-LE-105-1): il free-hist misurato — riga NUOVA, le
+        // righe storiche restano byte-identiche.
+        let fh = php_types::memcensus::free_histogram();
+        let _ = writeln!(
+            f,
+            "freehist le16={} le32={} le48={} le64={} le96={} le128={} le256={} le512={} le1k={} le4k={} gt4k={}",
+            fh[0], fh[1], fh[2], fh[3], fh[4], fh[5], fh[6], fh[7], fh[8], fh[9], fh[10]
+        );
     }
 }

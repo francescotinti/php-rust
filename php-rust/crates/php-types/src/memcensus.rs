@@ -1357,6 +1357,9 @@ pub fn galloc_note(bytes: usize) {
 pub fn gfree_note(bytes: usize) {
     GA_FREE.fetch_add(bytes as u64, Relaxed);
     GA_FREE_N.fetch_add(1, Relaxed);
+    // S-104 H-D (A-LE-105-1): il free era ASSUNTO simmetrico all'alloc
+    // senza istogramma — ora la distribuzione lato free si MISURA.
+    fhist_note(bytes);
 }
 
 // S-103 H-D (A-LE-104-1, RC-LE-104-7): il realloc DISAGGREGATO — contarlo
@@ -1399,6 +1402,25 @@ pub fn realloc_counters() -> (u64, u64, u64) {
 /// L'istogramma size-class degli alloc puri (11 bucket, vedi HIST_BUCKETS).
 pub fn alloc_histogram() -> [u64; 11] {
     std::array::from_fn(|i| GA_HIST[i].load(Relaxed))
+}
+
+// S-104 H-D (A-LE-105-1): istogramma size-class dei FREE puri — stessa
+// bucketizzazione degli alloc, famiglia separata (i realloc restano fuori
+// da entrambe, disaggregazione A-LE-104-1).
+static GA_FHIST: [AtomicU64; 11] = [const { AtomicU64::new(0) }; 11];
+
+#[inline]
+fn fhist_note(bytes: usize) {
+    let mut i = 0;
+    while i < HIST_BUCKETS.len() && bytes > HIST_BUCKETS[i] {
+        i += 1;
+    }
+    GA_FHIST[i].fetch_add(1, Relaxed);
+}
+
+/// L'istogramma size-class dei free puri (stessi bucket degli alloc).
+pub fn free_histogram() -> [u64; 11] {
+    std::array::from_fn(|i| GA_FHIST[i].load(Relaxed))
 }
 
 /// Snapshot of the cumulative (allocated, freed) counters — the clone-delta
