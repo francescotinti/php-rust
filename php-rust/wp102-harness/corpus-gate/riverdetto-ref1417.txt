@@ -1,0 +1,6 @@
+ri-verdetto corpus S-102 contro riferimento AGGIORNATO (A-KL-104 capitale: il .done rc=2 fu emesso contro il riferimento VECCHIO 1418; questo file è il ri-giudizio ARCHIVIATO)
+data=2026-08-06 12:40:46
+ref=wp82-harness/p2-parity/corpus82p2.fails sha256=7371d3e4e70b20a1 righe=1417
+modo off: set IDENTICO al riferimento aggiornato (1417 nomi) — VERDE
+modo on: set IDENTICO al riferimento aggiornato (1417 nomi) — VERDE
+delta vs riferimento vecchio: SOLO nullsafe_operator/015.phpt RIMOSSO (miglioria fix §3.13, byte-id oracle verificato nei 2 modi — scratchpad t015)

@@ -1,0 +1,10 @@
+phpr=d0b01362433b3039
+10:55:02 corpus off (PHPR_REG_LOWER=0 esplicito): run
+pass rate (of runnable): 65.2% (2650/4067)
+failures: 1417
+11:01:45 corpus off: DIVERSO — diff in corpus-off.diff
+11:01:45 corpus on (PHPR_REG_LOWER=1 esplicito): run
+pass rate (of runnable): 65.2% (2650/4067)
+failures: 1417
+11:08:27 corpus on: DIVERSO — diff in corpus-on.diff
+11:08:27 CORPUS GATE DONE fails=2
