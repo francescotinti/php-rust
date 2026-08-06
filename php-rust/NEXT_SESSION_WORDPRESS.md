@@ -129,7 +129,8 @@ Tutti i NON-riproporre WP-83..100 restano. Nuovi da S-101:
   stesura: polarità di emit_binary dedotta dal riassunto ⇒ rosso; la
   polarità si legge nel codice).
 - **atteso contabile dal costo/evento del profilo a campioni** senza
-  dichiararlo banda LARGA: i simboli inlined sovracontano (~2× su H-C1b);
+  dichiararlo banda LARGA: l'attribuzione sugli inlined ha errore di
+  fattore ~2 A SEGNO IGNOTO (R-GR-103-1: n=1, mai «sovraconta» come legge);
   il costo/evento fa fede solo dall'A/B.
 - **misure VERDICT in finestra con burst remoto senza interleave**: la
   prima ri-baseline è stata VOID (spread 2,53 s); ABAB nella stessa
@@ -145,32 +146,62 @@ Tutti i NON-riproporre WP-83..100 restano. Nuovi da S-101:
 **Riscritto**: rotazione S-101 il 2026-08-06. Apertura/chiusura = skill
 `apri-sessione`/`chiudi-sessione`. Harness di sessione: `wp101-harness/`.
 
-## §S-102 — ORDINE (BOZZA della rotazione; il Concilio WP-103 lo giudica e lo fissa in `wp103-harness/verbali/SYNTHESIS.md`)
+## §S-102 — ORDINE DEFINITIVO (fissato dal Concilio WP-103, `wp103-harness/verbali/SYNTHESIS.md` §Ordine)
 
-Oggetto proposto: **le due gambe trasversali nominate dal profilo S-101 —
-la meccanica della pila operandi (~26,6%) e il canale emissione del
-ricevitore (3 clone LoadVar/iter)** — più il debito del punto 4.
+⚖️ **Concilio WP-103 (2026-08-06, su S-101 e programma S-102) —
+VINCOLANTE.** Indice + ricevute in `wp103-harness/COUNCIL_WP103_REVIEWS.md`
+(testi integrali SOLO in `verbali/`). 9/9, **nessun MI OPPONGO alle
+promozioni H-C1a/b** (Hoare le ha verificate sound sul codice); **5
+refutazioni capitali adottate**: (1) Pedersen — «se si tocca il server»
+confonde codice server con runtime ESEGUITO: il collaudo del pin è debito
+NON condizionato; (2) Leijen — «alloc/iter≈0» invisibile alle stats a
+pagine (cieche al churn): gamba alloc da rifare a mem-census; (3) Hejlsberg
+R-HE-103-1 — la metà emissione del dente absent≡`=1` è `f(x)==f(x)`
+(tautologia): serve la coppia in SOTTOPROCESSO col dump-diff; (4) Gregg
+R-GR-103-1 — «gli inlined sovracontano» refutata come legge (n=1, segno
+ignoto); (5) Matsakis — «strong_count non osservabile» è FALSO (≥6
+osservatori a conteggio assoluto nel VM): INV-RECV-1 da nominare e auditare
+PRIMA di ogni ESTENSIONE del move. Il «26,6% pila operandi» è DICHIARATO
+poroso: arbitro = census push/pop; VIETATO derivarne attesi (KS congiunto
+Bak+Gregg). Nuova candidata NOMINATA: **H-C2 drop fast-out scalare**
+(~11 drop/iter, banda [8,22] ns/iter, pavimento ½ con motivazione a segno
+ignoto). Ordine:
 
-1. **Punto 4 WP-102 (debito)**: A/B pin S-99↔S-100 stessa-sera (R≥5,
-   mediane, bande unilaterali sul rumore ~10% misurato) PRIMA del bisect.
-2. **Ipotesi PILA OPERANDI (da iscrivere col SUO nome)**: census del
-   traffico push/pop per categoria (contatore nel census build) +
-   controfattuale contato PRIMA di ogni forma (es. slot-diretti al posto
-   del round-trip in pila per gli operandi dei Prop-op — è EMISSIONE:
-   dump-diff, non cronometro, come primo giudice).
-3. **Canale emissione ricevitore**: i 3 clone LoadVar/iter dello stesso
-   `$o` — forma candidata: PropGet/PropSet a SLOT-OPERANDO (à la forme
-   registro) che leggono il ricevitore dallo slot senza transitare dalla
-   pila; controfattuale = 3 coppie × costo A/B (~2 ns/coppia MISURATO in
-   S-101, non stimato).
-4. **H-D tavola completa**: census call-path bi-regime (nominare i 3
-   gc_note/iter + i canali fuori read_slot) + profilo co-equale calls.
-5. **Denti residui**: sentinella server sul pin 2c4242b6 (se si tocca il
-   server); `cargo check --features zval-census` in batteria (protegge i
-   moduli feature-gated); fixture per specie per H-C1c (A-BA-102-3).
-6. (timebox) fix §3.13/§3.11 famiglia fetch-undef (A-ST-102-1/2) SE una
-   leva tocca quel percorso.
+1. **Collaudo php-server 2c4242b6** (debito NON condizionato, A-PE-103-1/2):
+   sentinella estesa bimodale + mode-probe + dente capture-boundary (output
+   da __destruct, ≥2 richieste stesso worker, byte-id); niente cifre server
+   né nuove build prima del grado (A-PE-103-3).
+2. **Guardie della famiglia MOVE** (bloccano l'ESTENSIONE, non la promozione
+   fatta): audit INV-RECV-1 dei ≥6 osservatori assoluti di `strong_count`
+   (esito per NOME) + fixture mancanti (destruct-reenter-PropSet,
+   typed-write-coercion, clone, lazy-init-drop-ultima-ref, gc-mid-arm) +
+   predicato unico `is_gc_container` esaustivo a due livelli
+   (Hoare A-HO-103-1 ∘ Stogov A-ST-103-5).
+3. **Misura peak (punto 4 WP-102 emendato)**: banda rumore full-peak della
+   gamba PHPR (R≥5, ABAB, mediana+spread) PRIMA; poi A/B pin S-99↔S-100 a
+   modo FISSATO off/off (A-LE-103-2); bande UNILATERALI; spread ≥48 MiB ⇒
+   bisect VIETATO (KS-LE-103-2).
+4. **Census pila operandi** (push/pop per sito-opcode e primitiva,
+   A-BA-103-1/A-GR-103-3) + leva-nulla di taratura (A-BA-103-4); SOLO POI:
+   H-C2 col suo criterio, e l'eventuale riscrittura slot-diretti (oggi
+   INAMMISSIBILE: il controfattuale bozza DOPPIO-CONTAVA un canale già
+   eliminato dal move — Matsakis; dump-diff come primo giudice — Hejlsberg).
+5. **Denti e igiene**: dente absent≡`=1` in SOTTOPROCESSO col dump-diff
+   (A-HE-103-3, sostituisce la metà tautologica); tripwire ON su corpo-zoo
+   fuori-funnel (A-HE-103-1); gate fixture pinnato a **13 per NOME o VOID**
+   (A-KL-103-2); expected-diff §3.13 a path normalizzato (A-KL-103-3);
+   gamba alloc a mem-census (A-LE-103-1).
+6. (timebox) **fix §3.13 fedele** (riga timbrata all'ACCODAMENTO come
+   opline della lettura, A-ST-103-4 — il fix CANCELLA la carve-out) + H-D
+   tavola completa se resta finestra. **H-C1c resta GATED** su
+   fixture/giudici per specie (KS-KL-103-1, A-ST-103-6).
 
-Pre-flight S-102: pin phpr **48a5d4384970d8ff** @ HEAD f808017 (fa fede
-HEAD) · php-server **2c4242b6c8120b8e** (NON collaudato) · corpus 1418 per
-NOME nei 2 modi SUL PIN · default flag-ON · debug/ si rigenera: rimuoverla.
+BACKLOG per NOME: A-HO-103-2 (Generator, prima birth-track), A-HO-103-3
+(feature-check col morso dimostrato), A-HE-103-2 (budget `enabled()`),
+A-MA-103-2 (assert no-Ref-wrapper nei path prop), 21,2% run_loop senza nome
+(dopo census pila), A-KL-103-1 (staging per file nominati).
+
+Pre-flight S-102: pin phpr **48a5d4384970d8ff** @ HEAD (fa fede HEAD) ·
+php-server **2c4242b6c8120b8e** (NON collaudato — punto 1) · corpus 1418
+per NOME nei 2 modi SUL PIN · default flag-ON · debug/ si rigenera:
+rimuoverla.

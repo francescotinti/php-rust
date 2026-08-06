@@ -55,11 +55,12 @@ pushati.
 - ⭐⭐ **Il census dinamico è un giudice, non una conferma**: due predizioni
   statiche su tre corrette in dettaglio (3 load non 2; 4 gc_note non 3) —
   ogni atteso contabile costruito sullo statico avrebbe sbagliato bersaglio.
-- ⭐⭐ **L'attribuzione a campioni sui simboli inlined SOVRASTIMA il costo
-  per evento** (banda H-C1b [7,20] vs 6,0 misurato): il controfattuale si
-  scrive dal canale contato, ma il costo/evento va preso come banda larga
-  finché non c'è l'A/B — la refutazione della banda si registra, non si
-  nasconde.
+- ⭐⭐ **L'attribuzione a campioni sui simboli inlined ha un errore di
+  fattore ~2 A SEGNO IGNOTO** (banda H-C1b [7,20] vs 6,0 misurato; la
+  forma «sovraconta» è stata refutata come legge dal Concilio WP-103,
+  R-GR-103-1: n=1): il controfattuale si scrive dal canale contato, il
+  costo/evento fa fede solo dall'A/B — e la refutazione della banda si
+  registra, non si nasconde.
 - ⭐⭐ **A/B interleaved contro il rumore remoto**: coi burst di Chrome
   Remote Desktop, alternare ABAB nella stessa finestra ha dato spread 0,04
   dove la prima finestra sequenziale era VOID (2,53).
