@@ -45,6 +45,19 @@ macro_rules! dcn {
     ($($t:tt)*) => {};
 }
 
+// S-103 leva-nulla (A-BA-103-4 → KS-BA-104-2, design in
+// wp103-harness/hc2-prep-design.md §1): perturbazione di LAYOUT
+// semanticamente NULLA — mai chiamata, #[no_mangle] la tiene nel testo,
+// #[inline(never)] la tiene FUORI dai sentieri. Il |Δ| misurato sul
+// giudice tra pin e build `--features null-lever` È la banda-layout:
+// nessun A/B micro è giudicabile sotto quella banda.
+#[cfg(feature = "null-lever")]
+#[inline(never)]
+#[no_mangle]
+pub extern "C" fn phpr_null_lever_pad() -> u64 {
+    std::hint::black_box(0xC0FF_EEu64)
+}
+
 /// A file op that a userland stream wrapper (`stream_wrapper_register`) can
 /// service via its `stream_*` methods, if its first argument is a `UserStream`.
 fn is_user_stream_op(name: &[u8]) -> bool {

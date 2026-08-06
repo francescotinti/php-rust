@@ -21,6 +21,9 @@ zval-census = ["php-runtime/zval-census"]
 # arm — the prerequisite for judging A-BB1 (the alloc A/B needed counters on
 # BOTH arms; exit stats were never going to exist on this one, KG-79.B).
 census-instrumentation = ["php-runtime/census-instrumentation"]
+# S-103 leva-nulla (KS-BA-104-2): braccio B dell'A/B di taratura layout —
+# una pad function mai chiamata accanto a run_loop. Mai parità.
+null-lever = ["php-runtime/null-lever"]
 
 [dependencies]
 php-types.workspace = true

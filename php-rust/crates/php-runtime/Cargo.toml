@@ -34,6 +34,12 @@ census-instrumentation = []
 # parity/campaign feature: a build without it does not CONTAIN the probe
 # symbol, so KH85-1's "pub mint reachable outside tests" cannot recur.
 vm-gate-probe = []
+# S-103 leva-nulla (A-BA-103-4 → KS-BA-104-2, Council WP-104): a
+# SEMANTICALLY NULL text-layout perturbation — one never-called
+# #[inline(never)] #[no_mangle] pad function next to run_loop. Build arm B
+# of the layout A/B with this feature; arm A is the pin. Never a parity
+# feature; the measured |Δ| on the giudice IS the layout noise band.
+null-lever = []
 
 [dependencies]
 php-types.workspace = true
