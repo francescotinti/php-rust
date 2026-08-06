@@ -629,6 +629,12 @@ pub enum Op {
     /// assign-and-discard tails `Binary,StoreSlot` and
     /// `Binary,Dup,StoreSlot,Pop` collapse here.
     BinaryDst { op: BinOp, dst: u16 },
+    /// `[r] -> []` — `slots[l] ⊕ pop`, result sunk into `slots[dst]`: the
+    /// compound-assign prefix `LoadSlot(l), Swap` fused over `BinaryDst`
+    /// (S-106 leva H-A1, `wp106-harness/ha1-criterio.out`). Semantics are
+    /// BinaryDst's by construction: same silent `read_slot` lhs read, same
+    /// `binary_value_ab`, same `reg_store_slot` sink.
+    BinarySTDst { op: BinOp, l: u16, dst: u16 },
     /// `[] -> []` — compare `slots[l] <op> slots[r]`, jump to `addr` when
     /// the boolean equals `when` (same contract as [`Op::CmpJmp`]).
     CmpJmpSS { op: BinOp, l: u16, r: u16, addr: Addr, when: bool },

@@ -35,12 +35,14 @@ pub enum Site {
     PropGet = 11,
     PropSet = 12,
     Other = 13,
+    /// S-106 leva H-A1: la fusione RMW-su-slot (LoadSlot;Swap;BinaryDst).
+    BinarySTDst = 14,
 }
-pub const SITES: usize = 14;
+pub const SITES: usize = 15;
 pub const SITE_NAMES: [&str; SITES] = [
     "Pop", "Swap", "LoadSlot", "LoadVar", "PushConst", "IncDecSlot",
     "BinaryAdd", "BinaryDst", "CmpJmpSC", "Sweep", "Jump", "PropGet",
-    "PropSet", "Other",
+    "PropSet", "Other", "BinarySTDst",
 ];
 
 /// Primitive di pila a livello SORGENTE (gli `as_slice`/`ptr::read` del

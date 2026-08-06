@@ -1204,6 +1204,33 @@ impl<'m> super::Vm<'m> {
                     dcn!(BinaryDst: &self.frames[top].slots[*dst as usize]);
                     self.reg_store_slot(top, *dst, res)?;
                 }
+                Op::BinarySTDst { op: b, l, dst } => {
+                    // S-106 leva H-A1 (ha1-criterio.out): fonde il tris
+                    // `LoadSlot(l); Swap; BinaryDst{op,dst}` del compound
+                    // assign. Semantica IDENTICA per costruzione: stessa
+                    // read_slot silenziosa (lhs), stessi binary_value_ab e
+                    // reg_store_slot del braccio BinaryDst — la fusione
+                    // elide solo dispatch e transiti di pila.
+                    #[cfg(feature = "zval-census")]
+                    super::zvalcensus::note_slot_load_site(func, ip, &self.frames[top].slots[*l as usize]);
+                    #[cfg(feature = "zval-census")]
+                    super::zvalcensus::note_recv_load(&self.frames[top].slots[*l as usize]);
+                    scn!(BinarySTDst: op);
+                    scn!(BinarySTDst: Pop = 1);
+                    let rhs = self.frames[top].stack.pop().expect("BinarySTDst rhs");
+                    let lhs = read_slot(&self.frames[top].slots[*l as usize]);
+                    #[cfg(feature = "zval-census")]
+                    {
+                        super::zvalcensus::note_prop_val(2, &lhs);
+                        super::zvalcensus::note_prop_val(2, &rhs);
+                    }
+                    dcn!(BinarySTDst: &lhs); // consumati da binary_value_ab
+                    dcn!(BinarySTDst: &rhs);
+                    let res = self.binary_value_ab(*b, lhs, rhs)?;
+                    // il valore corrente del dst muore nello store
+                    dcn!(BinarySTDst: &self.frames[top].slots[*dst as usize]);
+                    self.reg_store_slot(top, *dst, res)?;
+                }
                 Op::CmpJmpSS { op, l, r, addr, when } => {
                     let res = 'r: {
                         {

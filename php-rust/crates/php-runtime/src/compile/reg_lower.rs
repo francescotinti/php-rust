@@ -130,7 +130,7 @@ fn visit_addrs(op: &mut Op, f: &mut impl FnMut(&mut Addr)) {
         | Op::ParkReturn { .. } | Op::Binary { .. } | Op::BinaryAdd { .. }
         | Op::Unary { .. } | Op::Cast { .. } | Op::BinarySS { .. }
         | Op::BinarySSDst { .. } | Op::BinarySC { .. } | Op::BinarySCDst { .. }
-        | Op::BinaryDst { .. } | Op::ConcatN { .. } | Op::Echo { .. }
+        | Op::BinaryDst { .. } | Op::BinarySTDst { .. } | Op::ConcatN { .. } | Op::Echo { .. }
         | Op::Print { .. } | Op::Stringify { .. } | Op::ArrayInit { .. }
         | Op::ArrayPush { .. } | Op::ArrayInsert { .. }
         | Op::ArrayAppendSpread { .. } | Op::CallArgs { .. } | Op::FetchDim { .. }
@@ -302,6 +302,11 @@ pub(super) fn lower_func(f: &mut Func) {
 enum BinKind {
     SS(u16, u16),
     SC(u16, u16),
+    /// lhs from `LoadSlot` (silent read), rhs from the stack — the
+    /// compound-assign prefix `LoadSlot(l), Swap` (S-106 leva H-A1).
+    /// Fuses ONLY with an assign-and-discard tail: there is no bare
+    /// `BinaryST` value form by choice (minimal lever, ha1-criterio.out).
+    ST(u16),
     Stack,
 }
 
@@ -342,7 +347,8 @@ fn bin_op_of(op: &Op) -> Option<BinOp> {
         | Op::Jump { .. } | Op::JumpIfFalse { .. } | Op::JumpIfTrue { .. }
         | Op::CmpJmp { .. } | Op::CmpJmpConst { .. } | Op::BinarySS { .. }
         | Op::BinarySSDst { .. } | Op::BinarySC { .. } | Op::BinarySCDst { .. }
-        | Op::BinaryDst { .. } | Op::CmpJmpSS { .. } | Op::CmpJmpSC { .. }
+        | Op::BinaryDst { .. } | Op::BinarySTDst { .. }
+        | Op::CmpJmpSS { .. } | Op::CmpJmpSC { .. }
         | Op::ConcatN { .. } | Op::JumpIfNotNull { .. } | Op::JumpIfNull { .. }
         | Op::Echo { .. } | Op::Print { .. } | Op::Stringify { .. }
         | Op::ArrayInit { .. } | Op::ArrayPush { .. } | Op::ArrayInsert { .. }
@@ -466,6 +472,23 @@ fn fuse_window(f: &Func, blocked: &[bool], i: usize) -> (Op, usize) {
             }
         }
     }
+    // [LoadSlot, Swap, Binary] — RMW su slot (S-106 leva H-A1): il prefisso
+    // lhs-da-slot del compound assign `$s <op>= expr`. EMENDAMENTO DICHIARATO
+    // (S-106-R-3) della regola v3 «LoadSlot never folded»: quella regola
+    // presumeva LoadSlot FREDDO e il dump del giudice arith la refuta (è il
+    // read del compound assign nel corpo caldo). La lettura è SILENZIOSA per
+    // contratto — nessun warning da risintetizzare ⇒ il fold è
+    // diagnostic-safe. Fonde SOLO con coda assign-and-discard (BinKind::ST
+    // senza coda non fonde: nessuna forma value).
+    if let Op::LoadSlot(l) = &f.ops[i] {
+        if *l <= u16::MAX as u32 && free(i + 1) && free(i + 2) {
+            if matches!(f.ops[i + 1], Op::Swap) {
+                if let Some(op) = bin_op_of(&f.ops[i + 2]) {
+                    return bin_dst(f, &free, i, 3, BinKind::ST(*l as u16), op);
+                }
+            }
+        }
+    }
     // Bare Binary: wins only with an assign-and-discard tail.
     if let Some(op) = bin_op_of(&f.ops[i]) {
         return bin_dst(f, &free, i, 1, BinKind::Stack, op);
@@ -509,6 +532,9 @@ fn bin_dst(
             (Op::BinarySCDst { op, slot, cidx, dst }, w + e)
         }
         (BinKind::SC(slot, cidx), None) => (Op::BinarySC { op, slot, cidx }, w),
+        // H-A1: senza coda la finestra ST NON fonde (nessuna forma value).
+        (BinKind::ST(l), Some((dst, e))) => (Op::BinarySTDst { op, l, dst }, w + e),
+        (BinKind::ST(_), None) => (f.ops[i].clone(), 1),
         (BinKind::Stack, Some((dst, e))) => (Op::BinaryDst { op, dst }, w + e),
         (BinKind::Stack, None) => (f.ops[i].clone(), 1),
     }

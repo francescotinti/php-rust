@@ -1,0 +1,45 @@
+S-106 punto 5 — VERDETTO A/B leva H-A1 (arith RMW-su-slot, BinarySTDst)
+Criterio: ha1-criterio.out (pre-registrato e committato 60448b3 PRIMA
+di ogni implementazione e misura). Data: 2026-08-07 01:2x–01:3x.
+
+A = pin phpr d4d0fa5217515dd9 (stash phpr-s105, byte-verificato)
+B = build leva fcda5e4fa2b529f5 (hash₁ pre-batteria)
+Giudice: arith.php 50M iter, user CPU netta del pavimento PER-binario,
+interleaved ABAB (mai burst).
+
+CO-PRIMARIO STRUTTURALE (verificato PRIMA del timing):
+- dump ON: corpo del loop 11 → 9 op per NOME — spariti LoadSlot(0),
+  Swap, BinaryDst{Add,0}; presente BinarySTDst{Add, l:0, dst:0}.
+- dump OFF: sequenza INVARIATA (la finestra vive solo nel pass).
+- valore: 13749900000 = oracle (parità del giudice).
+
+ADMISSION-DISASM (D-4, dichiarata):
+- run_loop 257.956 → 257.828 B (−128 B: CALA con un braccio in più;
+  riferimento R-2 S-104 257.632, margine +4 KB lontano).
+- bl_totali 5416 → 5418 (+2); istogramma con ±1–2 su sei target
+  (grow_one −1, drop_slow −2, bounds_check +2, panic_in_cleanup −2,
+  clone +2, expect_failed +1) = RIMESCOLO D'INLINER DICHIARATO:
+  nessun claim «nessun flip», nessuna componente di costo citabile da
+  questo A/B (KS-BA-106-1, D-1/D-2).
+
+SMOKE R=2 (D-7): A 5,31/5,32 · B 5,00/4,99 → 2/2 segno atteso,
+niente early-stop.
+
+PIENO R=5 (ABAB):
+A: 5,34 5,33 5,31 5,38 5,34  → mediana 5,34 (spread 0,07)
+B: 4,97 4,98 4,99 5,02 5,00  → mediana 4,99 (spread 0,05)
+Δ per coppia: +0,37 +0,35 +0,32 +0,36 +0,34 → SEGNO CONCORDE 5/5
+Δ mediana = 0,35 s / 50M = **+7,0 ns/iter**
+
+VERDETTO (regola pre-registrata): Δ=7,0 ≥ max(pavimento 4; rumore
+max(1,4; 3,5)=3,5; layout 0,67) E 5/5 concorde ⇒ **PROMOSSA**.
+Rapporto arith atteso: 4,99/0,43 ≈ 11,6 (da 12,4) — la cifra
+UFFICIALE la emette il micro R=5 sul pin di chiusura (PIN-106).
+Nota (lezione S-105 confermata): l'orientativa «−2 dispatch su 11»
+NON prezzava il singolo dispatch; il Δ misurato è il fatto, la
+scomposizione per-op resta NON citabile.
+
+SEGUE (stessa notte): PIN-106 con D-17 — batteria (rc E conteggio
+stessa run) → re-hash₂ → stash phpr-s106 → fixture 13+5+19a/b+fx20v2
++fx21-gate → corpus 1417×2 per NOME → micro R=5 sul pin + taglia
+run_loop + micro su hash₁ se churn (R-1).

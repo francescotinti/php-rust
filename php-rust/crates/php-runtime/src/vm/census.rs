@@ -13,7 +13,7 @@ use crate::bytecode::Op;
 use crate::hir::BinOp;
 use php_types::Zval;
 
-pub const N_OPS: usize = 186;
+pub const N_OPS: usize = 187;
 
 pub const OP_NAMES: [&str; N_OPS] = [
     "PushConst", "Pop", "Dup", "LoadSlot", "LoadVar", "PushUndef", "StoreSlot", "Swap",
@@ -40,7 +40,7 @@ pub const OP_NAMES: [&str; N_OPS] = [
     "Exit", "SuppressBegin", "SuppressEnd", "Sweep", "ThisPropGet", "CmpJmpConst", "ConcatN",
     "ThisMethodCall", "Nop", "ConcatAssignSlot",
     "BinarySS", "BinarySSDst", "BinarySC", "BinarySCDst", "BinaryDst", "CmpJmpSS", "CmpJmpSC",
-    "BinaryAdd",
+    "BinaryAdd", "BinarySTDst",
 ];
 
 pub fn op_index(op: &Op) -> usize {
@@ -238,6 +238,7 @@ pub fn op_index(op: &Op) -> usize {
         Op::CmpJmpSS { .. } => 183,
         Op::CmpJmpSC { .. } => 184,
         Op::BinaryAdd => 185,
+        Op::BinarySTDst { .. } => 186,
     }
 }
 
