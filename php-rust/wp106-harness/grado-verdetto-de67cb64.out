@@ -1,0 +1,51 @@
+S-106 — VERDETTO grado PIENO php-server de67cb6466acb030 (A-PE-107-1)
+Data: 2026-08-07 00:37–00:43
+
+ESITO: PIN DECADUTO PER DIFETTO DI RICETTA (non per proroga: il
+tentativo di grado È STATO ESEGUITO come primo atto, prima di ogni
+cifra server e di ogni build — proroga A-PE-107-1 SPESA e onorata).
+
+FATTI:
+- Chain lanciato detached 00:37 (pre-flight A-PE-107-2 OK: MySQL wp8
+  su, STATE assente, 2876G liberi). Doppio pin gate FAIL-CLOSED
+  PASSATO: stash php-server-s105 = de67cb6466acb030, phpr =
+  d4d0fa5217515dd9.
+- Gamba A (sentinella estesa, modo off): FAIL fails=5 — TUTTE le
+  risposte vuote + mode-probe morto. Causa nel srv.log, UNA riga:
+      php-server: --axum requires 'axum-server' feature
+- Diagnosi: il binario stashato in S-105 è una build workspace SENZA
+  `--features axum-server` — l'ESATTO artefatto che la dottrina S-102
+  dichiara «effetto collaterale ... NON è un pin e non si registra».
+  Conferma indipendente dalla taglia: 17,2M (come php-server-wp94 e
+  -s97, pre-axum) contro 18,5–18,6M di tutti i pin con ricetta
+  (s99..s103). In S-105 il grado fu rinviato: nessun collaudo aveva
+  mai eseguito questo binario.
+- Il difetto è dell'ARTEFATTO, non del runtime: il codice a HEAD è
+  quello del pin phpr d4d0fa52 (batteria 1740/0, corpus 1417×2).
+
+COLLATERALE RACCOLTO PRIMA DELLO STOP (gamba B, phpr-CLI — gradata
+dal pin phpr per KS-PE-107-1, quindi valida come parità CLI):
+- option modo off: IDENTICO per NOME (413 nomi), assert conteggi↔nomi
+  OK.
+- restapi oracle completato (3508 test dichiarati); phpr restapi
+  interrotto dallo stop (nessun verdetto).
+
+AZIONI:
+- Chain fermato 00:43 (verdetto della gamba A già deciso: inutile
+  bruciare ~2h su un binario che non serve HTTP). Uploads: restore
+  VERIFICATO (count=3), STATE pulito.
+- Cura (dottrina S-103, «build con ricetta + collaudo del pin NUOVO»):
+  cargo build --release -p php-server --features axum-server a HEAD;
+  pin phpr riverificato INVARIATO dopo la build; stash
+  php-server-s106; PIN_SRV_ATTESO.txt aggiornato; chain RILANCIATO
+  sul pin nuovo. Il grado si fa UNA volta, sul binario giusto.
+
+REGISTRO: de67cb6466acb030 va marcato DECADUTO/NON-PIN in
+PIN_REGISTRY; «server NON misurato» resta lo stato dei report finché
+il pin nuovo non è gradato PIENO (KS-PE-107-3).
+
+LEZIONE (candidata ⭐⭐): lo stash di un binario NON collaudato può
+stashare il difetto insieme al binario — l'hash pinna l'identità, non
+la RICETTA: il pin di un server si registra solo con la ricetta nel
+verbale della build (già dottrina S-100/S-102, violata in S-105 dal
+«ricostruito + stash» senza feature).
