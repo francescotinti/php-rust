@@ -141,22 +141,61 @@ Tutti i NON-riproporre WP-83..102 restano. Nuovi da S-103:
 **Riscritto**: rotazione S-103 il 2026-08-06. Apertura/chiusura = skill
 `apri-sessione`/`chiudi-sessione`. Harness di sessione: `wp103-harness/`.
 
-## §S-104 — ORDINE (BOZZA pre-concilio; il Concilio WP-105 lo emenda e VINCOLA)
+## §S-104 — ORDINE DEFINITIVO (Concilio WP-105, `wp105-harness/verbali/SYNTHESIS.md` — VINCOLANTE)
 
-1. **Verdetto A/B R=7** (lettura + audit finestra — le regole sono GIÀ
-   nel launcher; se VOID di nuovo: ridisegno della metrica, non un terzo
-   rerun cieco).
-2. **LEVA H-C2** (drop fast-out scalare, zero prefissi davanti):
-   implementazione col predicato unico → A/B DA SOLA vs
-   `hc2-criterio.out` → gate pieno (fixture 13+5+19 + batteria + corpus
-   1417×2 + **coppia WP bimodale**, che salda anche il debito S-103).
-3. **H-D SiteTag** (residuo≡0) → attribuzione della 1×32,0 B → leva solo
-   se la cifra la giustifica dal SUO criterio pre-registrato.
-4. **Generator-in-cycle**: decidere fedeltà (container+descend / birth-
-   track) o assenza consapevole — la fixture rossa arbitra; catalogare.
-5. **Igiene (timebox ½)**: banda tra-sere punto 3/3 · tavola bi-regime
-   calls corretta ×½ · censimento gc_note calls (~5/chiamata) ·
-   21,2% run_loop (se il concilio la ordina).
+⚖️ **Concilio WP-105 (2026-08-06, su S-103 e programma S-104)**. Indice +
+ricevute in `wp105-harness/COUNCIL_WP105_REVIEWS.md` (testi SOLO in
+`verbali/`). 9/9 CON EMENDAMENTI, nessun MI OPPONGO. **REFUTAZIONE
+CAPITALE CONVERGENTE (Hoare∧Bak, indipendenti): il criterio H-C2 chiavava
+il fast-out su `is_gc_container` — ma Str/Resource/Generator sono `false`
+con Drop NON banale ⇒ leak di ogni stringa poppata, invisibile al giudice
+prop.** Più: §3.12 ha TRE regimi e 🔵 la marca §3.13 perde l'UNITÀ su
+include/eval (divergenza NUOVA provata, Stogov); parity-null va PROVATO
+funzionale+strumentale sul pin di chiusura (Klabnik); 32,0 B è soffitto
+solo-alloc (Leijen); banda tra-sere 2 punti stesso giorno = 1 (Gregg);
+«un arbitro mai visto fallire non arbitra» (Matsakis). Ordine:
+
+1. **Verdetto A/B R=7** con la regola di lettura PRE-REGISTRATA in
+   SYNTHESIS §Regola-di-lettura (tetto R-coerente/IQR; |Δ| E sign test
+   CO-PRIMARI; direzione senza magnitudine ≠ bisect; **R=7 = ULTIMO
+   tentativo full-peak: VOID ⇒ metrica inadatta, per-fase DOPO la leva,
+   MAI terzo rerun**).
+2. **LEVA H-C2 — NON NEGOZIABILE (KS-GR-105-1: senza il suo A/B ESEGUITO,
+   contatore anomalia = 3 ⇒ WP-106 riallocazione obbligatoria)**:
+   a. atto zero ~30′: emenda criterio — predicato **`is_trivial_drop`**
+      (true SOLO Undef/Null/Bool/Long/Double + ArgPlace/WeakHandle
+      classificati ESPLICITI, match esaustivo) + **`dispose(v)` unico**
+      + align/fingerprint Zval nel criterio (KS-HE-105-1);
+      **KS-HO-105-1 ≡ KS-BA-105-1: fast-out su `!is_gc_container` =
+      reject senza appello**;
+   b. prefisso disasm ~30′ (A-BA-105-2): drop_in_place outlined? l'esito
+      RINOMINA la banda [8,22] (mai misurata al numeratore); A/B senza
+      verdetto disasm = VOID;
+   c. denti DENTI-105 nella finestra: mutation-check 19a/19b col ROSSO
+      ARCHIVIATO (pre-atto, KS-MA-105-1) + `==1` per-corpo + `=0` col
+      controllo POSITIVO + dente panic-su-container nel fast path;
+   d. implementazione → **A/B DA SOLA** (Δ≥8 ns/iter ⇒ R=5; Δ∈[4,8) ⇒
+      R≥9 + segno stabile; sotto max(banda-layout, rumore ~3) ⇒ registra
+      e chiudi il braccio);
+   e. gate pieno con **regola PIN-105** (pin bilaterale ANCHE oracle;
+      sequenza atomica build→hash→STASH→batteria→fixture→corpus×2;
+      «gradato» senza stash contestuale = retroattivamente NON-gradato):
+      fixture 13+5+19 + stringhe-in-Pop + batteria + corpus 1417×2 +
+      **coppia WP bimodale** (salda il debito S-103).
+3. **H-D**: free-histogram + attese byte-per-tipo PRE-registrate
+   (A-LE-105-1/2; 40 B = Rc<RefCell<Zval>> ⇒ ret_cell escluso per
+   layout, indiziato = args-Vec) → SiteTag residuo≡0 → attribuzione;
+   ogni cifra per-iter cita l'N EMESSO dal run (KS-GR-105-2).
+4. **Igiene (timebox ½)**: catalogo SUBITO — tre regimi §3.12 (strict e
+   `.=` CONSERVANO), unit §3.13 + probe include/eval, symlink-docroot;
+   N emesso dal giudice micro; terzo punto banda su GIORNO distinto;
+   A-HO-105-2/3/4; fixture 19c/zoo hook se entra.
+5. **BACKLOG per NOME**: A-MA-105-3 ledger fine-vita; banda-layout N≥3
+   (solo se Δ marginale, dentro la campagna); rc 0/1/66; design per-fase
+   A-LE-105-5; grado PIENO server + A-PE-105-1/3/4 sul pin post-leva;
+   fix generator get_gc COMPLETO / fix §3.12 catena-UNDEF (solo se
+   punto-fedeltà scelto, coi loro KS); 21,2% run_loop (subordinato alla
+   leva).
 
 Pre-flight S-104: pin phpr **f45a5d199ab34132** @ HEAD (fa fede HEAD) ·
 server **31aa7c2e** gradato · corpus 1417 per NOME ×2 SUL PIN · default
