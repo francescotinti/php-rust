@@ -92,6 +92,11 @@ const _: () = assert!(
 // against THIS size — a lever that changes it must fail loudly here
 // (criterion VOID by construction), never drift silently.
 const _: () = assert!(std::mem::size_of::<Zval>() == 16);
+// KS-HE-105-1 (Council WP-105, S-104): size alone does not pin the layout —
+// the H-C2 criterion also records align and the definition fingerprint
+// (wp104-harness/hc2-criterio-v2.out); a repack at constant size must not
+// drift silently either.
+const _: () = assert!(std::mem::align_of::<Zval>() == 8);
 
 /// Storage representation, mirroring Zend's packed/mixed hash split
 /// (invisible to programs; the split only changes memory/CPU costs).

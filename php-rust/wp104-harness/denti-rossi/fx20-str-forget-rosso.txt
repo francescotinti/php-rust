@@ -1,0 +1,6 @@
+phpr_pin=181d7a75f55183fc oracle_pin=07b0df8d63247695 (bilaterale, verificato)
+mode-probe OK (on=registri, off=pila)
+rss_on_MiB=301 (cap 150)
+FAIL fx20-stringhe-in-pop:on (RSS 301 >= cap 150: LEAK)
+rss_off_MiB=301 (cap 150)
+FAIL fx20-stringhe-in-pop:off (RSS 301 >= cap 150: LEAK)

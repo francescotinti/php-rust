@@ -104,3 +104,4 @@ if ($smax > $CEIL) {
 PERL
 step "AB-PEAK-R7 DONE"
 echo "rc=0 $(date +%T)" > "$OUT/ab.done"
+exec: No such file or directory at /Volumes/Extreme Pro/Claude/wp57-harness/daemonize.pl line 16.

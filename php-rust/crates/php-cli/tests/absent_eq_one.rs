@@ -49,6 +49,28 @@ fn run_arm(src_path: &std::path::Path, reg_lower: Option<&str>) -> (Vec<u8>, Vec
     (out.stdout, out.stderr)
 }
 
+/// A-HE-105-1 (Concilio WP-105): conteggio PER CORPO di un op nel dump di
+/// PHPR_DUMP_OPS. I corpi aprono con l'intestazione `-- NOME n_slots=… --`;
+/// l'op si riconosce ANCORATO come secondo token di una riga-istruzione
+/// (`0003 Binary(Add)`), mai come substring nuda (un ipotetico
+/// `XBinary(Add)` non conta).
+fn per_body_op_counts(dump: &str, op_token: &str) -> std::collections::BTreeMap<String, usize> {
+    let mut cur = String::from("<fuori-corpo>");
+    let mut map = std::collections::BTreeMap::new();
+    for line in dump.lines() {
+        if let Some(rest) = line.strip_prefix("-- ") {
+            cur = rest.split(" n_slots").next().unwrap_or(rest).trim().to_string();
+        } else {
+            let mut it = line.split_whitespace();
+            let is_instr = matches!(it.next(), Some(ix) if !ix.is_empty() && ix.chars().all(|c| c.is_ascii_digit()));
+            if is_instr && it.next() == Some(op_token) {
+                *map.entry(cur.clone()).or_insert(0) += 1;
+            }
+        }
+    }
+    map
+}
+
 #[test]
 fn absent_env_subprocess_dump_identical_to_explicit_one() {
     let dir = std::env::temp_dir().join(format!("phpr-absent-eq-one-{}", std::process::id()));
@@ -85,16 +107,31 @@ fn absent_env_subprocess_dump_identical_to_explicit_one() {
         "controllo positivo fuori-funnel: il dump non contiene il corpo \
          `Z::{{prop-init}}` — il «modulo intero» non e' provato\n{d}"
     );
-    // A-HE-103-1 emendato «==1 ESATTO» (Concilio WP-104): il residuo
-    // `Binary(Add)` fuori-funnel e' ESATTAMENTE quello di Z::{prop-init}
-    // — zero significherebbe finestre estese in silenzio (attesa da
-    // aggiornare CON NOME), due+ un residuo nuovo non censito.
-    let n_generic_add = d.matches("Binary(Add)").count();
+    // A-HE-105-1 (Concilio WP-105, supera il «==1 GLOBALE» di A-HE-103-1):
+    // il residuo `Binary(Add)` si giudica PER CORPO, ancorato al token-op —
+    // un residuo nuovo esce col NOME del corpo invece di conflazionare tre
+    // cause (prelude cambiato / funnel allargato / residuo nuovo) in un
+    // conteggio globale.
+    let adds = per_body_op_counts(&d, "Binary(Add)");
+    let residui: Vec<String> = adds.iter().map(|(k, v)| format!("{k}: {v}")).collect();
     assert_eq!(
-        n_generic_add, 1,
-        "residuo `Binary(Add)` atteso ESATTAMENTE 1 (Z::{{prop-init}}), \
-         trovati {n_generic_add}"
+        adds.get("Z::{prop-init}").copied().unwrap_or(0),
+        1,
+        "Binary(Add) atteso ESATTAMENTE 1 dentro Z::{{prop-init}}; residui per corpo: {residui:?}"
     );
+    assert_eq!(
+        adds.len(),
+        1,
+        "Binary(Add) residuo FUORI da Z::{{prop-init}} — corpi con residuo: {residui:?}"
+    );
+    // Tripwire di enumerazione (primo passo verso A-HE-105-3): i corpi
+    // dello zoo compaiono TUTTI per NOME nel dump del braccio assente.
+    for body in ["{main}", "fn f", "Z::m", "Z::{prop-init}"] {
+        assert!(
+            d.lines().any(|l| l.strip_prefix("-- ").is_some_and(|r| r.trim_start().starts_with(body))),
+            "corpo '{body}' assente dal dump: lo zoo non e' piu' enumerato"
+        );
+    }
     // A-HE-104-1 (Concilio WP-104): braccio `=0` DISCRIMINANTE — due
     // bracci uguali-per-costruzione non possono fallire per modo; il
     // terzo braccio prova che l'env viaggia: stdout identico ma dump
@@ -109,6 +146,22 @@ fn absent_env_subprocess_dump_identical_to_explicit_one() {
     assert!(
         !dz.contains("BinaryDst") && !dz.contains("CmpJmpSC") && !dz.contains("BinarySS"),
         "forme registro nel dump `=0`: il modo OFF non e' off\n{dz}"
+    );
+    // A-HE-105-2 (Concilio WP-105): controllo POSITIVO del braccio `=0` —
+    // un env che sotto `=0` uccidesse il dumping intero passerebbe i check
+    // negativi sopra. Il dump OFF deve contenere Z::{prop-init} e le forme
+    // PILA vive: `BinaryAdd` ancorato > 1. (Rosso di nascita ARCHIVIATO in
+    // wp104-harness/denti-rossi/absent-eq-one-he105-2-rosso.txt: la prima
+    // attesa contava il generico `Binary(Add)`, ma il loop in pila emette
+    // l'op DEDICATO `BinaryAdd` — il generico vive solo fuori-funnel.)
+    assert!(
+        dz.contains("Z::{prop-init}"),
+        "controllo positivo `=0`: manca Z::{{prop-init}} nel dump OFF"
+    );
+    let n_off: usize = per_body_op_counts(&dz, "BinaryAdd").values().sum();
+    assert!(
+        n_off > 1,
+        "controllo positivo `=0`: attesi BinaryAdd di pila > 1, trovati {n_off}"
     );
     // Il VERDETTO: dump BYTE-identico sul modulo intero.
     assert_eq!(

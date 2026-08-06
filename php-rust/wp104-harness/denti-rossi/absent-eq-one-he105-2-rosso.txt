@@ -1,0 +1,11 @@
+---- absent_env_subprocess_dump_identical_to_explicit_one stdout ----
+
+thread 'absent_env_subprocess_dump_identical_to_explicit_one' (22305714) panicked at crates/php-cli/tests/absent_eq_one.rs:159:5:
+controllo positivo `=0`: attesi Binary(Add) generici > 1 in modalita' pila, trovati 0
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    absent_env_subprocess_dump_identical_to_explicit_one
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.06s

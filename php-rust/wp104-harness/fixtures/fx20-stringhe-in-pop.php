@@ -3,24 +3,16 @@
 // che il giudice prop non può vedere. Ogni iterazione fa morire stringhe
 // HEAP (non-interned) sui DUE sentieri della leva H-C2:
 //   - Pop: un expression-statement il cui risultato stringa viene scartato;
-//   - overwrite di slot (StoreSlot/reg_store_slot): $s riassegnato a ogni giro.
-// Se il fast-out saltasse il glue delle Str (il difetto del predicato v1),
-// ~200k stringhe da ~70 B resterebbero vive: growth >> soglia e il dente
-// morde. Attesa: growth stabile ⇒ bool(true), byte-identico all'oracle.
+//   - overwrite di slot: $s riassegnato a ogni giro.
+// Il VERDETTO di leak NON è in-script (memory_get_usage in phpr è uno stub
+// costante — scoperto dal mutation-check KS-MA-105-1, rosso archiviato in
+// wp104-harness/denti-rossi/): lo emette il GATE misurando il peak RSS del
+// processo (~1M stringhe trattenute ≈ +250 MiB, inconfondibile).
+// Qui solo output deterministico byte-identico all'oracle.
 $base = str_repeat("x", 64);
-$mem0 = 0;
-$mem1 = 0;
-for ($i = 0; $i < 200000; $i++) {
-    $s = $base . $i;      // il vecchio $s (Str) muore nell'overwrite
-    $s . "tail";          // la Str temporanea muore via Pop
-    if ($i === 50000) {
-        $mem0 = memory_get_usage();
-    }
-    if ($i === 150000) {
-        $mem1 = memory_get_usage();
-    }
+for ($i = 0; $i < 1000000; $i++) {
+    $s = $base . $i;
+    $s . "tail";
 }
-var_dump($s === $base . "199999");
-$growth = $mem1 - $mem0;
-var_dump($growth < 64 * 1024);
+var_dump($s === $base . "999999");
 echo "fx20 done\n";

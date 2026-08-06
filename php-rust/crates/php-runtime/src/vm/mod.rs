@@ -3928,6 +3928,58 @@ impl<'m> Vm<'m> {
         }
     }
 
+    /// Single end-of-life funnel for a Zval the caller OWNS and is killing
+    /// (H-C2 lever, Council WP-105 A-BA-105-1): ONE variant examination per
+    /// death (KS-BA-105-2 — the `gc_note` check is FUSED here, a converted
+    /// site must not also call `gc_note`), routing to three arms:
+    /// trivial scalar → no glue at all (the whole point of the lever);
+    /// gc container → note + glue, never skipped (A-HO-104-5);
+    /// refcounted non-container (`Str`/`Resource`/…) → glue only, owed
+    /// (KS-HO-105-1 ≡ KS-BA-105-1: a fast-out that skipped it would leak).
+    /// Exhaustive by name — a new `Zval` variant fails to compile here.
+    /// Parity: converted sites either already did note+glue (Pop,
+    /// PropSet-old, reg_store_slot) or die provably-trivial (Long-guarded
+    /// overwrites, CmpJmpSC consts — `Const::to_zval` never yields a
+    /// container), so the note behaviour is byte-identical by construction.
+    #[inline]
+    fn dispose(&mut self, v: Zval) {
+        // A-MA-105-4 / A-HO-105-1: the trivial arm cannot receive a
+        // container BY PATTERN; this seals the arms against drifting away
+        // from the named predicate (debug/census builds only).
+        debug_assert!(
+            v.is_trivial_drop()
+                == matches!(
+                    v,
+                    Zval::Undef | Zval::Null | Zval::Bool(_) | Zval::Long(_) | Zval::Double(_)
+                ),
+            "dispose arms drifted from is_trivial_drop"
+        );
+        debug_assert!(
+            !(v.is_trivial_drop() && v.is_gc_container()),
+            "a trivial-drop value must never be a gc container"
+        );
+        match v {
+            // is_trivial_drop: variant known in-arm ⇒ the drop compiles to
+            // nothing (no outlined drop_in_place call, no note).
+            Zval::Undef | Zval::Null | Zval::Bool(_) | Zval::Long(_) | Zval::Double(_) => {}
+            // is_gc_container: note then glue — the fused gc_note path.
+            v @ (Zval::Object(_) | Zval::Ref(_) | Zval::Array(_) | Zval::Closure(_)) => {
+                #[cfg(feature = "gc-census")]
+                gc_census::note();
+                #[cfg(feature = "zval-census")]
+                zvalcensus::note_gcnote(&v);
+                self.gc_note_slow(&v);
+            }
+            // Refcounted but never collectable: glue owed, no note (Zend
+            // never buffers these — same as today's gc_note fall-through).
+            v @ (Zval::Str(_)
+            | Zval::Resource(_)
+            | Zval::Generator(_)
+            | Zval::WeakHandle(_)
+            | Zval::ArgPlace(_)) => drop(v),
+        }
+    }
+
     fn gc_note_slow(&mut self, v: &Zval) {
         match v {
             Zval::Object(rc) => {
@@ -3958,6 +4010,14 @@ impl<'m> Vm<'m> {
                 }
             }
             Zval::Ref(r) => {
+                // A-HO-105-2 (Concilio WP-105): l'invariante «i reference
+                // non si annidano» sorveglia ENTRAMBI i sentieri — issata
+                // PRIMA del branch: nel braccio ==1 un Ref annidato
+                // ricorreva in gc_note e veniva digerito in silenzio.
+                debug_assert!(
+                    !matches!(&*r.borrow(), Zval::Ref(_)),
+                    "gc_note(Ref): nested Ref — PHP references never nest (A-ST-104-4)"
+                );
                 if Rc::strong_count(r) == 1 {
                     let inner = r.borrow();
                     self.gc_note(&inner);
@@ -3971,13 +4031,9 @@ impl<'m> Vm<'m> {
                     // OBS-12 (INV-RECV-1, FUORI perimetro move: observes the
                     // noted VALUE, never the receiver handle). A-ST-104-4:
                     // the wrapper itself is never a root — enforced by TYPE
-                    // at the root sinks; here the descend asserts Zend's
-                    // never-nested-references invariant (a nested Ref would
-                    // silently fall through the `_` arm).
-                    debug_assert!(
-                        !matches!(&*inner, Zval::Ref(_)),
-                        "gc_note(Ref): nested Ref — PHP references never nest (A-ST-104-4)"
-                    );
+                    // at the root sinks; the never-nested invariant is now
+                    // asserted BEFORE the branch (A-HO-105-2), so a nested
+                    // Ref can no longer fall through the `_` arm unseen.
                     match &*inner {
                         Zval::Object(rc) => {
                             if !rc.borrow().gc.destructed() {

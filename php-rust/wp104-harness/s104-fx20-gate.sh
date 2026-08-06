@@ -43,12 +43,26 @@ f="$F/$b.php"
 env -u PHPR_REG_LOWER "$PHPR" "$f" > "$OUT/$b.on" 2>&1
 PHPR_REG_LOWER=0 "$PHPR" "$f" > "$OUT/$b.off" 2>&1
 fails=0
-cmp -s "$OUT/$b.oracle" "$OUT/$b.on"  || { echo "FAIL $b:on";  fails=1; }
-cmp -s "$OUT/$b.oracle" "$OUT/$b.off" || { echo "FAIL $b:off"; fails=1; }
-# il verdetto dell'oracle stesso deve essere quello ATTESO (bool(true)x2):
-# una fixture che passa perche' l'oracle pure cresce non arbitra niente.
-if ! grep -q "bool(true)" "$OUT/$b.oracle" || [ "$(grep -c "bool(true)" "$OUT/$b.oracle")" != 2 ]; then
-  echo "GATE VOID: l'oracle non emette 2x bool(true) — la fixture non arbitra"; exit 66
+cmp -s "$OUT/$b.oracle" "$OUT/$b.on"  || { echo "FAIL $b:on (byte-diff)";  fails=1; }
+cmp -s "$OUT/$b.oracle" "$OUT/$b.off" || { echo "FAIL $b:off (byte-diff)"; fails=1; }
+# l'oracle deve arbitrare l'output atteso (1x bool(true) + done) o VOID.
+if [ "$(grep -c "bool(true)" "$OUT/$b.oracle")" != 1 ] || ! grep -q "fx20 done" "$OUT/$b.oracle"; then
+  echo "GATE VOID: output oracle inatteso — la fixture non arbitra"; exit 66
 fi
-if [ "$fails" = 0 ]; then echo "PASS $b (2 modi byte-id, oracle arbitro valido)"; exit 0; fi
+# ---- braccio RSS (KS-MA-105-1): il verdetto di LEAK vive QUI, non
+# in-script (memory_get_usage di phpr e' uno stub costante — rosso del
+# mutation-check archiviato in denti-rossi/). ~1M Str trattenute ≈
+# +250 MiB: CAP pre-registrato 150 MiB (misure: clean ~<60, leaky 301).
+CAP_MIB=150
+for mode in on off; do
+  if [ "$mode" = on ]; then
+    rss=$({ /usr/bin/time -l env -u PHPR_REG_LOWER "$PHPR" "$f" >/dev/null; } 2>&1 | awk '/maximum resident/{printf "%d", $1/1048576}')
+  else
+    rss=$({ /usr/bin/time -l env PHPR_REG_LOWER=0 "$PHPR" "$f" >/dev/null; } 2>&1 | awk '/maximum resident/{printf "%d", $1/1048576}')
+  fi
+  [ -n "$rss" ] || { echo "GATE VOID: RSS non misurabile ($mode)"; exit 66; }
+  echo "rss_${mode}_MiB=$rss (cap $CAP_MIB)"
+  if [ "$rss" -ge "$CAP_MIB" ]; then echo "FAIL $b:$mode (RSS $rss >= cap $CAP_MIB: LEAK)"; fails=1; fi
+done
+if [ "$fails" = 0 ]; then echo "PASS $b (2 modi byte-id + RSS sotto cap, oracle arbitro valido)"; exit 0; fi
 exit 1

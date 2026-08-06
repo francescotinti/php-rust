@@ -210,8 +210,11 @@ impl Zval {
     /// a wildcard arm — encoding Zend's TWO levels: `Z_REFCOUNTED` (bit
     /// test) narrowed by *collectable* (`GC_MAY_LEAK`). `Str` and `Resource`
     /// are refcounted but never collectable — Zend never buffers them
-    /// (`gc_check_possible_root`); a `Ref` is unwrapped to its inner value
-    /// by the caller, the wrapper itself is never a root.)
+    /// (`gc_check_possible_root`); a noted `Ref` is routed INTO the descend
+    /// (`gc_note_slow`), which unwraps it there — the callers pass the
+    /// wrapper through, and the wrapper itself is never a root. A-HO-105-3:
+    /// this head used to claim the caller unwraps; the call sites refuted
+    /// that in S-103.)
     #[inline]
     pub fn is_gc_container(&self) -> bool {
         match self {
@@ -240,6 +243,39 @@ impl Zval {
             | Zval::Double(_)
             | Zval::WeakHandle(_)
             | Zval::ArgPlace(_) => false,
+        }
+    }
+
+    /// Is this value's death free — no heap handle, no refcount to touch,
+    /// no drop glue owed? (A-HO-105-1, Council WP-105: the DROP-channel
+    /// predicate of the H-C2 lever, DISTINCT from the NOTE-channel
+    /// `is_gc_container` — the capital refutation R-HO-105-1 ≡ R2-Bak:
+    /// `Str`/`Resource`/`Generator` are `false` on the note predicate yet
+    /// their drop does real work, so a fast-out keyed on that predicate
+    /// would leak every popped string. Exhaustive by name: a new variant
+    /// fails to compile here. `WeakHandle` and `ArgPlace` are EXPLICITLY
+    /// non-trivial — dropping them decrements a `Weak`/`Rc` count.)
+    #[inline]
+    pub fn is_trivial_drop(&self) -> bool {
+        match self {
+            // No heap behind the discriminant: the drop is a no-op.
+            Zval::Undef
+            | Zval::Null
+            | Zval::Bool(_)
+            | Zval::Long(_)
+            | Zval::Double(_) => true,
+            // Refcounted handles: the drop glue decrements (and may free).
+            Zval::Str(_)
+            | Zval::Array(_)
+            | Zval::Ref(_)
+            | Zval::Closure(_)
+            | Zval::Object(_)
+            | Zval::Generator(_)
+            | Zval::Resource(_) => false,
+            // Explicit, not lumped: a Weak decrement is still drop glue.
+            Zval::WeakHandle(_) => false,
+            // Explicit: the place holds an Rc<ArgPlace>.
+            Zval::ArgPlace(_) => false,
         }
     }
 
@@ -331,6 +367,33 @@ mod tests {
         match (&a, &b) {
             (Zval::Str(x), Zval::Str(y)) => assert!(Rc::ptr_eq(x, y)),
             _ => unreachable!(),
+        }
+    }
+
+    #[test]
+    fn trivial_drop_seals_the_hc2_fast_out() {
+        // DENTI-105 (A-HO-105-1, Council WP-105): the DROP-channel
+        // predicate is true ONLY for the five no-heap scalars; a heap
+        // handle — Str INCLUDED, the capital refutation R-HO-105-1 —
+        // is never trivial. Cross-property: trivial ⇒ never container.
+        let trivial = [
+            Zval::Undef,
+            Zval::Null,
+            Zval::Bool(true),
+            Zval::Long(7),
+            Zval::Double(0.5),
+        ];
+        for v in &trivial {
+            assert!(v.is_trivial_drop(), "{} must be trivial", v.gettype());
+            assert!(!v.is_gc_container(), "trivial {} can never be a container", v.gettype());
+        }
+        let nontrivial = [
+            Zval::str_from("heap string"),
+            Zval::Array(Rc::new(PhpArray::new())),
+            Zval::Ref(Rc::new(RefCell::new(Zval::Long(1)))),
+        ];
+        for v in &nontrivial {
+            assert!(!v.is_trivial_drop(), "{} must NOT be trivial", v.gettype());
         }
     }
 
