@@ -22,10 +22,13 @@ chiudersi su sere successive.
 | sera | finestra | arith | prop | calls | str | arr | re | fonte |
 |---|---|---|---|---|---|---|---|---|
 | 1 | 2026-08-06 mattina (S-102) | 12,3 | 11,5 | 7,7 | 6,6 | 4,6 | 3,6 | `wp102-harness/micro-baseline-s102.out` |
-| 2 | 2026-08-06 sera (S-103, dopo ab.done) | — | — | — | — | — | — | da eseguire: `wp103-harness/micro-baseline-s103.out` |
+| 2 | 2026-08-06 pomeriggio (S-103, 16:1x) | 12,3 | 11,5 | 7,4 | 6,6 | 4,4 | 3,7 | `wp103-harness/micro-baseline-s103.out` (spread phpr ≤0,06 su tutte: sera VALIDA) |
 | 3 | sera successiva | — | — | — | — | — | — | — |
 
-**BANDA: NON ANCORA NOMINABILE** (1 punto su ≥3). Fino ad allora vige
+**BANDA: NON ANCORA NOMINABILE** (2 punti su ≥3). Delta stesso-pin
+sera1→sera2: arith 0,0 · prop 0,0 · calls −0,3 · str 0,0 · arr −0,2 ·
+re +0,1 — coerenti con l'indizio cross-binario (±0,2-0,4). Il terzo
+punto chiude la banda (sera successiva). Fino ad allora vige
 KS-GR-104-1 in forma piena.
 
 ## Indizi cross-binario (NON banda: binari diversi, leve in mezzo)

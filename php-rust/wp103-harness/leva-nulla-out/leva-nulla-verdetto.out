@@ -1,0 +1,25 @@
+leva-nulla-verdetto: S-103 punto 3 (prefisso 1 di H-C2, A-BA-103-4 →
+KS-BA-104-2) — taratura della banda-LAYOUT con perturbazione nulla.
+grade=VERDICT  # R=5 per braccio ABAB, mediana+spread, netto pavimenti
+sessione=S-103 (2026-08-06 16:0x, macchina quieta)
+braccio_A=phpr parita' (eca523da, __text 360e03a6/10503156)
+braccio_B=phpr --features null-lever (f1027697, __text 2dba24ed/10502848:
+  la perturbazione HA spostato il testo, -308 B; il simbolo pad e' stato
+  strippato dal linker ma il layout-shift resta — provato dagli hash)
+semantica_nulla=PROVATA (dump-diff bimodale A<->B ZERO su body_zoo, 2 modi)
+
+# pavimenti: A 0,02 · B 0,02 (identici)
+# prop netto (s): A = 4,80 4,86 4,88 4,85 4,87 -> mediana 4,86 spread 0,08
+#                 B = 4,88 4,91 4,85 4,82 4,92 -> mediana 4,88 spread 0,10
+# delta_mediane = +0,02 s su 30M iter  =>  **banda-LAYOUT = 0,67 ns/iter**
+# rumore run-to-run (spread) = 2,7-3,3 ns/iter — resta il gate DOMINANTE
+# (KS-GR-102-2: banda < rumore => VOID vale per il rumore, non per questa).
+
+LETTURA (le due letture della stessa build, composizione Bak/Gregg):
+- taratura: nessun A/B micro su prop e' giudicabile sotto ~0,7 ns/iter di
+  |Δ| — e in pratica sotto il rumore ~3 ns/iter dello spread;
+- il PAVIMENTO del criterio H-C2 (4 ns/iter, hc2-criterio.out) sta SOPRA
+  entrambi: il criterio e' COERENTE con la taratura misurata.
+- calibro profilo (lettura Gregg): un Δ ~0,4% tra build identiche = la
+  risoluzione sotto cui l'attribuzione per simbolo non distingue nulla.
+raw: wp103-harness/leva-nulla-out/*.time

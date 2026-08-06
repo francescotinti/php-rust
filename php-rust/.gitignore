@@ -26,3 +26,7 @@ php-8.5.7.code-workspace
 wp103-harness/collaudo-out-off/
 wp103-harness/collaudo-out-on/
 wp103-harness/corpus-gate/
+wp103-harness/bin/
+wp103-harness/leva-nulla-out/*.time
+wp103-harness/stack-census-out/
+wp103-harness/peak-ab-out/
