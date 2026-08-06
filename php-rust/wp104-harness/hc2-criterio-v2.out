@@ -1,0 +1,91 @@
+hc2-criterio-v2: ATTO ZERO della leva H-C2 (S-104, ordine WP-105 §2a) —
+EMENDA il criterio S-103 (wp103-harness/hc2-criterio.out) per la
+refutazione capitale convergente R-HO-105-1 ≡ R2-Bak. Il v1 resta a
+registro come storia; per la leva FA FEDE QUESTO file.
+grade=CRITERIO
+sessione=S-104 (2026-08-06, atto zero nella finestra d'attesa A/B R=7)
+
+# ---- PERCHÉ l'emenda (refutazione capitale, Hoare ∧ Bak indipendenti) ----
+# Il v1 chiavava il fast-out su `is_gc_container`. Quel predicato separa
+# container-collezionabile da non-container, NON drop-banale da drop-con-
+# lavoro: Str(Rc<PhpStr>), Resource, Generator, WeakHandle, ArgPlace
+# rispondono `false` e hanno Drop NON banale (decrementi Rc/Weak,
+# finalizzazioni). Un fast-out letterale su `!is_gc_container` LEAKA ogni
+# stringa poppata — invisibile al giudice prop (quasi solo Long) fino a
+# corpus/WordPress.
+# KS-HO-105-1 ≡ KS-BA-105-1: fast-out chiavato su `!is_gc_container`
+# (o qualunque predicato che renda Str/Resource/Generator saltabili)
+# = REJECT SENZA APPELLO.
+
+# ---- PREDICATO della leva: `is_trivial_drop` (A-HO-105-1) ----
+# match ESAUSTIVO su Zval (niente wildcard: una variante nuova NON COMPILA),
+# classificazione per NOME sulle 14 varianti correnti:
+#   true  ⇐ Undef · Null · Bool · Long · Double        (nessun heap, no glue)
+#   false ⇐ Str(Rc) · Array(Rc) · Ref(Rc) · Closure(Rc) · Object(Rc)
+#           · Generator(Rc) · Resource(Rc)             (glue refcount)
+#   false ⇐ WeakHandle(Weak)  ESPLICITO: il drop decrementa il weak-count
+#   false ⇐ ArgPlace(Rc)      ESPLICITO: il drop decrementa l'Rc del place
+# Dente cross-check nel codice:
+#   debug_assert!(v.is_trivial_drop() ⇒ !v.is_gc_container())
+# I DUE predicati coesistono con ruoli DISTINTI: is_gc_container = canale
+# NOTE (gc_note → descend); is_trivial_drop = canale DROP (fast-out).
+
+# ---- FORMA dell'implementazione: `dispose(v)` unico (A-BA-105-1) ----
+# UNA funzione di fine-vita, UN solo match sulla variante per morte:
+#   scalare-trivial            → forget/no-op (niente drop-machinery)
+#   refcounted NON container   → glue (drop normale, NIENTE note)
+#   container (is_gc_container)→ gc_note + glue
+# KS-BA-105-2: DUE valutazioni di predicato sulla stessa morte (es. una nel
+# fast-out e una dentro gc_note) = reject in review — il check di gc_note
+# si FONDE nel dispose. I 3 DropC/iter (2 handle PropGet + 1 PropSet)
+# restano nel canale note+glue: un fast-out che li salti = reject
+# (A-HO-104-5, invariato dal v1).
+# Dente fast path (A-MA-105-4): panic-su-container nel braccio trivial
+# (build census/debug) — DENTI-105.
+
+# ---- PIN STRUTTURALI (KS-HE-105-1: taglia ≠ layout) ----
+# - size_of::<Zval>() == 16  GIÀ pinnato a compile-time (array.rs:93).
+# - align_of::<Zval>() == 8  da const-asserire NELLO STESSO punto alla
+#   prima build della leva (atteso 8: Rc/f64/i64; se l'assert fallisse il
+#   criterio è VOID per costruzione, mai deriva silenziosa).
+# - FINGERPRINT della definizione (questo criterio è VOID se cambia):
+#     sha256(blocco `pub enum Zval {..}`) = 789812e5d0a5f242
+#     varianti in ORDINE = Undef Null Bool Long Double Str Array Ref
+#       Closure Object Generator Resource WeakHandle ArgPlace  (n=14)
+#   Riordino/repack a taglia costante ⇒ fingerprint cambia ⇒ criterio da
+#   ri-emettere (il costo di cache/branch non è coperto dal solo size).
+
+# ---- BANDA e VERDETTO A/B (emendati dal team-misura/leva) ----
+# - La banda v1 [8,22] ns/iter è NOMINALE: il census S-103 conferma il
+#   DENOMINATORE (11 DropS/iter per sito), MAI il numeratore (0,7-2,0
+#   ns/drop mai misurato). Il prefisso disasm A-BA-105-2 (drop_in_place::
+#   <Zval> outlined nei siti Pop/Binary*?) RINOMINA la banda PRIMA
+#   dell'A/B; KS-BA-105-3: A/B senza verdetto disasm = VOID.
+# - PROMOZIONE (A-BA-105-4): Δ_A/B (leva DA SOLA, ABAB stessa sera, netto
+#   pavimenti, su prop) ≥ 8 ns/iter ⇒ basta R=5; Δ ∈ [4,8) ⇒ R≥9 E segno
+#   stabile su tutte le coppie; in ogni caso dump-diff bimodale ZERO e
+#   gate pieno (sotto).
+# - PAVIMENTO 4 ns/iter (feedback-keep-partial-wins): sotto il pavimento
+#   il guadagno si REGISTRA ma non promuove da solo.
+# - CADUTA: Δ < max(banda-layout, rumore run-to-run ~3 ns/iter misurato la
+#   sera stessa) ⇒ la leva non è distinguibile: si registra e si chiude il
+#   braccio. ⚠️ banda-layout 0,67 = CAMPIONE N=1 (KS-HE-105-2): ogni claim
+#   di effetto in (0,67; 3] ns è VOID finché non ricampionata (N≥3 pad,
+#   A-BA-105-3/A-HE-105-4 — DENTRO la campagna, solo se Δ marginale);
+#   verdetto INDETERMINATO ammesso.
+# - N del giudice EMESSO dal run (KS-GR-105-2): prop.php = 30M iter — il
+#   denominatore si rilegge dal sorgente del giudice, mai dalla memoria.
+# - ATTRIBUZIONE: Δ per SITO×specie coi conteggi di
+#   wp103-harness/hc-drop-census-s103.out (mai ÷11 aggregato).
+
+# ---- GATE PIENO con regola PIN-105 (Klabnik) ----
+# - Pin BILATERALE: PHPR_PIN_ATTESO E ORACLE_PIN_ATTESO nei gate.
+# - Sequenza atomica di chiusura: build → hash → STASH → batteria →
+#   fixture → corpus ×2 («gradato» senza stash contestuale =
+#   retroattivamente NON-gradato).
+# - Fixture: 13 + 5 + 19a/19b (col mutation-check a ROSSO ARCHIVIATO
+#   pre-atto, KS-MA-105-1) + **stringhe-in-Pop** (KS-BA-105-1: fixture
+#   NUOVA che il gate esige — stringhe che muoiono via Pop/overwrite,
+#   verdetto su bilancio refcount/memoria stabile, non solo output).
+# - Batteria 1739/0 · corpus 1417 per NOME ×2 modi · COPPIA WP BIMODALE
+#   (salda il debito S-103).
