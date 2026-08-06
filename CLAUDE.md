@@ -39,4 +39,5 @@ Reimplementazione moderna di PHP 8.5 in Rust, guidata dal comportamento osservab
 > NON build sul volume esterno. Sorgente/corpus sul volume esterno sono solo letti.
 > Engine: VM a bytecode unico (pipeline mago AST→HIR→bytecode→VM); il vecchio
 > tree-walker `eval/` è stato eliminato. Lowering in `php-runtime/src/lower/`,
-> VM in `php-runtime/src/vm/` (mod.rs ~15k righe — usare Serena/Vexp).
+> VM in `php-runtime/src/vm/` (mod.rs ~14,7k righe + il loop caldo scisso in
+> `run.rs` — usare Serena/Vexp, mai grep sui .rs).

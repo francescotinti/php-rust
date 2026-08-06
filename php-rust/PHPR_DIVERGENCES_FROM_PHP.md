@@ -802,8 +802,17 @@ non lo si dichiara assenza consapevole). Fixture:
   ref a prop typed, ref a static typed, prop diretta, param by-ref.
   TypeError e messaggio a parità; diverge SOLO lo stato post-errore.
   Probe: `wp103-harness/censimento-311-312/`.
+- **⚠️ EMENDA WP-105 (Stogov, A-ST-105-1 — TRE regimi, non uno)**: il
+  censimento 4/4 era TUTTO nel regime (i) «op fallisce + weak-mode» (⇒
+  Zend ri-coercizza UNDEF allo zero del tipo). Regime (ii)
+  `strict_types=1`: Zend **CONSERVA** (phpr già a parità); regime (iii)
+  op RIESCE ma il verify di tipo fallisce (es. `.=` su typed int): Zend
+  **CONSERVA**. Un eventuale fix deve replicare la catena
+  UNDEF→verify-weak PER TIPO e portare bracci strict e `.=` nel gate
+  (KS-ST-105-1) — un azzeramento indiscriminato sarebbe una divergenza
+  NUOVA. Dettaglio: `wp105-harness/verbali/verbale-8-stogov.md`.
 
-### 3.13 🟢 Warning «Undefined property» attribuito alla RIGA SUCCESSIVA (S-101; FIX S-102, claim ridimensionato S-103)
+### 3.13 🟡 Warning «Undefined property» attribuito alla RIGA SUCCESSIVA (S-101; FIX S-102 sulla riga; RIAPERTA WP-105 sul canale UNIT)
 
 Trovata costruendo la fixture 09 di H-C1 (unset-durante-lettura). Verificata
 sul binario di parità con repro minimo, identica flag-off e flag-on (NON è
@@ -825,6 +834,12 @@ diff ESATTO in `hc1-fixtures.sh`).
   accodamento diagnostico. Le altre famiglie di warning accodati restano
   timbrate al flush: la disciplina della marca va estesa famiglia per
   famiglia quando le si tocca (es. §3.11 quando il warning nascerà).
+- **🔴 RIAPERTA sul canale UNIT (WP-105, Stogov A-ST-105-3, provata su
+  HEAD)**: la marca porta la RIGA ma non l'UNITÀ — se la lettura avviene
+  in un file incluso e il flush cade nell'includente, il warning esce
+  con riga giusta ma **file del flush** (e su `eval` manca lo
+  pseudo-file). La marca deve diventare (unit, line); fixture
+  include+eval dovute prima di dichiarare §3.13 chiusa davvero.
 
 ## 4. Punti di forza da NON toccare (invarianti verificati byte-identici)
 
@@ -856,6 +871,11 @@ l'oracle e vanno preservati:
 
 ### Changelog di questo documento
 
+- 2026-08-06 (S-103 sera, Concilio WP-105): §3.12 emendata coi TRE regimi
+  (strict_types e `.=` CONSERVANO — il censimento 4/4 era mono-regime);
+  §3.13 RIAPERTA sul canale unit (include/eval: file del flush, provato
+  su HEAD); da S-104: divergenza symlink-docroot del server da catalogare
+  (php -S canonicalizza, phpr no — osservata nel collaudo S-103).
 - 2026-08-06 (S-103): §3.13 chiusa per la famiglia PropGet (fix S-102) con
   claim ridimensionato (5 siti su ~435, A-ST-104-2); perimetri §3.11/§3.12
   MISURATI con probe (§3.12 rititolata typed-LVALUE: azzera anche senza
