@@ -1,0 +1,28 @@
+hd-census-secondo: S-102 punto 6 (timebox) — seconda pietra del census H-D
+su calls.php, col mem-census DIRETTO che S-101 non aveva.
+grade=CENSUS
+formato=ascii-nudo
+sessione=S-102 (2026-08-06 12:2x)
+strumento=build census e92e585be588de28 (zval-census+mem-census)
+giudice=wp97-harness/micro/calls.php (10M iter, out=20000000 ok)
+
+# raw (calls.census):
+#   gcnote_total=100000004 (10/iter) gcnote_scalar=100000004 (100% scalari)
+#   gcnote_obj=0 · gcnote_site_pop=40000002 (4/iter)
+#   residuo NON taggato = 6/iter (S-101 ne aveva nominati 5 su un giudice
+#   da 20M; qui 10/iter su 10M — da riconciliare con la tavola completa)
+#   stackcensus_tot: push=6/iter pop=4/iter (SOLO siti strumentati del
+#   giudice prop: i canali Call/Ret NON sono strumentati — tavola parziale)
+#   alloccensus: galloc_n=20196691 gfree_n=20157607 galloc_bytes=711934806
+#
+# 🔵 SCOPERTA (A-LE-103-1 morde): al netto dei ~197k eventi di avvio,
+#   **~2 alloc + ~2 free PER CHIAMATA** (~20,0M eventi su 10M iter,
+#   ~35 B/alloc medio) — churn BILANCIATO, invisibile alle stats a pagine
+#   (RC-LE-103-1 concretizzata). Il verdetto «alloc/iter=0» di prop NON
+#   si estende a calls: il call-path ALLOCA per iterazione.
+# CANALE NOMINATO per H-D: identificare le 2 allocazioni/chiamata (args
+#   Vec? frame? diags?) col census per-sito PRIMA di qualunque leva —
+#   stessa disciplina del canale contato (KS-GR-103-1).
+# La tavola COMPLETA bi-regime (nominare i 6 gc_note/iter residui + i
+#   canali che non passano da read_slot + strumentare Call/Ret nello
+#   stackcensus) resta l'apertura di H-D in S-103.
