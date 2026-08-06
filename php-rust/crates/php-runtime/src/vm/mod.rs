@@ -3968,6 +3968,16 @@ impl<'m> Vm<'m> {
                     // collectable *inside* it becomes the possible root
                     // (WP-46).
                     let inner = r.borrow();
+                    // OBS-12 (INV-RECV-1, FUORI perimetro move: observes the
+                    // noted VALUE, never the receiver handle). A-ST-104-4:
+                    // the wrapper itself is never a root — enforced by TYPE
+                    // at the root sinks; here the descend asserts Zend's
+                    // never-nested-references invariant (a nested Ref would
+                    // silently fall through the `_` arm).
+                    debug_assert!(
+                        !matches!(&*inner, Zval::Ref(_)),
+                        "gc_note(Ref): nested Ref — PHP references never nest (A-ST-104-4)"
+                    );
                     match &*inner {
                         Zval::Object(rc) => {
                             if !rc.borrow().gc.destructed() {
@@ -4147,6 +4157,9 @@ impl<'m> Vm<'m> {
                 let taken = slot.take();
                 self.gc_buf_head += 1;
                 let Some(o) = taken else { continue };
+                // OBS-4 (INV-RECV-1, tavola emendata S-103): collectable-NOW
+                // exact count (created + buffer clone). Zona base=1: fixture
+                // 19b arbitrates.
                 if Rc::strong_count(&o) == 2 {
                     break Some(o);
                 }
@@ -4178,8 +4191,10 @@ impl<'m> Vm<'m> {
                     .created
                     .iter()
                     .filter(|(_, o)| {
-                        // The popped candidate still counts as buffered: we
-                        // hold its clone, as the map entry used to.
+                        // OBS-5 (INV-RECV-1): releasable-in-sweep exact
+                        // count. The popped candidate still counts as
+                        // buffered: we hold its clone, as the map entry
+                        // used to.
                         let extra = o.borrow().gc.buffered() as usize;
                         Rc::strong_count(o) - extra == 1
                     })
@@ -4479,6 +4494,8 @@ impl<'m> Vm<'m> {
                 // under the FIFO buffer) dies through that later release in
                 // Zend, AFTER the parent: keep it buffered
                 // (object_reference.phpt's `&$foo->bar` copy cell).
+                // OBS-6 (INV-RECV-1, tavola emendata S-103): exact-count
+                // cascade gate. Zona base=1: fixture 19b arbitrates.
                 let exclusive = Rc::strong_count(rc) == 2
                     && !lazy
                     && !rc.borrow().gc.buffered()
@@ -4575,6 +4592,8 @@ impl<'m> Vm<'m> {
             if let Zval::Object(o) = this {
                 let id = o.borrow().id;
                 if self.destructed.contains(&id) && !self.created.contains_key(&id) {
+                    // OBS-7 (INV-RECV-1): destructed non-created cascade,
+                    // exact count.
                     if Rc::strong_count(o) == 1 {
                         self.gc_cascade(o);
                     }
@@ -4932,6 +4951,10 @@ impl<'m> Vm<'m> {
         // tracked object. An untracked object (interned enum case) is immortal.
         let mut live: VecDeque<u32> = VecDeque::new();
         for (i, rec) in recs.iter_mut().enumerate() {
+            // OBS-8 (INV-RECV-1, tavola emendata S-103): collector
+            // external-holder arithmetic — the in-flight arm handle is an
+            // external holder (+1). Exact-threshold arbiters: fixtures
+            // 19a/19b (soglia a distanza zero, base=1).
             let external = match (&rec.node, &rec.handle) {
                 (GcNode::Obj(id), Handle::Obj(o)) => {
                     !self.created.contains_key(id)
@@ -5273,6 +5296,8 @@ impl<'m> Vm<'m> {
             let mut dtor_dead_now: HashSet<u32> = HashSet::default();
             for &id in &dtor_w {
                 if let Some(rc) = self.created.get(&id) {
+                    // OBS-9 (INV-RECV-1): dtor-dead exact count (created
+                    // only) at end of the destructor pass.
                     if Rc::strong_count(rc) == 1 {
                         dtor_dead_now.insert(id);
                     }
@@ -14155,6 +14180,8 @@ impl<'m> Vm<'m> {
         prop: &[u8],
         hint: TypeHint,
     ) {
+        // OBS-11 (INV-RECV-1): `>` thresholds — the arm handle can only
+        // raise the count; verdict invariant by direction.
         self.typed_refs.retain(|t| t.cell.strong_count() > 0);
         let ptr = Rc::as_ptr(cell);
         if self.typed_refs.iter().any(|t| std::ptr::eq(t.cell.as_ptr(), ptr)) {

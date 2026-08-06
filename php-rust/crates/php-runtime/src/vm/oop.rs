@@ -1079,6 +1079,9 @@ impl<'m> Vm<'m> {
             loop {
                 let mut changed = false;
                 for idx in (0..gf.slots.len()).rev() {
+                    // OBS-1 (INV-RECV-1, tavola emendata S-103): absolute
+                    // strong_count observer — mid-arm the in-flight receiver
+                    // handle keeps the count above this threshold.
                     let last_user_ref = |rc: &Rc<RefCell<Object>>| {
                         // BORROW-OK: shared read, no walk in flight.
                         let extra = usize::from(rc.borrow().gc.buffered());
@@ -1086,14 +1089,17 @@ impl<'m> Vm<'m> {
                     };
                     let releasable = match &gf.slots[idx] {
                         Zval::Object(rc) => last_user_ref(rc),
-                        // A Closure is an object in Zend's symbol table: a
-                        // slot holding its only reference releases here and
-                        // its captures die with it (droporder in-closure).
+                        // OBS-2 (INV-RECV-1): a Closure is an object in
+                        // Zend's symbol table: a slot holding its only
+                        // reference releases here and its captures die with
+                        // it (droporder in-closure).
                         Zval::Closure(c) => Rc::strong_count(c) == 1,
-                        // After any include, main's globals live in SHARED
-                        // cells (cross-unit slot bridging) — Zend's symbol
-                        // table holds them as plain objects, so a cell whose
-                        // only holder is this slot releases like one.
+                        // OBS-3 (INV-RECV-1, FUORI perimetro move: observes
+                        // the CELL, never the moved handle). After any
+                        // include, main's globals live in SHARED cells
+                        // (cross-unit slot bridging) — Zend's symbol table
+                        // holds them as plain objects, so a cell whose only
+                        // holder is this slot releases like one.
                         Zval::Ref(cell) if Rc::strong_count(cell) == 1 => {
                             // BORROW-OK: shared read on the cell (no walk).
                             match &*cell.borrow() {

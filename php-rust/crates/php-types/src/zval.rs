@@ -215,7 +215,15 @@ impl Zval {
     #[inline]
     pub fn is_gc_container(&self) -> bool {
         match self {
-            // Collectable containers: can sit in / release a cycle.
+            // Collectable containers: can sit in / release a cycle. `Ref` is
+            // `true` NOT because the wrapper can be a root (it never is —
+            // Zend's gc_check_possible_root sees the inner value, and phpr's
+            // root sinks `gc_buf_push`/`gc_root_*` cannot even take a Ref BY
+            // TYPE) but because `true` is what routes a noted Ref into
+            // `gc_note_slow`'s descend, which unwraps it there (A-ST-104-4:
+            // the Hoare/Stogov conflict dissolves at the call sites — the
+            // enforcing assert lives in the descend, on the never-nested
+            // invariant).
             Zval::Object(_) | Zval::Ref(_) | Zval::Array(_) | Zval::Closure(_) => true,
             // Refcounted but NEVER collectable in Zend (no GC_MAY_LEAK).
             Zval::Str(_) | Zval::Resource(_) => false,

@@ -56,5 +56,17 @@ Gate: `s103-recv-fixtures.sh` (pinnato ai 2 NOMI o VOID), out in
   non più dal buco base=1/soglia-esatta.
 - NON tocca: le promozioni H-C1a/b (mai bloccate — RC-MA-104: nessun
   osservatore mid-arm nel giudice; corpus/fixture coprono l'uso).
-- Resta dovuto nel pacchetto: **assert Ref in `is_gc_container`**
-  (A-ST-104-4, col primo commit runtime) + marcatori OBS in codice.
+- **A-ST-104-4 SALDATA (S-103, con CORREZIONE di rotta documentata)**: la
+  premessa del composto («il chiamante scartoccia sempre») è REFUTATA dal
+  codice — `gc_note` passa legittimamente i `Ref` al predicato (è proprio
+  `Ref→true` che instrada il descend; lo scartocciamento avviene DENTRO
+  `gc_note_slow`) e le catture by-ref delle closure sono `Ref` legittimi.
+  Un assert nel braccio `Ref` del predicato avrebbe morso sentieri sani.
+  Il contratto VERO («il wrapper non è mai una ROOT») è già imposto PER
+  TIPO ai sink (`gc_buf_push`/`gc_root_*` non accettano `Ref`); l'assert
+  che aggiunge valore è nel descend: `debug_assert` sull'invariante Zend
+  «i reference non si annidano» (un Ref annidato cadrebbe in silenzio nel
+  braccio `_`). Semantica invariata; teeth solo nelle build debug/census
+  (release senza debug-assertions — annotato onestamente).
+- **Marcatori OBS-1..OBS-12 in codice: FATTO** (S-103, commenti ai 12
+  siti; le zone base=1 citano la fixture 19b, OBS-8 cita 19a/19b).

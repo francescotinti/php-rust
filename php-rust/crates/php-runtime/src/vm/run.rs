@@ -779,6 +779,8 @@ impl<'m> super::Vm<'m> {
                         None => self.statics[*id as usize].replace(cell),
                     };
                     if let Some(cell) = old {
+                        // OBS-10 (INV-RECV-1, FUORI perimetro move: observes
+                        // the replaced static cell, never the moved handle).
                         if Rc::strong_count(&cell) == 1 {
                             let inner = cell.borrow();
                             self.gc_note(&inner);
