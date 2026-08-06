@@ -2597,8 +2597,16 @@ impl<'m> super::Vm<'m> {
                         // chiamante ai primi slot del callee, in ordine inverso
                         // di pop: nessun contenitore, nessuna alloc (canale
                         // 1 alloc × 32 B/chiamata inchiodato da hd-free-hist).
-                        // Semantica = braccio fast di bind_params (decay_arg
-                        // è pure-read: l'ordine di decay non osserva effetti).
+                        // Semantica = braccio fast di bind_params. DECLASSATO
+                        // (S-106-D-9, KS-MA-107-1): «decay_arg è pure-read»
+                        // era un CLAIM non provato — il drop del wrapper Ref
+                        // dentro decay_arg può liberare l'ultima ref (memoria
+                        // resa, handle-id riciclabili): l'ordine (0..n).rev()
+                        // è equivalente al push-order di bind_params SOLO
+                        // finché nessun operando è last-ref, proprietà mai
+                        // provata per NOME. Niente user code nel decay (no
+                        // __destruct inline nel drop glue) è l'unica parte
+                        // osservata; il dente handle-id/cascata è a backlog.
                         #[cfg(feature = "mem-census")]
                         php_types::memcensus::arity_note(n);
                         let mut frame = self.pooled_frame(callee, m);

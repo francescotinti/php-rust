@@ -1,0 +1,39 @@
+S-106 punto 2 — VERDETTO grado PIENO php-server dde2a64dcc2eb32b
+(A-PE-107-1, rito di lettura S-106-D-16) — 2026-08-07 00:45–01:01
+
+ESITO: **GRADATO PIENO, VERDE** — rc_off=0 rc_on=0, fails=0 voids=0
+in ENTRAMBI i modi (primo grado PIENO dal pin S-100 62b978c5).
+
+RITO D-16 (dai progress.txt, mai dal solo rc):
+- Gamba 0 ×2: TRE pin FAIL-CLOSED verificati e REGISTRATI —
+  php-server-stash=dde2a64dcc2eb32b · phpr=d4d0fa5217515dd9 ·
+  oracle=07b0df8d63247695 (sanatura 2 ASSERITA).
+- Sentinella estesa: PASS con mode-probe in off E on (16 interleaved +
+  4 concorrenti, workers=2, sul binario STASHATO php-server-s106).
+- option: IDENTICO per NOME, **413 nomi** (= atteso pinnato) ×2 modi.
+- restapi: IDENTICO per NOME, **3508 nomi** (= atteso pinnato) ×2 modi.
+- Nessuna riga VOID/FAIL/DIVERSO/REFUSE nei progress (verificato per
+  grep); done marker `rc=0 voids=0` per gamba (sanatura 4: VOID e
+  DIVERSO separati). Watchdog su TUTTE le gambe phpunit, oracle
+  inclusa (sanatura 1, visibile nelle righe di progress).
+- Uploads: backup→wipe→restore VERIFICATO per gamba (count=3 ×2).
+- Chain v2: pre-flight PASS (MySQL wp8, STATE assente, disco);
+  marker grado-chain.done rc_off=0 rc_on=0 01:01:42.
+
+IDENTITÀ/RICETTA (S-106-D-19): binario costruito con
+`cargo build --release -p php-server --features axum-server` @ HEAD
+c7b6eb2 (2026-08-07 00:43, 55s); pin phpr d4d0fa52 INVARIATO dopo la
+build (verificato per hash). Delta sorgente rispetto al commit del
+pin phpr (d569a56): SOLO 766d3d8 (const-seal compile-time + doc) +
+commit doc/harness — nessun codegen: parity-null ora PROVATO anche
+dalla compilazione (la sentinella e le 7.842 parità per NOME lo
+confermano a valle). Stash: php-server-s106 (hash riverificato).
+
+CONSEGUENZE:
+- KS-PE-107-3 SODDISFATTO nella finestra: il grado è chiuso in S-106,
+  il pin server NON decade. Le cifre server sono d'ora in poi
+  ATTRIBUIBILI al pin dde2a64d (KS-PE-107-1: same-HEAD + grado PIENO).
+- Lo stato dei report passa da «server NON misurato» a «server gradato
+  dde2a64d (S-106)».
+- Ogni chain futuro = v2 (D-16, seconda frase): pre-flight, restore
+  per gamba, watchdog ovunque, rc=verdetto con voids separati.

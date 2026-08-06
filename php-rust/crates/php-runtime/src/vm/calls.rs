@@ -301,7 +301,15 @@ pub(super) fn decay_arg(a: Zval) -> Zval {
         // Backstop only: every dispatch funnel materializes deferred place
         // arguments before any decay, so one reaching here is a missed funnel
         // — degrade to NULL rather than leak the descriptor to user code.
-        Zval::ArgPlace(_) => Zval::Null,
+        // S-106-D-12 (A-MA-107-2): the backstop is NOISY now — debug builds
+        // abort at the missed funnel, census builds count the hits (a silent
+        // NULL was indistinguishable from a legitimate absent argument).
+        Zval::ArgPlace(_) => {
+            debug_assert!(false, "ArgPlace reached decay_arg: missed materialization funnel");
+            #[cfg(feature = "mem-census")]
+            php_types::memcensus::argplace_decay_note();
+            Zval::Null
+        }
         other => other,
     }
 }

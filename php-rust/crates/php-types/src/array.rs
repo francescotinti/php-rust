@@ -97,14 +97,18 @@ const _: () = assert!(std::mem::size_of::<Zval>() == 16);
 // (wp104-harness/hc2-criterio-v2.out); a repack at constant size must not
 // drift silently either.
 const _: () = assert!(std::mem::align_of::<Zval>() == 8);
-// A-HO-106-1 (Council WP-106, S-105): type-seal on the trivial arms — the
-// scalar payloads `is_trivial_drop` classifies as no-op MUST be `Copy`; a
-// future payload change (e.g. Bool -> boxed) fails here, not silently.
+// A-HO-107-1 ≡ A-KL-107-2 (Council WP-107, S-106-D-11): type-seal on the
+// trivial arms, rewritten on the VARIANT CONSTRUCTORS. The A-HO-106-1 form
+// sealed the literal types bool/i64/f64 and was VACUOUS — its own
+// counterexample (`Bool -> boxed`) would still compile, since `bool` stays
+// `Copy` no matter what the variant holds. Tying `T: Copy` to each
+// constructor's parameter type makes the counterexample fail here:
+// `fn(Box<bool>) -> Zval` has a non-`Copy` argument.
 const _: () = {
-    const fn _seal<T: Copy>() {}
-    _seal::<bool>();
-    _seal::<i64>();
-    _seal::<f64>();
+    const fn _seal<T: Copy>(_: fn(T) -> Zval) {}
+    _seal(Zval::Bool);
+    _seal(Zval::Long);
+    _seal(Zval::Double);
 };
 
 /// Storage representation, mirroring Zend's packed/mixed hash split

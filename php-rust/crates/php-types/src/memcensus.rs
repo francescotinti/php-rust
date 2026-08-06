@@ -1434,6 +1434,21 @@ pub fn arity_note(n: usize) {
     GA_ARITY[n.min(5)].fetch_add(1, Relaxed);
 }
 
+// S-106-D-12 (A-MA-107-2): contatore del backstop ArgPlace in decay_arg —
+// ogni hit è un funnel di materializzazione mancato (in parità il chiamante
+// è feature-gated; il degrade a NULL resta, ma non più silenzioso).
+static GA_ARGPLACE_DECAY: AtomicU64 = AtomicU64::new(0);
+
+#[inline]
+pub fn argplace_decay_note() {
+    GA_ARGPLACE_DECAY.fetch_add(1, Relaxed);
+}
+
+/// Hit del backstop ArgPlace (atteso 0: ogni valore ≠0 è un funnel mancato).
+pub fn argplace_decay_hits() -> u64 {
+    GA_ARGPLACE_DECAY.load(Relaxed)
+}
+
 /// L'istogramma dell'arità dei bind (bucket 0..4 esatti, ultimo = ≥5).
 pub fn arity_histogram() -> [u64; 6] {
     std::array::from_fn(|i| GA_ARITY[i].load(Relaxed))
