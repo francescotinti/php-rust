@@ -112,9 +112,8 @@ verdetto su memory_get_usage finché è stub (KS-MA-106-1, §3.14).
   (full∈[1,84;1,89], media∈[2,57;2,64], f̂=(1−r/1,89)/0,14 per la quota
   calls); se il chain è fallito ⇒ fallback KS-PE-106-2: rilancio entro
   chiusura S-106 o il riferimento WP-102 DECADE.
-- **Completamento Concilio WP-107**: sedie Leijen+Stogov (cadute per
-  limite API) + eventuale Pedersen + FASE 2 team + SYNTHESIS — primo
-  atto dopo la lettura coppia; i 6 verbali consegnati sono GIÀ vincolanti.
+- **Fase 2 Concilio WP-107** (team + SYNTHESIS + ratifica): fase 1
+  completa 9/9, tutti i verbali vincolanti.
 - **cargo check a HEAD** (A-KL-107-1) + **sigillo Copy riscritto sui
   costruttori di variante** (A-HO-107-1 ≡ A-KL-107-2) + **dente
   ordine-di-drop del direct-bind** (A-MA-107-1: «decay pure-read» va
@@ -171,18 +170,30 @@ Tutti i NON-riproporre WP-83..104 restano. Nuovi da S-105/WP-107:
 skill `apri-sessione`/`chiudi-sessione`. Harness di sessione:
 `wp105-harness/`; concilio in `wp107-harness/`.
 
-## §S-106 — ORDINE (Concilio WP-107 — stato: COLLEGIO PARZIALE 6-7/9, fase 2 NON tenuta)
+## §S-106 — ORDINE (Concilio WP-107 — FASE 1 COMPLETA 9/9; fase 2 + SYNTHESIS = S-106)
 
-⚖️ **Concilio WP-107 (2026-08-06 notte)**: fase 1 convocata a 9 sedie;
-consegnati **7/9** — Hoare, Matsakis, Klabnik, Hejlsberg, Bak, Pedersen,
-Gregg (verbali in `wp107-harness/verbali/`, VINCOLANTI); **Leijen e
-Stogov cadute per LIMITE API settimanale (reset 3:00 Europe/Rome)**.
-**La FASE 2 (team) e la SYNTHESIS NON sono state tenute**: completare il
-collegio è atto dovuto di S-106 («se manca, primo atto della successiva =
-convocarlo»). Pedersen ricalibra il rinvio del grado server:
-**A-PE-107-1 = grado PIENO primo atto S-106 PRIMA di cifre e build**
-(proroga SPESA; KS-PE-107-3: seconda proroga ⇒ il pin server decade);
-lettura ratios con precondizioni failnames-VUOTI (A-PE-107-3).
+⚖️ **Concilio WP-107 (2026-08-06 notte)**: fase 1 **COMPLETA 9/9**
+(Leijen e Stogov cadute al primo lancio per limite API, RECUPERATE con
+rilancio a quota liberata, indipendenza preservata; verbali in
+`wp107-harness/verbali/`, VINCOLANTI; indice+ricevute in
+`COUNCIL_WP107_REVIEWS.md`). **La FASE 2 (team) e la SYNTHESIS restano
+da tenere in S-106**, con la ratifica di quest'ordine. Colpi aggiuntivi
+delle due sedie recuperate: **KS-LE-107-1** manifest-binario per ogni
+lettura census (recepisce l'incidente del campione arità dal binario col
+probe) · **KS-LE-107-2** niente STOP/bisect da bande a componenti
+prezzate · **R-ST-107-4 refuta la Scoperta 3 di S-105**: la §3.15 NON
+era invisibile — `by_ref.phpt` era GIÀ rosso nei 1417, il congelamento
+del corpus l'aveva sepolta ⇒ **KS-ST-107-1**: ogni voce nuova a catalogo
+si cerca nel fail-set congelato, e la sua cura cita i fail che deve
+flippare (attesa §3.15: 1417→1415) · **KS-ST-107-2**: il fast path è ora
+una SECONDA copia della semantica di bind — toccarne una sola ⇒ fx21
+VOID · Stogov nomina il debito «metà-Zend» (resta il doppio transito
+push→pop; il modello Zend scrive gli slot alla SEND) e riordina la
+fedeltà: **§3.15 > get_gc > §3.13 > §3.12-i > §3.14**. Pedersen
+ricalibra il grado server: **A-PE-107-1 = grado PIENO primo atto S-106
+PRIMA di cifre e build** (proroga SPESA; KS-PE-107-3: seconda proroga ⇒
+il pin server decade); lettura ratios con precondizioni failnames-VUOTI
+(A-PE-107-3).
 
 Ordine PROVVISORIO S-106 (da RATIFICARE con la SYNTHESIS WP-107):
 
@@ -192,8 +203,8 @@ Ordine PROVVISORIO S-106 (da RATIFICARE con la SYNTHESIS WP-107):
 2. **Grado PIENO php-server de67cb64** (A-PE-107-1: PRIMA di cifre e
    build; collaudo sullo stash `php-server-s105`; seconda proroga ⇒ pin
    server decade, KS-PE-107-3).
-3. **Completamento Concilio WP-107** (Leijen+Stogov fase 1 + fase 2 team
-   + SYNTHESIS + ratifica di quest'ordine).
+3. **Fase 2 Concilio WP-107** (team tematici + SYNTHESIS + ratifica di
+   quest'ordine — la fase 1 è completa 9/9).
 4. **Igiene del pin (breve)**: cargo check a HEAD (A-KL-107-1) + sigillo
    Copy riscritto (A-HO-107-1) + dente ordine-di-drop (A-MA-107-1) +
    fx21 a gate fail-closed (A-KL-107-3).
@@ -204,8 +215,9 @@ Ordine PROVVISORIO S-106 (da RATIFICARE con la SYNTHESIS WP-107):
 6. **Denti nella finestra**: terza mutazione OBS-8 (mod.rs:4965, −2→−1,
    target-dir separato) + mutante leak-parziale fx20 (deve rompere la
    guardia 75) + contatore hit/miss fast path (A-BA-107-1, census-gated).
-7. Fedeltà timeboxata: generator get_gc > §3.13 unit > §3.15 (ordine da
-   ratificare con Stogov al completamento).
+7. Fedeltà timeboxata (ordine Stogov): **§3.15 (cura Zend-esatta, gate
+   ORM/hk, deve flippare i suoi fail: attesa 1417→1415, KS-ST-107-1)** >
+   generator get_gc > §3.13 unit > §3.12-i > §3.14.
 
 Pre-flight S-106: pin phpr **d4d0fa5217515dd9** @ HEAD S-105 (fa fede
 HEAD, la build churna) · server de67cb64 stash `php-server-s105` (NON

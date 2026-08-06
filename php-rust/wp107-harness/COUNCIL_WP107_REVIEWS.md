@@ -2,10 +2,11 @@
 
 > Formato indice (decisione utente 2026-08-06): link + ricevute ≤80
 > parole; i testi integrali vivono SOLO in `verbali/`.
-> **STATO: COLLEGIO PARZIALE 7/9, FASE 2 NON TENUTA** — Leijen e Stogov
-> cadute per limite API settimanale (reset 3:00 Europe/Rome).
-> Completamento = atto dovuto S-106 (§S-106 punto 3 di NEXT_SESSION).
-> I 7 verbali consegnati sono GIÀ VINCOLANTI.
+> **STATO: FASE 1 COMPLETA 9/9** (Leijen e Stogov cadute al primo lancio
+> per limite API settimanale, RECUPERATE con rilancio in nottata a quota
+> liberata, senza leggere i verbali altrui — indipendenza preservata).
+> **FASE 2 (team) + SYNTHESIS: NON tenute** — si tengono in S-106 con la
+> ratifica dell'ordine. I 9 verbali sono VINCOLANTI.
 
 | Sedia | Verbale | Ricevuta |
 |---|---|---|
@@ -15,8 +16,8 @@
 | 4 Hejlsberg | [verbali/verbale-4-hejlsberg.md](verbali/verbale-4-hejlsberg.md) | PROMOZIONE forma 2 NON contestata, sovrastruttura REFUTATA — A-HE-107-1 diff per-target completo nell'admission; -2 «37 ns» declassato a divario direzionale; -3 micro su hash₁ E hash₂ (banda-layout gratis dal churn); -4 text-budget run_loop (+4 KB ⇒ PGO/outlining) — KS: -1 niente «37 ns» nei criteri; -2 icache solo targeting; -3 componenti non citabili senza diff per-target — capitale: sì — il «~37 ns» è estimatore post-hoc tra binari a layout diversi (stessa falla di R=7). |
 | 5 Bak | [verbali/verbale-5-bak.md](verbali/verbale-5-bak.md) | LEVA PROMOSSA NON TOCCATA, REFUTATE Scoperta-4 e perimetro S-106 — A-BA-107-1 contatore hit/miss+per-chiamante prima del prossimo sito; -2 srotolamento per-arità respinto; -3 prop solo dopo braccio contatori, altrimenti arith — KS: copertura≠istogramma arità; specializzazioni solo con run_loop non-crescente; verdetti contenitori per forma-e-confine — capitale: sì — il 73,1% è arità a bind_params, NON copertura del predicato fast (builtin/metodi/default mai censiti). |
 | 6 Pedersen | [verbali/verbale-6-pedersen.md](verbali/verbale-6-pedersen.md) | CON EMENDAMENTI — A-PE-107-1 grado PIENO primo atto S-106 prima di cifre e build (proroga SPESA); -2 chain v2 pre-flight+restore-on-fail+watchdog; -3 lettura ratios con precondizioni failnames-VUOTI e bande su WP-102; -4 census server solo per-request — KS: 107-1 riscrive 106-1; 107-2 saldato-senza-protocollo VOID; 107-3 seconda proroga ⇒ pin server decade — capitali: no; firewall inter-gamba esiste solo dentro uploads-guard (verificato). |
-| 7 Leijen | — NON CONSEGNATO | ⛔ caduta per limite API settimanale; fase 1 da completare in S-106. |
-| 8 Stogov | — NON CONSEGNATO | ⛔ caduta per limite API settimanale; fase 1 da completare in S-106. |
+| 7 Leijen | [verbali/verbale-7-leijen.md](verbali/verbale-7-leijen.md) | CON EMENDAMENTI — sostituzione di lettera-gate = emendamento dichiarato col test soppresso ri-collocato; bande H-C3 mai da componenti prezzate (solo segno+soglie); rerun arità su binario pulito ∘ A-BA-107-1; attese negli spigoli reali dell'istogramma; «TL quasi gratis» = ipotesi, non cifra — KS: KS-LE-107-1 manifest-binario per ogni lettura census; KS-LE-107-2 niente STOP/bisect da bande a componenti — capitali: no; la promozione forma 2 regge sui co-primari, convenzione S-102 verificata a sorgente. |
+| 8 Stogov | [verbali/verbale-8-stogov.md](verbali/verbale-8-stogov.md) | CON EMENDAMENTI — forma 2 = metà del modello Zend (resta il doppio transito push→pop, debito nominato); cura §3.15 Zend-esatta (verificata su zend_check_arg_send_type) ma da estendere a Error/MakeRef ≥ vslot + gamba dinamica fx21; ordine fedeltà: §3.15 > get_gc > §3.13 > §3.12-i > §3.14 — KS: KS-ST-107-1 voci nuove cercate nel fail-set congelato, fix cita i fail da flippare (attesa 1417→1415); KS-ST-107-2 doppia copia fast-path ⇒ fx21 VOID se se ne tocca una sola — capitali: no; ma R-ST-107-4 refuta la Scoperta 3: by_ref.phpt era GIÀ rosso nei 1417, il congelamento l'aveva sepolta. |
 | 9 Gregg | [verbali/verbale-9-gregg.md](verbali/verbale-9-gregg.md) | PROMOSSO CON EMENDAMENTI (co-primari T∧C reggono, admission senza flip) — A-GR-107-1 «~37» = contrasto post-hoc CON confondenti (reverse+bind_params); -2 quota-calls WP solo da formula pre-registrata — KS: -1 early-stop smoke 2/2 opposto; -2 contrasti tra A/B distinti mai cifra; -3 banda coppia PRE-registrata full∈[1,84;1,89] media∈[2,57;2,64] f̂=(1−r/1,89)/0,14 — capitali: no; oggetto avanzato (calls 6,3) ma prop/arith fermi: S-106 morda lì. |
 
 **Fase 2 (team) + SYNTHESIS**: NON tenute — si tengono al completamento
