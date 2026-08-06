@@ -203,6 +203,38 @@ impl Zval {
         Zval::Str(PhpStr::from_str(s))
     }
 
+    /// Can this value (transitively) hold the last reference to a tracked
+    /// object, i.e. must a release note descend into it / buffer it?
+    /// (A-HO-103-1 ⊕ A-ST-103-5, Council WP-103: ONE predicate, exhaustive —
+    /// a new `Zval` variant fails to compile here instead of silently taking
+    /// a wildcard arm — encoding Zend's TWO levels: `Z_REFCOUNTED` (bit
+    /// test) narrowed by *collectable* (`GC_MAY_LEAK`). `Str` and `Resource`
+    /// are refcounted but never collectable — Zend never buffers them
+    /// (`gc_check_possible_root`); a `Ref` is unwrapped to its inner value
+    /// by the caller, the wrapper itself is never a root.)
+    #[inline]
+    pub fn is_gc_container(&self) -> bool {
+        match self {
+            // Collectable containers: can sit in / release a cycle.
+            Zval::Object(_) | Zval::Ref(_) | Zval::Array(_) | Zval::Closure(_) => true,
+            // Refcounted but NEVER collectable in Zend (no GC_MAY_LEAK).
+            Zval::Str(_) | Zval::Resource(_) => false,
+            // Generator: an object in Zend, NOT noted today — the documented
+            // PRE-existing hole A-HO-103-2 (backlog: birth-track evidence or
+            // fixture). Explicit here so the hole is a named decision, not a
+            // wildcard accident.
+            Zval::Generator(_) => false,
+            // Non-refcounted scalars / never-owning placeholders.
+            Zval::Undef
+            | Zval::Null
+            | Zval::Bool(_)
+            | Zval::Long(_)
+            | Zval::Double(_)
+            | Zval::WeakHandle(_)
+            | Zval::ArgPlace(_) => false,
+        }
+    }
+
     /// The underlying value, following a reference (D-R11). A non-reference is
     /// cloned as-is; a `Ref` yields a clone of its current cell contents. By the
     /// no-ref-to-ref invariant this never returns a `Ref`.

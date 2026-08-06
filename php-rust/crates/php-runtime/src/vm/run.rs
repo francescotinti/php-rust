@@ -3417,6 +3417,13 @@ impl<'m> super::Vm<'m> {
                     // instead of cloning a second handle that dies at arm end.
                     // Only a Ref clones out its inner value (the wrapper never
                     // travels past this point).
+                    // INV-RECV-1 (S-102 audit, wp102-harness/inv-recv-1-audit.md):
+                    // at every point of this arm reachable by synchronous PHP
+                    // or by an absolute strong_count observer, ≥1 owned handle
+                    // of the receiver is alive — `target` here, then the frame
+                    // clone in push_hook/push_magic_prop before the fallback
+                    // returns. Extending the move to other forms requires
+                    // re-auditing that table (KS-MA-103-2).
                     let target = if matches!(obj, Zval::Ref(_)) {
                         let t = obj.deref_clone();
                         // S-101 census: bump Rc del ricevitore (P2, solo Ref).
@@ -3579,6 +3586,10 @@ impl<'m> super::Vm<'m> {
                     let obj = self.frames[top].stack.pop().expect("PropSet object");
                     let cur = self.frames[top].class;
                     // H-C1b (S-101): move the owned handle (see PropGet).
+                    // INV-RECV-1 holds here too: `target` is owned through
+                    // lazy_prop_access and every write path below; the old
+                    // value's synchronous __destruct always sees ≥1 owned
+                    // receiver handle (audit: wp102-harness/inv-recv-1-audit.md).
                     let target = if matches!(obj, Zval::Ref(_)) {
                         let t = obj.deref_clone();
                         // S-101 census: bump Rc del ricevitore (P2, solo Ref).

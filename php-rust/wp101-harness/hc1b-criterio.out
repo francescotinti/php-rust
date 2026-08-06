@@ -63,3 +63,16 @@ verdetto=PROMOSSA per criterio (Delta 6.0 >= 1.0 pavimento) MA SOTTO la banda
 # => NESSUNA regressione di parita' dal runtime H-C1a+b (KS-KL-102-3/
 #    KS-MA-102-4 SODDISFATTI); ordine distruttori mai divergente (fixture 12
 #    + full suite == baseline per NOME).
+
+# ---- ADDENDUM S-102 (Concilio WP-103, RC-MA-103-1 — la motivazione si
+# ---- corregge, la leva e il verdetto NON si riaprono) ----
+# La frase «il valore assoluto non e' osservabile da PHP» e' FALSA come
+# scritta: il motore osserva conteggi ASSOLUTI in >=6 siti (last_user_ref
+# ==2+extra; sweep-candidate ==2; exclusive ==2; collector -2>in_edges;
+# dtor-dead ==1; static-replace ==1). Cio' che rende sound il MOVE e'
+# INV-RECV-1: in ogni punto del braccio raggiungibile da PHP sincrono o da
+# un osservatore di conteggio vive >=1 handle OWNED del ricevitore (target
+# mosso, poi il clone nel frame magic/hook). Il MOVE abbassa il conteggio
+# mid-arm di esattamente 1 senza mai rimuovere l'ultimo handle: il verdetto
+# di OGNI osservatore e' invariante. Audit completo per NOME:
+# wp102-harness/inv-recv-1-audit.md (12 osservatori classe A + classe B).

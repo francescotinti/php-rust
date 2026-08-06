@@ -3905,11 +3905,10 @@ impl<'m> Vm<'m> {
         zvalcensus::note_gcnote(v);
         // H-C1a (S-101): only a container species can reach the buffer — the
         // guard inlines at every call site so a scalar/string note never pays
-        // the call (the body's `_ => {}` arm, hoisted; same perimeter).
-        if matches!(
-            v,
-            Zval::Object(_) | Zval::Ref(_) | Zval::Array(_) | Zval::Closure(_)
-        ) {
+        // the call. S-102 (A-HO-103-1): the species list lives in ONE
+        // exhaustive predicate shared by every site — a new variant fails to
+        // compile there instead of silently skipping the note.
+        if v.is_gc_container() {
             self.gc_note_slow(v);
         }
     }
@@ -3995,12 +3994,7 @@ impl<'m> Vm<'m> {
                         self.gc_note(bt);
                     }
                 } else if cl.bound_this.is_some()
-                    || cl.captures.iter().any(|(_, cv)| {
-                        matches!(
-                            cv,
-                            Zval::Array(_) | Zval::Object(_) | Zval::Ref(_) | Zval::Closure(_)
-                        )
-                    })
+                    || cl.captures.iter().any(|(_, cv)| cv.is_gc_container())
                 {
                     // A closure is an object in Zend and roots like one; a
                     // capture-less/scalar-capture closure without a bound
@@ -4008,7 +4002,21 @@ impl<'m> Vm<'m> {
                     self.gc_root_clo(cl);
                 }
             }
-            _ => {}
+            // No wildcard (A-HO-103-1): a new Zval variant must be CLASSIFIED
+            // here and in `Zval::is_gc_container` — the guard above means
+            // these arms are unreachable, but listing them keeps the compiler
+            // as the tripwire. Generator is the named pre-existing hole
+            // (A-HO-103-2, backlog).
+            Zval::Undef
+            | Zval::Null
+            | Zval::Bool(_)
+            | Zval::Long(_)
+            | Zval::Double(_)
+            | Zval::Str(_)
+            | Zval::Generator(_)
+            | Zval::Resource(_)
+            | Zval::WeakHandle(_)
+            | Zval::ArgPlace(_) => {}
         }
     }
 
