@@ -7,7 +7,8 @@ functions with `function_exists()` inside `phpr` (grouped by
 `ReflectionFunction::getExtensionName()`); the corpus number is the real pass
 count of the upstream Zend test suite under `phpt-runner`.
 
-_Last measured: 2026-07-30 (WP-72) · reference: PHP 8.5.7 (`get_defined_functions()`)._
+_Last measured: 2026-08-06 (S-103; corpus from the S-102 pinned run, archived
+re-verdict) · reference: PHP 8.5.7 (`get_defined_functions()`)._
 
 ---
 
@@ -17,11 +18,11 @@ _Last measured: 2026-07-30 (WP-72) · reference: PHP 8.5.7 (`get_defined_functio
 | --- | --- |
 | Internal functions implemented | **1017 / 2143** (47%) |
 | — of which **core / language stdlib** (standard + Core + date) | **539 / 654** (82%) |
-| Zend test corpus (`Zend/tests/*.phpt`) | **2649 passing** — 65.1% of runnable (2649/4067) |
+| Zend test corpus (`Zend/tests/*.phpt`) | **2650 passing** — 65.2% of runnable (2650/4067) |
 | **WordPress core test suite** | **full effective parity** — single-site 30,472 tests AND multisite 31,278 tests each at **a single declared name-diff**, stable by name across runs |
 | Fully-complete areas | ctype, json, SimpleXML, zlib, bcmath, tokenizer, session, **xml**, **fileinfo**, **tidy**, PDO core |
 
-Corpus breakdown: 5305 total · **2649 pass** · 1418 fail · 1238 skip (skips are
+Corpus breakdown: 5305 total · **2650 pass** · 1417 fail · 1238 skip (skips are
 mostly tests that need an extension `phpr` hasn't ported, or SAPI-specific
 setup; the runner executes `--INI--` sections as `php -d`-style overrides).
 
