@@ -1,0 +1,34 @@
+s102-peak-criterio: S-102 punto 3 — attribuzione crescita full-peak
+S-99→S-100, CRITERIO E REGOLA DI CHIUSURA scritti PRIMA dei dati
+(A-LE-103-3 + A-GR-103-4; KS-GR-103-2: punto eseguito senza banda
+stessa-sera = VOID).
+grade=CRITERIO
+formato=ascii-nudo
+sessione=S-102 (2026-08-06)
+
+# OGGETTO: il delta full-peak tra pin S-99 (52330330, stash phpr-s99-sigillo)
+# e pin S-100 (f29883eb, stash phpr-s100-fix), ~+95 MiB nel confronto
+# tra-sere non controllato. Domanda: crescita REALE del pin o rumore?
+#
+# FASE 1 (banda rumore, PRIMA): R=5 run full IDENTICI, pin S-100, modo
+# off ESPLICITO (A-LE-103-2: il modo e' un INPUT fissato — l'effetto-modo
+# ~116 MiB e' piu' grande dell'oggetto), stessa sera, macchina quieta,
+# launcher s102-peak-noise.sh. STATISTICA NOMINATA: mediana per braccio +
+# spread max-min (MAI la media: il peak e' coda unilaterale).
+#
+# FASE 2 (A/B, SOLO se ammessa): ABABA...B interleaved stessa sera,
+# A = pin S-99 off, B = pin S-100 off, R>=5 per braccio; delta per coppia
+# adiacente pubblicati accanto alle mediane (A-GR-103-1: >=3/7 coppie a
+# segno opposto => finestra sospetta, si ripete).
+#
+# REGOLA DI CHIUSURA (pre-registrata, bande UNILATERALI):
+#   banda = max(spread_A, spread_B) misurato in fase 1/2 (mai il ~10%
+#   dell'oracle: motore sbagliato, R-LE).
+#   |mediana_B - mediana_A| <= banda  => voce CHIUSA come RUMORE, il
+#     confronto tra-sere +95 MiB si dichiara NON attribuibile; NIENTE bisect.
+#   |mediana_B - mediana_A| >  banda  => crescita REALE del pin; il bisect
+#     e' ammesso SOLO se spread < 48 MiB (KS-LE-103-3: spread >= ~48 MiB
+#     = meta' dell'effetto => bisect VIETATO comunque).
+#   Modi diversi tra i bracci => VOID (KS-LE-103-2).
+# La pista modo->peak (off vs on, ~116 MiB su R=1) resta voce PROPRIA
+# (R>=3), NON si mescola a questo punto.

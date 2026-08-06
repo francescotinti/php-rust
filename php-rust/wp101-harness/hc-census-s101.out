@@ -90,3 +90,13 @@ att_gcnote_site_propset_old=1
 # CONFERMATO (Bak: il meccanismo si RI-NOMINA — non e' allocazione, e':
 #   12 refcount-op/iter + 4 gc_note-call/iter + drop-glue/discriminante + traffico
 #   Vec della pila operandi).
+
+# ---- ADDENDUM S-102 (Concilio WP-103, RC-LE-103-1 — DECLASSAMENTO) ----
+# La riga «alloc/iter ~= 0 CONFERMATO» della gamba alloc e' DECLASSATA:
+# le stats mimalloc a PAGINE (MIMALLOC_SHOW_STATS) sono CIECHE al churn
+# malloc/free bilanciato dentro una pagina — provano solo «retained ~= 0
+# su f29883eb», mai «zero allocazioni per iterazione». La cifra resta come
+# INDIZIO. La gamba si rifa' a MEM-CENSUS DIRETTO (#[global_allocator]
+# CountingMi, feature mem-census WP-60 P3): conteggi alloc/free/bytes con
+# linearita' 300:1 — vedi wp102-harness/hc-alloc-memcensus-s102.out.
+# KS-LE-103-1: «alloc/iter~=0» da stats a pagine ⇒ gamba VOID.

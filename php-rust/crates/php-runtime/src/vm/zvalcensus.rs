@@ -329,5 +329,16 @@ pub fn dump_exit() {
     if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
         let _ = writeln!(f, "{}", dump_line());
         let _ = writeln!(f, "{}", dump_line_s101());
+        // S-102: righe del census pila operandi (modulo separato).
+        let _ = writeln!(f, "{}", super::stackcensus::dump_lines());
+        // S-102 (A-LE-103-1): gamba alloc a mem-census DIRETTO — byte e
+        // CONTEGGI dal global_allocator contante (0/0 se questa build non
+        // monta CountingMi: il campo dice anche QUALE build ha scritto).
+        let (ab, fb) = php_types::memcensus::alloc_counters();
+        let (an, fn_) = php_types::memcensus::alloc_event_counters();
+        let _ = writeln!(
+            f,
+            "alloccensus galloc_bytes={ab} gfree_bytes={fb} galloc_n={an} gfree_n={fn_}"
+        );
     }
 }

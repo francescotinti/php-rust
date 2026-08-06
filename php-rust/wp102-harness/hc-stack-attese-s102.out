@@ -1,0 +1,39 @@
+hc-stack-attese-s102: S-102 punto 4 — ATTESE STATICHE del census pila
+operandi, scritte PRIMA del run (A-BA-103-1: assert conteggi<->dump; il
+DINAMICO arbitra — S-101 ha morso lo statico due volte).
+grade=ATTESE
+formato=ascii-nudo
+sessione=S-102 (2026-08-06)
+
+# GAMBA STATICA — dal dump {main} flag-on del giudice prop.php (op 18-35,
+# 18 op/iter, S-100/S-101): CmpJmpSC, LoadSlot, LoadVar, PropGet(y),
+# PushConst, BinaryAdd, PropSet(x), Pop, Sweep, LoadVar, PropGet(x),
+# LoadSlot, Swap, BinaryDst, Sweep, IncDecSlot, Pop, Jump.
+#
+# ops/iter attesi (30M iter => x30e6 + coda costante):
+att_ops_Pop=2 att_ops_Swap=1 att_ops_LoadSlot=2 att_ops_LoadVar=2
+att_ops_PushConst=1 att_ops_IncDecSlot=1 att_ops_BinaryAdd=1
+att_ops_BinaryDst=1 att_ops_CmpJmpSC=1 att_ops_Sweep=2 att_ops_Jump=1
+att_ops_PropGet=2 att_ops_PropSet=1   # totale 18/iter
+#
+# transiti/iter attesi per (sito x primitiva), sentieri FAST/IC-hit:
+#   Pop:        pop=2
+#   Swap:       len=1 elem=2
+#   LoadSlot:   push=2
+#   LoadVar:    push=2
+#   PushConst:  push=1
+#   IncDecSlot: push=1        (fast Long)
+#   BinaryAdd:  pop=1 peek=2  (fast Long+Long: peek del check + last_mut)
+#   BinaryDst:  pop=2
+#   CmpJmpSC:   0             (forma registro, nessun transito)
+#   Sweep:      0             (buffer vuoto sul giudice)
+#   Jump:       0
+#   PropGet:    pop=2 push=2  (IC hit)
+#   PropSet:    pop=2 push=1  (IC hit)
+# TOTALI/iter attesi: push=9 pop=9 peek=2 len=1 elem=2 => 23 transiti
+# su 18 op (~1,28 transiti-SORGENTE/op). NB: un pop sorgente compila in
+# piu' accessor inlined (len+as_slice+ptr::read) — la quota 26,6% del
+# profilo NON si converte in attesi (KS-GR-103-1/KS-BA-103-3): il
+# costo/transito fara' fede SOLO da un futuro Delta_A/B / transiti.
+# LEDGER: push == pop su loop stazionario (profondita' torna a 0/iter).
+# Linearita': prop_small 100K stessi rapporti ESATTI (300:1), code costanti.

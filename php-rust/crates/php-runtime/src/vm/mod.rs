@@ -59,6 +59,10 @@ mod gc_census;
 // (design95-leva-zval.md). Stessa convenzione: build di strumentazione soltanto.
 #[cfg(feature = "zval-census")]
 pub mod zvalcensus;
+// S-102 punto 4: census della pila operandi per sito-opcode e primitiva
+// (A-BA-103-1). Stessa convenzione: build di strumentazione soltanto.
+#[cfg(feature = "zval-census")]
+pub mod stackcensus;
 // S-95.0 leva A-ZV2 fase F1: analisi di ultimo uso in sola misura
 // (design95-liveness.md). Stessa convenzione: build di strumentazione soltanto.
 #[cfg(feature = "zval-census")]
@@ -727,6 +731,7 @@ pub fn vm_new<'m>(
         ob_stack: Vec::new(),
         diags: Diags::new(),
         diags_rendered: 0,
+        diag_line_marks: Vec::new(),
         fatal_line: 1,
         error_level: 30719, // PHP 8.5 E_ALL
         last_error: None,
@@ -3132,6 +3137,15 @@ pub struct Vm<'m> {
     /// How many entries of `diags` have already been rendered into `rendered`
     /// (the flush cursor), mirroring `eval`'s `diags_rendered`.
     diags_rendered: usize,
+    /// §3.13 fix (A-ST-103-4, S-102): line overrides for queued diags, keyed
+    /// by index into `diags`. A diagnostic queued during an op whose line is
+    /// known is stamped at ENQUEUE time (the reading op's line, Zend's
+    /// opline); `flush_diags` prefers the stamp over the flush point's line —
+    /// the flush may happen on the NEXT statement (fixture 09: the warning
+    /// printed "on line 19" for a read at line 18). Sparse on purpose: only
+    /// the sites that know their line stamp, everything else keeps the old
+    /// flush-line behaviour.
+    diag_line_marks: Vec<(usize, Line)>,
     /// The source line where the uncaught fatal occurred, captured before unwinding
     /// pops the faulting frame — used by [`Vm::render_fatal`] for an engine error
     /// (a thrown object carries its own line).
@@ -3783,6 +3797,7 @@ impl<'m> Vm<'m> {
         self.ob_stack.clear();
         self.diags = Diags::new();
         self.diags_rendered = 0;
+        self.diag_line_marks.clear();
         self.error_log.clear();
 
         // Request HTTP state
@@ -5473,10 +5488,33 @@ impl<'m> Vm<'m> {
                 Diag::Notice(m) => (8, m.clone()),      // E_NOTICE
                 Diag::Deprecated(m) => (8192, m.clone()), // E_DEPRECATED
             };
+            // §3.13 (A-ST-103-4): a diag stamped at enqueue renders with ITS
+            // line (the reading op's), not the flush point's.
+            let idx = self.diags_rendered;
+            let at = self
+                .diag_line_marks
+                .iter()
+                .find(|(i, _)| *i == idx)
+                .map(|(_, l)| *l)
+                .unwrap_or(line);
             self.diags_rendered += 1;
-            self.raise_diagnostic(errno, &message, line)?;
+            self.raise_diagnostic(errno, &message, at)?;
         }
+        // Marks for consumed diags are dead — drop them (the vec stays tiny:
+        // only line-known sites stamp, and only until the next flush).
+        let cut = self.diags_rendered;
+        self.diag_line_marks.retain(|(i, _)| *i >= cut);
         Ok(())
+    }
+
+    /// §3.13 fix (A-ST-103-4): stamp every diag queued from index `from`
+    /// onward with `line` — called by sites that know the reading op's line
+    /// right after pushing into `self.diags` (directly or through
+    /// `read_property`/`read_property_at`).
+    fn mark_pending_diag_lines(&mut self, from: usize, line: Line) {
+        for i in from..self.diags.len() {
+            self.diag_line_marks.push((i, line));
+        }
     }
 
     /// Apply increment/decrement to a *copy* of the operand, returning the new
@@ -11648,7 +11686,11 @@ impl<'m> Vm<'m> {
                 return Err(err);
             }
         }
-        Ok(read_property(&target, &key, &mut self.diags))
+        let before_diags = self.diags.len();
+        let v = read_property(&target, &key, &mut self.diags);
+        let read_line = self.cur_line(top);
+        self.mark_pending_diag_lines(before_diags, read_line);
+        Ok(v)
     }
 
     /// `start` is already resolved (OOP-2a). `forwarding` is true for

@@ -1,0 +1,53 @@
+hc-stack-census-s102: S-102 punto 4 — census PILA OPERANDI per sito-opcode
+e primitiva (A-BA-103-1/A-GR-103-3) + gamba ALLOC a mem-census diretto
+(A-LE-103-1). Attese PRE-registrate in hc-stack-attese-s102.out.
+grade=CENSUS  # conteggi esatti, non-timing; nessuna cifra cronometrica
+formato=ascii-nudo
+sessione=S-102 (2026-08-06 11:2x)
+strumento=build census isolata (phpr-census-target, features
+  zval-census+mem-census, bin e92e585be588de28); macro scn! nei 13 bracci
+  del giudice; CountingMi global_allocator per i conteggi alloc
+giudice=wp97-harness/micro/prop.php 30M + prop_small 100K (300:1)
+
+# ---- VERDETTO vs ATTESE (il dinamico ARBITRA; stavolta lo statico REGGE) ----
+# transiti/iter MISURATI (prop 30M; coda costante tra parentesi):
+#   Pop:        ops=2 pop=2            (+4 coda)
+#   Swap:       ops=1 len=1 elem=2
+#   LoadSlot:   ops=2 push=2
+#   LoadVar:    ops=2 push=2           (+1 coda)
+#   PushConst:  ops=1 push=1           (+4 coda)
+#   IncDecSlot: ops=1 push=1
+#   BinaryAdd:  ops=1 pop=1 peek=2     (fast Long+Long al 100%)
+#   BinaryDst:  ops=1 pop=2
+#   CmpJmpSC:   ops=1 transiti=0       (forma registro, confermato)
+#   Sweep:      ops=2 transiti=0       (buffer vuoto, confermato)
+#   Jump:       ops=1 transiti=0
+#   PropGet:    ops=2 pop=2 push=2     (push 59999998: 2 fallback di WARMUP
+#                                       IC — push nel fallback non taggato)
+#   PropSet:    ops=1 pop=2 push=1     (push 29999999: 1 miss di fill IC)
+# TOTALI/iter: push=9 pop=9 peek=2 len=1 elem=2 => 23 transiti-SORGENTE/iter
+# su 18 op — ESATTAMENTE le attese statiche. Ledger push==pop a meno di
+# code costanti (i 4 pop di coda scaricano push di siti non strumentati).
+# Linearita' 300:1 ESATTA (prop_small: stessi rapporti, stesse code).
+#
+# LETTURA (KS-GR-103-1/KS-BA-103-3 rispettati): da questi 23 transiti/iter
+# NON si deriva alcun atteso in ns — il costo/transito fara' fede SOLO da
+# un Delta_A/B diviso questi conteggi. La quota ~26,6% del profilo resta
+# DICHIARATA porosa; questo file e' il denominatore contato che mancava.
+# Nota: 23 transiti-sorgente/iter ~= 1,28/op, contro i 2-3 «accessi Vec»
+# per op stimati dal profilo inline-aware: un transito sorgente compila in
+# piu' accessor inlined (len+as_slice+ptr::read per un pop) — le due cifre
+# non sono in contraddizione, misurano strati diversi.
+
+# ---- GAMBA ALLOC (A-LE-103-1, sostituisce la gamba VOID di S-101) ----
+# CONTEGGI DIRETTI dal global_allocator (mai piu' stats a pagine):
+#   prop_small 100K: galloc_n=196915 gfree_n=157825 galloc_bytes=71952781
+#   prop      30M:   galloc_n=196917 gfree_n=157827 galloc_bytes=71952831
+# DELTA su +29.900.000 iterazioni: +2 eventi alloc, +2 free, +50 byte.
+# => alloc/iter = 0 CONTATO (event-level): il canale caldo di prop.php non
+#    alloca — i ~197k eventi sono avvio+compilazione (costanti tra i run).
+# La frase S-101 «alloc/iter~=0» e' ora VERDICT-grade su questo strumento.
+# GAP REGISTRATO: empty.php non produce il file census (il dump atexit si
+# registra alla prima nota zval; empty non ne fa) — il confronto
+# prop_small<->prop basta per il verdetto per-iter (l'avvio si cancella);
+# la registrazione atexit anche da stackcensus e' a backlog.

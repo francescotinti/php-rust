@@ -1033,25 +1033,80 @@ echo g(1), ($h)(2), C::K;"#;
         );
     }
 
-    /// A-KL-102-3 (Concilio WP-102, S-101 punto 5): `assente ≡ =1` — non
-    /// solo entrambi VERI: la STESSA emissione. Il dente lega la grammatica
-    /// al funnel: i due modi risolti devono coincidere E produrre lo stesso
-    /// `{main}` compilato.
+    /// A-HE-103-1 (Concilio WP-103, S-102 punto 5): BODY_ZOO — il tripwire
+    /// zero-`Binary(Add)` esteso ai corpi FUORI funnel. `ctx.reg_lower` è UN
+    /// campo per l'intero Module, ma il pass registro visita solo i corpi
+    /// del funnel `compile_body`: prop_init (costruito a mano, RC-2) non lo
+    /// vede MAI.
+    /// ATTESA SCRITTA PRIMA (dalla lettura di emit_binary + RC-2):
+    /// - OFF: `!ctx.reg_lower` ⇒ emit_binary emette `BinaryAdd` diretto
+    ///   OVUNQUE, prop_init compreso ⇒ zero `Binary(Add)` nel modulo intero.
+    /// - ON: emit_binary emette `Binary(Add)` generico contando sul pass; in
+    ///   prop_init il pass non passa ⇒ il generico SOPRAVVIVE. L'invariante
+    ///   «zero-Binary(Add) modulo intero» sotto ON è FALSO fuori funnel: il
+    ///   residuo si pinna PER NOME (carve-out prop_init), non si nasconde.
+    ///   Semantica invariata (il generico è corretto, solo non specializzato).
     #[test]
-    fn absent_env_is_identical_to_explicit_one() {
+    fn body_zoo_off_funnel_add_polarity() {
+        use crate::hir::BinOp;
+        let src = br#"<?php
+            class Z {
+                const K = 5;
+                public $p = self::K + 1;
+            }
+            $z = new Z(); echo $z->p;"#;
+        let count_in = |fs: &[&Func], pred: &dyn Fn(&Op) -> bool| -> usize {
+            fs.iter().map(|f| f.ops.iter().filter(|o| pred(o)).count()).sum()
+        };
+        let off = compile(src);
+        assert_eq!(
+            count_in(&all_funcs(&off), &|o| matches!(o, Op::Binary(BinOp::Add))),
+            0,
+            "OFF: nessun Binary(Add) generico in NESSUN corpo (prop_init compreso)"
+        );
+        let on = compile_on(src);
+        // Carve-out per NOME: il residuo generico sotto ON vive SOLO in
+        // prop_init (fuori funnel). I corpi del funnel restano a zero.
+        let funnel: Vec<&Func> = {
+            let mut v: Vec<&Func> = vec![&on.main];
+            v.extend(on.functions.iter().map(|f| f.as_ref()));
+            v.extend(on.closures.iter());
+            for c in &on.classes {
+                v.extend(c.methods.iter().map(|m| &m.func));
+            }
+            v
+        };
+        assert_eq!(
+            count_in(&funnel, &|o| matches!(o, Op::Binary(BinOp::Add))),
+            0,
+            "ON: zero Binary(Add) nei corpi DEL funnel"
+        );
+        let prop_inits: Vec<&Func> =
+            on.classes.iter().filter_map(|c| c.prop_init.as_ref()).collect();
+        assert!(
+            count_in(&prop_inits, &|o| matches!(o, Op::Binary(BinOp::Add))) >= 1,
+            "ON: il residuo fuori-funnel esiste ed e' PINNATO qui (prop_init, RC-2); \
+             se questo assert diventa rosso il pass ha iniziato a visitare \
+             prop_init — aggiornare il carve-out PER NOME"
+        );
+    }
+
+    /// A-KL-102-3 riscritto per R-HE-103-1 (Concilio WP-103, S-102 punto 5):
+    /// la vecchia metà «stessa emissione» era `f(x)==f(x)` — confrontava
+    /// `compile_mode(src, a)` con `compile_mode(src, b)` DOPO aver asserito
+    /// `a == b`: pinnava il DETERMINISMO del compilatore, non «assente ≡ =1»
+    /// (copertura fabbricata: un sito ambientale residuo colorerebbe i due
+    /// bracci allo stesso modo). Qui resta SOLO il contenuto reale del dente:
+    /// la riga di grammatica (A-HE-103-4). La coppia assente↔`=1` VERA vive
+    /// in SOTTOPROCESSO col dump-diff: php-cli/tests/absent_eq_one.rs
+    /// (A-HE-103-3).
+    #[test]
+    fn absent_env_resolves_like_explicit_one() {
         use std::ffi::OsStr;
         assert_eq!(
             mode_from_env(None),
             mode_from_env(Some(OsStr::new("1"))),
-            "assente e `=1` devono risolvere lo stesso modo"
-        );
-        let src = br#"<?php $s=0; for($i=0;$i<9;$i++){ $s = $s + $i*3; } echo $s;"#;
-        let a = compile_mode(src, mode_from_env(None));
-        let b = compile_mode(src, mode_from_env(Some(OsStr::new("1"))));
-        assert_eq!(
-            format!("{:?}", a.main.ops),
-            format!("{:?}", b.main.ops),
-            "assente e `=1` devono emettere lo stesso {{main}}"
+            "assente e `=1` devono risolvere lo stesso modo (grammatica value-parsed)"
         );
     }
 }

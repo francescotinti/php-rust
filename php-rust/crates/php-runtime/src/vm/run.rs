@@ -5,6 +5,28 @@ use std::borrow::Cow;
 
 use super::*;
 
+// S-102 punto 4 (A-BA-103-1): hook compatti del census pila operandi —
+// `scn!(Sito: op)` conta una esecuzione dell'arm, `scn!(Sito: Prim = n)`
+// conta n transiti della primitiva AL SENTIERO ESEGUITO (fast e slow si
+// contano dove eseguono, mai staticamente). Vuoto fuori dalla feature.
+#[cfg(feature = "zval-census")]
+macro_rules! scn {
+    ($site:ident: op) => {
+        super::stackcensus::note_op(super::stackcensus::Site::$site)
+    };
+    ($site:ident: $prim:ident = $n:expr) => {
+        super::stackcensus::note(
+            super::stackcensus::Site::$site,
+            super::stackcensus::Prim::$prim,
+            $n,
+        )
+    };
+}
+#[cfg(not(feature = "zval-census"))]
+macro_rules! scn {
+    ($($t:tt)*) => {};
+}
+
 /// A file op that a userland stream wrapper (`stream_wrapper_register`) can
 /// service via its `stream_*` methods, if its first argument is a `UserStream`.
 fn is_user_stream_op(name: &[u8]) -> bool {
@@ -494,7 +516,13 @@ impl<'m> super::Vm<'m> {
                 return Err(err);
             }
         }
+        // §3.13 (A-ST-103-4): il warning della lettura si timbra con la riga
+        // dell'op che LEGGE, all'accodamento — il flush può cadere sulla
+        // riga successiva (fixture 09).
+        let before_diags = self.diags.len();
         let v = read_property_at(&target, &key, slot_idx, &mut self.diags);
+        let read_line = self.cur_line(top);
+        self.mark_pending_diag_lines(before_diags, read_line);
         // S-101 census: specie del valore letto (P1, percorso generale).
         #[cfg(feature = "zval-census")]
         super::zvalcensus::note_prop_val(0, &v);
@@ -571,6 +599,8 @@ impl<'m> super::Vm<'m> {
 
             match op {
                 Op::PushConst(i) => {
+                    scn!(PushConst: op);
+                    scn!(PushConst: Push = 1);
                     let v = self.frames[top].func.consts[*i as usize].to_zval();
                     self.frames[top].stack.push(v);
                 }
@@ -616,6 +646,8 @@ impl<'m> super::Vm<'m> {
                     }
                 }
                 Op::Pop => {
+                    scn!(Pop: op);
+                    scn!(Pop: Pop = 1);
                     if let Some(v) = self.frames[top].stack.pop() {
                         // S-101 census: sito Pop taggato (P2 drop-handle, P3 gc_note).
                         #[cfg(feature = "zval-census")]
@@ -628,6 +660,9 @@ impl<'m> super::Vm<'m> {
                     self.frames[top].stack.push(v);
                 }
                 Op::Swap => {
+                    scn!(Swap: op);
+                    scn!(Swap: Len = 1);
+                    scn!(Swap: Elem = 2);
                     let st = &mut self.frames[top].stack;
                     let n = st.len();
                     st.swap(n - 1, n - 2);
@@ -643,6 +678,8 @@ impl<'m> super::Vm<'m> {
                     // S-101 census: clone di un handle Object in pila (P2).
                     #[cfg(feature = "zval-census")]
                     super::zvalcensus::note_recv_load(&self.frames[top].slots[*s as usize]);
+                    scn!(LoadSlot: op);
+                    scn!(LoadSlot: Push = 1);
                     let v = read_slot(&self.frames[top].slots[*s as usize]);
                     self.frames[top].stack.push(v);
                 }
@@ -665,6 +702,8 @@ impl<'m> super::Vm<'m> {
                     // S-101 census: clone di un handle Object in pila (P2).
                     #[cfg(feature = "zval-census")]
                     super::zvalcensus::note_recv_load(&self.frames[top].slots[*slot as usize]);
+                    scn!(LoadVar: op);
+                    scn!(LoadVar: Push = 1);
                     let v = read_slot(&self.frames[top].slots[*slot as usize]);
                     self.frames[top].stack.push(v);
                 }
@@ -922,6 +961,7 @@ impl<'m> super::Vm<'m> {
                     }
                 }
                 Op::IncDecSlot { slot, inc, pre } => {
+                    scn!(IncDecSlot: op);
                     let i = *slot as usize;
                     // WP-33 T1c guard: a raw Long slot with no overflow is a
                     // pure register op — no diags possible, no reference
@@ -931,6 +971,7 @@ impl<'m> super::Vm<'m> {
                     if let Zval::Long(l) = &self.frames[top].slots[i] {
                         let l = *l;
                         if let Some(n) = l.checked_add(if *inc { 1 } else { -1 }) {
+                            scn!(IncDecSlot: Push = 1);
                             self.frames[top].slots[i] = Zval::Long(n);
                             self.frames[top].stack.push(Zval::Long(if *pre { n } else { l }));
                             continue;
@@ -950,6 +991,7 @@ impl<'m> super::Vm<'m> {
                     self.raise_diags(diags, self.cur_line(top))?;
                     let _ = store_slot(&mut self.frames[top].slots[i], newv.clone());
                     let pushed = if *pre { newv } else { old };
+                    scn!(IncDecSlot: Push = 1);
                     self.frames[top].stack.push(pushed);
                 }
                 Op::Binary(b) => {
@@ -964,6 +1006,9 @@ impl<'m> super::Vm<'m> {
                     // from `binary_fast`); any miss re-enters the generic
                     // funnel — same diags, overloads and errors by
                     // construction.
+                    scn!(BinaryAdd: op);
+                    scn!(BinaryAdd: Pop = 1);
+                    scn!(BinaryAdd: Peek = 1);
                     let rhs = self.frames[top].stack.pop().expect("BinaryAdd rhs");
                     let fast = match (self.frames[top].stack.last(), &rhs) {
                         (Some(Zval::Long(l)), Zval::Long(r)) => Some((*l, *r)),
@@ -971,6 +1016,7 @@ impl<'m> super::Vm<'m> {
                     };
                     match fast {
                         Some((l, r)) => {
+                            scn!(BinaryAdd: Peek = 1);
                             let v = match l.checked_add(r) {
                                 Some(s) => Zval::Long(s),
                                 None => Zval::Double(l as f64 + r as f64),
@@ -981,6 +1027,8 @@ impl<'m> super::Vm<'m> {
                                 .expect("BinaryAdd lhs") = v;
                         }
                         None => {
+                            scn!(BinaryAdd: Pop = 1);
+                            scn!(BinaryAdd: Push = 1);
                             let lhs =
                                 self.frames[top].stack.pop().expect("BinaryAdd lhs");
                             let r = self.binary_value_ab(BinOp::Add, lhs, rhs)?;
@@ -1099,6 +1147,8 @@ impl<'m> super::Vm<'m> {
                 Op::BinaryDst { op: b, dst } => {
                     // Assign-and-discard tail: operands pop exactly like
                     // binary_value (rhs first), result sinks into the slot.
+                    scn!(BinaryDst: op);
+                    scn!(BinaryDst: Pop = 2);
                     let rhs = self.frames[top].stack.pop().expect("BinaryDst rhs");
                     let lhs = self.frames[top].stack.pop().expect("BinaryDst lhs");
                     // S-101 census: specie degli operandi transitati (P1).
@@ -1133,6 +1183,7 @@ impl<'m> super::Vm<'m> {
                     }
                 }
                 Op::CmpJmpSC { op, slot, cidx, addr, when } => {
+                    scn!(CmpJmpSC: op);
                     let cv = func.consts[*cidx as usize].to_zval();
                     let res = 'r: {
                         {
@@ -1237,6 +1288,7 @@ impl<'m> super::Vm<'m> {
                     self.frames[top].stack.push(r);
                 }
                 Op::Jump(addr) => {
+                    scn!(Jump: op);
                     self.frames[top].ip = *addr as usize;
                 }
                 Op::JumpIfFalse(addr) => {
@@ -3411,6 +3463,8 @@ impl<'m> super::Vm<'m> {
                     }
                 }
                 Op::PropGet { name, ic } => {
+                    scn!(PropGet: op);
+                    scn!(PropGet: Pop = 1);
                     let obj = self.frames[top].stack.pop().expect("PropGet object");
                     let sk = crate::bytecode::PropIc::scope_key(self.frames[top].class);
                     // H-C1b (S-101): the popped handle is OWNED — move it
@@ -3450,6 +3504,7 @@ impl<'m> super::Vm<'m> {
                                         // S-101 census: specie del valore letto (P1).
                                         #[cfg(feature = "zval-census")]
                                         super::zvalcensus::note_prop_val(0, &v);
+                                        scn!(PropGet: Push = 1);
                                         self.frames[top].stack.push(v);
                                         continue;
                                     }
@@ -3557,7 +3612,10 @@ impl<'m> super::Vm<'m> {
                             return Err(err);
                         }
                     }
+                    let before_diags = self.diags.len();
                     let v = read_property(&target, &key, &mut self.diags);
+                    let read_line = self.cur_line(top);
+                    self.mark_pending_diag_lines(before_diags, read_line);
                     self.frames[top].stack.push(v);
                 }
                 Op::PropGetDynamicSilent => {
@@ -3582,6 +3640,8 @@ impl<'m> super::Vm<'m> {
                     self.frames[top].stack.push(v);
                 }
                 Op::PropSet { name, ic } => {
+                    scn!(PropSet: op);
+                    scn!(PropSet: Pop = 2);
                     let mut value = self.frames[top].stack.pop().expect("PropSet value");
                     let obj = self.frames[top].stack.pop().expect("PropSet object");
                     let cur = self.frames[top].class;
@@ -3625,6 +3685,7 @@ impl<'m> super::Vm<'m> {
                             super::zvalcensus::note_gcnote_site_propset_old();
                             self.gc_note(&old);
                         }
+                        scn!(PropSet: Push = 1);
                         self.frames[top].stack.push(value);
                         continue;
                     }
@@ -3655,6 +3716,7 @@ impl<'m> super::Vm<'m> {
                                     super::zvalcensus::note_gcnote_site_propset_old();
                                     self.gc_note(&old);
                                 }
+                                scn!(PropSet: Push = 1);
                                 self.frames[top].stack.push(value);
                                 continue;
                             }
@@ -4631,7 +4693,10 @@ impl<'m> super::Vm<'m> {
                                 return Err(err);
                             }
                         }
+                        let before_diags = self.diags.len();
                         let v = read_property(&recv, &key, &mut self.diags);
+                        let read_line = self.cur_line(top);
+                        self.mark_pending_diag_lines(before_diags, read_line);
                         self.frames[top].stack.push(v);
                     }
                 }
@@ -5546,6 +5611,7 @@ impl<'m> super::Vm<'m> {
                     )));
                 }
                 Op::Sweep { main } => {
+                    scn!(Sweep: op);
                     // A destructor body's statement sweeps no-op — see
                     // Frame::in_destructor (handle-id release order).
                     if !self.frames[top].flags.get(FrameFlags::IN_DESTRUCTOR) {
@@ -5735,11 +5801,14 @@ impl<'m> super::Vm<'m> {
                             .as_ref()
                             .map(|io| io.borrow().class_id as usize)
                             .unwrap_or(cid_o);
+                        let before_diags = self.diags.len();
                         self.diags.push(Diag::Warning(format!(
                             "Undefined property: {}::${}",
                             String::from_utf8_lossy(&self.classes[icid].name),
                             String::from_utf8_lossy(&n),
                         )));
+                        let read_line = self.cur_line(top);
+                        self.mark_pending_diag_lines(before_diags, read_line);
                         break 'makeref_magic Some(Rc::new(RefCell::new(Zval::Null)));
                     }
                 }

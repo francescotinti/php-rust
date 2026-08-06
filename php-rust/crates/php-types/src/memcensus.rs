@@ -1340,15 +1340,22 @@ fn phys_window_dump(win: u32, phys: u64, tag: &str) {
 /// binary owns the allocator choice; this crate only owns the counters).
 static GA_ALLOC: AtomicU64 = AtomicU64::new(0);
 static GA_FREE: AtomicU64 = AtomicU64::new(0);
+// S-102 (A-LE-103-1): anche i CONTEGGI di eventi, non solo i byte — la gamba
+// alloc si giudica a mem-census diretto (le stats a pagine sono cieche al
+// churn malloc/free bilanciato, RC-LE-103-1).
+static GA_ALLOC_N: AtomicU64 = AtomicU64::new(0);
+static GA_FREE_N: AtomicU64 = AtomicU64::new(0);
 
 #[inline]
 pub fn galloc_note(bytes: usize) {
     GA_ALLOC.fetch_add(bytes as u64, Relaxed);
+    GA_ALLOC_N.fetch_add(1, Relaxed);
 }
 
 #[inline]
 pub fn gfree_note(bytes: usize) {
     GA_FREE.fetch_add(bytes as u64, Relaxed);
+    GA_FREE_N.fetch_add(1, Relaxed);
 }
 
 /// Snapshot of the cumulative (allocated, freed) counters — the clone-delta
@@ -1358,6 +1365,12 @@ pub fn gfree_note(bytes: usize) {
 /// — a clone bumps their refcount without allocating).
 pub fn alloc_counters() -> (u64, u64) {
     (GA_ALLOC.load(Relaxed), GA_FREE.load(Relaxed))
+}
+
+/// S-102 (A-LE-103-1): event COUNTS (alloc_n, free_n) — zero in any build
+/// whose global allocator does not route through the counting wrapper.
+pub fn alloc_event_counters() -> (u64, u64) {
+    (GA_ALLOC_N.load(Relaxed), GA_FREE_N.load(Relaxed))
 }
 
 /// Monotonic milliseconds since the first census event in the process —
