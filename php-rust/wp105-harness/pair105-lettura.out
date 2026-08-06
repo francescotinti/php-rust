@@ -1,0 +1,51 @@
+pair105-lettura: lettura della COPPIA WP bimodale S-105 col protocollo
+pre-registrato (banda KS-GR-107-3, precondizioni A-PE-107-3) — eseguita
+a chain concluso (00:01:20), stessa notte della leva.
+grade=LETTURA
+sessione=S-105 coda (2026-08-07 ~00:1x)
+
+# ---- PRECONDIZIONI (A-PE-107-3) ----
+# identity ✓ per ENTRAMBE le gambe: phpr d4d0fa5217515dd9 (pin S-105,
+#   con leva args) · php-server de67cb6466acb030 · oracle 8.5.7 · modi
+#   ESPLICITI (off=REG_LOWER=0, on=1). rc_off=0 rc_on=0.
+# parità per NOME ✓: media failnames IDENTICI (0 fail) nei 2 modi; full
+#   = SOLO il delta PRE-esistente wp_is_stream (data set #2 ftp://),
+#   invariante di modo e di leva (identico a S-101/S-102/S-103).
+# ⇒ le precondizioni reggono: i ratios sono LEGGIBILI.
+
+# ---- RATIOS (dai .time, output macchina) vs banda PRE-registrata ----
+# banda KS-GR-107-3 (Gregg, scritta PRIMA dei numeri):
+#   full ∈ [1,84; 1,89] · media ∈ [2,57; 2,64] ·
+#   f̂ = (1 − r/1,89)/0,14 per la quota calls.
+# full CPU:  off **1,947** · on **1,894**
+#   → on = 1,894: sul BORDO alto della banda (≡ riferimento WP-102 on
+#     1,894 alla terza cifra) — il riferimento è CONFERMATO;
+#   → off = 1,947: FUORI banda sfavorevole (+0,056 su WP-102 off 1,891)
+#     — voce aperta per NOME (gamba off sopra-banda, attribuzione non
+#     tentata stanotte: mai bisect da una banda a N piccolo).
+#   → f̂(on) = (1 − 1,894/1,89)/0,14 ≈ −0,015 ⇒ **l'effetto della leva
+#     args sul full CPU WordPress è ≈ 0, indistinguibile** — atteso: il
+#     full è dominato da I/O/builtin/DB, il giudice resta la
+#     micro-categoria (calls 6,3), MAI l'aggregato diluito.
+# media CPU: off **2,697** · on **2,734**
+#   → ENTRAMBE fuori banda sfavorevole ([2,57;2,64]; WP-102: 2,640/2,641)
+#     — +2/+4%. Voce aperta per NOME; nota: la media ha storicamente
+#     varianza tra-sere alta (S-101 2,589/2,604 → S-102 2,640/2,641 →
+#     stanotte 2,697/2,734) e l'oracle media peak ha già mostrato ±12-29%
+#     tra-sere (GAP_TREND WP-100). NESSUN verdetto di regressione senza
+#     rerun: la leva NON tocca i sentieri media in modo noto e il full
+#     (30k test, denominatore 20×) è in banda sulla gamba on.
+# peak footprint phpr: full off 1897,50 MiB · on 1867,33 (storico
+#   1863-1998: in famiglia); media ratio 3,07/3,23 (riferimento, non
+#   giudicato — metrica peak full-run esaurita da S-104).
+
+# ---- VERDETTO ----
+# **DEBITO COPPIA SALDATO** (KS-PE-106-2): coppia bimodale eseguita
+# stessa notte della leva promossa, identità pinnata, parità per NOME,
+# ratios letti contro banda pre-registrata. Riferimento CORRENTE del
+# collaudo WordPress = **WP-105: full 1,947/1,894 · media 2,697/2,734 ·
+# peak 1897,5/1867,3 MiB** (sostituisce WP-102 come riga di trend; le
+# voci fuori banda — full-off e media entrambe — restano APERTE per
+# NOME, senza verdetto).
+# Restano dovuti (S-106): grado PIENO server de67cb64 (A-PE-107-1,
+# PRIMA di cifre server) · fase 2 concilio + SYNTHESIS.

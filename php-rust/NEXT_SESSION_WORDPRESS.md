@@ -1,13 +1,15 @@
 # NEXT_SESSION — LA SPINA DORSALE: il nucleo interprete, misurato per categoria
 
-⏱ **FONDAMENTALI**: ultima misura full/media WordPress = **coppia bimodale
-IN VOLO da S-105** (chain off→on detached 23:03 del 2026-08-06; finché la
-lettura non è fatta, riferimento = WP-102, 3 sessioni fa; lettura dei
-ratios = PRIMO ATTO S-106, con la banda PRE-registrata KS-GR-107-3:
-full∈[1,84;1,89] · media∈[2,57;2,64] — fuori banda in meglio si legge con
-la formula f̂, non con l'entusiasmo) · ultima campagna sull'OGGETTO =
-**S-105 (LEVA H-D args PROMOSSA: calls 7,6→6,3)** ·
-**sessioni-senza-Δ-rapporti = 0** (azzerato da S-105; era 3).
+⏱ **FONDAMENTALI**: ultima misura full/media WordPress = **WP-105
+STESSA NOTTE della leva (0 sessioni fa)** — coppia bimodale eseguita e
+LETTA (chain 23:03→00:01, rc=0×2, protocollo pre-registrato): **full off
+1,947 · on 1,894** (on ≡ WP-102: riferimento confermato; off fuori banda
++0,056 = voce aperta) · **media 2,697/2,734** (fuori banda +2/+4% = voce
+aperta, alta varianza tra-sere) · f̂(on)≈0 (leva args invisibile
+sull'aggregato: il giudice resta la micro-categoria) · **DEBITO
+KS-PE-106-2 SALDATO** (`wp105-harness/pair105-lettura.out`) · ultima
+campagna sull'OGGETTO = **S-105 (LEVA H-D args PROMOSSA: calls 7,6→6,3)**
+· **sessioni-senza-Δ-rapporti = 0** (azzerato da S-105; era 3).
 
 **Ultima sessione (S-105, 2026-08-06 sera)**: ordine WP-106 §1 consumato
 INTERO. 1) **LEVA H-D args SPEDITA (forma 2 direct-bind)**: Δ=+23,00
@@ -107,11 +109,11 @@ verdetto su memory_get_usage finché è stub (KS-MA-106-1, §3.14).
 
 ## Voci APERTE per NOME
 
-- **Lettura coppia WP S-105** (primo atto S-106): pair-chain.done +
-  identity per gamba + ratios vs banda PRE-registrata KS-GR-107-3
-  (full∈[1,84;1,89], media∈[2,57;2,64], f̂=(1−r/1,89)/0,14 per la quota
-  calls); se il chain è fallito ⇒ fallback KS-PE-106-2: rilancio entro
-  chiusura S-106 o il riferimento WP-102 DECADE.
+- **Voci aperte dalla coppia WP-105 (LETTA in coda a S-105, debito
+  saldato)**: full gamba OFF 1,947 sopra banda (+0,056 su WP-102) ·
+  media 2,697/2,734 fuori banda nei 2 modi (+2/+4%) — per NOME, nessun
+  verdetto: rerun/attribuzione solo con banda a N adeguato (la media è
+  storicamente ballerina tra-sere).
 - **Fase 2 Concilio WP-107** (team + SYNTHESIS + ratifica): fase 1
   completa 9/9, tutti i verbali vincolanti.
 - **cargo check a HEAD** (A-KL-107-1) + **sigillo Copy riscritto sui
@@ -197,9 +199,10 @@ il pin server decade); lettura ratios con precondizioni failnames-VUOTI
 
 Ordine PROVVISORIO S-106 (da RATIFICARE con la SYNTHESIS WP-107):
 
-1. **Lettura coppia WP S-105** (pair-chain.done + identity per gamba +
-   precondizioni failnames A-PE-107-3 + banda KS-GR-107-3) — salda o
-   rilancia il debito KS-PE-106-2.
+1. ~~Lettura coppia WP S-105~~ **FATTA in coda a S-105** (debito
+   SALDATO; restano le due voci aperte per NOME: full-off sopra banda
+   +0,056 e media fuori banda nei 2 modi — rerun prima di ogni
+   attribuzione, mai bisect da banda a N piccolo).
 2. **Grado PIENO php-server de67cb64** (A-PE-107-1: PRIMA di cifre e
    build; collaudo sullo stash `php-server-s105`; seconda proroga ⇒ pin
    server decade, KS-PE-107-3).
