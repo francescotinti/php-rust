@@ -767,8 +767,14 @@ manca il diagnostico. Fixture: `wp100-harness/assignop-traps/e-undef-warning-ord
 
 - **Stato**: APERTA (S-100, trovata di lato — fuori dall'oggetto promozione).
   L'ordine rhs→warning→errore-op non è collaudabile finché il warning non esiste.
+- **Perimetro MISURATO (S-103, A-ST-104-2)**: la famiglia è TUTTO il canale
+  read-modify-write su lhs indefinito — compound-assign (`+=`,`-=`,`.=`,…),
+  incr/decr (`$u++`, `++$u`) e le array-key nei RMW (due specie: var
+  indefinita = 2 warning mancanti; key indefinita su var definita = 1).
+  Valori sempre a parità; `??=` (controllo) a parità piena. Probe:
+  `wp103-harness/censimento-311-312/` (verdetto in `censimento-verdetto.out`).
 
-### 3.12 🔴 Typed-ref: AssignOp fallito — Zend AZZERA il referente, phpr lo conserva (S-100)
+### 3.12 🔴 Typed-LVALUE: AssignOp fallito — Zend AZZERA, phpr conserva (S-100; rititolata S-103)
 
 Trovata costruendo la trappola (b) di A-ST-99-3. Verificata sul binario di
 parità, identica nei due modi (NON è del pass).
@@ -789,8 +795,15 @@ non lo si dichiara assenza consapevole). Fixture:
 `wp100-harness/assignop-traps/b-typed-ref.php` (attesa-divergente per NOME).
 
 - **Stato**: APERTA (S-100, trovata di lato — fuori dall'oggetto promozione).
+- **Perimetro MISURATO (S-103, A-ST-104-2)**: 🔵 il titolo originario
+  «typed-REF» era troppo stretto — l'oracle azzera il typed-LVALUE dopo
+  QUALUNQUE AssignOp fallito, anche la proprietà diretta SENZA ref
+  (`$t->i += "abc"` ⇒ oracle `i==0`, phpr `i==1`). 4/4 specie divergenti:
+  ref a prop typed, ref a static typed, prop diretta, param by-ref.
+  TypeError e messaggio a parità; diverge SOLO lo stato post-errore.
+  Probe: `wp103-harness/censimento-311-312/`.
 
-### 3.13 🔴 Warning «Undefined property» attribuito alla RIGA SUCCESSIVA (S-101)
+### 3.13 🟢 Warning «Undefined property» attribuito alla RIGA SUCCESSIVA (S-101; FIX S-102, claim ridimensionato S-103)
 
 Trovata costruendo la fixture 09 di H-C1 (unset-durante-lettura). Verificata
 sul binario di parità con repro minimo, identica flag-off e flag-on (NON è
@@ -804,7 +817,14 @@ diverge SOLO il numero di riga. Famiglia fetch-undef (A-ST-102-2). Fixture:
 `wp101-harness/hc1-fixtures/09-unset-during-read.php` (carve-out per NOME a
 diff ESATTO in `hc1-fixtures.sh`).
 
-- **Stato**: APERTA (S-101, trovata di lato — fuori dall'oggetto H-C).
+- **Stato**: CHIUSA per la famiglia PropGet (S-102: `diag_line_marks` +
+  `mark_pending_diag_lines`, carve-out 09 cancellata, fixture 13/13 a diff
+  zero; miglioria corpus `nullsafe_operator/015.phpt`, 1418→1417).
+- **Claim RIDIMENSIONATO (S-103, A-ST-104-2, refutazione Stogov)**: «fedele»
+  vale per la **famiglia PropGet timbrata** — 5 siti su ~435 punti di
+  accodamento diagnostico. Le altre famiglie di warning accodati restano
+  timbrate al flush: la disciplina della marca va estesa famiglia per
+  famiglia quando le si tocca (es. §3.11 quando il warning nascerà).
 
 ## 4. Punti di forza da NON toccare (invarianti verificati byte-identici)
 
@@ -836,6 +856,12 @@ l'oracle e vanno preservati:
 
 ### Changelog di questo documento
 
+- 2026-08-06 (S-103): §3.13 chiusa per la famiglia PropGet (fix S-102) con
+  claim ridimensionato (5 siti su ~435, A-ST-104-2); perimetri §3.11/§3.12
+  MISURATI con probe (§3.12 rititolata typed-LVALUE: azzera anche senza
+  ref); nuova divergenza generator-in-cycle PROVATA
+  (`wp103-harness/recv-fixtures-gen/gen1-verdetto.out`: il ciclo via
+  Generator non è mai raccolto, dtor solo a shutdown — buco A-HO-103-2).
 - 2026-08-06 (S-101): §3.13 — warning «Undefined property» attribuito alla
   riga dello statement successivo (famiglia fetch-undef, trovata dalla
   fixture 09 di H-C1; identica nei due modi).

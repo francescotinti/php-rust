@@ -1,0 +1,37 @@
+censimento-311-312: A-ST-104-2 (Concilio WP-104) — perimetro MISURATO
+delle divergenze §3.11 e §3.12 (probe oracle<->phpr, 2 modi identici).
+grade=CENSUS  # presenza/assenza di diagnostici e stato post-errore; no cifre
+pin=d0b01362433b3039 · oracle=8.5.7 · probe in questa dir (.oracle/.on/.off)
+
+# ---- §3.11 — warning undef-lhs nei percorsi READ-MODIFY-WRITE ----
+# caso                          oracle                          phpr
+# a  $u += 1 (toplevel)         Warning Undefined variable      NIENTE
+# b  $u += 2 (funzione)         Warning Undefined variable      NIENTE
+# c  $a['k'] += 3 ($a indef.)   DUE warning (variable + key)    NIENTE (0/2)
+# d  $a2['y'] += 4 (key indef.) Warning Undefined array key     NIENTE
+# e  $u .= "x"                  Warning Undefined variable      NIENTE
+# f  $u ??= 5 (CONTROLLO)       niente per design               niente = PARITA'
+# g  $u++                       Warning Undefined variable      NIENTE
+# h  ++$u                       Warning Undefined variable      NIENTE
+# i  $u -= 7                    Warning Undefined variable      NIENTE
+# PERIMETRO: la famiglia e' TUTTO il canale RMW su lhs indefinito
+# (compound-assign +,-,.,: 5 casi; incr/decr: 2; array-key in RMW: 2 specie
+# — anche su var definita). Valori SEMPRE a parita'; manca solo il
+# diagnostico. Il controllo positivo (f) esclude l'over-reporting.
+# NOTA §3.13: quando il warning nascera', va timbrato alla riga della
+# LETTURA (stessa disciplina diag_line_marks, oggi solo famiglia PropGet).
+
+# ---- §3.12 — typed-lvalue: stato post-TypeError di AssignOp ----
+# caso                              oracle    phpr
+# a  $r = &$t->i;  $r += "abc"      i==0      i==1 (conserva)
+# b  $q = &T::$s;  $q += "abc"      s==0      s==2 (conserva)   [NUOVO]
+# c  $t2->i += "abc" (SENZA ref)    i==0      i==1 (conserva)   [🔵 NUOVO]
+# d  bump(&$t3->i) param by-ref     i==0      i==1 (conserva)
+# 🔵 SCOPERTA: il titolo S-100 «typed-REF» era TROPPO STRETTO — l'oracle
+# azzera il typed-LVALUE dopo QUALUNQUE AssignOp fallito, anche la
+# proprieta' diretta senza ref (caso c). La voce di catalogo va
+# rititolata: «typed-lvalue: AssignOp fallito ⇒ Zend azzera, phpr
+# conserva» — perimetro misurato 4/4 specie divergenti, TypeError e
+# messaggio a parita', diverge SOLO lo stato post-errore.
+# (Riconcilia A-ST-104-5/15-bis: la fixture 15 copre la coercion che
+# RIESCE; il ramo che FALLISCE e' TUTTO qui.)

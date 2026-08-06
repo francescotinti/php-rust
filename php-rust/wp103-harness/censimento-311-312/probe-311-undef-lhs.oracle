@@ -1,0 +1,37 @@
+case-a:toplevel-var-plus
+
+Warning: Undefined variable $u1 in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp103-harness/censimento-311-312/probe-311-undef-lhs.php on line 6
+u1=1
+case-b:function-var-plus
+
+Warning: Undefined variable $u2 in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp103-harness/censimento-311-312/probe-311-undef-lhs.php on line 9
+u2=2
+case-c:dim-su-var-indefinita
+
+Warning: Undefined variable $a1 in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp103-harness/censimento-311-312/probe-311-undef-lhs.php on line 12
+
+Warning: Undefined array key "k" in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp103-harness/censimento-311-312/probe-311-undef-lhs.php on line 12
+a1k=3
+case-d:array-key-indefinita
+
+Warning: Undefined array key "y" in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp103-harness/censimento-311-312/probe-311-undef-lhs.php on line 16
+a2y=4
+case-e:concat-assign
+
+Warning: Undefined variable $u3 in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp103-harness/censimento-311-312/probe-311-undef-lhs.php on line 19
+u3=x
+case-f:coalesce-assign-controllo
+u4=5
+case-g:post-incr
+
+Warning: Undefined variable $u5 in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp103-harness/censimento-311-312/probe-311-undef-lhs.php on line 25
+u5=1
+case-h:pre-incr
+
+Warning: Undefined variable $u6 in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp103-harness/censimento-311-312/probe-311-undef-lhs.php on line 28
+u6=1
+case-i:minus-assign
+
+Warning: Undefined variable $u7 in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp103-harness/censimento-311-312/probe-311-undef-lhs.php on line 31
+u7=-7
+fine

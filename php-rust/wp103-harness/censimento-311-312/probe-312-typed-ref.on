@@ -1,0 +1,13 @@
+case-a:ref-a-prop-typed
+TE
+t-i=1
+case-b:ref-a-static-typed
+TE
+T-s=2
+case-c:prop-typed-diretta-controllo
+TE
+t2-i=1
+case-d:ref-passata-per-funzione
+TE
+t3-i=1
+fine
