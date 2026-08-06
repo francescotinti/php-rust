@@ -65,13 +65,22 @@ pure**; giudice = le sei micro-categorie di `wp97-harness/micro/`.
   memoria per tutta la richiesta.
 - **H-C1c**: resta GATED su fixture/giudici per SPECIE (KS-ST-103-2).
 
-## Regole di metodo (invariate)
+## Regole di metodo
 
 1. Il giudice è la micro-categoria. 2. WordPress è un collaudo di PARITÀ
 (si esegue quando cambia emissione O runtime — S-103: runtime parity-null
 PROVATO da corpus/batteria/server, coppia non rieseguita e debito
 NOMINATO: la prima leva vera la salda). 3. Criterio scritto PRIMA.
 4. Apparato solo se blocca; timebox ½ sessione.
+5. **⭐⭐ REGOLA UTENTE (2026-08-06, rango sopra i concili,
+[[feedback-scoreboard-lever-pacing]])**: (a) ogni report di fine
+sessione apre con lo **SCOREBOARD** (sei rapporti + frecce vs sessione
+precedente, CPU/RAM WordPress, riga «leve perf spedite: N»); (b) **ogni
+sessione DEVE tentare almeno una leva perf** (A/B ESEGUITO, qualunque
+verdetto) — i prerequisiti si COMPRIMONO nella finestra della leva; una
+sessione con N=0 dichiara l'anomalia in testa al report e la successiva
+apre con riallocazione fondamentali-first. Un ordine di concilio
+composto solo di prerequisiti non è un ordine valido.
 
 ## Stato gate
 

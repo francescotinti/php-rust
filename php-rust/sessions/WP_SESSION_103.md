@@ -8,6 +8,22 @@ lavoro nelle proprietà e nelle chiamate (scoprendo che una stima precedente
 era il doppio del reale), e dimostrato con un test che gli oggetti in
 circolo attraverso un generatore non vengono mai liberati.
 
+**SCOREBOARD** (prima applicazione della regola utente 2026-08-06):
+
+| giudice | S-102 | S-103 | trend |
+|---|---|---|---|
+| aritmetica | 12,3 | 12,3 | = |
+| proprietà | 11,5 | 11,5 | = |
+| chiamate | 7,7 | 7,4 | ↓ −0,3 (banda tra-sere, non leva) |
+| stringhe | 6,6 | 6,6 | = |
+| array | 4,6 | 4,4 | ↓ −0,2 (banda) |
+| regex | 3,6 | 3,7 | ↑ +0,1 (banda) |
+
+WordPress (riferimento WP-102): full CPU **1,89×** · media CPU **2,64×**
+· full peak phpr ~1942-1990 MiB. **Leve perf spedite in questa
+sessione: 0** — ANOMALIA DICHIARATA (seconda sessione consecutiva;
+KS-GR-105-1: S-104 spedisce l'A/B della leva H-C2 o riallocazione).
+
 **Data**: 2026-08-06 (13:0x–16:3x). **Modello verificato all'apertura**:
 Fable 5. **Ordine eseguito**: Concilio WP-104 §S-103 punti 1-5 TUTTI
 (igiene 8/8 nella finestra d'attesa dell'A/B — timebox rispettato).
