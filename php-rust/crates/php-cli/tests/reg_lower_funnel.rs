@@ -95,12 +95,19 @@ $s=0; for($i=0;$i<1000;$i++){ $s += $i*3 - ($i>>2); } echo $s,"\n"; echo probe(1
     };
 
     // Positive control flag-on: `{main}` AND the probe function both show the
-    // fused register forms (BinarySC for `*3`/`>>2`, BinaryDst for the `+=`
-    // tail; il compare del loop è slot-const nel main → CmpJmpSC, slot-slot
-    // nella probe `$j<$n` → CmpJmpSS).
-    for (label, cmp_form) in [("{main}", "CmpJmpSC"), ("fn probe", "CmpJmpSS")] {
+    // fused register forms (BinarySC for `*3`/`>>2`; il compare del loop è
+    // slot-const nel main → CmpJmpSC, slot-slot nella probe `$j<$n` →
+    // CmpJmpSS). EMENDAMENTO DICHIARATO S-106 (leva H-A1, S-106-R-3): il
+    // `+=` del main ora fonde OLTRE BinaryDst nella RMW-su-slot
+    // `BinarySTDst` — l'attesa BinaryDst del main è SOSTITUITA, e il
+    // controllo positivo di BinaryDst è RI-COLLOCATO nella probe, dove il
+    // sito lhs-stack della catena `$t+$j+$j+$j` lo produce ancora.
+    for (label, cmp_form, dst_form) in [
+        ("{main}", "CmpJmpSC", "BinarySTDst"),
+        ("fn probe", "CmpJmpSS", "BinaryDst"),
+    ] {
         let chunk = chunk_of(&on_err, label);
-        for form in ["BinarySC", cmp_form, "BinaryDst"] {
+        for form in ["BinarySC", cmp_form, dst_form] {
             assert!(
                 chunk.contains(form),
                 "no {form} in the `{label}` dump: the pass did not rewrite it\n{chunk}"
@@ -130,7 +137,7 @@ $s=0; for($i=0;$i<1000;$i++){ $s += $i*3 - ($i>>2); } echo $s,"\n"; echo probe(1
             chunk.contains("BinaryAdd"),
             "flag-off senza BinaryAdd in `{label}`: la specializzazione H-B2 è sparita\n{chunk}"
         );
-        for form in ["BinarySC", "CmpJmpSC", "BinaryDst", "BinarySS", "CmpJmpSS"] {
+        for form in ["BinarySC", "CmpJmpSC", "BinaryDst", "BinarySS", "CmpJmpSS", "BinarySTDst"] {
             assert!(
                 !chunk.contains(form),
                 "{form} nel dump flag-off di `{label}`: il modo OFF non è off\n{chunk}"
