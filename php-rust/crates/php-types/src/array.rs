@@ -88,6 +88,10 @@ pub struct ArrayAppendError;
 const _: () = assert!(
     std::mem::size_of::<Option<Zval>>() == std::mem::size_of::<Zval>()
 );
+// KS-HE-104-1 (Council WP-104, S-103): the H-C2 criterion is written
+// against THIS size — a lever that changes it must fail loudly here
+// (criterion VOID by construction), never drift silently.
+const _: () = assert!(std::mem::size_of::<Zval>() == 16);
 
 /// Storage representation, mirroring Zend's packed/mixed hash split
 /// (invisible to programs; the split only changes memory/CPU costs).

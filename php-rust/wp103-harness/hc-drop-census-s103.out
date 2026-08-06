@@ -1,0 +1,36 @@
+hc-drop-census-s103: S-103 punto 3 (prefisso H-C2, KS-BA-104-3 ≡
+RC-LE-104-1) — il canale drop CONTATO per sito e specie.
+grade=CENSUS  # conteggi esatti, non-timing; nessuna cifra cronometrica
+sessione=S-103 (2026-08-06 15:5x)
+strumento=build census isolata (phpr-census-target, zval-census+mem-census,
+  bin e11c1dfb5302ba86); macro dcn! nei bracci (fine-vita Zval per specie
+  via is_gc_container — KS-MA-104-1: il predicato è UNO)
+giudice=wp97-harness/micro/prop.php 30M + prop_small 100K (300:1)
+attesa=PRE-REGISTRATA v2 in hc2-prep-design.md §2 (raffinata leggendo i
+  corpi PRIMA del dinamico: la v1 da memoria contava 11 e mancava gli
+  overwrite)
+
+# ---- VERDETTO vs ATTESE (il dinamico ARBITRA; la v2 REGGE ESATTA) ----
+# drop/iter MISURATI (prop 30M; coda costante tra parentesi):
+#   Pop:        2 S            (+3 S, +1 C di coda: teardown)
+#   IncDecSlot: 1 S            (old Long sovrascritto)
+#   BinaryAdd:  2 S            (rhs consumato + top sovrascritto)
+#   BinaryDst:  3 S            (lhs+rhs consumati + dst sovrascritto)
+#   CmpJmpSC:   2 S            (+2 S di coda; cv materializzato + Bool res)
+#   PropGet:    2 C            (−2 C di coda: i 2 fallback IC di warmup non
+#                               annotati — coerente col census pila S-102)
+#   PropSet:    1 S + 1 C      (old + handle ricevitore mosso)
+# TOTALI/iter: **DropS = 11 ESATTI · DropC = 3 ESATTI** (14 fine-vita/iter)
+# Linearità 300:1 ESATTA (prop_small: 1.100.004 S / 299.998 C → stessi
+# rapporti, stesse code).
+#
+# LETTURA:
+# - L'attesa pre-registrata v2 (11 S + 3 C) è CONFERMATA A ZERO SCARTI.
+#   La stima storica «~11 drop/iter» combacia coi SOLI scalari: il canale
+#   della leva H-C2 (fast-out scalare) è **11 DropS/iter**, per sito come
+#   sopra — mai ÷14 aggregato (KS-BA-104-1: Δ_A/B per sito×primitiva).
+# - I 3 DropC/iter (2 handle PropGet + 1 handle PropSet) NON sono canale
+#   del fast-out: un fast-out che li salti = reject (A-HO-104-5).
+# - NIENTE attesi in ns da questi conteggi (KS-GR-103-1): il costo/drop
+#   fa fede SOLO dal Δ_A/B della leva ÷ questi conteggi.
+# raw: wp103-harness/stack-census-out/{prop,prop_small,empty}.census

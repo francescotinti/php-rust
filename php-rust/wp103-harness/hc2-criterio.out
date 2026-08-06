@@ -1,0 +1,38 @@
+hc2-criterio: criterio di caduta/promozione della leva H-C2 (drop fast-out
+scalare) — SCRITTO PRIMA della leva (regola 3 del metodo), dopo i due
+prefissi vincolati (KS-BA-104-2/3).
+grade=CRITERIO
+sessione=S-103
+
+# ---- prerequisiti CONSUMATI ----
+# 1) drop-census: canale CONTATO = 11 DropS/iter per sito (+3 DropC FUORI
+#    canale) — hc-drop-census-s103.out, attesa v2 confermata esatta.
+# 2) leva-nulla: banda-LAYOUT da misurare con la build --features
+#    null-lever (stessa sera della leva; KS-BA-104-2: nessun A/B micro è
+#    giudicabile sotto quella banda). Stato: build pronta, misura in coda
+#    S-103 (se non entra: PRIMO atto della sessione che apre la leva).
+
+# ---- pin strutturali ----
+# - size_of::<Zval>() == 16 PINNATO A COMPILE-TIME (php-types/src/array.rs,
+#   KS-HE-104-1): una leva che cambia la taglia NON COMPILA ⇒ criterio
+#   VOID per costruzione, mai deriva silenziosa.
+# - fast-out SOLO via `is_gc_container` (A-HO-104-5 ≡ A-MA-104-4,
+#   KS-MA-104-1): un fast-out che salti drop/gc_note su un container
+#   (i 3 DropC/iter) = reject senza appello.
+
+# ---- criterio (banda WP-103 [8,22] ns/iter RIPESATA sul contato) ----
+# La banda [8,22] ns/iter del Concilio WP-103 presupponeva ~11 drop/iter:
+# il contato CONFERMA 11 DropS/iter ⇒ la banda resta [8,22] ns/iter sul
+# giudice prop (≈ 0,7-2,0 ns/drop-scalare). NIENTE attesi derivati:
+# la banda è il TETTO di plausibilità, non l'attesa.
+# - PROMOZIONE: Δ_A/B (leva da sola, ABAB stessa sera, R=5, netto
+#   pavimenti) ≥ PAVIMENTO = ½ del limite basso = **4 ns/iter** su prop
+#   (½ prudenziale, feedback-keep-partial-wins: sotto pavimento il
+#   guadagno si REGISTRA ma non promuove da solo) E |Δ| > banda-layout
+#   misurata dalla leva-nulla E dump-diff bimodale ZERO E gate pieno
+#   (fixture 13+5+19 + batteria + corpus 1417×2 per NOME + coppia WP).
+# - CADUTA: Δ_A/B < banda-layout ⇒ la leva NON è distinguibile dal
+#   linker: si registra e si chiude il braccio (niente iterazioni cieche).
+# - ATTRIBUZIONE: Δ si divide per SITO×specie coi conteggi di
+#   hc-drop-census-s103.out (mai ÷11 aggregato, KS-BA-104-1).
+# - Un Δ su categorie NON giudicate dall'A/B resta INDIZIO (KS-GR-104-1).
