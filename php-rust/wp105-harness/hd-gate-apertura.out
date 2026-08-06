@@ -1,0 +1,60 @@
+hd-gate-apertura: S-105 §1b — GATE D'APERTURA della leva H-D args, letto
+contro il criterio pre-registrato hd-args-criterio.out (commit 11cc23a).
+grade=GATE
+sessione=S-105 (2026-08-06 sera)
+
+# ---- G1 · probe cap-bump 2→4: SITO CONFERMATO ----
+# Edit di working-tree (MAI committato, revert verificato con git diff
+# vuoto): run.rs Op::Call `with_capacity(n)` → `with_capacity(n.max(4))`.
+# Build census 66d395d5 (zval-census+mem-census, target isolato).
+# Delta calls↔calls_small (denominatore 19.900.000 chiamate):
+#   allochist le64: 20.004.912 − 104.912 = 19.900.000 ESATTI
+#   freehist  le64: 20.002.145 − 102.145 = 19.900.000 ESATTI
+#   allochist le32: Δ=7 ≈ 0 · freehist le32: Δ=3 ≈ 0
+#   galloc_n Δ = 20.183.929 − 283.929 = 19.900.000 (linearità quarta cifra)
+# ⇒ la massa per-chiamata si SPOSTA integralmente (16,32] → (48,64] col
+# cap 4 (4×16 = 64 B, bucket le64): l'args-Vec di Op::Call È il canale,
+# per MISURA (non più per esclusione di layout). Il gate APRE.
+# raw: wp105-harness/hd-probe-out/{calls,calls_small}.census (fuori repo)
+
+# ---- G2 · censimento ARITÀ (choke-point bind_params): INLINE-2 REGGE ----
+# Apparato committato 60ceb68 (GA_ARITY + riga argarity, census-only).
+# (a) calls.php: argarity a2=20.000.000 ESATTI (massa ≡ arità 2, attesa ✓;
+#     calls_small a2=100.000 ✓).
+# (b) campione reale NOMINATO: wptests fetta pura-PHP
+#     (~/Claude/wpdev tests/phpunit/tests/functions.php, 214 test reali,
+#     bootstrap WP incluso; wptests = DB scratch, uploads non toccati):
+#     985.695 bind: a0=19,1% a1=33,1% a2=20,9% a3=7,7% a4=15,6% ge5=3,6%
+#     ⇒ quota arità ≤2 = 73,1% MAGGIORITARIA (lettura pre-registrata):
+#     inline-2 ben dimensionato; il 26,9% ad arità >2 resta sul sentiero
+#     heap IDENTICO a oggi (nessuna pessimizzazione attesa).
+#   ⚠️ il binario del campione (b) montava ancora il probe G1: da quel run
+#     si legge SOLO la riga argarity (indipendente dalla capacity); gli
+#     istogrammi byte di quel run NON sono citabili.
+
+# ---- G3 · audit-fuga: NESSUNA FUGA + 1 DIVERGENZA PRE-ESISTENTE ----
+# (a) STATICO (Serena): 12 chiamanti di bind_params censiti — il
+#     contenitore muore DENTRO bind_params in tutti i rami (fast path:
+#     move nei slot; generic: extra_args = deref_clone; variadic: move in
+#     PhpArray). invoke_value/invoke_named a monte passano by-value.
+# (b) FIXTURE fx21-args-window.php (surplus/func_get_args, by-ref
+#     aliasing, variadic, variadic by-ref, surplus con reference):
+#     oracle↔phpr BYTE-IDENTICO su 7/8 righe.
+#     🔵 RIGA 5 DIVERGE PRE-LEVA (fedeltà, NON correlata al contenitore):
+#     `function vref(&...$rs)` con chiamata diretta `vref($m,$n)` — dentro
+#     la funzione entrambi incrementati (ritorna "2,3"), ma SOLO il primo
+#     argomento aliasa indietro (oracle "23", phpr "22"). Indiziato: il
+#     COMPILATORE lato chiamante pusha VALUE (non Ref) per le posizioni
+#     variadic oltre vslot (param_by_ref.get(i) = None per i > vslot);
+#     il binder (bind_params, variadic_by_ref) è corretto. La voce spread
+#     by-ref a catalogo (§d) NON copre la chiamata diretta. → punto 4
+#     fedeltà: voce NUOVA a catalogo; NON si tocca nella finestra leva.
+# PIN del gate leva: fx21 su phpr PRE-leva salvato
+# (hd-probe-out/fx21-pre-leva-phpr.pin) — la leva deve dare output
+# IDENTICO (PRE≡POST) su phpr E conservare la parità oracle sulle 7 righe.
+
+# ---- VERDETTO DEL GATE ----
+# G1 ✓ (sito = canale, per misura) · G2 ✓ (inline-2 dimensionato sul
+# reale) · G3 ✓ (nessuna fuga; 1 divergenza pre-esistente catalogata a
+# parte). LA LEVA SI IMPLEMENTA — prossimo: SmallVec<[Zval;2]> ArgsBuf,
+# admission-disasm, smoke R=2, A/B R=5 ABAB col criterio 11cc23a.
