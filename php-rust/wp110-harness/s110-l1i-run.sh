@@ -9,6 +9,19 @@ set -u
 export PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin:$PATH
 H="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp110-harness"
 OUT="$H/l1i-out/coll"; mkdir -p "$OUT"
+# EMENDAMENTO APPARATO S-110 (il criterio v2 non cambia): lo scratch di xctrace
+# (NSTemporaryDirectory) ha riempito il volume interno (15G di .ktrace, ENOSPC,
+# rc=134). Quattro guardie: TMPDIR sul volume esterno; cap 60s per recording;
+# fail-closed se Data <5G; pulizia scratch dopo OGNI record.
+SCRATCH_T="$H/l1i-out/tmp"; mkdir -p "$SCRATCH_T"; export TMPDIR="$SCRATCH_T"
+DARWIN_T="$(getconf DARWIN_USER_TEMP_DIR 2>/dev/null || echo /private/var/folders/n2/3ynvhhr1275c7p2j80kc1q5r0000gn/T)"
+guard_disk() {
+  free_g=$(df -g /System/Volumes/Data | awk 'NR==2{print $4}')
+  if [ "$free_g" -lt 5 ]; then
+    echo "rc=99 disco Data a ${free_g}G (<5G): FAIL-CLOSED" > "$H/l1i-out/coll.done"
+    exit 99
+  fi
+}
 L="$HOME/Claude/l1i-micro"
 ORACLE=/opt/homebrew/opt/php/bin/php
 PHPR="$HOME/Claude/php-rust-output/release/phpr"
@@ -27,11 +40,14 @@ for side in oracle phpr; do
   for j in arith prop arr; do
     for r in $(seq 1 $R); do
       T="$OUT/$side-$j-r$r.trace"; rm -rf "$T"
+      guard_disk
       step "record $side $j r$r"
       xctrace record --template 'CPU Counters' --output "$T" --no-prompt \
+        --time-limit 60s \
         --target-stdout /dev/null --launch -- "$BIN" "$L/$j.php" \
         >> "$OUT/record.log" 2>&1
       rc=$?
+      rm -f "$SCRATCH_T"/instruments*.ktrace "$DARWIN_T"/instruments*.ktrace 2>/dev/null
       step "record $side $j r$r rc=$rc"
       if [ $rc -ne 0 ]; then echo "rc=$rc lato=$side g=$j r=$r" > "$H/l1i-out/coll.done"; exit 1; fi
       xctrace export --input "$T" \
