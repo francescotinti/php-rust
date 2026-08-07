@@ -1,0 +1,33 @@
+# ==== PIN S-109 — VERDETTO GATE sul lotto-3 (F1 Neg-fold + F2 ConcatNConst) ====
+# ordine REGOLE par.6: build → hash → batteria → re-hash → STASH(script) → corpus/fixture → micro.
+# build lotto-3 @ 35d9ff1:       hash₁ = 929095448e823cb5 (A/B su questo; binario CONSERVATO — lezione azione-5)
+# batteria cargo test --release: 1742 passed / 0 failed, rc=0 DAL COMANDO (seconda run;
+#   1° giro ANNULLATO a verbale per DUE cause: (a) lancio con rc-in-coda-a-pipe INTERCETTATO e rilanciato
+#   (la regola stava per mordere la QUARTA volta — fermato prima del verdetto); (b) test lotto3 errato:
+#   il run() di batteria non registra i builtin host (substr indefinita) — riscritto builtin-free nella
+#   forma del giudice (fix 706/1 sul solo lib, commit dichiarato).
+# re-hash post-batteria: release/phpr = 9a2dbfa1 ≠ candidato (build gemella, .text non riproducibile —
+#   classe S-108 CONFERMATA). PIN = il binario MISURATO dall'A/B: candidato ripristinato in release/ e
+#   stashato con lo script (nessun binario non-eseguito: smoke parità 2 modi dentro pin-phpr.sh).
+# STASH via scripts/pin-phpr.sh s109: phpr-s109 = 929095448e823cb5
+# corpus: 1415 per NOME ×2 modi (off 20:11, on 20:18), insieme IDENTICO alla lista wp82,
+#   assert conteggi↔nomi ok, fails=0
+# fixture: catena 6/6 rc=0 (PHPR_PIN_ATTESO=929095448e823cb5, ORACLE_PIN_ATTESO=07b0df8d63247695):
+#   hc1 ×13 · move ×5 · recv 19a/b · fx20 (2 modi byte-id + RSS 50 MiB sotto guardia 75) · fx21 (7 righe
+#   byte-id, riga 5 golden §3.15) · W9 NUOVE ×2 (azioni 3-4 revisore S-108: w9b TypeError-obj-in-pila
+#   byte-id; w9a __get-che-lancia byte-id; probe di finestra: i dump ON contengono BinaryTCPropSetPop e
+#   PropGetSlotRecv). Il caso B di w9a (ricevitore undef) ha ESPOSTO la divergenza pre-esistente §3.16
+#   (riga errata nel warning undef-var, bilaterale on≡off) → catalogata per NOME, repro parcheggiata.
+# gate ORM: 3484 test, 3E/13F, 16 NOMI = baseline catalogata ESATTA (diff vuoto vs orm7742-fails.txt;
+#   assertions 11989 = s107b/s108)
+# gate hk: 1665 test 0E/0F (rc=1 = 2 PHPUnit-warnings + 5 warnings + 128 deprecations, = baseline)
+# micro SUL PIN (R=5, N emessi, micro-pin-s109.out):
+#   arith 9,4 → 9,3 · prop 8,0 → 7,9 · calls 5,3 → 5,1 · **str 6,2 → 5,3 (la leva)** ·
+#   arr 3,8 → 3,9 · re 3,5 → 3,5 (banda tra-sere ±0,1-0,2; nessuna regressione)
+# ==== PIN S-109 SALDO su 929095448e823cb5 (stash phpr-s109, default flag-ON, oracle 07b0df8d) ====
+# taglia run_loop sul pin: 287.944 B (S-108: 288.920; −976 B DICHIARATO: +1 handler ma ricompattamento);
+#   metodo taglia = nm differenza-indirizzi (identico a S-108); bl-nel-simbolo 5849 (metodo otool NUOVO,
+#   non confrontabile col "bl=29" storico che contava altro — dichiarato).
+# server: pin 443ae42f GRADATO PIENO ×2 modi in S-109 (grado-verdetto-443ae42f.out) — POST-lotti 1-2;
+#   NOTA: il grado server è sul HEAD 5e2713d (pre-lotto-3); un regrade post-lotto-3 NON è dovuto per
+#   cifre server già gradate (il lotto-3 tocca solo l'emissione CLI phpr), ma la voce resta nominabile.
