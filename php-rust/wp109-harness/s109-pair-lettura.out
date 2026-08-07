@@ -1,0 +1,26 @@
+s109-pair-lettura: coppia WP full+media BIMODALE sul pin 3b3d25e2 (criterio s109-pair-criterio.out PRE-registrato)
+grade=VERDICT  # rapporti macchina da pair109-ratios-{on,off}.out; parita' per NOME nei raw pair-out-{on,off}/
+
+== gamba ON (default; run 18:20-18:49, rc=0 gate_void=0) ==
+full_master_cpu=1.842 (oracle 449.26 / phpr 827.58) -> banda [1,86;1,93]: SOTTO di 0,018
+verdetto_gate=la voce fuori-banda-SOPRA non c'e': il lotto-2 (+14,7 KB run_loop; +31,1 KB cumulativi) NON paga icache
+  sull'aggregato -> LEVA S-109 SBLOCCATA dal criterio
+lettura=1,842 vs 1,855 (S-108) e 1,894 (WP-102): terza sera consecutiva in discesa — DIREZIONE favorevole coerente
+  coi lotti (meno op eseguite); magnitudine NON ripartita (confronto TRA-sere, nessun A/B proprio; REGOLE par.4)
+media_user_cpu=2.707 (oracle 21.38 / phpr 57.87) -> quarta lettura della voce aperta: in famiglia alta (2,677-2,747),
+  resta APERTA per NOME, solo direzione
+full_peak_phpr=1845,49 MiB (sotto la famiglia 1863-1998: minimo osservato); media_peak ratio 3,169 (metrica rumorosa)
+parita'=media 0 fail x2 lati; full failnames diff = SOLO Tests_Functions::test_wp_is_stream ftp (catalogo, pre-esistente);
+  conteggi IDENTICI (Tests 30472, Assertions 4558029, Warnings 86; oracle 1F / phpr 2F)
+
+== gamba OFF (seconda gamba bimodale, solo direzione; run 18:51-19:18, rc=0 gate_void=0) ==
+full_master_cpu=1.911 (oracle 447.66 / phpr 855.63) -> famiglia storica off [1,885;1,947]: DENTRO, sopra la lettura
+  S-108 (1,885) — banda tra-sere della gamba non-default, nessun verdetto
+media_user_cpu=2.634 (oracle 21.08 / phpr 55.52) -> AL riferimento 2,64: la gamba off della voce media RIENTRA
+  in questa lettura (on resta 2,707) — la voce media resta APERTA ma la deriva non e' monotona: varianza tra-sere
+full_peak_phpr=1872,00 MiB (famiglia off 1979-1998 NON confermata: sotto di ~107 MiB); media_peak ratio 3,396
+parita'=media 0 fail x2; full = SOLO wp_is_stream ftp (identico alla gamba on)
+
+== chiusura punto 1 ==
+gate=VERDE nei 2 modi (gate_void=0 x2, parita' per NOME x2); debito coppia-WP del lotto-2 SALDATO
+sull'aggregato (nessun pagamento icache visibile: full ON al minimo storico 1,842); leva S-109 SBLOCCATA.
