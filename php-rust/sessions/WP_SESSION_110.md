@@ -5,7 +5,6 @@ nulla sul carico reale (1,867×, in banda), e la prima misura coi contatori
 hardware su ENTRAMBI i motori ha firmato perché aritmetica e proprietà restano
 lente: phpr butta un terzo dei cicli ad aspettare le istruzioni (frontend),
 l'oracle il 3% — la prossima leva ha un bersaglio nominato (threaded-dispatch).
-
 **SCOREBOARD** (micro NON rimisurati: pin 92909544 invariato, valori S-109):
 **arith 9,3 = · prop 7,9 = · calls 5,1 = · str 5,3 = · arr 3,9 = · re 3,5 =**
 WordPress: **full ON 1,867× DENTRO banda [1,81;1,88]** (rif resta 1,842) /
