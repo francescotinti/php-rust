@@ -11,11 +11,11 @@ invariato) · incidenti «mai collaudato»: 1 (de67cb64, S-106).
 ## Scoreboard (pin 92909544, micro R=5 di S-109 — S-110 non li ha rimisurati)
 
 **arith 9,3 · prop 7,9 · calls 5,1 · str 5,3 · arr 3,9 · re 3,5**
-🔬 **TESI FRONTEND FIRMATA (S-110, criterio v2 9ff53cf)**: delivery-share
-phpr/oracle **arith 9,75× (32,5% vs 3,3% dei cicli) · prop 5,96× · controllo
-arr 1,04×** (specificità ✓); discarded 30×/169× su quote piccole. Firma di
-FAMIGLIA frontend — causa IC/ITLB/redirect NON ripartita (limite strumento).
-Verbale: `wp110-harness/s110-l1i-verdetto.out`, raw in `l1i-out/coll/`.
+🔬 **TESI FRONTEND FIRMATA (S-110, criterio v2 9ff53cf; soglia ≥2× SUPERATA
+con margine, controllo arr pari)**: delivery phpr **arith 32,5% dei cicli vs
+oracle 3,3% · prop 10,2% vs 1,7%**. Firma di FAMIGLIA (IC/ITLB/redirect non
+ripartita). ⚠️ TETTO revisore: azzerare TUTTA la delivery vale ≤×1,48 su arith
+(9,3→~6,3). Verbale+emendamento: `wp110-harness/s110-l1i-verdetto.out`.
 
 ## Stato gate
 
@@ -29,14 +29,14 @@ Verbale: `wp110-harness/s110-l1i-verdetto.out`, raw in `l1i-out/coll/`.
 
 ## §S-111 — ordine provvisorio
 
-1. **LEVA THREADED-DISPATCH (esperimento con A/B proprio)** — il bersaglio è
-   FIRMATO (fame frontend su arith/prop). Istruttoria PRIMA: forma minima
-   (tail-call sui handler? dispatch table computed-goto-like? clustering dei
-   handler caldi?) su run_loop; criterio PRE-registrato (giudici arith+prop,
-   soglia, R, disasm bl-count prima/dopo); guardia: contro-lettura delivery
-   post-leva con lo stesso apparato S-110 (`s110-l1i-run.sh` riusabile).
-   Vincoli revisore ATTIVI: commit+push a OGNI passo; admission bipartita;
-   se la leva emette bytecode: diff del prelude enumerato.
+1. **LEVA THREADED-DISPATCH (esperimento con A/B proprio)** — bersaglio
+   FIRMATO (fame frontend arith/prop). Istruttoria PRIMA: forma minima
+   (tail-call handler? clustering handler caldi?) su run_loop; criterio
+   PRE-registrato (giudici arith+prop, soglia, R, bl-count prima/dopo) CON
+   TETTO pre-registrato ×1,48 su arith (revisore az.4) e rumore tra-sere
+   della coppia da caratterizzare prima di nuove bande (az.2); guardia:
+   contro-lettura delivery post-leva con `s110-l1i-run.sh`. Vincoli attivi:
+   commit+push a OGNI passo; admission bipartita; diff prelude se emette.
 2. Coppia WP: NON dovuta in apertura (S-110 in banda); torna dovuta se la leva
    1 spedisce (collaudo aggregato sul pin nuovo).
 3. Se la leva 1 si blocca: (c) Sweep/ciclo-vita Zval o (b) arr RMW-su-dim
