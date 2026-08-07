@@ -35,11 +35,12 @@ cross-frame (inlining/threaded).
 2. **Leva S-110 — scelta per NOME** (criterio PRIMA): (a) str [StringifySlot;*]
    solo con istruttoria sospendibilità __toString (vincolo S-108) · (b) arr
    RMW-su-dim [FetchDim;BinarySTDst] previa istruttoria FetchDim · (c) Sweep/
-   ciclo-vita Zval (in TUTTI i giudici) · (d) contatori L1I SOLO se l'utente
-   installa Xcode (xctrace assente = fatto S-109) · (e) funnel interno arith:
-   fast-path i64 nelle op fuse (parere esterno VAGLIATO, wp109-harness/
-   parere-esterno-gemini-20260807.md: solo con criterio+A/B, stime esterne
-   MAI nei criteri).
+   ciclo-vita Zval (in TUTTI i giudici) · (d) contatori L1I: Xcode INSTALLATO
+   ma xctrace E GIT rifiutano senza `sudo xcodebuild -license` (azione utente;
+   ripiego git: `DEVELOPER_DIR=/Library/Developer/CommandLineTools`) ·
+   (e) funnel interno arith: fast-path i64 nelle op fuse (parere esterno
+   VAGLIATO in wp109-harness/parere-esterno-gemini-20260807.md: solo con
+   criterio+A/B, stime esterne MAI nei criteri).
 3. Azioni revisore S-109 (wp109-harness/revisione.md, PROCESSO): admission
    BIPARTITA per commit · diff prelude ON enumerato (conteggi F1/F2 attesi) ·
    batteria-sul-byte o dichiarazione permanente · **vincolo: commit+push A
@@ -77,4 +78,5 @@ Storia: `sessions/` · `gaps/GAP_TREND.md` · revisioni in `wp10*-harness/`.
 
 Pre-flight S-110: pin phpr **92909544** (fa fede HEAD, la build churna) ·
 server 443ae42f (stash php-server-s109) · MySQL wp8 con elenco DB · debug/
-da rimuovere · uploads sotto guardia · nessuna run in volo.
+da rimuovere · uploads sotto guardia · nessuna run in volo · ⚠️ disco Data
+a 12G post-Xcode (soglia 15G: liberare o dichiarare).
