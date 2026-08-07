@@ -29,3 +29,19 @@
 #   nuovi, DICHIARATO; bl 5418→5675). Il text-budget R-2 va ricontrattato
 #   alla prossima leva se la crescita continua.
 # ==== PIN S-107 SALDO su b4b1a87df02a7717 (default flag-ON, oracle 07b0df8d) ====
+#
+# ---- APPENDICE s107b: CURA §3.15 (stessa sessione, protocollo intero) ----
+# cura: push_call_args maschera estesa i>=vslot + Fatal senza nome param
+#   (probe oracle); build → 922ec830 → smoke fx315/fx315b byte-id 3 vie,
+#   fx21 riga5 = oracle → flip verificati per NOME (by_ref, by_ref_error
+#   PASS al runner) → corpus **1415 per NOME ×2 modi** (lista wp82
+#   aggiornata −2 nello stesso commit) → batteria 1739/0/2ign rc=0 →
+#   gate ORM: 3484 test 3E/13F, NOMI = baseline catalogata (HydrationCache,
+#   Lifecycle, XSD ×8, rollback ×2, NewOperator, PropertyHooks,
+#   AbstractHydrator, DebugTest; assertions 11986→11989 nota) →
+#   gate hk: 1665 test **0E/0F** (rc=1 = warning/deprecation phpunit) →
+#   re-hash relink batteria 62a4df65578282b5 → stash via pin-phpr.sh
+#   s107b → fixture ×5 rc=0 (fx21 golden ora IDENTICI) → micro R=5:
+#   arith 9,7 · prop 8,5 · calls 5,3 · str 6,2 · arr 3,9 · re 3,4
+#   (entro banda del PIN-108: la cura è cold-path).
+# ==== PIN FINALE S-107 = 62a4df65578282b5 (stash phpr-s107b) ====

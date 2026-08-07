@@ -1393,8 +1393,6 @@
 /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/use_unlinked_class.phpt
 /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/varSyntax/tempDimFetchByRefError.phpt
 /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/varSyntax/tempPropFetchByRefError.phpt
-/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/variadic/by_ref.phpt
-/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/variadic/by_ref_error.phpt
 /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/variadic/closure_invoke.phpt
 /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/weakrefs/gh10043-001.phpt
 /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/weakrefs/gh10043-002.phpt

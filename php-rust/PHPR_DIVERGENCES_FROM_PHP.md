@@ -861,7 +861,17 @@ la cifra ⇒ verdetto in-script VACUO). Conseguenze già vincolate:
 - Violazione del principio **correct-or-absent**: uno stub che mente è
   peggio di un'assenza — la voce resta 🔴 finché il contatore non è vero.
 
-### 3.15 🔴 Variadic **by-ref** in chiamata diretta: aliasa solo il PRIMO argomento del pack (scoperta S-105, fixture fx21)
+### 3.15 🏁 CURATA (S-107) — Variadic **by-ref** in chiamata diretta: aliasava solo il PRIMO argomento del pack (scoperta S-105, fixture fx21)
+
+**Cura S-107** (`push_call_args`, compile/expr.rs): l'indiziato di S-105
+confermato alla lettera — la maschera `by_ref.get(i)` rispondeva `false`
+oltre `vslot`; ora le posizioni `i >= vslot` usano il flag del pack e il
+Fatal «could not be passed by reference» per una posizione del pack OMETTE
+il nome del parametro (probe oracle: anche alla PRIMA posizione). Flip
+citati e verificati: `variadic/by_ref.phpt` + `variadic/by_ref_error.phpt`
+(corpus 1417→1415); golden fx21 riga 5 allineato all'oracle NELLO STESSO
+commit. Restano FUORI (già a catalogo §(d)): spread `f(...$arr)` by-ref e
+dispatch dinamico.
 
 `function vref(&...$rs) { foreach ($rs as &$r) { $r++; } }` con chiamata
 diretta `vref($m, $n)`: dentro la funzione ENTRAMBI gli elementi risultano

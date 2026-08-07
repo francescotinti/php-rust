@@ -631,6 +631,11 @@ impl<'a> super::FnCompiler<'a> {
                                     if decl.params.iter().any(|p| p.by_ref) {
                                         let by_ref: Vec<bool> =
                                             decl.params.iter().map(|p| p.by_ref).collect();
+                                        let variadic = decl
+                                            .params
+                                            .last()
+                                            .filter(|p| p.variadic)
+                                            .map(|p| p.by_ref);
                                         let pnames: Vec<Box<[u8]>> = decl
                                             .slots
                                             .iter()
@@ -640,7 +645,7 @@ impl<'a> super::FnCompiler<'a> {
                                         let mut fname = self.ctx.classes[cid].name.to_vec();
                                         fname.extend_from_slice(b"::");
                                         fname.extend_from_slice(method);
-                                        self.push_call_args(args, &by_ref, &fname, &pnames)?;
+                                        self.push_call_args(args, &by_ref, &fname, &pnames, variadic)?;
                                     } else {
                                         // Known callee with no by-ref params: values.
                                         self.push_value_args(args)?;
@@ -997,10 +1002,11 @@ impl<'a> super::FnCompiler<'a> {
             // Snapshot the by-ref mask so the immutable borrow of `callee` ends
             // before `push_call_args` borrows `self` mutably (REF-2).
             let by_ref: Vec<bool> = callee.params.iter().map(|p| p.by_ref).collect();
+            let variadic = callee.params.last().filter(|p| p.variadic).map(|p| p.by_ref);
             let pnames: Vec<Box<[u8]>> =
                 callee.params.iter().map(|p| callee.slots[p.slot as usize].clone()).collect();
             let returns_ref = callee.by_ref;
-            self.push_call_args(args, &by_ref, name, &pnames)?;
+            self.push_call_args(args, &by_ref, name, &pnames, variadic)?;
             self.emit(Op::Call { func: idx as u32, argc: args.len() as u32 });
             // A `function &f()` used in value context yields a copy, not an alias
             // (REF-4b). `$y = &f()` takes the raw ref via `AssignRefCall` instead.
@@ -1414,7 +1420,8 @@ impl<'a> super::FnCompiler<'a> {
                     .is_some_and(|p| p.by_ref)
             })
             .collect();
-        self.push_call_args(args, &by_ref, &fname, &pnames)?;
+        let variadic = fd.params.last().filter(|p| p.variadic).map(|p| p.by_ref);
+        self.push_call_args(args, &by_ref, &fname, &pnames, variadic)?;
         for ((_, expr), &br) in named.iter().zip(&named_by_ref) {
             match (&expr.kind, br) {
                 (ExprKind::Var(slot), true) => {
@@ -1602,18 +1609,38 @@ impl<'a> super::FnCompiler<'a> {
     /// compiles to an [`Op::Fatal`] in place rather than a compile rejection.
     /// `fname` is the callee's display name and `pnames` its parameter names
     /// (indexed positionally) for that message.
+    ///
+    /// CURA §3.15 (S-107; fixture fx21 riga 5; flip attesi variadic/by_ref.phpt
+    /// e variadic/by_ref_error.phpt): `variadic` è il flag by-ref del pack
+    /// quando l'ULTIMO parametro è `...$rest` (`None` senza variadico). Le
+    /// posizioni `i >= vslot` (vslot = ultimo indice della maschera) usano QUEL
+    /// flag — prima rispondevano `false` oltre la maschera e il pack viaggiava
+    /// by-value dalla seconda posizione. Il messaggio d'errore per una
+    /// posizione del pack OMETTE il nome del parametro (probe oracle 8.5.7:
+    /// `vref(): Argument #1 could not be passed by reference`, senza `($rs)`
+    /// anche alla PRIMA posizione del pack; un fisso lo conserva).
     pub(super) fn push_call_args(
         &mut self,
         args: &[Expr],
         by_ref: &[bool],
         fname: &[u8],
         pnames: &[Box<[u8]>],
+        variadic: Option<bool>,
     ) -> R<()> {
+        // Il variadico è per grammatica l'ULTIMO parametro: il suo indice è
+        // l'ultima posizione della maschera.
+        let vslot = variadic.map(|_| by_ref.len().saturating_sub(1));
         for (i, a) in args.iter().enumerate() {
             if matches!(a.kind, ExprKind::Spread(_)) {
                 return Err(CompileError::Unsupported("argument unpacking (spread)".into()));
             }
-            if by_ref.get(i).copied().unwrap_or(false) {
+            let in_pack = vslot.is_some_and(|v| i >= v);
+            let pos_by_ref = if in_pack {
+                variadic.unwrap_or(false)
+            } else {
+                by_ref.get(i).copied().unwrap_or(false)
+            };
+            if pos_by_ref {
                 match &a.kind {
                     ExprKind::Var(slot) => {
                         self.emit(Op::PushRef(*slot));
@@ -1628,13 +1655,21 @@ impl<'a> super::FnCompiler<'a> {
                             self.emit(Op::MakeRef { base, steps: steps.into() });
                             continue;
                         }
-                        let pname = pnames.get(i).map(|n| n.as_ref()).unwrap_or(b"");
-                        let msg = format!(
-                            "{}(): Argument #{} (${}) could not be passed by reference",
-                            String::from_utf8_lossy(fname),
-                            i + 1,
-                            String::from_utf8_lossy(pname),
-                        );
+                        let msg = if in_pack {
+                            format!(
+                                "{}(): Argument #{} could not be passed by reference",
+                                String::from_utf8_lossy(fname),
+                                i + 1,
+                            )
+                        } else {
+                            let pname = pnames.get(i).map(|n| n.as_ref()).unwrap_or(b"");
+                            format!(
+                                "{}(): Argument #{} (${}) could not be passed by reference",
+                                String::from_utf8_lossy(fname),
+                                i + 1,
+                                String::from_utf8_lossy(pname),
+                            )
+                        };
                         let k = self.konst(Const::Str(php_types::PhpStr::new(msg.into_bytes())));
                         self.emit(Op::Fatal(k));
                         return Ok(());
@@ -1727,12 +1762,14 @@ impl<'a> super::FnCompiler<'a> {
                     let decl = &self.ctx.classes[defc].methods[midx].decl;
                     if decl.params.iter().any(|p| p.by_ref) {
                         let by_ref: Vec<bool> = decl.params.iter().map(|p| p.by_ref).collect();
+                        let variadic =
+                            decl.params.last().filter(|p| p.variadic).map(|p| p.by_ref);
                         let pnames: Vec<Box<[u8]>> =
                             decl.slots.iter().take(decl.params.len()).cloned().collect();
                         let mut fname = self.ctx.classes[cid].name.to_vec();
                         fname.extend_from_slice(b"::");
                         fname.extend_from_slice(method);
-                        self.push_call_args(args, &by_ref, &fname, &pnames)?;
+                        self.push_call_args(args, &by_ref, &fname, &pnames, variadic)?;
                     } else {
                         // Known callee with no by-ref params: plain values.
                         self.push_value_args(args)?;
@@ -2171,11 +2208,12 @@ impl<'a> super::FnCompiler<'a> {
                 let decl = &self.ctx.classes[defc].methods[midx].decl;
                 if decl.params.iter().any(|p| p.by_ref) {
                     let by_ref: Vec<bool> = decl.params.iter().map(|p| p.by_ref).collect();
+                    let variadic = decl.params.last().filter(|p| p.variadic).map(|p| p.by_ref);
                     let pnames: Vec<Box<[u8]>> =
                         decl.slots.iter().take(decl.params.len()).cloned().collect();
                     let mut fname = self.ctx.classes[cid].name.to_vec();
                     fname.extend_from_slice(b"::__construct");
-                    self.push_call_args(args, &by_ref, &fname, &pnames)?;
+                    self.push_call_args(args, &by_ref, &fname, &pnames, variadic)?;
                 } else {
                     self.push_value_args(args)?;
                 }

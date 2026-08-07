@@ -429,7 +429,8 @@ impl<'a> super::FnCompiler<'a> {
         let pnames: Vec<Box<[u8]>> =
             callee.params.iter().map(|p| callee.slots[p.slot as usize].clone()).collect();
         let (base, steps) = self.field_path(target)?; // target index keys first…
-        self.push_call_args(args, &by_ref, name, &pnames)?; // …then the call args…
+        // Variadico già respinto sopra ⇒ nessun pack (cura §3.15 inerte qui).
+        self.push_call_args(args, &by_ref, name, &pnames, None)?; // …then the call args…
         self.emit(Op::Call { func: idx as u32, argc: args.len() as u32 }); // …leaving the raw ref on top
         // Aliasing a non-reference-returning function copies the value and raises a
         // notice (D-13.5). A by-ref callee that returned a non-place already raised
