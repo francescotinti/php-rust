@@ -10,10 +10,7 @@ try {
 } catch (RuntimeException $e) {
     echo "caught ", $e->getMessage(), "\n";
 }
-// caso B: ricevitore undef — l'ordine warning/Error deve essere l'oracle.
-try {
-    $u->p = $u->p + 1;
-} catch (Error $e) {
-    echo get_class($e), ": ", $e->getMessage(), "\n";
-}
+// (caso B — ricevitore undef — PARCHEGGIATO: catalogo §3.16, riga errata
+// nel warning undef-var del ricevitore, bilaterale on≡off; repro in
+// parked-w9a-caso-b-receiver-undef.php.txt)
 echo "done\n";

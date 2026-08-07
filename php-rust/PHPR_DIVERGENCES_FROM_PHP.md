@@ -893,6 +893,21 @@ NON è un effetto della leva (diverge sul pin 86a50d1c PRE-leva).
   (le altre 7 righe sono byte-identiche all'oracle e fanno da guardia
   della leva args).
 
+### 3.16 🔴 Riga sbagliata nel warning «Undefined variable» del RICEVITORE di un prop-assign (scoperta S-109, fixture w9a caso B)
+
+`$u->p = $u->p + 1;` con `$u` mai assegnata, dentro un `try { } catch`:
+l'ordine e i messaggi sono ORACLE-IDENTICI (Warning undef-var → Warning
+read-prop-on-null → Error assign-prop-on-null), ma phpr attribuisce il
+PRIMO warning alla riga dell'`echo` dentro il blocco `catch` (riga 17)
+invece che alla riga dello statement (riga 15). BILATERALE (on ≡ off:
+NON è un effetto delle finestre fuse — diverge identicamente a pila
+pura). Indiziato (non provato): la `lines[]` dell'op che legge il
+ricevitore del write (`AssignPath`/base-fetch) o l'emissione pigra del
+warning che legge la riga all'ip corrente. Fixture repro parcheggiata:
+`wp109-harness/w9-fixtures/parked-w9a-caso-b-receiver-undef.php` (fuori
+dal gate finché la voce non è curata; il gate w9 copre il caso A
+__get-che-lancia, byte-identico).
+
 ## 4. Punti di forza da NON toccare (invarianti verificati byte-identici)
 
 Per evitare regressioni, questi comportamenti sono **già** byte-identici con

@@ -1,0 +1,11 @@
+<?php
+// PARCHEGGIATA (S-109, catalogo §3.16): ricevitore undef in prop-assign —
+// phpr attribuisce il warning «Undefined variable $u» alla riga dell'echo
+// nel catch invece che allo statement. Bilaterale on≡off. Rientra nel gate
+// w9 (rinominata .php) quando la voce §3.16 viene curata.
+try {
+    $u->p = $u->p + 1;
+} catch (Error $e) {
+    echo get_class($e), ": ", $e->getMessage(), "\n";
+}
+echo "done\n";
