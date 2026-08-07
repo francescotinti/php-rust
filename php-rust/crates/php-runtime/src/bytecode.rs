@@ -713,6 +713,13 @@ pub enum Op {
     /// push, nessun effetto eliso — parità warning LoadVar via
     /// `reg_load_slot` (guardia fold_slot), poi il const.
     LoadVarPushConst { slot: u16, cidx: u16 },
+    /// `[s1..s(n-1)] -> [s]` — fused `PushConst(cidx); ConcatN(n)` (S-109
+    /// F2): la parte literal del join (SOLO `Const::Str`, guardia della
+    /// finestra) è l'ULTIMA parte; il corpo è lo stesso `concat_n` di
+    /// `ConcatN` (helper condiviso, zero biforcazione). ConcatN è puro per
+    /// costruzione — nessun helper sospendibile nella finestra (vincolo
+    /// S-108).
+    ConcatNConst { n: u32, cidx: u16 },
     /// `[s1..sn] -> [s]` — join `n` already-stringified parts (WP-34): the
     /// compiler emits each part through `Stringify` (or as a Str literal), so
     /// the flattened chain's intermediate `Concat`s were pure — one

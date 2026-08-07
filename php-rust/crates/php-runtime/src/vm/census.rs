@@ -13,7 +13,7 @@ use crate::bytecode::Op;
 use crate::hir::BinOp;
 use php_types::Zval;
 
-pub const N_OPS: usize = 198;
+pub const N_OPS: usize = 199;
 
 pub const OP_NAMES: [&str; N_OPS] = [
     "PushConst", "Pop", "Dup", "LoadSlot", "LoadVar", "PushUndef", "StoreSlot", "Swap",
@@ -43,6 +43,7 @@ pub const OP_NAMES: [&str; N_OPS] = [
     "BinarySTDst",
     "BinaryTC", "BinarySCSC", "IncDecSlotPop", "IncDecSlotJmp", "PropGetSlot", "PropSetPop", "StringifySlot",
     "PropGetSlotRecv", "BinaryTCPropSetPop", "BinarySCSCDst", "LoadVarPushConst",
+    "ConcatNConst",
     "BinaryAdd",
 ];
 
@@ -262,7 +263,11 @@ pub fn op_index(op: &Op) -> usize {
         Op::BinaryTCPropSetPop { .. } => 194,
         Op::BinarySCSCDst { .. } => 195,
         Op::LoadVarPushConst { .. } => 196,
-        Op::BinaryAdd => 197,
+        // S-109 lotto-3 (census terzo giro): ConcatNConst entra PRIMA di
+        // BinaryAdd — l'invariante «BinaryAdd chiude la tabella» resta vero.
+        // EMENDAMENTO DICHIARATO S-109: offset +1 (N_OPS 198→199).
+        Op::ConcatNConst { .. } => 197,
+        Op::BinaryAdd => 198,
     }
 }
 
@@ -656,13 +661,15 @@ mod tests {
             assert_eq!(OP_NAMES[i], *name, "OP_NAMES row mismatch for {name}");
         }
         // BinaryAdd (H-B2, S-98.0) closes the table; the register-form block
-        // (S-97.1, esteso da BinarySTDst in S-106 H-A1, dal lotto S-107 e
+        // (S-97.1, esteso da BinarySTDst in S-106 H-A1, dal lotto S-107,
         // dal LOTTO-2 S-108: PropGetSlotRecv/BinaryTCPropSetPop/
-        // BinarySCSCDst/LoadVarPushConst) sits just before it, with
-        // ConcatAssignSlot (WP-55) ahead of that block. EMENDAMENTO
-        // DICHIARATO S-107: offset +7 (N_OPS 187→194). EMENDAMENTO
-        // DICHIARATO S-108: offset +4 (N_OPS 194→198).
-        assert_eq!(op_index(&Op::ConcatAssignSlot(0)), N_OPS - 21);
+        // BinarySCSCDst/LoadVarPushConst, e dal LOTTO-3 S-109:
+        // ConcatNConst) sits just before it, with ConcatAssignSlot (WP-55)
+        // ahead of that block. EMENDAMENTO DICHIARATO S-107: offset +7
+        // (N_OPS 187→194). EMENDAMENTO DICHIARATO S-108: offset +4
+        // (N_OPS 194→198). EMENDAMENTO DICHIARATO S-109: offset +1
+        // (N_OPS 198→199).
+        assert_eq!(op_index(&Op::ConcatAssignSlot(0)), N_OPS - 22);
         assert_eq!(
             op_index(&Op::CmpJmpSC {
                 op: crate::hir::BinOp::Lt,
@@ -671,28 +678,30 @@ mod tests {
                 addr: 0,
                 when: true
             }),
-            N_OPS - 14
+            N_OPS - 15
         );
-        assert_eq!(OP_NAMES[N_OPS - 14], "CmpJmpSC");
+        assert_eq!(OP_NAMES[N_OPS - 15], "CmpJmpSC");
         assert_eq!(
             op_index(&Op::BinarySTDst { op: crate::hir::BinOp::Add, l: 0, dst: 0 }),
-            N_OPS - 13
+            N_OPS - 14
         );
-        assert_eq!(OP_NAMES[N_OPS - 13], "BinarySTDst");
+        assert_eq!(OP_NAMES[N_OPS - 14], "BinarySTDst");
         assert_eq!(
             op_index(&Op::BinaryTC { op: crate::hir::BinOp::Add, cidx: 0 }),
-            N_OPS - 12
+            N_OPS - 13
         );
-        assert_eq!(OP_NAMES[N_OPS - 12], "BinaryTC");
+        assert_eq!(OP_NAMES[N_OPS - 13], "BinaryTC");
         assert_eq!(
             op_index(&Op::IncDecSlotJmp { slot: 0, inc: true, addr: 0 }),
-            N_OPS - 9
+            N_OPS - 10
         );
-        assert_eq!(OP_NAMES[N_OPS - 9], "IncDecSlotJmp");
-        assert_eq!(op_index(&Op::StringifySlot { slot: 0 }), N_OPS - 6);
-        assert_eq!(OP_NAMES[N_OPS - 6], "StringifySlot");
-        assert_eq!(op_index(&Op::LoadVarPushConst { slot: 0, cidx: 0 }), N_OPS - 2);
-        assert_eq!(OP_NAMES[N_OPS - 2], "LoadVarPushConst");
+        assert_eq!(OP_NAMES[N_OPS - 10], "IncDecSlotJmp");
+        assert_eq!(op_index(&Op::StringifySlot { slot: 0 }), N_OPS - 7);
+        assert_eq!(OP_NAMES[N_OPS - 7], "StringifySlot");
+        assert_eq!(op_index(&Op::LoadVarPushConst { slot: 0, cidx: 0 }), N_OPS - 3);
+        assert_eq!(OP_NAMES[N_OPS - 3], "LoadVarPushConst");
+        assert_eq!(op_index(&Op::ConcatNConst { n: 0, cidx: 0 }), N_OPS - 2);
+        assert_eq!(OP_NAMES[N_OPS - 2], "ConcatNConst");
         assert_eq!(op_index(&Op::BinaryAdd), N_OPS - 1);
         assert_eq!(OP_NAMES[N_OPS - 1], "BinaryAdd");
     }

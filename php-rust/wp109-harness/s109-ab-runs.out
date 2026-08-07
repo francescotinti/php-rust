@@ -1,0 +1,48 @@
+cat=arith N=50000000 A=3b3d25e2 B=92909544 R=5
+floor_A=0.02 floor_B=0.02
+run1: A=80.00 ns/iter  B=80.20 ns/iter  D=-0.20 (B piu' veloce se +)
+run2: A=80.00 ns/iter  B=80.40 ns/iter  D=-0.40 (B piu' veloce se +)
+run3: A=80.40 ns/iter  B=79.80 ns/iter  D=+0.60 (B piu' veloce se +)
+run4: A=80.00 ns/iter  B=80.00 ns/iter  D=+0.00 (B piu' veloce se +)
+run5: A=80.20 ns/iter  B=79.80 ns/iter  D=+0.40 (B piu' veloce se +)
+
+cat=prop N=30000000 A=3b3d25e2 B=92909544 R=5
+floor_A=0.02 floor_B=0.03
+run1: A=113.33 ns/iter  B=110.00 ns/iter  D=+3.33 (B piu' veloce se +)
+run2: A=110.00 ns/iter  B=110.33 ns/iter  D=-0.33 (B piu' veloce se +)
+run3: A=110.33 ns/iter  B=108.67 ns/iter  D=+1.67 (B piu' veloce se +)
+run4: A=109.67 ns/iter  B=110.67 ns/iter  D=-1.00 (B piu' veloce se +)
+run5: A=112.00 ns/iter  B=110.33 ns/iter  D=+1.67 (B piu' veloce se +)
+
+cat=calls N=20000000 A=3b3d25e2 B=92909544 R=5
+floor_A=0.02 floor_B=0.02
+run1: A=117.00 ns/iter  B=116.00 ns/iter  D=+1.00 (B piu' veloce se +)
+run2: A=117.50 ns/iter  B=115.50 ns/iter  D=+2.00 (B piu' veloce se +)
+run3: A=117.50 ns/iter  B=116.00 ns/iter  D=+1.50 (B piu' veloce se +)
+run4: A=116.50 ns/iter  B=115.50 ns/iter  D=+1.00 (B piu' veloce se +)
+run5: A=117.50 ns/iter  B=117.50 ns/iter  D=+0.00 (B piu' veloce se +)
+
+cat=str N=4000000 A=3b3d25e2 B=92909544 R=5
+floor_A=0.02 floor_B=0.03
+run1: A=242.50 ns/iter  B=207.50 ns/iter  D=+35.00 (B piu' veloce se +)
+run2: A=242.50 ns/iter  B=205.00 ns/iter  D=+37.50 (B piu' veloce se +)
+run3: A=245.00 ns/iter  B=207.50 ns/iter  D=+37.50 (B piu' veloce se +)
+run4: A=245.00 ns/iter  B=205.00 ns/iter  D=+40.00 (B piu' veloce se +)
+run5: A=247.50 ns/iter  B=205.00 ns/iter  D=+42.50 (B piu' veloce se +)
+
+cat=arr N=100000 A=3b3d25e2 B=92909544 R=5
+floor_A=0.02 floor_B=0.03
+run1: A=11400.00 ns/iter  B=11300.00 ns/iter  D=+100.00 (B piu' veloce se +)
+run2: A=11100.00 ns/iter  B=11200.00 ns/iter  D=-100.00 (B piu' veloce se +)
+run3: A=11400.00 ns/iter  B=11000.00 ns/iter  D=+400.00 (B piu' veloce se +)
+run4: A=11400.00 ns/iter  B=12700.00 ns/iter  D=-1300.00 (B piu' veloce se +)
+run5: A=11700.00 ns/iter  B=11300.00 ns/iter  D=+400.00 (B piu' veloce se +)
+
+cat=re N=2000000 A=3b3d25e2 B=92909544 R=5
+floor_A=0.02 floor_B=0.02
+run1: A=630.00 ns/iter  B=630.00 ns/iter  D=+0.00 (B piu' veloce se +)
+run2: A=635.00 ns/iter  B=635.00 ns/iter  D=+0.00 (B piu' veloce se +)
+run3: A=635.00 ns/iter  B=635.00 ns/iter  D=+0.00 (B piu' veloce se +)
+run4: A=630.00 ns/iter  B=630.00 ns/iter  D=+0.00 (B piu' veloce se +)
+run5: A=635.00 ns/iter  B=635.00 ns/iter  D=+0.00 (B piu' veloce se +)
+

@@ -1,0 +1,20 @@
+candidato=929095448e823cb5  stash_A=3b3d25e2a467c8b0
+== (a) dump ON: str = F1+F2, gli altri cinque IDENTICI al pin ==
+   arith: ON DIVERGE dal pin (VIOLAZIONE: lotto-3 deve toccare solo str)
+   prop: ON DIVERGE dal pin (VIOLAZIONE: lotto-3 deve toccare solo str)
+   calls: ON DIVERGE dal pin (VIOLAZIONE: lotto-3 deve toccare solo str)
+   str: ConcatNConst=114 (atteso >0), Unary(Neg)=73 (atteso 0)
+   str: ADMISSION VIOLATA
+   arr: ON DIVERGE dal pin (VIOLAZIONE: lotto-3 deve toccare solo str)
+   re: ON DIVERGE dal pin (VIOLAZIONE: lotto-3 deve toccare solo str)
+== (b) OFF al byte: candidato vs stash ==
+   arith: OFF IDENTICO al byte
+   prop: OFF IDENTICO al byte
+   calls: OFF IDENTICO al byte
+   str: OFF IDENTICO al byte
+   arr: OFF IDENTICO al byte
+   re: OFF IDENTICO al byte
+== (c) run_loop: taglia e bl-count (candidato vs stash) ==
+   B run_loop_instr=44 bl=5
+   A run_loop_instr=44 bl=5
+admission_rc=1

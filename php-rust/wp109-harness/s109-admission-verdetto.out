@@ -1,0 +1,21 @@
+candidato=929095448e823cb5  stash_A=3b3d25e2a467c8b0
+== (a) dump ON, sezione {main}: str = F1+F2, gli altri cinque IDENTICI al pin ==
+   arith: {main} ON IDENTICO al pin
+   prop: {main} ON IDENTICO al pin
+   calls: {main} ON IDENTICO al pin
+   str{main}: ConcatNConst=1 (atteso >0), Unary(Neg)=0 (atteso 0)
+   arr: {main} ON IDENTICO al pin
+   re: {main} ON IDENTICO al pin
+== (b) OFF al byte (dump interi): candidato vs stash ==
+   arith: OFF IDENTICO al byte
+   prop: OFF IDENTICO al byte
+   calls: OFF IDENTICO al byte
+   str: OFF IDENTICO al byte
+   arr: OFF IDENTICO al byte
+   re: OFF IDENTICO al byte
+== (c) run_loop: taglia (nm) e bl-count (otool, simbolo esatto) ==
+   run_loop_size=287944 B
+   bl=5849
+   run_loop_size=288920 B
+   bl=5866
+admission_rc=0

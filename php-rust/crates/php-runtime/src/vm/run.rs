@@ -427,6 +427,33 @@ impl<'m> super::Vm<'m> {
         Ok(v)
     }
 
+    /// Corpo di `ConcatN`, condiviso con `ConcatNConst` (S-109 F2, criterio
+    /// lotto-3: helper condivisi, zero biforcazione): join in un'allocazione
+    /// quando tutte le parti sono Str, altrimenti funnel pairwise.
+    fn concat_n(&mut self, top: usize, n: usize) -> Result<(), PhpError> {
+        let base = self.frames[top].stack.len() - n;
+        if self.frames[top].stack[base..].iter().all(|v| matches!(v, Zval::Str(_))) {
+            let total: usize = self.frames[top].stack[base..]
+                .iter()
+                .map(|v| match v {
+                    Zval::Str(s) => s.len(),
+                    _ => 0,
+                })
+                .sum();
+            let joined = concat_n_join(&mut self.frames[top].stack, base, total);
+            self.frames[top].stack.push(Zval::Str(joined));
+        } else {
+            let parts: Vec<Zval> = self.frames[top].stack.drain(base..).collect();
+            let mut it = parts.into_iter();
+            let mut acc = it.next().expect("ConcatN parts");
+            for p in it {
+                acc = self.binary_value_ab(BinOp::Concat, acc, p)?;
+            }
+            self.frames[top].stack.push(acc);
+        }
+        Ok(())
+    }
+
     /// Operand-explicit core of [`Self::binary_value`] (WP-34): shared by
     /// `Binary`/`CmpJmp` (operands popped) and `CmpJmpConst` (one operand
     /// materialised from the constant pool) so all three evaluate a binary
@@ -1858,26 +1885,16 @@ impl<'m> super::Vm<'m> {
                     // folds pairwise through binary_value_ab to keep concat
                     // semantics owned in one place.
                     let n = *n as usize;
-                    let base = self.frames[top].stack.len() - n;
-                    if self.frames[top].stack[base..].iter().all(|v| matches!(v, Zval::Str(_))) {
-                        let total: usize = self.frames[top].stack[base..]
-                            .iter()
-                            .map(|v| match v {
-                                Zval::Str(s) => s.len(),
-                                _ => 0,
-                            })
-                            .sum();
-                        let joined = concat_n_join(&mut self.frames[top].stack, base, total);
-                        self.frames[top].stack.push(Zval::Str(joined));
-                    } else {
-                        let parts: Vec<Zval> = self.frames[top].stack.drain(base..).collect();
-                        let mut it = parts.into_iter();
-                        let mut acc = it.next().expect("ConcatN parts");
-                        for p in it {
-                            acc = self.binary_value_ab(BinOp::Concat, acc, p)?;
-                        }
-                        self.frames[top].stack.push(acc);
-                    }
+                    self.concat_n(top, n)?;
+                }
+                Op::ConcatNConst { n, cidx } => {
+                    // S-109 F2: la parte literal (Str per guardia della
+                    // finestra) è l'ultimo push del join; poi lo STESSO
+                    // corpo di ConcatN (concat_n, helper condiviso).
+                    let n = *n as usize;
+                    let cv = func.consts[*cidx as usize].to_zval();
+                    self.frames[top].stack.push(cv);
+                    self.concat_n(top, n)?;
                 }
                 Op::Unary(u) => {
                     let a = self.frames[top].stack.pop().expect("Unary operand");

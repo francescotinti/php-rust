@@ -1,0 +1,23 @@
+s109-ab-verdetto: lotto-3 str (F1 Neg-fold + F2 ConcatNConst) — criterio s109-lotto3-criterio.out (6534584, PRE)
+grade=VERDICT  # raw in s109-ab-runs.out; A=stash phpr-s108 3b3d25e2 (pin), B=candidato CONSERVATO 92909544 (phpr-s109-ab-candidate)
+
+ADMISSION v2: PASS (s109-admission-verdetto.out) — {main} dei 5 giudici non-str IDENTICO al pin; str{main}
+  ConcatNConst=1 e Unary(Neg)=0; OFF al byte x6; run_loop 288.920 -> 287.944 B (-976 B DICHIARATO: +1 handler
+  ma jump-table/inliner ricompattati; bl-totali-nel-simbolo 5866->5849, metodo NUOVO dichiarato: otool sul
+  simbolo esatto — il "bl=29" storico S-108 usava un conteggio diverso, non confrontabile).
+  EMENDAMENTO v1 DICHIARATO (s109-admission-v1.out): il controllo "cinque identici" era mis-specificato sul
+  dump INTERO (il prelude fonde F1/F2 legittimamente in ogni giudice) — ri-collocato sul solo {main}.
+
+SMOKE R=2 str: +35,00 / +40,00 — 2/2 stesso segno, si prosegue.
+
+ABAB R=5 (user CPU netto pavimenti per-binario, N emessi):
+  str   : +35,00 +37,50 +37,50 +40,00 +42,50  -> 5/5 CONCORDI, mediana +37,50 >> soglia 4  ==> PROMOSSA
+          (A 242,5-247,5 -> B 205,0-207,5 ns/iter: -15,4% sul giudice)
+  arith : -0,20 -0,40 +0,60 +0,00 +0,40       -> rumore, INVARIANTE atteso ok
+  prop  : +3,33 -0,33 +1,67 -1,00 +1,67       -> dentro rumore, nessuna regressione
+  calls : +1,00 +2,00 +1,50 +1,00 +0,00       -> sotto soglia (direzione favorevole non rivendicata)
+  arr   : +100 -100 +400 -1300 +400            -> granularita' inner-loop (~11,3 us/outer-iter), dentro spread
+  re    : +0,00 x5                             -> INVARIANTE esatto
+
+VERDETTO: promozione ai gate PIN (criterio punto 4 SODDISFATTO: str 5/5 sopra soglia, nessun giudice oltre
+soglia in regressione). Attesa statica str 10->8 op/iter CONFERMATA dall'admission (dump {main}).

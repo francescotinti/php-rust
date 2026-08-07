@@ -384,6 +384,8 @@ fn effect(op: &Op, park_targets: &[usize]) -> Effect {
         | Op::ClosureStatic { .. }
         | Op::CoalesceFetchDim { .. }
         | Op::ConcatN { .. }
+        // S-109 F2: come ConcatN — solo pila, nessun effetto slot.
+        | Op::ConcatNConst { .. }
         | Op::ConstFetch { .. }
         | Op::DeclareClass { .. }
         | Op::DeclareDeferred { .. }
@@ -651,6 +653,7 @@ fn renounce(func: &Func) -> (bool, Bits) {
             | Op::CoerceParam { .. }
             | Op::ConcatAssignSlot { .. }
             | Op::ConcatN { .. }
+            | Op::ConcatNConst { .. }
             | Op::ConstFetch { .. }
             | Op::DeclareClass { .. }
             | Op::DeclareFn { .. }

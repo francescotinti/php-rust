@@ -41,7 +41,7 @@
 //! stays 0.
 
 use crate::bytecode::{Addr, Const, Func, Op};
-use crate::hir::BinOp;
+use crate::hir::{BinOp, UnOp};
 
 /// CONTRATTO DI MODO di `PHPR_REG_LOWER` (S-100 punto 1 — KS-MA-101-1,
 /// A-HO-101-2, A-HE-101-1, A-PE-101-4). Grafia VALUE-PARSED, lista CHIUSA:
@@ -136,6 +136,7 @@ fn visit_addrs(op: &mut Op, f: &mut impl FnMut(&mut Addr)) {
         | Op::PropSetPop { .. } | Op::StringifySlot { .. }
         | Op::PropGetSlotRecv { .. } | Op::BinaryTCPropSetPop { .. }
         | Op::BinarySCSCDst { .. } | Op::LoadVarPushConst { .. }
+        | Op::ConcatNConst { .. }
         | Op::ConcatN { .. } | Op::Echo { .. }
         | Op::Print { .. } | Op::Stringify { .. } | Op::ArrayInit { .. }
         | Op::ArrayPush { .. } | Op::ArrayInsert { .. }
@@ -264,6 +265,33 @@ pub(super) fn lower_func(f: &mut Func) {
     let mut map = vec![0u32; n + 1];
     let mut i = 0usize;
     while i < n {
+        // S-109 F1 Neg-fold: [PushConst(c), Unary(Neg)] stessa riga, i+1 non
+        // bersaglio — il const si NEGA IN TABELLA (consts-append) e resta un
+        // solo PushConst. Vive QUI e non in fuse_window (che ha &Func: la
+        // tabella const è mutabile solo nel driver). SOLO Int con
+        // checked_neg()=Some (INT_MIN resta non fuso: la sua negazione
+        // promuove a float via il funnel unario) e Float; la negazione
+        // replica apply_unop_ovl a compile-time.
+        if i + 1 < n && !blocked[i + 1] && f.lines[i + 1] == f.lines[i] {
+            if let (Op::PushConst(c), Op::Unary(UnOp::Neg)) = (&f.ops[i], &f.ops[i + 1]) {
+                let negated = match f.consts.get(*c as usize) {
+                    Some(Const::Int(v)) => v.checked_neg().map(Const::Int),
+                    Some(Const::Float(x)) => Some(Const::Float(-x)),
+                    _ => None,
+                };
+                if let Some(k) = negated {
+                    let nc = f.consts.len() as u32;
+                    f.consts.push(k);
+                    for k2 in i..i + 2 {
+                        map[k2] = new_ops.len() as u32;
+                    }
+                    new_lines.push(f.lines[i]);
+                    new_ops.push(Op::PushConst(nc));
+                    i += 2;
+                    continue;
+                }
+            }
+        }
         let (op, w) = fuse_window(f, &blocked, i);
         for k in i..i + w {
             map[k] = new_ops.len() as u32;
@@ -358,6 +386,7 @@ fn bin_op_of(op: &Op) -> Option<BinOp> {
         | Op::PropGetSlot { .. } | Op::PropSetPop { .. } | Op::StringifySlot { .. }
         | Op::PropGetSlotRecv { .. } | Op::BinaryTCPropSetPop { .. }
         | Op::BinarySCSCDst { .. } | Op::LoadVarPushConst { .. }
+        | Op::ConcatNConst { .. }
         | Op::CmpJmpSS { .. } | Op::CmpJmpSC { .. }
         | Op::ConcatN { .. } | Op::JumpIfNotNull { .. } | Op::JumpIfNull { .. }
         | Op::Echo { .. } | Op::Print { .. } | Op::Stringify { .. }
@@ -539,11 +568,22 @@ fn fuse_window(f: &Func, blocked: &[bool], i: usize) -> (Op, usize) {
         // argomenti (calls/arr/re) quando NESSUNA finestra più lunga ha
         // vinto. Guardia di non-interferenza: se all'op dopo il const c'è un
         // Binary sulla stessa riga, la coppia si LASCIA al braccio W5
-        // ([PushConst, Binary] → BinaryTC): il lotto-2 AGGIUNGE fusioni,
-        // non cambia mai l'emissione del lotto-1.
+        // ([PushConst, Binary] → BinaryTC); se dopo il const c'è un
+        // [LoadVar foldabile, Cmp specchiabile] sulla stessa riga, il const
+        // appartiene al fold SPECCHIO (S-109, azione-1 revisore S-108: su
+        // quel pattern l'emissione torna lotto-1). W13 resta invece PRIMA
+        // di F2 ([PushConst, ConcatN]): su [LoadVar, PushConst, ConcatN]
+        // vince W13 come in lotto-2 — F2 fonde solo i const che nessuna
+        // finestra precedente ha assorbito. Il lotto AGGIUNGE fusioni, non
+        // cambia mai l'emissione dei lotti precedenti.
         if free(i + 1) {
             if let Some(c) = fold_const(f, i + 1) {
-                if !(free(i + 2) && bin_op_of(&f.ops[i + 2]).is_some()) {
+                let w5 = free(i + 2) && bin_op_of(&f.ops[i + 2]).is_some();
+                let mirror = free(i + 2)
+                    && free(i + 3)
+                    && fold_slot(f, i + 2).is_some()
+                    && bin_op_of(&f.ops[i + 3]).and_then(mirror_cmp).is_some();
+                if !w5 && !mirror {
                     return (Op::LoadVarPushConst { slot: a, cidx: c }, 2);
                 }
             }
@@ -559,6 +599,18 @@ fn fuse_window(f: &Func, blocked: &[bool], i: usize) -> (Op, usize) {
                     if let Some(m) = mirror_cmp(op) {
                         return bin_dst(f, &free, i, 3, BinKind::SC(a, c), m);
                     }
+                }
+            }
+        }
+        // S-109 F2: [PushConst(Str), ConcatN] — la parte literal del join
+        // entra nell'op di concatenazione (helper condiviso concat_n).
+        // Guardia: SOLO Const::Str (il fast path all-Str di ConcatN resta
+        // monomorfo); ConcatN è puro per costruzione — nessun helper
+        // sospendibile in finestra (vincolo S-108).
+        if free(i + 1) {
+            if let Op::ConcatN(nn) = &f.ops[i + 1] {
+                if matches!(f.consts.get(c as usize), Some(Const::Str(_))) {
+                    return (Op::ConcatNConst { n: *nn, cidx: c }, 2);
                 }
             }
         }
@@ -970,6 +1022,8 @@ echo g(1), ($h)(2), C::K;"#;
                 | Op::BinaryTCPropSetPop { .. }
                 | Op::BinarySCSCDst { .. }
                 | Op::LoadVarPushConst { .. }
+                // S-109 lotto-3: e questa.
+                | Op::ConcatNConst { .. }
         )
     }
 
@@ -1063,6 +1117,59 @@ echo g(1), ($h)(2), C::K;"#;
             "const-first arith must stay on the stack: {:#?}",
             lm.main.ops
         );
+        assert_eq!(run(&m), run(&lm));
+    }
+
+    /// S-109 azione-2 revisore S-108 (DENTE, emissione INTESA pre-registrata):
+    /// sullo stream [LoadVar, PushConst, LoadVar, Cmp-specchiabile] il const
+    /// appartiene al fold SPECCHIO — W13 CEDE (guardia estesa S-109), il
+    /// LoadVar di testa resta nudo e l'emissione è quella lotto-1
+    /// (BinarySC specchiato). Prima della guardia W13 rubava il PushConst
+    /// (de-ottimizzazione a valore identico, revisione.md S-108 pista 4).
+    #[test]
+    fn w13_cede_al_fold_specchio() {
+        let src = br#"<?php
+            function f($x, $y) { return $x + ($y ? 1 : 0); }
+            $a=1; $b=2; echo f($a, 3 < $b);
+            "#;
+        let m = compile(src);
+        let lm = compile_on(src);
+        assert!(
+            lm.main.ops.iter().any(|o| matches!(o, Op::BinarySC { .. })),
+            "fold specchio atteso (BinarySC dal const-lhs): {:#?}",
+            lm.main.ops
+        );
+        assert!(
+            !lm.main.ops.iter().any(|o| matches!(o, Op::LoadVarPushConst { .. })),
+            "W13 non deve rubare il PushConst del fold specchio: {:#?}",
+            lm.main.ops
+        );
+        assert_eq!(run(&m), run(&lm));
+    }
+
+    /// S-109 lotto-3 (criterio s109-lotto3-criterio.out): il corpo str
+    /// `$s = substr($s . "abc", -30)` emette ConcatNConst (F2) e il
+    /// PushConst NEGATO senza Unary (F1); il modo OFF resta pila pura.
+    #[test]
+    fn lotto3_negfold_and_concatnconst() {
+        let src = br#"<?php $s=''; for($i=0;$i<3;$i++){ $s = substr($s . "abc", -2); } echo $s;"#;
+        let m = compile(src);
+        let lm = compile_on(src);
+        assert!(
+            lm.main.ops.iter().any(|o| matches!(o, Op::ConcatNConst { .. })),
+            "F2 atteso (ConcatNConst): {:#?}",
+            lm.main.ops
+        );
+        assert!(
+            !lm.main.ops.iter().any(|o| matches!(o, Op::Unary(UnOp::Neg))),
+            "F1 atteso (Neg-fold via consts-append, niente Unary): {:#?}",
+            lm.main.ops
+        );
+        // INT_MIN non si fonde: la negazione promuove a float nel funnel.
+        let edge = br#"<?php echo -9223372036854775808;"#;
+        let me = compile(edge);
+        let lme = compile_on(edge);
+        assert_eq!(run(&me), run(&lme));
         assert_eq!(run(&m), run(&lm));
     }
 
