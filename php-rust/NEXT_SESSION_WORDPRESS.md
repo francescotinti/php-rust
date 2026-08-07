@@ -41,7 +41,10 @@ vita Zval (Sweep) e il costo interno dei funnel — non altre peephole su arith.
    consts-append; RMW-su-dim arr FetchDim+BinarySTDst; PropGetSlot+BinarySTDst
    prop) O **contatori L1I** (prerequisito del threaded dispatch, S-106).
    Criterio pre-registrato PRIMA, come da REGOLE §3.
-4. Azioni del revisore S-108 (wp108-harness/revisione.md) in coda d'apertura.
+4. Azioni revisore S-108 (wp108-harness/revisione.md, lente semantica):
+   guardia W13 estesa al fold SPECCHIO [PushConst,LoadVar,Cmp] + dente su
+   stream sintetico [LoadVar,PushConst,LoadVar,Cmp] + fixture W9b (TypeError
+   con obj in pila) + fixture W9a (__get che lancia su slot undef).
 5. Chiusura lean: rotazione + revisore singolo (lente: PROCESSO).
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
