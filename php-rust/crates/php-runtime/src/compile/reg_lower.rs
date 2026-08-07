@@ -1152,7 +1152,15 @@ echo g(1), ($h)(2), C::K;"#;
     /// PushConst NEGATO senza Unary (F1); il modo OFF resta pila pura.
     #[test]
     fn lotto3_negfold_and_concatnconst() {
-        let src = br#"<?php $s=''; for($i=0;$i<3;$i++){ $s = substr($s . "abc", -2); } echo $s;"#;
+        // Stessa forma del giudice str ma su funzione UTENTE (il run() della
+        // batteria non registra i builtin host): il PushConst del Neg segue
+        // ConcatN — fuori dalla portata di W13, F1 fonde. (Un Neg il cui
+        // const segue un LoadVar foldabile viene assorbito da W13 PRIMA:
+        // valore identico, il Neg resta a runtime — dichiarato nel verbale.)
+        let src = br#"<?php
+            function keep($a, $b) { return $a . $b; }
+            $s=''; for($i=0;$i<3;$i++){ $s = keep($s . "ab", -7); } echo $s;
+            "#;
         let m = compile(src);
         let lm = compile_on(src);
         assert!(

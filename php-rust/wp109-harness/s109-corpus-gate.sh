@@ -13,7 +13,7 @@ export PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin
 RUNNER="$HOME/Claude/php-rust-output/release/phpt-runner"
 CORPUS="/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests"
 REF="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp82-harness/p2-parity/corpus82p2.fails"
-OUT="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp108-harness/corpus-gate"
+OUT="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp109-harness/corpus-gate"
 mkdir -p "$OUT"
 step(){ echo "$(date +%H:%M:%S) $1" | tee -a "$OUT/progress.txt"; }
 FAILS=0
