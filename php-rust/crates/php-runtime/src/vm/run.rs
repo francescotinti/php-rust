@@ -194,8 +194,32 @@ fn binary_fast(b: BinOp, lhs: &Zval, rhs: &Zval) -> Option<Zval> {
                 BitAnd => Zval::Long(l & r),
                 BitOr => Zval::Long(l | r),
                 BitXor => Zval::Long(l ^ r),
-                // Div (zero / exact-division / MIN÷-1), Mod, Pow, Shl/Shr
-                // (negative-shift errors), Concat → generic.
+                // S-112 H-A2a: shift semantics VERBATIM from ops::shl/shr —
+                // y<0 raises ArithmeticError, so that arm stays generic
+                // (binary_fast cannot error); y>=64 saturates to 0 (shl) or
+                // the sign fill (shr).
+                Shl => {
+                    if r < 0 {
+                        return None;
+                    }
+                    if r >= 64 {
+                        Zval::Long(0)
+                    } else {
+                        Zval::Long(((l as u64) << r) as i64)
+                    }
+                }
+                Shr => {
+                    if r < 0 {
+                        return None;
+                    }
+                    if r >= 64 {
+                        Zval::Long(if l < 0 { -1 } else { 0 })
+                    } else {
+                        Zval::Long(l >> r)
+                    }
+                }
+                // Div (zero / exact-division / MIN÷-1), Mod, Pow, negative
+                // shifts, Concat → generic.
                 _ => return None,
             }
         }
@@ -1706,9 +1730,14 @@ impl<'m> super::Vm<'m> {
                         super::zvalcensus::note_prop_val(2, &lhs);
                         super::zvalcensus::note_prop_val(2, &rhs);
                     }
-                    dcn!(BinarySTDst: &lhs); // consumati da binary_value_ab
+                    dcn!(BinarySTDst: &lhs); // consumati dalla coda (fast o funnel)
                     dcn!(BinarySTDst: &rhs);
-                    let res = self.binary_value_ab(*b, lhs, rhs)?;
+                    // S-112 H-A2c: guardia binary_fast inline (hoisting puro
+                    // della prima riga di binary_value_ab), miss al funnel.
+                    let res = match binary_fast(*b, &lhs, &rhs) {
+                        Some(v) => v,
+                        None => self.binary_value_ab(*b, lhs, rhs)?,
+                    };
                     // il valore corrente del dst muore nello store
                     dcn!(BinarySTDst: &self.frames[top].slots[*dst as usize]);
                     self.reg_store_slot(top, *dst, res)?;
@@ -1777,9 +1806,9 @@ impl<'m> super::Vm<'m> {
                     // S-108 lotto-2 W10: l'albero BinarySCSC ESATTO (tre
                     // funnel, ordine a→b→combine) poi la coda BinarySTDst
                     // sul risultato senza transito di pila — stessa
-                    // read_slot silenziosa del lhs, stesso binary_value_ab
-                    // (la coda non ha fast path, come l'op non fusa),
-                    // stesso reg_store_slot.
+                    // read_slot silenziosa del lhs, stessa coda (guardia
+                    // binary_fast + funnel, come l'op non fusa da S-112
+                    // H-A2), stesso reg_store_slot.
                     let cva = func.consts[*ca as usize].to_zval();
                     let a = 'r: {
                         {
@@ -1811,7 +1840,13 @@ impl<'m> super::Vm<'m> {
                         None => self.binary_value_ab(*op, a, bv)?,
                     };
                     let lhs = read_slot(&self.frames[top].slots[*l as usize]);
-                    let res = self.binary_value_ab(*opd, lhs, res)?;
+                    // S-112 H-A2b: stessa guardia inline del combine qui
+                    // sopra — hoisting puro della prima riga di
+                    // binary_value_ab, il miss resta al funnel.
+                    let res = match binary_fast(*opd, &lhs, &res) {
+                        Some(v) => v,
+                        None => self.binary_value_ab(*opd, lhs, res)?,
+                    };
                     self.reg_store_slot(top, *dst, res)?;
                 }
                 Op::LoadVarPushConst { slot, cidx } => {
