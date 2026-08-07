@@ -60,17 +60,16 @@ gh-status-sync) · bl-count nuovo metodo non confrontabile col «29» storico.
 
 ## NON riproporre (i veti restano; dettaglio nei concili archiviati)
 
-pin/stash senza collaudo-nell'atto · contenitori sul call path · differenze tra
-A/B distinti come cifra · componenti prezzate nei criteri · magnitudine
-ripartita senza A/B proprio · estensioni di finestre senza criterio+dente ·
-allargare simple_call senza dente+fx21 · fixture su memory_get_usage (stub) ·
-**«icache-bound» resta NON-premessa: la firma S-110 è di FAMIGLIA frontend, la
-causa fine va misurata prima di prezzarla** · denominatori a memoria · output
-di run nel repo · rc di gate da pipe (4 morsi) · tee/log prima del mkdir ·
-finestre fuse OLTRE un helper sospendibile · admission d'emissione sul dump
-INTERO ({main} il perimetro; diff prelude enumerato quando emette) · xctrace
-senza guardie disco (TMPDIR interno = 15G di ktrace, rc=134, S-110) · path del
-volume esterno nel figlio tracciato (TCC headless blocca open()).
+pin/stash senza collaudo-nell'atto · contenitori sul call path · differenze
+tra A/B distinti come cifra · componenti prezzate nei criteri · magnitudine
+ripartita senza A/B proprio · finestre estese senza criterio+dente · simple_call
+allargato senza dente+fx21 · fixture su memory_get_usage (stub) · **«icache»
+resta NON-premessa (firma S-110 = FAMIGLIA frontend; la causa fine si misura
+prima di prezzarla)** · denominatori a memoria · output di run nel repo · rc di
+gate da pipe (4 morsi) · tee/log prima del mkdir · finestre fuse OLTRE un helper
+sospendibile · admission sul dump INTERO ({main} il perimetro; diff prelude
+quando emette) · xctrace senza guardie disco (15G ktrace, rc=134) · path del
+volume esterno nel figlio tracciato (TCC blocca open()).
 
 ---
 **Riscritto**: 2026-08-08 (chiusura S-110 + recepimento revisione Codex).
