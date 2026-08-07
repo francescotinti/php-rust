@@ -24,8 +24,7 @@ regge come motore; salto-indiretto/fetch-helper = ipotesi da MISURARE. Tetto
   6/6 (S-110) · run_loop 287.944 B · flag-ON · oracle 07b0df8d. Build fresca
   dello stesso sorgente = e0a3ea6a (divergenza NOTA S-110/111: il pin si
   ripristina SOLO dallo stash).
-- **php-server 443ae42f GRADATO PIENO ×2** (stash `php-server-s109`; il
-  release/php-server è residuo di build, non fa fede) · GitHub sync S-110.
+- **php-server 443ae42f ×2** (stash s109; release = residuo) · GitHub sync S-110.
 
 ## §S-112 — ordine provvisorio
 
