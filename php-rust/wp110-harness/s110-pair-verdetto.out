@@ -1,0 +1,8 @@
+s110-pair-verdetto: coppia WP bimodale sul pin 92909544 (criterio ded4a74 PRE-registrato)
+gate_principale=full ON 1,867 DENTRO banda [1,81;1,88] -> lotto-3 NON paga icache sul carico reale; LEVA S-110 SBLOCCATA
+full_off=1,869 (direzione: sotto la famiglia storica 1,885-1,911; stasera ON~OFF, il divario bimodale full si chiude a rumore)
+media=quinta lettura voce aperta: on 2,673 (giu da 2,707) / off 2,612 (giu da 2,634, SOTTO il rif 2,64): la voce perde ancora monotonia, resta aperta solo-direzione
+peak=full phpr ON 1843,53 MiB (in linea col minimo 1845,49 S-109) / OFF 1986,75 MiB
+validita=gate_void=0 su TUTTE e quattro le gambe; failnames estratti==dichiarati; media 0 nomi ×2; full parita per NOME con la SOLA eccezione nominata wp_is_stream ×2
+attribuzione=dentro-banda: nessuna cifra promossa a nuovo riferimento; il riferimento resta full ON 1,842 / OFF 1,911 (S-109) con la lettura S-110 1,867/1,869 registrata nella famiglia
+debito=lotto-3 su WP ASSOLTO; coppia dovuta S-110 SALDATA
