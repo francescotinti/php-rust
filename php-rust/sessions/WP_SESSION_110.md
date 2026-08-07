@@ -1,7 +1,7 @@
 # WP_SESSION_110 — S-110: coppia WP in banda (debito saldato) + TESI FRONTEND FIRMATA (xctrace)
 
-**In una frase**: la suite WordPress conferma che il terzo lotto non costa
-nulla sul carico reale (1,867×, in banda), e la prima misura coi contatori
+**In una frase**: la suite WordPress mostra che il terzo lotto costa al più
+~2% sul carico reale (1,867×, in banda), e la prima misura coi contatori
 hardware su ENTRAMBI i motori ha firmato perché aritmetica e proprietà restano
 lente: phpr butta un terzo dei cicli ad aspettare le istruzioni (frontend),
 l'oracle il 3% — la prossima leva ha un bersaglio nominato (threaded-dispatch).
