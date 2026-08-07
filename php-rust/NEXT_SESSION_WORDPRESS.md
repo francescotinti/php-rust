@@ -10,11 +10,10 @@ sessioni-senza-Δ-rapporti = 0 · incidenti «mai collaudato»: 1 (de67cb64, S-1
 ## Scoreboard (pin 92909544, micro R=5, S-109)
 
 **arith 9,3 · prop 7,9 · calls 5,1 · str 5,3 · arr 3,9 · re 3,5**
-str assolto dal lotto-3 (6,2→5,3): il corpo str è ora 8 op/iter.
-I colli restanti per NOME: arith/prop = dispatch (threaded, GATED dai
-contatori L1I — xctrace ASSENTE sulla macchina: serve Xcode pieno, decisione
-utente sul prerequisito) · ciclo di vita Zval (Sweep in ogni giudice) ·
-costo interno dei funnel · calls = cross-frame (inlining/threaded).
+str assolto dal lotto-3 (6,2→5,3; corpo 8 op/iter). Colli restanti per NOME:
+arith/prop = dispatch (threaded, GATED L1I — xctrace vuole Xcode, decisione
+utente) · ciclo di vita Zval (Sweep ovunque) · funnel interni · calls =
+cross-frame (inlining/threaded).
 
 ## Stato gate
 
@@ -24,9 +23,8 @@ costo interno dei funnel · calls = cross-frame (inlining/threaded).
   nomi = baseline ESATTA · hk 0E/0F · run_loop 287.944 B · default flag-ON ·
   oracle 07b0df8d. Stash 3b3d25e2 (s108) resta per retro-A/B.
 - **php-server 443ae42f GRADATO PIENO ×2 (S-109, post-lotti 1-2)**: cifre
-  server ATTRIBUIBILI. Nota: il binario server NON contiene il lotto-3
-  (HEAD 5e2713d); un eventuale re-pin server post-lotto-3 è nominabile ma
-  non dovuto per le cifre già gradate.
+  server ATTRIBUIBILI. Il binario server NON contiene il lotto-3 (HEAD
+  5e2713d); re-pin post-lotto-3 nominabile, non dovuto per le cifre gradate.
 - Census: terzo giro S-109 in wp109-harness/census-out (fuori repo).
 
 ## §S-110 — ordine provvisorio
@@ -34,12 +32,14 @@ costo interno dei funnel · calls = cross-frame (inlining/threaded).
 1. **COPPIA WP FULL+MEDIA BIMODALE in APERTURA sul pin 92909544** (debito
    lotto-3; criterio PRIMA: banda su riferimento 1,842/1,911; fuori banda
    sopra il cap della banda pre-registrata BLOCCA la leva).
-2. **Leva S-110 — scelta per NOME** (criterio PRIMA): (a) residui census str
-   [StringifySlot;*] SOLO se si istruisce la sospendibilità di
-   Stringify/__toString (vincolo S-108) · (b) RMW-su-dim arr
-   [FetchDim;BinarySTDst] previa istruttoria sospendibilità FetchDim ·
-   (c) Sweep/ciclo-vita Zval (presente in TUTTI i giudici) · (d) contatori
-   L1I SOLO se l'utente installa Xcode (xctrace assente = fatto S-109).
+2. **Leva S-110 — scelta per NOME** (criterio PRIMA): (a) str [StringifySlot;*]
+   solo con istruttoria sospendibilità __toString (vincolo S-108) · (b) arr
+   RMW-su-dim [FetchDim;BinarySTDst] previa istruttoria FetchDim · (c) Sweep/
+   ciclo-vita Zval (in TUTTI i giudici) · (d) contatori L1I SOLO se l'utente
+   installa Xcode (xctrace assente = fatto S-109) · (e) funnel interno arith:
+   fast-path i64 nelle op fuse (parere esterno VAGLIATO, wp109-harness/
+   parere-esterno-gemini-20260807.md: solo con criterio+A/B, stime esterne
+   MAI nei criteri).
 3. Azioni revisore S-109 (wp109-harness/revisione.md, PROCESSO): admission
    BIPARTITA per commit · diff prelude ON enumerato (conteggi F1/F2 attesi) ·
    batteria-sul-byte o dichiarazione permanente · **vincolo: commit+push A
