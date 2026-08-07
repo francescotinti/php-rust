@@ -76,8 +76,7 @@ volume esterno nel figlio tracciato (TCC headless blocca open()).
 **Riscritto**: 2026-08-08 (chiusura S-110 + recepimento revisione Codex).
 Storia: `sessions/` · `gaps/GAP_TREND.md` · revisioni in `wp1*-harness/`.
 
-Pre-flight S-111: pin phpr **92909544** (fa fede HEAD; release ripristinato
-dallo stash) · server 443ae42f (stash php-server-s109) · MySQL wp8 con elenco
-DB · debug/ da rimuovere · uploads sotto guardia · nessuna run in volo ·
-disco Data ~15-17G (soglia 15G: OK ma stretta; xctrace SOLO con le guardie di
-`s110-l1i-run.sh`) · xcrun xctrace version OK (licenza accettata).
+Pre-flight S-111: pin phpr **92909544** (fa fede HEAD; release dallo stash) ·
+server 443ae42f · MySQL wp8 con elenco DB · debug/ da rimuovere · uploads sotto
+guardia · nessuna run in volo · disco Data ~15-17G (stretto: xctrace SOLO con
+le guardie di `s110-l1i-run.sh`) · xcrun xctrace version OK.
