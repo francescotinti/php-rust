@@ -40,12 +40,10 @@ costo interno dei funnel · calls = cross-frame (inlining/threaded).
    [FetchDim;BinarySTDst] previa istruttoria sospendibilità FetchDim ·
    (c) Sweep/ciclo-vita Zval (presente in TUTTI i giudici) · (d) contatori
    L1I SOLO se l'utente installa Xcode (xctrace assente = fatto S-109).
-3. Azioni revisore S-109 (wp109-harness/revisione.md, lente PROCESSO):
-   admission BIPARTITA per commit (script+attese prima della build; ogni
-   emendamento = commit proprio) · diff del prelude ON enumerato (conteggi
-   F1/F2 attesi) · scelta batteria-sul-byte vs dichiarazione permanente ·
-   **vincolo in testa: commit+push A OGNI PASSO anche dentro la finestra
-   della leva (monocommit 35d9ff1 = violazione contata)**.
+3. Azioni revisore S-109 (wp109-harness/revisione.md, PROCESSO): admission
+   BIPARTITA per commit · diff prelude ON enumerato (conteggi F1/F2 attesi) ·
+   batteria-sul-byte o dichiarazione permanente · **vincolo: commit+push A
+   OGNI PASSO anche nella finestra della leva (monocommit 35d9ff1 contato)**.
 4. Chiusura lean: rotazione + revisore singolo (lente: MISURA).
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
@@ -56,10 +54,9 @@ repro parcheggiata in wp109-harness/w9-fixtures/) · fixture w9a caso B rientra
 nel gate quando §3.16 è curata · contatori L1I (prerequisito: Xcode) ·
 retro-A/B str coi tre stash s107b/s108/s109 · denti rinviati (OBS-8 terza
 mutazione; mutante fx20; dente direct-bind; dente drop-order; contatore
-hit/miss) · fedeltà: $z++/$z-- su undefined non warna · §3.13 · §3.12-i ·
-§3.14 · get_gc · bl-count run_loop: metodo NUOVO (otool sul simbolo, 5849)
-dichiarato non confrontabile col «29» storico — se serve il confronto si
-ricostruisce il metodo vecchio per NOME.
+hit/miss) · fedeltà: $z++/$z-- undefined non warna · §3.13 · §3.12-i · §3.14 ·
+get_gc · bl-count run_loop: metodo NUOVO (otool sul simbolo, 5849) non
+confrontabile col «29» storico — se serve, si ricostruisce il vecchio per NOME.
 
 ## NON riproporre (i veti restano; dettaglio nei concili archiviati)
 
