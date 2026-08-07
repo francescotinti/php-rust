@@ -20,11 +20,10 @@ Verbale: `wp110-harness/s110-l1i-verdetto.out`, raw in `l1i-out/coll/`.
 ## Stato gate
 
 - **phpr pin 929095448e823cb5** @ HEAD (stash `phpr-s109`, ripristinato al byte
-  in chiusura S-110 dopo churn della docs-build) — batteria 1742/0 · corpus
-  **1415 per NOME ×2** (fresco S-110: 2652/1415/1238) · fixture 6/6 · ORM 16
-  nomi = baseline · hk 0E/0F · run_loop 287.944 B · default flag-ON · oracle
-  07b0df8d. Scelta pendente (revisore S-109 az.3): al prossimo pin, batteria
-  sul binario stashato O dichiarazione permanente gate-sorgente/gate-byte.
+  in chiusura S-110 dopo churn docs-build) — batteria 1742/0 · corpus **1415
+  per NOME ×2** (fresco S-110: 2652/1415/1238) · fixture 6/6 · ORM 16 nomi =
+  baseline · hk 0E/0F · run_loop 287.944 B · flag-ON · oracle 07b0df8d. Pendente
+  (rev. S-109 az.3): al prossimo pin, batteria sul byte O dichiarazione permanente.
 - **php-server 443ae42f GRADATO PIENO ×2** (pre-lotto-3; re-pin nominabile).
 - GitHub SINCRONIZZATO (23c35b0): corpus 2652/1415, blockquote perf riscritto.
 
@@ -50,12 +49,11 @@ Verbale: `wp110-harness/s110-l1i-verdetto.out`, raw in `l1i-out/coll/`.
 media voce aperta (2,673/2,612: sesta lettura con la prossima coppia) ·
 **§3.16 riga errata warning undef-var ricevitore prop-assign** (bilaterale,
 repro in wp109-harness/w9-fixtures/; w9a caso B rientra nel gate quando curata)
-· causa frontend NON ripartita (IC vs ITLB vs redirect: servirebbe kpc/sudo o
-template custom GUI — azione utente nominabile) · retro-A/B str stash
-s107b/s108/s109 · denti rinviati (OBS-8 terza mutazione; mutante fx20;
-direct-bind; drop-order; contatore hit/miss) · fedeltà: $z++/$z-- undefined
-non warna · §3.13 · §3.12-i · §3.14 · get_gc · bl-count run_loop metodo nuovo
-(otool 5849) non confrontabile col «29» storico.
+· causa frontend NON ripartita (IC/ITLB/redirect: serve kpc/sudo o template
+GUI — azione utente nominabile) · retro-A/B str stash s107b/s108/s109 · denti
+rinviati (OBS-8; fx20; direct-bind; drop-order; hit/miss) · fedeltà: $z++/$z--
+undefined non warna · §3.13 · §3.12-i · §3.14 · get_gc · bl-count run_loop
+metodo nuovo (otool 5849) non confrontabile col «29» storico.
 
 ## NON riproporre (i veti restano; dettaglio nei concili archiviati)
 
