@@ -1,0 +1,10 @@
+== S-107 CRITERIO PRE-REGISTRATO — lotto superistruzioni W1a/W1b/W2/W3/W4/W5/W6/W8 (committato PRIMA dell'implementazione) ==
+1. Giudici A/B: TUTTI E SEI (ogni categoria è toccata dal lotto). Giudice primario: arith (peggiore, 11,6).
+2. Attesa di segno per giudice (dal conto statico in s107-census-derive.out): arith +, prop +, calls +, str +, arr +, re +.
+3. Soglia di promozione PER GIUDICE: Δ mediana ≥ max(4 ns/iter, spread osservato nella run). Nessuna banda-layout pre-registrata su questi giudici.
+4. Protocollo: smoke R=2 con early-stop a segno opposto sul giudice primario; poi A/B interleaved ABAB R=5, user CPU al netto dei pavimenti PER-binario, N emesso dal sorgente.
+5. Verdetto: PROMOSSO se arith supera la soglia con 5/5 concordi E nessun giudice regredisce oltre la soglia (segno − con |Δ| > soglia = REGRESSIONE, lotto respinto o ridotto per NOME).
+6. Co-primario strutturale: corpo arith 9→5, prop 16→10, calls 14→10, str 15→10, arr(inner) 12→9, re 13→9 PER NOME nel dump; OFF (PHPR_REG_LOWER=0) INVARIATO al byte; valore stampato = oracle su tutti i giudici.
+7. Admission prima dello smoke: diff disasm dei sei corpi (solo le finestre dichiarate), taglia e bl-count di run_loop a verbale (attesa: cresce — 7 handler nuovi; non è soglia, è dichiarazione).
+8. Magnitudine: SOLO dai Δ ABAB per giudice; nessuna ripartizione per finestra (le finestre non hanno A/B propri — direzione+meccanismo dal dump, REGOLE §4).
+9. Ogni emendamento di lettera-gate che morde (census op_index N_OPS 187→194, funnel, differential) si DICHIARA nel verbale di chiusura col sito ri-collocato.

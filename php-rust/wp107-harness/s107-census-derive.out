@@ -1,0 +1,36 @@
+== S-107 punto 2: derivazione top-N fusioni dal census (solo esiti e numeri) ==
+census_bin=58a93c94afe59119 (build strumentata, feature op-census, target phpr-census-target)
+parity_pin=eb555106a3c7b718  reg_lower=default-ON  dump ancorato: PHPR_DUMP_OPS sul pin di parità
+
+-- bigrammi caldi FUSABILI (conteggi dinamici census; per-Func, stessa riga, guardie finestra v3) --
+[IncDecSlot,Pop,Jump]   arith 50M · prop 30M · calls 20M · str 4M · arr 6,2M(x3 siti) · re 4M(x2 siti)  = TUTTI I SEI
+[Dup,StoreSlot,Pop]     calls 20M · str 4M · (init freddi ovunque)
+[LoadVar,PropGet]       prop 60M (2 siti/iter)
+[PropSet,Pop]           prop 30M
+[PushConst,Binary]      prop 30M (PushConst(1);BinaryAdd, lhs da stack)
+[LV,PC,Bin,LV,PC,Bin,Bin] arith 50M (BinarySC;BinarySC;Binary(Sub) post-pass = finestra 7 op nell'originale)
+[LoadVar,Stringify]     str 4M · arr 6,1M (interpolazione chiave)
+
+-- bigrammi caldi NON fusabili (dichiarati, con ragione) --
+Sweep->* / *->Sweep (veto GC/diagnostica, ordine S-107) · Jump->CmpJmpSC (bersaglio di salto a i+1: guardia finestra)
+Call->CheckArity / CheckArity->BinarySS / BinarySS->Ret / Ret->Dup (adiacenze CROSS-FRAME: fusabili solo per inlining, fuori scope; candidato threaded-dispatch S-108+)
+FetchDim->BinarySTDst / ConcatN->FetchDim (superop RMW-su-dim: profondità oltre il lotto, a rotazione per NOME)
+PushConst->Unary(Neg) str 4M: fold di costante, richiede APPEND a f.consts (fuse_window è &Func): meccanismo diverso dal lotto, a rotazione per NOME
+
+== IL LOTTO (7 op nuove + 1 riscrittura a op esistente; ogni handler riusa gli helper esistenti, zero biforcazione) ==
+W1a IncDecSlotJmp{slot,inc,pre,addr}  [IncDecSlot,Pop,Jump] -> 1     W1b IncDecSlotPop{slot,inc,pre}  [IncDecSlot,Pop] -> 1
+W2  (nessuna op nuova)                [Dup,StoreSlot s,Pop] -> StoreSlot s   (precedente *Dst: il duplicato transiente elide, net identico)
+W3  PropGetSlot{slot,name,ic}         [LoadVar,PropGet] -> 1         (parità warning LoadVar: stessa guardia fold_slot)
+W4  PropSetPop{name,ic}               [PropSet,Pop] -> 1             (elide push+pop del valore assegnato)
+W5  BinaryTC{op,cidx}                 [PushConst,Binary] -> 1        (lhs stack, const SEMPRE rhs: nessuno swap, diagnostic-safe)
+W6  BinarySCSC{la,ca,opa,lb,cb,opb,op} finestra 7 op -> 1            (ordine di valutazione e warning IDENTICI: a poi b poi op)
+W8  StringifySlot{slot}               [LoadVar,Stringify] -> 1       (parità warning LoadVar)
+
+-- stima STATICA op/iter (dal disasm; attesa di segno per l'A/B) --
+giudice  corpo_ante -> post   finestre           quota dispatch
+arith        9 -> 5   (-44%)  W6 -2, W1a -2
+prop        16 -> 10  (-38%)  W3 -2, W1a -2, W5 -1, W4 -1
+calls       14 -> 10  (-29%)  W2 -2, W1a -2      (Call/CheckArity/Ret intoccati)
+str         15 -> 10  (-33%)  W2 -2, W1a -2, W8 -1  (PushConst;Unary resta: Neg-fold rinviato)
+arr(inner)  12 -> 9   (-25%)  W8 -1, W1a -2
+re          13 -> 9   (-31%)  W1a -4 (2 siti)

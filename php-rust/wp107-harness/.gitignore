@@ -1,0 +1,4 @@
+# Output di run (REGOLE §10): i dump census e i log restano fuori dal repo;
+# il verbale derivato (s107-*.out) è l'unico artefatto committato.
+census-out/
+ab-out/
