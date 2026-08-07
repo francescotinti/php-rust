@@ -105,8 +105,13 @@ $s=0; for($i=0;$i<1000;$i++){ $s += $i*3 - ($i>>2); } echo $s,"\n"; echo probe(1
     // resterebbe verde per SOTTOSTRINGA di BinarySCSC, quindi il controllo
     // nomina la forma INTERA), e il trigramma IncDecSlot;Pop;Jump del
     // back-edge fonde in `IncDecSlotJmp` in entrambi i corpi.
+    // EMENDAMENTO DICHIARATO S-108 (lotto-2, W10): nel `{main}` l'intero
+    // statement RMW fonde in `BinarySCSCDst` (albero SCSC + coda STDst in
+    // un'op sola) — il controllo si RI-COLLOCA sulla forma sopravvissuta;
+    // il vecchio contains("BinarySCSC") resta verde per sottostringa, e la
+    // probe conserva il sito BinaryDst/CmpJmpSS non toccato dal lotto-2.
     for (label, cmp_form, dst_form) in [
-        ("{main}", "CmpJmpSC", "BinarySTDst"),
+        ("{main}", "CmpJmpSC", "BinarySCSCDst"),
         ("fn probe", "CmpJmpSS", "BinaryDst"),
     ] {
         let chunk = chunk_of(&on_err, label);
