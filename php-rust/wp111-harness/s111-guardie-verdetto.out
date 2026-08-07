@@ -1,0 +1,21 @@
+s111-guardie-verdetto: post-leva par.9 (qualunque verdetto) — held-out PRIMA LETTURA + contro-lettura delivery
+grade=VERDICT
+formato=ascii-nudo
+
+-- held-out (run-heldout.sh R=5, pavimenti per-binario; prima lettura in assoluto: congelati fdbe5c8 PRIMA della progettazione) --
+pin_92909544:  poly=6.7 [10.22/1.52]  err=2.6 [3.02/1.17]  wploop=5.6 [6.73/1.20]   (spread phpr <=0.06)
+B_f8482298:    poly=7.2 [10.89/1.52]  err=2.6 [3.09/1.17]  wploop=6.0 [7.09/1.19]   (spread poly B 0.18, nominato)
+esito=la leva REGREDISCE tutti e tre i giudici fuori-progetto (phpr netto: poly +6,6%, err +2,3%, wploop +5,3%):
+  la famiglia hot-cluster NON generalizza — l'apparato anti-overfitting ha morso alla prima uscita.
+
+-- contro-lettura delivery (s111-l1i-b.sh: lato phpr=B, arith+arr, R=3, stesso template/parse S-110 az.3 righe/4;
+   pin = re-parse degli XML S-110 sopravvissuti, stesso metodo) --
+arith: delivery pin=0.3249 [0.3204..0.3290] -> B=0.2951 [0.2903..0.3037]  (useful 0.6722->0.6966)
+arr:   delivery pin=0.2406 [0.2350..0.2443] -> B=0.2698 [0.2678..0.2700]  (useful 0.6181->0.5868)
+esito=su arith il clustering RIDUCE la quota delivery di ~3 punti e il tempo scende in proporzione (-3,4%),
+  ma il residuo (~0,295) SOPRAVVIVE coi 4 handler adiacenti: lo scatter dei caldi non e' il motore della
+  fame frontend — il residuo va cercato altrove (redirect/salto indiretto, fetch degli helper outlined:
+  ipotesi da misurare, NON premesse). Su arr la tassa dei freddi appare anche nei contatori (+2,9 punti
+  delivery, useful giu'): coerenza cronometro<->contatori su entrambi i lati.
+
+nota apparato: quote per-motore e contrasti tra binari usati SOLO come direzione (REGOLE par.3).
