@@ -1,0 +1,16 @@
+== S-107 A/B VERDETTO — lotto superistruzioni (criterio pre-registrato s107-batch-criterio.out @ 622e757) ==
+A = pin S-106 eb555106 (stash phpr-s106) · B = candidato lotto a0543213 · R=5 ABAB · user CPU al netto dei pavimenti per-binario · N emessi dal sorgente
+dati integrali: ab-out/s107-ab-full.txt (fuori repo); smoke R=2 arith: +16,2/+16,4 concordi (nessun early-stop)
+
+giudice  Δ mediana (ns/iter)  concordanza  soglia [max(4, spread)]  esito
+arith         +16,4              5/5           max(4; A 3,0/B 0,8)   SUPERA (primario)
+prop          +26,0              5/5           max(4; A 2,3/B 7,7)   SUPERA
+calls         +19,0              5/5           max(4; A 1,5/B 1,5)   SUPERA
+str           +17,5              5/5           max(4; A 15/B 7,5)    SUPERA
+arr          +500 (per iter esterna, 60 inner)  4/5  rumore A 900    positivo, non oltre soglia in nessuna direzione
+re            +10,0              5/5           max(4; A 15/B 10)     positivo (dentro rumore A: direzione firmata, magnitudine debole)
+
+Criterio §5: arith 5/5 sopra soglia E nessun giudice regredisce oltre soglia ⇒ **PROMOSSO**.
+Attribuzione (REGOLE §4): il Δ per giudice è il TOTALE del lotto su quella categoria; nessuna
+ripartizione per finestra (le finestre non hanno A/B propri — direzione+meccanismo dal dump admission).
+Co-primario strutturale: corpi 9→5 / 16→10 / 14→10 / 15→10 / 12→9 / (re: 2 trigrammi fusi) PER NOME nei dump post (census-out/post-*.dump, fuori repo).
