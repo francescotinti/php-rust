@@ -1,0 +1,11 @@
+== S-108 ADMISSION lotto-2 (criterio punto 5, PRIMA dello smoke) — candidato 3b3d25e2a467c8b0 @ ec03838 ==
+size_of_Op=48 INVARIATO (test compile::reg_lower::tests::stage2v3_op_size_unchanged: ok)
+emissione_ESATTA=si', per NOME nei dump PHPR_DUMP_OPS (census-out/post2-*.dump, fuori repo):
+  arith corpo 5->4 (BinarySCSCDst SALDA l'intero statement, opd=Add) · prop 10->8 (PropGetSlotRecv+BinaryTCPropSetPop)
+  calls caller 7->6 (LoadVarPushConst; +3 callee = 9 tot) · str 10 INVARIANTE · arr(inner) 9->8 (LoadVarPushConst) · re 9->8 (LoadVarPushConst; W12 differita)
+OFF_al_byte=IDENTICO x6 giudici (cmp dump off candidato vs stash 62a4df65: admission_off_rc=0)
+valori_stampati=IDENTICI x6 (candidato vs stash)
+run_loop=274.192 -> 288.920 B (+14.728 B DICHIARATO, 4 handler nuovi; testo cumulativo lotto1+2 = +31,1 KB da S-106 —
+  il collaudo WP di stamattina assolve il lotto-1; il lotto-2 pretende la coppia WP in S-109, voce nominata)
+bl_run_loop=29 -> 29 INVARIATO (nessun flip dell'inliner: la trappola H-C2/S-104 non scatta)
+ADMISSION: PASS — si procede allo smoke R=2 su prop

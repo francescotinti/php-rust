@@ -1,0 +1,34 @@
+# ==== PIN-109 (S-108) — VERDETTO GATE sul lotto-2 ====
+# ordine REGOLE par.6: build → hash → batteria → re-hash → STASH(script) → corpus/fixture → micro.
+# build lotto-2 @ ec03838:      hash₁ = 3b3d25e2a467c8b0 (A/B su questo; binario CONSERVATO — lezione azione-5)
+# batteria cargo test --release: 1740 passed / 0 failed, rc=0 DAL COMANDO (terza run; le prime due:
+#   1° giro ANNULLATO a verbale — rc in coda a pipe, la regola morde per la terza volta nell'arco;
+#   2° giro: DUE lettere-gate morse dal lotto-2, EMENDATE DICHIARANDO (REGOLE par.5):
+#     (a) reg_lower_funnel pretendeva BinarySTDst nel {main} — W10 la super-fonde: controllo
+#         ri-collocato su BinarySCSCDst (b999030);
+#     (b) census op_index_maps_sampled_variants_in_range: offset N_OPS-relativi slittati di 4
+#         (N_OPS 194→198, BinaryAdd chiude invariante) + controllo NUOVO su LoadVarPushConst (6ed9c2c).
+#   NOTA conteggio: 1739 (S-107) vs 1740 (oggi) = artefatto di conteggio run GIÀ provato per LISTA
+#   in questa sessione (s108-list-diff-verdetto.out: 1742=1742 nomi identici).
+# PIN = il binario dell'A/B: la build gemella post-batteria (a5cd220c) DIFFERISCE al .text
+#   (444k/659k righe, non-riproducibilità del relink: l'identità .text fra build gemelle NON è provabile
+#   — confermata a macchina la premessa dell'azione-5 S-107). Il pin coincide col binario MISURATO:
+#   nessuna «build gemella» da marcare questa volta. Sorgente identica provata dai commit
+#   (b999030/6ed9c2c toccano solo test).
+# STASH via scripts/pin-phpr.sh s108 (smoke parità 2 modi vs oracle): phpr-s108 = 3b3d25e2a467c8b0
+# corpus: **1415 per NOME ×2 modi** (off 13:27, on 13:34), insieme IDENTICO alla lista wp82,
+#   assert conteggi↔nomi ok, fails=0
+# fixture ×5 rc=0 (PHPR_PIN_ATTESO=3b3d25e2a467c8b0, ORACLE_PIN_ATTESO=07b0df8d63247695):
+#   hc1 · move · recv 19a/b · fx20 (2 modi byte-id + RSS sotto cap) · fx21 (7 righe byte-id, riga 5 = golden §3.15)
+# gate ORM: 3484 test, 3E/13F, 16 NOMI = baseline catalogata ESATTA (rollback ×2, HydrationCache,
+#   Lifecycle, XSD/Xml ×8, NewOperator, PropertyHooks, AbstractHydrator, Debug; assertions 11989 = s107b)
+# gate hk: 1665 test **0E/0F** (rc=1 = warning/deprecation phpunit, = baseline s107b)
+# micro SUL PIN (R=5, N emessi, ab-out/micro-pin-s108.out):
+#   arith 9,7 → 9,4 · prop 8,5 → 8,0 · calls 5,3 → 5,3 · str 6,2 → 6,2 ·
+#   arr 3,9 → 3,8 · re 3,4 → 3,5 (banda tra-sere ±0,1-0,4; nessuna regressione)
+# ==== PIN S-108 SALDO su 3b3d25e2a467c8b0 (stash phpr-s108, default flag-ON, oracle 07b0df8d) ====
+# regrade server: RINVIATO per NOME a S-109 (la finestra è andata alla leva; il server dde2a64d
+#   resta gradato ma PRE-lotti: nessuna cifra server attribuibile fino al regrade)
+# taglia run_loop sul pin: 288.920 B (S-107: 274.192; +14.728 = 4 handler nuovi, DICHIARATO;
+#   bl run_loop 29 = INVARIATO, nessun flip inliner). Cumulativo lotto1+2 = +31,1 KB da S-106:
+#   la coppia WP di S-109 è il collaudo icache del lotto-2 (quella di OGGI assolveva il lotto-1).

@@ -1,0 +1,16 @@
+== S-108 A/B VERDETTO — lotto-2 (criterio s108-lotto2-criterio.out @ af5d31d, emendato 74e0d62 PRE-implementazione) ==
+A = pin S-107b 62a4df65 (stash) · B = candidato lotto-2 3b3d25e2 (binario CONSERVATO phpr-s108-ab-candidate) · R=5 ABAB
+user CPU netto pavimenti per-binario · N emessi dal sorgente · raw in ab-out/s108-ab-full.txt (fuori repo)
+smoke R=2 prop: +6,67/+10,67 concordi (nessun early-stop)
+
+giudice  Δ mediana (ns/iter)  concordanza  soglia [max(4; spread A)]  esito
+prop         +7,33               5/5           max(4; 3,67) = 4       SUPERA (primario; 7/7 con lo smoke)
+arith        +2,60               5/5           max(4; 1,20) = 4       positivo SOTTO soglia: direzione firmata (statico 5->4, ~3,4 ns/op attesi: coerente)
+calls        +2,50               5/5           max(4; 5,00) = 5       positivo sotto soglia: direzione firmata
+re           +5,00               4/5 (1 zero)  max(4; 10,0) = 10      positivo sotto soglia: direzione firmata
+arr          +100 (denom. 100k)  3/5           rumore ±300            DENTRO RUMORE: nessun verdetto (per inner-iter ~+1,6 vs attesa ~3,4)
+str          +0,00 (controllo)   —             max(4; 0) = 4          NESSUNA regressione oltre soglia (mediana 0; run5 -10 singola)
+
+Criterio punto 3: prop supera con 5/5 E nessun giudice regredisce oltre soglia ⇒ **LOTTO-2 PROMOSSO**.
+Attribuzione (REGOLE par.4): Δ per giudice = totale del lotto-2; nessuna ripartizione per finestra.
+Co-primario strutturale: corpi 5->4 / 10->8 / 7->6 caller / 10 inv. / 9->8 / 9->8 per NOME nei dump (admission).
