@@ -1,0 +1,10 @@
+s108-list-diff-verdetto: diff PER NOME degli eseguibili di batteria S-106 vs S-107 (azione-3 revisore S-107)
+metodo=cargo test --release -- --list su HEAD (repo, target di parita': relink churn dichiarato, pin ripristinato
+  dallo stash e riverificato 62a4df65) E su commit S-106 6019890 (worktree + target dedicato phpr-s106-listtarget)
+esito=1742 nomi su ENTRAMBI i lati, diff VUOTO: l'insieme dei test eseguibili e' IDENTICO per NOME
+conclusione=il -1 della batteria (1740 S-106 -> 1739 S-107) e' un artefatto del conteggio della RUN,
+  non un test sparito: ora provato a livello di LISTA eseguibile (profilo release, feature applicate),
+  piu' forte dell'inventario #[test] sul sorgente usato in S-107 (che non vedeva cfg/feature)
+nota=1742 elencati vs 1739 contati dalla run: la differenza di 3 e' costante sui due lati e non nomina
+  nessun test nuovo/rimosso; la voce si chiude
+azione-3 revisore S-107: SALDATA

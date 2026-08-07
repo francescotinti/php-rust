@@ -1,0 +1,31 @@
+== S-108 punto 3a: census SECONDO GIRO sul pin 62a4df65 (build strumentata 43eaf06e) — derivazione lotto-2 ==
+corpi post-lotto-1 (op/iter dal dump, conteggi ESATTI): arith 5 · prop 10 · calls 10 · str 10 · arr(inner) 9 · re 9
+
+-- bigrammi caldi FUSABILI residui (stessa riga, stesso frame; il bersaglio di salto puo' stare SOLO in testa alla finestra) --
+[LoadSlot,PropGetSlot,BinaryTC,PropSetPop]  prop 30M = catena INTERA di `$o->c = $o->c + 1` (4 op -> 1)   quota 40% dei dispatch prop
+[BinarySCSC,BinarySTDst]                    arith 50M (20%+20% dei dispatch): l'intera espressione RMW dell'iterazione
+[LoadVar,PushConst]                         calls 20M (10%) · arr 6M (11%) · re 2M (11%) — TRE giudici, stessa coppia
+[CallHostBuiltinOut,JumpIfFalse]            re 2M (11%): chiamata builtin-out + branch sul risultato
+
+-- residui NON in lotto-2 (dichiarati, con ragione) --
+Sweep->* / *->Sweep (veto GC, invariato) · IncDecSlotJmp->CmpJmpSC e CmpJmpSC->* (bersagli di salto in
+posizione interna: guardia finestra) · Call/CheckArity/BinarySS/Ret (CROSS-FRAME: solo inlining/threaded,
+gated dai contatori L1I, S-106) · PushConst->Unary str (Neg-fold: meccanismo consts-append, rinviato per NOME)
+· FetchDim->BinarySTDst + ConcatN->FetchDim arr (superop RMW-su-dim: profondita', resta a rotazione per NOME)
+· PropGetSlot->BinarySTDst prop (si riesamina DOPO il lotto-2: W9 cambia la classifica)
+· StringifySlot->ConcatN / PushConst->StringifySlot (catena interpolazione: profondita', a rotazione)
+
+== IL LOTTO-2 (4 finestre candidate; ammissione singola per NOME, gate taglia-Op nel criterio) ==
+W9  PropRMWConstPop{obj_slot,name,ic,cidx,op}  [LoadSlot,PropGetSlot,BinaryTC,PropSetPop] -> 1
+W10 BinarySCSCSTDst{...campi W6...,dst,op}     [BinarySCSC,BinarySTDst] -> 1   (SOLO se size_of Op invariato)
+W13 LoadVarPushConst{name,cidx}                [LoadVar,PushConst] -> 1        (parita' warning LoadVar)
+W12 CallHostBuiltinOutJmpF{...campi call...,addr} [CallHostBuiltinOut,JumpIfFalse] -> 1
+
+-- stima STATICA op/iter (attesa di segno per l'A/B) --
+giudice  corpo_ante -> post    finestre           quota dispatch rimossa
+arith        5 -> 4   (-20%)   W10 -1             (se W10 esclusa: arith INVARIATO)
+prop        10 -> 7   (-30%)   W9 -3
+calls       10 -> 9   (-10%)   W13 -1
+str         10 -> 10  (0)      nessuna: atteso INVARIANTE entro rumore
+arr(inner)   9 -> 8   (-11%)   W13 -1
+re           9 -> 7   (-22%)   W13 -1, W12 -1

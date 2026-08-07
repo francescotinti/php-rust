@@ -10,7 +10,7 @@ set -u
 export PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin:$HOME/.cargo/bin
 H="$(cd -P "$(dirname -- "$0")" && pwd -P)"
 REPO="$H/.."
-WT="/Volumes/Extreme Pro/Claude/phpr-s106-worktree"
+WT="/Volumes/Extreme Pro/Claude/phpr-s106-worktree/php-rust"  # la radice git ha php-rust/ come sottodir
 WT_TARGET="/Volumes/Extreme Pro/Claude/phpr-s106-listtarget"
 OUT="$H/list-out"; mkdir -p "$OUT"
 norm() { sed -n 's/^\(.*\): test$/\1/p' "$1" | sort; }
