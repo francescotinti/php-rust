@@ -1,0 +1,10 @@
+s108-abx-criterio: rerun A/B mirato arr+re a rumore abbattuto (PRE-registrato, azione-2 revisore S-107)
+giudici=micro-x/arr_x.php (N=240*100000=24.000.000 inner-iter; setup 100k FUORI denominatore, bias +0,4% dichiarato) e micro-x/re_x.php (N=8.000.000) — stessi corpi dei giudici canonici, solo conteggio maggiorato (arr 4x, re 4x)
+lati=A=phpr-s106 (stash, eb555106) vs B=pin S-107b 62a4df65 (lotto superistruzioni + cura par.3.15: la cifra appartiene al PIN, non al solo lotto)
+segno_atteso=B piu' veloce (D positivo) su entrambe
+protocollo=R=5 ABAB interleaved, user CPU al netto del pavimento PER-binario (empty.php), N emesso dal sorgente
+soglia=max(4 ns/inner-iter; spread lato A osservato in ns/inner-iter) — come criterio S-107
+verdetto_CIFRA=D mediano > soglia E segno positivo in >=4/5 run -> la cifra ns/inner-iter diventa citabile
+altrimenti=resta <<direzione firmata, magnitudine non stabilita>> (REGOLE par.4)
+regressione=D mediano negativo oltre soglia -> si dichiara e blocca la leva S-108
+esecuzione=SOLO a coppia WP conclusa (niente run concorrenti, REGOLE par.10)

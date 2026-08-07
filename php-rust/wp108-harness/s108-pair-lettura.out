@@ -1,0 +1,16 @@
+s108-pair-lettura: coppia WP full+media BIMODALE sul pin 62a4df65 (criterio s108-pair-criterio.out PRE-registrato)
+grade=VERDICT  # rapporti macchina da pair108-ratios-{on,off}.out; parita' per NOME nei raw pair-out-{on,off}/
+
+== gamba ON (default; run 11:36-12:05, rc=0 gate_void=0) ==
+full_master_cpu=1.855 (oracle 450.10 / phpr 834.73) -> banda [1,86;1,93]: SOTTO di 0,005
+verdetto_gate=la voce fuori-banda-SOPRA non c'e': ipotesi icache del +16,4 KB NON morde sull'aggregato -> LEVA S-108 SBLOCCATA
+lettura=1,855 vs riferimento 1,894 (WP-102) = -2,1%: DIREZIONE favorevole, coerente col lotto (meno op eseguite);
+  attribuzione di magnitudine NON rivendicata (confronto TRA-sere, nessun A/B proprio; REGOLE par.4)
+media_user_cpu=2.677 (oracle 21.36 / phpr 57.19) -> vs rif 2,64 e vs voci S-105 2,697/2,734: rientrata FRA le due,
+  metrica ad alta varianza tra-sere: resta DIREZIONE, la voce S-105 si aggiorna (2,677 questa sera) senza verdetto
+full_peak_phpr=1866,69 MiB (in famiglia 1863-1998); media_peak ratio 2,547
+parita'=media 0 fail x2 lati; full failnames diff = SOLO Tests_Functions::test_wp_is_stream ftp (catalogo, pre-esistente);
+  conteggi IDENTICI (Tests 30472, Assertions 4558029, Warnings 86; oracle 1F / phpr 2F)
+
+== gamba OFF (seconda gamba bimodale, solo direzione) ==
+[da compilare a run conclusa]

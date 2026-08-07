@@ -1,0 +1,10 @@
+s108-pair-criterio: coppia WP full+media BIMODALE sul pin 62a4df65 (PRE-registrato, prima della run)
+oggetto=test ipotesi icache del +16,4 KB run_loop del lotto S-107 (azione-4 revisore, REGOLE §4)
+giudice=pair108.sh (ricetta pair94/pair102 INVARIATA; rapporti macchina dai .time; gate per NOME KS-KL-101-3)
+gate_principale=full modo ON (default): banda [1,86;1,93] su riferimento WP-102 full 1,894x
+dentro_banda=lotto non paga icache sul carico reale -> leva S-108 SBLOCCATA
+fuori_banda_sopra_1.93=leva BLOCCATA -> diagnosi per-fase (candidato: dieta testo dei 7 handler)
+sotto_1.86=miglioramento: si registra come direzione, attribuzione solo con meccanismo firmato
+media=solo DIREZIONE (riferimento 2,64x; voci S-105 fuori banda 2,697/2,734 in rerun con questa coppia)
+full_off=seconda gamba bimodale, solo direzione (voce S-105 fuori banda 1,947 in rerun)
+validita=failnames estratti==dichiarati e gate_void=0, altrimenti la gamba e' VOID e si rilancia

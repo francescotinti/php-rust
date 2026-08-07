@@ -1,0 +1,5 @@
+s108-azione5: esito sull'identita' .text a0543213<->b4b1a87d (azione-5 revisore S-107)
+verifica=stash in /Volumes/Extreme Pro/Claude/phpr-old-target/release/ contiene SOLO phpr-s107=b4b1a87df02a7717 e phpr-s107b=62a4df65578282b5; nessun binario a0543213 conservato
+esito=prova d'identita' .text IMPOSSIBILE a posteriori -> si applica la seconda via dell'azione-5
+MARCA A VERBALE=l'A/B S-107 (s107-ab-verdetto.out) e' stato misurato su a0543213, BUILD GEMELLA del pin b4b1a87d: stesso sorgente (528dff4/537a77d), binario rilinkato dalla batteria prima dello stash. I Delta pubblicati appartengono alla build gemella; al pin b4b1a87d appartengono direzione+meccanismo (REGOLE par.4), non la cifra.
+lezione_operativa=se l'A/B precede la batteria, conservare ANCHE il binario dell'A/B (un cp costa nulla, la prova .text a posteriori e' impagabile) — candidata a entrare nel protocollo pin solo se riaccade
