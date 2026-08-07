@@ -9,7 +9,11 @@ export PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin:$PATH
 H="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp110-harness"
 OUT="$H/l1i-out"; mkdir -p "$OUT"
 PHPR="$HOME/Claude/php-rust-output/release/phpr"
-MICRO="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp97-harness/micro"
+# EMENDAMENTO S-110 (dichiarato): il figlio tracciato da Instruments si blocca
+# in open() sui path del volume esterno (prompt TCC senza risposta in headless).
+# I giudici sono copie BYTE-IDENTICHE di wp97-harness/micro su disco interno,
+# uguali per ENTRAMBI i motori: la ricetta di misura non cambia.
+MICRO="$HOME/Claude/l1i-micro"
 TPL="${1:-CPU Counters}"   # nome template di serie O path a un .tracetemplate custom
 TAG="${2:-stock}"
 rm -f "$OUT/t1-$TAG.trace" 2>/dev/null; rm -rf "$OUT/t1-$TAG.trace"
