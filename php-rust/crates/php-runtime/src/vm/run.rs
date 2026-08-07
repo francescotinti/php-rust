@@ -1746,6 +1746,56 @@ impl<'m> super::Vm<'m> {
                     };
                     self.frames[top].stack.push(res);
                 }
+                Op::BinarySCSCDst { opa, la, ca, opb, lb, cb, op, opd, l, dst } => {
+                    // S-108 lotto-2 W10: l'albero BinarySCSC ESATTO (tre
+                    // funnel, ordine a→b→combine) poi la coda BinarySTDst
+                    // sul risultato senza transito di pila — stessa
+                    // read_slot silenziosa del lhs, stesso binary_value_ab
+                    // (la coda non ha fast path, come l'op non fusa),
+                    // stesso reg_store_slot.
+                    let cva = func.consts[*ca as usize].to_zval();
+                    let a = 'r: {
+                        {
+                            let lv = &self.frames[top].slots[*la as usize];
+                            if !matches!(lv, Zval::Undef | Zval::Ref(_)) {
+                                if let Some(v) = binary_fast(*opa, lv, &cva) {
+                                    break 'r v;
+                                }
+                            }
+                        }
+                        let lhs = self.reg_load_slot(top, func, *la);
+                        self.binary_value_ab(*opa, lhs, cva)?
+                    };
+                    let cvb = func.consts[*cb as usize].to_zval();
+                    let bv = 'r: {
+                        {
+                            let lv = &self.frames[top].slots[*lb as usize];
+                            if !matches!(lv, Zval::Undef | Zval::Ref(_)) {
+                                if let Some(v) = binary_fast(*opb, lv, &cvb) {
+                                    break 'r v;
+                                }
+                            }
+                        }
+                        let lhs = self.reg_load_slot(top, func, *lb);
+                        self.binary_value_ab(*opb, lhs, cvb)?
+                    };
+                    let res = match binary_fast(*op, &a, &bv) {
+                        Some(v) => v,
+                        None => self.binary_value_ab(*op, a, bv)?,
+                    };
+                    let lhs = read_slot(&self.frames[top].slots[*l as usize]);
+                    let res = self.binary_value_ab(*opd, lhs, res)?;
+                    self.reg_store_slot(top, *dst, res)?;
+                }
+                Op::LoadVarPushConst { slot, cidx } => {
+                    // S-108 lotto-2 W13: pura coppia di push — LoadVar
+                    // (parità warning via reg_load_slot/unit_slot_name,
+                    // guardia fold_slot) poi il const. Nessun effetto eliso.
+                    let v = self.reg_load_slot(top, func, *slot);
+                    self.frames[top].stack.push(v);
+                    let cv = func.consts[*cidx as usize].to_zval();
+                    self.frames[top].stack.push(cv);
+                }
                 Op::IncDecSlotPop { slot, inc } => {
                     // S-107 lotto: `$x++;` come statement — IncDecSlot ESATTO
                     // (metodo condiviso) senza push+Pop del transiente.
@@ -4064,6 +4114,18 @@ impl<'m> super::Vm<'m> {
                     let obj = self.reg_load_slot(top, func, *slot);
                     self.prop_get_entry(top, obj, name, ic)?;
                 }
+                Op::PropGetSlotRecv { recv, slot, name, ic } => {
+                    // S-108 lotto-2 W9a: LoadSlot ESATTO (push silente del
+                    // ricevitore) poi PropGetSlot intero (parità warning +
+                    // prop_get_entry condivisa). La sospensione hook/__get
+                    // sta nell'ULTIMO helper: al ritorno del frame lo stream
+                    // riprende come nella sequenza non fusa, col ricevitore
+                    // già in pila.
+                    let rv = read_slot(&self.frames[top].slots[*recv as usize]);
+                    self.frames[top].stack.push(rv);
+                    let obj = self.reg_load_slot(top, func, *slot);
+                    self.prop_get_entry(top, obj, name, ic)?;
+                }
                 Op::ThisPropGet { name, ic } => {
                     // Fused `$this->name` (WP-34): the IC hit borrows the
                     // receiver in place — no This clone, no stack round-trip.
@@ -4202,6 +4264,27 @@ impl<'m> super::Vm<'m> {
                     // valore assegnato che il Pop scartava.
                     let value = self.frames[top].stack.pop().expect("PropSetPop value");
                     let obj = self.frames[top].stack.pop().expect("PropSetPop object");
+                    self.prop_set_entry::<true>(top, obj, value, name, ic)?;
+                }
+                Op::BinaryTCPropSetPop { op: b, cidx, name, ic } => {
+                    // S-108 lotto-2 W9b: BinaryTC ESATTO (funnel const-rhs,
+                    // flat — binary_value_ab non sospende, precedente
+                    // BinarySCSC) senza il push del risultato, poi l'entry
+                    // PropSet DISCARD condivisa come ULTIMO passo.
+                    let cv = func.consts[*cidx as usize].to_zval();
+                    let value = 'r: {
+                        if let Some(lv) = self.frames[top].stack.last() {
+                            if !matches!(lv, Zval::Undef | Zval::Ref(_)) {
+                                if let Some(v) = binary_fast(*b, lv, &cv) {
+                                    self.frames[top].stack.pop();
+                                    break 'r v;
+                                }
+                            }
+                        }
+                        let lhs = self.frames[top].stack.pop().expect("BinaryTCPropSetPop lhs");
+                        self.binary_value_ab(*b, lhs, cv)?
+                    };
+                    let obj = self.frames[top].stack.pop().expect("BinaryTCPropSetPop object");
                     self.prop_set_entry::<true>(top, obj, value, name, ic)?;
                 }
                 Op::PropOpSet { name, op } => {

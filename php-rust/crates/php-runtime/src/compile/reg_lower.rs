@@ -134,6 +134,8 @@ fn visit_addrs(op: &mut Op, f: &mut impl FnMut(&mut Addr)) {
         | Op::BinaryDst { .. } | Op::BinarySTDst { .. } | Op::BinaryTC { .. }
         | Op::BinarySCSC { .. } | Op::IncDecSlotPop { .. } | Op::PropGetSlot { .. }
         | Op::PropSetPop { .. } | Op::StringifySlot { .. }
+        | Op::PropGetSlotRecv { .. } | Op::BinaryTCPropSetPop { .. }
+        | Op::BinarySCSCDst { .. } | Op::LoadVarPushConst { .. }
         | Op::ConcatN { .. } | Op::Echo { .. }
         | Op::Print { .. } | Op::Stringify { .. } | Op::ArrayInit { .. }
         | Op::ArrayPush { .. } | Op::ArrayInsert { .. }
@@ -354,6 +356,8 @@ fn bin_op_of(op: &Op) -> Option<BinOp> {
         | Op::BinaryDst { .. } | Op::BinarySTDst { .. } | Op::BinaryTC { .. }
         | Op::BinarySCSC { .. } | Op::IncDecSlotPop { .. } | Op::IncDecSlotJmp { .. }
         | Op::PropGetSlot { .. } | Op::PropSetPop { .. } | Op::StringifySlot { .. }
+        | Op::PropGetSlotRecv { .. } | Op::BinaryTCPropSetPop { .. }
+        | Op::BinarySCSCDst { .. } | Op::LoadVarPushConst { .. }
         | Op::CmpJmpSS { .. } | Op::CmpJmpSC { .. }
         | Op::ConcatN { .. } | Op::JumpIfNotNull { .. } | Op::JumpIfNull { .. }
         | Op::Echo { .. } | Op::Print { .. } | Op::Stringify { .. }
@@ -434,6 +438,38 @@ fn fuse_window(f: &Func, blocked: &[bool], i: usize) -> (Op, usize) {
                 bin_op_of(&f.ops[i + 5]),
                 bin_op_of(&f.ops[i + 6]),
             ) {
+                // S-108 lotto-2 W10: la coda BinarySTDst nella STESSA riga —
+                // [LoadSlot(l), Swap, Binary(opd), tail-assign] subito dopo
+                // l'albero: l'intero statement `$s opd= (…)` in un'op sola.
+                // Se la coda non c'è, la finestra S-107 resta identica.
+                if (7..=9).all(|k| free(i + k)) {
+                    if let (Op::LoadSlot(l), Op::Swap) = (&f.ops[i + 7], &f.ops[i + 8]) {
+                        if *l <= u16::MAX as u32 {
+                            if let Some(opd) = bin_op_of(&f.ops[i + 9]) {
+                                if free(i + 10) {
+                                    if let Op::StoreSlot(dst) = &f.ops[i + 10] {
+                                        if *dst <= u16::MAX as u32 {
+                                            return (
+                                                Op::BinarySCSCDst { opa, la: a, ca, opb, lb, cb, op, opd, l: *l as u16, dst: *dst as u16 },
+                                                11,
+                                            );
+                                        }
+                                    }
+                                    if matches!(f.ops[i + 10], Op::Dup) && free(i + 11) && free(i + 12) {
+                                        if let (Op::StoreSlot(dst), Op::Pop) = (&f.ops[i + 11], &f.ops[i + 12]) {
+                                            if *dst <= u16::MAX as u32 {
+                                                return (
+                                                    Op::BinarySCSCDst { opa, la: a, ca, opb, lb, cb, op, opd, l: *l as u16, dst: *dst as u16 },
+                                                    13,
+                                                );
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 return (
                     Op::BinarySCSC { opa, la: a, ca, opb, lb, cb, op },
                     7,
@@ -499,6 +535,19 @@ fn fuse_window(f: &Func, blocked: &[bool], i: usize) -> (Op, usize) {
                 }
             }
         }
+        // S-108 lotto-2 W13: [LoadVar, PushConst] — la coppia di push
+        // argomenti (calls/arr/re) quando NESSUNA finestra più lunga ha
+        // vinto. Guardia di non-interferenza: se all'op dopo il const c'è un
+        // Binary sulla stessa riga, la coppia si LASCIA al braccio W5
+        // ([PushConst, Binary] → BinaryTC): il lotto-2 AGGIUNGE fusioni,
+        // non cambia mai l'emissione del lotto-1.
+        if free(i + 1) {
+            if let Some(c) = fold_const(f, i + 1) {
+                if !(free(i + 2) && bin_op_of(&f.ops[i + 2]).is_some()) {
+                    return (Op::LoadVarPushConst { slot: a, cidx: c }, 2);
+                }
+            }
+        }
     }
     // [PushConst, LoadVar, Binary] — const written first: fold only a
     // mirrorable COMPARISON (order-free by construction). The WP-44
@@ -519,6 +568,17 @@ fn fuse_window(f: &Func, blocked: &[bool], i: usize) -> (Op, usize) {
         // d'ordine possibile (bigram prop: PushConst(1);BinaryAdd, 30M).
         if free(i + 1) {
             if let Some(op) = bin_op_of(&f.ops[i + 1]) {
+                // S-108 lotto-2 W9b: la coda [PropSet, Pop] nella stessa
+                // riga — `$o->p = <stack> op const;` intero (funnel BinaryTC
+                // flat, poi l'entry PropSet DISCARD come ultimo passo).
+                if free(i + 2) && free(i + 3) {
+                    if let (Op::PropSet { name, ic }, Op::Pop) = (&f.ops[i + 2], &f.ops[i + 3]) {
+                        return (
+                            Op::BinaryTCPropSetPop { op, cidx: c, name: name.clone(), ic: ic.clone() },
+                            4,
+                        );
+                    }
+                }
                 return (Op::BinaryTC { op, cidx: c }, 2);
             }
         }
@@ -536,6 +596,18 @@ fn fuse_window(f: &Func, blocked: &[bool], i: usize) -> (Op, usize) {
             if matches!(f.ops[i + 1], Op::Swap) {
                 if let Some(op) = bin_op_of(&f.ops[i + 2]) {
                     return bin_dst(f, &free, i, 3, BinKind::ST(*l as u16), op);
+                }
+            }
+            // S-108 lotto-2 W9a: [LoadSlot(recv), LoadVar, PropGet] — la
+            // testa RMW del giudice prop (`$o->c = $o->c …`): push silente
+            // del ricevitore + la finestra W3 intera. La sospensione
+            // hook/__get resta nell'ULTIMO helper del handler.
+            if let Some(slot) = fold_slot(f, i + 1) {
+                if let Op::PropGet { name, ic } = &f.ops[i + 2] {
+                    return (
+                        Op::PropGetSlotRecv { recv: *l as u16, slot, name: name.clone(), ic: ic.clone() },
+                        3,
+                    );
                 }
             }
         }
@@ -893,6 +965,11 @@ echo g(1), ($h)(2), C::K;"#;
                 | Op::PropGetSlot { .. }
                 | Op::PropSetPop { .. }
                 | Op::StringifySlot { .. }
+                // S-108 lotto-2: il dente flag-off copre anche queste.
+                | Op::PropGetSlotRecv { .. }
+                | Op::BinaryTCPropSetPop { .. }
+                | Op::BinarySCSCDst { .. }
+                | Op::LoadVarPushConst { .. }
         )
     }
 

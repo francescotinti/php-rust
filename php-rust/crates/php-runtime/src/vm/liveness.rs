@@ -145,6 +145,26 @@ fn effect(op: &Op, park_targets: &[usize]) -> Effect {
             e.uses.push(*la as u32);
             e.uses.push(*lb as u32);
         }
+        // S-106 H-A1 / S-108 lotto-2 — classificazione EMENDATA in S-108: la
+        // build zval-census non compilava da S-106 (BinarySTDst/BinaryTC/
+        // PropSetPop mai classificati qui — il dente A-TH-97-2 morde solo
+        // quando la feature viene compilata, e nessuna sessione l'ha ricompilata
+        // dopo H-A1). Dichiarato nel verbale lotto-2 (wp108-harness).
+        Op::BinarySTDst { l, dst, .. } => {
+            e.uses.push(*l as u32);
+            e.defs.push(*dst as u32);
+        }
+        Op::BinarySCSCDst { la, lb, l, dst, .. } => {
+            e.uses.push(*la as u32);
+            e.uses.push(*lb as u32);
+            e.uses.push(*l as u32);
+            e.defs.push(*dst as u32);
+        }
+        Op::PropGetSlotRecv { recv, slot, .. } => {
+            e.uses.push(*recv as u32);
+            e.uses.push(*slot as u32);
+        }
+        Op::LoadVarPushConst { slot, .. } => e.uses.push(*slot as u32),
         Op::PropGetSlot { slot, .. } | Op::StringifySlot { slot } => {
             e.uses.push(*slot as u32)
         }
@@ -336,6 +356,10 @@ fn effect(op: &Op, park_targets: &[usize]) -> Effect {
         // S-101: `BinaryAdd` (S-100, H-B2) è la forma pura-pila di
         // `Binary(Add)`: stessi effetti (nessuno slot per indice).
         | Op::BinaryAdd
+        // S-107/S-108: forme pure-pila (const inlined, nessuno slot per
+        // indice) — classificate nell'emendamento S-108 (vedi sopra).
+        | Op::BinaryTC { .. }
+        | Op::BinaryTCPropSetPop { .. }
         | Op::Call { .. }
         | Op::CallArgs { .. }
         | Op::CallBuiltin { .. }
@@ -410,6 +434,7 @@ fn effect(op: &Op, park_targets: &[usize]) -> Effect {
         | Op::PropIssetFetchGate { .. }
         | Op::PropOpSet { .. }
         | Op::PropSet { .. }
+        | Op::PropSetPop { .. }
         | Op::PropUnset { .. }
         | Op::PushConst { .. }
         | Op::PushUndef { .. }
@@ -584,6 +609,22 @@ fn renounce(func: &Func) -> (bool, Bits) {
             | Op::BinaryDst { .. }
             | Op::CmpJmpSS { .. }
             | Op::CmpJmpSC { .. }
+            // S-106 H-A1 + lotti S-107/S-108 — classificazione EMENDATA in
+            // S-108 (stessa scoperta dell'effect() qui sopra: la build
+            // zval-census non compilava da S-106). Stessa ragione delle
+            // forme registro: helper condivisi, nessun alias installato.
+            | Op::BinarySTDst { .. }
+            | Op::BinaryTC { .. }
+            | Op::BinarySCSC { .. }
+            | Op::IncDecSlotPop { .. }
+            | Op::IncDecSlotJmp { .. }
+            | Op::PropGetSlot { .. }
+            | Op::PropSetPop { .. }
+            | Op::StringifySlot { .. }
+            | Op::PropGetSlotRecv { .. }
+            | Op::BinaryTCPropSetPop { .. }
+            | Op::BinarySCSCDst { .. }
+            | Op::LoadVarPushConst { .. }
             | Op::Call { .. }
             | Op::CallArgs { .. }
             | Op::CallArrayMultisort { .. }

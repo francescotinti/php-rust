@@ -13,7 +13,7 @@ use crate::bytecode::Op;
 use crate::hir::BinOp;
 use php_types::Zval;
 
-pub const N_OPS: usize = 194;
+pub const N_OPS: usize = 198;
 
 pub const OP_NAMES: [&str; N_OPS] = [
     "PushConst", "Pop", "Dup", "LoadSlot", "LoadVar", "PushUndef", "StoreSlot", "Swap",
@@ -42,6 +42,7 @@ pub const OP_NAMES: [&str; N_OPS] = [
     "BinarySS", "BinarySSDst", "BinarySC", "BinarySCDst", "BinaryDst", "CmpJmpSS", "CmpJmpSC",
     "BinarySTDst",
     "BinaryTC", "BinarySCSC", "IncDecSlotPop", "IncDecSlotJmp", "PropGetSlot", "PropSetPop", "StringifySlot",
+    "PropGetSlotRecv", "BinaryTCPropSetPop", "BinarySCSCDst", "LoadVarPushConst",
     "BinaryAdd",
 ];
 
@@ -253,7 +254,15 @@ pub fn op_index(op: &Op) -> usize {
         Op::PropGetSlot { .. } => 190,
         Op::PropSetPop { .. } => 191,
         Op::StringifySlot { .. } => 192,
-        Op::BinaryAdd => 193,
+        // S-108 lotto-2 (census secondo giro): il blocco nuovo entra PRIMA
+        // di BinaryAdd — l'invariante «BinaryAdd chiude la tabella» resta
+        // vero; nessuna di queste forme porta operandi in pila per la
+        // matrice type-pair (stessa nota delle forme-registro).
+        Op::PropGetSlotRecv { .. } => 193,
+        Op::BinaryTCPropSetPop { .. } => 194,
+        Op::BinarySCSCDst { .. } => 195,
+        Op::LoadVarPushConst { .. } => 196,
+        Op::BinaryAdd => 197,
     }
 }
 

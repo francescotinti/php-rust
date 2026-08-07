@@ -683,6 +683,36 @@ pub enum Op {
     /// interpolation): LoadVar warning parity, then the exact Stringify
     /// entry (shared method — `__toString` frames included).
     StringifySlot { slot: u16 },
+    // ----- lotto-2 superistruzioni S-108 (census secondo giro,
+    // wp108-harness/s108-census-derive.out): stesse regole v3 del lotto
+    // S-107. Vincolo NUOVO nominato nell'emendamento del criterio: una
+    // finestra fusa TERMINA al primo helper sospendibile (prop_get_entry/
+    // prop_set_entry possono rientrare nella VM via frame __get/hook — le
+    // op residue di una finestra che proseguisse oltre andrebbero perse). -----
+    /// `[] -> [recv, value]` — fused `LoadSlot(recv); LoadVar(slot); PropGet`
+    /// (testa RMW del giudice prop, `$o->c = $o->c + …`): push SILENTE del
+    /// ricevitore (LoadSlot esatto), poi la semantica PropGetSlot intera
+    /// (parità warning + `prop_get_entry` condivisa come ULTIMO passo: una
+    /// sospensione magic/hook riprende esattamente come nello stream non fuso,
+    /// col ricevitore già in pila).
+    PropGetSlotRecv { recv: u16, slot: u16, name: Rc<[u8]>, ic: PropIc },
+    /// `[obj, lhs] -> []` — fused `BinaryTC(op,cidx); PropSet; Pop` (coda RMW
+    /// del giudice prop): il funnel const-rhs ESATTO di BinaryTC (flat —
+    /// `binary_value_ab` non sospende, precedente BinarySCSC), poi l'entry
+    /// PropSet DISCARD condivisa come ULTIMO passo.
+    BinaryTCPropSetPop { op: BinOp, cidx: u16, name: Rc<[u8]>, ic: PropIc },
+    /// `[] -> []` — fused `BinarySCSC(…); BinarySTDst(opd,l,dst)` (l'intero
+    /// statement del giudice arith, `$s opd= (la opa ca) op (lb opb cb)`):
+    /// i tre funnel dell'albero SCSC nell'ordine originale (a, b, combine),
+    /// poi la coda BinarySTDst ESATTA sul risultato senza transito di pila —
+    /// stessa `read_slot` silenziosa del lhs, stesso `binary_value_ab` (la
+    /// coda non ha fast path, come l'op non fusa), stesso `reg_store_slot`.
+    BinarySCSCDst { opa: BinOp, la: u16, ca: u16, opb: BinOp, lb: u16, cb: u16, op: BinOp, opd: BinOp, l: u16, dst: u16 },
+    /// `[] -> [var, const]` — fused `LoadVar(slot); PushConst(cidx)` (la
+    /// coppia di push-argomenti dei giudici calls/arr/re): pura coppia di
+    /// push, nessun effetto eliso — parità warning LoadVar via
+    /// `reg_load_slot` (guardia fold_slot), poi il const.
+    LoadVarPushConst { slot: u16, cidx: u16 },
     /// `[s1..sn] -> [s]` — join `n` already-stringified parts (WP-34): the
     /// compiler emits each part through `Stringify` (or as a Str literal), so
     /// the flattened chain's intermediate `Concat`s were pure — one
