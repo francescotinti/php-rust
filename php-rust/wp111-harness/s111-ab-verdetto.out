@@ -1,0 +1,19 @@
+s111-ab-verdetto: leva hot-cluster dispatch — FAMIGLIA-REFUTATA (criterio s111-criterio.md #7)
+grade=VERDICT
+A_pin=929095448e823cb5  B_leva=f848229886dfc15d (build churn batteria dichiarato: relink test 3f9fccaf, ripristinato al byte con cargo build)
+smoke R=2 ABAB, early-stop ESERCITATO (segno opposto su prop, REGOLE par.3)
+pavimento_A_s=0.025  pavimento_B_s=0.02
+arith: A_netto=3.98 B_netto=3.85  delta=-0.13 s (-2.70 ns/iter)  SOTTO soglia 0.20 s  spread 0.02/0.02
+prop:  A_netto=3.30 B_netto=3.32  delta=+0.02 s (+0.67 ns/iter)  SEGNO OPPOSTO (= banda-layout 0,67)  spread 0.05/0.04
+arr:   A_netto=1.14 B_netto=1.23  delta=+0.09 s (+8,4%)  GUARDIA SFONDATA  spread 0.02/0.02
+calls: A_netto=2.31 B_netto=2.58  delta=+0.27 s (+13.25 ns/iter, +11,4%)  GUARDIA SFONDATA  spread 0.00/0.02
+verdetto=FAMIGLIA-REFUTATA: entrambi i bersagli sotto soglia; reperto nominato = TASSA DEL FILTRO
+  sui sentieri freddi (ogni op non-caldo paga il pre-match: calls/arr regrediscono piu' di quanto
+  arith guadagni). Il clustering PERFETTO dei 4 handler di arith rende -3,4% a fronte di una
+  delivery share 32,5% (S-110): lo scatter degli handler caldi NON e' il motore della fame frontend.
+meccanismo (disasm, protocollo S-104): run_loop 287.944->226.092 B (-21%), istr 71.992->56.526,
+  bl 5849->4770, br-indiretti 22->36; op_* tutti inlinati (0 simboli separati), outlining helper
+  INVARIATO tra A e B -> il calo e' riorganizzazione interna del match; l'inliner ha flippato.
+admission (prima della misura): parita' output 9/9 (6 micro + 3 held-out vs oracle), batteria 1742/0 rc=0.
+azione=revert al byte (nessun guadagno netto da tenere: feedback-keep-partial-wins non applicabile,
+  il saldo e' negativo). Guardie post-leva par.9: held-out A-vs-B + contro-lettura delivery in coda.
