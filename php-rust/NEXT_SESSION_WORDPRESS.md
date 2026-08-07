@@ -1,5 +1,4 @@
 # NEXT_SESSION — phpr ≤ 3× l'oracle (processo LEAN v1: la lista unica è REGOLE.md)
-
 ⏱ **FONDAMENTALI**: rif WP **full ON 1,842 / OFF 1,911** (S-109; S-110 sul pin
 nuovo: **1,867/1,869 IN banda [1,81;1,88]**, lotto-3 ≤~2%) · media 2,673/2,612
 (off SOTTO il rif 2,64, voce aperta vicina a rientrare) · ultima leva di codice
