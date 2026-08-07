@@ -40,7 +40,12 @@ costo interno dei funnel · calls = cross-frame (inlining/threaded).
    [FetchDim;BinarySTDst] previa istruttoria sospendibilità FetchDim ·
    (c) Sweep/ciclo-vita Zval (presente in TUTTI i giudici) · (d) contatori
    L1I SOLO se l'utente installa Xcode (xctrace assente = fatto S-109).
-3. Azioni revisore S-109 (wp109-harness/revisione.md, lente PROCESSO).
+3. Azioni revisore S-109 (wp109-harness/revisione.md, lente PROCESSO):
+   admission BIPARTITA per commit (script+attese prima della build; ogni
+   emendamento = commit proprio) · diff del prelude ON enumerato (conteggi
+   F1/F2 attesi) · scelta batteria-sul-byte vs dichiarazione permanente ·
+   **vincolo in testa: commit+push A OGNI PASSO anche dentro la finestra
+   della leva (monocommit 35d9ff1 = violazione contata)**.
 4. Chiusura lean: rotazione + revisore singolo (lente: MISURA).
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
@@ -63,8 +68,8 @@ tra A/B distinti come cifra · componenti prezzate nei criteri · magnitudine
 ripartita senza A/B proprio · estensioni di finestre senza criterio+dente ·
 allargare simple_call senza dente+fx21 · fixture su memory_get_usage (stub) ·
 «icache-bound» come premessa firmata · denominatori a memoria · output di
-run nel repo · rc di gate da pipe (sfiorato per la 4ª volta in S-109:
-INTERCETTATO al lancio — la regola vale anche per i comandi detached) ·
+run nel repo · rc di gate da pipe (MORSO per la 4ª volta in S-109 al lancio
+batteria, fermato prima del verdetto — vale anche per i comandi detached) ·
 tee/log prima del mkdir · finestre fuse OLTRE un helper sospendibile
 (vincolo S-108) · **admission d'emissione sul dump INTERO (il perimetro è il
 {main}: il prelude fonde in ogni giudice — emendamento S-109)**.
