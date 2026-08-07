@@ -14,7 +14,7 @@ collaudi.
 | giudice | S-105 | S-106 | trend |
 |---|---|---|---|
 | **aritmetica** | **12,4** | **11,6** | **↓ −0,8 (leva H-A1)** |
-| **proprietà** | **11,5** | **10,6** | **↓ −0,9 (H-A1, 2° beneficiario NOMINATO: `$s += $o->x` nel loop, dump BinarySTDst)** |
+| **proprietà** | **11,5** | **10,6** | **↓ −0,9 — direzione+meccanismo FIRMATI dalla leva (`$s += $o->x` nel loop, dump BinarySTDst), magnitudine NON ripartita** (emendamento Concilio WP-108 Gregg∘Bak: l'eccesso oltre il Δ ABAB resta tra-sere finché il retro-A/B prop coi due stash non lo riparte) |
 | chiamate | 6,3 | 6,3 | = |
 | stringhe | 6,7 | 6,6 | = (−0,1) |
 | array | 4,5 | 4,2 | = (−0,3, in banda) |

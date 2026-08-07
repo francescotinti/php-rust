@@ -150,34 +150,52 @@ skill `apri-sessione`/`chiudi-sessione`. Harness di sessione:
 `wp106-harness/`; concilio WP-107 (consumato) in `wp107-harness/`;
 concilio WP-108 in `wp108-harness/`.
 
-## §S-107 — ORDINE PROVVISORIO (da RATIFICARE col Concilio WP-108)
+## §S-107 — ORDINE RATIFICATO (Concilio WP-108 COMPLETO: 9 sedie + 3 team + SYNTHESIS)
 
-⚖️ **Concilio WP-108**: convocato alla chiusura S-106 (fase 1 a 9 sedie
-+ fase 2 team + SYNTHESIS — stato in `wp108-harness/verbali/` e
-`COUNCIL_WP108_REVIEWS.md`, VINCOLANTI per quest'ordine).
+⚖️ **Concilio WP-108 (2026-08-07 notte, chiusura S-106)**: COMPLETO —
+fase 1 9/9, fase 2 (3 team), SYNTHESIS RATIFICATA: **26 direttive (20
+vincolanti S-107-D-1..20 + 6 racc.)** in
+`wp108-harness/COUNCIL_WP108_SYNTHESIS.md` (VINCOLANTE; indice+ricevute
+in `COUNCIL_WP108_REVIEWS.md`). Colpi principali: attribuzione prop
+DECLASSATA a «direzione+meccanismo firmati, magnitudine NON ripartita»
+(scoreboard S-106 già emendato) · il server gradato è **PRE-leva**:
+regrade @ HEAD S-106 = prerequisito delle sole CIFRE server, non del
+pair (KS-PE-108-1) · attese stack-census S-102 DECADUTE dalla fusione ·
+doc «fold rules» di reg_lower da riallineare · cura D-12 composta
+(contatore anche release + LETTORE/gate==0: un contatore senza lettore
+non è un dente) · **Sweep VIETATO come peephole** (semantica GC) ·
+coppia WP **DOVUTA** (il «se» cade) · KS-GR-108-1: voce fuori banda >2
+sessioni senza rerun BLOCCA la leva.
 
-1. **Denti nella finestra corta** (eredità D-5/D-9/D-10 + mutanti):
-   contatore hit/miss fast path (census build, manifest-binario
-   KS-LE-107-1, rerun arità stesso run) · terza mutazione OBS-8
-   (target-dir separato) · mutante leak-parziale fx20 · dente VM
-   direct-bind · dente drop-order (o prova per NOME, o il commento
-   declassato resta).
-2. **Fedeltà §3.15** (cura D-13, Zend-esatta, gate ORM/hk, attesa
-   1417→1415 CITATA dal fix, golden fx21 aggiornato stesso commit) —
-   testa non negoziabile dell'ordine Stogov; poi get_gc se la finestra
-   regge.
-3. **LEVA di sessione** (regola di ritmo): candidata = nuova
-   istruttoria arith (Sweep per-iter, IncDecSlot+Pop) O prop H-C3 se
-   il braccio contatori L1I entra PRIMA del criterio (D-18 vige);
-   criterio PRIMA, admission D-4, early-stop D-7, PIN in chiusura.
-4. **Coppia WP bimodale** (se una leva è spedita O se il concilio la
-   chiede per le voci aperte S-105): chain v2 con le sanature D-16 +
-   identity con hash oracle (nota retro-verifica S-106).
-5. Igiene a margine: banda-layout terzo punto su giorno distinto ·
-   GA_ARITY feature-gate (R-5, senza churn del pin).
+1. **Denti test-only con TIMEBOX anti-fame-leva** (vincolante): denti
+   funnel (sito {main}-BinaryDst conservato altrove + negativo residuo
+   LoadSlot/Swap) · dente throwing-store famiglia Dst · dente D-10
+   direct-bind con gamba debug_assertions · cura D-12 COMPLETA
+   (contatore release + lettore/gate==0) · doc reg_lower RIALLINEATO
+   (3 siti) · retro-A/B prop coi due stash (phpr-s105 vs phpr-s106 su
+   prop.php: riparte la magnitudine −0,9) · churn a registro come
+   «BUILD EMENDATA post-A/B» quando include sorgente.
+2. **Fedeltà §3.15** (cura D-13, Zend-esatta ≥ vslot, gate ORM/hk,
+   attesa 1417→1415 CITATA dal fix, golden fx21 aggiornato NELLO
+   STESSO commit) — testa non negoziabile; poi get_gc se la finestra
+   regge. **2-bis**: census hit/miss D-5 DOPO §3.15 (il fix riscrive
+   il sito censito; binario pulito con manifest, rerun arità e
+   ri-registrazione attese stack-census nello STESSO run).
+3. **LEVA di sessione**: **IncDecSlot+Pop** (variante void; dichiara
+   l'accoppiamento §3.11) — Sweep per-iter VIETATO come peephole
+   (criterio GC proprio se mai); criterio PRIMA, admission D-4,
+   early-stop D-7, PIN in chiusura con D-17.
+4. **Coppia WP bimodale DOVUTA**: chain v2 (sanature D-16 ereditate,
+   gamba 0 tre-pin) + identity con HASH oracle + riga server
+   «dde2a64d @ c7b6eb2 PRE-H-A1» come identità d'ambiente; regrade
+   server SOLO se si vogliono cifre server.
+5. Igiene contatori a margine: lettore GA_ARGPLACE_DECAY ·
+   GA_ARITY manifest/etichetta due-siti · feature-gate R-5 esteso ·
+   banda-layout terzo punto su giorno distinto.
 
 Pre-flight S-107: pin phpr **eb555106a3c7b718** @ HEAD S-106 (fa fede
-HEAD, la build churna) · server **dde2a64d GRADATO** stash
-`php-server-s106` · corpus 1417 per NOME ×2 SUL PIN · default flag-ON ·
-debug/ si rigenera: rimuoverla · MySQL wp8 con l'elenco dei database ·
-uploads sotto guardia · nessuna run in volo.
+HEAD, la build churna) · server **dde2a64d GRADATO ma PRE-H-A1** stash
+`php-server-s106` (cifre server ⇒ prima regrade @ HEAD) · corpus 1417
+per NOME ×2 SUL PIN · default flag-ON · debug/ si rigenera: rimuoverla ·
+MySQL wp8 con l'elenco dei database · uploads sotto guardia · nessuna
+run in volo.
