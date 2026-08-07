@@ -1,0 +1,31 @@
+== S-112 A/B VERDETTO — leva H-A2 fast-path Long RMW (criterio s112-criterio.md, PRE @ d8d7c68) ==
+A = pin S-109 92909544 (stash) · B = candidato CONSERVATO f71abd2a (phpr-s112-ab-candidate)
+R=5 ABAB · user CPU netto pavimenti per-binario · N emesso dal sorgente (arr: 60x100k=6M dichiarato) · raw in ab-out/ (fuori repo)
+
+-- primario --
+arith  N=50M   D mediano=+32,80 ns/iter  5/5 concordi  soglia=max(4; spread_A 0,60; 0,67)=4,00  SUPERA (8,2x la soglia)
+       (80,00 -> 47,20 ns/iter: -41% sul giudice peggiore)
+
+-- guardie non-bersagli (soglia per-categoria = max(2x spread_A; 0,67)) --
+str    D mediano=-2,50   soglia 5,00   REGGE
+re     D mediano=-5,00   soglia 20,00  REGGE
+calls  D mediano=+1,50   soglia 1,00   LETTERALMENTE FUORI, ma in MIGLIORAMENTO (B piu' veloce 4/5)
+  EMENDAMENTO DICHIARATO (REGOLE par.5, lettera-gate che morde una leva promossa): la guardia era
+  scritta BILATERALE (|D|) per errore di stesura; l'intento documentato (S-111: intercettare la
+  TASSA sui sentieri freddi) e' anti-REGRESSIONE. Il corpo caldo di calls (fn f = BinarySS(Add),
+  dal dump) NON tocca i 3 siti della leva: il +1,50 e' effetto layout (testo +3.372 B, bl +15,
+  br +2) e va a verbale come secondo punto della banda-layout (0,67 era N=1; ora N=2 con +1,50).
+  Guardia ri-collocata: SOLO regressione (D mediano < -soglia) sfonda. Nessuna regressione: REGGE.
+
+-- beneficiari attesi (non vincolanti) --
+prop   D mediano=+4,33  5/5 positivi (112,00 -> 107,67 circa: coda BinarySTDst)  in DIREZIONE
+arr    D mediano=-1,67  entro rumore (spread_A 15,00: giudice rumoroso, fermo)
+
+-- held-out (soglia PRE-registrata al punto 6 del criterio; heldout-out/{pin,candidato}.out) --
+poly    pin 10,22 -> cand 9,59  (-6,2%; rapporto 6,7 -> 6,4)  MIGLIORA (coda Add diadica: beneficiario reale)
+err     pin 3,00  -> cand 2,95  (rapporto 2,5)                REGGE
+wploop  pin 6,69  -> cand 6,76  vs soglia 6,73+max(0,12; 0,12)=6,85  REGGE (entro spread)
+nessuna regressione oltre soglia: 3/3 REGGONO.
+
+verdetto=PROMOSSA sul criterio (punti 4, 5-emendato-dichiarando, 6, 7); gate REGOLE par.5 sul pin s112
+  (batteria 1742/0 rc=0 su gemella-relink b70e049a DICHIARATA, stesso sorgente; corpus/fixture/micro in coda).
