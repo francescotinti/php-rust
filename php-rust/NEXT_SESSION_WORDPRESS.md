@@ -29,31 +29,36 @@ ripartita). ⚠️ TETTO revisore: azzerare TUTTA la delivery vale ≤×1,48 su 
 
 ## §S-111 — ordine provvisorio
 
-1. **LEVA THREADED-DISPATCH (esperimento con A/B proprio)** — bersaglio
-   FIRMATO (fame frontend arith/prop). Istruttoria PRIMA: forma minima
-   (tail-call handler? clustering handler caldi?) su run_loop; criterio
-   PRE-registrato (giudici arith+prop, soglia, R, bl-count prima/dopo) CON
-   TETTO pre-registrato ×1,48 su arith (revisore az.4) e rumore tra-sere
-   della coppia da caratterizzare prima di nuove bande (az.2); guardia:
-   contro-lettura delivery post-leva con `s110-l1i-run.sh`. Vincoli attivi:
-   commit+push a OGNI passo; admission bipartita; diff prelude se emette.
+1. **LEVA THREADED-DISPATCH (A/B proprio)** — bersaglio FIRMATO (fame frontend
+   arith/prop). Cautele Codex (revisione `20260807-codex.md`, recepite): la
+   leva è un **DISCRIMINATORE tra famiglie di dispatch**, non la soluzione
+   finale (tetto ×1,48); **PRIMA di progettarla congelare 2-3 giudici HELD-OUT**
+   fuori dal ciclo di progettazione (tipi alternati/megamorfici, error-path,
+   hot-loop estratto da WP) da leggere SOLO a leva conclusa — anti-overfitting
+   ai sei micro. Poi istruttoria forma minima (tail-call handler? clustering
+   caldi?) su run_loop; criterio PRE con TETTO ×1,48 su arith (az.4) + rumore
+   tra-sere da caratterizzare prima di nuove bande (az.2); guardia:
+   contro-lettura delivery post-leva con `s110-l1i-run.sh`. Vincoli: commit+push
+   a OGNI passo; admission bipartita; diff prelude se emette.
 2. Coppia WP: NON dovuta in apertura (S-110 in banda); torna dovuta se la leva
-   1 spedisce (collaudo aggregato sul pin nuovo).
-3. Se la leva 1 si blocca: (c) Sweep/ciclo-vita Zval o (b) arr RMW-su-dim
-   [FetchDim;BinarySTDst] previa istruttoria; (e) fast-path i64 op fuse resta
-   in lista (parere esterno vagliato, stime esterne MAI nei criteri).
+   1 spedisce. Se la leva si blocca: (c) Sweep/Zval o (b) arr RMW-su-dim previa
+   istruttoria; (e) fast-path i64 resta in lista (stime esterne MAI nei criteri).
+3. **Backlog PRODOTTO (revisione Codex `20260807-codex.md`, sequenza)**: fuzz
+   end-to-end P0 (no-crash su input arbitrario) → stub memory_get_usage da
+   implementare-o-rimuovere (correct-or-absent) → soak server fault-oriented →
+   CI macOS+fmt → **Laravel come arbitro anti-overfitting**. La rotta resta
+   perf-first (decisione utente): questi filoni si aprono su ordine esplicito.
 4. Chiusura lean: rotazione + revisore singolo (lente: SEMANTICA).
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
 
-media voce aperta (2,673/2,612: sesta lettura con la prossima coppia) ·
-**§3.16 riga errata warning undef-var ricevitore prop-assign** (bilaterale,
-repro in wp109-harness/w9-fixtures/; w9a caso B rientra nel gate quando curata)
-· causa frontend NON ripartita (IC/ITLB/redirect: serve kpc/sudo o template
-GUI — azione utente nominabile) · retro-A/B str stash s107b/s108/s109 · denti
-rinviati (OBS-8; fx20; direct-bind; drop-order; hit/miss) · fedeltà: $z++/$z--
-undefined non warna · §3.13 · §3.12-i · §3.14 · get_gc · bl-count run_loop
-metodo nuovo (otool 5849) non confrontabile col «29» storico.
+media voce aperta (2,673/2,612: sesta lettura con la prossima coppia) · **§3.16
+warning undef-var prop-assign** (repro wp109-harness/w9-fixtures/) · causa
+frontend NON ripartita (serve kpc/sudo o template GUI — azione utente
+nominabile) · retro-A/B str stash s107b/s108/s109 · denti rinviati (OBS-8;
+fx20; direct-bind; drop-order; hit/miss) · $z++/$z-- undef non warna · §3.13 ·
+§3.12-i · §3.14 · get_gc · drift TODO.md «0%» su aree fatte (Codex; prossimo
+gh-status-sync) · bl-count nuovo metodo non confrontabile col «29» storico.
 
 ## NON riproporre (i veti restano; dettaglio nei concili archiviati)
 
@@ -70,7 +75,7 @@ senza guardie disco (TMPDIR interno = 15G di ktrace, rc=134, S-110) · path del
 volume esterno nel figlio tracciato (TCC headless blocca open()).
 
 ---
-**Riscritto**: 2026-08-08 (chiusura S-110). Apertura/chiusura = skill v2.
+**Riscritto**: 2026-08-08 (chiusura S-110 + recepimento revisione Codex).
 Storia: `sessions/` · `gaps/GAP_TREND.md` · revisioni in `wp1*-harness/`.
 
 Pre-flight S-111: pin phpr **92909544** (fa fede HEAD; release ripristinato
