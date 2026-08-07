@@ -11,9 +11,8 @@ sessioni-senza-Δ-rapporti = 0 · incidenti «mai collaudato»: 1 (de67cb64, S-1
 
 **arith 9,3 · prop 7,9 · calls 5,1 · str 5,3 · arr 3,9 · re 3,5**
 str assolto dal lotto-3 (6,2→5,3; corpo 8 op/iter). Colli restanti per NOME:
-arith/prop = dispatch (threaded, GATED L1I — xctrace vuole Xcode, decisione
-utente) · ciclo di vita Zval (Sweep ovunque) · funnel interni · calls =
-cross-frame (inlining/threaded).
+arith/prop = dispatch (threaded, GATED L1I — licenza Xcode) · ciclo di vita
+Zval (Sweep ovunque) · funnel interni · calls = cross-frame.
 
 ## Stato gate
 
@@ -52,8 +51,8 @@ cross-frame (inlining/threaded).
 media voce aperta (2,707 on / 2,634 off: quinta lettura con la coppia S-110) ·
 **§3.16 riga errata warning undef-var ricevitore prop-assign** (bilaterale,
 repro parcheggiata in wp109-harness/w9-fixtures/) · fixture w9a caso B rientra
-nel gate quando §3.16 è curata · contatori L1I (prerequisito: Xcode) ·
-retro-A/B str coi tre stash s107b/s108/s109 · denti rinviati (OBS-8 terza
+nel gate quando §3.16 è curata · retro-A/B str coi tre stash s107b/s108/s109 ·
+denti rinviati (OBS-8 terza
 mutazione; mutante fx20; dente direct-bind; dente drop-order; contatore
 hit/miss) · fedeltà: $z++/$z-- undefined non warna · §3.13 · §3.12-i · §3.14 ·
 get_gc · bl-count run_loop: metodo NUOVO (otool sul simbolo, 5849) non
