@@ -1043,246 +1043,6 @@ impl<'m> super::Vm<'m> {
         Ok(())
     }
 
-    // ---- S-111 leva hot-cluster (criterio wp111-harness/s111-criterio.md) —
-    // i corpi degli 8 op caldi dei giudici arith/prop, estratti VERBATIM dagli
-    // arm del match grande in metodi #[inline(always)] chiamati da DUE siti:
-    // il pre-match caldo in testa a run_loop (sito compatto) e l'arm
-    // originale (che resta, per l'esaustività del match e per gli op che
-    // arrivano da sentieri freddi). Un solo corpo sorgente per op: la
-    // semantica dei due siti è identica per costruzione.
-
-    /// Corpo di `Op::BinarySTDst` (S-106 H-A1): fonde il tris
-    /// `LoadSlot(l); Swap; BinaryDst{op,dst}` del compound assign — stessa
-    /// read_slot silenziosa (lhs), stessi binary_value_ab e reg_store_slot
-    /// del braccio BinaryDst.
-    #[inline(always)]
-    #[cfg_attr(not(feature = "zval-census"), allow(unused_variables))]
-    fn op_binary_st_dst(
-        &mut self,
-        top: usize,
-        func: &crate::bytecode::Func,
-        ip: usize,
-        b: BinOp,
-        l: u16,
-        dst: u16,
-    ) -> Result<(), PhpError> {
-        #[cfg(feature = "zval-census")]
-        super::zvalcensus::note_slot_load_site(func, ip, &self.frames[top].slots[l as usize]);
-        #[cfg(feature = "zval-census")]
-        super::zvalcensus::note_recv_load(&self.frames[top].slots[l as usize]);
-        let rhs = self.frames[top].stack.pop().expect("BinarySTDst rhs");
-        let lhs = read_slot(&self.frames[top].slots[l as usize]);
-        #[cfg(feature = "zval-census")]
-        {
-            super::zvalcensus::note_prop_val(2, &lhs);
-            super::zvalcensus::note_prop_val(2, &rhs);
-        }
-        dcn!(BinarySTDst: &lhs); // consumati da binary_value_ab
-        dcn!(BinarySTDst: &rhs);
-        let res = self.binary_value_ab(b, lhs, rhs)?;
-        // il valore corrente del dst muore nello store
-        dcn!(BinarySTDst: &self.frames[top].slots[dst as usize]);
-        self.reg_store_slot(top, dst, res)
-    }
-
-    /// Corpo di `Op::BinarySCSCDst` (S-108 lotto-2 W10): l'albero BinarySCSC
-    /// ESATTO (tre funnel, ordine a→b→combine) poi la coda BinarySTDst sul
-    /// risultato senza transito di pila.
-    #[allow(clippy::too_many_arguments)]
-    #[inline(always)]
-    fn op_binary_scsc_dst(
-        &mut self,
-        top: usize,
-        func: &crate::bytecode::Func,
-        opa: BinOp,
-        la: u16,
-        ca: u16,
-        opb: BinOp,
-        lb: u16,
-        cb: u16,
-        op: BinOp,
-        opd: BinOp,
-        l: u16,
-        dst: u16,
-    ) -> Result<(), PhpError> {
-        let cva = func.consts[ca as usize].to_zval();
-        let a = 'r: {
-            {
-                let lv = &self.frames[top].slots[la as usize];
-                if !matches!(lv, Zval::Undef | Zval::Ref(_)) {
-                    if let Some(v) = binary_fast(opa, lv, &cva) {
-                        break 'r v;
-                    }
-                }
-            }
-            let lhs = self.reg_load_slot(top, func, la);
-            self.binary_value_ab(opa, lhs, cva)?
-        };
-        let cvb = func.consts[cb as usize].to_zval();
-        let bv = 'r: {
-            {
-                let lv = &self.frames[top].slots[lb as usize];
-                if !matches!(lv, Zval::Undef | Zval::Ref(_)) {
-                    if let Some(v) = binary_fast(opb, lv, &cvb) {
-                        break 'r v;
-                    }
-                }
-            }
-            let lhs = self.reg_load_slot(top, func, lb);
-            self.binary_value_ab(opb, lhs, cvb)?
-        };
-        let res = match binary_fast(op, &a, &bv) {
-            Some(v) => v,
-            None => self.binary_value_ab(op, a, bv)?,
-        };
-        let lhs = read_slot(&self.frames[top].slots[l as usize]);
-        let res = self.binary_value_ab(opd, lhs, res)?;
-        self.reg_store_slot(top, dst, res)
-    }
-
-    /// Corpo di `Op::IncDecSlotJmp` (S-107 lotto): il trigramma
-    /// IncDecSlot;Pop;Jump del back-edge di loop.
-    #[inline(always)]
-    fn op_incdec_slot_jmp(
-        &mut self,
-        top: usize,
-        slot: u16,
-        inc: bool,
-        addr: usize,
-    ) -> Result<(), PhpError> {
-        self.incdec_slot_discard(top, slot, inc)?;
-        self.frames[top].ip = addr;
-        Ok(())
-    }
-
-    /// Corpo di `Op::CmpJmpSC`: confronto slot⊚const + salto condizionale.
-    #[inline(always)]
-    fn op_cmp_jmp_sc(
-        &mut self,
-        top: usize,
-        func: &crate::bytecode::Func,
-        op: BinOp,
-        slot: u16,
-        cidx: u16,
-        addr: usize,
-        when: bool,
-    ) -> Result<(), PhpError> {
-        let cv = func.consts[cidx as usize].to_zval();
-        dcn!(CmpJmpSC: &cv); // il const materializzato muore nell'arm (fast o slow)
-        let res = 'r: {
-            {
-                let lv = &self.frames[top].slots[slot as usize];
-                if !matches!(lv, Zval::Undef | Zval::Ref(_)) {
-                    if let Some(v) = binary_fast(op, lv, &cv) {
-                        break 'r v;
-                    }
-                }
-            }
-            let lhs = self.reg_load_slot(top, func, slot);
-            self.binary_value_ab(op, lhs, cv)?
-        };
-        dcn!(CmpJmpSC: &res); // il Bool temporaneo muore dopo to_bool
-        if convert::to_bool(&res, &mut self.diags) == when {
-            self.frames[top].ip = addr;
-        }
-        Ok(())
-    }
-
-    /// Corpo di `Op::PropGetSlot` (S-107 lotto): LoadVar (parità warning via
-    /// reg_load_slot) + PropGet ESATTO — stesso metodo condiviso (IC-hit +
-    /// fallback), zero biforcazione.
-    #[inline(always)]
-    fn op_prop_get_slot(
-        &mut self,
-        top: usize,
-        func: &crate::bytecode::Func,
-        slot: u16,
-        name: &Rc<[u8]>,
-        ic: &crate::bytecode::PropIc,
-    ) -> Result<(), PhpError> {
-        let obj = self.reg_load_slot(top, func, slot);
-        self.prop_get_entry(top, obj, name, ic)
-    }
-
-    /// Corpo di `Op::PropGetSlotRecv` (S-108 lotto-2 W9a): LoadSlot ESATTO
-    /// (push silente del ricevitore) poi PropGetSlot intero. La sospensione
-    /// hook/__get sta nell'ULTIMO helper: al ritorno del frame lo stream
-    /// riprende come nella sequenza non fusa, col ricevitore già in pila.
-    #[inline(always)]
-    fn op_prop_get_slot_recv(
-        &mut self,
-        top: usize,
-        func: &crate::bytecode::Func,
-        recv: u16,
-        slot: u16,
-        name: &Rc<[u8]>,
-        ic: &crate::bytecode::PropIc,
-    ) -> Result<(), PhpError> {
-        let rv = read_slot(&self.frames[top].slots[recv as usize]);
-        self.frames[top].stack.push(rv);
-        let obj = self.reg_load_slot(top, func, slot);
-        self.prop_get_entry(top, obj, name, ic)
-    }
-
-    /// Corpo di `Op::BinaryTCPropSetPop` (S-108 lotto-2 W9b): BinaryTC ESATTO
-    /// (funnel const-rhs, flat) senza il push del risultato, poi l'entry
-    /// PropSet DISCARD condivisa come ULTIMO passo.
-    #[inline(always)]
-    fn op_binary_tc_prop_set_pop(
-        &mut self,
-        top: usize,
-        func: &crate::bytecode::Func,
-        b: BinOp,
-        cidx: u16,
-        name: &Rc<[u8]>,
-        ic: &crate::bytecode::PropIc,
-    ) -> Result<(), PhpError> {
-        let cv = func.consts[cidx as usize].to_zval();
-        let value = 'r: {
-            if let Some(lv) = self.frames[top].stack.last() {
-                if !matches!(lv, Zval::Undef | Zval::Ref(_)) {
-                    if let Some(v) = binary_fast(b, lv, &cv) {
-                        self.frames[top].stack.pop();
-                        break 'r v;
-                    }
-                }
-            }
-            let lhs = self.frames[top].stack.pop().expect("BinaryTCPropSetPop lhs");
-            self.binary_value_ab(b, lhs, cv)?
-        };
-        let obj = self.frames[top].stack.pop().expect("BinaryTCPropSetPop object");
-        self.prop_set_entry::<true>(top, obj, value, name, ic)
-    }
-
-    /// Corpo di `Op::Sweep`: il fast-path buffer-vuoto (WP-39/WP-50) davanti
-    /// a gc_sweep. Il corpo di un distruttore non sweepa (Frame::in_destructor,
-    /// ordine di rilascio degli handle-id).
-    #[inline(always)]
-    fn op_sweep(&mut self, top: usize, ip: usize, main: bool) -> Result<(), PhpError> {
-        if !self.frames[top].flags.get(FrameFlags::IN_DESTRUCTOR) {
-            // WP-39 empty-buffer fast path + WP-50: il bound dello skip deve
-            // combaciare col bound effettivo del trigger
-            // `max(threshold, purge_floor)` (vm/mod.rs sweep tail).
-            let noop = self.gc_buf_head >= self.gc_buf.len()
-                && (!main || self.gc_light_demoted.is_empty())
-                && (!self.gc_enabled
-                    || self.gc_cycle_roots.len() + self.gc_ctr_roots.len()
-                        < self.gc_sweep_bound);
-            #[cfg(feature = "gc-census")]
-            if noop
-                && self.gc_enabled
-                && self.gc_cycle_roots.len() + self.gc_ctr_roots.len()
-                    >= self.gc_cycle_threshold
-            {
-                super::gc_census::sweep_band_skipped();
-            }
-            if !noop {
-                self.gc_sweep(top, ip, main)?;
-            }
-        }
-        Ok(())
-    }
-
     pub(super) fn run_loop(&mut self, baseline: usize) -> Result<RunExit, PhpError> {
         // WP-60 P2(a): park the VM for the census window-context renderer
         // (tag=ctx). Two relaxed stores, census builds only.
@@ -1349,54 +1109,6 @@ impl<'m> super::Vm<'m> {
             // Default fall-through advance. Jumps overwrite `ip`; `Call` advances
             // the *caller* before pushing the callee; `Ret` discards this frame.
             self.frames[top].ip = ip + 1;
-
-            // S-111 leva hot-cluster (criterio wp111-harness/s111-criterio.md):
-            // gli 8 op caldi dei giudici arith/prop dispatchati da un sito
-            // COMPATTO in testa al loop — stessi metodi #[inline(always)] del
-            // match grande, che resta sotto intatto (ed esaustivo) per tutto
-            // il resto. Ogni arm caldo chiude con `continue`: il match grande
-            // non vede mai questi op dal sentiero caldo.
-            match op {
-                Op::CmpJmpSC { op, slot, cidx, addr, when } => {
-                    scn!(CmpJmpSC: op);
-                    self.op_cmp_jmp_sc(top, func, *op, *slot, *cidx, *addr as usize, *when)?;
-                    continue;
-                }
-                Op::BinarySCSCDst { opa, la, ca, opb, lb, cb, op, opd, l, dst } => {
-                    self.op_binary_scsc_dst(
-                        top, func, *opa, *la, *ca, *opb, *lb, *cb, *op, *opd, *l, *dst,
-                    )?;
-                    continue;
-                }
-                Op::IncDecSlotJmp { slot, inc, addr } => {
-                    self.op_incdec_slot_jmp(top, *slot, *inc, *addr as usize)?;
-                    continue;
-                }
-                Op::Sweep { main } => {
-                    scn!(Sweep: op);
-                    self.op_sweep(top, ip, *main)?;
-                    continue;
-                }
-                Op::PropGetSlot { slot, name, ic } => {
-                    self.op_prop_get_slot(top, func, *slot, name, ic)?;
-                    continue;
-                }
-                Op::PropGetSlotRecv { recv, slot, name, ic } => {
-                    self.op_prop_get_slot_recv(top, func, *recv, *slot, name, ic)?;
-                    continue;
-                }
-                Op::BinaryTCPropSetPop { op: b, cidx, name, ic } => {
-                    self.op_binary_tc_prop_set_pop(top, func, *b, *cidx, name, ic)?;
-                    continue;
-                }
-                Op::BinarySTDst { op: b, l, dst } => {
-                    scn!(BinarySTDst: op);
-                    scn!(BinarySTDst: Pop = 1);
-                    self.op_binary_st_dst(top, func, ip, *b, *l, *dst)?;
-                    continue;
-                }
-                _ => {}
-            }
 
             match op {
                 Op::PushConst(i) => {
@@ -1975,9 +1687,31 @@ impl<'m> super::Vm<'m> {
                     self.reg_store_slot(top, *dst, res)?;
                 }
                 Op::BinarySTDst { op: b, l, dst } => {
+                    // S-106 leva H-A1 (ha1-criterio.out): fonde il tris
+                    // `LoadSlot(l); Swap; BinaryDst{op,dst}` del compound
+                    // assign. Semantica IDENTICA per costruzione: stessa
+                    // read_slot silenziosa (lhs), stessi binary_value_ab e
+                    // reg_store_slot del braccio BinaryDst — la fusione
+                    // elide solo dispatch e transiti di pila.
+                    #[cfg(feature = "zval-census")]
+                    super::zvalcensus::note_slot_load_site(func, ip, &self.frames[top].slots[*l as usize]);
+                    #[cfg(feature = "zval-census")]
+                    super::zvalcensus::note_recv_load(&self.frames[top].slots[*l as usize]);
                     scn!(BinarySTDst: op);
                     scn!(BinarySTDst: Pop = 1);
-                    self.op_binary_st_dst(top, func, ip, *b, *l, *dst)?;
+                    let rhs = self.frames[top].stack.pop().expect("BinarySTDst rhs");
+                    let lhs = read_slot(&self.frames[top].slots[*l as usize]);
+                    #[cfg(feature = "zval-census")]
+                    {
+                        super::zvalcensus::note_prop_val(2, &lhs);
+                        super::zvalcensus::note_prop_val(2, &rhs);
+                    }
+                    dcn!(BinarySTDst: &lhs); // consumati da binary_value_ab
+                    dcn!(BinarySTDst: &rhs);
+                    let res = self.binary_value_ab(*b, lhs, rhs)?;
+                    // il valore corrente del dst muore nello store
+                    dcn!(BinarySTDst: &self.frames[top].slots[*dst as usize]);
+                    self.reg_store_slot(top, *dst, res)?;
                 }
                 Op::BinaryTC { op: b, cidx } => {
                     // S-107 lotto: BinarySC a lhs di PILA (bigram
@@ -2040,9 +1774,45 @@ impl<'m> super::Vm<'m> {
                     self.frames[top].stack.push(res);
                 }
                 Op::BinarySCSCDst { opa, la, ca, opb, lb, cb, op, opd, l, dst } => {
-                    self.op_binary_scsc_dst(
-                        top, func, *opa, *la, *ca, *opb, *lb, *cb, *op, *opd, *l, *dst,
-                    )?;
+                    // S-108 lotto-2 W10: l'albero BinarySCSC ESATTO (tre
+                    // funnel, ordine a→b→combine) poi la coda BinarySTDst
+                    // sul risultato senza transito di pila — stessa
+                    // read_slot silenziosa del lhs, stesso binary_value_ab
+                    // (la coda non ha fast path, come l'op non fusa),
+                    // stesso reg_store_slot.
+                    let cva = func.consts[*ca as usize].to_zval();
+                    let a = 'r: {
+                        {
+                            let lv = &self.frames[top].slots[*la as usize];
+                            if !matches!(lv, Zval::Undef | Zval::Ref(_)) {
+                                if let Some(v) = binary_fast(*opa, lv, &cva) {
+                                    break 'r v;
+                                }
+                            }
+                        }
+                        let lhs = self.reg_load_slot(top, func, *la);
+                        self.binary_value_ab(*opa, lhs, cva)?
+                    };
+                    let cvb = func.consts[*cb as usize].to_zval();
+                    let bv = 'r: {
+                        {
+                            let lv = &self.frames[top].slots[*lb as usize];
+                            if !matches!(lv, Zval::Undef | Zval::Ref(_)) {
+                                if let Some(v) = binary_fast(*opb, lv, &cvb) {
+                                    break 'r v;
+                                }
+                            }
+                        }
+                        let lhs = self.reg_load_slot(top, func, *lb);
+                        self.binary_value_ab(*opb, lhs, cvb)?
+                    };
+                    let res = match binary_fast(*op, &a, &bv) {
+                        Some(v) => v,
+                        None => self.binary_value_ab(*op, a, bv)?,
+                    };
+                    let lhs = read_slot(&self.frames[top].slots[*l as usize]);
+                    let res = self.binary_value_ab(*opd, lhs, res)?;
+                    self.reg_store_slot(top, *dst, res)?;
                 }
                 Op::LoadVarPushConst { slot, cidx } => {
                     // S-108 lotto-2 W13: pura coppia di push — LoadVar
@@ -2059,7 +1829,10 @@ impl<'m> super::Vm<'m> {
                     self.incdec_slot_discard(top, *slot, *inc)?;
                 }
                 Op::IncDecSlotJmp { slot, inc, addr } => {
-                    self.op_incdec_slot_jmp(top, *slot, *inc, *addr as usize)?;
+                    // S-107 lotto: il trigramma IncDecSlot;Pop;Jump del
+                    // back-edge di loop — incremento poi salto incondizionato.
+                    self.incdec_slot_discard(top, *slot, *inc)?;
+                    self.frames[top].ip = *addr as usize;
                 }
                 Op::CmpJmpSS { op, l, r, addr, when } => {
                     let res = 'r: {
@@ -2085,7 +1858,24 @@ impl<'m> super::Vm<'m> {
                 }
                 Op::CmpJmpSC { op, slot, cidx, addr, when } => {
                     scn!(CmpJmpSC: op);
-                    self.op_cmp_jmp_sc(top, func, *op, *slot, *cidx, *addr as usize, *when)?;
+                    let cv = func.consts[*cidx as usize].to_zval();
+                    dcn!(CmpJmpSC: &cv); // il const materializzato muore nell'arm (fast o slow)
+                    let res = 'r: {
+                        {
+                            let lv = &self.frames[top].slots[*slot as usize];
+                            if !matches!(lv, Zval::Undef | Zval::Ref(_)) {
+                                if let Some(v) = binary_fast(*op, lv, &cv) {
+                                    break 'r v;
+                                }
+                            }
+                        }
+                        let lhs = self.reg_load_slot(top, func, *slot);
+                        self.binary_value_ab(*op, lhs, cv)?
+                    };
+                    dcn!(CmpJmpSC: &res); // il Bool temporaneo muore dopo to_bool
+                    if convert::to_bool(&res, &mut self.diags) == *when {
+                        self.frames[top].ip = *addr as usize;
+                    }
                 }
                 Op::ConcatN(n) => {
                     // Flattened concat chain (WP-34): every part arrived
@@ -4335,10 +4125,23 @@ impl<'m> super::Vm<'m> {
                     self.prop_get_entry(top, obj, name, ic)?;
                 }
                 Op::PropGetSlot { slot, name, ic } => {
-                    self.op_prop_get_slot(top, func, *slot, name, ic)?;
+                    // S-107 lotto: LoadVar (parità warning via reg_load_slot)
+                    // + PropGet ESATTO — stesso metodo condiviso (IC-hit +
+                    // fallback), zero biforcazione.
+                    let obj = self.reg_load_slot(top, func, *slot);
+                    self.prop_get_entry(top, obj, name, ic)?;
                 }
                 Op::PropGetSlotRecv { recv, slot, name, ic } => {
-                    self.op_prop_get_slot_recv(top, func, *recv, *slot, name, ic)?;
+                    // S-108 lotto-2 W9a: LoadSlot ESATTO (push silente del
+                    // ricevitore) poi PropGetSlot intero (parità warning +
+                    // prop_get_entry condivisa). La sospensione hook/__get
+                    // sta nell'ULTIMO helper: al ritorno del frame lo stream
+                    // riprende come nella sequenza non fusa, col ricevitore
+                    // già in pila.
+                    let rv = read_slot(&self.frames[top].slots[*recv as usize]);
+                    self.frames[top].stack.push(rv);
+                    let obj = self.reg_load_slot(top, func, *slot);
+                    self.prop_get_entry(top, obj, name, ic)?;
                 }
                 Op::ThisPropGet { name, ic } => {
                     // Fused `$this->name` (WP-34): the IC hit borrows the
@@ -4481,7 +4284,25 @@ impl<'m> super::Vm<'m> {
                     self.prop_set_entry::<true>(top, obj, value, name, ic)?;
                 }
                 Op::BinaryTCPropSetPop { op: b, cidx, name, ic } => {
-                    self.op_binary_tc_prop_set_pop(top, func, *b, *cidx, name, ic)?;
+                    // S-108 lotto-2 W9b: BinaryTC ESATTO (funnel const-rhs,
+                    // flat — binary_value_ab non sospende, precedente
+                    // BinarySCSC) senza il push del risultato, poi l'entry
+                    // PropSet DISCARD condivisa come ULTIMO passo.
+                    let cv = func.consts[*cidx as usize].to_zval();
+                    let value = 'r: {
+                        if let Some(lv) = self.frames[top].stack.last() {
+                            if !matches!(lv, Zval::Undef | Zval::Ref(_)) {
+                                if let Some(v) = binary_fast(*b, lv, &cv) {
+                                    self.frames[top].stack.pop();
+                                    break 'r v;
+                                }
+                            }
+                        }
+                        let lhs = self.frames[top].stack.pop().expect("BinaryTCPropSetPop lhs");
+                        self.binary_value_ab(*b, lhs, cv)?
+                    };
+                    let obj = self.frames[top].stack.pop().expect("BinaryTCPropSetPop object");
+                    self.prop_set_entry::<true>(top, obj, value, name, ic)?;
                 }
                 Op::PropOpSet { name, op } => {
                     let rhs = self.frames[top].stack.pop().expect("PropOpSet rhs");
@@ -6169,7 +5990,44 @@ impl<'m> super::Vm<'m> {
                 }
                 Op::Sweep { main } => {
                     scn!(Sweep: op);
-                    self.op_sweep(top, ip, *main)?;
+                    // A destructor body's statement sweeps no-op — see
+                    // Frame::in_destructor (handle-id release order).
+                    if !self.frames[top].flags.get(FrameFlags::IN_DESTRUCTOR) {
+                        // WP-39 empty-buffer fast path: nothing was noted since
+                        // the last sweep (cursor at the end ⇒ no pending
+                        // candidate slots — the sweep tail drains and resets
+                        // the buffer), no light demotions for a main sweep to
+                        // re-seed, and the cycle collector's pressure trigger
+                        // is under threshold ⇒ the sweep body would only
+                        // walk/clear empty buffers. gc-census (media): 53M
+                        // statement sweeps, ~6M with a non-empty buffer — the
+                        // rest take this path.
+                        // WP-50: the skip bound must match the trigger's
+                        // effective bound `max(threshold, purge_floor)`
+                        // (vm/mod.rs sweep tail) — with the WP-49 trigger-time
+                        // tombstone purge the raw buffer sits in the band
+                        // [threshold, floor) most of the time, and a body
+                        // entry there does nothing at all: no candidates (the
+                        // note buffer is empty here), no purge, no collect.
+                        // Full census: 1.014,7M light entries, ~805M of them
+                        // band-only.
+                        let noop = self.gc_buf_head >= self.gc_buf.len()
+                            && (!*main || self.gc_light_demoted.is_empty())
+                            && (!self.gc_enabled
+                                || self.gc_cycle_roots.len() + self.gc_ctr_roots.len()
+                                    < self.gc_sweep_bound);
+                        #[cfg(feature = "gc-census")]
+                        if noop
+                            && self.gc_enabled
+                            && self.gc_cycle_roots.len() + self.gc_ctr_roots.len()
+                                >= self.gc_cycle_threshold
+                        {
+                            super::gc_census::sweep_band_skipped();
+                        }
+                        if !noop {
+                            self.gc_sweep(top, ip, *main)?;
+                        }
+                    }
                 }
                 Op::Nop => {}
             }
