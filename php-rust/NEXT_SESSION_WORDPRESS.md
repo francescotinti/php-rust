@@ -52,9 +52,8 @@ media voce aperta (2,707 on / 2,634 off: quinta lettura con la coppia S-110) ·
 **§3.16 riga errata warning undef-var ricevitore prop-assign** (bilaterale,
 repro parcheggiata in wp109-harness/w9-fixtures/) · fixture w9a caso B rientra
 nel gate quando §3.16 è curata · retro-A/B str coi tre stash s107b/s108/s109 ·
-denti rinviati (OBS-8 terza
-mutazione; mutante fx20; dente direct-bind; dente drop-order; contatore
-hit/miss) · fedeltà: $z++/$z-- undefined non warna · §3.13 · §3.12-i · §3.14 ·
+denti rinviati (OBS-8 terza mutazione; mutante fx20; direct-bind; drop-order;
+contatore hit/miss) · fedeltà: $z++/$z-- undefined non warna · §3.13 · §3.12-i · §3.14 ·
 get_gc · bl-count run_loop: metodo NUOVO (otool sul simbolo, 5849) non
 confrontabile col «29» storico — se serve, si ricostruisce il vecchio per NOME.
 
