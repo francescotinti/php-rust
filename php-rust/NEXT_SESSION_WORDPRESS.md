@@ -1,12 +1,10 @@
 # NEXT_SESSION — phpr ≤ 3× l'oracle (processo LEAN v1: la lista unica è REGOLE.md)
 
-⏱ **FONDAMENTALI**: riferimento WP = **full ON 1,842× / OFF 1,911×** (S-109;
-lettura S-110 sul pin nuovo: **1,867/1,869 DENTRO banda [1,81;1,88]** — debito
-lotto-3 ASSOLTO, stasera ON~OFF) · media 2,673/2,612 (quinta lettura: entrambe
-in discesa, off SOTTO il rif 2,64 — voce aperta vicina a rientrare) · ultima
-leva di codice = S-109 (lotto-3 str) · **S-110: 0 leve di codice (dichiarato),
-leva MISURATIVA (d) FIRMATA** · sessioni-senza-Δ-rapporti = 1 (micro fermi, pin
-invariato) · incidenti «mai collaudato»: 1 (de67cb64, S-106).
+⏱ **FONDAMENTALI**: rif WP **full ON 1,842 / OFF 1,911** (S-109; S-110 sul pin
+nuovo: **1,867/1,869 IN banda [1,81;1,88]**, lotto-3 ≤~2%) · media 2,673/2,612
+(off SOTTO il rif 2,64, voce aperta vicina a rientrare) · ultima leva di codice
+S-109 · S-110: 0 leve di codice (dichiarato), leva misurativa (d) FIRMATA ·
+sessioni-senza-Δ-rapporti = 1 · incidenti «mai collaudato»: 1 (de67cb64, S-106).
 
 ## Scoreboard (pin 92909544, micro R=5 di S-109 — S-110 non li ha rimisurati)
 
@@ -20,12 +18,12 @@ ripartita). ⚠️ TETTO revisore: azzerare TUTTA la delivery vale ≤×1,48 su 
 ## Stato gate
 
 - **phpr pin 929095448e823cb5** @ HEAD (stash `phpr-s109`, ripristinato al byte
-  in chiusura S-110 dopo churn docs-build) — batteria 1742/0 · corpus **1415
-  per NOME ×2** (fresco S-110: 2652/1415/1238) · fixture 6/6 · ORM 16 nomi =
-  baseline · hk 0E/0F · run_loop 287.944 B · flag-ON · oracle 07b0df8d. Pendente
-  (rev. S-109 az.3): al prossimo pin, batteria sul byte O dichiarazione permanente.
-- **php-server 443ae42f GRADATO PIENO ×2** (pre-lotto-3; re-pin nominabile).
-- GitHub SINCRONIZZATO (23c35b0): corpus 2652/1415, blockquote perf riscritto.
+  post-churn docs-build) — batteria 1742/0 · corpus **1415 per NOME ×2** (fresco
+  S-110: 2652/1415/1238) · fixture 6/6 · ORM 16 nomi · hk 0E/0F · run_loop
+  287.944 B · flag-ON · oracle 07b0df8d. Pendente (rev. S-109 az.3): al prossimo
+  pin, batteria sul byte O dichiarazione permanente.
+- **php-server 443ae42f GRADATO PIENO ×2** (pre-lotto-3; re-pin nominabile) ·
+  GitHub SINCRONIZZATO (23c35b0): corpus 2652/1415, blockquote perf riscritto.
 
 ## §S-111 — ordine provvisorio
 
