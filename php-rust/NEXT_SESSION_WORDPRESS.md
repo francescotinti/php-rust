@@ -72,9 +72,8 @@ tee/log prima del mkdir · finestre fuse OLTRE un helper sospendibile
 {main}: il prelude fonde in ogni giudice — emendamento S-109)**.
 
 ---
-**Riscritto**: 2026-08-07 (chiusura S-109). Apertura/chiusura = skill
-`apri-sessione`/`chiudi-sessione` v2. Storia: `sessions/` ·
-`gaps/GAP_TREND.md` · revisioni in `wp10*-harness/revisione.md`.
+**Riscritto**: 2026-08-07 (chiusura S-109). Apertura/chiusura = skill v2.
+Storia: `sessions/` · `gaps/GAP_TREND.md` · revisioni in `wp10*-harness/`.
 
 Pre-flight S-110: pin phpr **92909544** (fa fede HEAD, la build churna) ·
 server 443ae42f (stash php-server-s109) · MySQL wp8 con elenco DB · debug/
