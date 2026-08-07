@@ -11,10 +11,9 @@ l'oracle il 3% — la prossima leva ha un bersaglio nominato (threaded-dispatch)
 WordPress: **full ON 1,867× DENTRO banda [1,81;1,88]** (rif resta 1,842) /
 OFF 1,869× (↓ da 1,911, sotto la famiglia storica) · media 2,673/2,612 (↓↓,
 off sotto il rif 2,64; quinta lettura, voce aperta) · peak full ON 1843,53 MiB.
-**Leve perf di codice spedite: 0 (dichiarato)** — la finestra leva è andata
-alla leva MISURATIVA (d) per NOME dall'ordine S-110, eseguita e FIRMATA.
-
-**Data**: 2026-08-07 (21:2x–23:5x). **Modello**: Fable 5. **Commit**: ded4a74→(chiusura) pushati.
+**Leve perf di codice spedite: 0 (dichiarato)** — finestra leva = leva
+MISURATIVA (d) dall'ordine S-110, eseguita e FIRMATA. **Data**: 2026-08-07
+(21:2x–23:5x) · **Modello**: Fable 5 · **Commit**: ded4a74→(chiusura) pushati.
 
 ## Esiti secchi
 1·coppia bimodale VERDE ×4 gambe (criterio PRE ded4a74; parità per NOME, sola
