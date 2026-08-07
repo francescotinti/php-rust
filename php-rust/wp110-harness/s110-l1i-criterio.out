@@ -1,0 +1,10 @@
+s110-l1i-criterio: leva (d) contatori L1I — PRE-registrato, prima di ogni registrazione
+oggetto=firmare o refutare il canale frontend/icache del dispatch su arith (9,3) e prop (7,9) — prerequisito della tesi threaded-dispatch; il veto vigente vieta di assumerlo («icache-bound» non e' premessa firmata)
+strumento=xctrace 16.0 template CPU Counters su M4 (kpep as5); eventi bersaglio: FIXED_CYCLES, INST_ALL, L1I_CACHE_MISS_DEMAND, MAP_DISPATCH_BUBBLE_IC (+BRANCH_INDIR_MISPRED_NONSPEC se i counter bastano)
+T1_gate_tooling=una registrazione di prova con --launch deve esporre, via xctrace export, conteggi PER-PROCESSO che includano almeno {cycles, INST_ALL, L1I_CACHE_MISS_DEMAND}; se il template di serie non li porta si tenta UN template custom via path; fallito anche quello ⇒ leva (d) DICHIARATA infattibile-da-CLI (sudo non disponibile per kpc) e la sessione ripiega su leva (e) con criterio proprio
+misura=bilaterale (feedback-one-sided-profile): giudici arith.php, prop.php + arr.php come CONTROLLO di specificita' (categoria gia' buona, 3,9), su ENTRAMBI i motori; pavimento per-binario = empty.php, contatori del pavimento SOTTRATTI; R=3 per lato, mediana dei rate
+metriche=L1I_MPKI = L1I_CACHE_MISS_DEMAND/(INST_ALL/1000) e bubble_ic_share = MAP_DISPATCH_BUBBLE_IC/FIXED_CYCLES; SOLO rate normalizzati per-motore, MAI ns o magnitudini di tempo da questo strumento
+tesi_FIRMATA=su arith E prop: (bubble_ic_share phpr >= 2x oracle) OPPURE (L1I_MPKI phpr >= 3x oracle), E il contrasto su arr < meta' del contrasto su arith (specificita' di categoria) -> S-111 candidata: esperimento threaded-dispatch con A/B proprio
+tesi_REFUTATA=su arith E prop: L1I_MPKI phpr < 1,5x oracle E bubble_ic_share phpr < 1,5x oracle -> il collo e' altrove (Sweep/ciclo-vita Zval sale candidata (c)); il veto sulla premessa diventa definitivo
+in_mezzo=NON RISOLTO per NOME (si dichiara quale meta' del criterio ha ceduto); nessuna promozione di tesi
+vincolo=nessuna registrazione finche' la coppia WP e' in volo (contaminazione bidirezionale); esito della coppia fuori banda sopra 1,88 ⇒ questa leva NON parte (gate del criterio coppia)
