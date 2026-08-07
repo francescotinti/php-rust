@@ -1,0 +1,31 @@
+# ==== PIN-108 (S-107) — VERDETTO GATE sul lotto superistruzioni ====
+# ordine REGOLE §6: build → hash → batteria → re-hash → STASH(script) →
+# corpus/fixture → micro. NESSUNA build di release dopo lo stash.
+# build lotto:                 hash₁ = a05432133a3e4199 (A/B su questo)
+# batteria cargo test --release: 1739 passed / 0 failed / 2 ignored
+#   (pre-esistenti: measure82 campaign-bound + null-array-offset deferred),
+#   rc=0 DAL COMANDO. NOTA DICHIARATA: S-106 verbalizzava «1740 passed»;
+#   inventario #[test] IDENTICO fra i due commit (git grep: 1767 = 1767)
+#   ⇒ il −1 è artefatto di conteggio run, NON un test rimosso. Primo
+#   tentativo di batteria ANNULLATO prima dell'esito: rc incatenato a una
+#   pipe (la regola «rc mai da pipe» morde anche chi la scrive) — rifatto
+#   con rc dal comando.
+# re-hash (churn di relink batteria, documentato): a0543213 → **b4b1a87df02a7717** = PIN S-107
+# STASH via scripts/pin-phpr.sh s107 (collaudo-nell'atto: smoke parità 2
+#   modi vs oracle + hash stash verificato): phpr-s107 = b4b1a87df02a7717
+# corpus: **1417 per NOME ×2 modi** (off 10:20, on 10:27), insieme
+#   IDENTICO alla lista wp82, assert conteggi↔nomi ok, rc=0
+# fixture ×5 rc=0: hc1 · move · recv 19a/b · fx20 · fx21-GATE (il doppio
+#   golden morde col phpr pre-cura «2,3 22»: fail-closed vivo)
+# denti diagnostici in-sessione: ON==OFF al byte su warning/errori delle
+#   finestre nuove; doppio warning BinarySCSC su slot undefined ✓;
+#   divergenza PRE-esistente ($z++ su undefined non warna, oracle sì)
+#   identica nei 2 modi e nel pin S-106 → a catalogo per NOME.
+# micro SUL PIN (R=5, N emessi, ab-out/micro-pin-s107.out):
+#   arith 11,6 → 9,9 · prop 10,6 → 8,5 · calls 6,3 → 5,6 ·
+#   str 6,6 → 6,2 · arr 4,2 → 4,1 · re 3,5 → 3,4
+#   — PRIMA sessione dell'arco con TUTTE e sei le categorie in discesa.
+# taglia run_loop sul pin: 274.192 B (S-106: 257.828; +16.364 = 7 handler
+#   nuovi, DICHIARATO; bl 5418→5675). Il text-budget R-2 va ricontrattato
+#   alla prossima leva se la crescita continua.
+# ==== PIN S-107 SALDO su b4b1a87df02a7717 (default flag-ON, oracle 07b0df8d) ====

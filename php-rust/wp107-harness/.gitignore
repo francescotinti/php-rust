@@ -2,3 +2,5 @@
 # il verbale derivato (s107-*.out) è l'unico artefatto committato.
 census-out/
 ab-out/
+corpus-gate/
+fixture-out/
