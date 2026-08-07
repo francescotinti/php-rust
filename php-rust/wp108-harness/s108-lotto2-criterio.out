@@ -11,3 +11,12 @@
 6. Gate pin (SOLO via scripts/pin-phpr.sh): batteria rc dal comando (mai da pipe) · corpus 1415 per NOME x2 modi · fixture bilaterali x5 · micro R=5 · ORM 3E/13F + hk 0E/0F per NOME (W9 tocca il canale property: ricetta obbligatoria).
 7. Magnitudine: SOLO dai Delta ABAB per giudice; nessuna ripartizione per finestra (REGOLE par.4).
 8. Ogni lettera-gate che morde (census op_index/N_OPS, liveness effect, visit_addrs) si emenda DICHIARANDO nel verbale col sito ri-collocato.
+
+== EMENDAMENTO PRE-IMPLEMENTAZIONE (dichiarato PRIMA di ogni riga di codice e di ogni misura) ==
+W9 a 4 op e' INAMMISSIBILE per meccanismo NOMINATO: `prop_get_entry` puo' sospendere nella VM via frame
+__get/hook (prop_get_fallback, run.rs:510-575) — una finestra che prosegue OLTRE quel punto perderebbe le op
+residue (l'esecuzione riprende all'op successiva, non a meta' handler). Le finestre v3 legali TERMINANO al punto
+di sospensione. W9 si RIDUCE per NOME in due finestre legali:
+   W9a PropGetSlotRecv   [LoadSlot(o); PropGetSlot(o,name,ic)] -> 1  (push ricevitore silente + entry condivisa; la sospensione e' nell'ULTIMO helper)
+   W9b BinaryTCPropSetPop [BinaryTC(op,c); PropSetPop(name,ic)] -> 1 (funnel binario flat — precedente BinarySCSC — poi set entry, sospensione in coda)
+Attesa prop aggiornata: 10 -> 8 (-20%). Primario resta prop. Le altre attese invariate.
