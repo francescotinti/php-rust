@@ -19,3 +19,8 @@ esito=su arith il clustering RIDUCE la quota delivery di ~3 punti e il tempo sce
   delivery, useful giu'): coerenza cronometro<->contatori su entrambi i lati.
 
 nota apparato: quote per-motore e contrasti tra binari usati SOLO come direzione (REGOLE par.3).
+
+-- EMENDAMENTO az.5 revisore S-111 (dichiarato, stessa sessione) --
+err: delta phpr +0.07 s contro spread <=0.06 e rapporto 2,6->2,6 = INVARIATO ENTRO SPREAD
+(nessuna soglia held-out era pre-registrata); l'enunciato "regredisce tutti e tre" e' declassato a
+"poly/wploop regrediti, err fermo". La refutazione della famiglia NON cambia (portata da micro+guardie).

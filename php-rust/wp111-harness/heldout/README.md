@@ -26,6 +26,13 @@ Questi tre giudici stanno FUORI dal ciclo di progettazione.
    con closure (`apply_filters`), sanitize_key (strtolower+preg_replace),
    escape (str_replace multiplo), interpolazione, in_array strict.
 
+**Tare dichiarate (revisore S-111, az.4)**: `poly.php` ha pattern di dispatch
+di PERIODO 16 — polimorfismo reale, ma un predittore moderno lo impara: non
+spacciarlo per «branch imprevedibili». La parità d'output di `err.php` NON
+certifica la diagnostica soppressa dal `@` (proprio lì il revisore ha trovato
+la divergenza §3.17: riga sbagliata del warning non-numeric). Prima della
+prossima lettura comparativa va PRE-registrata una soglia held-out (az.5).
+
 **Verdetto della leva sui giudici**: la leva threaded-dispatch è un
 DISCRIMINATORE tra famiglie di dispatch; se migliora i micro ma peggiora o
 lascia fermi questi tre, la famiglia NON generalizza e il verdetto lo dice.

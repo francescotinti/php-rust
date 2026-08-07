@@ -908,6 +908,17 @@ warning che legge la riga all'ip corrente. Fixture repro parcheggiata:
 dal gate finché la voce non è curata; il gate w9 copre il caso A
 __get-che-lancia, byte-identico).
 
+### 3.17 🟡 Riga sbagliata nel warning «A non-numeric value encountered» (scoperta S-111, revisore semantica sul giudice held-out err)
+
+`$sum += @("12x" + 1);` — senza `@`, l'oracle attribuisce il warning alla
+riga dell'espressione aritmetica; phpr lo emette PER-iterazione (nessun
+folding: il conteggio è giusto) ma lo attribuisce alla RIGA D'USO
+SUCCESSIVA (repro del revisore: riga 6 vs riga 4 oracle). Stessa famiglia
+di §3.13/§3.16 (emissione pigra che legge la riga all'ip corrente invece
+che all'op che genera). Nel giudice `wp111-harness/heldout/err.php` la
+divergenza è NASCOSTA dal `@`: la parità d'output del giudice NON
+certifica la diagnostica soppressa (nota dichiarata nel README held-out).
+
 ## 4. Punti di forza da NON toccare (invarianti verificati byte-identici)
 
 Per evitare regressioni, questi comportamenti sono **già** byte-identici con
@@ -938,6 +949,9 @@ l'oracle e vanno preservati:
 
 ### Changelog di questo documento
 
+- 2026-08-08 (S-111): AGGIUNTA §3.17 — riga sbagliata nel warning «A
+  non-numeric value encountered» (famiglia §3.13/§3.16), scoperta dal
+  revisore semantica collaudando il giudice held-out `err.php` senza `@`.
 - 2026-08-06 (S-103 sera, Concilio WP-105): §3.12 emendata coi TRE regimi
   (strict_types e `.=` CONSERVANO — il censimento 4/4 era mono-regime);
   §3.13 RIAPERTA sul canale unit (include/eval: file del flush, provato

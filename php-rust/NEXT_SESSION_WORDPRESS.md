@@ -9,11 +9,12 @@ sessioni-senza-Δ-rapporti = 2 · incidenti «mai collaudato»: 1 (de67cb64, S-1
 **arith 9,3 · prop 7,9 · calls 5,1 · str 5,3 · arr 3,9 · re 3,5**
 🆕 **HELD-OUT baseline (prima lettura S-111 sul pin, R=5, wp111-harness/heldout/):
 poly 6,7 · err 2,6 · wploop 5,6** — d'ora in poi GUARDIA STANDARD di ogni leva
-(lettura SOLO a leva conclusa). 🔬 Tesi frontend (S-110) RAFFINATA da S-111: lo
-SCATTER degli handler caldi è REFUTATO come motore (delivery arith 0,325→0,295
-coi 4 handler adiacenti, tempo −3,4% coerente; residuo ~0,30 sopravvive) — il
-residuo sta in salto-indiretto/fetch-helper: ipotesi da MISURARE. Tetto ×1,48
-su arith resta il tetto di OGNI leva solo-frontend.
+(lettura SOLO a leva conclusa; soglia held-out da PRE-registrare prima della
+prossima lettura — az.5 rev. S-111). 🔬 Tesi frontend (S-110) raffinata da
+S-111, in DIREZIONE (quote per-motore, forma pre-filtro): delivery arith
+0,325→0,295 coi 4 handler ADIACENTI, residuo ~0,30 ⇒ lo scatter dei caldi non
+regge come motore; salto-indiretto/fetch-helper = ipotesi da MISURARE. Tetto
+×1,48 su arith resta il tetto di OGNI leva solo-frontend.
 
 ## Stato gate
 
@@ -49,8 +50,9 @@ su arith resta il tetto di OGNI leva solo-frontend.
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
 
 media voce aperta (2,673/2,612: sesta lettura con la prossima coppia) · rumore
-tra-sere WP (az.2 S-110) · causa fine frontend NON ripartita (kpc/sudo — azione
-utente) · **§3.16 warning undef-var prop-assign** (repro wp109-harness/) ·
+tra-sere WP (az.2 S-110) · **A/B pre-filtro VUOTO** (az.2 rev. S-111: ripartire
+tassa-filtro vs flip-inliner) · causa fine frontend NON ripartita (kpc/sudo —
+azione utente) · **§3.16/§3.17 righe dei warning** (famiglia §3.13) ·
 retro-A/B str stash s107b/s108/s109 · denti rinviati (OBS-8; fx20; direct-bind;
 drop-order; hit/miss) · $z++/$z-- undef non warna · §3.13 · §3.12-i · §3.14 ·
 get_gc · drift TODO.md «0%» su aree fatte (prossimo gh-status-sync) · bl-count
@@ -62,9 +64,9 @@ pin/stash senza collaudo-nell'atto · contenitori sul call path · differenze tr
 A/B distinti come cifra · componenti prezzate nei criteri · magnitudine
 ripartita senza A/B proprio · finestre estese senza criterio+dente · simple_call
 allargato senza dente+fx21 · fixture su memory_get_usage (stub) · «icache»
-NON-premessa · **pre-filtro/hot-cluster davanti al dispatch: famiglia REFUTATA
-S-111 (tassa sui freddi +11% calls) — si ripropone SOLO con forma che non tassa
-i non-caldi** · denominatori a memoria · output di run nel repo · rc di gate da
+NON-premessa · **pre-filtro/hot-cluster (REFUTATA S-111; tassa non ripartita
+dal flip inliner) senza forma che non tassi i freddi** · denominatori a
+memoria · output di run nel repo · rc di gate da
 pipe (4 morsi) · tee/log prima del mkdir · finestre fuse oltre un helper
 sospendibile · admission sul dump intero · xctrace senza guardie disco · path
 del volume esterno nel figlio tracciato (TCC).
