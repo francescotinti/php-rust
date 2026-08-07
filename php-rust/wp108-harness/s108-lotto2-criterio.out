@@ -1,0 +1,13 @@
+== S-108 CRITERIO PRE-REGISTRATO — lotto-2 superistruzioni W9/W10/W13 (committato PRIMA dell'implementazione) ==
+1. Finestre (dal census secondo giro, s108-census-derive.out; regole v3: monomorfe, u16 nudi, helper condivisi, zero biforcazione):
+   W9  PropRMWCPop  [LoadSlot(o); PropGetSlot(o,name); BinaryTC(op,c); PropSetPop(name)] -> 1  (stesso slot o e stesso name nella finestra; DUE PropIc distinti get/set)
+   W10 BinarySCSCDst [BinarySCSC(...); BinarySTDst(opd,l,dst)] -> 1
+   W13 LoadVarPushConst [LoadVar(slot,name); PushConst(c)] -> 1  (parita' warning LoadVar)
+   W12 [CallHostBuiltinOut; JumpIfFalse] DIFFERITA per NOME: re 3,4 e' gia' presso il target 3x, il corpo e' dominato dal builtin (~660 ns/iter misurati oggi), payload Call largo — costo/beneficio sfavorevole in questa finestra.
+2. Attesa di segno (conto statico dal census): prop + (10->7) · arith + (5->4) · calls + (10->9) · arr + (9->8) · re + (9->8, solo W13) · str 0 (INVARIANTE: controllo di non-regressione).
+3. Giudice primario: prop (worst toccato con guadagno statico massimo -30%%). Soglia PER GIUDICE: Delta mediana >= max(4 ns/iter, spread osservato). Promozione: prop supera con 5/5 concordi E nessun giudice regredisce oltre soglia (str incluso).
+4. Protocollo: smoke R=2 early-stop a segno opposto su prop; poi ABAB R=5, user CPU netto pavimenti per-binario, N emessi dal sorgente. A = stash phpr-s107b (62a4df65), B = candidato lotto-2. Il binario dell'A/B si CONSERVA (cp negli stash provvisori) fino al pin: lezione azione-5.
+5. Admission PRIMA dello smoke: size_of::<Op>()==48 INVARIATO (test esistente reg_lower.rs); emissione ESATTA all'attesa nei dump dei sei giudici (PHPR_DUMP_OPS); modo OFF (PHPR_REG_LOWER=0) INVARIATO al byte; taglia e bl-count di run_loop a verbale (dichiarazione, non soglia).
+6. Gate pin (SOLO via scripts/pin-phpr.sh): batteria rc dal comando (mai da pipe) · corpus 1415 per NOME x2 modi · fixture bilaterali x5 · micro R=5 · ORM 3E/13F + hk 0E/0F per NOME (W9 tocca il canale property: ricetta obbligatoria).
+7. Magnitudine: SOLO dai Delta ABAB per giudice; nessuna ripartizione per finestra (REGOLE par.4).
+8. Ogni lettera-gate che morde (census op_index/N_OPS, liveness effect, visit_addrs) si emenda DICHIARANDO nel verbale col sito ri-collocato.
