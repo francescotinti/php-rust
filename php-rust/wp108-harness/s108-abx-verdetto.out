@@ -1,0 +1,13 @@
+== S-108 A/B VERDETTO — rerun mirato arr+re a N maggiorato (criterio s108-abx-criterio.out, PRE-registrato @ d384392) ==
+A = pin S-106 eb555106 (stash phpr-s106) · B = pin S-107b 62a4df65 (lotto+cura: la cifra appartiene al PIN) · R=5 ABAB · user CPU netto pavimenti per-binario · N emesso dal sorgente · raw in abx-out/ (fuori repo)
+
+giudice  N_inner        Δ mediana (ns/inner-iter)  concordanza  soglia [max(4; spread A)]  esito
+arr_x    24.000.000          +11,67                    5/5          4,58                   SUPERA (margine 2,5x la soglia)
+re_x      8.000.000          +13,75                    5/5         11,25                   SUPERA a margine STRETTO (2,50 ns): citabile per criterio, margine dichiarato
+
+lettura=le due voci S-107 <<direzione firmata, magnitudine non stabilita>> si PROMUOVONO a cifra:
+  arr Δ=+11,7 ns/inner-iter (coerente con il +500/60~8,3 del vecchio denominatore da 60 inner);
+  re Δ=+13,75 ns/inner-iter (coerente col +10,0 di S-107 che non superava la soglia-rumore di allora)
+nota=il rumore per-iter di re NON scende con N (ogni iter e' un preg_match ~660 ns: jitter proporzionale);
+  su arr scende (4,58 vs ~15 del vecchio giudice) — la promozione arr e' quella solida
+azione-2 revisore S-107: SALDATA

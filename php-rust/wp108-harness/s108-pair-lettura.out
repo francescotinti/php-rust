@@ -12,5 +12,15 @@ full_peak_phpr=1866,69 MiB (in famiglia 1863-1998); media_peak ratio 2,547
 parita'=media 0 fail x2 lati; full failnames diff = SOLO Tests_Functions::test_wp_is_stream ftp (catalogo, pre-esistente);
   conteggi IDENTICI (Tests 30472, Assertions 4558029, Warnings 86; oracle 1F / phpr 2F)
 
-== gamba OFF (seconda gamba bimodale, solo direzione) ==
-[da compilare a run conclusa]
+== gamba OFF (seconda gamba bimodale, solo direzione; run 12:05-12:35, rc=0 gate_void=0) ==
+full_master_cpu=1.885 (oracle 453.22 / phpr 854.41) -> VOCE S-105 full-off 1,947 RIENTRATA col rerun:
+  1,885 e' in famiglia storica (WP-102 off 1,891; WP-101 off 1,894) — la voce aperta si CHIUDE per NOME
+media_user_cpu=2.747 -> resta ALTA (rif 2,589-2,64; S-105 off 2,697): la voce media fuori banda NON rientra;
+  gamba oracle stabile (21,24/21,34/21,36 su tre sere), gamba phpr media 56,09->57,19(on)/58,62(off):
+  deriva piccola e dentro la varianza tra-sere della metrica — resta voce APERTA per NOME, solo direzione
+full_peak_phpr=1979,91 MiB (famiglia off 1979-1998); media_peak ratio 3,075 (metrica rumorosa ~10%)
+parita'=media 0 fail x2; full = SOLO wp_is_stream ftp (identico alla gamba on)
+
+== chiusura punto 1 ==
+gate=VERDE nei 2 modi (gate_void=0 x2, parita' per NOME x2); leva S-108 SBLOCCATA dal criterio;
+debito coppia-WP di S-107 SALDATO; run_loop +16,4 KB assolto sull'aggregato (nessun pagamento icache visibile)
