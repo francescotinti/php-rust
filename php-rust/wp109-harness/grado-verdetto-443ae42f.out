@@ -1,0 +1,16 @@
+S-109 punto 2 — VERDETTO grado PIENO php-server 443ae42f4e8e2f02 (regrade POST-lotti)
+(rito D-16: lettura dai progress.txt, mai dal solo rc) — 2026-08-07 19:20-19:37
+
+ESITO: **GRADATO PIENO, VERDE** — rc_off=0 rc_on=0, fails=0 voids=0 in ENTRAMBI i modi.
+
+- Gamba 0 x2: TRE pin FAIL-CLOSED verificati — php-server-stash=443ae42f4e8e2f02 (stash php-server-s109,
+  nato da scripts/pin-server.sh s109 @ 5e2713d, smoke --axum OK, phpr INVARIATO durante la build) ·
+  phpr=3b3d25e2a467c8b0 (gamba phpunit sul binario STASHATO phpr-s108 = pin) · oracle=07b0df8d63247695.
+- Sentinella estesa: PASS con mode-probe in off E on (16 interleaved + 4 concorrenti, workers=2, sullo stash).
+- option: IDENTICO per NOME, 413 nomi (= atteso pinnato) x2 modi.
+- restapi: IDENTICO per NOME, 3508 nomi (= atteso pinnato) x2 modi.
+- Nessuna riga VOID/FAIL/DIVERSO/REFUSE nei progress (grep=0 x2); done marker rc=0 voids=0 per gamba.
+- Uploads sotto guardia backup/wipe/restore per gamba.
+
+CONSEGUENZE: il debito «server dde2a64d gradato ma PRE-lotti» si CHIUDE per NOME — le cifre server
+sono d'ora in poi attribuibili al pin 443ae42f (same-HEAD 5e2713d del pin phpr 3b3d25e2 + grado PIENO).
