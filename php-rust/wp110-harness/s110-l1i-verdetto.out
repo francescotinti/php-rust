@@ -1,0 +1,13 @@
+s110-l1i-verdetto: quote top-down bilaterali (criterio v2 9ff53cf)
+grade=VERDICT  # mediana finestre ~1ms del processo bersaglio, poi mediana R=3
+formato=ascii-nudo
+oracle_arith: R=3 finestre_per_run=[2708, 2840, 3044] delivery=0.0333 discarded=0.0001 processing=0.0013 useful=0.9653
+oracle_prop: R=3 finestre_per_run=[2796, 2720, 2688] delivery=0.0170 discarded=0.0001 processing=0.1629 useful=0.8190
+oracle_arr: R=3 finestre_per_run=[1732, 1880, 1720] delivery=0.2324 discarded=0.0302 processing=0.0059 useful=0.7293
+phpr_arith: R=3 finestre_per_run=[18392, 20904, 18016] delivery=0.3249 discarded=0.0024 processing=0.0008 useful=0.6722
+phpr_prop: R=3 finestre_per_run=[14480, 14756, 15328] delivery=0.1015 discarded=0.0219 processing=0.1595 useful=0.7164
+phpr_arr: R=3 finestre_per_run=[5364, 5200, 5336] delivery=0.2406 discarded=0.0989 processing=0.0384 useful=0.6181
+-- contrasti phpr/oracle (quota su quota, per giudice) --
+contrasto_arith: delivery=9.75x discarded=30.34x processing=0.65x useful=0.70x
+contrasto_prop: delivery=5.96x discarded=168.55x processing=0.98x useful=0.87x
+contrasto_arr: delivery=1.04x discarded=3.27x processing=6.46x useful=0.85x

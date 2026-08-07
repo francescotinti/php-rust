@@ -15,17 +15,21 @@ SHORT = {"Instruction Delivery Bottleneck": "delivery",
 TARGET = {"oracle": "php", "phpr": "phpr"}
 
 def rows_for(path, procname):
-    # risolve la compressione id/ref dell'export xctrace
+    # risolve la compressione id/ref dell'export xctrace; le DEFINIZIONI possono
+    # stare annidate (es. process dentro thread), quindi l'indice id->elemento
+    # va costruito con una pre-passata sull'INTERO albero, non sui figli diretti
+    root = ET.parse(path).getroot()
     byid = {}
+    for el in root.iter():
+        if el.get("id") is not None:
+            byid[el.get("id")] = el
     def resolve(el):
         if el.get("ref") is not None:
             return byid.get(el.get("ref"))
-        if el.get("id") is not None:
-            byid[el.get("id")] = el
         return el
     per_name = {n: [] for n in NAMES}
     n_win = 0
-    for row in ET.parse(path).getroot().iter("row"):
+    for row in root.iter("row"):
         kids = [resolve(k) for k in row]
         name = proc = val = None
         for k in kids:
