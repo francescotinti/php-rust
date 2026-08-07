@@ -13,7 +13,7 @@ use crate::bytecode::Op;
 use crate::hir::BinOp;
 use php_types::Zval;
 
-pub const N_OPS: usize = 187;
+pub const N_OPS: usize = 194;
 
 pub const OP_NAMES: [&str; N_OPS] = [
     "PushConst", "Pop", "Dup", "LoadSlot", "LoadVar", "PushUndef", "StoreSlot", "Swap",
@@ -40,7 +40,9 @@ pub const OP_NAMES: [&str; N_OPS] = [
     "Exit", "SuppressBegin", "SuppressEnd", "Sweep", "ThisPropGet", "CmpJmpConst", "ConcatN",
     "ThisMethodCall", "Nop", "ConcatAssignSlot",
     "BinarySS", "BinarySSDst", "BinarySC", "BinarySCDst", "BinaryDst", "CmpJmpSS", "CmpJmpSC",
-    "BinarySTDst", "BinaryAdd",
+    "BinarySTDst",
+    "BinaryTC", "BinarySCSC", "IncDecSlotPop", "IncDecSlotJmp", "PropGetSlot", "PropSetPop", "StringifySlot",
+    "BinaryAdd",
 ];
 
 pub fn op_index(op: &Op) -> usize {
@@ -240,7 +242,18 @@ pub fn op_index(op: &Op) -> usize {
         // S-106 H-A1: dentro il blocco forme-registro, PRIMA di BinaryAdd —
         // l'invariante «BinaryAdd chiude la tabella» resta vero.
         Op::BinarySTDst { .. } => 185,
-        Op::BinaryAdd => 186,
+        // S-107 lotto superistruzioni (census-driven): come sopra, il blocco
+        // nuovo entra PRIMA di BinaryAdd; nessuna di queste forme porta
+        // operandi in pila per la matrice type-pair (stessa nota di
+        // CmpJmpConst / forme-registro).
+        Op::BinaryTC { .. } => 186,
+        Op::BinarySCSC { .. } => 187,
+        Op::IncDecSlotPop { .. } => 188,
+        Op::IncDecSlotJmp { .. } => 189,
+        Op::PropGetSlot { .. } => 190,
+        Op::PropSetPop { .. } => 191,
+        Op::StringifySlot { .. } => 192,
+        Op::BinaryAdd => 193,
     }
 }
 
@@ -634,9 +647,12 @@ mod tests {
             assert_eq!(OP_NAMES[i], *name, "OP_NAMES row mismatch for {name}");
         }
         // BinaryAdd (H-B2, S-98.0) closes the table; the register-form block
-        // (S-97.1, esteso da BinarySTDst in S-106 H-A1) sits just before it,
-        // with ConcatAssignSlot (WP-55) ahead of that block.
-        assert_eq!(op_index(&Op::ConcatAssignSlot(0)), N_OPS - 10);
+        // (S-97.1, esteso da BinarySTDst in S-106 H-A1 e dal lotto S-107:
+        // BinaryTC/BinarySCSC/IncDecSlotPop/IncDecSlotJmp/PropGetSlot/
+        // PropSetPop/StringifySlot) sits just before it, with
+        // ConcatAssignSlot (WP-55) ahead of that block. EMENDAMENTO
+        // DICHIARATO S-107: gli offset slittano di 7 (N_OPS 187→194).
+        assert_eq!(op_index(&Op::ConcatAssignSlot(0)), N_OPS - 17);
         assert_eq!(
             op_index(&Op::CmpJmpSC {
                 op: crate::hir::BinOp::Lt,
@@ -645,14 +661,26 @@ mod tests {
                 addr: 0,
                 when: true
             }),
-            N_OPS - 3
+            N_OPS - 10
         );
-        assert_eq!(OP_NAMES[N_OPS - 3], "CmpJmpSC");
+        assert_eq!(OP_NAMES[N_OPS - 10], "CmpJmpSC");
         assert_eq!(
             op_index(&Op::BinarySTDst { op: crate::hir::BinOp::Add, l: 0, dst: 0 }),
-            N_OPS - 2
+            N_OPS - 9
         );
-        assert_eq!(OP_NAMES[N_OPS - 2], "BinarySTDst");
+        assert_eq!(OP_NAMES[N_OPS - 9], "BinarySTDst");
+        assert_eq!(
+            op_index(&Op::BinaryTC { op: crate::hir::BinOp::Add, cidx: 0 }),
+            N_OPS - 8
+        );
+        assert_eq!(OP_NAMES[N_OPS - 8], "BinaryTC");
+        assert_eq!(
+            op_index(&Op::IncDecSlotJmp { slot: 0, inc: true, addr: 0 }),
+            N_OPS - 5
+        );
+        assert_eq!(OP_NAMES[N_OPS - 5], "IncDecSlotJmp");
+        assert_eq!(op_index(&Op::StringifySlot { slot: 0 }), N_OPS - 2);
+        assert_eq!(OP_NAMES[N_OPS - 2], "StringifySlot");
         assert_eq!(op_index(&Op::BinaryAdd), N_OPS - 1);
         assert_eq!(OP_NAMES[N_OPS - 1], "BinaryAdd");
     }

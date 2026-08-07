@@ -310,6 +310,87 @@ impl<'m> super::Vm<'m> {
         Ok(())
     }
 
+    /// Corpo di `Op::Stringify` dopo il pop (S-107 lotto): UN solo sito
+    /// possiede la semantica — condiviso con [`Op::StringifySlot`], frame
+    /// `__toString` (RET_STRINGIFY) compreso.
+    #[inline(always)]
+    fn stringify_entry(&mut self, top: usize, v: Zval) -> Result<(), PhpError> {
+        let target = v.deref_clone();
+        match &target {
+            Zval::Object(o) => {
+                let cid = o.borrow().class_id as usize;
+                match resolve_method_runtime(&self.classes, cid, b"__toString") {
+                    // __toString's (stringified) return flows back via Ret.
+                    Some((defc, midx)) => {
+                        let callee = &self.classes[defc].methods[midx].func;
+                        let m = self.class_mod(defc);
+                        let mut frame = self.pooled_frame(callee, m);
+                        frame.this = Some(target.clone());
+                        frame.class = Some(defc);
+                        frame.static_class = Some(cid);
+                        frame.flags.set(FrameFlags::RET_STRINGIFY, true);
+                        self.frames.push(frame);
+                    }
+                    None => {
+                        let name = String::from_utf8_lossy(
+                            o.borrow().class_name.as_bytes(),
+                        )
+                        .into_owned();
+                        return Err(PhpError::Error(format!(
+                            "Object of class {name} could not be converted to string"
+                        )));
+                    }
+                }
+            }
+            // A Closure / Generator has no `__toString`: the explicit
+            // cast throws like any such object (the infallible
+            // echo/concat funnel still warns — D-19.18).
+            Zval::Closure(_) => {
+                return Err(PhpError::Error(
+                    "Object of class Closure could not be converted to string".into(),
+                ));
+            }
+            Zval::Generator(_) => {
+                return Err(PhpError::Error(
+                    "Object of class Generator could not be converted to string".into(),
+                ));
+            }
+            other => {
+                let s = convert::to_zstr(other, &mut self.diags);
+                self.frames[top].stack.push(Zval::Str(s));
+            }
+        }
+        Ok(())
+    }
+
+    /// Corpo di `Op::IncDecSlot` senza il push del risultato (S-107 lotto,
+    /// [`Op::IncDecSlotPop`]/[`Op::IncDecSlotJmp`]): stessa guardia Long del
+    /// braccio non fuso, stessi `compute_incdec`/`raise_diags`/`store_slot`
+    /// nello stesso ordine. `pre` non esiste più: pre/post differivano solo
+    /// nel valore SCARTATO.
+    #[inline(always)]
+    fn incdec_slot_discard(&mut self, top: usize, slot: u16, inc: bool) -> Result<(), PhpError> {
+        let i = slot as usize;
+        // WP-33 T1c guard (identica al braccio IncDecSlot): Long puro senza
+        // overflow = op di registro, nessun diag possibile.
+        if let Zval::Long(l) = &self.frames[top].slots[i] {
+            let l = *l;
+            if let Some(n) = l.checked_add(if inc { 1 } else { -1 }) {
+                self.frames[top].slots[i] = Zval::Long(n);
+                return Ok(());
+            }
+        }
+        if matches!(self.frames[top].slots[i], Zval::Undef) {
+            self.frames[top].slots[i] = Zval::Null;
+        }
+        let old = self.frames[top].slots[i].deref_clone();
+        let (newv, diags) = self.compute_incdec(old, inc)?;
+        // Raise before write-back (see IncDecGlobal).
+        self.raise_diags(diags, self.cur_line(top))?;
+        let _ = store_slot(&mut self.frames[top].slots[i], newv);
+        Ok(())
+    }
+
     /// Fused `$slot .= rhs` (WP-55, [`Op::ConcatAssignSlot`]): in-place
     /// append when the slot holds a directly-owned UNIQUE Str and the rhs is
     /// a Str (`Rc::get_mut` — an alias, the const pool, or a Ref slot makes
@@ -433,6 +514,380 @@ impl<'m> super::Vm<'m> {
     /// [`Op::ThisPropGet`] shares the identical semantics (warning order,
     /// IC fill discipline, magic re-entry) by construction. Pushes the read
     /// value (or re-enters the VM via a hook/`__get` frame) and returns.
+    /// Corpo di `Op::PropGet` dopo il pop del ricevitore (S-107 lotto):
+    /// condiviso con [`Op::PropGetSlot`] — deref del Ref, IC-hit, fallback.
+    /// Il `continue` del braccio storico è il `return Ok(())` dell'IC-hit.
+    #[inline(always)]
+    fn prop_get_entry(
+        &mut self,
+        top: usize,
+        obj: Zval,
+        name: &Rc<[u8]>,
+        ic: &crate::bytecode::PropIc,
+    ) -> Result<(), PhpError> {
+        let sk = crate::bytecode::PropIc::scope_key(self.frames[top].class);
+        // H-C1b (S-101): the popped handle is OWNED — move it
+        // instead of cloning a second handle that dies at arm end.
+        // Only a Ref clones out its inner value (the wrapper never
+        // travels past this point).
+        // INV-RECV-1 (S-102 audit, wp102-harness/inv-recv-1-audit.md):
+        // at every point of this arm reachable by synchronous PHP
+        // or by an absolute strong_count observer, ≥1 owned handle
+        // of the receiver is alive — `target` here, then the frame
+        // clone in push_hook/push_magic_prop before the fallback
+        // returns. Extending the move to other forms requires
+        // re-auditing that table (KS-MA-103-2).
+        let target = if matches!(obj, Zval::Ref(_)) {
+            let t = obj.deref_clone();
+            // S-101 census: bump Rc del ricevitore (P2, solo Ref).
+            #[cfg(feature = "zval-census")]
+            super::zvalcensus::note_recv_clone_prop(&t);
+            t
+        } else {
+            obj
+        };
+        // INLINE CACHE (WP-29): the site's last cacheable
+        // resolution — a PUBLIC hook-free backed slot on this
+        // class — reads with zero hashing. A present non-`Undef`
+        // value is the only hit; everything else (absent = unset →
+        // `__get`, `Undef` = typed-uninit fatal, other class, lazy
+        // wrapper) falls through to the paths that own it.
+        if let Zval::Object(o) = &target {
+            if let Some((cid1, slot)) = ic.get(sk) {
+                let b = o.borrow();
+                if b.class_id + 1 == cid1 && b.lazy.is_none() {
+                    if let Some(v) = b.props.get_slot(slot) {
+                        if !matches!(v, Zval::Undef) {
+                            let v = v.deref_clone();
+                            drop(b);
+                            // S-101 census: specie del valore letto (P1).
+                            #[cfg(feature = "zval-census")]
+                            super::zvalcensus::note_prop_val(0, &v);
+                            scn!(PropGet: Push = 1);
+                            self.frames[top].stack.push(v);
+                            dcn!(PropGet: &target); // l'handle mosso muore a fine arm
+                            return Ok(());
+                        }
+                    }
+                }
+            }
+        }
+        self.prop_get_fallback(top, target, name, ic)
+    }
+
+    /// Corpo di `Op::PropSet` dopo i due pop (S-107 lotto): condiviso con
+    /// [`Op::PropSetPop`] via const-generic `DISCARD` (monomorfizzato: zero
+    /// dispatch a runtime). Con `DISCARD` il valore assegnato NON viene
+    /// spinto — era il push che il `Pop` fuso scartava; ogni altro effetto
+    /// (hook, `__set`, typed/readonly, gc_note sul valore rimpiazzato) è
+    /// il codice storico del braccio, `continue` → `return Ok(())`.
+    #[inline(always)]
+    fn prop_set_entry<const DISCARD: bool>(
+        &mut self,
+        top: usize,
+        obj: Zval,
+        mut value: Zval,
+        name: &Rc<[u8]>,
+        ic: &crate::bytecode::PropIc,
+    ) -> Result<(), PhpError> {
+        let cur = self.frames[top].class;
+        // H-C1b (S-101): move the owned handle (see PropGet).
+        // INV-RECV-1 holds here too: `target` is owned through
+        // lazy_prop_access and every write path below; the old
+        // value's synchronous __destruct always sees ≥1 owned
+        // receiver handle (audit: wp102-harness/inv-recv-1-audit.md).
+        let target = if matches!(obj, Zval::Ref(_)) {
+            let t = obj.deref_clone();
+            // S-101 census: bump Rc del ricevitore (P2, solo Ref).
+            #[cfg(feature = "zval-census")]
+            super::zvalcensus::note_recv_clone_prop(&t);
+            t
+        } else {
+            obj
+        };
+        // S-101 census: specie del valore scritto (P1).
+        #[cfg(feature = "zval-census")]
+        super::zvalcensus::note_prop_val(1, &value);
+        // A write to a lazy object initializes it first (PHP 8.4) —
+        // unless a set hook/`__set` serves it; a no-op during the
+        // object's own construction (it is no longer lazy then).
+        // Proxy forwarding is transitive (a reset instance re-triggers).
+        let target = if !self.frames[top].flags.get(FrameFlags::INIT_PROPS) {
+            self.lazy_prop_access(target, name, cur, Some(true), (MagicKind::Set, b"__set"))?
+        } else {
+            target
+        };
+        // A `prop_init` thunk writes defaults directly: no `__set`, no
+        // visibility check (so a subclass can set an inherited private).
+        // The slot is the declared one (unconditional, mangled for a
+        // private) regardless of the running scope.
+        if self.frames[top].flags.get(FrameFlags::INIT_PROPS) {
+            let key = match object_class_id(&target) {
+                Some(ocid) => self.prop_decl_storage_key(ocid, name),
+                None => Cow::Borrowed(&name[..]),
+            };
+            if let Some(old) = write_property(&target, &key, value.clone())? {
+                #[cfg(feature = "zval-census")]
+                super::zvalcensus::note_gcnote_site_propset_old();
+                self.gc_note(&old);
+            }
+            if !DISCARD {
+                scn!(PropSet: Push = 1);
+                self.frames[top].stack.push(value);
+            }
+            return Ok(());
+        }
+        // INLINE CACHE (WP-29): the WP-25 guards below, but
+        // slot-indexed — zero hashing on a monomorphic site. Only
+        // fills from a `plain_set_props` class, so a class-id
+        // match re-implies every per-class guard; the per-object
+        // ones (lazy, enum, present slot, Ref×typed_refs) are
+        // re-checked here.
+        if let Zval::Object(o) = &target {
+            if let Some((cid1, slot)) = ic.get(crate::bytecode::PropIc::scope_key(cur)) {
+                let hit = {
+                    let b = o.borrow();
+                    b.class_id + 1 == cid1
+                        && b.lazy.is_none()
+                        && !b.info.is_enum_case
+                        && match b.props.get_slot(slot) {
+                            Some(Zval::Ref(_)) => self.typed_refs.is_empty(),
+                            Some(_) => true,
+                            None => false,
+                        }
+                };
+                if hit {
+                    if let Some(old) =
+                        write_property_at(&target, name, Some(slot), value.clone())?
+                    {
+                        #[cfg(feature = "zval-census")]
+                        super::zvalcensus::note_gcnote_site_propset_old();
+                        self.gc_note(&old);
+                        dcn!(PropSet: &old); // il vecchio valore muore qui
+                    }
+                    if !DISCARD {
+                        scn!(PropSet: Push = 1);
+                        self.frames[top].stack.push(value);
+                    }
+                    dcn!(PropSet: &target); // l'handle mosso muore a fine arm
+                    return Ok(());
+                }
+            }
+        }
+        // FAST PATH (WP-25): overwrite of a *present* slot on a
+        // non-lazy, non-enum instance of a class whose declared
+        // properties are all plain for writing (public, symmetric,
+        // untyped, non-readonly, hook-free): no visibility walk,
+        // no magic probe, no coercion. A miss falls through
+        // (dynamic-prop creation/deprecation, `__set`); a Ref slot
+        // with live typed refs falls through (typed_ref_assign).
+        if let Zval::Object(o) = &target {
+            let (fast, fcid) = {
+                let b = o.borrow();
+                let ok = b.lazy.is_none()
+                    && !b.info.is_enum_case
+                    && self.classes[b.class_id as usize].plain_set_props
+                    // A scope-private override writes the scope's
+                    // mangled slot, not the leaf entry (WP-35).
+                    && !scope_private_overrides(&self.classes, b.class_id as usize, name, cur)
+                    && match b.props.get(name) {
+                        Some(Zval::Ref(_)) => self.typed_refs.is_empty(),
+                        Some(_) => true,
+                        None => false,
+                    };
+                (ok, b.class_id)
+            };
+            if fast {
+                // IC fill from the fast path too (see PropGet):
+                // plain_set_props classes never reach the general
+                // resolve, so without this the cache stays cold.
+                let slot = self.classes[fcid as usize]
+                    .prop_info
+                    .get(&name[..])
+                    .and_then(|pi| pi.slot);
+                if let Some(i) = slot {
+                    ic.fill(fcid, crate::bytecode::PropIc::scope_key(cur), i);
+                }
+                if let Some(old) = write_property_at(&target, name, slot, value.clone())? {
+                    #[cfg(feature = "zval-census")]
+                    super::zvalcensus::note_gcnote_site_propset_old();
+                    self.gc_note(&old);
+                }
+                if !DISCARD {
+                    self.frames[top].stack.push(value);
+                }
+                return Ok(());
+            }
+        }
+        // Storage slot to write (plain name for a dynamic/non-object
+        // target; a mangled key for an accessible private — set below).
+        let mut key: Cow<[u8]> = Cow::Borrowed(&name[..]);
+        let mut slot_idx: Option<u32> = None;
+        if let Zval::Object(o) = &target {
+            // An enum case is immutable: every property is readonly and
+            // no dynamic property may be created (step 23).
+            {
+                let ob = o.borrow();
+                if ob.info.is_enum_case {
+                    let cls = String::from_utf8_lossy(ob.class_name.as_bytes()).into_owned();
+                    let prop = String::from_utf8_lossy(name).into_owned();
+                    return Err(PhpError::Error(if ob.props.contains(name) {
+                        format!("Cannot modify readonly property {cls}::${prop}")
+                    } else {
+                        format!("Cannot create dynamic property {cls}::${prop}")
+                    }));
+                }
+            }
+            // A `set` hook takes precedence over `__set` and direct write
+            // (step 50); skipped while a hook for this property is active
+            // (a backing write inside the hook). The expression still
+            // yields the assigned value; the hook's own return is dropped.
+            let (oid, cid) = { let b = o.borrow(); (b.id, b.class_id as usize) };
+            if !self.hook_guarded(oid, name) {
+                if let Some(func) = self.prop_hook(cid, name, true) {
+                    if !DISCARD {
+                        self.frames[top].stack.push(value.clone());
+                    }
+                    self.push_hook(func, target.clone(), oid, name, Some(value));
+                    return Ok(());
+                }
+                // A virtual hooked property with no set hook is read-only.
+                if self.is_virtual_hooked(cid, name) {
+                    return Err(PhpError::Error(format!(
+                        "Property {}::${} is read-only",
+                        String::from_utf8_lossy(&self.classes[cid].name),
+                        String::from_utf8_lossy(name),
+                    )));
+                }
+            }
+            if let Some((defc, midx, oid)) =
+                self.magic_applies(o, name, cur, MagicKind::Set, b"__set")
+            {
+                // The expression yields the assigned value; __set's own
+                // return is discarded into a throwaway cell.
+                if !DISCARD {
+                    self.frames[top].stack.push(value.clone());
+                }
+                let discard = Rc::new(RefCell::new(Zval::Null));
+                self.push_magic_prop(defc, midx, oid, MagicKind::Set, target.clone(), name, Some(value), Some(discard), false);
+                return Ok(());
+            }
+            let ocid = o.borrow().class_id as usize;
+            // Storage slot (mangled for an accessible private); per-instance
+            // state (props, readonly tracking) is keyed by it. A single
+            // resolution decides visibility (`Denied` errors here) and the
+            // slot: the write is either a declared slot or a dynamic
+            // creation — readonly / typed enforcement applies only to the
+            // former (a parent's private reached from a child scope is a
+            // *dynamic* write, untyped and unguarded).
+            let access = resolve_prop_access(&self.classes, ocid, name, cur);
+            let declared_slot = matches!(access, PropAccess::Slot { .. });
+            key = match access {
+                PropAccess::Slot { key: k, slot } => {
+                    slot_idx = slot;
+                    // IC fill: only from a plain_set_props class
+                    // (public, symmetric, untyped, non-readonly,
+                    // hook-free in blocco — see PropIc).
+                    if let Some(i) = slot {
+                        if self.classes[ocid].plain_set_props {
+                            ic.fill(ocid as u32, crate::bytecode::PropIc::scope_key(cur), i);
+                        }
+                    }
+                    Cow::Borrowed(k)
+                }
+                PropAccess::Denied { decl, vis } => {
+                    return Err(prop_access_error(&self.classes, decl, name, vis))
+                }
+                PropAccess::Dynamic => Cow::Borrowed(&name[..]),
+            };
+            // PHP 8.4 asymmetric visibility: a declared slot whose set
+            // visibility excludes this scope cannot be assigned (the
+            // readonly path below keeps its own message shapes).
+            if declared_slot {
+                if let Some(err) = asym_write_error(&self.classes, cur, ocid, name, "modify") {
+                    return Err(err);
+                }
+            }
+            // Readonly write-once enforcement (after the visibility check,
+            // so a private/protected readonly reports the access error
+            // first, matching PHP). A permitted first initialisation is
+            // recorded so any later write fatals.
+            if declared_slot {
+                if let Some(decl) = prop_readonly_decl(&self.classes, ocid, name) {
+                    if o.borrow().readonly_clone_writable(&key) {
+                        // Permitted re-initialisation during `__clone` (8.3).
+                        let mut ob = o.borrow_mut();
+                        ob.consume_clone_writable(&key);
+                        ob.mark_readonly_init(&key);
+                    } else {
+                        let inited = o.borrow().is_readonly_init(&key);
+                        let set_vis = prop_info(&self.classes, ocid, name)
+                            .and_then(|pi| pi.set_visibility);
+                        if let Some(err) = readonly_write_error(&self.classes, cur, decl, name, inited, set_vis) {
+                            return Err(err);
+                        }
+                        o.borrow_mut().mark_readonly_init(&key);
+                    }
+                }
+            }
+            // PHP 8.2: creating an *undeclared* property on a class that
+            // does not allow dynamic properties is deprecated (the
+            // property is still created). `__set`/hooks already
+            // short-circuited above. A *declared* property that was
+            // `unset` is absent from the store yet is not a dynamic
+            // creation when re-assigned — `declared_slot` covers it.
+            if !declared_slot
+                && !o.borrow().props.contains(&key)
+                && !self.allows_dynamic_props(ocid)
+            {
+                let cls = String::from_utf8_lossy(&self.classes[ocid].name).into_owned();
+                let prop = String::from_utf8_lossy(name).into_owned();
+                self.diags.push(Diag::Deprecated(format!(
+                    "Creation of dynamic property {cls}::${prop} is deprecated"
+                )));
+            }
+            // Typed-property write enforcement: coerce the value to the
+            // property's declared type (or TypeError). The assignment
+            // expression yields the coerced value.
+            if declared_slot {
+                value = self.coerce_typed_prop_write(ocid, name, value)?;
+            }
+        }
+        // A declared slot written on a lazy wrapper (guarded writes
+        // during its own initializer) keeps declaration order.
+        if let Zval::Object(o) = &target {
+            self.lazy_ordered_insert(o, &key);
+        }
+        // A write through a reference slot honours ALL of the
+        // cell's typed sources (an aliased pair enforces both,
+        // typed_properties_002).
+        if !self.typed_refs.is_empty() {
+            if let Zval::Object(o) = &target {
+                let b = o.borrow();
+                let cur_val = match slot_idx {
+                    Some(i) => b.props.get_slot(i),
+                    None => b.props.get(&key),
+                };
+                let cell = match cur_val {
+                    Some(Zval::Ref(c)) => Some(Rc::clone(c)),
+                    _ => None,
+                };
+                drop(b);
+                if let Some(cell) = cell {
+                    let strict = self.frames[top].module.strict;
+                    value = self.typed_ref_assign(&cell, value, strict)?;
+                }
+            }
+        }
+        if let Some(old) = write_property_at(&target, &key, slot_idx, value.clone())? {
+            self.gc_note(&old);
+        }
+        if !DISCARD {
+            self.frames[top].stack.push(value);
+        }
+        Ok(())
+    }
+
     fn prop_get_fallback(
         &mut self,
         top: usize,
@@ -1231,6 +1686,77 @@ impl<'m> super::Vm<'m> {
                     dcn!(BinarySTDst: &self.frames[top].slots[*dst as usize]);
                     self.reg_store_slot(top, *dst, res)?;
                 }
+                Op::BinaryTC { op: b, cidx } => {
+                    // S-107 lotto: BinarySC a lhs di PILA (bigram
+                    // PushConst→Binary). Const materializzato una volta;
+                    // stesso binary_fast + funnel binary_value_ab del
+                    // braccio Binary — il lhs arriva dalla pila ESATTAMENTE
+                    // come nell'op non fusa.
+                    let cv = func.consts[*cidx as usize].to_zval();
+                    let res = 'r: {
+                        if let Some(lv) = self.frames[top].stack.last() {
+                            if !matches!(lv, Zval::Undef | Zval::Ref(_)) {
+                                if let Some(v) = binary_fast(*b, lv, &cv) {
+                                    self.frames[top].stack.pop();
+                                    break 'r v;
+                                }
+                            }
+                        }
+                        let lhs = self.frames[top].stack.pop().expect("BinaryTC lhs");
+                        self.binary_value_ab(*b, lhs, cv)?
+                    };
+                    self.frames[top].stack.push(res);
+                }
+                Op::BinarySCSC { opa, la, ca, opb, lb, cb, op } => {
+                    // S-107 lotto: l'albero `(la⊚ca) ⊚ (lb⊚cb)` (giudice
+                    // arith) in un'unica forma monomorfa. Ordine di
+                    // valutazione e diagnostica ORIGINALI: a per intero
+                    // (lettura con parità warning + funnel), poi b, poi il
+                    // combine — stessi binary_fast/binary_value_ab/
+                    // reg_load_slot delle forme SC.
+                    let cva = func.consts[*ca as usize].to_zval();
+                    let a = 'r: {
+                        {
+                            let lv = &self.frames[top].slots[*la as usize];
+                            if !matches!(lv, Zval::Undef | Zval::Ref(_)) {
+                                if let Some(v) = binary_fast(*opa, lv, &cva) {
+                                    break 'r v;
+                                }
+                            }
+                        }
+                        let lhs = self.reg_load_slot(top, func, *la);
+                        self.binary_value_ab(*opa, lhs, cva)?
+                    };
+                    let cvb = func.consts[*cb as usize].to_zval();
+                    let bv = 'r: {
+                        {
+                            let lv = &self.frames[top].slots[*lb as usize];
+                            if !matches!(lv, Zval::Undef | Zval::Ref(_)) {
+                                if let Some(v) = binary_fast(*opb, lv, &cvb) {
+                                    break 'r v;
+                                }
+                            }
+                        }
+                        let lhs = self.reg_load_slot(top, func, *lb);
+                        self.binary_value_ab(*opb, lhs, cvb)?
+                    };
+                    let res = match binary_fast(*op, &a, &bv) {
+                        Some(v) => v,
+                        None => self.binary_value_ab(*op, a, bv)?,
+                    };
+                    self.frames[top].stack.push(res);
+                }
+                Op::IncDecSlotPop { slot, inc } => {
+                    // S-107 lotto: `$x++;` come statement — IncDecSlot ESATTO
+                    // (metodo condiviso) senza push+Pop del transiente.
+                    self.incdec_slot_discard(top, *slot, *inc)?;
+                }
+                Op::IncDecSlotJmp { slot, inc, addr } => {
+                    // S-107 lotto: il trigramma IncDecSlot;Pop;Jump del
+                    // back-edge di loop — incremento poi salto incondizionato.
+                    self.incdec_slot_discard(top, *slot, *inc)?;
+                    self.frames[top].ip = *addr as usize;
+                }
                 Op::CmpJmpSS { op, l, r, addr, when } => {
                     let res = 'r: {
                         {
@@ -1389,51 +1915,14 @@ impl<'m> super::Vm<'m> {
                 }
                 Op::Stringify => {
                     let v = self.frames[top].stack.pop().expect("Stringify operand");
-                    let target = v.deref_clone();
-                    match &target {
-                        Zval::Object(o) => {
-                            let cid = o.borrow().class_id as usize;
-                            match resolve_method_runtime(&self.classes, cid, b"__toString") {
-                                // __toString's (stringified) return flows back via Ret.
-                                Some((defc, midx)) => {
-                                    let callee = &self.classes[defc].methods[midx].func;
-                                    let m = self.class_mod(defc);
-                                    let mut frame = self.pooled_frame(callee, m);
-                                    frame.this = Some(target.clone());
-                                    frame.class = Some(defc);
-                                    frame.static_class = Some(cid);
-                                    frame.flags.set(FrameFlags::RET_STRINGIFY, true);
-                                    self.frames.push(frame);
-                                }
-                                None => {
-                                    let name = String::from_utf8_lossy(
-                                        o.borrow().class_name.as_bytes(),
-                                    )
-                                    .into_owned();
-                                    return Err(PhpError::Error(format!(
-                                        "Object of class {name} could not be converted to string"
-                                    )));
-                                }
-                            }
-                        }
-                        // A Closure / Generator has no `__toString`: the explicit
-                        // cast throws like any such object (the infallible
-                        // echo/concat funnel still warns — D-19.18).
-                        Zval::Closure(_) => {
-                            return Err(PhpError::Error(
-                                "Object of class Closure could not be converted to string".into(),
-                            ));
-                        }
-                        Zval::Generator(_) => {
-                            return Err(PhpError::Error(
-                                "Object of class Generator could not be converted to string".into(),
-                            ));
-                        }
-                        other => {
-                            let s = convert::to_zstr(other, &mut self.diags);
-                            self.frames[top].stack.push(Zval::Str(s));
-                        }
-                    }
+                    self.stringify_entry(top, v)?;
+                }
+                Op::StringifySlot { slot } => {
+                    // S-107 lotto: LoadVar (parità warning via reg_load_slot)
+                    // + Stringify ESATTO — stesso metodo condiviso, frame
+                    // __toString compreso.
+                    let v = self.reg_load_slot(top, func, *slot);
+                    self.stringify_entry(top, v)?;
                 }
                 Op::JumpIfNotNull(addr) => {
                     let keep = !matches!(
@@ -3566,54 +4055,14 @@ impl<'m> super::Vm<'m> {
                     scn!(PropGet: op);
                     scn!(PropGet: Pop = 1);
                     let obj = self.frames[top].stack.pop().expect("PropGet object");
-                    let sk = crate::bytecode::PropIc::scope_key(self.frames[top].class);
-                    // H-C1b (S-101): the popped handle is OWNED — move it
-                    // instead of cloning a second handle that dies at arm end.
-                    // Only a Ref clones out its inner value (the wrapper never
-                    // travels past this point).
-                    // INV-RECV-1 (S-102 audit, wp102-harness/inv-recv-1-audit.md):
-                    // at every point of this arm reachable by synchronous PHP
-                    // or by an absolute strong_count observer, ≥1 owned handle
-                    // of the receiver is alive — `target` here, then the frame
-                    // clone in push_hook/push_magic_prop before the fallback
-                    // returns. Extending the move to other forms requires
-                    // re-auditing that table (KS-MA-103-2).
-                    let target = if matches!(obj, Zval::Ref(_)) {
-                        let t = obj.deref_clone();
-                        // S-101 census: bump Rc del ricevitore (P2, solo Ref).
-                        #[cfg(feature = "zval-census")]
-                        super::zvalcensus::note_recv_clone_prop(&t);
-                        t
-                    } else {
-                        obj
-                    };
-                    // INLINE CACHE (WP-29): the site's last cacheable
-                    // resolution — a PUBLIC hook-free backed slot on this
-                    // class — reads with zero hashing. A present non-`Undef`
-                    // value is the only hit; everything else (absent = unset →
-                    // `__get`, `Undef` = typed-uninit fatal, other class, lazy
-                    // wrapper) falls through to the paths that own it.
-                    if let Zval::Object(o) = &target {
-                        if let Some((cid1, slot)) = ic.get(sk) {
-                            let b = o.borrow();
-                            if b.class_id + 1 == cid1 && b.lazy.is_none() {
-                                if let Some(v) = b.props.get_slot(slot) {
-                                    if !matches!(v, Zval::Undef) {
-                                        let v = v.deref_clone();
-                                        drop(b);
-                                        // S-101 census: specie del valore letto (P1).
-                                        #[cfg(feature = "zval-census")]
-                                        super::zvalcensus::note_prop_val(0, &v);
-                                        scn!(PropGet: Push = 1);
-                                        self.frames[top].stack.push(v);
-                                        dcn!(PropGet: &target); // l'handle mosso muore a fine arm
-                                        continue;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    self.prop_get_fallback(top, target, name, ic)?;
+                    self.prop_get_entry(top, obj, name, ic)?;
+                }
+                Op::PropGetSlot { slot, name, ic } => {
+                    // S-107 lotto: LoadVar (parità warning via reg_load_slot)
+                    // + PropGet ESATTO — stesso metodo condiviso (IC-hit +
+                    // fallback), zero biforcazione.
+                    let obj = self.reg_load_slot(top, func, *slot);
+                    self.prop_get_entry(top, obj, name, ic)?;
                 }
                 Op::ThisPropGet { name, ic } => {
                     // Fused `$this->name` (WP-34): the IC hit borrows the
@@ -3743,291 +4192,17 @@ impl<'m> super::Vm<'m> {
                 Op::PropSet { name, ic } => {
                     scn!(PropSet: op);
                     scn!(PropSet: Pop = 2);
-                    let mut value = self.frames[top].stack.pop().expect("PropSet value");
+                    let value = self.frames[top].stack.pop().expect("PropSet value");
                     let obj = self.frames[top].stack.pop().expect("PropSet object");
-                    let cur = self.frames[top].class;
-                    // H-C1b (S-101): move the owned handle (see PropGet).
-                    // INV-RECV-1 holds here too: `target` is owned through
-                    // lazy_prop_access and every write path below; the old
-                    // value's synchronous __destruct always sees ≥1 owned
-                    // receiver handle (audit: wp102-harness/inv-recv-1-audit.md).
-                    let target = if matches!(obj, Zval::Ref(_)) {
-                        let t = obj.deref_clone();
-                        // S-101 census: bump Rc del ricevitore (P2, solo Ref).
-                        #[cfg(feature = "zval-census")]
-                        super::zvalcensus::note_recv_clone_prop(&t);
-                        t
-                    } else {
-                        obj
-                    };
-                    // S-101 census: specie del valore scritto (P1).
-                    #[cfg(feature = "zval-census")]
-                    super::zvalcensus::note_prop_val(1, &value);
-                    // A write to a lazy object initializes it first (PHP 8.4) —
-                    // unless a set hook/`__set` serves it; a no-op during the
-                    // object's own construction (it is no longer lazy then).
-                    // Proxy forwarding is transitive (a reset instance re-triggers).
-                    let target = if !self.frames[top].flags.get(FrameFlags::INIT_PROPS) {
-                        self.lazy_prop_access(target, &name, cur, Some(true), (MagicKind::Set, b"__set"))?
-                    } else {
-                        target
-                    };
-                    // A `prop_init` thunk writes defaults directly: no `__set`, no
-                    // visibility check (so a subclass can set an inherited private).
-                    // The slot is the declared one (unconditional, mangled for a
-                    // private) regardless of the running scope.
-                    if self.frames[top].flags.get(FrameFlags::INIT_PROPS) {
-                        let key = match object_class_id(&target) {
-                            Some(ocid) => self.prop_decl_storage_key(ocid, &name),
-                            None => Cow::Borrowed(&name[..]),
-                        };
-                        if let Some(old) = write_property(&target, &key, value.clone())? {
-                            #[cfg(feature = "zval-census")]
-                            super::zvalcensus::note_gcnote_site_propset_old();
-                            self.gc_note(&old);
-                        }
-                        scn!(PropSet: Push = 1);
-                        self.frames[top].stack.push(value);
-                        continue;
-                    }
-                    // INLINE CACHE (WP-29): the WP-25 guards below, but
-                    // slot-indexed — zero hashing on a monomorphic site. Only
-                    // fills from a `plain_set_props` class, so a class-id
-                    // match re-implies every per-class guard; the per-object
-                    // ones (lazy, enum, present slot, Ref×typed_refs) are
-                    // re-checked here.
-                    if let Zval::Object(o) = &target {
-                        if let Some((cid1, slot)) = ic.get(crate::bytecode::PropIc::scope_key(cur)) {
-                            let hit = {
-                                let b = o.borrow();
-                                b.class_id + 1 == cid1
-                                    && b.lazy.is_none()
-                                    && !b.info.is_enum_case
-                                    && match b.props.get_slot(slot) {
-                                        Some(Zval::Ref(_)) => self.typed_refs.is_empty(),
-                                        Some(_) => true,
-                                        None => false,
-                                    }
-                            };
-                            if hit {
-                                if let Some(old) =
-                                    write_property_at(&target, &name, Some(slot), value.clone())?
-                                {
-                                    #[cfg(feature = "zval-census")]
-                                    super::zvalcensus::note_gcnote_site_propset_old();
-                                    self.gc_note(&old);
-                                    dcn!(PropSet: &old); // il vecchio valore muore qui
-                                }
-                                scn!(PropSet: Push = 1);
-                                self.frames[top].stack.push(value);
-                                dcn!(PropSet: &target); // l'handle mosso muore a fine arm
-                                continue;
-                            }
-                        }
-                    }
-                    // FAST PATH (WP-25): overwrite of a *present* slot on a
-                    // non-lazy, non-enum instance of a class whose declared
-                    // properties are all plain for writing (public, symmetric,
-                    // untyped, non-readonly, hook-free): no visibility walk,
-                    // no magic probe, no coercion. A miss falls through
-                    // (dynamic-prop creation/deprecation, `__set`); a Ref slot
-                    // with live typed refs falls through (typed_ref_assign).
-                    if let Zval::Object(o) = &target {
-                        let (fast, fcid) = {
-                            let b = o.borrow();
-                            let ok = b.lazy.is_none()
-                                && !b.info.is_enum_case
-                                && self.classes[b.class_id as usize].plain_set_props
-                                // A scope-private override writes the scope's
-                                // mangled slot, not the leaf entry (WP-35).
-                                && !scope_private_overrides(&self.classes, b.class_id as usize, &name, cur)
-                                && match b.props.get(&name) {
-                                    Some(Zval::Ref(_)) => self.typed_refs.is_empty(),
-                                    Some(_) => true,
-                                    None => false,
-                                };
-                            (ok, b.class_id)
-                        };
-                        if fast {
-                            // IC fill from the fast path too (see PropGet):
-                            // plain_set_props classes never reach the general
-                            // resolve, so without this the cache stays cold.
-                            let slot = self.classes[fcid as usize]
-                                .prop_info
-                                .get(&name[..])
-                                .and_then(|pi| pi.slot);
-                            if let Some(i) = slot {
-                                ic.fill(fcid, crate::bytecode::PropIc::scope_key(cur), i);
-                            }
-                            if let Some(old) = write_property_at(&target, &name, slot, value.clone())? {
-                                #[cfg(feature = "zval-census")]
-                                super::zvalcensus::note_gcnote_site_propset_old();
-                                self.gc_note(&old);
-                            }
-                            self.frames[top].stack.push(value);
-                            continue;
-                        }
-                    }
-                    // Storage slot to write (plain name for a dynamic/non-object
-                    // target; a mangled key for an accessible private — set below).
-                    let mut key: Cow<[u8]> = Cow::Borrowed(&name[..]);
-                    let mut slot_idx: Option<u32> = None;
-                    if let Zval::Object(o) = &target {
-                        // An enum case is immutable: every property is readonly and
-                        // no dynamic property may be created (step 23).
-                        {
-                            let ob = o.borrow();
-                            if ob.info.is_enum_case {
-                                let cls = String::from_utf8_lossy(ob.class_name.as_bytes()).into_owned();
-                                let prop = String::from_utf8_lossy(&name).into_owned();
-                                return Err(PhpError::Error(if ob.props.contains(&name) {
-                                    format!("Cannot modify readonly property {cls}::${prop}")
-                                } else {
-                                    format!("Cannot create dynamic property {cls}::${prop}")
-                                }));
-                            }
-                        }
-                        // A `set` hook takes precedence over `__set` and direct write
-                        // (step 50); skipped while a hook for this property is active
-                        // (a backing write inside the hook). The expression still
-                        // yields the assigned value; the hook's own return is dropped.
-                        let (oid, cid) = { let b = o.borrow(); (b.id, b.class_id as usize) };
-                        if !self.hook_guarded(oid, &name) {
-                            if let Some(func) = self.prop_hook(cid, &name, true) {
-                                self.frames[top].stack.push(value.clone());
-                                self.push_hook(func, target.clone(), oid, &name, Some(value));
-                                continue;
-                            }
-                            // A virtual hooked property with no set hook is read-only.
-                            if self.is_virtual_hooked(cid, &name) {
-                                return Err(PhpError::Error(format!(
-                                    "Property {}::${} is read-only",
-                                    String::from_utf8_lossy(&self.classes[cid].name),
-                                    String::from_utf8_lossy(&name),
-                                )));
-                            }
-                        }
-                        if let Some((defc, midx, oid)) =
-                            self.magic_applies(o, &name, cur, MagicKind::Set, b"__set")
-                        {
-                            // The expression yields the assigned value; __set's own
-                            // return is discarded into a throwaway cell.
-                            self.frames[top].stack.push(value.clone());
-                            let discard = Rc::new(RefCell::new(Zval::Null));
-                            self.push_magic_prop(defc, midx, oid, MagicKind::Set, target.clone(), &name, Some(value), Some(discard), false);
-                            continue;
-                        }
-                        let ocid = o.borrow().class_id as usize;
-                        // Storage slot (mangled for an accessible private); per-instance
-                        // state (props, readonly tracking) is keyed by it. A single
-                        // resolution decides visibility (`Denied` errors here) and the
-                        // slot: the write is either a declared slot or a dynamic
-                        // creation — readonly / typed enforcement applies only to the
-                        // former (a parent's private reached from a child scope is a
-                        // *dynamic* write, untyped and unguarded).
-                        let access = resolve_prop_access(&self.classes, ocid, &name, cur);
-                        let declared_slot = matches!(access, PropAccess::Slot { .. });
-                        key = match access {
-                            PropAccess::Slot { key: k, slot } => {
-                                slot_idx = slot;
-                                // IC fill: only from a plain_set_props class
-                                // (public, symmetric, untyped, non-readonly,
-                                // hook-free in blocco — see PropIc).
-                                if let Some(i) = slot {
-                                    if self.classes[ocid].plain_set_props {
-                                        ic.fill(ocid as u32, crate::bytecode::PropIc::scope_key(cur), i);
-                                    }
-                                }
-                                Cow::Borrowed(k)
-                            }
-                            PropAccess::Denied { decl, vis } => {
-                                return Err(prop_access_error(&self.classes, decl, &name, vis))
-                            }
-                            PropAccess::Dynamic => Cow::Borrowed(&name[..]),
-                        };
-                        // PHP 8.4 asymmetric visibility: a declared slot whose set
-                        // visibility excludes this scope cannot be assigned (the
-                        // readonly path below keeps its own message shapes).
-                        if declared_slot {
-                            if let Some(err) = asym_write_error(&self.classes, cur, ocid, &name, "modify") {
-                                return Err(err);
-                            }
-                        }
-                        // Readonly write-once enforcement (after the visibility check,
-                        // so a private/protected readonly reports the access error
-                        // first, matching PHP). A permitted first initialisation is
-                        // recorded so any later write fatals.
-                        if declared_slot {
-                            if let Some(decl) = prop_readonly_decl(&self.classes, ocid, &name) {
-                                if o.borrow().readonly_clone_writable(&key) {
-                                    // Permitted re-initialisation during `__clone` (8.3).
-                                    let mut ob = o.borrow_mut();
-                                    ob.consume_clone_writable(&key);
-                                    ob.mark_readonly_init(&key);
-                                } else {
-                                    let inited = o.borrow().is_readonly_init(&key);
-                                    let set_vis = prop_info(&self.classes, ocid, &name)
-                                        .and_then(|pi| pi.set_visibility);
-                                    if let Some(err) = readonly_write_error(&self.classes, cur, decl, &name, inited, set_vis) {
-                                        return Err(err);
-                                    }
-                                    o.borrow_mut().mark_readonly_init(&key);
-                                }
-                            }
-                        }
-                        // PHP 8.2: creating an *undeclared* property on a class that
-                        // does not allow dynamic properties is deprecated (the
-                        // property is still created). `__set`/hooks already
-                        // short-circuited above. A *declared* property that was
-                        // `unset` is absent from the store yet is not a dynamic
-                        // creation when re-assigned — `declared_slot` covers it.
-                        if !declared_slot
-                            && !o.borrow().props.contains(&key)
-                            && !self.allows_dynamic_props(ocid)
-                        {
-                            let cls = String::from_utf8_lossy(&self.classes[ocid].name).into_owned();
-                            let prop = String::from_utf8_lossy(&name).into_owned();
-                            self.diags.push(Diag::Deprecated(format!(
-                                "Creation of dynamic property {cls}::${prop} is deprecated"
-                            )));
-                        }
-                        // Typed-property write enforcement: coerce the value to the
-                        // property's declared type (or TypeError). The assignment
-                        // expression yields the coerced value.
-                        if declared_slot {
-                            value = self.coerce_typed_prop_write(ocid, &name, value)?;
-                        }
-                    }
-                    // A declared slot written on a lazy wrapper (guarded writes
-                    // during its own initializer) keeps declaration order.
-                    if let Zval::Object(o) = &target {
-                        self.lazy_ordered_insert(o, &key);
-                    }
-                    // A write through a reference slot honours ALL of the
-                    // cell's typed sources (an aliased pair enforces both,
-                    // typed_properties_002).
-                    if !self.typed_refs.is_empty() {
-                        if let Zval::Object(o) = &target {
-                            let b = o.borrow();
-                            let cur_val = match slot_idx {
-                                Some(i) => b.props.get_slot(i),
-                                None => b.props.get(&key),
-                            };
-                            let cell = match cur_val {
-                                Some(Zval::Ref(c)) => Some(Rc::clone(c)),
-                                _ => None,
-                            };
-                            drop(b);
-                            if let Some(cell) = cell {
-                                let strict = self.frames[top].module.strict;
-                                value = self.typed_ref_assign(&cell, value, strict)?;
-                            }
-                        }
-                    }
-                    if let Some(old) = write_property_at(&target, &key, slot_idx, value.clone())? {
-                        self.gc_note(&old);
-                    }
-                    self.frames[top].stack.push(value);
+                    self.prop_set_entry::<false>(top, obj, value, name, ic)?;
+                }
+                Op::PropSetPop { name, ic } => {
+                    // S-107 lotto: PropSet ESATTO (stesso metodo, DISCARD
+                    // monomorfizzato dal const-generic) senza il push del
+                    // valore assegnato che il Pop scartava.
+                    let value = self.frames[top].stack.pop().expect("PropSetPop value");
+                    let obj = self.frames[top].stack.pop().expect("PropSetPop object");
+                    self.prop_set_entry::<true>(top, obj, value, name, ic)?;
                 }
                 Op::PropOpSet { name, op } => {
                     let rhs = self.frames[top].stack.pop().expect("PropOpSet rhs");

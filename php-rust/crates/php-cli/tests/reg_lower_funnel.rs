@@ -95,19 +95,22 @@ $s=0; for($i=0;$i<1000;$i++){ $s += $i*3 - ($i>>2); } echo $s,"\n"; echo probe(1
     };
 
     // Positive control flag-on: `{main}` AND the probe function both show the
-    // fused register forms (BinarySC for `*3`/`>>2`; il compare del loop è
-    // slot-const nel main → CmpJmpSC, slot-slot nella probe `$j<$n` →
-    // CmpJmpSS). EMENDAMENTO DICHIARATO S-106 (leva H-A1, S-106-R-3): il
-    // `+=` del main ora fonde OLTRE BinaryDst nella RMW-su-slot
-    // `BinarySTDst` — l'attesa BinaryDst del main è SOSTITUITA, e il
-    // controllo positivo di BinaryDst è RI-COLLOCATO nella probe, dove il
-    // sito lhs-stack della catena `$t+$j+$j+$j` lo produce ancora.
+    // fused register forms (il compare del loop è slot-const nel main →
+    // CmpJmpSC, slot-slot nella probe `$j<$n` → CmpJmpSS). EMENDAMENTO
+    // DICHIARATO S-106 (leva H-A1): il `+=` fonde nella RMW-su-slot
+    // `BinarySTDst`; BinaryDst RI-COLLOCATO nella probe (catena lhs-stack).
+    // EMENDAMENTO DICHIARATO S-107 (lotto superistruzioni): l'albero
+    // `$i*3 - ($i>>2)` fonde le DUE BinarySC e la Sub in `BinarySCSC`
+    // (l'attesa BinarySC standalone è SOSTITUITA — un contains("BinarySC")
+    // resterebbe verde per SOTTOSTRINGA di BinarySCSC, quindi il controllo
+    // nomina la forma INTERA), e il trigramma IncDecSlot;Pop;Jump del
+    // back-edge fonde in `IncDecSlotJmp` in entrambi i corpi.
     for (label, cmp_form, dst_form) in [
         ("{main}", "CmpJmpSC", "BinarySTDst"),
         ("fn probe", "CmpJmpSS", "BinaryDst"),
     ] {
         let chunk = chunk_of(&on_err, label);
-        for form in ["BinarySC", cmp_form, dst_form] {
+        for form in ["BinarySCSC", "IncDecSlotJmp", cmp_form, dst_form] {
             assert!(
                 chunk.contains(form),
                 "no {form} in the `{label}` dump: the pass did not rewrite it\n{chunk}"
@@ -137,7 +140,12 @@ $s=0; for($i=0;$i<1000;$i++){ $s += $i*3 - ($i>>2); } echo $s,"\n"; echo probe(1
             chunk.contains("BinaryAdd"),
             "flag-off senza BinaryAdd in `{label}`: la specializzazione H-B2 è sparita\n{chunk}"
         );
-        for form in ["BinarySC", "CmpJmpSC", "BinaryDst", "BinarySS", "CmpJmpSS", "BinarySTDst"] {
+        for form in [
+            "BinarySC", "CmpJmpSC", "BinaryDst", "BinarySS", "CmpJmpSS", "BinarySTDst",
+            // S-107: le forme del lotto non esistono flag-off.
+            "BinarySCSC", "BinaryTC", "IncDecSlotPop", "IncDecSlotJmp",
+            "PropGetSlot", "PropSetPop", "StringifySlot",
+        ] {
             assert!(
                 !chunk.contains(form),
                 "{form} nel dump flag-off di `{label}`: il modo OFF non è off\n{chunk}"

@@ -641,6 +641,48 @@ pub enum Op {
     /// `[] -> []` — compare `slots[slot] <op> consts[cidx]` (const always
     /// rhs, mirrored at fold time like [`Op::BinarySC`]), then jump.
     CmpJmpSC { op: BinOp, slot: u16, cidx: u16, addr: Addr, when: bool },
+    // ----- lotto superistruzioni S-107 (census-driven, wp107-harness/
+    // s107-census-derive.out): stesse regole v3 — forme MONOMORFE, indici
+    // u16 nudi, ogni handler riusa gli helper del braccio non fuso (zero
+    // biforcazione), slot READ = semantica LoadVar via `unit_slot_name`. -----
+    /// `[lhs] -> [lhs <op> consts[cidx]]` — literal rhs inlined on a STACK
+    /// lhs (bigram PushConst→Binary): the [`Op::BinarySC`] shape for sites
+    /// whose lhs is not a foldable slot (e.g. a PropGet result). Const is
+    /// ALWAYS rhs by construction (the PushConst immediately precedes the
+    /// Binary), so no operand-order divergence is possible.
+    BinaryTC { op: BinOp, cidx: u16 },
+    /// `[] -> [(slots[la] <opa> consts[ca]) <op> (slots[lb] <opb> consts[cb])]`
+    /// — two const-rhs slot subexpressions feeding one Binary (the arith
+    /// judge's `$i*3 - ($i>>2)` tree). Evaluation order and diags are the
+    /// original's by construction: a's read+op fully first, then b's, then
+    /// the combine — each step through the same binary_fast/binary_value_ab
+    /// funnel and the same warning-parity slot read.
+    BinarySCSC { opa: BinOp, la: u16, ca: u16, opb: BinOp, lb: u16, cb: u16, op: BinOp },
+    /// `[] -> []` — `$x++`/`$x--` as a statement: [`Op::IncDecSlot`] whose
+    /// pushed result is immediately discarded by `Pop`. `pre` is dropped at
+    /// fold time: pre/post differ only in the discarded value. The elided
+    /// transient is only ever a scalar clone (++/-- on array/object is a
+    /// TypeError before any push), so the skipped `gc_note` is a no-op.
+    IncDecSlotPop { slot: u16, inc: bool },
+    /// `[] -> []` — [`Op::IncDecSlotPop`] fused over the loop back-edge
+    /// `Jump` (trigram IncDecSlot→Pop→Jump: the hottest fusable shape in
+    /// ALL six judges). Increment semantics first, then an unconditional
+    /// jump to `addr`.
+    IncDecSlotJmp { slot: u16, inc: bool, addr: Addr },
+    /// `[] -> [value]` — fused `LoadVar(slot); PropGet` (bigram
+    /// LoadVar→PropGet, the prop judge's hottest): LoadVar warning parity
+    /// via `unit_slot_name`, then the exact PropGet entry (shared method,
+    /// IC + fallback).
+    PropGetSlot { slot: u16, name: Rc<[u8]>, ic: PropIc },
+    /// `[obj, value] -> []` — fused `PropSet; Pop`: the assigned value is
+    /// not pushed (the Pop discarded it). Every other effect — hooks,
+    /// `__set`, typed/readonly enforcement, gc_note on the displaced value
+    /// — is the PropSet arm's own code (const-generic DISCARD entry).
+    PropSetPop { name: Rc<[u8]>, ic: PropIc },
+    /// `[] -> [string]` — fused `LoadVar(slot); Stringify` (str/arr key
+    /// interpolation): LoadVar warning parity, then the exact Stringify
+    /// entry (shared method — `__toString` frames included).
+    StringifySlot { slot: u16 },
     /// `[s1..sn] -> [s]` — join `n` already-stringified parts (WP-34): the
     /// compiler emits each part through `Stringify` (or as a Str literal), so
     /// the flattened chain's intermediate `Concat`s were pure — one

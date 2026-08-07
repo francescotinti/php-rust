@@ -110,7 +110,8 @@ fn visit_addrs(op: &mut Op, f: &mut impl FnMut(&mut Addr)) {
         Op::CmpJmp { addr, .. }
         | Op::CmpJmpConst { addr, .. }
         | Op::CmpJmpSS { addr, .. }
-        | Op::CmpJmpSC { addr, .. } => f(addr),
+        | Op::CmpJmpSC { addr, .. }
+        | Op::IncDecSlotJmp { addr, .. } => f(addr),
         Op::IterNext { end, .. } | Op::IterNextRef { end, .. } => f(end),
         // ---- lista chiusa: varianti SENZA Addr (niente da visitare) ----
         Op::PushConst { .. } | Op::Pop { .. } | Op::Dup { .. }
@@ -130,7 +131,10 @@ fn visit_addrs(op: &mut Op, f: &mut impl FnMut(&mut Addr)) {
         | Op::ParkReturn { .. } | Op::Binary { .. } | Op::BinaryAdd { .. }
         | Op::Unary { .. } | Op::Cast { .. } | Op::BinarySS { .. }
         | Op::BinarySSDst { .. } | Op::BinarySC { .. } | Op::BinarySCDst { .. }
-        | Op::BinaryDst { .. } | Op::BinarySTDst { .. } | Op::ConcatN { .. } | Op::Echo { .. }
+        | Op::BinaryDst { .. } | Op::BinarySTDst { .. } | Op::BinaryTC { .. }
+        | Op::BinarySCSC { .. } | Op::IncDecSlotPop { .. } | Op::PropGetSlot { .. }
+        | Op::PropSetPop { .. } | Op::StringifySlot { .. }
+        | Op::ConcatN { .. } | Op::Echo { .. }
         | Op::Print { .. } | Op::Stringify { .. } | Op::ArrayInit { .. }
         | Op::ArrayPush { .. } | Op::ArrayInsert { .. }
         | Op::ArrayAppendSpread { .. } | Op::CallArgs { .. } | Op::FetchDim { .. }
@@ -347,7 +351,9 @@ fn bin_op_of(op: &Op) -> Option<BinOp> {
         | Op::Jump { .. } | Op::JumpIfFalse { .. } | Op::JumpIfTrue { .. }
         | Op::CmpJmp { .. } | Op::CmpJmpConst { .. } | Op::BinarySS { .. }
         | Op::BinarySSDst { .. } | Op::BinarySC { .. } | Op::BinarySCDst { .. }
-        | Op::BinaryDst { .. } | Op::BinarySTDst { .. }
+        | Op::BinaryDst { .. } | Op::BinarySTDst { .. } | Op::BinaryTC { .. }
+        | Op::BinarySCSC { .. } | Op::IncDecSlotPop { .. } | Op::IncDecSlotJmp { .. }
+        | Op::PropGetSlot { .. } | Op::PropSetPop { .. } | Op::StringifySlot { .. }
         | Op::CmpJmpSS { .. } | Op::CmpJmpSC { .. }
         | Op::ConcatN { .. } | Op::JumpIfNotNull { .. } | Op::JumpIfNull { .. }
         | Op::Echo { .. } | Op::Print { .. } | Op::Stringify { .. }
@@ -414,6 +420,26 @@ fn fuse_window(f: &Func, blocked: &[bool], i: usize) -> (Op, usize) {
     let free = |j: usize| j < n && !blocked[j] && f.lines[j] == line;
 
     if let Some(a) = fold_slot(f, i) {
+        // S-107 W6 (PRIMA delle finestre 3-op: la più lunga vince): l'albero
+        // [LoadVar, PushConst, Binary, LoadVar, PushConst, Binary, Binary]
+        // — due sottoespressioni slot⊚const che alimentano un Binary
+        // (census arith: BinarySC;BinarySC;Binary(Sub), 50M/run). Nessuna
+        // coda Dst per scelta (il giudice alimenta BinarySTDst).
+        if (3..=6).all(|k| free(i + k)) && free(i + 1) && free(i + 2) {
+            if let (Some(ca), Some(opa), Some(lb), Some(cb), Some(opb), Some(op)) = (
+                fold_const(f, i + 1),
+                bin_op_of(&f.ops[i + 2]),
+                fold_slot(f, i + 3),
+                fold_const(f, i + 4),
+                bin_op_of(&f.ops[i + 5]),
+                bin_op_of(&f.ops[i + 6]),
+            ) {
+                return (
+                    Op::BinarySCSC { opa, la: a, ca, opb, lb, cb, op },
+                    7,
+                );
+            }
+        }
         if free(i + 1) && free(i + 2) {
             // [LoadVar, LoadVar, Binary|CmpJmp]
             if let Some(b) = fold_slot(f, i + 1) {
@@ -435,6 +461,22 @@ fn fuse_window(f: &Func, blocked: &[bool], i: usize) -> (Op, usize) {
                 if let Some(op) = bin_op_of(&f.ops[i + 2]) {
                     return bin_dst(f, &free, i, 3, BinKind::SC(a, c), op);
                 }
+            }
+        }
+        // S-107 W3/W8: 2-op a testa LoadVar — la lettura fusa conserva la
+        // parità warning (guardia fold_slot + `unit_slot_name` a runtime).
+        if free(i + 1) {
+            match &f.ops[i + 1] {
+                // [LoadVar, PropGet] → PropGetSlot (bigram 60M nel giudice prop)
+                Op::PropGet { name, ic } => {
+                    return (
+                        Op::PropGetSlot { slot: a, name: name.clone(), ic: ic.clone() },
+                        2,
+                    )
+                }
+                // [LoadVar, Stringify] → StringifySlot (interpolazione str/arr)
+                Op::Stringify => return (Op::StringifySlot { slot: a }, 2),
+                _ => {}
             }
         }
         // [LoadVar, CmpJmpConst] → slot vs const compare (mirror const-lhs)
@@ -471,6 +513,15 @@ fn fuse_window(f: &Func, blocked: &[bool], i: usize) -> (Op, usize) {
                 }
             }
         }
+        // S-107 W5: [PushConst, Binary] ADIACENTI — lhs in PILA, const
+        // SEMPRE rhs per costruzione (il PushConst precede immediatamente il
+        // Binary ⇒ il const è il top). Nessuno swap, nessuna divergenza
+        // d'ordine possibile (bigram prop: PushConst(1);BinaryAdd, 30M).
+        if free(i + 1) {
+            if let Some(op) = bin_op_of(&f.ops[i + 1]) {
+                return (Op::BinaryTC { op, cidx: c }, 2);
+            }
+        }
     }
     // [LoadSlot, Swap, Binary] — RMW su slot (S-106 leva H-A1): il prefisso
     // lhs-da-slot del compound assign `$s <op>= expr`. EMENDAMENTO DICHIARATO
@@ -487,6 +538,40 @@ fn fuse_window(f: &Func, blocked: &[bool], i: usize) -> (Op, usize) {
                     return bin_dst(f, &free, i, 3, BinKind::ST(*l as u16), op);
                 }
             }
+        }
+    }
+    // S-107 W1: [IncDecSlot, Pop] (+ Jump di back-edge) — il valore spinto
+    // è SCARTATO, quindi pre/post collassano nella forma fusa e il gc_note
+    // eliso è un no-op (il transiente è sempre uno scalare: ++/-- su
+    // array/oggetto è TypeError prima di ogni push). Il trigramma col Jump
+    // è la forma calda in TUTTI e sei i giudici.
+    if let Op::IncDecSlot { slot, inc, pre: _ } = &f.ops[i] {
+        if *slot <= u16::MAX as u32 && free(i + 1) && matches!(f.ops[i + 1], Op::Pop) {
+            if free(i + 2) {
+                if let Op::Jump(a) = &f.ops[i + 2] {
+                    return (
+                        Op::IncDecSlotJmp { slot: *slot as u16, inc: *inc, addr: *a },
+                        3,
+                    );
+                }
+            }
+            return (Op::IncDecSlotPop { slot: *slot as u16, inc: *inc }, 2);
+        }
+    }
+    // S-107 W2: [Dup, StoreSlot s, Pop] ≡ [StoreSlot s] — nessuna op nuova:
+    // il duplicato transiente elide (stesso precedente delle code *Dst; il
+    // gc_note del Pop cadeva sul clone transiente, che non esiste più).
+    // Cattura le code assign-and-discard dietro produttori NON fusabili
+    // (Call, CallBuiltin, Ret del chiamato — census calls/str).
+    if matches!(f.ops[i], Op::Dup) && free(i + 1) && free(i + 2) {
+        if let (Op::StoreSlot(s), Op::Pop) = (&f.ops[i + 1], &f.ops[i + 2]) {
+            return (Op::StoreSlot(*s), 3);
+        }
+    }
+    // S-107 W4: [PropSet, Pop] → PropSetPop (statement `$o->p = v;`).
+    if let Op::PropSet { name, ic } = &f.ops[i] {
+        if free(i + 1) && matches!(f.ops[i + 1], Op::Pop) {
+            return (Op::PropSetPop { name: name.clone(), ic: ic.clone() }, 2);
         }
     }
     // Bare Binary: wins only with an assign-and-discard tail.
@@ -798,6 +883,16 @@ echo g(1), ($h)(2), C::K;"#;
                 | Op::BinaryDst { .. }
                 | Op::CmpJmpSS { .. }
                 | Op::CmpJmpSC { .. }
+                // S-106 H-A1 + lotto S-107: il dente flag-off vale anche per
+                // le forme nuove — la compilazione OFF non ne emette MAI una.
+                | Op::BinarySTDst { .. }
+                | Op::BinaryTC { .. }
+                | Op::BinarySCSC { .. }
+                | Op::IncDecSlotPop { .. }
+                | Op::IncDecSlotJmp { .. }
+                | Op::PropGetSlot { .. }
+                | Op::PropSetPop { .. }
+                | Op::StringifySlot { .. }
         )
     }
 

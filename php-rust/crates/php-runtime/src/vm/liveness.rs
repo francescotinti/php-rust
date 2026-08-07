@@ -138,6 +138,26 @@ fn effect(op: &Op, park_targets: &[usize]) -> Effect {
             e.defs.push(*dst as u32);
         }
         Op::BinaryDst { dst, .. } => e.defs.push(*dst as u32),
+        // S-107 lotto superistruzioni: letture per indice (uso), la coppia
+        // IncDec* è lettura+scrittura sullo stesso slot; IncDecSlotJmp è un
+        // Jump incondizionato (fall=false, arco verso addr).
+        Op::BinarySCSC { la, lb, .. } => {
+            e.uses.push(*la as u32);
+            e.uses.push(*lb as u32);
+        }
+        Op::PropGetSlot { slot, .. } | Op::StringifySlot { slot } => {
+            e.uses.push(*slot as u32)
+        }
+        Op::IncDecSlotPop { slot, .. } => {
+            e.uses.push(*slot as u32);
+            e.defs.push(*slot as u32);
+        }
+        Op::IncDecSlotJmp { slot, addr, .. } => {
+            e.uses.push(*slot as u32);
+            e.defs.push(*slot as u32);
+            e.fall = false;
+            e.edges.push((*addr as usize, Vec::new()));
+        }
         Op::CmpJmpSS { l, r, addr, .. } => {
             e.uses.push(*l as u32);
             e.uses.push(*r as u32);
