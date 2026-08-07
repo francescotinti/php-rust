@@ -1,0 +1,9 @@
+s109-pair-criterio: coppia WP full+media BIMODALE sul pin 3b3d25e2 (PRE-registrato, prima della run)
+oggetto=collaudo icache del lotto-2 S-108 (run_loop +14,7 KB, cumulativo +31,1 KB in due sessioni) sull'aggregato WP
+giudice=pair109.sh (ricetta pair94/pair102/pair108 INVARIATA; rapporti macchina dai .time; gate per NOME KS-KL-101-3)
+gate_principale=full modo ON (default): banda [1,86;1,93]; riferimenti full ON 1,855 (S-108 stessa-sera) e 1,894 (WP-102 storico)
+dentro_banda_o_sotto=lotto-2 non paga icache sul carico reale -> leva S-109 SBLOCCATA; sotto 1,86 = direzione favorevole, attribuzione solo con meccanismo firmato
+fuori_banda_sopra_1.93=leva S-109 BLOCCATA -> diagnosi per-fase (candidato primo: dieta testo dei 4 handler lotto-2; text-budget 288.920 B si ricontratta)
+media=solo DIREZIONE, terza lettura della voce aperta (S-108: 2,677 on / 2,747 off; rif 2,64): tre letture concordi sopra 2,67 -> la voce resta APERTA per NOME con trend dichiarato
+full_off=seconda gamba bimodale, solo direzione (famiglia storica 1,885-1,894)
+validita=failnames estratti==dichiarati e gate_void=0 su OGNI gamba, altrimenti la gamba e' VOID e si rilancia
