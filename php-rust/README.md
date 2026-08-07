@@ -22,23 +22,20 @@ interpreter, not to pass a toy subset.
 > real IANA timezones (system TZif, timelib gap/fold semantics), a
 > cycle-collecting GC with Zend-style adaptive thresholds and Zend-faithful
 > destructor timing, property hooks, lazy objects, fibers, and an
-> opcache-like per-request unit cache. Current front: **performance** — a
-> measured arc of specializing-interpreter and GC work, guided by
-> owner-level attribution of both bytes and CPU-seconds (sampled call
-> trees reconciled against the master clock), has brought the WordPress
-> media benchmark to **~2.61×** the oracle's CPU and cut the
-> peak-footprint gap **from 11.9× to ~4.07×**; the latest levers — a
-> keyless hashed-array index (single Zend-style table, no duplicated
-> key), then an array-storage tranche (header diet to an exact 96B
-> allocator bin, index elision for small hashes, and a bounded
-> block-recycling arena) — cut peak footprint another −1.8% and −1.05%
-> in successive sessions at flat benchmark CPU; the full WordPress-suite
-> CPU sits at **~2.06–2.11×** (from 3.4×; the array tranche cost
-> +1–2.5% on the full suite only, kept and on the books per the
-> no-revert policy). Every value channel (strings, arrays, objects) is
-> now measured with exact live byte-accounting — next: attributing the
-> physical footprint that lives *outside* those channels, then Laravel
-> validation.
+> opcache-like per-request unit cache. Current front: **performance** — the
+> backbone is a six-category micro benchmark (same PHP source on both
+> engines, per-binary startup floors subtracted) currently at **arith 9.3× ·
+> property 7.9× · calls 5.1× · string 5.3× · array 3.9× · regex 3.5×** the
+> oracle's CPU, target ≤3× per category; a run of fused-superinstruction
+> lots took string ops from 10 to 8 ops/iter (−15% on the judge). On the
+> real-application aggregate the **full WordPress-suite CPU is ~1.87×**
+> (bimodal same-evening pair, historic best 1.842×), the media group
+> ~2.61–2.67×, and full-suite peak footprint **2.31×** (from 11.9× at the
+> start of the arc). Latest measured finding (Instruments top-down
+> counters, both engines): the arith/property gap is **frontend-bound** —
+> phpr stalls a third of its cycles on instruction delivery in the
+> dispatch-heavy judges vs the oracle's 3% — which names the next lever:
+> a threaded-dispatch experiment under its own A/B.
 
 ## Coverage at a glance
 
@@ -46,7 +43,7 @@ interpreter, not to pass a toy subset.
 | --- | --- |
 | Core / language stdlib functions | **539 / 654 (82%)** |
 | All internal functions | 1017 / 2143 (47%) |
-| Zend test corpus passing | **2650** (65.2% of runnable) |
+| Zend test corpus passing | **2652** (65.2% of runnable) |
 | WordPress core suite | **effective parity** (single-site AND multisite: **1** declared name-diff each) |
 
 Full, measured breakdown → **[COVERAGE.md](COVERAGE.md)**.

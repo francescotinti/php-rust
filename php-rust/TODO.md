@@ -6,10 +6,10 @@ as they complete. Deliberate behavioural deviations are catalogued in
 [`PHPR_DIVERGENCES_FROM_PHP.md`](PHPR_DIVERGENCES_FROM_PHP.md); measured
 coverage in [`COVERAGE.md`](COVERAGE.md).
 
-Current state (2026-08-06, post session S-102, synced S-103): Zend corpus
-**2650** passing (65.2% of runnable; gate baseline **1417** fails by name —
-the S-102 §3.13 fidelity fix made `nullsafe_operator/015.phpt` pass, archived
-re-verdict in `wp102-harness/corpus-gate/riverdetto-ref1417.txt`) · internal functions
+Current state (2026-08-07, post session S-110, fresh corpus run): Zend corpus
+**2652** passing (65.2% of runnable; gate baseline **1415** fails by name —
+frozen set re-declared in S-109 after the lotto-3 batch; full pair on the
+new pin measured in-band, `gaps/REPORT_GAP_110.md`) · internal functions
 **1017/2143, 47%** (core stdlib **539/654, 82%**). **WORDPRESS: the full
 single-site core PHPUnit suite (30,472 tests, wordpress-develop trunk) AND
 multisite (31,278 tests) are each at a SINGLE declared name-diff vs the
