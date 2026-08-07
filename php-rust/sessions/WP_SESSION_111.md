@@ -6,8 +6,7 @@ dispersione degli handler caldi non regge come motore (direzione); ritirata
 al byte.
 **SCOREBOARD** (micro NON rimisurati: pin 92909544 invariato, valori S-109):
 **arith 9,3 = · prop 7,9 = · calls 5,1 = · str 5,3 = · arr 3,9 = · re 3,5 =**
-WP non rimisurato (coppia non dovuta) — rif 1,867/1,869,
-media 2,673/2,612 (S-110). **Leve perf spedite: 0
+WP non rimisurato (coppia non dovuta) — rif 1,867/1,869 · media 2,673/2,612. **Leve perf spedite: 0
 (dichiarato)** — leva TENTATA con A/B pieno e verdetto (ritmo rispettato).
 **Data**: 2026-08-08 · Fable 5 · commit fdbe5c8→bc8d18d pushati.
 
