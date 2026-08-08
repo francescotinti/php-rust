@@ -1,0 +1,27 @@
+== S-112 PIN VERDETTO — pin s112 = f71abd2a16da7e71 (leva H-A2 PROMOSSA) ==
+grade=VERDICT
+formato=ascii-nudo
+
+sequenza=build f71abd2a -> admission (emissione INVARIATA: dump ON {main} x6 e OFF x6 al byte
+  vs pin 92909544; run_loop 287.944->291.316 B, bl 5849->5864, br 22->24) -> batteria
+  cargo test --release 1742/0 rc=0 DAL COMANDO (NOTA: relink della batteria = gemella b70e049a
+  dello stesso sorgente, DICHIARATA; il binario misurato e' il candidato CONSERVATO f71abd2a)
+  -> A/B PROMOSSO (s112-ab-verdetto.out) -> release ripristinata dal candidato (cp, hash
+  verificato f71abd2a) -> stash phpr-s112 SOLO da scripts/pin-phpr.sh (smoke parita' 2 modi)
+  -> corpus -> fixture -> micro.
+
+corpus=1415 per NOME x2 modi (PHPR_REG_LOWER esplicito 0/1), insieme IDENTICO alla lista
+  congelata wp82 (rc=0 dal comando; corpus-gate/progress.txt; run 01:45-01:58)
+fixture_chain=rc_totale=0 DAL COMANDO (hc1 + move + recv + fx20 + fx21 + w9, bilaterali,
+  pin verificato fail-closed f71abd2a / oracle 07b0df8d)
+micro_R5_sul_pin (run 02:0x, run-micro.sh, netto pavimenti, N emesso; spread phpr <=0.03):
+  arith=5,5 [2,36/0,43]   (era 9,3: -41% — leva H-A2)
+  prop=7,6  [3,21/0,42]   (era 7,9: coda BinarySTDst, coerente con A/B +4,33)
+  calls=5,2 [2,30/0,44]   (era 5,1: fermo entro tra-sere +-0,4)
+  str=5,3   [0,85/0,16]   (fermo)
+  arr=4,2   [1,21/0,29]   (era 3,9: +0,3 entro tra-sere +-0,4; A/B arr fermo nel rumore, spread_A 15 ns/iter)
+  re=3,4    [1,27/0,37]   (fermo)
+held_out_sul_candidato (=pin): poly 6,4 [9,59/1,51] MIGLIORATO · err 2,5 [2,95/1,18] ·
+  wploop 5,6 [6,76/1,20] — 3/3 su soglia PRE-registrata (heldout-out/)
+coppia_WP=NON rimisurata stanotte (rif resta 1,867/1,869 S-110); DOVUTA in S-113:
+  collaudo icache del testo aggiunto (+3.372 B run_loop).
