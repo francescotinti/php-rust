@@ -1,0 +1,28 @@
+# S-117 spike A′ stadio-1 — determinismo build ×2 (sorgente 4c14048, lto=fat cgu=1, target fresco, INCREMENTAL=0)
+build1: rc=0 phpr=9af7c0c6d1350557 runner=3fff7e360b24566f
+build2: rc=0 phpr=0171351f747eba53 runner=5a8f3371dd718daf
+determinismo=ROTTO (rc=1 in aprime-out/build-rc)
+diagnosi determinismo (build2 vs build3, stessa ricetta): __text/__const/__DATA*/size-m IDENTICI; DIVERGE solo __TEXT,__cstring per 4 byte = __TIME__ mimalloc; emendamento ricetta SOURCE_DATE_EPOCH=0 DICHIARATO (criterio §2-bis), criterio ×2 RIESEGUITO da capo
+# S-117 spike A′ stadio-1 — determinismo build ×2 (sorgente 6c04b6c, lto=fat cgu=1, target fresco, INCREMENTAL=0)
+build1: rc=0 phpr=8135dcf802fef16d runner=dbf756c331ae8138
+build2: rc=0 phpr=8135dcf802fef16d runner=dbf756c331ae8138
+determinismo=OK (rc=0 in aprime-out/build-rc)
+gate SMOKE: parità arith 2 modi OK (candidato phpr 8135dcf802fef16d)
+candidato CONSERVATO: phpr-s117-aprime + phpt-runner-s117-aprime (8135dcf802fef16d)
+gate BATTERIA: rc=0 (da aprime-out/batteria.rc) · 1742/0/2 · inventario vs S-114: IDENTICO
+gate CORPUS(off): fail-set per NOME == congelato s109 (1415)
+gate CORPUS(on): fail-set per NOME == congelato s109 (1415)
+gate CORPUS off↔on: rc=0 (da aprime-out/corpus/offon.rc) — CORPUS-DIFF: ZERO differenze per-test off<->on fuori carve-out
+GATES A′ COMPLESSIVO: rc=0 (da aprime-out/gates-rc)
+
+A/B uplift pin↔A′ (s117-ab-uplift.sh R=5, rc=0 da aprime-out/uplift-rc):
+arith: fam=5 pin_med=47.40 D_med=-0.20 segni +1/5 uplift=-0.42%
+prop: fam=5 pin_med=107.33 D_med=-7.67 segni +0/5 uplift=-7.15%
+calls: fam=5 pin_med=115.00 D_med=+8.50 segni +5/5 uplift=+7.39%
+str: fam=5 pin_med=210.00 D_med=+2.50 segni +3/5 uplift=+1.19%
+arr: fam=5 pin_med=190.00 D_med=+10.00 segni +5/5 uplift=+5.26%
+re: fam=5 pin_med=635.00 D_med=+20.00 segni +5/5 uplift=+3.15%
+UPLIFT_MEDIANO=+2.17% (giudice KS-A: scatta se <2% E banda_new max >5)
+
+# micro R=5 su A′ (phpr-s117-aprime 8135dcf8, NUOVE baseline; oracle invariato):
+arith 5,5 · prop 8,2 · calls 4,8 · str 5,2 · arr 3,8 · re 3,3 · held-out poly 6,3 · err 2,6 · wploop 5,4 (raw in aprime-out/{micro,heldout}-aprime-r5.out)
