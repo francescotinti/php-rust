@@ -1,0 +1,30 @@
+== S-113 A/B VERDETTO — leva H-P1 probe IC col ricevitore in prestito (criterio s113-criterio.md, PRE @ 40fcc80) ==
+A = pin S-112 f71abd2a (stash) · B = candidato CONSERVATO f210eab4 (phpr-s113-ab-candidate, post-batteria: stesso binario dell'atto di build, az.5 rev. S-112)
+R=5 ABAB · user CPU netto pavimenti per-binario · N emesso dal sorgente · raw in ab-out/ (fuori repo)
+admission=PASSATA (12/12 dump identici: la leva non tocca il pass; run_loop 291.316->293.292 B (+1.976), bl 5864->5888, br 24=24)
+batteria=rc=0 DAL COMANDO, 0 fail su 28 suite; conteggio 1741 passed vs 1742 dichiarato S-112: DELTA NON ATTRIBUITO a verbale (nessun file di test toccato nei commit dal pin; solo bracci run.rs + script harness)
+
+-- primario --
+prop   N=30M  D mediano=+3,33 ns/iter  5/5 concordi POSITIVI  soglia=max(4; spread_A 2,67; 0,67)=4,00  SOTTO SOGLIA
+       (smoke R=2: +5,33/+0,33 stesso segno; A ~107,3 -> B ~104,0)
+
+-- guardie non-bersagli (stesura SOLO-REGRESSIONE, sfonda se D mediano < -max(2x spread_A; 0,67)) --
+arith  D mediano=-0,20  soglia -1,60  REGGE
+calls  D mediano=-5,50  5/5 NEGATIVI  soglia -2,00  SFONDATA (regressione vera: 115,0->121,0 circa)
+str    D mediano=-2,50  soglia -5,00  REGGE
+arr    D mediano=+3,33  (rumoroso come da storico, spread_A 45)  REGGE
+re     D mediano=0,00   soglia -30,00  REGGE
+
+meccanismo_calls=il corpo caldo di calls (fn f = BinarySS, dal dump S-112) NON tocca PropGetSlot*/prop_get_entry:
+  la regressione -5,50 su sentiero non toccato e' della stessa famiglia del +1,50 S-112 (attribuzione layout MAI
+  misurata in proprio, az.2 rev. S-112) ma di segno OPPOSTO e 3,7x piu' grande: il testo aggiunto (+1.976 B, bl +24)
+  sposta il layout del run_loop e stavolta TASSA. L'A/B leva-nulla di attribuzione (aperture NEXT_SESSION) SALE di priorita'.
+
+-- held-out --
+NON eseguito: gate di promozione (criterio punto 6, "a leva conclusa" verso il pin); con refutazione ai punti 4 E 5 non si apre.
+
+verdetto=NON PROMOSSA — doppia refutazione dal criterio PRE: (4) primario sotto soglia (direzione FIRMATA su prop,
+  5/5 positivi ~+3,3 = il costo del clone Rc evitato e' REALE ma sotto il pavimento 4) e (5) guardia calls SFONDATA
+  in regressione vera. REVERT AL BYTE: release ripristinata dallo stash phpr-s112 (hash verificato f71abd2a),
+  commit sorgente 8bb395c revertito; il guadagno misurato resta a verbale (feedback-keep-partial-wins), la
+  prossima leva prop deve comporre >4 ns/iter o cambiare famiglia (op-count/fusione legale, non solo lifecycle).
