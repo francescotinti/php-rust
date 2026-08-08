@@ -1,0 +1,6 @@
+candidato treno-2 = 350582e55d21533d (target canonico, ricetta A′; A = pin 15dfb6b3da215b56)
+admission: 6/6 parità output + 6/6 dump INTERO byte-id (rc=0 da treno2-out/admission.rc)
+candidato CONSERVATO: phpr-s119-treno2 (350582e55d21533d)
+ripristino: release/phpr == pin 15dfb6b3da215b56 AL BYTE; A/B pronte su stash A=phpr-s118 B=phpr-s119-treno2
+smoke R=2 guardia (rc=1): D per coppia = -1.67 -2.67 +0.50 +1.00
+smoke treno-2: rc=1 dal filtro smoke (prop concorde -1.67/-2.67 R=2, DENTRO banda-v2 3.33; prop non esercita V3-V5: sospetto layout). Il criterio p.2 giudica a banda nel FULL: si procede al full R=5, dichiarato.
