@@ -4173,94 +4173,10 @@ impl<'m> super::Vm<'m> {
                     // sta nell'ULTIMO helper: al ritorno del frame lo stream
                     // riprende come nella sequenza non fusa, col ricevitore
                     // già in pila.
-                    // L-A (S-114): peephole runtime sul bigramma
-                    // `$o->x = $o->y OP C` (questo op + BinaryTCPropSetPop).
-                    // Probe bipartito SOLO-borrow, condizioni replicate
-                    // verbatim da prop_get_entry (hit IC get) e
-                    // prop_set_entry (hit IC set): sul double-hit niente
-                    // clone del ricevitore, niente round-trip di pila,
-                    // niente lazy_prop_access (ri-implicato dalle guardie),
-                    // niente clone del value, un dispatch in meno (ip+2).
-                    // OGNI miss cade alla sequenza storica sotto, da zero:
-                    // il probe non tocca stato. Fuori dalle build census:
-                    // i contatori misurano il sentiero storico.
-                    #[cfg(not(any(feature = "zval-census", feature = "op-census")))]
-                    let fused = 'f: {
-                        let Some(Op::BinaryTCPropSetPop {
-                            op: b2,
-                            cidx,
-                            name: set_name,
-                            ic: set_ic,
-                        }) = func.ops.get(ip + 1)
-                        else {
-                            break 'f false;
-                        };
-                        if self.frames[top].flags.get(FrameFlags::INIT_PROPS) {
-                            break 'f false;
-                        }
-                        let sk = crate::bytecode::PropIc::scope_key(self.frames[top].class);
-                        let Zval::Object(o) = &self.frames[top].slots[*slot as usize] else {
-                            break 'f false;
-                        };
-                        let Some((cid1, gslot)) = ic.get(sk) else {
-                            break 'f false;
-                        };
-                        let yv = {
-                            let b = o.borrow();
-                            if b.class_id + 1 != cid1 || b.lazy.is_some() {
-                                break 'f false;
-                            }
-                            match b.props.get_slot(gslot) {
-                                Some(v) if !matches!(v, Zval::Undef) => v.deref_clone(),
-                                _ => break 'f false,
-                            }
-                        };
-                        if matches!(yv, Zval::Undef | Zval::Ref(_)) {
-                            break 'f false;
-                        }
-                        let cv = func.consts[*cidx as usize].to_zval();
-                        let Some(value) = binary_fast(*b2, &yv, &cv) else {
-                            break 'f false;
-                        };
-                        let Zval::Object(ro) = &self.frames[top].slots[*recv as usize] else {
-                            break 'f false;
-                        };
-                        let Some((cid2, sslot)) = set_ic.get(sk) else {
-                            break 'f false;
-                        };
-                        {
-                            let rb = ro.borrow();
-                            if rb.class_id + 1 != cid2
-                                || rb.lazy.is_some()
-                                || rb.info.is_enum_case
-                                || !match rb.props.get_slot(sslot) {
-                                    Some(Zval::Ref(_)) => self.typed_refs.is_empty(),
-                                    Some(_) => true,
-                                    None => false,
-                                }
-                            {
-                                break 'f false;
-                            }
-                        }
-                        if let Some(old) = write_property_at(
-                            &self.frames[top].slots[*recv as usize],
-                            set_name,
-                            Some(sslot),
-                            value,
-                        )? {
-                            self.gc_note(&old);
-                        }
-                        self.frames[top].ip = ip + 2;
-                        true
-                    };
-                    #[cfg(any(feature = "zval-census", feature = "op-census"))]
-                    let fused = false;
-                    if !fused {
-                        let rv = read_slot(&self.frames[top].slots[*recv as usize]);
-                        self.frames[top].stack.push(rv);
-                        let obj = self.reg_load_slot(top, func, *slot);
-                        self.prop_get_entry(top, obj, name, ic)?;
-                    }
+                    let rv = read_slot(&self.frames[top].slots[*recv as usize]);
+                    self.frames[top].stack.push(rv);
+                    let obj = self.reg_load_slot(top, func, *slot);
+                    self.prop_get_entry(top, obj, name, ic)?;
                 }
                 Op::ThisPropGet { name, ic } => {
                     // Fused `$this->name` (WP-34): the IC hit borrows the
