@@ -4163,6 +4163,32 @@ impl<'m> super::Vm<'m> {
                     // S-107 lotto: LoadVar (parità warning via reg_load_slot)
                     // + PropGet ESATTO — stesso metodo condiviso (IC-hit +
                     // fallback), zero biforcazione.
+                    // S-113 H-P1a: probe IC col ricevitore in PRESTITO (forma
+                    // ThisPropGet, prior art WP-34) — l'hit non clona l'handle
+                    // dello slot; condizioni VERBATIM dall'hit di
+                    // prop_get_entry, OGNI miss cade nel sentiero storico
+                    // invariato (warning Undef, deref del Ref, fallback).
+                    let mut hit: Option<Zval> = None;
+                    if let Zval::Object(o) = &self.frames[top].slots[*slot as usize] {
+                        let sk = crate::bytecode::PropIc::scope_key(self.frames[top].class);
+                        if let Some((cid1, pslot)) = ic.get(sk) {
+                            let b = o.borrow();
+                            if b.class_id + 1 == cid1 && b.lazy.is_none() {
+                                if let Some(v) = b.props.get_slot(pslot) {
+                                    if !matches!(v, Zval::Undef) {
+                                        hit = Some(v.deref_clone());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if let Some(v) = hit {
+                        #[cfg(feature = "zval-census")]
+                        super::zvalcensus::note_prop_val(0, &v);
+                        scn!(PropGet: Push = 1);
+                        self.frames[top].stack.push(v);
+                        continue;
+                    }
                     let obj = self.reg_load_slot(top, func, *slot);
                     self.prop_get_entry(top, obj, name, ic)?;
                 }
@@ -4258,6 +4284,32 @@ impl<'m> super::Vm<'m> {
                     if !fused {
                         let rv = read_slot(&self.frames[top].slots[*recv as usize]);
                         self.frames[top].stack.push(rv);
+                        // S-113 H-P1b: stesso probe in prestito di P1a, DOPO il
+                        // push del recv (ordine di pila identico al sentiero
+                        // storico); ogni miss → reg_load_slot + prop_get_entry
+                        // invariati. Sotto L-A (S-114) questo ramo è il
+                        // solo-miss del peephole fuso.
+                        let mut hit: Option<Zval> = None;
+                        if let Zval::Object(o) = &self.frames[top].slots[*slot as usize] {
+                            let sk = crate::bytecode::PropIc::scope_key(self.frames[top].class);
+                            if let Some((cid1, pslot)) = ic.get(sk) {
+                                let b = o.borrow();
+                                if b.class_id + 1 == cid1 && b.lazy.is_none() {
+                                    if let Some(v) = b.props.get_slot(pslot) {
+                                        if !matches!(v, Zval::Undef) {
+                                            hit = Some(v.deref_clone());
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        if let Some(v) = hit {
+                            #[cfg(feature = "zval-census")]
+                            super::zvalcensus::note_prop_val(0, &v);
+                            scn!(PropGet: Push = 1);
+                            self.frames[top].stack.push(v);
+                            continue;
+                        }
                         let obj = self.reg_load_slot(top, func, *slot);
                         self.prop_get_entry(top, obj, name, ic)?;
                     }
