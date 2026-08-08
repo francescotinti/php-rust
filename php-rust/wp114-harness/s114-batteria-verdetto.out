@@ -4,7 +4,8 @@ hp1-batteria (tree H-P1 8bb395c ricostruito): rc=0 · 1742 passed / 0 failed / 2
 diff inventari per NOME: VUOTO (INVENTARI_IDENTICI)
 ignored (per NOME, entrambi): vm::tests::a_ds9_supersede_scan_cost_bound · rendered_null_array_offset_deprecation
 
-Attribuzione: il 1741 di S-113 NON è attribuibile al codice H-P1 — lo stesso sorgente oggi rende 1742
-con inventario identico per nome. Resta un one-off AMBIENTALE della run S-113, senza log conservato:
-il nome mancante è inconoscibile dai raw. Nessuna lettera-gate da aprire. Metodo sanato: da S-114 ogni
-batteria conserva log + elenco nomi nei raw (batteria-out/).
+Attribuzione (riformulata su az.4 revisione S-114): il 1741 di S-113 NON È ATTRIBUIBILE A H-P1 CON
+L'EVIDENZA DISPONIBILE — lo stesso sorgente oggi rende 1742 con inventario identico per nome (UN rerun
+per tree: l'ipotesi test FLAKY non è esclusa; senza log S-113 il nome mancante è inconoscibile).
+Nessuna lettera-gate APERTA oggi; chiusura definitiva solo dopo N>=3 rerun su 8bb395c (apertura S-115).
+Metodo sanato: da S-114 ogni batteria conserva log + elenco nomi nei raw (batteria-out/).

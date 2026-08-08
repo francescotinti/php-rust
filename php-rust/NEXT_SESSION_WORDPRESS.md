@@ -22,9 +22,9 @@ mediano 5/5** — direzione FIRMATA ben oltre banda, magnitudine NON stabilita
 - **phpr pin s112 = f71abd2a16da7e71** (stash `phpr-s112`; release==pin
   VERIFICATO ×3 in S-114, diff crates/ vuoto) — gate S-112 (batteria 1742/0 ·
   corpus 1415×2 · fixture · micro R=5). Inventario batteria **1744 nomi nei
-  raw S-114** (1742 ok + 2 ignored); delta 1741 S-113 CHIUSO (one-off
-  ambientale: tree H-P1 ricostruito dà 1742, inventario identico). Candidati
-  conservati: `phpr-s114-nulla` 846d0df4 · `phpr-s114-la` 052ea417.
+  raw S-114** (1742 ok + 2 ignored); 1741 S-113 NON attribuibile a H-P1 con
+  l'evidenza disponibile (flaky non escluso: N≥3 su 8bb395c per chiudere).
+  Candidati: `phpr-s114-nulla` 846d0df4 · `phpr-s114-la` 052ea417.
 - **php-server 443ae42f ×2** (stash s109; release relink 06e6d677) · GitHub
   sync S-110 (drift TODO.md aperto).
 
@@ -34,9 +34,12 @@ mediano 5/5** — direzione FIRMATA ben oltre banda, magnitudine NON stabilita
    direzione è firmata, si rimisura il quanto). Da pre-registrare PRIMA della
    run: (a) scheduling osservabile — esclusione per NOME delle run fuori
    famiglia (es. >1,3× la mediana della PROPRIA serie, emessa dallo script) o
-   QoS/affinità se praticabile; (b) soglia max(4; spread_A depurato; banda
-   4,33); (c) guardie con banda S-114; (d) R=7 se resta rumore. Codice pronto:
-   commit 2c18b2e (revert f6fbf6a), candidato phpr-s114-la.
+   QoS/affinità; (b) spread_A oltre soglia invalida la MISURA → rerun
+   automatico, NON la leva (az.5 rev.); (c) soglia max(4; spread_A depurato;
+   banda 4,33), guardie con banda S-114; (d) A/B con `diff` output
+   candidato-vs-pin per micro, gate su rc (az.1 rev.); (e) admission con caso
+   PHP mirato hit E miss del sentiero fuso, output vs pin (az.3 rev.); (f) R=7
+   se resta rumore. Codice pronto: 2c18b2e (revert f6fbf6a), phpr-s114-la.
 2. **Seconda perturbazione leva-nulla** (banda N=2): variante zavorra (taglia/
    posizione) prima di L-B dispatch — pesa su ogni soglia futura.
 3. Se L-A promossa: pin SOLO via `scripts/pin-phpr.sh` §6 PIENO + micro R=5 +
@@ -46,29 +49,28 @@ mediano 5/5** — direzione FIRMATA ben oltre banda, magnitudine NON stabilita
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
 
-L-A emendata (p.1) · banda N=2 (p.2) · bimodalità run (~107/150 pin, 78/102
-candidato — P/E-core da rendere osservabile) · arr 4,2 vs 3,9 (tra-sere) ·
-media voce aperta · rumore tra-sere WP · fame frontend (kpc/sudo — azione
-utente) · §3.16/§3.17 warning · retro-A/B str s107b/s108/s109 · denti rinviati
-(OBS-8; fx20; direct-bind; drop-order; hit/miss) · $z++/$z-- undef non warna ·
-§3.13 · §3.12-i · §3.14 · get_gc · drift TODO.md · (b-min) ConcatNFetchDim ·
-(g) BinaryDst/CmpJmpConst solo se census WP li mostra caldi · dente
-checkout-staging (show --stat dopo ogni checkout parziale).
+L-A emendata (p.1) · banda N=2 (p.2) · batteria N≥3 su 8bb395c · bimodalità
+run (~107/150 pin, 78/102 candidato — P/E-core da rendere osservabile) · arr
+4,2 vs 3,9 (tra-sere) · media voce aperta · rumore tra-sere WP · fame frontend
+(kpc/sudo — azione utente) · §3.16/§3.17 warning · retro-A/B str
+s107b/s108/s109 · denti rinviati (OBS-8; fx20; direct-bind; drop-order;
+hit/miss; checkout-staging) · $z++/$z-- undef non warna · §3.13 · §3.12-i ·
+§3.14 · get_gc · drift TODO.md · (b-min) ConcatNFetchDim · (g) BinaryDst/
+CmpJmpConst solo se census WP li mostra caldi.
 
 ## NON riproporre (i veti restano; dettaglio nei concili archiviati)
 
 pin/stash senza collaudo-nell'atto · contenitori sul call path · differenze
-tra A/B distinti come cifra · componenti prezzate nei criteri · magnitudine
-ripartita senza A/B proprio · finestre estese senza criterio+dente ·
-simple_call allargato senza dente+fx21 · fixture su memory_get_usage (stub) ·
-«icache» NON-premessa · pre-filtro/hot-cluster che tassi i freddi · finestre
-fuse oltre un helper sospendibile · guardie non-bersaglio BILATERALI ·
-denominatori a memoria · output di run nel repo · rc di gate da pipe (5 morsi)
-· tee/log prima del mkdir (6° morso S-114) · admission sul dump intero ·
-xctrace senza guardie disco · path del volume esterno nel figlio tracciato ·
-leve lifecycle mono-clone su prop · run pesanti come task (detached DA SUBITO)
-· **edit ai sorgenti con build/batteria in volo** · **promozione su segni
-concordi sotto banda-layout (la concordanza non firma)**.
+tra A/B distinti come cifra · componenti prezzate · magnitudine ripartita
+senza A/B proprio · finestre estese senza criterio+dente · simple_call senza
+dente+fx21 · fixture su memory_get_usage · «icache» NON-premessa · pre-filtro
+che tassi i freddi · finestre fuse oltre helper sospendibile · guardie
+non-bersaglio BILATERALI · denominatori a memoria · output di run nel repo ·
+rc di gate da pipe (5 morsi) · tee/log pre-mkdir (6° morso S-114) · admission
+sul dump intero · xctrace senza guardie disco · path volume esterno nel figlio
+tracciato · leve lifecycle mono-clone su prop · run pesanti come task
+(detached DA SUBITO) · **edit ai sorgenti con build/batteria in volo** ·
+**promozione su segni concordi sotto banda-layout (la concordanza non firma)**.
 
 ---
 **Riscritto**: 2026-08-08 (chiusura S-114). Storia: `sessions/` ·

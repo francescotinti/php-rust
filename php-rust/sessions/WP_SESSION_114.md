@@ -1,4 +1,4 @@
-# WP_SESSION_114 — banda-layout MISURATA (6,67) · L-A firmata (+30,33 5/5) NON promossa · delta batteria CHIUSO
+# WP_SESSION_114 — banda-layout MISURATA (6,67) · L-A firmata (+30,33 5/5) NON promossa · delta batteria non-H-P1
 
 **In una frase**: misurata l'«impaginazione» del binario che sposta i
 cronometri (fino a 6,7 ns: spiega il morso di ieri su calls); la fusione sulle
@@ -23,10 +23,10 @@ CON NOMI**, dump 12/12, run_loop +3.176 B; full R=5 a macchina: **prop +30,33
 P/E-core NON attribuita) → soglia 47 FAIL; **guardia calls −6,50 < −5,50
 SFONDATA** (famiglia layout) → **NON PROMOSSA: «direzione firmata, magnitudine
 non stabilita»**; revert al byte VERIFICATO ×2 (candidati conservati
-phpr-s114-nulla 846d0df4, phpr-s114-la 052ea417) → 3·DELTA BATTERIA CHIUSO:
-tree H-P1 ricostruito (8bb395c) → 1742/0/2, inventario 1744 nomi IDENTICO;
-1741 S-113 = one-off ambientale senza log; nessuna lettera-gate; i log ora si
-conservano. Incidenti processo: 3 (batteria contaminata da edit concorrente,
+phpr-s114-nulla 846d0df4, phpr-s114-la 052ea417) → 3·DELTA BATTERIA: tree
+H-P1 ricostruito (8bb395c) → 1742/0/2, inventario 1744 nomi IDENTICO; 1741
+S-113 NON attribuibile a H-P1 con l'evidenza disponibile (az.4 revisione:
+flaky non escluso, N≥3 in apertura); i log ora si conservano. Incidenti processo: 3 (batteria contaminata da edit concorrente,
 uccisa e rifatta · redirect pre-mkdir · checkout-staging di run.rs: corretto
 index-only 3cf7c39).
 

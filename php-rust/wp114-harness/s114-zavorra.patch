@@ -1,0 +1,82 @@
+diff --git a/php-rust/crates/php-runtime/src/vm/run.rs b/php-rust/crates/php-runtime/src/vm/run.rs
+index 4306bfd..ed43cf4 100644
+--- a/php-rust/crates/php-runtime/src/vm/run.rs
++++ b/php-rust/crates/php-runtime/src/vm/run.rs
+@@ -2505,6 +2505,77 @@ impl<'m> super::Vm<'m> {
+                     self.invoke_named_fallback(&name, &fallback, args)?;
+                 }
+                 Op::Throw => {
++                    // S-114 leva-nulla: zavorra di testo inerte per misurare la banda-layout.
++                    // Ramo MAI preso nelle misure (env mai settata); da rimuovere a misura chiusa.
++                    if std::env::var_os("PHPR_S114_BALLAST").is_some() {
++                        use std::hint::black_box as bb;
++                        let mut a = bb(0u64);
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A0001)^0x0F1E2D3C4B5A0001;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A0002)^0x0F1E2D3C4B5A0002;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A0003)^0x0F1E2D3C4B5A0003;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A0004)^0x0F1E2D3C4B5A0004;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A0005)^0x0F1E2D3C4B5A0005;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A0006)^0x0F1E2D3C4B5A0006;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A0007)^0x0F1E2D3C4B5A0007;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A0008)^0x0F1E2D3C4B5A0008;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A0009)^0x0F1E2D3C4B5A0009;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A000A)^0x0F1E2D3C4B5A000A;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A000B)^0x0F1E2D3C4B5A000B;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A000C)^0x0F1E2D3C4B5A000C;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A000D)^0x0F1E2D3C4B5A000D;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A000E)^0x0F1E2D3C4B5A000E;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A000F)^0x0F1E2D3C4B5A000F;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A0010)^0x0F1E2D3C4B5A0010;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A0011)^0x0F1E2D3C4B5A0011;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A0012)^0x0F1E2D3C4B5A0012;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A0013)^0x0F1E2D3C4B5A0013;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A0014)^0x0F1E2D3C4B5A0014;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A0015)^0x0F1E2D3C4B5A0015;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A0016)^0x0F1E2D3C4B5A0016;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A0017)^0x0F1E2D3C4B5A0017;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A0018)^0x0F1E2D3C4B5A0018;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A0019)^0x0F1E2D3C4B5A0019;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A001A)^0x0F1E2D3C4B5A001A;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A001B)^0x0F1E2D3C4B5A001B;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A001C)^0x0F1E2D3C4B5A001C;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A001D)^0x0F1E2D3C4B5A001D;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A001E)^0x0F1E2D3C4B5A001E;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A001F)^0x0F1E2D3C4B5A001F;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A0020)^0x0F1E2D3C4B5A0020;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A0021)^0x0F1E2D3C4B5A0021;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A0022)^0x0F1E2D3C4B5A0022;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A0023)^0x0F1E2D3C4B5A0023;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A0024)^0x0F1E2D3C4B5A0024;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A0025)^0x0F1E2D3C4B5A0025;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A0026)^0x0F1E2D3C4B5A0026;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A0027)^0x0F1E2D3C4B5A0027;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A0028)^0x0F1E2D3C4B5A0028;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A0029)^0x0F1E2D3C4B5A0029;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A002A)^0x0F1E2D3C4B5A002A;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A002B)^0x0F1E2D3C4B5A002B;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A002C)^0x0F1E2D3C4B5A002C;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A002D)^0x0F1E2D3C4B5A002D;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A002E)^0x0F1E2D3C4B5A002E;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A002F)^0x0F1E2D3C4B5A002F;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A0030)^0x0F1E2D3C4B5A0030;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A0031)^0x0F1E2D3C4B5A0031;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A0032)^0x0F1E2D3C4B5A0032;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A0033)^0x0F1E2D3C4B5A0033;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A0034)^0x0F1E2D3C4B5A0034;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A0035)^0x0F1E2D3C4B5A0035;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A0036)^0x0F1E2D3C4B5A0036;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A0037)^0x0F1E2D3C4B5A0037;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A0038)^0x0F1E2D3C4B5A0038;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A0039)^0x0F1E2D3C4B5A0039;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A003A)^0x0F1E2D3C4B5A003A;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A003B)^0x0F1E2D3C4B5A003B;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A003C)^0x0F1E2D3C4B5A003C;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A003D)^0x0F1E2D3C4B5A003D;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A003E)^0x0F1E2D3C4B5A003E;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A003F)^0x0F1E2D3C4B5A003F;
++                        a=a.rotate_left(13).wrapping_add(0x9E3779B97F4A0040)^0x0F1E2D3C4B5A0040;
++                        bb(a);
++                    }
+                     let v = self.frames[top].stack.pop().expect("throw operand");
+                     return Err(PhpError::Thrown(v.deref_clone()));
+                 }
