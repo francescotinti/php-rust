@@ -34,9 +34,6 @@ Incidente processo: 1 (BUILD_RC dopo pipe, dichiarato, MAI usato come gate).
 Candidati: s114-la 052ea417 · s114-nulla 846d0df4 · s115-nulla2 d9093a6b.
 
 ## ⭐ Lezioni (max 3)
-- ⭐⭐ **Un giudice senza banda misurata non può fare da gate a soglia fissa**:
-  la leva nulla sfonda il suo limite — prima si misura la banda, poi si gata.
-- ⭐⭐ **Le famiglie pre-registrate (1,3×min, esclusione per NOME) recuperano la
-  misura senza toccare la leva**: spread_A 47→2 sulla stessa coppia di binari.
-- ⭐ **Una banda a N=1 mente per categoria** (re 0→10): il valore d'uso è il
-  max sui campioni, mai l'ultimo.
+- ⭐⭐ **Un giudice senza banda misurata non può fare da gate a soglia fissa**: la leva nulla sfonda il suo limite — prima la banda, poi il gate.
+- ⭐⭐ **Le famiglie pre-registrate (1,3×min, esclusione per NOME) recuperano la misura senza toccare la leva**: spread_A 47→2 sugli stessi binari.
+- ⭐ **Una banda a N=1 mente per categoria** (re 0→10): il valore d'uso è il max sui campioni, mai l'ultimo.

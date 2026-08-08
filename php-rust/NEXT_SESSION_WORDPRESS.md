@@ -69,8 +69,7 @@ edit ai sorgenti con build/batteria in volo · promozione su segni concordi
 sotto banda · **gate a soglia fissa su giudice SENZA banda misurata**.
 
 ---
-**Riscritto**: 2026-08-08 (chiusura S-115). Storia: `sessions/` ·
-`gaps/GAP_TREND.md` · revisioni in `wp1*-harness/`.
+**Riscritto**: 2026-08-08 (chiusura S-115). Storia: `sessions/` · `gaps/GAP_TREND.md` · revisioni in `wp1*-harness/`.
 
 Pre-flight S-116: pin phpr **f71abd2a** (release AL pin, verificato fine
 S-115) · server 443ae42f (stash s109; relink 06e6d677) · MySQL wp8 con elenco
