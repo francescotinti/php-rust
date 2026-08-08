@@ -18,11 +18,13 @@ held-out=max(pin,cand), tie a 2 decimali, rc in FILE, esiti appesi dagli
 script): admission rc=0 · smoke rc=0 (+28,33/+29,33) · full rc=1: **prop
 +29,33 5/5, spread_A dep 4,00, ZERO esclusioni → PASS**, MA **guardia calls
 −6,50 < −5,50 SFONDATA ⇒ NON PROMOSSA** (zero deroghe); held-out non dovuto.
-QUINTO campione famiglia calls: L-A −6,5/−7,0/−6,5 TUTTI oltre le nulle
-−5,5/−5,5 ⇒ la tassa calls è FATTO sistematico, non banda.
+calls: L-A −6,5/−7,0/−6,5 oltre le nulle −5,5/−5,5 — [rev. S-116] repliche di
+UN solo layout (N layout=1, p≈0,10): «questa build paga 6,5-7,0 su calls»,
+NON ancora tassa della leva; separazione al rebuild A′.
 2·Batteria N=3 su 8bb395c (worktree+target DEDICATI, pin mai toccato, rc per
 run in FILE): 3×1742/0/2, inventari per NOME identici tra run e vs S-114 —
-il 1741 di S-113 non riproducibile in 4 rerun ⇒ lettera CHIUSA.
+il 1741 di S-113 non riproducibile in 4 rerun ⇒ flakiness dei TEST chiusa
+su una build ([rev.] la BUILD resta N≈2: run fresca in apertura).
 3·DECISIONE UTENTE (cambio rotta: «basta leve una-a-una, altre strade») ⇒
 CONCILIO A 9 (12 agenti, bozze indipendenti + 3 team): 9/9 CONCORDO CON
 EMENDAMENTI; **BOLT ESPUNTO (non esiste su Mach-O — colto da TUTTE le sedie)**;
@@ -35,4 +37,4 @@ rc-op. `wp117-harness/COUNCIL_WP117_REVIEWS.md` VINCOLANTE, dissensi registrati.
 ## ⭐ Lezioni (max 3)
 - ⭐⭐ **L'aritmetica del bersaglio smaschera le rotte**: prop chiede −65 ns/iter, la miglior leva mai misurata ne dà 29 — nessuna somma di peephole chiude senza il ciclo di vita Zval.
 - ⭐⭐ **Nove refutazioni indipendenti colgono lo strumento inesistente** (BOLT su Mach-O) che una raccomandazione singola aveva dato per buono: le bozze cieche valgono il loro costo.
-- ⭐ **Un segnale ripetuto oltre banda nulla si promuove da rumore a fatto** (tassa calls, 5 campioni) e cambia l'istruttoria della leva.
+- ⭐ **Rimisurare lo stesso binario replica il LAYOUT, non la leva** (rev. S-116): campioni indipendenti = layout diversi; la grana del cronometro (0,5 ns su calls) va tenuta ≪ margine di guardia.
