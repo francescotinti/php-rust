@@ -1,0 +1,24 @@
+# S-115 verdetto SECONDA leva-nulla (criterio s115-criterio-nulla2.md; raw: ab-out/nulla2-full.out, admission-out/ — gitignored)
+A=f71abd2a (stash phpr-s112 = pin) · B=d9093a6b (phpr-s115-nulla2 CONSERVATO; zavorra 32 round in Op::Clone, patch VERSIONATA s115-zavorra2.patch PRIMA del revert)
+admission rc=0: dump ON {main} x6 IDENTICI al pin · OFF interi x6 al byte · run_loop 291.316->292.992 B (+1.676), bl 5864->5865 (+1), br 24=24 · parita' output 6/6 IDENTICA · guardia PHPR_S115_BALLAST2 mai settata nelle misure
+
+BANDA2 A MACCHINA (famiglie 1,3x min; R=5 ABAB + eventuali extra):
+arith: fam=5 D_mediano=-0.20 banda2=0.20 (S114=0.40, max=0.40)
+prop:  fam=5 D_mediano=-3.00 banda2=3.00 (S114=4.33, max=4.33)
+calls: fam=5 D_mediano=-5.50 banda2=5.50 (S114=5.50, max=5.50)
+str:   fam=5 D_mediano=-2.50 banda2=2.50 (S114=5.00, max=5.00)
+arr:   fam=5 D_mediano=+3.33 banda2=3.33 (S114=6.67, max=6.67)
+re:    fam=5 D_mediano=-10.00 banda2=10.00 (S114=0.00, max=10.00)
+BANDA2_GLOBALE=10.00 (S114 6.67; instabilita' se >13.34: NO — banda dichiarata STABILE, da S-116 banda(cat)=max(S114,S115))
+
+HELD-OUT banda-layout (p.4-bis, PRIMO campione, R=5 net per-binario):
+poly:   Dnet=-0.20s banda_heldout=0.20s (spread_A 0.15, spread_B 0.03)
+err:    Dnet=-0.01s banda_heldout=0.01s
+wploop: Dnet=-0.06s banda_heldout=0.06s
+
+Esiti a verbale:
+1. La banda micro e' ora N=2 MISURATA. calls: -5,50 IDENTICO a S-114 (quarto campione famiglia layout su calls: nulla1 -5,50 · L-A s114 -6,50 · L-A s115 -7,00 · nulla2 -5,50). re: 10,00 dove S-114 dava 0,00 — una banda a N=1 puo' mentire per categoria; il max N=2 e' il valore d'uso.
+2. arr +3,33 con segni 4/5 POSITIVI da una leva NULLA: seconda conferma che la concordanza di segno senza margine sopra banda non firma nulla (lezione S-114).
+3. **HELD-OUT: il candidato NULLO fa poly 9,80s e SFONDEREBBE il limite 9,71s del gate p.7 di L-A** (baseline 9,59 + max(2xspread; 0,12)) con ZERO semantica. La guardia held-out senza allowance layout NON distingue L-A da una leva nulla: il blocco L-A su poly (+0,26s vs pin) e' ATTRIBUITO alla famiglia layout con campione misurato (0,20s) — non e' piu' solo un'ipotesi nominata.
+4. Conseguenza pre-registrata (criterio nulla-2 p.4-bis): il rerun held-out di L-A si fa in S-116 RIESEGUENDO il criterio L-A emendato PER INTERO, con soglia held-out = baseline + max(2xspread; 0,12; banda_heldout misurata per giudice). Niente rerun in questa sessione sotto questo criterio.
+5. Revert AL BYTE: release ricostruita dopo git restore = f71abd2a (verificato, diff crates/ vuoto); candidato conservato phpr-s115-nulla2 d9093a6b.
