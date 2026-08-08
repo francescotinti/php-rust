@@ -1,8 +1,7 @@
 # NEXT_SESSION — phpr ≤ 3× l'oracle (processo LEAN v1: la lista unica è REGOLE.md)
 ⏱ **FONDAMENTALI**: rif WP **full ON 1,867 / OFF 1,869** (S-110, banda [1,81;1,88])
-· media 2,673/2,612 (voce aperta) · ultima leva di codice SPEDITA **S-112 (H-A2:
-arith −41%)** · sessioni-senza-Δ-rapporti = 0 · incidenti «mai collaudato»: 1
-(de67cb64, S-106).
+· media 2,673/2,612 (voce aperta) · ultima leva SPEDITA **S-112 (H-A2: arith
+−41%)** · sessioni-senza-Δ-rapporti = 0 · incidenti «mai collaudato»: 1 (S-106).
 
 ## Scoreboard (pin s112 f71abd2a, micro R=5 di S-112)
 
