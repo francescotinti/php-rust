@@ -10,12 +10,25 @@ STASH="/Volumes/Extreme Pro/Claude/phpr-old-target/release"
 TAG="${1:?uso: pin-server.sh <tag, es. s107>}"
 
 cd "$REPO"
+# RICETTA A′ (S-118): profilo lto=fat+cgu=1 dal Cargo.toml di root +
+# SOURCE_DATE_EPOCH=0 CARGO_INCREMENTAL=0 (determinismo provato S-117).
 PHPR_PRE=$(shasum -a 256 "$PHPR" | cut -c1-16)
-cargo build --release -p php-server --features axum-server
+SOURCE_DATE_EPOCH=0 CARGO_INCREMENTAL=0 cargo build --release -p php-server --features axum-server
 H=$(shasum -a 256 "$BIN" | cut -c1-16)
 PHPR_POST=$(shasum -a 256 "$PHPR" | cut -c1-16)
 NOTE_PHPR="pin phpr INVARIATO ($PHPR_POST)"
-[ "$PHPR_PRE" = "$PHPR_POST" ] || NOTE_PHPR="ATTENZIONE: build ha toccato phpr $PHPR_PRE->$PHPR_POST"
+if [ "$PHPR_PRE" != "$PHPR_POST" ]; then
+  # churn del release/: si sana con build ricetta; il determinismo A′ esige
+  # il ritorno AL BYTE all'hash pre-build, pena STOP (criterio R3 gate 1).
+  SOURCE_DATE_EPOCH=0 CARGO_INCREMENTAL=0 cargo build --release
+  PHPR_POST=$(shasum -a 256 "$PHPR" | cut -c1-16)
+  if [ "$PHPR_PRE" = "$PHPR_POST" ]; then
+    NOTE_PHPR="churn phpr SANATO con build ricetta (torna $PHPR_POST al byte)"
+  else
+    echo "STOP: phpr churnato $PHPR_PRE->$PHPR_POST e la build ricetta NON riproduce H1 => niente pin."
+    exit 1
+  fi
+fi
 
 # ---- SMOKE: o serve davvero via --axum, o non esiste alcun pin ----
 D=$(mktemp -d)
