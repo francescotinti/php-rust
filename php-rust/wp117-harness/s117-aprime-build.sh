@@ -6,6 +6,11 @@
 # verdetto determinismo appeso DALLO script. Le build sono sequenziali.
 set -u
 export PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin:"$HOME/.cargo/bin"
+# Emendamento ricetta S-117a (DICHIARATO nel criterio §2): la prima prova ×2 è
+# fallita per 4 byte in __TEXT,__cstring — il __TIME__ di mimalloc (cc-crate);
+# __text e ogni altra sezione erano IDENTICHE. clang onora SOURCE_DATE_EPOCH:
+# congelarlo rende deterministico l'hash dell'INTERO file, criterio invariato.
+export SOURCE_DATE_EPOCH=0
 H="$(cd -P "$(dirname -- "$0")" && pwd -P)"
 SRC="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust"
 TGT="/Volumes/Extreme Pro/Claude/phpr-s117-aprime-target"
