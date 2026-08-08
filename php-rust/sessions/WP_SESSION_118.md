@@ -14,26 +14,22 @@ s117): **full ON 1,913 / OFF 1,955 · media 2,506/2,580 · peak ON 1839,2 MiB**
 spedite: 1 (treno-1 = H-P1a/b)**. 2026-08-08 · Fable 5 · 9cf1fcd→f7f7da7.
 
 ## Esiti secchi
-1·**R3 saldato** (criterio PRE 9cf1fcd, verdetto s118-r3-verdetto.out): gate1
-repin server A′ 20411ba0 (phpr INVARIATO, zero churn) · gate2 grado ×2 modi
-rc=0 voids=0 (option 413 + restapi 3508 IDENTICI per NOME) · gate3 pair109
-stessa sera ×2 modi (media 0 fail ×4 gambe; full diff == SOLO wp_is_stream) ·
-gate4 tripla census **obj/req 0,000 spread 0,000** (KiB/req 0,0000, uc-steady
-3 leg) ⇒ «parità CLI» ESTESA a «parità WP per-request»; verdetto WP di A′ CHIUSO.
-2·az.rev. S-117: **corpus-gate CANONICO** (`scripts/corpus-gate.sh`, nomi E
-CONTENUTO E off↔on; golden 1412 digest/modo dai raw del pin) collaudato con
-replay rc=0 E mutante rc=1 col test nominato; prima esecuzione LIVE verde in
-promozione · A/B eseguito nel TARGET CANONICO (niente cross-target).
-3·**treno-1** (manifest 5 vagoni per NOME 3148cae PRIMA; criterio PRE 9013b2b):
-H-P1 composto sopra L-A (patch 52 righe additive, conflitto PropGetSlotRecv
-risolto: probe fuso invariato, ramo !fused in prestito); admission 6/6 output +
-6/6 dump INTERI byte-id; A/B R=5: **prop +5,33 ≥ 4,00, 5/5; guardie TUTTE
-tengono (calls +0,50)**; held-out 3/3 · §6 pieno: build riproduce il candidato
-al byte ×2 (pre e post batteria 1742/0/2 inventario IDENTICO), pin via script,
-corpus canonico rc=0, fixture 6/6. V3-V5 (IncDec/Isset/MCall) istruiti per S-119.
-4·C-lite: disegno committato (5a834f7); esecuzione rinviata a S-119 (dichiarato).
-5·⚠️ release/php-server post-promozione RIPRISTINATO allo stash gradato
-20411ba0: la leva NON è ancora nel server (repin+grado = apertura S-119).
+1·**R3 saldato** (criterio PRE 9cf1fcd → s118-r3-verdetto.out): repin server A′
+20411ba0 (phpr zero churn) · grado ×2 modi rc=0 voids=0 (option 413 + restapi
+3508 per NOME) · pair109 stessa sera ×2 modi (media 0 fail ×4; full == SOLO
+wp_is_stream) · tripla census **obj/req 0,000 spread 0,000** ⇒ «parità CLI»
+ESTESA a «parità WP per-request»; verdetto WP di A′ CHIUSO.
+2·az.rev. S-117: **corpus-gate CANONICO** (nomi E CONTENUTO E off↔on, golden
+1412 digest/modo) collaudato replay rc=0 + mutante rc=1 col test nominato;
+prima esecuzione LIVE verde in promozione · A/B nel TARGET CANONICO.
+3·**treno-1** (manifest 3148cae e criterio 9013b2b PRIMA): H-P1 composto sopra
+L-A (52 righe additive); admission 6/6 output + 6/6 dump INTERI byte-id; A/B
+R=5 **prop +5,33 ≥ 4,00, 5/5; guardie TUTTE tengono (calls +0,50)**; held-out
+3/3 · §6 pieno: candidato riprodotto al byte ×2 (batteria 1742/0/2 inventario
+IDENTICO), pin via script, corpus canonico rc=0, fixture 6/6. V3-V5 → S-119.
+4·C-lite: disegno committato; esecuzione S-119 (dichiarato). 5·⚠️ release
+server RIPRISTINATO allo stash gradato 20411ba0 (la leva NON è nel server;
+repin+grado = apertura S-119).
 
 ## ⭐ Lezioni (max 3)
 - ⭐⭐ **Una leva bocciata è un candidato congelato, non un morto**: H-P1 (+3,33
