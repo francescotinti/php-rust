@@ -33,17 +33,17 @@ compone o si cambia famiglia. Il peggiore resta **prop 7,6**.
    **banda-layout si MISURA** (oggi solo punti raccontati: +1,50 S-112 e −5,50
    S-113 su calls non toccato) e ricalibra le soglie di guardia.
 2. **LEVA PERF** (ritmo: una per sessione, A/B eseguito qualunque verdetto).
-   Candidati con istruttoria PRIMA del criterio: **(h) prop composta** —
-   bundle lifecycle multi-sito (2 get H-P1 + doppio borrow del set + recv
-   push) con attesa > banda misurata al punto 1; o **(i) op-count su prop**
-   (fusione LEGALE entro il primo helper sospendibile, dai dump). Vincoli:
-   criterio PRE, soglia max(4; rumore; banda MISURATA), guardie solo-regressione,
-   **soglie/mediane A/B A MACCHINA** (az.2 rev. S-113), held-out, §6 pieno.
+   Candidata prima: **(h)=L-A «trigramma prop in prestito»** dal differenziale
+   Zend↔phpr (**doc/DIFFERENZIALE_ZEND_PHPR.md**, §5+§9, righe C verificate):
+   probe bipartita get-IC E set-IC di `$o->x=$o->y+C`, hit in-place senza
+   clone/round-trip, miss → sequenza storica VERBATIM (prior art W9a);
+   composizione dei +3,3 H-P1 + set-side, attesa progettata > 4+banda.
+   Vincoli: criterio PRE, soglia max(4; rumore; banda MISURATA), guardie
+   solo-regressione, **soglie/mediane A MACCHINA**, held-out, §6 pieno.
 3. **Delta batteria 1741 vs 1742**: attribuire per NOME (diff inventario
    #[test] come az.3 S-108) — chiude o apre una lettera-gate.
-4. Se resta finestra: rumore tra-sere WP (az.2 S-110) · arr 4,2 vs 3,9 rerun.
-5. Backlog PRODOTTO (Codex): SOLO su ordine esplicito dell'utente.
-6. Chiusura lean: rotazione + revisore singolo (lente: SEMANTICA, a rotazione).
+4. Se resta finestra: rumore tra-sere WP (az.2 S-110) · arr rerun. Backlog
+   Codex SOLO su ordine esplicito. Chiusura lean: revisore (lente SEMANTICA).
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
 
