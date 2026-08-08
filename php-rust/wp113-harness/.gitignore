@@ -8,3 +8,5 @@ ab-out/
 corpus-gate/
 heldout-out/
 admission-out/
+watcher.log
+nohup.log
