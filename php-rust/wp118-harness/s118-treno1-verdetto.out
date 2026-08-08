@@ -1,0 +1,29 @@
+candidato B = 15dfb6b3da215b56 (target canonico, ricetta A′; A = pin 1656580e4e590e20)
+admission: 6/6 parità output + 6/6 dump INTERO byte-id (rc=0 da treno-out/admission.rc)
+candidato CONSERVATO: phpr-s118-treno1 (15dfb6b3da215b56)
+ripristino: release/phpr == pin 1656580e4e590e20 AL BYTE; A/B pronte su stash A=phpr-s117 B=phpr-s118-treno1
+smoke R=2 (rc=0): D per coppia = +5.67 +7.00
+
+VERDETTO SOGLIE A MACCHINA (s118-ab-treno1.sh full, rc=0 da treno-out/full-rc):
+arith: fam=5 D_med=-0.40 segni +2/5 spread_A_dep=0.80 quanto=0.20 soglia_guardia=-1.60 -> tiene (tie: = -> tiene)
+prop: fam=5 D_med=+5.33 segni +5/5 spread_A_dep=1.33 soglia_promozione=4.00 -> PASS (tie: >= = PASS)
+calls: fam=5 D_med=+0.50 segni +3/5 spread_A_dep=1.00 quanto=0.50 soglia_guardia=-2.00 -> tiene (tie: = -> tiene)
+str: fam=5 D_med=+0.00 segni +1/5 spread_A_dep=10.00 quanto=2.50 soglia_guardia=-20.00 -> tiene (tie: = -> tiene)
+arr: fam=5 D_med=+1.67 segni +4/5 spread_A_dep=0.00 quanto=1.67 soglia_guardia=-6.67 -> tiene (tie: = -> tiene)
+re: fam=5 D_med=+5.00 segni +3/5 spread_A_dep=15.00 quanto=5.00 soglia_guardia=-30.00 -> tiene (tie: = -> tiene)
+VERDETTO_MICRO=PROMUOVIBILE (resta held-out)
+
+HELD-OUT (s118-heldout-treno1.sh, rc=0 da treno-out/heldout.rc; baseline+banda A′ N=2; spread=max(pin,cand) pubblicati):
+poly: net_A=9.50s net_cand=9.45s spread_pin=0.06s spread_cand=0.07s spread=max=0.07s baseline_Aprime=9.45s banda_ho=0.01s limite=9.59s -> ok
+err: net_A=2.96s net_cand=2.94s spread_pin=0.04s spread_cand=0.05s spread=max=0.05s baseline_Aprime=2.97s banda_ho=0.06s limite=3.09s -> ok
+wploop: net_A=6.45s net_cand=6.39s spread_pin=0.06s spread_cand=0.04s spread=max=0.06s baseline_Aprime=6.41s banda_ho=0.08s limite=6.53s -> ok
+promozione: leva committata @ f7f7da7
+promozione: build ricetta riproduce il candidato 15dfb6b3da215b56 (A/B e held-out valgono per QUESTO binario)
+promozione batteria: rc=0 (da promo-out/batteria.rc) · 1742/0/2 · inventario vs pin s117: IDENTICO
+promozione: churn batteria neutralizzato (build ricetta → 15dfb6b3da215b56 al byte)
+promozione: PIN phpr s118 = 15dfb6b3da215b56 (smoke parità 2 modi OK, stash phpr-s118). I gate del protocollo (batteria/corpus/fixture/micro) restano dovuti.
+promozione corpus-gate: rc=0 — nomi==congelato, CONTENUTO==golden, off↔on zero (prima esecuzione live del gate canonico)
+promozione fixture chain: rc=0 (6/6 gate verdi)
+promozione micro pin s118: rapporto_arith=5.5  [derivata: companion 2.36/0.43] rapporto_prop=5.5  [derivata: companion 2.32/0.42] rapporto_calls=4.8  [derivata: companion 2.13/0.44] rapporto_str=5.3  [derivata: companion 0.84/0.16] rapporto_arr=3.8  [derivata: companion 1.10/0.29] rapporto_re=3.3  [derivata: companion 1.22/0.37] 
+promozione held-out pin s118: rapporto_poly=6.3  [derivata: companion 9.47/1.51] rapporto_err=2.5  [derivata: companion 2.95/1.17] rapporto_wploop=5.4  [derivata: companion 6.40/1.19] 
+PROMOZIONE COMPLETA rc=0 (da promo-out/rc): pin s118 = 15dfb6b3da215b56 @ f7f7da7
