@@ -1,0 +1,9 @@
+s113-pair-verdetto: coppia WP bimodale sul pin f71abd2a (criterio 0df621d PRE-registrato)
+gate_principale=full ON 1,871 DENTRO banda [1,81;1,88] -> H-A2 (+3.372 B run_loop) NON paga icache sul carico reale; debito coppia SALDATO, LEVA S-113 SBLOCCATA
+full_off=1,891 (direzione: rientra nella famiglia storica 1,885-1,911; S-110 era 1,869 — il divario bimodale full riappare, entro famiglia)
+media=sesta lettura voce aperta: on 2,632 (giu da 2,673) / off 2,603 (giu da 2,612, sotto il rif 2,64): trend in discesa su entrambe le gambe, la voce resta aperta solo-direzione
+peak=full phpr ON 1842,27 MiB (minimo della famiglia: sotto 1843,53 S-110) / OFF 1910,14 MiB
+validita=gate_void=0 su TUTTE e quattro le gambe; failnames estratti==dichiarati; media 0 nomi x2; full parita per NOME con la SOLA eccezione nominata wp_is_stream x2 (87 oracle / 88 phpr, identica a S-110)
+tempi=ON 10:22:56-10:51:21, OFF 10:51:32-11:20:11 (watcher sequenziale); raw in pair-out-*/ (fuori repo)
+attribuzione=dentro-banda: nessuna cifra promossa a nuovo riferimento; il riferimento resta full ON 1,867/OFF 1,869 (S-110) con la lettura S-113 1,871/1,891 registrata nella famiglia
+incidente_processo=primo lancio della gamba ON partito come task di sessione (non detached) e fermato: la guardia uploads ha morso fail-closed (backup pendente -> ABORT, rc=4); restore verificato da manifest, rilancio pulito. Contato come incidente di processo (run pesante non-detached), non di misura: nessun dato della run abortita e' entrato nei rapporti.
