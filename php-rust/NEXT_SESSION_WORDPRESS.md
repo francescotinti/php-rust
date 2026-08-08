@@ -11,32 +11,33 @@ letto dopo pipe — dichiarato, mai usato come gate).
 6,4·2,5·5,6. 🔬 S-115 ha STABILITO: (a) **L-A magnitudine +26,33 ns/iter su
 prop, 5/5, spread_A depurato 2,00** (famiglie 1,3×min: il metro inquinato S-114
 RECUPERATO senza toccare la leva) — NON promossa SOLO per held-out poly
-9,86>9,71; (b) blocco = LAYOUT PROVATO: la nulla-2 fa poly 9,80 (banda held-out
-0,20s) e sfonderebbe lo stesso gate con ZERO semantica; (c) **banda micro N=2:
+9,86>9,71; (b) gate held-out REFUTATO come DIAGNOSTICO: la nulla-2 fa poly 9,80
+(0,20s, N=1) e sfonderebbe lo stesso gate a ZERO semantica; (c) **banda micro N=2:
 max = arith 0,40 · prop 4,33 · calls 5,50 · str 5,00 · arr 6,67 · re 10,00**
 (re 0→10: banda N=1 mente; globale 10,00 stabile <13,34). Il peggiore resta
 **prop 7,6**; L-A promossa lo abbatterebbe (~26 su ~107 lato pin).
 
 ## Stato gate
 
-- **phpr pin s112 = f71abd2a16da7e71** (stash `phpr-s112`; release AL pin
-  verificato a fine S-115 con cargo_rc dal comando, diff crates/ vuoto) — gate
-  S-112 (batteria 1742/0 · corpus 1415×2 · fixture · micro R=5). Candidati
-  CONSERVATI: `phpr-s114-la` 052ea417 (codice 2c18b2e) · `phpr-s114-nulla`
-  846d0df4 · `phpr-s115-nulla2` d9093a6b (patch s115-zavorra2.patch).
+- **phpr pin s112 = f71abd2a16da7e71** (stash `phpr-s112`; release AL pin,
+  verificato fine S-115, diff crates/ vuoto) — gate S-112 (batteria 1742/0 ·
+  corpus 1415×2 · fixture · micro R=5). Candidati CONSERVATI: `phpr-s114-la`
+  052ea417 (codice 2c18b2e) · `phpr-s114-nulla` 846d0df4 · `phpr-s115-nulla2`
+  d9093a6b (patch s115-zavorra2.patch).
 - **php-server 443ae42f ×2** (stash s109; relink 06e6d677) · GitHub sync S-110
-  (drift TODO.md aperto). Batteria 1741 S-113: flaky non escluso (N≥3 su
-  8bb395c resta in aperture).
+  (drift TODO.md aperto). Batteria 1741 S-113: flaky non escluso.
 
 ## §S-116 — ordine provvisorio
 
 1. **LEVA PERF = PROMOZIONE L-A**: rieseguire il criterio L-A PER INTERO
-   (REGOLE §3: la guardia si emenda solo rieseguendo il criterio emendato)
-   con le SOLE modifiche: (a) banda micro = max N=2 (riga (c) sopra, incl. re
-   10,00); (b) soglia held-out = baseline + max(2×spread; 0,12; banda_heldout
-   MISURATA: poly 0,20 · err 0,01 · wploop 0,06 — N=1, caveat dichiarato);
-   (c) resto INVARIATO (famiglie 1,3×min, parità output, admission hit/miss —
-   binari conservati, zero rebuild). Smoke R=2 prima del full.
+   (REGOLE §3) con le SOLE modifiche (azioni revisore S-115): (a) banda micro
+   = max N=2 (riga (c), incl. re 10,00); (b) soglia held-out = baseline +
+   max(2×spread; 0,12; banda_heldout 0,20/0,01/0,06 — N=1 dichiarato), con
+   «spread» DEFINITO = max(pin, candidato) ed ENTRAMBI pubblicati nei raw;
+   (c) tie ESATTI sulle soglie pre-registrati; (d) rc di gate scritti dagli
+   script in FILE (mai da echo/pipe), esiti nei verbali appesi A ESITO
+   ACQUISITO; (e) resto INVARIATO (famiglie 1,3×min, parità output, admission
+   hit/miss — binari conservati, zero rebuild). Smoke R=2 prima del full.
 2. Se PROMOSSA: cherry-pick 2c18b2e (MAI checkout parziale) + pin SOLO via
    `scripts/pin-phpr.sh` §6 PIENO + micro R=5 + held-out sul pin nuovo.
 3. Finestra: batteria N≥3 su 8bb395c · rumore tra-sere WP · arr rerun. Codex

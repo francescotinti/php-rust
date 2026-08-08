@@ -26,7 +26,7 @@ micro N=2: max = 0,40/4,33/5,50/5,00/6,67/10,00** (re 0→10: una banda N=1 può
 mentire; calls −5,50 IDENTICO = 4° campione famiglia; arr +3,33 con 4/5
 positivi da leva NULLA); **held-out PRIMO campione: poly 0,20s · err 0,01 ·
 wploop 0,06 — il NULLO farebbe 9,80>9,71: il gate p.7 non distingue L-A dal
-nulla** ⇒ blocco ATTRIBUITO a layout CON campione. Revert al byte VERIFICATO
+nulla** ⇒ gate REFUTATO come diagnostico (attribuzione: ipotesi, N=1). Revert AL BYTE
 (f71abd2a, cargo_rc dal comando); patch versionata s115-zavorra2.
 3·Pre-flight: disco Data ✗ (3,5G: bundle VM Claude Desktop 7,5G — decisione
 utente); mitigato con A/B su binari CONSERVATI (zero rebuild per L-A).
