@@ -41,21 +41,18 @@ S-114..116 era layout di QUELLA build (FIRMATA, N=2); held-out 3/3.
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
 
 az. rev. S-117 (SEMANTICA): macchina chunk s102 DENTRO lo script di
-pin/promozione (nomi E contenuto) · golden dei CONTENUTI dei fail per modo in
-corpus-gate · banda della path-dipendenza dei target (o A/B nel target canonico
-prima di guardie sub-ns) · dicitura «parità CLI» finché WP/census non rimisurati ·
-WP full/media + census sul pin s117 (=§1) · repin server sotto A′ (=§1) ·
-**str/arr bande larghe 7,50/6,67**: metro NON riparato lì (zavorre N≥3 o
-indagine dedicata prima di leve su str/arr) · banda calls a N≥4 layout (rev.
-S-116; oggi N=2 con 0,50·0,50) · quanto cronometro nelle guardie (pavimento
-2×quanto ADOTTATO S-117 — estenderlo al criterio-tipo) · zavorra nulla-1 su A′
-sposta str −7,50/arr −6,67 con 0/5: indiziare il layout di __cstring/dati ·
-prop 8,2→5,9 ma A′ da sola PEGGIORAVA prop (−7,67, 0/5): meccanismo non
-indagato · media voce aperta · rumore tra-sere WP · fame frontend (kpc/sudo —
-azione utente) · §3.16/§3.17 warning · retro-A/B str s107b/s108/s109 · denti
-rinviati (OBS-8; fx20; direct-bind; drop-order; hit/miss; checkout-staging) ·
-$z++/$z-- undef non warna · §3.13 · §3.12-i · §3.14 · get_gc · drift TODO.md ·
-(b-min)/(g) solo se census WP li mostra caldi.
+pin/promozione (nomi E contenuto) · golden dei CONTENUTI dei fail per modo ·
+banda path-dipendenza dei target (o A/B nel target canonico prima di guardie
+sub-ns) · dicitura «parità CLI» finché WP/census non rimisurati · **str/arr
+bande larghe 7,50/6,67**: metro NON riparato lì (zavorre N≥3 prima di leve
+str/arr) · banda calls a N≥4 layout (rev. S-116; oggi N=2 con 0,50·0,50) ·
+quanto-guard nel criterio-tipo · zavorra nulla-1 su A′ sposta str/arr con 0/5:
+indiziare layout __cstring/dati · A′ da sola PEGGIORAVA prop (−7,67, 0/5):
+meccanismo non indagato · media voce aperta · rumore tra-sere WP · fame
+frontend (kpc/sudo — azione utente) · §3.16/§3.17 warning · retro-A/B str
+s107b/s108/s109 · denti rinviati (OBS-8; fx20; direct-bind; drop-order;
+hit/miss; checkout-staging) · $z++/$z-- undef non warna · §3.13 · §3.12-i ·
+§3.14 · get_gc · drift TODO.md · (b-min)/(g) solo se census WP li mostra caldi.
 
 ## NON riproporre (i veti restano; dettaglio nei concili archiviati)
 
