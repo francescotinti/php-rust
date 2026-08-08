@@ -1,0 +1,19 @@
+# S-114 verdetto A/B LEVA-NULLA layout (criterio s114-criterio-nulla.md; raw: ab-out/s114-ab-nulla-raw.out, gitignored)
+A=f71abd2a (stash phpr-s112 = pin) · B=846d0df4 (phpr-s114-nulla, zavorra +2.360 B in run_loop, bl 5864->5865, br 24=24) · R=5 ABAB
+admission_rc=0 (dump ON {main} x6 IDENTICI · OFF interi x6 al byte)
+
+RIEPILOGO A MACCHINA (emesso da s114-ab-nulla.sh, nessuna derivazione a mano):
+arith: D_mediano=+0.40 segni +4/-1 spread_A=0.40 spread_B=0.80 banda=0.40
+prop:  D_mediano=-4.33 segni +0/-5 spread_A=4.00 spread_B=3.33 banda=4.33
+calls: D_mediano=-5.50 segni +0/-5 spread_A=2.00 spread_B=2.00 banda=5.50
+str:   D_mediano=-5.00 segni +0/-5 spread_A=2.50 spread_B=2.50 banda=5.00
+arr:   D_mediano=+6.67 segni +4/-1 spread_A=11.67 spread_B=30.00 banda=6.67
+re:    D_mediano=+0.00 segni +2/-1 spread_A=15.00 spread_B=5.00 banda=0.00
+BANDA_GLOBALE=6.67 ns/iter (max su 6 categorie; N=1 perturbazione, limite dichiarato al punto 7 del criterio)
+
+Esiti numerici a verbale:
+1. calls -5.50 sotto leva NULLA = stesso valore della "guardia sfondata" S-113 (H-P1): compatibile con puro layout.
+2. Una leva nulla produce 5/5 segni concordi su prop, calls, str: il conteggio segni NON distingue layout da causa.
+3. banda(prop)=4.33 > pavimento 4: il +3.33 di H-P1 (S-113) sta DENTRO la banda misurata.
+4. Soglie da S-114 in poi (criterio punto 5): promozione max(4; spread_A; banda(cat)); guardia -max(2*spread_A; banda(cat)).
+Candidato 846d0df4 SCARTATO a misura conclusa (nessuna promozione per costruzione); revert al byte a seguire.
