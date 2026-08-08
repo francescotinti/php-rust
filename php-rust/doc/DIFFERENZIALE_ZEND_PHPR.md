@@ -31,7 +31,8 @@ piano: ogni riga diventa leva solo passando da istruttoria→criterio PRE→A/B.
   (pari a Zend), ma Str/Array/Ref/Closure/Object sono `Rc` e il VM passa Zval
   **posseduti per valore** tra helper: ogni transito di un Object = clone
   Rc++ e drop successivo. prop paga ~3 cloni del ricevitore/iter (H-P1 ne
-  toglieva 2: **+3,3 ns/iter misurati S-113** — il quanto del clone è ~1,6).
+  toglieva 2: +3,3 ns/iter letti S-113, ma **DENTRO la banda-layout 4,33
+  misurata S-114** — il quanto del singolo clone NON è stabilito).
 - **Extra phpr**: `Rc<RefCell<Object>>` aggiunge il borrow-flag a OGNI
   accesso (check+set+clear); Zend non ha l'equivalente (mutazione libera).
 
@@ -109,7 +110,13 @@ frame pool. La fedeltà byte resta il vincolo che Zend non deve pagare.
    finestre, la sospensione sta tutta nel sentiero miss — prior art W9a).
    Attesa: somma dei costi §5 = i +3,3 di H-P1 PIÙ set-side e round-trip
    di pila ⇒ progettata per stare sopra 4+banda. Composizione, non clone
-   singolo (lezione S-113).
+   singolo (lezione S-113). **ESITO S-114**: tentata (peephole runtime,
+   commit 8bb395c-analogo 2c18b2e, revert f6fbf6a) — prop **+30,33
+   mediano, 5/5 positivi** (direzione FIRMATA ben oltre banda 4,33) ma NON
+   promossa dal criterio: spread_A 47,00 inquinato da 2 run del pin fuori
+   famiglia (~150 vs ~107, ipotesi P/E-core NON attribuita) e guardia
+   calls −6,50 nella famiglia layout (−5,50 misurato dalla leva-nulla).
+   Prossimo passo: criterio EMENDATO con scheduling osservabile/escluso.
 2. **L-B famiglia dispatch** (tutti i giudici): la più grande e la più
    rischiosa; UNA forma già refutata (S-111). Prossima istruttoria: contare
    il costo del ritorno-al-top vs salto diretto (disasm + contatori) PRIMA
