@@ -37,15 +37,17 @@ hoisting di poche righe). Il peggiore ora è **prop 7,6**.
    generalizzato). Vincoli invariati: criterio PRE con soglia max(4;
    rumore; banda-layout) + guardie non-bersagli A SOLO-REGRESSIONE (lezione
    S-112) + held-out a leva conclusa su soglia PRE + disasm bl-count +
-   admission bipartita + commit+push a ogni passo.
+   admission bipartita + commit+push + **ordine §6 PIENO (az.5 rev. S-112:
+   batteria→re-hash→stash sullo STESSO binario, o deroga dichiarata norma)**.
 3. Se resta finestra: rumore tra-sere WP (az.2 S-110) o A/B pre-filtro vuoto.
 4. Backlog PRODOTTO (Codex): SOLO su ordine esplicito dell'utente.
 5. Chiusura lean: rotazione + revisore singolo (lente: MISURA, riparte).
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
 
-arr 4,2 vs 3,9 (tra-sere: rerun con la coppia S-113) · banda-layout N=2
-(0,67; +1,50 calls S-112): vuole più punti · media voce aperta · rumore
+arr 4,2 vs 3,9 (tra-sere: rerun con la coppia S-113) · banda-layout RESTA
+0,67 (az.2 rev. S-112: +1,50 calls non misurato — A/B leva-nulla prima di
+promuoverlo) · media voce aperta · rumore
 tra-sere WP (az.2 S-110) · A/B pre-filtro VUOTO (az.2 rev. S-111) · causa
 fine frontend (kpc/sudo — azione utente; dopo H-A2 la quota su arith va
 RIMISURATA prima di investirci) · §3.16/§3.17 righe warning · retro-A/B str
@@ -63,9 +65,10 @@ simple_call allargato senza dente+fx21 · fixture su memory_get_usage (stub) ·
 «icache» NON-premessa · pre-filtro/hot-cluster senza forma che non tassi i
 freddi · finestre fuse oltre un helper sospendibile · guardie non-bersaglio
 BILATERALI (S-112: solo-regressione) · denominatori a memoria · output di
-run nel repo · rc di gate da pipe (4 morsi) · tee/log prima del mkdir ·
-admission sul dump intero · xctrace senza guardie disco · path del volume
-esterno nel figlio tracciato (TCC).
+run nel repo · rc di gate da pipe (**5 morsi**: S-112 fixture chain,
+rieseguita col rc dal comando) · tee/log prima del mkdir · admission sul
+dump intero · xctrace senza guardie disco · path del volume esterno nel
+figlio tracciato (TCC).
 
 ---
 **Riscritto**: 2026-08-08 (chiusura S-112). Storia: `sessions/` ·

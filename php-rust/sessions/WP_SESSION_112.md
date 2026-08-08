@@ -1,4 +1,4 @@
-# WP_SESSION_112 — S-112: leva H-A2 fast-path Long RMW PROMOSSA — arith 9,3 → 5,5
+# WP_SESSION_112 — S-112: leva H-A2 fast-path Long RMW promossa SU CRITERIO EMENDATO IN CORSA (guardia calls) — arith 9,3 → 5,5
 
 **In una frase**: una singola operazione (lo shift di interi) cadeva fuori
 dalla corsia veloce e trascinava la catena lenta 50 milioni di volte per run;
