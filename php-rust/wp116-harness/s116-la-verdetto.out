@@ -2,3 +2,18 @@
 A=f71abd2a (stash phpr-s112 = pin) · B=052ea417 (phpr-s114-la CONSERVATO, codice 2c18b2e) · ZERO rebuild per l'A/B
 admission (p.6, rc=0 da admission-out/rc): A=f71abd2a B=052ea417 · parita' output e dump {main} x5: TUTTI IDENTICI · bigramma: hit=SI miss-magic=SI miss-undef=SI miss-ref=SI miss-str=SI · batteria RIUSATA 1742/0/2 S-114 (byte-identico — deroga dichiarata)
 smoke R=2 (rc=0): D per coppia = +28.33 +29.33
+
+VERDETTO SOGLIE A MACCHINA (s116-ab-la.sh full, rc=1 da ab-out/full-rc):
+arith: fam=5 D_mediano=+0.60 segni +5/5 spread_A_dep=0.40 soglia_guardia=-0.80 -> tiene (tie: = soglia -> tiene)
+prop: fam=5 D_mediano=+29.33 segni +5/5 spread_A_dep=4.00 soglia_promozione=4.33 -> PASS (tie: >= soglia = PASS)
+calls: fam=5 D_mediano=-6.50 segni +0/5 spread_A_dep=0.50 soglia_guardia=-5.50 -> SFONDATA (tie: = soglia -> tiene)
+str: fam=5 D_mediano=-5.00 segni +0/5 spread_A_dep=5.00 soglia_guardia=-10.00 -> tiene (tie: = soglia -> tiene)
+arr: fam=5 D_mediano=-1.67 segni +2/5 spread_A_dep=13.33 soglia_guardia=-26.66 -> tiene (tie: = soglia -> tiene)
+re: fam=5 D_mediano=+0.00 segni +2/5 spread_A_dep=20.00 soglia_guardia=-40.00 -> tiene (tie: = soglia -> tiene)
+VERDETTO_MICRO=NON promuovibile
+
+Esiti a verbale (appesi A ESITI ACQUISITI; rc letti dai FILE admission-out/rc=0, ab-out/smoke-rc=0, ab-out/full-rc=1):
+1. Magnitudine prop RICONFERMATA (terzo campione): +29,33 ns/iter mediano, 5/5, spread_A depurato 4,00, ZERO coppie escluse (S-115: +26,33 con 2 esclusioni; S-114: direzione firmata). La fusione vale ~27-29 ns/iter sulla categoria peggiore (prop 7,6).
+2. GUARDIA calls SFONDATA: D_mediano=-6,50 con spread_A dep 0,50 -> soglia=-max(2x0,50; banda 5,50)=-5,50; -6,50 STRETTAMENTE sotto ⇒ per la regola pre-registrata (p.2) NIENTE PROMOZIONE, zero deroghe. QUINTO campione famiglia calls: nulla1 -5,50 · L-A s114 -6,50 · L-A s115 -7,00 · nulla2 -5,50 · L-A s116 -6,50. I tre campioni L-A (-6,50/-7,00/-6,50) stanno TUTTI oltre i due campioni nulla (-5,50 identici): il deficit su calls e' SISTEMATICO oltre la banda nulla misurata (N=2) — una tassa reale ~1-1,5 ns/iter su calls (sentiero non toccato nei dump: layout/icache del probe in run_loop) NON e' piu' esclusa; l'attribuzione «solo banda» non regge il quinto campione.
+3. Held-out NON eseguito: non dovuto, verdetto gia' acquisito al gate micro (p.7 richiede TUTTI i gate); la pubblicazione spread_pin held-out resta nelle aperture (banda N=1).
+4. ESITO: NON PROMOSSA — «direzione firmata + magnitudine STABILITA E RICONFERMATA (+29,33 5/5) + fedelta' runtime OK; blocco = guardia calls -6,50 oltre banda nulla, terzo campione L-A concorde». Keep-partial-wins: il criterio alloca la prossima mossa = (i) istruire la riduzione della tassa calls (collocazione cold del probe/outlining, con dente disasm bl-count) OPPURE (ii) proporre all'utente un gate a beneficio NETTO pesato tra categorie — decisione di criterio da pre-registrare, non deroga in corsa. Binari conservati restano (phpr-s114-la 052ea417); release MAI toccata (zero rebuild in S-116).
