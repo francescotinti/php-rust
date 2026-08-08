@@ -1,0 +1,51 @@
+diff --git a/php-rust/crates/php-runtime/src/vm/run.rs b/php-rust/crates/php-runtime/src/vm/run.rs
+index 4306bfd..ea60d8d 100644
+--- a/php-rust/crates/php-runtime/src/vm/run.rs
++++ b/php-rust/crates/php-runtime/src/vm/run.rs
+@@ -4003,6 +4003,46 @@ impl<'m> super::Vm<'m> {
+                     self.frames[top].stack.push(result);
+                 }
+                 Op::Clone => {
++                    // S-115 leva-nulla-2: zavorra di testo inerte (32 round, ~meta' S-114) per il
++                    // secondo campione di banda-layout. Ramo MAI preso nelle misure (env mai
++                    // settata); da rimuovere a misura chiusa.
++                    if std::env::var_os("PHPR_S115_BALLAST2").is_some() {
++                        use std::hint::black_box as bb;
++                        let mut a = bb(0u64);
++                        a=a.rotate_left(11).wrapping_add(0xC2B2AE3D27D4EB01)^0x1F2E3D4C5B6A0001;
++                        a=a.rotate_left(11).wrapping_add(0xC2B2AE3D27D4EB02)^0x1F2E3D4C5B6A0002;
++                        a=a.rotate_left(11).wrapping_add(0xC2B2AE3D27D4EB03)^0x1F2E3D4C5B6A0003;
++                        a=a.rotate_left(11).wrapping_add(0xC2B2AE3D27D4EB04)^0x1F2E3D4C5B6A0004;
++                        a=a.rotate_left(11).wrapping_add(0xC2B2AE3D27D4EB05)^0x1F2E3D4C5B6A0005;
++                        a=a.rotate_left(11).wrapping_add(0xC2B2AE3D27D4EB06)^0x1F2E3D4C5B6A0006;
++                        a=a.rotate_left(11).wrapping_add(0xC2B2AE3D27D4EB07)^0x1F2E3D4C5B6A0007;
++                        a=a.rotate_left(11).wrapping_add(0xC2B2AE3D27D4EB08)^0x1F2E3D4C5B6A0008;
++                        a=a.rotate_left(11).wrapping_add(0xC2B2AE3D27D4EB09)^0x1F2E3D4C5B6A0009;
++                        a=a.rotate_left(11).wrapping_add(0xC2B2AE3D27D4EB0A)^0x1F2E3D4C5B6A000A;
++                        a=a.rotate_left(11).wrapping_add(0xC2B2AE3D27D4EB0B)^0x1F2E3D4C5B6A000B;
++                        a=a.rotate_left(11).wrapping_add(0xC2B2AE3D27D4EB0C)^0x1F2E3D4C5B6A000C;
++                        a=a.rotate_left(11).wrapping_add(0xC2B2AE3D27D4EB0D)^0x1F2E3D4C5B6A000D;
++                        a=a.rotate_left(11).wrapping_add(0xC2B2AE3D27D4EB0E)^0x1F2E3D4C5B6A000E;
++                        a=a.rotate_left(11).wrapping_add(0xC2B2AE3D27D4EB0F)^0x1F2E3D4C5B6A000F;
++                        a=a.rotate_left(11).wrapping_add(0xC2B2AE3D27D4EB10)^0x1F2E3D4C5B6A0010;
++                        a=a.rotate_left(11).wrapping_add(0xC2B2AE3D27D4EB11)^0x1F2E3D4C5B6A0011;
++                        a=a.rotate_left(11).wrapping_add(0xC2B2AE3D27D4EB12)^0x1F2E3D4C5B6A0012;
++                        a=a.rotate_left(11).wrapping_add(0xC2B2AE3D27D4EB13)^0x1F2E3D4C5B6A0013;
++                        a=a.rotate_left(11).wrapping_add(0xC2B2AE3D27D4EB14)^0x1F2E3D4C5B6A0014;
++                        a=a.rotate_left(11).wrapping_add(0xC2B2AE3D27D4EB15)^0x1F2E3D4C5B6A0015;
++                        a=a.rotate_left(11).wrapping_add(0xC2B2AE3D27D4EB16)^0x1F2E3D4C5B6A0016;
++                        a=a.rotate_left(11).wrapping_add(0xC2B2AE3D27D4EB17)^0x1F2E3D4C5B6A0017;
++                        a=a.rotate_left(11).wrapping_add(0xC2B2AE3D27D4EB18)^0x1F2E3D4C5B6A0018;
++                        a=a.rotate_left(11).wrapping_add(0xC2B2AE3D27D4EB19)^0x1F2E3D4C5B6A0019;
++                        a=a.rotate_left(11).wrapping_add(0xC2B2AE3D27D4EB1A)^0x1F2E3D4C5B6A001A;
++                        a=a.rotate_left(11).wrapping_add(0xC2B2AE3D27D4EB1B)^0x1F2E3D4C5B6A001B;
++                        a=a.rotate_left(11).wrapping_add(0xC2B2AE3D27D4EB1C)^0x1F2E3D4C5B6A001C;
++                        a=a.rotate_left(11).wrapping_add(0xC2B2AE3D27D4EB1D)^0x1F2E3D4C5B6A001D;
++                        a=a.rotate_left(11).wrapping_add(0xC2B2AE3D27D4EB1E)^0x1F2E3D4C5B6A001E;
++                        a=a.rotate_left(11).wrapping_add(0xC2B2AE3D27D4EB1F)^0x1F2E3D4C5B6A001F;
++                        a=a.rotate_left(11).wrapping_add(0xC2B2AE3D27D4EB20)^0x1F2E3D4C5B6A0020;
++                        bb(a);
++                    }
+                     let src = self.frames[top].stack.pop().expect("Clone operand").deref_clone();
+                     let Zval::Object(o) = &src else {
+                         return Err(PhpError::TypeError(format!(
