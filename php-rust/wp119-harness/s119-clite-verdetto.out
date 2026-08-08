@@ -1,0 +1,17 @@
+s119-clite-verdetto — tabella 6x4 conteggi/iter (netti vs empty; N dal sorgente; R=2 identici, unica eccezione zend-arith malloc_n +-1)
+colonne: alloc_n/iter free_n/iter zvclone_all/iter zvclone_rc/iter | zend: alloc_n/iter free_n/iter rc-op(statico,deroga2)
+arith  N=50000000 phpr: alloc=0.00 free=0.00 zvclone_all=1.000 zvclone_rc=0.000 | zend: alloc=0.00 free=0.00 rc_static=0
+prop   N=30000000 phpr: alloc=0.00 free=0.00 zvclone_all=5.000 zvclone_rc=1.000 | zend: alloc=0.00 free=0.00 rc_static=0
+calls  N=20000000 phpr: alloc=0.00 free=0.00 zvclone_all=2.000 zvclone_rc=0.000 | zend: alloc=0.00 free=0.00 rc_static=0
+str    N=4000000 phpr: alloc=5.00 free=5.00 zvclone_all=2.000 zvclone_rc=2.000 | zend: alloc=2.00 free=2.00 rc_static=~2
+arr    N=100000 phpr: alloc=245.01 free=245.01 zvclone_all=305.000 zvclone_rc=61.000 | zend: alloc=121.99 free=121.99 rc_static=~1-2/op-int
+       (arr per op-interno, 6100000 op: phpr alloc=4.02 zvclone_all=5.00 zvclone_rc=1.00 | zend alloc=2.00)
+re     N=2000000 phpr: alloc=17.00 free=17.00 zvclone_all=3.000 zvclone_rc=3.000 | zend: alloc=5.00 free=5.00 rc_static=~5-8
+
+delta (phpr-zend) alloc/iter: re=+12.00 str=+3.00 arr=+2.02(op-int) arith=+0.00 prop=+0.00 calls=+0.00
+clone-census phpr (zend int-path rc=0 ancorato a zend_types.h:949-953,1310-1313 via awk/Vexp):
+  prop  5.000 cloni/iter di cui 1.000 Rc  <- il residuo prop 5,5x NON e' alloc: e' ciclo-di-vita/copia
+  calls 2.000 cloni/iter scalari, 0 Rc; arith 1.000 cloni/iter scalari
+  str 2.0 cloni Rc/iter; re 3.0 cloni Rc/iter + 17.0 alloc/iter (zend 5.0)
+classifica vagoni (delta lifecycle): 1) re-alloc (+12/iter) 2) prop-cloni (5/iter, 1 Rc) 3) str-alloc (+3) 4) arr-alloc (+2/op) 5) calls-cloni (2/iter) 6) arith-cloni (1/iter)
+nota: i vagoni V3/V4/V5 (treno-2) mordono la voce 2 (prop-cloni); re/str = candidati futuri NOMINATI

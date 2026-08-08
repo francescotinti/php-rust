@@ -12,7 +12,11 @@ use crate::{GenState, Object, PhpArray, PhpStr};
 ///
 /// Heap types use `Rc` with copy-on-write via `Rc::make_mut`, which matches
 /// Zend's refcount + SEPARATE_* separation exactly.
-#[derive(Clone, Debug)]
+// S-119 C-lite: sotto `mem-census` il Clone è manuale (stesso corpo del
+// derive) per contare ogni copia di Zval al funnel unico; fuori feature il
+// derive resta e l'espansione è identica — il pin non cambia al byte.
+#[cfg_attr(not(feature = "mem-census"), derive(Clone))]
+#[derive(Debug)]
 pub enum Zval {
     Undef,
     Null,
@@ -68,6 +72,73 @@ pub enum Zval {
     /// (warns on a missing key, creates nothing). Never escapes the call
     /// window — no other consumer sees this variant.
     ArgPlace(Rc<ArgPlace>),
+}
+
+// S-119 C-lite (build census soltanto): il corpo replica il derive; la sola
+// aggiunta è il conteggio — varianti Rc segnate `true` (il lato incref del
+// ciclo di vita), scalari `false`.
+#[cfg(feature = "mem-census")]
+impl Clone for Zval {
+    fn clone(&self) -> Self {
+        match self {
+            Zval::Undef => {
+                crate::memcensus::note_zval_clone(false);
+                Zval::Undef
+            }
+            Zval::Null => {
+                crate::memcensus::note_zval_clone(false);
+                Zval::Null
+            }
+            Zval::Bool(b) => {
+                crate::memcensus::note_zval_clone(false);
+                Zval::Bool(*b)
+            }
+            Zval::Long(n) => {
+                crate::memcensus::note_zval_clone(false);
+                Zval::Long(*n)
+            }
+            Zval::Double(d) => {
+                crate::memcensus::note_zval_clone(false);
+                Zval::Double(*d)
+            }
+            Zval::Str(r) => {
+                crate::memcensus::note_zval_clone(true);
+                Zval::Str(r.clone())
+            }
+            Zval::Array(r) => {
+                crate::memcensus::note_zval_clone(true);
+                Zval::Array(r.clone())
+            }
+            Zval::Ref(r) => {
+                crate::memcensus::note_zval_clone(true);
+                Zval::Ref(r.clone())
+            }
+            Zval::Closure(r) => {
+                crate::memcensus::note_zval_clone(true);
+                Zval::Closure(r.clone())
+            }
+            Zval::Object(r) => {
+                crate::memcensus::note_zval_clone(true);
+                Zval::Object(r.clone())
+            }
+            Zval::Generator(r) => {
+                crate::memcensus::note_zval_clone(true);
+                Zval::Generator(r.clone())
+            }
+            Zval::Resource(r) => {
+                crate::memcensus::note_zval_clone(true);
+                Zval::Resource(r.clone())
+            }
+            Zval::WeakHandle(w) => {
+                crate::memcensus::note_zval_clone(true);
+                Zval::WeakHandle(w.clone())
+            }
+            Zval::ArgPlace(r) => {
+                crate::memcensus::note_zval_clone(true);
+                Zval::ArgPlace(r.clone())
+            }
+        }
+    }
 }
 
 /// Payload of [`Zval::ArgPlace`]: which store roots the path, the steps to
