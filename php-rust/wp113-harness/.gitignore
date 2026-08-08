@@ -1,0 +1,10 @@
+# Output di run (REGOLE §10): i raw della coppia WP restano fuori dal repo;
+# i verbali derivati (s113-*.out, pair113-ratios-*.out) sono gli unici
+# artefatti committati.
+pair-out-on/
+pair-out-off/
+census-out/
+ab-out/
+corpus-gate/
+heldout-out/
+admission-out/

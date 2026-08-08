@@ -1,0 +1,10 @@
+s113-pair-criterio: coppia WP full+media BIMODALE sul pin f71abd2a (PRE-registrato, prima della run)
+oggetto=collaudo icache della leva H-A2 S-112 (fast-path Long RMW; run_loop 287.944->291.316 B, +3.372) sull'aggregato WP; attesa nulla o favorevole (arith -41% micro, poly held-out migliorato)
+giudice=pair113.sh (ricetta pair110 INVARIATA a meno del numero; rapporti macchina dai .time; gate per NOME KS-KL-101-3)
+gate_principale=full modo ON (default): banda [1,81;1,88]; riferimento full ON 1,867 (S-110, stessa ricetta, pin s109 PRE-H-A2)
+dentro_banda_o_sotto=H-A2 non paga icache sul carico reale -> debito coppia SALDATO, leva S-113 SBLOCCATA; sotto 1,81 = direzione favorevole, attribuzione solo con meccanismo firmato
+fuori_banda_sopra_1.88=leva S-113 BLOCCATA -> diagnosi (primo candidato: contatore L1i delivery sul braccio WP come in S-111, con guardie disco s110/s111)
+media=solo DIREZIONE, sesta lettura della voce aperta (S-110: 2,673 on / 2,612 off; rif 2,64): si dichiara il trend, nessuna cifra promossa
+full_off=seconda gamba bimodale, solo direzione (S-110: 1,869; famiglia storica 1,885-1,911)
+validita=failnames estratti==dichiarati e gate_void=0 su OGNI gamba, altrimenti la gamba e' VOID e si rilancia; ordine gambe: ON poi OFF, sequenziali detached
+dichiarazione=php-server release 06e6d677 = relink S-112 stesso sorgente (stash s109 443ae42f INTATTO); la coppia esercita solo phpr CLI, l'hash server e' registrato nell'identity e non decide
