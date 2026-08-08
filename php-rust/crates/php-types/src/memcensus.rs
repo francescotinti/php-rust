@@ -196,10 +196,6 @@ fn dump_line(tag: &str) {
 
 extern "C" fn dump_exit() {
     dump_line("exit");
-    // S-119 C-lite: riga NUOVA coi contatori globali (GA_* + cloni Zval) —
-    // il file PHPR_MEM_CENSUS basta da solo per la tabella 6×4; le righe
-    // storiche restano byte-identiche.
-    dump_ga_line();
     // WP-59 Ob.1: exit snapshot (win=0) — the cleanest fragmentation read:
     // channel live is exact here (recon reached==live), so per-bin
     // committed−used at this instant IS retention + non-censused standing.
@@ -212,25 +208,6 @@ extern "C" fn dump_exit() {
     if std::env::var_os("PHPR_MI_COLLECT_EXIT").is_some_and(|v| v == "1") {
         collect_mi_standing();
     }
-}
-
-/// S-119 C-lite: la riga `gacensus` — conteggi/byte del global allocator e
-/// cloni Zval, appesa allo stesso file di `dump_line` (PHPR_MEM_CENSUS).
-fn dump_ga_line() {
-    use std::io::Write;
-    let Ok(path) = std::env::var("PHPR_MEM_CENSUS") else { return };
-    let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) else {
-        return;
-    };
-    let (ab, fb) = (GA_ALLOC.load(Relaxed), GA_FREE.load(Relaxed));
-    let (an, fn_) = (GA_ALLOC_N.load(Relaxed), GA_FREE_N.load(Relaxed));
-    let rn = GA_REALLOC_N.load(Relaxed);
-    let (zall, zrc) = zval_clone_counters();
-    let _ = writeln!(
-        f,
-        "gacensus pid={} galloc_bytes={ab} gfree_bytes={fb} galloc_n={an} gfree_n={fn_} realloc_n={rn} zvclone_all={zall} zvclone_rc={zrc}",
-        std::process::id()
-    );
 }
 
 /// The standing checkpoint body shared by the atexit path above and the
@@ -1371,33 +1348,9 @@ static GA_FREE_N: AtomicU64 = AtomicU64::new(0);
 
 #[inline]
 pub fn galloc_note(bytes: usize) {
-    // S-119 C-lite: il dump atexit era registrato solo dai canali tagged —
-    // un workload che non li tocca (empty.php, la baseline del netting)
-    // usciva senza riga. Ogni processo alloca: l'aggancio vive qui.
-    ensure_registered();
     GA_ALLOC.fetch_add(bytes as u64, Relaxed);
     GA_ALLOC_N.fetch_add(1, Relaxed);
     hist_note(bytes);
-}
-
-// S-119 C-lite (deroga 1 del criterio): censimento dei CLONI Zval a livello
-// di variante — il lato incref del ciclo di vita, contato al funnel unico
-// che ogni copia di Zval attraversa (impl Clone manuale sotto feature).
-// Lower bound dichiarato: i cloni diretti degli Rc interni sfuggono.
-static ZC_ALL_N: AtomicU64 = AtomicU64::new(0);
-static ZC_RC_N: AtomicU64 = AtomicU64::new(0);
-
-#[inline]
-pub fn note_zval_clone(holds_rc: bool) {
-    ZC_ALL_N.fetch_add(1, Relaxed);
-    if holds_rc {
-        ZC_RC_N.fetch_add(1, Relaxed);
-    }
-}
-
-/// (cloni Zval totali, cloni di varianti refcounted) cumulativi.
-pub fn zval_clone_counters() -> (u64, u64) {
-    (ZC_ALL_N.load(Relaxed), ZC_RC_N.load(Relaxed))
 }
 
 #[inline]
