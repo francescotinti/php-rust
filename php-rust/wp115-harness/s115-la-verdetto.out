@@ -1,0 +1,23 @@
+# S-115 verdetto rimisura L-A (criterio s115-criterio-la.md; raw: ab-out/la-full.out, la-smoke run a video, admission-out/ — gitignored)
+A=f71abd2a (stash phpr-s112 = pin) · B=052ea417 (phpr-s114-la CONSERVATO, codice 2c18b2e) · NESSUN rebuild per l'A/B
+admission (p.6): hit+4 miss OUTPUT IDENTICI al pin (rc dal comando) · dump {main} identici x5 · bigramma PropGetSlotRecv+BinaryTCPropSetPop presente in TUTTI e 5 i casi (anche i miss esercitano il probe) · batteria riusata da S-114 (1742/0/2, stesso binario byte-identico — deroga dichiarata)
+smoke R=2: +28,67 / +28,00 (2/2 positivi)
+
+VERDETTO SOGLIE A MACCHINA (da s115-ab-la.sh full, R=5 ABAB + famiglie 1,3x min):
+arith: fam=5 D_mediano=+0.20 segni +4/5 spread_A_dep=0.60 soglia_guardia=-1.20 -> tiene
+prop: ESCLUSE per NOME coppia2 (A=155.00) e coppia6 (A=166.33) — soglie fam A<=142.13 B<=101.40
+prop: fam=5 D_mediano=+26.33 segni +5/5 spread_A_dep=2.00 soglia_promozione=4.33 -> PASS
+calls: fam=5 D_mediano=-7.00 segni +0/5 spread_A_dep=3.50 soglia_guardia=-7.00 -> tiene
+str: fam=5 D_mediano=-5.00 segni +0/5 spread_A_dep=5.00 soglia_guardia=-10.00 -> tiene
+arr: fam=5 D_mediano=+0.00 segni +2/5 spread_A_dep=15.00 soglia_guardia=-30.00 -> tiene
+re: fam=5 D_mediano=-5.00 segni +0/5 spread_A_dep=5.00 soglia_guardia=-10.00 -> tiene
+VERDETTO_MICRO=PROMUOVIBILE
+
+Esiti a verbale:
+1. L'emendamento (a) ha FUNZIONATO: le due run A fuori famiglia (155/166 vs min 107,33) sono state ESCLUSE PER NOME e rimpiazzate da coppie extra; spread_A depurato 2,00 contro il 47,00 che in S-114 aveva invalidato la misura. La magnitudine di L-A e' ORA stabilita: **+26,33 ns/iter mediano su prop, 5/5, ~6x sopra la soglia 4,33**.
+2. calls -7,00 e' ESATTAMENTE sulla soglia -max(2x3,50; 5,50)=-7,00: per la regola pre-registrata (sfonda solo se STRETTAMENTE sotto) la guardia tiene. Dichiarato senza deroghe: e' il terzo campione della famiglia layout su calls (nulla -5,50 · S-114 -6,50 · oggi -7,00), sentiero NON toccato dai dump (identici al pin).
+3. parita' output (d): 6/6 categorie IDENTICHE prima del cronometro — la fedelta' del B misurato e' ora verificata A RUNTIME (colma il rilievo del revisore S-114).
+4. Held-out (p.7, R=5): poly net_cand=9,86s > limite 9,71s (baseline 9,59 + max(2x0,02; 0,12)) -> REGRESSIONE; err 2,98<=3,11 ok · wploop 6,73<=6,90 ok. UNA regressione ⇒ NIENTE PROMOZIONE (p.8), nessuna deroga post-hoc.
+5. Meccanismo NOMINATO e refutato come semantico: il dump di poly.php sul pin ha ZERO PropGetSlotRecv (0 occorrenze, 0 bigrammi) — il codice della leva NON viene mai eseguito in poly; l'ipotesi probe-overhead cade. Il deficit e' in famiglia LAYOUT (run_loop +3.176 B) su un giudice SENZA banda misurata: la soglia p.7 (fissa, +0,12s) non ha allowance layout per costruzione.
+6. ESITO: NON PROMOSSA — «direzione firmata (S-114) + MAGNITUDINE STABILITA (+26,33 ns/iter, 5/5, spread_A dep 2,00) + fedelta' runtime verificata; blocco = held-out poly fuori famiglia di soglia, attribuzione layout NON misurata». Keep-partial-wins: il criterio alloca la prossima mossa = misurare la banda-layout degli held-out (criterio nulla-2 EMENDATO PRIMA della sua run, questa stessa sessione); rerun L-A held-out solo con criterio emendato riesguito per intero (REGOLE §3).
+7. Binari conservati restano (phpr-s114-la 052ea417); release MAI toccata in questa rimisura (nessun rebuild).
