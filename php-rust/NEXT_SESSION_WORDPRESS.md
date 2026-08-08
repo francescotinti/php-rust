@@ -1,10 +1,9 @@
 # NEXT_SESSION — phpr ≤ 3× l'oracle (processo LEAN v1: la lista unica è REGOLE.md)
 ⏱ **FONDAMENTALI**: rif WP **full ON 1,867 / OFF 1,869** (S-110) · media
 2,632/2,603 (voce aperta) · ultima leva SPEDITA **S-112 (H-A2)** ·
-sessioni-senza-Δ = 2 (S-113 H-P1, S-114 L-A: tentate con A/B pieno e verdetto)
-· incidenti «mai collaudato»: 1 (S-106) · incidenti processo: +3 S-114
-(batteria contaminata da edit concorrente · redirect pre-mkdir ·
-checkout-staging di run.rs, corretto index-only).
+sessioni-senza-Δ = 2 (S-113, S-114: tentate con A/B pieno e verdetto) ·
+incidenti «mai collaudato»: 1 (S-106) · incidenti processo: +3 S-114 (batteria
+contaminata da edit concorrente · redirect pre-mkdir · checkout-staging).
 
 ## Scoreboard (pin s112 f71abd2a, micro R=5 di S-112 — S-113/114 non li muovono)
 
@@ -44,8 +43,7 @@ mediano 5/5** — direzione FIRMATA ben oltre banda, magnitudine NON stabilita
    posizione) prima di L-B dispatch — pesa su ogni soglia futura.
 3. Se L-A promossa: pin SOLO via `scripts/pin-phpr.sh` §6 PIENO + micro R=5 +
    held-out.
-4. Se resta finestra: rumore tra-sere WP (az.2 S-110) · arr rerun. Backlog
-   Codex SOLO su ordine esplicito. Chiusura lean: revisore (lente PROCESSO).
+4. Se resta finestra: rumore tra-sere WP · arr rerun. Backlog Codex SOLO su ordine esplicito. Chiusura lean: revisore (lente PROCESSO).
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
 
