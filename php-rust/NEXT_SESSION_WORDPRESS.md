@@ -37,13 +37,11 @@ held-out 3/3, §6 pieno col determinismo esercitato 3× al byte.
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
 
-az. rev. S-118 (PROCESSO): ogni deroga a una trappola va NOMINATA come tale
-nel criterio, con la trappola citata · banda held-out A′ a N=3 prima del
-prossimo giudizio (oggi N=2, poly 0,01 s troppo sottile) · «minimo
-storico/famiglia» vietato finché la serie A′ non ha N≥2 (direzione-solo) ·
-WP del pin s118 non misurato (rif = pin s117, delta atteso ~0: H-P1 è
-runtime-only su prop) · arith micro 5,5 vs 5,4: dentro il rumore R=5, non è
-una voce (A/B guardia −0,40 in banda) · **str/arr bande larghe 7,50/6,67**:
+az. rev. S-118 (PROCESSO): deroghe a trappole NOMINATE nel criterio con la
+trappola citata · held-out a N=3 prima del prossimo giudizio (poly 0,01 s
+troppo sottile) · «minimo storico» vietato su serie A′ N=1 (direzione-solo) ·
+WP del pin s118 non misurato (delta atteso ~0: H-P1 runtime-only) · arith 5,5
+vs 5,4 dentro il rumore R=5 · **str/arr bande larghe 7,50/6,67**:
 zavorre N≥3 prima di leve str/arr · banda calls a N≥4 layout (oggi N=3 con
 0,50·0,50·+0,50) · A′ da sola PEGGIORAVA prop (−7,67, 0/5): meccanismo non
 indagato · media voce aperta (ON 2,506, serie A′ N=1, direzione-solo) · rumore
