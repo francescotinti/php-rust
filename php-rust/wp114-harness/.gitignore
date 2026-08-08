@@ -1,0 +1,9 @@
+# Output di run (REGOLE §10): i raw restano fuori dal repo; i verbali
+# derivati (s114-*.out) sono gli unici artefatti committati.
+ab-out/
+admission-out/
+corpus-gate/
+heldout-out/
+batteria-out/
+watcher.log
+nohup.log
