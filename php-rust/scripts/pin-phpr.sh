@@ -7,6 +7,9 @@
 # verbale a stdout. La batteria/corpus/micro restano i gate del protocollo
 # PIN (REGOLE §6): questo script garantisce che NESSUN binario non-eseguito
 # venga mai stashato.
+# GATE CORPUS CANONICO (az. rev. S-117): `scripts/corpus-gate.sh <runner> <out>`
+# giudica NOMI (congelato s109) E CONTENUTO (golden digest) E off↔on — ogni
+# pin/promozione lo usa al posto del confronto solo-nomi.
 set -euo pipefail
 BIN="$HOME/Claude/php-rust-output/release/phpr"
 ORACLE=/opt/homebrew/opt/php/bin/php
