@@ -1,0 +1,21 @@
+s118-r3-verdetto: debito R3-Pedersen (criterio 9cf1fcd PRE-registrato) — 4 gate
+grade=VERDICT  # ogni cifra dal .out/.done/.verdict del suo script giudice
+
+gate1 repin server A': pin s118 = 20411ba03d6ce979 @ c4f5937 (pin-server.sh ricetta,
+  smoke --axum OK, stash==release); release/phpr INVARIATO 1656580e (nessun churn)
+gate2 grado s118: off rc=0 voids=0 · on rc=0 voids=0 (sentinella PASS x2;
+  option 413 IDENTICO per NOME x2; restapi 3508 IDENTICO per NOME x2)
+gate3 pair109 stessa sera (release==pin 1656580e, server 20411ba0):
+  off rc=0 gate_void=0: media 0 fail x2 lati; full diff == SOLO wp_is_stream (catalogo)
+    media_user 2.580 (20.83/53.75) · full_master 1.955 (398.20/778.58) · peak 1917.52 MiB
+  on  rc=0 gate_void=0: media 0 fail x2 lati; full diff == SOLO wp_is_stream (catalogo)
+    media_user 2.506 (20.73/51.94) · full_master 1.913 (400.38/766.01) · peak 1839.16 MiB
+  => NUOVO riferimento WP sotto A' (il rif 1,867/1,869 DECADE come pre-registrato;
+     tra-sere = solo direzione, REGOLE par.4)
+gate4 tripla census per-request (probe72-tripla PASS fails=0, head 3148cae,
+  census_bin b61389cf strumentato, parity_pin 1656580e):
+  obj/req mediana_used_n=0.000 spread_n=0.000 · KiB/req 0.0000 spread 0.0000
+  T-72.a PASS · T-72.b PASS · T-72.c ~0 OK (C4 chiusa) · uc-steady 3 leg OK
+
+ESITO R3: PASS 4/4 => la dicitura "parita' CLI" (S-117) si ESTENDE a
+"parita' WP per-request"; il verdetto WP della pipeline A' e' CHIUSO (criterio p.5).
