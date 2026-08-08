@@ -8,8 +8,7 @@ inquinato il metro: si riverte per regola; il test «sparito» non era il codice
 **SCOREBOARD** (pin s112 f71abd2a INVARIATO; micro = S-112, frecce =):
 **arith 5,5 = · prop 7,6 = · calls 5,2 = · str 5,3 = · arr 4,2 = · re 3,4 =** ·
 held-out 6,4·2,5·5,6 e WP (1,867/1,869 · 2,632/2,603) non rimisurati.
-**Leve spedite: 0 — dichiarato; ritmo: 1 leva TENTATA con A/B pieno + 1
-leva-nulla di misura.** 2026-08-08 · Fable 5 · 8cf0b61→c6c0317.
+**Leve spedite: 0 — dichiarato; ritmo: 1 leva TENTATA (A/B pieno) + 1 leva-nulla.** 2026-08-08 · Fable 5 · 8cf0b61→0b04d7b.
 
 ## Esiti secchi
 1·LEVA-NULLA (criterio PRE 8cf0b61): zavorra +2.360 B nel braccio Throw,
