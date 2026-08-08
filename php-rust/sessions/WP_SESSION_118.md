@@ -1,10 +1,9 @@
 # WP_SESSION_118 — R3-Pedersen SALDATO 4/4 (parità WP per-request sotto A′) · treno-1 H-P1 PROMOSSO (prop +5,33 5/5, la tassa calls non esiste) · pin s118
 
-**In una frase**: il collaudo sul sito WordPress vero e sul server persistente
+**In una frase**: il collaudo su WordPress vero e sul server persistente
 conferma che la nuova fabbrica del programma non ha rotto nulla (zero oggetti
-persi per richiesta, stessi identici test verdi), e il ritocco alle proprietà
-bocciato tre sessioni fa è stato ripescato e promosso: ora il metro fine
-mostra che velocizza davvero, e il rapporto sulle proprietà scende a 5,5×.
+persi per richiesta, stessi test verdi), e il ritocco alle proprietà bocciato
+tre sessioni fa è stato ripescato e promosso: le proprietà scendono a 5,5×.
 
 **SCOREBOARD** (pin s118 **15dfb6b3** @ f7f7da7, micro R=5 sul pin; frecce vs
 s117): **arith 5,5 ↑lieve (5,4) · prop 5,5 ↓ (5,9) · calls 4,8 = · str 5,3 = ·
@@ -38,6 +37,5 @@ repin+grado = apertura S-119).
 - ⭐⭐ **Il gate che non giudica il contenuto passa leve che cambiano il
   dettaglio**: il corpus-gate nomi+contenuto è nato dal buco che il revisore
   S-117 aveva coperto a mano, e ha girato live già stasera.
-- ⭐ **Il determinismo paga tre volte in una sera**: riproduzione del candidato
-  giudicato, neutralizzazione del relink batteria, ripristino del release al
-  pin dopo l'A/B — tutti «al byte, pena STOP», tutti passati.
+- ⭐ **Il determinismo paga tre volte in una sera**: candidato riprodotto,
+  relink batteria neutralizzato, release ripristinato — «al byte, pena STOP».
