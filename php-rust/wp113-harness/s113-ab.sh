@@ -1,5 +1,5 @@
 #!/bin/bash
-# s113-ab.sh <categoria> <R> — A/B interleaved ABAB fra pin S-109 (A, stash
+# s113-ab.sh <categoria> <R> — A/B interleaved ABAB fra pin S-112 (A, stash
 # = pin f71abd2a) e candidato H-P1 S-113 (B, binario CONSERVATO
 # phpr-s113-ab-candidate: l'A/B non dipende dal churn di release/phpr).
 # user CPU al netto del pavimento PER-binario; N emesso dal sorgente.
