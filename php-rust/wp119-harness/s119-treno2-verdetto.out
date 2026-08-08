@@ -4,3 +4,12 @@ candidato CONSERVATO: phpr-s119-treno2 (350582e55d21533d)
 ripristino: release/phpr == pin 15dfb6b3da215b56 AL BYTE; A/B pronte su stash A=phpr-s118 B=phpr-s119-treno2
 smoke R=2 guardia (rc=1): D per coppia = -1.67 -2.67 +0.50 +1.00
 smoke treno-2: rc=1 dal filtro smoke (prop concorde -1.67/-2.67 R=2, DENTRO banda-v2 3.33; prop non esercita V3-V5: sospetto layout). Il criterio p.2 giudica a banda nel FULL: si procede al full R=5, dichiarato.
+
+VERDETTO GUARDIE A MACCHINA (s119-ab-treno2.sh full, rc=0 da treno2-out/full-rc):
+arith: fam=5 D_med=+0.40 segni +3/5 spread_A_dep=1.00 quanto=0.20 soglia_guardia=-2.00 -> tiene (tie: = -> tiene)
+prop: fam=5 D_med=+0.00 segni +2/5 spread_A_dep=1.00 quanto=0.33 soglia_guardia=-3.33 -> tiene (tie: = -> tiene)
+calls: fam=5 D_med=-0.50 segni +0/5 spread_A_dep=1.00 quanto=0.50 soglia_guardia=-2.00 -> tiene (tie: = -> tiene) [REGISTRATA: morso dentro banda]
+str: fam=5 D_med=+5.00 segni +3/5 spread_A_dep=5.00 quanto=2.50 soglia_guardia=-10.00 -> tiene (tie: = -> tiene)
+arr: fam=5 D_med=-1.67 segni +1/5 spread_A_dep=6.67 quanto=1.67 soglia_guardia=-13.34 -> tiene (tie: = -> tiene)
+re: fam=5 D_med=+0.00 segni +1/5 spread_A_dep=5.00 quanto=5.00 soglia_guardia=-10.00 -> tiene (tie: = -> tiene)
+VERDETTO_MICRO=GUARDIE TENGONO (resta held-out N=3)
