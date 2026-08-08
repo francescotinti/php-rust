@@ -15,3 +15,14 @@ HELD-OUT (s117-heldout-la.sh, rc=0 da la-out/heldout.rc; baseline+banda A′ N=2
 poly: net_A=9.46s net_cand=9.49s spread_pin=0.10s spread_cand=0.05s spread=max=0.10s baseline_Aprime=9.44s banda_ho=0.01s limite=9.64s -> ok
 err: net_A=3.00s net_cand=2.96s spread_pin=0.05s spread_cand=0.04s spread=max=0.05s baseline_Aprime=2.99s banda_ho=0.06s limite=3.11s -> ok
 wploop: net_A=6.37s net_cand=6.40s spread_pin=0.06s spread_cand=0.05s spread=max=0.06s baseline_Aprime=6.38s banda_ho=0.08s limite=6.50s -> ok
+promozione: cherry-pick 2c18b2e committato (6f6795a)
+promozione: build rc=0, phpr=1656580e4e590e20
+promozione: batteria rc=0 (da promo-out/batteria.rc) · 1742/0/2 · inventario: IDENTICO
+promozione: re-hash DIVERSO (1656580e4e590e20 vs 9595e59aca3756f7) — churn non dichiarato, STOP
+promozione-2: churn batteria neutralizzato — build ricetta riproduce H1=1656580e4e590e20 (determinismo esercitato); batteria 1742/0/2 copre questo sorgente, binario byte-identico
+promozione-2: PIN phpr s117 = 1656580e4e590e20 (smoke parità 2 modi OK, stash phpr-s117). I gate del protocollo (batteria/corpus/fixture/micro) restano dovuti.
+promozione-2 corpus(off): fail-set per NOME == congelato s109 (1415)
+promozione-2 corpus(on): fail-set per NOME == congelato s109 (1415)
+promozione micro pin s117: rapporto_arith=5.4  [derivata: companion 2.34/0.43] rapporto_prop=5.9  [derivata: companion 2.49/0.42] rapporto_calls=4.8  [derivata: companion 2.14/0.45] rapporto_str=5.3  [derivata: companion 0.84/0.16] rapporto_arr=3.8  [derivata: companion 1.10/0.29] rapporto_re=3.4  [derivata: companion 1.22/0.36] 
+promozione held-out pin s117: rapporto_poly=6.2  [derivata: companion 9.45/1.52] rapporto_err=2.5  [derivata: companion 2.97/1.18] rapporto_wploop=5.4  [derivata: companion 6.41/1.18] 
+PROMOZIONE COMPLETA rc=0 (da promo-out/rc): pin s117 = 1656580e4e590e20
