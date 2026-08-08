@@ -13,3 +13,18 @@ str: fam=5 D_med=+5.00 segni +3/5 spread_A_dep=5.00 quanto=2.50 soglia_guardia=-
 arr: fam=5 D_med=-1.67 segni +1/5 spread_A_dep=6.67 quanto=1.67 soglia_guardia=-13.34 -> tiene (tie: = -> tiene)
 re: fam=5 D_med=+0.00 segni +1/5 spread_A_dep=5.00 quanto=5.00 soglia_guardia=-10.00 -> tiene (tie: = -> tiene)
 VERDETTO_MICRO=GUARDIE TENGONO (resta held-out N=3)
+
+HELD-OUT N=3 (s119-heldout-treno2.sh, rc=0 da treno2-out/heldout.rc; baseline+banda da 3 serie del pin stessa sera):
+poly: pin_N3=9.43/9.44/9.40 base=9.43s banda_N3=0.04s cand=9.30s spread_cand=0.05s limite=9.55s -> ok [direzione: ≤ come atteso]
+err: pin_N3=2.94/2.94/2.94 base=2.94s banda_N3=0.00s cand=2.95s spread_cand=0.05s limite=3.06s -> ok
+wploop: pin_N3=6.41/6.42/6.40 base=6.41s banda_N3=0.02s cand=6.43s spread_cand=0.13s limite=6.67s -> ok
+promozione: leva committata @ 22e0cda
+resume §6: interruzione a build in corso dichiarata; si riprende dal passo build
+promozione: build ricetta riproduce il candidato 350582e55d21533d
+promozione batteria: rc=0 (da promo-out/batteria.rc) · 1742/0/2 · inventario vs pin s118: IDENTICO
+promozione: churn batteria neutralizzato (build ricetta → 350582e55d21533d al byte)
+promozione: PIN phpr s119 = 350582e55d21533d (smoke parità 2 modi OK, stash phpr-s119). I gate del protocollo (batteria/corpus/fixture/micro) restano dovuti.
+promozione corpus-gate: rc=0 — nomi==congelato, CONTENUTO==golden, off↔on zero
+promozione fixture chain: rc=0 (6/6 gate verdi)
+promozione micro pin s119: rapporto_arith=5.4  [derivata: companion 2.33/0.43] rapporto_prop=5.5  [derivata: companion 2.32/0.42] rapporto_calls=5.0  [derivata: companion 2.13/0.43] rapporto_str=5.6  [derivata: companion 0.84/0.15] rapporto_arr=3.7  [derivata: companion 1.11/0.30] rapporto_re=3.3  [derivata: companion 1.22/0.37] 
+PROMOZIONE COMPLETA rc=0 (da promo-out/rc): pin s119 = 350582e55d21533d @ 22e0cda
