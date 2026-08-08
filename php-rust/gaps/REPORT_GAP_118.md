@@ -9,9 +9,9 @@ misura WP dopo la pipeline nuova). Binari: phpr = pin s117 1656580e
 
 | metrica | ON (default) | OFF | nota |
 |---|---|---|---|
-| media group, user CPU | **2,506×** (20,73/51,94) | 2,580× (20,83/53,75) | rif S-113: 2,632/2,603 — ON minimo storico della voce |
+| media group, user CPU | **2,506×** (20,73/51,94) | 2,580× (20,83/53,75) | serie A′ N=1: direzione-solo vs vecchia pipeline (az. rev. S-118) |
 | full suite, master CPU | **1,913×** (400,38/766,01) | 1,955× (398,20/778,58) | rif VECCHIA pipeline 1,867/1,869 DECADE (pre-registrato); oracle stasera −11% assoluto: tra-sere = solo direzione |
-| full peak footprint phpr | **1839,16 MiB** | 1917,52 MiB | ON = minimo famiglia (1842-1998) |
+| full peak footprint phpr | **1839,16 MiB** | 1917,52 MiB | serie A′ N=1: nessun ranking cross-pipeline (az. rev. S-118) |
 | media peak ratio | 3,197 | 2,626 | metrica rumorosa (nota storica) |
 
 Parità: media 0 fail ×4 gambe; full failnames diff == SOLO
