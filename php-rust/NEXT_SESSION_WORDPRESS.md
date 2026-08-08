@@ -45,8 +45,8 @@ max = arith 0,40 · prop 4,33 · calls 5,50 · str 5,00 · arr 6,67 · re 10,00*
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
 
-L-A promozione (p.1) · banda held-out N=1 da irrobustire · disco Data ~3G
-(bundle VM Claude Desktop 7,5G — AZIONE UTENTE) · batteria N≥3 su 8bb395c ·
+L-A promozione (p.1) · banda held-out N=1 da irrobustire · batteria N≥3 su
+8bb395c ·
 bimodalità P/E-core (le famiglie la gestiscono, resta non attribuita) · arr
 4,2 vs 3,9 (tra-sere) · media voce aperta · rumore tra-sere WP · fame frontend
 (kpc/sudo — azione utente) · §3.16/§3.17 warning · retro-A/B str s107b/s108/
@@ -74,7 +74,7 @@ sotto banda · **gate a soglia fissa su giudice SENZA banda misurata**.
 Pre-flight S-116: pin phpr **f71abd2a** (release AL pin, verificato fine
 S-115) · server 443ae42f (stash s109; relink 06e6d677) · MySQL wp8 con elenco
 database · debug/ da rimuovere · uploads sotto guardia · nessuna run in volo ·
-⚠️ disco Data ~3G (bundle VM 7,5G — decisione utente; mitigazione: binari
-conservati, raw su Extreme Pro) · held-out 6,4·2,5·5,6 · candidati
+disco Data ~12G (bundle VM Claude Desktop RIMOSSO su ordine utente, fine
+S-115) · held-out 6,4·2,5·5,6 · candidati
 phpr-s114-{la,nulla} + phpr-s115-nulla2 · banda micro N=2 (riga (c)) +
 held-out N=1 (0,20/0,01/0,06).
