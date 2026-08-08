@@ -54,7 +54,6 @@ s109 · denti rinviati (OBS-8; fx20; direct-bind; drop-order; hit/miss;
 checkout-staging) · $z++/$z-- undef non warna · §3.13 · §3.12-i · §3.14 ·
 get_gc · drift TODO.md · (b-min) ConcatNFetchDim · (g) BinaryDst/CmpJmpConst
 solo se census WP li mostra caldi.
-
 ## NON riproporre (i veti restano; dettaglio nei concili archiviati)
 
 pin/stash senza collaudo-nell'atto · contenitori sul call path · differenze
