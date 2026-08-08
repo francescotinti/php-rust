@@ -1,0 +1,10 @@
+# S-114 verdetto delta batteria 1741/1742 (az.4 rev. S-113; raw: batteria-out/*.log, *-nomi.txt — gitignored)
+la-batteria (tree S-114 candidato L-A, 052ea417): rc=0 · 1742 passed / 0 failed / 2 ignored · 1744 nomi
+hp1-batteria (tree H-P1 8bb395c ricostruito): rc=0 · 1742 passed / 0 failed / 2 ignored · 1744 nomi
+diff inventari per NOME: VUOTO (INVENTARI_IDENTICI)
+ignored (per NOME, entrambi): vm::tests::a_ds9_supersede_scan_cost_bound · rendered_null_array_offset_deprecation
+
+Attribuzione: il 1741 di S-113 NON è attribuibile al codice H-P1 — lo stesso sorgente oggi rende 1742
+con inventario identico per nome. Resta un one-off AMBIENTALE della run S-113, senza log conservato:
+il nome mancante è inconoscibile dai raw. Nessuna lettera-gate da aprire. Metodo sanato: da S-114 ogni
+batteria conserva log + elenco nomi nei raw (batteria-out/).
