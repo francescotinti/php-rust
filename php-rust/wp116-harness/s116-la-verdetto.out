@@ -1,3 +1,4 @@
 # S-116 verdetto promozione L-A (criterio s116-criterio-la.md; raw gitignored in wp116-harness/{ab-out,admission-out,heldout-out}/; righe di esito APPESE DAGLI SCRIPT a esito acquisito)
 A=f71abd2a (stash phpr-s112 = pin) · B=052ea417 (phpr-s114-la CONSERVATO, codice 2c18b2e) · ZERO rebuild per l'A/B
 admission (p.6, rc=0 da admission-out/rc): A=f71abd2a B=052ea417 · parita' output e dump {main} x5: TUTTI IDENTICI · bigramma: hit=SI miss-magic=SI miss-undef=SI miss-ref=SI miss-str=SI · batteria RIUSATA 1742/0/2 S-114 (byte-identico — deroga dichiarata)
+smoke R=2 (rc=0): D per coppia = +28.33 +29.33
