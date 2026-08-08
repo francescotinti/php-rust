@@ -35,3 +35,10 @@ rustc-hash = "2"
 # (A-MS3, Council WP-78); removing an assert requires a Council deliberation
 # (KS-MS-1), never an in-session edit.
 static_assertions = "1.1"
+
+# A' stage-1 pipeline (S-117, council mandate wp117-harness/COUNCIL_WP117_REVIEWS.md):
+# fat LTO + single codegen unit — the 16 default CGUs are themselves a source of
+# the layout lottery the null-lever bands measured (up to 10 ns/iter).
+[profile.release]
+lto = "fat"
+codegen-units = 1
