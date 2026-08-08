@@ -30,6 +30,9 @@ mediano di 3): prop **+33,00** 5/5 (soglia 4,00) · guardia calls **−0,50 =
 (ipotesi layout FIRMATA, N layout=2) · held-out 3/3 ok (spread_pin pubblicato)
 ⇒ **PROMOSSA**. §6 pieno: re-hash morde il churn del test-relink → neutralizzato
 via determinismo (build ricetta ⇒ H1 al byte); pin s117 via pin-phpr.sh.
+[rev. SEMANTICA: il corpus della promozione giudicava solo i NOMI; contenuto
+chunk pareggiato post-hoc dal revisore (0 diff fuori carve-out, transitività
+via A′) — la parità dichiarata è della superficie CLI (WP/census = debito §1).]
 
 ## ⭐ Lezioni (max 3)
 - ⭐⭐ **Il metro si ripara per categoria, non per proclama**: la stessa leva bocciata 3 volte è promossa quando banda(calls) scende 5,50→0,50 — una «tassa sistematica» replicata su un solo layout era la firma della build, non del codice.

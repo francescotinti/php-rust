@@ -40,6 +40,10 @@ S-114..116 era layout di QUELLA build (FIRMATA, N=2); held-out 3/3.
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
 
+az. rev. S-117 (SEMANTICA): macchina chunk s102 DENTRO lo script di
+pin/promozione (nomi E contenuto) · golden dei CONTENUTI dei fail per modo in
+corpus-gate · banda della path-dipendenza dei target (o A/B nel target canonico
+prima di guardie sub-ns) · dicitura «parità CLI» finché WP/census non rimisurati ·
 WP full/media + census sul pin s117 (=§1) · repin server sotto A′ (=§1) ·
 **str/arr bande larghe 7,50/6,67**: metro NON riparato lì (zavorre N≥3 o
 indagine dedicata prima di leve su str/arr) · banda calls a N≥4 layout (rev.
