@@ -26,3 +26,4 @@ promozione-2 corpus(on): fail-set per NOME == congelato s109 (1415)
 promozione micro pin s117: rapporto_arith=5.4  [derivata: companion 2.34/0.43] rapporto_prop=5.9  [derivata: companion 2.49/0.42] rapporto_calls=4.8  [derivata: companion 2.14/0.45] rapporto_str=5.3  [derivata: companion 0.84/0.16] rapporto_arr=3.8  [derivata: companion 1.10/0.29] rapporto_re=3.4  [derivata: companion 1.22/0.36] 
 promozione held-out pin s117: rapporto_poly=6.2  [derivata: companion 9.45/1.52] rapporto_err=2.5  [derivata: companion 2.97/1.18] rapporto_wploop=5.4  [derivata: companion 6.41/1.18] 
 PROMOZIONE COMPLETA rc=0 (da promo-out/rc): pin s117 = 1656580e4e590e20
+fixture bilaterali (catena s109: hc1·move·recv·fx20·fx21·w9) sul pin s117: rc=0 TUTTI (da promo-out/fixture-chain.rc) — gate REGOLE §5 completo
