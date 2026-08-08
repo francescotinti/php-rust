@@ -9,14 +9,13 @@ letto dopo pipe — dichiarato, mai usato come gate).
 
 **arith 5,5 · prop 7,6 · calls 5,2 · str 5,3 · arr 4,2 · re 3,4** · held-out
 6,4·2,5·5,6. 🔬 S-115 ha STABILITO: (a) **L-A magnitudine +26,33 ns/iter su
-prop, 5/5, spread_A depurato 2,00** (famiglie 1,3×min: il metro inquinato di
-S-114 è RECUPERATO senza toccare la leva) — NON promossa SOLO per held-out
-poly 9,86>9,71; (b) il blocco è LAYOUT PROVATO: la leva-nulla-2 fa poly 9,80
-(banda held-out 0,20s) e sfonderebbe lo stesso gate con ZERO semantica;
-(c) **banda micro N=2: max = arith 0,40 · prop 4,33 · calls 5,50 · str 5,00 ·
-arr 6,67 · re 10,00** (re 0→10: banda N=1 mente; globale 10,00, stabile
-<13,34). Il peggiore resta **prop 7,6**; L-A promossa lo abbatterebbe (~26 su
-~107 lato pin).
+prop, 5/5, spread_A depurato 2,00** (famiglie 1,3×min: il metro inquinato S-114
+RECUPERATO senza toccare la leva) — NON promossa SOLO per held-out poly
+9,86>9,71; (b) blocco = LAYOUT PROVATO: la nulla-2 fa poly 9,80 (banda held-out
+0,20s) e sfonderebbe lo stesso gate con ZERO semantica; (c) **banda micro N=2:
+max = arith 0,40 · prop 4,33 · calls 5,50 · str 5,00 · arr 6,67 · re 10,00**
+(re 0→10: banda N=1 mente; globale 10,00 stabile <13,34). Il peggiore resta
+**prop 7,6**; L-A promossa lo abbatterebbe (~26 su ~107 lato pin).
 
 ## Stato gate
 
@@ -40,36 +39,34 @@ arr 6,67 · re 10,00** (re 0→10: banda N=1 mente; globale 10,00, stabile
    binari conservati, zero rebuild). Smoke R=2 prima del full.
 2. Se PROMOSSA: cherry-pick 2c18b2e (MAI checkout parziale) + pin SOLO via
    `scripts/pin-phpr.sh` §6 PIENO + micro R=5 + held-out sul pin nuovo.
-3. Se resta finestra: batteria N≥3 su 8bb395c (chiude il flaky S-113) ·
-   rumore tra-sere WP · arr rerun. Backlog Codex SOLO su ordine esplicito.
-   Chiusura lean: revisore (lente MISURA — rotazione dopo PROCESSO S-115).
+3. Finestra: batteria N≥3 su 8bb395c · rumore tra-sere WP · arr rerun. Codex
+   solo su ordine. Chiusura lean: revisore (lente MISURA, dopo PROCESSO S-115).
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
 
 L-A promozione (p.1) · banda held-out N=1 da irrobustire · disco Data ~3G
-(bundle VM Claude Desktop 7,5G del 7/8 — AZIONE UTENTE: rimuovere da app o a
-mano) · batteria N≥3 su 8bb395c · bimodalità P/E-core (le famiglie la GESTISCONO,
-resta non attribuita) · arr 4,2 vs 3,9 (tra-sere) · media voce aperta · rumore
-tra-sere WP · fame frontend (kpc/sudo — azione utente) · §3.16/§3.17 warning ·
-retro-A/B str s107b/s108/s109 · denti rinviati (OBS-8; fx20; direct-bind;
-drop-order; hit/miss; checkout-staging) · $z++/$z-- undef non warna · §3.13 ·
-§3.12-i · §3.14 · get_gc · drift TODO.md · (b-min) ConcatNFetchDim · (g)
-BinaryDst/CmpJmpConst solo se census WP li mostra caldi.
+(bundle VM Claude Desktop 7,5G — AZIONE UTENTE) · batteria N≥3 su 8bb395c ·
+bimodalità P/E-core (le famiglie la gestiscono, resta non attribuita) · arr
+4,2 vs 3,9 (tra-sere) · media voce aperta · rumore tra-sere WP · fame frontend
+(kpc/sudo — azione utente) · §3.16/§3.17 warning · retro-A/B str s107b/s108/
+s109 · denti rinviati (OBS-8; fx20; direct-bind; drop-order; hit/miss;
+checkout-staging) · $z++/$z-- undef non warna · §3.13 · §3.12-i · §3.14 ·
+get_gc · drift TODO.md · (b-min) ConcatNFetchDim · (g) BinaryDst/CmpJmpConst
+solo se census WP li mostra caldi.
 
 ## NON riproporre (i veti restano; dettaglio nei concili archiviati)
 
 pin/stash senza collaudo-nell'atto · contenitori sul call path · differenze
-tra A/B distinti come cifra · componenti prezzate · magnitudine ripartita
-senza A/B proprio · finestre estese senza criterio+dente · simple_call senza
-dente+fx21 · fixture su memory_get_usage · «icache» NON-premessa · pre-filtro
-che tassi i freddi · finestre fuse oltre helper sospendibile · guardie
-non-bersaglio BILATERALI · denominatori a memoria · output di run nel repo ·
-rc di gate da pipe (6 morsi: +BUILD_RC S-115) · tee/log pre-mkdir ·
-admission sul dump intero · xctrace senza guardie disco · path volume esterno
-nel figlio tracciato · leve lifecycle mono-clone su prop · run pesanti come
-task (detached DA SUBITO) · edit ai sorgenti con build/batteria in volo ·
-promozione su segni concordi sotto banda-layout · **gate a soglia fissa su
-giudice SENZA banda misurata (S-115: la leva nulla lo sfonda)**.
+tra A/B distinti come cifra · componenti prezzate · magnitudine ripartita senza
+A/B proprio · finestre estese senza criterio+dente · simple_call senza dente+
+fx21 · fixture su memory_get_usage · «icache» NON-premessa · pre-filtro che
+tassi i freddi · finestre fuse oltre helper sospendibile · guardie non-bersaglio
+BILATERALI · denominatori a memoria · output di run nel repo · rc di gate da
+pipe (6 morsi: +BUILD_RC S-115) · tee/log pre-mkdir · admission sul dump intero
+· xctrace senza guardie disco · path volume esterno nel figlio tracciato · leve
+lifecycle mono-clone su prop · run pesanti come task (detached DA SUBITO) ·
+edit ai sorgenti con build/batteria in volo · promozione su segni concordi
+sotto banda · **gate a soglia fissa su giudice SENZA banda misurata**.
 
 ---
 **Riscritto**: 2026-08-08 (chiusura S-115). Storia: `sessions/` ·
