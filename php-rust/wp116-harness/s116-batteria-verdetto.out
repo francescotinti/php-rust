@@ -1,0 +1,5 @@
+# S-116 batteria N=3 su 8bb395c (tree H-P1; worktree dedicato, target separato, INCREMENTAL=0; rc per run in batteria-out/hp1-runN.rc)
+run1: rc=0 (da hp1-run1.rc) · 1742 passed / 0 failed / 2 ignored · 1744 nomi
+run2: rc=0 (da hp1-run2.rc) · 1742 passed / 0 failed / 2 ignored · 1744 nomi
+run3: rc=0 (da hp1-run3.rc) · 1742 passed / 0 failed / 2 ignored · 1744 nomi
+diff inventari per NOME tra le 3 run: NESSUNO · run1 vs inventario S-114: IDENTICO · rc_complessivo=0
