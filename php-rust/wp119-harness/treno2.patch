@@ -1,0 +1,36 @@
+diff --git a/php-rust/crates/php-runtime/src/vm/run.rs b/php-rust/crates/php-runtime/src/vm/run.rs
+index 432baa0..a8869a8 100644
+--- a/php-rust/crates/php-runtime/src/vm/run.rs
++++ b/php-rust/crates/php-runtime/src/vm/run.rs
+@@ -4544,7 +4544,9 @@ impl<'m> super::Vm<'m> {
+                 Op::PropIncDec { name, inc, pre, ic } => {
+                     let obj = self.frames[top].stack.pop().expect("PropIncDec object");
+                     let cur = self.frames[top].class;
+-                    let obj_d = obj.deref_clone();
++                    // V3 (S-119 treno-2): il ricevitore è POSSEDUTO (pop) —
++                    // il deref_clone serve solo a un Ref; altrimenti si muove.
++                    let obj_d = if matches!(obj, Zval::Ref(_)) { obj.deref_clone() } else { obj };
+                     // INLINE CACHE (WP-30): the RMW twin of the PropSet hit.
+                     // Fills only from a `plain_set_props` class (below), so a
+                     // class-id match re-implies every per-class check the slow
+@@ -4736,7 +4738,8 @@ impl<'m> super::Vm<'m> {
+                 Op::PropIsset { name, ic } => {
+                     let obj = self.frames[top].stack.pop().expect("PropIsset object");
+                     let cur = self.frames[top].class;
+-                    let recv = obj.deref_clone();
++                    // V4 (S-119 treno-2): stessa guardia-Ref di V3.
++                    let recv = if matches!(obj, Zval::Ref(_)) { obj.deref_clone() } else { obj };
+                     // INLINE CACHE (WP-29): mirror of the PropGet IC — a
+                     // present non-`Undef` PUBLIC slot on the cached class
+                     // answers with zero hashing; anything else falls through.
+@@ -4962,7 +4965,9 @@ impl<'m> super::Vm<'m> {
+                 Op::MethodCall { method, argc, ic, deref } => {
+                     let args = self.pop_keys(top, *argc); // source order
+                     let recv = self.frames[top].stack.pop().expect("MethodCall receiver");
+-                    let this = recv.deref_clone();
++                    // V5 (S-119 treno-2): il frame vuole l'handle POSSEDUTO —
++                    // recv lo è già (pop); il clone serve solo a un Ref.
++                    let this = if matches!(recv, Zval::Ref(_)) { recv.deref_clone() } else { recv };
+                     self.method_call(top, this, &method, args, Some(&ic), *deref)?;
+                 }
+                 Op::ThisMethodCall { method, ic } => {
