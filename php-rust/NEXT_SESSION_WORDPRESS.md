@@ -75,7 +75,6 @@ concordi sotto banda-layout (la concordanza non firma)**.
 `gaps/GAP_TREND.md` · revisioni in `wp1*-harness/`.
 
 Pre-flight S-115: pin phpr **f71abd2a** (release AL pin, verificato fine
-S-114) · server 443ae42f (stash s109; relink 06e6d677) · MySQL wp8 con
-l'elenco database · debug/ da rimuovere · uploads sotto guardia · nessuna run
-in volo · disco Data ~15G (guardie xctrace) · held-out 6,4·2,5·5,6 ·
-candidati conservati phpr-s114-{nulla,la}.
+S-114) · server 443ae42f (stash s109; relink 06e6d677) · MySQL wp8 con elenco
+database · debug/ da rimuovere · uploads sotto guardia · nessuna run in volo ·
+disco Data ~15G · held-out 6,4·2,5·5,6 · candidati phpr-s114-{nulla,la}.

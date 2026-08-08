@@ -1,10 +1,9 @@
 # WP_SESSION_114 — banda-layout MISURATA (6,67) · L-A firmata (+30,33 5/5) NON promossa · delta batteria CHIUSO
 
-**In una frase**: misurato quanto la sola «impaginazione» del binario sposta i
+**In una frase**: misurata l'«impaginazione» del binario che sposta i
 cronometri (fino a 6,7 ns: spiega il morso di ieri su calls); la fusione sulle
-proprietà velocizza il giudice 5/5 ma due letture anomale del sistema hanno
-inquinato il metro e una guardia è scattata: si riverte per regola e si
-rimisurerà con metro emendato; il test «sparito» ieri non era il codice.
+proprietà velocizza il giudice 5/5 ma letture anomale del sistema hanno
+inquinato il metro: si riverte per regola; il test «sparito» non era il codice.
 
 **SCOREBOARD** (pin s112 f71abd2a INVARIATO; micro = S-112, frecce =):
 **arith 5,5 = · prop 7,6 = · calls 5,2 = · str 5,3 = · arr 4,2 = · re 3,4 =** ·
@@ -29,8 +28,8 @@ phpr-s114-nulla 846d0df4, phpr-s114-la 052ea417) → 3·DELTA BATTERIA CHIUSO:
 tree H-P1 ricostruito (8bb395c) → 1742/0/2, inventario 1744 nomi IDENTICO;
 1741 S-113 = one-off ambientale senza log; nessuna lettera-gate; i log ora si
 conservano. Incidenti processo: 3 (batteria contaminata da edit concorrente,
-uccisa e rifatta · redirect pre-mkdir · staging implicito di `git checkout
-<commit> -- path` ha committato run.rs: corretto index-only 3cf7c39).
+uccisa e rifatta · redirect pre-mkdir · checkout-staging di run.rs: corretto
+index-only 3cf7c39).
 
 ## ⭐ Lezioni (max 3)
 - ⭐⭐ **La banda-layout misurata declassa i verdetti mono-punto**: una leva
@@ -39,5 +38,4 @@ uccisa e rifatta · redirect pre-mkdir · staging implicito di `git checkout
 - ⭐⭐ **Il metro può essere il colpevole**: 2 run del PIN a +40% bocciano un
   mediano +30 5/5 via spread_A — il criterio emendato renda lo scheduling
   osservabile o escluda per NOME (pre-registrato) le run fuori famiglia.
-- ⭐ **`git checkout <commit> -- path` STAGIA**: dopo un checkout parziale ogni
-  commit va ispezionato con `show --stat`.
+- ⭐ **`git checkout <commit> -- path` STAGIA**: dopo un checkout parziale, `show --stat` su ogni commit.
