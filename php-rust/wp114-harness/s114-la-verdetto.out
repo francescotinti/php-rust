@@ -1,0 +1,19 @@
+# S-114 verdetto leva L-A «trigramma prop in prestito» (criterio s114-criterio-la.md; raw: ab-out/la-smoke.out, la-full.out, admission-out/la-admission-dump.out, batteria-out/la-batteria.log — gitignored)
+A=f71abd2a (stash phpr-s112 = pin) · B=052ea417 (phpr-s114-la CONSERVATO) · commit codice 2c18b2e
+admission: batteria rc=0 (DAL COMANDO, .rc file) 1742 passed / 0 failed / 2 ignored, ELENCO NOMI nel log ·
+dump ON {main} x6 IDENTICI · OFF interi x6 al byte · run_loop 291.316->294.492 B (+3.176), bl 5864->5889 (+25), br 24->26 · smoke R=2: +29,33 / +5,33 (2/2 positivi, nessun early-stop)
+
+VERDETTO SOGLIE A MACCHINA (da s114-ab-la.sh, R=5 ABAB):
+arith: D_mediano=+0.20 segni +4/-1 spread_A=0.60 soglia_guardia=-1.20 -> tiene
+prop:  D_mediano=+30.33 segni +5/-0 spread_A=47.00 spread_B=33.33 soglia_promozione=47.00 -> FAIL
+calls: D_mediano=-6.50 segni +0/-5 spread_A=1.00 soglia_guardia=-5.50 -> SFONDATA
+str:   D_mediano=-7.50 segni +0/-5 spread_A=7.50 soglia_guardia=-15.00 -> tiene
+arr:   D_mediano=+0.00 segni +1/-2 spread_A=18.33 soglia_guardia=-36.67 -> tiene
+re:    D_mediano=-10.00 segni +2/-3 spread_A=20.00 soglia_guardia=-40.00 -> tiene
+VERDETTO_MICRO=NON promuovibile -> ESITO: NON PROMOSSA, «direzione firmata, magnitudine non stabilita»; revert AL BYTE (criterio punto 8). Held-out non eseguito: promozione gia' esclusa dalle micro.
+
+Esiti numerici a verbale:
+1. prop 5/5 positivi, mediano +30,33 >> banda 4,33: la direzione della leva e' FIRMATA con margine; la magnitudine NON e' stabilita perche' spread_A=47,00 e' inquinato da due run A fuori famiglia (150,67/153,67 vs ~107 storico; A = pin invariato ⇒ ambiente, non codice).
+2. Bimodalita' B: 78,00x2 + 101-111x3 (e smoke 78,33/102,33). Ipotesi NOMINATA non attribuita: scheduling P/E-core (rapporti 150/107=1,40 e 102/78=1,31 compatibili). Un criterio emendato deve renderla osservabile (QoS/affinita' o esclusione per NOME pre-registrata delle run fuori famiglia).
+3. calls -6,50: a 1,0 dal punto layout MISURATO dalla leva-nulla (-5,50, stessa direzione, sentiero non toccato dai dump): famiglia layout, ora N=2 misurati su calls.
+4. Il criterio ha morso ESATTAMENTE dove doveva: nessuna deroga post-hoc; il rerun in condizioni controllate e' materia del criterio EMENDATO di S-115 (keep-partial-wins).
