@@ -1,0 +1,17 @@
+la-build: rc=0, candidato phpr-s117-la=67d74c70 conservato, tree ripulito (cherry-pick -n + reset --hard)
+admission (rc=0 da la-out/admission.rc): A=8135dcf8 B=67d74c70 · 5 casi parità+dump: OK · bigramma: hit=SI miss-magic=SI miss-undef=SI miss-ref=SI miss-str=SI · batteria tree L-A×A′ rinviata alla promozione (deroga dichiarata, criterio p.6)
+smoke R=2 (rc=0): D per coppia = +32.00 +32.00
+
+VERDETTO SOGLIE A MACCHINA (s117-ab-la.sh full, rc=0 da la-out/full-rc):
+arith: fam=5 D_med=+1.00 segni +5/5 spread_A_dep=0.80 quanto=0.20 soglia_guardia=-1.60 -> tiene (tie: = -> tiene)
+prop: fam=5 D_med=+33.00 segni +5/5 spread_A_dep=1.67 soglia_promozione=4.00 -> PASS (tie: >= = PASS)
+calls: fam=5 D_med=-0.50 segni +0/5 spread_A_dep=1.00 quanto=0.50 soglia_guardia=-2.00 -> tiene (tie: = -> tiene)
+str: fam=5 D_med=+0.00 segni +1/5 spread_A_dep=5.00 quanto=2.50 soglia_guardia=-10.00 -> tiene (tie: = -> tiene)
+arr: fam=5 D_med=-3.33 segni +1/5 spread_A_dep=6.67 quanto=1.67 soglia_guardia=-13.34 -> tiene (tie: = -> tiene)
+re: fam=5 D_med=-5.00 segni +1/5 spread_A_dep=10.00 quanto=5.00 soglia_guardia=-20.00 -> tiene (tie: = -> tiene)
+VERDETTO_MICRO=PROMUOVIBILE (resta held-out)
+
+HELD-OUT (s117-heldout-la.sh, rc=0 da la-out/heldout.rc; baseline+banda A′ N=2; spread=max(pin,cand) pubblicati):
+poly: net_A=9.46s net_cand=9.49s spread_pin=0.10s spread_cand=0.05s spread=max=0.10s baseline_Aprime=9.44s banda_ho=0.01s limite=9.64s -> ok
+err: net_A=3.00s net_cand=2.96s spread_pin=0.05s spread_cand=0.04s spread=max=0.05s baseline_Aprime=2.99s banda_ho=0.06s limite=3.11s -> ok
+wploop: net_A=6.37s net_cand=6.40s spread_pin=0.06s spread_cand=0.05s spread=max=0.06s baseline_Aprime=6.38s banda_ho=0.08s limite=6.50s -> ok

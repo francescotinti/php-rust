@@ -1,5 +1,8 @@
 #!/bin/bash
 # pin-phpr.sh <tag> — REGOLE.md §2: lo stash del pin phpr nasce SOLO da qui.
+# RICETTA BUILD (pipeline A′, S-117): [profile.release] lto="fat"+codegen-units=1
+# (Cargo.toml di root) + `SOURCE_DATE_EPOCH=0 CARGO_INCREMENTAL=0 cargo build
+# --release` — determinismo provato build ×2 hash IDENTICO (s117-criterio §2/§2-bis).
 # Smoke di parità VERO (giudice arith vs oracle, entrambi i modi) + stash +
 # verbale a stdout. La batteria/corpus/micro restano i gate del protocollo
 # PIN (REGOLE §6): questo script garantisce che NESSUN binario non-eseguito
