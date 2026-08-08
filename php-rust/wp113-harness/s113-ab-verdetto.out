@@ -13,7 +13,7 @@ arith  D mediano=-0,20  soglia -1,60  REGGE
 calls  D mediano=-5,50  5/5 NEGATIVI  soglia -2,00  SFONDATA (regressione vera: 115,0->121,0 circa)
 str    D mediano=-2,50  soglia -5,00  REGGE
 arr    D mediano=+3,33  (rumoroso come da storico, spread_A 45)  REGGE
-re     D mediano=0,00   soglia -30,00  REGGE
+re     D mediano=0,00   soglia -60,00  REGGE  [EMENDATO da -30,00 su azione revisore S-113: spread_A=30, 2x30=60; esito INVARIATO su entrambe le soglie]
 
 meccanismo_calls=il corpo caldo di calls (fn f = BinarySS, dal dump S-112) NON tocca PropGetSlot*/prop_get_entry:
   la regressione -5,50 su sentiero non toccato e' della stessa famiglia del +1,50 S-112 (attribuzione layout MAI

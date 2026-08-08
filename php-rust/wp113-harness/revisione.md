@@ -1,0 +1,13 @@
+# Revisione S-113 — lente MISURA (revisore singolo, REGOLE §7)
+
+**Verifiche sui raw**: rapporti coppia RIFATTI dai .time: full ON 419,62+26,61=446,23 / 791,38+43,49=834,87 → **1,871** (dentro [1,81;1,88]); OFF 446,01/843,62 → **1,891**; media user 56,78/21,57=2,632 e 55,34/21,26=2,603; peak 1931757632 B=1842,27 MiB e 2002929800 B=1910,14 MiB — tutte le cifre pubblicate coincidono al centesimo. Failnames contati: 87 oracle / 88 phpr su ENTRAMBE le gambe, byte-identici fra ON e OFF, unico delta wp_is_stream #2; media 0 nomi ×2; done rc=0 ×2. Criteri PRE byte-identici ai commit (0df621d 10:16:19 < prima misura 10:16:29; 40fcc80 10:25:31 < ab-out 11:27–11:31). A/B: mediane e spread RIFATTI — prop +3,33 (5/5 positivi, spread_A 108,67−106,00=2,67, soglia 4,00: SOTTO); calls −5,50 (5/5, spread_A 1,00, soglia −2,00: SFONDATA, A≈115 → B≈121); arith −0,20/−1,60; str −2,50/−5,00; arr +3,33 (spread 45); tutti confermati. N dal sorgente verificato (prop.php `$i<30000000`; calls cst001=20000000). Hash: A=f71abd2a, B=f210eab4 sul disco; revert al byte VERO (diff crates/ 40fcc80→HEAD vuoto; release = f71abd2a...). Il dump calls.main non contiene PropGetSlot: il −5,50 è davvero su sentiero non toccato.
+
+**Il punto che RIDIMENSIONA**: la **soglia di re a verbale è SBAGLIATA**: spread_A = 660−630 = 30 → per il criterio (−max(2×spread; 0,67)) la soglia è **−60,00**, non −30,00. Non decide nulla (D mediano 0,00 regge su entrambe), ma su cinque soglie derivate a mano una è errata: la derivazione soglie non è a macchina come i ratios. Secondari: (1) l'attribuzione layout del −5,50 resta RACCONTATA (nessun A/B leva-nulla) — dichiarato onestamente, e la refutazione non ne dipende (calls sfonda comunque); la «famiglia layout» però ora ha N=2 punti (+1,50 S-112, −5,50 S-113) entrambi non misurati e di segno opposto. (2) Delta batteria 1741 vs 1742: nessun log in harness, delta per CONTEGGIO e non per NOME — inverificabile dai raw.
+
+**Verdetto: entrambi i claim REGGONO — coppia dentro banda con cifre riprodotte al centesimo dai .time; NON-promozione CORRETTA dal criterio PRE (3,33<4,00 e guardia calls −5,50<−2,00); revert al byte verificato. Unico errore di misura trovato: soglia re −30 invece di −60, non decisivo.**
+
+## Azioni
+1. Correggere a verbale (WP_SESSION_113) la soglia re: −60,00; l'esito REGGE invariato.
+2. Soglie e mediane A/B emesse A MACCHINA dallo script (come pair113-ratios), non derivate a mano nel verdetto.
+3. A/B leva-nulla di attribuzione layout come PRIMO atto S-114: la famiglia è a N=2 mai misurata, segni opposti.
+4. Attribuire il delta batteria 1741/1742 per NOME (diff elenco passed pin vs candidato), non per conteggio; log batteria conservato nei raw.

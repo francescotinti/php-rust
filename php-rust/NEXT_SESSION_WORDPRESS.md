@@ -37,8 +37,8 @@ compone o si cambia famiglia. Il peggiore resta **prop 7,6**.
    bundle lifecycle multi-sito (2 get H-P1 + doppio borrow del set + recv
    push) con attesa > banda misurata al punto 1; o **(i) op-count su prop**
    (fusione LEGALE entro il primo helper sospendibile, dai dump). Vincoli:
-   criterio PRE con soglia max(4; rumore; banda MISURATA) + guardie a
-   solo-regressione + held-out su soglia PRE + admission + §6 pieno.
+   criterio PRE, soglia max(4; rumore; banda MISURATA), guardie solo-regressione,
+   **soglie/mediane A/B A MACCHINA** (az.2 rev. S-113), held-out, §6 pieno.
 3. **Delta batteria 1741 vs 1742**: attribuire per NOME (diff inventario
    #[test] come az.3 S-108) — chiude o apre una lettera-gate.
 4. Se resta finestra: rumore tra-sere WP (az.2 S-110) · arr 4,2 vs 3,9 rerun.
