@@ -41,10 +41,9 @@ str +3,00 · arr +2,05**, resto 0; prop zvclone 5→3 (fusione, residui in
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
 
 PhpStr single-alloc (p.1) · PGO st.2 (p.2) · prop residui fusi (p.3) · cura
-§3.18 (gate preg ROSSO + golden stesso commit) · re residuo: Caps.groups Vec
-1 alloc/iter resta SOLO via single-alloc dei 3 gruppi (L-RE2 archiviata) ·
-Serena HANG (Read mirato + Explore) · fame frontend (kpc/sudo) · §3.16/§3.17
-warning · retro-A/B str s107b/s108/s109 · denti rinviati (OBS-8; fx20;
+§3.18 (gate preg ROSSO + golden stesso commit) · re residuo SOLO via
+single-alloc dei 3 gruppi (L-RE2 archiviata) · Serena HANG · fame frontend
+(kpc/sudo) · §3.16/§3.17 warning · retro-A/B str s107b/s108/s109 · denti rinviati (OBS-8; fx20;
 direct-bind; drop-order; hit/miss; checkout-staging) · $z++/$z-- undef non
 warna · §3.13 · §3.12-i · §3.14 · get_gc · drift TODO.md · latin1-cliff.
 
@@ -61,12 +60,11 @@ morsi) · tee/log pre-mkdir · admission sul dump intero (deroga forma S-118
 citata nel criterio) · xctrace senza guardie disco · run pesanti come task ·
 edit coi build in volo · promozione sotto banda · gate a soglia fissa senza
 banda · bande pre-pipeline su binari post-pipeline · corpus-gate solo-nomi ·
-strumentazione nei sorgenti del pin · leve micro sotto soglia-layout senza
-banda v2 · zavorra run-to-run come arbitro del layout · alloc-removal senza
-modello del costo SOSTITUTIVO (**4 cadute**) · probe senza riferimento vivo ·
-**classifiche da census che spegne la fusione (v1 sovrastimava prop di 2
-cloni/iter)** · **ordine FISSO di misura (P0-primo/TA-prima): SEMPRE permutato
-o alternato** · **delta tra census di epoche diverse senza datare i raw**.
+strumentazione nei sorgenti del pin · leve micro senza banda v2 · zavorra
+run-to-run come arbitro del layout · alloc-removal senza modello del costo
+SOSTITUTIVO (**4 cadute**) · probe senza riferimento vivo · **classifiche da
+census che spegne la fusione** · **ordine FISSO di misura: SEMPRE permutato o
+alternato** · **delta tra census di epoche diverse senza datare i raw**.
 
 ---
 **Riscritto**: 2026-08-09 (chiusura S-123). Storia: `sessions/` · `gaps/GAP_TREND.md` · revisione in `wp123-harness/revisione.md`.
@@ -79,5 +77,4 @@ s119-treno2/s120-re1(==pin)/s121-st1(reperto)/s122-lay1..3(probe)/
 s122-re2(reperto)/**s123-p0b(==pin, fixture metro)** · php-server-s119/s120 ·
 census-target FUSO riusabile (solo mem-census; catena s123-classifica-*.sh) ·
 Serena in hang: Read mirato + Explore · ⚠️ **disco Data ~8G < 15G**: snapshot
-aggiornamento macOS staged (MSUPrepareUpdate) — completare/annullare
-l'aggiornamento PRIMA delle run pesanti.
+aggiornamento macOS (MSUPrepareUpdate) — completare/annullare PRIMA delle run pesanti.
