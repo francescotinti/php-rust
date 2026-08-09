@@ -1,0 +1,86 @@
+diff --git a/php-rust/crates/php-runtime/src/vm/run.rs b/php-rust/crates/php-runtime/src/vm/run.rs
+index 1a9b018..8639dc3 100644
+--- a/php-rust/crates/php-runtime/src/vm/run.rs
++++ b/php-rust/crates/php-runtime/src/vm/run.rs
+@@ -3329,12 +3329,35 @@ impl<'m> super::Vm<'m> {
+                         // The compiler only emits CallBuiltin for value builtins.
+                         _ => return Err(undefined_builtin(&name)),
+                     };
+-                    let mut args = self.pop_keys(top, *argc); // pops argc, source order
++                    // L-HD2 (S-125): per arità <=4 gli argomenti vivono in un
++                    // buffer sullo stack nativo — la split_off-Vec era una
++                    // coppia malloc+free PER CHIAMATA (canale H-D, WP-103/104;
++                    // stessa forma «senza contenitore» della S-105 su Op::Call).
++                    // Oltre 4 resta il sentiero storico. Ordine sorgente
++                    // preservato (drain == split_off).
++                    let mut inline: [Zval; 4] = std::array::from_fn(|_| Zval::Undef);
++                    let mut heap: Vec<Zval>;
++                    let args: &mut [Zval] = if *argc as usize <= 4 {
++                        let at = self.frames[top]
++                            .stack
++                            .len()
++                            .checked_sub(*argc as usize)
++                            .expect("builtin args");
++                        for (dst, v) in
++                            inline.iter_mut().zip(self.frames[top].stack.drain(at..))
++                        {
++                            *dst = v;
++                        }
++                        &mut inline[..*argc as usize]
++                    } else {
++                        heap = self.pop_keys(top, *argc);
++                        &mut heap[..]
++                    };
+                     // A whole-object exporter initializes a lazy argument first
+                     // (PHP 8.4, init_trigger_var_export); the pure builtin then
+                     // formats the realized instance.
+                     if matches!(&name[..], b"var_export" | b"print_r") {
+-                        for a in &mut args {
++                        for a in args.iter_mut() {
+                             if self.is_lazy_value(a) {
+                                 *a = self.realize_full(a)?;
+                             }
+@@ -3346,7 +3369,7 @@ impl<'m> super::Vm<'m> {
+                     // array under the object header. Results handed to the builtin
+                     // via `var_dump_debug` (taken in `run_value_builtin`).
+                     if name[..] == *b"var_dump" {
+-                        self.var_dump_debug = self.compute_debug_info(&args)?;
++                        self.var_dump_debug = self.compute_debug_info(&args[..])?;
+                     }
+                     // `count($obj)`/`sizeof($obj)` on a Countable dispatches its
+                     // user `count()` method (step 56); the builtin only handles
+@@ -3370,7 +3393,7 @@ impl<'m> super::Vm<'m> {
+                         if let Some(rc) = user_stream_rc(&args[0]) {
+                             let line = self.cur_line(top);
+                             self.flush_diags(line)?;
+-                            let result = self.user_stream_op(&name, rc, &args)?;
++                            let result = self.user_stream_op(&name, rc, &args[..])?;
+                             self.flush_diags(line)?;
+                             self.frames[top].stack.push(result);
+                             continue;
+@@ -3393,7 +3416,7 @@ impl<'m> super::Vm<'m> {
+                         if let Some(path) = user_wrapper_url(&args[0], &self.stream_wrappers) {
+                             let line = self.cur_line(top);
+                             self.flush_diags(line)?;
+-                            let result = self.user_wrapper_path_op(&name, &path, &args)?;
++                            let result = self.user_wrapper_path_op(&name, &path, &args[..])?;
+                             self.flush_diags(line)?;
+                             self.frames[top].stack.push(result);
+                             continue;
+@@ -3406,12 +3429,12 @@ impl<'m> super::Vm<'m> {
+                     // family (`implode`/`str_replace`) also coerces array
+                     // *elements*, so its precompute recurses into array arguments.
+                     if value_builtin_string_coerces(&name) {
+-                        self.stringify_args = self.compute_stringify(&args, false)?;
+-                    } else if value_builtin_string_coerces_deep(&name, &args) {
+-                        self.stringify_args = self.compute_stringify(&args, true)?;
++                        self.stringify_args = self.compute_stringify(&args[..], false)?;
++                    } else if value_builtin_string_coerces_deep(&name, &args[..]) {
++                        self.stringify_args = self.compute_stringify(&args[..], true)?;
+                     }
+                     let line = self.cur_line(top);
+-                    let result = self.run_value_builtin(f, &args, line)?;
++                    let result = self.run_value_builtin(f, &args[..], line)?;
+                     self.frames[top].stack.push(result);
+                 }
+                 Op::CallBuiltinSpread { name, spreads } => {

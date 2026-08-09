@@ -1,6 +1,7 @@
 pair-out/
 census-out/
 banda-out/
+metro-out/
 *.log
 p2-progress.txt
 p2-chain.done
