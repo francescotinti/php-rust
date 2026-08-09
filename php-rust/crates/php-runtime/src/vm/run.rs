@@ -267,13 +267,15 @@ fn binary_fast(b: BinOp, lhs: &Zval, rhs: &Zval) -> Option<Zval> {
 /// (WP-33 ⭐⭐: extra rarely-taken code in the dispatch loop costs ~3%).
 #[inline(never)]
 fn concat_n_join(stack: &mut Vec<Zval>, base: usize, total: usize) -> php_types::ZStr {
-    let mut out = Vec::with_capacity(total);
+    // S-124 single-alloc: write the parts straight into the one block
+    // (`total` is the precomputed byte sum) — no transient Vec.
+    let mut out = PhpStr::builder(total);
     for v in stack.drain(base..) {
         if let Zval::Str(s) = v {
-            out.extend_from_slice(s.as_bytes());
+            out.push(s.as_bytes());
         }
     }
-    PhpStr::new(out)
+    out.finish()
 }
 
 impl<'m> super::Vm<'m> {
@@ -430,9 +432,8 @@ impl<'m> super::Vm<'m> {
         let rhs = self.frames[top].stack.pop().expect("ConcatAssignSlot rhs");
         if let Zval::Str(rv) = &rhs {
             if let Zval::Str(l) = &mut self.frames[top].slots[s as usize] {
-                if let Some(ls) = Rc::get_mut(l) {
-                    ls.append(rv.as_bytes());
-                    return Ok(Zval::Str(Rc::clone(l)));
+                if l.try_append(rv.as_bytes()) {
+                    return Ok(Zval::Str(l.clone()));
                 }
             }
         }
@@ -4031,10 +4032,10 @@ impl<'m> super::Vm<'m> {
                     if o.borrow().lazy.is_some() && o.borrow().proxy_instance.is_none() {
                         self.realize_lazy(&src)?;
                     }
-                    let proxy_wrapper: Option<(u32, Rc<PhpStr>, Rc<ObjectInfo>)> = {
+                    let proxy_wrapper: Option<(u32, php_types::ZStr, Rc<ObjectInfo>)> = {
                         let b = o.borrow();
                         if matches!(b.lazy, Some(LazyKind::Proxy)) && b.proxy_instance.is_some() {
-                            Some((b.class_id, Rc::clone(&b.class_name), Rc::clone(&b.info)))
+                            Some((b.class_id, b.class_name.clone(), Rc::clone(&b.info)))
                         } else {
                             None
                         }
@@ -4056,7 +4057,7 @@ impl<'m> super::Vm<'m> {
                         props.separate_cloned_internal_refs();
                         let obj = Object {
                             class_id: b.class_id,
-                            class_name: Rc::clone(&b.class_name),
+                            class_name: b.class_name.clone(),
                             props,
                             id: self.next_obj_id(),
                             info: Rc::clone(&b.info),

@@ -8,7 +8,6 @@
 //! (php-builtins → php-runtime) while still letting builtins write to stdout and
 //! raise diagnostics.
 
-use std::rc::Rc;
 
 use php_types::{convert, Diags, PhpError, Zval, ZStr};
 
@@ -49,7 +48,7 @@ impl Ctx<'_> {
             Zval::Object(o) => {
                 let id = o.borrow().id;
                 if let Some(s) = self.stringify.get(&id) {
-                    return Rc::clone(s);
+                    return s.clone();
                 }
                 convert::to_zstr(v, self.diags)
             }

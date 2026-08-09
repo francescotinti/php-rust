@@ -1,6 +1,10 @@
+use std::alloc::{alloc, dealloc, handle_alloc_error, realloc, Layout};
+use std::borrow::Borrow;
 use std::cell::Cell;
 use std::fmt;
-use std::rc::Rc;
+use std::marker::PhantomData;
+use std::ops::Deref;
+use std::ptr::NonNull;
 
 /// A PHP string: an arbitrary byte sequence (never assumed UTF-8).
 ///
@@ -14,71 +18,338 @@ use std::rc::Rc;
 /// (`new` accetta `&[u8]`), `concat2` e `from_i64`, che evitano round-trip
 /// inutili senza cambiare la rappresentazione. Da non riproporre senza
 /// nuovi dati (cfr. NaN-boxing WP-32).
-/// WP-55: `bytes` è `Vec<u8>` (growable) per l'append-in-place di `.=`
-/// (mirror di `zend_string_extend`): quando lo ZStr è UNICO (`Rc::get_mut`)
-/// l'append estende il buffer con crescita ammortizzata invece di
-/// riallocare+copiare l'intera stringa (canale O(n²), probe WP-54: 244×
-/// vs oracle). Costo quotato PRIMA del layout (WP-52): RcBox 40→48B =
-/// +8B/stringa viva (bin mimalloc a passo 8 sotto i 64B). I costruttori
-/// slice/Vec-fed restano exact-size per costruzione (`shrink_to_fit` nel
-/// funnel = stessa disciplina della vecchia conversione a `Box<[u8]>`);
-/// solo il path append lascia slack di crescita.
+///
+/// S-124 single-alloc: la coppia `Rc<PhpStr{hash, Vec<u8>}>` (2 malloc: RcBox
+/// + buffer del Vec) diventa UN blocco stile `zend_string`: questo header di
+/// 32 B `{rc, hash, len, cap}` con i byte in coda alla STESSA allocazione e
+/// refcount custom non-atomico (la VM è single-thread; `NonNull` tiene ZStr
+/// !Send/!Sync come lo era Rc). La lettura resta un deref — nessun branch SSO
+/// — ma sparisce un hop (offset fisso invece del puntatore del Vec) e l'header
+/// condivide la cache line coi primi byte. NON è l'SSO bocciato WP-38.
+///
+/// WP-55 (invariata nella sostanza): l'append-in-place di `.=` (mirror di
+/// `zend_string_extend`) vive in [`ZStr::try_append`]: SOLO quando la stringa
+/// è unica (rc == 1) il blocco cresce con `realloc` ammortizzato ×2 invece di
+/// riallocare+copiare l'intera stringa (canale O(n²), probe WP-54: 244× vs
+/// oracle). I costruttori restano exact-size (`cap == len`); solo il path
+/// append lascia slack di crescita. Le stringhe condivise restano
+/// copy-on-write per costruzione (fallback `concat2` al sito di chiamata).
+#[repr(C)]
 pub struct PhpStr {
+    /// Non-atomic refcount, mirrors `Rc`'s strong count (no weak field).
+    rc: Cell<usize>,
     hash: Cell<u64>,
-    bytes: Vec<u8>,
+    len: usize,
+    cap: usize,
+    // `len` payload bytes follow the header in the same allocation
+    // (`cap` bytes reserved).
 }
 
 const _: () = {
     assert!(std::mem::size_of::<PhpStr>() == 32);
+    assert!(std::mem::align_of::<PhpStr>() == 8);
 };
 
-pub type ZStr = Rc<PhpStr>;
+const HDR: usize = std::mem::size_of::<PhpStr>();
+
+/// Layout of a whole string block (header + `cap` payload bytes).
+fn block_layout(cap: usize) -> Layout {
+    let size = HDR.checked_add(cap).expect("PhpStr capacity overflow");
+    Layout::from_size_align(size, std::mem::align_of::<PhpStr>())
+        .expect("PhpStr layout overflow")
+}
+
+/// Owning handle to a refcounted single-allocation [`PhpStr`] block.
+/// Replaces the old `pub type ZStr = Rc<PhpStr>`: same 8-byte niche-friendly
+/// representation, same !Send/!Sync (raw pointer inside), same
+/// Deref-to-`PhpStr` call sites.
+pub struct ZStr {
+    ptr: NonNull<PhpStr>,
+    _own: PhantomData<PhpStr>,
+}
+
+impl ZStr {
+    /// Allocate a block with `cap` reserved bytes and `len` already claimed.
+    /// The caller must initialise `len` payload bytes before the ZStr is read.
+    fn alloc_block(len: usize, cap: usize) -> NonNull<PhpStr> {
+        let lay = block_layout(cap);
+        let raw = unsafe { alloc(lay) };
+        let Some(ptr) = NonNull::new(raw.cast::<PhpStr>()) else {
+            handle_alloc_error(lay)
+        };
+        unsafe {
+            ptr.as_ptr().write(PhpStr {
+                rc: Cell::new(1),
+                hash: Cell::new(0),
+                len,
+                cap,
+            });
+        }
+        ptr
+    }
+
+    #[inline]
+    fn from_raw(ptr: NonNull<PhpStr>) -> ZStr {
+        ZStr {
+            ptr,
+            _own: PhantomData,
+        }
+    }
+
+    #[inline]
+    fn data_ptr(ptr: NonNull<PhpStr>) -> *mut u8 {
+        unsafe { ptr.as_ptr().cast::<u8>().add(HDR) }
+    }
+
+    /// Pointer identity (the old `Rc::ptr_eq`).
+    #[inline]
+    pub fn ptr_eq(a: &ZStr, b: &ZStr) -> bool {
+        a.ptr == b.ptr
+    }
+
+    /// Stable header address (the old `Rc::as_ptr`); census dedup key.
+    #[inline]
+    pub fn as_ptr(this: &ZStr) -> *const PhpStr {
+        this.ptr.as_ptr()
+    }
+
+    /// WP-55 append-in-place, single-alloc edition: extends the block with
+    /// amortised growth and INVALIDATES the cached hash — the one in-place
+    /// mutation site; every constructor freezes the bytes. Returns `false`
+    /// when the string is shared (`rc > 1`): the caller falls back to
+    /// `concat2`, which is what keeps aliased/interned strings copy-on-write
+    /// by construction (the old `Rc::get_mut` gate, run.rs fused `.=`).
+    ///
+    /// `more` can never alias this block: borrowing it from `self` is ruled
+    /// out by `&mut self`, and a slice from another handle to the same block
+    /// implies `rc > 1`, which bails out above.
+    pub fn try_append(&mut self, more: &[u8]) -> bool {
+        if self.rc.get() != 1 {
+            return false;
+        }
+        #[cfg(feature = "mem-census")]
+        crate::memcensus::adjust(crate::memcensus::CH_STR, more.len() as i64);
+        unsafe {
+            let (len, cap) = {
+                let h = self.ptr.as_ref();
+                (h.len, h.cap)
+            };
+            let need = len.checked_add(more.len()).expect("PhpStr length overflow");
+            if need > cap {
+                // Vec-mirror growth: at least double, never below `need`.
+                let new_cap = need.max(cap.saturating_mul(2));
+                let new_lay = block_layout(new_cap);
+                let raw = realloc(
+                    self.ptr.as_ptr().cast::<u8>(),
+                    block_layout(cap),
+                    new_lay.size(),
+                );
+                let Some(p) = NonNull::new(raw.cast::<PhpStr>()) else {
+                    handle_alloc_error(new_lay)
+                };
+                self.ptr = p;
+                (*self.ptr.as_ptr()).cap = new_cap;
+            }
+            std::ptr::copy_nonoverlapping(
+                more.as_ptr(),
+                Self::data_ptr(self.ptr).add(len),
+                more.len(),
+            );
+            let h = self.ptr.as_ptr();
+            (*h).len = need;
+            (*h).hash.set(0);
+        }
+        true
+    }
+}
+
+impl Clone for ZStr {
+    #[inline]
+    fn clone(&self) -> ZStr {
+        // Mirror Rc: wrapping increment, hard abort on overflow.
+        let n = self.rc.get().wrapping_add(1);
+        self.rc.set(n);
+        if n == 0 {
+            std::process::abort();
+        }
+        ZStr::from_raw(self.ptr)
+    }
+}
+
+impl Drop for ZStr {
+    #[inline]
+    fn drop(&mut self) {
+        let n = self.rc.get() - 1;
+        self.rc.set(n);
+        if n == 0 {
+            #[cfg(feature = "mem-census")]
+            crate::memcensus::free(
+                crate::memcensus::CH_STR,
+                self.len() + crate::memcensus::STR_OVERHEAD,
+            );
+            unsafe {
+                let cap = self.ptr.as_ref().cap;
+                dealloc(self.ptr.as_ptr().cast::<u8>(), block_layout(cap));
+            }
+        }
+    }
+}
+
+impl Deref for ZStr {
+    type Target = PhpStr;
+    #[inline]
+    fn deref(&self) -> &PhpStr {
+        unsafe { self.ptr.as_ref() }
+    }
+}
+
+impl Borrow<PhpStr> for ZStr {
+    #[inline]
+    fn borrow(&self) -> &PhpStr {
+        self
+    }
+}
+
+impl PartialEq for ZStr {
+    /// RcEqIdent semantics preserved BY HAND (istruttoria S-123, rischio 1):
+    /// the libstd specialisation `ptr_eq || byte-eq` for `Rc<T: Eq>` does not
+    /// carry over to a custom type — losing it silently regresses key lookups.
+    #[inline]
+    fn eq(&self, other: &Self) -> bool {
+        ZStr::ptr_eq(self, other) || self.as_bytes() == other.as_bytes()
+    }
+}
+
+impl Eq for ZStr {}
+
+impl std::hash::Hash for ZStr {
+    #[inline]
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        (**self).hash(state)
+    }
+}
+
+impl fmt::Debug for ZStr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        (**self).fmt(f)
+    }
+}
+
+/// Exact-capacity builder: writes multi-part concatenations (ConcatN join)
+/// straight into the single block — no transient `Vec`.
+pub struct ZStrBuilder {
+    ptr: NonNull<PhpStr>,
+    written: usize,
+}
+
+impl ZStrBuilder {
+    pub fn push(&mut self, bytes: &[u8]) {
+        let cap = unsafe { self.ptr.as_ref().cap };
+        assert!(
+            bytes.len() <= cap - self.written,
+            "ZStrBuilder capacity overflow"
+        );
+        unsafe {
+            std::ptr::copy_nonoverlapping(
+                bytes.as_ptr(),
+                ZStr::data_ptr(self.ptr).add(self.written),
+                bytes.len(),
+            );
+        }
+        self.written += bytes.len();
+    }
+
+    pub fn finish(self) -> ZStr {
+        unsafe {
+            let cap = self.ptr.as_ref().cap;
+            let mut ptr = self.ptr;
+            if self.written < cap {
+                // Exact-size discipline (WP-55 pin): shrink the rare
+                // under-filled block, same contract as the old shrink_to_fit.
+                let new_lay = block_layout(self.written);
+                let raw = realloc(
+                    ptr.as_ptr().cast::<u8>(),
+                    block_layout(cap),
+                    new_lay.size(),
+                );
+                let Some(p) = NonNull::new(raw.cast::<PhpStr>()) else {
+                    handle_alloc_error(new_lay)
+                };
+                ptr = p;
+                (*ptr.as_ptr()).cap = self.written;
+            }
+            (*ptr.as_ptr()).len = self.written;
+            #[cfg(feature = "str-census")]
+            census::record(self.written);
+            #[cfg(feature = "mem-census")]
+            crate::memcensus::alloc(
+                crate::memcensus::CH_STR,
+                self.written + crate::memcensus::STR_OVERHEAD,
+            );
+            std::mem::forget(self);
+            ZStr::from_raw(ptr)
+        }
+    }
+}
+
+impl Drop for ZStrBuilder {
+    fn drop(&mut self) {
+        // Abandoned builder (no `finish`): release the block; no census
+        // alloc was recorded yet, so nothing to balance.
+        unsafe {
+            let cap = self.ptr.as_ref().cap;
+            dealloc(self.ptr.as_ptr().cast::<u8>(), block_layout(cap));
+        }
+    }
+}
 
 impl PhpStr {
     /// The single construction funnel: every PhpStr goes through here.
-    /// Accepts both owned buffers and plain slices (`&[u8]`/`&str` callers
-    /// need no `to_vec` round-trip).
-    pub fn new(bytes: impl AsRef<[u8]> + Into<Vec<u8>>) -> ZStr {
+    /// Accepts any byte view (`&[u8]`/`&str`/`Vec<u8>`/`String`); the payload
+    /// is copied once into the block (`cap == len`, exact-size by build).
+    pub fn new(bytes: impl AsRef<[u8]>) -> ZStr {
+        let b = bytes.as_ref();
         #[cfg(feature = "str-census")]
-        census::record(bytes.as_ref().len());
+        census::record(b.len());
         #[cfg(feature = "mem-census")]
         crate::memcensus::alloc(
             crate::memcensus::CH_STR,
-            bytes.as_ref().len() + crate::memcensus::STR_OVERHEAD,
+            b.len() + crate::memcensus::STR_OVERHEAD,
         );
-        // Exact-size discipline (WP-55 pin): the old `Into<Box<[u8]>>`
-        // conversion shrank any slack; keep that byte-for-byte so only the
-        // append path ever carries growth capacity.
-        let mut bytes: Vec<u8> = bytes.into();
-        bytes.shrink_to_fit();
-        Rc::new(PhpStr {
-            hash: Cell::new(0),
-            bytes,
-        })
+        let ptr = ZStr::alloc_block(b.len(), b.len());
+        unsafe {
+            std::ptr::copy_nonoverlapping(b.as_ptr(), ZStr::data_ptr(ptr), b.len());
+        }
+        ZStr::from_raw(ptr)
     }
 
-    /// WP-55 append-in-place: extend the buffer with amortised growth and
-    /// INVALIDATE the cached hash (the one in-place mutation site — every
-    /// other constructor freezes the bytes). Reachable only through
-    /// `Rc::get_mut`, i.e. when this string has a single owner; callers
-    /// (the VM's fused `.=` op) fall back to `concat2` otherwise, which is
-    /// what makes aliased/interned strings copy-on-write by construction.
-    pub fn append(&mut self, more: &[u8]) {
-        #[cfg(feature = "mem-census")]
-        crate::memcensus::adjust(crate::memcensus::CH_STR, more.len() as i64);
-        self.bytes.extend_from_slice(more);
-        self.hash.set(0);
+    /// Exact-capacity multi-part builder (see [`ZStrBuilder`]).
+    pub fn builder(cap: usize) -> ZStrBuilder {
+        ZStrBuilder {
+            ptr: ZStr::alloc_block(0, cap),
+            written: 0,
+        }
     }
 
-    /// Binary concatenation in one exact-size allocation (WP-38): a small
-    /// result builds straight into the inline buffer, a large one into an
-    /// exactly-sized heap buffer. Byte-wise identical to concatenating into
-    /// a Vec and calling `new`.
+    /// Binary concatenation in ONE exact-size block (WP-38, S-124: written
+    /// directly, no intermediate buffer). Byte-wise identical to
+    /// concatenating into a Vec and calling `new`.
     pub fn concat2(a: &[u8], b: &[u8]) -> ZStr {
-        let mut out = Vec::with_capacity(a.len() + b.len());
-        out.extend_from_slice(a);
-        out.extend_from_slice(b);
-        Self::new(out)
+        let total = a.len().checked_add(b.len()).expect("PhpStr length overflow");
+        #[cfg(feature = "str-census")]
+        census::record(total);
+        #[cfg(feature = "mem-census")]
+        crate::memcensus::alloc(
+            crate::memcensus::CH_STR,
+            total + crate::memcensus::STR_OVERHEAD,
+        );
+        let ptr = ZStr::alloc_block(total, total);
+        unsafe {
+            let d = ZStr::data_ptr(ptr);
+            std::ptr::copy_nonoverlapping(a.as_ptr(), d, a.len());
+            std::ptr::copy_nonoverlapping(b.as_ptr(), d.add(a.len()), b.len());
+        }
+        ZStr::from_raw(ptr)
     }
 
     /// Integer stringification without the `String`/fmt round-trip (WP-38):
@@ -114,12 +385,14 @@ impl PhpStr {
 
     #[inline]
     pub fn as_bytes(&self) -> &[u8] {
-        &self.bytes
+        unsafe {
+            std::slice::from_raw_parts((self as *const PhpStr).add(1).cast::<u8>(), self.len)
+        }
     }
 
     #[inline]
     pub fn len(&self) -> usize {
-        self.bytes.len()
+        self.len
     }
 
     #[inline]
@@ -142,18 +415,6 @@ impl PhpStr {
         let hash = hash | 0x8000_0000_0000_0000;
         self.hash.set(hash);
         hash
-    }
-}
-
-/// Fase 0 byte-census: exact live tracking for the STR channel (the `new`
-/// funnel is the single construction site). Census builds only.
-#[cfg(feature = "mem-census")]
-impl Drop for PhpStr {
-    fn drop(&mut self) {
-        crate::memcensus::free(
-            crate::memcensus::CH_STR,
-            self.bytes.len() + crate::memcensus::STR_OVERHEAD,
-        );
     }
 }
 
@@ -302,5 +563,64 @@ mod tests {
         assert_eq!(s.len(), 4);
         assert!(!s.is_empty());
         assert!(PhpStr::empty().is_empty());
+    }
+
+    #[test]
+    fn append_unique_shared_and_hash_invalidation() {
+        let mut s = PhpStr::from_str("ab");
+        let h0 = s.zhash();
+        assert!(s.try_append(b"cd")); // unique: in-place
+        assert_eq!(s.as_bytes(), b"abcd");
+        assert_ne!(s.zhash(), h0); // cached hash invalidated
+        let alias = s.clone();
+        assert!(!s.try_append(b"x")); // shared: COW fallback at the call site
+        assert_eq!(s.as_bytes(), b"abcd");
+        assert_eq!(alias.as_bytes(), b"abcd");
+        drop(alias);
+        assert!(s.try_append(b"ef")); // unique again after the alias drops
+        assert_eq!(s.as_bytes(), b"abcdef");
+    }
+
+    #[test]
+    fn append_grows_across_many_extends() {
+        // Exercises the realloc path repeatedly (amortised growth).
+        let mut s = PhpStr::from_str("");
+        let mut expect = Vec::new();
+        for i in 0..200u8 {
+            assert!(s.try_append(&[i, i, i]));
+            expect.extend_from_slice(&[i, i, i]);
+        }
+        assert_eq!(s.as_bytes(), &expect[..]);
+    }
+
+    #[test]
+    fn eq_identity_fast_path_and_ptr_api() {
+        let a = PhpStr::from_str("k1");
+        let b = a.clone();
+        assert!(ZStr::ptr_eq(&a, &b));
+        assert_eq!(ZStr::as_ptr(&a), ZStr::as_ptr(&b));
+        assert_eq!(a, b);
+        assert_eq!(a, PhpStr::from_str("k1")); // byte path
+        assert_ne!(a, PhpStr::from_str("k2"));
+    }
+
+    #[test]
+    fn builder_exact_and_underfill() {
+        let mut b = PhpStr::builder(5);
+        b.push(b"he");
+        b.push(b"llo");
+        let s = b.finish();
+        assert_eq!(s.as_bytes(), b"hello");
+        assert_eq!(s.len(), 5);
+        // Under-filled builder shrinks to written size.
+        let mut u = PhpStr::builder(64);
+        u.push(b"xy");
+        let t = u.finish();
+        assert_eq!(t.as_bytes(), b"xy");
+        assert_eq!(t.len(), 2);
+        // Abandoned builder: Drop releases the block (no leak, no crash).
+        let mut dead = PhpStr::builder(8);
+        dead.push(b"zz");
+        drop(dead);
     }
 }

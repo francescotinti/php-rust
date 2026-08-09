@@ -98,7 +98,7 @@ pub(super) fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> C
                 let vis = match p.visibility {
                     Visibility::Public => PropVis::Public,
                     Visibility::Protected => PropVis::Protected,
-                    Visibility::Private => PropVis::Private(Rc::clone(&cname)),
+                    Visibility::Private => PropVis::Private(cname.clone()),
                 };
                 match vis_entries.iter_mut().find(|(k, _)| k.as_ref() == skey.as_ref()) {
                     Some(e) => e.1 = vis,

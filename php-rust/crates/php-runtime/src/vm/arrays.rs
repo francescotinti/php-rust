@@ -921,7 +921,7 @@ pub(super) fn snapshot_entries(iterable: &Zval) -> Vec<(Zval, Zval)> {
 pub(super) fn key_to_zval(k: &Key) -> Zval {
     match k {
         Key::Int(i) => Zval::Long(*i),
-        Key::Str(s) => Zval::Str(Rc::clone(s)),
+        Key::Str(s) => Zval::Str(s.clone()),
     }
 }
 

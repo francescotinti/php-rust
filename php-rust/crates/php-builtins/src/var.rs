@@ -413,12 +413,12 @@ pub(crate) fn closure_properties(c: &Closure) -> Vec<(Vec<u8>, Zval)> {
     let mut props: Vec<(Vec<u8>, Zval)> = Vec::new();
     match &c.info.kind {
         ClosureRender::Closure { name, file, line } => {
-            props.push((b"name".to_vec(), Zval::Str(Rc::clone(name))));
-            props.push((b"file".to_vec(), Zval::Str(Rc::clone(file))));
+            props.push((b"name".to_vec(), Zval::Str(name.clone())));
+            props.push((b"file".to_vec(), Zval::Str(file.clone())));
             props.push((b"line".to_vec(), Zval::Long(*line as i64)));
         }
         ClosureRender::Function(name) => {
-            props.push((b"function".to_vec(), Zval::Str(Rc::clone(name))));
+            props.push((b"function".to_vec(), Zval::Str(name.clone())));
         }
     }
     if !c.info.params.is_empty() {
@@ -885,7 +885,7 @@ pub(crate) fn strval(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     // (Ctx::stringify) — the pure funnel below cannot invoke user methods.
     if let Zval::Object(o) = &v.deref_clone() {
         if let Some(s) = ctx.stringify.get(&o.borrow().id) {
-            return Ok(Zval::Str(std::rc::Rc::clone(s)));
+            return Ok(Zval::Str(s.clone()));
         }
     }
     Ok(Zval::Str(convert::to_zstr_cast(v, ctx.diags)))

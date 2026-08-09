@@ -1258,7 +1258,7 @@ pub fn run_module_with_hir<'m>(
                 let mut b = 0u64;
                 for c in &f.consts {
                     if let crate::bytecode::Const::Str(s) = c {
-                        if seen.insert(std::rc::Rc::as_ptr(s) as usize) {
+                        if seen.insert(php_types::ZStr::as_ptr(s) as usize) {
                             let sb = (s.as_bytes().len() + mc::STR_OVERHEAD) as u64;
                             mc::reached_note(mc::CH_STR, sb);
                             b += sb;
@@ -1841,7 +1841,7 @@ pub fn run_module_with_hir<'m>(
                             // PhpStr is not Clone (growable, WP-55): logical
                             // bytes (len + 32B header), same basis as the
                             // content histogram — labeled, never physical.
-                            if w.lit_addr.insert(std::rc::Rc::as_ptr(s) as usize) {
+                            if w.lit_addr.insert(php_types::ZStr::as_ptr(s) as usize) {
                                 w.lit_uniq_bytes += 32 + s.as_bytes().len() as u64;
                             }
                         }
@@ -10269,7 +10269,7 @@ impl<'m> Vm<'m> {
             return Zval::Null;
         };
         let cc = self.classes[cid];
-        let class_name = Rc::clone(&cc.class_name);
+        let class_name = cc.class_name.clone();
         let info = Rc::clone(&cc.info);
         // Start from the declared defaults, exactly like `alloc_object`: Zend's
         // unserialize builds the object from the class's default-properties
@@ -10679,7 +10679,7 @@ impl<'m> Vm<'m> {
     /// Convert a value to a string, running `__toString` for an object via a nested
     /// bounded run (the synchronous analogue of [`Op::Stringify`]). A non-object is
     /// coerced directly; an object without `__toString` is the usual fatal `Error`.
-    fn vm_stringify(&mut self, v: &Zval) -> Result<Rc<PhpStr>, PhpError> {
+    fn vm_stringify(&mut self, v: &Zval) -> Result<php_types::ZStr, PhpError> {
         match v {
             Zval::Object(o) => {
                 let cid = o.borrow().class_id as usize;
@@ -12211,7 +12211,7 @@ impl<'m> Vm<'m> {
         for name in &cc.uninit_props {
             props.set(name, Zval::Undef);
         }
-        let class_name = Rc::clone(&cc.class_name);
+        let class_name = cc.class_name.clone();
         let info = Rc::clone(&cc.info);
         let id = self.next_obj_id();
         let obj = Object { class_id: cid as u32, class_name, props, id, info, rare: None, lazy: None, proxy_instance: None, gc: php_types::GcMark::new() };
@@ -13070,7 +13070,7 @@ impl<'m> Vm<'m> {
         let id = self.next_obj_id();
         let obj = Object {
             class_id: class as u32,
-            class_name: Rc::clone(&cc.class_name),
+            class_name: cc.class_name.clone(),
             props,
             id,
             info: Rc::new(ObjectInfo::enum_case(entries)),

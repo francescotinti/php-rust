@@ -11,7 +11,7 @@ use php_types::{convert, ops, Key, PhpArray, PhpError, Zval};
 fn key_to_zval(key: &Key) -> Zval {
     match key {
         Key::Int(i) => Zval::Long(*i),
-        Key::Str(s) => Zval::Str(Rc::clone(s)),
+        Key::Str(s) => Zval::Str(s.clone()),
     }
 }
 

@@ -9,7 +9,7 @@
 
 use std::rc::Rc;
 
-use crate::{PhpStr, Zval};
+use crate::{PhpStr, ZStr, Zval};
 
 /// One object instance. `class_id` indexes the program's class table for method
 /// resolution / `instanceof` (evaluator side); `class_name` is carried in the
@@ -18,7 +18,7 @@ use crate::{PhpStr, Zval};
 #[derive(Debug)]
 pub struct Object {
     pub class_id: u32,
-    pub class_name: Rc<PhpStr>,
+    pub class_name: ZStr,
     /// Declared and dynamic properties, in insertion order.
     pub props: Props,
     /// Object handle (`#N` in `var_dump`), assigned monotonically at creation.
@@ -396,7 +396,7 @@ impl Object {
     pub fn copy_with_id(&self, id: u32) -> Object {
         Object {
             class_id: self.class_id,
-            class_name: Rc::clone(&self.class_name),
+            class_name: self.class_name.clone(),
             props: self.props.clone(),
             id,
             info: Rc::clone(&self.info),
@@ -562,7 +562,7 @@ pub enum PropVis {
     Public,
     Protected,
     /// `private`, carrying the *declaring* class name (var_dump prints it).
-    Private(Rc<PhpStr>),
+    Private(ZStr),
 }
 
 /// Per-class property-visibility table for object dumping (step 19-7, D-19.20).

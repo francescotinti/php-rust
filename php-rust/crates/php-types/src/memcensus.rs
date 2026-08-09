@@ -355,7 +355,7 @@ pub fn deep_size(
     }
     match v {
         Zval::Str(s) => {
-            if seen.insert(std::rc::Rc::as_ptr(s) as usize) {
+            if seen.insert(crate::ZStr::as_ptr(s) as usize) {
                 let b = (s.as_bytes().len() + STR_OVERHEAD) as u64;
                 reached(CH_STR, b);
                 b
@@ -374,7 +374,7 @@ pub fn deep_size(
             let mut b = own;
             for (k, ev) in a.iter() {
                 if let crate::Key::Str(ks) = &k {
-                    if seen.insert(std::rc::Rc::as_ptr(ks) as usize) {
+                    if seen.insert(crate::ZStr::as_ptr(ks) as usize) {
                         let kb = (ks.as_bytes().len() + STR_OVERHEAD) as u64;
                         reached(CH_STR, kb);
                         b += kb;

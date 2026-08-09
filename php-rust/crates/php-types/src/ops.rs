@@ -7,6 +7,7 @@
 use std::rc::Rc;
 
 use crate::convert::{dval_to_lval_safe, fits_long, is_long_compatible, is_true_silent, to_zstr};
+use crate::ZStr;
 use crate::diag::{Diag, Diags, PhpError};
 use crate::dtoa::double_to_precision;
 use crate::numstr::{parse_numeric, parse_numeric_ex, Num};
@@ -629,7 +630,7 @@ pub fn compare(a: &Zval, b: &Zval) -> i32 {
             (Zval::Bool(lb), Zval::Undef | Zval::Null) => return if *lb { 1 } else { 0 },
             (Zval::Bool(lb), Zval::Bool(rb)) => return threeway_i(*lb as i64, *rb as i64),
             (Zval::Str(l), Zval::Str(r)) => {
-                if Rc::ptr_eq(l, r) {
+                if ZStr::ptr_eq(l, r) {
                     return 0;
                 }
                 return smart_strcmp(l, r);
@@ -1074,7 +1075,7 @@ pub fn increment(v: &mut Zval, diags: &mut Diags) -> Result<(), PhpError> {
 }
 
 /// Perl-style alphanumeric carry (zend_operators.c:2613).
-fn increment_string(s: &[u8]) -> Rc<PhpStr> {
+fn increment_string(s: &[u8]) -> ZStr {
     if s.is_empty() {
         return PhpStr::from_str("1");
     }

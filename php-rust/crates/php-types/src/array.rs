@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use crate::{PhpStr, Zval};
+use crate::{PhpStr, ZStr, Zval};
 
 /// Outcome of [`PhpArray::set_returning_displaced`] (H-70.1, WP-70). `Done`
 /// is the write as performed (through an existing `Ref` slot or in place),
@@ -17,7 +17,7 @@ pub enum LeafWrite {
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Key {
     Int(i64),
-    Str(Rc<PhpStr>),
+    Str(ZStr),
 }
 
 impl Key {
@@ -31,10 +31,10 @@ impl Key {
         }
     }
 
-    pub fn from_zstr(s: &Rc<PhpStr>) -> Key {
+    pub fn from_zstr(s: &ZStr) -> Key {
         match canonical_int_key(s.as_bytes()) {
             Some(i) => Key::Int(i),
-            None => Key::Str(Rc::clone(s)),
+            None => Key::Str(s.clone()),
         }
     }
 }

@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::{GenState, Object, PhpArray, PhpStr};
+use crate::{GenState, Object, PhpArray, PhpStr, ZStr};
 
 /// A PHP value. Mirrors the observable semantics of `zval`
 /// (Zend/zend_types.h:355-380, type tags :620-631).
@@ -19,7 +19,7 @@ pub enum Zval {
     Bool(bool),
     Long(i64),
     Double(f64),
-    Str(Rc<PhpStr>),
+    Str(ZStr),
     Array(Rc<PhpArray>),
     /// A PHP reference (`IS_REFERENCE`, step 11d): a shared, mutable cell that
     /// any number of variables / array elements can alias. Writing through any
@@ -136,7 +136,7 @@ pub struct Closure {
     /// `Some(name)` for a first-class callable such as `strlen(...)` (step 18-6,
     /// D-18.10): the value wraps a function *name* and `fn_idx`/`captures` are
     /// unused. `None` for an ordinary anonymous/arrow closure.
-    pub named: Option<Rc<PhpStr>>,
+    pub named: Option<ZStr>,
     /// The bound `$this` (step 19-6, D-19.19): captured at creation for a
     /// non-static closure defined in a method, or set by `bindTo`/`Closure::bind`.
     /// `None` for a static closure, a top-level closure, or a first-class callable.
@@ -183,11 +183,11 @@ pub struct ClosureInfo {
 #[derive(Clone, Debug)]
 pub enum ClosureRender {
     Closure {
-        name: Rc<PhpStr>,
-        file: Rc<PhpStr>,
+        name: ZStr,
+        file: ZStr,
         line: u32,
     },
-    Function(Rc<PhpStr>),
+    Function(ZStr),
 }
 
 /// One formal parameter as rendered by `var_dump` (`["$x"] => "<required>"`).
@@ -373,7 +373,7 @@ mod tests {
         let a = Zval::str_from("hello");
         let b = a.clone();
         match (&a, &b) {
-            (Zval::Str(x), Zval::Str(y)) => assert!(Rc::ptr_eq(x, y)),
+            (Zval::Str(x), Zval::Str(y)) => assert!(ZStr::ptr_eq(x, y)),
             _ => unreachable!(),
         }
     }

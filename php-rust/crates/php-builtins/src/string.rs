@@ -109,7 +109,7 @@ pub fn explode(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     } else {
         // limit == 0 behaves like 1; limit >= parts.len() keeps everything.
         if limit == 0 {
-            let _ = out.append(Zval::Str(Rc::clone(&string)));
+            let _ = out.append(Zval::Str(string.clone()));
         } else {
             for p in &parts {
                 let _ = out.append(Zval::Str(PhpStr::new(*p)));
@@ -458,7 +458,7 @@ fn zend_strcmp(a: &[u8], b: &[u8], cap: Option<usize>, ci: bool) -> i64 {
     normalize_bool(eff_a as i64 - eff_b as i64)
 }
 
-fn cmp_arg_str(args: &[Zval], i: usize, name: &str, ctx: &mut Ctx) -> Result<Rc<PhpStr>, PhpError> {
+fn cmp_arg_str(args: &[Zval], i: usize, name: &str, ctx: &mut Ctx) -> Result<php_types::ZStr, PhpError> {
     let v = args.get(i).ok_or_else(|| {
         PhpError::Error(format!("{name}() expects at least {} arguments, {} given", i + 1, args.len()))
     })?;

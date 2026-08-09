@@ -84,7 +84,7 @@ use std::rc::Rc;
 /// class-name resolution, `prop_info` on every property access.
 type HashMap<K, V> = rustc_hash::FxHashMap<K, V>;
 
-use php_types::{ObjectInfo, PhpStr, Zval};
+use php_types::{ObjectInfo, Zval};
 
 use crate::hir::{BinOp, Capture, CastKind, ClassId, IncludeMode, Line, Slot, TypeHint, UnOp, Visibility};
 
@@ -122,7 +122,7 @@ impl Const {
             Const::Bool(b) => Zval::Bool(*b),
             Const::Int(i) => Zval::Long(*i),
             Const::Float(f) => Zval::Double(*f),
-            Const::Str(b) => Zval::Str(Rc::clone(b)),
+            Const::Str(b) => Zval::Str(b.clone()),
         }
     }
 }
@@ -1910,7 +1910,7 @@ pub struct CompiledClass {
     pub doc: Option<Box<[u8]>>,
     /// The name as a shared [`PhpStr`], stamped into each instance's
     /// [`php_types::Object::class_name`] without re-allocating.
-    pub class_name: Rc<PhpStr>,
+    pub class_name: php_types::ZStr,
     /// Superclass, resolved to its [`ClassId`] at lowering; `None` for a root.
     pub parent: Option<ClassId>,
     /// Implemented interfaces (resolved ids); `instanceof` walks them transitively.

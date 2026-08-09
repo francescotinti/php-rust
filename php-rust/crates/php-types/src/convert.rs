@@ -1,6 +1,5 @@
 //! Type conversions (convert_to_* family, Zend/zend_operators.c:687-850).
 
-use std::rc::Rc;
 
 use crate::diag::{Diag, Diags};
 use crate::dtoa::double_to_precision;
@@ -203,7 +202,7 @@ pub fn to_zstr(v: &Zval, diags: &mut Diags) -> ZStr {
         // NAN converts silently here (oracle: null . NAN); the explicit
         // (string) cast warns — see to_zstr_cast.
         Zval::Double(d) => PhpStr::new(double_to_precision(*d, 14)),
-        Zval::Str(s) => Rc::clone(s),
+        Zval::Str(s) => s.clone(),
         Zval::Array(_) => {
             diags.push(Diag::Warning("Array to string conversion".to_string()));
             PhpStr::from_str("Array")
@@ -264,6 +263,7 @@ pub fn to_zstr_cast(v: &Zval, diags: &mut Diags) -> ZStr {
 mod tests {
     use super::*;
     use crate::PhpArray;
+    use std::rc::Rc;
 
     #[test]
     fn bool_falsy_table() {
