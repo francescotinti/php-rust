@@ -1,0 +1,18 @@
+== s123 classifica-v2 build: census_bin=6e21b7419c6ac67b (SOLO mem-census, fusione VIVA)
+   head=65b3385 patch=census-clite(wp119) admission=7/7 pin=885d2c64
+
+CLASSIFICA-V2 (fusione VIVA, rc=0 da classifica-out/report.rc):
+cat    alloc/it v2 v1(unfused)  oracle  Δv2-or zvclone v2     v1  zvrc v2     v1
+re           10.00       17.00    5.00   +5.00       3.00   3.00     3.00   3.00
+str           5.00        5.00    2.00   +3.00       2.00   2.00     2.00   2.00
+arr           4.08        4.08    2.03   +2.05       5.08   5.08     1.02   1.02
+arith         0.00        0.00    0.00   +0.00       1.00   1.00     0.00   0.00
+prop          0.00        0.00    0.00   +0.00       3.00   5.00     0.00   1.00
+calls         0.00        0.00    0.00   +0.00       2.00   2.00     0.00   0.00
+arith: v1->v2 zvclone 1.00->1.00 [=] alloc 0.00->0.00
+prop: v1->v2 zvclone 5.00->3.00 [CROLLA] alloc 0.00->0.00
+calls: v1->v2 zvclone 2.00->2.00 [=] alloc 0.00->0.00
+str: v1->v2 zvclone 2.00->2.00 [=] alloc 5.00->5.00
+arr: v1->v2 zvclone 5.08->5.08 [=] alloc 4.08->4.08
+re: v1->v2 zvclone 3.00->3.00 [=] alloc 17.00->10.00
+NOTA (a verbale): colonna v1 = raw S-119 (pin s119, PRE-L-RE1): re 17,00->10,00 e' L-RE1 spedita in S-120, NON effetto-fusione (sanity: v2 fusa == baseline s120 noto 10,00). Effetto-fusione PURO = prop zvclone 5,00->3,00 (predizione p.6 attesa ~0-1: grado MANCATO, direzione CONFERMATA; i 3 residui vivono in `$s += $o->x`). arr 4,08 ~= 2 ZStr di chiave per lettura (from_i64+concat2): con single-alloc ~2,04 vs oracle 2,03.
