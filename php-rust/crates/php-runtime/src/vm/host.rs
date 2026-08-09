@@ -3707,7 +3707,7 @@ impl<'m> super::Vm<'m> {
             }
             if offset_capture {
                 let _ = arr.append(crate::preg::offset_pair(
-                    Zval::Str(PhpStr::new(text.to_vec())),
+                    Zval::Str(PhpStr::new(text)),
                     off as i64,
                 ));
             } else {
@@ -3726,7 +3726,7 @@ impl<'m> super::Vm<'m> {
             if delim_capture {
                 for g in 1..caps.len() {
                     if let Some(mm) = caps.get(g) {
-                        push(&mut arr, &mm.text, mm.start);
+                        push(&mut arr, mm.text.as_bytes(), mm.start);
                     }
                 }
             }

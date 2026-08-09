@@ -12,17 +12,22 @@
 use regex::RegexBuilder;
 use std::rc::Rc;
 
-use php_types::{Key, PhpArray, PhpStr, Zval};
+use php_types::{Key, PhpArray, PhpStr, ZStr, Zval};
 
 /// A single capture group's byte span and text, engine-neutral so the two
 /// backends never leak their distinct `Match`/`Captures` lifetimes into the
 /// evaluator. `text` is bytes (PHP strings are): for a latin1-round-tripped
 /// subject (see [`subject_text`]) it holds the *original* subject bytes after
 /// [`Caps::latin1_fix`].
+///
+/// S-124 (ridiagnosi admission): il testo è uno [`ZStr`] costruito SLICE-FED
+/// direttamente dallo span del subject — un solo blocco per gruppo. Il vecchio
+/// `Vec<u8>` (L-RE1 «move») pagava comunque 2 alloc (Vec + blocco/RcBox);
+/// consegnare il gruppo al chiamante ora è un refcount, non una copia.
 pub struct CapMatch {
     pub start: usize,
     pub end: usize,
-    pub text: Vec<u8>,
+    pub text: ZStr,
 }
 
 /// Engine-neutral capture set: index 0 is the whole match, 1.. the groups.
@@ -53,7 +58,7 @@ impl Caps {
     /// offset is the char count before the span).
     pub fn latin1_fix(&mut self, decoded: &str) {
         for g in self.groups.iter_mut().flatten() {
-            g.text = latin1_encode(&String::from_utf8_lossy(&g.text));
+            g.text = PhpStr::new(latin1_encode(&String::from_utf8_lossy(g.text.as_bytes())));
             g.start = decoded[..g.start.min(decoded.len())].chars().count();
             g.end = g.start + g.text.len();
         }
@@ -178,7 +183,7 @@ fn caps_from_locations(text: &str, locs: &regex::CaptureLocations) -> Caps {
             locs.get(i).map(|(start, end)| CapMatch {
                 start,
                 end,
-                text: text[start..end].as_bytes().to_vec(),
+                text: PhpStr::new(text[start..end].as_bytes()),
             })
         })
         .collect();
@@ -191,7 +196,7 @@ fn caps_from_regex(caps: &regex::Captures) -> Caps {
             caps.get(i).map(|m| CapMatch {
                 start: m.start(),
                 end: m.end(),
-                text: m.as_str().as_bytes().to_vec(),
+                text: PhpStr::new(m.as_str().as_bytes()),
             })
         })
         .collect();
@@ -204,7 +209,7 @@ fn caps_from_fancy(caps: &fancy_regex::Captures) -> Caps {
             caps.get(i).map(|m| CapMatch {
                 start: m.start(),
                 end: m.end(),
-                text: m.as_str().as_bytes().to_vec(),
+                text: PhpStr::new(m.as_str().as_bytes()),
             })
         })
         .collect();
@@ -220,7 +225,7 @@ fn caps_from_onig(caps: &onig::Captures) -> Caps {
             caps.pos(i).map(|(start, end)| CapMatch {
                 start,
                 end,
-                text: caps.at(i).unwrap_or("").as_bytes().to_vec(),
+                text: PhpStr::new(caps.at(i).unwrap_or("").as_bytes()),
             })
         })
         .collect();
@@ -236,7 +241,7 @@ fn caps_from_onig_region(text: &str, region: &onig::Region) -> Caps {
             region.pos(i).map(|(start, end)| CapMatch {
                 start,
                 end,
-                text: text.get(start..end).unwrap_or("").as_bytes().to_vec(),
+                text: PhpStr::new(text.get(start..end).unwrap_or("").as_bytes()),
             })
         })
         .collect();
@@ -638,7 +643,7 @@ fn expand_caps_template(c: &Caps, repl: &str) -> String {
             if j > ds && rb.get(j) == Some(&b'}') {
                 let n: usize = repl[ds..j].parse().unwrap_or(usize::MAX);
                 if let Some(m) = c.get(n) {
-                    out.extend_from_slice(&m.text);
+                    out.extend_from_slice(m.text.as_bytes());
                 }
                 i = j + 1;
             } else {
@@ -2227,7 +2232,7 @@ pub fn captures_array(re: &Engine, caps: Caps, flags: i64) -> Zval {
 pub fn capture_value_owned(m: Option<CapMatch>, offset: bool, as_null: bool) -> Zval {
     match m {
         Some(mm) => {
-            let s = Zval::Str(PhpStr::new(mm.text));
+            let s = Zval::Str(mm.text);
             if offset {
                 offset_pair(s, mm.start as i64)
             } else {
@@ -2254,7 +2259,7 @@ pub fn capture_value_owned(m: Option<CapMatch>, offset: bool, as_null: bool) -> 
 pub fn capture_value(m: Option<&CapMatch>, offset: bool, as_null: bool) -> Zval {
     match m {
         Some(mm) => {
-            let s = Zval::Str(PhpStr::new(mm.text.clone()));
+            let s = Zval::Str(mm.text.clone());
             if offset {
                 offset_pair(s, mm.start as i64)
             } else {
