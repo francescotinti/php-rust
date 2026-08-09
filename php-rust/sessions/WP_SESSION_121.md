@@ -23,20 +23,18 @@ banda-LAYOUT non coperta dal run-to-run.
 2·**Grado PIENO server s120**: off E on rc=0 voids=0 (option 413 e restapi
 3508 IDENTICI per NOME). Re-pin chiusura riproduce **6b822369 AL BYTE**
 @ 26c484e, phpr invariato (lezione S-120 applicata).
-3·**Az. rev. S-120 4/4**: fixture preg per NOME (gate PASS; **§3.18**:
-`(?J)` dup → false; `__phprbg` utente nascosto) · colonna arr a denominatore
-DICHIARATO (D2 per-op-int 6,1M: **+2,02/op**) · precedenza smoke↔banda nel
-criterio (applicata) · **ABAB s119↔s120**: L-RE1 su WP **NON ripartibile**
-(segno 2/2 s120 più LENTO, D −2,16/−14,57 s, DENTRO spread intra-pin 18,73 s
-dominato dalla gamba B2; parità failnames 4/4).
+3·**Az. rev. S-120 4/4**: fixture preg per NOME (gate PASS; **§3.18**: `(?J)`
+dup → false; `__phprbg` utente nascosto) · colonna arr DICHIARATA (D2
+per-op-int 6,1M: **+2,02/op**) · precedenza smoke↔banda applicata · **ABAB
+s119↔s120**: L-RE1 su WP **NON ripartibile** (segno 2/2 s120 più LENTO,
+D −2,16/−14,57 s DENTRO spread intra-pin 18,73 s; failnames 4/4).
 
 ## ⭐ Lezioni (max 3)
 - ⭐⭐ **La precedenza scritta PRIMA morde anche quando dispiace**: dopo due
   smoke «bugiardi», la regola pre-registrata ha fermato la terza leva SENZA
   full — il criterio decide, non l'entusiasmo.
-- ⭐⭐ **Un alloc in meno non è un guadagno**: due ipotesi APERTE — il
-  bookkeeping dello scratch costa più del malloc 32 B, O il −6,25 è layout
-  tra binari; le leve alloc si giudicano sul TEMPO, il census firma solo il
-  meccanismo.
+- ⭐⭐ **Un alloc in meno non è un guadagno**: due ipotesi APERTE (bookkeeping
+  dello scratch > malloc 32 B, O layout tra binari) — le leve alloc si
+  giudicano sul TEMPO, il census firma solo il meccanismo.
 - ⭐ **Un micro-guadagno promosso può essere invisibile sul full**: +100 ns/iter
   su re non muove WP sopra il rumore N=2 — lo dice solo l'ABAB tra-pin.
