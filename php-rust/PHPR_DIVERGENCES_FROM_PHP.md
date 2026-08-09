@@ -919,6 +919,24 @@ che all'op che genera). Nel giudice `wp111-harness/heldout/err.php` la
 divergenza è NASCOSTA dal `@`: la parità d'output del giudice NON
 certifica la diagnostica soppressa (nota dichiarata nel README held-out).
 
+### 3.18 🔴 `preg_match`: due piste fredde divergenti (scoperte S-121, fixture az. rev. S-120 #1)
+
+Fixture congelata `wp121-harness/fixtures/fx-preg-re1.php` (12 casi per NOME),
+BILATERALE on ≡ off sul pin s120:
+- **(a) nomi duplicati con `(?J)`**: `/(?J)(?<x>a)|(?<x>b)/` su `'zb'` —
+  l'oracle matcha (`{"0":"b","x":"b","1":"","2":"b"}`), phpr ritorna
+  `false` con `$m = null` (compile della pattern rifiutato). Riga 2 del gate.
+- **(b) nome utente col prefisso sintetico `__phprbg`**: `/(?<__phprbg1>z)/`
+  — l'oracle espone la chiave nominata, phpr la NASCONDE (il filtro di
+  `Engine::capture_names` non distingue i sintetici di `demix` dai nomi
+  utente; già presente PRIMA di L-RE1 — revisione S-120). Riga 11 del gate.
+
+Le altre 10 piste (nomi base, `(?|)`, NULL/unmatched, PREG_UNMATCHED_AS_NULL,
+PREG_OFFSET_CAPTURE, offset arg, subject latin1, backref demix `\1`, mix
+nome+backref, no-match) sono BYTE-IDENTICHE nei 2 modi. Gate fail-closed:
+`wp121-harness/s121-fx-preg-gate.sh` (golden phpr pinnati per riga 2/11 —
+alla cura il gate diventa ROSSO e i golden si aggiornano nello stesso commit).
+
 ## 4. Punti di forza da NON toccare (invarianti verificati byte-identici)
 
 Per evitare regressioni, questi comportamenti sono **già** byte-identici con
@@ -949,6 +967,10 @@ l'oracle e vanno preservati:
 
 ### Changelog di questo documento
 
+- 2026-08-09 (S-121): AGGIUNTA §3.18 — preg_match: `(?J)` nomi duplicati
+  → false, e nome utente col prefisso sintetico `__phprbg` nascosto
+  (fixture bilaterale per NOME, az. rev. S-120 #1; gate fail-closed in
+  wp121-harness).
 - 2026-08-08 (S-111): AGGIUNTA §3.17 — riga sbagliata nel warning «A
   non-numeric value encountered» (famiglia §3.13/§3.16), scoperta dal
   revisore semantica collaudando il giudice held-out `err.php` senza `@`.
