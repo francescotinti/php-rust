@@ -1,0 +1,22 @@
+MECCANISMO census L-RE2 (rc=0, identity: census_bin=16dfbe9cf8177730  # build strumentata, NON il pin):
+arith: alloc/iter=0.00 (s119=0.00, N=50000000)
+prop: alloc/iter=0.00 (s119=0.00, N=30000000)
+calls: alloc/iter=0.00 (s119=0.00, N=20000000)
+str: alloc/iter=5.00 (s119=5.00, N=4000000)
+arr: alloc/iter=245.01 (s119=245.01, N=100000)
+re: alloc/iter=9.00 (s119=17.00, N=2000000)
+predizioni secondarie (invarianza): arith:OK prop:OK calls:OK str:OK arr:OK
+CENSUS_RE2: re 17.00 -> 9.00 alloc/iter => MECCANISMO CONFERMATO (9,00 ESATTO)
+candidato L-RE2 = 4eda5d6bb17a317e (target canonico, ricetta A′; A = pin 885d2c646ac7ff4c)
+admission: 6/6 parità output + 6/6 dump INTERO byte-id (rc=0 da re2-out/admission.rc)
+candidato CONSERVATO: phpr-s122-re2 (4eda5d6bb17a317e)
+ripristino: release/phpr == pin 885d2c646ac7ff4c AL BYTE; A/B su stash A=phpr-s120-re1 B=phpr-s122-re2
+smoke R=2 guardia (rc=1, criterio p.8): D per coppia = -20.00 -10.00 +0.00 +0.00
+
+VERDETTO L-RE2 (S-122): FERMATA dallo smoke (criterio p.8, regola pre-registrata):
+re concorde 2/2 negativo (-20,00/-10,00), |D_med|=15,00 > banda 10,00
+(= max(BL_re 5,00; 2×quanto 10,00) — banda ≥ 2×quanto, asimmetria S-121 sanata).
+Census: MECCANISMO CONFERMATO 9,00 ESATTO + predizioni secondarie 5/5 OK.
+Ipotesi meccanica NOMINATA (anti-tesi p.3 del criterio): mosse per-valore di
+Caps 24→~176 B > malloc+free risparmiato. Candidato 4eda5d6bb17a317e = REPERTO
+(phpr-s122-re2), release == pin 885d2c64 AL BYTE, nessun revert dovuto.
