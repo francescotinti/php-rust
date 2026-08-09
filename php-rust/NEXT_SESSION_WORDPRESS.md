@@ -68,8 +68,7 @@ vivo (ld64 dead-strippa: nm + hash ≠ pin)** · **classifiche da census che
 spegne la fusione**.
 
 ---
-**Riscritto**: 2026-08-09 (chiusura S-122). Storia: `sessions/` ·
-`gaps/GAP_TREND.md` · revisione in `wp122-harness/revisione.md`.
+**Riscritto**: 2026-08-09 (chiusura S-122). Storia: `sessions/` · `gaps/GAP_TREND.md` · revisione in `wp122-harness/revisione.md`.
 
 Pre-flight S-123: pin phpr **s120 885d2c64**6ac7ff4c @ 86306c3 (ricetta A′;
 la batteria rilinka ⇒ build ricetta e pretendere 885d2c64 al byte) · server
