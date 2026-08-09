@@ -182,17 +182,26 @@ impl Drop for ZStr {
         let n = self.rc.get() - 1;
         self.rc.set(n);
         if n == 0 {
-            #[cfg(feature = "mem-census")]
-            crate::memcensus::free(
-                crate::memcensus::CH_STR,
-                self.len() + crate::memcensus::STR_OVERHEAD,
-            );
-            unsafe {
-                let cap = self.ptr.as_ref().cap;
-                dealloc(self.ptr.as_ptr().cast::<u8>(), block_layout(cap));
-            }
+            // S-124 B2 (guardia calls del giudice v3, −3,94 0/5): il path di
+            // morte resta FUORI linea come Rc::drop_slow — inlinearlo gonfiava
+            // OGNI sito di drop Zval e run_loop è icache-bound (WP-104).
+            unsafe { zstr_drop_slow(self.ptr) }
         }
     }
+}
+
+/// Outlined death path (mirror of `Rc`'s `#[cold] drop_slow`): census note +
+/// block dealloc. Caller guarantees the refcount just hit zero.
+#[cold]
+#[inline(never)]
+unsafe fn zstr_drop_slow(ptr: NonNull<PhpStr>) {
+    #[cfg(feature = "mem-census")]
+    crate::memcensus::free(
+        crate::memcensus::CH_STR,
+        (*ptr.as_ptr()).len + crate::memcensus::STR_OVERHEAD,
+    );
+    let cap = (*ptr.as_ptr()).cap;
+    dealloc(ptr.as_ptr().cast::<u8>(), block_layout(cap));
 }
 
 impl Deref for ZStr {
