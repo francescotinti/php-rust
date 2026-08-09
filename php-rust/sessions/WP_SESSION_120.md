@@ -1,10 +1,9 @@
 # WP_SESSION_120 — L-RE1 PROMOSSA (pin s120, re 2,8 = prima categoria sotto 3×) · coppia WP N=2 intercalata (full 1,81–1,89; media-ON e peak sciolti)
 
-**In una frase**: la categoria delle espressioni regolari faceva 17 allocazioni
-di memoria per chiamata contro le 5 di PHP — ne abbiamo tolte 7 con quattro
-ritocchi chirurgici, la categoria scende sotto il triplo dell'oracle (prima
-volta per una categoria), e la misura WordPress ripetuta 4 volte nella stessa
-sera dimostra che i "misteri" della scorsa sessione erano rumore dell'oracle.
+**In una frase**: le espressioni regolari facevano 17 allocazioni per chiamata
+contro le 5 di PHP — tolte 7 con quattro ritocchi, la categoria scende per
+prima sotto il triplo dell'oracle, e la misura WordPress ripetuta 4 volte
+nella stessa sera dimostra che i "misteri" di S-119 erano rumore dell'oracle.
 
 **SCOREBOARD** (pin s120 **885d2c64** @ 86306c3 = A′+treni+L-RE1; micro R=5;
 frecce vs s119): **arith 5,5 ↑ (5,4) · prop 5,5 = · calls 4,8 ↓ (5,0) · str
@@ -34,9 +33,8 @@ debito S-121). Str-alloc NON tentata: finestra occupata dalla coppia WP.
 - ⭐⭐ **L'istruttoria che somma al conteggio misurato vale un criterio**: i 17
   alloc/iter decomposti sito-per-sito (somma ESATTA) hanno predetto il −7 del
   census al primo colpo — la leva si progetta sul conteggio, non sul profilo.
-- ⭐⭐ **Un'anomalia N=1 si scioglie campionando il denominatore, non
-  inseguendola**: 4 gambe intercalate stessa sera (oracle spread 2,2%) hanno
-  chiuso in un colpo media-ON, peak e intervallo — più economico di tre
-  indagini separate.
+- ⭐⭐ **Un'anomalia N=1 si scioglie campionando il denominatore**: 4 gambe
+  intercalate stessa sera (oracle spread 2,2%) chiudono in un colpo media-ON,
+  peak e intervallo — più economico di tre indagini separate.
 - ⭐ **La build di promozione rilinka i binari fratelli**: il server perde il
   pin in silenzio — re-pin (smoke minimo) nel protocollo di chiusura.

@@ -1,53 +1,53 @@
 # NEXT_SESSION — phpr: OBIETTIVO PARITÀ (≥1×) con l'oracle; ≤3× = tappa (REGOLE §1)
-⏱ **FONDAMENTALI**: rif WP **full = INTERVALLO 1,71–1,84** (az. rev. S-119: lo
-split ON/OFF a N=1 è artefatto dell'oracle mosso 7,2% a phpr fermo 826/827) ·
-**media 2,636/2,519 · peak ON 1933,6 MiB** (N=1, direzione-solo) · ultima leva
-SPEDITA **S-119 (treno-2 V3-V5)** · sessioni-senza-Δ = 0 · incidenti «mai
-collaudato»: 1 (S-106) · incidenti processo: 1 (S-115).
+⏱ **FONDAMENTALI**: rif WP **full = 1,810–1,889** (16 celle, N=2/modo stessa
+sera sul pin s120; oracle N=4 spread 2,2% ⇒ il 7,2% s119 era TRA-SERE; punto
+mediano ~1,85; il rif s119 1,71–1,84 DECADE col pin) · **media ~2,51–2,53 ·
+peak 1862–1983 MiB** (anomalie s119 SCIOLTE: erano N=1) · ultima leva SPEDITA
+**S-120 (L-RE1)** · sessioni-senza-Δ = 0 · incidenti: 1 (S-106) + 1 processo
+(S-115).
 
-## Scoreboard (pin s119 **350582e5** @ 22e0cda = A′+L-A+H-P1+V3-V5; micro R=5; vs s118)
+## Scoreboard (pin s120 **885d2c64** @ 86306c3 = A′+treni+L-RE1; micro R=5; vs s119)
 
-**arith 5,4 ↓ · prop 5,5 = · calls 5,0 ↑ · str 5,6 ↑ · arr 3,7 ↓ · re 3,3 =**
-(A/B stessa-sera: guardie 6/6 TENGONO — calls D_med −0,50 = quanto layout
-[banda calls ora N=4: +0,50/−0,50/+0,50/−0,50 ⇒ 0,50 CONFERMATA], str +5,00;
-frecce dei rapporti = anche rumore oracle). S-119 ha STABILITO: (a) **C-lite**:
-tabella 6×4 conteggi/iter sui DUE motori (s119-clite-verdetto.out) — int-pure
-ZERO alloc entrambi ⇒ residuo prop = 5 cloni Zval/iter (1 Rc) vs 0 rc-op Zend;
-**classifica delta: re +12 alloc/iter · str +3 · arr +2**; (b) **treno-2
-PROMOSSO** (guardie 6/6, held-out N=3 3/3, poly −0,13 s direzione attesa, §6
-pieno con resume dichiarato); (c) server **s119 gradato** ×2 modi + coppia WP
-stessa sera; (d) ⭐⭐ ogni edit a php-types cambia il binario (span→svh→simboli):
-strumentazione SOLO via `wp119-harness/census-clite.patch`, mai nei sorgenti.
+**arith 5,5 ↑ · prop 5,5 = · calls 4,8 ↓ · str 5,3 ↓ · arr 3,7 = · re 2,8 ↓↓**
+(re: A/B PROPRIO firmato D_med +100,00 ns/iter 5/5, soglia +20,00 — PRIMA
+categoria sotto la tappa 3×; le altre frecce includono rumore oracle). S-120
+ha STABILITO: (a) **L-RE1 promossa** — preg_match 17→10 alloc/iter (borrow
+pat/subject, no-names fast-path, move testo→PhpStr, scratch CaptureLocations;
+census v2 su raw s119, non-bersaglio IDENTICHE); (b) **coppia WP N=2
+intercalata** (off1→on1→off2→on2 stessa sera, pair109 invariata): ON<OFF
+concorde N=2 (801/808 vs 817/818 s); parità ==wp_is_stream ×4; (c) server
+**s120 6b822369** pin al MINIMO (grado pieno dovuto); (d) smoke-morso prop
+R=2 svanito nel full anche stavolta (2ª conferma lezione S-119).
 
-## §S-120 — ordine proposto
+## §S-121 — ordine proposto
 
-1. **Leva re-alloc** (classifica C-lite voce 1: re = 17 alloc/iter phpr vs 5
-   Zend nel giudice re): istruttoria BREVE (dove nascono: $m ricostruito, gruppi,
-   preg-cache) → criterio ≤10 righe (bersaglio NEL giudice re; banda-v2 re 0,00
-   ma banda micro N=2 re 10,00: trattarla nel criterio) → A/B.
-2. **Str-alloc** (+3/iter) se il timebox regge: stessa forma (concat+substr = 5
-   alloc/iter phpr vs 2 Zend).
-3. **Coppia WP N≥2 sul pin s119 a gambe INTERCALATE** (az. rev.: pubblicare
-   anche i rapporti cross-oracle; scioglie l'intervallo 1,71–1,84, il peak
-   +94 MiB e la media ON 2,636 — misura dedicata R≥3 PRIMA di nuove leve WP).
+1. **Leva str-alloc** (classifica C-lite voce 2: str = 5 alloc/iter phpr vs 2
+   Zend su concat+substr): istruttoria coi conteggi sito-per-sito che SOMMANO
+   (metodo L-RE1) → criterio ≤10 righe (banda-v2 str 7,50; zavorra N≥3 se
+   serve) → A/B. Il pavimento PhpStr 2-alloc (Rc+Vec) è di php-types: NON in
+   questa leva (progetto DST a parte, se mai).
+2. **Grado pieno server s120** (s119-grado-server.sh adattato: option+restapi
+   per NOME ×2 modi) — il pin minimo non fa cifre server.
+3. **re residuo 10→8→5**: arg-Vec di CallHostBuiltinOut (split_off per
+   chiamata, tocca tutti gli out-builtin) e/o riuso array $m; poi il
+   pavimento 8→5 è PhpStr DST (php-types: solo con progetto dedicato).
 4. **Stadio-2 PGO** (criterio §6 pre-registrato in s117-criterio-aprime.md;
    KS-A2: profdata non riproducibile ⇒ resta LTO).
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
 
-prop residuo: 4 cloni scalari + 1 Rc/iter ANCORA sul giudice (census su pin
-s118; rimisurare col patch se serve una leva) · smoke-di-guardia da ricalibrare
-(R=2 post-build mente: prop −2 svanito a R=5 — primo-giro; early-stop solo su
-segno concorde a R≥3 o warmup escluso) · media ON 2,636 e peak 1933,6 N=1 (vedi
-§3) · oracle tra-gambe ±7% stanotte (rumore tra-sere WP) · held-out: metodo N=3
-stessa-sera promosso (banda poly 0,04 vs 0,01 di S-117) · str/arr bande larghe
-7,50/6,67: zavorre N≥3 prima di leve str/arr · A′ da sola PEGGIORAVA prop
-(−7,67, 0/5): meccanismo non indagato · Serena find_symbol/search_for_pattern
-HANG su questo repo (Read mirato + agente Explore) · fame frontend (kpc/sudo —
-azione utente) · §3.16/§3.17 warning · retro-A/B str s107b/s108/s109 · denti
-rinviati (OBS-8; fx20; direct-bind; drop-order; hit/miss; checkout-staging) ·
-$z++/$z-- undef non warna · §3.13 · §3.12-i · §3.14 · get_gc · drift TODO.md ·
-(b-min)/(g) solo se census WP li mostra caldi.
+prop residuo: 5 cloni Zval/iter (1 Rc) = ciclo-di-vita, census su pin s118 ·
+smoke-di-guardia da ricalibrare (2 morsi primo-giro s119/s120: early-stop solo
+segno concorde R≥3 o warmup escluso) · str/arr bande larghe 7,50/6,67: zavorre
+N≥3 prima di leve str/arr · A′ da sola PEGGIORAVA prop (−7,67, 0/5):
+meccanismo non indagato · Serena find_symbol/search_for_pattern HANG su questo
+repo (Read mirato + agente Explore) · fame frontend (kpc/sudo — azione utente)
+· §3.16/§3.17 warning · retro-A/B str s107b/s108/s109 · denti rinviati (OBS-8;
+fx20; direct-bind; drop-order; hit/miss; checkout-staging) · $z++/$z-- undef
+non warna · §3.13 · §3.12-i · §3.14 · get_gc · drift TODO.md · (b-min)/(g)
+solo se census WP li mostra caldi · latin1-cliff preg (subject non-ASCII senza
+/u: +1 String + latin1_fix realloca ogni gruppo — freddo sui giudici, notato
+in istruttoria L-RE1).
 
 ## NON riproporre (i veti restano; dettaglio nei concili archiviati)
 
@@ -62,17 +62,19 @@ admission sul dump intero (deroga: leve runtime-only a emissione INVARIATA,
 forma S-118, citata nel criterio) · xctrace senza guardie disco · run pesanti
 come task · edit coi build in volo · promozione sotto banda · gate a soglia
 fissa senza banda · bande pre-pipeline su binari post-pipeline · corpus-gate
-solo-nomi · **edit di strumentazione nei sorgenti del pin (S-119: span→svh)**.
+solo-nomi · edit di strumentazione nei sorgenti del pin (S-119: span→svh).
 
 ---
-**Riscritto**: 2026-08-09 (chiusura S-119). Storia: `sessions/` ·
-`gaps/GAP_TREND.md` · revisione in `wp119-harness/revisione.md`.
+**Riscritto**: 2026-08-09 (chiusura S-120). Storia: `sessions/` ·
+`gaps/GAP_TREND.md` · revisione in `wp120-harness/revisione.md`.
 
-Pre-flight S-120: pin phpr **s119 350582e5** @ 22e0cda (ricetta A′:
+Pre-flight S-121: pin phpr **s120 885d2c64**6ac7ff4c @ 86306c3 (ricetta A′:
 `[profile.release]` in Cargo.toml + `SOURCE_DATE_EPOCH=0 CARGO_INCREMENTAL=0`;
-la batteria rilinka ⇒ build ricetta e pretendere 350582e5 al byte) · server
-**b7bd6744 pin s119 GRADATO** · MySQL wp8 con l'elenco · uploads sotto guardia ·
-disco Data ~4G (dichiarare, raw su Extreme Pro) · conservati: phpr-s117 ·
-phpr-s118 · phpr-s118-treno1 · phpr-s119 (==pin) · phpr-s119-treno2 (==pin) ·
-php-server-s118 · php-server-s119 · target census riusabili (census patch:
-wp119-harness/census-clite.patch) · Serena in hang: Read mirato + Explore.
+la batteria rilinka ⇒ build ricetta e pretendere 885d2c64 al byte) · server
+**s120 6b822369**89a4a0c4 pin MINIMO (grado pieno = punto 2) · MySQL wp8 con
+l'elenco (giù a inizio S-120: mysqld_safe daemonizzato su datadir esterno) ·
+uploads sotto guardia · conservati: phpr-s118 · phpr-s119 (==pin s119) ·
+phpr-s119-treno2 · phpr-s120-re1 (==pin s120) · php-server-s119 ·
+php-server-s120 · census target riusabile (patch: wp119-harness/
+census-clite.patch, riprodotta in S-120 senza incidenti) · Serena in hang:
+Read mirato + Explore.
