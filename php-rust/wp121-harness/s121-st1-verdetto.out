@@ -1,0 +1,20 @@
+
+MECCANISMO census (s121-census-st1.sh + verdetto, identity: census_bin=20f6bb3ebbb52772  # build strumentata, NON il pin):
+empty galloc_n R=2: 183577 / 183577
+arith: alloc/iter=0.00 (s119=0.00, stesso denominatore N=50000000)
+prop: alloc/iter=0.00 (s119=0.00, stesso denominatore N=30000000)
+calls: alloc/iter=0.00 (s119=0.00, stesso denominatore N=20000000)
+str: alloc/iter=4.00 (s119=5.00, stesso denominatore N=4000000)
+arr: alloc/iter=245.01 (s119=245.01, stesso denominatore N=100000)
+re: alloc/iter=10.00 (s119=17.00, stesso denominatore N=2000000)
+CENSUS_ST1: str 5.00 -> 4.00 alloc/iter (zend 2.00) => MECCANISMO CONFERMATO (atteso 4,00 ESATTO) · cali registrati (non promuovono): re:17.00->10.00
+candidato L-ST1 = 2e1eda8d87bd5a9b (target canonico, ricetta A′; A = pin 885d2c646ac7ff4c)
+admission: 6/6 parità output + 6/6 dump INTERO byte-id (rc=0 da st1-out/admission.rc)
+candidato CONSERVATO: phpr-s121-st1 (2e1eda8d87bd5a9b)
+ripristino: release/phpr == pin 885d2c646ac7ff4c AL BYTE; A/B pronte su stash A=phpr-s120-re1 B=phpr-s121-st1
+smoke R=2 guardia (rc=1, regola p.7): D per coppia = -5.00 -7.50 +2.33 +0.33
+
+L-ST1 VERDETTO FINALE (regole p.7+p.9, NESSUNA deroga in corsa):
+smoke str concorde -5,00/-7,50 (D_med -6,25, |D_med| > banda-zavorra 2,50) => early-stop (a)+(b) p.7; leva a UN componente => REVERT secco p.9. Full NON eseguito.
+Keep-partial-wins: census str 5,00->4,00 ESATTO resta a verbale (somma siti 2+1+2 CONFERMATA); il tempo REFUTA lo swap take/restore: costa piu' dell'alloc 32B mimalloc, O il -6,25 e' banda-LAYOUT (tra binari) che la zavorra run-to-run NON copre — questione NOMINATA per S-122 (banda-layout str da misurare prima di ogni retry).
+Tree: patch mai nei sorgenti committati; release/phpr == pin 885d2c64 AL BYTE (verificato dal build script); candidato phpr-s121-st1 (2e1eda8d) conservato come reperto.
