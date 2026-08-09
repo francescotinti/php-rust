@@ -18,3 +18,7 @@ L-ST1 VERDETTO FINALE (regole p.7+p.9, NESSUNA deroga in corsa):
 smoke str concorde -5,00/-7,50 (D_med -6,25, |D_med| > banda-zavorra 2,50) => early-stop (a)+(b) p.7; leva a UN componente => REVERT secco p.9. Full NON eseguito.
 Keep-partial-wins: census str 5,00->4,00 ESATTO resta a verbale (somma siti 2+1+2 CONFERMATA); il tempo REFUTA lo swap take/restore: costa piu' dell'alloc 32B mimalloc, O il -6,25 e' banda-LAYOUT (tra binari) che la zavorra run-to-run NON copre — questione NOMINATA per S-122 (banda-layout str da misurare prima di ogni retry).
 Tree: patch mai nei sorgenti committati; release/phpr == pin 885d2c64 AL BYTE (verificato dal build script); candidato phpr-s121-st1 (2e1eda8d) conservato come reperto.
+
+AZ. REV. S-121 (lente PROCESSO) recepita nel verbale:
+predizione p.2 (arr atteso in CALO) NON realizzata: arr 245,01 -> 245,01 — mancata, a verbale (az. rev. #3).
+verdetto ridimensionato: L-ST1 FERMATA dalla regola pre-registrata = refutazione PROVVISORIA (banda 2,50 = 1 quanto timer, asimmetrica vs soglia promozione 5,00); full A/B dallo stash 2e1eda8d = azione S-122.

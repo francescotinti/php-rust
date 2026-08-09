@@ -8,33 +8,33 @@ dalla regola pre-registrata — ritmo rispettato, promozione no) · incidenti:
 ## Scoreboard (pin s120 **885d2c64** @ 86306c3 INVARIATO; micro di S-120)
 
 **arith 5,5 · prop 5,5 · calls 4,8 · str 5,3 · arr 3,7 · re 2,8** (non
-rimisurate in S-121: pin fermo). S-121 ha STABILITO: (a) **L-ST1 REFUTATA
-sul tempo** — scratch args-Vec CallBuiltin: census str 5→4 ESATTO ma smoke
-str −5,00/−7,50 concorde ⇒ early-stop p.7 (PRIMA applicazione della
-precedenza pre-registrata) + revert p.9; il bookkeeping (take/drain/restore)
-costa più del malloc 32 B mimalloc; (b) **grado PIENO server s120** off+on
-rc=0 voids=0 (option 413 + restapi 3508 per NOME; re-pin 6b822369 al byte);
-(c) **ABAB s119↔s120**: L-RE1 su WP NON ripartibile (D −2,16/−14,57 s dentro
-spread intra-pin 18,73 s; parità failnames 4/4); (d) az. rev. S-120 4/4
-(fixture preg = gate `wp121-harness/s121-fx-preg-gate.sh`, §3.18 a catalogo;
-colonna arr D2 = +2,02/op-int su 6,1M).
+rimisurate in S-121: pin fermo). S-121 ha STABILITO: (a) **L-ST1 FERMATA
+(refutazione PROVVISORIA — az. rev.: banda 2,50 = 1 quanto, asimmetrica)** —
+scratch args-Vec CallBuiltin: census str 5→4 ESATTO ma smoke str −5,00/−7,50
+concorde ⇒ early-stop p.7 (PRIMA applicazione) + revert p.9; due ipotesi
+APERTE: bookkeeping > malloc 32 B O layout; (b) **grado PIENO server s120**
+off+on rc=0 voids=0 (option 413 + restapi 3508 per NOME; re-pin al byte);
+(c) **ABAB s119↔s120**: L-RE1 su WP NON ripartibile (segno 2/2 s120 più
+lento, DENTRO spread intra-pin 18,73 s; failnames 4/4); (d) az. rev. S-120
+4/4 (gate preg `s121-fx-preg-gate.sh` + §3.18; colonna arr D2 +2,02/op-int).
 
 ## §S-122 — ordine proposto
 
-1. **Banda-LAYOUT micro** (PREREQUISITO per ogni leva ≤10 ns/iter, lezione
-   L-ST1): A′ è deterministico ⇒ si campiona con un no-op FIRMATO (simbolo
-   dummy) ricompilato ×N; criterio PRIMA; la zavorra run-to-run NON la copre.
+1. **Banda-LAYOUT micro + full A/B L-ST1 dallo stash** (az. rev. S-121):
+   banda tra-binari con no-op FIRMATO ricompilato ×N (criterio PRIMA); poi
+   full L-ST1 (stash 2e1eda8d, costo basso) = refutazione-vs-layout chiusa;
+   interim: early-stop str usa max(zavorra; 2×quanto = 5,00).
 2. **Leva prop-cloni** (classifica: 5 cloni Zval/iter, 1 Rc — ciclo-di-vita,
    non alloc): census su pin s118 già in mano; istruttoria sito-per-sito che
    SOMMA, poi criterio col bersaglio prop (banda-v2 3,33).
 3. **re residuo 10→8** (arg-Vec CallHostBuiltinOut): VINCOLATA da (1) e
    dalla refutazione L-ST1 — lo swap take/restore è refutato; serve un
    meccanismo senza swap (borrow disgiunto dei campi / refactor flush_diags).
-   Ogni leva preg passa ANCHE dal gate fixture preg (s121-fx-preg-gate.sh).
+   PRIMA: cablare s121-fx-preg-gate.sh nella catena fixture (az. rev. #4).
 4. **Stadio-2 PGO** (criterio §6 pre-registrato in s117-criterio-aprime.md;
    KS-A2: profdata non riproducibile ⇒ resta LTO).
-5. **arr**: SOLO istruttoria conteggi-che-sommano su D2 DICHIARATO
-   (+2,02/op-int; indiziata la chiave "k$i" ricostruita a ogni op).
+5. **arr**: SOLO istruttoria su D2 (+2,02/op-int; indiziata la chiave "k$i");
+   nei census-verdetti anche le predizioni secondarie a verbale (az. rev.).
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
 

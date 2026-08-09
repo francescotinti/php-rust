@@ -1,4 +1,4 @@
-# WP_SESSION_121 — L-ST1 REFUTATA dalla regola pre-registrata · grado PIENO server s120 · az. rev. S-120 4/4
+# WP_SESSION_121 — L-ST1 FERMATA dalla regola pre-registrata (refutazione PROVVISORIA) · grado PIENO server s120 · az. rev. S-120 4/4
 
 **In una frase**: la leva sulle stringhe ha tolto l'allocazione prevista ma il
 tempo è PEGGIORATO e la regola scritta in anticipo l'ha fermata senza sconti;
@@ -12,13 +12,14 @@ mostra che il guadagno regex di ieri non si vede su WordPress intero.
 rispettato). 2026-08-09 · Fable 5 · ae92801→26c484e.
 
 ## Esiti secchi
-1·**L-ST1 (str-alloc) REFUTATA sul tempo** (criterio PRE ae92801): scratch
-args-Vec di CallBuiltin; istruttoria che SOMMA (5 = 2 concat + 1 args-Vec +
-2 substr); census **str 5,00→4,00 ESATTO**; admission 6/6+6/6; smoke str
-**−5,00/−7,50 concorde** > banda-zavorra 2,50 ⇒ **early-stop p.7 + revert
-p.9, NESSUNA deroga** (prima applicazione della precedenza az. rev. #3).
-Candidato 2e1eda8d reperto; release al pin AL BYTE. Zavorra str N=3 = 2,50
-(debito saldato); NOMINATA: banda-LAYOUT non coperta dalla zavorra run-to-run.
+1·**L-ST1 (str-alloc) FERMATA — refutazione PROVVISORIA** (criterio PRE
+ae92801; az. rev.: la banda 2,50 = 1 quanto timer, asimmetrica vs promozione
+≥5,00): scratch args-Vec di CallBuiltin; istruttoria che SOMMA (5 = 2+1+2);
+census **str 5,00→4,00 ESATTO** (predizione p.2 arr-in-calo NON realizzata —
+a verbale); admission 6/6+6/6; smoke str **−5,00/−7,50 concorde** > 2,50 ⇒
+early-stop p.7 + revert p.9, NESSUNA deroga. Candidato 2e1eda8d reperto
+(full A/B dallo stash = az. rev. S-122); zavorra str N=3 = 2,50; NOMINATA:
+banda-LAYOUT non coperta dal run-to-run.
 2·**Grado PIENO server s120**: off E on rc=0 voids=0 (option 413 e restapi
 3508 IDENTICI per NOME). Re-pin chiusura riproduce **6b822369 AL BYTE**
 @ 26c484e, phpr invariato (lezione S-120 applicata).
@@ -26,14 +27,16 @@ Candidato 2e1eda8d reperto; release al pin AL BYTE. Zavorra str N=3 = 2,50
 `(?J)` dup → false; `__phprbg` utente nascosto) · colonna arr a denominatore
 DICHIARATO (D2 per-op-int 6,1M: **+2,02/op**) · precedenza smoke↔banda nel
 criterio (applicata) · **ABAB s119↔s120**: L-RE1 su WP **NON ripartibile**
-(D −2,16/−14,57 s dentro spread intra-pin 18,73 s; parità failnames 4/4).
+(segno 2/2 s120 più LENTO, D −2,16/−14,57 s, DENTRO spread intra-pin 18,73 s
+dominato dalla gamba B2; parità failnames 4/4).
 
 ## ⭐ Lezioni (max 3)
 - ⭐⭐ **La precedenza scritta PRIMA morde anche quando dispiace**: dopo due
   smoke «bugiardi», la regola pre-registrata ha fermato la terza leva SENZA
   full — il criterio decide, non l'entusiasmo.
-- ⭐⭐ **Un alloc in meno non è un guadagno**: il bookkeeping dello scratch
-  (take/drain/restore) costa più del malloc 32 B di mimalloc — le leve alloc
-  si giudicano sul TEMPO; il census firma solo il meccanismo.
+- ⭐⭐ **Un alloc in meno non è un guadagno**: due ipotesi APERTE — il
+  bookkeeping dello scratch costa più del malloc 32 B, O il −6,25 è layout
+  tra binari; le leve alloc si giudicano sul TEMPO, il census firma solo il
+  meccanismo.
 - ⭐ **Un micro-guadagno promosso può essere invisibile sul full**: +100 ns/iter
   su re non muove WP sopra il rumore N=2 — lo dice solo l'ABAB tra-pin.
