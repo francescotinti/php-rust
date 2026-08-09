@@ -1,0 +1,60 @@
+diff --git a/php-rust/Cargo.lock b/php-rust/Cargo.lock
+index 8a409fa..ff3c6d8 100644
+--- a/php-rust/Cargo.lock
++++ b/php-rust/Cargo.lock
+@@ -1914,6 +1914,7 @@ dependencies = [
+  "regex",
+  "rusqlite",
+  "rustc-hash",
++ "smallvec",
+  "static_assertions",
+  "unicode-segmentation",
+  "zip",
+diff --git a/php-rust/crates/php-runtime/Cargo.toml b/php-rust/crates/php-runtime/Cargo.toml
+index 2a1716e..ca4f57b 100644
+--- a/php-rust/crates/php-runtime/Cargo.toml
++++ b/php-rust/crates/php-runtime/Cargo.toml
+@@ -54,6 +54,9 @@ bumpalo = "3"
+ regex = "1"
+ fancy-regex = "0.14"
+ onig = "6.5.3"
++# L-RE2 (S-122): inline storage for Caps.groups — already in the lock as a
++# transitive dep, promoted to direct; no new crate enters the graph.
++smallvec = "1.15"
+ getrandom = "0.2"
+ zip = { version = "2", default-features = false, features = ["deflate"] }
+ quick-xml = "0.41"
+diff --git a/php-rust/crates/php-runtime/src/preg.rs b/php-rust/crates/php-runtime/src/preg.rs
+index b87b0bb..4f9829d 100644
+--- a/php-rust/crates/php-runtime/src/preg.rs
++++ b/php-rust/crates/php-runtime/src/preg.rs
+@@ -25,10 +25,15 @@ pub struct CapMatch {
+     pub text: Vec<u8>,
+ }
+ 
++/// L-RE2 (S-122): the groups buffer lives INLINE for ≤4 slots (whole match +
++/// 3 groups covers the common shapes) — the per-call heap Vec was 1 alloc on
++/// every cached preg call; larger patterns spill to the heap as before.
++type CapsVec = smallvec::SmallVec<[Option<CapMatch>; 4]>;
++
+ /// Engine-neutral capture set: index 0 is the whole match, 1.. the groups.
+ /// A `None` entry is a group that did not participate in the match.
+ pub struct Caps {
+-    groups: Vec<Option<CapMatch>>,
++    groups: CapsVec,
+ }
+ 
+ impl Caps {
+@@ -308,8 +313,10 @@ pub enum Engine {
+ /// [`Engine::Remap`]): logical slot L takes the first participating physical
+ /// group with `map[p] == L`; slot 0 is the whole match, unchanged.
+ fn remap_caps(c: &Caps, map: &[usize], logical_len: usize) -> Caps {
+-    let mut groups: Vec<Option<CapMatch>> = Vec::with_capacity(logical_len);
+-    groups.resize_with(logical_len, || None);
++    let mut groups: CapsVec = smallvec::SmallVec::with_capacity(logical_len);
++    for _ in 0..logical_len {
++        groups.push(None);
++    }
+     let copy = |m: &CapMatch| CapMatch {
+         start: m.start,
+         end: m.end,
