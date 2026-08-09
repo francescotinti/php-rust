@@ -28,9 +28,8 @@ POSSEDUTO in PropIncDec/PropIsset/MethodCall; admission 6/6+6/6 dump; guardie
 A/B 6/6 TENGONO; held-out **N=3** 3/3 con **poly −0,13 s** (direzione attesa,
 banda N3 0,04); §6 pieno via **resume dichiarato** (interruzione a build in
 corso, nessun passo saltato): batteria 1742/0/2 inventario IDENTICO, corpus
-canonico rc=0, fixture 6/6 → pin s119.
-4·Server **b7bd6744 pin s119 GRADATO** ×2 modi (option 413 + restapi 3508 per
-NOME, fails=0 voids=0) · coppia WP stessa sera rc=0 ×2 (full == solo wp_is_stream).
+canonico rc=0, fixture 6/6 → pin s119. 4·Server **b7bd6744 pin s119 GRADATO** ×2
+modi (option 413+restapi 3508 per NOME, 0/0) · coppia WP rc=0 ×2 (== wp_is_stream).
 
 ## ⭐ Lezioni (max 3)
 - ⭐⭐ **Nessun edit a php-types è gratis**: span→svh→simboli — la strumentazione
