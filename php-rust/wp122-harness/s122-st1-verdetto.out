@@ -1,0 +1,9 @@
+
+GIUDICE S-122 L-ST1 (rc=1 da st1-out/giudice.rc, criterio p.6-7):
+arith: fam=5 D_med=-0.40 segni +1/5 spread_A=0.60 quanto=0.20 BL=1.00 soglia_guardia=-1.20 -> tiene (tie: = -> tiene)
+prop: fam=5 D_med=+1.67 segni +4/5 spread_A=2.33 quanto=0.33 BL=1.00 soglia_guardia=-4.66 -> tiene (tie: = -> tiene)
+calls: fam=5 D_med=+0.50 segni +4/5 spread_A=0.50 quanto=0.50 BL=0.00 soglia_guardia=-1.00 -> tiene (tie: = -> tiene)
+str: fam=5 D_med=-5.00 segni +0/5 spread_A=7.50 quanto=2.50 BL=5.00 soglia_ref=-5.00 soglia_promo=+15.00 -> REFUTAZIONE CONFERMATA
+arr: fam=5 D_med=+3.33 segni +4/5 spread_A=3.33 quanto=1.67 BL=3.33 soglia_guardia=-6.67 -> tiene (tie: = -> tiene)
+re: fam=5 D_med=+0.00 segni +2/5 spread_A=5.00 quanto=5.00 BL=5.00 soglia_guardia=-10.00 -> tiene (tie: = -> tiene)
+VERDETTO_S122_L-ST1 = REFUTAZIONE CONFERMATA

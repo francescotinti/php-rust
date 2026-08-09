@@ -1,0 +1,9 @@
+
+VERDETTO A MACCHINA (s121-ab-st1.sh full, rc=4 da st1-out/full-rc):
+arith: fam=5 D_med=-0.40 segni +1/5 spread_A_dep=0.60 quanto=0.20 soglia_guardia=-1.20 -> tiene (tie: = -> tiene)
+prop: fam=5 D_med=+1.67 segni +4/5 spread_A_dep=2.33 quanto=0.33 soglia_guardia=-4.66 -> tiene (tie: = -> tiene)
+calls: fam=5 D_med=+0.50 segni +4/5 spread_A_dep=0.50 quanto=0.50 soglia_guardia=-1.00 -> tiene (tie: = -> tiene)
+str: fam=5 D_med=-5.00 segni +0/5 spread_A_dep=7.50 quanto=2.50 soglia_promozione=+15.00 -> SOTTO SOGLIA
+arr: fam=5 D_med=+3.33 segni +4/5 spread_A_dep=3.33 quanto=1.67 soglia_guardia=-6.67 -> tiene (tie: = -> tiene)
+re: fam=5 D_med=+0.00 segni +2/5 spread_A_dep=5.00 quanto=5.00 soglia_guardia=-10.00 -> tiene (tie: = -> tiene)
+VERDETTO_MICRO=SOTTO SOGLIA (guardie tengono): leva NON promossa sul tempo — vale feedback-keep-partial-wins

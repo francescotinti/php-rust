@@ -1,0 +1,38 @@
+P1: simbolo probe ASSENTE (dead-strip?) — build NULLA
+PRE: release=b77040380d717678 != pin — riallineamento con ricetta (tree pulito)
+PRE: riallineamento OK, release == pin AL BYTE
+P1 (K=17) = 29565241857aebf4 CONSERVATA phpr-s122-lay1 (admission 6/6+6/6, simbolo presente)
+P2 (K=173) = dc98d1b1e6b15a77 CONSERVATA phpr-s122-lay2 (admission 6/6+6/6, simbolo presente)
+P3 (K=1731) = f3bc390ed569c572 CONSERVATA phpr-s122-lay3 (admission 6/6+6/6, simbolo presente)
+ripristino: release/phpr == pin 885d2c646ac7ff4c AL BYTE; layout P1..P3 pronti
+== s122 banda-LAYOUT: P0=885d2c64 P1=29565241 P2=dc98d1b1 P3=f3bc390e R=5 interleaved ==
+arith P0: net/iter = 46.20 46.40 46.80 46.80 46.60 | fam=5/5 med_fam=46.60
+arith P1: net/iter = 48.00 47.20 47.40 47.00 47.60 | fam=5/5 med_fam=47.40
+arith P2: net/iter = 47.80 47.40 47.40 47.40 47.60 | fam=5/5 med_fam=47.40
+arith P3: net/iter = 47.60 47.60 47.80 47.20 48.00 | fam=5/5 med_fam=47.60
+arith: mediane P0..P3 = 46.60 47.40 47.40 47.60  BANDA_LAYOUT = 1.00 ns/iter
+prop P0: net/iter = 78.00 77.67 78.00 78.33 77.67 | fam=5/5 med_fam=78.00
+prop P1: net/iter = 78.00 80.00 77.67 77.33 78.33 | fam=5/5 med_fam=78.00
+prop P2: net/iter = 79.33 78.33 78.67 77.67 78.00 | fam=5/5 med_fam=78.33
+prop P3: net/iter = 80.00 77.67 79.67 77.67 79.00 | fam=5/5 med_fam=79.00
+prop: mediane P0..P3 = 78.00 78.00 78.33 79.00  BANDA_LAYOUT = 1.00 ns/iter
+calls P0: net/iter = 107.00 107.50 106.50 106.50 107.50 | fam=5/5 med_fam=107.00
+calls P1: net/iter = 106.50 107.00 107.50 107.00 106.50 | fam=5/5 med_fam=107.00
+calls P2: net/iter = 107.50 107.00 107.00 107.50 106.50 | fam=5/5 med_fam=107.00
+calls P3: net/iter = 107.00 107.00 106.50 107.00 106.50 | fam=5/5 med_fam=107.00
+calls: mediane P0..P3 = 107.00 107.00 107.00 107.00  BANDA_LAYOUT = 0.00 ns/iter
+str P0: net/iter = 210.00 207.50 212.50 212.50 210.00 | fam=5/5 med_fam=210.00
+str P1: net/iter = 215.00 212.50 212.50 212.50 212.50 | fam=5/5 med_fam=212.50
+str P2: net/iter = 217.50 215.00 215.00 212.50 217.50 | fam=5/5 med_fam=215.00
+str P3: net/iter = 215.00 212.50 215.00 210.00 215.00 | fam=5/5 med_fam=215.00
+str: mediane P0..P3 = 210.00 212.50 215.00 215.00  BANDA_LAYOUT = 5.00 ns/iter
+arr P0: net/iter = 183.33 181.67 183.33 183.33 181.67 | fam=5/5 med_fam=183.33
+arr P1: net/iter = 185.00 193.33 190.00 186.67 186.67 | fam=5/5 med_fam=186.67
+arr P2: net/iter = 211.67 183.33 186.67 190.00 186.67 | fam=5/5 med_fam=186.67
+arr P3: net/iter = 185.00 186.67 185.00 181.67 183.33 | fam=5/5 med_fam=185.00
+arr: mediane P0..P3 = 183.33 186.67 186.67 185.00  BANDA_LAYOUT = 3.33 ns/iter
+re P0: net/iter = 515.00 505.00 515.00 510.00 515.00 | fam=5/5 med_fam=515.00
+re P1: net/iter = 515.00 515.00 510.00 510.00 515.00 | fam=5/5 med_fam=515.00
+re P2: net/iter = 515.00 510.00 510.00 510.00 510.00 | fam=5/5 med_fam=510.00
+re P3: net/iter = 515.00 510.00 515.00 510.00 510.00 | fam=5/5 med_fam=510.00
+re: mediane P0..P3 = 515.00 515.00 510.00 510.00  BANDA_LAYOUT = 5.00 ns/iter
