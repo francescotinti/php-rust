@@ -1,9 +1,8 @@
 # NEXT_SESSION — phpr: OBIETTIVO PARITÀ (≥1×) con l'oracle; ≤3× = tappa (REGOLE §1)
-⏱ **FONDAMENTALI**: rif WP **full = 1,810–1,889** (S-120, su pin VECCHIO s120 —
-**da rimisurare sul pin s124**: leva promossa ⇒ trigger p.4) · ultima leva
-SPEDITA **S-124 (PhpStr single-alloc)** · **sessioni-senza-Δ = 0** · incidenti:
-1 (S-106) + 2 processo (S-115; **S-124: arbitro admission committato DOPO i
-suoi verdetti** — rev. PROCESSO).
+⏱ **FONDAMENTALI**: rif WP **full = 1,810–1,889** (S-120, pin vecchio — **da
+rimisurare sul pin s124**, trigger p.4) · ultima leva SPEDITA **S-124 (PhpStr
+single-alloc)** · **sessioni-senza-Δ = 0** · incidenti: 1 (S-106) + 2 processo
+(S-115; **S-124: arbitro admission committato DOPO i verdetti** — rev.).
 
 ## Scoreboard (pin **s124 c5ba2573**a23adf69 @ fb140d1; micro R=5 sul pin vs oracle)
 
