@@ -1,0 +1,4 @@
+s121-grado-server-verdetto — GRADO PIENO del pin php-server s120 6b82236989a4a0c4 (debito S-120 saldato)
+gambe phpr su stash phpr-s120-re1 (885d2c64); oracle 07b0df8d verificato; env -i lista chiusa; watchdog; uploads sotto guardia
+off: rc=0 voids=0 (sentinella PASS; option 413 IDENTICO per NOME; restapi 3508 IDENTICO per NOME, 1E+4W == oracle)
+on : rc=0 voids=0 (sentinella PASS; option 413 IDENTICO per NOME; restapi 3508 IDENTICO per NOME, 1E+4W == oracle)
