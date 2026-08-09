@@ -8,17 +8,15 @@ suoi verdetti** — rev. PROCESSO).
 ## Scoreboard (pin **s124 c5ba2573**a23adf69 @ fb140d1; micro R=5 sul pin vs oracle)
 
 **arith 5,5 · prop 5,6 · calls 4,7 · str 4,2 · arr 3,2 · re 2,5**. S-124 =
-PhpStr single-alloc PROMOSSA: ZStr = blocco unico {rc,hash,len,cap}+bytes
-(refcount custom, PartialEq ptr-fast-path, try_append realloc, builder ConcatN,
-drop_slow OUTLINED — B1 inlined sfondava calls −3,94, flip a +0,81 = canale
-icache indiziato, attribuzione NON firmata da A/B proprio, rev. #2). A/B str2:
-**str +39,42 · arr +29,38 · re +50,48 ns/iter (5/5), guardie 6/6**. Admission
-census: **5 predette esatte + 1 (re) costruita dopo ridiagnosi Vec-fed→slice-fed**
-(dicitura da rev. #5); Δalloc/iter vs oracle ora **str +1,00 · arr +0,02
-(≈PARITÀ) · re +2,00**, resto 0. Gate: batteria 1746/0/2 (inventario + 4 zstr
-dichiarati) · corpus congelato+golden+off↔on 0 · fixture verdi · ORM 3484
-3E/13F per NOME == baseline · http-kernel 1665 0E/0F · server **s124 f9526be3**
-GRADO MINIMO (pieno = debito).
+PhpStr single-alloc PROMOSSA: ZStr = blocco unico {rc,hash,len,cap}+bytes,
+refcount custom, PartialEq ptr-fast-path, try_append realloc, builder ConcatN,
+drop_slow OUTLINED (B1 inlined sfondava calls −3,94; flip +0,81 = icache
+INDIZIATO, non firmato — rev. #2). A/B str2: **str +39,42 · arr +29,38 · re
++50,48 (5/5), guardie 6/6**. Admission: **5 predette esatte + 1 (re) costruita
+post-ridiagnosi Vec-fed→slice-fed** (rev. #5); Δalloc vs oracle: **str +1,00 ·
+arr +0,02 (≈PARITÀ) · re +2,00**. Gate: batteria 1746/0/2 (+4 zstr dichiarati)
+· corpus 0 · fixture verdi · ORM 3E/13F per NOME · hk 0E/0F · server **s124
+f9526be3** GRADO MINIMO (pieno = debito).
 
 ## §S-125 — ordine proposto
 
