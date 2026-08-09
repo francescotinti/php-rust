@@ -2,7 +2,8 @@
 ⏱ **FONDAMENTALI**: rif WP **full = 1,810–1,889** (16 celle, N=2/modo stessa
 sera sul pin s120; oracle N=4 spread 2,2% ⇒ il 7,2% s119 era TRA-SERE; punto
 mediano ~1,85; il rif s119 1,71–1,84 DECADE col pin) · **media ~2,51–2,53 ·
-peak 1862–1983 MiB** (anomalie s119 SCIOLTE: erano N=1) · ultima leva SPEDITA
+peak 1862–1983 MiB** (anomalie s119 RIENTRATE — az. rev.: N=2 = direzione,
+non dimostrazione) · ultima leva SPEDITA
 **S-120 (L-RE1)** · sessioni-senza-Δ = 0 · incidenti: 1 (S-106) + 1 processo
 (S-115).
 
@@ -14,10 +15,10 @@ categoria sotto la tappa 3×; le altre frecce includono rumore oracle). S-120
 ha STABILITO: (a) **L-RE1 promossa** — preg_match 17→10 alloc/iter (borrow
 pat/subject, no-names fast-path, move testo→PhpStr, scratch CaptureLocations;
 census v2 su raw s119, non-bersaglio IDENTICHE); (b) **coppia WP N=2
-intercalata** (off1→on1→off2→on2 stessa sera, pair109 invariata): ON<OFF
-concorde N=2 (801/808 vs 817/818 s); parità ==wp_is_stream ×4; (c) server
-**s120 6b822369** pin al MINIMO (grado pieno dovuto); (d) smoke-morso prop
-R=2 svanito nel full anche stavolta (2ª conferma lezione S-119).
+intercalata** (stessa sera, pair109 invariata): ON<OFF concorde N=2 (801/808
+vs 817/818 s); parità ==wp_is_stream ×4; (c) server **s120 6b822369** pin al
+MINIMO (grado pieno dovuto); (d) smoke-morso prop R=2 svanito nel full (2ª
+conferma lezione S-119).
 
 ## §S-121 — ordine proposto
 
@@ -31,7 +32,11 @@ R=2 svanito nel full anche stavolta (2ª conferma lezione S-119).
 3. **re residuo 10→8→5**: arg-Vec di CallHostBuiltinOut (split_off per
    chiamata, tocca tutti gli out-builtin) e/o riuso array $m; poi il
    pavimento 8→5 è PhpStr DST (php-types: solo con progetto dedicato).
-4. **Stadio-2 PGO** (criterio §6 pre-registrato in s117-criterio-aprime.md;
+4. **Az. rev. S-120** (prima delle leve che toccano): fixture preg bilaterale
+   per NOME (nomi/NULL/offset/latin1/`(?|)`); colonna arr C-lite a denominatore
+   DICHIARATO prima di leve arr; precedenza smoke↔banda scritta PRIMA nel
+   criterio; gamba ABAB s119↔s120 stessa sera per ripartire L-RE1 su WP.
+5. **Stadio-2 PGO** (criterio §6 pre-registrato in s117-criterio-aprime.md;
    KS-A2: profdata non riproducibile ⇒ resta LTO).
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
@@ -45,9 +50,8 @@ repo (Read mirato + agente Explore) · fame frontend (kpc/sudo — azione utente
 · §3.16/§3.17 warning · retro-A/B str s107b/s108/s109 · denti rinviati (OBS-8;
 fx20; direct-bind; drop-order; hit/miss; checkout-staging) · $z++/$z-- undef
 non warna · §3.13 · §3.12-i · §3.14 · get_gc · drift TODO.md · (b-min)/(g)
-solo se census WP li mostra caldi · latin1-cliff preg (subject non-ASCII senza
-/u: +1 String + latin1_fix realloca ogni gruppo — freddo sui giudici, notato
-in istruttoria L-RE1).
+solo se census WP li mostra caldi · latin1-cliff preg (freddo sui giudici,
+istruttoria L-RE1).
 
 ## NON riproporre (i veti restano; dettaglio nei concili archiviati)
 
@@ -72,9 +76,7 @@ Pre-flight S-121: pin phpr **s120 885d2c64**6ac7ff4c @ 86306c3 (ricetta A′:
 `[profile.release]` in Cargo.toml + `SOURCE_DATE_EPOCH=0 CARGO_INCREMENTAL=0`;
 la batteria rilinka ⇒ build ricetta e pretendere 885d2c64 al byte) · server
 **s120 6b822369**89a4a0c4 pin MINIMO (grado pieno = punto 2) · MySQL wp8 con
-l'elenco (giù a inizio S-120: mysqld_safe daemonizzato su datadir esterno) ·
-uploads sotto guardia · conservati: phpr-s118 · phpr-s119 (==pin s119) ·
-phpr-s119-treno2 · phpr-s120-re1 (==pin s120) · php-server-s119 ·
-php-server-s120 · census target riusabile (patch: wp119-harness/
-census-clite.patch, riprodotta in S-120 senza incidenti) · Serena in hang:
-Read mirato + Explore.
+l'elenco (se giù: mysqld_safe daemonizzato su datadir esterno) · uploads sotto
+guardia · conservati: phpr-s118 · phpr-s119 · phpr-s119-treno2 · phpr-s120-re1
+(==pin s120) · php-server-s119 · php-server-s120 · census target riusabile
+(wp119-harness/census-clite.patch) · Serena in hang: Read mirato + Explore.

@@ -21,6 +21,12 @@
 - phpr full 801–818 s contro 826/827 s del pin s119: coerente con L-RE1 (WP è
   preg-heavy) ma TRA-SERE e tra-pin ⇒ direzione-solo, magnitudine non ripartita.
 
+## Az. rev. S-120 (lente SEMANTICA)
+«Sciolte» sovra-afferma a N=2: le anomalie s119 sono RIENTRATE (compatibili con
+rumore N=1), direzione plausibile; magnitudine L-RE1 su WP NON ripartita (serve
+gamba ABAB s119↔s120 stessa sera). Colonna arr della classifica C-lite a
+denominatori mescolati: da rifare prima di una leva arr.
+
 ## Metodo
 DEVIAZIONE DICHIARATA dal piano «sul pin s119»: il pin s119 è stato superato in
 sessione (L-RE1 → pin s120); l'intervallo si scioglie campionando l'oracle N=4

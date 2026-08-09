@@ -3,14 +3,14 @@
 **In una frase**: le espressioni regolari facevano 17 allocazioni per chiamata
 contro le 5 di PHP — tolte 7 con quattro ritocchi, la categoria scende per
 prima sotto il triplo dell'oracle, e la misura WordPress ripetuta 4 volte
-nella stessa sera dimostra che i "misteri" di S-119 erano rumore dell'oracle.
+nella stessa sera indica che i "misteri" di S-119 erano rumore dell'oracle.
 
 **SCOREBOARD** (pin s120 **885d2c64** @ 86306c3 = A′+treni+L-RE1; micro R=5;
 frecce vs s119): **arith 5,5 ↑ (5,4) · prop 5,5 = · calls 4,8 ↓ (5,0) · str
 5,3 ↓ (5,6) · arr 3,7 = · re 2,8 ↓↓ (3,3, A/B proprio firmato)** · WP sul pin
 s120: **full = 1,810–1,889** (16 celle, N=2/modo stessa sera; oracle N=4 spread
-2,2%) · **media ~2,51–2,53 · peak 1862–1983 MiB** (entrambe le anomalie s119
-SCIOLTE). **Leve perf spedite: 1 (L-RE1)**. 2026-08-09 · Fable 5 · a57595a→(chiusura).
+2,2%) · **media ~2,51–2,53 · peak 1862–1983 MiB** (anomalie s119 RIENTRATE —
+az. rev.: N=2 = direzione, non dimostrazione). **Leve perf spedite: 1 (L-RE1)**. 2026-08-09 · Fable 5 · a57595a→(chiusura).
 
 ## Esiti secchi
 1·**L-RE1 PROMOSSA** (criterio PRE a57595a; classifica C-lite re +12): borrow
