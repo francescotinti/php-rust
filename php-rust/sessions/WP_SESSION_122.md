@@ -37,5 +37,4 @@ prop/arr/re a verbale; PGO stadio-2 RINVIATO dichiarato.
   margine zero — ordine PERMUTATO per round e pin-vs-pin come pavimento.
 - ⭐⭐ **Una firma census può descrivere un sentiero che il release non
   percorre**: la prossima classifica vuole contatori NEL ramo fuso.
-- ⭐ **Un no-op senza riferimento non esiste**: ld64 lo dead-strippa; ogni
-  probe di layout pretende simbolo in nm e hash ≠ pin.
+- ⭐ **Un no-op senza riferimento non esiste**: ld64 lo dead-strippa (nm + hash ≠ pin obbligatori).
