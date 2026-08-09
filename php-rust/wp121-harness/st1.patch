@@ -1,0 +1,68 @@
+diff --git a/php-rust/crates/php-runtime/src/vm/mod.rs b/php-rust/crates/php-runtime/src/vm/mod.rs
+index 01ab6b0..50a69b8 100644
+--- a/php-rust/crates/php-runtime/src/vm/mod.rs
++++ b/php-rust/crates/php-runtime/src/vm/mod.rs
+@@ -815,6 +815,7 @@ pub fn vm_new<'m>(
+         lazy_props: HashMap::default(),
+         var_dump_debug: std::collections::HashMap::new(),
+         stringify_args: std::collections::HashMap::new(),
++        builtin_args_scratch: Vec::new(),
+         reflect_method_info_cache: std::collections::HashMap::new(),
+         lazy_options: HashMap::default(),
+         reflect_object_bound: HashMap::default(),
+@@ -3538,6 +3539,12 @@ pub struct Vm<'m> {
+     /// re-entering the VM (see `Ctx::stringify` / `compute_stringify`).
+     // (std map: crosses into php-builtins like `var_dump_debug`; cold path.)
+     stringify_args: std::collections::HashMap<u32, php_types::ZStr>,
++    /// Reusable argument buffer for `Op::CallBuiltin`: `mem::take`n at the call
++    /// site, refilled via `pop_keys_into`, and handed back emptied after the
++    /// builtin returns — steady state pays no per-call `Vec` allocation. Cold
++    /// exits (`continue`/`?` before the hand-back) drop it, and a re-entrant
++    /// call finds an empty fresh `Vec`: both just fall back to allocating.
++    builtin_args_scratch: Vec<Zval>,
+     /// Memoized `__reflect_method_info` descriptors, keyed by (resolved class
+     /// id, lowercased method name). Sound because a declared class's method
+     /// table and ancestry never change afterwards (no runkit); later class
+@@ -8188,6 +8195,15 @@ impl<'m> Vm<'m> {
+         stack.split_off(at)
+     }
+ 
++    /// [`Self::pop_keys`] into a caller-provided buffer (the
++    /// `builtin_args_scratch` reuse path): drains the stack tail in source
++    /// order without allocating a fresh `Vec` per call.
++    fn pop_keys_into(&mut self, top: usize, n: u32, buf: &mut Vec<Zval>) {
++        let stack = &mut self.frames[top].stack;
++        let at = stack.len().checked_sub(n as usize).expect("path index keys");
++        buf.extend(stack.drain(at..));
++    }
++
+     // `dispatch_host_builtin` is generated, together with `host_builtin_canonical`,
+     // from the single `host_builtins!` table defined near `host_builtin_canonical`
+     // below — adding a host builtin is one edit there, not a two-list sync.
+diff --git a/php-rust/crates/php-runtime/src/vm/run.rs b/php-rust/crates/php-runtime/src/vm/run.rs
+index a8869a8..ef0c551 100644
+--- a/php-rust/crates/php-runtime/src/vm/run.rs
++++ b/php-rust/crates/php-runtime/src/vm/run.rs
+@@ -3328,7 +3328,8 @@ impl<'m> super::Vm<'m> {
+                         // The compiler only emits CallBuiltin for value builtins.
+                         _ => return Err(undefined_builtin(&name)),
+                     };
+-                    let mut args = self.pop_keys(top, *argc); // pops argc, source order
++                    let mut args = std::mem::take(&mut self.builtin_args_scratch);
++                    self.pop_keys_into(top, *argc, &mut args); // pops argc, source order
+                     // A whole-object exporter initializes a lazy argument first
+                     // (PHP 8.4, init_trigger_var_export); the pure builtin then
+                     // formats the realized instance.
+@@ -3410,8 +3411,10 @@ impl<'m> super::Vm<'m> {
+                         self.stringify_args = self.compute_stringify(&args, true)?;
+                     }
+                     let line = self.cur_line(top);
+-                    let result = self.run_value_builtin(f, &args, line)?;
+-                    self.frames[top].stack.push(result);
++                    let result = self.run_value_builtin(f, &args, line);
++                    args.clear();
++                    self.builtin_args_scratch = args;
++                    self.frames[top].stack.push(result?);
+                 }
+                 Op::CallBuiltinSpread { name, spreads } => {
+                     // A registry builtin runs via its Value fn; a VM host
