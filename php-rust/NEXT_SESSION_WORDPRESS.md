@@ -71,14 +71,11 @@ spegne la fusione**.
 **Riscritto**: 2026-08-09 (chiusura S-122). Storia: `sessions/` ·
 `gaps/GAP_TREND.md` · revisione in `wp122-harness/revisione.md`.
 
-Pre-flight S-123: pin phpr **s120 885d2c64**6ac7ff4c @ 86306c3 (ricetta A′:
-`[profile.release]` + `SOURCE_DATE_EPOCH=0 CARGO_INCREMENTAL=0`; la batteria
-rilinka ⇒ build ricetta e pretendere 885d2c64 al byte) · server **s120
-6b822369** GRADO PIENO · MySQL wp8 con l'elenco (se giù: mysqld_safe
-daemonizzato su datadir esterno) · uploads sotto guardia · conservati:
-phpr-s118 · phpr-s119 · phpr-s119-treno2 · phpr-s120-re1 (==pin) ·
-phpr-s121-st1 (REPERTO refutato) · **phpr-s122-lay1..3 (probe layout)** ·
-**phpr-s122-re2 (REPERTO refutato, 4eda5d6b)** · php-server-s119/s120 ·
-census target riusabile (wp119 census-clite.patch; bande in
-wp122-harness/layout-out/layout-bande.txt) · Serena in hang: Read mirato +
-Explore · disco Data: liberata cache uv (1,6G) in S-122, ricontrollare ≥15G.
+Pre-flight S-123: pin phpr **s120 885d2c64**6ac7ff4c @ 86306c3 (ricetta A′;
+la batteria rilinka ⇒ build ricetta e pretendere 885d2c64 al byte) · server
+**s120 6b822369** GRADO PIENO · MySQL wp8 con l'elenco (se giù: mysqld_safe
+su datadir esterno) · uploads sotto guardia · conservati: phpr-s118/s119/
+s119-treno2/s120-re1(==pin)/s121-st1(reperto) · **phpr-s122-lay1..3 (probe)**
+· **phpr-s122-re2 (reperto, 4eda5d6b)** · php-server-s119/s120 · census
+riusabile (wp119 census-clite.patch; bande in wp122-harness/layout-out/) ·
+Serena in hang: Read mirato + Explore · disco Data ≥15G da ricontrollare.
