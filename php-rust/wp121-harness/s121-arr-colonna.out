@@ -1,0 +1,13 @@
+s121-arr-colonna — az. rev. S-120 #2: colonna arr della classifica C-lite a DENOMINATORE DICHIARATO (prima di ogni leva arr)
+sorgente: raw census wp119-harness/clite-out (r1; R=2 identici), riconfermato da wp121-harness/census-out (245,01 identico)
+arr.php = 100.000 insert ($a["k$i"]=$i) + 60x100.000 = 6.000.000 letture ($s+=$a["k$i"]); OGNI op (insert E lettura) costruisce la chiave "k$i" per interpolazione
+DENOMINATORI (dichiarati, NON intercambiabili):
+  D1 per-iter-insert N=100.000   : phpr 245,01  zend 121,99  (1 "iter" = 1 insert + 60 letture + 61 chiavi: NON adatto alla classifica)
+  D2 per-op-interno N=6.100.000  : phpr 4,02    zend 2,00    delta +2,02/op  (= IL denominatore della classifica; 245,01x100k = 4,017x6,1M al quanto)
+  D3 giudice del tempo N=6.000.000 (sole letture, ab/run-micro): i ns/iter del tempo NON sono confrontabili 1:1 col census D2 (scarto denominatori 1,7%, dichiarato)
+CLASSIFICA delta-alloc AGGIORNATA a denominatore dichiarato (stato pin s120: L-RE1 promossa, L-ST1 refutata):
+  1) re  +5,00/iter  (10,00 phpr vs 5,00 zend, N=2M; residuo nominato: arg-Vec out-builtin ~2, poi pavimento PhpStr DST)
+  2) str +3,00/iter  (5,00 vs 2,00, N=4M; scratch-swap args-Vec REFUTATO S-121 sul tempo: residuo = pavimento PhpStr DST, php-types, progetto dedicato)
+  3) arr +2,02/op-int (D2; ipotesi da istruire coi conteggi-che-sommano PRIMA di ogni leva: chiave "k$i" ricostruita a ogni op)
+  4) prop 5 cloni/iter (1 Rc) — ciclo-di-vita, NON alloc (census cloni, non galloc)
+nota: la cella arr=245,01 della tabella 6x4 resta corretta PER-ITER-INSERT (D1); e' la CLASSIFICA che deve usare D2. La riga (arr per op-interno) del verdetto s119 era gia' D2: l'errore del v1 S-120 fu confrontare D2 con D1.
