@@ -68,8 +68,7 @@ non ancora committati** · **«N/N esatte» quando una predizione è costruita
 post-ridiagnosi** · SSO inline (WP-38, riconfermato: single-alloc ≠ SSO).
 
 ---
-**Riscritto**: 2026-08-10 (chiusura S-124). Storia: `sessions/` ·
-`gaps/GAP_TREND.md` · revisione in `wp124-harness/revisione.md`.
+**Riscritto**: 2026-08-10 (chiusura S-124). Storia: `sessions/` · `gaps/GAP_TREND.md` · revisione in `wp124-harness/revisione.md`.
 
 Pre-flight S-125: pin phpr **s124 c5ba2573**a23adf69 @ fb140d1 (ricetta A′; la
 batteria rilinka ⇒ build ricetta e pretendere c5ba2573 al byte) · server
