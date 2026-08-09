@@ -22,9 +22,8 @@ colonna arr D2 = +2,02/op-int su 6,1M).
 ## §S-122 — ordine proposto
 
 1. **Banda-LAYOUT micro** (PREREQUISITO per ogni leva ≤10 ns/iter, lezione
-   L-ST1): A′ è deterministico ⇒ la banda tra-binari si campiona con un
-   no-op FIRMATO (es. simbolo dummy non chiamato) ricompilato ×N; criterio
-   ≤10 righe PRIMA; la zavorra run-to-run (str 2,50) NON la copre.
+   L-ST1): A′ è deterministico ⇒ si campiona con un no-op FIRMATO (simbolo
+   dummy) ricompilato ×N; criterio PRIMA; la zavorra run-to-run NON la copre.
 2. **Leva prop-cloni** (classifica: 5 cloni Zval/iter, 1 Rc — ciclo-di-vita,
    non alloc): census su pin s118 già in mano; istruttoria sito-per-sito che
    SOMMA, poi criterio col bersaglio prop (banda-v2 3,33).
@@ -34,9 +33,8 @@ colonna arr D2 = +2,02/op-int su 6,1M).
    Ogni leva preg passa ANCHE dal gate fixture preg (s121-fx-preg-gate.sh).
 4. **Stadio-2 PGO** (criterio §6 pre-registrato in s117-criterio-aprime.md;
    KS-A2: profdata non riproducibile ⇒ resta LTO).
-5. **arr**: istruttoria conteggi-che-sommano su D2 DICHIARATO (+2,02/op-int;
-   indiziata la chiave "k$i" ricostruita a ogni op) — solo istruttoria, la
-   leva sceglie S-123.
+5. **arr**: SOLO istruttoria conteggi-che-sommano su D2 DICHIARATO
+   (+2,02/op-int; indiziata la chiave "k$i" ricostruita a ogni op).
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
 
@@ -59,13 +57,13 @@ differenze tra A/B distinti come cifra · componenti prezzate · magnitudine
 ripartita senza A/B proprio · fixture su memory_get_usage · «icache»
 NON-premessa · pre-filtro che tassa i freddi · guardie non-bersaglio
 BILATERALI · denominatori a memoria · output di run nel repo · rc di gate
-da pipe (6 morsi) · tee/log pre-mkdir · admission sul dump intero (deroga:
-leve runtime-only a emissione INVARIATA, forma S-118, citata nel criterio) ·
-xctrace senza guardie disco · run pesanti come task · edit coi build in
-volo · promozione sotto banda · gate a soglia fissa senza banda · bande
-pre-pipeline su binari post-pipeline · corpus-gate solo-nomi · edit di
-strumentazione nei sorgenti del pin · **leve micro ≤10 ns/iter senza
-banda-layout misurata** · **zavorra run-to-run come arbitro del layout**.
+da pipe (6 morsi) · tee/log pre-mkdir · admission sul dump intero (deroga
+forma S-118: leve runtime-only a emissione INVARIATA, citata nel criterio) ·
+xctrace senza guardie disco · run pesanti come task · edit coi build in volo
+· promozione sotto banda · gate a soglia fissa senza banda · bande
+pre-pipeline su binari post-pipeline · corpus-gate solo-nomi · strumentazione
+nei sorgenti del pin · **leve micro ≤10 ns/iter senza banda-layout misurata**
+· **zavorra run-to-run come arbitro del layout**.
 
 ---
 **Riscritto**: 2026-08-09 (chiusura S-121). Storia: `sessions/` ·
