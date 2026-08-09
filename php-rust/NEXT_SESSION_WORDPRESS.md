@@ -1,7 +1,7 @@
 # NEXT_SESSION — phpr: OBIETTIVO PARITÀ (≥1×) con l'oracle; ≤3× = tappa (REGOLE §1)
-⏱ **FONDAMENTALI**: rif WP **full ON 1,716 / OFF 1,837 · media 2,636/2,519 ·
-peak ON 1933,6 MiB** (S-119, pin s119+server s119, serie A′ N=1 direzione-solo;
-oracle mosso ~7% tra le gambe: magnitudine del calo non ripartita) · ultima leva
+⏱ **FONDAMENTALI**: rif WP **full = INTERVALLO 1,71–1,84** (az. rev. S-119: lo
+split ON/OFF a N=1 è artefatto dell'oracle mosso 7,2% a phpr fermo 826/827) ·
+**media 2,636/2,519 · peak ON 1933,6 MiB** (N=1, direzione-solo) · ultima leva
 SPEDITA **S-119 (treno-2 V3-V5)** · sessioni-senza-Δ = 0 · incidenti «mai
 collaudato»: 1 (S-106) · incidenti processo: 1 (S-115).
 
@@ -27,8 +27,9 @@ strumentazione SOLO via `wp119-harness/census-clite.patch`, mai nei sorgenti.
    ma banda micro N=2 re 10,00: trattarla nel criterio) → A/B.
 2. **Str-alloc** (+3/iter) se il timebox regge: stessa forma (concat+substr = 5
    alloc/iter phpr vs 2 Zend).
-3. **Coppia WP N=2 sul pin s119** (stessa coppia di stanotte ⇒ prime bande della
-   famiglia A′; scioglie anche peak +94 MiB e media ON 2,636, oggi N=1).
+3. **Coppia WP N≥2 sul pin s119 a gambe INTERCALATE** (az. rev.: pubblicare
+   anche i rapporti cross-oracle; scioglie l'intervallo 1,71–1,84, il peak
+   +94 MiB e la media ON 2,636 — misura dedicata R≥3 PRIMA di nuove leve WP).
 4. **Stadio-2 PGO** (criterio §6 pre-registrato in s117-criterio-aprime.md;
    KS-A2: profdata non riproducibile ⇒ resta LTO).
 

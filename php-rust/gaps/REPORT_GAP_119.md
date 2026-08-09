@@ -18,6 +18,13 @@
   voce (aperta da S-113); direzione non firmata.
 - peak ON 1933,6 MiB vs 1839,2 (s118): +94 MiB, serie N=1, voce da riosservare.
 
+## Emendamento (az. rev. S-119, lente MISURA)
+Incrocio dei denominatori: ON con oracle-OFF = 1,840; OFF con oracle-ON = 1,714
+(phpr fermo 826,16/827,07). Lo split ON/OFF a N=1 NON esiste: il rif si scrive
+**intervallo 1,71–1,84**; la direzione vs s118 sopravvive anche al ricalcolo
+conservativo (1,840 < 1,913), di poco. Media ON e peak sono regressioni N=1 da
+sciogliere con misura dedicata (ordine S-120 §3).
+
 ## Metodo
 Riferimento nuovo della famiglia = QUESTA coppia (pin s119+server s119); il
 riferimento s118 (pin s117+server s118) decade come pre-registrato dalla regola

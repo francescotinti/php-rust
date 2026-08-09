@@ -9,10 +9,10 @@ il carico WordPress completo scende sotto 1,9× in entrambi i modi.
 frecce vs s118): **arith 5,4 ↓ (5,5) · prop 5,5 = · calls 5,0 ↑ (4,8) · str 5,6
 ↑ (5,3) · arr 3,7 ↓ (3,8) · re 3,3 =** (calls/str: A/B stessa-sera dice guardie
 TENGONO — calls D_med −0,50 = quanto layout, str D_med +5,00; le frecce dei
-rapporti includono il rumore oracle) · WP sul pin s119+server s119: **full ON
-1,716 / OFF 1,837 · media 2,636/2,519 · peak ON 1933,6 MiB** (serie A′ N=1,
-direzione-solo; oracle mosso ~7% tra le gambe). **Leve perf spedite: 1
-(treno-2 = V3+V4+V5)**. 2026-08-09 · Fable 5 · 8bcd7d4→cd2c4a3.
+rapporti includono il rumore oracle) · WP sul pin s119+server s119: **full =
+INTERVALLO 1,71–1,84** (az. rev.: split ON/OFF a N=1 = artefatto oracle 7,2% a
+phpr fermo) · **media 2,636/2,519 · peak ON 1933,6 MiB** (N=1). **Leve perf
+spedite: 1 (treno-2 = V3+V4+V5)**. 2026-08-09 · Fable 5 · 8bcd7d4→cd2c4a3.
 
 ## Esiti secchi
 1·**C-lite eseguita** (criterio PRE 00a4824, 4 deroghe NOMINATE; verdetto
