@@ -5,3 +5,5 @@ metro-out/
 *.log
 p2-progress.txt
 p2-chain.done
+cbargs-progress.txt
+cbargs-chain.done
