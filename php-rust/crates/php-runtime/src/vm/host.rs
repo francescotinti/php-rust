@@ -3244,8 +3244,11 @@ impl<'m> super::Vm<'m> {
                 if latin1 {
                     caps.latin1_fix(&subj);
                 }
-                let m0 = caps.get(0).expect("match has group 0");
-                (m0.start, m0.end, crate::preg::captures_array(&re, &caps, 0))
+                let (s0, e0) = {
+                    let m0 = caps.get(0).expect("match has group 0");
+                    (m0.start, m0.end)
+                };
+                (s0, e0, crate::preg::captures_array(&re, caps, 0))
             })
             .collect();
         // `$limit`: maximum replacements; negative = unlimited (default -1),
@@ -3971,10 +3974,14 @@ impl<'m> super::Vm<'m> {
                 "preg_match() expects at least 2 arguments".to_string(),
             ));
         }
-        let pat = convert::to_zstr_cast(&args[0].deref_clone(), &mut self.diags).as_bytes().to_vec();
-        let subject =
-            convert::to_zstr_cast(&args[1].deref_clone(), &mut self.diags).as_bytes().to_vec();
-        let Some(re) = self.preg_compile(&pat) else {
+        // L-RE1 (S-120): borrow pattern/subject dai loro ZStr — il to_vec qui
+        // costava 2 alloc + una memcpy O(len) per chiamata; tutto il path a
+        // valle (compile-cache, pattern_is_unicode, subject_text) legge &[u8].
+        let pat_z = convert::to_zstr_cast(&args[0].deref_clone(), &mut self.diags);
+        let pat = pat_z.as_bytes();
+        let subject_z = convert::to_zstr_cast(&args[1].deref_clone(), &mut self.diags);
+        let subject = subject_z.as_bytes();
+        let Some(re) = self.preg_compile(pat) else {
             return Ok((Zval::Bool(false), Zval::Null));
         };
         let flags = match args.get(3) {
@@ -4010,7 +4017,7 @@ impl<'m> super::Vm<'m> {
                 if latin1 {
                     caps.latin1_fix(subj);
                 }
-                (1, crate::preg::captures_array(&re, &caps, flags))
+                (1, crate::preg::captures_array(&re, caps, flags))
             }
             None => (0, Zval::Array(Rc::new(PhpArray::new()))),
         };
@@ -4053,7 +4060,7 @@ impl<'m> super::Vm<'m> {
                     caps.latin1_fix(&subj);
                 }
                 count += 1;
-                let _ = outer.append(crate::preg::captures_array(&re, &caps, flags));
+                let _ = outer.append(crate::preg::captures_array(&re, caps, flags));
             }
             outer
         } else {

@@ -170,6 +170,21 @@ pub fn subject_text(subject: &[u8], unicode: bool) -> Option<SubjectText<'_>> {
     }
 }
 
+/// L-RE1: come [`caps_from_regex`], ma da uno scratch `CaptureLocations`
+/// riusato — il testo dei gruppi si affetta dal subject per span.
+fn caps_from_locations(text: &str, locs: &regex::CaptureLocations) -> Caps {
+    let groups = (0..locs.len())
+        .map(|i| {
+            locs.get(i).map(|(start, end)| CapMatch {
+                start,
+                end,
+                text: text[start..end].as_bytes().to_vec(),
+            })
+        })
+        .collect();
+    Caps { groups }
+}
+
 fn caps_from_regex(caps: &regex::Captures) -> Caps {
     let groups = (0..caps.len())
         .map(|i| {
@@ -235,8 +250,35 @@ fn caps_from_onig_region(text: &str, region: &onig::Region) -> Caps {
 /// blocks, recursion. Oniguruma is PHP's own mbregex backend and reads PCRE
 /// syntax under its `perl_ng` dialect. It is the LAST resort: only patterns both
 /// Rust engines reject reach it, so no existing behaviour changes.
+/// L-RE1 (S-120): il backend `regex` con uno scratch `CaptureLocations`
+/// riusato tra le chiamate — `Regex::captures_at` alloca un vettore di slot
+/// per OGNI match; su un pattern cache-ato in un ciclo stretto quella è
+/// un'alloc/iter pura. Il Deref lascia intatti tutti gli arm che chiamano
+/// metodi di `regex::Regex` sul binding. Lo scratch è per-Engine (le
+/// locations di una regex NON sono riusabili su un'altra) e il borrow vive
+/// solo dentro la singola ricerca: il matching non rientra mai in codice
+/// utente.
+pub struct CachedRegex {
+    re: regex::Regex,
+    scratch: std::cell::RefCell<regex::CaptureLocations>,
+}
+
+impl CachedRegex {
+    pub fn new(re: regex::Regex) -> Self {
+        let scratch = std::cell::RefCell::new(re.capture_locations());
+        CachedRegex { re, scratch }
+    }
+}
+
+impl std::ops::Deref for CachedRegex {
+    type Target = regex::Regex;
+    fn deref(&self) -> &regex::Regex {
+        &self.re
+    }
+}
+
 pub enum Engine {
-    Regex(regex::Regex),
+    Regex(CachedRegex),
     Fancy(fancy_regex::Regex),
     Onig(onig::Regex),
     /// PCRE_ANCHORED (`/A`): the inner engine compiled WITHOUT any `\A` wrap;
@@ -300,6 +342,38 @@ impl Engine {
         }
     }
 
+    /// L-RE1: whether the pattern has ANY (non-synthetic) named group.
+    /// Allocation-free probe — [`Engine::capture_names`] materialises a
+    /// `Vec<Option<String>>` per call, and on the no-names fast path (the
+    /// overwhelmingly common case) the caller can skip it entirely. A
+    /// conservative `true` only forfeits the optimisation, never correctness.
+    pub fn has_named_groups(&self) -> bool {
+        match self {
+            Engine::Regex(r) => r
+                .capture_names()
+                .flatten()
+                .any(|s| !s.starts_with(SYN_BACKREF_PREFIX)),
+            Engine::Fancy(r) => r
+                .capture_names()
+                .flatten()
+                .any(|s| !s.starts_with(SYN_BACKREF_PREFIX)),
+            Engine::Onig(r) => {
+                let mut has = false;
+                r.foreach_name(|name, _| {
+                    if name.starts_with(SYN_BACKREF_PREFIX) {
+                        true // synthetic: keep scanning
+                    } else {
+                        has = true;
+                        false // real name found: stop
+                    }
+                });
+                has
+            }
+            Engine::Anchored(inner) => inner.has_named_groups(),
+            Engine::Remap { inner, .. } => inner.has_named_groups(),
+        }
+    }
+
     /// Capture-group names by index (`None` for unnamed / the whole match),
     /// collected to owned strings so both backends share one return type.
     /// Synthetic names introduced by [`demix_numbered_backrefs`] are hidden
@@ -360,7 +434,11 @@ impl Engine {
     /// (e.g. backtrack limit) collapses to "no match" (D-36.3).
     pub fn captures(&self, text: &str) -> Option<Caps> {
         match self {
-            Engine::Regex(r) => r.captures(text).map(|c| caps_from_regex(&c)),
+            Engine::Regex(r) => {
+                let mut locs = r.scratch.borrow_mut();
+                r.re.captures_read(&mut locs, text)
+                    .map(|_| caps_from_locations(text, &locs))
+            }
             Engine::Fancy(r) => r.captures(text).ok().flatten().map(|c| caps_from_fancy(&c)),
             Engine::Onig(r) => r.captures(text).map(|c| caps_from_onig(&c)),
             Engine::Anchored(_) => self.captures_at(text, 0),
@@ -381,7 +459,11 @@ impl Engine {
             return None;
         }
         match self {
-            Engine::Regex(r) => r.captures_at(text, start).map(|c| caps_from_regex(&c)),
+            Engine::Regex(r) => {
+                let mut locs = r.scratch.borrow_mut();
+                r.re.captures_read_at(&mut locs, text, start)
+                    .map(|_| caps_from_locations(text, &locs))
+            }
             Engine::Fancy(r) => r.captures_from_pos(text, start).ok().flatten().map(|c| caps_from_fancy(&c)),
             // `start == 0` is a plain `captures`; a positive offset searches from
             // `start` over the still-fully-visible text via `search_with_options`
@@ -868,7 +950,7 @@ pub fn compile(pattern: &[u8]) -> Option<Engine> {
         }
     }
     if let Ok(r) = b.build() {
-        return Some(wrap(Engine::Regex(r)));
+        return Some(wrap(Engine::Regex(CachedRegex::new(r))));
     }
 
     // Fallback: fancy-regex (backreferences + lookaround). Inline flags are
@@ -2107,10 +2189,16 @@ pub const PREG_SET_ORDER: i64 = 2;
 /// `PREG_OFFSET_CAPTURE` each value becomes a `[string, byte-offset]` pair; with
 /// `PREG_UNMATCHED_AS_NULL` unmatched groups are `null` and every group is kept,
 /// otherwise trailing unmatched groups are dropped.
-pub fn captures_array(re: &Engine, caps: &Caps, flags: i64) -> Zval {
+pub fn captures_array(re: &Engine, caps: Caps, flags: i64) -> Zval {
     let offset = flags & PREG_OFFSET_CAPTURE != 0;
     let as_null = flags & PREG_UNMATCHED_AS_NULL != 0;
-    let names = re.capture_names();
+    // L-RE1: `capture_names()` materialises a Vec per call; on the no-names
+    // fast path `Vec::new()` is allocation-free and `names.get(i)` is `None`.
+    let names = if re.has_named_groups() {
+        re.capture_names()
+    } else {
+        Vec::new()
+    };
     let limit = if as_null {
         caps.len().saturating_sub(1)
     } else {
@@ -2120,14 +2208,45 @@ pub fn captures_array(re: &Engine, caps: &Caps, flags: i64) -> Zval {
             .unwrap_or(0)
     };
     let mut arr = PhpArray::new();
+    // L-RE1: consume the Caps so each group's bytes MOVE into their PhpStr —
+    // the borrowed path paid a second copy of every group text here.
+    let mut groups = caps.groups.into_iter();
     for i in 0..=limit {
-        let val = capture_value(caps.get(i), offset, as_null);
+        let val = capture_value_owned(groups.next().flatten(), offset, as_null);
         if let Some(Some(name)) = names.get(i) {
             arr.insert(Key::from_bytes(name.as_bytes()), val.clone());
         }
         arr.insert(Key::Int(i as i64), val);
     }
     Zval::Array(Rc::new(arr))
+}
+
+/// L-RE1: owned twin of [`capture_value`] — the group's byte buffer MOVES
+/// into its `PhpStr` (exact-size Vec, so `shrink_to_fit` is a no-op) instead
+/// of being cloned a second time.
+pub fn capture_value_owned(m: Option<CapMatch>, offset: bool, as_null: bool) -> Zval {
+    match m {
+        Some(mm) => {
+            let s = Zval::Str(PhpStr::new(mm.text));
+            if offset {
+                offset_pair(s, mm.start as i64)
+            } else {
+                s
+            }
+        }
+        None => {
+            let base = if as_null {
+                Zval::Null
+            } else {
+                Zval::Str(PhpStr::new(Vec::new()))
+            };
+            if offset {
+                offset_pair(base, -1)
+            } else {
+                base
+            }
+        }
+    }
 }
 
 /// A single capture group's value, honouring `PREG_OFFSET_CAPTURE` /
