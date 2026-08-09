@@ -1,0 +1,44 @@
+candidato L-RE1 = 885d2c646ac7ff4c (target canonico, ricetta A′; A = pin 350582e55d21533d)
+admission: 6/6 parità output + 6/6 dump INTERO byte-id (rc=0 da re1-out/admission.rc)
+candidato CONSERVATO: phpr-s120-re1 (885d2c646ac7ff4c)
+ripristino: release/phpr == pin 350582e55d21533d AL BYTE; A/B pronte su stash A=phpr-s119 B=phpr-s120-re1
+
+MECCANISMO census (s120-census-re1.sh + verdetto, identity: census_bin=c23d53ae09682c7b  # build strumentata, NON il pin):
+empty galloc_n R=2: 183569 / 183569
+arith: alloc/iter=0.00/0.00  s119=0.00  zend=0.00
+prop: alloc/iter=0.00/0.00  s119=0.00  zend=0.00
+calls: alloc/iter=0.00/0.00  s119=0.00  zend=0.00
+str: alloc/iter=5.00/5.00  s119=5.00  zend=2.00
+arr: alloc/iter=245.01/245.01  s119=4.02  zend=2.00
+re: alloc/iter=10.00/10.00  s119=17.00  zend=5.00
+CENSUS_RE1: re 17.00 -> 10.00 alloc/iter (zend 5,00) => MECCANISMO MANCATO (atteso <=10,00) · AUMENTI NON-BERSAGLIO: arr:245.01>4.02
+
+MECCANISMO census v2 (s120-census-re1.sh + verdetto v2, identity: census_bin=c23d53ae09682c7b  # build strumentata, NON il pin):
+empty galloc_n R=2: 183569 / 183569
+arith: alloc/iter=0.00 (s119=0.00, stesso denominatore N=50000000)
+prop: alloc/iter=0.00 (s119=0.00, stesso denominatore N=30000000)
+calls: alloc/iter=0.00 (s119=0.00, stesso denominatore N=20000000)
+str: alloc/iter=5.00 (s119=5.00, stesso denominatore N=4000000)
+arr: alloc/iter=245.01 (s119=245.01, stesso denominatore N=100000)
+re: alloc/iter=10.00 (s119=17.00, stesso denominatore N=2000000)
+CENSUS_RE1: re 17.00 -> 10.00 alloc/iter (zend 5.00) => MECCANISMO CONFERMATO (atteso <=10,00)
+smoke R=2 guardia (rc=1): D per coppia = +100.00 +100.00 -5.00 -1.67
+smoke L-RE1: rc=1 dal filtro (prop concorde -5.00/-1.67 R=2; D_med -3.33 = tie sulla banda-v2 3.33; prop NON esercita preg e ha 0 alloc/iter: firma del primo-giro S-119). Bersaglio re +100.00/+100.00. Criterio p.5/p.7: la banda giudica nel FULL R=5 — si procede, dichiarato.
+
+VERDETTO A MACCHINA (s120-ab-re1.sh full, rc=0 da re1-out/full-rc):
+arith: fam=5 D_med=+0.20 segni +3/5 spread_A_dep=0.20 quanto=0.20 soglia_guardia=-0.80 -> tiene (tie: = -> tiene)
+prop: fam=5 D_med=+0.00 segni +1/5 spread_A_dep=3.00 quanto=0.33 soglia_guardia=-6.00 -> tiene (tie: = -> tiene)
+calls: fam=5 D_med=+0.50 segni +3/5 spread_A_dep=1.00 quanto=0.50 soglia_guardia=-2.00 -> tiene (tie: = -> tiene)
+str: fam=5 D_med=+0.00 segni +1/5 spread_A_dep=2.50 quanto=2.50 soglia_guardia=-7.50 -> tiene (tie: = -> tiene)
+arr: fam=5 D_med=+0.00 segni +2/5 spread_A_dep=1.67 quanto=1.67 soglia_guardia=-6.67 -> tiene (tie: = -> tiene)
+re: fam=5 D_med=+100.00 segni +5/5 spread_A_dep=10.00 quanto=5.00 soglia_promozione=+20.00 -> PROMOZIONE
+VERDETTO_MICRO=BERSAGLIO re OLTRE SOGLIA + GUARDIE TENGONO (si procede ai gate di promozione)
+promozione: leva committata @ 86306c3
+promozione: build ricetta riproduce il candidato 885d2c646ac7ff4c
+promozione batteria: rc=0 (da promo-out/batteria.rc) · 1742/0/2 · inventario vs pin s119: IDENTICO
+promozione: churn batteria neutralizzato (build ricetta → 885d2c646ac7ff4c al byte)
+promozione: PIN phpr s120 = 885d2c646ac7ff4c (smoke parità 2 modi OK, stash phpr-s120). I gate del protocollo (batteria/corpus/fixture/micro) restano dovuti.
+promozione corpus-gate: rc=0 — nomi==congelato, CONTENUTO==golden, off↔on zero
+promozione fixture chain: rc=0 (6/6 gate verdi)
+promozione micro pin s120: rapporto_arith=5.5  [derivata: companion 2.35/0.43] rapporto_prop=5.5  [derivata: companion 2.32/0.42] rapporto_calls=4.8  [derivata: companion 2.14/0.45] rapporto_str=5.3  [derivata: companion 0.84/0.16] rapporto_arr=3.7  [derivata: companion 1.11/0.30] rapporto_re=2.8  [derivata: companion 1.02/0.37] 
+PROMOZIONE COMPLETA rc=0 (da promo-out/rc): pin s120 = 885d2c646ac7ff4c @ 86306c3
