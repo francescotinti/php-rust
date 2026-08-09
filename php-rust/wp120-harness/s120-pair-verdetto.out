@@ -1,0 +1,47 @@
+cross-ratios S-120 (full master cpu = user+sys; 4 gambe intercalate off1 on1 off2 on2)
+grade=VERDICT  # derivazione meccanica dai .time
+full_oracle_off1=436.05 full_phpr_off1=816.55 media_oracle_off1=23.02 media_phpr_off1=57.04 peak_phpr_off1_MiB=1909.2
+full_oracle_off2=441.30 full_phpr_off2=817.86 media_oracle_off2=22.95 media_phpr_off2=57.16 peak_phpr_off2_MiB=1983.1
+full_oracle_on1=432.93 full_phpr_on1=801.02 media_oracle_on1=23.09 media_phpr_on1=57.32 peak_phpr_on1_MiB=1936.6
+full_oracle_on2=442.65 full_phpr_on2=807.67 media_oracle_on2=23.09 media_phpr_on2=57.21 peak_phpr_on2_MiB=1862.5
+matrice full phpr(riga)/oracle(colonna):
+off1/off1=1.873  off1/off2=1.850  off1/on1=1.886  off1/on2=1.845
+off2/off1=1.876  off2/off2=1.853  off2/on1=1.889  off2/on2=1.848
+on1/off1=1.837  on1/off2=1.815  on1/on1=1.850  on1/on2=1.810
+on2/off1=1.852  on2/off2=1.830  on2/on1=1.866  on2/on2=1.825
+oracle_full_N4: min=432.93 max=442.65 spread=2.2%
+phpr_full_N4: min=801.02 max=817.86 spread=2.1%
+full_intervallo=1.810-1.889 (min/max su tutte le 16 celle)
+media_off_ratio_N2=2.478/2.491
+full_peak_off_MiB_N2=1909.2/1983.1
+media_on_ratio_N2=2.482/2.478
+full_peak_on_MiB_N2=1936.6/1862.5
+
+per-gamba (pair109 ratios.out, media=user-only canonico GAP_TREND):
+-- leg1-off
+media_user_cpu_oracle=20.88 media_user_cpu_phpr=52.42 ratio=2.511
+media_peak_footprint_oracle=393872248 media_peak_footprint_phpr=1150305696 ratio=2.921
+full_master_cpu_oracle=436.05 full_master_cpu_phpr=816.55 ratio=1.873
+full_peak_footprint_oracle=734938336 full_peak_footprint_phpr=2001930328 ratio=2.724
+full_peak_footprint_phpr_MiB=1909.19
+-- leg1-on
+media_user_cpu_oracle=20.83 media_user_cpu_phpr=52.78 ratio=2.534
+media_peak_footprint_oracle=394249104 media_peak_footprint_phpr=1112688008 ratio=2.822
+full_master_cpu_oracle=432.93 full_master_cpu_phpr=801.02 ratio=1.850
+full_peak_footprint_oracle=834782432 full_peak_footprint_phpr=2030651480 ratio=2.433
+full_peak_footprint_phpr_MiB=1936.58
+-- leg2-off
+media_user_cpu_oracle=20.84 media_user_cpu_phpr=52.61 ratio=2.524
+media_peak_footprint_oracle=393987008 media_peak_footprint_phpr=1148847520 ratio=2.916
+full_master_cpu_oracle=441.30 full_master_cpu_phpr=817.86 ratio=1.853
+full_peak_footprint_oracle=833963256 full_peak_footprint_phpr=2079459416 ratio=2.493
+full_peak_footprint_phpr_MiB=1983.13
+-- leg2-on
+media_user_cpu_oracle=20.84 media_user_cpu_phpr=52.67 ratio=2.527
+media_peak_footprint_oracle=393593768 media_peak_footprint_phpr=1116390864 ratio=2.836
+full_master_cpu_oracle=442.65 full_master_cpu_phpr=807.67 ratio=1.825
+full_peak_footprint_oracle=726598880 full_peak_footprint_phpr=1952925784 ratio=2.688
+full_peak_footprint_phpr_MiB=1862.46
+
+parita' per NOME: media 0 nomi x4; full diff == SOLO wp_is_stream data set #2 (divergenza nota, come S-119) su TUTTE e 4 le gambe; gate_void=0 x4; rc=0
+pin misurato: phpr s120 885d2c646ac7ff4c (deviazione dal "sul pin s119" DICHIARATA: pin superato in sessione; oracle campionato N=4 stessa sera)
