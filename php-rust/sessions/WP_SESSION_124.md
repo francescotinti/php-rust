@@ -37,5 +37,4 @@ NOME == baseline · http-kernel 1665 0E/0F** · server re-pin **f9526be3**.
 - ⭐⭐ **Un tipo che sostituisce Rc deve replicarne anche la STRUTTURA di
   codegen**: Drop inline con morte outlined #[cold]; inlinearla ha sfondato
   calls (−3,94, 0/5) e il flip a +0,81 dopo l'outline firma il canale icache (WP-104).
-- ⭐ **L'admission a predizioni di conteggio è un arbitro pre-tempo economico**:
-  due giri di emendazione consumati sul census (30 s l'uno), zero A/B sprecati.
+- ⭐ **L'admission a conteggi è un arbitro pre-tempo economico**: due emendazioni consumate sul census (30 s l'una), zero A/B sprecati.

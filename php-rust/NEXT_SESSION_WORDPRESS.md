@@ -43,12 +43,11 @@ promozione nel verdetto del run PROMOSSO, non del bocciato.
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
 
 Full/media su pin s124 (p.1) · bande layout post-patch (p.2) · str residuo
-+1,00 alloc/iter vs oracle (ultimo malloc di str.php da classificare) · re
-residuo +2,00 (dopo single-alloc: 7,00 vs 5,00) · grado pieno server s124 ·
-cura §3.18 (gate preg ROSSO + golden stesso commit) · fame frontend (kpc/sudo)
-· §3.16/§3.17 warning · retro-A/B str s107b/s108/s109 · denti rinviati (OBS-8;
-fx20; direct-bind; drop-order; hit/miss; checkout-staging) · $z++/$z-- undef
-non warna · §3.13 · §3.12-i · §3.14 · get_gc · drift TODO.md · latin1-cliff.
++1,00 alloc/iter vs oracle · re residuo +2,00 (7,00 vs 5,00) · grado pieno
+server s124 · cura §3.18 · fame frontend (kpc/sudo) · §3.16/§3.17 warning ·
+retro-A/B str s107b/s108/s109 · denti rinviati (OBS-8; fx20; direct-bind;
+drop-order; hit/miss; checkout-staging) · $z++/$z-- undef non warna · §3.13 ·
+§3.12-i · §3.14 · get_gc · drift TODO.md · latin1-cliff.
 
 ## NON riproporre (i veti restano; dettaglio nei concili archiviati)
 
@@ -80,7 +79,6 @@ batteria rilinka ⇒ build ricetta e pretendere c5ba2573 al byte) · server
 **s124 f9526be3** GRADO MINIMO (pieno = debito) · MySQL wp8 con l'elenco (se
 giù: mysqld_safe su datadir esterno via daemonizer) · uploads sotto guardia ·
 conservati: phpr-s118/s119/s119-treno2/s120-re1/s121-st1/s122-lay1..3/
-s122-re2/s123-p0b/**s124-str1(reperto B1)/s124-str2(==pin)** ·
-php-server-s119/s120/**s124** · census-target = build S-124 fusa (head con
-patch) · Serena OK (hang S-123 rientrato) · disco Data risanato (26G) ·
-nessuna run detached in volo.
+s122-re2/s123-p0b/**s124-str1(reperto B1)/s124-str2(==pin)** · php-server-
+s119/s120/**s124** · census-target = build S-124 fusa · Serena OK · disco Data
+risanato (26G) · nessuna run detached in volo.
