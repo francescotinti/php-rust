@@ -17,8 +17,8 @@ wp123-harness/metro-out/layout-bande-v2.txt, righe anche nel verdetto .out);
 (c) **L-RE2 ARCHIVIATA** (re −15,74, 0/6, R=6 alternato; anti-tesi mosse Caps
 vince — 4ª caduta alloc-removal sul costo sostitutivo); (d) **classifica-v2
 FUSA** (build SOLO mem-census, fuso vivo): Δalloc/iter vs oracle **re +5,00 ·
-str +3,00 · arr +2,05**, resto 0; prop zvclone 5→3 (fusione, residui in
-`$s+=$o->x`); **arr = 2 ZStr di chiave per lettura** ⇒ single-alloc → ~parità.
+str +3,00 · arr +2,05**, resto 0; prop zvclone 5→3 e arr = 2 ZStr/chiave =
+INFERENZE (rev. SEMANTICA: v1 = pin s119 ⇒ fusione+drift non separati).
 
 ## §S-124 — ordine proposto
 
@@ -28,14 +28,15 @@ str +3,00 · arr +2,05**, resto 0; prop zvclone 5→3 (fusione, residui in
    funnel unico zstr.rs:54, 3 rischi non testuali: RcEqIdent chiavi, hash in
    Cell, !Clone). Il criterio DEVE scrivere il modello del costo SOSTITUTIVO
    (refcount custom, regrow append, PartialEq manuale con ptr-fast-path) PRIMA
-   del tempo; soglie dal metro S-123; gate: batteria + corpus 1415×2 + fixture
-   + ricetta ORM/http-kernel (tocca php-types). Fasi: patch → census fuso
-   (conferma −2/−3/−2) → A/B alternato → gate.
+   del tempo; soglie SOLO dalle v2 (az. rev. #3: via i BSTOR old-regime) e bande
+   valide per file SCALATI+timer µs (az. rev. #4: coi micro originali si
+   rimisura, arr in testa). Gate: batteria + corpus 1415×2 + fixture + ricetta
+   ORM/http-kernel (php-types). Fasi: patch → census fuso → A/B alternato → gate.
 2. **PGO stadio-2** (criterio §6 s117-criterio-aprime.md: workload WP CON
    teardown, MAI le micro; profdata hashato; non riproducibile ⇒ resta LTO).
-3. **prop oltre i cloni**: i 3 zvclone/iter residui stanno in `$s += $o->x`
-   (secondo statement) — IC-probe/doppio borrow s122-istruttoria-prop, misure
-   col census FUSO (s123-classifica-*.sh riusabili).
+3. **prop oltre i cloni**: PRIMA il controllo pulito ±zval-census a STESSO head
+   (az. rev. #1-2: effetto-fusione separato dal drift, attribuzioni per-sito o
+   etichettate INFERENZA) — poi IC-probe/doppio borrow s122-istruttoria-prop.
 4. Full/media A/B WP quando una leva promuove (riferimento S-120 resta).
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
