@@ -1,0 +1,19 @@
+== s124-ab str1: A=885d2c64 B=b4cec406 R=5 extra<=3 cats=[arith prop calls str arr re] ordine ALTERNATO ==
+
+GIUDICE S-124 str1 bersaglio=str (rc=2 da metro-out/giudice-str1.rc):
+arith: fam=5 D_med=-0.83 segni +0/5 spread_A=0.39 4quanto=0.027 SL=0.94 soglia_guardia=-0.94 -> tiene (tie: = -> tiene)
+prop: fam=5 D_med=-1.79 segni +0/5 spread_A=1.06 4quanto=0.044 SL=0.80 soglia_guardia=-2.12 -> tiene (tie: = -> tiene)
+calls: fam=5 D_med=-3.94 segni +0/5 spread_A=0.22 4quanto=0.067 SL=0.73 soglia_guardia=-0.73 -> SFONDATA (tie: = -> tiene)
+str [BERSAGLIO]: fam=5 D_med=+35.51 segni +5/5 spread_A=3.06 4quanto=0.143 SL=2.89 soglia_ref=-6.12 soglia_promo=+6.12 -> PROMOZIONE-ai-gate
+arr: fam=5 D_med=+28.04 segni +5/5 spread_A=1.76 4quanto=0.133 SL=2.49 soglia_guardia=-3.52 -> tiene (tie: = -> tiene)
+re: fam=5 D_med=+48.59 segni +5/5 spread_A=4.40 4quanto=0.333 SL=4.46 soglia_guardia=-8.80 -> tiene (tie: = -> tiene)
+guardie SFONDATE: ['calls']
+VERDETTO_S124_str1 = bersaglio OLTRE soglia ma guardie SFONDATE — NIENTE promozione
+promozione: build ricetta riproduce il candidato c5ba2573a23adf69
+promozione batteria: rc=0 (da promo-out/batteria.rc) · 1746/0/2 · inventario vs pin s120: IDENTICO + 4 nuovi zstr DICHIARATI
+promozione: churn batteria neutralizzato (build ricetta → c5ba2573a23adf69 al byte)
+promozione: PIN phpr s124 = c5ba2573a23adf69 (smoke parità 2 modi OK, stash phpr-s124). I gate del protocollo (batteria/corpus/fixture/micro) restano dovuti.
+promozione corpus-gate: rc=0 — nomi==congelato, CONTENUTO==golden, off↔on zero
+promozione fixture chain: rc=0 (7/6 gate verdi)
+promozione micro pin s124: rapporto_arith=5.5  [derivata: companion 2.35/0.43] rapporto_prop=5.6  [derivata: companion 2.37/0.42] rapporto_calls=4.7  [derivata: companion 2.12/0.45] rapporto_str=4.2  [derivata: companion 0.68/0.16] rapporto_arr=3.2  [derivata: companion 0.92/0.29] rapporto_re=2.5  [derivata: companion 0.92/0.37] 
+PROMOZIONE COMPLETA rc=0 (da promo-out/rc): pin s124 = c5ba2573a23adf69

@@ -1,0 +1,10 @@
+== s124-ab str2: A=885d2c64 B=c5ba2573 R=5 extra<=3 cats=[arith prop calls str arr re] ordine ALTERNATO ==
+
+GIUDICE S-124 str2 bersaglio=str (rc=0 da metro-out/giudice-str2.rc):
+arith: fam=5 D_med=-0.51 segni +2/5 spread_A=0.82 4quanto=0.027 SL=0.94 soglia_guardia=-1.64 -> tiene (tie: = -> tiene)
+prop: fam=5 D_med=-0.35 segni +0/5 spread_A=1.02 4quanto=0.044 SL=0.80 soglia_guardia=-2.04 -> tiene (tie: = -> tiene)
+calls: fam=5 D_med=+0.81 segni +5/5 spread_A=0.52 4quanto=0.067 SL=0.73 soglia_guardia=-1.04 -> tiene (tie: = -> tiene)
+str [BERSAGLIO]: fam=5 D_med=+39.42 segni +5/5 spread_A=2.83 4quanto=0.143 SL=2.89 soglia_ref=-5.66 soglia_promo=+5.66 -> PROMOZIONE-ai-gate
+arr: fam=5 D_med=+29.38 segni +5/5 spread_A=3.17 4quanto=0.133 SL=2.49 soglia_guardia=-6.34 -> tiene (tie: = -> tiene)
+re: fam=5 D_med=+50.48 segni +5/5 spread_A=2.51 4quanto=0.333 SL=4.46 soglia_guardia=-5.02 -> tiene (tie: = -> tiene)
+VERDETTO_S124_str2 = PROMOZIONE-ai-gate

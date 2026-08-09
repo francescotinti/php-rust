@@ -1,0 +1,25 @@
+== s124 classifica build: census_bin=880b4d5ec1cfa65b (SOLO mem-census, fusione VIVA, head CON patch single-alloc)
+   head=43d7610 patch=census-clite(wp119) admission=7/7 pin=885d2c64
+
+ADMISSION S-124 (rc=1 da classifica-out/report.rc; v123 datata head 65b3385, v124 head CON patch):
+cat    alloc/it v124    v123  Δpatch   pred  esito  oracle Δv124-or realloc v124
+arith           0.00    0.00   +0.00  +0.00     OK    0.00    +0.00         0.00
+prop            0.00    0.00   +0.00  +0.00     OK    0.00    +0.00         0.00
+calls           0.00    0.00   +0.00  +0.00     OK    0.00    +0.00         0.00
+str             3.00    5.00   -2.00  -2.00     OK    2.00    +1.00         0.00
+arr             2.05    4.08   -2.03  -2.04     OK    2.03    +0.02         0.00
+re             10.00   10.00   +0.00  -3.00  MANCA    5.00    +5.00         0.00
+PREDIZIONI MANCATE: ['re(Δ+0.00 vs pred -3.00)']
+ADMISSION FALLITA — STOP e ridiagnosi (criterio p.3)
+== s124 classifica build: census_bin=30d5799c8495ef4d (SOLO mem-census, fusione VIVA, head CON patch single-alloc)
+   head=2d2c180 patch=census-clite(wp119) admission=7/7 pin=885d2c64
+
+ADMISSION S-124 (rc=0 da classifica-out/report.rc; v123 datata head 65b3385, v124 head CON patch):
+cat    alloc/it v124    v123  Δpatch   pred  esito  oracle Δv124-or realloc v124
+arith           0.00    0.00   +0.00  +0.00     OK    0.00    +0.00         0.00
+prop            0.00    0.00   +0.00  +0.00     OK    0.00    +0.00         0.00
+calls           0.00    0.00   +0.00  +0.00     OK    0.00    +0.00         0.00
+str             3.00    5.00   -2.00  -2.00     OK    2.00    +1.00         0.00
+arr             2.05    4.08   -2.03  -2.04     OK    2.03    +0.02         0.00
+re              7.00   10.00   -3.00  -3.00     OK    5.00    +2.00         0.00
+ADMISSION PASSA — A/B autorizzato
