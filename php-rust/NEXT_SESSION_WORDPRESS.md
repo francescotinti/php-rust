@@ -22,11 +22,9 @@ conferma lezione S-119).
 
 ## §S-121 — ordine proposto
 
-1. **Leva str-alloc** (classifica C-lite voce 2: str = 5 alloc/iter phpr vs 2
-   Zend su concat+substr): istruttoria coi conteggi sito-per-sito che SOMMANO
-   (metodo L-RE1) → criterio ≤10 righe (banda-v2 str 7,50; zavorra N≥3 se
-   serve) → A/B. Il pavimento PhpStr 2-alloc (Rc+Vec) è di php-types: NON in
-   questa leva (progetto DST a parte, se mai).
+1. **Leva str-alloc** (C-lite voce 2: str = 5 alloc/iter vs 2 Zend): conteggi
+   sito-per-sito che SOMMANO (metodo L-RE1) → criterio ≤10 righe (banda-v2 str
+   7,50) → A/B. Pavimento PhpStr 2-alloc = php-types: FUORI da questa leva.
 2. **Grado pieno server s120** (s119-grado-server.sh adattato: option+restapi
    per NOME ×2 modi) — il pin minimo non fa cifre server.
 3. **re residuo 10→8→5**: arg-Vec di CallHostBuiltinOut (split_off per
