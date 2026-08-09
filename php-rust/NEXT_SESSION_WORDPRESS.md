@@ -76,6 +76,5 @@ batteria rilinka ⇒ build ricetta e pretendere 885d2c64 al byte) · server
 datadir esterno) · uploads sotto guardia · conservati: phpr-s118/s119/
 s119-treno2/s120-re1(==pin)/s121-st1(reperto)/s122-lay1..3(probe)/
 s122-re2(reperto)/**s123-p0b(==pin, fixture metro)** · php-server-s119/s120 ·
-census-target FUSO riusabile (solo mem-census; catena s123-classifica-*.sh) ·
-Serena in hang: Read mirato + Explore · ⚠️ **disco Data ~8G < 15G**: snapshot
+census-target FUSO riusabile · Serena in hang · ⚠️ **disco Data ~8G < 15G**: snapshot
 aggiornamento macOS (MSUPrepareUpdate) — completare/annullare PRIMA delle run pesanti.
