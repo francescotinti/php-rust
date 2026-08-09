@@ -1,0 +1,9 @@
+s121-abab-verdetto — L-RE1 ripartita su WP (az. rev. S-120 #4; A=phpr-s119 350582e55d21533d  B=phpr-s120-re1 885d2c646ac7ff4c  modo=ON esplicito  ordine=A1,B1,A2,B2)
+parita' failnames 4 gambe: IDENTICI
+full_A1_cpu=805.72s peak=1932.0MiB
+full_B1_cpu=807.88s peak=1920.7MiB
+full_A2_cpu=812.04s peak=1930.5MiB
+full_B2_cpu=826.61s peak=1916.5MiB
+D_coppia (A-B, + = s120 piu' veloce): D1=-2.16s D2=-14.57s
+spread intra-pin stessa sera: A=6.32s B=18.73s
+L-RE1 su WP (tra-pin, stessa sera, N=2): segno CONCORDE; magnitudine mediana=-8.36s — DENTRO lo spread intra-pin (N=2 = direzione, non dimostrazione)
