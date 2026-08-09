@@ -1,7 +1,7 @@
 #!/bin/bash
-# s109-fixture-chain.sh — le 5 fixture storiche + le 2 W9 nuove (azioni 3-4
-# revisore S-108) sul PIN s109. rc di OGNI gate DAL COMANDO (mai da pipe);
-# marker finale rc=somma.
+# s109-fixture-chain.sh — le 5 fixture storiche + le 2 W9 (azioni 3-4 revisore
+# S-108) + il gate preg §3.18 (az. rev. S-121 #4, cablato S-122) sul PIN.
+# rc di OGNI gate DAL COMANDO (mai da pipe); marker finale rc=somma.
 set -u
 export PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin
 R="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust"
@@ -21,5 +21,6 @@ run_gate recv "$R/wp103-harness/s103-recv-fixtures.sh"
 run_gate fx20 "$R/wp104-harness/s104-fx20-gate.sh"
 run_gate fx21 "$R/wp105-harness/s105-fx21-gate.sh"
 run_gate w9   "$R/wp109-harness/s109-w9-fixtures.sh"
+run_gate preg "$R/wp121-harness/s121-fx-preg-gate.sh"
 echo "FIXTURE-CHAIN rc_totale=$TOT (0 = tutte verdi)"
 exit "$TOT"

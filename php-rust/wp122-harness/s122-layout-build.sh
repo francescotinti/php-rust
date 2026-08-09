@@ -20,9 +20,19 @@ note(){ echo "$1"; echo "$1" >> "$VERD"; }
 fail(){ note "$1"; echo 1 > "$OUT/build.rc"; exit 1; }
 
 cd "$REPO" || exit 2
-H0=$(shasum -a 256 "$BIN" | cut -c1-16)
-[ "$H0" = "$PIN_EXP" ] || fail "PRE: release/phpr=$H0 != pin $PIN_EXP — STOP"
 git diff --quiet -- crates/ || fail "PRE: crates/ sporco — STOP"
+H0=$(shasum -a 256 "$BIN" | cut -c1-16)
+if [ "$H0" != "$PIN_EXP" ]; then
+  # tree pulito ma release non-pin (es. tentativo probe precedente): la
+  # ricetta A′ è deterministica — build di RIALLINEAMENTO dichiarata, poi
+  # si pretende il pin al byte o STOP.
+  note "PRE: release=$H0 != pin — riallineamento con ricetta (tree pulito)"
+  SOURCE_DATE_EPOCH=0 CARGO_INCREMENTAL=0 cargo build --release > "$OUT/build-realign.log" 2>&1 \
+    || fail "PRE: build riallineamento fallita"
+  H0=$(shasum -a 256 "$BIN" | cut -c1-16)
+  [ "$H0" = "$PIN_EXP" ] || fail "PRE: riallineamento NON riproduce il pin ($H0) — STOP"
+  note "PRE: riallineamento OK, release == pin AL BYTE"
+fi
 HP0=$(shasum -a 256 "$P0" | cut -c1-16)
 [ "$HP0" = "$PIN_EXP" ] || fail "PRE: stash P0=$HP0 != pin — STOP"
 
@@ -33,6 +43,14 @@ for K in 17 173 1731; do
   python3 - "$SRC" "$K" <<'PY' || fail "append probe P$V fallito"
 import sys
 src, k = sys.argv[1], int(sys.argv[2])
+text = open(src).read()
+anchor = "fn main() -> ExitCode {"
+assert text.count(anchor) == 1, f"anchor main() non univoco: {text.count(anchor)}"
+keep = anchor + """
+    // s122 keep-alive (criterio p.1 EMENDATO): materializza l'INDIRIZZO del
+    // probe (mai chiamato) — senza riferimento ld64 lo dead-strippa (P1 NULLA).
+    std::hint::black_box(__phpr_layout_probe_s122 as usize);"""
+text = text.replace(anchor, keep)
 body = "\n".join(
     f"    x = x.wrapping_mul(6364136223846793005).wrapping_add({i});"
     for i in range(k))
@@ -48,15 +66,15 @@ pub extern "C" fn __phpr_layout_probe_s122() -> u64 {{
     std::hint::black_box(x)
 }}
 '''
-open(src, "a").write(code)
+open(src, "w").write(text + code)
 PY
   SOURCE_DATE_EPOCH=0 CARGO_INCREMENTAL=0 cargo build --release > "$OUT/build-p$V.log" 2>&1
   brc=$?; echo "$brc" > "$OUT/build-p$V.rc"
   [ "$brc" = 0 ] || { git checkout -- crates/; fail "build P$V rc=$brc (tree ripristinato)"; }
   HB=$(shasum -a 256 "$BIN" | cut -c1-16)
-  [ "$HB" != "$PIN_EXP" ] || fail "P$V riproduce il pin: probe NON entrato — build NULLA"
+  [ "$HB" != "$PIN_EXP" ] || { git checkout -- crates/; fail "P$V riproduce il pin: probe NON entrato — build NULLA"; }
   nm "$BIN" 2>/dev/null | grep -q "__phpr_layout_probe_s122" \
-    || fail "P$V: simbolo probe ASSENTE (dead-strip?) — build NULLA"
+    || { git checkout -- crates/; fail "P$V: simbolo probe ASSENTE (dead-strip?) — build NULLA"; }
   ADM=0
   for C in arith prop calls str arr re; do
     "$P0"  "$M/$C.php" > "$OUT/adm-$C-p0.out" 2>&1
