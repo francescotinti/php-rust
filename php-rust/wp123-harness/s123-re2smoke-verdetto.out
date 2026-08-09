@@ -1,0 +1,6 @@
+== s123-ab re2smoke: A=885d2c64 B=4eda5d6b R=6 extra<=0 cats=[re str] ordine ALTERNATO ==
+
+GIUDICE S-123 re2smoke bersaglio=re (rc=1 da metro-out/giudice-re2smoke.rc):
+str: fam=6 D_med=-2.60 segni +0/6 spread_A=2.31 4quanto=0.143 SL=2.89 soglia_guardia=-7.50 -> tiene (tie: = -> tiene)
+re [BERSAGLIO]: fam=6 D_med=-15.74 segni +0/6 spread_A=5.34 4quanto=0.333 SL=4.46 soglia_ref=-10.68 soglia_promo=+10.68 -> REFUTAZIONE CONFERMATA
+VERDETTO_S123_re2smoke = REFUTAZIONE CONFERMATA

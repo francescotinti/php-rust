@@ -1,0 +1,43 @@
+== s123 banda-LAYOUT v2: P0/P0b=885d2c64 P1=29565241 P2=dc98d1b1 P3=f3bc390e R=5 latino-ciclico timer=getrusage-µs ==
+arith P0: net/iter = 46.89 46.98 46.69 50.97 60.62 | fam=5/5 med_fam=46.98
+arith P0b: net/iter = 47.00 46.98 46.74 62.40 47.87 | fam=4/5 med_fam=46.99
+arith P1: net/iter = 47.44 47.80 47.64 49.96 47.97 | fam=5/5 med_fam=47.80
+arith P2: net/iter = 47.80 47.64 47.78 47.65 47.29 | fam=5/5 med_fam=47.65
+arith P3: net/iter = 47.80 48.19 47.53 47.92 49.65 | fam=5/5 med_fam=47.92
+arith: mediane P0 P0b P1 P2 P3 = 46.98 46.99 47.80 47.65 47.92
+arith: BANDA_V2=0.94 PAV_PIN=0.01 SOGLIA_LAYOUT=0.94 ns/iter | med per POSIZIONE 0..4 = 47.64 47.80 47.64 47.97 47.29
+prop P0: net/iter = 78.18 77.10 79.74 79.75 77.67 | fam=5/5 med_fam=78.18
+prop P0b: net/iter = 77.90 77.77 78.09 77.28 77.66 | fam=5/5 med_fam=77.77
+prop P1: net/iter = 77.62 77.33 79.39 79.62 76.97 | fam=5/5 med_fam=77.62
+prop P2: net/iter = 77.64 77.22 77.37 79.42 77.78 | fam=5/5 med_fam=77.64
+prop P3: net/iter = 77.34 77.90 77.38 77.29 79.07 | fam=5/5 med_fam=77.38
+prop: mediane P0 P0b P1 P2 P3 = 78.18 77.77 77.62 77.64 77.38
+prop: BANDA_V2=0.80 PAV_PIN=0.41 SOGLIA_LAYOUT=0.80 ns/iter | med per POSIZIONE 0..4 = 79.07 77.37 77.62 77.64 77.78
+calls P0: net/iter = 107.40 106.52 107.46 106.48 106.38 | fam=5/5 med_fam=106.52
+calls P0b: net/iter = 107.33 106.90 106.36 106.92 106.61 | fam=5/5 med_fam=106.90
+calls P1: net/iter = 106.62 107.20 107.34 107.29 107.18 | fam=5/5 med_fam=107.20
+calls P2: net/iter = 107.88 107.31 106.74 106.64 106.73 | fam=5/5 med_fam=106.74
+calls P3: net/iter = 107.12 108.09 106.98 107.25 107.29 | fam=5/5 med_fam=107.25
+calls: mediane P0 P0b P1 P2 P3 = 106.52 106.90 107.20 106.74 107.25
+calls: BANDA_V2=0.73 PAV_PIN=0.38 SOGLIA_LAYOUT=0.73 ns/iter | med per POSIZIONE 0..4 = 107.29 107.20 106.62 107.46 106.73
+str P0: net/iter = 208.77 209.63 213.76 211.78 213.21 | fam=5/5 med_fam=211.78
+str P0b: net/iter = 209.97 209.45 212.15 214.11 222.05 | fam=5/5 med_fam=212.15
+str P1: net/iter = 211.73 213.49 212.15 216.73 215.96 | fam=5/5 med_fam=213.49
+str P2: net/iter = 214.14 209.98 214.15 214.17 214.14 | fam=5/5 med_fam=214.14
+str P3: net/iter = 214.14 213.79 214.95 215.62 214.67 | fam=5/5 med_fam=214.67
+str: mediane P0 P0b P1 P2 P3 = 211.78 212.15 213.49 214.14 214.67
+str: BANDA_V2=2.89 PAV_PIN=0.37 SOGLIA_LAYOUT=2.89 ns/iter | med per POSIZIONE 0..4 = 212.15 213.49 211.78 214.11 214.14
+arr P0: net/iter = 190.42 179.59 182.13 180.18 179.52 | fam=5/5 med_fam=180.18
+arr P0b: net/iter = 180.28 180.70 182.40 179.54 179.51 | fam=5/5 med_fam=180.28
+arr P1: net/iter = 182.67 185.89 182.54 184.38 179.44 | fam=5/5 med_fam=182.67
+arr P2: net/iter = 181.57 181.70 182.50 180.08 180.34 | fam=5/5 med_fam=181.57
+arr P3: net/iter = 181.10 181.47 181.19 181.08 186.29 | fam=5/5 med_fam=181.19
+arr: mediane P0 P0b P1 P2 P3 = 180.18 180.28 182.67 181.57 181.19
+arr: BANDA_V2=2.49 PAV_PIN=0.10 SOGLIA_LAYOUT=2.49 ns/iter | med per POSIZIONE 0..4 = 182.54 181.08 181.19 181.47 181.10
+re P0: net/iter = 508.26 507.98 507.98 511.68 505.71 | fam=5/5 med_fam=507.98
+re P0b: net/iter = 509.34 509.48 507.13 508.72 513.70 | fam=5/5 med_fam=509.34
+re P1: net/iter = 512.44 508.88 515.00 508.41 513.07 | fam=5/5 med_fam=512.44
+re P2: net/iter = 509.08 513.46 509.50 510.52 508.57 | fam=5/5 med_fam=509.50
+re P3: net/iter = 508.54 510.07 512.08 512.38 514.61 | fam=5/5 med_fam=512.08
+re: mediane P0 P0b P1 P2 P3 = 507.98 509.34 512.44 509.50 512.08
+re: BANDA_V2=4.46 PAV_PIN=1.36 SOGLIA_LAYOUT=4.46 ns/iter | med per POSIZIONE 0..4 = 510.52 509.34 512.44 509.08 508.41
