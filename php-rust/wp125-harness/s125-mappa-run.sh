@@ -37,18 +37,28 @@ run_leg(){ # W TGZ DIR TIMEOUT ENGINE LABEL
   local W="$1" TGZ="$2" DIR="$3" T="$4" E="$5" L="$6"
   rm -rf "$SP/$DIR"; tar xzf "$GATES/$TGZ" -C "$SP" || return 7
   p "$W $L START"
+  # EMENDA criterio p.7: l'oracle gira con memory_limit=-1 (phpr non applica
+  # il limite, §3.14 stub — parità di condizioni; il default 128M uccideva
+  # la gamba ORM a metà suite).
+  local ML=""
+  [ "$E" = "$ORACLE" ] && ML="-d memory_limit=-1"
   ( cd "$SP/$DIR" && "$WD" -t "$T" -s 600 -p "$OUT/$W-$L.txt" -o "$OUT" -- \
-      /usr/bin/time -l "$E" vendor/bin/phpunit --no-coverage > "$OUT/$W-$L.txt" 2> "$OUT/$W-$L.time" )
+      /usr/bin/time -l "$E" $ML vendor/bin/phpunit --no-coverage > "$OUT/$W-$L.txt" 2> "$OUT/$W-$L.time" )
   local rc=$?
   p "$W $L rc=$rc"
   return 0
 }
 
+WLS="${WORKLOADS:-orm hk}"
 for leg in 1 2; do
-  run_leg orm orm-work.tgz orm-work 3600 "$ORACLE" "oracle$leg"
-  run_leg orm orm-work.tgz orm-work 3600 "$PHPR"   "phpr$leg"
-  run_leg hk  hk-work.tgz  hk-work  1800 "$ORACLE" "oracle$leg"
-  run_leg hk  hk-work.tgz  hk-work  1800 "$PHPR"   "phpr$leg"
+  case " $WLS " in *" orm "*)
+    run_leg orm orm-work.tgz orm-work 3600 "$ORACLE" "oracle$leg"
+    run_leg orm orm-work.tgz orm-work 3600 "$PHPR"   "phpr$leg" ;;
+  esac
+  case " $WLS " in *" hk "*)
+    run_leg hk  hk-work.tgz  hk-work  1800 "$ORACLE" "oracle$leg"
+    run_leg hk  hk-work.tgz  hk-work  1800 "$PHPR"   "phpr$leg" ;;
+  esac
 done
 
 # parità: ORM phpr per NOME vs baseline; hk phpr 0E/0F
