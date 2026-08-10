@@ -943,9 +943,13 @@ alla cura il gate diventa ROSSO e i golden si aggiornano nello stesso commit).
 (stmt:HaltCompiler)` (riga 30 dello stub). Capability phar onestamente assente
 (cfr. `stream_get_wrappers`); già noto come residuo tokenizer (bug54089), qui
 la conseguenza pratica: ogni tool distribuito come phar non parte. Workaround
-canonico: sorgente estratto (`Phar::extractTo` con l'oracle → `bin/composer`),
-che phpr esegue (verde da luglio). Fixture di fatto: gamba compoff run1 in
-`wp126-harness/mappa2-out/`.
+canonico storico: sorgente estratto (`bin/composer`), verde a luglio. ⚠️
+AGGRAVANTE (S-126, stessa sera): anche il composer 2.10 ESTRATTO muore su
+phpr con **rc=255 SILENTE** (zero output su stdout+stderr; shebang escluso
+con probe; smoke rc=0 esatto dell'arbitro ha rifiutato la misura). Da
+bisecare in S-127: regressione phpr vs costrutti nuovi di composer 2.10
+(a luglio girava il composer di allora). Fixture di fatto: gambe compoff
+run1 + abort compoff2 in `wp126-harness/mappa2-out/`.
 
 ### 3.20 🟡 doctrine/dbal 4.4-dev: 10 fail per NOME phpr-only (S-126, mappa2)
 

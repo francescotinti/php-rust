@@ -1,0 +1,11 @@
+== s126 aboff: A=s123-p0b (pre-PhpStr) vs B=s124 (post) — full WP stessa notte ==
+grade=VERDICT  # derivazione meccanica dai .time; criterio s126-criterio-aboff.md
+full_A1: cpu=823.32 (user=780.92 sys=42.40) ictx=195432 peak_MiB=1921.8 media_cpu=59.82
+full_B1: cpu=820.39 (user=777.37 sys=43.02) ictx=175491 peak_MiB=1901.3 media_cpu=59.08
+full_A2: cpu=809.28 (user=769.44 sys=39.84) ictx=105063 peak_MiB=1933.3 media_cpu=58.04
+full_B2: cpu=790.02 (user=751.78 sys=38.24) ictx=103473 peak_MiB=1898.7 media_cpu=57.28
+ictx_mediana=140277 gambe_nulle(>1,5x)=nessuna
+failset_stabile: A=True B=True
+A_med=816.30 (spread 1.72%)  B_med=805.20 (spread 3.77%)
+delta_B_vs_A=-1.36%  soglia_risoluzione=max spread intra-lato 3.77%
+NON RISOLVIBILE anche same-night — voce chiusa (criterio p.5)

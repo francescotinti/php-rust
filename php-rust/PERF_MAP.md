@@ -16,7 +16,7 @@ cifre dai verdetti `.out`. Regola di lettura: rapporti PER workload, MAI aggrega
 | **doctrine/collections** (242) | **~6,2 raw** | 2/lato | S-126; INDICATIVA: oracle netto 0,09 s (denominatore sotto-scala); parità 0/0 |
 | **doctrine/dbal** (3929, sqlite) | **8,29–8,33** | 2/lato | S-126; fail-set stabile 10 nomi (0,25% ≤1% ⇒ canonica; Portability+parser unicode a catalogo); ictx phpr alto ma gambe concordi 0,4% |
 | **doctrine/orm** (3484 test) | **8,51–8,56** | 2/lato | oracle con `memory_limit=-1` (§3.14); parità fail-set 16 nomi |
-| **composer install OFFLINE** | run1 phpr **NULLA** | 2/lato | phar/`__halt_compiler` non supportato (capability assente); rimisura con composer ESTRATTO in coda (criterio mappa2 p.7) → `s126-compoff-verdetto.out` |
+| **composer install OFFLINE** | phpr **NULLA** (voce aperta) | 2/lato | phar/`__halt_compiler` assente; rimisura con composer 2.10 ESTRATTO abortita dallo smoke: **rc=255 silente** (§3.19 aggravata) — bisezione S-127 |
 
 ## Micro-categorie (R=5, pin s125; tappa ≤3×)
 
