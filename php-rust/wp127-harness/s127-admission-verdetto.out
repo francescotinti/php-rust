@@ -1,0 +1,9 @@
+== s127 admission L-OL1: census alloc/free per-iter (REGISTRAZIONE, R=2 identici) ==
+grade=VERDICT  # conteggi deterministici; per-iter = (cat-empty)/3e6
+objalloc   alloc/iter=9.00 free/iter=9.00
+objallocni alloc/iter=7.00 free/iter=7.00
+objdatains alloc/iter=13.00 free/iter=13.00
+objdropdef alloc/iter=10.00 free/iter=10.00
+objmap     alloc/iter=1.00 free/iter=1.00
+objchurn   alloc/iter=14.00 free/iter=14.00
+ADMISSION-CENSUS: ACQUISITA
