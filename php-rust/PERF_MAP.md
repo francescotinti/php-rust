@@ -1,6 +1,6 @@
 # PERF_MAP — phpr vs PHP oracle 8.5.7, mappa multi-workload
 
-Aggiornata: **2026-08-10 (S-127, emenda cifra canonica)** · pin phpr **s125 002e6cc1** ·
+Aggiornata: **2026-08-11 (S-127b)** · pin phpr **s127b ccb63dca** ·
 metodo: user CPU, pavimenti per-binario, N per voce come indicato; criteri pre-registrati in
 `wp125-harness/s125-criterio-{pair,mappa}.md` e `wp126-harness/s126-criterio-{orm,mappa2}.md`
 (+ emenda S-127: **cifra canonica = NETTO-pavimento**, raw companion; gate contesa in ictx/s);
@@ -17,13 +17,15 @@ cifre dai verdetti `.out`. Regola di lettura: rapporti PER workload, MAI aggrega
 | **doctrine/collections** (242) | **8,22 net** (raw 6,20) | 2/lato | S-126; INDICATIVA: oracle netto 0,09 s (denominatore sotto-scala); parità 0/0 |
 | **doctrine/dbal** (3929, sqlite) | **8,57–8,60** (raw 8,29–8,33) | 2/lato | S-126; fail-set stabile 10 nomi (0,25% ≤1% ⇒ canonica; Portability+parser unicode a catalogo); ictx assoluti nel verdetto, gate in ictx/s da emenda S-127 |
 | **doctrine/orm** (3484 test) | **8,51–8,56** | 2/lato | oracle con `memory_limit=-1` (§3.14); parità fail-set 16 nomi |
-| **composer install OFFLINE** | phpr **NULLA** (voce aperta) | 2/lato | phar/`__halt_compiler` assente; rimisura con composer 2.10 ESTRATTO abortita dallo smoke: **rc=255 silente** (§3.19 aggravata) — bisezione S-127 |
+| **composer install OFFLINE** | **RIAPERTA** (rimisura S-128) | — | cure S-127b (§3.19-bis/-ter + FILTER/SimpleXML/iconv): install ESTRATTO rc=0 vendor_ok bilaterale; residuo phpcs config-set (§3.19-quinquies) |
 
-## Micro-categorie (R=5, pin s127; tappa ≤3×)
+## Micro-categorie (R=5, pin s127b; tappa ≤3×)
 
 | arith | prop | calls | str | arr | re |
 |---|---|---|---|---|---|
-| 5,4 | 5,5 | 4,7 | **4,2** | **3,3** | **2,5** ✅ |
+| 5,3 | 5,6 | 4,9(*) | **4,2** | **3,2** | **2,6** ✅ |
+
+(*) calls +0,2 vs s127: bordo del run-to-run, da osservare in S-128.
 
 Allocazioni/iter vs oracle: arith/prop/calls 0=0 · **str 2,00=2,00 (PARITÀ, S-125)** ·
 arr 2,05≈2,03 · re 7,00 vs 5,00 (+2, apertura per NOME).
