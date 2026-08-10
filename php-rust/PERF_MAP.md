@@ -1,8 +1,9 @@
 # PERF_MAP — phpr vs PHP oracle 8.5.7, mappa multi-workload
 
-Aggiornata: **2026-08-10 (S-126)** · pin phpr **s125 002e6cc1** · metodo: user CPU,
-pavimenti per-binario, N per voce come indicato; criteri pre-registrati in
-`wp125-harness/s125-criterio-{pair,mappa}.md` e `wp126-harness/s126-criterio-{orm,mappa2}.md`;
+Aggiornata: **2026-08-10 (S-127, emenda cifra canonica)** · pin phpr **s125 002e6cc1** ·
+metodo: user CPU, pavimenti per-binario, N per voce come indicato; criteri pre-registrati in
+`wp125-harness/s125-criterio-{pair,mappa}.md` e `wp126-harness/s126-criterio-{orm,mappa2}.md`
+(+ emenda S-127: **cifra canonica = NETTO-pavimento**, raw companion; gate contesa in ictx/s);
 cifre dai verdetti `.out`. Regola di lettura: rapporti PER workload, MAI aggregato.
 
 ## Workload reali
@@ -11,10 +12,10 @@ cifre dai verdetti `.out`. Regola di lettura: rapporti PER workload, MAI aggrega
 |---|---|---|---|
 | **WordPress full-suite** | **1,815–1,896** | 4/lato (16 celle) | pin s124 pre-cbargs2 (effetto leva ≤~2%); parità per NOME; peak mem ~2,7× |
 | **WordPress gruppo media** | **2,485–2,518** | 4 | user-only |
-| **symfony http-foundation** (1854) | **2,55–2,57** | 2/lato | S-126; diff 17 nomi = famiglia `php -S`/session-server (0,92% ≤1% ⇒ canonica); sys alto (I/O) |
+| **symfony http-foundation** (1854) | **2,547–2,559** (raw 2,55–2,57) | 2/lato | S-126; canonica sul CONTEGGIO diff 17 nomi = 0,92% ≤1% (≥3 nomi sono unit puri, NON famiglia `php -S` — emenda S-127); sys alto (I/O) |
 | **symfony http-kernel** (1665 test) | **4,29–4,32** | 2/lato | parità 0E/0F; contesa ok |
-| **doctrine/collections** (242) | **~6,2 raw** | 2/lato | S-126; INDICATIVA: oracle netto 0,09 s (denominatore sotto-scala); parità 0/0 |
-| **doctrine/dbal** (3929, sqlite) | **8,29–8,33** | 2/lato | S-126; fail-set stabile 10 nomi (0,25% ≤1% ⇒ canonica; Portability+parser unicode a catalogo); ictx phpr alto ma gambe concordi 0,4% |
+| **doctrine/collections** (242) | **8,22 net** (raw 6,20) | 2/lato | S-126; INDICATIVA: oracle netto 0,09 s (denominatore sotto-scala); parità 0/0 |
+| **doctrine/dbal** (3929, sqlite) | **8,57–8,60** (raw 8,29–8,33) | 2/lato | S-126; fail-set stabile 10 nomi (0,25% ≤1% ⇒ canonica; Portability+parser unicode a catalogo); ictx assoluti nel verdetto, gate in ictx/s da emenda S-127 |
 | **doctrine/orm** (3484 test) | **8,51–8,56** | 2/lato | oracle con `memory_limit=-1` (§3.14); parità fail-set 16 nomi |
 | **composer install OFFLINE** | phpr **NULLA** (voce aperta) | 2/lato | phar/`__halt_compiler` assente; rimisura con composer 2.10 ESTRATTO abortita dallo smoke: **rc=255 silente** (§3.19 aggravata) — bisezione S-127 |
 
@@ -39,8 +40,8 @@ gc_note/sweep/collect_cycles, insert/lookup, malloc/free); compile ≤~1% leaf, 
 ## Lettura (direzione+indizio, NON attribuzioni firmate — REGOLE §4)
 
 - Il gap **cresce con la densità di lavoro-motore puro**: WP 1,85 ≪ hf 2,6 ≪ hk 4,3 ≪
-  dbal 8,3 ≈ ORM 8,5. WP e hf sono diluiti da I/O; le suite object-dense mostrano il soffitto.
-- **dbal 8,3 conferma ORM 8,5 senza mock-eval pesante** ⇒ il driver è il lavoro-oggetti, non il
+  dbal 8,6 ≈ ORM 8,5 (cifre net, emenda S-127). WP e hf sono diluiti da I/O; le suite object-dense mostrano il soffitto.
+- **dbal 8,6 conferma ORM 8,5 senza mock-eval pesante** ⇒ il driver è il lavoro-oggetti, non il
   sentiero compile: coerente con l'istruttoria (compile ≤1% leaf nel run reale).
 - **LEVA NOMINATA: L-OL1 ciclo-di-vita oggetto** (objalloc 9,9× = 67% del churn) →
   `wp126-harness/s126-leva-nominata.md` (criterio A/B pre-scritto; esecuzione S-127).

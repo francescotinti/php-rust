@@ -7,3 +7,20 @@
 5. Parità per workload: fail-set phpr per NOME IDENTICO tra le 2 gambe (pena cifra NULLA); differenza phpr↔oracle dichiarata per NOME; cifra CANONICA se |failset_phpr diff oracle| ≤1% dei test, altrimenti INDICATIVA. Composer: gamba valida se rc=0 e `vendor/autoload.php` esiste.
 6. Arbitro `s126-mappa2-run.sh` committato QUI; cifre citabili solo da `s126-mappa2-verdetto.out`; PERF_MAP.md si aggiorna SOLO da quel verdetto. Nessuna predizione di magnitudine (prime misure).
 7. EMENDA (run1, PRIMA della rimisura): la gamba compoff-phpr è crollata a t=0 con `Parse error: unsupported construct (stmt:HaltCompiler)` — phpr NON esegue il phar (stub `__halt_compiler`; capability phar onestamente assente, cfr. stream_get_wrappers). Run1 compoff: gambe phpr NULLE; gambe oracle valide ma NON pubblicabili come rapporto (manca il numeratore). STRUMENTO EMENDATO: composer ESTRATTO (`Phar::extractTo` con l'oracle → `composer-x/bin/composer`), STESSO strumento sui due lati; pavimento = med3 `composer-x/bin/composer --version` per binario; smoke bilaterale rc=0 esatto prima del congelamento del tarball. Rimisura SOLO compoff via `s126-compoff-rerun.sh` (committato QUI), in CODA all'aboff (attesa di `aboff.done`: run pesanti sequenziali); verdetto separato `s126-compoff-verdetto.out`.
+
+## EMENDA S-127 (az. rev. S-126 #3-#5; vale per OGNI esecuzione futura della mappa)
+1. **Cifra canonica = ratio_NET** (netto-pavimento per-binario, coerente con REGOLE §3);
+   il raw resta companion tra parentesi. PERF_MAP riallineata di conseguenza dallo
+   STESSO verdetto (dbal 8,57/8,60 · hf 2,547/2,559 · coll net 8,22 — resta INDICATIVA:
+   denominatore netto 0,09 s sotto-scala).
+2. **Gate contesa in ictx/s** (ictx diviso durata wall della gamba), soglia >1,5× la
+   mediana delle gambe in ictx/s: due gambe di durata 8× diversa non sono più
+   SEGNALATE per costruzione. I conteggi assoluti restano nel verdetto come raw.
+3. **Correzione a verbale hf** (reperto #3): la frase «diff 17 nomi = famiglia php -S»
+   era FALSA per ≥3 nomi (testIntlLocale, testSetTrustedHostsKeepsPatternsIndependent,
+   testTrustedHostsAreNotAccumulated: unit puri); la canonicità di hf regge sul
+   CONTEGGIO (17/1854 = 0,92% ≤1%), non su quella motivazione. Le righe summary
+   phpr/hf/coll nel verdetto s126 sono VUOTE (cattura rotta): il denominatore per-suite
+   va d'ora in poi CATTURATO NEL verdetto (`Tests: N` di entrambi i motori); finché la
+   cattura non è rifatta, il denominatore hf si cita dal conteggio oracle (1854, run
+   S-126 p.2) con questa nota.
