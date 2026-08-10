@@ -2,8 +2,7 @@
 ⏱ **FONDAMENTALI**: rif WP **full = 1,815–1,896** (S-125 @ s124; DA RIFARE sul
 pin s127 — due leve accumulate da allora: cbargs2 + stampo) · ultima leva
 SPEDITA **S-127 (L-OL1-F1 stampo)** · **sessioni-senza-Δ = 0** · incidenti:
-1 (S-106) + 2 processo + 2 apparato S-125 + 1 S-126 + **1 apparato S-127**
-(LSP-indexing in finestra di misura; rerun pulito, verdetto contaminato a verbale).
+1 (S-106) + 2 processo + 2 app. S-125 + 1 S-126 + **1 app. S-127** (LSP in finestra di misura; rerun pulito).
 
 ## Scoreboard (pin **s127 834f5e01**fbdb7ebc; micro R=5 dal gate di promozione)
 
@@ -41,12 +40,11 @@ seconda notte di banda (az.rev. S-125).
 full/media su s127 (p.1) · §3.19-bis/-ter (p.2) · L-OL1 seg.2 Δins (p.3) ·
 evalcls 316,9× (dopo densità) · refl 42,4× · re +2,00 alloc/iter host-path ·
 prop C1 single-borrow · cbargs2 su CallHostBuiltin/Ref/Spread · grado pieno
-server · morte-immediata al sito di nota (forma B scartata S-127, apertura) ·
-micro-trim morte: guardia is_empty sulle 2 remove SipHash + has_destruct
-precompilato + FxHash sulle mappe per-id (s127-admission-lettura) · fame
-frontend (kpc/sudo) · denti rinviati (OBS-8; fx20; direct-bind; drop-order;
-hit/miss; checkout-staging) · $z++/$z-- undef non warna · §3.13 · §3.12-i ·
-§3.14 · get_gc · drift TODO.md · latin1-cliff.
+server · morte-immediata al sito di nota (forma B scartata S-127) · micro-trim
+morte: is_empty su 2 remove SipHash + has_destruct precompilato + FxHash mappe
+per-id (s127-admission-lettura) · fame frontend (kpc/sudo) · denti rinviati
+(OBS-8; fx20; direct-bind; drop-order; hit/miss; checkout-staging) · $z++/$z--
+undef non warna · §3.13 · §3.12-i · §3.14 · get_gc · drift TODO.md · latin1-cliff.
 
 ## NON riproporre (i veti restano; dettaglio nei concili archiviati)
 
@@ -74,7 +72,6 @@ giudice con fam-min > R · altre notti su PhpStr-full (voce CHIUSA S-126) ·
 
 ---
 **Riscritto**: 2026-08-10 (chiusura S-127). Storia: `sessions/` · `gaps/GAP_TREND.md`.
-
 Pre-flight S-128: pin phpr **s127 834f5e01**fbdb7ebc (ricetta A′; la batteria
 rilinka ⇒ pretendere 834f5e01 al byte; stash phpr-s127) · server **s127
 72f47855** grado minimo · MySQL wp8 con l'elenco · uploads sotto guardia ·
