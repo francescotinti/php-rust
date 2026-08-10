@@ -8,14 +8,12 @@ scrittura dentro commit intermedio bd74d79; ricommittato a run concluso).
 
 ## Scoreboard (pin **s125 002e6cc1**2047ab9f INVARIATO; micro = S-125)
 
-**arith 5,5 · prop 5,6 · calls 4,7 · str 4,2 · arr 3,2 · re 2,6** ·
-**MAPPA v2 (PERF_MAP.md)**: WP 1,85 ≪ hf 2,55–2,57 ≪ hk 4,3 ≪ **dbal
-8,29–8,33 ≈ ORM 8,51–8,56** — il gap cresce col LAVORO-OGGETTI (dbal
-mock-leggera scagiona il compile) · **istruttoria ORM S-126**: evalcls
-**316,9** (2,38 ms/classe eval'd) · refl **42,4** · objchurn **10,3** =
-**objalloc 9,9 (1220 vs 123,3 ns/oggetto, ~67% del churn)** + objmap 17,3;
-profilo: churn multi-%, compile ≤~1% leaf ⇒ **LEVA NOMINATA L-OL1
-«ciclo-di-vita oggetto»** (criterio A/B già scritto: s126-leva-nominata.md).
+**arith 5,5 · prop 5,6 · calls 4,7 · str 4,2 · arr 3,2 · re 2,6** · **MAPPA
+v2**: WP 1,85 ≪ hf 2,55–2,57 ≪ hk 4,3 ≪ **dbal 8,29–8,33 ≈ ORM 8,51–8,56**
+(gap ∝ lavoro-oggetti; profilo scagiona il compile) · **istruttoria ORM**:
+evalcls **316,9** · refl **42,4** · objchurn **10,3** = **objalloc 9,9 (1220
+vs 123,3 ns/oggetto, ~67%*)** + objmap 17,3 (*additività aperta, az. rev. #2)
+⇒ **LEVA L-OL1 «ciclo-di-vita oggetto»** (criterio: s126-leva-nominata.md).
 
 ## §S-127 — ordine proposto
 
