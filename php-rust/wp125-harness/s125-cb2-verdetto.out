@@ -1,0 +1,21 @@
+== s125-ab cb2: A=c5ba2573 B=002e6cc1 R=5 extra<=5 cats=[arith prop calls str arr re] ordine ALTERNATO ==
+
+GIUDICE S-125 cb2 bersaglio=str (rc=0 da metro-out/giudice-cb2.rc):
+arith: fam=5 D_med=+0.04 segni +3/5 spread_A=0.42 4quanto=0.027 SL=0.44 soglia_guardia=-0.84 -> tiene (tie: = -> tiene)
+prop: fam=5 D_med=-0.98 segni +1/5 spread_A=1.83 4quanto=0.044 SL=0.40 soglia_guardia=-3.66 -> tiene (tie: = -> tiene)
+calls: fam=5 D_med=-0.20 segni +1/5 spread_A=0.56 4quanto=0.067 SL=0.60 soglia_guardia=-1.12 -> tiene (tie: = -> tiene)
+str [BERSAGLIO]: fam=5 D_med=+12.07 segni +5/5 spread_A=0.85 4quanto=0.143 SL=0.47 soglia_ref=-1.70 soglia_promo=+4.00 -> PROMOZIONE-ai-gate
+arr: fam=5 D_med=+0.92 segni +5/5 spread_A=1.33 4quanto=0.133 SL=1.31 soglia_guardia=-2.66 -> tiene (tie: = -> tiene)
+re: fam=5 D_med=-2.28 segni +1/5 spread_A=1.43 4quanto=0.333 SL=2.03 soglia_guardia=-2.86 -> tiene (tie: = -> tiene)
+VERDETTO_S125_cb2 = PROMOZIONE-ai-gate
+promozione: build ricetta riproduce il candidato 002e6cc12047ab9f
+promozione batteria: rc=0 (da promo-out/batteria.rc) · 1746/0/2 · inventario: IDENTICO al pin s124 (zero test nuovi, come dichiarato)
+promozione: churn batteria neutralizzato (build ricetta → 002e6cc12047ab9f al byte)
+promozione: PIN phpr s125 = 002e6cc12047ab9f (smoke parità 2 modi OK, stash phpr-s125). I gate del protocollo (batteria/corpus/fixture/micro) restano dovuti.
+promozione corpus-gate: rc=0 — nomi==congelato, CONTENUTO==golden, off↔on zero
+promozione fixture chain: rc=0 (7/6 gate verdi)
+promozione micro pin s125: rapporto_arith=5.5  [derivata: companion 2.36/0.43] rapporto_prop=5.6  [derivata: companion 2.35/0.42] rapporto_calls=4.7  [derivata: companion 2.12/0.45] rapporto_str=4.2  [derivata: companion 0.63/0.15] rapporto_arr=3.2  [derivata: companion 0.91/0.28] rapporto_re=2.6  [derivata: companion 0.92/0.36] 
+promozione gate ORM: fail-set per NOME == baseline (16 nomi) · Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, Skipped: 59, Incomplete: 2.
+promozione gate http-kernel: 0E/0F · Tests: 1665, Assertions: 3850, PHPUnit Warnings: 2, Warnings: 5, Deprecations: 128.
+promozione server: PIN server s125 = 1d132dfa0111e4c7 @ 5140acc (smoke OK, stashato, registrato). pin phpr INVARIATO (002e6cc12047ab9f)
+PROMOZIONE COMPLETA rc=0 (da promo-out/rc): pin s125 = 002e6cc12047ab9f

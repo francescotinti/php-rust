@@ -1,40 +1,40 @@
-# WP_SESSION_125 — full rimisurato (1,815–1,896: PhpStr non lo muove) · fusione = MISURA · banda v2-s125 · cbargs refutata
+# WP_SESSION_125 — full rimisurato · fusione=MISURA · banda v2-s125 · cbargs: forma-1 caduta, FORMA-2 PROMOSSA → pin s125
 
-**In una frase**: rimisurata l'intera suite WordPress col motore nuovo — il
-salto delle micro (stringhe +39%) vale sul carico reale al più ~2%, sotto la
-risoluzione della misura: il collo vero vive altrove, e ora abbiamo bande e controlli per cercarlo.
+**In una frase**: rimisurata l'intera suite WordPress (il salto micro stringhe
+vale sul carico reale al più ~2%) e, su spinta dell'utente, la leva argomenti
+è stata rigiocata in una seconda forma che ha vinto: le stringhe ora costano
+in allocazioni ESATTAMENTE quanto PHP, e il micro stringhe guadagna un altro 7%.
 
-**SCOREBOARD** (pin **s124 c5ba2573** INVARIATO; micro non rimisurate, = S-124):
-**arith 5,5 = · prop 5,6 = · calls 4,7 = · str 4,2 = · arr 3,2 = · re 2,5 =** ·
-rif WP **full = 1,815–1,896 (RIMISURATO, sovrapposto a 1,810–1,889)** · **leve
-perf spedite: 0** (1 tentata: cbargs, A/B smoke, REFUTATA). 2026-08-10 · Fable 5 · 92d5e9b→8b23231.
+**SCOREBOARD** (pin **s125 002e6cc1**2047ab9f @ 5140acc; micro R=5 sul pin):
+**arith 5,5 = · prop 5,6 = · calls 4,7 = · str 4,2 = (companion 0,63/0,15,
+phpr −7%) · arr 3,2 = · re 2,6 (≈, arrotondamento)** · rif WP **full =
+1,815–1,896 (RIMISURATO su s124; effetto leva ≤~2%)** · **leve perf spedite: 1**
+(L-HD2 cbargs2; forma-1 refutata prima). 2026-08-10 · Fable 5 · 92d5e9b→(chiusura).
 
 ## Esiti secchi
-1·**p.1 coppia full/media** (criterio 92d5e9b PRIMA del run): 4 gambe rc=0,
-parità per NOME ×4. **full 1,815–1,896** (off1 inquinata da contesa, rev.):
-effetto PhpStr **≤~2% NON risolvibile a N=2**; media 2,485–2,518 (↓ lieve). → REPORT_GAP_125.
-2·**p.2a controllo ±zval STESSO head** (az. rev. S-123 #1): **6/6 esatto** —
-prop zvclone A(fusa)=3,00 vs B(unfused)=5,00 ⇒ **fusione +2,00 = MISURA**
-(inferenza S-123 chiusa); alloc invariate A↔B ovunque.
-3·**p.2b banda layout v2-s125 POST-PATCH** (az. rev. S-124 #4): SL = arith 0,44
-· prop 0,40 · calls 0,60 · str 0,47 · arr 1,31 · re 2,03 ns/iter — sostituiscono
-le v2 S-123 (K=5 latino ciclico, pin ripristinato al byte).
-4·**Leva L-HD2 cbargs** (criterio+arbitri 75a0caf PRIMA di ogni run): admission
-census **PASS str 3,00→2,00 = PARITÀ alloc oracle** (6/6); smoke R=2 **−5,04/
-−5,41 segno opposto 2/2** ⇒ **REFUTAZIONE della FORMA** (init [Zval;4]+drain >
-coppia malloc+free; run_loop +1284 B, bl 5906→5924); revert 0755f0e verificato
-al byte. Canale args-CallBuiltin APERTO (forma senza init/drain da disegnare).
-5·**p.3 istruttoria prop oltre-i-cloni** consegnata: 5 RefCell + 3 probe IC +
-3 copie Long per iter; C1 single-borrow nominato (vincolo banda 0,40).
-6·Incidenti d'apparato (2, contati): (a) mv dei ratios TRACCIATI wp109 ⇒ PRE
-census morso (recuperato); (b) smoke sul giudice fam≥5 con R=2 ⇒ rc=3 garantito,
-revert auto saltato (fatto a mano, al byte). ⚠️ Serena 1.7: LSP rotto fino al riavvio.
+1·**p.1 coppia full/media** (criterio 92d5e9b PRIMA): 4 gambe rc=0, parità per
+NOME ×4. full 1,815–1,896 (off1 inquinata, rev.): effetto PhpStr **≤~2% NON
+risolvibile a N=2**; media 2,485–2,518. → REPORT_GAP_125.
+2·**p.2a ±zval STESSO head 6/6**: prop zvclone A=3,00 vs B=5,00 ⇒ **fusione
++2,00 = MISURA** (inferenza S-123 chiusa). **p.2b banda v2-s125**: SL 0,44 ·
+0,40 · 0,60 · 0,47 · 1,31 · 2,03 (K=5 latino ciclico, pin al byte).
+3·**L-HD2 forma-1** (75a0caf): census str 3→2 CENTRATO ma smoke −5,04/−5,41 ⇒
+refutata (init+drain+braccio +1284 B); revert al byte. **FORMA-2** (240372f,
+pop diretti + corpo FUORI dal dispatcher): run_loop **−2072 B** (bl 5906→5893),
+census 6/6 identico, smoke +11,5, **A/B str +12,07 ns/iter 5/5** (soglia 4,00,
+banda [+4,+14] del modello S-105 CENTRATA), guardie 6/6 ⇒ **PROMOZIONE**.
+4·**Gate promozione rc=0**: batteria 1746/0/2 inventario IDENTICO · pin s125
+collaudo-nell'atto · corpus nomi+golden+off↔on · fixture 7/6 · **ORM 16 nomi
+== baseline · hk 0E/0F** (watchdog) · server **s125 1d132dfa** GRADO MINIMO.
+**str alloc/iter = 2,00 = PARITÀ oracle** (Δalloc: str 0,00 · arr +0,02 · re +2,00).
+5·**p.3 istruttoria prop** consegnata (5 RefCell+3 IC+3 Long/iter; C1 nominato).
+6·Incidenti apparato (2): mv ratios tracciati ⇒ PRE census morso; smoke su
+giudice fam≥5 (sanato: MINFAM). ⚠️ Serena 1.7: LSP rotto fino a riavvio MCP.
 
 ## ⭐ Lezioni (max 3)
-- ⭐⭐ **Le micro sature rendono sul full meno di quanto la coppia risolva**
-  (~1-2% atteso vs risoluzione N=2): il prossimo sforzo va sul PROFILO del
-  carico WP, non su un'altra leva micro.
-- ⭐⭐ **Census centrato + tempo peggiorato = costo della FORMA** (S-105 redux):
-  la refutazione con alloc-parità non chiude il canale, ordina la forma nuova.
-- ⭐ **Lo smoke deve avere il SUO lettore**: un giudice che pretende fam≥5
-  chiamato con R=2 dà rc=3 garantito e salta i rami di sicurezza a valle.
+- ⭐⭐ **La forma si rigioca nella stessa finestra** (S-105 confermata): census
+  co-primario centrato + tempo peggiorato ≠ canale chiuso — forma-2 disegnata
+  DAL meccanismo della caduta (−init/−drain/−braccio) ha CENTRATO la banda.
+- ⭐⭐ **Estrarre i rami freddi dal dispatcher è metà della leva**: run_loop
+  −2072 B con bl in calo; la forma-1 (stesso census) lo gonfiava di +1284 B.
+- ⭐ **Le micro sature rendono sul full ≤~2%, sotto la risoluzione della coppia**: il prossimo sforzo è il PROFILO del carico WP.

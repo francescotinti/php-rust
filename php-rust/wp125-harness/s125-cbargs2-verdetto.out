@@ -1,0 +1,14 @@
+== s125 admission cbargs2 (forma-2): census L2 (leva) vs A (baseline stesso head) ==
+arith  alloc/it A=0.00 L2=0.00 D=+0.00 | free/it A=0.00 L2=0.00 D=+0.00 | pred=+0.00 tol=0.05 -> OK
+prop   alloc/it A=0.00 L2=0.00 D=+0.00 | free/it A=0.00 L2=0.00 D=+0.00 | pred=+0.00 tol=0.05 -> OK
+calls  alloc/it A=0.00 L2=0.00 D=+0.00 | free/it A=0.00 L2=0.00 D=+0.00 | pred=+0.00 tol=0.05 -> OK
+str    alloc/it A=3.00 L2=2.00 D=-1.00 | free/it A=3.00 L2=2.00 D=-1.00 | pred=-1.00 tol=0.05 -> OK
+arr    alloc/it A=2.05 L2=2.05 D=+0.00 | free/it A=2.05 L2=2.05 D=+0.00 | pred=+0.00 tol=0.10 -> OK
+re     alloc/it A=7.00 L2=7.00 D=+0.00 | free/it A=7.00 L2=7.00 D=+0.00 | pred=+0.00 tol=0.05 -> OK
+ADMISSION: PASS — str a PARITA' alloc con l'oracle (2,00)
+== disasm admission (criterio p.6; pin da census-out/disasm-pin.txt della forma-1) ==
+pin: run_loop_addr=0x0000000100266610 run_loop_size_B=286552
+pin: bl_totali=5906
+cb2: run_loop_addr=0x0000000100266610 run_loop_size_B=284480
+cb2: bl_totali=5893
+smoke R=2 MINFAM=2: OK +11.56 +11.43
