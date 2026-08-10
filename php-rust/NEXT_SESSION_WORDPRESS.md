@@ -1,27 +1,26 @@
 # NEXT_SESSION — phpr: OBIETTIVO PARITÀ (≥1×) con l'oracle; ≤3× = tappa (REGOLE §1)
 ⏱ **FONDAMENTALI**: rif WP **full = 1,815–1,896** (S-125 @ s124; DA RIFARE sul
 pin s127 — due leve accumulate da allora: cbargs2 + stampo) · ultima leva
-SPEDITA **S-127 (L-OL1-F1 stampo)** · **sessioni-senza-Δ = 0** · incidenti:
+SPEDITA **S-127 (L-OL1-F1 stampo; + ondata-2 fedeltà → pin s127b)** · **sessioni-senza-Δ = 0** · incidenti:
 1 (S-106) + 2 processo + 2 app. S-125 + 1 S-126 + **1 app. S-127** (LSP in finestra di misura; rerun pulito).
 
-## Scoreboard (pin **s127 834f5e01**fbdb7ebc; micro R=5 dal gate di promozione)
+## Scoreboard (pin **s127b ccb63dca**f565cffc; micro R=5 dal gate s127b)
 
-**arith 5,4 · prop 5,5 · calls 4,7 · str 4,2 · arr 3,3 · re 2,5** · **oggetti:
+**arith 5,3 · prop 5,6 · calls 4,9(*) · str 4,2 · arr 3,2 · re 2,6** ((*) bordo run-to-run, osservare) · **oggetti:
 objalloc 9,6→7,7 · churn 10,2→8,9** (leva stampo −20,4% sul giudice; additività
 churn CHIUSA 3,4 ns: residuo = Δins 320 ns insert-su-proprietà + Δdrop 90 ns) ·
 MAPPA (cifra canonica = NETTO da emenda S-127): WP 1,85 ≪ hf 2,55 ≪ hk 4,3 ≪
-dbal 8,6 ≈ ORM 8,5 · corpus congelato **1414** (bug69534 flippato VERDE
-dichiarato) · compoff: bisezione CHIUSA (§3.19-bis/-ter, cure nominate).
+dbal 8,6 ≈ ORM 8,5 · corpus congelato **1414** (bug69534 VERDE dichiarato) ·
+**compoff CURATO (ondata-2): install rc=0 vendor_ok — voce mappa RIAPERTA**.
 
 ## §S-128 — ordine proposto
 
 1. **Rimisura full/media sul pin s127** (4 gambe intercalate, ricetta S-125
    pair109; DB reset + uploads guard): due leve accumulate (cbargs2+stampo, la
    seconda tocca ogni `new`) — il riferimento 1,815–1,896 è VECCHIO di 2 pin.
-2. **Cure §3.19-bis/-ter** (fedeltà, piccole e nominate): registrare exec/system/
-   passthru/proc_open nella tabella di dispatch dinamico (+popen; macchineria
-   Symfony-Process esiste) · display_errors=stderr come DESTINAZIONE. Fixture =
-   sonde del verdetto s127-compoff-bisez; POI rimisura compoff (voce mappa NULLA).
+2. **Rimisura compoff sulla mappa** (cure ondata-2 FATTE: §3.19-bis/-ter CURATE,
+   pin s127b): gambe bilaterali criterio mappa2 emendato (cifra NET) con composer
+   ESTRATTO; ricongelare compoff-work.tgz CON composer-x. Osservare calls 4,9.
 3. **L-OL1 segmento 2 dal churn residuo**: Δins 320 ns/iter (insert su array di
    proprietà: COW make_mut + KeyIndex) — istruttoria d'ammissione census+disasm
    PRIMA della forma, criterio col protocollo di s126-leva-nominata emendato.
@@ -71,10 +70,11 @@ giudice con fam-min > R · altre notti su PhpStr-full (voce CHIUSA S-126) ·
 **misure con indicizzatore LSP in volo (incidente S-127)**.
 
 **Riscritto**: 2026-08-10 (chiusura S-127). Storia: `sessions/` · `gaps/GAP_TREND.md`.
-Pre-flight S-128: pin phpr **s127 834f5e01**fbdb7ebc (ricetta A′; la batteria
-rilinka ⇒ pretendere 834f5e01 al byte; stash phpr-s127) · server **s127
-72f47855** grado minimo · MySQL wp8 con l'elenco · uploads sotto guardia ·
-corpus congelato **1414** ×2 modi (emenda S-127 nei .fails LOCALI wp109) ·
-gates wp9 invariati (compoff-work.tgz SENZA composer-x: riestrarre il phar
-con l'oracle) · nessuna run detached in volo · ordine lettura: REGOLE.md →
-QUI → sessions/WP_SESSION_127.md → wp127-harness/revisione.md → PERF_MAP.md.
+Pre-flight S-128: pin phpr **s127b ccb63dca**f565cffc (ricetta A′; la batteria
+rilinka ⇒ pretendere ccb63dca al byte; stash phpr-s127b; s127 834f5e01
+conservato) · server **s127b bc95ba71** grado minimo · MySQL wp8 con l'elenco ·
+uploads sotto guardia ·
+corpus congelato **1414** ×2 modi (.fails LOCALI wp109) · compoff-work.tgz
+SENZA composer-x (riestrarre il phar con l'oracle) · nessuna run detached in
+volo · ordine lettura: REGOLE.md → QUI → sessions/WP_SESSION_127.md →
+wp127-harness/revisione.md → PERF_MAP.md.
