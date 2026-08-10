@@ -1,0 +1,3 @@
+catch0: Undefined constant "MISSING_CONST_XYZ"
+catch1: Undefined constant "MISSING_CONST_XYZ"
+fine

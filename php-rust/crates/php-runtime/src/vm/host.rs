@@ -2837,7 +2837,8 @@ impl<'m> super::Vm<'m> {
         let created_mark = self.created.last_key_value().map(|(id, _)| *id);
         let temp = self.alloc_object(cid)?;
         let cc = self.classes[cid];
-        if let Some(func) = cc.prop_init.as_ref() {
+        // L-OL1-F1: a complete template already seeded the evaluated defaults.
+        if let Some(func) = cc.prop_init.as_ref().filter(|_| cc.props_template.0.get().is_none()) {
             let baseline = self.frames.len();
             let mut frame = Frame::new(func, self.class_mod(cid));
             frame.this = Some(temp.clone());
@@ -6479,7 +6480,8 @@ impl<'m> super::Vm<'m> {
     fn instantiate_wrapper(&mut self, cid: ClassId) -> Result<Zval, PhpError> {
         let obj = self.alloc_object(cid)?;
         let cc = self.classes[cid];
-        if let Some(func) = cc.prop_init.as_ref() {
+        // L-OL1-F1: a complete template already seeded the evaluated defaults.
+        if let Some(func) = cc.prop_init.as_ref().filter(|_| cc.props_template.0.get().is_none()) {
             let baseline = self.frames.len();
             let mut frame = Frame::new(func, self.class_mod(cid));
             frame.this = Some(obj.clone());

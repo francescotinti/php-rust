@@ -1622,6 +1622,28 @@ impl CompiledAttribute {
 }
 
 impl CompiledClass {
+    /// A fresh instance's property table (L-OL1-F1 «stampo»): the template
+    /// clone when complete, else the classic constant seeding by name. A class
+    /// whose defaults are ALL constant completes its template right here on
+    /// first use; one with a `prop_init` thunk stays on the classic path until
+    /// the thunk's first regular return snapshots the full table (`Op::Ret`).
+    pub fn fresh_props(&self) -> php_types::Props {
+        if let Some(t) = self.props_template.0.get() {
+            return t.clone();
+        }
+        let mut props = php_types::Props::with_layout(std::rc::Rc::clone(&self.props_layout));
+        for (name, c) in &self.prop_defaults {
+            props.set(name, c.to_zval());
+        }
+        for name in &self.uninit_props {
+            props.set(name, php_types::Zval::Undef);
+        }
+        if self.prop_init.is_none() {
+            let _ = self.props_template.0.set(props.clone());
+        }
+        props
+    }
+
     /// See [`Func::shrink`]: every nested thunk/method body plus the class's
     /// own metadata Vecs.
     pub fn shrink(&mut self) {
@@ -2019,6 +2041,32 @@ pub struct CompiledClass {
     /// per-write prop_info lookup (WP-26 quick win: the WP-25 deny cost
     /// showed up as an unconditional hash lookup per declared write).
     pub has_asym_set: bool,
+    /// L-OL1-F1 «stampo» (S-127): the class's COMPLETE per-instance property
+    /// table, snapshotted once and cloned by every later allocation. Filled at
+    /// the first `alloc_object` when every default is constant (`prop_init`
+    /// None); for a class WITH a `prop_init` thunk, filled at the thunk's
+    /// first REGULAR return (fresh instance, pre-ctor — every `INIT_PROPS`
+    /// frame site qualifies), so the thunk runs once per class. Invariant:
+    /// **filled ⟺ the template is complete for instantiation** (constants +
+    /// evaluated non-constant defaults). Sharing is COW-correct:
+    /// `Zval::Array(Rc<PhpArray>)` writes go through `make_mut`, and a shared
+    /// closure/enum-case default matches Zend's once-per-class evaluation of
+    /// constant expressions. Never filled before unit link (relocation clones
+    /// see an empty cell).
+    pub props_template: PropsTemplate,
+}
+
+/// Cache cell for [`CompiledClass::props_template`]. Newtype because the
+/// struct derives `PartialEq`: a lazily-filled cache is DERIVED state, fully
+/// determined by `prop_defaults`/`uninit_props`/`prop_init`, so two classes
+/// compare equal regardless of whether either cache is warm.
+#[derive(Debug, Clone, Default)]
+pub struct PropsTemplate(pub std::cell::OnceCell<php_types::Props>);
+
+impl PartialEq for PropsTemplate {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
 }
 
 /// The compiled `get`/`set` hooks of one property (step 50). Each hook is a

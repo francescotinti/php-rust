@@ -475,6 +475,7 @@ pub(super) fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> C
                 && pi.hooks.is_none()
         }),
         has_asym_set: prop_info.values().any(|pi| pi.set_visibility.is_some()),
+        props_template: Default::default(),
         prop_info,
     }
 }
@@ -608,5 +609,6 @@ pub(super) fn stub_class(cd: &crate::hir::ClassDecl) -> CompiledClass {
         all_props_public: false,
         plain_set_props: false,
         has_asym_set: false,
+        props_template: Default::default(),
     }
 }

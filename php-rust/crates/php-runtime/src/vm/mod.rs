@@ -10275,13 +10275,7 @@ impl<'m> Vm<'m> {
         // unserialize builds the object from the class's default-properties
         // table and only then applies the serialized fields (doctrine's
         // Instantiator relies on `O:N:"C":0:{}` yielding a defaulted instance).
-        let mut props = Props::with_layout(Rc::clone(&cc.props_layout));
-        for (name, c) in &cc.prop_defaults {
-            props.set(name, c.to_zval());
-        }
-        for name in &cc.uninit_props {
-            props.set(name, Zval::Undef);
-        }
+        let props = cc.fresh_props();
         let id = self.next_obj_id();
         let obj = Object { class_id: cid as u32, class_name, props, id, info, rare: None, lazy: None, proxy_instance: None, gc: php_types::GcMark::new() };
         let rc = Rc::new(RefCell::new(obj));
@@ -10326,6 +10320,11 @@ impl<'m> Vm<'m> {
     /// `unserialize` and `ReflectionClass::newInstanceWithoutConstructor`. A
     /// failing thunk degrades to the constant-only defaults.
     fn run_prop_init_thunk(&mut self, cid: ClassId, rc: &Rc<RefCell<Object>>) {
+        // L-OL1-F1: a complete template means the seed already carried the
+        // evaluated defaults — nothing left for the thunk to write.
+        if self.classes[cid].props_template.0.get().is_some() {
+            return;
+        }
         if let Some(func) = &self.classes[cid].prop_init {
             let baseline = self.frames.len();
             let mut frame = Frame::new(func, self.class_mod(cid));
@@ -12201,16 +12200,10 @@ impl<'m> Vm<'m> {
                 String::from_utf8_lossy(&cc.name)
             )));
         }
-        let mut props = Props::with_layout(Rc::clone(&cc.props_layout));
-        for (name, c) in &cc.prop_defaults {
-            props.set(name, c.to_zval());
-        }
-        // A typed property with no default starts uninitialized: overwrite its NULL
-        // placeholder with `Undef` (kept in declaration order). Reading it errors;
-        // `var_dump` renders `uninitialized(T)`; `isset` is false.
-        for name in &cc.uninit_props {
-            props.set(name, Zval::Undef);
-        }
+        // L-OL1-F1 «stampo»: template clone when complete (COW-shared defaults),
+        // classic by-name seeding otherwise. `Undef` uninitialized slots and
+        // declaration order are baked into the template on its first build.
+        let props = cc.fresh_props();
         let class_name = cc.class_name.clone();
         let info = Rc::clone(&cc.info);
         let id = self.next_obj_id();
@@ -19913,6 +19906,7 @@ mod tests {
                     all_props_public: _,
                     plain_set_props: _,
                     has_asym_set: _,
+                    props_template: _,
                 } = c;
                 let mut pattr: Vec<_> = prop_attributes.iter().collect();
                 pattr.sort_by(|a, b| a.0.cmp(b.0));

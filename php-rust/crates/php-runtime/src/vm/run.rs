@@ -3813,6 +3813,22 @@ impl<'m> super::Vm<'m> {
                             o.borrow_mut().clear_readonly_clone_writable();
                         }
                     }
+                    // L-OL1-F1 «stampo»: a prop-init thunk finishing REGULARLY
+                    // (every INIT_PROPS frame runs on a fresh, pre-ctor
+                    // instance) snapshots the class's complete default table;
+                    // later allocations clone it and skip this thunk. An
+                    // unwinding thunk never reaches Ret, so a failed
+                    // evaluation is retried at the next `new`, like Zend.
+                    if fl & FrameFlags::INIT_PROPS != 0 {
+                        if let (Some(cid), Some(Zval::Object(o))) =
+                            (self.frames[top].class, self.frames[top].this.as_ref())
+                        {
+                            let cc = self.classes[cid];
+                            if cc.props_template.0.get().is_none() {
+                                let _ = cc.props_template.0.set(o.borrow().props.clone());
+                            }
+                        }
+                    }
                     let dead = self.frames.pop().expect("Ret pops the active frame");
                     if self.frames.is_empty() && !self.final_flush {
                         // The script `main` is returning: park its frame — the
@@ -5612,7 +5628,12 @@ impl<'m> super::Vm<'m> {
                 Op::InitProps => {
                     let recv = self.frames[top].stack.pop().expect("InitProps receiver");
                     let cid = object_class_id(&recv).expect("InitProps on a non-object");
+                    // L-OL1-F1 «stampo»: a complete template already seeded the
+                    // evaluated defaults at alloc — skip the thunk entirely.
                     match &self.classes[cid].prop_init {
+                        Some(_) if self.classes[cid].props_template.0.get().is_some() => {
+                            self.frames[top].stack.push(Zval::Null)
+                        }
                         Some(func) => {
                             let mut frame = Frame::new(func, self.class_mod(cid));
                             frame.this = Some(recv.deref_clone());

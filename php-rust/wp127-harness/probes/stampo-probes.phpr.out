@@ -1,0 +1,79 @@
+array(1) {
+  ["k"]=>
+  int(1)
+}
+array(0) {
+}
+array(4) {
+  [0]=>
+  int(1)
+  [1]=>
+  string(3) "due"
+  [2]=>
+  float(3)
+  [3]=>
+  int(99)
+}
+array(3) {
+  [0]=>
+  int(1)
+  [1]=>
+  string(3) "due"
+  [2]=>
+  float(3)
+}
+int(7)
+array(2) {
+  ["arr"]=>
+  array(3) {
+    [0]=>
+    int(1)
+    [1]=>
+    string(3) "due"
+    [2]=>
+    float(3)
+  }
+  ["n"]=>
+  int(7)
+}
+array(3) {
+  [0]=>
+  int(1)
+  [1]=>
+  string(3) "due"
+  [2]=>
+  float(3)
+}
+int(7)
+array(1) {
+  [0]=>
+  string(4) "seed"
+}
+array(1) {
+  [0]=>
+  string(4) "ctor"
+}
+object(D1)#8 (2) {
+  ["t"]=>
+  uninitialized(int)
+  ["u"]=>
+  string(1) "v"
+  ["w"]=>
+  array(0) {
+  }
+}
+array(1) {
+  [0]=>
+  string(6) "figlio"
+}
+array(1) {
+  [0]=>
+  string(5) "padre"
+}
+array(1) {
+  [0]=>
+  int(7)
+}
+int(7000)
+string(71) "O:2:"B1":2:{s:3:"arr";a:3:{i:0;i:1;i:1;s:3:"due";i:2;d:3;}s:1:"n";i:7;}"
+string(25) "{"arr":[1,"due",3],"n":7}"
