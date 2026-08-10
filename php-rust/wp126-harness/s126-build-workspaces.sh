@@ -20,7 +20,7 @@ mk(){ # DIR URL BRANCH(o '-' per default)
   if [ "$BR" = "-" ]; then git clone --depth 1 "$URL" "$BUILD/$DIR" >> "$LOG" 2>&1 || fail "clone $DIR"
   else git clone --depth 1 -b "$BR" "$URL" "$BUILD/$DIR" >> "$LOG" 2>&1 || fail "clone $DIR ($BR)"; fi
   ( cd "$BUILD/$DIR" && COMPOSER_CACHE_DIR="$BUILD/$DIR/ccache" COMPOSER_HOME="$BUILD/$DIR/chome" \
-      "$ORACLE" "$GATES/composer.phar" install --no-interaction --no-audit --no-progress >> "$LOG" 2>&1 ) || fail "composer $DIR"
+      "$ORACLE" "$GATES/composer.phar" install --no-interaction --no-progress >> "$LOG" 2>&1 ) || fail "composer $DIR"
   # smoke bilaterale (esito ESATTO rc=0, feedback forge-silent-failure)
   ( cd "$BUILD/$DIR" && "$ORACLE" vendor/bin/phpunit --version > /dev/null 2>&1 ) || fail "smoke oracle $DIR"
   ( cd "$BUILD/$DIR" && "$PHPR" vendor/bin/phpunit --version > /dev/null 2>&1 ) || fail "smoke phpr $DIR"
@@ -38,11 +38,11 @@ mk coll-work https://github.com/doctrine/collections.git -
 rm -rf "$BUILD/compoff-work"; mkdir -p "$BUILD/compoff-work"
 cp "$BUILD/dbal-work/composer.json" "$BUILD/dbal-work/composer.lock" "$BUILD/compoff-work/" 2>>"$LOG" || fail "compoff copia json/lock"
 ( cd "$BUILD/compoff-work" && COMPOSER_CACHE_DIR="$BUILD/compoff-work/ccache" COMPOSER_HOME="$BUILD/compoff-work/chome" \
-    "$ORACLE" "$GATES/composer.phar" install --no-interaction --no-audit --no-progress >> "$LOG" 2>&1 ) || fail "compoff warm install"
+    "$ORACLE" "$GATES/composer.phar" install --no-interaction --no-progress >> "$LOG" 2>&1 ) || fail "compoff warm install"
 # smoke OFFLINE col lettore proprio: reinstall a rete spenta deve riuscire (oracle)
 ( cd "$BUILD/compoff-work" && rm -rf vendor && \
   COMPOSER_DISABLE_NETWORK=1 COMPOSER_CACHE_DIR="$BUILD/compoff-work/ccache" COMPOSER_HOME="$BUILD/compoff-work/chome" \
-  "$ORACLE" "$GATES/composer.phar" install --no-interaction --no-audit >> "$LOG" 2>&1 && [ -f vendor/autoload.php ] ) || fail "compoff smoke offline"
+  "$ORACLE" "$GATES/composer.phar" install --no-interaction >> "$LOG" 2>&1 && [ -f vendor/autoload.php ] ) || fail "compoff smoke offline"
 rm -rf "$BUILD/compoff-work/vendor"
 echo "compoff-work base=dbal composer.lock $(shasum -a 256 "$BUILD/compoff-work/composer.lock" | cut -c1-16)" >> "$IDF"
 tar czf "$GATES/compoff-work.tgz" -C "$BUILD" compoff-work || fail "tar compoff"

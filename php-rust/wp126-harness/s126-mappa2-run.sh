@@ -53,7 +53,7 @@ run_compoff(){ # ENGINE LABEL
   [ "$E" = "$ORACLE" ] && ML="-d memory_limit=-1"
   ( cd "$SP/compoff-work" && rm -rf vendor && \
     COMPOSER_DISABLE_NETWORK=1 COMPOSER_CACHE_DIR="$SP/compoff-work/ccache" COMPOSER_HOME="$SP/compoff-work/chome" \
-    /usr/bin/time -l perl -e 'alarm 1200; exec @ARGV or die' -- "$E" $ML "$GATES/composer.phar" install --no-interaction --no-audit \
+    /usr/bin/time -l perl -e 'alarm 1200; exec @ARGV or die' -- "$E" $ML "$GATES/composer.phar" install --no-interaction \
       > "$OUT/compoff-$L.txt" 2> "$OUT/compoff-$L.time" )
   local rc=$?
   [ -f "$SP/compoff-work/vendor/autoload.php" ] && echo "vendor_ok" >> "$OUT/compoff-$L.txt"
