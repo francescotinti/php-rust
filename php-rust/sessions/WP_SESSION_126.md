@@ -10,7 +10,6 @@ e l'A/B notturno chiude la questione PhpStr sul carico WP.
 **arith 5,5 = · prop 5,6 = · calls 4,7 = · str 4,2 = · arr 3,2 = · re 2,6 =** · rif WP
 full = 1,815–1,896 (S-125 @ s124) · **leve spedite: 0 — ANOMALIA DICHIARATA** (istruttoria/
 mappa per mandato §S-126; L-OL1 nominata, esecuzione S-127). 2026-08-10 · Fable 5.
-
 ## Esiti secchi
 1·**p.1 istruttoria ORM** (criterio b8fcb4a PRIMA; R=5 netto-pavimento): evalcls **316,9**
 (2,38 ms/classe eval'd vs 7,5 µs) · refl **42,4** · objchurn **10,3**; profilo ORM (indizio

@@ -31,12 +31,12 @@ profilo: churn multi-%, compile ≤~1% leaf ⇒ **LEVA NOMINATA L-OL1
    self · strumento DENSITÀ evalcls prima di ogni leva compile · §3.20 dbal.
 4. Az. rev. S-125 residue: **seconda notte di banda** (fino ad allora guardie
    max(SL s123, SL s125)) · s125-ab.sh smoke col lettore interno.
-APPARATO (vincoli vivi): copi-mai-mv · smoke col lettore proprio · gate
-contesa in ictx/s (az. rev. #5) · verdetti senza header abortiti · MAI `git
-add` di verdetti con run in volo · **az. rev. S-126 #1-5 VINCOLANTI
+APPARATO: copi-mai-mv · smoke col lettore proprio · verdetti senza header ·
+MAI `git add` di verdetti con run in volo · **az. rev. S-126 #1-5 VINCOLANTI
 (revisione.md): #1 regola di nomina PRIMA dell'ammissione L-OL1 · #2 sub-micro
-residuo 427 ns/additività · #3 summary hf nel verdetto+nomi non-php-S ·
-#4 cifra canonica raw/netto in criterio mappa · tetto PhpStr citabile ≤3,8%.**
+residuo 427 ns (additività) · #3 summary hf nel verdetto + nomi non-php-S ·
+#4 cifra canonica raw/netto nel criterio mappa · #5 contesa in ictx/s; tetto
+PhpStr citabile ≤3,8%.**
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
 
