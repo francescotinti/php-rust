@@ -1,0 +1,8 @@
+# s126-criterio-mappa2.md — MAPPA perf v2 (estensione PERF_MAP) — PRE-registrato
+
+1. Oggetto: REGISTRAZIONE (non leva) del rapporto phpr(pin s125 002e6cc1)/oracle su: **doctrine/dbal** (sqlite) · **symfony/http-foundation** (no-session, i Functional `php -S` esclusi dal fail-gate come da storico 0E/12F) · **doctrine/collections** · **composer install OFFLINE** (cache calda, `COMPOSER_DISABLE_NETWORK=1`, vendor rimosso prima di ogni gamba). Rapporti PER workload, MAI aggregato.
+2. RINVIATE E DICHIARATE (nessun tetto silenzioso): lexer/inflector/event-manager · wp-cli · PHPUnit-self → coda S-127.
+3. Metodo = s125-criterio-mappa: N=2 per lato, dentro ogni gamba oracle PRIMA poi phpr, workspace ri-untarrato per gamba (tarball in `wp9-harness/gates/`, costruiti oggi con l'oracle e congelati PRIMA del run), watchdog anti-hang, `/usr/bin/time -l`; cifra canonica = user CPU; pavimento per-binario = med3 `phpunit --version` nel workspace dbal (per composer: med3 `composer.phar --version`). Oracle SEMPRE con `-d memory_limit=-1` (asimmetria §3.14 dichiarata, emenda S-125 p.7).
+4. Contesa (az. rev. S-125 #1): ictx per gamba a verbale; gamba >1,5× la mediana del workload = SEGNALATA; se le gambe dello stesso lato divergono >3% E una è segnalata ⇒ gamba segnalata NULLA.
+5. Parità per workload: fail-set phpr per NOME IDENTICO tra le 2 gambe (pena cifra NULLA); differenza phpr↔oracle dichiarata per NOME; cifra CANONICA se |failset_phpr diff oracle| ≤1% dei test, altrimenti INDICATIVA. Composer: gamba valida se rc=0 e `vendor/autoload.php` esiste.
+6. Arbitro `s126-mappa2-run.sh` committato QUI; cifre citabili solo da `s126-mappa2-verdetto.out`; PERF_MAP.md si aggiorna SOLO da quel verdetto. Nessuna predizione di magnitudine (prime misure).

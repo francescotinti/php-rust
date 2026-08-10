@@ -1,0 +1,8 @@
+# s126-criterio-aboff.md — A/B full WP off-patch s123↔s124, stessa notte — PRE-registrato (az. rev. S-125 #1+#2)
+
+1. Oggetto: risolvere l'effetto della patch PhpStr (S-124) sul carico WP reale, oggi «≤~2% non risolvibile a N=2 cross-notte». A = stash `phpr-s123-p0b` (885d2c646ac7ff4c, == pin s120/s123, PRE-patch); B = stash `phpr-s124` (c5ba2573a23adf69, POST-patch). Binari verificati al byte in testa al run, `release/phpr` NON toccato (resta pin s125).
+2. Gambe: 4, INTERCALATE A1→B1→A2→B2, stessa notte, full suite + gruppo media, ricetta pair109 (DB reset + uploads via guardia PRIMA di ogni run, MIMALLOC_PURGE_DELAY=0, PHPR_REG_LOWER=1 ESPLICITO su entrambi i lati, server s125 costante e dichiarato). Niente oracle: il contrasto è phpr↔phpr sullo STESSO giudice.
+3. Misura: master = cpu (user+sys) da `/usr/bin/time -l` (convenzione pair); peak footprint registrato. **Gate di contesa per gamba** (az. rev. #1): involuntary ctx switches; gamba full >1,5× la mediana delle 4 ⇒ gamba NULLA. Se un lato perde entrambe le gambe ⇒ verdetto NULLO (rieseguire un'altra notte).
+4. Parità: failnames per NOME per gamba; le 2 gambe dello stesso binario devono avere fail-set IDENTICO (pena cifra NULLA su quel lato); differenze A↔B dichiarate a verbale.
+5. Verdetto (`s126-aboff-verdetto.out`, arbitro `s126-aboff.sh` committato QUI): Δ% = (mediana B − mediana A)/mediana A sul full cpu; atteso segno NEGATIVO (B più veloce) e |Δ| ≤ ~2% (modello S-125); l'effetto è RISOLTO solo se |Δ| > spread intra-lato massimo delle gambe valide; altrimenti si registra «non risolvibile anche same-night» e la voce si chiude SENZA ulteriori rerun (il costo ha un tetto).
+6. Run DETACHED via daemonizer, in coda alla catena p.2 (run pesanti sequenziali); nessun altro carico in macchina.
