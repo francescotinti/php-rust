@@ -76,5 +76,5 @@ uploads sotto guardia · conservati: phpr-s118/s119/s119-treno2/s120-re1/
 s121-st1/s122-lay1..3/s122-re2/s123-p0b/s124-str1/s124-str2/s124/**s125(==pin)/
 s125-cb2(==pin)/s125-lay1..3/s125-p0b/s125-cb1 (reperto forma-1)** · php-server-
 s119/s120/s124/**s125** · census target A/B(zv)/L(l1) — B/L eliminabili a bisogno disco
-· **Serena: LSP rotto post-upgrade 1.7, riavviare l'MCP prima del lavoro
-Rust** · nessuna run detached in volo.
+· Serena 1.7 OK (MCP riavviato a fine S-125, LSP verificato) · nessuna run
+detached in volo.
