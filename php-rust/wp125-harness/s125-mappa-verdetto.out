@@ -1,0 +1,19 @@
+== s125 mappa perf v1 (pin s125 002e6cc1 vs oracle 8.5.7; criterio s125-criterio-mappa.md) ==
+floor_user_med3 oracle=0.06 phpr=0.07 (phpunit --version, pavimento PARZIALE dichiarato)
+mappa-v1 (user CPU; pavimento PARZIALE phpunit --version: oracle 0.060 phpr 0.070)
+grade=VERDICT  # derivazione meccanica dai .time
+orm_leg1: oracle_user=5.12 (sys=0.55) phpr_user=43.80 (sys=1.60) ratio_raw=8.555 ratio_net=8.642
+orm_leg2: oracle_user=5.13 (sys=0.59) phpr_user=43.66 (sys=1.55) ratio_raw=8.511 ratio_net=8.598
+orm_ictx: oracle1=1030 phpr1=2738 oracle2=654 phpr2=2422  SEGNALATE(>1,5x med): ['phpr1']
+hk_leg1: oracle_user=2.26 (sys=1.13) phpr_user=9.70 (sys=2.21) ratio_raw=4.292 ratio_net=4.377
+hk_leg2: oracle_user=2.25 (sys=1.12) phpr_user=9.72 (sys=2.26) ratio_raw=4.320 ratio_net=4.406
+hk_ictx: oracle1=1149 phpr1=856 oracle2=1181 phpr2=971  contesa ok
+parita': orm phpr per NOME vs baseline 16 · hk phpr 0E/0F — rc=0 (0=tutte valide)
+orm oracle1: Tests: 3484, Assertions: 12003, Skipped: 59, Incomplete: 2.
+orm phpr1:   Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, Skipped: 59, Incomplete: 2.
+hk  oracle1: Tests: 1665, Assertions: 3850, PHPUnit Warnings: 3.
+hk  phpr1:   Tests: 1665, Assertions: 3850, PHPUnit Warnings: 2, Warnings: 5, Deprecations: 128.
+orm oracle2: Tests: 3484, Assertions: 12003, Skipped: 59, Incomplete: 2.
+orm phpr2:   Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, Skipped: 59, Incomplete: 2.
+hk  oracle2: Tests: 1665, Assertions: 3850, PHPUnit Warnings: 3.
+hk  phpr2:   Tests: 1665, Assertions: 3850, PHPUnit Warnings: 2, Warnings: 5, Deprecations: 128.

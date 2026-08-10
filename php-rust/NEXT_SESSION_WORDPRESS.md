@@ -9,24 +9,24 @@ census morso; smoke su giudice fam≥5 ⇒ rc=3 garantito, revert a mano).
 
 **arith 5,5 · prop 5,6 · calls 4,7 · str 4,2 (companion 0,63/0,15, phpr −7%) ·
 arr 3,2 · re 2,6 (≈ arrotondamento)**.
-S-125 = sessione di MISURA: full/media RIMISURATI (full 1,815–1,896, effetto
-PhpStr **≤~2% non risolvibile a N=2**; media 2,485–2,518 ↓ lieve; peak 1838–1959)
-· controllo ±zval STESSO head **6/6** (fusione = MISURA: prop zvclone B−A +2,00;
+S-125: full/media RIMISURATI (full 1,815–1,896, effetto PhpStr **≤~2% non
+risolvibile a N=2**; media 2,485–2,518; peak 1838–1959) · ±zval STESSO head **6/6** (fusione = MISURA: prop zvclone B−A +2,00;
 inferenza S-123 chiusa) · **banda layout v2-s125 POST-PATCH**: SL arith 0,44 ·
 prop 0,40 · calls 0,60 · str 0,47 · arr 1,31 · re 2,03 (N=1 notte — az. rev. #3:
 fino a replica, guardie con max(SL s123, SL s125)) · **cbargs: forma-1 refutata (−5, braccio +1284 B), FORMA-2 PROMOSSA**
 (pop diretti + corpo fuori dal dispatcher: run_loop −2072 B, A/B str +12,07
-5/5, gate tutti verdi) ⇒ **str alloc/iter 2,00 = PARITÀ oracle**.
+5/5, gate tutti verdi) ⇒ **str alloc/iter 2,00 = PARITÀ oracle** · **MAPPA
+perf v1 (PERF_MAP.md)**: **ORM 8,51–8,56× · hk 4,29–4,32×** vs WP 1,82–1,90
+⇒ il gap cresce con il lavoro-motore puro; ORM = bersaglio S-126.
 
 ## §S-126 — ordine proposto
 
-1. **PROFILO del full sul pin s124** (lezione S-125: le micro sature rendono
-   ≤~2%): attribuire il 1,82–1,85× per sottosistema, BILATERALE (mai un lato
-   solo), pavimenti per-binario, criterio+strumento PRE-registrati; xctrace
-   solo con guardie disco. Da qui si allocano le prossime leve.
-2. **A/B full off-patch s123↔s124 stessa notte** (az. rev. #2, deferito dal
-   criterio pair p.8) CON gate di contesa per gamba (az. rev. #1: involuntary
-   ctx-switch > 1,5× la mediana ⇒ gamba NULLA, si riesegue).
+1. **PROFILO guidato dalla MAPPA** (PERF_MAP.md): partire da **ORM 8,5×**
+   (indiziati mock-eval/compile, reflection, churn oggetti — istruttoria coi
+   criteri REGOLE §3, BILATERALE, pavimenti per-binario) e hk 4,3×; il full WP
+   (1,85×, diluito da I/O) passa in seconda linea. xctrace solo con guardie disco.
+2. **A/B full off-patch s123↔s124 stessa notte** (az. rev. #2) con gate di
+   contesa per gamba (az. rev. #1: ictx >1,5× mediana ⇒ gamba nulla).
 3. **re residuo +2,00** (host-path preg; valutare estensione cbargs2 a
    CallHostBuiltin/Ref dal profilo) · **prop C1 single-borrow** (SL prop
    0,40) — dopo il profilo. 4. PGO stadio-2 (criterio §6 s117).
@@ -37,7 +37,8 @@ sole-s125 · verdetti senza header di run abortiti.
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
 
-Profilo full bilaterale (p.1) · A/B off-patch s123↔s124 (p.2) · cbargs2 su
+Istruttoria ORM 8,5× (p.1) · mappa: DBAL/http-foundation/collections/Composer-
+OFFLINE/wp-cli · A/B off-patch s123↔s124 (p.2) · cbargs2 su
 CallHostBuiltin/Ref/Spread (per NOME) · re +2,00 host-path · prop C1 single-borrow · grado pieno server s125 · cura
 §3.18 · fame frontend (kpc/sudo) · §3.16/§3.17 warning · retro-A/B str
 s107b/s108/s109 · denti rinviati (OBS-8; fx20; direct-bind; drop-order;
