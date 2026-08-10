@@ -1,0 +1,12 @@
+promozione: build ricetta riproduce il candidato 834f5e01fbdb7ebc
+promozione batteria: rc=0 (da promo-out/batteria.rc) · 1746/0/2 · inventario: IDENTICO al pin s125 (zero test nuovi, come dichiarato)
+promozione: churn batteria neutralizzato (build ricetta → 834f5e01fbdb7ebc al byte)
+promozione: PIN phpr s127 = 834f5e01fbdb7ebc (smoke parità 2 modi OK, stash phpr-s127). I gate del protocollo (batteria/corpus/fixture/micro) restano dovuti.
+corpus-gate rc=1 (vedi promo-out/corpus/corpus-gate.out)
+promozione corpus-gate POST-EMENDA (1414): rc=0 — nomi==congelato, CONTENUTO==golden, off<->on zero
+promozione fixture chain: rc=0 (7/6 gate verdi)
+promozione micro pin s127: rapporto_arith=5.4  [derivata: companion 2.34/0.43] rapporto_prop=5.5  [derivata: companion 2.29/0.42] rapporto_calls=4.7  [derivata: companion 2.11/0.45] rapporto_str=4.2  [derivata: companion 0.63/0.15] rapporto_arr=3.3  [derivata: companion 0.96/0.29] rapporto_re=2.5  [derivata: companion 0.92/0.37] 
+promozione gate ORM: fail-set per NOME == baseline (16 nomi) · Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, Skipped: 59, Incomplete: 2.
+promozione gate http-kernel: 0E/0F · Tests: 1665, Assertions: 3850, PHPUnit Warnings: 2, Warnings: 5, Deprecations: 128.
+promozione server: PIN server s127 = 72f478550bf450b5 @ e01e605 (smoke OK, stashato, registrato). pin phpr INVARIATO (834f5e01fbdb7ebc)
+PROMOZIONE COMPLETA rc=0 (da promo-out/rc): pin s127 = 834f5e01fbdb7ebc
