@@ -937,6 +937,27 @@ nome+backref, no-match) sono BYTE-IDENTICHE nei 2 modi. Gate fail-closed:
 `wp121-harness/s121-fx-preg-gate.sh` (golden phpr pinnati per riga 2/11 —
 alla cura il gate diventa ROSSO e i golden si aggiornano nello stesso commit).
 
+### 3.19 🔴 `__halt_compiler` statement-level + phar stub: `composer.phar` NON eseguibile (S-126, mappa2 p.7)
+
+`phpr composer.phar …` muore a t=0 con `Parse error: unsupported construct
+(stmt:HaltCompiler)` (riga 30 dello stub). Capability phar onestamente assente
+(cfr. `stream_get_wrappers`); già noto come residuo tokenizer (bug54089), qui
+la conseguenza pratica: ogni tool distribuito come phar non parte. Workaround
+canonico: sorgente estratto (`Phar::extractTo` con l'oracle → `bin/composer`),
+che phpr esegue (verde da luglio). Fixture di fatto: gamba compoff run1 in
+`wp126-harness/mappa2-out/`.
+
+### 3.20 🟡 doctrine/dbal 4.4-dev: 10 fail per NOME phpr-only (S-126, mappa2)
+
+Fail-set stabile 2/2 gambe (0,25% di 3929; nomi integrali nel verdetto
+`wp126-harness/s126-mappa2-verdetto.out`): famiglia
+`Functional\PortabilityTest` (9: testCaseConversion*, testFetch*,
+testFullFetchMode, testGetDatabaseName — middleware Portability su sqlite,
+da bisecare) + `Schema\Name\Parser\GenericNameParserTest::testValidInput #11`
+(identificatori unicode `schéma."übermäßigkeit"…` — `ExpectedDot at position
+9`: sospetto offset byte-vs-char nel lexer dei nomi, pista preg/mb da
+verificare col manuale). Oracle 0 fail equivalenti.
+
 ## 4. Punti di forza da NON toccare (invarianti verificati byte-identici)
 
 Per evitare regressioni, questi comportamenti sono **già** byte-identici con
