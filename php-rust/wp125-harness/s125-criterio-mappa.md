@@ -1,0 +1,8 @@
+# s125-criterio-mappa.md — MAPPA perf multi-workload v1 (proposta utente), PRE-registrato
+
+1. Oggetto: REGISTRAZIONE (non leva) del rapporto phpr(pin s125 002e6cc1)/oracle su workload reali OLTRE WordPress. Rapporti PER workload, MAI aggregato unico (feedback one-sided-profile: l'aggregato è diluito).
+2. Gambe v1 (workspace pronti wp9): **doctrine/orm** (3484 test, sqlite in-memory) · **symfony http-kernel** (1665). N=2 per lato, dentro ogni gamba oracle PRIMA poi phpr (convenzione pair109), workspace ri-untarrato per gamba, watchdog anti-hang.
+3. Misura: `/usr/bin/time -l`; cifra canonica = **user CPU** (sys registrato); **pavimento per-binario** = med3 di `<motore> vendor/bin/phpunit --version` (pavimento PARZIALE: boot motore+phpunit, non l'autoload della suite — dichiarato; si pubblicano ratio RAW e ratio netto-pavimento). Involuntary ctx-switch per gamba a verbale (az. rev. S-125 #1); gamba >1,5× la mediana = SEGNALATA.
+4. Validità: la cifra phpr di una gamba vale SOLO se la parità regge — ORM fail-set per NOME == baseline committata (16 nomi) · hk 0E/0F dichiarati. Parità rotta ⇒ cifra NULLA su quella gamba. Dell'oracle si registra il summary.
+5. Arbitro (`s125-mappa-run.sh`, committato QUI): estrazioni meccaniche dai `.time`; cifre citabili solo da `s125-mappa-verdetto.out`; la tabella `PERF_MAP.md` nel repo fonde v1 + WP/micro di stanotte, con voci future nominate (DBAL · http-foundation · collections/lexer/inflector · Composer OFFLINE · wp-cli) da misurare in S-126.
+6. Nessuna predizione di magnitudine (prima misura di queste gambe): la mappa registra ciò che trova; ogni lettura causale resta «direzione+indizio», mai attribuzione firmata (REGOLE §4).
