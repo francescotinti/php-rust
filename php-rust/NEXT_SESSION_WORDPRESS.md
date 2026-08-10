@@ -30,10 +30,9 @@ perf v1 (PERF_MAP.md)**: **ORM 8,51–8,56× · hk 4,29–4,32×** vs WP 1,82–
 3. **re residuo +2,00** (host-path preg; valutare estensione cbargs2 a
    CallHostBuiltin/Ref dal profilo) · **prop C1 single-borrow** (SL prop
    0,40) — dopo il profilo. 4. PGO stadio-2 (criterio §6 s117).
-APPARATO (az. rev. S-125, vincolanti): pair-intercal COPI i ratios (mai mv di
-tracciati) · s125-ab.sh con modalità smoke R=2 e lettore early-stop interno ·
-gate di contesa nel cross-ratios · seconda notte di banda prima di guardie
-sole-s125 · verdetti senza header di run abortiti.
+APPARATO (az. rev. S-125, vincolanti): pair-intercal COPI i ratios (mai mv) ·
+smoke con lettore proprio (fatto: MINFAM) · gate di contesa nel cross-ratios ·
+seconda notte di banda prima di guardie sole-s125 · verdetti senza header abortiti.
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
 
