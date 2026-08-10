@@ -1068,6 +1068,96 @@ impl<'m> super::Vm<'m> {
         Ok(())
     }
 
+    /// Corpo condiviso di `Op::CallBuiltin` (L-HD2 forma-2, S-125): riceve gli
+    /// argomenti già sfilati dalla pila (array esatto per arità <=4, Vec oltre)
+    /// e restituisce il valore da pushare. Fuori da `run_loop` di proposito:
+    /// i rami freddi non pesano sul layout del dispatcher.
+    fn value_builtin_call(
+        &mut self,
+        top: usize,
+        f: crate::builtin::BuiltinFn,
+        name: &std::rc::Rc<[u8]>,
+        args: &mut [Zval],
+    ) -> Result<Zval, PhpError> {
+        // A whole-object exporter initializes a lazy argument first
+        // (PHP 8.4, init_trigger_var_export); the pure builtin then
+        // formats the realized instance.
+        if matches!(&name[..], b"var_export" | b"print_r") {
+            for a in &mut *args {
+                if self.is_lazy_value(a) {
+                    *a = self.realize_full(a)?;
+                }
+            }
+        }
+        // `var_dump` calls each debuggable object's `__debugInfo()`
+        // (PHP 8.4) *before* rendering — a lazy object initializes only
+        // if that method touches its state — and dumps the returned
+        // array under the object header. Results handed to the builtin
+        // via `var_dump_debug` (taken in `run_value_builtin`).
+        if name[..] == *b"var_dump" {
+            self.var_dump_debug = self.compute_debug_info(args)?;
+        }
+        // `count($obj)`/`sizeof($obj)` on a Countable dispatches its
+        // user `count()` method (step 56); the builtin only handles
+        // arrays. A non-Countable object still TypeErrors in the
+        // builtin below, matching PHP.
+        if args.len() == 1
+            && (name[..] == *b"count" || name[..] == *b"sizeof")
+        {
+            if let Some(obj) = self.as_countable(&args[0]) {
+                return self.call_method_sync(obj, b"count", Vec::new());
+            }
+        }
+        // A userland stream wrapper (stream_wrapper_register): a file
+        // op whose first argument is such a resource dispatches to the
+        // wrapper object's stream_* methods (VM re-entrant), never the
+        // pure value builtin. Only fires for UserStream resources, so
+        // ordinary file I/O is untouched.
+        if !args.is_empty() && is_user_stream_op(&name) {
+            if let Some(rc) = user_stream_rc(&args[0]) {
+                let line = self.cur_line(top);
+                self.flush_diags(line)?;
+                let result = self.user_stream_op(&name, rc, args)?;
+                self.flush_diags(line)?;
+                return Ok(result);
+            }
+        }
+        // `file_get_contents("scheme://…")` on a registered wrapper.
+        if !args.is_empty() && name[..] == *b"file_get_contents" {
+            if let Some(path) = user_wrapper_url(&args[0], &self.stream_wrappers) {
+                let line = self.cur_line(top);
+                self.flush_diags(line)?;
+                let result = self.user_wrapper_get_contents(&path)?;
+                self.flush_diags(line)?;
+                return Ok(result);
+            }
+        }
+        // Stat-family / image / exif builtins on a wrapper URL:
+        // url_stat or read-to-EOF through the wrapper object.
+        if !args.is_empty() && is_user_wrapper_path_op(&name) {
+            if let Some(path) = user_wrapper_url(&args[0], &self.stream_wrappers) {
+                let line = self.cur_line(top);
+                self.flush_diags(line)?;
+                let result = self.user_wrapper_path_op(&name, &path, args)?;
+                self.flush_diags(line)?;
+                return Ok(result);
+            }
+        }
+        // A builtin that unconditionally string-coerces its (string)
+        // arguments gets each Stringable object's `__toString()`
+        // precomputed, so the pure builtin honors it (handed over via
+        // `stringify_args`, taken in `run_value_builtin`). The `deep`
+        // family (`implode`/`str_replace`) also coerces array
+        // *elements*, so its precompute recurses into array arguments.
+        if value_builtin_string_coerces(&name) {
+            self.stringify_args = self.compute_stringify(args, false)?;
+        } else if value_builtin_string_coerces_deep(&name, args) {
+            self.stringify_args = self.compute_stringify(args, true)?;
+        }
+        let line = self.cur_line(top);
+        self.run_value_builtin(f, args, line)
+    }
+
     pub(super) fn run_loop(&mut self, baseline: usize) -> Result<RunExit, PhpError> {
         // WP-60 P2(a): park the VM for the census window-context renderer
         // (tag=ctx). Two relaxed stores, census builds only.
@@ -3329,89 +3419,43 @@ impl<'m> super::Vm<'m> {
                         // The compiler only emits CallBuiltin for value builtins.
                         _ => return Err(undefined_builtin(&name)),
                     };
-                    let mut args = self.pop_keys(top, *argc); // pops argc, source order
-                    // A whole-object exporter initializes a lazy argument first
-                    // (PHP 8.4, init_trigger_var_export); the pure builtin then
-                    // formats the realized instance.
-                    if matches!(&name[..], b"var_export" | b"print_r") {
-                        for a in &mut args {
-                            if self.is_lazy_value(a) {
-                                *a = self.realize_full(a)?;
-                            }
+                    // L-HD2 forma-2 (S-125): per arità <=4 gli argomenti passano
+                    // per POP DIRETTI in un array esatto sullo stack nativo —
+                    // niente split_off (coppia malloc+free per chiamata, canale
+                    // H-D), niente slot di riempimento, niente iteratore; il
+                    // contratto di visibilità è quello storico (gli argomenti
+                    // vivono fuori dal frame durante la chiamata). Oltre 4
+                    // resta il Vec. Corpo (rami freddi inclusi) in
+                    // `value_builtin_call`, fuori dal dispatcher.
+                    let result = match *argc {
+                        0 => self.value_builtin_call(top, f, name, &mut [])?,
+                        1 => {
+                            let a0 = self.frames[top].stack.pop().expect("builtin args");
+                            self.value_builtin_call(top, f, name, &mut [a0])?
                         }
-                    }
-                    // `var_dump` calls each debuggable object's `__debugInfo()`
-                    // (PHP 8.4) *before* rendering — a lazy object initializes only
-                    // if that method touches its state — and dumps the returned
-                    // array under the object header. Results handed to the builtin
-                    // via `var_dump_debug` (taken in `run_value_builtin`).
-                    if name[..] == *b"var_dump" {
-                        self.var_dump_debug = self.compute_debug_info(&args)?;
-                    }
-                    // `count($obj)`/`sizeof($obj)` on a Countable dispatches its
-                    // user `count()` method (step 56); the builtin only handles
-                    // arrays. A non-Countable object still TypeErrors in the
-                    // builtin below, matching PHP.
-                    if *argc == 1
-                        && (name[..] == *b"count" || name[..] == *b"sizeof")
-                    {
-                        if let Some(obj) = self.as_countable(&args[0]) {
-                            let n = self.call_method_sync(obj, b"count", Vec::new())?;
-                            self.frames[top].stack.push(n);
-                            continue;
+                        2 => {
+                            let a1 = self.frames[top].stack.pop().expect("builtin args");
+                            let a0 = self.frames[top].stack.pop().expect("builtin args");
+                            self.value_builtin_call(top, f, name, &mut [a0, a1])?
                         }
-                    }
-                    // A userland stream wrapper (stream_wrapper_register): a file
-                    // op whose first argument is such a resource dispatches to the
-                    // wrapper object's stream_* methods (VM re-entrant), never the
-                    // pure value builtin. Only fires for UserStream resources, so
-                    // ordinary file I/O is untouched.
-                    if *argc >= 1 && is_user_stream_op(&name) {
-                        if let Some(rc) = user_stream_rc(&args[0]) {
-                            let line = self.cur_line(top);
-                            self.flush_diags(line)?;
-                            let result = self.user_stream_op(&name, rc, &args)?;
-                            self.flush_diags(line)?;
-                            self.frames[top].stack.push(result);
-                            continue;
+                        3 => {
+                            let a2 = self.frames[top].stack.pop().expect("builtin args");
+                            let a1 = self.frames[top].stack.pop().expect("builtin args");
+                            let a0 = self.frames[top].stack.pop().expect("builtin args");
+                            self.value_builtin_call(top, f, name, &mut [a0, a1, a2])?
                         }
-                    }
-                    // `file_get_contents("scheme://…")` on a registered wrapper.
-                    if *argc >= 1 && name[..] == *b"file_get_contents" {
-                        if let Some(path) = user_wrapper_url(&args[0], &self.stream_wrappers) {
-                            let line = self.cur_line(top);
-                            self.flush_diags(line)?;
-                            let result = self.user_wrapper_get_contents(&path)?;
-                            self.flush_diags(line)?;
-                            self.frames[top].stack.push(result);
-                            continue;
+                        4 => {
+                            let a3 = self.frames[top].stack.pop().expect("builtin args");
+                            let a2 = self.frames[top].stack.pop().expect("builtin args");
+                            let a1 = self.frames[top].stack.pop().expect("builtin args");
+                            let a0 = self.frames[top].stack.pop().expect("builtin args");
+                            self.value_builtin_call(top, f, name, &mut [a0, a1, a2, a3])?
                         }
-                    }
-                    // Stat-family / image / exif builtins on a wrapper URL:
-                    // url_stat or read-to-EOF through the wrapper object.
-                    if *argc >= 1 && is_user_wrapper_path_op(&name) {
-                        if let Some(path) = user_wrapper_url(&args[0], &self.stream_wrappers) {
-                            let line = self.cur_line(top);
-                            self.flush_diags(line)?;
-                            let result = self.user_wrapper_path_op(&name, &path, &args)?;
-                            self.flush_diags(line)?;
-                            self.frames[top].stack.push(result);
-                            continue;
+                        _ => {
+                            let mut args = self.pop_keys(top, *argc);
+                            self.value_builtin_call(top, f, name, &mut args)?
                         }
-                    }
-                    // A builtin that unconditionally string-coerces its (string)
-                    // arguments gets each Stringable object's `__toString()`
-                    // precomputed, so the pure builtin honors it (handed over via
-                    // `stringify_args`, taken in `run_value_builtin`). The `deep`
-                    // family (`implode`/`str_replace`) also coerces array
-                    // *elements*, so its precompute recurses into array arguments.
-                    if value_builtin_string_coerces(&name) {
-                        self.stringify_args = self.compute_stringify(&args, false)?;
-                    } else if value_builtin_string_coerces_deep(&name, &args) {
-                        self.stringify_args = self.compute_stringify(&args, true)?;
-                    }
-                    let line = self.cur_line(top);
-                    let result = self.run_value_builtin(f, &args, line)?;
+                    };
                     self.frames[top].stack.push(result);
                 }
                 Op::CallBuiltinSpread { name, spreads } => {
