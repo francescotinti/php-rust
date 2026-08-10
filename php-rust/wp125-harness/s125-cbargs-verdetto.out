@@ -1,0 +1,18 @@
+== s125 admission cbargs: census L (leva) vs A (baseline stesso head) ==
+arith  alloc/it A=0.00 L=0.00 D=+0.00 | free/it A=0.00 L=0.00 D=+0.00 | pred=+0.00 tol=0.05 -> OK
+prop   alloc/it A=0.00 L=0.00 D=+0.00 | free/it A=0.00 L=0.00 D=+0.00 | pred=+0.00 tol=0.05 -> OK
+calls  alloc/it A=0.00 L=0.00 D=+0.00 | free/it A=0.00 L=0.00 D=+0.00 | pred=+0.00 tol=0.05 -> OK
+str    alloc/it A=3.00 L=2.00 D=-1.00 | free/it A=3.00 L=2.00 D=-1.00 | pred=-1.00 tol=0.05 -> OK
+arr    alloc/it A=2.05 L=2.05 D=+0.00 | free/it A=2.05 L=2.05 D=+0.00 | pred=+0.00 tol=0.10 -> OK
+re     alloc/it A=7.00 L=7.00 D=+0.00 | free/it A=7.00 L=7.00 D=+0.00 | pred=+0.00 tol=0.05 -> OK
+ADMISSION: PASS — str a PARITA' alloc con l'oracle (2,00)
+== disasm admission (criterio p.6) ==
+pin: run_loop_addr=0x0000000100266610 run_loop_size_B=286552
+pin: bl_totali=5906
+cb1: run_loop_addr=0x0000000100266610 run_loop_size_B=287836
+cb1: bl_totali=5924
+smoke R=2 (da metro-out/cb1smoke-runs.tsv, lettore del chain non eseguito per il difetto di forma sotto):
+  coppia1 [AB]: A=168.55 B=173.59 D=-5.04 · coppia2 [BA]: A=168.44 B=173.84 D=-5.41 — SEGNO OPPOSTO 2/2
+VERDETTO_S125_cbargs = REFUTAZIONE (smoke early-stop: entrambe le coppie a segno opposto, |D| ~5 ns/iter >> SL_str 0,47)
+LETTURA (S-105 forma-1 redux): il census co-primario firma il bersaglio CENTRATO (str alloc 3,00->2,00 = PARITA' oracle; free idem; altre 5 categorie 0,00) — la REGRESSIONE e' il costo della FORMA: init [Zval;4]+drain per-elemento+drop glue nel braccio (run_loop +1284 B, bl 5906->5924) costa piu' della coppia malloc+free (~10-15 ns attesi, netto -5). Il canale resta APERTO: serve una forma senza init/drain (stile direct-bind S-105 forma 2).
+DIFETTO DI APPARATO a verbale: lo smoke chiamava s125-ab.sh con R=2 ma il giudice interno pretende fam>=5 => rc=3 GARANTITO; il chain si e' fermato per quel rc (esito giusto, ramo sbagliato) e NON ha eseguito il revert automatico — revert eseguito a mano sotto, verificato al byte.
