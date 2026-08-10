@@ -1,0 +1,29 @@
+cross-ratios S-125 (full master cpu = user+sys; 4 gambe intercalate off1 on1 off2 on2; pin s124)
+grade=VERDICT  # derivazione meccanica dai .time
+full_oracle_off1=436.83 full_phpr_off1=828.20 media_oracle_off1=23.61 media_phpr_off1=58.42 peak_phpr_off1_MiB=1959.4
+full_oracle_off2=442.11 full_phpr_off2=817.94 media_oracle_off2=23.21 media_phpr_off2=56.68 peak_phpr_off2_MiB=1901.0
+full_oracle_on1=441.39 full_phpr_on1=802.25 media_oracle_on1=23.26 media_phpr_on1=56.94 peak_phpr_on1_MiB=1906.7
+full_oracle_on2=441.36 full_phpr_on2=802.21 media_oracle_on2=23.19 media_phpr_on2=57.03 peak_phpr_on2_MiB=1838.1
+matrice full phpr(riga)/oracle(colonna):
+off1/off1=1.896  off1/off2=1.873  off1/on1=1.876  off1/on2=1.876
+off2/off1=1.872  off2/off2=1.850  off2/on1=1.853  off2/on2=1.853
+on1/off1=1.837  on1/off2=1.815  on1/on1=1.818  on1/on2=1.818
+on2/off1=1.836  on2/off2=1.815  on2/on1=1.817  on2/on2=1.818
+oracle_full_N4: min=436.83 max=442.11 spread=1.2%
+phpr_full_N4: min=802.21 max=828.20 spread=3.2%
+full_intervallo=1.815-1.896 (min/max su tutte le 16 celle)
+media_off_ratio_N2=2.474/2.442
+full_peak_off_MiB_N2=1959.4/1901.0
+media_on_ratio_N2=2.448/2.459
+full_peak_on_MiB_N2=1906.7/1838.1
+
+per-gamba (pair109 ratios.out in pair-out/leg*/ratios.out; media=user-only canonico GAP_TREND):
+leg1-off: media_user ratio=2.518 full=1.896 peak_MiB=1959.39
+leg1-on:  media_user ratio=2.492 full=1.818 peak_MiB=1906.71
+leg2-off: media_user ratio=2.485 full=1.850 peak_MiB=1901.03
+leg2-on:  media_user ratio=2.505 full=1.818 peak_MiB=1838.13
+
+parita' per NOME: media 0 nomi x4; full diff == SOLO wp_is_stream data set #2 (divergenza nota, come S-119/S-120) su TUTTE e 4 le gambe; gate_void=0 x4; rc=0
+pin misurato: phpr s124 c5ba2573a23adf69 (identity per gamba nei leg*/pair109.identity; head=92d5e9b criterio committato PRIMA del run)
+LETTURA vs riferimento S-120 (1,810-1,889): full_intervallo 1,815-1,896 SOVRAPPOSTO — il salto micro str/arr/re NON muove il full oltre lo spread (magnitudine full della leva PhpStr: non distinguibile dal rumore N=2); media user-only 2,485-2,518 vs 2,511-2,534 (S-120) = lieve miglioramento; peak 1838-1959 nel range storico. NUOVO riferimento full = 1,815-1,896 (pin s124).
+NOTE a verbale: (a) riga rustc= vuota nelle identity (PATH daemon senza cargo) — solo identity, nessuna cifra toccata; (b) incidente processo: il mv dei ratios TRACCIATI di wp109 sporca l'albero a fine coppia -> PRE census-build morso (recupero: rerun census post-layout, incidente contato).
