@@ -19,20 +19,20 @@ cifre dai verdetti `.out`. Regola di lettura: rapporti PER workload, MAI aggrega
 | **doctrine/orm** (3484 test) | **8,51–8,56** | 2/lato | oracle con `memory_limit=-1` (§3.14); parità fail-set 16 nomi |
 | **composer install OFFLINE** | phpr **NULLA** (voce aperta) | 2/lato | phar/`__halt_compiler` assente; rimisura con composer 2.10 ESTRATTO abortita dallo smoke: **rc=255 silente** (§3.19 aggravata) — bisezione S-127 |
 
-## Micro-categorie (R=5, pin s125; tappa ≤3×)
+## Micro-categorie (R=5, pin s127; tappa ≤3×)
 
 | arith | prop | calls | str | arr | re |
 |---|---|---|---|---|---|
-| 5,5 | 5,6 | 4,7 | **4,2** | **3,2** | **2,6** ✅ |
+| 5,4 | 5,5 | 4,7 | **4,2** | **3,3** | **2,5** ✅ |
 
 Allocazioni/iter vs oracle: arith/prop/calls 0=0 · **str 2,00=2,00 (PARITÀ, S-125)** ·
 arr 2,05≈2,03 · re 7,00 vs 5,00 (+2, apertura per NOME).
 
-## Micro-ORM (istruttoria S-126, R=5 — `wp126-harness/s126-orm-micro{,2}-verdetto.out`)
+## Micro-ORM (S-126 istruttoria; S-127 post-leva L-OL1-F1 — verdetti s127-submicro + s127-ab)
 
 | evalcls (compile/classe via eval) | refl | objchurn | └ objalloc (new+ctor+drop) | └ objmap (insert map) |
 |---|---|---|---|---|
-| **316,9** (2,38 ms vs 7,5 µs) | **42,4** | **10,3** | **9,9** (1220 vs 123 ns; ~67% del churn) | 17,3 (~10%) |
+| **316,9** (2,38 ms vs 7,5 µs) | **42,4** | 10,2→**8,9** | 9,6→**7,7** (976,7 vs 126,7 ns; additività chiusa 3,4 ns) | 17,3 |
 
 Profilo ORM phpr (indizio unilaterale): churn visibile multi-% (Zval clone/drop, slot_of,
 gc_note/sweep/collect_cycles, insert/lookup, malloc/free); compile ≤~1% leaf, reflection <0,5%.
@@ -43,8 +43,10 @@ gc_note/sweep/collect_cycles, insert/lookup, malloc/free); compile ≤~1% leaf, 
   dbal 8,6 ≈ ORM 8,5 (cifre net, emenda S-127). WP e hf sono diluiti da I/O; le suite object-dense mostrano il soffitto.
 - **dbal 8,6 conferma ORM 8,5 senza mock-eval pesante** ⇒ il driver è il lavoro-oggetti, non il
   sentiero compile: coerente con l'istruttoria (compile ≤1% leaf nel run reale).
-- **LEVA NOMINATA: L-OL1 ciclo-di-vita oggetto** (objalloc 9,9× = 67% del churn) →
-  `wp126-harness/s126-leva-nominata.md` (criterio A/B pre-scritto; esecuzione S-127).
+- **L-OL1-F1 «stampo» SPEDITA (S-127, pin s127 834f5e01)**: template Props per classe,
+  default COW — objalloc −20,4% (7,7×), churn 8,9×; corpus bug69534 flippa VERDE
+  (stesso meccanismo). Prossimo segmento nominabile dal churn residuo: Δins 320 ns
+  (insert su array di proprietà) — vedi wp127-harness/s127-submicro-letture.md.
 - Aperture per NOME: `evalcls` **316,9×** (cliff compile-per-classe; serve strumento di densità
   prima di ogni leva) · `refl` **42,4×** · re +2,00 alloc/iter.
 
