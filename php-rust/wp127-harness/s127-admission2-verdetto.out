@@ -1,0 +1,9 @@
+== s127 admission2 FORMA F1: census leva vs baseline (pred -1,00; objmap 0,00) ==
+grade=VERDICT  # conteggi deterministici; per-iter = (cat-empty)/3e6
+objalloc   alloc/it base=9.00 leva=7.00 D=-2.00 | free/it base=9.00 leva=7.00 D=-2.00 | pred=-1.00 -> FUORI PREDIZIONE
+objallocni alloc/it base=7.00 leva=5.00 D=-2.00 | free/it base=7.00 leva=5.00 D=-2.00 | pred=-1.00 -> FUORI PREDIZIONE
+objdatains alloc/it base=13.00 leva=12.00 D=-1.00 | free/it base=13.00 leva=12.00 D=-1.00 | pred=-1.00 -> OK
+objdropdef alloc/it base=10.00 leva=8.00 D=-2.00 | free/it base=10.00 leva=8.00 D=-2.00 | pred=-1.00 -> FUORI PREDIZIONE
+objmap     alloc/it base=1.00 leva=1.00 D=+0.00 | free/it base=1.00 leva=1.00 D=+0.00 | pred=+0.00 -> OK
+objchurn   alloc/it base=14.00 leva=13.00 D=-1.00 | free/it base=14.00 leva=13.00 D=-1.00 | pred=-1.00 -> OK
+ADMISSION2: FUORI PREDIZIONE — diagnosi PRIMA dell'A/B
