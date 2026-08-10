@@ -9,7 +9,7 @@ export PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin
 H="$(cd -P "$(dirname -- "$0")" && pwd -P)"
 REPO="$H/.."
 M="$H/micro-orm"
-M97="$REPO/wp97-harness/micro"
+M97="$REPO/wp123-harness/scaled"
 A="/Volumes/Extreme Pro/Claude/phpr-old-target/release/phpr-s125"
 BB="${1:?BPATH}"; BEXP="${2:?BEXP8}"; TAG="${3:?TAG}"; R="${4:?R}"
 OUT="$H/ab-out"; mkdir -p "$OUT"
@@ -25,6 +25,7 @@ floor3() { local a b c; a=$(ucpu "$1" "$2"); b=$(ucpu "$1" "$2"); c=$(ucpu "$1" 
 
 # categoria -> dir,N (N emesso anche dal sorgente: ricontrollato sotto)
 src_of() { case "$1" in objalloc|objchurn|objmap) echo "$M";; *) echo "$M97";; esac; }
+n_fixed() { case "$1" in arith) echo 150000000;; prop) echo 90000000;; calls) echo 60000000;; str) echo 28000000;; arr) echo 30000000;; re) echo 12000000;; *) echo "";; esac; }
 CATS_JUDGE="objalloc"
 CATS_GUARD="objchurn objmap arith prop calls str arr re"
 
@@ -32,7 +33,8 @@ CATS_GUARD="objchurn objmap arith prop calls str arr re"
 echo "== s127-ab $TAG: A=002e6cc1(pin s125) B=$BEXP R=$R ordine ALTERNATO; giudice=objalloc; guardie solo-regressione =="
 for C in $CATS_JUDGE $CATS_GUARD; do
   D=$(src_of "$C")
-  N=$(awk 'match($0, /\$i<[0-9]+/) {print substr($0, RSTART+3, RLENGTH-3); exit}' "$D/$C.php")
+  N=$(n_fixed "$C")
+  [ -n "$N" ] || N=$(awk 'match($0, /\$i<[0-9]+/) {print substr($0, RSTART+3, RLENGTH-3); exit}' "$D/$C.php")
   "$A"  "$D/$C.php" > "$OUT/$TAG-$C-A.out" 2>&1
   "$BB" "$D/$C.php" > "$OUT/$TAG-$C-B.out" 2>&1
   if ! diff -q "$OUT/$TAG-$C-A.out" "$OUT/$TAG-$C-B.out" > /dev/null; then
