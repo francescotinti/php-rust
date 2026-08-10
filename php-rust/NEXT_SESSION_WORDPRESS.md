@@ -28,9 +28,13 @@ dichiarato) · compoff: bisezione CHIUSA (§3.19-bis/-ter, cure nominate).
    PRIMA della forma, criterio col protocollo di s126-leva-nominata emendato.
 4. Mappa residui per NOME: lexer/inflector/event-manager · wp-cli · PHPUnit-self ·
    strumento DENSITÀ evalcls · §3.20 dbal (Portability 9 + parser unicode).
-APPARATO: Serena si attiva PRIMA della prima misura (incidente S-127) · rifare
-cattura summary per-suite NEL verdetto mappa (az.rev. S-126 #3, resta aperta) ·
-seconda notte di banda (az.rev. S-125, guardie max(SL s123, SL s125) intanto).
+APPARATO: Serena PRIMA della prima misura (incidente S-127) · **az.rev. S-127
+#2-#5 VINCOLANTI** (revisione.md; #1 già eseguita b969f15): #2 il verdetto cita
+SOLO il file rc del proprio script · #3 verdetto avverso committato PRIMA
+dell'emenda che ne discende (commit distinti) · #4 bande objchurn/objmap:
+derivare o dichiarare «default 4 ns» · #5 claim provabili da git («criterio
+prima del CODICE») · cattura summary per-suite (az.rev. S-126 #3, aperta) ·
+seconda notte di banda (az.rev. S-125).
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
 
