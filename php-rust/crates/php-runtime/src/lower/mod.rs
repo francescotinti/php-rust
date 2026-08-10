@@ -2447,6 +2447,12 @@ pub(crate) fn resolve_constant(name: &[u8]) -> Option<ExprKind> {
         b"FILTER_VALIDATE_MAC" => ExprKind::Int(276),
         b"FILTER_CALLBACK" => ExprKind::Int(1024),
         b"FILTER_NULL_ON_FAILURE" => ExprKind::Int(134217728),
+        // ext/iconv (§3.19 catena composer, S-127): valori dell'oracle 8.5.7
+        // (PlatformRepository legge ICONV_VERSION per la versione dell'ext).
+        b"ICONV_VERSION" => ExprKind::Str(b"1.11".to_vec().into_boxed_slice()),
+        b"ICONV_IMPL" => ExprKind::Str(b"libiconv".to_vec().into_boxed_slice()),
+        b"ICONV_MIME_DECODE_STRICT" => ExprKind::Int(1),
+        b"ICONV_MIME_DECODE_CONTINUE_ON_ERROR" => ExprKind::Int(2),
         b"FILTER_REQUIRE_SCALAR" => ExprKind::Int(33554432),
         b"FILTER_REQUIRE_ARRAY" => ExprKind::Int(16777216),
         b"FILTER_FORCE_ARRAY" => ExprKind::Int(67108864),
@@ -2477,6 +2483,10 @@ pub(crate) fn resolve_constant(name: &[u8]) -> Option<ExprKind> {
         b"FILTER_FLAG_SCHEME_REQUIRED" => ExprKind::Int(65536),
         b"FILTER_FLAG_HOST_REQUIRED" => ExprKind::Int(131072),
         b"FILTER_FLAG_HOSTNAME" => ExprKind::Int(1048576),
+        // §3.19 catena composer (S-127): json-schema valida le email degli
+        // authors con questo flag (local-part unicode); il valore CONDIVIDE
+        // 1048576 con HOSTNAME (filtri diversi, spazi di flag diversi).
+        b"FILTER_FLAG_EMAIL_UNICODE" => ExprKind::Int(1048576),
         // FILTER_VALIDATE_IP flags (+ the aggregate GLOBAL_RANGE, 8.2).
         b"FILTER_FLAG_IPV4" => ExprKind::Int(1048576),
         b"FILTER_FLAG_IPV6" => ExprKind::Int(2097152),

@@ -1,0 +1,10 @@
+var-exec: dyn-exec
+cuf-exec: cuf-exec
+wrap-system: wrap-system
+ rc-val='wrap-system'
+
+Warning: exec(): Argument #2 ($output) must be passed by reference, value given in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp127-harness/probes/cure319-dyncall.php on line 14
+exec-out: r=warned out='untouched'
+dyn-passthru
+bool(true)
+bool(true)

@@ -24,13 +24,19 @@ impl<'m> Vm<'m> {
         // live stack trace (fatal_error_backtraces=On by default) — in the
         // html_errors form too, where the trace lines stay UN-bolded after
         // the `<br />` banner (oracle-pinned, s69 srv pins).
+        // §3.19-ter (S-127): `display_errors=stderr` displays — to the real
+        // stderr on the CLI SAPI (immediately, never through the ob stack);
+        // the web SAPI treats the value as plain On, like Zend's
+        // PHP_DISPLAY_ERRORS_STDERR outside CLI/CGI.
+        let de_stderr = self.ini.display_errors_stderr();
+        let to_stderr = de_stderr && !self.web;
         if let PhpError::FatalAt { msg, file, line, trace } = err {
             let file = String::from_utf8_lossy(file);
             if self.web && self.ini.get_bool(b"log_errors") {
                 self.error_log
                     .push(format!("PHP Fatal error:  {msg} in {file} on line {line}").into_bytes());
             }
-            if !self.ini.get_bool(b"display_errors") {
+            if !de_stderr && !self.ini.get_bool(b"display_errors") {
                 return;
             }
             let bt = self.ini.get_bool(b"fatal_error_backtraces") && !trace.is_empty();
@@ -45,7 +51,15 @@ impl<'m> Vm<'m> {
             } else {
                 format!("\nFatal error: {msg} in {file} on line {line}\n")
             };
-            self.rendered.extend_from_slice(block.as_bytes());
+            if to_stderr {
+                // Zend's stderr display drops the leading blank line of the
+                // stdout form (oracle-probed, cure319-stderr).
+                use std::io::Write;
+                let b = block.as_bytes();
+                let _ = std::io::stderr().write_all(b.strip_prefix(b"\n").unwrap_or(b));
+            } else {
+                self.rendered.extend_from_slice(block.as_bytes());
+            }
             return;
         }
         // The throwing-site file: taken from the throwable (its `file` prop was
@@ -119,7 +133,7 @@ impl<'m> Vm<'m> {
                 .into_bytes(),
             );
         }
-        if !self.ini.get_bool(b"display_errors") {
+        if !de_stderr && !self.ini.get_bool(b"display_errors") {
             return;
         }
         if self.ini.get_bool(b"html_errors") {
@@ -133,13 +147,29 @@ impl<'m> Vm<'m> {
             let block = format!(
                 "<br />\n<b>Fatal error</b>:  {head} in <b>{file}</b> on line <b>{line}</b><br />\n"
             );
-            self.rendered.extend_from_slice(block.as_bytes());
+            if to_stderr {
+                // Zend's stderr display drops the leading blank line of the
+                // stdout form (oracle-probed, cure319-stderr).
+                use std::io::Write;
+                let b = block.as_bytes();
+                let _ = std::io::stderr().write_all(b.strip_prefix(b"\n").unwrap_or(b));
+            } else {
+                self.rendered.extend_from_slice(block.as_bytes());
+            }
         } else {
             let block = format!(
                 "\nFatal error: {label}{joiner} {file}:{line}\nStack trace:\n{trace}\n  \
                  thrown in {file} on line {line}\n"
             );
-            self.rendered.extend_from_slice(block.as_bytes());
+            if to_stderr {
+                // Zend's stderr display drops the leading blank line of the
+                // stdout form (oracle-probed, cure319-stderr).
+                use std::io::Write;
+                let b = block.as_bytes();
+                let _ = std::io::stderr().write_all(b.strip_prefix(b"\n").unwrap_or(b));
+            } else {
+                self.rendered.extend_from_slice(block.as_bytes());
+            }
         }
     }
 

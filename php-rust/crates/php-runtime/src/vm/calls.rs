@@ -195,6 +195,21 @@ pub(super) fn ref_stringify_roots(cell: &Zval) -> Vec<Zval> {
     }
 }
 
+/// §3.19-bis (S-127): the by-ref-out PROCESS builtins that also resolve as
+/// dynamic string callables — `(canonical, by-ref positions (index, name))`.
+/// `popen` stays absent (correct-or-absent: no pipe resource yet).
+pub(super) fn host_builtin_out_dynamic(
+    name: &[u8],
+) -> Option<(&'static [u8], &'static [(usize, &'static [u8])])> {
+    const T: &[(&[u8], &[(usize, &[u8])])] = &[
+        (b"exec", &[(1, b"output"), (2, b"result_code")]),
+        (b"system", &[(1, b"result_code")]),
+        (b"passthru", &[(1, b"result_code")]),
+        (b"proc_open", &[(2, b"pipes")]),
+    ];
+    T.iter().find(|(n, _)| name.eq_ignore_ascii_case(n)).map(|&(n, p)| (n, p))
+}
+
 /// The fatal a call raises when a name isn't a callable VM builtin (defensive:
 /// the compiler already filters these, so this is a safety net).
 pub(super) fn undefined_builtin(name: &[u8]) -> PhpError {
@@ -1090,6 +1105,34 @@ impl<'m> Vm<'m> {
                 // callable (`array_map('current', $rows)`) passes the array
                 // by value. The pointer-MOVING family keeps the error below,
                 // exactly as PHP refuses a by-ref arg it cannot bind.
+                // §3.19-bis (S-127): the by-ref-out process family resolves
+                // as a DYNAMIC string callable too (Composer's
+                // Silencer::call('exec', "sudo -K …")). Arguments travel BY
+                // VALUE: a supplied by-ref position cannot bind, so it warns
+                // exactly like Zend's trampoline ("must be passed by
+                // reference, value given" — oracle-probed on
+                // call_user_func('proc_open', …), which RUNS and returns the
+                // resource with the pipes lost) and the call proceeds; the
+                // out-values are discarded.
+                if let Some((canon, refpos)) = host_builtin_out_dynamic(name) {
+                    let line = self.cur_line(self.frames.len() - 1);
+                    for &(i, pname) in refpos {
+                        if args.len() > i {
+                            let msg = format!(
+                                "{}(): Argument #{} (${}) must be passed by reference, value given",
+                                String::from_utf8_lossy(canon),
+                                i + 1,
+                                String::from_utf8_lossy(pname),
+                            );
+                            self.raise_diagnostic(2, &msg, line)?;
+                        }
+                    }
+                    let (result, _out, _out2) =
+                        self.dispatch_host_builtin_out(canon, args, 1)?;
+                    let top = self.frames.len() - 1;
+                    self.frames[top].stack.push(result);
+                    return Ok(());
+                }
                 if let Some(canon) = host_builtin_ref_first(name) {
                     if canon == b"current" || canon == b"key" {
                         let mut a0 = args

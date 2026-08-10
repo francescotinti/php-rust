@@ -744,6 +744,11 @@ const LOADED_EXTENSIONS: &[&[u8]] = &[
     // xml_parser_*, XMLWriter) are filled in test-driven — a use ahead of the
     // implementation surfaces as an honest "undefined function".
     b"xml", b"xmlwriter", b"tokenizer", b"phar",
+    // §3.19 catena composer (S-127): iconv() core c'è; il resto della
+    // superficie (iconv_strlen/substr/mime_*) si riempie test-driven, stesso
+    // patto della riga sopra — un uso anticipato è un onesto "undefined
+    // function". symfony/polyfill-mbstring esige ext-iconv nei METADATI.
+    b"iconv",
 ];
 
 /// The same list with PHP's canonical casing, as `get_loaded_extensions()`
@@ -751,7 +756,11 @@ const LOADED_EXTENSIONS: &[&[u8]] = &[
 const LOADED_EXTENSIONS_CASED: &[&[u8]] = &[
     b"Core", b"session", b"standard", b"SPL", b"pcre", b"json", b"mbstring", b"hash", b"date", b"openssl",
     b"zip", b"dom", b"libxml", b"Reflection", b"ctype", b"curl", b"pcntl", b"posix",
-    b"PDO", b"pdo_sqlite", b"sqlite3", b"bcmath", b"gmp",
+    // §3.19 catena composer (S-127): la lista cased aveva PERSO SimpleXML
+    // (drift vs la gemella lowercase) — extension_loaded('simplexml') diceva
+    // sì mentre get_loaded_extensions() non lo listava, e il PlatformRepository
+    // di Composer non materializzava ext-simplexml.
+    b"PDO", b"pdo_sqlite", b"sqlite3", b"SimpleXML", b"bcmath", b"gmp",
     b"gd", b"exif",
     b"fileinfo",
     b"intl",
@@ -760,6 +769,7 @@ const LOADED_EXTENSIONS_CASED: &[&[u8]] = &[
     b"mysqli", b"mysqlnd",
     b"filter",
     b"xml", b"xmlwriter", b"tokenizer", b"Phar",
+    b"iconv",
 ];
 
 

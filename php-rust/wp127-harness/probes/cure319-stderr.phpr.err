@@ -1,0 +1,5 @@
+Warning: warn-su-stderr in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp127-harness/probes/cure319-stderr.php on line 9
+Fatal error: Uncaught Error: fatal-su-stderr in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp127-harness/probes/cure319-stderr.php:11
+Stack trace:
+#0 {main}
+  thrown in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp127-harness/probes/cure319-stderr.php on line 11

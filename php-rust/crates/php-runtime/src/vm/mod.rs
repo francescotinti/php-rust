@@ -5648,7 +5648,11 @@ impl<'m> Vm<'m> {
             }
             // `display_errors=0` suppresses the visible render only (the
             // last_error record above and the log line still happened).
-            if !self.ini.get_bool(b"display_errors") {
+            // §3.19-ter (S-127): the "stderr" third state DISPLAYS — to the
+            // real stderr on CLI (immediately, outside the ob stack).
+            let de_stderr = self.ini.display_errors_stderr();
+            let to_stderr = de_stderr && !self.web;
+            if !de_stderr && !self.ini.get_bool(b"display_errors") {
                 return Ok(());
             }
             // error_prepend_string/error_append_string wrap every displayed
@@ -5685,7 +5689,12 @@ impl<'m> Vm<'m> {
             // change the id; an unbuffered one blocks it). Shutdown-time
             // renders stay raw: the buffers are already flushed and a handler
             // must not run this late.
-            if self.final_flush {
+            if to_stderr {
+                // Zend's stderr display drops the leading blank line
+                // (oracle-probed, cure319-stderr).
+                use std::io::Write;
+                let _ = std::io::stderr().write_all(block.strip_prefix(b"\n").unwrap_or(&block));
+            } else if self.final_flush {
                 self.rendered.extend_from_slice(&block);
             } else {
                 self.write_output(&block)?;

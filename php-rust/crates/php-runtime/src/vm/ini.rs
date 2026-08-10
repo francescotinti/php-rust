@@ -280,6 +280,15 @@ impl IniTable {
     pub(super) fn get_bool(&self, name: &[u8]) -> bool {
         self.get(name).is_some_and(ini_bool)
     }
+
+    /// §3.19-ter (S-127): `display_errors=stderr` (Zend's third state,
+    /// OnUpdateDisplayErrors) — displayed diagnostics go to the REAL stderr
+    /// on the CLI SAPI instead of the output stream. `ini_bool("stderr")` is
+    /// false, so the render chokepoints must consult this BEFORE the boolean
+    /// gate or the mode reads as Off and every fatal goes mute.
+    pub(super) fn display_errors_stderr(&self) -> bool {
+        self.get(b"display_errors").is_some_and(|v| v.eq_ignore_ascii_case(b"stderr"))
+    }
 }
 
 /// Bool-typed (OnUpdateBool) directives store their value NORMALIZED to
