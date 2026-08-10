@@ -1,0 +1,10 @@
+== s125 census ±zval STESSO head: A=33f7a2dc05e3ec7e (mem-census, fusa) B=f2178951aa556af2 (mem-census+zval-census, unfused)
+   head=3d04f29 crates@fb140d1 patch=census-clite(wp119) admission=7/7+7/7 pin=c5ba2573
+== s125 controllo ±zval STESSO head (fusa A vs unfused B; zvclone/it e alloc/it nettati) ==
+arith  A: zv=1.00 alloc=0.00 | B: zv=1.00 alloc=0.00 | B-A zv=+0.00 alloc=+0.00 | pred A=1.00 Dzv=+0.00 tol=0.05 -> OK
+prop   A: zv=3.00 alloc=0.00 | B: zv=5.00 alloc=0.00 | B-A zv=+2.00 alloc=+0.00 | pred A=3.00 Dzv=+2.00 tol=0.05 -> OK
+calls  A: zv=2.00 alloc=0.00 | B: zv=2.00 alloc=0.00 | B-A zv=+0.00 alloc=+0.00 | pred A=2.00 Dzv=+0.00 tol=0.05 -> OK
+str    A: zv=2.00 alloc=3.00 | B: zv=2.00 alloc=3.00 | B-A zv=+0.00 alloc=+0.00 | pred A=2.00 Dzv=+0.00 tol=0.05 -> OK
+arr    A: zv=5.08 alloc=2.05 | B: zv=5.08 alloc=2.05 | B-A zv=+0.00 alloc=+0.00 | pred A=5.08 Dzv=+0.00 tol=0.10 -> OK
+re     A: zv=3.00 alloc=7.00 | B: zv=3.00 alloc=7.00 | B-A zv=+0.00 alloc=+0.00 | pred A=3.00 Dzv=+0.00 tol=0.05 -> OK
+VERDETTO: fusione CONFERMATA come MISURA (prop double-hit = B-A zvclone +2,00; inferenza S-123 chiusa)

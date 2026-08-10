@@ -11,8 +11,7 @@
 
 ## Lettura (N=2 per modo, stessa notte, oracle N=4 spread 1,2%)
 - **Matrice 16 celle: full = 1,815–1,896** — intervallo SOVRAPPOSTO al riferimento
-  S-120 (1,810–1,889): **il salto micro di PhpStr (str +39% · arr +29% · re +50%)
-  NON muove il full oltre lo spread** (phpr N=4 spread 3,2%). Il gap full vive
+  S-120 (1,810–1,889): **l'effetto full di PhpStr è ≤~2%, NON RISOLVIBILE a N=2** (attesa dalle micro ~1–2% del full; phpr spread 3,2% gonfiato dalla gamba off1, inquinata: 249.003 involuntary ctx-switch vs 78–81k delle altre, rev. S-125). Il gap full vive
   altrove: da profilare sul workload WP, non sulle micro.
 - ON di nuovo CONCORDE e più stretto di OFF (802,2/802,2 vs 817,9/828,2).
 - media user-only 2,485–2,518 vs 2,511–2,534 (S-120): lieve discesa, direzione
