@@ -1,9 +1,9 @@
 # PERF_MAP — phpr vs PHP oracle 8.5.7, mappa multi-workload
 
-Aggiornata: **2026-08-10 (S-125)** · pin phpr **s125 002e6cc1** · metodo: user CPU,
+Aggiornata: **2026-08-10 (S-126)** · pin phpr **s125 002e6cc1** · metodo: user CPU,
 pavimenti per-binario, N per voce come indicato; criteri pre-registrati in
-`wp125-harness/s125-criterio-{pair,mappa}.md`; cifre dai verdetti `.out`.
-Regola di lettura: rapporti PER workload, MAI aggregato (un aggregato è diluito).
+`wp125-harness/s125-criterio-{pair,mappa}.md` e `wp126-harness/s126-criterio-{orm,mappa2}.md`;
+cifre dai verdetti `.out`. Regola di lettura: rapporti PER workload, MAI aggregato.
 
 ## Workload reali
 
@@ -11,8 +11,12 @@ Regola di lettura: rapporti PER workload, MAI aggregato (un aggregato è diluito
 |---|---|---|---|
 | **WordPress full-suite** | **1,815–1,896** | 4/lato (16 celle) | pin s124 pre-cbargs2 (effetto leva ≤~2%); parità per NOME; peak mem ~2,7× |
 | **WordPress gruppo media** | **2,485–2,518** | 4 | user-only |
+| **symfony http-foundation** (1854) | **2,55–2,57** | 2/lato | S-126; diff 17 nomi = famiglia `php -S`/session-server (0,92% ≤1% ⇒ canonica); sys alto (I/O) |
 | **symfony http-kernel** (1665 test) | **4,29–4,32** | 2/lato | parità 0E/0F; contesa ok |
-| **doctrine/orm** (3484 test) | **8,51–8,56** | 2/lato | oracle con `memory_limit=-1` (phpr non applica il limite, §3.14 — emenda criterio p.7); parità fail-set 16 nomi |
+| **doctrine/collections** (242) | **~6,2 raw** | 2/lato | S-126; INDICATIVA: oracle netto 0,09 s (denominatore sotto-scala); parità 0/0 |
+| **doctrine/dbal** (3929, sqlite) | **8,29–8,33** | 2/lato | S-126; fail-set stabile 10 nomi (0,25% ≤1% ⇒ canonica; Portability+parser unicode a catalogo); ictx phpr alto ma gambe concordi 0,4% |
+| **doctrine/orm** (3484 test) | **8,51–8,56** | 2/lato | oracle con `memory_limit=-1` (§3.14); parità fail-set 16 nomi |
+| **composer install OFFLINE** | run1 phpr **NULLA** | 2/lato | phar/`__halt_compiler` non supportato (capability assente); rimisura con composer ESTRATTO in coda (criterio mappa2 p.7) → `s126-compoff-verdetto.out` |
 
 ## Micro-categorie (R=5, pin s125; tappa ≤3×)
 
@@ -23,19 +27,27 @@ Regola di lettura: rapporti PER workload, MAI aggregato (un aggregato è diluito
 Allocazioni/iter vs oracle: arith/prop/calls 0=0 · **str 2,00=2,00 (PARITÀ, S-125)** ·
 arr 2,05≈2,03 · re 7,00 vs 5,00 (+2, apertura per NOME).
 
+## Micro-ORM (istruttoria S-126, R=5 — `wp126-harness/s126-orm-micro{,2}-verdetto.out`)
+
+| evalcls (compile/classe via eval) | refl | objchurn | └ objalloc (new+ctor+drop) | └ objmap (insert map) |
+|---|---|---|---|---|
+| **316,9** (2,38 ms vs 7,5 µs) | **42,4** | **10,3** | **9,9** (1220 vs 123 ns; ~67% del churn) | 17,3 (~10%) |
+
+Profilo ORM phpr (indizio unilaterale): churn visibile multi-% (Zval clone/drop, slot_of,
+gc_note/sweep/collect_cycles, insert/lookup, malloc/free); compile ≤~1% leaf, reflection <0,5%.
+
 ## Lettura (direzione+indizio, NON attribuzioni firmate — REGOLE §4)
 
-- Il gap **cresce con la densità di lavoro-motore puro**: WP 1,85 ≪ hk 4,3 ≪ ORM 8,5.
-  WP è il caso MIGLIORE perché diluito da I/O (MySQL, filesystem) ed estensioni
-  native; le suite pure-engine mostrano il soffitto vero.
-- **ORM 8,5× è il segnale più grosso della mappa**: indiziati (da istruire in
-  S-126) i mock PHPUnit generati via eval (sentiero di COMPILE per classe),
-  reflection, e il churn oggetti/UoW — coerente con micro prop 5,6 e calls 4,7.
-- hk 4,3× ≈ le micro str/calls: workload stringhe/closure senza I/O che diluisce.
-- ictx: gamba orm-phpr1 segnalata (contesa >1,5× mediana) ma le due gambe ORM
-  concordano allo 0,5% ⇒ cifra tenuta.
+- Il gap **cresce con la densità di lavoro-motore puro**: WP 1,85 ≪ hf 2,6 ≪ hk 4,3 ≪
+  dbal 8,3 ≈ ORM 8,5. WP e hf sono diluiti da I/O; le suite object-dense mostrano il soffitto.
+- **dbal 8,3 conferma ORM 8,5 senza mock-eval pesante** ⇒ il driver è il lavoro-oggetti, non il
+  sentiero compile: coerente con l'istruttoria (compile ≤1% leaf nel run reale).
+- **LEVA NOMINATA: L-OL1 ciclo-di-vita oggetto** (objalloc 9,9× = 67% del churn) →
+  `wp126-harness/s126-leva-nominata.md` (criterio A/B pre-scritto; esecuzione S-127).
+- Aperture per NOME: `evalcls` **316,9×** (cliff compile-per-classe; serve strumento di densità
+  prima di ogni leva) · `refl` **42,4×** · re +2,00 alloc/iter.
 
-## Voci da misurare (S-126, per NOME)
+## Voci da misurare (per NOME)
 
-DBAL (3769) · http-foundation · collections/lexer/inflector/event-manager ·
-Composer install OFFLINE (rete esclusa) · wp-cli · PHPUnit-self.
+compoff (in coda stanotte) · lexer/inflector/event-manager · wp-cli · PHPUnit-self ·
+DBAL: catalogare i 10 nomi Portability/parser-unicode in PHPR_DIVERGENCES.
