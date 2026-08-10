@@ -2,3 +2,5 @@ submicro-out/
 *-daemon.log
 *.done
 admission-out/
+promo-out/
+ab-out/
