@@ -1,0 +1,65 @@
+== s127-ab ab: A=002e6cc1(pin s125) B=834f5e01 R=5 ordine ALTERNATO; giudice=objalloc; guardie solo-regressione ==
+cat=objalloc N=3000000 floor_A=0.02 floor_B=0.03
+  coppia1 [AB]: rawA=3.70 rawB=2.97
+  coppia2 [BA]: rawA=3.70 rawB=2.94
+  coppia3 [AB]: rawA=3.71 rawB=2.96
+  coppia4 [BA]: rawA=3.65 rawB=2.96
+  coppia5 [AB]: rawA=3.66 rawB=2.95
+cat=objchurn N=3000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=5.46 rawB=4.79
+  coppia2 [BA]: rawA=5.42 rawB=4.73
+  coppia3 [AB]: rawA=5.44 rawB=4.73
+  coppia4 [BA]: rawA=5.46 rawB=4.77
+  coppia5 [AB]: rawA=5.43 rawB=4.75
+cat=objmap N=3000000 floor_A=0.02 floor_B=0.03
+  coppia1 [AB]: rawA=0.66 rawB=0.55
+  coppia2 [BA]: rawA=0.55 rawB=0.53
+  coppia3 [AB]: rawA=0.54 rawB=0.56
+  coppia4 [BA]: rawA=0.54 rawB=0.54
+  coppia5 [AB]: rawA=0.54 rawB=0.54
+cat=arith N=150000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=7.06 rawB=7.08
+  coppia2 [BA]: rawA=7.10 rawB=7.05
+  coppia3 [AB]: rawA=7.09 rawB=7.09
+  coppia4 [BA]: rawA=7.10 rawB=7.06
+  coppia5 [AB]: rawA=7.05 rawB=7.07
+cat=prop N=90000000 floor_A=0.02 floor_B=0.03
+  coppia1 [AB]: rawA=7.11 rawB=6.93
+  coppia2 [BA]: rawA=7.04 rawB=6.94
+  coppia3 [AB]: rawA=7.09 rawB=6.97
+  coppia4 [BA]: rawA=7.08 rawB=6.95
+  coppia5 [AB]: rawA=7.12 rawB=6.92
+cat=calls N=60000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=6.40 rawB=6.32
+  coppia2 [BA]: rawA=6.48 rawB=6.33
+  coppia3 [AB]: rawA=6.37 rawB=6.34
+  coppia4 [BA]: rawA=6.38 rawB=6.33
+  coppia5 [AB]: rawA=6.41 rawB=6.33
+cat=str N=28000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=4.41 rawB=4.42
+  coppia2 [BA]: rawA=4.42 rawB=4.53
+  coppia3 [AB]: rawA=4.43 rawB=4.42
+  coppia4 [BA]: rawA=4.39 rawB=4.54
+  coppia5 [AB]: rawA=4.42 rawB=4.46
+cat=arr N=30000000 floor_A=0.02 floor_B=0.03
+  coppia1 [AB]: rawA=4.54 rawB=4.53
+  coppia2 [BA]: rawA=4.53 rawB=4.55
+  coppia3 [AB]: rawA=4.52 rawB=4.48
+  coppia4 [BA]: rawA=4.47 rawB=4.57
+  coppia5 [AB]: rawA=4.49 rawB=4.54
+cat=re N=12000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=5.54 rawB=5.51
+  coppia2 [BA]: rawA=5.50 rawB=5.50
+  coppia3 [AB]: rawA=5.54 rawB=5.48
+  coppia4 [BA]: rawA=5.49 rawB=5.51
+  coppia5 [AB]: rawA=5.54 rawB=5.49
+GIUDICE objalloc: A=1226.7 B=976.7 ns/iter D=+250.0 soglia=10.0 (rumoreB=10.0) -> PROMOSSA
+guardia objchurn: A=1806.7 B=1576.7 D=+230.0 soglia_reg=-4.0 -> ok
+guardia objmap: A=173.3 B=170.0 D=+3.3 soglia_reg=-4.0 -> ok
+guardia arith: A=47.1 B=47.0 D=+0.1 soglia_reg=-4.0 -> ok
+guardia prop: A=78.6 B=76.8 D=+1.8 soglia_reg=-4.0 -> ok
+guardia calls: A=106.3 B=105.2 D=+1.2 soglia_reg=-4.0 -> ok
+guardia str: A=157.1 B=158.6 D=-1.4 soglia_reg=-4.0 -> ok
+guardia arr: A=150.0 B=150.3 D=-0.3 soglia_reg=-4.0 -> ok
+guardia re: A=460.0 B=456.7 D=+3.3 soglia_reg=-4.5 -> ok
+ESITO: PROMOSSA (giudice sopra soglia, guardie ok)
