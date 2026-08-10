@@ -1,0 +1,14 @@
+== s126 istruttoria ORM: micro bilaterali (criterio s126-criterio-orm.md) ==
+grade=VERDICT  # derivazione meccanica; R=5; user CPU netto-pavimento per-binario
+oracle=8.5.7 phpr=002e6cc12047ab9f
+pavimento_oracle_s=0.05 pavimento_phpr_s=0.03
+objalloc_N_iter=3000000
+objalloc_oracle_netto_s=0.37 objalloc_phpr_netto_s=3.66
+rapporto_objalloc=9.9  [companion 3.66/0.37]
+objalloc_ns_iter: oracle=123.3 phpr=1220.0 delta=+1096.7
+objalloc_spread_oracle_s=0.01 objalloc_spread_phpr_s=0.03
+objmap_N_iter=3000000
+objmap_oracle_netto_s=0.03 objmap_phpr_netto_s=0.52
+rapporto_objmap=17.3  [companion 0.52/0.03]
+objmap_ns_iter: oracle=10.0 phpr=173.3 delta=+163.3
+objmap_spread_oracle_s=0.00 objmap_spread_phpr_s=0.02
