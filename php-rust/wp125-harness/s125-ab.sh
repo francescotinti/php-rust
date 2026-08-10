@@ -72,11 +72,14 @@ for C in $CATS; do
   echo "cat=$C N=$N floor_A(med3)=$FA floor_B(med3)=$FB"
   for i in $(seq 1 "$RBASE"); do run_pair "$C" "$N" "$i" "$FA" "$FB"; done
   x=0
-  while [ "$(infam_count "$C")" -lt 5 ] && [ "$x" -lt "$EXTRA_MAX" ]; do
-    x=$((x+1)); echo "  [$C] coppie in famiglia $(infam_count "$C")/5 — coppia extra $x/$EXTRA_MAX"
+  # MINFAM (az. rev. S-125 #5): in modalità smoke (R<5) la famiglia richiesta
+  # è R; il giudice finale resta a 5 (default).
+  MF="${MINFAM:-5}"
+  while [ "$(infam_count "$C")" -lt "$MF" ] && [ "$x" -lt "$EXTRA_MAX" ]; do
+    x=$((x+1)); echo "  [$C] coppie in famiglia $(infam_count "$C")/$MF — coppia extra $x/$EXTRA_MAX"
     run_pair "$C" "$N" "$((RBASE+x))" "$FA" "$FB"
   done
-  if [ "$(infam_count "$C")" -lt 5 ]; then echo "  [$C] MISURA_INVALIDA"; INVALID="$INVALID $C"; fi
+  if [ "$(infam_count "$C")" -lt "$MF" ]; then echo "  [$C] MISURA_INVALIDA"; INVALID="$INVALID $C"; fi
 done
 
 if [ -n "$INVALID" ]; then
