@@ -1,0 +1,37 @@
+== s126 mappa perf v2 (pin s125 002e6cc1 vs oracle 8.5.7; criterio s126-criterio-mappa2.md) ==
+floor phpunit oracle=0.06 phpr=0.19 · composer oracle=0.08 phpr=0.02
+mappa2 (user CPU; pavimenti: phpunit o=0.060 p=0.190, composer o=0.080 p=0.020)
+grade=VERDICT  # derivazione meccanica dai .time
+dbal_leg1: oracle_user=1.17 (sys=0.24) phpr_user=9.70 (sys=0.51) ratio_raw=8.291 ratio_net=8.568
+dbal_leg2: oracle_user=1.17 (sys=0.24) phpr_user=9.74 (sys=0.53) ratio_raw=8.325 ratio_net=8.604
+dbal_ictx: oracle1=155 phpr1=2339 oracle2=348 phpr2=2172  SEGNALATE(>1,5x med): ['phpr1', 'phpr2']
+dbal_parita': phpr_failset_stabile=True |phpr_fail|=10 |diff_vs_oracle|=10
+dbal_diff_nomi: Doctrine\DBAL\Tests\Functional\PortabilityTest::testCaseConversion with data set "lower" (Doctrine\DBAL\ColumnCase Enum (LOWER), ['test_int', 'test_string', 'test_null']) | Doctrine\DBAL\Tests\Functional\PortabilityTest::testCaseConversion with data set "upper" (Doctrine\DBAL\ColumnCase Enum (UPPER), ['TEST_INT', 'TEST_STRING', 'TEST_NULL']) | Doctrine\DBAL\Tests\Functional\PortabilityTest::testCaseConversionColumnName with data set "lower" (Doctrine\DBAL\ColumnCase Enum (LOWER), ['test_int', 'test_string', 'test_null']) | Doctrine\DBAL\Tests\Functional\PortabilityTest::testCaseConversionColumnName with data set "upper" (Doctrine\DBAL\ColumnCase Enum (UPPER), ['TEST_INT', 'TEST_STRING', 'TEST_NULL']) | Doctrine\DBAL\Tests\Functional\PortabilityTest::testFetchAllNullColumn | Doctrine\DBAL\Tests\Functional\PortabilityTest::testFetchColumn with data set "int" ('Test_Int', [1, 2]) | Doctrine\DBAL\Tests\Functional\PortabilityTest::testFetchColumn with data set "string" ('Test_String', ['foo', 'foo']) | Doctrine\DBAL\Tests\Functional\PortabilityTest::testFullFetchMode | Doctrine\DBAL\Tests\Functional\PortabilityTest::testGetDatabaseName | Doctrine\DBAL\Tests\Schema\Name\Parser\GenericNameParserTest::testValidInput with data set #11 ('schéma."übermäßigkeit".`àçcên...ràctér', [Doctrine\DBAL\Schema\Name\Identifier Object (...), Doctrine\DBAL\Schema\Name\Identifier Object (...), Doctrine\DBAL\Schema\Name\Identifier Object (...), Doctrine\DBAL\Schema\Name\Identifier Object (...), Doctrine\DBAL\Schema\Name\Identifier Object (...)])
+hf_leg1: oracle_user=5.42 (sys=2.20) phpr_user=13.84 (sys=3.48) ratio_raw=2.554 ratio_net=2.547
+hf_leg2: oracle_user=5.43 (sys=2.22) phpr_user=13.93 (sys=3.47) ratio_raw=2.565 ratio_net=2.559
+hf_ictx: oracle1=3749 phpr1=3527 oracle2=3840 phpr2=3211  contesa ok
+hf_parita': phpr_failset_stabile=True |phpr_fail|=19 |diff_vs_oracle|=17
+hf_diff_nomi: /private/tmp/claude-501/-Volumes-Extreme-Pro-Claude-php-8-5-7/f2e0cbe7-3fa7-4e6c-92da-ce44f33f353a/scratchpad/hf-work/Tests/RequestFunctionalTest.php:65 | /private/tmp/claude-501/-Volumes-Extreme-Pro-Claude-php-8-5-7/f2e0cbe7-3fa7-4e6c-92da-ce44f33f353a/scratchpad/hf-work/Tests/RequestFunctionalTest.php:90 | Symfony\Component\HttpFoundation\Tests\RequestFunctionalTest::testFormUrlEncodedBodyParsing#0 with data ('PUT') | Symfony\Component\HttpFoundation\Tests\RequestFunctionalTest::testFormUrlEncodedBodyParsing#1 with data ('DELETE') | Symfony\Component\HttpFoundation\Tests\RequestFunctionalTest::testFormUrlEncodedBodyParsing#2 with data ('PATCH') | Symfony\Component\HttpFoundation\Tests\RequestFunctionalTest::testMultipartFormDataBodyParsing#0 with data ('PUT') | Symfony\Component\HttpFoundation\Tests\RequestFunctionalTest::testMultipartFormDataBodyParsing#1 with data ('DELETE') | Symfony\Component\HttpFoundation\Tests\RequestFunctionalTest::testMultipartFormDataBodyParsing#2 with data ('PATCH') | Symfony\Component\HttpFoundation\Tests\RequestTest::testIntlLocale | Symfony\Component\HttpFoundation\Tests\RequestTest::testSetTrustedHostsKeepsPatternsIndependent | Symfony\Component\HttpFoundation\Tests\RequestTest::testTrustedHostsAreNotAccumulated | Symfony\Component\HttpFoundation\Tests\ResponseFunctionalTest::testCookie#4 with data ('deleted_cookie') | Symfony\Component\HttpFoundation\Tests\Session\Storage\Handler\AbstractSessionHandlerTest::testSession#0 with data ('empty_destroys') | Symfony\Component\HttpFoundation\Tests\Session\Storage\Handler\AbstractSessionHandlerTest::testSession#3 with data ('regenerate') | Symfony\Component\HttpFoundation\Tests\Session\Storage\Handler\AbstractSessionHandlerTest::testSession#4 with data ('storage') | Symfony\Component\HttpFoundation\Tests\Session\Storage\Handler\AbstractSessionHandlerTest::testSession#6 with data ('with_cookie_and_session') | Symfony\Component\HttpFoundation\Tests\Session\Storage\Handler\AbstractSessionHandlerTest::testSession#8 with data ('with_samesite_and_migration')
+coll_leg1: oracle_user=0.15 (sys=0.10) phpr_user=0.93 (sys=0.14) ratio_raw=6.200 ratio_net=8.222
+coll_leg2: oracle_user=0.15 (sys=0.10) phpr_user=0.93 (sys=0.14) ratio_raw=6.200 ratio_net=8.222
+coll_ictx: oracle1=315 phpr1=176 oracle2=118 phpr2=144  SEGNALATE(>1,5x med): ['oracle1']
+coll_parita': phpr_failset_stabile=True |phpr_fail|=0 |diff_vs_oracle|=0
+compoff_leg1: oracle_user=1.68 (sys=2.59) phpr_user=0.02 (sys=0.01) ratio_raw=0.012 ratio_net=0.000
+compoff_leg2: oracle_user=1.74 (sys=2.77) phpr_user=0.02 (sys=0.01) ratio_raw=0.011 ratio_net=0.000
+compoff_ictx: oracle1=13375 phpr1=11 oracle2=9658 phpr2=24  SEGNALATE(>1,5x med): ['oracle1', 'oracle2']
+dbal oracle1: Tests: 3929, Assertions: 5706, Skipped: 594, Incomplete: 13.
+dbal phpr1:   
+dbal oracle2: Tests: 3929, Assertions: 5706, Skipped: 594, Incomplete: 13.
+dbal phpr2:   
+hf oracle1: 
+hf phpr1:   
+hf oracle2: 
+hf phpr2:   
+coll oracle1: 
+coll phpr1:   
+coll oracle2: 
+coll phpr2:   
+compoff oracle1: PHP CodeSniffer Config installed_paths set to ../../doctrine/coding-standard/lib,../../slevomat/coding-standard vendor_ok 
+compoff phpr1:   
+compoff oracle2: PHP CodeSniffer Config installed_paths set to ../../doctrine/coding-standard/lib,../../slevomat/coding-standard vendor_ok 
+compoff phpr2:   
