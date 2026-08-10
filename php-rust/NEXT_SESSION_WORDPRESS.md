@@ -70,7 +70,6 @@ giudice con fam-min > R · altre notti su PhpStr-full (voce CHIUSA S-126) ·
 **guardie su giudici diversi da quelli delle loro bande (morso S-127)** ·
 **misure con indicizzatore LSP in volo (incidente S-127)**.
 
----
 **Riscritto**: 2026-08-10 (chiusura S-127). Storia: `sessions/` · `gaps/GAP_TREND.md`.
 Pre-flight S-128: pin phpr **s127 834f5e01**fbdb7ebc (ricetta A′; la batteria
 rilinka ⇒ pretendere 834f5e01 al byte; stash phpr-s127) · server **s127
