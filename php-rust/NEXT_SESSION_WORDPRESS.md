@@ -1,48 +1,48 @@
 # NEXT_SESSION — phpr: OBIETTIVO PARITÀ (≥1×) con l'oracle; ≤3× = tappa (REGOLE §1)
-⏱ **FONDAMENTALI**: rif WP **full = 1,815–1,896** (S-125 @ s124; PhpStr-full
-CHIUSA in S-126: Δ −1,36% < spread 3,77% same-night ⇒ voce chiusa) · ultima
-leva SPEDITA **S-125 (cbargs2)** · **sessioni-senza-Δ = 1** (istruttoria/mappa
-per mandato, anomalia dichiarata; L-OL1 pronta) · incidenti: 1 (S-106) + 2
-processo + 2 apparato S-125 + **1 apparato S-126** (verdetto in-flight in bd74d79).
+⏱ **FONDAMENTALI**: rif WP **full = 1,815–1,896** (S-125 @ s124; DA RIFARE sul
+pin s127 — due leve accumulate da allora: cbargs2 + stampo) · ultima leva
+SPEDITA **S-127 (L-OL1-F1 stampo)** · **sessioni-senza-Δ = 0** · incidenti:
+1 (S-106) + 2 processo + 2 apparato S-125 + 1 S-126 + **1 apparato S-127**
+(LSP-indexing in finestra di misura; rerun pulito, verdetto contaminato a verbale).
 
-## Scoreboard (pin **s125 002e6cc1**2047ab9f INVARIATO; micro = S-125)
+## Scoreboard (pin **s127 834f5e01**fbdb7ebc; micro R=5 dal gate di promozione)
 
-**arith 5,5 · prop 5,6 · calls 4,7 · str 4,2 · arr 3,2 · re 2,6** · **MAPPA
-v2**: WP 1,85 ≪ hf 2,55–2,57 ≪ hk 4,3 ≪ **dbal 8,29–8,33 ≈ ORM 8,51–8,56**
-(gap ∝ lavoro-oggetti; profilo scagiona il compile) · **istruttoria ORM**:
-evalcls **316,9** · refl **42,4** · objchurn **10,3** = **objalloc 9,9 (1220
-vs 123,3 ns/oggetto, ~67%*)** + objmap 17,3 (*additività aperta, az. rev. #2)
-⇒ **LEVA L-OL1 «ciclo-di-vita oggetto»** (criterio: s126-leva-nominata.md).
+**arith 5,4 · prop 5,5 · calls 4,7 · str 4,2 · arr 3,3 · re 2,5** · **oggetti:
+objalloc 9,6→7,7 · churn 10,2→8,9** (leva stampo −20,4% sul giudice; additività
+churn CHIUSA 3,4 ns: residuo = Δins 320 ns insert-su-proprietà + Δdrop 90 ns) ·
+MAPPA (cifra canonica = NETTO da emenda S-127): WP 1,85 ≪ hf 2,55 ≪ hk 4,3 ≪
+dbal 8,6 ≈ ORM 8,5 · corpus congelato **1414** (bug69534 flippato VERDE
+dichiarato) · compoff: bisezione CHIUSA (§3.19-bis/-ter, cure nominate).
 
-## §S-127 — ordine proposto
+## §S-128 — ordine proposto
 
-1. **L-OL1 ESECUZIONE** (wp126-harness/s126-leva-nominata.md): admission
-   PRIMA della forma (census ±zval + conteggio malloc/free per `new` +
-   disasm sentiero new/ctor/drop, bl-count) → UNA forma dal meccanismo →
-   A/B objalloc R=5 (soglia max(4 ns, rumore, SL prop)) → gate pieni +
-   pin-phpr.sh. Guardie solo-regressione: 6 micro storiche + objchurn/objmap.
-2. **Bisezione compoff rc=255 SILENTE** (§3.19 aggravata): phpr muore senza
-   output su composer 2.10 anche ESTRATTO (a luglio girava) — morte silente
-   = fedeltà rotta; bisecare bootstrap (src/ progressivo) con oracle a fianco.
-3. Mappa residui per NOME: lexer/inflector/event-manager · wp-cli · PHPUnit-
-   self · strumento DENSITÀ evalcls prima di ogni leva compile · §3.20 dbal.
-4. Az. rev. S-125 residue: **seconda notte di banda** (fino ad allora guardie
-   max(SL s123, SL s125)) · s125-ab.sh smoke col lettore interno.
-APPARATO: copi-mai-mv · smoke col lettore proprio · verdetti senza header ·
-MAI `git add` di verdetti con run in volo · **az. rev. S-126 #1-5 VINCOLANTI
-(revisione.md): #1 regola di nomina PRIMA dell'ammissione L-OL1 · #2 sub-micro
-residuo 427 ns (additività) · #3 summary hf nel verdetto + nomi non-php-S ·
-#4 cifra canonica raw/netto nel criterio mappa · #5 contesa in ictx/s; tetto
-PhpStr citabile ≤3,8%.**
+1. **Rimisura full/media sul pin s127** (4 gambe intercalate, ricetta S-125
+   pair109; DB reset + uploads guard): due leve accumulate (cbargs2+stampo, la
+   seconda tocca ogni `new`) — il riferimento 1,815–1,896 è VECCHIO di 2 pin.
+2. **Cure §3.19-bis/-ter** (fedeltà, piccole e nominate): registrare exec/system/
+   passthru/proc_open nella tabella di dispatch dinamico (+popen; macchineria
+   Symfony-Process esiste) · display_errors=stderr come DESTINAZIONE. Fixture =
+   sonde del verdetto s127-compoff-bisez; POI rimisura compoff (voce mappa NULLA).
+3. **L-OL1 segmento 2 dal churn residuo**: Δins 320 ns/iter (insert su array di
+   proprietà: COW make_mut + KeyIndex) — istruttoria d'ammissione census+disasm
+   PRIMA della forma, criterio col protocollo di s126-leva-nominata emendato.
+4. Mappa residui per NOME: lexer/inflector/event-manager · wp-cli · PHPUnit-self ·
+   strumento DENSITÀ evalcls · §3.20 dbal (Portability 9 + parser unicode).
+APPARATO: Serena si attiva PRIMA della prima misura (incidente S-127) · rifare
+cattura summary per-suite NEL verdetto mappa (az.rev. S-126 #3, resta aperta) ·
+seconda notte di banda (az.rev. S-125, guardie max(SL s123, SL s125) intanto).
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
 
-L-OL1 (p.1) · compoff rc=255 (p.2) · evalcls 316,9× (dopo densità) · refl
-42,4× · re +2,00 host-path · prop C1 single-borrow · cbargs2 su CallHost
-Builtin/Ref/Spread · grado pieno server s125 · cure §3.18/§3.16/§3.17/§3.20 ·
-fame frontend (kpc/sudo) · denti rinviati (OBS-8; fx20; direct-bind; drop-
-order; hit/miss; checkout-staging) · $z++/$z-- undef non warna · §3.13 ·
-§3.12-i · §3.14 · get_gc · drift TODO.md · latin1-cliff.
+full/media su s127 (p.1) · §3.19-bis/-ter (p.2) · L-OL1 seg.2 Δins (p.3) ·
+evalcls 316,9× (dopo densità) · refl 42,4× · re +2,00 alloc/iter host-path ·
+prop C1 single-borrow · cbargs2 su CallHostBuiltin/Ref/Spread · grado pieno
+server · morte-immediata al sito di nota (forma B scartata S-127, apertura) ·
+micro-trim morte: guardia is_empty sulle 2 remove SipHash + has_destruct
+precompilato + FxHash sulle mappe per-id (s127-admission-lettura) · fame
+frontend (kpc/sudo) · denti rinviati (OBS-8; fx20; direct-bind; drop-order;
+hit/miss; checkout-staging) · $z++/$z-- undef non warna · §3.13 · §3.12-i ·
+§3.14 · get_gc · drift TODO.md · latin1-cliff.
 
 ## NON riproporre (i veti restano; dettaglio nei concili archiviati)
 
@@ -62,19 +62,19 @@ arbitro del layout · alloc-removal senza modello del costo SOSTITUTIVO ·
 probe senza riferimento vivo · classifiche da census che spegne la fusione ·
 ordine FISSO di misura: SEMPRE permutato o alternato · delta tra census di
 epoche diverse senza datare i raw · verdetti da script d'arbitrio non
-committati · «N/N esatte» con predizioni post-ridiagnosi · SSO inline (WP-38)
-· forma inline-array init+drain per gli args (S-125) · claim di ASSENZA
-oltre la risoluzione (rev. S-125) · smoke su giudice con fam-min > R ·
-**altre notti su PhpStr-full (voce CHIUSA da criterio, S-126)**.
+committati · SSO inline (WP-38) · forma inline-array init+drain per gli args
+(S-125) · claim di ASSENZA oltre la risoluzione (rev. S-125) · smoke su
+giudice con fam-min > R · altre notti su PhpStr-full (voce CHIUSA S-126) ·
+**guardie su giudici diversi da quelli delle loro bande (morso S-127)** ·
+**misure con indicizzatore LSP in volo (incidente S-127)**.
 
 ---
-**Riscritto**: 2026-08-10 (chiusura S-126). Storia: `sessions/` · `gaps/GAP_TREND.md`.
+**Riscritto**: 2026-08-10 (chiusura S-127). Storia: `sessions/` · `gaps/GAP_TREND.md`.
 
-Pre-flight S-127: pin phpr **s125 002e6cc1**2047ab9f INVARIATO (ricetta A′;
-la batteria rilinka ⇒ pretendere 002e6cc1 al byte) · server **s125 1d132dfa**
-GRADO MINIMO · MySQL wp8 con l'elenco · uploads sotto guardia (restore S-126
-verificato) · conservati: come S-125 (aboff ha usato s123-p0b/s124 in sola
-lettura) + gates NUOVI dbal/hf/coll/compoff-work.tgz (identity in wp9-harness/
-gates/s126-workspaces.identity) · nessuna run detached in volo (compoff2 rc=8
-abort dichiarato) · ordine lettura: REGOLE.md → QUI → s126-leva-nominata.md →
-PERF_MAP.md → sessions/WP_SESSION_126.md → wp126-harness/revisione.md.
+Pre-flight S-128: pin phpr **s127 834f5e01**fbdb7ebc (ricetta A′; la batteria
+rilinka ⇒ pretendere 834f5e01 al byte; stash phpr-s127) · server **s127
+72f47855** grado minimo · MySQL wp8 con l'elenco · uploads sotto guardia ·
+corpus congelato **1414** ×2 modi (emenda S-127 nei .fails LOCALI wp109) ·
+gates wp9 invariati (compoff-work.tgz SENZA composer-x: riestrarre il phar
+con l'oracle) · nessuna run detached in volo · ordine lettura: REGOLE.md →
+QUI → sessions/WP_SESSION_127.md → wp127-harness/revisione.md → PERF_MAP.md.
