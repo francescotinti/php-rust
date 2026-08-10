@@ -955,24 +955,50 @@ il rc=255 silente è la COMPOSIZIONE di §3.19-bis + §3.19-ter (sotto), innesca
 dalla guardia sudo di Composer (`Application.php:246`,
 `Silencer::call('exec', "sudo -K …")`). Nessun costrutto nuovo del 2.10 in causa.
 
-### 3.19-bis 🔴 builtin di processo NON risolvibili come callable dinamico (S-127)
+### 3.19-bis ✅ CURATA (S-127 ondata-2, pin s127b ccb63dca) — builtin di processo come callable dinamico
 
 `exec`/`system`/`passthru`/`proc_open` funzionano SOLO in chiamata diretta
 (intercetto compile-time); come stringa-callable (`$f='exec'; $f(...)`,
 `call_user_func`, parametro `callable`) → `Error: Call to undefined function`.
 `popen` assente anche in diretta. Aggravante di coerenza: `function_exists('exec')`
 risponde `true` mentre la chiamata dinamica fallisce. Oracle: tutte risolte
-(proc_open/popen falliscono solo per arità, cioè DOPO la risoluzione). Cura:
-registrare la famiglia nella tabella di dispatch dinamico (la macchineria
-processo esiste: proc_open→Symfony-Process) + popen.
+(proc_open/popen falliscono solo per arità, cioè DOPO la risoluzione).
+**CURA (commit 4c8e687)**: exec/system/passthru/proc_open registrate nel
+dispatch dinamico by-value, con warning oracle-fedele «must be passed by
+reference, value given» sugli out forniti (semantica call_user_func provata
+sull'oracle: proc_open ESEGUE e perde i pipes). Fixture bilaterali:
+`wp127-harness/probes/cure319-dyncall.*` IDENTICHE (out+err+rc). `popen`
+resta ASSENTE (correct-or-absent: manca la risorsa pipe).
 
-### 3.19-ter 🔴 `ini_set('display_errors','stderr')` trattato come OFF: Fatal MUTO (S-127)
+### 3.19-ter ✅ CURATA (S-127 ondata-2) — `display_errors=stderr` come destinazione
 
-Dopo `ini_set('display_errors','stderr')` phpr NON stampa più i Fatal per
-eccezioni non catturate (né stdout né stderr; rc=255 muto). Oracle: stampa su
-stderr (è una DESTINAZIONE, non un falsy). Senza quell'ini_set phpr stampa il
-Fatal correttamente. È il componente-SILENZIO del rc=255 di Composer (il cui
-prologo setta proprio `display_errors=stderr`).
+Era: dopo `ini_set('display_errors','stderr')` phpr non stampava più i Fatal
+(rc=255 muto) — il componente-SILENZIO del rc=255 di Composer. **CURA (commit
+4c8e687)**: "stderr" = terza modalità (ini.display_errors_stderr consultata
+PRIMA del gate booleano nei choke di render): fatal E warning sul VERO stderr
+in CLI, forma display SENZA riga vuota iniziale (oracle-fedele); web SAPI = On
+come Zend fuori CLI/CGI. Fixture: `probes/cure319-stderr.*` IDENTICHE.
+
+### 3.19-quater 🟡 canale log CLI (`log_errors=1`) → stderr ASSENTE (S-127)
+
+L'oracle CLI (log_errors=1, error_log vuoto) scrive ogni diagnostica ANCHE in
+forma-log «PHP Warning:  …» su stderr; phpr non emette il canale log su CLI.
+Pre-esistente, scoperta con le sonde cure319 (che lo spengono con log_errors=0
+per confrontare il canale display). Cura da valutare con cautela: tocca lo
+stderr di OGNI run CLI (harness che uniscono 2>&1).
+
+### 3.19-quinquies 🟡 composer install: post-install phpcs config-set fallisce (S-127)
+
+Con le cure ondata-2 `composer install` offline COMPLETA (rc=0, vendor_ok,
+gambe bilaterali): l'UNICA riga stdout divergente è il plugin
+phpcodesniffer-composer-installer — oracle «PHP CodeSniffer Config
+installed_paths set to …» vs phpr «Failed to set …». Pista: residuo famiglia
+processo nel plugin. stderr diverge solo per granularità progress-bar (timing).
+Nella stessa catena: FILTER_FLAG_EMAIL_UNICODE aggiunta (json-schema email) ·
+drift SimpleXML sanato nella lista cased di get_loaded_extensions ·
+**iconv DICHIARATA col patto test-driven** (iconv() core c'è;
+strlen/substr/mime_* mancanti = onesto undefined function) + costanti ICONV_*
+dall'oracle. La voce compoff della mappa è RIAPERTA (rimisura S-128).
 
 ### 3.20 🟡 doctrine/dbal 4.4-dev: 10 fail per NOME phpr-only (S-126, mappa2)
 
