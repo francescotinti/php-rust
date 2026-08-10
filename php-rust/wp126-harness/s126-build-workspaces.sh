@@ -14,13 +14,19 @@ LOG="$BUILD/build.log"; : > "$LOG"
 IDF="$GATES/s126-workspaces.identity"; : > "$IDF"
 fail(){ echo "BUILD FALLITA: $1" | tee -a "$LOG"; exit 1; }
 
-mk(){ # DIR URL BRANCH(o '-' per default)
-  local DIR="$1" URL="$2" BR="$3"
+mk(){ # DIR URL BRANCH(o '-' per default) [REQ_PHPUNIT]
+  local DIR="$1" URL="$2" BR="$3" REQ="${4:-}"
   rm -rf "$BUILD/$DIR"
   if [ "$BR" = "-" ]; then git clone --depth 1 "$URL" "$BUILD/$DIR" >> "$LOG" 2>&1 || fail "clone $DIR"
   else git clone --depth 1 -b "$BR" "$URL" "$BUILD/$DIR" >> "$LOG" 2>&1 || fail "clone $DIR ($BR)"; fi
   ( cd "$BUILD/$DIR" && COMPOSER_CACHE_DIR="$BUILD/$DIR/ccache" COMPOSER_HOME="$BUILD/$DIR/chome" \
       "$ORACLE" "$GATES/composer.phar" install --no-interaction --no-security-blocking --no-progress >> "$LOG" 2>&1 ) || fail "composer $DIR"
+  # i componenti Symfony non portano vendor/bin/phpunit (usano il bridge):
+  # require esplicito, dichiarato nell'identity
+  if [ "$REQ" = "phpunit" ]; then
+    ( cd "$BUILD/$DIR" && COMPOSER_CACHE_DIR="$BUILD/$DIR/ccache" COMPOSER_HOME="$BUILD/$DIR/chome" \
+        "$ORACLE" "$GATES/composer.phar" require --dev phpunit/phpunit --no-interaction --no-security-blocking --no-progress -W >> "$LOG" 2>&1 ) || fail "require phpunit $DIR"
+  fi
   # smoke bilaterale (esito ESATTO rc=0, feedback forge-silent-failure)
   ( cd "$BUILD/$DIR" && "$ORACLE" vendor/bin/phpunit --version > /dev/null 2>&1 ) || fail "smoke oracle $DIR"
   ( cd "$BUILD/$DIR" && "$PHPR" vendor/bin/phpunit --version > /dev/null 2>&1 ) || fail "smoke phpr $DIR"
@@ -31,7 +37,7 @@ mk(){ # DIR URL BRANCH(o '-' per default)
 }
 
 mk dbal-work https://github.com/doctrine/dbal.git -
-mk hf-work   https://github.com/symfony/http-foundation.git 7.4
+mk hf-work   https://github.com/symfony/http-foundation.git 7.4 phpunit
 mk coll-work https://github.com/doctrine/collections.git -
 
 # compoff-work: composer.json+lock del clone dbal, cache CALDA, senza vendor.
