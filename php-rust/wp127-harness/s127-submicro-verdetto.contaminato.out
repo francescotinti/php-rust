@@ -1,0 +1,35 @@
+== s127 sub-micro residuo 427 ns (criterio s127-criterio-submicro.md) ==
+grade=VERDICT  # derivazione meccanica; R=5; user CPU netto-pavimento per-binario
+oracle=8.5.7 phpr=002e6cc12047ab9f
+pavimento_oracle_s=0.05 pavimento_phpr_s=0.02
+objalloc_N_iter=3000000
+objalloc_oracle_netto_s=0.38 objalloc_phpr_netto_s=3.68
+rapporto_objalloc=9.7  [companion 3.68/0.38]
+objalloc_ns_iter: oracle=126.7 phpr=1226.7 delta=+1100.0
+objalloc_spread_oracle_s=0.02 objalloc_spread_phpr_s=0.21
+objchurn_N_iter=3000000
+objchurn_oracle_netto_s=0.55 objchurn_phpr_netto_s=6.36
+rapporto_objchurn=11.6  [companion 6.36/0.55]
+objchurn_ns_iter: oracle=183.3 phpr=2120.0 delta=+1936.7
+objchurn_spread_oracle_s=0.29 objchurn_spread_phpr_s=1.90
+objmap_N_iter=3000000
+objmap_oracle_netto_s=0.03 objmap_phpr_netto_s=0.52
+rapporto_objmap=17.3  [companion 0.52/0.03]
+objmap_ns_iter: oracle=10.0 phpr=173.3 delta=+163.3
+objmap_spread_oracle_s=0.00 objmap_spread_phpr_s=0.02
+objdropdef_N_iter=3000000
+objdropdef_oracle_netto_s=0.41 objdropdef_phpr_netto_s=4.50
+rapporto_objdropdef=11.0  [companion 4.50/0.41]
+objdropdef_ns_iter: oracle=136.7 phpr=1500.0 delta=+1363.3
+objdropdef_spread_oracle_s=0.00 objdropdef_spread_phpr_s=0.28
+objdatains_N_iter=3000000
+objdatains_oracle_netto_s=0.49 objdatains_phpr_netto_s=4.66
+rapporto_objdatains=9.5  [companion 4.66/0.49]
+objdatains_ns_iter: oracle=163.3 phpr=1553.3 delta=+1390.0
+objdatains_spread_oracle_s=0.01 objdatains_spread_phpr_s=0.07
+objallocni_N_iter=3000000
+objallocni_oracle_netto_s=0.28 objallocni_phpr_netto_s=3.48
+rapporto_objallocni=12.4  [companion 3.48/0.28]
+objallocni_ns_iter: oracle=93.3 phpr=1160.0 delta=+1066.7
+objallocni_spread_oracle_s=0.00 objallocni_spread_phpr_s=0.03
+# CONTAMINATO: LSP-indexing (Serena/rust-analyzer) in volo durante la misura — incidente apparato S-127, rerun pulito a seguire
