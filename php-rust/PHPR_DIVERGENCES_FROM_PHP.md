@@ -950,6 +950,29 @@ con probe; smoke rc=0 esatto dell'arbitro ha rifiutato la misura). Da
 bisecare in S-127: regressione phpr vs costrutti nuovi di composer 2.10
 (a luglio girava il composer di allora). Fixture di fatto: gambe compoff
 run1 + abort compoff2 in `wp126-harness/mappa2-out/`.
+**BISEZIONE CHIUSA (S-127)** → verdetto `wp127-harness/s127-compoff-bisez-verdetto.out`:
+il rc=255 silente è la COMPOSIZIONE di §3.19-bis + §3.19-ter (sotto), innescata
+dalla guardia sudo di Composer (`Application.php:246`,
+`Silencer::call('exec', "sudo -K …")`). Nessun costrutto nuovo del 2.10 in causa.
+
+### 3.19-bis 🔴 builtin di processo NON risolvibili come callable dinamico (S-127)
+
+`exec`/`system`/`passthru`/`proc_open` funzionano SOLO in chiamata diretta
+(intercetto compile-time); come stringa-callable (`$f='exec'; $f(...)`,
+`call_user_func`, parametro `callable`) → `Error: Call to undefined function`.
+`popen` assente anche in diretta. Aggravante di coerenza: `function_exists('exec')`
+risponde `true` mentre la chiamata dinamica fallisce. Oracle: tutte risolte
+(proc_open/popen falliscono solo per arità, cioè DOPO la risoluzione). Cura:
+registrare la famiglia nella tabella di dispatch dinamico (la macchineria
+processo esiste: proc_open→Symfony-Process) + popen.
+
+### 3.19-ter 🔴 `ini_set('display_errors','stderr')` trattato come OFF: Fatal MUTO (S-127)
+
+Dopo `ini_set('display_errors','stderr')` phpr NON stampa più i Fatal per
+eccezioni non catturate (né stdout né stderr; rc=255 muto). Oracle: stampa su
+stderr (è una DESTINAZIONE, non un falsy). Senza quell'ini_set phpr stampa il
+Fatal correttamente. È il componente-SILENZIO del rc=255 di Composer (il cui
+prologo setta proprio `display_errors=stderr`).
 
 ### 3.20 🟡 doctrine/dbal 4.4-dev: 10 fail per NOME phpr-only (S-126, mappa2)
 

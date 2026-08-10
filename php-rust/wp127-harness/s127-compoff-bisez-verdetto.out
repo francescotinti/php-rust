@@ -1,0 +1,17 @@
+== s127 bisezione compoff rc=255 silente (§3.19 aggravata; mandato p.2) ==
+riproduzione: composer-x/bin/composer --version -> oracle rc=0, phpr rc=255 ZERO output (pin s127 834f5e01)
+bisezione bootstrap: src/bootstrap.php OK · XdebugHandler OK · prologo intero PRE-RUN OK · morte DENTRO Application::run()
+catch Throwable: "Error: Call to undefined function exec() @ src/Composer/Util/Silencer.php:67"
+chiamante: Composer/Console/Application.php:246 — guardia sudo Silencer::call('exec', "sudo -K ...")
+sonda perimetro dispatch dinamico (phpr vs oracle):
+  exec:     dir=Y dyn=N   | oracle dir=Y dyn=Y
+  system:   dir=Y dyn=N   | oracle dir=Y dyn=Y
+  passthru: dir=Y dyn=N   | oracle dir=Y dyn=Y
+  proc_open:dir=Y dyn=N(undefined) | oracle dyn=RISOLTO (errore di arita', non di risoluzione)
+  popen:    dir=N dyn=N   | oracle dir=Y
+  shell_exec/escapeshellarg/escapeshellcmd/putenv/getenv: dir=Y dyn=Y (parita')
+  aggravante: function_exists('exec')==true MA chiamata dinamica fallisce (incoerenza interna)
+sonda silenzio: `@ini_set("display_errors","stderr"); throw new Error(...)`
+  -> phpr: NESSUN output (ne' stdout ne' stderr), rc=255 · oracle: Fatal su stderr
+  -> phpr tratta "stderr" come OFF invece che come DESTINAZIONE (senza ini_set il Fatal si stampa correttamente)
+VERDETTO: rc=255 silente = (dispatch dinamico mancante per 4 builtin processo + popen assente) COMPOSTO con (display_errors=stderr => fatal muto). Cura S-128 per NOME: §3.19-bis registrare exec/system/passthru/proc_open nella tabella dinamica + popen; §3.19-ter display_errors=stderr come destinazione. Sonde minime in questo verdetto; probes bin/probe*.php NON ricongelati nel tarball (workspace di lavoro ~/Claude/s127-sp).
