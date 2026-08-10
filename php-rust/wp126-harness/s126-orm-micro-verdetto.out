@@ -2,3 +2,18 @@
 grade=VERDICT  # derivazione meccanica; R=5; user CPU netto-pavimento per-binario
 oracle=8.5.7 phpr=002e6cc12047ab9f
 pavimento_oracle_s=0.05 pavimento_phpr_s=0.03
+evalcls_N_iter=20000
+evalcls_oracle_netto_s=0.15 evalcls_phpr_netto_s=47.53
+rapporto_evalcls=316.9  [companion 47.53/0.15]
+evalcls_ns_iter: oracle=7500.0 phpr=2376500.0 delta=+2369000.0
+evalcls_spread_oracle_s=0.00 evalcls_spread_phpr_s=0.88
+refl_N_iter=400000
+refl_oracle_netto_s=0.31 refl_phpr_netto_s=13.15
+rapporto_refl=42.4  [companion 13.15/0.31]
+refl_ns_iter: oracle=775.0 phpr=32875.0 delta=+32100.0
+refl_spread_oracle_s=0.01 refl_spread_phpr_s=0.05
+objchurn_N_iter=3000000
+objchurn_oracle_netto_s=0.53 objchurn_phpr_netto_s=5.46
+rapporto_objchurn=10.3  [companion 5.46/0.53]
+objchurn_ns_iter: oracle=176.7 phpr=1820.0 delta=+1643.3
+objchurn_spread_oracle_s=0.01 objchurn_spread_phpr_s=0.03

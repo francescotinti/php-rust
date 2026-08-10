@@ -11,7 +11,8 @@ VERD="$H/s126-orm-micro-verdetto.out"
 ORACLE="${ORACLE:-/opt/homebrew/opt/php/bin/php}"
 PHPR="${PHPR:-$HOME/Claude/php-rust-output/release/phpr}"
 R=5
-CATS="evalcls refl objchurn"
+CATS="${CATS:-evalcls refl objchurn}"
+VERD="${VERD_OVERRIDE:-$VERD}"
 rm -f "$OUT/micro.done"
 [ "$(shasum -a 256 "$PHPR" | cut -c1-16)" = "002e6cc12047ab9f" ] || { echo "rc=9 pin!=s125" > "$OUT/micro.done"; exit 9; }
 

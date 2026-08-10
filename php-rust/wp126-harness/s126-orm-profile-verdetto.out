@@ -1,0 +1,70 @@
+== s126 profilo ORM phpr (INDIZIO unilaterale — criterio p.5; MAI cifra) ==
+grade=INDIZIO  # sample perturba: nessun tempo citabile da questo run
+phpr=002e6cc12047ab9f run_rc=2
+summary_run=Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, Skipped: 59, Incomplete: 2.
+--- sample1 top-of-stack (prime 30 righe) ---
+Sort by top of stack, same collapsed (when >= 5):
+        php_runtime::vm::run::_$LT$impl$u20$php_runtime..vm..Vm$GT$::run_loop::h020169540842788d  (in phpr)        3238
+        _platform_memmove  (in libsystem_platform.dylib)        1060
+        _platform_memcmp  (in libsystem_platform.dylib)        649
+        _$LT$php_types..zval..Zval$u20$as$u20$core..clone..Clone$GT$::clone::hb60d50ad8d817bfb  (in phpr)        642
+        core::ptr::drop_in_place$LT$php_types..zval..Zval$GT$::h62447a0982454671  (in phpr)        615
+        php_types::object::PropsLayout::slot_of::h61d55ad1df0d550c  (in phpr)        547
+        php_runtime::vm::Vm::gc_sweep_impl::hcc7258844e8409b7  (in phpr)        443
+        php_runtime::vm::Vm::collect_cycles_inner::hc1eedb5e734d65f2  (in phpr)        431
+        _$LT$core..hash..sip..Hasher$LT$S$GT$$u20$as$u20$core..hash..Hasher$GT$::write::h05b7b71e25010fa6  (in phpr)        350
+        hashbrown::map::HashMap$LT$K$C$V$C$S$C$A$GT$::get::h72f425d0490ab6c0  (in phpr)        306
+        mi_malloc_aligned  (in phpr)        292
+        mi_free  (in phpr)        288
+        php_runtime::vm::Vm::gc_note_slow::hef1d37aafca2e5c3  (in phpr)        268
+        php_runtime::vm::oop::resolve_method_runtime::h8e6d2c6baecfb715  (in phpr)        237
+        php_runtime::vm::calls::_$LT$impl$u20$php_runtime..vm..Vm$GT$::enter_callee::h62bfc3fd51c942ee  (in phpr)        208
+        __open_nocancel  (in libsystem_kernel.dylib)        191
+        __getattrlist  (in libsystem_kernel.dylib)        186
+        php_runtime::vm::Frame::with_buffers::h32bc031cac648a8a  (in phpr)        174
+        php_types::array::KeyIndex::lookup::h88b75ea06acd7778  (in phpr)        171
+        OUTLINED_FUNCTION_32  (in phpr)        166
+        php_runtime::vm::oop::resolve_prop_access::h4e2c08e5527f51a0  (in phpr)        163
+        OUTLINED_FUNCTION_41  (in phpr)        149
+        php_types::array::PhpArray::insert::hf143968ee0d7c015  (in phpr)        141
+        php_runtime::vm::Vm::recycle_frame::hb8c57ff66d3172fa  (in phpr)        134
+        DYLD-STUB$$memcmp  (in phpr)        114
+        php_runtime::vm::Vm::gc_note_frame::hb3c21a3539a4d40e  (in phpr)        113
+        php_runtime::vm::Vm::coerce_or_check_hint::h588a51bd98262abc  (in phpr)        107
+        php_runtime::vm::Vm::dispatch_instance_call::h7b3e7305732cd04a  (in phpr)        106
+        core::ptr::drop_in_place$LT$php_runtime..vm..Frame$GT$::h4b37a43402cf3450  (in phpr)        105
+        core::ptr::drop_in_place$LT$php_types..zval..Zval$GT$::h250ac38a44e964ef  (in phpr)        104
+        (.874)  (in phpr)        102
+--- sample2 top-of-stack (prime 30 righe) ---
+Sort by top of stack, same collapsed (when >= 5):
+        php_runtime::vm::run::_$LT$impl$u20$php_runtime..vm..Vm$GT$::run_loop::h020169540842788d  (in phpr)        2040
+        _platform_memmove  (in libsystem_platform.dylib)        1272
+        _platform_memcmp  (in libsystem_platform.dylib)        708
+        _$LT$php_types..zval..Zval$u20$as$u20$core..clone..Clone$GT$::clone::hb60d50ad8d817bfb  (in phpr)        420
+        mi_malloc_aligned  (in phpr)        416
+        core::ptr::drop_in_place$LT$php_types..zval..Zval$GT$::h62447a0982454671  (in phpr)        405
+        php_types::array::KeyIndex::lookup::h88b75ea06acd7778  (in phpr)        391
+        mi_free  (in phpr)        384
+        php_runtime::vm::Vm::collect_cycles_inner::hc1eedb5e734d65f2  (in phpr)        364
+        php_runtime::vm::Vm::gc_note_slow::hef1d37aafca2e5c3  (in phpr)        362
+        php_types::array::PhpArray::insert::hf143968ee0d7c015  (in phpr)        288
+        php_types::object::PropsLayout::slot_of::h61d55ad1df0d550c  (in phpr)        262
+        OUTLINED_FUNCTION_32  (in phpr)        254
+        core::ptr::drop_in_place$LT$php_types..zval..Zval$GT$::h250ac38a44e964ef  (in phpr)        225
+        php_runtime::vm::Vm::gc_sweep_impl::hcc7258844e8409b7  (in phpr)        220
+        OUTLINED_FUNCTION_41  (in phpr)        219
+        sqlite3VdbeExec  (in phpr)        197
+        _$LT$core..hash..sip..Hasher$LT$S$GT$$u20$as$u20$core..hash..Hasher$GT$::write::h05b7b71e25010fa6  (in phpr)        176
+        core::ptr::drop_in_place$LT$php_types..array..Repr$GT$::h3e56134878dab45e  (in phpr)        171
+        php_runtime::vm::oop::resolve_method_runtime::h8e6d2c6baecfb715  (in phpr)        169
+        php_runtime::vm::host::_$LT$impl$u20$php_runtime..vm..Vm$GT$::ho_debug_backtrace::h464de8909403051b  (in phpr)        168
+        php_types::zstr::PhpStr::new::h81e029d9a3ea2076  (in phpr)        167
+        php_types::array::KeyIndex::insert_new::he756457a4666c0bd  (in phpr)        145
+        php_types::array::Key::from_bytes::h23ff29e1c5235877  (in phpr)        139
+        php_runtime::vm::calls::_$LT$impl$u20$php_runtime..vm..Vm$GT$::enter_callee::h62bfc3fd51c942ee  (in phpr)        137
+        hashbrown::map::HashMap$LT$K$C$V$C$S$C$A$GT$::get::h72f425d0490ab6c0  (in phpr)        133
+        DYLD-STUB$$memcpy  (in phpr)        132
+        __open_nocancel  (in libsystem_kernel.dylib)        131
+        alloc::collections::btree::map::BTreeMap$LT$K$C$V$C$A$GT$::insert::h51095accc5d50457  (in phpr)        131
+        php_runtime::vm::Vm::collect_backtrace::h32a7e36f84e0238f  (in phpr)        123
+        btreeParseCellPtr  (in phpr)        122
