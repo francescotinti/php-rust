@@ -10,3 +10,4 @@ promozione gate ORM: fail-set per NOME == baseline (16 nomi) · Tests: 3484, Ass
 promozione gate http-kernel: 0E/0F · Tests: 1665, Assertions: 3850, PHPUnit Warnings: 2, Warnings: 5, Deprecations: 128.
 promozione server: PIN server s127 = 72f478550bf450b5 @ e01e605 (smoke OK, stashato, registrato). pin phpr INVARIATO (834f5e01fbdb7ebc)
 PROMOZIONE COMPLETA rc=0 (da promo-out/rc): pin s127 = 834f5e01fbdb7ebc
+CORREZIONE ATTESTAZIONE (rev. S-127, lente processo): l'rc autoritativo della catena-2 e' promo-out/rc2 = 0; promo-out/rc = 1 appartiene alla CATENA-1 morta al corpus (pre-emenda bug69534). La riga precedente cita la fonte SBAGLIATA (rc invece di rc2): errata la provenienza, non l'esito — batteria.rc=0 · corpus2-rc=0 · fixture-chain.rc=0 · orm.rc/hk 0E-0F · pin.rc=0 · pin-server.rc=0.

@@ -70,5 +70,5 @@ src_rc=$?; echo "$src_rc" > "$OUT/pin-server.rc"
 note "promozione server: $(grep '^PIN server' "$OUT/pin-server.log" | tail -1)"
 
 echo 0 > "$OUT/rc2"
-note "PROMOZIONE COMPLETA rc=0 (da promo-out/rc): pin s127 = $H2"
+note "PROMOZIONE COMPLETA rc=0 (da promo-out/rc2 — il file rc che QUESTO script scrive): pin s127 = $H2"
 exit 0
