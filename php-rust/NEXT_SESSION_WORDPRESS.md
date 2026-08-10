@@ -1,10 +1,9 @@
 # NEXT_SESSION — phpr: OBIETTIVO PARITÀ (≥1×) con l'oracle; ≤3× = tappa (REGOLE §1)
 ⏱ **FONDAMENTALI**: rif WP **full = 1,815–1,896** (S-125 @ s124; PhpStr-full
 CHIUSA in S-126: Δ −1,36% < spread 3,77% same-night ⇒ voce chiusa) · ultima
-leva SPEDITA **S-125 (cbargs2)** · **sessioni-senza-Δ = 1** (S-126 =
-istruttoria/mappa per mandato, anomalia dichiarata; L-OL1 pronta) · incidenti:
-1 (S-106) + 2 processo + 2 apparato S-125 + **1 apparato S-126** (verdetto in
-scrittura dentro commit intermedio bd74d79; ricommittato a run concluso).
+leva SPEDITA **S-125 (cbargs2)** · **sessioni-senza-Δ = 1** (istruttoria/mappa
+per mandato, anomalia dichiarata; L-OL1 pronta) · incidenti: 1 (S-106) + 2
+processo + 2 apparato S-125 + **1 apparato S-126** (verdetto in-flight in bd74d79).
 
 ## Scoreboard (pin **s125 002e6cc1**2047ab9f INVARIATO; micro = S-125)
 
