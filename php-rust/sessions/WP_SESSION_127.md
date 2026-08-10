@@ -11,7 +11,6 @@ divergenze nominate.
 (vs s125; ±0,1 = rumore) · rif WP full = 1,815–1,896 (S-125 @ s124) ·
 **leve perf spedite: 1 (L-OL1-F1)** · incidenti: +1 apparato (LSP in finestra
 di misura, dichiarato, rerun pulito). 2026-08-10 · Fable 5.
-
 ## Esiti secchi
 1·az.rev.#1+#2: regola di nomina ri-committata PRIMA dell'ammissione (c71620b);
   **additività churn CHIUSA a 3,4 ns bilaterale** (Δins 320/36,6 · Δdrop 90/0 —
@@ -32,7 +31,6 @@ di misura, dichiarato, rerun pulito). 2026-08-10 · Fable 5.
   + §3.19-ter `display_errors=stderr` come OFF ⇒ Fatal MUTO. Cure S-128 a catalogo.
 7·az.rev.#3-#5: cifra canonica mappa = NETTO (dbal 8,57-8,60 · coll 8,22 ind.) ·
   gate contesa in ictx/s · correzione a verbale hf (≥3 nomi unit puri).
-
 ## ⭐ Lezioni (max 3)
 - ⭐⭐ Un «fuori predizione» può essere il meccanismo che si rivela: se UN modello
   spiega TUTTE le celle (−2+w su 6/6), la diagnosi è una scoperta, non un fallimento.
