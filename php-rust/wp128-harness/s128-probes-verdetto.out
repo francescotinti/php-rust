@@ -1,0 +1,9 @@
+== s128 probes census: passi dell'insert su proprieta' (REGISTRAZIONE, R=2 identici) ==
+grade=VERDICT  # conteggi deterministici; per-iter=(sonda-empty)/3e6; rc autoritativo = admission-out/probes.rc
+# riferimenti dallo stesso census: objalloc=7.00, objdatains=12.00 (s128-admission-verdetto.out)
+p2-append    alloc/iter=11.00 free/iter=11.00  (delta vs objalloc: +4.00)
+p3-local     alloc/iter=10.00 free/iter=10.00  (delta vs objalloc: +3.00)
+p4-int       alloc/iter=12.00 free/iter=12.00  (delta vs objalloc: +5.00)
+p5-two       alloc/iter=15.00 free/iter=15.00  (delta vs objalloc: +8.00)
+p6-overwrite alloc/iter=16.00 free/iter=16.00  (delta vs objalloc: +9.00)
+PROBES-CENSUS: ACQUISITA
