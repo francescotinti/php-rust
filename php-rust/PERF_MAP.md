@@ -10,14 +10,14 @@ cifre dai verdetti `.out`. Regola di lettura: rapporti PER workload, MAI aggrega
 
 | workload | rapporto phpr/oracle | N | note |
 |---|---|---|---|
-| **WordPress full-suite** | **1,758–1,909** | 4/lato (16 celle) | S-128 @ pin s127b (post cbargs2+stampo); phpr 782–809 s (S-125: 802–828, ↓ su OGNI gamba); intervallo allargato in alto dal denominatore (spread oracle 5,1%, gamba off1 veloce 423,6 s); parità per NOME (solo `wp_is_stream data set #2` ×4); peak mem 2,299–2,374× (phpr 1828–1894 MiB); verdetto `wp128-harness/pair-out/cross-ratios.out` |
+| **WordPress full-suite** | **1,758–1,909** (⚠ bordo alto: gamba leg1-off con ictx 2–3× su ENTRAMBI i lati, non sorvegliata dalla ricetta — coppie proprie pulite **1,765–1,805**; rev. S-128) | 4/lato (16 celle) | S-128 @ pin s127b (post cbargs2+stampo); phpr 782–809 s (S-125: 802–828, ↓ su OGNI gamba); parità per NOME (solo `wp_is_stream data set #2` ×4); peak mem 2,299–2,374× (phpr 1828–1894 MiB); verdetto `wp128-harness/pair-out/cross-ratios.out` |
 | **WordPress gruppo media** | **2,447–2,539** | 4 | user-only; S-128 @ s127b (S-125: 2,485–2,518); parità 0 nomi ×4 |
 | **symfony http-foundation** (1854) | **2,547–2,559** (raw 2,55–2,57) | 2/lato | S-126; canonica sul CONTEGGIO diff 17 nomi = 0,92% ≤1% (≥3 nomi sono unit puri, NON famiglia `php -S` — emenda S-127); sys alto (I/O) |
 | **symfony http-kernel** (1665 test) | **4,29–4,32** | 2/lato | parità 0E/0F; contesa ok |
 | **doctrine/collections** (242) | **8,22 net** (raw 6,20) | 2/lato | S-126; INDICATIVA: oracle netto 0,09 s (denominatore sotto-scala); parità 0/0 |
 | **doctrine/dbal** (3929, sqlite) | **8,57–8,60** (raw 8,29–8,33) | 2/lato | S-126; fail-set stabile 10 nomi (0,25% ≤1% ⇒ canonica; Portability+parser unicode a catalogo); ictx assoluti nel verdetto, gate in ictx/s da emenda S-127 |
 | **doctrine/orm** (3484 test) | **8,51–8,56** | 2/lato | oracle con `memory_limit=-1` (§3.14); parità fail-set 16 nomi |
-| **composer install OFFLINE** | **1,863–1,891 net** (raw 1,820–1,847) | 2/lato | S-128 @ s127b, PRIMA misura col numeratore vivo (cure ondata-2); composer ESTRATTO, vendor_ok bilaterale, contesa ok (ictx/s); floors 0,07/0,06; sys≈user (I/O-denso, ~2,3 s/lato); residuo phpcs config-set (§3.19-quinquies); verdetto `wp128-harness/s128-compoff-verdetto.out` |
+| **composer install OFFLINE** | **1,863–1,891 net** (raw 1,820–1,847) | 2/lato | S-128 @ s127b, PRIMA misura col numeratore vivo (cure ondata-2); composer ESTRATTO, vendor_ok bilaterale, contesa ok (ictx/s); floors 0,07/0,06; sys≈user (~2,3 s/lato) ⇒ **cifra user-only NON confrontabile col full (user+sys): su user+sys sarebbe ~1,3** (rev. S-128 az.5); residuo phpcs config-set (§3.19-quinquies); verdetto `wp128-harness/s128-compoff-verdetto.out` |
 
 ## Micro-categorie (R=5, pin s127b; tappa ≤3×)
 
