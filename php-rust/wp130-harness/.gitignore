@@ -1,0 +1,8 @@
+ab-out/
+ab-out-build.log
+promo-out/
+quiesce.rc
+probe-src/
+tempo-out/
+*-daemon.log
+*.done
