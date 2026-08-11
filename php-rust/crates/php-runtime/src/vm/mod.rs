@@ -743,7 +743,6 @@ pub fn vm_new<'m>(
         suppress_marks: Vec::new(),
         silence_saved: Vec::new(),
         superglobals: std::array::from_fn(|_| Zval::Undef),
-        field_keys_scratch: Vec::new(),
         preg_cache: HashMap::default(),
         frames: Vec::new(),
         frame_pool: FramePool::default(),
@@ -3202,14 +3201,6 @@ pub struct Vm<'m> {
     /// superglobal resolves by name from any unit/frame — an included file reads
     /// the same `$_SERVER` as the main script. Unseeded entries are `Undef`.
     superglobals: [Zval; 8],
-    /// Scratch buffer for the index keys of a `Field*` WRITE statement
-    /// (L-OL1-F2 «keys-scratch»): taken at the handler, drained by the
-    /// terminal consumer (`field_set_mode` / `field_set_in_root`) and put
-    /// back with its capacity, so the per-statement `Vec<Zval>` allocation
-    /// disappears in steady state. A re-entrant write (AA/magic dispatch
-    /// runs user code) finds it already taken and `mem::take` hands out a
-    /// fresh empty Vec — the pre-F2 behavior, allocation included.
-    field_keys_scratch: Vec<Zval>,
     /// Compiled-regex cache, keyed by the raw PHP pattern (delimiters + flags),
     /// mirroring PCRE's per-request pattern cache. Composer/symfony call e.g.
     /// `preg_match('/.{1,10000}/u', …)` in a loop; without this each call would
@@ -13518,23 +13509,6 @@ impl<'m> Vm<'m> {
 
     /// Pop the operand-stack keys for a field path's `Index` / `PropDyn` steps
     /// (one value per such step), restoring source order.
-    /// [`Self::pop_field_keys`] into the reusable scratch buffer (L-OL1-F2):
-    /// same key order (the stack slice, bottom-to-top), no per-statement
-    /// allocation once the buffer has warmed. WRITE statements only — their
-    /// keys always flow into a terminal consumer that puts the buffer back.
-    fn pop_field_keys_scratch(&mut self, top: usize, steps: &[FieldStep]) -> Vec<Zval> {
-        let n = steps
-            .iter()
-            .filter(|s| matches!(s, FieldStep::Index | FieldStep::PropDyn))
-            .count();
-        let mut keys = std::mem::take(&mut self.field_keys_scratch);
-        debug_assert!(keys.is_empty());
-        let stack = &mut self.frames[top].stack;
-        let at = stack.len().checked_sub(n).expect("field index keys");
-        keys.extend(stack.drain(at..));
-        keys
-    }
-
     fn pop_field_keys(&mut self, top: usize, steps: &[FieldStep]) -> Vec<Zval> {
         let n = steps
             .iter()

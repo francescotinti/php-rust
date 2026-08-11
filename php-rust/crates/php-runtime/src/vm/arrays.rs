@@ -186,7 +186,7 @@ fn unset_into_walk(cell: &mut Zval, keys: &[Zval], i: usize, aa: &mut Option<Uns
 /// source order.
 /// The property name of a [`FieldStep::PropDyn`] step: the next stack-sourced key
 /// coerced to a string (step 51).
-pub(super) fn prop_dyn_name(keys: &mut impl Iterator<Item = Zval>, diags: &mut Diags) -> Box<[u8]> {
+pub(super) fn prop_dyn_name(keys: &mut std::vec::IntoIter<Zval>, diags: &mut Diags) -> Box<[u8]> {
     let key = keys.next().expect("field prop-dyn name");
     convert::to_zstr(&key, diags).as_bytes().into()
 }
@@ -252,7 +252,7 @@ pub(super) enum AaOp {
 pub(super) fn field_write(
     target: &mut Zval,
     steps: &[FieldStep],
-    keys: &mut impl Iterator<Item = Zval>,
+    keys: &mut std::vec::IntoIter<Zval>,
     fs: FieldScope,
     value: Zval,
     diags: &mut Diags,
@@ -305,7 +305,7 @@ fn field_write_walk(
     target: &mut Zval,
     steps: &[FieldStep],
     i: usize,
-    keys: &mut impl Iterator<Item = Zval>,
+    keys: &mut std::vec::IntoIter<Zval>,
     fs: FieldScope,
     value: Zval,
     diags: &mut Diags,
@@ -467,7 +467,7 @@ fn field_write_prop_step(
     o: &Rc<RefCell<Object>>,
     steps: &[FieldStep],
     i: usize,
-    keys: &mut impl Iterator<Item = Zval>,
+    keys: &mut std::vec::IntoIter<Zval>,
     fs: FieldScope,
     value: Zval,
     diags: &mut Diags,
@@ -1446,13 +1446,9 @@ impl<'m> Vm<'m> {
                 PhpError::Error("Using $this when not in object context".to_string())
             })?,
         };
-        let mut keys = keys;
         let mut dropped = Vec::new();
         let mut aa = None;
-        let r = field_write(cell, steps, &mut keys.drain(..), fs, value, &mut self.diags, &mut dropped, &mut aa, rebind, rw);
-        // Terminal consumer: the (now drained) keys buffer goes back as the
-        // scratch, capacity retained (L-OL1-F2).
-        self.field_keys_scratch = keys;
+        let r = field_write(cell, steps, &mut keys.into_iter(), fs, value, &mut self.diags, &mut dropped, &mut aa, rebind, rw);
         for d in &dropped {
             self.gc_note(d);
         }
@@ -1477,12 +1473,9 @@ impl<'m> Vm<'m> {
     ) -> Result<(), PhpError> {
         let fs = FieldScope { classes: &self.classes, scope: self.frames[top].class };
         let mut root_val = Zval::Ref(root);
-        let mut keys = keys;
         let mut dropped = Vec::new();
         let mut aa = None;
-        let r = field_write(&mut root_val, steps, &mut keys.drain(..), fs, value, &mut self.diags, &mut dropped, &mut aa, rebind, rw);
-        // Terminal consumer: scratch back with its capacity (L-OL1-F2).
-        self.field_keys_scratch = keys;
+        let r = field_write(&mut root_val, steps, &mut keys.into_iter(), fs, value, &mut self.diags, &mut dropped, &mut aa, rebind, rw);
         for d in &dropped {
             self.gc_note(d);
         }
