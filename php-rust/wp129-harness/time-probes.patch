@@ -1,0 +1,81 @@
+diff --git a/php-rust/crates/php-runtime/src/vm/arrays.rs b/php-rust/crates/php-runtime/src/vm/arrays.rs
+index cda294b..9a4a74b 100644
+--- a/php-rust/crates/php-runtime/src/vm/arrays.rs
++++ b/php-rust/crates/php-runtime/src/vm/arrays.rs
+@@ -583,7 +583,11 @@ fn field_write_prop_step(
+         let child = obj.props.get_mut(key).expect("property just inserted");
+         // Continue INSIDE this guard only up to the next boundary; the
+         // guard drops when the token returns (boundary discipline).
+-        field_write_walk(child, steps, i + 1, keys, fs, value, diags, dropped, aa, rebind, rw)
++        // S-129 sonde per-passo: seg 5 = E2 (walk interno: COW+coerce+insert).
++        let tp0 = super::timeprobes::now();
++        let r = field_write_walk(child, steps, i + 1, keys, fs, value, diags, dropped, aa, rebind, rw);
++        super::timeprobes::note(5, tp0);
++        r
+     }
+ }
+ 
+diff --git a/php-rust/crates/php-runtime/src/vm/mod.rs b/php-rust/crates/php-runtime/src/vm/mod.rs
+index 4d104a2..b96187f 100644
+--- a/php-rust/crates/php-runtime/src/vm/mod.rs
++++ b/php-rust/crates/php-runtime/src/vm/mod.rs
+@@ -46,6 +46,10 @@ use crate::hir::{
+ };
+ 
+ mod arrays;
++// S-129 seg.3 (SOLO build emendata time-probes): il modulo vive in
++// wp129-harness/ — nessuna strumentazione nei sorgenti del pin.
++#[path = "../../../../wp129-harness/timeprobes.rs"]
++pub(crate) mod timeprobes;
+ mod calls;
+ // Without `op-census` only the arm/dump stubs and the unit tests use the
+ // module — the counters are compiled out of run_loop.
+diff --git a/php-rust/crates/php-runtime/src/vm/run.rs b/php-rust/crates/php-runtime/src/vm/run.rs
+index 152d487..31e56f1 100644
+--- a/php-rust/crates/php-runtime/src/vm/run.rs
++++ b/php-rust/crates/php-runtime/src/vm/run.rs
+@@ -5801,25 +5801,42 @@ impl<'m> super::Vm<'m> {
+                     self.frames[top].stack.push(if *pre { newv } else { old });
+                 }
+                 Op::FieldAssign { base, steps } => {
++                    // S-129 sonde per-passo (build emendata): seg 0=TOT 6=A
++                    // 1=B 2=C 3=D 4=E 7=CAL (criterio p.4).
++                    let tp_tot = super::timeprobes::now();
+                     let value = self.frames[top].stack.pop().expect("FieldAssign value");
+                     let keys = self.pop_field_keys(top, &steps);
++                    super::timeprobes::note(6, tp_tot);
+                     // A path starting at a `&get` hooked property writes through
+                     // the reference the hook returns (one hook run, no set hook).
+-                    if let Some(root) = self.byref_hook_root(*base, top, &steps)? {
++                    let tp0 = super::timeprobes::now();
++                    let tp_bh = self.byref_hook_root(*base, top, &steps)?;
++                    super::timeprobes::note(1, tp0);
++                    if let Some(root) = tp_bh {
+                         self.field_set_in_root(root, top, &steps[1..], keys, value.clone(), false, false)?;
+                         self.frames[top].stack.push(value);
+                         continue;
+                     }
++                    let tp0 = super::timeprobes::now();
+                     self.reject_indirect_hook(*base, top, &steps)?;
++                    super::timeprobes::note(2, tp0);
+                     // A lazy base initializes/forwards first; the walk then roots
+                     // at the realized object (PHP 8.4).
+-                    if let Some(root) = self.field_lazy_root(*base, top, &steps, &keys, true)? {
++                    let tp0 = super::timeprobes::now();
++                    let tp_lz = self.field_lazy_root(*base, top, &steps, &keys, true)?;
++                    super::timeprobes::note(3, tp0);
++                    if let Some(root) = tp_lz {
+                         self.field_set_in_root(Rc::new(RefCell::new(root)), top, &steps, keys, value.clone(), false, false)?;
+                         self.frames[top].stack.push(value);
+                         continue;
+                     }
++                    let tp0 = super::timeprobes::now();
+                     self.field_set(*base, top, &steps, keys, value.clone())?;
++                    super::timeprobes::note(4, tp0);
+                     self.frames[top].stack.push(value);
++                    let tp_cal = super::timeprobes::now();
++                    super::timeprobes::note(7, tp_cal);
++                    super::timeprobes::note(0, tp_tot);
+                 }
+                 Op::FieldAssignOp { base, steps, op } => {
+                     let rhs = self.frames[top].stack.pop().expect("FieldAssignOp rhs");
