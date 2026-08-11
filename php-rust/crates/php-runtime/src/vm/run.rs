@@ -5802,7 +5802,7 @@ impl<'m> super::Vm<'m> {
                 }
                 Op::FieldAssign { base, steps } => {
                     let value = self.frames[top].stack.pop().expect("FieldAssign value");
-                    let keys = self.pop_field_keys(top, &steps);
+                    let keys = self.pop_field_keys_scratch(top, &steps);
                     // A path starting at a `&get` hooked property writes through
                     // the reference the hook returns (one hook run, no set hook).
                     if let Some(root) = self.byref_hook_root(*base, top, &steps)? {
@@ -5823,7 +5823,7 @@ impl<'m> super::Vm<'m> {
                 }
                 Op::FieldAssignOp { base, steps, op } => {
                     let rhs = self.frames[top].stack.pop().expect("FieldAssignOp rhs");
-                    let keys = self.pop_field_keys(top, &steps);
+                    let keys = self.pop_field_keys_scratch(top, &steps);
                     if let Some(root) = self.byref_hook_root(*base, top, &steps)? {
                         let old = {
                             let fs = FieldScope { classes: &self.classes, scope: self.frames[top].class };
@@ -5864,7 +5864,7 @@ impl<'m> super::Vm<'m> {
                     self.frames[top].stack.push(result);
                 }
                 Op::FieldIncDec { base, steps, inc, pre } => {
-                    let keys = self.pop_field_keys(top, &steps);
+                    let keys = self.pop_field_keys_scratch(top, &steps);
                     if let Some(root) = self.byref_hook_root(*base, top, &steps)? {
                         let old = {
                             let fs = FieldScope { classes: &self.classes, scope: self.frames[top].class };
