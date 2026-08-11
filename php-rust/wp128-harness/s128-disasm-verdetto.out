@@ -1,0 +1,13 @@
+== s128 disasm seg.2: sentiero insert-su-proprieta' (pin s127b ccb63dca; protocollo S-104) ==
+grade=DISASM  # analisi statica del pin, nessuna cifra cronometrica; rc autoritativo = wp128-harness/disasm.rc
+sym=__ZN9php_types5array8KeyIndex6lookup ins=129 bl=4
+sym=__ZN9php_types5array8KeyIndex6lookup17h88b75ea06acd7778E.874 ins=129 bl=4
+sym=__ZN11php_runtime2vm6arrays11field_write ins=1297 bl=92
+sym=__ZN11php_runtime2vm6arrays16field_write_walk ins=791 bl=80
+sym=__ZN11php_runtime2vm6arrays16field_write_walk28_$u7b$$u7b$closure$u7d$$u7d$ ins=56 bl=5
+sym=__ZN11php_runtime2vm6arrays16field_write_walk28_$u7b$$u7b$closure$u7d$$u7d$ ins=27 bl=2
+sym=__ZN9php_types5array8PhpArray6insert ins=188 bl=23
+sym=__ZN9php_types5array8PhpArray9to_hashed ins=143 bl=16
+sym=__ZN9php_types5array8KeyIndex10insert_new ins=239 bl=5
+sym=__ZN9php_types5array8KeyIndex5build ins=145 bl=3
+sym=__ZN9php_types5array8KeyIndex7rebuild ins=202 bl=8
