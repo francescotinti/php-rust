@@ -7,13 +7,18 @@ export PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin
 R="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust"
 export PHPR_PIN_ATTESO="${PHPR_PIN_ATTESO:?serve il pin atteso}"
 export ORACLE_PIN_ATTESO="${ORACLE_PIN_ATTESO:-07b0df8d63247695}"
+# Az.rev. S-130 #2: lista gate CONGELATA per NOME — l'inventario eseguito deve
+# coincidere con questa, pena rc!=0 (mai piu' denominatori cablati stantii).
+ATTESI="hc1 move recv fx20 fx21 w9 preg"
 TOT=0
+VISTI=""
 run_gate() { # $1=etichetta $2=script
   echo "== gate $1 =="
   "$2"
   local rc=$?
   echo "-- $1 rc=$rc"
   TOT=$((TOT + rc))
+  VISTI="${VISTI:+$VISTI }$1"
 }
 run_gate hc1  "$R/wp101-harness/hc1-fixtures.sh"
 run_gate move "$R/wp102-harness/s102-move-fixtures.sh"
@@ -22,5 +27,10 @@ run_gate fx20 "$R/wp104-harness/s104-fx20-gate.sh"
 run_gate fx21 "$R/wp105-harness/s105-fx21-gate.sh"
 run_gate w9   "$R/wp109-harness/s109-w9-fixtures.sh"
 run_gate preg "$R/wp121-harness/s121-fx-preg-gate.sh"
-echo "FIXTURE-CHAIN rc_totale=$TOT (0 = tutte verdi)"
+if [ "$VISTI" != "$ATTESI" ]; then
+  echo "FIXTURE-CHAIN INVENTARIO DIVERSO: visti='$VISTI' attesi='$ATTESI'"
+  TOT=$((TOT + 1))
+fi
+echo "FIXTURE-CHAIN inventario=$VISTI"
+echo "FIXTURE-CHAIN rc_totale=$TOT (0 = tutte verdi, inventario conforme)"
 exit "$TOT"

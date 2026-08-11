@@ -68,7 +68,12 @@ note "promozione corpus-gate: rc=0 — nomi==congelato, CONTENUTO==golden, off�
 PHPR_PIN_ATTESO="$CAND_EXP" "$SRC/wp109-harness/s109-fixture-chain.sh" > "$OUT/fixture-chain.out" 2>&1
 frc=$?; echo "$frc" > "$OUT/fixture-chain.rc"
 [ "$frc" = 0 ] || stop "fixture chain rc=$frc"
-note "promozione fixture chain: rc=0 ($(grep -c '^-- .* rc=0' "$OUT/fixture-chain.out")/6 gate verdi)"
+# Az.rev. S-130 #2: inventario per NOME dal marker della catena, confrontato
+# con la lista CONGELATA — mai piu' conteggio-grep con denominatore cablato.
+FX_ATTESI="hc1 move recv fx20 fx21 w9 preg"
+FX_VISTI=$(sed -n 's/^FIXTURE-CHAIN inventario=//p' "$OUT/fixture-chain.out")
+[ "$FX_VISTI" = "$FX_ATTESI" ] || stop "fixture chain inventario diverso: visti='$FX_VISTI' attesi='$FX_ATTESI'"
+note "promozione fixture chain: rc=0 (inventario per NOME conforme: $FX_VISTI)"
 
 PHPR="$BIN" R=5 "$SRC/wp97-harness/micro/run-micro.sh" > "$OUT/micro-pin-s130.out" 2>&1
 note "promozione micro pin s130: $(grep -E '^rapporto_' "$OUT/micro-pin-s130.out" | tr '\n' ' ')"

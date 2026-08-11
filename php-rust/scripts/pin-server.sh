@@ -49,5 +49,13 @@ HS=$(shasum -a 256 "$STASH/php-server-$TAG" | cut -c1-16)
 [ "$H" = "$HS" ] || { echo "hash dello stash diverso ($H vs $HS)"; exit 1; }
 HEAD_SHA=$(git rev-parse --short HEAD)
 echo "| $H | $TAG | \`cargo build --release -p php-server --features axum-server\` @ $HEAD_SHA | smoke --axum OK $(date '+%F %T'); $NOTE_PHPR; GRADO PIENO a parte (s106-grado-server.sh) | stash \`php-server-$TAG\` |" >> PIN_REGISTRY.md
-echo "PIN server $TAG = $H @ $HEAD_SHA (smoke OK, stashato, registrato). $NOTE_PHPR"
+# Az.rev. S-130 #1: il registro si COMMITTA nello stesso atto e il tree deve
+# restare pulito su PIN_REGISTRY.md, pena STOP (registro senza evidenza = niente pin).
+MSG=$(mktemp); echo "pin server $TAG: registro PIN_REGISTRY ($H)" > "$MSG"
+git add PIN_REGISTRY.md && git commit -F "$MSG" >/dev/null && git push >/dev/null
+rm -f "$MSG"
+if [ -n "$(git status --porcelain PIN_REGISTRY.md)" ]; then
+  echo "STOP: PIN_REGISTRY.md ancora sporco dopo il commit dell'atto."; exit 1
+fi
+echo "PIN server $TAG = $H @ $HEAD_SHA (smoke OK, stashato, registrato+committato). $NOTE_PHPR"
 echo "NB: questo e' il pin COLLAUDATO AL MINIMO; le cifre server esigono il grado pieno."
