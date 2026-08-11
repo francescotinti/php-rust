@@ -1,0 +1,14 @@
+== s129 census F4 prelude-gate (criterio f4 p.2; predizioni = colonna B name-borrow) ==
+grade=VERDICT  # conteggi deterministici; rc autoritativo = census-out/census-f4.rc
+objalloc     alloc/iter=7.00 free/iter=7.00  [PRED-OK]
+objallocni   alloc/iter=5.00 free/iter=5.00  [PRED-OK]
+objdatains   alloc/iter=10.00 free/iter=10.00  [PRED-OK]
+objdropdef   alloc/iter=8.00 free/iter=8.00  [PRED-OK]
+objmap       alloc/iter=1.00 free/iter=1.00  [PRED-OK]
+objchurn     alloc/iter=11.00 free/iter=11.00  [PRED-OK]
+p2-append    alloc/iter=9.00 free/iter=9.00  [PRED-OK]
+p3-local     alloc/iter=10.00 free/iter=10.00  [PRED-OK]
+p4-int       alloc/iter=10.00 free/iter=10.00  [PRED-OK]
+p5-two       alloc/iter=11.00 free/iter=11.00  [PRED-OK]
+p6-overwrite alloc/iter=12.00 free/iter=12.00  [PRED-OK]
+CENSUS-F4: 11/11 PRED-OK — A/B AMMESSO
