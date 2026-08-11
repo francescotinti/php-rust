@@ -14324,6 +14324,33 @@ impl<'m> Vm<'m> {
     /// is cleared because this dispatch serves a *place* context. A hook that
     /// returns a non-reference yields a detached cell (writes are lost, like
     /// PHP's temporary).
+    /// L-OL1-F4 «prelude-gate» (S-129, criterio s129-criterio-f4.md): TRUE
+    /// quando il trio per-statement [`Self::byref_hook_root`] /
+    /// [`Self::reject_indirect_hook`] / [`Self::field_lazy_root`] è no-op PER
+    /// COSTRUZIONE: primo passo `Prop`, base = `Zval::Object` diretto (un
+    /// `Ref` resta in via lenta), oggetto né lazy né proxy, classe senza
+    /// property hook (flag flattened `has_prop_hooks`). Sotto queste
+    /// condizioni: byref → hook assente ⇒ `Ok(None)`; indirect → prop_hook×2
+    /// `None`; lazy_root → `is_lazy_value` false ⇒ `Ok(None)` — e nessuno dei
+    /// tre ha effetti collaterali sul loro fast path. Ogni condizione
+    /// violata (borrow occupato incluso) ⇒ via lenta invariata.
+    fn field_prelude_skip(&self, base: FieldBase, top: usize, steps: &[FieldStep]) -> bool {
+        if !matches!(steps.first(), Some(FieldStep::Prop(_))) {
+            return false;
+        }
+        let base_val = match base {
+            FieldBase::Local(s) => self.frames[top].slots.get(s as usize),
+            FieldBase::Global(s) => self.frames[0].slots.get(s as usize),
+            FieldBase::Superglobal(i) => self.superglobals.get(i as usize),
+            FieldBase::This => self.frames[top].this.as_ref(),
+        };
+        let Some(Zval::Object(o)) = base_val else { return false };
+        let Ok(b) = o.try_borrow() else { return false };
+        b.lazy.is_none()
+            && b.proxy_instance.is_none()
+            && !self.classes[b.class_id as usize].has_prop_hooks
+    }
+
     fn byref_hook_root(
         &mut self,
         base: FieldBase,

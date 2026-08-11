@@ -5803,6 +5803,13 @@ impl<'m> super::Vm<'m> {
                 Op::FieldAssign { base, steps } => {
                     let value = self.frames[top].stack.pop().expect("FieldAssign value");
                     let keys = self.pop_field_keys(top, &steps);
+                    // L-OL1-F4 (S-129): su base-oggetto piana di classe senza
+                    // hook il trio byref/indirect/lazy è no-op per costruzione.
+                    if self.field_prelude_skip(*base, top, &steps) {
+                        self.field_set(*base, top, &steps, keys, value.clone())?;
+                        self.frames[top].stack.push(value);
+                        continue;
+                    }
                     // A path starting at a `&get` hooked property writes through
                     // the reference the hook returns (one hook run, no set hook).
                     if let Some(root) = self.byref_hook_root(*base, top, &steps)? {
