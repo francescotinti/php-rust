@@ -22,20 +22,19 @@ congelato **1414** ×2 modi · compoff MISURATA (S-128, tarball CON composer-x).
    field_write vanno MODELLATI (sonde temporali per passo + disasm mirato, criterio
    pre-registrato) PRIMA di nominare una forma. Candidati da spiegare: chi alloca i
    2 residui (Key? walk? dropped?), perché overwrite (+4) > secondo insert (+3).
-2. **Gate micro R=5 su s127b per osservare calls 4,9(*)** (voce a bordo rumore da
-   2 gate: REGOLE §4 — blocca la leva successiva se resta senza rerun).
+2. **Gate micro R=5 su s127b: osservare calls 4,9(*)** (REGOLE §4: senza rerun
+   blocca la leva successiva) + gamba off pulita della pair (az.rev. #2).
 3. Mappa residui per NOME: lexer/inflector/event-manager · wp-cli · PHPUnit-self ·
    strumento DENSITÀ evalcls · §3.20 dbal (Portability 9 + parser unicode).
 4. Fedeltà in coda: §3.19-quater · §3.19-quinquies (phpcs) · iconv parziale.
-APPARATO: az.rev. S-128 in `wp128-harness/revisione.md` VINCOLANTI · quiescenza =
-GATE separato PRIMA di ogni lancio di misura (mediaanalysisd S-128) · Serena PRIMA
-della prima misura · cattura summary per-suite (az.rev. S-126 #3, ancora aperta).
+APPARATO: az.rev. S-128 VINCOLANTI (revisione.md: gate ictx sulla pair · gamba off
+pulita · media unica etichettata · riconciliare collaudo F1) · quiescenza = GATE
+separato PRIMA di ogni lancio · Serena prima della prima misura · summary per-suite.
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
 
 costo fisso per-statement Field* (residui ~2 alloc + tempo; keys-Vec da SOLO non
-paga) · oracle-denominatore: gamba off1 veloce 423,6 s (spread 5,1% vs 1,2% S-125)
-da tenere d'occhio alla prossima coppia · evalcls 316,9× (dopo densità) · refl
+paga) · oracle-denominatore instabile (leg1-off ictx 2–3×) · evalcls 316,9× · refl
 42,4× · re +2,00 alloc/iter · prop C1 single-borrow · cbargs2 su CallHostBuiltin/
 Ref/Spread · grado pieno server · morte-immediata al sito di nota · micro-trim
 morte (is_empty 2 remove SipHash · has_destruct precompilato · FxHash mappe per-id)
