@@ -1,0 +1,41 @@
+== s130 sonda E1a (criterio s130-criterio-e1a.md; build EMENDATA: quote=MODELLO, nessuna cifra promuovibile) ==
+grade=MODEL  # rc autoritativo = tempo-out/tempo-e1a.rc; CAL sottratta per nota; R=3 mediane; pin s130
+-- objalloc (stmt/iter=0 [CNT-OK]; resolve/iter k=4.0000) --
+   cal_ticks/nota=0.00 freq=1000000000
+   TOT               0.0 ns/iter  (spread R=3 0.0)
+   E1a_resolve      72.2 ns/iter  (spread R=3 0.5)
+   E_fieldset        0.0 ns/iter  (spread R=3 0.0)
+   E2_walk           0.0 ns/iter  (spread R=3 0.0)
+-- objdatains (stmt/iter=1 [CNT-OK]; resolve/iter k=9.0000) --
+   cal_ticks/nota=0.48 freq=1000000000
+   TOT             232.9 ns/iter  (spread R=3 5.8)
+   E1a_resolve     111.1 ns/iter  (spread R=3 7.0)
+   E_fieldset      215.3 ns/iter  (spread R=3 6.0)
+   E2_walk          50.3 ns/iter  (spread R=3 0.3)
+   E-E2 (dispatch+prop_step) = 165.1 ns/iter; E1a/(E-E2) = 67%
+   UB resolve-once (collasso a UNA resolve/statement: 9.00->1) = 98.8 ns/iter
+-- p2-append (stmt/iter=1 [CNT-OK]; resolve/iter k=9.0000) --
+   cal_ticks/nota=0.48 freq=1000000000
+   TOT             199.9 ns/iter  (spread R=3 3.8)
+   E1a_resolve     111.7 ns/iter  (spread R=3 0.4)
+   E_fieldset      187.7 ns/iter  (spread R=3 3.7)
+   E2_walk          29.4 ns/iter  (spread R=3 1.8)
+   E-E2 (dispatch+prop_step) = 158.3 ns/iter; E1a/(E-E2) = 71%
+   UB resolve-once (collasso a UNA resolve/statement: 9.00->1) = 99.3 ns/iter
+-- p5-two (stmt/iter=2 [CNT-OK]; resolve/iter k=14.0000) --
+   cal_ticks/nota=0.48 freq=1000000000
+   TOT             472.3 ns/iter  (spread R=3 10.8)
+   E1a_resolve     155.3 ns/iter  (spread R=3 8.1)
+   E_fieldset      437.3 ns/iter  (spread R=3 9.9)
+   E2_walk         110.9 ns/iter  (spread R=3 2.3)
+   E-E2 (dispatch+prop_step) = 326.4 ns/iter; E1a/(E-E2) = 48%
+   UB resolve-once (collasso a UNA resolve/statement: 14.00->2) = 133.1 ns/iter
+-- p6-overwrite (stmt/iter=2 [CNT-OK]; resolve/iter k=14.0000) --
+   cal_ticks/nota=0.49 freq=1000000000
+   TOT             465.2 ns/iter  (spread R=3 0.5)
+   E1a_resolve     154.2 ns/iter  (spread R=3 5.1)
+   E_fieldset      430.6 ns/iter  (spread R=3 1.8)
+   E2_walk          96.8 ns/iter  (spread R=3 2.3)
+   E-E2 (dispatch+prop_step) = 333.8 ns/iter; E1a/(E-E2) = 46%
+   UB resolve-once (collasso a UNA resolve/statement: 14.00->2) = 132.2 ns/iter
+SONDA-E1A: ACQUISITA
