@@ -25,8 +25,7 @@ congelato **1414** ×2 modi · compoff MISURATA (S-128, tarball CON composer-x).
    2 gate: REGOLE §4 — blocca la leva successiva se resta senza rerun).
 3. Mappa residui per NOME: lexer/inflector/event-manager · wp-cli · PHPUnit-self ·
    strumento DENSITÀ evalcls · §3.20 dbal (Portability 9 + parser unicode).
-4. Fedeltà in coda: §3.19-quater (log CLI→stderr) · §3.19-quinquies (phpcs
-   config-set) · iconv superficie parziale.
+4. Fedeltà in coda: §3.19-quater · §3.19-quinquies (phpcs) · iconv parziale.
 APPARATO: az.rev. S-128 in `wp128-harness/revisione.md` VINCOLANTI · quiescenza =
 GATE separato PRIMA di ogni lancio di misura (mediaanalysisd S-128) · Serena PRIMA
 della prima misura · cattura summary per-suite (az.rev. S-126 #3, ancora aperta).
