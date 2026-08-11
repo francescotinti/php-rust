@@ -1,6 +1,9 @@
 tempo-out/
 census-out/
 ab-out/
+ab-out-build.log
+promo-out/
+quiesce.rc
 micro-out/
 pair-out/
 probe-src/
