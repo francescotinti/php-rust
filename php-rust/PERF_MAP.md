@@ -1,6 +1,6 @@
 # PERF_MAP — phpr vs PHP oracle 8.5.7, mappa multi-workload
 
-Aggiornata: **2026-08-11 (S-129)** · pin phpr **s127b ccb63dca** ·
+Aggiornata: **2026-08-11 (S-130)** · pin phpr **s130 0fdf1c49** (F4 prelude-gate SPEDITA; le cifre WP full/media/hf/hk/dbal/ORM/compoff restano misurate @ pin precedente, rimisura full/media in S-131) ·
 metodo: user CPU, pavimenti per-binario, N per voce come indicato; criteri pre-registrati in
 `wp125-harness/s125-criterio-{pair,mappa}.md` e `wp126-harness/s126-criterio-{orm,mappa2}.md`
 (+ emenda S-127: **cifra canonica = NETTO-pavimento**, raw companion; gate contesa in ictx/s);
@@ -31,11 +31,11 @@ solo il denominatore oracle 0,43–0,44). re 2,5/2,6 = run-to-run del denominato
 Allocazioni/iter vs oracle: arith/prop/calls 0=0 · **str 2,00=2,00 (PARITÀ, S-125)** ·
 arr 2,05≈2,03 · re 7,00 vs 5,00 (+2, apertura per NOME).
 
-## Micro-ORM (S-126 istruttoria; S-127 post-leva L-OL1-F1 — verdetti s127-submicro + s127-ab)
+## Micro-ORM (S-130 sul pin s130 POST-F4 — verdetto s130-submicro; evalcls/refl da S-126)
 
-| evalcls (compile/classe via eval) | refl | objchurn | └ objalloc (new+ctor+drop) | └ objmap (insert map) |
-|---|---|---|---|---|
-| **316,9** (2,38 ms vs 7,5 µs) | **42,4** | 10,2→**8,9** | 9,6→**7,7** (976,7 vs 126,7 ns; additività chiusa 3,4 ns) | 17,3 |
+| evalcls (compile/classe via eval) | refl | objchurn | └ objalloc | └ objdatains | └ objdropdef | └ objallocni | └ objmap |
+|---|---|---|---|---|---|---|---|
+| **316,9** (2,38 ms vs 7,5 µs) | **42,4** | 8,9→**8,6** (1516,7 ns) | **7,8** (983,3) | 9,4→**7,7** (1253,3, −80 = F4) | 10,9→**9,0** | 12,3→**9,8** | **17,0** |
 
 Profilo ORM phpr (indizio unilaterale): churn visibile multi-% (Zval clone/drop, slot_of,
 gc_note/sweep/collect_cycles, insert/lookup, malloc/free); compile ≤~1% leaf, reflection <0,5%.
@@ -55,10 +55,14 @@ gc_note/sweep/collect_cycles, insert/lookup, malloc/free); compile ≤~1% leaf, 
   (rev. S-129) · preludio byref/indirect/lazy ~73 ns (25%, sondato E corroborato
   dall'A/B F4) · walk interno 48 (16%);
   i 2 alloc residui = n.clone() del nome in byref_hook_root+field_lazy_root (census
-  22/22). **F4 «prelude-gate» TENTATA S-129**: census 11/11, smoke +71,7 PROMOSSA,
-  R=5 D=+66,7 AVVERSA per criterio (soglia 70 da outlier singolo; objmap −6,7 =
-  layout su banda default) — direzione firmata 7/7, revert al byte; **rientro S-130
-  con criterio emendato** (s129-ab-f4-lettura.md); poi resolve-once (E1) col modello.
+  22/22). **F4 «prelude-gate» SPEDITA S-130** (criterio emendato pre-registrato:
+  rumore trimmed drop-1 simmetrico + bande fondate 6,7/6,7/13,3): smoke +80,0 →
+  R=5 D=+80,0 vs soglia 16,7, direzione 14/14 cumulata, promozione piena rc=0 →
+  **pin s130 0fdf1c49**. **Sonda E1a S-130** (s130-e1a-lettura.md): controllo
+  objalloc k=4 svela le resolve del CTOR ⇒ per-statement 5 resolve = **39–44 ns
+  ≈24% di E−E2** (non 67%); UB resolve-once statement-only 31–35 ns; il GROSSO di
+  E−E2 (~120 ns) è prop_step NON-resolve (3× prop_key + contains/get_mut/replace)
+  — modello del costo prop_step PRIMA di nominare la forma E1 (S-131).
 - Aperture per NOME: `evalcls` **316,9×** (cliff compile-per-classe; serve strumento di densità
   prima di ogni leva) · `refl` **42,4×** · re +2,00 alloc/iter.
 

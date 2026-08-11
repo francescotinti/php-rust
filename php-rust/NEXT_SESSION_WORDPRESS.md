@@ -1,53 +1,52 @@
 # NEXT_SESSION — phpr: OBIETTIVO PARITÀ (≥1×) con l'oracle; ≤3× = tappa (REGOLE §1)
-⏱ **FONDAMENTALI**: rif WP **full PULITO = 1,758–1,805** (S-129 @ s127b, gate ictx/s
-per gamba: leg1-off E leg3-off escluse, set confermato ANCHE con mediana per-motore;
-coppie proprie 1,765–1,805 user+sys · 1,772–1,813 user-only; media CANONICA
-user-only 2,447–2,463) · ultima leva SPEDITA **S-127 (stampo)**; S-128 F2 CADUTA;
-**S-129 F4 TENTATA: avversa PER CRITERIO con direzione firmata 7/7 (+66,7/+71,7 su
-UB 73) — rientro pronto** — sessioni-senza-leva-spedita = 2 · incidenti: storici
-7 + **1 app. S-129** (dump tprobes assente su categoria a zero eventi).
+⏱ **FONDAMENTALI**: rif WP **full PULITO = 1,758–1,805** (S-129, MA misurato @
+s127b: la coppia va RIFATTA sul pin nuovo — F4 tocca FieldAssign e WP ne ha) ·
+ultima leva SPEDITA **S-130 (F4 prelude-gate → PIN NUOVO s130)** —
+sessioni-senza-leva-spedita = 0 · incidenti: storici 8 (nessuno nuovo in S-130).
 
-## Scoreboard (pin **s127b ccb63dca**f565cffc INVARIATO + server bc95ba71; micro gate S-129)
+## Scoreboard (pin **s130 0fdf1c49**b16c24ba + server s130 7fb79069; micro gate promozione S-130)
 
-**arith 5,3 · prop 5,6 · calls 5,0 (sciolta: phpr netto identico) · str 4,2 ·
-arr 3,2 · re 2,5** · oggetti: **objalloc 7,7 · churn 8,9** · **MODELLO DEL TEMPO
-seg.3 CHIUSO**: statement Field* 300–340 ns quasi invariante (oracle 23–37; locale
-170); torta: E−E2 dispatch+prop_step 155 (52%, residuo — attribuzione resolve =
-indizio) · preludio 73 (25%, SONDATO) · walk 48 (16%) · MAPPA (net): WP 1,76–1,81
-≈ compoff 1,86–1,89 ≪ hf 2,55 ≪ hk 4,3 ≪ dbal 8,6 ≈ ORM 8,5 · corpus **1414** ×2.
+**arith 5,5 · prop 5,6 · calls 5,0 · str 4,3 · arr 3,3 · re 2,5** (↗ apparenti =
+jitter denominatore oracle; phpr netto invariato) · oggetti POST-F4: **objdatains
+7,7 (1253,3 ns) · churn 8,6 · dropdef 9,0 · allocni 9,8 · alloc 7,8 · objmap 17,0**
+· **E1a MISURATA**: per-statement 5 resolve = 39–44 ns ≈24% di E−E2 (~165); UB
+resolve-once statement-only 31–35 ns; il GROSSO di E−E2 ~120 ns = prop_step
+NON-resolve (3× prop_key Box + contains/get_mut/replace + borrow) · MAPPA (net):
+WP 1,76–1,81(@s127b) ≈ compoff 1,86–1,89 ≪ hf 2,55 ≪ hk 4,3 ≪ dbal 8,6 ≈ ORM 8,5
+· corpus **1414** ×2.
 
-## §S-130 — ordine proposto
+## §S-131 — ordine proposto
 
-1. **RIENTRO F4 prelude-gate** (s129-ab-f4-lettura.md; codice PRONTO = revert del
-   revert di f4143a6, census 11/11 già valido): PRIMA di ogni run committare il
-   criterio emendato — (a) rumore giudice robusto all'outlier singolo (trimmed
-   drop-1 SIMMETRICO su A e B, dichiarato); (b) bande objmap/objalloc/objchurn
-   FONDATE (spread R≥5 sul pin misurato nello stesso criterio), niente default 4;
-   poi smoke R=2 → R=5 → se sopra soglia: promozione piena (s129-promozione.sh
-   PRONTO: batteria→pin s129→corpus→fixture→micro→ORM→hk→server).
-2. **Sonda E1a** (az.rev. #1): segmento dedicato alle sole `resolve_prop_access`
-   dentro `field_write_prop_step` (estendere time-probes.patch, stessa ricetta):
-   UB di resolve-once MISURATO, non residuale — decide la leva E1 di S-131.
-3. Se F4 promossa: rimisurare micro-ORM sul pin nuovo (objdatains atteso ~−70 ns,
-   churn ~−85) + coppia WP full/media SOLO se il tempo resta.
+1. **Coppia WP full+media sul pin s130** (ricetta s128/s129: gate ictx/s con
+   mediana PER MOTORE, quiescenza gate separato, user-only canonica + companion):
+   aspettativa modello = riduzione piccola ma di segno fisso (F4 morde FieldAssign
+   prop-rooted); REPORT_GAP_131 col nuovo riferimento.
+2. **Modello del costo prop_step NON-resolve** (~120 ns, ora il segmento dominante
+   NOMINATO): sonde dedicate dentro `field_write_prop_step` sulla ricetta
+   time-probes (3× `fs.prop_key` separate da contains/get_mut/replace e dal
+   borrow) — il modello DECIDE la forma E1 di S-132 (resolve-once statement-only
+   UB 31–35 vale solo se compone con la cura del resto; prop_key ritorna Box:
+   candidato «key-once» = una resolve+key per statement riusata sui 4 siti).
+3. Se il tempo resta: A/B della forma nominata dal modello (criterio suo,
+   PRE-REGISTRATO, bande fondate v2 — le objX ora hanno serie s130).
 4. Mappa residui per NOME: lexer/inflector/event-manager · wp-cli · PHPUnit-self ·
    strumento DENSITÀ evalcls · §3.20 dbal.
-APPARATO: quiescenza = GATE SEPARATO (script s129-quiescenza.sh) PRIMA di ogni
-run · Serena prima della prima misura, MAI edit .rs in finestra di misura · gate
-ictx/s della pair: mediana PER MOTORE (addendum S-129) · verdetti avversi
-committati PRIMA di ogni emenda.
+APPARATO: quiescenza = GATE SEPARATO (wp129-harness/s129-quiescenza.sh) PRIMA di
+ogni run · Serena prima della prima misura, MAI edit .rs in finestra di misura ·
+verdetti avversi committati PRIMA di ogni emenda · bande di guardia: fondarle
+dalle gambe A committate (S-130: zero run extra).
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
 
-warm-up leg nella ricetta pair (le 2 gambe segnalate sono entrambe PRIME della
-sequenza; oracle cpu più bassa con ictx 2×: meccanismo da nominare prima di
-fidarsi del gate) · resolve-once in prop_step (E1a prima) · AssignOp/IncDec fuori
-perimetro F4 (comporre dopo la promozione) · famiglia locale 170 ns (pop_keys
+coppia full/media su s130 (punto 1) · warm-up leg nella ricetta pair (2 gambe
+escluse S-129 erano PRIME di sequenza: meccanismo da nominare) · resolve del CTOR
+(4/iter, 72 ns su objalloc: forma separata da FieldAssign, tocca New/PropSet) ·
+AssignOp/IncDec fuori perimetro F4 (comporre) · famiglia locale 170 ns (pop_keys
 split_off; objmap 1 alloc) · evalcls 316,9× · refl 42,4× · re +2,00 alloc/iter ·
 oracle-denominatore leg-first · morte-immediata al sito di nota · micro-trim morte
 (is_empty SipHash · has_destruct · FxHash per-id) · fame frontend (kpc/sudo) ·
 $z++/$z-- undef non warna · §3.13 · §3.12-i · §3.14 · get_gc · drift TODO.md ·
-latin1-cliff · `$GLOBALS['x']->p` resta FieldAssign (caveat innocuo, rev. S-129).
+latin1-cliff · `$GLOBALS['x']->p` resta FieldAssign (caveat innocuo).
 
 ## NON riproporre (i veti restano; dettaglio nei concili archiviati)
 
@@ -60,21 +59,21 @@ output di run nel repo · rc di gate da pipe · tee/log pre-mkdir · admission s
 dump intero · xctrace senza guardie disco · run pesanti come task · edit coi
 build in volo · promozione sotto banda · gate a soglia fissa senza banda ·
 corpus-gate solo-nomi · strumentazione nei sorgenti del pin (#[path] fuori-crates
-= ricetta S-129) · leve micro senza banda v2 · alloc-removal senza modello del
-costo SOSTITUTIVO · probe senza riferimento vivo · ordine FISSO di misura · delta
-tra census di epoche diverse senza datare i raw · verdetti da script non
-committati · SSO inline · inline-array init+drain args · claim di ASSENZA oltre
-la risoluzione · smoke con fam-min > R · notti su PhpStr-full · guardie su giudici
-diversi dalle loro bande · misure con LSP in volo · F2 keys-scratch · quiescenza
-nello stesso comando del lancio · output TRACKED mossi da orchestratori ·
-**rumore-soglia = range PIENO senza formula robusta (morso S-129)** · **guardia su
-categoria senza banda propria spacciata per meccanismo (objmap S-129)**.
+= ricetta) · leve micro senza banda v2 · alloc-removal senza modello del costo
+SOSTITUTIVO · probe senza riferimento vivo · ordine FISSO di misura · delta tra
+census di epoche diverse senza datare i raw · verdetti da script non committati ·
+SSO inline · inline-array init+drain args · claim di ASSENZA oltre la risoluzione
+· smoke con fam-min > R · notti su PhpStr-full · guardie su giudici diversi dalle
+loro bande · misure con LSP in volo · F2 keys-scratch · quiescenza nello stesso
+comando del lancio · output TRACKED mossi da orchestratori · rumore-soglia =
+range PIENO senza formula robusta · guardia su categoria senza banda propria ·
+**percentuale tra segmenti NON annidati senza controllo a zero eventi (morso
+E1a S-130: 67% vs 24%)**.
 
-**Riscritto**: 2026-08-11 (chiusura S-129). Storia: `sessions/` · `gaps/GAP_TREND.md`.
-Pre-flight S-130: pin phpr **s127b ccb63dca**f565cffc (il rebuild canonico lo
-riproduce al byte — riprovato S-129 dopo il revert F4) · server **bc95ba71**
-(ripristinato dallo stash: OGNI build canonica lo rilinka, ricontrollare l'hash)
-· MySQL wp8 con l'elenco · uploads sotto guardia · corpus 1414 ×2 modi · target
-census e time-probes CALDI (phpr-census-l1-target, phpr-time-l1-target) · nessuna
-run detached · ordine lettura: REGOLE.md → QUI → sessions/WP_SESSION_129.md →
-wp129-harness/revisione.md → wp129-harness/s129-ab-f4-lettura.md → PERF_MAP.md.
+**Riscritto**: 2026-08-11 (chiusura S-130). Storia: `sessions/` · `gaps/GAP_TREND.md`.
+Pre-flight S-131: pin phpr **s130 0fdf1c49**b16c24ba + server **s130 7fb79069**
+(OGNI build canonica rilinka il server: ricontrollare l'hash dopo ogni build;
+stash canonici in phpr-old-target/release/) · MySQL wp8 con l'elenco · uploads
+sotto guardia · corpus 1414 ×2 modi · target census e time-probes CALDI · nessuna
+run detached · ordine lettura: REGOLE.md → QUI → sessions/WP_SESSION_130.md →
+wp130-harness/revisione.md → wp130-harness/s130-e1a-lettura.md → PERF_MAP.md.
