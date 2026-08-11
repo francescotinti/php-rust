@@ -3,6 +3,7 @@ ab-out-build.log
 promo-out/
 quiesce.rc
 probe-src/
+submicro-out/
 tempo-out/
 *-daemon.log
 *.done
