@@ -1,0 +1,26 @@
+== s129 gamba off pulita + gate ictx/s per gamba (az.rev. S-128 #1-#3) ==
+grade=VERDICT  # derivazione meccanica dai .time; rc autoritativo = pair-out/legoff.done
+# full: cpu=user+sys (etichettato); media: CANONICA=user-only (az.rev. #3)
+leg1-off: ictx/s oracle=2624 phpr=545  SEGNALATA(>1,5x med)
+leg1-on: ictx/s oracle=1279 phpr=210  contesa ok
+leg2-off: ictx/s oracle=1285 phpr=189  contesa ok
+leg2-on: ictx/s oracle=1271 phpr=220  contesa ok
+leg3-off: ictx/s oracle=2273 phpr=223  SEGNALATA(>1,5x med)
+ictx_s_mediana=908
+gambe pulite: ['leg1-on', 'leg2-off', 'leg2-on']
+leg1-off: full_oracle_cpu=423.57 full_phpr_cpu=808.73 proprio=1.909 peak_phpr_MiB=1894.4
+leg1-on: full_oracle_cpu=444.99 full_phpr_cpu=786.31 proprio=1.767 peak_phpr_MiB=1837.3
+leg2-off: full_oracle_cpu=440.90 full_phpr_cpu=795.62 proprio=1.805 peak_phpr_MiB=1880.2
+leg2-on: full_oracle_cpu=443.33 full_phpr_cpu=782.36 proprio=1.765 peak_phpr_MiB=1828.2
+leg3-off: full_oracle_cpu=408.75 full_phpr_cpu=795.69 proprio=1.947 peak_phpr_MiB=1903.5
+matrice full (gambe PULITE) phpr(riga)/oracle(colonna):
+  leg1-on/leg1-on=1.767  leg1-on/leg2-off=1.783  leg1-on/leg2-on=1.774
+  leg2-off/leg1-on=1.788  leg2-off/leg2-off=1.805  leg2-off/leg2-on=1.795
+  leg2-on/leg1-on=1.758  leg2-on/leg2-off=1.774  leg2-on/leg2-on=1.765
+full_intervallo_PULITO=1.758-1.805
+coppie_proprie_PULITE=1.765-1.805 (N=3)
+media_leg1-off: user_only_CANONICA=2.539 user+sys_companion=2.494 (SEGNALATA)
+media_leg1-on: user_only_CANONICA=2.463 user+sys_companion=2.419
+media_leg2-off: user_only_CANONICA=2.447 user+sys_companion=2.412
+media_leg2-on: user_only_CANONICA=2.455 user+sys_companion=2.408
+media_leg3-off: user_only_CANONICA=2.506 user+sys_companion=2.463 (SEGNALATA)
