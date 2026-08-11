@@ -1,53 +1,53 @@
 # NEXT_SESSION — phpr: OBIETTIVO PARITÀ (≥1×) con l'oracle; ≤3× = tappa (REGOLE §1)
-⏱ **FONDAMENTALI**: rif WP **full PULITO = 1,758–1,805** (S-129, MA misurato @
-s127b: la coppia va RIFATTA sul pin nuovo — F4 tocca FieldAssign e WP ne ha) ·
-ultima leva SPEDITA **S-130 (F4 prelude-gate → PIN NUOVO s130)** · sessioni-senza-
-leva = 0 · incidenti: storici 8 + **1 app. S-130** («7/6» fixture + registro tardo).
+⏱ **FONDAMENTALI**: rif WP **full PULITO = 1,757–1,797** (S-131, MA misurato @
+s130: la coppia va RIFATTA sul pin nuovo — E1-KO tocca FieldAssign e WP ne ha) ·
+ultima leva SPEDITA **S-131 (E1-KO resolve-once → PIN NUOVO s131)** · sessioni-
+senza-leva = 0 · incidenti: storici 9 + **1 app. S-131** (gate quiescenza auto-
+morso da «phpr» nell'argv dell'arbitro; fermo pre-misura, fix path neutro).
 
-## Scoreboard (pin **s130 0fdf1c49**b16c24ba + server s130 7fb79069; micro gate promozione S-130)
+## Scoreboard (pin **s131 ff66cb84**6e6cd439 + server s131 97ed6e06; micro gate promozione S-131)
 
-**arith 5,5 · prop 5,6 · calls 5,0 · str 4,3 · arr 3,3 · re 2,5** (↗ apparenti =
-jitter denominatore oracle; phpr netto invariato) · oggetti POST-F4: **objdatains
-7,7 (1253,3 ns) · churn 8,6 · dropdef 9,0 · allocni 9,8 · alloc 7,8 · objmap 17,0**
-· **E1a MISURATA**: per-statement 5 resolve = 39–44 ns ≈24% di E−E2 (~165); UB
-resolve-once statement-only 31–35 ns; il GROSSO di E−E2 ~120 ns = prop_step
-NON-resolve (3× prop_key Box + contains/get_mut/replace + borrow) · MAPPA (net):
-WP 1,76–1,81(@s127b) ≈ compoff 1,86–1,89 ≪ hf 2,55 ≪ hk 4,3 ≪ dbal 8,6 ≈ ORM 8,5
-· corpus **1414** ×2.
+**arith 5,6 · prop 5,6 · calls 4,9 · str 4,3 · arr 3,2 · re 2,5** (mosse ≤0,1 =
+jitter denominatore) · oggetti POST-E1-KO: **objdatains 7,5 (1220,0 ns, −33) ·
+churn 8,3 (1490,0) · dropdef 8,8 · alloc 7,8 (ctor non toccato) · allocni 9,8 ·
+objmap 17,3** · **MODELLO PROP_STEP** (s131-propstep-lettura.md, chiusura 93–94%):
+E−E2 166,9 @ s130 = prop_step 130,7 (guardie 49,4 · defer 37,0 · key+op 34,3 ·
+borrow 1,5) + dispatch 36,3; resolve statement ora ~10 (1 sito); residui NOMINATI:
+**lookup-once props-map** (~3 lookup→1 dentro 81,9 non-resolve) · **ctor 70,8**
+(4 resolve, tocca New/PropSet) · dispatch 36,3 · MAPPA (net): WP 1,76–1,80(@s130)
+≈ compoff 1,86–1,89 ≪ hf 2,55 ≪ hk 4,3 ≪ dbal 8,6 ≈ ORM 8,5 · corpus **1414** ×2.
 
-## §S-131 — ordine proposto
+## §S-132 — ordine proposto
 
-1. **Coppia WP full+media sul pin s130** (ricetta s128/s129: gate ictx/s con
-   mediana PER MOTORE, quiescenza gate separato, user-only canonica + companion):
-   aspettativa modello = riduzione piccola ma di segno fisso (F4 morde FieldAssign
-   prop-rooted); REPORT_GAP_131 col nuovo riferimento.
-2. **Modello del costo prop_step NON-resolve** (~120 ns, ora il segmento dominante
-   NOMINATO): sonde dedicate dentro `field_write_prop_step` sulla ricetta
-   time-probes (3× `fs.prop_key` separate da contains/get_mut/replace e dal
-   borrow) — il modello DECIDE la forma E1 di S-132 (resolve-once statement-only
-   UB 31–35 vale solo se compone con la cura del resto; prop_key ritorna Box:
-   candidato «key-once» = una resolve+key per statement riusata sui 4 siti).
-3. Se il tempo resta: A/B della forma nominata dal modello (criterio suo,
-   PRE-REGISTRATO, bande fondate v2 — le objX ora hanno serie s130).
+1. **Coppia WP full+media sul pin s131** (ricetta s131-pair.sh RIUSABILE: cambiare
+   SOLO i pin attesi; warm-up leg + mediana PER MOTORE + quiescenza rc in header):
+   aspettativa = riduzione piccola di segno fisso (E1-KO −33 ns/statement su
+   datains); REPORT_GAP_132 col nuovo riferimento.
+2. **Leva «lookup-once» sulla props-map** (forma GIÀ NOMINATA dal modello S-131):
+   in field_write_prop_step la STESSA chiave subisce ~3 lookup (props.get in
+   guardie + contains in defer + contains/get_mut in key+op) — una entry-once
+   (get_mut/entry riusata) dentro gli 81,9 ns non-resolve; criterio SUO
+   pre-registrato (bande objX ora hanno serie s131: gambe B committate S-131);
+   ricetta A/B = s131-ab.sh (A=stash s131, path B NEUTRO — lezione argv).
+3. Se il tempo resta: **forma ctor** (70,8 ns = 4 resolve da PropSet/init;
+   tocca New/ctor — sonda per-sito prima della forma, ricetta propstep riusabile).
 4. Mappa residui per NOME: lexer/inflector/event-manager · wp-cli · PHPUnit-self ·
    strumento DENSITÀ evalcls · §3.20 dbal.
-APPARATO + az.rev. S-130 (PROCESSO, vincolanti): quiescenza gate SEPARATO prima
-di ogni run E il suo rc citato nell'HEADER di ogni verdetto A/B (#3) · fixture
-chain: lista gate CONGELATA per NOME nello script di promozione, fail su
-inventario diverso (#2) · criterio E1a p.2 da emendare + quota ctor/statement
-per call-site CON rerun (#4) · pin-server verifichi tree pulito post-atto (#1) ·
-Serena prima della prima misura, MAI edit .rs in finestra di misura · verdetti
-avversi committati PRIMA di ogni emenda · bande fondate dalle gambe A committate.
+APPARATO: quiescenza gate separato + rc SEMPRE in header (ora cablato in pair/ab/
+tempo) · argv dei lanci SENZA la stringa «phpr» (gate self-match, incidente S-131)
+· Serena prima della prima misura, MAI edit .rs in finestra di misura · verdetti
+avversi committati PRIMA di ogni emenda · bande fondate da gambe committate.
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
 
-warm-up leg nella ricetta pair (le 2 escluse S-129 erano PRIME di sequenza) ·
-resolve del CTOR (4/iter, 72 ns su objalloc: forma separata, tocca New/PropSet) ·
-AssignOp/IncDec fuori perimetro F4 (comporre) · famiglia locale 170 ns · evalcls
-316,9× · refl 42,4× · re +2,00 alloc/iter · oracle-denominatore leg-first ·
-micro-trim morte (is_empty SipHash · has_destruct · FxHash per-id) · fame
-frontend (kpc/sudo) · $z++/$z-- undef non warna · §3.13 · §3.12-i · §3.14 ·
-get_gc · drift TODO.md · latin1-cliff · `$GLOBALS['x']->p` resta FieldAssign.
+resolve del CTOR (70,8 ns, 4/iter da PropSet/init: forma separata) · lookup-once
+props-map (p.2 sopra) · dispatch fuori prop_step 36,3 · «prop_step altro» 8,5 ·
+AssignOp/IncDec fuori perimetro F4/E1-KO (comporre) · famiglia locale 170 ns ·
+evalcls 316,9× · refl 42,4× · re +2,00 alloc/iter · leaf-magic paths ora pagano
+key0 su Denied (prop_info extra, freddi — da osservare se mai caldi) · micro-trim
+morte (is_empty SipHash · has_destruct · FxHash per-id) · $z++/$z-- undef non
+warna · §3.13 · §3.12-i · §3.14 · get_gc · drift TODO.md · latin1-cliff ·
+`$GLOBALS['x']->p` resta FieldAssign.
 
 ## NON riproporre (i veti restano; dettaglio nei concili archiviati)
 
@@ -68,13 +68,13 @@ SSO inline · inline-array init+drain args · claim di ASSENZA oltre la risoluzi
 loro bande · misure con LSP in volo · F2 keys-scratch · quiescenza nello stesso
 comando del lancio · output TRACKED mossi da orchestratori · rumore-soglia =
 range PIENO senza formula robusta · guardia su categoria senza banda propria ·
-**percentuale tra segmenti NON annidati senza controllo a zero eventi (morso
-E1a S-130: 67% vs 24%)**.
+percentuale tra segmenti NON annidati senza controllo a zero eventi · **pattern
+del gate quiescenza dentro l'argv del lancio (morso S-131)**.
 
-**Riscritto**: 2026-08-11 (chiusura S-130). Storia: `sessions/` · `gaps/GAP_TREND.md`.
-Pre-flight S-131: pin phpr **s130 0fdf1c49**b16c24ba + server **s130 7fb79069**
-(OGNI build canonica rilinka il server: ricontrollare l'hash dopo ogni build;
-stash canonici in phpr-old-target/release/) · MySQL wp8 con l'elenco · uploads
-sotto guardia · corpus 1414 ×2 modi · target census e time-probes CALDI · nessuna
-run detached · ordine lettura: REGOLE.md → QUI → sessions/WP_SESSION_130.md →
-wp130-harness/revisione.md → wp130-harness/s130-e1a-lettura.md → PERF_MAP.md.
+**Riscritto**: 2026-08-11 (chiusura S-131). Storia: `sessions/` · `gaps/GAP_TREND.md`.
+Pre-flight S-132: pin phpr **s131 ff66cb84**6e6cd439 + server **s131 97ed6e06**
+(OGNI build canonica rilinka il server: ricontrollare l'hash; stash canonici in
+phpr-old-target/release/) · MySQL wp8 con l'elenco · uploads sotto guardia ·
+corpus 1414 ×2 modi · target time-probes CALDO · nessuna run detached · ordine
+lettura: REGOLE.md → QUI → sessions/WP_SESSION_131.md → wp131-harness/
+s131-propstep-lettura.md → wp131-harness/revisione.md → PERF_MAP.md.
