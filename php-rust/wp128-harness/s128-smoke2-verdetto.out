@@ -1,0 +1,42 @@
+== s128-ab smoke2: A=ccb63dca(pin s127b) B=52cc3b3e R=2 ordine ALTERNATO; giudice=objdatains; guardie solo-regressione; rc autoritativo = ab-out/smoke2.rc ==
+cat=objdatains N=3000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=3.99 rawB=4.02
+  coppia2 [BA]: rawA=3.98 rawB=4.05
+cat=objalloc N=3000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=2.96 rawB=2.94
+  coppia2 [BA]: rawA=2.99 rawB=2.94
+cat=objchurn N=3000000 floor_A=0.03 floor_B=0.02
+  coppia1 [AB]: rawA=4.81 rawB=4.79
+  coppia2 [BA]: rawA=4.78 rawB=4.79
+cat=objmap N=3000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=0.54 rawB=0.54
+  coppia2 [BA]: rawA=0.54 rawB=0.53
+cat=arith N=150000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=7.12 rawB=7.13
+  coppia2 [BA]: rawA=7.02 rawB=7.11
+cat=prop N=90000000 floor_A=0.03 floor_B=0.02
+  coppia1 [AB]: rawA=7.12 rawB=7.05
+  coppia2 [BA]: rawA=7.14 rawB=7.05
+cat=calls N=60000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=6.43 rawB=6.41
+  coppia2 [BA]: rawA=6.43 rawB=6.41
+cat=str N=28000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=4.42 rawB=4.48
+  coppia2 [BA]: rawA=4.42 rawB=4.51
+cat=arr N=30000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=4.53 rawB=4.51
+  coppia2 [BA]: rawA=4.57 rawB=4.51
+cat=re N=12000000 floor_A=0.03 floor_B=0.02
+  coppia1 [AB]: rawA=5.51 rawB=5.55
+  coppia2 [BA]: rawA=5.52 rawB=5.56
+GIUDICE objdatains: A=1321.7 B=1338.3 ns/iter D=-16.7 soglia=10.0 (rumoreB=10.0) -> SOTTO SOGLIA
+guardia objalloc: A=985.0 B=973.3 D=+11.7 soglia_reg=-4.0 [default 4 ns (nessuna banda storica)] -> ok
+guardia objchurn: A=1588.3 B=1590.0 D=-1.7 soglia_reg=-4.0 [default 4 ns (nessuna banda storica)] -> ok
+guardia objmap: A=173.3 B=171.7 D=+1.7 soglia_reg=-4.0 [default 4 ns (nessuna banda storica)] -> ok
+guardia arith: A=47.0 B=47.3 D=-0.3 soglia_reg=-4.0 [SL=0.94] -> ok
+guardia prop: A=78.9 B=78.1 D=+0.8 soglia_reg=-4.0 [SL=0.8] -> ok
+guardia calls: A=106.8 B=106.5 D=+0.3 soglia_reg=-4.0 [SL=0.73] -> ok
+guardia str: A=157.1 B=159.8 D=-2.7 soglia_reg=-4.0 [SL=2.89] -> ok
+guardia arr: A=151.0 B=149.7 D=+1.3 soglia_reg=-4.0 [SL=2.49] -> ok
+guardia re: A=457.1 B=461.2 D=-4.2 soglia_reg=-4.5 [SL=4.46] -> ok
+ESITO: NON PROMOSSA (sotto soglia)
