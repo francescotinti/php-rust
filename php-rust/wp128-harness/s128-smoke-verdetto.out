@@ -1,0 +1,42 @@
+== s128-ab smoke: A=ccb63dca(pin s127b) B=52cc3b3e R=2 ordine ALTERNATO; giudice=objdatains; guardie solo-regressione; rc autoritativo = ab-out/smoke.rc ==
+cat=objdatains N=3000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=4.04 rawB=4.06
+  coppia2 [BA]: rawA=4.05 rawB=4.07
+cat=objalloc N=3000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=2.96 rawB=2.94
+  coppia2 [BA]: rawA=2.99 rawB=2.94
+cat=objchurn N=3000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=4.81 rawB=4.83
+  coppia2 [BA]: rawA=4.82 rawB=4.84
+cat=objmap N=3000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=0.54 rawB=0.55
+  coppia2 [BA]: rawA=0.54 rawB=0.53
+cat=arith N=150000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=7.05 rawB=7.13
+  coppia2 [BA]: rawA=7.10 rawB=7.12
+cat=prop N=90000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=7.24 rawB=7.14
+  coppia2 [BA]: rawA=7.16 rawB=7.14
+cat=calls N=60000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=6.48 rawB=6.45
+  coppia2 [BA]: rawA=6.54 rawB=6.52
+cat=str N=28000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=4.47 rawB=4.54
+  coppia2 [BA]: rawA=4.56 rawB=4.51
+cat=arr N=30000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=4.54 rawB=4.56
+  coppia2 [BA]: rawA=4.62 rawB=4.53
+cat=re N=12000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=5.52 rawB=5.55
+  coppia2 [BA]: rawA=5.50 rawB=5.53
+GIUDICE objdatains: A=1341.7 B=1348.3 ns/iter D=-6.7 soglia=4.0 (rumoreB=3.3) -> SOTTO SOGLIA
+guardia objalloc: A=985.0 B=973.3 D=+11.7 soglia_reg=-4.0 [default 4 ns (nessuna banda storica)] -> ok
+guardia objchurn: A=1598.3 B=1605.0 D=-6.7 soglia_reg=-4.0 [default 4 ns (nessuna banda storica)] -> REGRESSIONE
+guardia objmap: A=173.3 B=173.3 D=+0.0 soglia_reg=-4.0 [default 4 ns (nessuna banda storica)] -> ok
+guardia arith: A=47.0 B=47.4 D=-0.3 soglia_reg=-4.0 [SL=0.94] -> ok
+guardia prop: A=79.8 B=79.1 D=+0.7 soglia_reg=-4.0 [SL=0.8] -> ok
+guardia calls: A=108.2 B=107.8 D=+0.4 soglia_reg=-4.0 [SL=0.73] -> ok
+guardia str: A=160.5 B=160.9 D=-0.4 soglia_reg=-4.0 [SL=2.89] -> ok
+guardia arr: A=152.0 B=150.8 D=+1.2 soglia_reg=-4.0 [SL=2.49] -> ok
+guardia re: A=457.5 B=460.0 D=-2.5 soglia_reg=-4.5 [SL=4.46] -> ok
+ESITO: GUARDIA MORDE
