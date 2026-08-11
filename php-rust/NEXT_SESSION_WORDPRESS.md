@@ -42,14 +42,12 @@ Serena pre-misura, mai edit .rs in finestra · rc quiescenza sempre in header.
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
 
-resolve del CTOR (70,8 ns, 4/iter da PropSet/init: forma separata) · lookup-once
-props-map (p.2 sopra) · dispatch fuori prop_step 36,3 · «prop_step altro» 8,5 ·
-AssignOp/IncDec fuori perimetro F4/E1-KO (comporre) · famiglia locale 170 ns ·
-evalcls 316,9× · refl 42,4× · re +2,00 alloc/iter · leaf-magic paths ora pagano
-key0 su Denied (prop_info extra, freddi — da osservare se mai caldi) · micro-trim
-morte (is_empty SipHash · has_destruct · FxHash per-id) · $z++/$z-- undef non
-warna · §3.13 · §3.12-i · §3.14 · get_gc · drift TODO.md · latin1-cliff ·
-`$GLOBALS['x']->p` resta FieldAssign.
+resolve del CTOR (70,8 ns, 4/iter da PropSet/init: forma separata) · dispatch
+fuori prop_step 36,3 · «prop_step altro» 8,5 · AssignOp/IncDec fuori perimetro
+F4/E1-KO (comporre) · famiglia locale 170 ns · evalcls 316,9× · refl 42,4× · re
++2,00 alloc/iter · leaf-magic ora paga key0 su Denied (freddi, osservare) ·
+micro-trim morte (is_empty SipHash · has_destruct · FxHash per-id) · $z++/$z--
+undef non warna · §3.13 · §3.12-i · §3.14 · get_gc · drift TODO.md · latin1-cliff.
 
 ## NON riproporre (i veti restano; dettaglio nei concili archiviati)
 
