@@ -1,0 +1,91 @@
+diff --git a/php-rust/crates/php-runtime/src/vm/arrays.rs b/php-rust/crates/php-runtime/src/vm/arrays.rs
+index cda294b..37719fa 100644
+--- a/php-rust/crates/php-runtime/src/vm/arrays.rs
++++ b/php-rust/crates/php-runtime/src/vm/arrays.rs
+@@ -583,7 +583,11 @@ fn field_write_prop_step(
+         let child = obj.props.get_mut(key).expect("property just inserted");
+         // Continue INSIDE this guard only up to the next boundary; the
+         // guard drops when the token returns (boundary discipline).
+-        field_write_walk(child, steps, i + 1, keys, fs, value, diags, dropped, aa, rebind, rw)
++        // S-130 sonda: seg 5 = E2 (walk interno: COW+coerce+insert).
++        let tp0 = super::timeprobes::now();
++        let r = field_write_walk(child, steps, i + 1, keys, fs, value, diags, dropped, aa, rebind, rw);
++        super::timeprobes::note(5, tp0);
++        r
+     }
+ }
+ 
+diff --git a/php-rust/crates/php-runtime/src/vm/mod.rs b/php-rust/crates/php-runtime/src/vm/mod.rs
+index a561779..73e9a75 100644
+--- a/php-rust/crates/php-runtime/src/vm/mod.rs
++++ b/php-rust/crates/php-runtime/src/vm/mod.rs
+@@ -46,6 +46,10 @@ use crate::hir::{
+ };
+ 
+ mod arrays;
++// S-130 sonda E1a (SOLO build emendata time-probes): il modulo vive in
++// wp130-harness/ — nessuna strumentazione nei sorgenti del pin.
++#[path = "../../../../wp130-harness/timeprobes.rs"]
++pub(crate) mod timeprobes;
+ mod calls;
+ // Without `op-census` only the arm/dump stubs and the unit tests use the
+ // module — the counters are compiled out of run_loop.
+diff --git a/php-rust/crates/php-runtime/src/vm/oop.rs b/php-rust/crates/php-runtime/src/vm/oop.rs
+index 1273fbc..ce8c824 100644
+--- a/php-rust/crates/php-runtime/src/vm/oop.rs
++++ b/php-rust/crates/php-runtime/src/vm/oop.rs
+@@ -425,6 +425,14 @@ pub(super) enum PropAccess<'a> {
+ ///    an invisible private declared by the object's own class (or an invisible
+ ///    protected) is `Denied`.
+ pub(super) fn resolve_prop_access<'a>(classes: &[&'a CompiledClass], obj_class: ClassId, name: &[u8], scope: Option<ClassId>) -> PropAccess<'a> {
++    // S-130 sonda E1a: seg 1 = TUTTE le chiamate del processo (nel micro-loop
++    // provengono dal solo cammino FieldAssign; i conteggi c1 lo certificano).
++    let tp0 = super::timeprobes::now();
++    let r = resolve_prop_access_inner(classes, obj_class, name, scope);
++    super::timeprobes::note(1, tp0);
++    r
++}
++fn resolve_prop_access_inner<'a>(classes: &[&'a CompiledClass], obj_class: ClassId, name: &[u8], scope: Option<ClassId>) -> PropAccess<'a> {
+     if let Some(s) = scope {
+         if let Some(pi) = prop_info(classes, s, name) {
+             if pi.visibility == Visibility::Private
+diff --git a/php-rust/crates/php-runtime/src/vm/run.rs b/php-rust/crates/php-runtime/src/vm/run.rs
+index d5a8999..6f553eb 100644
+--- a/php-rust/crates/php-runtime/src/vm/run.rs
++++ b/php-rust/crates/php-runtime/src/vm/run.rs
+@@ -5801,13 +5801,21 @@ impl<'m> super::Vm<'m> {
+                     self.frames[top].stack.push(if *pre { newv } else { old });
+                 }
+                 Op::FieldAssign { base, steps } => {
++                    // S-130 sonda E1a (build emendata): 0=TOT 4=E 7=CAL
++                    // (1=E1a dentro resolve_prop_access, 5=E2 in prop_step).
++                    let tp_tot = super::timeprobes::now();
+                     let value = self.frames[top].stack.pop().expect("FieldAssign value");
+                     let keys = self.pop_field_keys(top, &steps);
+                     // L-OL1-F4 (S-129): su base-oggetto piana di classe senza
+                     // hook il trio byref/indirect/lazy è no-op per costruzione.
+                     if self.field_prelude_skip(*base, top, &steps) {
++                        let tp0 = super::timeprobes::now();
+                         self.field_set(*base, top, &steps, keys, value.clone())?;
++                        super::timeprobes::note(4, tp0);
+                         self.frames[top].stack.push(value);
++                        let tp_cal = super::timeprobes::now();
++                        super::timeprobes::note(7, tp_cal);
++                        super::timeprobes::note(0, tp_tot);
+                         continue;
+                     }
+                     // A path starting at a `&get` hooked property writes through
+@@ -5825,8 +5833,13 @@ impl<'m> super::Vm<'m> {
+                         self.frames[top].stack.push(value);
+                         continue;
+                     }
++                    let tp0 = super::timeprobes::now();
+                     self.field_set(*base, top, &steps, keys, value.clone())?;
++                    super::timeprobes::note(4, tp0);
+                     self.frames[top].stack.push(value);
++                    let tp_cal = super::timeprobes::now();
++                    super::timeprobes::note(7, tp_cal);
++                    super::timeprobes::note(0, tp_tot);
+                 }
+                 Op::FieldAssignOp { base, steps, op } => {
+                     let rhs = self.frames[top].stack.pop().expect("FieldAssignOp rhs");
