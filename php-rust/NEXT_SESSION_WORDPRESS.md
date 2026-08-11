@@ -2,7 +2,8 @@
 ⏱ **FONDAMENTALI**: rif WP **full PULITO = 1,758–1,805** (S-129, MA misurato @
 s127b: la coppia va RIFATTA sul pin nuovo — F4 tocca FieldAssign e WP ne ha) ·
 ultima leva SPEDITA **S-130 (F4 prelude-gate → PIN NUOVO s130)** —
-sessioni-senza-leva-spedita = 0 · incidenti: storici 8 (nessuno nuovo in S-130).
+sessioni-senza-leva-spedita = 0 · incidenti: storici 8 + **1 app. S-130**
+(«7/6 gate verdi» fixture + registro server committato tardi, rev. PROCESSO).
 
 ## Scoreboard (pin **s130 0fdf1c49**b16c24ba + server s130 7fb79069; micro gate promozione S-130)
 
@@ -31,10 +32,13 @@ WP 1,76–1,81(@s127b) ≈ compoff 1,86–1,89 ≪ hf 2,55 ≪ hk 4,3 ≪ dbal 8
    PRE-REGISTRATO, bande fondate v2 — le objX ora hanno serie s130).
 4. Mappa residui per NOME: lexer/inflector/event-manager · wp-cli · PHPUnit-self ·
    strumento DENSITÀ evalcls · §3.20 dbal.
-APPARATO: quiescenza = GATE SEPARATO (wp129-harness/s129-quiescenza.sh) PRIMA di
-ogni run · Serena prima della prima misura, MAI edit .rs in finestra di misura ·
-verdetti avversi committati PRIMA di ogni emenda · bande di guardia: fondarle
-dalle gambe A committate (S-130: zero run extra).
+APPARATO + az.rev. S-130 (PROCESSO, vincolanti): quiescenza gate SEPARATO prima
+di ogni run E il suo rc citato nell'HEADER di ogni verdetto A/B (#3) · fixture
+chain: lista gate CONGELATA per NOME nello script di promozione, fail su
+inventario diverso (#2) · criterio E1a p.2 da emendare + quota ctor/statement
+per call-site CON rerun (#4) · pin-server verifichi tree pulito post-atto (#1) ·
+Serena prima della prima misura, MAI edit .rs in finestra di misura · verdetti
+avversi committati PRIMA di ogni emenda · bande fondate dalle gambe A committate.
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
 

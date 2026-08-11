@@ -10,7 +10,9 @@ del cammino di scrittura (~120 ns).
 **SCOREBOARD** (pin NUOVO **s130 0fdf1c49** + server s130 7fb79069; micro gate promozione):
 **arith 5,5 ↗ · prop 5,6 = · calls 5,0 = · str 4,3 ↗ · arr 3,3 ↗ · re 2,5 =**
 (↗ = jitter denominatore oracle; phpr netto invariato) · WP full NON rimisurato
-(resta 1,758–1,805 @ s127b) · **leve spedite: 1 (F4)** · incidenti: 0. 2026-08-11.
+(resta 1,758–1,805 @ s127b) · **leve spedite: 1 (F4)** · incidenti: 1 app.
+(«7/6 gate verdi»: denominatore fixture stantio da S-122 + registro server
+committato solo a valle della revisione — rev. PROCESSO). 2026-08-11.
 
 ## Esiti secchi
 1·**Criterio F4 emendato PRE-REGISTRATO** (879a38e, PRIMA di ogni run): rumore
