@@ -1,6 +1,7 @@
 # NEXT_SESSION — phpr: OBIETTIVO PARITÀ (≥1×) con l'oracle; ≤3× = tappa (REGOLE §1)
-⏱ **FONDAMENTALI**: rif WP **full = 1,758–1,909** (S-128 @ s127b, FRESCO; coppie
-proprie ON 1,765–1,767; media 2,447–2,539; peak 2,299–2,374×) · ultima leva SPEDITA
+⏱ **FONDAMENTALI**: rif WP **full = 1,758–1,909** (S-128 @ s127b, FRESCO; ⚠ bordo
+alto = gamba leg1-off con ictx 2–3× — coppie proprie PULITE **1,765–1,805**, rev.
+S-128 az.1-2; media 2,447–2,539; peak 2,30–2,37×) · ultima leva SPEDITA
 **S-127 (stampo)**; S-128: F2 keys-scratch TENTATA (A/B eseguito) e **CADUTA** con
 meccanismo — sessioni-senza-leva-spedita = 1 · incidenti: 1 (S-106) + 2 proc. S-125
 + 2 app. S-125 + 1 S-126 + 1 app. S-127 + **2 proc. + 1 app. S-128**.
