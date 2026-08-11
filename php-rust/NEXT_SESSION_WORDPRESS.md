@@ -33,10 +33,12 @@ borrow 1,5) + dispatch 36,3; resolve statement ora ~10 (1 sito); residui NOMINAT
    tocca New/ctor — sonda per-sito prima della forma, ricetta propstep riusabile).
 4. Mappa residui per NOME: lexer/inflector/event-manager · wp-cli · PHPUnit-self ·
    strumento DENSITÀ evalcls · §3.20 dbal.
-APPARATO: quiescenza gate separato + rc SEMPRE in header (ora cablato in pair/ab/
-tempo) · argv dei lanci SENZA la stringa «phpr» (gate self-match, incidente S-131)
-· Serena prima della prima misura, MAI edit .rs in finestra di misura · verdetti
-avversi committati PRIMA di ogni emenda · bande fondate da gambe committate.
+APPARATO + az.rev. S-131 (MISURA, vincolanti): soglia giudice = max(drop-1,
+spread storico TRA batch sul pin) (#1) · verdetto R=5 riconcili |D_smoke−D_R5| e
+D vs UB del modello (#2) · pair: riferimento anche PER CONFIGURAZIONE (on-only =
+default) + firma per gamba (#3) · trange tie-break deterministico (#4) · verdetto
+= file NUOVO per tentativo, mai append (#5) · argv dei lanci senza «phpr» ·
+Serena pre-misura, mai edit .rs in finestra · rc quiescenza sempre in header.
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
 
