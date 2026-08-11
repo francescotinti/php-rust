@@ -1,0 +1,5 @@
+pair-out/
+tempo-out/
+quiesce.rc
+*-daemon.log
+*.done
