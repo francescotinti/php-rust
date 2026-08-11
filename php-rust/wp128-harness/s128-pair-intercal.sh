@@ -69,8 +69,12 @@ printf "oracle_full_N4: min=%.2f max=%.2f spread=%.1f%%\n", $omin, $omax, 100*($
 printf "phpr_full_N4: min=%.2f max=%.2f spread=%.1f%%\n", $pmin, $pmax, 100*($pmax-$pmin)/$pmin;
 printf "full_intervallo=%.3f-%.3f (min/max su tutte le 16 celle)\n", $pmin/$omax, $pmax/$omin;
 for my $mode (qw(off on)) {
+  # az.rev. S-128 #3: UNA media canonica (user-only, come i ratios.out per
+  # gamba); la user+sys resta come companion ETICHETTATA.
+  my @ru = map { $pm{"$mode$_"}{user}/$om{"$mode$_"}{user} } (1, 2);
+  printf "media_%s_user_only_CANONICA_N2=%.3f/%.3f\n", $mode, @ru;
   my @r = map { $pm{"$mode$_"}{cpu}/$om{"$mode$_"}{cpu} } (1, 2);
-  printf "media_%s_ratio_N2=%.3f/%.3f\n", $mode, @r;
+  printf "media_%s_user_sys_companion_N2=%.3f/%.3f\n", $mode, @r;
   my @pk = map { $p{"$mode$_"}{pf}/1048576 } (1, 2);
   printf "full_peak_%s_MiB_N2=%.1f/%.1f\n", $mode, @pk;
 }
