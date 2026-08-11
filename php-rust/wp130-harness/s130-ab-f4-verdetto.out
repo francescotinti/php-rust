@@ -1,0 +1,72 @@
+== s130-ab ab-f4: A=ccb63dca(pin s127b) B=0fdf1c49 R=5 ordine ALTERNATO; giudice=objdatains; rumore trimmed drop-1 simmetrico; bande fondate objmap 6.7/objalloc 6.7/objchurn 13.3; rc autoritativo = ab-out/ab-f4.rc ==
+cat=objdatains N=3000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=4.01 rawB=3.77
+  coppia2 [BA]: rawA=4.15 rawB=3.83
+  coppia3 [AB]: rawA=4.03 rawB=3.82
+  coppia4 [BA]: rawA=4.01 rawB=3.77
+  coppia5 [AB]: rawA=4.02 rawB=3.78
+cat=objalloc N=3000000 floor_A=0.03 floor_B=0.02
+  coppia1 [AB]: rawA=2.97 rawB=2.96
+  coppia2 [BA]: rawA=2.97 rawB=2.97
+  coppia3 [AB]: rawA=3.10 rawB=3.10
+  coppia4 [BA]: rawA=2.96 rawB=2.97
+  coppia5 [AB]: rawA=2.97 rawB=2.98
+cat=objchurn N=3000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=4.81 rawB=4.55
+  coppia2 [BA]: rawA=4.83 rawB=4.72
+  coppia3 [AB]: rawA=4.81 rawB=4.55
+  coppia4 [BA]: rawA=4.78 rawB=4.60
+  coppia5 [AB]: rawA=4.81 rawB=4.56
+cat=objmap N=3000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=0.53 rawB=0.55
+  coppia2 [BA]: rawA=0.54 rawB=0.52
+  coppia3 [AB]: rawA=0.55 rawB=0.56
+  coppia4 [BA]: rawA=0.54 rawB=0.56
+  coppia5 [AB]: rawA=0.54 rawB=0.55
+cat=arith N=150000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=7.03 rawB=7.23
+  coppia2 [BA]: rawA=7.04 rawB=7.21
+  coppia3 [AB]: rawA=7.08 rawB=7.18
+  coppia4 [BA]: rawA=7.11 rawB=7.25
+  coppia5 [AB]: rawA=7.01 rawB=7.20
+cat=prop N=90000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=7.09 rawB=7.02
+  coppia2 [BA]: rawA=7.12 rawB=7.09
+  coppia3 [AB]: rawA=7.09 rawB=7.06
+  coppia4 [BA]: rawA=7.08 rawB=7.06
+  coppia5 [AB]: rawA=7.09 rawB=7.02
+cat=calls N=60000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=6.44 rawB=6.48
+  coppia2 [BA]: rawA=6.41 rawB=6.51
+  coppia3 [AB]: rawA=6.46 rawB=6.43
+  coppia4 [BA]: rawA=6.44 rawB=6.46
+  coppia5 [AB]: rawA=6.44 rawB=6.79
+cat=str N=28000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=4.43 rawB=4.47
+  coppia2 [BA]: rawA=4.42 rawB=4.50
+  coppia3 [AB]: rawA=4.44 rawB=4.53
+  coppia4 [BA]: rawA=4.43 rawB=4.49
+  coppia5 [AB]: rawA=4.43 rawB=4.47
+cat=arr N=30000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=4.57 rawB=4.56
+  coppia2 [BA]: rawA=4.56 rawB=4.60
+  coppia3 [AB]: rawA=4.54 rawB=4.52
+  coppia4 [BA]: rawA=4.55 rawB=4.58
+  coppia5 [AB]: rawA=4.59 rawB=4.52
+cat=re N=12000000 floor_A=0.03 floor_B=0.02
+  coppia1 [AB]: rawA=5.60 rawB=5.57
+  coppia2 [BA]: rawA=5.62 rawB=5.58
+  coppia3 [AB]: rawA=5.61 rawB=5.57
+  coppia4 [BA]: rawA=5.57 rawB=5.58
+  coppia5 [AB]: rawA=5.62 rawB=5.60
+GIUDICE objdatains: A=1333.3 B=1253.3 ns/iter D=+80.0 soglia=16.7 (rumore drop-1: A'=6.7 B'=16.7) -> PROMOSSA
+guardia objalloc: A=980.0 B=983.3 D=-3.3 soglia_reg=-6.7 [banda fondata=6.7] -> ok
+guardia objchurn: A=1596.7 B=1513.3 D=+83.3 soglia_reg=-13.3 [banda fondata=13.3] -> ok
+guardia objmap: A=173.3 B=176.7 D=-3.3 soglia_reg=-6.7 [banda fondata=6.7] -> ok
+guardia arith: A=46.8 B=47.9 D=-1.1 soglia_reg=-4.0 [SL=0.94] -> ok
+guardia prop: A=78.6 B=78.2 D=+0.3 soglia_reg=-4.0 [SL=0.8] -> ok
+guardia calls: A=107.0 B=107.7 D=-0.7 soglia_reg=-4.0 [SL=0.73] -> ok
+guardia str: A=157.5 B=159.6 D=-2.1 soglia_reg=-4.0 [SL=2.89] -> ok
+guardia arr: A=151.3 B=151.3 D=+0.0 soglia_reg=-4.0 [SL=2.49] -> ok
+guardia re: A=465.0 B=463.3 D=+1.7 soglia_reg=-4.5 [SL=4.46] -> ok
+ESITO: PROMOSSA (giudice sopra soglia, guardie ok)
