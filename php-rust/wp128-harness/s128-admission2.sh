@@ -15,7 +15,9 @@ fail(){ echo "$1" | tee -a "$VERD"; echo 1 > "$OUT/admission2.rc"; git -C "$REPO
 
 cd "$REPO" || exit 2
 git diff --quiet || fail "PRE: tree sporco — STOP"
-[ "$(git rev-parse --short=7 HEAD)" = "31ceca9" ] || fail "HEAD != forma F2 31ceca9"
+# la forma F2 deve essere NEL tree (ancestor di HEAD): il guard a uguaglianza
+# stretta mordeva il commit dell'arbitro stesso (emenda post-verdetto-avverso)
+git merge-base --is-ancestor 31ceca9 HEAD || fail "forma F2 31ceca9 non in HEAD"
 git apply wp119-harness/census-clite.patch || fail "census-clite.patch NON applica"
 CARGO_TARGET_DIR="$CTL" SOURCE_DATE_EPOCH=0 CARGO_INCREMENTAL=0 \
   cargo build --release -p php-cli --features mem-census \
