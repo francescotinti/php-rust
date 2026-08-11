@@ -1,9 +1,8 @@
 # NEXT_SESSION — phpr: OBIETTIVO PARITÀ (≥1×) con l'oracle; ≤3× = tappa (REGOLE §1)
 ⏱ **FONDAMENTALI**: rif WP **full PULITO = 1,758–1,805** (S-129, MA misurato @
 s127b: la coppia va RIFATTA sul pin nuovo — F4 tocca FieldAssign e WP ne ha) ·
-ultima leva SPEDITA **S-130 (F4 prelude-gate → PIN NUOVO s130)** —
-sessioni-senza-leva-spedita = 0 · incidenti: storici 8 + **1 app. S-130**
-(«7/6 gate verdi» fixture + registro server committato tardi, rev. PROCESSO).
+ultima leva SPEDITA **S-130 (F4 prelude-gate → PIN NUOVO s130)** · sessioni-senza-
+leva = 0 · incidenti: storici 8 + **1 app. S-130** («7/6» fixture + registro tardo).
 
 ## Scoreboard (pin **s130 0fdf1c49**b16c24ba + server s130 7fb79069; micro gate promozione S-130)
 
