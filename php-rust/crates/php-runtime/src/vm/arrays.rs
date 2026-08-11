@@ -498,6 +498,23 @@ fn field_write_prop_step(
     let cid = obj.class_id as usize;
     let is_enum = obj.info.is_enum_case;
     let is_lazy = obj.lazy.is_some();
+    // L-OL1-E1-KO (S-131): ONE `resolve_prop_access` per prop step, reused by
+    // the four helper sites below (three `prop_key` + `prop_key_read` +
+    // `prop_is_declared_slot`) — key0/declared0/denied0 are equivalent BY
+    // CONSTRUCTION to the helpers they replace (same match as
+    // `FieldScope::prop_key`; `prop_key_read` is `None` iff `Denied`).
+    // `prop_indirect_guard` keeps its own internal resolve (measured ~free).
+    let ra = resolve_prop_access(fs.classes, cid, name, fs.scope);
+    let declared0 = matches!(&ra, PropAccess::Slot { .. });
+    let denied0 = matches!(&ra, PropAccess::Denied { .. });
+    let key0: std::borrow::Cow<[u8]> = match ra {
+        PropAccess::Slot { key: k, .. } => std::borrow::Cow::Borrowed(k),
+        PropAccess::Denied { .. } => match prop_info(fs.classes, cid, name) {
+            Some(pi) => std::borrow::Cow::Borrowed(pi.storage_key.as_ref()),
+            None => std::borrow::Cow::Borrowed(name),
+        },
+        PropAccess::Dynamic => std::borrow::Cow::Borrowed(name),
+    };
     // PHP 8.4 container-fetch guard: drilling INTO a readonly or
     // set-visibility-denied property whose value is not an object is
     // "Cannot indirectly modify …" (and a compound fetch of an
@@ -505,7 +522,7 @@ fn field_write_prop_step(
     // magic-descend deferral — the slot is declared and get-visible here,
     // so Zend never reaches `__get` for it.
     if !rest.is_empty() && !is_enum && !is_lazy {
-        let state = prop_slot_state(obj.props.get(fs.prop_key(cid, name).as_ref()));
+        let state = prop_slot_state(obj.props.get(key0.as_ref()));
         prop_indirect_guard(fs.classes, fs.scope, cid, name, state, rw, false)?;
     }
     // A leaf write on a property that is not a declared, accessible
@@ -527,7 +544,7 @@ fn field_write_prop_step(
     // aliasing (`typed_properties_071`, oss-fuzz hooked backing).
     if rest.is_empty()
         && !is_enum
-        && (!fs.prop_is_declared_slot(cid, name)
+        && (!declared0
             || (!rebind && (fs.prop_hooked(cid, name) || fs.prop_typed(cid, name)))
             || is_lazy)
     {
@@ -546,8 +563,8 @@ fn field_write_prop_step(
     // its own machinery); enum cases fall through to their
     // dedicated immutability error below.
     if !rest.is_empty() && !is_enum && !is_lazy {
-        let denied = fs.prop_key_read(cid, name).is_none();
-        let absent = !obj.props.contains(fs.prop_key(cid, name).as_ref());
+        let denied = denied0;
+        let absent = !obj.props.contains(key0.as_ref());
         if denied || absent {
             drop(obj);
             *aa = Some(AaOp::MagicDescend(AaMagicDescend {
@@ -560,8 +577,7 @@ fn field_write_prop_step(
             return Ok(WriteWalk::Done);
         }
     }
-    let key = fs.prop_key(cid, name);
-    let key = key.as_ref();
+    let key = key0.as_ref();
     if obj.info.is_enum_case {
         let cls = String::from_utf8_lossy(obj.class_name.as_bytes()).into_owned();
         let prop = String::from_utf8_lossy(name).into_owned();
