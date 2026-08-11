@@ -16,8 +16,9 @@ incidenti: 1 apparato (dump tprobes assente su categoria a zero statement). 2026
 ## Esiti secchi
 1·**MODELLO DEL TEMPO seg.3 CHIUSO** (criterio 2c8fb2f PRIMA; census 22/22 → pin
   R=5 → per-passo chiusura 95-96% → disasm → lettura): Δstatement 300–340 ns quasi
-  INVARIANTE per forma; torta: **E1 resolve-per-NOME 155 ns (52%)** · preludio
-  byref/lazy/indirect 73 (25%) · walk interno 48 (16%); i 2 alloc residui =
+  INVARIANTE per forma; torta: **E−E2 dispatch+prop_step 155 ns (52%; residuo per
+  sottrazione — «resolve-per-NOME» è indizio, sonda E1a in S-130, rev.)** · preludio
+  byref/lazy/indirect 73 (25%, sondato+corroborato) · walk 48 (16%); 2 alloc residui =
   n.clone() del nome (mod.rs:14333, 12876). Overwrite(+4)/2°insert(+3) SPIEGATI.
 2·**F4 prelude-gate**: criterio → codice f4143a6 → census 11/11 → smoke +71,7
   PROMOSSA → R=5 D=+66,7 SOTTO soglia 70 (rumore da UNA run 4,00 vs 3,79–3,83) +

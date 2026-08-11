@@ -10,7 +10,7 @@ cifre dai verdetti `.out`. Regola di lettura: rapporti PER workload, MAI aggrega
 
 | workload | rapporto phpr/oracle | N | note |
 |---|---|---|---|
-| **WordPress full-suite** | **1,758–1,805 PULITO** (gate ictx/s per gamba, S-129: leg1-off S-128 E leg3-off nuova SEGNALATE >1,5× mediana ed ESCLUSE — entrambe prime-di-sequenza, indizio warm-up; coppie proprie pulite **1,765–1,805**, N=3) | 3 gambe pulite (9 celle) | S-129 @ pin s127b; phpr 782–796 s; parità per NOME invariata; peak 1828–1880 MiB sulle pulite; verdetto `wp129-harness/s129-pair-legoff-verdetto.out` |
+| **WordPress full-suite** | **1,758–1,805 PULITO** (gate ictx/s per gamba, S-129: leg1-off S-128 E leg3-off nuova SEGNALATE ed ESCLUSE — set INVARIATO anche con mediana PER MOTORE, addendum rev. S-129; entrambe prime-di-sequenza, indizio warm-up; coppie proprie pulite **1,765–1,805** user+sys, **1,772–1,813** user-only, N=3) | 3 gambe pulite (9 celle) | S-129 @ pin s127b; phpr 782–796 s; parità per NOME invariata; peak 1828–1880 MiB sulle pulite; verdetto `wp129-harness/s129-pair-legoff-verdetto.out` |
 | **WordPress gruppo media** | **2,447–2,463 CANONICA user-only** (gambe pulite; companion user+sys 2,408–2,419; az.rev. S-128 #3: una sola media) | 3 | S-129 @ s127b; le gambe segnalate davano 2,506–2,539 |
 | **symfony http-foundation** (1854) | **2,547–2,559** (raw 2,55–2,57) | 2/lato | S-126; canonica sul CONTEGGIO diff 17 nomi = 0,92% ≤1% (≥3 nomi sono unit puri, NON famiglia `php -S` — emenda S-127); sys alto (I/O) |
 | **symfony http-kernel** (1665 test) | **4,29–4,32** | 2/lato | parità 0E/0F; contesa ok |
@@ -49,8 +49,11 @@ gc_note/sweep/collect_cycles, insert/lookup, malloc/free); compile ≤~1% leaf, 
 - **L-OL1-F1 «stampo» SPEDITA (S-127, pin s127 834f5e01)**: template Props per classe,
   default COW — objalloc −20,4% (7,7×), churn 8,9×. **S-129: MODELLO DEL TEMPO seg.3
   CHIUSO** (s129-modello-tempo.md): statement Field* ≈300–340 ns QUASI INVARIANTE per
-  forma (oracle 23–37; locale 170); torta per-passo (chiusura 96%): **E1 resolve-per-NOME
-  ~155 ns (52%)** · preludio byref/indirect/lazy ~73 ns (25%) · walk interno 48 (16%);
+  forma (oracle 23–37; locale 170); torta per-passo (chiusura 96%): **E−E2
+  (dispatch+prop_step) ~155 ns (52%)** — residuo per sottrazione; l'attribuzione
+  «resolve-per-NOME» è INDIZIO (profilo+disasm), sonda diretta E1a dovuta in S-130
+  (rev. S-129) · preludio byref/indirect/lazy ~73 ns (25%, sondato E corroborato
+  dall'A/B F4) · walk interno 48 (16%);
   i 2 alloc residui = n.clone() del nome in byref_hook_root+field_lazy_root (census
   22/22). **F4 «prelude-gate» TENTATA S-129**: census 11/11, smoke +71,7 PROMOSSA,
   R=5 D=+66,7 AVVERSA per criterio (soglia 70 da outlier singolo; objmap −6,7 =
