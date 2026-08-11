@@ -47,8 +47,10 @@ gc_note/sweep/collect_cycles, insert/lookup, malloc/free); compile ≤~1% leaf, 
   sentiero compile: coerente con l'istruttoria (compile ≤1% leaf nel run reale).
 - **L-OL1-F1 «stampo» SPEDITA (S-127, pin s127 834f5e01)**: template Props per classe,
   default COW — objalloc −20,4% (7,7×), churn 8,9×; corpus bug69534 flippa VERDE
-  (stesso meccanismo). Prossimo segmento nominabile dal churn residuo: Δins 320 ns
-  (insert su array di proprietà) — vedi wp127-harness/s127-submicro-letture.md.
+  (stesso meccanismo). Churn residuo: Δins 320 ns = **5 alloc/insert** (census S-128,
+  sonde p2–p6: costo FISSO per-statement, overwrite +4) — **F2 «keys-scratch» CADUTA
+  S-128** (census 11/11 OK, giudice −16,7 segno opposto: alloc-count ≠ modello di
+  tempo); seg.3 vuole il modello del TEMPO (wp128-harness/s128-admission-lettura.md).
 - Aperture per NOME: `evalcls` **316,9×** (cliff compile-per-classe; serve strumento di densità
   prima di ogni leva) · `refl` **42,4×** · re +2,00 alloc/iter.
 
