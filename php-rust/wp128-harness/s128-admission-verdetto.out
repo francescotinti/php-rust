@@ -1,1 +1,10 @@
-PRE: tree sporco — STOP
+== s128 admission L-OL1 seg.2: census alloc/free per-iter al pin s127b (REGISTRAZIONE, R=2 identici) ==
+grade=VERDICT  # conteggi deterministici; per-iter=(cat-empty)/3e6; rc autoritativo = admission-out/admission.rc
+objalloc   alloc/iter=7.00 free/iter=7.00  [F1-OK]
+objallocni alloc/iter=5.00 free/iter=5.00  [F1-OK]
+objdatains alloc/iter=12.00 free/iter=12.00  [F1-OK]
+objdropdef alloc/iter=8.00 free/iter=8.00  [F1-OK]
+objmap     alloc/iter=1.00 free/iter=1.00  [F1-OK]
+objchurn   alloc/iter=13.00 free/iter=13.00  [F1-OK]
+Dins_alloc = datains-alloc = 5.00 alloc/insert (atteso post-F1: 5.00; pre-F1 era 4.00)
+ADMISSION-CENSUS: ACQUISITA
