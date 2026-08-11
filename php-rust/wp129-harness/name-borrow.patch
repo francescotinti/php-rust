@@ -1,0 +1,87 @@
+diff --git a/php-rust/crates/php-runtime/src/vm/mod.rs b/php-rust/crates/php-runtime/src/vm/mod.rs
+index 4d104a2..741b52b 100644
+--- a/php-rust/crates/php-runtime/src/vm/mod.rs
++++ b/php-rust/crates/php-runtime/src/vm/mod.rs
+@@ -12873,20 +12873,23 @@ impl<'m> Vm<'m> {
+         keys: &[Zval],
+         write: bool,
+     ) -> Result<Option<Zval>, PhpError> {
+-        let n: Box<[u8]> = match steps.first() {
+-            Some(FieldStep::Prop(n)) => n.clone(),
++        // S-129 name-borrow (variante census): prestito da `steps` per il caso
++        // Prop (il clone per-statement cade); PropDyn resta owned.
++        let owned: Box<[u8]>;
++        let n: &[u8] = match steps.first() {
++            Some(FieldStep::Prop(n)) => n,
+             // A dynamic first step's name is the first popped key (an object
+             // name converts via __toString, warning-free).
+             Some(FieldStep::PropDyn) => match keys.first() {
+                 Some(k) => {
+                     let k = k.clone();
+-                    self.dyn_prop_name_value(&k)?
++                    owned = self.dyn_prop_name_value(&k)?;
++                    &owned
+                 }
+                 None => return Ok(None),
+             },
+             _ => return Ok(None),
+         };
+-        let n = &n;
+         let base_val = match base {
+             FieldBase::Local(s) => self.frames[top].slots.get(s as usize),
+             FieldBase::Global(s) => self.frames[0].slots.get(s as usize),
+@@ -12897,12 +12900,11 @@ impl<'m> Vm<'m> {
+         if !self.is_lazy_value(&v) {
+             return Ok(None);
+         }
+-        let n = n.clone();
+         let cur = self.frames[top].class;
+         let fwd = if write {
+-            self.lazy_prop_access(v, &n, cur, Some(true), (MagicKind::Set, b"__set"))?
++            self.lazy_prop_access(v, n, cur, Some(true), (MagicKind::Set, b"__set"))?
+         } else {
+-            self.lazy_prop_access(v, &n, cur, Some(false), (MagicKind::Get, b"__get"))?
++            self.lazy_prop_access(v, n, cur, Some(false), (MagicKind::Get, b"__get"))?
+         };
+         Ok(Some(fwd))
+     }
+@@ -14330,8 +14332,10 @@ impl<'m> Vm<'m> {
+         top: usize,
+         steps: &[FieldStep],
+     ) -> Result<Option<Rc<RefCell<Zval>>>, PhpError> {
+-        let name: Box<[u8]> = match steps.first() {
+-            Some(FieldStep::Prop(n)) => n.clone(),
++        // S-129 name-borrow (variante census): il nome si PRENDE IN PRESTITO
++        // da `steps` (indipendente da `self`); il Box clone per-statement cade.
++        let name: &[u8] = match steps.first() {
++            Some(FieldStep::Prop(n)) => n,
+             _ => return Ok(None),
+         };
+         let base_val = match base {
+@@ -14349,7 +14353,7 @@ impl<'m> Vm<'m> {
+         // real instance (transitively — the instance may have been reset lazy).
+         let target = self.lazy_prop_access(
+             target,
+-            &name,
++            name,
+             self.frames[top].class,
+             Some(false),
+             (MagicKind::Get, b"__get"),
+@@ -14359,14 +14363,14 @@ impl<'m> Vm<'m> {
+             let b = o.borrow();
+             (b.id, b.class_id as usize)
+         };
+-        if self.hook_guarded(oid, &name) {
++        if self.hook_guarded(oid, name) {
+             return Ok(None);
+         }
+-        let Some(func) = self.prop_hook(cid, &name, false).filter(|f| f.by_ref) else {
++        let Some(func) = self.prop_hook(cid, name, false).filter(|f| f.by_ref) else {
+             return Ok(None);
+         };
+         let baseline = self.frames.len();
+-        self.push_hook(func, target, oid, &name, None);
++        self.push_hook(func, target, oid, name, None);
+         self.frames.last_mut().expect("hook frame just pushed").flags.set(FrameFlags::RET_DEREF, false);
+         let v = self.drive_to_return(baseline)?;
+         Ok(Some(match v {
