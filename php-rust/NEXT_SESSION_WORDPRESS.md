@@ -63,13 +63,12 @@ morso: F2 S-128)** · probe senza riferimento vivo · classifiche da census che
 spegne la fusione · ordine FISSO di misura: SEMPRE permutato o alternato ·
 delta tra census di epoche diverse senza datare i raw · verdetti da script
 d'arbitrio non committati · SSO inline (WP-38) · forma inline-array init+drain
-per gli args (S-125) · claim di ASSENZA oltre la risoluzione · smoke su
-giudice con fam-min > R · altre notti su PhpStr-full · guardie su giudici
-diversi da quelli delle loro bande (morso S-127) · misure con indicizzatore
-LSP in volo (incidente S-127) · **F2 keys-scratch drain+put-back (caduta
-S-128)** · **check di quiescenza nello stesso comando del lancio (morso
-S-128)** · **output di run TRACKED mossi/cancellati da orchestratori (2 morsi
-S-128: emenda = fuori dal tracking, mai allentare il gate)**.
+args (S-125) · claim di ASSENZA oltre la risoluzione · smoke con fam-min > R ·
+altre notti su PhpStr-full · guardie su giudici diversi dalle loro bande (S-127)
+· misure con LSP in volo (S-127) · **F2 keys-scratch drain+put-back (caduta
+S-128)** · **quiescenza nello stesso comando del lancio (S-128)** · **output di
+run TRACKED mossi/cancellati da orchestratori (2 morsi S-128: fuori dal
+tracking, mai allentare il gate)**.
 
 **Riscritto**: 2026-08-11 (chiusura S-128). Storia: `sessions/` · `gaps/GAP_TREND.md`.
 Pre-flight S-129: pin phpr **s127b ccb63dca**f565cffc (stash phpr-s127b; il rebuild
