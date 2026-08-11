@@ -1,0 +1,35 @@
+== s129 gate micro R=5 @ pin s127b (osservazione calls 4,9(*)) ==
+grade=VERDICT  # rc autoritativo = micro-out/micro.rc; riferimento = s127b-micro-pin-verdetto.out
+pavimento_oracle_s=0.05
+pavimento_phpr_s=0.02
+arith_N_iter=50000000
+arith_oracle_netto_s=0.44
+arith_phpr_netto_s=2.34
+rapporto_arith=5.3  [derivata: companion 2.34/0.44]
+arith_spread_oracle_s=0.01  arith_spread_phpr_s=0.05
+prop_N_iter=30000000
+prop_oracle_netto_s=0.42
+prop_phpr_netto_s=2.36
+rapporto_prop=5.6  [derivata: companion 2.36/0.42]
+prop_spread_oracle_s=0.01  prop_spread_phpr_s=0.06
+calls_N_iter=20000000
+calls_oracle_netto_s=0.43
+calls_phpr_netto_s=2.14
+rapporto_calls=5.0  [derivata: companion 2.14/0.43]
+calls_spread_oracle_s=0.02  calls_spread_phpr_s=0.02
+str_N_iter=4000000
+str_oracle_netto_s=0.15
+str_phpr_netto_s=0.63
+rapporto_str=4.2  [derivata: companion 0.63/0.15]
+str_spread_oracle_s=0.00  str_spread_phpr_s=0.02
+arr_N_iter=100000
+arr_oracle_netto_s=0.29
+arr_phpr_netto_s=0.94
+rapporto_arr=3.2  [derivata: companion 0.94/0.29]
+arr_spread_oracle_s=0.01  arr_spread_phpr_s=0.01
+re_N_iter=2000000
+re_oracle_netto_s=0.37
+re_phpr_netto_s=0.92
+rapporto_re=2.5  [derivata: companion 0.92/0.37]
+re_spread_oracle_s=0.00  re_spread_phpr_s=0.00
+-- confronto dichiarato vs s127b (run-to-run, non banda): arith 5,3 prop 5,6 calls 4,9 str 4,2 arr 3,2 re 2,6 --
