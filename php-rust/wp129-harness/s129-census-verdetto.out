@@ -1,0 +1,27 @@
+== s129 census identità H-cloni (criterio p.2 EMENDATO; baseline S-128 + variante name-borrow, stesso epoch) ==
+grade=VERDICT  # conteggi deterministici; per-iter=(cat-empty)/3e6; rc autoritativo = census-out/census.rc
+-- fase A (baseline clite) --
+objalloc     alloc/iter=7.00 free/iter=7.00  [PRED-OK]
+objallocni   alloc/iter=5.00 free/iter=5.00  [PRED-OK]
+objdatains   alloc/iter=12.00 free/iter=12.00  [PRED-OK]
+objdropdef   alloc/iter=8.00 free/iter=8.00  [PRED-OK]
+objmap       alloc/iter=1.00 free/iter=1.00  [PRED-OK]
+objchurn     alloc/iter=13.00 free/iter=13.00  [PRED-OK]
+p2-append    alloc/iter=11.00 free/iter=11.00  [PRED-OK]
+p3-local     alloc/iter=10.00 free/iter=10.00  [PRED-OK]
+p4-int       alloc/iter=12.00 free/iter=12.00  [PRED-OK]
+p5-two       alloc/iter=15.00 free/iter=15.00  [PRED-OK]
+p6-overwrite alloc/iter=16.00 free/iter=16.00  [PRED-OK]
+-- fase B (clite + name-borrow) --
+objalloc     alloc/iter=7.00 free/iter=7.00  [PRED-OK]
+objallocni   alloc/iter=5.00 free/iter=5.00  [PRED-OK]
+objdatains   alloc/iter=10.00 free/iter=10.00  [PRED-OK]
+objdropdef   alloc/iter=8.00 free/iter=8.00  [PRED-OK]
+objmap       alloc/iter=1.00 free/iter=1.00  [PRED-OK]
+objchurn     alloc/iter=11.00 free/iter=11.00  [PRED-OK]
+p2-append    alloc/iter=9.00 free/iter=9.00  [PRED-OK]
+p3-local     alloc/iter=10.00 free/iter=10.00  [PRED-OK]
+p4-int       alloc/iter=10.00 free/iter=10.00  [PRED-OK]
+p5-two       alloc/iter=11.00 free/iter=11.00  [PRED-OK]
+p6-overwrite alloc/iter=12.00 free/iter=12.00  [PRED-OK]
+H-CLONI: CONFERMATA 22/22
