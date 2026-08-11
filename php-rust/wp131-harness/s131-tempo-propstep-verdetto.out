@@ -1,0 +1,81 @@
+== s131 modello prop_step (criterio s131-criterio-propstep.md; build EMENDATA: quote=MODELLO) ==
+grade=MODEL  # rc autoritativo = tempo-out/tempo-propstep.rc; overhead annidato sottratto dai conteggi; R=3 mediane; pin s130
+quiescenza: rc=0 (file: tempo-out/quiesce-propstep.rc)
+-- objalloc (stmt/iter=0 [CNT-OK]; resolve TUTTE k=4.0000; c9/iter=0.0000 c10/iter=0.0000) --
+   cal_ticks/nota=0.00 freq=1000000000
+   TOT                         0.0 ns/iter  (spread R=3 0.0)
+   E_fieldset                  0.0 ns/iter  (spread R=3 0.0)
+   E2_walk                     0.0 ns/iter  (spread R=3 0.0)
+   prop_step_INTERO            0.0 ns/iter  (spread R=3 0.0)
+   borrow                      0.0 ns/iter  (spread R=3 0.0)
+   guardie                     0.0 ns/iter  (spread R=3 0.0)
+   defer_check                 0.0 ns/iter  (spread R=3 0.0)
+   key+container_op            0.0 ns/iter  (spread R=3 0.0)
+   resolve@prop_key            0.0 ns/iter  (spread R=3 0.0)
+   resolve@prop_key_read       0.0 ns/iter  (spread R=3 0.0)
+   resolve_TUTTE              70.8 ns/iter  (spread R=3 1.6)
+-- objdatains (stmt/iter=1 [CNT-OK]; resolve TUTTE k=9.0000; c9/iter=3.0000 c10/iter=1.0000) --
+   cal_ticks/nota=0.48 freq=1000000000
+   TOT                       232.8 ns/iter  (spread R=3 2.1)
+   E_fieldset                216.1 ns/iter  (spread R=3 1.9)
+   E2_walk                    49.2 ns/iter  (spread R=3 1.6)
+   prop_step_INTERO          179.8 ns/iter  (spread R=3 2.0)
+   borrow                      1.5 ns/iter  (spread R=3 0.0)
+   guardie                    49.4 ns/iter  (spread R=3 0.5)
+   defer_check                37.0 ns/iter  (spread R=3 0.4)
+   key+container_op           34.3 ns/iter  (spread R=3 0.2)
+   resolve@prop_key           31.2 ns/iter  (spread R=3 0.3)
+   resolve@prop_key_read       9.1 ns/iter  (spread R=3 0.0)
+   resolve_TUTTE             110.5 ns/iter  (spread R=3 0.3)
+   quota call-site/iter: statement(c9+c10)=4.00 ctor=4.00 ALTRI=1.00  <-- ENUMERARE per NOME
+   E-E2=166.9 ns/iter; prop_step interno (1-5)=130.7; somma blocchi (2+3+6+8)=122.1; chiusura=93% (resto prop_step altro=8.5); dispatch fuori prop_step=36.3
+   non-resolve nei blocchi = 81.9 ns/iter (resolve@siti statement = 40.3)
+-- p2-append (stmt/iter=1 [CNT-OK]; resolve TUTTE k=9.0000; c9/iter=3.0000 c10/iter=1.0000) --
+   cal_ticks/nota=0.48 freq=1000000000
+   TOT                       200.4 ns/iter  (spread R=3 1.2)
+   E_fieldset                189.6 ns/iter  (spread R=3 1.2)
+   E2_walk                    29.0 ns/iter  (spread R=3 0.4)
+   prop_step_INTERO          158.7 ns/iter  (spread R=3 1.1)
+   borrow                      1.3 ns/iter  (spread R=3 0.0)
+   guardie                    48.7 ns/iter  (spread R=3 0.6)
+   defer_check                37.4 ns/iter  (spread R=3 0.2)
+   key+container_op           34.4 ns/iter  (spread R=3 0.6)
+   resolve@prop_key           31.4 ns/iter  (spread R=3 0.3)
+   resolve@prop_key_read       9.2 ns/iter  (spread R=3 0.1)
+   resolve_TUTTE             111.3 ns/iter  (spread R=3 1.3)
+   quota call-site/iter: statement(c9+c10)=4.00 ctor=4.00 ALTRI=1.00  <-- ENUMERARE per NOME
+   E-E2=160.7 ns/iter; prop_step interno (1-5)=129.8; somma blocchi (2+3+6+8)=121.8; chiusura=94% (resto prop_step altro=8.0); dispatch fuori prop_step=30.9
+   non-resolve nei blocchi = 81.2 ns/iter (resolve@siti statement = 40.5)
+-- p5-two (stmt/iter=2 [CNT-OK]; resolve TUTTE k=14.0000; c9/iter=6.0000 c10/iter=2.0000) --
+   cal_ticks/nota=0.49 freq=1000000000
+   TOT                       463.4 ns/iter  (spread R=3 10.1)
+   E_fieldset                430.5 ns/iter  (spread R=3 8.8)
+   E2_walk                   103.7 ns/iter  (spread R=3 0.7)
+   prop_step_INTERO          362.6 ns/iter  (spread R=3 8.7)
+   borrow                      2.9 ns/iter  (spread R=3 0.1)
+   guardie                    98.1 ns/iter  (spread R=3 0.7)
+   defer_check                74.9 ns/iter  (spread R=3 8.8)
+   key+container_op           66.8 ns/iter  (spread R=3 0.5)
+   resolve@prop_key           63.2 ns/iter  (spread R=3 5.0)
+   resolve@prop_key_read      18.4 ns/iter  (spread R=3 1.9)
+   resolve_TUTTE             153.0 ns/iter  (spread R=3 6.0)
+   quota call-site/iter: statement(c9+c10)=8.00 ctor=4.00 ALTRI=2.00  <-- ENUMERARE per NOME
+   E-E2=326.8 ns/iter; prop_step interno (1-5)=258.9; somma blocchi (2+3+6+8)=242.7; chiusura=94% (resto prop_step altro=16.2); dispatch fuori prop_step=67.9
+   non-resolve nei blocchi = 161.1 ns/iter (resolve@siti statement = 81.6)
+-- p6-overwrite (stmt/iter=2 [CNT-OK]; resolve TUTTE k=14.0000; c9/iter=6.0000 c10/iter=2.0000) --
+   cal_ticks/nota=0.48 freq=1000000000
+   TOT                       460.7 ns/iter  (spread R=3 1.8)
+   E_fieldset                427.5 ns/iter  (spread R=3 1.8)
+   E2_walk                    92.8 ns/iter  (spread R=3 1.8)
+   prop_step_INTERO          354.0 ns/iter  (spread R=3 2.0)
+   borrow                      2.9 ns/iter  (spread R=3 0.0)
+   guardie                    98.3 ns/iter  (spread R=3 2.5)
+   defer_check                74.9 ns/iter  (spread R=3 0.4)
+   key+container_op           66.8 ns/iter  (spread R=3 0.9)
+   resolve@prop_key           63.1 ns/iter  (spread R=3 0.3)
+   resolve@prop_key_read      18.4 ns/iter  (spread R=3 0.1)
+   resolve_TUTTE             152.2 ns/iter  (spread R=3 0.5)
+   quota call-site/iter: statement(c9+c10)=8.00 ctor=4.00 ALTRI=2.00  <-- ENUMERARE per NOME
+   E-E2=334.8 ns/iter; prop_step interno (1-5)=261.2; somma blocchi (2+3+6+8)=242.9; chiusura=93% (resto prop_step altro=18.3); dispatch fuori prop_step=73.5
+   non-resolve nei blocchi = 161.4 ns/iter (resolve@siti statement = 81.6)
+SONDA-PROPSTEP: ACQUISITA
