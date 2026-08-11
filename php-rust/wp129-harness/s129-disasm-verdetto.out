@@ -1,0 +1,15 @@
+== s129 disasm seg.3: preludio per-statement + famiglia resolve (pin s127b; protocollo S-104) ==
+grade=DISASM  # analisi statica del pin, nessuna cifra cronometrica; rc autoritativo = wp129-harness/disasm.rc
+pattern=byref_hook_root|field_lazy_root|indirect_hook_target|lazy_prop_access|resolve_prop_access|prop_hook|hook_guarded|field_set_mode|field_write_prop_step|field_write_walk|pop_field_keys
+sym=__ZN11php_runtime2vm2Vm14pop_field_keys ins=147 bl=7
+sym=__ZN11php_runtime2vm2Vm15byref_hook_root ins=395 bl=34
+sym=__ZN11php_runtime2vm2Vm15field_lazy_root ins=317 bl=30
+sym=__ZN11php_runtime2vm6arrays37_$LT$impl$u20$php_runtime..vm..Vm$GT$14field_set_mode ins=304 bl=33
+sym=__ZN11php_runtime2vm2Vm16lazy_prop_access ins=1001 bl=96
+sym=__ZN11php_runtime2vm2Vm12hook_guarded ins=47 bl=5
+sym=__ZN11php_runtime2vm2Vm9prop_hook ins=38 bl=2
+sym=__ZN11php_runtime2vm3oop19resolve_prop_access ins=115 bl=3
+sym=__ZN11php_runtime2vm2Vm12prop_hook_in ins=22 bl=2
+sym=__ZN11php_runtime2vm6arrays16field_write_walk ins=791 bl=80
+sym=__ZN11php_runtime2vm6arrays16field_write_walk28_$u7b$$u7b$closure$u7d$$u7d$ ins=56 bl=5
+sym=__ZN11php_runtime2vm6arrays16field_write_walk28_$u7b$$u7b$closure$u7d$$u7d$ ins=27 bl=2
