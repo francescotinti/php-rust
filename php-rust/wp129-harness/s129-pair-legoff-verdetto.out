@@ -24,3 +24,8 @@ media_leg1-on: user_only_CANONICA=2.463 user+sys_companion=2.419
 media_leg2-off: user_only_CANONICA=2.447 user+sys_companion=2.412
 media_leg2-on: user_only_CANONICA=2.455 user+sys_companion=2.408
 media_leg3-off: user_only_CANONICA=2.506 user+sys_companion=2.463 (SEGNALATA)
+-- ADDENDUM post-revisione (az.rev. S-129 #4, riderivazione dai .time, ZERO run nuove) --
+mediana PER MOTORE: oracle=1285 phpr=220 (la pooled 908 non poteva segnalare gambe phpr)
+leg1-off: oracle=2624* phpr=545* | leg1-on: 1279/210 | leg2-off: 1285/189 | leg2-on: 1271/220 | leg3-off: 2273* /223
+flag PER MOTORE = {leg1-off, leg3-off} == flag pooled ⇒ set pulito INVARIATO
+coppie proprie pulite user-only: leg1-on=1,772 leg2-off=1,813 leg2-on=1,777 (companion del canone user+sys 1,765-1,805)
