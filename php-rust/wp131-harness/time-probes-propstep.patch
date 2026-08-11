@@ -1,0 +1,187 @@
+diff --git a/php-rust/crates/php-runtime/src/vm/arrays.rs b/php-rust/crates/php-runtime/src/vm/arrays.rs
+index cda294b..7322bef 100644
+--- a/php-rust/crates/php-runtime/src/vm/arrays.rs
++++ b/php-rust/crates/php-runtime/src/vm/arrays.rs
+@@ -277,7 +277,11 @@ pub(super) fn field_write(
+                 }
+             },
+             WriteWalk::IntoObj(o, i, value) => {
+-                field_write_prop_step(&o, steps, i, keys, fs, value, diags, dropped, aa, rebind, rw)?
++                // S-131 sonda: seg 1 = prop_step INTERO (call-site unico del driver).
++                let tp1 = super::timeprobes::now();
++                let r = field_write_prop_step(&o, steps, i, keys, fs, value, diags, dropped, aa, rebind, rw);
++                super::timeprobes::note(1, tp1);
++                r?
+             }
+         };
+     }
+@@ -476,6 +480,8 @@ fn field_write_prop_step(
+     rebind: bool,
+     rw: bool,
+ ) -> Result<WriteWalk, PhpError> {
++    // S-131 sonda: seg 2 = borrow (name+Rc::clone+try_borrow_mut+header).
++    let tp2 = super::timeprobes::now();
+     let owned;
+     let name: &[u8] = match &steps[i] {
+         FieldStep::Prop(n) => n,
+@@ -498,6 +504,9 @@ fn field_write_prop_step(
+     let cid = obj.class_id as usize;
+     let is_enum = obj.info.is_enum_case;
+     let is_lazy = obj.lazy.is_some();
++    super::timeprobes::note(2, tp2);
++    // S-131 sonda: seg 3 = container-guard (su intermedio; nota anche a guardia saltata).
++    let tp3 = super::timeprobes::now();
+     // PHP 8.4 container-fetch guard: drilling INTO a readonly or
+     // set-visibility-denied property whose value is not an object is
+     // "Cannot indirectly modify …" (and a compound fetch of an
+@@ -508,6 +517,7 @@ fn field_write_prop_step(
+         let state = prop_slot_state(obj.props.get(fs.prop_key(cid, name).as_ref()));
+         prop_indirect_guard(fs.classes, fs.scope, cid, name, state, rw, false)?;
+     }
++    super::timeprobes::note(3, tp3);
+     // A leaf write on a property that is not a declared, accessible
+     // slot defers to the VM caller (`prop_set_magic_or_dynamic`),
+     // which dispatches `__set` (guarded against re-entrant recursion)
+@@ -545,6 +555,9 @@ fn field_write_prop_step(
+     // wrappers keep the legacy raw walk (their realization has
+     // its own machinery); enum cases fall through to their
+     // dedicated immutability error below.
++    // S-131 sonda: seg 6 = defer-check intermedio (key_read+contains; il ramo
++    // che defer-isce esce senza nota — dichiarato, i micro non vi passano).
++    let tp6 = super::timeprobes::now();
+     if !rest.is_empty() && !is_enum && !is_lazy {
+         let denied = fs.prop_key_read(cid, name).is_none();
+         let absent = !obj.props.contains(fs.prop_key(cid, name).as_ref());
+@@ -560,6 +573,9 @@ fn field_write_prop_step(
+             return Ok(WriteWalk::Done);
+         }
+     }
++    super::timeprobes::note(6, tp6);
++    // S-131 sonda: seg 8 = key+container-op (prop_key, enum-check, contains/set/get_mut o replace).
++    let tp8 = super::timeprobes::now();
+     let key = fs.prop_key(cid, name);
+     let key = key.as_ref();
+     if obj.info.is_enum_case {
+@@ -575,15 +591,21 @@ fn field_write_prop_step(
+         if let Some(old) = obj.props.replace(key, value) {
+             dropped.push(old);
+         }
++        super::timeprobes::note(8, tp8);
+         Ok(WriteWalk::Done)
+     } else {
+         if !obj.props.contains(key) {
+             obj.props.set(key, Zval::Array(Rc::new(PhpArray::new())));
+         }
+         let child = obj.props.get_mut(key).expect("property just inserted");
++        super::timeprobes::note(8, tp8);
+         // Continue INSIDE this guard only up to the next boundary; the
+         // guard drops when the token returns (boundary discipline).
+-        field_write_walk(child, steps, i + 1, keys, fs, value, diags, dropped, aa, rebind, rw)
++        // S-130 sonda: seg 5 = E2 (walk interno: COW+coerce+insert).
++        let tp0 = super::timeprobes::now();
++        let r = field_write_walk(child, steps, i + 1, keys, fs, value, diags, dropped, aa, rebind, rw);
++        super::timeprobes::note(5, tp0);
++        r
+     }
+ }
+ 
+diff --git a/php-rust/crates/php-runtime/src/vm/mod.rs b/php-rust/crates/php-runtime/src/vm/mod.rs
+index a561779..17f835b 100644
+--- a/php-rust/crates/php-runtime/src/vm/mod.rs
++++ b/php-rust/crates/php-runtime/src/vm/mod.rs
+@@ -46,6 +46,10 @@ use crate::hir::{
+ };
+ 
+ mod arrays;
++// S-131 sonda prop_step (SOLO build emendata time-probes): il modulo vive in
++// wp131-harness/ — nessuna strumentazione nei sorgenti del pin.
++#[path = "../../../../wp131-harness/timeprobes.rs"]
++pub(crate) mod timeprobes;
+ mod calls;
+ // Without `op-census` only the arm/dump stubs and the unit tests use the
+ // module — the counters are compiled out of run_loop.
+diff --git a/php-rust/crates/php-runtime/src/vm/oop.rs b/php-rust/crates/php-runtime/src/vm/oop.rs
+index 1273fbc..b23fabd 100644
+--- a/php-rust/crates/php-runtime/src/vm/oop.rs
++++ b/php-rust/crates/php-runtime/src/vm/oop.rs
+@@ -425,6 +425,14 @@ pub(super) enum PropAccess<'a> {
+ ///    an invisible private declared by the object's own class (or an invisible
+ ///    protected) is `Denied`.
+ pub(super) fn resolve_prop_access<'a>(classes: &[&'a CompiledClass], obj_class: ClassId, name: &[u8], scope: Option<ClassId>) -> PropAccess<'a> {
++    // S-131 sonda: seg 11 = resolve TUTTE (= E1a S-130; la quota per
++    // call-site vive nei seg 9/10 — criterio s131-criterio-propstep.md p.3).
++    let tp0 = super::timeprobes::now();
++    let r = resolve_prop_access_inner(classes, obj_class, name, scope);
++    super::timeprobes::note(11, tp0);
++    r
++}
++fn resolve_prop_access_inner<'a>(classes: &[&'a CompiledClass], obj_class: ClassId, name: &[u8], scope: Option<ClassId>) -> PropAccess<'a> {
+     if let Some(s) = scope {
+         if let Some(pi) = prop_info(classes, s, name) {
+             if pi.visibility == Visibility::Private
+@@ -512,7 +520,11 @@ impl<'a> FieldScope<'a> {
+     where
+         'a: 'n,
+     {
+-        match resolve_prop_access(self.classes, ocid, name, self.scope) {
++        // S-131 sonda: seg 10 = resolve al call-site prop_key_read (include la nota seg 11).
++        let tp10 = super::timeprobes::now();
++        let ra = resolve_prop_access(self.classes, ocid, name, self.scope);
++        super::timeprobes::note(10, tp10);
++        match ra {
+             // Borrowed straight from the class table (WP-29): the resolved
+             // key used to be copied per Prop step — a per-access allocation
+             // on every mixed-path walk.
+@@ -568,7 +580,11 @@ impl<'a> FieldScope<'a> {
+     where
+         'a: 'n,
+     {
+-        match resolve_prop_access(self.classes, ocid, name, self.scope) {
++        // S-131 sonda: seg 9 = resolve al call-site prop_key (include la nota seg 11).
++        let tp9 = super::timeprobes::now();
++        let ra = resolve_prop_access(self.classes, ocid, name, self.scope);
++        super::timeprobes::note(9, tp9);
++        match ra {
+             PropAccess::Slot { key: k, .. } => std::borrow::Cow::Borrowed(k),
+             PropAccess::Denied { .. } => match prop_info(self.classes, ocid, name) {
+                 Some(pi) => std::borrow::Cow::Borrowed(pi.storage_key.as_ref()),
+diff --git a/php-rust/crates/php-runtime/src/vm/run.rs b/php-rust/crates/php-runtime/src/vm/run.rs
+index d5a8999..6f553eb 100644
+--- a/php-rust/crates/php-runtime/src/vm/run.rs
++++ b/php-rust/crates/php-runtime/src/vm/run.rs
+@@ -5801,13 +5801,21 @@ impl<'m> super::Vm<'m> {
+                     self.frames[top].stack.push(if *pre { newv } else { old });
+                 }
+                 Op::FieldAssign { base, steps } => {
++                    // S-130 sonda E1a (build emendata): 0=TOT 4=E 7=CAL
++                    // (1=E1a dentro resolve_prop_access, 5=E2 in prop_step).
++                    let tp_tot = super::timeprobes::now();
+                     let value = self.frames[top].stack.pop().expect("FieldAssign value");
+                     let keys = self.pop_field_keys(top, &steps);
+                     // L-OL1-F4 (S-129): su base-oggetto piana di classe senza
+                     // hook il trio byref/indirect/lazy è no-op per costruzione.
+                     if self.field_prelude_skip(*base, top, &steps) {
++                        let tp0 = super::timeprobes::now();
+                         self.field_set(*base, top, &steps, keys, value.clone())?;
++                        super::timeprobes::note(4, tp0);
+                         self.frames[top].stack.push(value);
++                        let tp_cal = super::timeprobes::now();
++                        super::timeprobes::note(7, tp_cal);
++                        super::timeprobes::note(0, tp_tot);
+                         continue;
+                     }
+                     // A path starting at a `&get` hooked property writes through
+@@ -5825,8 +5833,13 @@ impl<'m> super::Vm<'m> {
+                         self.frames[top].stack.push(value);
+                         continue;
+                     }
++                    let tp0 = super::timeprobes::now();
+                     self.field_set(*base, top, &steps, keys, value.clone())?;
++                    super::timeprobes::note(4, tp0);
+                     self.frames[top].stack.push(value);
++                    let tp_cal = super::timeprobes::now();
++                    super::timeprobes::note(7, tp_cal);
++                    super::timeprobes::note(0, tp_tot);
+                 }
+                 Op::FieldAssignOp { base, steps, op } => {
+                     let rhs = self.frames[top].stack.pop().expect("FieldAssignOp rhs");
