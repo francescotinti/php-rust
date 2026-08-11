@@ -40,7 +40,14 @@ for c in $CATS; do
   for r in 1 2 3; do
     f="$OUT/tp-$c-r$r.tprobes"; rm -f "$f"
     PHPR_TIME_PROBES="$f" MIMALLOC_PURGE_DELAY=0 "$TBIN" "$s" > /dev/null 2>&1
-    grep -q "^tprobes " "$f" || fail "tprobes ASSENTE in $c-r$r"
+    if ! grep -q "^tprobes " "$f" 2>/dev/null; then
+      # EMENDA dichiarata (morso d'apparato S-129): una categoria con ZERO
+      # statement FieldAssign non chiama mai note() ⇒ l'atexit non si
+      # registra e il dump manca. SOLO objalloc (atteso 0) riceve zeri
+      # sintetici; per ogni altra categoria il file assente resta FATALE.
+      [ "$c" = objalloc ] || fail "tprobes ASSENTE in $c-r$r"
+      echo "tprobes pid=0 freq=24000000 s0=0 c0=0 s1=0 c1=0 s2=0 c2=0 s3=0 c3=0 s4=0 c4=0 s5=0 c5=0 s6=0 c6=0 s7=0 c7=0" > "$f"
+    fi
   done
 done
 
