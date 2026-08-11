@@ -44,11 +44,10 @@ sequenza; oracle cpu più bassa con ictx 2×: meccanismo da nominare prima di
 fidarsi del gate) · resolve-once in prop_step (E1a prima) · AssignOp/IncDec fuori
 perimetro F4 (comporre dopo la promozione) · famiglia locale 170 ns (pop_keys
 split_off; objmap 1 alloc) · evalcls 316,9× · refl 42,4× · re +2,00 alloc/iter ·
-oracle-denominatore leg-first · morte-immediata al sito di nota · micro-trim
-morte (is_empty 2 remove SipHash · has_destruct precompilato · FxHash per-id) ·
-fame frontend (kpc/sudo) · $z++/$z-- undef non warna · §3.13 · §3.12-i · §3.14 ·
-get_gc · drift TODO.md · latin1-cliff · `$GLOBALS['x']->p` resta FieldAssign
-(caveat innocuo, rev. S-129).
+oracle-denominatore leg-first · morte-immediata al sito di nota · micro-trim morte
+(is_empty SipHash · has_destruct · FxHash per-id) · fame frontend (kpc/sudo) ·
+$z++/$z-- undef non warna · §3.13 · §3.12-i · §3.14 · get_gc · drift TODO.md ·
+latin1-cliff · `$GLOBALS['x']->p` resta FieldAssign (caveat innocuo, rev. S-129).
 
 ## NON riproporre (i veti restano; dettaglio nei concili archiviati)
 
@@ -60,17 +59,16 @@ tassa i freddi · guardie non-bersaglio BILATERALI · denominatori a memoria ·
 output di run nel repo · rc di gate da pipe · tee/log pre-mkdir · admission sul
 dump intero · xctrace senza guardie disco · run pesanti come task · edit coi
 build in volo · promozione sotto banda · gate a soglia fissa senza banda ·
-corpus-gate solo-nomi · strumentazione nei sorgenti del pin (modulo via #[path]
-fuori-crates = ricetta S-129) · leve micro senza banda v2 · alloc-removal senza
-modello del costo SOSTITUTIVO · probe senza riferimento vivo · ordine FISSO di
-misura · delta tra census di epoche diverse senza datare i raw · verdetti da
-script non committati · SSO inline · inline-array init+drain args · claim di
-ASSENZA oltre la risoluzione · smoke con fam-min > R · notti su PhpStr-full ·
-guardie su giudici diversi dalle loro bande · misure con LSP in volo · F2
-keys-scratch drain+put-back · quiescenza nello stesso comando del lancio ·
-output di run TRACKED mossi da orchestratori · **rumore-soglia = range PIENO
-senza formula robusta dichiarata (morso S-129)** · **guardia su categoria senza
-banda propria spacciata per meccanismo (objmap S-129)**.
+corpus-gate solo-nomi · strumentazione nei sorgenti del pin (#[path] fuori-crates
+= ricetta S-129) · leve micro senza banda v2 · alloc-removal senza modello del
+costo SOSTITUTIVO · probe senza riferimento vivo · ordine FISSO di misura · delta
+tra census di epoche diverse senza datare i raw · verdetti da script non
+committati · SSO inline · inline-array init+drain args · claim di ASSENZA oltre
+la risoluzione · smoke con fam-min > R · notti su PhpStr-full · guardie su giudici
+diversi dalle loro bande · misure con LSP in volo · F2 keys-scratch · quiescenza
+nello stesso comando del lancio · output TRACKED mossi da orchestratori ·
+**rumore-soglia = range PIENO senza formula robusta (morso S-129)** · **guardia su
+categoria senza banda propria spacciata per meccanismo (objmap S-129)**.
 
 **Riscritto**: 2026-08-11 (chiusura S-129). Storia: `sessions/` · `gaps/GAP_TREND.md`.
 Pre-flight S-130: pin phpr **s127b ccb63dca**f565cffc (il rebuild canonico lo
