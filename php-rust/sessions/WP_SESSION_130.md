@@ -10,9 +10,8 @@ del cammino di scrittura (~120 ns).
 **SCOREBOARD** (pin NUOVO **s130 0fdf1c49** + server s130 7fb79069; micro gate promozione):
 **arith 5,5 ↗ · prop 5,6 = · calls 5,0 = · str 4,3 ↗ · arr 3,3 ↗ · re 2,5 =**
 (↗ = jitter denominatore oracle; phpr netto invariato) · WP full NON rimisurato
-(resta 1,758–1,805 @ s127b) · **leve spedite: 1 (F4)** · incidenti: 1 app.
-(«7/6 gate verdi»: denominatore fixture stantio da S-122 + registro server
-committato solo a valle della revisione — rev. PROCESSO). 2026-08-11.
+(resta 1,758–1,805 @ s127b) · **leve spedite: 1 (F4)** · incidenti: 1 app. («7/6»
+fixture stantio + registro server committato tardi — rev. PROCESSO). 2026-08-11.
 
 ## Esiti secchi
 1·**Criterio F4 emendato PRE-REGISTRATO** (879a38e, PRIMA di ogni run): rumore
@@ -28,11 +27,10 @@ committato solo a valle della revisione — rev. PROCESSO). 2026-08-11.
 4·**Micro-ORM su s130**: objdatains **7,7** (1253,3 ns, coerente al ns col lato B
   dell'A/B) · churn **8,6** · dropdef 9,0 · allocni 9,8 · alloc 7,8 ≈ · objmap 17,0 ≈.
 5·**Sonda E1a ACQUISITA** (az.rev. S-129 #1): k deterministici (alloc **4** a zero
-  statement! datains 9 · p5/p6 14) ⇒ 4 resolve/iter vengono dal CTOR; per-statement
-  **5 resolve = 39–44 ns ≈ 24% di E−E2** (la riga «67%» del verdetto è respinta in
-  lettura: E1a non è sottoinsieme di E−E2); UB resolve-once statement-only **31–35
-  ns**; il grosso di E−E2 (~120 ns) è prop_step NON-resolve (3× prop_key +
-  contains/get_mut/replace). TOT 232,9 vs 296,7 pre-F4: il modello trasferisce.
+  statement! datains 9 · p5/p6 14) ⇒ 4 resolve/iter dal CTOR; per-statement **5
+  resolve = 39–44 ns ≈ 24% di E−E2** (riga «67%» respinta: E1a ⊄ E−E2); UB
+  resolve-once statement-only **31–35 ns**; il grosso di E−E2 (~120) è prop_step
+  NON-resolve (3× prop_key + contains/get_mut/replace). TOT 232,9 vs 296,7: trasferisce.
 ## ⭐ Lezioni (max 3)
 - ⭐⭐ Una leva con direzione firmata e criterio caduto su un artefatto della formula
   si RIESEGUE col criterio emendato pre-registrato: F4 da avversa a spedita senza

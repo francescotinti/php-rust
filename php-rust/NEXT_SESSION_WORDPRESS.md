@@ -42,15 +42,13 @@ avversi committati PRIMA di ogni emenda · bande fondate dalle gambe A committat
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
 
-coppia full/media su s130 (punto 1) · warm-up leg nella ricetta pair (2 gambe
-escluse S-129 erano PRIME di sequenza: meccanismo da nominare) · resolve del CTOR
-(4/iter, 72 ns su objalloc: forma separata da FieldAssign, tocca New/PropSet) ·
-AssignOp/IncDec fuori perimetro F4 (comporre) · famiglia locale 170 ns (pop_keys
-split_off; objmap 1 alloc) · evalcls 316,9× · refl 42,4× · re +2,00 alloc/iter ·
-oracle-denominatore leg-first · morte-immediata al sito di nota · micro-trim morte
-(is_empty SipHash · has_destruct · FxHash per-id) · fame frontend (kpc/sudo) ·
-$z++/$z-- undef non warna · §3.13 · §3.12-i · §3.14 · get_gc · drift TODO.md ·
-latin1-cliff · `$GLOBALS['x']->p` resta FieldAssign (caveat innocuo).
+warm-up leg nella ricetta pair (le 2 escluse S-129 erano PRIME di sequenza) ·
+resolve del CTOR (4/iter, 72 ns su objalloc: forma separata, tocca New/PropSet) ·
+AssignOp/IncDec fuori perimetro F4 (comporre) · famiglia locale 170 ns · evalcls
+316,9× · refl 42,4× · re +2,00 alloc/iter · oracle-denominatore leg-first ·
+micro-trim morte (is_empty SipHash · has_destruct · FxHash per-id) · fame
+frontend (kpc/sudo) · $z++/$z-- undef non warna · §3.13 · §3.12-i · §3.14 ·
+get_gc · drift TODO.md · latin1-cliff · `$GLOBALS['x']->p` resta FieldAssign.
 
 ## NON riproporre (i veti restano; dettaglio nei concili archiviati)
 
