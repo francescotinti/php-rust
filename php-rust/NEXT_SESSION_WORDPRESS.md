@@ -32,17 +32,15 @@ corpus **1414** ×2.
    Denied/Dynamic del ctor): sonda per-sito PRIMA della forma (ricetta
    propstep riusabile), poi criterio pre-registrato con soglia = max(drop-1,
    spread-batch sul pin s132 — le gambe B di S-132 sono nei verdetti).
-4. Se resta: dispatch fuori prop_step 36,3 · mappa residui per NOME
-   (lexer/inflector/event-manager · wp-cli · PHPUnit-self · densità evalcls ·
-   §3.20 dbal).
+4. Se resta: dispatch 36,3 · mappa residui per NOME (lexer/inflector/
+   event-manager · wp-cli · PHPUnit-self · densità evalcls · §3.20 dbal).
 APPARATO + az.rev. S-132 (SEMANTICA, vincolanti): #1 fixture teardown (p.1
 sopra) · #2 `debug_assert!` slot0 ⇒ presenza slot == contains(key0) in
 field_write_prop_step · #3 disciplina `replace_slot` (Err su indice estraneo)
 anche a `get_slot_mut`, o invariante documentata sul tipo Props · #4 FATTA in
 S-132 (nota N=2 in PERF_MAP) · #5 commento L-LO1: delimitare hooked-backed
-non-leaf come pre-esistente (edit .rs solo fuori finestra di misura, build
-emendata dichiarata se rilinca) · argv dei lanci senza pattern del gate ·
-Serena pre-misura, mai edit .rs in finestra · rc quiescenza sempre in header.
+non-leaf come pre-esistente · argv senza pattern del gate · Serena pre-misura,
+mai edit .rs in finestra · rc quiescenza sempre in header.
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
 
