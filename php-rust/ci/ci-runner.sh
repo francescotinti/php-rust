@@ -75,10 +75,14 @@ while :; do
     fail_job "skipped-busy"
     continue
   fi
+  # guardia disco: picco misurato del job ~4G (smoke 76544e8); sotto 8G il
+  # commit TORNA IN CODA (lo riprova il runner del prossimo push) e si esce.
   FREE=$(df -g /private/tmp | awk 'NR==2{print $4}')
-  if [ "${FREE:-0}" -lt 10 ]; then
-    fail_job "disk-low(${FREE}G)"
-    continue
+  if [ "${FREE:-0}" -lt 8 ]; then
+    echo "$SHA" > "$Q/$(date +%s)-${S12}"
+    echo "REQUEUE $S12 disk-low(${FREE}G) $(date '+%F %T')" >> "$FEED"
+    notify "$S12: requeue disk-low(${FREE}G)"
+    break
   fi
   echo "START $S12 $(date '+%F %T')" >> "$FEED"
   dot_clean_git
