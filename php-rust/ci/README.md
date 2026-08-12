@@ -2,9 +2,10 @@
 
 Ogni `git push origin main` arriva ANCHE al bare locale
 `/Volumes/Extreme Pro/Claude/phpr-ci/repo.git` (secondo push-URL di origin);
-il hook `post-receive` accoda il commit in `phpr-ci/queue/`, launchd
-(`com.phpr.ci`, WatchPaths + StartInterval 600) lancia `ci/ci-runner.sh` che
-consuma la coda UNO alla volta: **build release → batteria (cargo test) →
+il hook `post-receive` accoda il commit in `phpr-ci/queue/` e DEMONIZZA
+`ci/ci-runner.sh` (daemonize.pl; istanza unica via runner.lock — launchd
+SCARTATO: EX_CONFIG/TCC sui volumi esterni per gli agenti). Il runner consuma
+la coda UNO alla volta: **build release → batteria (cargo test) →
 corpus-gate**, con target dir SEPARATA `phpr-ci/target` (mai php-rust-output).
 
 Esiti: `phpr-ci/out/<sha12>/status` (OK · build-FAIL · batteria-FAIL ·
@@ -29,9 +30,11 @@ NON sono in CI v1 (dipendono da binari pinnati/ambienti: restano in promozione).
 
 Install (già eseguito; per reinstallare):
 ```
+git init --bare "/Volumes/Extreme Pro/Claude/phpr-ci/repo.git"
 cp ci/post-receive "/Volumes/Extreme Pro/Claude/phpr-ci/repo.git/hooks/" && chmod +x "/Volumes/Extreme Pro/Claude/phpr-ci/repo.git/hooks/post-receive"
 git remote set-url --add --push origin https://github.com/francescotinti/php-rust.git
 git remote set-url --add --push origin "/Volumes/Extreme Pro/Claude/phpr-ci/repo.git"
-cp ci/com.phpr.ci.plist ~/Library/LaunchAgents/ && launchctl bootstrap "gui/$(id -u)" ~/Library/LaunchAgents/com.phpr.ci.plist
+git remote add ci "/Volumes/Extreme Pro/Claude/phpr-ci/repo.git"
 ```
-Rollback: `launchctl bootout gui/$(id -u)/com.phpr.ci` + `git remote set-url --delete --push origin ".*phpr-ci.*"`.
+Coda arretrata senza push imminente: `perl .../wp52-harness/daemonize.pl .../phpr-ci/runner-daemon.log /bin/bash ci/ci-runner.sh`.
+Rollback: `git remote set-url --delete --push origin ".*phpr-ci.*"`.

@@ -1,10 +1,16 @@
 #!/bin/bash
-# post-receive (bare repo phpr-ci/repo.git) — accoda soltanto: il runner
-# (launchd com.phpr.ci, WatchPaths su queue/) fa il lavoro. Push istantaneo.
+# post-receive (bare repo phpr-ci/repo.git) — accoda e DEMONIZZA il runner
+# (niente launchd: EX_CONFIG/TCC sui volumi esterni — il hook gira nel
+# contesto del push, che ha i permessi sul volume; l'istanza unica la
+# garantisce il runner.lock del runner stesso). Push istantaneo.
 Q="/Volumes/Extreme Pro/Claude/phpr-ci/queue"
+RUNNER="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/ci/ci-runner.sh"
+DAEMONIZE="/Volumes/Extreme Pro/Claude/wp52-harness/daemonize.pl"
+LOG="/Volumes/Extreme Pro/Claude/phpr-ci/runner-daemon.log"
 mkdir -p "$Q"
 while read -r old new ref; do
   case "$new" in *[!0]*) ;; *) continue ;; esac
   echo "$new" > "$Q/$(date +%s)-${new:0:12}"
 done
+perl "$DAEMONIZE" "$LOG" /bin/bash "$RUNNER" 2>/dev/null || true
 exit 0
