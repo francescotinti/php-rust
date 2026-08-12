@@ -1,0 +1,59 @@
+diff --git a/php-rust/crates/php-runtime/src/vm/mod.rs b/php-rust/crates/php-runtime/src/vm/mod.rs
+index a561779..51351e8 100644
+--- a/php-rust/crates/php-runtime/src/vm/mod.rs
++++ b/php-rust/crates/php-runtime/src/vm/mod.rs
+@@ -84,6 +84,10 @@ mod tidy;
+ mod xslt;
+ mod tokenizer;
+ mod websapi;
++// S-133 sonda ctor (build emendata, patch count-probes-ctor.patch): conteggi
++// per-sito dei resolve del cammino PropSet — MAI nel pin.
++#[path = "../../../../wp133-harness/ctorprobes.rs"]
++pub(crate) mod ctorprobes;
+ use arrays::*;
+ use calls::*;
+ use oop::*;
+diff --git a/php-rust/crates/php-runtime/src/vm/oop.rs b/php-rust/crates/php-runtime/src/vm/oop.rs
+index 1273fbc..5c5796b 100644
+--- a/php-rust/crates/php-runtime/src/vm/oop.rs
++++ b/php-rust/crates/php-runtime/src/vm/oop.rs
+@@ -425,6 +425,8 @@ pub(super) enum PropAccess<'a> {
+ ///    an invisible private declared by the object's own class (or an invisible
+ ///    protected) is `Denied`.
+ pub(super) fn resolve_prop_access<'a>(classes: &[&'a CompiledClass], obj_class: ClassId, name: &[u8], scope: Option<ClassId>) -> PropAccess<'a> {
++    // S-133 sonda: seg 2 = TUTTE le resolve.
++    super::ctorprobes::count(2);
+     if let Some(s) = scope {
+         if let Some(pi) = prop_info(classes, s, name) {
+             if pi.visibility == Visibility::Private
+@@ -1007,6 +1009,8 @@ impl<'m> Vm<'m> {
+             let undef_unset = |key: &[u8]| {
+                 matches!(obj.props.get(key), Some(Zval::Undef)) && obj.is_typed_unset(key)
+             };
++            // S-133 sonda: seg 0 = resolve dentro magic_applies (sito A).
++            super::ctorprobes::count(0);
+             let (present, accessible) = match resolve_prop_access(&self.classes, cid, name, cur_class) {
+                 PropAccess::Slot { key: k, .. } => (obj.props.contains(k) && !undef_unset(k), true),
+                 PropAccess::Dynamic => (obj.props.contains(name) && !undef_unset(name), true),
+diff --git a/php-rust/crates/php-runtime/src/vm/run.rs b/php-rust/crates/php-runtime/src/vm/run.rs
+index d5a8999..f67c1a0 100644
+--- a/php-rust/crates/php-runtime/src/vm/run.rs
++++ b/php-rust/crates/php-runtime/src/vm/run.rs
+@@ -642,6 +642,8 @@ impl<'m> super::Vm<'m> {
+         name: &Rc<[u8]>,
+         ic: &crate::bytecode::PropIc,
+     ) -> Result<(), PhpError> {
++        // S-133 sonda: seg 3 = entrate in prop_set_entry.
++        super::ctorprobes::count(3);
+         let cur = self.frames[top].class;
+         // H-C1b (S-101): move the owned handle (see PropGet).
+         // INV-RECV-1 holds here too: `target` is owned through
+@@ -832,6 +834,8 @@ impl<'m> super::Vm<'m> {
+             // creation — readonly / typed enforcement applies only to the
+             // former (a parent's private reached from a child scope is a
+             // *dynamic* write, untyped and unguarded).
++            // S-133 sonda: seg 1 = resolve nel fallback di prop_set_entry (sito B).
++            super::ctorprobes::count(1);
+             let access = resolve_prop_access(&self.classes, ocid, name, cur);
+             let declared_slot = matches!(access, PropAccess::Slot { .. });
+             key = match access {
