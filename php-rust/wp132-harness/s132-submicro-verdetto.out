@@ -1,0 +1,34 @@
+== s132 micro-ORM POST-L-LO1 sul pin s132 (metodo s127-criterio-submicro.md INVARIATO) ==
+grade=VERDICT  # derivazione meccanica; R=5; user CPU netto-pavimento per-binario
+oracle=8.5.7 phpr=6af6e4975ef8d0bf
+pavimento_oracle_s=0.05 pavimento_phpr_s=0.02
+objalloc_N_iter=3000000
+objalloc_oracle_netto_s=0.38 objalloc_phpr_netto_s=2.95
+rapporto_objalloc=7.8  [companion 2.95/0.38]
+objalloc_ns_iter: oracle=126.7 phpr=983.3 delta=+856.7
+objalloc_spread_oracle_s=0.01 objalloc_spread_phpr_s=0.04
+objchurn_N_iter=3000000
+objchurn_oracle_netto_s=0.54 objchurn_phpr_netto_s=4.42
+rapporto_objchurn=8.2  [companion 4.42/0.54]
+objchurn_ns_iter: oracle=180.0 phpr=1473.3 delta=+1293.3
+objchurn_spread_oracle_s=0.01 objchurn_spread_phpr_s=0.02
+objmap_N_iter=3000000
+objmap_oracle_netto_s=0.03 objmap_phpr_netto_s=0.52
+rapporto_objmap=17.3  [companion 0.52/0.03]
+objmap_ns_iter: oracle=10.0 phpr=173.3 delta=+163.3
+objmap_spread_oracle_s=0.00 objmap_spread_phpr_s=0.04
+objdropdef_N_iter=3000000
+objdropdef_oracle_netto_s=0.41 objdropdef_phpr_netto_s=3.69
+rapporto_objdropdef=9.0  [companion 3.69/0.41]
+objdropdef_ns_iter: oracle=136.7 phpr=1230.0 delta=+1093.3
+objdropdef_spread_oracle_s=0.01 objdropdef_spread_phpr_s=0.02
+objdatains_N_iter=3000000
+objdatains_oracle_netto_s=0.50 objdatains_phpr_netto_s=3.60
+rapporto_objdatains=7.2  [companion 3.60/0.50]
+objdatains_ns_iter: oracle=166.7 phpr=1200.0 delta=+1033.3
+objdatains_spread_oracle_s=0.01 objdatains_spread_phpr_s=0.01
+objallocni_N_iter=3000000
+objallocni_oracle_netto_s=0.28 objallocni_phpr_netto_s=2.72
+rapporto_objallocni=9.7  [companion 2.72/0.28]
+objallocni_ns_iter: oracle=93.3 phpr=906.7 delta=+813.3
+objallocni_spread_oracle_s=0.00 objallocni_spread_phpr_s=0.04
