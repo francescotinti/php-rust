@@ -499,21 +499,23 @@ fn field_write_prop_step(
     let is_enum = obj.info.is_enum_case;
     let is_lazy = obj.lazy.is_some();
     // L-OL1-E1-KO (S-131): ONE `resolve_prop_access` per prop step, reused by
-    // the four helper sites below (three `prop_key` + `prop_key_read` +
+    // the helper sites below (formerly three `prop_key` + `prop_key_read` +
     // `prop_is_declared_slot`) — key0/declared0/denied0 are equivalent BY
     // CONSTRUCTION to the helpers they replace (same match as
     // `FieldScope::prop_key`; `prop_key_read` is `None` iff `Denied`).
+    // L-LO1 (S-132) also keeps the resolved slot index for the single
+    // props-map access in the non-leaf block below.
     // `prop_indirect_guard` keeps its own internal resolve (measured ~free).
     let ra = resolve_prop_access(fs.classes, cid, name, fs.scope);
     let declared0 = matches!(&ra, PropAccess::Slot { .. });
     let denied0 = matches!(&ra, PropAccess::Denied { .. });
-    let key0: std::borrow::Cow<[u8]> = match ra {
-        PropAccess::Slot { key: k, .. } => std::borrow::Cow::Borrowed(k),
+    let (key0, slot0): (std::borrow::Cow<[u8]>, Option<u32>) = match ra {
+        PropAccess::Slot { key: k, slot } => (std::borrow::Cow::Borrowed(k), slot),
         PropAccess::Denied { .. } => match prop_info(fs.classes, cid, name) {
-            Some(pi) => std::borrow::Cow::Borrowed(pi.storage_key.as_ref()),
-            None => std::borrow::Cow::Borrowed(name),
+            Some(pi) => (std::borrow::Cow::Borrowed(pi.storage_key.as_ref()), None),
+            None => (std::borrow::Cow::Borrowed(name), None),
         },
-        PropAccess::Dynamic => std::borrow::Cow::Borrowed(name),
+        PropAccess::Dynamic => (std::borrow::Cow::Borrowed(name), None),
     };
     // PHP 8.4 container-fetch guard: drilling INTO a readonly or
     // set-visibility-denied property whose value is not an object is
@@ -521,9 +523,41 @@ fn field_write_prop_step(
     // uninitialized TYPED slot is the uninit fatal), BEFORE any
     // magic-descend deferral — the slot is declared and get-visible here,
     // so Zend never reaches `__get` for it.
+    // L-LO1 (S-132): ONE props-map access for the whole non-leaf step — the
+    // container-guard state, the absent check and the descend target all come
+    // from the same lookup (slot-index fast path when the resolve stamped
+    // one), instead of get + contains + contains/get_mut on the SAME key.
+    // Guard-then-defer order is unchanged. An intermediate step whose raw
+    // slot is absent or inaccessible needs the VM (overloaded-property
+    // protocol / no-autoviv semantics) — defer the remaining path. Enum
+    // cases keep their dedicated immutability error below; lazy wrappers
+    // keep the legacy by-name raw walk (their realization has its own
+    // machinery).
     if !rest.is_empty() && !is_enum && !is_lazy {
-        let state = prop_slot_state(obj.props.get(key0.as_ref()));
+        let child = match slot0 {
+            Some(si) => obj.props.get_slot_mut(si),
+            None => obj.props.get_mut(key0.as_ref()),
+        };
+        let state = prop_slot_state(child.as_deref());
         prop_indirect_guard(fs.classes, fs.scope, cid, name, state, rw, false)?;
+        match child {
+            Some(child) if !denied0 => {
+                return field_write_walk(
+                    child, steps, i + 1, keys, fs, value, diags, dropped, aa, rebind, rw,
+                );
+            }
+            _ => {
+                drop(obj);
+                *aa = Some(AaOp::MagicDescend(AaMagicDescend {
+                    obj: Zval::Object(o),
+                    name: name.to_vec(),
+                    rest: rest.to_vec(),
+                    keys: keys.collect(),
+                    value,
+                }));
+                return Ok(WriteWalk::Done);
+            }
+        }
     }
     // A leaf write on a property that is not a declared, accessible
     // slot defers to the VM caller (`prop_set_magic_or_dynamic`),
@@ -555,27 +589,6 @@ fn field_write_prop_step(
             value,
         }));
         return Ok(WriteWalk::Done);
-    }
-    // An intermediate step whose raw slot is absent or
-    // inaccessible needs the VM (overloaded-property protocol /
-    // no-autoviv semantics) — defer the remaining path. Lazy
-    // wrappers keep the legacy raw walk (their realization has
-    // its own machinery); enum cases fall through to their
-    // dedicated immutability error below.
-    if !rest.is_empty() && !is_enum && !is_lazy {
-        let denied = denied0;
-        let absent = !obj.props.contains(key0.as_ref());
-        if denied || absent {
-            drop(obj);
-            *aa = Some(AaOp::MagicDescend(AaMagicDescend {
-                obj: Zval::Object(o),
-                name: name.to_vec(),
-                rest: rest.to_vec(),
-                keys: keys.collect(),
-                value,
-            }));
-            return Ok(WriteWalk::Done);
-        }
     }
     let key = key0.as_ref();
     if obj.info.is_enum_case {
