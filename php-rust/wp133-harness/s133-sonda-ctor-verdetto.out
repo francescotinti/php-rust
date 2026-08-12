@@ -1,0 +1,5 @@
+== s133 sonda ctor: CONTEGGI per-sito (predizioni: objalloc A=2 B=2 TOT=4 ENTRATE=4 /iter; objdatains TOT=9) ==
+probe_bin=04fc5fa26050472d (build emendata, MAI pinnabile)
+objalloc: N=3000000 sitoA(magic)=6000000 (2.0000/iter) sitoB(propset)=6000000 (2.0000/iter) TOT_resolve=12000000 (4.0000/iter) entrate_propset=6000001 (2.0000/iter)
+objdatains: N=3000000 sitoA(magic)=6000000 (2.0000/iter) sitoB(propset)=6000000 (2.0000/iter) TOT_resolve=18000000 (6.0000/iter) entrate_propset=6000001 (2.0000/iter)
+SONDA ACQUISITA (parita' ok, conteggi deterministici)
