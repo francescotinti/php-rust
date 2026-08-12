@@ -16,8 +16,8 @@ dispatch 36,3 · non-resolve residuo ~60 ns/statement · MAPPA (net): WP 1,75–
 on-only (@s131) ≈ compoff 1,86–1,89 ≪ hf 2,55 ≪ hk 4,3 ≪ dbal 8,6 ≈ ORM 8,5 ·
 corpus **1414** ×2.
 
-## §S-133 — ordine (⚖️ UTENTE 2026-08-12: FOCUS OGGETTI; coppia WP DIRADATA —
-## solo quando Σ|D| leve promosse dall'ultima coppia supera il rumore, ~2-3 pin)
+## §S-133 — ordine (⚖️ UTENTE 2026-08-12: FOCUS OGGETTI — la leva oggetti viene
+## PRIMA; la coppia WP resta nel protocollo a ogni pin nuovo, in coda)
 
 1. **Fixture destructor-window** (az.rev. S-132 #1, corta ma PRIMA di ogni leva
    sul cammino: il «by construction» di L-LO1 ha un buco nella finestra di
@@ -30,10 +30,10 @@ corpus **1414** ×2.
    PRIMA della forma (ricetta propstep riusabile), poi criterio pre-registrato
    con soglia = max(drop-1, spread-batch sul pin s132 — gambe B nei verdetti);
    giudici objalloc/objdatains, promozione con catena s132 riusabile.
-3. Se resta: **dispatch fuori prop_step 36,3** (seconda leva oggetti) —
-   NON la coppia WP.
-4. Coppia WP su s132: SOLO se Σ|D| dall'ultima coppia supera ~60 ns/statement;
-   altrimenti GAP_TREND: «non rimisurato, riferimento resta 1,752–1,768 @ s131».
+3. **Coppia WP full+media sul pin CORRENTE a fine leva** (s133 se il ctor è
+   promosso, altrimenti s132; ricetta s132-pair.sh, soli pin attesi; tentativo
+   nuovo = file nuovo; per-config + firma) → REPORT_GAP_133.
+4. Se resta: dispatch fuori prop_step 36,3 (seconda leva oggetti).
 APPARATO + az.rev. S-132 (SEMANTICA, vincolanti): #1 fixture teardown (p.1
 sopra) · #2 `debug_assert!` slot0 ⇒ presenza slot == contains(key0) in
 field_write_prop_step · #3 disciplina `replace_slot` (Err su indice estraneo)
