@@ -1,0 +1,10 @@
+#!/bin/bash
+# post-receive (bare repo phpr-ci/repo.git) — accoda soltanto: il runner
+# (launchd com.phpr.ci, WatchPaths su queue/) fa il lavoro. Push istantaneo.
+Q="/Volumes/Extreme Pro/Claude/phpr-ci/queue"
+mkdir -p "$Q"
+while read -r old new ref; do
+  case "$new" in *[!0]*) ;; *) continue ;; esac
+  echo "$new" > "$Q/$(date +%s)-${new:0:12}"
+done
+exit 0
