@@ -12,9 +12,15 @@
 # esiste /private/tmp/phpr-measure.lock (convenzione per le ricette future).
 set -u
 export PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin:"$HOME/.cargo/bin"
+# il hook post-receive ci spawna con l'ambiente di git: senza unset, ogni
+# comando git qui dentro vedrebbe GIT_DIR=. (morso al primo collaudo)
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
 CI="/Volumes/Extreme Pro/Claude/phpr-ci"
 Q="$CI/queue"; OUT="$CI/out"; WORK="$CI/work"
-export CARGO_TARGET_DIR="$CI/target"
+# target su disco LOCALE APFS (cargo su ExFAT = terreno minato: niente
+# symlink/permessi) e PRUNE a fine job: build a freddo, ma il disco locale
+# (budget pre-flight ≥15G) non tiene cache CI residenti.
+export CARGO_TARGET_DIR="/private/tmp/phpr-ci-target"
 LOCK="$CI/runner.lock"
 FEED="$CI/CI_FEED.log"
 MLOCK="/private/tmp/phpr-measure.lock"
@@ -45,6 +51,18 @@ quiet_wait() { # aspetta le misure (check ogni 30 s, max 4 h; poi rinuncia)
 }
 
 notify() { osascript -e "display notification \"$1\" with title \"phpr CI\"" 2>/dev/null || true; }
+fail_job() { # esito negativo precoce: status + DONE nel feed + notifica (morso: START senza DONE)
+  echo "$1" > "$O/status"
+  echo "DONE $S12 $1 $(date '+%F %T')" >> "$FEED"
+  notify "$S12: $1"
+}
+# AppleDouble: il volume exFAT semina ._* anche dentro .git (._pack-*.idx
+# avvelena il pack reader: "non-monotonic index" — morso al primo collaudo);
+# vale per il bare E per il clone di lavoro.
+dot_clean_git() {
+  find "$CI/repo.git/objects" -name '._*' -delete 2>/dev/null
+  [ -d "$WORK/.git" ] && find "$WORK/.git" -name '._*' -delete 2>/dev/null
+}
 
 while :; do
   JOB=$(ls -1 "$Q" 2>/dev/null | sort | head -1)
@@ -54,16 +72,23 @@ while :; do
   S12=${SHA:0:12}
   O="$OUT/$S12"; mkdir -p "$O"
   if ! quiet_wait; then
-    echo "skipped-busy" > "$O/status"
-    echo "SKIP $S12 misure in corso da >4h $(date '+%F %T')" >> "$FEED"
+    fail_job "skipped-busy"
+    continue
+  fi
+  FREE=$(df -g /private/tmp | awk 'NR==2{print $4}')
+  if [ "${FREE:-0}" -lt 10 ]; then
+    fail_job "disk-low(${FREE}G)"
     continue
   fi
   echo "START $S12 $(date '+%F %T')" >> "$FEED"
+  dot_clean_git
   if [ ! -d "$WORK/.git" ]; then
-    git clone -q "$CI/repo.git" "$WORK" || { echo "clone-fail" > "$O/status"; continue; }
+    git clone -q "$CI/repo.git" "$WORK" || { fail_job "clone-fail"; continue; }
   fi
-  git -C "$WORK" fetch -q origin || { echo "fetch-fail" > "$O/status"; continue; }
-  git -C "$WORK" checkout -qf "$SHA" || { echo "checkout-fail" > "$O/status"; continue; }
+  dot_clean_git
+  git -C "$WORK" fetch -q origin || { fail_job "fetch-fail"; continue; }
+  dot_clean_git
+  git -C "$WORK" checkout -qf "$SHA" || { fail_job "checkout-fail"; continue; }
   SRC="$WORK/php-rust"
   ST="OK"
   ( cd "$SRC" && SOURCE_DATE_EPOCH=0 CARGO_INCREMENTAL=0 cargo build --release ) > "$O/build.log" 2>&1
@@ -86,4 +111,5 @@ while :; do
   echo "$ST" > "$O/status"
   echo "DONE $S12 $ST $(date '+%F %T')" >> "$FEED"
   notify "$S12: $ST"
+  rm -rf "$CARGO_TARGET_DIR"   # prune: il disco locale non tiene cache CI
 done
