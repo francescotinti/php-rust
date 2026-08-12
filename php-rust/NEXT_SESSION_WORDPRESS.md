@@ -30,9 +30,8 @@ corpus **1414** ×2.
    PRIMA della forma (ricetta propstep riusabile), poi criterio pre-registrato
    con soglia = max(drop-1, spread-batch sul pin s132 — gambe B nei verdetti);
    giudici objalloc/objdatains, promozione con catena s132 riusabile.
-3. **Coppia WP full+media sul pin CORRENTE a fine leva** (s133 se il ctor è
-   promosso, altrimenti s132; ricetta s132-pair.sh, soli pin attesi; tentativo
-   nuovo = file nuovo; per-config + firma) → REPORT_GAP_133.
+3. **Coppia WP full+media sul pin CORRENTE a fine leva** (ricetta s132-pair.sh,
+   soli pin attesi; tentativo nuovo = file nuovo; per-config) → REPORT_GAP_133.
 4. Se resta: dispatch fuori prop_step 36,3 (seconda leva oggetti).
 APPARATO + az.rev. S-132 (SEMANTICA, vincolanti): #1 fixture teardown (p.1
 sopra) · #2 `debug_assert!` slot0 ⇒ presenza slot == contains(key0) in
@@ -76,5 +75,6 @@ del gate quiescenza dentro l'argv del lancio (morso S-131).
 Pre-flight S-133: pin phpr **s132 6af6e497**5ef8d0bf + server **s132 ad17a10d**85cc8471
 (OGNI build canonica rilinka il server: ricontrollare l'hash; stash canonici in
 phpr-old-target/release/) · MySQL wp8 con l'elenco · uploads sotto guardia ·
-corpus 1414 ×2 modi · nessuna run detached · ordine lettura: REGOLE.md → QUI →
-sessions/WP_SESSION_132.md → wp132-harness/revisione.md → PERF_MAP.md.
+corpus 1414 ×2 modi · nessuna run detached · **CI: leggere phpr-ci/CI_FEED.log,
+un FAIL su main si indaga PRIMA di misurare** (ci/README.md; non gate di record)
+· lettura: REGOLE.md → QUI → WP_SESSION_132 → wp132-harness/revisione.md → PERF_MAP.
