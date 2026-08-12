@@ -840,6 +840,21 @@ impl Props {
     }
 
     /// Mutable twin of [`Self::get_slot`].
+    ///
+    /// SLOT-INDEX INVARIANT (az. rev. S-132 #3): `None` here means BOTH
+    /// "declared slot currently absent" and "index outside this table's
+    /// layout" — unlike [`Self::replace_slot`], which hands the stale-index
+    /// case back as `Err`. Callers that read `None` as "absent" (the L-LO1
+    /// non-leaf lookup in `field_write_prop_step`) are correct only while a
+    /// stamped `PropInfo.slot` index is used against a table built by
+    /// [`Self::with_layout`] for the matching class. The one table that
+    /// breaks the layout premise on purpose — the GC destroy-phase
+    /// `Props::new()` swap — is confined to objects with no surviving
+    /// PHP-visible handle (S-133 teardown gate: 7 vectors byte-identical
+    /// with the oracle). A future Props constructor that breaks this
+    /// alignment must keep the premise or move those callers to the name
+    /// path; the debug assert at the L-LO1 site cross-checks slot presence
+    /// against `contains(key0)` in debug builds.
     #[inline]
     pub fn get_slot_mut(&mut self, i: u32) -> Option<&mut Zval> {
         self.slots.get_mut(i as usize)?.as_mut()

@@ -532,8 +532,24 @@ fn field_write_prop_step(
     // protocol / no-autoviv semantics) — defer the remaining path. Enum
     // cases keep their dedicated immutability error below; lazy wrappers
     // keep the legacy by-name raw walk (their realization has its own
-    // machinery).
+    // machinery). A *hooked backed* property on a non-leaf step descends
+    // into the raw backing store without invoking its hook — PRE-EXISTING
+    // behaviour (the old by-name get/get_mut path did the same), unchanged
+    // by L-LO1 (az. rev. S-132 #5).
     if !rest.is_empty() && !is_enum && !is_lazy {
+        // Az. rev. S-132 #2: the slot fast path and the name path must agree
+        // on presence whenever the resolve stamped a slot index (ties the
+        // three distant legs together: per-class stamping in compile/class.rs,
+        // the scope-private guard in oop.rs, `with_layout` construction).
+        // Debug builds only — compiled out of the release pin.
+        #[cfg(debug_assertions)]
+        if let Some(si) = slot0 {
+            debug_assert_eq!(
+                obj.props.get_slot(si).is_some(),
+                obj.props.contains(key0.as_ref()),
+                "L-LO1: slot {si} presence diverges from contains(key0) on class {cid}",
+            );
+        }
         let child = match slot0 {
             Some(si) => obj.props.get_slot_mut(si),
             None => obj.props.get_mut(key0.as_ref()),
