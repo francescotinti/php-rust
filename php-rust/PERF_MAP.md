@@ -10,7 +10,7 @@ cifre dai verdetti `.out`. Regola di lettura: rapporti PER workload, MAI aggrega
 
 | workload | rapporto phpr/oracle | N | note |
 |---|---|---|---|
-| **WordPress full-suite** | **ON-ONLY CANONICO 1,752–1,768** (S-132 @ pin s131, az.rev. S-131 #3: riferimento PER CONFIGURAZIONE; off 1,783 N=1; misto pulito 1,751–1,797; leg1-off esclusa dal gate 1,5× con firma ictx +61% / oracle CPU rank 1/4; quiescenza rc=0 ×5 in header) | 3 gambe pulite (9 celle) | S-132 @ s131; parità per NOME 4/4 (solo `wp_is_stream #2`); peak 1754–1810 MiB; verdetto `wp132-harness/s132-pair-verdetto-t1.out`; da rifare su s132 (L-LO1 morde FieldAssign non-leaf) |
+| **WordPress full-suite** | **ON-ONLY CANONICO 1,752–1,768** (S-132 @ pin s131, az.rev. S-131 #3: riferimento PER CONFIGURAZIONE; off 1,783 N=1; misto pulito 1,751–1,797; leg1-off esclusa dal gate 1,5× con firma ictx +61% / oracle CPU rank 1/4; quiescenza rc=0 ×5 in header) | 3 gambe pulite (9 celle; on-only = **N=2 coppie proprie**, intervallo di due punti, non banda — az.rev. S-132 #4) | S-132 @ s131; parità per NOME 4/4 (solo `wp_is_stream #2`); peak 1754–1810 MiB; verdetto `wp132-harness/s132-pair-verdetto-t1.out`; da rifare su s132 (L-LO1 morde FieldAssign non-leaf) |
 | **WordPress gruppo media** | **2,453–2,481 CANONICA user-only** (companion user+sys 2,406–2,439, gambe pulite) | 3 | S-132 @ s131 |
 | **symfony http-foundation** (1854) | **2,547–2,559** (raw 2,55–2,57) | 2/lato | S-126; canonica sul CONTEGGIO diff 17 nomi = 0,92% ≤1% (≥3 nomi sono unit puri, NON famiglia `php -S` — emenda S-127); sys alto (I/O) |
 | **symfony http-kernel** (1665 test) | **4,29–4,32** | 2/lato | parità 0E/0F; contesa ok |

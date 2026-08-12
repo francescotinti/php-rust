@@ -1,51 +1,54 @@
 # NEXT_SESSION — phpr: OBIETTIVO PARITÀ (≥1×) con l'oracle; ≤3× = tappa (REGOLE §1)
-⏱ **FONDAMENTALI**: rif WP **full PULITO = 1,757–1,797** (S-131, MA misurato @
-s130: la coppia va RIFATTA sul pin nuovo — E1-KO tocca FieldAssign e WP ne ha) ·
-ultima leva SPEDITA **S-131 (E1-KO resolve-once → PIN NUOVO s131)** · sessioni-
-senza-leva = 0 · incidenti: storici 9 + **1 app. S-131** (gate quiescenza auto-
-morso da «phpr» nell'argv dell'arbitro; fermo pre-misura, fix path neutro).
+⏱ **FONDAMENTALI**: rif WP **full ON-ONLY CANONICO = 1,752–1,768** (S-132 @ pin
+s131, az.rev. #3 per-config; N=2 coppie — intervallo di due punti, non banda;
+da RIFARE su s132: L-LO1 morde FieldAssign non-leaf) · ultima leva SPEDITA
+**S-132 (L-LO1 lookup-once → PIN NUOVO s132)** · sessioni-senza-leva = 0 ·
+incidenti: storici 10 (9 + 1 app. S-131) · S-132: 0 nuovi.
 
-## Scoreboard (pin **s131 ff66cb84**6e6cd439 + server s131 97ed6e06; micro gate promozione S-131)
+## Scoreboard (pin **s132 6af6e497**5ef8d0bf + server s132 ad17a10d85cc8471; micro gate promozione S-132)
 
-**arith 5,6 · prop 5,6 · calls 4,9 · str 4,3 · arr 3,2 · re 2,5** (mosse ≤0,1 =
-jitter denominatore) · oggetti POST-E1-KO: **objdatains 7,5 (1220,0 ns, −33) ·
-churn 8,3 (1490,0) · dropdef 8,8 · alloc 7,8 (ctor non toccato) · allocni 9,8 ·
-objmap 17,3** · **MODELLO PROP_STEP** (s131-propstep-lettura.md, chiusura 93–94%):
-E−E2 166,9 @ s130 = prop_step 130,7 (guardie 49,4 · defer 37,0 · key+op 34,3 ·
-borrow 1,5) + dispatch 36,3; resolve statement ora ~10 (1 sito); residui NOMINATI:
-**lookup-once props-map** (~3 lookup→1 dentro 81,9 non-resolve) · **ctor 70,8**
-(4 resolve, tocca New/PropSet) · dispatch 36,3 · MAPPA (net): WP 1,76–1,80(@s130)
-≈ compoff 1,86–1,89 ≪ hf 2,55 ≪ hk 4,3 ≪ dbal 8,6 ≈ ORM 8,5 · corpus **1414** ×2.
+**arith 5,5 · prop 5,5 · calls 5,0 · str 4,3 · arr 3,1 · re 2,5** (mosse ≤0,1 =
+jitter denominatore) · oggetti POST-L-LO1: **objdatains 7,2 (1200,0 ns, −20) ·
+churn 8,2 (1473,3) · dropdef 9,0 (denom. 0,41 sotto-scala) · alloc 7,8 (ctor non
+toccato) · allocni 9,7 · objmap 17,3** · residui NOMINATI dal modello prop_step
+(s131-propstep-lettura.md): **forma ctor 70,8** (4 resolve, tocca New/PropSet) ·
+dispatch 36,3 · non-resolve residuo ~60 ns/statement · MAPPA (net): WP 1,75–1,77
+on-only (@s131) ≈ compoff 1,86–1,89 ≪ hf 2,55 ≪ hk 4,3 ≪ dbal 8,6 ≈ ORM 8,5 ·
+corpus **1414** ×2.
 
-## §S-132 — ordine proposto
+## §S-133 — ordine proposto
 
-1. **Coppia WP full+media sul pin s131** (ricetta s131-pair.sh RIUSABILE: cambiare
-   SOLO i pin attesi; warm-up leg + mediana PER MOTORE + quiescenza rc in header):
-   aspettativa = riduzione piccola di segno fisso (E1-KO −33 ns/statement su
-   datains); REPORT_GAP_132 col nuovo riferimento.
-2. **Leva «lookup-once» sulla props-map** (forma GIÀ NOMINATA dal modello S-131):
-   in field_write_prop_step la STESSA chiave subisce ~3 lookup (props.get in
-   guardie + contains in defer + contains/get_mut in key+op) — una entry-once
-   (get_mut/entry riusata) dentro gli 81,9 ns non-resolve; criterio SUO
-   pre-registrato (bande objX ora hanno serie s131: gambe B committate S-131);
-   ricetta A/B = s131-ab.sh (A=stash s131, path B NEUTRO — lezione argv).
-3. Se il tempo resta: **forma ctor** (70,8 ns = 4 resolve da PropSet/init;
-   tocca New/ctor — sonda per-sito prima della forma, ricetta propstep riusabile).
-4. Mappa residui per NOME: lexer/inflector/event-manager · wp-cli · PHPUnit-self ·
-   strumento DENSITÀ evalcls · §3.20 dbal.
-APPARATO + az.rev. S-131 (MISURA, vincolanti): soglia giudice = max(drop-1,
-spread storico TRA batch sul pin) (#1) · verdetto R=5 riconcili |D_smoke−D_R5| e
-D vs UB del modello (#2) · pair: riferimento anche PER CONFIGURAZIONE (on-only =
-default) + firma per gamba (#3) · trange tie-break deterministico (#4) · verdetto
-= file NUOVO per tentativo, mai append (#5) · argv dei lanci senza «phpr» ·
+1. **Fixture destructor-window PRIMA di ogni leva** (az.rev. S-132 #1, lente
+   SEMANTICA: il «by construction» di L-LO1 ha un buco nella finestra di
+   teardown GC — `Props::new()` a layout vuoto + `__destruct` che ripopola una
+   prop dichiarata poi usata non-leaf → oggi MagicDescend/errore dove prima
+   scriveva; NESSUN gate lo copre): scrivere il caso, diff vecchio/nuovo
+   (stash s131 vs pin s132), decidere cura o divergenza a catalogo.
+2. **Coppia WP full+media sul pin s132** (ricetta s132-pair.sh RIUSABILE:
+   cambiare SOLO i pin attesi; tentativo NUOVO = file nuovo; per-config on-only
+   canonico + firma per gamba): aspettativa = riduzione piccola di segno fisso
+   (L-LO1 −20 ns/statement su datains) → REPORT_GAP_133.
+3. **Forma ctor** (70,8 ns = 4 resolve da PropSet/init, 17,7/resolve: cammino
+   Denied/Dynamic del ctor): sonda per-sito PRIMA della forma (ricetta
+   propstep riusabile), poi criterio pre-registrato con soglia = max(drop-1,
+   spread-batch sul pin s132 — le gambe B di S-132 sono nei verdetti).
+4. Se resta: dispatch fuori prop_step 36,3 · mappa residui per NOME
+   (lexer/inflector/event-manager · wp-cli · PHPUnit-self · densità evalcls ·
+   §3.20 dbal).
+APPARATO + az.rev. S-132 (SEMANTICA, vincolanti): #1 fixture teardown (p.1
+sopra) · #2 `debug_assert!` slot0 ⇒ presenza slot == contains(key0) in
+field_write_prop_step · #3 disciplina `replace_slot` (Err su indice estraneo)
+anche a `get_slot_mut`, o invariante documentata sul tipo Props · #4 FATTA in
+S-132 (nota N=2 in PERF_MAP) · #5 commento L-LO1: delimitare hooked-backed
+non-leaf come pre-esistente (edit .rs solo fuori finestra di misura, build
+emendata dichiarata se rilinca) · argv dei lanci senza pattern del gate ·
 Serena pre-misura, mai edit .rs in finestra · rc quiescenza sempre in header.
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
 
-resolve del CTOR (70,8 ns, 4/iter da PropSet/init: forma separata) · dispatch
-fuori prop_step 36,3 · «prop_step altro» 8,5 · AssignOp/IncDec fuori perimetro
-F4/E1-KO (comporre) · famiglia locale 170 ns · evalcls 316,9× · refl 42,4× · re
-+2,00 alloc/iter · leaf-magic ora paga key0 su Denied (freddi, osservare) ·
+dispatch fuori prop_step 36,3 · «prop_step altro» 8,5 · AssignOp/IncDec fuori
+perimetro F4/E1-KO/L-LO1 (comporre) · famiglia locale 170 ns · evalcls 316,9× ·
+refl 42,4× · re +2,00 alloc/iter · leaf-magic ora paga key0 su Denied (freddi) ·
 micro-trim morte (is_empty SipHash · has_destruct · FxHash per-id) · $z++/$z--
 undef non warna · §3.13 · §3.12-i · §3.14 · get_gc · drift TODO.md · latin1-cliff.
 
@@ -68,13 +71,12 @@ SSO inline · inline-array init+drain args · claim di ASSENZA oltre la risoluzi
 loro bande · misure con LSP in volo · F2 keys-scratch · quiescenza nello stesso
 comando del lancio · output TRACKED mossi da orchestratori · rumore-soglia =
 range PIENO senza formula robusta · guardia su categoria senza banda propria ·
-percentuale tra segmenti NON annidati senza controllo a zero eventi · **pattern
-del gate quiescenza dentro l'argv del lancio (morso S-131)**.
+percentuale tra segmenti NON annidati senza controllo a zero eventi · pattern
+del gate quiescenza dentro l'argv del lancio (morso S-131).
 
-**Riscritto**: 2026-08-11 (chiusura S-131). Storia: `sessions/` · `gaps/GAP_TREND.md`.
-Pre-flight S-132: pin phpr **s131 ff66cb84**6e6cd439 + server **s131 97ed6e06**
+**Riscritto**: 2026-08-12 (chiusura S-132). Storia: `sessions/` · `gaps/GAP_TREND.md`.
+Pre-flight S-133: pin phpr **s132 6af6e497**5ef8d0bf + server **s132 ad17a10d**85cc8471
 (OGNI build canonica rilinka il server: ricontrollare l'hash; stash canonici in
 phpr-old-target/release/) · MySQL wp8 con l'elenco · uploads sotto guardia ·
-corpus 1414 ×2 modi · target time-probes CALDO · nessuna run detached · ordine
-lettura: REGOLE.md → QUI → sessions/WP_SESSION_131.md → wp131-harness/
-s131-propstep-lettura.md → wp131-harness/revisione.md → PERF_MAP.md.
+corpus 1414 ×2 modi · nessuna run detached · ordine lettura: REGOLE.md → QUI →
+sessions/WP_SESSION_132.md → wp132-harness/revisione.md → PERF_MAP.md.
