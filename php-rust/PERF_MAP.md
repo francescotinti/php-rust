@@ -1,6 +1,6 @@
 # PERF_MAP — phpr vs PHP oracle 8.5.7, mappa multi-workload
 
-Aggiornata: **2026-08-11 (S-131)** · pin phpr **s131 ff66cb84** (E1-KO resolve-once SPEDITA; WP full/media RIMISURATI in S-131 @ pin s130 — rimisura su s131 in S-132; hf/hk/dbal/ORM/compoff restano @ pin precedenti) ·
+Aggiornata: **2026-08-12 (S-132)** · pin phpr **s132 6af6e497** (L-LO1 lookup-once SPEDITA; WP full/media RIMISURATI in S-132 @ pin s131 — rimisura su s132 in S-133; hf/hk/dbal/ORM/compoff restano @ pin precedenti) ·
 metodo: user CPU, pavimenti per-binario, N per voce come indicato; criteri pre-registrati in
 `wp125-harness/s125-criterio-{pair,mappa}.md` e `wp126-harness/s126-criterio-{orm,mappa2}.md`
 (+ emenda S-127: **cifra canonica = NETTO-pavimento**, raw companion; gate contesa in ictx/s);
@@ -10,8 +10,8 @@ cifre dai verdetti `.out`. Regola di lettura: rapporti PER workload, MAI aggrega
 
 | workload | rapporto phpr/oracle | N | note |
 |---|---|---|---|
-| **WordPress full-suite** | **1,757–1,797 PULITO** (S-131 @ pin s130: warm-up leg dichiarato, 4/4 gambe pulite, mediana ictx/s PER MOTORE 1248/173, quiescenza rc=0 ×5 in header; coppie proprie = intervallo; user-only 1,766–1,809) | 4 gambe pulite (16 celle) | S-131 @ s130; parità per NOME 4/4 (solo `wp_is_stream #2`); peak 1788–1887 MiB; verdetto `wp131-harness/s131-pair-verdetto.out`; da rifare su s131 (E1-KO morde FieldAssign) |
-| **WordPress gruppo media** | **2,441–2,479 CANONICA user-only** (companion user+sys 2,394–2,447) | 4 | S-131 @ s130 |
+| **WordPress full-suite** | **ON-ONLY CANONICO 1,752–1,768** (S-132 @ pin s131, az.rev. S-131 #3: riferimento PER CONFIGURAZIONE; off 1,783 N=1; misto pulito 1,751–1,797; leg1-off esclusa dal gate 1,5× con firma ictx +61% / oracle CPU rank 1/4; quiescenza rc=0 ×5 in header) | 3 gambe pulite (9 celle) | S-132 @ s131; parità per NOME 4/4 (solo `wp_is_stream #2`); peak 1754–1810 MiB; verdetto `wp132-harness/s132-pair-verdetto-t1.out`; da rifare su s132 (L-LO1 morde FieldAssign non-leaf) |
+| **WordPress gruppo media** | **2,453–2,481 CANONICA user-only** (companion user+sys 2,406–2,439, gambe pulite) | 3 | S-132 @ s131 |
 | **symfony http-foundation** (1854) | **2,547–2,559** (raw 2,55–2,57) | 2/lato | S-126; canonica sul CONTEGGIO diff 17 nomi = 0,92% ≤1% (≥3 nomi sono unit puri, NON famiglia `php -S` — emenda S-127); sys alto (I/O) |
 | **symfony http-kernel** (1665 test) | **4,29–4,32** | 2/lato | parità 0E/0F; contesa ok |
 | **doctrine/collections** (242) | **8,22 net** (raw 6,20) | 2/lato | S-126; INDICATIVA: oracle netto 0,09 s (denominatore sotto-scala); parità 0/0 |
@@ -19,11 +19,11 @@ cifre dai verdetti `.out`. Regola di lettura: rapporti PER workload, MAI aggrega
 | **doctrine/orm** (3484 test) | **8,51–8,56** | 2/lato | oracle con `memory_limit=-1` (§3.14); parità fail-set 16 nomi |
 | **composer install OFFLINE** | **1,863–1,891 net** (raw 1,820–1,847) | 2/lato | S-128 @ s127b, PRIMA misura col numeratore vivo (cure ondata-2); composer ESTRATTO, vendor_ok bilaterale, contesa ok (ictx/s); floors 0,07/0,06; sys≈user (~2,3 s/lato) ⇒ **cifra user-only NON confrontabile col full (user+sys): su user+sys sarebbe ~1,3** (rev. S-128 az.5); residuo phpcs config-set (§3.19-quinquies); verdetto `wp128-harness/s128-compoff-verdetto.out` |
 
-## Micro-categorie (R=5, pin s131; tappa ≤3×; gate promozione S-131)
+## Micro-categorie (R=5, pin s132; tappa ≤3×; gate promozione S-132)
 
 | arith | prop | calls | str | arr | re |
 |---|---|---|---|---|---|
-| 5,6 | 5,6 | 4,9 | **4,3** | **3,2** | **2,5** ✅ |
+| 5,5 | 5,5 | 5,0 | **4,3** | **3,1** | **2,5** ✅ |
 
 calls: la (*) di s127 è SCIOLTA in S-129 (phpr netto IDENTICO 2,14 s; si muove
 solo il denominatore oracle 0,43–0,44). re 2,5/2,6 = run-to-run del denominatore.
@@ -31,11 +31,11 @@ solo il denominatore oracle 0,43–0,44). re 2,5/2,6 = run-to-run del denominato
 Allocazioni/iter vs oracle: arith/prop/calls 0=0 · **str 2,00=2,00 (PARITÀ, S-125)** ·
 arr 2,05≈2,03 · re 7,00 vs 5,00 (+2, apertura per NOME).
 
-## Micro-ORM (S-131 sul pin s131 POST-E1-KO — verdetto s131-submicro; evalcls/refl da S-126)
+## Micro-ORM (S-132 sul pin s132 POST-L-LO1 — verdetto s132-submicro; evalcls/refl da S-126)
 
 | evalcls (compile/classe via eval) | refl | objchurn | └ objalloc | └ objdatains | └ objdropdef | └ objallocni | └ objmap |
 |---|---|---|---|---|---|---|---|
-| **316,9** (2,38 ms vs 7,5 µs) | **42,4** | 8,6→**8,3** (1490,0 ns) | **7,8** (986,7; ctor non toccato) | 7,7→**7,5** (1220,0, −33 = E1-KO) | 9,0→**8,8** | **9,8** | **17,3** |
+| **316,9** (2,38 ms vs 7,5 µs) | **42,4** | 8,3→**8,2** (1473,3 ns) | **7,8** (983,3; ctor non toccato) | 7,5→**7,2** (1200,0, −20 = L-LO1) | 8,8→**9,0** (denom. 0,41 sotto-scala) | **9,7** | **17,3** |
 
 Profilo ORM phpr (indizio unilaterale): churn visibile multi-% (Zval clone/drop, slot_of,
 gc_note/sweep/collect_cycles, insert/lookup, malloc/free); compile ≤~1% leaf, reflection <0,5%.
@@ -66,9 +66,13 @@ gc_note/sweep/collect_cycles, insert/lookup, malloc/free); compile ≤~1% leaf, 
   enumerati per NOME (3× prop_key + prop_key_read + prop_indirect_guard ≈0);
   ctor 70,8 (17,7/resolve, più care). **E1-KO «resolve-once» SPEDITA S-131**
   (criterio pre-registrato: smoke +45,0 → R=5 D=+23,3 vs soglia 13,3, guardie
-  9/9, promozione rc=0) → **pin s131 ff66cb84**. Residui NOMINATI dal modello:
-  «lookup-once» sulla props-map (~3 lookup → 1, dentro gli 81,9 non-resolve) ·
-  forma ctor (70,8 ns, tocca New/PropSet) · dispatch 36,3.
+  9/9, promozione rc=0) → **pin s131 ff66cb84**. **L-LO1 «lookup-once» SPEDITA
+  S-132** (criterio pre-registrato con soglia az.rev. #1 = spread-batch 10,0:
+  smoke +23,3 → R=5 D=+20,0, riconciliazione 3,3 in banda e dentro UB 30,
+  guardie 9/9, promozione rc=0) → **pin s132 6af6e497**: UN accesso alla
+  props-map nel ramo non-leaf (slot WP-29 dalla resolve, fallback by-name).
+  Residui NOMINATI dal modello: forma ctor (70,8 ns, tocca New/PropSet) ·
+  dispatch 36,3 · non-resolve residuo ~60 ns/statement.
 - Aperture per NOME: `evalcls` **316,9×** (cliff compile-per-classe; serve strumento di densità
   prima di ogni leva) · `refl` **42,4×** · re +2,00 alloc/iter.
 
