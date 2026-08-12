@@ -1,7 +1,7 @@
 #!/bin/bash
 # s132-promozione.sh <cand_hash16> — gate di promozione L-LO1 lookup-once props-map — S-132 (copia dichiarata di s131-promozione.sh: soli tag s132 e path wp132)
 # (criterio s132-criterio-lookuponce.md p.7; A/B R=5).
-# Ordine REGOLE §6 (leva GIÀ committata @ b87d7fa (E1-KO)): build ricetta (riproduce il
+# Ordine REGOLE §6 (leva L-LO1 GIÀ committata prima del lancio): build ricetta (riproduce il
 # candidato) → batteria (rc da comando, inventario per NOME vs pin s124, ZERO
 # test nuovi attesi) → re-build ricetta → pin-phpr.sh s129 → corpus-gate
 # CANONICO → fixture chain s109 → micro R=5 → gate ORM per NOME (baseline
