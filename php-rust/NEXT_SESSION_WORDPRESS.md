@@ -16,24 +16,24 @@ dispatch 36,3 · non-resolve residuo ~60 ns/statement · MAPPA (net): WP 1,75–
 on-only (@s131) ≈ compoff 1,86–1,89 ≪ hf 2,55 ≪ hk 4,3 ≪ dbal 8,6 ≈ ORM 8,5 ·
 corpus **1414** ×2.
 
-## §S-133 — ordine proposto
+## §S-133 — ordine (⚖️ UTENTE 2026-08-12: FOCUS OGGETTI; coppia WP DIRADATA —
+## solo quando Σ|D| leve promosse dall'ultima coppia supera il rumore, ~2-3 pin)
 
-1. **Fixture destructor-window PRIMA di ogni leva** (az.rev. S-132 #1, lente
-   SEMANTICA: il «by construction» di L-LO1 ha un buco nella finestra di
+1. **Fixture destructor-window** (az.rev. S-132 #1, corta ma PRIMA di ogni leva
+   sul cammino: il «by construction» di L-LO1 ha un buco nella finestra di
    teardown GC — `Props::new()` a layout vuoto + `__destruct` che ripopola una
    prop dichiarata poi usata non-leaf → oggi MagicDescend/errore dove prima
-   scriveva; NESSUN gate lo copre): scrivere il caso, diff vecchio/nuovo
-   (stash s131 vs pin s132), decidere cura o divergenza a catalogo.
-2. **Coppia WP full+media sul pin s132** (ricetta s132-pair.sh RIUSABILE:
-   cambiare SOLO i pin attesi; tentativo NUOVO = file nuovo; per-config on-only
-   canonico + firma per gamba): aspettativa = riduzione piccola di segno fisso
-   (L-LO1 −20 ns/statement su datains) → REPORT_GAP_133.
-3. **Forma ctor** (70,8 ns = 4 resolve da PropSet/init, 17,7/resolve: cammino
-   Denied/Dynamic del ctor): sonda per-sito PRIMA della forma (ricetta
-   propstep riusabile), poi criterio pre-registrato con soglia = max(drop-1,
-   spread-batch sul pin s132 — le gambe B di S-132 sono nei verdetti).
-4. Se resta: dispatch 36,3 · mappa residui per NOME (lexer/inflector/
-   event-manager · wp-cli · PHPUnit-self · densità evalcls · §3.20 dbal).
+   scriveva; NESSUN gate lo copre): scrivere il caso, diff stash s131 vs pin
+   s132, decidere cura o divergenza a catalogo.
+2. **Forma ctor — LEVA OGGETTI della sessione** (70,8 ns = 4 resolve da
+   PropSet/init, 17,7/resolve: cammino Denied/Dynamic del ctor): sonda per-sito
+   PRIMA della forma (ricetta propstep riusabile), poi criterio pre-registrato
+   con soglia = max(drop-1, spread-batch sul pin s132 — gambe B nei verdetti);
+   giudici objalloc/objdatains, promozione con catena s132 riusabile.
+3. Se resta: **dispatch fuori prop_step 36,3** (seconda leva oggetti) —
+   NON la coppia WP.
+4. Coppia WP su s132: SOLO se Σ|D| dall'ultima coppia supera ~60 ns/statement;
+   altrimenti GAP_TREND: «non rimisurato, riferimento resta 1,752–1,768 @ s131».
 APPARATO + az.rev. S-132 (SEMANTICA, vincolanti): #1 fixture teardown (p.1
 sopra) · #2 `debug_assert!` slot0 ⇒ presenza slot == contains(key0) in
 field_write_prop_step · #3 disciplina `replace_slot` (Err su indice estraneo)
