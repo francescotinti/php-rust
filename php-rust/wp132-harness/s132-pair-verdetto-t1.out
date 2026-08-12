@@ -1,0 +1,42 @@
+== s132 coppia WP full+media sul pin s131 tentativo=t1 (criterio s132-criterio-pair.md) ==
+grade=VERDICT  # derivazione meccanica dai .time; rc autoritativo = pair-out/pair132-t1.done
+# full: cpu=user+sys (etichettato); media: CANONICA=user-only + companion (az.rev. S-128 #3)
+# az.rev. S-131 #3: riferimento PER CONFIGURAZIONE, ON-ONLY = canonico; firma per gamba
+quiescenza warmup: rc=0 (file: pair-out/quiesce-t1-warmup.rc)
+quiescenza leg1-off: rc=0 (file: pair-out/quiesce-t1-leg1-off.rc)
+quiescenza leg1-on: rc=0 (file: pair-out/quiesce-t1-leg1-on.rc)
+quiescenza leg2-off: rc=0 (file: pair-out/quiesce-t1-leg2-off.rc)
+quiescenza leg2-on: rc=0 (file: pair-out/quiesce-t1-leg2-on.rc)
+leg1-off: ictx/s oracle=2181 phpr=651  SEGNALATA(>1,5x med MOTORE)
+  firma leg1-off: ictx%med oracle=161% phpr=245% rank_cpu_oracle=1/4 (1=piu' veloce)
+leg1-on: ictx/s oracle=1374 phpr=270  contesa ok
+  firma leg1-on: ictx%med oracle=101% phpr=102% rank_cpu_oracle=2/4 (1=piu' veloce)
+leg2-off: ictx/s oracle=1335 phpr=262  contesa ok
+  firma leg2-off: ictx%med oracle=98% phpr=98% rank_cpu_oracle=3/4 (1=piu' veloce)
+leg2-on: ictx/s oracle=1338 phpr=243  contesa ok
+  firma leg2-on: ictx%med oracle=99% phpr=91% rank_cpu_oracle=4/4 (1=piu' veloce)
+ictx_s_mediana_oracle=1356 ictx_s_mediana_phpr=266  # PER MOTORE
+gambe pulite: ['leg1-on', 'leg2-off', 'leg2-on']
+leg1-off: full_oracle_cpu=441.86 full_phpr_cpu=793.99 proprio=1.797 peak_phpr_MiB=1795.2
+leg1-on: full_oracle_cpu=442.41 full_phpr_cpu=782.08 proprio=1.768 peak_phpr_MiB=1754.1
+leg2-off: full_oracle_cpu=445.87 full_phpr_cpu=795.11 proprio=1.783 peak_phpr_MiB=1810.5
+leg2-on: full_oracle_cpu=446.76 full_phpr_cpu=782.59 proprio=1.752 peak_phpr_MiB=1766.0
+matrice full (gambe PULITE) phpr(riga)/oracle(colonna):
+  leg1-on/leg1-on=1.768  leg1-on/leg2-off=1.754  leg1-on/leg2-on=1.751
+  leg2-off/leg1-on=1.797  leg2-off/leg2-off=1.783  leg2-off/leg2-on=1.780
+  leg2-on/leg1-on=1.769  leg2-on/leg2-off=1.755  leg2-on/leg2-on=1.752
+full_intervallo_PULITO_misto=1.751-1.797  # companion (miscela config)
+coppie_proprie_PULITE_miste=1.752-1.783 (N=3)
+coppie_proprie_user_only_miste=1.761-1.793
+full_on_only_coppie_proprie=1.752-1.768 (N=2) CANONICO
+full_on_only_intervallo=1.751-1.769
+full_off_only_coppie_proprie=1.783-1.783 (N=1)
+full_off_only_intervallo=1.783-1.783
+media_leg1-off: user_only_CANONICA=2.475 user+sys_companion=2.433 (SEGNALATA)
+media_leg1-on: user_only_CANONICA=2.481 user+sys_companion=2.439
+media_leg2-off: user_only_CANONICA=2.458 user+sys_companion=2.423
+media_leg2-on: user_only_CANONICA=2.453 user+sys_companion=2.406
+parita_leg1-off: media=OK(vuoto) full=OK(solo wp_is_stream #2)
+parita_leg1-on: media=OK(vuoto) full=OK(solo wp_is_stream #2)
+parita_leg2-off: media=OK(vuoto) full=OK(solo wp_is_stream #2)
+parita_leg2-on: media=OK(vuoto) full=OK(solo wp_is_stream #2)
