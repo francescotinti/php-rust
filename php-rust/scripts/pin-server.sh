@@ -58,7 +58,17 @@ cp "$BIN" "$STASH/php-server-$TAG"
 HS=$(shasum -a 256 "$STASH/php-server-$TAG" | cut -c1-16)
 [ "$H" = "$HS" ] || { echo "hash dello stash diverso ($H vs $HS)"; exit 1; }
 HEAD_SHA=$(git rev-parse --short HEAD)
-echo "| $H | $TAG | \`cargo build --release -p php-server --features axum-server\` @ $HEAD_SHA | smoke --axum OK $(date '+%F %T'); $NOTE_PHPR; GRADO PIENO a parte (s106-grado-server.sh) | stash \`php-server-$TAG\` |" >> PIN_REGISTRY.md
+ROW="| $H | $TAG | \`cargo build --release -p php-server --features axum-server\` @ $HEAD_SHA | smoke --axum OK $(date '+%F %T'); $NOTE_PHPR; GRADO PIENO a parte (s106-grado-server.sh) | stash \`php-server-$TAG\` |"
+# Az.rev. S-133 #1: la riga entra nella SEZIONE php-server (in testa alla sua
+# tabella, newest-first), NON in coda al file (da s109 finiva dentro la tabella
+# phpr). Fail-closed: se l'ancora non c'è, il registro non viene toccato.
+awk -v row="$ROW" '
+  /^## php-server/ { sec=1 }
+  { print }
+  sec==1 && /^\|---\|---\|---\|---\|---\|$/ { print row; sec=2; ins=1 }
+  END { if (!ins) exit 3 }
+' PIN_REGISTRY.md > PIN_REGISTRY.md.new || { echo "STOP: ancora tabella php-server non trovata in PIN_REGISTRY.md => registro NON scritto."; rm -f PIN_REGISTRY.md.new; exit 1; }
+mv PIN_REGISTRY.md.new PIN_REGISTRY.md
 # Az.rev. S-130 #1: il registro si COMMITTA nello stesso atto e il tree deve
 # restare pulito su PIN_REGISTRY.md, pena STOP (registro senza evidenza = niente pin).
 MSG=$(mktemp); echo "pin server $TAG: registro PIN_REGISTRY ($H)" > "$MSG"
