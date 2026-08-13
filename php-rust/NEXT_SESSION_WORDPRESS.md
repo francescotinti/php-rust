@@ -43,10 +43,9 @@ locale: sospendere il runner nelle finestre di misura e dichiararlo (S-133).
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
 
 dispatch fuori prop_step 36,3 · ultima resolve ctor (IC non-plain) · «prop_step
-altro» 8,5 · k=9 di S-130 smentito dalla sonda S-133 (6 con E1-KO+L-LO1): la
-contabilità statement va ri-derivata al prossimo modello · AssignOp/IncDec
-fuori perimetro F4/E1-KO/L-LO1 · famiglia locale 170 ns · evalcls 316,9× ·
-refl 42,4× · re +2,00 alloc/iter · peak WP +80 MiB bordo alto (S-133) ·
+altro» 8,5 · k=9 di S-130 smentito (sonda S-133: 6) → contabilità statement da
+ri-derivare · AssignOp/IncDec fuori perimetro · famiglia locale 170 ns ·
+evalcls 316,9× · refl 42,4× · re +2,00 alloc/iter · peak WP +80 MiB (S-133) ·
 micro-trim morte · $z++/$z-- undef non warna · §3.13 · §3.12-i · §3.14 ·
 get_gc · drift TODO.md · latin1-cliff.
 
@@ -78,7 +77,6 @@ Pre-flight S-134: pin phpr **s133 c87439a9**789bcef4 + server **s133 d447f828**3
 (OGNI build canonica rilinka il server: ricontrollare l'hash; stash canonici in
 phpr-old-target/release/) · MySQL wp8 con l'elenco · uploads sotto guardia ·
 corpus 1414 ×2 modi · nessuna run detached · CI: leggere phpr-ci/CI_FEED.log
-(un FAIL su main si indaga PRIMA di misurare; il run a55fd59 è stato interrotto
-in S-133 senza DONE: atteso, i commit successivi coprono) · disco Data ≥10G
-(build a freddo post-prune ~+3 min) · lettura: REGOLE.md → QUI →
-WP_SESSION_133 → wp133-harness/revisione.md → PERF_MAP.
+(FAIL su main si indaga PRIMA di misurare; run a55fd59 interrotto senza DONE:
+atteso, i commit successivi coprono) · disco Data ≥10G (build a freddo ~+3 min)
+· lettura: REGOLE.md → QUI → WP_SESSION_133 → wp133-harness/revisione.md → PERF_MAP.
