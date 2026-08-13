@@ -74,8 +74,7 @@ sopra la parte modellata senza sonda di ripartizione (reperto S-134)**.
 Pre-flight S-135: pin phpr **s134 61896da1**3654fd00 + server **s134 461bfb55**56164cfa
 (OGNI build canonica rilinka il server: ricontrollare l'hash; stash canonici in
 phpr-old-target/release/; gate `stash` in catena verifica 4 pinnati vs registro) ·
-MySQL wp8 con l'elenco · uploads sotto guardia · corpus 1414 ×2 modi · nessuna
-run detached · CI: leggere phpr-ci/CI_FEED.log (FAIL su main si indaga PRIMA di
-misurare; la coda post-S-134 smaltisce ~14 commit: attesa fisiologica) · disco
-Data ≥10G (build a freddo ~+3 min) · lettura: REGOLE.md → QUI → WP_SESSION_134 →
-wp134-harness/revisione.md → PERF_MAP.md.
+MySQL wp8 con l'elenco · uploads sotto guardia · corpus 1414 ×2 · nessuna run
+detached · CI_FEED.log (FAIL su main si indaga PRIMA; coda post-S-134 ~14
+commit: attesa fisiologica) · disco Data ≥10G · lettura: REGOLE.md → QUI →
+WP_SESSION_134 → wp134-harness/revisione.md → PERF_MAP.md.
