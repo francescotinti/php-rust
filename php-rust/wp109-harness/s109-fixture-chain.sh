@@ -1,8 +1,10 @@
 #!/bin/bash
 # s109-fixture-chain.sh — le 5 fixture storiche + le 2 W9 (azioni 3-4 revisore
 # S-108) + il gate preg §3.18 (az. rev. S-121 #4, cablato S-122) + il gate
-# teardown destructor-window (az. rev. S-132 #1, cablato S-133) sul PIN.
-# rc di OGNI gate DAL COMANDO (mai da pipe); marker finale rc=somma.
+# teardown destructor-window (az. rev. S-132 #1, cablato S-133) + il gate
+# stash (az. rev. S-133 #2, cablato S-134: ri-hash dei 4 pinnati vs
+# PIN_REGISTRY) sul PIN. rc di OGNI gate DAL COMANDO (mai da pipe);
+# marker finale rc=somma. EMENDA DICHIARATA S-134: inventario 8 -> 9 gate.
 set -u
 export PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin
 R="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust"
@@ -10,7 +12,7 @@ export PHPR_PIN_ATTESO="${PHPR_PIN_ATTESO:?serve il pin atteso}"
 export ORACLE_PIN_ATTESO="${ORACLE_PIN_ATTESO:-07b0df8d63247695}"
 # Az.rev. S-130 #2: lista gate CONGELATA per NOME — l'inventario eseguito deve
 # coincidere con questa, pena rc!=0 (mai piu' denominatori cablati stantii).
-ATTESI="hc1 move recv fx20 fx21 w9 preg teardown"
+ATTESI="hc1 move recv fx20 fx21 w9 preg teardown stash"
 TOT=0
 VISTI=""
 run_gate() { # $1=etichetta $2=script
@@ -29,6 +31,7 @@ run_gate fx21 "$R/wp105-harness/s105-fx21-gate.sh"
 run_gate w9   "$R/wp109-harness/s109-w9-fixtures.sh"
 run_gate preg "$R/wp121-harness/s121-fx-preg-gate.sh"
 run_gate teardown "$R/wp133-harness/s133-fx-teardown-gate.sh"
+run_gate stash "$R/wp134-harness/s134-stash-gate.sh"
 if [ "$VISTI" != "$ATTESI" ]; then
   echo "FIXTURE-CHAIN INVENTARIO DIVERSO: visti='$VISTI' attesi='$ATTESI'"
   TOT=$((TOT + 1))
