@@ -1,0 +1,42 @@
+2,3c2,3
+< # s134-promozione.sh <cand_hash16> — gate di promozione LEVA IC non-plain — S-134 (copia dichiarata di s133-promozione.sh: tag s134, path wp134, inventario fixture a 9 gate con `stash`; collaudo copia-gate + manifest s134-promozione-copia.diff)
+< # (criterio s134-criterio-icnp.md p.3; A/B R=5).
+---
+> # s135-promozione.sh <cand_hash16> — gate di promozione LEVA AP1 fast-path — S-135 (copia dichiarata di s134-promozione.sh: tag s135, path wp135, inventario fixture a 9 gate con `stash`; collaudo copia-gate + manifest s135-promozione-copia.diff)
+> # (criterio s135-criterio-ap1.md; A/B R=5).
+6c6
+< # test nuovi attesi) → re-build ricetta → pin-phpr.sh s134 → corpus-gate
+---
+> # test nuovi attesi) → re-build ricetta → pin-phpr.sh s135 → corpus-gate
+9c9
+< # watchdog → pin-server.sh s134 (grado minimo). Registro nel verdetto del run
+---
+> # watchdog → pin-server.sh s135 (grado minimo). Registro nel verdetto del run
+14c14
+< H="$SRC/wp134-harness"
+---
+> H="$SRC/wp135-harness"
+21,22c21,22
+< VERD="$H/s134-promo-verdetto.out"
+< CAND_EXP="${1:?uso: s134-promozione.sh <cand_hash16>}"
+---
+> VERD="$H/s135-promo-verdetto.out"
+> CAND_EXP="${1:?uso: s135-promozione.sh <cand_hash16>}"
+58c58
+< "$SRC/scripts/pin-phpr.sh" s134 > "$OUT/pin.log" 2>&1
+---
+> "$SRC/scripts/pin-phpr.sh" s135 > "$OUT/pin.log" 2>&1
+78,79c78,79
+< PHPR="$BIN" R=5 "$SRC/wp97-harness/micro/run-micro.sh" > "$OUT/micro-pin-s134.out" 2>&1
+< note "promozione micro pin s134: $(grep -E '^rapporto_' "$OUT/micro-pin-s134.out" | tr '\n' ' ')"
+---
+> PHPR="$BIN" R=5 "$SRC/wp97-harness/micro/run-micro.sh" > "$OUT/micro-pin-s135.out" 2>&1
+> note "promozione micro pin s135: $(grep -E '^rapporto_' "$OUT/micro-pin-s135.out" | tr '\n' ' ')"
+109c109
+< "$SRC/scripts/pin-server.sh" s134 > "$OUT/pin-server.log" 2>&1
+---
+> "$SRC/scripts/pin-server.sh" s135 > "$OUT/pin-server.log" 2>&1
+115c115
+< note "PROMOZIONE COMPLETA rc=0 (da promo-out/rcb — il file rc che QUESTO script scrive): pin s134 = $H2"
+---
+> note "PROMOZIONE COMPLETA rc=0 (da promo-out/rcb — il file rc che QUESTO script scrive): pin s135 = $H2"
