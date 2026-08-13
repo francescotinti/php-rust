@@ -1,9 +1,8 @@
 # WP_SESSION_133 — LEVA ctor resolve-once SPEDITA (pin s133) + gate teardown + coppia WP
 
-**In una frase**: la terza cura nominata dal modello — risolvere il nome della
-proprietà UNA volta invece di due quando un costruttore con tipi la scrive — è
-promossa su tutta la catena (allocazione oggetti ~4% più veloce), e la finestra
-di teardown è coperta da sette prove byte-identiche al PHP ufficiale.
+**In una frase**: la terza cura del modello — risolvere il nome della proprietà
+UNA volta invece di due quando un costruttore con tipi la scrive — è promossa su
+tutta la catena (allocazione oggetti ~4% più veloce); teardown coperto da 7 prove.
 
 **SCOREBOARD** (pin NUOVO **s133 c87439a9**789bcef4 + server s133 d447f828; micro gate promozione):
 **arith 5,5 = · prop 5,5 = · calls 4,8 ↘ · str 4,2 ↘ · arr 3,2 ↗(jitter) · re 2,5 =**
@@ -27,8 +26,7 @@ dichiarata → stash sovrascritti; riparato al byte). 2026-08-13.
   objdatains 7,2 (1183,3) · churn 8,2 · dropdef 8,9 · allocni 9,4 · objmap 17,3.
 4·**Coppia WP t1**: 3/4 gambe pulite (leg2-on esclusa, firma phpr ictx 226%);
   on-only 1,754 dentro il rif. s131 — la leva NON muove WP (coerente: morde il
-  fallback non-plain, profilo ORM; WP è plain→IC) · peak 1816–1898 MiB (+80
-  bordo alto, da guardare) → REPORT_GAP_133.
+  fallback non-plain, profilo ORM) · peak +80 bordo alto → REPORT_GAP_133.
 5·**INCIDENTE riparato al byte**: sed della copia cieco sulle righe QUOTATE →
   promo con `pin-*.sh s132` → stash s132 sovrascritti; server da backup .SAFE,
   phpr-s132=6af6e497 ricostruito da ceb1ec2 nel tree PRINCIPALE (worktree NON
@@ -39,5 +37,4 @@ dichiarata → stash sovrascritti; riparato al byte). 2026-08-13.
 - ⭐⭐ La copia dichiarata si collauda ANCHE sulle righe che il pattern non tocca.
 - ⭐⭐ Il determinismo della ricetta ripara (6af6e497 al byte dal commit giusto)
   ma SOLO nel tree originale: la riproducibilità è path-dipendente.
-- ⭐ Per una leva resolve-bound basta una sonda a SOLI CONTEGGI: niente timer,
-  niente quiescenza, costo una build.
+- ⭐ Per una leva resolve-bound basta una sonda a SOLI CONTEGGI: costo una build.

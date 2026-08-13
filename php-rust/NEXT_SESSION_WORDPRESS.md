@@ -1,10 +1,9 @@
 # NEXT_SESSION — phpr: OBIETTIVO PARITÀ (≥1×) con l'oracle; ≤3× = tappa (REGOLE §1)
 ⏱ **FONDAMENTALI**: rif WP **full ON-ONLY = 1,754 (N=1 — UN punto, non banda)**
-(S-133 @ pin s133; off 1,781–1,808 N=2; media 2,453→2,428–2,487; **peak
-1816–1898 MiB, +80 bordo alto: da guardare**) · ultima leva SPEDITA **S-133
-(ctor resolve-once → PIN NUOVO s133)** · sessioni-senza-leva = 0 · incidenti:
-storici 11 (10 + **1 S-133**: sed copia cieco su righe quotate → stash s132
-sovrascritti, riparati al byte).
+(S-133 @ pin s133; off 1,781–1,808 N=2; media 2,428–2,487; **peak 1816–1898
+MiB, +80 bordo alto: da guardare**) · ultima leva SPEDITA **S-133 (ctor
+resolve-once → PIN NUOVO s133)** · sessioni-senza-leva = 0 · incidenti: storici
+11 (10 + **1 S-133**: sed copia cieco su righe quotate, riparato al byte).
 
 ## Scoreboard (pin **s133 c87439a9**789bcef4 + server s133 d447f8283c03e1bb; micro gate promozione S-133)
 
@@ -35,10 +34,9 @@ beneficiare della leva ctor — rimisura dovuta**) · corpus **1414** ×2.
 5. **Coppia WP sul pin nuovo se leva promossa** (per-config, s133-pair
    ricetta; tentativo nuovo = file nuovo) → REPORT_GAP_134; **rimisura
    dbal/ORM sul pin corrente** se resta finestra (la leva ctor parla a loro).
-APPARATO: az.rev. #5 = dichiarare a catalogo la risoluzione del gate teardown
-(parità provata SUI 7 vettori, non oltre) · argv senza pattern del gate ·
-Serena pre-misura, mai edit .rs in finestra · rc quiescenza in header · CI
-locale: sospendere il runner nelle finestre di misura e dichiararlo (S-133).
+APPARATO: az.rev. #5 = a catalogo la risoluzione del gate teardown (parità SUI
+7 vettori, non oltre) · argv senza pattern del gate · Serena pre-misura, mai
+edit .rs in finestra · rc quiescenza in header · CI sospesa in finestra di misura.
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
 
