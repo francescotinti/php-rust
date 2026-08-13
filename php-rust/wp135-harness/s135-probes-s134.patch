@@ -1,0 +1,126 @@
+diff --git a/php-rust/crates/php-runtime/src/vm/mod.rs b/php-rust/crates/php-runtime/src/vm/mod.rs
+index a561779..1da64d8 100644
+--- a/php-rust/crates/php-runtime/src/vm/mod.rs
++++ b/php-rust/crates/php-runtime/src/vm/mod.rs
+@@ -84,6 +84,9 @@ mod tidy;
+ mod xslt;
+ mod tokenizer;
+ mod websapi;
++// S-135 sonda conteggi (build emendata, worktree): MAI nel pin.
++#[path = "../../../../wp135-harness/s135probes.rs"]
++pub(crate) mod s135probes;
+ use arrays::*;
+ use calls::*;
+ use oop::*;
+@@ -11218,6 +11221,8 @@ impl<'m> Vm<'m> {
+     /// dynamic property passes the value through unchanged. The strict-types mode of
+     /// the *writing* frame governs coercion, mirroring the parameter binder.
+     fn coerce_typed_prop_write(&mut self, ocid: ClassId, name: &[u8], value: Zval) -> Result<Zval, PhpError> {
++        // S-135 sonda: seg 10 = coercizioni typed (canale pagato).
++        s135probes::count(10);
+         let Some((decl, hint)) = prop_type_decl(&self.classes, ocid, name) else {
+             return Ok(value);
+         };
+diff --git a/php-rust/crates/php-runtime/src/vm/oop.rs b/php-rust/crates/php-runtime/src/vm/oop.rs
+index 5054447..c50456e 100644
+--- a/php-rust/crates/php-runtime/src/vm/oop.rs
++++ b/php-rust/crates/php-runtime/src/vm/oop.rs
+@@ -425,6 +425,8 @@ pub(super) enum PropAccess<'a> {
+ ///    an invisible private declared by the object's own class (or an invisible
+ ///    protected) is `Denied`.
+ pub(super) fn resolve_prop_access<'a>(classes: &[&'a CompiledClass], obj_class: ClassId, name: &[u8], scope: Option<ClassId>) -> PropAccess<'a> {
++    // S-135 sonda: seg 1 = TUTTE le resolve.
++    super::s135probes::count(1);
+     if let Some(s) = scope {
+         if let Some(pi) = prop_info(classes, s, name) {
+             if pi.visibility == Visibility::Private
+diff --git a/php-rust/crates/php-runtime/src/vm/run.rs b/php-rust/crates/php-runtime/src/vm/run.rs
+index 6d203a1..1c6834a 100644
+--- a/php-rust/crates/php-runtime/src/vm/run.rs
++++ b/php-rust/crates/php-runtime/src/vm/run.rs
+@@ -643,6 +643,8 @@ impl<'m> super::Vm<'m> {
+         ic: &crate::bytecode::PropIc,
+     ) -> Result<(), PhpError> {
+         let cur = self.frames[top].class;
++        // S-135 sonda: seg 0 = entrate prop_set_entry.
++        super::s135probes::count(0);
+         // H-C1b (S-101): move the owned handle (see PropGet).
+         // INV-RECV-1 holds here too: `target` is owned through
+         // lazy_prop_access and every write path below; the old
+@@ -710,6 +712,12 @@ impl<'m> super::Vm<'m> {
+                         }
+                 };
+                 if hit {
++                    // S-135 sonda: seg 2 = hit NP, seg 11 = hit plain.
++                    if raw & crate::bytecode::PropIc::NP != 0 {
++                        super::s135probes::count(2);
++                    } else {
++                        super::s135probes::count(11);
++                    }
+                     // S-134 IC non-plain (s134-criterio-icnp p.1): il ramo TY
+                     // coercisce nello stesso ordine del cammino pieno (coerce
+                     // PRIMA della scrittura, stessa esposizione a __toString)
+@@ -803,6 +811,8 @@ impl<'m> super::Vm<'m> {
+             // An enum case is immutable: every property is readonly and
+             // no dynamic property may be created (step 23).
+             {
++                // S-135 sonda: seg 6 = enum-check borrow.
++                super::s135probes::count(6);
+                 let ob = o.borrow();
+                 if ob.info.is_enum_case {
+                     let cls = String::from_utf8_lossy(ob.class_name.as_bytes()).into_owned();
+@@ -823,6 +833,8 @@ impl<'m> super::Vm<'m> {
+             // sotto con esito negativo — condizione di fill del ramo NP.
+             let mut np_fillable = false;
+             if !self.hook_guarded(oid, name) {
++                // S-135 sonda: seg 5 = hook-lookup eseguito.
++                super::s135probes::count(5);
+                 if let Some(func) = self.prop_hook(cid, name, true) {
+                     if !DISCARD {
+                         self.frames[top].stack.push(value.clone());
+@@ -849,6 +861,8 @@ impl<'m> super::Vm<'m> {
+             // before, nothing between them mutates class or props.
+             let ocid = o.borrow().class_id as usize;
+             let access = resolve_prop_access(&self.classes, ocid, name, cur);
++            // S-135 sonda: seg 4 = magic-probe.
++            super::s135probes::count(4);
+             if let Some((defc, midx, oid)) =
+                 self.magic_applies_resolved(o, name, &access, MagicKind::Set, b"__set")
+             {
+@@ -892,6 +906,8 @@ impl<'m> super::Vm<'m> {
+             // visibility excludes this scope cannot be assigned (the
+             // readonly path below keeps its own message shapes).
+             if declared_slot {
++                // S-135 sonda: seg 7 = asym check.
++                super::s135probes::count(7);
+                 if let Some(err) = asym_write_error(&self.classes, cur, ocid, name, "modify") {
+                     return Err(err);
+                 }
+@@ -901,6 +917,8 @@ impl<'m> super::Vm<'m> {
+             // first, matching PHP). A permitted first initialisation is
+             // recorded so any later write fatals.
+             let ro_decl = if declared_slot {
++                // S-135 sonda: seg 8 = readonly decl-lookup.
++                super::s135probes::count(8);
+                 prop_readonly_decl(&self.classes, ocid, name)
+             } else {
+                 None
+@@ -942,6 +960,8 @@ impl<'m> super::Vm<'m> {
+                             } else {
+                                 0
+                             };
++                        // S-135 sonda: seg 3 = IC-fill NP.
++                        super::s135probes::count(3);
+                         ic.fill(ocid as u32, crate::bytecode::PropIc::scope_key(cur), i | bits);
+                     }
+                 }
+@@ -953,7 +973,8 @@ impl<'m> super::Vm<'m> {
+             // `unset` is absent from the store yet is not a dynamic
+             // creation when re-assigned — `declared_slot` covers it.
+             if !declared_slot
+-                && !o.borrow().props.contains(&key)
++                // S-135 sonda: seg 9 = deprecation props.contains.
++                && { super::s135probes::count(9); !o.borrow().props.contains(&key) }
+                 && !self.allows_dynamic_props(ocid)
+             {
+                 let cls = String::from_utf8_lossy(&self.classes[ocid].name).into_owned();
