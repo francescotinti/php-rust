@@ -1,6 +1,6 @@
 # PERF_MAP — phpr vs PHP oracle 8.5.7, mappa multi-workload
 
-Aggiornata: **2026-08-13 (S-133)** · pin phpr **s133 c87439a9** (leva ctor resolve-once SPEDITA; WP full/media RIMISURATI in S-133 @ pin s133; hf/hk/dbal/ORM/compoff restano @ pin precedenti — le suite object-dense sono le prime candidate a beneficiare della leva ctor) ·
+Aggiornata: **2026-08-13 (S-134)** · pin phpr **s134 61896da1** (leva IC non-plain SPEDITA sopra la ctor resolve-once; WP full/media RIMISURATI in S-134 @ pin s134; hf/hk/dbal/ORM/compoff restano @ pin precedenti — DUE leve consecutive parlano alle suite object-dense: rimisura dbal/ORM DOVUTA in S-135) ·
 metodo: user CPU, pavimenti per-binario, N per voce come indicato; criteri pre-registrati in
 `wp125-harness/s125-criterio-{pair,mappa}.md` e `wp126-harness/s126-criterio-{orm,mappa2}.md`
 (+ emenda S-127: **cifra canonica = NETTO-pavimento**, raw companion; gate contesa in ictx/s);
@@ -10,8 +10,8 @@ cifre dai verdetti `.out`. Regola di lettura: rapporti PER workload, MAI aggrega
 
 | workload | rapporto phpr/oracle | N | note |
 |---|---|---|---|
-| **WordPress full-suite** | **ON-ONLY CANONICO 1,754** (S-133 @ pin s133; off 1,781–1,808 N=2; misto pulito 1,750–1,817; leg2-on esclusa dal gate 1,5× con firma phpr ictx 226% / oracle rank 4/4 — il suo raw 1,756 resta nell'intervallo; quiescenza rc=0 ×5, CI locale sospesa in finestra) | 3 gambe pulite (9 celle; on-only = **N=1 coppia propria — UN punto, non banda**) | S-133 @ s133; parità per NOME 4/4 (solo `wp_is_stream #2`); **peak 1816–1898 MiB (+80 bordo alto vs s131/s132, da tenere d'occhio)**; verdetto `wp133-harness/s133-pair-verdetto-t1.out`; la leva ctor NON muove WP (coerente: morde il fallback non-plain, profilo ORM) |
-| **WordPress gruppo media** | **2,428–2,487 CANONICA user-only** (companion user+sys 2,366–2,454, gambe pulite) | 3 | S-133 @ s133 |
+| **WordPress full-suite** | **ON-ONLY CANONICO 1,769** (S-134 @ pin s134; **N=2 coppie proprie CONCORDI 1,769/1,769 — prima banda propria**; off 1,748–1,789 N=2; misto pulito 1,730–1,791; quiescenza rc=0 ×5, CI sospesa via lock) | **4/4 gambe pulite** (16 celle; prima coppia senza esclusioni dal s131) | S-134 @ s134; parità per NOME 4/4 (solo `wp_is_stream #2`); **peak 1818–1884 MiB (bordo alto +80 vs s131/s132 PERSISTE, da tenere d'occhio)**; verdetto `wp134-harness/s134-pair-verdetto-t1.out`; le leve ctor+IC-non-plain NON muovono WP (coerente: mordono il cammino non-plain, profilo ORM) |
+| **WordPress gruppo media** | **2,405–2,467 CANONICA user-only** (companion user+sys 2,324–2,411, 4 gambe pulite) | 4 | S-134 @ s134 |
 | **symfony http-foundation** (1854) | **2,547–2,559** (raw 2,55–2,57) | 2/lato | S-126; canonica sul CONTEGGIO diff 17 nomi = 0,92% ≤1% (≥3 nomi sono unit puri, NON famiglia `php -S` — emenda S-127); sys alto (I/O) |
 | **symfony http-kernel** (1665 test) | **4,29–4,32** | 2/lato | parità 0E/0F; contesa ok |
 | **doctrine/collections** (242) | **8,22 net** (raw 6,20) | 2/lato | S-126; INDICATIVA: oracle netto 0,09 s (denominatore sotto-scala); parità 0/0 |
@@ -19,11 +19,11 @@ cifre dai verdetti `.out`. Regola di lettura: rapporti PER workload, MAI aggrega
 | **doctrine/orm** (3484 test) | **8,51–8,56** | 2/lato | oracle con `memory_limit=-1` (§3.14); parità fail-set 16 nomi |
 | **composer install OFFLINE** | **1,863–1,891 net** (raw 1,820–1,847) | 2/lato | S-128 @ s127b, PRIMA misura col numeratore vivo (cure ondata-2); composer ESTRATTO, vendor_ok bilaterale, contesa ok (ictx/s); floors 0,07/0,06; sys≈user (~2,3 s/lato) ⇒ **cifra user-only NON confrontabile col full (user+sys): su user+sys sarebbe ~1,3** (rev. S-128 az.5); residuo phpcs config-set (§3.19-quinquies); verdetto `wp128-harness/s128-compoff-verdetto.out` |
 
-## Micro-categorie (R=5, pin s133; tappa ≤3×; gate promozione S-133)
+## Micro-categorie (R=5, pin s134; tappa ≤3×; gate promozione S-134)
 
 | arith | prop | calls | str | arr | re |
 |---|---|---|---|---|---|
-| 5,5 | 5,5 | 4,8 | **4,2** | **3,2** | **2,5** ✅ |
+| 5,4 | 5,5 | 5,0 | **4,2** | **3,2** | **2,5** ✅ |
 
 calls: la (*) di s127 è SCIOLTA in S-129 (phpr netto IDENTICO 2,14 s; si muove
 solo il denominatore oracle 0,43–0,44). re 2,5/2,6 = run-to-run del denominatore.
@@ -31,11 +31,11 @@ solo il denominatore oracle 0,43–0,44). re 2,5/2,6 = run-to-run del denominato
 Allocazioni/iter vs oracle: arith/prop/calls 0=0 · **str 2,00=2,00 (PARITÀ, S-125)** ·
 arr 2,05≈2,03 · re 7,00 vs 5,00 (+2, apertura per NOME).
 
-## Micro-ORM (S-133 sul pin s133 POST-leva-ctor — verdetto s133-submicro; evalcls/refl da S-126)
+## Micro-ORM (S-134 sul pin s134 POST-leva-IC-non-plain — verdetto s134-submicro; evalcls/refl da S-126)
 
 | evalcls (compile/classe via eval) | refl | objchurn | └ objalloc | └ objdatains | └ objdropdef | └ objallocni | └ objmap |
 |---|---|---|---|---|---|---|---|
-| **316,9** (2,38 ms vs 7,5 µs) | **42,4** | 8,2→**8,2** (1440,0 ns) | 7,8→**7,5** (946,7, −36,6 = ctor resolve-once) | 7,2→**7,2** (1183,3, −16,7) | 9,0→**8,9** | 9,7→**9,4** | **17,3** |
+| **316,9** (2,38 ms vs 7,5 µs) | **42,4** | 8,2→**7,4** (1303,3 ns) | 7,5→**6,6** (813,3, −133,4 = IC non-plain) | 7,2→**6,4** (1066,7, −116,6) | 8,9→**7,9** | 9,4→**7,9** | **17,3** = |
 
 Profilo ORM phpr (indizio unilaterale): churn visibile multi-% (Zval clone/drop, slot_of,
 gc_note/sweep/collect_cycles, insert/lookup, malloc/free); compile ≤~1% leaf, reflection <0,5%.
@@ -78,9 +78,21 @@ gc_note/sweep/collect_cycles, insert/lookup, malloc/free); compile ≤~1% leaf, 
   guardie 8/8, promozione rc=0) → **pin s133 c87439a9**: UNA resolve hoistata
   post-hook in prop_set_entry, condivisa dal magic-check e dal blocco
   key/slot/IC; hooked-set resta a zero resolve.
-  Residui NOMINATI dal modello: dispatch 36,3 · non-resolve residuo ~60
-  ns/statement · l'ULTIMA resolve del ctor (2/iter: IC per classi non-plain =
-  forma nuova, da nominare solo da un modello).
+  **Leva «IC non-plain» SPEDITA S-134** (eccedenza s133 prima NOMINATA dal
+  disasm — seconda lookup dipendente back-to-back, `s134-eccedenza-lettura.md`;
+  criterio pre-registrato coi componenti non prezzati DICHIARATI per nome,
+  soglie spread-batch s133 26,7/13,3: smoke +150,0/+130,0 → R=5 objalloc
+  D=+136,7 + objdatains D=+133,3, riconciliazioni in banda, guardie 8/8,
+  promozione rc=0 su catena a 9 gate) → **pin s134 61896da1**: bit NP/TY nei
+  2 bit alti dello slot del PropIc; fill dal cammino pieno SOLO con fatti di
+  classe provati (no set/virtual-hook, no `__set` — load-bearing per il
+  typed-unset —, asym ok, non readonly, key==name); il hit salta resolve +
+  magic-probe + asym/readonly/hook-lookup e MANTIENE coercizione typed,
+  presenza slot e typed_refs per-scrittura.
+  Residui NOMINATI: dispatch 36,3 · contabilità del non-resolve residuo da
+  RI-DERIVARE sul pin s134 (il hit IC copre parte dei ~60 ns/statement) ·
+  cammini non cacheabili per costruzione (readonly, private mangled, `__set`
+  presente, slot assente).
 - Aperture per NOME: `evalcls` **316,9×** (cliff compile-per-classe; serve strumento di densità
   prima di ogni leva) · `refl` **42,4×** · re +2,00 alloc/iter.
 
