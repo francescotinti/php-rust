@@ -38,4 +38,26 @@ fi
 cp "$BIN" "$STASH/phpr-$TAG"
 HS=$(shasum -a 256 "$STASH/phpr-$TAG" | cut -c1-16)
 [ "$H" = "$HS" ] || { echo "hash dello stash diverso ($H vs $HS)"; exit 1; }
-echo "PIN phpr $TAG = $H (smoke parità 2 modi OK, stash phpr-$TAG). I gate del protocollo (batteria/corpus/fixture/micro) restano dovuti."
+# Az.rev. S-134 (apparato S-135): la riga phpr entra a REGISTRO da qui,
+# fail-closed come pin-server.sh — nella SEZIONE phpr, in testa alla sua
+# tabella (newest-first); ancora assente => registro NON toccato, STOP.
+# La riga registra il collaudo MINIMO; l'arricchimento (promozione, A/B)
+# resta un edit dichiarato della stessa riga a promozione avvenuta.
+REPO="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust"
+cd "$REPO"
+HEAD_SHA=$(git rev-parse --short HEAD)
+ROW="| $H | $TAG (sorgente @ $HEAD_SHA; riga da pin-phpr.sh) | smoke parità 2 modi OK $(date '+%F %T') — batteria/corpus/fixture/micro DOVUTI a parte | stash \`phpr-$TAG\` |"
+awk -v row="$ROW" '
+  /^## phpr/ { sec=1 }
+  { print }
+  sec==1 && /^\|---\|---\|---\|---\|$/ { print row; sec=2; ins=1 }
+  END { if (!ins) exit 3 }
+' PIN_REGISTRY.md > PIN_REGISTRY.md.new || { echo "STOP: ancora tabella phpr non trovata in PIN_REGISTRY.md => registro NON scritto."; rm -f PIN_REGISTRY.md.new; exit 1; }
+mv PIN_REGISTRY.md.new PIN_REGISTRY.md
+MSG=$(mktemp); echo "pin phpr $TAG: registro PIN_REGISTRY ($H)" > "$MSG"
+git add PIN_REGISTRY.md && git commit -F "$MSG" >/dev/null && git push >/dev/null
+rm -f "$MSG"
+if [ -n "$(git status --porcelain PIN_REGISTRY.md)" ]; then
+  echo "STOP: PIN_REGISTRY.md ancora sporco dopo il commit dell'atto."; exit 1
+fi
+echo "PIN phpr $TAG = $H (smoke parità 2 modi OK, stash phpr-$TAG, registrato+committato). I gate del protocollo (batteria/corpus/fixture/micro) restano dovuti."
