@@ -1041,6 +1041,14 @@ l'oracle e vanno preservati:
 
 ### Changelog di questo documento
 
+- 2026-08-13 (S-134, az.rev. S-133 #5): DICHIARATA la risoluzione del gate
+  `teardown` (wp133-harness/s133-fx-teardown-gate.sh, in catena s109): la
+  parità sulla finestra dei distruttori a fine richiesta è PROVATA sui 7
+  vettori nominati (dtor self/peer, gc annidata, resurrezione, dtor-walk,
+  WeakReference, doppio gc) byte-id oracle==s131==s132 — e NON OLTRE: il
+  buco «by construction» della finestra teardown è RISTRETTO dai 7 vettori,
+  non chiuso; ogni claim di assenza oltre quei vettori eccede la risoluzione
+  del gate (REGOLE: claim di ASSENZA oltre la risoluzione = vietato).
 - 2026-08-09 (S-121): AGGIUNTA §3.18 — preg_match: `(?J)` nomi duplicati
   → false, e nome utente col prefisso sintetico `__phprbg` nascosto
   (fixture bilaterale per NOME, az. rev. S-120 #1; gate fail-closed in
