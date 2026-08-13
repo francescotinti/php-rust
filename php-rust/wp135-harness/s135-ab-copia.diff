@@ -1,0 +1,101 @@
+2,16c2,15
+< # s134-ab.sh <BPATH> <BEXP8> <TAG> <R> [DSMOKE_ALLOC] [DSMOKE_DATAINS] — LEVA
+< # IC non-plain (criterio s134-criterio-icnp.md, commit PRIMA di ogni run).
+< # COPIA DICHIARATA di wp133-harness/s133-ab.sh (collaudo: scripts/copia-gate.sh
+< # + manifest s134-ab-copia.diff) coi SOLI adattamenti del criterio p.2:
+< #  (a) A = stash pin s133 (phpr-s133, c87439a9);
+< #  (b) DUE GIUDICI: objalloc E objdatains, entrambi sopra soglia per
+< #      promuovere; soglia per giudice = max(4, rumore drop-1 del run,
+< #      SPREAD-BATCH gambe B s133 PER GIUDICE: objalloc 26.7, objdatains 13.3);
+< #  (c) bande micro-ORM FONDATE sulle gambe B del verdetto s133-ab-ctor:
+< #      objchurn 10.0 / objmap max(4, 0.0)=4 (objalloc/objdatains sono giudici);
+< #  (d) PARTE MODELLATA = 35.4 (2 x 17.7): D atteso SOPRA — l'eccedenza è la
+< #      somma DICHIARATA dei componenti nominati non prezzati (criterio p.2.3,
+< #      lezione az.rev. S-133 #4); riconciliazione smoke-R5 con banda =
+< #      spread-batch del giudice;
+< #  (e) churn dichiarato: nessuno (tree B = leva sola sopra il pin s133).
+---
+> # s135-ab.sh <BPATH> <BEXP8> <TAG> <R> [DSMOKE_OBJMAP] — LEVA AP1 fast-path
+> # (criterio s135-criterio-ap1.md, commit PRIMA di ogni run).
+> # COPIA DICHIARATA di wp134-harness/s134-ab.sh (collaudo: scripts/copia-gate.sh
+> # + manifest s135-ab-copia.diff) coi SOLI adattamenti del criterio p.3-6:
+> #  (a) A = stash pin s134 (phpr-s134, 61896da1);
+> #  (b) UN GIUDICE: objmap; soglia = max(4, rumore drop-1 del run,
+> #      SPREAD-BATCH objmap s134-submicro: 10.0);
+> #  (c) guardie micro-ORM con bande = spread s134-submicro phpr:
+> #      objalloc 3.3 · objdatains 30.0 · objchurn 16.7;
+> #  (d) UB FALSIFICABILE = 47.7 (walk-plumbing 38.4 + residuo-arm 9.3,
+> #      prezzi MISURATI dal modello tempo s135-tempo-verdetto.out):
+> #      D > UB+banda(10.0)=57.7 = FUORI BANDA dichiarato a verbale;
+> #      riconciliazione smoke-R5 con banda = spread-batch giudice (10.0);
+> #  (e) churn dichiarato: nessuno (tree B = leva sola sopra il pin s134).
+26c25
+< A="/Volumes/Extreme Pro/Claude/phpr-old-target/release/phpr-s133"
+---
+> A="/Volumes/Extreme Pro/Claude/phpr-old-target/release/phpr-s134"
+28c27
+< BB="${1:?BPATH}"; BEXP="${2:?BEXP8}"; TAG="${3:?TAG}"; R="${4:?R}"; DSA="${5:-}"; DSD="${6:-}"
+---
+> BB="${1:?BPATH}"; BEXP="${2:?BEXP8}"; TAG="${3:?TAG}"; R="${4:?R}"; DSM="${5:-}"
+30c29
+< VERD="$H/s134-$TAG-verdetto.out"
+---
+> VERD="$H/s135-$TAG-verdetto.out"
+44c43
+< [ "$(shasum -a 256 "$A" | cut -c1-8)" = "c87439a9" ] || { echo "A != pin s133 — STOP" | tee -a "$VERD"; echo 1 > "$RC"; exit 1; }
+---
+> [ "$(shasum -a 256 "$A" | cut -c1-8)" = "61896da1" ] || { echo "A != pin s134 — STOP" | tee -a "$VERD"; echo 1 > "$RC"; exit 1; }
+52,53c51,52
+< CATS_JUDGE="objalloc objdatains"
+< CATS_GUARD="objchurn objmap arith prop calls str arr re"
+---
+> CATS_JUDGE="objmap"
+> CATS_GUARD="objalloc objdatains objchurn arith prop calls str arr re"
+56c55
+< echo "== s134-ab $TAG: A=c87439a9(pin s133) B=$BEXP R=$R ordine ALTERNATO; giudici=objalloc+objdatains (ENTRAMBI sopra soglia); soglia=max(4, drop-1, spread-batch s133 per giudice 26.7/13.3); bande fondate objchurn 10.0/objmap 4.0; parte modellata=35.4 (eccedenza attesa e dichiarata); quiescenza rc=$QRC (file: ab-out/quiesce-$TAG.rc); rc autoritativo = ab-out/$TAG.rc =="
+---
+> echo "== s135-ab $TAG: A=61896da1(pin s134) B=$BEXP R=$R ordine ALTERNATO; giudice=objmap; soglia=max(4, drop-1, spread-batch s134 10.0); UB falsificabile=47.7 (+banda 10.0 => fuori banda sopra 57.7); guardie fondate objalloc 3.3/objdatains 30.0/objchurn 16.7; quiescenza rc=$QRC (file: ab-out/quiesce-$TAG.rc); rc autoritativo = ab-out/$TAG.rc =="
+78c77
+< python3 - "$TSV" "$R" "$DSA" "$DSD" <<'PY'
+---
+> python3 - "$TSV" "$R" "$DSM" <<'PY'
+82,87c81,85
+< if len(sys.argv) > 3 and sys.argv[3]: dsmoke["objalloc"] = float(sys.argv[3])
+< if len(sys.argv) > 4 and sys.argv[4]: dsmoke["objdatains"] = float(sys.argv[4])
+< MODEL = 35.4         # criterio p.2.3: parte MODELLATA (2 x 17.7); D atteso sopra
+< SPREAD_BATCH = {"objalloc": 26.7, "objdatains": 13.3}
+<                      # criterio p.2.2: gambe B verdetto s133-ab-ctor (objalloc
+<                      # 2.80-2.88, objdatains 3.52-3.56 @ N=3e6)
+---
+> if len(sys.argv) > 3 and sys.argv[3]: dsmoke["objmap"] = float(sys.argv[3])
+> UB = 47.7            # criterio p.4: walk-plumbing 38.4 + residuo-arm 9.3
+>                      # (prezzi MISURATI, s135-tempo-verdetto.out)
+> SPREAD_BATCH = {"objmap": 10.0}
+>                      # criterio p.4: spread s134-submicro objmap 0.03 s @3e6
+92,93c90,91
+< # SL storiche (max s123/s125, committate) per le sei; bande micro-ORM FONDATE
+< # sulle gambe B del verdetto s133-ab-ctor (criterio p.2.5).
+---
+> # SL storiche (max s123/s125, committate) per le sei; bande micro-ORM =
+> # spread s134-submicro phpr (criterio p.6).
+95c93
+< BAND = {"objmap":4.0,"objchurn":10.0}
+---
+> BAND = {"objalloc":3.3,"objdatains":30.0,"objchurn":16.7}
+107c105
+< JUDGES = ("objalloc", "objdatains")
+---
+> JUDGES = ("objmap",)
+119c117
+<         print(f"GIUDICE {cat}: A={ma:.1f} B={mb:.1f} ns/iter D={delta:+.1f} soglia={thr:.1f} (rumore drop-1: A'={ra:.1f} B'={rb:.1f}; spread-batch s133={SPREAD_BATCH[cat]}) -> {'SOPRA SOGLIA' if ok else 'SOTTO SOGLIA'}")
+---
+>         print(f"GIUDICE {cat}: A={ma:.1f} B={mb:.1f} ns/iter D={delta:+.1f} soglia={thr:.1f} (rumore drop-1: A'={ra:.1f} B'={rb:.1f}; spread-batch s134={SPREAD_BATCH[cat]}) -> {'SOPRA SOGLIA' if ok else 'SOTTO SOGLIA'}")
+123c121,122
+<         print(f"riconciliazione parte-modellata {cat}: D={delta:+.1f} vs modellata={MODEL:.1f} -> eccedenza {delta-MODEL:+.1f} = componenti nominati NON prezzati (criterio p.2.3), attesa se D>modellata")
+---
+>         fb = delta > UB + SPREAD_BATCH[cat]
+>         print(f"riconciliazione UB {cat}: D={delta:+.1f} vs UB={UB:.1f}+banda={SPREAD_BATCH[cat]} -> {'FUORI BANDA SOPRA (reperto a verbale, sonda dovuta)' if fb else 'dentro la banda del modello'}")
+131c130
+< print("ESITO: " + {0:"PROMOSSA (entrambi i giudici sopra soglia, guardie ok)",4:"NON PROMOSSA (giudice sotto soglia)",5:"GUARDIA MORDE"}[verdict_rc])
+---
+> print("ESITO: " + {0:"PROMOSSA (giudice sopra soglia, guardie ok)",4:"NON PROMOSSA (giudice sotto soglia)",5:"GUARDIA MORDE"}[verdict_rc])

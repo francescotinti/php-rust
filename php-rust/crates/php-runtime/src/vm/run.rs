@@ -2385,6 +2385,61 @@ impl<'m> super::Vm<'m> {
                             continue;
                         }
                     }
+                    // S-135 leva AP1 (criterio s135-criterio-ap1.md): caso
+                    // monomorfo `$a[k] = v` con base slot GIÀ Array — la
+                    // specializzazione letterale del cammino pieno (coerce →
+                    // make_mut → set_returning_displaced → gc_note → push),
+                    // senza il plumbing path_op/path_walk/Last. Il peek NON
+                    // coercisce e non vivifica: ogni altro caso (base
+                    // Ref/Object/Str/Null-vivify, append, nkeys>1, chiave
+                    // illegale a parte il TypeError condiviso, Busy) resta
+                    // al cammino pieno sotto, INVARIATO.
+                    if !*append && *nkeys == 1 {
+                        let is_plain_arr = {
+                            let cell = match *base {
+                                DimBase::Local(s) => &self.frames[top].slots[s as usize],
+                                DimBase::Global(s) => &self.frames[0].slots[s as usize],
+                                DimBase::Superglobal(i) => &self.superglobals[i as usize],
+                            };
+                            matches!(cell, Zval::Array(_))
+                        };
+                        if is_plain_arr {
+                            let key = keys.pop().expect("AssignPath key");
+                            let k = coerce_key_diag(&key, &mut self.diags)
+                                .ok_or_else(|| PhpError::TypeError("Illegal offset type".to_string()))?;
+                            let lw = {
+                                let cell = match *base {
+                                    DimBase::Local(s) => &mut self.frames[top].slots[s as usize],
+                                    DimBase::Global(s) => &mut self.frames[0].slots[s as usize],
+                                    DimBase::Superglobal(i) => &mut self.superglobals[i as usize],
+                                };
+                                let Zval::Array(rc) = cell else { unreachable!("peeked array") };
+                                Rc::make_mut(rc).set_returning_displaced(k, value.clone())
+                            };
+                            match lw {
+                                LeafWrite::Done(d) => {
+                                    if let Some(d) = d {
+                                        self.gc_note(&d);
+                                    }
+                                }
+                                LeafWrite::Busy(cell, val) => {
+                                    // Drain Set di path_op replicato (H-70.1;
+                                    // H-71.3: Err dichiarato irraggiungibile).
+                                    cell_park_note();
+                                    match cell.try_borrow_mut() {
+                                        Ok(mut g) => {
+                                            let d = std::mem::replace(&mut *g, val);
+                                            drop(g);
+                                            self.gc_note(&d);
+                                        }
+                                        Err(_) => drain_fail_note(),
+                                    }
+                                }
+                            }
+                            self.frames[top].stack.push(value);
+                            continue;
+                        }
+                    }
                     let last = if *append {
                         Last::Append { value }
                     } else {
