@@ -1,6 +1,9 @@
 # PERF_MAP — phpr vs PHP oracle 8.5.7, mappa multi-workload
 
-Aggiornata: **2026-08-13 (S-134)** · pin phpr **s134 61896da1** (leva IC non-plain SPEDITA sopra la ctor resolve-once; WP full/media RIMISURATI in S-134 @ pin s134; hf/hk/dbal/ORM/compoff restano @ pin precedenti — DUE leve consecutive parlano alle suite object-dense: rimisura dbal/ORM DOVUTA in S-135) ·
+Aggiornata: **2026-08-13 sera (S-135)** · pin phpr **s135 6518a1e1** (leva AP1
+fast-path AssignPath SPEDITA; dbal/ORM RIMISURATI in S-135 @ pin s134 —
+rapporti FERMI, reperto; WP full/media restano @ pin s134: coppia WP on-only
+N≥3 DOVUTA in S-136 sul pin s135) ·
 metodo: user CPU, pavimenti per-binario, N per voce come indicato; criteri pre-registrati in
 `wp125-harness/s125-criterio-{pair,mappa}.md` e `wp126-harness/s126-criterio-{orm,mappa2}.md`
 (+ emenda S-127: **cifra canonica = NETTO-pavimento**, raw companion; gate contesa in ictx/s);
@@ -31,11 +34,11 @@ solo il denominatore oracle 0,43–0,44). re 2,5/2,6 = run-to-run del denominato
 Allocazioni/iter vs oracle: arith/prop/calls 0=0 · **str 2,00=2,00 (PARITÀ, S-125)** ·
 arr 2,05≈2,03 · re 7,00 vs 5,00 (+2, apertura per NOME).
 
-## Micro-ORM (S-134 sul pin s134 POST-leva-IC-non-plain — verdetto s134-submicro; evalcls/refl da S-126)
+## Micro-ORM (S-135 sul pin s135 POST-leva-AP1 — verdetto s135-submicro; evalcls/refl da S-126)
 
 | evalcls (compile/classe via eval) | refl | objchurn | └ objalloc | └ objdatains | └ objdropdef | └ objallocni | └ objmap |
 |---|---|---|---|---|---|---|---|
-| **316,9** (2,38 ms vs 7,5 µs) | **42,4** | 8,2→**7,4** (1303,3 ns) | 7,5→**6,6** (813,3, −133,4 = IC non-plain) | 7,2→**6,4** (1066,7, −116,6) | 8,9→**7,9** | 9,4→**7,9** | **17,3** = |
+| **316,9** (2,38 ms vs 7,5 µs) | **42,4** | 7,4→**7,0** (1266,7 ns, collaterale AP1) | **6,5** (820,0) | **6,5** (1060,0) | **7,6** | **8,1** (+13,3, osservazione: sopra spread 6,7) | 17,3→**11,7** (116,7 ns, −56,6 = AP1; riconc. A/B 0,1 ≤ 20) |
 
 Profilo ORM phpr (indizio unilaterale): churn visibile multi-% (Zval clone/drop, slot_of,
 gc_note/sweep/collect_cycles, insert/lookup, malloc/free); compile ≤~1% leaf, reflection <0,5%.
@@ -93,6 +96,20 @@ gc_note/sweep/collect_cycles, insert/lookup, malloc/free); compile ≤~1% leaf, 
   RI-DERIVARE sul pin s134 (il hit IC copre parte dei ~60 ns/statement) ·
   cammini non cacheabili per costruzione (readonly, private mangled, `__set`
   presente, slot assente).
+  **Leva «AP1 fast-path» SPEDITA S-135** (scelta dai numeri: bisezione objmap
+  → canale dominante = macchineria dim-set 183,3 = 77%, poi modello del tempo
+  AssignPath su m3: arm 66,8, path_op 52,2 = 78%, walk-plumbing 38,4,
+  chiusura 86% INCOMPLETO dichiarato; criterio pre-registrato con UB
+  FALSIFICABILE 47,7 = prezzi misurati; A/B r1 rc=5 agli atti — guardia
+  objalloc su banda sotto-fondata — emenda rev. S-112: guardie alla formula
+  del giudice; r2 R=5 objmap D=+56,7 ≤ 57,7, riconc. smoke 6,7 ≤ 10,
+  guardie 9/9, promozione rc=0) → **pin s135 6518a1e1**: nel braccio
+  AssignPath, caso 1-chiave/no-append/base GIÀ Array = specializzazione
+  letterale del cammino pieno (coerce → make_mut → set_returning_displaced →
+  gc_note → push), tutto il resto al pieno invariato; sonda dim-write residua
+  (objdatains 2 resolve/iter sul cammino prop-dim, fuori perimetro) a
+  catalogo. Sonda conteggi S-135: eccedenza S-134 ATTRIBUITA (5 canali 2→0,
+  depr 0→0 falsificato, layout escluso; `s135-eccedenza-chiusura.md`).
 - Aperture per NOME: `evalcls` **316,9×** (cliff compile-per-classe; serve strumento di densità
   prima di ogni leva) · `refl` **42,4×** · re +2,00 alloc/iter.
 
