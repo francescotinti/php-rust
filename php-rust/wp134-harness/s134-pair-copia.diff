@@ -1,0 +1,39 @@
+2c2
+< # s133-pair.sh <tentativo> — S-133 p.3: coppia full/media WP sul pin s133 (a fine leva ctor),
+---
+> # s134-pair.sh <tentativo> — S-134 p.5: coppia full/media WP sul pin s134 (a fine leva IC non-plain),
+4,5c4,6
+< # gia committato). COPIA DICHIARATA di wp132-harness/s132-pair.sh coi SOLI
+< # adattamenti: pin s133; az.rev. S-131 #5 (verdetto = FILE NUOVO
+---
+> # gia committato). COPIA DICHIARATA di wp133-harness/s133-pair.sh (collaudo:
+> # copia-gate + manifest s134-pair-copia.diff) coi SOLI
+> # adattamenti: pin s134 (phpr+server); az.rev. S-131 #5 (verdetto = FILE NUOVO
+11c12
+< # rc autoritativo = SOLO pair-out/pair133-<tentativo>.done scritto QUI.
+---
+> # rc autoritativo = SOLO pair-out/pair134-<tentativo>.done scritto QUI.
+15c16
+< H="$REPO/wp133-harness"
+---
+> H="$REPO/wp134-harness"
+20c21
+< VERD="$H/s133-pair-verdetto-$T.out"
+---
+> VERD="$H/s134-pair-verdetto-$T.out"
+25c26
+< DONE="$OUT/pair133-$T.done"
+---
+> DONE="$OUT/pair134-$T.done"
+34,35c35,36
+< PIN_ATTESO="c87439a9789bcef4"
+< SRV_ATTESO="d447f8283c03e1bb"
+---
+> PIN_ATTESO="61896da13654fd00"
+> SRV_ATTESO="461bfb5556164cfa"
+108,109c109,110
+< print(f"== s133 coppia WP full+media sul pin s133 tentativo={T} (criterio s132-criterio-pair.md RIUSATO) ==")
+< print(f"grade=VERDICT  # derivazione meccanica dai .time; rc autoritativo = pair-out/pair133-{T}.done")
+---
+> print(f"== s134 coppia WP full+media sul pin s134 tentativo={T} (criterio s132-criterio-pair.md RIUSATO) ==")
+> print(f"grade=VERDICT  # derivazione meccanica dai .time; rc autoritativo = pair-out/pair134-{T}.done")
