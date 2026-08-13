@@ -2,12 +2,13 @@
 # s133-promozione.sh <cand_hash16> — gate di promozione LEVA ctor resolve-once — S-133 (copia dichiarata di s132-promozione.sh: tag s133, path wp133, inventario fixture NUOVO con gate teardown)
 # (criterio s133-criterio-ctor.md p.2.6; A/B R=5).
 # Ordine REGOLE §6 (leva ctor GIÀ committata prima del lancio): build ricetta (riproduce il
-# candidato) → batteria (rc da comando, inventario per NOME vs pin s124, ZERO
-# test nuovi attesi) → re-build ricetta → pin-phpr.sh s129 → corpus-gate
+# candidato) → batteria (rc da comando, inventario per NOME vs pin s125, ZERO
+# test nuovi attesi) → re-build ricetta → pin-phpr.sh s133 → corpus-gate
 # CANONICO → fixture chain s109 → micro R=5 → gate ORM per NOME (baseline
 # committata orm-baseline-failnames.txt) → gate http-kernel (0E/0F) sotto
-# watchdog → pin-server.sh s129 (grado minimo). Registro nel verdetto del run
-# PROMOSSO (rev. S-124 #3).
+# watchdog → pin-server.sh s133 (grado minimo). Registro nel verdetto del run
+# PROMOSSO (rev. S-124 #3). Commenti sanati S-134 (az.rev. S-133 sec. #1:
+# dicevano s124/s129 — la malattia del sed cieco, sopravvissuta nei commenti).
 set -u
 export PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin:"$HOME/.cargo/bin"
 SRC="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust"

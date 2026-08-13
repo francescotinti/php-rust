@@ -1,0 +1,51 @@
+2,6c2,6
+< # s132-promozione.sh <cand_hash16> — gate di promozione L-LO1 lookup-once props-map — S-132 (copia dichiarata di s131-promozione.sh: soli tag s132 e path wp132)
+< # (criterio s132-criterio-lookuponce.md p.7; A/B R=5).
+< # Ordine REGOLE §6 (leva L-LO1 GIÀ committata prima del lancio): build ricetta (riproduce il
+< # candidato) → batteria (rc da comando, inventario per NOME vs pin s124, ZERO
+< # test nuovi attesi) → re-build ricetta → pin-phpr.sh s129 → corpus-gate
+---
+> # s133-promozione.sh <cand_hash16> — gate di promozione LEVA ctor resolve-once — S-133 (copia dichiarata di s132-promozione.sh: tag s133, path wp133, inventario fixture NUOVO con gate teardown)
+> # (criterio s133-criterio-ctor.md p.2.6; A/B R=5).
+> # Ordine REGOLE §6 (leva ctor GIÀ committata prima del lancio): build ricetta (riproduce il
+> # candidato) → batteria (rc da comando, inventario per NOME vs pin s125, ZERO
+> # test nuovi attesi) → re-build ricetta → pin-phpr.sh s133 → corpus-gate
+9,10c9,11
+< # watchdog → pin-server.sh s129 (grado minimo). Registro nel verdetto del run
+< # PROMOSSO (rev. S-124 #3).
+---
+> # watchdog → pin-server.sh s133 (grado minimo). Registro nel verdetto del run
+> # PROMOSSO (rev. S-124 #3). Commenti sanati S-134 (az.rev. S-133 sec. #1:
+> # dicevano s124/s129 — la malattia del sed cieco, sopravvissuta nei commenti).
+14c15
+< H="$SRC/wp132-harness"
+---
+> H="$SRC/wp133-harness"
+21,22c22,23
+< VERD="$H/s132-promo-verdetto.out"
+< CAND_EXP="${1:?uso: s132-promozione.sh <cand_hash16>}"
+---
+> VERD="$H/s133-promo-verdetto.out"
+> CAND_EXP="${1:?uso: s133-promozione.sh <cand_hash16>}"
+58c59
+< "$SRC/scripts/pin-phpr.sh" s132 > "$OUT/pin.log" 2>&1
+---
+> "$SRC/scripts/pin-phpr.sh" s133 > "$OUT/pin.log" 2>&1
+73c74
+< FX_ATTESI="hc1 move recv fx20 fx21 w9 preg"
+---
+> FX_ATTESI="hc1 move recv fx20 fx21 w9 preg teardown"
+78,79c79,80
+< PHPR="$BIN" R=5 "$SRC/wp97-harness/micro/run-micro.sh" > "$OUT/micro-pin-s132.out" 2>&1
+< note "promozione micro pin s132: $(grep -E '^rapporto_' "$OUT/micro-pin-s132.out" | tr '\n' ' ')"
+---
+> PHPR="$BIN" R=5 "$SRC/wp97-harness/micro/run-micro.sh" > "$OUT/micro-pin-s133.out" 2>&1
+> note "promozione micro pin s133: $(grep -E '^rapporto_' "$OUT/micro-pin-s133.out" | tr '\n' ' ')"
+109c110
+< "$SRC/scripts/pin-server.sh" s132 > "$OUT/pin-server.log" 2>&1
+---
+> "$SRC/scripts/pin-server.sh" s133 > "$OUT/pin-server.log" 2>&1
+115c116
+< note "PROMOZIONE COMPLETA rc=0 (da promo-out/rcb — il file rc che QUESTO script scrive): pin s132 = $H2"
+---
+> note "PROMOZIONE COMPLETA rc=0 (da promo-out/rcb — il file rc che QUESTO script scrive): pin s133 = $H2"
