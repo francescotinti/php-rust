@@ -812,8 +812,17 @@ impl<'m> super::Vm<'m> {
                     )));
                 }
             }
+            // S-133 ctor resolve-once: ONE `resolve_prop_access` for the
+            // whole non-plain path — the magic-set decision and the key/slot/
+            // IC block below share it (formerly two identical resolves: the 4
+            // ctor resolves of the S-131 model; sonda S-133 split 2+2).
+            // Computed AFTER the hook checks so the hooked-set path keeps
+            // zero resolves. Same (class, name, scope) triple both sites used
+            // before, nothing between them mutates class or props.
+            let ocid = o.borrow().class_id as usize;
+            let access = resolve_prop_access(&self.classes, ocid, name, cur);
             if let Some((defc, midx, oid)) =
-                self.magic_applies(o, name, cur, MagicKind::Set, b"__set")
+                self.magic_applies_resolved(o, name, &access, MagicKind::Set, b"__set")
             {
                 // The expression yields the assigned value; __set's own
                 // return is discarded into a throwaway cell.
@@ -824,15 +833,14 @@ impl<'m> super::Vm<'m> {
                 self.push_magic_prop(defc, midx, oid, MagicKind::Set, target.clone(), name, Some(value), Some(discard), false);
                 return Ok(());
             }
-            let ocid = o.borrow().class_id as usize;
             // Storage slot (mangled for an accessible private); per-instance
             // state (props, readonly tracking) is keyed by it. A single
             // resolution decides visibility (`Denied` errors here) and the
             // slot: the write is either a declared slot or a dynamic
             // creation — readonly / typed enforcement applies only to the
             // former (a parent's private reached from a child scope is a
-            // *dynamic* write, untyped and unguarded).
-            let access = resolve_prop_access(&self.classes, ocid, name, cur);
+            // *dynamic* write, untyped and unguarded). The resolution is the
+            // S-133 hoisted one above (shared with the magic-set check).
             let declared_slot = matches!(access, PropAccess::Slot { .. });
             key = match access {
                 PropAccess::Slot { key: k, slot } => {

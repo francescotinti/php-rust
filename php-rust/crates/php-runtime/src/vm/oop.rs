@@ -993,6 +993,26 @@ impl<'m> Vm<'m> {
         kind: MagicKind,
         magic_name: &[u8],
     ) -> Option<(ClassId, usize, u32)> {
+        let cid = o.borrow().class_id as usize;
+        let access = resolve_prop_access(&self.classes, cid, name, cur_class);
+        self.magic_applies_resolved(o, name, &access, kind, magic_name)
+    }
+
+    /// [`Self::magic_applies`] with the property access already resolved by
+    /// the caller (S-133 ctor resolve-once): `prop_set_entry`'s non-plain
+    /// path resolves ONCE and shares the result between this check and its
+    /// key/slot block. `access` MUST come from `resolve_prop_access` on the
+    /// SAME (object class, name, scope) triple the wrapper would use —
+    /// equivalence by construction (the resolve is pure and nothing between
+    /// the two former call sites mutates class or props).
+    pub(super) fn magic_applies_resolved(
+        &self,
+        o: &Rc<RefCell<Object>>,
+        name: &[u8],
+        access: &PropAccess<'_>,
+        kind: MagicKind,
+        magic_name: &[u8],
+    ) -> Option<(ClassId, usize, u32)> {
         let (cid, oid, present, accessible) = {
             let obj = o.borrow();
             let cid = obj.class_id as usize;
@@ -1007,7 +1027,7 @@ impl<'m> Vm<'m> {
             let undef_unset = |key: &[u8]| {
                 matches!(obj.props.get(key), Some(Zval::Undef)) && obj.is_typed_unset(key)
             };
-            let (present, accessible) = match resolve_prop_access(&self.classes, cid, name, cur_class) {
+            let (present, accessible) = match access {
                 PropAccess::Slot { key: k, .. } => (obj.props.contains(k) && !undef_unset(k), true),
                 PropAccess::Dynamic => (obj.props.contains(name) && !undef_unset(name), true),
                 PropAccess::Denied { .. } => (obj.props.contains(name), false),
