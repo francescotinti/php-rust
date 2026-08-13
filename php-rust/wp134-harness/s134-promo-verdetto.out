@@ -1,0 +1,11 @@
+promozione: build ricetta riproduce il candidato 61896da13654fd00
+promozione batteria: rc=0 (da promo-out/batteria.rc) · 1746/0/2 · inventario: IDENTICO al pin s125 (zero test nuovi, come dichiarato)
+promozione: churn batteria neutralizzato (build ricetta → 61896da13654fd00 al byte)
+promozione: PIN phpr s134 = 61896da13654fd00 (smoke parità 2 modi OK, stash phpr-s134). I gate del protocollo (batteria/corpus/fixture/micro) restano dovuti.
+promozione corpus-gate: rc=0 — nomi==congelato, CONTENUTO==golden, off↔on zero
+promozione fixture chain: rc=0 (inventario per NOME conforme: hc1 move recv fx20 fx21 w9 preg teardown stash)
+promozione micro pin s134: rapporto_arith=5.4  [derivata: companion 2.37/0.44] rapporto_prop=5.5  [derivata: companion 2.32/0.42] rapporto_calls=5.0  [derivata: companion 2.13/0.43] rapporto_str=4.2  [derivata: companion 0.63/0.15] rapporto_arr=3.2  [derivata: companion 0.92/0.29] rapporto_re=2.5  [derivata: companion 0.91/0.36] 
+promozione gate ORM: fail-set per NOME == baseline (16 nomi) · Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, Skipped: 59, Incomplete: 2.
+promozione gate http-kernel: 0E/0F · Tests: 1665, Assertions: 3850, PHPUnit Warnings: 2, Warnings: 5, Deprecations: 128.
+promozione server: PIN server s134 = 461bfb5556164cfa @ 311d1f8 (smoke OK, stashato, registrato+committato). pin phpr INVARIATO (61896da13654fd00)
+PROMOZIONE COMPLETA rc=0 (da promo-out/rcb — il file rc che QUESTO script scrive): pin s134 = 61896da13654fd00
