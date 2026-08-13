@@ -18,39 +18,33 @@ corpus **1414** ×2.
 
 ## §S-135 — ordine (az.rev. S-134 MISURA, vincolanti; poi rimisura e leva)
 
-1. **Sonda a conteggi sul pin s134** (az.rev. #1+#5): apparato s133 riusabile
-   (ctorprobes.rs + patch, target separato) su s134 vs stash s133 — verificare
-   resolve objalloc 2→0/iter a regime e RIPARTIRE l'eccedenza +101,3 (il
-   bl-count statico s133↔s134 è agli atti ma non esclude il canale layout,
-   +681 istr). Costo: una build fredda sul target sonda.
+1. **Sonda a conteggi sul pin s134** (az.rev. #1+#5): apparato s133 (probe +
+   patch, target separato) su s134 vs s133 — resolve objalloc 2→0/iter a
+   regime e RIPARTIZIONE dell'eccedenza +101,3 (il bl-count statico è agli
+   atti ma non esclude il canale layout, +681 istr). Costo: una build sonda.
 2. **Rimisura dbal/ORM BILATERALE sul pin s134** (DOVUTA da S-133/S-134):
-   ricetta mappa S-126 (untar per gamba, 2/lato, watchdog, `/usr/bin/time -l`,
-   pavimenti per-binario, gate ictx/s, fail-set per NOME; oracle con
-   `memory_limit=-1` su ORM); criterio pre-registrato PRIMA del run; CI
-   sospesa col lock. Baseline: dbal 8,57–8,60 · ORM 8,51–8,56 @ pin vecchi.
-3. **LEVA della sessione** (scelta DOPO p.1-2, dai numeri): candidati per NOME
-   dispatch 36,3 (rischio H-C2: disasm obbligatorio) · contabilità non-resolve
-   da RI-DERIVARE sul pin s134 · objmap 17,3 (unico submicro fermo). Criterio:
-   **banda superiore FALSIFICABILE obbligatoria** (az.rev. #2: mai più
-   componenti «nominati senza prezzo») + **banda submicro↔A/B pre-registrata**
-   (az.rev. #3: lo scarto objdatains 16,7 > 13,3 è aperto e va ricondotto).
+   ricetta mappa S-126 (untar per gamba, 2/lato, watchdog, pavimenti
+   per-binario, gate ictx/s, fail-set per NOME; oracle `memory_limit=-1` su
+   ORM); criterio PRIMA del run; CI col lock. Baseline: dbal 8,6 · ORM 8,5.
+3. **LEVA della sessione** (scelta DOPO p.1-2, dai numeri): candidati dispatch
+   36,3 (rischio H-C2: disasm obbligatorio) · contabilità non-resolve da
+   ri-derivare · objmap 17,3. Criterio: **banda superiore FALSIFICABILE
+   obbligatoria** (az.rev. #2: mai componenti «nominati senza prezzo») +
+   **banda submicro↔A/B pre-registrata** (az.rev. #3: scarto objdatains 16,7).
 4. **Coppia WP on-only a N≥3** se pin nuovo (az.rev. #4): confronto formale
-   1,769 vs 1,754 con la variabilità off (0,041) come banda; s134-pair ricetta,
-   tentativo nuovo = file nuovo.
-APPARATO: pin-phpr.sh NON scrive il registro (riga phpr a mano da 2 sessioni)
-— cablare l'append nella sezione phpr con la stessa forma fail-closed di
-pin-server.sh · peak WP +80 bordo alto (2 sessioni) resta da guardare ·
-CI sospesa in finestra di misura · Serena pre-misura, mai edit .rs in finestra.
+   1,769 vs 1,754 con la variabilità off (0,041) come banda; file nuovo.
+APPARATO: cablare l'append phpr in pin-phpr.sh (fail-closed come pin-server.sh
+— riga a mano da 2 sessioni) · peak WP +80 (2 sessioni) da guardare · CI
+sospesa in finestra · Serena pre-misura, mai edit .rs in finestra.
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
 
-dispatch fuori prop_step 36,3 · contabilità non-resolve post-IC (i ~60
-ns/statement sono in parte coperti dal hit) · cammini non cacheabili
-(readonly, private mangled, `__set`, slot assente) · objmap 17,3 · «prop_step
-altro» 8,5 · AssignOp/IncDec fuori perimetro · famiglia locale 170 ns ·
-evalcls 316,9× · refl 42,4× · re +2,00 alloc/iter · peak WP +80 MiB ·
-micro-trim morte · $z++/$z-- undef non warna · §3.13 · §3.12-i · §3.14 ·
-get_gc · drift TODO.md · latin1-cliff.
+dispatch fuori prop_step 36,3 · contabilità non-resolve post-IC · cammini non
+cacheabili (readonly, private mangled, `__set`, slot assente) · objmap 17,3 ·
+«prop_step altro» 8,5 · AssignOp/IncDec · famiglia locale 170 ns · evalcls
+316,9× · refl 42,4× · re +2,00 alloc/iter · peak WP +80 · micro-trim morte ·
+$z++/$z-- undef non warna · §3.13 · §3.12-i · §3.14 · get_gc · drift TODO.md ·
+latin1-cliff.
 
 ## NON riproporre (i veti restano; dettaglio nei concili archiviati)
 
