@@ -13,6 +13,7 @@ nello stesso atto perché appenda in QUESTA sezione.)
 
 | pin (sha256/16) | sessione | ricetta | collaudato | evidenza |
 |---|---|---|---|---|
+| e2efdf15bf74d8c9 | s135 | `cargo build --release -p php-server --features axum-server` @ 0326676 | smoke --axum OK 2026-08-13 21:00:08; pin phpr INVARIATO (6518a1e14a266d52); GRADO PIENO a parte (s106-grado-server.sh) | stash `php-server-s135` |
 | 461bfb5556164cfa | s134 | `cargo build --release -p php-server --features axum-server` @ 311d1f8 | smoke --axum OK 2026-08-13 13:54:10; pin phpr INVARIATO (61896da13654fd00); GRADO PIENO a parte (s106-grado-server.sh) | stash `php-server-s134` |
 | d447f8283c03e1bb | s133 | `cargo build --release -p php-server --features axum-server` @ 59f1cb0 | smoke --axum OK 2026-08-13 02:42:04; pin phpr INVARIATO (c87439a9789bcef4); GRADO PIENO a parte (s106-grado-server.sh); tag emendato S-133 (la promo aveva chiamato pin-server.sh s132: sed della copia dichiarata cieco sulle righe quotate — incidente contato; stash rinominato e ri-verificato al byte) | stash `php-server-s133` |
 | ad17a10d85cc8471 | s132 | `cargo build --release -p php-server --features axum-server` @ 240ba01 | smoke --axum OK 2026-08-12 13:24:07; pin phpr INVARIATO (6af6e4975ef8d0bf); GRADO PIENO a parte (s106-grado-server.sh) | stash `php-server-s132` |
