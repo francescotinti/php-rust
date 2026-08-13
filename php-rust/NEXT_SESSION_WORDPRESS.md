@@ -1,49 +1,54 @@
 # NEXT_SESSION — phpr: OBIETTIVO PARITÀ (≥1×) con l'oracle; ≤3× = tappa (REGOLE §1)
-⏱ **FONDAMENTALI**: rif WP **full ON-ONLY = 1,754 (N=1 — UN punto, non banda)**
-(S-133 @ pin s133; off 1,781–1,808 N=2; media 2,428–2,487; **peak 1816–1898
-MiB, +80 bordo alto: da guardare**) · ultima leva SPEDITA **S-133 (ctor
-resolve-once → PIN NUOVO s133)** · sessioni-senza-leva = 0 · incidenti: storici
-11 (10 + **1 S-133**: sed copia cieco su righe quotate, riparato al byte).
+⏱ **FONDAMENTALI**: rif WP **full ON-ONLY = 1,769 (N=2 coppie proprie
+CONCORDI; ⚠ revisore: N=2 non è una banda)** (S-134 @ pin s134; off
+1,748–1,789; media 2,405–2,467; **peak 1818–1884, bordo alto +80 PERSISTE**)
+· ultima leva SPEDITA **S-134 (IC non-plain → PIN NUOVO s134)** ·
+sessioni-senza-leva = 0 · incidenti: storici 11 (0 nuovi in S-134).
 
-## Scoreboard (pin **s133 c87439a9**789bcef4 + server s133 d447f8283c03e1bb; micro gate promozione S-133)
+## Scoreboard (pin **s134 61896da1**3654fd00 + server s134 461bfb5556164cfa; micro gate promozione S-134)
 
-**arith 5,5 · prop 5,5 · calls 4,8 · str 4,2 · arr 3,2 · re 2,5** · oggetti
-POST-leva-ctor: **objalloc 7,5 (946,7 ns, −36,6) · objdatains 7,2 (1183,3) ·
-churn 8,2 (1440,0) · dropdef 8,9 · allocni 9,4 · objmap 17,3** · residui dal
-modello prop_step: **dispatch fuori prop_step 36,3** · non-resolve residuo ~60
-ns/statement · ultima resolve ctor 2/iter (IC non-plain = forma NUOVA, solo da
-modello) · MAPPA (net): WP 1,75 on-only (@s133) ≈ compoff 1,86–1,89 ≪ hf 2,55 ≪
-hk 4,3 ≪ dbal 8,6 ≈ ORM 8,5 (**dbal/ORM @ pin vecchi: prime candidate a
-beneficiare della leva ctor — rimisura dovuta**) · corpus **1414** ×2.
+**arith 5,4 · prop 5,5 · calls 5,0 · str 4,2 · arr 3,2 · re 2,5** · oggetti
+POST-leva-IC-non-plain: **objalloc 6,6 (813,3 ns, −133,4) · objdatains 6,4
+(1066,7) · churn 7,4 (1303,3) · dropdef 7,9 · allocni 7,9 · objmap 17,3 =** ·
+⚠ revisore MISURA: **il 74% del D promosso (+101,3 su +136,7) è eccedenza
+DICHIARATA ma non attribuita** — sonda conteggi dovuta · MAPPA (net): WP 1,77
+on-only (@s134) ≈ compoff 1,86–1,89 ≪ hf 2,55 ≪ hk 4,3 ≪ dbal 8,6 ≈ ORM 8,5
+(**@ pin VECCHI: DUE leve consecutive parlano a loro — rimisura DOVUTA**) ·
+corpus **1414** ×2.
 
-## §S-134 — ordine (az.rev. S-133 PROCESSO, vincolanti; poi leva)
+## §S-135 — ordine (az.rev. S-134 MISURA, vincolanti; poi rimisura e leva)
 
-1. **Sanare PIN_REGISTRY** (az.rev. #1): righe server FUORI dalla tabella phpr
-   (sezione propria), riga phpr per s132/s133 con evidenza; correggere
-   pin-server.sh perché appenda nella SUA sezione.
-2. **Gate stash con rc** (az.rev. #2): ri-hash dei 4 pinnati vs registro in
-   catena fixture; compone con la guardia NO-CLOBBER già COLLAUDATA (S-133 post).
-3. **Dente di collaudo delle copie dichiarate** (az.rev. #3): diff col template
-   che elenca per NOME le righe divergenti ATTESE (quotate e commenti inclusi);
-   ripulire i commenti stantii di s133-promozione.sh (az.rev. sec. #1).
-4. **LEVA della sessione**: nominare l'eccedenza D>UB su objalloc (az.rev. #4:
-   disasm/conteggio chiamate prima/dopo su prop_set_entry) POI scegliere tra
-   **dispatch 36,3** e **ultima resolve ctor** (serve modello per la forma IC
-   non-plain); criterio pre-registrato, soglia = max(4, drop-1, spread-batch
-   s133 gambe B), catena s133 riusabile COLLAUDANDO la copia col dente p.3.
-5. **Coppia WP sul pin nuovo se leva promossa** (per-config, s133-pair
-   ricetta; tentativo nuovo = file nuovo) → REPORT_GAP_134; **rimisura
-   dbal/ORM sul pin corrente** se resta finestra (la leva ctor parla a loro).
-APPARATO: az.rev. #5 = a catalogo la risoluzione del gate teardown (parità SUI
-7 vettori, non oltre) · argv senza pattern del gate · Serena pre-misura, mai
-edit .rs in finestra · rc quiescenza in header · CI sospesa in finestra di misura.
+1. **Sonda a conteggi sul pin s134** (az.rev. #1+#5): apparato s133 riusabile
+   (ctorprobes.rs + patch, target separato) su s134 vs stash s133 — verificare
+   resolve objalloc 2→0/iter a regime e RIPARTIRE l'eccedenza +101,3 (il
+   bl-count statico s133↔s134 è agli atti ma non esclude il canale layout,
+   +681 istr). Costo: una build fredda sul target sonda.
+2. **Rimisura dbal/ORM BILATERALE sul pin s134** (DOVUTA da S-133/S-134):
+   ricetta mappa S-126 (untar per gamba, 2/lato, watchdog, `/usr/bin/time -l`,
+   pavimenti per-binario, gate ictx/s, fail-set per NOME; oracle con
+   `memory_limit=-1` su ORM); criterio pre-registrato PRIMA del run; CI
+   sospesa col lock. Baseline: dbal 8,57–8,60 · ORM 8,51–8,56 @ pin vecchi.
+3. **LEVA della sessione** (scelta DOPO p.1-2, dai numeri): candidati per NOME
+   dispatch 36,3 (rischio H-C2: disasm obbligatorio) · contabilità non-resolve
+   da RI-DERIVARE sul pin s134 · objmap 17,3 (unico submicro fermo). Criterio:
+   **banda superiore FALSIFICABILE obbligatoria** (az.rev. #2: mai più
+   componenti «nominati senza prezzo») + **banda submicro↔A/B pre-registrata**
+   (az.rev. #3: lo scarto objdatains 16,7 > 13,3 è aperto e va ricondotto).
+4. **Coppia WP on-only a N≥3** se pin nuovo (az.rev. #4): confronto formale
+   1,769 vs 1,754 con la variabilità off (0,041) come banda; s134-pair ricetta,
+   tentativo nuovo = file nuovo.
+APPARATO: pin-phpr.sh NON scrive il registro (riga phpr a mano da 2 sessioni)
+— cablare l'append nella sezione phpr con la stessa forma fail-closed di
+pin-server.sh · peak WP +80 bordo alto (2 sessioni) resta da guardare ·
+CI sospesa in finestra di misura · Serena pre-misura, mai edit .rs in finestra.
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
 
-dispatch fuori prop_step 36,3 · ultima resolve ctor (IC non-plain) · «prop_step
-altro» 8,5 · k=9 di S-130 smentito (sonda S-133: 6) → contabilità statement da
-ri-derivare · AssignOp/IncDec fuori perimetro · famiglia locale 170 ns ·
-evalcls 316,9× · refl 42,4× · re +2,00 alloc/iter · peak WP +80 MiB (S-133) ·
+dispatch fuori prop_step 36,3 · contabilità non-resolve post-IC (i ~60
+ns/statement sono in parte coperti dal hit) · cammini non cacheabili
+(readonly, private mangled, `__set`, slot assente) · objmap 17,3 · «prop_step
+altro» 8,5 · AssignOp/IncDec fuori perimetro · famiglia locale 170 ns ·
+evalcls 316,9× · refl 42,4× · re +2,00 alloc/iter · peak WP +80 MiB ·
 micro-trim morte · $z++/$z-- undef non warna · §3.13 · §3.12-i · §3.14 ·
 get_gc · drift TODO.md · latin1-cliff.
 
@@ -67,14 +72,16 @@ loro bande · misure con LSP in volo · F2 keys-scratch · quiescenza nello stes
 comando del lancio · output TRACKED mossi da orchestratori · rumore-soglia =
 range PIENO senza formula robusta · guardia su categoria senza banda propria ·
 percentuale tra segmenti NON annidati senza controllo a zero eventi · pattern del
-gate quiescenza dentro l'argv del lancio · **sed di copia dichiarata senza
-collaudo delle righe NON toccate dal pattern (morso S-133)**.
+gate quiescenza dentro l'argv del lancio · sed di copia dichiarata senza collaudo
+delle righe NON toccate (morso S-133; dente: scripts/copia-gate.sh) · **eccedenza
+sopra la parte modellata senza sonda di ripartizione (reperto S-134)**.
 
-**Riscritto**: 2026-08-13 (chiusura S-133). Storia: `sessions/` · `gaps/GAP_TREND.md`.
-Pre-flight S-134: pin phpr **s133 c87439a9**789bcef4 + server **s133 d447f828**3c03e1bb
+**Riscritto**: 2026-08-13 (chiusura S-134). Storia: `sessions/` · `gaps/GAP_TREND.md`.
+Pre-flight S-135: pin phpr **s134 61896da1**3654fd00 + server **s134 461bfb55**56164cfa
 (OGNI build canonica rilinka il server: ricontrollare l'hash; stash canonici in
-phpr-old-target/release/) · MySQL wp8 con l'elenco · uploads sotto guardia ·
-corpus 1414 ×2 modi · nessuna run detached · CI: leggere phpr-ci/CI_FEED.log
-(FAIL su main si indaga PRIMA di misurare; run a55fd59 interrotto senza DONE:
-atteso, i commit successivi coprono) · disco Data ≥10G (build a freddo ~+3 min)
-· lettura: REGOLE.md → QUI → WP_SESSION_133 → wp133-harness/revisione.md → PERF_MAP.
+phpr-old-target/release/; gate `stash` in catena verifica 4 pinnati vs registro) ·
+MySQL wp8 con l'elenco · uploads sotto guardia · corpus 1414 ×2 modi · nessuna
+run detached · CI: leggere phpr-ci/CI_FEED.log (FAIL su main si indaga PRIMA di
+misurare; la coda post-S-134 smaltisce ~14 commit: attesa fisiologica) · disco
+Data ≥10G (build a freddo ~+3 min) · lettura: REGOLE.md → QUI → WP_SESSION_134 →
+wp134-harness/revisione.md → PERF_MAP.md.

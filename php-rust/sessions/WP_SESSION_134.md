@@ -34,7 +34,8 @@ prima scrittura (una cache al posto di 5 ricerche ripetute) — creare oggetti �
   concordi; la leva NON muove WP (atteso) → REPORT_GAP_134. dbal/ORM: rimisura
   DOVUTA in testa a S-135 (finestra insufficiente per la ricetta pulita).
 ## ⭐ Lezioni (max 3)
-- ⭐⭐ Dichiarare PRIMA i componenti non prezzati trasforma il «FUORI UB» in
-  riconciliazione attesa (l'eccedenza D−35,4 era nominata, non un'anomalia).
+- ⭐⭐ CORRETTA dal revisore: dichiarare componenti senza prezzo rende la banda
+  superiore INFALSIFICABILE — il 74% del D promosso resta senza attribuzione
+  misurata (sonda conteggi dovuta); il prossimo criterio esige banda sup. vera.
 - ⭐⭐ Il dente delle copie (manifest AL BYTE) ha collaudato 3 copie in un'ora.
 - ⭐ pin-phpr.sh non scrive il registro (riga phpr a mano): candidato az.rev.
