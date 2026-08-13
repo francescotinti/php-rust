@@ -1,0 +1,158 @@
+2,4c2,6
+< # s125-mappa-run.sh — MAPPA perf v1 (criterio s125-criterio-mappa.md):
+< # ORM + http-kernel, N=2 per lato, oracle prima poi phpr per gamba,
+< # workspace ri-untarrato, watchdog, /usr/bin/time -l, pavimenti per-binario.
+---
+> # s135-rimisura.sh — RIMISURA dbal+ORM sul pin s134 (criterio
+> # s135-criterio-rimisura.md; copia DICHIARATA di s125-mappa-run.sh):
+> # ORM + dbal, N=2 per lato, oracle prima poi phpr per gamba,
+> # workspace ri-untarrato, watchdog, /usr/bin/time -l, pavimenti per-binario
+> # PER WORKSPACE, gate contesa in ictx/s (emenda S-127), lock misura.
+8c10
+< H="$REPO/wp125-harness"
+---
+> H="$REPO/wp135-harness"
+14,15c16,17
+< OUT="$H/mappa-out"; mkdir -p "$OUT"
+< VERD="$H/s125-mappa-verdetto.out"
+---
+> OUT="$H/rimisura-out"; mkdir -p "$OUT"
+> VERD="$H/s135-rimisura-verdetto.out"
+18,19c20,25
+< rm -f "$OUT/mappa.done"
+< [ "$(shasum -a 256 "$PHPR" | cut -c1-16)" = "002e6cc12047ab9f" ] || { echo "rc=9 pin!=s125" > "$OUT/mappa.done"; exit 9; }
+---
+> rm -f "$OUT/rimisura.done"
+> [ "$(shasum -a 256 "$PHPR" | cut -c1-16)" = "61896da13654fd00" ] || { echo "rc=9 pin!=s134" > "$OUT/rimisura.done"; exit 9; }
+> # S-135: finestra protetta — lock convenzionale letto dal runner CI.
+> LOCK=/private/tmp/phpr-measure.lock
+> echo "s135-rimisura pid=$$" > "$LOCK"
+> trap 'rm -f "$LOCK"' EXIT
+24,29c30,37
+< # pavimenti per-binario (med3 di `phpunit --version` nel workspace ORM)
+< rm -rf "$SP/orm-work"; tar xzf "$GATES/orm-work.tgz" -C "$SP" || { echo "rc=8 untar" > "$OUT/mappa.done"; exit 8; }
+< floor3(){ local E="$1" f1 f2 f3
+<   f1=$( { /usr/bin/time -l "$E" "$SP/orm-work/vendor/bin/phpunit" --version > /dev/null; } 2>&1 | awk '/[0-9.]+ *user/{for(i=1;i<=NF;i++) if($i=="user"){print $(i-1)}}' )
+<   f2=$( { /usr/bin/time -l "$E" "$SP/orm-work/vendor/bin/phpunit" --version > /dev/null; } 2>&1 | awk '/[0-9.]+ *user/{for(i=1;i<=NF;i++) if($i=="user"){print $(i-1)}}' )
+<   f3=$( { /usr/bin/time -l "$E" "$SP/orm-work/vendor/bin/phpunit" --version > /dev/null; } 2>&1 | awk '/[0-9.]+ *user/{for(i=1;i<=NF;i++) if($i=="user"){print $(i-1)}}' )
+---
+> # pavimenti per-binario (med3 di `phpunit --version`) PER WORKSPACE — orm E
+> # dbal (divergenza dichiarata vs s125: un pavimento per workload).
+> rm -rf "$SP/orm-work"; tar xzf "$GATES/orm-work.tgz" -C "$SP" || { echo "rc=8 untar" > "$OUT/rimisura.done"; exit 8; }
+> rm -rf "$SP/dbal-work"; tar xzf "$GATES/dbal-work.tgz" -C "$SP" || { echo "rc=8 untar-dbal" > "$OUT/rimisura.done"; exit 8; }
+> floor3(){ local E="$1" P="$2" f1 f2 f3
+>   f1=$( { /usr/bin/time -l "$E" "$P" --version > /dev/null; } 2>&1 | awk '/[0-9.]+ *user/{for(i=1;i<=NF;i++) if($i=="user"){print $(i-1)}}' )
+>   f2=$( { /usr/bin/time -l "$E" "$P" --version > /dev/null; } 2>&1 | awk '/[0-9.]+ *user/{for(i=1;i<=NF;i++) if($i=="user"){print $(i-1)}}' )
+>   f3=$( { /usr/bin/time -l "$E" "$P" --version > /dev/null; } 2>&1 | awk '/[0-9.]+ *user/{for(i=1;i<=NF;i++) if($i=="user"){print $(i-1)}}' )
+32,34c40,43
+< FO=$(floor3 "$ORACLE"); FP=$(floor3 "$PHPR")
+< echo "floor_user_med3 oracle=$FO phpr=$FP (phpunit --version, pavimento PARZIALE dichiarato)" > "$OUT/floors.txt"
+< p "floors: oracle=$FO phpr=$FP"
+---
+> FO=$(floor3 "$ORACLE" "$SP/orm-work/vendor/bin/phpunit"); FP=$(floor3 "$PHPR" "$SP/orm-work/vendor/bin/phpunit")
+> DFO=$(floor3 "$ORACLE" "$SP/dbal-work/vendor/bin/phpunit"); DFP=$(floor3 "$PHPR" "$SP/dbal-work/vendor/bin/phpunit")
+> echo "floor_user_med3 orm: oracle=$FO phpr=$FP · dbal: oracle=$DFO phpr=$DFP (phpunit --version, pavimento PARZIALE dichiarato)" > "$OUT/floors.txt"
+> p "floors: orm o=$FO p=$FP · dbal o=$DFO p=$DFP"
+52c61
+< WLS="${WORKLOADS:-orm hk}"
+---
+> WLS="${WORKLOADS:-orm dbal}"
+58,60c67,69
+<   case " $WLS " in *" hk "*)
+<     run_leg hk  hk-work.tgz  hk-work  1800 "$ORACLE" "oracle$leg"
+<     run_leg hk  hk-work.tgz  hk-work  1800 "$PHPR"   "phpr$leg" ;;
+---
+>   case " $WLS " in *" dbal "*)
+>     run_leg dbal dbal-work.tgz dbal-work 3600 "$ORACLE" "oracle$leg"
+>     run_leg dbal dbal-work.tgz dbal-work 3600 "$PHPR"   "phpr$leg" ;;
+64c73,74
+< # parità: ORM phpr per NOME vs baseline; hk phpr 0E/0F
+---
+> # parità: ORM phpr per NOME vs baseline 16; dbal fail-set phpr STABILE tra
+> # gambe (il ≤1% vs oracle si legge dal conteggio nel verdetto, criterio p.4)
+68c78
+<   if ! diff -q "$H/orm-baseline-failnames.txt" "$OUT/orm-phpr$leg.failnames" > /dev/null; then
+---
+>   if ! diff -q "$REPO/wp125-harness/orm-baseline-failnames.txt" "$OUT/orm-phpr$leg.failnames" > /dev/null; then
+71,74c81,82
+<   HS=$(summ "$OUT/hk-phpr$leg.txt")
+<   HE=$(printf '%s' "$HS" | sed -n 's/.*Errors: \([0-9]*\).*/\1/p'); HE=${HE:-0}
+<   HF=$(printf '%s' "$HS" | sed -n 's/.*Failures: \([0-9]*\).*/\1/p'); HF=${HF:-0}
+<   if [ "$HE" != 0 ] || [ "$HF" != 0 ]; then p "hk phpr$leg: E=$HE F=$HF — cifra NULLA"; RC=1; fi
+---
+>   names "$OUT/dbal-phpr$leg.txt"   > "$OUT/dbal-phpr$leg.failnames"
+>   names "$OUT/dbal-oracle$leg.txt" > "$OUT/dbal-oracle$leg.failnames"
+75a84,86
+> if ! diff -q "$OUT/dbal-phpr1.failnames" "$OUT/dbal-phpr2.failnames" > /dev/null; then
+>   p "dbal: fail-set phpr NON stabile tra gambe — cifra NULLA"; RC=1
+> fi
+77,79c88,91
+< python3 - "$OUT" "$FO" "$FP" > "$OUT/ratios.txt" <<'PY'
+< import re, sys, statistics
+< out, fo, fp = sys.argv[1], float(sys.argv[2]), float(sys.argv[3])
+---
+> python3 - "$OUT" "$FO" "$FP" "$DFO" "$DFP" > "$OUT/ratios.txt" <<'PY'
+> import re, sys, statistics, os
+> out = sys.argv[1]
+> fo, fp, dfo, dfp = map(float, sys.argv[2:6])
+82a95,96
+>         m = re.search(r'([\d.]+)\s+real', l)
+>         if m: d['real'] = float(m.group(1))
+90c104,106
+< print("mappa-v1 (user CPU; pavimento PARZIALE phpunit --version: oracle %.3f phpr %.3f)" % (fo, fp))
+---
+> def failset(f):
+>     return set(x.strip() for x in open(f) if x.strip()) if os.path.exists(f) else set()
+> print("rimisura-s135 (user CPU; pavimenti PARZIALI phpunit --version: orm o=%.3f p=%.3f · dbal o=%.3f p=%.3f)" % (fo, fp, dfo, dfp))
+92,93c108,109
+< for w in ("orm", "hk"):
+<     ictx = {}
+---
+> for w, flo, flp in (("orm", fo, fp), ("dbal", dfo, dfp)):
+>     rate = {}; absi = {}
+97,98c113,116
+<         net = (p_['user']-fp)/(o['user']-fo)
+<         ictx[f"oracle{leg}"] = o.get('ictx', -1); ictx[f"phpr{leg}"] = p_.get('ictx', -1)
+---
+>         net = (p_['user']-flp)/(o['user']-flo)
+>         for k, d in ((f"oracle{leg}", o), (f"phpr{leg}", p_)):
+>             absi[k] = d.get('ictx', -1)
+>             rate[k] = (d['ictx']/d['real']) if ('ictx' in d and d.get('real', 0) > 0) else -1
+100c118
+<     vals = [v for v in ictx.values() if v >= 0]
+---
+>     vals = [v for v in rate.values() if v >= 0]
+102,103c120,127
+<     flag = [k for k, v in ictx.items() if med > 0 and v > 1.5*med]
+<     print(f"{w}_ictx: " + " ".join(f"{k}={v}" for k, v in ictx.items()) + (f"  SEGNALATE(>1,5x med): {flag}" if flag else "  contesa ok"))
+---
+>     flag = [k for k, v in rate.items() if med > 0 and v > 1.5*med]
+>     print(f"{w}_ictx_abs: " + " ".join(f"{k}={absi[k]}" for k in absi))
+>     print(f"{w}_ictx/s (gate emenda S-127): " + " ".join(f"{k}={rate[k]:.1f}" for k in rate) + (f"  SEGNALATE(>1,5x med): {flag}" if flag else "  contesa ok"))
+> s1, s2 = failset(f"{out}/dbal-phpr1.failnames"), failset(f"{out}/dbal-phpr2.failnames")
+> o1 = failset(f"{out}/dbal-oracle1.failnames")
+> diff = sorted(s1 - o1)
+> print(f"dbal_parita': phpr_failset_stabile={s1 == s2} |phpr_fail|={len(s1)} |diff_vs_oracle|={len(diff)}")
+> if diff[:20]: print("dbal_diff_nomi: " + " | ".join(diff[:20]))
+106c130
+< { echo "== s125 mappa perf v1 (pin s125 002e6cc1 vs oracle 8.5.7; criterio s125-criterio-mappa.md) =="
+---
+> { echo "== s135 rimisura dbal+ORM (pin s134 61896da1 vs oracle 8.5.7; criterio s135-criterio-rimisura.md) =="
+109c133
+<   echo "parita': orm phpr per NOME vs baseline 16 · hk phpr 0E/0F — rc=$RC (0=tutte valide)"
+---
+>   echo "parita': orm phpr per NOME vs baseline 16 · dbal fail-set stabile tra gambe — rc=$RC (0=tutte valide)"
+111,114c135,138
+<     echo "orm oracle$leg: $(summ "$OUT/orm-oracle$leg.txt")"
+<     echo "orm phpr$leg:   $(summ "$OUT/orm-phpr$leg.txt")"
+<     echo "hk  oracle$leg: $(summ "$OUT/hk-oracle$leg.txt")"
+<     echo "hk  phpr$leg:   $(summ "$OUT/hk-phpr$leg.txt")"
+---
+>     echo "orm  oracle$leg: $(summ "$OUT/orm-oracle$leg.txt")"
+>     echo "orm  phpr$leg:   $(summ "$OUT/orm-phpr$leg.txt")"
+>     echo "dbal oracle$leg: $(summ "$OUT/dbal-oracle$leg.txt")"
+>     echo "dbal phpr$leg:   $(summ "$OUT/dbal-phpr$leg.txt")"
+117c141
+< echo "rc=$RC $(date +%T)" > "$OUT/mappa.done"
+---
+> echo "rc=$RC $(date +%T)" > "$OUT/rimisura.done"
