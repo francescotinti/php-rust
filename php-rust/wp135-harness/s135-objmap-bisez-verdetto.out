@@ -1,0 +1,24 @@
+== s135 istruttoria objmap: bisezione bilaterale (criterio s135-criterio-bisez.md) ==
+grade=VERDICT  # derivazione meccanica; R=5; user CPU netto-pavimento per-binario
+oracle=8.5.7 phpr=61896da13654fd00
+pavimento_oracle_s=0.06 pavimento_phpr_s=0.03
+m0_obj2048_N_iter=3000000
+m0_obj2048_oracle_netto_s=0.05 m0_obj2048_phpr_netto_s=0.76
+rapporto_m0_obj2048=15.2  [companion 0.76/0.05]
+m0_obj2048_ns_iter: oracle=16.7 phpr=253.3 delta=+236.7
+m0_obj2048_spread_oracle_s=0.01 m0_obj2048_spread_phpr_s=0.06
+m1_int2048_N_iter=3000000
+m1_int2048_oracle_netto_s=0.04 m1_int2048_phpr_netto_s=0.62
+rapporto_m1_int2048=15.5  [companion 0.62/0.04]
+m1_int2048_ns_iter: oracle=13.3 phpr=206.7 delta=+193.3
+m1_int2048_spread_oracle_s=0.01 m1_int2048_spread_phpr_s=0.08
+m2_obj0_N_iter=3000000
+m2_obj0_oracle_netto_s=0.05 m2_obj0_phpr_netto_s=0.75
+rapporto_m2_obj0=15.0  [companion 0.75/0.05]
+m2_obj0_ns_iter: oracle=16.7 phpr=250.0 delta=+233.3
+m2_obj0_spread_oracle_s=0.02 m2_obj0_spread_phpr_s=0.03
+m3_int0_N_iter=3000000
+m3_int0_oracle_netto_s=0.04 m3_int0_phpr_netto_s=0.59
+rapporto_m3_int0=14.7  [companion 0.59/0.04]
+m3_int0_ns_iter: oracle=13.3 phpr=196.7 delta=+183.3
+m3_int0_spread_oracle_s=0.01 m3_int0_spread_phpr_s=0.02
