@@ -1,0 +1,29 @@
+2,4c2,5
+< # s126-orm-micro.sh — istruttoria ORM: micro bilaterali dei tre indiziati
+< # (criterio s126-criterio-orm.md, committato PRIMA del run). Metodo run-micro.sh:
+< # user CPU, pavimento per-binario, R=5 alternato, N dal sorgente, parita' stdout.
+---
+> # s135-objmap-bisez.sh — istruttoria objmap: bisezione bilaterale a 4 varianti
+> # (criterio s135-criterio-bisez.md, committato PRIMA del run; copia DICHIARATA
+> # di s126-orm-micro.sh). Metodo run-micro.sh: user CPU, pavimento per-binario,
+> # R=5 alternato, N dal sorgente, parita' stdout.
+8,10c9,11
+< M="$H/micro-orm"
+< OUT="$H/orm-out"; mkdir -p "$OUT"
+< VERD="$H/s126-orm-micro-verdetto.out"
+---
+> M="$H/micro-bisez"
+> OUT="$H/bisez-out"; mkdir -p "$OUT"
+> VERD="$H/s135-objmap-bisez-verdetto.out"
+14c15
+< CATS="${CATS:-evalcls refl objchurn}"
+---
+> CATS="${CATS:-m0_obj2048 m1_int2048 m2_obj0 m3_int0}"
+17c18
+< [ "$(shasum -a 256 "$PHPR" | cut -c1-16)" = "002e6cc12047ab9f" ] || { echo "rc=9 pin!=s125" > "$OUT/micro.done"; exit 9; }
+---
+> [ "$(shasum -a 256 "$PHPR" | cut -c1-16)" = "61896da13654fd00" ] || { echo "rc=9 pin!=s134" > "$OUT/micro.done"; exit 9; }
+26c27
+< echo "== s126 istruttoria ORM: micro bilaterali (criterio s126-criterio-orm.md) =="
+---
+> echo "== s135 istruttoria objmap: bisezione bilaterale (criterio s135-criterio-bisez.md) =="
