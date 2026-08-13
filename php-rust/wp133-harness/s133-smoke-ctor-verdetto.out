@@ -1,0 +1,44 @@
+== s133-ab smoke-ctor: A=6af6e497(pin s132) B=c87439a9 R=2 ordine ALTERNATO; giudici=objalloc+objdatains (ENTRAMBI sopra soglia); soglia=max(4, drop-1, spread-batch s132 6.7); bande fondate objchurn 13.3/objmap 10.0; UB=35.4; quiescenza rc=0 (file: ab-out/quiesce-smoke-ctor.rc); rc autoritativo = ab-out/smoke-ctor.rc ==
+cat=objalloc N=3000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=2.97 rawB=2.83
+  coppia2 [BA]: rawA=2.95 rawB=2.87
+cat=objdatains N=3000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=3.60 rawB=3.51
+  coppia2 [BA]: rawA=3.64 rawB=3.54
+cat=objchurn N=3000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=4.41 rawB=4.34
+  coppia2 [BA]: rawA=4.39 rawB=4.33
+cat=objmap N=3000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=0.53 rawB=0.54
+  coppia2 [BA]: rawA=0.54 rawB=0.53
+cat=arith N=150000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=7.37 rawB=7.05
+  coppia2 [BA]: rawA=7.35 rawB=7.11
+cat=prop N=90000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=7.06 rawB=6.97
+  coppia2 [BA]: rawA=7.06 rawB=6.96
+cat=calls N=60000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=6.43 rawB=6.40
+  coppia2 [BA]: rawA=6.56 rawB=6.45
+cat=str N=28000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=4.47 rawB=4.44
+  coppia2 [BA]: rawA=4.48 rawB=4.41
+cat=arr N=30000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=4.56 rawB=4.49
+  coppia2 [BA]: rawA=4.54 rawB=4.51
+cat=re N=12000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=5.52 rawB=5.54
+  coppia2 [BA]: rawA=5.53 rawB=5.52
+GIUDICE objalloc: A=980.0 B=943.3 ns/iter D=+36.7 soglia=13.3 (rumore drop-1: A'=6.7 B'=13.3; spread-batch s132=6.7) -> SOPRA SOGLIA
+riconciliazione UB objalloc: D=+36.7 vs UB modello=35.4 -> FUORI BANDA (D>UB)
+GIUDICE objdatains: A=1200.0 B=1168.3 ns/iter D=+31.7 soglia=13.3 (rumore drop-1: A'=13.3 B'=10.0; spread-batch s132=6.7) -> SOPRA SOGLIA
+riconciliazione UB objdatains: D=+31.7 vs UB modello=35.4 -> dentro UB
+guardia objchurn: A=1460.0 B=1438.3 D=+21.7 soglia_reg=-13.3 [banda fondata=13.3] -> ok
+guardia objmap: A=171.7 B=171.7 D=+0.0 soglia_reg=-10.0 [banda fondata=10.0] -> ok
+guardia arith: A=48.9 B=47.1 D=+1.9 soglia_reg=-4.0 [SL=0.94] -> ok
+guardia prop: A=78.2 B=77.2 D=+1.1 soglia_reg=-4.0 [SL=0.8] -> ok
+guardia calls: A=107.9 B=106.8 D=+1.2 soglia_reg=-4.0 [SL=0.73] -> ok
+guardia str: A=159.1 B=157.3 D=+1.8 soglia_reg=-4.0 [SL=2.89] -> ok
+guardia arr: A=151.0 B=149.3 D=+1.7 soglia_reg=-4.0 [SL=2.49] -> ok
+guardia re: A=458.8 B=459.2 D=-0.4 soglia_reg=-4.5 [SL=4.46] -> ok
+ESITO: PROMOSSA (entrambi i giudici sopra soglia, guardie ok)
