@@ -25,15 +25,12 @@ layout escluso) · UB falsificabile RISPETTATA in AP1 (D 56,7 ≤ 57,7).
    lock si RICREA dopo ogni orchestratore (il trap EXIT altrui lo rimuove).
 2. **Azioni revisore S-135** (lente SEMANTICA, `wp135-harness/revisione.md`):
    vincolanti come az.rev.
-3. **LEVA dai numeri**: candidati per NOME — dim-write su prop (objdatains:
-   2 resolve/iter residue sul cammino prop-dim, fuori perimetro AP1; sonda
-   S-135 le ha contate) · objmap residuo 116,7 ns (canali misurati bisez:
-   valore-oggetto 43,4 · chiave 10,0 · arm residuo; scaffolding condiviso) ·
-   dispatch 36,3 (rischio H-C2: disasm obbligatorio) · allocni +13,3 da
-   spiegare. Criterio: UB falsificabile da prezzi MISURATI (modello AP1 =
-   precedente riuscito) + guardie con formula del giudice (emenda S-135).
-4. Se resta finestra: sonda chiusura del 14% mancante del modello AssignPath
-   (Last-build + push, dichiarato INCOMPLETO a 86%).
+3. **LEVA dai numeri**: candidati per NOME — dim-write su prop (2 resolve/iter
+   contate dalla sonda, fuori perimetro AP1) · objmap residuo 116,7 (canali
+   bisez: valore-oggetto 43,4 · chiave 10,0) · dispatch 36,3 (H-C2: disasm
+   obbligatorio) · allocni +13,3. Criterio: UB falsificabile da prezzi
+   MISURATI (modello AP1 = precedente) + guardie a formula del giudice.
+4. Se resta finestra: sonda del 14% mancante del modello AssignPath (86%).
 APPARATO: nessun arretrato dichiarato (append phpr SPEDITO e vivo in promo).
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
@@ -78,7 +75,6 @@ Pre-flight S-136: pin phpr **s135 6518a1e1**4a266d52 + server **s135 e2efdf15**b
 (OGNI build canonica rilinka il server: ricontrollare l'hash; stash canonici in
 phpr-old-target/release/; gate `stash` in catena verifica 4 pinnati vs registro) ·
 MySQL wp8 con l'elenco · uploads sotto guardia · corpus 1414 ×2 · nessuna run
-detached · CI_FEED.log (coda post-S-135 ~13 commit: attesa fisiologica; FAIL su
-main si indaga PRIMA — il FAIL dbff54a è GIÀ chiuso: infrastrutturale) · disco
-Data ≥10G · lettura: REGOLE.md → QUI → WP_SESSION_135 → wp135-harness/revisione.md
-→ PERF_MAP.md.
+detached · CI_FEED.log (coda ~13 commit fisiologica; FAIL dbff54a GIÀ chiuso:
+infrastrutturale) · disco Data ≥10G · lettura: REGOLE.md → QUI →
+WP_SESSION_135 → wp135-harness/revisione.md → PERF_MAP.md.

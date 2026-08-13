@@ -28,9 +28,8 @@ in S-136 sul pin s135) · **leve perf spedite: 1 (AP1)** · incidenti: 0 nuovi.
   **objmap D=+56,7 ≤ UB 57,7**, riconc. smoke 6,7≤10, guardie 9/9 →
   promozione rc=0 → **pin s135**. Submicro: **objmap 11,7** (riconc. A/B
   0,1≤20) · objchurn 7,0 (collaterale) · allocni 8,1 (+13,3, osservazione).
-4·CI: FAIL `dbff54a` indagato = infrastrutturale (SIGTERM disk-low), non di
-  codice · lock misura: il trap EXIT della rimisura l'ha rimosso a run finito
-  scoprendo la finestra (dichiarato; smoke1 rc=1 agli atti, senza incidenti).
+4·CI: FAIL `dbff54a` = infrastrutturale (SIGTERM disk-low) · lock misura
+  rimosso dal trap EXIT della rimisura → finestra scoperta (smoke1 rc=1 agli atti).
 ## ⭐ Lezioni (max 3)
 - ⭐⭐ Una banda di guardia presa da uno strumento DIVERSO (spread submicro) può
   essere più stretta del rumore vivo dell'A/B: la guardia si fonda anche sul
