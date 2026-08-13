@@ -1,0 +1,23 @@
+== s135 rimisura dbal+ORM (pin s134 61896da1 vs oracle 8.5.7; criterio s135-criterio-rimisura.md) ==
+floor_user_med3 orm: oracle=0.06 phpr=0.07 · dbal: oracle=0.06 phpr=0.19 (phpunit --version, pavimento PARZIALE dichiarato)
+rimisura-s135 (user CPU; pavimenti PARZIALI phpunit --version: orm o=0.060 p=0.070 · dbal o=0.060 p=0.190)
+grade=VERDICT  # derivazione meccanica dai .time
+orm_leg1: oracle_user=4.95 (sys=0.46) phpr_user=41.31 (sys=1.17) ratio_raw=8.345 ratio_net=8.434
+orm_leg2: oracle_user=4.91 (sys=0.48) phpr_user=41.60 (sys=1.26) ratio_raw=8.473 ratio_net=8.563
+orm_ictx_abs: oracle1=4487 phpr1=10276 oracle2=1567 phpr2=17032
+orm_ictx/s (gate emenda S-127): oracle1=821.8 phpr1=241.3 oracle2=285.9 phpr2=395.2  SEGNALATE(>1,5x med): ['oracle1']
+dbal_leg1: oracle_user=1.13 (sys=0.19) phpr_user=9.23 (sys=0.36) ratio_raw=8.168 ratio_net=8.449
+dbal_leg2: oracle_user=1.16 (sys=0.20) phpr_user=9.39 (sys=0.38) ratio_raw=8.095 ratio_net=8.364
+dbal_ictx_abs: oracle1=116 phpr1=1874 oracle2=554 phpr2=5043
+dbal_ictx/s (gate emenda S-127): oracle1=87.2 phpr1=195.0 oracle2=404.4 phpr2=514.1  SEGNALATE(>1,5x med): ['phpr2']
+dbal_parita': phpr_failset_stabile=True |phpr_fail|=10 |diff_vs_oracle|=10
+dbal_diff_nomi: Doctrine\DBAL\Tests\Functional\PortabilityTest::testCaseConversion with data set "lower" (Doctrine\DBAL\ColumnCase Enum (LOWER), ['test_int', 'test_string', 'test_null']) | Doctrine\DBAL\Tests\Functional\PortabilityTest::testCaseConversion with data set "upper" (Doctrine\DBAL\ColumnCase Enum (UPPER), ['TEST_INT', 'TEST_STRING', 'TEST_NULL']) | Doctrine\DBAL\Tests\Functional\PortabilityTest::testCaseConversionColumnName with data set "lower" (Doctrine\DBAL\ColumnCase Enum (LOWER), ['test_int', 'test_string', 'test_null']) | Doctrine\DBAL\Tests\Functional\PortabilityTest::testCaseConversionColumnName with data set "upper" (Doctrine\DBAL\ColumnCase Enum (UPPER), ['TEST_INT', 'TEST_STRING', 'TEST_NULL']) | Doctrine\DBAL\Tests\Functional\PortabilityTest::testFetchAllNullColumn | Doctrine\DBAL\Tests\Functional\PortabilityTest::testFetchColumn with data set "int" ('Test_Int', [1, 2]) | Doctrine\DBAL\Tests\Functional\PortabilityTest::testFetchColumn with data set "string" ('Test_String', ['foo', 'foo']) | Doctrine\DBAL\Tests\Functional\PortabilityTest::testFullFetchMode | Doctrine\DBAL\Tests\Functional\PortabilityTest::testGetDatabaseName | Doctrine\DBAL\Tests\Schema\Name\Parser\GenericNameParserTest::testValidInput with data set #11 ('schéma."übermäßigkeit".`àçcên...ràctér', [Doctrine\DBAL\Schema\Name\Identifier Object (...), Doctrine\DBAL\Schema\Name\Identifier Object (...), Doctrine\DBAL\Schema\Name\Identifier Object (...), Doctrine\DBAL\Schema\Name\Identifier Object (...), Doctrine\DBAL\Schema\Name\Identifier Object (...)])
+parita': orm phpr per NOME vs baseline 16 · dbal fail-set stabile tra gambe — rc=0 (0=tutte valide)
+orm  oracle1: Tests: 3484, Assertions: 12003, Skipped: 59, Incomplete: 2.
+orm  phpr1:   Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, Skipped: 59, Incomplete: 2.
+dbal oracle1: Tests: 3929, Assertions: 5706, Skipped: 594, Incomplete: 13.
+dbal phpr1:   
+orm  oracle2: Tests: 3484, Assertions: 12003, Skipped: 59, Incomplete: 2.
+orm  phpr2:   Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, Skipped: 59, Incomplete: 2.
+dbal oracle2: Tests: 3929, Assertions: 5706, Skipped: 594, Incomplete: 13.
+dbal phpr2:   
