@@ -1,0 +1,17 @@
+== s135 modello tempo AssignPath su m3_int0 (criterio s135-criterio-tempo.md) ==
+tp_bin=251eeecea5b2686e (build emendata, MAI pinnabile)
+seg0_ns_span_med3=107.083 (r: 106.959 113.338 107.083)
+seg1_ns_span_med3=43.245 (r: 43.375 43.089 43.245)
+seg2_ns_span_med3=42.749 (r: 42.749 42.995 42.211)
+seg3_ns_span_med3=92.488 (r: 91.709 92.488 92.700)
+seg4_ns_span_med3=53.933 (r: 55.037 53.833 53.933)
+seg5_ns_span_med3=46.296 (r: 43.896 46.296 47.121)
+seg6_ns_span_med3=40.446 (r: 40.498 40.446 40.250)
+seg9_ns_span_med3=40.315 (r: 40.355 40.125 40.315)
+overhead_coppia_ns=40.3 (seg9, sottratto)
+arm_totale=66.8  pop+keysvec=2.9  probe_aa=2.4  path_op=52.2
+  apply_last=13.6  set_displaced=6.0  gc_note=0.1
+derivate: walk(path_op-apply_last-gc)=38.4  coerce+ensure(apply_last-set)=7.6
+chiusura=(pop+probe+path_op)/arm = 57.5/66.8 = 86%  (criterio: >=90% o modello INCOMPLETO)
+dominante_35pct: pop=4% probe=4% path_op=78%
+TEMPO ACQUISITO (parita' ok)
