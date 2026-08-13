@@ -44,6 +44,16 @@ if [ "$BODY" != "SMOKE-OK" ]; then
 fi
 rm -rf "$D"
 
+# Guardia NO-CLOBBER (incidente S-133, stessa forma di pin-phpr.sh): uno
+# stash ESISTENTE con hash DIVERSO non si sovrascrive mai in silenzio;
+# sostituzione consapevole = PIN_FORCE=1 dichiarato a verbale.
+if [ -e "$STASH/php-server-$TAG" ] && [ "${PIN_FORCE:-0}" != 1 ]; then
+  HOLD=$(shasum -a 256 "$STASH/php-server-$TAG" | cut -c1-16)
+  if [ "$HOLD" != "$H" ]; then
+    echo "STOP NO-CLOBBER: stash php-server-$TAG ESISTE con hash DIVERSO ($HOLD != $H) — tag sbagliato o rotazione non dichiarata; sovrascrivere solo con PIN_FORCE=1."
+    exit 1
+  fi
+fi
 cp "$BIN" "$STASH/php-server-$TAG"
 HS=$(shasum -a 256 "$STASH/php-server-$TAG" | cut -c1-16)
 [ "$H" = "$HS" ] || { echo "hash dello stash diverso ($H vs $HS)"; exit 1; }

@@ -24,6 +24,17 @@ OFF=$(PHPR_REG_LOWER=0 "$BIN" "$MICRO")
 if [ "$ON" != "$EXP" ] || [ "$OFF" != "$EXP" ]; then
   echo "SMOKE FALLITO: oracle='$EXP' on='$ON' off='$OFF' => NIENTE stash."; exit 1
 fi
+# Guardia NO-CLOBBER (incidente S-133: promo con tag vecchio → stash storico
+# sovrascritto): uno stash ESISTENTE con hash DIVERSO non si sovrascrive MAI
+# in silenzio — un tag sbagliato muore QUI, non sul binario storico.
+# Sostituzione consapevole = PIN_FORCE=1 dichiarato a verbale.
+if [ -e "$STASH/phpr-$TAG" ] && [ "${PIN_FORCE:-0}" != 1 ]; then
+  HOLD=$(shasum -a 256 "$STASH/phpr-$TAG" | cut -c1-16)
+  if [ "$HOLD" != "$H" ]; then
+    echo "STOP NO-CLOBBER: stash phpr-$TAG ESISTE con hash DIVERSO ($HOLD != $H) — tag sbagliato o rotazione non dichiarata; sovrascrivere solo con PIN_FORCE=1."
+    exit 1
+  fi
+fi
 cp "$BIN" "$STASH/phpr-$TAG"
 HS=$(shasum -a 256 "$STASH/phpr-$TAG" | cut -c1-16)
 [ "$H" = "$HS" ] || { echo "hash dello stash diverso ($H vs $HS)"; exit 1; }

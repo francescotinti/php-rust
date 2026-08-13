@@ -21,8 +21,9 @@ beneficiare della leva ctor — rimisura dovuta**) · corpus **1414** ×2.
 1. **Sanare PIN_REGISTRY** (az.rev. #1): righe server FUORI dalla tabella phpr
    (sezione propria), riga phpr per s132/s133 con evidenza; correggere
    pin-server.sh perché appenda nella SUA sezione.
-2. **Gate stash con rc** (az.rev. #2): script che ri-hasha i 4 binari pinnati
-   contro il registro, accodato alla catena fixture (emenda dichiarata inventario).
+2. **Gate stash con rc** (az.rev. #2): ri-hash dei 4 binari pinnati contro il
+   registro in catena fixture; compone con la guardia NO-CLOBBER già cablata e
+   COLLAUDATA nei pin-*.sh post-S-133 (replay incidente → STOP, re-pin → ok).
 3. **Dente di collaudo delle copie dichiarate** (az.rev. #3): diff col template
    che elenca per NOME le righe divergenti ATTESE (quotate e commenti inclusi);
    ripulire i commenti stantii di s133-promozione.sh (az.rev. sec. #1).
