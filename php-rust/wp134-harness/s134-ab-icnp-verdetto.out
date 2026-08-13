@@ -1,0 +1,76 @@
+== s134-ab ab-icnp: A=c87439a9(pin s133) B=61896da1 R=5 ordine ALTERNATO; giudici=objalloc+objdatains (ENTRAMBI sopra soglia); soglia=max(4, drop-1, spread-batch s133 per giudice 26.7/13.3); bande fondate objchurn 10.0/objmap 4.0; parte modellata=35.4 (eccedenza attesa e dichiarata); quiescenza rc=0 (file: ab-out/quiesce-ab-icnp.rc); rc autoritativo = ab-out/ab-icnp.rc ==
+cat=objalloc N=3000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=2.85 rawB=2.44
+  coppia2 [BA]: rawA=2.88 rawB=2.44
+  coppia3 [AB]: rawA=2.88 rawB=2.44
+  coppia4 [BA]: rawA=2.85 rawB=2.42
+  coppia5 [AB]: rawA=2.85 rawB=2.45
+cat=objdatains N=3000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=3.55 rawB=3.14
+  coppia2 [BA]: rawA=3.64 rawB=3.16
+  coppia3 [AB]: rawA=3.53 rawB=3.15
+  coppia4 [BA]: rawA=3.57 rawB=3.21
+  coppia5 [AB]: rawA=3.54 rawB=3.15
+cat=objchurn N=3000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=4.40 rawB=3.92
+  coppia2 [BA]: rawA=4.36 rawB=4.01
+  coppia3 [AB]: rawA=4.39 rawB=4.01
+  coppia4 [BA]: rawA=4.50 rawB=4.07
+  coppia5 [AB]: rawA=4.33 rawB=3.90
+cat=objmap N=3000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=0.54 rawB=0.56
+  coppia2 [BA]: rawA=0.54 rawB=0.56
+  coppia3 [AB]: rawA=0.54 rawB=0.55
+  coppia4 [BA]: rawA=0.54 rawB=0.54
+  coppia5 [AB]: rawA=0.53 rawB=0.54
+cat=arith N=150000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=7.20 rawB=7.17
+  coppia2 [BA]: rawA=7.20 rawB=7.21
+  coppia3 [AB]: rawA=7.14 rawB=7.20
+  coppia4 [BA]: rawA=7.15 rawB=7.24
+  coppia5 [AB]: rawA=7.14 rawB=7.19
+cat=prop N=90000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=7.32 rawB=7.15
+  coppia2 [BA]: rawA=7.13 rawB=7.26
+  coppia3 [AB]: rawA=7.22 rawB=7.14
+  coppia4 [BA]: rawA=7.17 rawB=7.25
+  coppia5 [AB]: rawA=7.34 rawB=7.24
+cat=calls N=60000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=6.52 rawB=6.48
+  coppia2 [BA]: rawA=6.49 rawB=6.48
+  coppia3 [AB]: rawA=6.52 rawB=6.47
+  coppia4 [BA]: rawA=6.52 rawB=6.49
+  coppia5 [AB]: rawA=6.44 rawB=6.37
+cat=str N=28000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=4.47 rawB=4.45
+  coppia2 [BA]: rawA=4.52 rawB=4.47
+  coppia3 [AB]: rawA=4.50 rawB=4.44
+  coppia4 [BA]: rawA=4.42 rawB=4.47
+  coppia5 [AB]: rawA=4.49 rawB=4.48
+cat=arr N=30000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=4.55 rawB=4.50
+  coppia2 [BA]: rawA=4.56 rawB=4.54
+  coppia3 [AB]: rawA=4.63 rawB=4.50
+  coppia4 [BA]: rawA=4.57 rawB=4.54
+  coppia5 [AB]: rawA=4.52 rawB=4.52
+cat=re N=12000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=5.55 rawB=5.58
+  coppia2 [BA]: rawA=5.53 rawB=5.52
+  coppia3 [AB]: rawA=5.59 rawB=5.55
+  coppia4 [BA]: rawA=5.51 rawB=5.52
+  coppia5 [AB]: rawA=5.54 rawB=5.54
+GIUDICE objalloc: A=943.3 B=806.7 ns/iter D=+136.7 soglia=26.7 (rumore drop-1: A'=10.0 B'=3.3; spread-batch s133=26.7) -> SOPRA SOGLIA
+riconciliazione objalloc: D_smoke=+150.0 D_R5=+136.7 |diff|=13.3 banda=26.7 -> in banda
+riconciliazione parte-modellata objalloc: D=+136.7 vs modellata=35.4 -> eccedenza +101.3 = componenti nominati NON prezzati (criterio p.2.3), attesa se D>modellata
+GIUDICE objdatains: A=1176.7 B=1043.3 ns/iter D=+133.3 soglia=13.3 (rumore drop-1: A'=13.3 B'=6.7; spread-batch s133=13.3) -> SOPRA SOGLIA
+riconciliazione objdatains: D_smoke=+130.0 D_R5=+133.3 |diff|=3.3 banda=13.3 -> in banda
+riconciliazione parte-modellata objdatains: D=+133.3 vs modellata=35.4 -> eccedenza +97.9 = componenti nominati NON prezzati (criterio p.2.3), attesa se D>modellata
+guardia objchurn: A=1456.7 B=1330.0 D=+126.7 soglia_reg=-10.0 [banda fondata=10.0] -> ok
+guardia objmap: A=173.3 B=176.7 D=-3.3 soglia_reg=-4.0 [banda fondata=4.0] -> ok
+guardia arith: A=47.5 B=47.9 D=-0.3 soglia_reg=-4.0 [SL=0.94] -> ok
+guardia prop: A=80.0 B=80.2 D=-0.2 soglia_reg=-4.0 [SL=0.8] -> ok
+guardia calls: A=108.3 B=107.7 D=+0.7 soglia_reg=-4.0 [SL=0.73] -> ok
+guardia str: A=159.6 B=158.9 D=+0.7 soglia_reg=-4.0 [SL=2.89] -> ok
+guardia arr: A=151.3 B=150.0 D=+1.3 soglia_reg=-4.0 [SL=2.49] -> ok
+guardia re: A=460.0 B=460.0 D=+0.0 soglia_reg=-4.5 [SL=4.46] -> ok
+ESITO: PROMOSSA (entrambi i giudici sopra soglia, guardie ok)
