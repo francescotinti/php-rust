@@ -200,6 +200,18 @@ fn ic_epoch() -> u64 {
 pub struct PropIc(Rc<std::cell::Cell<(u64, u32, u32, u32)>>);
 
 impl PropIc {
+    /// S-134 «IC non-plain»: bit alti dello slot cachato dalle SCRITTURE.
+    /// `NP` marca una entry riempita dal cammino pieno di `prop_set_entry`
+    /// (classe non `plain_set_props`; fatti di classe provati al fill:
+    /// nessun set-hook né virtual-hook, `__set` assente, asym superato, non
+    /// readonly, key == name). `TY` impone la coercizione typed al hit. Lo
+    /// slot vero sta nei 30 bit bassi (`SLOT_MASK`). Emenda dichiarata del
+    /// contratto sopra: le scritture non sono più plain-only — il ramo NP
+    /// mantiene per-scrittura presenza slot, coercizione e typed_refs.
+    pub const NP: u32 = 1 << 31;
+    pub const TY: u32 = 1 << 30;
+    pub const SLOT_MASK: u32 = Self::TY - 1;
+
     /// The cached `(class_id + 1, slot)` when filled IN THIS RUN for
     /// exactly this calling scope (see [`PropIc::scope_key`]).
     #[inline]

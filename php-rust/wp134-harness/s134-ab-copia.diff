@@ -1,0 +1,75 @@
+2,6c2,6
+< # s133-ab.sh <BPATH> <BEXP8> <TAG> <R> [DSMOKE_ALLOC] [DSMOKE_DATAINS] — LEVA
+< # ctor resolve-once (criterio s133-criterio-ctor.md, commit PRIMA di ogni run).
+< # COPIA DICHIARATA di wp132-harness/s132-ab.sh coi SOLI adattamenti del
+< # criterio p.2-4:
+< #  (a) A = stash pin s132 (phpr-s132, 6af6e497);
+---
+> # s134-ab.sh <BPATH> <BEXP8> <TAG> <R> [DSMOKE_ALLOC] [DSMOKE_DATAINS] — LEVA
+> # IC non-plain (criterio s134-criterio-icnp.md, commit PRIMA di ogni run).
+> # COPIA DICHIARATA di wp133-harness/s133-ab.sh (collaudo: scripts/copia-gate.sh
+> # + manifest s134-ab-copia.diff) coi SOLI adattamenti del criterio p.2:
+> #  (a) A = stash pin s133 (phpr-s133, c87439a9);
+9,14c9,16
+< #      SPREAD-BATCH gambe B s132 = 6.7);
+< #  (c) bande micro-ORM FONDATE sulle gambe B del verdetto s132-ab-lo1:
+< #      objchurn 13.3 / objmap 10.0 (objalloc/objdatains sono giudici);
+< #  (d) UB modello = 35.4 (2 x 17.7, s131-propstep p.3);
+< #  (e) churn dichiarato: il tree B porta anche i commenti/debug_assert az.rev.
+< #      S-132 (c1f8f54, zero codegen release).
+---
+> #      SPREAD-BATCH gambe B s133 PER GIUDICE: objalloc 26.7, objdatains 13.3);
+> #  (c) bande micro-ORM FONDATE sulle gambe B del verdetto s133-ab-ctor:
+> #      objchurn 10.0 / objmap max(4, 0.0)=4 (objalloc/objdatains sono giudici);
+> #  (d) PARTE MODELLATA = 35.4 (2 x 17.7): D atteso SOPRA — l'eccedenza è la
+> #      somma DICHIARATA dei componenti nominati non prezzati (criterio p.2.3,
+> #      lezione az.rev. S-133 #4); riconciliazione smoke-R5 con banda =
+> #      spread-batch del giudice;
+> #  (e) churn dichiarato: nessuno (tree B = leva sola sopra il pin s133).
+24c26
+< A="/Volumes/Extreme Pro/Claude/phpr-old-target/release/phpr-s132"
+---
+> A="/Volumes/Extreme Pro/Claude/phpr-old-target/release/phpr-s133"
+28c30
+< VERD="$H/s133-$TAG-verdetto.out"
+---
+> VERD="$H/s134-$TAG-verdetto.out"
+42c44
+< [ "$(shasum -a 256 "$A" | cut -c1-8)" = "6af6e497" ] || { echo "A != pin s132 — STOP" | tee -a "$VERD"; echo 1 > "$RC"; exit 1; }
+---
+> [ "$(shasum -a 256 "$A" | cut -c1-8)" = "c87439a9" ] || { echo "A != pin s133 — STOP" | tee -a "$VERD"; echo 1 > "$RC"; exit 1; }
+54c56
+< echo "== s133-ab $TAG: A=6af6e497(pin s132) B=$BEXP R=$R ordine ALTERNATO; giudici=objalloc+objdatains (ENTRAMBI sopra soglia); soglia=max(4, drop-1, spread-batch s132 6.7); bande fondate objchurn 13.3/objmap 10.0; UB=35.4; quiescenza rc=$QRC (file: ab-out/quiesce-$TAG.rc); rc autoritativo = ab-out/$TAG.rc =="
+---
+> echo "== s134-ab $TAG: A=c87439a9(pin s133) B=$BEXP R=$R ordine ALTERNATO; giudici=objalloc+objdatains (ENTRAMBI sopra soglia); soglia=max(4, drop-1, spread-batch s133 per giudice 26.7/13.3); bande fondate objchurn 10.0/objmap 4.0; parte modellata=35.4 (eccedenza attesa e dichiarata); quiescenza rc=$QRC (file: ab-out/quiesce-$TAG.rc); rc autoritativo = ab-out/$TAG.rc =="
+82,84c84,87
+< UB = 35.4            # criterio p.2: 2 x 17.7 (s131-propstep p.3)
+< SPREAD_BATCH = 6.7   # criterio p.3: gambe B verdetto s132-ab-lo1 (objalloc
+<                      # 2.96-2.98, objdatains 3.61-3.63 @ N=3e6)
+---
+> MODEL = 35.4         # criterio p.2.3: parte MODELLATA (2 x 17.7); D atteso sopra
+> SPREAD_BATCH = {"objalloc": 26.7, "objdatains": 13.3}
+>                      # criterio p.2.2: gambe B verdetto s133-ab-ctor (objalloc
+>                      # 2.80-2.88, objdatains 3.52-3.56 @ N=3e6)
+90c93
+< # sulle gambe B del verdetto s132-ab-lo1 (criterio p.4).
+---
+> # sulle gambe B del verdetto s133-ab-ctor (criterio p.2.5).
+92c95
+< BAND = {"objmap":10.0,"objchurn":13.3}
+---
+> BAND = {"objmap":4.0,"objchurn":10.0}
+114c117
+<         thr = max(4.0, noise, SPREAD_BATCH)
+---
+>         thr = max(4.0, noise, SPREAD_BATCH[cat])
+116c119
+<         print(f"GIUDICE {cat}: A={ma:.1f} B={mb:.1f} ns/iter D={delta:+.1f} soglia={thr:.1f} (rumore drop-1: A'={ra:.1f} B'={rb:.1f}; spread-batch s132={SPREAD_BATCH}) -> {'SOPRA SOGLIA' if ok else 'SOTTO SOGLIA'}")
+---
+>         print(f"GIUDICE {cat}: A={ma:.1f} B={mb:.1f} ns/iter D={delta:+.1f} soglia={thr:.1f} (rumore drop-1: A'={ra:.1f} B'={rb:.1f}; spread-batch s133={SPREAD_BATCH[cat]}) -> {'SOPRA SOGLIA' if ok else 'SOTTO SOGLIA'}")
+119,120c122,123
+<             print(f"riconciliazione {cat}: D_smoke={dsmoke[cat]:+.1f} D_R{R}={delta:+.1f} |diff|={dd:.1f} -> {'FUORI BANDA (>soglia)' if dd > thr else 'in banda'}")
+<         print(f"riconciliazione UB {cat}: D={delta:+.1f} vs UB modello={UB:.1f} -> {'FUORI BANDA (D>UB)' if delta > UB else 'dentro UB'}")
+---
+>             print(f"riconciliazione {cat}: D_smoke={dsmoke[cat]:+.1f} D_R{R}={delta:+.1f} |diff|={dd:.1f} banda={SPREAD_BATCH[cat]} -> {'FUORI BANDA' if dd > SPREAD_BATCH[cat] else 'in banda'}")
+>         print(f"riconciliazione parte-modellata {cat}: D={delta:+.1f} vs modellata={MODEL:.1f} -> eccedenza {delta-MODEL:+.1f} = componenti nominati NON prezzati (criterio p.2.3), attesa se D>modellata")

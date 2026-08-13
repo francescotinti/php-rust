@@ -696,7 +696,8 @@ impl<'m> super::Vm<'m> {
         // ones (lazy, enum, present slot, Ref×typed_refs) are
         // re-checked here.
         if let Zval::Object(o) = &target {
-            if let Some((cid1, slot)) = ic.get(crate::bytecode::PropIc::scope_key(cur)) {
+            if let Some((cid1, raw)) = ic.get(crate::bytecode::PropIc::scope_key(cur)) {
+                let slot = raw & crate::bytecode::PropIc::SLOT_MASK;
                 let hit = {
                     let b = o.borrow();
                     b.class_id + 1 == cid1
@@ -709,6 +710,29 @@ impl<'m> super::Vm<'m> {
                         }
                 };
                 if hit {
+                    // S-134 IC non-plain (s134-criterio-icnp p.1): il ramo TY
+                    // coercisce nello stesso ordine del cammino pieno (coerce
+                    // PRIMA della scrittura, stessa esposizione a __toString)
+                    // e ri-onora le typed_refs sul post-coercizione come il
+                    // blocco del cammino pieno; ogni altro salto del ramo NP
+                    // è un fatto di classe provato al fill.
+                    if raw & crate::bytecode::PropIc::TY != 0 {
+                        let ocid = o.borrow().class_id as usize;
+                        value = self.coerce_typed_prop_write(ocid, name, value)?;
+                        if !self.typed_refs.is_empty() {
+                            let cell = {
+                                let b = o.borrow();
+                                match b.props.get_slot(slot) {
+                                    Some(Zval::Ref(c)) => Some(Rc::clone(c)),
+                                    _ => None,
+                                }
+                            };
+                            if let Some(cell) = cell {
+                                let strict = self.frames[top].module.strict;
+                                value = self.typed_ref_assign(&cell, value, strict)?;
+                            }
+                        }
+                    }
                     if let Some(old) =
                         write_property_at(&target, name, Some(slot), value.clone())?
                     {
@@ -795,6 +819,9 @@ impl<'m> super::Vm<'m> {
             // (a backing write inside the hook). The expression still
             // yields the assigned value; the hook's own return is dropped.
             let (oid, cid) = { let b = o.borrow(); (b.id, b.class_id as usize) };
+            // S-134: vero solo sul percorso che ha ESEGUITO i check hook qui
+            // sotto con esito negativo — condizione di fill del ramo NP.
+            let mut np_fillable = false;
             if !self.hook_guarded(oid, name) {
                 if let Some(func) = self.prop_hook(cid, name, true) {
                     if !DISCARD {
@@ -811,6 +838,7 @@ impl<'m> super::Vm<'m> {
                         String::from_utf8_lossy(name),
                     )));
                 }
+                np_fillable = true;
             }
             // S-133 ctor resolve-once: ONE `resolve_prop_access` for the
             // whole non-plain path — the magic-set decision and the key/slot/
@@ -872,8 +900,13 @@ impl<'m> super::Vm<'m> {
             // so a private/protected readonly reports the access error
             // first, matching PHP). A permitted first initialisation is
             // recorded so any later write fatals.
+            let ro_decl = if declared_slot {
+                prop_readonly_decl(&self.classes, ocid, name)
+            } else {
+                None
+            };
             if declared_slot {
-                if let Some(decl) = prop_readonly_decl(&self.classes, ocid, name) {
+                if let Some(decl) = ro_decl {
                     if o.borrow().readonly_clone_writable(&key) {
                         // Permitted re-initialisation during `__clone` (8.3).
                         let mut ob = o.borrow_mut();
@@ -887,6 +920,29 @@ impl<'m> super::Vm<'m> {
                             return Err(err);
                         }
                         o.borrow_mut().mark_readonly_init(&key);
+                    }
+                }
+            }
+            // S-134 «IC non-plain» (s134-criterio-icnp p.1): cache del
+            // risultato della resolve per (classe, scope) nella cella IC
+            // esistente, bit NP+TY nello slot. Fill SOLO coi fatti di classe
+            // provati SU QUESTO percorso: check hook eseguiti e negativi,
+            // slot dichiarato con key == name (mai un private mangled), asym
+            // già superato (siamo oltre il suo check), non readonly, `__set`
+            // strutturalmente ASSENTE — con un `__set` il typed-unset DEVE
+            // dispatchare il magic: l'assenza è ciò che rende il salto del
+            // magic-check un fatto di classe e non di istanza.
+            if np_fillable && declared_slot && ro_decl.is_none() && key.as_ref() == &name[..] {
+                if let Some(i) = slot_idx {
+                    if resolve_method_runtime(&self.classes, ocid, b"__set").is_none() {
+                        debug_assert_eq!(i & !crate::bytecode::PropIc::SLOT_MASK, 0);
+                        let bits = crate::bytecode::PropIc::NP
+                            | if prop_type_decl(&self.classes, ocid, name).is_some() {
+                                crate::bytecode::PropIc::TY
+                            } else {
+                                0
+                            };
+                        ic.fill(ocid as u32, crate::bytecode::PropIc::scope_key(cur), i | bits);
                     }
                 }
             }
