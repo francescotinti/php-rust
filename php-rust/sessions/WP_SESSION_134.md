@@ -34,9 +34,7 @@ prima scrittura (una cache al posto di 5 ricerche ripetute) — creare oggetti �
   concordi; la leva NON muove WP (atteso) → REPORT_GAP_134. dbal/ORM: rimisura
   DOVUTA in testa a S-135 (finestra insufficiente per la ricetta pulita).
 ## ⭐ Lezioni (max 3)
-- ⭐⭐ Dichiarare PRIMA i componenti non prezzati trasforma un «FUORI UB» in
-  riconciliazione: l'eccedenza D−35,4 era attesa e nominata, non un'anomalia.
-- ⭐⭐ Il dente delle copie (manifest AL BYTE) ha collaudato 3 copie in un'ora:
-  il costo del collaudo è crollato sotto il costo dell'incidente che previene.
-- ⭐ pin-phpr.sh non scrive il registro (la riga phpr si aggiunge a mano):
-  candidato az.rev. per chiudere la malattia alla radice.
+- ⭐⭐ Dichiarare PRIMA i componenti non prezzati trasforma il «FUORI UB» in
+  riconciliazione attesa (l'eccedenza D−35,4 era nominata, non un'anomalia).
+- ⭐⭐ Il dente delle copie (manifest AL BYTE) ha collaudato 3 copie in un'ora.
+- ⭐ pin-phpr.sh non scrive il registro (riga phpr a mano): candidato az.rev.
