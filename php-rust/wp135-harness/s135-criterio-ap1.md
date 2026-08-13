@@ -32,6 +32,14 @@
    phpr): objalloc 3,3 · objdatains 30,0 · objchurn 16,7 → soglia_reg =
    −max(4, SL); le sei micro restano al gate di promozione (catena s134,
    9 gate, pin SOLO via pin-phpr.sh/pin-server.sh emendati).
+   **EMENDA (dopo il verdetto ab-ap1, PRIMA del rerun — rev. S-112)**: il
+   run R=5 ha morso objalloc a D=−10,0 con banda 3,3 mentre il rumore
+   drop-1 del run stesso era A'=6,7/B'=13,3 — banda sotto-fondata rispetto
+   al rumore vivo. Guardie emendate alla STESSA formula del giudice:
+   soglia_reg = −max(4, banda fondata, rumore drop-1 del run per la
+   categoria). Il verdetto ab-ap1 (rc=5) resta agli atti; il rerun è
+   `ab-ap1-r2` con TUTTO il criterio riapplicato (giudice compreso);
+   una guardia che morde OLTRE il proprio rumore fa cadere la leva.
 7. **Sonde di fedeltà PRIMA dell'A/B**: fixture rapide bilaterali su
    forme dim-set (ref-base, vivify null, stringa-offset, append, nested,
    ArrayAccess, chiave float/bool/null, Busy-cycle) — phpr candidato ==

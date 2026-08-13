@@ -122,10 +122,14 @@ for cat, rs in rows.items():
         print(f"riconciliazione UB {cat}: D={delta:+.1f} vs UB={UB:.1f}+banda={SPREAD_BATCH[cat]} -> {'FUORI BANDA SOPRA (reperto a verbale, sonda dovuta)' if fb else 'dentro la banda del modello'}")
         if not ok: verdict_rc = 4
     else:
-        thr = max(4.0, BAND.get(cat, SL.get(cat, 0.0)))
+        # EMENDA criterio p.6 (rev. S-112, dopo ab-ap1): stessa formula del
+        # giudice — la soglia include il rumore drop-1 del run stesso.
+        ra, rb = trange(na), trange(nb)
+        noise = max(ra, rb)
+        thr = max(4.0, BAND.get(cat, SL.get(cat, 0.0)), noise)
         reg = delta < -thr
         band = f"SL={SL[cat]}" if cat in SL else f"banda fondata={BAND[cat]}"
-        print(f"guardia {cat}: A={ma:.1f} B={mb:.1f} D={delta:+.1f} soglia_reg={-thr:.1f} [{band}] -> {'REGRESSIONE' if reg else 'ok'}")
+        print(f"guardia {cat}: A={ma:.1f} B={mb:.1f} D={delta:+.1f} soglia_reg={-thr:.1f} [{band}; rumore drop-1 A'={ra:.1f} B'={rb:.1f}] -> {'REGRESSIONE' if reg else 'ok'}")
         if reg: verdict_rc = 5
 print("ESITO: " + {0:"PROMOSSA (giudice sopra soglia, guardie ok)",4:"NON PROMOSSA (giudice sotto soglia)",5:"GUARDIA MORDE"}[verdict_rc])
 sys.exit(verdict_rc)
