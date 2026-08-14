@@ -2,9 +2,8 @@
 ⏱ **FONDAMENTALI**: rif WP **full ON-ONLY = 1,767–1,781** (S-137 @ **pin s136**,
 N=3 coppie proprie, COMPATIBILE col precedente 1,777–1,779 su banda off 0,041;
 off 1,805 N=2; media 2,445–2,529; peak 1743–1819 RIENTRATO) — pin INVARIATO ⇒
-prossima coppia SOLO a pin nuovo · ultima leva SPEDITA S-136 (FD1) ·
-**sessioni-senza-leva = 1 (ANOMALIA S-137 dichiarata, 3 ragioni per NOME)** ·
-incidenti: storici 13 (0 nuovi S-137).
+coppia SOLO a pin nuovo · ultima leva SPEDITA S-136 (FD1) · **sessioni-senza-leva
+= 1 (ANOMALIA S-137, 3 ragioni per NOME)** · incidenti: storici 13 (0 nuovi).
 
 ## Scoreboard (pin s136 1e14793ec0d9650c + server 91c4e04321309936; micro dal gate S-136)
 
