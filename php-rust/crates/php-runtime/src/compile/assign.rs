@@ -966,7 +966,7 @@ impl<'a> super::FnCompiler<'a> {
         if place_has_prop(place) {
             let (base, steps) = self.field_path(place)?;
             self.expr(rhs)?;
-            self.emit(Op::FieldAssignOp { base, steps: steps.into(), op });
+            self.emit(Op::FieldAssignOp { base, steps: steps.into(), op, ic: PropIc::default() });
             return Ok(());
         }
         if let PlaceBase::Global(s) = place.base {
@@ -1020,7 +1020,7 @@ impl<'a> super::FnCompiler<'a> {
         }
         if place_has_prop(place) {
             let (base, steps) = self.field_path(place)?;
-            self.emit(Op::FieldIncDec { base, steps: steps.into(), inc, pre });
+            self.emit(Op::FieldIncDec { base, steps: steps.into(), inc, pre, ic: PropIc::default() });
             return Ok(());
         }
         if let PlaceBase::Global(s) = place.base {

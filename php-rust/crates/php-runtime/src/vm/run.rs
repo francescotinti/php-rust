@@ -5965,9 +5965,20 @@ impl<'m> super::Vm<'m> {
                     self.field_set(*base, top, &steps, keys, value.clone())?;
                     self.frames[top].stack.push(value);
                 }
-                Op::FieldAssignOp { base, steps, op } => {
+                Op::FieldAssignOp { base, steps, op, ic } => {
                     let rhs = self.frames[top].stack.pop().expect("FieldAssignOp rhs");
                     let keys = self.pop_field_keys(top, &steps);
+                    // S-138 FD1-ext RMW (criterio s138-criterio-rmw.md): fast
+                    // path a IC-hit; MISS restituisce keys al pieno INVARIATO.
+                    let keys = match self.field_rmw_fast(
+                        *base, top, &steps, keys, RmwArg::Bin(*op, &rhs), ic,
+                    )? {
+                        RmwFastOut::Hit(push) => {
+                            self.frames[top].stack.push(push);
+                            continue;
+                        }
+                        RmwFastOut::Miss(keys) => keys,
+                    };
                     if let Some(root) = self.byref_hook_root(*base, top, &steps)? {
                         let old = {
                             let fs = FieldScope { classes: &self.classes, scope: self.frames[top].class };
@@ -6005,10 +6016,24 @@ impl<'m> super::Vm<'m> {
                     }
                     let result = self.apply_binop_ovl(*op, &old, &rhs)?;
                     self.field_set_op(*base, top, &steps, keys, result.clone())?;
+                    // FD1-ext fill: ramo piano a esito Ok, stessi fatti F4.
+                    if self.field_prelude_skip(*base, top, &steps) {
+                        self.field_assign_fill(*base, top, &steps, ic);
+                    }
                     self.frames[top].stack.push(result);
                 }
-                Op::FieldIncDec { base, steps, inc, pre } => {
+                Op::FieldIncDec { base, steps, inc, pre, ic } => {
                     let keys = self.pop_field_keys(top, &steps);
+                    // S-138 FD1-ext RMW: fast path a IC-hit (come FieldAssignOp).
+                    let keys = match self.field_rmw_fast(
+                        *base, top, &steps, keys, RmwArg::IncDec { inc: *inc, pre: *pre }, ic,
+                    )? {
+                        RmwFastOut::Hit(push) => {
+                            self.frames[top].stack.push(push);
+                            continue;
+                        }
+                        RmwFastOut::Miss(keys) => keys,
+                    };
                     if let Some(root) = self.byref_hook_root(*base, top, &steps)? {
                         let old = {
                             let fs = FieldScope { classes: &self.classes, scope: self.frames[top].class };
@@ -6049,6 +6074,10 @@ impl<'m> super::Vm<'m> {
                         ops::decrement(&mut newv, &mut self.diags)?;
                     }
                     self.field_set_op(*base, top, &steps, keys, newv.clone())?;
+                    // FD1-ext fill: ramo piano a esito Ok, stessi fatti F4.
+                    if self.field_prelude_skip(*base, top, &steps) {
+                        self.field_assign_fill(*base, top, &steps, ic);
+                    }
                     self.frames[top].stack.push(if *pre { newv } else { old });
                 }
                 Op::FieldIsset { base, steps } => {

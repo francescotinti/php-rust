@@ -1,6 +1,20 @@
 //! VM arrays logic, extracted from vm/mod.rs (no semantic change).
 use super::*;
 
+/// S-138 «FD1-ext RMW»: argomento dell'op per `field_rmw_fast` — il binop
+/// tiene il rhs in prestito (sul MISS resta al chiamante per il pieno).
+pub(super) enum RmwArg<'a> {
+    Bin(crate::hir::BinOp, &'a Zval),
+    IncDec { inc: bool, pre: bool },
+}
+
+/// Esito di `field_rmw_fast`: `Hit(v)` = scritto, `v` da pushare;
+/// `Miss(keys)` = cammino pieno INVARIATO con le keys restituite.
+pub(super) enum RmwFastOut {
+    Hit(Zval),
+    Miss(Vec<Zval>),
+}
+
 /// Silently follow `keys` from `cell` without auto-vivifying anything, returning
 /// the leaf value if the whole path exists (an unset variable or a missing key
 /// at any level yields `None`). Backs `isset` / `empty`. A reference is followed;
@@ -1585,6 +1599,190 @@ impl<'m> Vm<'m> {
         }
         self.drain_aa_pending(aa, top, false, false)?;
         Ok(None)
+    }
+
+    /// S-138 «FD1-ext RMW» (criterio s138-criterio-rmw.md): fast path a
+    /// IC-hit per `$o->prop[k] op= rhs` e `$o->prop[k]++/--`. Il pieno paga
+    /// DUE walk (read `field_value` + write `field_set_op`) più il preludio
+    /// byref/indirect/lazy; qui: admission IDENTICA a `field_assign_fast`
+    /// (stessa cella NP, stessi fatti provati al fill) + peek dell'entry +
+    /// op SILENTE per perimetro + `field_write_walk` RIUSATO sul child
+    /// (leaf identico per costruzione, disciplina S-136).
+    /// PERIMETRO (tutto il resto → `Miss`, pieno INVARIATO): 1 chiave
+    /// {Long, Str} con coercizione silente ≡ diag; entry PRESENTE (assente:
+    /// il pieno emette il suo warning); old (deref) {Long, Double};
+    /// AssignOp solo {Add, Sub, Mul} con rhs {Long, Double}; IncDec con old
+    /// {Long, Double} (string-increment deprecato resta al pieno). Gli op
+    /// ammessi sono puri e senza diagnostica: nessun codice utente gira tra
+    /// peek e write-back e il borrow dell'oggetto resta VIVO per l'intera
+    /// finestra (lo stato non può cambiare sotto i piedi).
+    pub(super) fn field_rmw_fast(
+        &mut self,
+        base: FieldBase,
+        top: usize,
+        steps: &[FieldStep],
+        keys: Vec<Zval>,
+        rmw: RmwArg<'_>,
+        ic: &crate::bytecode::PropIc,
+    ) -> Result<RmwFastOut, PhpError> {
+        use crate::bytecode::PropIc;
+        use crate::hir::BinOp;
+        if steps.len() != 2
+            || !matches!(steps[0], FieldStep::Prop(_))
+            || !matches!(steps[1], FieldStep::Index)
+            || keys.len() != 1
+        {
+            return Ok(RmwFastOut::Miss(keys));
+        }
+        if let RmwArg::Bin(op, rhs) = &rmw {
+            if !matches!(op, BinOp::Add | BinOp::Sub | BinOp::Mul)
+                || !matches!(rhs, Zval::Long(_) | Zval::Double(_))
+            {
+                return Ok(RmwFastOut::Miss(keys));
+            }
+        }
+        if !matches!(keys[0], Zval::Long(_) | Zval::Str(_)) {
+            return Ok(RmwFastOut::Miss(keys));
+        }
+        let scope = self.frames[top].class;
+        let Some((cid1, bits)) = ic.get(PropIc::scope_key(scope)) else {
+            return Ok(RmwFastOut::Miss(keys));
+        };
+        if bits & PropIc::NP == 0 {
+            return Ok(RmwFastOut::Miss(keys));
+        }
+        let si = bits & PropIc::SLOT_MASK;
+        let cell = match base {
+            FieldBase::Local(s) => self.frames[top].slots.get(s as usize),
+            FieldBase::Global(s) => self.frames[0].slots.get(s as usize),
+            FieldBase::Superglobal(i) => self.superglobals.get(i as usize),
+            FieldBase::This => self.frames[top].this.as_ref(),
+        };
+        let Some(Zval::Object(o)) = cell else { return Ok(RmwFastOut::Miss(keys)) };
+        let o = Rc::clone(o);
+        let Ok(mut obj) = o.try_borrow_mut() else {
+            // Base mid-write: come in field_assign_fast, la rotta contata
+            // (cell_skip) appartiene al pieno.
+            return Ok(RmwFastOut::Miss(keys));
+        };
+        if obj.class_id as u32 + 1 != cid1
+            || obj.lazy.is_some()
+            || obj.proxy_instance.is_some()
+            || obj.info.is_enum_case
+        {
+            return Ok(RmwFastOut::Miss(keys));
+        }
+        let Some(k) = coerce_key_silent(&keys[0]) else {
+            return Ok(RmwFastOut::Miss(keys));
+        };
+        let old = {
+            let Some(child) = obj.props.get_slot_mut(si) else {
+                drop(obj);
+                return Ok(RmwFastOut::Miss(keys));
+            };
+            let Zval::Array(a) = &*child else {
+                drop(obj);
+                return Ok(RmwFastOut::Miss(keys));
+            };
+            let Some(entry) = a.get(&k) else {
+                // Chiave assente: il warning "Undefined array key" è del pieno.
+                drop(obj);
+                return Ok(RmwFastOut::Miss(keys));
+            };
+            entry.deref_clone()
+        };
+        if !matches!(old, Zval::Long(_) | Zval::Double(_)) {
+            drop(obj);
+            return Ok(RmwFastOut::Miss(keys));
+        }
+        // Op silente per perimetro: nessuna diagnostica, nessun codice utente
+        // (il borrow di `obj` resta vivo: `o` è un Rc locale, non `self`).
+        let (result, push) = match rmw {
+            RmwArg::Bin(op, rhs) => {
+                let r = self.apply_binop_ovl(op, &old, rhs)?;
+                (r.clone(), r)
+            }
+            RmwArg::IncDec { inc, pre } => {
+                let mut newv = old.clone();
+                if inc {
+                    ops::increment(&mut newv, &mut self.diags)?;
+                } else {
+                    ops::decrement(&mut newv, &mut self.diags)?;
+                }
+                let push = if pre { newv.clone() } else { old };
+                (newv, push)
+            }
+        };
+        let fs = FieldScope { classes: &self.classes, scope };
+        let mut dropped = Vec::new();
+        let mut aa = None;
+        let mut keys_it;
+        let walk0 = {
+            let Some(child) = obj.props.get_slot_mut(si) else {
+                // Irraggiungibile (borrow tenuto): il pieno resta corretto.
+                drop(obj);
+                return Ok(RmwFastOut::Miss(keys));
+            };
+            keys_it = keys.into_iter();
+            field_write_walk(
+                child, steps, 1, &mut keys_it, fs, result, &mut self.diags, &mut dropped,
+                &mut aa, false, false,
+            )
+        };
+        drop(obj);
+        // Replica letterale del loop di `field_write` (boundary token dopo il
+        // rilascio del borrow, discipline M-71.1 invariata).
+        let mut werr = None;
+        let mut walk = match walk0 {
+            Ok(w) => w,
+            Err(e) => {
+                werr = Some(e);
+                WriteWalk::Done
+            }
+        };
+        loop {
+            walk = match walk {
+                WriteWalk::Done => break,
+                WriteWalk::IntoRef(rc, i, value) => match rc.try_borrow_mut() {
+                    Ok(mut g) => {
+                        match field_write_walk(
+                            &mut g, steps, i, &mut keys_it, fs, value, &mut self.diags,
+                            &mut dropped, &mut aa, false, false,
+                        ) {
+                            Ok(w) => w,
+                            Err(e) => {
+                                werr = Some(e);
+                                WriteWalk::Done
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        cell_skip_note();
+                        WriteWalk::Done
+                    }
+                },
+                WriteWalk::IntoObj(o2, i, value) => {
+                    match field_write_prop_step(
+                        &o2, steps, i, &mut keys_it, fs, value, &mut self.diags, &mut dropped,
+                        &mut aa, false, false,
+                    ) {
+                        Ok(w) => w,
+                        Err(e) => {
+                            werr = Some(e);
+                            WriteWalk::Done
+                        }
+                    }
+                }
+            };
+        }
+        for d in &dropped {
+            self.gc_note(d);
+        }
+        if let Some(e) = werr {
+            return Err(e);
+        }
+        self.drain_aa_pending(aa, top, false, false)?;
+        Ok(RmwFastOut::Hit(push))
     }
 
     /// Fill della cella FD1 (criterio p.2) — chiamato SOLO dal ramo F4 del

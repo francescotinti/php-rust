@@ -1334,9 +1334,12 @@ pub enum Op {
     FieldAssign { base: FieldBase, steps: Rc<[FieldStep]>, ic: PropIc },
     /// `[keys…, rhs] -> [result]` — compound `place op= rhs`: read the place (NULL
     /// if absent), apply `op`, write back, leave the result.
-    FieldAssignOp { base: FieldBase, steps: Rc<[FieldStep]>, op: BinOp },
+    /// S-138 «FD1-ext RMW»: stessa cella IC di `FieldAssign` per il fast path
+    /// `[Prop, Index]` (criterio s138-criterio-rmw.md).
+    FieldAssignOp { base: FieldBase, steps: Rc<[FieldStep]>, op: BinOp, ic: PropIc },
     /// `[keys…] -> [result]` — `++`/`--` on a mixed place (read, apply, write back).
-    FieldIncDec { base: FieldBase, steps: Rc<[FieldStep]>, inc: bool, pre: bool },
+    /// S-138 «FD1-ext RMW»: cella IC come sopra.
+    FieldIncDec { base: FieldBase, steps: Rc<[FieldStep]>, inc: bool, pre: bool, ic: PropIc },
     /// `[keys…] -> [bool]` — `isset()` of a mixed place: true iff every level
     /// exists and the leaf is non-null (silent).
     FieldIsset { base: FieldBase, steps: Rc<[FieldStep]> },
