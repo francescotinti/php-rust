@@ -1,0 +1,129 @@
+2,16c2,14
+< # s136-ab.sh <BPATH> <BEXP8> <TAG> <R> [DSMOKE_OBJDATAINS] — LEVA FD1 fast-path
+< # dim-write su prop (criterio s136-criterio-dimwrite.md, commit PRIMA di ogni run).
+< # COPIA DICHIARATA di wp135-harness/s135-ab.sh (collaudo: scripts/copia-gate.sh
+< # + manifest s136-ab-copia.diff) coi SOLI adattamenti del criterio p.3-7:
+< #  (a) A = stash pin s135 (phpr-s135, 6518a1e1);
+< #  (b) UN GIUDICE: objdatains; soglia = max(4, rumore drop-1 del run,
+< #      SPREAD-BATCH objdatains s135-submicro: 13.3);
+< #  (c) guardie micro-ORM con bande = spread s135-submicro phpr:
+< #      objalloc 13.3 · objmap 3.3 · objchurn 6.7 · objallocni 10.0;
+< #  (d) UB FALSIFICABILE = 69.6 (walk_driver 37.2 + resolve 6.7 + guardia 11.3
+< #      + prop_step_altro 14.4, prezzi MISURATI da s136-tempo-verdetto.out):
+< #      D > UB+banda(13.3)=82.9 = FUORI BANDA dichiarato a verbale;
+< #      riconciliazione smoke-R5 con banda = spread-batch giudice (13.3);
+< #  (e) churn dichiarato: il tree B porta ANCHE az.rev. S-135 #3 (contatore
+< #      AP1_BUSY su ramo dichiarato irraggiungibile — codice freddo).
+---
+> # s138-ab-rmw.sh <BPATH> <BEXP8> <TAG> <R> [SMOKE=0|1] [DSM_RMW] [DSM_INC] —
+> # LEVA FD1-ext RMW (criterio s138-criterio-rmw.md, commit PRIMA di ogni run).
+> # COPIA DICHIARATA di wp136-harness/s136-ab.sh coi SOLI adattamenti:
+> #  (a) A = stash pin s136 (phpr-s136, 1e14793e); B = candidato RMW;
+> #  (b) DUE GIUDICI: m-dimrmw e m-diminc (wp138-harness, N=3e6 dal sorgente);
+> #      soglia = max(4, rumore drop-1 del run, spread-batch famiglia FD1 13.3);
+> #  (c) SMOKE=1 (az.rev. S-136 #1): SOLO i giudici, NESSUNA guardia — le
+> #      guardie si giudicano SOLO a R=5 col drop-1 vero;
+> #  (d) guardie R=5: objdatains (banda fondata 13.3) + le sei micro (SL);
+> #  (e) UB parte-modellata = 63.3 (prezzo CHIUSO dall'A/B s135<->s136 su
+> #      m-dimwrite, s138-ab-mdw-verdetto.out); componenti NON prezzate
+> #      dichiarate nel criterio p.4; D > 63.3+100 = FUORI MODELLO (sonda
+> #      dovuta prima di promuovere).
+26c24
+< A="/Volumes/Extreme Pro/Claude/phpr-old-target/release/phpr-s135"
+---
+> A="/Volumes/Extreme Pro/Claude/phpr-old-target/release/phpr-s136"
+28c26,27
+< BB="${1:?BPATH}"; BEXP="${2:?BEXP8}"; TAG="${3:?TAG}"; R="${4:?R}"; DSM="${5:-}"
+---
+> BB="${1:?BPATH}"; BEXP="${2:?BEXP8}"; TAG="${3:?TAG}"; R="${4:?R}"
+> SMOKE="${5:-0}"; DSM_RMW="${6:-}"; DSM_INC="${7:-}"
+30c29
+< VERD="$H/s136-$TAG-verdetto.out"
+---
+> VERD="$H/s138-$TAG-verdetto.out"
+32c31
+<   echo "verdetto $VERD ESISTE — tentativo nuovo = TAG nuovo (az.rev. S-131 #5)" >&2
+---
+>   echo "verdetto $VERD ESISTE — tentativo nuovo = TAG nuovo" >&2
+44c43
+< [ "$(shasum -a 256 "$A" | cut -c1-8)" = "6518a1e1" ] || { echo "A != pin s135 — STOP" | tee -a "$VERD"; echo 1 > "$RC"; exit 1; }
+---
+> [ "$(shasum -a 256 "$A" | cut -c1-8)" = "1e14793e" ] || { echo "A != pin s136 — STOP" | tee -a "$VERD"; echo 1 > "$RC"; exit 1; }
+50c49
+< src_of() { case "$1" in objalloc|objchurn|objmap|objdatains|objallocni) echo "$M";; *) echo "$M97";; esac; }
+---
+> src_of() { case "$1" in m-dimrmw|m-diminc) echo "$H";; objalloc|objchurn|objmap|objdatains|objallocni) echo "$M";; *) echo "$M97";; esac; }
+52,53c51,56
+< CATS_JUDGE="objdatains"
+< CATS_GUARD="objalloc objmap objchurn objallocni arith prop calls str arr re"
+---
+> CATS_JUDGE="m-dimrmw m-diminc"
+> if [ "$SMOKE" = 1 ]; then
+>   CATS_GUARD=""
+> else
+>   CATS_GUARD="objdatains arith prop calls str arr re"
+> fi
+56c59
+< echo "== s136-ab $TAG: A=6518a1e1(pin s135) B=$BEXP R=$R ordine ALTERNATO; giudice=objdatains; soglia=max(4, drop-1, spread-batch s135 13.3); UB falsificabile=69.6 (+banda 13.3 => fuori banda sopra 82.9); guardie fondate objalloc 13.3/objmap 3.3/objchurn 6.7/objallocni 10.0; quiescenza rc=$QRC (file: ab-out/quiesce-$TAG.rc); rc autoritativo = ab-out/$TAG.rc =="
+---
+> echo "== s138-ab-rmw $TAG: A=1e14793e(pin s136) B=$BEXP R=$R SMOKE=$SMOKE ordine ALTERNATO; giudici=m-dimrmw,m-diminc; soglia=max(4, drop-1, spread-batch 13.3); UB parte-modellata=63.3 (fuori modello sopra 163.3); guardie $([ "$SMOKE" = 1 ] && echo NESSUNA-allo-smoke || echo "objdatains+sei micro, solo a R=$R"); quiescenza rc=$QRC; rc autoritativo = ab-out/$TAG.rc =="
+78c81
+< python3 - "$TSV" "$R" "$DSM" <<'PY'
+---
+> python3 - "$TSV" "$R" "$DSM_RMW" "$DSM_INC" <<'PY'
+82,87c85,90
+< if len(sys.argv) > 3 and sys.argv[3]: dsmoke["objdatains"] = float(sys.argv[3])
+< UB = 69.6            # criterio p.3: walk_driver 37.2 + resolve 6.7 +
+<                      # guardia 11.3 + prop_step_altro 14.4 (prezzi MISURATI,
+<                      # s136-tempo-verdetto.out; tetto per costruzione)
+< SPREAD_BATCH = {"objdatains": 13.3}
+<                      # criterio p.5: spread s135-submicro objdatains 0.04 s @3e6
+---
+> if len(sys.argv) > 3 and sys.argv[3]: dsmoke["m-dimrmw"] = float(sys.argv[3])
+> if len(sys.argv) > 4 and sys.argv[4]: dsmoke["m-diminc"] = float(sys.argv[4])
+> UB_MOD = 63.3        # criterio p.4: parte modellata (prezzo CHIUSO A/B s135<->s136
+>                      # su m-dimwrite); componenti non prezzate dichiarate per NOME
+> FUORI_MODELLO = UB_MOD + 100.0
+> SPREAD_BATCH = 13.3  # famiglia FD1 (s135-submicro objdatains), dichiarato p.3
+92,93d94
+< # SL storiche (max s123/s125, committate) per le sei; bande micro-ORM =
+< # spread s135-submicro phpr (criterio p.7).
+95c96
+< BAND = {"objalloc":13.3,"objmap":3.3,"objchurn":6.7,"objallocni":10.0}
+---
+> BAND = {"objdatains":13.3}
+100d100
+<     # az.rev. S-131 #4: tie-break deterministico — chiave (|x-m|, x).
+107,108c107,109
+< JUDGES = ("objdatains",)
+< for cat, rs in rows.items():
+---
+> JUDGES = ("m-dimrmw", "m-diminc")
+> for cat in [c for c in JUDGES if c in rows] + [c for c in rows if c not in JUDGES]:
+>     rs = rows[cat]
+117c118
+<         thr = max(4.0, noise, SPREAD_BATCH[cat])
+---
+>         thr = max(4.0, noise, SPREAD_BATCH)
+119c120
+<         print(f"GIUDICE {cat}: A={ma:.1f} B={mb:.1f} ns/iter D={delta:+.1f} soglia={thr:.1f} (rumore drop-1: A'={ra:.1f} B'={rb:.1f}; spread-batch s135={SPREAD_BATCH[cat]}) -> {'SOPRA SOGLIA' if ok else 'SOTTO SOGLIA'}")
+---
+>         print(f"GIUDICE {cat}: A={ma:.1f} B={mb:.1f} ns/iter D={delta:+.1f} soglia={thr:.1f} (rumore drop-1: A'={ra:.1f} B'={rb:.1f}) -> {'SOPRA SOGLIA' if ok else 'SOTTO SOGLIA'}")
+122,124c123,126
+<             print(f"riconciliazione {cat}: D_smoke={dsmoke[cat]:+.1f} D_R{R}={delta:+.1f} |diff|={dd:.1f} banda={SPREAD_BATCH[cat]} -> {'FUORI BANDA' if dd > SPREAD_BATCH[cat] else 'in banda'}")
+<         fb = delta > UB + SPREAD_BATCH[cat]
+<         print(f"riconciliazione UB {cat}: D={delta:+.1f} vs UB={UB:.1f}+banda={SPREAD_BATCH[cat]} -> {'FUORI BANDA SOPRA (reperto a verbale, sonda dovuta)' if fb else 'dentro la banda del modello'}")
+---
+>             print(f"riconciliazione {cat}: D_smoke={dsmoke[cat]:+.1f} D_R{R}={delta:+.1f} |diff|={dd:.1f} banda={SPREAD_BATCH} -> {'FUORI BANDA' if dd > SPREAD_BATCH else 'in banda'}")
+>         sc = delta - UB_MOD
+>         fm = delta > FUORI_MODELLO
+>         print(f"vs parte-modellata {cat}: D={delta:+.1f} vs 63.3 -> scarto {sc:+.1f} ({'FUORI MODELLO: sonda dovuta prima di promuovere' if fm else 'eccedenza attribuita alle componenti dichiarate (read-walk, preludio, peek+op)' if sc > SPREAD_BATCH else 'dentro la banda della parte modellata'})")
+125a128
+>         if fm: verdict_rc = 6
+127,128d129
+<         # EMENDA criterio p.6 (rev. S-112, dopo ab-ap1): stessa formula del
+<         # giudice — la soglia include il rumore drop-1 del run stesso.
+136c137
+< print("ESITO: " + {0:"PROMOSSA (giudice sopra soglia, guardie ok)",4:"NON PROMOSSA (giudice sotto soglia)",5:"GUARDIA MORDE"}[verdict_rc])
+---
+> print("ESITO: " + {0:"PROMOSSA (giudici sopra soglia, guardie ok)",4:"NON PROMOSSA (giudice sotto soglia)",5:"GUARDIA MORDE",6:"FUORI MODELLO (sonda dovuta)"}[verdict_rc])
