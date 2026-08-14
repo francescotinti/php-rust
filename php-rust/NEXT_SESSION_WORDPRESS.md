@@ -34,14 +34,13 @@ APPARATO: CI batteria-FAIL = ambiente work-dir (access/fstat): sanare o dichiara
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
 
-eccedenza FD1 +13,7 (sonda v2 = §S-138 p.1) · estensione FD1 FieldAssignOp/IncDec
-(SBLOCCA con p.1) · objdatains residuo (leaf 18,9 · plumbing 17,6) · objmap:
-chiave 10,0 (sotto soglia) — valore-oggetto 43,4 SPOSTATO al piano GC · dispatch
-fuori prop_step 36,3 · walk_driver 37,2 (tutti i Field*) · cammini non cacheabili
-(readonly, mangled, `__set`, slot assente, child Ref) · famiglia locale 170 ns ·
-evalcls 316,9× · refl 42,4× · re +2,00 alloc/iter · 14% modello AssignPath ·
-§3.13 · §3.12-i · §3.14 · §3.21 · get_gc · drift TODO.md · latin1-cliff ·
-media bordo 2,529 (nuovo bordo S-137, osservazione).
+eccedenza FD1 +13,7 (sonda v2 = p.1) · estensione FD1 AssignOp/IncDec (sblocca
+con p.1) · objdatains residuo (leaf 18,9 · plumbing 17,6) · objmap: chiave 10,0
+sotto soglia, valore-oggetto 43,4 SPOSTATO al piano GC · dispatch 36,3 ·
+walk_driver 37,2 (tutti i Field*) · cammini non cacheabili (readonly, mangled,
+`__set`, slot assente, child Ref) · famiglia locale 170 ns · evalcls 316,9× ·
+refl 42,4× · re +2,00 alloc/iter · 14% AssignPath · §3.13 · §3.12-i · §3.14 ·
+§3.21 · get_gc · drift TODO.md · latin1-cliff · media bordo 2,529 (osservazione).
 
 ## NON riproporre (i veti restano; dettaglio nei concili archiviati)
 
