@@ -1,0 +1,66 @@
+2c2
+< # s134-pair.sh <tentativo> — S-134 p.5: coppia full/media WP sul pin s134 (a fine leva IC non-plain),
+---
+> # s136-pair.sh <tentativo> — S-136 p.1: coppia full/media WP sul pin s135 (OBBLIGO pin nuovo),
+4,10c4,11
+< # gia committato). COPIA DICHIARATA di wp133-harness/s133-pair.sh (collaudo:
+< # copia-gate + manifest s134-pair-copia.diff) coi SOLI
+< # adattamenti: pin s134 (phpr+server); az.rev. S-131 #5 (verdetto = FILE NUOVO
+< # per tentativo, rifiuto se esiste); az.rev. S-131 #3 (giudice: riferimento
+< # PER CONFIGURAZIONE con ON-ONLY canonico + firma per gamba ictx%/rank CPU
+< # oracle). Tutto il resto INVARIATO: warm-up media-only MAI giudicata, 4 gambe
+< # intercalate off1->on1->off2->on2 (pair109 INVARIATA), quiescenza gate
+---
+> # gia committato) + s136-criterio-pair.md (confronto formale col rif 1,769 su
+> # banda off 0,041). COPIA DICHIARATA di wp134-harness/s134-pair.sh (collaudo:
+> # copia-gate + manifest s136-pair-copia.diff) coi SOLI
+> # adattamenti: pin s135 (phpr+server); N>=3 ON-ONLY (az.rev. S-134 #4: TRE
+> # gambe per configurazione, off1->on1->off2->on2->off3->on3); giudice esteso
+> # col confronto formale al riferimento 1,769 (banda = variabilita' off 0,041).
+> # Tutto il resto INVARIATO: warm-up media-only MAI giudicata, gambe
+> # intercalate (pair109 INVARIATA), quiescenza gate
+12c13
+< # rc autoritativo = SOLO pair-out/pair134-<tentativo>.done scritto QUI.
+---
+> # rc autoritativo = SOLO pair-out/pair136-<tentativo>.done scritto QUI.
+16c17
+< H="$REPO/wp134-harness"
+---
+> H="$REPO/wp136-harness"
+21c22
+< VERD="$H/s134-pair-verdetto-$T.out"
+---
+> VERD="$H/s136-pair-verdetto-$T.out"
+26c27
+< DONE="$OUT/pair134-$T.done"
+---
+> DONE="$OUT/pair136-$T.done"
+35,36c36,37
+< PIN_ATTESO="61896da13654fd00"
+< SRV_ATTESO="461bfb5556164cfa"
+---
+> PIN_ATTESO="6518a1e14a266d52"
+> SRV_ATTESO="e2efdf15bf74d8c9"
+77c78
+< # ---- 4 gambe intercalate off1->on1->off2->on2 (pair109 INVARIATA)
+---
+> # ---- 6 gambe intercalate off1->on1->off2->on2->off3->on3 (pair109 INVARIATA)
+79c80
+< for leg in 1 2; do
+---
+> for leg in 1 2 3; do
+108,110c109,111
+< legs = ["leg1-off", "leg1-on", "leg2-off", "leg2-on"]
+< print(f"== s134 coppia WP full+media sul pin s134 tentativo={T} (criterio s132-criterio-pair.md RIUSATO) ==")
+< print(f"grade=VERDICT  # derivazione meccanica dai .time; rc autoritativo = pair-out/pair134-{T}.done")
+---
+> legs = ["leg1-off", "leg1-on", "leg2-off", "leg2-on", "leg3-off", "leg3-on"]
+> print(f"== s136 coppia WP full+media sul pin s135 tentativo={T} (criterio s132-criterio-pair.md RIUSATO + s136-criterio-pair.md) ==")
+> print(f"grade=VERDICT  # derivazione meccanica dai .time; rc autoritativo = pair-out/pair136-{T}.done")
+166a168,173
+>     if cfg == "on":
+>         REF, BANDA = 1.769, 0.041  # s136-criterio-pair.md: rif S-134 on-only, banda = variabilita' off s134
+>         dentro = all(abs(r - REF) <= BANDA for r in props)
+>         print(f"confronto_formale_rif: on-only vs {REF} banda {BANDA} -> " +
+>               ("COMPATIBILE (tutte le coppie proprie dentro)" if dentro else
+>                "FUORI BANDA: " + " ".join(f"{r:.3f}(d={r-REF:+.3f})" for r in props if abs(r - REF) > BANDA)))
