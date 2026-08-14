@@ -28,8 +28,7 @@ inlining del probe; indizio: plumbing +13,0) ⇒ blocco leve dim-write ATTIVO**.
 2. **Criterio leva con az.rev. S-136 #1 e #5** (OBBLIGO al primo criterio): ruolo
    smoke sulle guardie PRE-REGISTRATO · working tree DICHIARATO pulito al commit.
 3. **Az.rev. S-137** (`wp137-harness/revisione.md`): vincolanti.
-4. Se p.1 non chiude: leva NON-dim-write con prezzi misurati propri (dispatch
-   36,3 SOLO dopo modello; 14% AssignPath).
+4. Se p.1 non chiude: leva NON-dim-write con prezzi propri (dispatch 36,3 SOLO dopo modello; 14% AssignPath).
 APPARATO: CI batteria-FAIL = ambiente work-dir (access/fstat): sanare o dichiarare noto.
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
