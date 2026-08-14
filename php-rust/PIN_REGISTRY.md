@@ -13,6 +13,7 @@ nello stesso atto perché appenda in QUESTA sezione.)
 
 | pin (sha256/16) | sessione | ricetta | collaudato | evidenza |
 |---|---|---|---|---|
+| a9aded4516e6d46c | s138 | `cargo build --release -p php-server --features axum-server` @ c98569e | smoke --axum OK 2026-08-14 20:39:10; pin phpr INVARIATO (fa17dabd9eaa4bcb); GRADO PIENO a parte (s106-grado-server.sh) | stash `php-server-s138` |
 | 91c4e04321309936 | s136 | `cargo build --release -p php-server --features axum-server` @ 414e6e1 | smoke --axum OK 2026-08-14 10:34:38; pin phpr INVARIATO (1e14793ec0d9650c); GRADO PIENO a parte (s106-grado-server.sh) | stash `php-server-s136` |
 | e2efdf15bf74d8c9 | s135 | `cargo build --release -p php-server --features axum-server` @ 0326676 | smoke --axum OK 2026-08-13 21:00:08; pin phpr INVARIATO (6518a1e14a266d52); GRADO PIENO a parte (s106-grado-server.sh) | stash `php-server-s135` |
 | 461bfb5556164cfa | s134 | `cargo build --release -p php-server --features axum-server` @ 311d1f8 | smoke --axum OK 2026-08-13 13:54:10; pin phpr INVARIATO (61896da13654fd00); GRADO PIENO a parte (s106-grado-server.sh) | stash `php-server-s134` |
