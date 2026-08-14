@@ -1,0 +1,26 @@
+== s138 disasm az.rev. S-137 #1 (criterio s138-criterio-disasm.md, commit 7568bb1 PRIMA del disasm probe) ==
+pin: 1e14793ec0d9650c (canonico)
+probe: RICOSTRUITO con ricetta S-137 (worktree @ HEAD ec56e93, crate == pin
+  verificato con git diff 24d56db..HEAD -- '*.rs' = solo wp137-harness/s137tp.rs;
+  patch s137-tp-s136.patch; CARGO_TARGET_DIR phpr-s137-target-s136)
+  hash = 0b20947a4f438ac7 ≠ 8dc582d9 originale: RICETTA IDENTICA, HASH DIVERSO
+  (build emendata, MAI pinnabile; il binario 8dc582d9 non esiste più — fa fede
+  la ricetta, rischio residuo dichiarato)
+
+nm field_assign_fast: pin ASSENTE · probe ASSENTE  -> INLINE MANTENUTO in entrambi
+bl-count run_loop: pin 5983 · probe 6046 (delta +63)
+bersagli nominati (pin -> probe): field_write_walk 2->2 · field_write_prop_step
+  1->1 · field_assign_fill 1->1 · pop_field_keys 12->12  (NESSUN flip)
+delta +63 nominato: Instant::elapsed x14 (= 7 coppie t0/add: 4 in run.rs + 3 in
+  arrays.rs — le coppie di arrays.rs COMPAIONO NEL CORPO di run_loop: seconda
+  prova dell'inline di field_assign_fast nel probe) · OnceLock::initialize x30
+  (cold path) · stub dyld (clock/esterni) · drop del temporaneo s137_r x1
+
+ESITO (criterio p.4): IPOTESI ARTEFATTO-INLINING **REFUTATA** — i timer al
+call-site NON rompono l'inlining di field_assign_fast; la struttura delle
+chiamate del run_loop è invariata sui bersagli nominati.
+IPOTESI SOSTITUTIVA (nominata, NON misurata): densità di call-site timer
+INATTIVI dentro l'arm v1 (~14 siti elapsed + ~14 check branch+load inattivi per
+run attivo; seg9 calibra SOLO la coppia attiva, non i check inattivi nel span)
+-> da mettere alla prova con la sonda v2 arm-only (2 soli check inattivi nello
+span seg0). arm v2 atteso ~34,9 se l'ipotesi regge.

@@ -1,0 +1,41 @@
+diff --git a/php-rust/crates/php-runtime/src/vm/mod.rs b/php-rust/crates/php-runtime/src/vm/mod.rs
+index 4900a94..e550722 100644
+--- a/php-rust/crates/php-runtime/src/vm/mod.rs
++++ b/php-rust/crates/php-runtime/src/vm/mod.rs
+@@ -84,6 +84,9 @@ mod tidy;
+ mod xslt;
+ mod tokenizer;
+ mod websapi;
++// S-138 sonda v2 arm-only (build emendata, worktree): MAI nel pin.
++#[path = "../../../../wp137-harness/s137tp.rs"]
++pub(crate) mod s137tp;
+ use arrays::*;
+ use calls::*;
+ use oop::*;
+diff --git a/php-rust/crates/php-runtime/src/vm/run.rs b/php-rust/crates/php-runtime/src/vm/run.rs
+index 3bde67e..b5de598 100644
+--- a/php-rust/crates/php-runtime/src/vm/run.rs
++++ b/php-rust/crates/php-runtime/src/vm/run.rs
+@@ -5926,6 +5926,14 @@ impl<'m> super::Vm<'m> {
+                     self.frames[top].stack.push(if *pre { newv } else { old });
+                 }
+                 Op::FieldAssign { base, steps, ic } => {
++                    // S-138 sonda v2 ARM-ONLY (criterio s138-criterio-sonda-v2.md):
++                    // seg0 = arm intero, seg9 = span vuoto (calibrazione).
++                    // NESSUN timer al call-site di field_assign_fast, NESSUN
++                    // sotto-segmento, NESSUN hit/miss compilato: l'inlining
++                    // del bersaglio resta libero (verdetto disasm S-138).
++                    let s138_t0 = super::s137tp::t0(0);
++                    let s138_t9 = super::s137tp::t0(9);
++                    super::s137tp::add(9, s138_t9);
+                     let value = self.frames[top].stack.pop().expect("FieldAssign value");
+                     let keys = self.pop_field_keys(top, &steps);
+                     // S-136 FD1 (criterio s136-criterio-dimwrite.md): fast
+@@ -5934,6 +5942,7 @@ impl<'m> super::Vm<'m> {
+                     let keys = match self.field_assign_fast(*base, top, &steps, keys, value.clone(), ic)? {
+                         None => {
+                             self.frames[top].stack.push(value);
++                            super::s137tp::add(0, s138_t0);
+                             continue;
+                         }
+                         Some((keys, _)) => keys,
