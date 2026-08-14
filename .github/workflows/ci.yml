@@ -58,8 +58,15 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y zlib1g-dev pkg-config libgd-dev libtidy-dev libxslt1-dev
       - name: Build (release)
         run: cargo build --release --workspace
+      # Il test differenziale (php-builtins) pretende l'oracle PHP 8.5.7 e su
+      # runner Linux non c'è: skip ESPLICITO con la valvola prevista dal test
+      # stesso (primo run S-139: panic "PHP oracle non trovato" con istruzioni).
+      # Installare un PHP di distro ≠ 8.5.7 brew pinnato darebbe rossi spuri:
+      # il differenziale resta gate LOCALE (header).
       - name: Unit tests
         run: cargo test --release --workspace
+        env:
+          PHPR_ALLOW_MISSING_ORACLE: 1
       # A-AH2/A-AH3 (Council WP-78) + A-AH10 (Council WP-80) + A-AH16 (Council
       # WP-81): the php-server feature matrix is a QUINTET (default /
       # axum-only / census / census-axum-only / union) and the crate must be
