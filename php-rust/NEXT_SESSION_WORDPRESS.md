@@ -42,8 +42,7 @@ residuo (leaf 18,9 · plumbing 17,6) · objmap residuo (valore-oggetto 43,4 ·
 chiave 10,0) · dispatch fuori prop_step 36,3 · walk_driver 37,2 nominato (vale
 per TUTTI i Field*) · cammini non cacheabili (readonly, mangled, `__set`, slot
 assente, child Ref) · famiglia locale 170 ns · evalcls 316,9× · refl 42,4× ·
-re +2,00 alloc/iter · chiusura 86% AssignPath · §3.13 · §3.12-i · §3.14 ·
-§3.21 (a/b/c) · get_gc · drift TODO.md · latin1-cliff · media bordo 2,477.
+re +2,00 alloc/iter · chiusura 86% AssignPath · §3.13 · §3.12-i · §3.14 · §3.21 · get_gc · drift TODO.md · latin1-cliff · media bordo 2,477.
 
 ## NON riproporre (i veti restano; dettaglio nei concili archiviati)
 
