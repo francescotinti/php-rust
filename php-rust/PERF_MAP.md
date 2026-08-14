@@ -1,9 +1,11 @@
 # PERF_MAP — phpr vs PHP oracle 8.5.7, mappa multi-workload
 
-Aggiornata: **2026-08-14 (S-136)** · pin phpr **s136 1e14793e** (leva FD1
-fast-path dim-write su prop SPEDITA; coppia WP on-only **N=3 ESEGUITA in
-S-136 sul pin s135**: 1,777–1,779 COMPATIBILE col rif 1,769, peak bordo +80
-RIENTRATO; dbal/ORM restano @ pin s134, S-135) ·
+Aggiornata: **2026-08-14 (S-137)** · pin phpr **s136 1e14793e** INVARIATO
+(coppia WP on-only **N=3 ESEGUITA in S-137 SUL pin s136**: 1,767–1,781
+COMPATIBILE col rif 1,777–1,779 su banda off 0,041; peak 1743–1819; sonda
+eccedenza FD1 NON CHIUSA — blocco leve dim-write ATTIVO; objmap valore-oggetto
+43,4 ATTRIBUITO al round-trip GC, cura = piano gc-cycle-collector;
+dbal/ORM restano @ pin s134, S-135) ·
 metodo: user CPU, pavimenti per-binario, N per voce come indicato; criteri pre-registrati in
 `wp125-harness/s125-criterio-{pair,mappa}.md` e `wp126-harness/s126-criterio-{orm,mappa2}.md`
 (+ emenda S-127: **cifra canonica = NETTO-pavimento**, raw companion; gate contesa in ictx/s);
@@ -13,8 +15,8 @@ cifre dai verdetti `.out`. Regola di lettura: rapporti PER workload, MAI aggrega
 
 | workload | rapporto phpr/oracle | N | note |
 |---|---|---|---|
-| **WordPress full-suite** | **ON-ONLY CANONICO 1,777–1,779** (S-136 @ pin s135; **N=3 coppie proprie, spread 0,002 — obbligo az.rev. S-134 #4 assolto**; COMPATIBILE formale col rif 1,769 su banda off s134 0,041; off 1,793–1,807 N=3; quiescenza rc=0 ×7 con emenda assestamento mediaanalysisd) | **6/6 gambe pulite** (t4; t1/t2/t3 rc=8 a gate quiescenza, agli atti) | S-136 @ s135; parità per NOME 6/6 (solo `wp_is_stream #2`); **peak 1753–1825 MiB: bordo alto +80 RIENTRATO** (s134: 1818–1884); verdetto `wp136-harness/s136-pair-verdetto-t4.out`; AP1 non muove WP (atteso: leva objmap, WP diluito) |
-| **WordPress gruppo media** | **2,460–2,477 CANONICA user-only** (companion user+sys 2,431–2,464, 6 gambe pulite; bordo lievemente sopra s134 2,405–2,467, sovrapposto) | 6 | S-136 @ s135 |
+| **WordPress full-suite** | **ON-ONLY CANONICO 1,767–1,781** (S-137 @ **pin s136**; N=3 coppie proprie; COMPATIBILE formale col rif S-136 1,777–1,779 su banda off 0,041 — FD1 non muove WP, atteso; off 1,805 N=2; quiescenza rc=0 ×7 SENZA retry: emende s136 reggono) | **5/6 gambe pulite** (t1; leg1-off SPORCA phpr ictx 2260% med esclusa; leg1-on ELEVATA 137% annotata — lettura firma PRE-REGISTRATA az.rev. S-136 #2) | S-137 @ s136; parità per NOME 6/6 (solo `wp_is_stream #2`); **peak 1743–1819 MiB** (banda oss. s136 1753–1825: bordo alto rientrato, 1743 nuovo bordo basso); verdetto `wp137-harness/s137-pair-verdetto-t1.out` |
+| **WordPress gruppo media** | **2,445–2,529 CANONICA user-only** (S-137 @ s136, 5 gambe pulite; companion 2,393–2,478; bordo alto 2,529 sopra s136 2,460–2,477, osservazione senza banda formale) | 5 | S-137 @ s136 |
 | **symfony http-foundation** (1854) | **2,547–2,559** (raw 2,55–2,57) | 2/lato | S-126; canonica sul CONTEGGIO diff 17 nomi = 0,92% ≤1% (≥3 nomi sono unit puri, NON famiglia `php -S` — emenda S-127); sys alto (I/O) |
 | **symfony http-kernel** (1665 test) | **4,29–4,32** | 2/lato | parità 0E/0F; contesa ok |
 | **doctrine/collections** (242) | **8,22 net** (raw 6,20) | 2/lato | S-126; INDICATIVA: oracle netto 0,09 s (denominatore sotto-scala); parità 0/0 |
@@ -124,7 +126,12 @@ gc_note/sweep/collect_cycles, insert/lookup, malloc/free); compile ≤~1% leaf, 
   + driver-loop replicato; fill dal ramo F4 a esito Ok coi fatti di classe
   (slot key==name, non readonly, asym ok; hooks esclusi da F4). Perimetro
   fuori: child Ref/Str/assente, nkeys≠1, unset-prop, readonly, asym-negata.
-  Aperture per NOME: eccedenza FD1 +13,7 · 14% modello AssignPath (86%).
+  Aperture per NOME: eccedenza FD1 +13,7 — **sonda S-137 NON CHIUSA** (artefatto
+  inlining del probe; indizio dominante plumbing +13,0; blocco leve dim-write
+  ATTIVO, sonda v2 = S-138 p.1) · 14% modello AssignPath (86%) · **objmap
+  «valore-oggetto» 43,4 ATTRIBUITO (S-137, census: inserted 3M/iter, sweep
+  1/statement su m0; 2 su m1) al round-trip GC nota→sweep→demozione — leva
+  note-time REFUTATA (precedente WP-21), cura = piano gc-cycle-collector**.
 - Aperture per NOME: `evalcls` **316,9×** (cliff compile-per-classe; serve strumento di densità
   prima di ogni leva) · `refl` **42,4×** · re +2,00 alloc/iter.
 
