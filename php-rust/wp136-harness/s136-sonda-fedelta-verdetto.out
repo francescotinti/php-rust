@@ -1,0 +1,26 @@
+== s136 sonda fedeltà AP1 (fixture v2, az.rev. S-135 #1) 2026-08-14 09:30:42 ==
+pin=6518a1e14a266d52 (atteso 6518a1e14a266d52) stash=61896da13654fd00 (atteso 61896da13654fd00)
+oracle rc=0
+pin rc=0
+stash rc=0
+pin==stash: BYTE-ID ok
+diff oracle→pin: 11 righe marcate (file: sonda-out/diff-oracle-pin.txt)
+--- diff integrale (a verbale) ---
+  57d56
+  < PHP Deprecated:  Implicit conversion from float 1.7 to int loses precision in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp136-harness/fixtures-ap1-v2.php on line 47
+  59,62c58
+  < Deprecated: Implicit conversion from float 1.7 to int loses precision in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp136-harness/fixtures-ap1-v2.php on line 47
+  < PHP Deprecated:  Using null as an array offset is deprecated, use an empty string instead in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp136-harness/fixtures-ap1-v2.php on line 49
+  < 
+  < Deprecated: Using null as an array offset is deprecated, use an empty string instead in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp136-harness/fixtures-ap1-v2.php on line 49
+  ---
+  > Deprecated: Implicit conversion from float 1.7 to int loses precision in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp136-harness/fixtures-ap1-v2.php on line 52
+  74c70
+  < Cannot access offset of type array on array
+  ---
+  > Illegal offset type
+  87,89d82
+  < PHP Deprecated:  Automatic conversion of false to array is deprecated in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp136-harness/fixtures-ap1-v2.php on line 74
+  < 
+  < Deprecated: Automatic conversion of false to array is deprecated in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp136-harness/fixtures-ap1-v2.php on line 74
+ESITO: rc=0 (pin==stash byte-id; divergenze oracle tutte nelle famiglie §3.21)
