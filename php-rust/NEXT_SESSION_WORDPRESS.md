@@ -30,8 +30,7 @@ Doctrine — la prossima leva object si sceglie dal profilo SUITE.**
    NUOVO PID-based — verificare 1 solo runner); GH Actions: esito ultimo run
    (fix corsie census + stub mach committati bf6ab09; se rosso residuo →
    iterare); fase 2 (corpus-gate col tarball php.net) SOLO su decisione utente.
-4. Coppia WP: NON dovuta (pin invariato s138); torna dovuta a pin nuovo, col
-   confronto sulla banda_ON 0,033.
+4. Coppia WP: NON dovuta (pin invariato); a pin nuovo, su banda_ON 0,033.
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
 
@@ -43,7 +42,7 @@ dispatch 36,3 · walk_driver 37,2 · cammini non cacheabili (readonly, mangled,
 `__set`, slot assente, child Ref) · famiglia locale 170 ns · evalcls 316,9× ·
 refl 42,4× · re +2,00 alloc/iter · 14% AssignPath · §3.13 · §3.12-i · §3.14 ·
 §3.21 · get_gc · drift TODO.md · latin1-cliff · media bordo 2,529 (oss.) ·
-warnings Linux php-builtins ×4 (dependency-position, non bloccanti).
+warnings Linux php-builtins ×4 (non bloccanti).
 
 ## NON riproporre (i veti restano; dettaglio nei concili archiviati)
 
@@ -76,10 +75,8 @@ CON divergenze a catalogo (si pre-registra il filtro per NOME — S-139)**.
 
 **Riscritto**: 2026-08-15 (chiusura S-139). Storia: `sessions/` · `gaps/GAP_TREND.md`.
 Pre-flight S-140: pin phpr **s138 fa17dabd**9eaa4bcb + server **s138 a9aded45**16e6d46c
-(INVARIATI; sorgente AVANTI al pin di soli attributi lint + cfg(test) +
-ic-stats cfg-gated: churn dichiarato, prossimo pin li ingloba) · MySQL wp8 con
-l'elenco · uploads sotto guardia · corpus 1414 ×2 · CI locale: coda in
-smaltimento col mutex nuovo · lock misura `/private/tmp/phpr-measure.lock` da
-CREARE a ogni finestra (oggi RIMOSSO) · disco Data ≥10G · pgrep rust-analyzer
-PRIMA di ogni misura · lettura: REGOLE.md → QUI → WP_SESSION_139 →
-wp139-harness/revisione.md → PERF_MAP.md.
+(INVARIATI; sorgente avanti al pin di soli lint/cfg dichiarati) · MySQL wp8
+con l'elenco · uploads sotto guardia · corpus 1414 ×2 · CI locale: coda in
+smaltimento col mutex nuovo · lock misura da CREARE a ogni finestra (oggi
+RIMOSSO) · disco Data ≥10G · pgrep rust-analyzer PRIMA di ogni misura ·
+lettura: REGOLE.md → QUI → WP_SESSION_139 → wp139-harness/revisione.md → PERF_MAP.md.
