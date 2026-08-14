@@ -1,0 +1,58 @@
+== s136 coppia WP full+media sul pin s135 tentativo=t4 (criterio s132-criterio-pair.md RIUSATO + s136-criterio-pair.md) ==
+grade=VERDICT  # derivazione meccanica dai .time; rc autoritativo = pair-out/pair136-t4.done
+# full: cpu=user+sys (etichettato); media: CANONICA=user-only + companion (az.rev. S-128 #3)
+# az.rev. S-131 #3: riferimento PER CONFIGURAZIONE, ON-ONLY = canonico; firma per gamba
+quiescenza warmup: rc=0 (file: pair-out/quiesce-t4-warmup.rc)
+quiescenza leg1-off: rc=0 (file: pair-out/quiesce-t4-leg1-off.rc)
+quiescenza leg1-on: rc=0 (file: pair-out/quiesce-t4-leg1-on.rc)
+quiescenza leg2-off: rc=0 (file: pair-out/quiesce-t4-leg2-off.rc)
+quiescenza leg2-on: rc=0 (file: pair-out/quiesce-t4-leg2-on.rc)
+quiescenza leg3-off: rc=0 (file: pair-out/quiesce-t4-leg3-off.rc)
+quiescenza leg3-on: rc=0 (file: pair-out/quiesce-t4-leg3-on.rc)
+leg1-off: ictx/s oracle=1153 phpr=74  contesa ok
+  firma leg1-off: ictx%med oracle=100% phpr=100% rank_cpu_oracle=6/4 (1=piu' veloce)
+leg1-on: ictx/s oracle=1146 phpr=75  contesa ok
+  firma leg1-on: ictx%med oracle=100% phpr=101% rank_cpu_oracle=4/4 (1=piu' veloce)
+leg2-off: ictx/s oracle=1149 phpr=72  contesa ok
+  firma leg2-off: ictx%med oracle=100% phpr=97% rank_cpu_oracle=3/4 (1=piu' veloce)
+leg2-on: ictx/s oracle=1146 phpr=73  contesa ok
+  firma leg2-on: ictx%med oracle=100% phpr=99% rank_cpu_oracle=5/4 (1=piu' veloce)
+leg3-off: ictx/s oracle=1150 phpr=75  contesa ok
+  firma leg3-off: ictx%med oracle=100% phpr=100% rank_cpu_oracle=1/4 (1=piu' veloce)
+leg3-on: ictx/s oracle=1146 phpr=99  contesa ok
+  firma leg3-on: ictx%med oracle=100% phpr=133% rank_cpu_oracle=2/4 (1=piu' veloce)
+ictx_s_mediana_oracle=1148 ictx_s_mediana_phpr=74  # PER MOTORE
+gambe pulite: ['leg1-off', 'leg1-on', 'leg2-off', 'leg2-on', 'leg3-off', 'leg3-on']
+leg1-off: full_oracle_cpu=437.20 full_phpr_cpu=785.80 proprio=1.797 peak_phpr_MiB=1804.7
+leg1-on: full_oracle_cpu=437.06 full_phpr_cpu=776.70 proprio=1.777 peak_phpr_MiB=1766.2
+leg2-off: full_oracle_cpu=436.90 full_phpr_cpu=783.23 proprio=1.793 peak_phpr_MiB=1824.9
+leg2-on: full_oracle_cpu=437.17 full_phpr_cpu=777.75 proprio=1.779 peak_phpr_MiB=1773.5
+leg3-off: full_oracle_cpu=435.27 full_phpr_cpu=786.35 proprio=1.807 peak_phpr_MiB=1815.0
+leg3-on: full_oracle_cpu=435.82 full_phpr_cpu=775.36 proprio=1.779 peak_phpr_MiB=1752.8
+matrice full (gambe PULITE) phpr(riga)/oracle(colonna):
+  leg1-off/leg1-off=1.797  leg1-off/leg1-on=1.798  leg1-off/leg2-off=1.799  leg1-off/leg2-on=1.797  leg1-off/leg3-off=1.805  leg1-off/leg3-on=1.803
+  leg1-on/leg1-off=1.777  leg1-on/leg1-on=1.777  leg1-on/leg2-off=1.778  leg1-on/leg2-on=1.777  leg1-on/leg3-off=1.784  leg1-on/leg3-on=1.782
+  leg2-off/leg1-off=1.791  leg2-off/leg1-on=1.792  leg2-off/leg2-off=1.793  leg2-off/leg2-on=1.792  leg2-off/leg3-off=1.799  leg2-off/leg3-on=1.797
+  leg2-on/leg1-off=1.779  leg2-on/leg1-on=1.780  leg2-on/leg2-off=1.780  leg2-on/leg2-on=1.779  leg2-on/leg3-off=1.787  leg2-on/leg3-on=1.785
+  leg3-off/leg1-off=1.799  leg3-off/leg1-on=1.799  leg3-off/leg2-off=1.800  leg3-off/leg2-on=1.799  leg3-off/leg3-off=1.807  leg3-off/leg3-on=1.804
+  leg3-on/leg1-off=1.773  leg3-on/leg1-on=1.774  leg3-on/leg2-off=1.775  leg3-on/leg2-on=1.774  leg3-on/leg3-off=1.781  leg3-on/leg3-on=1.779
+full_intervallo_PULITO_misto=1.773-1.807  # companion (miscela config)
+coppie_proprie_PULITE_miste=1.777-1.807 (N=6)
+coppie_proprie_user_only_miste=1.781-1.814
+full_on_only_coppie_proprie=1.777-1.779 (N=3) CANONICO
+full_on_only_intervallo=1.774-1.785
+confronto_formale_rif: on-only vs 1.769 banda 0.041 -> COMPATIBILE (tutte le coppie proprie dentro)
+full_off_only_coppie_proprie=1.793-1.807 (N=3)
+full_off_only_intervallo=1.791-1.807
+media_leg1-off: user_only_CANONICA=2.460 user+sys_companion=2.432
+media_leg1-on: user_only_CANONICA=2.463 user+sys_companion=2.431
+media_leg2-off: user_only_CANONICA=2.474 user+sys_companion=2.443
+media_leg2-on: user_only_CANONICA=2.475 user+sys_companion=2.437
+media_leg3-off: user_only_CANONICA=2.477 user+sys_companion=2.436
+media_leg3-on: user_only_CANONICA=2.475 user+sys_companion=2.464
+parita_leg1-off: media=OK(vuoto) full=OK(solo wp_is_stream #2)
+parita_leg1-on: media=OK(vuoto) full=OK(solo wp_is_stream #2)
+parita_leg2-off: media=OK(vuoto) full=OK(solo wp_is_stream #2)
+parita_leg2-on: media=OK(vuoto) full=OK(solo wp_is_stream #2)
+parita_leg3-off: media=OK(vuoto) full=OK(solo wp_is_stream #2)
+parita_leg3-on: media=OK(vuoto) full=OK(solo wp_is_stream #2)
