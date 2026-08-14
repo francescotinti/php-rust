@@ -1,0 +1,70 @@
+diff --git a/php-rust/crates/php-runtime/src/vm/arrays.rs b/php-rust/crates/php-runtime/src/vm/arrays.rs
+index 68e49a9..adbfd16 100644
+--- a/php-rust/crates/php-runtime/src/vm/arrays.rs
++++ b/php-rust/crates/php-runtime/src/vm/arrays.rs
+@@ -1627,6 +1627,11 @@ impl<'m> Vm<'m> {
+     ) -> Result<RmwFastOut, PhpError> {
+         use crate::bytecode::PropIc;
+         use crate::hir::BinOp;
++        // S-138 sonda: kill-switch PHPR_TP_FULL=1 → MISS forzato, l'arm
++        // misurato è il cammino PIENO dello stesso binario (criterio p.2).
++        if super::s138tp::full_path() {
++            return Ok(RmwFastOut::Miss(keys));
++        }
+         if steps.len() != 2
+             || !matches!(steps[0], FieldStep::Prop(_))
+             || !matches!(steps[1], FieldStep::Index)
+diff --git a/php-rust/crates/php-runtime/src/vm/mod.rs b/php-rust/crates/php-runtime/src/vm/mod.rs
+index 4900a94..2113d4a 100644
+--- a/php-rust/crates/php-runtime/src/vm/mod.rs
++++ b/php-rust/crates/php-runtime/src/vm/mod.rs
+@@ -84,6 +84,9 @@ mod tidy;
+ mod xslt;
+ mod tokenizer;
+ mod websapi;
++// S-138 sonda attribuzione RMW (build emendata, worktree): MAI nel pin.
++#[path = "../../../../wp138-harness/s138tp.rs"]
++pub(crate) mod s138tp;
+ use arrays::*;
+ use calls::*;
+ use oop::*;
+diff --git a/php-rust/crates/php-runtime/src/vm/run.rs b/php-rust/crates/php-runtime/src/vm/run.rs
+index 1e10037..e957acb 100644
+--- a/php-rust/crates/php-runtime/src/vm/run.rs
++++ b/php-rust/crates/php-runtime/src/vm/run.rs
+@@ -5966,6 +5966,11 @@ impl<'m> super::Vm<'m> {
+                     self.frames[top].stack.push(value);
+                 }
+                 Op::FieldAssignOp { base, steps, op, ic } => {
++                    // S-138 sonda attribuzione (criterio s138-criterio-sonda-rmw.md):
++                    // seg0 = arm intero, seg9 = calibrazione; call-site intatto.
++                    let s138_t0 = super::s138tp::t0(0);
++                    let s138_t9 = super::s138tp::t0(9);
++                    super::s138tp::add(9, s138_t9);
+                     let rhs = self.frames[top].stack.pop().expect("FieldAssignOp rhs");
+                     let keys = self.pop_field_keys(top, &steps);
+                     // S-138 FD1-ext RMW (criterio s138-criterio-rmw.md): fast
+@@ -5975,6 +5980,7 @@ impl<'m> super::Vm<'m> {
+                     )? {
+                         RmwFastOut::Hit(push) => {
+                             self.frames[top].stack.push(push);
++                            super::s138tp::add(0, s138_t0);
+                             continue;
+                         }
+                         RmwFastOut::Miss(keys) => keys,
+@@ -6017,10 +6023,14 @@ impl<'m> super::Vm<'m> {
+                     let result = self.apply_binop_ovl(*op, &old, &rhs)?;
+                     self.field_set_op(*base, top, &steps, keys, result.clone())?;
+                     // FD1-ext fill: ramo piano a esito Ok, stessi fatti F4.
+-                    if self.field_prelude_skip(*base, top, &steps) {
++                    // S-138 sonda v2: sotto kill-switch il fill+predicato si
++                    // SALTA — l'arm_full misurato è il pieno a forma-pin
++                    // (ε del criterio v1 eliminato, non stimato).
++                    if !super::s138tp::full_path() && self.field_prelude_skip(*base, top, &steps) {
+                         self.field_assign_fill(*base, top, &steps, ic);
+                     }
+                     self.frames[top].stack.push(result);
++                    super::s138tp::add(0, s138_t0);
+                 }
+                 Op::FieldIncDec { base, steps, inc, pre, ic } => {
+                     let keys = self.pop_field_keys(top, &steps);

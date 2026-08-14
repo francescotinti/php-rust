@@ -1,0 +1,15 @@
+== s138 sonda attribuzione RMW (criterio s138-criterio-sonda-rmw.md; D_AB=173.3) ==
+probe_bin=06b215b88a5f01c7 (build emendata, MAI pinnabile)
+quiescenza: rc=0
+gate_nm_inline: simboli fast=1 (atteso 0)
+gate_nm_inline: FALLITO
+parita_fixtures_rmw: OK (probe==cand)
+inerzia: probe_med3=0.46 cand_med3=0.45 delta=+0.010s soglia=0.012s
+inerzia: OK
+fast_ns_span_med3=131.655 (r: 131.655 130.000 131.917)
+full_ns_span_med3=337.621 (r: 336.323 337.621 342.918)
+cal_ns_span_med3=39.487 (r: 39.195 39.583 39.487)
+overhead_coppia_ns=39.5 (seg9, sottratto)
+arm_fast=92.2  arm_full=298.1  (arm_full-arm_fast)=206.0
+identita': 206.0 vs D_AB 173.3 -> scarto +32.7 (banda 13.3+eps 10.0; eps=prelude_skip+fill nel pieno del candidato, atteso verso l'alto)
+ESITO SONDA: NON CHIUSA — promozione FERMA (criterio p.4)
