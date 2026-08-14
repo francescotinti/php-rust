@@ -66,11 +66,45 @@ class Th { public array $data = ['k' => 5];
   public function bump(): int { $this->data['k'] += 3; $this->data['k']++; return $this->data['k']; }
 }
 var_dump((new Th())->bump());
-// 21: due RMW sulla stessa statement-famiglia con IC condiviso per sito — classi DIVERSE sullo stesso sito (poly)
+// 21: IC condiviso per sito — classi DIVERSE sullo stesso sito. FIX az.rev.
+// S-138 #4: l'alternanza garantisce solo MISS (cid-mismatch); la coda
+// MONO-CLASSE ripetuta dopo l'alternanza forza fill (P1) + hit ai giri 2-4.
 function poly(object $o): void { $o->data['k'] += 1; }
 class P1 { public array $data = ['k' => 1]; }
 class P2 { public array $data = ['k' => 100]; }
 $p1 = new P1(); $p2 = new P2();
 poly($p1); poly($p2); poly($p1); poly($p2);
+poly($p1); poly($p1); poly($p1); poly($p1); // coda mono-classe: hit CALDI
 var_dump($p1->data['k'], $p2->data['k']);
+
+// ===== SEZIONE CALDA (az.rev. S-138 #1: loop >=4 per vettore in perimetro;
+// il fill avviene al giro 1 sul ramo pieno a esito Ok, i giri 2+ DEVONO
+// colpire il fast path — gate >=1 hit per vettore, az.rev. #2) =====
+// H1: += Long a caldo (FieldAssignOp)
+$hc = new En(); $hc->data['k'] = 0;
+for ($i = 0; $i < 4; $i++) { $hc->data['k'] += 5; var_dump($hc->data['k']); }
+// H2: -= Long a caldo
+$hc->data['s'] = 100;
+for ($i = 0; $i < 4; $i++) { $hc->data['s'] -= 3; }
+var_dump($hc->data['s']);
+// H3: *= su old che diventa Double dalla 2a iter
+$hc->data['m'] = 2;
+for ($i = 0; $i < 4; $i++) { $hc->data['m'] *= 1.5; var_dump($hc->data['m']); }
+// H4: ++ post a caldo con valore d'uso (FieldIncDec)
+$hc->data['i'] = 10;
+for ($i = 0; $i < 4; $i++) { var_dump($hc->data['i']++); }
+// H5: -- pre a caldo con valore d'uso
+for ($i = 0; $i < 4; $i++) { var_dump(--$hc->data['i']); }
+// H6: chiave Long a caldo
+$hc->data[42] = 7;
+for ($i = 0; $i < 4; $i++) { $hc->data[42] += 11; }
+var_dump($hc->data[42]);
+// H7: base $this a caldo (metodo con loop interno)
+class ThHot { public array $data = ['k' => 0];
+  public function warm(): int { for ($i = 0; $i < 4; $i++) { $this->data['k'] += 2; $this->data['k']++; } return $this->data['k']; }
+}
+var_dump((new ThHot())->warm());
+// H8: overflow a caldo dentro il loop (old Long->Double resta in perimetro)
+$hc->data['o'] = PHP_INT_MAX - 2;
+for ($i = 0; $i < 4; $i++) { $hc->data['o'] += 1; var_dump($hc->data['o']); }
 echo "FINE\n";
