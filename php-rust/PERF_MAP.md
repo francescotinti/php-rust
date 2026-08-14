@@ -1,11 +1,10 @@
 # PERF_MAP — phpr vs PHP oracle 8.5.7, mappa multi-workload
 
-Aggiornata: **2026-08-14 (S-137)** · pin phpr **s136 1e14793e** INVARIATO
-(coppia WP on-only **N=3 ESEGUITA in S-137 SUL pin s136**: 1,767–1,781
-COMPATIBILE col rif 1,777–1,779 su banda off 0,041; peak 1743–1819; sonda
-eccedenza FD1 NON CHIUSA — blocco leve dim-write ATTIVO; objmap valore-oggetto
-43,4 ATTRIBUITO al round-trip GC, cura = piano gc-cycle-collector;
-dbal/ORM restano @ pin s134, S-135) ·
+Aggiornata: **2026-08-14 (S-138)** · pin phpr **s138 fa17dabd** + server
+**s138 a9aded45** (LEVA FD1-ext RMW promossa; eccedenza FD1 CHIUSA come
+CROSS-GIUDICE in S-138: D_mdw 63,3 vs UB 69,6 in banda — dim-write SBLOCCATO;
+coppia WP resta @ s136 1,767–1,781, DOVUTA a s138 in S-139 con banda ON N≥5;
+objmap 43,4 → piano gc-cycle-collector; dbal/ORM restano @ pin s134, S-135) ·
 metodo: user CPU, pavimenti per-binario, N per voce come indicato; criteri pre-registrati in
 `wp125-harness/s125-criterio-{pair,mappa}.md` e `wp126-harness/s126-criterio-{orm,mappa2}.md`
 (+ emenda S-127: **cifra canonica = NETTO-pavimento**, raw companion; gate contesa in ictx/s);
@@ -24,11 +23,14 @@ cifre dai verdetti `.out`. Regola di lettura: rapporti PER workload, MAI aggrega
 | **doctrine/orm** (3484 test) | **8,43–8,56 net** | 2/lato | **S-135 RIMISURATA @ pin s134** (stesso verdetto; oracle `memory_limit=-1` §3.14; parità 16 nomi == baseline): vs 8,51–8,56 @ s125 ⇒ **INVARIATO** — REPERTO pre-registrato (criterio p.6): 6 leve object s127→s134 (objalloc micro −20% e −14%) NON muovono il rapporto suite (phpr −2,3 s assoluti ≈ −5%, oracle −4% drift): il typed-set/ctor è fetta minore del churn ⇒ la prossima leva si sceglie sul profilo SUITE (insert/lookup, clone/drop) |
 | **composer install OFFLINE** | **1,863–1,891 net** (raw 1,820–1,847) | 2/lato | S-128 @ s127b, PRIMA misura col numeratore vivo (cure ondata-2); composer ESTRATTO, vendor_ok bilaterale, contesa ok (ictx/s); floors 0,07/0,06; sys≈user (~2,3 s/lato) ⇒ **cifra user-only NON confrontabile col full (user+sys): su user+sys sarebbe ~1,3** (rev. S-128 az.5); residuo phpcs config-set (§3.19-quinquies); verdetto `wp128-harness/s128-compoff-verdetto.out` |
 
-## Micro-categorie (R=5, pin s136; tappa ≤3×; gate promozione S-136)
+## Micro-categorie (R=5, pin s138; tappa ≤3×; gate promozione S-138)
 
 | arith | prop | calls | str | arr | re |
 |---|---|---|---|---|---|
-| 5,5 | 5,6 | 4,7 | **4,2** | **3,3** | **2,6** ✅ |
+| 5,6 | 5,6 | 4,8 | **4,3** | **3,2** | **2,6** ✅ |
+
+RMW (giudici leva S-138, A/B + conferma post-pin): **m-dimrmw 320→146,7
+ns/iter (D=+173,3)** · **m-diminc 270→113,3 (D=+156,7)**.
 
 calls: la (*) di s127 è SCIOLTA in S-129 (phpr netto IDENTICO 2,14 s; si muove
 solo il denominatore oracle 0,43–0,44). re 2,5/2,6 = run-to-run del denominatore.
@@ -126,12 +128,24 @@ gc_note/sweep/collect_cycles, insert/lookup, malloc/free); compile ≤~1% leaf, 
   + driver-loop replicato; fill dal ramo F4 a esito Ok coi fatti di classe
   (slot key==name, non readonly, asym ok; hooks esclusi da F4). Perimetro
   fuori: child Ref/Str/assente, nkeys≠1, unset-prop, readonly, asym-negata.
-  Aperture per NOME: eccedenza FD1 +13,7 — **sonda S-137 NON CHIUSA** (artefatto
-  inlining del probe; indizio dominante plumbing +13,0; blocco leve dim-write
-  ATTIVO, sonda v2 = S-138 p.1) · 14% modello AssignPath (86%) · **objmap
-  «valore-oggetto» 43,4 ATTRIBUITO (S-137, census: inserted 3M/iter, sweep
-  1/statement su m0; 2 su m1) al round-trip GC nota→sweep→demozione — leva
-  note-time REFUTATA (precedente WP-21), cura = piano gc-cycle-collector**.
+  **Eccedenza FD1 CHIUSA (S-138)**: disasm refuta l'artefatto-inlining (bl +63
+  = timer); sonda arm-only v2 (inerzia 0,000) dà arm 51,9 pulito; **A/B pin
+  s135↔s136 sul giudice del modello: D_mdw 63,3 vs UB 69,6 IN BANDA** — la
+  «eccedenza» era aritmetica CROSS-GIUDICE (D 83,3 misurato su objdatains, arm
+  su m-dimwrite); coerenza-arm 51,9+63,3=115,2 ≈ 118,2. Dim-write SBLOCCATO.
+  **Leva «FD1-ext RMW» SPEDITA S-138** (criterio s138-criterio-rmw.md: cella IC
+  su FieldAssignOp/FieldIncDec; fast = admission FD1 + peek entry + op silente
+  {Add,Sub,Mul}×{Long,Double} + field_write_walk riusato; fill dal ramo piano
+  via field_prelude_skip; il pieno pagava DUE walk + preludio. A/B R=5:
+  m-dimrmw D=+173,3, m-diminc D=+156,7, guardie 7/7, objdatains ±0,0;
+  fuori-modello +110 ATTRIBUITO con sonda monobinaria kill-switch (scarto
+  +3,7/17,3: arm_full 266,9 − arm_fast 89,9 = 177,0 ≈ D); promo rc=0 + conferma
+  post-pin in banda 5,0/5,0) → **pin s138 fa17dabd + server a9aded45**.
+  Aperture per NOME: FieldRead/dim-read IC (famiglia sbloccata) · divergenze
+  RMW del pieno (undefined-key, float-key, str-increment, overloaded-notice) ·
+  14% modello AssignPath (86%) · **objmap «valore-oggetto» 43,4 ATTRIBUITO
+  (S-137, census) al round-trip GC nota→sweep→demozione — leva note-time
+  REFUTATA (precedente WP-21), cura = piano gc-cycle-collector**.
 - Aperture per NOME: `evalcls` **316,9×** (cliff compile-per-classe; serve strumento di densità
   prima di ogni leva) · `refl` **42,4×** · re +2,00 alloc/iter.
 
