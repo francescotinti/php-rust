@@ -1011,6 +1011,26 @@ da bisecare) + `Schema\Name\Parser\GenericNameParserTest::testValidInput #11`
 9`: sospetto offset byte-vs-char nel lexer dei nomi, pista preg/mb da
 verificare col manuale). Oracle 0 fail equivalenti.
 
+### 3.21 🟡 Diagnostica dim-set (array offset in SCRITTURA): tre divergenze pre-esistenti (revisore S-135, catalogate S-136)
+
+Trovate dal revisore semantico S-135 sui probe della leva AP1 (identiche su pin
+s135 E stash s134 ⇒ PRE-esistenti, non-leva; probe `rev135-p1/p2.php`,
+fixture `wp135-harness/fixtures-ap1.php` s8/s9/s12):
+
+- **(a) messaggio TypeError chiave illegale**: `$a[[]] = 1` → phpr
+  «Illegal offset type» vs oracle 8.5 «Cannot access offset of type array
+  on array» (il testo Zend è per-tipo e per-contesto; phpr usa il messaggio
+  legacy). Stessa classe, messaggi diversi ⇒ i phpt con expect sul testo
+  divergono.
+- **(b) deprecation 8.5 mancanti sul cammino dim-set**: `$x[null]` in
+  scrittura non emette la Deprecated «null array offset» 8.5; `$f = false;
+  $f[0] = 1` non emette la Deprecated «Automatic conversion of false to
+  array» (il valore/verdetto finale è corretto in entrambi i casi).
+- **(c) riga del Deprecated float-key attribuita allo statement DOPO**:
+  fixture s8 su una riga sola lo mascherava; spezzata (S-136) la riga
+  espone 28 vs 27 oracle. Famiglia §3.13/§3.16/§3.17 (canale diag che
+  legge la riga del pc corrente, già avanzato).
+
 ## 4. Punti di forza da NON toccare (invarianti verificati byte-identici)
 
 Per evitare regressioni, questi comportamenti sono **già** byte-identici con

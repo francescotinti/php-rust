@@ -13,6 +13,17 @@
    osservabile di diag/errori/gc_note; coerce eseguita SOLO dopo il peek
    Array ⇒ nessuna doppia diag); vivificazione e string-offset restano al
    pieno per costruzione del peek.
+   **EMENDA a verbale (az.rev. S-135 #2, S-136)**: «stessi passi, stesso
+   ordine» è FALSO alla lettera — il pieno fa `make_mut` PRIMA di
+   `coerce_key_diag` (mod.rs:17233-17238), il fast il contrario
+   (run.rs:2407-2416). La rivendicazione corretta è l'EQUIVALENZA
+   OSSERVABILE, argomentata: `make_mut` è muto (nessuna diag/effetto
+   visibile), quindi lo scambio commuta per ogni esito di coerce; l'unica
+   differenza è che su chiave illegale il pieno de-condivide l'array prima
+   del TypeError e il fast no — differenza di solo stato CoW interno, non
+   osservabile da PHP (verificato dal revisore: stato post-errore ==
+   oracle su array condiviso). Il codice resta invariato; si emenda la
+   lettera del criterio.
 3. **Giudice**: `objmap` (baseline s134-submicro 173,3 ns/iter, la leva
    morde il suo arm) — A/B R=5 ABAB vs stash `phpr-s134`, user CPU
    netto-pavimento per-binario, N dal sorgente, quiescenza gate separato,
