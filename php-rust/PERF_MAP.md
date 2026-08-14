@@ -1,10 +1,10 @@
 # PERF_MAP — phpr vs PHP oracle 8.5.7, mappa multi-workload
 
-Aggiornata: **2026-08-14 (S-138)** · pin phpr **s138 fa17dabd** + server
-**s138 a9aded45** (LEVA FD1-ext RMW promossa; eccedenza FD1 CHIUSA come
-CROSS-GIUDICE in S-138: D_mdw 63,3 vs UB 69,6 in banda — dim-write SBLOCCATO;
-coppia WP resta @ s136 1,767–1,781, DOVUTA a s138 in S-139 con banda ON N≥5;
-objmap 43,4 → piano gc-cycle-collector; dbal/ORM restano @ pin s134, S-135) ·
+Aggiornata: **2026-08-15 (S-139)** · pin phpr **s138 fa17dabd** + server
+**s138 a9aded45** (COPPIA WP @ s138 FATTA: on-only 1,752–1,785 N=5,
+COMPATIBILE col rif S-137 — RMW non muove WP, atteso; **banda_ON FONDATA
+0,033** da N=5 gambe pulite, da S-140 sostituisce la banda off 0,041;
+objmap 43,4 → piano gc-cycle-collector; dbal/ORM in rimisura S-139) ·
 metodo: user CPU, pavimenti per-binario, N per voce come indicato; criteri pre-registrati in
 `wp125-harness/s125-criterio-{pair,mappa}.md` e `wp126-harness/s126-criterio-{orm,mappa2}.md`
 (+ emenda S-127: **cifra canonica = NETTO-pavimento**, raw companion; gate contesa in ictx/s);
@@ -14,8 +14,8 @@ cifre dai verdetti `.out`. Regola di lettura: rapporti PER workload, MAI aggrega
 
 | workload | rapporto phpr/oracle | N | note |
 |---|---|---|---|
-| **WordPress full-suite** | **ON-ONLY CANONICO 1,767–1,781** (S-137 @ **pin s136**; N=3 coppie proprie; COMPATIBILE formale col rif S-136 1,777–1,779 su banda off 0,041 — FD1 non muove WP, atteso; off 1,805 N=2; quiescenza rc=0 ×7 SENZA retry: emende s136 reggono) | **5/6 gambe pulite** (t1; leg1-off SPORCA phpr ictx 2260% med esclusa; leg1-on ELEVATA 137% annotata — lettura firma PRE-REGISTRATA az.rev. S-136 #2) | S-137 @ s136; parità per NOME 6/6 (solo `wp_is_stream #2`); **peak 1743–1819 MiB** (banda oss. s136 1753–1825: bordo alto rientrato, 1743 nuovo bordo basso); verdetto `wp137-harness/s137-pair-verdetto-t1.out` |
-| **WordPress gruppo media** | **2,445–2,529 CANONICA user-only** (S-137 @ s136, 5 gambe pulite; companion 2,393–2,478; bordo alto 2,529 sopra s136 2,460–2,477, osservazione senza banda formale) | 5 | S-137 @ s136 |
+| **WordPress full-suite** | **ON-ONLY CANONICO 1,752–1,785** (S-139 @ **pin s138**; N=5 coppie proprie PULITE su 6 gambe TUTTE ON — config off PENSIONATA; COMPATIBILE formale col rif S-137 1,767–1,781 su banda 0,041 ULTIMO USO — RMW non muove WP, atteso; **banda_ON FONDATA = 0,033**, canonica dai confronti S-140; quiescenza rc=0 ×7 SENZA retry) | **5/6 gambe pulite** (t1; leg6-on SPORCA phpr ictx 267% med esclusa — era la gamba col proprio anomalo 1,810: la firma morde giusto) | S-139 @ s138; parità per NOME 6/6 (solo `wp_is_stream #2`); **peak 1831–1849 MiB: OSSERVAZIONE, sopra la banda oss. s136/s137 1743–1825 su TUTTE le gambe (+~80 MiB, bordo alto NUOVO; causa non attribuita — candidate per NOME: celle IC per-sito RMW, warmup ora on-config)**; verdetto `wp139-harness/s139-pair-verdetto-t1.out` |
+| **WordPress gruppo media** | **2,470–2,486 CANONICA user-only** (S-139 @ s138, 5 gambe pulite; companion 2,428–2,444; dentro il range S-137 2,445–2,529, bordo alto rientrato) | 5 | S-139 @ s138 |
 | **symfony http-foundation** (1854) | **2,547–2,559** (raw 2,55–2,57) | 2/lato | S-126; canonica sul CONTEGGIO diff 17 nomi = 0,92% ≤1% (≥3 nomi sono unit puri, NON famiglia `php -S` — emenda S-127); sys alto (I/O) |
 | **symfony http-kernel** (1665 test) | **4,29–4,32** | 2/lato | parità 0E/0F; contesa ok |
 | **doctrine/collections** (242) | **8,22 net** (raw 6,20) | 2/lato | S-126; INDICATIVA: oracle netto 0,09 s (denominatore sotto-scala); parità 0/0 |
