@@ -3,22 +3,20 @@
 **In una frase**: il confronto WordPress sul motore promosso è fermo come
 previsto e ora ha una banda fondata su 5 misure; le suite Doctrine dicono che
 le tre leve di scrittura-array NON le muovono (reperto che orienta la prossima
-leva); il collaudo RMW è chiuso su tutti i punti; la CI locale ha il mutex
-riparato e quella su GitHub è VIVA per la prima volta.
+leva); il collaudo RMW è chiuso; la CI locale e quella GitHub sono risanate.
 
 **SCOREBOARD** (pin s138 INVARIATI; micro dal gate promo S-138, non rimisurate):
 **arith 5,6 = · prop 5,6 = · calls 4,8 = · str 4,3 = · arr 3,2 = · re 2,6 =**
 · **WP full ON-ONLY 1,752–1,785 (N=5) CANONICO · banda_ON FONDATA 0,033** ·
 media 2,470–2,486 · dbal 8,15–8,23 ↓ · ORM 8,59–8,71 fermo/↑ REPERTO ·
-**leve spedite: 0 (ANOMALIA dichiarata: 2 misure canoniche obbligatorie +
-apparato CI + az.rev. hanno consumato la finestra)** · incidenti 14 (=).
+**leve spedite: 0 (ANOMALIA dichiarata: la finestra è andata a 2 misure
+canoniche obbligatorie + apparato CI + az.rev.)** · incidenti 14 (=).
 
 ## Esiti secchi
 1·**Coppia t1 rc=0**: 6 gambe TUTTE ON, 5 pulite (leg6 SPORCA ictx 267% =
-  proprio anomalo 1,810 escluso: la firma morde giusto); COMPATIBILE rif
-  S-137 su 0,041 ULTIMO USO ⇒ RMW non muove WP (atteso); parità 6/6;
-  quiescenza 7/7 senza retry; **peak 1831–1849 OSSERVAZIONE** (+80 MiB sopra
-  banda oss., causa NON attribuita — candidate per NOME in PERF_MAP).
+  proprio anomalo 1,810 escluso: la firma morde giusto); COMPATIBILE rif S-137
+  su 0,041 ULTIMO USO ⇒ RMW non muove WP (atteso); parità 6/6; quiescenza 7/7;
+  **peak 1831–1849 OSSERVAZIONE** (+80 MiB, candidate per NOME in PERF_MAP).
 2·**Rimisura ORM/dbal rc=0** (ricetta S-135, chain): ORM **8,59–8,71 FERMO**
   vs 8,43–8,56 → **REPERTO pre-registrato: AP1+FD1+RMW non parlano alla
   suite** (attesa ↓ FALSIFICATA) ⇒ prossima leva dal profilo SUITE; dbal
@@ -32,8 +30,7 @@ apparato CI + az.rev. hanno consumato la finestra)** · incidenti 14 (=).
   owner-check + filtro `._*` (causa S-138: staleness a OROLOGIO su runner
   LEGITTIMO >6h); GitHub (richiesta utente) — ci.yml dei concili WP-78..83
   era INERTE in sottodirectory → radice: build+batteria Linux VERDI ~10′; le
-  corsie -D vive svelano bit-rot census (worker_pool, compile_program_with_mode,
-  mach su Linux) → 3 fix; esito ultimo run in NEXT_SESSION.
+  corsie -D vive svelano bit-rot census → 3 fix (dettaglio in NEXT_SESSION).
 
 ## ⭐ Lezioni (max 3)
 - ⭐⭐ Una corsia di gate INERTE è peggio di nessuna: certifica silenzio. Il
