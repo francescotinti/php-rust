@@ -1,0 +1,66 @@
+2,9c2,10
+< # s136-pair.sh <tentativo> — S-136 p.1: coppia full/media WP sul pin s135 (OBBLIGO pin nuovo),
+< # criterio s132-criterio-pair.md RIUSATO INVARIATO (per-config, firma per gamba;
+< # gia committato) + s136-criterio-pair.md (confronto formale col rif 1,769 su
+< # banda off 0,041). COPIA DICHIARATA di wp134-harness/s134-pair.sh (collaudo:
+< # copia-gate + manifest s136-pair-copia.diff) coi SOLI
+< # adattamenti: pin s135 (phpr+server); N>=3 ON-ONLY (az.rev. S-134 #4: TRE
+< # gambe per configurazione, off1->on1->off2->on2->off3->on3); giudice esteso
+< # col confronto formale al riferimento 1,769 (banda = variabilita' off 0,041).
+---
+> # s137-pair.sh <tentativo> — S-137 p.1: coppia full/media WP sul pin s136 (OBBLIGO pin nuovo),
+> # criterio s132-criterio-pair.md RIUSATO INVARIATO + s137-criterio-pair.md
+> # (confronto formale col rif S-136 [1,777-1,779] su banda off 0,041; lettura
+> # firma per gamba PRE-REGISTRATA az.rev. S-136 #2). COPIA DICHIARATA di
+> # wp136-harness/s136-pair.sh (collaudo: copia-gate + manifest
+> # s137-pair-copia.diff) coi SOLI adattamenti: pin s136 (phpr+server); nomi
+> # s137/pair137/wp137-harness; giudice: rif a INTERVALLO + nota ELEVATA
+> # 120-150% + rank label /6 (fix dichiarato: 6 gambe, non 4). Le emende S-136
+> # (assestamento a STREAK + retry gate x3) sono EREDITATE INVARIATE.
+13c14
+< # rc autoritativo = SOLO pair-out/pair136-<tentativo>.done scritto QUI.
+---
+> # rc autoritativo = SOLO pair-out/pair137-<tentativo>.done scritto QUI.
+17c18
+< H="$REPO/wp136-harness"
+---
+> H="$REPO/wp137-harness"
+22c23
+< VERD="$H/s136-pair-verdetto-$T.out"
+---
+> VERD="$H/s137-pair-verdetto-$T.out"
+27c28
+< DONE="$OUT/pair136-$T.done"
+---
+> DONE="$OUT/pair137-$T.done"
+36,37c37,38
+< PIN_ATTESO="6518a1e14a266d52"
+< SRV_ATTESO="e2efdf15bf74d8c9"
+---
+> PIN_ATTESO="1e14793ec0d9650c"
+> SRV_ATTESO="91c4e04321309936"
+139,140c140,141
+< print(f"== s136 coppia WP full+media sul pin s135 tentativo={T} (criterio s132-criterio-pair.md RIUSATO + s136-criterio-pair.md) ==")
+< print(f"grade=VERDICT  # derivazione meccanica dai .time; rc autoritativo = pair-out/pair136-{T}.done")
+---
+> print(f"== s137 coppia WP full+media sul pin s136 tentativo={T} (criterio s132-criterio-pair.md RIUSATO + s137-criterio-pair.md) ==")
+> print(f"grade=VERDICT  # derivazione meccanica dai .time; rc autoritativo = pair-out/pair137-{T}.done")
+142a144
+> print("# az.rev. S-136 #2: lettura firma PRE-REGISTRATA: >150% med MOTORE = SPORCA (esclusa); 120-150% = ELEVATA (nel canone, annotata); <=120% pulita")
+168c170,171
+<     print(f"  firma {leg}: ictx%med oracle={po:.0f}% phpr={pp:.0f}% rank_cpu_oracle={rk}/4 (1=piu' veloce)")
+---
+>     eleva = "  ELEVATA(120-150% med MOTORE: resta nel canone, annotata — az.rev. S-136 #2)" if (not flagged and (po > 120 or pp > 120)) else ""
+>     print(f"  firma {leg}: ictx%med oracle={po:.0f}% phpr={pp:.0f}% rank_cpu_oracle={rk}/6 (1=piu' veloce){eleva}")
+198,200c201,203
+<         REF, BANDA = 1.769, 0.041  # s136-criterio-pair.md: rif S-134 on-only, banda = variabilita' off s134
+<         dentro = all(abs(r - REF) <= BANDA for r in props)
+<         print(f"confronto_formale_rif: on-only vs {REF} banda {BANDA} -> " +
+---
+>         REF_LO, REF_HI, BANDA = 1.777, 1.779, 0.041  # s137-criterio-pair.md p.3: rif S-136 on-only [1,777-1,779], banda = variabilita' off s134
+>         dentro = all(REF_LO - BANDA <= r <= REF_HI + BANDA for r in props)
+>         print(f"confronto_formale_rif: on-only vs [{REF_LO}-{REF_HI}] banda {BANDA} -> " +
+202c205
+<                "FUORI BANDA: " + " ".join(f"{r:.3f}(d={r-REF:+.3f})" for r in props if abs(r - REF) > BANDA)))
+---
+>                "FUORI BANDA: " + " ".join(f"{r:.3f}(d={r-(REF_LO if r < REF_LO else REF_HI):+.3f})" for r in props if not (REF_LO - BANDA <= r <= REF_HI + BANDA))))
