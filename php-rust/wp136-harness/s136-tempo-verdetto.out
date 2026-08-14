@@ -1,0 +1,19 @@
+== s136 modello tempo FieldAssign su m-dimwrite (criterio s136-criterio-tempo.md) ==
+tp_bin=41c69be2b99ac933 (build emendata, MAI pinnabile)
+seg0_ns_span_med3=157.476 (r: 156.720 157.640 157.476)
+seg1_ns_span_med3=43.866 (r: 43.866 43.907 43.713)
+seg2_ns_span_med3=39.863 (r: 39.863 39.770 39.904)
+seg3_ns_span_med3=145.365 (r: 145.365 144.914 145.751)
+seg4_ns_span_med3=127.731 (r: 126.482 127.759 127.731)
+seg5_ns_span_med3=90.548 (r: 90.656 90.296 90.548)
+seg6_ns_span_med3=45.985 (r: 45.866 45.985 46.051)
+seg7_ns_span_med3=50.635 (r: 49.772 50.635 51.276)
+seg8_ns_span_med3=58.193 (r: 58.006 58.939 58.193)
+seg9_ns_span_med3=39.322 (r: 39.386 39.322 39.234)
+overhead_coppia_ns=39.3 (seg9, sottratto)
+arm_totale=118.2  pop+keys=4.5  prelude_skip=0.5  field_set=106.0
+  field_write=88.4  prop_step=51.2  resolve=6.7  guardia=11.3  leaf_index=18.9
+derivate: dispatch+push(0-1-2-3)=7.0  plumbing_set(3-4)=17.6  walk_driver(4-5)=37.2  prop_step_altro(5-6-7-8)=14.4
+chiusura=(1+2+3)/0 = 111.1/118.2 = 94%  (criterio: >=90% o modello INCOMPLETO)
+canali_bypassati_leva: resolve+guardia=18.0 (+ quote di prop_step_altro/plumbing da nominare nel criterio leva)
+TEMPO ACQUISITO (parita' ok)
