@@ -1,0 +1,14 @@
+== s138-ab-rmw ab-rmw-conferma: A=1e14793e(pin s136) B=fa17dabd R=2 SMOKE=1 ordine ALTERNATO; giudici=m-dimrmw,m-diminc; soglia=max(4, drop-1, spread-batch 13.3); UB parte-modellata=63.3 (fuori modello sopra 163.3); guardie NESSUNA-allo-smoke; quiescenza rc=0; rc autoritativo = ab-out/ab-rmw-conferma.rc ==
+cat=m-dimrmw N=3000000 floor_A=0.02 floor_B=0.03
+  coppia1 [AB]: rawA=0.97 rawB=0.45
+  coppia2 [BA]: rawA=0.98 rawB=0.45
+cat=m-diminc N=3000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=0.86 rawB=0.37
+  coppia2 [BA]: rawA=0.85 rawB=0.37
+GIUDICE m-dimrmw: A=318.3 B=140.0 ns/iter D=+178.3 soglia=13.3 (rumore drop-1: A'=3.3 B'=0.0) -> SOPRA SOGLIA
+riconciliazione m-dimrmw: D_smoke=+173.3 D_R2=+178.3 |diff|=5.0 banda=13.3 -> in banda
+vs parte-modellata m-dimrmw: D=+178.3 vs 63.3 -> scarto +115.0 (FUORI MODELLO: sonda dovuta prima di promuovere)
+GIUDICE m-diminc: A=278.3 B=116.7 ns/iter D=+161.7 soglia=13.3 (rumore drop-1: A'=3.3 B'=0.0) -> SOPRA SOGLIA
+riconciliazione m-diminc: D_smoke=+156.7 D_R2=+161.7 |diff|=5.0 banda=13.3 -> in banda
+vs parte-modellata m-diminc: D=+161.7 vs 63.3 -> scarto +98.4 (eccedenza attribuita alle componenti dichiarate (read-walk, preludio, peek+op))
+ESITO: FUORI MODELLO (sonda dovuta)
