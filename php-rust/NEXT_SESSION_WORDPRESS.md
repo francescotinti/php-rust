@@ -23,23 +23,26 @@ SBLOCCATO**.
    criterio pair PRE-REGISTRATO che (a) fonda la **banda ON-config da N≥5 gambe
    ON** (pensiona lo 0,041 S-134 — az.rev. S-137 #4); (b) firma per gamba come
    S-137. Atteso: RMW non muove WP (statement rara) — verdetto ai numeri.
-2. **Az.rev. S-138** (`wp138-harness/revisione.md`): vincolanti al primo criterio.
-3. **Leva successiva dai numeri**: candidata naturale = FieldRead/dim-read (IC
-   sui cammini di lettura, famiglia sbloccata) previa modello; o objdatains residuo.
+2. **RIMISURA dbal/ORM @ pin s138 (richiesta UTENTE 2026-08-14)**: ricetta S-135
+   (pavimenti per-workspace, watchdog, detached serale, criterio pre-registrato);
+   baseline 8,36–8,45 / 8,43–8,56 @ s134 — il test: le TRE leve dim-write
+   (AP1+FD1+RMW) muovono la suite? (`$this->elements[$k]=$v` = FieldAssign
+   [Prop,Index]). Parità già verde a s138 (gate promo, 16 nomi).
+3. **Az.rev. S-138** (`wp138-harness/revisione.md`): vincolanti al primo criterio.
+4. **Leva dai numeri**: candidata = FieldRead/dim-read previa modello.
 APPARATO: **CI runner.lock NON tiene (5 istanze concorrenti in S-138 = causa
 batteria-FAIL del feed): fixare il mutex (flock) o spegnere l'auto-spawn**;
 coda in smaltimento con 1 runner post-sessione.
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
 
-FieldRead/dim-read IC (famiglia FD1, sbloccata) · divergenze RMW del cammino
-PIENO trovate da fixtures-rmw (undefined-key su RMW · float-key deprecation ·
-str-increment deprecation · notice overloaded-property: per NOME, pre-esistenti)
-· objdatains residuo (leaf 18,9 · plumbing 17,6) · objmap valore-oggetto 43,4 →
-piano GC · dispatch 36,3 (solo dopo modello) · walk_driver 37,2 · cammini non
-cacheabili (readonly, mangled, `__set`, slot assente, child Ref) · famiglia
-locale 170 ns · evalcls 316,9× · refl 42,4× · re +2,00 alloc/iter · 14%
-AssignPath · §3.13 · §3.12-i · §3.14 · §3.21 · get_gc · drift TODO.md ·
+FieldRead/dim-read IC (famiglia sbloccata) · divergenze RMW del PIENO da
+fixtures-rmw (undefined-key · float-key · str-increment · overloaded-notice:
+per NOME, pre-esistenti) · objdatains residuo (leaf 18,9 · plumbing 17,6) ·
+objmap 43,4 → piano GC · dispatch 36,3 (dopo modello) · walk_driver 37,2 ·
+cammini non cacheabili (readonly, mangled, `__set`, slot assente, child Ref) ·
+famiglia locale 170 ns · evalcls 316,9× · refl 42,4× · re +2,00 alloc/iter ·
+14% AssignPath · §3.13 · §3.12-i · §3.14 · §3.21 · get_gc · drift TODO.md ·
 latin1-cliff · media bordo 2,529 (osservazione).
 
 ## NON riproporre (i veti restano; dettaglio nei concili archiviati)
