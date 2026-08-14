@@ -1,21 +1,18 @@
 # NEXT_SESSION — phpr: OBIETTIVO PARITÀ (≥1×) con l'oracle; ≤3× = tappa (REGOLE §1)
-⏱ **FONDAMENTALI**: rif WP **full ON-ONLY = 1,767–1,781** (S-137 @ pin s136) —
-**PIN RUOTATO s138 ⇒ COPPIA DOVUTA in S-139** (con rifondazione banda ON-config
-N≥5, az.rev. S-137 #4 assorbita) · ultima leva SPEDITA **S-138 (FD1-ext RMW:
-dimrmw −54%, diminc −58%)** · sessioni-senza-leva = 0 · incidenti: storici 14
-(n.14 sed-copia, morso dal NO-CLOBBER).
+⏱ **FONDAMENTALI**: rif WP **full ON-ONLY = 1,767–1,781** (S-137 @ s136) —
+**PIN RUOTATO s138 ⇒ COPPIA DOVUTA in S-139** (banda ON-config N≥5, az.rev.
+S-137 #4) · ultima leva SPEDITA **S-138 (FD1-ext RMW: −54%/−58%)** ·
+sessioni-senza-leva = 0 · incidenti: storici 14 (n.14 sed-copia).
 
 ## Scoreboard (pin s138 fa17dabd9eaa4bcb + server a9aded4516e6d46c; micro dal gate promo S-138)
 
 **arith 5,6 · prop 5,6 · calls 4,8 · str 4,3 · arr 3,2 · re 2,6** · oggetti
-(dal gate s136, NON rimisurate a s138): objdatains 5,9 (963,3) · objchurn 6,7 ·
-objalloc 6,4 · objdropdef 7,5 · objallocni 7,9 · objmap 11,7 design-bound
-(round-trip GC; cura = piano gc-cycle-collector) · **RMW nuove voci: m-dimrmw
-320→147 ns/iter · m-diminc 270→113 (A/B S-138, conferma post-pin in banda)** ·
-MAPPA (net): WP 1,77 on-only (@s136) ≈ compoff 1,86–1,89 ≪ hf 2,55 ≪ hk 4,3 ≪
-dbal 8,36–8,45 ≈ ORM 8,43–8,56 (@s134) · corpus **1414** ×2 · **eccedenza FD1
-CHIUSA (S-138: cross-giudice; D_mdw 63,3 vs UB 69,6 in banda) — dim-write
-SBLOCCATO**.
+(dal gate s136, NON rimisurate a s138): objdatains 5,9 · objchurn 6,7 ·
+objalloc 6,4 · objdropdef 7,5 · objallocni 7,9 · objmap 11,7 design-bound (→
+piano gc-cycle-collector) · **RMW: m-dimrmw 320→147 · m-diminc 270→113 (A/B
+S-138 + conferma post-pin)** · MAPPA (net): WP 1,77 (@s136) ≈ compoff 1,86–1,89
+≪ hf 2,55 ≪ hk 4,3 ≪ dbal 8,36–8,45 ≈ ORM 8,43–8,56 (@s134) · corpus **1414**
+×2 · **eccedenza FD1 CHIUSA (cross-giudice) — dim-write SBLOCCATO**.
 
 ## §S-139 — ordine
 
