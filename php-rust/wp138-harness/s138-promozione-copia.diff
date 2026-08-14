@@ -1,0 +1,34 @@
+2,3c2,3
+< # s136-promozione.sh <cand_hash16> — gate di promozione LEVA FD1 fast-path dim-write su prop — S-136 (copia dichiarata di s135-promozione.sh: tag s136, path wp136; baseline batteria s125 e ORM INVARIATE, FD1 non dichiara test nuovi; collaudo copia-gate + manifest s136-promozione-copia.diff)
+< # (criterio s136-criterio-dimwrite.md; A/B R=5 s136-ab-fd1 D=+83,3, FUORI-UB +0,4 dichiarato a verbale).
+---
+> # s138-promozione.sh <cand_hash16> — gate di promozione LEVA FD1-ext RMW — S-138 (copia dichiarata di s136-promozione.sh (a sua volta copia s135): tag s138, path wp138; baseline batteria s125 e ORM INVARIATE, FD1 non dichiara test nuovi; collaudo copia-gate + manifest s138-promozione-copia.diff)
+> # (criterio s138-criterio-rmw.md; A/B R=5 s138-ab-rmw).
+6c6
+< # test nuovi attesi) → re-build ricetta → pin-phpr.sh s136 → corpus-gate
+---
+> # test nuovi attesi) → re-build ricetta → pin-phpr.sh s138 → corpus-gate
+9c9
+< # watchdog → pin-server.sh s136 (grado minimo). Registro nel verdetto del run
+---
+> # watchdog → pin-server.sh s138 (grado minimo). Registro nel verdetto del run
+14c14
+< H="$SRC/wp136-harness"
+---
+> H="$SRC/wp138-harness"
+21,22c21,22
+< VERD="$H/s136-promo-verdetto.out"
+< CAND_EXP="${1:?uso: s136-promozione.sh <cand_hash16>}"
+---
+> VERD="$H/s138-promo-verdetto.out"
+> CAND_EXP="${1:?uso: s138-promozione.sh <cand_hash16>}"
+78,79c78,79
+< PHPR="$BIN" R=5 "$SRC/wp97-harness/micro/run-micro.sh" > "$OUT/micro-pin-s136.out" 2>&1
+< note "promozione micro pin s136: $(grep -E '^rapporto_' "$OUT/micro-pin-s136.out" | tr '\n' ' ')"
+---
+> PHPR="$BIN" R=5 "$SRC/wp97-harness/micro/run-micro.sh" > "$OUT/micro-pin-s138.out" 2>&1
+> note "promozione micro pin s138: $(grep -E '^rapporto_' "$OUT/micro-pin-s138.out" | tr '\n' ' ')"
+115c115
+< note "PROMOZIONE COMPLETA rc=0 (da promo-out/rcb — il file rc che QUESTO script scrive): pin s136 = $H2"
+---
+> note "PROMOZIONE COMPLETA rc=0 (da promo-out/rcb — il file rc che QUESTO script scrive): pin s138 = $H2"
