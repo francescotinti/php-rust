@@ -1,0 +1,92 @@
+2,14c2,14
+< # s137-pair.sh <tentativo> — S-137 p.1: coppia full/media WP sul pin s136 (OBBLIGO pin nuovo),
+< # criterio s132-criterio-pair.md RIUSATO INVARIATO + s137-criterio-pair.md
+< # (confronto formale col rif S-136 [1,777-1,779] su banda off 0,041; lettura
+< # firma per gamba PRE-REGISTRATA az.rev. S-136 #2). COPIA DICHIARATA di
+< # wp136-harness/s136-pair.sh (collaudo: copia-gate + manifest
+< # s137-pair-copia.diff) coi SOLI adattamenti: pin s136 (phpr+server); nomi
+< # s137/pair137/wp137-harness; giudice: rif a INTERVALLO + nota ELEVATA
+< # 120-150% + rank label /6 (fix dichiarato: 6 gambe, non 4). Le emende S-136
+< # (assestamento a STREAK + retry gate x3) sono EREDITATE INVARIATE.
+< # Tutto il resto INVARIATO: warm-up media-only MAI giudicata, gambe
+< # intercalate (pair109 INVARIATA), quiescenza gate
+< # SEPARATO per gamba, gate ictx/s a mediana PER MOTORE.
+< # rc autoritativo = SOLO pair-out/pair137-<tentativo>.done scritto QUI.
+---
+> # s139-pair.sh <tentativo> — S-139 p.1: coppia full/media WP sul pin s138 (OBBLIGO pin nuovo),
+> # criterio s132-criterio-pair.md RIUSATO INVARIATO + s139-criterio-pair.md
+> # (confronto formale col rif S-137 [1,767-1,781] su banda 0,041 ULTIMO USO;
+> # FONDAZIONE banda ON-config da N>=5 gambe ON pulite — az.rev. S-137 #4).
+> # COPIA DICHIARATA di wp137-harness/s137-pair.sh (collaudo: copia-gate +
+> # manifest s139-pair-copia.diff) coi SOLI adattamenti: pin s138 (phpr+server);
+> # nomi s139/pair139/wp139-harness; 6 gambe TUTTE ON (config off PENSIONATA dal
+> # canone, criterio p.1); warm-up phpr in ON-config (criterio p.8); giudice:
+> # rif S-137 + fondazione banda_ON (max-min coppie proprie ON pulite, N>=5).
+> # Le emende S-136 (assestamento a STREAK + retry gate x3) EREDITATE INVARIATE.
+> # Tutto il resto INVARIATO: warm-up media-only MAI giudicata, quiescenza gate
+> # SEPARATO per gamba, gate ictx/s a mediana PER MOTORE (pair109 INVARIATA).
+> # rc autoritativo = SOLO pair-out/pair139-<tentativo>.done scritto QUI.
+18c18
+< H="$REPO/wp137-harness"
+---
+> H="$REPO/wp139-harness"
+23c23
+< VERD="$H/s137-pair-verdetto-$T.out"
+---
+> VERD="$H/s139-pair-verdetto-$T.out"
+28c28
+< DONE="$OUT/pair137-$T.done"
+---
+> DONE="$OUT/pair139-$T.done"
+37,38c37,38
+< PIN_ATTESO="1e14793ec0d9650c"
+< SRV_ATTESO="91c4e04321309936"
+---
+> PIN_ATTESO="fa17dabd9eaa4bcb"
+> SRV_ATTESO="a9aded4516e6d46c"
+99c99
+< step "warmup media phpr (off)"
+---
+> step "warmup media phpr (on)"
+101c101
+< MIMALLOC_PURGE_DELAY=0 PHPR_REG_LOWER=0 /usr/bin/time -l "$PHPR" vendor/bin/phpunit --group media \
+---
+> MIMALLOC_PURGE_DELAY=0 /usr/bin/time -l "$PHPR" vendor/bin/phpunit --group media \
+108c108
+< # ---- 6 gambe intercalate off1->on1->off2->on2->off3->on3 (pair109 INVARIATA)
+---
+> # ---- 6 gambe TUTTE ON leg1-on..leg6-on (criterio p.1: off PENSIONATA; pair109 INVARIATA)
+110,111c110,111
+< for leg in 1 2 3; do
+<   for mode in off on; do
+---
+> for leg in 1 2 3 4 5 6; do
+>   for mode in on; do
+139,141c139,141
+< legs = ["leg1-off", "leg1-on", "leg2-off", "leg2-on", "leg3-off", "leg3-on"]
+< print(f"== s137 coppia WP full+media sul pin s136 tentativo={T} (criterio s132-criterio-pair.md RIUSATO + s137-criterio-pair.md) ==")
+< print(f"grade=VERDICT  # derivazione meccanica dai .time; rc autoritativo = pair-out/pair137-{T}.done")
+---
+> legs = ["leg1-on", "leg2-on", "leg3-on", "leg4-on", "leg5-on", "leg6-on"]
+> print(f"== s139 coppia WP full+media sul pin s138 tentativo={T} (criterio s132-criterio-pair.md RIUSATO + s139-criterio-pair.md) ==")
+> print(f"grade=VERDICT  # derivazione meccanica dai .time; rc autoritativo = pair-out/pair139-{T}.done")
+189,190c189,190
+< # az.rev. S-131 #3: PER CONFIGURAZIONE — ON-ONLY = riferimento CANONICO
+< for cfg in ("on", "off"):
+---
+> # az.rev. S-131 #3: PER CONFIGURAZIONE — ON-ONLY = riferimento CANONICO (off PENSIONATA)
+> for cfg in ("on",):
+201c201
+<         REF_LO, REF_HI, BANDA = 1.777, 1.779, 0.041  # s137-criterio-pair.md p.3: rif S-136 on-only [1,777-1,779], banda = variabilita' off s134
+---
+>         REF_LO, REF_HI, BANDA = 1.767, 1.781, 0.041  # s139-criterio-pair.md p.3: rif S-137 on-only [1,767-1,781], banda 0,041 ULTIMO USO (pensionamento dichiarato)
+203c203
+<         print(f"confronto_formale_rif: on-only vs [{REF_LO}-{REF_HI}] banda {BANDA} -> " +
+---
+>         print(f"confronto_formale_rif: on-only vs [{REF_LO}-{REF_HI}] banda {BANDA} (ULTIMO USO banda off S-134) -> " +
+205a206,210
+>         # s139-criterio-pair.md p.4: FONDAZIONE banda ON-config (N>=5 gambe pulite)
+>         if len(props) >= 5:
+>             print(f"banda_ON_fondata={max(props)-min(props):.3f} (max-min di N={len(props)} coppie proprie ON PULITE; da S-140 sostituisce 0,041)")
+>         else:
+>             print(f"banda_ON: N={len(props)} INSUFFICIENTE (<5 gambe pulite) — tentativo da integrare (criterio p.4)")
