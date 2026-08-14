@@ -1,0 +1,4 @@
+promozione: build ricetta riproduce il candidato fa17dabd9eaa4bcb
+promozione batteria: rc=0 (da promo-out/batteria.rc) · 1746/0/2 · inventario: IDENTICO al pin s125 (zero test nuovi, come dichiarato)
+promozione: churn batteria neutralizzato (build ricetta → fa17dabd9eaa4bcb al byte)
+pin-phpr.sh rc=1

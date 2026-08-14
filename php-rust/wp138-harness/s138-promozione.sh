@@ -55,7 +55,7 @@ H2=$(shasum -a 256 "$BIN" | cut -c1-16)
 [ "$H2" = "$CAND_EXP" ] || stop "re-hash post-batteria $H2 != $CAND_EXP — STOP"
 note "promozione: churn batteria neutralizzato (build ricetta → $H2 al byte)"
 
-"$SRC/scripts/pin-phpr.sh" s136 > "$OUT/pin.log" 2>&1
+"$SRC/scripts/pin-phpr.sh" s138 > "$OUT/pin.log" 2>&1
 prc=$?; echo "$prc" > "$OUT/pin.rc"
 [ "$prc" = 0 ] || stop "pin-phpr.sh rc=$prc"
 note "promozione: $(tail -1 "$OUT/pin.log")"
@@ -106,7 +106,7 @@ else
   stop "gate http-kernel: E=$HE F=$HF (attesi 0/0) · $HSUMM"
 fi
 
-"$SRC/scripts/pin-server.sh" s136 > "$OUT/pin-server.log" 2>&1
+"$SRC/scripts/pin-server.sh" s138 > "$OUT/pin-server.log" 2>&1
 src_rc=$?; echo "$src_rc" > "$OUT/pin-server.rc"
 [ "$src_rc" = 0 ] || stop "pin-server.sh rc=$src_rc"
 note "promozione server: $(grep '^PIN server' "$OUT/pin-server.log" | tail -1)"
