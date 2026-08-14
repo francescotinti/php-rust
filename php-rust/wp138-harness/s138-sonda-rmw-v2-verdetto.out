@@ -1,0 +1,17 @@
+== s138 sonda attribuzione RMW (criterio s138-criterio-sonda-rmw-v2.md; D_AB=173.3) ==
+probe_bin=ec8a13b354ede13e (build emendata, MAI pinnabile)
+quiescenza: rc=0
+gate_nm_v2: field_assign_fast probe=0 cand=0 (attesi 0/0) · field_rmw_fast probe=1 cand=1 (atteso STESSO stato)
+gate_nm_v2: OK (omogeneo)
+parita_fixtures_rmw: OK (probe==cand)
+inerzia: probe_med3=0.45 cand_med3=0.45 delta=+0.000s soglia=0.012s
+inerzia: OK
+fast_ns_span_med3=129.424 (r: 131.339 129.424 129.163)
+full_ns_span_med3=306.403 (r: 306.403 314.747 305.913)
+cal_ns_span_med3=39.479 (r: 39.479 39.269 39.905)
+overhead_coppia_ns=39.5 (seg9, sottratto)
+arm_fast=89.9  arm_full=266.9  (arm_full-arm_fast)=177.0
+identita': 177.0 vs D_AB 173.3 -> scarto +3.7 (banda 13.3+eps 4.0; eps=ingresso field_rmw_fast fino al kill-switch, tetto 4)
+ESITO SONDA: ECCEDENZA ATTRIBUITA per NOME — l'eccedenza fuori-modello vive nei canali dichiarati
+             (read-walk field_value + secondo preludio + write-walk field_set_op, contrasto omogeneo monobinario)
+SONDA ACQUISITA (gate ok)
