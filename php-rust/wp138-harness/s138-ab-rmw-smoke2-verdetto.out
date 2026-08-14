@@ -1,0 +1,12 @@
+== s138-ab-rmw ab-rmw-smoke2: A=1e14793e(pin s136) B=f06d7355 R=2 SMOKE=1 ordine ALTERNATO; giudici=m-dimrmw,m-diminc; soglia=max(4, drop-1, spread-batch 13.3); UB parte-modellata=63.3 (fuori modello sopra 163.3); guardie NESSUNA-allo-smoke; quiescenza rc=0; rc autoritativo = ab-out/ab-rmw-smoke2.rc ==
+cat=m-dimrmw N=3000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=0.97 rawB=0.47
+  coppia2 [BA]: rawA=0.98 rawB=0.46
+cat=m-diminc N=3000000 floor_A=0.03 floor_B=0.03
+  coppia1 [AB]: rawA=0.86 rawB=0.38
+  coppia2 [BA]: rawA=0.86 rawB=0.37
+GIUDICE m-dimrmw: A=318.3 B=148.3 ns/iter D=+170.0 soglia=13.3 (rumore drop-1: A'=3.3 B'=3.3) -> SOPRA SOGLIA
+vs parte-modellata m-dimrmw: D=+170.0 vs 63.3 -> scarto +106.7 (FUORI MODELLO: sonda dovuta prima di promuovere)
+GIUDICE m-diminc: A=276.7 B=115.0 ns/iter D=+161.7 soglia=13.3 (rumore drop-1: A'=0.0 B'=3.3) -> SOPRA SOGLIA
+vs parte-modellata m-diminc: D=+161.7 vs 63.3 -> scarto +98.4 (eccedenza attribuita alle componenti dichiarate (read-walk, preludio, peek+op))
+ESITO: FUORI MODELLO (sonda dovuta)
