@@ -43,6 +43,21 @@ if [ "$PIN" != "$PIN_ATTESO" ] || [ "$SRV" != "$SRV_ATTESO" ]; then
 fi
 
 quiesce_gate(){ # $1=etichetta — gate SEPARATO, rc nel suo file (mai nel comando del lancio)
+  # EMENDA DICHIARATA (t3, dopo rc=8 t1 E t2 allo STESSO confine leg2-off):
+  # attesa di ASSESTAMENTO per mediaanalysisd (digerisce il churn immagini
+  # delle gambe media, flare ~25' dopo l'avvio del ciclo) PRIMA del gate —
+  # il gate resta AUTORITATIVO e invariato (stesso modello del quiet_wait
+  # del runner CI). Max ~22 min, poi si lascia parlare il gate.
+  local w=0 c1 c2
+  while :; do
+    c1=$(ps -Ao %cpu,comm | awk 'index($0,"mediaanalysisd"){s+=$1} END{printf "%.1f", s+0}')
+    /bin/sleep 5
+    c2=$(ps -Ao %cpu,comm | awk 'index($0,"mediaanalysisd"){s+=$1} END{printf "%.1f", s+0}')
+    if awk -v a="$c1" -v b="$c2" 'BEGIN{exit !(a<5.0 && b<5.0)}'; then break; fi
+    w=$((w+1)); step "assestamento $1: mediaanalysisd $c1/$c2 (attesa $((w*15))s)"
+    [ "$w" -gt 90 ] && break
+    /bin/sleep 10
+  done
   "$QUIESCE" "$OUT/quiesce-$T-$1.rc" > "$OUT/quiesce-$T-$1.log" 2>&1
   local q=$?
   step "quiescenza $1 rc=$q (file: pair-out/quiesce-$T-$1.rc)"
