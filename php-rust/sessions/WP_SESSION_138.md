@@ -6,14 +6,12 @@ costruita, misurata (−54% e −58%) e promossa a pin nuovo con la catena verde
 
 **SCOREBOARD** (pin NUOVO s138 fa17dabd + server a9aded45; micro dal gate promo):
 **arith 5,6 ↑ · prop 5,6 = · calls 4,8 ↑ · str 4,3 ↑ · arr 3,2 ↓ · re 2,6 =**
-(±0,1 = run-to-run) · rif WP full ON-ONLY **resta 1,767–1,781 @ s136** (pin
-ruotato ⇒ coppia DOVUTA in S-139 con banda ON-config N≥5) · **leve perf
-spedite: 1 (FD1-ext RMW)** · incidenti: +1 (n.14) storici 14.
+(±0,1 run-to-run) · rif WP on-only **resta 1,767–1,781 @ s136** (pin ruotato ⇒
+coppia DOVUTA S-139, banda ON N≥5) · **leve spedite: 1** · incidenti +1 (n.14)=14.
 
 ## Esiti secchi
 1·**Az.rev. S-137 #1**: disasm pin vs probe RICOSTRUITO (ricetta identica, hash
-  diverso dichiarato) — artefatto-inlining **REFUTATO** (inline mantenuto,
-  bersagli 2/1/1/12 invariati; delta bl +63 = timer nominati).
+  diverso dichiarato) — artefatto-inlining **REFUTATO** (bl +63 = timer nominati).
 2·**Sonda v2 arm-only** (inerzia 0,000): arm 51,9 pulito, identità v1 NON CHIUSA
   → sospetto = aritmetica CROSS-GIUDICE (118,2 su m-dimwrite − 83,3 su
   objdatains). **A/B v3 pin s135↔s136 su m-dimwrite (zero probe): D=63,3 vs UB
@@ -34,9 +32,8 @@ spedite: 1 (FD1-ext RMW)** · incidenti: +1 (n.14) storici 14.
   del feed; runner fermati, coda 35 da smaltire.**
 
 ## ⭐ Lezioni (max 3)
-- ⭐⭐ Un'identità che mescola GIUDICI diversi non è un'identità: si chiude
-  sull'unico giudice del modello, e un A/B tra pin STASHATI è la sonda più
-  pulita che esista (zero strumentazione, zero banda tra sonde).
+- ⭐⭐ Un'identità che mescola GIUDICI diversi non è un'identità: si chiude sul
+  giudice del modello — e un A/B tra pin STASHATI è la sonda più pulita che c'è.
 - ⭐⭐ Il gemello di relink non eredita il verdetto A/B gratis (layout): la
   conferma-smoke post-pin è il ponte, pre-registrata prima della promozione.
 - ⭐ Incidente n.14: sed di copia non matcha le righe eseguibili (quote nel
