@@ -222,6 +222,10 @@ fn compile_program_impl(
 /// Come [`compile_program_impl`] ma col modo register-lowering ESPLICITO:
 /// l'entry per i test di emissione (i due modi senza toccare l'ambiente del
 /// processo). La produzione passa sempre da `reg_lower::enabled()`.
+/// SOLO test per costruzione (unico riferimento: reg_lower tests) — il
+/// cfg(test) è il fix del dead-code svelato dal primo run vivo della corsia
+/// census in CI (S-139).
+#[cfg(test)]
 pub(crate) fn compile_program_with_mode(
     program: &Program,
     registry: &Registry,

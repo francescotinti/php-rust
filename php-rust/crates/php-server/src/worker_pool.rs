@@ -194,8 +194,15 @@ mod implementation {
         /// watermark of 1, so pipelined overlap is invisible here. Any
         /// closed-sequential claim from this watermark alone is ADVISORY
         /// (KH81-1); the verdict-grade observable is OUTSTANDING below.
+        // NB (S-139): sotto mem-census-ONLY i sei item marcati allow qui
+        // sotto sono DORMIENTI PER DESIGN (A-PP-63: «QUEUE_DEPTH ops and the
+        // per-request census row stay census-instrumentation-only») — i loro
+        // consumatori sono cfg census-instrumentation. L'allow dichiara la
+        // dormienza; il cfg stretto romperebbe reset_depth_stats nei test.
+        #[allow(dead_code)]
         pub static QUEUE_DEPTH: AtomicUsize = AtomicUsize::new(0);
         /// High-watermark of QUEUE_DEPTH since process start.
+        #[allow(dead_code)]
         pub static QUEUE_DEPTH_MAX: AtomicUsize = AtomicUsize::new(0);
         /// S-80.0.3 (A-TH9/KH81-1): requests inside the server — increment in
         /// dispatch BEFORE the channel send, decrement in the worker AFTER
@@ -225,6 +232,7 @@ mod implementation {
         /// A-MS16).
         pub static ARRIVALS: AtomicU64 = AtomicU64::new(0);
         /// Requests completed pool-wide.
+        #[allow(dead_code)]
         pub static REQUESTS: AtomicU64 = AtomicU64::new(0);
         /// A-PP14 (Council WP-82): churn of requests whose census line was
         /// never emitted (fatal early-returns) — the SplitDrain guard books
@@ -234,7 +242,9 @@ mod implementation {
         /// teardown (`census-drained:` line); KS-PP-82-1 still VOIDs any
         /// figure from a run containing a fatal — these accumulators make
         /// the void VISIBLE in the ledger, they never bless such a run.
+        #[allow(dead_code)]
         pub static DRAINED_CALLS: AtomicU64 = AtomicU64::new(0);
+        #[allow(dead_code)]
         pub static DRAINED_BYTES: AtomicU64 = AtomicU64::new(0);
 
         /// S-80.0.3 tripwire (A-TH10/KH81-2): `d` arrives as fetch_add()+1,
@@ -243,6 +253,7 @@ mod implementation {
         /// the anti-wrap test alone could NOT falsify (its inc/dec balance
         /// out and the drain==0 assert passes WITH the bug). The panic
         /// escalates to abort in production via the global hook (A-PP9/A-PP4).
+        #[allow(dead_code)]
         pub fn note_depth(d: usize) {
             if d == 0 {
                 panic!(
@@ -303,6 +314,7 @@ mod implementation {
     /// clean-window claim. Read-only: the witness never perturbs the
     /// counter.
     #[cfg(any(feature = "census-instrumentation", feature = "mem-census"))]
+    #[allow(dead_code)] // consumata SOLO dalle patch-sonda (vedi re-export in coda al file)
     pub fn census_outstanding_now() -> usize {
         census::OUTSTANDING.load(std::sync::atomic::Ordering::Acquire)
     }
@@ -310,6 +322,7 @@ mod implementation {
     /// A-PP-67 (Council WP-93): monotone arrivals, read-only for the
     /// unified witness row (arr_pre/arr_post).
     #[cfg(any(feature = "census-instrumentation", feature = "mem-census"))]
+    #[allow(dead_code)] // consumata SOLO dalle patch-sonda (vedi re-export in coda al file)
     pub fn census_arrivals_now() -> u64 {
         census::ARRIVALS.load(std::sync::atomic::Ordering::Relaxed)
     }
@@ -2049,7 +2062,13 @@ pub use implementation::{
     REQ_NS, WorkerHandlerMeta, WorkerPool, WorkerPoolContext, WorkerTask, census_probe_active,
     req_ns_armed,
 };
+// API di testimonianza per le PATCH-SONDA di sessione (WP-93 A-PP-67):
+// nessun consumatore in-tree per costruzione — le sonde si applicano come
+// patch temporanee in finestra di misura. L'allow è la DICHIARAZIONE:
+// il primo run vivo della corsia census (S-139) ha svelato il dead-code.
 #[cfg(any(feature = "census-instrumentation", feature = "mem-census"))]
+#[allow(unused_imports)]
 pub use implementation::census_outstanding_now;
 #[cfg(any(feature = "census-instrumentation", feature = "mem-census"))]
+#[allow(unused_imports)]
 pub use implementation::census_arrivals_now;
