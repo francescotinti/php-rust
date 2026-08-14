@@ -632,6 +632,32 @@ pub fn census_dump() {
     }
 }
 
+/// S-139 ic-stats (criterio s139-criterio-rmw-collaudo.md p.3): contatori
+/// fill/hit della cella IC RMW (FieldAssignOp / FieldIncDec). Stessa
+/// convenzione delle census: SOLO build diagnostiche — mai nel pin; la
+/// fedeltà si giudica sempre sul pin, mai su questa build. Dump su stderr
+/// a fine run se `PHPR_IC_STATS` è settata.
+#[cfg(feature = "ic-stats")]
+pub mod ic_stats {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    pub static HIT_ASSIGNOP: AtomicU64 = AtomicU64::new(0);
+    pub static HIT_INCDEC: AtomicU64 = AtomicU64::new(0);
+    pub static FILL_ASSIGNOP: AtomicU64 = AtomicU64::new(0);
+    pub static FILL_INCDEC: AtomicU64 = AtomicU64::new(0);
+    pub fn dump() {
+        if std::env::var_os("PHPR_IC_STATS").is_none() {
+            return;
+        }
+        eprintln!(
+            "== PHPR_IC_STATS: rmw_hit_assignop={} rmw_hit_incdec={} rmw_fill_assignop={} rmw_fill_incdec={} ==",
+            HIT_ASSIGNOP.load(Ordering::Relaxed),
+            HIT_INCDEC.load(Ordering::Relaxed),
+            FILL_ASSIGNOP.load(Ordering::Relaxed),
+            FILL_INCDEC.load(Ordering::Relaxed),
+        );
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

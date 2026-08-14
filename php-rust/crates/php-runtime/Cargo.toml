@@ -40,6 +40,10 @@ vm-gate-probe = []
 # of the layout A/B with this feature; arm A is the pin. Never a parity
 # feature; the measured |Δ| on the giudice IS the layout noise band.
 null-lever = []
+# S-139 az.rev. S-138 #2 (criterio s139-criterio-rmw-collaudo.md p.3): contatori
+# fill/hit della cella IC RMW (PHPR_IC_STATS). Stessa convenzione delle census:
+# SOLO build diagnostiche — mai nel pin; nessuna cifra di tempo da questa build.
+ic-stats = []
 
 [dependencies]
 php-types.workspace = true

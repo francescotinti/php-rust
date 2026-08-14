@@ -1,0 +1,27 @@
+== s139 collaudo CALDO leva FD1-ext RMW (criterio s139-criterio-rmw-collaudo.md) ==
+grade=VERDICT  # p.2 fedeltà; run del 2026-08-15 00:39, pin s138 fa17dabd vs oracle 8.5.7
+attacco-rmw-hot.php:  BYTE-ID rc=0 (cmp secco)
+attacco-rmw-keys.php: BYTE-ID rc=0 (cmp secco)
+fixtures-rmw.php (EMENDATO: sezione CALDA H1-H8 + v.21 coda mono-classe):
+  cmp secco DIVERGE su ESATTAMENTE 2 coppie (riga vuota + "Warning: Undefined
+  array key") ai vettori 2 (riga 14) e 12 (riga 35) = divergenza undefined-key
+  RMW GIÀ A CATALOGO da S-138 (pre-esistente, per NOME; in S-138 il cmp era
+  candidato==pin, entrambi phpr — il vs-oracle sui vettori divergenti non
+  poteva che mordere: EMENDA DICHIARATA del giudizio, REGOLE §5).
+  Al netto delle 2 coppie (filtro perl a coppia esatta): BYTE-ID rc=0.
+  ZERO divergenze NUOVE: sezione CALDA e v.21 fixato byte-identici.
+p.3 GATE HIT (build diagnostica `cargo build -p php-cli --features
+php-runtime/ic-stats`, debug, target scratch — MAI il pin): run di
+fixtures-rmw.php sotto PHPR_IC_STATS=1 →
+  rmw_hit_assignop=21 rmw_hit_incdec=9 rmw_fill_assignop=23 rmw_fill_incdec=11
+  soglie (fill>=1 E hit>=6 per famiglia): PASS. Il 21 coincide col modello
+  meccanico della sezione CALDA (7 vettori assignop × 3 hit post-fill).
+  stdout della build diagnostica == pin: BYTE-ID (contatori inerti).
+p.4 EQUIVALENZA rw PROVATA (non più assunta): `rw` ha UN solo consumatore
+  comportamentale — prop_indirect_guard allo step Prop (arrays.rs:571, fatal
+  BP_VAR_RW su typed prop uninit); il fast entra nel walk OLTRE lo step Prop
+  (perimetro [Prop,Index] 1 chiave ⇒ solo Index+leaf: ramo mai raggiunto);
+  lo stato in cui rw morde (prop uninit) fa fallire il peek ⇒ pieno con
+  rw=true ⇒ fatal preservato. Prova empirica: probe-rw-uninit.php (sito
+  CALDO, poi unset della typed prop) BYTE-ID pin vs oracle, fatal esatto.
+ESITO: az.rev. S-138 #1..#5 TUTTE CHIUSE in S-139.

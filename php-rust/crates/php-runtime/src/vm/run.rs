@@ -5974,6 +5974,9 @@ impl<'m> super::Vm<'m> {
                         *base, top, &steps, keys, RmwArg::Bin(*op, &rhs), ic,
                     )? {
                         RmwFastOut::Hit(push) => {
+                            #[cfg(feature = "ic-stats")]
+                            crate::vm::census::ic_stats::HIT_ASSIGNOP
+                                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                             self.frames[top].stack.push(push);
                             continue;
                         }
@@ -6019,6 +6022,9 @@ impl<'m> super::Vm<'m> {
                     // FD1-ext fill: ramo piano a esito Ok, stessi fatti F4.
                     if self.field_prelude_skip(*base, top, &steps) {
                         self.field_assign_fill(*base, top, &steps, ic);
+                        #[cfg(feature = "ic-stats")]
+                        crate::vm::census::ic_stats::FILL_ASSIGNOP
+                            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     }
                     self.frames[top].stack.push(result);
                 }
@@ -6029,6 +6035,9 @@ impl<'m> super::Vm<'m> {
                         *base, top, &steps, keys, RmwArg::IncDec { inc: *inc, pre: *pre }, ic,
                     )? {
                         RmwFastOut::Hit(push) => {
+                            #[cfg(feature = "ic-stats")]
+                            crate::vm::census::ic_stats::HIT_INCDEC
+                                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                             self.frames[top].stack.push(push);
                             continue;
                         }
@@ -6077,6 +6086,9 @@ impl<'m> super::Vm<'m> {
                     // FD1-ext fill: ramo piano a esito Ok, stessi fatti F4.
                     if self.field_prelude_skip(*base, top, &steps) {
                         self.field_assign_fill(*base, top, &steps, ic);
+                        #[cfg(feature = "ic-stats")]
+                        crate::vm::census::ic_stats::FILL_INCDEC
+                            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     }
                     self.frames[top].stack.push(if *pre { newv } else { old });
                 }

@@ -2059,6 +2059,9 @@ pub fn run_module_with_hir<'m>(
     if vm.census_on {
         census::census_dump();
     }
+    // S-139 ic-stats: dump CLI-only a fine run (l'env-check è dentro dump()).
+    #[cfg(feature = "ic-stats")]
+    census::ic_stats::dump();
     #[cfg(feature = "gc-census")]
     gc_census::dump();
     // WP-60 P2(a): un-park the VM before it is destructured/forgotten — the
