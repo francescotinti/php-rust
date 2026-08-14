@@ -53,7 +53,11 @@ echo "pin==stash: BYTE-ID ok" >> "$VERD"
 diff "$OUT/fix-oracle.txt" "$OUT/fix-pin.txt" > "$OUT/diff-oracle-pin.txt"
 # famiglie DICHIARATE (catalogo §3.21 a/b/c): ogni riga di contenuto del diff
 # deve appartenervi; righe di controllo diff (NcN/---) escluse.
-UNDECL=$(grep '^[<>]' "$OUT/diff-oracle-pin.txt" | grep -Ev \
+# EMENDA r2 (dichiarata): le righe marcate VUOTE (separatori dei blocchi
+# multi-riga dell'oracle attorno ai Deprecated della famiglia (b)) NON sono
+# contenuto divergente — il run r1 (rc=2, agli atti in
+# s136-sonda-fedelta-verdetto-r1.out) le contava come non-catalogate.
+UNDECL=$(grep '^[<>]' "$OUT/diff-oracle-pin.txt" | grep -Ev '^[<>] *$' | grep -Ev \
   'Illegal offset type|Cannot access offset of type|null as an array offset|null.*array offset|Automatic conversion of false to array|Implicit conversion from float' \
   || true)
 {

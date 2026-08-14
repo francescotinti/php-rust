@@ -1976,9 +1976,10 @@ pub fn run_module_with_hir<'m>(
                 // WP-71 M-71.2: park routes (RefLeaf) + drain-fail tripwire
                 // (H-71.3, declared unreachable — expected 0 ALWAYS).
                 mc::census_line(&format!(
-                    "tag=cellpark parks={} drainfails={}",
+                    "tag=cellpark parks={} drainfails={} ap1busy={}",
                     CELL_PARK.with(|c| c.get()),
                     DRAIN_FAIL.with(|c| c.get()),
+                    AP1_BUSY.with(|c| c.get()),
                 ));
                 // WP-72 S-72.4: mass-teardown break stats (cumulative).
                 {
@@ -17459,6 +17460,10 @@ thread_local! {
 thread_local! {
     static CELL_PARK: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
     static DRAIN_FAIL: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+    // S-136 (az.rev. S-135 #3): Busy hit inside the AP1 fast path — no walk
+    // guard is alive there and the base-cell borrow ends before the drain,
+    // so the branch is DECLARED unreachable without re-entrancy.
+    static AP1_BUSY: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
     // S-72.4 (WP-72): cumulative mass-teardown stats — (objects registered at
     // the break phase, props-broken, busy cells [declared unreachable: no
     // user code runs at break — K-M72.2], still-alive after the break
@@ -17497,6 +17502,17 @@ fn cell_park_note() {
 fn drain_fail_note() {
     debug_assert!(false, "RefLeaf drain hit a live guard (declared unreachable, H-71.3)");
     DRAIN_FAIL.with(|c| c.set(c.get() + 1));
+}
+
+/// S-136 (az.rev. S-135 #3): the AP1 fast path took the `LeafWrite::Busy`
+/// defensive replica. Declared unreachable there (no walk guard alive, the
+/// base-cell borrow is released before the drain, no user code runs in
+/// between) — debug builds assert, every build counts (never a silent
+/// swallow; census channel `tag=cellpark ap1busy=`).
+#[inline]
+pub(crate) fn ap1_busy_note() {
+    debug_assert!(false, "AP1 fast path hit LeafWrite::Busy (declared unreachable, az.rev. S-135 #3)");
+    AP1_BUSY.with(|c| c.set(c.get() + 1));
 }
 
 /// Promote `array[key]` to a shared cell and return it, de-COW-ing the array in

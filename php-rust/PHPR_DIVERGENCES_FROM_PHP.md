@@ -1026,10 +1026,12 @@ fixture `wp135-harness/fixtures-ap1.php` s8/s9/s12):
   scrittura non emette la Deprecated «null array offset» 8.5; `$f = false;
   $f[0] = 1` non emette la Deprecated «Automatic conversion of false to
   array» (il valore/verdetto finale è corretto in entrambi i casi).
-- **(c) riga del Deprecated float-key attribuita allo statement DOPO**:
-  fixture s8 su una riga sola lo mascherava; spezzata (S-136) la riga
-  espone 28 vs 27 oracle. Famiglia §3.13/§3.16/§3.17 (canale diag che
-  legge la riga del pc corrente, già avanzato).
+- **(c) riga del Deprecated float-key attribuita a uno statement SUCCESSIVO
+  (punto di FLUSH del canale diag)**: fixture s8 su una riga sola lo
+  mascherava; spezzata (S-136) espone +1 nel probe del revisore (28 vs 27)
+  e +5 nella fixture v2 (52 vs 47: il flush avviene alla READ successiva
+  dell'array, `var_dump`). Famiglia §3.13/§3.16/§3.17 (canale diag che
+  legge la riga del pc al momento del flush, non del sito).
 
 ## 4. Punti di forza da NON toccare (invarianti verificati byte-identici)
 

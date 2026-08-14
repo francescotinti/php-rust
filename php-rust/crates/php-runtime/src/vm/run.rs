@@ -2425,7 +2425,13 @@ impl<'m> super::Vm<'m> {
                                 LeafWrite::Busy(cell, val) => {
                                     // Drain Set di path_op replicato (H-70.1;
                                     // H-71.3: Err dichiarato irraggiungibile).
-                                    cell_park_note();
+                                    // S-136 az.rev. S-135 #3: QUI Busy stesso è
+                                    // dichiarato irraggiungibile (nessun guard
+                                    // di walk vivo, borrow del base cell chiuso
+                                    // prima del drain, nessun codice utente in
+                                    // mezzo): replica difensiva tenuta, ma il
+                                    // contatore dedicato denuncia se mai morde.
+                                    ap1_busy_note();
                                     match cell.try_borrow_mut() {
                                         Ok(mut g) => {
                                             let d = std::mem::replace(&mut *g, val);
