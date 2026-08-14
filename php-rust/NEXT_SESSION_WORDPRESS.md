@@ -66,18 +66,16 @@ rust-analyzer**) · F2 keys-scratch · quiescenza nello stesso comando del lanci
 output TRACKED mossi da orchestratori · rumore-soglia = range PIENO senza formula
 robusta · guardia su categoria senza banda propria · percentuale tra segmenti NON
 annidati senza controllo a zero eventi · pattern del gate quiescenza dentro
-l'argv del lancio · sed di copia dichiarata senza collaudo delle righe NON
-toccate · eccedenza sopra la parte modellata senza sonda di ripartizione · banda
-di guardia da strumento DIVERSO senza il rumore drop-1 del run stesso · finestra
-di misura affidata a un lock con trap EXIT altrui · **gate di quiescenza a 2
-campioni senza assestamento a STREAK contro i daemon oscillanti · abort di un
-run multi-gamba al PRIMO morso di gate senza retry**.
+l'argv del lancio · sed di copia senza collaudo delle righe NON toccate ·
+eccedenza sopra la parte modellata senza sonda · banda di guardia da strumento
+DIVERSO senza drop-1 del run · lock di finestra con trap EXIT altrui · **gate di
+quiescenza a 2 campioni senza assestamento a STREAK contro i daemon oscillanti ·
+abort di un run multi-gamba al PRIMO morso di gate senza retry**.
 
 **Riscritto**: 2026-08-14 (chiusura S-136). Storia: `sessions/` · `gaps/GAP_TREND.md`.
 Pre-flight S-137: pin phpr **s136 1e14793e**c0d9650c + server **s136 91c4e043**21309936
-(OGNI build canonica rilinka il server: ricontrollare l'hash; stash canonici in
-phpr-old-target/release/) · MySQL wp8 con l'elenco (S-136: era GIÙ, riavviato
-col daemonizer) · uploads sotto guardia · corpus 1414 ×2 · nessuna run detached
-· CI: runner in smaltimento coda (~30 job) dopo il rilascio del lock — a inizio
-sessione leggere CI_FEED.log · disco Data ≥10G (post-prune 18G) · lettura:
-REGOLE.md → QUI → WP_SESSION_136 → wp136-harness/revisione.md → PERF_MAP.md.
+(ogni build canonica rilinka il server: ricontrollare l'hash; stash in
+phpr-old-target/release/) · MySQL wp8 con l'elenco (S-136: era GIÙ, daemonizer) ·
+uploads sotto guardia · corpus 1414 ×2 · nessuna run detached · CI: runner in
+smaltimento coda ~30 job post-lock, leggere CI_FEED.log · disco Data ≥10G ·
+lettura: REGOLE.md → QUI → WP_SESSION_136 → wp136-harness/revisione.md → PERF_MAP.md.
