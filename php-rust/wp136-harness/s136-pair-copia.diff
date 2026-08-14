@@ -41,31 +41,58 @@
 ---
 > PIN_ATTESO="6518a1e14a266d52"
 > SRV_ATTESO="e2efdf15bf74d8c9"
-44a46,60
+45,50c46,80
+<   "$QUIESCE" "$OUT/quiesce-$T-$1.rc" > "$OUT/quiesce-$T-$1.log" 2>&1
+<   local q=$?
+<   step "quiescenza $1 rc=$q (file: pair-out/quiesce-$T-$1.rc)"
+<   if [ "$q" != 0 ]; then
+<     echo "rc=8 quiescenza-fail su $1" > "$DONE"; exit 8
+<   fi
+---
 >   # EMENDA DICHIARATA (t3, dopo rc=8 t1 E t2 allo STESSO confine leg2-off):
 >   # attesa di ASSESTAMENTO per mediaanalysisd (digerisce il churn immagini
 >   # delle gambe media, flare ~25' dopo l'avvio del ciclo) PRIMA del gate —
 >   # il gate resta AUTORITATIVO e invariato (stesso modello del quiet_wait
->   # del runner CI). Max ~22 min, poi si lascia parlare il gate.
->   local w=0 c1 c2
->   while :; do
->     c1=$(ps -Ao %cpu,comm | awk 'index($0,"mediaanalysisd"){s+=$1} END{printf "%.1f", s+0}')
->     /bin/sleep 5
->     c2=$(ps -Ao %cpu,comm | awk 'index($0,"mediaanalysisd"){s+=$1} END{printf "%.1f", s+0}')
->     if awk -v a="$c1" -v b="$c2" 'BEGIN{exit !(a<5.0 && b<5.0)}'; then break; fi
->     w=$((w+1)); step "assestamento $1: mediaanalysisd $c1/$c2 (attesa $((w*15))s)"
->     [ "$w" -gt 90 ] && break
->     /bin/sleep 10
+>   # del runner CI).
+>   # EMENDA 2 (t4, dopo rc=8 t3 su leg3-off: il daemon OSCILLA 4→23% in 30 s
+>   # e una valle breve faceva partire il gate sul picco): (a) l'assestamento
+>   # richiede una STREAK di 4 campioni consecutivi <5% a passo 5 s (~20 s di
+>   # quiete continua, la scala dei due campioni del gate); (b) un gate che
+>   # morde a un confine si RITENTA fino a 3 volte (ri-assestando) prima di
+>   # abortire — il gate in sé resta invariato; si smette solo di buttare le
+>   # gambe valide già misurate per UN flare tra le gambe.
+>   local attempt q
+>   for attempt in 1 2 3; do
+>     local w=0 streak=0 c
+>     while :; do
+>       c=$(ps -Ao %cpu,comm | awk 'index($0,"mediaanalysisd"){s+=$1} END{printf "%.1f", s+0}')
+>       if awk -v a="$c" 'BEGIN{exit !(a<5.0)}'; then
+>         streak=$((streak+1))
+>         [ "$streak" -ge 4 ] && break
+>       else
+>         [ "$streak" -gt 0 ] && step "assestamento $1 (att.$attempt): streak rotta a $streak da $c%"
+>         streak=0
+>         w=$((w+1)); step "assestamento $1 (att.$attempt): mediaanalysisd $c% (attesa ~$((w*15))s)"
+>         [ "$w" -gt 90 ] && break
+>         /bin/sleep 10
+>       fi
+>       /bin/sleep 5
+>     done
+>     "$QUIESCE" "$OUT/quiesce-$T-$1.rc" > "$OUT/quiesce-$T-$1.log" 2>&1
+>     q=$?
+>     step "quiescenza $1 rc=$q tentativo-gate=$attempt (file: pair-out/quiesce-$T-$1.rc)"
+>     [ "$q" = 0 ] && return 0
 >   done
-77c93
+>   echo "rc=8 quiescenza-fail su $1 (3 tentativi)" > "$DONE"; exit 8
+77c107
 < # ---- 4 gambe intercalate off1->on1->off2->on2 (pair109 INVARIATA)
 ---
 > # ---- 6 gambe intercalate off1->on1->off2->on2->off3->on3 (pair109 INVARIATA)
-79c95
+79c109
 < for leg in 1 2; do
 ---
 > for leg in 1 2 3; do
-108,110c124,126
+108,110c138,140
 < legs = ["leg1-off", "leg1-on", "leg2-off", "leg2-on"]
 < print(f"== s134 coppia WP full+media sul pin s134 tentativo={T} (criterio s132-criterio-pair.md RIUSATO) ==")
 < print(f"grade=VERDICT  # derivazione meccanica dai .time; rc autoritativo = pair-out/pair134-{T}.done")
@@ -73,7 +100,7 @@
 > legs = ["leg1-off", "leg1-on", "leg2-off", "leg2-on", "leg3-off", "leg3-on"]
 > print(f"== s136 coppia WP full+media sul pin s135 tentativo={T} (criterio s132-criterio-pair.md RIUSATO + s136-criterio-pair.md) ==")
 > print(f"grade=VERDICT  # derivazione meccanica dai .time; rc autoritativo = pair-out/pair136-{T}.done")
-166a183,188
+166a197,202
 >     if cfg == "on":
 >         REF, BANDA = 1.769, 0.041  # s136-criterio-pair.md: rif S-134 on-only, banda = variabilita' off s134
 >         dentro = all(abs(r - REF) <= BANDA for r in props)

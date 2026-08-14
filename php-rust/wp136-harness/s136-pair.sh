@@ -47,23 +47,37 @@ quiesce_gate(){ # $1=etichetta — gate SEPARATO, rc nel suo file (mai nel coman
   # attesa di ASSESTAMENTO per mediaanalysisd (digerisce il churn immagini
   # delle gambe media, flare ~25' dopo l'avvio del ciclo) PRIMA del gate —
   # il gate resta AUTORITATIVO e invariato (stesso modello del quiet_wait
-  # del runner CI). Max ~22 min, poi si lascia parlare il gate.
-  local w=0 c1 c2
-  while :; do
-    c1=$(ps -Ao %cpu,comm | awk 'index($0,"mediaanalysisd"){s+=$1} END{printf "%.1f", s+0}')
-    /bin/sleep 5
-    c2=$(ps -Ao %cpu,comm | awk 'index($0,"mediaanalysisd"){s+=$1} END{printf "%.1f", s+0}')
-    if awk -v a="$c1" -v b="$c2" 'BEGIN{exit !(a<5.0 && b<5.0)}'; then break; fi
-    w=$((w+1)); step "assestamento $1: mediaanalysisd $c1/$c2 (attesa $((w*15))s)"
-    [ "$w" -gt 90 ] && break
-    /bin/sleep 10
+  # del runner CI).
+  # EMENDA 2 (t4, dopo rc=8 t3 su leg3-off: il daemon OSCILLA 4→23% in 30 s
+  # e una valle breve faceva partire il gate sul picco): (a) l'assestamento
+  # richiede una STREAK di 4 campioni consecutivi <5% a passo 5 s (~20 s di
+  # quiete continua, la scala dei due campioni del gate); (b) un gate che
+  # morde a un confine si RITENTA fino a 3 volte (ri-assestando) prima di
+  # abortire — il gate in sé resta invariato; si smette solo di buttare le
+  # gambe valide già misurate per UN flare tra le gambe.
+  local attempt q
+  for attempt in 1 2 3; do
+    local w=0 streak=0 c
+    while :; do
+      c=$(ps -Ao %cpu,comm | awk 'index($0,"mediaanalysisd"){s+=$1} END{printf "%.1f", s+0}')
+      if awk -v a="$c" 'BEGIN{exit !(a<5.0)}'; then
+        streak=$((streak+1))
+        [ "$streak" -ge 4 ] && break
+      else
+        [ "$streak" -gt 0 ] && step "assestamento $1 (att.$attempt): streak rotta a $streak da $c%"
+        streak=0
+        w=$((w+1)); step "assestamento $1 (att.$attempt): mediaanalysisd $c% (attesa ~$((w*15))s)"
+        [ "$w" -gt 90 ] && break
+        /bin/sleep 10
+      fi
+      /bin/sleep 5
+    done
+    "$QUIESCE" "$OUT/quiesce-$T-$1.rc" > "$OUT/quiesce-$T-$1.log" 2>&1
+    q=$?
+    step "quiescenza $1 rc=$q tentativo-gate=$attempt (file: pair-out/quiesce-$T-$1.rc)"
+    [ "$q" = 0 ] && return 0
   done
-  "$QUIESCE" "$OUT/quiesce-$T-$1.rc" > "$OUT/quiesce-$T-$1.log" 2>&1
-  local q=$?
-  step "quiescenza $1 rc=$q (file: pair-out/quiesce-$T-$1.rc)"
-  if [ "$q" != 0 ]; then
-    echo "rc=8 quiescenza-fail su $1" > "$DONE"; exit 8
-  fi
+  echo "rc=8 quiescenza-fail su $1 (3 tentativi)" > "$DONE"; exit 8
 }
 
 reset_env(){
