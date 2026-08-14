@@ -147,3 +147,5 @@ S-134 (2026-08-13): full/media RIMISURATI sul pin NUOVO s134 61896da1 (post-leva
 S-135 (2026-08-13): full NON rimisurato — riferimento resta on-only 1,769 @ pin s134; pin NUOVO s135 (leva AP1 dim-set): coppia N>=3 DOVUTA in S-136. dbal/ORM rimisurati @ s134: 8,36-8,45 / 8,43-8,56 net (FERMI, reperto).
 
 S-136 (2026-08-14): WP full on-only 1,777-1,779 (N=3 @ s135, COMPATIBILE rif 1,769; obbligo N>=3 assolto); media 2,460-2,477; peak 1753-1825 RIENTRATO; leva FD1: objdatains 1060->963,3.
+
+S-137 (2026-08-14): full/media RIMISURATI sul pin s136 (obbligo pin nuovo assolto): **full ON-ONLY CANONICO 1,767-1,781 (N=3 @ s136, COMPATIBILE rif 1,777-1,779 su banda off 0,041)**; off 1,805 N=2; media user-only 2,445-2,529; peak 1743-1819 (bordo alto rientrato) -> gaps/REPORT_GAP_137.md; leve spedite 0 (ANOMALIA dichiarata: blocco dim-write da sonda FD1 NON CHIUSA + objmap valore-oggetto ATTRIBUITO al round-trip GC via census, cura = piano gc-cycle-collector) -> sessions/WP_SESSION_137.md
