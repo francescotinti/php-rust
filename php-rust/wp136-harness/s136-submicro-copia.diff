@@ -1,0 +1,22 @@
+2,5c2,5
+< # s135-submicro.sh — rimisura micro-ORM sul pin s135 POST-leva-AP1.
+< # COPIA DICHIARATA di wp134-harness/s134-submicro.sh (collaudo: copia-gate +
+< # manifest s135-submicro-copia.diff): soli cambi = pin atteso
+< # s135 (hash dal pin promosso, iniettato via PIN_S135), OUT/VERD in wp135-harness. Metodo INVARIATO
+---
+> # s136-submicro.sh — rimisura micro-ORM sul pin s136 POST-leva-FD1.
+> # COPIA DICHIARATA di wp135-harness/s135-submicro.sh (collaudo: copia-gate +
+> # manifest s136-submicro-copia.diff): soli cambi = pin atteso
+> # s136 (hash dal pin promosso, iniettato via PIN_S136), OUT/VERD in wp136-harness. Metodo INVARIATO
+14c14
+< VERD="$H/s135-submicro-verdetto.out"
+---
+> VERD="$H/s136-submicro-verdetto.out"
+21c21
+< [ "$(shasum -a 256 "$PHPR" | cut -c1-16)" = "${PIN_S135:?PIN_S135 richiesto}" ] || { echo "rc=9 pin!=s135" > "$OUT/micro.done"; exit 9; }
+---
+> [ "$(shasum -a 256 "$PHPR" | cut -c1-16)" = "${PIN_S136:?PIN_S136 richiesto}" ] || { echo "rc=9 pin!=s136" > "$OUT/micro.done"; exit 9; }
+30c30
+< echo "== s135 micro-ORM POST-leva-AP1 sul pin s135 (metodo s127-criterio-submicro.md INVARIATO) =="
+---
+> echo "== s136 micro-ORM POST-leva-FD1 sul pin s136 (metodo s127-criterio-submicro.md INVARIATO) =="

@@ -1,9 +1,9 @@
 # PERF_MAP — phpr vs PHP oracle 8.5.7, mappa multi-workload
 
-Aggiornata: **2026-08-13 sera (S-135)** · pin phpr **s135 6518a1e1** (leva AP1
-fast-path AssignPath SPEDITA; dbal/ORM RIMISURATI in S-135 @ pin s134 —
-rapporti FERMI, reperto; WP full/media restano @ pin s134: coppia WP on-only
-N≥3 DOVUTA in S-136 sul pin s135) ·
+Aggiornata: **2026-08-14 (S-136)** · pin phpr **s136 1e14793e** (leva FD1
+fast-path dim-write su prop SPEDITA; coppia WP on-only **N=3 ESEGUITA in
+S-136 sul pin s135**: 1,777–1,779 COMPATIBILE col rif 1,769, peak bordo +80
+RIENTRATO; dbal/ORM restano @ pin s134, S-135) ·
 metodo: user CPU, pavimenti per-binario, N per voce come indicato; criteri pre-registrati in
 `wp125-harness/s125-criterio-{pair,mappa}.md` e `wp126-harness/s126-criterio-{orm,mappa2}.md`
 (+ emenda S-127: **cifra canonica = NETTO-pavimento**, raw companion; gate contesa in ictx/s);
@@ -13,8 +13,8 @@ cifre dai verdetti `.out`. Regola di lettura: rapporti PER workload, MAI aggrega
 
 | workload | rapporto phpr/oracle | N | note |
 |---|---|---|---|
-| **WordPress full-suite** | **ON-ONLY CANONICO 1,769** (S-134 @ pin s134; **N=2 coppie proprie CONCORDI 1,769/1,769 — prima banda propria**; off 1,748–1,789 N=2; misto pulito 1,730–1,791; quiescenza rc=0 ×5, CI sospesa via lock) | **4/4 gambe pulite** (16 celle; prima coppia senza esclusioni dal s131) | S-134 @ s134; parità per NOME 4/4 (solo `wp_is_stream #2`); **peak 1818–1884 MiB (bordo alto +80 vs s131/s132 PERSISTE, da tenere d'occhio)**; verdetto `wp134-harness/s134-pair-verdetto-t1.out`; le leve ctor+IC-non-plain NON muovono WP (coerente: mordono il cammino non-plain, profilo ORM) |
-| **WordPress gruppo media** | **2,405–2,467 CANONICA user-only** (companion user+sys 2,324–2,411, 4 gambe pulite) | 4 | S-134 @ s134 |
+| **WordPress full-suite** | **ON-ONLY CANONICO 1,777–1,779** (S-136 @ pin s135; **N=3 coppie proprie, spread 0,002 — obbligo az.rev. S-134 #4 assolto**; COMPATIBILE formale col rif 1,769 su banda off s134 0,041; off 1,793–1,807 N=3; quiescenza rc=0 ×7 con emenda assestamento mediaanalysisd) | **6/6 gambe pulite** (t4; t1/t2/t3 rc=8 a gate quiescenza, agli atti) | S-136 @ s135; parità per NOME 6/6 (solo `wp_is_stream #2`); **peak 1753–1825 MiB: bordo alto +80 RIENTRATO** (s134: 1818–1884); verdetto `wp136-harness/s136-pair-verdetto-t4.out`; AP1 non muove WP (atteso: leva objmap, WP diluito) |
+| **WordPress gruppo media** | **2,460–2,477 CANONICA user-only** (companion user+sys 2,431–2,464, 6 gambe pulite; bordo lievemente sopra s134 2,405–2,467, sovrapposto) | 6 | S-136 @ s135 |
 | **symfony http-foundation** (1854) | **2,547–2,559** (raw 2,55–2,57) | 2/lato | S-126; canonica sul CONTEGGIO diff 17 nomi = 0,92% ≤1% (≥3 nomi sono unit puri, NON famiglia `php -S` — emenda S-127); sys alto (I/O) |
 | **symfony http-kernel** (1665 test) | **4,29–4,32** | 2/lato | parità 0E/0F; contesa ok |
 | **doctrine/collections** (242) | **8,22 net** (raw 6,20) | 2/lato | S-126; INDICATIVA: oracle netto 0,09 s (denominatore sotto-scala); parità 0/0 |
@@ -22,11 +22,11 @@ cifre dai verdetti `.out`. Regola di lettura: rapporti PER workload, MAI aggrega
 | **doctrine/orm** (3484 test) | **8,43–8,56 net** | 2/lato | **S-135 RIMISURATA @ pin s134** (stesso verdetto; oracle `memory_limit=-1` §3.14; parità 16 nomi == baseline): vs 8,51–8,56 @ s125 ⇒ **INVARIATO** — REPERTO pre-registrato (criterio p.6): 6 leve object s127→s134 (objalloc micro −20% e −14%) NON muovono il rapporto suite (phpr −2,3 s assoluti ≈ −5%, oracle −4% drift): il typed-set/ctor è fetta minore del churn ⇒ la prossima leva si sceglie sul profilo SUITE (insert/lookup, clone/drop) |
 | **composer install OFFLINE** | **1,863–1,891 net** (raw 1,820–1,847) | 2/lato | S-128 @ s127b, PRIMA misura col numeratore vivo (cure ondata-2); composer ESTRATTO, vendor_ok bilaterale, contesa ok (ictx/s); floors 0,07/0,06; sys≈user (~2,3 s/lato) ⇒ **cifra user-only NON confrontabile col full (user+sys): su user+sys sarebbe ~1,3** (rev. S-128 az.5); residuo phpcs config-set (§3.19-quinquies); verdetto `wp128-harness/s128-compoff-verdetto.out` |
 
-## Micro-categorie (R=5, pin s134; tappa ≤3×; gate promozione S-134)
+## Micro-categorie (R=5, pin s136; tappa ≤3×; gate promozione S-136)
 
 | arith | prop | calls | str | arr | re |
 |---|---|---|---|---|---|
-| 5,4 | 5,5 | 5,0 | **4,2** | **3,2** | **2,5** ✅ |
+| 5,5 | 5,6 | 4,7 | **4,2** | **3,3** | **2,6** ✅ |
 
 calls: la (*) di s127 è SCIOLTA in S-129 (phpr netto IDENTICO 2,14 s; si muove
 solo il denominatore oracle 0,43–0,44). re 2,5/2,6 = run-to-run del denominatore.
@@ -34,11 +34,11 @@ solo il denominatore oracle 0,43–0,44). re 2,5/2,6 = run-to-run del denominato
 Allocazioni/iter vs oracle: arith/prop/calls 0=0 · **str 2,00=2,00 (PARITÀ, S-125)** ·
 arr 2,05≈2,03 · re 7,00 vs 5,00 (+2, apertura per NOME).
 
-## Micro-ORM (S-135 sul pin s135 POST-leva-AP1 — verdetto s135-submicro; evalcls/refl da S-126)
+## Micro-ORM (S-136 sul pin s136 POST-leva-FD1 — verdetto s136-submicro; evalcls/refl da S-126)
 
 | evalcls (compile/classe via eval) | refl | objchurn | └ objalloc | └ objdatains | └ objdropdef | └ objallocni | └ objmap |
 |---|---|---|---|---|---|---|---|
-| **316,9** (2,38 ms vs 7,5 µs) | **42,4** | 7,4→**7,0** (1266,7 ns, collaterale AP1) | **6,5** (820,0) | **6,5** (1060,0) | **7,6** | **8,1** (+13,3, osservazione: sopra spread 6,7) | 17,3→**11,7** (116,7 ns, −56,6 = AP1; riconc. A/B 0,1 ≤ 20) |
+| **316,9** (2,38 ms vs 7,5 µs) | **42,4** | 7,0→**6,7** (1180,0 ns, collaterale FD1 −86,7) | **6,4** (810,0) | 6,5→**5,9** (963,3 ns, −96,7 = FD1; riconc. A/B 13,4 ≤ 26,7) | **7,5** | 8,1→**7,9** (736,7; l'osservazione +13,3 di S-135 rientra) | **11,7** (116,7 ns, fermo) |
 
 Profilo ORM phpr (indizio unilaterale): churn visibile multi-% (Zval clone/drop, slot_of,
 gc_note/sweep/collect_cycles, insert/lookup, malloc/free); compile ≤~1% leaf, reflection <0,5%.
@@ -110,6 +110,21 @@ gc_note/sweep/collect_cycles, insert/lookup, malloc/free); compile ≤~1% leaf, 
   (objdatains 2 resolve/iter sul cammino prop-dim, fuori perimetro) a
   catalogo. Sonda conteggi S-135: eccedenza S-134 ATTRIBUITA (5 canali 2→0,
   depr 0→0 falsificato, layout escluso; `s135-eccedenza-chiusura.md`).
+  **Leva «FD1 fast-path dim-write su prop» SPEDITA S-136** (dal reperto sonda:
+  2 resolve/iter su `$e->data['k']=$i` → lowering `FieldAssign{[Prop,Index]}`
+  verificato col dump; modello tempo FieldAssign su m-dimwrite, chiusura 94%:
+  arm 118,2 = walk_driver 37,2 · leaf 18,9 · plumbing 17,6 · prop_step_altro
+  14,4 · guardia 11,3 · resolve 6,7 · dispatch 7,0 · pop 4,5; criterio con UB
+  falsificabile 69,6 = somma canali bypassati; A/B R=5 objdatains D=+83,3,
+  soglia 13,3, riconc. smoke 1,6, **FUORI-UB +0,4 DICHIARATO** — eccedenza
+  +13,7 non ripartita, sonda dovuta; guardie 10/10, `re` morsa allo smoke
+  rientrata a R=5 col drop-1 vero; promozione rc=0) → **pin s136 1e14793e**:
+  cella PropIc su `Op::FieldAssign`, fast path `[Prop,Index]` con
+  `field_write_walk` RIUSATO sul child Array (leaf identico per costruzione)
+  + driver-loop replicato; fill dal ramo F4 a esito Ok coi fatti di classe
+  (slot key==name, non readonly, asym ok; hooks esclusi da F4). Perimetro
+  fuori: child Ref/Str/assente, nkeys≠1, unset-prop, readonly, asym-negata.
+  Aperture per NOME: eccedenza FD1 +13,7 · 14% modello AssignPath (86%).
 - Aperture per NOME: `evalcls` **316,9×** (cliff compile-per-classe; serve strumento di densità
   prima di ogni leva) · `refl` **42,4×** · re +2,00 alloc/iter.
 
