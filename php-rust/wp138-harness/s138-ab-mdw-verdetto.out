@@ -1,0 +1,16 @@
+== s138 A/B m-dimwrite: pin s135 (6518a1e1) vs pin s136 (1e14793e) — criterio s138-criterio-ab-mdw.md ==
+quiescenza: rc=0
+r1: s135=0.60s s136=0.42s
+r2: s135=0.60s s136=0.41s
+smoke(2): OK
+r3: s135=0.60s s136=0.41s
+r4: s135=0.60s s136=0.41s
+r5: s135=0.60s s136=0.42s
+med5: s135=0.60s s136=0.41s (raw a: [0.6, 0.6, 0.6, 0.6, 0.6], b: [0.42, 0.41, 0.41, 0.41, 0.42])
+D_mdw=63.3 ns/iter  rumore=4.0  (denominatore 3e6 dal sorgente)
+identita'-prezzo: D_mdw 63.3 vs UB 69.6 -> scarto -6.3 (banda 13.3)
+ESITO: IDENTITA'-PREZZO CHIUSA sul giudice del modello — BLOCCO DIM-WRITE RIMOSSO;
+       eccedenza objdatains +13,7 RIATTRIBUITA a cross-giudice (apertura per NOME, senza blocco)
+coerenza-arm (informativa, cross-strumento, banda non-omogeneita' >=2 ns/seg):
+  arm_v2 51.9 + D_mdw 63.3 = 115.2 vs arm_pre 118,2 -> scarto -3.0
+A/B ACQUISITO (parita' ok)
