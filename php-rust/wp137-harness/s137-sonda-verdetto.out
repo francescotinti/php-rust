@@ -1,0 +1,28 @@
+== s137 sonda ripartizione eccedenza FD1 su m-dimwrite (criterio s137-criterio-sonda.md) ==
+tp_bin=8dc582d93922376a (build emendata, MAI pinnabile)
+quiescenza: rc=0 (file: sonda-out/quiesce-sonda.rc)
+parita_fixtures_fd1: OK (probe==pin)
+conteggi: hit=2999999 miss=1 (atteso hit~3e6, miss=O(1))
+seg0_ns_span_med3=97.183 (r: 97.183 97.081 97.812)
+seg1_ns_span_med3=43.011 (r: 42.970 43.612 43.011)
+seg2_ns_span_med3=41.981 (r: 41.956 42.378 41.981)
+seg3_ns_span_med3=56.901 (r: 56.991 56.678 56.901)
+seg4_ns_span_med3=45.032 (r: 44.686 45.073 45.032)
+seg5_ns_span_med3=85.080 (r: 85.149 84.813 85.080)
+seg9_ns_span_med3=40.474 (r: 40.346 40.474 40.596)
+overhead_coppia_ns=40.5 (seg9, sottratto)
+arm_totale=56.7  pop+keys=2.5  fast_intero=44.6
+  admission=1.5  leaf_walk=16.4  post_plumbing=4.6
+derivate: dispatch+push(0-1-5)=9.6  fast_altro(5-2-3-4)=22.1
+chiusura=(1+5)/0 = 47.1/56.7 = 83%  (criterio p.3: >=90% o modello INCOMPLETO)
+gain_tra_sonde=118.2-56.7=61.5 (contrasto tra sonde OMOGENEE; A/B resta D=+83.3)
+ripartizione per NOME (modello kept s136 -> misura s137; + = restituito oltre l'UB):
+  pop+keys: 4.5->2.5 delta=+2.0
+  dispatch+push: 7.0->9.6 delta=-2.6
+  plumbing (set-entry -> post_plumbing kept): 17.6->4.6 delta=+13.0
+  leaf (walk child vs leaf_index): 18.9->16.4 delta=+2.5
+  costo AGGIUNTO admission+altro: -23.6
+eccedenza_spiegata_dalla_sonda=-8.7 (attesa ~+13,7)
+identita': UB 69.6 + eccedenza -8.7 = 60.9 vs D_A/B 83.3 -> scarto -22.4 (banda 13.3)
+ESITO SONDA: NON CHIUSA — il blocco az.rev. S-136 #4 sulle leve dim-write PERSISTE
+SONDA ACQUISITA (parita' ok)
