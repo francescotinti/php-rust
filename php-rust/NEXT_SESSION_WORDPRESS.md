@@ -1,48 +1,50 @@
 # NEXT_SESSION — phpr: OBIETTIVO PARITÀ (≥1×) con l'oracle; ≤3× = tappa (REGOLE §1)
-⏱ **FONDAMENTALI**: rif WP **full ON-ONLY = 1,777–1,779** (S-136 @ pin s135;
-N=3 coppie proprie, spread 0,002; COMPATIBILE col precedente 1,769; off
-1,793–1,807; media 2,460–2,477; **peak 1753–1825: bordo +80 RIENTRATO**) —
-**coppia N≥3 sul pin s136 DOVUTA (regola: a OGNI pin nuovo)** · ultima leva
-SPEDITA **S-136 (FD1 fast-path dim-write su prop → PIN s136)** ·
-sessioni-senza-leva = 0 · incidenti: storici 13 (2 nuovi S-136: LSP + probe in finestra).
+⏱ **FONDAMENTALI**: rif WP **full ON-ONLY = 1,767–1,781** (S-137 @ **pin s136**,
+N=3 coppie proprie, COMPATIBILE col precedente 1,777–1,779 su banda off 0,041;
+off 1,805 N=2; media 2,445–2,529; peak 1743–1819 RIENTRATO) — pin INVARIATO ⇒
+prossima coppia SOLO a pin nuovo · ultima leva SPEDITA S-136 (FD1) ·
+**sessioni-senza-leva = 1 (ANOMALIA S-137 dichiarata, 3 ragioni per NOME)** ·
+incidenti: storici 13 (0 nuovi S-137).
 
-## Scoreboard (pin **s136 1e14793e**c0d9650c + server s136 91c4e04321309936; micro gate promozione S-136)
+## Scoreboard (pin s136 1e14793ec0d9650c + server 91c4e04321309936; micro dal gate S-136)
 
-**arith 5,5 · prop 5,6 · calls 4,7 · str 4,2 · arr 3,3 · re 2,6** · oggetti
-POST-FD1: **objdatains 6,5→5,9 (963,3 ns, −96,7) · objchurn 6,7 (collaterale)
-· objalloc 6,4 · objdropdef 7,5 · objallocni 7,9 (l'osservazione +13,3 S-135
-rientra) · objmap 11,7 fermo (residuo 116,7)** · MAPPA (net): WP 1,78 on-only
-(@s135) ≈ compoff 1,86–1,89 ≪ hf 2,55 ≪ hk 4,3 ≪ dbal 8,36–8,45 ≈ ORM
-8,43–8,56 (FERMI @ s134 — leva dal profilo SUITE) · corpus **1414** ×2 ·
-**FD1 FUORI-UB +0,4 dichiarato (eccedenza +13,7 → sonda ripartizione DOVUTA)**.
+**arith 5,5 · prop 5,6 · calls 4,7 · str 4,2 · arr 3,3 · re 2,6** · oggetti:
+objdatains 5,9 (963,3) · objchurn 6,7 · objalloc 6,4 · objdropdef 7,5 ·
+objallocni 7,9 · **objmap 11,7 (116,7): valore-oggetto 43,4 RIQUALIFICATO
+design-bound (round-trip GC nota→sweep→demozione, census S-137; cura = piano
+gc-cycle-collector, NON leva micro)** · MAPPA (net): WP 1,77 on-only (@s136) ≈
+compoff 1,86–1,89 ≪ hf 2,55 ≪ hk 4,3 ≪ dbal 8,36–8,45 ≈ ORM 8,43–8,56 (@s134) ·
+corpus **1414** ×2 · **eccedenza FD1 +13,7 NON CHIUSA (sonda S-137: artefatto
+inlining del probe; indizio: plumbing +13,0) ⇒ blocco leve dim-write ATTIVO**.
 
-## §S-137 — ordine
+## §S-138 — ordine
 
-1. **Coppia WP full on-only N≥3 sul pin s136** (OBBLIGO pin nuovo): ricetta
-   s136-pair (le emende assestamento-streak + retry-gate sono GIÀ dentro,
-   COPIA-GATE rc=0), file NUOVO t1; confronto formale col rif 1,777–1,779
-   usando la banda off 0,041; lock misura da tenere e RICREARE dopo ogni
-   orchestratore; NIENTE Serena/LSP in finestra (incidente S-136).
-2. **Azioni revisore S-136** (lente PROCESSO, `wp136-harness/revisione.md`):
-   vincolanti come az.rev.
-3. **Sonda di ripartizione eccedenza FD1 +13,7** (dovuta dal FUORI-UB): sonda
-   conteggi/segmenti sul pin s136 vs stash s135, canali per NOME (plumbing
-   field_set 17,6 quota-kept? leaf? fill-site?). POI **leva dai numeri**:
-   candidati per NOME — estensione FD1 a `FieldAssignOp`/`FieldIncDec`
-   (stesso cammino, path RMW) · objdatains residuo (leaf 18,9 + plumbing) ·
-   objmap residuo 116,7 (valore-oggetto 43,4 · chiave 10,0) · dispatch 36,3.
-   Criterio: UB falsificabile da prezzi misurati + guardie a formula.
-4. Se resta finestra: sonda del 14% mancante del modello AssignPath (86%).
-APPARATO: nessun arretrato dichiarato.
+1. **Sonda FD1 v2 per SBLOCCARE dim-write** (criterio NUOVO dichiarato, emenda
+   della v1): l'identità cade per artefatto-inlining del probe al call-site di
+   `field_assign_fast` (arm probe 56,7 vs ~34,9 implicato dall'A/B). Vie senza
+   rottura d'inlining: (a) contrasto A/B a COPPIE DI BUILD con un solo canale
+   rimosso per build (prezzi per differenza, metodo H-D) · (b) disasm del pin
+   (bl-count/inline-check, protocollo S-104) + conteggi census. Se l'eccedenza
+   chiude ⇒ **leva estensione FD1 a FieldAssignOp/FieldIncDec** (stesso cammino
+   RMW; UB dai prezzi chiusi).
+2. **Criterio leva con az.rev. S-136 #1 e #5** (OBBLIGO al primo criterio):
+   ruolo dello smoke sulle guardie PRE-REGISTRATO (chi adjudica, a quale R) ·
+   commit del criterio con working tree DICHIARATO pulito dal codice della leva.
+3. **Az.rev. S-137** (revisore lente MISURA, `wp137-harness/revisione.md`): vincolanti.
+4. Se la via 1 non chiude: leva alternativa NON-dim-write dai numeri con prezzi
+   misurati propri (dispatch 36,3 SOLO dopo modello del meccanismo; 14% AssignPath).
+APPARATO: CI batteria-FAIL ambiente (access/fstat su work-dir CI, non regressione) — sanare il work-dir o dichiarare noto.
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
 
-eccedenza FD1 +13,7 · estensione FD1 a FieldAssignOp/FieldIncDec · objdatains
-residuo (leaf 18,9 · plumbing 17,6) · objmap residuo (valore-oggetto 43,4 ·
-chiave 10,0) · dispatch fuori prop_step 36,3 · walk_driver 37,2 nominato (vale
-per TUTTI i Field*) · cammini non cacheabili (readonly, mangled, `__set`, slot
-assente, child Ref) · famiglia locale 170 ns · evalcls 316,9× · refl 42,4× ·
-re +2,00 alloc/iter · chiusura 86% AssignPath · §3.13 · §3.12-i · §3.14 · §3.21 · get_gc · drift TODO.md · latin1-cliff · media bordo 2,477.
+eccedenza FD1 +13,7 (sonda v2 = §S-138 p.1) · estensione FD1 FieldAssignOp/IncDec
+(SBLOCCA con p.1) · objdatains residuo (leaf 18,9 · plumbing 17,6) · objmap:
+chiave 10,0 (sotto soglia) — valore-oggetto 43,4 SPOSTATO al piano GC · dispatch
+fuori prop_step 36,3 · walk_driver 37,2 (tutti i Field*) · cammini non cacheabili
+(readonly, mangled, `__set`, slot assente, child Ref) · famiglia locale 170 ns ·
+evalcls 316,9× · refl 42,4× · re +2,00 alloc/iter · 14% modello AssignPath ·
+§3.13 · §3.12-i · §3.14 · §3.21 · get_gc · drift TODO.md · latin1-cliff ·
+media bordo 2,529 (nuovo bordo S-137, osservazione).
 
 ## NON riproporre (i veti restano; dettaglio nei concili archiviati)
 
@@ -60,21 +62,24 @@ SOSTITUTIVO · probe senza riferimento vivo · ordine FISSO di misura · delta t
 census di epoche diverse senza datare i raw · verdetti da script non committati ·
 SSO inline · inline-array init+drain args · claim di ASSENZA oltre la risoluzione
 · smoke con fam-min > R · notti su PhpStr-full · guardie su giudici diversi dalle
-loro bande · misure con LSP in volo (**anche via Serena: l'attivazione lancia
-rust-analyzer**) · F2 keys-scratch · quiescenza nello stesso comando del lancio ·
-output TRACKED mossi da orchestratori · rumore-soglia = range PIENO senza formula
-robusta · guardia su categoria senza banda propria · percentuale tra segmenti NON
-annidati senza controllo a zero eventi · pattern del gate quiescenza dentro
-l'argv del lancio · sed di copia senza collaudo delle righe NON toccate ·
-eccedenza sopra la parte modellata senza sonda · banda di guardia da strumento
-DIVERSO senza drop-1 del run · lock di finestra con trap EXIT altrui · **gate di
-quiescenza a 2 campioni senza assestamento a STREAK contro i daemon oscillanti ·
-abort di un run multi-gamba al PRIMO morso di gate senza retry**.
+loro bande · misure con LSP in volo (anche via Serena/IDE: **verificare pgrep
+rust-analyzer PRIMA di ogni finestra**) · F2 keys-scratch · quiescenza nello
+stesso comando del lancio · output TRACKED mossi da orchestratori · rumore-soglia
+= range PIENO senza formula robusta · guardia su categoria senza banda propria ·
+percentuale tra segmenti NON annidati senza controllo a zero eventi · pattern del
+gate quiescenza dentro l'argv del lancio · sed di copia senza collaudo delle
+righe NON toccate · eccedenza sopra la parte modellata senza sonda · banda di
+guardia da strumento DIVERSO senza drop-1 del run · lock di finestra con trap
+EXIT altrui · gate di quiescenza a 2 campioni senza assestamento a STREAK ·
+abort multi-gamba al PRIMO morso senza retry · **identità di sonda con probe che
+rompe l'inlining del bersaglio · leva GC note-time contro il precedente WP-21 ·
+`git add` di directory harness (imbarca gli output di run: add per FILE)**.
 
-**Riscritto**: 2026-08-14 (chiusura S-136). Storia: `sessions/` · `gaps/GAP_TREND.md`.
-Pre-flight S-137: pin phpr **s136 1e14793e**c0d9650c + server **s136 91c4e043**21309936
-(ogni build canonica rilinka il server: ricontrollare l'hash; stash in
-phpr-old-target/release/) · MySQL wp8 con l'elenco (S-136: era GIÙ, daemonizer) ·
-uploads sotto guardia · corpus 1414 ×2 · nessuna run detached · CI: runner in
-smaltimento coda ~30 job post-lock, leggere CI_FEED.log · disco Data ≥10G ·
-lettura: REGOLE.md → QUI → WP_SESSION_136 → wp136-harness/revisione.md → PERF_MAP.md.
+**Riscritto**: 2026-08-14 (chiusura S-137). Storia: `sessions/` · `gaps/GAP_TREND.md`.
+Pre-flight S-138: pin phpr **s136 1e14793e**c0d9650c + server **s136 91c4e043**21309936
+(INVARIATI da S-136; stash in phpr-old-target/release/) · MySQL wp8 con l'elenco ·
+uploads sotto guardia · corpus 1414 ×2 · nessuna run detached · CI: coda in
+smaltimento post-lock (batteria-FAIL = ambiente work-dir, non regressione; lock
+misura `/private/tmp/phpr-measure.lock` da CREARE a ogni finestra e rimuovere a
+fine sessione — oggi RIMOSSO) · disco Data ≥10G · pgrep rust-analyzer prima di
+ogni misura · lettura: REGOLE.md → QUI → WP_SESSION_137 → wp137-harness/revisione.md → PERF_MAP.md.

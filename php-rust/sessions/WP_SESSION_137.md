@@ -1,11 +1,10 @@
 # WP_SESSION_137 — coppia WP sul pin s136 (obbligo assolto) + sonda FD1 NON CHIUSA + objmap ATTRIBUITO (leva 0 DICHIARATA)
 
 **In una frase**: la verifica completa di WordPress rifatta tre volte sul motore
-nuovo conferma il rapporto (~1,77–1,78: la leva FD1 non ha rotto nulla), e le due
-indagini di misura hanno inchiodato dove NON si guadagna a buon mercato — l'eccedenza
-FD1 resta non ripartita (colpa dell'attrezzo di misura, dichiarato) e il sovrapprezzo
-degli oggetti-in-mappa è un giro completo del garbage collector a ogni statement,
-curabile solo dal piano GC a roadmap.
+nuovo conferma il rapporto (~1,77–1,78: la leva FD1 non ha rotto nulla); le due
+indagini hanno inchiodato dove NON si guadagna a buon mercato: eccedenza FD1 non
+ripartita (colpa dell'attrezzo, dichiarato) e oggetti-in-mappa = un giro completo
+di garbage collector a ogni statement, curabile solo dal piano GC a roadmap.
 
 **SCOREBOARD** (pin INVARIATO s136 1e14793e + server 91c4e043; micro dal gate S-136, NON rimisurate):
 **arith 5,5 = · prop 5,6 = · calls 4,7 = · str 4,2 = · arr 3,3 = · re 2,6 =** ·
@@ -38,5 +37,4 @@ s137-istruttoria-objmap.md p.5) · incidenti: 0 nuovi (storici 13).
   altrimenti NON CHIUSA senza sconti a posteriori, e l'indizio resta indizio.
 - ⭐⭐ Prima di disegnare una leva GC, leggere i precedenti NEL sorgente: la
   scorciatoia note-time era già caduta (flake WP-21) e il commento lo dichiara.
-- ⭐ Un'anomalia leva-0 con tre ragioni per NOME vale più di un A/B forzato su
-  un meccanismo refutato.
+- ⭐ Anomalia leva-0 con tre ragioni per NOME > un A/B forzato su meccanismo refutato.
