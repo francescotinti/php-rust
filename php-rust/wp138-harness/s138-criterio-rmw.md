@@ -43,3 +43,14 @@
 8. Verdetti: `s138-ab-rmw-verdetto.out` (A/B) · promozione nel registro pin.
    rc autoritativi da file. Lock misura + quiescenza + pgrep rust-analyzer
    per ogni finestra.
+
+## Emenda pre-registrata (PRIMA del run t2 della promozione)
+9. Il candidato giudicato in A/B (f06d7355) è il GEMELLO DI RELINK della
+   batteria; la ricetta canonica riproduce fa17dabd (build originale,
+   fixtures BYTE-ID verificate su ENTRAMBI gli hash, sorgente identico al
+   commit). La promozione t2 gira su fa17dabd. Poiché un relink può muovere
+   il layout (lezione H-C2), il verdetto A/B si trasferisce al binario
+   pinnato SOLO con CONFERMA-SMOKE post-pin: A/B R=2 giudici-only
+   (s138-ab-rmw.sh SMOKE=1) pin-s138 vs stash pin-s136, attesa
+   |D_conferma − D_R5| ≤ 13,3 per entrambi i giudici. Fuori banda ⇒ il pin
+   NON eredita il verdetto: reperto layout, promozione da rivalutare.
