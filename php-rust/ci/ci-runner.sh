@@ -26,15 +26,33 @@ FEED="$CI/CI_FEED.log"
 MLOCK="/private/tmp/phpr-measure.lock"
 mkdir -p "$Q" "$OUT"
 
-# un solo runner alla volta (mkdir atomico); lock orfano >6h = stale, si rompe
-if ! mkdir "$LOCK" 2>/dev/null; then
-  if [ -n "$(find "$LOCK" -maxdepth 0 -mmin +360 2>/dev/null)" ]; then
-    rmdir "$LOCK" 2>/dev/null; mkdir "$LOCK" 2>/dev/null || exit 0
-  else
-    exit 0
-  fi
-fi
-trap 'rmdir "$LOCK" 2>/dev/null' EXIT
+# un solo runner alla volta: lock a directory con PID dentro; stale = pid MORTO,
+# MAI a tempo (S-138: una coda lunga tiene il lock >6h legittimamente e la
+# staleness a orologio ha prodotto 5 runner concorrenti). Rottura ATOMICA via
+# mv: un solo breaker vince la rename, i perdenti NON toccano il lock nuovo.
+acquire_lock() {
+  while :; do
+    if mkdir "$LOCK" 2>/dev/null; then
+      echo $$ > "$LOCK/pid"
+      return 0
+    fi
+    local pid; pid=$(cat "$LOCK/pid" 2>/dev/null)
+    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+      return 1                    # runner vivo legittimo: ci si fa da parte
+    fi
+    if [ -z "$pid" ] && [ -z "$(find "$LOCK" -maxdepth 0 -mmin +10 2>/dev/null)" ]; then
+      return 1                    # pid non ancora scritto: finestra di nascita, non stale
+    fi
+    if mv "$LOCK" "$LOCK.stale.$$" 2>/dev/null; then
+      rm -rf "$LOCK.stale.$$"     # orfano rimosso; si ritenta il mkdir
+    else
+      return 1                    # un altro breaker ha vinto la mv
+    fi
+  done
+}
+acquire_lock || exit 0
+# cleanup SOLO se il lock è ancora nostro (un breaker può averlo sostituito)
+trap '[ "$(cat "$LOCK/pid" 2>/dev/null)" = "$$" ] && rm -rf "$LOCK"' EXIT
 
 quiet_wait() { # aspetta le misure (check ogni 30 s, max 4 h; poi rinuncia)
   local i=0 busy
@@ -65,7 +83,10 @@ dot_clean_git() {
 }
 
 while :; do
-  JOB=$(ls -1 "$Q" 2>/dev/null | sort | head -1)
+  # AppleDouble in coda: l'exFAT semina ._* anche in queue/ e un ._job letto
+  # come SHA produce raffiche di checkout-fail (morso S-138/S-139)
+  find "$Q" -name '._*' -delete 2>/dev/null
+  JOB=$(ls -1 "$Q" 2>/dev/null | grep -v '^\._' | sort | head -1)
   [ -n "${JOB:-}" ] || break
   SHA=$(cat "$Q/$JOB" 2>/dev/null); rm -f "$Q/$JOB"
   [ -n "$SHA" ] || continue
