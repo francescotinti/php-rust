@@ -1,0 +1,112 @@
+diff --git a/php-rust/crates/php-runtime/src/vm/arrays.rs b/php-rust/crates/php-runtime/src/vm/arrays.rs
+index 35afe6f..b7fbccb 100644
+--- a/php-rust/crates/php-runtime/src/vm/arrays.rs
++++ b/php-rust/crates/php-runtime/src/vm/arrays.rs
+@@ -277,7 +277,11 @@ pub(super) fn field_write(
+                 }
+             },
+             WriteWalk::IntoObj(o, i, value) => {
+-                field_write_prop_step(&o, steps, i, keys, fs, value, diags, dropped, aa, rebind, rw)?
++                // S-136 tp: seg5 = field_write_prop_step (call-site).
++                let s136_t5 = super::s136tp::t0(5);
++                let s136_w = field_write_prop_step(&o, steps, i, keys, fs, value, diags, dropped, aa, rebind, rw);
++                super::s136tp::add(5, s136_t5);
++                s136_w?
+             }
+         };
+     }
+@@ -506,7 +510,10 @@ fn field_write_prop_step(
+     // L-LO1 (S-132) also keeps the resolved slot index for the single
+     // props-map access in the non-leaf block below.
+     // `prop_indirect_guard` keeps its own internal resolve (measured ~free).
++    // S-136 tp: seg6 = resolve E1-KO.
++    let s136_t6 = super::s136tp::t0(6);
+     let ra = resolve_prop_access(fs.classes, cid, name, fs.scope);
++    super::s136tp::add(6, s136_t6);
+     let declared0 = matches!(&ra, PropAccess::Slot { .. });
+     let denied0 = matches!(&ra, PropAccess::Denied { .. });
+     let (key0, slot0): (std::borrow::Cow<[u8]>, Option<u32>) = match ra {
+@@ -550,17 +557,25 @@ fn field_write_prop_step(
+                 "L-LO1: slot {si} presence diverges from contains(key0) on class {cid}",
+             );
+         }
++        // S-136 tp: seg7 = blocco guardia (child-fetch + state + indirect_guard).
++        let s136_t7 = super::s136tp::t0(7);
+         let child = match slot0 {
+             Some(si) => obj.props.get_slot_mut(si),
+             None => obj.props.get_mut(key0.as_ref()),
+         };
+         let state = prop_slot_state(child.as_deref());
+-        prop_indirect_guard(fs.classes, fs.scope, cid, name, state, rw, false)?;
++        let s136_g = prop_indirect_guard(fs.classes, fs.scope, cid, name, state, rw, false);
++        super::s136tp::add(7, s136_t7);
++        s136_g?;
+         match child {
+             Some(child) if !denied0 => {
+-                return field_write_walk(
++                // S-136 tp: seg8 = discesa leaf (passo Index sul child).
++                let s136_t8 = super::s136tp::t0(8);
++                let s136_r = field_write_walk(
+                     child, steps, i + 1, keys, fs, value, diags, dropped, aa, rebind, rw,
+                 );
++                super::s136tp::add(8, s136_t8);
++                return s136_r;
+             }
+             _ => {
+                 drop(obj);
+@@ -1493,7 +1508,10 @@ impl<'m> Vm<'m> {
+         };
+         let mut dropped = Vec::new();
+         let mut aa = None;
++        // S-136 tp: seg4 = field_write intero.
++        let s136_t4 = super::s136tp::t0(4);
+         let r = field_write(cell, steps, &mut keys.into_iter(), fs, value, &mut self.diags, &mut dropped, &mut aa, rebind, rw);
++        super::s136tp::add(4, s136_t4);
+         for d in &dropped {
+             self.gc_note(d);
+         }
+diff --git a/php-rust/crates/php-runtime/src/vm/mod.rs b/php-rust/crates/php-runtime/src/vm/mod.rs
+index a561779..17f6693 100644
+--- a/php-rust/crates/php-runtime/src/vm/mod.rs
++++ b/php-rust/crates/php-runtime/src/vm/mod.rs
+@@ -84,6 +84,9 @@ mod tidy;
+ mod xslt;
+ mod tokenizer;
+ mod websapi;
++// S-136 modello tempo FieldAssign (build emendata, worktree): MAI nel pin.
++#[path = "../../../../wp136-harness/s136tp.rs"]
++pub(crate) mod s136tp;
+ use arrays::*;
+ use calls::*;
+ use oop::*;
+diff --git a/php-rust/crates/php-runtime/src/vm/run.rs b/php-rust/crates/php-runtime/src/vm/run.rs
+index dbf403a..9fb1f89 100644
+--- a/php-rust/crates/php-runtime/src/vm/run.rs
++++ b/php-rust/crates/php-runtime/src/vm/run.rs
+@@ -5920,13 +5920,25 @@ impl<'m> super::Vm<'m> {
+                     self.frames[top].stack.push(if *pre { newv } else { old });
+                 }
+                 Op::FieldAssign { base, steps } => {
++                    // S-136 tp: seg0 arm intero · seg9 span vuoto (calibrazione)
++                    let s136_t0 = super::s136tp::t0(0);
++                    let s136_t9 = super::s136tp::t0(9);
++                    super::s136tp::add(9, s136_t9);
++                    let s136_t1 = super::s136tp::t0(1);
+                     let value = self.frames[top].stack.pop().expect("FieldAssign value");
+                     let keys = self.pop_field_keys(top, &steps);
++                    super::s136tp::add(1, s136_t1);
+                     // L-OL1-F4 (S-129): su base-oggetto piana di classe senza
+                     // hook il trio byref/indirect/lazy è no-op per costruzione.
+-                    if self.field_prelude_skip(*base, top, &steps) {
++                    let s136_t2 = super::s136tp::t0(2);
++                    let s136_skip = self.field_prelude_skip(*base, top, &steps);
++                    super::s136tp::add(2, s136_t2);
++                    if s136_skip {
++                        let s136_t3 = super::s136tp::t0(3);
+                         self.field_set(*base, top, &steps, keys, value.clone())?;
++                        super::s136tp::add(3, s136_t3);
+                         self.frames[top].stack.push(value);
++                        super::s136tp::add(0, s136_t0);
+                         continue;
+                     }
+                     // A path starting at a `&get` hooked property writes through
