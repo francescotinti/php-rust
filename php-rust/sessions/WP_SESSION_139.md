@@ -8,7 +8,7 @@ leva); il collaudo RMW è chiuso; la CI locale e quella GitHub sono risanate.
 **SCOREBOARD** (pin s138 INVARIATI; micro dal gate promo S-138, non rimisurate):
 **arith 5,6 = · prop 5,6 = · calls 4,8 = · str 4,3 = · arr 3,2 = · re 2,6 =**
 · **WP full ON-ONLY 1,752–1,785 (N=5) CANONICO · banda_ON FONDATA 0,033** ·
-media 2,470–2,486 · dbal 8,15–8,23 ↓ · ORM 8,59–8,71 fermo/↑ REPERTO ·
+media 2,470–2,486 · dbal 8,15–8,23 ↓ ind. (rev.) · ORM 8,59–8,71 REPERTO ·
 **leve spedite: 0 (ANOMALIA dichiarata: la finestra è andata a 2 misure
 canoniche obbligatorie + apparato CI + az.rev.)** · incidenti 14 (=).
 
@@ -19,8 +19,8 @@ canoniche obbligatorie + apparato CI + az.rev.)** · incidenti 14 (=).
   **peak 1831–1849 OSSERVAZIONE** (+80 MiB, candidate per NOME in PERF_MAP).
 2·**Rimisura ORM/dbal rc=0** (ricetta S-135, chain): ORM **8,59–8,71 FERMO**
   vs 8,43–8,56 → **REPERTO pre-registrato: AP1+FD1+RMW non parlano alla
-  suite** (attesa ↓ FALSIFICATA) ⇒ prossima leva dal profilo SUITE; dbal
-  8,15–8,23 ↓ lieve; parità ORM 16==baseline, dbal 10 stabili.
+  suite** (attesa ↓ FALSIFICATA; regge anche senza phpr1: 8,71≥8,56) ⇒ leva
+  dal profilo SUITE; dbal 8,15–8,23 ↓ INDICATIVO (gambe oracle segnalate).
 3·**Az.rev. S-138 #1..#5 CHIUSE**: fixtures CALDE H1–H8 + v.21 coda mono-classe;
   byte-id 3 file (2 warning undefined-key A CATALOGO esclusi per NOME, zero
   NUOVE); gate hit build `ic-stats`: **21/9/23/11 PASS** (21 == modello 7×3);

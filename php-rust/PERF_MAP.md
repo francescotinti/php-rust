@@ -3,7 +3,9 @@
 Aggiornata: **2026-08-15 (S-139)** · pin phpr **s138 fa17dabd** + server
 **s138 a9aded45** (COPPIA WP @ s138 FATTA: on-only 1,752–1,785 N=5,
 COMPATIBILE col rif S-137 — RMW non muove WP, atteso; **banda_ON FONDATA
-0,033** da N=5 gambe pulite, da S-140 sostituisce la banda off 0,041;
+0,033 — QUALIFICA az.rev. S-139 #1: è variabilità INTRA-finestra (5 gambe
+dello stesso t1); da confermare su una seconda finestra al prossimo pin
+prima che dichiari un delta da sola** — sostituisce comunque la off 0,041;
 objmap 43,4 → piano gc-cycle-collector; dbal/ORM RIMISURATE S-139: dbal ↓
 lieve 8,15–8,23, ORM FERMO 8,59–8,71 — le leve dim-write NON muovono ORM,
 REPERTO) ·
@@ -21,7 +23,7 @@ cifre dai verdetti `.out`. Regola di lettura: rapporti PER workload, MAI aggrega
 | **symfony http-foundation** (1854) | **2,547–2,559** (raw 2,55–2,57) | 2/lato | S-126; canonica sul CONTEGGIO diff 17 nomi = 0,92% ≤1% (≥3 nomi sono unit puri, NON famiglia `php -S` — emenda S-127); sys alto (I/O) |
 | **symfony http-kernel** (1665 test) | **4,29–4,32** | 2/lato | parità 0E/0F; contesa ok |
 | **doctrine/collections** (242) | **8,22 net** (raw 6,20) | 2/lato | S-126; INDICATIVA: oracle netto 0,09 s (denominatore sotto-scala); parità 0/0 |
-| **doctrine/dbal** (3929, sqlite) | **8,15–8,23 net** (raw 7,90–7,97) | 2/lato | **S-139 RIMISURATA @ pin s138** (verdetto `wp139-harness/s139-rimisura-verdetto.out`; floors 0,06/0,19): fail-set stabile 10 nomi == baseline (0,25% ≤1% ⇒ canonica); vs 8,36–8,45 @ s134: **direzione ↓ lieve (−2,5%)** — nessun A/B proprio ⇒ direzione sola; gambe oracle SEGNALATE al gate ictx (run corti ~1,6 s) ma stesso-lato <1% ⇒ valide (precedente S-135); summary phpr VUOTA (classe S-126 #3, fail-set dai .failnames) |
+| **doctrine/dbal** (3929, sqlite) | **8,15–8,23 net** (raw 7,90–7,97) | 2/lato | **S-139 RIMISURATA @ pin s138** (verdetto `wp139-harness/s139-rimisura-verdetto.out`; floors 0,06/0,19): fail-set stabile 10 nomi == baseline (0,25% ≤1% ⇒ canonica); vs 8,36–8,45 @ s134: **direzione ↓ INDICATIVA (az.rev. S-139 #5: ENTRAMBE le gambe oracle SEGNALATE al gate ictx — l'adiudicazione stesso-lato <1% è precedente S-135 ma applicata fuori criterio; declassata da «lieve ↓» a indicativo)**; summary phpr VUOTA (classe S-126 #3, fail-set dai .failnames) |
 | **doctrine/orm** (3484 test) | **8,59–8,71 net** | 2/lato | **S-139 RIMISURATA @ pin s138** (stesso verdetto; oracle `memory_limit=-1` §3.14; parità 16 nomi == baseline; phpr1 ictx segnalata ma stesso-lato <0,2% ⇒ valida): vs 8,43–8,56 @ s134 ⇒ **FERMO/lieve ↑** — REPERTO pre-registrato (criterio p.6): le TRE leve dim-write s135→s138 (AP1+FD1+RMW) NON muovono la suite (l'attesa ↓ è FALSIFICATA: `$this->elements[$k]=$v` non è fetta misurabile del tempo ORM, o il perimetro FD1 lì non morde) ⇒ la prossima leva si sceglie sul profilo SUITE (churn clone/drop, insert/lookup — come già indicava S-135) |
 | **composer install OFFLINE** | **1,863–1,891 net** (raw 1,820–1,847) | 2/lato | S-128 @ s127b, PRIMA misura col numeratore vivo (cure ondata-2); composer ESTRATTO, vendor_ok bilaterale, contesa ok (ictx/s); floors 0,07/0,06; sys≈user (~2,3 s/lato) ⇒ **cifra user-only NON confrontabile col full (user+sys): su user+sys sarebbe ~1,3** (rev. S-128 az.5); residuo phpcs config-set (§3.19-quinquies); verdetto `wp128-harness/s128-compoff-verdetto.out` |
 
