@@ -21,10 +21,10 @@ s137-istruttoria-objmap.md p.5) · incidenti: 0 nuovi (storici 13).
   giudice; parità per NOME 6/6; COPIA-GATE ricetta rc=0 (manifest 45 righe).
 2·**Sonda eccedenza FD1 (az.rev. S-136 #4 ASSOLTA)**: rc=0, hit 2.999.999/miss 1,
   parità probe==pin; ma identità NON CHIUSA (UB 69,6 − 8,7 = 60,9 vs D 83,3,
-  scarto −22,4 fuori banda 13,3): arm probe 56,7 vs ~34,9 implicato dall'A/B =
-  artefatto del probe (timer nel call-site rompono l'inlining di
-  field_assign_fast). Indizio dominante: plumbing set-entry 17,6→4,6 = **+13,0 ≈
-  eccedenza +13,7**. Per p.5 pre-registrato: **blocco leve dim-write PERSISTE**.
+  scarto −22,4 fuori banda 13,3): arm probe 56,7 vs ~34,9 implicato dall'A/B —
+  IPOTESI (az.rev. #1): artefatto-inlining del probe, disasm DOVUTO in S-138.
+  Indizio (non cifra): plumbing set-entry 17,6→4,6 = +13,0 ≈ eccedenza +13,7.
+  Per p.5 pre-registrato: **blocco leve dim-write PERSISTE**.
 3·**Istruttoria objmap con census** (build gc-census): m0 obj `inserted 3,0M
   (1/iter) · sweep main 3,0M (1/statement) · demoted 3,0M`; m1 int: 2. Canale
   «valore-oggetto 43,4» **ATTRIBUITO al round-trip nota→sweep→demozione**; leva

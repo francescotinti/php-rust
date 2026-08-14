@@ -19,8 +19,9 @@ inlining del probe; indizio: plumbing +13,0) ⇒ blocco leve dim-write ATTIVO**.
 ## §S-138 — ordine
 
 1. **Sonda FD1 v2 per SBLOCCARE dim-write** (criterio NUOVO dichiarato): la v1
-   cade per artefatto-inlining del probe al call-site di `field_assign_fast`
-   (arm probe 56,7 vs ~34,9 dall'A/B). Vie senza rottura d'inlining: (a) A/B a
+   cade con IPOTESI artefatto-inlining al call-site di `field_assign_fast` (arm
+   probe 56,7 vs ~34,9 dall'A/B) — **disasm DOVUTO PRIMA (az.rev. S-137 #1)**;
+   poi vie senza rottura d'inlining: (a) A/B a
    COPPIE DI BUILD, un canale rimosso per build (prezzi per differenza, metodo
    H-D) · (b) disasm del pin (bl-count, protocollo S-104) + census. Se chiude ⇒
    **leva estensione FD1 a FieldAssignOp/FieldIncDec** (RMW; UB dai prezzi chiusi).
