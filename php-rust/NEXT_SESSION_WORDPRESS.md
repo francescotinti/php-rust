@@ -1,8 +1,7 @@
 # NEXT_SESSION — phpr: OBIETTIVO PARITÀ (≥1×) con l'oracle; ≤3× = tappa (REGOLE §1)
 ⏱ **FONDAMENTALI**: rif WP **full ON-ONLY = 1,752–1,785 (S-139 @ s138, N=5)** ·
-**banda_ON CANONICA = 0,033** (fondata S-139; la banda off 0,041 è PENSIONATA) ·
-ultima leva SPEDITA S-138 (FD1-ext RMW) · **sessioni-senza-leva = 1 (S-139,
-anomalia dichiarata)** · incidenti: storici 14.
+**banda_ON CANONICA = 0,033** (la banda off 0,041 è PENSIONATA) · ultima leva
+SPEDITA S-138 · **sessioni-senza-leva = 1 (anomalia dichiarata)** · incidenti 14.
 
 ## Scoreboard (pin s138 fa17dabd9eaa4bcb + server a9aded4516e6d46c; micro dal gate promo S-138)
 
@@ -26,10 +25,9 @@ Doctrine — la prossima leva object si sceglie dal profilo SUITE.**
 2. **Peak WP 1831–1849 OSSERVAZIONE** (+80 MiB sopra banda oss. s136/s137 su
    TUTTE le gambe): attribuire per NOME prima di qualunque claim (candidate:
    celle IC per-sito RMW, warmup on-config) — misura dedicata, non gate.
-3. **CI**: leggere `phpr-ci/CI_FEED.log` (coda ~42 in smaltimento col mutex
-   NUOVO PID-based — verificare 1 solo runner); GH Actions: esito ultimo run
-   (fix corsie census + stub mach committati bf6ab09; se rosso residuo →
-   iterare); fase 2 (corpus-gate col tarball php.net) SOLO su decisione utente.
+3. **CI**: `phpr-ci/CI_FEED.log` (coda ~42, mutex NUOVO — verificare 1 solo
+   runner); GH Actions: esito ultimo run (fix corsie + stub mach bf6ab09; se
+   rosso → iterare); fase 2 (corpus-gate tarball php.net) SOLO su decisione utente.
 4. Coppia WP: NON dovuta (pin invariato); a pin nuovo, su banda_ON 0,033.
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
