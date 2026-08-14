@@ -1,0 +1,98 @@
+diff --git a/php-rust/crates/php-runtime/src/vm/arrays.rs b/php-rust/crates/php-runtime/src/vm/arrays.rs
+index c0db4cf..5e4e2ff 100644
+--- a/php-rust/crates/php-runtime/src/vm/arrays.rs
++++ b/php-rust/crates/php-runtime/src/vm/arrays.rs
+@@ -1478,6 +1478,9 @@ impl<'m> Vm<'m> {
+         ic: &crate::bytecode::PropIc,
+     ) -> Result<Option<(Vec<Zval>, Zval)>, PhpError> {
+         use crate::bytecode::PropIc;
++        // S-137 tp: seg2 = admission (IC get + fetch base + borrow + peek slot);
++        // sui MISS lo span resta aperto e NON accumula (t0 scartato).
++        let s137_t2 = super::s137tp::t0(2);
+         if steps.len() != 2
+             || !matches!(steps[0], FieldStep::Prop(_))
+             || !matches!(steps[1], FieldStep::Index)
+@@ -1526,12 +1529,19 @@ impl<'m> Vm<'m> {
+                 return Ok(Some((keys, value)));
+             }
+             keys_it = keys.into_iter();
+-            field_write_walk(
++            super::s137tp::add(2, s137_t2);
++            // S-137 tp: seg3 = field_write_walk sul child (leaf).
++            let s137_t3 = super::s137tp::t0(3);
++            let s137_w = field_write_walk(
+                 child, steps, 1, &mut keys_it, fs, value, &mut self.diags, &mut dropped, &mut aa,
+                 false, false,
+-            )
++            );
++            super::s137tp::add(3, s137_t3);
++            s137_w
+         };
+         drop(obj);
++        // S-137 tp: seg4 = boundary-loop + gc_note + drain (plumbing kept).
++        let s137_t4 = super::s137tp::t0(4);
+         // Replica letterale del loop di `field_write` (boundary token dopo il
+         // rilascio del borrow, discipline M-71.1 invariata).
+         let mut werr = None;
+@@ -1584,6 +1594,7 @@ impl<'m> Vm<'m> {
+             return Err(e);
+         }
+         self.drain_aa_pending(aa, top, false, false)?;
++        super::s137tp::add(4, s137_t4);
+         Ok(None)
+     }
+ 
+diff --git a/php-rust/crates/php-runtime/src/vm/mod.rs b/php-rust/crates/php-runtime/src/vm/mod.rs
+index 4900a94..83b541f 100644
+--- a/php-rust/crates/php-runtime/src/vm/mod.rs
++++ b/php-rust/crates/php-runtime/src/vm/mod.rs
+@@ -84,6 +84,9 @@ mod tidy;
+ mod xslt;
+ mod tokenizer;
+ mod websapi;
++// S-137 sonda ripartizione FD1 (build emendata, worktree): MAI nel pin.
++#[path = "../../../../wp137-harness/s137tp.rs"]
++pub(crate) mod s137tp;
+ use arrays::*;
+ use calls::*;
+ use oop::*;
+diff --git a/php-rust/crates/php-runtime/src/vm/run.rs b/php-rust/crates/php-runtime/src/vm/run.rs
+index 3bde67e..89d96b6 100644
+--- a/php-rust/crates/php-runtime/src/vm/run.rs
++++ b/php-rust/crates/php-runtime/src/vm/run.rs
+@@ -5926,17 +5926,33 @@ impl<'m> super::Vm<'m> {
+                     self.frames[top].stack.push(if *pre { newv } else { old });
+                 }
+                 Op::FieldAssign { base, steps, ic } => {
++                    // S-137 tp: seg0 arm intero · seg9 span vuoto (calibrazione)
++                    let s137_t0 = super::s137tp::t0(0);
++                    let s137_t9 = super::s137tp::t0(9);
++                    super::s137tp::add(9, s137_t9);
++                    let s137_t1 = super::s137tp::t0(1);
+                     let value = self.frames[top].stack.pop().expect("FieldAssign value");
+                     let keys = self.pop_field_keys(top, &steps);
++                    super::s137tp::add(1, s137_t1);
+                     // S-136 FD1 (criterio s136-criterio-dimwrite.md): fast
+                     // path dim-write su prop al hit IC; MISS restituisce
+                     // keys+value al cammino pieno INVARIATO.
+-                    let keys = match self.field_assign_fast(*base, top, &steps, keys, value.clone(), ic)? {
++                    // S-137 tp: seg5 = field_assign_fast intero (call-site);
++                    // hit/miss = run separato (PHPR_TPC, criterio p.4).
++                    let s137_t5 = super::s137tp::t0(5);
++                    let s137_r = self.field_assign_fast(*base, top, &steps, keys, value.clone(), ic);
++                    super::s137tp::add(5, s137_t5);
++                    let keys = match s137_r? {
+                         None => {
++                            super::s137tp::hit();
+                             self.frames[top].stack.push(value);
++                            super::s137tp::add(0, s137_t0);
+                             continue;
+                         }
+-                        Some((keys, _)) => keys,
++                        Some((keys, _)) => {
++                            super::s137tp::miss();
++                            keys
++                        }
+                     };
+                     // L-OL1-F4 (S-129): su base-oggetto piana di classe senza
+                     // hook il trio byref/indirect/lazy è no-op per costruzione.
