@@ -1,0 +1,47 @@
+== s136-ab ab-fd1-smoke: A=6518a1e1(pin s135) B=1e14793e R=2 ordine ALTERNATO; giudice=objdatains; soglia=max(4, drop-1, spread-batch s135 13.3); UB falsificabile=69.6 (+banda 13.3 => fuori banda sopra 82.9); guardie fondate objalloc 13.3/objmap 3.3/objchurn 6.7/objallocni 10.0; quiescenza rc=0 (file: ab-out/quiesce-ab-fd1-smoke.rc); rc autoritativo = ab-out/ab-fd1-smoke.rc ==
+cat=objdatains N=3000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=3.18 rawB=2.93
+  coppia2 [BA]: rawA=3.18 rawB=2.94
+cat=objalloc N=3000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=2.46 rawB=2.45
+  coppia2 [BA]: rawA=2.47 rawB=2.44
+cat=objmap N=3000000 floor_A=0.02 floor_B=0.03
+  coppia1 [AB]: rawA=0.38 rawB=0.37
+  coppia2 [BA]: rawA=0.38 rawB=0.37
+cat=objchurn N=3000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=3.87 rawB=3.60
+  coppia2 [BA]: rawA=3.78 rawB=3.58
+cat=objallocni N=3000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=2.26 rawB=2.24
+  coppia2 [BA]: rawA=2.25 rawB=2.25
+cat=arith N=150000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=7.04 rawB=7.07
+  coppia2 [BA]: rawA=7.04 rawB=7.03
+cat=prop N=90000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=7.01 rawB=7.04
+  coppia2 [BA]: rawA=7.04 rawB=7.23
+cat=calls N=60000000 floor_A=0.02 floor_B=0.03
+  coppia1 [AB]: rawA=6.45 rawB=6.41
+  coppia2 [BA]: rawA=6.43 rawB=6.40
+cat=str N=28000000 floor_A=0.03 floor_B=0.02
+  coppia1 [AB]: rawA=4.43 rawB=4.43
+  coppia2 [BA]: rawA=4.43 rawB=4.53
+cat=arr N=30000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=4.58 rawB=4.56
+  coppia2 [BA]: rawA=4.55 rawB=4.55
+cat=re N=12000000 floor_A=0.03 floor_B=0.03
+  coppia1 [AB]: rawA=5.53 rawB=5.58
+  coppia2 [BA]: rawA=5.53 rawB=5.61
+GIUDICE objdatains: A=1053.3 B=971.7 ns/iter D=+81.7 soglia=13.3 (rumore drop-1: A'=0.0 B'=3.3; spread-batch s135=13.3) -> SOPRA SOGLIA
+riconciliazione UB objdatains: D=+81.7 vs UB=69.6+banda=13.3 -> dentro la banda del modello
+guardia objalloc: A=815.0 B=808.3 D=+6.7 soglia_reg=-13.3 [banda fondata=13.3; rumore drop-1 A'=3.3 B'=3.3] -> ok
+guardia objmap: A=120.0 B=113.3 D=+6.7 soglia_reg=-4.0 [banda fondata=3.3; rumore drop-1 A'=0.0 B'=0.0] -> ok
+guardia objchurn: A=1268.3 B=1190.0 D=+78.3 soglia_reg=-30.0 [banda fondata=6.7; rumore drop-1 A'=30.0 B'=6.7] -> ok
+guardia objallocni: A=745.0 B=741.7 D=+3.3 soglia_reg=-10.0 [banda fondata=10.0; rumore drop-1 A'=3.3 B'=3.3] -> ok
+guardia arith: A=46.8 B=46.9 D=-0.1 soglia_reg=-4.0 [SL=0.94; rumore drop-1 A'=0.0 B'=0.3] -> ok
+guardia prop: A=77.8 B=79.1 D=-1.2 soglia_reg=-4.0 [SL=0.8; rumore drop-1 A'=0.3 B'=2.1] -> ok
+guardia calls: A=107.0 B=106.2 D=+0.8 soglia_reg=-4.0 [SL=0.73; rumore drop-1 A'=0.3 B'=0.2] -> ok
+guardia str: A=157.1 B=159.3 D=-2.1 soglia_reg=-4.0 [SL=2.89; rumore drop-1 A'=0.0 B'=3.6] -> ok
+guardia arr: A=151.5 B=151.2 D=+0.3 soglia_reg=-4.0 [SL=2.49; rumore drop-1 A'=1.0 B'=0.3] -> ok
+guardia re: A=458.3 B=463.8 D=-5.4 soglia_reg=-4.5 [SL=4.46; rumore drop-1 A'=0.0 B'=2.5] -> REGRESSIONE
+ESITO: GUARDIA MORDE
