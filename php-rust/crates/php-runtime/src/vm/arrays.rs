@@ -1456,6 +1456,187 @@ impl<'m> Vm<'m> {
         self.field_set_mode(base, top, steps, keys, value, false, false)
     }
 
+    /// S-136 «FD1 fast-path dim-write» (criterio s136-criterio-dimwrite.md
+    /// p.1): `$o->prop[k] = v` con IC hit — salta walk-driver, resolve e
+    /// guardie i cui fatti di classe sono PROVATI al fill (slot dichiarato
+    /// key==name, non readonly, asym-write ok per lo scope cachato, classe
+    /// senza prop-hooks dal ramo F4). Perimetro: `steps == [Prop, Index]`,
+    /// base oggetto plain (no lazy/proxy/enum, borrow libero) e slot child
+    /// GIÀ `Zval::Array` (peek). Il passo Index è `field_write_walk`
+    /// RIUSATO (stesso codice del pieno: ensure/make_mut/coerce/set) con la
+    /// replica letterale del driver-loop di `field_write` per i boundary
+    /// token; gc_note/drain_aa nell'ordine di `field_set_mode`.
+    /// `Ok(None)` = scritto; `Ok(Some((keys, value)))` = MISS, restituiti
+    /// al cammino pieno INVARIATO.
+    pub(super) fn field_assign_fast(
+        &mut self,
+        base: FieldBase,
+        top: usize,
+        steps: &[FieldStep],
+        keys: Vec<Zval>,
+        value: Zval,
+        ic: &crate::bytecode::PropIc,
+    ) -> Result<Option<(Vec<Zval>, Zval)>, PhpError> {
+        use crate::bytecode::PropIc;
+        if steps.len() != 2
+            || !matches!(steps[0], FieldStep::Prop(_))
+            || !matches!(steps[1], FieldStep::Index)
+        {
+            return Ok(Some((keys, value)));
+        }
+        let scope = self.frames[top].class;
+        let Some((cid1, bits)) = ic.get(PropIc::scope_key(scope)) else {
+            return Ok(Some((keys, value)));
+        };
+        if bits & PropIc::NP == 0 {
+            return Ok(Some((keys, value)));
+        }
+        let si = bits & PropIc::SLOT_MASK;
+        let cell = match base {
+            FieldBase::Local(s) => self.frames[top].slots.get(s as usize),
+            FieldBase::Global(s) => self.frames[0].slots.get(s as usize),
+            FieldBase::Superglobal(i) => self.superglobals.get(i as usize),
+            FieldBase::This => self.frames[top].this.as_ref(),
+        };
+        let Some(Zval::Object(o)) = cell else { return Ok(Some((keys, value))) };
+        let o = Rc::clone(o);
+        let Ok(mut obj) = o.try_borrow_mut() else {
+            // Base mid-write su questo stesso statement: il pieno ha la sua
+            // rotta contata (cell_skip) — qui si cade al pieno che la esegue.
+            return Ok(Some((keys, value)));
+        };
+        if obj.class_id as u32 + 1 != cid1
+            || obj.lazy.is_some()
+            || obj.proxy_instance.is_some()
+            || obj.info.is_enum_case
+        {
+            return Ok(Some((keys, value)));
+        }
+        let fs = FieldScope { classes: &self.classes, scope };
+        let mut dropped = Vec::new();
+        let mut aa = None;
+        let mut keys_it;
+        let walk0 = {
+            let Some(child) = obj.props.get_slot_mut(si) else {
+                drop(obj);
+                return Ok(Some((keys, value)));
+            };
+            if !matches!(child, Zval::Array(_)) {
+                drop(obj);
+                return Ok(Some((keys, value)));
+            }
+            keys_it = keys.into_iter();
+            field_write_walk(
+                child, steps, 1, &mut keys_it, fs, value, &mut self.diags, &mut dropped, &mut aa,
+                false, false,
+            )
+        };
+        drop(obj);
+        // Replica letterale del loop di `field_write` (boundary token dopo il
+        // rilascio del borrow, discipline M-71.1 invariata).
+        let mut werr = None;
+        let mut walk = match walk0 {
+            Ok(w) => w,
+            Err(e) => {
+                werr = Some(e);
+                WriteWalk::Done
+            }
+        };
+        loop {
+            walk = match walk {
+                WriteWalk::Done => break,
+                WriteWalk::IntoRef(rc, i, value) => match rc.try_borrow_mut() {
+                    Ok(mut g) => {
+                        match field_write_walk(
+                            &mut g, steps, i, &mut keys_it, fs, value, &mut self.diags,
+                            &mut dropped, &mut aa, false, false,
+                        ) {
+                            Ok(w) => w,
+                            Err(e) => {
+                                werr = Some(e);
+                                WriteWalk::Done
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        cell_skip_note();
+                        WriteWalk::Done
+                    }
+                },
+                WriteWalk::IntoObj(o2, i, value) => {
+                    match field_write_prop_step(
+                        &o2, steps, i, &mut keys_it, fs, value, &mut self.diags, &mut dropped,
+                        &mut aa, false, false,
+                    ) {
+                        Ok(w) => w,
+                        Err(e) => {
+                            werr = Some(e);
+                            WriteWalk::Done
+                        }
+                    }
+                }
+            };
+        }
+        for d in &dropped {
+            self.gc_note(d);
+        }
+        if let Some(e) = werr {
+            return Err(e);
+        }
+        self.drain_aa_pending(aa, top, false, false)?;
+        Ok(None)
+    }
+
+    /// Fill della cella FD1 (criterio p.2) — chiamato SOLO dal ramo F4 del
+    /// cammino pieno a esito Ok (classe senza prop-hooks già provata dal
+    /// prelude-skip). Cachea (classe, scope) → slot|NP se e solo se: la
+    /// resolve stampa uno Slot con `key == name` e slot-index, la prop NON è
+    /// readonly e l'asym-write passa per QUESTO scope — i due fatti che il
+    /// container-guard (`prop_indirect_guard`) fa rispettare sul pieno.
+    pub(super) fn field_assign_fill(
+        &self,
+        base: FieldBase,
+        top: usize,
+        steps: &[FieldStep],
+        ic: &crate::bytecode::PropIc,
+    ) {
+        use crate::bytecode::PropIc;
+        if steps.len() != 2 || !matches!(steps[1], FieldStep::Index) {
+            return;
+        }
+        let FieldStep::Prop(name) = &steps[0] else { return };
+        let cell = match base {
+            FieldBase::Local(s) => self.frames[top].slots.get(s as usize),
+            FieldBase::Global(s) => self.frames[0].slots.get(s as usize),
+            FieldBase::Superglobal(i) => self.superglobals.get(i as usize),
+            FieldBase::This => self.frames[top].this.as_ref(),
+        };
+        let Some(Zval::Object(o)) = cell else { return };
+        let Ok(b) = o.try_borrow() else { return };
+        let cid = b.class_id as usize;
+        if b.lazy.is_some() || b.proxy_instance.is_some() || b.info.is_enum_case {
+            return;
+        }
+        drop(b);
+        let scope = self.frames[top].class;
+        let PropAccess::Slot { key, slot: Some(si) } =
+            resolve_prop_access(&self.classes, cid, name, scope)
+        else {
+            return;
+        };
+        if key != &name[..] {
+            return;
+        }
+        if prop_readonly_decl(&self.classes, cid, name).is_some() {
+            return;
+        }
+        if asym_write_error(&self.classes, scope, cid, name, "modify").is_some() {
+            return;
+        }
+        debug_assert_eq!(si & !PropIc::SLOT_MASK, 0);
+        ic.fill(cid as u32, PropIc::scope_key(scope), si | PropIc::NP);
+    }
+
     /// [`Self::field_set`] for a COMPOUND write (`+=`, `++`): the container
     /// fetch is Zend's BP_VAR_RW, so an uninitialized typed property along the
     /// path is the uninit fatal (see `prop_indirect_guard`).

@@ -1329,7 +1329,9 @@ pub enum Op {
     /// `[keys…, value] -> [value]` — write `value` through `base` then `steps`
     /// (`Index` steps consume the pushed keys in source order). Objects navigate
     /// in place, arrays auto-vivify + copy-on-write (à la `write_into`).
-    FieldAssign { base: FieldBase, steps: Rc<[FieldStep]> },
+    /// S-136 «FD1»: la cella IC cacha (classe, scope) → slot con bit NP per il
+    /// fast path `[Prop, Index]` (criterio s136-criterio-dimwrite.md).
+    FieldAssign { base: FieldBase, steps: Rc<[FieldStep]>, ic: PropIc },
     /// `[keys…, rhs] -> [result]` — compound `place op= rhs`: read the place (NULL
     /// if absent), apply `op`, write back, leave the result.
     FieldAssignOp { base: FieldBase, steps: Rc<[FieldStep]>, op: BinOp },

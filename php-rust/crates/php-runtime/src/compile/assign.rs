@@ -470,7 +470,7 @@ impl<'a> super::FnCompiler<'a> {
         if place_has_prop(place) || place_has_intermediate_append(place) {
             let (base, steps) = self.field_path(place)?;
             self.expr(rhs)?;
-            self.emit(Op::FieldAssign { base, steps: steps.into() });
+            self.emit(Op::FieldAssign { base, steps: steps.into(), ic: PropIc::default() });
             return Ok(());
         }
         if let PlaceBase::Global(s) = place.base {
@@ -879,7 +879,7 @@ impl<'a> super::FnCompiler<'a> {
                 self.emit(Op::LoadSlot(*t));
             }
             self.expr(rhs)?;
-            self.emit(Op::FieldAssign { base, steps: steps.into() });
+            self.emit(Op::FieldAssign { base, steps: steps.into(), ic: PropIc::default() });
             let end = self.here();
             self.patch(to_end, Op::Jump(end));
             for _ in temps.iter().flatten() {

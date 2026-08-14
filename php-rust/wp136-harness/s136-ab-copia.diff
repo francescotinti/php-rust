@@ -1,0 +1,86 @@
+2,15c2,16
+< # s135-ab.sh <BPATH> <BEXP8> <TAG> <R> [DSMOKE_OBJMAP] — LEVA AP1 fast-path
+< # (criterio s135-criterio-ap1.md, commit PRIMA di ogni run).
+< # COPIA DICHIARATA di wp134-harness/s134-ab.sh (collaudo: scripts/copia-gate.sh
+< # + manifest s135-ab-copia.diff) coi SOLI adattamenti del criterio p.3-6:
+< #  (a) A = stash pin s134 (phpr-s134, 61896da1);
+< #  (b) UN GIUDICE: objmap; soglia = max(4, rumore drop-1 del run,
+< #      SPREAD-BATCH objmap s134-submicro: 10.0);
+< #  (c) guardie micro-ORM con bande = spread s134-submicro phpr:
+< #      objalloc 3.3 · objdatains 30.0 · objchurn 16.7;
+< #  (d) UB FALSIFICABILE = 47.7 (walk-plumbing 38.4 + residuo-arm 9.3,
+< #      prezzi MISURATI dal modello tempo s135-tempo-verdetto.out):
+< #      D > UB+banda(10.0)=57.7 = FUORI BANDA dichiarato a verbale;
+< #      riconciliazione smoke-R5 con banda = spread-batch giudice (10.0);
+< #  (e) churn dichiarato: nessuno (tree B = leva sola sopra il pin s134).
+---
+> # s136-ab.sh <BPATH> <BEXP8> <TAG> <R> [DSMOKE_OBJDATAINS] — LEVA FD1 fast-path
+> # dim-write su prop (criterio s136-criterio-dimwrite.md, commit PRIMA di ogni run).
+> # COPIA DICHIARATA di wp135-harness/s135-ab.sh (collaudo: scripts/copia-gate.sh
+> # + manifest s136-ab-copia.diff) coi SOLI adattamenti del criterio p.3-7:
+> #  (a) A = stash pin s135 (phpr-s135, 6518a1e1);
+> #  (b) UN GIUDICE: objdatains; soglia = max(4, rumore drop-1 del run,
+> #      SPREAD-BATCH objdatains s135-submicro: 13.3);
+> #  (c) guardie micro-ORM con bande = spread s135-submicro phpr:
+> #      objalloc 13.3 · objmap 3.3 · objchurn 6.7 · objallocni 10.0;
+> #  (d) UB FALSIFICABILE = 69.6 (walk_driver 37.2 + resolve 6.7 + guardia 11.3
+> #      + prop_step_altro 14.4, prezzi MISURATI da s136-tempo-verdetto.out):
+> #      D > UB+banda(13.3)=82.9 = FUORI BANDA dichiarato a verbale;
+> #      riconciliazione smoke-R5 con banda = spread-batch giudice (13.3);
+> #  (e) churn dichiarato: il tree B porta ANCHE az.rev. S-135 #3 (contatore
+> #      AP1_BUSY su ramo dichiarato irraggiungibile — codice freddo).
+25c26
+< A="/Volumes/Extreme Pro/Claude/phpr-old-target/release/phpr-s134"
+---
+> A="/Volumes/Extreme Pro/Claude/phpr-old-target/release/phpr-s135"
+29c30
+< VERD="$H/s135-$TAG-verdetto.out"
+---
+> VERD="$H/s136-$TAG-verdetto.out"
+43c44
+< [ "$(shasum -a 256 "$A" | cut -c1-8)" = "61896da1" ] || { echo "A != pin s134 — STOP" | tee -a "$VERD"; echo 1 > "$RC"; exit 1; }
+---
+> [ "$(shasum -a 256 "$A" | cut -c1-8)" = "6518a1e1" ] || { echo "A != pin s135 — STOP" | tee -a "$VERD"; echo 1 > "$RC"; exit 1; }
+49c50
+< src_of() { case "$1" in objalloc|objchurn|objmap|objdatains) echo "$M";; *) echo "$M97";; esac; }
+---
+> src_of() { case "$1" in objalloc|objchurn|objmap|objdatains|objallocni) echo "$M";; *) echo "$M97";; esac; }
+51,52c52,53
+< CATS_JUDGE="objmap"
+< CATS_GUARD="objalloc objdatains objchurn arith prop calls str arr re"
+---
+> CATS_JUDGE="objdatains"
+> CATS_GUARD="objalloc objmap objchurn objallocni arith prop calls str arr re"
+55c56
+< echo "== s135-ab $TAG: A=61896da1(pin s134) B=$BEXP R=$R ordine ALTERNATO; giudice=objmap; soglia=max(4, drop-1, spread-batch s134 10.0); UB falsificabile=47.7 (+banda 10.0 => fuori banda sopra 57.7); guardie fondate objalloc 3.3/objdatains 30.0/objchurn 16.7; quiescenza rc=$QRC (file: ab-out/quiesce-$TAG.rc); rc autoritativo = ab-out/$TAG.rc =="
+---
+> echo "== s136-ab $TAG: A=6518a1e1(pin s135) B=$BEXP R=$R ordine ALTERNATO; giudice=objdatains; soglia=max(4, drop-1, spread-batch s135 13.3); UB falsificabile=69.6 (+banda 13.3 => fuori banda sopra 82.9); guardie fondate objalloc 13.3/objmap 3.3/objchurn 6.7/objallocni 10.0; quiescenza rc=$QRC (file: ab-out/quiesce-$TAG.rc); rc autoritativo = ab-out/$TAG.rc =="
+81,85c82,87
+< if len(sys.argv) > 3 and sys.argv[3]: dsmoke["objmap"] = float(sys.argv[3])
+< UB = 47.7            # criterio p.4: walk-plumbing 38.4 + residuo-arm 9.3
+<                      # (prezzi MISURATI, s135-tempo-verdetto.out)
+< SPREAD_BATCH = {"objmap": 10.0}
+<                      # criterio p.4: spread s134-submicro objmap 0.03 s @3e6
+---
+> if len(sys.argv) > 3 and sys.argv[3]: dsmoke["objdatains"] = float(sys.argv[3])
+> UB = 69.6            # criterio p.3: walk_driver 37.2 + resolve 6.7 +
+>                      # guardia 11.3 + prop_step_altro 14.4 (prezzi MISURATI,
+>                      # s136-tempo-verdetto.out; tetto per costruzione)
+> SPREAD_BATCH = {"objdatains": 13.3}
+>                      # criterio p.5: spread s135-submicro objdatains 0.04 s @3e6
+91c93
+< # spread s134-submicro phpr (criterio p.6).
+---
+> # spread s135-submicro phpr (criterio p.7).
+93c95
+< BAND = {"objalloc":3.3,"objdatains":30.0,"objchurn":16.7}
+---
+> BAND = {"objalloc":13.3,"objmap":3.3,"objchurn":6.7,"objallocni":10.0}
+105c107
+< JUDGES = ("objmap",)
+---
+> JUDGES = ("objdatains",)
+117c119
+<         print(f"GIUDICE {cat}: A={ma:.1f} B={mb:.1f} ns/iter D={delta:+.1f} soglia={thr:.1f} (rumore drop-1: A'={ra:.1f} B'={rb:.1f}; spread-batch s134={SPREAD_BATCH[cat]}) -> {'SOPRA SOGLIA' if ok else 'SOTTO SOGLIA'}")
+---
+>         print(f"GIUDICE {cat}: A={ma:.1f} B={mb:.1f} ns/iter D={delta:+.1f} soglia={thr:.1f} (rumore drop-1: A'={ra:.1f} B'={rb:.1f}; spread-batch s135={SPREAD_BATCH[cat]}) -> {'SOPRA SOGLIA' if ok else 'SOTTO SOGLIA'}")

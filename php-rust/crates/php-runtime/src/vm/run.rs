@@ -5925,13 +5925,25 @@ impl<'m> super::Vm<'m> {
                     *cell.borrow_mut() = newv.clone();
                     self.frames[top].stack.push(if *pre { newv } else { old });
                 }
-                Op::FieldAssign { base, steps } => {
+                Op::FieldAssign { base, steps, ic } => {
                     let value = self.frames[top].stack.pop().expect("FieldAssign value");
                     let keys = self.pop_field_keys(top, &steps);
+                    // S-136 FD1 (criterio s136-criterio-dimwrite.md): fast
+                    // path dim-write su prop al hit IC; MISS restituisce
+                    // keys+value al cammino pieno INVARIATO.
+                    let keys = match self.field_assign_fast(*base, top, &steps, keys, value.clone(), ic)? {
+                        None => {
+                            self.frames[top].stack.push(value);
+                            continue;
+                        }
+                        Some((keys, _)) => keys,
+                    };
                     // L-OL1-F4 (S-129): su base-oggetto piana di classe senza
                     // hook il trio byref/indirect/lazy è no-op per costruzione.
                     if self.field_prelude_skip(*base, top, &steps) {
                         self.field_set(*base, top, &steps, keys, value.clone())?;
+                        // FD1 fill: solo dal ramo F4 a esito Ok (fatti provati).
+                        self.field_assign_fill(*base, top, &steps, ic);
                         self.frames[top].stack.push(value);
                         continue;
                     }
