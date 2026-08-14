@@ -9,7 +9,7 @@ quotidiano di Doctrine) ora salta il corridoio interno: −9% sulla micro dedica
 **arith 5,5 ↗ · prop 5,6 ↗ · calls 4,7 ↘ · str 4,2 = · arr 3,3 ↗ · re 2,6 ↗**
 (run-to-run vs s135) · **rif WP full ON-ONLY = 1,777–1,779 (N=3 @ pin s135,
 COMPATIBILE col rif 1,769** su banda off 0,041) · **leve perf spedite: 1 (FD1)**
-· incidenti: 1 nuovo (LSP acceso ~40 s in finestra di misura, dichiarato).
+· incidenti: 2 nuovi (LSP ~40 s + 3 probe dump in finestra, dichiarati; conteggio corretto da az.rev. #3).
 
 ## Esiti secchi
 1·**Coppia WP p.1**: t4 rc=0, 6/6 gambe pulite, parità 6/6, on-only

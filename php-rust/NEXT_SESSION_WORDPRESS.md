@@ -4,7 +4,7 @@ N=3 coppie proprie, spread 0,002; COMPATIBILE col precedente 1,769; off
 1,793–1,807; media 2,460–2,477; **peak 1753–1825: bordo +80 RIENTRATO**) —
 **coppia N≥3 sul pin s136 DOVUTA (regola: a OGNI pin nuovo)** · ultima leva
 SPEDITA **S-136 (FD1 fast-path dim-write su prop → PIN s136)** ·
-sessioni-senza-leva = 0 · incidenti: storici 12 (1 nuovo S-136: LSP in finestra).
+sessioni-senza-leva = 0 · incidenti: storici 13 (2 nuovi S-136: LSP + probe in finestra).
 
 ## Scoreboard (pin **s136 1e14793e**c0d9650c + server s136 91c4e04321309936; micro gate promozione S-136)
 
