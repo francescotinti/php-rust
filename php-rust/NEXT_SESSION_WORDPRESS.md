@@ -19,21 +19,18 @@ inlining del probe; indizio: plumbing +13,0) ⇒ blocco leve dim-write ATTIVO**.
 
 ## §S-138 — ordine
 
-1. **Sonda FD1 v2 per SBLOCCARE dim-write** (criterio NUOVO dichiarato, emenda
-   della v1): l'identità cade per artefatto-inlining del probe al call-site di
-   `field_assign_fast` (arm probe 56,7 vs ~34,9 implicato dall'A/B). Vie senza
-   rottura d'inlining: (a) contrasto A/B a COPPIE DI BUILD con un solo canale
-   rimosso per build (prezzi per differenza, metodo H-D) · (b) disasm del pin
-   (bl-count/inline-check, protocollo S-104) + conteggi census. Se l'eccedenza
-   chiude ⇒ **leva estensione FD1 a FieldAssignOp/FieldIncDec** (stesso cammino
-   RMW; UB dai prezzi chiusi).
-2. **Criterio leva con az.rev. S-136 #1 e #5** (OBBLIGO al primo criterio):
-   ruolo dello smoke sulle guardie PRE-REGISTRATO (chi adjudica, a quale R) ·
-   commit del criterio con working tree DICHIARATO pulito dal codice della leva.
-3. **Az.rev. S-137** (revisore lente MISURA, `wp137-harness/revisione.md`): vincolanti.
-4. Se la via 1 non chiude: leva alternativa NON-dim-write dai numeri con prezzi
-   misurati propri (dispatch 36,3 SOLO dopo modello del meccanismo; 14% AssignPath).
-APPARATO: CI batteria-FAIL ambiente (access/fstat su work-dir CI, non regressione) — sanare il work-dir o dichiarare noto.
+1. **Sonda FD1 v2 per SBLOCCARE dim-write** (criterio NUOVO dichiarato): la v1
+   cade per artefatto-inlining del probe al call-site di `field_assign_fast`
+   (arm probe 56,7 vs ~34,9 dall'A/B). Vie senza rottura d'inlining: (a) A/B a
+   COPPIE DI BUILD, un canale rimosso per build (prezzi per differenza, metodo
+   H-D) · (b) disasm del pin (bl-count, protocollo S-104) + census. Se chiude ⇒
+   **leva estensione FD1 a FieldAssignOp/FieldIncDec** (RMW; UB dai prezzi chiusi).
+2. **Criterio leva con az.rev. S-136 #1 e #5** (OBBLIGO al primo criterio): ruolo
+   smoke sulle guardie PRE-REGISTRATO · working tree DICHIARATO pulito al commit.
+3. **Az.rev. S-137** (`wp137-harness/revisione.md`): vincolanti.
+4. Se p.1 non chiude: leva NON-dim-write con prezzi misurati propri (dispatch
+   36,3 SOLO dopo modello; 14% AssignPath).
+APPARATO: CI batteria-FAIL = ambiente work-dir (access/fstat): sanare o dichiarare noto.
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
 
@@ -70,16 +67,16 @@ percentuale tra segmenti NON annidati senza controllo a zero eventi · pattern d
 gate quiescenza dentro l'argv del lancio · sed di copia senza collaudo delle
 righe NON toccate · eccedenza sopra la parte modellata senza sonda · banda di
 guardia da strumento DIVERSO senza drop-1 del run · lock di finestra con trap
-EXIT altrui · gate di quiescenza a 2 campioni senza assestamento a STREAK ·
-abort multi-gamba al PRIMO morso senza retry · **identità di sonda con probe che
-rompe l'inlining del bersaglio · leva GC note-time contro il precedente WP-21 ·
-`git add` di directory harness (imbarca gli output di run: add per FILE)**.
+EXIT altrui · quiescenza a 2 campioni senza STREAK · abort multi-gamba al PRIMO
+morso senza retry · **identità di sonda con probe che rompe l'inlining del
+bersaglio · leva GC note-time contro il precedente WP-21 · `git add` di
+directory harness (imbarca gli output di run: add per FILE)**.
 
 **Riscritto**: 2026-08-14 (chiusura S-137). Storia: `sessions/` · `gaps/GAP_TREND.md`.
-Pre-flight S-138: pin phpr **s136 1e14793e**c0d9650c + server **s136 91c4e043**21309936
-(INVARIATI da S-136; stash in phpr-old-target/release/) · MySQL wp8 con l'elenco ·
-uploads sotto guardia · corpus 1414 ×2 · nessuna run detached · CI: coda in
-smaltimento post-lock (batteria-FAIL = ambiente work-dir, non regressione; lock
-misura `/private/tmp/phpr-measure.lock` da CREARE a ogni finestra e rimuovere a
-fine sessione — oggi RIMOSSO) · disco Data ≥10G · pgrep rust-analyzer prima di
-ogni misura · lettura: REGOLE.md → QUI → WP_SESSION_137 → wp137-harness/revisione.md → PERF_MAP.md.
+Pre-flight S-138: pin phpr **s136 1e14793e**c0d9650c + server **91c4e043**21309936
+(INVARIATI; stash in phpr-old-target/release/) · MySQL wp8 con l'elenco · uploads
+sotto guardia · corpus 1414 ×2 · nessuna run detached · CI: coda post-lock
+(batteria-FAIL = ambiente work-dir, non regressione); lock misura
+`/private/tmp/phpr-measure.lock` da CREARE a ogni finestra (oggi RIMOSSO) · disco
+Data ≥10G · pgrep rust-analyzer PRIMA di ogni misura · lettura: REGOLE.md → QUI →
+WP_SESSION_137 → wp137-harness/revisione.md → PERF_MAP.md.
