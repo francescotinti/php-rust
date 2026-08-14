@@ -4,27 +4,58 @@
 # what those gates structurally cannot: cfg(test)-only breakage (a Ctx field
 # addition once left `cargo test` uncompilable for several sessions) and
 # platform drift.
+#
+# S-139 fase 1 (decisione utente 2026-08-14): file SPOSTATO da
+# php-rust/.github/workflows/ (dove GitHub non lo eseguiva: i workflow vivono
+# solo alla RADICE del repo — inerte dalla scrittura, zero run) con i SOLI
+# adattamenti: working-directory php-rust, cache scoping, deps di sistema
+# estese in via difensiva, concurrency, paths-filter, workflow_dispatch.
+# Le corsie (matrice quintetto, census, grep-gate) sono INVARIATE.
+# Rete di ALLARME PRECOCE: pin e promozione restano sugli script locali
+# canonici (REGOLE §2/§5/§6); nessuna cifra di tempo esce da qui.
 name: CI
 
 on:
   push:
     branches: [main]
+    paths:
+      - 'php-rust/crates/**'
+      - 'php-rust/Cargo.toml'
+      - 'php-rust/Cargo.lock'
+      - 'php-rust/rust-toolchain.toml'
+      - 'php-rust/wp78-harness/**'
+      - '.github/workflows/ci.yml'
   pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+
+defaults:
+  run:
+    working-directory: php-rust
 
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: php-rust
       # libz-sys links the SYSTEM zlib (deliberate: byte-identical deflate needs
       # PHP's exact library); zlib1g-dev ships on the runner image, this is a
-      # guard for image changes.
+      # guard for image changes. gd/tidy/xslt added defensively (S-139: on
+      # macOS the build links them via homebrew -L paths; first green run is
+      # the judge of what Linux actually needs).
       - name: System deps
-        run: sudo apt-get update && sudo apt-get install -y zlib1g-dev pkg-config
+        run: sudo apt-get update && sudo apt-get install -y zlib1g-dev pkg-config libgd-dev libtidy-dev libxslt1-dev
       - name: Build (release)
         run: cargo build --release --workspace
       - name: Unit tests
