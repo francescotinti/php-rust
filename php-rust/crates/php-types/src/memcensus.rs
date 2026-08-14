@@ -565,6 +565,7 @@ pub fn report_roots(entries: &[(String, u64)]) {
 /// Prefix of darwin's `task_vm_info` out to `phys_footprint` (rev1). The
 /// kernel copies `min(requested, available)` words, so asking for exactly
 /// this prefix is stable ABI on every macOS that has phys_footprint.
+#[cfg(target_os = "macos")]
 #[repr(C)]
 struct TaskVmInfoPrefix {
     virtual_size: u64,
@@ -589,8 +590,10 @@ struct TaskVmInfoPrefix {
     phys_footprint: u64,
 }
 
+#[cfg(target_os = "macos")]
 const TASK_VM_INFO: u32 = 22;
 
+#[cfg(target_os = "macos")]
 extern "C" {
     static mach_task_self_: u32;
     fn task_info(task: u32, flavor: u32, info: *mut i32, count: *mut u32) -> i32;
@@ -598,6 +601,7 @@ extern "C" {
 
 /// The ledger the judges' metric reports (`/usr/bin/time -l` "peak memory
 /// footprint" is the peak of this): internal + compressed, in bytes.
+#[cfg(target_os = "macos")]
 pub fn phys_footprint() -> u64 {
     let mut info = std::mem::MaybeUninit::<TaskVmInfoPrefix>::zeroed();
     let mut count = (std::mem::size_of::<TaskVmInfoPrefix>() / 4) as u32;
@@ -608,6 +612,15 @@ pub fn phys_footprint() -> u64 {
         return 0;
     }
     unsafe { info.assume_init() }.phys_footprint
+}
+
+/// Fuori macOS il ledger phys_footprint NON ESISTE (task_info è API Mach):
+/// stub a 0 — lo stesso valore del ramo kr!=0, «nessuna lettura» — SOLO per
+/// tenere compilabili le corsie mem-census sul runner Linux (S-139, fase 1
+/// GH Actions). Da qui non esce mai una cifra: lo strumento è macOS-only.
+#[cfg(not(target_os = "macos"))]
+pub fn phys_footprint() -> u64 {
+    0
 }
 
 // mimalloc v3 public API (statically linked via the `mimalloc` crate; no
