@@ -1,0 +1,6 @@
+floors: oracle=0.05 phpr=0.02
+coppia1 oracle=0.15 phpr=0.75
+coppia2 oracle=0.16 phpr=0.76
+coppia3 oracle=0.15 phpr=0.76
+coppia4 oracle=0.15 phpr=0.75
+coppia5 oracle=0.16 phpr=0.74

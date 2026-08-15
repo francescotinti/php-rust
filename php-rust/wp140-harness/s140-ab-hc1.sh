@@ -45,9 +45,10 @@ fi
 ucpu() { { /usr/bin/time -p perl -e 'alarm 900; exec @ARGV or die' -- "$1" "$2" > /dev/null; } 2>&1 | awk '/^user/{print $2}'; }
 floor3() { local a b c; a=$(ucpu "$1" "$2"); b=$(ucpu "$1" "$2"); c=$(ucpu "$1" "$2"); printf '%s\n%s\n%s\n' "$a" "$b" "$c" | sort -n | awk 'NR==2'; }
 
-src_of() { case "$1" in m-hintcall) echo "$H";; m-dimrmw|m-diminc) echo "$M138";; objalloc|objchurn|objmap|objdatains|objallocni) echo "$M";; *) echo "$M97";; esac; }
+src_of() { case "$1" in m-hintcall|m-hintcall6) echo "$H";; m-dimrmw|m-diminc) echo "$M138";; objalloc|objchurn|objmap|objdatains|objallocni) echo "$M";; *) echo "$M97";; esac; }
 n_fixed() { case "$1" in arith) echo 150000000;; prop) echo 90000000;; calls) echo 60000000;; str) echo 28000000;; arr) echo 30000000;; re) echo 12000000;; *) echo "";; esac; }
-CATS_JUDGE="m-hintcall"
+# criterio v2: giudice sostituibile via env JUDGE (default v1)
+CATS_JUDGE="${JUDGE:-m-hintcall}"
 if [ "$SMOKE" = 1 ]; then
   CATS_GUARD=""
 else
@@ -77,10 +78,11 @@ for C in $CATS_JUDGE $CATS_GUARD; do
     echo "  coppia$i [$ord]: rawA=$TA rawB=$TB"
   done
 done
-python3 - "$TSV" "$R" "$BANDA" "$DSM" <<'PY'
+python3 - "$TSV" "$R" "$BANDA" "$DSM" "$CATS_JUDGE" <<'PY'
 import sys
 tsv, R, banda = sys.argv[1], int(sys.argv[2]), float(sys.argv[3])
 dsmoke = float(sys.argv[4]) if len(sys.argv) > 4 and sys.argv[4] else None
+judge_name = sys.argv[5] if len(sys.argv) > 5 else "m-hintcall"
 FUORI_MODELLO = 80.0   # criterio p.4
 RICONC_BANDA = max(banda, 5.0)
 rows = {}
@@ -99,7 +101,7 @@ def trange(v):
     w = sorted(v, key=lambda x: (abs(x - m), x))[:-1]
     return max(w) - min(w)
 verdict_rc = 0
-JUDGES = ("m-hintcall",)
+JUDGES = (judge_name,)
 for cat in [c for c in JUDGES if c in rows] + [c for c in rows if c not in JUDGES]:
     rs = rows[cat]
     n = float(rs[0][1])

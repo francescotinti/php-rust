@@ -1,0 +1,7 @@
+== s140-ab-hc1 smoke: A=fa17dabd(pin s138) B=f2708b75 R=2 SMOKE=1 ordine ALTERNATO; giudice=m-hintcall; soglia=max(4, drop-1, banda-layout 3.3); UB: D>80 FUORI MODELLO; guardie NESSUNA-allo-smoke; quiescenza rc=0; rc autoritativo = ab-out/smoke.rc ==
+cat=m-hintcall N=3000000 floor_A=0.02 floor_B=0.03
+  coppia1 [AB]: rawA=0.76 rawB=0.75
+  coppia2 [BA]: rawA=0.76 rawB=0.74
+GIUDICE m-hintcall: A=246.7 B=238.3 ns/iter D=+8.3 soglia=4.0 (rumore drop-1: A'=0.0 B'=3.3; banda-layout=3.3) -> SOPRA SOGLIA
+vs modello m-hintcall: D=+8.3 atteso 10-40 -> dentro il modello dichiarato
+ESITO: PROMOSSA (giudice sopra soglia, guardie ok)
