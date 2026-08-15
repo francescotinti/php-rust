@@ -1,0 +1,6 @@
+== s141 disasm L-RD1 (controllo positivo criterio p.4 — messo agli atti su azione revisione #2) ==
+grade=FIRMA  # conteggi bl da otool -tv; A=phpr-s140 f2708b75, B=phpr-s141-rd1 f751ef5b
+A drop_in_place<php_types..array..Repr> h3e56134878dab45e: istruzioni=119 bl=13 bl_verso_glue_Zval=5 (per-elemento sul cammino di teardown)
+B _<PhpArray as Drop>::drop: istruzioni=204 bl=22 bl_verso_glue_Zval=1 (residuo: destinazione drop_in_place<Zval> h250ac38a; ARM del residuo NON attribuito in S-141 — DICHIARATO, azione revisione #2 aperta: se sta sul cammino Str la firma e' parziale)
+B conserva 3 copie della glue Repr (119/119/90 istr): girano sui Vec SVUOTATI dal drain (len 0) + siti non-teardown; riferimenti a PhpArray-as-Drop nel binario B: 155 (A: 0)
+lettura: la call per-elemento SPARISCE dal cammino PhpArray::drop (5 bl -> 1 residuo); firma del meccanismo PRESENTE, completezza sul cammino Str da chiudere in S-142.
