@@ -63,8 +63,10 @@ for f in sorted(glob.glob(f"{out}/census-mem-r*.txt")):
     rep = re.search(r"census-mem-(r\d)", f).group(1)
     tot = dict.fromkeys(MKEYS, 0)
     for line in open(f, errors="replace"):
-        if " tag=exit " not in line and not line.rstrip().endswith("tag=exit"):
-            if "tag=exit" not in line: continue
+        # EMENDA v2 (dichiarata): tag ESATTO — la riga `tag=exit_mi` ristampa
+        # gli stessi contatori e col match a substring raddoppiava ogni chiave.
+        m = re.search(r"\btag=(\S+)", line)
+        if not m or m.group(1) != "exit": continue
         kv = dict(re.findall(r"([\w.]+)=(-?\d+)", line))
         for k in MKEYS:
             if k in kv: tot[k] += int(kv[k])

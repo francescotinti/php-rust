@@ -1,0 +1,29 @@
+== s143 census CH_* PER CLASSE su SUITE ORM (criterio s143-criterio-istruttoria.md — CONTEGGI, mai tempo) ==
+grade=CENSUS  # monobinario census, quote = eventi/galloc_n stessa run (denominatore dal sorgente)
+census_phpr=b57c818352d08aac  # probe build, MAI parita'
+EMENDA v2 DICHIARATA: parser quota corretto a tag ESATTO (v1 catturava anche tag=exit_mi => ogni chiave x2; QUOTE invariate, conteggi assoluti dimezzati al vero); raw INVARIATI, run non ripetute
+CONFERMA INCROCIATA: galloc_n=471.263.410 / gfree_n=468.822.630 == dossier S-141 (471,3M + 468,8M) al pari; bytes galloc 26,69 GB / gfree 31,02 GB (livello -9% vs S-141, delta free-alloc 4,33 GB INVARIATO)
+BILANCIO BYTES (voce d, Leijen R3) CHIUSO PER ISPEZIONE: realloc disaggregato (S-103) non nota ne' galloc ne' gfree ma dealloc nota la taglia FINALE => gfree-galloc ~= somma(new-old) dei realloc (9,63-4,87=4,76 GB) - blocchi vivi a fine run ~= 4,33 GB osservato. NON e' un bug di conteggio: convenzione dichiarata.
+rep1 run_rc=2 raw=census-mem-r1-20260815.txt
+rep2 run_rc=2 raw=census-mem-r2-20260815.txt
+parita' per NOME vs baseline16: rc=0 (0=entrambe ==)
+--- sentinelle (non-gate, criterio p.7) ---
+rep1 pre=BUSY
+rep1 post=CLEAN
+rep2 pre=CLEAN
+rep2 post=CLEAN
+--- contatori e quote (parser v2) ---
+r1: str.cum_n=129933714 arr.cum_n=28431596 obj.cum_n=3265745 s143.arrbuf_n=15818775 s143.propsbuf_n=3219798 s143.galloc_n=471263410 s143.gfree_n=468822630
+r2: str.cum_n=129933714 arr.cum_n=28431596 obj.cum_n=3265745 s143.arrbuf_n=15818775 s143.propsbuf_n=3219798 s143.galloc_n=471263409 s143.gfree_n=468822629
+r1 bytes: galloc=26687569022 gfree=31022072546
+r2 bytes: galloc=26687568373 gfree=31022071795
+zval_size=16  # size_of::<Zval>() dichiarato (Hejlsberg R3)
+quota_obj=1.38% (box 0.69% + propsbuf 0.68%)
+quota_arr=9.39% (box 6.03% + arrbuf 3.36%)
+quota_str=27.57%
+quota_other=61.66%  # include ref/vecargs/Vec-interni/realloc-alloc: NON attribuiti in questa tranche (DICHIARATO, criterio p.2)
+REGOLA p.3 (pre-registrata): quota_obj >=40% => A-poi-B ; <25% => B sola/B-poi-A ; 25-40% => RICONVOCA su terza via
+ESITO REGOLA: quota_obj 1.4% < 25% => B sola / B-poi-A
+NOTA: quote = eventi ai funnel di tipo / galloc_n stessa run; clausola memcpy>=60% (Klabnik) fuori perimetro di questa tornata (profilo, non census)
+summary rep1: Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, Skipped: 59, Incomplete: 2.
+summary rep2: Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, Skipped: 59, Incomplete: 2.

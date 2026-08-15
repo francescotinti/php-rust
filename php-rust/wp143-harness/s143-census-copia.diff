@@ -62,18 +62,20 @@
 > for f in sorted(glob.glob(f"{out}/census-mem-r*.txt")):
 >     rep = re.search(r"census-mem-(r\d)", f).group(1)
 >     tot = dict.fromkeys(MKEYS, 0)
-64,66c66,71
+64,66c66,73
 <         if not line.startswith("zvalcensus_s142 "): continue
 <         for k, v in re.findall(r"(\w+)=(\d+)", line):
 <             if k in tot: tot[k] += int(v)
 ---
->         if " tag=exit " not in line and not line.rstrip().endswith("tag=exit"):
->             if "tag=exit" not in line: continue
+>         # EMENDA v2 (dichiarata): tag ESATTO — la riga `tag=exit_mi` ristampa
+>         # gli stessi contatori e col match a substring raddoppiava ogni chiave.
+>         m = re.search(r"\btag=(\S+)", line)
+>         if not m or m.group(1) != "exit": continue
 >         kv = dict(re.findall(r"([\w.]+)=(-?\d+)", line))
 >         for k in MKEYS:
 >             if k in kv: tot[k] += int(kv[k])
 >         if "s143.zval_size" in kv: zsize = int(kv["s143.zval_size"])
-68,70c73,87
+68,70c75,89
 < for rep, tot in per_rep.items():
 <     print(f"{rep}: " + " ".join(f"{k}={tot[k]}" for k in KEYS))
 < reps = list(per_rep.values())
@@ -93,15 +95,15 @@
 >     print(f"{rep} bytes: galloc={tot['galloc_bytes']} gfree={tot['gfree_bytes']}")
 > print(f"zval_size={zsize}  # size_of::<Zval>() dichiarato (Hejlsberg R3)")
 > reps = [per_rep[r] for r in sorted(per_rep)]
-72c89
+72c91
 <     for k in KEYS:
 ---
 >     for k in MKEYS:
-76c93
+76c95
 <             print(f"DICHIARA scarto>1% su {k}: r1={a} r2={b}")
 ---
 >             print(f"DICHIARA scarto>1% su {k}: r1={a} r2={b} (criterio p.6.ii)")
-78,86c95,108
+78,86c97,110
 <     t = reps[0]
 <     lo = 100*(t["rd1_elems"]*PREZZO_ELEM[0] + t["rd1_arrays"]*PREZZO_ARR[0])/T_SUITE_NS
 <     hi = 100*(t["rd1_elems"]*PREZZO_ELEM[1] + t["rd1_arrays"]*PREZZO_ARR[1])/T_SUITE_NS
@@ -126,7 +128,7 @@
 >     elif q_obj < 25: print(f"ESITO REGOLA: quota_obj {q_obj:.1f}% < 25% => B sola / B-poi-A")
 >     else: print(f"ESITO REGOLA: quota_obj {q_obj:.1f}% in 25-40% => RICONVOCA il concilio su terza via")
 >     print("NOTA: quote = eventi ai funnel di tipo / galloc_n stessa run; clausola memcpy>=60% (Klabnik) fuori perimetro di questa tornata (profilo, non census)")
-89,90c111,112
+89,90c113,114
 < { echo "== s142 census L-RD1 su SUITE ORM (criterio s142-criterio-census-rd1.md — CONTEGGI, mai tempo) =="
 <   echo "grade=CENSUS  # monobinario census, quote = INDIZIO (prezzo cross-giudice dichiarato)"
 ---
