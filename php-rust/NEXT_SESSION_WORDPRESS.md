@@ -20,19 +20,20 @@ clone-drop/niche, non taglia) · bilancio bytes CHIUSO · A sotto OGNI kill-swit
    clone/drop Rc (churn 4,4 s), memops (5,4 s), nota GC. Giudici churn-probe/
    memops (Klabnik R3), soglia banda ORM ±0,7% entro ≤3 sessioni; la
    promozione di B ASPETTA il profilo oracle (Stogov R4, p.2).
-2. **ISTRUTTORIA voci restanti**: (b) profilo ORACLE per famiglia (budget =
-   phpr−oracle per canale) · (c) sonda prezzi alloc/free+gc_note classe S-138 ·
-   (e) «other»: 26,6% profilo S-140 E 61,7% census — chiudere o fuori-budget.
+2. **ISTRUTTORIA voci restanti + az.rev. S-143 (revisione.md, VINCOLANTI)**:
+   census tranche-2 rczval+vecargs ⇒ `quota_obj_max` per MISURA (il 1,38% è un
+   MINORANTE: rczval giace in other; B regge per maggiorante ~8–15%) · (b)
+   profilo ORACLE per famiglia · (c) sonda prezzi S-138 · (e) other 61,7%:
+   attribuire ≥80% o fuori-budget · golden-test del parser (exit vs exit_mi).
 3. **Apertura dal census (per NOME): str 27,6%** — 129,9M creazioni/run: CHI le
    crea (census provenienza, monobinario)? Veti SSO/PhpStr-full restano.
-4. **Az.rev. S-142 residue**: #4 decisione utente (near-miss = incidente 15?) ·
-   #2 replica peak-only senza inserzione prima di ogni sonda sul bimodale.
-5. CI: feed in apertura (coda ~60 in drenaggio, non-gate).
+4. Az.rev. S-142 residue: #4 decisione utente (near-miss = incidente 15?) · #2
+   replica peak-only senza inserzione. · 5. CI: feed in apertura (non-gate).
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
-str-provenienza 27,6% (p.3) · profilo oracle (p.2b) · sonda prezzi (p.2c) ·
-other census 61,7% · peak due livelli (az.rev. #2) · cura §3.22 · media leg5
-2,524 sopra tetto (oss.) · deprecation float→int · warning corsia ×2 ·
+str-provenienza 27,6% (p.3) · profilo oracle · sonda prezzi · other 61,7% ·
+peak due livelli · cura §3.22 · media leg5 2,524 (oss.) · depr. float→int ·
+warning corsia ×2 ·
 divergenze RMW · objdatains residuo · objmap 43,4 → piano GC · evalcls 316,9× ·
 refl 42,4× · re +2 alloc · §3.13 · §3.12-i · §3.14 · §3.21 · get_gc · drift
 TODO.md · latin1-cliff · dbal 10 nomi.
