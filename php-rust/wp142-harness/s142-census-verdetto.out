@@ -1,0 +1,19 @@
+== s142 census L-RD1 su SUITE ORM (criterio s142-criterio-census-rd1.md — CONTEGGI, mai tempo) ==
+grade=CENSUS  # monobinario census, quote = INDIZIO (prezzo cross-giudice dichiarato)
+census_phpr=d771622d439765bb  # probe build, MAI parita'
+rep1 run_rc=2 raw=census-r1-20260815.txt
+rep2 run_rc=2 raw=census-r2-20260815.txt
+parita' per NOME vs baseline16: rc=0 (0=entrambe ==)
+--- sentinelle (non-gate, criterio p.7) ---
+rep1 pre=CLEAN
+rep1 post=CLEAN
+rep2 pre=CLEAN
+rep2 post=CLEAN
+--- contatori e quote ---
+r1: rd1_arrays=21713173 rd1_elems=118801399 rd1_tombs=73346
+r2: rd1_arrays=21713173 rd1_elems=118801399 rd1_tombs=73346
+quota_L-RD1 (INDIZIO, criterio p.5): 0.24%-0.53% della suite ORM
+LETTURA p.6: quota >=0,3% -> citata come canale residuo nel dossier
+NESSUN GATE: la leva e' gia' promossa dalla catena; la quota si SCRIVE nel verbale di spedizione
+summary rep1: Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, Skipped: 59, Incomplete: 2.
+summary rep2: Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, Skipped: 59, Incomplete: 2.

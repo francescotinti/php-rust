@@ -45,6 +45,7 @@ Percentuali medie r1/r2 su T_phpr ≈ 42,5 s (`wp140-harness/s140-profilo-verdet
 | push stack totali (LoadVar 58,4M + PushConst 54,3M + …) | 118,3M | — | proxy VOLUME dispatch |
 | chiamate per arity (a0 14,7M · a1 8,3M · a2 2,8M · ≥3 2,0M) | ~27,8M | — | famiglia calls |
 | hint_checks (HC1, già spedita) | 35,6M | ~1,65 ns | 0,05–0,06 (misurata: 0,13%) |
+| **teardown array** (rd1: 21,7M array · 118,8M elem — census S-142) | 140,5M ev | 0,5–1,0/elem + 2–5/arr | 0,10–0,23 (L-RD1 spedita ci vive qui) |
 | bytes: alloc 29,4 GB · free 33,8 GB /run | — | — | pressione cache: non prezzabile qui |
 
 **Riconciliazione** (due strumenti indipendenti): conteggi×prezzi alloc/free
@@ -83,9 +84,16 @@ scommessa strutturale, due opzioni NOMINATE (riesame veti SOLO in concilio):
 - (con dati census per-classe si può quantificare A vs B canale per canale —
   v. §7.)
 
-## 6. Quota L-RD1 (criterio p.7 — DOVUTA prima della spedizione definitiva)
-Census `rd1_arrays/rd1_elems/rd1_tombs` da criterio
-`s142-criterio-census-rd1.md`: **[IN CODA — si esegue a catena s142 conclusa]**.
+## 6. Quota L-RD1 (criterio p.7 — MISURATA, verdetto s142-census-verdetto.out)
+Census ×2 (r1==r2 al singolo evento; parità per NOME rc=0): **rd1_arrays
+21,7M · rd1_elems 118,8M · rd1_tombs 73k per run** ⇒ **quota 0,24–0,53%
+della suite ORM (INDIZIO, prezzi 0,5–1,0 ns/elem + 2–5 ns/array)** ≈
+0,10–0,23 s su 42,5 s. Lettura pre-registrata p.6: citata come canale residuo;
+SOTTO la risoluzione della coppia suite (banda ORM ~±0,7%): L-RD1 è vera al
+suo giudice ma NON misurabile sulla suite — QUARTA conferma numerica in
+quattro sessioni che il singolo sito non muove Doctrine. Il «teardown array
+≈2%» S-141 era il CANALE intero: la leva ne rimuove il quarto–metà (il resto
+è dec Rc, free dei buffer, costi che restano per necessità).
 
 ## 7. Residui NOMINATI prima del deliberato (il concilio li vede come limiti)
 1. **Census alloc/free PER CLASSE** (CH_* histogram) su ORM: quota oggetti vs
