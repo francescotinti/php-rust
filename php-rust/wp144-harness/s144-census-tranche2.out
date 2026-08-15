@@ -1,0 +1,32 @@
+== s144 census TRANCHE-2 (rczval/vecargs => quota_obj_max) su SUITE ORM (criterio s144-criterio-tranche2.md — CONTEGGI, mai tempo) ==
+grade=CENSUS  # monobinario census, quote = eventi/galloc_n stessa run (denominatore dal sorgente)
+census_phpr=4ab4aa9af0480021  # probe build, MAI parita'
+parser=v3 s144-census-parse.py GOLDEN-TESTED (case1+case2 PASS, tag ESATTO)
+CONVENZIONE CONTEGGI (az.rev. S-143 #3): realloc-eventi FUORI dal denominatore per costruzione (A-LE-104-1), stampati come s144.grealloc_n; banda dyn_entries su quota_obj: +0/-0,69pp
+rep1 run_rc=2 raw=census-mem-r1-20260816.txt
+rep2 run_rc=2 raw=census-mem-r2-20260816.txt
+parita' per NOME vs baseline16: rc=0 (0=entrambe ==)
+--- sentinelle (non-gate, criterio p.1) ---
+rep1 pre=BUSY
+rep1 post=BUSY
+rep2 pre=BUSY
+rep2 post=BUSY
+--- contatori e quote (parser v3) ---
+r1: str.cum_n=129933714 arr.cum_n=28431596 obj.cum_n=3265745 s143.arrbuf_n=15818775 s143.propsbuf_n=3219798 s143.galloc_n=471263413 s143.gfree_n=468822633 s144.rczval_n=4738276 s144.rczval_prop_n=0 s144.vecargs_n=13141064 s144.grealloc_n=19497745 s144.objsynth_n=48
+r2: str.cum_n=129933714 arr.cum_n=28431596 obj.cum_n=3265745 s143.arrbuf_n=15818775 s143.propsbuf_n=3219798 s143.galloc_n=471263413 s143.gfree_n=468822633 s144.rczval_n=4738276 s144.rczval_prop_n=0 s144.vecargs_n=13141064 s144.grealloc_n=19497745 s144.objsynth_n=48
+r1 bytes: galloc=26687568832 gfree=31022072252
+r2 bytes: galloc=26687569205 gfree=31022072659
+zval_size=16
+quota_obj=1.38% (banda dyn_entries +0/-0,69pp DICHIARATA, criterio p.3)
+quota_arr=9.39%  quota_str=27.57%
+quota_rczval=1.01% (prop 0.00%)  quota_vecargs=2.79%
+quota_obj_max_strict=1.38%  quota_obj_max_loose=2.38%
+quota_attribuita=42.13%  residuo_other=57.87%
+conteggi FUORI denominatore (dichiarati, p.3): grealloc_n=19497745 objsynth_n=48
+REGOLA p.5 (pre-registrata; arbitra = regola S-143 p.3 sul maggiorante):
+ESITO REGOLA: quota_obj_max_loose 2.4% < 25% => B sola / B-poi-A CONFERMATA PER MISURA (numeratore chiuso)
+summary rep1: Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, Skipped: 59, Incomplete: 2.
+summary rep2: Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, Skipped: 59, Incomplete: 2.
+NOTA sentinelle (dichiarata): BUSY = rust-analyzer (LSP Serena) vivo in finestra — census a CONTEGGI deterministici, immune per costruzione (r1==r2 al singolo evento su OGNI chiave lo prova); ucciso PRIMA del profilo oracle campionario.
+NOTA rczval_prop_n=0 (dichiarata): lo smoke gate ha PROVATO il funnel vivo (>=1 su smoke144.php); lo 0 sulla suite e' misura vera — l'ORM non tocca i 7 siti strettamente-prop (foreach-by-ref su oggetto, makeref magic, radici lazy). Il verdetto della regola poggia sul MAGGIORANTE (loose), insensibile al flag.
+NOTA az.rev. S-143 #2 (other): attribuzione salita 38,34%->42,13%; residuo 57,87% DICHIARATO FUORI-BUDGET della scommessa B per S-144 (specchio Gregg R3); apertura nominata tranche-3: growth-alloc interni di PhpArray/hashbrown (alloc-nuovo+free-vecchio, NON realloc), pool Frame, temp dei builtins.
