@@ -27,3 +27,7 @@ ESITO REGOLA: quota_obj 1.4% < 25% => B sola / B-poi-A
 NOTA: quote = eventi ai funnel di tipo / galloc_n stessa run; clausola memcpy>=60% (Klabnik) fuori perimetro di questa tornata (profilo, non census)
 summary rep1: Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, Skipped: 59, Incomplete: 2.
 summary rep2: Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, Skipped: 59, Incomplete: 2.
+--- EMENDA S-144 (2026-08-16, az.rev. S-143 #3; quote INVARIATE, nessuna run ripetuta) ---
+CONVENZIONE CONTEGGI (specchio della convenzione bytes, voce d): le quote sono su galloc_n; i realloc-EVENTI (19.497.739, `realloccensus n=` in census-zval-r1) sono FUORI dal denominatore per costruzione (disaggregazione A-LE-104-1) — dichiarato QUI, non solo nel sorgente.
+BANDA dyn_entries (nel verdetto, non solo nel codice): il propsbuf conta slots+dyn UNA volta alla transizione accounted 0->>0 => quota_obj 1,38% ha banda +0/-0,69pp; il verdetto della regola (1,38% < 25%) e' INSENSIBILE alla banda.
+NOTA az.rev. #1: il 1,38% e' un MINORANTE del numeratore della regola (rczval non attribuita in questa tranche); il maggiorante per MISURA arriva dalla tranche-2 (s144-census-tranche2.out, quota_obj_max).
