@@ -1,7 +1,15 @@
 # PERF_MAP — phpr vs PHP oracle 8.5.7, mappa multi-workload
 
-Aggiornata: **2026-08-15 (S-140)** · pin phpr **s140 f2708b75** + server
-**s140 c7a03e2a** (leva **HC1 «hint-check senza clone» SPEDITA**: borrow-first
+Aggiornata: **2026-08-15 sera (S-142)** · pin phpr **s142 bba8a734** + server
+**s142 eeb284b6** (leva **L-RD1 «teardown array inline» SPEDITA**: Drop for
+PhpArray drena Packed/Hashed con match esaustivo, niente call per-elemento
+sul cammino eseguito — disasm agli atti: il bl residuo è unwind-only; A/B
+S-141 D=+5,0 AL BORDO con segni 7/7, conferma post-pin S-142 D=+5,0 al CENTRO
+banda segni 5/5; catena piena rc=0 incl. ORM 3E/13F per NOME; invarianza
+semantica VERIFICATA: parità Hashed A==B byte-id, nesting ~74–76k invariato;
+divergenza PRE-esistente catalogata §3.22 unset-elemento/__destruct differito;
+quota ORM dal census rd1_*: v. wp142-harness/s142-census-verdetto.out) ·
+storico S-140 (HC1 «hint-check senza clone»: borrow-first
 in coerce_or_check_hint, ramo Ref invariato; giudice NUOVO m-hintcall 7,3×
 bilaterale, D=+6,7 su 6 check/iter, catena promo completa incl. gate ORM
 3E/13F per NOME; census ORM: 35,6M hint-check ≈ 0,13% suite ⇒ HC1 non muove
@@ -19,8 +27,8 @@ cifre dai verdetti `.out`. Regola di lettura: rapporti PER workload, MAI aggrega
 
 | workload | rapporto phpr/oracle | N | note |
 |---|---|---|---|
-| **WordPress full-suite** | **ON-ONLY CANONICO 1,765–1,777** (S-140 @ **pin s140**; N=6 coppie proprie, 6/6 gambe PULITE; COMPATIBILE col rif S-139 1,752–1,785 su **banda_ON 0,033 — CONFERMATA cross-finestra (2 finestre, 2 pin; intra-finestra S-140: 0,012)** — HC1 non muove WP, atteso) | **6/6 gambe pulite** (t1) | S-140 @ s140; parità per NOME 6/6 (solo `wp_is_stream #2`); **peak 1807–1853 MiB: leg1 1807 DENTRO la banda oss. s136/s137 1743–1825, gambe 2–6 a 1838–1853 — la firma S-139 «tutte alte» NON si ripete ⇒ candidato binario (celle IC RMW) indebolito, componente STATO/ordine-finestra indiziata; bisezione per POSIZIONE in §S-141** ; verdetto `wp140-harness/s140-pair-verdetto-t1.out` (errata header dichiarata in coda) |
-| **WordPress gruppo media** | **2,462–2,479 CANONICA user-only** (S-140 @ s140, 6 gambe pulite; companion 2,406–2,429; nel range S-139 2,470–2,486 a meno di 0,008 sul bordo basso) | 6 | S-140 @ s140 |
+| **WordPress full-suite** | **ON-ONLY CANONICO 1,765–1,788** (S-142 @ **pin s142**; N=5 coppie proprie PULITE, leg6 SEGNALATA esclusa; COMPATIBILE col rif S-140 1,765–1,777 su banda_ON 0,033 — attesa FERMO rispettata, L-RD1 non muove WP; **banda_ON canonica post-S-142 = 0,036 (max-min UNIONE S-139+S-140+S-142)**, finestra propria 0,023) | **5/6 gambe pulite** (t1) | S-142 @ s142; parità per NOME 6/6 (solo `wp_is_stream #2`); **BISEZIONE PEAK (criterio p.5) esito MISTO ⇒ nessuna firma, ed ENTRAMBE le ipotesi S-140 REFUTATE**: rewarmup media tra leg3/leg4 NON abbassa leg4 (1844) — cade STATO-post-media; leg5–6 scendono da sole a 1744/1753 — cade POSIZIONE/cumulo. **Peak BIMODALE: ~1740–1750 vs ~1836–1850 (salto ~95 MiB), transizioni non governate da ciò che si è manipolato** — apertura per NOME; verdetto `wp142-harness/s142-pair-verdetto-t1.out` |
+| **WordPress gruppo media** | **2,463–2,524 CANONICA user-only** (S-142 @ s142, 5 gambe pulite; companion 2,407–2,484; leg5 2,524 sopra il tetto S-140 2,479 di 0,045 — osservativo, gamba con ictx ELEVATA annotata) | 5 | S-142 @ s142 |
 | **symfony http-foundation** (1854) | **2,547–2,559** (raw 2,55–2,57) | 2/lato | S-126; canonica sul CONTEGGIO diff 17 nomi = 0,92% ≤1% (≥3 nomi sono unit puri, NON famiglia `php -S` — emenda S-127); sys alto (I/O) |
 | **symfony http-kernel** (1665 test) | **4,29–4,32** | 2/lato | parità 0E/0F; contesa ok |
 | **doctrine/collections** (242) | **8,22 net** (raw 6,20) | 2/lato | S-126; INDICATIVA: oracle netto 0,09 s (denominatore sotto-scala); parità 0/0 |
@@ -28,11 +36,15 @@ cifre dai verdetti `.out`. Regola di lettura: rapporti PER workload, MAI aggrega
 | **doctrine/orm** (3484 test) | **8,59–8,71 net** | 2/lato | **S-139 RIMISURATA @ pin s138** (stesso verdetto; oracle `memory_limit=-1` §3.14; parità 16 nomi == baseline; phpr1 ictx segnalata ma stesso-lato <0,2% ⇒ valida): vs 8,43–8,56 @ s134 ⇒ **FERMO/lieve ↑** — REPERTO pre-registrato (criterio p.6): le TRE leve dim-write s135→s138 (AP1+FD1+RMW) NON muovono la suite (l'attesa ↓ è FALSIFICATA: `$this->elements[$k]=$v` non è fetta misurabile del tempo ORM, o il perimetro FD1 lì non morde) ⇒ la prossima leva si sceglie sul profilo SUITE (churn clone/drop, insert/lookup — come già indicava S-135) |
 | **composer install OFFLINE** | **1,863–1,891 net** (raw 1,820–1,847) | 2/lato | S-128 @ s127b, PRIMA misura col numeratore vivo (cure ondata-2); composer ESTRATTO, vendor_ok bilaterale, contesa ok (ictx/s); floors 0,07/0,06; sys≈user (~2,3 s/lato) ⇒ **cifra user-only NON confrontabile col full (user+sys): su user+sys sarebbe ~1,3** (rev. S-128 az.5); residuo phpcs config-set (§3.19-quinquies); verdetto `wp128-harness/s128-compoff-verdetto.out` |
 
-## Micro-categorie (R=5, pin s138; tappa ≤3×; gate promozione S-138 — invariate come guardie R=5 promo HC1 S-140)
+## Micro-categorie (R=5, pin s142 dalla catena promo L-RD1; tappa ≤3×)
 
 | arith | prop | calls | str | arr | re | hintcall |
 |---|---|---|---|---|---|---|
-| 5,6 | 5,6 | 4,8 | **4,3** | **3,2** | **2,6** ✅ | **7,3** (S-140, nuova) |
+| 5,5 | 5,6 | 4,7 | **4,2** | **3,2** | **2,6** ✅ | **7,3** (S-140, non rimisurata) |
+
+(S-142: arith/calls/str un tick sotto i rif s138–s140 — coerente coi
+collaterali positivi arr/str/re dell'A/B L-RD1; rif storici s138: 5,6 · 5,6 ·
+4,8 · 4,3 · 3,2 · 2,6.)
 
 RMW (giudici leva S-138, A/B + conferma post-pin): **m-dimrmw 320→146,7
 ns/iter (D=+173,3)** · **m-diminc 270→113,3 (D=+156,7)**.
