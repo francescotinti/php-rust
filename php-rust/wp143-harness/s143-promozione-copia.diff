@@ -1,0 +1,39 @@
+2,3c2,3
+< # s142-promozione.sh <cand_hash16> — gate di promozione LEVA L-RD1 teardown array inline — S-142 (copia dichiarata di s138-promozione.sh: tag s142, path wp142; baseline batteria s125 e ORM INVARIATE, L-RD1 non dichiara test nuovi; collaudo copia-gate + manifest s142-promozione-copia.diff)
+< # (criterio s141-criterio-rd1.md p.6; A/B R=5 s141-ab-rd1 D=+5,0 AL BORDO; conferma post-pin da s142-criterio-conferma.md).
+---
+> # s143-promozione.sh <cand_hash16> — gate di promozione S-143 (copia dichiarata di s142-promozione.sh: tag s143, path wp143; baseline batteria s125 e ORM INVARIATE; collaudo copia-gate + manifest s143-promozione-copia.diff; EMENDA az.rev. S-142 #3: sentinelle d'igiene pgrep stampate nel verdetto PRIMA e DOPO il gate micro — prova registrata, non-gate)
+> # (leva e criterio DA DICHIARARE al lancio: questa copia nasce in S-143 per portare l'emenda #3 nella catena; la riga leva/criterio si compila alla promozione, edit dichiarato).
+14c14
+< H="$SRC/wp142-harness"
+---
+> H="$SRC/wp143-harness"
+21c21
+< VERD="$H/s142-promo-verdetto.out"
+---
+> VERD="$H/s143-promo-verdetto.out"
+24a25,28
+> # Az.rev. S-142 #3 (veto «misure con LSP in volo»): sentinella d'igiene come
+> # nel census S-142 — si STAMPA nel verdetto, non giudica (il confine resta
+> # dichiarato, non auto-giudicato).
+> busy(){ { pgrep -x rustc || pgrep -x cargo || pgrep -f rust-analyzer; } > /dev/null 2>&1 && echo BUSY || echo CLEAN; }
+58c62
+< "$SRC/scripts/pin-phpr.sh" s142 > "$OUT/pin.log" 2>&1
+---
+> "$SRC/scripts/pin-phpr.sh" s143 > "$OUT/pin.log" 2>&1
+78,79c82,85
+< PHPR="$BIN" R=5 "$SRC/wp97-harness/micro/run-micro.sh" > "$OUT/micro-pin-s142.out" 2>&1
+< note "promozione micro pin s142: $(grep -E '^rapporto_' "$OUT/micro-pin-s142.out" | tr '\n' ' ')"
+---
+> note "promozione micro sentinella pre=$(busy)"
+> PHPR="$BIN" R=5 "$SRC/wp97-harness/micro/run-micro.sh" > "$OUT/micro-pin-s143.out" 2>&1
+> note "promozione micro sentinella post=$(busy)"
+> note "promozione micro pin s143: $(grep -E '^rapporto_' "$OUT/micro-pin-s143.out" | tr '\n' ' ')"
+109c115
+< "$SRC/scripts/pin-server.sh" s142 > "$OUT/pin-server.log" 2>&1
+---
+> "$SRC/scripts/pin-server.sh" s143 > "$OUT/pin-server.log" 2>&1
+115c121
+< note "PROMOZIONE COMPLETA rc=0 (da promo-out/rcb — il file rc che QUESTO script scrive): pin s142 = $H2"
+---
+> note "PROMOZIONE COMPLETA rc=0 (da promo-out/rcb — il file rc che QUESTO script scrive): pin s143 = $H2"
