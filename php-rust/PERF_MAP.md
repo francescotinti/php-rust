@@ -36,9 +36,11 @@ cifre dai verdetti `.out`. Regola di lettura: rapporti PER workload, MAI aggrega
 
 RMW (giudici leva S-138, A/B + conferma post-pin): **m-dimrmw 320→146,7
 ns/iter (D=+173,3)** · **m-diminc 270→113,3 (D=+156,7)**.
-**HC1 (S-140, pin s140)**: m-hintcall6 D=+6,7 (6 check/iter ⇒ ~1,1–1,7
-ns/check); conferma post-pin +10,0 in banda; census ORM 35,6M check ≈ 0,13%
-suite (il guadagno reale = prezzo×conteggi: HC1 non muove le suite — REPERTO).
+**HC1 (S-140, pin s140)**: m-hintcall6 D=+6,7 — **QUALIFICA rev. S-140: tick
+di quantizzazione 3,3 ⇒ 6,7±3,3; evidenza portante = conferma post-pin +10,0
++ segni 5/5 (t2) e 5/5 (conferma)**; ~1,1–1,7 ns/check; census ORM 35,6M
+check ≈ 0,13% suite (guadagno reale = prezzo×conteggi: HC1 non muove le
+suite — REPERTO; az.rev. #5: census preventivo della quota PRIMA di spedire).
 
 calls: la (*) di s127 è SCIOLTA in S-129 (phpr netto IDENTICO 2,14 s; si muove
 solo il denominatore oracle 0,43–0,44). re 2,5/2,6 = run-to-run del denominatore.

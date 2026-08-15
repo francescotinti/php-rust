@@ -29,17 +29,14 @@ da run_loop (ciclo vita Zval → TakeSlot); i canali per-statement piccoli
 3. **CI**: feed locale in apertura; GH Actions esito run s140 (ef66b79/
    54d7334/d690a64); fase 2 SOLO su decisione utente.
 4. Coppia WP: NON dovuta (s140 coperto t1 6/6); a pin nuovo, su banda_ON 0,033.
+5. **Az.rev. S-140 #1–#5 VINCOLANTI al primo criterio** (revisione.md): giudici
+   sub-tick (N≥1e7 o µs; soglia ≥ layout+2 tick) · bound v2 nell'harness ·
+   UNA banda nel verdetto · deroga pin-push in REGOLE PRIMA degli atti +
+   requeue skipped-busy · census quota-suite PRIMA di spedire.
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
 
-TakeSlot census suite (p.1) · Repr-drop 11% · frame-lifecycle 9% ·
-peak-per-posizione (p.2) · bisezione peak s136 (declassata) · deprecation
-float→int da catalogare (riga doppia CLI + linea decl-callee vs call-site) ·
-warning corsia zval+mem-census ×2 (pre-esistenti) · fix echo s140-pair.sh ·
-divergenze RMW del PIENO · objdatains residuo (18,9/17,6) · objmap 43,4 →
-piano GC · dispatch 36,3 · cammini non cacheabili · locale 170 ns · evalcls
-316,9× · refl 42,4× · re +2,00 alloc/iter · §3.13 · §3.12-i · §3.14 · §3.21 ·
-get_gc · drift TODO.md · latin1-cliff · dbal 10 nomi.
+TakeSlot census suite (p.1) · Repr-drop 11% · frame-lifecycle 9% · peak-per-posizione (p.2) · bisezione s136 (declassata) · deprecation float→int da catalogare (riga doppia CLI + linea decl-callee) · warning corsia zval+mem-census ×2 · fix echo s140-pair.sh · divergenze RMW del PIENO · objdatains residuo (18,9/17,6) · objmap 43,4 → piano GC · dispatch 36,3 · cammini non cacheabili · locale 170 ns · evalcls 316,9× · refl 42,4× · re +2,00 alloc/iter · §3.13 · §3.12-i · §3.14 · §3.21 · get_gc · drift TODO.md · latin1-cliff · dbal 10 nomi.
 
 ## NON riproporre (i veti restano; dettaglio nei concili archiviati)
 
