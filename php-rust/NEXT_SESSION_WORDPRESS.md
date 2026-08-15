@@ -30,18 +30,17 @@ recycle_frame 8,5%); L-RD1 A/B PROMOSSA con qualifica: D=+5,0 AL BORDO soglia
 4. CI: feed in apertura; fase 2 SOLO su decisione utente.
 5. **Az.rev. S-141 #1–#5 VINCOLANTI** (revisione.md): catena PRIMA del pin ·
    ARM del bl residuo da attribuire (se Str, firma parziale) · sonda profondità
-   nesting A/B · micro parità Hashed (str+tombstoni+annidati vs oracle) ·
-   strettezza soglia pre-registrata (D==soglia ⇒ «AL BORDO ⇒ replica»).
+   nesting A/B · micro parità Hashed (str+tombstoni+annidati vs oracle) · strettezza
+   soglia pre-registrata (D==soglia ⇒ «AL BORDO ⇒ replica»).
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
 
-catena L-RD1 (p.1) · coppia+peak-per-posizione (p.2) · drop-glue run_loop 34,5%
-· recycle_frame 8,5% · frame-lifecycle 9% · bisezione s136 · deprecation
-float→int · warning corsia zval+mem-census ×2 · fix echo s140-pair.sh ·
-divergenze RMW del PIENO · objdatains residuo · objmap 43,4 → piano GC ·
-dispatch 36,3 · locale 170 ns · evalcls 316,9× · refl 42,4× · re +2,00
-alloc/iter · §3.13 · §3.12-i · §3.14 · §3.21 · get_gc · drift TODO.md ·
-latin1-cliff · dbal 10 nomi · cammini non cacheabili.
+catena L-RD1 (p.1) · coppia+peak-per-posizione (p.2) · drop-glue run_loop 34,5% ·
+recycle_frame 8,5% · frame-lifecycle 9% · bisezione s136 · deprecation float→int ·
+warning corsia zval+mem-census ×2 · fix echo s140-pair.sh · divergenze RMW del PIENO ·
+objdatains residuo · objmap 43,4 → piano GC · dispatch 36,3 · locale 170 ns · evalcls
+316,9× · refl 42,4× · re +2,00 alloc/iter · §3.13 · §3.12-i · §3.14 · §3.21 · get_gc ·
+drift TODO.md · latin1-cliff · dbal 10 nomi · cammini non cacheabili.
 
 ## NON riproporre (i veti restano; dettaglio nei concili archiviati)
 
@@ -73,9 +72,9 @@ OROLOGIO · cmp secco vs oracle su fixture CON divergenze a catalogo · giudice
 sotto-risoluto per il fenomeno (si scala la DENSITÀ, mai la soglia — S-140) ·
 stash post-batteria senza rebuild ricetta A′ al byte (S-140) · **giudice nuovo
 senza dry-run del parser del harness (awk `$i<N` senza spazi — S-141)**.
-**Riscritto**: 2026-08-15 (chiusura S-141). Storia: `sessions/` · `gaps/GAP_TREND.md`.
+**Riscritto** 2026-08-15 (chiusura S-141); storia in `sessions/` · `gaps/GAP_TREND.md`.
 Pre-flight S-142: pin phpr **s140 f2708b75**660803a7 + server **s140 c7a03e2a**aa7c7cba
 (HEAD acb5e7d+ = CANDIDATO L-RD1: sorgente ≠ pin, ATTESO) · MySQL wp8 con l'elenco ·
-uploads sotto guardia · corpus 1414 ×2 · CI feed (coda S-141) · lock misura da CREARE ·
-Data ≥10G · pgrep rust-analyzer PRIMA di ogni misura · lettura: REGOLE.md → QUI →
-WP_SESSION_141 → wp141-harness/revisione.md → PERF_MAP.md.
+uploads sotto guardia · corpus 1414 ×2 · CI feed (coda S-141) · lock misura da CREARE · Data ≥10G ·
+pgrep rust-analyzer PRIMA di ogni misura · lettura: REGOLE.md → QUI → WP_SESSION_141 →
+wp141-harness/revisione.md → PERF_MAP.md.
