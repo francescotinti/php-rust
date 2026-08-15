@@ -1,0 +1,122 @@
+2,10c2,10
+< # s140-pair.sh <tentativo> — S-139 p.1: coppia full/media WP sul pin s138 (OBBLIGO pin nuovo),
+< # criterio s132-criterio-pair.md RIUSATO INVARIATO + s140-criterio-pair.md
+< # (confronto formale col rif S-137 [1,767-1,781] su banda 0,041 ULTIMO USO;
+< # FONDAZIONE banda ON-config da N>=5 gambe ON pulite — az.rev. S-137 #4).
+< # COPIA DICHIARATA di wp137-harness/s137-pair.sh (collaudo: copia-gate +
+< # manifest s140-pair-copia.diff) coi SOLI adattamenti: pin s138 (phpr+server);
+< # nomi s139/pair140/wp140-harness; 6 gambe TUTTE ON (config off PENSIONATA dal
+< # canone, criterio p.1); warm-up phpr in ON-config (criterio p.8); giudice:
+< # rif S-137 + fondazione banda_ON (max-min coppie proprie ON pulite, N>=5).
+---
+> # s142-pair.sh <tentativo> — S-142 p.2: coppia full/media WP sul pin s142 (OBBLIGO pin nuovo),
+> # criterio s132-criterio-pair.md RIUSATO INVARIATO + s142-criterio-pair.md
+> # (confronto formale col rif S-140 [1,765-1,777] su banda_ON 0,033 TERZA finestra;
+> # PEAK PER POSIZIONE: bisezione osservativa p.5 — reinserzione warm-up media tra leg3 e leg4).
+> # COPIA DICHIARATA di wp140-harness/s140-pair.sh (collaudo: copia-gate +
+> # manifest s142-pair-copia.diff) coi SOLI adattamenti: pin s142 (phpr+server);
+> # nomi s142/pair142/wp142-harness; header del giudice AGGIORNATO (fix
+> # dell'apertura «fix echo s140-pair.sh»: il vecchio testo diceva s139/s138);
+> # rif S-140+banda 0,033; blocco REWARMUP tra leg3 e leg4 (MAI giudicato).
+14c14
+< # rc autoritativo = SOLO pair-out/pair140-<tentativo>.done scritto QUI.
+---
+> # rc autoritativo = SOLO pair-out/pair142-<tentativo>.done scritto QUI.
+18c18
+< H="$REPO/wp140-harness"
+---
+> H="$REPO/wp142-harness"
+23c23
+< VERD="$H/s140-pair-verdetto-$T.out"
+---
+> VERD="$H/s142-pair-verdetto-$T.out"
+28c28
+< DONE="$OUT/pair140-$T.done"
+---
+> DONE="$OUT/pair142-$T.done"
+37,38c37,38
+< PIN_ATTESO="f2708b75660803a7"
+< SRV_ATTESO="c7a03e2aaa7c7cba"
+---
+> PIN_ATTESO="bba8a7346d727e0e"
+> SRV_ATTESO="eeb284b681c4bf89"
+88a89,107
+> warmup_media(){ # $1=etichetta dir (warmup|rewarmup) — bilaterale, MAI giudicata
+>   mkdir -p "$OUT/$1-$T"
+>   "$GUARD" backup-wipe >> "$OUT/progress-$T.txt" 2>&1 || { echo "rc=4 guard-backup" > "$DONE"; exit 4; }
+>   cd "$WPDEV" || { echo "rc=2 wpdev" > "$DONE"; exit 2; }
+>   step "$1 media oracle"
+>   reset_env
+>   MIMALLOC_PURGE_DELAY=0 /usr/bin/time -l "$ORACLE" vendor/bin/phpunit --group media \
+>     > "$OUT/$1-$T/media-oracle.txt" 2> "$OUT/$1-$T/media-oracle.time"
+>   step "$1 media oracle rc=$?"
+>   step "$1 media phpr (on)"
+>   reset_env
+>   MIMALLOC_PURGE_DELAY=0 /usr/bin/time -l "$PHPR" vendor/bin/phpunit --group media \
+>     > "$OUT/$1-$T/media-phpr.txt" 2> "$OUT/$1-$T/media-phpr.time"
+>   step "$1 media phpr rc=$?"
+>   find "$WPDEV/src/wp-content/uploads" -mindepth 1 -delete 2>/dev/null
+>   "$GUARD" restore >> "$OUT/progress-$T.txt" 2>&1
+>   step "$1 DONE (mai giudicata)"
+> }
+> 
+91,106c110
+< mkdir -p "$OUT/warmup-$T"
+< "$GUARD" backup-wipe >> "$OUT/progress-$T.txt" 2>&1 || { echo "rc=4 guard-backup" > "$DONE"; exit 4; }
+< cd "$WPDEV" || { echo "rc=2 wpdev" > "$DONE"; exit 2; }
+< step "warmup media oracle"
+< reset_env
+< MIMALLOC_PURGE_DELAY=0 /usr/bin/time -l "$ORACLE" vendor/bin/phpunit --group media \
+<   > "$OUT/warmup-$T/media-oracle.txt" 2> "$OUT/warmup-$T/media-oracle.time"
+< step "warmup media oracle rc=$?"
+< step "warmup media phpr (on)"
+< reset_env
+< MIMALLOC_PURGE_DELAY=0 /usr/bin/time -l "$PHPR" vendor/bin/phpunit --group media \
+<   > "$OUT/warmup-$T/media-phpr.txt" 2> "$OUT/warmup-$T/media-phpr.time"
+< step "warmup media phpr rc=$?"
+< find "$WPDEV/src/wp-content/uploads" -mindepth 1 -delete 2>/dev/null
+< "$GUARD" restore >> "$OUT/progress-$T.txt" 2>&1
+< step "warmup DONE (mai giudicata)"
+---
+> warmup_media warmup
+108a113,114
+> # S-142 p.5: tra leg3 e leg4 REINSERZIONE del warm-up media (bisezione peak
+> # STATO vs POSIZIONE) — dichiarata, MAI giudicata, dietro gate di quiescenza.
+110a117,120
+>   if [ "$leg" = 4 ]; then
+>     quiesce_gate rewarmup
+>     warmup_media rewarmup
+>   fi
+140,141c150,151
+< print(f"== s139 coppia WP full+media sul pin s138 tentativo={T} (criterio s132-criterio-pair.md RIUSATO + s140-criterio-pair.md) ==")
+< print(f"grade=VERDICT  # derivazione meccanica dai .time; rc autoritativo = pair-out/pair140-{T}.done")
+---
+> print(f"== s142 coppia WP full+media sul pin s142 tentativo={T} (criterio s132-criterio-pair.md RIUSATO + s142-criterio-pair.md; bisezione peak p.5: REWARMUP tra leg3 e leg4) ==")
+> print(f"grade=VERDICT  # derivazione meccanica dai .time; rc autoritativo = pair-out/pair142-{T}.done")
+145c155
+< for tag in ["warmup"] + legs:
+---
+> for tag in ["warmup", "rewarmup"] + legs:
+177a188,197
+> # S-142 p.5: lettura PRE-REGISTRATA della bisezione peak (osservativa, NESSUN gate)
+> pk = {l: P[l].get('pf',0)/1048576 for l in legs}
+> print("bisezione_peak (p.5): leg1-3 pre-rewarmup, leg4-6 post-rewarmup — " +
+>       " ".join(f"{l}={pk[l]:.1f}" for l in legs))
+> if pk["leg4-on"] <= 1825 and pk["leg5-on"] >= 1830 and pk["leg6-on"] >= 1830:
+>     print("bisezione_peak lettura: leg4 BASSA (<=1825) e leg5-6 alte -> firma STATO-post-media")
+> elif all(pk[l] >= 1830 for l in ("leg4-on","leg5-on","leg6-on")):
+>     print("bisezione_peak lettura: leg4-6 tutte alte (>=1830) -> firma POSIZIONE/cumulo")
+> else:
+>     print("bisezione_peak lettura: esito MISTO -> nessuna firma, si dichiara")
+201c221
+<         REF_LO, REF_HI, BANDA = 1.752, 1.785, 0.033  # s140-criterio-pair.md p.3: rif S-139 on-only [1,752-1,785], banda_ON 0,033 (PRIMO uso cross-finestra: questa coppia e' la SECONDA finestra che la conferma o la allarga — az.rev. S-139 #1)
+---
+>         REF_LO, REF_HI, BANDA = 1.765, 1.777, 0.033  # s142-criterio-pair.md p.3: rif S-140 on-only [1,765-1,777], banda_ON 0,033 (TERZA finestra: confermata cross-finestra in S-140; FUORI BANDA => replica SENZA l'inserzione p.5 prima di ogni claim)
+203c223
+<         print(f"confronto_formale_rif: on-only vs [{REF_LO}-{REF_HI}] banda {BANDA} (ULTIMO USO banda off S-134) -> " +
+---
+>         print(f"confronto_formale_rif: on-only vs [{REF_LO}-{REF_HI}] banda {BANDA} (rif S-140) -> " +
+208c228
+<             print(f"banda_ON_fondata={max(props)-min(props):.3f} (max-min di N={len(props)} coppie proprie ON PULITE; da S-140 sostituisce 0,041)")
+---
+>             print(f"banda_ON_fondata={max(props)-min(props):.3f} (max-min di N={len(props)} coppie proprie ON PULITE; unione finestre nel verdetto di sessione)")
