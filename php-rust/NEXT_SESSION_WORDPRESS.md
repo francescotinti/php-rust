@@ -24,7 +24,11 @@ churn_zval 0,2% vs phpr 10,3% IN BUDGET · memops 7,8–8,1% vs 12,6% FUORI (sev
 2. **PRIMA FETTA B spedita** (leva DOVUTA): criterio proprio ≤10 righe,
    giudici micro churn + famiglia; promozione ora SBLOCCATA (profilo oracle
    fatto, gate Stogov R4 assolto). Progetto: `s144-progettazione-B.md`.
-3. **Az.rev. S-144** (`wp144-harness/revisione.md`, VINCOLANTI).
+3. **Az.rev. S-144** (`wp144-harness/revisione.md`, VINCOLANTI): #2 CHIUSA in
+   chiusura (whole-stack 0,26pp ≪ 5,15pp, churn in budget PER MISURA) · #5
+   FATTA (baseline oracle 0 nomi congelata) · restano **#1 riparse simmetrico
+   committato+golden (oracle E phpr-s140)** · **#4 dente CI anti
+   `Rc::new(RefCell::new` fuori dal funnel** · #3 assorbita dall'esito #2.
 4. **str 27,6% provenienza** (129,9M creazioni: CHI le crea — census
    provenienza monobinario; veti SSO/PhpStr-full restano).
 5. Residui: az.rev. S-142 #2 (replica peak-only senza inserzione) ·

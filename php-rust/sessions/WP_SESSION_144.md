@@ -25,11 +25,13 @@ prossima leva è DOVUTA)** · incidenti 15 (nessun nuovo).
   propget/recv_clone erano CLONI, non nascite). Funnel `zcell` tipato:
   enumerazione siti chiusa dal COMPILATORE. Golden-test parser PASS 2/2.
 3·**p.2d profilo oracle** (2 rep, sentinelle CLEAN, emenda v2 dichiarata:
-  69% dei campioni = thread workqueue PARCHEGGIATI, esclusi): churn_zval
-  oracle 0,2% vs phpr 10,3% ⇒ **IN BUDGET (robusto)**; memops 7,8–8,1% vs
-  12,6% ⇒ rapporto 62–66% ≥50% ⇒ **FUORI BUDGET** (letture v1/v2 divergono
-  ⇒ applicata la SEVERA). Gate Stogov R4 assolto: **bersaglio vivo di B =
-  churn Rc + gc-nota, NON il memcpy**.
+  69% dei campioni = thread workqueue PARCHEGGIATI, esclusi): memops 7,8–8,1%
+  vs 12,6% ⇒ rapporto 62–66% ≥50% ⇒ **FUORI BUDGET** (severa). churn_zval:
+  il revisore ha morso la prima dicitura «robusto» (giudice top-of-stack
+  quasi-vacuo per inlining) ⇒ **az.2 eseguita in chiusura col SUO criterio:
+  whole-stack 0,26/0,24pp ≪ 5,15pp ⇒ IN BUDGET CHIUSO PER MISURA** (caveat
+  inlining-totale dichiarato; S-129 a corredo). Gate Stogov R4 assolto:
+  **bersaglio vivo di B = churn Rc + gc-nota, NON il memcpy**.
 4·Az.rev. S-143: #1 quota_obj_max FATTA · #2 other 42,1% attribuito, residuo
   57,9% dichiarato fuori-budget + tranche-3 nominata (growth-alloc hashbrown)
   · #3 emenda verdetto FATTA · #4 golden-test FATTO · #5 objsynth=48 FATTO.
@@ -42,5 +44,6 @@ prossima leva è DOVUTA)** · incidenti 15 (nessun nuovo).
 - ⭐⭐ `sample` conta anche i thread PARCHEGGIATI: su binario multi-thread il
   denominatore va emendato ai campioni ATTIVI; se due letture divergono su
   un gate, si applica la SEVERA (errore asimmetrico verso il non-promuovere).
-- ⭐ Un funnel TIPATO (parametro `Zval`) chiude l'enumerazione dei siti dal
-  compilatore: la completezza di un census non dipende dalla diligenza.
+- ⭐ Un funnel TIPATO (parametro `Zval`) vincola il payload NEI SITI CONVERTITI
+  (rett. revisore az.4: la chiusura resta la ricerca esaustiva; il dente CI
+  che vieta il pattern fuori dal funnel è a S-145).
