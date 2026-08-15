@@ -1,0 +1,60 @@
+== s139 coppia WP full+media sul pin s138 tentativo=t1 (criterio s132-criterio-pair.md RIUSATO + s140-criterio-pair.md) ==
+grade=VERDICT  # derivazione meccanica dai .time; rc autoritativo = pair-out/pair140-t1.done
+# full: cpu=user+sys (etichettato); media: CANONICA=user-only + companion (az.rev. S-128 #3)
+# az.rev. S-131 #3: riferimento PER CONFIGURAZIONE, ON-ONLY = canonico; firma per gamba
+# az.rev. S-136 #2: lettura firma PRE-REGISTRATA: >150% med MOTORE = SPORCA (esclusa); 120-150% = ELEVATA (nel canone, annotata); <=120% pulita
+quiescenza warmup: rc=0 (file: pair-out/quiesce-t1-warmup.rc)
+quiescenza leg1-on: rc=0 (file: pair-out/quiesce-t1-leg1-on.rc)
+quiescenza leg2-on: rc=0 (file: pair-out/quiesce-t1-leg2-on.rc)
+quiescenza leg3-on: rc=0 (file: pair-out/quiesce-t1-leg3-on.rc)
+quiescenza leg4-on: rc=0 (file: pair-out/quiesce-t1-leg4-on.rc)
+quiescenza leg5-on: rc=0 (file: pair-out/quiesce-t1-leg5-on.rc)
+quiescenza leg6-on: rc=0 (file: pair-out/quiesce-t1-leg6-on.rc)
+leg1-on: ictx/s oracle=1182 phpr=114  contesa ok
+  firma leg1-on: ictx%med oracle=98% phpr=69% rank_cpu_oracle=4/6 (1=piu' veloce)
+leg2-on: ictx/s oracle=1178 phpr=113  contesa ok
+  firma leg2-on: ictx%med oracle=97% phpr=69% rank_cpu_oracle=6/6 (1=piu' veloce)
+leg3-on: ictx/s oracle=1214 phpr=195  contesa ok
+  firma leg3-on: ictx%med oracle=100% phpr=118% rank_cpu_oracle=3/6 (1=piu' veloce)
+leg4-on: ictx/s oracle=1257 phpr=173  contesa ok
+  firma leg4-on: ictx%med oracle=104% phpr=105% rank_cpu_oracle=2/6 (1=piu' veloce)
+leg5-on: ictx/s oracle=1211 phpr=174  contesa ok
+  firma leg5-on: ictx%med oracle=100% phpr=106% rank_cpu_oracle=5/6 (1=piu' veloce)
+leg6-on: ictx/s oracle=1209 phpr=156  contesa ok
+  firma leg6-on: ictx%med oracle=100% phpr=95% rank_cpu_oracle=1/6 (1=piu' veloce)
+ictx_s_mediana_oracle=1210 ictx_s_mediana_phpr=165  # PER MOTORE
+gambe pulite: ['leg1-on', 'leg2-on', 'leg3-on', 'leg4-on', 'leg5-on', 'leg6-on']
+leg1-on: full_oracle_cpu=441.39 full_phpr_cpu=779.68 proprio=1.766 peak_phpr_MiB=1807.3
+leg2-on: full_oracle_cpu=442.32 full_phpr_cpu=780.87 proprio=1.765 peak_phpr_MiB=1844.2
+leg3-on: full_oracle_cpu=441.33 full_phpr_cpu=781.86 proprio=1.772 peak_phpr_MiB=1841.5
+leg4-on: full_oracle_cpu=440.99 full_phpr_cpu=780.85 proprio=1.771 peak_phpr_MiB=1838.7
+leg5-on: full_oracle_cpu=441.81 full_phpr_cpu=782.65 proprio=1.771 peak_phpr_MiB=1846.4
+leg6-on: full_oracle_cpu=440.40 full_phpr_cpu=782.56 proprio=1.777 peak_phpr_MiB=1852.7
+matrice full (gambe PULITE) phpr(riga)/oracle(colonna):
+  leg1-on/leg1-on=1.766  leg1-on/leg2-on=1.763  leg1-on/leg3-on=1.767  leg1-on/leg4-on=1.768  leg1-on/leg5-on=1.765  leg1-on/leg6-on=1.770
+  leg2-on/leg1-on=1.769  leg2-on/leg2-on=1.765  leg2-on/leg3-on=1.769  leg2-on/leg4-on=1.771  leg2-on/leg5-on=1.767  leg2-on/leg6-on=1.773
+  leg3-on/leg1-on=1.771  leg3-on/leg2-on=1.768  leg3-on/leg3-on=1.772  leg3-on/leg4-on=1.773  leg3-on/leg5-on=1.770  leg3-on/leg6-on=1.775
+  leg4-on/leg1-on=1.769  leg4-on/leg2-on=1.765  leg4-on/leg3-on=1.769  leg4-on/leg4-on=1.771  leg4-on/leg5-on=1.767  leg4-on/leg6-on=1.773
+  leg5-on/leg1-on=1.773  leg5-on/leg2-on=1.769  leg5-on/leg3-on=1.773  leg5-on/leg4-on=1.775  leg5-on/leg5-on=1.771  leg5-on/leg6-on=1.777
+  leg6-on/leg1-on=1.773  leg6-on/leg2-on=1.769  leg6-on/leg3-on=1.773  leg6-on/leg4-on=1.775  leg6-on/leg5-on=1.771  leg6-on/leg6-on=1.777
+full_intervallo_PULITO_misto=1.763-1.777  # companion (miscela config)
+coppie_proprie_PULITE_miste=1.765-1.777 (N=6)
+coppie_proprie_user_only_miste=1.772-1.783
+full_on_only_coppie_proprie=1.765-1.777 (N=6) CANONICO
+full_on_only_intervallo=1.763-1.777
+confronto_formale_rif: on-only vs [1.752-1.785] banda 0.033 (ULTIMO USO banda off S-134) -> COMPATIBILE (tutte le coppie proprie dentro)
+banda_ON_fondata=0.012 (max-min di N=6 coppie proprie ON PULITE; da S-140 sostituisce 0,041)
+media_leg1-on: user_only_CANONICA=2.462 user+sys_companion=2.406
+media_leg2-on: user_only_CANONICA=2.465 user+sys_companion=2.415
+media_leg3-on: user_only_CANONICA=2.466 user+sys_companion=2.410
+media_leg4-on: user_only_CANONICA=2.462 user+sys_companion=2.414
+media_leg5-on: user_only_CANONICA=2.469 user+sys_companion=2.422
+media_leg6-on: user_only_CANONICA=2.479 user+sys_companion=2.429
+parita_leg1-on: media=OK(vuoto) full=OK(solo wp_is_stream #2)
+parita_leg2-on: media=OK(vuoto) full=OK(solo wp_is_stream #2)
+parita_leg3-on: media=OK(vuoto) full=OK(solo wp_is_stream #2)
+parita_leg4-on: media=OK(vuoto) full=OK(solo wp_is_stream #2)
+parita_leg5-on: media=OK(vuoto) full=OK(solo wp_is_stream #2)
+parita_leg6-on: media=OK(vuoto) full=OK(solo wp_is_stream #2)
+ERRATA (dichiarata a verbale S-140): la riga di testata dice «s139 … pin s138» — residuo di copia non adattato nell'echo; il run È sul pin s140 (gate hash f2708b75660803a7/c7a03e2aaa7c7cba superato, altrimenti rc=9). Fix dell'echo dovuto alla prossima copia.
+banda_ON canonica post-S-140 (criterio p.4): 0,033 CROSS-FINESTRA (unione S-139[1,752-1,785] ∪ S-140[1,765-1,777]; questa finestra da sola: 0,012).
