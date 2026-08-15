@@ -15,15 +15,17 @@ firma (possibile artefatto dell'inserzione — rett. revisore).**
 
 ## §S-143 — ordine
 
-1. **⚖️ CONCILIO a 9 (rotta utente 2026-08-15): delibera della scommessa
-   strutturale** su `wp142-harness/s142-dossier-parita.md` (ancore 42,5 vs
-   4,9 s; canali ciclo-di-vita ~26–28 s; opzione A oggetti handle+arena vs
-   opzione B layout Zval/Option; riesame veti pertinenti SOLO in concilio).
-   Il dossier NOMINA i suoi limiti (§7): il concilio delibera con essi o
-   ordina prima le 2 misure mancanti (p.2).
-2. **Se il concilio le chiede (o come istruttoria pre-concilio)**: census
-   alloc/free PER CLASSE (CH_*) su ORM — decide quanto compra l'opzione A ·
-   profilo per famiglia lato ORACLE (feedback-one-sided-profile).
+1. **⚖️ CONCILIO a 9 RIUNITO (S-143): verbali VINCOLANTI in
+   `wp143-harness/COUNCIL_S143_REVIEWS.md`** (sintesi in testa). Deliberato:
+   9/9 concordo-con-emendamenti, 0 opposizioni; **ISTRUTTORIA-PRIMA 7/9**
+   (Stogov B-poi-A, Hejlsberg A+B-ora); nessuna sedia vota A come scritta —
+   A RIFONDATA (refcount conservato, pool non arena, destruct deterministico,
+   binding output-capture NON emendabile); 6 veti confermati 9/9; a verbale:
+   la scommessa compra la TAPPA ≤3×, non la parità (~15 s residui).
+2. **ISTRUTTORIA ordinata dal concilio** (regola di decisione PRE-REGISTRATA
+   in `wp143-harness/s143-criterio-istruttoria.md` PRIMA dei dati): census
+   CH_* per classe+taglia · profilo ORACLE per famiglia · sonda prezzi ·
+   bilancio bytes · «other» 26,6%.
 3. Az.rev. S-142 (revisione.md) VINCOLANTI. · 4. CI: feed in apertura (coda
    LUNGA, commit S-141+S-142 arretrati — non gate).
 5. HEAD ≠ sorgente-pin ATTESO (contatori census post-pin da 0ffea87): il pin
