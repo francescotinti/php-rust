@@ -16,40 +16,33 @@ CHIUSO (realloc disaggregato) · A cade sotto OGNI kill-switch (1,4% vs 15–40%
 
 ## §S-144 — ordine
 
-1. **PROGETTAZIONE B su carta + criterio pre-registrato** (deliberato: B sola /
-   B-poi-A; verbali vincolanti): bersaglio RIMIRATO dal reperto zval_size=16 —
-   non taglia ma ciclo-di-vita: clone/drop Rc (churn 4,4 s), memops (5,4 s),
-   nota GC. Giudici: churn-probe/memops (Klabnik R3), criterio ≤10 righe con
-   soglia banda ORM ±0,7% entro ≤3 sessioni (team semantica p.2). Stogov R4:
-   la promozione di B ASPETTA il profilo oracle (p.2 qui sotto).
+1. **PROGETTAZIONE B su carta + criterio pre-registrato** (deliberato: B sola/
+   B-poi-A): bersaglio RIMIRATO da zval_size=16 — non taglia ma ciclo-di-vita:
+   clone/drop Rc (churn 4,4 s), memops (5,4 s), nota GC. Giudici churn-probe/
+   memops (Klabnik R3), soglia banda ORM ±0,7% entro ≤3 sessioni; la
+   promozione di B ASPETTA il profilo oracle (Stogov R4, p.2).
 2. **ISTRUTTORIA voci restanti**: (b) profilo ORACLE per famiglia (budget =
-   phpr−oracle canale per canale; feedback-one-sided-profile) · (c) sonda
-   monobinaria prezzi alloc/free+gc_note classe S-138 · (e) «other»: la coda
-   26,6% del profilo S-140 E il 61,7% del census (ref/vecargs/Vec-interni) —
-   Gregg R3: chiudere o dichiarare fuori-budget.
-3. **Apertura nuova dal census (per NOME): str 27,6%** — 129,9M creazioni
-   stringa/run su ORM: CHI le crea (census per sito/op, monobinario)? I veti
-   SSO-inline e notti-PhpStr-full restano; un census di provenienza non li tocca.
-4. **Az.rev. S-142 residue**: #4 decisione utente (near-miss RA = incidente 15?
-   regola di conteggio, una riga sostituendone una) · #2 replica peak-only
-   SENZA inserzione PRIMA di ogni sonda sul bimodale (se si riapre il peak).
-5. CI: feed in apertura (coda ~60 commit in drenaggio, non-gate).
+   phpr−oracle per canale) · (c) sonda prezzi alloc/free+gc_note classe S-138 ·
+   (e) «other»: 26,6% profilo S-140 E 61,7% census — chiudere o fuori-budget.
+3. **Apertura dal census (per NOME): str 27,6%** — 129,9M creazioni/run: CHI le
+   crea (census provenienza, monobinario)? Veti SSO/PhpStr-full restano.
+4. **Az.rev. S-142 residue**: #4 decisione utente (near-miss = incidente 15?) ·
+   #2 replica peak-only senza inserzione prima di ogni sonda sul bimodale.
+5. CI: feed in apertura (coda ~60 in drenaggio, non-gate).
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
 
 str-provenienza 27,6% (p.3) · profilo oracle (p.2b) · sonda prezzi (p.2c) ·
-other census 61,7% (ref/vecargs da attribuire) · peak due livelli (~1740–1750
-vs ~1836–1850, az.rev. #2) · cura §3.22 (unset-elemento/__destruct) · media
-leg5 2,524 sopra tetto (oss.) · deprecation float→int · warning corsia ×2 ·
+other census 61,7% · peak due livelli (az.rev. #2) · cura §3.22 · media leg5
+2,524 sopra tetto (oss.) · deprecation float→int · warning corsia ×2 ·
 divergenze RMW · objdatains residuo · objmap 43,4 → piano GC · evalcls 316,9× ·
 refl 42,4× · re +2 alloc · §3.13 · §3.12-i · §3.14 · §3.21 · get_gc · drift
 TODO.md · latin1-cliff · dbal 10 nomi.
 
 ## NON riproporre (i veti restano; dettaglio nei concili archiviati)
 
-**S-143 (concilio): A come scritta nel dossier (arena-sweep senza refcount) è
-RIFONDATA — ogni futura A = pool+refcount+handle-generazione con giudici nuovi
-PRIMA del primo commit (fascicolo §oneri)**; 6 veti storici confermati 9/9.
+**S-143: A come scritta (arena-sweep senza refcount) RIFONDATA — ogni futura
+A = pool+refcount+handle-generazione, giudici nuovi PRIMA del primo commit.**
 BOLT su Mach-O · NaN-boxing (la niche di B ne compra la parte lecita in safe) ·
 threaded-dispatch · PGO sui giudici · verdetti su build emendata senza ri-banda ·
 pin/stash senza collaudo-nell'atto · contenitori sul call path (vale per la
@@ -83,7 +76,7 @@ byte-identità come gate di un edit .rs post-pin (S-142).
 **Riscritto** 2026-08-16 notte (chiusura S-143); storia in `sessions/` · `gaps/GAP_TREND.md`.
 Pre-flight S-144: pin phpr **s142 bba8a734**6d727e0e + server **s142 eeb284b6**81c4bf89
 (HEAD ≠ sorgente-pin ATTESO: contatori census S-142+S-143 post-pin; pin = stash) ·
-MySQL wp8 con l'elenco · uploads sotto guardia · corpus 1414 ×2 · CI feed (coda) ·
-lock misura da CREARE prima di misure · Data ≥10G · pgrep rust-analyzer PRIMA di
-ogni misura · lettura: REGOLE.md → QUI → WP_SESSION_143 → wp143-harness/
-COUNCIL_S143_REVIEWS.md (sintesi) → s143-census-verdetto.out → PERF_MAP.md.
+MySQL wp8 con l'elenco · uploads sotto guardia · corpus 1414 ×2 · CI feed · lock
+misura da CREARE · Data ≥10G · pgrep rust-analyzer prima di ogni misura · lettura:
+REGOLE.md → QUI → WP_SESSION_143 → COUNCIL_S143_REVIEWS.md (sintesi) →
+s143-census-verdetto.out → PERF_MAP.md.
