@@ -1,0 +1,22 @@
+== s141 census TakeSlot su SUITE ORM (criterio s141-criterio-census.md — CONTEGGI, mai tempo) ==
+grade=CENSUS  # monobinario census, quote = INDIZIO (prezzo cross-giudice dichiarato)
+census_phpr=b41f762e007159f3  # probe build, MAI parita'
+rep1 run_rc=2 raw=census-r1-20260815.txt
+rep2 run_rc=2 raw=census-r2-20260815.txt
+parita' per NOME vs baseline16: rc=0 (0=entrambe ==)
+--- sentinelle (non-gate, criterio p.7) ---
+rep1 pre=BUSY
+rep1 post=BUSY
+rep2 pre=BUSY
+rep2 post=BUSY
+--- contatori e quote ---
+r1: slot_reads=73264218 slot_reads_rc=55572658 would_take=26080946 would_take_rc=19689199 would_take_safe=22336726 would_take_safe_rc=16781932 would_take_safe_str=7436642 would_take_safe_ref=15 sites_total=30290 sites_movable=14970 sites_safe=11903
+r2: slot_reads=73264220 slot_reads_rc=55572658 would_take=26080946 would_take_rc=19689199 would_take_safe=22336726 would_take_safe_rc=16781932 would_take_safe_str=7436642 would_take_safe_ref=15 sites_total=30290 sites_movable=14970 sites_safe=11903
+quota_would_take_safe (INDIZIO): 0.06%-0.09% della suite
+quota_would_take_safe_rc (INDIZIO): 0.04%-0.07% della suite
+quota_would_take_safe_str (INDIZIO): 0.02%-0.03% della suite
+quota_would_take_safe_ref (INDIZIO): 0.00%-0.00% della suite
+P2 storica: safe_rc/would_take_rc = 85.2% (soglia 60)
+DECISIONE p.6: quota_str <0,5% -> TakeSlot DELUDE sul suo meccanismo -> filone alternativo (Repr-drop 11% / frame 9%)
+summary rep1: Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, Skipped: 59, Incomplete: 2.
+summary rep2: Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, Skipped: 59, Incomplete: 2.
