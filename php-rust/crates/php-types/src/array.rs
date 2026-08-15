@@ -514,6 +514,11 @@ impl Drop for PhpArray {
         match &mut self.repr {
             Repr::Packed(slots) => unsafe {
                 let len = slots.len();
+                #[cfg(feature = "mem-census")]
+                {
+                    let vivi = slots.iter().filter(|s| s.is_some()).count() as u64;
+                    crate::memcensus::rd1_note(len, vivi, len as u64 - vivi);
+                }
                 let p = slots.as_mut_ptr();
                 slots.set_len(0);
                 for i in 0..len {
@@ -524,6 +529,11 @@ impl Drop for PhpArray {
             },
             Repr::Hashed { entries, .. } => unsafe {
                 let len = entries.len();
+                #[cfg(feature = "mem-census")]
+                {
+                    let vivi = entries.iter().filter(|s| s.is_some()).count() as u64;
+                    crate::memcensus::rd1_note(len, vivi, len as u64 - vivi);
+                }
                 let p = entries.as_mut_ptr();
                 entries.set_len(0);
                 for i in 0..len {

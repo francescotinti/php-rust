@@ -1482,6 +1482,40 @@ pub fn alloc_event_counters() -> (u64, u64) {
     (GA_ALLOC_N.load(Relaxed), GA_FREE_N.load(Relaxed))
 }
 
+// S-142 (criterio s142-criterio-census-rd1.md, REVISIONE dell'edit dopo STOP
+// hash: la v1 con statiche sempre-compilate NON era byte-neutra): contatori
+// del MECCANISMO L-RD1 — teardown inline di PhpArray. TUTTO sotto feature
+// `mem-census`: nel pin non esiste nemmeno il simbolo.
+#[cfg(feature = "mem-census")]
+static RD1_ARRAYS: AtomicU64 = AtomicU64::new(0);
+#[cfg(feature = "mem-census")]
+static RD1_ELEMS: AtomicU64 = AtomicU64::new(0);
+#[cfg(feature = "mem-census")]
+static RD1_TOMBS: AtomicU64 = AtomicU64::new(0);
+
+/// Pre-pass di conteggio all'ingresso di `PhpArray::drop` (repr non vuota,
+/// elementi vivi, tombstoni) — SOLO build census; il drain del pin resta
+/// testualmente intatto.
+#[cfg(feature = "mem-census")]
+#[inline]
+pub fn rd1_note(len: usize, elems: u64, tombs: u64) {
+    if len > 0 {
+        RD1_ARRAYS.fetch_add(1, Relaxed);
+    }
+    RD1_ELEMS.fetch_add(elems, Relaxed);
+    RD1_TOMBS.fetch_add(tombs, Relaxed);
+}
+
+/// Snapshot (arrays, elems, tombs) per la riga `zvalcensus_s142`.
+#[cfg(feature = "mem-census")]
+pub fn rd1_counters() -> (u64, u64, u64) {
+    (
+        RD1_ARRAYS.load(Relaxed),
+        RD1_ELEMS.load(Relaxed),
+        RD1_TOMBS.load(Relaxed),
+    )
+}
+
 /// Monotonic milliseconds since the first census event in the process —
 /// stamped on window lines so the external supervisor's log joins on time,
 /// never on child stdout offsets (Gregg V4).

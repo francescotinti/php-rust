@@ -371,6 +371,14 @@ pub fn dump_exit() {
         let _ = writeln!(f, "{}", dump_line_s101());
         // S-140: riga contatori hint-check (leva HC1) — riga NUOVA.
         let _ = writeln!(f, "{}", dump_line_s140());
+        // S-142: contatori del meccanismo L-RD1 — riga NUOVA, SOLO quando la
+        // build monta anche mem-census (i simboli non esistono altrimenti).
+        #[cfg(feature = "mem-census")]
+        {
+            let (ra, re_, rt) = php_types::memcensus::rd1_counters();
+            let _ =
+                writeln!(f, "zvalcensus_s142 rd1_arrays={ra} rd1_elems={re_} rd1_tombs={rt}");
+        }
         // S-102: righe del census pila operandi (modulo separato).
         let _ = writeln!(f, "{}", super::stackcensus::dump_lines());
         // S-102 (A-LE-103-1): gamba alloc a mem-census DIRETTO — byte e

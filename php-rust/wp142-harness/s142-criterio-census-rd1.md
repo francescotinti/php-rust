@@ -5,10 +5,15 @@
    `rd1_elems` = elementi drenati (Packed + Hashed, tombstoni ESCLUSI dal conto
    elems ma contati a parte `rd1_tombs`). Contatori NUOVI sotto la feature
    `zval-census` (stessa disciplina S-95/S-97), dump nelle righe `zvalcensus_s142`.
-2. **Pin non toccato**: i contatori entrano nei sorgenti DOPO il pin s142
-   (bba8a734); cfg-gated OFF nel default. VERIFICA OBBLIGATORIA: rebuild ricetta
-   A′ dal commit coi contatori ⇒ hash IDENTICO bba8a734, altrimenti STOP e
-   revisione dell'edit (il gate è l'hash, non l'ispezione).
+2. **Pin non toccato** (EMENDA DICHIARATA in-sessione dopo DUE STOP hash: la
+   byte-identità post-edit è irraggiungibile per costruzione — ogni edit sposta
+   i numeri di riga dei panic-location embedded, anche con codice interamente
+   cfg-gated; v1 39cf/3067, v2 7679). Gate SOSTITUITO: (i) contatori TUTTI
+   sotto `#[cfg(feature="mem-census")]` (nel pin il simbolo non esiste);
+   (ii) il PIN resta lo stash `phpr-s142` bba8a734 IMMUTABILE, la dir canonica
+   si RIPRISTINA dallo stash a fine lavori census (hash verificato);
+   (iii) HEAD ≠ sorgente-pin dichiarato in NEXT_SESSION (stato normale tra
+   sessioni); il prossimo pin ripercorre la catena piena come sempre.
 3. **Probe**: build feature `zval-census,mem-census`, target ISOLATO
    `/Volumes/Extreme Pro/Claude/phpr-census-target` — mai parità/A-B, mai stash.
 4. **Run**: script COPIA DICHIARATA di s141-census.sh (manifest copia-gate);
