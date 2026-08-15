@@ -1,6 +1,7 @@
 # NEXT_SESSION — phpr: OBIETTIVO PARITÀ (≥1×) con l'oracle; ≤3× = tappa (REGOLE §1)
 ⏱ **FONDAMENTALI**: rif WP **1,765–1,777 (S-140 @ s140, N=6; banda_ON 0,033)** ·
-S-141: pin FERMO · **A/B L-RD1 PROMOSSO, spedite 0: catena = PRIMO atto S-142** · incidenti 14.
+S-141: pin FERMO · **A/B L-RD1 PROMOSSO, spedite 0: catena = PRIMO atto S-142** ·
+**⚖️ ROTTA UTENTE: budget di parità → concilio (p.3)** · incidenti 14.
 
 ## Scoreboard (pin s140 f2708b75660803a7 + c7a03e2aaa7c7cba INVARIATO; micro = riferimenti S-140)
 
@@ -25,8 +26,12 @@ recycle_frame 8,5%); L-RD1 A/B PROMOSSA con qualifica: D=+5,0 AL BORDO soglia
    spedizione (p.7)**.
 2. **Coppia WP a pin nuovo** (obbligo a OGNI pin), banda_ON 0,033; peak per
    POSIZIONE = bisezione osservativa gamba-fredda/ordine-ruotato stessa finestra.
-3. **Leva successiva dai numeri** (se resta finestra): caller grossi drop-glue =
-   run_loop 34,5% e recycle_frame 8,5%; census del meccanismo PRIMA di ogni A/B.
+3. **⚖️ ROTTA UTENTE (2026-08-15): BUDGET DI PARITÀ** — nuove micro-leve sul
+   fronte ORM SOSPESE (tre falsificazioni: S-139 tre-leve, HC1 0,13%, RD1 ~1–2%):
+   attribuzione TOP-DOWN dei ~37 s di divario ORM per NOME (statement-count ×
+   tasse; modelli S-129/S-131 + profilo S-140) → dossier per **CONCILIO a 9**
+   che delibera la scommessa strutturale (oggetti handle+arena vs layout
+   Zval/Option; riesame veti pertinenti SOLO in concilio).
 4. CI: feed in apertura; fase 2 SOLO su decisione utente.
 5. **Az.rev. S-141 #1–#5 VINCOLANTI** (revisione.md): catena PRIMA del pin ·
    ARM del bl residuo da attribuire (se Str, firma parziale) · sonda profondità
