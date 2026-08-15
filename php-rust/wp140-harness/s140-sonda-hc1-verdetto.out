@@ -1,0 +1,6 @@
+== s140 sonda meccanismo HC1 (criterio s140-criterio-hc1.md p.3 — contatore prima dell'orologio) ==
+grade=CONTEGGIO  # probe build zval-census+mem-census, giudice m-hintcall N=3e6 (2 check Object/iter)
+pre-leva  (sorgente contatori-only): hint_checks=6000002 hint_checks_rc=6000000 hint_avoided=0        # atteso: 6e6±1%, rc=6e6, 0 per costruzione -> PASS
+post-leva (candidato f2708b75 +census): hint_checks=6000002 hint_checks_rc=6000000 hint_avoided=6000002  # atteso: avoided≈6e6, rc invariato come conteggio -> PASS
+controllo positivo: la leva serve TUTTI i check non-Ref borrow-first; il ramo Ref conserva il deref_clone.
+binari: probe-pre = phpr-census-preleva (scratch) · candidato A/B = f2708b75 · null-lever = 275e5836

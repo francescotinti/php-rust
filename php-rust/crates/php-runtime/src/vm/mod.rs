@@ -11075,7 +11075,25 @@ impl<'m> Vm<'m> {
         // S-140 census leva HC1: conta il check e la specie (solo probe build).
         #[cfg(feature = "zval-census")]
         zvalcensus::note_hint_check(&value);
-        let v = value.deref_clone();
+        // S-140 leva HC1 «hint-check senza clone»: i rami check-only
+        // ispezionano il valore PER RIFERIMENTO — il clone che moriva a fine
+        // check (Rc++/-- su Object/Array/Str, due volte per chiamata
+        // tipizzata: parametro e return) resta SOLO per `Zval::Ref`, dove
+        // serve la copia del contenuto della cella (tenere il borrow della
+        // RefCell attraverso i metodi `&mut self` rischierebbe un re-borrow
+        // della stessa cella).
+        let deref_tmp;
+        let v: &Zval = match &value {
+            Zval::Ref(cell) => {
+                deref_tmp = cell.borrow().clone();
+                &deref_tmp
+            }
+            other => {
+                #[cfg(feature = "zval-census")]
+                zvalcensus::note_hint_avoided();
+                other
+            }
+        };
         if matches!(v, Zval::Null | Zval::Undef) {
             return if hint.nullable { Ok(Zval::Null) } else { Err("null".to_string()) };
         }
@@ -11088,7 +11106,7 @@ impl<'m> Vm<'m> {
                 // (Residue: a THROWING __toString here degrades to the
                 // TypeError instead of propagating the exception.)
                 if !strict && *st == crate::hir::ScalarType::String {
-                    if let Some(s) = self.object_to_string_weak(&v) {
+                    if let Some(s) = self.object_to_string_weak(v) {
                         return Ok(Zval::Str(s));
                     }
                 }
@@ -11103,21 +11121,21 @@ impl<'m> Vm<'m> {
                 other => Err(other.type_name_for_error()),
             },
             HintKind::Callable => {
-                if self.is_value_callable(&v) {
+                if self.is_value_callable(v) {
                     Ok(value)
                 } else {
                     Err(v.type_name_for_error())
                 }
             }
             HintKind::Iterable => {
-                if matches!(v, Zval::Array(_)) || self.value_satisfies_class(&v, b"Traversable") {
+                if matches!(v, Zval::Array(_)) || self.value_satisfies_class(v, b"Traversable") {
                     Ok(value)
                 } else {
                     Err(v.type_name_for_error())
                 }
             }
             HintKind::Class(name) => {
-                if self.value_satisfies_class(&v, name) {
+                if self.value_satisfies_class(v, name) {
                     Ok(value)
                 } else {
                     Err(v.type_name_for_error())
@@ -11141,12 +11159,12 @@ impl<'m> Vm<'m> {
                         HintKind::Object => {
                             matches!(v, Zval::Object(_) | Zval::Closure(_) | Zval::Generator(_))
                         }
-                        HintKind::Callable => self.is_value_callable(&v),
+                        HintKind::Callable => self.is_value_callable(v),
                         HintKind::Iterable => {
                             matches!(v, Zval::Array(_))
-                                || self.value_satisfies_class(&v, b"Traversable")
+                                || self.value_satisfies_class(v, b"Traversable")
                         }
-                        HintKind::Class(name) => self.value_satisfies_class(&v, name),
+                        HintKind::Class(name) => self.value_satisfies_class(v, name),
                         HintKind::Union(_) => false, // unions do not nest
                     }
                 };
@@ -11167,7 +11185,7 @@ impl<'m> Vm<'m> {
                         }
                         // An object converts only toward `string`, via __toString.
                         if want == St::String {
-                            if let Some(s) = self.object_to_string_weak(&v) {
+                            if let Some(s) = self.object_to_string_weak(v) {
                                 return Ok(Zval::Str(s));
                             }
                         }
