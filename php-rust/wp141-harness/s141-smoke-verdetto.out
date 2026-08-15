@@ -1,0 +1,7 @@
+== s141-ab-rd1 smoke: A=f2708b75(pin s140) B=f751ef5b R=2 SMOKE=1 ordine ALTERNATO; giudice=m-arrdrop; soglia=max(4, drop-1, banda-layout 2.0 + 2 tick); UB: D atteso 6-40, D>60 FUORI MODELLO, lato basso NON-gate; guardie NESSUNA-allo-smoke; quiescenza rc=0; rc autoritativo = ab-out/smoke.rc ==
+cat=m-arrdrop N=10000000 floor_A=0.03 floor_B=0.02
+  coppia1 [AB]: rawA=2.76 rawB=2.73
+  coppia2 [BA]: rawA=2.79 rawB=2.71
+GIUDICE m-arrdrop: A=274.5 B=270.0 ns/iter D=+4.5 soglia=4.0 (rumore drop-1: A'=3.0 B'=2.0; banda-layout=2.0+2 tick) -> SOPRA SOGLIA
+vs modello m-arrdrop: D=+4.5 atteso 6-40 (lato basso NON-gate) -> dentro il modello dichiarato
+ESITO: PROMOSSA (giudice sopra soglia, guardie ok)

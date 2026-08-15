@@ -1,0 +1,74 @@
+== s141-ab-rd1 r5: A=f2708b75(pin s140) B=f751ef5b R=5 SMOKE=0 ordine ALTERNATO; giudice=m-arrdrop; soglia=max(4, drop-1, banda-layout 2.0 + 2 tick); UB: D atteso 6-40, D>60 FUORI MODELLO, lato basso NON-gate; guardie objdatains+m-dimrmw+m-diminc+sei micro, solo a R=5; quiescenza rc=0; rc autoritativo = ab-out/r5.rc ==
+cat=m-arrdrop N=10000000 floor_A=0.03 floor_B=0.02
+  coppia1 [AB]: rawA=2.78 rawB=2.72
+  coppia2 [BA]: rawA=2.76 rawB=2.69
+  coppia3 [AB]: rawA=2.79 rawB=2.72
+  coppia4 [BA]: rawA=2.74 rawB=2.72
+  coppia5 [AB]: rawA=2.81 rawB=2.71
+cat=objdatains N=3000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=2.89 rawB=2.92
+  coppia2 [BA]: rawA=2.92 rawB=2.94
+  coppia3 [AB]: rawA=2.94 rawB=2.92
+  coppia4 [BA]: rawA=2.89 rawB=2.91
+  coppia5 [AB]: rawA=2.91 rawB=2.91
+cat=m-dimrmw N=3000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=0.46 rawB=0.45
+  coppia2 [BA]: rawA=0.46 rawB=0.45
+  coppia3 [AB]: rawA=0.46 rawB=0.45
+  coppia4 [BA]: rawA=0.46 rawB=0.45
+  coppia5 [AB]: rawA=0.45 rawB=0.45
+cat=m-diminc N=3000000 floor_A=0.03 floor_B=0.02
+  coppia1 [AB]: rawA=0.37 rawB=0.37
+  coppia2 [BA]: rawA=0.37 rawB=0.37
+  coppia3 [AB]: rawA=0.37 rawB=0.37
+  coppia4 [BA]: rawA=0.38 rawB=0.37
+  coppia5 [AB]: rawA=0.37 rawB=0.37
+cat=arith N=150000000 floor_A=0.03 floor_B=0.03
+  coppia1 [AB]: rawA=7.18 rawB=7.16
+  coppia2 [BA]: rawA=7.22 rawB=7.22
+  coppia3 [AB]: rawA=7.15 rawB=7.17
+  coppia4 [BA]: rawA=7.22 rawB=7.12
+  coppia5 [AB]: rawA=7.18 rawB=7.18
+cat=prop N=90000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=7.06 rawB=7.15
+  coppia2 [BA]: rawA=7.06 rawB=7.06
+  coppia3 [AB]: rawA=7.01 rawB=7.19
+  coppia4 [BA]: rawA=7.09 rawB=7.11
+  coppia5 [AB]: rawA=7.09 rawB=7.05
+cat=calls N=60000000 floor_A=0.02 floor_B=0.03
+  coppia1 [AB]: rawA=6.46 rawB=6.43
+  coppia2 [BA]: rawA=6.42 rawB=6.45
+  coppia3 [AB]: rawA=6.45 rawB=6.47
+  coppia4 [BA]: rawA=6.45 rawB=6.42
+  coppia5 [AB]: rawA=6.44 rawB=6.40
+cat=str N=28000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=4.44 rawB=4.40
+  coppia2 [BA]: rawA=4.51 rawB=4.52
+  coppia3 [AB]: rawA=4.47 rawB=4.41
+  coppia4 [BA]: rawA=4.47 rawB=4.40
+  coppia5 [AB]: rawA=4.45 rawB=4.40
+cat=arr N=30000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=4.60 rawB=4.57
+  coppia2 [BA]: rawA=4.69 rawB=4.58
+  coppia3 [AB]: rawA=4.68 rawB=4.56
+  coppia4 [BA]: rawA=4.70 rawB=4.55
+  coppia5 [AB]: rawA=4.56 rawB=4.61
+cat=re N=12000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=5.58 rawB=5.54
+  coppia2 [BA]: rawA=5.63 rawB=5.58
+  coppia3 [AB]: rawA=5.61 rawB=5.58
+  coppia4 [BA]: rawA=5.61 rawB=5.58
+  coppia5 [AB]: rawA=5.61 rawB=5.58
+GIUDICE m-arrdrop: A=275.0 B=270.0 ns/iter D=+5.0 soglia=5.0 (rumore drop-1: A'=5.0 B'=1.0; banda-layout=2.0+2 tick) -> SOPRA SOGLIA
+riconciliazione m-arrdrop: D_smoke=+4.5 D_R5=+5.0 |diff|=0.5 banda=5.0 -> in banda
+vs modello m-arrdrop: D=+5.0 atteso 6-40 (lato basso NON-gate) -> dentro il modello dichiarato
+guardia objdatains: A=963.3 B=966.7 D=-3.3 soglia_reg=-13.3 [banda fondata=13.3; rumore drop-1 A'=10.0 B'=3.3] -> ok
+guardia m-dimrmw: A=146.7 B=143.3 D=+3.3 soglia_reg=-5.0 [banda fondata=5.0; rumore drop-1 A'=0.0 B'=0.0] -> ok
+guardia m-diminc: A=113.3 B=116.7 D=-3.3 soglia_reg=-5.0 [banda fondata=5.0; rumore drop-1 A'=0.0 B'=0.0] -> ok
+guardia arith: A=47.7 B=47.6 D=+0.1 soglia_reg=-4.0 [SL=0.94; rumore drop-1 A'=0.5 B'=0.4] -> ok
+guardia prop: A=78.2 B=78.8 D=-0.6 soglia_reg=-4.0 [SL=0.8; rumore drop-1 A'=0.3 B'=1.1] -> ok
+guardia calls: A=107.2 B=106.7 D=+0.5 soglia_reg=-4.0 [SL=0.73; rumore drop-1 A'=0.3 B'=0.8] -> ok
+guardia str: A=158.9 B=156.4 D=+2.5 soglia_reg=-4.0 [SL=2.89; rumore drop-1 A'=1.1 B'=0.4] -> ok
+guardia arr: A=155.3 B=151.7 D=+3.7 soglia_reg=-4.0 [SL=2.49; rumore drop-1 A'=3.3 B'=1.0] -> ok
+guardia re: A=465.8 B=463.3 D=+2.5 soglia_reg=-4.5 [SL=4.46; rumore drop-1 A'=1.7 B'=0.0] -> ok
+ESITO: PROMOSSA (giudice sopra soglia, guardie ok)

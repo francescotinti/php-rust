@@ -1,0 +1,10 @@
+== s141-ab-rd1 banda: A=f2708b75(pin s140) B=39316fc0 R=5 SMOKE=1 ordine ALTERNATO; giudice=m-arrdrop; soglia=max(4, drop-1, banda-layout 0 + 2 tick); UB: D atteso 6-40, D>60 FUORI MODELLO, lato basso NON-gate; guardie NESSUNA-allo-smoke; quiescenza rc=0; rc autoritativo = ab-out/banda.rc ==
+cat=m-arrdrop N= floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=2.76 rawB=2.79
+  coppia2 [BA]: rawA=2.76 rawB=2.78
+  coppia3 [AB]: rawA=2.76 rawB=2.79
+  coppia4 [BA]: rawA=2.80 rawB=2.79
+  coppia5 [AB]: rawA=2.74 rawB=2.80
+Traceback (most recent call last):
+  File "<stdin>", line 27, in <module>
+ValueError: could not convert string to float: ''
