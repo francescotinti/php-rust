@@ -1,14 +1,15 @@
 # PERF_MAP — phpr vs PHP oracle 8.5.7, mappa multi-workload
 
-Aggiornata: **2026-08-15 (S-139)** · pin phpr **s138 fa17dabd** + server
-**s138 a9aded45** (COPPIA WP @ s138 FATTA: on-only 1,752–1,785 N=5,
-COMPATIBILE col rif S-137 — RMW non muove WP, atteso; **banda_ON FONDATA
-0,033 — QUALIFICA az.rev. S-139 #1: è variabilità INTRA-finestra (5 gambe
-dello stesso t1); da confermare su una seconda finestra al prossimo pin
-prima che dichiari un delta da sola** — sostituisce comunque la off 0,041;
-objmap 43,4 → piano gc-cycle-collector; dbal/ORM RIMISURATE S-139: dbal ↓
-lieve 8,15–8,23, ORM FERMO 8,59–8,71 — le leve dim-write NON muovono ORM,
-REPERTO) ·
+Aggiornata: **2026-08-15 (S-140)** · pin phpr **s140 f2708b75** + server
+**s140 c7a03e2a** (leva **HC1 «hint-check senza clone» SPEDITA**: borrow-first
+in coerce_or_check_hint, ramo Ref invariato; giudice NUOVO m-hintcall 7,3×
+bilaterale, D=+6,7 su 6 check/iter, catena promo completa incl. gate ORM
+3E/13F per NOME; census ORM: 35,6M hint-check ≈ 0,13% suite ⇒ HC1 non muove
+Doctrine — REPERTO S-140: profilo SUITE = CHURN 32% vs DIMPROP 6%, 44% dei
+clone INLINE da run_loop → filone TakeSlot. COPPIA WP @ s140 FATTA: on-only
+1,765–1,777 N=6 COMPATIBILE — **banda_ON 0,033 CONFERMATA cross-finestra,
+az.rev. S-139 #1 CHIUSA**; objmap 43,4 → piano gc-cycle-collector; dbal/ORM
+riferimento S-139: dbal 8,15–8,23 ind., ORM 8,59–8,71) ·
 metodo: user CPU, pavimenti per-binario, N per voce come indicato; criteri pre-registrati in
 `wp125-harness/s125-criterio-{pair,mappa}.md` e `wp126-harness/s126-criterio-{orm,mappa2}.md`
 (+ emenda S-127: **cifra canonica = NETTO-pavimento**, raw companion; gate contesa in ictx/s);
@@ -18,8 +19,8 @@ cifre dai verdetti `.out`. Regola di lettura: rapporti PER workload, MAI aggrega
 
 | workload | rapporto phpr/oracle | N | note |
 |---|---|---|---|
-| **WordPress full-suite** | **ON-ONLY CANONICO 1,752–1,785** (S-139 @ **pin s138**; N=5 coppie proprie PULITE su 6 gambe TUTTE ON — config off PENSIONATA; COMPATIBILE formale col rif S-137 1,767–1,781 su banda 0,041 ULTIMO USO — RMW non muove WP, atteso; **banda_ON FONDATA = 0,033**, canonica dai confronti S-140; quiescenza rc=0 ×7 SENZA retry) | **5/6 gambe pulite** (t1; leg6-on SPORCA phpr ictx 267% med esclusa — era la gamba col proprio anomalo 1,810: la firma morde giusto) | S-139 @ s138; parità per NOME 6/6 (solo `wp_is_stream #2`); **peak 1831–1849 MiB: OSSERVAZIONE, sopra la banda oss. s136/s137 1743–1825 su TUTTE le gambe (+~80 MiB, bordo alto NUOVO; causa non attribuita — candidate per NOME: celle IC per-sito RMW, warmup ora on-config)**; verdetto `wp139-harness/s139-pair-verdetto-t1.out` |
-| **WordPress gruppo media** | **2,470–2,486 CANONICA user-only** (S-139 @ s138, 5 gambe pulite; companion 2,428–2,444; dentro il range S-137 2,445–2,529, bordo alto rientrato) | 5 | S-139 @ s138 |
+| **WordPress full-suite** | **ON-ONLY CANONICO 1,765–1,777** (S-140 @ **pin s140**; N=6 coppie proprie, 6/6 gambe PULITE; COMPATIBILE col rif S-139 1,752–1,785 su **banda_ON 0,033 — CONFERMATA cross-finestra (2 finestre, 2 pin; intra-finestra S-140: 0,012)** — HC1 non muove WP, atteso) | **6/6 gambe pulite** (t1) | S-140 @ s140; parità per NOME 6/6 (solo `wp_is_stream #2`); **peak 1807–1853 MiB: leg1 1807 DENTRO la banda oss. s136/s137 1743–1825, gambe 2–6 a 1838–1853 — la firma S-139 «tutte alte» NON si ripete ⇒ candidato binario (celle IC RMW) indebolito, componente STATO/ordine-finestra indiziata; bisezione per POSIZIONE in §S-141** ; verdetto `wp140-harness/s140-pair-verdetto-t1.out` (errata header dichiarata in coda) |
+| **WordPress gruppo media** | **2,462–2,479 CANONICA user-only** (S-140 @ s140, 6 gambe pulite; companion 2,406–2,429; nel range S-139 2,470–2,486 a meno di 0,008 sul bordo basso) | 6 | S-140 @ s140 |
 | **symfony http-foundation** (1854) | **2,547–2,559** (raw 2,55–2,57) | 2/lato | S-126; canonica sul CONTEGGIO diff 17 nomi = 0,92% ≤1% (≥3 nomi sono unit puri, NON famiglia `php -S` — emenda S-127); sys alto (I/O) |
 | **symfony http-kernel** (1665 test) | **4,29–4,32** | 2/lato | parità 0E/0F; contesa ok |
 | **doctrine/collections** (242) | **8,22 net** (raw 6,20) | 2/lato | S-126; INDICATIVA: oracle netto 0,09 s (denominatore sotto-scala); parità 0/0 |
@@ -27,14 +28,17 @@ cifre dai verdetti `.out`. Regola di lettura: rapporti PER workload, MAI aggrega
 | **doctrine/orm** (3484 test) | **8,59–8,71 net** | 2/lato | **S-139 RIMISURATA @ pin s138** (stesso verdetto; oracle `memory_limit=-1` §3.14; parità 16 nomi == baseline; phpr1 ictx segnalata ma stesso-lato <0,2% ⇒ valida): vs 8,43–8,56 @ s134 ⇒ **FERMO/lieve ↑** — REPERTO pre-registrato (criterio p.6): le TRE leve dim-write s135→s138 (AP1+FD1+RMW) NON muovono la suite (l'attesa ↓ è FALSIFICATA: `$this->elements[$k]=$v` non è fetta misurabile del tempo ORM, o il perimetro FD1 lì non morde) ⇒ la prossima leva si sceglie sul profilo SUITE (churn clone/drop, insert/lookup — come già indicava S-135) |
 | **composer install OFFLINE** | **1,863–1,891 net** (raw 1,820–1,847) | 2/lato | S-128 @ s127b, PRIMA misura col numeratore vivo (cure ondata-2); composer ESTRATTO, vendor_ok bilaterale, contesa ok (ictx/s); floors 0,07/0,06; sys≈user (~2,3 s/lato) ⇒ **cifra user-only NON confrontabile col full (user+sys): su user+sys sarebbe ~1,3** (rev. S-128 az.5); residuo phpcs config-set (§3.19-quinquies); verdetto `wp128-harness/s128-compoff-verdetto.out` |
 
-## Micro-categorie (R=5, pin s138; tappa ≤3×; gate promozione S-138)
+## Micro-categorie (R=5, pin s138; tappa ≤3×; gate promozione S-138 — invariate come guardie R=5 promo HC1 S-140)
 
-| arith | prop | calls | str | arr | re |
-|---|---|---|---|---|---|
-| 5,6 | 5,6 | 4,8 | **4,3** | **3,2** | **2,6** ✅ |
+| arith | prop | calls | str | arr | re | hintcall |
+|---|---|---|---|---|---|---|
+| 5,6 | 5,6 | 4,8 | **4,3** | **3,2** | **2,6** ✅ | **7,3** (S-140, nuova) |
 
 RMW (giudici leva S-138, A/B + conferma post-pin): **m-dimrmw 320→146,7
 ns/iter (D=+173,3)** · **m-diminc 270→113,3 (D=+156,7)**.
+**HC1 (S-140, pin s140)**: m-hintcall6 D=+6,7 (6 check/iter ⇒ ~1,1–1,7
+ns/check); conferma post-pin +10,0 in banda; census ORM 35,6M check ≈ 0,13%
+suite (il guadagno reale = prezzo×conteggi: HC1 non muove le suite — REPERTO).
 
 calls: la (*) di s127 è SCIOLTA in S-129 (phpr netto IDENTICO 2,14 s; si muove
 solo il denominatore oracle 0,43–0,44). re 2,5/2,6 = run-to-run del denominatore.

@@ -1,9 +1,9 @@
 # NEXT_SESSION — phpr: OBIETTIVO PARITÀ (≥1×) con l'oracle; ≤3× = tappa (REGOLE §1)
 ⏱ **FONDAMENTALI**: rif WP **full ON-ONLY = 1,765–1,777 (S-140 @ s140, N=6)** ·
-**banda_ON = 0,033 CONFERMATA cross-finestra (S-139+S-140; az.rev. S-139 #1
-CHIUSA)** · leva SPEDITA S-140 (HC1) · senza-leva = 0 · incidenti 14.
+**banda_ON = 0,033 CONFERMATA cross-finestra (az.rev. S-139 #1 CHIUSA)** ·
+leva SPEDITA S-140 (HC1) · senza-leva = 0 · incidenti 14.
 
-## Scoreboard (pin s140 f2708b75660803a7 + server c7a03e2aaa7c7cba; micro = guardie R=5 promo HC1)
+## Scoreboard (pin s140 f2708b75660803a7 + c7a03e2aaa7c7cba; micro = guardie promo HC1)
 
 **arith 5,6 · prop 5,6 · calls 4,8 · str 4,3 · arr 3,2 · re 2,6 · hintcall
 7,3 (NUOVA)** · oggetti (s136): objdatains 5,9 · objchurn 6,7 · objalloc 6,4 ·
@@ -17,12 +17,11 @@ da run_loop (ciclo vita Zval → TakeSlot); i canali per-statement piccoli
 ## §S-141 — ordine
 
 1. **LEVA dai numeri**: canale GROSSO = clone/drop del ciclo vita Zval in
-   run_loop (44% dei clone della suite) = famiglia **TakeSlot** (S-95:
-   liveness.rs, perimetro F2 e contatori would_take_safe GIÀ FATTI; opcode MAI
-   scritto; WP-98: metodo vincolato, ordine sospeso). Primo passo: census
-   would_take_safe_{rc,str} sulla SUITE ORM (probe zval-census, come
-   s140-census) per prezzare il sotto-canale sicuro; se STR-only multi-% ⇒
-   istruttoria opcode (F3/F4 design95, divergenze S-96 rilette PRIMA).
+   run_loop (44% dei clone) = famiglia **TakeSlot** (S-95: liveness.rs, F2 e
+   contatori would_take_safe GIÀ FATTI; opcode MAI scritto; WP-98: metodo
+   vincolato, ordine sospeso). Primo passo: census would_take_safe_{rc,str}
+   sulla SUITE ORM (probe zval-census, come s140-census); se STR-only multi-%
+   ⇒ istruttoria opcode (F3/F4 design95, divergenze S-96 rilette PRIMA).
    Alternativa se delude: Repr-drop 11% o frame-lifecycle 9%.
 2. **Peak WP**: reperto S-140 (leg1 1807 SOTTO banda vecchia, 2–6 a 1838–1853)
    indizia STATO/ordine-finestra ⇒ bisezione PER POSIZIONE (gamba fredda /
@@ -73,7 +72,6 @@ cmp secco vs oracle su fixture CON divergenze a catalogo · **giudice
 sotto-risoluto per il fenomeno (si scala la DENSITÀ del giudice, mai la
 soglia — S-140)** · **stash post-batteria senza rebuild ricetta A′ riprodotto
 al byte (il relink di cargo test MORDE — S-140)**.
-
 **Riscritto**: 2026-08-15 (chiusura S-140). Storia: `sessions/` · `gaps/GAP_TREND.md`.
 Pre-flight S-141: pin phpr **s140 f2708b75**660803a7 + server **s140 c7a03e2a**aa7c7cba ·
 MySQL wp8 con l'elenco · uploads sotto guardia · corpus 1414 ×2 · CI: feed
