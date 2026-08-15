@@ -1,0 +1,81 @@
+== s144 profilo SUITE ORM ORACLE (INDIZIO per famiglie — criterio s144-criterio-profilo-oracle.md; MAI cifra di tempo) ==
+grade=INDIZIO  # sample perturba; asimmetria di inlining DICHIARATA (criterio p.3)
+oracle=PHP 8.5.7 (cli) (built: Jun  2 2026 20:59:56) (NTS)
+rep1 run_rc=0
+rep2 run_rc=0
+fail-names oracle: prima fotografia (osservativo, criterio p.5): rep1=0 rep2=0 nomi
+--- sentinelle per finestra (criterio p.5) ---
+rep1 w1 pre=CLEAN
+rep1 w1 post=CLEAN
+rep2 w1 pre=CLEAN
+rep2 w1 post=CLEAN
+--- famiglie oracle (top-of-stack cumulata, lista chiusa p.2) ---
+rep1 tot_campioni=12154
+  rep1 other: 9783 (80.5%)
+  rep1 vm_inline: 1048 (8.6%)
+  rep1 gc: 461 (3.8%)
+  rep1 memops: 304 (2.5%)
+  rep1 calls: 130 (1.1%)
+  rep1 prop_dim: 129 (1.1%)
+  rep1 map: 123 (1.0%)
+  rep1 alloc: 121 (1.0%)
+  rep1 compile: 36 (0.3%)
+  rep1 str: 10 (0.1%)
+  rep1 churn_zval: 9 (0.1%)
+  rep1 BERSAGLI-B (churn_zval+memops): 2.6%
+  rep1 rank_top3: other > vm_inline > gc
+rep2 tot_campioni=11833
+  rep2 other: 9588 (81.0%)
+  rep2 vm_inline: 962 (8.1%)
+  rep2 gc: 444 (3.8%)
+  rep2 memops: 279 (2.4%)
+  rep2 prop_dim: 145 (1.2%)
+  rep2 calls: 140 (1.2%)
+  rep2 alloc: 116 (1.0%)
+  rep2 map: 105 (0.9%)
+  rep2 compile: 25 (0.2%)
+  rep2 str: 22 (0.2%)
+  rep2 churn_zval: 7 (0.1%)
+  rep2 BERSAGLI-B (churn_zval+memops): 2.4%
+  rep2 rank_top3: other > vm_inline > gc
+--- riferimento phpr (s140-profilo-verdetto.out, stessa lente) ---
+rep1 tot_campioni=24954
+  rep1 other: 6626 (26.6%)
+  rep1 vm_inline: 4135 (16.6%)
+  rep1 memops: 3149 (12.6%)
+  rep1 churn_zval: 2572 (10.3%)
+  rep1 map: 2192 (8.8%)
+  rep1 gc: 2035 (8.2%)
+  rep1 prop_dim: 1502 (6.0%)
+  rep1 alloc: 1342 (5.4%)
+  rep1 calls: 971 (3.9%)
+  rep1 str: 205 (0.8%)
+  rep1 compile: 179 (0.7%)
+  rep1 refl: 46 (0.2%)
+  rep1 MACRO: CHURN=32.6% DIMPROP=6.0% (vm_inline=16.6% FUORI, memops=12.6% FUORI)
+rep2 tot_campioni=24985
+  rep2 other: 6679 (26.7%)
+  rep2 vm_inline: 4109 (16.4%)
+  rep2 memops: 3144 (12.6%)
+  rep2 churn_zval: 2583 (10.3%)
+  rep2 map: 2193 (8.8%)
+  rep2 gc: 1946 (7.8%)
+  rep2 prop_dim: 1518 (6.1%)
+  rep2 alloc: 1343 (5.4%)
+  rep2 calls: 979 (3.9%)
+  rep2 compile: 231 (0.9%)
+  rep2 str: 203 (0.8%)
+  rep2 refl: 57 (0.2%)
+  rep2 MACRO: CHURN=32.3% DIMPROP=6.1% (vm_inline=16.4% FUORI, memops=12.6% FUORI)
+summary rep1: Tests: 3484, Assertions: 12003, Skipped: 59, Incomplete: 2.
+summary rep2: Tests: 3484, Assertions: 12003, Skipped: 59, Incomplete: 2.
+--- EMENDA v2 (dichiarata; raw INVARIATI, run non ripetute — precedente parser S-143) ---
+DIFETTO DEL GIUDICE nominato: `sample` campiona TUTTI i thread; il 69% dei campioni oracle e' `__workq_kernreturn` = thread workqueue PARCHEGGIATI (idle kernel, non lavoro CPU); phpr e' mono-thread e non ha questo inquinamento => il denominatore v1 sottostima OGNI quota oracle.
+Denominatore emendato (esclusi __workq_kernreturn|__psynch|kevent|__semwait):
+rep1: tot=12154 idle=8418 att=3736 => memops 8.14% churn_zval 0.24% B=8.38%
+rep2: tot=11833 idle=8244 att=3589 => memops 7.77% churn_zval 0.20% B=7.97%
+APPLICAZIONE p.6 PER FAMIGLIA (lettura testuale del criterio: «una famiglia bersaglio»):
+- churn_zval: oracle 0,20-0,24% vs phpr 10,3% => rapporto ~2% <50% => IN BUDGET (ROBUSTO in entrambe le letture v1/v2). Riserva d'inlining dichiarata (p.3): parte del churn Zend vive negli handler; il tie-break resta la tassa per-statement BILATERALE ~10x (S-129).
+- memops: oracle 7,8-8,1% vs phpr 12,6% => rapporto 62-66% >=50% => FUORI BUDGET nella lettura v2 (v1 darebbe 20% <50%: le letture DIVERGONO => si applica la SEVERA, errore asimmetrico a favore del non-promuovere).
+CONSEGUENZA PER B (gate Stogov R4 assolto): il bersaglio VIVO di B = churn_zval (clone/drop Rc) + voce gc-nota; le fette che bersagliano il memcpy NON si promuovono senza attribuzione Zval-move dedicata. Coerente con la progettazione rimirata (s144-progettazione-B.md par.2: memops gia' condizionata ad attribuzione pendente).
+NOTA: top simboli `other` oracle (v2): sqlite3VdbeExec, syscalls I/O (__open_nocancel, __getdirentries64), <deduplicated_symbol> 133 — lavoro reale non-engine, dichiarato.
