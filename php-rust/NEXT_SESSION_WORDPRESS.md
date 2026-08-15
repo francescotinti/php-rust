@@ -8,11 +8,10 @@ sessioni-senza-misura: 0 (S-143 census) · incidenti 14 (+ #4 S-142 all'utente).
 · oggetti (s136): objchurn 6,7 · objalloc 6,4 · objdatains 5,9 · objdropdef 7,5 ·
 objallocni 7,9 · objmap 11,7 · MAPPA (net): WP 1,78 ≈ compoff 1,9 ≪ hf 2,55 ≪
 hk 4,3 ≪ dbal 8,2 ≈ ORM 8,6 · corpus **1414 ×2** · **REPERTI S-143: concilio 9/9
-(fascicolo `wp143-harness/COUNCIL_S143_REVIEWS.md` VINCOLANTE); census CH_*:
-quota_obj 1,38% · quota_str 27,6% (129,9M creazioni/run!) · quota_arr 9,4% ·
-other 61,7% dichiarato · galloc_n 471,3M ≡ dossier · `size_of::<Zval>()=16`
-(B NON è riduzione-taglia: è Rc-traffic/clone-drop/niche) · bilancio bytes
-CHIUSO (realloc disaggregato) · A cade sotto OGNI kill-switch (1,4% vs 15–40%).**
+(`wp143-harness/COUNCIL_S143_REVIEWS.md` VINCOLANTE); census CH_*: quota_obj
+1,38% · quota_str 27,6% (129,9M creazioni/run!) · quota_arr 9,4% · other 61,7%
+dichiarato · galloc_n 471,3M ≡ dossier · `size_of::<Zval>()=16` (B = Rc-traffic/
+clone-drop/niche, non taglia) · bilancio bytes CHIUSO · A sotto OGNI kill-switch.**
 
 ## §S-144 — ordine
 
@@ -31,7 +30,6 @@ CHIUSO (realloc disaggregato) · A cade sotto OGNI kill-switch (1,4% vs 15–40%
 5. CI: feed in apertura (coda ~60 in drenaggio, non-gate).
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
-
 str-provenienza 27,6% (p.3) · profilo oracle (p.2b) · sonda prezzi (p.2c) ·
 other census 61,7% · peak due livelli (az.rev. #2) · cura §3.22 · media leg5
 2,524 sopra tetto (oss.) · deprecation float→int · warning corsia ×2 ·
