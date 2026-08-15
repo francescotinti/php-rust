@@ -1,8 +1,7 @@
 # NEXT_SESSION — phpr: OBIETTIVO PARITÀ (≥1×) con l'oracle; ≤3× = tappa (REGOLE §1)
 ⏱ **FONDAMENTALI**: rif WP **1,765–1,788 (S-142 @ s142; banda_ON unione 0,036)** ·
 **⚖️ DELIBERATO S-143: via B (regola pre-registrata applicata: quota_obj 1,4% <25%)** ·
-sessioni-senza-misura: 0 (S-143 census) · **incidenti 15** (⚖️ utente 2026-08-16:
-near-miss RA S-142 CONTATO; regola di conteggio in REGOLE §3; az.rev. #4 CHIUSA).
+sessioni-senza-misura: 0 · **incidenti 15** (⚖️ utente: near-miss RA contato; regola in REGOLE §3).
 
 ## Scoreboard (pin s142 phpr bba8a7346d727e0e + server eeb284b681c4bf89 — INVARIATO in S-143)
 **arith 5,5 · prop 5,6 · calls 4,7 · str 4,2 · arr 3,2 · re 2,6 · hintcall 7,3**

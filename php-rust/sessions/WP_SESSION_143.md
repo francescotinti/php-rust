@@ -7,8 +7,7 @@ sono solo l'1,4% delle allocazioni (le stringhe il 27,6%) ⇒ la via è la B.
 **SCOREBOARD** (pin s142 bba8a734+eeb284b6 INVARIATO, micro non rimisurate =
 per costruzione): **arith 5,5 · prop 5,6 · calls 4,7 · str 4,2 · arr 3,2 ·
 re 2,6** · WP rif 1,765–1,788 (fermo, non rimisurato) · **leve perf spedite: 0
-(DICHIARATO: sessione concilio+istruttoria su rotta utente)** · **incidenti 15
-(⚖️ utente a chiusura: near-miss RA S-142 contato; regola in REGOLE §3)**.
+(DICHIARATO: sessione concilio+istruttoria su rotta utente)** · **incidenti 15 (⚖️ utente a chiusura: near-miss RA contato, regola in REGOLE §3)**.
 
 ## Esiti secchi
 1·**CONCILIO a 9** (`COUNCIL_S143_REVIEWS.md`, 2 fasi, 13 agenti): 9/9
