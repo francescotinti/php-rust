@@ -7,13 +7,12 @@ spedite = 0: la catena è il PRIMO atto di S-142** · incidenti 14.
 
 **arith 5,6 · prop 5,6 · calls 4,8 · str 4,3 · arr 3,2 · re 2,6 · hintcall 7,3**
 · oggetti (s136): objdatains 5,9 · objchurn 6,7 · objalloc 6,4 · objdropdef 7,5 ·
-objallocni 7,9 · objmap 11,7 · RMW: m-dimrmw 147 · m-diminc 113 · MAPPA (net):
-WP 1,77 ≈ compoff 1,9 ≪ hf 2,55 ≪ hk 4,3 ≪ dbal 8,2 ≈ ORM 8,6 · corpus **1414
-×2** · **REPERTI S-141: census TakeSlot DELUDE (safe 22,3M ev = 0,06–0,09%
-suite) — filone CHIUSO sul suo meccanismo; teardown array ≈2% suite (Zval-glue
-leaf 4,6%; caller: run_loop 34,5%, Repr 21,6%, recycle_frame 8,5%); L-RD1 A/B
-PROMOSSA con qualifica: D=+5,0 AL BORDO soglia 5,0, segni 7/7, guardie 9/9,
-collaterali positivi arr/str/re, ~0,8 ns/elem (sotto modello, non-gate).**
+objallocni 7,9 · objmap 11,7 · RMW: dimrmw 147 · diminc 113 · MAPPA (net): WP
+1,77 ≈ compoff 1,9 ≪ hf 2,55 ≪ hk 4,3 ≪ dbal 8,2 ≈ ORM 8,6 · corpus **1414 ×2**
+· **REPERTI S-141: census TakeSlot DELUDE (22,3M ev = 0,06–0,09% suite) —
+CHIUSO; teardown array ≈2% (Zval-glue leaf 4,6%; run_loop 34,5%, Repr 21,6%,
+recycle_frame 8,5%); L-RD1 A/B PROMOSSA con qualifica: D=+5,0 AL BORDO soglia
+5,0, segni 7/7, guardie 9/9, collaterali positivi arr/str/re (~0,8 ns/elem).**
 
 ## §S-142 — ordine
 
@@ -31,16 +30,20 @@ collaterali positivi arr/str/re, ~0,8 ns/elem (sotto modello, non-gate).**
 3. **Leva successiva dai numeri** (se resta finestra): caller grossi drop-glue =
    run_loop 34,5% e recycle_frame 8,5%; census del meccanismo PRIMA di ogni A/B.
 4. CI: feed in apertura; fase 2 SOLO su decisione utente.
+5. **Az.rev. S-141 #1–#5 VINCOLANTI** (revisione.md): catena PRIMA del pin ·
+   ARM del bl residuo da attribuire (se Str, firma parziale) · sonda profondità
+   nesting A/B · micro parità Hashed (str+tombstoni+annidati vs oracle) ·
+   strettezza soglia pre-registrata (D==soglia ⇒ «AL BORDO ⇒ replica»).
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
 
 catena L-RD1 (p.1) · coppia+peak-per-posizione (p.2) · drop-glue run_loop 34,5%
-· recycle_frame 8,5% · frame-lifecycle 9% · bisezione s136 (declassata) ·
-deprecation float→int da catalogare · warning corsia zval+mem-census ×2 · fix
-echo s140-pair.sh · divergenze RMW del PIENO · objdatains residuo · objmap 43,4
-→ piano GC · dispatch 36,3 · cammini non cacheabili · locale 170 ns · evalcls
-316,9× · refl 42,4× · re +2,00 alloc/iter · §3.13 · §3.12-i · §3.14 · §3.21 ·
-get_gc · drift TODO.md · latin1-cliff · dbal 10 nomi.
+· recycle_frame 8,5% · frame-lifecycle 9% · bisezione s136 · deprecation
+float→int · warning corsia zval+mem-census ×2 · fix echo s140-pair.sh ·
+divergenze RMW del PIENO · objdatains residuo · objmap 43,4 → piano GC ·
+dispatch 36,3 · locale 170 ns · evalcls 316,9× · refl 42,4× · re +2,00
+alloc/iter · §3.13 · §3.12-i · §3.14 · §3.21 · get_gc · drift TODO.md ·
+latin1-cliff · dbal 10 nomi · cammini non cacheabili.
 
 ## NON riproporre (i veti restano; dettaglio nei concili archiviati)
 
