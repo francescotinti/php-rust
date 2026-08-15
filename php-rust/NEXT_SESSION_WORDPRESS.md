@@ -9,21 +9,18 @@ S-141: pin FERMO · **A/B L-RD1 PROMOSSO, spedite 0: catena = PRIMO atto S-142**
 · oggetti (s136): objdatains 5,9 · objchurn 6,7 · objalloc 6,4 · objdropdef 7,5 ·
 objallocni 7,9 · objmap 11,7 · RMW: dimrmw 147 · diminc 113 · MAPPA (net): WP
 1,77 ≈ compoff 1,9 ≪ hf 2,55 ≪ hk 4,3 ≪ dbal 8,2 ≈ ORM 8,6 · corpus **1414 ×2**
-· **REPERTI S-141: census TakeSlot DELUDE (22,3M ev = 0,06–0,09% suite) —
-CHIUSO; teardown array ≈2% (Zval-glue leaf 4,6%; run_loop 34,5%, Repr 21,6%,
-recycle_frame 8,5%); L-RD1 A/B PROMOSSA con qualifica: D=+5,0 AL BORDO soglia
-5,0, segni 7/7, guardie 9/9, collaterali positivi arr/str/re (~0,8 ns/elem).**
+· **REPERTI S-141: TakeSlot DELUDE (0,06–0,09% suite) CHIUSO; teardown array ≈2%
+(Zval-glue 4,6%; run_loop 34,5%, Repr 21,6%); L-RD1 A/B PROMOSSA con qualifica:
+D=+5,0 AL BORDO soglia 5,0, segni 7/7, guardie 9/9, collaterali + arr/str/re.**
 
 ## §S-142 — ordine
 
 1. **CATENA PROMOZIONE L-RD1** (criterio s141-criterio-rd1.md p.6, VINCOLANTE):
-   candidato = HEAD acb5e7d (binari A/B in `phpr-rd1-target/keep/`; banda
-   giudice 2,0, DSM=+5,0): esito CI della coda PRIMA · batteria (rc dal
-   comando) · pin via scripts (re-hash ricetta A′ al byte) · corpus 1414×2 ·
-   fixture · **gate ORM 3E/13F per NOME (ciclo vita valori: OBBLIGATORIO)** ·
-   conferma post-pin m-arrdrop (attesa D≈+5 in banda 5) · **census contatori
-   del meccanismo (arrays/elems) per la quota REALE prima di dichiarare la
-   spedizione (p.7)**.
+   candidato = HEAD acb5e7d (binari in `phpr-rd1-target/keep/`; banda 2,0,
+   DSM=+5,0): esito CI della coda PRIMA · batteria (rc dal comando) · pin via
+   scripts (re-hash ricetta A′ al byte) · corpus 1414×2 · fixture · **gate ORM
+   3E/13F per NOME (OBBLIGATORIO)** · conferma post-pin m-arrdrop (D≈+5 in
+   banda 5) · **census arrays/elems per la quota REALE prima di dichiarare (p.7)**.
 2. **Coppia WP a pin nuovo** (obbligo a OGNI pin), banda_ON 0,033; peak per
    POSIZIONE = bisezione osservativa gamba-fredda/ordine-ruotato stessa finestra.
 3. **⚖️ ROTTA UTENTE (2026-08-15): BUDGET DI PARITÀ** — nuove micro-leve sul
@@ -33,19 +30,18 @@ recycle_frame 8,5%); L-RD1 A/B PROMOSSA con qualifica: D=+5,0 AL BORDO soglia
    che delibera la scommessa strutturale (oggetti handle+arena vs layout
    Zval/Option; riesame veti pertinenti SOLO in concilio).
 4. CI: feed in apertura; fase 2 SOLO su decisione utente.
-5. **Az.rev. S-141 #1–#5 VINCOLANTI** (revisione.md): catena PRIMA del pin ·
-   ARM del bl residuo da attribuire (se Str, firma parziale) · sonda profondità
-   nesting A/B · micro parità Hashed (str+tombstoni+annidati vs oracle) · strettezza
-   soglia pre-registrata (D==soglia ⇒ «AL BORDO ⇒ replica»).
+5. **Az.rev. S-141 #1–#5 VINCOLANTI** (revisione.md): catena PRIMA del pin · ARM
+   del bl residuo (se Str, firma parziale) · sonda profondità nesting · micro
+   parità Hashed vs oracle · a D==soglia il verdetto è «AL BORDO ⇒ replica».
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
 
-catena L-RD1 (p.1) · coppia+peak-per-posizione (p.2) · drop-glue run_loop 34,5% ·
-recycle_frame 8,5% · frame-lifecycle 9% · bisezione s136 · deprecation float→int ·
-warning corsia zval+mem-census ×2 · fix echo s140-pair.sh · divergenze RMW del PIENO ·
-objdatains residuo · objmap 43,4 → piano GC · dispatch 36,3 · locale 170 ns · evalcls
-316,9× · refl 42,4× · re +2,00 alloc/iter · §3.13 · §3.12-i · §3.14 · §3.21 · get_gc ·
-drift TODO.md · latin1-cliff · dbal 10 nomi · cammini non cacheabili.
+catena L-RD1 (p.1) · budget di parità (p.3) · coppia+peak-per-posizione (p.2) ·
+canali drop-glue run_loop 34,5%/recycle_frame 8,5%/frame 9% (CONGELATI fino a
+concilio) · bisezione s136 · deprecation float→int · warning corsia ×2 · fix echo
+s140-pair.sh · divergenze RMW · objdatains residuo · objmap 43,4 → piano GC ·
+evalcls 316,9× · refl 42,4× · re +2 alloc · §3.13 · §3.12-i · §3.14 · §3.21 ·
+get_gc · drift TODO.md · latin1-cliff · dbal 10 nomi.
 
 ## NON riproporre (i veti restano; dettaglio nei concili archiviati)
 
