@@ -1,0 +1,76 @@
+2,6c2,7
+< # s141-census.sh — census CONTEGGI TakeSlot (would_take_safe*) su SUITE ORM,
+< # monobinario census (sorgenti pin s140 + feature zval-census). Criterio:
+< # s141-criterio-census.md (pre-registrato). MAI cifra di tempo da qui.
+< # Base DICHIARATA: wp140-harness/s140-profilo.sh (adattamenti: niente sample,
+< # env census per replica, quota python dal criterio p.5-6).
+---
+> # s142-census-rd1.sh — census CONTEGGI L-RD1 (rd1_arrays/rd1_elems/rd1_tombs) su
+> # SUITE ORM, monobinario census (sorgenti pin s142 + contatori cfg-gated post-pin
+> # verificati hash-A′ + feature zval-census). Criterio: s142-criterio-census-rd1.md
+> # (pre-registrato). MAI cifra di tempo da qui.
+> # Base DICHIARATA: wp141-harness/s141-census.sh (adattamenti: chiavi rd1_*,
+> # quota python dal criterio p.5-6, path wp142).
+10c11
+< H="$REPO/wp141-harness"
+---
+> H="$REPO/wp142-harness"
+15c16
+< VERD="$H/s141-census-verdetto.out"
+---
+> VERD="$H/s142-census-verdetto.out"
+20,21c21,22
+< # criterio p.3: smoke — il probe non deve essere muto
+< printf '<?php $a="x"; $b=$a; echo strlen($b), "\n";' > "$SP/smoke141.php"
+---
+> # criterio p.4: smoke — il probe deve emettere i contatori NUOVI rd1_*
+> printf '<?php $a=[1,"x",2.5]; unset($a); $h=["k"=>1]; unset($h["k"]); unset($h); echo "ok\n";' > "$SP/smoke142.php"
+23,25c24,26
+< PHPR_ZVAL_CENSUS="$OUT/smoke-census.txt" "$CENSUS_PHPR" "$SP/smoke141.php" > "$SP/smoke141.out" 2>&1
+< grep -q "would_take_safe" "$OUT/smoke-census.txt" || { echo "rc=8 probe MUTO" > "$OUT/census.done"; exit 8; }
+< p "smoke PASS (dump vivo)"
+---
+> PHPR_ZVAL_CENSUS="$OUT/smoke-census.txt" "$CENSUS_PHPR" "$SP/smoke142.php" > "$SP/smoke142.out" 2>&1
+> grep -q "rd1_arrays" "$OUT/smoke-census.txt" || { echo "rc=8 probe MUTO sui contatori rd1_*" > "$OUT/census.done"; exit 8; }
+> p "smoke PASS (dump rd1_* vivo)"
+54,56c55
+< KEYS = ["slot_reads","slot_reads_rc","would_take","would_take_rc",
+<         "would_take_safe","would_take_safe_rc","would_take_safe_str",
+<         "would_take_safe_ref","sites_total","sites_movable","sites_safe"]
+---
+> KEYS = ["rd1_arrays","rd1_elems","rd1_tombs"]
+58c57,58
+< PREZZO = (1.1, 1.7)   # ns/evento clone+drop Rc (HC1, cross-giudice DICHIARATO)
+---
+> PREZZO_ELEM = (0.5, 1.0)   # ns/elem = lato-basso modello S-141 (~0,8), cross-giudice DICHIARATO
+> PREZZO_ARR  = (2.0, 5.0)   # ns/array = costo fisso call-glue risparmiata
+64c64
+<         if not line.startswith("zvalcensus "): continue
+---
+>         if not line.startswith("zvalcensus_s142 "): continue
+79,90c79,86
+<     for k in ("would_take_safe","would_take_safe_rc","would_take_safe_str","would_take_safe_ref"):
+<         lo = 100*t[k]*PREZZO[0]/T_SUITE_NS; hi = 100*t[k]*PREZZO[1]/T_SUITE_NS
+<         print(f"quota_{k} (INDIZIO): {lo:.2f}%-{hi:.2f}% della suite")
+<     wtr = t["would_take_rc"]
+<     p2 = 100*t["would_take_safe_rc"]/wtr if wtr else 0.0
+<     print(f"P2 storica: safe_rc/would_take_rc = {p2:.1f}% (soglia 60)")
+<     qlo = 100*t["would_take_safe_str"]*PREZZO[0]/T_SUITE_NS
+<     qhi = 100*t["would_take_safe_str"]*PREZZO[1]/T_SUITE_NS
+<     if qlo >= 2.0: dec = "DECISIONE p.6: quota_str >=2% -> ISTRUTTORIA OPCODE (F3/F4; divergenze S-96 RILETTE PRIMA)"
+<     elif qhi < 0.5: dec = "DECISIONE p.6: quota_str <0,5% -> TakeSlot DELUDE sul suo meccanismo -> filone alternativo (Repr-drop 11% / frame 9%)"
+<     else: dec = "DECISIONE p.6: zona 0,5-2% (o cavallo di soglia) -> confronto con Repr-drop 11% / frame 9%, si sceglie il canale maggiore"
+<     print(dec)
+---
+>     lo = 100*(t["rd1_elems"]*PREZZO_ELEM[0] + t["rd1_arrays"]*PREZZO_ARR[0])/T_SUITE_NS
+>     hi = 100*(t["rd1_elems"]*PREZZO_ELEM[1] + t["rd1_arrays"]*PREZZO_ARR[1])/T_SUITE_NS
+>     print(f"quota_L-RD1 (INDIZIO, criterio p.5): {lo:.2f}%-{hi:.2f}% della suite ORM")
+>     if hi < 0.3:
+>         print("LETTURA p.6: quota <0,3% -> nel dossier p.3: guadagno ORM sotto risoluzione della coppia suite")
+>     else:
+>         print("LETTURA p.6: quota >=0,3% -> citata come canale residuo nel dossier")
+>     print("NESSUN GATE: la leva e' gia' promossa dalla catena; la quota si SCRIVE nel verbale di spedizione")
+93c89
+< { echo "== s141 census TakeSlot su SUITE ORM (criterio s141-criterio-census.md — CONTEGGI, mai tempo) =="
+---
+> { echo "== s142 census L-RD1 su SUITE ORM (criterio s142-criterio-census-rd1.md — CONTEGGI, mai tempo) =="
