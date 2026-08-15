@@ -1,10 +1,9 @@
 # NEXT_SESSION — phpr: OBIETTIVO PARITÀ (≥1×) con l'oracle; ≤3× = tappa (REGOLE §1)
 ⏱ **FONDAMENTALI**: rif WP **1,765–1,777 (S-140 @ s140, N=6; banda_ON 0,033)** ·
-S-141: pin FERMO · **A/B L-RD1 PROMOSSO, spedite 0: catena = PRIMO atto S-142** ·
+S-141: pin FERMO · **L-RD1 PROMOSSO, spedite 0: catena = atto 1 di S-142** ·
 **⚖️ ROTTA UTENTE: budget di parità → concilio (p.3)** · incidenti 14.
 
 ## Scoreboard (pin s140 f2708b75660803a7 + c7a03e2aaa7c7cba INVARIATO; micro = riferimenti S-140)
-
 **arith 5,6 · prop 5,6 · calls 4,8 · str 4,3 · arr 3,2 · re 2,6 · hintcall 7,3**
 · oggetti (s136): objdatains 5,9 · objchurn 6,7 · objalloc 6,4 · objdropdef 7,5 ·
 objallocni 7,9 · objmap 11,7 · RMW: dimrmw 147 · diminc 113 · MAPPA (net): WP
