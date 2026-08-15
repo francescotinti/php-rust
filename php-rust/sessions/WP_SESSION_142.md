@@ -1,4 +1,4 @@
-# WP_SESSION_142 — L-RD1 SPEDITA (catena 9 gate + conferma), invarianza VERIFICATA, quota 0,24–0,53%, coppia FERMA, peak BIMODALE
+# WP_SESSION_142 — L-RD1 SPEDITA (catena 9 gate + conferma), invarianza VERIFICATA, quota 0,24–0,53%, coppia FERMA, peak SENZA firma
 
 **In una frase**: la leva sullo smontaggio degli array è spedita con tutti i
 controlli e confermata; i dubbi del revisore sono chiusi dai fatti; su Doctrine
@@ -25,8 +25,9 @@ WP rif **1,765–1,788 @ s142 (N=5, COMPATIBILE; banda_ON unione 0,036)** ·
 3·**Census quota L-RD1** (contatori cfg-gated post-pin; 2 STOP hash ⇒ EMENDA:
   byte-identità post-edit irraggiungibile, panic-location): arrays 21,7M ·
   elems 118,8M · r1==r2 esatti · **0,24–0,53% suite ORM** = canale residuo.
-4·**Coppia @ s142 rc=0**: 1,765–1,788 N=5 FERMO atteso; **peak BIMODALE
-  1744–1850: bisezione rewarmup ⇒ ENTRAMBE le ipotesi S-140 refutate**.
+4·**Coppia @ s142 rc=0**: 1,765–1,788 N=5 FERMO atteso; peak 1744–1850:
+  **esito MISTO ⇒ NESSUNA firma** (rett. revisore: «refutate» era oltre il
+  verdetto; l'inserzione = possibile causa ritardata — replica az.rev. #2).
 5·**Dossier parità** (`s142-dossier-parita.md`): divario 37,6 s; canali
   ciclo-di-vita ~26–28 s; opzioni A/B e residui NOMINATI.
 
@@ -36,5 +37,4 @@ WP rif **1,765–1,788 @ s142 (N=5, COMPATIBILE; banda_ON unione 0,036)** ·
   post-pin si àncora allo STASH immutabile, non all'hash.
 - ⭐⭐ Un bl «residuo» si giudica rispetto alla ret: nel landing pad di unwind
   non è sul cammino eseguito — il disasm ha chiuso il dubbio Str in 10 minuti.
-- ⭐ Una micro con `__destruct` rende OSSERVABILE l'ordine di drop: una sola
-  fixture ha verificato l'invarianza A==B e scovato §3.22.
+- ⭐ Una micro con `__destruct` rende osservabile l'ordine di drop: A==B verificato e §3.22 scovata in una fixture.

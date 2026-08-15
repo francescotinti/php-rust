@@ -10,8 +10,8 @@ objallocni 7,9 · objmap 11,7 · RMW: dimrmw 147 · diminc 113 · MAPPA (net): W
 1,78 ≈ compoff 1,9 ≪ hf 2,55 ≪ hk 4,3 ≪ dbal 8,2 ≈ ORM 8,6 · corpus **1414 ×2**
 · **REPERTI S-142: quota L-RD1 0,24–0,53% ORM (4ª conferma: i siti non muovono
 la suite); invarianza VERIFICATA (A==B byte-id; nesting =; disasm: residuo =
-unwind); §3.22 catalogata; PEAK BIMODALE 1744–1850 (entrambe le ipotesi S-140
-REFUTATE dalla bisezione rewarmup).**
+unwind); §3.22 catalogata; peak 1744–1850: bisezione ESITO MISTO ⇒ NESSUNA
+firma (possibile artefatto dell'inserzione — rett. revisore).**
 
 ## §S-143 — ordine
 
@@ -31,9 +31,9 @@ REFUTATE dalla bisezione rewarmup).**
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
 
-concilio (p.1) · census per-classe (p.2) · profilo oracle (p.2) · **peak
-BIMODALE** (~1740–1750 vs ~1836–1850, transizioni non governate: serve ipotesi
-NUOVA per NOME prima di ogni sonda) · cura §3.22 (unset-elemento/__destruct:
+concilio (p.1) · census per-classe (p.2) · profilo oracle (p.2) · **peak due
+livelli** (~1740–1750 vs ~1836–1850, esito MISTO: replica SENZA inserzione
+PRIMA di ogni sonda — az.rev. #2) · cura §3.22 (unset-elemento/__destruct:
 cita i fail del corpus da flippare) · media leg5 2,524 sopra tetto (oss.) ·
 bisezione s136 · deprecation float→int · warning corsia ×2 · divergenze RMW ·
 objdatains residuo · objmap 43,4 → piano GC · evalcls 316,9× · refl 42,4× ·
