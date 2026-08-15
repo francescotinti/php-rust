@@ -14,7 +14,6 @@ dichiarato · galloc_n 471,3M ≡ dossier · `size_of::<Zval>()=16` (B = Rc-traf
 clone-drop/niche, non taglia) · bilancio bytes CHIUSO · A sotto OGNI kill-switch.**
 
 ## §S-144 — ordine
-
 1. **PROGETTAZIONE B su carta + criterio pre-registrato** (deliberato: B sola/
    B-poi-A): bersaglio RIMIRATO da zval_size=16 — non taglia ma ciclo-di-vita:
    clone/drop Rc (churn 4,4 s), memops (5,4 s), nota GC. Giudici churn-probe/
