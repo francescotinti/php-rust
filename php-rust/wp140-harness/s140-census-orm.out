@@ -1,0 +1,4 @@
+== s140 census ORM (probe leva+census, monobinario — CONTEGGI, mai tempo) ==
+suite doctrine/orm intera: zvalcensus_s140 hint_checks=35614892 hint_checks_rc=24988341 hint_avoided=35614888
+lettura: 35,6M check/run (25,0M Rc); prezzo per-check dal t1 ~1,65 ns => canale ~50-60 ms su ~42,5 s phpr = ~0,13% suite
+summary: Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, Skipped: 59, Incomplete: 2.
