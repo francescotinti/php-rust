@@ -1,46 +1,44 @@
 # NEXT_SESSION — phpr: OBIETTIVO PARITÀ (≥1×) con l'oracle; ≤3× = tappa (REGOLE §1)
-⏱ **FONDAMENTALI**: rif WP **1,765–1,777 (S-140 @ s140, N=6; banda_ON 0,033)** ·
-S-141: pin FERMO · **L-RD1 PROMOSSO, spedite 0: catena = atto 1 di S-142** ·
-**⚖️ ROTTA UTENTE: budget di parità → concilio (p.3)** · incidenti 14.
+⏱ **FONDAMENTALI**: rif WP **1,765–1,788 (S-142 @ s142, N=5; banda_ON unione 0,036)** ·
+**L-RD1 SPEDITA (pin s142, catena 9 gate + conferma; quota ORM 0,24–0,53%)** ·
+**⚖️ ROTTA UTENTE: dossier PRONTO → CONCILIO a 9 (p.1)** · incidenti 14.
 
-## Scoreboard (pin s140 f2708b75660803a7 + c7a03e2aaa7c7cba INVARIATO; micro = riferimenti S-140)
-**arith 5,6 · prop 5,6 · calls 4,8 · str 4,3 · arr 3,2 · re 2,6 · hintcall 7,3**
+## Scoreboard (pin s142 phpr bba8a7346d727e0e + server eeb284b6 81c4bf89; micro dalla catena)
+**arith 5,5 · prop 5,6 · calls 4,7 · str 4,2 · arr 3,2 · re 2,6 · hintcall 7,3**
 · oggetti (s136): objdatains 5,9 · objchurn 6,7 · objalloc 6,4 · objdropdef 7,5 ·
 objallocni 7,9 · objmap 11,7 · RMW: dimrmw 147 · diminc 113 · MAPPA (net): WP
-1,77 ≈ compoff 1,9 ≪ hf 2,55 ≪ hk 4,3 ≪ dbal 8,2 ≈ ORM 8,6 · corpus **1414 ×2**
-· **REPERTI S-141: TakeSlot DELUDE (0,06–0,09% suite) CHIUSO; teardown array ≈2%
-(Zval-glue 4,6%; run_loop 34,5%, Repr 21,6%); L-RD1 A/B PROMOSSA con qualifica:
-D=+5,0 AL BORDO soglia 5,0, segni 7/7, guardie 9/9, collaterali + arr/str/re.**
+1,78 ≈ compoff 1,9 ≪ hf 2,55 ≪ hk 4,3 ≪ dbal 8,2 ≈ ORM 8,6 · corpus **1414 ×2**
+· **REPERTI S-142: quota L-RD1 0,24–0,53% ORM (4ª conferma: i siti non muovono
+la suite); invarianza VERIFICATA (A==B byte-id; nesting =; disasm: residuo =
+unwind); §3.22 catalogata; PEAK BIMODALE 1744–1850 (entrambe le ipotesi S-140
+REFUTATE dalla bisezione rewarmup).**
 
-## §S-142 — ordine
+## §S-143 — ordine
 
-1. **CATENA PROMOZIONE L-RD1** (criterio s141-criterio-rd1.md p.6, VINCOLANTE):
-   candidato = HEAD acb5e7d (binari in `phpr-rd1-target/keep/`; banda 2,0,
-   DSM=+5,0): esito CI della coda PRIMA · batteria (rc dal comando) · pin via
-   scripts (re-hash ricetta A′ al byte) · corpus 1414×2 · fixture · **gate ORM
-   3E/13F per NOME (OBBLIGATORIO)** · conferma post-pin m-arrdrop (D≈+5 in
-   banda 5) · **census arrays/elems per la quota REALE prima di dichiarare (p.7)**.
-2. **Coppia WP a pin nuovo** (obbligo a OGNI pin), banda_ON 0,033; peak per
-   POSIZIONE = bisezione osservativa gamba-fredda/ordine-ruotato stessa finestra.
-3. **⚖️ ROTTA UTENTE (2026-08-15): BUDGET DI PARITÀ** — nuove micro-leve sul
-   fronte ORM SOSPESE (tre falsificazioni: S-139 tre-leve, HC1 0,13%, RD1 ~1–2%):
-   attribuzione TOP-DOWN dei ~37 s di divario ORM per NOME (statement-count ×
-   tasse; modelli S-129/S-131 + profilo S-140) → dossier per **CONCILIO a 9**
-   che delibera la scommessa strutturale (oggetti handle+arena vs layout
-   Zval/Option; riesame veti pertinenti SOLO in concilio).
-4. CI: feed in apertura; fase 2 SOLO su decisione utente.
-5. **Az.rev. S-141 #1–#5 VINCOLANTI** (revisione.md): catena PRIMA del pin · ARM
-   del bl residuo (se Str, firma parziale) · sonda profondità nesting · micro
-   parità Hashed vs oracle · a D==soglia il verdetto è «AL BORDO ⇒ replica».
+1. **⚖️ CONCILIO a 9 (rotta utente 2026-08-15): delibera della scommessa
+   strutturale** su `wp142-harness/s142-dossier-parita.md` (ancore 42,5 vs
+   4,9 s; canali ciclo-di-vita ~26–28 s; opzione A oggetti handle+arena vs
+   opzione B layout Zval/Option; riesame veti pertinenti SOLO in concilio).
+   Il dossier NOMINA i suoi limiti (§7): il concilio delibera con essi o
+   ordina prima le 2 misure mancanti (p.2).
+2. **Se il concilio le chiede (o come istruttoria pre-concilio)**: census
+   alloc/free PER CLASSE (CH_*) su ORM — decide quanto compra l'opzione A ·
+   profilo per famiglia lato ORACLE (feedback-one-sided-profile).
+3. Az.rev. S-142 (revisione.md) VINCOLANTI. · 4. CI: feed in apertura (coda
+   LUNGA, commit S-141+S-142 arretrati — non gate).
+5. HEAD ≠ sorgente-pin ATTESO (contatori census post-pin da 0ffea87): il pin
+   è lo STASH phpr-s142/php-server-s142; canonica già ripristinata e potata.
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
 
-catena L-RD1 (p.1) · budget di parità (p.3) · coppia+peak-per-posizione (p.2) ·
-canali drop-glue run_loop 34,5%/recycle_frame 8,5%/frame 9% (CONGELATI fino a
-concilio) · bisezione s136 · deprecation float→int · warning corsia ×2 · fix echo
-s140-pair.sh · divergenze RMW · objdatains residuo · objmap 43,4 → piano GC ·
-evalcls 316,9× · refl 42,4× · re +2 alloc · §3.13 · §3.12-i · §3.14 · §3.21 ·
-get_gc · drift TODO.md · latin1-cliff · dbal 10 nomi.
+concilio (p.1) · census per-classe (p.2) · profilo oracle (p.2) · **peak
+BIMODALE** (~1740–1750 vs ~1836–1850, transizioni non governate: serve ipotesi
+NUOVA per NOME prima di ogni sonda) · cura §3.22 (unset-elemento/__destruct:
+cita i fail del corpus da flippare) · media leg5 2,524 sopra tetto (oss.) ·
+bisezione s136 · deprecation float→int · warning corsia ×2 · divergenze RMW ·
+objdatains residuo · objmap 43,4 → piano GC · evalcls 316,9× · refl 42,4× ·
+re +2 alloc · §3.13 · §3.12-i · §3.14 · §3.21 · get_gc · drift TODO.md ·
+latin1-cliff · dbal 10 nomi.
 
 ## NON riproporre (i veti restano; dettaglio nei concili archiviati)
 
@@ -70,11 +68,13 @@ directory harness · identità tra GIUDICI diversi come gate · gemello di relin
 che eredita il verdetto A/B senza conferma post-pin · staleness di lock a
 OROLOGIO · cmp secco vs oracle su fixture CON divergenze a catalogo · giudice
 sotto-risoluto per il fenomeno (si scala la DENSITÀ, mai la soglia — S-140) ·
-stash post-batteria senza rebuild ricetta A′ al byte (S-140) · **giudice nuovo
-senza dry-run del parser del harness (awk `$i<N` senza spazi — S-141)**.
-**Riscritto** 2026-08-15 (chiusura S-141); storia in `sessions/` · `gaps/GAP_TREND.md`.
-Pre-flight S-142: pin phpr **s140 f2708b75**660803a7 + server **s140 c7a03e2a**aa7c7cba
-(HEAD acb5e7d+ = CANDIDATO L-RD1: sorgente ≠ pin, ATTESO) · MySQL wp8 con l'elenco ·
-uploads sotto guardia · corpus 1414 ×2 · CI feed (coda S-141) · lock misura da CREARE · Data ≥10G ·
-pgrep rust-analyzer PRIMA di ogni misura · lettura: REGOLE.md → QUI → WP_SESSION_141 →
-wp141-harness/revisione.md → PERF_MAP.md.
+stash post-batteria senza rebuild ricetta A′ al byte (S-140) · giudice nuovo
+senza dry-run del parser del harness (S-141) · **byte-identità della rebuild
+come GATE di un edit .rs post-pin (panic-location line shift — S-142: il gate
+è lo stash immutabile + cfg-inspection)**.
+**Riscritto** 2026-08-15 sera (chiusura S-142); storia in `sessions/` · `gaps/GAP_TREND.md`.
+Pre-flight S-143: pin phpr **s142 bba8a734**6d727e0e + server **s142 eeb284b6**81c4bf89
+(HEAD ≠ sorgente-pin ATTESO, p.5) · MySQL wp8 con l'elenco · uploads sotto guardia ·
+corpus 1414 ×2 · CI feed (coda) · lock misura da CREARE · Data ≥10G ·
+pgrep rust-analyzer PRIMA di ogni misura · lettura: REGOLE.md → QUI →
+WP_SESSION_142 → wp142-harness/revisione.md → s142-dossier-parita.md → PERF_MAP.md.
