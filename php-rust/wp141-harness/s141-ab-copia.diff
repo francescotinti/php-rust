@@ -1,0 +1,73 @@
+2,4c2,4
+< # s140-ab-hc1.sh <BPATH> <BEXP8> <TAG> <R> [SMOKE=0|1] [BANDA] [DSM] —
+< # LEVA HC1 hint-check senza clone (criterio s140-criterio-hc1.md, commit
+< # PRIMA di ogni run). COPIA DICHIARATA di wp138-harness/s138-ab-rmw.sh coi
+---
+> # s141-ab-rd1.sh <BPATH> <BEXP8> <TAG> <R> [SMOKE=0|1] [BANDA] [DSM] —
+> # LEVA L-RD1 teardown array inline (criterio s141-criterio-rd1.md, commit
+> # PRIMA di ogni run). COPIA DICHIARATA di wp140-harness/s140-ab-hc1.sh coi
+6,9c6,9
+< #  (a) A = stash pin s138 (phpr-s138, fa17dabd); B = candidato HC1;
+< #  (b) UN GIUDICE: m-hintcall (wp140-harness, N=3e6 dal sorgente);
+< #      soglia = max(4, rumore drop-1 del run, BANDA arg6 = banda-layout
+< #      propria del giudice da s140-banda-verdetto.out);
+---
+> #  (a) A = stash pin s140 (phpr-s140, f2708b75); B = candidato RD1;
+> #  (b) UN GIUDICE: m-arrdrop (wp141-harness, N=1e7 dal sorgente);
+> #      soglia = max(4, rumore drop-1 del run, BANDA arg6 + 2 tick [tick=1,0
+> #      ns/iter a N=1e7 — az.rev. S-140 #1]);
+11,14c11,14
+< #  (d) guardie R=5 SOLO-REGRESSIONE: objdatains (13.3) + sei micro (SL) +
+< #      m-dimrmw/m-diminc (banda 5.0, conferma post-pin S-138);
+< #  (e) UB: D atteso 10-40 (criterio p.4, canale RECV non prezzato in A/B
+< #      proprio); D > 80 = FUORI MODELLO (sonda dovuta prima di promuovere).
+---
+> #  (d) guardie R=5 SOLO-REGRESSIONE invariate: objdatains (13.3) + sei micro
+> #      (SL) + m-dimrmw/m-diminc (banda 5.0);
+> #  (e) UB: D atteso 6-40 (criterio p.4, ~6 call outlined/teardown); D > 60 =
+> #      FUORI MODELLO; lato basso NON-gate (dichiarato — az.rev. S-140 #2).
+23c23
+< A="/Volumes/Extreme Pro/Claude/phpr-old-target/release/phpr-s138"
+---
+> A="/Volumes/Extreme Pro/Claude/phpr-old-target/release/phpr-s140"
+28c28
+< VERD="$H/s140-$TAG-verdetto.out"
+---
+> VERD="$H/s141-$TAG-verdetto.out"
+42c42
+< [ "$(shasum -a 256 "$A" | cut -c1-8)" = "fa17dabd" ] || { echo "A != pin s138 — STOP" | tee -a "$VERD"; echo 1 > "$RC"; exit 1; }
+---
+> [ "$(shasum -a 256 "$A" | cut -c1-8)" = "f2708b75" ] || { echo "A != pin s140 — STOP" | tee -a "$VERD"; echo 1 > "$RC"; exit 1; }
+48c48
+< src_of() { case "$1" in m-hintcall|m-hintcall6) echo "$H";; m-dimrmw|m-diminc) echo "$M138";; objalloc|objchurn|objmap|objdatains|objallocni) echo "$M";; *) echo "$M97";; esac; }
+---
+> src_of() { case "$1" in m-arrdrop) echo "$H";; m-dimrmw|m-diminc) echo "$M138";; objalloc|objchurn|objmap|objdatains|objallocni) echo "$M";; *) echo "$M97";; esac; }
+50,51c50,51
+< # criterio v2: giudice sostituibile via env JUDGE (default v1)
+< CATS_JUDGE="${JUDGE:-m-hintcall}"
+---
+> # criterio: giudice sostituibile via env JUDGE (default m-arrdrop)
+> CATS_JUDGE="${JUDGE:-m-arrdrop}"
+59c59
+< echo "== s140-ab-hc1 $TAG: A=fa17dabd(pin s138) B=$BEXP R=$R SMOKE=$SMOKE ordine ALTERNATO; giudice=m-hintcall; soglia=max(4, drop-1, banda-layout $BANDA); UB: D>80 FUORI MODELLO; guardie $([ "$SMOKE" = 1 ] && echo NESSUNA-allo-smoke || echo "objdatains+m-dimrmw+m-diminc+sei micro, solo a R=$R"); quiescenza rc=$QRC; rc autoritativo = ab-out/$TAG.rc =="
+---
+> echo "== s141-ab-rd1 $TAG: A=f2708b75(pin s140) B=$BEXP R=$R SMOKE=$SMOKE ordine ALTERNATO; giudice=m-arrdrop; soglia=max(4, drop-1, banda-layout $BANDA + 2 tick); UB: D atteso 6-40, D>60 FUORI MODELLO, lato basso NON-gate; guardie $([ "$SMOKE" = 1 ] && echo NESSUNA-allo-smoke || echo "objdatains+m-dimrmw+m-diminc+sei micro, solo a R=$R"); quiescenza rc=$QRC; rc autoritativo = ab-out/$TAG.rc =="
+85,86c85,87
+< judge_name = sys.argv[5] if len(sys.argv) > 5 else "m-hintcall"
+< FUORI_MODELLO = 80.0   # criterio p.4
+---
+> judge_name = sys.argv[5] if len(sys.argv) > 5 else "m-arrdrop"
+> FUORI_MODELLO = 60.0   # criterio p.4
+> TICK = 1.0             # ns/iter a N=1e7 (az.rev. S-140 #1)
+115c116
+<         thr = max(4.0, noise, banda)
+---
+>         thr = max(4.0, noise, banda + 2*TICK)
+117c118
+<         print(f"GIUDICE {cat}: A={ma:.1f} B={mb:.1f} ns/iter D={delta:+.1f} soglia={thr:.1f} (rumore drop-1: A'={ra:.1f} B'={rb:.1f}; banda-layout={banda}) -> {'SOPRA SOGLIA' if ok else 'SOTTO SOGLIA'}")
+---
+>         print(f"GIUDICE {cat}: A={ma:.1f} B={mb:.1f} ns/iter D={delta:+.1f} soglia={thr:.1f} (rumore drop-1: A'={ra:.1f} B'={rb:.1f}; banda-layout={banda}+2 tick) -> {'SOPRA SOGLIA' if ok else 'SOTTO SOGLIA'}")
+122c123
+<         print(f"vs modello {cat}: D={delta:+.1f} atteso 10-40 -> {'FUORI MODELLO: sonda dovuta prima di promuovere' if fm else 'dentro il modello dichiarato'}")
+---
+>         print(f"vs modello {cat}: D={delta:+.1f} atteso 6-40 (lato basso NON-gate) -> {'FUORI MODELLO: sonda dovuta prima di promuovere' if fm else 'dentro il modello dichiarato'}")
