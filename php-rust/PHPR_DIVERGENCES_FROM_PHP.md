@@ -1033,6 +1033,24 @@ fixture `wp135-harness/fixtures-ap1.php` s8/s9/s12):
   dell'array, `var_dump`). Famiglia §3.13/§3.16/§3.17 (canale diag che
   legge la riga del pc al momento del flush, non del sito).
 
+### 3.22 🔴 `unset($a[k])` su ELEMENTO d'array: `__destruct` DIFFERITO al drop dell'array (S-142, pre-esistente)
+
+Trovata dalla micro di parità az.rev. S-141 #4 (`wp142-harness/parita-hashed.php`
++ sonda a 3 casi `probe-unset.php`): **identica su stash s140 E candidato L-RD1
+⇒ PRE-esistente, non-leva** (A==B byte-identico nei 2 modi).
+
+- Zend: `unset($a[k])` distrugge il valore ALL'ISTANTE (il `__destruct`
+  dell'oggetto contenuto scatta sull'unset, prima dello statement successivo).
+- phpr: il tombstone (packed E hashed) TIENE VIVO il valore fino al drop
+  dell'ARRAY contenitore (fine scope o ultimo Rc): il `__destruct` slitta lì.
+  `unset($var)` su variabile è invece a PARITÀ (eager).
+- Conseguenze: (1) ordine/timing dei `__destruct` osservabilmente diverso nei
+  programmi che usano `unset` di elemento come rilascio-risorsa (unlink, close);
+  (2) footprint: subtree tombstonati restano vivi finché vive l'array.
+- Cura NON tentata in S-142 (catena L-RD1 in corso; toccare il drop-path
+  avrebbe invalidato l'A/B): apertura per NOME. Una cura deve citare i fail
+  del corpus congelato che flippa (famiglia destructors/gc del fail-set).
+
 ## 4. Punti di forza da NON toccare (invarianti verificati byte-identici)
 
 Per evitare regressioni, questi comportamenti sono **già** byte-identici con
