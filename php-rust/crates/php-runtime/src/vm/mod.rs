@@ -11072,6 +11072,9 @@ impl<'m> Vm<'m> {
         hint: &TypeHint,
         strict: bool,
     ) -> Result<Zval, String> {
+        // S-140 census leva HC1: conta il check e la specie (solo probe build).
+        #[cfg(feature = "zval-census")]
+        zvalcensus::note_hint_check(&value);
         let v = value.deref_clone();
         if matches!(v, Zval::Null | Zval::Undef) {
             return if hint.nullable { Ok(Zval::Null) } else { Err("null".to_string()) };

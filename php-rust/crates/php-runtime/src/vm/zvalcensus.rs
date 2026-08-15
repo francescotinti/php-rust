@@ -320,6 +320,46 @@ pub fn dump_line() -> String {
 ///
 /// La env si legge QUI, a fine processo, mai nel percorso caldo (lezione
 /// A-TH-73 di S-94.0).
+/// S-140 leva HC1 «hint-check senza clone» — contatori del MECCANISMO
+/// (convenzione A-ZV1: il controllo positivo distingue «la leva ha agito»
+/// da «il tempo è cambiato per altro»).
+/// Chiamate a `coerce_or_check_hint` (qualunque esito).
+pub static HINT_CHECKS: AtomicU64 = AtomicU64::new(0);
+/// Il sottoinsieme il cui valore porta un `Rc` ([`zval_holds_rc`]): prima
+/// della leva OGNUNA paga un `deref_clone` che muore a fine check.
+pub static HINT_CHECKS_RC: AtomicU64 = AtomicU64::new(0);
+/// Check serviti dal cammino borrow-first SENZA clone (leva HC1). Prima
+/// della leva vale 0 per costruzione.
+pub static HINT_AVOIDED: AtomicU64 = AtomicU64::new(0);
+
+/// Nota una chiamata a `coerce_or_check_hint` col valore in ingresso.
+#[inline]
+pub fn note_hint_check(v: &Zval) {
+    REGISTERED.call_once(|| unsafe {
+        libc::atexit(dump_at_exit);
+    });
+    HINT_CHECKS.fetch_add(1, Ordering::Relaxed);
+    if zval_holds_rc(v) {
+        HINT_CHECKS_RC.fetch_add(1, Ordering::Relaxed);
+    }
+}
+
+/// Nota un check servito senza clone (solo la build con la leva lo tocca).
+#[inline]
+pub fn note_hint_avoided() {
+    HINT_AVOIDED.fetch_add(1, Ordering::Relaxed);
+}
+
+/// Riga S-140 SEPARATA (le righe storiche restano byte-identiche).
+pub fn dump_line_s140() -> String {
+    format!(
+        "zvalcensus_s140 hint_checks={} hint_checks_rc={} hint_avoided={}",
+        HINT_CHECKS.load(Ordering::Relaxed),
+        HINT_CHECKS_RC.load(Ordering::Relaxed),
+        HINT_AVOIDED.load(Ordering::Relaxed),
+    )
+}
+
 pub fn dump_exit() {
     use std::io::Write;
     let Some(path) = std::env::var_os("PHPR_ZVAL_CENSUS") else { return };
@@ -329,6 +369,8 @@ pub fn dump_exit() {
     if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
         let _ = writeln!(f, "{}", dump_line());
         let _ = writeln!(f, "{}", dump_line_s101());
+        // S-140: riga contatori hint-check (leva HC1) — riga NUOVA.
+        let _ = writeln!(f, "{}", dump_line_s140());
         // S-102: righe del census pila operandi (modulo separato).
         let _ = writeln!(f, "{}", super::stackcensus::dump_lines());
         // S-102 (A-LE-103-1): gamba alloc a mem-census DIRETTO — byte e
