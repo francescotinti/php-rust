@@ -497,10 +497,64 @@ impl Clone for PhpArray {
 /// figure, so the channel can never drift. CUM now accumulates
 /// alloc + positive adjusts (same convention as the str channel) — the
 /// old `death()` feed is gone with the estimator.
-#[cfg(feature = "mem-census")]
 impl Drop for PhpArray {
     fn drop(&mut self) {
+        #[cfg(feature = "mem-census")]
         crate::memcensus::free(crate::memcensus::CH_ARR, self.accounted.get());
+        // L-RD1 (S-141, criterio s141-criterio-rd1.md): teardown INLINE degli
+        // elementi. La glue pagava una call outlined per OGNI elemento
+        // (`drop_in_place<Option<Zval>>`), scalari inclusi; il drain manuale
+        // col match esaustivo fa svanire gli scalari senza call e raggiunge il
+        // dec dell'Rc inline per i portatori. ORDINE INVARIATO rispetto alla
+        // glue (avanti; Key prima del valore); PROFONDITÀ di ricorsione
+        // INVARIATA (drop_bounded governa Props/Captures, non gli array).
+        // `set_len(0)` PRIMA del drain: su panic al peggio LEAK, mai
+        // double-free. I Vec svuotati e il KeyIndex liberano i buffer dalla
+        // glue di coda come prima.
+        match &mut self.repr {
+            Repr::Packed(slots) => unsafe {
+                let len = slots.len();
+                let p = slots.as_mut_ptr();
+                slots.set_len(0);
+                for i in 0..len {
+                    if let Some(v) = std::ptr::read(p.add(i)) {
+                        rd1_drop_val(v);
+                    }
+                }
+            },
+            Repr::Hashed { entries, .. } => unsafe {
+                let len = entries.len();
+                let p = entries.as_mut_ptr();
+                entries.set_len(0);
+                for i in 0..len {
+                    if let Some((k, v)) = std::ptr::read(p.add(i)) {
+                        match k {
+                            Key::Int(_) => {}
+                            Key::Str(s) => drop(s),
+                        }
+                        rd1_drop_val(v);
+                    }
+                }
+            },
+        }
+    }
+}
+
+/// L-RD1: drop di UN valore col dispatch inline sulla variante — match
+/// ESAUSTIVO (disciplina S-96: una variante nuova di `Zval` NON compila qui).
+#[inline(always)]
+fn rd1_drop_val(v: Zval) {
+    match v {
+        Zval::Undef | Zval::Null | Zval::Bool(_) | Zval::Long(_) | Zval::Double(_) => {}
+        Zval::Str(s) => drop(s),
+        Zval::Array(a) => drop(a),
+        Zval::Ref(r) => drop(r),
+        Zval::Closure(c) => drop(c),
+        Zval::Object(o) => drop(o),
+        Zval::Generator(g) => drop(g),
+        Zval::Resource(r) => drop(r),
+        Zval::WeakHandle(w) => drop(w),
+        Zval::ArgPlace(p) => drop(p),
     }
 }
 
