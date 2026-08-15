@@ -857,7 +857,7 @@ impl<'m> super::Vm<'m> {
                 if !DISCARD {
                     self.frames[top].stack.push(value.clone());
                 }
-                let discard = Rc::new(RefCell::new(Zval::Null));
+                let discard = php_types::zcell(Zval::Null);
                 self.push_magic_prop(defc, midx, oid, MagicKind::Set, target.clone(), name, Some(value), Some(discard), false);
                 return Ok(());
             }
@@ -1466,7 +1466,7 @@ impl<'m> super::Vm<'m> {
                 Op::StaticStore { id } => {
                     let id = &self.rbs(*id);
                     let v = self.frames[top].stack.pop().expect("StaticStore on empty stack");
-                    let cell = Rc::new(RefCell::new(v));
+                    let cell = php_types::zcell(v);
                     let old = match self.frames[top].closure_id() {
                         Some(cid) => self.closure_statics.insert((cid, *id), cell),
                         None => self.statics[*id as usize].replace(cell),
@@ -2847,7 +2847,7 @@ impl<'m> super::Vm<'m> {
                                 let top_val = self.frames[top].stack.pop().expect("BindRefTo value");
                                 let cell = match top_val {
                                     Zval::Ref(rc) => rc,
-                                    other => Rc::new(RefCell::new(other)),
+                                    other => php_types::zcell(other),
                                 };
                                 let value = cell.borrow().clone();
                                 let keys = self.pop_field_keys(top, &steps);
@@ -2868,7 +2868,7 @@ impl<'m> super::Vm<'m> {
                     let top_val = self.frames[top].stack.pop().expect("BindRefTo value");
                     let cell = match top_val {
                         Zval::Ref(rc) => rc,
-                        other => Rc::new(RefCell::new(other)),
+                        other => php_types::zcell(other),
                     };
                     let mut keys = self.pop_field_keys(top, &steps);
                     // A lazy base initializes/forwards; binding into a typed
@@ -2889,7 +2889,7 @@ impl<'m> super::Vm<'m> {
                     }
                     let value = cell.borrow().clone();
                     if let Some(root) = lazy_root {
-                        self.field_set_in_root(Rc::new(RefCell::new(root)), top, &steps, keys, Zval::Ref(cell), true, false)?;
+                        self.field_set_in_root(php_types::zcell_prop(root), top, &steps, keys, Zval::Ref(cell), true, false)?;
                     } else if steps.is_empty() {
                         // A step-less base is rebound directly (not written
                         // through), matching `eval::bind_ref_target`.
@@ -2919,7 +2919,7 @@ impl<'m> super::Vm<'m> {
                                     ));
                                     let line = self.cur_line(top);
                                     self.flush_diags(line)?;
-                                    Rc::new(RefCell::new(other))
+                                    php_types::zcell(other)
                                 }
                             };
                             let value = cell.borrow().clone();
@@ -2941,7 +2941,7 @@ impl<'m> super::Vm<'m> {
                             ));
                             let line = self.cur_line(top);
                             self.flush_diags(line)?;
-                            Rc::new(RefCell::new(other))
+                            php_types::zcell(other)
                         }
                     };
                     let value = cell.borrow().clone();
@@ -3289,7 +3289,7 @@ impl<'m> super::Vm<'m> {
                                     let v = self.run_iter_get_hook(&obj, &name, view, false)?;
                                     let cell = match v {
                                         Zval::Ref(rc) => rc,
-                                        other => Rc::new(RefCell::new(other)),
+                                        other => php_types::zcell(other),
                                     };
                                     break Some((cell, display));
                                 }
@@ -3864,7 +3864,7 @@ impl<'m> super::Vm<'m> {
                     let rest = self.pop_keys(top, *argc);
                     let cell = match self.frames[top].stack.pop().expect("CallBuiltinRefCell ref") {
                         Zval::Ref(rc) => rc,
-                        other => Rc::new(RefCell::new(other)),
+                        other => php_types::zcell(other),
                     };
                     let line = self.cur_line(top);
                     self.flush_diags(line)?;
@@ -3917,7 +3917,7 @@ impl<'m> super::Vm<'m> {
                         // a *reference* in Zend — so `$t = &f()` binds it
                         // silently instead of raising a second notice.
                         if shape & Func::RS_WRAP != 0 && !matches!(ret, Zval::Ref(_)) {
-                            ret = Zval::Ref(Rc::new(RefCell::new(ret)));
+                            ret = Zval::Ref(php_types::zcell(ret));
                         }
                     }
                     let ret_cell = self.frames[top].ret_cell.take();
@@ -4333,7 +4333,7 @@ impl<'m> super::Vm<'m> {
                         frame.this = Some(clone_val);
                         frame.class = Some(defc);
                         frame.static_class = Some(cid);
-                        frame.ret_cell = Some(Rc::new(RefCell::new(Zval::Null)));
+                        frame.ret_cell = Some(php_types::zcell(Zval::Null));
                         frame.flags.set(FrameFlags::CLONE_INIT, true);
                         self.frames.push(frame);
                         continue;
@@ -5066,7 +5066,7 @@ impl<'m> super::Vm<'m> {
                         if let Some((defc, midx, oid)) =
                             self.magic_applies(o, &name, cur, MagicKind::Unset, b"__unset")
                         {
-                            let discard = Rc::new(RefCell::new(Zval::Null));
+                            let discard = php_types::zcell(Zval::Null);
                             self.push_magic_prop(defc, midx, oid, MagicKind::Unset, target.clone(), &name, None, Some(discard), false);
                             continue;
                         }
@@ -5958,7 +5958,7 @@ impl<'m> super::Vm<'m> {
                     // A lazy base initializes/forwards first; the walk then roots
                     // at the realized object (PHP 8.4).
                     if let Some(root) = self.field_lazy_root(*base, top, &steps, &keys, true)? {
-                        self.field_set_in_root(Rc::new(RefCell::new(root)), top, &steps, keys, value.clone(), false, false)?;
+                        self.field_set_in_root(php_types::zcell_prop(root), top, &steps, keys, value.clone(), false, false)?;
                         self.frames[top].stack.push(value);
                         continue;
                     }
@@ -6008,7 +6008,7 @@ impl<'m> super::Vm<'m> {
                             crate::vm::census::census_concat_site(4, &old, &rhs);
                         }
                         let result = self.apply_binop_ovl(*op, &old, &rhs)?;
-                        self.field_set_in_root(Rc::new(RefCell::new(root)), top, &steps, keys, result.clone(), false, true)?;
+                        self.field_set_in_root(php_types::zcell_prop(root), top, &steps, keys, result.clone(), false, true)?;
                         self.frames[top].stack.push(result);
                         continue;
                     }
@@ -6071,7 +6071,7 @@ impl<'m> super::Vm<'m> {
                         } else {
                             ops::decrement(&mut newv, &mut self.diags)?;
                         }
-                        self.field_set_in_root(Rc::new(RefCell::new(root)), top, &steps, keys, newv.clone(), false, true)?;
+                        self.field_set_in_root(php_types::zcell_prop(root), top, &steps, keys, newv.clone(), false, true)?;
                         self.frames[top].stack.push(if *pre { newv } else { old });
                         continue;
                     }
@@ -6577,7 +6577,7 @@ impl<'m> super::Vm<'m> {
                         self.magic_guard.remove(&gkey);
                     }
                     let v = r?;
-                    break 'makeref_magic Some(Rc::new(RefCell::new(v.deref_clone())));
+                    break 'makeref_magic Some(php_types::zcell_prop(v.deref_clone()));
                 }
                 // `__get` guard-suppressed on a forwarding PROXY WRAPPER
                 // with an absent slot: Zend's ptr-fetch falls back to a
@@ -6614,7 +6614,7 @@ impl<'m> super::Vm<'m> {
                         )));
                         let read_line = self.cur_line(top);
                         self.mark_pending_diag_lines(before_diags, read_line);
-                        break 'makeref_magic Some(Rc::new(RefCell::new(Zval::Null)));
+                        break 'makeref_magic Some(php_types::zcell_prop(Zval::Null));
                     }
                 }
                 None

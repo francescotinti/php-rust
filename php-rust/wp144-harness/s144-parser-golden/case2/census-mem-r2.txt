@@ -1,0 +1,2 @@
+pid=222 tag=exit str.cum_n=100 arr.cum_n=50 obj.cum_n=10 s143.arrbuf_n=30 s143.propsbuf_n=5 s143.galloc_n=1000 s143.gfree_n=990 s143.zval_size=16 s144.rczval_n=300 s144.rczval_prop_n=50 s144.vecargs_n=100 s144.grealloc_n=40 s144.objsynth_n=2
+pid=222 tag=exit_mi str.cum_n=100 arr.cum_n=50 obj.cum_n=10 s143.arrbuf_n=30 s143.propsbuf_n=5 s143.galloc_n=1000 s143.gfree_n=990 s143.zval_size=16 s144.rczval_n=300 s144.rczval_prop_n=50 s144.vecargs_n=100 s144.grealloc_n=40 s144.objsynth_n=2

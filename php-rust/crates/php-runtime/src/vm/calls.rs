@@ -333,6 +333,14 @@ pub(super) fn decay_arg(a: Zval) -> Zval {
 /// receiver dispatched without a [`bind_params`] step (a generator/fiber/closure
 /// method, `__call`, an enum `from`), which always wants values.
 pub(super) fn decay_args(args: Vec<Zval>) -> Vec<Zval> {
+    // S-144 tranche-2: gemello del funnel vecargs di `bind_params` per il
+    // dispatch nativo/magic (perimetri disgiunti per costruzione — il
+    // chiamante usa l'uno O l'altro); altri path nativi restano FUORI
+    // perimetro, dichiarato nel criterio.
+    #[cfg(feature = "mem-census")]
+    if args.capacity() > 0 {
+        php_types::memcensus::s144_vecargs_note();
+    }
     args.into_iter().map(decay_arg).collect()
 }
 
@@ -341,6 +349,14 @@ pub(super) fn bind_params(frame: &mut Frame, args: Vec<Zval>) {
     // Solo build census: la build di parità non contiene la chiamata.
     #[cfg(feature = "mem-census")]
     php_types::memcensus::arity_note(args.len());
+    // S-144 tranche-2: una Vec argomenti CON buffer allocato che arriva al
+    // bind è un evento `vecargs` (capacity>0 ⟺ almeno un alloc a monte; la
+    // crescita sta nei realloc, disaggregati). Il path diretto stack→slot
+    // non alloca e correttamente non passa di qui.
+    #[cfg(feature = "mem-census")]
+    if args.capacity() > 0 {
+        php_types::memcensus::s144_vecargs_note();
+    }
     // WP-37 fast path: a simple-call callee (no by-ref/variadic) receiving
     // EXACTLY its declared arity — every slot gets a by-value argument, no
     // surplus to snapshot, no `Undef` for the default prologue. Equal to the

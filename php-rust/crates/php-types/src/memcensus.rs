@@ -205,6 +205,15 @@ fn dump_line(tag: &str) {
             gfn,
             std::mem::size_of::<crate::Zval>(),
         ));
+        // S-144 tranche-2: rczval/vecargs + realloc-eventi DICHIARATI accanto
+        // al denominatore (fuori da galloc_n per costruzione, A-LE-104-1).
+        let (rcz, rczp, vargs) = s144_counters();
+        let (grn, _, _) = realloc_counters();
+        line.push_str(&format!(
+            " s144.rczval_n={} s144.rczval_prop_n={} s144.vecargs_n={} s144.grealloc_n={} s144.objsynth_n={}",
+            rcz, rczp, vargs, grn,
+            s144_objsynth(),
+        ));
     }
     line.push('\n');
     let _ = f.write_all(line.as_bytes());
@@ -1559,6 +1568,63 @@ pub fn s143_propsbuf_note() {
 #[cfg(feature = "mem-census")]
 pub fn s143_counters() -> (u64, u64) {
     (S143_ARRBUF_N.load(Relaxed), S143_PROPSBUF_N.load(Relaxed))
+}
+
+// S-144 tranche-2 (revisione S-143 az.1, criterio s144-criterio-tranche2.md):
+// nascite dei box `Rc<RefCell<Zval>>` (classe `rczval` del criterio S-143
+// p.2) al funnel unico `zval::zcell`/`zcell_prop` — il flag prop marca i
+// SOLI siti inequivocabilmente di macchineria-proprietà (bracket
+// [strict, loose]: la classificazione dei siti misti resta NO, dichiarata)
+// — più il contatore `vecargs` (Vec argomenti con buffer allocato ai funnel
+// bind_params/decay_args; path diretto no-alloc e nativi fuori perimetro,
+// dichiarato). TUTTO sotto feature `mem-census` (disciplina S-142 p.2).
+#[cfg(feature = "mem-census")]
+static S144_RCZVAL_N: AtomicU64 = AtomicU64::new(0);
+#[cfg(feature = "mem-census")]
+static S144_RCZVAL_PROP_N: AtomicU64 = AtomicU64::new(0);
+#[cfg(feature = "mem-census")]
+static S144_VECARGS_N: AtomicU64 = AtomicU64::new(0);
+
+#[cfg(feature = "mem-census")]
+#[inline]
+pub fn s144_rczval_note(prop: bool) {
+    S144_RCZVAL_N.fetch_add(1, Relaxed);
+    if prop {
+        S144_RCZVAL_PROP_N.fetch_add(1, Relaxed);
+    }
+}
+
+#[cfg(feature = "mem-census")]
+#[inline]
+pub fn s144_vecargs_note() {
+    S144_VECARGS_N.fetch_add(1, Relaxed);
+}
+
+// Revisione S-143 az.5: il box sintetico di `copy_with_id(0)`
+// (vm/mod.rs, serializzazione) NON passa dal mint oggetti — tick dedicato
+// perché il suo peso smetta di essere «probabile piccolo» e diventi cifra.
+#[cfg(feature = "mem-census")]
+static S144_OBJSYNTH_N: AtomicU64 = AtomicU64::new(0);
+
+#[cfg(feature = "mem-census")]
+#[inline]
+pub fn s144_objsynth_note() {
+    S144_OBJSYNTH_N.fetch_add(1, Relaxed);
+}
+
+#[cfg(feature = "mem-census")]
+pub fn s144_objsynth() -> u64 {
+    S144_OBJSYNTH_N.load(Relaxed)
+}
+
+/// Snapshot (rczval, rczval_prop, vecargs) per la riga `s144` del dump.
+#[cfg(feature = "mem-census")]
+pub fn s144_counters() -> (u64, u64, u64) {
+    (
+        S144_RCZVAL_N.load(Relaxed),
+        S144_RCZVAL_PROP_N.load(Relaxed),
+        S144_VECARGS_N.load(Relaxed),
+    )
 }
 
 /// Monotonic milliseconds since the first census event in the process —

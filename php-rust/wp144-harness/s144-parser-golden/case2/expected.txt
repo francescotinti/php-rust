@@ -1,0 +1,13 @@
+r1: str.cum_n=100 arr.cum_n=50 obj.cum_n=10 s143.arrbuf_n=30 s143.propsbuf_n=5 s143.galloc_n=1000 s143.gfree_n=990 s144.rczval_n=300 s144.rczval_prop_n=50 s144.vecargs_n=100 s144.grealloc_n=40 s144.objsynth_n=2
+r2: str.cum_n=100 arr.cum_n=50 obj.cum_n=10 s143.arrbuf_n=30 s143.propsbuf_n=5 s143.galloc_n=1000 s143.gfree_n=990 s144.rczval_n=300 s144.rczval_prop_n=50 s144.vecargs_n=100 s144.grealloc_n=40 s144.objsynth_n=2
+r1 bytes: galloc=1234 gfree=2345
+r2 bytes: galloc=1234 gfree=2345
+zval_size=16
+quota_obj=1.50% (banda dyn_entries +0/-0,69pp DICHIARATA, criterio p.3)
+quota_arr=8.00%  quota_str=10.00%
+quota_rczval=30.00% (prop 5.00%)  quota_vecargs=10.00%
+quota_obj_max_strict=6.50%  quota_obj_max_loose=31.50%
+quota_attribuita=59.50%  residuo_other=40.50%
+conteggi FUORI denominatore (dichiarati, p.3): grealloc_n=40 objsynth_n=2
+REGOLA p.5 (pre-registrata; arbitra = regola S-143 p.3 sul maggiorante):
+ESITO REGOLA: loose 31.5% >= 25% con strict 6.5% < 25% => RICONVOCA con tranche-3 (flag su make_cell)

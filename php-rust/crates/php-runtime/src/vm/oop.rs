@@ -122,7 +122,7 @@ pub(super) fn prop_ref_cell(o: &Rc<RefCell<Object>>, name: &[u8]) -> Rc<RefCell<
         return Rc::clone(rc);
     }
     let cur = b.props.get(name).cloned().unwrap_or(Zval::Null);
-    let cell = Rc::new(RefCell::new(cur));
+    let cell = php_types::zcell_prop(cur);
     b.props.set(name, Zval::Ref(Rc::clone(&cell)));
     cell
 }

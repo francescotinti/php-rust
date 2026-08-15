@@ -70,6 +70,30 @@ pub enum Zval {
     ArgPlace(Rc<ArgPlace>),
 }
 
+/// S-144 tranche-2 (census, revisione S-143 az.1): funnel di nascita dei box
+/// condivisi `Rc<RefCell<Zval>>` (classe `rczval` del criterio S-143 p.2).
+/// Senza la feature `mem-census` è testualmente `Rc::new(RefCell::new(v))`
+/// (`#[inline]`, nessun simbolo census nel binario di parità). Il tipo del
+/// parametro è il classificatore: un sito il cui payload non è `Zval`
+/// (Object/Resource/GenState) NON compila qui — l'enumerazione dei siti è
+/// chiusa dal compilatore, non dalla diligenza.
+#[inline]
+pub fn zcell(v: Zval) -> Rc<RefCell<Zval>> {
+    #[cfg(feature = "mem-census")]
+    crate::memcensus::s144_rczval_note(false);
+    Rc::new(RefCell::new(v))
+}
+
+/// [`zcell`] per i SOLI siti inequivocabilmente di macchineria-proprietà
+/// (prop_ref_cell, makeref magic, radici lazy dei field-set): alimenta
+/// `rczval_prop_n`, il lato STRETTO del bracket del criterio S-144.
+#[inline]
+pub fn zcell_prop(v: Zval) -> Rc<RefCell<Zval>> {
+    #[cfg(feature = "mem-census")]
+    crate::memcensus::s144_rczval_note(true);
+    Rc::new(RefCell::new(v))
+}
+
 /// Payload of [`Zval::ArgPlace`]: which store roots the path, the steps to
 /// walk, the `Index` keys (already evaluated, source order), and the root
 /// variable's bare name for the R-branch's "Undefined variable" warning

@@ -1003,7 +1003,7 @@ impl<'m> super::Vm<'m> {
         match &self.classes[decl].static_props[idx].init {
             StaticInit::Const(c) => {
                 let v = c.to_zval();
-                self.static_props.insert(key, Rc::new(RefCell::new(v.clone())));
+                self.static_props.insert(key, php_types::zcell(v.clone()));
                 Ok(v)
             }
             StaticInit::Thunk(_) => Ok(Zval::Null),
@@ -1026,7 +1026,7 @@ impl<'m> super::Vm<'m> {
         match self.static_props.get(&key) {
             Some(cell) => *cell.borrow_mut() = value,
             None => {
-                self.static_props.insert(key, Rc::new(RefCell::new(value)));
+                self.static_props.insert(key, php_types::zcell(value));
             }
         }
         Ok(Zval::Bool(true))

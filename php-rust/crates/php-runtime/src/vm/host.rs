@@ -6445,7 +6445,7 @@ impl<'m> super::Vm<'m> {
             return Ok(Zval::Bool(false));
         }
         let obj = self.instantiate_wrapper(cid)?;
-        let opened = Rc::new(RefCell::new(Zval::Null));
+        let opened = php_types::zcell(Zval::Null);
         let ret = self.call_method_sync(
             obj.clone(),
             b"stream_open",
@@ -7067,7 +7067,7 @@ impl<'m> super::Vm<'m> {
         for (k, v) in entries {
             let key_z = key_to_zval(&k);
             let new_v = if by_ref {
-                let vcell = Rc::new(RefCell::new(v));
+                let vcell = php_types::zcell(v);
                 let mut argv = vec![Zval::Ref(Rc::clone(&vcell)), key_z];
                 if let Some(e) = &extra {
                     argv.push(e.clone());

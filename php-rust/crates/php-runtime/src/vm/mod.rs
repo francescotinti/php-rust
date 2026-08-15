@@ -4402,7 +4402,7 @@ impl<'m> Vm<'m> {
                 frame.flags.set(FrameFlags::IN_DESTRUCTOR, true);
                 // Discard the destructor's return (don't disturb the caller's
                 // operand stack).
-                frame.ret_cell = Some(Rc::new(RefCell::new(Zval::Null)));
+                frame.ret_cell = Some(php_types::zcell(Zval::Null));
                 match resume {
                     Some((top, ip)) => {
                         self.frames[top].ip = ip; // re-run Sweep after it returns
@@ -6051,7 +6051,7 @@ impl<'m> Vm<'m> {
         frame.static_class = Some(cid);
         frame.ret_cell = match ret {
             RetMode::Stack => None,
-            RetMode::Discard => Some(Rc::new(RefCell::new(Zval::Null))),
+            RetMode::Discard => Some(php_types::zcell(Zval::Null)),
             RetMode::Capture(cell) => Some(cell),
         };
         self.enter_callee(frame)
@@ -6559,7 +6559,7 @@ impl<'m> Vm<'m> {
                         frame.slots[i] =
                             Zval::Ref(make_cell_bridge(&mut self.frames[0].slots[slot]));
                     } else {
-                        let cell = Rc::new(RefCell::new(Zval::Undef));
+                        let cell = php_types::zcell(Zval::Undef);
                         frame.slots[i] = Zval::Ref(Rc::clone(&cell));
                         fresh_bridged.push((name.to_vec(), cell));
                     }
@@ -8148,7 +8148,7 @@ impl<'m> Vm<'m> {
         capture: bool,
         next: ObjStage,
     ) -> Result<(), PhpError> {
-        let cell = if capture { Some(Rc::new(RefCell::new(Zval::Null))) } else { None };
+        let cell = if capture { Some(php_types::zcell(Zval::Null)) } else { None };
         let it = {
             let Some(IterState::Object { it, stage, pending, .. }) =
                 self.frames[top].iters.last_mut()
@@ -10047,6 +10047,9 @@ impl<'m> Vm<'m> {
                 // Synthetic same-class carrier, registered in `memo` BEFORE the
                 // recursion so a cyclic graph terminates.
                 // id 0 = synthetic carrier: never printed, never releases a handle.
+                // S-144 az.5: box Object sintetico fuori dal mint — tick census.
+                #[cfg(feature = "mem-census")]
+                php_types::memcensus::s144_objsynth_note();
                 let synth = Rc::new(RefCell::new(orc.borrow().copy_with_id(0)));
                 {
                     let mut sb = synth.borrow_mut();
@@ -10110,7 +10113,7 @@ impl<'m> Vm<'m> {
         let n = ctx.count;
         let built = self.vm_ser_build(s, n, ctx)?;
         if ctx.targets.contains(&n) {
-            let cell = Rc::new(RefCell::new(built));
+            let cell = php_types::zcell(built);
             ctx.cells.insert(n, Rc::clone(&cell));
             return Ok(Zval::Ref(cell));
         }
@@ -10865,7 +10868,7 @@ impl<'m> Vm<'m> {
                 leaf => {
                     let key_z = key_to_zval(&k);
                     if by_ref {
-                        let vcell = Rc::new(RefCell::new(leaf));
+                        let vcell = php_types::zcell(leaf);
                         let mut argv = vec![Zval::Ref(Rc::clone(&vcell)), key_z];
                         if let Some(e) = extra {
                             argv.push(e.clone());
@@ -13512,14 +13515,14 @@ impl<'m> Vm<'m> {
         }
         match &entry.init {
             StaticInit::Const(c) => {
-                let cell = Rc::new(RefCell::new(c.to_zval()));
+                let cell = php_types::zcell(c.to_zval());
                 self.static_props.insert(key, Rc::clone(&cell));
                 Ok(Some(cell))
             }
             StaticInit::Thunk(func) => {
                 // Insert a placeholder cell now, run the thunk into it, and rewind
                 // so the access re-reads the filled cell on the next iteration.
-                let cell = Rc::new(RefCell::new(Zval::Null));
+                let cell = php_types::zcell(Zval::Null);
                 self.static_props.insert(key, Rc::clone(&cell));
                 let mut frame = Frame::new(func, self.class_mod(decl));
                 frame.class = Some(decl);
@@ -14060,7 +14063,7 @@ impl<'m> Vm<'m> {
         frame.static_class = Some(lsb);
         if is_set {
             // A `set` hook's own return value is discarded (like `__set`).
-            frame.ret_cell = Some(Rc::new(RefCell::new(Zval::Null)));
+            frame.ret_cell = Some(php_types::zcell(Zval::Null));
         }
         // A `&get` hook returns a `Zval::Ref`; this implicit dispatch serves a
         // *value* context (a plain property read), so the caller needs the
@@ -14110,7 +14113,7 @@ impl<'m> Vm<'m> {
         frame.class = Some(decl);
         frame.static_class = Some(lsb);
         if is_set {
-            frame.ret_cell = Some(Rc::new(RefCell::new(Zval::Null)));
+            frame.ret_cell = Some(php_types::zcell(Zval::Null));
         }
         // Explicit `parent::$name::get()` is a value context: deref a `&get`
         // hook's returned cell (mirrors `push_hook`).
@@ -14336,7 +14339,7 @@ impl<'m> Vm<'m> {
             false,
         )?;
         let val = o.borrow().props.get(&key).map(|v| v.deref_clone()).unwrap_or(Zval::Null);
-        Ok(Some(Rc::new(RefCell::new(val))))
+        Ok(Some(php_types::zcell(val)))
     }
 
     /// If a write/ref path starts at a property whose get hook returns **by
@@ -14423,7 +14426,7 @@ impl<'m> Vm<'m> {
         let v = self.drive_to_return(baseline)?;
         Ok(Some(match v {
             Zval::Ref(rc) => rc,
-            other => Rc::new(RefCell::new(other)),
+            other => php_types::zcell(other),
         }))
     }
 
@@ -17427,7 +17430,7 @@ fn make_cell(cell: &mut Zval) -> Rc<RefCell<Zval>> {
         Zval::Undef => Zval::Null,
         other => other.clone(),
     };
-    let rc = Rc::new(RefCell::new(init));
+    let rc = php_types::zcell(init);
     *cell = Zval::Ref(Rc::clone(&rc));
     rc
 }
@@ -17445,7 +17448,7 @@ fn make_cell_bridge(cell: &mut Zval) -> Rc<RefCell<Zval>> {
         return Rc::clone(rc);
     }
     let init = std::mem::replace(cell, Zval::Undef);
-    let rc = Rc::new(RefCell::new(init));
+    let rc = php_types::zcell(init);
     *cell = Zval::Ref(Rc::clone(&rc));
     rc
 }
@@ -17554,7 +17557,7 @@ fn elem_cell(cell: &mut Zval, key: &Key) -> Rc<RefCell<Zval>> {
         let rc = Rc::clone(rc);
         let Ok(mut inner) = rc.try_borrow_mut() else {
             cell_skip_note();
-            return Rc::new(RefCell::new(Zval::Null));
+            return php_types::zcell(Zval::Null);
         };
         return elem_cell_step(&mut inner, key);
     }
@@ -17570,7 +17573,7 @@ fn elem_cell_step(cell: &mut Zval, key: &Key) -> Rc<RefCell<Zval>> {
         let child = arr.slot_or_vivify(key.clone());
         return make_cell(child);
     }
-    Rc::new(RefCell::new(Zval::Null))
+    php_types::zcell(Zval::Null)
 }
 
 /// The mutable cell a [`FieldBase`] addresses — the root of a [`Op::MakeRef`] /
@@ -17630,7 +17633,7 @@ fn field_cell(
                     Ok(mut g) => field_walk(&mut g, steps, i, keys, fs)?,
                     Err(_) => {
                         cell_skip_note();
-                        CellWalk::Done(Rc::new(RefCell::new(Zval::Null)))
+                        CellWalk::Done(php_types::zcell(Zval::Null))
                     }
                 }
             }
@@ -17661,7 +17664,7 @@ fn field_walk(
             // `&$o->prop` / `&$o->$n` (Session A / step 51): promote the property to
             // a shared cell. A non-object yields a detached cell (PHP warns).
             let Zval::Object(o) = target else {
-                return Ok(CellWalk::Done(Rc::new(RefCell::new(Zval::Null))));
+                return Ok(CellWalk::Done(php_types::zcell(Zval::Null)));
             };
             Ok(CellWalk::IntoObj(Rc::clone(o), i))
         }
@@ -17669,27 +17672,27 @@ fn field_walk(
             // `&$a[]` (Session A): append a fresh element and reference it. Append
             // is always the final step (the compiler enforces it).
             if ensure_array(target).is_err() {
-                return Ok(CellWalk::Done(Rc::new(RefCell::new(Zval::Null))));
+                return Ok(CellWalk::Done(php_types::zcell(Zval::Null)));
             }
             let Zval::Array(rc) = target else {
-                return Ok(CellWalk::Done(Rc::new(RefCell::new(Zval::Null))));
+                return Ok(CellWalk::Done(php_types::zcell(Zval::Null)));
             };
             let arr = Rc::make_mut(rc);
             match arr.append_default() {
                 Some(child) => field_walk(child, steps, i + 1, keys, fs),
-                None => Ok(CellWalk::Done(Rc::new(RefCell::new(Zval::Null)))),
+                None => Ok(CellWalk::Done(php_types::zcell(Zval::Null))),
             }
         }
         FieldStep::Index => {
             let key = keys.next().expect("ref index key");
             let Some(k) = coerce_key_silent(&key) else {
-                return Ok(CellWalk::Done(Rc::new(RefCell::new(Zval::Null))));
+                return Ok(CellWalk::Done(php_types::zcell(Zval::Null)));
             };
             if ensure_array(target).is_err() {
-                return Ok(CellWalk::Done(Rc::new(RefCell::new(Zval::Null))));
+                return Ok(CellWalk::Done(php_types::zcell(Zval::Null)));
             }
             let Zval::Array(rc) = target else {
-                return Ok(CellWalk::Done(Rc::new(RefCell::new(Zval::Null))));
+                return Ok(CellWalk::Done(php_types::zcell(Zval::Null)));
             };
             let arr = Rc::make_mut(rc);
             if !arr.contains_key(&k) {
@@ -17726,7 +17729,7 @@ fn field_prop_step(
         // driver dropped its guard — so only a caller-held borrow trips
         // this): detached cell, counted (M-70.2).
         cell_skip_note();
-        return Ok(CellWalk::Done(Rc::new(RefCell::new(Zval::Null))));
+        return Ok(CellWalk::Done(php_types::zcell(Zval::Null)));
     };
     let cid = obj.class_id as usize;
     // PHP 8.4 container-fetch guard (W+REF): a readonly / set-denied
@@ -17747,7 +17750,7 @@ fn field_prop_step(
     {
         if steps.len() == i + 1 {
             let copy = obj.props.get(key).map(|v| v.deref_clone()).unwrap_or(Zval::Null);
-            return Ok(CellWalk::Done(Rc::new(RefCell::new(copy))));
+            return Ok(CellWalk::Done(php_types::zcell(copy)));
         }
         let child = obj.props.get_mut(key).expect("object slot present");
         return field_walk(child, steps, i + 1, keys, fs);
