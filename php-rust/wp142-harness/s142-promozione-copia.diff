@@ -1,0 +1,42 @@
+2,3c2,3
+< # s138-promozione.sh <cand_hash16> — gate di promozione LEVA FD1-ext RMW — S-138 (copia dichiarata di s136-promozione.sh (a sua volta copia s135): tag s138, path wp138; baseline batteria s125 e ORM INVARIATE, FD1 non dichiara test nuovi; collaudo copia-gate + manifest s138-promozione-copia.diff)
+< # (criterio s138-criterio-rmw.md; A/B R=5 s138-ab-rmw).
+---
+> # s142-promozione.sh <cand_hash16> — gate di promozione LEVA L-RD1 teardown array inline — S-142 (copia dichiarata di s138-promozione.sh: tag s142, path wp142; baseline batteria s125 e ORM INVARIATE, L-RD1 non dichiara test nuovi; collaudo copia-gate + manifest s142-promozione-copia.diff)
+> # (criterio s141-criterio-rd1.md p.6; A/B R=5 s141-ab-rd1 D=+5,0 AL BORDO; conferma post-pin da s142-criterio-conferma.md).
+6c6
+< # test nuovi attesi) → re-build ricetta → pin-phpr.sh s138 → corpus-gate
+---
+> # test nuovi attesi) → re-build ricetta → pin-phpr.sh s142 → corpus-gate
+9c9
+< # watchdog → pin-server.sh s138 (grado minimo). Registro nel verdetto del run
+---
+> # watchdog → pin-server.sh s142 (grado minimo). Registro nel verdetto del run
+14c14
+< H="$SRC/wp138-harness"
+---
+> H="$SRC/wp142-harness"
+21,22c21,22
+< VERD="$H/s138-promo-verdetto.out"
+< CAND_EXP="${1:?uso: s138-promozione.sh <cand_hash16>}"
+---
+> VERD="$H/s142-promo-verdetto.out"
+> CAND_EXP="${1:?uso: s142-promozione.sh <cand_hash16>}"
+58c58
+< "$SRC/scripts/pin-phpr.sh" s138 > "$OUT/pin.log" 2>&1
+---
+> "$SRC/scripts/pin-phpr.sh" s142 > "$OUT/pin.log" 2>&1
+78,79c78,79
+< PHPR="$BIN" R=5 "$SRC/wp97-harness/micro/run-micro.sh" > "$OUT/micro-pin-s138.out" 2>&1
+< note "promozione micro pin s138: $(grep -E '^rapporto_' "$OUT/micro-pin-s138.out" | tr '\n' ' ')"
+---
+> PHPR="$BIN" R=5 "$SRC/wp97-harness/micro/run-micro.sh" > "$OUT/micro-pin-s142.out" 2>&1
+> note "promozione micro pin s142: $(grep -E '^rapporto_' "$OUT/micro-pin-s142.out" | tr '\n' ' ')"
+109c109
+< "$SRC/scripts/pin-server.sh" s138 > "$OUT/pin-server.log" 2>&1
+---
+> "$SRC/scripts/pin-server.sh" s142 > "$OUT/pin-server.log" 2>&1
+115c115
+< note "PROMOZIONE COMPLETA rc=0 (da promo-out/rcb — il file rc che QUESTO script scrive): pin s138 = $H2"
+---
+> note "PROMOZIONE COMPLETA rc=0 (da promo-out/rcb — il file rc che QUESTO script scrive): pin s142 = $H2"
