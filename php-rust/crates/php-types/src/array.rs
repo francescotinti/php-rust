@@ -483,6 +483,10 @@ impl Clone for PhpArray {
         {
             let cb = new.census_bytes();
             crate::memcensus::alloc(crate::memcensus::CH_ARR, cb);
+            // S-143: una copia con corpo non vuoto nasce col suo buffer.
+            if cb > crate::memcensus::ARR_OVERHEAD {
+                crate::memcensus::s143_arrbuf_note();
+            }
             new.accounted.set(cb);
         }
         new
@@ -591,6 +595,13 @@ impl PhpArray {
     #[inline]
     pub(crate) fn census_sync(&self) {
         let cb = self.census_bytes();
+        // S-143: prima transizione corpo 0→>0 = creazione del buffer (evento
+        // raw dell'allocatore attribuibile ad arr).
+        if self.accounted.get() <= crate::memcensus::ARR_OVERHEAD
+            && cb > crate::memcensus::ARR_OVERHEAD
+        {
+            crate::memcensus::s143_arrbuf_note();
+        }
         let delta = cb as i64 - self.accounted.get() as i64;
         if delta != 0 {
             crate::memcensus::adjust(crate::memcensus::CH_ARR, delta);

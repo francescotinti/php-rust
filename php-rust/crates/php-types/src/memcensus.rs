@@ -185,12 +185,28 @@ fn dump_line(tag: &str) {
         ));
     }
     line.push_str(&format!(
-        " created={} units={} unit_slack={} proxy_peak={}\n",
+        " created={} units={} unit_slack={} proxy_peak={}",
         GAUGES[G_CREATED].load(Relaxed),
         GAUGES[G_UNITS].load(Relaxed),
         UNIT_SLACK.load(Relaxed),
         PROXY_PEAK.load(Relaxed),
     ));
+    // S-143 istruttoria: numeratori-evento e denominatore raw NELLA STESSA
+    // run (mai denominatori a memoria); zval_size dichiarato (Hejlsberg R3).
+    #[cfg(feature = "mem-census")]
+    {
+        let (arrbuf, propsbuf) = s143_counters();
+        let (gan, gfn) = alloc_event_counters();
+        line.push_str(&format!(
+            " s143.arrbuf_n={} s143.propsbuf_n={} s143.galloc_n={} s143.gfree_n={} s143.zval_size={}",
+            arrbuf,
+            propsbuf,
+            gan,
+            gfn,
+            std::mem::size_of::<crate::Zval>(),
+        ));
+    }
+    line.push('\n');
     let _ = f.write_all(line.as_bytes());
 }
 
@@ -1514,6 +1530,35 @@ pub fn rd1_counters() -> (u64, u64, u64) {
         RD1_ELEMS.load(Relaxed),
         RD1_TOMBS.load(Relaxed),
     )
+}
+
+// S-143 istruttoria (criterio s143-criterio-istruttoria.md p.2, deliberato
+// concilio): eventi di CREAZIONE BUFFER per arr/props — colmano il buco tra
+// i `cum_n` di canale (box) e le coppie raw dell'allocatore. Un buffer
+// Hashed conta UNA volta (entries+index insieme, banda dichiarata); il
+// propsbuf conta la transizione accounted 0→>0 (slots+dyn insieme).
+// TUTTO sotto feature `mem-census` (disciplina S-142 p.2).
+#[cfg(feature = "mem-census")]
+static S143_ARRBUF_N: AtomicU64 = AtomicU64::new(0);
+#[cfg(feature = "mem-census")]
+static S143_PROPSBUF_N: AtomicU64 = AtomicU64::new(0);
+
+#[cfg(feature = "mem-census")]
+#[inline]
+pub fn s143_arrbuf_note() {
+    S143_ARRBUF_N.fetch_add(1, Relaxed);
+}
+
+#[cfg(feature = "mem-census")]
+#[inline]
+pub fn s143_propsbuf_note() {
+    S143_PROPSBUF_N.fetch_add(1, Relaxed);
+}
+
+/// Snapshot (arrbuf, propsbuf) per la riga `s143` del dump.
+#[cfg(feature = "mem-census")]
+pub fn s143_counters() -> (u64, u64) {
+    (S143_ARRBUF_N.load(Relaxed), S143_PROPSBUF_N.load(Relaxed))
 }
 
 /// Monotonic milliseconds since the first census event in the process —

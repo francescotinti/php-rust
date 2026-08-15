@@ -1,0 +1,134 @@
+2,7c2,8
+< # s142-census-rd1.sh — census CONTEGGI L-RD1 (rd1_arrays/rd1_elems/rd1_tombs) su
+< # SUITE ORM, monobinario census (sorgenti pin s142 + contatori cfg-gated post-pin
+< # verificati hash-A′ + feature zval-census). Criterio: s142-criterio-census-rd1.md
+< # (pre-registrato). MAI cifra di tempo da qui.
+< # Base DICHIARATA: wp141-harness/s141-census.sh (adattamenti: chiavi rd1_*,
+< # quota python dal criterio p.5-6, path wp142).
+---
+> # s143-census-ch.sh — census CH_* PER CLASSE (eventi cum_n + buffer s143_* +
+> # denominatore galloc_n STESSA run) su SUITE ORM, monobinario census (feature
+> # zval-census,mem-census). Criterio: s143-criterio-istruttoria.md (regola di
+> # decisione PRE-REGISTRATA p.3). MAI cifra di tempo da qui.
+> # Base DICHIARATA: wp142-harness/s142-census-rd1.sh (adattamenti: doppio dump
+> # PHPR_MEM_CENSUS+PHPR_ZVAL_CENSUS, smoke su s143.galloc_n, quota python dalla
+> # regola p.3, path wp143).
+11c12
+< H="$REPO/wp142-harness"
+---
+> H="$REPO/wp143-harness"
+16c17
+< VERD="$H/s142-census-verdetto.out"
+---
+> VERD="$H/s143-census-verdetto.out"
+21,26c22,28
+< # criterio p.4: smoke — il probe deve emettere i contatori NUOVI rd1_*
+< printf '<?php $a=[1,"x",2.5]; unset($a); $h=["k"=>1]; unset($h["k"]); unset($h); echo "ok\n";' > "$SP/smoke142.php"
+< rm -f "$OUT/smoke-census.txt"
+< PHPR_ZVAL_CENSUS="$OUT/smoke-census.txt" "$CENSUS_PHPR" "$SP/smoke142.php" > "$SP/smoke142.out" 2>&1
+< grep -q "rd1_arrays" "$OUT/smoke-census.txt" || { echo "rc=8 probe MUTO sui contatori rd1_*" > "$OUT/census.done"; exit 8; }
+< p "smoke PASS (dump rd1_* vivo)"
+---
+> # criterio p.6.iii: smoke — il probe deve emettere i contatori s143.* nel dump
+> # MEM (oggetto con props + array con elementi ⇒ propsbuf_n>=1, arrbuf_n>=1)
+> printf '<?php class C { public $x=1; public $y=2; } $o=new C; $o->x=3; $a=[1,"x",2.5]; $a[]=4; echo "ok\n";' > "$SP/smoke143.php"
+> rm -f "$OUT/smoke-mem.txt"
+> PHPR_MEM_CENSUS="$OUT/smoke-mem.txt" "$CENSUS_PHPR" "$SP/smoke143.php" > "$SP/smoke143.out" 2>&1
+> grep -q "s143.galloc_n" "$OUT/smoke-mem.txt" || { echo "rc=8 probe MUTO sui contatori s143.*" > "$OUT/census.done"; exit 8; }
+> p "smoke PASS (dump s143.* vivo)"
+33c35,36
+<   RAW="$OUT/census-r$rep-$(date +%Y%m%d).txt"; rm -f "$RAW"
+---
+>   RAW="$OUT/census-mem-r$rep-$(date +%Y%m%d).txt"; rm -f "$RAW"
+>   RAWZ="$OUT/census-zval-r$rep-$(date +%Y%m%d).txt"; rm -f "$RAWZ"
+36c39
+<   PHPR_ZVAL_CENSUS="$RAW" "$CENSUS_PHPR" vendor/bin/phpunit --no-coverage > "$OUT/run$rep.txt" 2>&1 &
+---
+>   PHPR_MEM_CENSUS="$RAW" PHPR_ZVAL_CENSUS="$RAWZ" "$CENSUS_PHPR" vendor/bin/phpunit --no-coverage > "$OUT/run$rep.txt" 2>&1 &
+55,62c58,64
+< KEYS = ["rd1_arrays","rd1_elems","rd1_tombs"]
+< T_SUITE_NS = 42.5e9   # criterio p.5: T_suite phpr S-140
+< PREZZO_ELEM = (0.5, 1.0)   # ns/elem = lato-basso modello S-141 (~0,8), cross-giudice DICHIARATO
+< PREZZO_ARR  = (2.0, 5.0)   # ns/array = costo fisso call-glue risparmiata
+< per_rep = {}
+< for f in sorted(glob.glob(f"{out}/census-r*.txt")):
+<     rep = re.search(r"census-(r\d)", f).group(1)
+<     tot = dict.fromkeys(KEYS, 0)
+---
+> # Chiavi dal dump mem-census (righe tag=exit, somma per-pid) — criterio p.2.
+> MKEYS = ["str.cum_n","arr.cum_n","obj.cum_n",
+>          "s143.arrbuf_n","s143.propsbuf_n","s143.galloc_n","s143.gfree_n"]
+> per_rep, zval_rep, zsize = {}, {}, None
+> for f in sorted(glob.glob(f"{out}/census-mem-r*.txt")):
+>     rep = re.search(r"census-mem-(r\d)", f).group(1)
+>     tot = dict.fromkeys(MKEYS, 0)
+64,66c66,71
+<         if not line.startswith("zvalcensus_s142 "): continue
+<         for k, v in re.findall(r"(\w+)=(\d+)", line):
+<             if k in tot: tot[k] += int(v)
+---
+>         if " tag=exit " not in line and not line.rstrip().endswith("tag=exit"):
+>             if "tag=exit" not in line: continue
+>         kv = dict(re.findall(r"([\w.]+)=(-?\d+)", line))
+>         for k in MKEYS:
+>             if k in kv: tot[k] += int(kv[k])
+>         if "s143.zval_size" in kv: zsize = int(kv["s143.zval_size"])
+68,70c73,87
+< for rep, tot in per_rep.items():
+<     print(f"{rep}: " + " ".join(f"{k}={tot[k]}" for k in KEYS))
+< reps = list(per_rep.values())
+---
+> for f in sorted(glob.glob(f"{out}/census-zval-r*.txt")):
+>     rep = re.search(r"census-zval-(r\d)", f).group(1)
+>     tot = {"galloc_bytes":0,"gfree_bytes":0}
+>     for line in open(f, errors="replace"):
+>         if not line.startswith("alloccensus "): continue
+>         kv = dict(re.findall(r"(\w+)=(\d+)", line))
+>         for k in tot:
+>             if k in kv: tot[k] += int(kv[k])
+>     zval_rep[rep] = tot
+> for rep, tot in sorted(per_rep.items()):
+>     print(f"{rep}: " + " ".join(f"{k}={tot[k]}" for k in MKEYS))
+> for rep, tot in sorted(zval_rep.items()):
+>     print(f"{rep} bytes: galloc={tot['galloc_bytes']} gfree={tot['gfree_bytes']}")
+> print(f"zval_size={zsize}  # size_of::<Zval>() dichiarato (Hejlsberg R3)")
+> reps = [per_rep[r] for r in sorted(per_rep)]
+72c89
+<     for k in KEYS:
+---
+>     for k in MKEYS:
+76c93
+<             print(f"DICHIARA scarto>1% su {k}: r1={a} r2={b}")
+---
+>             print(f"DICHIARA scarto>1% su {k}: r1={a} r2={b} (criterio p.6.ii)")
+78,86c95,108
+<     t = reps[0]
+<     lo = 100*(t["rd1_elems"]*PREZZO_ELEM[0] + t["rd1_arrays"]*PREZZO_ARR[0])/T_SUITE_NS
+<     hi = 100*(t["rd1_elems"]*PREZZO_ELEM[1] + t["rd1_arrays"]*PREZZO_ARR[1])/T_SUITE_NS
+<     print(f"quota_L-RD1 (INDIZIO, criterio p.5): {lo:.2f}%-{hi:.2f}% della suite ORM")
+<     if hi < 0.3:
+<         print("LETTURA p.6: quota <0,3% -> nel dossier p.3: guadagno ORM sotto risoluzione della coppia suite")
+<     else:
+<         print("LETTURA p.6: quota >=0,3% -> citata come canale residuo nel dossier")
+<     print("NESSUN GATE: la leva e' gia' promossa dalla catena; la quota si SCRIVE nel verbale di spedizione")
+---
+>     t = reps[0]; g = t["s143.galloc_n"] or 1
+>     q_obj = 100*(t["obj.cum_n"] + t["s143.propsbuf_n"])/g
+>     q_arr = 100*(t["arr.cum_n"] + t["s143.arrbuf_n"])/g
+>     q_str = 100*t["str.cum_n"]/g
+>     q_oth = 100 - q_obj - q_arr - q_str
+>     print(f"quota_obj={q_obj:.2f}% (box {100*t['obj.cum_n']/g:.2f}% + propsbuf {100*t['s143.propsbuf_n']/g:.2f}%)")
+>     print(f"quota_arr={q_arr:.2f}% (box {100*t['arr.cum_n']/g:.2f}% + arrbuf {100*t['s143.arrbuf_n']/g:.2f}%)")
+>     print(f"quota_str={q_str:.2f}%")
+>     print(f"quota_other={q_oth:.2f}%  # include ref/vecargs/Vec-interni/realloc-alloc: NON attribuiti in questa tranche (DICHIARATO, criterio p.2)")
+>     print("REGOLA p.3 (pre-registrata): quota_obj >=40% => A-poi-B ; <25% => B sola/B-poi-A ; 25-40% => RICONVOCA su terza via")
+>     if q_obj >= 40: print(f"ESITO REGOLA: quota_obj {q_obj:.1f}% >= 40% => A-poi-B (A ricondizionata pool+refcount)")
+>     elif q_obj < 25: print(f"ESITO REGOLA: quota_obj {q_obj:.1f}% < 25% => B sola / B-poi-A")
+>     else: print(f"ESITO REGOLA: quota_obj {q_obj:.1f}% in 25-40% => RICONVOCA il concilio su terza via")
+>     print("NOTA: quote = eventi ai funnel di tipo / galloc_n stessa run; clausola memcpy>=60% (Klabnik) fuori perimetro di questa tornata (profilo, non census)")
+89,90c111,112
+< { echo "== s142 census L-RD1 su SUITE ORM (criterio s142-criterio-census-rd1.md — CONTEGGI, mai tempo) =="
+<   echo "grade=CENSUS  # monobinario census, quote = INDIZIO (prezzo cross-giudice dichiarato)"
+---
+> { echo "== s143 census CH_* PER CLASSE su SUITE ORM (criterio s143-criterio-istruttoria.md — CONTEGGI, mai tempo) =="
+>   echo "grade=CENSUS  # monobinario census, quote = eventi/galloc_n stessa run (denominatore dal sorgente)"
