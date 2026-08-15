@@ -1,7 +1,8 @@
 # NEXT_SESSION — phpr: OBIETTIVO PARITÀ (≥1×) con l'oracle; ≤3× = tappa (REGOLE §1)
 ⏱ **FONDAMENTALI**: rif WP **1,765–1,788 (S-142 @ s142; banda_ON unione 0,036)** ·
 **⚖️ DELIBERATO S-143: via B (regola pre-registrata applicata: quota_obj 1,4% <25%)** ·
-sessioni-senza-misura: 0 (S-143 census) · incidenti 14 (+ #4 S-142 all'utente).
+sessioni-senza-misura: 0 (S-143 census) · **incidenti 15** (⚖️ utente 2026-08-16:
+near-miss RA S-142 CONTATO; regola di conteggio in REGOLE §3; az.rev. #4 CHIUSA).
 
 ## Scoreboard (pin s142 phpr bba8a7346d727e0e + server eeb284b681c4bf89 — INVARIATO in S-143)
 **arith 5,5 · prop 5,6 · calls 4,7 · str 4,2 · arr 3,2 · re 2,6 · hintcall 7,3**
@@ -26,8 +27,8 @@ clone-drop/niche, non taglia) · bilancio bytes CHIUSO · A sotto OGNI kill-swit
    attribuire ≥80% o fuori-budget · golden-test del parser (exit vs exit_mi).
 3. **Apertura dal census (per NOME): str 27,6%** — 129,9M creazioni/run: CHI le
    crea (census provenienza, monobinario)? Veti SSO/PhpStr-full restano.
-4. Az.rev. S-142 residue: #4 decisione utente (near-miss = incidente 15?) · #2
-   replica peak-only senza inserzione. · 5. CI: feed in apertura (non-gate).
+4. Az.rev. S-142: #2 replica peak-only senza inserzione (residua; #4 CHIUSA:
+   incidente 15 contato). · 5. CI: feed in apertura (non-gate).
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
 str-provenienza 27,6% (p.3) · profilo oracle · sonda prezzi · other 61,7% ·

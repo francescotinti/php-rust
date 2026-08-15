@@ -7,7 +7,8 @@ sono solo l'1,4% delle allocazioni (le stringhe il 27,6%) ⇒ la via è la B.
 **SCOREBOARD** (pin s142 bba8a734+eeb284b6 INVARIATO, micro non rimisurate =
 per costruzione): **arith 5,5 · prop 5,6 · calls 4,7 · str 4,2 · arr 3,2 ·
 re 2,6** · WP rif 1,765–1,788 (fermo, non rimisurato) · **leve perf spedite: 0
-(DICHIARATO: sessione concilio+istruttoria su rotta utente)** · incidenti 14.
+(DICHIARATO: sessione concilio+istruttoria su rotta utente)** · **incidenti 15
+(⚖️ utente a chiusura: near-miss RA S-142 contato; regola in REGOLE §3)**.
 
 ## Esiti secchi
 1·**CONCILIO a 9** (`COUNCIL_S143_REVIEWS.md`, 2 fasi, 13 agenti): 9/9
@@ -28,7 +29,7 @@ re 2,6** · WP rif 1,765–1,788 (fermo, non rimisurato) · **leve perf spedite:
   CHIUSO per ispezione (realloc disaggregato: gfree−galloc ≈ Σ(new−old)=4,76 GB
   ≈ 4,33 osservato) · emenda v2 parser (tag=exit_mi doppiava; quote invariate).
 5·Az.rev. S-142: #3 FATTA (s143-promozione.sh, copia-gate rc=0) · #2 vincolo
-  attivo · #5 coda CI drena · #4 all'utente (near-miss = incidente 15?).
+  attivo · #5 coda CI drena · #4 CHIUSA a verbale (incidente 15).
 
 ## ⭐ Lezioni (max 3)
 - ⭐⭐ Una regola di decisione firmata PRIMA dei dati trasforma un esito
