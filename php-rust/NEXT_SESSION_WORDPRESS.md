@@ -76,6 +76,6 @@ senza dry-run del parser del harness (awk `$i<N` senza spazi — S-141)**.
 **Riscritto**: 2026-08-15 (chiusura S-141). Storia: `sessions/` · `gaps/GAP_TREND.md`.
 Pre-flight S-142: pin phpr **s140 f2708b75**660803a7 + server **s140 c7a03e2a**aa7c7cba
 (HEAD acb5e7d+ = CANDIDATO L-RD1: sorgente ≠ pin, ATTESO) · MySQL wp8 con l'elenco ·
-uploads sotto guardia · corpus 1414 ×2 · CI: feed locale (coda S-141 in lavorazione)
-· lock misura da CREARE · Data ≥10G · pgrep rust-analyzer PRIMA di ogni misura ·
-lettura: REGOLE.md → QUI → WP_SESSION_141 → wp141-harness/revisione.md → PERF_MAP.md.
+uploads sotto guardia · corpus 1414 ×2 · CI feed (coda S-141) · lock misura da CREARE ·
+Data ≥10G · pgrep rust-analyzer PRIMA di ogni misura · lettura: REGOLE.md → QUI →
+WP_SESSION_141 → wp141-harness/revisione.md → PERF_MAP.md.
