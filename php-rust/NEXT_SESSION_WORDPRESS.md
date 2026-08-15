@@ -22,9 +22,8 @@ firma (possibile artefatto dell'inserzione — rett. revisore).**
    (refcount conservato, pool non arena, binding capture NON emendabile);
    6 veti confermati 9/9; la scommessa compra la TAPPA ≤3×, non la parità.
 2. **ISTRUTTORIA ordinata** (regola PRE-REGISTRATA in `wp143-harness/
-   s143-criterio-istruttoria.md` PRIMA dei dati): census CH_* per
-   classe+taglia · profilo ORACLE per famiglia · sonda prezzi · bilancio
-   bytes · «other» 26,6%.
+   s143-criterio-istruttoria.md` PRIMA dei dati): census CH_* classe+taglia ·
+   profilo ORACLE per famiglia · sonda prezzi · bilancio bytes · other 26,6%.
 3. Az.rev. S-142 (revisione.md) VINCOLANTI. · 4. CI: feed in apertura (coda
    LUNGA, commit S-141+S-142 arretrati — non gate).
 5. HEAD ≠ sorgente-pin ATTESO (contatori census post-pin da 0ffea87): il pin
