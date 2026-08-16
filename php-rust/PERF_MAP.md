@@ -1,9 +1,15 @@
 # PERF_MAP — phpr vs PHP oracle 8.5.7, mappa multi-workload
 
-Aggiornata: **2026-08-16 sera (S-146)** · pin phpr **s145 a89faf32** + server
-**s145 4a9adc51** (invariato; S-146 = coppia WP saldata + concilio B3 +
-guardia dimrmw: **regressione FR1 CONFERMATA +3,00 ns/iter su m-dimrmw 10×,
-5/5, soglia 1,33 ⇒ leva FR1 in ISTRUTTORIA — dimread resta;** verdetto
+Aggiornata: **2026-08-16 notte (S-147)** · pin phpr **s145 a89faf32** + server
+**s145 4a9adc51** (invariato; **S-147 = coppia dbal+ORM RIMISURATA @ s145
+(ORM 8,370–8,427 ↓ indicativa, dbal 8,20–8,37) + CENSUS UNICO ORM: KILL
+KS-146-1 SCATTATO — ponte slot-load 0,216 s < soglia 0,293 s (0,74×) ⇒ ZERO
+codice borrow-first su slot; famiglia estesa 0,414 s (1,41×) ⇒ solo fette
+micro; TETTO canale movimenti 1,27 s ≈ 3,4% del gap; take_str SAFE 0,029 s ⇒
+TakeSlot chiuso a fortiori; repliche ESATTE, 367,55M == sonda; verdetto
+`wp147-harness/s147-census-verdetto.out`**; storico S-146 = coppia WP saldata
++ concilio B3 + guardia dimrmw: **regressione FR1 CONFERMATA +3,00 ns/iter su
+m-dimrmw 10×, 5/5 ⇒ leva FR1 in ISTRUTTORIA — dimread resta;** verdetto
 `wp146-harness/s146-ab-dimrmw-verdetto.out`; deliberato concilio VINCOLANTE
 in `wp146-harness/concilio/sintesi.md`) (leva **L-FR1 «dim-read fuso a chiave costante» SPEDITA**:
 peephole `PropGetSlot;PushConst(k);FetchDim` → `PropDimGetConst` in place,
@@ -52,8 +58,8 @@ cifre dai verdetti `.out`. Regola di lettura: rapporti PER workload, MAI aggrega
 | **symfony http-foundation** (1854) | **2,547–2,559** (raw 2,55–2,57) | 2/lato | S-126; canonica sul CONTEGGIO diff 17 nomi = 0,92% ≤1% (≥3 nomi sono unit puri, NON famiglia `php -S` — emenda S-127); sys alto (I/O) |
 | **symfony http-kernel** (1665 test) | **4,29–4,32** | 2/lato | parità 0E/0F; contesa ok |
 | **doctrine/collections** (242) | **8,22 net** (raw 6,20) | 2/lato | S-126; INDICATIVA: oracle netto 0,09 s (denominatore sotto-scala); parità 0/0 |
-| **doctrine/dbal** (3929, sqlite) | **8,15–8,23 net** (raw 7,90–7,97) | 2/lato | **S-139 RIMISURATA @ pin s138** (verdetto `wp139-harness/s139-rimisura-verdetto.out`; floors 0,06/0,19): fail-set stabile 10 nomi == baseline (0,25% ≤1% ⇒ canonica); vs 8,36–8,45 @ s134: **direzione ↓ INDICATIVA (az.rev. S-139 #5: ENTRAMBE le gambe oracle SEGNALATE al gate ictx — l'adiudicazione stesso-lato <1% è precedente S-135 ma applicata fuori criterio; declassata da «lieve ↓» a indicativo)**; summary phpr VUOTA (classe S-126 #3, fail-set dai .failnames) |
-| **doctrine/orm** (3484 test) | **8,59–8,71 net** | 2/lato | **S-139 RIMISURATA @ pin s138** (stesso verdetto; oracle `memory_limit=-1` §3.14; parità 16 nomi == baseline; phpr1 ictx segnalata ma stesso-lato <0,2% ⇒ valida): vs 8,43–8,56 @ s134 ⇒ **FERMO/lieve ↑** — REPERTO pre-registrato (criterio p.6): le TRE leve dim-write s135→s138 (AP1+FD1+RMW) NON muovono la suite (l'attesa ↓ è FALSIFICATA: `$this->elements[$k]=$v` non è fetta misurabile del tempo ORM, o il perimetro FD1 lì non morde) ⇒ la prossima leva si sceglie sul profilo SUITE (churn clone/drop, insert/lookup — come già indicava S-135) |
+| **doctrine/dbal** (3929, sqlite) | **8,20–8,37 net** (raw 7,94–8,10) | 2/lato | **S-147 RIMISURATA @ pin s145** (verdetto `wp147-harness/s147-orm-rimisura-verdetto.out`; oracle1 SEGNALATA ictx; fail-set stabile 10 nomi == baseline ⇒ canonica): vs 8,15–8,23 @ s138 FERMO/lieve ↑ dentro il rumore · storico **S-139 @ s138: 8,15–8,23** (verdetto `wp139-harness/s139-rimisura-verdetto.out`; floors 0,06/0,19): fail-set stabile 10 nomi == baseline (0,25% ≤1% ⇒ canonica); vs 8,36–8,45 @ s134: **direzione ↓ INDICATIVA (az.rev. S-139 #5: ENTRAMBE le gambe oracle SEGNALATE al gate ictx — l'adiudicazione stesso-lato <1% è precedente S-135 ma applicata fuori criterio; declassata da «lieve ↓» a indicativo)**; summary phpr VUOTA (classe S-126 #3, fail-set dai .failnames) |
+| **doctrine/orm** (3484 test) | **8,370–8,427 net** | 2/lato | **S-147 RIMISURATA @ pin s145** (stesso verdetto; parità 16 nomi == baseline; leg1+oracle1 SEGNALATE ictx, leg2 PULITA 8,370): vs 8,59–8,71 @ s138 ⇒ **direzione ↓ INDICATIVA** (3 leve HC1+RD1+FR1 spedite in mezzo, nessun A/B proprio: magnitudine non ripartita, REGOLE §4); **denominatori KILL KS-146-1: soglia 0,7% = 0,293 s** · storico **S-139 @ s138: 8,59–8,71** (verdetto s139; oracle `memory_limit=-1` §3.14; parità 16 nomi == baseline; phpr1 ictx segnalata ma stesso-lato <0,2% ⇒ valida): vs 8,43–8,56 @ s134 ⇒ **FERMO/lieve ↑** — REPERTO pre-registrato (criterio p.6): le TRE leve dim-write s135→s138 (AP1+FD1+RMW) NON muovono la suite (l'attesa ↓ è FALSIFICATA: `$this->elements[$k]=$v` non è fetta misurabile del tempo ORM, o il perimetro FD1 lì non morde) ⇒ la prossima leva si sceglie sul profilo SUITE (churn clone/drop, insert/lookup — come già indicava S-135) |
 | **composer install OFFLINE** | **1,863–1,891 net** (raw 1,820–1,847) | 2/lato | S-128 @ s127b, PRIMA misura col numeratore vivo (cure ondata-2); composer ESTRATTO, vendor_ok bilaterale, contesa ok (ictx/s); floors 0,07/0,06; sys≈user (~2,3 s/lato) ⇒ **cifra user-only NON confrontabile col full (user+sys): su user+sys sarebbe ~1,3** (rev. S-128 az.5); residuo phpcs config-set (§3.19-quinquies); verdetto `wp128-harness/s128-compoff-verdetto.out` |
 
 ## Micro-categorie (R=5, pin s145 dalla catena promo L-FR1; tappa ≤3×)
