@@ -1,0 +1,16 @@
+== s145 SONDA-B — VERDETTO (modello s145-sonda-b-modello.md; regola madre s144-criterio-B.md p.2-3 PRE-REGISTRATA) ==
+grade=SONDA (prezzi monobinario sonda-price 39e5f048 + conteggi census c326f2d8; probe MAI pinnabili)
+record: prezzi = tentativo t2 (t1/t3 DICHIARATI agli atti: pair_arr0 rumore intrinseco 2-4% => emenda gate pair 5% + prezzo a BANDA, parser riemesso golden 3/3; chiavi partizione <=0,12% in t2) · conteggi = r1 (r1~r2 entro 1% dichiarato, parita' per NOME rc=0)
+sentinelle: BUSY = rust-analyzer PRESENTE (respawn IDE) sotto il gate CPU 5% della quiescenza (PASS t12/t21/t1) — dichiarato, non-gate
+--- partizione (parser s145-partition.py c1c140d, golden 3/3) ---
+prezzi_netti_ns: mv_scalar=2.877 mv_str=3.848 mv_arr=3.841 mv_obj=3.362 note_scalar=0.113 note_cont_repeat=2.399 (cal=0.480)
+conteggi (r1==r2 entro 1%, DICHIARATO): clone scalar=91144624 str=104071946 arr=60910800 rc(obj+ref+other)=111457570 tot=367584940 gcnote_total=238636951 gcnote_cont=97412540
+componenti_s: memcpy=1.06 incdec=0.21 nota=0.25 (somma=1.52; denominatore = somma delle tre, dal sorgente della sonda)
+QUOTE: memcpy=69.5% inc-dec=14.1% nota=16.4%
+PREZZI PAIR FIRMATI A BANDA (fuori partizione; emenda gate 5%): pair_zcell=8.71-8.80 ns pair_arr0=11.57-11.79 ns (contesto nascite: rczval=4738276 arr=28431596 obj=3265745)
+REGOLA p.3 (s144-criterio-B.md, pre-registrata):
+ESITO REGOLA: memcpy = 69.5% >= 60% => B1/B2 NON si aprono, filone conteggi (B3) TORNA AL CONCILIO (KS-B4)
+--- ESITO PRE-REGISTRATO ---
+KS-B4 SCATTA: churn memcpy-dominato 69,5% >= 60% => B1 uniform-rc e B2 root-at-decrement NON SI APRONO; il collo del ciclo per-movimento e' il PAVIMENTO dispatch+move (2,88 ns/mov su 367,6M movimenti = 1,06 s), non il prezzo inc-dec (0,21 s) ne' la nota (0,25 s) => filone CONTEGGI (B3/TakeSlot S-140) TORNA AL CONCILIO (progettazione p.3: non si improvvisa).
+PERIMETRO DICHIARATO: la partizione copre il churn MODELLATO dalla sonda (coppia clone+drop per movimento + note); la famiglia churn_zval del profilo (~4,4 s indizio) contiene anche glue su nascite/args fuori modello — nessun claim oltre la risoluzione.
+COERENZA ESTERNA: gcnote_total 238.636.951 == dossier S-141 (238,6M) ESATTO; inc_obj 0,49 ns < inc_str/arr ~0,97 ns (osservativo, dichiarato).

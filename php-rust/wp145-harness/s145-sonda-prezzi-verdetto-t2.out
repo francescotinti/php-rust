@@ -1,0 +1,16 @@
+== s145 sonda-B PREZZI (modello s145-sonda-b-modello.md; criterio s144-criterio-B p.2) ==
+probe_bin=39e5f048a50dec0c (build sonda-price, MAI parita')
+start=2026-08-16 11:05:26
+lock: creato /private/tmp/phpr-measure.lock
+rust-analyzer: KILL inviato
+quiescenza: PASS al tentativo 21
+smoke: PASS (stdout SONDA-OK, 11 chiavi >0)
+r1 pre=BUSY
+r1 post=BUSY
+r1: OK s145.price.cal_ns=0.4801 s145.price.mv_scalar_ns=3.3586 s145.price.mv_str_ns=4.3292 s145.price.mv_arr_ns=4.3236 s145.price.mv_obj_ns=3.8438 s145.price.note_scalar_ns=0.5917 s145.price.note_cont_repeat_ns=2.8789 s145.price.pair_zcell_ns=9.1914 s145.price.pair_arr0_ns=12.0451 s145.price.n_mv=200000000 s145.price.n_pair=20000000 
+r2 pre=BUSY
+r2 post=BUSY
+r2: OK s145.price.cal_ns=0.4795 s145.price.mv_scalar_ns=3.3556 s145.price.mv_str_ns=4.3273 s145.price.mv_arr_ns=4.3188 s145.price.mv_obj_ns=3.8396 s145.price.note_scalar_ns=0.5934 s145.price.note_cont_repeat_ns=2.8796 s145.price.pair_zcell_ns=9.2815 s145.price.pair_arr0_ns=12.2737 s145.price.n_mv=200000000 s145.price.n_pair=20000000 
+lock: rimosso
+end=2026-08-16 11:25:51
+PREZZI ACQUISITI (replica <=1% giudicata dal parser s145-partition.py)

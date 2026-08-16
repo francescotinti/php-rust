@@ -1,0 +1,13 @@
+== s145 census MOVIMENTI (clone per classe + gcnote_cont) su SUITE ORM (modello s145-sonda-b-modello.md — CONTEGGI, mai tempo) ==
+grade=CENSUS  # monobinario census; la partizione la fa s145-partition.py (golden-tested)
+census_phpr=c326f2d847efa9ea  # probe build, MAI parita'
+rep1 run_rc=2 raw=census-mem-r1.txt
+rep2 run_rc=2 raw=census-mem-r2.txt
+parita' per NOME vs baseline16: rc=0 (0=entrambe ==)
+--- sentinelle (non-gate, S-143 p.1) ---
+rep1 pre=BUSY
+rep1 post=BUSY
+rep2 pre=BUSY
+rep2 post=BUSY
+summary rep1: Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, Skipped: 59, Incomplete: 2.
+summary rep2: Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, Skipped: 59, Incomplete: 2.
