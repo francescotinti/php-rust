@@ -99,3 +99,9 @@ Famiglia FR1-ext ESTESA come nominata dal concilio (ponte + ThisPropGet 0,108 + 
 Tetto ASSOLUTO canale movimenti (tutti i 367,55M al prezzo pieno): 1,270s su ~36,9s di gap ORM (~3,4%) => il canale movimenti NON e' la scommessa di parita' (conferma sintesi 'Che cosa B3 NON e''); secondo atto dichiarato: other 57,9% / tranche-3 growth-alloc (Leijen).
 Take-per-tipo: take_str SAFE 0,029s (vs stima 0,40s su clone_str totali: il takeable e' 7,4M non 104M) => TakeSlot resta CHIUSO a fortiori (KS-M3).
 Ponte convenzioni: slot_reads 73,27M vs ponte_mv 61,76M; siti Load* fuori ponte NOMINATI: LoadGlobal, LoadGlobals, LoadSuperglobal, LoadVarPushConst (mai sommati in silenzio).
+
+--- RETTIFICA post-revisione S-147 (lente SEMANTICA, revisione.md) ---
+1. Il kill vale sul PONTE pre-registrato, NON sulla famiglia: FR1-ext (0,414s = 1,41x) RESTA in fascia micro-judged e PROCEDE come da concilio (sintesi par.Ordine p.2).
+2. Ponte SECONDO CRITERIO p.1-ii (con LoadVarPushConst, fused-load visto nel dump): 0,216+0,028 = 0,244s => 0,83x — il kill REGGE; la cifra 0,216 sottostimava il ponte per definizione.
+3. Confine slot-load da dichiarare per NOME: This (13,8M obj, 0,047s) e' lettura di slot di frame; ponte-criterio+This = 0,291s = 0,99x soglia — il perimetro slot COMPLETO sfiora la soglia (apertura S-148).
+4. Le cifre del census sono un TETTO misurato sul binario census (fused=false), non sul pin — direzione conservativa per il kill, da citare come tale.

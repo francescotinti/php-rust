@@ -2,12 +2,13 @@
 ⏱ **FONDAMENTALI**: rif WP **resta 1,765–1,788 su banda 0,036 CONGELATA**
 (replica t2 ANCORA dovuta) · **ORM RIMISURATA @ s145 (S-147): 8,370–8,427
 net (↓ indicativa da 8,59–8,71 @ s138; leg1+oracle1 segnalate ictx) · dbal
-8,20–8,37** · **⚖️ S-147: KILL KS-146-1 SCATTATO — census unico ORM
-(repliche ESATTE, 367,55M == sonda): ponte slot-load 0,216 s < soglia
-0,293 s (0,74×) ⇒ ZERO codice borrow-first su slot; famiglia estesa 0,414 s
-(1,41×) ⇒ SOLO fette micro; TETTO canale movimenti 1,27 s (~3,4% del gap)
-⇒ B3/borrow NON è la scommessa di parità — SECONDO ATTO dichiarato: other
-57,9% + tranche-3 growth-alloc (Leijen)** · FR1 resta in ISTRUTTORIA
+8,20–8,37** · **⚖️ S-147: KILL KS-146-1 SCATTATO SUL PONTE — census unico
+ORM (repliche ESATTE, 367,55M == sonda): ponte slot-load per criterio (con
+LoadVarPushConst) 0,244 s < soglia 0,293 s (0,83×) ⇒ ZERO codice sul ponte;
+famiglia FR1-ext 0,414 s (1,41×) RESTA micro-judged e PROCEDE (concilio
+p.2); ponte+This 0,99× (confine da nominare); TETTO canale movimenti 1,27 s
+≈3,4% del gap (tetto su binario census) ⇒ B3/borrow NON è la scommessa di
+parità — SECONDO ATTO: other 57,9% + tranche-3 (Leijen)** · FR1 in ISTRUTTORIA
 (az.#4) · leve spedite S-147: 0 (dichiarato: census-ordinata) ·
 sessioni-senza-misura: 0 · incidenti 16 (=).
 
@@ -36,18 +37,21 @@ slot_reads 73,3M (fused Load* nominati) · CI ha mutex col measure-lock.
 3. **Istruttoria FR1 dimrmw (az.#4)**: mutante a parità di layout + disasm
    bl-count PRIMA di ogni revert (regressione +3,0 ns/iter confermata;
    indiziato layout run_loop +795 istr).
-4. Fette micro FR1-ext (tier 1,41×) SOLO se pescate e SOLO micro-judged
-   (soglie REGOLE §3); nessuna scommessa suite sul canale movimenti.
+4. Fette micro FR1-ext: la famiglia (1,41×) PROCEDE come da concilio p.2,
+   SOLO micro-judged (soglie REGOLE §3); PRIMA dichiarare per NOME il
+   confine slot-load (This dentro/fuori: ponte+This = 0,99× soglia);
+   nessuna scommessa suite sul canale movimenti.
 5. Coppia WP di pin: NON dovuta (pin invariato); dovuta a OGNI pin nuovo.
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
 banda_ON finestra 0,090 da capire · deriva peak discendente senza inserzione · leg5 media max ricorrente · attribuzione Zval-move dei memops (VOCE PROPRIA — KS-146-6/R4-Gregg) · ORM ↓ 8,59→8,37 da confermare al prossimo pin (nessun A/B proprio) · cura §3.22 · depr. float→int · warning corsia ×2 · divergenze RMW · objdatains residuo · objmap 43,4 → piano GC · evalcls 316,9× · refl 42,4× · re +2 alloc · §3.13 · §3.12-i · §3.14 · §3.21 · get_gc · drift TODO.md · latin1-cliff · dbal 10 nomi.
 
 ## NON riproporre (i veti restano; dettaglio nei concili archiviati)
-**S-147: borrow-first/FR1-ext su slot-load come scommessa suite (kill
-0,74× pre-registrato) · TakeSlot in OGNI forma (takeable SAFE 0,029 s,
-chiuso a fortiori su KS-M3) · leve sul canale movimenti oltre fette micro
-(tetto 1,27 s misurato).**
+**S-147: borrow-first sul PONTE slot-load {LoadSlot,LoadVar,
+LoadVarPushConst} (kill 0,83× pre-registrato) · scommessa SUITE su
+QUALUNQUE fetta del canale movimenti (tetto 1,27 s su binario census) ·
+TakeSlot in OGNI forma (takeable SAFE 0,029 s, KS-M3 a fortiori) · cifre
+census citate senza la qualifica «tetto su binario census».**
 **S-146: TakeSlot senza le TRE condizioni (comunque chiuso, sopra) ·
 arena-conteggi senza definizione ≤1 pagina · prezzi pair zcell/arr0 come
 budget (INDIZIO) · quota memops come giudice di fetta (KS-G3) ·

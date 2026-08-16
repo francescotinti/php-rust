@@ -3,11 +3,13 @@
 Aggiornata: **2026-08-16 notte (S-147)** · pin phpr **s145 a89faf32** + server
 **s145 4a9adc51** (invariato; **S-147 = coppia dbal+ORM RIMISURATA @ s145
 (ORM 8,370–8,427 ↓ indicativa, dbal 8,20–8,37) + CENSUS UNICO ORM: KILL
-KS-146-1 SCATTATO — ponte slot-load 0,216 s < soglia 0,293 s (0,74×) ⇒ ZERO
-codice borrow-first su slot; famiglia estesa 0,414 s (1,41×) ⇒ solo fette
-micro; TETTO canale movimenti 1,27 s ≈ 3,4% del gap; take_str SAFE 0,029 s ⇒
-TakeSlot chiuso a fortiori; repliche ESATTE, 367,55M == sonda; verdetto
-`wp147-harness/s147-census-verdetto.out`**; storico S-146 = coppia WP saldata
+KS-146-1 SCATTATO SUL PONTE (rett. rev. SEMANTICA) — ponte slot-load per
+criterio (con LoadVarPushConst) 0,244 s < soglia 0,293 s (0,83×) ⇒ ZERO
+codice sul ponte; famiglia FR1-ext 0,414 s (1,41×) RESTA micro-judged e
+PROCEDE (concilio p.2); ponte+This 0,99× (confine da nominare in S-148);
+TETTO canale movimenti 1,27 s ≈ 3,4% del gap (tetto su binario census);
+take_str SAFE 0,029 s ⇒ TakeSlot chiuso a fortiori; repliche ESATTE,
+367,55M == sonda; verdetto `wp147-harness/s147-census-verdetto.out`**; storico S-146 = coppia WP saldata
 + concilio B3 + guardia dimrmw: **regressione FR1 CONFERMATA +3,00 ns/iter su
 m-dimrmw 10×, 5/5 ⇒ leva FR1 in ISTRUTTORIA — dimread resta;** verdetto
 `wp146-harness/s146-ab-dimrmw-verdetto.out`; deliberato concilio VINCOLANTE

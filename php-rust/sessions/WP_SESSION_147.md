@@ -21,11 +21,12 @@ concilio: il kill pre-registrato È l'esito; misure eseguite: coppia + census).
 2·**p.1b CENSUS UNICO ORM** (strumentazione s147mv/s147dg/zvalcensus_s147
   SOLO feature census; copia-gate 44 righe; parser golden 10/10; smoke
   coerenza esatta): repliche r1==r2 **ESATTE** (delta 0,000% su ogni chiave;
-  tot 367,55M == cifra sonda). **KILL KS-146-1 SCATTATO**: ponte slot-load
-  0,216 s < 0,293 s (0,74×) ⇒ **ZERO codice borrow-first su slot**; famiglia
-  estesa (+ThisPropGet+FieldIsset) 0,414 s = 1,41× ⇒ SOLO fette micro;
-  **tetto ASSOLUTO canale movimenti 1,27 s (~3,4% del gap)**; take_str SAFE
-  0,029 s (takeable 7,4M, non 104M) ⇒ **TakeSlot chiuso a fortiori** (KS-M3).
+  tot 367,55M == cifra sonda). **KILL KS-146-1 SCATTATO sul PONTE** (rett.
+  rev.): per criterio con LoadVarPushConst 0,244 s < 0,293 s (0,83×) ⇒ ZERO
+  codice sul ponte slot-load; **famiglia FR1-ext 0,414 s = 1,41× ⇒ RESTA
+  micro-judged e PROCEDE (concilio p.2)**; ponte+This 0,99× (confine da
+  nominare); **tetto canale movimenti 1,27 s (~3,4% del gap; tetto su
+  binario census)**; take_str SAFE 0,029 s ⇒ **TakeSlot chiuso a fortiori**.
 3·Reperto operativo: la CI locale ha un MUTEX con le misure (quiet_wait sul
   measure-lock + pattern harness) — niente contesa CI in finestra protetta.
 4·Aperture restanti: az.rev. S-146 #1 (replica WP t2) · #3 (test deriva
