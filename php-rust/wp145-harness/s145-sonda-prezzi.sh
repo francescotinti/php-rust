@@ -11,7 +11,7 @@ H="$REPO/wp145-harness"
 BIN="${PRICE_PHPR:?binario sonda-price richiesto}"
 QUIESCE="$REPO/wp129-harness/s129-quiescenza.sh"
 OUT="$H/sonda-out"; mkdir -p "$OUT"
-VERD="$H/s145-sonda-prezzi-verdetto.out"
+VERD="$H/s145-sonda-prezzi-verdetto${TAG:-}.out"   # TAG=-tN per repliche (criterio p.9)
 RC="$OUT/prezzi.rc"
 LOCK="/private/tmp/phpr-measure.lock"
 [ -e "$VERD" ] && { echo "verdetto ESISTE — tentativo nuovo = file nuovo" >&2; exit 7; }
@@ -39,7 +39,11 @@ echo "lock: creato $LOCK"
 
 # quiescenza in RETRY (gate separato, lezione S-128): la CI in volo la fa
 # fallire finché il job non chiude; 45 tentativi x 60 s ~ 45 min max.
-pkill -f rust-analyzer 2>/dev/null && echo "rust-analyzer: KILL inviato"
+if [ -z "${SKIP_RA_KILL:-}" ]; then
+  pkill -f rust-analyzer 2>/dev/null && echo "rust-analyzer: KILL inviato"
+else
+  echo "rust-analyzer: lasciato quieto (il gate CPU della quiescenza arbitra; il kill lo fa RIPARTIRE a indicizzare — osservato t2: 21 tentativi)"
+fi
 QOK=1
 for t in $(seq 1 45); do
   if "$QUIESCE" "$OUT/quiesce.rc" > "$OUT/quiesce-t$t.log" 2>&1; then QOK=0; echo "quiescenza: PASS al tentativo $t"; break; fi
