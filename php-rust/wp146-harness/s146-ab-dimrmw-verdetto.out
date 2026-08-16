@@ -1,0 +1,20 @@
+== s146 rimisura m-dimrmw 10x (criterio s146-criterio-dimrmw.md; grade GUARDIA — nessuna cifra in PERF_MAP) ==
+armA=bba8a7346d727e0e (stash phpr-s142 pre-leva)  armB=a89faf32c62142f9 (stash phpr-s145 leva FR1)
+lock-finestra: PRESENTE
+start=2026-08-16 17:34:23
+quiescenza: PASS al tentativo 1
+pavimenti: A=0.02 B=0.02
+smoke r1 pre=CLEAN A=4.31 B=4.35 post=CLEAN
+smoke r2 pre=CLEAN A=4.34 B=4.27 post=CLEAN
+r1 pre=CLEAN
+r2 pre=CLEAN
+r3 pre=CLEAN
+r4 pre=CLEAN
+r5 pre=CLEAN
+grezzi A: 4.28 4.31 4.27 4.30 4.28  B: 4.40 4.34 4.36 4.39 4.38
+parita' stdout: 0 violazioni
+ns/iter A=['142.00', '143.00', '141.67', '142.67', '142.00'] B=['146.00', '144.00', '144.67', '145.67', '145.33']
+D=B-A per replica: ['+4.00', '+1.00', '+3.00', '+3.00', '+3.33']  Dmed=+3.00  segni_pos=5/5
+rumore_drop1=max(A,B)=1.33  soglia=max(1.0,1.33,0.67)=1.33
+VERDETTO (p.6): REGRESSIONE CONFERMATA => leva FR1 in ISTRUTTORIA (dimread resta - keep-partial-wins)
+end=2026-08-16 17:35:46
