@@ -1,0 +1,5 @@
+s148tag pid=300 tag=2 name=hostcall n=100 attr=40 b=2900 hist=100,0,0,0,0,0,0,0,0,0,0
+s149name pid=300 name=str_repeat n=70 attr=30 b=2100
+s149name pid=300 name=sprintf n=25 attr=8 b=600
+s149name pid=300 name=implode n=5 attr=2 b=200
+s149sum pid=300 hostcall_n=100 sum_name_n=100 unnamed_n=0 overflow=0

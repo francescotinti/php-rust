@@ -1,0 +1,58 @@
+2,6c2,6
+< # s148-census-orm.sh — census ATTRIBUZIONE per TAG su SUITE ORM (criterio
+< # s148-criterio-attrib.md). Base DICHIARATA: wp147-harness/s147-census-orm.sh
+< # (adattamenti: feature solo mem-census — niente zval/op census; smoke sulle
+< # chiavi s148tag + identita' s148sum; output in census-out/, verdetto s148).
+< # Manifest s148-census-copia.diff (copia-gate). MAI cifra di tempo da qui.
+---
+> # s149-census-orm.sh — census tranche-4 per-NOME-builtin su SUITE ORM
+> # (criterio s149-criterio-tr4.md). Base DICHIARATA: wp148-harness/
+> # s148-census-orm.sh (adattamenti: smoke s149 nomi str_repeat/sprintf +
+> # identita' s149sum EREDITANDO lo smoke s148; output in census-out/, verdetto
+> # s149). Manifest s149-census-copia.diff (copia-gate). MAI cifra di tempo.
+10c10
+< H="$REPO/wp148-harness"
+---
+> H="$REPO/wp149-harness"
+15c15
+< VERD="$H/s148-attrib-verdetto.out"
+---
+> VERD="$H/s149-tr4-verdetto.out"
+19,20c19,21
+< # smoke (criterio p.5): esito ESATTO — s148tag frame/hostcall/arrgrow >=1 E
+< # identita' s148sum galloc_n==sum_n; gc puo' restare 0 (FUORI smoke, dichiarato).
+---
+> # smoke (criterio p.5): esito ESATTO — s148 EREDITATO (frame/hostcall/arrgrow
+> # >=1 + identita' s148sum) E s149: nomi str_repeat/sprintf n>=1, identita'
+> # hostcall_n==sum_name_n+unnamed_n, unnamed==0, overflow==0.
+23c24
+<   "$CENSUS_PHPR" "$H/smoke148.php" > "$SP/smoke148.out" 2>&1
+---
+>   "$CENSUS_PHPR" "$H/smoke149.php" > "$SP/smoke149.out" 2>&1
+32c33
+<   SMOKE_FAIL="$SMOKE_FAIL identita=galloc_n:${ga:-ASSENTE}!=sum_n:${sm:-ASSENTE}"
+---
+>   SMOKE_FAIL="$SMOKE_FAIL identita_s148=galloc_n:${ga:-ASSENTE}!=sum_n:${sm:-ASSENTE}"
+33a35,46
+> for nm in str_repeat sprintf; do
+>   v=$(sed -n 's/^s149name pid=[0-9]* name='"$nm"' n=\([0-9][0-9]*\) .*/\1/p' "$OUT/smoke-mem.txt" | head -1)
+>   [ -n "${v:-}" ] && [ "$v" -ge 1 ] || SMOKE_FAIL="$SMOKE_FAIL s149name.$nm=${v:-ASSENTE}"
+> done
+> hn=$(sed -n 's/^s149sum pid=[0-9]* hostcall_n=\([0-9][0-9]*\) .*/\1/p' "$OUT/smoke-mem.txt" | head -1)
+> sn=$(sed -n 's/^s149sum pid=[0-9]* hostcall_n=[0-9]* sum_name_n=\([0-9][0-9]*\) .*/\1/p' "$OUT/smoke-mem.txt" | head -1)
+> un=$(sed -n 's/^s149sum pid=[0-9]* .* unnamed_n=\([0-9][0-9]*\) .*/\1/p' "$OUT/smoke-mem.txt" | head -1)
+> ov=$(sed -n 's/^s149sum pid=[0-9]* .* overflow=\([0-9][0-9]*\)$/\1/p' "$OUT/smoke-mem.txt" | head -1)
+> if [ -z "${hn:-}" ] || [ -z "${sn:-}" ] || [ -z "${un:-}" ] || [ -z "${ov:-}" ] \
+>    || [ "$hn" != "$((sn + un))" ] || [ "$un" != 0 ] || [ "$ov" != 0 ]; then
+>   SMOKE_FAIL="$SMOKE_FAIL identita_s149=hostcall:${hn:-ASSENTE},sum:${sn:-ASSENTE},unnamed:${un:-ASSENTE},overflow:${ov:-ASSENTE}"
+> fi
+37c50
+< p "smoke PASS (s148tag frame/hostcall/arrgrow vivi + identita' ESATTA)"
+---
+> p "smoke PASS (s148 ereditato + s149 nomi vivi + identita' ESATTA + unnamed/overflow 0)"
+64,65c77,78
+< { echo "== s148 census ATTRIBUZIONE per TAG (other 57,9% / tranche-3) su SUITE ORM (criterio s148-criterio-attrib.md — CONTEGGI, mai tempo) =="
+<   echo "grade=CENSUS  # monobinario census; l'aggregazione la fa s148-parse.py (golden-tested)"
+---
+> { echo "== s149 census tranche-4 per-NOME-builtin (hostcall.other 165,6M) su SUITE ORM (criterio s149-criterio-tr4.md — CONTEGGI, mai tempo) =="
+>   echo "grade=CENSUS  # monobinario census; l'aggregazione la fa s149-parse.py (golden-tested)"

@@ -12,7 +12,7 @@
 //! Measurement-only: never enabled in parity or A/B builds. Counters are
 //! atomics (phpt-runner threads); the VM itself is single-threaded.
 
-use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU64, Ordering::Relaxed};
+use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU64, AtomicU8, Ordering::Relaxed};
 
 pub const CH_STR: usize = 0;
 pub const CH_ARR: usize = 1;
@@ -238,6 +238,9 @@ extern "C" fn dump_exit() {
     // S-148: righe per-tag della partizione di galloc_n.
     #[cfg(feature = "mem-census")]
     s148_dump_lines();
+    // S-149 tranche-4: righe per-NOME-builtin della partizione di hostcall.n.
+    #[cfg(feature = "mem-census")]
+    s149_dump_lines();
     // WP-59 Ob.1: exit snapshot (win=0) — the cleanest fragmentation read:
     // channel live is exact here (recon reached==live), so per-bin
     // committed−used at this instant IS retention + non-censused standing.
@@ -1837,6 +1840,11 @@ fn s148_alloc_note(bytes: usize) {
         i += 1;
     }
     S148_TAG_HIST[t][i].fetch_add(1, Relaxed);
+    // S-149 tranche-4: dentro il tag `hostcall` ogni alloc cade in un NOME
+    // (Σ nomi + unnamed == hostcall.n per costruzione, criterio p.4).
+    if t == S148_HOSTCALL as usize {
+        s149_name_alloc_note(bytes);
+    }
 }
 
 /// Crosswalk: una nota-evento già attribuita in s144 (cum_n str/arr/obj,
@@ -1844,7 +1852,11 @@ fn s148_alloc_note(bytes: usize) {
 /// EREDITATA) accredita il tag corrente; `other_tag = n − attr` nel parser.
 #[inline]
 pub fn s148_attr_note() {
-    S148_TAG_ATTR[s148_cur_tag()].fetch_add(1, Relaxed);
+    let t = s148_cur_tag();
+    S148_TAG_ATTR[t].fetch_add(1, Relaxed);
+    if t == S148_HOSTCALL as usize {
+        s149_name_attr_note();
+    }
 }
 
 /// Righe `s148tag` (pid-prefixed) appese al file di `PHPR_MEM_CENSUS` a fine
@@ -1883,6 +1895,162 @@ fn s148_dump_lines() {
     }
     let sum: u64 = n.iter().sum();
     let _ = writeln!(f, "s148sum pid={} galloc_n={} sum_n={}", pid, ga, sum);
+}
+
+// ---------------------------------------------------------------------------
+// S-149 tranche-4: partizione di `hostcall.n` per NOME di builtin
+// (wp149-harness/s149-criterio-tr4.md). Scope-nome negli STESSI due siti del
+// tag s148 (perimetro IDENTICO); il conteggio per-nome scatta SOLO col tag
+// corrente == `hostcall` ⇒ Σ nomi + unnamed == hostcall.n per costruzione.
+// Tabella statica pre-allocata: il censimento stesso non alloca mai.
+
+const S149_SLOTS: usize = 4096;
+const S149_NAME_MAX: usize = 40;
+
+static S149_KEY: [AtomicU64; S149_SLOTS] = [const { AtomicU64::new(0) }; S149_SLOTS];
+static S149_N: [AtomicU64; S149_SLOTS] = [const { AtomicU64::new(0) }; S149_SLOTS];
+static S149_ATTR: [AtomicU64; S149_SLOTS] = [const { AtomicU64::new(0) }; S149_SLOTS];
+static S149_B: [AtomicU64; S149_SLOTS] = [const { AtomicU64::new(0) }; S149_SLOTS];
+static S149_NAME_LEN: [AtomicU8; S149_SLOTS] = [const { AtomicU8::new(0) }; S149_SLOTS];
+static S149_NAME_BYTES: [[AtomicU8; S149_NAME_MAX]; S149_SLOTS] =
+    [const { [const { AtomicU8::new(0) }; S149_NAME_MAX] }; S149_SLOTS];
+static S149_OVERFLOW: AtomicU64 = AtomicU64::new(0);
+static S149_UNNAMED_N: AtomicU64 = AtomicU64::new(0);
+
+std::thread_local! {
+    static S149_CUR: std::cell::Cell<u32> = const { std::cell::Cell::new(u32::MAX) };
+}
+
+/// FNV-1a 64 del nome; slot vuoto = chiave 0 (eguaglianza per hash a 64 bit,
+/// DICHIARATA nel criterio p.3). Ritorna u32::MAX su tabella piena.
+#[inline]
+fn s149_slot_for(name: &[u8]) -> u32 {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for &b in name {
+        h ^= b as u64;
+        h = h.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    if h == 0 {
+        h = 1;
+    }
+    let mut i = (h as usize) & (S149_SLOTS - 1);
+    for _ in 0..S149_SLOTS {
+        let k = S149_KEY[i].load(Relaxed);
+        if k == h {
+            return i as u32;
+        }
+        if k == 0 {
+            match S149_KEY[i].compare_exchange(0, h, Relaxed, Relaxed) {
+                Ok(_) => {
+                    let l = name.len().min(S149_NAME_MAX);
+                    for (j, &b) in name[..l].iter().enumerate() {
+                        S149_NAME_BYTES[i][j].store(b, Relaxed);
+                    }
+                    S149_NAME_LEN[i].store(l as u8, Relaxed);
+                    return i as u32;
+                }
+                Err(k2) if k2 == h => return i as u32,
+                Err(_) => {}
+            }
+        }
+        i = (i + 1) & (S149_SLOTS - 1);
+    }
+    S149_OVERFLOW.fetch_add(1, Relaxed);
+    u32::MAX
+}
+
+/// RAII: imposta il nome-builtin corrente del thread (u32::MAX = nessuno) e
+/// ripristina il precedente al Drop (nesting builtin→callable→builtin ok).
+pub struct S149Scope {
+    prev: u32,
+}
+
+#[inline]
+pub fn s149_name_scope(name: &[u8]) -> S149Scope {
+    let slot = s149_slot_for(name);
+    let prev = S149_CUR
+        .try_with(|c| {
+            let p = c.get();
+            c.set(slot);
+            p
+        })
+        .unwrap_or(u32::MAX);
+    S149Scope { prev }
+}
+
+impl Drop for S149Scope {
+    #[inline]
+    fn drop(&mut self) {
+        let _ = S149_CUR.try_with(|c| c.set(self.prev));
+    }
+}
+
+#[inline]
+fn s149_cur_slot() -> u32 {
+    S149_CUR.try_with(|c| c.get()).unwrap_or(u32::MAX)
+}
+
+/// Hook dal ramo `hostcall` di `s148_alloc_note`.
+#[inline]
+fn s149_name_alloc_note(bytes: usize) {
+    let s = s149_cur_slot();
+    if s == u32::MAX {
+        S149_UNNAMED_N.fetch_add(1, Relaxed);
+        return;
+    }
+    S149_N[s as usize].fetch_add(1, Relaxed);
+    S149_B[s as usize].fetch_add(bytes as u64, Relaxed);
+}
+
+/// Hook dal ramo `hostcall` di `s148_attr_note` (crosswalk s144 EREDITATO).
+#[inline]
+fn s149_name_attr_note() {
+    let s = s149_cur_slot();
+    if s != u32::MAX {
+        S149_ATTR[s as usize].fetch_add(1, Relaxed);
+    }
+}
+
+/// Righe `s149name`/`s149sum` (pid-prefixed) appese a `PHPR_MEM_CENSUS` a
+/// fine processo — il parser somma sui pid. Snapshot dei contatori PRIMA di
+/// ogni alloc del dump stesso (identità criterio p.4).
+fn s149_dump_lines() {
+    use std::io::Write;
+    let Ok(path) = std::env::var("PHPR_MEM_CENSUS") else { return };
+    let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) else {
+        return;
+    };
+    let host_n = S148_TAG_N[S148_HOSTCALL as usize].load(Relaxed);
+    let unnamed = S149_UNNAMED_N.load(Relaxed);
+    let overflow = S149_OVERFLOW.load(Relaxed);
+    let mut rows: Vec<(u64, u64, u64, usize)> = Vec::new();
+    let mut sum: u64 = 0;
+    for i in 0..S149_SLOTS {
+        let n = S149_N[i].load(Relaxed);
+        let attr = S149_ATTR[i].load(Relaxed);
+        if n == 0 && attr == 0 {
+            continue;
+        }
+        sum += n;
+        rows.push((n, attr, S149_B[i].load(Relaxed), i));
+    }
+    rows.sort_unstable_by(|a, b| b.0.cmp(&a.0));
+    let pid = std::process::id();
+    for (n, attr, b, i) in rows {
+        let l = S149_NAME_LEN[i].load(Relaxed) as usize;
+        let raw: Vec<u8> = (0..l).map(|j| S149_NAME_BYTES[i][j].load(Relaxed)).collect();
+        let name = String::from_utf8_lossy(&raw).replace([' ', '\t'], "_");
+        let _ = writeln!(
+            f,
+            "s149name pid={} name={} n={} attr={} b={}",
+            pid, name, n, attr, b,
+        );
+    }
+    let _ = writeln!(
+        f,
+        "s149sum pid={} hostcall_n={} sum_name_n={} unnamed_n={} overflow={}",
+        pid, host_n, sum, unnamed, overflow,
+    );
 }
 
 #[cfg(feature = "mem-census")]

@@ -3545,6 +3545,10 @@ impl<'m> super::Vm<'m> {
                     let _s148 = php_types::memcensus::s148_scope(
                         php_types::memcensus::S148_HOSTCALL,
                     );
+                    // S-149 tranche-4 (census): partizione di hostcall.n per
+                    // NOME (stesso perimetro del tag, criterio p.1).
+                    #[cfg(feature = "mem-census")]
+                    let _s149 = php_types::memcensus::s149_name_scope(&name[..]);
                     let f = match self.registry.get(&name[..]) {
                         Some(Builtin::Value(f)) => *f,
                         // The compiler only emits CallBuiltin for value builtins.
@@ -3646,6 +3650,10 @@ impl<'m> super::Vm<'m> {
                     let _s148 = php_types::memcensus::s148_scope(
                         php_types::memcensus::S148_HOSTCALL,
                     );
+                    // S-149 tranche-4 (census): partizione di hostcall.n per
+                    // NOME (stesso perimetro del tag, criterio p.1).
+                    #[cfg(feature = "mem-census")]
+                    let _s149 = php_types::memcensus::s149_name_scope(&name[..]);
                     // An evaluator-only host builtin (Session B): it may invoke a
                     // user callable via `call_callable` (a nested `run_loop`).
                     let args = self.pop_keys(top, *argc);
