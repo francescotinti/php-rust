@@ -52,6 +52,7 @@ nello stesso atto perché appenda in QUESTA sezione.)
 
 | pin (sha256/16) | sessione | collaudato | evidenza |
 |---|---|---|---|
+| a89faf32c62142f9 | s145 (sorgente @ 4a968b7; riga da pin-phpr.sh) | smoke parità 2 modi OK 2026-08-16 13:38:33 — batteria/corpus/fixture/micro DOVUTI a parte | stash `phpr-s145` |
 | bba8a7346d727e0e | s142 (sorgente @ f36c04e; riga da pin-phpr.sh) | smoke parità 2 modi OK 2026-08-15 19:27:46 — batteria/corpus/fixture/micro DOVUTI a parte | stash `phpr-s142` |
 | f2708b75660803a7 | s140 (sorgente @ bc60c86; riga da pin-phpr.sh) | smoke parità 2 modi OK 2026-08-15 12:09:21 — batteria/corpus/fixture/micro DOVUTI a parte | stash `phpr-s140` |
 | fa17dabd9eaa4bcb | s138 (sorgente @ 7c35515; riga da pin-phpr.sh) | smoke parità 2 modi OK 2026-08-14 20:20:52 — batteria/corpus/fixture/micro DOVUTI a parte | stash `phpr-s138` |
