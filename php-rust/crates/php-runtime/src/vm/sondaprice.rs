@@ -93,6 +93,37 @@ impl<'m> Vm<'m> {
             let b = Rc::new(php_types::PhpArray::new());
             std::hint::black_box(&b);
         });
+        // S-149 p.2 (sonda-prezzo pair, wp149-harness/s149-criterio-pair.md):
+        // coppia malloc+free alla TAGLIA del churn reale della testa hostcall
+        // (shape s148: ≤16 B 98,8M · ≤48 B 107,9M) via Vec::with_capacity
+        // esatta; il drop a fine iterazione chiude la coppia.
+        let pair16 = bench(N_PAIR, |_| {
+            let v: Vec<Zval> = Vec::with_capacity(1);
+            std::hint::black_box(&v);
+        });
+        let pair32 = bench(N_PAIR, |_| {
+            let v: Vec<Zval> = Vec::with_capacity(2);
+            std::hint::black_box(&v);
+        });
+        let pair48 = bench(N_PAIR, |_| {
+            let v: Vec<Zval> = Vec::with_capacity(3);
+            std::hint::black_box(&v);
+        });
+        // Pattern pop_keys ESATTO (run.rs): push×3 sullo stack sorgente poi
+        // `split_off` NON in testa (un elemento di fondo tiene at=1: il ramo
+        // at==0 di std fa mem::replace e NON riprodurrebbe la coppia) =
+        // malloc(48)+memcpy(3×Zval)+drop-glue+free per iterazione.
+        let splitoff3 = {
+            let mut src: Vec<Zval> = Vec::with_capacity(8);
+            src.push(Zval::Long(0));
+            bench(N_PAIR, |i| {
+                src.push(Zval::Long(i as i64));
+                src.push(Zval::Long(1));
+                src.push(Zval::Long(2));
+                let args = src.split_off(1);
+                std::hint::black_box(&args);
+            })
+        };
 
         let mut out = String::new();
         for (k, v) in [
@@ -109,6 +140,18 @@ impl<'m> Vm<'m> {
             out.push_str(&format!("s145.price.{k}_ns={v:.4}\n"));
         }
         out.push_str(&format!("s145.price.n_mv={N_MV}\ns145.price.n_pair={N_PAIR}\n"));
+        for (k, v) in [
+            ("pair16", pair16),
+            ("pair32", pair32),
+            ("pair48", pair48),
+            ("splitoff3", splitoff3),
+        ] {
+            out.push_str(&format!("s149.price.{k}_ns={v:.4}\n"));
+        }
+        out.push_str(&format!(
+            "s149.price.zval_size={}\ns149.price.n_pair={N_PAIR}\n",
+            std::mem::size_of::<Zval>(),
+        ));
         if f.write_all(out.as_bytes()).is_err() {
             return Ok(Zval::Bool(false));
         }

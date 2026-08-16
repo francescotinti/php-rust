@@ -1,0 +1,78 @@
+2,6c2,8
+< # s145-sonda-prezzi.sh — sonda-B lato PREZZI (modello s145-sonda-b-modello.md,
+< # regola madre s144-criterio-B.md p.2). Probe monobinario `sonda-price`
+< # (nessuna census attiva): 1 smoke + 2 repliche del driver, chiavi a esito
+< # ESATTO, quiescenza col gate SEPARATO in retry (la CI locale ha il mutex sul
+< # lock). rc autoritativo = sonda-out/prezzi.rc (mai da pipe).
+---
+> # s149-sonda-pair.sh — sonda-PREZZO pair churn 16–48 B (criterio
+> # s149-criterio-pair.md). Base DICHIARATA: wp145-harness/s145-sonda-prezzi.sh
+> # (adattamenti: chiavi s149.price.* aggiunte allo smoke/check, verdetto e out
+> # in wp149-harness). Manifest s149-sonda-copia.diff (copia-gate). Probe
+> # monobinario `sonda-price` (nessuna census attiva): 1 smoke + 2 repliche del
+> # driver, chiavi a esito ESATTO, quiescenza col gate SEPARATO in retry (la CI
+> # locale ha il mutex sul lock). rc autoritativo = sonda-out/prezzi.rc.
+10c12
+< H="$REPO/wp145-harness"
+---
+> H="$REPO/wp149-harness"
+14c16
+< VERD="$H/s145-sonda-prezzi-verdetto${TAG:-}.out"   # TAG=-tN per repliche (criterio p.9)
+---
+> VERD="$H/s149-sonda-pair-verdetto${TAG:-}.out"   # TAG=-tN per repliche
+18c20,21
+< KEYS="cal mv_scalar mv_str mv_arr mv_obj note_scalar note_cont_repeat pair_zcell pair_arr0"
+---
+> KEYS145="cal mv_scalar mv_str mv_arr mv_obj note_scalar note_cont_repeat pair_zcell pair_arr0"
+> KEYS149="pair16 pair32 pair48 splitoff3"
+21c24
+<   for k in $KEYS; do
+---
+>   for k in $KEYS145; do
+26c29,35
+<   grep -q '^s145\.price\.n_mv=' "$1" && grep -q '^s145\.price\.n_pair=' "$1"
+---
+>   for k in $KEYS149; do
+>     v=$(sed -n "s/^s149\.price\.${k}_ns=\([0-9.]*\)$/\1/p" "$1" | head -1)
+>     [ -n "${v:-}" ] || return 1
+>     awk -v x="$v" 'BEGIN{ exit !(x>0) }' || return 1
+>   done
+>   grep -q '^s145\.price\.n_mv=' "$1" && grep -q '^s145\.price\.n_pair=' "$1" \
+>     && grep -q '^s149\.price\.zval_size=' "$1" && grep -q '^s149\.price\.n_pair=' "$1"
+31c40
+< echo "== s145 sonda-B PREZZI (modello s145-sonda-b-modello.md; criterio s144-criterio-B p.2) =="
+---
+> echo "== s149 sonda-PREZZO pair churn 16-48 B (criterio s149-criterio-pair.md; base s145-sonda-prezzi.sh) =="
+37c46
+< echo "s145-prezzi pid=$$ $(date +%FT%T)" > "$LOCK"
+---
+> echo "s149-pair pid=$$ $(date +%FT%T)" > "$LOCK"
+45c54
+<   echo "rust-analyzer: lasciato quieto (il gate CPU della quiescenza arbitra; il kill lo fa RIPARTIRE a indicizzare — osservato t2: 21 tentativi)"
+---
+>   echo "rust-analyzer: lasciato quieto (il gate CPU della quiescenza arbitra; il kill lo fa RIPARTIRE a indicizzare — osservato s145 t2: 21 tentativi)"
+54c63
+< # smoke (criterio p.9: probe muto/parziale => STOP rc=8, niente run di record)
+---
+> # smoke (criterio p.3/p.6: probe muto/parziale => STOP rc=8, niente run)
+56c65
+< GOT=$(PHPR_SONDA_OUT="$OUT/smoke-price.txt" "$BIN" "$H/driver-sonda-b.php" 2>&1)
+---
+> GOT=$(PHPR_SONDA_OUT="$OUT/smoke-price.txt" "$BIN" "$REPO/wp145-harness/driver-sonda-b.php" 2>&1)
+58c67
+<   echo "smoke: FALLITO (stdout='$GOT'; chiavi $(grep -c '^s145\.price\.' "$OUT/smoke-price.txt" 2>/dev/null || echo 0)/11) — STOP rc=8"
+---
+>   echo "smoke: FALLITO (stdout='$GOT'; chiavi s145=$(grep -c '^s145\.price\.' "$OUT/smoke-price.txt" 2>/dev/null || echo 0)/11 s149=$(grep -c '^s149\.price\.' "$OUT/smoke-price.txt" 2>/dev/null || echo 0)/6) — STOP rc=8"
+61c70,71
+< echo "smoke: PASS (stdout SONDA-OK, 11 chiavi >0)"
+---
+> echo "smoke: PASS (stdout SONDA-OK, 11 chiavi s145 + 6 chiavi s149, prezzi >0)"
+> echo "zval_size=$(sed -n 's/^s149\.price\.zval_size=\([0-9]*\)$/\1/p' "$OUT/smoke-price.txt") (audit taglia, atteso 16)"
+67c77
+<   GOT=$(PHPR_SONDA_OUT="$OUT/price-r$r.txt" "$BIN" "$H/driver-sonda-b.php" 2>&1)
+---
+>   GOT=$(PHPR_SONDA_OUT="$OUT/price-r$r.txt" "$BIN" "$REPO/wp145-harness/driver-sonda-b.php" 2>&1)
+78c88
+< [ "$FAIL" = 0 ] && echo "PREZZI ACQUISITI (replica <=1% giudicata dal parser s145-partition.py)"
+---
+> [ "$FAIL" = 0 ] && echo "PREZZI ACQUISITI (banda per chiave = [min,max] delle 2 repliche; replica >2% sulla chiave di decisione => t3 dovuta — criterio p.2)"
