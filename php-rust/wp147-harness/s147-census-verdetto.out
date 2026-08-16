@@ -1,0 +1,101 @@
+== s147 CENSUS UNICO ORM (per-sito/digrammi + ponte + F1 take-per-tipo) — criterio s147-criterio-census.md — CONTEGGI, mai tempo ==
+grade=CENSUS  # monobinario census; l'aggregazione la fa s147-parse.py (golden-tested)
+census_phpr=8fb0685686d85bf6  # probe build, MAI parita'
+rep1 run_rc=2 raw=census-mem-r1.txt
+rep2 run_rc=2 raw=census-mem-r2.txt
+parita' per NOME vs baseline16: rc=0 (0=entrambe ==)
+--- sentinelle (non-gate, S-143 p.1) ---
+rep1 pre=BUSY
+rep1 post=BUSY
+rep2 pre=BUSY
+rep2 post=BUSY
+summary rep1: Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, Skipped: 59, Incomplete: 2.
+summary rep2: Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, Skipped: 59, Incomplete: 2.
+--- ANALISI s147-parse.py (appesa post-run; parser committato ca9a490, golden 10/10) ---
+--- s147-parse (prezzi: mv-cal ns/coppia scalar=2.877 str=3.840 arr=3.833 obj=3.363 ref=3.363 rcother=3.363; soglia KS-146-1 = 0,7% x orm_net 41.91 s = 0.293 s) ---
+r1_coerenza: s147mv_tot=367551626 s145_clone_tot=367551626 OK
+r2_coerenza: s147mv_tot=367551627 s145_clone_tot=367551627 OK
+replica tot_mv: r1=367551626 r2=367551627 delta=0.000%
+replica mv_scalar: r1=91144627 r2=91144628 delta=0.000%
+replica mv_str: r1=104071946 r2=104071946 delta=0.000%
+replica mv_arr: r1=60875641 r2=60875641 delta=0.000%
+replica mv_obj: r1=109795608 r2=109795608 delta=0.000%
+replica mv_ref: r1=417 r2=417 delta=0.000%
+replica mv_rcother: r1=1663387 r2=1663387 delta=0.000%
+replica ponte: r1=61760566 r2=61760566 delta=0.000%
+replica slot_reads: r1=73266066 r2=73266067 delta=0.000%
+replica slot_reads_rc: r1=55574500 r2=55574500 delta=0.000%
+replica would_take_safe: r1=22332910 r2=22332910 delta=0.000%
+replica would_take_safe_rc: r1=16778334 r2=16778334 delta=0.000%
+replica would_take_safe_str: r1=7435492 r2=7435492 delta=0.000%
+replica would_take_safe_ref: r1=15 r2=15 delta=0.000%
+replica would_take_safe_arr: r1=3427561 r2=3427561 delta=0.000%
+replica would_take_safe_obj: r1=5888916 r2=5888916 delta=0.000%
+replica_worst: slot_reads 0.000%
+--- ranking siti (media r1/r2; movimenti e SECONDI = conteggio x prezzo classe) ---
+sito LoadVar                mv=    58374260 (15.88%) sec=  0.204  [scalar=14789079 str=24742269 arr=6350060 obj=12468789 rcother=24063]
+sito CallHostBuiltin        mv=    33607241 ( 9.14%) sec=  0.119  [scalar=2743083 str=10816823 arr=3913531 obj=15689137 ref=14 rcother=444653]
+sito MethodCall             mv=    31198196 ( 8.49%) sec=  0.099  [scalar=18764997 str=6264013 arr=1278205 obj=4885460 rcother=5521]
+sito ThisPropGet            mv=    29938081 ( 8.15%) sec=  0.108  [scalar=2802384 str=13033845 arr=5876811 obj=8220137 rcother=4904]
+sito FieldIsset             mv=    25335903 ( 6.89%) sec=  0.090  [scalar=1364831 str=4430939 arr=7463067 obj=12077060 rcother=6]
+sito IterNext               mv=    17074961 ( 4.65%) sec=  0.059  [scalar=5223577 str=5642145 arr=2425072 obj=3784000 ref=71 rcother=96]
+sito FetchDim               mv=    14568517 ( 3.96%) sec=  0.051  [scalar=3974122 str=6873997 arr=2110710 obj=1596798 rcother=12890]
+sito This                   mv=    13831731 ( 3.76%) sec=  0.047  [obj=13831731]
+sito PropSetPop             mv=    13614563 ( 3.70%) sec=  0.047  [scalar=4328828 str=3871152 arr=2365871 obj=3042669 rcother=6043]
+sito AssignPath             mv=    12305888 ( 3.35%) sec=  0.046  [scalar=476154 str=995123 arr=8706390 obj=2128034 ref=13 rcother=174]
+sito StaticCall             mv=    11128508 ( 3.03%) sec=  0.034  [scalar=8338555 str=1815519 arr=55544 obj=918838 rcother=52]
+sito Dup                    mv=     7423341 ( 2.02%) sec=  0.025  [scalar=427144 str=272381 arr=45406 obj=6678400 rcother=10]
+sito LoadVarPushConst       mv=     7407542 ( 2.02%) sec=  0.028  [scalar=328152 str=2799077 arr=3768601 obj=510755 rcother=957]
+sito IterInit               mv=     7178141 ( 1.95%) sec=  0.026  [scalar=724951 str=1968330 arr=2987142 obj=1496448 ref=71 rcother=1199]
+sito InvokeCtor             mv=     6240347 ( 1.70%) sec=  0.021  [scalar=2325778 str=499600 arr=1253132 obj=2159318 rcother=2519]
+sito InvokeMethod           mv=     5268936 ( 1.43%) sec=  0.016  [scalar=2965396 str=259217 arr=42029 obj=2002134 rcother=160]
+sito Stringify              mv=     5111165 ( 1.39%) sec=  0.020  [scalar=49177 str=5061518 obj=470]
+sito Alloc                  mv=     5071918 ( 1.38%) sec=  0.015  [scalar=4596135 str=67743 arr=408040]
+sito AllocDynamic           mv=     5013015 ( 1.36%) sec=  0.016  [scalar=3216753 str=1029051 arr=765605 obj=1606]
+sito PushRef                mv=     4047590 ( 1.10%) sec=  0.014  [scalar=890836 str=1730650 arr=297979 obj=1126832 rcother=1293]
+sito FieldAssign            mv=     3550990 ( 0.97%) sec=  0.012  [scalar=766078 str=1080580 arr=790150 obj=914176 rcother=6]
+sito LoadSlot               mv=     3386306 ( 0.92%) sec=  0.012  [scalar=752804 str=600496 arr=1176771 obj=843331 rcother=12904]
+sito Ret                    mv=     3381524 ( 0.92%) sec=  0.011  [scalar=54567 str=46326 arr=32993 obj=2144824 rcother=1102814]
+sito CallBuiltin            mv=     3240702 ( 0.88%) sec=  0.012  [scalar=151877 str=599999 arr=1055097 obj=1430030 rcother=3699]
+sito StaticCallDynamic      mv=     3149006 ( 0.86%) sec=  0.011  [scalar=1387757 str=1046831 arr=334527 obj=379885 rcother=6]
+tot_mv=367551626 tot_sec_modellati=1.270
+--- ponte slot-load <-> movimenti ---
+ponte_mv (s147mv, lista ['LoadSlot', 'LoadVar']): 61760566 = 16.80% del tot_mv; sec=0.216
+slot_reads (convenzione census): 73266066  slot_reads_rc=55574500
+altri siti Load* NON nel ponte (nominati, criterio p.1-ii): ['LoadGlobal', 'LoadGlobals', 'LoadSuperglobal', 'LoadVarPushConst']
+--- digrammi top-20 (prev->cur per movimento) ---
+dg PushConst->CallHostBuiltin: 21642784
+dg LoadVar->FieldIsset: 20196572
+dg Sweep->LoadVar: 15438257
+dg PushRef->MethodCall: 12809529
+dg Jump->IterNext: 11486480
+dg LoadVar->PropSetPop: 9962625
+dg This->LoadVar: 8881853
+dg LoadVar->MethodCall: 7271170
+dg Sweep->This: 7175643
+dg LoadVar->LoadVar: 7153784
+dg LoadVar->CallHostBuiltin: 6990931
+dg LoadVar->FetchDim: 6045568
+dg JumpIfFalse->LoadVar: 5349006
+dg PushConst->StaticCall: 5176208
+dg JumpIfFalse->ThisPropGet: 4876067
+dg LoadVar->StaticCall: 4662216
+dg CallBuiltin->AssignPath: 4653251
+dg PushConst->AllocDynamic: 4541580
+dg IterInit->IterNext: 4473813
+dg LoadVar->AssignPath: 4311268
+--- F1 take-per-tipo (would_take_safe_*, media r1/r2) ---
+take_str: n=7435492 pieno=0.029s incdec=0.007s
+take_arr: n=3427561 pieno=0.013s incdec=0.003s
+take_obj: n=5888916 pieno=0.020s incdec=0.003s
+take_ref: n=15 pieno=0.000s incdec=0.000s
+take_safe_tot: n=22332910 (rc=16778334)
+--- KILL ARITMETICO KS-146-1 ---
+banda_borrow_first=0.216s soglia=0.293s rapporto=0.74 => ZERO codice sul bersaglio (banda < 1x soglia)
+
+--- LETTURA (criterio p.6-p.9) ---
+KILL KS-146-1 SCATTATO sul bersaglio pre-registrato (ponte slot-load): 0,216s < 0,293s (0,74x) => ZERO codice.
+Famiglia FR1-ext ESTESA come nominata dal concilio (ponte + ThisPropGet 0,108 + FieldIsset 0,090): 0,414s = 1,41x soglia => tier 1x-2x, SOLO fette micro-judged, NESSUNA scommessa suite.
+Tetto ASSOLUTO canale movimenti (tutti i 367,55M al prezzo pieno): 1,270s su ~36,9s di gap ORM (~3,4%) => il canale movimenti NON e' la scommessa di parita' (conferma sintesi 'Che cosa B3 NON e''); secondo atto dichiarato: other 57,9% / tranche-3 growth-alloc (Leijen).
+Take-per-tipo: take_str SAFE 0,029s (vs stima 0,40s su clone_str totali: il takeable e' 7,4M non 104M) => TakeSlot resta CHIUSO a fortiori (KS-M3).
+Ponte convenzioni: slot_reads 73,27M vs ponte_mv 61,76M; siti Load* fuori ponte NOMINATI: LoadGlobal, LoadGlobals, LoadSuperglobal, LoadVarPushConst (mai sommati in silenzio).
