@@ -2,7 +2,9 @@
 ⏱ **FONDAMENTALI**: rif WP **1,765–1,788 (S-142 @ s142; banda_ON unione 0,036)** ·
 **⚖️ S-145: SONDA-B CHIUSA — KS-B4 SCATTATO (memcpy 69,5% ≥60%): B1/B2 NON si
 aprono, filone conteggi (B3) TORNA AL CONCILIO** · **leve spedite: 1 (L-FR1
-dim-read, pin s145)** · sessioni-senza-misura: 0 · incidenti 15.
+dim-read, pin s145)** · sessioni-senza-misura: 0 · **incidenti 16**
+(nuovo n.16, rev. S-145 az.5: rc-da-pipe sulla build + braccio A su target
+condivisa — morsi dai gate PRIMA del giudizio, contati comunque).
 
 ## Scoreboard (pin NUOVO s145 phpr a89faf32c62142f9 + server 4a9adc51a62b21ba)
 **arith 5,5 · prop 5,5 · calls 4,8 · str 4,3 · arr 3,2 · re 2,5 · hintcall 7,3
@@ -25,7 +27,14 @@ FUORI / churn IN confermati · L-FR1: D=+16,7 ns/iter (−28%) su m-dimread.**
    arena-conteggi; il fascicolo è il verdetto sonda-B + progettazione S-144.
 3. **str 27,6% provenienza** (129,9M creazioni: census provenienza
    monobinario; veti SSO/PhpStr-full restano).
-4. Residui: az.rev. S-142 #2 (replica peak-only) · tranche-3 other
+4. **Az.rev. S-145 (VINCOLANTI, wp145-harness/revisione.md)**: #2 rimisura
+   m-dimrmw pre-leva vs pin a N≥10× (regressione confermata ⇒ leva in
+   istruttoria, dimread resta — keep-partial-wins) · #3 giudice delle
+   guardie DENTRO lo script A/B (banda calcolata, rc dal giudizio) · #4
+   collaudo del criterio PRIMA della firma (giudici esistenti per nome,
+   banda ≥ risoluzione) · #5 pair: run fresca sotto gate 5% o declassare
+   a indizio.
+5. Residui: az.rev. S-142 #2 (replica peak-only) · tranche-3 other
    (growth-alloc hashbrown, pool Frame) · CI feed in apertura (non-gate).
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
