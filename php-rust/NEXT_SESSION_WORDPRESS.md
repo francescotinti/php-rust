@@ -39,12 +39,12 @@ FramePool WP-30 già ricicla.
 5. Coppia WP di pin: NON dovuta (pin invariato); dovuta a OGNI pin nuovo.
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
-spread WP cross-finestra 0,101 (banda multi-finestra) · confine slot-load
-(ponte+This 0,99×) · Zval-move dei memops (VOCE PROPRIA) · ORM ↓ da
-confermare al prossimo pin · §3.22 · depr. float→int · warning corsia ×2 ·
-divergenze RMW · objdatains residuo · objmap 43,4 → piano GC · evalcls
-316,9× · refl 42,4× · re +2 alloc · §3.13 · §3.12-i · §3.14 · §3.21 · get_gc
-· drift TODO.md · latin1-cliff · dbal 10 nomi · leg-max media ballerina.
+spread WP cross-finestra 0,101 · confine slot-load (ponte+This 0,99×) ·
+Zval-move dei memops (VOCE PROPRIA) · ORM ↓ da confermare al prossimo pin ·
+§3.22 · depr. float→int · warning corsia ×2 · divergenze RMW · objdatains ·
+objmap 43,4 → piano GC · evalcls 316,9× · refl 42,4× · re +2 alloc ·
+§3.13/§3.12-i/§3.14/§3.21 · get_gc · drift TODO.md · latin1-cliff · dbal 10
+nomi · leg-max media ballerina.
 
 ## NON riproporre (i veti restano; dettaglio nei concili archiviati)
 **S-148: growth-hashbrown / pool-Frame / gc come bersaglio-solo AL PERIMETRO
