@@ -27,10 +27,9 @@ concilio: il kill pre-registrato È l'esito; misure eseguite: coppia + census).
   micro-judged e PROCEDE (concilio p.2)**; ponte+This 0,99× (confine da
   nominare); **tetto canale movimenti 1,27 s (~3,4% del gap; tetto su
   binario census)**; take_str SAFE 0,029 s ⇒ **TakeSlot chiuso a fortiori**.
-3·Reperto operativo: la CI locale ha un MUTEX con le misure (quiet_wait sul
-  measure-lock + pattern harness) — niente contesa CI in finestra protetta.
-4·Aperture restanti: az.rev. S-146 #1 (replica WP t2) · #3 (test deriva
-  peak) · #4 (istruttoria FR1 dimrmw: mutante a parità di layout + disasm).
+3·Reperto: la CI ha MUTEX con le misure (quiet_wait su measure-lock).
+4·Aperture: az.rev. S-146 #1 (replica WP t2) · #3 (deriva peak) · #4
+  (istruttoria FR1 dimrmw: mutante a parità di layout + disasm).
 
 ## ⭐ Lezioni (max 3)
 - ⭐⭐ Un kill aritmetico pre-registrato è la morte più economica possibile:

@@ -11,10 +11,9 @@ di famiglia, il claim contraddice il proprio verdetto (riga «Famiglia FR1-ext
 ESTESA … 1,41x») e il deliberato. Il kill uccide il ponte, non la famiglia.
 
 ## Reperti secondari
-1. Deviazione dal criterio p.1-ii: il ponte doveva includere gli «eventuali
-   fused-load visti nel dump»; LoadVarPushConst (fused LoadVar;PushConst,
-   0,028 s) è stato messo FUORI. Col criterio applicato: 0,244 s → 0,83× —
-   il kill regge, ma la cifra pubblicata sottostima il ponte per definizione.
+1. Deviazione dal criterio p.1-ii: il ponte doveva includere i «fused-load
+   visti nel dump»; LoadVarPushConst (0,028 s) è FUORI. Col criterio:
+   0,244 s → 0,83× — il kill regge, ma la cifra pubblicata sottostima.
 2. Confine «origine slot-load» non nominato: `This` (13,8 M obj, 0,047 s) è
    una lettura di slot di frame a tutti gli effetti. Ponte-criterio + This =
    0,291 s ≈ 0,99× soglia: il perimetro slot completo SFIORA la soglia. Prima
