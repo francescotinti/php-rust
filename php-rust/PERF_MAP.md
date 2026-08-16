@@ -1,7 +1,23 @@
 # PERF_MAP — phpr vs PHP oracle 8.5.7, mappa multi-workload
 
-Aggiornata: **2026-08-15 sera (S-142)** · pin phpr **s142 bba8a734** + server
-**s142 eeb284b6** (leva **L-RD1 «teardown array inline» SPEDITA**: Drop for
+Aggiornata: **2026-08-16 (S-145)** · pin phpr **s145 a89faf32** + server
+**s145 4a9adc51** (leva **L-FR1 «dim-read fuso a chiave costante» SPEDITA**:
+peephole `PropGetSlot;PushConst(k);FetchDim` → `PropDimGetConst` in place,
+PropIc condivisa, composito intatto come fallback per costruzione; hit =
+elemento through-borrow, l'`Rc<PhpArray>` della prop NON viene clonato.
+Giudice NUOVO m-dimread 3M iter: A/B R=5 **D=+16,7 ns/iter (60,0→43,3,
+−28%) segni 7/7**, rumore drop-1 0, soglia 4; guardie m-dimrmw +0,01s=1 tick
+DICHIARATO al limite di risoluzione, m-diminc/arr/prop verdi; disasm run_loop
+A 71694 istr/5988 bl → B 72489/6014 agli atti; bilaterale: oracle 10 ns/iter
+⇒ rapporto dim-read 6,0×→4,3×. Catena promo piena rc=0: batteria 1747/0/2
+con inventario = baseline s125 + SOLO dente rczval dichiarato (t1 rosso su
+ancora test census, t2 rosso su nomi VOLATILI compile-fail (line N) — emende
+dichiarate agli atti), corpus 1414×2 nomi+contenuto+off↔on, fixture 9/9,
+micro R=5, ORM 16 nomi==baseline, hk 0E/0F; conferma post-pin = IDENTITÀ di
+byte col braccio B giudicato (ricetta riprodotta ×2). **Coppia WP al pin
+nuovo DOVUTA → S-146 p.1**; verdetti in `wp145-harness/`) ·
+storico S-142 (pin **s142 bba8a734** + server **eeb284b6**, leva **L-RD1
+«teardown array inline» SPEDITA**: Drop for
 PhpArray drena Packed/Hashed con match esaustivo, niente call per-elemento
 sul cammino eseguito — disasm agli atti: il bl residuo è unwind-only; A/B
 S-141 D=+5,0 AL BORDO con segni 7/7, conferma post-pin S-142 D=+5,0 al CENTRO
@@ -36,15 +52,15 @@ cifre dai verdetti `.out`. Regola di lettura: rapporti PER workload, MAI aggrega
 | **doctrine/orm** (3484 test) | **8,59–8,71 net** | 2/lato | **S-139 RIMISURATA @ pin s138** (stesso verdetto; oracle `memory_limit=-1` §3.14; parità 16 nomi == baseline; phpr1 ictx segnalata ma stesso-lato <0,2% ⇒ valida): vs 8,43–8,56 @ s134 ⇒ **FERMO/lieve ↑** — REPERTO pre-registrato (criterio p.6): le TRE leve dim-write s135→s138 (AP1+FD1+RMW) NON muovono la suite (l'attesa ↓ è FALSIFICATA: `$this->elements[$k]=$v` non è fetta misurabile del tempo ORM, o il perimetro FD1 lì non morde) ⇒ la prossima leva si sceglie sul profilo SUITE (churn clone/drop, insert/lookup — come già indicava S-135) |
 | **composer install OFFLINE** | **1,863–1,891 net** (raw 1,820–1,847) | 2/lato | S-128 @ s127b, PRIMA misura col numeratore vivo (cure ondata-2); composer ESTRATTO, vendor_ok bilaterale, contesa ok (ictx/s); floors 0,07/0,06; sys≈user (~2,3 s/lato) ⇒ **cifra user-only NON confrontabile col full (user+sys): su user+sys sarebbe ~1,3** (rev. S-128 az.5); residuo phpcs config-set (§3.19-quinquies); verdetto `wp128-harness/s128-compoff-verdetto.out` |
 
-## Micro-categorie (R=5, pin s142 dalla catena promo L-RD1; tappa ≤3×)
+## Micro-categorie (R=5, pin s145 dalla catena promo L-FR1; tappa ≤3×)
 
-| arith | prop | calls | str | arr | re | hintcall |
-|---|---|---|---|---|---|---|
-| 5,5 | 5,6 | 4,7 | **4,2** | **3,2** | **2,6** ✅ | **7,3** (S-140, non rimisurata) |
+| arith | prop | calls | str | arr | re | hintcall | dimread |
+|---|---|---|---|---|---|---|---|
+| 5,5 | 5,5 | 4,8 | 4,3 | **3,2** | **2,5** ✅ | **7,3** (S-140, non rimis.) | **4,3** (m-dimread NUOVO, 43,3 vs 10 ns/iter) |
 
-(S-142: arith/calls/str un tick sotto i rif s138–s140 — coerente coi
-collaterali positivi arr/str/re dell'A/B L-RD1; rif storici s138: 5,6 · 5,6 ·
-4,8 · 4,3 · 3,2 · 2,6.)
+(S-145: tutte le voci entro 1 tick dai rif s142 5,5·5,6·4,7·4,2·3,2·2,6 —
+la fusione non tassa i freddi; rif storici s138: 5,6 · 5,6 · 4,8 · 4,3 ·
+3,2 · 2,6.)
 
 RMW (giudici leva S-138, A/B + conferma post-pin): **m-dimrmw 320→146,7
 ns/iter (D=+173,3)** · **m-diminc 270→113,3 (D=+156,7)**.

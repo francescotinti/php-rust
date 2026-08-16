@@ -1,0 +1,18 @@
+== s145 A/B FR1 dim-read fuso (criterio s145-criterio-fr1.md) ==
+armA=61f6b0414a9fb605 (407e93f pre-leva)  armB=a89faf32c62142f9 (546a6f7 leva)
+start=2026-08-16 12:22:12
+lock: creato
+quiescenza: PASS al tentativo 11
+pavimenti: A=0.02 B=0.02
+smoke r1 pre=BUSY
+smoke r2 pre=BUSY
+smoke ns/iter A=60.0/60.0 B=43.3/43.3 D=+16.7/+16.7
+SMOKE-OK
+grezzi A: 0.20 0.20 0.20 0.20 0.20  B: 0.15 0.15 0.15 0.15 0.15
+guardia RMW A: 0.45 0.45 0.45  B: 0.46 0.46 0.46
+guardia INC A: 0.37 0.37 0.37  B: 0.37 0.37 0.37
+guardia ARR A: 0.94 0.96 0.94  B: 0.94 0.94 0.94
+guardia PROP A: 2.39 2.37 2.40  B: 2.36 2.37 2.35
+parita' stdout: 0 violazioni ()
+lock: rimosso
+end=2026-08-16 12:33:01

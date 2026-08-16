@@ -1,0 +1,6 @@
+promozione: build ricetta riproduce il candidato a89faf32c62142f9
+promozione batteria: rc=0 (da promo-out/batteria.rc) · 1747/0/2 · inventario: DIVERGE (nuovi='crates/php-runtime/src/vm/mod.rs - vm::gate::VmGate (line 530) - compile fail
+crates/php-runtime/src/vm/mod.rs - vm::gate::VmGate (line 538) - compile fail
+rczval_pattern_resta_nel_funnel' spariti='crates/php-runtime/src/vm/mod.rs - vm::gate::VmGate (line 524) - compile fail
+crates/php-runtime/src/vm/mod.rs - vm::gate::VmGate (line 532) - compile fail' — diff in promo-out/batteria-inv.diff)
+inventario batteria DIVERGE
