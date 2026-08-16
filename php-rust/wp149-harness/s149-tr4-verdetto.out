@@ -1,0 +1,95 @@
+== s149 census tranche-4 per-NOME-builtin (hostcall.other 165,6M) su SUITE ORM (criterio s149-criterio-tr4.md — CONTEGGI, mai tempo) ==
+grade=CENSUS  # monobinario census; l'aggregazione la fa s149-parse.py (golden-tested)
+census_phpr=f3a111ac92cac3ef  # probe build, MAI parita'
+rep1 run_rc=2 raw=census-mem-r1.txt
+rep2 run_rc=2 raw=census-mem-r2.txt
+parita' per NOME vs baseline16: rc=0 (0=entrambe ==)
+--- sentinelle (non-gate, S-143 p.1) ---
+rep1 pre=BUSY
+rep1 post=BUSY
+rep2 pre=BUSY
+rep2 post=BUSY
+summary rep1: Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, Skipped: 59, Incomplete: 2.
+summary rep2: Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, Skipped: 59, Incomplete: 2.
+--- ANALISI s149-parse.py (appesa post-run; parser committato 5294ec1, golden 11/11) ---
+r1_identita: hostcall_n=335837200 sum_name_n=335837200 unnamed_n=0 overflow=0 OK
+r1_crosscheck_s148tag: hostcall.n=335837200 OK
+r2_identita: hostcall_n=335837200 sum_name_n=335837200 unnamed_n=0 overflow=0 OK
+r2_crosscheck_s148tag: hostcall.n=335837200 OK
+r1_hostcall_n: ora=335837200 s148=325416908 delta=3.202% DICHIARA scarto>1% vs s148
+r1_hostcall_attr: ora=159833568 s148=159833568 delta=0.000%
+r1_hostcall_other: ora=176003632 s148=165583340 delta=6.293% DICHIARA scarto>1% vs s148
+r2_hostcall_n: ora=335837200 s148=325416908 delta=3.202% DICHIARA scarto>1% vs s148
+r2_hostcall_attr: ora=159833568 s148=159833568 delta=0.000%
+r2_hostcall_other: ora=176003632 s148=165583340 delta=6.293% DICHIARA scarto>1% vs s148
+replica_worst_head: implode.b 0.000%
+--- partizione hostcall.n per NOME (media repliche; other = n - attr; nomi totali=202, stampati top 30 per other) ---
+name debug_backtrace              n=  274976697 attr=  144825427 other=  130151270 (73.95% di hostcall.other) b=11671210993
+name class_exists                 n=    9740041 attr=      27778 other=    9712263 ( 5.52% di hostcall.other) b=744277093
+name array_map                    n=    7726741 attr=    3308878 other=    4417863 ( 2.51% di hostcall.other) b=580243499
+name str_replace                  n=    3891518 attr=     582250 other=    3309268 ( 1.88% di hostcall.other) b=132553404
+name __reflect_method_info        n=    3366759 attr=     209297 other=    3157462 ( 1.79% di hostcall.other) b=111050049
+name get_declared_classes         n=    4563808 attr=    1493906 other=    3069902 ( 1.74% di hostcall.other) b=247789713
+name __reflect_class_real_name    n=    3254556 attr=     650904 other=    2603652 ( 1.48% di hostcall.other) b=118656084
+name array_diff                   n=    3247941 attr=     979930 other=    2268011 ( 1.29% di hostcall.other) b=248649543
+name __reflect_prop_attr_new      n=    2153006 attr=     285691 other=    1867315 ( 1.06% di hostcall.other) b=98644388
+name __reflect_prop_details       n=    2148442 attr=     989330 other=    1159112 ( 0.66% di hostcall.other) b=80684826
+name array_filter                 n=    1831238 attr=     688493 other=    1142745 ( 0.65% di hostcall.other) b=107247603
+name __reflect_class_loc          n=    1383358 attr=     457498 other=     925860 ( 0.53% di hostcall.other) b=92436596
+name assert                       n=     918486 attr=          0 other=     918486 ( 0.52% di hostcall.other) b=29391552
+name __reflect_method_names       n=    1197795 attr=     391578 other=     806217 ( 0.46% di hostcall.other) b=63511659
+name implode                      n=     899955 attr=     207519 other=     692436 ( 0.39% di hostcall.other) b=23366688
+name __reflect_prop_declaring_class n=     745008 attr=     124168 other=     620840 ( 0.35% di hostcall.other) b=28788976
+name is_subclass_of               n=     589515 attr=       1106 other=     588409 ( 0.33% di hostcall.other) b=42779876
+name count                        n=     877616 attr=     309513 other=     568103 ( 0.32% di hostcall.other) b=47794498
+name scandir                      n=     782402 attr=     270152 other=     512250 ( 0.29% di hostcall.other) b=21767872
+name __reflect_prop_type          n=     733898 attr=     249108 other=     484790 ( 0.28% di hostcall.other) b=26933232
+name __pdo_run                    n=     832338 attr=     407752 other=     424586 ( 0.24% di hostcall.other) b=44881592
+name sprintf                      n=     470202 attr=      68740 other=     401462 ( 0.23% di hostcall.other) b=15682884
+name strtolower                   n=     798058 attr=     399029 other=     399029 ( 0.23% di hostcall.other) b=21153136
+name __reflect_prop_attributes    n=     741985 attr=     351135 other=     390850 ( 0.22% di hostcall.other) b=53091004
+name __reflect_attr_newinstance   n=     467377 attr=      78108 other=     389269 ( 0.22% di hostcall.other) b=23696843
+name spl_object_id                n=     365495 attr=          0 other=     365495 ( 0.21% di hostcall.other) b=5847920
+name call_user_func_array         n=     402911 attr=      84174 other=     318737 ( 0.18% di hostcall.other) b=24225084
+name method_exists                n=     312750 attr=        731 other=     312019 ( 0.18% di hostcall.other) b=20425518
+name ltrim                        n=     570040 attr=     285020 other=     285020 ( 0.16% di hostcall.other) b=20598048
+name str_contains                 n=     221228 attr=          0 other=     221228 ( 0.13% di hostcall.other) b=2233929
+name RESTO(172 nomi)            n=    5626036 attr=    2106353 other=    3519683 ( 2.00% di hostcall.other) b=323966915
+--- ranking OTHER per NOME (teste tranche-4; soglia INDIZIO p.7 = 24800000 eventi) ---
+other debug_backtrace                130151270 (38.75% di hostcall.n)  CANDIDATA sonda-prezzo
+other class_exists                     9712263 ( 2.89% di hostcall.n)  sotto soglia (solo per FAMIGLIA)
+other array_map                        4417863 ( 1.32% di hostcall.n)  sotto soglia (solo per FAMIGLIA)
+other str_replace                      3309268 ( 0.99% di hostcall.n)  sotto soglia (solo per FAMIGLIA)
+other __reflect_method_info            3157462 ( 0.94% di hostcall.n)  sotto soglia (solo per FAMIGLIA)
+other get_declared_classes             3069902 ( 0.91% di hostcall.n)  sotto soglia (solo per FAMIGLIA)
+other __reflect_class_real_name        2603652 ( 0.78% di hostcall.n)  sotto soglia (solo per FAMIGLIA)
+other array_diff                       2268011 ( 0.68% di hostcall.n)  sotto soglia (solo per FAMIGLIA)
+other __reflect_prop_attr_new          1867315 ( 0.56% di hostcall.n)  sotto soglia (solo per FAMIGLIA)
+other __reflect_prop_details           1159112 ( 0.35% di hostcall.n)  sotto soglia (solo per FAMIGLIA)
+other array_filter                     1142745 ( 0.34% di hostcall.n)  sotto soglia (solo per FAMIGLIA)
+other __reflect_class_loc               925860 ( 0.28% di hostcall.n)  sotto soglia (solo per FAMIGLIA)
+other assert                            918486 ( 0.27% di hostcall.n)  sotto soglia (solo per FAMIGLIA)
+other __reflect_method_names            806217 ( 0.24% di hostcall.n)  sotto soglia (solo per FAMIGLIA)
+other implode                           692436 ( 0.21% di hostcall.n)  sotto soglia (solo per FAMIGLIA)
+other __reflect_prop_declaring_class      620840 ( 0.18% di hostcall.n)  sotto soglia (solo per FAMIGLIA)
+other is_subclass_of                    588409 ( 0.18% di hostcall.n)  sotto soglia (solo per FAMIGLIA)
+other count                             568103 ( 0.17% di hostcall.n)  sotto soglia (solo per FAMIGLIA)
+other scandir                           512250 ( 0.15% di hostcall.n)  sotto soglia (solo per FAMIGLIA)
+other __reflect_prop_type               484790 ( 0.14% di hostcall.n)  sotto soglia (solo per FAMIGLIA)
+other __pdo_run                         424586 ( 0.13% di hostcall.n)  sotto soglia (solo per FAMIGLIA)
+other sprintf                           401462 ( 0.12% di hostcall.n)  sotto soglia (solo per FAMIGLIA)
+other strtolower                        399029 ( 0.12% di hostcall.n)  sotto soglia (solo per FAMIGLIA)
+other __reflect_prop_attributes         390850 ( 0.12% di hostcall.n)  sotto soglia (solo per FAMIGLIA)
+other __reflect_attr_newinstance        389269 ( 0.12% di hostcall.n)  sotto soglia (solo per FAMIGLIA)
+other spl_object_id                     365495 ( 0.11% di hostcall.n)  sotto soglia (solo per FAMIGLIA)
+other call_user_func_array              318737 ( 0.09% di hostcall.n)  sotto soglia (solo per FAMIGLIA)
+other method_exists                     312019 ( 0.09% di hostcall.n)  sotto soglia (solo per FAMIGLIA)
+other ltrim                             285020 ( 0.08% di hostcall.n)  sotto soglia (solo per FAMIGLIA)
+other str_contains                      221228 ( 0.07% di hostcall.n)  sotto soglia (solo per FAMIGLIA)
+
+--- LETTURA (criterio p.4-p.7-p.8) ---
+1. VALIDITA': identita' Sigma-nomi+unnamed==hostcall.n ESATTA su entrambe le repliche (335.837.200); unnamed=0 e overflow=0 su entrambe; crosscheck s148tag==s149sum OK; repliche worst 0,000% (deterministiche); parita' 16 nomi == baseline rc=0.
+2. SCARTO DICHIARATO vs s148 (criterio p.4): hostcall.n +3,202% (+10,4M) e galloc_n +2,73% (480,6M vs 467,8M) con attr IDENTICI ALLA CIFRA (hostcall.attr 159.833.568 ==; none.attr 34.714.381 ~==; frame/gc n ESATTAMENTE ==). Candidato NOMINATO: lunghezza del path del workdir (CENSUS_SP /private/tmp/phpr-census-sp ~28 char vs scratchpad s148 ~100+ char) — i path dei file entrano nelle stringhe dei frame (debug_backtrace in testa) e l'istogramma hostcall mostra lo shift di taglia coerente (<=256: -31,6M; <=96: +18,6M; <=128: +10,0M; <=16: +10,4M). I conteggi per-NOME restano validi (identita' propria); il confronto FINE col 165,6M s148 eredita questo scarto di perimetro-ambiente, DICHIARATO.
+3. TESTA (p.7): debug_backtrace other=130.151.270 = 5,2x la soglia-conteggio 24,8M = UNICA CANDIDATA sonda-prezzo per bersaglio-solo; n=274.976.697 = 81,9% di hostcall.n; b=11,67 GB = 77% dei bytes del tag. La seconda (class_exists 9,7M = 0,39x) e TUTTE le altre sono sotto soglia; anche per FAMIGLIA: __reflect_* Sigma-other ~12,4M (0,50x), array_map/diff/filter ~7,8M (0,32x) — nessuna famiglia raggiunge la soglia.
+4. Lettura d'insieme: la meta' scarsa dell'other hostcall attribuita in s148 ai "temp dei builtin" e' in realta' UN SOLO builtin: debug_backtrace (73,95% dell'other). ~275M alloc / ~24,8M dispatch = il grosso delle ~6,7 alloc/chiamata medie dell'anatomia s148 e' concentrato qui; il plumbing pop_keys/split_off resta reale ma di second'ordine rispetto alla testa.
+5. Nessuna leva si scrive su questo verdetto (p.9); prossimo atto = sonda-prezzo pair (criterio s149-criterio-pair.md) e DECISIONE sulla scala S-146; cifre SEMPRE con qualifica "tetto su binario census".
