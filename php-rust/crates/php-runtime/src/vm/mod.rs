@@ -10367,9 +10367,19 @@ impl<'m> Vm<'m> {
     }
 
     fn collect_backtrace(&self) -> Vec<BtFrame> {
+        self.collect_backtrace_opt(0, false)
+    }
+
+    /// BT1 (S-149): `limit` 0 = tutti i frame; `ignore_args` salta la
+    /// raccolta (e il clone per-arg) degli argomenti — il chiamante omette
+    /// la chiave `args` per intero (semantica 8.5.7).
+    fn collect_backtrace_opt(&self, limit: usize, ignore_args: bool) -> Vec<BtFrame> {
         let top = self.frames.len() - 1;
         let mut out = Vec::new();
         for i in (1..=top).rev() {
+            if limit != 0 && out.len() == limit {
+                break;
+            }
             let f = &self.frames[i];
             // An `eval()` unit's frame renders as `eval`; an anonymous frame as
             // `{closure}`; otherwise its own name.
@@ -10406,7 +10416,7 @@ impl<'m> Vm<'m> {
                 // A method with no bound `$this` is a static call ("::"); otherwise "->".
                 is_static: f.class.is_some() && f.this.is_none(),
                 object,
-                args: self.current_frame_args(i),
+                args: if ignore_args { Vec::new() } else { self.current_frame_args(i) },
                 is_eval: f.eval_origin().is_some(),
             });
         }

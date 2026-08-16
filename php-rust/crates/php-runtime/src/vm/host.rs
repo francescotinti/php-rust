@@ -4327,8 +4327,28 @@ impl<'m> super::Vm<'m> {
             }
         }
     }
-    pub(super) fn ho_debug_backtrace(&mut self, _args: Vec<Zval>) -> Result<Zval, PhpError> {
-        let frames = self.collect_backtrace();
+    pub(super) fn ho_debug_backtrace(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        // PHP 8.5: debug_backtrace(int $options = DEBUG_BACKTRACE_PROVIDE_OBJECT,
+        // int $limit = 0). BT1 (S-149): prima options/limit erano IGNORATI —
+        // pila intera con tutti gli args clonati a ogni chiamata (275,0M
+        // alloc = 81,9% del tag hostcall sulla suite ORM, census tranche-4;
+        // forma dominante Doctrine: IGNORE_ARGS + limit=2). Un argomento di
+        // specie inattesa ricade sul default (cammino pieno, mai TypeError
+        // nuovo da questa leva).
+        const PROVIDE_OBJECT: i64 = 1;
+        const IGNORE_ARGS: i64 = 2;
+        let long_at = |i: usize| -> Option<i64> {
+            args.get(i).map(|v| v.deref_clone()).and_then(|v| match v {
+                Zval::Long(n) => Some(n),
+                Zval::Bool(b) => Some(b as i64),
+                _ => None,
+            })
+        };
+        let options = long_at(0).unwrap_or(PROVIDE_OBJECT);
+        let limit = long_at(1).filter(|&n| n > 0).unwrap_or(0) as usize;
+        let provide_object = options & PROVIDE_OBJECT != 0;
+        let ignore_args = options & IGNORE_ARGS != 0;
+        let frames = self.collect_backtrace_opt(limit, ignore_args);
         let mut outer = PhpArray::new();
         for bt in frames {
             let mut e = PhpArray::new();
@@ -4337,14 +4357,17 @@ impl<'m> super::Vm<'m> {
             e.insert(Key::from_bytes(b"function"), Zval::Str(PhpStr::new(bt.function)));
             if let Some(cls) = bt.class {
                 e.insert(Key::from_bytes(b"class"), Zval::Str(PhpStr::new(cls)));
-                if let Some(obj) = bt.object {
-                    e.insert(Key::from_bytes(b"object"), obj);
+                if provide_object {
+                    if let Some(obj) = bt.object {
+                        e.insert(Key::from_bytes(b"object"), obj);
+                    }
                 }
                 let ty: &[u8] = if bt.is_static { b"::" } else { b"->" };
                 e.insert(Key::from_bytes(b"type"), Zval::Str(PhpStr::new(ty.to_vec())));
             }
-            // PHP's `eval` frame carries no `args` entry.
-            if !bt.is_eval {
+            // PHP's `eval` frame carries no `args` entry; IGNORE_ARGS omette
+            // la chiave per intero (semantica 8.5.7).
+            if !bt.is_eval && !ignore_args {
                 let mut argsarr = PhpArray::new();
                 for a in bt.args {
                     let _ = argsarr.append(a);
