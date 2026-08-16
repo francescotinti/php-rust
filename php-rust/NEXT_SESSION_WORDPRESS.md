@@ -42,16 +42,14 @@ spread WP cross-finestra 0,101 (banda multi-finestra) · confine slot-load
 (ponte+This 0,99×) · Zval-move dei memops (VOCE PROPRIA) · ORM ↓ da
 confermare al prossimo pin · §3.22 · depr. float→int · warning corsia ×2 ·
 divergenze RMW · objdatains residuo · objmap 43,4 → piano GC · evalcls
-316,9× · refl 42,4× · re +2 alloc · §3.13 · §3.12-i · §3.14 · §3.21 ·
-get_gc · drift TODO.md · latin1-cliff · dbal 10 nomi · leg-max media
-ballerina (leg5 S-142/146, leg3 t2).
+316,9× · refl 42,4× · re +2 alloc · §3.13 · §3.12-i · §3.14 · §3.21 · get_gc
+· drift TODO.md · latin1-cliff · dbal 10 nomi · leg-max media ballerina.
 
 ## NON riproporre (i veti restano; dettaglio nei concili archiviati)
-**S-148: growth-hashbrown come bersaglio-solo (0,23× soglia) · pool-Frame
-come bersaglio-solo (0,12×; FramePool già ricicla) · gc come bersaglio alloc
-(0,36M) · conversione conteggi→secondi coi prezzi zcell/arr0 come CIFRA
-(INDIZIO, mai record) · uso di rif/banda nuovi PRIMA della t3 · hist per-tag
-letto come other-only (è sul tag intero).**
+**S-148: growth-hashbrown / pool-Frame / gc come bersaglio-solo (0,23× /
+0,12× / 0,36M) · conteggi→secondi coi prezzi zcell/arr0 come CIFRA (INDIZIO,
+mai record) · rif/banda nuovi PRIMA della t3 · hist per-tag letto come
+other-only (è sul tag intero).**
 **S-147: borrow-first sul PONTE slot-load (0,83×) · scommessa SUITE sul canale
 movimenti (tetto 1,27 s) · TakeSlot in OGNI forma. S-146: arena-conteggi senza
 definizione · prezzi pair come budget · quota memops come giudice (KS-G3) ·
