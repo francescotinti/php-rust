@@ -1,7 +1,18 @@
 # PERF_MAP — phpr vs PHP oracle 8.5.7, mappa multi-workload
 
-Aggiornata: **2026-08-16 notte (S-147)** · pin phpr **s145 a89faf32** + server
-**s145 4a9adc51** (invariato; **S-147 = coppia dbal+ORM RIMISURATA @ s145
+Aggiornata: **2026-08-17 (S-148)** · pin phpr **s145 a89faf32** + server
+**s145 4a9adc51** (invariato; **S-148 = SECONDO ATTO: census ATTRIBUZIONE per
+TAG su ORM (identità Σtag==galloc_n ESATTA ×2; repliche worst 0,056%;
+workload==s144 −0,73%) — other 269,3M NOMINATO: hostcall.other 165,6M
+(61,5%; temp dei builtin, 6,7× soglia-conteggio 24,8M) > none/VM-inline
+94,6M (3,8×) > arrgrow 5,7M > frame 3,0M > gc 0,36M ⇒ KILL per CONTEGGI dei
+candidati concilio growth-hashbrown (0,23×) e pool-Frame (0,12×; FramePool
+WP-30 già ricicla): zero codice; 69,6% di TUTTE le alloc dentro i builtin;
+anatomia: ~6,7 alloc/chiamata nei corpi, pop_keys/split_off nominato (11
+siti), shape ≤48B 107,9M + ≤16B 98,8M; verdetto
+`wp148-harness/s148-attrib-verdetto.out` + `s148-anatomia-hostcall.md`;
+coppia WP t2: FUORI BANDA bordo BASSO ⇒ nessun claim, t3 dovuta, spread
+CROSS-finestra 0,101**; storico S-147 = coppia dbal+ORM RIMISURATA @ s145
 (ORM 8,370–8,427 ↓ indicativa, dbal 8,20–8,37) + CENSUS UNICO ORM: KILL
 KS-146-1 SCATTATO SUL PONTE (rett. rev. SEMANTICA) — ponte slot-load per
 criterio (con LoadVarPushConst) 0,244 s < soglia 0,293 s (0,83×) ⇒ ZERO
@@ -55,8 +66,8 @@ cifre dai verdetti `.out`. Regola di lettura: rapporti PER workload, MAI aggrega
 
 | workload | rapporto phpr/oracle | N | note |
 |---|---|---|---|
-| **WordPress full-suite** | **rif CANONICO resta 1,765–1,788 (S-142) su banda_ON 0,036 CONGELATA** (recepimento rev. S-146 az.2: aggiornamento di banda MAI da finestra singola anomala). S-146 @ **pin s145**: on-only **1,733–1,823** (N=6, **6/6 PULITE**) ⇒ **COMPATIBILE MARGINALE — FERMO regge per 0,001** (leg1 1,823 vs limite 1,824, un tick, gamba ELEVATA): **replica t2 dovuta prima di ogni uso del rif/banda nuovi**; spread finestra **0,090 = APERTURA da spiegare** (deriva sistematica correlata al peak, non rumore) | **6/6 gambe pulite** (t1) | S-146 @ s145; parità per NOME 6/6 (solo `wp_is_stream #2`); **REPLICA PEAK SENZA inserzione (az.rev. S-142 #2 SALDATA): esito MISTO ⇒ nessuna firma**; pattern S-140 (leg1 bassa) NON riprodotto; osservata DERIVA DISCENDENTE gambe tarde 1843→1831→1808→1773 correlata ai rapporti (leg6 min su peak E rapporto); verdetto `wp146-harness/s146-pair-verdetto-t1.out` (storico S-142: bimodale 1744–1850, verdetto `wp142-harness/s142-pair-verdetto-t1.out`) |
-| **WordPress gruppo media** | **2,460–2,547 CANONICA user-only** (S-146 @ s145, 6 gambe pulite; companion 2,391–2,491; leg5 2,547 di NUOVO la massima — ricorrenza osservativa: S-142 leg5 2,524) | 6 | S-146 @ s145 |
+| **WordPress full-suite** | **rif CANONICO resta 1,765–1,788 (S-142) su banda_ON 0,036 CONGELATA**. **S-148 t2 @ s145: on-only 1,722–1,742 (N=5 pulite; leg1 SEGNALATA ictx 202%) ⇒ FUORI BANDA bordo BASSO (leg3 1,722 vs limite 1,729; 4/5 dentro) ⇒ esito pre-registrato: NESSUN claim, replica t3 DOVUTA**; banda finestra t2 0,020 vs t1 0,090 ⇒ **spread CROSS-finestra (unione t1+t2 1,722–1,823 = 0,101) — banda da rifondare multi-finestra** | **5/6 pulite** (t2) | S-148 t2 @ s145; parità 6/6 (solo `wp_is_stream #2`); peak t2 1782–1851 ASCENDENTI (opposto della deriva discendente t1), lettura peak MISTO ⇒ nessuna firma; deriva test (az.rev. S-146 #3) SOTTO-CAMPIONATO N=5<6 ⇒ si applica a t3; verdetto `wp148-harness/s148-pair-verdetto-t2.out` (storico t1: 1,733–1,823 COMPATIBILE MARGINALE, `wp146-harness/s146-pair-verdetto-t1.out`; S-142 bimodale 1744–1850) |
+| **WordPress gruppo media** | **2,454–2,569 CANONICA user-only** (S-148 t2 @ s145, 5 gambe pulite; companion 2,382–2,505; leg3 2,569 massima — la ricorrenza leg5-max S-142/S-146 NON si ripete) | 5 | S-148 t2 @ s145 (storico S-146: 2,460–2,547) |
 | **symfony http-foundation** (1854) | **2,547–2,559** (raw 2,55–2,57) | 2/lato | S-126; canonica sul CONTEGGIO diff 17 nomi = 0,92% ≤1% (≥3 nomi sono unit puri, NON famiglia `php -S` — emenda S-127); sys alto (I/O) |
 | **symfony http-kernel** (1665 test) | **4,29–4,32** | 2/lato | parità 0E/0F; contesa ok |
 | **doctrine/collections** (242) | **8,22 net** (raw 6,20) | 2/lato | S-126; INDICATIVA: oracle netto 0,09 s (denominatore sotto-scala); parità 0/0 |
