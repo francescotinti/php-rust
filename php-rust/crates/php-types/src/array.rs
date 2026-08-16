@@ -684,6 +684,9 @@ impl PhpArray {
     /// Convert a packed array to the hashed representation. Slot positions
     /// (and therefore the cursor) and tombstones are preserved exactly.
     fn to_hashed(&mut self) {
+        // S-148 (census): interni container (hashbrown/Vec) nel tag `arrgrow`.
+        #[cfg(feature = "mem-census")]
+        let _s148 = crate::memcensus::s148_scope(crate::memcensus::S148_ARRGROW);
         let Repr::Packed(slots) = &mut self.repr else {
             return;
         };
@@ -831,6 +834,9 @@ impl PhpArray {
     /// vivify-Null-then-overwrite, which would mis-flag scalar-only arrays
     /// and feed a spurious Null to gc_note) and returns `None`.
     pub fn set_returning_displaced(&mut self, key: Key, val: Zval) -> LeafWrite {
+        // S-148 (census): interni container (hashbrown/Vec) nel tag `arrgrow`.
+        #[cfg(feature = "mem-census")]
+        let _s148 = crate::memcensus::s148_scope(crate::memcensus::S148_ARRGROW);
         #[cfg(feature = "mem-census")]
         self.census_sync();
         fn write_slot(slot: &mut Zval, val: Zval) -> Result<Zval, LeafWrite> {
@@ -898,6 +904,9 @@ impl PhpArray {
     /// Fails only when that slot is occupied (possible after saturation at
     /// i64::MAX), matching Zend's "next element is already occupied" error.
     pub fn append(&mut self, val: Zval) -> Result<(), ArrayAppendError> {
+        // S-148 (census): interni container (hashbrown/Vec) nel tag `arrgrow`.
+        #[cfg(feature = "mem-census")]
+        let _s148 = crate::memcensus::s148_scope(crate::memcensus::S148_ARRGROW);
         #[cfg(feature = "mem-census")]
         self.census_sync();
         let h = if self.next_free == i64::MIN { 0 } else { self.next_free };
@@ -913,6 +922,9 @@ impl PhpArray {
     /// reference cell. `None` when that slot is occupied (saturation), matching
     /// [`Self::append`].
     pub fn append_default(&mut self) -> Option<&mut Zval> {
+        // S-148 (census): interni container (hashbrown/Vec) nel tag `arrgrow`.
+        #[cfg(feature = "mem-census")]
+        let _s148 = crate::memcensus::s148_scope(crate::memcensus::S148_ARRGROW);
         #[cfg(feature = "mem-census")]
         self.census_sync();
         let h = if self.next_free == i64::MIN { 0 } else { self.next_free };

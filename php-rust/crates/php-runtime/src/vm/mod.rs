@@ -2712,6 +2712,10 @@ impl<'m> Frame<'m> {
         stack_buf: Vec<Zval>,
     ) -> Self {
         debug_assert!(slots_buf.is_empty() && stack_buf.is_empty());
+        // S-148 (census): le alloc del frame (resize slots su pool-miss)
+        // cadono nel tag `frame` della partizione galloc.
+        #[cfg(feature = "mem-census")]
+        let _s148 = php_types::memcensus::s148_scope(php_types::memcensus::S148_FRAME);
         // Named locals plus register temps (Leva B stage 1): max_temps is 0
         // until the reg_lower pass emits register forms, so this is today's
         // size; register temps are ordinary slots past n_slots (plan §4).
@@ -5185,6 +5189,9 @@ impl<'m> Vm<'m> {
     }
 
     fn collect_cycles_inner(&mut self) -> Result<i64, PhpError> {
+        // S-148 (census): le alloc del ciclo di collect cadono nel tag `gc`.
+        #[cfg(feature = "mem-census")]
+        let _s148 = php_types::memcensus::s148_scope(php_types::memcensus::S148_GC);
         let mut total = 0i64;
         // The drains below empty both root buffers: any purge floor from an
         // avoided-collect is stale now.

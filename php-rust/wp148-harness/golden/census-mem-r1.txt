@@ -1,0 +1,8 @@
+memcensus tag=exit str.cum_n=10 arr.cum_n=5 obj.cum_n=2 s143.arrbuf_n=3 s143.propsbuf_n=1 s143.galloc_n=100 s143.gfree_n=90 s144.rczval_n=4 s144.rczval_prop_n=0 s144.vecargs_n=6 s144.grealloc_n=7 s144.objsynth_n=0
+s148tag pid=11 tag=0 name=none n=30 attr=10 b=480 hist=30,0,0,0,0,0,0,0,0,0,0
+s148tag pid=12 tag=0 name=none n=30 attr=10 b=480 hist=20,10,0,0,0,0,0,0,0,0,0
+s148tag pid=11 tag=1 name=frame n=20 attr=0 b=320 hist=0,20,0,0,0,0,0,0,0,0,0
+s148tag pid=11 tag=2 name=hostcall n=10 attr=5 b=160 hist=10,0,0,0,0,0,0,0,0,0,0
+s148tag pid=11 tag=4 name=arrgrow n=10 attr=6 b=200 hist=0,0,10,0,0,0,0,0,0,0,0
+s148sum pid=11 galloc_n=70 sum_n=70
+s148sum pid=12 galloc_n=30 sum_n=30

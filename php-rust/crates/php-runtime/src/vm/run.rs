@@ -3539,6 +3539,12 @@ impl<'m> super::Vm<'m> {
                     self.enter_callee(frame)?;
                 }
                 Op::CallBuiltin { name, argc } => {
+                    // S-148 (census): estensione dinamica del builtin nel
+                    // tag `hostcall` della partizione galloc.
+                    #[cfg(feature = "mem-census")]
+                    let _s148 = php_types::memcensus::s148_scope(
+                        php_types::memcensus::S148_HOSTCALL,
+                    );
                     let f = match self.registry.get(&name[..]) {
                         Some(Builtin::Value(f)) => *f,
                         // The compiler only emits CallBuiltin for value builtins.
@@ -3634,6 +3640,12 @@ impl<'m> super::Vm<'m> {
                     self.frames[top].stack.push(result);
                 }
                 Op::CallHostBuiltin { name, argc } => {
+                    // S-148 (census): estensione dinamica del builtin nel
+                    // tag `hostcall` della partizione galloc.
+                    #[cfg(feature = "mem-census")]
+                    let _s148 = php_types::memcensus::s148_scope(
+                        php_types::memcensus::S148_HOSTCALL,
+                    );
                     // An evaluator-only host builtin (Session B): it may invoke a
                     // user callable via `call_callable` (a nested `run_loop`).
                     let args = self.pop_keys(top, *argc);

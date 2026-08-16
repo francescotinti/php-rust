@@ -70,6 +70,11 @@ pub fn alloc(ch: usize, bytes: usize) {
     CUM[ch].fetch_add(bytes as u64, Relaxed);
     CUM_N[ch].fetch_add(1, Relaxed);
     LIVE_N[ch].fetch_add(1, Relaxed);
+    // S-148 crosswalk: le nascite di canale (str/arr/obj) sono eventi già
+    // attribuiti in s144 — accreditano il tag corrente (convenzione 1:1).
+    if ch != CH_UNIT {
+        s148_attr_note();
+    }
     watermark();
 }
 
@@ -230,6 +235,9 @@ extern "C" fn dump_exit() {
     // S-147: righe per-sito/digramma dei movimenti (solo non-zero).
     #[cfg(feature = "mem-census")]
     s147_dump_lines();
+    // S-148: righe per-tag della partizione di galloc_n.
+    #[cfg(feature = "mem-census")]
+    s148_dump_lines();
     // WP-59 Ob.1: exit snapshot (win=0) — the cleanest fragmentation read:
     // channel live is exact here (recon reached==live), so per-bin
     // committed−used at this instant IS retention + non-censused standing.
@@ -1398,6 +1406,8 @@ pub fn galloc_note(bytes: usize) {
     GA_ALLOC.fetch_add(bytes as u64, Relaxed);
     GA_ALLOC_N.fetch_add(1, Relaxed);
     hist_note(bytes);
+    // S-148: partizione per tag di contesto (stessa run, stesso hook).
+    s148_alloc_note(bytes);
 }
 
 #[inline]
@@ -1565,12 +1575,14 @@ static S143_PROPSBUF_N: AtomicU64 = AtomicU64::new(0);
 #[inline]
 pub fn s143_arrbuf_note() {
     S143_ARRBUF_N.fetch_add(1, Relaxed);
+    s148_attr_note();
 }
 
 #[cfg(feature = "mem-census")]
 #[inline]
 pub fn s143_propsbuf_note() {
     S143_PROPSBUF_N.fetch_add(1, Relaxed);
+    s148_attr_note();
 }
 
 /// Snapshot (arrbuf, propsbuf) per la riga `s143` del dump.
@@ -1760,6 +1772,119 @@ fn s147_dump_lines() {
     }
 }
 
+// ---------------------------------------------------------------------------
+// S-148 tranche-3: partizione COMPLETA di `galloc_n` per TAG di contesto
+// (attribuzione dell'`other` 57,9% — wp148-harness/s148-criterio-attrib.md).
+// Lista CHIUSA; il tag più INTERNO vince (RAII save/restore sul thread).
+
+pub const S148_NONE: u8 = 0;
+pub const S148_FRAME: u8 = 1;
+pub const S148_HOSTCALL: u8 = 2;
+pub const S148_GC: u8 = 3;
+pub const S148_ARRGROW: u8 = 4;
+pub const S148_N_TAGS: usize = 5;
+pub const S148_TAG_NAMES: [&str; S148_N_TAGS] =
+    ["none", "frame", "hostcall", "gc", "arrgrow"];
+
+static S148_TAG_N: [AtomicU64; S148_N_TAGS] = [const { AtomicU64::new(0) }; S148_N_TAGS];
+static S148_TAG_ATTR: [AtomicU64; S148_N_TAGS] = [const { AtomicU64::new(0) }; S148_N_TAGS];
+static S148_TAG_B: [AtomicU64; S148_N_TAGS] = [const { AtomicU64::new(0) }; S148_N_TAGS];
+static S148_TAG_HIST: [[AtomicU64; 11]; S148_N_TAGS] =
+    [const { [const { AtomicU64::new(0) }; 11] }; S148_N_TAGS];
+
+std::thread_local! {
+    static S148_CUR: std::cell::Cell<u8> = const { std::cell::Cell::new(0) };
+}
+
+/// RAII: imposta il tag corrente del thread e ripristina il precedente al Drop.
+pub struct S148Scope {
+    prev: u8,
+}
+
+#[inline]
+pub fn s148_scope(tag: u8) -> S148Scope {
+    let prev = S148_CUR
+        .try_with(|c| {
+            let p = c.get();
+            c.set(tag);
+            p
+        })
+        .unwrap_or(0);
+    S148Scope { prev }
+}
+
+impl Drop for S148Scope {
+    #[inline]
+    fn drop(&mut self) {
+        let _ = S148_CUR.try_with(|c| c.set(self.prev));
+    }
+}
+
+#[inline]
+fn s148_cur_tag() -> usize {
+    (S148_CUR.try_with(|c| c.get() as usize).unwrap_or(0)).min(S148_N_TAGS - 1)
+}
+
+/// Hook dal wrapper GlobalAlloc (via `galloc_note`): ogni alloc grezza cade in
+/// ESATTAMENTE un tag (Σ tag == galloc_n per costruzione, identità p.4).
+#[inline]
+fn s148_alloc_note(bytes: usize) {
+    let t = s148_cur_tag();
+    S148_TAG_N[t].fetch_add(1, Relaxed);
+    S148_TAG_B[t].fetch_add(bytes as u64, Relaxed);
+    let mut i = 0;
+    while i < HIST_BUCKETS.len() && bytes > HIST_BUCKETS[i] {
+        i += 1;
+    }
+    S148_TAG_HIST[t][i].fetch_add(1, Relaxed);
+}
+
+/// Crosswalk: una nota-evento già attribuita in s144 (cum_n str/arr/obj,
+/// arrbuf, propsbuf, rczval, vecargs — convenzione 1 evento = 1 alloc
+/// EREDITATA) accredita il tag corrente; `other_tag = n − attr` nel parser.
+#[inline]
+pub fn s148_attr_note() {
+    S148_TAG_ATTR[s148_cur_tag()].fetch_add(1, Relaxed);
+}
+
+/// Righe `s148tag` (pid-prefixed) appese al file di `PHPR_MEM_CENSUS` a fine
+/// processo — il parser somma sui pid.
+fn s148_dump_lines() {
+    use std::io::Write;
+    let Ok(path) = std::env::var("PHPR_MEM_CENSUS") else { return };
+    let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) else {
+        return;
+    };
+    // Snapshot COERENTE prima di ogni alloc del dump stesso (identità p.4:
+    // Σ tag n == galloc_n al medesimo istante; solo load atomici qui).
+    let ga = GA_ALLOC_N.load(Relaxed);
+    let n: [u64; S148_N_TAGS] = std::array::from_fn(|t| S148_TAG_N[t].load(Relaxed));
+    let attr: [u64; S148_N_TAGS] = std::array::from_fn(|t| S148_TAG_ATTR[t].load(Relaxed));
+    let b: [u64; S148_N_TAGS] = std::array::from_fn(|t| S148_TAG_B[t].load(Relaxed));
+    let hist: [[u64; 11]; S148_N_TAGS] =
+        std::array::from_fn(|t| std::array::from_fn(|i| S148_TAG_HIST[t][i].load(Relaxed)));
+    let pid = std::process::id();
+    for t in 0..S148_N_TAGS {
+        if n[t] == 0 && attr[t] == 0 {
+            continue;
+        }
+        let h: Vec<String> = hist[t].iter().map(|v| v.to_string()).collect();
+        let _ = writeln!(
+            f,
+            "s148tag pid={} tag={} name={} n={} attr={} b={} hist={}",
+            pid,
+            t,
+            S148_TAG_NAMES[t],
+            n[t],
+            attr[t],
+            b[t],
+            h.join(","),
+        );
+    }
+    let sum: u64 = n.iter().sum();
+    let _ = writeln!(f, "s148sum pid={} galloc_n={} sum_n={}", pid, ga, sum);
+}
+
 #[cfg(feature = "mem-census")]
 #[inline]
 pub fn s144_rczval_note(prop: bool) {
@@ -1767,12 +1892,14 @@ pub fn s144_rczval_note(prop: bool) {
     if prop {
         S144_RCZVAL_PROP_N.fetch_add(1, Relaxed);
     }
+    s148_attr_note();
 }
 
 #[cfg(feature = "mem-census")]
 #[inline]
 pub fn s144_vecargs_note() {
     S144_VECARGS_N.fetch_add(1, Relaxed);
+    s148_attr_note();
 }
 
 // Revisione S-143 az.5: il box sintetico di `copy_with_id(0)`

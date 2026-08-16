@@ -1,0 +1,72 @@
+2,7c2,6
+< # s147-census-orm.sh — CENSUS UNICO ORM monobinario (criterio
+< # s147-criterio-census.md; concilio S-146 §Ordine p.1). Base DICHIARATA:
+< # wp145-harness/s145-census-mv.sh (adattamenti: PHPR_OP_CENSUS armato per
+< # l'attribuzione per-sito s147mv/s147dg, smoke sulle chiavi s147, output in
+< # census-out/, verdetto s147). Manifest s147-census-copia.diff (copia-gate).
+< # MAI cifra di tempo da qui.
+---
+> # s148-census-orm.sh — census ATTRIBUZIONE per TAG su SUITE ORM (criterio
+> # s148-criterio-attrib.md). Base DICHIARATA: wp147-harness/s147-census-orm.sh
+> # (adattamenti: feature solo mem-census — niente zval/op census; smoke sulle
+> # chiavi s148tag + identita' s148sum; output in census-out/, verdetto s148).
+> # Manifest s148-census-copia.diff (copia-gate). MAI cifra di tempo da qui.
+11c10
+< H="$REPO/wp147-harness"
+---
+> H="$REPO/wp148-harness"
+16c15
+< VERD="$H/s147-census-verdetto.out"
+---
+> VERD="$H/s148-attrib-verdetto.out"
+20,26c19,23
+< # smoke (criterio p.3): chiavi a esito ESATTO >=1 — s145.clone_*, s147mv
+< # LoadSlot, almeno un s147dg; zvalcensus_s147 PRESENTE (arr/obj possono
+< # restare 0 su script minimo: FUORI smoke, dichiarato).
+< rm -f "$OUT/smoke-mem.txt" "$OUT/smoke-zval.txt" "$OUT/smoke-op.txt"
+< PHPR_MEM_CENSUS="$OUT/smoke-mem.txt" PHPR_ZVAL_CENSUS="$OUT/smoke-zval.txt" \
+<   PHPR_OP_CENSUS="$OUT/smoke-op.txt" \
+<   "$CENSUS_PHPR" "$H/smoke147.php" > "$SP/smoke147.out" 2>&1
+---
+> # smoke (criterio p.5): esito ESATTO — s148tag frame/hostcall/arrgrow >=1 E
+> # identita' s148sum galloc_n==sum_n; gc puo' restare 0 (FUORI smoke, dichiarato).
+> rm -f "$OUT/smoke-mem.txt"
+> PHPR_MEM_CENSUS="$OUT/smoke-mem.txt" \
+>   "$CENSUS_PHPR" "$H/smoke148.php" > "$SP/smoke148.out" 2>&1
+28,30c25,27
+< for k in s145.clone_scalar_n s145.clone_str_n s145.clone_arr_n s145.clone_obj_n; do
+<   v=$(sed -n 's/.* tag=exit .*'"$k"'=\([0-9][0-9]*\).*/\1/p' "$OUT/smoke-mem.txt" | head -1)
+<   [ -n "${v:-}" ] && [ "$v" -ge 1 ] || SMOKE_FAIL="$SMOKE_FAIL $k=${v:-ASSENTE}"
+---
+> for t in frame hostcall arrgrow; do
+>   v=$(sed -n 's/^s148tag pid=[0-9]* tag=[0-9] name='"$t"' n=\([0-9][0-9]*\) .*/\1/p' "$OUT/smoke-mem.txt" | head -1)
+>   [ -n "${v:-}" ] && [ "$v" -ge 1 ] || SMOKE_FAIL="$SMOKE_FAIL s148tag.$t=${v:-ASSENTE}"
+32,36c29,33
+< v=$(sed -n 's/^s147mv pid=[0-9]* site=[0-9]* name=LoadSlot .*tot=\([0-9][0-9]*\)$/\1/p' "$OUT/smoke-mem.txt" | head -1)
+< [ -n "${v:-}" ] && [ "$v" -ge 1 ] || SMOKE_FAIL="$SMOKE_FAIL s147mv.LoadSlot=${v:-ASSENTE}"
+< v=$(grep -c '^s147dg pid=' "$OUT/smoke-mem.txt" || true)
+< [ "${v:-0}" -ge 1 ] || SMOKE_FAIL="$SMOKE_FAIL s147dg=${v:-0}"
+< grep -q '^zvalcensus_s147 ' "$OUT/smoke-zval.txt" || SMOKE_FAIL="$SMOKE_FAIL zvalcensus_s147=ASSENTE"
+---
+> ga=$(sed -n 's/^s148sum pid=[0-9]* galloc_n=\([0-9][0-9]*\) .*/\1/p' "$OUT/smoke-mem.txt" | head -1)
+> sm=$(sed -n 's/^s148sum pid=[0-9]* galloc_n=[0-9]* sum_n=\([0-9][0-9]*\)$/\1/p' "$OUT/smoke-mem.txt" | head -1)
+> if [ -z "${ga:-}" ] || [ -z "${sm:-}" ] || [ "$ga" != "$sm" ]; then
+>   SMOKE_FAIL="$SMOKE_FAIL identita=galloc_n:${ga:-ASSENTE}!=sum_n:${sm:-ASSENTE}"
+> fi
+40c37
+< p "smoke PASS (s145.* + s147mv/s147dg/zvalcensus_s147 vivi)"
+---
+> p "smoke PASS (s148tag frame/hostcall/arrgrow vivi + identita' ESATTA)"
+48,49d44
+<   RAWZ="$OUT/census-zval-r$rep.txt"; rm -f "$RAWZ"
+<   RAWO="$OUT/census-op-r$rep.txt"; rm -f "$RAWO"
+52c47
+<   PHPR_MEM_CENSUS="$RAW" PHPR_ZVAL_CENSUS="$RAWZ" PHPR_OP_CENSUS="$RAWO" \
+---
+>   PHPR_MEM_CENSUS="$RAW" \
+69,70c64,65
+< { echo "== s147 CENSUS UNICO ORM (per-sito/digrammi + ponte + F1 take-per-tipo) — criterio s147-criterio-census.md — CONTEGGI, mai tempo =="
+<   echo "grade=CENSUS  # monobinario census; l'aggregazione la fa s147-parse.py (golden-tested)"
+---
+> { echo "== s148 census ATTRIBUZIONE per TAG (other 57,9% / tranche-3) su SUITE ORM (criterio s148-criterio-attrib.md — CONTEGGI, mai tempo) =="
+>   echo "grade=CENSUS  # monobinario census; l'aggregazione la fa s148-parse.py (golden-tested)"
