@@ -39,9 +39,14 @@ cnt=$(awk '/^test result:/{p+=$4; f+=$6; ig+=$8} END{printf "%d/%d/%d", p, f, ig
 grep -E '^test .* \.\.\. ' "$OUT/batteria.log" | sed 's/^test //; s/ \.\.\..*//' | sort > "$OUT/batteria-nomi.txt"
 # inventario vs pin s125: S-145 dichiara UN test NUOVO (il dente rczval,
 # az.rev. S-144 #4) — l'inventario è conforme SOLO se l'aggiunta è ESATTAMENTE
-# quel nome e nessun test è SPARITO.
-NEW_ONLY=$(comm -13 "$SRC/wp125-harness/promo-out/batteria-nomi.txt" "$OUT/batteria-nomi.txt")
-GONE=$(comm -23 "$SRC/wp125-harness/promo-out/batteria-nomi.txt" "$OUT/batteria-nomi.txt")
+# quel nome e nessun test è SPARITO. I nomi dei compile-fail VmGate portano il
+# NUMERO DI RIGA (volatile: slitta con ogni edit di vm/mod.rs — classe S-96:
+# mai fidarsi della FORMA): normalizzato su ENTRAMBI i lati prima del comm.
+normline(){ sed 's/(line [0-9][0-9]*)/(line N)/' "$1" | sort; }
+normline "$SRC/wp125-harness/promo-out/batteria-nomi.txt" > "$OUT/base-norm.txt"
+normline "$OUT/batteria-nomi.txt" > "$OUT/nomi-norm.txt"
+NEW_ONLY=$(comm -13 "$OUT/base-norm.txt" "$OUT/nomi-norm.txt")
+GONE=$(comm -23 "$OUT/base-norm.txt" "$OUT/nomi-norm.txt")
 if [ "$NEW_ONLY" = "rczval_pattern_resta_nel_funnel" ] && [ -z "$GONE" ]; then
   INV="baseline s125 + il SOLO test dichiarato (rczval_pattern_resta_nel_funnel)"
 else

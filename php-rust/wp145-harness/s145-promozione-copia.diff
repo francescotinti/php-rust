@@ -22,37 +22,42 @@
 ---
 > VERD="$H/s145-promo-verdetto.out"
 > CAND_EXP="${1:?uso: s145-promozione.sh <cand_hash16>}"
-40,42c40,46
+40,42c40,51
 < # inventario vs pin s125: la leva NON dichiara test nuovi — ogni differenza = STOP.
 < if diff -q "$SRC/wp125-harness/promo-out/batteria-nomi.txt" "$OUT/batteria-nomi.txt" > /dev/null; then
 <   INV="IDENTICO al pin s125 (zero test nuovi, come dichiarato)"
 ---
 > # inventario vs pin s125: S-145 dichiara UN test NUOVO (il dente rczval,
 > # az.rev. S-144 #4) — l'inventario è conforme SOLO se l'aggiunta è ESATTAMENTE
-> # quel nome e nessun test è SPARITO.
-> NEW_ONLY=$(comm -13 "$SRC/wp125-harness/promo-out/batteria-nomi.txt" "$OUT/batteria-nomi.txt")
-> GONE=$(comm -23 "$SRC/wp125-harness/promo-out/batteria-nomi.txt" "$OUT/batteria-nomi.txt")
+> # quel nome e nessun test è SPARITO. I nomi dei compile-fail VmGate portano il
+> # NUMERO DI RIGA (volatile: slitta con ogni edit di vm/mod.rs — classe S-96:
+> # mai fidarsi della FORMA): normalizzato su ENTRAMBI i lati prima del comm.
+> normline(){ sed 's/(line [0-9][0-9]*)/(line N)/' "$1" | sort; }
+> normline "$SRC/wp125-harness/promo-out/batteria-nomi.txt" > "$OUT/base-norm.txt"
+> normline "$OUT/batteria-nomi.txt" > "$OUT/nomi-norm.txt"
+> NEW_ONLY=$(comm -13 "$OUT/base-norm.txt" "$OUT/nomi-norm.txt")
+> GONE=$(comm -23 "$OUT/base-norm.txt" "$OUT/nomi-norm.txt")
 > if [ "$NEW_ONLY" = "rczval_pattern_resta_nel_funnel" ] && [ -z "$GONE" ]; then
 >   INV="baseline s125 + il SOLO test dichiarato (rczval_pattern_resta_nel_funnel)"
-44c48
+44c53
 <   INV="DIVERGE (diff vs wp125 in promo-out/batteria-inv.diff)"
 ---
 >   INV="DIVERGE (nuovi='$NEW_ONLY' spariti='$GONE' — diff in promo-out/batteria-inv.diff)"
-58c62
+58c67
 < "$SRC/scripts/pin-phpr.sh" s138 > "$OUT/pin.log" 2>&1
 ---
 > "$SRC/scripts/pin-phpr.sh" s145 > "$OUT/pin.log" 2>&1
-78,79c82,83
+78,79c87,88
 < PHPR="$BIN" R=5 "$SRC/wp97-harness/micro/run-micro.sh" > "$OUT/micro-pin-s138.out" 2>&1
 < note "promozione micro pin s138: $(grep -E '^rapporto_' "$OUT/micro-pin-s138.out" | tr '\n' ' ')"
 ---
 > PHPR="$BIN" R=5 "$SRC/wp97-harness/micro/run-micro.sh" > "$OUT/micro-pin-s145.out" 2>&1
 > note "promozione micro pin s145: $(grep -E '^rapporto_' "$OUT/micro-pin-s145.out" | tr '\n' ' ')"
-109c113
+109c118
 < "$SRC/scripts/pin-server.sh" s138 > "$OUT/pin-server.log" 2>&1
 ---
 > "$SRC/scripts/pin-server.sh" s145 > "$OUT/pin-server.log" 2>&1
-115c119
+115c124
 < note "PROMOZIONE COMPLETA rc=0 (da promo-out/rcb — il file rc che QUESTO script scrive): pin s138 = $H2"
 ---
 > note "PROMOZIONE COMPLETA rc=0 (da promo-out/rcb — il file rc che QUESTO script scrive): pin s145 = $H2"
