@@ -1,0 +1,35 @@
+== s149 A/B BT1 debug_backtrace options/limit (criterio s149-criterio-bt1.md; decisione in s149-decisione-bt1.md scritta PRIMA) ==
+armA=a89faf32c62142f9 (pin s145)  armB=ac26375aa0e8fef0 (leva BT1)
+start=2026-08-17 00:42:42
+lock: creato
+quiescenza: PASS al tentativo 19
+fixture fx-backtrace: B==oracle BYTE-ID (gate PASS)
+fixture su A: DIVERGE (6 righe oracle) — la divergenza che BT1 chiude, attesa
+pavimenti: A=0.02 B=0.02
+oracle med3 user=0.07 (bilaterale, rapporto nel giudizio)
+smoke r1 pre=BUSY
+smoke r2 pre=BUSY
+smoke ns/iter A=19933/19667 B=733/733 D=+19200/+18933
+SMOKE-OK
+grezzi A: 3.00 2.99 2.97 2.96 2.98  B: 0.13 0.12 0.13 0.13 0.13
+guardia RMW A: 0.46 0.47 0.46  B: 0.45 0.46 0.45
+guardia DR A: 0.15 0.15 0.15  B: 0.15 0.15 0.15
+guardia ARR A: 0.95 0.94 0.95  B: 0.96 0.96 0.95
+guardia PROP A: 2.36 2.36 2.36  B: 2.41 2.37 2.37
+guardia CALLS A: 2.15 2.15 2.15  B: 2.16 2.15 2.16
+guardia STR A: 0.66 0.66 0.67  B: 0.66 0.67 0.67
+parita' stdout: 7 violazioni (PARITA' ROTTA ab-A1 PARITA' ROTTA ab-A2 PARITA' ROTTA ab-A3 PARITA' ROTTA ab-A4 PARITA' ROTTA ab-A5 PARITA' ROTTA sm-A1 PARITA' ROTTA sm-A2 )
+lock: rimosso
+end=2026-08-17 01:02:13
+
+--- GIUDIZIO (derivazione meccanica dai grezzi; formula criterio p.3) ---
+ns_iter = (mediana - pavimento_binario) / 150000
+A: med 2,98 (2,96-3,00) -> (2,98-0,02)/150k = 19733 ns/iter
+B: med 0,13 (0,12-0,13) -> (0,13-0,02)/150k =   733 ns/iter
+D = +19000 ns/iter (-96,3%); segni 7/7 (smoke +19200/+18933 + R=5 tutti positivi)
+soglia = max(4; drop-1 A = spread 0,03 s -> 200 ns; spread-batch) = 200 ns -> D = 95x la soglia: LEVA REGGE
+bilaterale (companion RAW, pavimento oracle NON misurato - dichiarato): A/oracle 2,98/0,07 = 42,6x -> B/oracle 0,13/0,07 = 1,86x
+guardie 6/6 VERDI: RMW 0,46->0,45 · DR 0,15= · ARR 0,95->0,96 (+1 tick, al limite di risoluzione, DICHIARATO) · PROP 2,36->2,37 (+1 tick) · CALLS 2,15->2,16 (+1 tick) · STR 0,66->0,67 (+1 tick) - tutte entro la quantizzazione 0,01 s
+parita': B PULITA ovunque (7 violazioni = SOLO braccio A = la divergenza che BT1 chiude, attesa e pre-registrata)
+fixture: B==oracle BYTE-ID (gate PASS); scommessa suite AMMESSA e PRE-REGISTRATA (s149-decisione-bt1.md p.4: attesa 0,8-3,1 s sulla coppia ORM al prossimo pin)
+promozione: NON in questa sessione (criterio p.7: prima la coppia t3 @ s145; catena pin-phpr.sh in S-150)
