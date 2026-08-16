@@ -214,6 +214,12 @@ fn dump_line(tag: &str) {
             rcz, rczp, vargs, grn,
             s144_objsynth(),
         ));
+        // S-145 sonda-B: movimenti Zval per classe (impl Clone census-gated).
+        let (csc, cst, car, cob, crf, cro) = s145_counters();
+        line.push_str(&format!(
+            " s145.clone_scalar_n={} s145.clone_str_n={} s145.clone_arr_n={} s145.clone_obj_n={} s145.clone_ref_n={} s145.clone_rcother_n={}",
+            csc, cst, car, cob, crf, cro,
+        ));
     }
     line.push('\n');
     let _ = f.write_all(line.as_bytes());
@@ -1584,6 +1590,58 @@ static S144_RCZVAL_N: AtomicU64 = AtomicU64::new(0);
 static S144_RCZVAL_PROP_N: AtomicU64 = AtomicU64::new(0);
 #[cfg(feature = "mem-census")]
 static S144_VECARGS_N: AtomicU64 = AtomicU64::new(0);
+
+// S-145 sonda-B (modello wp145-harness/s145-sonda-b-modello.md): movimenti
+// Zval per CLASSE dal SOLO impl Clone manuale census-gated di `Zval` — il
+// denominatore della partizione memcpy/inc-dec/nota. `rcother` raccoglie
+// Closure/Generator/Resource/ArgPlace/WeakHandle (inc/dec di RcBox al prezzo
+// obj, dichiarato nel modello).
+#[cfg(feature = "mem-census")]
+static S145_CLONE_SCALAR: AtomicU64 = AtomicU64::new(0);
+#[cfg(feature = "mem-census")]
+static S145_CLONE_STR: AtomicU64 = AtomicU64::new(0);
+#[cfg(feature = "mem-census")]
+static S145_CLONE_ARR: AtomicU64 = AtomicU64::new(0);
+#[cfg(feature = "mem-census")]
+static S145_CLONE_OBJ: AtomicU64 = AtomicU64::new(0);
+#[cfg(feature = "mem-census")]
+static S145_CLONE_REF: AtomicU64 = AtomicU64::new(0);
+#[cfg(feature = "mem-census")]
+static S145_CLONE_RCOTHER: AtomicU64 = AtomicU64::new(0);
+
+#[cfg(feature = "mem-census")]
+#[inline]
+pub fn s145_clone_note(v: &crate::Zval) {
+    use crate::Zval;
+    let c = match v {
+        Zval::Undef | Zval::Null | Zval::Bool(_) | Zval::Long(_) | Zval::Double(_) => {
+            &S145_CLONE_SCALAR
+        }
+        Zval::Str(_) => &S145_CLONE_STR,
+        Zval::Array(_) => &S145_CLONE_ARR,
+        Zval::Object(_) => &S145_CLONE_OBJ,
+        Zval::Ref(_) => &S145_CLONE_REF,
+        Zval::Closure(_)
+        | Zval::Generator(_)
+        | Zval::Resource(_)
+        | Zval::WeakHandle(_)
+        | Zval::ArgPlace(_) => &S145_CLONE_RCOTHER,
+    };
+    c.fetch_add(1, Relaxed);
+}
+
+/// Snapshot (scalar, str, arr, obj, ref, rcother) per la riga `s145` del dump.
+#[cfg(feature = "mem-census")]
+pub fn s145_counters() -> (u64, u64, u64, u64, u64, u64) {
+    (
+        S145_CLONE_SCALAR.load(Relaxed),
+        S145_CLONE_STR.load(Relaxed),
+        S145_CLONE_ARR.load(Relaxed),
+        S145_CLONE_OBJ.load(Relaxed),
+        S145_CLONE_REF.load(Relaxed),
+        S145_CLONE_RCOTHER.load(Relaxed),
+    )
+}
 
 #[cfg(feature = "mem-census")]
 #[inline]

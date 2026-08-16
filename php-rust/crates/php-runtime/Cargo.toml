@@ -44,6 +44,11 @@ null-lever = []
 # fill/hit della cella IC RMW (PHPR_IC_STATS). Stessa convenzione delle census:
 # SOLO build diagnostiche — mai nel pin; nessuna cifra di tempo da questa build.
 ic-stats = []
+# S-145 sonda-B (modello wp145-harness/s145-sonda-b-modello.md): gate del SOLO
+# builtin `__phpr_sonda_b` (loop di prezzo clone/drop/gc_note/pair). Nessun
+# contatore: i cammini prezzati restano la forma di parità. Probe build only —
+# mai nel pin; i conteggi vivono nelle census (mem-census/zval-census).
+sonda-price = []
 
 [dependencies]
 php-types.workspace = true

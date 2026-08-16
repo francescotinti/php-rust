@@ -1164,6 +1164,18 @@ impl<'m> Vm<'m> {
                         return Ok(());
                     }
                 }
+                // S-145 sonda-B: il builtin dei prezzi esiste SOLO nella
+                // build probe `sonda-price` (mai in HOST_BUILTIN_NAMES: in
+                // parità il nome resta undefined e get_defined_functions
+                // non lo elenca). Il driver lo chiama come string-callable,
+                // che arriva QUI per costruzione.
+                #[cfg(feature = "sonda-price")]
+                if name == b"__phpr_sonda_b" {
+                    let result = self.ho_sonda_b(args)?;
+                    let top = self.frames.len() - 1;
+                    self.frames[top].stack.push(result);
+                    return Ok(());
+                }
                 Err(undefined_builtin(written))
             }
         }

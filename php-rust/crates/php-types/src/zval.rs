@@ -12,7 +12,8 @@ use crate::{GenState, Object, PhpArray, PhpStr, ZStr};
 ///
 /// Heap types use `Rc` with copy-on-write via `Rc::make_mut`, which matches
 /// Zend's refcount + SEPARATE_* separation exactly.
-#[derive(Clone, Debug)]
+#[cfg_attr(not(feature = "mem-census"), derive(Clone))]
+#[derive(Debug)]
 pub enum Zval {
     Undef,
     Null,
@@ -68,6 +69,36 @@ pub enum Zval {
     /// (warns on a missing key, creates nothing). Never escapes the call
     /// window — no other consumer sees this variant.
     ArgPlace(Rc<ArgPlace>),
+}
+
+/// S-145 sonda-B (modello wp145-harness/s145-sonda-b-modello.md): sotto
+/// `mem-census` la derive lascia il posto a questo impl MANUALE che conta
+/// ogni movimento per CLASSE prima di clonare — il denominatore della
+/// partizione memcpy/inc-dec/nota. Variante per variante il corpo è la
+/// stessa copia della derive (Rc::clone / copy); senza feature la derive
+/// resta e la forma di parità non cambia di un byte.
+#[cfg(feature = "mem-census")]
+impl Clone for Zval {
+    #[inline]
+    fn clone(&self) -> Self {
+        crate::memcensus::s145_clone_note(self);
+        match self {
+            Zval::Undef => Zval::Undef,
+            Zval::Null => Zval::Null,
+            Zval::Bool(b) => Zval::Bool(*b),
+            Zval::Long(n) => Zval::Long(*n),
+            Zval::Double(d) => Zval::Double(*d),
+            Zval::Str(s) => Zval::Str(s.clone()),
+            Zval::Array(a) => Zval::Array(Rc::clone(a)),
+            Zval::Ref(r) => Zval::Ref(Rc::clone(r)),
+            Zval::Closure(c) => Zval::Closure(Rc::clone(c)),
+            Zval::Object(o) => Zval::Object(Rc::clone(o)),
+            Zval::Generator(g) => Zval::Generator(Rc::clone(g)),
+            Zval::Resource(r) => Zval::Resource(Rc::clone(r)),
+            Zval::WeakHandle(w) => Zval::WeakHandle(w.clone()),
+            Zval::ArgPlace(p) => Zval::ArgPlace(Rc::clone(p)),
+        }
+    }
 }
 
 /// S-144 tranche-2 (census, revisione S-143 az.1): funnel di nascita dei box

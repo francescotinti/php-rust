@@ -24,6 +24,9 @@ census-instrumentation = ["php-runtime/census-instrumentation"]
 # S-103 leva-nulla (KS-BA-104-2): braccio B dell'A/B di taratura layout —
 # una pad function mai chiamata accanto a run_loop. Mai parità.
 null-lever = ["php-runtime/null-lever"]
+# S-145 sonda-B lato prezzi: SOLO il builtin __phpr_sonda_b, nessuna census
+# (wp145-harness/s145-sonda-b-modello.md). Probe build, mai parità.
+sonda-price = ["php-runtime/sonda-price"]
 
 [dependencies]
 php-types.workspace = true

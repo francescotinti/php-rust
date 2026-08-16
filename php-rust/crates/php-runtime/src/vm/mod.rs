@@ -67,6 +67,12 @@ pub mod stackcensus;
 // (design95-liveness.md). Stessa convenzione: build di strumentazione soltanto.
 #[cfg(feature = "zval-census")]
 pub mod liveness;
+// S-145 sonda-B lato PREZZI (wp145-harness/s145-sonda-b-modello.md): il
+// builtin `__phpr_sonda_b`, SOLO build probe `sonda-price` — che per
+// costruzione non monta alcuna census, così i cammini prezzati sono la
+// forma di parità.
+#[cfg(feature = "sonda-price")]
+mod sondaprice;
 mod coroutines;
 mod dom;
 mod exceptions;

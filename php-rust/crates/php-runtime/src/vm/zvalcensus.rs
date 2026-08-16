@@ -167,6 +167,11 @@ pub static GCNOTE_SCALAR: AtomicU64 = AtomicU64::new(0);
 /// Chiamate a `gc_note` con argomento `Object` (borrow + flag DESTRUCTED +
 /// eventuale insert nel gc_buf). Predizione Matsakis.
 pub static GCNOTE_OBJ: AtomicU64 = AtomicU64::new(0);
+/// S-145 sonda-B: chiamate a `gc_note` con `is_gc_container()` VERO (pagano
+/// `gc_note_slow`); il complemento a `GCNOTE_TOTAL` paga la sola guard
+/// inline. Alimenta il canale `nota` della partizione (modello
+/// wp145-harness/s145-sonda-b-modello.md).
+pub static GCNOTE_CONT: AtomicU64 = AtomicU64::new(0);
 /// Le chiamate taggate al sito `Op::Pop` (una per pop riuscito).
 pub static GCNOTE_SITE_POP: AtomicU64 = AtomicU64::new(0);
 /// Le chiamate taggate al sito `PropSet` sul VECCHIO valore sovrascritto.
@@ -224,6 +229,9 @@ pub fn note_gcnote(v: &Zval) {
         libc::atexit(dump_at_exit);
     });
     GCNOTE_TOTAL.fetch_add(1, Ordering::Relaxed);
+    if v.is_gc_container() {
+        GCNOTE_CONT.fetch_add(1, Ordering::Relaxed);
+    }
     match v {
         Zval::Undef | Zval::Null | Zval::Bool(_) | Zval::Long(_) | Zval::Double(_) => {
             GCNOTE_SCALAR.fetch_add(1, Ordering::Relaxed);
@@ -369,6 +377,13 @@ pub fn dump_exit() {
     if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
         let _ = writeln!(f, "{}", dump_line());
         let _ = writeln!(f, "{}", dump_line_s101());
+        // S-145 sonda-B: note su container (riga NUOVA, la riga storica
+        // S-101 resta byte-identica).
+        let _ = writeln!(
+            f,
+            "zvalcensus_s145 gcnote_cont={}",
+            GCNOTE_CONT.load(Ordering::Relaxed)
+        );
         // S-140: riga contatori hint-check (leva HC1) — riga NUOVA.
         let _ = writeln!(f, "{}", dump_line_s140());
         // S-142: contatori del meccanismo L-RD1 — riga NUOVA, SOLO quando la
