@@ -1,0 +1,17 @@
+== s149 sonda-PREZZO pair churn 16-48 B (criterio s149-criterio-pair.md; base s145-sonda-prezzi.sh) ==
+probe_bin=6872b42121fd6cd3 (build sonda-price, MAI parita')
+start=2026-08-17 00:29:11
+lock: creato /private/tmp/phpr-measure.lock
+rust-analyzer: lasciato quieto (il gate CPU della quiescenza arbitra; il kill lo fa RIPARTIRE a indicizzare — osservato s145 t2: 21 tentativi)
+quiescenza: PASS al tentativo 9
+smoke: PASS (stdout SONDA-OK, 11 chiavi s145 + 6 chiavi s149, prezzi >0)
+zval_size=16 (audit taglia, atteso 16)
+r1 pre=BUSY
+r1 post=BUSY
+r1: OK s145.price.cal_ns=0.4801 s145.price.mv_scalar_ns=3.3600 s145.price.mv_str_ns=4.3214 s145.price.mv_arr_ns=4.3205 s145.price.mv_obj_ns=4.4275 s145.price.note_scalar_ns=0.6262 s145.price.note_cont_repeat_ns=3.3592 s145.price.pair_zcell_ns=9.2344 s145.price.pair_arr0_ns=12.0639 s145.price.n_mv=200000000 s145.price.n_pair=20000000 s149.price.pair16_ns=6.8612 s149.price.pair32_ns=7.2551 s149.price.pair48_ns=11.6864 s149.price.splitoff3_ns=19.5367 s149.price.zval_size=16 s149.price.n_pair=20000000 
+r2 pre=BUSY
+r2 post=BUSY
+r2: OK s145.price.cal_ns=0.4798 s145.price.mv_scalar_ns=3.3599 s145.price.mv_str_ns=4.3204 s145.price.mv_arr_ns=4.3205 s145.price.mv_obj_ns=3.8721 s145.price.note_scalar_ns=0.6226 s145.price.note_cont_repeat_ns=3.3595 s145.price.pair_zcell_ns=9.2086 s145.price.pair_arr0_ns=12.2753 s145.price.n_mv=200000000 s145.price.n_pair=20000000 s149.price.pair16_ns=6.8452 s149.price.pair32_ns=7.2469 s149.price.pair48_ns=11.7470 s149.price.splitoff3_ns=20.5683 s149.price.zval_size=16 s149.price.n_pair=20000000 
+lock: rimosso
+end=2026-08-17 00:37:39
+PREZZI ACQUISITI (banda per chiave = [min,max] delle 2 repliche; replica >2% sulla chiave di decisione => t3 dovuta — criterio p.2)
