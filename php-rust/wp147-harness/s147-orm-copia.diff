@@ -1,0 +1,30 @@
+2,4c2,4
+< # s139-rimisura.sh — RIMISURA dbal+ORM sul pin s138 (criterio
+< # s139-criterio-rimisura.md; copia DICHIARATA di s135-rimisura.sh, manifest
+< # s139-rimisura-copia.diff): ORM + dbal, N=2 per lato, oracle prima poi phpr
+---
+> # s147-orm-rimisura.sh — RIMISURA dbal+ORM sul pin s145 (criterio
+> # s147-criterio-orm.md; copia DICHIARATA di s139-rimisura.sh, manifest
+> # s147-orm-copia.diff): ORM + dbal, N=2 per lato, oracle prima poi phpr
+12c12
+< H="$REPO/wp139-harness"
+---
+> H="$REPO/wp147-harness"
+19c19
+< VERD="$H/s139-rimisura-verdetto.out"
+---
+> VERD="$H/s147-orm-rimisura-verdetto.out"
+23,24c23,24
+< [ "$(shasum -a 256 "$PHPR" | cut -c1-16)" = "fa17dabd9eaa4bcb" ] || { echo "rc=9 pin!=s138" > "$OUT/rimisura.done"; exit 9; }
+< # S-139 (criterio p.3): finestra protetta — il lock è della SESSIONE, qui
+---
+> [ "$(shasum -a 256 "$PHPR" | cut -c1-16)" = "a89faf32c62142f9" ] || { echo "rc=9 pin!=s145" > "$OUT/rimisura.done"; exit 9; }
+> # S-147 (criterio p.3): finestra protetta — il lock è della SESSIONE, qui
+108c108
+< print("rimisura-s139 (user CPU; pavimenti PARZIALI phpunit --version: orm o=%.3f p=%.3f · dbal o=%.3f p=%.3f)" % (fo, fp, dfo, dfp))
+---
+> print("rimisura-s147 (user CPU; pavimenti PARZIALI phpunit --version: orm o=%.3f p=%.3f · dbal o=%.3f p=%.3f)" % (fo, fp, dfo, dfp))
+132c132
+< { echo "== s139 rimisura dbal+ORM (pin s138 fa17dabd vs oracle 8.5.7; criterio s139-criterio-rimisura.md) =="
+---
+> { echo "== s147 rimisura dbal+ORM (pin s145 a89faf32 vs oracle 8.5.7; criterio s147-criterio-orm.md) =="
