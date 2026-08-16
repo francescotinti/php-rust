@@ -27,6 +27,10 @@ null-lever = ["php-runtime/null-lever"]
 # S-145 sonda-B lato prezzi: SOLO il builtin __phpr_sonda_b, nessuna census
 # (wp145-harness/s145-sonda-b-modello.md). Probe build, mai parità.
 sonda-price = ["php-runtime/sonda-price"]
+# S-147 census unico ORM (concilio S-146): op-census per l'attribuzione dei
+# movimenti Zval al sito VM (righe s147mv/s147dg via mem-census). Solo
+# strumentazione — mai parità.
+op-census = ["php-runtime/op-census"]
 
 [dependencies]
 php-types.workspace = true

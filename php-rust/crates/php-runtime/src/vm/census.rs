@@ -426,6 +426,11 @@ impl OpCensus {
     /// stack (peeked defensively), `slots` its locals.
     pub fn record(&mut self, op: &Op, stack: &[Zval], slots: &[Zval]) {
         let i = op_index(op);
+        // S-147 census unico ORM: nota il sito al census dei MOVIMENTI
+        // (mem-census) PRIMA dell'esecuzione dell'handler — i cloni fatti
+        // dall'handler si attribuiscono a quest'op.
+        #[cfg(feature = "mem-census")]
+        php_types::memcensus::s147_note_dispatch(i as u16);
         self.ops[i] += 1;
         let prev = self.last;
         self.bigram[prev * N_OPS + i] += 1;
@@ -582,6 +587,10 @@ pub fn census_arm() -> bool {
         let mut c = c.borrow_mut();
         if c.is_none() {
             *c = Some(Box::new(OpCensus::new()));
+            // S-147: dà i NOMI ai siti del census movimenti (OnceLock:
+            // registrazioni successive sono no-op).
+            #[cfg(feature = "mem-census")]
+            php_types::memcensus::s147_register_names(&OP_NAMES);
         }
     });
     true

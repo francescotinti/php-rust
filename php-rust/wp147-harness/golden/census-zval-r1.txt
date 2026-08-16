@@ -1,0 +1,2 @@
+zvalcensus slot_reads=15 slot_reads_rc=5 slot_reads_avoided=0 would_take=4 would_take_rc=2 would_take_safe=4 would_take_safe_rc=2 would_take_safe_str=2 would_take_safe_ref=0 sites_total=3 sites_movable=2 sites_safe=2
+zvalcensus_s147 would_take_safe_arr=1 would_take_safe_obj=1

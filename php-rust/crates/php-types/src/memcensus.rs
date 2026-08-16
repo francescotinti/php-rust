@@ -227,6 +227,9 @@ fn dump_line(tag: &str) {
 
 extern "C" fn dump_exit() {
     dump_line("exit");
+    // S-147: righe per-sito/digramma dei movimenti (solo non-zero).
+    #[cfg(feature = "mem-census")]
+    s147_dump_lines();
     // WP-59 Ob.1: exit snapshot (win=0) — the cleanest fragmentation read:
     // channel live is exact here (recon reached==live), so per-bin
     // committed−used at this instant IS retention + non-censused standing.
@@ -1613,21 +1616,23 @@ static S145_CLONE_RCOTHER: AtomicU64 = AtomicU64::new(0);
 #[inline]
 pub fn s145_clone_note(v: &crate::Zval) {
     use crate::Zval;
-    let c = match v {
+    let (c, k) = match v {
         Zval::Undef | Zval::Null | Zval::Bool(_) | Zval::Long(_) | Zval::Double(_) => {
-            &S145_CLONE_SCALAR
+            (&S145_CLONE_SCALAR, 0)
         }
-        Zval::Str(_) => &S145_CLONE_STR,
-        Zval::Array(_) => &S145_CLONE_ARR,
-        Zval::Object(_) => &S145_CLONE_OBJ,
-        Zval::Ref(_) => &S145_CLONE_REF,
+        Zval::Str(_) => (&S145_CLONE_STR, 1),
+        Zval::Array(_) => (&S145_CLONE_ARR, 2),
+        Zval::Object(_) => (&S145_CLONE_OBJ, 3),
+        Zval::Ref(_) => (&S145_CLONE_REF, 4),
         Zval::Closure(_)
         | Zval::Generator(_)
         | Zval::Resource(_)
         | Zval::WeakHandle(_)
-        | Zval::ArgPlace(_) => &S145_CLONE_RCOTHER,
+        | Zval::ArgPlace(_) => (&S145_CLONE_RCOTHER, 5),
     };
     c.fetch_add(1, Relaxed);
+    // S-147: lo STESSO movimento, attribuito al sito/digramma del dispatch.
+    s147_mv_note(k);
 }
 
 /// Snapshot (scalar, str, arr, obj, ref, rcother) per la riga `s145` del dump.
@@ -1641,6 +1646,118 @@ pub fn s145_counters() -> (u64, u64, u64, u64, u64, u64) {
         S145_CLONE_REF.load(Relaxed),
         S145_CLONE_RCOTHER.load(Relaxed),
     )
+}
+
+// S-147 census unico ORM (concilio S-146, sintesi §Ordine p.1): attribuzione
+// di OGNI movimento Zval (impl Clone census-gated) al SITO VM corrente — l'op
+// del dispatch, notato da `OpCensus::record` PRIMA dell'esecuzione
+// dell'handler — più il DIGRAMMA (op precedente → op corrente) al momento del
+// movimento. La tabella dei nomi la registra il runtime quando arma l'op
+// census (PHPR_OP_CENSUS); senza arming ogni movimento cade nel sito
+// sentinella «outside» (dichiarato: il TOTALE resta esatto, è l'attribuzione
+// che degrada). TUTTO sotto `mem-census`: nel pin non esiste il simbolo.
+#[cfg(feature = "mem-census")]
+const S147_N_SITES: usize = 256;
+#[cfg(feature = "mem-census")]
+const S147_OUTSIDE: u16 = (S147_N_SITES - 1) as u16;
+#[cfg(feature = "mem-census")]
+static S147_MV: [[AtomicU64; 6]; S147_N_SITES] =
+    [const { [const { AtomicU64::new(0) }; 6] }; S147_N_SITES];
+#[cfg(feature = "mem-census")]
+static S147_DG: [AtomicU64; S147_N_SITES * S147_N_SITES] =
+    [const { AtomicU64::new(0) }; S147_N_SITES * S147_N_SITES];
+#[cfg(feature = "mem-census")]
+static S147_NAMES: std::sync::OnceLock<&'static [&'static str]> = std::sync::OnceLock::new();
+#[cfg(feature = "mem-census")]
+std::thread_local! {
+    static S147_SITE: std::cell::Cell<(u16, u16)> =
+        const { std::cell::Cell::new((S147_OUTSIDE, S147_OUTSIDE)) };
+}
+
+/// Registrata dal runtime quando arma l'op-census: la tabella OP_NAMES che dà
+/// il nome ai siti nel dump (dente: la tabella deve stare sotto la sentinella).
+#[cfg(feature = "mem-census")]
+pub fn s147_register_names(names: &'static [&'static str]) {
+    assert!(names.len() < S147_N_SITES, "OP_NAMES non entra nella tabella s147");
+    let _ = S147_NAMES.set(names);
+}
+
+/// Notata dal dispatch PRIMA dell'esecuzione dell'handler: i movimenti fatti
+/// dentro l'handler (builtins inclusi) si attribuiscono a `cur`; il digramma
+/// è (op precedente → cur) sullo stesso thread.
+#[cfg(feature = "mem-census")]
+#[inline]
+pub fn s147_note_dispatch(cur: u16) {
+    let cur = cur.min(S147_OUTSIDE);
+    S147_SITE.with(|c| {
+        let (_, old) = c.get();
+        c.set((old, cur));
+    });
+}
+
+#[cfg(feature = "mem-census")]
+#[inline]
+fn s147_mv_note(class_idx: usize) {
+    let (prev, cur) = S147_SITE.with(|c| c.get());
+    S147_MV[cur as usize][class_idx].fetch_add(1, Relaxed);
+    S147_DG[(prev as usize) * S147_N_SITES + cur as usize].fetch_add(1, Relaxed);
+}
+
+#[cfg(feature = "mem-census")]
+fn s147_site_name(i: usize) -> &'static str {
+    if i == S147_OUTSIDE as usize {
+        return "outside";
+    }
+    S147_NAMES.get().and_then(|n| n.get(i)).copied().unwrap_or("?")
+}
+
+/// Righe `s147mv`/`s147dg` (solo non-zero, pid-prefixed) appese al file di
+/// `PHPR_MEM_CENSUS` a fine processo — il parser somma sui pid.
+#[cfg(feature = "mem-census")]
+fn s147_dump_lines() {
+    use std::io::Write;
+    let Ok(path) = std::env::var("PHPR_MEM_CENSUS") else { return };
+    let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) else {
+        return;
+    };
+    let pid = std::process::id();
+    for site in 0..S147_N_SITES {
+        let row: [u64; 6] = std::array::from_fn(|k| S147_MV[site][k].load(Relaxed));
+        let tot: u64 = row.iter().sum();
+        if tot == 0 {
+            continue;
+        }
+        let _ = writeln!(
+            f,
+            "s147mv pid={} site={} name={} scalar={} str={} arr={} obj={} ref={} rcother={} tot={}",
+            pid,
+            site,
+            s147_site_name(site),
+            row[0],
+            row[1],
+            row[2],
+            row[3],
+            row[4],
+            row[5],
+            tot,
+        );
+    }
+    for prev in 0..S147_N_SITES {
+        for cur in 0..S147_N_SITES {
+            let n = S147_DG[prev * S147_N_SITES + cur].load(Relaxed);
+            if n == 0 {
+                continue;
+            }
+            let _ = writeln!(
+                f,
+                "s147dg pid={} prev={} cur={} n={}",
+                pid,
+                s147_site_name(prev),
+                s147_site_name(cur),
+                n,
+            );
+        }
+    }
 }
 
 #[cfg(feature = "mem-census")]

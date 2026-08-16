@@ -1,0 +1,63 @@
+2,6c2,7
+< # s145-census-mv.sh — sonda-B lato CONTEGGI (movimenti per classe + note
+< # container) su SUITE ORM, monobinario census. Modello s145-sonda-b-modello.md;
+< # base DICHIARATA: wp144-harness/s144-census-tranche2.sh (adattamenti: chiavi
+< # s145.*, smoke anche sul dump zval per gcnote_cont, output in sonda-out/
+< # accanto ai prezzi per il parser unico). MAI cifra di tempo da qui.
+---
+> # s147-census-orm.sh — CENSUS UNICO ORM monobinario (criterio
+> # s147-criterio-census.md; concilio S-146 §Ordine p.1). Base DICHIARATA:
+> # wp145-harness/s145-census-mv.sh (adattamenti: PHPR_OP_CENSUS armato per
+> # l'attribuzione per-sito s147mv/s147dg, smoke sulle chiavi s147, output in
+> # census-out/, verdetto s147). Manifest s147-census-copia.diff (copia-gate).
+> # MAI cifra di tempo da qui.
+10c11
+< H="$REPO/wp145-harness"
+---
+> H="$REPO/wp147-harness"
+14,15c15,16
+< OUT="$H/sonda-out"; mkdir -p "$OUT"
+< VERD="$H/s145-census-mv.out"
+---
+> OUT="$H/census-out"; mkdir -p "$OUT"
+> VERD="$H/s147-census-verdetto.out"
+19,21c20,23
+< # smoke: chiavi s145 a esito ESATTO >=1 (ref/rcother FUORI smoke, dichiarato
+< # nel modello: in uno script minimo possono restare 0).
+< rm -f "$OUT/smoke-mem.txt" "$OUT/smoke-zval.txt"
+---
+> # smoke (criterio p.3): chiavi a esito ESATTO >=1 — s145.clone_*, s147mv
+> # LoadSlot, almeno un s147dg; zvalcensus_s147 PRESENTE (arr/obj possono
+> # restare 0 su script minimo: FUORI smoke, dichiarato).
+> rm -f "$OUT/smoke-mem.txt" "$OUT/smoke-zval.txt" "$OUT/smoke-op.txt"
+23c25,26
+<   "$CENSUS_PHPR" "$H/smoke145.php" > "$SP/smoke145.out" 2>&1
+---
+>   PHPR_OP_CENSUS="$OUT/smoke-op.txt" \
+>   "$CENSUS_PHPR" "$H/smoke147.php" > "$SP/smoke147.out" 2>&1
+29,30c32,36
+< v=$(sed -n 's/^zvalcensus_s145 gcnote_cont=\([0-9][0-9]*\)$/\1/p' "$OUT/smoke-zval.txt" | head -1)
+< [ -n "${v:-}" ] && [ "$v" -ge 1 ] || SMOKE_FAIL="$SMOKE_FAIL gcnote_cont=${v:-ASSENTE}"
+---
+> v=$(sed -n 's/^s147mv pid=[0-9]* site=[0-9]* name=LoadSlot .*tot=\([0-9][0-9]*\)$/\1/p' "$OUT/smoke-mem.txt" | head -1)
+> [ -n "${v:-}" ] && [ "$v" -ge 1 ] || SMOKE_FAIL="$SMOKE_FAIL s147mv.LoadSlot=${v:-ASSENTE}"
+> v=$(grep -c '^s147dg pid=' "$OUT/smoke-mem.txt" || true)
+> [ "${v:-0}" -ge 1 ] || SMOKE_FAIL="$SMOKE_FAIL s147dg=${v:-0}"
+> grep -q '^zvalcensus_s147 ' "$OUT/smoke-zval.txt" || SMOKE_FAIL="$SMOKE_FAIL zvalcensus_s147=ASSENTE"
+34c40
+< p "smoke PASS (s145.* vivi)"
+---
+> p "smoke PASS (s145.* + s147mv/s147dg/zvalcensus_s147 vivi)"
+42a49
+>   RAWO="$OUT/census-op-r$rep.txt"; rm -f "$RAWO"
+45c52,53
+<   PHPR_MEM_CENSUS="$RAW" PHPR_ZVAL_CENSUS="$RAWZ" "$CENSUS_PHPR" vendor/bin/phpunit --no-coverage > "$OUT/run$rep.txt" 2>&1 &
+---
+>   PHPR_MEM_CENSUS="$RAW" PHPR_ZVAL_CENSUS="$RAWZ" PHPR_OP_CENSUS="$RAWO" \
+>     "$CENSUS_PHPR" vendor/bin/phpunit --no-coverage > "$OUT/run$rep.txt" 2>&1 &
+61,62c69,70
+< { echo "== s145 census MOVIMENTI (clone per classe + gcnote_cont) su SUITE ORM (modello s145-sonda-b-modello.md — CONTEGGI, mai tempo) =="
+<   echo "grade=CENSUS  # monobinario census; la partizione la fa s145-partition.py (golden-tested)"
+---
+> { echo "== s147 CENSUS UNICO ORM (per-sito/digrammi + ponte + F1 take-per-tipo) — criterio s147-criterio-census.md — CONTEGGI, mai tempo =="
+>   echo "grade=CENSUS  # monobinario census; l'aggregazione la fa s147-parse.py (golden-tested)"

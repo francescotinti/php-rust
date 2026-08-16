@@ -62,6 +62,13 @@ pub static WOULD_TAKE_SAFE_STR: AtomicU64 = AtomicU64::new(0);
 pub static WOULD_TAKE_SAFE_REF: AtomicU64 = AtomicU64::new(0);
 /// Siti che restano movibili sotto il perimetro F2.
 pub static SITES_SAFE: AtomicU64 = AtomicU64::new(0);
+/// S-147 take-per-tipo (concilio S-146, sintesi §Ordine p.1-iii): i
+/// sottoinsiemi ARRAY e OBJECT di [`WOULD_TAKE_SAFE`] — con `_STR`/`_REF`
+/// completano la separazione per tipo di ciò che un take eviterebbe
+/// (scioglie il conflitto 0,21 vs 0,4 s sul take-str; il veto semantico
+/// KS-146-4 sui container resta: questi sono SOLI conteggi).
+pub static WOULD_TAKE_SAFE_ARR: AtomicU64 = AtomicU64::new(0);
+pub static WOULD_TAKE_SAFE_OBJ: AtomicU64 = AtomicU64::new(0);
 
 std::thread_local! {
     /// Cache per-funzione dell'analisi di ultimo uso. Chiave: (indirizzo della
@@ -109,6 +116,13 @@ pub fn note_slot_load_site(func: &crate::bytecode::Func, ip: usize, cell: &Zval)
             // A-MS-97-1: il buco che la rinuncia statica non vede.
             if matches!(cell, Zval::Ref(_)) {
                 WOULD_TAKE_SAFE_REF.fetch_add(1, Ordering::Relaxed);
+            }
+            // S-147 take-per-tipo: container, SOLI conteggi (KS-146-4).
+            if matches!(cell, Zval::Array(_)) {
+                WOULD_TAKE_SAFE_ARR.fetch_add(1, Ordering::Relaxed);
+            }
+            if matches!(cell, Zval::Object(_)) {
+                WOULD_TAKE_SAFE_OBJ.fetch_add(1, Ordering::Relaxed);
             }
         }
     }
@@ -386,6 +400,14 @@ pub fn dump_exit() {
         );
         // S-140: riga contatori hint-check (leva HC1) — riga NUOVA.
         let _ = writeln!(f, "{}", dump_line_s140());
+        // S-147: take-per-tipo (riga NUOVA; le righe storiche restano
+        // byte-identiche — arr/obj accanto a str/ref della riga storica).
+        let _ = writeln!(
+            f,
+            "zvalcensus_s147 would_take_safe_arr={} would_take_safe_obj={}",
+            WOULD_TAKE_SAFE_ARR.load(Ordering::Relaxed),
+            WOULD_TAKE_SAFE_OBJ.load(Ordering::Relaxed),
+        );
         // S-142: contatori del meccanismo L-RD1 — riga NUOVA, SOLO quando la
         // build monta anche mem-census (i simboli non esistono altrimenti).
         #[cfg(feature = "mem-census")]
