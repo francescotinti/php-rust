@@ -1,7 +1,7 @@
 //! S-145 (az.rev. S-144 #4): dente CI sul funnel `zcell`. La rettifica del
 //! revisore S-144 ha stabilito che il tipo di `zcell` vincola i SITI
-//! CONVERTITI, non impedisce a un sito nuovo di chiamare
-//! `Rc::new(RefCell::new(zval))` direttamente — la chiusura resta ricerca
+//! CONVERTITI, non impedisce a un sito nuovo di comporre `Rc::new` con
+//! `RefCell::new(zval)` direttamente — la chiusura resta ricerca
 //! esaustiva. Questo ratchet la rende meccanica: ogni occorrenza del pattern
 //! fuori da `php-types/src/zval.rs` (il funnel) sta nell'allowlist con il suo
 //! conteggio ESATTO e il payload dichiarato (Object/Resource/GenState o
