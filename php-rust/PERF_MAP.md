@@ -1,7 +1,11 @@
 # PERF_MAP — phpr vs PHP oracle 8.5.7, mappa multi-workload
 
-Aggiornata: **2026-08-16 (S-145)** · pin phpr **s145 a89faf32** + server
-**s145 4a9adc51** (leva **L-FR1 «dim-read fuso a chiave costante» SPEDITA**:
+Aggiornata: **2026-08-16 sera (S-146)** · pin phpr **s145 a89faf32** + server
+**s145 4a9adc51** (invariato; S-146 = coppia WP saldata + concilio B3 +
+guardia dimrmw: **regressione FR1 CONFERMATA +3,00 ns/iter su m-dimrmw 10×,
+5/5, soglia 1,33 ⇒ leva FR1 in ISTRUTTORIA — dimread resta;** verdetto
+`wp146-harness/s146-ab-dimrmw-verdetto.out`; deliberato concilio VINCOLANTE
+in `wp146-harness/concilio/sintesi.md`) (leva **L-FR1 «dim-read fuso a chiave costante» SPEDITA**:
 peephole `PropGetSlot;PushConst(k);FetchDim` → `PropDimGetConst` in place,
 PropIc condivisa, composito intatto come fallback per costruzione; hit =
 elemento through-borrow, l'`Rc<PhpArray>` della prop NON viene clonato.
@@ -43,8 +47,8 @@ cifre dai verdetti `.out`. Regola di lettura: rapporti PER workload, MAI aggrega
 
 | workload | rapporto phpr/oracle | N | note |
 |---|---|---|---|
-| **WordPress full-suite** | **ON-ONLY CANONICO 1,765–1,788** (S-142 @ **pin s142**; N=5 coppie proprie PULITE, leg6 SEGNALATA esclusa; COMPATIBILE col rif S-140 1,765–1,777 su banda_ON 0,033 — attesa FERMO rispettata, L-RD1 non muove WP; **banda_ON canonica post-S-142 = 0,036 (max-min UNIONE S-139+S-140+S-142)**, finestra propria 0,023) | **5/6 gambe pulite** (t1) | S-142 @ s142; parità per NOME 6/6 (solo `wp_is_stream #2`); **BISEZIONE PEAK (criterio p.5): esito MISTO ⇒ NESSUNA firma** (lettura pre-registrata; **rett. revisore S-142: il «due ipotesi refutate» iniziale era OLTRE il verdetto** — leg5–6 basse arrivano DOPO l'inserzione, che resta possibile causa RITARDATA). Osservati due livelli ~1740–1750 vs ~1836–1850 (salto ~95 MiB); **replica peak-only SENZA inserzione PRIMA di ogni sonda** (az.rev. #2); verdetto `wp142-harness/s142-pair-verdetto-t1.out` |
-| **WordPress gruppo media** | **2,463–2,524 CANONICA user-only** (S-142 @ s142, 5 gambe pulite; companion 2,407–2,484; leg5 2,524 sopra il tetto S-140 2,479 di 0,045 — osservativo, gamba con ictx ELEVATA annotata) | 5 | S-142 @ s142 |
+| **WordPress full-suite** | **ON-ONLY CANONICO 1,733–1,823** (S-146 @ **pin s145**; N=6 coppie proprie, **6/6 PULITE**; COMPATIBILE col rif S-142 1,765–1,788 su banda_ON 0,036 — attesa FERMO rispettata, L-FR1 non muove WP; **banda finestra 0,090 INEDITA (3–7× le precedenti) con zero gambe sporche ⇒ banda_ON canonica post-S-146 = 0,090 (unione 4 finestre) — APERTURA: capirla prima di usarla come banda di merito**) | **6/6 gambe pulite** (t1) | S-146 @ s145; parità per NOME 6/6 (solo `wp_is_stream #2`); **REPLICA PEAK SENZA inserzione (az.rev. S-142 #2 SALDATA): esito MISTO ⇒ nessuna firma**; pattern S-140 (leg1 bassa) NON riprodotto; osservata DERIVA DISCENDENTE gambe tarde 1843→1831→1808→1773 correlata ai rapporti (leg6 min su peak E rapporto); verdetto `wp146-harness/s146-pair-verdetto-t1.out` (storico S-142: bimodale 1744–1850, verdetto `wp142-harness/s142-pair-verdetto-t1.out`) |
+| **WordPress gruppo media** | **2,460–2,547 CANONICA user-only** (S-146 @ s145, 6 gambe pulite; companion 2,391–2,491; leg5 2,547 di NUOVO la massima — ricorrenza osservativa: S-142 leg5 2,524) | 6 | S-146 @ s145 |
 | **symfony http-foundation** (1854) | **2,547–2,559** (raw 2,55–2,57) | 2/lato | S-126; canonica sul CONTEGGIO diff 17 nomi = 0,92% ≤1% (≥3 nomi sono unit puri, NON famiglia `php -S` — emenda S-127); sys alto (I/O) |
 | **symfony http-kernel** (1665 test) | **4,29–4,32** | 2/lato | parità 0E/0F; contesa ok |
 | **doctrine/collections** (242) | **8,22 net** (raw 6,20) | 2/lato | S-126; INDICATIVA: oracle netto 0,09 s (denominatore sotto-scala); parità 0/0 |
