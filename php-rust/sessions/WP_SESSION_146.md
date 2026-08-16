@@ -11,7 +11,8 @@ un cammino vicino ed entra in istruttoria senza perdere il suo guadagno.
 **SCOREBOARD** (pin s145 a89faf32+4a9adc51 INVARIATO): **arith 5,5 → ·
 prop 5,5 → · calls 4,8 → · str 4,3 → · arr 3,2 → · re 2,5 →** (micro NON
 rimisurate: pin invariato; dimread 4,3, hintcall 7,3 n.r.) · **WP full
-ON-ONLY 1,733–1,823 NUOVO rif (S-146 @ s145, N=6 6/6 pulite)** · media
+on-only 1,733–1,823 (S-146 @ s145, N=6 6/6 pulite) — FERMO MARGINALE per
+0,001, replica t2 dovuta; rif canonico RESTA 1,765–1,788/0,036 (rev. az.2)** · media
 2,460–2,547 · **leve perf spedite: 0 — ANOMALIA DICHIARATA** (sessione
 ordinata dall'utente su coppia+concilio+az.rev.; A/B eseguito = guardia
 dimrmw 10×) · incidenti 16 (=).

@@ -1,6 +1,7 @@
 # NEXT_SESSION — phpr: OBIETTIVO PARITÀ (≥1×) con l'oracle; ≤3× = tappa (REGOLE §1)
-⏱ **FONDAMENTALI**: rif WP **1,733–1,823 (S-146 @ s145; banda_ON unione
-0,090 — INEDITA, apertura)** · **⚖️ S-146: CONCILIO B3 DELIBERATO 9/9 —
+⏱ **FONDAMENTALI**: rif WP **resta 1,765–1,788 (S-142) su banda 0,036
+CONGELATA** — S-146 @ s145: 1,733–1,823 **COMPATIBILE MARGINALE (FERMO per
+0,001 su leg1 ELEVATA; replica t2 DOVUTA; spread 0,090 = apertura)** · **⚖️ S-146: CONCILIO B3 DELIBERATO 9/9 —
 verbali `wp146-harness/COUNCIL_S146_REVIEWS.md` + `concilio/sintesi.md`
 VINCOLANTI per il design S-147: borrow-first/FR1-ext PRIMA, TakeSlot
 RETROCESSO (3 condizioni), arena-conteggi ARCHIVIATA, census unico ORM,
@@ -35,7 +36,14 @@ ns/iter 5/5 · prezzi pair zcell/arr0 DECLASSATI a INDIZIO (KS-146-6).
 3. **Fixture bilaterali (Pedersen R1) + gate STOP allargato** (weakrefs/
    destructor/generators/references): pre-condizione di ogni fetta che
    CONSUMA (7 nomi fx-* nella sintesi §Ordine p.3).
-4. Coppia WP: NON dovuta (pin invariato); dovuta a OGNI pin nuovo.
+4. **Az.rev. S-146 (VINCOLANTI, wp146-harness/revisione.md)**: #1 replica
+   coppia t2 @ s145 PRIMA di ogni uso di banda/rif nuovi (margine ≤1 tick ⇒
+   «marginale, replicato») · #2 banda canonica CONGELATA a 0,036 + criterio
+   pre-registrato per aggiornamenti di banda · #3 test ordinato
+   pre-registrato deriva peak↔rapporto · #4 istruttoria FR1: leva vs layout
+   (mutante a parità di layout + disasm) prima di ogni revert · #5 coppia
+   ORM rimisurata @ s145 PRIMA del census (denominatori KS-146-1).
+5. Coppia WP di pin: NON dovuta (pin invariato); dovuta a OGNI pin nuovo.
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
 banda_ON finestra 0,090 da capire (prima di usarla come banda di merito) ·
