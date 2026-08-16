@@ -1,0 +1,59 @@
+== s148 census ATTRIBUZIONE per TAG (other 57,9% / tranche-3) su SUITE ORM (criterio s148-criterio-attrib.md — CONTEGGI, mai tempo) ==
+grade=CENSUS  # monobinario census; l'aggregazione la fa s148-parse.py (golden-tested)
+census_phpr=162c736886491288  # probe build, MAI parita'
+rep1 run_rc=2 raw=census-mem-r1.txt
+rep2 run_rc=2 raw=census-mem-r2.txt
+parita' per NOME vs baseline16: rc=0 (0=entrambe ==)
+--- sentinelle (non-gate, S-143 p.1) ---
+rep1 pre=BUSY
+rep1 post=BUSY
+rep2 pre=BUSY
+rep2 post=BUSY
+summary rep1: Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, Skipped: 59, Incomplete: 2.
+summary rep2: Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, Skipped: 59, Incomplete: 2.
+--- ANALISI s148-parse.py (appesa post-run; parser committato d59b2b5, golden 10/10) ---
+r1: str.cum_n=129933702 arr.cum_n=28431596 obj.cum_n=3265745 s143.arrbuf_n=15818775 s143.propsbuf_n=3219798 s143.galloc_n=467817555 s143.gfree_n=465376787 s144.rczval_n=4738276 s144.rczval_prop_n=0 s144.vecargs_n=13141064 s144.grealloc_n=19495956 s144.objsynth_n=48
+r2: str.cum_n=129933702 arr.cum_n=28431596 obj.cum_n=3265745 s143.arrbuf_n=15818775 s143.propsbuf_n=3219798 s143.galloc_n=467817556 s143.gfree_n=465376788 s144.rczval_n=4738276 s144.rczval_prop_n=0 s144.vecargs_n=13141064 s144.grealloc_n=19495955 s144.objsynth_n=48
+r1_identita: galloc_n=467817560 sum_tag_n=467817560 OK
+r2_identita: galloc_n=467817561 sum_tag_n=467817561 OK
+replica none.n: r1=129299428 r2=129299585 delta=0.000%
+replica none.attr: r1=34714385 r2=34714385 delta=0.000%
+replica none.b: r1=10517619430 r2=10517978943 delta=0.003%
+replica frame.n: r1=2991528 r2=2991528 delta=0.000%
+replica frame.attr: r1=0 r2=0 delta=0.000%
+replica frame.b: r1=262121968 r2=262121968 delta=0.000%
+replica hostcall.n: r1=325417065 r2=325416752 delta=0.000%
+replica hostcall.attr: r1=159833568 r2=159833568 delta=0.000%
+replica hostcall.b: r1=18027055832 r2=18026337951 delta=0.004%
+replica gc.n: r1=360765 r2=360765 delta=0.000%
+replica gc.attr: r1=15 r2=15 delta=0.000%
+replica gc.b: r1=219085138 r2=219085138 delta=0.000%
+replica arrgrow.n: r1=9748774 r2=9748931 delta=0.002%
+replica arrgrow.attr: r1=4000988 r2=4000988 delta=0.000%
+replica arrgrow.b: r1=639025728 r2=639384690 delta=0.056%
+replica_worst: arrgrow.b 0.056%
+--- partizione galloc_n per TAG (media repliche; other = n - attr) ---
+tag none      n=   129299506 (27.64%) attr=    34714385 other=    94585121 (20.22%) bytes=10517799186
+tag frame     n=     2991528 ( 0.64%) attr=           0 other=     2991528 ( 0.64%) bytes=262121968
+tag hostcall  n=   325416908 (69.56%) attr=   159833568 other=   165583340 (35.39%) bytes=18026696891
+tag gc        n=      360765 ( 0.08%) attr=          15 other=      360750 ( 0.08%) bytes=219085138
+tag arrgrow   n=     9748852 ( 2.08%) attr=     4000988 other=     5747864 ( 1.23%) bytes=639205209
+--- ranking OTHER per tag (bersagli tranche-3; soglia INDIZIO p.7 = 24800000 eventi) ---
+other hostcall     165583340 (35.39% di galloc_n)  CANDIDATA sonda-prezzo
+other none          94585121 (20.22% di galloc_n)  CANDIDATA sonda-prezzo
+other arrgrow        5747864 ( 1.23% di galloc_n)  NON-bersaglio-solo (sotto soglia INDIZIO)
+other frame          2991528 ( 0.64% di galloc_n)  NON-bersaglio-solo (sotto soglia INDIZIO)
+other gc              360750 ( 0.08% di galloc_n)  NON-bersaglio-solo (sotto soglia INDIZIO)
+--- istogramma taglie per tag (media repliche) ---
+hist none      39404160,20480394,29634830,16200354,11667716,3253330,7691529,444752,288802,140705,92932  top: <=16:39404160 <=48:29634830 <=32:20480394
+hist frame     0,0,0,2231158,185330,56030,457344,52265,9400,1,0  top: <=64:2231158 <=256:457344 <=96:185330
+hist hostcall  98838937,20542846,107855713,17230063,32145041,13186198,34973954,551212,33972,43100,15872  top: <=48:107855713 <=16:98838937 <=256:34973954
+hist gc        121,41,12,359781,45,21,95,90,67,119,373  top: <=64:359781 >4096:373 <=16:121
+hist arrgrow   13,108145,0,9354688,10,285603,276,57,18,27,13  top: <=64:9354688 <=128:285603 <=32:108145
+
+--- LETTURA (criterio p.7-p.9) ---
+1. VALIDITA': identita' Sigma-tag==galloc_n ESATTA su entrambe le repliche (467.817.560/561); replica worst 0,056% (arrgrow.b) <=1%; parita' 16 nomi ==; contatori s144 tutti entro 1% (galloc_n 467,8M vs 471,3M s144 = -0,73%: workload identico confermato).
+2. ATTRIBUZIONE dell'other (269,3M eventi = 57,6% di galloc_n, conferma della cifra s144): hostcall 165,6M (61,5% dell'other; 35,39% di galloc_n) > none/VM-inline 94,6M (35,1%) > arrgrow 5,7M > frame 3,0M > gc 0,36M. Il 69,56% di TUTTE le alloc grezze avviene nell'estensione dinamica dei builtin (attr inclusa): il traffico allocativo e' dominato dai builtin, non dal VM-inline (27,6%).
+3. KILL PER CONTEGGI (p.7, soglia INDIZIO 24,8M eventi): i DUE candidati nominati della tranche-3 (concilio S-146/Leijen) muoiono al tavolo — growth hashbrown (arrgrow.other 5,7M = 0,23x soglia) e pool Frame (frame.other 3,0M = 0,12x soglia; la FramePool WP-30 gia' ricicla) NON possono essere bersaglio-solo nemmeno al prezzo pair alto; gc idem (0,36M). ZERO codice su questi tre.
+4. TESTA del ranking (p.8): hostcall.other 165,6M = 6,7x la soglia-conteggio = i «temp dei builtins» (il TERZO candidato nominato in s144 az.#2) -> bersaglio della sonda-PREZZO propria (il «poi prezzare»); SECONDA: none.other 94,6M VM-inline = 3,8x soglia. Shape (hist = n del tag INTERO, non other-only, DICHIARATO): hostcall dominata da <=48 B (107,9M) e <=16 B (98,8M).
+5. Nessuna leva si scrive su questo verdetto (p.8); cifre SEMPRE con qualifica «tetto su binario census»; le due convenzioni (tag-partizione vs eventi s144) si incrociano SOLO nel crosswalk attr dichiarato.
