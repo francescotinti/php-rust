@@ -1,79 +1,71 @@
 # NEXT_SESSION — phpr: OBIETTIVO PARITÀ (≥1×) con l'oracle; ≤3× = tappa (REGOLE §1)
-⏱ **FONDAMENTALI**: rif WP **resta 1,765–1,788 (S-142) su banda 0,036
-CONGELATA** — S-146 @ s145: 1,733–1,823 **COMPATIBILE MARGINALE (FERMO per
-0,001 su leg1 ELEVATA; replica t2 DOVUTA; spread 0,090 = apertura)** · **⚖️ S-146: CONCILIO B3 DELIBERATO 9/9 —
-verbali `wp146-harness/COUNCIL_S146_REVIEWS.md` + `concilio/sintesi.md`
-VINCOLANTI per il design S-147: borrow-first/FR1-ext PRIMA, TakeSlot
-RETROCESSO (3 condizioni), arena-conteggi ARCHIVIATA, census unico ORM,
-KS-146-1..7** · **FR1 in ISTRUTTORIA (regressione m-dimrmw CONFERMATA
-+3,0 ns/iter 5/5; dimread −28% resta)** · leve spedite S-146: 0
-(dichiarato: coppia+concilio+az.rev. su ordine utente) ·
+⏱ **FONDAMENTALI**: rif WP **resta 1,765–1,788 su banda 0,036 CONGELATA**
+(replica t2 ANCORA dovuta) · **ORM RIMISURATA @ s145 (S-147): 8,370–8,427
+net (↓ indicativa da 8,59–8,71 @ s138; leg1+oracle1 segnalate ictx) · dbal
+8,20–8,37** · **⚖️ S-147: KILL KS-146-1 SCATTATO — census unico ORM
+(repliche ESATTE, 367,55M == sonda): ponte slot-load 0,216 s < soglia
+0,293 s (0,74×) ⇒ ZERO codice borrow-first su slot; famiglia estesa 0,414 s
+(1,41×) ⇒ SOLO fette micro; TETTO canale movimenti 1,27 s (~3,4% del gap)
+⇒ B3/borrow NON è la scommessa di parità — SECONDO ATTO dichiarato: other
+57,9% + tranche-3 growth-alloc (Leijen)** · FR1 resta in ISTRUTTORIA
+(az.#4) · leve spedite S-147: 0 (dichiarato: census-ordinata) ·
 sessioni-senza-misura: 0 · incidenti 16 (=).
 
 ## Scoreboard (pin s145 phpr a89faf32c62142f9 + server 4a9adc51a62b21ba INVARIATO)
 **arith 5,5 · prop 5,5 · calls 4,8 · str 4,3 · arr 3,2 · re 2,5 · hintcall
-7,3 (n.r.) · dimread 4,3** (micro n.r. in S-146: pin invariato) · oggetti
-(s136): objchurn 6,7 · objmap 11,7 · MAPPA (net): WP **1,78 nuovo rif
-1,733–1,823** ≈ compoff 1,9 ≪ hf 2,55 ≪ hk 4,3 ≪ dbal 8,2 ≈ ORM 8,6 ·
-corpus **1414 ×2** · media 2,460–2,547 (leg5 max ricorrente) · **REPERTI
-S-146**: banda finestra 0,090 con 6/6 pulite · peak deriva discendente
-1843→1773 senza inserzione (MISTO, nessuna firma) · dimrmw 10×: +3,00
-ns/iter 5/5 · prezzi pair zcell/arr0 DECLASSATI a INDIZIO (KS-146-6).
+7,3 (n.r.) · dimread 4,3** (micro n.r. S-146/S-147: pin invariato) ·
+oggetti (s136): objchurn 6,7 · objmap 11,7 · MAPPA (net): WP 1,78 (rif
+1,765–1,788) ≈ compoff 1,9 ≪ hf 2,55 ≪ hk 4,3 ≪ **dbal 8,20–8,37 ≈ ORM
+8,370–8,427 (S-147 @ s145)** · corpus **1414 ×2** · media 2,460–2,547 ·
+**REPERTI S-147**: ranking siti senza testa dominante (LoadVar 15,9% max) ·
+take_str SAFE 0,029 s (stima 0,40 gonfiata 14×) · ponte 61,8M vs
+slot_reads 73,3M (fused Load* nominati) · CI ha mutex col measure-lock.
 
-## §S-147 — ordine (dal deliberato concilio, sintesi p.1-4)
-1. **CENSUS UNICO ORM monobinario** (criterio ≤10 righe + kill aritmetico
-   KS-146-1 PRE-registrati PRIMA dei dati): nella STESSA run (i) movimenti
-   per SITO/digramma × categoria (ranking bersagli borrow-first),
-   (ii) contatore-PONTE slot_reads↔movimenti + F1-liveness su ORM,
-   (iii) take-per-tipo (scioglie 0,21 vs 0,4 s). ×2 repliche r1==r2 ≤1%,
-   parità per NOME, denominatori dal sorgente; assorbe str-provenienza
-   (129,9M). Banda in SECONDI = conteggi × prezzi sonda (mai lo SCREEN).
-2. **FR1-ext borrow-first**: istruttoria sui bersagli GIÀ nominati (chiave
-   da SLOT `$o->d[$k]` pattern LoadSlot; famiglia FieldRead/isset),
-   protocollo L-FR1; PRIMA: istruttoria della regressione dimrmw (+3,0
-   confermata; indiziato layout run_loop +795 istr — disasm agli atti):
-   una fetta FR1-ext la spiega/riassorbe o la dichiara.
-3. **Fixture bilaterali (Pedersen R1) + gate STOP allargato** (weakrefs/
-   destructor/generators/references): pre-condizione di ogni fetta che
-   CONSUMA (7 nomi fx-* nella sintesi §Ordine p.3).
-4. **Az.rev. S-146 (VINCOLANTI, wp146-harness/revisione.md)**: #1 replica
-   coppia t2 @ s145 PRIMA di ogni uso di banda/rif nuovi (margine ≤1 tick ⇒
-   «marginale, replicato») · #2 banda canonica CONGELATA a 0,036 + criterio
-   pre-registrato per aggiornamenti di banda · #3 test ordinato
-   pre-registrato deriva peak↔rapporto · #4 istruttoria FR1: leva vs layout
-   (mutante a parità di layout + disasm) prima di ogni revert · #5 coppia
-   ORM rimisurata @ s145 PRIMA del census (denominatori KS-146-1).
+## §S-148 — ordine (dal kill S-147: il secondo atto)
+1. **Attribuzione `other` 57,9% + tranche-3 growth-alloc** (hashbrown +
+   pool Frame, Leijen CONCORRENTE in concilio S-146): census/attribuzione
+   con criterio ≤10 righe + soglie PRE-registrate (soglia kill in secondi
+   dai denominatori S-147: 0,7% ORM = 0,293 s); prima ATTRIBUIRE (chi sono
+   i 471,3M alloc-pair e l'other), poi prezzare, poi decidere la leva.
+   Strumento: classe census (l'apparato s147 è riusabile; alloc-hist/
+   free-hist già esistono in memcensus).
+2. **Az.rev. S-146 residue (VINCOLANTI)**: #1 replica coppia WP t2 @ s145
+   (dovuta PRIMA di ogni uso di banda/rif nuovi; margine ≤1 tick ⇒
+   «marginale, replicato») · #3 test ordinato pre-registrato deriva
+   peak↔rapporto (soglie prima dei dati).
+3. **Istruttoria FR1 dimrmw (az.#4)**: mutante a parità di layout + disasm
+   bl-count PRIMA di ogni revert (regressione +3,0 ns/iter confermata;
+   indiziato layout run_loop +795 istr).
+4. Fette micro FR1-ext (tier 1,41×) SOLO se pescate e SOLO micro-judged
+   (soglie REGOLE §3); nessuna scommessa suite sul canale movimenti.
 5. Coppia WP di pin: NON dovuta (pin invariato); dovuta a OGNI pin nuovo.
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
-banda_ON finestra 0,090 da capire (prima di usarla come banda di merito) ·
-deriva peak discendente senza inserzione · leg5 media max ricorrente ·
-attribuzione Zval-move dei memops (VOCE PROPRIA, unica via di riapertura —
-KS-146-6/R4-Gregg) · tranche-3 growth-alloc hashbrown + pool Frame
-(CONCORRENTE per la leva dopo, Leijen) · FR1-ext chiave-da-SLOT e famiglia
-FieldRead/isset (ora ORDINATE dal concilio) · cura §3.22 · media leg5
-2,524-2,547 (oss.) · depr. float→int · warning corsia ×2 · divergenze RMW ·
-objdatains residuo · objmap 43,4 → piano GC · evalcls 316,9× · refl 42,4× ·
-re +2 alloc · §3.13 · §3.12-i · §3.14 · §3.21 · get_gc · drift TODO.md ·
-latin1-cliff · dbal 10 nomi.
+banda_ON finestra 0,090 da capire · deriva peak discendente senza inserzione · leg5 media max ricorrente · attribuzione Zval-move dei memops (VOCE PROPRIA — KS-146-6/R4-Gregg) · ORM ↓ 8,59→8,37 da confermare al prossimo pin (nessun A/B proprio) · cura §3.22 · depr. float→int · warning corsia ×2 · divergenze RMW · objdatains residuo · objmap 43,4 → piano GC · evalcls 316,9× · refl 42,4× · re +2 alloc · §3.13 · §3.12-i · §3.14 · §3.21 · get_gc · drift TODO.md · latin1-cliff · dbal 10 nomi.
 
 ## NON riproporre (i veti restano; dettaglio nei concili archiviati)
-**S-146: TakeSlot senza le TRE condizioni della sintesi (residuo
-non-borrowable ≥ soglia + fixture verdi + sigilli Hoare R1–R3; comunque
-chiuso finché inc-dec ≤20% del churn) · arena-conteggi senza definizione
-≤1 pagina con giudice proprio · prezzi pair zcell/arr0 come budget
-(INDIZIO) · quota memops come giudice di fetta (KS-G3) · moltiplicatore
-SCREEN 4,5–6,5% (pensionato) · convenzioni slot_reads↔movimenti mescolate
-fuori dal ponte (KS-146-2).**
-**S-145: B1 uniform-rc / B2 root-at-decrement SENZA nuovo concilio · àncore di dente emendate con replace testuale · inventari su nomi VOLATILI senza normalizzazione · braccio di contrasto su target dir CONDIVISA.** **S-144: memops come bersaglio senza attribuzione Zval-move BILATERALE · denominatore `sample` coi thread PARCHEGGIATI.** **S-143: A come scritta RIFONDATA — ogni futura A = pool+refcount+handle-gen.**
-BOLT su Mach-O · NaN-boxing (niche GIÀ attiva) · threaded-dispatch · PGO sui giudici · verdetti su build emendata senza ri-banda · pin/stash senza collaudo-nell'atto · contenitori sul call path · differenze tra A/B distinti come cifra · componenti prezzate · magnitudine ripartita senza A/B proprio · «icache» NON-premessa · pre-filtro che tassa i freddi · guardie non-bersaglio BILATERALI · denominatori a memoria · output di run nel repo · rc di gate da pipe · tee/log pre-mkdir · admission sul dump intero · xctrace senza guardie disco · run pesanti come task · edit coi build in volo · promozione sotto banda · gate a soglia fissa senza banda · corpus-gate solo-nomi · strumentazione nei sorgenti del pin · leve micro senza banda v2 · alloc-removal senza modello del costo SOSTITUTIVO · probe senza riferimento vivo · ordine FISSO di misura · delta tra census di epoche diverse senza datare i raw · verdetti da script non committati · SSO inline · inline-array init+drain args · claim di ASSENZA oltre la risoluzione · smoke con fam-min > R · notti su PhpStr-full · guardie su giudici diversi dalle loro bande · misure con LSP in volo · F2 keys-scratch · quiescenza nello stesso comando del lancio · pattern quiescenza nell'argv · output TRACKED mossi da orchestratori · rumore-soglia = range PIENO · guardia senza banda propria · percentuale tra segmenti NON annidati senza zero-check · sed di copia su righe ESEGUIBILI · eccedenza sopra la parte modellata senza sonda · banda di guardia da strumento DIVERSO senza drop-1 · lock di finestra con trap EXIT altrui · staleness di lock a OROLOGIO · quiescenza a 2 campioni senza STREAK · abort multi-gamba senza retry · probe che rompe l'inlining · leva GC note-time (WP-21) · `git add` di directory harness · identità tra GIUDICI diversi come gate · gemello di relink senza conferma post-pin · cmp secco vs oracle su fixture CON divergenze a catalogo · giudice sotto-risoluto · stash post-batteria senza rebuild ricetta A′ · parser senza golden-test · byte-identità come gate di un edit .rs post-pin (S-142).
-**Riscritto** 2026-08-16 (chiusura S-146); storia in `sessions/` · `gaps/GAP_TREND.md`.
-Pre-flight S-147: pin phpr **s145 a89faf32**c62142f9 + server **s145
-4a9adc51**a62b21ba (INVARIATI da S-145; HEAD > sorgente-pin 4a968b7 ATTESO:
-doc post-pin; stash `phpr-old-target/release/phpr-s145`) · MySQL wp8 con
-l'elenco · uploads sotto guardia · corpus 1414 ×2 · CI feed · lock misura
+**S-147: borrow-first/FR1-ext su slot-load come scommessa suite (kill
+0,74× pre-registrato) · TakeSlot in OGNI forma (takeable SAFE 0,029 s,
+chiuso a fortiori su KS-M3) · leve sul canale movimenti oltre fette micro
+(tetto 1,27 s misurato).**
+**S-146: TakeSlot senza le TRE condizioni (comunque chiuso, sopra) ·
+arena-conteggi senza definizione ≤1 pagina · prezzi pair zcell/arr0 come
+budget (INDIZIO) · quota memops come giudice di fetta (KS-G3) ·
+moltiplicatore SCREEN (pensionato) · convenzioni slot_reads↔movimenti
+mescolate fuori dal ponte (KS-146-2).**
+**S-145: B1/B2 senza nuovo concilio · àncore di dente con replace testuale ·
+inventari su nomi VOLATILI · braccio di contrasto su target condivisa.**
+**S-144: memops come bersaglio senza attribuzione BILATERALE · denominatore
+`sample` coi thread PARCHEGGIATI.** **S-143: A rifondata = pool+refcount+
+handle-gen.**
+BOLT su Mach-O · NaN-boxing · threaded-dispatch · PGO sui giudici · verdetti su build emendata senza ri-banda · pin/stash senza collaudo-nell'atto · contenitori sul call path · differenze tra A/B distinti come cifra · componenti prezzate · magnitudine ripartita senza A/B proprio · «icache» NON-premessa · pre-filtro che tassa i freddi · guardie non-bersaglio BILATERALI · denominatori a memoria · output di run nel repo · rc di gate da pipe · tee/log pre-mkdir · admission sul dump intero · xctrace senza guardie disco · run pesanti come task · edit coi build in volo · promozione sotto banda · gate a soglia fissa senza banda · corpus-gate solo-nomi · strumentazione nei sorgenti del pin · leve micro senza banda v2 · alloc-removal senza modello del costo SOSTITUTIVO · probe senza riferimento vivo · ordine FISSO di misura · delta tra census di epoche diverse senza datare i raw · verdetti da script non committati · SSO inline · claim di ASSENZA oltre la risoluzione · misure con LSP in volo (sentinelle) · lock di finestra con trap EXIT altrui · staleness di lock a OROLOGIO · quiescenza a 2 campioni senza STREAK · probe che rompe l'inlining · `git add` di directory harness · gemello di relink senza conferma post-pin · giudice sotto-risoluto · stash post-batteria senza rebuild ricetta A′ · byte-identità come gate di un edit .rs post-pin (S-142).
+**Riscritto** 2026-08-16 (chiusura S-147); storia in `sessions/` · `gaps/GAP_TREND.md`.
+Pre-flight S-148: pin phpr **s145 a89faf32**c62142f9 + server **s145
+4a9adc51**a62b21ba (stash `phpr-old-target/release/phpr-s145`) · MySQL wp8
+con l'elenco · uploads sotto guardia · corpus 1414 ×2 · CI feed (mutex col
+measure-lock: la coda riparte a lock rimosso) · lock misura
 `/private/tmp/phpr-measure.lock` da CREARE a ogni finestra · Data ≥10G ·
-pgrep rust-analyzer prima di ogni misura (NON killarlo: il gate CPU
-arbitra) · lettura: REGOLE.md → QUI → wp146-harness/concilio/sintesi.md
-(deliberato+KS) → sessions/WP_SESSION_146.md → wp146-harness/revisione.md →
-PERF_MAP.md (verbali di sedia in COUNCIL_S146_REVIEWS.md al bisogno).
+pgrep rust-analyzer (NON killarlo: gate CPU/sentinelle arbitrano) ·
+lettura: REGOLE.md → QUI → wp147-harness/s147-census-verdetto.out →
+sessions/WP_SESSION_147.md → wp146-harness/concilio/sintesi.md (per il
+secondo atto) → PERF_MAP.md.
