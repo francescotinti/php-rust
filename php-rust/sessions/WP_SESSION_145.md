@@ -11,8 +11,9 @@ quella lettura ed è stata promossa a pin con tutti i gate verdi.
 **arith 5,5 → · prop 5,5 ↓ · calls 4,8 ↑ · str 4,3 ↑ · arr 3,2 → · re 2,5 ↓**
 (tutte entro 1 tick dai rif s142; hintcall 7,3 non rimis.; **dimread 4,3
 NUOVA** — era 6,0 pre-leva) · WP rif 1,765–1,788 (fermo; **coppia DOVUTA al
-pin nuovo → S-146 p.1**) · **leve perf spedite: 1 (L-FR1)** · incidenti 15
-(nessun nuovo).
+pin nuovo → S-146 p.1**) · **leve perf spedite: 1 (L-FR1; la revisione
+PROCESSO indebolisce le GUARDIE, non il D — az.rev. #2/#3 vincolanti)** ·
+**incidenti 16** (n.16 contato da rev. az.5: rc-da-pipe + braccio A).
 
 ## Esiti secchi
 1·**p.1 SONDA-B** (verdetto s145-sonda-b-verdetto.out; prezzi t2 record,
