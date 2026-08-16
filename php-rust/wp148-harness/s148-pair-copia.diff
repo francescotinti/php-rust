@@ -1,0 +1,91 @@
+2,10c2,10
+< # s146-pair.sh <tentativo> — S-146 p.1: coppia full/media WP sul pin s145 (OBBLIGO pin nuovo),
+< # criterio s132-criterio-pair.md RIUSATO INVARIATO + s146-criterio-pair.md
+< # (confronto formale col rif S-142 [1,765-1,788] su banda_ON canonica 0,036 UNIONE;
+< # REPLICA PEAK-ONLY p.5: NESSUNA inserzione — salda az.rev. S-142 #2).
+< # COPIA DICHIARATA di wp142-harness/s142-pair.sh (collaudo: copia-gate +
+< # manifest s146-pair-copia.diff) coi SOLI adattamenti: pin s145 (phpr+server);
+< # nomi s146/pair146/wp146-harness; header del giudice aggiornato; rif
+< # S-142+banda 0,036; RIMOZIONE del blocco REWARMUP tra leg3 e leg4 (az.rev.
+< # S-142 #2: replica peak-only SENZA inserzione) e del suo tag nel giudice.
+---
+> # s148-pair.sh <tentativo> — S-148 p.2: replica coppia full/media WP @ pin s145
+> # (az.rev. S-146 #1), criterio s132-criterio-pair.md RIUSATO INVARIATO +
+> # s146-criterio-pair.md EREDITATO INVARIATO + s148-criterio-t2.md (confronto
+> # formale col rif S-142 [1,765-1,788] su banda_ON canonica 0,036; test ordinato
+> # DERIVA p.4 pre-registrato, az.rev. S-146 #3, OSSERVATIVO).
+> # COPIA DICHIARATA di wp146-harness/s146-pair.sh (collaudo: copia-gate +
+> # manifest s148-pair-copia.diff) coi SOLI adattamenti: nomi s148/pair148/
+> # wp148-harness; header del giudice aggiornato; blocco DERIVA appeso al
+> # giudice (Spearman rho_A/rho_B, soglie 0,829 PRIMA dei dati t2).
+14c14
+< # rc autoritativo = SOLO pair-out/pair146-<tentativo>.done scritto QUI.
+---
+> # rc autoritativo = SOLO pair-out/pair148-<tentativo>.done scritto QUI.
+18c18
+< H="$REPO/wp146-harness"
+---
+> H="$REPO/wp148-harness"
+21c21
+< T="${1:?tentativo (es. t1)}"
+---
+> T="${1:?tentativo (es. t2)}"
+23c23
+< VERD="$H/s146-pair-verdetto-$T.out"
+---
+> VERD="$H/s148-pair-verdetto-$T.out"
+28c28
+< DONE="$OUT/pair146-$T.done"
+---
+> DONE="$OUT/pair148-$T.done"
+132c132
+< # per gamba (ictx% della mediana del motore, rank CPU oracle).
+---
+> # per gamba (ictx% della mediana del motore, rank CPU oracle) + DERIVA (s148 p.4).
+146,147c146,147
+< print(f"== s146 coppia WP full+media sul pin s145 tentativo={T} (criterio s132-criterio-pair.md RIUSATO + s146-criterio-pair.md; replica peak-only p.5 SENZA inserzione) ==")
+< print(f"grade=VERDICT  # derivazione meccanica dai .time; rc autoritativo = pair-out/pair146-{T}.done")
+---
+> print(f"== s148 replica coppia WP full+media sul pin s145 tentativo={T} (criterio s132-criterio-pair.md RIUSATO + s146-criterio-pair.md EREDITATO + s148-criterio-t2.md; az.rev. S-146 #1/#3) ==")
+> print(f"grade=VERDICT  # derivazione meccanica dai .time; rc autoritativo = pair-out/pair148-{T}.done")
+220c220
+<         REF_LO, REF_HI, BANDA = 1.765, 1.788, 0.036  # s146-criterio-pair.md p.3: rif S-142 on-only [1,765-1,788], banda_ON canonica 0,036 (UNIONE S-139+S-140+S-142; FUORI BANDA => nessun claim dal singolo tentativo, replica prima di ogni delta)
+---
+>         REF_LO, REF_HI, BANDA = 1.765, 1.788, 0.036  # s146-criterio-pair.md p.3 EREDITATO: rif S-142 on-only [1,765-1,788], banda_ON canonica 0,036 (UNIONE S-139+S-140+S-142; FUORI BANDA => nessun claim dal singolo tentativo, replica prima di ogni delta)
+243a244,279
+> # S-148 p.4 (az.rev. S-146 #3): test ordinato DERIVA peak<->rapporto —
+> # soglie PRE-REGISTRATE in s148-criterio-t2.md PRIMA dei dati t2;
+> # OSSERVATIVO, nessun gate. Spearman, N=6, critico 0,829 (alpha~0,05 unilat.).
+> def spearman(xs, ys):
+>     def rank(v):
+>         s = sorted(range(len(v)), key=lambda i: v[i])
+>         r = [0.0]*len(v)
+>         i = 0
+>         while i < len(s):
+>             j = i
+>             while j+1 < len(s) and v[s[j+1]] == v[s[i]]:
+>                 j += 1
+>             for k in range(i, j+1):
+>                 r[s[k]] = (i+j)/2 + 1
+>             i = j+1
+>         return r
+>     rx, ry = rank(xs), rank(ys)
+>     mx, my = sum(rx)/len(rx), sum(ry)/len(ry)
+>     num = sum((a-mx)*(b-my) for a, b in zip(rx, ry))
+>     dx = sum((a-mx)**2 for a in rx) ** 0.5
+>     dy = sum((b-my)**2 for b in ry) ** 0.5
+>     return num/(dx*dy) if dx and dy else 0.0
+> if len(clean) == 6:
+>     idx = [legs.index(l)+1 for l in clean]
+>     pks = [pk[l] for l in clean]
+>     rats = [pcs[l]/ocs[l] for l in clean]
+>     ra = spearman(idx, pks)
+>     rb = spearman(pks, rats)
+>     ca = ("DERIVA DISCENDENTE confermata" if ra <= -0.829 else
+>           ("DERIVA ASCENDENTE (opposta)" if ra >= 0.829 else "nessuna firma di deriva"))
+>     cb = ("ACCOPPIAMENTO peak<->rapporto confermato" if rb >= 0.829 else "accoppiamento NON confermato")
+>     print(f"deriva_test (s148 p.4, N=6 critico 0,829): rho_A(leg,peak)={ra:.3f} -> {ca}; rho_B(peak,rapporto)={rb:.3f} -> {cb}")
+>     if ra <= -0.829 and rb >= 0.829:
+>         print("deriva_firma: stato discendente correlato al rapporto (OSSERVATIVA, nessun gate)")
+> else:
+>     print(f"deriva_test: gambe pulite N={len(clean)} < 6 -> SOTTO-CAMPIONATO, nessuna soglia applicata (s148 p.4)")
