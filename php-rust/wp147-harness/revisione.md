@@ -29,8 +29,8 @@ ESTESA … 1,41x») e il deliberato. Il kill uccide il ponte, non la famiglia.
   restano sotto — verdetto invariato.
 - (e) take_str 7,4 M ⊂ ponte str (25,3 M); convenzioni tenute separate come
   da criterio p.7; 0,029 s ≪ soglia → «a fortiori» regge.
-- (f) Il 69,5% è la quota memcpy del ciclo per-movimento (KS-B4), non del
-  gap; sintesi (tetto 1,52 s) e census (1,27 s) coerenti: nessuna confusione.
+- (f) Il 69,5% è quota memcpy per-movimento (KS-B4), non del gap; tetto
+  1,52 s e census 1,27 s coerenti.
 
 ## Azioni S-148
 1. Riformulare il claim a verbale: kill sul PONTE; FR1-ext resta in fascia
