@@ -122,6 +122,9 @@ fn visit_addrs(op: &mut Op, f: &mut impl FnMut(&mut Addr)) {
         | Op::IncDecSuperglobal { .. } | Op::FetchDimList { .. }
         | Op::LoadGlobals { .. } | Op::GlobalsDynAssign { .. }
         | Op::CoerceParam { .. } | Op::CheckArity { .. } | Op::IncDecSlot { .. }
+        // S-145 FR1: salto implicito ip+3, nessun campo Addr da rimappare
+        // (nasce a shrink, DOPO questo pass; classificato per il dente).
+        | Op::PropDimGetConst { .. }
         | Op::BindRef { .. } | Op::StaticStore { .. } | Op::StaticAlias { .. }
         | Op::PushRef { .. } | Op::MakeRef { .. } | Op::PushArgPlace { .. }
         | Op::BindRefTo { .. } | Op::BindRefToChecked { .. } | Op::DerefTop { .. }
@@ -381,6 +384,8 @@ fn bin_op_of(op: &Op) -> Option<BinOp> {
         | Op::Jump { .. } | Op::JumpIfFalse { .. } | Op::JumpIfTrue { .. }
         | Op::CmpJmp { .. } | Op::CmpJmpConst { .. } | Op::BinarySS { .. }
         | Op::BinarySSDst { .. } | Op::BinarySC { .. } | Op::BinarySCDst { .. }
+        // S-145 FR1: forma fusa post-pass, le finestre non la fondono.
+        | Op::PropDimGetConst { .. }
         | Op::BinaryDst { .. } | Op::BinarySTDst { .. } | Op::BinaryTC { .. }
         | Op::BinarySCSC { .. } | Op::IncDecSlotPop { .. } | Op::IncDecSlotJmp { .. }
         | Op::PropGetSlot { .. } | Op::PropSetPop { .. } | Op::StringifySlot { .. }

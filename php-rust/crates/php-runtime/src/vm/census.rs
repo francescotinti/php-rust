@@ -13,7 +13,7 @@ use crate::bytecode::Op;
 use crate::hir::BinOp;
 use php_types::Zval;
 
-pub const N_OPS: usize = 199;
+pub const N_OPS: usize = 200;
 
 pub const OP_NAMES: [&str; N_OPS] = [
     "PushConst", "Pop", "Dup", "LoadSlot", "LoadVar", "PushUndef", "StoreSlot", "Swap",
@@ -45,6 +45,7 @@ pub const OP_NAMES: [&str; N_OPS] = [
     "PropGetSlotRecv", "BinaryTCPropSetPop", "BinarySCSCDst", "LoadVarPushConst",
     "ConcatNConst",
     "BinaryAdd",
+    "PropDimGetConst",
 ];
 
 pub fn op_index(op: &Op) -> usize {
@@ -268,6 +269,8 @@ pub fn op_index(op: &Op) -> usize {
         // EMENDAMENTO DICHIARATO S-109: offset +1 (N_OPS 198→199).
         Op::ConcatNConst { .. } => 197,
         Op::BinaryAdd => 198,
+        // S-145 FR1: dim-read fuso a chiave costante.
+        Op::PropDimGetConst { .. } => 199,
     }
 }
 

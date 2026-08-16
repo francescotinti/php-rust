@@ -168,6 +168,13 @@ fn effect(op: &Op, park_targets: &[usize]) -> Effect {
         Op::PropGetSlot { slot, .. } | Op::StringifySlot { slot } => {
             e.uses.push(*slot as u32)
         }
+        // S-145 FR1: legge lo slot; il salto implicito `ip+3` non è
+        // esprimibile come edge assoluto qui (effect non vede il pc) —
+        // conservativo: uses_all, il tool non specula oltre (misura-only).
+        Op::PropDimGetConst { slot, .. } => {
+            e.uses.push(*slot as u32);
+            e.uses_all = true;
+        }
         Op::IncDecSlotPop { slot, .. } => {
             e.uses.push(*slot as u32);
             e.defs.push(*slot as u32);
@@ -621,6 +628,7 @@ fn renounce(func: &Func) -> (bool, Bits) {
             | Op::IncDecSlotPop { .. }
             | Op::IncDecSlotJmp { .. }
             | Op::PropGetSlot { .. }
+            | Op::PropDimGetConst { .. }
             | Op::PropSetPop { .. }
             | Op::StringifySlot { .. }
             | Op::PropGetSlotRecv { .. }

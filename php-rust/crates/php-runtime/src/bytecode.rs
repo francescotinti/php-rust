@@ -686,6 +686,17 @@ pub enum Op {
     /// via `unit_slot_name`, then the exact PropGet entry (shared method,
     /// IC + fallback).
     PropGetSlot { slot: u16, name: Rc<[u8]>, ic: PropIc },
+    /// `[] -> [elem]` — S-145 «FR1»: fusione peephole del triplo
+    /// `PropGetSlot ; PushConst(key) ; FetchDim` a chiave COSTANTE
+    /// (criterio wp145-harness/s145-criterio-fr1.md). Sostituisce il
+    /// `PropGetSlot` IN PLACE e condivide la sua cella `PropIc`
+    /// (Rc-condivisa: il fill resta del composito). Su IC-hit con prop
+    /// Array (anche via Ref) e chiave Long/Str PRESENTE legge l'elemento
+    /// through-borrow — l'`Rc<PhpArray>` della prop non viene clonato —
+    /// e salta il composito (`ip+3`); su QUALSIASI miss esegue il braccio
+    /// `PropGetSlot` verbatim e cade nel composito intatto (fallback per
+    /// costruzione: magic, warning, string-offset, chiave assente).
+    PropDimGetConst { slot: u16, name: Rc<[u8]>, key: ConstIdx, ic: PropIc },
     /// `[obj, value] -> []` — fused `PropSet; Pop`: the assigned value is
     /// not pushed (the Pop discarded it). Every other effect — hooks,
     /// `__set`, typed/readonly enforcement, gc_note on the displaced value
@@ -1600,11 +1611,44 @@ impl Func {
         s
     }
 
+    /// S-145 «FR1» (criterio wp145-harness/s145-criterio-fr1.md): fusione
+    /// peephole del triplo `PropGetSlot ; PushConst(k) ; FetchDim` a chiave
+    /// Long/Str — il `PropGetSlot` è SOSTITUITO in place da
+    /// [`Op::PropDimGetConst`] con la STESSA cella `PropIc` (Rc-condivisa:
+    /// il fill resta del composito, che rimane intatto come fallback).
+    /// Nessuna inserzione/rimozione: gli indirizzi di salto non cambiano, e
+    /// un salto che atterrasse sul fuso produce lo stesso stato di stack del
+    /// triplo originale. Chiamata da [`Func::shrink`]: una volta per compile,
+    /// mai sul cammino di esecuzione.
+    fn fuse_prop_dim_reads(&mut self) {
+        for i in 0..self.ops.len().saturating_sub(2) {
+            let (Op::PropGetSlot { slot, name, ic }, Op::PushConst(k), Op::FetchDim) =
+                (&self.ops[i], &self.ops[i + 1], &self.ops[i + 2])
+            else {
+                continue;
+            };
+            if !matches!(
+                self.consts.get(*k as usize),
+                Some(Const::Int(_)) | Some(Const::Str(_))
+            ) {
+                continue;
+            }
+            let fused = Op::PropDimGetConst {
+                slot: *slot,
+                name: Rc::clone(name),
+                key: *k,
+                ic: ic.clone(),
+            };
+            self.ops[i] = fused;
+        }
+    }
+
     /// Release the push-growth capacity slack of every retained Vec (Fase 1.1,
     /// WP-48). Compiled modules are leaked for the life of the process
     /// (`Vm::drive_unit`), so slack bytes are retained bytes; runs once per
     /// compile ([`crate::compile`]), never on the execution path.
     pub fn shrink(&mut self) {
+        self.fuse_prop_dim_reads();
         self.ops.shrink_to_fit();
         self.lines.shrink_to_fit();
         self.consts.shrink_to_fit();

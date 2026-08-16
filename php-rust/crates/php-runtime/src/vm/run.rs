@@ -4378,6 +4378,57 @@ impl<'m> super::Vm<'m> {
                     let obj = self.reg_load_slot(top, func, *slot);
                     self.prop_get_entry(top, obj, name, ic)?;
                 }
+                Op::PropDimGetConst { slot, name, key, ic } => {
+                    // S-145 «FR1» (criterio s145-criterio-fr1.md): hit =
+                    // elemento letto through-borrow — l'`Rc<PhpArray>` della
+                    // prop NON viene clonato — e composito saltato (`ip+3`);
+                    // OGNI miss = braccio PropGetSlot verbatim, poi il
+                    // composito intatto che segue (fallback per costruzione:
+                    // magic, warning, string-offset, chiave assente, chiave
+                    // non-Long/Str). Condizioni IC VERBATIM da PropGetSlot;
+                    // guardie valore VERBATIM dal fast di FetchDim. Il
+                    // census propget_val NON vede questo hit (il valore
+                    // prop non è materializzato): dichiarato.
+                    let mut hit: Option<Zval> = None;
+                    if let Zval::Object(o) = &self.frames[top].slots[*slot as usize] {
+                        let sk = crate::bytecode::PropIc::scope_key(self.frames[top].class);
+                        if let Some((cid1, pslot)) = ic.get(sk) {
+                            let b = o.borrow();
+                            if b.class_id + 1 == cid1 && b.lazy.is_none() {
+                                if let Some(v) = b.props.get_slot(pslot) {
+                                    let read = |vv: &Zval| -> Option<Zval> {
+                                        let Zval::Array(a) = vv else { return None };
+                                        let kk = match &func.consts[*key as usize] {
+                                            crate::bytecode::Const::Int(i) => Key::Int(*i),
+                                            crate::bytecode::Const::Str(s) => Key::from_zstr(s),
+                                            _ => return None,
+                                        };
+                                        a.get(&kk).map(|e| e.deref_clone())
+                                    };
+                                    hit = match v {
+                                        Zval::Ref(cell) => read(&cell.borrow()),
+                                        other => read(other),
+                                    };
+                                }
+                            }
+                        }
+                    }
+                    if let Some(v) = hit {
+                        // ip PRIMA del flush: un handler che lancia deve
+                        // svolgersi dalla continuazione del triplo, come
+                        // nel FetchDim originale (trap #1: flush AT read).
+                        self.frames[top].ip = ip + 3;
+                        if self.diags_rendered < self.diags.len() {
+                            let line = self.cur_line(top);
+                            self.flush_diags(line)?;
+                        }
+                        let top = self.frames.len() - 1;
+                        self.frames[top].stack.push(v);
+                        continue;
+                    }
+                    let obj = self.reg_load_slot(top, func, *slot);
+                    self.prop_get_entry(top, obj, name, ic)?;
+                }
                 Op::PropGetSlotRecv { recv, slot, name, ic } => {
                     // S-108 lotto-2 W9a: LoadSlot ESATTO (push silente del
                     // ricevitore) poi PropGetSlot intero (parità warning +
