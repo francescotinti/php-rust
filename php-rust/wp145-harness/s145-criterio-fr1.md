@@ -1,0 +1,12 @@
+# s145-criterio-fr1 — leva FR1 «dim-read fuso a chiave costante» (PRE-REGISTRATO, commit prima di ogni A/B)
+
+1. Oggetto: peephole che SOSTITUISCE in place `PropGetSlot` nel triplo `PropGetSlot ; PushConst(k) ; FetchDim` con `PropDimGetConst` (stessa cella `PropIc`, Rc-condivisa): su IC-hit legge l'ELEMENTO through-borrow (l'`Rc<PhpArray>` della prop NON viene clonato: −1 movimento arr, ~3,8 ns lifecycle dalla sonda-B) e salta il composito (`ip+3`); su QUALSIASI miss esegue il braccio `PropGetSlot` verbatim e cade nel composito INTATTO — fallback per costruzione, magic/hook/warning inclusi. Apertura per NOME (PERF_MAP: FieldRead/dim-read IC, famiglia S-134/S-136 sbloccata); NON è filone conteggi B3 (nessun cambiamento di rappresentazione o di noting; il quesito conciliare resta intero).
+2. Attesa: D>0 su m-dimread (bersaglio). Ricognizione bilaterale agli atti: pin 60 ns/iter vs oracle 10 (pavimenti per-binario).
+3. Giudice: m-dimread.php NUOVO (3M iter, forma-famiglia m-dimrmw); A/B HEAD vs HEAD+leva, R=5 ABAB, user CPU netto-pavimento per-binario, mediana; smoke R=2 con early-stop a segno opposto.
+4. Soglia: max(4 ns/iter, rumore drop-1 simmetrico, banda-layout 0,67 — la leva tocca run_loop) ⇒ disasm bl-count su run_loop prima/dopo OBBLIGATORIO (lezione H-C2).
+5. Guardie non-bersaglio SOLO-REGRESSIONE (banda = drop-1 della propria serie): m-dimrmw, m-dimwrite (famiglia IC scritture: la cella è condivisa in lettura, il fill resta del composito), micro arr (wp97).
+6. Parità per run: stdout == oracle su ogni giudice e guardia (m-dimread: `42`).
+7. Esiti: smoke segno opposto ⇒ STOP leva a catalogo · D ≤ soglia a R=5 ⇒ leva misurata NON promossa (keep-partial-wins) · D > soglia e guardie verdi ⇒ catena promozione (batteria · corpus 1414×2 per NOME · ORM 3E/13F · fixture · micro R=5) in QUESTA o nella prossima sessione; nessuna promozione senza catena piena.
+8. Perimetro semantico dichiarato: la fusione muta SOLO l'ordine di materializzazione (elemento letto sotto borrow invece che da clone); ogni forma non-{Object, IC-hit, prop Array o Ref→Array, chiave Long/Str presente} passa dal composito; il flush dei diag pendenti resta AT the read (trap #1 FetchDim).
+9. Conteggi attesi (contesto, non gate): il pattern vive nelle letture a chiave letterale; census non richiesto per questa fetta (prezzo per-movimento già firmato dalla sonda-B).
+10. Probe/build: braccio B = build emendata worktree/HEAD+patch, MAI pinnabile; catena promo solo da script canonici.
