@@ -5,10 +5,10 @@ nessun claim, t3 DOVUTA; spread CROSS-finestra (0,090·0,020·unione 0,101)** ·
 ORM 8,370–8,427 / dbal 8,20–8,37 (S-147) · **⚖️ S-148 SECONDO ATTO COMPIUTO —
 census ATTRIBUZIONE per TAG (identità ESATTA ×2, repliche 0,056% worst,
 workload==s144): other 269,3M NOMINATO = hostcall 165,6M (61,5%; 6,7× soglia)
-+ none/VM-inline 94,6M (3,8×); KILL per CONTEGGI: growth-hashbrown 0,23×,
-pool-Frame 0,12×, gc — MORTI, zero codice** · FR1 in ISTRUTTORIA (az.#4
-slittata) · leve spedite S-148: 0 (dichiarato) · sessioni-senza-misura: 0 ·
-incidenti 16 (=).
++ none/RESIDUO 94,6M (3,8×; VM-inline+nativi host.rs+compile+iter, rett.
+rev.); KILL per CONTEGGI **AL PERIMETRO DEI TAG**: growth-hashbrown 0,23×,
+pool-Frame 0,12×, gc — MORTI** · FR1 (#4 slittata) · leve spedite S-148: 0
+(dichiarato) · sessioni-senza-misura: 0 · incidenti 16 (=).
 
 ## Scoreboard (pin s145 phpr a89faf32c62142f9 + server 4a9adc51a62b21ba INVARIATO)
 **arith 5,5 · prop 5,5 · calls 4,8 · str 4,3 · arr 3,2 · re 2,5 · hintcall
@@ -27,12 +27,13 @@ FramePool WP-30 già ricicla.
    come s148) → ranking dei builtin per alloc-other, teste NOMINATE.
 2. **Sonda-PREZZO pair COLLAUDATA** (monobinaria, churn 16–48 B, criterio con
    banda e giudice proprio): conteggi→secondi con prezzi PROPRI (zcell/arr0
-   INDIZIO, veto S-146); POI decisione leva sulla scala S-146 (≥2× soglia ⇒
-   scommessa ammessa). Candidate nominate (s148-anatomia-hostcall.md):
-   pop-diretti CallHostBuiltin · args-Vec user-call · corpi di testa (tr-4).
-3. **Replica coppia WP t3** (DEBITO): stesso harness s148-pair.sh (t3); il
-   test DERIVA (az.#3) si applica SOLO con N=6 pulite; a valle banda_ON da
-   RIFONDARE multi-finestra (unione t1+t2+t3), mai da finestra singola.
+   INDIZIO); POI decisione leva sulla scala S-146 (≥2× ⇒ scommessa ammessa).
+   Candidate nominate (s148-anatomia-hostcall.md): pop-diretti CallHostBuiltin
+   · args-Vec user-call · corpi di testa (tr-4). **S-149 DEVE tentare una
+   leva A/B vera (regola ritmo; rev. az.4)**.
+3. **Replica coppia WP t3** (DEBITO): stesso harness s148-pair.sh (t3);
+   PRIMA indagare l'ictx di leg1 (anomala t1+t2, rev. az.3); DERIVA solo con
+   N=6 pulite; banda_ON da RIFONDARE multi-finestra (t1+t2+t3), mai singola.
 4. **Istruttoria FR1 dimrmw** (az.#4, slittata ×2 — dichiarare se slitta):
    mutante a parità di layout + disasm bl-count PRIMA di ogni revert.
 5. Coppia WP di pin: NON dovuta (pin invariato); dovuta a OGNI pin nuovo.
@@ -46,10 +47,10 @@ divergenze RMW · objdatains residuo · objmap 43,4 → piano GC · evalcls
 · drift TODO.md · latin1-cliff · dbal 10 nomi · leg-max media ballerina.
 
 ## NON riproporre (i veti restano; dettaglio nei concili archiviati)
-**S-148: growth-hashbrown / pool-Frame / gc come bersaglio-solo (0,23× /
-0,12× / 0,36M) · conteggi→secondi coi prezzi zcell/arr0 come CIFRA (INDIZIO,
-mai record) · rif/banda nuovi PRIMA della t3 · hist per-tag letto come
-other-only (è sul tag intero).**
+**S-148: growth-hashbrown / pool-Frame / gc come bersaglio-solo AL PERIMETRO
+dei tag s148 (0,23×/0,12×/0,36M; rett. rev.: NON estendere il veto oltre) ·
+conteggi→secondi coi prezzi zcell/arr0 come CIFRA (INDIZIO, mai record) ·
+rif/banda nuovi PRIMA della t3 · hist per-tag come other-only (è sul tag).**
 **S-147: borrow-first sul PONTE slot-load (0,83×) · scommessa SUITE sul canale
 movimenti (tetto 1,27 s) · TakeSlot in OGNI forma. S-146: arena-conteggi senza
 definizione · prezzi pair come budget · quota memops come giudice (KS-G3) ·

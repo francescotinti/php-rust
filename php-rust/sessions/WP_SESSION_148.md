@@ -17,9 +17,9 @@ atto; sonda-prezzo = passo successivo del criterio p.8).
 1·**p.1 CENSUS ATTRIBUZIONE per TAG rc=0** (criterio+parser golden 10/10
   PRIMA; identità Σtag==galloc_n ESATTA ×2; repliche worst 0,056%; parità 16
   nomi; workload==s144 a −0,73%): other 269,3M = **hostcall 165,6M (61,5%)**
-  > none/VM-inline 94,6M > arrgrow 5,7M > frame 3,0M > gc 0,36M. **KILL per
-  conteggi (soglia INDIZIO 24,8M): growth-hashbrown 0,23×, pool-Frame 0,12×
-  (la FramePool WP-30 già ricicla), gc — MORTI, zero codice.** Il 69,6% di
+  > none/RESIDUO 94,6M > arrgrow 5,7M > frame 3,0M > gc 0,36M. **KILL per
+  conteggi (soglia 24,8M) AL PERIMETRO DEI TAG (rett. rev.): growth-hashbrown
+  0,23×, pool-Frame 0,12× (FramePool già ricicla), gc — MORTI.** Il 69,6% di
   TUTTE le alloc grezze avviene nell'estensione dinamica dei builtin.
 2·**Anatomia (INDIZIO)**: ~6,7 alloc non-attribuite per chiamata nei CORPI;
   plumbing nominato pop_keys/split_off (1 Vec a CallHostBuiltin, 11 siti —
