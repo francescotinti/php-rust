@@ -1,0 +1,96 @@
+2,10c2,10
+< # s142-pair.sh <tentativo> — S-142 p.2: coppia full/media WP sul pin s142 (OBBLIGO pin nuovo),
+< # criterio s132-criterio-pair.md RIUSATO INVARIATO + s142-criterio-pair.md
+< # (confronto formale col rif S-140 [1,765-1,777] su banda_ON 0,033 TERZA finestra;
+< # PEAK PER POSIZIONE: bisezione osservativa p.5 — reinserzione warm-up media tra leg3 e leg4).
+< # COPIA DICHIARATA di wp140-harness/s140-pair.sh (collaudo: copia-gate +
+< # manifest s142-pair-copia.diff) coi SOLI adattamenti: pin s142 (phpr+server);
+< # nomi s142/pair142/wp142-harness; header del giudice AGGIORNATO (fix
+< # dell'apertura «fix echo s140-pair.sh»: il vecchio testo diceva s139/s138);
+< # rif S-140+banda 0,033; blocco REWARMUP tra leg3 e leg4 (MAI giudicato).
+---
+> # s146-pair.sh <tentativo> — S-146 p.1: coppia full/media WP sul pin s145 (OBBLIGO pin nuovo),
+> # criterio s132-criterio-pair.md RIUSATO INVARIATO + s146-criterio-pair.md
+> # (confronto formale col rif S-142 [1,765-1,788] su banda_ON canonica 0,036 UNIONE;
+> # REPLICA PEAK-ONLY p.5: NESSUNA inserzione — salda az.rev. S-142 #2).
+> # COPIA DICHIARATA di wp142-harness/s142-pair.sh (collaudo: copia-gate +
+> # manifest s146-pair-copia.diff) coi SOLI adattamenti: pin s145 (phpr+server);
+> # nomi s146/pair146/wp146-harness; header del giudice aggiornato; rif
+> # S-142+banda 0,036; RIMOZIONE del blocco REWARMUP tra leg3 e leg4 (az.rev.
+> # S-142 #2: replica peak-only SENZA inserzione) e del suo tag nel giudice.
+14c14
+< # rc autoritativo = SOLO pair-out/pair142-<tentativo>.done scritto QUI.
+---
+> # rc autoritativo = SOLO pair-out/pair146-<tentativo>.done scritto QUI.
+18c18
+< H="$REPO/wp142-harness"
+---
+> H="$REPO/wp146-harness"
+23c23
+< VERD="$H/s142-pair-verdetto-$T.out"
+---
+> VERD="$H/s146-pair-verdetto-$T.out"
+28c28
+< DONE="$OUT/pair142-$T.done"
+---
+> DONE="$OUT/pair146-$T.done"
+37,38c37,38
+< PIN_ATTESO="bba8a7346d727e0e"
+< SRV_ATTESO="eeb284b681c4bf89"
+---
+> PIN_ATTESO="a89faf32c62142f9"
+> SRV_ATTESO="4a9adc51a62b21ba"
+113,114c113,114
+< # S-142 p.5: tra leg3 e leg4 REINSERZIONE del warm-up media (bisezione peak
+< # STATO vs POSIZIONE) — dichiarata, MAI giudicata, dietro gate di quiescenza.
+---
+> # S-146 p.5: NESSUNA inserzione tra le gambe (az.rev. S-142 #2: replica
+> # peak-only SENZA inserzione; i peak per gamba sono osservativi nel giudice).
+117,120d116
+<   if [ "$leg" = 4 ]; then
+<     quiesce_gate rewarmup
+<     warmup_media rewarmup
+<   fi
+150,151c146,147
+< print(f"== s142 coppia WP full+media sul pin s142 tentativo={T} (criterio s132-criterio-pair.md RIUSATO + s142-criterio-pair.md; bisezione peak p.5: REWARMUP tra leg3 e leg4) ==")
+< print(f"grade=VERDICT  # derivazione meccanica dai .time; rc autoritativo = pair-out/pair142-{T}.done")
+---
+> print(f"== s146 coppia WP full+media sul pin s145 tentativo={T} (criterio s132-criterio-pair.md RIUSATO + s146-criterio-pair.md; replica peak-only p.5 SENZA inserzione) ==")
+> print(f"grade=VERDICT  # derivazione meccanica dai .time; rc autoritativo = pair-out/pair146-{T}.done")
+155c151
+< for tag in ["warmup", "rewarmup"] + legs:
+---
+> for tag in ["warmup"] + legs:
+188c184
+< # S-142 p.5: lettura PRE-REGISTRATA della bisezione peak (osservativa, NESSUN gate)
+---
+> # S-146 p.5: replica PEAK-ONLY SENZA inserzione (az.rev. S-142 #2; osservativa, NESSUN gate)
+190c186
+< print("bisezione_peak (p.5): leg1-3 pre-rewarmup, leg4-6 post-rewarmup — " +
+---
+> print("replica_peak_senza_inserzione (p.5): " +
+192,195c188,194
+< if pk["leg4-on"] <= 1825 and pk["leg5-on"] >= 1830 and pk["leg6-on"] >= 1830:
+<     print("bisezione_peak lettura: leg4 BASSA (<=1825) e leg5-6 alte -> firma STATO-post-media")
+< elif all(pk[l] >= 1830 for l in ("leg4-on","leg5-on","leg6-on")):
+<     print("bisezione_peak lettura: leg4-6 tutte alte (>=1830) -> firma POSIZIONE/cumulo")
+---
+> lo = [l for l in legs if pk[l] <= 1825]; hi = [l for l in legs if pk[l] >= 1830]
+> if lo == ["leg1-on"] and len(hi) == 5:
+>     print("replica_peak lettura: leg1 BASSA (<=1825) e leg2-6 alte (>=1830) -> pattern S-140 RIPRODOTTO senza inserzione (coerente STATO-post-media; nessuna firma causale)")
+> elif len(hi) == 6:
+>     print("replica_peak lettura: 6/6 alte (>=1830) -> livello ALTO unico (il doppio livello NON si riproduce)")
+> elif len(lo) == 6:
+>     print("replica_peak lettura: 6/6 basse (<=1825) -> livello BASSO unico (il doppio livello NON si riproduce)")
+197c196
+<     print("bisezione_peak lettura: esito MISTO -> nessuna firma, si dichiara")
+---
+>     print("replica_peak lettura: esito MISTO -> nessuna firma, si dichiara")
+221c220
+<         REF_LO, REF_HI, BANDA = 1.765, 1.777, 0.033  # s142-criterio-pair.md p.3: rif S-140 on-only [1,765-1,777], banda_ON 0,033 (TERZA finestra: confermata cross-finestra in S-140; FUORI BANDA => replica SENZA l'inserzione p.5 prima di ogni claim)
+---
+>         REF_LO, REF_HI, BANDA = 1.765, 1.788, 0.036  # s146-criterio-pair.md p.3: rif S-142 on-only [1,765-1,788], banda_ON canonica 0,036 (UNIONE S-139+S-140+S-142; FUORI BANDA => nessun claim dal singolo tentativo, replica prima di ogni delta)
+223c222
+<         print(f"confronto_formale_rif: on-only vs [{REF_LO}-{REF_HI}] banda {BANDA} (rif S-140) -> " +
+---
+>         print(f"confronto_formale_rif: on-only vs [{REF_LO}-{REF_HI}] banda {BANDA} (rif S-142) -> " +
