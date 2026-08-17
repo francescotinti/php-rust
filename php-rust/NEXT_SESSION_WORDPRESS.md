@@ -42,12 +42,11 @@ PropSetPop.borrow 57,4M · Sweep.borrow 50,0M su 340,9M canale).
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
 famiglia borrow-teardown C2 (~0,91–1,09 s) · BT2-alloc m-backtrace ·
-class_exists 2 alloc/call · get_declared_classes 4,6M (conteggio k dovuto) ·
-gamba server census · §3.24 debug_print_backtrace + §3.23 fx-backtrace
-estesa (fedeltà, in coda) · confine slot-load 0,99× · §3.22 · depr.
-float→int · warning corsia ×2 · div. RMW · objmap 43,4 → piano GC ·
-evalcls 316,9× · refl 42,4× · re +2 alloc · §3.13/§3.12-i/§3.14/§3.21 ·
-get_gc · latin1 · dbal 10 nomi.
+class_exists 2 alloc/call · get_declared_classes 4,6M (k dovuto) · gamba
+server census · §3.24+§3.23 fedeltà backtrace · confine slot-load 0,99× ·
+§3.22 · depr. float→int · warning corsia ×2 · div. RMW · objmap 43,4 →
+piano GC · evalcls 316,9× · refl 42,4× · re +2 alloc ·
+§3.13/§3.12-i/§3.14/§3.21 · get_gc · latin1 · dbal 10 nomi.
 
 ## NON riproporre (i veti restano; dettaglio nei concili archiviati)
 **S-152: A3c in QUALUNQUE forma senza numeri nuovi oltre soglia (verdetto

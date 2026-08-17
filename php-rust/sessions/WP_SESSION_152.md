@@ -29,14 +29,12 @@ A3c ESEGUITO a verdetto** (misura decisionale, non apparato) · incidenti 19
   s149 REFUTATO a diff d59b2b5→5294ec1: tabella statica, zero alloc).
 4·**Rerun QUIET testa hostcall: Δ=0** (82.211.532 ×2) ⇒ contesa attribuita,
   testa CITABILE. 5·**Touch-map A2 dai 73 hunk ObjRc**: T2 (mod.rs
-  teardown/sweep) portante · T3 (run.rs) DECADE · host.rs backlog confermato;
-  quesito utente: perimetro A2 → T2-only. 6·CI: 3 corpus-FAIL = artefatto
-  backlog (binari s145 pre-BT1 vs congelato post-S150), nessun incidente.
+  teardown/sweep) portante · T3 DECADE · host.rs backlog; quesito: A2 →
+  T2-only. 6·CI: 3 corpus-FAIL = artefatto backlog s145 pre-BT1, non incidente.
 
 ## ⭐ Lezioni (max 3)
 - ⭐⭐ Un canale contato a nove cifre può valere UN secondo: nessuna chirurgia
   senza prezzo×conteggio contro soglie pre-registrate (A3c muore così).
 - ⭐⭐ Il calcolatore di un verdetto è una forgia: path con SPAZI e assunzioni
   d'ordine sui prezzi mordono anche l'aritmetica — collaudo o emenda dichiarata.
-- ⭐ La regola t3 (replica >2% su chiave di decisione) ha morso mv_obj al
-  15,8%: senza terza replica la banda C5 sarebbe stata cieca.
+- ⭐ La regola t3 (>2% su chiave di decisione) ha morso mv_obj al 15,8%.
