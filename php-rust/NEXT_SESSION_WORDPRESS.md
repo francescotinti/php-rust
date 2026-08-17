@@ -28,19 +28,17 @@ storiche finestre WP: t1 1,799 · t2 1,738 · t3 1,789 · t4 1,781.
    sparito — CONTARE la testa nuova di hostcall + partizione di none.other
    94,6M (nativi host DENTRO). Probe NUOVO a sorgente s150 (feature
    mem-census) con RICETTA ESATTA dichiarata env inclusa (lezione S-150);
-   apparato s149 riusabile (parser golden-tested). **Dentro: spiegare il
-   TETTO smentito della scommessa (Δ 6,1–6,7 ≈ 2× l'attesa alta 3,1 —
-   rilievo rev. 4): il modello conteggio×prezzo va rifondato coi conteggi
-   nuovi.**
+   apparato s149 riusabile. **Dentro: spiegare il TETTO smentito della
+   scommessa (Δ ≈ 2× l'attesa alta — rilievo rev.4): modello conteggio×prezzo
+   da rifondare coi conteggi nuovi.**
 2. **Dentro la stessa campagna: re-istruzione scarto +3,2%** (az. S-150):
    probe s149 CONSERVATO (scratchpad 5f008282, f3a111ac) vs probe s150 sullo
    STESSO workload piccolo — se il delta segue la strumentazione per-NOME,
    l'auto-conteggio è nominato; altrimenti resta aperto a verbale.
-3. **Leva dalla testa nuova** (criterio prima, A/B R=5, guardie R=5 —
-   incidente 17 non si ripete). Candidata di FEDELTÀ pronta (az.rev.3):
-   options/limit su debug_print_backtrace (§3.24, bersaglio = flip
-   `debug_print_backtrace_limit.phpt`) + fx-backtrace ESTESA (az.rev.2:
-   options non-int/both, limit>profondità, closure/include — §3.23).
+3. **Leva dalla testa nuova** (criterio prima, A/B+guardie R=5). Candidata di
+   FEDELTÀ pronta (az.rev.2-3): options/limit su debug_print_backtrace
+   (§3.24, bersaglio flip `debug_print_backtrace_limit.phpt`) + fx-backtrace
+   ESTESA (§3.23: options non-int/both, limit>profondità, closure/include).
 4. Pop-diretti (1×–2×) SOLO dopo replica t3 della sonda (splitoff3 5%).
 5. Coppia WP: dovuta SOLO a pin nuovo (eventuale promozione della leva p.3).
 
