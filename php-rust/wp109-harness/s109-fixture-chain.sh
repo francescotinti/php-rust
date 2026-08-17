@@ -5,6 +5,9 @@
 # stash (az. rev. S-133 #2, cablato S-134: ri-hash dei 4 pinnati vs
 # PIN_REGISTRY) sul PIN. rc di OGNI gate DAL COMANDO (mai da pipe);
 # marker finale rc=somma. EMENDA DICHIARATA S-134: inventario 8 -> 9 gate.
+# EMENDA DICHIARATA S-150: inventario 9 -> 10 gate — entra `backtrace`
+# (fixture bilaterale BT1, wp150-harness/s150-fx-backtrace-gate.sh; NEXT
+# §S-150 p.1 «fx-backtrace nel set»).
 set -u
 export PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin
 R="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust"
@@ -12,7 +15,7 @@ export PHPR_PIN_ATTESO="${PHPR_PIN_ATTESO:?serve il pin atteso}"
 export ORACLE_PIN_ATTESO="${ORACLE_PIN_ATTESO:-07b0df8d63247695}"
 # Az.rev. S-130 #2: lista gate CONGELATA per NOME — l'inventario eseguito deve
 # coincidere con questa, pena rc!=0 (mai piu' denominatori cablati stantii).
-ATTESI="hc1 move recv fx20 fx21 w9 preg teardown stash"
+ATTESI="hc1 move recv fx20 fx21 w9 preg teardown stash backtrace"
 TOT=0
 VISTI=""
 run_gate() { # $1=etichetta $2=script
@@ -32,6 +35,7 @@ run_gate w9   "$R/wp109-harness/s109-w9-fixtures.sh"
 run_gate preg "$R/wp121-harness/s121-fx-preg-gate.sh"
 run_gate teardown "$R/wp133-harness/s133-fx-teardown-gate.sh"
 run_gate stash "$R/wp134-harness/s134-stash-gate.sh"
+run_gate backtrace "$R/wp150-harness/s150-fx-backtrace-gate.sh"
 if [ "$VISTI" != "$ATTESI" ]; then
   echo "FIXTURE-CHAIN INVENTARIO DIVERSO: visti='$VISTI' attesi='$ATTESI'"
   TOT=$((TOT + 1))
