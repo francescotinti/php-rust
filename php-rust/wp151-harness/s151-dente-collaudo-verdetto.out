@@ -1,0 +1,3 @@
+collaudo negativo: rc=101, hit=1 (violazione sintetica 2001 righe morde col messaggio esatto)
+collaudo positivo: rc=0, 1 passed (allowlist 21 a cap esatti, anti-slack 200)
+DENTE ARMATO rc=0 (negativo morde + positivo verde)
