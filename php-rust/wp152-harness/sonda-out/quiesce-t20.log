@@ -1,4 +1,4 @@
 60606 /bin/bash /Volumes/Extreme Pro/Claude/phpr-ci/work/php-rust/scripts/corpus-gate.sh /private/tmp/phpr-ci-target/release/phpt-runner /Volumes/Extreme Pro/Claude/phpr-ci/out/d951a2091a03/corpus
 66814 /private/tmp/phpr-ci-target/release/phpt-runner --isolate --list-fails /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests
-68434 /private/tmp/phpr-ci-target/release/phpt-runner --run-one /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/enum/enum-as-constant.phpt
+71866 /private/tmp/phpr-ci-target/release/phpt-runner --run-one /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_coercion/float_to_int/warnings_float_vars.phpt
 QUIESCENZA-FAIL: processi phpr/php-server vivi

@@ -1,0 +1,6 @@
+== s152 GO/NO-GO A3c (criterio s152-criterio-sonde.md §6; soglie s151 §6; conteggi census s151) ==
+prezzi: sonda-out/price-r{1,2}.txt del verdetto s152-sonda-canali (probe d90dcdc6f9f154af)
+banda_netta = [1.109; 1.324] s (C2 [0.910;1.090] + C4 [0.096;0.097] + C5obj [0.000;0.032] + C3 [0.103;0.106])
+S3 somma lorda Object (C1..C5) = [3.627; 3.995] s
+soglie: S1>=0.50 S2>=1.53 (banda_netta) · S3>=4.58 (lorda)
+VERDETTO: NO-GO ROBUSTO a fortiori (estremo hi fallisce: S2 S3) — A3c CHIUSA (stile veto NaN-boxing); restano A3a/A3b micro-judged e leve per NOME

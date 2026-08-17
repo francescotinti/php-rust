@@ -1,4 +1,2 @@
-44348 /bin/bash /Volumes/Extreme Pro/Claude/phpr-ci/work/php-rust/scripts/corpus-gate.sh /private/tmp/phpr-ci-target/release/phpt-runner /Volumes/Extreme Pro/Claude/phpr-ci/out/278353a200bb/corpus
-44353 /private/tmp/phpr-ci-target/release/phpt-runner --isolate --list-fails /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests
-50058 /private/tmp/phpr-ci-target/release/phpt-runner --run-one /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/try/try_finally_007.phpt
+60438 /private/tmp/phpr-ci-target/release/deps/phpr-7282f60c0fabb1a7
 QUIESCENZA-FAIL: processi phpr/php-server vivi

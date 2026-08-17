@@ -16,17 +16,21 @@ V="$H/s152-gonogo-verdetto.out"
 # mock_dup_rel/c2_borrow): banda per chiave = [min,max] su TUTTE le repliche
 # disponibili — le 2 di record (price-rec-r*, salvate prima della t3) + le 2
 # della t3 (price-r* del verdetto -t3).
-FILES=""
+# NOTA di forgia (2026-08-18): la prima stesura iterava $FILES senza quote e
+# i path del progetto CONTENGONO SPAZI (lezione feedback-forge-silent-failure)
+# → verdetto nullo 0.000 catturato subito (sed a stderr + banda impossibile
+# con smoke >0) e rimosso; qui array bash quotato.
+FILES=()
 for f in "$OUT/price-rec-r1.txt" "$OUT/price-rec-r2.txt" "$OUT/price-r1.txt" "$OUT/price-r2.txt"; do
-  [ -s "$f" ] && FILES="$FILES $f"
+  [ -s "$f" ] && FILES+=("$f")
 done
-[ -n "$FILES" ] || { echo "prezzi assenti" >&2; exit 8; }
+[ "${#FILES[@]}" -gt 0 ] || { echo "prezzi assenti" >&2; exit 8; }
 
 get(){ # $1=file $2=chiave completa → valore
   sed -n "s/^$2=\([0-9.]*\)$/\1/p" "$1" | head -1
 }
 band(){ # $1=chiave → "min max" su tutte le repliche
-  { for f in $FILES; do get "$f" "$1"; done; } | awk 'NR==1{lo=$1;hi=$1} {if($1<lo)lo=$1; if($1>hi)hi=$1} END{print lo, hi}'
+  { for f in "${FILES[@]}"; do get "$f" "$1"; done; } | awk 'NR==1{lo=$1;hi=$1} {if($1<lo)lo=$1; if($1>hi)hi=$1} END{print lo, hi}'
 }
 
 read C2B_LO C2B_HI <<< "$(band s152.price.c2_borrow_ns)"
@@ -51,28 +55,38 @@ awk -v c2b_lo="$C2B_LO" -v c2b_hi="$C2B_HI" -v c2m_lo="$C2M_LO" -v c2m_hi="$C2M_
     -v mo_lo="$MO_LO" -v mo_hi="$MO_HI" -v ms_lo="$MS_LO" -v ms_hi="$MS_HI" \
     -v mst_lo="$MST_LO" -v mst_hi="$MST_HI" -v mar_lo="$MAR_LO" -v mar_hi="$MAR_HI" '
 function max(a,b){return a>b?a:b}
+function min(a,b){return a<b?a:b}
 BEGIN{
   C1=253971737; C2=340931405; C3=6439636; C4=43214340; C5=191157853
   BM_LO=11784675; BM_HI=60467189       # quota borrow_mut C2
   OBJ_LO=105787249; OBJ_HI=157382773   # quota obj C5
   NS=1e-9
+  # EMENDA (2026-08-18, prima stesura assumeva borrow_mut>borrow — i prezzi
+  # dicono l_OPPOSTO): ogni estremo = min/max su ENTRAMBE le assegnazioni di
+  # quota, nessuna assunzione d_ordine sui prezzi.
   # --- banda_netta (canali NON-movimento; netti clampati a >=0) ---
-  # C2: quota borrow_mut all_estremo che massimizza/minimizza (borrow_mut piu caro del borrow di norma)
-  n_lo = max(0,(C2-BM_LO)*(c2b_lo-md_hi)) + max(0,BM_LO*(c2m_lo-md_hi))
-  n_hi = max(0,(C2-BM_HI)*(c2b_hi-md_lo)) + max(0,BM_HI*(c2m_hi-md_lo))
-  # se borrow_mut>borrow, per l_estremo hi conviene BM_HI; per lo BM_LO: coerente sopra
-  c2n_lo=n_lo; c2n_hi=n_hi
+  a = max(0,(C2-BM_LO)*(c2b_lo-md_hi)) + max(0,BM_LO*(c2m_lo-md_hi))
+  b = max(0,(C2-BM_HI)*(c2b_lo-md_hi)) + max(0,BM_HI*(c2m_lo-md_hi))
+  c2n_lo = min(a,b)
+  a = max(0,(C2-BM_LO)*(c2b_hi-md_lo)) + max(0,BM_LO*(c2m_hi-md_lo))
+  b = max(0,(C2-BM_HI)*(c2b_hi-md_lo)) + max(0,BM_HI*(c2m_hi-md_lo))
+  c2n_hi = max(a,b)
   c4n_lo = max(0, C4*(nc_lo-md_hi));  c4n_hi = max(0, C4*(nc_hi-md_lo))
-  c5n_lo = max(0, OBJ_LO*(mo_lo-mr_hi)); c5n_hi = max(0, OBJ_HI*(mo_hi-mr_lo))
+  c5n_lo = min(max(0,OBJ_LO*(mo_lo-mr_hi)), max(0,OBJ_HI*(mo_lo-mr_hi)))
+  c5n_hi = max(max(0,OBJ_LO*(mo_hi-mr_lo)), max(0,OBJ_HI*(mo_hi-mr_lo)))
   c3n_lo = max(0, C3*(c3_lo-ma_hi));  c3n_hi = max(0, C3*(c3_hi-ma_lo))
   bn_lo = (c2n_lo+c4n_lo+c5n_lo+c3n_lo)*NS
   bn_hi = (c2n_hi+c4n_hi+c5n_hi+c3n_hi)*NS
   # --- S3: somma LORDA prezzo-corrente x conteggio, C1 incluso ---
-  # C2 lordo: mix borrow/borrow_mut agli estremi; C5 lordo: mix specie agli estremi
-  s3_lo = ( C1*c1_lo + ((C2-BM_LO)*c2b_lo+BM_LO*c2m_lo) + C3*c3_lo + C4*nc_lo \
-          + (OBJ_LO*mo_lo + (C5-OBJ_LO)*ms_lo) )*NS
-  s3_hi = ( C1*c1_hi + ((C2-BM_HI)*c2b_hi+BM_HI*c2m_hi) + C3*c3_hi + C4*nc_hi \
-          + (OBJ_HI*mo_hi + (C5-OBJ_HI)*mo_hi) )*NS
+  a = (C2-BM_LO)*c2b_lo+BM_LO*c2m_lo; b = (C2-BM_HI)*c2b_lo+BM_HI*c2m_lo
+  s3c2_lo = min(a,b)
+  a = (C2-BM_LO)*c2b_hi+BM_LO*c2m_hi; b = (C2-BM_HI)*c2b_hi+BM_HI*c2m_hi
+  s3c2_hi = max(a,b)
+  a = OBJ_LO*mo_lo + (C5-OBJ_LO)*ms_lo; b = OBJ_HI*mo_lo + (C5-OBJ_HI)*ms_lo
+  s3c5_lo = min(a,b)
+  s3c5_hi = C5*mo_hi
+  s3_lo = ( C1*c1_lo + s3c2_lo + C3*c3_lo + C4*nc_lo + s3c5_lo )*NS
+  s3_hi = ( C1*c1_hi + s3c2_hi + C3*c3_hi + C4*nc_hi + s3c5_hi )*NS
   printf "banda_netta = [%.3f; %.3f] s (C2 [%.3f;%.3f] + C4 [%.3f;%.3f] + C5obj [%.3f;%.3f] + C3 [%.3f;%.3f])\n", \
     bn_lo, bn_hi, c2n_lo*NS, c2n_hi*NS, c4n_lo*NS, c4n_hi*NS, c5n_lo*NS, c5n_hi*NS, c3n_lo*NS, c3n_hi*NS
   printf "S3 somma lorda Object (C1..C5) = [%.3f; %.3f] s\n", s3_lo, s3_hi

@@ -3,3 +3,16 @@ probe_bin=d90dcdc6f9f154af (build sonda-price, MAI parita')
 start=2026-08-18 00:16:53
 lock: creato /private/tmp/phpr-measure.lock
 rust-analyzer: lasciato quieto (il gate CPU della quiescenza arbitra; il kill lo fa RIPARTIRE a indicizzare — osservato s145 t2: 21 tentativi)
+quiescenza: PASS al tentativo 21
+smoke: PASS (stdout SONDA-OK, 11 chiavi s145 + 6 chiavi s149 + 12 chiavi s152, prezzi >0)
+zval_size=16 (audit taglia, atteso 16)
+obj_size=136 (audit taglia RefCell<Object>, informativo)
+r1 pre=BUSY
+r1 post=BUSY
+r1: OK s145.price.cal_ns=0.4792 s145.price.mv_scalar_ns=3.3542 s145.price.mv_str_ns=4.3136 s145.price.mv_arr_ns=4.3127 s145.price.mv_obj_ns=3.8338 s145.price.note_scalar_ns=0.5860 s145.price.note_cont_repeat_ns=3.3545 s145.price.pair_zcell_ns=9.9973 s145.price.pair_arr0_ns=12.7467 s145.price.n_mv=200000000 s145.price.n_pair=20000000 s149.price.pair16_ns=7.3122 s149.price.pair32_ns=7.7886 s149.price.pair48_ns=12.5548 s149.price.splitoff3_ns=19.8843 s149.price.zval_size=16 s149.price.n_pair=20000000 s152.price.c1_pair_ns=5.4835 s152.price.c2_borrow_ns=4.2535 s152.price.c2_borrow_mut_ns=1.6788 s152.price.c3_size_pair_ns=18.6596 s152.price.mock_deref_ns=1.1259 s152.price.mock_dup_rel_ns=4.9734 s152.price.mock_decq_ns=1.4384 s152.price.mock_alloc_ns=2.2984 s152.price.miheap_pair_ns=6.7424 s152.price.obj_size=136 s152.price.n_mv=200000000 s152.price.n_pair=20000000 
+r2 pre=BUSY
+r2 post=BUSY
+r2: OK s145.price.cal_ns=0.4791 s145.price.mv_scalar_ns=3.3567 s145.price.mv_str_ns=4.3235 s145.price.mv_arr_ns=4.3334 s145.price.mv_obj_ns=3.8331 s145.price.note_scalar_ns=0.5862 s145.price.note_cont_repeat_ns=3.3546 s145.price.pair_zcell_ns=10.0321 s145.price.pair_arr0_ns=12.8178 s145.price.n_mv=200000000 s145.price.n_pair=20000000 s149.price.pair16_ns=7.3058 s149.price.pair32_ns=7.7426 s149.price.pair48_ns=12.5152 s149.price.splitoff3_ns=19.7824 s149.price.zval_size=16 s149.price.n_pair=20000000 s152.price.c1_pair_ns=5.4970 s152.price.c2_borrow_ns=4.2924 s152.price.c2_borrow_mut_ns=1.7461 s152.price.c3_size_pair_ns=18.7497 s152.price.mock_deref_ns=1.1267 s152.price.mock_dup_rel_ns=4.9450 s152.price.mock_decq_ns=1.4379 s152.price.mock_alloc_ns=2.2945 s152.price.miheap_pair_ns=6.7625 s152.price.obj_size=136 s152.price.n_mv=200000000 s152.price.n_pair=20000000 
+lock: rimosso
+end=2026-08-18 00:37:35
+PREZZI ACQUISITI (banda per chiave = [min,max] delle 2 repliche; replica >2% sulla chiave di decisione => t3 dovuta — criterio p.3)
