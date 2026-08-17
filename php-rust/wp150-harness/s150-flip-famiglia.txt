@@ -1,5 +1,14 @@
 /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/attributes/031_backtrace.phpt
+/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/backtrace/bug28377.phpt
+/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/backtrace/bug30828.phpt
+/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/backtrace/bug39445.phpt
+/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/backtrace/bug64239_2.phpt
+/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/backtrace/bug64239_3.phpt
+/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/backtrace/bug64239_4.phpt
 /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/backtrace/bug69180-backtrace.phpt
+/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/backtrace/bug70547.phpt
+/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/backtrace/bug76047.phpt
+/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/backtrace/bug79108.phpt
 /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/backtrace/bug_debug_backtrace.phpt
 /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/backtrace/bug_debug_backtrace_replace_zend_execute_ex.phpt
 /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/backtrace/debug_backtrace_limit.phpt

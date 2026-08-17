@@ -12,8 +12,15 @@
 3. Batteria: inventario = baseline s125 + il SOLO `rczval_pattern_resta_nel_funnel`
    (estrazione dal diff 4a968b7..HEAD: ZERO `#[test]` nuovi; census tutto dietro
    `#[cfg(feature="mem-census")]`); `debug_backtrace_array_fields` resta verde.
-4. Corpus 1414×2: flip ATTESI ⊆ famiglia backtrace (20 nomi,
-   `s150-flip-famiglia.txt`); bersagli DIRETTI citati dalla cura (REGOLE §9):
+4. Corpus 1414×2: flip ATTESI ⊆ famiglia backtrace (`s150-flip-famiglia.txt`).
+   **EMENDA DICHIARATA (primo passaggio del gate)**: la famiglia era generata
+   per NOME file (20) e mancava `backtrace/bug64239_2.phpt` (directory
+   backtrace/, nome senza la parola): il handler fail-closed ha STOPPATO —
+   generazione corretta a MATCH DI PATH (`-ipath "*backtrace*"`, 29 nomi),
+   intento «famiglia backtrace» INVARIATO; l'esito del primo passaggio
+   (flip: bug64239_2 + debug_backtrace_limit ×2 modi; contenuto mutato:
+   debug_backtrace_options; off↔on ZERO) è agli atti in
+   promo-out/corpus/corpus-gate.out. Bersagli DIRETTI citati dalla cura (REGOLE §9):
    `backtrace/debug_backtrace_limit.phpt`, `backtrace/debug_backtrace_options.phpt`.
    NESSUN nome extra (regressione) ammesso. Gestione = `s150-flip-handler.sh`
    fail-closed (aggiorna congelato+golden SOLO per i nomi flippati/mutati della

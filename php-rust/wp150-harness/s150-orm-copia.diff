@@ -1,0 +1,86 @@
+2,7c2,8
+< # s147-orm-rimisura.sh — RIMISURA dbal+ORM sul pin s145 (criterio
+< # s147-criterio-orm.md; copia DICHIARATA di s139-rimisura.sh, manifest
+< # s147-orm-copia.diff): ORM + dbal, N=2 per lato, oracle prima poi phpr
+< # per gamba, workspace ri-untarrato, watchdog, /usr/bin/time -l, pavimenti
+< # per-binario PER WORKSPACE, gate contesa in ictx/s (emenda S-127).
+< # ADATTAMENTO lock (criterio p.3): il lock misura è della SESSIONE — lo
+---
+> # s150-orm-coppia.sh — coppia dbal+ORM sul pin s150 = GIUDIZIO della scommessa
+> # BT1 (criterio s150-criterio-orm.md; copia DICHIARATA di s147-orm-rimisura.sh,
+> # manifest s150-orm-copia.diff; adattamenti: pin s150 cbbe71735effb165, path
+> # wp150, blocco SCOMMESSA meccanico in coda al verdetto): ORM + dbal, N=2 per
+> # lato, oracle prima poi phpr per gamba, workspace ri-untarrato, watchdog,
+> # /usr/bin/time -l, pavimenti per-binario PER WORKSPACE, gate contesa ictx/s.
+> # ADATTAMENTO lock (ereditato): il lock misura è della SESSIONE — lo
+12c13
+< H="$REPO/wp147-harness"
+---
+> H="$REPO/wp150-harness"
+18,19c19,20
+< OUT="$H/rimisura-out"; mkdir -p "$OUT"
+< VERD="$H/s147-orm-rimisura-verdetto.out"
+---
+> OUT="$H/orm-out"; mkdir -p "$OUT"
+> VERD="$H/s150-orm-coppia-verdetto.out"
+23,25c24,25
+< [ "$(shasum -a 256 "$PHPR" | cut -c1-16)" = "a89faf32c62142f9" ] || { echo "rc=9 pin!=s145" > "$OUT/rimisura.done"; exit 9; }
+< # S-147 (criterio p.3): finestra protetta — il lock è della SESSIONE, qui
+< # si VERIFICA soltanto (niente creazione né trap: veto lock-con-trap-altrui).
+---
+> [ "$(shasum -a 256 "$PHPR" | cut -c1-16)" = "cbbe71735effb165" ] || { echo "rc=9 pin!=s150" > "$OUT/rimisura.done"; exit 9; }
+> # lock della SESSIONE: si VERIFICA soltanto (niente creazione né trap).
+32,33c32,33
+< # pavimenti per-binario (med3 di `phpunit --version`) PER WORKSPACE — orm E
+< # dbal (divergenza dichiarata vs s125: un pavimento per workload).
+---
+> # pavimenti per-binario (med3 di `phpunit --version`) PER WORKSPACE — MISURATI
+> # su QUESTO pin (az.rev.4: mai ereditati).
+51,53c51,52
+<   # EMENDA criterio p.7: l'oracle gira con memory_limit=-1 (phpr non applica
+<   # il limite, §3.14 stub — parità di condizioni; il default 128M uccideva
+<   # la gamba ORM a metà suite).
+---
+>   # EMENDA ereditata (s147 p.7): oracle con memory_limit=-1 (§3.14, parità
+>   # di condizioni).
+75,76c74
+< # parità: ORM phpr per NOME vs baseline 16; dbal fail-set phpr STABILE tra
+< # gambe (il ≤1% vs oracle si legge dal conteggio nel verdetto, criterio p.4)
+---
+> # parità: ORM phpr per NOME vs baseline 16; dbal fail-set phpr STABILE tra gambe
+90c88
+< python3 - "$OUT" "$FO" "$FP" "$DFO" "$DFP" > "$OUT/ratios.txt" <<'PY'
+---
+> python3 - "$OUT" "$FO" "$FP" "$DFO" "$DFP" "$RC" > "$OUT/ratios.txt" <<'PY'
+93a92
+> parita_rc = int(sys.argv[6])
+108c107
+< print("rimisura-s147 (user CPU; pavimenti PARZIALI phpunit --version: orm o=%.3f p=%.3f · dbal o=%.3f p=%.3f)" % (fo, fp, dfo, dfp))
+---
+> print("coppia-s150 (user CPU; pavimenti PARZIALI phpunit --version: orm o=%.3f p=%.3f · dbal o=%.3f p=%.3f)" % (fo, fp, dfo, dfp))
+109a109
+> new_net = {}
+115a116
+>         new_net.setdefault(w, []).append(p_['user']-flp)
+129a131,147
+> # --- SCOMMESSA BT1 (criterio s150-criterio-orm.md p.4, aritmetica meccanica) ---
+> REF_MIN, REF_MAX = 41.60, 42.22   # phpr ORM net @ s145 (s147 verdetto, floor 0,07)
+> RES = 0.293                        # risoluzione KS-146-1
+> ATT_LO, ATT_HI = 0.8, 3.1          # attesa pre-registrata
+> nn = sorted(new_net.get("orm", []))
+> if len(nn) == 2:
+>     d_min = REF_MIN - nn[-1]; d_max = REF_MAX - nn[0]
+>     print(f"scommessa: phpr_orm_net_new=[{nn[0]:.2f}; {nn[1]:.2f}] ref=[{REF_MIN}; {REF_MAX}] Delta=[{d_min:+.2f}; {d_max:+.2f}] s")
+>     if parita_rc != 0:
+>         print("scommessa: CIFRA NULLA (parita' rotta) — nessun giudizio")
+>     elif d_min >= RES:
+>         centro = "CENTRATA (dentro l'attesa 0,8-3,1)" if (d_max >= ATT_LO and d_min <= ATT_HI) else ("OLTRE-ATTESA (>3,1: dichiarare)" if d_min > ATT_HI else "VINTA ma SOTTO l'attesa 0,8 (dichiarare)")
+>         print(f"scommessa: VINTA (Delta_min {d_min:.2f} >= {RES}) — {centro}")
+>     elif d_max < RES:
+>         print(f"scommessa: PERSA (Delta_max {d_max:.2f} < {RES}: fermo nel rumore o su)")
+>     else:
+>         print(f"scommessa: NON RISOLTA (intervallo Delta a cavallo di {RES}) — replica dovuta")
+132c150
+< { echo "== s147 rimisura dbal+ORM (pin s145 a89faf32 vs oracle 8.5.7; criterio s147-criterio-orm.md) =="
+---
+> { echo "== s150 coppia dbal+ORM (pin s150 cbbe7173 vs oracle 8.5.7; criterio s150-criterio-orm.md) =="
