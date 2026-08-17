@@ -20,8 +20,8 @@ fail-closed, emende dichiarate)**.
 s150) · hintcall 7,3 (n.r.) · dimread 4,3 · oggetti (s136): objchurn 6,7 ·
 objmap 11,7 · MAPPA (net): WP 1,78 ≈ compoff 1,9 ≪ hf 2,55 ≪ hk 4,3 ≪ **ORM
 7,10–7,15 ≈ dbal 7,28–7,49** · corpus **1412 ×2** (congelato NUOVO S-150) ·
-media 2,480–2,555 (t4) · m-backtrace bilaterale NETTO 5,50× · mediane
-storiche finestre WP: t1 1,799 · t2 1,738 · t3 1,789 · t4 1,781.
+media 2,480–2,555 (t4) · m-backtrace NETTO 5,50× · mediane finestre WP:
+t1 1,799 · t2 1,738 · t3 1,789 · t4 1,781.
 
 ## §S-151 — ordine (la testa nuova si conta; ritmo: ≥1 leva A/B)
 1. **Census per-NOME @ pin s150 (tranche-5)**: il 130M di debug_backtrace è

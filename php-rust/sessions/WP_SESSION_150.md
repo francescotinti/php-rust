@@ -1,9 +1,8 @@
 # WP_SESSION_150 — BT1 PROMOSSA (pin s150); scommessa ORM VINTA OLTRE-ATTESA (8,4→7,1×); FR1 chiusa per eliminazione
 
-**In una frase**: la cura di debug_backtrace è entrata nel motore ufficiale
-con tutti i controlli verdi e la suite Doctrine è scesa da 8,4 a 7,1 volte il
-PHP originale (6 s guadagnati); il piccolo rallentamento di S-146 è stato
-circoscritto (non è nell'esecuzione del fuso) e chiuso senza revert.
+**In una frase**: la cura di debug_backtrace è nel motore ufficiale con tutti
+i controlli verdi, la suite Doctrine scende da 8,4 a 7,1 volte il PHP
+originale (6 s guadagnati) e il rallentamento di S-146 è chiuso senza revert.
 
 **SCOREBOARD** (pin **s150 phpr cbbe71735effb165 + server 18c2740774336c82**):
 arith 5,5 → · prop 5,5 → · calls 4,8 → · str 4,3 → · arr 3,3 (+1 tick) ·
@@ -38,5 +37,5 @@ rami mai collaudati: due stop fail-closed, emende dichiarate).
   stashato e ricetta ESATTA (env incluso) nell'atto A/B.
 - ⭐⭐ Un'attesa su un PAVIMENTO dichiarato rende l'oltre-attesa un esito
   leggibile (lavoro non prezzato), non un errore di modello.
-- ⭐ Il kill-switch monobinario vale solo col DENTE sull'altro giudice: il
-  +16,7 esatto trasforma lo «0» sul bersaglio in evidenza.
+- ⭐ Kill-switch monobinario solo col DENTE sull'altro giudice: il +16,7
+  esatto trasforma lo «0» sul bersaglio in evidenza.
