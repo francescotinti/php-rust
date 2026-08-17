@@ -75,7 +75,6 @@ Pre-flight S-152: pin phpr **s150 cbbe7173**5effb165 + server **18c27407**
 guardia · corpus **1412×2** · batteria = s125+rczval+**loc_dente** · probe
 census s151 CONSERVATO `wp151-harness/census-prep/phpr-census-s151`
 (**ab02faec0abfab67**) · CI mutex lock `/private/tmp/phpr-measure.lock` da
-CREARE a ogni finestra · Data ≥10G · rust-analyzer NON kill · lettura:
-REGOLE.md → QUI → `wp151-harness/concilio/sintesi.md` →
-`s151-census-{verdetto.out,lettura.md}` → `sessions/WP_SESSION_151.md` →
-PERF_MAP.md.
+CREARE a ogni finestra · Data ≥10G · rust-analyzer NON kill · lettura: REGOLE.md → QUI →
+`concilio/sintesi.md` → `s151-census-{verdetto.out,lettura.md}` →
+`sessions/WP_SESSION_151.md` → PERF_MAP.md.
