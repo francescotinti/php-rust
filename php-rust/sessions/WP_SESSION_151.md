@@ -33,8 +33,7 @@ dbal 7,283–7,491 · corpus 1412×2 · **leve spedite: 0 — ANOMALIA DICHIARAT
   diff sorgente (S-152). debug_backtrace ANCORA #1 21,3M. → `s151-census-lettura.md`.
 
 ## ⭐ Lezioni (max 3)
-- ⭐⭐ Una conservazione dichiarata SENZA path non conserva nulla: ogni asset
-  «conservato» entra a verbale con path+hash (fatto: probe s151).
+- ⭐⭐ Conservazione senza path non conserva: ogni asset a verbale con path+hash.
 - ⭐⭐ Le cifre census invecchiano con le leve promosse: testa 335,8M→82,2M
   post-BT1, residuo non-bt +0,16% — rifondare PRIMA di citare.
 - ⭐ Un conteggio frame-granulare attribuito a un builtin traveste un outlier
