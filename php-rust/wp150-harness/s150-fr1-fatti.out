@@ -1,0 +1,6 @@
+== s150 istruttoria FR1 — FATTI STATICI (criterio s150-criterio-fr1.md; si accumulano PRIMA dell'A/B) ==
+--- p.3 disasm run_loop (metodo S-109, nm+otool sul simbolo esatto; eseguito 2026-08-17 durante la finestra t4, nessun processo phpr) ---
+s142 (stash bba8a734, pre-FR1):  size=286776 B  bl=5988
+s145 (stash a89faf32, FR1):      size=289956 B  bl=6014   -> delta variante: +3180 B, +26 bl (RIVERIFICA del dato S-145)
+s150 (stash cbbe7173, FR1+BT1):  size=289956 B  bl=6014   -> IDENTICO a s145 (BT1 fuori dal dispatcher, coerente con guardie promo)
+--- p.2 dump ops (fused PropDimGetConst nei giudici): DA ESEGUIRE dopo la coppia ORM (nessun run phpr nella finestra t4) ---
