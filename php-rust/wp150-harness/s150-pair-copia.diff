@@ -1,0 +1,63 @@
+2,10c2,9
+< # s148-pair.sh <tentativo> — S-148 p.2: replica coppia full/media WP @ pin s145
+< # (az.rev. S-146 #1), criterio s132-criterio-pair.md RIUSATO INVARIATO +
+< # s146-criterio-pair.md EREDITATO INVARIATO + s148-criterio-t2.md (confronto
+< # formale col rif S-142 [1,765-1,788] su banda_ON canonica 0,036; test ordinato
+< # DERIVA p.4 pre-registrato, az.rev. S-146 #3, OSSERVATIVO).
+< # COPIA DICHIARATA di wp146-harness/s146-pair.sh (collaudo: copia-gate +
+< # manifest s148-pair-copia.diff) coi SOLI adattamenti: nomi s148/pair148/
+< # wp148-harness; header del giudice aggiornato; blocco DERIVA appeso al
+< # giudice (Spearman rho_A/rho_B, soglie 0,829 PRIMA dei dati t2).
+---
+> # s150-pair.sh <tentativo> — S-150 p.3: coppia full/media WP @ pin s150 (DOVUTA: pin nuovo)
+> # criteri s132/s146/s148 EREDITATI INVARIATI + s150-criterio-pair-t4.md
+> # (GIUDIZIO CANONICO a MEDIANA per finestra vs t1=1,799 t2=1,738 t3=1,789 —
+> # az.rev.3 S-149; banda-unione degradata a companion descrittivo).
+> # COPIA DICHIARATA di wp148-harness/s148-pair.sh (collaudo: copia-gate +
+> # manifest s150-pair-copia.diff) coi SOLI adattamenti: nomi s150/pair150/
+> # wp150-harness; pin s150 (phpr cbbe7173 + server 18c27407); header del
+> # giudice; blocco giudizio-MEDIANA al posto del confronto_formale_rif S-142.
+18c17
+< H="$REPO/wp148-harness"
+---
+> H="$REPO/wp150-harness"
+23c22
+< VERD="$H/s148-pair-verdetto-$T.out"
+---
+> VERD="$H/s150-pair-verdetto-$T.out"
+28c27
+< DONE="$OUT/pair148-$T.done"
+---
+> DONE="$OUT/pair150-$T.done"
+37,38c36,37
+< PIN_ATTESO="a89faf32c62142f9"
+< SRV_ATTESO="4a9adc51a62b21ba"
+---
+> PIN_ATTESO="cbbe71735effb165"
+> SRV_ATTESO="18c2740774336c82"
+146,147c145,146
+< print(f"== s148 replica coppia WP full+media sul pin s145 tentativo={T} (criterio s132-criterio-pair.md RIUSATO + s146-criterio-pair.md EREDITATO + s148-criterio-t2.md; az.rev. S-146 #1/#3) ==")
+< print(f"grade=VERDICT  # derivazione meccanica dai .time; rc autoritativo = pair-out/pair148-{T}.done")
+---
+> print(f"== s150 coppia WP full+media sul pin s150 tentativo={T} (criteri s132/s146/s148 EREDITATI + s150-criterio-pair-t4.md: giudizio a MEDIANA per finestra, az.rev.3 S-149) ==")
+> print(f"grade=VERDICT  # derivazione meccanica dai .time; rc autoritativo = pair-out/pair150-{T}.done")
+220,224c219,231
+<         REF_LO, REF_HI, BANDA = 1.765, 1.788, 0.036  # s146-criterio-pair.md p.3 EREDITATO: rif S-142 on-only [1,765-1,788], banda_ON canonica 0,036 (UNIONE S-139+S-140+S-142; FUORI BANDA => nessun claim dal singolo tentativo, replica prima di ogni delta)
+<         dentro = all(REF_LO - BANDA <= r <= REF_HI + BANDA for r in props)
+<         print(f"confronto_formale_rif: on-only vs [{REF_LO}-{REF_HI}] banda {BANDA} (rif S-142) -> " +
+<               ("COMPATIBILE (tutte le coppie proprie dentro)" if dentro else
+<                "FUORI BANDA: " + " ".join(f"{r:.3f}(d={r-(REF_LO if r < REF_LO else REF_HI):+.3f})" for r in props if not (REF_LO - BANDA <= r <= REF_HI + BANDA))))
+---
+>         # s150-criterio-pair-t4.md p.2 (az.rev.3 S-149): GIUDIZIO CANONICO a
+>         # MEDIANA per finestra vs mediane storiche t1=1,799 t2=1,738 t3=1,789;
+>         # la banda-unione resta SOLO companion descrittivo.
+>         MED_LO, MED_HI = 1.738, 1.799
+>         med_t4 = statistics.median(props)
+>         print(f"mediana_t4={med_t4:.3f} (N={len(props)} coppie proprie ON PULITE; mediane storiche t1=1.799 t2=1.738 t3=1.789)")
+>         if MED_LO <= med_t4 <= MED_HI:
+>             print(f"giudizio_MEDIANA (canonico, criterio t4 p.2): COMPATIBILE (mediana in [{MED_LO}; {MED_HI}]) — nessun claim")
+>         elif med_t4 < MED_LO:
+>             print(f"giudizio_MEDIANA (canonico, criterio t4 p.2): direzione GIU' SEGNALATA (mediana {med_t4:.3f} < {MED_LO}) — attesa BT1 su WP dichiarata piccola/nulla: NON attribuibile senza census proprio")
+>         else:
+>             print(f"giudizio_MEDIANA (canonico, criterio t4 p.2): REGRESSIONE SEGNALATA (mediana {med_t4:.3f} > {MED_HI}) — indagine PRIMA di ogni altra leva")
+>         print(f"companion banda-unione (descrittivo): coppie in [1.722-1.823]: {sum(1 for r in props if 1.722 <= r <= 1.823)}/{len(props)}")
