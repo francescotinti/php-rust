@@ -81,16 +81,9 @@ PERL
 rc=$?
 cat "$OUTV"
 [ "$rc" = 0 ] || exit 1
-cd "$REPO" || exit 4
-git add wp109-harness/corpus-gate/corpus-s109-off.fails \
-        wp109-harness/corpus-gate/corpus-s109-on.fails \
-        wp109-harness/corpus-gate/golden-content-off.tsv \
-        wp109-harness/corpus-gate/golden-content-on.tsv || exit 4
-M=$(mktemp)
-{ echo "S-150 flip corpus BT1 dichiarati per NOME (handler fail-closed; criterio p.4)"
-  echo
-  grep -E '^(  -|  ~|CONGELATO)' "$OUTV"; } > "$M"
-git commit -F "$M" > /dev/null && git push > /dev/null
-rm -f "$M"
-echo "FLIP-HANDLER: congelato+golden aggiornati e committati"
+# EMENDA DICHIARATA (primo passaggio parte2): il congelato corpus-gate/ è un
+# ASSET LOCALE NON TRACCIATO (gitignored dalla nascita, wp109-harness/
+# .gitignore r.9) — niente commit qui; l'ATTO è la dichiarazione per NOME nel
+# verdetto di promozione (come il flip 1415→1414 di S-127).
+echo "FLIP-HANDLER: congelato+golden aggiornati su disco (atto dichiarato nel verdetto)"
 exit 0

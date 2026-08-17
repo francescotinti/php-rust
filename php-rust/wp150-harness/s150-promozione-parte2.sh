@@ -27,9 +27,16 @@ cd "$SRC" || exit 4
 [ "$(shasum -a 256 "$BIN" | cut -c1-16)" = "$CAND_EXP" ] || stop "parte2 PRE: binario != candidato $CAND_EXP"
 note "parte2 (dopo emenda famiglia 39aeff8): riparto dal flip-handler sugli STESSI raw del corpus live"
 
-"$H/s150-flip-handler.sh" "$OUT/corpus" > "$OUT/flip.log" 2>&1
-frc=$?; echo "$frc" > "$OUT/flip.rc"
-[ "$frc" = 0 ] || stop "flip-handler rc=$frc (violazione anche dopo l'emenda) — vedi promo-out/flip-handler.out"
+# idempotenza (secondo lancio parte2): l'aggiornamento perl del primo lancio
+# è GIÀ applicato e il suo flip-handler.out è l'atto — non si ricalcola su
+# congelato già mutato (darebbe 0 flip e cancellerebbe il record vero).
+if grep -q "^FLIP-HANDLER rc=0" "$OUT/flip-handler.out" 2>/dev/null; then
+  note "promozione flip: handler GIÀ applicato (flip-handler.out del primo passaggio = atto; solo il commit git era errato ed è EMENDATO)"
+else
+  "$H/s150-flip-handler.sh" "$OUT/corpus" > "$OUT/flip.log" 2>&1
+  frc=$?; echo "$frc" > "$OUT/flip.rc"
+  [ "$frc" = 0 ] || stop "flip-handler rc=$frc (violazione anche dopo l'emenda) — vedi promo-out/flip-handler.out"
+fi
 note "promozione flip: $(grep -E '^CONGELATO' "$OUT/flip-handler.out" | tr '\n' ' ')"
 note "promozione flip per NOME: $(grep -E '^  [-~]' "$OUT/flip-handler.out" | sort -u | tr '\n' ' ')"
 "$SRC/scripts/corpus-gate.sh" --replay "$OUT/corpus/off.norm" "$OUT/corpus/on.norm" "$OUT/corpus-replay"
