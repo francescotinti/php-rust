@@ -25,6 +25,19 @@
    ≤1% ⇒ scarto istruito (indiziato: auto-conteggio probe s149); >1% ⇒
    resta aperto e — se non istruito entro la sessione census — i numeri A1
    sono declassati a INDICATIVI (Bak KS-3).
+5-bis. EMENDA DICHIARATA (2026-08-17, PRIMA della prima esecuzione del §5):
+   il binario probe s149 «conservato» NON è reperibile (stash phpr-old-target,
+   /private/tmp, php-rust-output ispezionati; la conservazione era dichiarata
+   SENZA path — osservazione di processo a verbale). Il §5 si esegue sui
+   VALORI REGISTRATI, stesso workload ORM pieno: hostcall.n del probe s151 vs
+   335.837.200 (probe s149, ×2 repliche + controllo path-lungo S-150) e vs
+   325.416.908 (probe s148). Lettura pre-registrata: ≤1% da 325,4M ⇒ scarto
+   ISTRUITO (sovra-conteggio del lignaggio s149 refutato dal probe nuovo);
+   ≤1% da 335,8M ⇒ delta = proprietà STABILE del codice-conteggio di
+   lignaggio s149 (che s151 EREDITA dall'albero — caveat dichiarato): scarto
+   APERTO, istruttoria al diff SORGENTE s148tag vs s149name in S-152;
+   altrove ⇒ aperto, testa nuova. I conteggi C1–C5 restano validi se le
+   identità §3 reggono: lo scarto riguarda la sola testa hostcall.
 6. GO/NO-GO A3c (pre-registrato ORA, prima di leggere qualunque numero;
    plenaria §3 della sintesi — la più severa governa, denominatore
    ARMONIZZATO): D_gap = gap ORM NETTO @ s150 = [30,52; 30,56] s (da

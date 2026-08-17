@@ -1,0 +1,1709 @@
+# s151-census-copia.diff — strumentazione tranche-5 (S-151, PROBE census)
+# Copia di lavoro: /private/tmp/phpr-census-s151-src (APFS; deviazione
+#   dichiarata dall'esempio exFAT del mandato: "cargo su exFAT = no", regola CI).
+# Sorgente pulito = repo canonico @ HEAD ae67d02 (crates/ invariato dal pin
+#   s150 salvo tests/loc_dente.rs, che NON entra nel binario).
+# GUARDIA IDENTITA (criterio p.4): copia PULITA + ricetta pin
+#   `SOURCE_DATE_EPOCH=0 CARGO_INCREMENTAL=0 cargo build --release` con
+#   CARGO_TARGET_DIR=/Users/francescotinti/Claude/php-rust-output (path
+#   canonico, cache canonica parcheggiata e ripristinata intatta)
+#   => phpr == cbbe71735effb165 ESATTO. Stessa ricetta su target dedicato
+#   /private/tmp/phpr-census-s151-target => d5e5cc07f47cab34: 48 byte di
+#   scarto = LC_UUID (offset 2105) + pagina di firma ad-hoc, strings-diff
+#   ZERO — il meccanismo cosmetico gia' nominato in s150-identita-candidato.md.
+# BUILD PROBE (registrata in census-prep/PREP.out):
+#   SOURCE_DATE_EPOCH=0 CARGO_INCREMENTAL=0
+#   CARGO_TARGET_DIR=/private/tmp/phpr-census-s151-target
+#   cargo build --release -p php-cli --features mem-census
+#   (toolchain 1.96.0 pinnata da rust-toolchain.toml; stato di FUSIONE
+#   dichiarato: feature `mem-census` SOLA, come i probe s148/s149; php-server
+#   e phpt-runner FUORI dal grafo -p php-cli e non costruiti).
+# Il diff sotto: `git diff --no-index` crates/ canonico -> crates/ della copia.
+diff --git a/php-rust/crates/php-builtins/src/var.rs b/private/tmp/phpr-census-s151-src/crates/php-builtins/src/var.rs
+index 212869b..e95c41c 100755
+--- a/php-rust/crates/php-builtins/src/var.rs
++++ b/private/tmp/phpr-census-s151-src/crates/php-builtins/src/var.rs
+@@ -278,7 +278,8 @@ pub(crate) fn dump(
+                             match h {
+                                 Zval::WeakHandle(w) => {
+                                     if let Some(o) = w.upgrade() {
+-                                        live.push((Zval::Object(o), value));
++                                        // S-151: weak->strong = MINT nel ledger.
++                                        live.push((Zval::Object(o.into()), value));
+                                     }
+                                 }
+                                 other => live.push((other, value)), // strong fallback
+@@ -400,7 +401,7 @@ pub(crate) fn dump(
+         // A bare weak handle (only reached if one ever escapes the WeakReference/
+         // WeakMap special-casing): the live object, or NULL once collected.
+         Zval::WeakHandle(w) => match w.upgrade() {
+-            Some(o) => dump(out, &Zval::Object(o), indent, seen, debug),
++            Some(o) => dump(out, &Zval::Object(o.into()), indent, seen, debug),
+             None => out.extend_from_slice(b"NULL\n"),
+         },
+     }
+diff --git a/php-rust/crates/php-runtime/src/vm/arrays.rs b/private/tmp/phpr-census-s151-src/crates/php-runtime/src/vm/arrays.rs
+index 68e49a9..d887e51 100755
+--- a/php-rust/crates/php-runtime/src/vm/arrays.rs
++++ b/private/tmp/phpr-census-s151-src/crates/php-runtime/src/vm/arrays.rs
+@@ -309,7 +309,7 @@ enum WriteWalk {
+     /// The walk crossed into a `Zval::Ref` cell; `steps[i..]` remain.
+     IntoRef(Rc<RefCell<Zval>>, usize, Zval),
+     /// The next step (`steps[i]`, a Prop/PropDyn) writes on this handle.
+-    IntoObj(Rc<RefCell<Object>>, usize, Zval),
++    IntoObj(php_types::ObjRc, usize, Zval),
+ }
+ 
+ /// Walk `steps[i..]` from `target` up to the next cell boundary (see
+@@ -349,7 +349,7 @@ fn field_write_walk(
+         FieldStep::Prop(_) | FieldStep::PropDyn => match target {
+             // Property steps run on the driver side (one scoped borrow per
+             // step): hand the handle over, the current guard drops first.
+-            Zval::Object(o) => Ok(WriteWalk::IntoObj(Rc::clone(o), i, value)),
++            Zval::Object(o) => Ok(WriteWalk::IntoObj(o.clone(), i, value)),
+             other => {
+                 let owned;
+                 let name: &[u8] = match first {
+@@ -478,7 +478,7 @@ fn field_write_walk(
+ /// when this function returns (the interior [`field_write_walk`] stops at
+ /// the next boundary).
+ fn field_write_prop_step(
+-    o: &Rc<RefCell<Object>>,
++    o: &php_types::ObjRc,
+     steps: &[FieldStep],
+     i: usize,
+     keys: &mut std::vec::IntoIter<Zval>,
+@@ -501,7 +501,7 @@ fn field_write_prop_step(
+     let rest = &steps[i + 1..];
+     // Own a handle so the defer branches can move the object into the
+     // pending op after the guard drops.
+-    let o = Rc::clone(o);
++    let o = o.clone();
+     let Ok(mut obj) = o.try_borrow_mut() else {
+         // Only a caller-held guard can trip this (the driver dropped its own
+         // before the step): the object is mid-write on this very statement.
+@@ -632,6 +632,9 @@ fn field_write_prop_step(
+     }
+     if rest.is_empty() {
+         if let Some(old) = obj.props.replace(key, value) {
++            // S-151 C5: valore DISPLACED dal write diretto di slot.
++            #[cfg(feature = "mem-census")]
++            php_types::memcensus::s151_c5_displaced(&old);
+             dropped.push(old);
+         }
+         Ok(WriteWalk::Done)
+@@ -724,7 +727,7 @@ pub(super) fn field_unset(target: &mut Zval, steps: &[FieldStep], keys: &mut std
+ enum UnsetWalk {
+     Done,
+     IntoRef(Rc<RefCell<Zval>>, usize),
+-    IntoObj(Rc<RefCell<Object>>, usize),
++    IntoObj(php_types::ObjRc, usize),
+ }
+ 
+ /// M-72.1 (WP-72): the pending ArrayAccess dispatch an UNSET walk produced —
+@@ -756,7 +759,7 @@ fn field_unset_walk(
+     };
+     match first {
+         FieldStep::Prop(_) | FieldStep::PropDyn => match target {
+-            Zval::Object(o) => Ok(UnsetWalk::IntoObj(Rc::clone(o), i)),
++            Zval::Object(o) => Ok(UnsetWalk::IntoObj(o.clone(), i)),
+             // Unsetting a property of a non-object is a silent no-op here
+             // (the VM-level PropUnset op has its own diagnostics).
+             _ => Ok(UnsetWalk::Done),
+@@ -797,7 +800,7 @@ fn field_unset_walk(
+ /// borrowed ONCE here and the borrow ends when this function returns
+ /// (M-71.1, mirrors [`field_write_prop_step`]).
+ fn field_unset_prop_step(
+-    o: &Rc<RefCell<Object>>,
++    o: &php_types::ObjRc,
+     steps: &[FieldStep],
+     i: usize,
+     keys: &mut std::vec::IntoIter<Zval>,
+diff --git a/php-rust/crates/php-runtime/src/vm/host.rs b/private/tmp/phpr-census-s151-src/crates/php-runtime/src/vm/host.rs
+index e366cc0..6d514a1 100755
+--- a/php-rust/crates/php-runtime/src/vm/host.rs
++++ b/private/tmp/phpr-census-s151-src/crates/php-runtime/src/vm/host.rs
+@@ -2208,7 +2208,10 @@ impl<'m> super::Vm<'m> {
+     pub(super) fn ho_weak_get(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+         let v = args.into_iter().next().unwrap_or(Zval::Null).deref_clone();
+         Ok(match v {
+-            Zval::WeakHandle(w) => w.upgrade().map(Zval::Object).unwrap_or(Zval::Null),
++            // S-151: upgrade weak->strong = MINT nel ledger (sito corrente).
++            Zval::WeakHandle(w) => {
++                w.upgrade().map(|rc| Zval::Object(rc.into())).unwrap_or(Zval::Null)
++            }
+             other => other,
+         })
+     }
+diff --git a/php-rust/crates/php-runtime/src/vm/mod.rs b/private/tmp/phpr-census-s151-src/crates/php-runtime/src/vm/mod.rs
+index bba08c9..20d74b6 100755
+--- a/php-rust/crates/php-runtime/src/vm/mod.rs
++++ b/private/tmp/phpr-census-s151-src/crates/php-runtime/src/vm/mod.rs
+@@ -1158,20 +1158,20 @@ pub fn run_module_with_hir<'m>(
+             drop(bo);
+             if std::rc::Rc::strong_count(o) - extra == 1 {
+                 created_dead_n += 1;
+-                let z = php_types::Zval::Object(std::rc::Rc::clone(o));
++                let z = php_types::Zval::Object(o.clone());
+                 b += mc::deep_size(&z, &mut seen, 0);
+             }
+         }
+         rep.push((format!("created-dead-rc1[n={created_dead_n}]"), b));
+         b = 0;
+         for o in vm.created.values() {
+-            let z = php_types::Zval::Object(std::rc::Rc::clone(o));
++            let z = php_types::Zval::Object(o.clone());
+             b += mc::deep_size(&z, &mut seen, 0);
+         }
+         rep.push(("created-registry-only".into(), b));
+         b = 0;
+         for s in vm.gc_buf.iter().flatten() {
+-            let z = php_types::Zval::Object(std::rc::Rc::clone(s));
++            let z = php_types::Zval::Object(s.clone());
+             b += mc::deep_size(&z, &mut seen, 0);
+         }
+         rep.push(("gc-buf-only".into(), b));
+@@ -1225,7 +1225,7 @@ pub fn run_module_with_hir<'m>(
+         rep.push(("ob-stack".into(), b));
+         b = 0;
+         for o in vm.enum_cache.values() {
+-            let z = php_types::Zval::Object(std::rc::Rc::clone(o));
++            let z = php_types::Zval::Object(o.clone());
+             b += mc::deep_size(&z, &mut seen, 0);
+         }
+         rep.push(("enum-cache".into(), b));
+@@ -3268,7 +3268,9 @@ pub struct Vm<'m> {
+     /// ref lets the destruction sweep detect unreachability
+     /// (`Rc::strong_count == 1` ⇒ only this tracking ref remains); entries are
+     /// removed as they are destructed or at shutdown.
+-    created: BTreeMap<u32, Rc<RefCell<Object>>>,
++    /// S-151 (probe): i valori sono handle strumentati `ObjRc` — la strong
++    /// ref dello store entra nel ledger clone/drop come ogni altro handle.
++    created: BTreeMap<u32, php_types::ObjRc>,
+     /// S-72.4: weak mirror of the store captured by the teardown dtor-walk
+     /// (which consumes `created` wholesale) so the break phase can still
+     /// reach the surviving cycles. Populated only during shutdown.
+@@ -3296,7 +3298,7 @@ pub struct Vm<'m> {
+     /// never move); the buffer is fully drained and reset by the sweep tail /
+     /// collect_cycles, but persists across the destructor-scheduling break
+     /// (the re-run sweep resumes at [`Self::gc_buf_head`]).
+-    gc_buf: Vec<Option<Rc<RefCell<Object>>>>,
++    gc_buf: Vec<Option<php_types::ObjRc>>,
+     /// Pop cursor into [`Self::gc_buf`]: slots before it are spent. A Vm
+     /// field, not a sweep local — a sweep that schedules a destructor breaks
+     /// out mid-drain and the re-run continues here.
+@@ -3490,7 +3492,7 @@ pub struct Vm<'m> {
+     json_active: Vec<usize>,
+     /// Interned enum case singletons, keyed by (enum class id, case index), so
+     /// `E::Case === E::Case` (Session A). Materialised lazily on first `E::Case`.
+-    enum_cache: HashMap<(ClassId, u32), Rc<RefCell<Object>>>,
++    enum_cache: HashMap<(ClassId, u32), php_types::ObjRc>,
+     /// User-defined constants from `define()` (B3), mirror of
+     /// `eval::Evaluator::constants`. Read by [`Op::ConstFetch`] and `constant()`;
+     /// engine constants (`PHP_INT_MAX`, …) are folded at lowering and not stored here.
+@@ -3805,6 +3807,10 @@ impl<'m> Vm<'m> {
+     }
+ 
+     pub fn request_end(&mut self) {
++        // S-151: fase simbolica `req_end` per gli eventi del reset.
++        #[cfg(feature = "mem-census")]
++        let _s151 =
++            php_types::memcensus::s151_override(php_types::memcensus::S151_SITE_REQ_END);
+         // Output streams & diagnostics
+         self.stdout.clear();
+         self.rendered.clear();
+@@ -3932,6 +3938,11 @@ impl<'m> Vm<'m> {
+         // S-101 census: ogni chiamata, con la specie dell'argomento (P3).
+         #[cfg(feature = "zval-census")]
+         zvalcensus::note_gcnote(v);
++        // S-151 C4: gc_note con argomento Object, per sito simbolico.
++        #[cfg(feature = "mem-census")]
++        if let Zval::Object(_) = v {
++            php_types::memcensus::s151_c4_note();
++        }
+         // H-C1a (S-101): only a container species can reach the buffer — the
+         // guard inlines at every call site so a scalar/string note never pays
+         // the call. S-102 (A-HO-103-1): the species list lives in ONE
+@@ -3967,7 +3978,7 @@ impl<'m> Vm<'m> {
+                     b.gc.set_pos(self.gc_buf.len());
+                     b.gc.set_birth(false);
+                     drop(b);
+-                    self.gc_buf.push(Some(Rc::clone(rc)));
++                    self.gc_buf.push(Some(rc.clone()));
+                     #[cfg(feature = "gc-census")]
+                     gc_census::note_inserted();
+                 }
+@@ -4070,7 +4081,7 @@ impl<'m> Vm<'m> {
+     /// particular, a release note never flips an existing BIRTH entry).
+     /// `birth` marks the entry as a creation-time seed ([`Self::gc_track`],
+     /// the light-demote re-seed) rather than a holder's release note.
+-    fn gc_buf_push(&mut self, rc: &Rc<RefCell<Object>>, birth: bool) -> bool {
++    fn gc_buf_push(&mut self, rc: &php_types::ObjRc, birth: bool) -> bool {
+         let b = rc.borrow();
+         if b.gc.buffered() {
+             return false;
+@@ -4078,7 +4089,7 @@ impl<'m> Vm<'m> {
+         b.gc.set_pos(self.gc_buf.len());
+         b.gc.set_birth(birth);
+         drop(b);
+-        self.gc_buf.push(Some(Rc::clone(rc)));
++        self.gc_buf.push(Some(rc.clone()));
+         true
+     }
+ 
+@@ -4406,7 +4417,7 @@ impl<'m> Vm<'m> {
+                 gc_census::destructor();
+                 let callee = &self.classes[defc].methods[midx].func;
+                 let mut frame = Frame::new(callee, self.class_mod(defc));
+-                frame.this = Some(Zval::Object(Rc::clone(&o)));
++                frame.this = Some(Zval::Object(o.clone()));
+                 frame.class = Some(defc);
+                 frame.static_class = Some(cid);
+                 frame.flags.set(FrameFlags::IN_DESTRUCTOR, true);
+@@ -4455,7 +4466,7 @@ impl<'m> Vm<'m> {
+     /// destructor, extra holders, buffer presence, or lazy state keeps the
+     /// buffered path (`gc_note` → next sweep pass), exactly as [`Self::gc_cascade`]
+     /// did for everything.
+-    fn gc_release_cascade(&mut self, o: &Rc<RefCell<Object>>) {
++    fn gc_release_cascade(&mut self, o: &php_types::ObjRc) {
+         // Per-id transient caches (a var_dump's memoized `__debugInfo` array
+         // clones the object's own containers — tidy 010's `child` list) die
+         // with the object, not at id reuse: they would otherwise hold the
+@@ -4463,7 +4474,7 @@ impl<'m> Vm<'m> {
+         let oid = o.borrow().id;
+         self.var_dump_debug.remove(&oid);
+         self.stringify_args.remove(&oid);
+-        let mut work: Vec<RelItem> = vec![RelItem::Obj(Rc::clone(o))];
++        let mut work: Vec<RelItem> = vec![RelItem::Obj(o.clone())];
+         while let Some(item) = work.pop() {
+             match item {
+                 RelItem::Obj(p) => {
+@@ -4532,7 +4543,7 @@ impl<'m> Vm<'m> {
+                     }
+                     self.var_dump_debug.remove(&id);
+                     self.stringify_args.remove(&id);
+-                    work.push(RelItem::Obj(Rc::clone(rc)));
++                    work.push(RelItem::Obj(rc.clone()));
+                 } else {
+                     self.gc_note(v);
+                 }
+@@ -4552,7 +4563,7 @@ impl<'m> Vm<'m> {
+     /// GC root: when `o` is freed those property references vanish, so the
+     /// objects behind them may become collectable on the next pass (this replays
+     /// the refcount cascade Zend gets for free from per-field DTORs).
+-    fn gc_cascade(&mut self, o: &Rc<RefCell<Object>>) {
++    fn gc_cascade(&mut self, o: &php_types::ObjRc) {
+         let b = o.borrow();
+         for (_, v) in b.props.iter() {
+             self.gc_note(v);
+@@ -4572,7 +4583,7 @@ impl<'m> Vm<'m> {
+     /// gets collected at that statement's sweep, just like the legacy full scan
+     /// caught it. Objects that survive (stored in a variable/property) are simply
+     /// drained and re-noted when they later lose a reference.
+-    fn gc_track(&mut self, rc: &Rc<RefCell<Object>>) {
++    fn gc_track(&mut self, rc: &php_types::ObjRc) {
+         self.gc_buf_push(rc, true);
+     }
+ 
+@@ -4582,6 +4593,11 @@ impl<'m> Vm<'m> {
+     /// their references, so a tracked object reached only through them may now be
+     /// collectable. Not for *parked* frames (a suspended generator keeps these).
+     fn gc_note_frame(&mut self, frame: &Frame<'m>) {
++        // S-151: fase simbolica `frame_teardown` per gli eventi qui dentro.
++        #[cfg(feature = "mem-census")]
++        let _s151 = php_types::memcensus::s151_override(
++            php_types::memcensus::S151_SITE_FRAME_TEARDOWN,
++        );
+         for v in &frame.slots {
+             self.gc_note(v);
+         }
+@@ -4753,7 +4769,7 @@ impl<'m> Vm<'m> {
+     fn gc_classify(&self, roots: &[u32], ctr_roots: Vec<CtrRoot>) -> GcWhites {
+         use std::collections::VecDeque;
+         enum Handle {
+-            Obj(Rc<RefCell<Object>>),
++            Obj(php_types::ObjRc),
+             Arr(Rc<PhpArray>),
+             Ref(Rc<RefCell<Zval>>),
+             Clo(Rc<Closure>),
+@@ -4761,7 +4777,7 @@ impl<'m> Vm<'m> {
+         impl Handle {
+             fn dup(&self) -> Handle {
+                 match self {
+-                    Handle::Obj(o) => Handle::Obj(Rc::clone(o)),
++                    Handle::Obj(o) => Handle::Obj(o.clone()),
+                     Handle::Arr(a) => Handle::Arr(Rc::clone(a)),
+                     Handle::Ref(r) => Handle::Ref(Rc::clone(r)),
+                     Handle::Clo(c) => Handle::Clo(Rc::clone(c)),
+@@ -4837,12 +4853,12 @@ impl<'m> Vm<'m> {
+             let Some(rc) = self.created.get(&id) else { continue };
+             let seen = rc.borrow().gc.walk.get(epoch);
+             match seen {
+-                Some(s) => recs[s as usize].handle = Handle::Obj(Rc::clone(rc)),
++                Some(s) => recs[s as usize].handle = Handle::Obj(rc.clone()),
+                 None => {
+                     rc.borrow().gc.walk.set(epoch, recs.len() as u32);
+                     recs.push(NodeRec {
+                         node: GcNode::Obj(id),
+-                        handle: Handle::Obj(Rc::clone(rc)),
++                        handle: Handle::Obj(rc.clone()),
+                         in_edges: 0,
+                         live: false,
+                     });
+@@ -4913,7 +4929,7 @@ impl<'m> Vm<'m> {
+                             drop(b);
+                             recs.push(NodeRec {
+                                 node: GcNode::Obj(id),
+-                                handle: Handle::Obj(Rc::clone(o)),
++                                handle: Handle::Obj(o.clone()),
+                                 in_edges: 1,
+                                 live: false,
+                             });
+@@ -5192,6 +5208,11 @@ impl<'m> Vm<'m> {
+         // S-148 (census): le alloc del ciclo di collect cadono nel tag `gc`.
+         #[cfg(feature = "mem-census")]
+         let _s148 = php_types::memcensus::s148_scope(php_types::memcensus::S148_GC);
++        // S-151: fase simbolica `gc_collect` per gli eventi del ciclo.
++        #[cfg(feature = "mem-census")]
++        let _s151 = php_types::memcensus::s151_override(
++            php_types::memcensus::S151_SITE_GC_COLLECT,
++        );
+         let mut total = 0i64;
+         // The drains below empty both root buffers: any purge floor from an
+         // avoided-collect is stale now.
+@@ -5308,7 +5329,7 @@ impl<'m> Vm<'m> {
+             }
+             for &id in &dtor_w {
+                 let Some(rc) = self.created.get(&id) else { continue };
+-                let rc = Rc::clone(rc);
++                let rc = rc.clone();
+                 let cid = rc.borrow().class_id as usize;
+                 log::debug!(target: "phpr::gc", "destruct (cycle): {}#{}", String::from_utf8_lossy(&self.classes[cid].name), id);
+                 self.destructed.insert(id);
+@@ -9599,7 +9620,7 @@ impl<'m> Vm<'m> {
+     /// `get_object_vars` and json-encoding a hooked object (json passes `None`).
+     fn object_vars_array(
+         &mut self,
+-        o: &Rc<RefCell<Object>>,
++        o: &php_types::ObjRc,
+         cid: usize,
+         oid: u32,
+         cur: Option<ClassId>,
+@@ -9961,7 +9982,8 @@ impl<'m> Vm<'m> {
+                         proxy_instance: None,
+                         gc: php_types::GcMark::new(),
+                     };
+-                    let out = Zval::Object(Rc::new(RefCell::new(synth)));
++                    // S-151: carrier sintetico non tracciato nello store -> MINT.
++                    let out = Zval::Object(php_types::ObjRc::from(Rc::new(RefCell::new(synth))));
+                     memo.insert(addr, out.clone());
+                     return Ok(out);
+                 }
+@@ -10063,7 +10085,8 @@ impl<'m> Vm<'m> {
+                 // S-144 az.5: box Object sintetico fuori dal mint — tick census.
+                 #[cfg(feature = "mem-census")]
+                 php_types::memcensus::s144_objsynth_note();
+-                let synth = Rc::new(RefCell::new(orc.borrow().copy_with_id(0)));
++                // S-151: carrier sintetico id=0 -> MINT (mai nello store).
++                let synth = php_types::ObjRc::from(Rc::new(RefCell::new(orc.borrow().copy_with_id(0))));
+                 {
+                     let mut sb = synth.borrow_mut();
+                     // The carrier is a concrete snapshot: drop any lazy marker so
+@@ -10304,12 +10327,20 @@ impl<'m> Vm<'m> {
+         // unserialize builds the object from the class's default-properties
+         // table and only then applies the serialized fields (doctrine's
+         // Instantiator relies on `O:N:"C":0:{}` yielding a defaulted instance).
+-        let props = cc.fresh_props();
+         let id = self.next_obj_id();
+-        let obj = Object { class_id: cid as u32, class_name, props, id, info, rare: None, lazy: None, proxy_instance: None, gc: php_types::GcMark::new() };
+-        let rc = Rc::new(RefCell::new(obj));
++        // S-151 C3: funnel `alloc_seeded` (props di default + header Rc);
++        // scope CHIUSO prima del thunk dei default non-costanti.
++        let rc = {
++            #[cfg(feature = "mem-census")]
++            let _s151 = php_types::memcensus::s151_ctor_scope(
++                php_types::memcensus::S151_CTOR_ALLOC_SEEDED,
++            );
++            let props = cc.fresh_props();
++            let obj = Object { class_id: cid as u32, class_name, props, id, info, rare: None, lazy: None, proxy_instance: None, gc: php_types::GcMark::new() };
++            php_types::ObjRc::birth(Rc::new(RefCell::new(obj)))
++        };
+         // Track for `__destruct` (OOP-3d), like every other freshly minted object.
+-        self.created.insert(id, Rc::clone(&rc));
++        self.created.insert(id, rc.clone());
+         self.gc_track(&rc);
+         // Non-constant declared defaults (`= []`, `= SOME_CONST`, …) live in the
+         // class's `prop_init` thunk — run it on the fresh instance, like
+@@ -10348,7 +10379,7 @@ impl<'m> Vm<'m> {
+     /// `Op::InitProps` does after `Op::Alloc` at a `new` site. Shared by
+     /// `unserialize` and `ReflectionClass::newInstanceWithoutConstructor`. A
+     /// failing thunk degrades to the constant-only defaults.
+-    fn run_prop_init_thunk(&mut self, cid: ClassId, rc: &Rc<RefCell<Object>>) {
++    fn run_prop_init_thunk(&mut self, cid: ClassId, rc: &php_types::ObjRc) {
+         // L-OL1-F1: a complete template means the seed already carried the
+         // evaluated defaults — nothing left for the thunk to write.
+         if self.classes[cid].props_template.0.get().is_some() {
+@@ -10357,7 +10388,7 @@ impl<'m> Vm<'m> {
+         if let Some(func) = &self.classes[cid].prop_init {
+             let baseline = self.frames.len();
+             let mut frame = Frame::new(func, self.class_mod(cid));
+-            frame.this = Some(Zval::Object(Rc::clone(rc)));
++            frame.this = Some(Zval::Object(rc.clone()));
+             frame.class = Some(cid);
+             frame.static_class = Some(cid);
+             frame.flags.set(FrameFlags::INIT_PROPS, true); // privileged default writes
+@@ -12263,14 +12294,21 @@ impl<'m> Vm<'m> {
+         // L-OL1-F1 «stampo»: template clone when complete (COW-shared defaults),
+         // classic by-name seeding otherwise. `Undef` uninitialized slots and
+         // declaration order are baked into the template on its first build.
+-        let props = cc.fresh_props();
+         let class_name = cc.class_name.clone();
+         let info = Rc::clone(&cc.info);
+         let id = self.next_obj_id();
+-        let obj = Object { class_id: cid as u32, class_name, props, id, info, rare: None, lazy: None, proxy_instance: None, gc: php_types::GcMark::new() };
+-        let rc = Rc::new(RefCell::new(obj));
++        // S-151 C3: funnel `alloc_instance` (stampo props + header Rc).
++        let rc = {
++            #[cfg(feature = "mem-census")]
++            let _s151 = php_types::memcensus::s151_ctor_scope(
++                php_types::memcensus::S151_CTOR_ALLOC_INSTANCE,
++            );
++            let props = cc.fresh_props();
++            let obj = Object { class_id: cid as u32, class_name, props, id, info, rare: None, lazy: None, proxy_instance: None, gc: php_types::GcMark::new() };
++            php_types::ObjRc::birth(Rc::new(RefCell::new(obj)))
++        };
+         // Track for `__destruct` (OOP-3d): the extra strong ref drives the sweep.
+-        self.created.insert(id, Rc::clone(&rc));
++        self.created.insert(id, rc.clone());
+         self.gc_track(&rc);
+         Ok(Zval::Object(rc))
+     }
+@@ -13107,9 +13145,9 @@ impl<'m> Vm<'m> {
+     /// (`instanceof`, method dispatch, `$this`) applies. Cached so `E::Case` is the
+     /// same handle every time (identity `===`). Singletons are *not* tracked for
+     /// `__destruct` — they live for the whole run.
+-    fn enum_case(&mut self, class: ClassId, case: u32) -> Rc<RefCell<Object>> {
++    fn enum_case(&mut self, class: ClassId, case: u32) -> php_types::ObjRc {
+         if let Some(o) = self.enum_cache.get(&(class, case)) {
+-            return Rc::clone(o);
++            return o.clone();
+         }
+         let cc = self.classes[class];
+         let decl = &cc.enum_cases[case as usize];
+@@ -13133,8 +13171,16 @@ impl<'m> Vm<'m> {
+             proxy_instance: None,
+             gc: php_types::GcMark::new(),
+         };
+-        let rc = Rc::new(RefCell::new(obj));
+-        self.enum_cache.insert((class, case), Rc::clone(&rc));
++        // S-151 C3: funnel `enum_case` (singleton, fuori dallo store
++        // `created` — il walker di fine-request cammina anche enum_cache).
++        let rc = {
++            #[cfg(feature = "mem-census")]
++            let _s151 = php_types::memcensus::s151_ctor_scope(
++                php_types::memcensus::S151_CTOR_ENUM_CASE,
++            );
++            php_types::ObjRc::birth(Rc::new(RefCell::new(obj)))
++        };
++        self.enum_cache.insert((class, case), rc.clone());
+         rc
+     }
+ 
+@@ -15149,7 +15195,7 @@ host_builtins! {
+ /// A container whose contents [`Vm::gc_release_cascade`] walks in place — a
+ /// released (un-tracked) dead object, or an exclusively-held array inside one.
+ enum RelItem {
+-    Obj(Rc<RefCell<Object>>),
++    Obj(php_types::ObjRc),
+     Arr(Rc<PhpArray>),
+ }
+ 
+@@ -17632,7 +17678,7 @@ enum CellWalk {
+     /// The walk crossed into a `Zval::Ref` cell; `steps[i..]` remain.
+     IntoRef(Rc<RefCell<Zval>>, usize),
+     /// The next step (`steps[i]`, a Prop/PropDyn) fetches on this handle.
+-    IntoObj(Rc<RefCell<Object>>, usize),
++    IntoObj(php_types::ObjRc, usize),
+ }
+ 
+ fn field_cell(
+@@ -17689,7 +17735,7 @@ fn field_walk(
+             let Zval::Object(o) = target else {
+                 return Ok(CellWalk::Done(php_types::zcell(Zval::Null)));
+             };
+-            Ok(CellWalk::IntoObj(Rc::clone(o), i))
++            Ok(CellWalk::IntoObj(o.clone(), i))
+         }
+         FieldStep::Append => {
+             // `&$a[]` (Session A): append a fresh element and reference it. Append
+diff --git a/php-rust/crates/php-runtime/src/vm/oop.rs b/private/tmp/phpr-census-s151-src/crates/php-runtime/src/vm/oop.rs
+index a969b0f..7f75066 100755
+--- a/php-rust/crates/php-runtime/src/vm/oop.rs
++++ b/private/tmp/phpr-census-s151-src/crates/php-runtime/src/vm/oop.rs
+@@ -49,9 +49,18 @@ pub(super) fn write_property(recv: &Zval, name: &[u8], value: Zval) -> Result<Op
+             };
+             if let Some(cell) = cell {
+                 let old = std::mem::replace(&mut *cell.borrow_mut(), value);
++                // S-151 C5: valore DISPLACED (drop imminente) — non-Object;
++                // l'Object passa dal hook dell'handle.
++                #[cfg(feature = "mem-census")]
++                php_types::memcensus::s151_c5_displaced(&old);
+                 return Ok(Some(old));
+             }
+-            Ok(o.borrow_mut().props.replace(name, value))
++            let displaced = o.borrow_mut().props.replace(name, value);
++            #[cfg(feature = "mem-census")]
++            if let Some(old) = &displaced {
++                php_types::memcensus::s151_c5_displaced(old);
++            }
++            Ok(displaced)
+         }
+         Zval::Ref(rc) => write_property(&rc.borrow(), name, value),
+         other => Err(PhpError::Error(format!(
+@@ -91,10 +100,18 @@ pub(super) fn write_property_at(recv: &Zval, name: &[u8], slot: Option<u32>, val
+         };
+         if let Some(cell) = cell {
+             let old = std::mem::replace(&mut *cell.borrow_mut(), value);
++            #[cfg(feature = "mem-census")]
++            php_types::memcensus::s151_c5_displaced(&old);
+             return Ok(Some(old));
+         }
+         return match o.borrow_mut().props.replace_slot(i, value) {
+-            Ok(old) => Ok(old),
++            Ok(old) => {
++                #[cfg(feature = "mem-census")]
++                if let Some(v) = &old {
++                    php_types::memcensus::s151_c5_displaced(v);
++                }
++                Ok(old)
++            }
+             Err(v) => write_property(recv, name, v),
+         };
+     }
+@@ -209,7 +226,7 @@ pub(super) fn object_class_id(v: &Zval) -> Option<ClassId> {
+ 
+ /// The object a value resolves to (following a reference), or `None` for a
+ /// non-object — for inspecting a field-path base that may be a `Ref`.
+-pub(super) fn deref_object(v: &Zval) -> Option<Rc<RefCell<Object>>> {
++pub(super) fn deref_object(v: &Zval) -> Option<php_types::ObjRc> {
+     match v {
+         Zval::Object(o) => Some(o.clone()),
+         Zval::Ref(rc) => deref_object(&rc.borrow()),
+@@ -1053,6 +1070,11 @@ impl<'m> Vm<'m> {
+     /// for value-builtin results. A throw inside a callback is swallowed (PHP turns
+     /// it into a separate shutdown-time fatal, not modelled here).
+     pub(super) fn run_shutdown_functions(&mut self) {
++        // S-151: fase simbolica `shutdown_fn` per gli eventi dei callback.
++        #[cfg(feature = "mem-census")]
++        let _s151 = php_types::memcensus::s151_override(
++            php_types::memcensus::S151_SITE_SHUTDOWN_FN,
++        );
+         if self.shutdown_fns.is_empty() {
+             return;
+         }
+@@ -1080,6 +1102,26 @@ impl<'m> Vm<'m> {
+     }
+ 
+     pub(super) fn run_shutdown_destructors(&mut self) {
++        // S-151: snapshot di FINE REQUEST (N6/conservazione) PRIMA del
++        // teardown — il ledger per-classe b/c/d viene congelato allo STESSO
++        // istante in cui il walker dello store misura i vivi (oggetti e
++        // handle forti, misura INDIPENDENTE dal ledger); poi tutta la fase
++        // porta il sito simbolico `shutdown_dtor`.
++        #[cfg(feature = "mem-census")]
++        let _s151 = {
++            php_types::memcensus::s151_snap_begin();
++            for rc in self.created.values().chain(self.enum_cache.values()) {
++                if let Ok(b) = rc.raw().try_borrow() {
++                    php_types::memcensus::s151_snap_object(
++                        &b,
++                        std::rc::Rc::strong_count(rc.raw()),
++                    );
++                }
++            }
++            php_types::memcensus::s151_override(
++                php_types::memcensus::S151_SITE_SHUTDOWN_DTOR,
++            )
++        };
+         // Phase A (S-72.4, Zend `shutdown_destructors`): repeated
+         // `zend_hash_reverse_apply(symbol_table, zend_call_destructors)` —
+         // walk the GLOBAL slots in REVERSE order and release only an OBJECT
+@@ -1162,13 +1204,13 @@ impl<'m> Vm<'m> {
+             // the break phase can only reach the surviving CYCLES through
+             // weaks captured BEFORE the drop (S-72.4 — without this the
+             // break found an empty store and the memory half was a no-op).
+-            self.teardown_weaks.extend(survivors.values().map(Rc::downgrade));
++            self.teardown_weaks.extend(survivors.values().map(|h| Rc::downgrade(h.raw())));
+             self.dtor_walk_round(survivors);
+         }
+     }
+ 
+     /// One store-order destructor round over a snapshot of the object store.
+-    fn dtor_walk_round(&mut self, survivors: std::collections::BTreeMap<u32, Rc<RefCell<Object>>>) {
++    fn dtor_walk_round(&mut self, survivors: std::collections::BTreeMap<u32, php_types::ObjRc>) {
+         for (_, o) in survivors.iter() {
+             let (cid, id) = {
+                 let b = o.borrow();
+@@ -1190,7 +1232,7 @@ impl<'m> Vm<'m> {
+                 let callee = &self.classes[defc].methods[midx].func;
+                 let m = self.class_mod(defc);
+                 let mut frame = self.pooled_frame(callee, m);
+-                frame.this = Some(Zval::Object(Rc::clone(o)));
++                frame.this = Some(Zval::Object(o.clone()));
+                 frame.class = Some(defc);
+                 frame.static_class = Some(cid);
+                 self.frames.push(frame);
+@@ -1238,7 +1280,7 @@ impl<'m> Vm<'m> {
+         // strong store.
+         let mut weaks = std::mem::take(&mut self.teardown_weaks);
+         let survivors = std::mem::take(&mut self.created);
+-        weaks.extend(survivors.values().map(Rc::downgrade));
++        weaks.extend(survivors.values().map(|h| Rc::downgrade(h.raw())));
+         drop(survivors);
+         let reg = weaks.len() as u64;
+         if reg == 0 {
+diff --git a/php-rust/crates/php-runtime/src/vm/run.rs b/private/tmp/phpr-census-s151-src/crates/php-runtime/src/vm/run.rs
+index 5f16b67..bb24c8c 100755
+--- a/php-rust/crates/php-runtime/src/vm/run.rs
++++ b/private/tmp/phpr-census-s151-src/crates/php-runtime/src/vm/run.rs
+@@ -1275,6 +1275,14 @@ impl<'m> super::Vm<'m> {
+                 }
+             }
+             let op = &func.ops[ip];
++            // S-151 (probe census): sito simbolico corrente = l'op in
++            // esecuzione (tabella s147; registrazione nomi idempotente,
++            // OnceLock). Solo build census — mai nel pin.
++            #[cfg(feature = "mem-census")]
++            {
++                php_types::memcensus::s147_register_names(&super::census::OP_NAMES);
++                php_types::memcensus::s147_note_dispatch(super::census::op_index(op) as u16);
++            }
+             // WP-33 T0: op census — compiled out unless the `op-census`
+             // feature is on (even a never-taken branch here costs ~3%).
+             #[cfg(feature = "op-census")]
+@@ -4254,7 +4262,12 @@ impl<'m> super::Vm<'m> {
+                     let Zval::Object(o) = &src else { unreachable!("proxy instance is an object") };
+                     // Shallow copy: a fresh handle, properties cloned by value
+                     // (nested objects share their handle, arrays copy on write).
++                    // S-151 C3: funnel `clone_copy` (copia props + header Rc).
+                     let clone_rc = {
++                        #[cfg(feature = "mem-census")]
++                        let _s151 = php_types::memcensus::s151_ctor_scope(
++                            php_types::memcensus::S151_CTOR_CLONE_COPY,
++                        );
+                         let b = o.borrow();
+                         let mut props = b.props.clone();
+                         // Detach object-internal (unshared) property references so
+@@ -4281,10 +4294,10 @@ impl<'m> super::Vm<'m> {
+                             proxy_instance: None,
+                             gc: php_types::GcMark::new(),
+                         };
+-                        Rc::new(RefCell::new(obj))
++                        php_types::ObjRc::birth(Rc::new(RefCell::new(obj)))
+                     };
+                     self.created
+-                        .insert(clone_rc.borrow().id, Rc::clone(&clone_rc));
++                        .insert(clone_rc.borrow().id, clone_rc.clone());
+                     self.gc_track(&clone_rc);
+                     // A clone inherits typed references (typed_properties_081):
+                     // its property slots share the source's reference cells, so
+@@ -4313,19 +4326,26 @@ impl<'m> super::Vm<'m> {
+                     // A proxy clones to a fresh initialized-proxy wrapper around
+                     // the instance copy; `__clone` below still runs on the copy.
+                     let pushed = if let Some((wcid, wname, winfo)) = proxy_wrapper {
+-                        let wrapper = Object {
+-                            class_id: wcid,
+-                            class_name: wname,
+-                            props: Props::new(),
+-                            id: self.next_obj_id(),
+-                            info: winfo,
+-                            rare: None,
+-                            lazy: Some(LazyKind::Proxy),
+-                            proxy_instance: Some(Box::new(clone_val.clone())),
+-                            gc: php_types::GcMark::new(),
++                        // S-151 C3: funnel `proxy_wrapper`.
++                        let wrc = {
++                            #[cfg(feature = "mem-census")]
++                            let _s151 = php_types::memcensus::s151_ctor_scope(
++                                php_types::memcensus::S151_CTOR_PROXY_WRAPPER,
++                            );
++                            let wrapper = Object {
++                                class_id: wcid,
++                                class_name: wname,
++                                props: Props::new(),
++                                id: self.next_obj_id(),
++                                info: winfo,
++                                rare: None,
++                                lazy: Some(LazyKind::Proxy),
++                                proxy_instance: Some(Box::new(clone_val.clone())),
++                                gc: php_types::GcMark::new(),
++                            };
++                            php_types::ObjRc::birth(Rc::new(RefCell::new(wrapper)))
+                         };
+-                        let wrc = Rc::new(RefCell::new(wrapper));
+-                        self.created.insert(wrc.borrow().id, Rc::clone(&wrc));
++                        self.created.insert(wrc.borrow().id, wrc.clone());
+                         self.gc_track(&wrc);
+                         Zval::Object(wrc)
+                     } else {
+@@ -5210,6 +5230,8 @@ impl<'m> super::Vm<'m> {
+                             // The displaced value is a reference drop (WP-46):
+                             // note it like an assignment's displaced value.
+                             if let Some(d) = displaced {
++                                #[cfg(feature = "mem-census")]
++                                php_types::memcensus::s151_c5_displaced(&d);
+                                 self.gc_note(&d);
+                             }
+                             continue;
+@@ -5244,7 +5266,7 @@ impl<'m> super::Vm<'m> {
+                     if let Some(Zval::Object(o)) = &self.frames[top].this {
+                         let cid = o.borrow().class_id as usize;
+                         if let Some((defc, midx)) = ic.get(cid) {
+-                            hit = Some((defc, midx, cid, Zval::Object(Rc::clone(o))));
++                            hit = Some((defc, midx, cid, Zval::Object(o.clone())));
+                         }
+                     }
+                     if let Some((defc, midx, cid, this)) = hit {
+@@ -6393,6 +6415,8 @@ impl<'m> super::Vm<'m> {
+                                 // BORROW-OK: scoped mut on the same fresh handle, op level.
+                                 let displaced = o.borrow_mut().props.replace(&key, Zval::Undef);
+                                 if let Some(d) = displaced {
++                                    #[cfg(feature = "mem-census")]
++                                    php_types::memcensus::s151_c5_displaced(&d);
+                                     self.gc_note(&d);
+                                 }
+                                 continue;
+@@ -6632,7 +6656,7 @@ impl<'m> super::Vm<'m> {
+                 let oid = o.borrow().id;
+                 // For a forwarding wrapper the guard may be held on the
+                 // instance's handle — honor both before dispatching.
+-                let inst = deref_object(&self.proxy_view(Zval::Object(Rc::clone(&o))));
++                let inst = deref_object(&self.proxy_view(Zval::Object(o.clone())));
+                 let inst_guard = inst
+                     .as_ref()
+                     .is_some_and(|io| self.magic_guard.contains(&(io.borrow().id, MagicKind::Get, n.to_vec())));
+@@ -6640,7 +6664,7 @@ impl<'m> super::Vm<'m> {
+                     let gkey = (oid, MagicKind::Get, n.to_vec());
+                     let ins = self.magic_guard.insert(gkey.clone());
+                     let r = self.call_method_sync(
+-                        Zval::Object(Rc::clone(&o)),
++                        Zval::Object(o.clone()),
+                         b"__get",
+                         vec![Zval::Str(PhpStr::new(n.to_vec()))],
+                     );
+diff --git a/php-rust/crates/php-types/src/lib.rs b/private/tmp/phpr-census-s151-src/crates/php-types/src/lib.rs
+index 208cf73..ec6b038 100755
+--- a/php-rust/crates/php-types/src/lib.rs
++++ b/private/tmp/phpr-census-s151-src/crates/php-types/src/lib.rs
+@@ -31,6 +31,8 @@ pub use diag::{Diag, Diags, PhpError};
+ pub use generator::{GenKey, GenState, GenStatus};
+ pub use object::{is_opaque_handle_class, mangle_prop_key, prop_display_name, unmangle_prop_key, GcMark, LazyKind, ObjRare, Object, ObjectInfo, PropVis, Props, PropsLayout, WalkMark};
+ pub use object::{free_object_id, reset_freed_object_ids, take_freed_object_id};
++// S-151 (probe census): handle strumentato di Zval::Object.
++pub use object::ObjRc;
+ pub use stream::{
+     open_data_stream, open_file_stream, open_php_stream, DirHandle, ResKind, Resource, Stream, StreamBackend,
+ };
+diff --git a/php-rust/crates/php-types/src/memcensus.rs b/private/tmp/phpr-census-s151-src/crates/php-types/src/memcensus.rs
+index eb83e08..2f1201f 100755
+--- a/php-rust/crates/php-types/src/memcensus.rs
++++ b/private/tmp/phpr-census-s151-src/crates/php-types/src/memcensus.rs
+@@ -241,6 +241,9 @@ extern "C" fn dump_exit() {
+     // S-149 tranche-4: righe per-NOME-builtin della partizione di hostcall.n.
+     #[cfg(feature = "mem-census")]
+     s149_dump_lines();
++    // S-151 tranche-5: canali C1-C5 + conservazione + N2/N6.
++    #[cfg(feature = "mem-census")]
++    s151_dump_lines();
+     // WP-59 Ob.1: exit snapshot (win=0) — the cleanest fragmentation read:
+     // channel live is exact here (recon reached==live), so per-bin
+     // committed−used at this instant IS retention + non-censused standing.
+@@ -1411,6 +1414,9 @@ pub fn galloc_note(bytes: usize) {
+     hist_note(bytes);
+     // S-148: partizione per tag di contesto (stessa run, stesso hook).
+     s148_alloc_note(bytes);
++    // S-151 C3: malloc dentro lo scope RAII di un funnel di costruzione.
++    #[cfg(feature = "mem-census")]
++    s151_ctor_alloc_note();
+ }
+ 
+ #[inline]
+@@ -1648,6 +1654,12 @@ pub fn s145_clone_note(v: &crate::Zval) {
+     c.fetch_add(1, Relaxed);
+     // S-147: lo STESSO movimento, attribuito al sito/digramma del dispatch.
+     s147_mv_note(k);
++    // S-151 C5: clone di VALORE non-Object nella famiglia-prop. L'Object NON
++    // si conta qui: il suo clone passa dal hook dell'handle `ObjRc`
++    // (instradato per sito) — disgiunzione C1/C5 per costruzione.
++    if k != 3 {
++        s151_c5_value_clone(k);
++    }
+ }
+ 
+ /// Snapshot (scalar, str, arr, obj, ref, rcother) per la riga `s145` del dump.
+@@ -2266,3 +2278,685 @@ pub fn abandoned_positive_control() {
+         },
+     ));
+ }
++
++// ---------------------------------------------------------------------------
++// S-151 tranche-5 (wp151-harness/s151-criterio-census.md §2-§3; spec del team
++// misura §Spec-census-esatta): canali C1-C5 per TIPO, chiavi SIMBOLICHE
++// (sito = nome-op del dispatch via tabella s147, o fase speciale), identita'
++// Sigma-siti==tot per canale DALLO STESSO hook, contatore OVERLAP (atteso 0),
++// legge di conservazione per classe nascite+cloni==drop+vivi_a_fine_request.
++// SOLO CONTEGGI - mai cifre di tempo da questo binario.
++//
++// Partizione DICHIARATA (disgiunzione per costruzione, Gregg Q3):
++//   C1 = clone/mint/drop dell'handle `ObjRc` con sito FUORI famiglia-prop
++//        (i mint - Rc nudo che entra nel ledger - sono SEMPRE C1);
++//   C2 = borrow/borrow_mut passati per l'handle `ObjRc`, per sito;
++//   C3 = malloc eseguite dentro lo scope RAII dei funnel di costruzione
++//        (header Rc + Vec props + dyn), per funnel;
++//   C4 = gc_note con argomento Object, per sito;
++//   C5 = eventi su VALORI Zval nella famiglia-prop: clone handle (tipo obj)
++//        col sito nella famiglia + clone di valori non-Object col sito nella
++//        famiglia + drop: handle (obj) col sito nella famiglia e valori
++//        DISPLACED non-Object nei helper write_property* (sito simbolico).
++// L'OVERLAP e' calcolato al dump dai contatori GRAND indipendenti (eventi
++// handle-clone/drop totali) vs la somma degli instradamenti C1/C5:
++// se un evento finisse in due canali la differenza lo denuncia.
++// PERIMETRO dichiarato: variante `Zval::Object` (Closure/Generator/Resource
++// restano fuori, come nel census s145); i drop di valori non-Object fuori dai
++// helper write_property* non sono osservabili senza un Drop su Zval e restano
++// FUORI dal canale (dichiarato al criterio).
++
++#[cfg(feature = "mem-census")]
++pub const S151_SITE_REQ_END: u16 = 249;
++#[cfg(feature = "mem-census")]
++pub const S151_SITE_GC_COLLECT: u16 = 250;
++#[cfg(feature = "mem-census")]
++pub const S151_SITE_FRAME_TEARDOWN: u16 = 251;
++#[cfg(feature = "mem-census")]
++pub const S151_SITE_SHUTDOWN_FN: u16 = 252;
++#[cfg(feature = "mem-census")]
++pub const S151_SITE_SHUTDOWN_DTOR: u16 = 253;
++
++#[cfg(feature = "mem-census")]
++const S151_N_SITES: usize = S147_N_SITES;
++#[cfg(feature = "mem-census")]
++const S151_K: usize = 6;
++#[cfg(feature = "mem-census")]
++const S151_KIND_NAMES: [&str; S151_K] = ["scalar", "str", "arr", "obj", "ref", "rcother"];
++#[cfg(feature = "mem-census")]
++const S151_CLS: usize = 4096;
++#[cfg(feature = "mem-census")]
++const S151_CLS_NAME_MAX: usize = 64;
++#[cfg(feature = "mem-census")]
++pub const S151_CTOR_ALLOC_INSTANCE: u8 = 0;
++#[cfg(feature = "mem-census")]
++pub const S151_CTOR_ALLOC_SEEDED: u8 = 1;
++#[cfg(feature = "mem-census")]
++pub const S151_CTOR_PROXY_WRAPPER: u8 = 2;
++#[cfg(feature = "mem-census")]
++pub const S151_CTOR_CLONE_COPY: u8 = 3;
++#[cfg(feature = "mem-census")]
++pub const S151_CTOR_ENUM_CASE: u8 = 4;
++#[cfg(feature = "mem-census")]
++pub const S151_CTOR_OTHER: u8 = 7;
++#[cfg(feature = "mem-census")]
++const S151_CTORS: usize = 8;
++#[cfg(feature = "mem-census")]
++const S151_CTOR_NAMES: [&str; S151_CTORS] = [
++    "alloc_instance", "alloc_seeded", "proxy_wrapper", "clone_copy", "enum_case", "ctor5",
++    "ctor6", "ctor_other",
++];
++
++#[cfg(feature = "mem-census")]
++static S151_C1_CLONE: [AtomicU64; S151_N_SITES] = [const { AtomicU64::new(0) }; S151_N_SITES];
++#[cfg(feature = "mem-census")]
++static S151_C1_MINT: [AtomicU64; S151_N_SITES] = [const { AtomicU64::new(0) }; S151_N_SITES];
++#[cfg(feature = "mem-census")]
++static S151_C1_DROP: [AtomicU64; S151_N_SITES] = [const { AtomicU64::new(0) }; S151_N_SITES];
++#[cfg(feature = "mem-census")]
++static S151_C2_BORROW: [AtomicU64; S151_N_SITES] = [const { AtomicU64::new(0) }; S151_N_SITES];
++#[cfg(feature = "mem-census")]
++static S151_C2_BORROWMUT: [AtomicU64; S151_N_SITES] =
++    [const { AtomicU64::new(0) }; S151_N_SITES];
++#[cfg(feature = "mem-census")]
++static S151_C3_N: [AtomicU64; S151_CTORS] = [const { AtomicU64::new(0) }; S151_CTORS];
++#[cfg(feature = "mem-census")]
++static S151_C4: [AtomicU64; S151_N_SITES] = [const { AtomicU64::new(0) }; S151_N_SITES];
++#[cfg(feature = "mem-census")]
++static S151_C5_CLONE: [[AtomicU64; S151_K]; S151_N_SITES] =
++    [const { [const { AtomicU64::new(0) }; S151_K] }; S151_N_SITES];
++#[cfg(feature = "mem-census")]
++static S151_C5_DROP: [[AtomicU64; S151_K]; S151_N_SITES] =
++    [const { [const { AtomicU64::new(0) }; S151_K] }; S151_N_SITES];
++/// Totali per canale (c1..c5), incrementati DALLO STESSO hook del sito.
++#[cfg(feature = "mem-census")]
++static S151_TOT: [AtomicU64; 5] = [const { AtomicU64::new(0) }; 5];
++/// GRAND: ogni evento clone/mint (risp. drop) dell'handle, PRIMA
++/// dell'instradamento — la base dell'overlap.
++#[cfg(feature = "mem-census")]
++static S151_GRAND_CLONE: AtomicU64 = AtomicU64::new(0);
++#[cfg(feature = "mem-census")]
++static S151_GRAND_DROP: AtomicU64 = AtomicU64::new(0);
++
++#[cfg(feature = "mem-census")]
++static S151_CLS_KEY: [AtomicU64; S151_CLS] = [const { AtomicU64::new(0) }; S151_CLS];
++#[cfg(feature = "mem-census")]
++static S151_CLS_NAME_LEN: [AtomicU8; S151_CLS] = [const { AtomicU8::new(0) }; S151_CLS];
++#[cfg(feature = "mem-census")]
++static S151_CLS_NAME_BYTES: [[AtomicU8; S151_CLS_NAME_MAX]; S151_CLS] =
++    [const { [const { AtomicU8::new(0) }; S151_CLS_NAME_MAX] }; S151_CLS];
++#[cfg(feature = "mem-census")]
++static S151_CLS_B: [AtomicU64; S151_CLS] = [const { AtomicU64::new(0) }; S151_CLS];
++#[cfg(feature = "mem-census")]
++static S151_CLS_C: [AtomicU64; S151_CLS] = [const { AtomicU64::new(0) }; S151_CLS];
++#[cfg(feature = "mem-census")]
++static S151_CLS_D: [AtomicU64; S151_CLS] = [const { AtomicU64::new(0) }; S151_CLS];
++#[cfg(feature = "mem-census")]
++static S151_CLS_DEATH: [AtomicU64; S151_CLS] = [const { AtomicU64::new(0) }; S151_CLS];
++#[cfg(feature = "mem-census")]
++static S151_CLS_OVF: AtomicU64 = AtomicU64::new(0);
++
++#[cfg(feature = "mem-census")]
++static S151_SNAP_TAKEN: AtomicU64 = AtomicU64::new(0);
++#[cfg(feature = "mem-census")]
++static S151_SNAP_B: [AtomicU64; S151_CLS] = [const { AtomicU64::new(0) }; S151_CLS];
++#[cfg(feature = "mem-census")]
++static S151_SNAP_C: [AtomicU64; S151_CLS] = [const { AtomicU64::new(0) }; S151_CLS];
++#[cfg(feature = "mem-census")]
++static S151_SNAP_D: [AtomicU64; S151_CLS] = [const { AtomicU64::new(0) }; S151_CLS];
++#[cfg(feature = "mem-census")]
++static S151_SNAP_LH: [AtomicU64; S151_CLS] = [const { AtomicU64::new(0) }; S151_CLS];
++#[cfg(feature = "mem-census")]
++static S151_SNAP_LO: [AtomicU64; S151_CLS] = [const { AtomicU64::new(0) }; S151_CLS];
++
++/// N2 (Leijen): distribuzione #props per ISTANZA, campionata una volta per
++/// istanza (alla morte se muore prima dello snapshot di fine-request, nello
++/// snapshot se e' viva li'). Bucket esatti 0..=63, [64] = ">=64".
++#[cfg(feature = "mem-census")]
++static S151_PROPS_HIST: [AtomicU64; 65] = [const { AtomicU64::new(0) }; 65];
++#[cfg(feature = "mem-census")]
++static S151_DYN_HIST: [AtomicU64; 17] = [const { AtomicU64::new(0) }; 17];
++#[cfg(feature = "mem-census")]
++static S151_PROPS_N: AtomicU64 = AtomicU64::new(0);
++#[cfg(feature = "mem-census")]
++static S151_PROPS_SUM: AtomicU64 = AtomicU64::new(0);
++#[cfg(feature = "mem-census")]
++static S151_DYN_OBJS: AtomicU64 = AtomicU64::new(0);
++#[cfg(feature = "mem-census")]
++static S151_DYN_ENTRIES_SUM: AtomicU64 = AtomicU64::new(0);
++
++#[cfg(feature = "mem-census")]
++std::thread_local! {
++    /// Scope RAII del funnel di costruzione corrente (C3); 0xFF = nessuno.
++    static S151_CTOR: std::cell::Cell<u8> = const { std::cell::Cell::new(u8::MAX) };
++    /// Override di FASE del sito (fuori dal dispatch); u16::MAX = nessuno.
++    static S151_OVR: std::cell::Cell<u16> = const { std::cell::Cell::new(u16::MAX) };
++}
++
++/// Sito simbolico corrente: override di fase se attivo, altrimenti l'op
++/// corrente del dispatch (tabella s147; 255 = outside).
++#[cfg(feature = "mem-census")]
++#[inline]
++fn s151_site() -> usize {
++    let o = S151_OVR.try_with(|c| c.get()).unwrap_or(u16::MAX);
++    if o != u16::MAX {
++        return (o as usize).min(S151_N_SITES - 1);
++    }
++    let cur = S147_SITE.try_with(|c| c.get().1).unwrap_or(S147_OUTSIDE);
++    (cur as usize).min(S151_N_SITES - 1)
++}
++
++#[cfg(feature = "mem-census")]
++fn s151_site_name(i: usize) -> &'static str {
++    match i as u16 {
++        S151_SITE_REQ_END => "req_end",
++        S151_SITE_GC_COLLECT => "gc_collect",
++        S151_SITE_FRAME_TEARDOWN => "frame_teardown",
++        S151_SITE_SHUTDOWN_FN => "shutdown_fn",
++        S151_SITE_SHUTDOWN_DTOR => "shutdown_dtor",
++        _ => s147_site_name(i),
++    }
++}
++
++/// Famiglia-prop (perimetro C5, lista CHIUSA dichiarata al criterio §2):
++/// gli op di accesso a proprieta' d'istanza/statiche del dispatch.
++#[cfg(feature = "mem-census")]
++static S151_PROPFAM: std::sync::OnceLock<[bool; S151_N_SITES]> = std::sync::OnceLock::new();
++
++#[cfg(feature = "mem-census")]
++#[inline]
++fn s151_is_propfam(s: usize) -> bool {
++    // Prima della registrazione dei nomi (entro il primo run_loop) nessun op
++    // e' in esecuzione: la famiglia e' vuota per definizione.
++    if S147_NAMES.get().is_none() {
++        return false;
++    }
++    S151_PROPFAM.get_or_init(|| {
++        let mut t = [false; S151_N_SITES];
++        if let Some(names) = S147_NAMES.get() {
++            for (i, n) in names.iter().enumerate().take(S151_N_SITES) {
++                t[i] = matches!(
++                    *n,
++                    "PropGet"
++                        | "PropSet"
++                        | "PropOpSet"
++                        | "PropIncDec"
++                        | "PropIsset"
++                        | "PropIssetFetchGate"
++                        | "PropIssetDyn"
++                        | "PropGetSilent"
++                        | "PropGetDynamic"
++                        | "PropGetDynamicSilent"
++                        | "PropUnset"
++                        | "ThisPropGet"
++                        | "PropGetSlot"
++                        | "PropSetPop"
++                        | "PropGetSlotRecv"
++                        | "BinaryTCPropSetPop"
++                        | "PropDimGetConst"
++                        | "FieldAssign"
++                        | "FieldAssignOp"
++                        | "FieldIncDec"
++                        | "FieldIsset"
++                        | "FieldEmpty"
++                        | "FieldUnset"
++                        | "StaticPropGet"
++                        | "StaticPropSet"
++                        | "StaticPropRef"
++                        | "StaticPropOpSet"
++                        | "StaticPropIncDec"
++                        | "StaticPropGetDynamic"
++                        | "StaticPropSetDynamic"
++                        | "StaticPropOpSetDynamic"
++                        | "StaticPropIncDecDynamic"
++                        | "StaticPropGetDynName"
++                        | "StaticPropSetDynName"
++                );
++            }
++        }
++        t
++    })[s]
++}
++
++/// Interning del nome-classe (stessa meccanica FNV-1a/64 + open addressing di
++/// `s149_slot_for`; tabella statica pre-allocata, il censimento non alloca).
++#[cfg(feature = "mem-census")]
++#[inline]
++fn s151_cls_for(name: &[u8]) -> u32 {
++    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
++    for &b in name {
++        h ^= b as u64;
++        h = h.wrapping_mul(0x0000_0100_0000_01b3);
++    }
++    if h == 0 {
++        h = 1;
++    }
++    let mut i = (h as usize) & (S151_CLS - 1);
++    for _ in 0..S151_CLS {
++        let k = S151_CLS_KEY[i].load(Relaxed);
++        if k == h {
++            return i as u32;
++        }
++        if k == 0 {
++            match S151_CLS_KEY[i].compare_exchange(0, h, Relaxed, Relaxed) {
++                Ok(_) => {
++                    let l = name.len().min(S151_CLS_NAME_MAX);
++                    for (j, &b) in name[..l].iter().enumerate() {
++                        S151_CLS_NAME_BYTES[i][j].store(b, Relaxed);
++                    }
++                    S151_CLS_NAME_LEN[i].store(l as u8, Relaxed);
++                    return i as u32;
++                }
++                Err(k2) if k2 == h => return i as u32,
++                Err(_) => {}
++            }
++        }
++        i = (i + 1) & (S151_CLS - 1);
++    }
++    S151_CLS_OVF.fetch_add(1, Relaxed);
++    u32::MAX
++}
++
++#[cfg(feature = "mem-census")]
++#[inline]
++fn s151_cls_of(rc: &std::rc::Rc<std::cell::RefCell<crate::Object>>) -> u32 {
++    match rc.try_borrow() {
++        Ok(b) => s151_cls_for(b.class_name.as_bytes()),
++        Err(_) => s151_cls_for(b"<unborrowable>"),
++    }
++}
++
++/// Nascita di un oggetto (handle #1) — chiamata SOLO da `ObjRc::birth`.
++#[cfg(feature = "mem-census")]
++#[inline]
++pub fn s151_birth(rc: &std::rc::Rc<std::cell::RefCell<crate::Object>>) {
++    let cls = s151_cls_of(rc);
++    if cls != u32::MAX {
++        S151_CLS_B[cls as usize].fetch_add(1, Relaxed);
++    }
++}
++
++#[cfg(feature = "mem-census")]
++#[inline]
++pub fn s151_handle_clone(rc: &std::rc::Rc<std::cell::RefCell<crate::Object>>) {
++    S151_GRAND_CLONE.fetch_add(1, Relaxed);
++    let cls = s151_cls_of(rc);
++    if cls != u32::MAX {
++        S151_CLS_C[cls as usize].fetch_add(1, Relaxed);
++    }
++    let s = s151_site();
++    if s151_is_propfam(s) {
++        S151_C5_CLONE[s][3].fetch_add(1, Relaxed);
++        S151_TOT[4].fetch_add(1, Relaxed);
++    } else {
++        S151_C1_CLONE[s].fetch_add(1, Relaxed);
++        S151_TOT[0].fetch_add(1, Relaxed);
++    }
++}
++
++#[cfg(feature = "mem-census")]
++#[inline]
++pub fn s151_handle_mint(rc: &std::rc::Rc<std::cell::RefCell<crate::Object>>) {
++    S151_GRAND_CLONE.fetch_add(1, Relaxed);
++    let cls = s151_cls_of(rc);
++    if cls != u32::MAX {
++        S151_CLS_C[cls as usize].fetch_add(1, Relaxed);
++    }
++    let s = s151_site();
++    S151_C1_MINT[s].fetch_add(1, Relaxed);
++    S151_TOT[0].fetch_add(1, Relaxed);
++}
++
++#[cfg(feature = "mem-census")]
++#[inline]
++pub fn s151_handle_drop(rc: &std::rc::Rc<std::cell::RefCell<crate::Object>>) {
++    S151_GRAND_DROP.fetch_add(1, Relaxed);
++    let cls = s151_cls_of(rc);
++    if cls != u32::MAX {
++        S151_CLS_D[cls as usize].fetch_add(1, Relaxed);
++    }
++    let s = s151_site();
++    if s151_is_propfam(s) {
++        S151_C5_DROP[s][3].fetch_add(1, Relaxed);
++        S151_TOT[4].fetch_add(1, Relaxed);
++    } else {
++        S151_C1_DROP[s].fetch_add(1, Relaxed);
++        S151_TOT[0].fetch_add(1, Relaxed);
++    }
++}
++
++#[cfg(feature = "mem-census")]
++#[inline]
++pub fn s151_borrow(mutable: bool) {
++    let s = s151_site();
++    if mutable {
++        S151_C2_BORROWMUT[s].fetch_add(1, Relaxed);
++    } else {
++        S151_C2_BORROW[s].fetch_add(1, Relaxed);
++    }
++    S151_TOT[1].fetch_add(1, Relaxed);
++}
++
++/// C4: `Vm::gc_note` chiamata con argomento Object (nota dal VM).
++#[cfg(feature = "mem-census")]
++#[inline]
++pub fn s151_c4_note() {
++    let s = s151_site();
++    S151_C4[s].fetch_add(1, Relaxed);
++    S151_TOT[3].fetch_add(1, Relaxed);
++}
++
++/// C5: clone di un VALORE Zval non-Object (k = indice s145) — conta solo se
++/// il sito corrente e' nella famiglia-prop.
++#[cfg(feature = "mem-census")]
++#[inline]
++pub fn s151_c5_value_clone(k: usize) {
++    let s = s151_site();
++    if s151_is_propfam(s) {
++        S151_C5_CLONE[s][k.min(S151_K - 1)].fetch_add(1, Relaxed);
++        S151_TOT[4].fetch_add(1, Relaxed);
++    }
++}
++
++/// C5: valore DISPLACED (il vecchio valore scalzato da un write_property*).
++/// L'Object non si conta qui: il suo drop passa dal hook dell'handle.
++#[cfg(feature = "mem-census")]
++#[inline]
++pub fn s151_c5_displaced(v: &crate::Zval) {
++    use crate::Zval;
++    let k = match v {
++        Zval::Undef | Zval::Null | Zval::Bool(_) | Zval::Long(_) | Zval::Double(_) => 0,
++        Zval::Str(_) => 1,
++        Zval::Array(_) => 2,
++        Zval::Object(_) => return,
++        Zval::Ref(_) => 4,
++        _ => 5,
++    };
++    let s = s151_site();
++    S151_C5_DROP[s][k].fetch_add(1, Relaxed);
++    S151_TOT[4].fetch_add(1, Relaxed);
++}
++
++/// RAII del funnel di costruzione (C3).
++#[cfg(feature = "mem-census")]
++pub struct S151CtorScope {
++    prev: u8,
++}
++
++#[cfg(feature = "mem-census")]
++#[inline]
++pub fn s151_ctor_scope(site: u8) -> S151CtorScope {
++    let prev = S151_CTOR
++        .try_with(|c| {
++            let p = c.get();
++            c.set(site);
++            p
++        })
++        .unwrap_or(u8::MAX);
++    S151CtorScope { prev }
++}
++
++#[cfg(feature = "mem-census")]
++impl Drop for S151CtorScope {
++    #[inline]
++    fn drop(&mut self) {
++        let _ = S151_CTOR.try_with(|c| c.set(self.prev));
++    }
++}
++
++/// Hook dal wrapper GlobalAlloc (via `galloc_note`): C3.
++#[cfg(feature = "mem-census")]
++#[inline]
++fn s151_ctor_alloc_note() {
++    let c = S151_CTOR.try_with(|c| c.get()).unwrap_or(u8::MAX);
++    if c != u8::MAX {
++        S151_C3_N[(c as usize).min(S151_CTORS - 1)].fetch_add(1, Relaxed);
++        S151_TOT[2].fetch_add(1, Relaxed);
++    }
++}
++
++/// RAII dell'override di FASE del sito (shutdown/teardown/gc/req_end).
++#[cfg(feature = "mem-census")]
++pub struct S151Ovr {
++    prev: u16,
++}
++
++#[cfg(feature = "mem-census")]
++#[inline]
++pub fn s151_override(site: u16) -> S151Ovr {
++    let prev = S151_OVR
++        .try_with(|c| {
++            let p = c.get();
++            c.set(site);
++            p
++        })
++        .unwrap_or(u16::MAX);
++    S151Ovr { prev }
++}
++
++#[cfg(feature = "mem-census")]
++impl Drop for S151Ovr {
++    #[inline]
++    fn drop(&mut self) {
++        let _ = S151_OVR.try_with(|c| c.set(self.prev));
++    }
++}
++
++/// Snapshot di FINE REQUEST (N6): congela il ledger per-classe b/c/d allo
++/// stesso istante in cui il walker misura i vivi (prima volta sola).
++#[cfg(feature = "mem-census")]
++pub fn s151_snap_begin() {
++    if S151_SNAP_TAKEN.swap(1, Relaxed) != 0 {
++        return;
++    }
++    for i in 0..S151_CLS {
++        S151_SNAP_B[i].store(S151_CLS_B[i].load(Relaxed), Relaxed);
++        S151_SNAP_C[i].store(S151_CLS_C[i].load(Relaxed), Relaxed);
++        S151_SNAP_D[i].store(S151_CLS_D[i].load(Relaxed), Relaxed);
++    }
++}
++
++/// Un oggetto VIVO al momento dello snapshot: classe + handle forti misurati
++/// (INDIPENDENTI dal ledger: e' il walker dello store a contarli) + campione
++/// props (N2).
++#[cfg(feature = "mem-census")]
++pub fn s151_snap_object(o: &crate::Object, strongs: usize) {
++    let cls = s151_cls_for(o.class_name.as_bytes());
++    if cls != u32::MAX {
++        S151_SNAP_LH[cls as usize].fetch_add(strongs as u64, Relaxed);
++        S151_SNAP_LO[cls as usize].fetch_add(1, Relaxed);
++    }
++    let (np, nd) = o.s151_props_counts();
++    s151_props_sample(np, nd);
++}
++
++/// Morte dell'OGGETTO (da `Object::drop`, id != 0): per classe; campiona la
++/// distribuzione props solo PRIMA dello snapshot (una istanza = un campione).
++#[cfg(feature = "mem-census")]
++pub fn s151_death(name: &[u8], np: usize, nd: usize) {
++    let cls = s151_cls_for(name);
++    if cls != u32::MAX {
++        S151_CLS_DEATH[cls as usize].fetch_add(1, Relaxed);
++    }
++    if S151_SNAP_TAKEN.load(Relaxed) == 0 {
++        s151_props_sample(np, nd);
++    }
++}
++
++#[cfg(feature = "mem-census")]
++fn s151_props_sample(np: usize, nd: usize) {
++    S151_PROPS_HIST[np.min(64)].fetch_add(1, Relaxed);
++    S151_DYN_HIST[nd.min(16)].fetch_add(1, Relaxed);
++    S151_PROPS_N.fetch_add(1, Relaxed);
++    S151_PROPS_SUM.fetch_add(np as u64, Relaxed);
++    if nd > 0 {
++        S151_DYN_OBJS.fetch_add(1, Relaxed);
++        S151_DYN_ENTRIES_SUM.fetch_add(nd as u64, Relaxed);
++    }
++}
++
++#[cfg(feature = "mem-census")]
++fn s151_cls_name(i: usize) -> String {
++    let l = S151_CLS_NAME_LEN[i].load(Relaxed) as usize;
++    let raw: Vec<u8> = (0..l).map(|j| S151_CLS_NAME_BYTES[i][j].load(Relaxed)).collect();
++    String::from_utf8_lossy(&raw).replace([' ', '\t'], "_")
++}
++
++/// Righe s151* appese a `PHPR_MEM_CENSUS` a fine processo. Snapshot COERENTE
++/// dei contatori PRIMA di ogni alloc del dump (pattern s148/s149).
++#[cfg(feature = "mem-census")]
++fn s151_dump_lines() {
++    use std::io::Write;
++    let Ok(path) = std::env::var("PHPR_MEM_CENSUS") else { return };
++    // Snapshot atomico di tutto cio' che entra nelle identita', PRIMA di
++    // aprire file / allocare.
++    let tot: [u64; 5] = std::array::from_fn(|i| S151_TOT[i].load(Relaxed));
++    let grand_clone = S151_GRAND_CLONE.load(Relaxed);
++    let grand_drop = S151_GRAND_DROP.load(Relaxed);
++    let c1c: Vec<u64> = (0..S151_N_SITES).map(|i| S151_C1_CLONE[i].load(Relaxed)).collect();
++    let c1m: Vec<u64> = (0..S151_N_SITES).map(|i| S151_C1_MINT[i].load(Relaxed)).collect();
++    let c1d: Vec<u64> = (0..S151_N_SITES).map(|i| S151_C1_DROP[i].load(Relaxed)).collect();
++    let c2b: Vec<u64> = (0..S151_N_SITES).map(|i| S151_C2_BORROW[i].load(Relaxed)).collect();
++    let c2m: Vec<u64> = (0..S151_N_SITES).map(|i| S151_C2_BORROWMUT[i].load(Relaxed)).collect();
++    let c3: Vec<u64> = (0..S151_CTORS).map(|i| S151_C3_N[i].load(Relaxed)).collect();
++    let c4: Vec<u64> = (0..S151_N_SITES).map(|i| S151_C4[i].load(Relaxed)).collect();
++    let c5c: Vec<[u64; S151_K]> = (0..S151_N_SITES)
++        .map(|i| std::array::from_fn(|k| S151_C5_CLONE[i][k].load(Relaxed)))
++        .collect();
++    let c5d: Vec<[u64; S151_K]> = (0..S151_N_SITES)
++        .map(|i| std::array::from_fn(|k| S151_C5_DROP[i][k].load(Relaxed)))
++        .collect();
++    let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) else {
++        return;
++    };
++    for i in 0..S151_N_SITES {
++        let n = s151_site_name(i);
++        if c1c[i] > 0 {
++            let _ = writeln!(f, "s151site channel=c1 site={n}.clone n={}", c1c[i]);
++        }
++        if c1m[i] > 0 {
++            let _ = writeln!(f, "s151site channel=c1 site={n}.mint n={}", c1m[i]);
++        }
++        if c1d[i] > 0 {
++            let _ = writeln!(f, "s151site channel=c1 site={n}.drop n={}", c1d[i]);
++        }
++        if c2b[i] > 0 {
++            let _ = writeln!(f, "s151site channel=c2 site={n}.borrow n={}", c2b[i]);
++        }
++        if c2m[i] > 0 {
++            let _ = writeln!(f, "s151site channel=c2 site={n}.borrow_mut n={}", c2m[i]);
++        }
++        if c4[i] > 0 {
++            let _ = writeln!(f, "s151site channel=c4 site={n} n={}", c4[i]);
++        }
++        for k in 0..S151_K {
++            if c5c[i][k] > 0 {
++                let _ = writeln!(
++                    f,
++                    "s151site channel=c5 site={n}.{}.clone n={}",
++                    S151_KIND_NAMES[k], c5c[i][k]
++                );
++            }
++            if c5d[i][k] > 0 {
++                let _ = writeln!(
++                    f,
++                    "s151site channel=c5 site={n}.{}.drop n={}",
++                    S151_KIND_NAMES[k], c5d[i][k]
++                );
++            }
++        }
++    }
++    for i in 0..S151_CTORS {
++        if c3[i] > 0 {
++            let _ = writeln!(f, "s151site channel=c3 site={} n={}", S151_CTOR_NAMES[i], c3[i]);
++        }
++    }
++    for (ch, t) in ["c1", "c2", "c3", "c4", "c5"].iter().zip(tot.iter()) {
++        let _ = writeln!(f, "s151tot channel={ch} n={t}");
++    }
++    // Overlap: somma canali instradati vs GRAND (per eventi handle).
++    let routed_clone: u64 = (0..S151_N_SITES)
++        .map(|i| c1c[i] + c1m[i] + c5c[i][3])
++        .sum();
++    let routed_drop: u64 = (0..S151_N_SITES).map(|i| c1d[i] + c5d[i][3]).sum();
++    let overlap = routed_clone.abs_diff(grand_clone) + routed_drop.abs_diff(grand_drop);
++    let _ = writeln!(f, "s151overlap n={overlap}");
++    let _ = writeln!(f, "s151grand clone={grand_clone} drop={grand_drop}");
++    // Conservazione per classe (snapshot di fine request) + N6.
++    let snap = S151_SNAP_TAKEN.load(Relaxed);
++    let _ = writeln!(f, "s151snap taken={snap}");
++    for i in 0..S151_CLS {
++        if S151_CLS_KEY[i].load(Relaxed) == 0 {
++            continue;
++        }
++        let (b, c, d) = (
++            S151_SNAP_B[i].load(Relaxed),
++            S151_SNAP_C[i].load(Relaxed),
++            S151_SNAP_D[i].load(Relaxed),
++        );
++        let (lh, lo) = (S151_SNAP_LH[i].load(Relaxed), S151_SNAP_LO[i].load(Relaxed));
++        if snap != 0 && (b + c + d + lh + lo) > 0 {
++            let _ = writeln!(
++                f,
++                "s151cons class={} births={b} clones={c} drops={d} live_end={lh}",
++                s151_cls_name(i)
++            );
++            let _ = writeln!(
++                f,
++                "s151n6 class={} objects={lo} deaths={}",
++                s151_cls_name(i),
++                S151_CLS_DEATH[i].load(Relaxed)
++            );
++        }
++    }
++    let _ = writeln!(f, "s151clsovf n={}", S151_CLS_OVF.load(Relaxed));
++    // N2: distribuzione #props (percentili PESATI dal histogramma).
++    let hist: [u64; 65] = std::array::from_fn(|i| S151_PROPS_HIST[i].load(Relaxed));
++    let dhist: [u64; 17] = std::array::from_fn(|i| S151_DYN_HIST[i].load(Relaxed));
++    let nsamples = S151_PROPS_N.load(Relaxed);
++    let psum = S151_PROPS_SUM.load(Relaxed);
++    let pct = |q: f64| -> usize {
++        if nsamples == 0 {
++            return 0;
++        }
++        let target = (q * nsamples as f64).ceil() as u64;
++        let mut acc = 0u64;
++        for (i, h) in hist.iter().enumerate() {
++            acc += h;
++            if acc >= target {
++                return i;
++            }
++        }
++        64
++    };
++    let le = |k: usize| -> f64 {
++        if nsamples == 0 {
++            return 0.0;
++        }
++        let s: u64 = hist[..=k].iter().sum();
++        s as f64 * 100.0 / nsamples as f64
++    };
++    let _ = writeln!(
++        f,
++        "s151props n={} sum={} p50={} p90={} p99={} le4_pct={:.2} le8_pct={:.2} dyn_objs={} dyn_entries={}",
++        nsamples,
++        psum,
++        pct(0.50),
++        pct(0.90),
++        pct(0.99),
++        le(4),
++        le(8),
++        S151_DYN_OBJS.load(Relaxed),
++        S151_DYN_ENTRIES_SUM.load(Relaxed),
++    );
++    for (i, h) in hist.iter().enumerate() {
++        if *h > 0 {
++            let _ = writeln!(f, "s151propshist bucket={i} n={h}");
++        }
++    }
++    for (i, h) in dhist.iter().enumerate() {
++        if *h > 0 {
++            let _ = writeln!(f, "s151dynhist bucket={i} n={h}");
++        }
++    }
++}
+diff --git a/php-rust/crates/php-types/src/object.rs b/private/tmp/phpr-census-s151-src/crates/php-types/src/object.rs
+index 23dcf13..f16fbcf 100755
+--- a/php-rust/crates/php-types/src/object.rs
++++ b/private/tmp/phpr-census-s151-src/crates/php-types/src/object.rs
+@@ -350,6 +350,12 @@ impl Object {
+             })
+     }
+ 
++    /// S-151 (probe census): (#props totali = dichiarate vive + dinamiche,
++    /// #entry dinamiche) — alimenta la distribuzione N2 (Leijen).
++    pub fn s151_props_counts(&self) -> (usize, usize) {
++        (self.props.len(), self.props.dyn_entries.len())
++    }
++
+     /// Root-walk support: clones of every child value (declared slots,
+     /// dynamic entries, proxy) so the walker can recurse without holding
+     /// this object's RefCell borrow.
+@@ -371,6 +377,12 @@ impl Drop for Object {
+         #[cfg(feature = "mem-census")]
+         if self.id != 0 {
+             crate::memcensus::free(crate::memcensus::CH_OBJ, crate::memcensus::obj_fixed());
++            // S-151: morte dell'OGGETTO (non dell'handle) per classe + campione
++            // della distribuzione #props (ogni istanza campionata UNA volta:
++            // qui se muore PRIMA dello snapshot di fine-request, nello
++            // snapshot altrimenti).
++            let (np, nd) = self.s151_props_counts();
++            crate::memcensus::s151_death(self.class_name.as_bytes(), np, nd);
+         }
+         // Zend's teardown (zend_objects_store_del) runs free_obj — releasing
+         // the properties, so any exclusively-held descendant returns its
+@@ -1029,6 +1041,120 @@ impl Props {
+     }
+ }
+ 
++// ---------------------------------------------------------------------------
++// S-151 tranche-5 (PROBE census, wp151-harness/s151-criterio-census.md §2):
++// handle STRUMENTATO dell'oggetto. `ObjRc` avvolge l'`Rc<RefCell<Object>>` di
++// `Zval::Object`, così ogni clone/drop/mint/borrow dell'handle passa da un
++// funnel chiuso dal COMPILATORE: un sito che vuole costruire il payload con un
++// `Rc` nudo NON compila — deve dichiararsi `ObjRc::birth` (nascita, C3/ledger)
++// o `.into()` (mint = addref da un Rc nudo, categoria `cloni` del ledger).
++// Fuori dalla feature `mem-census` i hook spariscono (wrapper trasparente,
++// stessa nicchia/il medesimo layout di un `Rc`). REGOLA del ledger: non esiste
++// alcun estrattore che RESTITUISCA un `Rc` nudo posseduto (solo `raw()` in
++// prestito): un handle tracciato non può uscire dal censimento senza drop.
++
++pub struct ObjRc(Rc<std::cell::RefCell<Object>>);
++
++impl ObjRc {
++    /// Nascita di un OGGETTO NUOVO (l'handle #1). Da usare SOLO nei funnel di
++    /// costruzione della VM (accanto a `created.insert`): registra la nascita
++    /// per classe nel ledger S-151.
++    #[inline]
++    pub fn birth(rc: Rc<std::cell::RefCell<Object>>) -> ObjRc {
++        #[cfg(feature = "mem-census")]
++        crate::memcensus::s151_birth(&rc);
++        ObjRc(rc)
++    }
++
++    /// Prestito del `Rc` nudo SENZA contare (macchineria del censimento:
++    /// snapshot walker, strong_count, downgrade). MAI clonare il risultato in
++    /// un possessore che sopravvive: il ledger conta solo handle `ObjRc`.
++    #[inline]
++    pub fn raw(&self) -> &Rc<std::cell::RefCell<Object>> {
++        &self.0
++    }
++
++    #[inline]
++    pub fn borrow(&self) -> std::cell::Ref<'_, Object> {
++        #[cfg(feature = "mem-census")]
++        crate::memcensus::s151_borrow(false);
++        self.0.borrow()
++    }
++
++    #[inline]
++    pub fn borrow_mut(&self) -> std::cell::RefMut<'_, Object> {
++        #[cfg(feature = "mem-census")]
++        crate::memcensus::s151_borrow(true);
++        self.0.borrow_mut()
++    }
++
++    #[inline]
++    pub fn try_borrow(&self) -> Result<std::cell::Ref<'_, Object>, std::cell::BorrowError> {
++        let r = self.0.try_borrow();
++        #[cfg(feature = "mem-census")]
++        if r.is_ok() {
++            crate::memcensus::s151_borrow(false);
++        }
++        r
++    }
++
++    #[inline]
++    pub fn try_borrow_mut(
++        &self,
++    ) -> Result<std::cell::RefMut<'_, Object>, std::cell::BorrowMutError> {
++        let r = self.0.try_borrow_mut();
++        #[cfg(feature = "mem-census")]
++        if r.is_ok() {
++            crate::memcensus::s151_borrow(true);
++        }
++        r
++    }
++}
++
++impl Clone for ObjRc {
++    /// C1/C5: clone dell'handle (refcount++), attribuito al sito corrente.
++    #[inline]
++    fn clone(&self) -> ObjRc {
++        #[cfg(feature = "mem-census")]
++        crate::memcensus::s151_handle_clone(&self.0);
++        ObjRc(Rc::clone(&self.0))
++    }
++}
++
++impl Drop for ObjRc {
++    /// C1/C5: drop dell'handle (refcount--), attribuito al sito corrente.
++    #[inline]
++    fn drop(&mut self) {
++        #[cfg(feature = "mem-census")]
++        crate::memcensus::s151_handle_drop(&self.0);
++    }
++}
++
++impl std::ops::Deref for ObjRc {
++    type Target = Rc<std::cell::RefCell<Object>>;
++    #[inline]
++    fn deref(&self) -> &Self::Target {
++        &self.0
++    }
++}
++
++impl From<Rc<std::cell::RefCell<Object>>> for ObjRc {
++    /// Mint: un `Rc` nudo (weak-upgrade, `Rc::clone` diretto pre-esistente)
++    /// entra nel ledger — categoria `cloni`, sito corrente, kind `mint`.
++    #[inline]
++    fn from(rc: Rc<std::cell::RefCell<Object>>) -> ObjRc {
++        #[cfg(feature = "mem-census")]
++        crate::memcensus::s151_handle_mint(&rc);
++        ObjRc(rc)
++    }
++}
++
++impl std::fmt::Debug for ObjRc {
++    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
++        self.0.fmt(f)
++    }
++}
++
+ #[cfg(test)]
+ mod tests {
+     use super::*;
+diff --git a/php-rust/crates/php-types/src/zval.rs b/private/tmp/phpr-census-s151-src/crates/php-types/src/zval.rs
+index 35d8176..102df71 100755
+--- a/php-rust/crates/php-types/src/zval.rs
++++ b/private/tmp/phpr-census-s151-src/crates/php-types/src/zval.rs
+@@ -38,7 +38,12 @@ pub enum Zval {
+     /// semantics: the shared `Rc<RefCell<Object>>` means `$q = $p` aliases the
+     /// same instance and writes through any handle are visible to all (unlike the
+     /// copy-on-write `Array`). `gettype` reports `"object"`.
+-    Object(Rc<RefCell<Object>>),
++    /// S-151 (probe census): il payload è l'handle STRUMENTATO [`crate::ObjRc`]
++    /// (wrapper trasparente di `Rc<RefCell<Object>>`; hook solo sotto
++    /// `mem-census`). Costruire il payload da un `Rc` nudo esige `.into()`
++    /// (mint) o `ObjRc::birth` (nascita) — l'enumerazione dei siti è chiusa
++    /// dal compilatore.
++    Object(crate::ObjRc),
+     /// A `Generator` object (step 39, D-GEN-3): the value a generator function
+     /// returns. Like `Closure` it is modelled as a dedicated variant rather than
+     /// a user-class instance; `gettype` reports `"object"` and `instanceof`
+@@ -92,7 +97,9 @@ impl Clone for Zval {
+             Zval::Array(a) => Zval::Array(Rc::clone(a)),
+             Zval::Ref(r) => Zval::Ref(Rc::clone(r)),
+             Zval::Closure(c) => Zval::Closure(Rc::clone(c)),
+-            Zval::Object(o) => Zval::Object(Rc::clone(o)),
++            // S-151: il clone dell'handle passa dal hook di `ObjRc` (C1/C5);
++            // qui NON si conta (il conteggio vive nel funnel del tipo).
++            Zval::Object(o) => Zval::Object(o.clone()),
+             Zval::Generator(g) => Zval::Generator(Rc::clone(g)),
+             Zval::Resource(r) => Zval::Resource(Rc::clone(r)),
+             Zval::WeakHandle(w) => Zval::WeakHandle(w.clone()),

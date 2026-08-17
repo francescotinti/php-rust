@@ -1,0 +1,52 @@
+# PREP.out — S-151 census tranche-5: PREPARAZIONE PROBE (fail-closed)
+# 2026-08-17 — implementatore probe; criterio: wp151-harness/s151-criterio-census.md
+
+GUARDIA copia-fedele: PASS diff -r canonico/crates vs copia/crates rc=0 (copia /private/tmp/phpr-census-s151-src, APFS — deviazione DICHIARATA dall'esempio exFAT del mandato: "cargo su exFAT = no", regola CI phpr)
+GUARDIA sorgente-HEAD-vs-pin: PASS git diff 6a7adc8..HEAD su crates/ Cargo.toml Cargo.lock = SOLO crates/php-runtime/tests/loc_dente.rs (+81 righe, file di test: NON entra nel binario)
+GUARDIA identita-ricetta (criterio p.4): PASS phpr da copia PULITA == cbbe71735effb165 ESATTO
+  env: SOURCE_DATE_EPOCH=0 CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/Users/francescotinti/Claude/php-rust-output cargo build --release (toolchain 1.96.0 pinnata da rust-toolchain.toml; cache canonica parcheggiata in php-rust-output.s151hold per la durata della build e RIPRISTINATA intatta, ri-verificata cbbe71735effb165)
+  nota di metodo: la stessa ricetta con target DEDICATO /private/tmp/phpr-census-s151-target da' d5e5cc07f47cab34 — 48 byte di scarto = LC_UUID@2105 (16 B) + pagina di firma ad-hoc (32 B), strings-diff ZERO: il meccanismo cosmetico gia' nominato in wp150-harness/s150-identita-candidato.md. Il contenuto codice+dati e' byte-identico; la guardia e' stata chiusa comunque a hash ESATTO replicando il target path canonico.
+
+BUILD PROBE: hash16=ab02faec0abfab67  binario: wp151-harness/census-prep/phpr-census-s151 (gemello in /private/tmp/phpr-census-s151-target/release/phpr)
+  env: SOURCE_DATE_EPOCH=0 CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/private/tmp/phpr-census-s151-target cargo build --release -p php-cli --features mem-census
+  stato di FUSIONE dichiarato: feature mem-census SOLA (come i probe s148/s149); php-server e phpt-runner FUORI dal grafo -p php-cli e non costruiti
+  diff strumentazione: wp151-harness/s151-census-copia.diff (11 file sorgente; header con env e ricetta)
+
+PERIMETRI DICHIARATI (criterio §2; ripetuti nel header del diff e nel commento del modulo memcensus):
+  - handle Object = variante Zval::Object avvolta nel newtype ObjRc: clone/drop/mint ESAUSTIVI per costruzione (il payload non e' costruibile da un Rc nudo: il compilatore chiude l'enumerazione dei siti). Closure/Generator/Resource fuori perimetro, come nel census s145.
+  - C5 drop non-Object = valori DISPLACED nei funnel write_property / replace_slot / unset-tipizzato / write diretto di slot; i drop di valori non-Object FUORI da quei funnel non sono osservabili senza un Drop su Zval e restano fuori canale (dichiarato).
+  - sito simbolico = nome-op del dispatch (tabella s147, registrazione idempotente nel run_loop) + fasi speciali shutdown_dtor / shutdown_fn / frame_teardown / gc_collect / req_end; MAI file:riga.
+  - snapshot N6/conservazione a INGRESSO di run_shutdown_destructors (= fine request, prima del teardown): ledger b/c/d congelato allo stesso istante in cui il walker misura i vivi su store `created` + `enum_cache`; la misura dei vivi (Rc::strong_count) e' INDIPENDENTE dal ledger.
+  - overlap calcolato al dump da contatori GRAND indipendenti vs instradamenti C1/C5 (righe s151grand a corredo).
+  - nei funnel di costruzione l'ordine next_obj_id/fresh_props e' scambiato (solo nella copia; nessun effetto osservabile, nessun evento census tra i due).
+
+GUARDIE SMOKE (attesi dichiarati in census-prep/smoke-atteso.md PRIMA di ogni lettura di output; PRIMA esecuzione, NESSUNA ri-dichiarazione; verificatore meccanico census-prep/smoke151-check.sh; raw in census-prep/smoke-out/):
+  GUARDIA A1-rc-stdout: PASS rc=0 stdout=b'SMOKE151 r=42\n'
+  GUARDIA A2-identita-c1: PASS sum_siti=132 tot=132
+  GUARDIA A2-identita-c2: PASS sum_siti=100 tot=100
+  GUARDIA A2-identita-c3: PASS sum_siti=19 tot=19
+  GUARDIA A2-identita-c4: PASS sum_siti=15 tot=15
+  GUARDIA A2-identita-c5: PASS sum_siti=8 tot=8
+  GUARDIA A3-overlap: PASS overlap=0
+  GUARDIA A3-clsovf: PASS clsovf=0
+  GUARDIA A3-snap: PASS snap=1
+  GUARDIA A4-K-births: PASS births=9
+  GUARDIA A4-K-conservazione: PASS b=9 c=64 d=70 l=3 (b+c=73 d+l=73)
+  GUARDIA A4-K-live_end: PASS live_end=3
+  GUARDIA A5-K-objects: PASS objects=1
+  GUARDIA A5-K-deaths: PASS deaths=9
+  GUARDIA A6-props-N2: PASS props={'n': '9', 'sum': '27', 'p50': '3', 'p90': '3', 'p99': '3', 'le4_pct': '100.00', 'le8_pct': '100.00', 'dyn_objs': '0', 'dyn_entries': '0'} phist={3: 9} dhist={0: 9}
+  GUARDIA A7-C3-alloc_instance: PASS alloc_instance=19 (bounded >=18)
+  GUARDIA A8-C5-scalar-drop: PASS scalar.drop=1
+  GUARDIA A8-C5-scalar-clone: PASS scalar.clone=2 (bounded >=1)
+  GUARDIA A9-C1-mint: PASS mint=0
+  GUARDIA A10-C2-tot: PASS c2=100 (bounded >=1)
+  GUARDIA A11-C4-tot: PASS c4=15 (bounded >=1)
+  GUARDIA A12-eredita-run-A: PASS s149sum=[0, 0, 0, 0]  # 0==0+0: lo smoke A non chiama builtin host
+  GUARDIA B13-s148tag: PASS rc=0 tags={'none': '185743', 'frame': '2', 'hostcall': '27', 'arrgrow': '20'}
+  GUARDIA B14-s149: PASS s149sum=[27, 27, 0, 0] str_repeat=6 sprintf=21
+  SMOKE151 VERDETTO: PASS (0 guardie fallite)
+
+GUARDIA smoke-esito-esatto (criterio §3): PASS 25/25 — identita' Sigma-siti==tot sui 5 canali, overlap=0, conservazione di classe ESATTA (K: 9+64==70+3), live_end=3 come derivato a priori, N6 objects=1/deaths=9, distribuzione N2 esatta (9 istanze x 3 props, 0 dyn), emissioni s148tag/s149sum EREDITATE vive in entrambi i run.
+
+STATO: prep COMPLETA, rc=0. Il probe e' pronto per il run census ORM (script di run e workdir >=100 char restano al conduttore di sessione; la copia sorgente e il target restano in /private/tmp per la durata della sessione).
