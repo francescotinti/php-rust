@@ -17,10 +17,11 @@ A3c ESEGUITO a verdetto** (misura decisionale, non apparato) · incidenti 19
   d90dcdc6f9f154af conservato ×2)**: c1_pair 5,43–5,46 · c2_borrow
   4,27–4,41 · c2_borrow_mut 1,68 · c3_size 18,2–18,5 · mock_deref 1,13 ·
   mock_dup_rel 4,29–4,97 · mock_alloc 2,30 · miheap 6,7–6,9 ns.
-2·**GO/NO-GO A3c = NO-GO ROBUSTO, A3c CHIUSA** (stile veto NaN-boxing):
-  banda_netta [1,109;1,324] s < S2 1,53 · S3 lorda [3,627;3,995] s < 4,58,
-  entrambe all'estremo FAVOREVOLE (mock LB-ottimistico) ⇒ restano A3a/A3b
-  micro-judged; residuo più grosso = borrow C2 teardown/sweep ~0,91–1,09 s.
+2·**GO/NO-GO A3c = NO-GO, A3c CHIUSA** (stile veto NaN-boxing; «robusto»
+  QUALIFICATO in revisione: modello hot-hot + cuscinetto pair-per-evento
+  ~2× pro-GO, emenda §9): banda_netta [1,109;1,324] s < S2 1,53 · S3 lorda
+  [3,627;3,995] s < 4,58, estremi FAVOREVOLI ⇒ restano A3a/A3B micro-judged;
+  residuo più grosso = borrow C2 teardown/sweep ~0,91–1,09 s.
 3·**Pesca outlier CHIUSA a scala suite**: debug_backtrace k=45 alloc/call
   ESATTE (≈473k chiamate ORM; grasso per-alloc, bilaterale 5,50×) ·
   class_exists k=2 (≈4,85M chiamate) · testa intera 82,2M ≈ 0,6–1,0 s ⇒

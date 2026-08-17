@@ -4,3 +4,4 @@ banda_netta = [1.109; 1.324] s (C2 [0.910;1.090] + C4 [0.096;0.097] + C5obj [0.0
 S3 somma lorda Object (C1..C5) = [3.627; 3.995] s
 soglie: S1>=0.50 S2>=1.53 (banda_netta) · S3>=4.58 (lorda)
 VERDETTO: NO-GO ROBUSTO a fortiori (estremo hi fallisce: S2 S3) — A3c CHIUSA (stile veto NaN-boxing); restano A3a/A3b micro-judged e leve per NOME
+RETTIFICA post-revisione (2026-08-18, rev. MISURA): la riga «prezzi:» sopra e IMPRECISA — i file usati sono QUATTRO (price-rec-r1/r2 di record + price-r1/r2 della t3, banda min/max sul pool). «NO-GO ROBUSTO a fortiori» QUALIFICATO: maggiorante nel modello hot-hot (prezzi correnti ANCH'essi su handle caldo, §9 criterio); la robustezza la fornisce il cuscinetto pair-per-evento ~2x pro-GO su C1/C5 (~1,1 s) + clamp e quote agli estremi pro-GO + mock_decq non addebitato. Il VERDETTO NO-GO resta.

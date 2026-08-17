@@ -77,3 +77,13 @@
    a pesca-outlier (atto 2) e touch-map A2 (atto 3); GO ⇒ criterio A3c
    pieno pre-registrato in sessione dedicata; INDECIDIBILE ⇒ atti del §6c
    poi rigiudizio, senza toccare le soglie.
+9. EMENDA post-revisione (2026-08-18, rev. MISURA — RECEPITA, il verdetto
+   NON cambia): (a) anche i prezzi CORRENTI (c1_pair/c2_*/note/mv_obj) sono
+   misurati su handle CALDO — il §7 dichiarava hot il solo mock; il NO-GO
+   poggia sulla cancellazione common-mode dei miss (simmetrici sui due lati)
+   E sul cuscinetto pro-GO della convenzione pair-per-evento: C1/C5 contano
+   clone e drop come eventi SEPARATI mentre c1_pair/mv_obj prezzano la
+   COPPIA ⇒ S3 e C5-netto sono gonfiati ~2× a favore di A3 (~1,1 s di
+   margine); (b) mock_decq mai addebitato al lato mock (pro-GO, dichiarato);
+   (c) ogni eventuale riapertura A3c esige sonde working-set (~180k slot)
+   su ENTRAMBI i lati, non solo mock.

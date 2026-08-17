@@ -1,7 +1,9 @@
 # NEXT_SESSION — phpr: OBIETTIVO PARITÀ (≥1×) con l'oracle; ≤3× = tappa (REGOLE §1)
 ⏱ **FONDAMENTALI**: **⚖️ A1 CHIUSA in S-152: sonde-prezzo + GO/NO-GO A3c =
-NO-GO ROBUSTO ⇒ A3c CHIUSA a verdetto** (stile veto NaN-boxing; riapribile
-SOLO con conteggi/prezzi nuovi che superino le soglie s151 §6): banda_netta
+NO-GO ⇒ A3c CHIUSA a verdetto** (stile veto NaN-boxing; «robusto»
+QUALIFICATO dalla revisione: maggiorante nel modello hot-hot + cuscinetto
+pair-per-evento ~2× pro-GO ~1,1 s, criterio §9; riapribile SOLO con
+sonde working-set ~180k slot su ENTRAMBI i lati oltre soglia): banda_netta
 [1,109;1,324] s < S2 1,53 · S3 lorda [3,627;3,995] s < 4,58, entrambe
 all'estremo FAVOREVOLE ad A3 (mock LB-ottimistico) — restano **A3a/A3b
 micro-judged** e leve per NOME · prezzi (4 repliche, probe d90dcdc6f9f154af
