@@ -1621,15 +1621,6 @@ impl Func {
     /// triplo originale. Chiamata da [`Func::shrink`]: una volta per compile,
     /// mai sul cammino di esecuzione.
     fn fuse_prop_dim_reads(&mut self) {
-        // S-150 istruttoria FR1 (criterio wp150-harness/s150-criterio-fr1.md
-        // p.4): interruttore MONOBINARIO d'istruttoria — con PHPR_FR1_OFF
-        // spegne la SOLA emissione del fuso alla lowering (questa funzione
-        // gira una volta per compile, mai sul cammino di esecuzione):
-        // run_loop e dispatch INVARIATI per costruzione. Si rimuove a fine
-        // istruttoria con revert dichiarato (criterio p.7).
-        if std::env::var_os("PHPR_FR1_OFF").is_some() {
-            return;
-        }
         for i in 0..self.ops.len().saturating_sub(2) {
             let (Op::PropGetSlot { slot, name, ic }, Op::PushConst(k), Op::FetchDim) =
                 (&self.ops[i], &self.ops[i + 1], &self.ops[i + 2])
