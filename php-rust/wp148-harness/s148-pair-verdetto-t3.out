@@ -1,0 +1,61 @@
+== s148 replica coppia WP full+media sul pin s145 tentativo=t3 (criterio s132-criterio-pair.md RIUSATO + s146-criterio-pair.md EREDITATO + s148-criterio-t2.md; az.rev. S-146 #1/#3) ==
+grade=VERDICT  # derivazione meccanica dai .time; rc autoritativo = pair-out/pair148-t3.done
+# full: cpu=user+sys (etichettato); media: CANONICA=user-only + companion (az.rev. S-128 #3)
+# az.rev. S-131 #3: riferimento PER CONFIGURAZIONE, ON-ONLY = canonico; firma per gamba
+# az.rev. S-136 #2: lettura firma PRE-REGISTRATA: >150% med MOTORE = SPORCA (esclusa); 120-150% = ELEVATA (nel canone, annotata); <=120% pulita
+quiescenza warmup: rc=0 (file: pair-out/quiesce-t3-warmup.rc)
+quiescenza leg1-on: rc=0 (file: pair-out/quiesce-t3-leg1-on.rc)
+quiescenza leg2-on: rc=0 (file: pair-out/quiesce-t3-leg2-on.rc)
+quiescenza leg3-on: rc=0 (file: pair-out/quiesce-t3-leg3-on.rc)
+quiescenza leg4-on: rc=0 (file: pair-out/quiesce-t3-leg4-on.rc)
+quiescenza leg5-on: rc=0 (file: pair-out/quiesce-t3-leg5-on.rc)
+quiescenza leg6-on: rc=0 (file: pair-out/quiesce-t3-leg6-on.rc)
+leg1-on: ictx/s oracle=1191 phpr=218  contesa ok
+  firma leg1-on: ictx%med oracle=100% phpr=100% rank_cpu_oracle=6/6 (1=piu' veloce)
+leg2-on: ictx/s oracle=1181 phpr=219  contesa ok
+  firma leg2-on: ictx%med oracle=100% phpr=101% rank_cpu_oracle=2/6 (1=piu' veloce)
+leg3-on: ictx/s oracle=1190 phpr=218  contesa ok
+  firma leg3-on: ictx%med oracle=100% phpr=100% rank_cpu_oracle=4/6 (1=piu' veloce)
+leg4-on: ictx/s oracle=1180 phpr=217  contesa ok
+  firma leg4-on: ictx%med oracle=99% phpr=99% rank_cpu_oracle=3/6 (1=piu' veloce)
+leg5-on: ictx/s oracle=1184 phpr=217  contesa ok
+  firma leg5-on: ictx%med oracle=100% phpr=100% rank_cpu_oracle=1/6 (1=piu' veloce)
+leg6-on: ictx/s oracle=1189 phpr=219  contesa ok
+  firma leg6-on: ictx%med oracle=100% phpr=100% rank_cpu_oracle=5/6 (1=piu' veloce)
+ictx_s_mediana_oracle=1186 ictx_s_mediana_phpr=218  # PER MOTORE
+gambe pulite: ['leg1-on', 'leg2-on', 'leg3-on', 'leg4-on', 'leg5-on', 'leg6-on']
+leg1-on: full_oracle_cpu=457.32 full_phpr_cpu=817.96 proprio=1.789 peak_phpr_MiB=1775.7
+leg2-on: full_oracle_cpu=456.37 full_phpr_cpu=816.35 proprio=1.789 peak_phpr_MiB=1782.0
+leg3-on: full_oracle_cpu=457.13 full_phpr_cpu=816.38 proprio=1.786 peak_phpr_MiB=1774.7
+leg4-on: full_oracle_cpu=456.87 full_phpr_cpu=817.37 proprio=1.789 peak_phpr_MiB=1772.5
+leg5-on: full_oracle_cpu=456.08 full_phpr_cpu=822.05 proprio=1.802 peak_phpr_MiB=1773.7
+leg6-on: full_oracle_cpu=457.27 full_phpr_cpu=819.83 proprio=1.793 peak_phpr_MiB=1772.2
+replica_peak_senza_inserzione (p.5): leg1-on=1775.7 leg2-on=1782.0 leg3-on=1774.7 leg4-on=1772.5 leg5-on=1773.7 leg6-on=1772.2
+replica_peak lettura: 6/6 basse (<=1825) -> livello BASSO unico (il doppio livello NON si riproduce)
+matrice full (gambe PULITE) phpr(riga)/oracle(colonna):
+  leg1-on/leg1-on=1.789  leg1-on/leg2-on=1.792  leg1-on/leg3-on=1.789  leg1-on/leg4-on=1.790  leg1-on/leg5-on=1.793  leg1-on/leg6-on=1.789
+  leg2-on/leg1-on=1.785  leg2-on/leg2-on=1.789  leg2-on/leg3-on=1.786  leg2-on/leg4-on=1.787  leg2-on/leg5-on=1.790  leg2-on/leg6-on=1.785
+  leg3-on/leg1-on=1.785  leg3-on/leg2-on=1.789  leg3-on/leg3-on=1.786  leg3-on/leg4-on=1.787  leg3-on/leg5-on=1.790  leg3-on/leg6-on=1.785
+  leg4-on/leg1-on=1.787  leg4-on/leg2-on=1.791  leg4-on/leg3-on=1.788  leg4-on/leg4-on=1.789  leg4-on/leg5-on=1.792  leg4-on/leg6-on=1.787
+  leg5-on/leg1-on=1.798  leg5-on/leg2-on=1.801  leg5-on/leg3-on=1.798  leg5-on/leg4-on=1.799  leg5-on/leg5-on=1.802  leg5-on/leg6-on=1.798
+  leg6-on/leg1-on=1.793  leg6-on/leg2-on=1.796  leg6-on/leg3-on=1.793  leg6-on/leg4-on=1.794  leg6-on/leg5-on=1.798  leg6-on/leg6-on=1.793
+full_intervallo_PULITO_misto=1.785-1.802  # companion (miscela config)
+coppie_proprie_PULITE_miste=1.786-1.802 (N=6)
+coppie_proprie_user_only_miste=1.796-1.813
+full_on_only_coppie_proprie=1.786-1.802 (N=6) CANONICO
+full_on_only_intervallo=1.785-1.802
+confronto_formale_rif: on-only vs [1.765-1.788] banda 0.036 (rif S-142) -> COMPATIBILE (tutte le coppie proprie dentro)
+banda_ON_fondata=0.017 (max-min di N=6 coppie proprie ON PULITE; unione finestre nel verdetto di sessione)
+media_leg1-on: user_only_CANONICA=2.509 user+sys_companion=2.445
+media_leg2-on: user_only_CANONICA=2.504 user+sys_companion=2.436
+media_leg3-on: user_only_CANONICA=2.528 user+sys_companion=2.462
+media_leg4-on: user_only_CANONICA=2.525 user+sys_companion=2.457
+media_leg5-on: user_only_CANONICA=2.514 user+sys_companion=2.450
+media_leg6-on: user_only_CANONICA=2.540 user+sys_companion=2.475
+parita_leg1-on: media=OK(vuoto) full=OK(solo wp_is_stream #2)
+parita_leg2-on: media=OK(vuoto) full=OK(solo wp_is_stream #2)
+parita_leg3-on: media=OK(vuoto) full=OK(solo wp_is_stream #2)
+parita_leg4-on: media=OK(vuoto) full=OK(solo wp_is_stream #2)
+parita_leg5-on: media=OK(vuoto) full=OK(solo wp_is_stream #2)
+parita_leg6-on: media=OK(vuoto) full=OK(solo wp_is_stream #2)
+deriva_test (s148 p.4, N=6 critico 0,829): rho_A(leg,peak)=-0.886 -> DERIVA DISCENDENTE confermata; rho_B(peak,rapporto)=-0.600 -> accoppiamento NON confermato
