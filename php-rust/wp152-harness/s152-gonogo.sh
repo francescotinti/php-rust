@@ -12,15 +12,21 @@ H="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp152-harness"
 OUT="$H/sonda-out"
 V="$H/s152-gonogo-verdetto.out"
 [ -e "$V" ] && { echo "verdetto ESISTE" >&2; exit 7; }
-[ -s "$OUT/price-r1.txt" ] && [ -s "$OUT/price-r2.txt" ] || { echo "prezzi assenti" >&2; exit 8; }
+# EMENDA dichiarata (criterio p.3, t3 dovuta per replica >2% su mv_obj/
+# mock_dup_rel/c2_borrow): banda per chiave = [min,max] su TUTTE le repliche
+# disponibili — le 2 di record (price-rec-r*, salvate prima della t3) + le 2
+# della t3 (price-r* del verdetto -t3).
+FILES=""
+for f in "$OUT/price-rec-r1.txt" "$OUT/price-rec-r2.txt" "$OUT/price-r1.txt" "$OUT/price-r2.txt"; do
+  [ -s "$f" ] && FILES="$FILES $f"
+done
+[ -n "$FILES" ] || { echo "prezzi assenti" >&2; exit 8; }
 
 get(){ # $1=file $2=chiave completa → valore
   sed -n "s/^$2=\([0-9.]*\)$/\1/p" "$1" | head -1
 }
-# banda per chiave = [min,max] delle 2 repliche
-band(){ # $1=chiave → "min max"
-  a=$(get "$OUT/price-r1.txt" "$1"); b=$(get "$OUT/price-r2.txt" "$1")
-  awk -v a="$a" -v b="$b" 'BEGIN{ if(a<b) print a, b; else print b, a }'
+band(){ # $1=chiave → "min max" su tutte le repliche
+  { for f in $FILES; do get "$f" "$1"; done; } | awk 'NR==1{lo=$1;hi=$1} {if($1<lo)lo=$1; if($1>hi)hi=$1} END{print lo, hi}'
 }
 
 read C2B_LO C2B_HI <<< "$(band s152.price.c2_borrow_ns)"

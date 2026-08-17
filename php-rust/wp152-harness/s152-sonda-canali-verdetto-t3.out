@@ -1,0 +1,5 @@
+== s152 sonde-prezzo canali C1-C5 + mock store-indicizzato (criterio s152-criterio-sonde.md; base s149-sonda-pair.sh) ==
+probe_bin=d90dcdc6f9f154af (build sonda-price, MAI parita')
+start=2026-08-18 00:16:53
+lock: creato /private/tmp/phpr-measure.lock
+rust-analyzer: lasciato quieto (il gate CPU della quiescenza arbitra; il kill lo fa RIPARTIRE a indicizzare — osservato s145 t2: 21 tentativi)
