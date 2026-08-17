@@ -1,0 +1,136 @@
+2,6c2,6
+< # s149-census-orm.sh — census tranche-4 per-NOME-builtin su SUITE ORM
+< # (criterio s149-criterio-tr4.md). Base DICHIARATA: wp148-harness/
+< # s148-census-orm.sh (adattamenti: smoke s149 nomi str_repeat/sprintf +
+< # identita' s149sum EREDITANDO lo smoke s148; output in census-out/, verdetto
+< # s149). Manifest s149-census-copia.diff (copia-gate). MAI cifra di tempo.
+---
+> # s150-census-controllo.sh — run di CONTROLLO census workdir-lungo (criterio
+> # s150-criterio-census.md, az.rev.2 S-149). Base DICHIARATA: wp149-harness/
+> # s149-census-orm.sh (adattamenti: 1 SOLA replica; guardia ${#SP}≥100 char;
+> # guardia hash probe == f3a111ac92cac3ef; estrazione diretta s149sum dal raw
+> # — niente ri-aggregazione per NOME; verdetto s150). MAI cifra di tempo.
+10c10,11
+< H="$REPO/wp149-harness"
+---
+> H="$REPO/wp150-harness"
+> H149="$REPO/wp149-harness"
+15,17c16,17
+< VERD="$H/s149-tr4-verdetto.out"
+< p(){ echo "$(date +%H:%M:%S) $1" >> "$OUT/progress.txt"; }
+< rm -f "$OUT/census.done" "$OUT/sentinelle.txt" "$OUT/runrc.txt"
+---
+> VERD="$H/s150-census-controllo-verdetto.out"
+> rm -f "$OUT/census.done"
+19,21c19,25
+< # smoke (criterio p.5): esito ESATTO — s148 EREDITATO (frame/hostcall/arrgrow
+< # >=1 + identita' s148sum) E s149: nomi str_repeat/sprintf n>=1, identita'
+< # hostcall_n==sum_name_n+unnamed_n, unnamed==0, overflow==0.
+---
+> HP=$(shasum -a 256 "$CENSUS_PHPR" | cut -c1-16)
+> [ "$HP" = "f3a111ac92cac3ef" ] || { echo "rc=6 probe $HP != f3a111ac92cac3ef (criterio p.2)" > "$OUT/census.done"; exit 6; }
+> WLEN=${#SP}
+> WORK="$SP/orm-work"; WWLEN=${#WORK}
+> [ "$WWLEN" -ge 100 ] || { echo "rc=6 workdir ${WWLEN} char < 100 (criterio p.2)" > "$OUT/census.done"; exit 6; }
+> 
+> # smoke probe EREDITATO (esito ESATTO, come s149)
+24c28
+<   "$CENSUS_PHPR" "$H/smoke149.php" > "$SP/smoke149.out" 2>&1
+---
+>   "$CENSUS_PHPR" "$H149/smoke149.php" > "$SP/smoke150.out" 2>&1
+30,38d33
+< ga=$(sed -n 's/^s148sum pid=[0-9]* galloc_n=\([0-9][0-9]*\) .*/\1/p' "$OUT/smoke-mem.txt" | head -1)
+< sm=$(sed -n 's/^s148sum pid=[0-9]* galloc_n=[0-9]* sum_n=\([0-9][0-9]*\)$/\1/p' "$OUT/smoke-mem.txt" | head -1)
+< if [ -z "${ga:-}" ] || [ -z "${sm:-}" ] || [ "$ga" != "$sm" ]; then
+<   SMOKE_FAIL="$SMOKE_FAIL identita_s148=galloc_n:${ga:-ASSENTE}!=sum_n:${sm:-ASSENTE}"
+< fi
+< for nm in str_repeat sprintf; do
+<   v=$(sed -n 's/^s149name pid=[0-9]* name='"$nm"' n=\([0-9][0-9]*\) .*/\1/p' "$OUT/smoke-mem.txt" | head -1)
+<   [ -n "${v:-}" ] && [ "$v" -ge 1 ] || SMOKE_FAIL="$SMOKE_FAIL s149name.$nm=${v:-ASSENTE}"
+< done
+47,50c42
+< if [ -n "$SMOKE_FAIL" ]; then
+<   echo "rc=8 probe MUTO/zero su:$SMOKE_FAIL" > "$OUT/census.done"; exit 8
+< fi
+< p "smoke PASS (s148 ereditato + s149 nomi vivi + identita' ESATTA + unnamed/overflow 0)"
+---
+> [ -z "$SMOKE_FAIL" ] || { echo "rc=8 probe MUTO/zero su:$SMOKE_FAIL" > "$OUT/census.done"; exit 8; }
+54,70c46,58
+< for rep in 1 2; do
+<   rm -rf "$SP/orm-work"; tar xzf "$GATES/orm-work.tgz" -C "$SP" || { echo "rc=7 untar" > "$OUT/census.done"; exit 7; }
+<   cd "$SP/orm-work" || { echo "rc=7 cd" > "$OUT/census.done"; exit 7; }
+<   RAW="$OUT/census-mem-r$rep.txt"; rm -f "$RAW"
+<   echo "rep$rep pre=$(busy)" >> "$OUT/sentinelle.txt"
+<   p "rep$rep START"
+<   PHPR_MEM_CENSUS="$RAW" \
+<     "$CENSUS_PHPR" vendor/bin/phpunit --no-coverage > "$OUT/run$rep.txt" 2>&1 &
+<   PID=$!
+<   ( sleep 1800; kill -9 "$PID" 2>/dev/null ) & WDPID=$!
+<   wait "$PID"; RUNRC=$?
+<   kill "$WDPID" 2>/dev/null; wait "$WDPID" 2>/dev/null
+<   echo "rep$rep post=$(busy)" >> "$OUT/sentinelle.txt"
+<   p "rep$rep rc=$RUNRC"
+<   echo "rep$rep run_rc=$RUNRC raw=$(basename "$RAW")" >> "$OUT/runrc.txt"
+<   tr -d '\0' < "$OUT/run$rep.txt" | sed -n 's/^[0-9][0-9]*) \(.*\)$/\1/p' | sort -u > "$OUT/rep$rep.failnames"
+< done
+---
+> rm -rf "$WORK"; tar xzf "$GATES/orm-work.tgz" -C "$SP" || { echo "rc=7 untar" > "$OUT/census.done"; exit 7; }
+> cd "$WORK" || { echo "rc=7 cd" > "$OUT/census.done"; exit 7; }
+> RAW="$OUT/census-mem-ctrl.txt"; rm -f "$RAW"
+> PRE=$(busy)
+> PHPR_MEM_CENSUS="$RAW" \
+>   "$CENSUS_PHPR" vendor/bin/phpunit --no-coverage > "$OUT/run-ctrl.txt" 2>&1 &
+> PID=$!
+> ( sleep 1800; kill -9 "$PID" 2>/dev/null ) & WDPID=$!
+> wait "$PID"; RUNRC=$?
+> kill "$WDPID" 2>/dev/null; wait "$WDPID" 2>/dev/null
+> POST=$(busy)
+> tr -d '\0' < "$OUT/run-ctrl.txt" | sed -n 's/^[0-9][0-9]*) \(.*\)$/\1/p' | sort -u > "$OUT/ctrl.failnames"
+> PAR=0; diff -q "$REPO/wp125-harness/orm-baseline-failnames.txt" "$OUT/ctrl.failnames" > /dev/null || PAR=1
+72,86c60,84
+< RC=0
+< for rep in 1 2; do
+<   diff -q "$REPO/wp125-harness/orm-baseline-failnames.txt" "$OUT/rep$rep.failnames" > /dev/null || { p "rep$rep parita' DIVERGE"; RC=1; }
+< done
+< 
+< { echo "== s149 census tranche-4 per-NOME-builtin (hostcall.other 165,6M) su SUITE ORM (criterio s149-criterio-tr4.md — CONTEGGI, mai tempo) =="
+<   echo "grade=CENSUS  # monobinario census; l'aggregazione la fa s149-parse.py (golden-tested)"
+<   echo "census_phpr=$(shasum -a 256 "$CENSUS_PHPR" | cut -c1-16)  # probe build, MAI parita'"
+<   cat "$OUT/runrc.txt"
+<   echo "parita' per NOME vs baseline16: rc=$RC (0=entrambe ==)"
+<   echo "--- sentinelle (non-gate, S-143 p.1) ---"
+<   cat "$OUT/sentinelle.txt"
+<   for rep in 1 2; do
+<     echo "summary rep$rep: $(tr -d '\0' < "$OUT/run$rep.txt" | sed -n 's/^\(Tests: .*\)$/\1/p' | tail -1)"
+<   done
+---
+> # aggregazione s149sum su TUTTI i pid del raw (somma; identita' obbligatoria)
+> read -r HN SN UN OV <<EOF
+> $(awk '/^s149sum pid=/{ for(i=1;i<=NF;i++){ split($i,kv,"="); if(kv[1]=="hostcall_n")h+=kv[2]; else if(kv[1]=="sum_name_n")s+=kv[2]; else if(kv[1]=="unnamed_n")u+=kv[2]; else if(kv[1]=="overflow")o+=kv[2] } } END{print h, s, u, o}' "$RAW")
+> EOF
+> { echo "== s150 census CONTROLLO workdir-lungo (criterio s150-criterio-census.md — CONTEGGI, mai tempo) =="
+>   echo "grade=CENSUS  # monobinario census, 1 replica dichiarata"
+>   echo "census_phpr=$HP  # probe CONSERVATO s149, MAI parita'"
+>   echo "workdir_len=${WWLEN} char ($WORK)"
+>   echo "run_rc=$RUNRC raw=$(basename "$RAW")"
+>   echo "sentinelle: pre=$PRE post=$POST (non-gate)"
+>   echo "summary: $(tr -d '\0' < "$OUT/run-ctrl.txt" | sed -n 's/^\(Tests: .*\)$/\1/p' | tail -1)"
+>   echo "parita' fail-set vs baseline16 (sentinella): rc=$PAR"
+>   echo "identita': hostcall_n=$HN sum_name_n=$SN unnamed_n=$UN overflow=$OV $([ "$HN" = "$((SN + UN))" ] && [ "$UN" = 0 ] && [ "$OV" = 0 ] && echo OK || echo VIOLATA-VOID)"
+>   python3 - "$HN" <<'PY'
+> import sys
+> hn = int(sys.argv[1]); s148 = 325416908; s149 = 335837200
+> d148 = (hn - s148) / s148 * 100; d149 = (hn - s149) / s149 * 100
+> print(f"confronto: vs s148(long-path)={d148:+.3f}%  vs s149(short-path)={d149:+.3f}%")
+> if abs(d148) <= 1.0:
+>     print("GIUDIZIO (p.3): spiegazione REGGE — lo scarto +3,2% era il path del workdir")
+> elif abs(d149) <= 1.0:
+>     print("GIUDIZIO (p.3): spiegazione CADE — il conteggio segue il run corto: scarto da RE-ISTRUIRE")
+> else:
+>     print("GIUDIZIO (p.3): FUORI da entrambe le bande — scarto da RE-ISTRUIRE")
+> PY
+88,89c86
+< echo "rc=$RC $(date +%T)" > "$OUT/census.done"
+< p "DONE rc=$RC"
+---
+> echo "rc=0 $(date +%T)" > "$OUT/census.done"
