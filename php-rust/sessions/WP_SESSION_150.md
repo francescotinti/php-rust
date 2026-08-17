@@ -1,5 +1,4 @@
 # WP_SESSION_150 — BT1 PROMOSSA (pin s150); scommessa ORM VINTA OLTRE-ATTESA (8,4→7,1×); FR1 chiusa per eliminazione
-
 **In una frase**: la cura di debug_backtrace è nel motore ufficiale con tutti
 i controlli verdi, la suite Doctrine scende da 8,4 a 7,1 volte il PHP
 originale (6 s guadagnati) e il rallentamento di S-146 è chiuso senza revert.

@@ -17,11 +17,11 @@ fail-closed, emende dichiarate)**.
 
 ## Scoreboard (pin s150 phpr cbbe71735effb165 + server 18c2740774336c82 — NUOVO, da S-150)
 **arith 5,5 · prop 5,5 · calls 4,8 · str 4,3 · arr 3,3 · re 2,5** (R=5 promo
-s150) · hintcall 7,3 (n.r.) · dimread 4,3 · oggetti (s136): objchurn 6,7 ·
-objmap 11,7 · MAPPA (net): WP 1,78 ≈ compoff 1,9 ≪ hf 2,55 ≪ hk 4,3 ≪ **ORM
-7,10–7,15 ≈ dbal 7,28–7,49** · corpus **1412 ×2** (congelato NUOVO S-150) ·
-media 2,480–2,555 (t4) · m-backtrace NETTO 5,50× · mediane finestre WP:
-t1 1,799 · t2 1,738 · t3 1,789 · t4 1,781.
+s150) · hintcall 7,3 (n.r.) · dimread 4,3 · objchurn 6,7 · objmap 11,7 · MAPPA
+(net): WP 1,78 ≈ compoff 1,9 ≪ hf 2,55 ≪ hk 4,3 ≪ **ORM 7,10–7,15 ≈ dbal
+7,28–7,49** · corpus **1412 ×2** (congelato NUOVO S-150) ·
+media 2,480–2,555 (t4) · m-backtrace NETTO 5,50× · mediane WP: t1 1,799 ·
+t2 1,738 · t3 1,789 · t4 1,781.
 
 ## §S-151 — ordine (la testa nuova si conta; ritmo: ≥1 leva A/B)
 1. **Census per-NOME @ pin s150 (tranche-5)**: il 130M di debug_backtrace è
@@ -75,7 +75,6 @@ Pre-flight S-151: pin phpr **s150 cbbe7173**5effb165 + server **s150
 18c27407**74336c82 (cambiano SOLO via pin-*.sh) · MySQL wp8 con l'elenco ·
 uploads sotto guardia · **corpus 1412 ×2** · CI mutex col lock
 `/private/tmp/phpr-measure.lock` da CREARE a ogni finestra · Data ≥10G ·
-rust-analyzer NON kill · ENABLE_PROMPT_CACHING_1H attivo (da S-150) · lettura:
-REGOLE.md → QUI → wp150-harness/s150-promo-verdetto.out →
-s150-orm-coppia-verdetto.out → s150-fr1-verdetto.out →
+rust-analyzer NON kill · ENABLE_PROMPT_CACHING_1H attivo · lettura: REGOLE.md
+→ QUI → wp150-harness/s150-{promo,pair-t4,orm-coppia,fr1}-verdetto.out →
 sessions/WP_SESSION_150.md → PERF_MAP.md.
