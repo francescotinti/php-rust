@@ -14,9 +14,10 @@ prezzi PROPRI pair16 6,37–6,38 / pair48 11,21–11,27 ns (splitoff3 replica 5%
 ⇒ t3 sonda dovuta prima dell'uso); pop-diretti 1×–2× solo micro-judged,
 args-Vec ~1× kill; promozione BT1 = S-150; verdetti
 `wp149-harness/s149-{tr4,sonda-pair,ab-bt1}-verdetto.out`; coppia t3:
-1,786–1,802 N=6 PRIMA finestra 6/6 pulite COMPATIBILE ⇒ rif S-142
-CONFERMATO, banda_ON RIFONDATA multi-finestra 1,722–1,823 (0,101, 17
-coppie)**; storico S-148 = census ATTRIBUZIONE per TAG (hostcall.other
+1,786–1,802 N=6 PRIMA finestra 6/6 pulite COMPATIBILE — su 3 finestre
+conferma NON piena (t2 resta fuori, rett. rev.); banda_ON RIFONDATA
+multi-finestra 1,722–1,823 (0,101, 17 coppie); revisione REGGE CON RETTIFICA
+(incidente 17: guardie R=3 vs R=5)**; storico S-148 = census ATTRIBUZIONE per TAG (hostcall.other
 165,6M > none 94,6M; kill hashbrown/pool-Frame/gc ai perimetri; t2 fuori
 banda basso, `wp148-harness/s148-attrib-verdetto.out`); storico S-147 = coppia dbal+ORM RIMISURATA @ s145
 (ORM 8,370–8,427 ↓ indicativa, dbal 8,20–8,37) + CENSUS UNICO ORM: KILL
@@ -72,7 +73,7 @@ cifre dai verdetti `.out`. Regola di lettura: rapporti PER workload, MAI aggrega
 
 | workload | rapporto phpr/oracle | N | note |
 |---|---|---|---|
-| **WordPress full-suite** | **S-149 t3 @ s145: on-only 1,786–1,802 (N=6, PRIMA finestra 6/6 PULITE) COMPATIBILE ⇒ rif S-142 1,765–1,788 CONFERMATO**; banda finestra t3 0,017 (t1 0,090 · t2 0,020) ⇒ **banda_ON RIFONDATA multi-finestra = unione t1+t2+t3 1,722–1,823 (0,101, 17 coppie proprie pulite) — il confronto formale usa QUESTA, mai finestra singola** | **6/6 pulite** (t3) | S-149 t3 @ s145; parità 6/6 (solo `wp_is_stream #2`); peak t3 1772–1782 = 6/6 livello BASSO unico (il doppio livello S-142 non si riproduce); deriva test N=6: ρ_A=−0,886 ≥ 0,829 ⇒ **deriva discendente peak CONFERMATA**, ρ_B=−0,600 ⇒ peak↮rapporto; leg1 PULITA (indagine `wp149-harness/s149-ictx-leg1-indagine.md`: firma di FINESTRA); verdetto `wp148-harness/s148-pair-verdetto-t3.out` (storico t2: 1,722–1,742 fuori banda basso; t1: 1,733–1,823) |
+| **WordPress full-suite** | **S-149 t3 @ s145: on-only 1,786–1,802 (N=6, PRIMA finestra 6/6 PULITE) COMPATIBILE col rif S-142 1,765–1,788 — su 3 finestre conferma NON piena (t2 resta fuori; rett. rev. S-149)**; banda finestra t3 0,017 (t1 0,090 · t2 0,020) ⇒ **banda_ON RIFONDATA multi-finestra = unione t1+t2+t3 1,722–1,823 (0,101, 17 coppie proprie pulite) — il confronto formale usa QUESTA; per t4+ pre-registrare falsificazione a MEDIANA per finestra (az.rev.3)** | **6/6 pulite** (t3) | S-149 t3 @ s145; parità 6/6 (solo `wp_is_stream #2`); peak t3 1772–1782 = 6/6 livello BASSO unico (il doppio livello S-142 non si riproduce); deriva test N=6: ρ_A=−0,886 ≥ 0,829 ⇒ **deriva discendente peak CONFERMATA**, ρ_B=−0,600 ⇒ peak↮rapporto; leg1 PULITA (indagine `wp149-harness/s149-ictx-leg1-indagine.md`: firma di FINESTRA); verdetto `wp148-harness/s148-pair-verdetto-t3.out` (storico t2: 1,722–1,742 fuori banda basso; t1: 1,733–1,823) |
 | **WordPress gruppo media** | **2,504–2,540 CANONICA user-only** (S-149 t3 @ s145, 6 gambe pulite; companion 2,436–2,475; leg6 massima — nessuna ricorrenza di gamba-max tra finestre) | 6 | S-149 t3 @ s145 (storico t2: 2,454–2,569; S-146: 2,460–2,547) |
 | **symfony http-foundation** (1854) | **2,547–2,559** (raw 2,55–2,57) | 2/lato | S-126; canonica sul CONTEGGIO diff 17 nomi = 0,92% ≤1% (≥3 nomi sono unit puri, NON famiglia `php -S` — emenda S-127); sys alto (I/O) |
 | **symfony http-kernel** (1665 test) | **4,29–4,32** | 2/lato | parità 0E/0F; contesa ok |

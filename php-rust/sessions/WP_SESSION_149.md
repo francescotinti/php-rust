@@ -1,18 +1,17 @@
 # WP_SESSION_149 — TERZO ATTO: l'other ha UN nome (debug_backtrace 74%); BT1 A/B −96,3%; t3 COMPATIBILE, banda multi-finestra rifondata
 
-**In una frase**: il censimento per nome ha svelato che quasi tutta
-l'allocazione «ignota» dei builtin viene da UNA funzione — debug_backtrace,
-che ignorava i propri parametri e costruiva sempre la pila intera — la cura è
-scritta, byte-identica al PHP vero e 27× più veloce sul giudice; la coppia
-WordPress è tornata in banda alla terza replica.
+**In una frase**: quasi tutta l'allocazione «ignota» dei builtin viene da
+UNA funzione — debug_backtrace, che ignorava i propri parametri e costruiva
+sempre la pila intera — la cura è scritta, byte-identica al PHP vero e ~27×
+più veloce sul giudice; la coppia WordPress torna in banda alla terza replica.
 
 **SCOREBOARD** (pin s145 a89faf32+4a9adc51 INVARIATO): arith 5,5 → · prop
 5,5 → · calls 4,8 → · str 4,3 → · arr 3,2 → · re 2,5 → (micro n.r.) · **WP
-full t3 1,786–1,802 (N=6, prima finestra 6/6 PULITE) COMPATIBILE, rif S-142
-CONFERMATO; banda_ON rifondata = unione t1+t2+t3 1,722–1,823 (0,101, 17
-coppie)** · media t3 2,504–2,540 · **leve spedite: 0 — BT1 A/B VINTO
-(ritmo assolto), promozione RINVIATA a S-150 per vincolo t3-prima
-(dichiarato)**.
+full t3 1,786–1,802 (N=6, prima finestra 6/6 PULITE) COMPATIBILE — su 3
+finestre conferma NON piena (t2 resta fuori, rett. rev.); banda_ON rifondata
+= unione t1+t2+t3 1,722–1,823 (0,101, 17 coppie)** · media t3 2,504–2,540 ·
+**leve spedite: 0 — BT1 A/B VINTO (ritmo assolto), promozione RINVIATA a
+S-150 (dichiarato)** · incidenti 16→17 (guardie R=3 vs R=5 pre-reg.).
 
 ## Esiti secchi
 1·**p.1 census tranche-4 rc=0** (golden 11/11 PRIMA; identità ESATTA ×2;
@@ -25,8 +24,9 @@ coppie)** · media t3 2,504–2,540 · **leve spedite: 0 — BT1 A/B VINTO
   PRIMA: attesa BT1 0,83–3,10 s ≥2× ⇒ scommessa suite AMMESSA**; pop-diretti
   1×–2× (micro-judged); args-Vec ~1× (kill bersaglio-solo).
 3·**Leva BT1 A/B** (options/limit onorati — anche cura FEDELTÀ): D=+19000
-  ns/iter (19733→733, −96,3%), 7/7, 95× soglia, guardie 6/6 ≤1 tick, fixture
-  fx-backtrace BYTE-ID, parità B pulita. Promozione S-150.
+  ns/iter (19733→B 667–800, −96%; rett. rev.: B a intervallo), 7/7, 95×
+  soglia, guardie 6/6 ≤1 tick MA a R=3 vs R=5 pre-reg. (incidente 17,
+  riparazione al gate promo), fixture BYTE-ID, parità B pulita. Promo S-150.
 4·**p.3 t3 rc=0**: 6/6 pulite; deriva peak ρ_A=−0,886 CONFERMATA,
   peak↮rapporto (ρ_B=−0,600); leg1 PULITA — coerente con l'indagine ictx
   (firma di FINESTRA amplificata dalla baseline bassa, s149-ictx-leg1).
