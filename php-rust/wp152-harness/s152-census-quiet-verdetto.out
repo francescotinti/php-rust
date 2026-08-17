@@ -1,0 +1,12 @@
+== s152 rerun QUIET testa hostcall (criterio s152-criterio-quiet.md; probe ab02faec0abfab67) ==
+lock: CREATO (finestra quiet; rimozione a fine run)
+quiescenza: PASS al tentativo 21
+workdir=106 char (>=100, come s151)
+replica r1: rc=2 busy_pre=BUSY busy_post=BUSY (attese CLEAN, criterio §2)
+replica r2: rc=2 busy_pre=BUSY busy_post=BUSY (attese CLEAN, criterio §2)
+sentinella fail-set: r1-vs-baseline16=OK · r1-vs-r2=OK (non-gate, si dichiara)
+HOSTN_QUIET_R1=82211532
+HOSTN_QUIET_R2=82211532
+DELTA=0
+GIUDIZIO (criterio §3): Δ=0 ⇒ non-determinismo s151 ATTRIBUITO alla contesa (meccanismo indiretto, dichiarato); testa hostcall CITABILE alla cifra quiet 82211532
+lock: rimosso (era mio)

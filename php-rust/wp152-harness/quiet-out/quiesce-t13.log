@@ -1,0 +1,4 @@
+76808 /bin/bash /Volumes/Extreme Pro/Claude/phpr-ci/work/php-rust/scripts/corpus-gate.sh /private/tmp/phpr-ci-target/release/phpt-runner /Volumes/Extreme Pro/Claude/phpr-ci/out/dd013d65c147/corpus
+76813 /private/tmp/phpr-ci-target/release/phpt-runner --isolate --list-fails /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests
+82480 /private/tmp/phpr-ci-target/release/phpt-runner --run-one /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_declarations/scalar_strict_declaration_placement_008.phpt
+QUIESCENZA-FAIL: processi phpr/php-server vivi
