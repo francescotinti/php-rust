@@ -1,15 +1,14 @@
 # WP_SESSION_151 — concilio ratifica Zval-first; dente A4 armato; census tranche-5 VALIDO
-**In una frase**: nove revisori indipendenti hanno approvato con correzioni il
-piano di ristrutturazione della memoria del motore, è entrato in vigore un
-freno automatico alla crescita dei file, e il censimento ha misurato per la
-prima volta quanto «traffico» di oggetti fa davvero la suite Doctrine.
+**In una frase**: nove revisori hanno approvato con correzioni il piano di
+ristrutturazione della memoria del motore, è in vigore un freno automatico
+alla crescita dei file, e il censimento ha misurato per la prima volta il
+«traffico» di oggetti reale della suite Doctrine.
 
 **SCOREBOARD** (pin s150 INVARIATO cbbe71735effb165 + 18c2740774336c82):
 arith 5,5 → · prop 5,5 → · calls 4,8 → · str 4,3 → · arr 3,3 → · re 2,5 →
-(non rimisurate: nessun pin nuovo) · WP t4 mediana 1,781 (rif.) · ORM
-7,104–7,149 · dbal 7,283–7,491 · corpus 1412×2 · **leve perf spedite: 0 —
-ANOMALIA DICHIARATA** (coperta da rotta utente + concilio) · incidenti
-18→**19** (probe s149 «conservato» SENZA path = non reperibile).
+(non rimisurate: pin invariato) · WP t4 mediana 1,781 · ORM 7,104–7,149 ·
+dbal 7,283–7,491 · corpus 1412×2 · **leve spedite: 0 — ANOMALIA DICHIARATA**
+(coperta dalla rotta) · incidenti 18→**19** (probe s149 senza path).
 
 ## Esiti secchi
 1·**Concilio a 9**: 9× CONCORDO CON EMENDAMENTI. Ratifica emendata: A2
@@ -31,8 +30,7 @@ ANOMALIA DICHIARATA** (coperta da rotta utente + concilio) · incidenti
   teardown/sweep**. N2: p50=1/p99=18, ≤8=92% ⇒ inline-8 fondato; live_end
   5,5%. Testa hostcall 82,2M: **residuo non-backtrace INVARIATO (+0,16% vs
   s149)** = staleness post-BT1 provata; §5-bis fuori bande ⇒ scarto +3,2% a
-  diff sorgente (S-152). debug_backtrace ANCORA #1 (21,3M). Lettura:
-  `s151-census-lettura.md`.
+  diff sorgente (S-152). debug_backtrace ANCORA #1 21,3M. → `s151-census-lettura.md`.
 
 ## ⭐ Lezioni (max 3)
 - ⭐⭐ Una conservazione dichiarata SENZA path non conserva nulla: ogni asset
