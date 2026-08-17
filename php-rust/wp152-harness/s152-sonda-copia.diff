@@ -1,0 +1,65 @@
+2,8c2,9
+< # s149-sonda-pair.sh — sonda-PREZZO pair churn 16–48 B (criterio
+< # s149-criterio-pair.md). Base DICHIARATA: wp145-harness/s145-sonda-prezzi.sh
+< # (adattamenti: chiavi s149.price.* aggiunte allo smoke/check, verdetto e out
+< # in wp149-harness). Manifest s149-sonda-copia.diff (copia-gate). Probe
+< # monobinario `sonda-price` (nessuna census attiva): 1 smoke + 2 repliche del
+< # driver, chiavi a esito ESATTO, quiescenza col gate SEPARATO in retry (la CI
+< # locale ha il mutex sul lock). rc autoritativo = sonda-out/prezzi.rc.
+---
+> # s152-sonda-canali.sh — sonde-prezzo canali C1–C5 + mock store-indicizzato
+> # (criterio s152-criterio-sonde.md). Base DICHIARATA: wp149-harness/
+> # s149-sonda-pair.sh (adattamenti: chiavi s152.price.* nello smoke/check,
+> # verdetto e out in wp152-harness). Manifest s152-sonda-copia.diff
+> # (copia-gate). Probe monobinario `sonda-price` (nessuna census attiva):
+> # 1 smoke + 2 repliche del driver, chiavi a esito ESATTO, quiescenza col gate
+> # SEPARATO in retry (la CI locale ha il mutex sul lock). rc autoritativo =
+> # sonda-out/prezzi.rc.
+12c13
+< H="$REPO/wp149-harness"
+---
+> H="$REPO/wp152-harness"
+16c17
+< VERD="$H/s149-sonda-pair-verdetto${TAG:-}.out"   # TAG=-tN per repliche
+---
+> VERD="$H/s152-sonda-canali-verdetto${TAG:-}.out"   # TAG=-tN per repliche
+21a23
+> KEYS152="c1_pair c2_borrow c2_borrow_mut c3_size_pair mock_deref mock_dup_rel mock_decq mock_alloc miheap_pair"
+33a36,40
+>   for k in $KEYS152; do
+>     v=$(sed -n "s/^s152\.price\.${k}_ns=\([0-9.]*\)$/\1/p" "$1" | head -1)
+>     [ -n "${v:-}" ] || return 1
+>     awk -v x="$v" 'BEGIN{ exit !(x>0) }' || return 1
+>   done
+35c42,44
+<     && grep -q '^s149\.price\.zval_size=' "$1" && grep -q '^s149\.price\.n_pair=' "$1"
+---
+>     && grep -q '^s149\.price\.zval_size=' "$1" && grep -q '^s149\.price\.n_pair=' "$1" \
+>     && grep -q '^s152\.price\.obj_size=' "$1" && grep -q '^s152\.price\.n_mv=' "$1" \
+>     && grep -q '^s152\.price\.n_pair=' "$1"
+40c49
+< echo "== s149 sonda-PREZZO pair churn 16-48 B (criterio s149-criterio-pair.md; base s145-sonda-prezzi.sh) =="
+---
+> echo "== s152 sonde-prezzo canali C1-C5 + mock store-indicizzato (criterio s152-criterio-sonde.md; base s149-sonda-pair.sh) =="
+46c55
+< echo "s149-pair pid=$$ $(date +%FT%T)" > "$LOCK"
+---
+> echo "s152-canali pid=$$ $(date +%FT%T)" > "$LOCK"
+63c72
+< # smoke (criterio p.3/p.6: probe muto/parziale => STOP rc=8, niente run)
+---
+> # smoke (criterio p.4: probe muto/parziale => STOP rc=8, niente run)
+67c76
+<   echo "smoke: FALLITO (stdout='$GOT'; chiavi s145=$(grep -c '^s145\.price\.' "$OUT/smoke-price.txt" 2>/dev/null || echo 0)/11 s149=$(grep -c '^s149\.price\.' "$OUT/smoke-price.txt" 2>/dev/null || echo 0)/6) — STOP rc=8"
+---
+>   echo "smoke: FALLITO (stdout='$GOT'; chiavi s145=$(grep -c '^s145\.price\.' "$OUT/smoke-price.txt" 2>/dev/null || echo 0)/11 s149=$(grep -c '^s149\.price\.' "$OUT/smoke-price.txt" 2>/dev/null || echo 0)/6 s152=$(grep -c '^s152\.price\.' "$OUT/smoke-price.txt" 2>/dev/null || echo 0)/12) — STOP rc=8"
+70c79
+< echo "smoke: PASS (stdout SONDA-OK, 11 chiavi s145 + 6 chiavi s149, prezzi >0)"
+---
+> echo "smoke: PASS (stdout SONDA-OK, 11 chiavi s145 + 6 chiavi s149 + 12 chiavi s152, prezzi >0)"
+71a81
+> echo "obj_size=$(sed -n 's/^s152\.price\.obj_size=\([0-9]*\)$/\1/p' "$OUT/smoke-price.txt") (audit taglia RefCell<Object>, informativo)"
+88c98
+< [ "$FAIL" = 0 ] && echo "PREZZI ACQUISITI (banda per chiave = [min,max] delle 2 repliche; replica >2% sulla chiave di decisione => t3 dovuta — criterio p.2)"
+---
+> [ "$FAIL" = 0 ] && echo "PREZZI ACQUISITI (banda per chiave = [min,max] delle 2 repliche; replica >2% sulla chiave di decisione => t3 dovuta — criterio p.3)"

@@ -125,6 +125,98 @@ impl<'m> Vm<'m> {
             })
         };
 
+        // S-152 p.1 (sonde-prezzo canali, wp152-harness/s152-criterio-sonde.md):
+        // prezzi CORRENTI dei canali census C1/C2/C3 sull'handle Object REALE
+        // + prezzi del SOSTITUTIVO mock store-indicizzato (forma A3 ratificata:
+        // bucket+free-list, incref sullo slot, gen-check). Il mock è su slot
+        // CALDO = lower bound OTTIMISTICO del sostitutivo, DICHIARATO nel
+        // criterio (§2/§6): niente modello cache/working-set qui.
+        let Zval::Object(orc) = &vobj else {
+            return Ok(Zval::Bool(false));
+        };
+        let c1_pair = bench(N_MV, |_| {
+            let c = Rc::clone(std::hint::black_box(orc));
+            std::hint::black_box(&c);
+        });
+        let c2_borrow = bench(N_MV, |_| {
+            let g = std::hint::black_box(orc).borrow();
+            std::hint::black_box(&*g);
+        });
+        let c2_borrow_mut = bench(N_MV, |_| {
+            let g = std::hint::black_box(orc).borrow_mut();
+            std::hint::black_box(&*g);
+        });
+        // C3: coppia malloc+free alla taglia della cella condivisa
+        // RefCell<Object> (il payload dell'Rc). Header Rc (2×usize) NON
+        // incluso: proxy per DIFETTO dichiarato; init campi/props INVARIANTI
+        // tra i mondi, fuori dal netto per costruzione.
+        let obj_size = std::mem::size_of::<RefCell<Object>>();
+        let c3_size_pair = bench(N_PAIR, |_| {
+            let v: Vec<u8> = Vec::with_capacity(std::hint::black_box(obj_size));
+            std::hint::black_box(&v);
+        });
+        struct MockSlot {
+            gen: u32,
+            rc: std::cell::Cell<u32>,
+            payload: [u64; 4],
+        }
+        let store: Vec<MockSlot> = (0..1024u32)
+            .map(|i| MockSlot { gen: i ^ 0x5a, rc: std::cell::Cell::new(1), payload: [0; 4] })
+            .collect();
+        let (idx, gen) = (512usize, store[512].gen);
+        let mock_deref = bench(N_MV, |_| {
+            let s = &store[std::hint::black_box(idx)];
+            if s.gen != std::hint::black_box(gen) {
+                unreachable!("gen-check fallito nel mock");
+            }
+            std::hint::black_box(&s.payload);
+        });
+        let mock_dup_rel = bench(N_MV, |_| {
+            let s = &store[std::hint::black_box(idx)];
+            s.rc.set(s.rc.get() + 1);
+            std::hint::black_box(&s.rc);
+            s.rc.set(s.rc.get() - 1);
+        });
+        // Drop sostitutivo (coda decrementi, Matsakis): push dell'id sulla
+        // coda riusata; il clear ammortizzato resta DENTRO la misura. Il
+        // decref applicato al drenaggio è già prezzato da mock_dup_rel.
+        let mock_decq = {
+            let mut q: Vec<u32> = Vec::with_capacity(1024);
+            bench(N_MV, |i| {
+                q.push(std::hint::black_box(i as u32));
+                if q.len() == 1024 {
+                    q.clear();
+                }
+            })
+        };
+        // Alloc sostitutivo di C3: pop free-list + gen-bump + push di ritorno
+        // (slot riusato, NESSUN malloc sul cammino).
+        let (mock_alloc, miheap_pair) = {
+            let mut free_ids: Vec<u32> = (0..1024).collect();
+            let mut store2: Vec<(u32, [u64; 4])> = vec![(0, [0; 4]); 1024];
+            let ma = bench(N_PAIR, |_| {
+                let id = free_ids.pop().unwrap();
+                let slot = &mut store2[std::hint::black_box(id as usize)];
+                slot.0 = slot.0.wrapping_add(1);
+                std::hint::black_box(&slot.1);
+                free_ids.push(id);
+            });
+            // Braccio mi_heap (Leijen R2): coppia alloc+free a taglia Object
+            // su heap mimalloc DEDICATO (il per-richiesta di A3); new/destroy
+            // dell'heap fuori misura = ammortizzati sul blocco, dichiarato.
+            let mh = unsafe {
+                let heap = libmimalloc_sys::mi_heap_new();
+                let v = bench(N_PAIR, |_| {
+                    let p = libmimalloc_sys::mi_heap_malloc(heap, std::hint::black_box(obj_size));
+                    std::hint::black_box(p);
+                    libmimalloc_sys::mi_free(p);
+                });
+                libmimalloc_sys::mi_heap_destroy(heap);
+                v
+            };
+            (ma, mh)
+        };
+
         let mut out = String::new();
         for (k, v) in [
             ("cal", cal),
@@ -151,6 +243,22 @@ impl<'m> Vm<'m> {
         out.push_str(&format!(
             "s149.price.zval_size={}\ns149.price.n_pair={N_PAIR}\n",
             std::mem::size_of::<Zval>(),
+        ));
+        for (k, v) in [
+            ("c1_pair", c1_pair),
+            ("c2_borrow", c2_borrow),
+            ("c2_borrow_mut", c2_borrow_mut),
+            ("c3_size_pair", c3_size_pair),
+            ("mock_deref", mock_deref),
+            ("mock_dup_rel", mock_dup_rel),
+            ("mock_decq", mock_decq),
+            ("mock_alloc", mock_alloc),
+            ("miheap_pair", miheap_pair),
+        ] {
+            out.push_str(&format!("s152.price.{k}_ns={v:.4}\n"));
+        }
+        out.push_str(&format!(
+            "s152.price.obj_size={obj_size}\ns152.price.n_mv={N_MV}\ns152.price.n_pair={N_PAIR}\n"
         ));
         if f.write_all(out.as_bytes()).is_err() {
             return Ok(Zval::Bool(false));

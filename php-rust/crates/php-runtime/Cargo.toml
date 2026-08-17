@@ -48,7 +48,11 @@ ic-stats = []
 # builtin `__phpr_sonda_b` (loop di prezzo clone/drop/gc_note/pair). Nessun
 # contatore: i cammini prezzati restano la forma di parità. Probe build only —
 # mai nel pin; i conteggi vivono nelle census (mem-census/zval-census).
-sonda-price = []
+# S-152 p.1 (criterio wp152-harness/s152-criterio-sonde.md §2): il braccio
+# mi_heap (Leijen R2) del probe sonda vuole i binding mi_heap_* — la dep
+# libmimalloc-sys/extended entra SOLO con questa feature (il binario di
+# parità non la attiva; il crate è già nel lock come dep di mimalloc).
+sonda-price = ["dep:libmimalloc-sys"]
 
 [dependencies]
 php-types.workspace = true
@@ -72,6 +76,7 @@ rusqlite = { version = "0.40.1", features = ["bundled", "column_decltype", "colu
 mysql = "28.0.0"
 elsa = "=1.11.2"
 static_assertions.workspace = true
+libmimalloc-sys = { version = "0.1", features = ["extended"], optional = true }
 
 # A-AH29 (Council WP-83): the mem-census lib-test target could not LINK
 # (php_types::memcensus calls mi_* symbols that only the bin crates'
