@@ -1,0 +1,16 @@
+== s150 istruttoria FR1 — A/B monobinario kill-switch (criterio s150-criterio-fr1.md; grado ISTRUTTORIA) ==
+M1=3d2a2d793d69c538 (commit bd40fc1, ricetta nel header)  pin=cbbe71735effb165 (s150)
+start=2026-08-17 19:07:14
+quiescenza: PASS al tentativo 1
+dump m-dimread: fuso ON=1 OFF=0 (attesi: >=1 / 0)
+pavimento M1 med3=0.02
+ancoraggio J1: M1-ON=4.41/4.35 pin=4.27/4.35 (scarto kill-switch dichiarato, non-gate)
+ancoraggio J2: M1-ON=0.15/0.15 pin=0.15/0.14 (scarto kill-switch dichiarato, non-gate)
+J1 grezzi ON: 4.33 4.36 4.39 4.41 4.34  OFF: 4.36 4.37 4.38 4.39 4.36
+J1: ON=144.7 ns/iter  OFF=145.0 ns/iter  D(OFF-ON)=+0.3  segni_OFF_lento=3/5  soglia=2.0
+J2 grezzi ON: 0.15 0.15 0.15 0.15 0.15  OFF: 0.20 0.20 0.20 0.20 0.20
+J2: ON=43.3 ns/iter  OFF=60.0 ns/iter  D(OFF-ON)=+16.7  segni_OFF_lento=5/5  soglia=4.0
+disasm M1: run_loop size=289956 bl=6014
+disasm PIN: run_loop size=289956 bl=6014
+parita' stdout: 0 violazioni ()
+end=2026-08-17 19:08:43

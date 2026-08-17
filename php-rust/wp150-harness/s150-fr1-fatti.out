@@ -4,3 +4,12 @@ s142 (stash bba8a734, pre-FR1):  size=286776 B  bl=5988
 s145 (stash a89faf32, FR1):      size=289956 B  bl=6014   -> delta variante: +3180 B, +26 bl (RIVERIFICA del dato S-145)
 s150 (stash cbbe7173, FR1+BT1):  size=289956 B  bl=6014   -> IDENTICO a s145 (BT1 fuori dal dispatcher, coerente con guardie promo)
 --- p.2 dump ops (fused PropDimGetConst nei giudici): DA ESEGUIRE dopo la coppia ORM (nessun run phpr nella finestra t4) ---
+--- p.2 dump ops (eseguito 19:0x, pin s150) ---
+m-dimrmw10: PropDimGetConst PRESENTE ma FUORI dal loop caldo (op 0026, dopo il loop 0018-0024: 1 esecuzione su 30M; loop = solo FieldAssignOp, celle IC per-op non condivise)
+m-dimread:  PropDimGetConst nel cammino caldo (il giudice della leva)
+--- CONCLUSIONE ISTRUTTORIA (s150-fr1-verdetto.out, esito pre-registrato (b)) ---
+Dente PROVATO su m-dimread: OFF perde il guadagno FR1 (D=+16,7, 5/5 == numeri S-145).
+m-dimrmw10: D(OFF-ON)=+0,3 < soglia 2,0 (3/5) => il +3,00 NON vive nell'emissione del fuso.
+MECCANISMO NOMINATO: prezzo STRUTTURALE della variante nel dispatcher (+3180 B/+26 bl).
+NESSUN REVERT (non curerebbe); voce CHIUSA come prezzo dichiarato (keep-partial-wins).
+Interruttore RIMOSSO con revert 928d87d (crates/ al byte vs sorgente pin, diff vuoto).
