@@ -8,8 +8,9 @@ incidente 17 riparato; identità candidato provata al byte —
 s150-identita-candidato.md) · SCOMMESSA ORM VINTA OLTRE-ATTESA Δ +6,07/+6,70 s
 (attesa 0,8–3,1 = pavimento solo-alloc dichiarato) · census controllo:
 spiegazione path CADUTA, scarto +3,2% s148↔s149 APERTO (candidato:
-auto-conteggio probe s149) · FR1 CHIUSA esito (b): +3,00 = prezzo
-STRUTTURALE (+3180 B/+26 bl), NESSUN revert, interruttore rimosso al byte** ·
+auto-conteggio probe s149) · FR1 CHIUSA esito (b): +3,00 LOCALIZZATO PER
+ELIMINAZIONE — non nell'emissione; indiziato il delta strutturale +3180 B/
++26 bl (rett. rev. SEMANTICA) — NESSUN revert, interruttore rimosso al byte** ·
 leve spedite S-150: **1** (BT1) · sessioni-senza-misura: 0 · **incidenti 18
 (+1: flip-handler coi rami MAI collaudati prima dei run di record — due stop
 fail-closed, emende dichiarate)**.
@@ -27,13 +28,19 @@ storiche finestre WP: t1 1,799 · t2 1,738 · t3 1,789 · t4 1,781.
    sparito — CONTARE la testa nuova di hostcall + partizione di none.other
    94,6M (nativi host DENTRO). Probe NUOVO a sorgente s150 (feature
    mem-census) con RICETTA ESATTA dichiarata env inclusa (lezione S-150);
-   apparato s149 riusabile (parser golden-tested).
+   apparato s149 riusabile (parser golden-tested). **Dentro: spiegare il
+   TETTO smentito della scommessa (Δ 6,1–6,7 ≈ 2× l'attesa alta 3,1 —
+   rilievo rev. 4): il modello conteggio×prezzo va rifondato coi conteggi
+   nuovi.**
 2. **Dentro la stessa campagna: re-istruzione scarto +3,2%** (az. S-150):
    probe s149 CONSERVATO (scratchpad 5f008282, f3a111ac) vs probe s150 sullo
    STESSO workload piccolo — se il delta segue la strumentazione per-NOME,
    l'auto-conteggio è nominato; altrimenti resta aperto a verbale.
 3. **Leva dalla testa nuova** (criterio prima, A/B R=5, guardie R=5 —
-   incidente 17 non si ripete).
+   incidente 17 non si ripete). Candidata di FEDELTÀ pronta (az.rev.3):
+   options/limit su debug_print_backtrace (§3.24, bersaglio = flip
+   `debug_print_backtrace_limit.phpt`) + fx-backtrace ESTESA (az.rev.2:
+   options non-int/both, limit>profondità, closure/include — §3.23).
 4. Pop-diretti (1×–2×) SOLO dopo replica t3 della sonda (splitoff3 5%).
 5. Coppia WP: dovuta SOLO a pin nuovo (eventuale promozione della leva p.3).
 

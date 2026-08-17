@@ -36,8 +36,10 @@ dichiarate).
   frame non era prezzata); dbal companion ↓ coerente (deprecations).
 5·**p.5 FR1 CHIUSA, esito (b)**: dente PROVATO su dimread (OFF perde
   D=+16,7, 5/5 = numeri S-145); dimrmw10 D=+0,3 sotto soglia; fuso FUORI dal
-  loop RMW (dump) ⇒ **+3,00 = prezzo STRUTTURALE** (+3180 B/+26 bl) ⇒ NESSUN
-  revert; interruttore rimosso al byte (928d87d).
+  loop RMW (dump) ⇒ **+3,00 LOCALIZZATO PER ELIMINAZIONE (non vive
+  nell'emissione); indiziato il delta strutturale +3180 B/+26 bl** (rett.
+  rev.: eliminazione, non prova diretta) ⇒ NESSUN revert; interruttore
+  rimosso al byte (928d87d).
 
 ## ⭐ Lezioni (max 3)
 - ⭐⭐ Un braccio A/B costruito FUORI ricetta dà un hash irripetibile:

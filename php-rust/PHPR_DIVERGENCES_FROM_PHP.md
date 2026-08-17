@@ -1051,6 +1051,26 @@ Trovata dalla micro di parità az.rev. S-141 #4 (`wp142-harness/parita-hashed.ph
   avrebbe invalidato l'A/B): apertura per NOME. Una cura deve citare i fail
   del corpus congelato che flippa (famiglia destructors/gc del fail-set).
 
+### 3.23 🟡 `debug_backtrace`: residui OLTRE il perimetro BT1 (S-150, az.rev.1 lente SEMANTICA)
+- La leva BT1 (pin s150) onora `options` int e `limit` sulla forma della
+  fixture (7 combinazioni, un call-site metodo): fx-backtrace byte-id ×2 modi.
+- RESIDUO per NOME: `Zend/tests/backtrace/debug_backtrace_options.phpt` resta
+  FAIL (contenuto MUTATO al flip S-150: diff ridotto, non chiuso). Superfici
+  non coperte dalla fixture: `options` non-int (true/false/coercizioni),
+  `PROVIDE_OBJECT|IGNORE_ARGS` combinati, `limit` > profondità reale,
+  call-site closure/include, VALORI di args (la fixture stampa solo chiavi).
+- Cura futura: estendere fx-backtrace a quelle superfici e citare il flip di
+  `debug_backtrace_options.phpt`.
+
+### 3.24 🟡 `debug_print_backtrace`: `options`/`limit` IGNORATI (asimmetria con la gemella, S-150)
+- Perimetro BT1 dichiarato (s149-criterio-bt1.md p.1): `ho_debug_print_backtrace`
+  INVARIATO (`collect_backtrace()` = delega a `_opt(0,false)`) ⇒ i suoi
+  parametri restano ignorati mentre `debug_backtrace` ora li onora.
+- Fail per NOME nel congelato: `Zend/tests/backtrace/debug_print_backtrace_limit.phpt`
+  (in famiglia, NON flippato da BT1 — atteso).
+- Cura futura (leva di fedeltà candidata S-151): passare options/limit anche
+  qui; bersaglio dichiarato = flip di `debug_print_backtrace_limit.phpt`.
+
 ## 4. Punti di forza da NON toccare (invarianti verificati byte-identici)
 
 Per evitare regressioni, questi comportamenti sono **già** byte-identici con
