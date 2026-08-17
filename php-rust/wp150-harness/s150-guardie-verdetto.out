@@ -1,0 +1,22 @@
+== s150 guardie R=5 + conferma m-backtrace + disasm (criterio s150-criterio-promo.md p.6; riparazione incidente 17) ==
+armA=a89faf32c62142f9 (stash pin s145)  armB=cbbe71735effb165 (candidato s150)
+start=2026-08-17 15:51:49
+pavimenti: A=0.02 B=0.02 oracle=0.05 (med3, misurati)
+guardia ARITH A: 2.39 2.39 2.40 2.39 2.38  B: 2.39 2.38 2.41 2.39 2.39  medA=2.39 medB=2.39 drop1A=0.01 soglia=0.01 -> VERDE
+guardia PROP A: 2.38 2.36 2.35 2.38 2.39  B: 2.38 2.38 2.41 2.37 2.36  medA=2.38 medB=2.38 drop1A=0.03 soglia=0.03 -> VERDE
+guardia CALLS A: 2.18 2.15 2.16 2.15 2.14  B: 2.15 2.16 2.15 2.16 2.21  medA=2.15 medB=2.16 drop1A=0.02 soglia=0.02 -> VERDE
+guardia STR A: 0.70 0.67 0.67 0.68 0.68  B: 0.67 0.66 0.67 0.66 0.67  medA=0.68 medB=0.67 drop1A=0.01 soglia=0.01 -> VERDE
+guardia ARR A: 0.95 0.95 0.95 0.94 1.04  B: 0.96 0.95 0.96 0.97 1.07  medA=0.95 medB=0.96 drop1A=0.01 soglia=0.01 -> VERDE
+guardia RE A: 0.96 0.96 0.95 0.96 0.95  B: 0.96 0.96 0.95 0.96 0.95  medA=0.96 medB=0.96 drop1A=0.01 soglia=0.01 -> VERDE
+guardia DR A: 0.15 0.15 0.15 0.15 0.15  B: 0.15 0.15 0.15 0.15 0.15  medA=0.15 medB=0.15 drop1A=0.00 soglia=0.01 -> VERDE
+guardia RMW A: 0.46 0.46 0.46 0.46 0.46  B: 0.45 0.46 0.46 0.46 0.45  medA=0.46 medB=0.46 drop1A=0.00 soglia=0.01 -> VERDE
+m-backtrace grezzi A: 3.00 2.98 2.98 2.98 2.97  B: 0.13 0.13 0.12 0.13 0.13
+m-backtrace: A=19733 ns/iter  B=733 ns/iter  D=+19000  segni=5/5  soglia=67 -> CONFERMA
+bilaterale NETTO (az.rev.4): oracle=133 ns/iter (pavimento 0.05 MISURATO) -> A/or=148.00x  B/or=5.50x
+disasm A: run_loop size=289956 B bl=6014
+disasm B: run_loop size=289956 B bl=6014
+disasm: bl-count INVARIATO (6014) — come atteso (leva fuori dal dispatcher)
+parita' stdout: 5 violazioni (PARITA' ROTTA mb-A1 PARITA' ROTTA mb-A2 PARITA' ROTTA mb-A3 PARITA' ROTTA mb-A4 PARITA' ROTTA mb-A5 )
+attese: SOLO mb-A* (la divergenza che BT1 chiude; A=pin s145)
+end=2026-08-17 15:54:24
+GUARDIE rc=0 (0 = 8/8 VERDI)

@@ -1,0 +1,11 @@
+== s150 census CONTROLLO workdir-lungo (criterio s150-criterio-census.md — CONTEGGI, mai tempo) ==
+grade=CENSUS  # monobinario census, 1 replica dichiarata
+census_phpr=f3a111ac92cac3ef  # probe CONSERVATO s149, MAI parita'
+workdir_len=118 char (/private/tmp/claude-501/-Volumes-Extreme-Pro-Claude-php-8-5-7/c80e7aae-3294-41a6-a6fc-523ff937f3b1/scratchpad/orm-work)
+run_rc=2 raw=census-mem-ctrl.txt
+sentinelle: pre=BUSY post=BUSY (non-gate)
+summary: Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, Skipped: 59, Incomplete: 2.
+parita' fail-set vs baseline16 (sentinella): rc=0
+identita': hostcall_n=335837211 sum_name_n=335837211 unnamed_n=0 overflow=0 OK
+confronto: vs s148(long-path)=+3.202%  vs s149(short-path)=+0.000%
+GIUDIZIO (p.3): spiegazione CADE — il conteggio segue il run corto: scarto da RE-ISTRUIRE
