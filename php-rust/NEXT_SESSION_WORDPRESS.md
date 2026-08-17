@@ -34,10 +34,9 @@ B leva ac26375a (si RICOMPILA alla promozione).
    attesa hostcall.n ≈ 325,4M; se non torna, lo scarto +3,2% va re-istruito).
 3. **Coppia WP al pin NUOVO** (DOVUTA): confronto su banda multi-finestra
    1,722–1,823; attesa BT1 su WP piccola o nulla (dichiarare).
-4. **Coppia ORM al pin nuovo = GIUDIZIO della scommessa** (pre-registrata:
-   direzione ↓ fuori rumore, attesa 0,8–3,1 s su ~42 s netti ⇒ ~7,6–8,2×;
-   denominatore 0,293 s; az.rev.5: la scommessa è l'UNICO arbitro; az.rev.4:
-   pavimento oracle MISURATO nel giudice bilaterale, B a intervallo).
+4. **Coppia ORM al pin nuovo = GIUDIZIO della scommessa** (direzione ↓
+   fuori rumore, attesa 0,8–3,1 s ⇒ ~7,6–8,2×; denominatore 0,293 s;
+   az.rev.4/5: pavimento oracle misurato, B a intervallo, scommessa = arbitro).
 5. **Istruttoria FR1 dimrmw** (slittata ×3 — OBBLIGO: mutante a parità di
    layout + disasm bl-count PRIMA di ogni revert).
 6. Se si vuole pop-diretti (1×–2×): PRIMA replica t3 sonda (splitoff3 5%).
@@ -51,11 +50,10 @@ objmap 43,4 → piano GC · evalcls 316,9× · refl 42,4× · re +2 alloc ·
 §3.13/§3.12-i/§3.14/§3.21 · get_gc · drift TODO.md · latin1-cliff · dbal 10 nomi.
 
 ## NON riproporre (i veti restano; dettaglio nei concili archiviati)
-**S-149: conteggi→secondi dei prezzi pair SEMPRE con banda dichiarata e mai
-come cifra di record · splitoff3 come chiave di decisione senza replica t3 ·
-bersaglio-solo su args-Vec (~1×) · confronto banda su finestra singola (la
-multi-finestra 1,722–1,823 è LA banda).** S-148: kill
-growth-hashbrown/pool-Frame/gc AL PERIMETRO dei tag · hist per-tag come
+**S-149: conteggi→secondi dei prezzi pair SEMPRE con banda e mai come cifra
+di record · splitoff3 come chiave di decisione senza replica t3 ·
+bersaglio-solo su args-Vec (~1×) · confronto banda su finestra singola.**
+S-148: kill hashbrown/pool-Frame/gc AL PERIMETRO dei tag · hist per-tag come
 other-only. S-147: borrow-first sul PONTE (0,83×) · scommessa canale
 movimenti (tetto 1,27 s) · TakeSlot in OGNI forma. S-146: arena-conteggi
 senza definizione · prezzi pair come budget · quota memops come giudice.
