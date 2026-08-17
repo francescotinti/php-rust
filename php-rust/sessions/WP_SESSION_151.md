@@ -24,17 +24,17 @@ dbal 7,283–7,491 · corpus 1412×2 · **leve spedite: 0 — ANOMALIA DICHIARAT
 3·**Probe tranche-5**: identità ricetta = pin ESATTO; smoke 25/25 su attesi
   PRE-dichiarati; probe **ab02faec0abfab67** CONSERVATO in
   `wp151-harness/census-prep/phpr-census-s151` (path+hash a verbale).
-4·**CENSUS VALIDO rc=0** (×2 repliche IDENTICHE; conservazione esatta su
-  2.393 classi): C2 borrow **340,9M** · C1 handle **254,0M** · C5 valori
-  **191,2M** · C4 gc_note **43,2M** · C3 alloc **6,4M** — **domina il
-  teardown/sweep**. N2: p50=1/p99=18, ≤8=92% ⇒ inline-8 fondato; live_end
-  5,5%. Testa hostcall 82,2M: **residuo non-backtrace INVARIATO (+0,16% vs
-  s149)** = staleness post-BT1 provata; §5-bis fuori bande ⇒ scarto +3,2% a
-  diff sorgente (S-152). debug_backtrace ANCORA #1 21,3M. → `s151-census-lettura.md`.
+4·**CENSUS VALIDO rc=0** (repliche identiche sui canali C1–C5; testa
+  hostcall Δ313 sotto contesa CI, meccanismo da nominare — rev. R1;
+  conservazione esatta 2.393 classi): C2 borrow **340,9M** · C1 handle
+  **254,0M** · C5 valori **191,2M** · C4 gc_note **43,2M** · C3 alloc
+  **6,4M** — domina il **teardown/sweep**. N2 ≤8=92% ⇒ inline-8 fondato.
+  Testa 82,2M: residuo non-bt +0,16% = staleness INDIZIATA (post-hoc,
+  rev. R2); §5-bis fuori bande ⇒ APERTO; diff sorgente S-152 = decisione
+  NUOVA motivata. debug_backtrace #1 21,3M. → `s151-census-lettura.md`.
 
 ## ⭐ Lezioni (max 3)
 - ⭐⭐ Conservazione senza path non conserva: ogni asset a verbale con path+hash.
-- ⭐⭐ Le cifre census invecchiano con le leve promosse: testa 335,8M→82,2M
-  post-BT1, residuo non-bt +0,16% — rifondare PRIMA di citare.
+- ⭐⭐ Le cifre census invecchiano con le leve promosse: rifondare PRIMA di citare.
 - ⭐ Un conteggio frame-granulare attribuito a un builtin traveste un outlier
   algoritmico da fatto di memory-model: granularità delle teste DICHIARATA.
