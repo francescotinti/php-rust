@@ -1,80 +1,79 @@
 # NEXT_SESSION — phpr: OBIETTIVO PARITÀ (≥1×) con l'oracle; ≤3× = tappa (REGOLE §1)
-⏱ **FONDAMENTALI**: **⚖️ CONCILIO S-151 (9× CONCORDO CON EMENDAMENTI, 0
-opposizioni): rotta Zval-first RATIFICATA EMENDATA — A1 census → A2
-chirurgia-first ~3 sessioni (touch-map da A1; run_loop ultimo/MAI) → A3 SOLO
-coi numeri (forma: store bucket+free-list campo della Vm · handle LINEARE
-non-Copy · weak=(id,gen) · coda decrementi+shadow-mode · A3.0
-sweep-preserving, dissenso agli atti); soglie GO/NO-GO GIÀ pre-registrate
-(criterio s151 §6: S1 0,50 · S2 1,53 · S3 4,58 s su D_gap 30,52–30,56 s);
-cifre Gemini MAI nei criteri; veto WP-44 confermato; vincolano
-`wp151-harness/concilio/{verbale-*.md,sintesi.md}`** · **dente A4 ARMATO in
-batteria** (loc_dente: nuovi ≤2.000, 21 cap esatti, anti-slack 200; collaudo
-neg+pos a verbale) · **CENSUS TRANCHE-5 VALIDO rc=0** (×2 repliche identiche;
-conservazione esatta 2.393 classi) · leve spedite S-151: **0 (anomalia DICHIARATA,
-coperta dalla rotta)** · sessioni-senza-misura: 0 · incidenti **19** (+1:
-probe s149 senza path; emenda §5-bis dichiarata pre-run).
-**QUESITI UTENTE** (non bloccanti): 1) ratifica perimetro A2 chirurgia-first
-(~3 vs 4–6 sessioni); 2) A3.0: conferma sweep-preserving o fedeltà-Zend (b).
+⏱ **FONDAMENTALI**: **⚖️ A1 CHIUSA in S-152: sonde-prezzo + GO/NO-GO A3c =
+NO-GO ROBUSTO ⇒ A3c CHIUSA a verdetto** (stile veto NaN-boxing; riapribile
+SOLO con conteggi/prezzi nuovi che superino le soglie s151 §6): banda_netta
+[1,109;1,324] s < S2 1,53 · S3 lorda [3,627;3,995] s < 4,58, entrambe
+all'estremo FAVOREVOLE ad A3 (mock LB-ottimistico) — restano **A3a/A3b
+micro-judged** e leve per NOME · prezzi (4 repliche, probe d90dcdc6f9f154af
+×2 in sonda-prep/+stash): c2_borrow 4,27–4,41 · c2_borrow_mut 1,68 ·
+c1_pair 5,43–5,46 · mock_deref 1,13 ns · **testa hostcall QUIET Δ=0
+(82.211.532 ×2) = CITABILE** · pesca outlier ESAURITA a scala suite (bt
+k=45 alloc/call ≈473k chiamate; ce k=2 ≈4,85M; testa intera ~0,6–1,0 s) ·
++3,2% lato sorgente CHIUSO (auto-conteggio refutato) · leve spedite S-152:
+0 (tentativo d'obbligo = GO/NO-GO eseguito a verdetto) · incidenti **19** (=).
+**QUESITI UTENTE**: 1) con A3c chiusa, perimetro A2 ridotto a **T2-only**
+(mod.rs zone teardown/sweep; T3 run.rs DECADE, T1 solo se una fetta la
+chiede) — ratifica; 2) A3.0 sweep-preserving resta adottato per le fette
+A3a/b (dissenso agli atti); 3) gamba SERVER census slittata ANCHE in S-152
+(dichiarato): commissionarla o lasciarla in coda?
 
 ## Scoreboard (pin s150 INVARIATO phpr cbbe71735effb165 + server 18c2740774336c82)
-**arith 5,5 · prop 5,5 · calls 4,8 · str 4,3 · arr 3,3 · re 2,5** (rif. promo
-s150, non rimisurate) · WP t4 MEDIANA 1,781 · media 2,480–2,555 · **ORM
-7,104–7,149 · dbal 7,283–7,491** · corpus **1412×2** · **CENSUS s151 (ORM,
-per replica): C2 borrow 340,9M · C1 handle 254,0M · C5 valori 191,2M ·
-C4 gc_note 43,2M · C3 alloc 6,4M — domina TEARDOWN/SWEEP
-(frame_teardown.borrow 61,0M · PropSetPop.borrow 57,4M · Sweep.borrow
-50,0M); N2 p50=1/p99=18, ≤8=92% ⇒ inline-8 fondato; live_end 5,5%; testa
-hostcall 82,2M: Δ313 tra repliche sotto contesa ⇒ NON citabile nei criteri
-senza rerun quiet o meccanismo nominato (rev. R1); residuo non-bt +0,16% =
-staleness INDIZIATA, post-hoc (rev. R2)**.
+**arith 5,5 · prop 5,5 · calls 4,8 · str 4,3 · arr 3,3 · re 2,5** (rif.
+promo s150, non rimisurate) · WP t4 MEDIANA 1,781 · media 2,480–2,555 ·
+**ORM 7,104–7,149 · dbal 7,283–7,491** · corpus **1412×2** · census s151
+(conteggi) + prezzi s152: il residuo prezzato più grosso è il **borrow C2
+nei siti teardown/sweep ~0,91–1,09 s netti** (frame_teardown.borrow 61,0M ·
+PropSetPop.borrow 57,4M · Sweep.borrow 50,0M su 340,9M canale).
 
-## §S-152 — ordine (dal concilio; A1 si CHIUDE, poi touch-map A2)
-1. **Sonde-prezzo per canale** (C1/C2/C4/C5, pair-style sul PIN; criterio da
-   pre-registrare con pavimenti dichiarati) + **mock sostitutivo
-   store-indicizzato** (Gregg Q5-4) + braccio mi_heap (Leijen R2) ⇒
-   **valutazione GO/NO-GO A3c** con le soglie GIÀ registrate (s151 §6).
-   Conteggi agli atti: `wp151-harness/s151-census-verdetto.out`.
-2. **Pesca outlier per NOME** (mandato concilio, dentro A1):
-   debug_backtrace ANCORA #1 **21,3M** eventi (istruttoria: perché con
-   limit=2?) · class_exists 9,7M · array_map 7,7M · get_declared_classes
-   4,6M · __reflect_* ≈14M · array_diff 3,2M. + **istruttoria +3,2% a diff
-   SORGENTE s148tag-vs-s149name** (decisione NUOVA motivata, rev. R2) +
-   rerun quiet della testa hostcall o meccanismo del Δ313 (rev. az.3).
-3. **Touch-map A3 → partizione tranche A2** (chirurgia-first; gate per
-   tranche = FASCIO di `concilio/sintesi.md §RATIFICA-A2` incl. census-eco
-   e disasm run_loop; pin per SESSIONE, coppia WP a ogni pin) · gamba
-   SERVER census (Pedersen R4, slittamento dichiarato).
+## §S-153 — ordine (A3a/b micro-judged coi numeri di S-151/152)
+1. **Leva famiglia borrow-teardown (A3a candidata)**: i 3 siti dominanti
+   valgono ~170M borrow ≈ 0,55 s (al bordo della scala-suite 2×0,26–0,30);
+   istruttoria a sonda conteggi per SITO → criterio pre-registrato (giudice
+   micro dedicato o objchurn; soglia max(4; rumore; banda-layout)) → A/B.
+   Forma candidata: borrow hoistato/unificato nel teardown (oggi più borrow
+   dello stesso handle per frame), SENZA toccare lo store (A3c chiusa).
+2. **Se resta finestra**: fetta micro per NOME dalla coda (BT2-alloc su
+   m-backtrace 5,50× — chiavi statiche + ZStr condivisi + presize, attesa
+   ~30 alloc/call; oppure class_exists lookup case-insensitive senza alloc).
+3. **Touch-map/A2**: solo DOPO la ratifica del quesito 1 (T2-only);
+   `wp152-harness/s152-touchmap-a2.md` è la mappa vincolante.
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
-sonde-prezzo canali · debug_backtrace 21,3M · class_exists 9,7M ·
-__reflect_* 14M · scarto +3,2% (diff sorgente) · gamba server census ·
-§3.24 debug_print_backtrace + §3.23 fx-backtrace estesa (fedeltà, in coda) ·
-confine slot-load 0,99× · §3.22 · depr. float→int · warning corsia ×2 ·
-div. RMW · objmap 43,4 → piano GC · evalcls 316,9× · refl 42,4× · re +2
-alloc · §3.13/§3.12-i/§3.14/§3.21 · get_gc · latin1 · dbal 10 nomi.
+famiglia borrow-teardown C2 (~0,91–1,09 s) · BT2-alloc m-backtrace ·
+class_exists 2 alloc/call · get_declared_classes 4,6M (conteggio k dovuto) ·
+gamba server census · §3.24 debug_print_backtrace + §3.23 fx-backtrace
+estesa (fedeltà, in coda) · confine slot-load 0,99× · §3.22 · depr.
+float→int · warning corsia ×2 · div. RMW · objmap 43,4 → piano GC ·
+evalcls 316,9× · refl 42,4× · re +2 alloc · §3.13/§3.12-i/§3.14/§3.21 ·
+get_gc · latin1 · dbal 10 nomi.
 
 ## NON riproporre (i veti restano; dettaglio nei concili archiviati)
-**S-151: asset «conservato» senza path+hash · cifre census pre-BT1 nei
-criteri (stale) · ObjectId Copy-senza-refcount · arena contigua/bump-reset ·
-spacchettare exec/ops_* di run_loop · crate nuovi in A2 · Fase-5 registri
-(veto WP-44).** S-150: A/B fuori ricetta senza gemello+ricetta · attese
-senza pavimento · forge coi rami non collaudati · revert FR1. S-149: prezzi
-pair senza banda · splitoff3 senza replica · banda su finestra singola.
-S-148/147/146: kill al perimetro dei tag · borrow-first sul ponte · TakeSlot
-in OGNI forma · B1/B2 senza concilio. Trasversali: BOLT/NaN-boxing/
-threaded-dispatch/PGO-sui-giudici · pin/stash senza collaudo-nell'atto ·
-differenze tra A/B distinti come cifra · componenti prezzate · denominatori
-a memoria · rc da pipe · run pesanti come task · edit coi build in volo ·
-promozione sotto banda · strumentazione nei sorgenti del pin · claim di
-ASSENZA oltre risoluzione · misure con LSP in volo · lock con trap altrui ·
-giudice sotto-risoluto · byte-identità come gate di edit .rs post-pin.
-**Riscritto** 2026-08-18 (chiusura S-151); storia in `sessions/` · `gaps/`.
-Pre-flight S-152: pin phpr **s150 cbbe7173**5effb165 + server **18c27407**
+**S-152: A3c in QUALUNQUE forma senza numeri nuovi oltre soglia (verdetto
+s152-gonogo) · leve debug_backtrace/class_exists a scala SUITE (solo fette
+micro-judged) · calcolatori di verdetto senza collaudo o emenda dichiarata
+(path con SPAZI; assunzioni d'ordine sui prezzi).** S-151: asset senza
+path+hash · cifre census pre-BT1 nei criteri · ObjectId Copy-senza-refcount ·
+arena contigua/bump-reset · spacchettare exec/ops_* di run_loop · crate
+nuovi in A2 · Fase-5 registri (veto WP-44). S-150: A/B fuori ricetta senza
+gemello+ricetta · attese senza pavimento · forge coi rami non collaudati ·
+revert FR1. S-149: prezzi pair senza banda · splitoff3 senza replica ·
+banda su finestra singola. S-148/147/146: kill al perimetro dei tag ·
+borrow-first sul ponte · TakeSlot in OGNI forma · B1/B2 senza concilio.
+Trasversali: BOLT/NaN-boxing/threaded-dispatch/PGO-sui-giudici · pin/stash
+senza collaudo-nell'atto · differenze tra A/B distinti come cifra ·
+componenti prezzate · denominatori a memoria · rc da pipe · run pesanti
+come task · edit coi build in volo · promozione sotto banda ·
+strumentazione nei sorgenti del pin · claim di ASSENZA oltre risoluzione ·
+misure con LSP in volo · lock con trap altrui · giudice sotto-risoluto ·
+byte-identità come gate di edit .rs post-pin.
+**Riscritto** 2026-08-18 (chiusura S-152); storia in `sessions/` · `gaps/`.
+Pre-flight S-153: pin phpr **s150 cbbe7173**5effb165 + server **18c27407**
 74336c82 (SOLO via pin-*.sh) · MySQL wp8 con l'elenco · uploads sotto
-guardia · corpus **1412×2** · batteria = s125+rczval+**loc_dente** · probe census
-s151 CONSERVATO ×2 (**ab02faec0abfab67**): `census-prep/phpr-census-s151` +
-stash `phpr-old-target/release/` · attesi di smoke verificati da un SECONDO
-attore prima di ogni run di record (rev. az.4) · CI mutex lock
-`/private/tmp/phpr-measure.lock` da CREARE a ogni finestra · Data ≥10G · rust-analyzer NON kill · lettura: REGOLE.md → QUI →
-`concilio/sintesi.md` → `s151-census-{verdetto.out,lettura.md}` →
-`sessions/WP_SESSION_151.md` → PERF_MAP.md.
+guardia · corpus **1412×2** · batteria = s125+rczval+loc_dente · probe
+census s151 **ab02faec0abfab67** + probe sonda s152 **d90dcdc6f9f154af**
+conservati ×2 (repo harness + phpr-old-target/release/) · attesi di smoke
+verificati da un SECONDO attore prima di ogni run di record · CI mutex lock
+`/private/tmp/phpr-measure.lock` da CREARE a ogni finestra · Data ≥10G ·
+rust-analyzer NON kill · lettura: REGOLE.md → QUI →
+`wp152-harness/s152-{gonogo-verdetto.out,pesca-lettura.md,touchmap-a2.md}`
+→ `sessions/WP_SESSION_152.md` → PERF_MAP.md.
