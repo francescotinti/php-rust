@@ -10,13 +10,11 @@ cifre Gemini MAI nei criteri; veto WP-44 confermato; vincolano
 `wp151-harness/concilio/{verbale-*.md,sintesi.md}`** · **dente A4 ARMATO in
 batteria** (loc_dente: nuovi ≤2.000, 21 cap esatti, anti-slack 200; collaudo
 neg+pos a verbale) · **CENSUS TRANCHE-5 VALIDO rc=0** (×2 repliche identiche;
-conservazione esatta 2.393 classi) · leve spedite S-151: **0 (anomalia
-DICHIARATA, coperta dalla rotta)** · sessioni-senza-misura: 0 · incidenti
-**19** (+1: probe s149 «conservato» SENZA path = non reperibile; emenda
-§5-bis dichiarata prima del run).
-**QUESITI UTENTE** (concilio, non bloccanti): 1) ratifica perimetro A2
-chirurgia-first (~3 sessioni vs 4–6 accettate); 2) A3.0: conferma
-sweep-preserving o commissione fedeltà-Zend (b).
+conservazione esatta 2.393 classi) · leve spedite S-151: **0 (anomalia DICHIARATA,
+coperta dalla rotta)** · sessioni-senza-misura: 0 · incidenti **19** (+1:
+probe s149 senza path; emenda §5-bis dichiarata pre-run).
+**QUESITI UTENTE** (non bloccanti): 1) ratifica perimetro A2 chirurgia-first
+(~3 vs 4–6 sessioni); 2) A3.0: conferma sweep-preserving o fedeltà-Zend (b).
 
 ## Scoreboard (pin s150 INVARIATO phpr cbbe71735effb165 + server 18c2740774336c82)
 **arith 5,5 · prop 5,5 · calls 4,8 · str 4,3 · arr 3,3 · re 2,5** (rif. promo
