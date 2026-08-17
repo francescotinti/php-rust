@@ -23,33 +23,35 @@ s150) · hintcall 7,3 (n.r.) · dimread 4,3 · objchurn 6,7 · objmap 11,7 · MA
 media 2,480–2,555 (t4) · m-backtrace NETTO 5,50× · mediane WP: t1 1,799 ·
 t2 1,738 · t3 1,789 · t4 1,781.
 
-## §S-151 — ordine (la testa nuova si conta; ritmo: ≥1 leva A/B)
-1. **Census per-NOME @ pin s150 (tranche-5)**: il 130M di debug_backtrace è
-   sparito — CONTARE la testa nuova di hostcall + partizione di none.other
-   94,6M (nativi host DENTRO). Probe NUOVO a sorgente s150 (feature
-   mem-census) con RICETTA ESATTA dichiarata env inclusa (lezione S-150);
-   apparato s149 riusabile. **Dentro: spiegare il TETTO smentito della
-   scommessa (Δ ≈ 2× l'attesa alta — rilievo rev.4): modello conteggio×prezzo
-   da rifondare coi conteggi nuovi.**
-2. **Dentro la stessa campagna: re-istruzione scarto +3,2%** (az. S-150):
-   probe s149 CONSERVATO (scratchpad 5f008282, f3a111ac) vs probe s150 sullo
-   STESSO workload piccolo — se il delta segue la strumentazione per-NOME,
-   l'auto-conteggio è nominato; altrimenti resta aperto a verbale.
-3. **Leva dalla testa nuova** (criterio prima, A/B+guardie R=5). Candidata di
-   FEDELTÀ pronta (az.rev.2-3): options/limit su debug_print_backtrace
-   (§3.24, bersaglio flip `debug_print_backtrace_limit.phpt`) + fx-backtrace
-   ESTESA (§3.23: options non-int/both, limit>profondità, closure/include).
-4. Pop-diretti (1×–2×) SOLO dopo replica t3 della sonda (splitoff3 5%).
-5. Coppia WP: dovuta SOLO a pin nuovo (eventuale promozione della leva p.3).
+## §S-151 — ordine (⚖️ ROTTA UTENTE 2026-08-17 sera: fronte ZVAL-FIRST, sequenza census→refactor→chirurgia)
+1. **CONCILIO a 9 (cambio di rotta: ratifica piano e fissa i gate)**.
+   Fascicolo: `doc/gemini/20260817-gemini.md` + refutazioni del registro
+   (TakeSlot chiuso S-147 · ponte 0,83× · movimenti TETTO 1,27 s ≈ 3,4% ·
+   NaN-boxing a veto senza census) + questione SEMANTICA distruttori
+   (refcount = timing osservabile ⇒ NIENTE ObjectId «Copy senza refcount»;
+   forma corretta: store centralizzato + refcount ESPLICITO senza RefCell,
+   props inline) + SEQUENZA da ratificare: census (p.2) → refactoring
+   monoliti a TRANCHE promo-gated (mod.rs 25.704 · host.rs 7.626 · run.rs
+   6.786 righe; ~4–6 sessioni senza leve = anomalia DICHIARATA e accettata
+   dall'utente) → chirurgia Zval/Object coi numeri; + dente ANTI-RICRESCITA
+   nella CI locale (gate righe .rs, soglia ~2.000).
+2. **Census tranche-5 @ s150 ORIENTATO al ciclo di vita Zval**: partizione
+   per canale (clone per SITO · drop · gc_note · refcount · borrow) + testa
+   nuova hostcall + none.other 94,6M; probe NUOVO a sorgente s150 con
+   RICETTA ESATTA env inclusa (lezione S-150); apparato s149 riusabile.
+   Dentro: TETTO scommessa da rifondare (rilievo rev.4) + re-istruzione
+   scarto +3,2% (probe s149 CONSERVATO f3a111ac vs probe s150, stesso
+   workload piccolo).
+3. Leva di FEDELTÀ solo se il concilio la ammette nel ritmo:
+   debug_print_backtrace §3.24 (flip `debug_print_backtrace_limit.phpt`)
+   + fx-backtrace ESTESA (§3.23). Coppia WP: dovuta SOLO a pin nuovo.
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
-scarto census +3,2% s148↔s149 (p.2) · none.other 94,6M (p.1) · class_exists
-9,7M / __reflect_* 12,4M (sotto soglia, solo compositi) · pop-diretti
-(replica sonda dovuta) · confine slot-load (ponte+This 0,99×) · Zval-move
-memops · §3.22 · depr. float→int · warning corsia ×2 · divergenze RMW ·
+scarto census +3,2% · none.other 94,6M · class_exists 9,7M / __reflect_*
+12,4M · pop-diretti (replica sonda dovuta) · confine slot-load 0,99× ·
+Zval-move memops · §3.22 · depr. float→int · warning corsia ×2 · div. RMW ·
 objdatains · objmap 43,4 → piano GC · evalcls 316,9× · refl 42,4× · re +2
-alloc · §3.13/§3.12-i/§3.14/§3.21 · get_gc · drift TODO.md · latin1-cliff ·
-dbal 10 nomi.
+alloc · §3.13/§3.12-i/§3.14/§3.21 · get_gc · drift TODO · latin1 · dbal 10 nomi.
 
 ## NON riproporre (i veti restano; dettaglio nei concili archiviati)
 **S-150: braccio A/B fuori ricetta senza gemello stashato e ricetta a
@@ -63,14 +65,13 @@ canale movimenti · TakeSlot in OGNI forma. S-146/145/144/143: B1/B2 senza
 concilio · àncore replace testuale · inventari su nomi VOLATILI · memops
 senza attribuzione BILATERALE. Trasversali: BOLT/NaN-boxing/threaded-dispatch/
 PGO-sui-giudici · pin/stash senza collaudo-nell'atto · differenze tra A/B
-distinti come cifra · componenti prezzate · denominatori a memoria · rc di
-gate da pipe · run pesanti come task · edit coi build in volo · promozione
-sotto banda · strumentazione nei sorgenti del pin · alloc-removal senza costo
-SOSTITUTIVO · claim di ASSENZA oltre la risoluzione · misure con LSP in volo ·
-lock con trap EXIT altrui · probe che rompe l'inlining · `git add` di
-directory harness · giudice sotto-risoluto · byte-identità come gate di un
-edit .rs post-pin.
-**Riscritto** 2026-08-17 sera (chiusura S-150); storia in `sessions/` · `gaps/GAP_TREND.md`.
+distinti come cifra · componenti prezzate · denominatori a memoria · rc da
+pipe · run pesanti come task · edit coi build in volo · promozione sotto
+banda · strumentazione nei sorgenti del pin · alloc-removal senza costo
+SOSTITUTIVO · claim di ASSENZA oltre risoluzione · misure con LSP in volo ·
+lock con trap altrui · probe che rompe l'inlining · `git add` di dir harness ·
+giudice sotto-risoluto · byte-identità come gate di edit .rs post-pin.
+**Riscritto** 2026-08-17 sera (post-chiusura: rotta utente Zval-first); storia in `sessions/` · `gaps/`.
 Pre-flight S-151: pin phpr **s150 cbbe7173**5effb165 + server **s150
 18c27407**74336c82 (cambiano SOLO via pin-*.sh) · MySQL wp8 con l'elenco ·
 uploads sotto guardia · **corpus 1412 ×2** · CI mutex col lock
