@@ -1,7 +1,20 @@
 # PERF_MAP — phpr vs PHP oracle 8.5.7, mappa multi-workload
 
-Aggiornata: **2026-08-17 (S-149)** · pin phpr **s145 a89faf32** + server
-**s145 4a9adc51** (invariato; **S-149 = TERZO ATTO: census per-NOME-builtin
+Aggiornata: **2026-08-17 sera (S-150)** · pin phpr **s150 cbbe7173** + server
+**s150 18c27407** (**S-150 = PROMOZIONE BT1 con catena piena rc=0**: corpus
+1414→**1412** (flip PASS per NOME `debug_backtrace_limit`+`bug64239_2`,
+mutato `debug_backtrace_options`), fixture **10/10** (fx-backtrace nel set),
+guardie 8/8 a R=5 + disasm bl 6014 INVARIATO (incidente 17 riparato),
+conferma m-backtrace D=+19000 5/5, **bilaterale NETTO 5,50×** (pavimenti
+misurati); identità candidato↔braccio giudicato provata AL BYTE
+(`wp150-harness/s150-identita-candidato.md`); **SCOMMESSA ORM VINTA
+OLTRE-ATTESA: Δ +6,07/+6,70 s ⇒ ORM 8,370–8,427 → 7,104–7,149 · dbal
+8,20–8,37 → 7,283–7,491** (attesa 0,8–3,1 = pavimento solo-alloc dichiarato;
+BT1 unica leva s145→s150); coppia t4 6/6 pulite **MEDIANA 1,781 COMPATIBILE**
+(primo giudizio a mediana); census controllo: spiegazione path CADUTA
+(+3,2% s148↔s149 APERTO); **FR1 CHIUSA esito (b): +3,00 = prezzo STRUTTURALE
+(+3180 B/+26 bl), nessun revert** — verdetti `wp150-harness/s150-*.out`;
+storico S-149 = census per-NOME-builtin
 dentro hostcall (identità Σnomi+unnamed==hostcall.n ESATTA ×2; repliche
 0,000%) — l'other ha UN nome: debug_backtrace other=130,15M = 5,2× soglia
 (73,95% dell'other; n=275,0M = 81,9% del tag; 11,7 GB); tutte le altre sotto
@@ -73,20 +86,20 @@ cifre dai verdetti `.out`. Regola di lettura: rapporti PER workload, MAI aggrega
 
 | workload | rapporto phpr/oracle | N | note |
 |---|---|---|---|
-| **WordPress full-suite** | **S-149 t3 @ s145: on-only 1,786–1,802 (N=6, PRIMA finestra 6/6 PULITE) COMPATIBILE col rif S-142 1,765–1,788 — su 3 finestre conferma NON piena (t2 resta fuori; rett. rev. S-149)**; banda finestra t3 0,017 (t1 0,090 · t2 0,020) ⇒ **banda_ON RIFONDATA multi-finestra = unione t1+t2+t3 1,722–1,823 (0,101, 17 coppie proprie pulite) — il confronto formale usa QUESTA; per t4+ pre-registrare falsificazione a MEDIANA per finestra (az.rev.3)** | **6/6 pulite** (t3) | S-149 t3 @ s145; parità 6/6 (solo `wp_is_stream #2`); peak t3 1772–1782 = 6/6 livello BASSO unico (il doppio livello S-142 non si riproduce); deriva test N=6: ρ_A=−0,886 ≥ 0,829 ⇒ **deriva discendente peak CONFERMATA**, ρ_B=−0,600 ⇒ peak↮rapporto; leg1 PULITA (indagine `wp149-harness/s149-ictx-leg1-indagine.md`: firma di FINESTRA); verdetto `wp148-harness/s148-pair-verdetto-t3.out` (storico t2: 1,722–1,742 fuori banda basso; t1: 1,733–1,823) |
-| **WordPress gruppo media** | **2,504–2,540 CANONICA user-only** (S-149 t3 @ s145, 6 gambe pulite; companion 2,436–2,475; leg6 massima — nessuna ricorrenza di gamba-max tra finestre) | 6 | S-149 t3 @ s145 (storico t2: 2,454–2,569; S-146: 2,460–2,547) |
+| **WordPress full-suite** | **S-150 t4 @ s150: on-only 1,745–1,800 (N=6 pulite) · MEDIANA 1,781 COMPATIBILE ∈ [1,738; 1,799] — GIUDIZIO CANONICO a MEDIANA per finestra (az.rev.3 S-149; mediane storiche t1=1,799 · t2=1,738 · t3=1,789 · t4=1,781); banda-unione 1,722–1,823 ora SOLO companion (t4: 6/6 dentro)** | **6/6 pulite** (t4) | S-150 t4 @ s150; parità 6/6 (solo `wp_is_stream #2`); peak t4 1774–1847 = MISTO dichiarato (nessuna firma); deriva: ρ_A=0,03 nessuna, ρ_B=−0,14 no accoppiamento; attesa BT1 su WP «piccola/nulla» RISPETTATA; verdetto `wp150-harness/s150-pair-verdetto-t4.out` (storico: t3 1,786–1,802 · t2 1,722–1,742 · t1 1,733–1,823) |
+| **WordPress gruppo media** | **2,480–2,555 CANONICA user-only** (S-150 t4 @ s150, 6 gambe pulite; companion 2,419–2,489) | 6 | S-150 t4 @ s150 (storico t3: 2,504–2,540; t2: 2,454–2,569) |
 | **symfony http-foundation** (1854) | **2,547–2,559** (raw 2,55–2,57) | 2/lato | S-126; canonica sul CONTEGGIO diff 17 nomi = 0,92% ≤1% (≥3 nomi sono unit puri, NON famiglia `php -S` — emenda S-127); sys alto (I/O) |
 | **symfony http-kernel** (1665 test) | **4,29–4,32** | 2/lato | parità 0E/0F; contesa ok |
 | **doctrine/collections** (242) | **8,22 net** (raw 6,20) | 2/lato | S-126; INDICATIVA: oracle netto 0,09 s (denominatore sotto-scala); parità 0/0 |
-| **doctrine/dbal** (3929, sqlite) | **8,20–8,37 net** (raw 7,94–8,10) | 2/lato | **S-147 RIMISURATA @ pin s145** (verdetto `wp147-harness/s147-orm-rimisura-verdetto.out`; oracle1 SEGNALATA ictx; fail-set stabile 10 nomi == baseline ⇒ canonica): vs 8,15–8,23 @ s138 FERMO/lieve ↑ dentro il rumore · storico **S-139 @ s138: 8,15–8,23** (verdetto `wp139-harness/s139-rimisura-verdetto.out`; floors 0,06/0,19): fail-set stabile 10 nomi == baseline (0,25% ≤1% ⇒ canonica); vs 8,36–8,45 @ s134: **direzione ↓ INDICATIVA (az.rev. S-139 #5: ENTRAMBE le gambe oracle SEGNALATE al gate ictx — l'adiudicazione stesso-lato <1% è precedente S-135 ma applicata fuori criterio; declassata da «lieve ↓» a indicativo)**; summary phpr VUOTA (classe S-126 #3, fail-set dai .failnames) |
-| **doctrine/orm** (3484 test) | **8,370–8,427 net** | 2/lato | **S-147 RIMISURATA @ pin s145** (stesso verdetto; parità 16 nomi == baseline; leg1+oracle1 SEGNALATE ictx, leg2 PULITA 8,370): vs 8,59–8,71 @ s138 ⇒ **direzione ↓ INDICATIVA** (3 leve HC1+RD1+FR1 spedite in mezzo, nessun A/B proprio: magnitudine non ripartita, REGOLE §4); **denominatori KILL KS-146-1: soglia 0,7% = 0,293 s** · storico **S-139 @ s138: 8,59–8,71** (verdetto s139; oracle `memory_limit=-1` §3.14; parità 16 nomi == baseline; phpr1 ictx segnalata ma stesso-lato <0,2% ⇒ valida): vs 8,43–8,56 @ s134 ⇒ **FERMO/lieve ↑** — REPERTO pre-registrato (criterio p.6): le TRE leve dim-write s135→s138 (AP1+FD1+RMW) NON muovono la suite (l'attesa ↓ è FALSIFICATA: `$this->elements[$k]=$v` non è fetta misurabile del tempo ORM, o il perimetro FD1 lì non morde) ⇒ la prossima leva si sceglie sul profilo SUITE (churn clone/drop, insert/lookup — come già indicava S-135) |
+| **doctrine/dbal** (3929, sqlite) | **7,283–7,491 net** (raw 7,08–7,27) | 2/lato | **S-150 RIMISURATA @ pin s150** (verdetto `wp150-harness/s150-orm-coppia-verdetto.out`; oracle1 SEGNALATA ictx; fail-set stabile 10 nomi ==): **↓ da 8,20–8,37 @ s145 — companion della scommessa BT1 (deprecations dbal passano da debug_backtrace); direzione firmata, magnitudine non ripartita in proprio** · storico S-147 @ s145: 8,20–8,37 (verdetto `wp147-harness/s147-orm-rimisura-verdetto.out`; oracle1 SEGNALATA ictx; fail-set stabile 10 nomi == baseline ⇒ canonica): vs 8,15–8,23 @ s138 FERMO/lieve ↑ dentro il rumore · storico **S-139 @ s138: 8,15–8,23** (verdetto `wp139-harness/s139-rimisura-verdetto.out`; floors 0,06/0,19): fail-set stabile 10 nomi == baseline (0,25% ≤1% ⇒ canonica); vs 8,36–8,45 @ s134: **direzione ↓ INDICATIVA (az.rev. S-139 #5: ENTRAMBE le gambe oracle SEGNALATE al gate ictx — l'adiudicazione stesso-lato <1% è precedente S-135 ma applicata fuori criterio; declassata da «lieve ↓» a indicativo)**; summary phpr VUOTA (classe S-126 #3, fail-set dai .failnames) |
+| **doctrine/orm** (3484 test) | **7,104–7,149 net** | 2/lato | **S-150 RIMISURATA @ pin s150 = GIUDIZIO SCOMMESSA BT1: VINTA OLTRE-ATTESA** (stesso verdetto; parità 16 nomi ==; contesa ok): **Δ phpr −6,07/−6,70 s vs s145 [41,60; 42,22]→[35,52; 35,53]** — attesa pre-registrata 0,8–3,1 s = PAVIMENTO solo-alloc (costruzione ~50 frame non prezzata, dichiarato); BT1 UNICA leva s145→s150 ⇒ direzione+meccanismo firmati · storico **S-147 @ s145: 8,370–8,427** (stesso verdetto; parità 16 nomi == baseline; leg1+oracle1 SEGNALATE ictx, leg2 PULITA 8,370): vs 8,59–8,71 @ s138 ⇒ **direzione ↓ INDICATIVA** (3 leve HC1+RD1+FR1 spedite in mezzo, nessun A/B proprio: magnitudine non ripartita, REGOLE §4); **denominatori KILL KS-146-1: soglia 0,7% = 0,293 s** · storico **S-139 @ s138: 8,59–8,71** (verdetto s139; oracle `memory_limit=-1` §3.14; parità 16 nomi == baseline; phpr1 ictx segnalata ma stesso-lato <0,2% ⇒ valida): vs 8,43–8,56 @ s134 ⇒ **FERMO/lieve ↑** — REPERTO pre-registrato (criterio p.6): le TRE leve dim-write s135→s138 (AP1+FD1+RMW) NON muovono la suite (l'attesa ↓ è FALSIFICATA: `$this->elements[$k]=$v` non è fetta misurabile del tempo ORM, o il perimetro FD1 lì non morde) ⇒ la prossima leva si sceglie sul profilo SUITE (churn clone/drop, insert/lookup — come già indicava S-135) |
 | **composer install OFFLINE** | **1,863–1,891 net** (raw 1,820–1,847) | 2/lato | S-128 @ s127b, PRIMA misura col numeratore vivo (cure ondata-2); composer ESTRATTO, vendor_ok bilaterale, contesa ok (ictx/s); floors 0,07/0,06; sys≈user (~2,3 s/lato) ⇒ **cifra user-only NON confrontabile col full (user+sys): su user+sys sarebbe ~1,3** (rev. S-128 az.5); residuo phpcs config-set (§3.19-quinquies); verdetto `wp128-harness/s128-compoff-verdetto.out` |
 
-## Micro-categorie (R=5, pin s145 dalla catena promo L-FR1; tappa ≤3×)
+## Micro-categorie (R=5, pin s150 dalla catena promo BT1; tappa ≤3×)
 
 | arith | prop | calls | str | arr | re | hintcall | dimread |
 |---|---|---|---|---|---|---|---|
-| 5,5 | 5,5 | 4,8 | 4,3 | **3,2** | **2,5** ✅ | **7,3** (S-140, non rimis.) | **4,3** (m-dimread NUOVO, 43,3 vs 10 ns/iter) |
+| 5,5 | 5,5 | 4,8 | 4,3 | **3,3** | **2,5** ✅ | **7,3** (S-140, non rimis.) | **4,3** (m-dimread; FR1 istruttoria CHIUSA S-150: +3,0 su dimrmw10 = prezzo strutturale, nessun revert) |
 
 (S-145: tutte le voci entro 1 tick dai rif s142 5,5·5,6·4,7·4,2·3,2·2,6 —
 la fusione non tassa i freddi; rif storici s138: 5,6 · 5,6 · 4,8 · 4,3 ·
@@ -118,7 +131,7 @@ gc_note/sweep/collect_cycles, insert/lookup, malloc/free); compile ≤~1% leaf, 
 ## Lettura (direzione+indizio, NON attribuzioni firmate — REGOLE §4)
 
 - Il gap **cresce con la densità di lavoro-motore puro**: WP ~1,8 ≈ compoff ~1,9 ≪ hf 2,6 ≪ hk 4,3 ≪
-  dbal 8,6 ≈ ORM 8,5 (cifre net). WP, compoff e hf sono diluiti da I/O; le suite object-dense mostrano il soffitto.
+  dbal 7,4 ≈ ORM 7,1 (cifre net, S-150). WP, compoff e hf sono diluiti da I/O; le suite object-dense mostrano il soffitto.
 - **dbal 8,6 conferma ORM 8,5 senza mock-eval pesante** ⇒ il driver è il lavoro-oggetti, non il
   sentiero compile: coerente con l'istruttoria (compile ≤1% leaf nel run reale).
 - **L-OL1-F1 «stampo» SPEDITA (S-127, pin s127 834f5e01)**: template Props per classe,
