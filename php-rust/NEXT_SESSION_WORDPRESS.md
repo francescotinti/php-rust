@@ -12,8 +12,7 @@ auto-conteggio probe s149) · FR1 CHIUSA esito (b): +3,00 LOCALIZZATO PER
 ELIMINAZIONE — non nell'emissione; indiziato il delta strutturale +3180 B/
 +26 bl (rett. rev. SEMANTICA) — NESSUN revert, interruttore rimosso al byte** ·
 leve spedite S-150: **1** (BT1) · sessioni-senza-misura: 0 · **incidenti 18
-(+1: flip-handler coi rami MAI collaudati prima dei run di record — due stop
-fail-closed, emende dichiarate)**.
+(+1: flip-handler coi rami mai collaudati — due stop fail-closed, emendati)**.
 
 ## Scoreboard (pin s150 phpr cbbe71735effb165 + server 18c2740774336c82 — NUOVO, da S-150)
 **arith 5,5 · prop 5,5 · calls 4,8 · str 4,3 · arr 3,3 · re 2,5** (R=5 promo
