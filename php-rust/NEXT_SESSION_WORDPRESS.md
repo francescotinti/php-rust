@@ -21,8 +21,8 @@ objchurn 6,7 · objmap 11,7 · MAPPA (net): WP 1,79 ≈ compoff 1,9 ≪ hf 2,55 
 hk 4,3 ≪ dbal 8,20–8,37 ≈ ORM 8,370–8,427 · corpus **1414 ×2** · media
 2,504–2,540 (t3) · **REPERTI S-149**: prezzi PROPRI pair16 6,37–6,38 /
 pair48 11,21–11,27 ns (splitoff3 replica 5% ⇒ t3 sonda dovuta se si usa) ·
-peak WP deriva discendente CONFERMATA (ρ_A −0,886), peak↮rapporto ·
-braccio B leva = ac26375aa0e8fef0 (binario in scratchpad s149, si RICOMPILA).
+peak WP deriva discendente CONFERMATA (ρ_A −0,886), peak↮rapporto · braccio
+B leva ac26375a (si RICOMPILA alla promozione).
 
 ## §S-150 — ordine (la scommessa si giudica; az. rev. 1–5 dentro)
 1. **PROMOZIONE BT1** con catena piena collaudo-nell'atto
@@ -71,11 +71,11 @@ probe che rompe l'inlining · `git add` di directory harness · giudice
 sotto-risoluto · byte-identità come gate di un edit .rs post-pin.
 **Riscritto** 2026-08-17 notte (chiusura S-149); storia in `sessions/` · `gaps/GAP_TREND.md`.
 Pre-flight S-150: pin phpr **s145 a89faf32**c62142f9 + server **s145
-4a9adc51**a62b21ba (stash `phpr-old-target/release/phpr-s145`) — cambierà
-SOLO via pin-phpr.sh alla promozione BT1 · MySQL wp8 con l'elenco · uploads
-sotto guardia · corpus 1414 ×2 · CI feed (mutex col measure-lock) · lock
-misura `/private/tmp/phpr-measure.lock` da CREARE a ogni finestra (il pair
-harness NON lo crea da sé) · Data ≥10G · rust-analyzer NON kill · lettura:
+4a9adc51**a62b21ba (stash phpr-old-target) — cambia SOLO via pin-phpr.sh
+alla promozione BT1 · MySQL wp8 con l'elenco · uploads sotto guardia ·
+corpus 1414 ×2 · CI mutex col lock `/private/tmp/phpr-measure.lock` da
+CREARE a ogni finestra (il pair harness NON lo crea) · Data ≥10G ·
+rust-analyzer NON kill · lettura:
 REGOLE.md → QUI → wp149-harness/s149-tr4-verdetto.out →
 wp149-harness/s149-decisione-bt1.md → wp149-harness/s149-ab-bt1-verdetto.out
 → wp148-harness/s148-pair-verdetto-t3.out → sessions/WP_SESSION_149.md →

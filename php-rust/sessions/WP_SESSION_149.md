@@ -37,5 +37,4 @@ S-150 (dichiarato)** · incidenti 16→17 (guardie R=3 vs R=5 pre-reg.).
   contare per NOME prima di prezzare il plumbing.
 - ⭐⭐ La firma % su mediana BASSA amplifica disturbi assoluti piccoli:
   leggere l'eccesso ASSOLUTO a corredo.
-- ⭐ Una cura di fedeltà può ESSERE la leva perf: il byte-id con l'oracle è
-  il gate che le unisce.
+- ⭐ Una cura di fedeltà può ESSERE la leva perf (gate = byte-id con l'oracle).
