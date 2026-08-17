@@ -38,8 +38,15 @@ toccherà). memcensus.rs (4 hunk) è strumentazione, fuori A2.
 - QUESITO UTENTE (aperto, non bloccante per T1): ratifica perimetro ~3
   sessioni vs 4–6; A3.0 sweep-preserving già adottato (dissenso agli atti).
 
-## Nota di sequenza (dal GO/NO-GO S-152)
-Se la sonda-prezzo dà NO-GO su A3c, la touch-map resta valida per A3a/A3b
-(fette micro-judged sui siti teardown/sweep di mod.rs — T2 diventa la
-tranche portante e T3 può DECADERE se il criterio delle fette non tocca
-run.rs); la decisione si scrive nel verdetto GO/NO-GO.
+## Nota di sequenza — DECISA dal verdetto (s152-gonogo-verdetto.out)
+**NO-GO ROBUSTO su A3c** (banda_netta [1,109;1,324] < S2 1,53 · S3 lorda
+[3,627;3,995] < 4,58, entrambe all'estremo FAVOREVOLE ad A3) ⇒ A3c CHIUSA
+stile veto. La touch-map resta valida per **A3a/A3b micro-judged**: il
+residuo prezzato più grosso è il borrow C2 nei siti teardown/sweep
+(~0,91–1,09 s netti, ~3–3,5% del gap, sotto la soglia-suite ma sopra la
+scala delle fette micro): frame_teardown.borrow 61,0M · PropSetPop.borrow
+57,4M · Sweep.borrow 50,0M. **T2 diventa la tranche portante; T3 (run.rs)
+DECADE salvo che un criterio-fetta la richiami; T1 si esegue solo nella
+misura in cui una fetta A3a/b la richiede** (chirurgia-first coerente).
+QUESITO UTENTE aggiornato: con A3c chiusa, il perimetro A2 ~3 sessioni può
+ridursi a T2-only — ratifica al prossimo contatto.
