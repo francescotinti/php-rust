@@ -1,18 +1,24 @@
 # PERF_MAP — phpr vs PHP oracle 8.5.7, mappa multi-workload
 
-Aggiornata: **2026-08-17 (S-148)** · pin phpr **s145 a89faf32** + server
-**s145 4a9adc51** (invariato; **S-148 = SECONDO ATTO: census ATTRIBUZIONE per
-TAG su ORM (identità Σtag==galloc_n ESATTA ×2; repliche worst 0,056%;
-workload==s144 −0,73%) — other 269,3M NOMINATO: hostcall.other 165,6M
-(61,5%; temp dei builtin, 6,7× soglia-conteggio 24,8M) > none/VM-inline
-94,6M (3,8×) > arrgrow 5,7M > frame 3,0M > gc 0,36M ⇒ KILL per CONTEGGI dei
-candidati concilio growth-hashbrown (0,23×) e pool-Frame (0,12×; FramePool
-WP-30 già ricicla): zero codice; 69,6% di TUTTE le alloc dentro i builtin;
-anatomia: ~6,7 alloc/chiamata nei corpi, pop_keys/split_off nominato (11
-siti), shape ≤48B 107,9M + ≤16B 98,8M; verdetto
-`wp148-harness/s148-attrib-verdetto.out` + `s148-anatomia-hostcall.md`;
-coppia WP t2: FUORI BANDA bordo BASSO ⇒ nessun claim, t3 dovuta, spread
-CROSS-finestra 0,101**; storico S-147 = coppia dbal+ORM RIMISURATA @ s145
+Aggiornata: **2026-08-17 (S-149)** · pin phpr **s145 a89faf32** + server
+**s145 4a9adc51** (invariato; **S-149 = TERZO ATTO: census per-NOME-builtin
+dentro hostcall (identità Σnomi+unnamed==hostcall.n ESATTA ×2; repliche
+0,000%) — l'other ha UN nome: debug_backtrace other=130,15M = 5,2× soglia
+(73,95% dell'other; n=275,0M = 81,9% del tag; 11,7 GB); tutte le altre sotto
+soglia anche per FAMIGLIA (__reflect_* 0,50×, array_* 0,32×); causa a
+sorgente: options/limit IGNORATI (Doctrine chiama IGNORE_ARGS,2) ⇒ leva
+BT1 A/B VINTO D=+19000 ns/iter (19733→733, −96,3%, segni 7/7, guardie 6/6,
+fixture fx-backtrace BYTE-ID) — anche cura di FEDELTÀ; scommessa ORM
+pre-registrata attesa ↓ 0,8–3,1 s (`wp149-harness/s149-decisione-bt1.md`);
+prezzi PROPRI pair16 6,37–6,38 / pair48 11,21–11,27 ns (splitoff3 replica 5%
+⇒ t3 sonda dovuta prima dell'uso); pop-diretti 1×–2× solo micro-judged,
+args-Vec ~1× kill; promozione BT1 = S-150; verdetti
+`wp149-harness/s149-{tr4,sonda-pair,ab-bt1}-verdetto.out`; coppia t3:
+1,786–1,802 N=6 PRIMA finestra 6/6 pulite COMPATIBILE ⇒ rif S-142
+CONFERMATO, banda_ON RIFONDATA multi-finestra 1,722–1,823 (0,101, 17
+coppie)**; storico S-148 = census ATTRIBUZIONE per TAG (hostcall.other
+165,6M > none 94,6M; kill hashbrown/pool-Frame/gc ai perimetri; t2 fuori
+banda basso, `wp148-harness/s148-attrib-verdetto.out`); storico S-147 = coppia dbal+ORM RIMISURATA @ s145
 (ORM 8,370–8,427 ↓ indicativa, dbal 8,20–8,37) + CENSUS UNICO ORM: KILL
 KS-146-1 SCATTATO SUL PONTE (rett. rev. SEMANTICA) — ponte slot-load per
 criterio (con LoadVarPushConst) 0,244 s < soglia 0,293 s (0,83×) ⇒ ZERO
@@ -66,8 +72,8 @@ cifre dai verdetti `.out`. Regola di lettura: rapporti PER workload, MAI aggrega
 
 | workload | rapporto phpr/oracle | N | note |
 |---|---|---|---|
-| **WordPress full-suite** | **rif CANONICO resta 1,765–1,788 (S-142) su banda_ON 0,036 CONGELATA**. **S-148 t2 @ s145: on-only 1,722–1,742 (N=5 pulite; leg1 SEGNALATA ictx 202%) ⇒ FUORI BANDA bordo BASSO (leg3 1,722 vs limite 1,729; 4/5 dentro) ⇒ esito pre-registrato: NESSUN claim, replica t3 DOVUTA**; banda finestra t2 0,020 vs t1 0,090 ⇒ **spread CROSS-finestra (unione t1+t2 1,722–1,823 = 0,101) — banda da rifondare multi-finestra** | **5/6 pulite** (t2) | S-148 t2 @ s145; parità 6/6 (solo `wp_is_stream #2`); peak t2 1782–1851 ASCENDENTI (opposto della deriva discendente t1), lettura peak MISTO ⇒ nessuna firma; deriva test (az.rev. S-146 #3) SOTTO-CAMPIONATO N=5<6 ⇒ si applica a t3; verdetto `wp148-harness/s148-pair-verdetto-t2.out` (storico t1: 1,733–1,823 COMPATIBILE MARGINALE, `wp146-harness/s146-pair-verdetto-t1.out`; S-142 bimodale 1744–1850) |
-| **WordPress gruppo media** | **2,454–2,569 CANONICA user-only** (S-148 t2 @ s145, 5 gambe pulite; companion 2,382–2,505; leg3 2,569 massima — la ricorrenza leg5-max S-142/S-146 NON si ripete) | 5 | S-148 t2 @ s145 (storico S-146: 2,460–2,547) |
+| **WordPress full-suite** | **S-149 t3 @ s145: on-only 1,786–1,802 (N=6, PRIMA finestra 6/6 PULITE) COMPATIBILE ⇒ rif S-142 1,765–1,788 CONFERMATO**; banda finestra t3 0,017 (t1 0,090 · t2 0,020) ⇒ **banda_ON RIFONDATA multi-finestra = unione t1+t2+t3 1,722–1,823 (0,101, 17 coppie proprie pulite) — il confronto formale usa QUESTA, mai finestra singola** | **6/6 pulite** (t3) | S-149 t3 @ s145; parità 6/6 (solo `wp_is_stream #2`); peak t3 1772–1782 = 6/6 livello BASSO unico (il doppio livello S-142 non si riproduce); deriva test N=6: ρ_A=−0,886 ≥ 0,829 ⇒ **deriva discendente peak CONFERMATA**, ρ_B=−0,600 ⇒ peak↮rapporto; leg1 PULITA (indagine `wp149-harness/s149-ictx-leg1-indagine.md`: firma di FINESTRA); verdetto `wp148-harness/s148-pair-verdetto-t3.out` (storico t2: 1,722–1,742 fuori banda basso; t1: 1,733–1,823) |
+| **WordPress gruppo media** | **2,504–2,540 CANONICA user-only** (S-149 t3 @ s145, 6 gambe pulite; companion 2,436–2,475; leg6 massima — nessuna ricorrenza di gamba-max tra finestre) | 6 | S-149 t3 @ s145 (storico t2: 2,454–2,569; S-146: 2,460–2,547) |
 | **symfony http-foundation** (1854) | **2,547–2,559** (raw 2,55–2,57) | 2/lato | S-126; canonica sul CONTEGGIO diff 17 nomi = 0,92% ≤1% (≥3 nomi sono unit puri, NON famiglia `php -S` — emenda S-127); sys alto (I/O) |
 | **symfony http-kernel** (1665 test) | **4,29–4,32** | 2/lato | parità 0E/0F; contesa ok |
 | **doctrine/collections** (242) | **8,22 net** (raw 6,20) | 2/lato | S-126; INDICATIVA: oracle netto 0,09 s (denominatore sotto-scala); parità 0/0 |
