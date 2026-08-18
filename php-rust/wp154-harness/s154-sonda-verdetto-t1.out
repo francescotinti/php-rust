@@ -1,0 +1,5 @@
+== s154 sonda k post-BT2 (criterio s154-criterio-sonda.md; ricetta PREP s151; CONTEGGI mai tempo) 2026-08-18 19:52:01 ==
+S0 guardie: lock presente, niente cargo/rustc, pin phpr=8370c257ae70cc8e server=f030c6fcbddfab96, hold assente
+S1 copia-fedele: PASS diff -r crates rc=0 (copia /private/tmp/phpr-census-s154-src)
+rc=3 identità-ricetta VIOLATA: build pulita=18dee21bff221146 != pin 8370c257ae70cc8e
+restore: canonica ripristinata intatta, pin ri-verificati (8370c257ae70cc8e/f030c6fcbddfab96)

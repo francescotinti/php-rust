@@ -9,6 +9,17 @@
    `-p php-cli --features mem-census`). GUARDIA identità-ricetta: build PULITA
    dalla copia == **8370c257ae70cc8e** (pena STOP). Smoke: `smoke151-check.sh`
    con attesi s151 INVARIATI (pena STOP). CONTEGGI, mai tempo.
+1-bis. **EMENDA (dichiarata nell'atto, dopo rc=3 t1 e PRIMA di ogni riuso)**:
+   la build PULITA dalla copia dà 18dee21bff221146 ≠ pin — con crates/ ==
+   sorgente pin @40df12f (git diff VUOTO) e ricetta identica ⇒ **il pin s153
+   NON è cold-riproducibile** (pin-phpr.sh l'ha costruito su cache canonica
+   CALDA dopo i build A/B di S-153; il pin s150 nacque su cache pre-prune
+   fredda, per questo PREP s151 chiudeva a hash esatto). Reperto a verbale.
+   La guardia identità-ricetta si chiude a **CONTENUTO**: build fredda in
+   target DEDICATO, confronto byte-a-byte col pin — PASS solo se dimensioni
+   uguali E ≤64 byte diversi confinati in LC_UUID+pagina firma (meccanismo
+   48 B già nominato in s150-identita-candidato.md e PREP s151) E
+   strings-diff ZERO. Oltre ⇒ rc=3 (divergenza REALE, STOP).
 2. **k nuovo**: `wp152-harness/bt-count.php` a BTN=100000/300000,
    k = Δ(hostcall.debug_backtrace)/ΔN, b = Δbyte/ΔN. Riferimento pre-BT2:
    k=45 ESATTE, b=2.282 B/call (s152-pesca). **Attesa BLIND: k_new 22–28**

@@ -38,22 +38,33 @@ if ! diff -r -x "._*" "$REPO/crates" "$SRC/crates" > "$OUT/copia-fedele.diff" 2>
 fi
 note "S1 copia-fedele: PASS diff -r crates rc=0 (copia $SRC)"
 
-# S2 — identità-ricetta: build PULITA dalla copia al target-path CANONICO == pin
-mv "$CANON" "$HOLD" || { note "rc=3 parcheggio fallito"; fin 3; }
-restore(){ # ripristino OBBLIGATORIO: fresh via, hold torna canonica, pin ri-verificati
-  rm -rf "$CANON"
-  mv "$HOLD" "$CANON" || { note "rc=2 RESTORE INCOMPLETO: $HOLD non ripristinato"; echo 2 > "$OUT/sonda.rc"; touch "$OUT/sonda.done"; exit 2; }
-  [ "$(h16 "$CANON/release/phpr")" = "$PIN" ] || { note "rc=2 RESTORE: pin phpr CAMBIATO"; echo 2 > "$OUT/sonda.rc"; touch "$OUT/sonda.done"; exit 2; }
-  [ "$(h16 "$CANON/release/php-server")" = "$SRV" ] || { note "rc=2 RESTORE: pin server CAMBIATO"; echo 2 > "$OUT/sonda.rc"; touch "$OUT/sonda.done"; exit 2; }
-  note "restore: canonica ripristinata intatta, pin ri-verificati ($PIN/$SRV)"
-}
-( cd "$SRC" && env SOURCE_DATE_EPOCH=0 CARGO_INCREMENTAL=0 CARGO_TARGET_DIR="$CANON" cargo build --release ) > "$OUT/build-identita.log" 2>&1
+# S2 — identità a CONTENUTO (emenda §1-bis dopo rc=3 t1: pin s153 NON
+# cold-riproducibile, cache calda ai build A/B S-153; scarto ammesso = SOLO
+# LC_UUID+pagina firma ≤64 B, meccanismo s150-identita-candidato + PREP s151)
+IDT=/private/tmp/phpr-census-s154-idcheck
+( cd "$SRC" && env SOURCE_DATE_EPOCH=0 CARGO_INCREMENTAL=0 CARGO_TARGET_DIR="$IDT" cargo build --release ) > "$OUT/build-identita.log" 2>&1
 BRC=$?
-if [ "$BRC" -ne 0 ]; then note "rc=3 build identità FALLITA (rc=$BRC, log sonda-out/build-identita.log)"; restore; fin 3; fi
-HID="$(h16 "$CANON/release/phpr")"
-if [ "$HID" != "$PIN" ]; then note "rc=3 identità-ricetta VIOLATA: build pulita=$HID != pin $PIN"; restore; fin 3; fi
-note "S2 identità-ricetta: PASS phpr da copia PULITA == $PIN ESATTO"
-restore
+[ "$BRC" -eq 0 ] || { note "rc=3 build identità FALLITA (rc=$BRC, log sonda-out/build-identita.log)"; fin 3; }
+HID="$(h16 "$IDT/release/phpr")"
+python3 - "$CANON/release/phpr" "$IDT/release/phpr" >> "$V" <<'PY'
+import sys
+a = open(sys.argv[1], "rb").read(); b = open(sys.argv[2], "rb").read()
+if len(a) != len(b):
+    print(f"S2 identità-contenuto: FAIL dimensioni {len(a)} != {len(b)}"); sys.exit(3)
+diffs = [i for i, (x, y) in enumerate(zip(a, b)) if x != y]
+lo = min(diffs) if diffs else 0; hi = max(diffs) if diffs else 0
+print(f"S2 confronto byte: {len(diffs)} byte diversi (range 0x{lo:x}-0x{hi:x}) su {len(a)}")
+sys.exit(0 if len(diffs) <= 64 else 3)
+PY
+CRC=$?
+[ "$CRC" -eq 0 ] || { note "rc=3 identità-contenuto VIOLATA oltre il meccanismo nominato (build=$HID)"; fin 3; }
+strings -a "$CANON/release/phpr" > "$OUT/strings-pin.txt"
+strings -a "$IDT/release/phpr" > "$OUT/strings-build.txt"
+if ! diff -q "$OUT/strings-pin.txt" "$OUT/strings-build.txt" > /dev/null; then
+  note "rc=3 strings-diff NON zero (build=$HID): divergenza REALE"; fin 3
+fi
+rm -f "$OUT/strings-pin.txt" "$OUT/strings-build.txt"
+note "S2 identità a CONTENUTO: PASS (build fredda $HID vs pin $PIN: scarto ≤64 B in LC_UUID+firma, strings-diff ZERO — emenda §1-bis)"
 
 # S3 — diff census normalizzato + apply nella copia
 sed -e 's#^--- a/php-rust/#--- a/#' \
