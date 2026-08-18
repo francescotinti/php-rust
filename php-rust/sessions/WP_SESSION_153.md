@@ -1,9 +1,8 @@
 # WP_SESSION_153 — L-BT2 SPEDITA (debug_backtrace −36% sul giudice); L-TD1 caduta col prezzo-borrow falsificato; pin NUOVO s153
-**In una frase**: abbiamo misurato quanto costa davvero ogni «prestito» degli
-oggetti nei punti caldi (quasi nulla: la cura provata lì non paga ed è stata
-ritirata) e in compenso abbiamo reso molto più economica la fotografia dello
-stack (debug_backtrace), promossa a nuovo binario di riferimento con tutti i
-collaudi verdi.
+**In una frase**: misurato quanto costa davvero ogni «prestito» degli oggetti
+nei punti caldi (quasi nulla: la cura lì non paga, ritirata) e resa molto più
+economica la fotografia dello stack (debug_backtrace), promossa a nuovo
+binario di riferimento con tutti i collaudi verdi.
 
 **SCOREBOARD** (pin NUOVO s153 8370c257ae70cc8e + server f030c6fcbddfab96):
 arith 5,5 → · prop 5,5 → · calls 4,7 ↓ · str 4,3 → · arr 3,2 ↓ · re 2,6 ↑
@@ -23,23 +22,19 @@ braccio-gemello DICHIARATA e catturata nell'atto, prima di ogni uso di record).
   verificato al byte). **EMENDA §7-bis**: primo smoke col braccio A=pin
   CONTAMINATO dal drift dei 2 commit cfg-gated post-pin (±5–10 ns/iter) ⇒
   regola nuova: braccio A = GEMELLO costruito dal tree corrente.
-4·**L-BT2 VINTA e SPEDITA**: chiavi statiche thread-local + BtFrame→ZStr in
-  ho_debug_backtrace; A/B R=5 D=+266,7 ns/iter (733→467, −36%), segni 7/7,
-  riconciliazione |0,0|, guardie 12/12, fx-backtrace byte-id; FUORI-UB sopra
-  (>160+rumore) a verbale ⇒ sonda k post-leva DOVUTA (S-154). Promo rc=0:
-  batteria 1748/0/2 (inventario s125+2 denti) · corpus 1412×2 zero flip ·
-  fixture 10/10 · micro ±1 tick · conferma post-pin +333,3 (5/5; tick 66,7
-  dichiarato) · ORM fail-set==16 nomi · hk 0E/0F · pin phpr+server s153.
+4·**L-BT2 VINTA e SPEDITA**: chiavi statiche thread-local + BtFrame→ZStr;
+  A/B R=5 D=+266,7 ns/iter (733→467, −36%), segni 7/7, riconciliazione
+  |0,0|, guardie 12/12, fx-backtrace byte-id; FUORI-UB sopra ⇒ sonda k
+  post-leva DOVUTA (S-154). Promo rc=0: batteria 1748/0/2 (s125+2 denti) ·
+  corpus 1412×2 zero flip · fixture 10/10 · micro ±1 tick · conferma
+  post-pin +333,3 (5/5, tick 66,7) · ORM ==16 nomi · hk 0E/0F · pin ×2.
 5·**Dente A4 ha MORSO la promo t1** (host.rs +35, mod.rs +3 oltre cap) →
   salita DICHIARATA nei cap (protocollo del dente rispettato), promo t2 rc=0.
 6·⚠️ Data a 2G (probabile update macOS staged): BLOCCANTE apertura S-154.
 
 ## ⭐ Lezioni (max 3)
-- ⭐⭐ A pin invariato ma tree avanzato, il braccio A di un A/B si COSTRUISCE
-  (gemello dalla ricetta), mai dallo stash: i commit cfg-gated spostano il
-  layout e firmano D fantasma.
-- ⭐⭐ Il prezzo mock hot-hot è un maggiorante, non un prezzo: una leva si
-  prezza col costo IN CONTESTO (qui: 4 borrow certi ⇒ D≈0) — falsificare
-  presto costa uno smoke, non una sessione.
-- ⭐ Un dente che morde la leva promossa della PROPRIA sessione e si placa
-  con la salita dichiarata è la prova che il protocollo anti-ricrescita regge.
+- ⭐⭐ A pin invariato ma tree avanzato, il braccio A si COSTRUISCE (gemello
+  dalla ricetta), mai dallo stash: i commit cfg-gated firmano D fantasma.
+- ⭐⭐ Il mock hot-hot è un maggiorante, non un prezzo: la leva si prezza col
+  costo IN CONTESTO (4 borrow certi ⇒ D≈0) — falsificare costa uno smoke.
+- ⭐ Il dente che morde la leva della PROPRIA sessione e si placa con la salita dichiarata prova che l'anti-ricrescita regge.

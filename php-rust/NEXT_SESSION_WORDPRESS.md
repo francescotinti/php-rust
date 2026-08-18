@@ -40,12 +40,11 @@ cap dente AGGIORNATI con salita dichiarata: mod.rs 25707 · host.rs 7661).
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
 sonda k post-BT2 (dovuta) · class_exists 2 alloc/call · get_declared_classes
-4,6M · gamba server census (3° slittamento) · PropSetPop 3+1→1+1
-(RETROCESSA: riprendibile SOLO con prezzo in-contesto fondato; run_loop ⇒
-disasm) · MethodCall.borrow k=2 (annotato) · §3.24+§3.23 fedeltà backtrace ·
-confine slot-load 0,99× · §3.22 · depr. float→int · warning corsia ×2 ·
-div. RMW · objmap 43,4 → piano GC · evalcls 316,9× · refl 42,4× · re +2
-alloc · §3.13/§3.12-i/§3.14/§3.21 · get_gc · latin1 · dbal 10 nomi.
+4,6M · gamba server census (3°) · PropSetPop 3+1→1+1 (RETROCESSA: solo con
+prezzo in-contesto fondato; run_loop ⇒ disasm) · MethodCall.borrow k=2 ·
+§3.24+§3.23 backtrace · slot-load 0,99× · §3.22 · depr. float→int · warning
+×2 · div. RMW · objmap 43,4 → GC · evalcls 316,9× · refl 42,4× · re +2 ·
+§3.13/§3.12-i/§3.14/§3.21 · get_gc · latin1 · dbal 10 nomi.
 
 ## NON riproporre (i veti restano; dettaglio nei concili archiviati)
 **S-153: A/B col braccio A dallo stash del pin quando il tree è avanzato
@@ -53,32 +52,28 @@ alloc · §3.13/§3.12-i/§3.14/§3.21 · get_gc · latin1 · dbal 10 nomi.
 prezzo in-contesto NUOVO (falsificato ≤1 ns) · byte-identità del revert
 verificata contro il PIN a tree avanzato (si verifica contro il GEMELLO).**
 S-152: A3c in QUALUNQUE forma senza numeri nuovi oltre soglia · leve
-debug_backtrace/class_exists a scala SUITE (solo fette micro-judged) ·
-calcolatori di verdetto senza collaudo o emenda dichiarata. S-151: asset
-senza path+hash · cifre census pre-BT1 nei criteri · ObjectId
-Copy-senza-refcount · arena contigua/bump-reset · spacchettare exec/ops_* ·
+debug_backtrace/class_exists a scala SUITE · calcolatori senza collaudo o
+emenda. S-151: asset senza path+hash · cifre census pre-BT1 nei criteri ·
+ObjectId Copy-senza-refcount · arena/bump-reset · spacchettare exec/ops_* ·
 crate nuovi in A2 · Fase-5 registri. S-150: A/B fuori ricetta senza
-gemello+ricetta · attese senza pavimento · forge coi rami non collaudati ·
-revert FR1. S-149: prezzi pair senza banda · splitoff3 senza replica · banda
-su finestra singola. S-148..146: kill al perimetro dei tag · borrow-first
-sul ponte · TakeSlot in OGNI forma · B1/B2 senza concilio. Trasversali:
+gemello+ricetta · attese senza pavimento · forge non collaudate · revert
+FR1. S-149: prezzi pair senza banda · splitoff3 senza replica · banda su
+finestra singola. S-148..146: kill al perimetro dei tag · borrow-first sul
+ponte · TakeSlot in OGNI forma · B1/B2 senza concilio. Trasversali:
 BOLT/NaN-boxing/threaded-dispatch/PGO-sui-giudici · pin/stash senza
-collaudo-nell'atto · differenze tra A/B distinti come cifra · componenti
-prezzate · denominatori a memoria · rc da pipe · run pesanti come task ·
-edit coi build in volo · promozione sotto banda · strumentazione nei
-sorgenti del pin · claim di ASSENZA oltre risoluzione · misure con LSP in
-volo · lock con trap altrui · giudice sotto-risoluto · byte-identità come
-gate di edit .rs post-pin.
+collaudo-nell'atto · differenze tra A/B come cifra · componenti prezzate ·
+denominatori a memoria · rc da pipe · run pesanti come task · edit coi
+build in volo · promozione sotto banda · strumentazione nel pin · claim di
+ASSENZA oltre risoluzione · misure con LSP in volo · lock con trap altrui ·
+giudice sotto-risoluto · byte-identità come gate di edit .rs post-pin.
 **Riscritto** 2026-08-18 (chiusura S-153); storia in `sessions/` · `gaps/`.
 Pre-flight S-154: pin phpr **s153 8370c257**ae70cc8e + server **f030c6fc**
 bddfab96 (SOLO via pin-*.sh) · MySQL wp8 con l'elenco · uploads sotto
 guardia · corpus **1412×2** · batteria = s125+rczval+loc_dente (cap 25707/
-7661) · gemelli s153 conservati: gemelloA f95a1067 · td1-cand 297cffc9 ·
-bt2-cand==pin 8370c257 (phpr-old-target/release/) · probe census s151
-ab02faec + sonda s152 d90dcdc6 ×2 · attesi di smoke verificati da SECONDO
-attore prima di ogni run di record · braccio A di ogni A/B = GEMELLO dal
-tree corrente (emenda §7-bis) · lock `/private/tmp/phpr-measure.lock` da
-CREARE a ogni finestra · **Data ≥10G: OGGI 2G, BLOCCANTE (quesito 0)** ·
+7661) · stash s153: gemelloA f95a1067 · td1-cand 297cffc9 · bt2==pin
+8370c257 · probe ab02faec + d90dcdc6 ×2 · attesi smoke da SECONDO attore
+prima d'ogni record · braccio A = GEMELLO dal tree (emenda §7-bis) · lock
+misura da CREARE a ogni finestra · **Data ≥10G: OGGI 2G, BLOCCANTE** ·
 rust-analyzer NON kill · lettura: REGOLE.md → QUI → wp153-harness/
 s153-{td1-caduta.md,criterio-td1-emenda.md,teardown-conteggi.md,
 ab-bt2-verdetto.out,promo-verdetto.out} → sessions/WP_SESSION_153.md →
