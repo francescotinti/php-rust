@@ -47,17 +47,66 @@
 < VERD="$H/s153-promo-verdetto.out"
 ---
 > VERD="$H/s154-promo-verdetto.out"
-81c78
+49,50c46,82
+< [ "$HB" = "$CAND_EXP" ] || stop "build NON riproduce il candidato dichiarato ($HB != $CAND_EXP) — STOP"
+< note "promozione: build ricetta riproduce il candidato $HB"
+---
+> # EMENDA t2 (dichiarata dopo lo STOP t1): il candidato fu costruito in target
+> # DEDICATO; la ricetta in target canonica differisce SOLO per LC_UUID+firma
+> # (±banner mimalloc) — meccanismo nominato (PREP s151, sonda §1-bis). Il gate
+> # si chiude a CONTENUTO contro il candidato STASHATO; il pin effettivo è $HB.
+> ident_contenuto(){ # $1=fileA $2=fileB — 0 se cluster tutti nominati, cap 160 B
+>   local le; le=$(otool -l "$1" | awk '/cmd LC_SEGMENT_64/{seg=""} /segname __LINKEDIT/{seg=1} seg && /fileoff/{print $2; exit}')
+>   python3 - "$1" "$2" "${le:-0}" <<'PY'
+> import sys
+> a=open(sys.argv[1],"rb").read(); b=open(sys.argv[2],"rb").read(); le=int(sys.argv[3])
+> if len(a)!=len(b): print("dimensioni diverse"); sys.exit(1)
+> d=[i for i,(x,y) in enumerate(zip(a,b)) if x!=y]
+> if len(d)>160: print(f"{len(d)} byte > cap 160"); sys.exit(1)
+> cl=[]
+> for i in d:
+>     if cl and i-cl[-1][1]<=64: cl[-1][1]=i
+>     else: cl.append([i,i])
+> bad=[]
+> for s,e in cl:
+>     ctx=a[max(0,s-64):e+64]+b[max(0,s-64):e+64]
+>     if s<4096 and e-s+1<=16: k="LC_UUID"
+>     elif le and s>=le: k="firma"
+>     elif b"Jan  1 1970" in ctx or b"00:00:00" in ctx or b"built on" in ctx: k="banner"
+>     else: k="NON-CLASSIFICATO"; bad.append((s,e))
+>     print(f"  cluster 0x{s:x}-0x{e:x}: {k}")
+> print(f"  tot {len(d)} B in {len(cl)} cluster")
+> sys.exit(1 if bad else 0)
+> PY
+> }
+> if [ "$HB" = "$CAND_EXP" ]; then
+>   note "promozione: build ricetta riproduce il candidato $HB AL BYTE"
+> else
+>   CSTASH="$STASH/phpr-s154-ce1-cand"
+>   [ "$(shasum -a 256 "$CSTASH" | cut -c1-16)" = "$CAND_EXP" ] || stop "stash candidato != $CAND_EXP — STOP"
+>   ident_contenuto "$BIN" "$CSTASH" > "$OUT/ident-contenuto.txt" 2>&1     || { cat "$OUT/ident-contenuto.txt" >> "$VERD"; stop "build $HB DIVERGE dal candidato OLTRE il meccanismo nominato — STOP"; }
+>   cat "$OUT/ident-contenuto.txt" >> "$VERD"
+>   note "promozione: identità candidato a CONTENUTO (emenda t2: cluster LC_UUID/firma/banner) — pin effettivo = $HB (dichiarato)"
+> fi
+78c110
+< [ "$H2" = "$CAND_EXP" ] || stop "re-hash post-batteria $H2 != $CAND_EXP — STOP"
+---
+> [ "$H2" = "$HB" ] || stop "re-hash post-batteria $H2 != $HB (churn) — STOP"
+81c113
 < "$SRC/scripts/pin-phpr.sh" s153 > "$OUT/pin.log" 2>&1
 ---
 > "$SRC/scripts/pin-phpr.sh" s154 > "$OUT/pin.log" 2>&1
-88,89c85,86
+88,89c120,121
 < [ "$crc" = 0 ] || stop "corpus-gate rc=$crc — BT2 non ammette flip (divergenza (3)): STOP"
 < note "promozione corpus-gate: rc=0 — nomi==congelato (1412), CONTENUTO==golden, off↔on zero (ZERO flip come atteso)"
 ---
 > [ "$crc" = 0 ] || stop "corpus-gate rc=$crc — CE1 non ammette flip (divergenza (3)): STOP"
 > note "promozione corpus-gate: rc=0 — nomi==congelato (1412), CONTENUTO==golden, off-on zero (ZERO flip come atteso, CE1)"
-98a96,106
+91c123
+< PHPR_PIN_ATTESO="$CAND_EXP" "$SRC/wp109-harness/s109-fixture-chain.sh" > "$OUT/fixture-chain.out" 2>&1
+---
+> PHPR_PIN_ATTESO="$H2" "$SRC/wp109-harness/s109-fixture-chain.sh" > "$OUT/fixture-chain.out" 2>&1
+98a131,141
 > # ---- gate fx-ce AGGIUNTO (divergenza (4)): bilaterale oracle==pin byte-id ----
 > ORACLE=/opt/homebrew/opt/php/bin/php
 > "$ORACLE" "$H/fx-ce.php" > "$OUT/fxce-oracle.out" 2>&1
@@ -69,13 +118,13 @@
 >   stop "gate fx-ce: DIVERGE (promo-out/fxce.diff)"
 > fi
 > 
-106,107c114,115
+106,107c149,150
 < PHPR="$BIN" R=5 "$SRC/wp97-harness/micro/run-micro.sh" > "$OUT/micro-pin-s153.out" 2>&1
 < note "promozione micro pin s153: $(grep -E '^rapporto_' "$OUT/micro-pin-s153.out" | tr '\n' ' ')"
 ---
 > PHPR="$BIN" R=5 "$SRC/wp97-harness/micro/run-micro.sh" > "$OUT/micro-pin-s154.out" 2>&1
 > note "promozione micro pin s154: $(grep -E '^rapporto_' "$OUT/micro-pin-s154.out" | tr '\n' ' ')"
-109,111c117,119
+109,111c152,154
 < # ---- conferma POST-PIN m-backtrace (divergenza (5)): R=5 pin vs stash s150 ----
 < AOLD="$STASH/phpr-s150"
 < [ "$(shasum -a 256 "$AOLD" | cut -c1-16)" = "cbbe71735effb165" ] || stop "stash phpr-s150 hash inatteso"
@@ -83,27 +132,27 @@
 > # ---- conferma POST-PIN m-classexists (divergenza (5)): R=5 pin vs stash s153 ----
 > AOLD="$STASH/phpr-s153"
 > [ "$(shasum -a 256 "$AOLD" | cut -c1-16)" = "8370c257ae70cc8e" ] || stop "stash phpr-s153 hash inatteso"
-114c122
+114c157
 < FA=$(floor3 "$AOLD" "$M149/empty.php"); FB=$(floor3 "$BIN" "$M149/empty.php")
 ---
 > FA=$(floor3 "$AOLD" "$H/empty.php"); FB=$(floor3 "$BIN" "$H/empty.php")
-117c125
+117c160
 <   if [ $((i % 2)) -eq 1 ]; then TA=$(ucpu "$AOLD" "$M149/m-backtrace.php"); TB=$(ucpu "$BIN" "$M149/m-backtrace.php"); else TB=$(ucpu "$BIN" "$M149/m-backtrace.php"); TA=$(ucpu "$AOLD" "$M149/m-backtrace.php"); fi
 ---
 >   if [ $((i % 2)) -eq 1 ]; then TA=$(ucpu "$AOLD" "$H/m-classexists.php"); TB=$(ucpu "$BIN" "$H/m-classexists.php"); else TB=$(ucpu "$BIN" "$H/m-classexists.php"); TA=$(ucpu "$AOLD" "$H/m-classexists.php"); fi
-123c131
+123c166
 < n=150000.0
 ---
 > n=10000000.0
-134c142
+134c177
 < note "conferma post-pin m-backtrace (pin s153 vs stash s150, drift-tree dichiarato ~0 su questo giudice): $CONF (attesa: segno +, D nell'intorno di +266,7 ± rumore+drift)"
 ---
 > note "conferma post-pin m-classexists (pin s154 vs stash s153, drift-tree da dichiarare): $CONF (attesa: segno +, D nell'intorno di +22,0 ± rumore+drift)"
-164c172
+164c207
 < "$SRC/scripts/pin-server.sh" s153 > "$OUT/pin-server.log" 2>&1
 ---
 > "$SRC/scripts/pin-server.sh" s154 > "$OUT/pin-server.log" 2>&1
-170c178
+170c213
 < note "PROMOZIONE COMPLETA rc=0 (da promo-out/rcb): pin s153 = $H2"
 ---
 > note "PROMOZIONE COMPLETA rc=0 (da promo-out/rcb): pin s154 = $H2"

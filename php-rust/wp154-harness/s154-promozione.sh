@@ -43,8 +43,43 @@ SOURCE_DATE_EPOCH=0 CARGO_INCREMENTAL=0 cargo build --release > "$OUT/build.log"
 rc=$?; echo "$rc" > "$OUT/build.rc"
 [ "$rc" = 0 ] || stop "build rc=$rc"
 HB=$(shasum -a 256 "$BIN" | cut -c1-16)
-[ "$HB" = "$CAND_EXP" ] || stop "build NON riproduce il candidato dichiarato ($HB != $CAND_EXP) — STOP"
-note "promozione: build ricetta riproduce il candidato $HB"
+# EMENDA t2 (dichiarata dopo lo STOP t1): il candidato fu costruito in target
+# DEDICATO; la ricetta in target canonica differisce SOLO per LC_UUID+firma
+# (±banner mimalloc) — meccanismo nominato (PREP s151, sonda §1-bis). Il gate
+# si chiude a CONTENUTO contro il candidato STASHATO; il pin effettivo è $HB.
+ident_contenuto(){ # $1=fileA $2=fileB — 0 se cluster tutti nominati, cap 160 B
+  local le; le=$(otool -l "$1" | awk '/cmd LC_SEGMENT_64/{seg=""} /segname __LINKEDIT/{seg=1} seg && /fileoff/{print $2; exit}')
+  python3 - "$1" "$2" "${le:-0}" <<'PY'
+import sys
+a=open(sys.argv[1],"rb").read(); b=open(sys.argv[2],"rb").read(); le=int(sys.argv[3])
+if len(a)!=len(b): print("dimensioni diverse"); sys.exit(1)
+d=[i for i,(x,y) in enumerate(zip(a,b)) if x!=y]
+if len(d)>160: print(f"{len(d)} byte > cap 160"); sys.exit(1)
+cl=[]
+for i in d:
+    if cl and i-cl[-1][1]<=64: cl[-1][1]=i
+    else: cl.append([i,i])
+bad=[]
+for s,e in cl:
+    ctx=a[max(0,s-64):e+64]+b[max(0,s-64):e+64]
+    if s<4096 and e-s+1<=16: k="LC_UUID"
+    elif le and s>=le: k="firma"
+    elif b"Jan  1 1970" in ctx or b"00:00:00" in ctx or b"built on" in ctx: k="banner"
+    else: k="NON-CLASSIFICATO"; bad.append((s,e))
+    print(f"  cluster 0x{s:x}-0x{e:x}: {k}")
+print(f"  tot {len(d)} B in {len(cl)} cluster")
+sys.exit(1 if bad else 0)
+PY
+}
+if [ "$HB" = "$CAND_EXP" ]; then
+  note "promozione: build ricetta riproduce il candidato $HB AL BYTE"
+else
+  CSTASH="$STASH/phpr-s154-ce1-cand"
+  [ "$(shasum -a 256 "$CSTASH" | cut -c1-16)" = "$CAND_EXP" ] || stop "stash candidato != $CAND_EXP — STOP"
+  ident_contenuto "$BIN" "$CSTASH" > "$OUT/ident-contenuto.txt" 2>&1     || { cat "$OUT/ident-contenuto.txt" >> "$VERD"; stop "build $HB DIVERGE dal candidato OLTRE il meccanismo nominato — STOP"; }
+  cat "$OUT/ident-contenuto.txt" >> "$VERD"
+  note "promozione: identità candidato a CONTENUTO (emenda t2: cluster LC_UUID/firma/banner) — pin effettivo = $HB (dichiarato)"
+fi
 
 CARGO_INCREMENTAL=0 cargo test --release > "$OUT/batteria.log" 2>&1
 brc=$?; echo "$brc" > "$OUT/batteria.rc"
@@ -72,7 +107,7 @@ SOURCE_DATE_EPOCH=0 CARGO_INCREMENTAL=0 cargo build --release > "$OUT/build2.log
 rc=$?; echo "$rc" > "$OUT/build2.rc"
 [ "$rc" = 0 ] || stop "build2 rc=$rc"
 H2=$(shasum -a 256 "$BIN" | cut -c1-16)
-[ "$H2" = "$CAND_EXP" ] || stop "re-hash post-batteria $H2 != $CAND_EXP — STOP"
+[ "$H2" = "$HB" ] || stop "re-hash post-batteria $H2 != $HB (churn) — STOP"
 note "promozione: churn batteria neutralizzato (build ricetta → $H2 al byte)"
 
 "$SRC/scripts/pin-phpr.sh" s154 > "$OUT/pin.log" 2>&1
@@ -85,7 +120,7 @@ crc=$?; echo "$crc" > "$OUT/corpus-rc"
 [ "$crc" = 0 ] || stop "corpus-gate rc=$crc — CE1 non ammette flip (divergenza (3)): STOP"
 note "promozione corpus-gate: rc=0 — nomi==congelato (1412), CONTENUTO==golden, off-on zero (ZERO flip come atteso, CE1)"
 
-PHPR_PIN_ATTESO="$CAND_EXP" "$SRC/wp109-harness/s109-fixture-chain.sh" > "$OUT/fixture-chain.out" 2>&1
+PHPR_PIN_ATTESO="$H2" "$SRC/wp109-harness/s109-fixture-chain.sh" > "$OUT/fixture-chain.out" 2>&1
 frc=$?; echo "$frc" > "$OUT/fixture-chain.rc"
 [ "$frc" = 0 ] || stop "fixture chain rc=$frc"
 FX_ATTESI="hc1 move recv fx20 fx21 w9 preg teardown stash backtrace"
