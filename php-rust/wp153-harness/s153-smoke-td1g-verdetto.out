@@ -1,0 +1,51 @@
+== s153-ab smoke-td1g: A=f95a1067(gemello tree) B=297cffc9 R=2 ordine ALTERNATO; giudice=objdropdef; soglia=max(4, drop-1); UB falsificabile=17.6 (4 borrow x mock 4.41); companion firmati objchurn/objdatains; guardie objalloc 13.3/objallocni 10.0/objmap 3.3 + sei SL; quiescenza rc=0; rc autoritativo = ab-out/smoke-td1g.rc ==
+cat=objdropdef N=3000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=3.13 rawB=3.10
+  coppia2 [BA]: rawA=3.10 rawB=3.09
+cat=objchurn N=3000000 floor_A=0.02 floor_B=0.03
+  coppia1 [AB]: rawA=3.55 rawB=3.53
+  coppia2 [BA]: rawA=3.54 rawB=3.57
+cat=objdatains N=3000000 floor_A=0.03 floor_B=0.03
+  coppia1 [AB]: rawA=2.91 rawB=2.91
+  coppia2 [BA]: rawA=2.90 rawB=2.92
+cat=objalloc N=3000000 floor_A=0.02 floor_B=0.03
+  coppia1 [AB]: rawA=2.42 rawB=2.42
+  coppia2 [BA]: rawA=2.42 rawB=2.42
+cat=objallocni N=3000000 floor_A=0.02 floor_B=0.03
+  coppia1 [AB]: rawA=2.22 rawB=2.21
+  coppia2 [BA]: rawA=2.20 rawB=2.23
+cat=objmap N=3000000 floor_A=0.03 floor_B=0.02
+  coppia1 [AB]: rawA=0.38 rawB=0.39
+  coppia2 [BA]: rawA=0.37 rawB=0.37
+cat=arith N=150000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=7.13 rawB=7.15
+  coppia2 [BA]: rawA=7.18 rawB=7.17
+cat=prop N=90000000 floor_A=0.03 floor_B=0.02
+  coppia1 [AB]: rawA=7.01 rawB=7.04
+  coppia2 [BA]: rawA=7.02 rawB=7.05
+cat=calls N=60000000 floor_A=0.02 floor_B=0.03
+  coppia1 [AB]: rawA=6.39 rawB=6.38
+  coppia2 [BA]: rawA=6.69 rawB=6.41
+cat=str N=28000000 floor_A=0.03 floor_B=0.03
+  coppia1 [AB]: rawA=4.48 rawB=4.42
+  coppia2 [BA]: rawA=4.49 rawB=4.78
+cat=arr N=30000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=4.65 rawB=4.46
+  coppia2 [BA]: rawA=4.63 rawB=4.55
+cat=re N=12000000 floor_A=0.03 floor_B=0.03
+  coppia1 [AB]: rawA=5.52 rawB=5.55
+  coppia2 [BA]: rawA=5.49 rawB=5.52
+GIUDICE objdropdef: A=1031.7 B=1025.0 ns/iter D=+6.7 soglia=10.0 (rumore drop-1: A'=10.0 B'=3.3) -> SOTTO SOGLIA
+riconciliazione UB objdropdef: D=+6.7 vs UB=17.6+rumore=10.0 -> dentro la banda del modello
+companion objchurn: A=1175.0 B=1173.3 D=+1.7 segno atteso + -> CONFERMA [rumore drop-1 A'=3.3 B'=13.3]
+companion objdatains: A=958.3 B=961.7 D=-3.3 segno atteso + -> SEGNO OPPOSTO (a verbale, non gate) [rumore drop-1 A'=3.3 B'=3.3]
+guardia objalloc: A=800.0 B=796.7 D=+3.3 soglia_reg=-13.3 [banda fondata=13.3; rumore drop-1 A'=0.0 B'=0.0] -> ok
+guardia objallocni: A=730.0 B=730.0 D=+0.0 soglia_reg=-10.0 [banda fondata=10.0; rumore drop-1 A'=6.7 B'=6.7] -> ok
+guardia objmap: A=115.0 B=120.0 D=-5.0 soglia_reg=-6.7 [banda fondata=3.3; rumore drop-1 A'=3.3 B'=6.7] -> ok
+guardia arith: A=47.6 B=47.6 D=-0.0 soglia_reg=-4.0 [SL=0.94; rumore drop-1 A'=0.3 B'=0.1] -> ok
+guardia prop: A=77.6 B=78.1 D=-0.4 soglia_reg=-4.0 [SL=0.8; rumore drop-1 A'=0.1 B'=0.1] -> ok
+guardia calls: A=108.7 B=106.1 D=+2.6 soglia_reg=-5.0 [SL=0.73; rumore drop-1 A'=5.0 B'=0.5] -> ok
+guardia str: A=159.1 B=163.2 D=-4.1 soglia_reg=-12.9 [SL=2.89; rumore drop-1 A'=0.4 B'=12.9] -> ok
+guardia arr: A=154.0 B=149.5 D=+4.5 soglia_reg=-4.0 [SL=2.49; rumore drop-1 A'=0.7 B'=3.0] -> ok
+guardia re: A=456.2 B=458.8 D=-2.5 soglia_reg=-4.5 [SL=4.46; rumore drop-1 A'=2.5 B'=2.5] -> ok
+ESITO: SOTTO SOGLIA (giudice)

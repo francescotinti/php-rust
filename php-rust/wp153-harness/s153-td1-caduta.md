@@ -1,4 +1,21 @@
-# S-153 p.3 — L-TD1 CADUTA allo smoke (early-stop da criterio) — istruttoria
+# S-153 p.3 — L-TD1 CADUTA — istruttoria (AGGIORNATA al verdetto GEMELLO R=5)
+
+## ⚖️ VERDETTO FINALE (gemello, R=5 di record — `s153-ab-td1g-verdetto.out`, rc=4)
+- A=f95a1067 (gemello tree) vs B=297cffc9 (stesso tree + soli edit L-TD1;
+  build riproducibile ×2 al byte): **D=−3,3 ns/iter, soglia 4,0** (rumore
+  drop-1 3,3/3,3) ⇒ SOTTO SOGLIA; guardie 12/12 ok; companion +3,3/+6,7 al
+  rumore; riconciliazione smoke↔R5 FUORI BANDA (il +6,7 dello smoke era
+  rumore: a verbale). Revert eseguito e verificato AL BYTE contro il gemello.
+- **Reperto pulito**: 4 borrow/iter rimossi PER COSTRUZIONE ⇒ |D| ≤ soglia 4
+  ⇒ **prezzo in-contesto ≤ ~1 ns/borrow** nei siti teardown/sweep, contro il
+  mock hot-hot 4,27–4,41 (maggiorante non rappresentativo, come già
+  qualificato dal §9 del gonogo — qui falsificato sperimentalmente).
+- Il primo smoke (D=−5,0, braccio A=pin non-gemello) resta DECLASSATO a
+  contaminato (emenda s153-criterio-td1-emenda.md, catturata nell'atto):
+  il confronto pin-vs-gemello mostra che il drift di layout dei due commit
+  cfg-gated post-pin vale ~±5–10 ns/iter su questo giudice.
+
+## Sotto: prima stesura (smoke contaminato) — SUPERSEDED, conservata agli atti
 
 ## Esito secco (verdetto `s153-smoke-td1-verdetto.out`, rc=4 da file)
 - Giudice objdropdef R=2: **D=−5,0 ns/iter** (A=1023,3 B=1028,3; soglia 10,0;
