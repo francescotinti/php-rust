@@ -1,0 +1,24 @@
+== s154 sonda k post-BT2 (criterio s154-criterio-sonda.md; ricetta PREP s151; CONTEGGI mai tempo) 2026-08-18 20:05:41 ==
+S0 guardie: lock presente, niente cargo/rustc, pin phpr=8370c257ae70cc8e server=f030c6fcbddfab96, hold assente
+S1 copia-fedele: PASS diff -r crates rc=0 (copia /private/tmp/phpr-census-s154-src)
+S2 cluster 0x838-0x847 (16 B): LC_UUID
+S2 cluster 0xbb848a-0xbb849d (13 B): mimalloc-banner __DATE__/__TIME__
+S2 cluster 0xe4c4b0-0xe4c4cf (32 B): __LINKEDIT/firma
+S2 cluster 0xe63bb0-0xe63bcf (32 B): __LINKEDIT/firma
+S2 confronto byte: 93 byte diversi in 4 cluster (linkedit fileoff=13615104)
+S2 strings: diff SOLO righe data/ora mimalloc (ammesse, emenda §1-bis raffinata)
+S2 identità a CONTENUTO: PASS (build fredda 2023cbb981a19d5f vs pin 8370c257ae70cc8e: cluster tutti nominati — LC_UUID + firma __LINKEDIT + banner mimalloc; emenda §1-bis)
+S3 diff census s151 applicato (10 file; offset nel log)
+S4 probe s154: hash16=b28899092ea1e2cc — conservato x2 (harness + stash), verificato
+S5 smoke: rc=0 (checker s151 a esiti esatti, attesi INVARIATI)
+S6 bt-count: stdout ESATTI ai due N, raw presenti
+k_new = 13.000 alloc/chiamata (INTERO ESATTO; Δn=2600000 su ΔN=200000) · b_new = 1244.0 B/chiamata (rif pre-BT2: k=45, b=2282)
+attesa k 22-28: FUORI (si torna al sorgente prima d'ogni conclusione)
+riconciliazione: D_alloc = (45-13.0) x miheap [6,7;6,9] = [214.4; 220.8] ns/iter · D misurato=+266,7
+residuo NON-alloc R = [45.9; 52.3] ns/iter — canali candidati da NOMINARE (hash Key::from_bytes, memcpy chiavi, ty.to_vec, clone file); nessuna cifra per canale senza mock dedicato
+S7 riconciliazione scritta. rc=0
+S8 decomposizione k (criterio: k FUORI attesa => sorgente; micro bt2-limit1/bt2-noclass, k=Δ/ΔN tutti INTERI ESATTI):
+  k(limit=1)=8 b=832 · k(noclass,limit=2)=11 b=1170 · k(metodo,limit=2)=13 b=1244
+  => fisso/chiamata=3 (Vec BtFrame + storage outer + Rc outer) · per-frame=5 (PhpStr function+file+class=3, tabella hashed e=1, Rc::new(e)=1) · gruppo class+type=1/frame (la sola PhpStr class)
+  => type dal pool statico = 0 alloc CONFERMATO · 5 chiavi dal pool = 0 alloc CONFERMATO (post-BT2 enumerato al sorgente, fit esatto 3+2x5=13)
+  FUORI-attesa spiegato: il modello blind (criterio bt2 p.2) contava chiavi=1 e campi=1 alloc; al census reale Key::from_bytes ~2 (buffer+header) e file/function/class avevano DOPPIO alloc (to_vec/clone in collect + PhpStr::new in ho_): eliminati 16/frame (±1 su internals from_bytes), non 10 — errore tutto sul lato PRE del modello, nessun residuo anomalo.
