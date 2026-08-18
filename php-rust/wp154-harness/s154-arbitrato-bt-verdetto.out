@@ -1,0 +1,9 @@
+== s154 arbitrato guardia backtrace (emenda §6-bis): N=600000 tick 16,7; A=2023cbb9 B=e634d95c R=5 ABAB; soglia max(4, drop-1) ==
+floor_A=0.03 floor_B=0.02 parita' 1200000==1200000 ok
+  coppia1 [AB]: rawA=0.29 rawB=0.29
+  coppia2 [BA]: rawA=0.29 rawB=0.30
+  coppia3 [AB]: rawA=0.30 rawB=0.30
+  coppia4 [BA]: rawA=0.30 rawB=0.29
+  coppia5 [AB]: rawA=0.30 rawB=0.29
+ARBITRATO backtrace: A=450.0 B=450.0 ns/iter D=+0.0 soglia=16.7 (rumore drop-1 A'=16.7 B'=16.7)
+ESITO: TICK-FLIP REFUTATO — guardia dichiarata ok (emenda §6-bis), giudice ab-ce1b VINTO
