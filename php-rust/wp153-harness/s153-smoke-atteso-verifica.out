@@ -1,0 +1,38 @@
+# s153-smoke-atteso-verifica — SECONDO ATTORE (indipendente, adversariale) — 2026-08-18
+
+P1 PASS — Derivato dal sorgente: i tre micro sommano (i & 1) per i=0..2.999.999 e stampano `echo $s,"\n"`.
+   python3: sum(i&1 for i in range(3000000)) = 1500000. Output atteso ESATTO `1500000`+newline per
+   objdropdef/objchurn/objdatains (data['k'] e $map non toccano $s). Conforme a s153-smoke-atteso.md p.1.
+P2 PASS con 3 segnalazioni — s153-ab.sh implementa il criterio:
+   giudice objdropdef soglia max(4.0, rumore drop-1) [r115]; UB=17.6 con fuori-banda D>UB+rumore [r86,r122];
+   companion objchurn/objdatains non gate [r125-126]; guardie BAND objalloc 13.3/objallocni 10.0/objmap 3.3 +
+   sei SL (arith .94/prop .80/calls .73/str 2.89/arr 2.49/re 4.46) solo-regressione [r92-93,r128-132];
+   guardia A=phpr-s150 hash cbbe7173 [r46] e B=hash dichiarato [r47]; coppie alternate AB/BA per indice [r71-76];
+   floor med3 per binario su empty.php della dir giusta [r50,r69]; lock deve contenere "s153" pena rc 9 [r37];
+   quiescenza rc!=0 => STOP [r40-44]; rc scritto su ab-out/<TAG>.rc [r137 e ogni ramo STOP].
+   SEGNALAZIONI (a verbale, non bloccanti): (i) soglia guardie = max(4.0, banda, rumore): il floor 4.0 non è nel
+   criterio e rende le guardie con banda<4 (objmap 3.3, SL arith/prop/calls/str/arr) più permissive tra banda e
+   4.0 ns/iter — ereditata dalla copia dichiarata s136; (ii) exit 7 (verdetto esistente) non scrive il .rc
+   (il file risulta MANCANTE, non falso 0 — accettabile); (iii) il TSV è troncato prima del check lock.
+P3 PASS — shasum-256 phpr-s150 = cbbe71735effb165c390a62cc2657e4ed733ed75171ab0a3164902578d2c1091 (prefisso conforme).
+P4 PASS — wp127-harness/micro-orm/empty.php esiste, 6 byte, solo `<?php`: floor corretto. Esiste anche
+   wp123-harness/scaled/empty.php (necessario alle sei guardie scalate).
+P5 PASS — git diff HEAD: SOLO crates/php-runtime/src/vm/mod.rs modificato (+38/-9; gli untracked sono output harness).
+   (b) ramo $this di gc_note_frame: l'inline replica gc_note_slow arm Object (HEAD r3946-3974): insert SOLO se
+   !gc.destructed() && !gc.buffered(); set_pos(gc_buf.len()) col len corrente; set_birth(false); drop del borrow;
+   push di Rc::clone. Ramo destructed-non-created INVARIATO (drop(b) prima di gc_cascade evita il double-borrow).
+   Nota: i contatori gc-census/zval-census (note/note_gcnote/note_inserted) NON sono nel percorso inlinato —
+   incide solo su build census, non sui binari di misura.
+   (c) sequenza free di gc_sweep_impl: ordine preservato = clear marks sotto borrow -> gc_buf[p]=None ->
+   drop(cand) (identico a gc_unbuffer HEAD r4109-4116: pos -> clear -> slot=None, poi drop(cand) r4372-4373);
+   class_id/lazy sole LETTURE anticipate: tra vecchio e nuovo punto di lettura solo decrementi Rc (slot, cand),
+   nessun Drop possibile (o tiene un ref forte) => valori identici. gc_release_cascade_id riceve `id` =
+   chiave di created.remove da cui o proviene (== o.borrow().id, cfr. match c.borrow().id==id r4352); il
+   wrapper gc_release_cascade legge oid e delega: gli altri call-site sono invariati.
+   (d) NESSUN cambio a strong_count (check Rc::strong_count==1 intatto, fuori borrow), all'ordine dei free
+   (var_dump_debug/stringify_args/cascata identici) o al LIFO id reuse (free-list non toccata dal diff).
+P6 PASS — attesi ESATTI: parità = valore 1500000 derivato (non «uguali»); hash A/B nominati; smoke arbitrato
+   dal SEGNO 2/2 con magnitudine [4;26] dichiarata NON cifra; rc atteso 0|4 con motivazione; early-stop
+   dichiarato manuale (i segni per coppia si derivano dal runs.tsv). Nessun atteso vago.
+
+VERDETTO FINALE: ATTESI PROMOSSI (nessuna contestazione; 3 segnalazioni non bloccanti a verbale in P2, 1 in P5b).
