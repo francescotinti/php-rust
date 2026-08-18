@@ -1,0 +1,63 @@
+2,5c2,5
+< # s150-orm-coppia.sh — coppia dbal+ORM sul pin s150 = GIUDIZIO della scommessa
+< # BT1 (criterio s150-criterio-orm.md; copia DICHIARATA di s147-orm-rimisura.sh,
+< # manifest s150-orm-copia.diff; adattamenti: pin s150 cbbe71735effb165, path
+< # wp150, blocco SCOMMESSA meccanico in coda al verdetto): ORM + dbal, N=2 per
+---
+> # s154-orm-coppia.sh — coppia dbal+ORM sul pin s153 = rimisura DOVUTA (pin
+> # nuovo) con attesa BT2 SOTTO-risoluzione (criterio s154-criterio-orm.md; copia
+> # DICHIARATA di s150-orm-coppia.sh, manifest s154-orm-copia.diff; adattamenti:
+> # pin s153 8370c257ae70cc8e, path wp154, blocco ATTESA-BT2): ORM + dbal, N=2 per
+13c13
+< H="$REPO/wp150-harness"
+---
+> H="$REPO/wp154-harness"
+20c20
+< VERD="$H/s150-orm-coppia-verdetto.out"
+---
+> VERD="$H/s154-orm-coppia-verdetto.out"
+24c24
+< [ "$(shasum -a 256 "$PHPR" | cut -c1-16)" = "cbbe71735effb165" ] || { echo "rc=9 pin!=s150" > "$OUT/rimisura.done"; exit 9; }
+---
+> [ "$(shasum -a 256 "$PHPR" | cut -c1-16)" = "8370c257ae70cc8e" ] || { echo "rc=9 pin!=s153" > "$OUT/rimisura.done"; exit 9; }
+107c107
+< print("coppia-s150 (user CPU; pavimenti PARZIALI phpunit --version: orm o=%.3f p=%.3f · dbal o=%.3f p=%.3f)" % (fo, fp, dfo, dfp))
+---
+> print("coppia-s154 (user CPU; pavimenti PARZIALI phpunit --version: orm o=%.3f p=%.3f · dbal o=%.3f p=%.3f)" % (fo, fp, dfo, dfp))
+131,132c131,132
+< # --- SCOMMESSA BT1 (criterio s150-criterio-orm.md p.4, aritmetica meccanica) ---
+< REF_MIN, REF_MAX = 41.60, 42.22   # phpr ORM net @ s145 (s147 verdetto, floor 0,07)
+---
+> # --- ATTESA BT2 (criterio s154-criterio-orm.md p.4, aritmetica meccanica) ---
+> REF_MIN, REF_MAX = 35.52, 35.53   # phpr ORM net @ s150 (s150-orm-coppia-verdetto)
+134c134
+< ATT_LO, ATT_HI = 0.8, 3.1          # attesa pre-registrata
+---
+> ATT_LO, ATT_HI = 0.05, 0.15       # attesa pre-registrata SOTTO risoluzione
+138c138
+<     print(f"scommessa: phpr_orm_net_new=[{nn[0]:.2f}; {nn[1]:.2f}] ref=[{REF_MIN}; {REF_MAX}] Delta=[{d_min:+.2f}; {d_max:+.2f}] s")
+---
+>     print(f"attesa-BT2: phpr_orm_net_new=[{nn[0]:.2f}; {nn[1]:.2f}] ref=[{REF_MIN}; {REF_MAX}] Delta=[{d_min:+.2f}; {d_max:+.2f}] s")
+140c140
+<         print("scommessa: CIFRA NULLA (parita' rotta) — nessun giudizio")
+---
+>         print("attesa-BT2: CIFRA NULLA (parita' rotta) — nessun giudizio")
+142,143c142,144
+<         centro = "CENTRATA (dentro l'attesa 0,8-3,1)" if (d_max >= ATT_LO and d_min <= ATT_HI) else ("OLTRE-ATTESA (>3,1: dichiarare)" if d_min > ATT_HI else "VINTA ma SOTTO l'attesa 0,8 (dichiarare)")
+<         print(f"scommessa: VINTA (Delta_min {d_min:.2f} >= {RES}) — {centro}")
+---
+>         print(f"attesa-BT2: DIREZIONE GIU' FUORI RUMORE (Delta_min {d_min:.2f} >= {RES}) — OLTRE l'attesa sotto-risoluzione 0,05-0,15: dichiarare")
+>     elif d_max < -RES:
+>         print(f"attesa-BT2: REGRESSIONE SEGNALATA (Delta_max {d_max:.2f} < -{RES}) — indagine PRIMA di ogni altra leva")
+145c146
+<         print(f"scommessa: PERSA (Delta_max {d_max:.2f} < {RES}: fermo nel rumore o su)")
+---
+>         print(f"attesa-BT2: COMPATIBILE (Delta dentro il rumore ±{RES}; attesa 0,05-0,15 SOTTO risoluzione — esito dichiarato, nessuna cifra attribuita a BT2)")
+147c148
+<         print(f"scommessa: NON RISOLTA (intervallo Delta a cavallo di {RES}) — replica dovuta")
+---
+>         print(f"attesa-BT2: NON RISOLTA (intervallo Delta a cavallo di {RES}) — si dichiara, replica eventuale")
+150c151
+< { echo "== s150 coppia dbal+ORM (pin s150 cbbe7173 vs oracle 8.5.7; criterio s150-criterio-orm.md) =="
+---
+> { echo "== s154 coppia dbal+ORM (pin s153 8370c257 vs oracle 8.5.7; criterio s154-criterio-orm.md) =="

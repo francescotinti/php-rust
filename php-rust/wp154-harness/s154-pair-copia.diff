@@ -1,0 +1,66 @@
+2,4c2,4
+< # s150-pair.sh <tentativo> — S-150 p.3: coppia full/media WP @ pin s150 (DOVUTA: pin nuovo)
+< # criteri s132/s146/s148 EREDITATI INVARIATI + s150-criterio-pair-t4.md
+< # (GIUDIZIO CANONICO a MEDIANA per finestra vs t1=1,799 t2=1,738 t3=1,789 —
+---
+> # s154-pair.sh <tentativo> — S-154 p.1: coppia full/media WP @ pin s153 (DOVUTA: pin nuovo)
+> # criteri s132/s146/s148 EREDITATI INVARIATI + s154-criterio-pair-t5.md
+> # (GIUDIZIO CANONICO a MEDIANA per finestra vs t1=1,799 t2=1,738 t3=1,789 t4=1,781 —
+6,9c6,9
+< # COPIA DICHIARATA di wp148-harness/s148-pair.sh (collaudo: copia-gate +
+< # manifest s150-pair-copia.diff) coi SOLI adattamenti: nomi s150/pair150/
+< # wp150-harness; pin s150 (phpr cbbe7173 + server 18c27407); header del
+< # giudice; blocco giudizio-MEDIANA al posto del confronto_formale_rif S-142.
+---
+> # COPIA DICHIARATA di wp150-harness/s150-pair.sh (collaudo: copia-gate +
+> # manifest s154-pair-copia.diff) coi SOLI adattamenti: nomi s154/pair154/
+> # wp154-harness; pin s153 (phpr 8370c257 + server f030c6fc); header del
+> # giudice; mediane storiche con t4=1,781 (banda giudizio INVARIATA [1,738;1,799]).
+17c17
+< H="$REPO/wp150-harness"
+---
+> H="$REPO/wp154-harness"
+22c22
+< VERD="$H/s150-pair-verdetto-$T.out"
+---
+> VERD="$H/s154-pair-verdetto-$T.out"
+27c27
+< DONE="$OUT/pair150-$T.done"
+---
+> DONE="$OUT/pair154-$T.done"
+36,37c36,37
+< PIN_ATTESO="cbbe71735effb165"
+< SRV_ATTESO="18c2740774336c82"
+---
+> PIN_ATTESO="8370c257ae70cc8e"
+> SRV_ATTESO="f030c6fcbddfab96"
+145,146c145,146
+< print(f"== s150 coppia WP full+media sul pin s150 tentativo={T} (criteri s132/s146/s148 EREDITATI + s150-criterio-pair-t4.md: giudizio a MEDIANA per finestra, az.rev.3 S-149) ==")
+< print(f"grade=VERDICT  # derivazione meccanica dai .time; rc autoritativo = pair-out/pair150-{T}.done")
+---
+> print(f"== s154 coppia WP full+media sul pin s153 tentativo={T} (criteri s132/s146/s148 EREDITATI + s154-criterio-pair-t5.md: giudizio a MEDIANA per finestra, az.rev.3 S-149) ==")
+> print(f"grade=VERDICT  # derivazione meccanica dai .time; rc autoritativo = pair-out/pair154-{T}.done")
+219,220c219,220
+<         # s150-criterio-pair-t4.md p.2 (az.rev.3 S-149): GIUDIZIO CANONICO a
+<         # MEDIANA per finestra vs mediane storiche t1=1,799 t2=1,738 t3=1,789;
+---
+>         # s154-criterio-pair-t5.md p.2 (az.rev.3 S-149): GIUDIZIO CANONICO a
+>         # MEDIANA per finestra vs mediane storiche t1=1,799 t2=1,738 t3=1,789 t4=1,781;
+223,228c223,228
+<         med_t4 = statistics.median(props)
+<         print(f"mediana_t4={med_t4:.3f} (N={len(props)} coppie proprie ON PULITE; mediane storiche t1=1.799 t2=1.738 t3=1.789)")
+<         if MED_LO <= med_t4 <= MED_HI:
+<             print(f"giudizio_MEDIANA (canonico, criterio t4 p.2): COMPATIBILE (mediana in [{MED_LO}; {MED_HI}]) — nessun claim")
+<         elif med_t4 < MED_LO:
+<             print(f"giudizio_MEDIANA (canonico, criterio t4 p.2): direzione GIU' SEGNALATA (mediana {med_t4:.3f} < {MED_LO}) — attesa BT1 su WP dichiarata piccola/nulla: NON attribuibile senza census proprio")
+---
+>         med_t5 = statistics.median(props)
+>         print(f"mediana_t5={med_t5:.3f} (N={len(props)} coppie proprie ON PULITE; mediane storiche t1=1.799 t2=1.738 t3=1.789 t4=1.781)")
+>         if MED_LO <= med_t5 <= MED_HI:
+>             print(f"giudizio_MEDIANA (canonico, criterio t5 p.2): COMPATIBILE (mediana in [{MED_LO}; {MED_HI}]) — nessun claim")
+>         elif med_t5 < MED_LO:
+>             print(f"giudizio_MEDIANA (canonico, criterio t5 p.2): direzione GIU' SEGNALATA (mediana {med_t5:.3f} < {MED_LO}) — attesa BT2 su WP dichiarata piccola/nulla: NON attribuibile senza census proprio")
+230c230
+<             print(f"giudizio_MEDIANA (canonico, criterio t4 p.2): REGRESSIONE SEGNALATA (mediana {med_t4:.3f} > {MED_HI}) — indagine PRIMA di ogni altra leva")
+---
+>             print(f"giudizio_MEDIANA (canonico, criterio t5 p.2): REGRESSIONE SEGNALATA (mediana {med_t5:.3f} > {MED_HI}) — indagine PRIMA di ogni altra leva")
