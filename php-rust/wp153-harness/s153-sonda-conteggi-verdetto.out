@@ -1,0 +1,18 @@
+== s153 sonda conteggi per SITO (probe ab02faec0abfab67; k=Δ/ΔN, N1=100000 N2=300000; canale c2) ==
+-- td-this: k per sito (canale c2, tutte le righe con Δ!=0; Δ su ΔN=200000):
+   MethodCall.borrow k=2.0000 (Δ=400000)
+   Sweep.borrow k=1.0000 (Δ=200000)
+   frame_teardown.borrow k=2.0000 (Δ=400000)
+-- td-local: k per sito (canale c2, tutte le righe con Δ!=0; Δ su ΔN=200000):
+   Sweep.borrow k=1.0000 (Δ=200000)
+   frame_teardown.borrow k=1.0000 (Δ=200000)
+-- td-die: k per sito (canale c2, tutte le righe con Δ!=0; Δ su ΔN=200000):
+   Alloc.borrow k=1.0000 (Δ=200000)
+   InitProps.borrow k=1.0000 (Δ=200000)
+   Pop.borrow k=1.0000 (Δ=200000)
+   StampThrowable.borrow k=1.0000 (Δ=200000)
+   Sweep.borrow k=5.0000 (Δ=1000000)
+-- ps-set: k per sito (canale c2, tutte le righe con Δ!=0; Δ su ΔN=200000):
+   PropSetPop.borrow k=3.0000 (Δ=600000)
+   PropSetPop.borrow_mut k=1.0000 (Δ=200000)
+SONDA VALIDA rc=0 (k esatti se Δ multiplo intero di ΔN — si legge nel confronto col piano)
