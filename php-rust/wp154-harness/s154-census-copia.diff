@@ -38,6 +38,10 @@
 < SP="/private/tmp/s151-census-sp-$PAD"
 ---
 > SP="/private/tmp/s154-census-sp-$PAD"
+32c34
+< CENSUS_PHPR="$PROBE" "$PREP/smoke151-check.sh" "$SMK" > "$SMK/check.log" 2>&1
+---
+> CENSUS_PHPR="$PROBE" "$REPO/wp151-harness/census-prep/smoke151-check.sh" "$SMK" > "$SMK/check.log" 2>&1
 102a105,108
 > # attese s154 (criterio sonda p.4): residuo non-backtrace 60,9M ±2%;
 > # debug_backtrace ≈ 0,473M×13 = 6,15M ±10%; conteggi class_exists e

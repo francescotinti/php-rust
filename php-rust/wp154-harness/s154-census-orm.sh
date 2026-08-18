@@ -31,7 +31,7 @@ WORK="$SP/orm-work"
 echo "workdir=${#WORK} char (>=100, criterio §4)" >> "$V"
 
 SMK="$OUT/smoke-rerun"; mkdir -p "$SMK"
-CENSUS_PHPR="$PROBE" "$PREP/smoke151-check.sh" "$SMK" > "$SMK/check.log" 2>&1
+CENSUS_PHPR="$PROBE" "$REPO/wp151-harness/census-prep/smoke151-check.sh" "$SMK" > "$SMK/check.log" 2>&1
 SRC_RC=$?
 [ "$SRC_RC" -eq 0 ] || { echo "rc=8 smoke pre-run FALLITO (rc=$SRC_RC, dettaglio $SMK/check.log)" >> "$V"; fin 8; }
 echo "smoke pre-run: rc=0 (checker a esiti esatti della prep, rieseguito)" >> "$V"
