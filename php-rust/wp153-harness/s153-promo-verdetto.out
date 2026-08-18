@@ -1,0 +1,15 @@
+lock CI: presente (finestra di sessione, non lo tocco)
+promozione: build ricetta riproduce il candidato 8370c257ae70cc8e
+promozione batteria: rc=0 (da promo-out/batteria.rc) · 1748/0/2 · inventario: baseline s125 + i DUE denti dichiarati (rczval + loc_dente A4)
+promozione batteria: debug_backtrace_array_fields VERDE
+promozione: churn batteria neutralizzato (build ricetta → 8370c257ae70cc8e al byte)
+promozione: PIN phpr s153 = 8370c257ae70cc8e (smoke parità 2 modi OK, stash phpr-s153, registrato+committato). I gate del protocollo (batteria/corpus/fixture/micro) restano dovuti.
+promozione corpus-gate: rc=0 — nomi==congelato (1412), CONTENUTO==golden, off↔on zero (ZERO flip come atteso)
+promozione fixture chain: rc=0 (10 gate: hc1 move recv fx20 fx21 w9 preg teardown stash backtrace)
+promozione quiescenza: PASS al tentativo 10
+promozione micro pin s153: rapporto_arith=5.5  [derivata: companion 2.37/0.43] rapporto_prop=5.5  [derivata: companion 2.33/0.42] rapporto_calls=4.7  [derivata: companion 2.12/0.45] rapporto_str=4.3  [derivata: companion 0.64/0.15] rapporto_arr=3.2  [derivata: companion 0.93/0.29] rapporto_re=2.6  [derivata: companion 0.93/0.36] 
+conferma post-pin m-backtrace (pin s153 vs stash s150, drift-tree dichiarato ~0 su questo giudice): D=+333.3 rumore=0.0 segni=5/5 A=733.3 B=400.0 (attesa: segno +, D nell'intorno di +266,7 ± rumore+drift)
+promozione gate ORM: fail-set per NOME == baseline (16 nomi) · Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, Skipped: 59, Incomplete: 2.
+promozione gate http-kernel: 0E/0F · Tests: 1665, Assertions: 3850, PHPUnit Warnings: 2, Warnings: 5, Deprecations: 128.
+promozione server: PIN server s153 = f030c6fcbddfab96 @ c74fb4c (smoke OK, stashato, registrato+committato). pin phpr INVARIATO (8370c257ae70cc8e)
+PROMOZIONE COMPLETA rc=0 (da promo-out/rcb): pin s153 = 8370c257ae70cc8e

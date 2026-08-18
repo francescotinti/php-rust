@@ -1,7 +1,19 @@
 # PERF_MAP — phpr vs PHP oracle 8.5.7, mappa multi-workload
 
-Aggiornata: **2026-08-17 sera (S-150)** · pin phpr **s150 cbbe7173** + server
-**s150 18c27407** (**S-150 = PROMOZIONE BT1 con catena piena rc=0**: corpus
+Aggiornata: **2026-08-18 (S-153)** · pin phpr **s153 8370c257** + server
+**s153 f030c6fc** (**S-153 = PROMOZIONE L-BT2 «debug_backtrace a chiavi
+statiche + ZStr condivisi» con catena piena rc=0**: A/B R=5 vs GEMELLO
+D=+266,7 ns/iter su m-backtrace (733→467, −36%), segni 7/7, riconciliazione
+|0,0|, guardie 12/12, FUORI-UB sopra ⇒ sonda k post-leva dovuta (S-154);
+batteria 1748/0/2 (s125+2 denti; cap dente aggiornati con salita dichiarata
+mod.rs 25707 · host.rs 7661), corpus 1412×2 ZERO flip, fixture 10/10,
+conferma post-pin +333,3 (5/5, tick 66,7), ORM fail-set==16 nomi, hk 0E/0F;
+**L-TD1 borrow-unify teardown/sweep CADUTA a R=5 gemello** D=−3,3 vs soglia
+4 con 4 borrow/iter rimossi certi ⇒ prezzo borrow in-contesto ≤~1 ns (mock
+hot-hot 4,27–4,41 FALSIFICATO come prezzo; NO-GO A3c rafforzato); EMENDA
+§7-bis: braccio A di ogni A/B = GEMELLO dal tree corrente; coppia WP+ORM al
+pin s153 DOVUTA → S-154; verdetti `wp153-harness/s153-*.out`); storico
+S-150 = pin **s150 cbbe7173** + server **18c27407** (**PROMOZIONE BT1 con catena piena rc=0**: corpus
 1414→**1412** (flip PASS per NOME `debug_backtrace_limit`+`bug64239_2`,
 mutato `debug_backtrace_options`), fixture **10/10** (fx-backtrace nel set),
 guardie 8/8 a R=5 + disasm bl 6014 INVARIATO (incidente 17 riparato),
@@ -95,11 +107,15 @@ cifre dai verdetti `.out`. Regola di lettura: rapporti PER workload, MAI aggrega
 | **doctrine/orm** (3484 test) | **7,104–7,149 net** | 2/lato | **S-150 RIMISURATA @ pin s150 = GIUDIZIO SCOMMESSA BT1: VINTA OLTRE-ATTESA** (stesso verdetto; parità 16 nomi ==; contesa ok): **Δ phpr −6,07/−6,70 s vs s145 [41,60; 42,22]→[35,52; 35,53]** — attesa pre-registrata 0,8–3,1 s = PAVIMENTO solo-alloc (costruzione ~50 frame non prezzata, dichiarato); BT1 UNICA leva s145→s150 ⇒ direzione+meccanismo firmati · storico **S-147 @ s145: 8,370–8,427** (stesso verdetto; parità 16 nomi == baseline; leg1+oracle1 SEGNALATE ictx, leg2 PULITA 8,370): vs 8,59–8,71 @ s138 ⇒ **direzione ↓ INDICATIVA** (3 leve HC1+RD1+FR1 spedite in mezzo, nessun A/B proprio: magnitudine non ripartita, REGOLE §4); **denominatori KILL KS-146-1: soglia 0,7% = 0,293 s** · storico **S-139 @ s138: 8,59–8,71** (verdetto s139; oracle `memory_limit=-1` §3.14; parità 16 nomi == baseline; phpr1 ictx segnalata ma stesso-lato <0,2% ⇒ valida): vs 8,43–8,56 @ s134 ⇒ **FERMO/lieve ↑** — REPERTO pre-registrato (criterio p.6): le TRE leve dim-write s135→s138 (AP1+FD1+RMW) NON muovono la suite (l'attesa ↓ è FALSIFICATA: `$this->elements[$k]=$v` non è fetta misurabile del tempo ORM, o il perimetro FD1 lì non morde) ⇒ la prossima leva si sceglie sul profilo SUITE (churn clone/drop, insert/lookup — come già indicava S-135) |
 | **composer install OFFLINE** | **1,863–1,891 net** (raw 1,820–1,847) | 2/lato | S-128 @ s127b, PRIMA misura col numeratore vivo (cure ondata-2); composer ESTRATTO, vendor_ok bilaterale, contesa ok (ictx/s); floors 0,07/0,06; sys≈user (~2,3 s/lato) ⇒ **cifra user-only NON confrontabile col full (user+sys): su user+sys sarebbe ~1,3** (rev. S-128 az.5); residuo phpcs config-set (§3.19-quinquies); verdetto `wp128-harness/s128-compoff-verdetto.out` |
 
-## Micro-categorie (R=5, pin s150 dalla catena promo BT1; tappa ≤3×)
+## Micro-categorie (R=5, pin s153 dalla catena promo BT2; tappa ≤3×)
 
 | arith | prop | calls | str | arr | re | hintcall | dimread |
 |---|---|---|---|---|---|---|---|
-| 5,5 | 5,5 | 4,8 | 4,3 | **3,3** | **2,5** ✅ | **7,3** (S-140, non rimis.) | **4,3** (m-dimread; FR1 istruttoria CHIUSA S-150: +3,0 su dimrmw10 = prezzo strutturale, nessun revert) |
+| 5,5 | 5,5 | 4,7 | 4,3 | **3,2** | **2,6** ✅ | **7,3** (S-140, non rimis.) | **4,3** (m-dimread; FR1 istruttoria CHIUSA S-150: +3,0 su dimrmw10 = prezzo strutturale, nessun revert) |
+
+m-backtrace (giudice BT1/BT2): phpr **733→467 ns/iter** @ s153 (D proprio
++266,7 firmato); bilaterale ~3,0× DERIVATA (oracle rif s150 ~133 non
+rimisurato — direzione, non cifra canonica).
 
 (S-145: tutte le voci entro 1 tick dai rif s142 5,5·5,6·4,7·4,2·3,2·2,6 —
 la fusione non tassa i freddi; rif storici s138: 5,6 · 5,6 · 4,8 · 4,3 ·
