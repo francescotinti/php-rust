@@ -1,0 +1,62 @@
+2,10c2,10
+< # s153-ab3.sh <BPATH> <BEXP8> <TAG> <R> [DSMOKE_BACKTRACE] — LEVA L-BT2
+< # debug_backtrace chiavi statiche + ZStr condivisi (criterio s153-criterio-bt2.md).
+< # COPIA DICHIARATA di s153-ab2.sh coi SOLI adattamenti del criterio:
+< #  (a) GIUDICE: backtrace (m-backtrace, wp149-harness) con N=150000 DICHIARATO
+< #      (il loop del sorgente usa $n variabile: l'awk generico non lo estrae);
+< #  (b) UB FALSIFICABILE = 160 (23 alloc/call x miheap 6.9, verdetto s152-sonda);
+< #  (c) niente companion; guardie = micro-ORM obj* (bande fondate dove esistono)
+< #      + le sei (SL storiche);
+< #  (d) A = gemello f95a1067 (emenda s153-criterio-td1-emenda.md §7-bis).
+---
+> # s154-ab-ce1.sh <BPATH> <BEXP8> <TAG> <R> [DSMOKE_CLASSEXISTS] — LEVA L-CE1
+> # class_exists lookup no-alloc via LcKey (criterio s154-criterio-ce1.md).
+> # COPIA DICHIARATA di s153-ab3.sh coi SOLI adattamenti del criterio:
+> #  (a) GIUDICE: classexists (m-classexists, wp154-harness) con N=10000000
+> #      DICHIARATO (letterale nel sorgente; n_fixed lo pinna comunque);
+> #  (b) UB-alloc FALSIFICABILE = 13.8 (2 alloc/call x miheap 6.9, s152/s154);
+> #  (c) guardie = backtrace (giudice BT2, ora guardia) + obj* + le sei;
+> #  (d) A = gemello 2023cbb9 (build fredda del tree corrente, contenuto==pin
+> #      per s154-sonda S2; emenda §7-bis).
+18c18
+< A="/Volumes/Extreme Pro/Claude/phpr-old-target/release/phpr-s153-gemelloA"
+---
+> A="/Volumes/Extreme Pro/Claude/phpr-old-target/release/phpr-s154-gemelloA"
+23c23
+< VERD="$H/s153-$TAG-verdetto.out"
+---
+> VERD="$H/s154-$TAG-verdetto.out"
+31c31
+< if ! grep -q "s153" "$LOCK" 2>/dev/null; then
+---
+> if ! grep -qi "s-154\|s154" "$LOCK" 2>/dev/null; then
+40c40
+< [ "$(shasum -a 256 "$A" | cut -c1-8)" = "f95a1067" ] || { echo "A != gemello f95a1067 — STOP" | tee -a "$VERD"; echo 1 > "$RC"; exit 1; }
+---
+> [ "$(shasum -a 256 "$A" | cut -c1-8)" = "2023cbb9" ] || { echo "A != gemello 2023cbb9 — STOP" | tee -a "$VERD"; echo 1 > "$RC"; exit 1; }
+46,50c46,50
+< src_of() { case "$1" in backtrace) echo "$M149";; objalloc|objchurn|objmap|objdatains|objallocni|objdropdef) echo "$M";; *) echo "$M97";; esac; }
+< php_of() { case "$1" in backtrace) echo "m-backtrace.php";; *) echo "$1.php";; esac; }
+< n_fixed() { case "$1" in backtrace) echo 150000;; arith) echo 150000000;; prop) echo 90000000;; calls) echo 60000000;; str) echo 28000000;; arr) echo 30000000;; re) echo 12000000;; *) echo "";; esac; }
+< CATS_JUDGE="backtrace"
+< CATS_GUARD="objdropdef objchurn objdatains objalloc objallocni objmap arith prop calls str arr re"
+---
+> src_of() { case "$1" in classexists) echo "$H";; backtrace) echo "$M149";; objalloc|objchurn|objmap|objdatains|objallocni|objdropdef) echo "$M";; *) echo "$M97";; esac; }
+> php_of() { case "$1" in classexists) echo "m-classexists.php";; backtrace) echo "m-backtrace.php";; *) echo "$1.php";; esac; }
+> n_fixed() { case "$1" in classexists) echo 10000000;; backtrace) echo 150000;; arith) echo 150000000;; prop) echo 90000000;; calls) echo 60000000;; str) echo 28000000;; arr) echo 30000000;; re) echo 12000000;; *) echo "";; esac; }
+> CATS_JUDGE="classexists"
+> CATS_GUARD="backtrace objdropdef objchurn objdatains objalloc objallocni objmap arith prop calls str arr re"
+53c53
+< echo "== s153-ab3 $TAG: A=f95a1067(gemello tree) B=$BEXP R=$R ordine ALTERNATO; giudice=backtrace N=150000 dichiarato; soglia=max(4, drop-1); UB falsificabile=160 (23 alloc x miheap 6.9); niente companion; guardie obj* + sei; quiescenza rc=$QRC; rc autoritativo = ab-out/$TAG.rc =="
+---
+> echo "== s154-ab-ce1 $TAG: A=2023cbb9(gemello tree) B=$BEXP R=$R ordine ALTERNATO; giudice=classexists N=10000000 dichiarato; soglia=max(4, drop-1); UB-alloc falsificabile=13.8 (2 alloc x miheap 6.9); guardie backtrace + obj* + sei; quiescenza rc=$QRC; rc autoritativo = ab-out/$TAG.rc =="
+79,80c79,80
+< if len(sys.argv) > 3 and sys.argv[3]: dsmoke["backtrace"] = float(sys.argv[3])
+< UB = 160.0           # criterio p.4: 23 alloc/call x miheap 6.9 (s152-sonda)
+---
+> if len(sys.argv) > 3 and sys.argv[3]: dsmoke["classexists"] = float(sys.argv[3])
+> UB = 13.8            # criterio ce1 p.4: 2 alloc/call x miheap 6.9 (s152/s154)
+97c97
+< JUDGES = ("backtrace",)
+---
+> JUDGES = ("classexists",)

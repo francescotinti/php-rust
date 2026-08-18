@@ -9686,11 +9686,13 @@ impl<'m> Vm<'m> {
         let autoload = args.get(1).is_none_or(|v| convert::to_bool(v, &mut self.diags));
         let raw = convert::to_zstr_cast(&a.deref_clone(), &mut self.diags);
         let b = raw.as_bytes();
-        let name = b.strip_prefix(b"\\").unwrap_or(b).to_vec();
+        // L-CE1 (S-154): slice diretta, niente to_vec — il hit-path di
+        // class_exists non deve allocare (k=2→0 col LcKey a valle).
+        let name = b.strip_prefix(b"\\").unwrap_or(b);
         if autoload {
-            self.resolve_class_autoload(&name)
+            self.resolve_class_autoload(name)
         } else {
-            Ok(self.class_index.get(LcKey::new(&name).as_slice()).copied())
+            Ok(self.class_index.get(LcKey::new(name).as_slice()).copied())
         }
     }
 
@@ -11980,8 +11982,11 @@ impl<'m> Vm<'m> {
     /// after autoloading; a throwing autoloader propagates.
     fn resolve_class_autoload(&mut self, name: &[u8]) -> Result<Option<ClassId>, PhpError> {
         let bare = name.strip_prefix(b"\\").unwrap_or(name);
-        let key = bare.to_ascii_lowercase();
-        if let Some(&id) = self.class_index.get(&key) {
+        // L-CE1 (S-154): chiave lowercased via LcKey (SSO stack ≤64 B) — il
+        // hit-path non alloca; stessi byte di to_ascii_lowercase, stesso
+        // ordine index→trait→autoload→index.
+        let key = LcKey::new(bare);
+        if let Some(&id) = self.class_index.get(key.as_slice()) {
             return Ok(Some(id));
         }
         // Zend keeps traits in the same class table as classes/interfaces: a
@@ -11989,11 +11994,11 @@ impl<'m> Vm<'m> {
         // false WITHOUT re-running the autoloader — the re-include would
         // collide with the file's other declarations: ReflectionClass on
         // PriorityTaggedServiceTrait, whose file also declares a class).
-        if self.trait_declared(&key) {
+        if self.trait_declared(key.as_slice()) {
             return Ok(None);
         }
-        self.try_autoload(bare, &key)?;
-        Ok(self.class_index.get(&key).copied())
+        self.try_autoload(bare, key.as_slice())?;
+        Ok(self.class_index.get(key.as_slice()).copied())
     }
 
     /// Whether `key` (a fully-qualified name) matches a declared trait's real
