@@ -1,0 +1,109 @@
+2,11c2,11
+< # s153-promozione.sh <cand_hash16> — gate di promozione LEVA BT2 (chiavi
+< # statiche + ZStr in debug_backtrace) — S-153. COPIA DICHIARATA di
+< # wp150-harness/s150-promozione.sh; DIVERGENZE DICHIARATE:
+< #  (1) tag s153, harness wp153; candidato 8370c257ae70cc8e (A/B R=5 rc=0 in
+< #      s153-ab-bt2-verdetto.out, braccio A = GEMELLO f95a1067 per emenda
+< #      s153-criterio-td1-emenda.md);
+< #  (2) inventario batteria = baseline s125 + DUE denti dichiarati:
+< #      rczval_pattern_resta_nel_funnel (S-145) + nessun_sorgente_rs_oltre_cap
+< #      (dente A4 righe-.rs, S-151);
+< #  (3) corpus: ZERO flip attesi (BT2 non cambia forma dei risultati) — rc!=0
+---
+> # s154-promozione.sh <cand_hash16> — gate di promozione LEVA CE1
+> # (class_exists lookup no-alloc via LcKey) — S-154. COPIA DICHIARATA di
+> # wp153-harness/s153-promozione.sh; DIVERGENZE DICHIARATE:
+> #  (1) tag s154, harness wp154; candidato e634d95cd8bfd475 (A/B R=5 in
+> #      s154-ab-ce1b-verdetto.out: giudice VINTO D=+22,0, guardia backtrace
+> #      arbitrata TICK-FLIP REFUTATO per emenda §6-bis, braccio A = GEMELLO
+> #      2023cbb9);
+> #  (2) inventario batteria = baseline s125 + DUE denti dichiarati (come
+> #      s153): rczval + loc_dente A4 — CE1 non aggiunge test;
+> #  (3) corpus: ZERO flip attesi (CE1 non cambia forma dei risultati) — rc!=0
+13,22c13,19
+< #  (4) fixture chain INVARIATA (10 gate; fx-backtrace già nel set da s150);
+< #  (5) guardie: evidenza = 12/12 verdi a R=5 nel verdetto ab-bt2 (stesso
+< #      candidato AL BYTE, braccio gemello, quiescenza rc=0); qui si aggiunge
+< #      la CONFERMA POST-PIN m-backtrace (R=5 pin s153 vs stash phpr-s150,
+< #      direzione attesa +, riconciliazione con D_ab=266,7 a banda = rumore
+< #      drop-1 + drift-tree DICHIARATO ~0 su questo giudice: gemello 733,3 ≈
+< #      pin storico 733);
+< #  (6) disasm run_loop NON dovuto (host builtin fuori run_loop, criterio
+< #      s153-criterio-bt2.md p.1);
+< #  (7) micro R=5 = run-micro.sh come s150 (scoreboard al pin nuovo).
+---
+> #  (4) fixture chain INVARIATA (10 gate) + gate fx-ce AGGIUNTO fuori catena
+> #      (bilaterale oracle==pin byte-id; già passato pre-promo sul candidato);
+> #  (5) conferma POST-PIN: m-classexists (R=5 pin s154 vs stash phpr-s153,
+> #      direzione attesa +, D nell'intorno di +22,0 ± rumore+drift);
+> #  (6) disasm run_loop NON dovuto (resolve_* non-inline fuori dal run_loop,
+> #      criterio s154-criterio-ce1.md p.1);
+> #  (7) micro R=5 = run-micro.sh come s153 (scoreboard al pin nuovo).
+26c23
+< H="$SRC/wp153-harness"
+---
+> H="$SRC/wp154-harness"
+36c33
+< VERD="$H/s153-promo-verdetto.out"
+---
+> VERD="$H/s154-promo-verdetto.out"
+81c78
+< "$SRC/scripts/pin-phpr.sh" s153 > "$OUT/pin.log" 2>&1
+---
+> "$SRC/scripts/pin-phpr.sh" s154 > "$OUT/pin.log" 2>&1
+88,89c85,86
+< [ "$crc" = 0 ] || stop "corpus-gate rc=$crc — BT2 non ammette flip (divergenza (3)): STOP"
+< note "promozione corpus-gate: rc=0 — nomi==congelato (1412), CONTENUTO==golden, off↔on zero (ZERO flip come atteso)"
+---
+> [ "$crc" = 0 ] || stop "corpus-gate rc=$crc — CE1 non ammette flip (divergenza (3)): STOP"
+> note "promozione corpus-gate: rc=0 — nomi==congelato (1412), CONTENUTO==golden, off-on zero (ZERO flip come atteso, CE1)"
+98a96,106
+> # ---- gate fx-ce AGGIUNTO (divergenza (4)): bilaterale oracle==pin byte-id ----
+> ORACLE=/opt/homebrew/opt/php/bin/php
+> "$ORACLE" "$H/fx-ce.php" > "$OUT/fxce-oracle.out" 2>&1
+> "$BIN" "$H/fx-ce.php" > "$OUT/fxce-pin.out" 2>&1
+> if diff -q "$OUT/fxce-oracle.out" "$OUT/fxce-pin.out" > /dev/null; then
+>   note "promozione gate fx-ce: oracle==pin BYTE-ID (12 forme class/interface/trait_exists)"
+> else
+>   diff "$OUT/fxce-oracle.out" "$OUT/fxce-pin.out" > "$OUT/fxce.diff" || true
+>   stop "gate fx-ce: DIVERGE (promo-out/fxce.diff)"
+> fi
+> 
+106,107c114,115
+< PHPR="$BIN" R=5 "$SRC/wp97-harness/micro/run-micro.sh" > "$OUT/micro-pin-s153.out" 2>&1
+< note "promozione micro pin s153: $(grep -E '^rapporto_' "$OUT/micro-pin-s153.out" | tr '\n' ' ')"
+---
+> PHPR="$BIN" R=5 "$SRC/wp97-harness/micro/run-micro.sh" > "$OUT/micro-pin-s154.out" 2>&1
+> note "promozione micro pin s154: $(grep -E '^rapporto_' "$OUT/micro-pin-s154.out" | tr '\n' ' ')"
+109,111c117,119
+< # ---- conferma POST-PIN m-backtrace (divergenza (5)): R=5 pin vs stash s150 ----
+< AOLD="$STASH/phpr-s150"
+< [ "$(shasum -a 256 "$AOLD" | cut -c1-16)" = "cbbe71735effb165" ] || stop "stash phpr-s150 hash inatteso"
+---
+> # ---- conferma POST-PIN m-classexists (divergenza (5)): R=5 pin vs stash s153 ----
+> AOLD="$STASH/phpr-s153"
+> [ "$(shasum -a 256 "$AOLD" | cut -c1-16)" = "8370c257ae70cc8e" ] || stop "stash phpr-s153 hash inatteso"
+114c122
+< FA=$(floor3 "$AOLD" "$M149/empty.php"); FB=$(floor3 "$BIN" "$M149/empty.php")
+---
+> FA=$(floor3 "$AOLD" "$H/empty.php"); FB=$(floor3 "$BIN" "$H/empty.php")
+117c125
+<   if [ $((i % 2)) -eq 1 ]; then TA=$(ucpu "$AOLD" "$M149/m-backtrace.php"); TB=$(ucpu "$BIN" "$M149/m-backtrace.php"); else TB=$(ucpu "$BIN" "$M149/m-backtrace.php"); TA=$(ucpu "$AOLD" "$M149/m-backtrace.php"); fi
+---
+>   if [ $((i % 2)) -eq 1 ]; then TA=$(ucpu "$AOLD" "$H/m-classexists.php"); TB=$(ucpu "$BIN" "$H/m-classexists.php"); else TB=$(ucpu "$BIN" "$H/m-classexists.php"); TA=$(ucpu "$AOLD" "$H/m-classexists.php"); fi
+123c131
+< n=150000.0
+---
+> n=10000000.0
+134c142
+< note "conferma post-pin m-backtrace (pin s153 vs stash s150, drift-tree dichiarato ~0 su questo giudice): $CONF (attesa: segno +, D nell'intorno di +266,7 ± rumore+drift)"
+---
+> note "conferma post-pin m-classexists (pin s154 vs stash s153, drift-tree da dichiarare): $CONF (attesa: segno +, D nell'intorno di +22,0 ± rumore+drift)"
+164c172
+< "$SRC/scripts/pin-server.sh" s153 > "$OUT/pin-server.log" 2>&1
+---
+> "$SRC/scripts/pin-server.sh" s154 > "$OUT/pin-server.log" 2>&1
+170c178
+< note "PROMOZIONE COMPLETA rc=0 (da promo-out/rcb): pin s153 = $H2"
+---
+> note "PROMOZIONE COMPLETA rc=0 (da promo-out/rcb): pin s154 = $H2"
