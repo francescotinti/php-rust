@@ -28,6 +28,18 @@
    storiche). L-CE1 non tocca alcun loro cammino (resolve_class_autoload non
    è sul cammino di quei micro: nessuno fa lookup di classi per nome in
    loop).
+6-bis. **EMENDA (dichiarata nell'atto, dopo il morso ab-ce1b; rev. S-112)**:
+   la guardia backtrace a N=150000 ha tick di quantizzazione 66,7 ns/iter
+   (timer 10 ms — nota revisore S-153) e ha morso con D=−66,7 = ESATTAMENTE
+   1 tick, rumore drop-1 0,0/0,0 (collasso da quantizzazione), con B
+   IDENTICO allo smoke (466,7) e A flippato di un tick (500→400): guardia
+   SOTTO-RISOLUTA per una soglia a 4 ns (veto trasversale nominato).
+   ARBITRATO: la guardia si riesegue RI-RISOLUTA con `m-backtrace-hi.php`
+   (derivato dichiarato: solo 150000→600000, tick 16,7), R=5 ABAB coi due
+   bracci del record, pavimenti med3, soglia INVARIATA max(4; rumore
+   drop-1): D ≤ −soglia ⇒ REGRESSIONE REALE (leva in istruttoria, niente
+   promo); |D| < soglia ⇒ tick-flip REFUTATO, guardia dichiarata ok e il
+   verdetto ab-ce1b si legge col giudice VINTO. Il morso resta agli atti.
 7. **Parità**: output A==B su OGNI categoria pena STOP (m-classexists stampa
    10000000). Fedeltà: fx-ce bilaterale (forme case-insensitive, leading-\,
    interface, trait, autoload=false, nome >64 B) oracle==phpr==A==B al promo.
