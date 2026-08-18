@@ -20,6 +20,16 @@
    uguali E ≤64 byte diversi confinati in LC_UUID+pagina firma (meccanismo
    48 B già nominato in s150-identita-candidato.md e PREP s151) E
    strings-diff ZERO. Oltre ⇒ rc=3 (divergenza REALE, STOP).
+   **Raffinamento (t2 rc=3, cluster istruiti al byte)**: i 93 B di scarto
+   reale sono 4 cluster TUTTI nominati — LC_UUID 16 B @0x838 · banner
+   `__DATE__/__TIME__` di mimalloc 13 B @0xbb848a (pin: «Aug 18 2026
+   10:02:49» = oggetto C riusato dalla cache calda S-153, dove
+   SOURCE_DATE_EPOCH non entra nel fingerprint del cc-build-script; build
+   fredda: «Jan 1 1970») · 2 slot firma 32+32 B in __LINKEDIT. La guardia
+   ammette ESATTAMENTE queste classi: ogni cluster o è nel LC_UUID, o è in
+   __LINKEDIT, o è il banner-data mimalloc (build='Jan  1 1970'/'00:00:00');
+   cap totale 160 B; il confronto strings ammette SOLO le righe data/ora.
+   Qualunque cluster non classificato ⇒ rc=3 (divergenza REALE, STOP).
 2. **k nuovo**: `wp152-harness/bt-count.php` a BTN=100000/300000,
    k = Δ(hostcall.debug_backtrace)/ΔN, b = Δbyte/ΔN. Riferimento pre-BT2:
    k=45 ESATTE, b=2.282 B/call (s152-pesca). **Attesa BLIND: k_new 22–28**

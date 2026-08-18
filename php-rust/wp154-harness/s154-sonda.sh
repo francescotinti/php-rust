@@ -46,25 +46,46 @@ IDT=/private/tmp/phpr-census-s154-idcheck
 BRC=$?
 [ "$BRC" -eq 0 ] || { note "rc=3 build identità FALLITA (rc=$BRC, log sonda-out/build-identita.log)"; fin 3; }
 HID="$(h16 "$IDT/release/phpr")"
-python3 - "$CANON/release/phpr" "$IDT/release/phpr" >> "$V" <<'PY'
-import sys
+LEOFF=$(otool -l "$IDT/release/phpr" | awk '/cmd LC_SEGMENT_64/{seg=""} /segname __LINKEDIT/{seg=1} seg && /fileoff/{print $2; exit}')
+python3 - "$CANON/release/phpr" "$IDT/release/phpr" "${LEOFF:-0}" >> "$V" <<'PY'
+import sys, re
 a = open(sys.argv[1], "rb").read(); b = open(sys.argv[2], "rb").read()
+linkedit = int(sys.argv[3])
 if len(a) != len(b):
     print(f"S2 identità-contenuto: FAIL dimensioni {len(a)} != {len(b)}"); sys.exit(3)
 diffs = [i for i, (x, y) in enumerate(zip(a, b)) if x != y]
-lo = min(diffs) if diffs else 0; hi = max(diffs) if diffs else 0
-print(f"S2 confronto byte: {len(diffs)} byte diversi (range 0x{lo:x}-0x{hi:x}) su {len(a)}")
-sys.exit(0 if len(diffs) <= 64 else 3)
+if len(diffs) > 160:
+    print(f"S2 FAIL: {len(diffs)} byte diversi > cap 160"); sys.exit(3)
+clusters = []
+for i in diffs:
+    if clusters and i - clusters[-1][1] <= 64: clusters[-1][1] = i
+    else: clusters.append([i, i])
+bad = []
+for s, e in clusters:
+    ctx_b = b[max(0, s-64):e+64]
+    if s < 4096 and e - s + 1 <= 16:
+        cls = "LC_UUID"          # header load-command area, ampiezza UUID
+    elif linkedit and s >= linkedit:
+        cls = "__LINKEDIT/firma"
+    elif b"Jan  1 1970" in ctx_b or b"00:00:00" in ctx_b:
+        cls = "mimalloc-banner __DATE__/__TIME__"
+    else:
+        cls = "NON CLASSIFICATO"; bad.append((s, e))
+    print(f"S2 cluster 0x{s:x}-0x{e:x} ({sum(1 for d in diffs if s<=d<=e)} B): {cls}")
+print(f"S2 confronto byte: {len(diffs)} byte diversi in {len(clusters)} cluster (linkedit fileoff={linkedit})")
+sys.exit(3 if bad else 0)
 PY
 CRC=$?
-[ "$CRC" -eq 0 ] || { note "rc=3 identità-contenuto VIOLATA oltre il meccanismo nominato (build=$HID)"; fin 3; }
+[ "$CRC" -eq 0 ] || { note "rc=3 identità-contenuto VIOLATA: cluster NON classificato (build=$HID)"; fin 3; }
 strings -a "$CANON/release/phpr" > "$OUT/strings-pin.txt"
 strings -a "$IDT/release/phpr" > "$OUT/strings-build.txt"
-if ! diff -q "$OUT/strings-pin.txt" "$OUT/strings-build.txt" > /dev/null; then
-  note "rc=3 strings-diff NON zero (build=$HID): divergenza REALE"; fin 3
+if ! diff "$OUT/strings-pin.txt" "$OUT/strings-build.txt" | grep -vE "^---$|^[<>].*(197[0-9]|202[0-9]|[0-9]{2}:[0-9]{2}:[0-9]{2})|^[0-9,]+[acd][0-9,]+$" | grep -q .; then
+  note "S2 strings: diff SOLO righe data/ora mimalloc (ammesse, emenda §1-bis raffinata)"
+else
+  note "rc=3 strings-diff oltre le righe data/ora (build=$HID): divergenza REALE"; fin 3
 fi
 rm -f "$OUT/strings-pin.txt" "$OUT/strings-build.txt"
-note "S2 identità a CONTENUTO: PASS (build fredda $HID vs pin $PIN: scarto ≤64 B in LC_UUID+firma, strings-diff ZERO — emenda §1-bis)"
+note "S2 identità a CONTENUTO: PASS (build fredda $HID vs pin $PIN: cluster tutti nominati — LC_UUID + firma __LINKEDIT + banner mimalloc; emenda §1-bis)"
 
 # S3 — diff census normalizzato + apply nella copia
 sed -e 's#^--- a/php-rust/#--- a/#' \

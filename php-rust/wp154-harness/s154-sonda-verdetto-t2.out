@@ -1,0 +1,5 @@
+== s154 sonda k post-BT2 (criterio s154-criterio-sonda.md; ricetta PREP s151; CONTEGGI mai tempo) 2026-08-18 19:59:19 ==
+S0 guardie: lock presente, niente cargo/rustc, pin phpr=8370c257ae70cc8e server=f030c6fcbddfab96, hold assente
+S1 copia-fedele: PASS diff -r crates rc=0 (copia /private/tmp/phpr-census-s154-src)
+S2 confronto byte: 93 byte diversi (range 0x838-0xe63bcf) su 15109712
+rc=3 identità-contenuto VIOLATA oltre il meccanismo nominato (build=2023cbb981a19d5f)
