@@ -1,0 +1,38 @@
+# s153-smoke-atteso-bt2-verifica — verbale SECONDO ATTORE (2026-08-18, pre-run di record)
+
+P1 PASS — 300000 ri-derivato dal sorgente: bt_recurse(48,150000,...) scende 48 livelli poi
+  bt_leaf(150000); ogni iterazione debug_backtrace(IGNORE_ARGS,2) su pila ~50 con limit=2
+  -> count=2; 150000*2 = 300000 + newline. Atteso ESATTO.
+P2 PASS — s153-ab3.sh conforme a s153-criterio-bt2.md:
+  giudice = solo "backtrace" (CATS_JUDGE e JUDGES) con N=150000 in n_fixed (r.48);
+  php_of backtrace->m-backtrace.php (r.47); src_of->$M149=wp149-harness (r.46);
+  UB=160.0 (r.80) con riconciliazione D>UB+rumore a verbale (r.114-115);
+  soglia giudice max(4.0, rumore drop-1) (r.107); NESSUN companion;
+  guardie = objdropdef objchurn objdatains objalloc objallocni objmap + arith prop calls
+  str arr re (r.50), SL storiche (r.85), BAND fondate {objalloc 13.3, objchurn 6.7,
+  objallocni 10.0, objmap 3.3} (r.86) = insieme del criterio p.6 (objdropdef/objdatains
+  a fallback max(4,drop-1)); guardia A=f95a1067 (r.40) e B==hash dichiarato (r.41);
+  coppie alternate AB/BA per i dispari/pari (r.66-70) = ABAB; floor3 = mediana di 3 su
+  "$D/empty.php" del dir sorgente della categoria (r.44,63); lock grep "s153" (r.31);
+  quiescenza con STOP se rc!=0 (r.34-38); rc su ab-out/$TAG.rc in ogni ramo di run.
+  Annotazioni NON ostative: (i) il ramo "verdetto ESISTE" exit 7 non scrive .rc (precede
+  il run); (ii) la lista bande del mandato del 1° attore letta posizionalmente darebbe
+  13,3 a objdropdef — il runner segue il CRITERIO pre-registrato, che prevale.
+P3 PASS — shasum gemelloA = f95a1067f528e1477fa3... (prefisso confermato);
+  diff wp149-harness/empty.php vs wp127-harness/micro-orm/empty.php: VUOTO.
+P4 PASS — git diff HEAD: SOLO vm/mod.rs (+12/-9) e vm/host.rs (+64/-29); git status: nessun
+  altro .rs modificato o non tracciato. (a) BtFrame {function,file,class} -> php_types::ZStr,
+  stringhe costruite UNA volta in collect_backtrace_opt (PhpStr::new su eval/{closure}/name,
+  file, composito eval, class). (b) ho_debug_backtrace in BT_STATICS.with: chiavi k_*.clone()
+  dal pool thread-local, NESSUN Key::from_bytes nel loop; campi ZStr MOSSI (Zval::Str(bt.file
+  /bt.function/cls), niente clone del file); ordine chiavi INVARIATO: file,line,function,
+  [class, object se provide_object, type solo se class], args solo se !is_eval &&
+  !ignore_args. (c) options/limit/PROVIDE_OBJECT/IGNORE_ARGS non toccati dal diff.
+  (d) ho_debug_print_backtrace: solo &bt.x -> bt.x.as_bytes(), stampa identica.
+  (e) run.rs/run_loop non toccati. (f) ty_static "::" / ty_arrow "->" ZStr statici clonati
+  al posto di ty.to_vec().
+P5 PASS (nessun atteso vago) — ogni atteso ha arbitro esatto: parità = diff vuoto; segno
+  POSITIVO 2/2; rc ammessi {0,4} con arbitro dichiarato = segno; banda [60;220] dichiarata
+  ESPLICITAMENTE orientativa e mai cifra; tsv 13 categorie x 2 righe.
+
+VERDETTO FINALE: ATTESI PROMOSSI (nessuna contestazione; 2 annotazioni non ostative in P2).

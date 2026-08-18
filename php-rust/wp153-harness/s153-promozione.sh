@@ -1,0 +1,171 @@
+#!/bin/bash
+# s153-promozione.sh <cand_hash16> — gate di promozione LEVA BT2 (chiavi
+# statiche + ZStr in debug_backtrace) — S-153. COPIA DICHIARATA di
+# wp150-harness/s150-promozione.sh; DIVERGENZE DICHIARATE:
+#  (1) tag s153, harness wp153; candidato 8370c257ae70cc8e (A/B R=5 rc=0 in
+#      s153-ab-bt2-verdetto.out, braccio A = GEMELLO f95a1067 per emenda
+#      s153-criterio-td1-emenda.md);
+#  (2) inventario batteria = baseline s125 + DUE denti dichiarati:
+#      rczval_pattern_resta_nel_funnel (S-145) + nessun_sorgente_rs_oltre_cap
+#      (dente A4 righe-.rs, S-151);
+#  (3) corpus: ZERO flip attesi (BT2 non cambia forma dei risultati) — rc!=0
+#      = STOP secco, NESSUN flip-handler;
+#  (4) fixture chain INVARIATA (10 gate; fx-backtrace già nel set da s150);
+#  (5) guardie: evidenza = 12/12 verdi a R=5 nel verdetto ab-bt2 (stesso
+#      candidato AL BYTE, braccio gemello, quiescenza rc=0); qui si aggiunge
+#      la CONFERMA POST-PIN m-backtrace (R=5 pin s153 vs stash phpr-s150,
+#      direzione attesa +, riconciliazione con D_ab=266,7 a banda = rumore
+#      drop-1 + drift-tree DICHIARATO ~0 su questo giudice: gemello 733,3 ≈
+#      pin storico 733);
+#  (6) disasm run_loop NON dovuto (host builtin fuori run_loop, criterio
+#      s153-criterio-bt2.md p.1);
+#  (7) micro R=5 = run-micro.sh come s150 (scoreboard al pin nuovo).
+set -u
+export PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin:"$HOME/.cargo/bin"
+SRC="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust"
+H="$SRC/wp153-harness"
+BIN="$HOME/Claude/php-rust-output/release/phpr"
+RUNNER="$HOME/Claude/php-rust-output/release/phpt-runner"
+STASH="/Volumes/Extreme Pro/Claude/phpr-old-target/release"
+WD="/Volumes/Extreme Pro/Claude/wp13-harness/run-with-watchdog.sh"
+GATES="/Volumes/Extreme Pro/Claude/wp9-harness/gates"
+QUIESCE="$SRC/wp129-harness/s129-quiescenza.sh"
+M149="$SRC/wp149-harness"
+SP="${PROMO_SP:?PROMO_SP (workdir APFS per i gate ORM/hk) richiesto}"
+OUT="$H/promo-out"; mkdir -p "$OUT"
+VERD="$H/s153-promo-verdetto.out"
+CAND_EXP="${1:?uso: s153-promozione.sh <cand_hash16>}"
+note(){ echo "$1"; echo "$1" >> "$VERD"; }
+stop(){ note "$1"; echo 1 > "$OUT/rcb"; exit 1; }
+
+cd "$SRC" || exit 4
+git diff --quiet -- crates/ || stop "PRE: crates/ sporco — STOP"
+[ -e /private/tmp/phpr-measure.lock ] && note "lock CI: presente (finestra di sessione, non lo tocco)" || note "lock CI: ASSENTE — la sessione lo doveva creare (proseguo, dichiarato)"
+
+SOURCE_DATE_EPOCH=0 CARGO_INCREMENTAL=0 cargo build --release > "$OUT/build.log" 2>&1
+rc=$?; echo "$rc" > "$OUT/build.rc"
+[ "$rc" = 0 ] || stop "build rc=$rc"
+HB=$(shasum -a 256 "$BIN" | cut -c1-16)
+[ "$HB" = "$CAND_EXP" ] || stop "build NON riproduce il candidato dichiarato ($HB != $CAND_EXP) — STOP"
+note "promozione: build ricetta riproduce il candidato $HB"
+
+CARGO_INCREMENTAL=0 cargo test --release > "$OUT/batteria.log" 2>&1
+brc=$?; echo "$brc" > "$OUT/batteria.rc"
+cnt=$(awk '/^test result:/{p+=$4; f+=$6; ig+=$8} END{printf "%d/%d/%d", p, f, ig}' "$OUT/batteria.log")
+grep -E '^test .* \.\.\. ' "$OUT/batteria.log" | sed 's/^test //; s/ \.\.\..*//' | sort > "$OUT/batteria-nomi.txt"
+normline(){ sed 's/(line [0-9][0-9]*)/(line N)/' "$1" | sort; }
+normline "$SRC/wp125-harness/promo-out/batteria-nomi.txt" > "$OUT/base-norm.txt"
+normline "$OUT/batteria-nomi.txt" > "$OUT/nomi-norm.txt"
+NEW_ONLY=$(comm -13 "$OUT/base-norm.txt" "$OUT/nomi-norm.txt" | sort | tr '\n' ' ' | sed 's/ $//')
+GONE=$(comm -23 "$OUT/base-norm.txt" "$OUT/nomi-norm.txt")
+if [ "$NEW_ONLY" = "nessun_sorgente_rs_oltre_cap rczval_pattern_resta_nel_funnel" ] && [ -z "$GONE" ]; then
+  INV="baseline s125 + i DUE denti dichiarati (rczval + loc_dente A4)"
+else
+  INV="DIVERGE (nuovi='$NEW_ONLY' spariti='$GONE' — diff in promo-out/batteria-inv.diff)"
+  diff "$SRC/wp125-harness/promo-out/batteria-nomi.txt" "$OUT/batteria-nomi.txt" > "$OUT/batteria-inv.diff" || true
+fi
+note "promozione batteria: rc=$brc (da promo-out/batteria.rc) · $cnt · inventario: $INV"
+[ "$brc" = 0 ] || stop "batteria rc=$brc"
+case "$INV" in DIVERGE*) stop "inventario batteria DIVERGE";; esac
+grep -E '^test .*debug_backtrace_array_fields' "$OUT/batteria.log" | grep -q ' ok$' \
+  && note "promozione batteria: debug_backtrace_array_fields VERDE" \
+  || stop "batteria: debug_backtrace_array_fields NON verde/assente"
+
+SOURCE_DATE_EPOCH=0 CARGO_INCREMENTAL=0 cargo build --release > "$OUT/build2.log" 2>&1
+rc=$?; echo "$rc" > "$OUT/build2.rc"
+[ "$rc" = 0 ] || stop "build2 rc=$rc"
+H2=$(shasum -a 256 "$BIN" | cut -c1-16)
+[ "$H2" = "$CAND_EXP" ] || stop "re-hash post-batteria $H2 != $CAND_EXP — STOP"
+note "promozione: churn batteria neutralizzato (build ricetta → $H2 al byte)"
+
+"$SRC/scripts/pin-phpr.sh" s153 > "$OUT/pin.log" 2>&1
+prc=$?; echo "$prc" > "$OUT/pin.rc"
+[ "$prc" = 0 ] || stop "pin-phpr.sh rc=$prc"
+note "promozione: $(tail -1 "$OUT/pin.log")"
+
+"$SRC/scripts/corpus-gate.sh" "$RUNNER" "$OUT/corpus"
+crc=$?; echo "$crc" > "$OUT/corpus-rc"
+[ "$crc" = 0 ] || stop "corpus-gate rc=$crc — BT2 non ammette flip (divergenza (3)): STOP"
+note "promozione corpus-gate: rc=0 — nomi==congelato (1412), CONTENUTO==golden, off↔on zero (ZERO flip come atteso)"
+
+PHPR_PIN_ATTESO="$CAND_EXP" "$SRC/wp109-harness/s109-fixture-chain.sh" > "$OUT/fixture-chain.out" 2>&1
+frc=$?; echo "$frc" > "$OUT/fixture-chain.rc"
+[ "$frc" = 0 ] || stop "fixture chain rc=$frc"
+FX_ATTESI="hc1 move recv fx20 fx21 w9 preg teardown stash backtrace"
+FX_VISTI=$(sed -n 's/^FIXTURE-CHAIN inventario=//p' "$OUT/fixture-chain.out")
+[ "$FX_VISTI" = "$FX_ATTESI" ] || stop "fixture chain inventario diverso: visti='$FX_VISTI' attesi='$FX_ATTESI'"
+note "promozione fixture chain: rc=0 (10 gate: $FX_VISTI)"
+
+QOK=1
+for t in $(seq 1 30); do
+  if "$QUIESCE" "$OUT/quiesce.rc" > "$OUT/quiesce-t$t.log" 2>&1; then QOK=0; note "promozione quiescenza: PASS al tentativo $t"; break; fi
+  sleep 60
+done
+[ "$QOK" = 0 ] || stop "quiescenza MAI PASS in 30 tentativi — STOP prima delle misure"
+
+PHPR="$BIN" R=5 "$SRC/wp97-harness/micro/run-micro.sh" > "$OUT/micro-pin-s153.out" 2>&1
+note "promozione micro pin s153: $(grep -E '^rapporto_' "$OUT/micro-pin-s153.out" | tr '\n' ' ')"
+
+# ---- conferma POST-PIN m-backtrace (divergenza (5)): R=5 pin vs stash s150 ----
+AOLD="$STASH/phpr-s150"
+[ "$(shasum -a 256 "$AOLD" | cut -c1-16)" = "cbbe71735effb165" ] || stop "stash phpr-s150 hash inatteso"
+ucpu(){ { /usr/bin/time -p perl -e 'alarm 900; exec @ARGV or die' -- "$1" "$2" > /dev/null; } 2>&1 | awk '/^user/{print $2}'; }
+floor3(){ local a b c; a=$(ucpu "$1" "$2"); b=$(ucpu "$1" "$2"); c=$(ucpu "$1" "$2"); printf '%s\n%s\n%s\n' "$a" "$b" "$c" | sort -n | awk 'NR==2'; }
+FA=$(floor3 "$AOLD" "$M149/empty.php"); FB=$(floor3 "$BIN" "$M149/empty.php")
+CT="$OUT/conferma-runs.tsv"; : > "$CT"
+for i in 1 2 3 4 5; do
+  if [ $((i % 2)) -eq 1 ]; then TA=$(ucpu "$AOLD" "$M149/m-backtrace.php"); TB=$(ucpu "$BIN" "$M149/m-backtrace.php"); else TB=$(ucpu "$BIN" "$M149/m-backtrace.php"); TA=$(ucpu "$AOLD" "$M149/m-backtrace.php"); fi
+  printf '%s\t%s\t%s\t%s\n' "$TA" "$TB" "$FA" "$FB" >> "$CT"
+done
+CONF=$(python3 - "$CT" <<'PY'
+import sys
+rows=[l.split("\t") for l in open(sys.argv[1]).read().strip().split("\n")]
+n=150000.0
+na=[(float(t[0])-float(t[2]))/n*1e9 for t in rows]
+nb=[(float(t[1])-float(t[3]))/n*1e9 for t in rows]
+def med(v): s=sorted(v); k=len(s); return s[k//2] if k%2 else (s[k//2-1]+s[k//2])/2
+def trange(v):
+    m=med(v); w=sorted(v,key=lambda x:(abs(x-m),x))[:-1]; return max(w)-min(w)
+d=med(na)-med(nb); noise=max(trange(na),trange(nb))
+segni=sum(1 for a,b in zip(na,nb) if a>b)
+print(f"D={d:+.1f} rumore={noise:.1f} segni={segni}/5 A={med(na):.1f} B={med(nb):.1f}")
+PY
+)
+note "conferma post-pin m-backtrace (pin s153 vs stash s150, drift-tree dichiarato ~0 su questo giudice): $CONF (attesa: segno +, D nell'intorno di +266,7 ± rumore+drift)"
+
+# ---- gate ORM per NOME ----
+rm -rf "$SP/orm-work" && mkdir -p "$SP" && tar xzf "$GATES/orm-work.tgz" -C "$SP" || stop "untar orm-work"
+( cd "$SP/orm-work" && "$WD" -t 2400 -s 600 -p "$OUT/orm.log" -o "$OUT" -- \
+    "$BIN" vendor/bin/phpunit --no-coverage > "$OUT/orm.log" 2>&1 )
+orc=$?; echo "$orc" > "$OUT/orm.rc"
+SUMM=$(tr -d '\0' < "$OUT/orm.log" | grep -E "^(Tests:|OK)" | tail -1)
+tr -d '\0' < "$OUT/orm.log" | sed -n 's/^[0-9][0-9]*) \(.*\)$/\1/p' | sort -u > "$OUT/orm-failnames.txt"
+if diff -q "$SRC/wp125-harness/orm-baseline-failnames.txt" "$OUT/orm-failnames.txt" > /dev/null; then
+  note "promozione gate ORM: fail-set per NOME == baseline (16 nomi) · $SUMM"
+else
+  diff "$SRC/wp125-harness/orm-baseline-failnames.txt" "$OUT/orm-failnames.txt" > "$OUT/orm-failnames.diff" || true
+  stop "gate ORM: fail-set DIVERGE per NOME (promo-out/orm-failnames.diff) · $SUMM"
+fi
+
+# ---- gate http-kernel: 0E/0F ----
+rm -rf "$SP/hk-work" && tar xzf "$GATES/hk-work.tgz" -C "$SP" || stop "untar hk-work"
+( cd "$SP/hk-work" && "$WD" -t 1800 -s 600 -p "$OUT/hk.log" -o "$OUT" -- \
+    "$BIN" vendor/bin/phpunit --no-coverage > "$OUT/hk.log" 2>&1 )
+hrc=$?; echo "$hrc" > "$OUT/hk.rc"
+HSUMM=$(tr -d '\0' < "$OUT/hk.log" | grep -E "^(Tests:|OK)" | tail -1)
+HE=$(printf '%s' "$HSUMM" | sed -n 's/.*Errors: \([0-9]*\).*/\1/p'); HE=${HE:-0}
+HF=$(printf '%s' "$HSUMM" | sed -n 's/.*Failures: \([0-9]*\).*/\1/p'); HF=${HF:-0}
+if [ "$HE" = 0 ] && [ "$HF" = 0 ] && [ -n "$HSUMM" ]; then
+  note "promozione gate http-kernel: 0E/0F · $HSUMM"
+else
+  stop "gate http-kernel: E=$HE F=$HF (attesi 0/0) · $HSUMM"
+fi
+
+"$SRC/scripts/pin-server.sh" s153 > "$OUT/pin-server.log" 2>&1
+src_rc=$?; echo "$src_rc" > "$OUT/pin-server.rc"
+[ "$src_rc" = 0 ] || stop "pin-server.sh rc=$src_rc"
+note "promozione server: $(grep '^PIN server' "$OUT/pin-server.log" | tail -1)"
+
+echo 0 > "$OUT/rcb"
+note "PROMOZIONE COMPLETA rc=0 (da promo-out/rcb): pin s153 = $H2"
+exit 0

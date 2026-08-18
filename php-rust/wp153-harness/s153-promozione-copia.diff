@@ -1,0 +1,144 @@
+2,9c2,22
+< # s150-promozione.sh <cand_hash16> — gate di promozione LEVA BT1 debug_backtrace — S-150 (copia dichiarata di s145-promozione.sh: tag s150, path wp150; DIVERGENZE DICHIARATE nel manifest s150-promozione-copia.diff: (1) inventario batteria = baseline s125 + SOLO rczval, INVARIATO da s145 — zero test nuovi dal diff 4a968b7..HEAD; (2) corpus: flip BT1 attesi ⊆ famiglia backtrace, gestione s150-flip-handler.sh fail-closed + replay rc=0; (3) fixture chain EMENDATA 9→10 gate (backtrace); (4) guardie R=5 + conferma m-backtrace + disasm bl-count = riparazione incidente 17 (az.rev.1 S-149), con quiescenza prima delle misure; (5) lock CI /private/tmp/phpr-measure.lock annotato, di proprietà della SESSIONE)
+< # (criterio s150-criterio-promo.md; A/B R=5 in s149-ab-bt1-verdetto.out).
+< # Ordine REGOLE §6 (leva BT1 GIÀ committata 6a7adc8): build ricetta (riproduce il
+< # candidato) → batteria (rc da comando, inventario per NOME vs pin s125) →
+< # re-build ricetta → pin-phpr.sh s150 → corpus-gate CANONICO (+flip-handler se
+< # flip dichiarati) → fixture chain s109 (10 gate) → quiescenza → micro R=5 →
+< # guardie R=5 → gate ORM per NOME → gate http-kernel (0E/0F) sotto watchdog →
+< # pin-server.sh s150 (grado minimo). Registro nel verdetto del run PROMOSSO.
+---
+> # s153-promozione.sh <cand_hash16> — gate di promozione LEVA BT2 (chiavi
+> # statiche + ZStr in debug_backtrace) — S-153. COPIA DICHIARATA di
+> # wp150-harness/s150-promozione.sh; DIVERGENZE DICHIARATE:
+> #  (1) tag s153, harness wp153; candidato 8370c257ae70cc8e (A/B R=5 rc=0 in
+> #      s153-ab-bt2-verdetto.out, braccio A = GEMELLO f95a1067 per emenda
+> #      s153-criterio-td1-emenda.md);
+> #  (2) inventario batteria = baseline s125 + DUE denti dichiarati:
+> #      rczval_pattern_resta_nel_funnel (S-145) + nessun_sorgente_rs_oltre_cap
+> #      (dente A4 righe-.rs, S-151);
+> #  (3) corpus: ZERO flip attesi (BT2 non cambia forma dei risultati) — rc!=0
+> #      = STOP secco, NESSUN flip-handler;
+> #  (4) fixture chain INVARIATA (10 gate; fx-backtrace già nel set da s150);
+> #  (5) guardie: evidenza = 12/12 verdi a R=5 nel verdetto ab-bt2 (stesso
+> #      candidato AL BYTE, braccio gemello, quiescenza rc=0); qui si aggiunge
+> #      la CONFERMA POST-PIN m-backtrace (R=5 pin s153 vs stash phpr-s150,
+> #      direzione attesa +, riconciliazione con D_ab=266,7 a banda = rumore
+> #      drop-1 + drift-tree DICHIARATO ~0 su questo giudice: gemello 733,3 ≈
+> #      pin storico 733);
+> #  (6) disasm run_loop NON dovuto (host builtin fuori run_loop, criterio
+> #      s153-criterio-bt2.md p.1);
+> #  (7) micro R=5 = run-micro.sh come s150 (scoreboard al pin nuovo).
+13c26
+< H="$SRC/wp150-harness"
+---
+> H="$SRC/wp153-harness"
+19a33
+> M149="$SRC/wp149-harness"
+22,23c36,37
+< VERD="$H/s150-promo-verdetto.out"
+< CAND_EXP="${1:?uso: s150-promozione.sh <cand_hash16>}"
+---
+> VERD="$H/s153-promo-verdetto.out"
+> CAND_EXP="${1:?uso: s153-promozione.sh <cand_hash16>}"
+42,45d55
+< # inventario vs pin s125: come s145, l'UNICA aggiunta ammessa resta il dente
+< # rczval (S-145); dal diff 4a968b7..HEAD ZERO #[test] nuovi (criterio p.3).
+< # I nomi dei compile-fail VmGate portano il NUMERO DI RIGA (volatile):
+< # normalizzato su ENTRAMBI i lati prima del comm.
+49c59
+< NEW_ONLY=$(comm -13 "$OUT/base-norm.txt" "$OUT/nomi-norm.txt")
+---
+> NEW_ONLY=$(comm -13 "$OUT/base-norm.txt" "$OUT/nomi-norm.txt" | sort | tr '\n' ' ' | sed 's/ $//')
+51,52c61,62
+< if [ "$NEW_ONLY" = "rczval_pattern_resta_nel_funnel" ] && [ -z "$GONE" ]; then
+<   INV="baseline s125 + il SOLO test dichiarato (rczval_pattern_resta_nel_funnel)"
+---
+> if [ "$NEW_ONLY" = "nessun_sorgente_rs_oltre_cap rczval_pattern_resta_nel_funnel" ] && [ -z "$GONE" ]; then
+>   INV="baseline s125 + i DUE denti dichiarati (rczval + loc_dente A4)"
+61c71
+<   && note "promozione batteria: debug_backtrace_array_fields VERDE (criterio p.3)" \
+---
+>   && note "promozione batteria: debug_backtrace_array_fields VERDE" \
+71c81
+< "$SRC/scripts/pin-phpr.sh" s150 > "$OUT/pin.log" 2>&1
+---
+> "$SRC/scripts/pin-phpr.sh" s153 > "$OUT/pin.log" 2>&1
+78,91c88,89
+< if [ "$crc" = 0 ]; then
+<   note "promozione corpus-gate: rc=0 — nomi==congelato, CONTENUTO==golden, off↔on zero (NESSUN flip)"
+< else
+<   note "promozione corpus-gate live: rc=$crc — flip BT1 attesi: passo al handler fail-closed (criterio p.4)"
+<   "$H/s150-flip-handler.sh" "$OUT/corpus" > "$OUT/flip.log" 2>&1
+<   frc=$?; echo "$frc" > "$OUT/flip.rc"
+<   [ "$frc" = 0 ] || stop "flip-handler rc=$frc (violazione: nome fuori famiglia o EXTRA) — vedi promo-out/flip-handler.out"
+<   note "promozione flip: $(grep -E '^CONGELATO' "$OUT/flip-handler.out" | tr '\n' ' ')"
+<   note "promozione flip per NOME: $(grep -E '^  -' "$OUT/flip-handler.out" | tr '\n' ' ')"
+<   "$SRC/scripts/corpus-gate.sh" --replay "$OUT/corpus/off.norm" "$OUT/corpus/on.norm" "$OUT/corpus-replay"
+<   rrc=$?; echo "$rrc" > "$OUT/corpus-replay-rc"
+<   [ "$rrc" = 0 ] || stop "corpus-gate REPLAY rc=$rrc dopo il handler — STOP"
+<   note "promozione corpus-gate replay: rc=0 sul congelato AGGIORNATO (flip dichiarati per nome)"
+< fi
+---
+> [ "$crc" = 0 ] || stop "corpus-gate rc=$crc — BT2 non ammette flip (divergenza (3)): STOP"
+> note "promozione corpus-gate: rc=0 — nomi==congelato (1412), CONTENUTO==golden, off↔on zero (ZERO flip come atteso)"
+99c97
+< note "promozione fixture chain: rc=0 (inventario per NOME conforme, 10 gate: $FX_VISTI)"
+---
+> note "promozione fixture chain: rc=0 (10 gate: $FX_VISTI)"
+101d98
+< # quiescenza PRIMA delle misure (micro + guardie): mai cifre con build/CI in volo
+109,110c106,107
+< PHPR="$BIN" R=5 "$SRC/wp97-harness/micro/run-micro.sh" > "$OUT/micro-pin-s150.out" 2>&1
+< note "promozione micro pin s150: $(grep -E '^rapporto_' "$OUT/micro-pin-s150.out" | tr '\n' ' ')"
+---
+> PHPR="$BIN" R=5 "$SRC/wp97-harness/micro/run-micro.sh" > "$OUT/micro-pin-s153.out" 2>&1
+> note "promozione micro pin s153: $(grep -E '^rapporto_' "$OUT/micro-pin-s153.out" | tr '\n' ' ')"
+112,115c109,134
+< ARM_A="$STASH/phpr-s145" ARM_B="$BIN" "$H/s150-guardie-r5.sh"
+< grc=$?; echo "$grc" > "$OUT/guardie.rc"
+< while IFS= read -r l; do note "  $l"; done < <(grep -E '^(guardia|m-backtrace|bilaterale|disasm|parita|pavimenti|GUARDIE)' "$H/s150-guardie-verdetto.out")
+< [ "$grc" = 0 ] || stop "guardie R=5 rc=$grc (guardia ROSSA) — promozione ABORTITA"
+---
+> # ---- conferma POST-PIN m-backtrace (divergenza (5)): R=5 pin vs stash s150 ----
+> AOLD="$STASH/phpr-s150"
+> [ "$(shasum -a 256 "$AOLD" | cut -c1-16)" = "cbbe71735effb165" ] || stop "stash phpr-s150 hash inatteso"
+> ucpu(){ { /usr/bin/time -p perl -e 'alarm 900; exec @ARGV or die' -- "$1" "$2" > /dev/null; } 2>&1 | awk '/^user/{print $2}'; }
+> floor3(){ local a b c; a=$(ucpu "$1" "$2"); b=$(ucpu "$1" "$2"); c=$(ucpu "$1" "$2"); printf '%s\n%s\n%s\n' "$a" "$b" "$c" | sort -n | awk 'NR==2'; }
+> FA=$(floor3 "$AOLD" "$M149/empty.php"); FB=$(floor3 "$BIN" "$M149/empty.php")
+> CT="$OUT/conferma-runs.tsv"; : > "$CT"
+> for i in 1 2 3 4 5; do
+>   if [ $((i % 2)) -eq 1 ]; then TA=$(ucpu "$AOLD" "$M149/m-backtrace.php"); TB=$(ucpu "$BIN" "$M149/m-backtrace.php"); else TB=$(ucpu "$BIN" "$M149/m-backtrace.php"); TA=$(ucpu "$AOLD" "$M149/m-backtrace.php"); fi
+>   printf '%s\t%s\t%s\t%s\n' "$TA" "$TB" "$FA" "$FB" >> "$CT"
+> done
+> CONF=$(python3 - "$CT" <<'PY'
+> import sys
+> rows=[l.split("\t") for l in open(sys.argv[1]).read().strip().split("\n")]
+> n=150000.0
+> na=[(float(t[0])-float(t[2]))/n*1e9 for t in rows]
+> nb=[(float(t[1])-float(t[3]))/n*1e9 for t in rows]
+> def med(v): s=sorted(v); k=len(s); return s[k//2] if k%2 else (s[k//2-1]+s[k//2])/2
+> def trange(v):
+>     m=med(v); w=sorted(v,key=lambda x:(abs(x-m),x))[:-1]; return max(w)-min(w)
+> d=med(na)-med(nb); noise=max(trange(na),trange(nb))
+> segni=sum(1 for a,b in zip(na,nb) if a>b)
+> print(f"D={d:+.1f} rumore={noise:.1f} segni={segni}/5 A={med(na):.1f} B={med(nb):.1f}")
+> PY
+> )
+> note "conferma post-pin m-backtrace (pin s153 vs stash s150, drift-tree dichiarato ~0 su questo giudice): $CONF (attesa: segno +, D nell'intorno di +266,7 ± rumore+drift)"
+117c136
+< # ---- gate ORM per NOME (ricetta wp9: tarball su APFS, run col pin) ----
+---
+> # ---- gate ORM per NOME ----
+131c150
+< # ---- gate http-kernel: 0E/0F dichiarati (il tip si muove: mai i totali) ----
+---
+> # ---- gate http-kernel: 0E/0F ----
+145c164
+< "$SRC/scripts/pin-server.sh" s150 > "$OUT/pin-server.log" 2>&1
+---
+> "$SRC/scripts/pin-server.sh" s153 > "$OUT/pin-server.log" 2>&1
+151c170
+< note "PROMOZIONE COMPLETA rc=0 (da promo-out/rcb — il file rc che QUESTO script scrive): pin s150 = $H2"
+---
+> note "PROMOZIONE COMPLETA rc=0 (da promo-out/rcb): pin s153 = $H2"
