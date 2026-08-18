@@ -31,7 +31,10 @@ fn nessun_sorgente_rs_oltre_cap() {
         // Salita DICHIARATA a verbale (S-153, leva L-BT2 promossa a verdetto
         // A/B rc=0: BtFrame→ZStr in mod.rs +3; pool BT_STATICS + riscrittura
         // ho_debug_backtrace in host.rs +35 — s153-ab-bt2-verdetto.out).
-        ("php-runtime/src/vm/mod.rs", 25707, "monolite VM — bersaglio A2"),
+        // Salita DICHIARATA a verbale (S-154, leva L-CE1 vinta all'A/B:
+        // resolve_named/resolve_class_autoload via LcKey, +5 righe di
+        // commento-leva in mod.rs — s154-ab-ce1b-verdetto.out + arbitrato).
+        ("php-runtime/src/vm/mod.rs", 25712, "monolite VM — bersaglio A2"),
         ("php-runtime/src/vm/host.rs", 7661, "hostcall — backlog A2"),
         ("php-runtime/src/vm/run.rs", 6786, "run_loop — ULTIMO o mai (A2)"),
         ("php-runtime/tests/eval.rs", 4773, "batteria eval"),
