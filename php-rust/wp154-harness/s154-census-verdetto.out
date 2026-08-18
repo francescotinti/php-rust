@@ -1,0 +1,96 @@
+== s154 testa hostcall rifondata @ s153 (probe b28899092ea1e2cc; criterio s154-criterio-sonda.md p.4; CONTEGGI mai tempo) ==
+lock: presente (della sessione), solo verificato
+workdir=107 char (>=100, criterio §4)
+smoke pre-run: rc=0 (checker a esiti esatti della prep, rieseguito)
+replica r1: run rc=2 busy_pre=BUSY busy_post=BUSY (sentinella contesa: conteggi non tempo, non-gate)
+replica r2: run rc=2 busy_pre=BUSY busy_post=BUSY (sentinella contesa: conteggi non tempo, non-gate)
+sentinella fail-set: r1-vs-baseline16=OK · r1-vs-r2=OK (non-gate, si dichiara)
+ID r1 c1: Sigma_siti=253971737 == tot OK
+ID r1 c2: Sigma_siti=340931405 == tot OK
+ID r1 c3: Sigma_siti=6439636 == tot OK
+ID r1 c4: Sigma_siti=43214340 == tot OK
+ID r1 c5: Sigma_siti=191157853 == tot OK
+OV r1 overlap=0 clsovf=0 snap=1
+CONS r1 classi=2393 b=3265745 c=188902173 d=191987792 l=180126 (b+c==d+l per OGNI riga-classe)
+S149 r1 hostcall_n=67023784 sum_name=67023784 unnamed=0 overflow=0 OK
+HOSTN_R1=67023784
+PROPS r1 s151props n=3265745 sum=8857266 p50=1 p90=6 p99=18 le4_pct=86.53 le8_pct=91.99 dyn_objs=245 dyn_entries=485
+ID r2 c1: Sigma_siti=253971737 == tot OK
+ID r2 c2: Sigma_siti=340931405 == tot OK
+ID r2 c3: Sigma_siti=6439636 == tot OK
+ID r2 c4: Sigma_siti=43214340 == tot OK
+ID r2 c5: Sigma_siti=191157853 == tot OK
+OV r2 overlap=0 clsovf=0 snap=1
+CONS r2 classi=2393 b=3265745 c=188902173 d=191987792 l=180126 (b+c==d+l per OGNI riga-classe)
+S149 r2 hostcall_n=67023784 sum_name=67023784 unnamed=0 overflow=0 OK
+HOSTN_R2=67023784
+PROPS r2 s151props n=3265745 sum=8857266 p50=1 p90=6 p99=18 le4_pct=86.53 le8_pct=91.99 dyn_objs=245 dyn_entries=485
+repliche: s151tot r1 == r2 (identiche, precedente 0,000%)
+-- top-10 siti c1 (r1, somma pid):
+   43836043 Sweep.drop
+   36551785 Ret.drop
+   26985250 frame_teardown.clone
+   13831722 This.clone
+   12468789 LoadVar.clone
+   7177567 CallHostBuiltin.clone
+   6678400 Dup.clone
+   6494884 CallHostBuiltin.drop
+   5631860 MethodCall.clone
+   5578059 ThisMethodCall.clone
+-- top-10 siti c2 (r1, somma pid):
+   61021434 frame_teardown.borrow
+   57356441 PropSetPop.borrow
+   49969596 Sweep.borrow
+   37206782 ThisPropGet.borrow
+   34577220 MethodCall.borrow
+   16676246 FieldIsset.borrow
+   11784675 PropSetPop.borrow_mut
+   8857485 CallHostBuiltin.borrow
+   7845555 gc_collect.borrow
+   6953457 ThisMethodCall.borrow
+-- top-10 siti c3 (r1, somma pid):
+   6273789 alloc_instance
+   165603 clone_copy
+   150 enum_case
+   94 alloc_seeded
+-- top-10 siti c4 (r1, somma pid):
+   35230083 frame_teardown
+   2261369 StoreSlot
+   1777229 Pop
+   1375396 IterPop
+   1198515 PropSetPop
+   676586 Sweep
+   605926 gc_collect
+   48618 PropSet
+   23676 AssignPath
+   10099 CallHostBuiltin
+-- top-10 siti c5 (r1, somma pid):
+   26395618 FieldIsset.obj.clone
+   26395470 FieldIsset.obj.drop
+   23369509 PropSetPop.obj.drop
+   14453288 PropSetPop.obj.clone
+   13033845 ThisPropGet.str.clone
+   10525865 ThisPropGet.obj.clone
+   7463067 FieldIsset.arr.clone
+   7401357 PropSetPop.scalar.drop
+   5876811 ThisPropGet.arr.clone
+   4647499 ThisPropGet.obj.drop
+-- testa hostcall per-NOME top-15 (r1, somma pid):
+   9740728 class_exists
+   7726404 array_map
+   6149308 debug_backtrace
+   4563808 get_declared_classes
+   3891518 str_replace
+   3366759 __reflect_method_info
+   3254556 __reflect_class_real_name
+   3247941 array_diff
+   2152724 __reflect_prop_attr_new
+   2148442 __reflect_prop_details
+   1831633 array_filter
+   1383358 __reflect_class_loc
+   1197795 __reflect_method_names
+   918486 assert
+   899955 implode
+§5-bis-s154: hostcall_n r1=67023784 · debug_backtrace=6149308 · residuo non-bt=60874476 (Δ% vs 60,9M = 0.04) · class_exists=9740728 · get_declared_classes=4563808
+§5-bis-s154 attese: residuo DENTRO ±2% · debug_backtrace DENTRO ±10% di 6,15M
+CENSUS TRANCHE-5 VALIDO rc=0 (identità §3 tutte OK su r1 e r2)
