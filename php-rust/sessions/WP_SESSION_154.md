@@ -1,8 +1,8 @@
 # WP_SESSION_154 — L-CE1 SPEDITA (class_exists no-alloc −20%); coppia t5+ORM @ s153; FUORI-UB di BT2 SPIEGATO; pin NUOVO s154
-**In una frase**: misurato il nuovo binario su WordPress e Doctrine (WordPress
-stabile, Doctrine più veloce del previsto), spiegato al centesimo il guadagno
-"eccessivo" della cura backtrace, e spedita una cura nuova che azzera le
-allocazioni del controllo-esistenza-classi, promossa con collaudi tutti verdi.
+**In una frase**: misurato il binario su WordPress e Doctrine (stabile il
+primo, più veloce del previsto il secondo), spiegato al centesimo il guadagno
+della cura backtrace, e spedita una cura che azzera le allocazioni del
+controllo-esistenza-classi, promossa con tutti i collaudi verdi.
 
 **SCOREBOARD** (pin NUOVO s154 bddc050320a6af4c + server b3cf348f69739edc):
 arith 5,5 → · prop 5,6 ↑ · calls 4,8 ↑ · str 4,3 → · arr 3,3 ↑ · re 2,5 ↓
@@ -28,7 +28,10 @@ spedite: 1** (L-CE1; tentate 1) · incidenti 19 (=).
   fx-ce byte-id ×3; conferma post-pin D=+22,0 5/5). Bracci: gemelloA
   2023cbb9 · ce1-cand e634d95c. 5·Reperto: pin s153 NON cold-riproducibile
   (banner mimalloc da cache calda + LC_UUID). 6·Sonda ce-count post-CE1
-  DOVUTA (S-155, probe da ricostruire sul tree con CE1).
+  DOVUTA (S-155). 7·Incidenti 19 (=) DIFESO: i morsi (quiescenza, identità,
+  dente) = gate fail-closed che funzionano, tag bruciati agli atti; la
+  lettura di un rcb STALE dal monitor (promo t2) NON ha orientato esiti di
+  record (il t2 era vivo e ha chiuso da sé) — a verbale qui.
 
 ## ⭐ Lezioni (max 3)
 - ⭐⭐ Il pin può NON essere cold-riproducibile (il cc-fingerprint non vede
