@@ -10384,11 +10384,11 @@ impl<'m> Vm<'m> {
             // An `eval()` unit's frame renders as `eval`; an anonymous frame as
             // `{closure}`; otherwise its own name.
             let function = if f.eval_origin().is_some() {
-                b"eval".to_vec()
+                PhpStr::new(&b"eval"[..])
             } else if f.func.name.is_empty() {
-                b"{closure}".to_vec()
+                PhpStr::new(&b"{closure}"[..])
             } else {
-                f.func.name.to_vec()
+                PhpStr::new(&f.func.name[..])
             };
             // The call was made from the *caller* frame (i-1): its file, unless that
             // caller is itself an eval unit, in which case PHP names it
@@ -10398,14 +10398,14 @@ impl<'m> Vm<'m> {
                 Some((ofile, oline)) => {
                     let mut s = ofile.to_vec();
                     s.extend_from_slice(format!("({oline}) : eval()'d code").as_bytes());
-                    s
+                    PhpStr::new(s)
                 }
-                None => caller.module.file.to_vec(),
+                None => PhpStr::new(&caller.module.file[..]),
             };
             let (class, object) = match f.class {
                 // Resolve the class id in the frame's own module (an eval'd /
                 // included frame may differ from `self.module`).
-                Some(cid) => (Some(self.classes[cid].name.to_vec()), f.this.clone()),
+                Some(cid) => (Some(PhpStr::new(&self.classes[cid].name[..])), f.this.clone()),
                 None => (None, None),
             };
             out.push(BtFrame {
@@ -15155,12 +15155,15 @@ enum RelItem {
 
 /// One reconstructed call-stack entry (see [`Vm::collect_backtrace`]).
 struct BtFrame {
-    function: Vec<u8>,
+    // L-BT2 (S-153): the string fields are ZStr built ONCE at collect time —
+    // the array form moves them into `Zval::Str` with no further copy (the
+    // old Vec fields paid a second block copy in `ho_debug_backtrace`).
+    function: php_types::ZStr,
     /// The file the call was made *from* (the caller frame's unit), or — when the
     /// caller is an `eval()` unit — the composite `<file>(<line>) : eval()'d code`.
-    file: Vec<u8>,
+    file: php_types::ZStr,
     line: Line,
-    class: Option<Vec<u8>>,
+    class: Option<php_types::ZStr>,
     is_static: bool,
     object: Option<Zval>,
     args: Vec<Zval>,

@@ -4,6 +4,36 @@
 
 use super::*;
 
+/// L-BT2 (S-153): chiavi fisse del risultato di `debug_backtrace` e i due
+/// ZStr di `type`, allocati UNA volta per thread (l'hash DJBX33A si calcola
+/// una volta nella vita della stringa); ogni insert clona solo il refcount —
+/// il cammino per-chiamata non alloca né hasha le chiavi.
+struct BtStatics {
+    k_file: Key,
+    k_line: Key,
+    k_function: Key,
+    k_class: Key,
+    k_object: Key,
+    k_type: Key,
+    k_args: Key,
+    ty_arrow: php_types::ZStr,
+    ty_static: php_types::ZStr,
+}
+
+thread_local! {
+    static BT_STATICS: BtStatics = BtStatics {
+        k_file: Key::from_bytes(b"file"),
+        k_line: Key::from_bytes(b"line"),
+        k_function: Key::from_bytes(b"function"),
+        k_class: Key::from_bytes(b"class"),
+        k_object: Key::from_bytes(b"object"),
+        k_type: Key::from_bytes(b"type"),
+        k_args: Key::from_bytes(b"args"),
+        ty_arrow: PhpStr::new(&b"->"[..]),
+        ty_static: PhpStr::new(&b"::"[..]),
+    };
+}
+
 /// How the `array_(u)diff/(u)intersect` family compares one dimension (value/key):
 /// ignored, by `(string)` equality (INTERNAL), or by a user comparator (USER).
 #[derive(Clone, Copy)]
@@ -4349,48 +4379,53 @@ impl<'m> super::Vm<'m> {
         let provide_object = options & PROVIDE_OBJECT != 0;
         let ignore_args = options & IGNORE_ARGS != 0;
         let frames = self.collect_backtrace_opt(limit, ignore_args);
-        let mut outer = PhpArray::new();
-        for bt in frames {
-            let mut e = PhpArray::new();
-            e.insert(Key::from_bytes(b"file"), Zval::Str(PhpStr::new(bt.file.clone())));
-            e.insert(Key::from_bytes(b"line"), Zval::Long(bt.line as i64));
-            e.insert(Key::from_bytes(b"function"), Zval::Str(PhpStr::new(bt.function)));
-            if let Some(cls) = bt.class {
-                e.insert(Key::from_bytes(b"class"), Zval::Str(PhpStr::new(cls)));
-                if provide_object {
-                    if let Some(obj) = bt.object {
-                        e.insert(Key::from_bytes(b"object"), obj);
+        // L-BT2 (S-153): chiavi e ZStr di `type` dal pool statico per-thread
+        // (zero alloc/hash per insert); i campi stringa del BtFrame sono ZStr
+        // e si MUOVONO in Zval::Str senza ricopiare il blocco.
+        BT_STATICS.with(|k| {
+            let mut outer = PhpArray::new();
+            for bt in frames {
+                let mut e = PhpArray::new();
+                e.insert(k.k_file.clone(), Zval::Str(bt.file));
+                e.insert(k.k_line.clone(), Zval::Long(bt.line as i64));
+                e.insert(k.k_function.clone(), Zval::Str(bt.function));
+                if let Some(cls) = bt.class {
+                    e.insert(k.k_class.clone(), Zval::Str(cls));
+                    if provide_object {
+                        if let Some(obj) = bt.object {
+                            e.insert(k.k_object.clone(), obj);
+                        }
                     }
+                    let ty = if bt.is_static { k.ty_static.clone() } else { k.ty_arrow.clone() };
+                    e.insert(k.k_type.clone(), Zval::Str(ty));
                 }
-                let ty: &[u8] = if bt.is_static { b"::" } else { b"->" };
-                e.insert(Key::from_bytes(b"type"), Zval::Str(PhpStr::new(ty.to_vec())));
-            }
-            // PHP's `eval` frame carries no `args` entry; IGNORE_ARGS omette
-            // la chiave per intero (semantica 8.5.7).
-            if !bt.is_eval && !ignore_args {
-                let mut argsarr = PhpArray::new();
-                for a in bt.args {
-                    let _ = argsarr.append(a);
+                // PHP's `eval` frame carries no `args` entry; IGNORE_ARGS omette
+                // la chiave per intero (semantica 8.5.7).
+                if !bt.is_eval && !ignore_args {
+                    let mut argsarr = PhpArray::new();
+                    for a in bt.args {
+                        let _ = argsarr.append(a);
+                    }
+                    e.insert(k.k_args.clone(), Zval::Array(Rc::new(argsarr)));
                 }
-                e.insert(Key::from_bytes(b"args"), Zval::Array(Rc::new(argsarr)));
+                let _ = outer.append(Zval::Array(Rc::new(e)));
             }
-            let _ = outer.append(Zval::Array(Rc::new(e)));
-        }
-        Ok(Zval::Array(Rc::new(outer)))
+            Ok(Zval::Array(Rc::new(outer)))
+        })
     }
     pub(super) fn ho_debug_print_backtrace(&mut self) -> Result<Zval, PhpError> {
         let frames = self.collect_backtrace();
         let mut s = String::new();
         for (n, bt) in frames.iter().enumerate() {
-            let file = String::from_utf8_lossy(&bt.file);
+            let file = String::from_utf8_lossy(bt.file.as_bytes());
             let callee = match &bt.class {
                 Some(cls) => format!(
                     "{}{}{}",
-                    String::from_utf8_lossy(cls),
+                    String::from_utf8_lossy(cls.as_bytes()),
                     if bt.is_static { "::" } else { "->" },
-                    String::from_utf8_lossy(&bt.function)
+                    String::from_utf8_lossy(bt.function.as_bytes())
                 ),
-                None => String::from_utf8_lossy(&bt.function).into_owned(),
+                None => String::from_utf8_lossy(bt.function.as_bytes()).into_owned(),
             };
             let argstr = bt
                 .args
