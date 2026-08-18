@@ -1,0 +1,69 @@
+2,3c2,6
+< # s151-census-orm.sh — census tranche-5 @ s150 (criterio s151-criterio-census.md
+< # §1–§6 + §5-bis; probe ab02faec0abfab67 da census-prep, prep.rc=0).
+---
+> # s154-census-orm.sh — testa hostcall RIFONDATA @ s153 (criterio
+> # s154-criterio-sonda.md p.4; COPIA DICHIARATA di s151-census-orm.sh, manifest
+> # s154-census-copia.diff; adattamenti: probe s154 b28899092ea1e2cc da
+> # census-prep-s154, lock della SESSIONE solo VERIFICATO, §5-bis sostituito
+> # dalle attese s154).
+10,11c13,14
+< H="$REPO/wp151-harness"; PREP="$H/census-prep"; OUT="$H/census-out"; mkdir -p "$OUT"
+< V="$H/s151-census-verdetto.out"
+---
+> H="$REPO/wp154-harness"; PREP="$H/census-prep-s154"; OUT="$H/census-out"; mkdir -p "$OUT"
+> V="$H/s154-census-verdetto.out"
+13c16
+< PROBE="$PREP/phpr-census-s151"
+---
+> PROBE="$PREP/phpr-census-s154"
+16c19
+< fin(){ echo "$1" > "$OUT/census.rc"; touch "$OUT/census.done"; if [ -f "$LOCK" ] && grep -q "s151-census" "$LOCK" 2>/dev/null; then rm -f "$LOCK"; echo "lock CI: rimosso (era mio)" >> "$V"; fi; exit "$1"; }
+---
+> fin(){ echo "$1" > "$OUT/census.rc"; touch "$OUT/census.done"; exit "$1"; }
+18c21
+< echo "== s151 census tranche-5 @ s150 (probe ab02faec0abfab67; criterio s151-criterio-census.md; CONTEGGI mai tempo) ==" >> "$V"
+---
+> echo "== s154 testa hostcall rifondata @ s153 (probe b28899092ea1e2cc; criterio s154-criterio-sonda.md p.4; CONTEGGI mai tempo) ==" >> "$V"
+20,23c23,25
+< [ "$HP" = "ab02faec0abfab67" ] || { echo "rc=6 probe $HP != ab02faec0abfab67 (criterio §4)" >> "$V"; fin 6; }
+< if [ -e "$LOCK" ]; then echo "rc=9 lock di misura ALTRUI presente: non lo tocco, run abortito" >> "$V"; echo 9 > "$OUT/census.rc"; touch "$OUT/census.done"; exit 9; fi
+< echo "s151-census pid=$$ avvio $(date '+%F %T')" > "$LOCK"
+< echo "lock CI: CREATO da questo run (finestra census; rimozione a fine run)" >> "$V"
+---
+> [ "$HP" = "b28899092ea1e2cc" ] || { echo "rc=6 probe $HP != b28899092ea1e2cc (criterio p.4)" >> "$V"; fin 6; }
+> [ -e "$LOCK" ] || { echo "rc=9 lock della SESSIONE ASSENTE (adattamento dichiarato: solo verifica)" >> "$V"; echo 9 > "$OUT/census.rc"; touch "$OUT/census.done"; exit 9; }
+> echo "lock: presente (della sessione), solo verificato" >> "$V"
+26c28
+< SP="/private/tmp/s151-census-sp-$PAD"
+---
+> SP="/private/tmp/s154-census-sp-$PAD"
+102a105,108
+> # attese s154 (criterio sonda p.4): residuo non-backtrace 60,9M ±2%;
+> # debug_backtrace ≈ 0,473M×13 = 6,15M ±10%; conteggi class_exists e
+> # get_declared_classes RIPORTATI (denominatori p.3).
+> BTN1=$(awk '/^s149name /{nm="";n=0; for(i=2;i<=NF;i++){split($i,kv,"="); if(kv[1]=="name")nm=kv[2]; else if(kv[1]=="n")n=kv[2]+0} if(nm=="debug_backtrace")s+=n} END{print s+0}' "$OUT/clean-r1.txt")
+103a110,111
+> CE1=$(awk '/^s149name /{nm="";n=0; for(i=2;i<=NF;i++){split($i,kv,"="); if(kv[1]=="name")nm=kv[2]; else if(kv[1]=="n")n=kv[2]+0} if(nm=="class_exists")s+=n} END{print s+0}' "$OUT/clean-r1.txt")
+> GD1=$(awk '/^s149name /{nm="";n=0; for(i=2;i<=NF;i++){split($i,kv,"="); if(kv[1]=="name")nm=kv[2]; else if(kv[1]=="n")n=kv[2]+0} if(nm=="get_declared_classes")s+=n} END{print s+0}' "$OUT/clean-r1.txt")
+105,111c113,120
+<   awk -v h="$HN1" 'BEGIN{
+<     a=325416908; b=335837200
+<     da=(h>a?h-a:a-h)/a*100; db=(h>b?h-b:b-h)/b*100
+<     printf "§5-bis: hostcall_n r1=%d · Δ%%(vs s148 325,4M)=%.2f · Δ%%(vs s149 335,8M)=%.2f — ",h,da,db
+<     if(da<=1) print "scarto ISTRUITO: sovra-conteggio lignaggio s149 REFUTATO dal probe nuovo"
+<     else if(db<=1) print "delta = proprietà STABILE del codice-conteggio lignaggio s149 (caveat eredità): scarto APERTO, istruttoria a diff sorgente s148tag-vs-s149name (S-152)"
+<     else print "FUORI da entrambe le bande: scarto APERTO, testa nuova"
+---
+>   awk -v h="$HN1" -v bt="$BTN1" -v ce="$CE1" -v gd="$GD1" 'BEGIN{
+>     resid=h-bt; a=60900000
+>     dr=(resid>a?resid-a:a-resid)/a*100
+>     battL=6150000*0.9; battH=6150000*1.1
+>     printf "§5-bis-s154: hostcall_n r1=%d · debug_backtrace=%d · residuo non-bt=%d (Δ%% vs 60,9M = %.2f) · class_exists=%d · get_declared_classes=%d\n",h,bt,resid,dr,ce,gd
+>     okr=(dr<=2)?"DENTRO ±2%":"FUORI ±2% (dichiarare)"
+>     okb=(bt>=battL && bt<=battH)?"DENTRO ±10% di 6,15M":"FUORI ±10% di 6,15M (dichiarare)"
+>     printf "§5-bis-s154 attese: residuo %s · debug_backtrace %s\n",okr,okb
+114c123
+<   echo "§5-bis: HOSTN_R1 non estratto — giudizio NON emesso (dichiarato)" >> "$V"
+---
+>   echo "§5-bis-s154: HOSTN_R1 non estratto — giudizio NON emesso (dichiarato)" >> "$V"
