@@ -1,15 +1,13 @@
-# WP_SESSION_154 — L-CE1 SPEDITA (class_exists no-alloc −20%); coppia t5+ORM @ s153; FUORI-UB di BT2 SPIEGATO; pin NUOVO s154
+# WP_SESSION_154 — L-CE1 SPEDITA (−20% sul giudice); coppia t5+ORM @ s153; FUORI-UB BT2 SPIEGATO; pin NUOVO s154
 **In una frase**: misurato il binario su WordPress e Doctrine (stabile il
 primo, più veloce del previsto il secondo), spiegato al centesimo il guadagno
 della cura backtrace, e spedita una cura che azzera le allocazioni del
 controllo-esistenza-classi, promossa con tutti i collaudi verdi.
-
 **SCOREBOARD** (pin NUOVO s154 bddc050320a6af4c + server b3cf348f69739edc):
 arith 5,5 → · prop 5,6 ↑ · calls 4,8 ↑ · str 4,3 → · arr 3,3 ↑ · re 2,5 ↓
-(±1 tick) · WP t5 1,757 COMPATIBILE (N=5, banda 0,013) · media 2,450–2,485 ·
-ORM 7,051–7,073 · dbal 7,440–7,450 (tutti @ s153: coppia @ s154 DOVUTA →
-S-155 p.1) · corpus 1412×2 ZERO flip · batteria 1748/0/2 · **leve perf
-spedite: 1** (L-CE1; tentate 1) · incidenti 19 (=).
+(±1 tick) · WP t5 1,757 · media 2,450–2,485 · ORM 7,051–7,073 · dbal
+7,440–7,450 (@ s153: coppia @ s154 DOVUTA) · corpus 1412×2 ZERO flip ·
+batteria 1748/0/2 · **leve spedite: 1** (tentate 1) · incidenti 19 (=).
 
 ## Esiti secchi
 1·Coppia t5 @ s153 COMPATIBILE (leg1 esclusa per firma; parità 6/6); ORM:
