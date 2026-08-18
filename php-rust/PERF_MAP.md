@@ -1,6 +1,22 @@
 # PERF_MAP — phpr vs PHP oracle 8.5.7, mappa multi-workload
 
-Aggiornata: **2026-08-18 (S-153)** · pin phpr **s153 8370c257** + server
+Aggiornata: **2026-08-19 (S-154)** · pin phpr **s154 bddc0503** + server
+**s154 b3cf348f** (**S-154 = PROMOZIONE L-CE1 «class_exists lookup no-alloc
+via LcKey» con catena piena rc=0**: A/B R=5 vs GEMELLO D=+22,0 ns/iter su
+m-classexists (111→89, −20%), segni 5/5, riconc. smoke 2,0, conferma
+post-pin +22,0 ESATTO 5/5; guardia backtrace morsa a 1 tick e ARBITRATA
+(N=600k D=+0,0, refutata — emenda §6-bis); identità candidato a CONTENUTO
+48 B LC_UUID+firma (emenda t2: pin non cold-riproducibile, banner mimalloc
+da cache calda); batteria 1748/0/2 (cap mod.rs 25712 dichiarato), corpus
+1412×2 ZERO flip, fixture 10/10 + fx-ce byte-id, ORM fail-set==16, hk 0E/0F;
+**coppia t5 + ORM @ s153**: t5 COMPATIBILE 1,757 (N=5, banda 0,013) · media
+2,450–2,485 · **ORM 7,051–7,073** (Δ+0,72/+0,77 GIÙ fuori rumore,
+OLTRE-attesa BT2 dichiarata, magnitudine NON ripartita, oracle −1,4% di
+giornata) · dbal 7,440–7,450; **FUORI-UB BT2 SPIEGATO**: k_new=13 ESATTO,
+alloc 214–221 + hash/memcpy 46–52 ≈ D 266,7; testa hostcall rifondata
+(debug_backtrace 6,149M==473k×13, residuo 60,87M Δ0,04%, class_exists 9,74M,
+get_declared_classes 4,56M); coppia @ s154 DOVUTA → S-155; verdetti
+`wp154-harness/s154-*.out`); storico S-153 = pin **s153 8370c257** + server
 **s153 f030c6fc** (**S-153 = PROMOZIONE L-BT2 «debug_backtrace a chiavi
 statiche + ZStr condivisi» con catena piena rc=0**: A/B R=5 vs GEMELLO
 D=+266,7 ns/iter su m-backtrace (733→467, −36%), segni 7/7, riconciliazione
