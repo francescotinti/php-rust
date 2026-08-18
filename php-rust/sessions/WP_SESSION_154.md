@@ -12,9 +12,9 @@ S-155 p.1) · corpus 1412×2 ZERO flip · batteria 1748/0/2 · **leve perf
 spedite: 1** (L-CE1; tentate 1) · incidenti 19 (=).
 
 ## Esiti secchi
-1·Coppia t5 @ s153 COMPATIBILE (leg1 esclusa per firma 182%; parità 6/6);
-  ORM @ s153: Δ=[+0,72;+0,77] GIÙ FUORI RUMORE, OLTRE-attesa ⇒ dichiarato,
-  magnitudine NON ripartita (oracle −1,4% stesso giorno; citabile 7,10→7,05).
+1·Coppia t5 @ s153 COMPATIBILE (leg1 esclusa per firma; parità 6/6); ORM:
+  Δ=[+0,72;+0,77] GIÙ FUORI RUMORE, OLTRE-attesa dichiarata, magnitudine
+  NON ripartita (oracle −1,4% di giornata; citabile 7,10→7,05).
 2·Sonda k post-BT2 rc=0: k_new=13 ESATTO (fisso 3 + 5/frame; pool chiavi e
   type = 0 alloc); FUORI-UB spiegato: alloc 214–221 + hash/memcpy ≈46–52 ≈
   D 266,7; il modello blind sbagliava sul lato PRE (chiavi ~2 alloc, campi
@@ -28,16 +28,15 @@ spedite: 1** (L-CE1; tentate 1) · incidenti 19 (=).
   fx-ce byte-id ×3; conferma post-pin D=+22,0 5/5). Bracci: gemelloA
   2023cbb9 · ce1-cand e634d95c. 5·Reperto: pin s153 NON cold-riproducibile
   (banner mimalloc da cache calda + LC_UUID). 6·Sonda ce-count post-CE1
-  DOVUTA (S-155). 7·Incidenti 19 (=) DIFESO: i morsi (quiescenza, identità,
-  dente) = gate fail-closed che funzionano, tag bruciati agli atti; la
-  lettura di un rcb STALE dal monitor (promo t2) NON ha orientato esiti di
-  record (il t2 era vivo e ha chiuso da sé) — a verbale qui.
+  DOVUTA (S-155). 7·Incidenti 19 (=) DIFESO: i morsi = gate fail-closed che
+  funzionano (tag bruciati agli atti); il rcb STALE letto dal monitor (promo
+  t2) NON ha orientato esiti di record — a verbale qui.
 
 ## ⭐ Lezioni (max 3)
-- ⭐⭐ Il pin può NON essere cold-riproducibile (il cc-fingerprint non vede
-  SOURCE_DATE_EPOCH: banner mimalloc dalla cache calda; LC_UUID/firma dal
-  target-path): identità chiusa a CONTENUTO con cluster NOMINATI, mai cap cieco.
+- ⭐⭐ Il pin può NON essere cold-riproducibile (cc-fingerprint cieco a
+  SOURCE_DATE_EPOCH; LC_UUID/firma dal target-path): identità chiusa a
+  CONTENUTO con cluster NOMINATI, mai cap cieco.
 - ⭐⭐ Guardia su giudice quantizzato (tick 66,7) con soglia 4 ns = sotto-
   risoluta: il morso da ±1 tick a rumore 0 si arbitra RI-RISOLVENDO N.
-- ⭐ Le attese-conteggio si fondano su k MISURATI: il modello blind di BT2
-  sbagliava di 12 alloc/call, tutto sul lato pre-leva.
+- ⭐ Le attese-conteggio si fondano su k MISURATI, non su enumerazione a
+  occhio (il modello blind BT2: −12 alloc/call, tutto sul lato pre).
