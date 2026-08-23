@@ -1,0 +1,87 @@
+2,8c2,8
+< # s154-promozione.sh <cand_hash16> — gate di promozione LEVA CE1
+< # (class_exists lookup no-alloc via LcKey) — S-154. COPIA DICHIARATA di
+< # wp153-harness/s153-promozione.sh; DIVERGENZE DICHIARATE:
+< #  (1) tag s154, harness wp154; candidato e634d95cd8bfd475 (A/B R=5 in
+< #      s154-ab-ce1b-verdetto.out: giudice VINTO D=+22,0, guardia backtrace
+< #      arbitrata TICK-FLIP REFUTATO per emenda §6-bis, braccio A = GEMELLO
+< #      2023cbb9);
+---
+> # s156-promozione.sh <cand_hash16> — gate di promozione LEVA HD2-hostcall
+> # (estensione L-HD2 forma-2 a CallHostBuiltin) — S-156. COPIA DICHIARATA di
+> # wp154-harness/s154-promozione.sh; DIVERGENZE DICHIARATE:
+> #  (1) tag s156, harness wp156; candidato 42efea3e34feb390 (A/B R=5 in
+> #      s156-abhd2h-verdetto.out: giudice VINTO D=+16,0 rumore 3,0/1,0,
+> #      13 guardie ok, braccio A = GEMELLO 2023cbb9; candidato stashato
+> #      phpr-s156-hd2host-B via pin-phpr.sh --braccio);
+10,19c10,20
+< #      s153): rczval + loc_dente A4 — CE1 non aggiunge test;
+< #  (3) corpus: ZERO flip attesi (CE1 non cambia forma dei risultati) — rc!=0
+< #      = STOP secco, NESSUN flip-handler;
+< #  (4) fixture chain INVARIATA (10 gate) + gate fx-ce AGGIUNTO fuori catena
+< #      (bilaterale oracle==pin byte-id; già passato pre-promo sul candidato);
+< #  (5) conferma POST-PIN: m-classexists (R=5 pin s154 vs stash phpr-s153,
+< #      direzione attesa +, D nell'intorno di +22,0 ± rumore+drift);
+< #  (6) disasm run_loop NON dovuto (resolve_* non-inline fuori dal run_loop,
+< #      criterio s154-criterio-ce1.md p.1);
+< #  (7) micro R=5 = run-micro.sh come s153 (scoreboard al pin nuovo).
+---
+> #      s154): rczval + loc_dente A4 — HD2-hostcall non aggiunge test;
+> #  (3) corpus: ZERO flip attesi (HD2-hostcall non cambia forma dei
+> #      risultati) — rc!=0 = STOP secco, NESSUN flip-handler;
+> #  (4) fixture chain INVARIATA (10 gate) + gate fx-ce TENUTO fuori catena
+> #      (bilaterale oracle==pin byte-id; copia byte-id da wp154);
+> #  (5) conferma POST-PIN: m-hostargs (R=5 pin s156 vs stash phpr-s154
+> #      bddc050320a6af4c, direzione attesa +, D nell'intorno di +16,0
+> #      ± rumore+drift);
+> #  (6) disasm run_loop DOVUTO e GIÀ AGLI ATTI pre-promo (criterio p.7:
+> #      bl A=6014 B=6033, Δ+19 localizzato, ab-out/disasm-run_loop-*.txt);
+> #  (7) micro R=5 = run-micro.sh come s154 (scoreboard al pin nuovo).
+23c24
+< H="$SRC/wp154-harness"
+---
+> H="$SRC/wp156-harness"
+33,34c34,35
+< VERD="$H/s154-promo-verdetto.out"
+< CAND_EXP="${1:?uso: s153-promozione.sh <cand_hash16>}"
+---
+> VERD="$H/s156-promo-verdetto.out"
+> CAND_EXP="${1:?uso: s156-promozione.sh <cand_hash16>}"
+77c78
+<   CSTASH="$STASH/phpr-s154-ce1-cand"
+---
+>   CSTASH="$STASH/phpr-s156-hd2host-B"
+113c114
+< "$SRC/scripts/pin-phpr.sh" s154 > "$OUT/pin.log" 2>&1
+---
+> "$SRC/scripts/pin-phpr.sh" s156 > "$OUT/pin.log" 2>&1
+149,150c150,151
+< PHPR="$BIN" R=5 "$SRC/wp97-harness/micro/run-micro.sh" > "$OUT/micro-pin-s154.out" 2>&1
+< note "promozione micro pin s154: $(grep -E '^rapporto_' "$OUT/micro-pin-s154.out" | tr '\n' ' ')"
+---
+> PHPR="$BIN" R=5 "$SRC/wp97-harness/micro/run-micro.sh" > "$OUT/micro-pin-s156.out" 2>&1
+> note "promozione micro pin s156: $(grep -E '^rapporto_' "$OUT/micro-pin-s156.out" | tr '\n' ' ')"
+152,154c153,155
+< # ---- conferma POST-PIN m-classexists (divergenza (5)): R=5 pin vs stash s153 ----
+< AOLD="$STASH/phpr-s153"
+< [ "$(shasum -a 256 "$AOLD" | cut -c1-16)" = "8370c257ae70cc8e" ] || stop "stash phpr-s153 hash inatteso"
+---
+> # ---- conferma POST-PIN m-hostargs (divergenza (5)): R=5 pin vs stash s154 ----
+> AOLD="$STASH/phpr-s154"
+> [ "$(shasum -a 256 "$AOLD" | cut -c1-16)" = "bddc050320a6af4c" ] || stop "stash phpr-s154 hash inatteso"
+160c161
+<   if [ $((i % 2)) -eq 1 ]; then TA=$(ucpu "$AOLD" "$H/m-classexists.php"); TB=$(ucpu "$BIN" "$H/m-classexists.php"); else TB=$(ucpu "$BIN" "$H/m-classexists.php"); TA=$(ucpu "$AOLD" "$H/m-classexists.php"); fi
+---
+>   if [ $((i % 2)) -eq 1 ]; then TA=$(ucpu "$AOLD" "$H/m-hostargs.php"); TB=$(ucpu "$BIN" "$H/m-hostargs.php"); else TB=$(ucpu "$BIN" "$H/m-hostargs.php"); TA=$(ucpu "$AOLD" "$H/m-hostargs.php"); fi
+177c178
+< note "conferma post-pin m-classexists (pin s154 vs stash s153, drift-tree da dichiarare): $CONF (attesa: segno +, D nell'intorno di +22,0 ± rumore+drift)"
+---
+> note "conferma post-pin m-hostargs (pin s156 vs stash s154, drift-tree da dichiarare): $CONF (attesa: segno +, D nell'intorno di +16,0 ± rumore+drift)"
+207c208
+< "$SRC/scripts/pin-server.sh" s154 > "$OUT/pin-server.log" 2>&1
+---
+> "$SRC/scripts/pin-server.sh" s156 > "$OUT/pin-server.log" 2>&1
+213c214
+< note "PROMOZIONE COMPLETA rc=0 (da promo-out/rcb): pin s154 = $H2"
+---
+> note "PROMOZIONE COMPLETA rc=0 (da promo-out/rcb): pin s156 = $H2"
