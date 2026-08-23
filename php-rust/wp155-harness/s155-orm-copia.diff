@@ -1,0 +1,64 @@
+2,5c2,5
+< # s154-orm-coppia.sh — coppia dbal+ORM sul pin s153 = rimisura DOVUTA (pin
+< # nuovo) con attesa BT2 SOTTO-risoluzione (criterio s154-criterio-orm.md; copia
+< # DICHIARATA di s150-orm-coppia.sh, manifest s154-orm-copia.diff; adattamenti:
+< # pin s153 8370c257ae70cc8e, path wp154, blocco ATTESA-BT2): ORM + dbal, N=2 per
+---
+> # s155-orm-coppia.sh — coppia dbal+ORM sul pin s154 = rimisura DOVUTA (pin
+> # nuovo) con attesa CE1 SOTTO-risoluzione (criterio s155-criterio-orm.md; copia
+> # DICHIARATA di s154-orm-coppia.sh, manifest s155-orm-copia.diff; adattamenti:
+> # pin s154 bddc050320a6af4c, path wp155, blocco ATTESA-CE1): ORM + dbal, N=2 per
+13c13
+< H="$REPO/wp154-harness"
+---
+> H="$REPO/wp155-harness"
+20c20
+< VERD="$H/s154-orm-coppia-verdetto.out"
+---
+> VERD="$H/s155-orm-coppia-verdetto.out"
+24c24
+< [ "$(shasum -a 256 "$PHPR" | cut -c1-16)" = "8370c257ae70cc8e" ] || { echo "rc=9 pin!=s153" > "$OUT/rimisura.done"; exit 9; }
+---
+> [ "$(shasum -a 256 "$PHPR" | cut -c1-16)" = "bddc050320a6af4c" ] || { echo "rc=9 pin!=s154" > "$OUT/rimisura.done"; exit 9; }
+107c107
+< print("coppia-s154 (user CPU; pavimenti PARZIALI phpunit --version: orm o=%.3f p=%.3f · dbal o=%.3f p=%.3f)" % (fo, fp, dfo, dfp))
+---
+> print("coppia-s155 (user CPU; pavimenti PARZIALI phpunit --version: orm o=%.3f p=%.3f · dbal o=%.3f p=%.3f)" % (fo, fp, dfo, dfp))
+131,132c131,132
+< # --- ATTESA BT2 (criterio s154-criterio-orm.md p.4, aritmetica meccanica) ---
+< REF_MIN, REF_MAX = 35.52, 35.53   # phpr ORM net @ s150 (s150-orm-coppia-verdetto)
+---
+> # --- ATTESA CE1 (criterio s155-criterio-orm.md p.4, aritmetica meccanica) ---
+> REF_MIN, REF_MAX = 34.76, 34.80   # phpr ORM net @ s153 (s154-orm-coppia-verdetto)
+134c134
+< ATT_LO, ATT_HI = 0.05, 0.15       # attesa pre-registrata SOTTO risoluzione
+---
+> ATT_LO, ATT_HI = 0.03, 0.07       # attesa pre-registrata SOTTO risoluzione
+138c138
+<     print(f"attesa-BT2: phpr_orm_net_new=[{nn[0]:.2f}; {nn[1]:.2f}] ref=[{REF_MIN}; {REF_MAX}] Delta=[{d_min:+.2f}; {d_max:+.2f}] s")
+---
+>     print(f"attesa-CE1: phpr_orm_net_new=[{nn[0]:.2f}; {nn[1]:.2f}] ref=[{REF_MIN}; {REF_MAX}] Delta=[{d_min:+.2f}; {d_max:+.2f}] s")
+140c140
+<         print("attesa-BT2: CIFRA NULLA (parita' rotta) — nessun giudizio")
+---
+>         print("attesa-CE1: CIFRA NULLA (parita' rotta) — nessun giudizio")
+142c142
+<         print(f"attesa-BT2: DIREZIONE GIU' FUORI RUMORE (Delta_min {d_min:.2f} >= {RES}) — OLTRE l'attesa sotto-risoluzione 0,05-0,15: dichiarare")
+---
+>         print(f"attesa-CE1: DIREZIONE GIU' FUORI RUMORE (Delta_min {d_min:.2f} >= {RES}) — OLTRE l'attesa sotto-risoluzione 0,03-0,07: dichiarare")
+144c144
+<         print(f"attesa-BT2: REGRESSIONE SEGNALATA (Delta_max {d_max:.2f} < -{RES}) — indagine PRIMA di ogni altra leva")
+---
+>         print(f"attesa-CE1: REGRESSIONE SEGNALATA (Delta_max {d_max:.2f} < -{RES}) — indagine PRIMA di ogni altra leva")
+146c146
+<         print(f"attesa-BT2: COMPATIBILE (Delta dentro il rumore ±{RES}; attesa 0,05-0,15 SOTTO risoluzione — esito dichiarato, nessuna cifra attribuita a BT2)")
+---
+>         print(f"attesa-CE1: COMPATIBILE (Delta dentro il rumore ±{RES}; attesa 0,03-0,07 SOTTO risoluzione — esito dichiarato, nessuna cifra attribuita a CE1)")
+148c148
+<         print(f"attesa-BT2: NON RISOLTA (intervallo Delta a cavallo di {RES}) — si dichiara, replica eventuale")
+---
+>         print(f"attesa-CE1: NON RISOLTA (intervallo Delta a cavallo di {RES}) — si dichiara, replica eventuale")
+151c151
+< { echo "== s154 coppia dbal+ORM (pin s153 8370c257 vs oracle 8.5.7; criterio s154-criterio-orm.md) =="
+---
+> { echo "== s155 coppia dbal+ORM (pin s154 bddc0503 vs oracle 8.5.7; criterio s155-criterio-orm.md) =="
