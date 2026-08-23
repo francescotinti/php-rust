@@ -29,6 +29,17 @@ CONFERMATO**: il claim della leva REGGE; era l'ATTESA k=0 a essere mal posta
    autoload=false ⇒ k_pre=2 ⇒ **chiamate ∈ [3,25M; 4,87M]**; si risolve solo
    col census ORM al probe s155.
 
+## ADDENDUM post-revisione (2026-08-23, az.rev. S-155 #2 e #3 — run dichiarati a CI ripresa: CONTEGGI, insensibili alla contesa)
+- **Az. #2 CHIUSA**: `ce-true-count.php` (forma autoload=true 1-arg, FQCN 45 B
+  hit, via resolve_class_autoload) sul probe s155: **k=1 INTERO ESATTO,
+  b=16,0 B** (Δn=200000/ΔN=200000; raw sonda-out/cetrue-*.raw) = solo
+  args-Vec ⇒ **CE1 0-alloc CONFERMATO anche sul ramo autoload=true**;
+  perimetro dichiarato: nomi >64 B allocano (LcKey heap, da criterio ce1 p.1).
+- **Az. #3 CHIUSA**: gdc terzo punto GDX=2200 (C=2352): **k=7057 INTERO
+  ESATTO == 1+3×2352 predetto dal fit** (Δn=1.411.400.000/ΔN=200000; b
+  157.749 B/chiamata; raw gdc-out/gdc-2200-*.raw) ⇒ linearità CONFERMATA
+  alla scala ORM; k_ORM=7180 e ~636 chiamate REGGONO.
+
 ## OLTRE-attesa ORM (Δ +0,41/+0,50 vs attesa 0,03–0,07) — meccanismo candidato NOMINATO
 Attesa micro-fondata: 3,25–4,87M chiamate × 15–22 ns ≈ **0,05–0,11 s** ≪ Δ.
 Ma l'edit (b) di CE1 alleggerisce `resolve_class_autoload`, che è il funnel
