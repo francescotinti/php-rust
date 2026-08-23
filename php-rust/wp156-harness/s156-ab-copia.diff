@@ -1,0 +1,53 @@
+2,5c2,5
+< # s154-ab-ce1.sh <BPATH> <BEXP8> <TAG> <R> [DSMOKE_CLASSEXISTS] — LEVA L-CE1
+< # class_exists lookup no-alloc via LcKey (criterio s154-criterio-ce1.md).
+< # COPIA DICHIARATA di s153-ab3.sh coi SOLI adattamenti del criterio:
+< #  (a) GIUDICE: classexists (m-classexists, wp154-harness) con N=10000000
+---
+> # s156-ab-hd2host.sh <BPATH> <BEXP8> <TAG> <R> [DSMOKE_HOSTARGS] — LEVA
+> # estensione L-HD2 forma-2 a CallHostBuiltin (criterio s156-criterio-hd2host.md).
+> # COPIA DICHIARATA di s154-ab-ce1.sh coi SOLI adattamenti del criterio:
+> #  (a) GIUDICE: hostargs (m-hostargs, wp156-harness) con N=10000000
+7,10c7,11
+< #  (b) UB-alloc FALSIFICABILE = 13.8 (2 alloc/call x miheap 6.9, s152/s154);
+< #  (c) guardie = backtrace (giudice BT2, ora guardia) + obj* + le sei;
+< #  (d) A = gemello 2023cbb9 (build fredda del tree corrente, contenuto==pin
+< #      per s154-sonda S2; emenda §7-bis).
+---
+> #  (b) UB-alloc FALSIFICABILE = 13.8 (2 args-Vec/iter x miheap 6.9);
+> #  (c) guardia backtrace RI-RISOLUTA a N=2400000 (m-backtrace24, REGOLE §3
+> #      az.rev. S-154) + obj* + le sei;
+> #  (d) A = gemello 2023cbb9 (pin INVARIATO s154, §7-bis ancora valido);
+> #  (e) lock/verdetto/tag s156.
+23c24
+< VERD="$H/s154-$TAG-verdetto.out"
+---
+> VERD="$H/s156-$TAG-verdetto.out"
+31c32
+< if ! grep -qi "s-154\|s154" "$LOCK" 2>/dev/null; then
+---
+> if ! grep -qi "s-156\|s156" "$LOCK" 2>/dev/null; then
+46,49c47,50
+< src_of() { case "$1" in classexists) echo "$H";; backtrace) echo "$M149";; objalloc|objchurn|objmap|objdatains|objallocni|objdropdef) echo "$M";; *) echo "$M97";; esac; }
+< php_of() { case "$1" in classexists) echo "m-classexists.php";; backtrace) echo "m-backtrace.php";; *) echo "$1.php";; esac; }
+< n_fixed() { case "$1" in classexists) echo 10000000;; backtrace) echo 150000;; arith) echo 150000000;; prop) echo 90000000;; calls) echo 60000000;; str) echo 28000000;; arr) echo 30000000;; re) echo 12000000;; *) echo "";; esac; }
+< CATS_JUDGE="classexists"
+---
+> src_of() { case "$1" in hostargs|backtrace) echo "$H";; objalloc|objchurn|objmap|objdatains|objallocni|objdropdef) echo "$M";; *) echo "$M97";; esac; }
+> php_of() { case "$1" in hostargs) echo "m-hostargs.php";; backtrace) echo "m-backtrace24.php";; *) echo "$1.php";; esac; }
+> n_fixed() { case "$1" in hostargs) echo 10000000;; backtrace) echo 2400000;; arith) echo 150000000;; prop) echo 90000000;; calls) echo 60000000;; str) echo 28000000;; arr) echo 30000000;; re) echo 12000000;; *) echo "";; esac; }
+> CATS_JUDGE="hostargs"
+53c54
+< echo "== s154-ab-ce1 $TAG: A=2023cbb9(gemello tree) B=$BEXP R=$R ordine ALTERNATO; giudice=classexists N=10000000 dichiarato; soglia=max(4, drop-1); UB-alloc falsificabile=13.8 (2 alloc x miheap 6.9); guardie backtrace + obj* + sei; quiescenza rc=$QRC; rc autoritativo = ab-out/$TAG.rc =="
+---
+> echo "== s156-ab-hd2host $TAG: A=2023cbb9(gemello s154) B=$BEXP R=$R ordine ALTERNATO; giudice=hostargs N=10000000 dichiarato; soglia=max(4, drop-1); UB-alloc falsificabile=13.8 (2 args-Vec x miheap 6.9); guardie backtrace24(N=2,4M) + obj* + sei; quiescenza rc=$QRC; rc autoritativo = ab-out/$TAG.rc =="
+79,80c80,81
+< if len(sys.argv) > 3 and sys.argv[3]: dsmoke["classexists"] = float(sys.argv[3])
+< UB = 13.8            # criterio ce1 p.4: 2 alloc/call x miheap 6.9 (s152/s154)
+---
+> if len(sys.argv) > 3 and sys.argv[3]: dsmoke["hostargs"] = float(sys.argv[3])
+> UB = 13.8            # criterio hd2host p.4: 2 args-Vec/iter x miheap 6.9
+97c98
+< JUDGES = ("classexists",)
+---
+> JUDGES = ("hostargs",)
