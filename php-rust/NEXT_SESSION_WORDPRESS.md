@@ -44,14 +44,13 @@ media 2,456–2,510 · **ORM 6,972–7,053** · dbal 7,385–7,422 · corpus
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
 args-Vec hostcall H-D (sito nominato S-155) · census ORM probe s155 (p.1) ·
-fix estrazione summary dbal phpr nello script coppia (az.rev.#4, ereditato
-da s154; da sanare alla PROSSIMA copia dichiarata della coppia ORM) ·
+fix estrazione summary dbal phpr (az.rev.#4, alla prossima copia coppia) ·
 __reflect_* ~8,7M · array_map 7,7M (istruttoria forma) · gamba server census
 (5°) · CI: corpus-FAIL d'ambiente su 3 test backtrace (nomi nel verbale s155;
 nei gate di record passano) · MethodCall.borrow k=2 · §3.24+§3.23 · slot-load ·
 §3.22 · depr. float→int · warning ×2 · div. RMW · objmap 43,4 → GC · evalcls
 316,9× · refl 42,4× · re +2 · §3.13/§3.12-i/§3.14/§3.21 · get_gc · latin1 ·
-dbal 10 nomi · gdc DECLASSATA (~636 chiamate, 0,031 s: micro-judged se mai).
+dbal 10 nomi · gdc DECLASSATA (~636 chiamate).
 
 ## NON riproporre (i veti restano; dettaglio nei concili archiviati)
 **S-155: attese-conteggio su census per-NOME senza il termine di PLUMBING
