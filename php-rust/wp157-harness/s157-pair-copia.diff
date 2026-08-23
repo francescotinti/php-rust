@@ -1,0 +1,71 @@
+2,4c2,4
+< # s155-pair.sh <tentativo> — S-155 p.1: coppia full/media WP @ pin s154 (DOVUTA: pin nuovo)
+< # criteri s132/s146/s148 EREDITATI INVARIATI + s155-criterio-pair-t6.md
+< # (GIUDIZIO CANONICO a MEDIANA per finestra vs t1=1,799 t2=1,738 t3=1,789 t4=1,781 t5=1,757 —
+---
+> # s157-pair.sh <tentativo> — S-157 p.1: coppia full/media WP @ pin s156 (DOVUTA: pin nuovo)
+> # criteri s132/s146/s148 EREDITATI INVARIATI + s157-criterio-pair-t7.md
+> # (GIUDIZIO CANONICO a MEDIANA per finestra vs t1=1,799 t2=1,738 t3=1,789 t4=1,781 t5=1,757 t6=1,771 —
+6,9c6,10
+< # COPIA DICHIARATA di wp154-harness/s154-pair.sh (collaudo: copia-gate +
+< # manifest s155-pair-copia.diff) coi SOLI adattamenti: nomi s155/pair155/
+< # wp155-harness; pin s154 (phpr bddc0503 + server b3cf348f); header del
+< # giudice; mediane storiche con t5=1,757 (banda giudizio INVARIATA [1,738;1,799]).
+---
+> # COPIA DICHIARATA di wp155-harness/s155-pair.sh (collaudo: copia-gate +
+> # manifest s157-pair-copia.diff) coi SOLI adattamenti: nomi s157/pair157/
+> # wp157-harness; pin s156 (phpr 42efea3e + server ef89630f); header del
+> # giudice; mediane storiche con t6=1,771 (banda giudizio INVARIATA [1,738;1,799]);
+> # attesa di leva nel messaggio GIU': HD2-hostcall (non CE1), dichiarata piccola/nulla.
+13c14
+< # rc autoritativo = SOLO pair-out/pair155-<tentativo>.done scritto QUI.
+---
+> # rc autoritativo = SOLO pair-out/pair157-<tentativo>.done scritto QUI.
+17c18
+< H="$REPO/wp155-harness"
+---
+> H="$REPO/wp157-harness"
+22c23
+< VERD="$H/s155-pair-verdetto-$T.out"
+---
+> VERD="$H/s157-pair-verdetto-$T.out"
+27c28
+< DONE="$OUT/pair155-$T.done"
+---
+> DONE="$OUT/pair157-$T.done"
+36,37c37,38
+< PIN_ATTESO="bddc050320a6af4c"
+< SRV_ATTESO="b3cf348f69739edc"
+---
+> PIN_ATTESO="42efea3e34feb390"
+> SRV_ATTESO="ef89630f9c7408c3"
+145,146c146,147
+< print(f"== s155 coppia WP full+media sul pin s154 tentativo={T} (criteri s132/s146/s148 EREDITATI + s155-criterio-pair-t6.md: giudizio a MEDIANA per finestra, az.rev.3 S-149) ==")
+< print(f"grade=VERDICT  # derivazione meccanica dai .time; rc autoritativo = pair-out/pair155-{T}.done")
+---
+> print(f"== s157 coppia WP full+media sul pin s156 tentativo={T} (criteri s132/s146/s148 EREDITATI + s157-criterio-pair-t7.md: giudizio a MEDIANA per finestra, az.rev.3 S-149) ==")
+> print(f"grade=VERDICT  # derivazione meccanica dai .time; rc autoritativo = pair-out/pair157-{T}.done")
+219,220c220,221
+<         # s155-criterio-pair-t6.md p.2 (az.rev.3 S-149): GIUDIZIO CANONICO a
+<         # MEDIANA per finestra vs mediane storiche t1=1,799 t2=1,738 t3=1,789 t4=1,781 t5=1,757;
+---
+>         # s157-criterio-pair-t7.md p.2 (az.rev.3 S-149): GIUDIZIO CANONICO a
+>         # MEDIANA per finestra vs mediane storiche t1=1,799 t2=1,738 t3=1,789 t4=1,781 t5=1,757 t6=1,771;
+223,228c224,229
+<         med_t6 = statistics.median(props)
+<         print(f"mediana_t6={med_t6:.3f} (N={len(props)} coppie proprie ON PULITE; mediane storiche t1=1.799 t2=1.738 t3=1.789 t4=1.781 t5=1.757)")
+<         if MED_LO <= med_t6 <= MED_HI:
+<             print(f"giudizio_MEDIANA (canonico, criterio t6 p.2): COMPATIBILE (mediana in [{MED_LO}; {MED_HI}]) — nessun claim")
+<         elif med_t6 < MED_LO:
+<             print(f"giudizio_MEDIANA (canonico, criterio t6 p.2): direzione GIU' SEGNALATA (mediana {med_t6:.3f} < {MED_LO}) — attesa CE1 su WP dichiarata piccola/nulla: NON attribuibile senza census proprio")
+---
+>         med_t7 = statistics.median(props)
+>         print(f"mediana_t7={med_t7:.3f} (N={len(props)} coppie proprie ON PULITE; mediane storiche t1=1.799 t2=1.738 t3=1.789 t4=1.781 t5=1.757 t6=1.771)")
+>         if MED_LO <= med_t7 <= MED_HI:
+>             print(f"giudizio_MEDIANA (canonico, criterio t7 p.2): COMPATIBILE (mediana in [{MED_LO}; {MED_HI}]) — nessun claim")
+>         elif med_t7 < MED_LO:
+>             print(f"giudizio_MEDIANA (canonico, criterio t7 p.2): direzione GIU' SEGNALATA (mediana {med_t7:.3f} < {MED_LO}) — attesa HD2-hostcall su WP dichiarata piccola/nulla: NON attribuibile senza census proprio")
+230c231
+<             print(f"giudizio_MEDIANA (canonico, criterio t6 p.2): REGRESSIONE SEGNALATA (mediana {med_t6:.3f} > {MED_HI}) — indagine PRIMA di ogni altra leva")
+---
+>             print(f"giudizio_MEDIANA (canonico, criterio t7 p.2): REGRESSIONE SEGNALATA (mediana {med_t7:.3f} > {MED_HI}) — indagine PRIMA di ogni altra leva")
