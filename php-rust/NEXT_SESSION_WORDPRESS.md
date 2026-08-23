@@ -38,7 +38,6 @@ media 2,456–2,510 · **ORM 6,972–7,053** · dbal 7,385–7,422 · corpus
    ~7 ns/chiamata × N hostcall dal census p.1 = attesa FONDATA prima
    dell'edit). Alternative per NOME: __reflect_* famiglia ~8,7M ·
    array_map 7,7M (PRIMA istruttoria di forma: k dipende da arità/callback).
-3. Ratifiche utente se al contatto: T2/A2 (sospensione) · perimetro A2.
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
 args-Vec hostcall H-D (sito nominato S-155) · census ORM probe s155 (p.1) ·
@@ -48,8 +47,7 @@ debug_backtrace_limit, debug_backtrace_options — nei gate di record passano;
 apparato) · MethodCall.borrow k=2 · §3.24+§3.23 backtrace · slot-load 0,99× ·
 §3.22 · depr. float→int · warning ×2 · div. RMW · objmap 43,4 → GC · evalcls
 316,9× · refl 42,4× · re +2 · §3.13/§3.12-i/§3.14/§3.21 · get_gc · latin1 ·
-dbal 10 nomi · get_declared_classes DECLASSATA (~636 chiamate, 0,031 s:
-micro-judged se mai).
+dbal 10 nomi · gdc DECLASSATA (~636 chiamate, 0,031 s: micro-judged se mai).
 
 ## NON riproporre (i veti restano; dettaglio nei concili archiviati)
 **S-155: attese-conteggio su census per-NOME senza il termine di PLUMBING
