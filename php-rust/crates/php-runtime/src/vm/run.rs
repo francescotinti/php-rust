@@ -3656,14 +3656,43 @@ impl<'m> super::Vm<'m> {
                     let _s149 = php_types::memcensus::s149_name_scope(&name[..]);
                     // An evaluator-only host builtin (Session B): it may invoke a
                     // user callable via `call_callable` (a nested `run_loop`).
-                    let args = self.pop_keys(top, *argc);
+                    // HD2-hostcall (S-156): per arità ≤4 gli argomenti passano
+                    // per POP DIRETTI in un array nativo (ordine sorgente ==
+                    // split_off di pop_keys) e i nomi convertiti dispacciano
+                    // sulla slice — niente args-Vec (canale H-D, 1 alloc ×
+                    // 16-64 B/chiamata). Un nome NON convertito ricostruisce il
+                    // Vec dagli stessi valori (1 alloc, identico a prima, più
+                    // un match perso — dichiarato). Il contratto di visibilità
+                    // è quello storico di pop_keys: gli argomenti vivono fuori
+                    // dal frame durante la chiamata (anche nei run_loop
+                    // annidati del builtin).
                     // Flush this builtin's own diagnostics at its call line, like
                     // `run_value_builtin` does for registry builtins — otherwise a
                     // warning it pushes (e.g. header()'s "headers already sent")
                     // renders at a later, wrong line.
                     let line = self.cur_line(top);
-                    self.flush_diags(line)?;
-                    let result = self.dispatch_host_builtin(&name, args)?;
+                    let result = if *argc <= 4 {
+                        let n = *argc as usize;
+                        let mut buf = [Zval::Null, Zval::Null, Zval::Null, Zval::Null];
+                        for slot in buf[..n].iter_mut().rev() {
+                            *slot = self.frames[top].stack.pop().expect("host builtin args");
+                        }
+                        self.flush_diags(line)?;
+                        match self.dispatch_host_builtin_slice(&name, &mut buf[..n]) {
+                            Some(result) => result?,
+                            None => {
+                                let mut args = Vec::with_capacity(n);
+                                for slot in &mut buf[..n] {
+                                    args.push(std::mem::replace(slot, Zval::Null));
+                                }
+                                self.dispatch_host_builtin(&name, args)?
+                            }
+                        }
+                    } else {
+                        let args = self.pop_keys(top, *argc);
+                        self.flush_diags(line)?;
+                        self.dispatch_host_builtin(&name, args)?
+                    };
                     self.flush_diags(line)?;
                     // `pcntl_async_signals(true)`: host-builtin returns are the
                     // async delivery points (a self-directed `posix_kill` is

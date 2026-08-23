@@ -2590,7 +2590,7 @@ impl<'m> super::Vm<'m> {
     /// fully-qualified name (case-insensitively, a leading `\` stripped) against
     /// each trait's real name — so `trait_exists('IFoo')` inside namespace `foo`
     /// is `false` even when `foo\IFoo` exists. Autoload is attempted when allowed.
-    pub(super) fn ho_trait_exists(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+    pub(super) fn ho_trait_exists(&mut self, args: &[Zval]) -> Result<Zval, PhpError> {
         let Some(first) = args.first() else { return Ok(Zval::Bool(false)) };
         let raw = convert::to_zstr_cast(first, &mut self.diags).as_bytes().to_vec();
         let bare = raw.strip_prefix(b"\\").unwrap_or(&raw).to_vec();
@@ -3084,7 +3084,7 @@ impl<'m> super::Vm<'m> {
 
     /// `function_exists($name)` (Session B4): whether `name` is a user function, a
     /// registry builtin, or a host builtin. A leading `\` is stripped.
-    pub(super) fn ho_function_exists(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+    pub(super) fn ho_function_exists(&mut self, args: &[Zval]) -> Result<Zval, PhpError> {
         let Some(a) = args.first() else {
             return Err(PhpError::ArgumentCountError(
                 "function_exists() expects exactly 1 argument, 0 given".to_string(),
@@ -3095,7 +3095,7 @@ impl<'m> super::Vm<'m> {
         let name = b.strip_prefix(b"\\").unwrap_or(b);
         Ok(Zval::Bool(self.is_name_callable(name)))
     }
-    pub(super) fn ho_class_exists(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+    pub(super) fn ho_class_exists(&mut self, args: &[Zval]) -> Result<Zval, PhpError> {
         // `Generator` and `Closure` are always-present engine classes phpr models
         // as special zvals (no ClassId) — class_exists() must report them present
         // (PHPUnit's assertInstanceOf(Generator::class, …)) and must decide
@@ -3106,7 +3106,7 @@ impl<'m> super::Vm<'m> {
         if args.first().and_then(Self::engine_special_class_name).is_some() {
             return Ok(Zval::Bool(true));
         }
-        let cid = self.resolve_named_class_with_autoload(&args)?;
+        let cid = self.resolve_named_class_with_autoload(args)?;
         if matches!(cid, Some(c) if self.classes[c].instantiable != Instantiable::Interface) {
             return Ok(Zval::Bool(true));
         }
@@ -3163,15 +3163,15 @@ impl<'m> super::Vm<'m> {
         self.seed_aliases.push((alias, orig));
         Ok(Zval::Bool(true))
     }
-    pub(super) fn ho_interface_exists(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
-        let cid = self.resolve_named_class_with_autoload(&args)?;
+    pub(super) fn ho_interface_exists(&mut self, args: &[Zval]) -> Result<Zval, PhpError> {
+        let cid = self.resolve_named_class_with_autoload(args)?;
         let is_iface = matches!(cid, Some(c) if self.classes[c].instantiable == Instantiable::Interface);
         Ok(Zval::Bool(is_iface))
     }
     /// `method_exists($object_or_class, $method)` (Session B4): whether the class of
     /// the object / named class defines `method` (walking the inheritance chain). An
     /// unresolvable target is `false` (no error, unlike `get_class_methods`).
-    pub(super) fn ho_method_exists(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+    pub(super) fn ho_method_exists(&mut self, args: &[Zval]) -> Result<Zval, PhpError> {
         let (Some(a0), Some(a1)) = (args.first(), args.get(1)) else {
             return Err(PhpError::ArgumentCountError(
                 "method_exists() expects exactly 2 arguments".to_string(),
@@ -4357,7 +4357,7 @@ impl<'m> super::Vm<'m> {
             }
         }
     }
-    pub(super) fn ho_debug_backtrace(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+    pub(super) fn ho_debug_backtrace(&mut self, args: &[Zval]) -> Result<Zval, PhpError> {
         // PHP 8.5: debug_backtrace(int $options = DEBUG_BACKTRACE_PROVIDE_OBJECT,
         // int $limit = 0). BT1 (S-149): prima options/limit erano IGNORATI —
         // pila intera con tutti gli args clonati a ogni chiamata (275,0M
