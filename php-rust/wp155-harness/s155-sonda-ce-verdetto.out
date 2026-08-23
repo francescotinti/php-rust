@@ -1,0 +1,17 @@
+== s155 sonda ce-count post-CE1 (criterio s155-criterio-sonda-ce.md; ricetta PREP s151; CONTEGGI mai tempo) 2026-08-23 15:00:11 ==
+S0 guardie: lock presente, niente cargo/rustc, pin phpr=bddc050320a6af4c server=b3cf348f69739edc, hold assente
+S1 copia-fedele: PASS diff -r crates rc=0 (copia /private/tmp/phpr-census-s155-src)
+S2 cluster 0x838-0x847 (16 B): LC_UUID
+S2 cluster 0xe4c4b0-0xe4c4cf (32 B): __LINKEDIT/firma
+S2 confronto byte: 48 byte diversi in 2 cluster (linkedit fileoff=13615104)
+S2 strings: diff SOLO righe data/ora mimalloc (ammesse, emenda §1-bis raffinata)
+S2 identità a CONTENUTO: PASS (build fredda fbcbfccd847ed9ce vs pin bddc050320a6af4c: cluster tutti nominati — LC_UUID + firma __LINKEDIT + banner mimalloc; emenda §1-bis)
+S3 diff census s151 applicato (10 file; offset nel log)
+S4 probe s155: hash16=3e6b5008482c32d0 — conservato x2 (harness + stash), verificato
+S5 smoke: rc=0 (checker s151 a esiti esatti, attesi INVARIATI)
+S6 ce-count: stdout ESATTI ai due N, raw presenti
+k_post = 1.000 alloc/chiamata (INTERO ESATTO; Δn=400000 su Δchiamate=400000) · b_post = 32.0 B/chiamata (baseline s152: k=2, 41,5 B/med)
+attesa k=0: FUORI (si torna al sorgente prima d'ogni conclusione)
+riconciliazione: D_alloc = (2-1.0) x miheap [6,7;6,9] = [6.7; 6.9] ns/iter · D misurato=+22,0 (ab-ce1b)
+residuo NON-alloc R = [15.1; 15.3] ns/iter — canali candidati da NOMINARE (memcpy to_vec evitato, byte-loop to_ascii_lowercase evitato, hash su chiave stack); nessuna cifra per canale senza mock dedicato
+S7 riconciliazione scritta. rc=0
