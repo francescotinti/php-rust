@@ -3662,7 +3662,7 @@ impl<'m> super::Vm<'m> {
                     // sulla slice — niente args-Vec (canale H-D, 1 alloc ×
                     // 16-64 B/chiamata). Un nome NON convertito ricostruisce il
                     // Vec dagli stessi valori (1 alloc, identico a prima, più
-                    // un match perso — dichiarato). Il contratto di visibilità
+                    // DUE match persi: qui e delega). Il contratto di visibilità
                     // è quello storico di pop_keys: gli argomenti vivono fuori
                     // dal frame durante la chiamata (anche nei run_loop
                     // annidati del builtin).
