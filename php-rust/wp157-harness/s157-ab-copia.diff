@@ -1,0 +1,65 @@
+2,5c2,5
+< # s156-ab-hd2host.sh <BPATH> <BEXP8> <TAG> <R> [DSMOKE_HOSTARGS] — LEVA
+< # estensione L-HD2 forma-2 a CallHostBuiltin (criterio s156-criterio-hd2host.md).
+< # COPIA DICHIARATA di s154-ab-ce1.sh coi SOLI adattamenti del criterio:
+< #  (a) GIUDICE: hostargs (m-hostargs, wp156-harness) con N=10000000
+---
+> # s157-ab-al1.sh <BPATH> <BEXP8> <TAG> <R> [DSMOKE_MISSLOAD] — LEVA
+> # L-AL1 miss/autoload plumbing 0-alloc (criterio s157-criterio-al1.md).
+> # COPIA DICHIARATA di s156-ab-hd2host.sh coi SOLI adattamenti del criterio:
+> #  (a) GIUDICE: missload (m-missload, wp157-harness) con N=10000000
+7,11c7,12
+< #  (b) UB-alloc FALSIFICABILE = 13.8 (2 args-Vec/iter x miheap 6.9);
+< #  (c) guardia backtrace RI-RISOLUTA a N=2400000 (m-backtrace24, REGOLE §3
+< #      az.rev. S-154) + obj* + le sei;
+< #  (d) A = gemello 2023cbb9 (pin INVARIATO s154, §7-bis ancora valido);
+< #  (e) lock/verdetto/tag s156.
+---
+> #  (b) UB-alloc FALSIFICABILE = 20.7 (3 alloc/miss x miheap 6.9);
+> #  (c) guardie: hostargs (m-hostargs N=10M, NUOVA: hit-path class_exists) +
+> #      backtrace24 (N=2400000) + obj* + le sei; comparatore STRETTO
+> #      pre-registrato (az.rev. S-156 #1): morde sse D < -soglia;
+> #  (d) A = GEMELLO RICOSTRUITO sul tree s156 (atteso 42efea3e, criterio p.6);
+> #  (e) lock/verdetto/tag s157.
+19c20
+< A="/Volumes/Extreme Pro/Claude/phpr-old-target/release/phpr-s154-gemelloA"
+---
+> A="/Volumes/Extreme Pro/Claude/phpr-old-target/release/phpr-s156-gemelloA"
+24c25
+< VERD="$H/s156-$TAG-verdetto.out"
+---
+> VERD="$H/s157-$TAG-verdetto.out"
+32c33
+< if ! grep -qi "s-156\|s156" "$LOCK" 2>/dev/null; then
+---
+> if ! grep -qi "s-157\|s157" "$LOCK" 2>/dev/null; then
+41c42
+< [ "$(shasum -a 256 "$A" | cut -c1-8)" = "2023cbb9" ] || { echo "A != gemello 2023cbb9 — STOP" | tee -a "$VERD"; echo 1 > "$RC"; exit 1; }
+---
+> [ "$(shasum -a 256 "$A" | cut -c1-8)" = "42efea3e" ] || { echo "A != gemello 42efea3e (ricostruito tree s156) — STOP" | tee -a "$VERD"; echo 1 > "$RC"; exit 1; }
+47,51c48,52
+< src_of() { case "$1" in hostargs|backtrace) echo "$H";; objalloc|objchurn|objmap|objdatains|objallocni|objdropdef) echo "$M";; *) echo "$M97";; esac; }
+< php_of() { case "$1" in hostargs) echo "m-hostargs.php";; backtrace) echo "m-backtrace24.php";; *) echo "$1.php";; esac; }
+< n_fixed() { case "$1" in hostargs) echo 10000000;; backtrace) echo 2400000;; arith) echo 150000000;; prop) echo 90000000;; calls) echo 60000000;; str) echo 28000000;; arr) echo 30000000;; re) echo 12000000;; *) echo "";; esac; }
+< CATS_JUDGE="hostargs"
+< CATS_GUARD="backtrace objdropdef objchurn objdatains objalloc objallocni objmap arith prop calls str arr re"
+---
+> src_of() { case "$1" in missload|hostargs|backtrace) echo "$H";; objalloc|objchurn|objmap|objdatains|objallocni|objdropdef) echo "$M";; *) echo "$M97";; esac; }
+> php_of() { case "$1" in missload) echo "m-missload.php";; hostargs) echo "m-hostargs.php";; backtrace) echo "m-backtrace24.php";; *) echo "$1.php";; esac; }
+> n_fixed() { case "$1" in missload) echo 10000000;; hostargs) echo 10000000;; backtrace) echo 2400000;; arith) echo 150000000;; prop) echo 90000000;; calls) echo 60000000;; str) echo 28000000;; arr) echo 30000000;; re) echo 12000000;; *) echo "";; esac; }
+> CATS_JUDGE="missload"
+> CATS_GUARD="hostargs backtrace objdropdef objchurn objdatains objalloc objallocni objmap arith prop calls str arr re"
+54c55
+< echo "== s156-ab-hd2host $TAG: A=2023cbb9(gemello s154) B=$BEXP R=$R ordine ALTERNATO; giudice=hostargs N=10000000 dichiarato; soglia=max(4, drop-1); UB-alloc falsificabile=13.8 (2 args-Vec x miheap 6.9); guardie backtrace24(N=2,4M) + obj* + sei; quiescenza rc=$QRC; rc autoritativo = ab-out/$TAG.rc =="
+---
+> echo "== s157-ab-al1 $TAG: A=42efea3e(gemello RICOSTRUITO tree s156) B=$BEXP R=$R ordine ALTERNATO; giudice=missload N=10000000 dichiarato; soglia=max(4, drop-1); UB-alloc falsificabile=20.7 (3 alloc/miss x miheap 6.9); guardie hostargs(N=10M) + backtrace24(N=2,4M) + obj* + sei, comparatore STRETTO; quiescenza rc=$QRC; rc autoritativo = ab-out/$TAG.rc =="
+80,81c81,82
+< if len(sys.argv) > 3 and sys.argv[3]: dsmoke["hostargs"] = float(sys.argv[3])
+< UB = 13.8            # criterio hd2host p.4: 2 args-Vec/iter x miheap 6.9
+---
+> if len(sys.argv) > 3 and sys.argv[3]: dsmoke["missload"] = float(sys.argv[3])
+> UB = 20.7            # criterio al1 p.3: 3 alloc/miss x miheap 6.9
+98c99
+< JUDGES = ("hostargs",)
+---
+> JUDGES = ("missload",)
