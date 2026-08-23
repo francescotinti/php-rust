@@ -35,6 +35,14 @@ promo s156) · WP t6 1,771 · media 2,456–2,510 · ORM 6,972–7,053 · dbal
    macro a due sezioni è già in piedi); (c) array_map 7,68M (forma: k dipende
    da arità/callback).
 
+3. **Az.rev. S-156** (semantica, REGGE CON RILIEVI): (1) guardia backtrace
+   col COMPARATORE pre-registrato nel criterio (margine zero −8,3/−8,3 non
+   si ripete); (2) arbitrato fuori-banda smoke↔R5 (4,5>4,0) + drift-tree
+   quantificato PRIMA di usare +16,0 come cifra di leva; (3) sonda
+   oracle↔pin `debug_backtrace()` dentro autoloader da class_exists →
+   catalogo divergenze (contratto storico, pre-HD2); (4) fixture a ruoli
+   distinti per ogni nome slice 2+ arg; (#5 commento: chiusa in-sessione).
+
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
 miss/autoload class_exists (E 4,8–6,05M, S-156 istruttoria) · __reflect_*
 slice tranche-2 · array_map 7,68M (istruttoria forma) · gamba server census
