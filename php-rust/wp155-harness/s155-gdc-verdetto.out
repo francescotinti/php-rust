@@ -1,0 +1,10 @@
+== s155 gdc-count (criterio s155-criterio-gdc.md; CONTEGGI mai tempo) 2026-08-23 15:17:03 ==
+S0 guardie: lock presente, niente cargo/rustc, probe 3e6b5008482c32d0 == verdetto sonda
+S1 gdc-count: stdout ESATTI ai 4 run; C0=152 C200=352 (+200 OK)
+k(GDX=0) = 457.000 alloc/chiamata (INTERO ESATTO; Δn=91400000 su ΔN=200000) · b = 11479.0 B/chiamata
+k(GDX=200) = 1057.000 alloc/chiamata (INTERO ESATTO; Δn=211400000 su ΔN=200000) · b = 24149.0 B/chiamata
+fit: per_classe = 3.0000 alloc · fisso = 1.00 (C0=152)
+ipotesi s152 (array ricostruito per chiamata, per_classe~1): FALSIFICATA (si torna al sorgente prima d'ogni conclusione)
+proiezione ORM: k_ORM = fisso + per_classe x 2393 = 7180.0 ⇒ chiamate ≈ 4.563.808 / 7180.0 = 636
+nota di scala (nessuna attesa di leva qui): alloc 4,56M x miheap [6,7;6,9] ns ≈ [0.031; 0.031] s puro-alloc — il criterio di LEVA (se mai) è atto separato coi canali copy/free nominati
+S2 aritmetica scritta. rc=0
