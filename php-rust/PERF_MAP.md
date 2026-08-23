@@ -1,17 +1,23 @@
 # PERF_MAP — phpr vs PHP oracle 8.5.7, mappa multi-workload
 
-Aggiornata: **2026-08-23 (S-155)** · pin phpr **s154 bddc0503** + server
-**s154 b3cf348f** INVARIATI (**S-155 = coppia @ s154 SALDATA: WP t6 mediana
-1,771 COMPATIBILE (6/6 pulite, banda_ON 0,022 record) · media 2,456–2,510 ·
-ORM 6,972–7,053 a CAVALLO di 7 — gamba migliore 6,97, «sotto 7» a
-intervallo intero (rett. rev.) — Δ +0,41/+0,50 giù fuori rumore,
-OLTRE-attesa CE1 istruita: funnel resolve_class_autoload 11 siti,
-magnitudine non ripartita · dbal 7,385–7,422 · sonda ce-count k=1 SPIEGATO
-(args-Vec pop_keys attribuito al nome; CE1 0-alloc CONFERMATO su entrambi i
-rami — controlli fe-count e ce-true k=1 b=16,0 ESATTI) · gdc-count: ~636
-chiamate (terzo punto k=7057==predetto), 0,031 s ⇒ fetta NON pagante
-DECLASSATA · verdetti `wp155-harness/s155-*.out`
-+ `s155-ce-istruttoria.md`); storico S-154 (**PROMOZIONE L-CE1 «class_exists lookup no-alloc
+Aggiornata: **2026-08-23 (S-156)** · pin phpr **s156 42efea3e** + server
+**s156 ef89630f** NUOVI (**S-156 = PROMOZIONE leva HD2-hostcall «args-Vec
+dei host-builtin: arità ≤4 su slice, 6 nomi convertiti» con catena piena
+rc=0 al t2**: A/B R=5 vs GEMELLO 2023cbb9 D=+16,0 ns/iter su m-hostargs
+(2 hostcall/iter; UB 13,8+rumore IN BANDA: canale alloc spiega tutto), 13
+guardie ok, disasm run_loop bl +19 localizzato; t1 STOP dente loc A4 →
+salita DICHIARATA (mod.rs 25742 · run.rs 6815, candidato al byte); micro
+promo 5,4·5,5·4,7·4,2·3,2·2,6; census ORM post-CE1 RIFONDATO: chiamate
+class_exists ∈ [1,23M;2,46M], residuo miss/autoload E ∈ [4,82M;6,05M]
+(fetta nuova), funnel CE1(b) apporzionato — ce −2,46M ·
+__reflect_class_real_name −1,28M · __reflect_class_loc −452k; verdetti
+`wp156-harness/s156-*.out` + `s156-census-istruttoria.md`; **coppia @ s156
+DOVUTA → S-157** col fix dbal LC_ALL=C); storico S-155 (coppia @ s154
+SALDATA: WP t6 mediana 1,771 COMPATIBILE, banda_ON 0,022 record · media
+2,456–2,510 · ORM 6,972–7,053 a CAVALLO di 7, Δ +0,41/+0,50 giù fuori
+rumore, funnel istruito · dbal 7,385–7,422 · ce-count k=1 = args-Vec, CE1
+0-alloc confermato · gdc ~636 chiamate NON pagante; verdetti
+`wp155-harness/s155-*.out` + `s155-ce-istruttoria.md`); storico S-154 (**PROMOZIONE L-CE1 «class_exists lookup no-alloc
 via LcKey» con catena piena rc=0**: A/B R=5 vs GEMELLO D=+22,0 ns/iter su
 m-classexists (111→89, −20%), segni 5/5, riconc. smoke 2,0, conferma
 post-pin +22,0 ESATTO 5/5; guardia backtrace morsa a 1 tick e ARBITRATA
@@ -133,11 +139,12 @@ cifre dai verdetti `.out`. Regola di lettura: rapporti PER workload, MAI aggrega
 | **doctrine/orm** (3484 test) | **6,972–7,053 net — a CAVALLO di 7 (gamba migliore 6,97; «sotto 7» si dichiara a intervallo intero, rett. rev. S-155)** | 2/lato | **S-155 RIMISURATA @ pin s154** (stesso verdetto s155; parità 16 nomi==; phpr net [34,30;34,35] vs [34,76;34,80] @ s153 ⇒ Δ +0,41/+0,50 GIÙ FUORI RUMORE, OLTRE-attesa CE1 0,03–0,07: istruttoria `s155-ce-istruttoria.md` — meccanismo candidato = funnel resolve_class_autoload 11 siti, magnitudine NON ripartita) · storico S-154 @ s153: 7,051–7,073 · **S-150 @ pin s150 = GIUDIZIO SCOMMESSA BT1: VINTA OLTRE-ATTESA** (stesso verdetto; parità 16 nomi ==; contesa ok): **Δ phpr −6,07/−6,70 s vs s145 [41,60; 42,22]→[35,52; 35,53]** — attesa pre-registrata 0,8–3,1 s = PAVIMENTO solo-alloc (costruzione ~50 frame non prezzata, dichiarato); BT1 UNICA leva s145→s150 ⇒ direzione+meccanismo firmati · storico **S-147 @ s145: 8,370–8,427** (stesso verdetto; parità 16 nomi == baseline; leg1+oracle1 SEGNALATE ictx, leg2 PULITA 8,370): vs 8,59–8,71 @ s138 ⇒ **direzione ↓ INDICATIVA** (3 leve HC1+RD1+FR1 spedite in mezzo, nessun A/B proprio: magnitudine non ripartita, REGOLE §4); **denominatori KILL KS-146-1: soglia 0,7% = 0,293 s** · storico **S-139 @ s138: 8,59–8,71** (verdetto s139; oracle `memory_limit=-1` §3.14; parità 16 nomi == baseline; phpr1 ictx segnalata ma stesso-lato <0,2% ⇒ valida): vs 8,43–8,56 @ s134 ⇒ **FERMO/lieve ↑** — REPERTO pre-registrato (criterio p.6): le TRE leve dim-write s135→s138 (AP1+FD1+RMW) NON muovono la suite (l'attesa ↓ è FALSIFICATA: `$this->elements[$k]=$v` non è fetta misurabile del tempo ORM, o il perimetro FD1 lì non morde) ⇒ la prossima leva si sceglie sul profilo SUITE (churn clone/drop, insert/lookup — come già indicava S-135) |
 | **composer install OFFLINE** | **1,863–1,891 net** (raw 1,820–1,847) | 2/lato | S-128 @ s127b, PRIMA misura col numeratore vivo (cure ondata-2); composer ESTRATTO, vendor_ok bilaterale, contesa ok (ictx/s); floors 0,07/0,06; sys≈user (~2,3 s/lato) ⇒ **cifra user-only NON confrontabile col full (user+sys): su user+sys sarebbe ~1,3** (rev. S-128 az.5); residuo phpcs config-set (§3.19-quinquies); verdetto `wp128-harness/s128-compoff-verdetto.out` |
 
-## Micro-categorie (R=5, pin s153 dalla catena promo BT2; tappa ≤3×)
+## Micro-categorie (R=5, pin s156 dalla catena promo HD2-hostcall; tappa ≤3×)
 
 | arith | prop | calls | str | arr | re | hintcall | dimread |
 |---|---|---|---|---|---|---|---|
-| 5,5 | 5,5 | 4,7 | 4,3 | **3,2** | **2,6** ✅ | **7,3** (S-140, non rimis.) | **4,3** (m-dimread; FR1 istruttoria CHIUSA S-150: +3,0 su dimrmw10 = prezzo strutturale, nessun revert) |
+| 5,4 | 5,5 | 4,7 | 4,2 | **3,2** | **2,6** ✅ | **7,3** (S-140, non rimis.) | **4,3** (m-dimread; FR1 istruttoria CHIUSA S-150: +3,0 su dimrmw10 = prezzo strutturale, nessun revert) |
+(rif s153: 5,5·5,5·4,7·4,3·3,2·2,6 · promo s154 in NEXT: 5,5·5,6·4,8·4,3·3,3·2,5)
 
 m-backtrace (giudice BT1/BT2): phpr **733→467 ns/iter** @ s153 (D proprio
 +266,7 firmato); bilaterale ~3,0× DERIVATA (oracle rif s150 ~133 non
