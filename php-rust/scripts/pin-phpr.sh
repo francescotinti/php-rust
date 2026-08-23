@@ -15,7 +15,20 @@ BIN="$HOME/Claude/php-rust-output/release/phpr"
 ORACLE=/opt/homebrew/opt/php/bin/php
 MICRO="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp97-harness/micro/arith_small.php"
 STASH="/Volumes/Extreme Pro/Claude/phpr-old-target/release"
-TAG="${1:?uso: pin-phpr.sh <tag, es. s107>}"
+# MODALITÀ BRACCIO/CANDIDATO (az.rev. S-154 #4): `pin-phpr.sh --braccio <tag>
+# <binario>` — stesso atto unico (smoke parità 2 modi + no-clobber + stash +
+# hash-verify + registro) su un binario di BRACCIO (gemello/candidato da
+# target dedicato). La riga a registro è marcata BRACCIO (non pin): i gate
+# del protocollo PIN non sono implicati.
+MODE=pin
+if [ "${1:-}" = "--braccio" ]; then
+  MODE=braccio; shift
+  TAG="${1:?uso: pin-phpr.sh --braccio <tag> <binario>}"
+  BIN="${2:?uso: pin-phpr.sh --braccio <tag> <binario>}"
+  [ -f "$BIN" ] || { echo "STOP: binario braccio '$BIN' inesistente."; exit 1; }
+else
+  TAG="${1:?uso: pin-phpr.sh <tag, es. s107> | --braccio <tag> <binario>}"
+fi
 
 H=$(shasum -a 256 "$BIN" | cut -c1-16)
 EXP=$("$ORACLE" "$MICRO")
@@ -46,7 +59,11 @@ HS=$(shasum -a 256 "$STASH/phpr-$TAG" | cut -c1-16)
 REPO="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust"
 cd "$REPO"
 HEAD_SHA=$(git rev-parse --short HEAD)
-ROW="| $H | $TAG (sorgente @ $HEAD_SHA; riga da pin-phpr.sh) | smoke parità 2 modi OK $(date '+%F %T') — batteria/corpus/fixture/micro DOVUTI a parte | stash \`phpr-$TAG\` |"
+if [ "$MODE" = braccio ]; then
+  ROW="| $H | $TAG BRACCIO (sorgente @ $HEAD_SHA; riga da pin-phpr.sh --braccio) | smoke parità 2 modi OK $(date '+%F %T') — braccio di misura, NON pin | stash \`phpr-$TAG\` |"
+else
+  ROW="| $H | $TAG (sorgente @ $HEAD_SHA; riga da pin-phpr.sh) | smoke parità 2 modi OK $(date '+%F %T') — batteria/corpus/fixture/micro DOVUTI a parte | stash \`phpr-$TAG\` |"
+fi
 awk -v row="$ROW" '
   /^## phpr/ { sec=1 }
   { print }
@@ -54,10 +71,14 @@ awk -v row="$ROW" '
   END { if (!ins) exit 3 }
 ' PIN_REGISTRY.md > PIN_REGISTRY.md.new || { echo "STOP: ancora tabella phpr non trovata in PIN_REGISTRY.md => registro NON scritto."; rm -f PIN_REGISTRY.md.new; exit 1; }
 mv PIN_REGISTRY.md.new PIN_REGISTRY.md
-MSG=$(mktemp); echo "pin phpr $TAG: registro PIN_REGISTRY ($H)" > "$MSG"
+MSG=$(mktemp); echo "${MODE} phpr $TAG: registro PIN_REGISTRY ($H)" > "$MSG"
 git add PIN_REGISTRY.md && git commit -F "$MSG" >/dev/null && git push >/dev/null
 rm -f "$MSG"
 if [ -n "$(git status --porcelain PIN_REGISTRY.md)" ]; then
   echo "STOP: PIN_REGISTRY.md ancora sporco dopo il commit dell'atto."; exit 1
 fi
-echo "PIN phpr $TAG = $H (smoke parità 2 modi OK, stash phpr-$TAG, registrato+committato). I gate del protocollo (batteria/corpus/fixture/micro) restano dovuti."
+if [ "$MODE" = braccio ]; then
+  echo "BRACCIO phpr $TAG = $H (smoke parità 2 modi OK, stash phpr-$TAG, registrato+committato). Braccio di misura: NON è un pin."
+else
+  echo "PIN phpr $TAG = $H (smoke parità 2 modi OK, stash phpr-$TAG, registrato+committato). I gate del protocollo (batteria/corpus/fixture/micro) restano dovuti."
+fi

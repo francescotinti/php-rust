@@ -1,0 +1,131 @@
+2,3c2,5
+< # s154-sonda.sh — S-154 p.2: sonda k post-BT2 (criterio s154-criterio-sonda.md,
+< # PRE-REGISTRATO). Ricetta PREP s151 INVARIATA; CONTEGGI, mai tempo.
+---
+> # s155-sonda-ce.sh — S-155 p.2: sonda ce-count post-CE1 (criterio
+> # s155-criterio-sonda-ce.md, PRE-REGISTRATO). Ricetta PREP s151 INVARIATA;
+> # COPIA DICHIARATA di s154-sonda.sh (manifest s155-sonda-copia.diff);
+> # CONTEGGI, mai tempo.
+9,10c11,12
+< H="$REPO/wp154-harness"; OUT="$H/sonda-out"; mkdir -p "$OUT"
+< V="$H/s154-sonda-verdetto.out"
+---
+> H="$REPO/wp155-harness"; OUT="$H/sonda-out"; mkdir -p "$OUT"
+> V="$H/s155-sonda-ce-verdetto.out"
+12,14c14,16
+< HOLD="$HOME/Claude/php-rust-output.s154hold"
+< SRC=/private/tmp/phpr-census-s154-src
+< TGT=/private/tmp/phpr-census-s154-target
+---
+> HOLD="$HOME/Claude/php-rust-output.s155hold"
+> SRC=/private/tmp/phpr-census-s155-src
+> TGT=/private/tmp/phpr-census-s155-target
+16c18
+< PIN="8370c257ae70cc8e"; SRV="f030c6fcbddfab96"
+---
+> PIN="bddc050320a6af4c"; SRV="b3cf348f69739edc"
+22c24
+< note "== s154 sonda k post-BT2 (criterio s154-criterio-sonda.md; ricetta PREP s151; CONTEGGI mai tempo) $(date '+%F %T') =="
+---
+> note "== s155 sonda ce-count post-CE1 (criterio s155-criterio-sonda-ce.md; ricetta PREP s151; CONTEGGI mai tempo) $(date '+%F %T') =="
+41,44c43,46
+< # S2 — identità a CONTENUTO (emenda §1-bis dopo rc=3 t1: pin s153 NON
+< # cold-riproducibile, cache calda ai build A/B S-153; scarto ammesso = SOLO
+< # LC_UUID+pagina firma ≤64 B, meccanismo s150-identita-candidato + PREP s151)
+< IDT=/private/tmp/phpr-census-s154-idcheck
+---
+> # S2 — identità a CONTENUTO (emenda §1-bis EREDITATA: pin non
+> # cold-riproducibile; scarto ammesso = SOLO cluster nominati
+> # LC_UUID/firma/banner, meccanismo s150-identita-candidato + PREP s151)
+> IDT=/private/tmp/phpr-census-s155-idcheck
+94,96c96,98
+<     "$REPO/wp151-harness/s151-census-copia.diff" > "$OUT/census-s154-norm.diff"
+< ( cd "$SRC" && git apply --check -v "$OUT/census-s154-norm.diff" ) > "$OUT/apply-check.log" 2>&1 || { note "rc=7 apply --check FALLITO (log sonda-out/apply-check.log)"; fin 7; }
+< ( cd "$SRC" && git apply -v "$OUT/census-s154-norm.diff" ) > "$OUT/apply.log" 2>&1 || { note "rc=7 apply FALLITO"; fin 7; }
+---
+>     "$REPO/wp151-harness/s151-census-copia.diff" > "$OUT/census-s155-norm.diff"
+> ( cd "$SRC" && git apply --check -v "$OUT/census-s155-norm.diff" ) > "$OUT/apply-check.log" 2>&1 || { note "rc=7 apply --check FALLITO (log sonda-out/apply-check.log)"; fin 7; }
+> ( cd "$SRC" && git apply -v "$OUT/census-s155-norm.diff" ) > "$OUT/apply.log" 2>&1 || { note "rc=7 apply FALLITO"; fin 7; }
+103,109c105,111
+< mkdir -p "$H/census-prep-s154"
+< cp "$PROBE_TGT" "$H/census-prep-s154/phpr-census-s154"
+< cp "$PROBE_TGT" "$STASH/phpr-census-s154"
+< [ "$(h16 "$H/census-prep-s154/phpr-census-s154")" = "$HP" ] || { note "rc=8 copia probe harness difforme"; fin 8; }
+< [ "$(h16 "$STASH/phpr-census-s154")" = "$HP" ] || { note "rc=8 stash probe difforme"; fin 8; }
+< PROBE="$H/census-prep-s154/phpr-census-s154"
+< note "S4 probe s154: hash16=$HP — conservato x2 (harness + stash), verificato"
+---
+> mkdir -p "$H/census-prep-s155"
+> cp "$PROBE_TGT" "$H/census-prep-s155/phpr-census-s155"
+> cp "$PROBE_TGT" "$STASH/phpr-census-s155"
+> [ "$(h16 "$H/census-prep-s155/phpr-census-s155")" = "$HP" ] || { note "rc=8 copia probe harness difforme"; fin 8; }
+> [ "$(h16 "$STASH/phpr-census-s155")" = "$HP" ] || { note "rc=8 stash probe difforme"; fin 8; }
+> PROBE="$H/census-prep-s155/phpr-census-s155"
+> note "S4 probe s155: hash16=$HP — conservato x2 (harness + stash), verificato"
+118c120,121
+< # S6 — conteggi bt-count a DUE N (esito stdout ESATTO pena STOP)
+---
+> # S6 — conteggi ce-count a DUE N (esito stdout ESATTO pena STOP; strumento
+> # EREDITATO INVARIATO wp152-harness/ce-count.php, baseline s152 k=2)
+121c124
+<   PHPR_MEM_CENSUS="$OUT/bt-$N.raw" BTN=$N "$PROBE" "$REPO/wp152-harness/bt-count.php" > "$OUT/bt-$N.stdout" 2> "$OUT/bt-$N.stderr"
+---
+>   PHPR_MEM_CENSUS="$OUT/ce-$N.raw" CEN=$N "$PROBE" "$REPO/wp152-harness/ce-count.php" > "$OUT/ce-$N.stdout" 2> "$OUT/ce-$N.stderr"
+123,127c126,130
+<   EXP="BT-COUNT-OK n=$N frames_tot=$((2*N))"
+<   GOT="$(cat "$OUT/bt-$N.stdout")"
+<   [ "$RCN" -eq 0 ] || { note "rc=8 bt-count N=$N rc=$RCN"; fin 8; }
+<   [ "$GOT" = "$EXP" ] || { note "rc=8 bt-count N=$N stdout '$GOT' != atteso '$EXP'"; fin 8; }
+<   [ -s "$OUT/bt-$N.raw" ] || { note "rc=8 raw N=$N vuoto"; fin 8; }
+---
+>   EXP="CE-COUNT-OK n=$N hit=$N"
+>   GOT="$(cat "$OUT/ce-$N.stdout")"
+>   [ "$RCN" -eq 0 ] || { note "rc=8 ce-count N=$N rc=$RCN"; fin 8; }
+>   [ "$GOT" = "$EXP" ] || { note "rc=8 ce-count N=$N stdout '$GOT' != atteso '$EXP'"; fin 8; }
+>   [ -s "$OUT/ce-$N.raw" ] || { note "rc=8 raw N=$N vuoto"; fin 8; }
+129c132
+< note "S6 bt-count: stdout ESATTI ai due N, raw presenti"
+---
+> note "S6 ce-count: stdout ESATTI ai due N, raw presenti"
+131,132c134,135
+< # S7 — k = Δ/ΔN + riconciliazione FUORI-UB (meccanica, criterio p.3)
+< python3 - "$OUT/bt-$N1.raw" "$OUT/bt-$N2.raw" "$N1" "$N2" >> "$V" <<'PY'
+---
+> # S7 — k = Δn/Δchiamate (Δchiamate=2·ΔN) + riconciliazione FUORI-UB (criterio p.4)
+> python3 - "$OUT/ce-$N1.raw" "$OUT/ce-$N2.raw" "$N1" "$N2" >> "$V" <<'PY'
+135c138
+< def bt(fn):
+---
+> def ce(fn):
+137c140
+<         if "name=debug_backtrace" in line:
+---
+>         if "name=class_exists" in line:
+140,150c143,153
+<     raise SystemExit(f"riga name=debug_backtrace ASSENTE in {fn}")
+< a1, b1 = bt(f1); a2, b2 = bt(f2)
+< dn = n2 - n1
+< k = (a2 - a1) / dn; by = (b2 - b1) / dn
+< intero = "INTERO ESATTO" if (a2 - a1) % dn == 0 else "NON intero (dichiarare)"
+< print(f"k_new = {k:.3f} alloc/chiamata ({intero}; Δn={a2-a1} su ΔN={dn}) · b_new = {by:.1f} B/chiamata (rif pre-BT2: k=45, b=2282)")
+< att = "DENTRO" if 22 <= k <= 28 else "FUORI (si torna al sorgente prima d'ogni conclusione)"
+< print(f"attesa k 22-28: {att}")
+< d_lo = (45 - k) * 6.7; d_hi = (45 - k) * 6.9
+< print(f"riconciliazione: D_alloc = (45-{k:.1f}) x miheap [6,7;6,9] = [{d_lo:.1f}; {d_hi:.1f}] ns/iter · D misurato=+266,7")
+< r_lo = 266.7 - d_hi; r_hi = 266.7 - d_lo
+---
+>     raise SystemExit(f"riga name=class_exists ASSENTE in {fn}")
+> a1, b1 = ce(f1); a2, b2 = ce(f2)
+> dc = 2 * (n2 - n1)
+> k = (a2 - a1) / dc; by = (b2 - b1) / dc
+> intero = "INTERO ESATTO" if (a2 - a1) % dc == 0 else "NON intero (dichiarare)"
+> print(f"k_post = {k:.3f} alloc/chiamata ({intero}; Δn={a2-a1} su Δchiamate={dc}) · b_post = {by:.1f} B/chiamata (baseline s152: k=2, 41,5 B/med)")
+> att = "DENTRO (attesa k=0)" if k == 0 else "FUORI (si torna al sorgente prima d'ogni conclusione)"
+> print(f"attesa k=0: {att}")
+> d_lo = (2 - k) * 6.7; d_hi = (2 - k) * 6.9
+> print(f"riconciliazione: D_alloc = (2-{k:.1f}) x miheap [6,7;6,9] = [{d_lo:.1f}; {d_hi:.1f}] ns/iter · D misurato=+22,0 (ab-ce1b)")
+> r_lo = 22.0 - d_hi; r_hi = 22.0 - d_lo
+154c157
+<     print(f"residuo NON-alloc R = [{r_lo:.1f}; {r_hi:.1f}] ns/iter — canali candidati da NOMINARE (hash Key::from_bytes, memcpy chiavi, ty.to_vec, clone file); nessuna cifra per canale senza mock dedicato")
+---
+>     print(f"residuo NON-alloc R = [{r_lo:.1f}; {r_hi:.1f}] ns/iter — canali candidati da NOMINARE (memcpy to_vec evitato, byte-loop to_ascii_lowercase evitato, hash su chiave stack); nessuna cifra per canale senza mock dedicato")
