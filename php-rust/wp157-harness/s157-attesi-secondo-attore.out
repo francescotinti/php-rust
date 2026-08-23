@@ -1,0 +1,9 @@
+== s157 verifica ATTESI BLIND L-AL1 da SECONDO attore (subagent, sola lettura, PRIMA di ogni run) ==
+(a) N giudice: m-missload.php loop 10000000 == criterio p.4 == n_fixed script OK
+(b) parita': acc==N sempre-miss (classe mai definita, loader no-op) -> "ML-OK 10000000" OK
+(c) UB 20.7 = 3 x 6.9 coerente in criterio p.3 / attesi p.2 / script (UB=20.7) OK
+(d) banda smoke [+10;+31] contiene 20.7, mezzo-UB per lato (arrotondamento dichiarato) OK
+(e) CATS_JUDGE=missload, JUDGES=("missload",); hostargs in CATS_GUARD con m-hostargs N=10M presente OK
+(f) comparatore guardia STRETTO: reg = delta < -thr (az.rev. S-156 #1) OK
+(g) gate hash braccio A = "42efea3e" == criterio p.6 OK
+ESITO: ATTESI-OK
