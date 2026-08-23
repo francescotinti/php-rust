@@ -1,0 +1,71 @@
+2,6c2,6
+< # s154-census-orm.sh — testa hostcall RIFONDATA @ s153 (criterio
+< # s154-criterio-sonda.md p.4; COPIA DICHIARATA di s151-census-orm.sh, manifest
+< # s154-census-copia.diff; adattamenti: probe s154 b28899092ea1e2cc da
+< # census-prep-s154, lock della SESSIONE solo VERIFICATO, §5-bis sostituito
+< # dalle attese s154).
+---
+> # s156-census-orm.sh — testa hostcall POST-CE1 @ s154 (criterio
+> # s156-criterio-census.md; COPIA DICHIARATA di s154-census-orm.sh, manifest
+> # s156-census-copia.diff; adattamenti: probe s155 3e6b5008482c32d0 da
+> # wp155-harness/census-prep-s155, path s156, §5-bis sostituito
+> # dalle attese s156).
+13,14c13,14
+< H="$REPO/wp154-harness"; PREP="$H/census-prep-s154"; OUT="$H/census-out"; mkdir -p "$OUT"
+< V="$H/s154-census-verdetto.out"
+---
+> H="$REPO/wp156-harness"; PREP="$REPO/wp155-harness/census-prep-s155"; OUT="$H/census-out"; mkdir -p "$OUT"
+> V="$H/s156-census-verdetto.out"
+16c16
+< PROBE="$PREP/phpr-census-s154"
+---
+> PROBE="$PREP/phpr-census-s155"
+21c21
+< echo "== s154 testa hostcall rifondata @ s153 (probe b28899092ea1e2cc; criterio s154-criterio-sonda.md p.4; CONTEGGI mai tempo) ==" >> "$V"
+---
+> echo "== s156 testa hostcall post-CE1 @ s154 (probe 3e6b5008482c32d0; criterio s156-criterio-census.md; CONTEGGI mai tempo) ==" >> "$V"
+23c23
+< [ "$HP" = "b28899092ea1e2cc" ] || { echo "rc=6 probe $HP != b28899092ea1e2cc (criterio p.4)" >> "$V"; fin 6; }
+---
+> [ "$HP" = "3e6b5008482c32d0" ] || { echo "rc=6 probe $HP != 3e6b5008482c32d0 (criterio p.1)" >> "$V"; fin 6; }
+28c28
+< SP="/private/tmp/s154-census-sp-$PAD"
+---
+> SP="/private/tmp/s156-census-sp-$PAD"
+105,107c105,109
+< # attese s154 (criterio sonda p.4): residuo non-backtrace 60,9M ±2%;
+< # debug_backtrace ≈ 0,473M×13 = 6,15M ±10%; conteggi class_exists e
+< # get_declared_classes RIPORTATI (denominatori p.3).
+---
+> # attese s156 (criterio p.3): debug_backtrace 6,15M ±10% (a) · class_exists
+> # ∈ [3,25M; 4,87M] = chiamate×1 post-CE1, scioglie il mix (b) ·
+> # get_declared_classes 4.563.808 ±2% (c) · hostcall_n DIREZIONE GIÙ vs
+> # 67.023.784, caduta minima attesa = caduta class_exists [4,87M; 6,49M];
+> # funnel su nomi terzi RIPORTATO, mai atteso per-nome (d).
+114,115c116,117
+<     resid=h-bt; a=60900000
+<     dr=(resid>a?resid-a:a-resid)/a*100
+---
+>     h154=67023784; ce154=9740728; gd154=4563808
+>     delta=h154-h
+117,118c119,120
+<     printf "§5-bis-s154: hostcall_n r1=%d · debug_backtrace=%d · residuo non-bt=%d (Δ%% vs 60,9M = %.2f) · class_exists=%d · get_declared_classes=%d\n",h,bt,resid,dr,ce,gd
+<     okr=(dr<=2)?"DENTRO ±2%":"FUORI ±2% (dichiarare)"
+---
+>     gdd=(gd>gd154?gd-gd154:gd154-gd)/gd154*100
+>     printf "§5-bis-s156: hostcall_n r1=%d (Δ vs s154 67.023.784 = %d GIU'\'') · debug_backtrace=%d · class_exists=%d (chiamate=%d) · get_declared_classes=%d (Δ%% vs s154 = %.2f)\n",h,delta,bt,ce,ce,gd,gdd
+120c122,125
+<     printf "§5-bis-s154 attese: residuo %s · debug_backtrace %s\n",okr,okb
+---
+>     okc=(ce>=3250000 && ce<=4870000)?"DENTRO [3,25M;4,87M] (mix SCIOLTO)":"FUORI [3,25M;4,87M] (dichiarare, al sorgente)"
+>     okg=(gdd<=2)?"DENTRO ±2% di 4.563.808":"FUORI ±2% (dichiarare)"
+>     okh=(delta>=4870000)?"caduta >= minima 4,87M OK":( (delta>0)?"GIU'\'' ma sotto la caduta minima 4,87M (dichiarare)":"NON GIU'\'' (FUORI, al sorgente)" )
+>     printf "§5-bis-s156 attese: (a) debug_backtrace %s · (b) class_exists %s · (c) gdc %s · (d) hostcall_n %s\n",okb,okc,okg,okh
+123c128
+<   echo "§5-bis-s154: HOSTN_R1 non estratto — giudizio NON emesso (dichiarato)" >> "$V"
+---
+>   echo "§5-bis-s156: HOSTN_R1 non estratto — giudizio NON emesso (dichiarato)" >> "$V"
+127c132
+<   echo "CENSUS TRANCHE-5 VALIDO rc=0 (identità §3 tutte OK su r1 e r2)" >> "$V"
+---
+>   echo "CENSUS s156 VALIDO rc=0 (identità §3 tutte OK su r1 e r2)" >> "$V"
