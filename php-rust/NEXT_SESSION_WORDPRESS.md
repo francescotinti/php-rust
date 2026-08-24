@@ -75,7 +75,7 @@ php-server-s157 · phpr-s157-al1-B (==pin) · phpr-s156-gemelloA (c19079d3) ·
 gemello A per S-158: ricetta dal tree s157 (la promo RIPRODUCE il candidato
 AL BYTE a cache calda; a freddo arbitrare a CONTENUTO, s157-gemelloA-
 identita.out) · lock misura da CREARE · CI: coda S-157 in smaltimento a lock
-rimosso · lettura: REGOLE.md → QUI → wp157-harness/{s157-al1-verdetto.out,
-s157-objchurn-arbitrato-verdetto.out,s157-indagine-hd2.out,s157-promo-
-verdetto.out,s157-pair-verdetto-t7.out,s157-orm-coppia-verdetto.out,
-revisione.md} → sessions/WP_SESSION_157.md → PERF_MAP.md.
+rimosso · lettura: REGOLE.md → QUI → wp157-harness/{s157-al1-verdetto,
+s157-objchurn-arbitrato-verdetto,s157-indagine-hd2,s157-promo-verdetto,
+s157-pair-verdetto-t7,s157-orm-coppia-verdetto}.out + revisione.md →
+sessions/WP_SESSION_157.md → PERF_MAP.md.
