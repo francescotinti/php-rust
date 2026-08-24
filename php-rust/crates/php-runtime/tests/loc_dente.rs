@@ -36,7 +36,10 @@ fn nessun_sorgente_rs_oltre_cap() {
         // commento-leva in mod.rs — s154-ab-ce1b-verdetto.out + arbitrato).
         // S-156: salita DICHIARATA +30 (leva HD2-hostcall: macro a due
         // sezioni + tabella slice) — verbale wp156-harness/s156-promo.
-        ("php-runtime/src/vm/mod.rs", 25742, "monolite VM — bersaglio A2"),
+        // S-157: salita DICHIARATA +36 (leva L-AL1 vinta all'A/B: pool
+        // guard-key + arg rc-clone in try_autoload, delega
+        // resolve_class_autoload_with — s157-al1-verdetto.out + arbitrato).
+        ("php-runtime/src/vm/mod.rs", 25778, "monolite VM — bersaglio A2"),
         ("php-runtime/src/vm/host.rs", 7661, "hostcall — backlog A2"),
         // S-156: salita DICHIARATA +29 (leva HD2-hostcall: braccio
         // CallHostBuiltin, pop diretti ≤4) — verbale wp156-harness/s156-promo.
