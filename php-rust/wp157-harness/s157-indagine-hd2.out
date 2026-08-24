@@ -1,0 +1,8 @@
+== s157 INDAGINE attesa-HD2 REGRESSIONE SEGNALATA (criterio orm p.5: prima di ogni altra leva) ==
+reperto: Delta assoluto = [-0,61;-0,47] s vs ref s154-window (34,82-34,91 vs 34,30-34,35), oltre RES 0,293.
+gamba 1 (aritmetica, dai verdetti): oracle di giornata +0,92% (net 4,94 vs 4,87-4,92) -> phpr atteso a drift comune [34,62;34,67]; residuo [+0,15;+0,29] SOTTO RES. Rapporti net SOVRAPPOSTI ([6,972;7,053] ref vs [7,049;7,067] notte).
+gamba 2 (replica3, finestra CERTIFICATA quiescenza rc=0, parita' rc=0): phpr_net3=34,86 · oracle_net3=4,96 · ratio_net=7,028 DENTRO il riferimento [6,972;7,053]. I numeri notturni si riproducono; l'oracle conferma il drift (+1,33% su leg3); residuo normalizzato +0,05/+0,10 s.
+corroborazioni di giornata: pair t7 mediana 1,795 al bordo ALTO della banda (stessa direzione su workload indipendente) · dbal ictx phpr2 SEGNALATA · language server IDE (Antigravity) vivo sul workspace per l'intera finestra (DICHIARATO; conteggi esenti non applicabili qui, misure a user-CPU).
+VERDETTO: falso allarme da confronto CROSS-FINESTRA in secondi assoluti senza normalizzazione di giornata (rischio noto S-154 "oracle -1,4% di giornata"). Attribuzione al pin s156 REFUTATA: (i) ratio in-intervallo; (ii) residuo oracle-normalizzato sotto-risoluzione; (iii) effetto HD2 plausibile a scala ORM <=0,05 s. La voce ORM S-157 si registra: rapporto 7,028-7,067 COMPATIBILE; assoluto [34,82;34,91] = NUOVO riferimento con nota di drift.
+EMENDA PROPOSTA (per il criterio orm S-158, da dichiarare alla prossima copia): giudizio Delta su net ORACLE-NORMALIZZATO (o su rapporto) accanto all'assoluto, per non ripetere il falso allarme.
+LEVA L-AL1: SBLOCCATA (indagine chiusa con meccanismo nominato).
