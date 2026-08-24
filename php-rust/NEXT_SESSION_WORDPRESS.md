@@ -30,8 +30,7 @@ dbal 7,701–7,853 (tutti @ pin s156: **coppia al pin s157 DOVUTA**) · corpus
    slice HD2** su __reflect_* (~9,5M alloc; macro a due sezioni in piedi;
    fixture a RUOLI DISTINTI per ogni nome 2+ arg — az.rev. S-156 #4, dovuta
    qui); (b) **array_map 7,68M** (istruttoria di forma: k dipende da
-   arità/callback); (c) **residuo L-AL1**: vec![arg.clone()] per loader
-   (istruttoria su call_callable prima di ogni criterio).
+   arità/callback); (c) **residuo L-AL1** vec![arg] (istruttoria call_callable).
 3. **Az.rev. S-157** (processo, REGGE CON RILIEVI — revisione.md; #1
    incidente proposto e #2 manifest retroattivo GIÀ eseguiti in-sessione):
    (3) identità bracci nei verdetti stampata dall'HASH MISURATO, mai da
