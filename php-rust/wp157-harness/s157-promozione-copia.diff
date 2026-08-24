@@ -1,0 +1,104 @@
+2,8c2,10
+< # s156-promozione.sh <cand_hash16> — gate di promozione LEVA HD2-hostcall
+< # (estensione L-HD2 forma-2 a CallHostBuiltin) — S-156. COPIA DICHIARATA di
+< # wp154-harness/s154-promozione.sh; DIVERGENZE DICHIARATE:
+< #  (1) tag s156, harness wp156; candidato 42efea3e34feb390 (A/B R=5 in
+< #      s156-abhd2h-verdetto.out: giudice VINTO D=+16,0 rumore 3,0/1,0,
+< #      13 guardie ok, braccio A = GEMELLO 2023cbb9; candidato stashato
+< #      phpr-s156-hd2host-B via pin-phpr.sh --braccio);
+---
+> # s157-promozione.sh <cand_hash16> — gate di promozione LEVA L-AL1
+> # (miss/autoload plumbing 0-alloc in try_autoload) — S-157. COPIA DICHIARATA
+> # di wp156-harness/s156-promozione.sh; DIVERGENZE DICHIARATE:
+> #  (1) tag s157, harness wp157; candidato 76787303716acd4e (A/B R=5 in
+> #      s157-al1-verdetto.out: giudice missload VINTO D=+22,0 rumore 1,0/5,0,
+> #      riconc. smoke in banda 2,0<5,0, UB in banda; 15 guardie ok — objchurn
+> #      morso a 3 tick e ARBITRATO refutato a N=12M, s157-objchurn-arbitrato-
+> #      verdetto.out; braccio A = GEMELLO RICOSTRUITO c19079d3 (contenuto==pin,
+> #      s157-gemelloA-identita.out); candidato stashato phpr-s157-al1-B);
+10,16c12,20
+< #      s154): rczval + loc_dente A4 — HD2-hostcall non aggiunge test;
+< #  (3) corpus: ZERO flip attesi (HD2-hostcall non cambia forma dei
+< #      risultati) — rc!=0 = STOP secco, NESSUN flip-handler;
+< #  (4) fixture chain INVARIATA (10 gate) + gate fx-ce TENUTO fuori catena
+< #      (bilaterale oracle==pin byte-id; copia byte-id da wp154);
+< #  (5) conferma POST-PIN: m-hostargs (R=5 pin s156 vs stash phpr-s154
+< #      bddc050320a6af4c, direzione attesa +, D nell'intorno di +16,0
+---
+> #      s156): rczval + loc_dente A4 — L-AL1 non aggiunge test; salita loc
+> #      mod.rs 25778 GIA' dichiarata e committata (225f0bb);
+> #  (3) corpus: ZERO flip attesi (L-AL1 non cambia forma dei risultati) —
+> #      rc!=0 = STOP secco, NESSUN flip-handler;
+> #  (4) fixture chain INVARIATA (10 gate) + gate fx-ce (bilaterale
+> #      oracle==pin byte-id; copia byte-id in wp157) + gate sonda-bt-autoload
+> #      AGGIUNTO (A==B gia' provato; al promo: pin==braccio-B byte-id);
+> #  (5) conferma POST-PIN: m-missload (R=5 pin s157 vs stash phpr-s156
+> #      42efea3e34feb390, direzione attesa +, D nell'intorno di +22,0
+18,20c22,24
+< #  (6) disasm run_loop DOVUTO e GIÀ AGLI ATTI pre-promo (criterio p.7:
+< #      bl A=6014 B=6033, Δ+19 localizzato, ab-out/disasm-run_loop-*.txt);
+< #  (7) micro R=5 = run-micro.sh come s154 (scoreboard al pin nuovo).
+---
+> #  (6) disasm run_loop GIA' AGLI ATTI pre-promo (criterio p.8: bl A=6033
+> #      B=6033, Δ=0 come atteso — la leva non tocca run.rs);
+> #  (7) micro R=5 = run-micro.sh come s156 (scoreboard al pin nuovo).
+24c28
+< H="$SRC/wp156-harness"
+---
+> H="$SRC/wp157-harness"
+34,35c38,39
+< VERD="$H/s156-promo-verdetto.out"
+< CAND_EXP="${1:?uso: s156-promozione.sh <cand_hash16>}"
+---
+> VERD="$H/s157-promo-verdetto.out"
+> CAND_EXP="${1:?uso: s157-promozione.sh <cand_hash16>}"
+78c82
+<   CSTASH="$STASH/phpr-s156-hd2host-B"
+---
+>   CSTASH="$STASH/phpr-s157-al1-B"
+114c118
+< "$SRC/scripts/pin-phpr.sh" s156 > "$OUT/pin.log" 2>&1
+---
+> "$SRC/scripts/pin-phpr.sh" s157 > "$OUT/pin.log" 2>&1
+122c126
+< note "promozione corpus-gate: rc=0 — nomi==congelato (1412), CONTENUTO==golden, off-on zero (ZERO flip come atteso, CE1)"
+---
+> note "promozione corpus-gate: rc=0 — nomi==congelato (1412), CONTENUTO==golden, off-on zero (ZERO flip come atteso, L-AL1)"
+141a146,152
+> # ---- gate sonda-bt-autoload AGGIUNTO (divergenza (4)): pin==braccio-B byte-id ----
+> "$BIN" "$H/sonda-bt-autoload.php" > "$OUT/sonda-bt-pin.out" 2>&1
+> if diff -q "$H/sonda-out/bt-B.txt" "$OUT/sonda-bt-pin.out" > /dev/null; then
+>   note "promozione gate sonda-bt: pin==braccio-B BYTE-ID (contratto autoload/backtrace §3.25 invariato)"
+> else
+>   stop "gate sonda-bt: pin DIVERGE dal braccio B (promo-out/sonda-bt-pin.out)"
+> fi
+150,151c161,162
+< PHPR="$BIN" R=5 "$SRC/wp97-harness/micro/run-micro.sh" > "$OUT/micro-pin-s156.out" 2>&1
+< note "promozione micro pin s156: $(grep -E '^rapporto_' "$OUT/micro-pin-s156.out" | tr '\n' ' ')"
+---
+> PHPR="$BIN" R=5 "$SRC/wp97-harness/micro/run-micro.sh" > "$OUT/micro-pin-s157.out" 2>&1
+> note "promozione micro pin s157: $(grep -E '^rapporto_' "$OUT/micro-pin-s157.out" | tr '\n' ' ')"
+153,155c164,166
+< # ---- conferma POST-PIN m-hostargs (divergenza (5)): R=5 pin vs stash s154 ----
+< AOLD="$STASH/phpr-s154"
+< [ "$(shasum -a 256 "$AOLD" | cut -c1-16)" = "bddc050320a6af4c" ] || stop "stash phpr-s154 hash inatteso"
+---
+> # ---- conferma POST-PIN m-missload (divergenza (5)): R=5 pin vs stash s156 ----
+> AOLD="$STASH/phpr-s156"
+> [ "$(shasum -a 256 "$AOLD" | cut -c1-16)" = "42efea3e34feb390" ] || stop "stash phpr-s156 hash inatteso"
+161c172
+<   if [ $((i % 2)) -eq 1 ]; then TA=$(ucpu "$AOLD" "$H/m-hostargs.php"); TB=$(ucpu "$BIN" "$H/m-hostargs.php"); else TB=$(ucpu "$BIN" "$H/m-hostargs.php"); TA=$(ucpu "$AOLD" "$H/m-hostargs.php"); fi
+---
+>   if [ $((i % 2)) -eq 1 ]; then TA=$(ucpu "$AOLD" "$H/m-missload.php"); TB=$(ucpu "$BIN" "$H/m-missload.php"); else TB=$(ucpu "$BIN" "$H/m-missload.php"); TA=$(ucpu "$AOLD" "$H/m-missload.php"); fi
+178c189
+< note "conferma post-pin m-hostargs (pin s156 vs stash s154, drift-tree da dichiarare): $CONF (attesa: segno +, D nell'intorno di +16,0 ± rumore+drift)"
+---
+> note "conferma post-pin m-missload (pin s157 vs stash s156, drift-tree da dichiarare): $CONF (attesa: segno +, D nell'intorno di +22,0 ± rumore+drift)"
+208c219
+< "$SRC/scripts/pin-server.sh" s156 > "$OUT/pin-server.log" 2>&1
+---
+> "$SRC/scripts/pin-server.sh" s157 > "$OUT/pin-server.log" 2>&1
+214c225
+< note "PROMOZIONE COMPLETA rc=0 (da promo-out/rcb): pin s156 = $H2"
+---
+> note "PROMOZIONE COMPLETA rc=0 (da promo-out/rcb): pin s157 = $H2"
