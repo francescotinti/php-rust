@@ -1,80 +1,80 @@
 # NEXT_SESSION — phpr: OBIETTIVO PARITÀ (≥1×) con l'oracle; ≤3× = tappa (REGOLE §1)
-⏱ **FONDAMENTALI**: **S-156 = leva HD2-hostcall PROMOSSA (pin NUOVO s156) +
-census ORM post-CE1 rifondato + fix dbal diagnosticato** · giudice m-hostargs
-**D=+16,0 ns/iter** (soglia 4,0; rumore 3,0/1,0; UB 13,8+3,0 in banda: canale
-alloc spiega tutto), 13 guardie ok, disasm bl +19 localizzato · promozione t2
-rc=0 (t1 STOP dente loc A4 → **salita DICHIARATA** mod.rs 25742 / run.rs 6815,
-candidato al byte) · census: attese (b)/(d) FUORI spiegate — scope s149
-annidante: il run_loop dell'AUTOLOADER resta sul nome ⇒ chiamate class_exists
-∈ [1,23M;2,46M], **residuo miss/autoload E ∈ [4,82M;6,05M]** (fetta nuova per
-NOME); funnel CE1(b) apporzionato: ce −2,46M · __reflect_class_real_name
-−1,28M · __reflect_class_loc −452k · leve S-156: **1 (promossa)** · incidenti
-**19** (=) · reperti dichiarati: riconc. smoke↔R5 fuori banda 0,5 · guardia
-backtrace al bordo (2 tick) · conferma post-pin D=+5,0 segni 5/5 (finestra) ·
-QUESITI UTENTE: (a) T2/A2 sospendere (raccomandazione S-155, ratifica al
-contatto); (b) census server (6° slittamento).
+⏱ **FONDAMENTALI**: **S-157 = coppia t7+ORM saldate @ s156 + falso allarme
+ORM ARBITRATO + leva L-AL1 PROMOSSA (pin NUOVO s157)** · giudice m-missload
+**D=+22,0 ns/iter** (soglia 5,0; UB 20,7+rumore in banda; riconc. smoke 2,0<5,0
+IN banda) · promozione **t1 rc=0** (salita dente loc PRE-dichiarata mod.rs
+25778, candidato al byte) · conferma post-pin +25,0 segni 5/5 · indagine
+attesa-HD2: Δ assoluto cross-finestra = drift di giornata (oracle +0,9/1,3%),
+replica3 certificata ratio 7,028 DENTRO il riferimento ⇒ attribuzione al pin
+REFUTATA · leve S-157: **1 (promossa)** · incidenti **19** (=) · reperti:
+objchurn arbitrato a N=12M (−4,17 sotto banda 6,7; morso R=5 = 3 tick) ·
+dbal 3921/626 vs oracle 3929/594 (estrazione emendata LC_ALL=C) · §3.25 a
+catalogo (frame builtin assente nel backtrace in autoloader) · QUESITI UTENTE:
+(a) T2/A2 sospendere (racc. S-155, ratifica al contatto); (b) census server
+(7° slittamento).
 
-## Scoreboard (pin s156 phpr 42efea3e34feb390 + server ef89630f9c7408c3)
-**arith 5,4 · prop 5,5 · calls 4,7 · str 4,2 · arr 3,2 · re 2,6** (micro R=5
-promo s156) · WP t6 1,771 · media 2,456–2,510 · ORM 6,972–7,053 · dbal
-7,385–7,422 (tutti @ pin s154: **coppia al pin s156 DOVUTA**) · corpus
-**1412×2** (promo s156) · batteria 1748/0/2 (cap loc 25742/6815).
+## Scoreboard (pin s157 phpr 76787303716acd4e + server bdd32a989ae1f492)
+**arith 5,4 · prop 5,5 · calls 4,8 · str 4,2 · arr 3,2 · re 2,5** (micro R=5
+promo s157) · WP t7 mediana 1,795 · media 2,459–2,579 · ORM 7,028–7,067 ·
+dbal 7,701–7,853 (tutti @ pin s156: **coppia al pin s157 DOVUTA**) · corpus
+**1412×2** (promo s157) · batteria 1748/0/2 (cap loc 25778/6815).
 
-## §S-157 — ordine
-1. **Coppia WP t7 + ORM/dbal al pin s156** (dovuta: pin nuovo). Nella COPIA:
-   fix `summ()` e failnames con `LC_ALL=C tr | grep -a` (az.rev. S-155 #4,
-   diagnosi in wp156-harness/s156-dbal-summ-fix.md) — dichiarare nel manifest
-   e mettere a verbale il reperto dbal phpr 3921 test/626 skip vs oracle
-   3929/594 (visibile solo col fix). Attesa HD2-hostcall PRE-REGISTRATA:
-   sotto-risoluzione su entrambe (WP «piccola/nulla»; ORM ≤ ~0,05 s).
-2. **LEVA TENTATA (obbligo di ritmo)** — candidate per NOME, istruttoria di
-   forma PRIMA dell'attesa: (a) **miss/autoload class_exists** (E 4,8–6,05M
-   alloc attribuite: capire il cammino — autoloader Composer per miss
-   ripetuti? — prima di ogni criterio); (b) **seconda tranche slice HD2**
-   (__reflect_* famiglia ~9,5M alloc: corpi da verificare SOLO-LETTURA, la
-   macro a due sezioni è già in piedi); (c) array_map 7,68M (forma: k dipende
-   da arità/callback).
-
-3. **Az.rev. S-156** (semantica, REGGE CON RILIEVI): (1) guardia backtrace
-   col COMPARATORE pre-registrato nel criterio (margine zero −8,3/−8,3 non
-   si ripete); (2) arbitrato fuori-banda smoke↔R5 (4,5>4,0) + drift-tree
-   quantificato PRIMA di usare +16,0 come cifra di leva; (3) sonda
-   oracle↔pin `debug_backtrace()` dentro autoloader da class_exists →
-   catalogo divergenze (contratto storico, pre-HD2); (4) fixture a ruoli
-   distinti per ogni nome slice 2+ arg; (#5 commento: chiusa in-sessione).
+## §S-158 — ordine
+1. **Coppia WP t8 + ORM/dbal al pin s157** (dovuta: pin nuovo). EMENDA
+   DICHIARATA nella copia del criterio orm (indagine S-157): giudizio Δ ANCHE
+   su net ORACLE-NORMALIZZATO accanto all'assoluto; riferimento assoluto
+   NUOVO [34,82;34,91] (con nota drift), rapporto [7,028;7,067]. Attesa L-AL1
+   PRE-REGISTRATA sotto-risoluzione (≈20 ns × N_miss ⇒ ~0,02–0,05 s ORM;
+   WP piccola/nulla).
+2. **LEVA TENTATA (obbligo di ritmo)** — candidate per NOME: (a) **tranche-2
+   slice HD2** su __reflect_* (~9,5M alloc; macro a due sezioni in piedi;
+   fixture a RUOLI DISTINTI per ogni nome 2+ arg — az.rev. S-156 #4, dovuta
+   qui); (b) **array_map 7,68M** (istruttoria di forma: k dipende da
+   arità/callback); (c) **residuo L-AL1**: vec![arg.clone()] per loader
+   (istruttoria su call_callable prima di ogni criterio).
+3. **Az.rev. S-157** (processo, REGGE CON RILIEVI — revisione.md): (1) banda
+   smoke annotata [10,35;31,05] oltre ai valori arrotondati; (2) trigger
+   d'indagine formale quando una guardia quantizzata morde entro 4 tick
+   (emenda REGOLE §3 da proporre all'utente); (3) REPORT_GAP ripristinato
+   (fatto S-157, mantenerlo quando si misura); (4) niente pkill di processi
+   condivisi senza dichiararlo nel verbale di sessione (RA/IDE).
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
-miss/autoload class_exists (E 4,8–6,05M, S-156 istruttoria) · __reflect_*
-slice tranche-2 · array_map 7,68M (istruttoria forma) · gamba server census
-(6°) · MethodCall.borrow k=2 · §3.24+§3.23 · slot-load · §3.22 · depr.
-float→int · warning ×2 · div. RMW · objmap 43,4 → GC · evalcls 316,9× ·
-refl 42,4× · re +2 · §3.13/§3.12-i/§3.14/§3.21 · get_gc · latin1 (morde
-anche l'estrazione dbal) · dbal 10 nomi · gdc DECLASSATA · CI: corpus-FAIL
-d'ambiente 3 test backtrace (nei gate di record passano).
+__reflect_* slice tranche-2 · array_map 7,68M · residuo L-AL1 vec![arg] ·
+miss/autoload: fetta E in parte PAGATA (L-AL1), risonda census al prossimo
+probe · gamba server census (7°) · MethodCall.borrow k=2 · §3.24+§3.23 ·
+§3.25 NUOVA (frame builtin nel backtrace da autoloader; cura candidata:
+frame sintetico nel collettore) · slot-load · §3.22 · depr. float→int ·
+warning ×2 · div. RMW · objmap 43,4 → GC · evalcls 316,9× · refl 42,4× ·
+re +2 · §3.13/§3.12-i/§3.14/§3.21 · get_gc · latin1 (morde anche dbal:
+reperto 3921/626 da istruire) · dbal 10 nomi · gdc DECLASSATA · CI: corpus-
+FAIL d'ambiente 3 test backtrace (nei gate di record passano).
 
 ## NON riproporre (i veti restano; dettaglio nei concili archiviati)
-**S-156: attese-census per-NOME senza i termini ANNIDATI dello scope
-(plumbing E miss/autoload: derivare dal perimetro, non dalla semantica) ·
-conferma post-pin come giudice di MAGNITUDINE (arbitra solo il segno) ·
-snellire il sorgente per un dente su leva già misurata (invalida il
-candidato: salita dichiarata sul file di test).** S-155: fette <risoluzione
-senza micro-judge · attese per-nome per cure su FUNNEL · claim «sotto N×» a
-intervallo a cavallo. S-154: identità pin a hash esatto su build fredda ·
-guardie quantizzate sotto il tick. S-153: braccio A non-gemello (§7-bis) ·
-leve borrow senza prezzo in-contesto. S-152: leve a scala SUITE. S-151:
-cifre census pre-BT1 · arena/bump-reset. S-150: A/B fuori ricetta · attese
-senza pavimento. Trasversali: BOLT/NaN-boxing/threaded-dispatch/PGO ·
-pin/stash senza collaudo-nell'atto · differenze tra A/B come cifra ·
-componenti prezzate · denominatori a memoria · rc da pipe · edit coi build
-in volo · promozione sotto banda · claim di ASSENZA oltre risoluzione ·
-misure con LSP in volo (conteggi esenti, dichiarare) · giudice sotto-risoluto.
-**Riscritto** 2026-08-23 (chiusura S-156); storia in `sessions/` · `gaps/`.
-Pre-flight S-157: pin phpr **s156 42efea3e**34feb390 + server **ef89630f**
-9c7408c3 (SOLO via pin-*.sh) · MySQL wp8 con l'elenco · uploads sotto
-guardia · corpus 1412×2 · batteria cap loc 25742/6815 · stash: phpr-s156 ·
-php-server-s156 · phpr-s156-hd2host-B (==pin) · **gemello A per S-157 da
-RICOSTRUIRE sul tree s156** (il 2023cbb9 è del tree s154) · lock misura da
-CREARE · CI: coda S-156 in smaltimento a lock rimosso · lettura: REGOLE.md →
-QUI → wp156-harness/{s156-census-verdetto.out,s156-census-istruttoria.md,
-s156-abhd2h-verdetto.out,s156-promo-verdetto.out,s156-dbal-summ-fix.md,
-revisione.md} → sessions/WP_SESSION_156.md → PERF_MAP.md.
+**S-157: attese/confronti in secondi ASSOLUTI tra finestre di giorni diversi
+senza normalizzazione oracle (falso allarme HD2) · far cadere una leva su
+guardia quantizzata morsa a pochi tick senza ri-risoluzione a N (REGOLE §3;
+objchurn) · promozione con salita dente NON pre-dichiarata.** S-156:
+attese-census per-NOME senza i termini ANNIDATI dello scope · conferma
+post-pin come giudice di MAGNITUDINE · snellire il sorgente per un dente su
+leva già misurata. S-155: fette <risoluzione senza micro-judge · attese
+per-nome per cure su FUNNEL · claim «sotto N×» a intervallo a cavallo.
+S-154: identità pin a hash esatto su build fredda · guardie quantizzate
+sotto il tick. S-153: braccio A non-gemello (§7-bis) · leve borrow senza
+prezzo in-contesto. S-152: leve a scala SUITE. Trasversali: BOLT/NaN-boxing/
+threaded-dispatch/PGO · pin/stash senza collaudo-nell'atto · differenze tra
+A/B come cifra · componenti prezzate · denominatori a memoria · rc da pipe ·
+edit coi build in volo · promozione sotto banda · claim di ASSENZA oltre
+risoluzione · misure con LSP in volo (dichiarare) · giudice sotto-risoluto.
+**Riscritto** 2026-08-24 (chiusura S-157); storia in `sessions/` · `gaps/`.
+Pre-flight S-158: pin phpr **s157 76787303**716acd4e + server **bdd32a98**
+9ae1f492 (SOLO via pin-*.sh) · MySQL wp8 con l'elenco · uploads sotto
+guardia · corpus 1412×2 · batteria cap loc 25778/6815 · stash: phpr-s157 ·
+php-server-s157 · phpr-s157-al1-B (==pin) · phpr-s156-gemelloA (c19079d3) ·
+gemello A per S-158: ricetta dal tree s157 (la promo RIPRODUCE il candidato
+AL BYTE a cache calda; a freddo arbitrare a CONTENUTO, s157-gemelloA-
+identita.out) · lock misura da CREARE · CI: coda S-157 in smaltimento a lock
+rimosso · lettura: REGOLE.md → QUI → wp157-harness/{s157-al1-verdetto.out,
+s157-objchurn-arbitrato-verdetto.out,s157-indagine-hd2.out,s157-promo-
+verdetto.out,s157-pair-verdetto-t7.out,s157-orm-coppia-verdetto.out,
+revisione.md} → sessions/WP_SESSION_157.md → PERF_MAP.md.

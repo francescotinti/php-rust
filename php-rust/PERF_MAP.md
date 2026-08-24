@@ -1,18 +1,29 @@
 # PERF_MAP — phpr vs PHP oracle 8.5.7, mappa multi-workload
 
-Aggiornata: **2026-08-23 (S-156)** · pin phpr **s156 42efea3e** + server
-**s156 ef89630f** NUOVI (**S-156 = PROMOZIONE leva HD2-hostcall «args-Vec
-dei host-builtin: arità ≤4 su slice, 6 nomi convertiti» con catena piena
-rc=0 al t2**: A/B R=5 vs GEMELLO 2023cbb9 D=+16,0 ns/iter su m-hostargs
-(2 hostcall/iter; UB 13,8+rumore IN BANDA: canale alloc spiega tutto), 13
-guardie ok, disasm run_loop bl +19 localizzato; t1 STOP dente loc A4 →
-salita DICHIARATA (mod.rs 25742 · run.rs 6815, candidato al byte); micro
-promo 5,4·5,5·4,7·4,2·3,2·2,6; census ORM post-CE1 RIFONDATO: chiamate
-class_exists ∈ [1,23M;2,46M], residuo miss/autoload E ∈ [4,82M;6,05M]
-(fetta nuova), funnel CE1(b) apporzionato — ce −2,46M ·
-__reflect_class_real_name −1,28M · __reflect_class_loc −452k; verdetti
-`wp156-harness/s156-*.out` + `s156-census-istruttoria.md`; **coppia @ s156
-DOVUTA → S-157** col fix dbal LC_ALL=C); storico S-155 (coppia @ s154
+Aggiornata: **2026-08-24 (S-157)** · pin phpr **s157 76787303** + server
+**s157 bdd32a98** NUOVI (**S-157 = PROMOZIONE leva L-AL1 «miss/autoload
+plumbing 0-alloc: pool guard-key + arg rc-clone in try_autoload» con catena
+piena rc=0 al t1**: A/B R=5 vs GEMELLO RICOSTRUITO c19079d3 (contenuto==pin
+s156, 92 B/4 cluster LC_UUID+banner+firma) D=+22,0 ns/iter su m-missload
+(1 class_exists MISS/iter, loader no-op; UB 20,7+rumore IN BANDA; riconc.
+smoke 2,0<5,0 IN banda), 15 guardie ok — objchurn morso a 3 tick REFUTATO ad
+arbitrato N=12M (−4,17 vs −6,70); disasm run_loop Δ=0; salita dente loc
+PRE-dichiarata mod.rs 25778; micro promo 5,4·5,5·4,8·4,2·3,2·2,5; conferma
+post-pin m-missload +25,0 segni 5/5; **coppia t7+ORM saldate @ s156**: WP t7
+mediana 1,795 COMPATIBILE (N=5, banda_ON 0,058) · media 2,459–2,579 · ORM
+7,028–7,067 (Δ assoluto −0,47/−0,61 = FALSO ALLARME da drift di giornata:
+indagine + replica3 certificata, ratio DENTRO [6,972;7,053]; emenda proposta
+criterio S-158: Δ oracle-normalizzato) · dbal 7,701–7,853 (companion, leg2
+contesa; estrazione emendata LC_ALL=C → reperto 3921/626 vs oracle 3929/594)
+· §3.25 a catalogo (frame builtin assente nel backtrace da autoloader);
+verdetti `wp157-harness/s157-*.out`; **coppia @ s157 DOVUTA → S-158**); storico S-156 (pin **s156 42efea3e** + server **ef89630f**; **PROMOZIONE
+leva HD2-hostcall «args-Vec host-builtin: arità ≤4 su slice, 6 nomi» t2 rc=0**:
+A/B R=5 vs GEMELLO 2023cbb9 D=+16,0 su m-hostargs, UB 13,8+rumore in banda,
+13 guardie ok, disasm bl +19; t1 STOP dente loc A4 → salita DICHIARATA
+25742/6815; micro promo 5,4·5,5·4,7·4,2·3,2·2,6; census ORM post-CE1
+RIFONDATO: chiamate class_exists ∈ [1,23M;2,46M], residuo miss/autoload
+E ∈ [4,82M;6,05M], funnel CE1(b) apporzionato; verdetti `wp156-harness/`);
+storico S-155 (coppia @ s154
 SALDATA: WP t6 mediana 1,771 COMPATIBILE, banda_ON 0,022 record · media
 2,456–2,510 · ORM 6,972–7,053 a CAVALLO di 7, Δ +0,41/+0,50 giù fuori
 rumore, funnel istruito · dbal 7,385–7,422 · ce-count k=1 = args-Vec, CE1

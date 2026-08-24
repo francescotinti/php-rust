@@ -21,18 +21,16 @@ contesa) · corpus 1412 · batteria 1748/0/2 (cap loc 25778/6815) ·
   normalizzato sotto-risoluzione ⇒ falso allarme cross-finestra, attribuzione
   al pin REFUTATA; emenda proposta al criterio orm S-158 (Δ oracle-normalizz.).
 3·Leva L-AL1 (try_autoload: pool guard-key + arg rc-clone; residuo vec![arg]
-  dichiarato): istruttoria al sorgente (Composer CACHEA i miss ⇒ plumbing
-  engine ~4 alloc/miss), attesi blind ATTESI-OK (secondo attore), smoke
-  D=+24,0 → R=5 **D=+22,0 SOPRA SOGLIA** (riconc. 2,0<5,0 in banda; UB 20,7
-  in banda); objchurn morso a 3 tick → ARBITRATO N=12M: REFUTATO (−4,17 vs
-  −6,70). Gemello A RICOSTRUITO, identità a CONTENUTO (c19079d3: LC_UUID+
-  banner mimalloc+firma, 92 B/4 cluster).
+  dichiarato): Composer CACHEA i miss ⇒ plumbing engine ~4 alloc/miss; attesi
+  blind OK (secondo attore); smoke +24,0 → R=5 **D=+22,0 SOPRA SOGLIA**
+  (riconc. 2,0<5,0; UB 20,7 in banda); objchurn morso a 3 tick REFUTATO ad
+  arbitrato N=12M; gemello A RICOSTRUITO a CONTENUTO (c19079d3, 92 B/4 cluster).
 4·Promozione rc=0 al t1 (salita dente loc PRE-dichiarata 25778): batteria
   1748/0/2 · corpus zero flip · fixture 10+fx-ce · gate sonda-bt NUOVO ·
   ORM 16== · hk 0E/0F · conferma post-pin m-missload D=+25,0 segni 5/5.
-5·Az.rev. S-156: #1 comparatore STRETTO nel criterio ✓ · #2 riconciliazione
-  in banda + arbitrato drift ✓ · #3 sonda → catalogo §3.25 (frame builtin
-  mancante nel backtrace in autoloader; A==B) ✓ · #4 → resta per tranche-2.
+5·Az.rev. S-156: #1 comparatore ✓ · #2 riconc.+arbitrato ✓ · #3 sonda →
+  catalogo §3.25 (frame builtin assente nel backtrace in autoloader; A==B) ✓
+  · #4 → tranche-2.
 
 ## ⭐ Lezioni (max 3)
 - ⭐⭐ Un'attesa in secondi ASSOLUTI tra finestre di giorni diversi sconta il
