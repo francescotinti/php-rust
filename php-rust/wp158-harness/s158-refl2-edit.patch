@@ -1,0 +1,133 @@
+diff --git a/php-rust/crates/php-runtime/src/vm/host_reflect.rs b/php-rust/crates/php-runtime/src/vm/host_reflect.rs
+index cfc7765..d17721d 100644
+--- a/php-rust/crates/php-runtime/src/vm/host_reflect.rs
++++ b/php-rust/crates/php-runtime/src/vm/host_reflect.rs
+@@ -413,7 +413,7 @@ impl<'m> super::Vm<'m> {
+     }
+     /// `__reflect_method_info($class, $method)`: the signature descriptor of a method
+     /// plus `static`/`visibility`/`abstract`/`declaringClass`, or `false` if unknown.
+-    pub(super) fn ho_reflect_method_info(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
++    pub(super) fn ho_reflect_method_info(&mut self, args: &[Zval]) -> Result<Zval, PhpError> {
+         let cname = match args.first().map(|v| v.deref_clone()) {
+             Some(Zval::Str(s)) => s.as_bytes().to_vec(),
+             _ => return Ok(Zval::Bool(false)),
+@@ -714,7 +714,7 @@ impl<'m> super::Vm<'m> {
+     /// `ReflectionClass::getMethods`). `get_class_methods` can't back this: it
+     /// filters to public when called from outside the class (PHPUnit's hook
+     /// discovery needs the protected `#[Before]` methods).
+-    pub(super) fn ho_reflect_method_names(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
++    pub(super) fn ho_reflect_method_names(&mut self, args: &[Zval]) -> Result<Zval, PhpError> {
+         let mut a = php_types::PhpArray::new();
+         if let Some(first) = args.first() {
+             let raw = convert::to_zstr_cast(first, &mut self.diags).as_bytes().to_vec();
+@@ -836,7 +836,7 @@ impl<'m> super::Vm<'m> {
+     /// `hasDefault` and the constant `default` value. `$class` is the declaring
+     /// class, whose flattened `prop_info` / `prop_defaults` carry the resolved
+     /// shape; static properties fall back to their `static_props` entry.
+-    pub(super) fn ho_reflect_prop_details(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
++    pub(super) fn ho_reflect_prop_details(&mut self, args: &[Zval]) -> Result<Zval, PhpError> {
+         let cls = convert::to_zstr_cast(args.first().unwrap_or(&Zval::Null), &mut self.diags).as_bytes().to_vec();
+         let prop = convert::to_zstr_cast(args.get(1).unwrap_or(&Zval::Null), &mut self.diags).as_bytes().to_vec();
+         let key = cls.strip_prefix(b"\\").unwrap_or(&cls).to_ascii_lowercase();
+@@ -1159,8 +1159,8 @@ impl<'m> super::Vm<'m> {
+     }
+     /// `__reflect_prop_attr_new($class, $prop, $index)` — run the property
+     /// attribute's `new Attr(args)` thunk (mirrors `__reflect_attr_newinstance`).
+-    pub(super) fn ho_reflect_prop_attr_new(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+-        let Some(thunk) = self.prop_attr_thunk(&args, false) else { return Ok(Zval::Null) };
++    pub(super) fn ho_reflect_prop_attr_new(&mut self, args: &[Zval]) -> Result<Zval, PhpError> {
++        let Some(thunk) = self.prop_attr_thunk(args, false) else { return Ok(Zval::Null) };
+         let cname = match args.first() { Some(Zval::Str(s)) => s.as_bytes().to_vec(), _ => Vec::new() };
+         let cid = self.class_index.get(&cname.strip_prefix(b"\\").unwrap_or(&cname).to_ascii_lowercase()).copied().unwrap_or(0);
+         // Validate the property attribute's target/repeatability first.
+@@ -1481,15 +1481,15 @@ impl<'m> super::Vm<'m> {
+     /// compiled body. Serves ReflectionClass::getFileName/getStartLine/getEndLine
+     /// (the span is an approximation from the op line tables, not the `class`
+     /// keyword's line).
+-    pub(super) fn ho_reflect_class_loc(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
++    pub(super) fn ho_reflect_class_loc(&mut self, args: &[Zval]) -> Result<Zval, PhpError> {
+         let mut out = PhpArray::new();
+-        let Some(cid) = self.resolve_named_class_with_autoload(&args)? else {
++        let Some(cid) = self.resolve_named_class_with_autoload(args)? else {
+             // Zend's class table also holds traits: getFileName/getStartLine/
+             // getEndLine on a trait name report its declaring unit, located
+             // via its methods' op line tables (a trait is flattened into its
+             // consumers and records no file — same approximation as the
+             // first-method fallback for classes below).
+-            if let Some((file, start, end)) = self.trait_loc(&args) {
++            if let Some((file, start, end)) = self.trait_loc(args) {
+                 let _ = out.append(Zval::Str(PhpStr::new(file)));
+                 let _ = out.append(Zval::Long(i64::from(start)));
+                 let _ = out.append(Zval::Long(i64::from(end)));
+@@ -1543,12 +1543,12 @@ impl<'m> super::Vm<'m> {
+     /// `false` when the class does not exist. Lets the prelude normalize a
+     /// `new ReflectionClass('MY\CLASS')` name back to `My\Class`
+     /// (Doctrine ClassMetadata::initializeReflection: ClassMetadataTest::testClassCaseSensitivity).
+-    pub(super) fn ho_reflect_class_real_name(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+-        match self.resolve_named_class_with_autoload(&args)? {
++    pub(super) fn ho_reflect_class_real_name(&mut self, args: &[Zval]) -> Result<Zval, PhpError> {
++        match self.resolve_named_class_with_autoload(args)? {
+             Some(cid) => Ok(Zval::Str(PhpStr::new(self.classes[cid].name.to_vec()))),
+             // A trait name reflects too (Zend single class table): report its
+             // declared casing.
+-            None => Ok(match self.named_trait(&args) {
++            None => Ok(match self.named_trait(args) {
+                 Some(name) => Zval::Str(PhpStr::new(name)),
+                 None => Zval::Bool(false),
+             }),
+diff --git a/php-rust/crates/php-runtime/src/vm/mod.rs b/php-rust/crates/php-runtime/src/vm/mod.rs
+index 46e0fbb..e3d90de 100644
+--- a/php-rust/crates/php-runtime/src/vm/mod.rs
++++ b/php-rust/crates/php-runtime/src/vm/mod.rs
+@@ -14723,6 +14723,13 @@ host_builtins! {
+     b"trait_exists" => vm.ho_trait_exists(args),
+     b"method_exists" => vm.ho_method_exists(args),
+     b"debug_backtrace" => vm.ho_debug_backtrace(args),
++    // L-RF2 (S-158) — tranche-2: famiglia __reflect_* (corpi SOLO-LETTURA, un chiamante, arita' <=3).
++    b"__reflect_method_names" => vm.ho_reflect_method_names(args),
++    b"__reflect_method_info" => vm.ho_reflect_method_info(args),
++    b"__reflect_prop_details" => vm.ho_reflect_prop_details(args),
++    b"__reflect_prop_attr_new" => vm.ho_reflect_prop_attr_new(args),
++    b"__reflect_class_loc" => vm.ho_reflect_class_loc(args),
++    b"__reflect_class_real_name" => vm.ho_reflect_class_real_name(args),
+     vec:
+     b"gc_collect_cycles" => vm.ho_gc_collect_cycles(args),
+     b"gc_enable" => vm.ho_gc_enable(true),
+@@ -14870,7 +14877,6 @@ host_builtins! {
+     b"__reflect_attr_newinstance" => vm.ho_reflect_attr_newinstance(args),
+     b"__reflect_attr_arguments" => vm.ho_reflect_attr_arguments(args),
+     b"__reflect_prop_declaring_class" => vm.ho_reflect_prop_declaring_class(args),
+-    b"__reflect_method_names" => vm.ho_reflect_method_names(args),
+     b"__reflect_prop_defaults" => vm.ho_reflect_prop_defaults(args),
+     b"implode" | b"join" => vm.ho_implode(args),
+     b"__reflect_func_info" => vm.ho_reflect_func_info(args),
+@@ -14878,7 +14884,6 @@ host_builtins! {
+     b"__reflect_closure_attributes" => vm.ho_reflect_closure_attributes(args),
+     b"__reflect_closure_attr_new" => vm.ho_reflect_closure_attr_new(args),
+     b"__reflect_closure_attr_args" => vm.ho_reflect_closure_attr_args(args),
+-    b"__reflect_method_info" => vm.ho_reflect_method_info(args),
+     b"__reflect_object_bind" => vm.ho_reflect_object_bind(args),
+     b"__reflect_object_dynprops" => vm.ho_reflect_object_dynprops(args),
+     b"__reflect_object_instance" => vm.ho_reflect_object_instance(args),
+@@ -14899,12 +14904,10 @@ host_builtins! {
+     b"__reflect_prop_names" => vm.ho_reflect_prop_names(args),
+     b"__reflect_prop_is_static" => vm.ho_reflect_prop_is_static(args),
+     b"__reflect_prop_type" => vm.ho_reflect_prop_type(args),
+-    b"__reflect_prop_details" => vm.ho_reflect_prop_details(args),
+     b"__reflect_prop_initialized" => vm.ho_reflect_prop_initialized(args),
+     b"__reflect_prop_get" => vm.ho_reflect_prop_get(args),
+     b"__reflect_prop_set" => vm.ho_reflect_prop_set(args),
+     b"__reflect_prop_attributes" => vm.ho_reflect_prop_attributes(args),
+-    b"__reflect_prop_attr_new" => vm.ho_reflect_prop_attr_new(args),
+     b"__reflect_prop_attr_args" => vm.ho_reflect_prop_attr_args(args),
+     b"__reflect_func_attributes" => vm.ho_reflect_func_attributes(args),
+     b"__reflect_func_attr_new" => vm.ho_reflect_func_attr_new(args),
+@@ -15103,8 +15106,6 @@ host_builtins! {
+     b"__dom_by_tag" => vm.ho_dom_by_tag(args),
+     b"__dom_xpath" => vm.ho_dom_xpath(args),
+     b"__dom_doc_meta" => vm.ho_dom_doc_meta(args),
+-    b"__reflect_class_loc" => vm.ho_reflect_class_loc(args),
+-    b"__reflect_class_real_name" => vm.ho_reflect_class_real_name(args),
+     b"__reflect_ref_id" => vm.ho_reflect_ref_id(args),
+     b"__reflect_gen_info" => vm.ho_reflect_gen_info(args),
+     b"__reflect_fiber_info" => vm.ho_reflect_fiber_info(args),
