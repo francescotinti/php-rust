@@ -1,0 +1,133 @@
+--- wp157-harness/s157-orm-coppia.sh	2026-08-23 23:28:56
++++ wp158-harness/s158-orm-coppia.sh	2026-08-25 01:36:31
+@@ -1,11 +1,13 @@
+ #!/bin/bash
+-# s157-orm-coppia.sh — coppia dbal+ORM sul pin s156 = rimisura DOVUTA (pin
+-# nuovo) con attesa HD2 SOTTO-risoluzione (criterio s157-criterio-orm.md; copia
+-# DICHIARATA di s155-orm-coppia.sh, manifest s157-orm-copia.diff; adattamenti:
+-# pin s156 42efea3e34feb390, path wp157, blocco ATTESA-HD2, FIX estrazione
+-# summ()/names() con LC_ALL=C + grep -a (az.rev. S-155 #4, diagnosi in
+-# wp156-harness/s156-dbal-summ-fix.md; reperto dbal ~3921/626 vs oracle
+-# 3929/594 A VERBALE con questa coppia): ORM + dbal, N=2 per
++# s158-orm-coppia.sh — coppia dbal+ORM sul pin s157 = rimisura DOVUTA (pin
++# nuovo) con attesa L-AL1 SOTTO-risoluzione (criterio s158-criterio-orm.md; copia
++# DICHIARATA di s157-orm-coppia.sh, manifest s158-orm-copia.diff; adattamenti:
++# pin s157 76787303716acd4e, path wp158, blocco ATTESA-AL1 con EMENDA S-157
++# (giudizio CANONICO su net ORACLE-NORMALIZZATO, ORA_REF=4,94; assoluto e
++# rapporto companion; REF NUOVO 34,82-34,91 con nota drift), EMENDE az.rev.
++# S-157 #3-#4 (header coi pin dall'HASH MISURATO + sentinella language-server
++# nel verdetto); FIX estrazione summ()/names() LC_ALL=C EREDITATO (reperto
++# dbal ~3921/626 vs oracle 3929/594 A VERBALE): ORM + dbal, N=2 per
+ # lato, oracle prima poi phpr per gamba, workspace ri-untarrato, watchdog,
+ # /usr/bin/time -l, pavimenti per-binario PER WORKSPACE, gate contesa ictx/s.
+ # ADATTAMENTO lock (ereditato): il lock misura è della SESSIONE — lo
+@@ -13,22 +15,29 @@
+ set -u
+ export PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin
+ REPO="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust"
+-H="$REPO/wp157-harness"
++H="$REPO/wp158-harness"
+ GATES="/Volumes/Extreme Pro/Claude/wp9-harness/gates"
+ WD="/Volumes/Extreme Pro/Claude/wp13-harness/run-with-watchdog.sh"
+ ORACLE=/opt/homebrew/opt/php/bin/php
+ PHPR="$HOME/Claude/php-rust-output/release/phpr"
+ SP="${MAPPA_SP:?MAPPA_SP (workdir APFS) richiesto}"
+ OUT="$H/orm-out"; mkdir -p "$OUT"
+-VERD="$H/s157-orm-coppia-verdetto.out"
++VERD="$H/s158-orm-coppia-verdetto.out"
+ p(){ echo "$(date +%H:%M:%S) $1" >> "$OUT/progress.txt"; }
+ : > "$OUT/progress.txt"
+ rm -f "$OUT/rimisura.done"
+-[ "$(shasum -a 256 "$PHPR" | cut -c1-16)" = "42efea3e34feb390" ] || { echo "rc=9 pin!=s156" > "$OUT/rimisura.done"; exit 9; }
++PINM="$(shasum -a 256 "$PHPR" | cut -c1-16)"
++[ "$PINM" = "76787303716acd4e" ] || { echo "rc=9 pin!=s157" > "$OUT/rimisura.done"; exit 9; }
+ # lock della SESSIONE: si VERIFICA soltanto (niente creazione né trap).
+ LOCK=/private/tmp/phpr-measure.lock
+ [ -e "$LOCK" ] || { echo "rc=6 measure-lock ASSENTE (finestra non aperta)" > "$OUT/rimisura.done"; exit 6; }
+ 
++# sentinella language-server (az.rev. S-157 #4): registrata nel verdetto,
++# inizio e fine finestra; presenza != esclusione (misure a user-CPU), si dichiara.
++ls_sentinel(){ pgrep -fl 'language[_-]server|Antigravity|rust-analyzer|intelephense|serena|gopls|pylsp|solargraph' 2>/dev/null | grep -v pgrep | awk '{print $2}' | sort -u | tr '\n' ' '; }
++LS_START="$(ls_sentinel)"
++p "sentinella LS inizio: ${LS_START:-nessuno}"
++
+ # FIX az.rev. S-155 #4 (adattamento DICHIARATO): l'output dbal phpr contiene
+ # byte non-UTF-8 (latin1 a catalogo) — tr/sed/grep BSD in locale UTF-8 muoiono
+ # a metà stream e la summary/failnames escono tronche. LC_ALL=C + grep -a.
+@@ -110,9 +119,9 @@
+     return d
+ def failset(f):
+     return set(x.strip() for x in open(f) if x.strip()) if os.path.exists(f) else set()
+-print("coppia-s157 (user CPU; pavimenti PARZIALI phpunit --version: orm o=%.3f p=%.3f · dbal o=%.3f p=%.3f)" % (fo, fp, dfo, dfp))
++print("coppia-s158 (user CPU; pavimenti PARZIALI phpunit --version: orm o=%.3f p=%.3f · dbal o=%.3f p=%.3f)" % (fo, fp, dfo, dfp))
+ print("grade=VERDICT  # derivazione meccanica dai .time")
+-new_net = {}
++new_net = {}; ora_net = {}; ratio_net = {}
+ for w, flo, flp in (("orm", fo, fp), ("dbal", dfo, dfp)):
+     rate = {}; absi = {}
+     for leg in (1, 2):
+@@ -120,6 +129,8 @@
+         raw = p_['user']/o['user']
+         net = (p_['user']-flp)/(o['user']-flo)
+         new_net.setdefault(w, []).append(p_['user']-flp)
++        ora_net.setdefault(w, []).append(o['user']-flo)
++        ratio_net.setdefault(w, []).append(net)
+         for k, d in ((f"oracle{leg}", o), (f"phpr{leg}", p_)):
+             absi[k] = d.get('ictx', -1)
+             rate[k] = (d['ictx']/d['real']) if ('ictx' in d and d.get('real', 0) > 0) else -1
+@@ -134,28 +145,41 @@
+ diff = sorted(s1 - o1)
+ print(f"dbal_parita': phpr_failset_stabile={s1 == s2} |phpr_fail|={len(s1)} |diff_vs_oracle|={len(diff)}")
+ if diff[:20]: print("dbal_diff_nomi: " + " | ".join(diff[:20]))
+-# --- ATTESA HD2 (criterio s157-criterio-orm.md p.4-5, aritmetica meccanica) ---
+-REF_MIN, REF_MAX = 34.30, 34.35   # phpr ORM net @ s154 (s155-orm-coppia-verdetto)
++# --- ATTESA L-AL1 (criterio s158-criterio-orm.md p.2-5, aritmetica meccanica) ---
++# EMENDA S-157 (indagine HD2, az.rev. #4): giudizio CANONICO su net
++# ORACLE-NORMALIZZATO; assoluto e rapporto stampati come companion.
++REF_MIN, REF_MAX = 34.82, 34.91   # phpr ORM net @ s157 (NUOVO rif., nota drift oracle +0,9/1,3%)
++ORA_REF = 4.94                     # oracle net della finestra s157 (stessa del rif. assoluto)
+ RES = 0.293                        # risoluzione KS-146-1
+-ATT_LO, ATT_HI = 0.01, 0.05       # attesa pre-registrata SOTTO risoluzione
++RREF_LO, RREF_HI = 7.028, 7.067   # rapporto net registrato S-157 (companion)
++ATT_LO, ATT_HI = 0.02, 0.05       # attesa L-AL1 pre-registrata SOTTO risoluzione
+ nn = sorted(new_net.get("orm", []))
+-if len(nn) == 2:
++on = ora_net.get("orm", [])
++rr = sorted(ratio_net.get("orm", []))
++if len(nn) == 2 and len(on) == 2:
+     d_min = REF_MIN - nn[-1]; d_max = REF_MAX - nn[0]
+-    print(f"attesa-HD2: phpr_orm_net_new=[{nn[0]:.2f}; {nn[1]:.2f}] ref=[{REF_MIN}; {REF_MAX}] Delta=[{d_min:+.2f}; {d_max:+.2f}] s")
++    print(f"attesa-AL1 assoluto (companion, nota drift): phpr_orm_net_new=[{nn[0]:.2f}; {nn[1]:.2f}] ref=[{REF_MIN}; {REF_MAX}] Delta=[{d_min:+.2f}; {d_max:+.2f}] s")
++    normed = sorted(pn * ORA_REF / o for pn, o in zip(new_net["orm"], on))
++    dn_min = REF_MIN - normed[-1]; dn_max = REF_MAX - normed[0]
++    print(f"attesa-AL1 ORACLE-NORMALIZZATO (CANONICO, emenda S-157): net_norm=[{normed[0]:.2f}; {normed[1]:.2f}] (ORA_REF={ORA_REF}, oracle_net_gambe={[round(x,2) for x in on]}) Delta_norm=[{dn_min:+.2f}; {dn_max:+.2f}] s")
++    print(f"rapporto net (companion): [{rr[0]:.3f}; {rr[1]:.3f}] vs registrato S-157 [{RREF_LO}; {RREF_HI}]")
+     if parita_rc != 0:
+-        print("attesa-HD2: CIFRA NULLA (parita' rotta) — nessun giudizio")
+-    elif d_min >= RES:
+-        print(f"attesa-HD2: DIREZIONE GIU' FUORI RUMORE (Delta_min {d_min:.2f} >= {RES}) — OLTRE l'attesa sotto-risoluzione 0,01-0,05: dichiarare")
+-    elif d_max < -RES:
+-        print(f"attesa-HD2: REGRESSIONE SEGNALATA (Delta_max {d_max:.2f} < -{RES}) — indagine PRIMA di ogni altra leva")
+-    elif d_max < RES:
+-        print(f"attesa-HD2: COMPATIBILE (Delta dentro il rumore ±{RES}; attesa 0,01-0,05 SOTTO risoluzione — esito dichiarato, nessuna cifra attribuita a HD2)")
++        print("attesa-AL1: CIFRA NULLA (parita' rotta) — nessun giudizio")
++    elif dn_min >= RES:
++        print(f"attesa-AL1: DIREZIONE GIU' FUORI RUMORE (Delta_norm_min {dn_min:.2f} >= {RES}) — OLTRE l'attesa sotto-risoluzione 0,02-0,05: dichiarare, nessuna attribuzione senza sonda")
++    elif dn_max < -RES:
++        print(f"attesa-AL1: REGRESSIONE SEGNALATA (Delta_norm_max {dn_max:.2f} < -{RES}) — indagine PRIMA di ogni altra leva")
++    elif dn_max < RES:
++        print(f"attesa-AL1: COMPATIBILE (Delta_norm dentro il rumore ±{RES}; attesa 0,02-0,05 SOTTO risoluzione — esito dichiarato, nessuna cifra attribuita a L-AL1)")
+     else:
+-        print(f"attesa-HD2: NON RISOLTA (intervallo Delta a cavallo di {RES}) — si dichiara, replica eventuale")
++        print(f"attesa-AL1: NON RISOLTA (intervallo Delta_norm a cavallo di {RES}) — si dichiara, replica eventuale")
+ PY
+ 
+-{ echo "== s157 coppia dbal+ORM (pin s156 42efea3e vs oracle 8.5.7; criterio s157-criterio-orm.md) =="
++{ echo "== s158 coppia dbal+ORM (pin s157 MISURATO $PINM vs oracle 8.5.7; criterio s158-criterio-orm.md) =="
+   echo "# estrazione summ/names con LC_ALL=C + grep -a (fix az.rev. S-155 #4); reperto conteggi dbal phpr vs oracle A VERBALE (companion, non arbitra)"
++  echo "sentinella language-server inizio finestra (az.rev. S-157 #4): ${LS_START:-nessuno}"
++  LS_END="$(ls_sentinel)"
++  echo "sentinella language-server fine finestra: ${LS_END:-nessuno}"
+   cat "$OUT/floors.txt"
+   cat "$OUT/ratios.txt"
+   echo "parita': orm phpr per NOME vs baseline 16 · dbal fail-set stabile tra gambe — rc=$RC (0=tutte valide)"
