@@ -4,13 +4,12 @@ ORM ARBITRATO + leva L-AL1 PROMOSSA (pin NUOVO s157)** · giudice m-missload
 **D=+22,0 ns/iter** (soglia 5,0; UB 20,7+rumore in banda; riconc. smoke 2,0<5,0
 IN banda) · promozione **t1 rc=0** (salita dente loc PRE-dichiarata mod.rs
 25778, candidato al byte) · conferma post-pin +25,0 segni 5/5 · indagine
-attesa-HD2: Δ assoluto cross-finestra = drift di giornata (oracle +0,9/1,3%),
-replica3 certificata ratio 7,028 DENTRO il riferimento ⇒ attribuzione al pin
-REFUTATA · leve S-157: **1 (promossa)** · incidenti **19 + 1 PROPOSTO**
-(smoke-stop scavalcato, dich. a verbale) · reperti:
-objchurn arbitrato a N=12M (−4,17 sotto banda 6,7; morso R=5 = 3 tick) ·
-dbal 3921/626 vs oracle 3929/594 (estrazione emendata LC_ALL=C) · §3.25 a
-catalogo (frame builtin assente nel backtrace in autoloader) · QUESITI UTENTE:
+attesa-HD2: Δ assoluto cross-finestra = drift di giornata (oracle +0,9/1,3%,
+replica3 certificata: ratio 7,028 DENTRO il riferimento) ⇒ pin REFUTATO ·
+leve S-157: **1 (promossa)** · incidenti **19 + 1 PROPOSTO** (smoke-stop
+scavalcato, dich. a verbale) · reperti: objchurn arbitrato N=12M (−4,17
+sotto banda) · dbal 3921/626 vs 3929/594 (fix LC_ALL=C) · §3.25 a catalogo
+(frame builtin assente nel backtrace da autoloader) · QUESITI UTENTE:
 (a) T2/A2 sospendere (racc. S-155, ratifica al contatto); (b) census server
 (7° slittamento); (c) incidente 20 (smoke-stop scavalcato): ratificare.
 
@@ -44,14 +43,13 @@ dbal 7,701–7,853 (tutti @ pin s156: **coppia al pin s157 DOVUTA**) · corpus
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
 __reflect_* slice tranche-2 · array_map 7,68M · residuo L-AL1 vec![arg] ·
-miss/autoload: fetta E in parte PAGATA (L-AL1), risonda census al prossimo
-probe · gamba server census (7°) · MethodCall.borrow k=2 · §3.24+§3.23 ·
-§3.25 NUOVA (frame builtin nel backtrace da autoloader; cura candidata:
-frame sintetico nel collettore) · slot-load · §3.22 · depr. float→int ·
-warning ×2 · div. RMW · objmap 43,4 → GC · evalcls 316,9× · refl 42,4× ·
-re +2 · §3.13/§3.12-i/§3.14/§3.21 · get_gc · latin1 (morde anche dbal:
-reperto 3921/626 da istruire) · dbal 10 nomi · gdc DECLASSATA · CI: corpus-
-FAIL d'ambiente 3 test backtrace (nei gate di record passano).
+miss/autoload PAGATA in parte (risonda al prossimo census) · gamba server
+census (7°) · MethodCall.borrow k=2 · §3.25 NUOVA (frame builtin nel
+backtrace da autoloader; cura: frame sintetico nel collettore) · §3.24+§3.23
+· slot-load · §3.22 · depr. float→int · warning ×2 · div. RMW · objmap 43,4
+→ GC · evalcls 316,9× · refl 42,4× · re +2 · §3.13/§3.12-i/§3.14/§3.21 ·
+get_gc · latin1 (morde anche dbal: 3921/626 da istruire) · dbal 10 nomi ·
+gdc DECLASSATA · CI: corpus-FAIL d'ambiente 3 test backtrace (nei gate ok).
 
 ## NON riproporre (i veti restano; dettaglio nei concili archiviati)
 **S-157: attese/confronti in secondi ASSOLUTI tra finestre di giorni diversi
@@ -65,10 +63,10 @@ per-nome per cure su FUNNEL · claim «sotto N×» a intervallo a cavallo.
 S-154: identità pin a hash esatto su build fredda · guardie quantizzate
 sotto il tick. S-153: braccio A non-gemello (§7-bis) · leve borrow senza
 prezzo in-contesto. S-152: leve a scala SUITE. Trasversali: BOLT/NaN-boxing/
-threaded-dispatch/PGO · pin/stash senza collaudo-nell'atto · differenze tra
-A/B come cifra · componenti prezzate · denominatori a memoria · rc da pipe ·
+threaded-dispatch/PGO · pin/stash senza collaudo-nell'atto · differenze A/B
+come cifra · componenti prezzate · denominatori a memoria · rc da pipe ·
 edit coi build in volo · promozione sotto banda · claim di ASSENZA oltre
-risoluzione · misure con LSP in volo (dichiarare) · giudice sotto-risoluto.
+risoluzione · LSP in volo (dichiarare) · giudice sotto-risoluto.
 **Riscritto** 2026-08-24 (chiusura S-157); storia in `sessions/` · `gaps/`.
 Pre-flight S-158: pin phpr **s157 76787303**716acd4e + server **bdd32a98**
 9ae1f492 (SOLO via pin-*.sh) · MySQL wp8 con l'elenco · uploads sotto
