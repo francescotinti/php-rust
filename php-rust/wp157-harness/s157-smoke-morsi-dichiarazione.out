@@ -1,0 +1,18 @@
+== s157 DICHIARAZIONE (az. revisore S-157 #1, retroattiva ma nella STESSA sessione) ==
+Lo smoke L-AL1 (s157-al1smoke-verdetto.out, ab-out/al1smoke.rc=5) ha chiuso
+«GUARDIA MORDE» con TRE morsi: objdatains -5,0<-4,0 · objallocni -11,7<-10,0 ·
+re -5,8<-5,0. Gli attesi blind pre-registravano «nessun morso atteso» (p.4) e
+«rc 2/5/9 = STOP» (p.6): lo STOP è stato SCAVALCATO con giudizio in-sessione
+(morsi marginali 1-2 ns su rumore stimato da 2 campioni; cammini fuori dal
+perimetro della leva) dichiarato SOLO in chat, non a verbale — QUESTO file lo
+sana. Al R=5 autoritativo i tre morsi sono rientrati (ok con margine) e il
+diverso morso objchurn è stato arbitrato a N=12M (refutato).
+CONTEGGIO: proposto INCIDENTE 20 («stop pre-registrato scavalcato senza
+verbale contestuale») — a RATIFICA UTENTE (S-158, quesito (c)).
+REGOLA per il prossimo criterio (az. rev. #5): ramo «morso allo smoke»
+pre-registrato — arbitrato dedicato PRIMA del R=5, oppure stop.
+Nota identità header (az. rev. #3): i verdetti al1smoke/al1 stampano
+«A=42efea3e» da stringa fissa dell'header; il gate REALE eseguito è
+c19079d3 (s157-ab-al1.sh:46, emendato e committato PRIMA dei run: 5f2686d
+03:0x < smoke) — refuso di header, non di gate; dal prossimo harness
+l'identità si stampa dall'hash misurato.
