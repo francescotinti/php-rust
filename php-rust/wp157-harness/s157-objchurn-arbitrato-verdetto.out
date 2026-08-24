@@ -1,0 +1,8 @@
+== s157-objchurn-arbitrato: A=c19079d3 B=76787303 R=5 ABAB; derivato m-objchurn12 N=12000000 (tick 0,83 <= soglia/4); soglia=max(4; 6,7; rumore drop-1); comparatore STRETTO; quiescenza rc=0 ==
+N=12000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=14.21 rawB=14.27
+  coppia2 [BA]: rawA=14.22 rawB=14.19
+  coppia3 [AB]: rawA=14.16 rawB=14.26
+  coppia4 [BA]: rawA=14.22 rawB=14.30
+  coppia5 [AB]: rawA=14.34 rawB=14.28
+ARBITRATO objchurn12: A=1183.33 B=1187.50 ns/iter D=-4.17 soglia_reg=-6.70 (rumore drop-1 A'=5.00 B'=3.33; banda fondata 6,7) -> morso REFUTATO (fluttuazione sotto-risoluta del giudice a N=3M)

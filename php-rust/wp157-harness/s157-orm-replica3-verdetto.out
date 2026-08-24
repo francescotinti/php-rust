@@ -1,0 +1,5 @@
+== s157 orm replica3 (INDAGINE attesa-HD2 REGRESSIONE SEGNALATA; finestra certificata quiescenza rc=0; parita' rc=0) ==
+floors: o=0.06 p=0.07
+orm_leg3: oracle_user=5.02 (sys=0.49) phpr_user=34.93 (sys=1.30) ratio_raw=6.958 ratio_net=7.028
+ictx: oracle3=346 (62.1/s) phpr3=2038 (55.8/s)
+phpr_net3=34.86 oracle_net3=4.96  # confronto: notte [34.82;34.91]/[4.94] · ref s154-window [34.30;34.35]/[4.87;4.92]

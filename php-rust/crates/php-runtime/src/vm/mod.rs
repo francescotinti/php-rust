@@ -731,6 +731,7 @@ pub fn vm_new<'m>(
         autoloaders: Vec::new(),
         autoload_cursors: Vec::new(),
         autoloading: HashSet::default(),
+        autoload_key_pool: Vec::new(),
         registry,
         stdout: Vec::new(),
         rendered: Vec::new(),
@@ -3130,6 +3131,10 @@ pub struct Vm<'m> {
     /// Class names (lowercased) currently mid-autoload, to break recursion if an
     /// autoloader (transitively) references the same name (step 57, Phase 3).
     autoloading: HashSet<Vec<u8>>,
+    /// L-AL1 (S-157): buffer di chiave riusati dal guard di `try_autoload` —
+    /// il miss ripetuto (autoloader registrato, classe mai definita) non deve
+    /// allocare per la chiave del guard: `take` restituisce il buffer al pool.
+    autoload_key_pool: Vec<Vec<u8>>,
     /// Builtin registry, injected by the caller (php-runtime can't build a
     /// populated one — that lives in php-builtins, which depends on php-runtime).
     registry: &'m Registry,
@@ -9690,7 +9695,9 @@ impl<'m> Vm<'m> {
         // class_exists non deve allocare (k=2→0 col LcKey a valle).
         let name = b.strip_prefix(b"\\").unwrap_or(b);
         if autoload {
-            self.resolve_class_autoload(name)
+            // L-AL1 (S-157): passa lo ZStr originale — sul miss l'arg del
+            // loader diventa un rc-clone invece di una copia.
+            self.resolve_class_autoload_with(name, Some(&raw))
         } else {
             Ok(self.class_index.get(LcKey::new(name).as_slice()).copied())
         }
@@ -10194,7 +10201,7 @@ impl<'m> Vm<'m> {
                     // The autoloader receives the name as serialized (no
                     // leading backslash in the wire format); a throw inside
                     // it aborts the unserialize like PHP.
-                    self.try_autoload(&class, &lower)?;
+                    self.try_autoload(&class, &lower, None)?;
                 }
                 let cid = self.class_index.get(lower.as_slice()).copied();
                 // `__unserialize` receives the raw data array INSTEAD of prop
@@ -11981,6 +11988,17 @@ impl<'m> Vm<'m> {
     /// miss and retrying (step 57, Phase 3). Returns `None` if still undefined
     /// after autoloading; a throwing autoloader propagates.
     fn resolve_class_autoload(&mut self, name: &[u8]) -> Result<Option<ClassId>, PhpError> {
+        self.resolve_class_autoload_with(name, None)
+    }
+
+    /// L-AL1 (S-157): variante con lo ZStr originale del chiamante — quando i
+    /// byte coincidono col nome (nessun prefisso `\`), l'arg dell'autoloader
+    /// è un rc-clone della stringa del chiamante (miss a 0 alloc per l'arg).
+    fn resolve_class_autoload_with(
+        &mut self,
+        name: &[u8],
+        name_zs: Option<&php_types::ZStr>,
+    ) -> Result<Option<ClassId>, PhpError> {
         let bare = name.strip_prefix(b"\\").unwrap_or(name);
         // L-CE1 (S-154): chiave lowercased via LcKey (SSO stack ≤64 B) — il
         // hit-path non alloca; stessi byte di to_ascii_lowercase, stesso
@@ -11997,7 +12015,7 @@ impl<'m> Vm<'m> {
         if self.trait_declared(key.as_slice()) {
             return Ok(None);
         }
-        self.try_autoload(bare, key.as_slice())?;
+        self.try_autoload(bare, key.as_slice(), name_zs)?;
         Ok(self.class_index.get(key.as_slice()).copied())
     }
 
@@ -12023,7 +12041,7 @@ impl<'m> Vm<'m> {
         if known(self) {
             return Ok(true);
         }
-        self.try_autoload(bare, &key)?;
+        self.try_autoload(bare, &key, None)?;
         Ok(known(self))
     }
 
@@ -12032,13 +12050,29 @@ impl<'m> Vm<'m> {
     /// class name, until one defines it or all are tried (step 57, Phase 3). A
     /// recursion guard prevents an autoloader that references the same name from
     /// looping. A throwing autoloader propagates.
-    fn try_autoload(&mut self, name: &[u8], key: &[u8]) -> Result<(), PhpError> {
+    fn try_autoload(
+        &mut self,
+        name: &[u8],
+        key: &[u8],
+        name_zs: Option<&php_types::ZStr>,
+    ) -> Result<(), PhpError> {
         if self.autoloaders.is_empty() || self.autoloading.contains(key) {
             return Ok(());
         }
-        self.autoloading.insert(key.to_vec());
+        // L-AL1 (S-157): chiave del guard dal pool — il miss ripetuto non
+        // alloca a regime (il buffer torna al pool alla rimozione).
+        let mut kbuf = self.autoload_key_pool.pop().unwrap_or_default();
+        kbuf.clear();
+        kbuf.extend_from_slice(key);
+        self.autoloading.insert(kbuf);
         log::debug!(target: "phpr::autoload", "autoload {}", String::from_utf8_lossy(name));
-        let arg = Zval::Str(PhpStr::new(name.to_vec()));
+        // L-AL1 (S-157): l'arg del loader condivide lo ZStr del chiamante
+        // quando i byte coincidono (stringhe PHP immutabili, rc sicuro);
+        // altrimenti una sola copia diretta dallo slice (niente to_vec).
+        let arg = match name_zs {
+            Some(z) if z.as_bytes() == name => Zval::Str(z.clone()),
+            _ => Zval::Str(PhpStr::new(name)),
+        };
         // S-71.2 (WP-71, Stogov): Zend iterates the LIVE registration list —
         // an autoloader that unregisters a later one during this very lookup
         // prevents it from firing, and one that unregisters ITSELF with
@@ -12066,7 +12100,9 @@ impl<'m> Vm<'m> {
             }
         }
         self.autoload_cursors.pop();
-        self.autoloading.remove(key);
+        if let Some(kbuf) = self.autoloading.take(key) {
+            self.autoload_key_pool.push(kbuf);
+        }
         outcome
     }
 

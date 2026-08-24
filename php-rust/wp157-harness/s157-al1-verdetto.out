@@ -1,0 +1,109 @@
+== s157-ab-al1 al1: A=42efea3e(gemello RICOSTRUITO tree s156) B=76787303 R=5 ordine ALTERNATO; giudice=missload N=10000000 dichiarato; soglia=max(4, drop-1); UB-alloc falsificabile=20.7 (3 alloc/miss x miheap 6.9); guardie hostargs(N=10M) + backtrace24(N=2,4M) + obj* + sei, comparatore STRETTO; quiescenza rc=0; rc autoritativo = ab-out/al1.rc ==
+cat=missload N=10000000 floor_A=0.03 floor_B=0.02
+  coppia1 [AB]: rawA=3.09 rawB=2.88
+  coppia2 [BA]: rawA=3.09 rawB=2.89
+  coppia3 [AB]: rawA=3.10 rawB=2.83
+  coppia4 [BA]: rawA=3.09 rawB=2.85
+  coppia5 [AB]: rawA=3.13 rawB=2.86
+cat=hostargs N=10000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=2.02 rawB=2.03
+  coppia2 [BA]: rawA=2.00 rawB=2.00
+  coppia3 [AB]: rawA=2.00 rawB=1.99
+  coppia4 [BA]: rawA=2.01 rawB=1.99
+  coppia5 [AB]: rawA=2.02 rawB=2.02
+cat=backtrace N=2400000 floor_A=0.03 floor_B=0.02
+  coppia1 [AB]: rawA=1.12 rawB=1.12
+  coppia2 [BA]: rawA=1.12 rawB=1.11
+  coppia3 [AB]: rawA=1.11 rawB=1.12
+  coppia4 [BA]: rawA=1.11 rawB=1.11
+  coppia5 [AB]: rawA=1.12 rawB=1.13
+cat=objdropdef N=3000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=3.10 rawB=3.12
+  coppia2 [BA]: rawA=3.12 rawB=3.11
+  coppia3 [AB]: rawA=3.09 rawB=3.09
+  coppia4 [BA]: rawA=3.10 rawB=3.08
+  coppia5 [AB]: rawA=3.10 rawB=3.09
+cat=objchurn N=3000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=3.54 rawB=3.57
+  coppia2 [BA]: rawA=3.54 rawB=3.56
+  coppia3 [AB]: rawA=3.53 rawB=3.57
+  coppia4 [BA]: rawA=3.53 rawB=3.54
+  coppia5 [AB]: rawA=3.59 rawB=3.57
+cat=objdatains N=3000000 floor_A=0.02 floor_B=0.03
+  coppia1 [AB]: rawA=2.91 rawB=2.89
+  coppia2 [BA]: rawA=2.91 rawB=2.92
+  coppia3 [AB]: rawA=2.90 rawB=2.89
+  coppia4 [BA]: rawA=2.89 rawB=2.91
+  coppia5 [AB]: rawA=2.90 rawB=2.88
+cat=objalloc N=3000000 floor_A=0.03 floor_B=0.02
+  coppia1 [AB]: rawA=2.41 rawB=2.41
+  coppia2 [BA]: rawA=2.42 rawB=2.40
+  coppia3 [AB]: rawA=2.41 rawB=2.45
+  coppia4 [BA]: rawA=2.43 rawB=2.42
+  coppia5 [AB]: rawA=2.41 rawB=2.41
+cat=objallocni N=3000000 floor_A=0.02 floor_B=0.03
+  coppia1 [AB]: rawA=2.22 rawB=2.21
+  coppia2 [BA]: rawA=2.23 rawB=2.22
+  coppia3 [AB]: rawA=2.21 rawB=2.23
+  coppia4 [BA]: rawA=2.21 rawB=2.25
+  coppia5 [AB]: rawA=2.21 rawB=2.22
+cat=objmap N=3000000 floor_A=0.02 floor_B=0.03
+  coppia1 [AB]: rawA=0.38 rawB=0.37
+  coppia2 [BA]: rawA=0.37 rawB=0.37
+  coppia3 [AB]: rawA=0.37 rawB=0.37
+  coppia4 [BA]: rawA=0.38 rawB=0.37
+  coppia5 [AB]: rawA=0.38 rawB=0.37
+cat=arith N=150000000 floor_A=0.02 floor_B=0.03
+  coppia1 [AB]: rawA=7.08 rawB=7.00
+  coppia2 [BA]: rawA=6.95 rawB=7.05
+  coppia3 [AB]: rawA=7.02 rawB=7.03
+  coppia4 [BA]: rawA=7.01 rawB=7.05
+  coppia5 [AB]: rawA=7.06 rawB=6.97
+cat=prop N=90000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=6.92 rawB=7.00
+  coppia2 [BA]: rawA=6.95 rawB=6.95
+  coppia3 [AB]: rawA=6.93 rawB=7.00
+  coppia4 [BA]: rawA=6.94 rawB=6.96
+  coppia5 [AB]: rawA=6.92 rawB=6.96
+cat=calls N=60000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=6.40 rawB=6.40
+  coppia2 [BA]: rawA=6.43 rawB=6.42
+  coppia3 [AB]: rawA=6.41 rawB=6.38
+  coppia4 [BA]: rawA=6.43 rawB=6.36
+  coppia5 [AB]: rawA=6.40 rawB=6.37
+cat=str N=28000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=4.46 rawB=4.45
+  coppia2 [BA]: rawA=4.41 rawB=4.44
+  coppia3 [AB]: rawA=4.43 rawB=4.48
+  coppia4 [BA]: rawA=4.42 rawB=4.45
+  coppia5 [AB]: rawA=4.41 rawB=4.44
+cat=arr N=30000000 floor_A=0.02 floor_B=0.03
+  coppia1 [AB]: rawA=4.53 rawB=4.58
+  coppia2 [BA]: rawA=4.61 rawB=4.54
+  coppia3 [AB]: rawA=4.58 rawB=4.65
+  coppia4 [BA]: rawA=4.51 rawB=4.56
+  coppia5 [AB]: rawA=4.54 rawB=4.53
+cat=re N=12000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=5.48 rawB=5.55
+  coppia2 [BA]: rawA=5.50 rawB=5.54
+  coppia3 [AB]: rawA=5.48 rawB=5.50
+  coppia4 [BA]: rawA=5.46 rawB=5.51
+  coppia5 [AB]: rawA=5.48 rawB=5.50
+GIUDICE missload: A=306.0 B=284.0 ns/iter D=+22.0 soglia=5.0 (rumore drop-1: A'=1.0 B'=5.0) -> SOPRA SOGLIA
+riconciliazione missload: D_smoke=+24.0 D_R5=+22.0 |diff|=2.0 banda=5.0 -> in banda
+riconciliazione UB missload: D=+22.0 vs UB=20.7+rumore=5.0 -> dentro la banda del modello
+guardia hostargs: A=199.0 B=198.0 D=+1.0 soglia_reg=-4.0 [max(4, drop-1); rumore drop-1 A'=2.0 B'=3.0] -> ok
+guardia backtrace: A=454.2 B=458.3 D=-4.2 soglia_reg=-8.3 [max(4, drop-1); rumore drop-1 A'=4.2 B'=8.3] -> ok
+guardia objdropdef: A=1026.7 B=1023.3 D=+3.3 soglia_reg=-10.0 [max(4, drop-1); rumore drop-1 A'=3.3 B'=10.0] -> ok
+guardia objchurn: A=1173.3 B=1183.3 D=-10.0 soglia_reg=-6.7 [banda fondata=6.7; rumore drop-1 A'=3.3 B'=3.3] -> REGRESSIONE
+guardia objdatains: A=960.0 B=953.3 D=+6.7 soglia_reg=-10.0 [max(4, drop-1); rumore drop-1 A'=6.7 B'=10.0] -> ok
+guardia objalloc: A=793.3 B=796.7 D=-3.3 soglia_reg=-13.3 [banda fondata=13.3; rumore drop-1 A'=3.3 B'=6.7] -> ok
+guardia objallocni: A=730.0 B=730.0 D=-0.0 soglia_reg=-10.0 [banda fondata=10.0; rumore drop-1 A'=3.3 B'=6.7] -> ok
+guardia objmap: A=120.0 B=113.3 D=+6.7 soglia_reg=-4.0 [banda fondata=3.3; rumore drop-1 A'=3.3 B'=0.0] -> ok
+guardia arith: A=46.7 B=46.7 D=+0.0 soglia_reg=-4.0 [SL=0.94; rumore drop-1 A'=0.5 B'=0.3] -> ok
+guardia prop: A=76.8 B=77.1 D=-0.3 soglia_reg=-4.0 [SL=0.8; rumore drop-1 A'=0.2 B'=0.6] -> ok
+guardia calls: A=106.5 B=106.0 D=+0.5 soglia_reg=-4.0 [SL=0.73; rumore drop-1 A'=0.5 B'=0.7] -> ok
+guardia str: A=157.1 B=158.2 D=-1.1 soglia_reg=-4.0 [SL=2.89; rumore drop-1 A'=0.7 B'=0.4] -> ok
+guardia arr: A=150.7 B=151.0 D=-0.3 soglia_reg=-4.0 [SL=2.49; rumore drop-1 A'=2.3 B'=1.7] -> ok
+guardia re: A=455.0 B=457.5 D=-2.5 soglia_reg=-4.5 [SL=4.46; rumore drop-1 A'=1.7 B'=3.3] -> ok
+ESITO: GUARDIA MORDE

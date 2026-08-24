@@ -2613,7 +2613,7 @@ impl<'m> super::Vm<'m> {
         if autoload {
             // The autoloader gets the name AS WRITTEN (PSR-4 file mapping is
             // case-sensitive); only the recursion-guard key is lowercased.
-            self.try_autoload(&bare, &want)?;
+            self.try_autoload(&bare, &want, None)?;
         }
         Ok(Zval::Bool(present(self)))
     }
