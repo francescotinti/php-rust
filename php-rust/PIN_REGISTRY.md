@@ -57,6 +57,7 @@ nello stesso atto perché appenda in QUESTA sezione.)
 
 | pin (sha256/16) | sessione | collaudato | evidenza |
 |---|---|---|---|
+| 76787303716acd4e | s157-al1-B BRACCIO (sorgente @ 3717812; riga da pin-phpr.sh --braccio) | smoke parità 2 modi OK 2026-08-24 02:30:06 — braccio di misura, NON pin | stash `phpr-s157-al1-B` |
 | c19079d31334a826 | s156-gemelloA BRACCIO (sorgente @ 0345dac; riga da pin-phpr.sh --braccio) | smoke parità 2 modi OK 2026-08-24 02:26:50 — braccio di misura, NON pin | stash `phpr-s156-gemelloA` |
 | 42efea3e34feb390 | s156 (sorgente @ 8815db1; riga da pin-phpr.sh) | smoke parità 2 modi OK 2026-08-23 22:23:16 — batteria/corpus/fixture/micro DOVUTI a parte | stash `phpr-s156` |
 | 42efea3e34feb390 | s156-hd2host-B BRACCIO (sorgente @ 4929916; riga da pin-phpr.sh --braccio) | smoke parità 2 modi OK 2026-08-23 21:52:32 — braccio di misura, NON pin | stash `phpr-s156-hd2host-B` |
