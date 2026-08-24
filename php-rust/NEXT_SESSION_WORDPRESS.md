@@ -6,12 +6,13 @@ IN banda) · promozione **t1 rc=0** (salita dente loc PRE-dichiarata mod.rs
 25778, candidato al byte) · conferma post-pin +25,0 segni 5/5 · indagine
 attesa-HD2: Δ assoluto cross-finestra = drift di giornata (oracle +0,9/1,3%),
 replica3 certificata ratio 7,028 DENTRO il riferimento ⇒ attribuzione al pin
-REFUTATA · leve S-157: **1 (promossa)** · incidenti **19** (=) · reperti:
+REFUTATA · leve S-157: **1 (promossa)** · incidenti **19 + 1 PROPOSTO**
+(smoke-stop scavalcato, dich. a verbale) · reperti:
 objchurn arbitrato a N=12M (−4,17 sotto banda 6,7; morso R=5 = 3 tick) ·
 dbal 3921/626 vs oracle 3929/594 (estrazione emendata LC_ALL=C) · §3.25 a
 catalogo (frame builtin assente nel backtrace in autoloader) · QUESITI UTENTE:
 (a) T2/A2 sospendere (racc. S-155, ratifica al contatto); (b) census server
-(7° slittamento).
+(7° slittamento); (c) incidente 20 (smoke-stop scavalcato): ratificare.
 
 ## Scoreboard (pin s157 phpr 76787303716acd4e + server bdd32a989ae1f492)
 **arith 5,4 · prop 5,5 · calls 4,8 · str 4,2 · arr 3,2 · re 2,5** (micro R=5
@@ -32,12 +33,14 @@ dbal 7,701–7,853 (tutti @ pin s156: **coppia al pin s157 DOVUTA**) · corpus
    qui); (b) **array_map 7,68M** (istruttoria di forma: k dipende da
    arità/callback); (c) **residuo L-AL1**: vec![arg.clone()] per loader
    (istruttoria su call_callable prima di ogni criterio).
-3. **Az.rev. S-157** (processo, REGGE CON RILIEVI — revisione.md): (1) banda
-   smoke annotata [10,35;31,05] oltre ai valori arrotondati; (2) trigger
-   d'indagine formale quando una guardia quantizzata morde entro 4 tick
-   (emenda REGOLE §3 da proporre all'utente); (3) REPORT_GAP ripristinato
-   (fatto S-157, mantenerlo quando si misura); (4) niente pkill di processi
-   condivisi senza dichiararlo nel verbale di sessione (RA/IDE).
+3. **Az.rev. S-157** (processo, REGGE CON RILIEVI — revisione.md; #1
+   incidente proposto e #2 manifest retroattivo GIÀ eseguiti in-sessione):
+   (3) identità bracci nei verdetti stampata dall'HASH MISURATO, mai da
+   stringa fissa; regione banner mimalloc pre-registrata nel criterio
+   gemello; (4) giudizio oracle-normalizzato nel criterio ORM PRIMA della
+   coppia + sentinella language-server nel .out di OGNI misura di record;
+   (5) ramo «morso allo smoke» pre-registrato nel criterio leva (arbitrato
+   dedicato PRIMA del R=5, oppure stop).
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
 __reflect_* slice tranche-2 · array_map 7,68M · residuo L-AL1 vec![arg] ·
