@@ -1071,6 +1071,20 @@ Trovata dalla micro di parità az.rev. S-141 #4 (`wp142-harness/parita-hashed.ph
 - Cura futura (leva di fedeltà candidata S-151): passare options/limit anche
   qui; bersaglio dichiarato = flip di `debug_print_backtrace_limit.phpt`.
 
+### 3.25 🟡 `debug_backtrace` DENTRO l'autoloader: manca il frame del builtin innescante (S-157, az.rev. S-156 #3, sonda bilaterale)
+- Sonda `wp157-harness/sonda-bt-autoload.php` (oracle vs pin s156 vs braccio
+  L-AL1: i due phpr IDENTICI — contratto storico, NON introdotto da HD2/AL1):
+  in Zend il backtrace dentro l'autoloader innescato da
+  `class_exists`/`interface_exists` mostra `#0 {closure}` E
+  `#1 class_exists nargs=1 a0=<nome COME SCRITTO, backslash incluso>`;
+  in phpr appare SOLO `#0 {closure}` (il frame del builtin chiamante manca:
+  gli args escono dal frame prima del dispatch — contratto HD2 §5 rev. S-156).
+- Il nome passato ALL'AUTOLOADER è invece identico (strip del `\` iniziale,
+  case preservato) — `AL:` byte-uguale sui tre motori.
+- Cura futura candidata: frame sintetico del builtin nel collettore backtrace
+  quando il run_loop è annidato in un hostcall (bersaglio: la riga `#1` della
+  sonda byte-uguale all'oracle).
+
 ## 4. Punti di forza da NON toccare (invarianti verificati byte-identici)
 
 Per evitare regressioni, questi comportamenti sono **già** byte-identici con

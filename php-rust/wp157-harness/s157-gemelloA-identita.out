@@ -1,0 +1,10 @@
+== s157 identita' gemello A (ricostruzione tree s156, criterio al1 p.6) ==
+build ricetta canonica (SOURCE_DATE_EPOCH=0 CARGO_INCREMENTAL=0, 2m29s) -> c19079d31334a826 != pin 42efea3e34feb390 (byte).
+arbitrato a CONTENUTO (emenda S-154): cmp -l pin-stash vs rebuild = 92 byte / 4 cluster:
+  2105-2120        = LC_UUID (uuid stash 8CF76F9D... vs rebuild 092C9446...)
+  12293259-12293275 = banner mimalloc __DATE__/__TIME__ ("Jan  1 1970/00:00:00" pin vs "Aug 23 2026/22:54:00" rebuild, cache C calda — reperto identico all'emenda S-154)
+  15008961-15008992 + 15104993-15105024 = firma (sig dataoff 15008816)
+NESSUNA differenza fuori dalle tre regioni lecite -> IDENTITA' A CONTENUTO CONFERMATA.
+Reperto uguale al rilievo di fine S-156 (rebuild stabile c19079d3, 92 B / 4 cluster).
+smoke parita' 2 modi OK; stash phpr-s156-gemelloA via pin-phpr.sh --braccio (registrato).
+Gate A dell'ab script emendato DICHIARANDO: atteso c19079d3 (ramo del criterio p.6).

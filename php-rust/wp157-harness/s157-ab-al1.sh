@@ -39,7 +39,11 @@ if [ "$QRC" != 0 ]; then
   echo "quiescenza FALLITA (rc=$QRC) — STOP" | tee -a "$VERD"; echo 1 > "$RC"; exit 1
 fi
 
-[ "$(shasum -a 256 "$A" | cut -c1-8)" = "42efea3e" ] || { echo "A != gemello 42efea3e (ricostruito tree s156) — STOP" | tee -a "$VERD"; echo 1 > "$RC"; exit 1; }
+# EMENDA DICHIARATA (criterio p.6, ramo contemplato): il rebuild del tree
+# pulito da' c19079d31334a826, non il byte del pin — identita' a CONTENUTO
+# arbitrata (92 B / 4 cluster = LC_UUID 16 + banner mimalloc __DATE__ 17 +
+# firma 2x32; verbale s157-gemelloA-identita.out). A = gemello ricostruito.
+[ "$(shasum -a 256 "$A" | cut -c1-8)" = "c19079d3" ] || { echo "A != gemello c19079d3 (ricostruito tree s156, contenuto==pin) — STOP" | tee -a "$VERD"; echo 1 > "$RC"; exit 1; }
 [ "$(shasum -a 256 "$BB" | cut -c1-8)" = "$BEXP" ]   || { echo "B != $BEXP — STOP" | tee -a "$VERD"; echo 1 > "$RC"; exit 1; }
 
 ucpu() { { /usr/bin/time -p perl -e 'alarm 900; exec @ARGV or die' -- "$1" "$2" > /dev/null; } 2>&1 | awk '/^user/{print $2}'; }
