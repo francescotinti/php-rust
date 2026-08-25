@@ -1,0 +1,9 @@
+== s158 identita' braccio A (gemello ricostruito tree s157) — arbitrato a CONTENUTO, ramo pre-registrato (criterio refl2 p.6 / attesi p.3, az.rev. S-157 #3) ==
+build: ricetta canonica (SOURCE_DATE_EPOCH=0 CARGO_INCREMENTAL=0 cargo build --release) su tree s157 PULITO (git status crates/ vuoto, edit L-RF2 in stash), a FREDDO post target-prune. rc=0 (ab-out/build-A.rc).
+hash misurato gemello: 369ee345e4a7abf5 · pin s157: 76787303716acd4e (stash phpr-s157, == pin al byte) — byte-id NON riprodotto a freddo (atteso: reperto S-157, riproduzione al byte solo a cache calda).
+diff binario integrale (python, confronto vs stash phpr-s157): lunghezze IDENTICHE (15.126.240) · 91 byte diversi · 4 cluster:
+  [0x838-0x847] 16 B = LC_UUID (regione ammessa 1)
+  [0xbb948a-0xbb949a] 17 B = stringa data build "Aug 23 2026 22:54" -> "Jan  1 1970 00:00" (banner mimalloc __DATE__; regione ammessa 2, <=32 B)
+  [0xe504c0-0xe504df] 32 B + [0xe67be0-0xe67bff] 32 B = firma code-sign 2x32 (regione ammessa 3)
+NESSUN byte fuori dalle tre regioni pre-registrate (criterio p.6) — condizione STOP non innescata.
+VERDETTO: A = CONTENUTO-UGUALE al pin s157; gate identita' dell'A/B: AEXP=369ee345 (hash MISURATO, passato come parametro al run).
