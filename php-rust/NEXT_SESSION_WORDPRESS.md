@@ -29,8 +29,7 @@ promo s158) · WP t8 mediana 1,754 (6/6 pulite, banda_ON 0,008) · media
    pulite PRIMA di chiudere l'attesa. Attesa L-RF2 SOTTO-risoluzione
    (estrapolata a ~7 ns × N_chiamate, NON ai 14,5 del giudice — az.rev. #2).
 2. **SONDA surplus m-refl** (az.rev. #1, entro S-160): conteggi alloc/iter
-   sui due bracci (build census) + taratura ns/alloc; finché non gira, la
-   cifra resta [21;29] §4.
+   sui due bracci (build census) + taratura ns/alloc; fino ad allora [21;29].
 3. **LEVA TENTATA (obbligo di ritmo)** — per NOME: (a) **array_map 7,68M**
    (istruttoria di forma: k da arità/callback); (b) **residuo L-AL1**
    vec![arg] (istruttoria call_callable); (c) fetta miss/autoload risonda.
