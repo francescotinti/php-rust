@@ -1,0 +1,17 @@
+== s159 copia-gate (REGOLE §3: copia dichiarata verificata PRIMA del run) ==
+pair: s159-pair.sh + s159-lancio-pair.sh vs s158 — manifest s159-pair-copia.diff
+  hunk=12; classi: nomi s159/pair159/wp159/t9 · pin s158 (92b0aea36573955a /
+  f381b3666e740cab, gate pena rc=9) · mediane storiche +t8=1,754 (banda
+  giudizio INVARIATA [1,738;1,799]) · attesa messaggio GIU' L-RF2 (non L-AL1)
+  · riferimenti criterio s159-criterio-pair-t9.md. NESSUN cambio non
+  dichiarato. rc=0
+orm: s159-orm-coppia.sh + s159-lancio-orm.sh vs s158 — manifest s159-orm-copia.diff
+  classi: nomi/path s159/wp159 · gate pin 92b0aea36573955a (pena rc=9) ·
+  cattura orm_flags nel loop ictx · blocco ATTESA a DOPPIO GIUDIZIO
+  (criterio p.2-4: (a) attesa-RF2 REF2=[34,90;35,25] CONTESO ORA_REF2=4,995,
+  RREF [6,952;7,093], ATT [0,03;0,12]; (b) replica-AL1 REF1=[34,82;34,91]
+  ORA_REF1=4,94, chiusura SOLO gambe pulite + assunzione RF2 regge; scaletta
+  meccanica del giudice INVARIATA applicata due volte). NESSUN cambio non
+  dichiarato. rc=0
+collaudo: bash -n 4/4 OK · py_compile heredoc PY 1/1 per script (match
+  contati: 1+1, nessun falso verde da regex vuota) OK
