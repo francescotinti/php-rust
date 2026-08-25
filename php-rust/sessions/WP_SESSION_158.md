@@ -6,11 +6,10 @@ una notte, con le emende di processo S-157 già operative.
 **SCOREBOARD** (pin NUOVO s158 phpr 92b0aea36573955a + server f381b3666e740cab):
 arith 5,4 = · prop 5,5 = · calls 4,8 = · str 4,3 ↑ · arr 3,3 ↑ · re 2,5 =
 (micro R=5 promo; rif. s157: 5,4/5,5/4,8/4,2/3,2/2,5; str/arr +1 tick) ·
-WP t8 mediana 1,754 COMPATIBILE (bordo basso banda [1,738;1,799], N=6 pulite
-6/6, banda_ON 0,008) · media 2,454–2,470 · ORM 6,952–7,093 (Δ_norm NON
-RISOLTA lato migliorativo) · dbal 7,477–7,486 · corpus 1412 · batteria
-1748/0/2 (cap loc 25779/6815) · **leve spedite: 1 (L-RF2 PROMOSSA)** ·
-incidenti 19 (+1 S-157 ancora in ratifica).
+WP t8 mediana 1,754 COMPATIBILE (bordo basso, N=6 pulite 6/6, banda 0,008) ·
+media 2,454–2,470 · ORM 6,952–7,093 (Δ_norm NON RISOLTA, lato migliorativo) ·
+dbal 7,477–7,486 · corpus 1412 · batteria 1748/0/2 (cap loc 25779/6815) ·
+**leve spedite: 1 (L-RF2 PROMOSSA)** · incidenti 19 (+1 S-157 in ratifica).
 
 ## Esiti secchi
 1·Coppia t8 rc=0 COMPATIBILE (1,754; PRIMA finestra 6/6 pulite; banda 0,008;
