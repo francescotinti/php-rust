@@ -413,7 +413,7 @@ impl<'m> super::Vm<'m> {
     }
     /// `__reflect_method_info($class, $method)`: the signature descriptor of a method
     /// plus `static`/`visibility`/`abstract`/`declaringClass`, or `false` if unknown.
-    pub(super) fn ho_reflect_method_info(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+    pub(super) fn ho_reflect_method_info(&mut self, args: &[Zval]) -> Result<Zval, PhpError> {
         let cname = match args.first().map(|v| v.deref_clone()) {
             Some(Zval::Str(s)) => s.as_bytes().to_vec(),
             _ => return Ok(Zval::Bool(false)),
@@ -714,7 +714,7 @@ impl<'m> super::Vm<'m> {
     /// `ReflectionClass::getMethods`). `get_class_methods` can't back this: it
     /// filters to public when called from outside the class (PHPUnit's hook
     /// discovery needs the protected `#[Before]` methods).
-    pub(super) fn ho_reflect_method_names(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+    pub(super) fn ho_reflect_method_names(&mut self, args: &[Zval]) -> Result<Zval, PhpError> {
         let mut a = php_types::PhpArray::new();
         if let Some(first) = args.first() {
             let raw = convert::to_zstr_cast(first, &mut self.diags).as_bytes().to_vec();
@@ -836,7 +836,7 @@ impl<'m> super::Vm<'m> {
     /// `hasDefault` and the constant `default` value. `$class` is the declaring
     /// class, whose flattened `prop_info` / `prop_defaults` carry the resolved
     /// shape; static properties fall back to their `static_props` entry.
-    pub(super) fn ho_reflect_prop_details(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+    pub(super) fn ho_reflect_prop_details(&mut self, args: &[Zval]) -> Result<Zval, PhpError> {
         let cls = convert::to_zstr_cast(args.first().unwrap_or(&Zval::Null), &mut self.diags).as_bytes().to_vec();
         let prop = convert::to_zstr_cast(args.get(1).unwrap_or(&Zval::Null), &mut self.diags).as_bytes().to_vec();
         let key = cls.strip_prefix(b"\\").unwrap_or(&cls).to_ascii_lowercase();
@@ -1159,8 +1159,8 @@ impl<'m> super::Vm<'m> {
     }
     /// `__reflect_prop_attr_new($class, $prop, $index)` — run the property
     /// attribute's `new Attr(args)` thunk (mirrors `__reflect_attr_newinstance`).
-    pub(super) fn ho_reflect_prop_attr_new(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
-        let Some(thunk) = self.prop_attr_thunk(&args, false) else { return Ok(Zval::Null) };
+    pub(super) fn ho_reflect_prop_attr_new(&mut self, args: &[Zval]) -> Result<Zval, PhpError> {
+        let Some(thunk) = self.prop_attr_thunk(args, false) else { return Ok(Zval::Null) };
         let cname = match args.first() { Some(Zval::Str(s)) => s.as_bytes().to_vec(), _ => Vec::new() };
         let cid = self.class_index.get(&cname.strip_prefix(b"\\").unwrap_or(&cname).to_ascii_lowercase()).copied().unwrap_or(0);
         // Validate the property attribute's target/repeatability first.
@@ -1481,15 +1481,15 @@ impl<'m> super::Vm<'m> {
     /// compiled body. Serves ReflectionClass::getFileName/getStartLine/getEndLine
     /// (the span is an approximation from the op line tables, not the `class`
     /// keyword's line).
-    pub(super) fn ho_reflect_class_loc(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
+    pub(super) fn ho_reflect_class_loc(&mut self, args: &[Zval]) -> Result<Zval, PhpError> {
         let mut out = PhpArray::new();
-        let Some(cid) = self.resolve_named_class_with_autoload(&args)? else {
+        let Some(cid) = self.resolve_named_class_with_autoload(args)? else {
             // Zend's class table also holds traits: getFileName/getStartLine/
             // getEndLine on a trait name report its declaring unit, located
             // via its methods' op line tables (a trait is flattened into its
             // consumers and records no file — same approximation as the
             // first-method fallback for classes below).
-            if let Some((file, start, end)) = self.trait_loc(&args) {
+            if let Some((file, start, end)) = self.trait_loc(args) {
                 let _ = out.append(Zval::Str(PhpStr::new(file)));
                 let _ = out.append(Zval::Long(i64::from(start)));
                 let _ = out.append(Zval::Long(i64::from(end)));
@@ -1543,12 +1543,12 @@ impl<'m> super::Vm<'m> {
     /// `false` when the class does not exist. Lets the prelude normalize a
     /// `new ReflectionClass('MY\CLASS')` name back to `My\Class`
     /// (Doctrine ClassMetadata::initializeReflection: ClassMetadataTest::testClassCaseSensitivity).
-    pub(super) fn ho_reflect_class_real_name(&mut self, args: Vec<Zval>) -> Result<Zval, PhpError> {
-        match self.resolve_named_class_with_autoload(&args)? {
+    pub(super) fn ho_reflect_class_real_name(&mut self, args: &[Zval]) -> Result<Zval, PhpError> {
+        match self.resolve_named_class_with_autoload(args)? {
             Some(cid) => Ok(Zval::Str(PhpStr::new(self.classes[cid].name.to_vec()))),
             // A trait name reflects too (Zend single class table): report its
             // declared casing.
-            None => Ok(match self.named_trait(&args) {
+            None => Ok(match self.named_trait(args) {
                 Some(name) => Zval::Str(PhpStr::new(name)),
                 None => Zval::Bool(false),
             }),
