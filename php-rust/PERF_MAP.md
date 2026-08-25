@@ -8,7 +8,11 @@ piena rc=0 al t1**: A/B R=5 vs GEMELLO RICOSTRUITO 369ee345 (contenuto==pin
 s157, 91 B/4 cluster LC_UUID+data+firma, regioni PRE-registrate) **D=+29,0
 ns/iter su m-refl** (2 chiamate/iter: method_info cache-hit +
 class_real_name; riconc. smoke 0,5<4,0 IN banda; **UB 13,8+rumore ECCEDUTO
-⇒ sonda conteggi DOVUTA S-159**), 15 guardie ok NESSUN morso; disasm
+⇒ sonda del surplus DOVUTA entro S-160, orologio §4**; cifra a REGISTRO
+**[21;29]** — conferma post-pin +21,0, scarto>rumore da drift-tree non
+quantificato; §4: direzione+meccanismo firmati, magnitudine NON ripartita;
+estrapolazione famiglia a ~7 ns/chiamata, NON ai 14,5 misurati — az.rev.
+S-158 #1-#2), 15 guardie ok NESSUN morso; disasm
 run_loop Δ=0; dente loc 25779 pre-dichiarato; micro promo
 5,4·5,5·4,8·4,3·3,3·2,5; conferma post-pin m-refl +21,0 segni 5/5; **coppia
 t8+ORM saldate @ s157**: WP t8 mediana 1,754 COMPATIBILE (N=6 pulite 6/6,
