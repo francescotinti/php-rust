@@ -13,15 +13,18 @@ DENTRO banda VINCOLANTE [8;22] coi denti NEL giudice; riconc. 1,0<4,0;
 dentro l'UB falsificabile**), 15 guardie ok, disasm run_loop bl 6033==6033;
 denti loc 25810/7683 PRE-dichiarati; fixture fx-am 14 forme BYTE-ID; micro
 promo 5,4·5,5·4,7·4,3·**3,1**·2,5 (arr 3,3→3,1 companion L-AM1); conferma
-post-pin m-arrmap +8,0 segni 5/5; **SONDA surplus m-refl SALDATA** (az.rev.
+post-pin m-arrmap +8,0 segni 5/5 (rev. #5: cifra a REGISTRO [8;11],
+drift-tree non quantificato); **SONDA surplus m-refl SALDATA** (az.rev.
 S-158 #1, entro orologio §4): conteggi census ESATTI Δ=2 alloc/iter, rimisura
 su stash FERMI **D=+24,0±5,0** (il registro L-RF2 [21;29] si RISOLVE: +29 e
 +21 entrambi nel rumore della cifra nuova), **coeff cammino vec![args] TARATO
-12,0 ns/alloc-sito (±2,5)** — fonda gli UB delle leve della stessa classe;
+12,0 ns per PASSAGGIO-DISPATCHER (±2,5; rev. #3: il census conta passaggi,
+non alloc pure)** — fonda gli UB delle leve della stessa classe;
 **coppia t9+ORM saldate @ s158**: WP t9 mediana 1,767 COMPATIBILE (N=6 pulite
 6/6, banda_ON 0,058) · media 2,441–2,462 · ORM 7,090–7,141 col DOPPIO
-giudizio pre-registrato (attesa-RF2 COMPATIBILE su RIF CONTESO, Δ_norm
-[−0,77;−0,16] scaletta dal solo dn_max DICHIARATA; replica-AL1 RESTA APERTA:
+giudizio pre-registrato (attesa-RF2 **NON RISOLTA lato peggiorativo** —
+RETTIFICA rev. #1: Δ_norm [−0,77;−0,16] a cavallo di −0,293, la scaletta dal
+solo dn_max e' emendanda a due estremi; RIF CONTESO; replica-AL1 RESTA APERTA:
 phpr1 ictx segnalata 3ª finestra consecutiva — apertura primo-run ORM) · dbal
 7,440–7,630; verdetti `wp159-harness/s159-*.out`; **coppia @ s159 DOVUTA →
 S-160**); storico S-158 (pin **s158 92b0aea3** + server
