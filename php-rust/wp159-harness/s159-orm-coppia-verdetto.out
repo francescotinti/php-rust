@@ -30,3 +30,5 @@ orm  oracle2: Tests: 3484, Assertions: 12003, Skipped: 59, Incomplete: 2.
 orm  phpr2:   Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, Skipped: 59, Incomplete: 2.
 dbal oracle2: Tests: 3929, Assertions: 5706, Skipped: 594, Incomplete: 13.
 dbal phpr2:   Tests: 3921, Assertions: 5550, Errors: 10, Skipped: 626, Incomplete: 13.
+== RETTIFICA revisione S-159 #1 (2026-08-26, lente semantica; ri-derivazione MECCANICA dai .time agli atti, nessun re-run) ==
+attesa-RF2: la riga "COMPATIBILE" sopra e' ERRATA rispetto al criterio p.4 pre-registrato: Delta_norm=[-0.77;-0.16] e' A CAVALLO di -0.293 (lato peggiorativo) — la scaletta ereditata giudicava dal solo dn_max (difetto gia' presente in s158, qui morde). CLASSE CORRETTA: **NON RISOLTA lato peggiorativo** (RIF CONTESO: contaminazione del riferimento possibile; oracle di giornata piu' veloce 4,89/4,91). La replica-AL1 non cambia (gia' APERTA per gamba segnalata). EMENDA per S-160: scaletta a DUE estremi nel criterio ORM.
