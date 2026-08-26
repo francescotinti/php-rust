@@ -1,0 +1,4 @@
+== s159 identita' braccio A (gemello dal tree corrente s158, criterio am1 p.3) ==
+build: ricetta canonica (SOURCE_DATE_EPOCH=0 CARGO_INCREMENTAL=0 cargo build --release) su tree s158 PULITO (working tree sorgente vuoto al pre-check), a FREDDO post target-prune. rc=0 (ab-out/build-gemA.rc).
+hash MISURATO gemello: 92b0aea36573955a == pin s158 92b0aea36573955a AL BYTE (nessun arbitrato a contenuto necessario; la riproduzione al byte a FREDDO smentisce in positivo il reperto s158 «byte-id solo a cache calda» — si dichiara, N=1).
+VERDETTO: A = pin AL BYTE; gate identita' A/B: AEXP=92b0aea3 (hash MISURATO, passato come parametro al run); stash phpr-s159-gemelloA scritto e ri-verificato.
