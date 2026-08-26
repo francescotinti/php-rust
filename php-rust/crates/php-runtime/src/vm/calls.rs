@@ -661,6 +661,27 @@ impl<'m> Vm<'m> {
         self.drive_to_return(baseline)
     }
 
+    /// L-AM1 (S-159): arity-1 mirror of [`Self::call_callable`] for a
+    /// pre-admitted anonymous closure — same baseline/drive contract, no
+    /// args-Vec. The caller has already checked, once per host call, that the
+    /// closure is anonymous (`named.is_none()`) and its body is `simple_call`
+    /// with exactly one parameter; every other callable shape stays on
+    /// [`Self::call_callable`].
+    pub(super) fn call_closure_one(&mut self, cl: &Closure, arg: Zval) -> Result<Zval, PhpError> {
+        let baseline = self.frames.len();
+        self.push_closure_frame_one(cl, arg)?;
+        if self.frames.len() == baseline {
+            // Mirror of call_callable's no-frame arm: unreachable for a user
+            // closure body (which always pushes a frame); kept for structural
+            // equality with the full path.
+            return Ok(self.frames[baseline - 1]
+                .stack
+                .pop()
+                .expect("host callable result on the caller stack"));
+        }
+        self.drive_to_return(baseline)
+    }
+
     /// Normalise the `$newThis` argument of `bindTo`/`bind`/`call`: an object
     /// binds, `null` (or anything else) clears the binding (step 19-6).
     fn closure_this_arg(v: Option<Zval>) -> Option<Zval> {

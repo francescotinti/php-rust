@@ -1972,6 +1972,28 @@ impl<'m> super::Vm<'m> {
         if arrays.len() == 1 {
             let entries: Vec<(Key, Zval)> =
                 arrays[0].iter().map(|(k, v)| (k.clone(), v.deref_clone())).collect();
+            // L-AM1 (S-159): 1 array + closure ANONIMA `simple_call` di arità 1
+            // — ammissione UNA volta per chiamata, poi dispatch per-elemento
+            // senza args-Vec (criterio s159-criterio-am1.md). Ogni altra forma
+            // cade sul loop generico sotto, invariato.
+            if !null_cb {
+                if let Zval::Closure(cl) = &cb {
+                    if cl.named.is_none() {
+                        let m = self.modules.get(cl.module_id).copied().unwrap_or(self.module);
+                        if m.closures
+                            .get(cl.fn_idx)
+                            .is_some_and(|f| f.simple_call && f.n_params == 1)
+                        {
+                            let cl = cl.clone();
+                            for (k, v) in entries {
+                                let mapped = self.call_closure_one(&cl, v)?;
+                                out.insert(k, mapped);
+                            }
+                            return Ok(Zval::Array(Rc::new(out)));
+                        }
+                    }
+                }
+            }
             for (k, v) in entries {
                 let mapped = if null_cb { v } else { self.call_callable(cb.clone(), vec![v])? };
                 out.insert(k, mapped);

@@ -11434,6 +11434,37 @@ impl<'m> Vm<'m> {
         self.enter_callee(frame)
     }
 
+    /// L-AM1 (S-159): install a frame for a pre-admitted anonymous closure with
+    /// a single by-value argument, without materializing an args-Vec. Admission
+    /// (checked once by the caller, per host call): `named.is_none()`, callee
+    /// body `simple_call` with `n_params == 1`; a host value is never an
+    /// `ArgPlace`. The scaffold mirrors [`Self::push_closure_frame`] line by
+    /// line; the intake equals `bind_params`' simple-call arm at arity 1
+    /// (`argc = 1; slots[0] = decay_arg(arg)`).
+    fn push_closure_frame_one(&mut self, cl: &Closure, arg: Zval) -> Result<(), PhpError> {
+        let m = self.modules.get(cl.module_id).copied().unwrap_or(self.module);
+        let Some(callee) = m.closures.get(cl.fn_idx) else {
+            return Err(PhpError::Error(
+                "closure is not callable in this context".to_string(),
+            ));
+        };
+        debug_assert!(callee.simple_call && callee.n_params == 1);
+        let mut frame = self.pooled_frame(callee, m);
+        frame.ext_mut().closure_id = Some(cl.id);
+        for (slot, val) in &cl.captures {
+            frame.slots[*slot as usize] = val.clone();
+        }
+        frame.argc = 1;
+        frame.slots[0] = decay_arg(arg);
+        frame.this = cl.bound_this.clone();
+        frame.class = cl.scope;
+        frame.static_class = cl
+            .lsb
+            .or_else(|| cl.bound_this.as_ref().and_then(object_class_id))
+            .or(cl.scope);
+        self.enter_callee(frame)
+    }
+
     /// Like [`Self::push_magic_call`] but the forwarded `$args` array also carries
     /// any **named arguments** keyed by name (string keys), matching PHP's `__call`
     /// behaviour for `$obj->missing(x: 1)` (Session A).
