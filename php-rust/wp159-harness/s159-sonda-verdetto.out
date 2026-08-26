@@ -1,0 +1,33 @@
+== s159 sonda surplus m-refl (criterio s159-criterio-sonda.md; bracci rimisura MISURATI A=369ee345(gemelloA s157) B=92b0aea3(==pin s158); conteggi su probe census A/B da tree HEAD∓patch) ==
+sentinella language-server inizio finestra: /Applications/Antigravity /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.96.0-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer 
+patch inversa: 2 file, zero rej (log agli atti)
+probe MISURATI: A=ea2c673290eaf75e B=8641b33d4c140ded (census -p php-cli --features mem-census, target dedicati)
+identita' s149sum A r1: hostcall_n=1800100 sum_name=1800100 unnamed=0 overflow=0 OK
+identita' s149sum A r2: hostcall_n=1800100 sum_name=1800100 unnamed=0 overflow=0 OK
+identita' s149sum B r1: hostcall_n=1400100 sum_name=1400100 unnamed=0 overflow=0 OK
+identita' s149sum B r2: hostcall_n=1400100 sum_name=1400100 unnamed=0 overflow=0 OK
+repliche A: r1==r2
+repliche B: r1==r2
+conteggi r1 per-NOME (famiglia __reflect_*):
+  __reflect_method_info: A=1200100 B=1000100 Delta=200000
+  __reflect_prop_details: A=0 B=0 Delta=0
+  __reflect_prop_attr_new: A=0 B=0 Delta=0
+  __reflect_class_real_name: A=600000 B=400000 Delta=200000
+  __reflect_method_names: A=0 B=0 Delta=0
+  __reflect_class_loc: A=0 B=0 Delta=0
+Delta hostcall_n = 400000 (atteso 400000 ESATTO)
+Delta nomi NON-reflect != 0: nessuno
+CONTEGGI: attese p.4 ESATTE (Delta 2 alloc/iter CONFERMATO: 1 method_info + 1 class_real_name; resto zero)
+quiescenza rimisura: rc=0
+rimisura: giudice m-refl N=10000000 floor_A=0.03 floor_B=0.02
+  coppia1 [AB]: rawA=3.78 rawB=3.53
+  coppia2 [BA]: rawA=3.76 rawB=3.51
+  coppia3 [AB]: rawA=3.77 rawB=3.53
+  coppia4 [BA]: rawA=3.79 rawB=3.56
+  coppia5 [AB]: rawA=3.79 rawB=3.57
+RIMISURA m-refl: A=375.0 B=351.0 ns/iter D=+24.0 (rumore drop-1: A'=2.0 B'=5.0)
+drift vs finestra s158 (+29.0): -5.0 · vs post-pin (+21.0): +3.0 (banda rumore 5.0)
+TARATURA: coeff cammino vec![args] = D/2 = 12.0 ns/alloc-sito (IC dal rumore: ±2.5) — vs miheap 6.9: surplus totale +10.2 ns/iter (5.1/sito)
+REGISTRO L-RF2 (criterio p.6): D_rimisura=+24.0 ± 5.0 su stash FERMI s157/s158 — fonda l'UB della leva p.3 a ~12.0 ns/alloc-sito rimosso
+sentinella language-server fine finestra: /Applications/Antigravity /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.96.0-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer 
+ESITO: rc=0 (conteggi ESATTI + rimisura agli atti)
