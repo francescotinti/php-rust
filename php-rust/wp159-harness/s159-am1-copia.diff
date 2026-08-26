@@ -1,0 +1,83 @@
+2,14c2,16
+< # s158-ab-refl2.sh <BPATH> <BEXP8> <TAG> <R> <AEXP8> [DSMOKE_REFL] — LEVA
+< # L-RF2 tranche-2 slice __reflect_* (criterio s158-criterio-refl2.md).
+< # COPIA DICHIARATA di s157-ab-al1.sh coi SOLI adattamenti del criterio:
+< #  (a) GIUDICE: refl (m-refl.php NUOVO wp158-harness, N=10000000 DICHIARATO;
+< #      n_fixed lo pinna comunque);
+< #  (b) UB-alloc FALSIFICABILE = 13.8 (2 alloc/iter x miheap 6.9);
+< #  (c) guardie: missload (presidio L-AL1) + hostargs + backtrace24 + obj* +
+< #      le sei; comparatore STRETTO (az.rev. S-156 #1): morde sse D < -soglia;
+< #  (d) A = GEMELLO RICOSTRUITO sul tree s157, hash atteso <AEXP8> PASSATO al
+< #      run (arbitrato a contenuto nel verbale s158-gemelloA-identita.out);
+< #      header con hash MISURATI dei bracci (az.rev. S-157 #3);
+< #  (e) sentinella language-server nel verdetto (az.rev. S-157 #4);
+< #  (f) lock/verdetto/tag s158.
+---
+> # s159-ab-am1.sh <BPATH> <BEXP8> <TAG> <R> <AEXP8> [DSMOKE_ARRMAP] — LEVA
+> # L-AM1 array_map plumbing 0-alloc per-elemento (criterio s159-criterio-am1.md).
+> # COPIA DICHIARATA di s158-ab-refl2.sh coi SOLI adattamenti del criterio:
+> #  (a) GIUDICE: arrmap (m-arrmap.php NUOVO wp159-harness, N=10000000
+> #      invocazioni-elemento DICHIARATO; n_fixed lo pinna comunque);
+> #  (b) UB-alloc FALSIFICABILE = 12.0 (1 alloc-sito/elemento x coeff TARATO
+> #      s159-sonda; ±2,5);
+> #  (c) guardie: refl (presidio L-RF2) + missload + hostargs + backtrace24 +
+> #      obj* + le sei; comparatore STRETTO; i giudici storici m-refl/missload/
+> #      hostargs/backtrace vivono in wp158-harness (W158);
+> #  (d) BANDA SMOKE VINCOLANTE (criterio p.5, az.rev. S-158 #4): al run R=2 il
+> #      copione STESSO impone D_smoke in [8;22] — fuori banda rc=6 (arbitrato
+> #      census PRIMA del R=5) — la banda ha i denti nel giudice, non a verbale;
+> #  (e) A = GEMELLO dal tree corrente (phpr-s159-gemelloA), hash atteso passato
+> #      al run; header con hash MISURATI; sentinella LS; lock/verdetto/tag s159.
+22c24,25
+< A="/Volumes/Extreme Pro/Claude/phpr-old-target/release/phpr-s158-gemelloA"
+---
+> W158="$REPO/wp158-harness"
+> A="/Volumes/Extreme Pro/Claude/phpr-old-target/release/phpr-s159-gemelloA"
+27c30
+< VERD="$H/s158-$TAG-verdetto.out"
+---
+> VERD="$H/s159-$TAG-verdetto.out"
+35c38
+< if ! grep -qi "s-158\|s158" "$LOCK" 2>/dev/null; then
+---
+> if ! grep -qi "s-159\|s159" "$LOCK" 2>/dev/null; then
+47c50
+< # s158-gemelloA-identita.out). Gli hash MISURATI finiscono nell'header.
+---
+> # s159-gemelloA-identita.out). Gli hash MISURATI finiscono nell'header.
+57,61c60,64
+< src_of() { case "$1" in refl|missload|hostargs|backtrace) echo "$H";; objalloc|objchurn|objmap|objdatains|objallocni|objdropdef) echo "$M";; *) echo "$M97";; esac; }
+< php_of() { case "$1" in refl) echo "m-refl.php";; missload) echo "m-missload.php";; hostargs) echo "m-hostargs.php";; backtrace) echo "m-backtrace24.php";; *) echo "$1.php";; esac; }
+< n_fixed() { case "$1" in refl) echo 10000000;; missload) echo 10000000;; hostargs) echo 10000000;; backtrace) echo 2400000;; arith) echo 150000000;; prop) echo 90000000;; calls) echo 60000000;; str) echo 28000000;; arr) echo 30000000;; re) echo 12000000;; *) echo "";; esac; }
+< CATS_JUDGE="refl"
+< CATS_GUARD="missload hostargs backtrace objdropdef objchurn objdatains objalloc objallocni objmap arith prop calls str arr re"
+---
+> src_of() { case "$1" in arrmap) echo "$H";; refl|missload|hostargs|backtrace) echo "$W158";; objalloc|objchurn|objmap|objdatains|objallocni|objdropdef) echo "$M";; *) echo "$M97";; esac; }
+> php_of() { case "$1" in arrmap) echo "m-arrmap.php";; refl) echo "m-refl.php";; missload) echo "m-missload.php";; hostargs) echo "m-hostargs.php";; backtrace) echo "m-backtrace24.php";; *) echo "$1.php";; esac; }
+> n_fixed() { case "$1" in arrmap) echo 10000000;; refl) echo 10000000;; missload) echo 10000000;; hostargs) echo 10000000;; backtrace) echo 2400000;; arith) echo 150000000;; prop) echo 90000000;; calls) echo 60000000;; str) echo 28000000;; arr) echo 30000000;; re) echo 12000000;; *) echo "";; esac; }
+> CATS_JUDGE="arrmap"
+> CATS_GUARD="refl missload hostargs backtrace objdropdef objchurn objdatains objalloc objallocni objmap arith prop calls str arr re"
+64c67
+< echo "== s158-ab-refl2 $TAG: A=$AM MISURATO (gemello RICOSTRUITO tree s157) B=$BM MISURATO R=$R ordine ALTERNATO; giudice=refl N=10000000 dichiarato; soglia=max(4, drop-1); UB-alloc falsificabile=13.8 (2 alloc/iter x miheap 6.9); guardie missload(N=10M) + hostargs(N=10M) + backtrace24(N=2,4M) + obj* + sei, comparatore STRETTO; quiescenza rc=$QRC; rc autoritativo = ab-out/$TAG.rc =="
+---
+> echo "== s159-ab-am1 $TAG: A=$AM MISURATO (gemello dal tree corrente s158) B=$BM MISURATO R=$R ordine ALTERNATO; giudice=arrmap N=10000000 invocazioni-elemento dichiarato; soglia=max(4, drop-1); UB-alloc falsificabile=12.0 (1 alloc-sito/elemento x coeff TARATO s159 ±2,5); BANDA SMOKE VINCOLANTE [8;22] nel giudice; guardie refl(N=10M) + missload(N=10M) + hostargs(N=10M) + backtrace24(N=2,4M) + obj* + sei, comparatore STRETTO; quiescenza rc=$QRC; rc autoritativo = ab-out/$TAG.rc =="
+91,92c94,96
+< if len(sys.argv) > 3 and sys.argv[3]: dsmoke["refl"] = float(sys.argv[3])
+< UB = 13.8            # criterio refl2 p.4: 2 alloc/iter x miheap 6.9
+---
+> if len(sys.argv) > 3 and sys.argv[3]: dsmoke["arrmap"] = float(sys.argv[3])
+> UB = 12.0            # criterio am1 p.4: 1 alloc-sito/elemento x coeff TARATO s159 (12.0 +/- 2.5)
+> SB_LO, SB_HI = 8.0, 22.0  # banda smoke VINCOLANTE (criterio p.5)
+109c113
+< JUDGES = ("refl",)
+---
+> JUDGES = ("arrmap",)
+128a133,136
+>         if R == 2 and cat not in dsmoke:
+>             inband = SB_LO <= delta <= SB_HI
+>             print(f"BANDA SMOKE VINCOLANTE {cat}: D_smoke={delta:+.1f} in [{SB_LO};{SB_HI}] -> {'OK, si procede al R=5' if inband else 'FUORI BANDA: rc=6, ARBITRATO census PRIMA del R=5 (criterio p.5)'}")
+>             if not inband and verdict_rc == 0: verdict_rc = 6
+135c143
+< print("ESITO: " + {0:"SOPRA SOGLIA (giudice ok, guardie ok)",4:"SOTTO SOGLIA (giudice)",5:"GUARDIA MORDE"}[verdict_rc])
+---
+> print("ESITO: " + {0:"SOPRA SOGLIA (giudice ok, guardie ok)",4:"SOTTO SOGLIA (giudice)",5:"GUARDIA MORDE",6:"FUORI BANDA SMOKE (arbitrato dovuto)"}[verdict_rc])
