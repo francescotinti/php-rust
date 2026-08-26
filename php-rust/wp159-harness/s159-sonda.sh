@@ -7,7 +7,7 @@
 # TARATURA: coeff = D/2 ns/alloc-sito; surplus = D − 13,8; drift vs +29/+21.
 # Esiti a FILE: verdetto s159-sonda-verdetto.out; rc SOLO da sonda-out/sonda.done.
 set -u
-export PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin
+export PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin:"$HOME/.cargo/bin"  # .cargo/bin: fix rc=7 del primo lancio (cargo not found), dichiarato nel verdetto
 REPO="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust"
 H="$REPO/wp159-harness"; OUT="$H/sonda-out"; mkdir -p "$OUT"
 VERD="$H/s159-sonda-verdetto.out"
