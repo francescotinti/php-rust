@@ -1,0 +1,14 @@
+== s160 istruttoria phpr1 (grade=ISTRUTTORIA; pin MISURATO f2d17f18c00a4049; 3 gambe phpr ORM, untar fresco per gamba) ==
+leg1: user=35.95 real=38.79 ictx=23204 ictx_s=598.2 reclaims=63086 instr=261645436319 cycles=78862570602
+leg2: user=35.26 real=37.22 ictx=4735 ictx_s=127.2 reclaims=64377 instr=261507720582 cycles=76792888643
+leg3: user=35.34 real=37.34 ictx=4375 ictx_s=117.2 reclaims=58680 instr=261490144843 cycles=76898711600
+-- daemon deltas (cputime cumulato, s) --
+leg1 PRE  managedcorespotlightd=12 deleted=98 mdworker_shared=0 mediaanalysisd=2 mds_stores=1874 mds=2104 corespotlightd=1163 fseventsd=3303 backupd-helper=23 photoanalysisd=1 backupd=266 
+leg1 IDLE CPU usage: 11.72% user, 8.15% sys, 80.12% idle 
+leg1 POST managedcorespotlightd=12 deleted=98 mdworker_shared=1 mds_stores=1874 mds=2105 corespotlightd=1163 fseventsd=3303 backupd-helper=23 photoanalysisd=1 backupd=266 
+leg2 PRE  managedcorespotlightd=12 deleted=98 mdworker_shared=1 mds_stores=1875 mds=2106 corespotlightd=1163 fseventsd=3306 backupd-helper=23 photoanalysisd=1 backupd=266 
+leg2 IDLE CPU usage: 11.38% user, 7.29% sys, 81.31% idle 
+leg2 POST managedcorespotlightd=12 deleted=98 mdworker_shared=1 mds_stores=1875 mds=2106 corespotlightd=1163 fseventsd=3306 backupd-helper=23 photoanalysisd=1 backupd=266 
+leg3 PRE  managedcorespotlightd=12 deleted=98 mdworker_shared=1 mds_stores=1876 mds=2107 corespotlightd=1163 fseventsd=3309 backupd-helper=23 photoanalysisd=1 backupd=266 
+leg3 IDLE CPU usage: 6.67% user, 3.72% sys, 89.59% idle 
+leg3 POST managedcorespotlightd=12 deleted=98 mdworker_shared=1 mds_stores=1877 mds=2107 corespotlightd=1163 fseventsd=3309 backupd-helper=23 photoanalysisd=1 backupd=266 

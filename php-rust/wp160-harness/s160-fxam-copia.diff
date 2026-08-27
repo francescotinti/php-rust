@@ -1,0 +1,37 @@
+2,3c2,7
+< // S-159 fx-am.php — fixture bilaterale L-AM1 (criterio p.7): tutte le forme di
+< // array_map, fast path E cammino pieno; oracle == candidato BYTE-ID al gate.
+---
+> // S-160 fx-am.php v2 — fixture bilaterale L-AM1 ESTESA (az.rev. S-159 #2):
+> // forme 1-14 EREDITATE da s159 (copia dichiarata, manifest s160-fxam-copia.diff)
+> // + forme 15-20 sui buchi nominati dalla revisione: closure-generatore,
+> // closure 1-param con hint, func_get_args nel fast, static closure,
+> // Closure::bind, by-ref a warning MASCHERATO (esclusione documentata).
+> // oracle == pin BYTE-ID al gate.
+47a52,77
+> // ---- v2 (S-160, az.rev. S-159 #2): buchi nominati dalla revisione ----
+> // 15. closure-GENERATORE (esclusa dal fast via !is_generator: mai provata
+> //     bilaterale prima): il callback torna un Generator per elemento.
+> $gens = array_map(function ($x) { yield $x * 3; }, [1, 2]);
+> foreach ($gens as $g) { var_dump($g instanceof Generator, $g->current()); }
+> // 16. closure 1-param CON hint di tipo (simple_call=false: cammino pieno,
+> //     instradamento mai testato prima) — coercizione int attiva.
+> var_dump(array_map(function (int $x): int { return $x + 5; }, ['1', 2]));
+> // 17. func_get_args/func_num_args DENTRO la closure fast (argc/extra_args
+> //     del frame arità-1: devono vedere ESATTAMENTE 1 argomento).
+> var_dump(array_map(function ($x) { return func_num_args() . ':' . func_get_args()[0]; }, [7, 8]));
+> // 18. static closure (fast senza bound_this).
+> var_dump(array_map(static fn($x) => $x - 1, [1, 2]));
+> // 19. Closure::bind (bound_this + scope su closure arità-1).
+> class AmFx3 { public $k2 = 50; }
+> $b = Closure::bind(function ($x) { return $x + $this->k2; }, new AmFx3(), AmFx3::class);
+> var_dump(array_map($b, [1, 2]));
+> // 20. by-ref param: ESCLUSIONE dal fast DOCUMENTATA sui VALORI. Il warning
+> //     oracle "must be passed by reference" e' divergenza PRE-esistente a
+> //     catalogo (assente in phpr): lo si MASCHERA con error_reporting per
+> //     confrontare al byte il resto (risultato + originale intatto).
+> error_reporting(E_ALL & ~E_WARNING);
+> $src = [1, 2];
+> $r = array_map(function (&$x) { $x++; return $x; }, $src);
+> var_dump($r, $src);
+> error_reporting(E_ALL);
