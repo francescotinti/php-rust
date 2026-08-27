@@ -1,0 +1,164 @@
+2,13c2,18
+< # s159-orm-coppia.sh — coppia dbal+ORM sul pin s158 = rimisura DOVUTA (pin
+< # nuovo) con attesa L-RF2 SOTTO-risoluzione + REPLICA attesa-AL1 (criterio
+< # s159-criterio-orm.md; copia DICHIARATA di s158-orm-coppia.sh, manifest
+< # s159-orm-copia.diff; adattamenti: pin s158 92b0aea36573955a, path wp159,
+< # blocco ATTESA a DOPPIO GIUDIZIO oracle-normalizzato (az.rev. S-158 #3):
+< # (a) attesa-RF2 vs RIF s158 [34,90;35,25] CON NOTA CONTESA, ORA_REF2=4,995;
+< # (b) replica-AL1 vs RIF s157 [34,82;34,91], ORA_REF1=4,94 — chiude SOLO con
+< # gambe ictx pulite e assunzione RF2-sotto-risoluzione; cattura orm_flags;
+< # rapporto companion; REF NUOVO 34,82-34,91 con nota drift), EMENDE az.rev.
+< # S-157 #3-#4 (header coi pin dall'HASH MISURATO + sentinella language-server
+< # nel verdetto); FIX estrazione summ()/names() LC_ALL=C EREDITATO (reperto
+< # dbal ~3921/626 vs oracle 3929/594 A VERBALE): ORM + dbal, N=2 per
+---
+> # s160-orm-coppia.sh — coppia dbal+ORM sul pin s159 = rimisura DOVUTA (pin
+> # nuovo) con attesa L-AM1 SOTTO-risoluzione + REPLICA attesa-AL1 (criterio
+> # s160-criterio-orm.md; copia DICHIARATA di s159-orm-coppia.sh, manifest
+> # s160-orm-copia.diff; adattamenti: pin s159 f2d17f18c00a4049, path wp160,
+> # blocco ATTESA a DOPPIO GIUDIZIO oracle-normalizzato:
+> # (a) attesa-AM1 vs RIF s159-finestra [34,81;34,92] CON NOTA (estremo alto da
+> # gamba phpr1 ictx-segnalata), ORA_REF3=4,90 (oracle 4,89/4,91 dichiarate);
+> # (b) replica-AL1 vs RIF s157 [34,82;34,91], ORA_REF1=4,94 EREDITATA — chiude
+> # SOLO con gambe ictx pulite e assunzione AM1-sotto-risoluzione.
+> # TRE ADATTAMENTI DICHIARATI (istruttoria p.1 + az.rev. S-159 #1, criterio p.1):
+> # (i) RODAGGIO non giudicante dopo i floors (1 gamba orm+dbal per motore,
+> # ictx/s a verbale come companion); (ii) QUIESCENZA per gamba giudicata
+> # (s129-quiescenza.sh, retry x3); (iii) SCALETTA A DUE ESTREMI in _classe
+> # (COMP solo a intervallo INTERO dentro la banda). EMENDE az.rev. S-157
+> # #3-#4 EREDITATE (header coi pin dall'HASH MISURATO + sentinella
+> # language-server nel verdetto); FIX estrazione summ()/names() LC_ALL=C
+> # EREDITATO: ORM + dbal, N=2 per
+21c26
+< H="$REPO/wp159-harness"
+---
+> H="$REPO/wp160-harness"
+28c33
+< VERD="$H/s159-orm-coppia-verdetto.out"
+---
+> VERD="$H/s160-orm-coppia-verdetto.out"
+33c38
+< [ "$PINM" = "92b0aea36573955a" ] || { echo "rc=9 pin!=s158" > "$OUT/rimisura.done"; exit 9; }
+---
+> [ "$PINM" = "f2d17f18c00a4049" ] || { echo "rc=9 pin!=s159" > "$OUT/rimisura.done"; exit 9; }
+43a49,61
+> # ADATTAMENTO (ii) DICHIARATO (istruttoria p.1): quiescenza per gamba giudicata,
+> # stesso gate del pair (s129-quiescenza.sh), retry x3 con pausa 30 s.
+> QUIESCE="$REPO/wp129-harness/s129-quiescenza.sh"
+> quiesce_gate(){ local attempt q
+>   for attempt in 1 2 3; do
+>     "$QUIESCE" "$OUT/quiesce-$1.rc" > "$OUT/quiesce-$1.log" 2>&1; q=$?
+>     p "quiescenza $1 rc=$q tentativo-gate=$attempt (file: orm-out/quiesce-$1.rc)"
+>     [ "$q" = 0 ] && return 0
+>     /bin/sleep 30
+>   done
+>   echo "rc=8 quiescenza-fail su $1 (3 tentativi)" > "$OUT/rimisura.done"; exit 8
+> }
+> 
+80a99,112
+> 
+> # ADATTAMENTO (i) DICHIARATO (istruttoria p.1): RODAGGIO non giudicante — una
+> # gamba per motore e workload, scarica il transitorio primo-run (leg1 598/s ->
+> # leg2-3 ~120/s in isolamento, daemon scagionati). FUORI da ogni statistica;
+> # ictx/s a verbale come companion.
+> case " $WLS " in *" orm "*)
+>   run_leg orm orm-work.tgz orm-work 3600 "$ORACLE" "rodaggio-oracle"
+>   run_leg orm orm-work.tgz orm-work 3600 "$PHPR"   "rodaggio-phpr" ;;
+> esac
+> case " $WLS " in *" dbal "*)
+>   run_leg dbal dbal-work.tgz dbal-work 3600 "$ORACLE" "rodaggio-oracle"
+>   run_leg dbal dbal-work.tgz dbal-work 3600 "$PHPR"   "rodaggio-phpr" ;;
+> esac
+> 
+82a115
+>     quiesce_gate "orm-leg$leg"
+86a120
+>     quiesce_gate "dbal-leg$leg"
+125c159
+< print("coppia-s159 (user CPU; pavimenti PARZIALI phpunit --version: orm o=%.3f p=%.3f · dbal o=%.3f p=%.3f)" % (fo, fp, dfo, dfp))
+---
+> print("coppia-s160 (user CPU; pavimenti PARZIALI phpunit --version: orm o=%.3f p=%.3f · dbal o=%.3f p=%.3f)" % (fo, fp, dfo, dfp))
+153,157c187,191
+< # --- ATTESA L-RF2 + REPLICA attesa-AL1 (criterio s159-criterio-orm.md p.2-4, aritmetica meccanica) ---
+< # Giudizio CANONICO su net ORACLE-NORMALIZZATO (emenda S-157) EREDITATO;
+< # scaletta meccanica del giudice INVARIATA (s158), applicata DUE volte.
+< REF2_MIN, REF2_MAX = 34.90, 35.25  # RIF s158 CON NOTA CONTESA (estremi da gambe ictx-segnalate: phpr1=3956, oracle2=1897)
+< ORA_REF2 = 4.995                   # media DICHIARATA gambe oracle finestra s158 (4,97/5,02)
+---
+> # --- ATTESA L-AM1 + REPLICA attesa-AL1 (criterio s160-criterio-orm.md p.2-3, aritmetica meccanica) ---
+> # Giudizio CANONICO su net ORACLE-NORMALIZZATO EREDITATO; ADATTAMENTO (iii)
+> # DICHIARATO: scaletta a DUE ESTREMI (az.rev. S-159 #1), applicata DUE volte.
+> REF2_MIN, REF2_MAX = 34.81, 34.92  # RIF s159-finestra CON NOTA (estremo alto da gamba phpr1 ictx-segnalata)
+> ORA_REF2 = 4.90                    # media DICHIARATA gambe oracle finestra s159 (4,89/4,91)
+161,162c195,196
+< RREF_LO, RREF_HI = 6.952, 7.093    # rapporto net registrato S-158 (companion)
+< ATT_LO, ATT_HI = 0.03, 0.12        # attesa L-RF2 pre-registrata SOTTO risoluzione (~7 ns x 11,66M siti)
+---
+> RREF_LO, RREF_HI = 7.090, 7.141    # rapporto net registrato S-159 (companion)
+> ATT_LO, ATT_HI = 0.0, 0.28         # attesa L-AM1 dichiarata (criterio p.3: census 7,73M CHIAMATE, elementi e frazione ammessa NON censiti)
+168c202
+<     print(f"attesa-RF2 assoluto (companion, RIF CONTESO): phpr_orm_net_new=[{nn[0]:.2f}; {nn[1]:.2f}] ref=[{REF2_MIN}; {REF2_MAX}] Delta=[{d_min:+.2f}; {d_max:+.2f}] s")
+---
+>     print(f"attesa-AM1 assoluto (companion, RIF CON NOTA): phpr_orm_net_new=[{nn[0]:.2f}; {nn[1]:.2f}] ref=[{REF2_MIN}; {REF2_MAX}] Delta=[{d_min:+.2f}; {d_max:+.2f}] s")
+172a207,208
+>         # ADATTAMENTO (iii) az.rev. S-159 #1: COMP SOLO a intervallo INTERO
+>         # dentro (-RES; RES); a cavallo su QUALUNQUE lato -> NR.
+175c211
+<         if dn_max < RES: return "COMP"
+---
+>         if dn_min > -RES and dn_max < RES: return "COMP"
+178,179c214,215
+<     print(f"attesa-RF2 ORACLE-NORMALIZZATO (CANONICO coppia, RIF CONTESO dichiarato): net_norm=[{n2[0]:.2f}; {n2[1]:.2f}] (ORA_REF={ORA_REF2}, oracle_net_gambe={[round(x,2) for x in on]}) Delta_norm=[{dn2_min:+.2f}; {dn2_max:+.2f}] s")
+<     print(f"rapporto net (companion): [{rr[0]:.3f}; {rr[1]:.3f}] vs registrato S-158 [{RREF_LO}; {RREF_HI}]")
+---
+>     print(f"attesa-AM1 ORACLE-NORMALIZZATO (CANONICO coppia, RIF CON NOTA dichiarato): net_norm=[{n2[0]:.2f}; {n2[1]:.2f}] (ORA_REF={ORA_REF2}, oracle_net_gambe={[round(x,2) for x in on]}) Delta_norm=[{dn2_min:+.2f}; {dn2_max:+.2f}] s")
+>     print(f"rapporto net (companion): [{rr[0]:.3f}; {rr[1]:.3f}] vs registrato S-159 [{RREF_LO}; {RREF_HI}]")
+182c218
+<         print("attesa-RF2: CIFRA NULLA (parita' rotta) — nessun giudizio")
+---
+>         print("attesa-AM1: CIFRA NULLA (parita' rotta) — nessun giudizio")
+184c220
+<         print(f"attesa-RF2: DIREZIONE GIU' FUORI RUMORE (Delta_norm_min {dn2_min:.2f} >= {RES}) — OLTRE l'attesa sotto-risoluzione {ATT_LO}-{ATT_HI}: dichiarare, nessuna attribuzione senza sonda")
+---
+>         print(f"attesa-AM1: DIREZIONE GIU' FUORI RUMORE (Delta_norm_min {dn2_min:.2f} >= {RES}) — OLTRE l'attesa sotto-risoluzione {ATT_LO}-{ATT_HI}: dichiarare, nessuna attribuzione senza sonda")
+186c222
+<         print(f"attesa-RF2: REGRESSIONE SEGNALATA (Delta_norm_max {dn2_max:.2f} < -{RES}) — indagine PRIMA di ogni altra leva")
+---
+>         print(f"attesa-AM1: REGRESSIONE SEGNALATA (Delta_norm_max {dn2_max:.2f} < -{RES}) — indagine PRIMA di ogni altra leva")
+188c224
+<         print(f"attesa-RF2: COMPATIBILE (Delta_norm dentro il rumore ±{RES}; attesa {ATT_LO}-{ATT_HI} SOTTO risoluzione — esito dichiarato, nessuna cifra attribuita a L-RF2)")
+---
+>         print(f"attesa-AM1: COMPATIBILE (Delta_norm dentro il rumore ±{RES}; attesa {ATT_LO}-{ATT_HI} SOTTO risoluzione — esito dichiarato, nessuna cifra attribuita a L-AM1)")
+190,191c226,227
+<         print(f"attesa-RF2: NON RISOLTA (intervallo Delta_norm a cavallo di {RES}) — si dichiara (RIF CONTESO: contaminazione del riferimento possibile)")
+<     # (b) replica attesa-AL1 (az.rev. S-158 #3): chiude SOLO con gambe pulite e assunzione RF2-sotto-risoluzione
+---
+>         print(f"attesa-AM1: NON RISOLTA (intervallo Delta_norm a cavallo di {RES}) — si dichiara (RIF CON NOTA: estremo alto del RIF da gamba segnalata)")
+>     # (b) replica attesa-AL1 (az.rev. S-158 #3): chiude SOLO con gambe pulite e assunzione AM1-sotto-risoluzione
+199c235
+<         print("replica-AL1: assunzione RF2-sotto-risoluzione CADUTA (attesa-RF2 fuori rumore in giu') — attesa AL1 RESTA APERTA")
+---
+>         print("replica-AL1: assunzione AM1-sotto-risoluzione CADUTA (attesa-AM1 fuori rumore in giu') — attesa AL1 RESTA APERTA")
+202c238
+<         lbl = "replica-AL1 (gambe pulite, assunzione RF2 ok — CHIUDE l'attesa):"
+---
+>         lbl = "replica-AL1 (gambe pulite, assunzione AM1 ok — CHIUDE l'attesa):"
+213c249,257
+< { echo "== s159 coppia dbal+ORM (pin s158 MISURATO $PINM vs oracle 8.5.7; criterio s159-criterio-orm.md) =="
+---
+> rod_ictx(){ # companion istruttoria: ictx/s delle gambe di rodaggio (FUORI dal gate)
+>   local f="$OUT/$1.time" r i
+>   [ -f "$f" ] || { echo "n/d"; return; }
+>   r=$(tr -d '\0' < "$f" | awk '/[0-9.]+ *real/{for(j=1;j<=NF;j++) if($j=="real"){print $(j-1)}}')
+>   i=$(tr -d '\0' < "$f" | awk '/involuntary/{print $1}')
+>   python3 -c "print(f'{$i/$r:.1f}')" 2>/dev/null || echo "n/d"
+> }
+> 
+> { echo "== s160 coppia dbal+ORM (pin s159 MISURATO $PINM vs oracle 8.5.7; criterio s160-criterio-orm.md) =="
+214a259
+>   echo "# ADATTAMENTI (i)-(iii) dall'istruttoria p.1 + az.rev. S-159 #1: rodaggio non giudicante, quiescenza per gamba, scaletta a due estremi"
+217a263,266
+>   echo "rodaggio (NON giudicato, companion istruttoria) ictx/s: orm_oracle=$(rod_ictx orm-rodaggio-oracle) orm_phpr=$(rod_ictx orm-rodaggio-phpr) dbal_oracle=$(rod_ictx dbal-rodaggio-oracle) dbal_phpr=$(rod_ictx dbal-rodaggio-phpr)"
+>   for g in orm-leg1 dbal-leg1 orm-leg2 dbal-leg2; do
+>     echo "quiescenza $g: rc=$(cat "$OUT/quiesce-$g.rc" 2>/dev/null || echo MANCANTE) (file: orm-out/quiesce-$g.rc)"
+>   done
