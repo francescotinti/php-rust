@@ -1,0 +1,11 @@
+== s160 fx-am v2 ri-baseline bilaterale (az.rev. S-159 #2; pin MISURATO f2d17f18c00a4049 vs oracle 8.5.7) ==
+forme: 14 ereditate s159 (copia dichiarata, manifest s160-fxam-copia.diff 2 hunk) + 6 nuove:
+  15 closure-GENERATORE (esclusione !is_generator provata bilaterale: Generator+current())
+  16 closure 1-param CON hint int (simple_call=false, instradamento pieno + coercizione '1'->int)
+  17 func_get_args/func_num_args DENTRO la closure fast: "1:7"/"1:8" (argc=1 ESATTO nel frame arita'-1)
+  18 static closure (fast senza bound_this)
+  19 Closure::bind con scope (bound_this su arita'-1): int(51)
+  20 by-ref param a warning MASCHERATO (E_ALL & ~E_WARNING): valori+originale byte-id;
+     divergenza warning oracle-only RESTA a catalogo (fuori perimetro L-AM1)
+esito: oracle==pin BYTE-ID (cmp rc=0); guardia anti-vuoto: 127 righe, FXAM-END, marcatori 15/17/19/20 presenti
+rc=0
