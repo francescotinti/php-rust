@@ -1,0 +1,84 @@
+2,5c2,5
+< # s159-ab-am1.sh <BPATH> <BEXP8> <TAG> <R> <AEXP8> [DSMOKE_ARRMAP] — LEVA
+< # L-AM1 array_map plumbing 0-alloc per-elemento (criterio s159-criterio-am1.md).
+< # COPIA DICHIARATA di s158-ab-refl2.sh coi SOLI adattamenti del criterio:
+< #  (a) GIUDICE: arrmap (m-arrmap.php NUOVO wp159-harness, N=10000000
+---
+> # s160-ab-af1.sh <BPATH> <BEXP8> <TAG> <R> <AEXP8> [DSMOKE_ARRFILTER] — LEVA
+> # L-AF1 array_filter plumbing 0-alloc per-elemento (criterio s160-criterio-af1.md).
+> # COPIA DICHIARATA di s159-ab-am1.sh coi SOLI adattamenti del criterio:
+> #  (a) GIUDICE: arrfilter (m-arrfilter.php NUOVO wp160-harness, N=10000000
+7,10c7,11
+< #  (b) UB-alloc FALSIFICABILE = 12.0 (1 alloc-sito/elemento x coeff TARATO
+< #      s159-sonda; ±2,5);
+< #  (c) guardie: refl (presidio L-RF2) + missload + hostargs + backtrace24 +
+< #      obj* + le sei; comparatore STRETTO; i giudici storici m-refl/missload/
+---
+> #  (b) UB-alloc FALSIFICABILE = 12.0 INVARIATO (1 alloc-sito/elemento x coeff
+> #      TARATO s159-sonda; ±2,5);
+> #  (c) guardie: arrmap NUOVA (presidio L-AM1, giudice in wp159-harness W159) +
+> #      refl (presidio L-RF2) + missload + hostargs + backtrace24 + obj* + le
+> #      sei = 16; comparatore STRETTO; i giudici storici m-refl/missload/
+12,16c13,17
+< #  (d) BANDA SMOKE VINCOLANTE (criterio p.5, az.rev. S-158 #4): al run R=2 il
+< #      copione STESSO impone D_smoke in [8;22] — fuori banda rc=6 (arbitrato
+< #      census PRIMA del R=5) — la banda ha i denti nel giudice, non a verbale;
+< #  (e) A = GEMELLO dal tree corrente (phpr-s159-gemelloA), hash atteso passato
+< #      al run; header con hash MISURATI; sentinella LS; lock/verdetto/tag s159.
+---
+> #  (d) BANDA SMOKE VINCOLANTE EREDITATA (criterio p.5): al run R=2 il copione
+> #      STESSO impone D_smoke in [8;22] — fuori banda rc=6 (arbitrato census
+> #      PRIMA del R=5) — la banda ha i denti nel giudice, non a verbale;
+> #  (e) A = GEMELLO dal tree corrente (phpr-s160-gemelloA), hash atteso passato
+> #      al run; header con hash MISURATI; sentinella LS; lock/verdetto/tag s160.
+25c26,27
+< A="/Volumes/Extreme Pro/Claude/phpr-old-target/release/phpr-s159-gemelloA"
+---
+> W159="$REPO/wp159-harness"
+> A="/Volumes/Extreme Pro/Claude/phpr-old-target/release/phpr-s160-gemelloA"
+30c32
+< VERD="$H/s159-$TAG-verdetto.out"
+---
+> VERD="$H/s160-$TAG-verdetto.out"
+38c40
+< if ! grep -qi "s-159\|s159" "$LOCK" 2>/dev/null; then
+---
+> if ! grep -qi "s-160\|s160" "$LOCK" 2>/dev/null; then
+48c50
+< # dal tree s157; l'hash ATTESO arriva dal run (byte==pin a cache calda,
+---
+> # dal tree s159; l'hash ATTESO arriva dal run (byte==pin (in s159 anche a freddo, N=1),
+50c52
+< # s159-gemelloA-identita.out). Gli hash MISURATI finiscono nell'header.
+---
+> # s160-gemelloA-identita.out). Gli hash MISURATI finiscono nell'header.
+52c54
+< [ "$AM" = "$AEXP" ] || { echo "A misurato $AM != atteso $AEXP (gemello tree s157) — STOP" | tee -a "$VERD"; echo 1 > "$RC"; exit 1; }
+---
+> [ "$AM" = "$AEXP" ] || { echo "A misurato $AM != atteso $AEXP (gemello tree s159) — STOP" | tee -a "$VERD"; echo 1 > "$RC"; exit 1; }
+60,64c62,66
+< src_of() { case "$1" in arrmap) echo "$H";; refl|missload|hostargs|backtrace) echo "$W158";; objalloc|objchurn|objmap|objdatains|objallocni|objdropdef) echo "$M";; *) echo "$M97";; esac; }
+< php_of() { case "$1" in arrmap) echo "m-arrmap.php";; refl) echo "m-refl.php";; missload) echo "m-missload.php";; hostargs) echo "m-hostargs.php";; backtrace) echo "m-backtrace24.php";; *) echo "$1.php";; esac; }
+< n_fixed() { case "$1" in arrmap) echo 10000000;; refl) echo 10000000;; missload) echo 10000000;; hostargs) echo 10000000;; backtrace) echo 2400000;; arith) echo 150000000;; prop) echo 90000000;; calls) echo 60000000;; str) echo 28000000;; arr) echo 30000000;; re) echo 12000000;; *) echo "";; esac; }
+< CATS_JUDGE="arrmap"
+< CATS_GUARD="refl missload hostargs backtrace objdropdef objchurn objdatains objalloc objallocni objmap arith prop calls str arr re"
+---
+> src_of() { case "$1" in arrfilter) echo "$H";; arrmap) echo "$W159";; refl|missload|hostargs|backtrace) echo "$W158";; objalloc|objchurn|objmap|objdatains|objallocni|objdropdef) echo "$M";; *) echo "$M97";; esac; }
+> php_of() { case "$1" in arrfilter) echo "m-arrfilter.php";; arrmap) echo "m-arrmap.php";; refl) echo "m-refl.php";; missload) echo "m-missload.php";; hostargs) echo "m-hostargs.php";; backtrace) echo "m-backtrace24.php";; *) echo "$1.php";; esac; }
+> n_fixed() { case "$1" in arrfilter) echo 10000000;; arrmap) echo 10000000;; refl) echo 10000000;; missload) echo 10000000;; hostargs) echo 10000000;; backtrace) echo 2400000;; arith) echo 150000000;; prop) echo 90000000;; calls) echo 60000000;; str) echo 28000000;; arr) echo 30000000;; re) echo 12000000;; *) echo "";; esac; }
+> CATS_JUDGE="arrfilter"
+> CATS_GUARD="arrmap refl missload hostargs backtrace objdropdef objchurn objdatains objalloc objallocni objmap arith prop calls str arr re"
+67c69
+< echo "== s159-ab-am1 $TAG: A=$AM MISURATO (gemello dal tree corrente s158) B=$BM MISURATO R=$R ordine ALTERNATO; giudice=arrmap N=10000000 invocazioni-elemento dichiarato; soglia=max(4, drop-1); UB-alloc falsificabile=12.0 (1 alloc-sito/elemento x coeff TARATO s159 ±2,5); BANDA SMOKE VINCOLANTE [8;22] nel giudice; guardie refl(N=10M) + missload(N=10M) + hostargs(N=10M) + backtrace24(N=2,4M) + obj* + sei, comparatore STRETTO; quiescenza rc=$QRC; rc autoritativo = ab-out/$TAG.rc =="
+---
+> echo "== s160-ab-af1 $TAG: A=$AM MISURATO (gemello dal tree corrente s159) B=$BM MISURATO R=$R ordine ALTERNATO; giudice=arrfilter N=10000000 invocazioni-elemento dichiarato; soglia=max(4, drop-1); UB-alloc falsificabile=12.0 (1 alloc-sito/elemento x coeff TARATO s159 ±2,5); BANDA SMOKE VINCOLANTE [8;22] nel giudice; guardie arrmap(N=10M, presidio L-AM1) + refl(N=10M) + missload(N=10M) + hostargs(N=10M) + backtrace24(N=2,4M) + obj* + sei, comparatore STRETTO; quiescenza rc=$QRC; rc autoritativo = ab-out/$TAG.rc =="
+94,95c96,97
+< if len(sys.argv) > 3 and sys.argv[3]: dsmoke["arrmap"] = float(sys.argv[3])
+< UB = 12.0            # criterio am1 p.4: 1 alloc-sito/elemento x coeff TARATO s159 (12.0 +/- 2.5)
+---
+> if len(sys.argv) > 3 and sys.argv[3]: dsmoke["arrfilter"] = float(sys.argv[3])
+> UB = 12.0            # criterio af1 p.4: 1 alloc-sito/elemento x coeff TARATO s159 (12.0 +/- 2.5)
+113c115
+< JUDGES = ("arrmap",)
+---
+> JUDGES = ("arrfilter",)
