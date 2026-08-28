@@ -1,0 +1,121 @@
+2,11c2,11
+< # s160-orm-coppia.sh — coppia dbal+ORM sul pin s159 = rimisura DOVUTA (pin
+< # nuovo) con attesa L-AM1 SOTTO-risoluzione + REPLICA attesa-AL1 (criterio
+< # s160-criterio-orm.md; copia DICHIARATA di s159-orm-coppia.sh, manifest
+< # s160-orm-copia.diff; adattamenti: pin s159 f2d17f18c00a4049, path wp160,
+< # blocco ATTESA a DOPPIO GIUDIZIO oracle-normalizzato:
+< # (a) attesa-AM1 vs RIF s159-finestra [34,81;34,92] CON NOTA (estremo alto da
+< # gamba phpr1 ictx-segnalata), ORA_REF3=4,90 (oracle 4,89/4,91 dichiarate);
+< # (b) replica-AL1 vs RIF s157 [34,82;34,91], ORA_REF1=4,94 EREDITATA — chiude
+< # SOLO con gambe ictx pulite e assunzione AM1-sotto-risoluzione.
+< # TRE ADATTAMENTI DICHIARATI (istruttoria p.1 + az.rev. S-159 #1, criterio p.1):
+---
+> # s161-orm-coppia.sh — coppia dbal+ORM sul pin s160 = rimisura DOVUTA (pin
+> # nuovo) con attesa L-AF1 SOTTO-risoluzione (criterio
+> # s161-criterio-orm.md; copia DICHIARATA di s160-orm-coppia.sh, manifest
+> # s161-orm-copia.diff; adattamenti: pin s160 ceeb6e76e4ef5ace, path wp161,
+> # blocco ATTESA a GIUDIZIO SINGOLO oracle-normalizzato:
+> # attesa-AF1 vs RIF s160-finestra [34,96;35,20] gambe PULITE (nessuna nota),
+> # ORA_REF=4,95 (oracle net 4,96/4,94 dichiarate); attesa [0,0;0,035] s =
+> # tetto DICHIARATO (census 1,83M passaggi x 17,0+2,0 ns sonda s161).
+> # replica-AL1 RIMOSSA: attesa CHIUSA in S-160 (adattamento DICHIARATO).
+> # I TRE ADATTAMENTI dell'istruttoria S-160 ORA NEL CANONE (criterio p.1):
+26c26
+< H="$REPO/wp160-harness"
+---
+> H="$REPO/wp161-harness"
+33c33
+< VERD="$H/s160-orm-coppia-verdetto.out"
+---
+> VERD="$H/s161-orm-coppia-verdetto.out"
+38c38
+< [ "$PINM" = "f2d17f18c00a4049" ] || { echo "rc=9 pin!=s159" > "$OUT/rimisura.done"; exit 9; }
+---
+> [ "$PINM" = "ceeb6e76e4ef5ace" ] || { echo "rc=9 pin!=s160" > "$OUT/rimisura.done"; exit 9; }
+159c159
+< print("coppia-s160 (user CPU; pavimenti PARZIALI phpunit --version: orm o=%.3f p=%.3f · dbal o=%.3f p=%.3f)" % (fo, fp, dfo, dfp))
+---
+> print("coppia-s161 (user CPU; pavimenti PARZIALI phpunit --version: orm o=%.3f p=%.3f · dbal o=%.3f p=%.3f)" % (fo, fp, dfo, dfp))
+187,193c187,191
+< # --- ATTESA L-AM1 + REPLICA attesa-AL1 (criterio s160-criterio-orm.md p.2-3, aritmetica meccanica) ---
+< # Giudizio CANONICO su net ORACLE-NORMALIZZATO EREDITATO; ADATTAMENTO (iii)
+< # DICHIARATO: scaletta a DUE ESTREMI (az.rev. S-159 #1), applicata DUE volte.
+< REF2_MIN, REF2_MAX = 34.81, 34.92  # RIF s159-finestra CON NOTA (estremo alto da gamba phpr1 ictx-segnalata)
+< ORA_REF2 = 4.90                    # media DICHIARATA gambe oracle finestra s159 (4,89/4,91)
+< REF1_MIN, REF1_MAX = 34.82, 34.91  # RIF s157 (replica attesa-AL1, catena ereditata)
+< ORA_REF1 = 4.94                    # oracle net finestra s157
+---
+> # --- ATTESA L-AF1 (criterio s161-criterio-orm.md p.2, aritmetica meccanica) ---
+> # Giudizio CANONICO su net ORACLE-NORMALIZZATO EREDITATO; scaletta a DUE
+> # ESTREMI NEL CANONE (S-160); replica-AL1 RIMOSSA (attesa CHIUSA S-160).
+> REF2_MIN, REF2_MAX = 34.96, 35.20  # RIF s160-finestra gambe PULITE (4/4, nessuna nota)
+> ORA_REF2 = 4.95                    # media DICHIARATA gambe oracle finestra s160 (4,96/4,94)
+195,196c193,194
+< RREF_LO, RREF_HI = 7.090, 7.141    # rapporto net registrato S-159 (companion)
+< ATT_LO, ATT_HI = 0.0, 0.28         # attesa L-AM1 dichiarata (criterio p.3: census 7,73M CHIAMATE, elementi e frazione ammessa NON censiti)
+---
+> RREF_LO, RREF_HI = 7.077, 7.097    # rapporto net registrato S-160 (companion)
+> ATT_LO, ATT_HI = 0.0, 0.035        # attesa L-AF1: TETTO dichiarato (census s149 1,83M passaggi x 17,0+2,0 ns sonda s161; frazione ammessa/elementi NON censiti)
+202c200
+<     print(f"attesa-AM1 assoluto (companion, RIF CON NOTA): phpr_orm_net_new=[{nn[0]:.2f}; {nn[1]:.2f}] ref=[{REF2_MIN}; {REF2_MAX}] Delta=[{d_min:+.2f}; {d_max:+.2f}] s")
+---
+>     print(f"attesa-AF1 assoluto (companion): phpr_orm_net_new=[{nn[0]:.2f}; {nn[1]:.2f}] ref=[{REF2_MIN}; {REF2_MAX}] Delta=[{d_min:+.2f}; {d_max:+.2f}] s")
+207,208c205,206
+<         # ADATTAMENTO (iii) az.rev. S-159 #1: COMP SOLO a intervallo INTERO
+<         # dentro (-RES; RES); a cavallo su QUALUNQUE lato -> NR.
+---
+>         # scaletta a DUE ESTREMI NEL CANONE (az.rev. S-159 #1): COMP SOLO a
+>         # intervallo INTERO dentro (-RES; RES); a cavallo su QUALUNQUE lato -> NR.
+214,215c212,213
+<     print(f"attesa-AM1 ORACLE-NORMALIZZATO (CANONICO coppia, RIF CON NOTA dichiarato): net_norm=[{n2[0]:.2f}; {n2[1]:.2f}] (ORA_REF={ORA_REF2}, oracle_net_gambe={[round(x,2) for x in on]}) Delta_norm=[{dn2_min:+.2f}; {dn2_max:+.2f}] s")
+<     print(f"rapporto net (companion): [{rr[0]:.3f}; {rr[1]:.3f}] vs registrato S-159 [{RREF_LO}; {RREF_HI}]")
+---
+>     print(f"attesa-AF1 ORACLE-NORMALIZZATO (CANONICO coppia): net_norm=[{n2[0]:.2f}; {n2[1]:.2f}] (ORA_REF={ORA_REF2}, oracle_net_gambe={[round(x,2) for x in on]}) Delta_norm=[{dn2_min:+.2f}; {dn2_max:+.2f}] s")
+>     print(f"rapporto net (companion): [{rr[0]:.3f}; {rr[1]:.3f}] vs registrato S-160 [{RREF_LO}; {RREF_HI}]")
+218c216
+<         print("attesa-AM1: CIFRA NULLA (parita' rotta) — nessun giudizio")
+---
+>         print("attesa-AF1: CIFRA NULLA (parita' rotta) — nessun giudizio")
+220c218
+<         print(f"attesa-AM1: DIREZIONE GIU' FUORI RUMORE (Delta_norm_min {dn2_min:.2f} >= {RES}) — OLTRE l'attesa sotto-risoluzione {ATT_LO}-{ATT_HI}: dichiarare, nessuna attribuzione senza sonda")
+---
+>         print(f"attesa-AF1: DIREZIONE GIU' FUORI RUMORE (Delta_norm_min {dn2_min:.2f} >= {RES}) — OLTRE l'attesa a tetto {ATT_LO}-{ATT_HI}: dichiarare, nessuna attribuzione senza census ORM proprio")
+222c220
+<         print(f"attesa-AM1: REGRESSIONE SEGNALATA (Delta_norm_max {dn2_max:.2f} < -{RES}) — indagine PRIMA di ogni altra leva")
+---
+>         print(f"attesa-AF1: REGRESSIONE SEGNALATA (Delta_norm_max {dn2_max:.2f} < -{RES}) — indagine PRIMA di ogni altra leva")
+224c222
+<         print(f"attesa-AM1: COMPATIBILE (Delta_norm dentro il rumore ±{RES}; attesa {ATT_LO}-{ATT_HI} SOTTO risoluzione — esito dichiarato, nessuna cifra attribuita a L-AM1)")
+---
+>         print(f"attesa-AF1: COMPATIBILE (Delta_norm dentro il rumore ±{RES}; attesa a tetto {ATT_LO}-{ATT_HI} SOTTO risoluzione — esito dichiarato, nessuna cifra attribuita a L-AF1)")
+226,246c224,227
+<         print(f"attesa-AM1: NON RISOLTA (intervallo Delta_norm a cavallo di {RES}) — si dichiara (RIF CON NOTA: estremo alto del RIF da gamba segnalata)")
+<     # (b) replica attesa-AL1 (az.rev. S-158 #3): chiude SOLO con gambe pulite e assunzione AM1-sotto-risoluzione
+<     n1, dn1_min, dn1_max = _norm(ORA_REF1, REF1_MIN, REF1_MAX)
+<     print(f"replica-AL1 ORACLE-NORMALIZZATO: net_norm=[{n1[0]:.2f}; {n1[1]:.2f}] (ORA_REF={ORA_REF1}) Delta_norm=[{dn1_min:+.2f}; {dn1_max:+.2f}] s vs RIF s157")
+<     if parita_rc != 0:
+<         print("replica-AL1: CIFRA NULLA (parita' rotta) — attesa AL1 RESTA APERTA")
+<     elif orm_flags:
+<         print(f"replica-AL1: gambe ictx SEGNALATE {orm_flags} — attesa AL1 RESTA APERTA (criterio p.2b)")
+<     elif c2 == "GIU":
+<         print("replica-AL1: assunzione AM1-sotto-risoluzione CADUTA (attesa-AM1 fuori rumore in giu') — attesa AL1 RESTA APERTA")
+<     else:
+<         c1 = _classe(dn1_min, dn1_max)
+<         lbl = "replica-AL1 (gambe pulite, assunzione AM1 ok — CHIUDE l'attesa):"
+<         if c1 == "GIU":
+<             print(f"{lbl} DIREZIONE GIU' FUORI RUMORE (Delta_norm_min {dn1_min:.2f} >= {RES}) — OLTRE l'attesa AL1 0,02-0,05: dichiarare, nessuna attribuzione senza sonda")
+<         elif c1 == "REGR":
+<             print(f"{lbl} REGRESSIONE SEGNALATA (Delta_norm_max {dn1_max:.2f} < -{RES}) — indagine PRIMA di ogni altra leva")
+<         elif c1 == "COMP":
+<             print(f"{lbl} COMPATIBILE (Delta_norm dentro ±{RES}; attesa AL1 0,02-0,05 sotto risoluzione CONFERMATA — nessuna cifra attribuita)")
+<         else:
+<             print(f"{lbl} NON RISOLTA anche su gambe pulite (a cavallo di {RES}) — si dichiara: segnale sotto il potere risolutivo a N=2, attesa chiusa come NON-RISOLVIBILE a questo N")
+---
+>         print(f"attesa-AF1: NON RISOLTA (intervallo Delta_norm a cavallo di {RES}) — si dichiara")
+>     # replica-AL1 RIMOSSA (attesa CHIUSA S-160); gambe segnalate restano a verbale
+>     if orm_flags:
+>         print(f"gambe ictx SEGNALATE {orm_flags} — a verbale (rodaggio nel canone; se ricorre, istruttoria dedicata)")
+257c238
+< { echo "== s160 coppia dbal+ORM (pin s159 MISURATO $PINM vs oracle 8.5.7; criterio s160-criterio-orm.md) =="
+---
+> { echo "== s161 coppia dbal+ORM (pin s160 MISURATO $PINM vs oracle 8.5.7; criterio s161-criterio-orm.md) =="
