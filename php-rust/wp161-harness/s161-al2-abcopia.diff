@@ -1,0 +1,82 @@
+2,12c2,12
+< # s160-ab-af1.sh <BPATH> <BEXP8> <TAG> <R> <AEXP8> [DSMOKE_ARRFILTER] — LEVA
+< # L-AF1 array_filter plumbing 0-alloc per-elemento (criterio s160-criterio-af1.md).
+< # COPIA DICHIARATA di s159-ab-am1.sh coi SOLI adattamenti del criterio:
+< #  (a) GIUDICE: arrfilter (m-arrfilter.php NUOVO wp160-harness, N=10000000
+< #      invocazioni-elemento DICHIARATO; n_fixed lo pinna comunque);
+< #  (b) UB-alloc FALSIFICABILE = 12.0 INVARIATO (1 alloc-sito/elemento x coeff
+< #      TARATO s159-sonda; ±2,5);
+< #  (c) guardie: arrmap NUOVA (presidio L-AM1, giudice in wp159-harness W159) +
+< #      refl (presidio L-RF2) + missload + hostargs + backtrace24 + obj* + le
+< #      sei = 16; comparatore STRETTO; i giudici storici m-refl/missload/
+< #      hostargs/backtrace vivono in wp158-harness (W158);
+---
+> # s161-ab-al2.sh <BPATH> <BEXP8> <TAG> <R> <AEXP8> [DSMOKE_MISSLOAD] — LEVA
+> # L-AL2 loader autoload k=1 senza args-Vec (criterio s161-criterio-al2.md).
+> # COPIA DICHIARATA di s160-ab-af1.sh coi SOLI adattamenti del criterio:
+> #  (a) GIUDICE: missload (m-missload.php wp158-harness — quello delle guardie
+> #      s158-s160 — N=10000000 miss/iter DICHIARATO; n_fixed lo pinna comunque);
+> #  (b) UB dal modello SDOPPIATO (sonda s161): coeff closure-vec 17,0±2,0 ⇒
+> #      bivio MECCANICO [15;19]+rumore (criterio p.4, fix rev. S-160 #4);
+> #  (c) guardie: arrfilter NUOVA (presidio L-AF1, giudice in wp160-harness
+> #      W160) + arrmap (presidio L-AM1, W159) + refl + hostargs (hit-path
+> #      class_exists) + backtrace24 + obj* + le sei = 17; comparatore STRETTO;
+> #      m-refl/hostargs/backtrace vivono in wp158-harness (W158);
+16,17c16,17
+< #  (e) A = GEMELLO dal tree corrente (phpr-s160-gemelloA), hash atteso passato
+< #      al run; header con hash MISURATI; sentinella LS; lock/verdetto/tag s160.
+---
+> #  (e) A = GEMELLO dal tree corrente s160 (phpr-s161-gemelloA), hash atteso
+> #      passato al run; header con hash MISURATI; sentinella LS; lock s161.
+27c27,28
+< A="/Volumes/Extreme Pro/Claude/phpr-old-target/release/phpr-s160-gemelloA"
+---
+> W160="$REPO/wp160-harness"
+> A="/Volumes/Extreme Pro/Claude/phpr-old-target/release/phpr-s161-gemelloA"
+32c33
+< VERD="$H/s160-$TAG-verdetto.out"
+---
+> VERD="$H/s161-$TAG-verdetto.out"
+40c41
+< if ! grep -qi "s-160\|s160" "$LOCK" 2>/dev/null; then
+---
+> if ! grep -qi "s-161\|s161" "$LOCK" 2>/dev/null; then
+52c53
+< # s160-gemelloA-identita.out). Gli hash MISURATI finiscono nell'header.
+---
+> # s161-gemelloA-identita.out). Gli hash MISURATI finiscono nell'header.
+62c63
+< src_of() { case "$1" in arrfilter) echo "$H";; arrmap) echo "$W159";; refl|missload|hostargs|backtrace) echo "$W158";; objalloc|objchurn|objmap|objdatains|objallocni|objdropdef) echo "$M";; *) echo "$M97";; esac; }
+---
+> src_of() { case "$1" in arrfilter) echo "$W160";; arrmap) echo "$W159";; refl|missload|hostargs|backtrace) echo "$W158";; objalloc|objchurn|objmap|objdatains|objallocni|objdropdef) echo "$M";; *) echo "$M97";; esac; }
+65,66c66,67
+< CATS_JUDGE="arrfilter"
+< CATS_GUARD="arrmap refl missload hostargs backtrace objdropdef objchurn objdatains objalloc objallocni objmap arith prop calls str arr re"
+---
+> CATS_JUDGE="missload"
+> CATS_GUARD="arrfilter arrmap refl hostargs backtrace objdropdef objchurn objdatains objalloc objallocni objmap arith prop calls str arr re"
+69c70
+< echo "== s160-ab-af1 $TAG: A=$AM MISURATO (gemello dal tree corrente s159) B=$BM MISURATO R=$R ordine ALTERNATO; giudice=arrfilter N=10000000 invocazioni-elemento dichiarato; soglia=max(4, drop-1); UB-alloc falsificabile=12.0 (1 alloc-sito/elemento x coeff TARATO s159 ±2,5); BANDA SMOKE VINCOLANTE [8;22] nel giudice; guardie arrmap(N=10M, presidio L-AM1) + refl(N=10M) + missload(N=10M) + hostargs(N=10M) + backtrace24(N=2,4M) + obj* + sei, comparatore STRETTO; quiescenza rc=$QRC; rc autoritativo = ab-out/$TAG.rc =="
+---
+> echo "== s161-ab-al2 $TAG: A=$AM MISURATO (gemello dal tree corrente s160) B=$BM MISURATO R=$R ordine ALTERNATO; giudice=missload N=10000000 miss/iter dichiarato; soglia=max(4, drop-1); UB dal modello SDOPPIATO: coeff closure-vec 17,0±2,0 (sonda s161) bivio MECCANICO [15;19]+rumore; BANDA SMOKE VINCOLANTE [8;22] nel giudice; guardie arrfilter(N=10M, presidio L-AF1) + arrmap(N=10M, presidio L-AM1) + refl(N=10M) + hostargs(N=10M, hit-path) + backtrace24(N=2,4M) + obj* + sei, comparatore STRETTO; quiescenza rc=$QRC; rc autoritativo = ab-out/$TAG.rc =="
+96,97c97,98
+< if len(sys.argv) > 3 and sys.argv[3]: dsmoke["arrfilter"] = float(sys.argv[3])
+< UB = 12.0            # criterio af1 p.4: 1 alloc-sito/elemento x coeff TARATO s159 (12.0 +/- 2.5)
+---
+> if len(sys.argv) > 3 and sys.argv[3]: dsmoke["missload"] = float(sys.argv[3])
+> UB_LO, UB_HI = 15.0, 19.0  # criterio al2 p.4: 1 passaggio closure-vec x coeff sonda s161 (17.0 +/- 2.0) — bivio MECCANICO
+115c116
+< JUDGES = ("arrfilter",)
+---
+> JUDGES = ("missload",)
+132,133c133,139
+<         fb = delta > UB + noise
+<         print(f"riconciliazione UB {cat}: D={delta:+.1f} vs UB={UB:.1f}+rumore={noise:.1f} -> {'FUORI BANDA SOPRA (reperto a verbale, sonda dovuta)' if fb else 'dentro la banda del modello'}")
+---
+>         if delta > UB_HI + noise:
+>             ub_es = "FUORI-UB SOPRA (reperto a verbale, sonda dovuta)"
+>         elif ok and delta < UB_LO - noise:
+>             ub_es = "SOTTO-MODELLO (reperto: componente non rimossa, si dichiara)"
+>         else:
+>             ub_es = "DENTRO il modello sdoppiato (coeff closure-vec collaudato)"
+>         print(f"riconciliazione UB {cat}: D={delta:+.1f} vs modello [{UB_LO:.1f};{UB_HI:.1f}]+rumore={noise:.1f} -> {ub_es}")
