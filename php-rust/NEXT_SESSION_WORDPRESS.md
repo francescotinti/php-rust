@@ -1,20 +1,17 @@
 # NEXT_SESSION — phpr: OBIETTIVO PARITÀ (≥1×) con l'oracle; ≤3× = tappa (REGOLE §1)
-⏱ **FONDAMENTALI**: **S-161 = sonda AF1 SALDATA (rimisura su stash FERMI
-D=+17,0±2,0; bivio (b): il coeff del passaggio rimosso è PER-SITO — refl
-12,0±2,5 · arrfilter 17,0±2,0 · autoload ~5,0; orologio §4 SPENTO) + coppia
-t11 @ s160 COMPATIBILE 1,765 (4/6 pulite, leg5-6 flare esterno; banda_ON NON
-fondata N=4<5 → tentativo da integrare) + ORM @ s160 parità VALIDA ma CIFRA
-NULLA (finestra CONTAMINATA da uso interattivo: ictx 227-1769 su TUTTE le
-gambe, oracle net 5,36/5,25 fuori dal SUO rif 4,96/4,94; attesa-AF1 «GIU'»
-[+0,72;+1,85] = ARTEFATTO probabile della normalizzazione, NON chiusa — veto
-gambe segnalate) + **leva L-AL2 PROMOSSA (pin NUOVO s161)**: smoke +5,5 fuori
-banda SOTTO → arbitrato census Δ=1/miss ESATTO → R=5 **D=+5,0 SOPRA SOGLIA**
-17/17 guardie, SOTTO-MODELLO dichiarato · promozione rc=0 SENZA rettifiche
-(path POSITIVI + marcatori: le lezioni #21 hanno retto) · leve S-161: **1
-(promossa)** · incidenti **19 + 2 in ratifica (#20 #21)** · QUESITI UTENTE
-APERTI: (a) T2/A2 sospendere (racc. S-155); (b) census server (11° slitt.);
-(c) incidenti #20 #21 + (d) emenda §3 (adottata di fatto negli apparati
-S-161, ratifica formale pendente).
+⏱ **FONDAMENTALI**: **S-161 = sonda AF1 SALDATA (stash FERMI D=+17,0±2,0;
+coeff PER-SITO: refl 12,0±2,5 · arrfilter 17,0±2,0 · autoload solo-segno;
+orologio §4 SPENTO) + coppia t11 @ s160 COMPATIBILE 1,765 (4/6 pulite;
+banda_ON NON fondata) + ORM @ s160 parità VALIDA ma CIFRA NULLA (finestra
+CONTAMINATA: ictx 227-1769 ovunque, oracle 5,36/5,25 fuori dal SUO rif;
+attesa-AF1 «GIU'» = artefatto probabile, NON chiusa) + leva L-AL2 PROMOSSA
+(pin NUOVO s161)**: smoke +5,5 fuori banda SOTTO → arbitrato census Δ=1/miss
+ESATTO → R=5 **D=+5,0 SOPRA SOGLIA** 17/17 guardie, SOTTO-MODELLO ·
+promozione rc=0 SENZA rettifiche · revisione MISURA: REGGE CON RILIEVI (6,
+recepiti qui) · leve S-161: **1 (promossa)** · incidenti **19 + 2 in
+ratifica (#20 #21)** · QUESITI UTENTE: (a) T2/A2 sospendere (racc. S-155);
+(b) census server (11° slitt.); (c) #20 #21 + (d) emenda §3 (praticata,
+ratifica pendente).
 
 ## Scoreboard (pin s161 phpr ec0a636ad0c42005 + server cad5cf83fa2309c9)
 **arith 5,3 · prop 5,6 · calls 4,9 · str 4,3 · arr 3,3 · re 2,6** (micro R=5
@@ -24,20 +21,26 @@ alla prossima promo, indagine) · WP t11 mediana 1,765 (4/6 pulite) · media
 2,437–2,447 · ORM/dbal @ s160 CIFRA NULLA (rif resta s160: 7,077–7,097 /
 7,541–7,550) · corpus **1412×2** · batteria 1748/0/2 (cap loc **25831**/7708).
 
-## §S-162 — ordine
+## §S-162 — ordine (rev. S-161 recepita: azioni #1-#5)
+0. **Rimisura AL2 su stash FERMI** (rev. #1: phpr-s160 vs phpr-s161, stile
+   sonda AF1, cifra 5,0±IC propria — fino ad allora «direzione firmata,
+   magnitudine non tarata»); registro = TABELLA PER-SITO (rev. #2).
 1. **Coppia WP t12 + ORM/dbal al pin s161** (DOVUTA: pin nuovo) in finestra
-   QUIETA — assorbe la rimisura ORM (contaminata in S-161) e il tentativo
-   integrativo banda pair (t11 N=4<5). Prima di lanciare: verificare carico
-   interattivo (top/uptime) e dichiarare; attesa L-AL2 su ORM ~ZERO
-   (Composer array-callable NON ammesso, quota dichiarata) — RIF ORM resta
-   s160 [34,96;35,20] / [7,077;7,097] ORA_REF=4,95; su WP attesa
-   sotto-risoluzione dichiarata.
+   QUIETA — assorbe la rimisura ORM (contaminata) e il tentativo integrativo
+   banda pair (t11 N=4<5, ≥5 pulite); companion ASSOLUTO nominato nella
+   lettura (rev. #3: a s161 il GIU' normalizzato conviveva con assoluto
+   NEGATIVO [-2,12;-0,17] — tensione a verbale). Prima di lanciare:
+   top/uptime dichiarati; attesa L-AL2 su ORM ~ZERO (Composer array-callable
+   NON ammesso) — RIF ORM resta s160 [34,96;35,20] / [7,077;7,097]
+   ORA_REF=4,95; su WP attesa sotto-risoluzione dichiarata.
 2. **Leva (obbligo di ritmo)** — candidata per NOME: **array_map
    string-callable** (to_vec/elemento; census array_map 7,73M passaggi ORM
    pre-AM1, frazione string-callable NON censita → il criterio la classifica
    e fonda l'UB sul sito più SIMILE del modello per-sito, bivio dichiarato);
    alternativa: MethodCall.borrow k=2 (aperture). Banda smoke VINCOLANTE
-   EREDITATA nel giudice.
+   EREDITATA nel giudice + emenda smoke (rev. #4): guardia che morde a R=2
+   pretende arbitrato DICHIARATO come la banda; conferma post-pin con
+   rumore > attesa/2 = «solo segno» (rev. #5).
 3. **Emenda §3** (se l'utente ratifica #20/#21 + emenda): recepire in REGOLE
    la formula già praticata (verifica POSITIVA path + marcatore + OUT nuova).
 4. Se la coppia t12 esce pulita 6/6: fondare banda_ON e chiudere il

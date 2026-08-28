@@ -9,8 +9,12 @@ INVARIATA» con catena rc=0 SENZA rettifiche**: A/B R=5 vs GEMELLO ceeb6e76
 smoke +5,5 FUORI banda [8;22] SOTTO ⇒ ARBITRATO census: Δ=1 passaggio/miss
 ESATTO su class_exists ⇒ R=5 autorizzato; riconc. |0,5|<4,0; **SOTTO-MODELLO
 DICHIARATO — reperto capitale: il coeff del passaggio rimosso è PER-SITO**
-— refl 12,0±2,5 (s159) · arrfilter 17,0±2,0 (sonda s161) · autoload ~5,0
-(qui): si prezza il BUNDLE del sito, mai la famiglia), 17 guardie ok (re
+— TABELLA a registro (rev. S-161 #2): refl 12,0±2,5 (sonda s159) · arrfilter
+17,0±2,0 (sonda s161) · autoload **direzione firmata, magnitudine NON tarata**
+(rev. #1: D=+5,0 a 1 tick dalla soglia, conferma +3,0±5,0 = solo segno —
+rimisura su stash fermi DOVUTA S-162); conflitto pre-registrazioni UB a
+verbale (sonda p.6 diceva hostcall [9,5;14,5], criterio AL2 closure [15;19]:
+5,0 sotto ENTRAMBE, verdetto invariante)), 17 guardie ok (re
 morsa a R=2 −4,6/−4,5 e RIENTRATA a R=5 −3,3/−5,0, dichiarata), bl run_loop
 6033==6033; dente loc monolite VM 25810→25831 PRE-dichiarato; conferma
 post-pin m-missload **D=+3,0 segni 5/5** (intorno +5±rumore 5); micro promo
