@@ -34,7 +34,7 @@
 set -u
 export PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin:"$HOME/.cargo/bin"
 SRC="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust"
-H="$SRC/wp159-harness"
+H="$SRC/wp160-harness"
 BIN="$HOME/Claude/php-rust-output/release/phpr"
 RUNNER="$HOME/Claude/php-rust-output/release/phpt-runner"
 STASH="/Volumes/Extreme Pro/Claude/phpr-old-target/release"
