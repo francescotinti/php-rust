@@ -12122,7 +12122,28 @@ impl<'m> Vm<'m> {
             }
             let loader = self.autoloaders[cur.next].clone();
             self.autoload_cursors[ci].next += 1;
-            if let Err(e) = self.call_callable(loader, vec![arg.clone()]) {
+            // L-AL2 (S-161): loader closure ANONIMA `simple_call` arità-1 —
+            // la chiamata per-miss va via call_closure_one (riuso L-AM1),
+            // senza args-Vec; ammissione PER-LOADER (lista LIVE, S-71.2:
+            // non hoistabile). Ogni altra forma di loader resta su
+            // call_callable INVARIATO (criterio s161-criterio-al2.md).
+            let mut fast = None;
+            if let Zval::Closure(cl) = &loader {
+                if cl.named.is_none() {
+                    let m = self.modules.get(cl.module_id).copied().unwrap_or(self.module);
+                    if m.closures
+                        .get(cl.fn_idx)
+                        .is_some_and(|f| f.simple_call && f.n_params == 1)
+                    {
+                        fast = Some(cl.clone());
+                    }
+                }
+            }
+            let call = match &fast {
+                Some(cl) => self.call_closure_one(cl, arg.clone()).map(drop),
+                None => self.call_callable(loader, vec![arg.clone()]).map(drop),
+            };
+            if let Err(e) = call {
                 outcome = Err(e);
                 break;
             }
