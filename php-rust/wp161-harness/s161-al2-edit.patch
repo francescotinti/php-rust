@@ -1,0 +1,49 @@
+diff --git a/php-rust/crates/php-runtime/src/vm/mod.rs b/php-rust/crates/php-runtime/src/vm/mod.rs
+index b895792c..101af17a 100644
+--- a/php-rust/crates/php-runtime/src/vm/mod.rs
++++ b/php-rust/crates/php-runtime/src/vm/mod.rs
+@@ -12122,7 +12122,28 @@ impl<'m> Vm<'m> {
+             }
+             let loader = self.autoloaders[cur.next].clone();
+             self.autoload_cursors[ci].next += 1;
+-            if let Err(e) = self.call_callable(loader, vec![arg.clone()]) {
++            // L-AL2 (S-161): loader closure ANONIMA `simple_call` arità-1 —
++            // la chiamata per-miss va via call_closure_one (riuso L-AM1),
++            // senza args-Vec; ammissione PER-LOADER (lista LIVE, S-71.2:
++            // non hoistabile). Ogni altra forma di loader resta su
++            // call_callable INVARIATO (criterio s161-criterio-al2.md).
++            let mut fast = None;
++            if let Zval::Closure(cl) = &loader {
++                if cl.named.is_none() {
++                    let m = self.modules.get(cl.module_id).copied().unwrap_or(self.module);
++                    if m.closures
++                        .get(cl.fn_idx)
++                        .is_some_and(|f| f.simple_call && f.n_params == 1)
++                    {
++                        fast = Some(cl.clone());
++                    }
++                }
++            }
++            let call = match &fast {
++                Some(cl) => self.call_closure_one(cl, arg.clone()).map(drop),
++                None => self.call_callable(loader, vec![arg.clone()]).map(drop),
++            };
++            if let Err(e) = call {
+                 outcome = Err(e);
+                 break;
+             }
+diff --git a/php-rust/crates/php-runtime/tests/loc_dente.rs b/php-rust/crates/php-runtime/tests/loc_dente.rs
+index 4a43271a..0d1dbea7 100644
+--- a/php-rust/crates/php-runtime/tests/loc_dente.rs
++++ b/php-rust/crates/php-runtime/tests/loc_dente.rs
+@@ -45,7 +45,9 @@ fn nessun_sorgente_rs_oltre_cap() {
+         // S-159 L-AM1: salita PRE-dichiarata (criterio s159-criterio-am1.md
+         // p.8) — mod.rs +31 (push_closure_frame_one), host.rs +22 (fast path
+         // array_map); calls.rs (+21) resta fuori allowlist sotto il cap 2000.
+-        ("php-runtime/src/vm/mod.rs", 25810, "monolite VM — bersaglio A2"),
++        // S-161: salita DICHIARATA +21 (leva L-AL2: fast path loader autoload
++        // k=1 in try_autoload — criterio s161-criterio-al2.md p.1).
++        ("php-runtime/src/vm/mod.rs", 25831, "monolite VM — bersaglio A2; +21 L-AL2 S-161 PRE-dichiarato"),
+         ("php-runtime/src/vm/host.rs", 7708, "hostcall — backlog A2; +25 L-AF1 S-160 PRE-dichiarato"),
+         // S-156: salita DICHIARATA +29 (leva HD2-hostcall: braccio
+         // CallHostBuiltin, pop diretti ≤4) — verbale wp156-harness/s156-promo.

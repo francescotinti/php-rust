@@ -1,0 +1,8 @@
+== s161 gemello A (criterio al2 p.3, §7-bis) ==
+build ricetta canonica (SOURCE_DATE_EPOCH=0 CARGO_INCREMENTAL=0 cargo build
+--release) dal tree s160 PULITO (git status crates/Cargo.* = vuoto), a freddo
+(target potato a fine S-160): hash MISURATO ceeb6e76e4ef5ace == pin s160 AL
+BYTE (N=4 consecutivo per la riproducibilità del tree: s159, s160 x2, s161).
+Stash: pin-phpr.sh --braccio s161-gemelloA → phpr-s161-gemelloA verificato
+ceeb6e76e4ef5ace (smoke parità 2 modi OK, registrato+committato dallo script).
+Nessun arbitrato a contenuto necessario.
