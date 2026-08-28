@@ -1,0 +1,38 @@
+== s160 coppia dbal+ORM (pin s159 MISURATO f2d17f18c00a4049 vs oracle 8.5.7; criterio s160-criterio-orm.md) ==
+# estrazione summ/names con LC_ALL=C + grep -a (fix az.rev. S-155 #4); reperto conteggi dbal phpr vs oracle A VERBALE (companion, non arbitra)
+# ADATTAMENTI (i)-(iii) dall'istruttoria p.1 + az.rev. S-159 #1: rodaggio non giudicante, quiescenza per gamba, scaletta a due estremi
+sentinella language-server inizio finestra (az.rev. S-157 #4): /Applications/Antigravity /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.96.0-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv 
+sentinella language-server fine finestra: /Applications/Antigravity /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.96.0-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv 
+rodaggio (NON giudicato, companion istruttoria) ictx/s: orm_oracle=99.8 orm_phpr=31.0 dbal_oracle=229.9 dbal_phpr=21.0
+quiescenza orm-leg1: rc=0 (file: orm-out/quiesce-orm-leg1.rc)
+quiescenza dbal-leg1: rc=0 (file: orm-out/quiesce-dbal-leg1.rc)
+quiescenza orm-leg2: rc=0 (file: orm-out/quiesce-orm-leg2.rc)
+quiescenza dbal-leg2: rc=0 (file: orm-out/quiesce-dbal-leg2.rc)
+floor_user_med3 orm: oracle=0.06 phpr=0.07 · dbal: oracle=0.06 phpr=0.19 (phpunit --version, pavimento PARZIALE dichiarato)
+coppia-s160 (user CPU; pavimenti PARZIALI phpunit --version: orm o=0.060 p=0.070 · dbal o=0.060 p=0.190)
+grade=VERDICT  # derivazione meccanica dai .time
+orm_leg1: oracle_user=5.02 (sys=0.49) phpr_user=35.27 (sys=1.33) ratio_raw=7.026 ratio_net=7.097
+orm_leg2: oracle_user=5.00 (sys=0.49) phpr_user=35.03 (sys=1.30) ratio_raw=7.006 ratio_net=7.077
+orm_ictx_abs: oracle1=362 phpr1=1960 oracle2=235 phpr2=1131
+orm_ictx/s (gate emenda S-127): oracle1=64.8 phpr1=53.1 oracle2=42.4 phpr2=30.9  contesa ok
+dbal_leg1: oracle_user=1.15 (sys=0.22) phpr_user=8.41 (sys=0.39) ratio_raw=7.313 ratio_net=7.541
+dbal_leg2: oracle_user=1.15 (sys=0.22) phpr_user=8.42 (sys=0.38) ratio_raw=7.322 ratio_net=7.550
+dbal_ictx_abs: oracle1=335 phpr1=1050 oracle2=317 phpr2=645
+dbal_ictx/s (gate emenda S-127): oracle1=231.0 phpr1=118.2 oracle2=217.1 phpr2=73.1  contesa ok
+dbal_parita': phpr_failset_stabile=True |phpr_fail|=10 |diff_vs_oracle|=10
+dbal_diff_nomi: Doctrine\DBAL\Tests\Functional\PortabilityTest::testCaseConversion with data set "lower" (Doctrine\DBAL\ColumnCase Enum (LOWER), ['test_int', 'test_string', 'test_null']) | Doctrine\DBAL\Tests\Functional\PortabilityTest::testCaseConversion with data set "upper" (Doctrine\DBAL\ColumnCase Enum (UPPER), ['TEST_INT', 'TEST_STRING', 'TEST_NULL']) | Doctrine\DBAL\Tests\Functional\PortabilityTest::testCaseConversionColumnName with data set "lower" (Doctrine\DBAL\ColumnCase Enum (LOWER), ['test_int', 'test_string', 'test_null']) | Doctrine\DBAL\Tests\Functional\PortabilityTest::testCaseConversionColumnName with data set "upper" (Doctrine\DBAL\ColumnCase Enum (UPPER), ['TEST_INT', 'TEST_STRING', 'TEST_NULL']) | Doctrine\DBAL\Tests\Functional\PortabilityTest::testFetchAllNullColumn | Doctrine\DBAL\Tests\Functional\PortabilityTest::testFetchColumn with data set "int" ('Test_Int', [1, 2]) | Doctrine\DBAL\Tests\Functional\PortabilityTest::testFetchColumn with data set "string" ('Test_String', ['foo', 'foo']) | Doctrine\DBAL\Tests\Functional\PortabilityTest::testFullFetchMode | Doctrine\DBAL\Tests\Functional\PortabilityTest::testGetDatabaseName | Doctrine\DBAL\Tests\Schema\Name\Parser\GenericNameParserTest::testValidInput with data set #11 ('schéma."übermäßigkeit".`àçcên...ràctér', [Doctrine\DBAL\Schema\Name\Identifier Object (...), Doctrine\DBAL\Schema\Name\Identifier Object (...), Doctrine\DBAL\Schema\Name\Identifier Object (...), Doctrine\DBAL\Schema\Name\Identifier Object (...), Doctrine\DBAL\Schema\Name\Identifier Object (...)])
+attesa-AM1 assoluto (companion, RIF CON NOTA): phpr_orm_net_new=[34.96; 35.20] ref=[34.81; 34.92] Delta=[-0.39; -0.04] s
+attesa-AM1 ORACLE-NORMALIZZATO (CANONICO coppia, RIF CON NOTA dichiarato): net_norm=[34.68; 34.77] (ORA_REF=4.9, oracle_net_gambe=[4.96, 4.94]) Delta_norm=[+0.04; +0.24] s
+rapporto net (companion): [7.077; 7.097] vs registrato S-159 [7.09; 7.141]
+attesa-AM1: COMPATIBILE (Delta_norm dentro il rumore ±0.293; attesa 0.0-0.28 SOTTO risoluzione — esito dichiarato, nessuna cifra attribuita a L-AM1)
+replica-AL1 ORACLE-NORMALIZZATO: net_norm=[34.96; 35.06] (ORA_REF=4.94) Delta_norm=[-0.24; -0.05] s vs RIF s157
+replica-AL1 (gambe pulite, assunzione AM1 ok — CHIUDE l'attesa): COMPATIBILE (Delta_norm dentro ±0.293; attesa AL1 0,02-0,05 sotto risoluzione CONFERMATA — nessuna cifra attribuita)
+parita': orm phpr per NOME vs baseline 16 · dbal fail-set stabile tra gambe — rc=0 (0=tutte valide)
+orm  oracle1: Tests: 3484, Assertions: 12003, Skipped: 59, Incomplete: 2.
+orm  phpr1:   Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, Skipped: 59, Incomplete: 2.
+dbal oracle1: Tests: 3929, Assertions: 5706, Skipped: 594, Incomplete: 13.
+dbal phpr1:   Tests: 3921, Assertions: 5550, Errors: 10, Skipped: 626, Incomplete: 13.
+orm  oracle2: Tests: 3484, Assertions: 12003, Skipped: 59, Incomplete: 2.
+orm  phpr2:   Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, Skipped: 59, Incomplete: 2.
+dbal oracle2: Tests: 3929, Assertions: 5706, Skipped: 594, Incomplete: 13.
+dbal phpr2:   Tests: 3921, Assertions: 5550, Errors: 10, Skipped: 626, Incomplete: 13.
