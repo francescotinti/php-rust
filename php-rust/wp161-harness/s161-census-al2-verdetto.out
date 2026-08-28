@@ -1,0 +1,16 @@
+== s161 arbitrato census L-AL2 (criterio al2 p.5; probe-B = tree HEAD con edit, probe-A = copia − patch; driver 200k) ==
+patch inversa: 2 file, zero rej (dente loc = test, fuori da -p php-cli, DICHIARATO)
+probe MISURATI: A=ddf8ff9bf7bf5701 B=c3d702e596635d2e (census -p php-cli --features mem-census, target dedicati)
+identita' s149sum A r1: hostcall_n=400008 sum_name=400008 unnamed=0 overflow=0 OK
+identita' s149sum A r2: hostcall_n=400008 sum_name=400008 unnamed=0 overflow=0 OK
+identita' s149sum B r1: hostcall_n=200008 sum_name=200008 unnamed=0 overflow=0 OK
+identita' s149sum B r2: hostcall_n=200008 sum_name=200008 unnamed=0 overflow=0 OK
+repliche A: r1==r2
+repliche B: r1==r2
+conteggi r1 per-NOME (arbitro: class_exists):
+  class_exists: A=400006 B=200006 Delta=200000
+  spl_autoload_register: A=2 B=2 Delta=0
+Delta hostcall_n = 200000 (atteso 200000 ESATTO)
+Delta altri nomi != 0: nessuno
+ARBITRATO: Delta 1 passaggio vec-args/miss CONFERMATO ESATTO — il fast path MORDE; D_smoke=+5,5 misura il bundle PROPRIO del sito (vec+dispatch, SENZA mode-match/doppio-clone di arrfilter): il coeff di famiglia si rivela PER-SITO. R=5 autorizzato col modello RIVISTO nel verdetto di sessione.
+ESITO: rc=0 (arbitrato agli atti)
