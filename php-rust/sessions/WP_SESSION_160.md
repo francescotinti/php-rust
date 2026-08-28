@@ -22,7 +22,7 @@ guardie A/B verdi) · WP t10 mediana 1,760 COMPATIBILE (6/6 pulite, banda_ON
   nel fast=1 arg ESATTO, static/bind, by-ref mascherato).
 4·Leva L-AF1 (census-quota: tranche-2 COLLASSA su array_filter 1,83M): smoke
   +14,0 in banda [8;22] → R=5 **D=+16,0 SOPRA SOGLIA** (m-arrfilter 196→180),
-  riconc. |2,0|<4,0, **FUORI-UB dichiarato** ⇒ sonda surplus DOVUTA S-161;
+  riconc. |2,0|<4,0, UB AL BORDO (rev. #5) ⇒ sonda surplus DOVUTA S-161;
   17/17 guardie (arrmap +2,0); bl 6033==6033; promozione rc=0 CON RETTIFICA.
 5·RETTIFICA promo (incidente #21 PROPOSTO): copia con H stantio (wp159) —
   fx-af/conferma su file INESISTENTI = falso verde da errore identico;

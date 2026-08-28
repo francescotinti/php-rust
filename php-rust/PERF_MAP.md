@@ -7,10 +7,11 @@ plumbing 0-alloc per-elemento: 1-array + closure ANONIMA simple_call arità-1
 (L-AM1); ogni altra forma sul cammino pieno INVARIATO» con catena rc=0 CON
 RETTIFICA in-sessione**: A/B R=5 vs GEMELLO f2d17f18 == pin s159 AL BYTE a
 freddo (N=2) **D=+16,0 ns/elemento su m-arrfilter** (196,0→180,0; smoke +14,0
-DENTRO banda VINCOLANTE [8;22]; riconc. 2,0<4,0; **FUORI-UB SOPRA dichiarato:
-UB 12,0±2,5, eccedenza ~0,5-3,0 su componenti NON prezzate nominate
-(dispatch call_callable · match mode · Rc-bump) ⇒ sonda surplus DOVUTA S-161,
-orologio §4**), 17 guardie ok (arrmap +2,0: L-AM1 presidiata), bl run_loop
+DENTRO banda VINCOLANTE [8;22]; riconc. 2,0<4,0; **reperto UB AL BORDO, non
+robusto (rev. #5: con ±2,5 la soglia è 15,5+rumore — D=+16,0 fuori di 0,5,
+conferma +15,0 DENTRO); componenti NON prezzate nominate (dispatch
+call_callable · match mode · Rc-bump) ⇒ sonda surplus S-161 DECIDE, orologio
+§4**), 17 guardie ok (arrmap +2,0: L-AM1 presidiata), bl run_loop
 6033==6033; dente loc host.rs 7683→7708 PRE-dichiarato; fx-af 13 forme + fx-am
 v2 20 forme BYTE-ID; conferma post-pin m-arrfilter **D=+15,0 segni 5/5**
 (RETTIFICA: prima corsa su file inesistente — la copia promo aveva H stantio

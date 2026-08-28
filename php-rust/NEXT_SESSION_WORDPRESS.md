@@ -4,8 +4,8 @@ rodaggio+quiescenza nel criterio ORM → 4/4 gambe PULITE, prima volta) + coppia
 t10+ORM saldate @ s159 (attesa-AM1 COMPATIBILE a DUE estremi; replica-AL1
 CHIUSA) + fx-am v2 20 forme + leva L-AF1 array_filter 0-alloc PROMOSSA (pin
 NUOVO s160)** · L-AF1: smoke +14,0 in banda VINCOLANTE [8;22] → R=5 **D=+16,0
-SOPRA SOGLIA, FUORI-UB sopra** (UB 12,0±2,5: eccedenza ~0,5-3,0 su componenti
-NON prezzate nominate: dispatch call_callable + match mode + Rc-bump) ⇒
+SOPRA SOGLIA; reperto UB AL BORDO non robusto** (rev. #5: con ±2,5 soglia
+15,5+rumore; conferma +15,0 DENTRO; componenti non prezzate nominate) ⇒
 **sonda surplus DOVUTA S-161 (orologio §4)** · conferma post-pin m-arrfilter
 **D=+15,0 segni 5/5** (rettifica: prima corsa su file inesistente = garbage
 dichiarato) · promozione rc=0 **CON RETTIFICA in-sessione**: copia promo con
@@ -38,7 +38,9 @@ al pin s160 DOVUTA**) · corpus **1412×2** · batteria 1748/0/2 (cap loc
    ratio [7,077;7,097], ORA_REF dalla finestra (oracle net 4,96/4,94).
 3. **Emenda REGOLE §3** (se ratificata dall'utente): copia-gate chiuso SOLO
    con verifica POSITIVA dei path adattati + marcatore d'esito preteso in
-   ogni gate-fixture (mai il solo A==B).
+   ogni gate-fixture (mai il solo A==B) + OUT della copia in directory NUOVA
+   (rev. #4: il run misdiretto ha SOVRASCRITTO i promo-out di s159 — record
+   clobber annotato nel verdetto s159, copia stantia INVALIDATA).
 4. **LEVA TENTATA (obbligo di ritmo)** — per NOME, col coeff/modello
    aggiornato dalla sonda p.1: (a) loader autoload k=1 (residuo L-AL1);
    (b) array_map string-callable (to_vec/elemento). Banda smoke VINCOLANTE
