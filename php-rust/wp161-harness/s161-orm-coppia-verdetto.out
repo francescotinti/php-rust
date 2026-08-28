@@ -1,0 +1,49 @@
+== s161 coppia dbal+ORM (pin s160 MISURATO ceeb6e76e4ef5ace vs oracle 8.5.7; criterio s161-criterio-orm.md) ==
+# estrazione summ/names con LC_ALL=C + grep -a (fix az.rev. S-155 #4); reperto conteggi dbal phpr vs oracle A VERBALE (companion, non arbitra)
+# ADATTAMENTI (i)-(iii) dall'istruttoria p.1 + az.rev. S-159 #1: rodaggio non giudicante, quiescenza per gamba, scaletta a due estremi
+sentinella language-server inizio finestra (az.rev. S-157 #4): /Applications/Antigravity /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.96.0-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer 
+sentinella language-server fine finestra: /Applications/Antigravity /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.96.0-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer 
+rodaggio (NON giudicato, companion istruttoria) ictx/s: orm_oracle=980.2 orm_phpr=2516.0 dbal_oracle=655.6 dbal_phpr=626.1
+quiescenza orm-leg1: rc=0 (file: orm-out/quiesce-orm-leg1.rc)
+quiescenza dbal-leg1: rc=0 (file: orm-out/quiesce-dbal-leg1.rc)
+quiescenza orm-leg2: rc=0 (file: orm-out/quiesce-orm-leg2.rc)
+quiescenza dbal-leg2: rc=0 (file: orm-out/quiesce-dbal-leg2.rc)
+floor_user_med3 orm: oracle=0.06 phpr=0.07 · dbal: oracle=0.06 phpr=0.19 (phpunit --version, pavimento PARZIALE dichiarato)
+coppia-s161 (user CPU; pavimenti PARZIALI phpunit --version: orm o=0.060 p=0.070 · dbal o=0.060 p=0.190)
+grade=VERDICT  # derivazione meccanica dai .time
+orm_leg1: oracle_user=5.42 (sys=0.60) phpr_user=37.15 (sys=1.88) ratio_raw=6.854 ratio_net=6.918
+orm_leg2: oracle_user=5.31 (sys=0.56) phpr_user=35.44 (sys=1.47) ratio_raw=6.674 ratio_net=6.737
+orm_ictx_abs: oracle1=11356 phpr1=46174 oracle2=6253 phpr2=12168
+orm_ictx/s (gate emenda S-127): oracle1=1768.8 phpr1=1125.9 oracle2=1021.7 phpr2=326.0  SEGNALATE(>1,5x med): ['oracle1']
+dbal_leg1: oracle_user=1.15 (sys=0.23) phpr_user=9.20 (sys=0.55) ratio_raw=8.000 ratio_net=8.266
+dbal_leg2: oracle_user=1.17 (sys=0.24) phpr_user=8.41 (sys=0.44) ratio_raw=7.188 ratio_net=7.405
+dbal_ictx_abs: oracle1=562 phpr1=16867 oracle2=1532 phpr2=2051
+dbal_ictx/s (gate emenda S-127): oracle1=372.2 phpr1=1675.0 oracle2=988.4 phpr2=227.1  SEGNALATE(>1,5x med): ['phpr1']
+dbal_parita': phpr_failset_stabile=True |phpr_fail|=10 |diff_vs_oracle|=10
+dbal_diff_nomi: Doctrine\DBAL\Tests\Functional\PortabilityTest::testCaseConversion with data set "lower" (Doctrine\DBAL\ColumnCase Enum (LOWER), ['test_int', 'test_string', 'test_null']) | Doctrine\DBAL\Tests\Functional\PortabilityTest::testCaseConversion with data set "upper" (Doctrine\DBAL\ColumnCase Enum (UPPER), ['TEST_INT', 'TEST_STRING', 'TEST_NULL']) | Doctrine\DBAL\Tests\Functional\PortabilityTest::testCaseConversionColumnName with data set "lower" (Doctrine\DBAL\ColumnCase Enum (LOWER), ['test_int', 'test_string', 'test_null']) | Doctrine\DBAL\Tests\Functional\PortabilityTest::testCaseConversionColumnName with data set "upper" (Doctrine\DBAL\ColumnCase Enum (UPPER), ['TEST_INT', 'TEST_STRING', 'TEST_NULL']) | Doctrine\DBAL\Tests\Functional\PortabilityTest::testFetchAllNullColumn | Doctrine\DBAL\Tests\Functional\PortabilityTest::testFetchColumn with data set "int" ('Test_Int', [1, 2]) | Doctrine\DBAL\Tests\Functional\PortabilityTest::testFetchColumn with data set "string" ('Test_String', ['foo', 'foo']) | Doctrine\DBAL\Tests\Functional\PortabilityTest::testFullFetchMode | Doctrine\DBAL\Tests\Functional\PortabilityTest::testGetDatabaseName | Doctrine\DBAL\Tests\Schema\Name\Parser\GenericNameParserTest::testValidInput with data set #11 ('schéma."übermäßigkeit".`àçcên...ràctér', [Doctrine\DBAL\Schema\Name\Identifier Object (...), Doctrine\DBAL\Schema\Name\Identifier Object (...), Doctrine\DBAL\Schema\Name\Identifier Object (...), Doctrine\DBAL\Schema\Name\Identifier Object (...), Doctrine\DBAL\Schema\Name\Identifier Object (...)])
+attesa-AF1 assoluto (companion): phpr_orm_net_new=[35.37; 37.08] ref=[34.96; 35.2] Delta=[-2.12; -0.17] s
+attesa-AF1 ORACLE-NORMALIZZATO (CANONICO coppia): net_norm=[33.35; 34.24] (ORA_REF=4.95, oracle_net_gambe=[5.36, 5.25]) Delta_norm=[+0.72; +1.85] s
+rapporto net (companion): [6.737; 6.918] vs registrato S-160 [7.077; 7.097]
+attesa-AF1: DIREZIONE GIU' FUORI RUMORE (Delta_norm_min 0.72 >= 0.293) — OLTRE l'attesa a tetto 0.0-0.035: dichiarare, nessuna attribuzione senza census ORM proprio
+gambe ictx SEGNALATE ['oracle1'] — a verbale (rodaggio nel canone; se ricorre, istruttoria dedicata)
+parita': orm phpr per NOME vs baseline 16 · dbal fail-set stabile tra gambe — rc=0 (0=tutte valide)
+orm  oracle1: Tests: 3484, Assertions: 12003, Skipped: 59, Incomplete: 2.
+orm  phpr1:   Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, Skipped: 59, Incomplete: 2.
+dbal oracle1: Tests: 3929, Assertions: 5706, Skipped: 594, Incomplete: 13.
+dbal phpr1:   Tests: 3921, Assertions: 5550, Errors: 10, Skipped: 626, Incomplete: 13.
+orm  oracle2: Tests: 3484, Assertions: 12003, Skipped: 59, Incomplete: 2.
+orm  phpr2:   Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, Skipped: 59, Incomplete: 2.
+dbal oracle2: Tests: 3929, Assertions: 5706, Skipped: 594, Incomplete: 13.
+dbal phpr2:   Tests: 3921, Assertions: 5550, Errors: 10, Skipped: 626, Incomplete: 13.
+== LETTURA DI SESSIONE S-161 (dichiarata, il blocco meccanico sopra resta intatto) ==
+FINESTRA CONTAMINATA da carico interattivo esterno (Chrome/uso macchina ~21:40-22:50,
+lo stesso flare delle gambe 5-6 del pair t11): ictx/s su TUTTE le gambe 227-1769
+vs 31-231 della finestra s160 (10-25x); oracle net 5,36/5,25 vs 4,96/4,94 del RIF
+(+7-8%: l'oracle stesso e' fuori dal suo riferimento). Il flag per-gamba (mediana
+di finestra) non morde una contaminazione SISTEMICA: 'oracle1'/'phpr1' segnalate
+sono solo la coda. CONSEGUENZE: (1) attesa-AF1 "DIREZIONE GIU'" = ARTEFATTO
+PROBABILE della normalizzazione su oracle gonfiato — NON si chiude (veto: mai
+chiudere attese su gambe ictx-segnalate); (2) rapporti net 6,74-6,92 (orm) e
+7,41-8,27 (dbal) NON confrontabili col registro; (3) parita' VALIDA (16 nomi orm,
+dbal stabile 10): il rc=0 vale per la parita', NON per la cifra. RIMISURA ORM in
+finestra QUIETA DOVUTA (con essa il tentativo integrativo banda pair, N=4<5).
