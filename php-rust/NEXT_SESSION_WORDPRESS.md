@@ -49,27 +49,25 @@ alla prossima promo, indagine) · WP t11 mediana 1,765 (4/6 pulite) · media
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
 array_map string-callable · MethodCall.borrow k=2 · elementi/chiamata
 array_map-filter non censiti · autoload array-callable [obj,method] k=1
-(braccio method-call n=1, quota ORM Composer PAGANTE ma superficie più larga)
-· gamba server census (11°) · §3.25 · §3.24+§3.23 · slot-load · §3.22 ·
-depr. float→int · warning ×2 · div. RMW · objmap → GC · evalcls 316,9× ·
-refl 42,4× · re +2 · §3.13/§3.12-i/§3.14/§3.21 · get_gc · latin1 (dbal
-3921/626) · dbal 10 nomi · divergenze array_map a catalogo · CI: corpus-FAIL
-d'ambiente 3 test backtrace.
+(quota ORM Composer PAGANTE, superficie più larga) · gamba server census
+(11°) · §3.25 · §3.24+§3.23 · slot-load · §3.22 · depr. float→int · warning
+×2 · div. RMW · objmap → GC · evalcls 316,9× · refl 42,4× · re +2 ·
+§3.13/§3.12-i/§3.14/§3.21 · get_gc · latin1 (dbal 3921/626) · dbal 10 nomi ·
+divergenze array_map a catalogo · CI: corpus-FAIL d'ambiente 3 backtrace.
 
 ## NON riproporre (i veti restano; dettaglio nei concili archiviati)
 **S-161: coeff di famiglia trasportato tra siti (si prezza il BUNDLE del
 sito) · chiudere un'attesa su finestra con oracle fuori dal SUO riferimento
 (contaminazione sistemica: il flag a mediana non basta).**
 S-160: gate-fixture A==B senza marcatore · copia-gate senza verifica
-riga-per-riga. S-159: giudizio d'intervallo da UN estremo · «alloc» per un
-coeff che conta passaggi · chiudere attese su gambe ictx-segnalate.
-S-158..S-152: banda smoke senza denti · famiglia dal prezzo del giudice ·
-cifra dalla sola finestra · assoluti cross-finestra non normalizzati ·
-guardia quantizzata senza ri-risoluzione · fette <risoluzione · braccio A
-non-gemello (§7-bis) · leve a scala SUITE. Trasversali: BOLT/NaN-boxing/PGO ·
-pin senza collaudo · differenze A/B come cifra · componenti prezzate ·
-denominatori a memoria · rc da pipe · edit coi build in volo · promozione
-sotto banda · claim di ASSENZA oltre risoluzione · giudice sotto-risoluto.
+riga-per-riga. S-159..S-152: giudizio d'intervallo da UN estremo · chiudere
+attese su gambe ictx-segnalate · banda smoke senza denti · famiglia dal
+prezzo del giudice · cifra dalla sola finestra · assoluti cross-finestra non
+normalizzati · fette <risoluzione · braccio A non-gemello (§7-bis) · leve a
+scala SUITE. Trasversali: BOLT/NaN-boxing/PGO · pin senza collaudo ·
+differenze A/B come cifra · componenti prezzate · denominatori a memoria ·
+rc da pipe · edit coi build in volo · promozione sotto banda · claim di
+ASSENZA oltre risoluzione · giudice sotto-risoluto.
 **Riscritto** 2026-08-29 (chiusura S-161; storia in `sessions/` · `gaps/`).
 Pre-flight S-162: pin phpr **s161 ec0a636a**d0c42005 + server **cad5cf83**
 fa2309c9 (SOLO via pin-*.sh) · Data 10G al prune (CI requeue <7G: guardare
