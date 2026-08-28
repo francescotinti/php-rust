@@ -1,0 +1,30 @@
+== s161 sonda surplus L-AF1 (criterio s161-criterio-sonda-af1.md; bracci rimisura MISURATI A=f2d17f18(gemelloA==pin s159) B=ceeb6e76(af1-B==pin s160); conteggi su probe census A/B da tree HEAD∓patch host.rs) ==
+sentinella language-server inizio finestra: /Applications/Antigravity /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.96.0-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer 
+patch inversa: 1 file (host.rs), zero rej (log agli atti; loc_dente.rs escluso DICHIARATO: test, non in -p php-cli)
+probe MISURATI: A=bd156ae2417ab1c3 B=b7ca07bf806befae (census -p php-cli --features mem-census, target dedicati)
+identita' s149sum A r1: hostcall_n=402003 sum_name=402003 unnamed=0 overflow=0 OK
+identita' s149sum A r2: hostcall_n=402003 sum_name=402003 unnamed=0 overflow=0 OK
+identita' s149sum B r1: hostcall_n=202003 sum_name=202003 unnamed=0 overflow=0 OK
+identita' s149sum B r2: hostcall_n=202003 sum_name=202003 unnamed=0 overflow=0 OK
+repliche A: r1==r2
+repliche B: r1==r2
+conteggi r1 per-NOME (arbitro: array_filter):
+  array_filter: A=402002 B=202002 Delta=200000
+  count: A=0 B=0 Delta=0
+  range: A=1 B=1 Delta=0
+Delta hostcall_n = 200000 (atteso 200000 ESATTO)
+Delta altri nomi != 0: nessuno
+CONTEGGI: attese p.4 ESATTE (Delta 1 passaggio vec-args/elemento CONFERMATO su array_filter; resto zero)
+quiescenza rimisura: rc=0
+rimisura: giudice m-arrfilter N=10000000 floor_A=0.02 floor_B=0.03
+  coppia1 [AB]: rawA=1.97 rawB=1.83
+  coppia2 [BA]: rawA=1.98 rawB=1.83
+  coppia3 [AB]: rawA=1.99 rawB=1.81
+  coppia4 [BA]: rawA=1.99 rawB=1.81
+  coppia5 [AB]: rawA=1.99 rawB=1.83
+RIMISURA m-arrfilter: A=197.0 B=180.0 ns/elemento D=+17.0 (rumore drop-1: A'=1.0 B'=2.0)
+drift vs finestra s160 (+16.0): +1.0 · vs post-pin (+15.0): +2.0 (banda rumore 2.0)
+REGISTRO L-AF1 (criterio p.6): D_rimisura=+17.0 ± 2.0 ns/elemento su stash FERMI s159/s160 — costo passaggio CLOSURE-vec (Delta census 1/elemento) = 17.0 ± 2.0 ns
+BIVIO p.6 = (b): |D-12.0|=5.0 > 2.5+rumore(2.0) — famiglia SDOPPIATA: hostcall-vec=12.0±2.5 (s159) · closure-vec=17.0±2.0 (s161); surplus dispatch closure = +5.0 ns/passaggio
+sentinella language-server fine finestra: /Applications/Antigravity /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.96.0-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer 
+ESITO: rc=0 (conteggi + rimisura + decisione agli atti)
