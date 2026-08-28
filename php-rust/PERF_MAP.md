@@ -1,7 +1,31 @@
 # PERF_MAP — phpr vs PHP oracle 8.5.7, mappa multi-workload
 
-Aggiornata: **2026-08-28 (S-160)** · pin phpr **s160 ceeb6e76** + server
-**s160 001a4b2b** NUOVI (**S-160 = PROMOZIONE leva L-AF1 «array_filter
+Aggiornata: **2026-08-29 (S-161)** · pin phpr **s161 ec0a636a** + server
+**s161 cad5cf83** NUOVI (**S-161 = PROMOZIONE leva L-AL2 «loader autoload
+k=1 senza args-Vec: ammissione PER-LOADER closure anonima simple_call
+arità-1, per-miss via call_closure_one RIUSATO; ogni altra forma di loader
+INVARIATA» con catena rc=0 SENZA rettifiche**: A/B R=5 vs GEMELLO ceeb6e76
+== pin s160 AL BYTE a freddo **D=+5,0 ns/miss su m-missload** (283,0→278,0;
+smoke +5,5 FUORI banda [8;22] SOTTO ⇒ ARBITRATO census: Δ=1 passaggio/miss
+ESATTO su class_exists ⇒ R=5 autorizzato; riconc. |0,5|<4,0; **SOTTO-MODELLO
+DICHIARATO — reperto capitale: il coeff del passaggio rimosso è PER-SITO**
+— refl 12,0±2,5 (s159) · arrfilter 17,0±2,0 (sonda s161) · autoload ~5,0
+(qui): si prezza il BUNDLE del sito, mai la famiglia), 17 guardie ok (re
+morsa a R=2 −4,6/−4,5 e RIENTRATA a R=5 −3,3/−5,0, dichiarata), bl run_loop
+6033==6033; dente loc monolite VM 25810→25831 PRE-dichiarato; conferma
+post-pin m-missload **D=+3,0 segni 5/5** (intorno +5±rumore 5); micro promo
+**5,3·5,6·4,9·4,3·3,3·2,6** (calls/arr tick denominatore, guardie A/B verdi);
+**SONDA surplus L-AF1 SALDATA** (orologio §4 SPENTO): census Δ=1/elemento
+ESATTO, rimisura su stash FERMI **D=+17,0±2,0** (drift +1/+2 in banda) —
+cifra a REGISTRO L-AF1; **coppia t11+ORM @ s160**: WP t11 mediana 1,765
+COMPATIBILE (4/6 pulite, leg5-6 flare esterno; banda_ON NON fondata N<5,
+tentativo da integrare) · media 2,437–2,447 · ORM/dbal parità VALIDA ma
+CIFRA NULLA (finestra CONTAMINATA da uso interattivo: ictx 10-25×, oracle
+net 5,36/5,25 fuori dal SUO rif 4,96/4,94; attesa-AF1 «GIU'» artefatto
+probabile, NON chiusa — veto) — rimisura assorbita dalla **coppia @ s161
+DOVUTA → S-162**; verdetti `wp161-harness/s161-*.out`); storico S-160
+(pin **s160 ceeb6e76** + server
+**s160 001a4b2b**; **PROMOZIONE leva L-AF1 «array_filter
 plumbing 0-alloc per-elemento: 1-array + closure ANONIMA simple_call arità-1
 + mode==0, ammissione hoistata, per-elemento via call_closure_one RIUSATO
 (L-AM1); ogni altra forma sul cammino pieno INVARIATO» con catena rc=0 CON
