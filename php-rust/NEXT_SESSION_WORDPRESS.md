@@ -14,7 +14,7 @@ ri-derivati con esito ESATTO — **INCIDENTE #21 PROPOSTO** + emenda §3
 proposta (copia-gate a verifica POSITIVA dei path + marcatore preteso in ogni
 gate-fixture) · leve S-160: **1 (promossa)** · incidenti **19 + 2 PROPOSTI**
 · QUESITI UTENTE: (a) T2/A2 sospendere (racc. S-155); (b) census server
-(10° slitt.); (c) incidenti #20 (smoke-stop S-157) e #21: ratificare;
+(10° slitt.); (c) incidenti #20 e #21: ratificare;
 (d) emenda §3 copia-gate/marcatore: ratificare.
 
 ## Scoreboard (pin s160 phpr ceeb6e76e4ef5ace + server 001a4b2bf04a73ae)
@@ -36,11 +36,10 @@ al pin s160 DOVUTA**) · corpus **1412×2** · batteria 1748/0/2 (cap loc
    canone); attesa L-AF1 SOTTO-risoluzione (1,83M chiamate ORM × elementi non
    censiti, dichiarare come lower-bound); RIF ORM s160 [34,96;35,20] ass. /
    ratio [7,077;7,097], ORA_REF dalla finestra (oracle net 4,96/4,94).
-3. **Emenda REGOLE §3** (se ratificata dall'utente): copia-gate chiuso SOLO
-   con verifica POSITIVA dei path adattati + marcatore d'esito preteso in
-   ogni gate-fixture (mai il solo A==B) + OUT della copia in directory NUOVA
-   (rev. #4: il run misdiretto ha SOVRASCRITTO i promo-out di s159 — record
-   clobber annotato nel verdetto s159, copia stantia INVALIDATA).
+3. **Emenda REGOLE §3** (se ratificata): copia-gate chiuso SOLO con verifica
+   POSITIVA dei path adattati + marcatore d'esito preteso (mai solo A==B) +
+   OUT in directory NUOVA (rev. #4: il run misdiretto ha SOVRASCRITTO i
+   promo-out s159 — clobber annotato, copia stantia INVALIDATA).
 4. **LEVA TENTATA (obbligo di ritmo)** — per NOME, col coeff/modello
    aggiornato dalla sonda p.1: (a) loader autoload k=1 (residuo L-AL1);
    (b) array_map string-callable (to_vec/elemento). Banda smoke VINCOLANTE
