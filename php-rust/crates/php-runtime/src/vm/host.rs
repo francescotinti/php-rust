@@ -2055,6 +2055,31 @@ impl<'m> super::Vm<'m> {
         let entries: Vec<(Key, Zval)> =
             arr.iter().map(|(k, v)| (k.clone(), v.deref_clone())).collect();
         let mut out = PhpArray::new();
+        // L-AF1 (S-160): 1 array + callback closure ANONIMA `simple_call` di
+        // arità 1, mode==0 — ammissione UNA volta per chiamata, per-elemento
+        // senza args-Vec via call_closure_one (riuso L-AM1; criterio
+        // s160-criterio-af1.md). Stesso numero di clone del pieno; ogni altra
+        // forma cade sul loop generico sotto, invariato.
+        if mode == 0 {
+            if let Some(Zval::Closure(cl)) = &cb {
+                if cl.named.is_none() {
+                    let m = self.modules.get(cl.module_id).copied().unwrap_or(self.module);
+                    if m.closures
+                        .get(cl.fn_idx)
+                        .is_some_and(|f| f.simple_call && f.n_params == 1)
+                    {
+                        let cl = cl.clone();
+                        for (k, v) in entries {
+                            let r = self.call_closure_one(&cl, v.clone())?;
+                            if convert::to_bool(&r, &mut self.diags) {
+                                out.insert(k, v);
+                            }
+                        }
+                        return Ok(Zval::Array(Rc::new(out)));
+                    }
+                }
+            }
+        }
         for (k, v) in entries {
             let keep = match &cb {
                 None => convert::to_bool(&v, &mut self.diags),
