@@ -1,0 +1,6 @@
+== s160 gemello A — identita' (criterio af1 p.3) ==
+build ricetta canonica (SOURCE_DATE_EPOCH=0 CARGO_INCREMENTAL=0 cargo build --release, lto=fat cu=1) dal tree s159 INVARIATO, a FREDDO (post target-prune s159): rc=0 in 3m23s
+hash MISURATO: f2d17f18c00a4049 == pin s159 AL BYTE (nessun arbitrato a contenuto necessario)
+reperto riproducibilita': byte-identita' a freddo CONFERMATA N=2 (prima: s159, N=1)
+stash: phpr-s160-gemelloA via pin-phpr.sh --braccio (smoke parita' 2 modi nell'atto)
+stash duplicato phpr-phpr-s160-gemelloA: MISFIRE di tag dichiarato (stesso byte, riga registro conservata; il canonico e' phpr-s160-gemelloA)
