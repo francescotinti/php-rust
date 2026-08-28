@@ -13,9 +13,8 @@ H stantio (wp159) ⇒ gate fx-af e conferma FALSI VERDI su file inesistenti,
 ri-derivati con esito ESATTO — **INCIDENTE #21 PROPOSTO** + emenda §3
 proposta (copia-gate a verifica POSITIVA dei path + marcatore preteso in ogni
 gate-fixture) · leve S-160: **1 (promossa)** · incidenti **19 + 2 PROPOSTI**
-· QUESITI UTENTE: (a) T2/A2 sospendere (racc. S-155); (b) census server
-(10° slitt.); (c) incidenti #20 e #21: ratificare;
-(d) emenda §3 copia-gate/marcatore: ratificare.
+· QUESITI UTENTE: (a) T2/A2 sospendere (racc. S-155); (b) census server (10°
+slitt.); (c) incidenti #20 e #21 + (d) emenda §3 (p.3): ratificare.
 
 ## Scoreboard (pin s160 phpr ceeb6e76e4ef5ace + server 001a4b2bf04a73ae)
 **arith 5,4 · prop 5,5 · calls 4,7 · str 4,3 · arr 3,2 · re 2,6** (micro R=5
