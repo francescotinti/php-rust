@@ -1,7 +1,32 @@
 # PERF_MAP — phpr vs PHP oracle 8.5.7, mappa multi-workload
 
-Aggiornata: **2026-08-26 (S-159)** · pin phpr **s159 f2d17f18** + server
-**s159 c8e43b58** NUOVI (**S-159 = PROMOZIONE leva L-AM1 «array_map plumbing
+Aggiornata: **2026-08-28 (S-160)** · pin phpr **s160 ceeb6e76** + server
+**s160 001a4b2b** NUOVI (**S-160 = PROMOZIONE leva L-AF1 «array_filter
+plumbing 0-alloc per-elemento: 1-array + closure ANONIMA simple_call arità-1
++ mode==0, ammissione hoistata, per-elemento via call_closure_one RIUSATO
+(L-AM1); ogni altra forma sul cammino pieno INVARIATO» con catena rc=0 CON
+RETTIFICA in-sessione**: A/B R=5 vs GEMELLO f2d17f18 == pin s159 AL BYTE a
+freddo (N=2) **D=+16,0 ns/elemento su m-arrfilter** (196,0→180,0; smoke +14,0
+DENTRO banda VINCOLANTE [8;22]; riconc. 2,0<4,0; **FUORI-UB SOPRA dichiarato:
+UB 12,0±2,5, eccedenza ~0,5-3,0 su componenti NON prezzate nominate
+(dispatch call_callable · match mode · Rc-bump) ⇒ sonda surplus DOVUTA S-161,
+orologio §4**), 17 guardie ok (arrmap +2,0: L-AM1 presidiata), bl run_loop
+6033==6033; dente loc host.rs 7683→7708 PRE-dichiarato; fx-af 13 forme + fx-am
+v2 20 forme BYTE-ID; conferma post-pin m-arrfilter **D=+15,0 segni 5/5**
+(RETTIFICA: prima corsa su file inesistente — la copia promo aveva H stantio
+wp159, fx-af/conferma FALSI VERDI ri-derivati con esito ESATTO, incidente #21
+PROPOSTO + emenda §3 proposta: verifica POSITIVA dei path + marcatore preteso);
+micro promo **5,4·5,5·4,7·4,3·3,2·2,6** (arr/re tick denominatore, guardie
+verdi); **istruttoria phpr1 CHIUSA**: transitorio INTERNO primo-run (istruzioni
+identiche, Δ-daemon≈0), rimedio rodaggio+quiescenza NEL criterio ORM → 4/4
+gambe PULITE (prima volta); **coppia t10+ORM saldate @ s159**: WP t10 mediana
+1,760 COMPATIBILE (6/6 pulite, banda_ON 0,008 == record) · media 2,434–2,458 ·
+ORM 7,077–7,097 (attesa-AM1 COMPATIBILE su scaletta a DUE estremi, Δ_norm
+[+0,04;+0,24] INTERO in banda; **replica-AL1 CHIUSA**: attesa 0,02-0,05
+sotto-risoluzione CONFERMATA su gambe pulite) · dbal 7,541–7,550; verdetti
+`wp160-harness/s160-*.out`; **coppia @ s160 DOVUTA → S-161**); storico S-159
+(pin **s159 f2d17f18** + server
+**s159 c8e43b58**; **PROMOZIONE leva L-AM1 «array_map plumbing
 0-alloc per-elemento: 1-array + closure ANONIMA simple_call arità-1,
 ammissione hoistata UNA volta per chiamata, per-elemento senza vec![v] via
 intake = braccio WP-37 di bind_params a n=1 (call_closure_one /

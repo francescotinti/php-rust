@@ -1,80 +1,80 @@
 # NEXT_SESSION — phpr: OBIETTIVO PARITÀ (≥1×) con l'oracle; ≤3× = tappa (REGOLE §1)
-⏱ **FONDAMENTALI**: **S-159 = coppia t9+ORM saldate @ s158 + SONDA surplus
-SALDATA (az.rev. S-158 #1 entro orologio §4) + leva L-AM1 array_map 0-alloc
-PROMOSSA (pin NUOVO s159)** · coeff cammino vec![args] **TARATO 12,0 ns per
-PASSAGGIO-DISPATCHER (±2,5)**: registro L-RF2 RISOLTO a +24,0±5,0 su stash
-fermi · L-AM1: smoke +10,0 in banda VINCOLANTE [8;22] coi denti NEL giudice
-→ R=5 **D=+11,0 DENTRO UB tarato** (prima leva nel modello); registro
-**[8;11]** (post-pin +8,0, rev. #5) · promozione **t1 rc=0** (candidato AL
-BYTE; denti 25810/7683 pre-dichiarati; corpus zero flip; fx-am 14 forme;
-gemello == pin AL BYTE anche a freddo, N=1) · revisione lente SEMANTICA:
-**REGGE CON RILIEVI** — RETTIFICA #1: attesa-RF2 ORM riclassificata **NON
-RISOLTA lato peggiorativo** (scaletta dal solo dn_max ⇒ EMENDA a due estremi
-in S-160); replica-AL1 APERTA (phpr1 ictx segnalata 3ª finestra) · leve
-S-159: **1 (promossa)** · incidenti **19 + 1 PROPOSTO** · QUESITI UTENTE:
-(a) T2/A2 sospendere (racc. S-155); (b) census server (9° slitt.);
-(c) incidente 20 (smoke-stop S-157): ratificare.
+⏱ **FONDAMENTALI**: **S-160 = istruttoria phpr1 CHIUSA (transitorio primo-run;
+rodaggio+quiescenza nel criterio ORM → 4/4 gambe PULITE, prima volta) + coppia
+t10+ORM saldate @ s159 (attesa-AM1 COMPATIBILE a DUE estremi; replica-AL1
+CHIUSA) + fx-am v2 20 forme + leva L-AF1 array_filter 0-alloc PROMOSSA (pin
+NUOVO s160)** · L-AF1: smoke +14,0 in banda VINCOLANTE [8;22] → R=5 **D=+16,0
+SOPRA SOGLIA, FUORI-UB sopra** (UB 12,0±2,5: eccedenza ~0,5-3,0 su componenti
+NON prezzate nominate: dispatch call_callable + match mode + Rc-bump) ⇒
+**sonda surplus DOVUTA S-161 (orologio §4)** · conferma post-pin m-arrfilter
+**D=+15,0 segni 5/5** (rettifica: prima corsa su file inesistente = garbage
+dichiarato) · promozione rc=0 **CON RETTIFICA in-sessione**: copia promo con
+H stantio (wp159) ⇒ gate fx-af e conferma FALSI VERDI su file inesistenti,
+ri-derivati con esito ESATTO — **INCIDENTE #21 PROPOSTO** + emenda §3
+proposta (copia-gate a verifica POSITIVA dei path + marcatore preteso in ogni
+gate-fixture) · leve S-160: **1 (promossa)** · incidenti **19 + 2 PROPOSTI**
+· QUESITI UTENTE: (a) T2/A2 sospendere (racc. S-155); (b) census server
+(10° slitt.); (c) incidenti #20 (smoke-stop S-157) e #21: ratificare;
+(d) emenda §3 copia-gate/marcatore: ratificare.
 
-## Scoreboard (pin s159 phpr f2d17f18c00a4049 + server c8e43b585c0a4c74)
-**arith 5,4 · prop 5,5 · calls 4,7 · str 4,3 · arr 3,1 · re 2,5** (micro R=5
-promo s159; arr 3,3→3,1 companion L-AM1) · WP t9 mediana 1,767 (6/6 pulite,
-banda_ON 0,058) · media 2,441–2,462 · ORM 7,090–7,141 · dbal 7,440–7,630
-(tutti @ pin s158: **coppia al pin s159 DOVUTA**) · corpus **1412×2** ·
-batteria 1748/0/2 (cap loc 25810/7683).
+## Scoreboard (pin s160 phpr ceeb6e76e4ef5ace + server 001a4b2bf04a73ae)
+**arith 5,4 · prop 5,5 · calls 4,7 · str 4,3 · arr 3,2 · re 2,6** (micro R=5
+promo s160; arr 3,1→3,2 e re 2,5→2,6 = tick denominatore, guardie A/B verdi)
+· WP t10 mediana 1,760 (6/6 pulite, banda_ON 0,008 == record) · media
+2,434–2,458 · ORM 7,077–7,097 · dbal 7,541–7,550 (tutti @ pin s159: **coppia
+al pin s160 DOVUTA**) · corpus **1412×2** · batteria 1748/0/2 (cap loc
+25810/**7708**).
 
-## §S-160 — ordine
-1. **DIAGNOSI gamba phpr1 ictx PRIMA della coppia** (az.rev. #4: 3 finestre
-   consecutive = primo-run sistematico del workspace ORM): istruttoria
-   ordine-gambe/warmup (rodaggio non giudicante?), esito nel criterio t10.
-2. **Coppia WP t10 + ORM/dbal al pin s159** (dovuta: pin nuovo). Criterio ORM:
-   oracle-normalizzato ereditato con **scaletta EMENDATA a DUE estremi**
-   (az.rev. #1: a cavallo su QUALUNQUE lato ⇒ NON RISOLTA) · RIF ass. s159
-   [34,81;34,92] CON NOTA (phpr1 segnalata; ORA_REF dalla finestra s159:
-   oracle net 4,89/4,91, dichiarare) · ratio [7,090;7,141] · attesa L-AM1
-   SOTTO-risoluzione (1 passaggio/elemento × 12,0 × conteggio array_map da
-   census, da RICONFERMARE come denominatore prima dell'attesa).
-3. **fx-am ESTESA** (az.rev. #2, PRIMA della prossima leva di famiglia): +4
-   forme (closure-generatore, hint di tipo, func_get_args nel fast, static
-   closure) + esclusione by-ref documentata; ri-baseline bilaterale.
-4. **LEVA TENTATA (obbligo di ritmo)** — per NOME, col coeff 12,0/passaggio:
-   (a) **tranche-2 vec![args] k=2** (array_filter·array_walk·usort·
-   array_reduce; census-quota prima di spedire); (b) loader autoload k=1
-   (residuo L-AL1). Banda smoke VINCOLANTE nel giudice EREDITATA.
-5. Az.rev. S-159: #1 (p.2) · #2 (p.3) · #4 (p.1); #3 e #5 GIÀ in PERF_MAP.
+## §S-161 — ordine
+1. **SONDA surplus L-AF1** (orologio §4, entro S-161): conteggi census
+   m-arrfilter sui bracci gemelloA/af1-B (Δ 1 alloc/elemento atteso ESATTO)
+   + rimisura su stash FERMI (phpr-s160-gemelloA vs phpr-s160-af1-B), stile
+   s159-sonda; esito: o il coeff sale, o la componente dispatch si prezza a
+   parte (il modello della famiglia si aggiorna PRIMA della prossima leva).
+2. **Coppia WP t11 + ORM/dbal al pin s160** (dovuta: pin nuovo). Criterio
+   ereditato CON rodaggio + quiescenza + scaletta a DUE estremi (ora nel
+   canone); attesa L-AF1 SOTTO-risoluzione (1,83M chiamate ORM × elementi non
+   censiti, dichiarare come lower-bound); RIF ORM s160 [34,96;35,20] ass. /
+   ratio [7,077;7,097], ORA_REF dalla finestra (oracle net 4,96/4,94).
+3. **Emenda REGOLE §3** (se ratificata dall'utente): copia-gate chiuso SOLO
+   con verifica POSITIVA dei path adattati + marcatore d'esito preteso in
+   ogni gate-fixture (mai il solo A==B).
+4. **LEVA TENTATA (obbligo di ritmo)** — per NOME, col coeff/modello
+   aggiornato dalla sonda p.1: (a) loader autoload k=1 (residuo L-AL1);
+   (b) array_map string-callable (to_vec/elemento). Banda smoke VINCOLANTE
+   nel giudice EREDITATA.
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
-primo-run ORM phpr1 (p.1) · tranche-2 vec![args] k=2 · loader autoload k=1 ·
-array_map string-callable (to_vec/elemento) · denominatore census array_map
-7,68M da riconfermare · gamba server census (9°) · MethodCall.borrow k=2 ·
-§3.25 · §3.24+§3.23 · slot-load · §3.22 · depr. float→int · warning ×2 ·
-div. RMW · objmap 43,4 → GC · evalcls 316,9× · refl 42,4× · re +2 ·
-§3.13/§3.12-i/§3.14/§3.21 · get_gc · latin1 (dbal 3921/626) · dbal 10 nomi ·
-divergenze array_map pre-leva a catalogo (msg ArgumentCountError file/line;
-warning by-ref assente) · CI: corpus-FAIL d'ambiente 3 test backtrace.
+sonda surplus AF1 (p.1) · loader autoload k=1 · array_map string-callable ·
+array_walk/usort/array_reduce (quota ORM zero: solo se census WP li paga) ·
+elementi/chiamata array_map-filter non censiti · gamba server census (10°) ·
+MethodCall.borrow k=2 · §3.25 · §3.24+§3.23 · slot-load · §3.22 · depr.
+float→int · warning ×2 · div. RMW · objmap 43,4 → GC · evalcls 316,9× ·
+refl 42,4× · re +2 · §3.13/§3.12-i/§3.14/§3.21 · get_gc · latin1 (dbal
+3921/626) · dbal 10 nomi · divergenze array_map a catalogo (msg
+ArgumentCountError file/line; warning by-ref assente) · CI: corpus-FAIL
+d'ambiente 3 test backtrace.
 
 ## NON riproporre (i veti restano; dettaglio nei concili archiviati)
-**S-159: giudizio d'intervallo da UN SOLO estremo (la scaletta si valuta su
-ENTRAMBI o non è un giudizio d'intervallo) · nominare «alloc» un coefficiente
-che conta passaggi-dispatcher · chiudere un'attesa su gambe ictx-segnalate.**
-S-158: banda smoke senza denti (ora nel giudice: tenerla) · famiglia dal
-prezzo del giudice · cifra dalla sola finestra (registro a INTERVALLO).
-S-157..S-152: assoluti cross-finestra non normalizzati · guardia quantizzata
-senza ri-risoluzione · salita dente non dichiarata · attese-census senza
-termini annidati · post-pin giudice di magnitudine · fette <risoluzione ·
-identità a hash su build fredda · braccio A non-gemello (§7-bis) · leve a
+**S-160: gate-fixture che confronta A==B senza pretendere l'esito (marcatore)
+· copia-gate «a conteggio hunk» senza verifica riga-per-riga dei path.**
+S-159: giudizio d'intervallo da UN SOLO estremo · «alloc» per un coeff che
+conta passaggi-dispatcher · chiudere attese su gambe ictx-segnalate.
+S-158..S-152: banda smoke senza denti · famiglia dal prezzo del giudice ·
+cifra dalla sola finestra · assoluti cross-finestra non normalizzati ·
+guardia quantizzata senza ri-risoluzione · attese-census senza termini
+annidati · fette <risoluzione · braccio A non-gemello (§7-bis) · leve a
 scala SUITE. Trasversali: BOLT/NaN-boxing/dispatch/PGO · pin senza collaudo ·
 differenze A/B come cifra · componenti prezzate · denominatori a memoria ·
 rc da pipe · edit coi build in volo · promozione sotto banda · claim di
 ASSENZA oltre risoluzione · LSP in volo (sentinella) · giudice sotto-risoluto.
-**Riscritto** 2026-08-26 (chiusura S-159; storia in `sessions/` · `gaps/`).
-Pre-flight S-160: pin phpr **s159 f2d17f18**c00a4049 + server **c8e43b58**
-5c0a4c74 (SOLO via pin-*.sh) · ⚠️ **Data 8G < 10G: liberare/dichiarare** ·
-MySQL wp8 con l'elenco · uploads sotto guardia · corpus 1412 · batteria cap
-loc 25810/7683 · stash: phpr-s159 · php-server-s159 · phpr-s159-am1-B (==pin)
-· phpr-s159-gemelloA (==pin s158) · gemello A per S-160: ricetta dal tree
-s159 (in S-159 riprodotto AL BYTE anche a freddo, N=1; se diverge: contenuto
-con regioni pre-registrate) · lock misura da CREARE · CI: coda in smaltimento
-a lock rimosso · lettura: REGOLE.md → QUI → wp159-harness/
-{s159-pair-verdetto-t9,s159-orm-coppia-verdetto(+RETTIFICA),s159-sonda-
-verdetto,s159-am1-verdetto,s159-promo-verdetto}.out + revisione.md →
-sessions/WP_SESSION_159.md → PERF_MAP.md.
+**Riscritto** 2026-08-28 (chiusura S-160; storia in `sessions/` · `gaps/`).
+Pre-flight S-161: pin phpr **s160 ceeb6e76**e4ef5ace + server **001a4b2b**
+f04a73ae (SOLO via pin-*.sh) · ⚠️⚠️ **Data 6G: LIBERARE PRIMA di aprire (CI
+REQUEUE sotto 7G; pre-flight vuole ≥10G)** · MySQL wp8 con l'elenco · uploads
+sotto guardia · corpus 1412 · batteria cap loc 25810/7708 · stash: phpr-s160
+· php-server-s160 · phpr-s160-af1-B (==pin) · phpr-s160-gemelloA (==pin s159)
+· gemello A per S-161: ricetta dal tree s160 (cold byte-id N=2) · lock misura
+da CREARE · lettura: REGOLE.md → QUI → wp160-harness/{s160-istr,s160-pair-
+verdetto-t10,s160-orm-coppia,s160-af1,s160-promo(+RETTIFICA)}-verdetto.out →
+revisione.md → sessions/WP_SESSION_160.md → PERF_MAP.md.
