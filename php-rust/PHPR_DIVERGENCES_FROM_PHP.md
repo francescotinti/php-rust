@@ -1085,6 +1085,22 @@ Trovata dalla micro di parità az.rev. S-141 #4 (`wp142-harness/parita-hashed.ph
   quando il run_loop è annidato in un hostcall (bersaglio: la riga `#1` della
   sonda byte-uguale all'oracle).
 
+### 3.26 🟡 string-callable dinamici: due divergenze scoperte al collaudo fixture L-AM2 (S-162, PRE-esistenti alla leva)
+
+Scoperte con `wp162-harness/fx-sm.php` sul pin s161 (PRIMA dell'edit L-AM2;
+la leva non le tocca per costruzione — gate d'invarianza `fx-sm-div.php`,
+pin==stash BYTE-ID in promozione):
+1. `array_map('f', …)` con `function f(&$x)` (parametro by-ref): l'oracle
+   emette `Warning: f(): Argument #1 ($x) must be passed by reference,
+   value given` per elemento e procede; phpr chiama in silenzio (nessun
+   warning). Stessa famiglia del trampolino §3.19-bis, ma per funzioni
+   UTENTE via callable dinamico.
+2. callback INESISTENTE: l'oracle lancia `TypeError: array_map(): Argument
+   #1 ($callback) must be a valid callback or null, function "…" not found
+   or invalid function name`; phpr lancia `Error: Call to undefined
+   function …()` (classe E messaggio diversi — la validazione del callable
+   in Zend avviene PRIMA della chiamata, in phpr al dispatch).
+
 ## 4. Punti di forza da NON toccare (invarianti verificati byte-identici)
 
 Per evitare regressioni, questi comportamenti sono **già** byte-identici con

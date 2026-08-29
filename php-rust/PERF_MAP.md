@@ -1,7 +1,35 @@
 # PERF_MAP — phpr vs PHP oracle 8.5.7, mappa multi-workload
 
-Aggiornata: **2026-08-29 (S-161)** · pin phpr **s161 ec0a636a** + server
-**s161 cad5cf83** NUOVI (**S-161 = PROMOZIONE leva L-AL2 «loader autoload
+Aggiornata: **2026-08-29 (S-162)** · pin phpr **s162 20c63af4** + server
+**s162 f6d4a63b** NUOVI (**S-162 = PROMOZIONE leva L-AM2 «array_map
+string-callable a funzione UTENTE k=1 senza args-Vec: risoluzione UNA volta
+per chiamata via resolve_fn_one, per-elemento via call_fn_one/
+push_fn_frame_one; ogni altra forma INVARIATA» con catena rc=0 SENZA
+rettifiche**: A/B R=5 vs GEMELLO ec0a636a == pin s161 AL BYTE **D=+65,0
+ns/elemento su m-strmap** (167,0→102,0; smoke +67,5 FUORI banda [4;19]
+SOPRA ⇒ ARBITRATO census: Δ=2 alloc/elemento ESATTE — args-Vec + to_vec
+del nome — sul solo array_map; attesa numerica del criterio p.5 in
+contraddizione col p.1 dello stesso criterio, ERRORE DI PRE-REGISTRO
+dichiarato in appendice; FUORI-UB SOPRA = REPERTO: il sito strmap ha il
+bundle più ricco della tabella); riconc. |2,5|<4,0; 18 guardie ok; disasm
+bl run_loop 6033==6033; denti loc 25847/7726 PRE-dichiarati; conferma
+post-pin **D=+68,0 rumore 1,0 segni 5/5** (cifra piena, rev. #5
+soddisfatta); micro promo **5,5·5,5·4,8·4,2·3,1·2,5** (arith 5,3→5,5 tick
+denominatore da annotare, guardia A/B della leva verde D=-0,2; arr
+3,3→3,1 · re 2,6→2,5 · str 4,3→4,2 · calls 4,9→4,8); **TABELLA PER-SITO
+(quinto sito): refl 12,0±2,5 · arrfilter 17,0±2,0 · autoload 7,0±3,0
+(rimisura S-162 stash fermi, rev. #1 ASSOLTA) · strmap 65,0±1,0 (R=5
+s162)**; **coppia t12+ORM @ s161 in finestra QUIETA**: WP t12 mediana
+1,767 COMPATIBILE **6/6 PULITE** → **banda_ON FONDATA=0,018** (tentativo
+integrativo t11 CHIUSO) · media 2,426-2,445 · ORM rapporto net
+[7,035;7,086] VALIDO (sentinella contaminazione NEGATIVA: oracle -1,2%
+dal lato veloce; companion assoluto MIGLIORA [+0,45;+0,73]s, tensione
+s161 risolta; attesa-AF1 NON risolta per ampiezza, coerente col tetto
+~0; dbal [7,391;7,440] con riserva ictx-oracle) — rimisura dovuta da
+s161 ASSOLTA; divergenze NUOVE a catalogo §3.26 (string-callable by-ref
+muto + undefined Error≠TypeError, PRE-esistenti, gate invarianza);
+verdetti `wp162-harness/s162-*.out`); storico S-161: pin **ec0a636a** +
+server **cad5cf83** (**S-161 = PROMOZIONE leva L-AL2 «loader autoload
 k=1 senza args-Vec: ammissione PER-LOADER closure anonima simple_call
 arità-1, per-miss via call_closure_one RIUSATO; ogni altra forma di loader
 INVARIATA» con catena rc=0 SENZA rettifiche**: A/B R=5 vs GEMELLO ceeb6e76
