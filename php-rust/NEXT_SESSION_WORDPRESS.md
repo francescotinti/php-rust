@@ -1,23 +1,20 @@
 # NEXT_SESSION — phpr: OBIETTIVO PARITÀ (≥1×) con l'oracle; ≤3× = tappa (REGOLE §1)
 ⏱ **FONDAMENTALI**: **S-162 = ordine COMPLETO: rimisura AL2 su stash FERMI
-(autoload 7,0±3,0, rev. S-161 #1-#2 assolte — TABELLA PER-SITO a cifre
-proprie: refl 12,0±2,5 · arrfilter 17,0±2,0 · autoload 7,0±3,0 · strmap
-65,0±1,0) + coppia t12 @ s161 COMPATIBILE 1,767 **6/6 PULITE** (quiete
-dichiarata uptime/top; **banda_ON FONDATA=0,018**, tentativo t11 CHIUSO) +
-ORM RIVALIDATO [7,035;7,086] (sentinella contaminazione NEGATIVA: oracle
--1,2% dal SUO rif; assoluto MIGLIORA [+0,45;+0,73]s, rev. #3 praticata;
-attesa-AF1 NON risolta per AMPIEZZA, coerente col tetto ~0; dbal
-[7,391;7,440] con riserva ictx-oracle) + leva L-AM2 PROMOSSA (pin NUOVO
-s162)**: smoke +67,5 FUORI banda [4;19] SOPRA → census **2 alloc/elemento
-ESATTE** (vec+nome; attesa p.5 contraddiceva p.1: errore pre-registro
+(autoload 7,0±3,0, rev. #1-#2 assolte — TABELLA PER-SITO: refl 12,0±2,5 ·
+arrfilter 17,0±2,0 · autoload 7,0±3,0 · strmap 65,0±1,0) + coppia t12 @
+s161 COMPATIBILE 1,767 **6/6 PULITE** (quiete dichiarata; **banda_ON
+FONDATA=0,018**, tentativo t11 CHIUSO) + ORM RIVALIDATO [7,035;7,086]
+(sentinella contaminazione NEGATIVA, oracle -1,2% dal SUO rif; assoluto
+MIGLIORA [+0,45;+0,73]s rev. #3; attesa-AF1 aperta per AMPIEZZA, coerente
+col tetto ~0; dbal [7,391;7,440] riserva ictx) + leva L-AM2 PROMOSSA (pin
+NUOVO s162)**: smoke +67,5 FUORI banda [4;19] SOPRA → census **2
+alloc/elemento ESATTE** (vec+nome; attesa p.5 vs p.1 = errore pre-registro
 DICHIARATO) → R=5 **D=+65,0** 18/18 guardie → promo rc=0 SENZA rettifiche,
-conferma post-pin +68,0 CIFRA PIENA · §3.26 a catalogo · revisione
-SEMANTICA: **REGGE CON RILIEVI** (5, recepiti in §S-163: ammissione più
-larga delle fixture; coeff strmap DA DECOMPORRE) · leve S-162: **1
-(promossa) + rimisura** · incidenti **19 + 2 in ratifica (#20 #21), 0
-nuovi** · QUESITI UTENTE PENDENTI: (a) T2/A2 sospendere (racc. S-155);
-(b) census server (12° slitt.); (c) ratifica #20 #21; (d) emenda §3
-(praticata anche in S-162, ratifica pendente).
+post-pin +68,0 CIFRA PIENA · §3.26 a catalogo · revisione SEMANTICA:
+**REGGE CON RILIEVI** (5, in §S-163 p.2; coeff strmap DA DECOMPORRE) ·
+leve S-162: **1 + rimisura** · incidenti **19+2 in ratifica, 0 nuovi** ·
+QUESITI UTENTE: (a) T2/A2 sospendere (racc. S-155); (b) census server
+(12° slitt.); (c) ratifica #20 #21; (d) emenda §3 (praticata, pendente).
 
 ## Scoreboard (pin s162 phpr 20c63af44bfd077a + server f6d4a63b23b963da)
 **arith 5,5 · prop 5,5 · calls 4,8 · str 4,2 · arr 3,1 · re 2,5** (micro R=5
