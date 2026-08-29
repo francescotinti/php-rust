@@ -1,0 +1,18 @@
+2026-08-29 15:29:22 [au1r5c] attesa quiete continua (6x30s <5%)
+2026-08-29 15:29:24 [au1r5c] mediaanalysisd=0.0 calm=1
+2026-08-29 15:29:56 [au1r5c] mediaanalysisd=0.0 calm=2
+2026-08-29 15:30:28 [au1r5c] mediaanalysisd=0.0 calm=3
+2026-08-29 15:30:59 [au1r5c] mediaanalysisd=0.0 calm=4
+2026-08-29 15:31:31 [au1r5c] mediaanalysisd=0.0 calm=5
+2026-08-29 15:32:03 [au1r5c] mediaanalysisd=0.0 calm=6
+2026-08-29 15:32:03 [au1r5c] quiete continua — exec A/B R=5
+2026-08-29 15:32:14 [au1r5c] rc=1
+2026-08-29 15:32:14 [au1r5d] attesa quiete continua (6x30s <5%)
+2026-08-29 15:32:15 [au1r5d] mediaanalysisd=0.0 calm=1
+2026-08-29 15:32:47 [au1r5d] mediaanalysisd=0.0 calm=2
+2026-08-29 15:33:19 [au1r5d] mediaanalysisd=0.0 calm=3
+2026-08-29 15:33:51 [au1r5d] mediaanalysisd=0.0 calm=4
+2026-08-29 15:34:23 [au1r5d] mediaanalysisd=0.0 calm=5
+2026-08-29 15:34:55 [au1r5d] mediaanalysisd=0.0 calm=6
+2026-08-29 15:34:55 [au1r5d] quiete continua — exec A/B R=5
+2026-08-29 15:48:33 [au1r5d] rc=0
