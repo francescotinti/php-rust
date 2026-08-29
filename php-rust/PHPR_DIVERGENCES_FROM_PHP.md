@@ -1107,6 +1107,19 @@ pin==stash BYTE-ID in promozione):
    errore). Conseguenza diretta del punto 2 (validazione al dispatch e
    non all'ingresso). Fixture: `fx-sm-div.php` (esteso S-163).
 
+### 3.27 🟡 autoload lista LIVE: self-unregister CON successore non ferma la camminata (S-163, PRE-esistente)
+
+Scoperta con `wp163-harness/fx-au.php` sul pin s162 (PRIMA della leva
+L-AU1; la leva non tocca il cursore per costruzione — gate d'invarianza
+`fx-au-div.php`, pin==gemello BYTE-ID in promozione): un loader che si
+DE-registra DA SOLO durante il lookup e ha un SUCCESSORE registrato —
+l'oracle TERMINA la camminata (il successore NON scatta); phpr, col
+cursore element-stable di S-71.2, prosegue e lo chiama. Il perimetro
+S-71.2 copriva il self-unregister SENZA successore (fine camminata,
+byte-id) e l'unregister di un ALTRO loader (fx-au t8, byte-id): il caso
+misto è nuovo. Corredo: in Zend la rimozione del bucket corrente mette
+l'iteratore sulla sentinella di fine, qualunque cosa segua.
+
 ## 4. Punti di forza da NON toccare (invarianti verificati byte-identici)
 
 Per evitare regressioni, questi comportamenti sono **già** byte-identici con

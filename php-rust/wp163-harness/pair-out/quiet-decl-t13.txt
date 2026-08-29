@@ -1,0 +1,14 @@
+== dichiarazione finestra quieta t13 2026-08-29 11:53:45 ==
+11:53  up 1 day,  2:04, 2 users, load averages: 7.97 6.85 5.87
+Networks: packets: 66956029/24G in, 63573458/18G out.
+Disks: 23625263/437G read, 47778387/541G written.
+
+PID    %CPU COMMAND         
+99996  0.0  Claude Helper   
+99995  0.0  Claude Helper   
+99993  0.0  ThemeWidgetContr
+99977  0.0  Claude Helper (R
+99974  0.0  Claude Helper (R
+99965  0.0  Claude Helper   
+99963  0.0  Claude Helper   
+99960  0.0  chrome_crashpad_

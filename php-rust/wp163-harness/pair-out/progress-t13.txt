@@ -1,0 +1,13 @@
+11:53:46 sentinella LS inizio: /Applications/Antigravity /Users/francescotinti/.antigravity-ide/extensions/rust-lang.rust-analyzer-0.3.3025-darwin-arm64/server/rust-analyzer /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.96.0-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer 
+11:54:12 quiescenza warmup rc=1 tentativo-gate=1 (file: pair-out/quiesce-t13-warmup.rc)
+11:54:37 quiescenza warmup rc=0 tentativo-gate=2 (file: pair-out/quiesce-t13-warmup.rc)
+uploads-guard: backup OK (3 file → /Volumes/Extreme Pro/Claude/uploads-backups/uploads-20260829-115437.tar.gz), uploads azzerata
+11:54:37 warmup media oracle
+11:55:10 warmup media oracle rc=0
+11:55:10 warmup media phpr (on)
+11:56:15 warmup media phpr rc=0
+uploads-guard: restore verificato (count=3) — backup conservato in /Volumes/Extreme Pro/Claude/uploads-backups/uploads-20260829-115437.tar.gz
+11:56:15 warmup DONE (mai giudicata)
+11:56:41 quiescenza leg1-on rc=0 tentativo-gate=1 (file: pair-out/quiesce-t13-leg1-on.rc)
+11:56:41 gamba on-1 START
+/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp109-harness/pair109.sh: line 38: rustc: command not found
