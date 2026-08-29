@@ -52,26 +52,25 @@ corpus **1412×2** · batteria 1748/0/2 (cap loc **25847/7726**).
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
 autoload array-callable k=1 · MethodCall.borrow k=2 · elementi/frazioni
-array_map-filter-string non censiti · gamba server census (12°) · §3.26
-(by-ref muto + undefined TypeError, catalogate s162) · §3.25 · §3.24+§3.23 ·
-slot-load · §3.22 · depr. float→int · warning ×2 · div. RMW · objmap → GC ·
-evalcls 316,9× · refl 42,4× · re +2 · §3.13/§3.12-i/§3.14/§3.21 · get_gc ·
-latin1 (dbal 3921/626) · dbal 10 nomi · CI: corpus-FAIL d'ambiente 3
-backtrace · attesa-AF1 (aperta, si risolve solo con più gambe ORM).
+array_map-filter-string non censiti · gamba server census (12°) · §3.26 ·
+§3.25 · §3.24+§3.23 · slot-load · §3.22 · depr. float→int · warning ×2 ·
+div. RMW · objmap → GC · evalcls 316,9× · refl 42,4× · re +2 ·
+§3.13/§3.12-i/§3.14/§3.21 · get_gc · latin1 · dbal 10 nomi · CI: corpus-FAIL
+d'ambiente 3 backtrace · attesa-AF1 (aperta: servono più gambe ORM).
 
 ## NON riproporre (i veti restano; dettaglio nei concili archiviati)
 **S-162: gemello in target DEDICATO (il path del target è cotto nel binario:
 solo target CANONICO del pin) · attesa census per ANALOGIA col sito
 precedente (si CONTANO le alloc del bundle p.1).**
-S-161: coeff di famiglia trasportato tra siti · chiudere attese su finestra
-con oracle fuori dal SUO riferimento. S-160..S-152: gate-fixture A==B senza
-marcatore · copia-gate senza verifica riga-per-riga · giudizio d'intervallo
-da UN estremo · chiudere attese su gambe ictx-segnalate · banda smoke senza
-denti · famiglia dal prezzo del giudice · cifra dalla sola finestra · fette
-<risoluzione · braccio A non-gemello (§7-bis) · leve a scala SUITE.
-Trasversali: BOLT/NaN-boxing/PGO · pin senza collaudo · differenze A/B come
-cifra · componenti prezzate · denominatori a memoria · rc da pipe · edit coi
-build in volo · promozione sotto banda · claim di ASSENZA oltre risoluzione.
+S-161: coeff di famiglia trasportato tra siti · attese chiuse con oracle
+fuori dal SUO rif. S-160..S-152: gate-fixture A==B senza marcatore ·
+copia-gate senza verifica riga-per-riga · giudizio da UN estremo · attese su
+gambe ictx-segnalate · banda smoke senza denti · famiglia dal prezzo del
+giudice · cifra dalla sola finestra · fette <risoluzione · braccio A
+non-gemello · leve a scala SUITE. Trasversali: BOLT/NaN-boxing/PGO · pin
+senza collaudo · differenze A/B come cifra · componenti prezzate ·
+denominatori a memoria · rc da pipe · edit coi build in volo · promozione
+sotto banda · claim di ASSENZA oltre risoluzione.
 **Riscritto** 2026-08-29 (chiusura S-162; storia in `sessions/` · `gaps/`).
 Pre-flight S-163: pin phpr **s162 20c63af4**4bfd077a + server **f6d4a63b**
 23b963da (SOLO via pin-*.sh) · Data 13G al prune (CI requeue <7G: feed) ·
