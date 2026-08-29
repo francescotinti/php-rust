@@ -5,8 +5,9 @@ Aggiornata: **2026-08-30 (S-163)** · pin phpr **s163 fea4a2d0** + server
 array-callable [obj,metodo] UTENTE k=1 senza args-Vec: ammissione PER-LOADER
 col predicato IC-fill (PUBLIC non-static simple_call arità-1 senza ombra
 private), dispatch per-miss via call_method_one/push_method_frame_one; ogni
-altra forma INVARIATA» con catena rc=0 SENZA rettifiche**: A/B R=5 (tag
-au1r5d; au1r5/b/c bruciati da flare mediaanalysisd, a verbale) vs GEMELLO
+altra forma INVARIATA» con catena rc=0 (claim EMENDATO post-revisione processo: arbitrato census
+emendato A MANO, incidente contato — cura S-164 riesecuzione da script)**:
+A/B R=5 (tag au1r5d; au1r5/b/c bruciati da flare mediaanalysisd, a verbale) vs GEMELLO
 20c63af4 == pin s162 AL BYTE al PRIMO tentativo **D=+42,0 ns/miss su
 m-arrload** (334,0→292,0; smoke +45,5 FUORI banda [12;30] SOPRA ⇒ ARBITRATO
 census: ERRORE D'UNITÀ dello strumento DICHIARATO — hostcall_n = TUTTE le

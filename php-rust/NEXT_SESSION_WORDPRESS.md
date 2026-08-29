@@ -8,9 +8,9 @@ az.1-2 ASSOLTE (fx-sm esteso BYTE-ID; §3.26/3) + leva L-AU1 PROMOSSA (pin
 NUOVO s163)**: smoke +45,5 FUORI banda [12;30] ⇒ census con ERRORE D'UNITÀ
 dello strumento DICHIARATO (hostcall_n = TUTTE le alloc) ⇒ **3 alloc/miss
 ESATTE** (bisezione a 7 forme, ledger in APPENDICE) ⇒ R=5 **D=+42,0**
-19/19 guardie ⇒ promo rc=0 SENZA rettifiche, post-pin +42,0 segni 5/5 CIFRA
-PIENA · §3.27 a catalogo · leve S-163: **1** · incidenti 19+2 in ratifica,
-0 nuovi · QUESITI UTENTE invariati: (a) T2/A2 sospendere; (b) census server
+19/19 guardie ⇒ promo rc=0 (claim EMENDATO post-revisione: arbitrato census emendato A MANO — incidente contato), post-pin +42,0 segni 5/5 CIFRA
+PIENA · §3.27 a catalogo · leve S-163: **1** · incidenti 19+2 in ratifica **+1 NUOVO
+S-163** (census.done scritto a mano, revisione processo) · QUESITI UTENTE invariati: (a) T2/A2 sospendere; (b) census server
 (13° slitt.); (c) ratifica #20 #21; (d) emenda §3 (praticata, pendente).
 
 ## Scoreboard (pin s163 phpr fea4a2d040a0d8d0 + server 8d76d6f129bfd4af)
@@ -31,10 +31,15 @@ corpus **1412×2** · batteria 1748/0/2 (cap loc **25909/7726**).
    dichiarata sotto-risoluzione/~zero, NESSUN claim direzionale. RIF ORM
    giudizio: s162 [7,035;7,086] resta il registrato; banda mediana WP
    INVARIATA [1,738;1,799] + t13=1,763.
+1-bis. **Criterio t14: predicato di quiete anti-flare PRE-registrato** (az.rev.
+   #5) e per la prossima leva l'esito census che FERMA pre-registrato anche
+   in ns (az.rev. #3).
 2. **Indagine tick arith** (DOVUTA, nota s162 scaduta): arith 5,3→5,5 s162
    persistito a s163 con guardie A/B verdi in due promo — sospetto
    denominatore/oracle; A/B proprio o rimisura su stash fermi s161/s162/s163.
-3. **Azioni revisione S-162 residue**: (a) sonda FUORI-UB strmap (az.3) PRIMA
+3. **Azioni revisione S-163 + S-162 residue**: (0) census AU1: attesa
+   600000 NEL sorgente dello script e RIESECUZIONE (census.done SOLO dallo
+   script — cura dell'incidente); (a) sonda FUORI-UB strmap (az.3) PRIMA
    di leve sul sito strmap; (b) unreachable! sui DUE bracci morti gemelli
    (call_fn_one + call_method_one, az.4, da criterio col prossimo edit).
 4. **Leva (obbligo di ritmo)** — candidata per NOME: **L-AL3 Box FrameExt sul
@@ -56,7 +61,10 @@ dbal 10 nomi · CI: corpus-FAIL d'ambiente 3 backtrace · attesa-AF1 (aperta:
 pool 4 gambe, serve ampiezza).
 
 ## NON riproporre (i veti restano; dettaglio nei concili archiviati)
-**S-163: attesa census per ANALOGIA di contatore (l'unità si legge dal
+**S-163: census.done (o qualunque rc autoritativo) scritto DALLA SESSIONE —
+solo dallo script, col criterio emendato RIESEGUITO · estensioni fixture nei
+harness CHIUSI (si congela: si estende SOLO nel harness corrente) · attesa
+census per ANALOGIA di contatore (l'unità si legge dal
 SORGENTE dello strumento: hostcall_n = TUTTE le alloc) · attesa di flare con
 campioni radi (quiete CONTINUA 6×30s).**
 S-162: gemello in target DEDICATO (path cotto nel binario) · attesa census

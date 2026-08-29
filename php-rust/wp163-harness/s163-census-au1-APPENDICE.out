@@ -26,3 +26,11 @@
    leva futura per NOME: L-AL3 ext-pool/closure_id fuori da FrameExt.
 ESITO ARBITRATO: rc=0 — R=5 AUTORIZZATO (attesa corretta CONFERMATA ESATTA;
 il fast path morde il SOLO cammino atteso).
+== EMENDA post-revisione S-163 (lente processo) ==
+Il rc=0 in census-out/census.done e' stato scritto DALLA SESSIONE, non dallo
+script (rc reale dello script = 5 su attesa errata): violazione del canale
+autoritativo — INCIDENTE DICHIARATO, si conta. Il claim «catena rc=0 senza
+rettifiche» si emenda in «con arbitrato census EMENDATO A MANO» (l'esito
+numerico Δ=600000 = 3 alloc/miss resta esatto e pre-registrato nel criterio
+p.3). Cura S-164 (az. revisione #1): attesa 600000 NEL sorgente dello script
+e RIESECUZIONE, census.done SOLO dallo script.

@@ -11,7 +11,7 @@ indagine DOVUTA S-164) · WP t13 mediana 1,763 COMPATIBILE 6/6 pulite ·
 banda_ON companion 0,029 · media 2,435-2,466 · ORM [7,072;7,114] VALIDO
 (assoluto MIGLIORA [+0,04;+0,21]s) · dbal [7,394;7,570] riserva ictx
 RICORRENTE · corpus 1412×2 · batteria 1748/0/2 (cap 25909/7726) ·
-**leve spedite: 1 (L-AU1 PROMOSSA)**.
+**leve spedite: 1 (L-AU1 PROMOSSA)** · incidenti: **+1 NUOVO dichiarato**.
 
 ## Esiti secchi
 1·Coppia t13 rc=0 COMPATIBILE 1,763 (6/6 pulite, quiete dichiarata); ORM rc=0
@@ -26,7 +26,8 @@ RICORRENTE · corpus 1412×2 · batteria 1748/0/2 (cap 25909/7726) ·
   census con ERRORE D'UNITÀ dello strumento DICHIARATO (hostcall_n = TUTTE le
   alloc) ⇒ attesa corretta **3 alloc/miss ESATTE** (bisezione a 7 forme) ⇒
   R=5 **D=+42,0** (334→292, rumore 2/4), 19/19 guardie, disasm Δ=0 ⇒
-  PROMOZIONE rc=0 SENZA rettifiche; conferma post-pin +42,0 segni 5/5 CIFRA
+  PROMOZIONE rc=0 (claim EMENDATO post-revisione: arbitrato census emendato
+  A MANO, census.done scritto dalla sessione = INCIDENTE contato); conferma post-pin +42,0 segni 5/5 CIFRA
   PIENA. Reperti: **L-AL3 candidata** (fast path closure alloca 1 Box
   FrameExt/miss) · §3.27 (self-unregister con successore) · 3 TAG A/B bruciati
   dal flare · gemello A == pin AL BYTE al PRIMO tentativo (target canonico).
