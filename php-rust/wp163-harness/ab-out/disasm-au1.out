@@ -1,0 +1,5 @@
+== s163 disasm gate L-AU1 (pre-promo, agli atti) ==
+metodo: otool -tv <bin> | awk primo simbolo con 'run_loop' fino al simbolo successivo, conteggio istruzioni bl
+phpr-s163-gemelloA (==pin s162): bl_run_loop=6043
+phpr-s163-au1-B    (fea4a2d0):   bl_run_loop=6043
+Delta=0 — run_loop INVARIATO (la cifra 6043 differisce dal 6033 di s162 per METODO di conteggio, stesso metodo sui due bracci: il gate e' il Delta)
