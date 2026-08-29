@@ -1,0 +1,62 @@
+2,9c2,11
+< # s163-census-au1.sh — arbitrato census L-AU1 (criterio s163-criterio-au1.md
+< # p.3, dovuto: smoke +45,5 FUORI banda [12;30] SOPRA). Probe-B = tree HEAD con
+< # edit; probe-A = copia − s163-au1-edit.patch (3 file, loc_dente.rs = test,
+< # fuori da -p php-cli, DICHIARATO). Driver m-arrload-census.php N=200000;
+< # attesa PRE-REGISTRATA SULLO STRUMENTO (vecargs-at-bind per host-call):
+< # Delta hostcall_n = 200000 ESATTO su class_exists (il solo vec![arg] di
+< # try_autoload transita dal bind; elems-Vec e to_vec del nome NON transitano
+< # e restano contati DAL SORGENTE, criterio p.3), altri nomi zero. Struttura+parser COPIA DICHIARATA della FASE 1 di
+---
+> # s164-census-au1-rerun.sh — RIESECUZIONE arbitrato census L-AU1 (cura
+> # incidente S-163: census.done scritto a mano; REGOLE §3 — la guardia si
+> # emenda solo RIESEGUENDO il criterio emendato). COPIA DICHIARATA di
+> # s163-census-au1.sh col SOLO emendamento dell'attesa NEL SORGENTE:
+> # l'unita' dello strumento e' hostcall_n = TUTTE le alloc sotto il tag
+> # (letta dal sorgente di memcensus, S-163). Probe-B = tree HEAD con edit
+> # (pin s164=fea4a2d0); probe-A = copia − patch s163 (3 file). Driver
+> # m-arrload-census.php N=200000; attesa EMENDATA: Delta hostcall_n =
+> # 600000 ESATTO su class_exists (3 alloc/miss: args-Vec + elems-Vec +
+> # to_vec del nome, ledger APPENDICE s163), altri nomi zero. Struttura+parser COPIA DICHIARATA della FASE 1 di
+12c14
+< # s163-census-au1-verdetto.out; rc SOLO da census-out/census.done.
+---
+> # s164-census-au1-verdetto.out; rc SOLO da census-out/census.done.
+17c19
+< VERD="$H/s163-census-au1-verdetto.out"
+---
+> VERD="$H/s164-census-au1-verdetto.out"
+19,21c21,23
+< PATCH="$H/s163-au1-edit.patch"
+< DRV="$H/m-arrload-census.php"
+< SRC="/private/tmp/s163-census"
+---
+> PATCH="$REPO/wp163-harness/s163-au1-edit.patch"  # input read-only dal harness s163
+> DRV="$REPO/wp163-harness/m-arrload-census.php"   # driver IDENTICO s163, read-only
+> SRC="/private/tmp/s164-census"
+28,29c30,31
+< grep -qi "s-163\|s163" "$LOCK" 2>/dev/null || { echo "rc=9 lock assente/altrui" | tee -a "$VERD"; fin 9; }
+< echo "== s163 arbitrato census L-AU1 (criterio au1 p.3; probe-B = tree HEAD con edit, probe-A = copia − patch 3 file; driver N=200000; smoke +45,5 FUORI banda [12;30] SOPRA) ==" >> "$VERD"
+---
+> grep -qi "s-164\|s164" "$LOCK" 2>/dev/null || { echo "rc=9 lock assente/altrui" | tee -a "$VERD"; fin 9; }
+> echo "== s164 RIESECUZIONE census L-AU1 (attesa EMENDATA 600000 = 3 alloc/miss, unita' hostcall_n=TUTTE le alloc; probe-B = tree HEAD, probe-A = copia − patch s163; driver N=200000) ==" >> "$VERD"
+93c95
+< if nA.get("class_exists",0) - nB.get("class_exists",0) != 200000: fuori.append("class_exists")
+---
+> if nA.get("class_exists",0) - nB.get("class_exists",0) != 600000: fuori.append("class_exists")
+96c98
+< print(f"Delta hostcall_n = {dh} (atteso 200000 ESATTO)")
+---
+> print(f"Delta hostcall_n = {dh} (atteso 600000 ESATTO — attesa EMENDATA: 3 alloc/miss)")
+98c100
+< if fuori or altri or dh != 200000:
+---
+> if fuori or altri or dh != 600000:
+102c104
+<     print("CONTEGGI: attesa strumentale ESATTA (Delta 1 vecargs-at-bind/miss CONFERMATO su class_exists; resto zero) — il fast path MORDE il SOLO cammino atteso; D_smoke misura il bundle PROPRIO del sito (vec-args + elems-Vec + to_vec nome + dispatch: rebind/visibilita'/frame plumbing), FUORI-UB SOPRA resta reperto A VERBALE per il R=5")
+---
+>     print("CONTEGGI: attesa EMENDATA ESATTA (Delta 3 alloc/miss CONFERMATO su class_exists: args-Vec + elems-Vec + to_vec del nome; resto zero) — rc emesso DALLO SCRIPT: incidente S-163 CURATO")
+107c109
+< echo "ESITO: rc=0 (arbitrato agli atti — R=5 AUTORIZZATO col reperto FUORI-UB dichiarato)" >> "$VERD"
+---
+> echo "ESITO: rc=0 (riesecuzione agli atti — census.done DALLO SCRIPT, incidente S-163 curato)" >> "$VERD"

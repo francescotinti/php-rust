@@ -1,0 +1,74 @@
+2,5c2,5
+< # s163-orm-coppia.sh — coppia dbal+ORM sul pin s162 (DOVUTA: pin nuovo)
+< # (criterio s163-criterio-orm.md; copia DICHIARATA di s162-orm-coppia.sh,
+< # manifest s163-orm-copia.diff; adattamenti: pin s162 20c63af44bfd077a,
+< # path wp163, RIF NUOVO = finestra s162 gambe PULITE [34,47;34,51],
+---
+> # s164-orm-coppia.sh — coppia dbal+ORM sul pin s163 (DOVUTA: pin nuovo)
+> # (criterio s164-criterio-orm.md; copia DICHIARATA di s163-orm-coppia.sh,
+> # manifest s164-orm-copia.diff; adattamenti: pin s163 fea4a2d040a0d8d0,
+> # path wp164, RIF INVARIATO = registrato s162 (2 gambe s163 NON aggiornano):
+7,9c7,9
+< # S-162 [7,035;7,086]; attesa L-AM2 su ORM ~ZERO DICHIARATA (Doctrine:
+< # closures e builtin-string NON ammessi dal fast path utente k=1; quota
+< # utente-string NON censita => tetto ~0); attesa-AF1 resta APERTA per
+---
+> # S-162 [7,035;7,086]; attesa L-AU1 su ORM ~ZERO DICHIARATA (Composer/
+> # Doctrine a REGIME = classmap hit, i miss autoload [obj,metodo] RARI;
+> # quota miss NON censita => tetto ~0); attesa-AF1 resta APERTA per
+18c18
+< H="$REPO/wp163-harness"
+---
+> H="$REPO/wp164-harness"
+25c25
+< VERD="$H/s163-orm-coppia-verdetto.out"
+---
+> VERD="$H/s164-orm-coppia-verdetto.out"
+30c30
+< [ "$PINM" = "20c63af44bfd077a" ] || { echo "rc=9 pin!=s162" > "$OUT/rimisura.done"; exit 9; }
+---
+> [ "$PINM" = "fea4a2d040a0d8d0" ] || { echo "rc=9 pin!=s163" > "$OUT/rimisura.done"; exit 9; }
+151c151
+< print("coppia-s163 (user CPU; pavimenti PARZIALI phpunit --version: orm o=%.3f p=%.3f · dbal o=%.3f p=%.3f)" % (fo, fp, dfo, dfp))
+---
+> print("coppia-s164 (user CPU; pavimenti PARZIALI phpunit --version: orm o=%.3f p=%.3f · dbal o=%.3f p=%.3f)" % (fo, fp, dfo, dfp))
+179c179
+< # --- ATTESA L-AM2 (criterio s163-criterio-orm.md p.3, aritmetica meccanica) ---
+---
+> # --- ATTESA L-AU1 (criterio s164-criterio-orm.md p.3, aritmetica meccanica) ---
+186c186
+< ATT_LO, ATT_HI = 0.0, 0.0          # attesa L-AM2: tetto ~0 DICHIARATO (Doctrine: closures e builtin-string NON ammessi dal fast path k=1; quota utente-string NON censita => sotto-risoluzione; attesa-AF1 resta APERTA, non risolta da questa coppia)
+---
+> ATT_LO, ATT_HI = 0.0, 0.0          # attesa L-AU1: tetto ~0 DICHIARATO (Composer/Doctrine a REGIME = classmap hit, i miss autoload [obj,metodo] RARI; quota miss NON censita => sotto-risoluzione; attesa-AF1 resta APERTA, non risolta da questa coppia)
+192c192
+<     print(f"attesa-AM2 assoluto (companion): phpr_orm_net_new=[{nn[0]:.2f}; {nn[1]:.2f}] ref=[{REF2_MIN}; {REF2_MAX}] Delta=[{d_min:+.2f}; {d_max:+.2f}] s")
+---
+>     print(f"attesa-AU1 assoluto (companion): phpr_orm_net_new=[{nn[0]:.2f}; {nn[1]:.2f}] ref=[{REF2_MIN}; {REF2_MAX}] Delta=[{d_min:+.2f}; {d_max:+.2f}] s")
+204c204
+<     print(f"attesa-AM2 ORACLE-NORMALIZZATO (CANONICO coppia): net_norm=[{n2[0]:.2f}; {n2[1]:.2f}] (ORA_REF={ORA_REF2}, oracle_net_gambe={[round(x,2) for x in on]}) Delta_norm=[{dn2_min:+.2f}; {dn2_max:+.2f}] s")
+---
+>     print(f"attesa-AU1 ORACLE-NORMALIZZATO (CANONICO coppia): net_norm=[{n2[0]:.2f}; {n2[1]:.2f}] (ORA_REF={ORA_REF2}, oracle_net_gambe={[round(x,2) for x in on]}) Delta_norm=[{dn2_min:+.2f}; {dn2_max:+.2f}] s")
+208c208
+<         print("attesa-AM2: CIFRA NULLA (parita' rotta) — nessun giudizio")
+---
+>         print("attesa-AU1: CIFRA NULLA (parita' rotta) — nessun giudizio")
+210c210
+<         print(f"attesa-AM2: DIREZIONE GIU' FUORI RUMORE (Delta_norm_min {dn2_min:.2f} >= {RES}) — OLTRE l'attesa a tetto {ATT_LO}-{ATT_HI}: dichiarare, nessuna attribuzione senza census ORM proprio")
+---
+>         print(f"attesa-AU1: DIREZIONE GIU' FUORI RUMORE (Delta_norm_min {dn2_min:.2f} >= {RES}) — OLTRE l'attesa a tetto {ATT_LO}-{ATT_HI}: dichiarare, nessuna attribuzione senza census ORM proprio")
+212c212
+<         print(f"attesa-AM2: REGRESSIONE SEGNALATA (Delta_norm_max {dn2_max:.2f} < -{RES}) — indagine PRIMA di ogni altra leva")
+---
+>         print(f"attesa-AU1: REGRESSIONE SEGNALATA (Delta_norm_max {dn2_max:.2f} < -{RES}) — indagine PRIMA di ogni altra leva")
+214c214
+<         print(f"attesa-AM2: COMPATIBILE (Delta_norm dentro il rumore ±{RES}; attesa a tetto {ATT_LO}-{ATT_HI} SOTTO risoluzione — esito dichiarato, nessuna cifra attribuita a L-AM2)")
+---
+>         print(f"attesa-AU1: COMPATIBILE (Delta_norm dentro il rumore ±{RES}; attesa a tetto {ATT_LO}-{ATT_HI} SOTTO risoluzione — esito dichiarato, nessuna cifra attribuita a L-AU1)")
+216c216
+<         print(f"attesa-AM2: NON RISOLTA (intervallo Delta_norm a cavallo di {RES}) — si dichiara")
+---
+>         print(f"attesa-AU1: NON RISOLTA (intervallo Delta_norm a cavallo di {RES}) — si dichiara")
+230c230
+< { echo "== s163 coppia dbal+ORM (pin s162 MISURATO $PINM vs oracle 8.5.7; criterio s163-criterio-orm.md) =="
+---
+> { echo "== s164 coppia dbal+ORM (pin s163 MISURATO $PINM vs oracle 8.5.7; criterio s164-criterio-orm.md) =="
