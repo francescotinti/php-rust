@@ -1,0 +1,35 @@
+== s162 arbitrato census L-AM2 (criterio am2 p.5; probe-B = tree HEAD con edit, probe-A = copia − patch 4 file; driver 200×1000; smoke +67,5 FUORI banda SOPRA) ==
+patch inversa: 4 file (calls/mod/host + loc_dente=test fuori da -p php-cli, DICHIARATO), zero rej
+probe MISURATI: A=b9c7f8965501faf3 B=548e2efa13a2c858 (census -p php-cli --features mem-census, target dedicati, run sequenziali)
+identita' s149sum A r1: hostcall_n=401003 sum_name=401003 unnamed=0 overflow=0 OK
+identita' s149sum A r2: hostcall_n=401003 sum_name=401003 unnamed=0 overflow=0 OK
+identita' s149sum B r1: hostcall_n=1003 sum_name=1003 unnamed=0 overflow=0 OK
+identita' s149sum B r2: hostcall_n=1003 sum_name=1003 unnamed=0 overflow=0 OK
+repliche A: r1==r2
+repliche B: r1==r2
+conteggi r1 per-NOME (arbitro: array_map):
+  array_map: A=401002 B=1002 Delta=400000
+  range: A=1 B=1 Delta=0
+  count: A=0 B=0 Delta=0
+Delta hostcall_n = 400000 (atteso 200000 ESATTO)
+Delta altri nomi != 0: nessuno
+CONTEGGI: FUORI ATTESA (p.5) — nomi_fuori=['array_map'] altri=[] — dichiarare e tornare al sorgente, NESSUNA taratura
+rc=5 conteggi non validi/fuori attesa
+== APPENDICE ARBITRATO (ritorno al sorgente, come impone il verdetto sopra) ==
+Lo strumento conta le ALLOCAZIONI dentro il tag hostcall attribuite per NOME
+(memcensus.rs s149_name_alloc_note: «ogni alloc cade in un nome»), NON i
+«passaggi» astratti. Il bundle del loop generico string-callable DICHIARATO
+al criterio p.1 contiene DUE alloc per elemento: (1) args-Vec `vec![v]` +
+(2) `bytes.to_vec()` del nome in invoke_value — l'attesa numerica del p.5
+(Δ=200.000, presa per ANALOGIA dal sito closure a 1 alloc) contraddiceva il
+p.1 dello STESSO criterio: ERRORE DI PRE-REGISTRO, si dichiara (nessuna
+taratura: il meccanismo era scritto in p.1 PRIMA del run).
+Il conteggio MISURATO: Δ=400.000 = 2 alloc/elemento ESATTE sul SOLO
+array_map, altri nomi ZERO, repliche r1==r2 su entrambi i probe, identita'
+s149sum OK 4/4 ⇒ il fast path rimuove ESATTAMENTE il bundle p.1 e NIENT'ALTRO.
+Riconciliazione qualitativa del D_smoke=+67,5: 2 alloc + find_fn_ci (ricerca
+binaria) + scan «::» + bind via Vec per elemento — bundle piu' ricco di ogni
+sito a tabella; il FUORI-UB SOPRA resta REPERTO A VERBALE del modello
+per-sito (il coeff PROPRIO del sito strmap lo emette il R=5).
+ESITO ARBITRATO: MECCANISMO CONFERMATO — R=5 AUTORIZZATO col modello
+RIVISTO DICHIARATO (rc=5 del run meccanico = attesa p.5 errata, non guasto).
