@@ -1,7 +1,38 @@
 # PERF_MAP — phpr vs PHP oracle 8.5.7, mappa multi-workload
 
-Aggiornata: **2026-08-29 (S-162)** · pin phpr **s162 20c63af4** + server
-**s162 f6d4a63b** NUOVI (**S-162 = PROMOZIONE leva L-AM2 «array_map
+Aggiornata: **2026-08-30 (S-163)** · pin phpr **s163 fea4a2d0** + server
+**s163 8d76d6f1** NUOVI (**S-163 = PROMOZIONE leva L-AU1 «autoload
+array-callable [obj,metodo] UTENTE k=1 senza args-Vec: ammissione PER-LOADER
+col predicato IC-fill (PUBLIC non-static simple_call arità-1 senza ombra
+private), dispatch per-miss via call_method_one/push_method_frame_one; ogni
+altra forma INVARIATA» con catena rc=0 SENZA rettifiche**: A/B R=5 (tag
+au1r5d; au1r5/b/c bruciati da flare mediaanalysisd, a verbale) vs GEMELLO
+20c63af4 == pin s162 AL BYTE al PRIMO tentativo **D=+42,0 ns/miss su
+m-arrload** (334,0→292,0; smoke +45,5 FUORI banda [12;30] SOPRA ⇒ ARBITRATO
+census: ERRORE D'UNITÀ dello strumento DICHIARATO — hostcall_n = TUTTE le
+alloc sotto il hostcall, non i soli vecargs — attesa corretta dal criterio
+p.3 **Δ=3 alloc/miss ESATTE** (args-Vec + elems-Vec + to_vec del nome),
+bisezione a 7 forme nel ledger APPENDICE: generico [obj,m]=3 · generico
+closure=2 · AL2-fast=1 (Box FrameExt residuo ⇒ **candidata L-AL3**) ·
+AU1-fast=0 · chiamata compilata=0; FUORI-UB SOPRA = REPERTO: plumbing di
+dispatch oltre le alloc); riconc. |3,5|<4,0; 19 guardie ok; disasm bl
+run_loop 6043==6043 (metodo proprio, Δ=0); dente loc mod.rs 25847→25909
+PRE-dichiarato; conferma post-pin **D=+42,0 rumore 3,0 segni 5/5** (cifra
+piena); micro promo **5,5·5,5·4,7·4,2·3,2·2,6** (⚠️ arith 5,5 PERSISTE da
+s162 ⇒ indagine DOVUTA S-164; calls 4,8→4,7 · arr 3,1→3,2 · re 2,5→2,6);
+**coppia t13+ORM @ s162 in finestra QUIETA**: WP t13 mediana 1,763
+COMPATIBILE **6/6 PULITE** · media 2,435-2,466 · ORM rapporto net
+[7,072;7,114] VALIDO (sentinella NEGATIVA: oracle 4,85/4,84 dal lato veloce;
+assoluto MIGLIORA [+0,04;+0,21]s vs ref s162 [34,47;34,51]; attesa-AM2
+COMPATIBILE a tetto ~0; attesa-AF1 aperta, +2 gambe pool; registrato s162
+[7,035;7,086] INVARIATO) · dbal [7,394;7,570] riserva ictx-oracle
+RICORRENTE (2ª coppia ⇒ istruttoria in aperture) — 1° giro ORM rc=8
+(quiescenza-fail flare, zero gambe sporche, riaggancio) — coppia dovuta da
+s162 ASSOLTA; §3.26/3 + §3.27 a catalogo (PRE-esistenti, gate invarianza
+fx-sm-div/fx-au-div); fixture fx-sm ESTESA (rev. az.1: default-param,
+return-hint, namespaced, generator BYTE-ID); verdetti
+`wp163-harness/s163-*.out`); storico S-162: pin **s162 20c63af4** + server
+**s162 f6d4a63b** (**S-162 = PROMOZIONE leva L-AM2 «array_map
 string-callable a funzione UTENTE k=1 senza args-Vec: risoluzione UNA volta
 per chiamata via resolve_fn_one, per-elemento via call_fn_one/
 push_fn_frame_one; ogni altra forma INVARIATA» con catena rc=0 SENZA
