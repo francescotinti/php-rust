@@ -1,0 +1,183 @@
+PHPUnit 11.5.56 by Sebastian Bergmann and contributors.
+
+Runtime:       PHP 8.5.7
+Configuration: /private/tmp/phpr-s162-orm/orm-work/phpunit.xml.dist
+
+.............................................................   61 / 3484 (  1%)
+.............................................................  122 / 3484 (  3%)
+.............................................................  183 / 3484 (  5%)
+.............................................................  244 / 3484 (  7%)
+........................F....................................  305 / 3484 (  8%)
+.............................................S...............  366 / 3484 ( 10%)
+.S...........................................................  427 / 3484 ( 12%)
+...................................................S.........  488 / 3484 ( 14%)
+.......................................................E.....  549 / 3484 ( 15%)
+......................E........SSS...........................  610 / 3484 ( 17%)
+.............................................................  671 / 3484 ( 19%)
+....F........................................................  732 / 3484 ( 21%)
+.............................................................  793 / 3484 ( 22%)
+.............................................................  854 / 3484 ( 24%)
+.......SSS................F...S..............................  915 / 3484 ( 26%)
+.............................................................  976 / 3484 ( 28%)
+...............................S............................. 1037 / 3484 ( 29%)
+...................................SSSSSSSS.................. 1098 / 3484 ( 31%)
+............................................................. 1159 / 3484 ( 33%)
+............................................................. 1220 / 3484 ( 35%)
+S............................................................ 1281 / 3484 ( 36%)
+............................................................. 1342 / 3484 ( 38%)
+...........................S..........................SSSS... 1403 / 3484 ( 40%)
+..........S.................................................. 1464 / 3484 ( 42%)
+.........................................S................... 1525 / 3484 ( 43%)
+..S.............................SSSSS........................ 1586 / 3484 ( 45%)
+.............S..............................................S 1647 / 3484 ( 47%)
+............................................................. 1708 / 3484 ( 49%)
+..........................................................SS. 1769 / 3484 ( 50%)
+............................................................. 1830 / 3484 ( 52%)
+........................................F.................... 1891 / 3484 ( 54%)
+............................................................. 1952 / 3484 ( 56%)
+............................................................. 2013 / 3484 ( 57%)
+............................................................. 2074 / 3484 ( 59%)
+............................................................. 2135 / 3484 ( 61%)
+...................................S....S.................... 2196 / 3484 ( 63%)
+..............................................S.............. 2257 / 3484 ( 64%)
+............................................................. 2318 / 3484 ( 66%)
+............................................................. 2379 / 3484 ( 68%)
+.....................................S...............SSS..... 2440 / 3484 ( 70%)
+.IISS............................F.....................F..... 2501 / 3484 ( 71%)
+.............................EFFF..F..F........SS............ 2562 / 3484 ( 73%)
+..............................S.SS........................... 2623 / 3484 ( 75%)
+............................................................. 2684 / 3484 ( 77%)
+............................................................. 2745 / 3484 ( 78%)
+............................................................. 2806 / 3484 ( 80%)
+....S........................................................ 2867 / 3484 ( 82%)
+............................................................. 2928 / 3484 ( 84%)
+...................................S......................... 2989 / 3484 ( 85%)
+..................................................S.......... 3050 / 3484 ( 87%)
+............................................................. 3111 / 3484 ( 89%)
+............................................................. 3172 / 3484 ( 91%)
+............................................................. 3233 / 3484 ( 92%)
+............................................................. 3294 / 3484 ( 94%)
+................SS........F............S..................... 3355 / 3484 ( 96%)
+............................................................. 3416 / 3484 ( 98%)
+.SS.......................................................... 3477 / 3484 ( 99%)
+F......                                                       3484 / 3484 (100%)
+
+Time: 00:31.959, Memory: 1.91 MB
+
+There were 3 errors:
+
+1) Doctrine\Tests\ORM\Functional\HydrationCacheTest::testHydrationCache
+ValueError: deepclone_from_array(): Argument #1 ($data) malformed payload, hard-ref slot must be of type int, array given
+
+/private/tmp/phpr-s162-orm/orm-work/vendor/symfony/polyfill-deepclone/DeepClone.php:1198
+/private/tmp/phpr-s162-orm/orm-work/vendor/symfony/polyfill-deepclone/DeepClone.php:1209
+/private/tmp/phpr-s162-orm/orm-work/vendor/symfony/polyfill-deepclone/DeepClone.php:1092
+/private/tmp/phpr-s162-orm/orm-work/vendor/symfony/polyfill-deepclone/DeepClone.php:399
+/private/tmp/phpr-s162-orm/orm-work/vendor/symfony/polyfill-deepclone/bootstrap81.php:22
+/private/tmp/phpr-s162-orm/orm-work/vendor/symfony/var-exporter/DeepCloner.php:132
+/private/tmp/phpr-s162-orm/orm-work/vendor/symfony/cache/Adapter/ArrayAdapter.php:372
+/private/tmp/phpr-s162-orm/orm-work/vendor/symfony/cache/Adapter/ArrayAdapter.php:134
+/private/tmp/phpr-s162-orm/orm-work/src/AbstractQuery.php:914
+/private/tmp/phpr-s162-orm/orm-work/src/AbstractQuery.php:886
+/private/tmp/phpr-s162-orm/orm-work/src/AbstractQuery.php:700
+/private/tmp/phpr-s162-orm/orm-work/tests/Tests/ORM/Functional/HydrationCacheTest.php:56
+
+2) Doctrine\Tests\ORM\Functional\LifecycleCallbackTest::testLifecycleListenerChangeUpdateChangeSet
+Doctrine\ORM\NoResultException: No result was found for query although at least one row was expected.
+
+/private/tmp/phpr-s162-orm/orm-work/src/AbstractQuery.php:775
+/private/tmp/phpr-s162-orm/orm-work/tests/Tests/ORM/Functional/LifecycleCallbackTest.php:363
+
+3) Doctrine\Tests\ORM\Mapping\XmlMappingDriverTest::testValidateIncorrectXmlSchema with data set #0 ('Doctrine\Tests\Models\DDC889\...9Class', [1])
+Doctrine\Persistence\Mapping\MappingException: Invalid mapping file 'Doctrine.Tests.Models.DDC889.DDC889Class.dcm.xml' for class 'Doctrine\Tests\Models\DDC889\DDC889Class'.
+
+/private/tmp/phpr-s162-orm/orm-work/vendor/doctrine/persistence/src/Mapping/MappingException.php:63
+/private/tmp/phpr-s162-orm/orm-work/vendor/doctrine/persistence/src/Mapping/Driver/FileDriver.php:89
+/private/tmp/phpr-s162-orm/orm-work/src/Mapping/Driver/XmlDriver.php:82
+/private/tmp/phpr-s162-orm/orm-work/tests/Tests/ORM/Mapping/MappingDriverTestCase.php:91
+/private/tmp/phpr-s162-orm/orm-work/tests/Tests/ORM/Mapping/XmlMappingDriverTest.php:211
+
+--
+
+There were 13 failures:
+
+1) Doctrine\Tests\ORM\EntityManagerTest::testItPreservesTheOriginalExceptionOnRollbackFailure
+Failed asserting that null is not null.
+
+/private/tmp/phpr-s162-orm/orm-work/tests/Tests/ORM/EntityManagerTest.php:230
+
+2) Doctrine\Tests\ORM\Functional\NewOperatorTest::testClassCantBeInstantiatedException
+Failed asserting that exception of type "ReflectionException" matches expected exception "Doctrine\ORM\Query\QueryException". Message was: "Access to non-public constructor of class Doctrine\Tests\ORM\Functional\ClassWithPrivateConstructor" at
+/private/tmp/phpr-s162-orm/orm-work/src/Internal/Hydration/AbstractHydrator.php:382
+/private/tmp/phpr-s162-orm/orm-work/src/Internal/Hydration/ObjectHydrator.php:327
+/private/tmp/phpr-s162-orm/orm-work/src/Internal/Hydration/ObjectHydrator.php:147
+/private/tmp/phpr-s162-orm/orm-work/src/Internal/Hydration/AbstractHydrator.php:176
+/private/tmp/phpr-s162-orm/orm-work/src/AbstractQuery.php:943
+/private/tmp/phpr-s162-orm/orm-work/src/AbstractQuery.php:886
+/private/tmp/phpr-s162-orm/orm-work/src/AbstractQuery.php:688
+/private/tmp/phpr-s162-orm/orm-work/tests/Tests/ORM/Functional/NewOperatorTest.php:1021
+.
+
+3) Doctrine\Tests\ORM\Functional\PropertyHooksTest::testMappingVirtualPropertyIsNotSupported
+Failed asserting that exception of type "Doctrine\ORM\Mapping\MappingException" is thrown.
+
+4) Doctrine\Tests\ORM\Hydration\AbstractHydratorTest::testToIterableIfYieldAndBreakBeforeFinishAlwaysCleansUp
+Failed asserting that actual size 1 matches expected size 0.
+
+/private/tmp/phpr-s162-orm/orm-work/tests/Tests/ORM/Hydration/AbstractHydratorTest.php:138
+
+5) Doctrine\Tests\ORM\Mapping\XmlMappingDriverTest::testEntityCustomGenerator
+Generator Type
+Failed asserting that 1 matches expected 7.
+
+/private/tmp/phpr-s162-orm/orm-work/tests/Tests/ORM/Mapping/MappingDriverTestCase.php:218
+
+6) Doctrine\Tests\ORM\Mapping\XmlMappingDriverTest::testDefaultFieldType
+Failed asserting that 4 matches expected 5.
+
+/private/tmp/phpr-s162-orm/orm-work/tests/Tests/ORM/Mapping/MappingDriverTestCase.php:515
+
+7) Doctrine\Tests\ORM\Mapping\XmlMappingDriverTest::testValidateIncorrectXmlSchema with data set #1 ('Doctrine\Tests\ORM\Mapping\Us...ibutes', [2, 2, 1])
+Failed asserting that 0 matches expected 2.
+
+/private/tmp/phpr-s162-orm/orm-work/tests/Tests/ORM/Mapping/XmlMappingDriverTest.php:216
+
+8) Doctrine\Tests\ORM\Mapping\XmlMappingDriverTest::testValidateIncorrectXmlSchema with data set #2 ('Doctrine\Tests\ORM\Mapping\Us...ibutes', [1])
+Failed asserting that 0 matches expected 1.
+
+/private/tmp/phpr-s162-orm/orm-work/tests/Tests/ORM/Mapping/XmlMappingDriverTest.php:216
+
+9) Doctrine\Tests\ORM\Mapping\XmlMappingDriverTest::testValidateIncorrectXmlSchema with data set #3 ('Doctrine\Tests\Models\Project...apping', [2])
+XML schema validation should throw a MappingException
+
+/private/tmp/phpr-s162-orm/orm-work/tests/Tests/ORM/Mapping/XmlMappingDriverTest.php:213
+
+10) Doctrine\Tests\ORM\Mapping\XmlMappingDriverTest::testInvalidEntityOrMappedSuperClassShouldMentionParentClasses
+Failed asserting that exception of type "Doctrine\Persistence\Mapping\MappingException" matches expected exception "Doctrine\ORM\Mapping\MappingException". Message was: "Invalid mapping file 'Doctrine.Tests.Models.DDC889.DDC889Class.dcm.xml' for class 'Doctrine\Tests\Models\DDC889\DDC889Class'." at
+/private/tmp/phpr-s162-orm/orm-work/vendor/doctrine/persistence/src/Mapping/MappingException.php:63
+/private/tmp/phpr-s162-orm/orm-work/vendor/doctrine/persistence/src/Mapping/Driver/FileDriver.php:89
+/private/tmp/phpr-s162-orm/orm-work/src/Mapping/Driver/XmlDriver.php:82
+/private/tmp/phpr-s162-orm/orm-work/tests/Tests/ORM/Mapping/MappingDriverTestCase.php:91
+/private/tmp/phpr-s162-orm/orm-work/tests/Tests/ORM/Mapping/XmlMappingDriverTest.php:283
+.
+
+11) Doctrine\Tests\ORM\Mapping\XmlMappingDriverTest::testXmlValidationEnabled
+Failed asserting that exception of type "Doctrine\ORM\Mapping\MappingException" is thrown.
+
+12) Doctrine\Tests\ORM\Tools\DebugTest::testExportObjectWithReference
+Failed asserting that two strings are equal.
+--- Expected
++++ Actual
+@@ @@
+-'tab'
++'bar'
+
+/private/tmp/phpr-s162-orm/orm-work/tests/Tests/ORM/Tools/DebugTest.php:44
+
+13) Doctrine\Tests\ORM\UnitOfWorkTest::testItPreservesTheOriginalExceptionOnRollbackFailure
+Failed asserting that null is not null.
+
+/private/tmp/phpr-s162-orm/orm-work/tests/Tests/ORM/UnitOfWorkTest.php:726
+
+ERRORS!
+Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, Skipped: 59, Incomplete: 2.

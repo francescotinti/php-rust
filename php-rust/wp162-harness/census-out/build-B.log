@@ -1,0 +1,330 @@
+   Compiling proc-macro2 v1.0.106
+   Compiling unicode-ident v1.0.24
+   Compiling quote v1.0.45
+   Compiling libc v0.2.186
+   Compiling cfg-if v1.0.4
+   Compiling serde_core v1.0.228
+   Compiling shlex v2.0.1
+   Compiling find-msvc-tools v0.1.9
+   Compiling serde v1.0.228
+   Compiling memchr v2.8.2
+   Compiling version_check v0.9.5
+   Compiling autocfg v1.5.1
+   Compiling cc v1.2.64
+   Compiling typenum v1.20.1
+   Compiling generic-array v0.14.7
+   Compiling zmij v1.0.21
+   Compiling foldhash v0.2.0
+   Compiling num-traits v0.2.19
+   Compiling pkg-config v0.3.33
+   Compiling thiserror v2.0.18
+   Compiling subtle v2.6.1
+   Compiling stable_deref_trait v1.2.1
+   Compiling aho-corasick v1.1.4
+   Compiling hashbrown v0.17.1
+   Compiling regex-syntax v0.8.11
+   Compiling crossbeam-utils v0.8.21
+   Compiling vcpkg v0.2.15
+   Compiling itoa v1.0.18
+   Compiling prettyplease v0.2.37
+   Compiling syn v2.0.117
+   Compiling getrandom v0.2.17
+   Compiling equivalent v1.0.2
+   Compiling indexmap v2.14.0
+   Compiling bitflags v2.13.0
+   Compiling regex-automata v0.4.14
+   Compiling zerocopy v0.8.52
+   Compiling block-buffer v0.10.4
+   Compiling crypto-common v0.1.7
+   Compiling log v0.4.32
+   Compiling anyhow v1.0.102
+   Compiling once_cell v1.21.4
+   Compiling serde_json v1.0.150
+   Compiling digest v0.10.7
+   Compiling cpufeatures v0.2.17
+   Compiling heck v0.5.0
+   Compiling smallvec v1.15.2
+   Compiling glob v0.3.3
+   Compiling clang-sys v1.8.1
+   Compiling crossbeam-epoch v0.9.18
+   Compiling libz-sys v1.1.29
+   Compiling regex v1.12.4
+   Compiling syn v1.0.109
+   Compiling litemap v0.8.2
+   Compiling writeable v0.6.3
+   Compiling synstructure v0.13.2
+   Compiling rayon-core v1.13.0
+   Compiling getrandom v0.3.4
+   Compiling lazy_static v1.5.0
+   Compiling crossbeam-deque v0.8.6
+   Compiling same-file v1.0.6
+   Compiling utf8_iter v1.0.4
+   Compiling icu_properties_data v2.2.0
+   Compiling icu_normalizer_data v2.2.0
+   Compiling minimal-lexical v0.2.1
+   Compiling fnv v1.0.7
+   Compiling serde_derive v1.0.228
+   Compiling displaydoc v0.2.6
+   Compiling zerofrom-derive v0.1.7
+   Compiling yoke-derive v0.8.2
+   Compiling thiserror-impl v2.0.18
+   Compiling zerovec-derive v0.11.3
+   Compiling ppv-lite86 v0.2.21
+   Compiling crc32fast v1.5.0
+   Compiling nom v7.1.3
+   Compiling tracing-attributes v0.1.31
+   Compiling uriparse v0.6.4
+   Compiling libloading v0.8.9
+   Compiling zerofrom v0.1.8
+   Compiling walkdir v2.5.0
+   Compiling yoke v0.8.3
+   Compiling Inflector v0.11.4
+   Compiling tracing-core v0.1.36
+   Compiling notify-types v2.1.0
+   Compiling fsevent-sys v4.1.0
+   Compiling bstr v1.12.1
+   Compiling winnow v1.0.4
+   Compiling simd-adler32 v0.3.9
+   Compiling zerovec v0.11.6
+   Compiling zerotrie v0.2.4
+   Compiling ident_case v1.0.1
+   Compiling bindgen v0.72.1
+   Compiling strsim v0.11.1
+   Compiling ref-cast v1.0.25
+   Compiling pin-project-lite v0.2.17
+   Compiling either v1.16.0
+   Compiling tracing v0.1.44
+   Compiling rayon v1.12.0
+   Compiling itertools v0.13.0
+   Compiling toml_parser v1.1.2+spec-1.1.0
+   Compiling schemafy_core v0.6.0
+   Compiling rand_core v0.6.4
+   Compiling schemafy_lib v0.6.0
+   Compiling tinystr v0.8.3
+   Compiling potential_utf v0.1.5
+   Compiling darling_core v0.23.0
+   Compiling icu_collections v2.2.0
+   Compiling icu_locale_core v2.2.0
+   Compiling proc-macro-utils v0.10.0
+   Compiling globset v0.4.18
+   Compiling notify v8.2.0
+   Compiling cexpr v0.6.0
+   Compiling icu_provider v2.2.0
+   Compiling ref-cast-impl v1.0.25
+   Compiling serde_derive_internals v0.29.1
+   Compiling num-integer v0.1.46
+   Compiling ring v0.17.14
+   Compiling num-conv v0.2.2
+   Compiling bytes v1.12.0
+   Compiling time-core v0.1.9
+   Compiling shlex v1.3.0
+   Compiling adler2 v2.0.1
+   Compiling rustc-hash v2.1.2
+   Compiling toml_datetime v1.1.1+spec-1.1.0
+   Compiling base64 v0.22.1
+   Compiling mago-database v1.30.0
+   Compiling darling_macro v0.23.0
+   Compiling toml_edit v0.25.13+spec-1.1.0
+   Compiling schemars_derive v1.2.1
+   Compiling miniz_oxide v0.8.9
+   Compiling time-macros v0.2.29
+   Compiling num-bigint v0.4.6
+   Compiling icu_normalizer v2.2.0
+   Compiling icu_properties v2.2.0
+   Compiling manyhow-macros v0.11.4
+   Compiling serde-sarif v0.8.0
+   Compiling rand_chacha v0.3.1
+   Compiling bumpalo v3.20.3
+   Compiling typed-builder-macro v0.21.2
+   Compiling digest v0.9.0
+   Compiling blake3 v1.8.5
+   Compiling rustversion v1.0.22
+   Compiling deranged v0.5.8
+   Compiling byteorder v1.5.0
+   Compiling opaque-debug v0.3.1
+   Compiling zeroize v1.9.0
+   Compiling unicode-width v0.2.2
+   Compiling powerfmt v0.2.0
+   Compiling percent-encoding v2.3.2
+   Compiling dyn-clone v1.0.20
+   Compiling parking_lot_core v0.9.12
+   Compiling schemars v1.2.1
+   Compiling rustls-pki-types v1.15.0
+   Compiling idna_adapter v1.2.2
+   Compiling typed-builder v0.21.2
+   Compiling time v0.3.49
+   Compiling manyhow v0.11.4
+   Compiling rand v0.8.6
+   Compiling rusticata-macros v4.1.0
+   Compiling mago-span v1.30.0
+   Compiling flate2 v1.1.9
+   Compiling proc-macro-crate v3.5.0
+   Compiling darling v0.23.0
+   Compiling rand_core v0.9.5
+   Compiling strum_macros v0.28.0
+   Compiling asn1-rs-derive v0.6.0
+   Compiling strum_macros v0.27.2
+   Compiling asn1-rs-impl v0.2.0
+   Compiling block-buffer v0.9.0
+   Compiling onig_sys v69.9.3
+   Compiling libsqlite3-sys v0.38.1
+   Compiling arrayvec v0.7.6
+   Compiling arrayref v0.3.9
+   Compiling untrusted v0.9.0
+   Compiling paste v1.0.15
+   Compiling scopeguard v1.2.0
+   Compiling mysql_common v0.37.3
+   Compiling httparse v1.10.1
+   Compiling termcolor v1.4.1
+   Compiling destructure_traitobject v0.2.0
+   Compiling constant_time_eq v0.4.2
+   Compiling yansi v1.0.1
+   Compiling unicode-xid v0.2.6
+   Compiling strum v0.27.2
+   Compiling core-foundation-sys v0.8.7
+   Compiling mysql-common-derive v0.32.2
+   Compiling derive_more-impl v2.1.1
+   Compiling iana-time-zone v0.1.65
+   Compiling ariadne v0.6.0
+   Compiling codespan-reporting v0.13.1
+   Compiling unsafe-any-ors v1.0.0
+   Compiling lock_api v0.4.14
+   Compiling strum v0.28.0
+   Compiling rand_chacha v0.9.0
+   Compiling asn1-rs v0.7.2
+   Compiling idna v1.1.0
+   Compiling form_urlencoded v1.2.2
+   Compiling mago-text-edit v1.30.0
+   Compiling derive_utils v0.15.1
+   Compiling sha1 v0.10.6
+   Compiling sha2 v0.10.9
+   Compiling ordered-float v2.10.1
+   Compiling btoi v0.5.0
+   Compiling uuid v1.23.5
+   Compiling rustls v0.23.41
+   Compiling saturating v0.1.0
+   Compiling bit-vec v0.8.0
+   Compiling ryu v1.0.23
+   Compiling zip v2.4.2
+   Compiling unsafe-libyaml v0.2.11
+   Compiling mysql v28.0.0
+   Compiling php-types v0.1.0 (/private/tmp/s162-census/B/php-rust/crates/php-types)
+   Compiling oid-registry v0.8.1
+   Compiling bit-set v0.8.0
+   Compiling serde_yaml v0.9.34+deprecated
+   Compiling serde-value v0.7.0
+   Compiling rustls-webpki v0.103.13
+   Compiling io-enum v1.2.1
+   Compiling arc-swap v1.9.1
+   Compiling url v2.5.8
+   Compiling derive_more v2.1.1
+   Compiling parking_lot v0.12.5
+   Compiling rand v0.9.4
+   Compiling typemap-ors v1.0.0
+   Compiling chrono v0.4.45
+   Compiling mago-syntax-core v1.30.0
+   Compiling mago-php-version v1.30.0
+   Compiling ordered-float v5.3.0
+   Compiling zopfli v0.8.3
+   Compiling pem v3.0.6
+   Compiling http v1.4.2
+   Compiling mago-reporting v1.30.0
+   Compiling crossbeam-queue v0.3.13
+   Compiling crypto-mac v0.10.0
+   Compiling cipher v0.2.5
+   Compiling socket2 v0.6.4
+   Compiling thread-id v5.1.0
+   Compiling hashlink v0.12.0
+   Compiling libmimalloc-sys v0.1.49
+   Compiling lru v0.16.4
+   Compiling unicode-segmentation v1.13.3
+   Compiling log-mdc v0.1.0
+   Compiling base64ct v1.8.3
+   Compiling mock_instant v0.6.1
+   Compiling fallible-iterator v0.3.0
+   Compiling fallible-streaming-iterator v0.1.9
+   Compiling tinyvec_macros v0.1.1
+   Compiling bufstream v0.1.4
+   Compiling humantime v2.3.0
+   Compiling twox-hash v2.1.2
+   Compiling log4rs v1.4.0
+   Compiling tinyvec v1.12.0
+   Compiling mago-syntax v1.30.0
+   Compiling password-hash v0.5.0
+   Compiling ureq-proto v0.6.0
+warning: function `xmlCanonicPath` is never used
+  --> crates/php-types/src/xsltio.rs:61:8
+   |
+61 |     fn xmlCanonicPath(path: *const c_char) -> *mut c_char;
+   |        ^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+   Compiling onig v6.5.3
+   Compiling blowfish v0.7.0
+   Compiling hmac v0.10.1
+   Compiling der-parser v10.0.0
+   Compiling fancy-regex v0.14.0
+   Compiling sha2 v0.9.9
+   Compiling sha-1 v0.9.8
+   Compiling md-5 v0.9.1
+warning: `php-types` (lib) generated 1 warning
+   Compiling webpki-roots v1.0.8
+   Compiling blake2 v0.10.6
+   Compiling keccak v0.1.6
+   Compiling elsa v1.11.2
+   Compiling quick-xml v0.41.0
+   Compiling utf8-zero v0.8.1
+   Compiling static_assertions v1.1.0
+   Compiling data-encoding v2.11.0
+   Compiling argon2 v0.5.3
+   Compiling sha3 v0.10.9
+   Compiling x509-parser v0.18.1
+   Compiling pwhash v1.0.0
+   Compiling unicode-normalization v0.1.25
+   Compiling hmac v0.12.1
+   Compiling md-5 v0.10.6
+   Compiling hostname v0.4.2
+   Compiling encoding_rs v0.8.35
+   Compiling xxhash-rust v0.8.16
+   Compiling mimalloc v0.1.52
+   Compiling ureq v3.3.0
+   Compiling rusqlite v0.40.1
+   Compiling php-runtime v0.1.0 (/private/tmp/s162-census/B/php-rust/crates/php-runtime)
+   Compiling php-builtins v0.1.0 (/private/tmp/s162-census/B/php-rust/crates/php-builtins)
+warning: function `gc_enable` is never used
+  --> crates/php-builtins/src/env.rs:19:8
+   |
+19 | pub fn gc_enable(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+   |        ^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `gc_enabled` is never used
+  --> crates/php-builtins/src/env.rs:24:8
+   |
+24 | pub fn gc_enabled(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+   |        ^^^^^^^^^^
+
+warning: function `gc_status` is never used
+  --> crates/php-builtins/src/env.rs:38:8
+   |
+38 | pub fn gc_status(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+   |        ^^^^^^^^^
+
+warning: unused `Result` that must be used
+   --> crates/php-builtins/src/net.rs:151:13
+    |
+151 |             out.append(Zval::Str(PhpStr::new(v4.ip().to_string().into_bytes())));
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+    = note: `#[warn(unused_must_use)]` (part of `#[warn(unused)]`) on by default
+help: use `let _ = ...` to ignore the resulting value
+    |
+151 |             let _ = out.append(Zval::Str(PhpStr::new(v4.ip().to_string().into_bytes())));
+    |             +++++++
+
+   Compiling php-cli v0.1.0 (/private/tmp/s162-census/B/php-rust/crates/php-cli)
+warning: `php-builtins` (lib) generated 4 warnings
+    Finished `release` profile [optimized] target(s) in 3m 28s

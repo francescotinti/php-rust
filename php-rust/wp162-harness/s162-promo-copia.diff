@@ -1,0 +1,180 @@
+2,14c2,15
+< # s161-promozione.sh <cand_hash16> — gate di promozione LEVA L-AL2
+< # (loader autoload k=1 senza args-Vec) — S-161. COPIA DICHIARATA di
+< # wp160-harness/s160-promozione.sh; DIVERGENZE DICHIARATE:
+< #  (1) tag s161, harness wp161 (H PROPRIO, OUT NUOVA promo-out — lezione
+< #      incidente #21: verifica POSITIVA dei path in testa, pena STOP);
+< #      candidato ec0a636ad0c42005 (A/B R=5 in s161-al2-verdetto.out: giudice
+< #      missload VINTO D=+5,0 rumore 1,0/2,0, riconc. smoke |0,5|<4,0 in
+< #      banda; ARBITRATO census in mezzo rc=0 (D_smoke +5,5 FUORI banda [8;22]
+< #      SOTTO): Delta=1 passaggio/miss ESATTO ⇒ SOTTO-MODELLO DICHIARATO,
+< #      coeff PER-SITO a verbale; 17 guardie ok NESSUN morso (re a R=5 -3,3 vs
+< #      -5,0; morso a R=2 dichiarato); braccio A = GEMELLO ceeb6e76 == pin
+< #      s160 AL BYTE a freddo (s161-gemelloA-identita.out); candidato stashato
+< #      phpr-s161-al2-B);
+---
+> # s162-promozione.sh <cand_hash16> — gate di promozione LEVA L-AM2
+> # (array_map string-callable UTENTE k=1 senza args-Vec) — S-162. COPIA
+> # DICHIARATA di wp161-harness/s161-promozione.sh; DIVERGENZE DICHIARATE:
+> #  (1) tag s162, harness wp162 (H PROPRIO, OUT NUOVA promo-out; verifica
+> #      POSITIVA dei path in testa, pena STOP); candidato 20c63af44bfd077a
+> #      (A/B R=5 in s162-am2r5-verdetto.out: giudice strmap VINTO D=+65,0
+> #      rumore 1,0/1,0, riconc. smoke |2,5|<4,0 in banda; ARBITRATO census in
+> #      mezzo rc=0-con-appendice (D_smoke +67,5 FUORI banda [4;19] SOPRA):
+> #      Delta=2 alloc/elemento ESATTE (args-Vec + to_vec del nome) sul solo
+> #      array_map ⇒ FUORI-UB SOPRA a verbale, coeff PROPRIO sito strmap;
+> #      18 guardie ok NESSUN morso; braccio A = GEMELLO ec0a636a == pin s161
+> #      AL BYTE (s162-gemelloA-identita.out: 2 tentativi target dedicato
+> #      scartati, path-sensibilita' dichiarata); candidato stashato
+> #      phpr-s162-am2-B);
+16,21c17,22
+< #      s160): rczval + loc_dente A4 — L-AL2 non aggiunge test; salita loc
+< #      monolite VM 25810→25831 PRE-dichiarata e committata (ba4b551c),
+< #      host.rs 7708 INVARIATO;
+< #  (3) corpus: ZERO flip attesi (L-AL2 preserva la semantica per costruzione:
+< #      fast path solo loader closure anonima simple arita' 1, resto
+< #      invariato) — rc!=0 = STOP secco, NESSUN flip-handler;
+---
+> #      s161): rczval + loc_dente A4 — L-AM2 non aggiunge test; salite loc
+> #      monolite VM 25831→25847 e host 7708→7726 PRE-dichiarate e committate
+> #      (edadf29f);
+> #  (3) corpus: ZERO flip attesi (L-AM2 preserva la semantica per costruzione:
+> #      fast path solo string-callable a funzione UTENTE simple arita' 1,
+> #      resto invariato) — rc!=0 = STOP secco, NESSUN flip-handler;
+23,32c24,35
+< #      sonda-bt (pin==stash s160: contratto autoload/backtrace §3.25
+< #      invariato — PRESIDIO DIRETTO della leva) + fx-refl (pin==stash s160)
+< #      + fx-am v2 + fx-af (bilaterali oracle==pin) — TUTTE le fixture in
+< #      BYTE-COPIA wp161 verificata cmp;
+< #  (5) conferma POST-PIN: m-missload (R=5 pin s161 vs stash phpr-s160
+< #      ceeb6e76e4ef5ace, direzione attesa +, D nell'intorno di +5,0
+< #      ± rumore+drift);
+< #  (6) disasm run_loop GIA' AGLI ATTI pre-promo (criterio p.8: bl A=6033
+< #      B=6033, Δ=0 — ab-out/disasm-al2.out);
+< #  (7) micro R=5 = run-micro.sh come s160 (scoreboard al pin nuovo).
+---
+> #      sonda-bt (pin==stash s161: contratto §3.25 invariato, presidio L-AL2
+> #      ereditato) + fx-refl (pin==stash s161) + fx-am v2 + fx-af (bilaterali
+> #      oracle==pin) + fx-sm NUOVO (bilaterale oracle==pin, forme
+> #      string-callable: presidio DIRETTO della leva) + fx-sm-div NUOVO
+> #      (pin==stash s161 INVARIANTE: 2 divergenze PRE-esistenti a catalogo) —
+> #      fixture ereditate in BYTE-COPIA wp162 verificata cmp;
+> #  (5) conferma POST-PIN: m-strmap (R=5 pin s162 vs stash phpr-s161
+> #      ec0a636ad0c42005, direzione attesa +, D nell'intorno di +65,0 ±
+> #      rumore+drift; rev. S-161 #5: rumore > attesa/2 ⇒ SOLO SEGNO);
+> #  (6) disasm run_loop GIA' AGLI ATTI pre-promo (bl A=6033 B=6033, Δ=0 —
+> #      ab-out/disasm-am2.out);
+> #  (7) micro R=5 = run-micro.sh come s161 (scoreboard al pin nuovo).
+36c39
+< H="$SRC/wp161-harness"
+---
+> H="$SRC/wp162-harness"
+45,46c48,49
+< VERD="$H/s161-promo-verdetto.out"
+< CAND_EXP="${1:?uso: s161-promozione.sh <cand_hash16>}"
+---
+> VERD="$H/s162-promo-verdetto.out"
+> CAND_EXP="${1:?uso: s162-promozione.sh <cand_hash16>}"
+52c55,56
+<          "$H/sonda-bt-autoload.php" "$H/m-arrfilter.php" "$H/m-missload.php" \
+---
+>          "$H/fx-sm.php" "$H/fx-sm-div.php" \
+>          "$H/sonda-bt-autoload.php" "$H/m-arrfilter.php" "$H/m-strmap.php" \
+56c60
+<          "$STASH/phpr-s160" "$STASH/phpr-s161-al2-B"; do
+---
+>          "$STASH/phpr-s161" "$STASH/phpr-s162-am2-B"; do
+95c99
+<   CSTASH="$STASH/phpr-s161-al2-B"
+---
+>   CSTASH="$STASH/phpr-s162-am2-B"
+131c135
+< "$SRC/scripts/pin-phpr.sh" s161 > "$OUT/pin.log" 2>&1
+---
+> "$SRC/scripts/pin-phpr.sh" s162 > "$OUT/pin.log" 2>&1
+139c143
+< note "promozione corpus-gate: rc=0 — nomi==congelato (1412), CONTENUTO==golden, off-on zero (ZERO flip come atteso, L-AL2)"
+---
+> note "promozione corpus-gate: rc=0 — nomi==congelato (1412), CONTENUTO==golden, off-on zero (ZERO flip come atteso, L-AM2)"
+160,161c164,165
+< # ---- gate sonda-bt: pin==stash s160 byte-id (§3.25 — PRESIDIO DIRETTO L-AL2) ----
+< "$STASH/phpr-s160" "$H/sonda-bt-autoload.php" > "$OUT/sonda-bt-s160.out" 2>&1
+---
+> # ---- gate sonda-bt: pin==stash s161 byte-id (§3.25 — presidio L-AL2 ereditato) ----
+> "$STASH/phpr-s161" "$H/sonda-bt-autoload.php" > "$OUT/sonda-bt-s161.out" 2>&1
+164,165c168,169
+< if diff -q "$OUT/sonda-bt-s160.out" "$OUT/sonda-bt-pin.out" > /dev/null; then
+<   note "promozione gate sonda-bt: pin==stash s160 BYTE-ID (contratto autoload/backtrace §3.25 invariato — presidio diretto L-AL2)"
+---
+> if diff -q "$OUT/sonda-bt-s161.out" "$OUT/sonda-bt-pin.out" > /dev/null; then
+>   note "promozione gate sonda-bt: pin==stash s161 BYTE-ID (contratto autoload/backtrace §3.25 invariato — presidio L-AL2 ereditato)"
+167c171
+<   stop "gate sonda-bt: pin DIVERGE dallo stash s160 (promo-out/sonda-bt-pin.out)"
+---
+>   stop "gate sonda-bt: pin DIVERGE dallo stash s161 (promo-out/sonda-bt-pin.out)"
+169,170c173,174
+< # ---- gate fx-refl: pin==stash s160 byte-id ----
+< "$STASH/phpr-s160" "$H/fx-refl.php" > "$OUT/fxrefl-s160.out" 2>&1
+---
+> # ---- gate fx-refl: pin==stash s161 byte-id ----
+> "$STASH/phpr-s161" "$H/fx-refl.php" > "$OUT/fxrefl-s161.out" 2>&1
+173,174c177,178
+< if diff -q "$OUT/fxrefl-s160.out" "$OUT/fxrefl-pin.out" > /dev/null; then
+<   note "promozione gate fx-refl: pin==stash s160 BYTE-ID (contratto __reflect_* L-RF2 invariato)"
+---
+> if diff -q "$OUT/fxrefl-s161.out" "$OUT/fxrefl-pin.out" > /dev/null; then
+>   note "promozione gate fx-refl: pin==stash s161 BYTE-ID (contratto __reflect_* L-RF2 invariato)"
+176c180
+<   stop "gate fx-refl: pin DIVERGE dallo stash s160 (promo-out/fxrefl-pin.out)"
+---
+>   stop "gate fx-refl: pin DIVERGE dallo stash s161 (promo-out/fxrefl-pin.out)"
+197a202,220
+> # ---- gate fx-sm: bilaterale oracle==pin byte-id + MARCATORE (presidio DIRETTO L-AM2) ----
+> "$ORACLE" "$H/fx-sm.php" > "$OUT/fxsm-oracle.out" 2>&1
+> "$BIN" "$H/fx-sm.php" > "$OUT/fxsm-pin.out" 2>&1
+> grep -q "FX-SM DONE" "$OUT/fxsm-pin.out" || stop "gate fx-sm: MARCATORE FX-SM DONE assente (lezione #21)"
+> if diff -q "$OUT/fxsm-oracle.out" "$OUT/fxsm-pin.out" > /dev/null; then
+>   note "promozione gate fx-sm: oracle==pin BYTE-ID (forme string-callable, fast E pieno — presidio DIRETTO L-AM2)"
+> else
+>   diff "$OUT/fxsm-oracle.out" "$OUT/fxsm-pin.out" > "$OUT/fxsm.diff" || true
+>   stop "gate fx-sm: DIVERGE (promo-out/fxsm.diff)"
+> fi
+> # ---- gate fx-sm-div: pin==stash s161 INVARIANTE + MARCATORE (divergenze pre-esistenti) ----
+> "$STASH/phpr-s161" "$H/fx-sm-div.php" > "$OUT/fxsmdiv-s161.out" 2>&1
+> "$BIN" "$H/fx-sm-div.php" > "$OUT/fxsmdiv-pin.out" 2>&1
+> grep -q "FX-SM-DIV DONE" "$OUT/fxsmdiv-pin.out" || stop "gate fx-sm-div: MARCATORE FX-SM-DIV DONE assente"
+> if diff -q "$OUT/fxsmdiv-s161.out" "$OUT/fxsmdiv-pin.out" > /dev/null; then
+>   note "promozione gate fx-sm-div: pin==stash s161 BYTE-ID (2 divergenze PRE-esistenti INVARIATE, a catalogo)"
+> else
+>   stop "gate fx-sm-div: pin DIVERGE dallo stash s161 (promo-out/fxsmdiv-pin.out)"
+> fi
+206,207c229,230
+< PHPR="$BIN" R=5 "$SRC/wp97-harness/micro/run-micro.sh" > "$OUT/micro-pin-s161.out" 2>&1
+< note "promozione micro pin s161: $(grep -E '^rapporto_' "$OUT/micro-pin-s161.out" | tr '\n' ' ')"
+---
+> PHPR="$BIN" R=5 "$SRC/wp97-harness/micro/run-micro.sh" > "$OUT/micro-pin-s162.out" 2>&1
+> note "promozione micro pin s162: $(grep -E '^rapporto_' "$OUT/micro-pin-s162.out" | tr '\n' ' ')"
+209,211c232,234
+< # ---- conferma POST-PIN m-missload (divergenza (5)): R=5 pin vs stash s160 ----
+< AOLD="$STASH/phpr-s160"
+< [ "$(shasum -a 256 "$AOLD" | cut -c1-16)" = "ceeb6e76e4ef5ace" ] || stop "stash phpr-s160 hash inatteso"
+---
+> # ---- conferma POST-PIN m-strmap (divergenza (5)): R=5 pin vs stash s161 ----
+> AOLD="$STASH/phpr-s161"
+> [ "$(shasum -a 256 "$AOLD" | cut -c1-16)" = "ec0a636ad0c42005" ] || stop "stash phpr-s161 hash inatteso"
+217c240
+<   if [ $((i % 2)) -eq 1 ]; then TA=$(ucpu "$AOLD" "$H/m-missload.php"); TB=$(ucpu "$BIN" "$H/m-missload.php"); else TB=$(ucpu "$BIN" "$H/m-missload.php"); TA=$(ucpu "$AOLD" "$H/m-missload.php"); fi
+---
+>   if [ $((i % 2)) -eq 1 ]; then TA=$(ucpu "$AOLD" "$H/m-strmap.php"); TB=$(ucpu "$BIN" "$H/m-strmap.php"); else TB=$(ucpu "$BIN" "$H/m-strmap.php"); TA=$(ucpu "$AOLD" "$H/m-strmap.php"); fi
+234c257
+< note "conferma post-pin m-missload (pin s161 vs stash s160, drift-tree da dichiarare): $CONF (attesa: segno +, D nell'intorno di +5,0 ± rumore+drift)"
+---
+> note "conferma post-pin m-strmap (pin s162 vs stash s161, drift-tree da dichiarare): $CONF (attesa: segno +, D nell'intorno di +65,0 ± rumore+drift; rev. S-161 #5: rumore > attesa/2 = 32,5 ⇒ SOLO SEGNO)"
+264c287
+< "$SRC/scripts/pin-server.sh" s161 > "$OUT/pin-server.log" 2>&1
+---
+> "$SRC/scripts/pin-server.sh" s162 > "$OUT/pin-server.log" 2>&1
+270c293
+< note "PROMOZIONE COMPLETA rc=0 (da promo-out/rcb): pin s161 = $H2"
+---
+> note "PROMOZIONE COMPLETA rc=0 (da promo-out/rcb): pin s162 = $H2"

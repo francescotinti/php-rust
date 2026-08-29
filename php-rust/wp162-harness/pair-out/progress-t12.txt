@@ -1,0 +1,51 @@
+03:01:31 sentinella LS inizio: /Applications/Antigravity /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.96.0-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer 
+03:01:56 quiescenza warmup rc=0 tentativo-gate=1 (file: pair-out/quiesce-t12-warmup.rc)
+uploads-guard: backup OK (3 file → /Volumes/Extreme Pro/Claude/uploads-backups/uploads-20260829-030156.tar.gz), uploads azzerata
+03:01:57 warmup media oracle
+03:02:29 warmup media oracle rc=0
+03:02:29 warmup media phpr (on)
+03:03:34 warmup media phpr rc=0
+uploads-guard: restore verificato (count=3) — backup conservato in /Volumes/Extreme Pro/Claude/uploads-backups/uploads-20260829-030156.tar.gz
+03:03:34 warmup DONE (mai giudicata)
+03:04:00 quiescenza leg1-on rc=0 tentativo-gate=1 (file: pair-out/quiesce-t12-leg1-on.rc)
+03:04:00 gamba on-1 START
+/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp109-harness/pair109.sh: line 38: rustc: command not found
+03:29:14 gamba on-1 rc=0
+03:29:14 assestamento leg2-on (att.1): mediaanalysisd 7.0% (attesa ~15s)
+03:29:29 assestamento leg2-on (att.1): mediaanalysisd 16.6% (attesa ~30s)
+03:29:44 assestamento leg2-on (att.1): mediaanalysisd 11.7% (attesa ~45s)
+03:30:04 assestamento leg2-on (att.1): streak rotta a 1 da 16.6%
+03:30:04 assestamento leg2-on (att.1): mediaanalysisd 16.6% (attesa ~60s)
+03:30:19 assestamento leg2-on (att.1): mediaanalysisd 22.9% (attesa ~75s)
+03:30:34 assestamento leg2-on (att.1): mediaanalysisd 14.6% (attesa ~90s)
+03:30:49 assestamento leg2-on (att.1): mediaanalysisd 19.6% (attesa ~105s)
+03:31:04 assestamento leg2-on (att.1): mediaanalysisd 14.2% (attesa ~120s)
+03:31:19 assestamento leg2-on (att.1): mediaanalysisd 12.8% (attesa ~135s)
+03:31:34 assestamento leg2-on (att.1): mediaanalysisd 16.8% (attesa ~150s)
+03:31:50 assestamento leg2-on (att.1): mediaanalysisd 11.3% (attesa ~165s)
+03:32:05 assestamento leg2-on (att.1): mediaanalysisd 30.1% (attesa ~180s)
+03:32:20 assestamento leg2-on (att.1): mediaanalysisd 7.7% (attesa ~195s)
+03:32:35 assestamento leg2-on (att.1): mediaanalysisd 13.1% (attesa ~210s)
+03:32:50 assestamento leg2-on (att.1): mediaanalysisd 20.2% (attesa ~225s)
+03:33:05 assestamento leg2-on (att.1): mediaanalysisd 15.3% (attesa ~240s)
+03:33:45 quiescenza leg2-on rc=0 tentativo-gate=1 (file: pair-out/quiesce-t12-leg2-on.rc)
+03:33:45 gamba on-2 START
+/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp109-harness/pair109.sh: line 38: rustc: command not found
+03:59:05 gamba on-2 rc=0
+03:59:31 quiescenza leg3-on rc=0 tentativo-gate=1 (file: pair-out/quiesce-t12-leg3-on.rc)
+03:59:31 gamba on-3 START
+/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp109-harness/pair109.sh: line 38: rustc: command not found
+04:24:51 gamba on-3 rc=0
+04:25:17 quiescenza leg4-on rc=0 tentativo-gate=1 (file: pair-out/quiesce-t12-leg4-on.rc)
+04:25:17 gamba on-4 START
+/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp109-harness/pair109.sh: line 38: rustc: command not found
+04:50:40 gamba on-4 rc=0
+04:51:06 quiescenza leg5-on rc=0 tentativo-gate=1 (file: pair-out/quiesce-t12-leg5-on.rc)
+04:51:06 gamba on-5 START
+/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp109-harness/pair109.sh: line 38: rustc: command not found
+05:16:33 gamba on-5 rc=0
+05:16:58 quiescenza leg6-on rc=0 tentativo-gate=1 (file: pair-out/quiesce-t12-leg6-on.rc)
+05:16:58 gamba on-6 START
+/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp109-harness/pair109.sh: line 38: rustc: command not found
+05:42:24 gamba on-6 rc=0
+05:42:24 DONE rc=0 (fonte rc: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp162-harness/pair-out/pair162-t12.done)
