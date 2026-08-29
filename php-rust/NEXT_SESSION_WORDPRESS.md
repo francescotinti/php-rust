@@ -73,8 +73,7 @@ Pre-flight S-163: pin phpr **s162 20c63af4**4bfd077a + server **f6d4a63b**
 MySQL wp8 con l'elenco · uploads sotto guardia · corpus 1412 · batteria cap
 25847/7726 · stash: phpr-s162 · php-server-s162 · phpr-s162-am2-B (==pin) ·
 phpr-s162-gemelloA (==pin s161) · gemello A per S-163: ricetta dal tree s162
-nel target CANONICO (lezione s162) · lock misura da CREARE · AppleDouble
-bonificati (se ricompaiono nel bare CI, ripulire prima dei push) · lettura:
+nel target CANONICO · lock misura da CREARE · AppleDouble bonificati · lettura:
 REGOLE.md → QUI → wp162-harness/{s162-al2-rimisura,s162-pair-verdetto-t12,
 s162-orm-coppia(+LETTURA),s162-am2smoke,s162-census-am2(+APPENDICE),
 s162-am2r5,s162-promo}-verdetto.out → revisione.md → sessions/
