@@ -1085,7 +1085,7 @@ Trovata dalla micro di parità az.rev. S-141 #4 (`wp142-harness/parita-hashed.ph
   quando il run_loop è annidato in un hostcall (bersaglio: la riga `#1` della
   sonda byte-uguale all'oracle).
 
-### 3.26 🟡 string-callable dinamici: due divergenze scoperte al collaudo fixture L-AM2 (S-162, PRE-esistenti alla leva)
+### 3.26 🟡 string-callable dinamici: tre divergenze scoperte al collaudo fixture L-AM2 (S-162 + estensione S-163, PRE-esistenti alla leva)
 
 Scoperte con `wp162-harness/fx-sm.php` sul pin s161 (PRIMA dell'edit L-AM2;
 la leva non le tocca per costruzione — gate d'invarianza `fx-sm-div.php`,
@@ -1100,6 +1100,12 @@ pin==stash BYTE-ID in promozione):
    or invalid function name`; phpr lancia `Error: Call to undefined
    function …()` (classe E messaggio diversi — la validazione del callable
    in Zend avviene PRIMA della chiamata, in phpr al dispatch).
+3. **(S-163, rev. S-162 rilievo 3)** callback INESISTENTE con array
+   VUOTO: l'oracle valida il callback PRIMA di iterare e lancia lo stesso
+   `TypeError` del punto 2 anche su `array_map('undef', [])`; phpr, col
+   loop a entries vuote, non chiama mai e restituisce `[]` MUTO (nessun
+   errore). Conseguenza diretta del punto 2 (validazione al dispatch e
+   non all'ingresso). Fixture: `fx-sm-div.php` (esteso S-163).
 
 ## 4. Punti di forza da NON toccare (invarianti verificati byte-identici)
 

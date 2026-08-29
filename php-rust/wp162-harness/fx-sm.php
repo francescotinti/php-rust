@@ -30,6 +30,23 @@ try { array_map('boom', [1, 2, 3]); } catch (RuntimeException $e) { echo "CAUGHT
 // funzione dichiarata da eval (linked): risoluzione linked_functions
 eval('function ev1($x) { return $x + 100; }');
 var_dump(array_map('ev1', [1, 2]));
+// --- S-163 estensioni (rev. S-162 az.1): forme AMMESSE dal fast path ma
+// prima non esercitate (l'ammissione simple_call e' piu' larga delle fixture)
+function h163($x = 5) { return $x + 1; }              // default su UNICO param: AMMESSA
+function r163($x): int { return $x * 3; }             // return-hint (non di param): AMMESSA
+var_dump(array_map('h163', $a));
+var_dump(array_map('r163', [1, 2]));
+// namespaced via stringa (dichiarata via eval per non spezzare il file)
+eval('namespace nsx163; function nf($x) { return $x + 7; }');
+var_dump(array_map('nsx163\\nf', [1, 2]));            // qualificata
+var_dump(array_map('\\nsx163\\nf', [1, 2]));          // fully-qualified
+// generator user-fn via stringa: ESCLUSA da simple_call, braccio no-frame
+function gen163($x) { yield $x; yield $x * 10; }
+foreach (array_map('gen163', [1, 2]) as $k => $g) {
+    echo "gen[$k] ", get_class($g), ":";
+    foreach ($g as $v) { echo " $v"; }
+    echo "\n";
+}
 echo "FX-SM DONE\n";
 // NOTA S-162: le forme by-ref ('f4') e undefined-callback stanno in
 // fx-sm-div.php (divergenze PRE-esistenti del pin, gate a INVARIANZA

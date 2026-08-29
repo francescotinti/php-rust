@@ -11,4 +11,8 @@ error_reporting(E_ALL);
 function g4(&$x) { $x++; return $x; }
 var_dump(array_map('g4', [1, 2]));
 try { array_map('no_such_fn_sm', [1]); } catch (Error $e) { echo get_class($e), ": ", $e->getMessage(), "\n"; }
+// S-163 (rev. S-162 az.2, rilievo 3): callback invalida con array VUOTO —
+// l'oracle valida il callback PRIMA di iterare (TypeError), phpr col loop
+// a entries vuote non chiama mai e restituisce [] MUTO. Divergenza §3.26/3.
+try { var_dump(array_map('no_such_fn_sm', [])); } catch (Error $e) { echo get_class($e), ": ", $e->getMessage(), "\n"; }
 echo "FX-SM-DIV DONE\n";
