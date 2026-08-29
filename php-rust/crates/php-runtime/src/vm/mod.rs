@@ -11481,6 +11481,33 @@ impl<'m> Vm<'m> {
         self.enter_callee(frame)
     }
 
+    /// L-AU1 (S-163): install a frame for a pre-admitted instance method
+    /// with a single by-value argument, without materializing an args-Vec.
+    /// Mirrors `dispatch_instance_call`'s usable arm at `deref: false`
+    /// (the autoload site never sets `RET_DEREF`) minus `bind_params`' Vec:
+    /// the intake equals its simple-call arm at arity 1 (`argc = 1;
+    /// slots[0] = decay_arg(arg)`); `this`/`class`/`static_class` are set
+    /// exactly as there (LSB = receiver's actual class).
+    fn push_method_frame_one(
+        &mut self,
+        defc: usize,
+        midx: usize,
+        cid: usize,
+        this: Zval,
+        arg: Zval,
+    ) -> Result<(), PhpError> {
+        let callee = &self.classes[defc].methods[midx].func;
+        debug_assert!(callee.simple_call && callee.n_params == 1);
+        let m = self.class_mod(defc);
+        let mut frame = self.pooled_frame(callee, m);
+        frame.argc = 1;
+        frame.slots[0] = decay_arg(arg);
+        frame.this = Some(this);
+        frame.class = Some(defc);
+        frame.static_class = Some(cid);
+        self.enter_callee(frame)
+    }
+
     /// Like [`Self::push_magic_call`] but the forwarded `$args` array also carries
     /// any **named arguments** keyed by name (string keys), matching PHP's `__call`
     /// behaviour for `$obj->missing(x: 1)` (Session A).
@@ -12155,9 +12182,44 @@ impl<'m> Vm<'m> {
                     }
                 }
             }
-            let call = match &fast {
-                Some(cl) => self.call_closure_one(cl, arg.clone()).map(drop),
-                None => self.call_callable(loader, vec![arg.clone()]).map(drop),
+            // L-AU1 (S-163): loader `[obj, metodo]` Composer-style — metodo
+            // utente PUBLIC non-static `simple_call` arità-1 senza ombra
+            // private nella catena del ricevitore (predicato IC-fill:
+            // risoluzione scope-indipendente). La chiamata per-miss va via
+            // call_method_one, senza args-Vec né elems-Vec né copia del
+            // nome. Elementi DIRETTI (non-Ref); ogni altra forma resta su
+            // call_callable INVARIATO (criterio s163-criterio-au1.md).
+            let mut fastm = None;
+            if fast.is_none() {
+                if let Zval::Array(a) = &loader {
+                    if a.len() == 2 {
+                        let mut it = a.iter();
+                        let e0 = it.next().map(|(_, v)| v);
+                        let e1 = it.next().map(|(_, v)| v);
+                        if let (Some(t @ Zval::Object(_)), Some(Zval::Str(mname))) = (e0, e1) {
+                            let cid = object_class_id(t).expect("object class id");
+                            let mb = mname.as_bytes();
+                            if let Some((defc, midx)) = resolve_method_runtime(&self.classes, cid, mb) {
+                                let cm = &self.classes[defc].methods[midx];
+                                if cm.visibility == Visibility::Public
+                                    && !cm.is_static
+                                    && cm.func.simple_call
+                                    && cm.func.n_params == 1
+                                    && !private_shadow_in_chain(&self.classes, cid, mb)
+                                {
+                                    fastm = Some((defc, midx, cid, t.clone()));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            let call = match (&fast, fastm) {
+                (Some(cl), _) => self.call_closure_one(cl, arg.clone()).map(drop),
+                (None, Some((defc, midx, cid, this))) => {
+                    self.call_method_one(defc, midx, cid, this, arg.clone()).map(drop)
+                }
+                (None, None) => self.call_callable(loader, vec![arg.clone()]).map(drop),
             };
             if let Err(e) = call {
                 outcome = Err(e);

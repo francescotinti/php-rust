@@ -720,6 +720,37 @@ impl<'m> Vm<'m> {
         self.drive_to_return(baseline)
     }
 
+    /// L-AU1 (S-163): arity-1 mirror of [`Self::call_callable`] for a
+    /// pre-admitted `[object, method]` array callable — same baseline/drive
+    /// contract as [`Self::call_fn_one`], no args-Vec, no elems-Vec, no
+    /// method-name copy. Admission (per loader, per miss, by the caller in
+    /// `try_autoload`): public non-static user method, `simple_call` with
+    /// exactly one parameter, no private homonym in the receiver's ancestor
+    /// chain — the `MethodIc` fill predicate, so the resolution is
+    /// scope-independent and skipping `parent_private_rebind` + the
+    /// visibility check is sound for every calling scope.
+    pub(super) fn call_method_one(
+        &mut self,
+        defc: usize,
+        midx: usize,
+        cid: usize,
+        this: Zval,
+        arg: Zval,
+    ) -> Result<Zval, PhpError> {
+        let baseline = self.frames.len();
+        self.push_method_frame_one(defc, midx, cid, this, arg)?;
+        if self.frames.len() == baseline {
+            // Mirror of call_callable's no-frame arm: unreachable for a user
+            // method body (which always pushes a frame); kept for structural
+            // equality with the full path.
+            return Ok(self.frames[baseline - 1]
+                .stack
+                .pop()
+                .expect("host callable result on the caller stack"));
+        }
+        self.drive_to_return(baseline)
+    }
+
     /// Normalise the `$newThis` argument of `bindTo`/`bind`/`call`: an object
     /// binds, `null` (or anything else) clears the binding (step 19-6).
     fn closure_this_arg(v: Option<Zval>) -> Option<Zval> {
