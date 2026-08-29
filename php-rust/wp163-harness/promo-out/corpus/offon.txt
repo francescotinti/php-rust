@@ -1,0 +1,4 @@
+fail solo OFF: 0
+fail solo ON: 0
+diff per-test DIVERSO: 0
+CORPUS-DIFF: ZERO differenze per-test off<->on fuori carve-out

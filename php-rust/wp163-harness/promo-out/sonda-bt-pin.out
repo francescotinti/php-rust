@@ -1,0 +1,9 @@
+AL:Nope\ProbeClass
+  #0 {closure:/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp163-harness/sonda-bt-autoload.php:5} nargs=1 a0=Nope\ProbeClass
+bool(false)
+AL:Nope\ProbeClass2
+  #0 {closure:/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp163-harness/sonda-bt-autoload.php:5} nargs=1 a0=Nope\ProbeClass2
+bool(false)
+AL:Nope\ProbeIface
+  #0 {closure:/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp163-harness/sonda-bt-autoload.php:5} nargs=1 a0=Nope\ProbeIface
+bool(false)

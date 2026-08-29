@@ -1,0 +1,110 @@
+array(3) {
+  [3]=>
+  int(2)
+  ["k"]=>
+  int(4)
+  [4]=>
+  int(10)
+}
+array(3) {
+  [3]=>
+  int(2)
+  ["k"]=>
+  int(4)
+  [4]=>
+  int(10)
+}
+array(3) {
+  [3]=>
+  int(2)
+  ["k"]=>
+  int(4)
+  [4]=>
+  int(10)
+}
+array(3) {
+  [3]=>
+  int(11)
+  ["k"]=>
+  int(12)
+  [4]=>
+  int(15)
+}
+array(3) {
+  [3]=>
+  int(0)
+  ["k"]=>
+  int(1)
+  [4]=>
+  int(4)
+}
+array(3) {
+  [3]=>
+  int(1)
+  ["k"]=>
+  int(1)
+  [4]=>
+  int(1)
+}
+array(2) {
+  [0]=>
+  string(2) "1!"
+  [1]=>
+  string(2) "2!"
+}
+array(2) {
+  [0]=>
+  string(1) "A"
+  [1]=>
+  string(1) "B"
+}
+array(2) {
+  [0]=>
+  string(1) "x"
+  [1]=>
+  string(1) "y"
+}
+array(0) {
+}
+array(2) {
+  [0]=>
+  int(2)
+  [1]=>
+  int(4)
+}
+CAUGHT b
+array(2) {
+  [0]=>
+  int(101)
+  [1]=>
+  int(102)
+}
+array(3) {
+  [3]=>
+  int(2)
+  ["k"]=>
+  int(3)
+  [4]=>
+  int(6)
+}
+array(2) {
+  [0]=>
+  int(3)
+  [1]=>
+  int(6)
+}
+array(2) {
+  [0]=>
+  int(8)
+  [1]=>
+  int(9)
+}
+array(2) {
+  [0]=>
+  int(8)
+  [1]=>
+  int(9)
+}
+gen[0] Generator: 1 10
+gen[1] Generator: 2 20
+FX-SM DONE

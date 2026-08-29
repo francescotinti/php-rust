@@ -1,0 +1,24 @@
+lock CI: presente (finestra di sessione, non lo tocco)
+promozione: build ricetta riproduce il candidato fea4a2d040a0d8d0 AL BYTE
+promozione batteria: rc=0 (da promo-out/batteria.rc) · 1748/0/2 · inventario: baseline s125 + i DUE denti dichiarati (rczval + loc_dente A4)
+promozione batteria: debug_backtrace_array_fields VERDE
+promozione: churn batteria neutralizzato (build ricetta → fea4a2d040a0d8d0 al byte)
+promozione: PIN phpr s163 = fea4a2d040a0d8d0 (smoke parità 2 modi OK, stash phpr-s163, registrato+committato). I gate del protocollo (batteria/corpus/fixture/micro) restano dovuti.
+promozione corpus-gate: rc=0 — nomi==congelato (1412), CONTENUTO==golden, off-on zero (ZERO flip come atteso, L-AM2)
+promozione fixture chain: rc=0 (10 gate: hc1 move recv fx20 fx21 w9 preg teardown stash backtrace)
+promozione gate fx-ce: oracle==pin BYTE-ID (12 forme class/interface/trait_exists)
+promozione gate sonda-bt: pin==stash s162 BYTE-ID (contratto autoload/backtrace §3.25 invariato — presidio L-AL2 ereditato)
+promozione gate fx-refl: pin==stash s162 BYTE-ID (contratto __reflect_* L-RF2 invariato)
+promozione gate fx-am: oracle==pin BYTE-ID (20 forme array_map v2, fast E pieno)
+promozione gate fx-af: oracle==pin BYTE-ID (13 forme array_filter, fast E pieno)
+promozione gate fx-sm: oracle==pin BYTE-ID (forme string-callable, fast E pieno — presidio DIRETTO L-AM2)
+promozione gate fx-sm-div: pin==stash s162 BYTE-ID (3 divergenze §3.26 PRE-esistenti INVARIATE, fixture ESTESA S-163)
+promozione gate fx-au: oracle==pin BYTE-ID (10 forme loader array-callable, fast E pieno — presidio DIRETTO L-AU1)
+promozione gate fx-au-div: pin==stash s162 BYTE-ID (divergenza §3.27 PRE-esistente INVARIATA, a catalogo)
+promozione quiescenza: PASS al tentativo 1
+promozione micro pin s163: rapporto_arith=5.5  [derivata: companion 2.35/0.43] rapporto_prop=5.5  [derivata: companion 2.32/0.42] rapporto_calls=4.7  [derivata: companion 2.12/0.45] rapporto_str=4.2  [derivata: companion 0.63/0.15] rapporto_arr=3.2  [derivata: companion 0.92/0.29] rapporto_re=2.6  [derivata: companion 0.92/0.36] 
+conferma post-pin m-arrload (pin s163 vs stash s162, drift-tree da dichiarare): D=+42.0 rumore=3.0 segni=5/5 A=335.0 B=293.0 (attesa: segno +, D nell'intorno di +42,0 ± rumore+drift; rev. S-161 #5: rumore > attesa/2 = 21,0 ⇒ SOLO SEGNO)
+promozione gate ORM: fail-set per NOME == baseline (16 nomi) · Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, Skipped: 59, Incomplete: 2.
+promozione gate http-kernel: 0E/0F · Tests: 1665, Assertions: 3850, PHPUnit Warnings: 2, Warnings: 5, Deprecations: 128.
+promozione server: PIN server s163 = 8d76d6f129bfd4af @ 115714b3 (smoke OK, stashato, registrato+committato). pin phpr INVARIATO (fea4a2d040a0d8d0)
+PROMOZIONE COMPLETA rc=0 (da promo-out/rcb): pin s163 = fea4a2d040a0d8d0

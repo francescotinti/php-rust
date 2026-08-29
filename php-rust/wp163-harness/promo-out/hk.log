@@ -1,0 +1,1223 @@
+PHPUnit 11.5.56 by Sebastian Bergmann and contributors.
+
+Runtime:       PHP 8.5.7
+Configuration: /private/tmp/phpr-s163-promo/hk-work/phpunit.xml.dist
+
+.........................................D...................   61 / 1665 (  3%)
+.............................................................  122 / 1665 (  7%)
+.......................................D.....................  183 / 1665 ( 10%)
+.....WW.W.....DDDDDDDDDDDD...................................  244 / 1665 ( 14%)
+.........W.................................DDD.D..D..........  305 / 1665 ( 18%)
+.............................................................  366 / 1665 ( 21%)
+.............................................................  427 / 1665 ( 25%)
+.............DumpDataCollectorTest.php on line 187:
+123
+.DumpDataCollectorTest.php on line 202:
+123
+..........W............................D.......  488 / 1665 ( 29%)
+.............................................................  549 / 1665 ( 32%)
+.............................................................  610 / 1665 ( 36%)
+.............................................................  671 / 1665 ( 40%)
+.............................................................  732 / 1665 ( 43%)
+.............................................................  793 / 1665 ( 47%)
+.............................................................  854 / 1665 ( 51%)
+.............................................................  915 / 1665 ( 54%)
+.............................................................  976 / 1665 ( 58%)
+............................................................. 1037 / 1665 ( 62%)
+............................................................. 1098 / 1665 ( 65%)
+............................................................. 1159 / 1665 ( 69%)
+............................................................. 1220 / 1665 ( 73%)
+............................................................. 1281 / 1665 ( 76%)
+............................................................. 1342 / 1665 ( 80%)
+............................................................. 1403 / 1665 ( 84%)
+............................................................. 1464 / 1665 ( 87%)
+............................................................. 1525 / 1665 ( 91%)
+.D.D...W..................................................... 1586 / 1665 ( 95%)
+.................WWW......................................... 1647 / 1665 ( 98%)
+..................                                            1665 / 1665 (100%)
+
+Time: 00:09.965, Memory: 1.91 MB
+
+There were 2 PHPUnit test runner warnings:
+
+1) Method Doctrine\Deprecations\Deprecation::trigger cannot be configured as a deprecation trigger because it is not declared
+
+2) Method Doctrine\Deprecations\Deprecation::triggerIfCalledFromOutside cannot be configured as a deprecation trigger because it is not declared
+
+--
+
+9 tests triggered 5 PHP warnings:
+
+1) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/serializer/Encoder/XmlEncoder.php:334
+DOMXPath::query(): Invalid expression
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\Controller\ArgumentResolver\RequestPayloadValueResolverTest::testAcceptFormatPassed#configure with json or xml, sends xml
+  /private/tmp/phpr-s163-promo/hk-work/Tests/Controller/ArgumentResolver/RequestPayloadValueResolverTest.php:749
+
+* Symfony\Component\HttpKernel\Tests\Controller\ArgumentResolver\RequestPayloadValueResolverTest::testAcceptFormatPassed#configure with xml as array, sends xml
+  /private/tmp/phpr-s163-promo/hk-work/Tests/Controller/ArgumentResolver/RequestPayloadValueResolverTest.php:749
+
+* Symfony\Component\HttpKernel\Tests\Controller\ArgumentResolver\RequestPayloadValueResolverTest::testAcceptFormatPassed#configure with xml as string, sends xml
+  /private/tmp/phpr-s163-promo/hk-work/Tests/Controller/ArgumentResolver/RequestPayloadValueResolverTest.php:749
+
+2) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/dependency-injection/Compiler/AutowirePass.php:730
+Undefined array key 2
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\Controller\ArgumentResolver\ServiceValueResolverTest::testErrorIsTruncated (2 times)
+  /private/tmp/phpr-s163-promo/hk-work/Tests/Controller/ArgumentResolver/ServiceValueResolverTest.php:91
+
+3) /private/tmp/phpr-s163-promo/hk-work/vendor/composer/ClassLoader.php:497
+Uninitialized string offset 0
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\DataCollector\LoggerDataCollectorTest::testCollect#logs with some deprecations
+  /private/tmp/phpr-s163-promo/hk-work/Tests/DataCollector/LoggerDataCollectorTest.php:137
+
+4) /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:194
+filesize(): stat failed for
+
+5) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/config/Resource/ReflectionClassResource.php:198
+Object of class ReflectionMethod could not be converted to string
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\KernelTest::testHttpCacheHandlesRequestsAfterKernelBoot (2 times)
+  /private/tmp/phpr-s163-promo/hk-work/Tests/KernelTest.php:581
+
+* Symfony\Component\HttpKernel\Tests\KernelTest::testServicesAreNotResetBetweenHttpCacheFragments (4 times)
+  /private/tmp/phpr-s163-promo/hk-work/Tests/KernelTest.php:548
+
+* Symfony\Component\HttpKernel\Tests\KernelTest::testServicesResetter
+  /private/tmp/phpr-s163-promo/hk-work/Tests/KernelTest.php:516
+
+--
+
+23 tests triggered 128 deprecations:
+
+1) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+Method "DateTimeImmutable::getOffset()" might add "int" as a native return type declaration in the future. Do the same in child class "Symfony\Component\Clock\DatePoint" now to avoid errors or add an explicit @return annotation to suppress this message.
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\Controller\ArgumentResolver\DateTimeValueResolverTest::testFullDate#3
+  /private/tmp/phpr-s163-promo/hk-work/Tests/Controller/ArgumentResolver/DateTimeValueResolverTest.php:66
+
+2) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+Method "DateTimeImmutable::format()" might add "string" as a native return type declaration in the future. Do the same in child class "Symfony\Component\Clock\DatePoint" now to avoid errors or add an explicit @return annotation to suppress this message.
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\Controller\ArgumentResolver\DateTimeValueResolverTest::testFullDate#3
+  /private/tmp/phpr-s163-promo/hk-work/Tests/Controller/ArgumentResolver/DateTimeValueResolverTest.php:66
+
+3) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+Method "DateTimeImmutable::getTimestamp()" might add "int" as a native return type declaration in the future. Do the same in child class "Symfony\Component\Clock\DatePoint" now to avoid errors or add an explicit @return annotation to suppress this message.
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\Controller\ArgumentResolver\DateTimeValueResolverTest::testFullDate#3
+  /private/tmp/phpr-s163-promo/hk-work/Tests/Controller/ArgumentResolver/DateTimeValueResolverTest.php:66
+
+4) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+Method "DateTimeImmutable::getLastErrors()" might add "array|false" as a native return type declaration in the future. Do the same in child class "Symfony\Component\Clock\DatePoint" now to avoid errors or add an explicit @return annotation to suppress this message.
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\Controller\ArgumentResolver\DateTimeValueResolverTest::testFullDate#3
+  /private/tmp/phpr-s163-promo/hk-work/Tests/Controller/ArgumentResolver/DateTimeValueResolverTest.php:66
+
+5) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+Method "DateTimeImmutable::diff()" might add "\DateInterval" as a native return type declaration in the future. Do the same in child class "Symfony\Component\Clock\DatePoint" now to avoid errors or add an explicit @return annotation to suppress this message.
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\Controller\ArgumentResolver\DateTimeValueResolverTest::testFullDate#3
+  /private/tmp/phpr-s163-promo/hk-work/Tests/Controller/ArgumentResolver/DateTimeValueResolverTest.php:66
+
+6) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\Serializer\Normalizer\AbstractNormalizer::handleCircularReference()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\Serializer\Normalizer\AbstractObjectNormalizer".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\Controller\ArgumentResolver\RequestPayloadValueResolverTest::testNullableValueArgument
+  /private/tmp/phpr-s163-promo/hk-work/Tests/Controller/ArgumentResolver/RequestPayloadValueResolverTest.php:133
+
+7) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\Serializer\Normalizer\AbstractObjectNormalizer::handleCircularReference()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\Serializer\Normalizer\ObjectNormalizer".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\Controller\ArgumentResolver\RequestPayloadValueResolverTest::testNullableValueArgument
+  /private/tmp/phpr-s163-promo/hk-work/Tests/Controller/ArgumentResolver/RequestPayloadValueResolverTest.php:133
+
+8) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/validator/ConstraintValidator.php:48
+Since symfony/validator 8.1: Overriding "Symfony\Component\Validator\ConstraintValidator::initialize()" in "Symfony\Component\Validator\Constraints\LengthValidator" is deprecated. Put the additional logic in the "validate()" method instead.
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\Controller\ArgumentResolver\RequestPayloadValueResolverTest::testValidationGroupsNotPassed#query with validation group as GroupSequence
+  /private/tmp/phpr-s163-promo/hk-work/Tests/Controller/ArgumentResolver/RequestPayloadValueResolverTest.php:902
+
+* Symfony\Component\HttpKernel\Tests\Controller\ArgumentResolver\RequestPayloadValueResolverTest::testValidationGroupsNotPassed#query with validation group as array
+  /private/tmp/phpr-s163-promo/hk-work/Tests/Controller/ArgumentResolver/RequestPayloadValueResolverTest.php:902
+
+* Symfony\Component\HttpKernel\Tests\Controller\ArgumentResolver\RequestPayloadValueResolverTest::testValidationGroupsNotPassed#query with validation group as string
+  /private/tmp/phpr-s163-promo/hk-work/Tests/Controller/ArgumentResolver/RequestPayloadValueResolverTest.php:902
+
+* Symfony\Component\HttpKernel\Tests\Controller\ArgumentResolver\RequestPayloadValueResolverTest::testValidationGroupsNotPassed#request payload with validation group as GroupSequence
+  /private/tmp/phpr-s163-promo/hk-work/Tests/Controller/ArgumentResolver/RequestPayloadValueResolverTest.php:902
+
+* Symfony\Component\HttpKernel\Tests\Controller\ArgumentResolver\RequestPayloadValueResolverTest::testValidationGroupsNotPassed#request payload with validation group as array
+  /private/tmp/phpr-s163-promo/hk-work/Tests/Controller/ArgumentResolver/RequestPayloadValueResolverTest.php:902
+
+* Symfony\Component\HttpKernel\Tests\Controller\ArgumentResolver\RequestPayloadValueResolverTest::testValidationGroupsNotPassed#request payload with validation group as string
+  /private/tmp/phpr-s163-promo/hk-work/Tests/Controller/ArgumentResolver/RequestPayloadValueResolverTest.php:902
+
+* Symfony\Component\HttpKernel\Tests\Controller\ArgumentResolver\RequestPayloadValueResolverTest::testValidationGroupsPassed#query with validation group as GroupSequence
+  /private/tmp/phpr-s163-promo/hk-work/Tests/Controller/ArgumentResolver/RequestPayloadValueResolverTest.php:875
+
+* Symfony\Component\HttpKernel\Tests\Controller\ArgumentResolver\RequestPayloadValueResolverTest::testValidationGroupsPassed#query with validation group as array
+  /private/tmp/phpr-s163-promo/hk-work/Tests/Controller/ArgumentResolver/RequestPayloadValueResolverTest.php:875
+
+* Symfony\Component\HttpKernel\Tests\Controller\ArgumentResolver\RequestPayloadValueResolverTest::testValidationGroupsPassed#query with validation group as string
+  /private/tmp/phpr-s163-promo/hk-work/Tests/Controller/ArgumentResolver/RequestPayloadValueResolverTest.php:875
+
+* Symfony\Component\HttpKernel\Tests\Controller\ArgumentResolver\RequestPayloadValueResolverTest::testValidationGroupsPassed#request payload with validation group as GroupSequence
+  /private/tmp/phpr-s163-promo/hk-work/Tests/Controller/ArgumentResolver/RequestPayloadValueResolverTest.php:875
+
+* Symfony\Component\HttpKernel\Tests\Controller\ArgumentResolver\RequestPayloadValueResolverTest::testValidationGroupsPassed#request payload with validation group as array
+  /private/tmp/phpr-s163-promo/hk-work/Tests/Controller/ArgumentResolver/RequestPayloadValueResolverTest.php:875
+
+* Symfony\Component\HttpKernel\Tests\Controller\ArgumentResolver\RequestPayloadValueResolverTest::testValidationGroupsPassed#request payload with validation group as string
+  /private/tmp/phpr-s163-promo/hk-work/Tests/Controller/ArgumentResolver/RequestPayloadValueResolverTest.php:875
+
+9) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/validator/ConstraintValidator.php:66
+Since symfony/validator 8.1: The "ConstraintValidator::initialize()" method is deprecated. Use the "validateInContext()" method instead of the "initialize()" and "validate()" ones.
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\Controller\ArgumentResolver\RequestPayloadValueResolverTest::testValidationGroupsNotPassed#query with validation group as GroupSequence
+  /private/tmp/phpr-s163-promo/hk-work/Tests/Controller/ArgumentResolver/RequestPayloadValueResolverTest.php:902
+
+* Symfony\Component\HttpKernel\Tests\Controller\ArgumentResolver\RequestPayloadValueResolverTest::testValidationGroupsNotPassed#query with validation group as array
+  /private/tmp/phpr-s163-promo/hk-work/Tests/Controller/ArgumentResolver/RequestPayloadValueResolverTest.php:902
+
+* Symfony\Component\HttpKernel\Tests\Controller\ArgumentResolver\RequestPayloadValueResolverTest::testValidationGroupsNotPassed#query with validation group as string
+  /private/tmp/phpr-s163-promo/hk-work/Tests/Controller/ArgumentResolver/RequestPayloadValueResolverTest.php:902
+
+* Symfony\Component\HttpKernel\Tests\Controller\ArgumentResolver\RequestPayloadValueResolverTest::testValidationGroupsNotPassed#request payload with validation group as GroupSequence
+  /private/tmp/phpr-s163-promo/hk-work/Tests/Controller/ArgumentResolver/RequestPayloadValueResolverTest.php:902
+
+* Symfony\Component\HttpKernel\Tests\Controller\ArgumentResolver\RequestPayloadValueResolverTest::testValidationGroupsNotPassed#request payload with validation group as array
+  /private/tmp/phpr-s163-promo/hk-work/Tests/Controller/ArgumentResolver/RequestPayloadValueResolverTest.php:902
+
+* Symfony\Component\HttpKernel\Tests\Controller\ArgumentResolver\RequestPayloadValueResolverTest::testValidationGroupsNotPassed#request payload with validation group as string
+  /private/tmp/phpr-s163-promo/hk-work/Tests/Controller/ArgumentResolver/RequestPayloadValueResolverTest.php:902
+
+* Symfony\Component\HttpKernel\Tests\Controller\ArgumentResolver\RequestPayloadValueResolverTest::testValidationGroupsPassed#query with validation group as GroupSequence
+  /private/tmp/phpr-s163-promo/hk-work/Tests/Controller/ArgumentResolver/RequestPayloadValueResolverTest.php:875
+
+* Symfony\Component\HttpKernel\Tests\Controller\ArgumentResolver\RequestPayloadValueResolverTest::testValidationGroupsPassed#query with validation group as array
+  /private/tmp/phpr-s163-promo/hk-work/Tests/Controller/ArgumentResolver/RequestPayloadValueResolverTest.php:875
+
+* Symfony\Component\HttpKernel\Tests\Controller\ArgumentResolver\RequestPayloadValueResolverTest::testValidationGroupsPassed#query with validation group as string
+  /private/tmp/phpr-s163-promo/hk-work/Tests/Controller/ArgumentResolver/RequestPayloadValueResolverTest.php:875
+
+* Symfony\Component\HttpKernel\Tests\Controller\ArgumentResolver\RequestPayloadValueResolverTest::testValidationGroupsPassed#request payload with validation group as GroupSequence
+  /private/tmp/phpr-s163-promo/hk-work/Tests/Controller/ArgumentResolver/RequestPayloadValueResolverTest.php:875
+
+* Symfony\Component\HttpKernel\Tests\Controller\ArgumentResolver\RequestPayloadValueResolverTest::testValidationGroupsPassed#request payload with validation group as array
+  /private/tmp/phpr-s163-promo/hk-work/Tests/Controller/ArgumentResolver/RequestPayloadValueResolverTest.php:875
+
+* Symfony\Component\HttpKernel\Tests\Controller\ArgumentResolver\RequestPayloadValueResolverTest::testValidationGroupsPassed#request payload with validation group as string
+  /private/tmp/phpr-s163-promo/hk-work/Tests/Controller/ArgumentResolver/RequestPayloadValueResolverTest.php:875
+
+* Symfony\Component\HttpKernel\Tests\Controller\ArgumentResolver\UploadedFileValueResolverTest::testConstraintsViolationHasArgumentNameAsPropertyPath#standard
+  /private/tmp/phpr-s163-promo/hk-work/Tests/Controller/ArgumentResolver/UploadedFileValueResolverTest.php:244
+
+* Symfony\Component\HttpKernel\Tests\Controller\ArgumentResolver\UploadedFileValueResolverTest::testConstraintsWithViolation#standard
+  /private/tmp/phpr-s163-promo/hk-work/Tests/Controller/ArgumentResolver/UploadedFileValueResolverTest.php:217
+
+* Symfony\Component\HttpKernel\Tests\Controller\ArgumentResolver\UploadedFileValueResolverTest::testConstraintsWithoutViolation#standard
+  /private/tmp/phpr-s163-promo/hk-work/Tests/Controller/ArgumentResolver/UploadedFileValueResolverTest.php:187
+
+* Symfony\Component\HttpKernel\Tests\Controller\ArgumentResolver\UploadedFileValueResolverTest::testMultipleFilesArrayConstraints#standard (3 times)
+  /private/tmp/phpr-s163-promo/hk-work/Tests/Controller/ArgumentResolver/UploadedFileValueResolverTest.php:307
+
+* Symfony\Component\HttpKernel\Tests\Controller\ArgumentResolver\UploadedFileValueResolverTest::testMultipleFilesVariadicConstraints#standard (3 times)
+  /private/tmp/phpr-s163-promo/hk-work/Tests/Controller/ArgumentResolver/UploadedFileValueResolverTest.php:396
+
+10) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/validator/ConstraintValidator.php:48
+Since symfony/validator 8.1: Overriding "Symfony\Component\Validator\ConstraintValidator::initialize()" in "Symfony\Component\Validator\Constraints\FileValidator" is deprecated. Put the additional logic in the "validate()" method instead.
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\Controller\ArgumentResolver\UploadedFileValueResolverTest::testConstraintsViolationHasArgumentNameAsPropertyPath#standard
+  /private/tmp/phpr-s163-promo/hk-work/Tests/Controller/ArgumentResolver/UploadedFileValueResolverTest.php:244
+
+* Symfony\Component\HttpKernel\Tests\Controller\ArgumentResolver\UploadedFileValueResolverTest::testConstraintsWithViolation#standard
+  /private/tmp/phpr-s163-promo/hk-work/Tests/Controller/ArgumentResolver/UploadedFileValueResolverTest.php:217
+
+* Symfony\Component\HttpKernel\Tests\Controller\ArgumentResolver\UploadedFileValueResolverTest::testConstraintsWithoutViolation#standard
+  /private/tmp/phpr-s163-promo/hk-work/Tests/Controller/ArgumentResolver/UploadedFileValueResolverTest.php:187
+
+* Symfony\Component\HttpKernel\Tests\Controller\ArgumentResolver\UploadedFileValueResolverTest::testMultipleFilesArrayConstraints#standard (2 times)
+  /private/tmp/phpr-s163-promo/hk-work/Tests/Controller/ArgumentResolver/UploadedFileValueResolverTest.php:307
+
+* Symfony\Component\HttpKernel\Tests\Controller\ArgumentResolver\UploadedFileValueResolverTest::testMultipleFilesVariadicConstraints#standard (2 times)
+  /private/tmp/phpr-s163-promo/hk-work/Tests/Controller/ArgumentResolver/UploadedFileValueResolverTest.php:396
+
+11) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/validator/ConstraintValidator.php:48
+Since symfony/validator 8.1: Overriding "Symfony\Component\Validator\ConstraintValidator::initialize()" in "Symfony\Component\Validator\Constraints\AllValidator" is deprecated. Put the additional logic in the "validate()" method instead.
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\Controller\ArgumentResolver\UploadedFileValueResolverTest::testMultipleFilesArrayConstraints#standard
+  /private/tmp/phpr-s163-promo/hk-work/Tests/Controller/ArgumentResolver/UploadedFileValueResolverTest.php:307
+
+* Symfony\Component\HttpKernel\Tests\Controller\ArgumentResolver\UploadedFileValueResolverTest::testMultipleFilesVariadicConstraints#standard
+  /private/tmp/phpr-s163-promo/hk-work/Tests/Controller/ArgumentResolver/UploadedFileValueResolverTest.php:396
+
+12) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::setProtocolVersion()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\RedirectResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\DataCollector\RequestDataCollectorTest::testItIgnoresInvalidCallables
+  /private/tmp/phpr-s163-promo/hk-work/Tests/DataCollector/RequestDataCollectorTest.php:207
+
+13) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::getProtocolVersion()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\RedirectResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\DataCollector\RequestDataCollectorTest::testItIgnoresInvalidCallables
+  /private/tmp/phpr-s163-promo/hk-work/Tests/DataCollector/RequestDataCollectorTest.php:207
+
+14) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::setStatusCode()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\RedirectResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\DataCollector\RequestDataCollectorTest::testItIgnoresInvalidCallables
+  /private/tmp/phpr-s163-promo/hk-work/Tests/DataCollector/RequestDataCollectorTest.php:207
+
+15) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::getStatusCode()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\RedirectResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\DataCollector\RequestDataCollectorTest::testItIgnoresInvalidCallables
+  /private/tmp/phpr-s163-promo/hk-work/Tests/DataCollector/RequestDataCollectorTest.php:207
+
+16) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::setCharset()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\RedirectResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\DataCollector\RequestDataCollectorTest::testItIgnoresInvalidCallables
+  /private/tmp/phpr-s163-promo/hk-work/Tests/DataCollector/RequestDataCollectorTest.php:207
+
+17) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::getCharset()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\RedirectResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\DataCollector\RequestDataCollectorTest::testItIgnoresInvalidCallables
+  /private/tmp/phpr-s163-promo/hk-work/Tests/DataCollector/RequestDataCollectorTest.php:207
+
+18) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::isCacheable()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\RedirectResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\DataCollector\RequestDataCollectorTest::testItIgnoresInvalidCallables
+  /private/tmp/phpr-s163-promo/hk-work/Tests/DataCollector/RequestDataCollectorTest.php:207
+
+19) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::isFresh()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\RedirectResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\DataCollector\RequestDataCollectorTest::testItIgnoresInvalidCallables
+  /private/tmp/phpr-s163-promo/hk-work/Tests/DataCollector/RequestDataCollectorTest.php:207
+
+20) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::isValidateable()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\RedirectResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\DataCollector\RequestDataCollectorTest::testItIgnoresInvalidCallables
+  /private/tmp/phpr-s163-promo/hk-work/Tests/DataCollector/RequestDataCollectorTest.php:207
+
+21) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::setPrivate()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\RedirectResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\DataCollector\RequestDataCollectorTest::testItIgnoresInvalidCallables
+  /private/tmp/phpr-s163-promo/hk-work/Tests/DataCollector/RequestDataCollectorTest.php:207
+
+22) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::setPublic()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\RedirectResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\DataCollector\RequestDataCollectorTest::testItIgnoresInvalidCallables
+  /private/tmp/phpr-s163-promo/hk-work/Tests/DataCollector/RequestDataCollectorTest.php:207
+
+23) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::setImmutable()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\RedirectResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\DataCollector\RequestDataCollectorTest::testItIgnoresInvalidCallables
+  /private/tmp/phpr-s163-promo/hk-work/Tests/DataCollector/RequestDataCollectorTest.php:207
+
+24) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::isImmutable()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\RedirectResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\DataCollector\RequestDataCollectorTest::testItIgnoresInvalidCallables
+  /private/tmp/phpr-s163-promo/hk-work/Tests/DataCollector/RequestDataCollectorTest.php:207
+
+25) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::mustRevalidate()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\RedirectResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\DataCollector\RequestDataCollectorTest::testItIgnoresInvalidCallables
+  /private/tmp/phpr-s163-promo/hk-work/Tests/DataCollector/RequestDataCollectorTest.php:207
+
+26) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::getDate()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\RedirectResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\DataCollector\RequestDataCollectorTest::testItIgnoresInvalidCallables
+  /private/tmp/phpr-s163-promo/hk-work/Tests/DataCollector/RequestDataCollectorTest.php:207
+
+27) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::setDate()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\RedirectResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\DataCollector\RequestDataCollectorTest::testItIgnoresInvalidCallables
+  /private/tmp/phpr-s163-promo/hk-work/Tests/DataCollector/RequestDataCollectorTest.php:207
+
+28) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::getAge()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\RedirectResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\DataCollector\RequestDataCollectorTest::testItIgnoresInvalidCallables
+  /private/tmp/phpr-s163-promo/hk-work/Tests/DataCollector/RequestDataCollectorTest.php:207
+
+29) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::getExpires()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\RedirectResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\DataCollector\RequestDataCollectorTest::testItIgnoresInvalidCallables
+  /private/tmp/phpr-s163-promo/hk-work/Tests/DataCollector/RequestDataCollectorTest.php:207
+
+30) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::setExpires()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\RedirectResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\DataCollector\RequestDataCollectorTest::testItIgnoresInvalidCallables
+  /private/tmp/phpr-s163-promo/hk-work/Tests/DataCollector/RequestDataCollectorTest.php:207
+
+31) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::getMaxAge()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\RedirectResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\DataCollector\RequestDataCollectorTest::testItIgnoresInvalidCallables
+  /private/tmp/phpr-s163-promo/hk-work/Tests/DataCollector/RequestDataCollectorTest.php:207
+
+32) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::setMaxAge()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\RedirectResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\DataCollector\RequestDataCollectorTest::testItIgnoresInvalidCallables
+  /private/tmp/phpr-s163-promo/hk-work/Tests/DataCollector/RequestDataCollectorTest.php:207
+
+33) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::setStaleIfError()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\RedirectResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\DataCollector\RequestDataCollectorTest::testItIgnoresInvalidCallables
+  /private/tmp/phpr-s163-promo/hk-work/Tests/DataCollector/RequestDataCollectorTest.php:207
+
+34) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::setStaleWhileRevalidate()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\RedirectResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\DataCollector\RequestDataCollectorTest::testItIgnoresInvalidCallables
+  /private/tmp/phpr-s163-promo/hk-work/Tests/DataCollector/RequestDataCollectorTest.php:207
+
+35) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::setSharedMaxAge()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\RedirectResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\DataCollector\RequestDataCollectorTest::testItIgnoresInvalidCallables
+  /private/tmp/phpr-s163-promo/hk-work/Tests/DataCollector/RequestDataCollectorTest.php:207
+
+36) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::getTtl()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\RedirectResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\DataCollector\RequestDataCollectorTest::testItIgnoresInvalidCallables
+  /private/tmp/phpr-s163-promo/hk-work/Tests/DataCollector/RequestDataCollectorTest.php:207
+
+37) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::setTtl()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\RedirectResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\DataCollector\RequestDataCollectorTest::testItIgnoresInvalidCallables
+  /private/tmp/phpr-s163-promo/hk-work/Tests/DataCollector/RequestDataCollectorTest.php:207
+
+38) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::setClientTtl()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\RedirectResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\DataCollector\RequestDataCollectorTest::testItIgnoresInvalidCallables
+  /private/tmp/phpr-s163-promo/hk-work/Tests/DataCollector/RequestDataCollectorTest.php:207
+
+39) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::getLastModified()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\RedirectResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\DataCollector\RequestDataCollectorTest::testItIgnoresInvalidCallables
+  /private/tmp/phpr-s163-promo/hk-work/Tests/DataCollector/RequestDataCollectorTest.php:207
+
+40) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::setLastModified()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\RedirectResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\DataCollector\RequestDataCollectorTest::testItIgnoresInvalidCallables
+  /private/tmp/phpr-s163-promo/hk-work/Tests/DataCollector/RequestDataCollectorTest.php:207
+
+41) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::getEtag()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\RedirectResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\DataCollector\RequestDataCollectorTest::testItIgnoresInvalidCallables
+  /private/tmp/phpr-s163-promo/hk-work/Tests/DataCollector/RequestDataCollectorTest.php:207
+
+42) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::setEtag()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\RedirectResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\DataCollector\RequestDataCollectorTest::testItIgnoresInvalidCallables
+  /private/tmp/phpr-s163-promo/hk-work/Tests/DataCollector/RequestDataCollectorTest.php:207
+
+43) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::setCache()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\RedirectResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\DataCollector\RequestDataCollectorTest::testItIgnoresInvalidCallables
+  /private/tmp/phpr-s163-promo/hk-work/Tests/DataCollector/RequestDataCollectorTest.php:207
+
+44) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::setNotModified()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\RedirectResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\DataCollector\RequestDataCollectorTest::testItIgnoresInvalidCallables
+  /private/tmp/phpr-s163-promo/hk-work/Tests/DataCollector/RequestDataCollectorTest.php:207
+
+45) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::hasVary()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\RedirectResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\DataCollector\RequestDataCollectorTest::testItIgnoresInvalidCallables
+  /private/tmp/phpr-s163-promo/hk-work/Tests/DataCollector/RequestDataCollectorTest.php:207
+
+46) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::getVary()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\RedirectResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\DataCollector\RequestDataCollectorTest::testItIgnoresInvalidCallables
+  /private/tmp/phpr-s163-promo/hk-work/Tests/DataCollector/RequestDataCollectorTest.php:207
+
+47) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::setVary()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\RedirectResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\DataCollector\RequestDataCollectorTest::testItIgnoresInvalidCallables
+  /private/tmp/phpr-s163-promo/hk-work/Tests/DataCollector/RequestDataCollectorTest.php:207
+
+48) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::isNotModified()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\RedirectResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\DataCollector\RequestDataCollectorTest::testItIgnoresInvalidCallables
+  /private/tmp/phpr-s163-promo/hk-work/Tests/DataCollector/RequestDataCollectorTest.php:207
+
+49) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::isInvalid()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\RedirectResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\DataCollector\RequestDataCollectorTest::testItIgnoresInvalidCallables
+  /private/tmp/phpr-s163-promo/hk-work/Tests/DataCollector/RequestDataCollectorTest.php:207
+
+50) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::isInformational()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\RedirectResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\DataCollector\RequestDataCollectorTest::testItIgnoresInvalidCallables
+  /private/tmp/phpr-s163-promo/hk-work/Tests/DataCollector/RequestDataCollectorTest.php:207
+
+51) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::isSuccessful()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\RedirectResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\DataCollector\RequestDataCollectorTest::testItIgnoresInvalidCallables
+  /private/tmp/phpr-s163-promo/hk-work/Tests/DataCollector/RequestDataCollectorTest.php:207
+
+52) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::isRedirection()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\RedirectResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\DataCollector\RequestDataCollectorTest::testItIgnoresInvalidCallables
+  /private/tmp/phpr-s163-promo/hk-work/Tests/DataCollector/RequestDataCollectorTest.php:207
+
+53) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::isClientError()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\RedirectResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\DataCollector\RequestDataCollectorTest::testItIgnoresInvalidCallables
+  /private/tmp/phpr-s163-promo/hk-work/Tests/DataCollector/RequestDataCollectorTest.php:207
+
+54) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::isServerError()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\RedirectResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\DataCollector\RequestDataCollectorTest::testItIgnoresInvalidCallables
+  /private/tmp/phpr-s163-promo/hk-work/Tests/DataCollector/RequestDataCollectorTest.php:207
+
+55) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::isOk()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\RedirectResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\DataCollector\RequestDataCollectorTest::testItIgnoresInvalidCallables
+  /private/tmp/phpr-s163-promo/hk-work/Tests/DataCollector/RequestDataCollectorTest.php:207
+
+56) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::isForbidden()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\RedirectResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\DataCollector\RequestDataCollectorTest::testItIgnoresInvalidCallables
+  /private/tmp/phpr-s163-promo/hk-work/Tests/DataCollector/RequestDataCollectorTest.php:207
+
+57) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::isNotFound()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\RedirectResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\DataCollector\RequestDataCollectorTest::testItIgnoresInvalidCallables
+  /private/tmp/phpr-s163-promo/hk-work/Tests/DataCollector/RequestDataCollectorTest.php:207
+
+58) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::isRedirect()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\RedirectResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\DataCollector\RequestDataCollectorTest::testItIgnoresInvalidCallables
+  /private/tmp/phpr-s163-promo/hk-work/Tests/DataCollector/RequestDataCollectorTest.php:207
+
+59) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::isEmpty()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\RedirectResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\DataCollector\RequestDataCollectorTest::testItIgnoresInvalidCallables
+  /private/tmp/phpr-s163-promo/hk-work/Tests/DataCollector/RequestDataCollectorTest.php:207
+
+60) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::closeOutputBuffers()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\RedirectResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\DataCollector\RequestDataCollectorTest::testItIgnoresInvalidCallables
+  /private/tmp/phpr-s163-promo/hk-work/Tests/DataCollector/RequestDataCollectorTest.php:207
+
+61) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::ensureIEOverSSLCompatibility()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\RedirectResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\DataCollector\RequestDataCollectorTest::testItIgnoresInvalidCallables
+  /private/tmp/phpr-s163-promo/hk-work/Tests/DataCollector/RequestDataCollectorTest.php:207
+
+62) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\Process\Process::run()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\Process\PhpProcess".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testGetScript
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:49
+
+63) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\Process\Process::mustRun()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\Process\PhpProcess".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testGetScript
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:49
+
+64) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\Process\Process::restart()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\Process\PhpProcess".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testGetScript
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:49
+
+65) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::setProtocolVersion()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\StreamedResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testFilterResponseSupportsStreamedResponses
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:78
+
+66) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::getProtocolVersion()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\StreamedResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testFilterResponseSupportsStreamedResponses
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:78
+
+67) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::setStatusCode()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\StreamedResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testFilterResponseSupportsStreamedResponses
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:78
+
+68) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::getStatusCode()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\StreamedResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testFilterResponseSupportsStreamedResponses
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:78
+
+69) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::setCharset()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\StreamedResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testFilterResponseSupportsStreamedResponses
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:78
+
+70) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::getCharset()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\StreamedResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testFilterResponseSupportsStreamedResponses
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:78
+
+71) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::isCacheable()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\StreamedResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testFilterResponseSupportsStreamedResponses
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:78
+
+72) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::isFresh()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\StreamedResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testFilterResponseSupportsStreamedResponses
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:78
+
+73) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::isValidateable()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\StreamedResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testFilterResponseSupportsStreamedResponses
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:78
+
+74) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::setPrivate()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\StreamedResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testFilterResponseSupportsStreamedResponses
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:78
+
+75) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::setPublic()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\StreamedResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testFilterResponseSupportsStreamedResponses
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:78
+
+76) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::setImmutable()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\StreamedResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testFilterResponseSupportsStreamedResponses
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:78
+
+77) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::isImmutable()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\StreamedResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testFilterResponseSupportsStreamedResponses
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:78
+
+78) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::mustRevalidate()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\StreamedResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testFilterResponseSupportsStreamedResponses
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:78
+
+79) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::getDate()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\StreamedResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testFilterResponseSupportsStreamedResponses
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:78
+
+80) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::setDate()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\StreamedResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testFilterResponseSupportsStreamedResponses
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:78
+
+81) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::getAge()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\StreamedResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testFilterResponseSupportsStreamedResponses
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:78
+
+82) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::getExpires()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\StreamedResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testFilterResponseSupportsStreamedResponses
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:78
+
+83) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::setExpires()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\StreamedResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testFilterResponseSupportsStreamedResponses
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:78
+
+84) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::getMaxAge()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\StreamedResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testFilterResponseSupportsStreamedResponses
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:78
+
+85) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::setMaxAge()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\StreamedResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testFilterResponseSupportsStreamedResponses
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:78
+
+86) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::setStaleIfError()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\StreamedResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testFilterResponseSupportsStreamedResponses
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:78
+
+87) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::setStaleWhileRevalidate()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\StreamedResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testFilterResponseSupportsStreamedResponses
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:78
+
+88) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::setSharedMaxAge()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\StreamedResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testFilterResponseSupportsStreamedResponses
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:78
+
+89) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::getTtl()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\StreamedResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testFilterResponseSupportsStreamedResponses
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:78
+
+90) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::setTtl()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\StreamedResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testFilterResponseSupportsStreamedResponses
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:78
+
+91) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::setClientTtl()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\StreamedResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testFilterResponseSupportsStreamedResponses
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:78
+
+92) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::getLastModified()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\StreamedResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testFilterResponseSupportsStreamedResponses
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:78
+
+93) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::setLastModified()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\StreamedResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testFilterResponseSupportsStreamedResponses
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:78
+
+94) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::getEtag()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\StreamedResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testFilterResponseSupportsStreamedResponses
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:78
+
+95) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::setEtag()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\StreamedResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testFilterResponseSupportsStreamedResponses
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:78
+
+96) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::setCache()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\StreamedResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testFilterResponseSupportsStreamedResponses
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:78
+
+97) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::setNotModified()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\StreamedResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testFilterResponseSupportsStreamedResponses
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:78
+
+98) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::hasVary()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\StreamedResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testFilterResponseSupportsStreamedResponses
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:78
+
+99) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::getVary()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\StreamedResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testFilterResponseSupportsStreamedResponses
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:78
+
+100) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::setVary()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\StreamedResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testFilterResponseSupportsStreamedResponses
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:78
+
+101) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::isNotModified()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\StreamedResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testFilterResponseSupportsStreamedResponses
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:78
+
+102) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::isInvalid()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\StreamedResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testFilterResponseSupportsStreamedResponses
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:78
+
+103) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::isInformational()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\StreamedResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testFilterResponseSupportsStreamedResponses
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:78
+
+104) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::isSuccessful()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\StreamedResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testFilterResponseSupportsStreamedResponses
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:78
+
+105) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::isRedirection()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\StreamedResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testFilterResponseSupportsStreamedResponses
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:78
+
+106) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::isClientError()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\StreamedResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testFilterResponseSupportsStreamedResponses
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:78
+
+107) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::isServerError()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\StreamedResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testFilterResponseSupportsStreamedResponses
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:78
+
+108) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::isOk()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\StreamedResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testFilterResponseSupportsStreamedResponses
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:78
+
+109) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::isForbidden()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\StreamedResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testFilterResponseSupportsStreamedResponses
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:78
+
+110) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::isNotFound()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\StreamedResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testFilterResponseSupportsStreamedResponses
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:78
+
+111) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::isRedirect()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\StreamedResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testFilterResponseSupportsStreamedResponses
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:78
+
+112) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::isEmpty()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\StreamedResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testFilterResponseSupportsStreamedResponses
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:78
+
+113) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::closeOutputBuffers()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\StreamedResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testFilterResponseSupportsStreamedResponses
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:78
+
+114) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+The "Symfony\Component\HttpFoundation\Response::ensureIEOverSSLCompatibility()" method is considered final. It may change without further notice as of its next major version. You should not extend it from "Symfony\Component\HttpFoundation\StreamedResponse".
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testFilterResponseSupportsStreamedResponses
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:78
+
+115) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+Method "SplFileInfo::getPathname()" might add "string" as a native return type declaration in the future. Do the same in child class "Symfony\Component\HttpKernel\Tests\Fixtures\MockableUploadFileWithClientSize" now to avoid errors or add an explicit @return annotation to suppress this message.
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testUploadedFileWhenSizeExceedsUploadMaxFileSize
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:157
+
+116) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+Method "SplFileInfo::isDir()" might add "bool" as a native return type declaration in the future. Do the same in child class "Symfony\Component\HttpKernel\Tests\Fixtures\MockableUploadFileWithClientSize" now to avoid errors or add an explicit @return annotation to suppress this message.
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testUploadedFileWhenSizeExceedsUploadMaxFileSize
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:157
+
+117) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+Method "SplFileInfo::isFile()" might add "bool" as a native return type declaration in the future. Do the same in child class "Symfony\Component\HttpKernel\Tests\Fixtures\MockableUploadFileWithClientSize" now to avoid errors or add an explicit @return annotation to suppress this message.
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testUploadedFileWhenSizeExceedsUploadMaxFileSize
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:157
+
+118) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+Method "SplFileInfo::isLink()" might add "bool" as a native return type declaration in the future. Do the same in child class "Symfony\Component\HttpKernel\Tests\Fixtures\MockableUploadFileWithClientSize" now to avoid errors or add an explicit @return annotation to suppress this message.
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testUploadedFileWhenSizeExceedsUploadMaxFileSize
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:157
+
+119) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+Method "SplFileInfo::getFilename()" might add "string" as a native return type declaration in the future. Do the same in child class "Symfony\Component\HttpKernel\Tests\Fixtures\MockableUploadFileWithClientSize" now to avoid errors or add an explicit @return annotation to suppress this message.
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testUploadedFileWhenSizeExceedsUploadMaxFileSize
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:157
+
+120) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+Method "SplFileInfo::getBasename()" might add "string" as a native return type declaration in the future. Do the same in child class "Symfony\Component\HttpKernel\Tests\Fixtures\MockableUploadFileWithClientSize" now to avoid errors or add an explicit @return annotation to suppress this message.
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testUploadedFileWhenSizeExceedsUploadMaxFileSize
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:157
+
+121) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+Method "SplFileInfo::getPath()" might add "string" as a native return type declaration in the future. Do the same in child class "Symfony\Component\HttpKernel\Tests\Fixtures\MockableUploadFileWithClientSize" now to avoid errors or add an explicit @return annotation to suppress this message.
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testUploadedFileWhenSizeExceedsUploadMaxFileSize
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:157
+
+122) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+Method "SplFileInfo::getRealPath()" might add "string|false" as a native return type declaration in the future. Do the same in child class "Symfony\Component\HttpKernel\Tests\Fixtures\MockableUploadFileWithClientSize" now to avoid errors or add an explicit @return annotation to suppress this message.
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testUploadedFileWhenSizeExceedsUploadMaxFileSize
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:157
+
+123) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+Method "SplFileInfo::getSize()" might add "int|false" as a native return type declaration in the future. Do the same in child class "Symfony\Component\HttpKernel\Tests\Fixtures\MockableUploadFileWithClientSize" now to avoid errors or add an explicit @return annotation to suppress this message.
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testUploadedFileWhenSizeExceedsUploadMaxFileSize
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:157
+
+124) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+Method "SplFileInfo::getPerms()" might add "int|false" as a native return type declaration in the future. Do the same in child class "Symfony\Component\HttpKernel\Tests\Fixtures\MockableUploadFileWithClientSize" now to avoid errors or add an explicit @return annotation to suppress this message.
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testUploadedFileWhenSizeExceedsUploadMaxFileSize
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:157
+
+125) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+Method "SplFileInfo::getMTime()" might add "int|false" as a native return type declaration in the future. Do the same in child class "Symfony\Component\HttpKernel\Tests\Fixtures\MockableUploadFileWithClientSize" now to avoid errors or add an explicit @return annotation to suppress this message.
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testUploadedFileWhenSizeExceedsUploadMaxFileSize
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:157
+
+126) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+Method "SplFileInfo::isReadable()" might add "bool" as a native return type declaration in the future. Do the same in child class "Symfony\Component\HttpKernel\Tests\Fixtures\MockableUploadFileWithClientSize" now to avoid errors or add an explicit @return annotation to suppress this message.
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testUploadedFileWhenSizeExceedsUploadMaxFileSize
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:157
+
+127) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+Method "SplFileInfo::isWritable()" might add "bool" as a native return type declaration in the future. Do the same in child class "Symfony\Component\HttpKernel\Tests\Fixtures\MockableUploadFileWithClientSize" now to avoid errors or add an explicit @return annotation to suppress this message.
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testUploadedFileWhenSizeExceedsUploadMaxFileSize
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:157
+
+128) /private/tmp/phpr-s163-promo/hk-work/vendor/symfony/error-handler/DebugClassLoader.php:391
+Method "SplFileInfo::getExtension()" might add "string" as a native return type declaration in the future. Do the same in child class "Symfony\Component\HttpKernel\Tests\Fixtures\MockableUploadFileWithClientSize" now to avoid errors or add an explicit @return annotation to suppress this message.
+
+Triggered by:
+
+* Symfony\Component\HttpKernel\Tests\HttpKernelBrowserTest::testUploadedFileWhenSizeExceedsUploadMaxFileSize
+  /private/tmp/phpr-s163-promo/hk-work/Tests/HttpKernelBrowserTest.php:157
+
+OK, but there were issues!
+Tests: 1665, Assertions: 3850, PHPUnit Warnings: 2, Warnings: 5, Deprecations: 128.

@@ -1,0 +1,81 @@
+== method_info (2 arg): dritto vs scambiato ==
+array(3) {
+  [0]=>
+  string(6) "public"
+  [1]=>
+  bool(false)
+  [2]=>
+  string(5) "FxCls"
+}
+bool(false)
+== prop_details (2 arg): dritto vs scambiato ==
+array(7) {
+  ["visibility"]=>
+  string(6) "public"
+  ["readonly"]=>
+  bool(false)
+  ["static"]=>
+  bool(false)
+  ["declaringClass"]=>
+  string(5) "FxCls"
+  ["hasDefault"]=>
+  bool(true)
+  ["default"]=>
+  int(3)
+  ["doc"]=>
+  bool(false)
+}
+array(6) {
+  ["visibility"]=>
+  string(6) "public"
+  ["readonly"]=>
+  bool(false)
+  ["static"]=>
+  bool(false)
+  ["declaringClass"]=>
+  string(8) "roleProp"
+  ["hasDefault"]=>
+  bool(true)
+  ["default"]=>
+  NULL
+}
+array(6) {
+  ["visibility"]=>
+  string(6) "public"
+  ["readonly"]=>
+  bool(false)
+  ["static"]=>
+  bool(true)
+  ["declaringClass"]=>
+  string(5) "FxCls"
+  ["hasDefault"]=>
+  bool(true)
+  ["default"]=>
+  NULL
+}
+== prop_attr_new (3 arg): dritto vs permutati ==
+object(FxRole)#1 (1) {
+  ["tag"]=>
+  string(15) "marcatore-ruolo"
+}
+NULL
+NULL
+== 1-arg: real_name / method_names / class_loc ==
+string(5) "FxCls"
+bool(false)
+array(3) {
+  [0]=>
+  string(10) "roleMethod"
+  [1]=>
+  string(8) "roleProt"
+  [2]=>
+  string(10) "baseSecret"
+}
+array(3) {
+  [0]=>
+  string(82) "/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp163-harness/fx-refl.php"
+  [1]=>
+  int(9)
+  [2]=>
+  int(14)
+}

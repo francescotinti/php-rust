@@ -1,0 +1,76 @@
+== gate hc1 ==
+phpr_pin=fea4a2d040a0d8d0 (verificato)
+mode-probe OK (on=registri, off=pila)
+PASS 01-specie-int
+PASS 02-specie-string
+PASS 03-specie-array
+PASS 04-alias-interleaved
+PASS 05-alias-magic-hook
+PASS 06-alias-lazy
+PASS 07-alias-ref-slot
+PASS 08-alias-reassign-intra
+PASS 09-unset-during-read
+PASS 10-readonly-typed-uninit
+PASS 11-stack-inplace
+PASS 12-destruct-order
+PASS 13-gc-cycle-prop
+fixtures_fail=0
+-- hc1 rc=0
+== gate move ==
+phpr_pin=fea4a2d040a0d8d0 (verificato)
+mode-probe OK (on=registri, off=pila)
+PASS 14-destruct-reenter-propset
+PASS 15-typed-write-coercion
+PASS 16-clone-prop
+PASS 17-lazy-init-drop-ultima-ref
+PASS 18-propset-gc-mid-arm
+move_fixtures_fail=0
+-- move rc=0
+== gate recv ==
+phpr_pin=fea4a2d040a0d8d0 (verificato)
+mode-probe OK (on=registri, off=pila)
+PASS 19a-soglia-esatta-slot-held
+PASS 19b-base1-ricevitore-temporaneo
+recv_fixtures_fail=0
+-- recv rc=0
+== gate fx20 ==
+phpr_pin=fea4a2d040a0d8d0 oracle_pin=07b0df8d63247695 (bilaterale, verificato)
+mode-probe OK (on=registri, off=pila)
+rss_on_MiB=49 (guardia 75, cap 150)
+rss_off_MiB=50 (guardia 75, cap 150)
+PASS fx20-stringhe-in-pop (2 modi byte-id + RSS sotto cap, oracle arbitro valido)
+-- fx20 rc=0
+== gate fx21 ==
+phpr_pin=fea4a2d040a0d8d0 oracle_pin=07b0df8d63247695 (bilaterale, verificato)
+mode-probe OK (on=registri, off=pila)
+PASS fx21-args-window (7 righe byte-id nei 2 modi; riga 5 = golden §3.15 pinnato)
+-- fx21 rc=0
+== gate w9 ==
+phpr_pin=fea4a2d040a0d8d0 (verificato)
+mode-probe OK (on=registri, off=pila)
+probe-finestra OK (w9b=BinaryTCPropSetPop, w9a=PropGetSlotRecv)
+PASS w9a-undef-get-lancia
+PASS w9b-typeerror-obj-in-pila
+w9_fixtures_fail=0
+-- w9 rc=0
+== gate preg ==
+phpr_pin=fea4a2d040a0d8d0 oracle_pin=07b0df8d63247695 (bilaterale, verificato)
+PASS fx-preg-re1 (10 righe byte-id nei 2 modi; righe 2/11 = golden §3.18 pinnati)
+-- preg rc=0
+== gate teardown ==
+phpr_pin=fea4a2d040a0d8d0 oracle_pin=07b0df8d63247695 (bilaterale, verificato)
+PASS teardown (7 fixture byte-id nei 2 modi)
+-- teardown rc=0
+== gate stash ==
+STASH-GATE ok: php-server-s162 = f6d4a63b23b963da
+STASH-GATE ok: php-server-s161 = cad5cf83fa2309c9
+STASH-GATE ok: phpr-s163 = fea4a2d040a0d8d0
+STASH-GATE ok: phpr-s162 = 20c63af44bfd077a
+STASH-GATE rc=0 (0 = 4/4 conformi al registro)
+-- stash rc=0
+== gate backtrace ==
+phpr_pin=fea4a2d040a0d8d0 oracle_pin=07b0df8d63247695 (bilaterale, verificato)
+PASS fx-backtrace (byte-id vs oracle nei 2 modi)
+-- backtrace rc=0
+FIXTURE-CHAIN inventario=hc1 move recv fx20 fx21 w9 preg teardown stash backtrace
+FIXTURE-CHAIN rc_totale=0 (0 = tutte verdi, inventario conforme)

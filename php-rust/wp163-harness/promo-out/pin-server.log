@@ -1,0 +1,220 @@
+   Compiling smallvec v1.15.2
+   Compiling serde_json v1.0.150
+   Compiling tracing v0.1.44
+   Compiling http v1.4.2
+   Compiling socket2 v0.6.4
+   Compiling httparse v1.10.1
+   Compiling syn v3.0.3
+   Compiling futures-core v0.3.32
+   Compiling form_urlencoded v1.2.2
+   Compiling errno v0.3.14
+   Compiling signal-hook-registry v1.4.8
+   Compiling mio v1.2.1
+   Compiling parking_lot_core v0.9.12
+   Compiling mago-database v1.30.0
+   Compiling icu_normalizer v2.2.0
+   Compiling parking_lot v0.12.5
+   Compiling tower-service v0.3.3
+   Compiling tower-layer v0.3.3
+   Compiling slab v0.4.12
+   Compiling futures-task v0.3.32
+warning: function `xmlCanonicPath` is never used
+  --> crates/php-types/src/xsltio.rs:61:8
+   |
+61 |     fn xmlCanonicPath(path: *const c_char) -> *mut c_char;
+   |        ^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `php-types` (lib) generated 1 warning
+   Compiling rusqlite v0.40.1
+   Compiling idna_adapter v1.2.2
+   Compiling futures-util v0.3.32
+   Compiling idna v1.1.0
+   Compiling http-body v1.1.0
+   Compiling futures-channel v0.3.32
+   Compiling mago-span v1.30.0
+   Compiling url v2.5.8
+   Compiling mago-syntax-core v1.30.0
+   Compiling sync_wrapper v1.0.2
+   Compiling httpdate v1.0.3
+   Compiling atomic-waker v1.1.2
+   Compiling ureq-proto v0.6.0
+   Compiling http-body-util v0.1.4
+   Compiling mime v0.3.17
+   Compiling serde_urlencoded v0.7.1
+   Compiling ureq v3.3.0
+   Compiling schemars v1.2.1
+   Compiling serde-sarif v0.8.0
+   Compiling mysql_common v0.37.3
+   Compiling log4rs v1.4.0
+   Compiling serde_path_to_error v0.1.20
+   Compiling matchit v0.7.3
+   Compiling tower v0.4.13
+   Compiling num_cpus v1.17.0
+   Compiling mago-php-version v1.30.0
+   Compiling tokio-macros v2.7.2
+   Compiling async-trait v0.1.91
+   Compiling tokio v1.53.1
+   Compiling axum-core v0.4.5
+   Compiling mysql v28.0.0
+   Compiling mago-reporting v1.30.0
+   Compiling mago-syntax v1.30.0
+   Compiling hyper v1.11.0
+   Compiling tower v0.5.3
+   Compiling hyper-util v0.1.20
+   Compiling axum v0.7.9
+   Compiling php-runtime v0.1.0 (/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/crates/php-runtime)
+   Compiling php-builtins v0.1.0 (/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/crates/php-builtins)
+warning: function `gc_enable` is never used
+  --> crates/php-builtins/src/env.rs:19:8
+   |
+19 | pub fn gc_enable(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+   |        ^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `gc_enabled` is never used
+  --> crates/php-builtins/src/env.rs:24:8
+   |
+24 | pub fn gc_enabled(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+   |        ^^^^^^^^^^
+
+warning: function `gc_status` is never used
+  --> crates/php-builtins/src/env.rs:38:8
+   |
+38 | pub fn gc_status(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+   |        ^^^^^^^^^
+
+warning: unused `Result` that must be used
+   --> crates/php-builtins/src/net.rs:151:13
+    |
+151 |             out.append(Zval::Str(PhpStr::new(v4.ip().to_string().into_bytes())));
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+    = note: `#[warn(unused_must_use)]` (part of `#[warn(unused)]`) on by default
+help: use `let _ = ...` to ignore the resulting value
+    |
+151 |             let _ = out.append(Zval::Str(PhpStr::new(v4.ip().to_string().into_bytes())));
+    |             +++++++
+
+   Compiling php-cli v0.1.0 (/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/crates/php-cli)
+warning: `php-builtins` (lib) generated 4 warnings
+   Compiling php-server v0.1.0 (/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/crates/php-server)
+    Finished `release` profile [optimized] target(s) in 2m 45s
+To https://github.com/francescotinti/php-rust.git
+   115714b3..42d38fac  main -> main
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+remote: error: non-monotonic index /Volumes/Extreme Pro/Claude/phpr-ci/repo.git/objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx        
+error: non-monotonic index ./objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx
+error: non-monotonic index ./objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx
+error: non-monotonic index ./objects/pack/._pack-32a8f36f8b0f64fe637ac92bbdf56974ad4ff63a.idx
+To /Volumes/Extreme Pro/Claude/phpr-ci/repo.git
+   115714b3..42d38fac  main -> main
+PIN server s163 = 8d76d6f129bfd4af @ 115714b3 (smoke OK, stashato, registrato+committato). pin phpr INVARIATO (fea4a2d040a0d8d0)
+NB: questo e' il pin COLLAUDATO AL MINIMO; le cifre server esigono il grado pieno.
