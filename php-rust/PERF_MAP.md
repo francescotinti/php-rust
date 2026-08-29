@@ -10,9 +10,10 @@ smoke +5,5 FUORI banda [8;22] SOTTO ⇒ ARBITRATO census: Δ=1 passaggio/miss
 ESATTO su class_exists ⇒ R=5 autorizzato; riconc. |0,5|<4,0; **SOTTO-MODELLO
 DICHIARATO — reperto capitale: il coeff del passaggio rimosso è PER-SITO**
 — TABELLA a registro (rev. S-161 #2): refl 12,0±2,5 (sonda s159) · arrfilter
-17,0±2,0 (sonda s161) · autoload **direzione firmata, magnitudine NON tarata**
-(rev. #1: D=+5,0 a 1 tick dalla soglia, conferma +3,0±5,0 = solo segno —
-rimisura su stash fermi DOVUTA S-162); conflitto pre-registrazioni UB a
+17,0±2,0 (sonda s161) · autoload **7,0±3,0 (rimisura S-162 su stash FERMI
+s160/s161, segni 5/5, COERENTE col R=5 +5,0: |Δ|=2,0 ≤ 2,0+rumore — rev. #1
+ASSOLTA, verdetto wp162-harness/s162-al2-rimisura-verdetto.out)**; conflitto
+pre-registrazioni UB a
 verbale (sonda p.6 diceva hostcall [9,5;14,5], criterio AL2 closure [15;19]:
 5,0 sotto ENTRAMBE, verdetto invariante)), 17 guardie ok (re
 morsa a R=2 −4,6/−4,5 e RIENTRATA a R=5 −3,3/−5,0, dichiarata), bl run_loop

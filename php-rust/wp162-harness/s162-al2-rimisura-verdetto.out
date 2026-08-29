@@ -1,0 +1,15 @@
+== s162 rimisura L-AL2 su stash FERMI (criterio s162-criterio-al2-rimisura.md; bracci MISURATI A=ceeb6e76(gemelloA==pin s160) B=ec0a636a(==pin s161); giudice m-missload N=10M) ==
+sentinella language-server inizio finestra: /Applications/Antigravity /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.96.0-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer 
+quiescenza rimisura: rc=0
+rimisura: giudice m-missload N=10000000 floor_A=0.03 floor_B=0.02
+  coppia1 [AB]: rawA=2.84 rawB=2.81
+  coppia2 [BA]: rawA=2.87 rawB=2.79
+  coppia3 [AB]: rawA=2.85 rawB=2.84
+  coppia4 [BA]: rawA=2.87 rawB=2.79
+  coppia5 [AB]: rawA=2.88 rawB=2.79
+RIMISURA m-missload: A=284.0 B=277.0 ns/miss D=+7.0 (rumore drop-1: A'=3.0 B'=2.0)
+drift vs R=5 s161 (+5.0): +2.0 · vs post-pin (+3.0): +4.0 (banda rumore 3.0)
+REGISTRO p.6: coeff sito-autoload = 7.0 ± 3.0 ns/miss su stash FERMI s160/s161 — TABELLA PER-SITO: refl 12.0±2.5 · arrfilter 17.0±2.0 · autoload 7.0±3.0
+INTORNO p.7: |D-5.0|=2.0 <= 2.0+rumore(3.0) — cifra COERENTE col R=5 di promozione
+sentinella language-server fine finestra: /Applications/Antigravity /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.96.0-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer 
+ESITO: rc=0 (rimisura + decisione agli atti)
