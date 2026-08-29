@@ -1,0 +1,82 @@
+== s162-ab-am2 am2smoke: A=ec0a636a MISURATO (gemello dal tree corrente s161) B=20c63af4 MISURATO R=2 ordine ALTERNATO; giudice=strmap N=10000000 elementi dichiarato; soglia=max(4, drop-1); UB dal modello PER-SITO: pavimento autoload 7,0±3,0 (rimisura s162), tetto rif arrfilter 19,0 ⇒ attesa [4;19]; BANDA SMOKE VINCOLANTE [4;19] nel giudice + emenda rev. S-161 #4; guardie missload(N=10M, presidio DIRETTO L-AL2) + arrfilter(N=10M, L-AF1) + arrmap(N=10M, L-AM1) + refl(N=10M) + hostargs(N=10M) + backtrace24(N=2,4M) + obj* + sei, comparatore STRETTO; quiescenza rc=0; rc autoritativo = ab-out/am2smoke.rc ==
+sentinella language-server inizio finestra (az.rev. S-157 #4): /Applications/Antigravity /Users/francescotinti/.antigravity-ide/extensions/rust-lang.rust-analyzer-0.3.3025-darwin-arm64/server/rust-analyzer /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.96.0-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer 
+cat=strmap N=10000000 floor_A=0.02 floor_B=0.03
+  coppia1 [AB]: rawA=1.70 rawB=1.03
+  coppia2 [BA]: rawA=1.70 rawB=1.04
+cat=missload N=10000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=2.79 rawB=2.80
+  coppia2 [BA]: rawA=2.80 rawB=2.82
+cat=arrfilter N=10000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=1.80 rawB=1.80
+  coppia2 [BA]: rawA=1.82 rawB=1.80
+cat=arrmap N=10000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=1.17 rawB=1.15
+  coppia2 [BA]: rawA=1.17 rawB=1.16
+cat=refl N=10000000 floor_A=0.03 floor_B=0.02
+  coppia1 [AB]: rawA=3.51 rawB=3.54
+  coppia2 [BA]: rawA=3.49 rawB=3.52
+cat=hostargs N=10000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=2.03 rawB=2.00
+  coppia2 [BA]: rawA=2.00 rawB=2.01
+cat=backtrace N=2400000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=1.13 rawB=1.11
+  coppia2 [BA]: rawA=1.12 rawB=1.12
+cat=objdropdef N=3000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=3.11 rawB=3.10
+  coppia2 [BA]: rawA=3.10 rawB=3.11
+cat=objchurn N=3000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=3.55 rawB=3.54
+  coppia2 [BA]: rawA=3.56 rawB=3.54
+cat=objdatains N=3000000 floor_A=0.03 floor_B=0.02
+  coppia1 [AB]: rawA=2.91 rawB=2.91
+  coppia2 [BA]: rawA=2.89 rawB=2.89
+cat=objalloc N=3000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=2.43 rawB=2.42
+  coppia2 [BA]: rawA=2.41 rawB=2.42
+cat=objallocni N=3000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=2.22 rawB=2.22
+  coppia2 [BA]: rawA=2.23 rawB=2.22
+cat=objmap N=3000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=0.37 rawB=0.37
+  coppia2 [BA]: rawA=0.37 rawB=0.38
+cat=arith N=150000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=7.17 rawB=7.11
+  coppia2 [BA]: rawA=7.06 rawB=7.09
+cat=prop N=90000000 floor_A=0.03 floor_B=0.02
+  coppia1 [AB]: rawA=6.94 rawB=6.96
+  coppia2 [BA]: rawA=6.97 rawB=6.97
+cat=calls N=60000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=6.40 rawB=6.40
+  coppia2 [BA]: rawA=6.37 rawB=6.36
+cat=str N=28000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=4.43 rawB=4.44
+  coppia2 [BA]: rawA=4.43 rawB=4.42
+cat=arr N=30000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=4.47 rawB=4.54
+  coppia2 [BA]: rawA=4.45 rawB=4.53
+cat=re N=12000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=5.50 rawB=5.53
+  coppia2 [BA]: rawA=5.50 rawB=5.53
+GIUDICE strmap: A=168.0 B=100.5 ns/elemento D=+67.5 soglia=4.0 (rumore drop-1: A'=0.0 B'=1.0) -> SOPRA SOGLIA
+riconciliazione UB strmap: D=+67.5 vs attesa [4.0;19.0]+rumore=1.0 -> FUORI-UB SOPRA (reperto a verbale, sonda dovuta)
+BANDA SMOKE VINCOLANTE strmap: D_smoke=+67.5 in [4.0;19.0] -> FUORI BANDA: rc=6, ARBITRATO census PRIMA del R=5 (criterio p.5)
+guardia missload: A=277.5 B=279.0 D=-1.5 soglia_reg=-4.0 [max(4, drop-1); rumore drop-1 A'=1.0 B'=2.0] -> ok
+guardia arrfilter: A=179.0 B=178.0 D=+1.0 soglia_reg=-4.0 [max(4, drop-1); rumore drop-1 A'=2.0 B'=0.0] -> ok
+guardia arrmap: A=115.0 B=113.5 D=+1.5 soglia_reg=-4.0 [max(4, drop-1); rumore drop-1 A'=0.0 B'=1.0] -> ok
+guardia refl: A=347.0 B=351.0 D=-4.0 soglia_reg=-4.0 [max(4, drop-1); rumore drop-1 A'=2.0 B'=2.0] -> ok
+guardia hostargs: A=199.5 B=198.5 D=+1.0 soglia_reg=-4.0 [max(4, drop-1); rumore drop-1 A'=3.0 B'=1.0] -> ok
+guardia backtrace: A=460.4 B=456.2 D=+4.2 soglia_reg=-4.2 [max(4, drop-1); rumore drop-1 A'=4.2 B'=4.2] -> ok
+guardia objdropdef: A=1028.3 B=1028.3 D=+0.0 soglia_reg=-4.0 [max(4, drop-1); rumore drop-1 A'=3.3 B'=3.3] -> ok
+guardia objchurn: A=1178.3 B=1173.3 D=+5.0 soglia_reg=-6.7 [banda fondata=6.7; rumore drop-1 A'=3.3 B'=0.0] -> ok
+guardia objdatains: A=956.7 B=960.0 D=-3.3 soglia_reg=-6.7 [max(4, drop-1); rumore drop-1 A'=6.7 B'=6.7] -> ok
+guardia objalloc: A=800.0 B=800.0 D=+0.0 soglia_reg=-13.3 [banda fondata=13.3; rumore drop-1 A'=6.7 B'=0.0] -> ok
+guardia objallocni: A=735.0 B=733.3 D=+1.7 soglia_reg=-10.0 [banda fondata=10.0; rumore drop-1 A'=3.3 B'=0.0] -> ok
+guardia objmap: A=116.7 B=118.3 D=-1.7 soglia_reg=-4.0 [banda fondata=3.3; rumore drop-1 A'=0.0 B'=3.3] -> ok
+guardia arith: A=47.3 B=47.2 D=+0.1 soglia_reg=-4.0 [SL=0.94; rumore drop-1 A'=0.7 B'=0.1] -> ok
+guardia prop: A=76.9 B=77.2 D=-0.2 soglia_reg=-4.0 [SL=0.8; rumore drop-1 A'=0.3 B'=0.1] -> ok
+guardia calls: A=106.1 B=106.0 D=+0.1 soglia_reg=-4.0 [SL=0.73; rumore drop-1 A'=0.5 B'=0.7] -> ok
+guardia str: A=157.5 B=157.5 D=-0.0 soglia_reg=-4.0 [SL=2.89; rumore drop-1 A'=0.0 B'=0.7] -> ok
+guardia arr: A=148.0 B=150.5 D=-2.5 soglia_reg=-4.0 [SL=2.49; rumore drop-1 A'=0.7 B'=0.3] -> ok
+guardia re: A=456.7 B=459.2 D=-2.5 soglia_reg=-4.5 [SL=4.46; rumore drop-1 A'=0.0 B'=0.0] -> ok
+ESITO: FUORI BANDA SMOKE (arbitrato dovuto)
+sentinella language-server fine finestra: /Applications/Antigravity /Users/francescotinti/.antigravity-ide/extensions/rust-lang.rust-analyzer-0.3.3025-darwin-arm64/server/rust-analyzer /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.96.0-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer 
