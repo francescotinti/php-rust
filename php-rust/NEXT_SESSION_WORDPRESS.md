@@ -11,7 +11,9 @@ attesa-AF1 NON risolta per AMPIEZZA, coerente col tetto ~0; dbal
 s162)**: smoke +67,5 FUORI banda [4;19] SOPRA → census **2 alloc/elemento
 ESATTE** (vec+nome; attesa p.5 contraddiceva p.1: errore pre-registro
 DICHIARATO) → R=5 **D=+65,0** 18/18 guardie → promo rc=0 SENZA rettifiche,
-conferma post-pin +68,0 CIFRA PIENA · §3.26 a catalogo · leve S-162: **1
+conferma post-pin +68,0 CIFRA PIENA · §3.26 a catalogo · revisione
+SEMANTICA: **REGGE CON RILIEVI** (5, recepiti in §S-163: ammissione più
+larga delle fixture; coeff strmap DA DECOMPORRE) · leve S-162: **1
 (promossa) + rimisura** · incidenti **19 + 2 in ratifica (#20 #21), 0
 nuovi** · QUESITI UTENTE PENDENTI: (a) T2/A2 sospendere (racc. S-155);
 (b) census server (12° slitt.); (c) ratifica #20 #21; (d) emenda §3
@@ -33,15 +35,20 @@ corpus **1412×2** · batteria 1748/0/2 (cap loc **25847/7726**).
    NON censita) ⇒ attesa dichiarata sotto-risoluzione/~zero. RIF ORM per il
    giudizio: s162 [7,035;7,086] gambe pulite, ORA_REF=4,885 (oracle 4,87/4,90)
    — banda giudizio mediana WP INVARIATA [1,738;1,799] + t12=1,767.
-2. **Leva (obbligo di ritmo)** — candidata per NOME: **autoload
-   array-callable [obj,method] k=1** (quota ORM Composer PAGANTE: il loader
-   vero è ClassLoader::loadClass — superficie più larga di L-AL2; UB dal
-   sito autoload 7,0±3,0 + componenti PROPRIE contate sul bundle, lezione
-   s162: si CONTANO le alloc, mai per analogia). Alternativa:
-   MethodCall.borrow k=2 (aperture).
-3. **Emenda §3 + quesiti (a)-(d)** se l'utente ratifica/risponde.
-4. Companion: annotare il tick arith alla promo; dbal riserva (se ricorre su
-   finestra quieta, istruttoria denominatore-corto).
+2. **Azioni revisione S-162 (PRIMA di nuove leve sul sito strmap)**: (a)
+   estendere fx-sm con default-param `h($x=5)`, return-hint, namespaced
+   ('ns\f'), generator-via-stringa (rev. #1-#2: l'ammissione simple_call è
+   più larga delle fixture); (b) fx-sm-div + §3.26: caso callback-invalida
+   con array VUOTO (oracle TypeError, phpr [] muto); (c) **sonda FUORI-UB**:
+   decomporre il bundle strmap (65,0 = 2 alloc + find_fn_ci + bind) prima
+   di USARE il quinto coeff come UB altrui; (d) unreachable! sul braccio
+   morto di call_fn_one (edit da criterio, non urgente).
+3. **Leva (obbligo di ritmo)** — candidata per NOME: **autoload
+   array-callable [obj,method] k=1** (quota ORM Composer PAGANTE; UB dal
+   sito autoload 7,0±3,0 + componenti CONTATE sul bundle, mai per
+   analogia). Alternativa: MethodCall.borrow k=2 (aperture).
+4. **Emenda §3 + quesiti (a)-(d)** se l'utente ratifica/risponde; companion:
+   tick arith alla promo; dbal riserva (se ricorre, istruttoria).
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
 autoload array-callable k=1 · MethodCall.borrow k=2 · elementi/frazioni
