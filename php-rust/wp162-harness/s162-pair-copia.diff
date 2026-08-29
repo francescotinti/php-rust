@@ -1,0 +1,75 @@
+2,4c2,4
+< # s161-pair.sh <tentativo> — S-161 p.2a: coppia full/media WP @ pin s160 (DOVUTA: pin nuovo)
+< # criteri s132/s146/s148 EREDITATI INVARIATI + s161-criterio-pair-t11.md
+< # (GIUDIZIO CANONICO a MEDIANA per finestra vs t1=1,799 t2=1,738 t3=1,789 t4=1,781 t5=1,757 t6=1,771 t7=1,795 t8=1,754 t9=1,767 t10=1,760 —
+---
+> # s162-pair.sh <tentativo> — S-162 p.1a: coppia full/media WP @ pin s161 (DOVUTA: pin nuovo)
+> # criteri s132/s146/s148 EREDITATI INVARIATI + s162-criterio-pair-t12.md
+> # (GIUDIZIO CANONICO a MEDIANA per finestra vs t1=1,799 t2=1,738 t3=1,789 t4=1,781 t5=1,757 t6=1,771 t7=1,795 t8=1,754 t9=1,767 t10=1,760 t11=1,765 —
+6,11c6,12
+< # COPIA DICHIARATA di wp160-harness/s160-pair.sh (collaudo: copia-gate a
+< # verifica POSITIVA + manifest s161-pair-copia.diff) coi SOLI adattamenti:
+< # nomi s161/pair161/wp161-harness/t11; pin s160 (phpr ceeb6e76 + server
+< # 001a4b2b); mediane storiche con t10=1,760 (banda giudizio INVARIATA
+< # [1,738;1,799]); attesa di leva nel messaggio GIU': L-AF1 (non L-AM1),
+< # dichiarata SOTTO-risoluzione (sonda s161: 17,0±2,0 ns/passaggio-closure);
+---
+> # COPIA DICHIARATA di wp161-harness/s161-pair.sh (collaudo: copia-gate a
+> # verifica POSITIVA + manifest s162-pair-copia.diff) coi SOLI adattamenti:
+> # nomi s162/pair162/wp162-harness/t12; pin s161 (phpr ec0a636a + server
+> # cad5cf83); mediane storiche con t11=1,765 (banda giudizio INVARIATA
+> # [1,738;1,799]); attesa di leva nel messaggio GIU': L-AL2 (non L-AF1),
+> # dichiarata SOTTO-risoluzione (quota loader-closure WP mai censita;
+> # coeff sito-autoload: rimisura s162 su stash fermi, tabella PER-SITO);
+17c18
+< # rc autoritativo = SOLO pair-out/pair161-<tentativo>.done scritto QUI.
+---
+> # rc autoritativo = SOLO pair-out/pair162-<tentativo>.done scritto QUI.
+21c22
+< H="$REPO/wp161-harness"
+---
+> H="$REPO/wp162-harness"
+26c27
+< VERD="$H/s161-pair-verdetto-$T.out"
+---
+> VERD="$H/s162-pair-verdetto-$T.out"
+31c32
+< DONE="$OUT/pair161-$T.done"
+---
+> DONE="$OUT/pair162-$T.done"
+40,41c41,42
+< PIN_ATTESO="ceeb6e76e4ef5ace"
+< SRV_ATTESO="001a4b2bf04a73ae"
+---
+> PIN_ATTESO="ec0a636ad0c42005"
+> SRV_ATTESO="cad5cf83fa2309c9"
+156,157c157,158
+< print(f"== s161 coppia WP full+media sul pin s160 MISURATO phpr={PINH} server={SRVH} tentativo={T} (criteri s132/s146/s148 EREDITATI + s161-criterio-pair-t11.md: giudizio a MEDIANA per finestra, az.rev.3 S-149) ==")
+< print(f"grade=VERDICT  # derivazione meccanica dai .time; rc autoritativo = pair-out/pair161-{T}.done")
+---
+> print(f"== s162 coppia WP full+media sul pin s161 MISURATO phpr={PINH} server={SRVH} tentativo={T} (criteri s132/s146/s148 EREDITATI + s162-criterio-pair-t12.md: giudizio a MEDIANA per finestra, az.rev.3 S-149) ==")
+> print(f"grade=VERDICT  # derivazione meccanica dai .time; rc autoritativo = pair-out/pair162-{T}.done")
+230,231c231,232
+<         # s161-criterio-pair-t11.md p.2 (az.rev.3 S-149): GIUDIZIO CANONICO a
+<         # MEDIANA per finestra vs mediane storiche t1=1,799 t2=1,738 t3=1,789 t4=1,781 t5=1,757 t6=1,771 t7=1,795 t8=1,754 t9=1,767 t10=1,760;
+---
+>         # s162-criterio-pair-t12.md p.2 (az.rev.3 S-149): GIUDIZIO CANONICO a
+>         # MEDIANA per finestra vs mediane storiche t1=1,799 t2=1,738 t3=1,789 t4=1,781 t5=1,757 t6=1,771 t7=1,795 t8=1,754 t9=1,767 t10=1,760 t11=1,765;
+234,239c235,240
+<         med_t11 = statistics.median(props)
+<         print(f"mediana_t11={med_t11:.3f} (N={len(props)} coppie proprie ON PULITE; mediane storiche t1=1.799 t2=1.738 t3=1.789 t4=1.781 t5=1.757 t6=1.771 t7=1.795 t8=1.754 t9=1.767 t10=1.760)")
+<         if MED_LO <= med_t11 <= MED_HI:
+<             print(f"giudizio_MEDIANA (canonico, criterio t11 p.2): COMPATIBILE (mediana in [{MED_LO}; {MED_HI}]) — nessun claim")
+<         elif med_t11 < MED_LO:
+<             print(f"giudizio_MEDIANA (canonico, criterio t11 p.2): direzione GIU' SEGNALATA (mediana {med_t11:.3f} < {MED_LO}) — attesa L-AF1 su WP dichiarata SOTTO-risoluzione: NON attribuibile senza census proprio")
+---
+>         med_t12 = statistics.median(props)
+>         print(f"mediana_t12={med_t12:.3f} (N={len(props)} coppie proprie ON PULITE; mediane storiche t1=1.799 t2=1.738 t3=1.789 t4=1.781 t5=1.757 t6=1.771 t7=1.795 t8=1.754 t9=1.767 t10=1.760 t11=1.765)")
+>         if MED_LO <= med_t12 <= MED_HI:
+>             print(f"giudizio_MEDIANA (canonico, criterio t12 p.2): COMPATIBILE (mediana in [{MED_LO}; {MED_HI}]) — nessun claim")
+>         elif med_t12 < MED_LO:
+>             print(f"giudizio_MEDIANA (canonico, criterio t12 p.2): direzione GIU' SEGNALATA (mediana {med_t12:.3f} < {MED_LO}) — attesa L-AL2 su WP dichiarata SOTTO-risoluzione: NON attribuibile senza census proprio")
+241c242
+<             print(f"giudizio_MEDIANA (canonico, criterio t11 p.2): REGRESSIONE SEGNALATA (mediana {med_t11:.3f} > {MED_HI}) — indagine PRIMA di ogni altra leva")
+---
+>             print(f"giudizio_MEDIANA (canonico, criterio t12 p.2): REGRESSIONE SEGNALATA (mediana {med_t12:.3f} > {MED_HI}) — indagine PRIMA di ogni altra leva")

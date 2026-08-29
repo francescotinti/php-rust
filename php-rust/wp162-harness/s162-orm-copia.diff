@@ -1,0 +1,51 @@
+2,7c2,7
+< # s161-orm-coppia.sh — coppia dbal+ORM sul pin s160 = rimisura DOVUTA (pin
+< # nuovo) con attesa L-AF1 SOTTO-risoluzione (criterio
+< # s161-criterio-orm.md; copia DICHIARATA di s160-orm-coppia.sh, manifest
+< # s161-orm-copia.diff; adattamenti: pin s160 ceeb6e76e4ef5ace, path wp161,
+< # blocco ATTESA a GIUDIZIO SINGOLO oracle-normalizzato:
+< # attesa-AF1 vs RIF s160-finestra [34,96;35,20] gambe PULITE (nessuna nota),
+---
+> # s162-orm-coppia.sh — coppia dbal+ORM sul pin s161 = rimisura DOVUTA (pin
+> # nuovo + finestra s161 CONTAMINATA: cifra NULLA, attesa-AF1 NON chiusa)
+> # (criterio s162-criterio-orm.md; copia DICHIARATA di s161-orm-coppia.sh,
+> # manifest s162-orm-copia.diff; adattamenti: pin s161 ec0a636ad0c42005,
+> # path wp162, blocco ATTESA a GIUDIZIO SINGOLO oracle-normalizzato:
+> # attesa-AF1 EREDITATA vs RIF s160-finestra [34,96;35,20] gambe PULITE,
+9,10c9,13
+< # tetto DICHIARATO (census 1,83M passaggi x 17,0+2,0 ns sonda s161).
+< # replica-AL1 RIMOSSA: attesa CHIUSA in S-160 (adattamento DICHIARATO).
+---
+> # tetto DICHIARATO (census 1,83M passaggi x 17,0+2,0 ns sonda s161);
+> # attesa-AL2 su ORM ~ZERO DICHIARATA (loader Composer ARRAY-callable, NON
+> # ammesso dal fast path k=1: il tetto NON sale). SENTINELLA CONTAMINAZIONE
+> # (lezione S-161): oracle net fuori dal SUO rif storico ⇒ cifra NULLA anche
+> # a flag per-gamba muti — giudizio nella LETTURA, blocco meccanico intatto.
+26c29
+< H="$REPO/wp161-harness"
+---
+> H="$REPO/wp162-harness"
+33c36
+< VERD="$H/s161-orm-coppia-verdetto.out"
+---
+> VERD="$H/s162-orm-coppia-verdetto.out"
+38c41
+< [ "$PINM" = "ceeb6e76e4ef5ace" ] || { echo "rc=9 pin!=s160" > "$OUT/rimisura.done"; exit 9; }
+---
+> [ "$PINM" = "ec0a636ad0c42005" ] || { echo "rc=9 pin!=s161" > "$OUT/rimisura.done"; exit 9; }
+159c162
+< print("coppia-s161 (user CPU; pavimenti PARZIALI phpunit --version: orm o=%.3f p=%.3f · dbal o=%.3f p=%.3f)" % (fo, fp, dfo, dfp))
+---
+> print("coppia-s162 (user CPU; pavimenti PARZIALI phpunit --version: orm o=%.3f p=%.3f · dbal o=%.3f p=%.3f)" % (fo, fp, dfo, dfp))
+187c190
+< # --- ATTESA L-AF1 (criterio s161-criterio-orm.md p.2, aritmetica meccanica) ---
+---
+> # --- ATTESA L-AF1 (criterio s162-criterio-orm.md p.2, aritmetica meccanica) ---
+194c197
+< ATT_LO, ATT_HI = 0.0, 0.035        # attesa L-AF1: TETTO dichiarato (census s149 1,83M passaggi x 17,0+2,0 ns sonda s161; frazione ammessa/elementi NON censiti)
+---
+> ATT_LO, ATT_HI = 0.0, 0.035        # attesa L-AF1: TETTO dichiarato (census s149 1,83M passaggi x 17,0+2,0 ns sonda s161; frazione ammessa/elementi NON censiti); attesa-AL2 ~ZERO (Composer array-callable NON ammesso): il tetto NON sale
+238c241
+< { echo "== s161 coppia dbal+ORM (pin s160 MISURATO $PINM vs oracle 8.5.7; criterio s161-criterio-orm.md) =="
+---
+> { echo "== s162 coppia dbal+ORM (pin s161 MISURATO $PINM vs oracle 8.5.7; criterio s162-criterio-orm.md) =="
