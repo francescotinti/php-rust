@@ -1,0 +1,124 @@
+diff --git a/php-rust/crates/php-runtime/src/vm/calls.rs b/php-rust/crates/php-runtime/src/vm/calls.rs
+index 630d92c2..60d1d320 100644
+--- a/php-rust/crates/php-runtime/src/vm/calls.rs
++++ b/php-rust/crates/php-runtime/src/vm/calls.rs
+@@ -682,6 +682,44 @@ impl<'m> Vm<'m> {
+         self.drive_to_return(baseline)
+     }
+ 
++    /// L-AM2 (S-162): once-per-host-call resolution of a plain string
++    /// callable to a user function admitted for the arity-1 no-Vec path.
++    /// Mirrors `invoke_named`'s user-function resolution (leading-backslash
++    /// strip, `find_fn_ci`, then `linked_functions`); admission is
++    /// `simple_call` with exactly one parameter. Any other shape — builtin,
++    /// `"Class::method"` (never a function name), a name that does not
++    /// resolve — returns `None` and stays on the generic loop. Hoisting is
++    /// idempotent: a user name that already resolves cannot change its
++    /// resolution mid-call (redefinition is fatal; linking only adds names).
++    pub(super) fn resolve_fn_one(&self, name: &[u8]) -> Option<(&'m Module, usize)> {
++        let name = name.strip_prefix(b"\\").unwrap_or(name);
++        let hit = self
++            .module
++            .find_fn_ci(name)
++            .map(|i| (self.module, i))
++            .or_else(|| self.linked_functions.get(LcKey::new(name).as_slice()).copied())?;
++        let f = &hit.0.functions[hit.1];
++        (f.simple_call && f.n_params == 1).then_some(hit)
++    }
++
++    /// L-AM2 (S-162): arity-1 mirror of [`Self::call_callable`] for a
++    /// pre-admitted user function named by a string callable — same
++    /// baseline/drive contract as [`Self::call_closure_one`], no args-Vec.
++    pub(super) fn call_fn_one(&mut self, fmod: &'m Module, idx: usize, arg: Zval) -> Result<Zval, PhpError> {
++        let baseline = self.frames.len();
++        self.push_fn_frame_one(fmod, idx, arg)?;
++        if self.frames.len() == baseline {
++            // Mirror of call_callable's no-frame arm: unreachable for a user
++            // function body (which always pushes a frame); kept for
++            // structural equality with the full path.
++            return Ok(self.frames[baseline - 1]
++                .stack
++                .pop()
++                .expect("host callable result on the caller stack"));
++        }
++        self.drive_to_return(baseline)
++    }
++
+     /// Normalise the `$newThis` argument of `bindTo`/`bind`/`call`: an object
+     /// binds, `null` (or anything else) clears the binding (step 19-6).
+     fn closure_this_arg(v: Option<Zval>) -> Option<Zval> {
+diff --git a/php-rust/crates/php-runtime/src/vm/host.rs b/php-rust/crates/php-runtime/src/vm/host.rs
+index 1f50e177..c82902f9 100644
+--- a/php-rust/crates/php-runtime/src/vm/host.rs
++++ b/php-rust/crates/php-runtime/src/vm/host.rs
+@@ -1993,6 +1993,24 @@ impl<'m> super::Vm<'m> {
+                         }
+                     }
+                 }
++                // L-AM2 (S-162): 1 array + STRING-callable a funzione UTENTE
++                // simple_call arità-1 — risoluzione UNA volta per chiamata
++                // (niente to_vec del nome, scan «::» né find_fn_ci
++                // per-elemento), poi dispatch per-elemento senza args-Vec via
++                // call_fn_one (stesso contratto di call_closure_one). Ogni
++                // altra forma (builtin, "Class::method", array-callable,
++                // closure non ammessa) cade sul loop generico sotto,
++                // invariato per costruzione: un nome che non risolve a
++                // funzione utente semplice arità-1 non entra qui.
++                if let Zval::Str(s) = &cb {
++                    if let Some((fm, idx)) = self.resolve_fn_one(s.as_bytes()) {
++                        for (k, v) in entries {
++                            let mapped = self.call_fn_one(fm, idx, v)?;
++                            out.insert(k, mapped);
++                        }
++                        return Ok(Zval::Array(Rc::new(out)));
++                    }
++                }
+             }
+             for (k, v) in entries {
+                 let mapped = if null_cb { v } else { self.call_callable(cb.clone(), vec![v])? };
+diff --git a/php-rust/crates/php-runtime/src/vm/mod.rs b/php-rust/crates/php-runtime/src/vm/mod.rs
+index 101af17a..8b28b59f 100644
+--- a/php-rust/crates/php-runtime/src/vm/mod.rs
++++ b/php-rust/crates/php-runtime/src/vm/mod.rs
+@@ -11465,6 +11465,22 @@ impl<'m> Vm<'m> {
+         self.enter_callee(frame)
+     }
+ 
++    /// L-AM2 (S-162): install a frame for a pre-admitted user function with
++    /// a single by-value argument, without materializing an args-Vec.
++    /// Admission (checked once by the caller, per host call, via
++    /// [`Self::resolve_fn_one`]): `simple_call && n_params == 1`; a host
++    /// value is never an `ArgPlace`. Mirrors `invoke_named`'s user-function
++    /// arm minus `bind_params`' Vec: the intake equals its simple-call arm
++    /// at arity 1 (`argc = 1; slots[0] = decay_arg(arg)`).
++    fn push_fn_frame_one(&mut self, fmod: &'m Module, idx: usize, arg: Zval) -> Result<(), PhpError> {
++        let callee = &fmod.functions[idx];
++        debug_assert!(callee.simple_call && callee.n_params == 1);
++        let mut frame = self.pooled_frame(callee, fmod);
++        frame.argc = 1;
++        frame.slots[0] = decay_arg(arg);
++        self.enter_callee(frame)
++    }
++
+     /// Like [`Self::push_magic_call`] but the forwarded `$args` array also carries
+     /// any **named arguments** keyed by name (string keys), matching PHP's `__call`
+     /// behaviour for `$obj->missing(x: 1)` (Session A).
+diff --git a/php-rust/crates/php-runtime/tests/loc_dente.rs b/php-rust/crates/php-runtime/tests/loc_dente.rs
+index 0d1dbea7..83d3c643 100644
+--- a/php-rust/crates/php-runtime/tests/loc_dente.rs
++++ b/php-rust/crates/php-runtime/tests/loc_dente.rs
+@@ -47,8 +47,12 @@ fn nessun_sorgente_rs_oltre_cap() {
+         // array_map); calls.rs (+21) resta fuori allowlist sotto il cap 2000.
+         // S-161: salita DICHIARATA +21 (leva L-AL2: fast path loader autoload
+         // k=1 in try_autoload — criterio s161-criterio-al2.md p.1).
+-        ("php-runtime/src/vm/mod.rs", 25831, "monolite VM — bersaglio A2; +21 L-AL2 S-161 PRE-dichiarato"),
+-        ("php-runtime/src/vm/host.rs", 7708, "hostcall — backlog A2; +25 L-AF1 S-160 PRE-dichiarato"),
++        // S-162 L-AM2: salita PRE-dichiarata (criterio s162-criterio-am2.md
++        // p.1) — mod.rs +16 (push_fn_frame_one), host.rs +18 (fast path
++        // array_map string-callable); calls.rs (+38) resta fuori allowlist
++        // sotto il cap 2000.
++        ("php-runtime/src/vm/mod.rs", 25847, "monolite VM — bersaglio A2; +16 L-AM2 S-162 PRE-dichiarato"),
++        ("php-runtime/src/vm/host.rs", 7726, "hostcall — backlog A2; +18 L-AM2 S-162 PRE-dichiarato"),
+         // S-156: salita DICHIARATA +29 (leva HD2-hostcall: braccio
+         // CallHostBuiltin, pop diretti ≤4) — verbale wp156-harness/s156-promo.
+         ("php-runtime/src/vm/run.rs", 6815, "run_loop — ULTIMO o mai (A2)"),

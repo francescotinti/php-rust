@@ -1,0 +1,15 @@
+== s162 identita' gemello A (criterio am2 p.3) ==
+tentativo 1 SCARTATO PRIMA di ogni uso: build `-p php-cli` (target dedicato
+/private/tmp/s162-tgtA) → a4b2029291089706 != pin ec0a636ad0c42005. Causa
+DICHIARATA: ricetta NON conforme — il pin nasce da `cargo build --release`
+sull'INTERO workspace (pin-phpr.sh, pipeline A'); la selezione `-p php-cli`
+cambia l'unificazione delle feature. Nessuno stash, nessuna misura: scartato
+al confronto hash, target rimosso.
+tentativo 2: ricetta INTERA (SOURCE_DATE_EPOCH=0 CARGO_INCREMENTAL=0
+cargo build --release, CARGO_TARGET_DIR dedicato /private/tmp/s162-tgtA) →
+a4b2029291089706 == tentativo 1: DETERMINISMO CONFERMATO, la differenza dal
+pin e' il PATH del target dir cotto nel binario (il pin nasce nel target
+canonico ~/Claude/php-rust-output, dove la ricetta ha riprodotto ec0a636a
+AL BYTE 2 volte a s161-promo). Scartato senza uso, target rimosso.
+tentativo 3: ricetta INTERA nel target CANONICO — esito a seguire.
+
