@@ -33,13 +33,12 @@ corpus **1412×2** · batteria 1748/0/2 (cap loc **25847/7726**).
    giudizio: s162 [7,035;7,086] gambe pulite, ORA_REF=4,885 (oracle 4,87/4,90)
    — banda giudizio mediana WP INVARIATA [1,738;1,799] + t12=1,767.
 2. **Azioni revisione S-162 (PRIMA di nuove leve sul sito strmap)**: (a)
-   estendere fx-sm con default-param `h($x=5)`, return-hint, namespaced
-   ('ns\f'), generator-via-stringa (rev. #1-#2: l'ammissione simple_call è
-   più larga delle fixture); (b) fx-sm-div + §3.26: caso callback-invalida
-   con array VUOTO (oracle TypeError, phpr [] muto); (c) **sonda FUORI-UB**:
-   decomporre il bundle strmap (65,0 = 2 alloc + find_fn_ci + bind) prima
-   di USARE il quinto coeff come UB altrui; (d) unreachable! sul braccio
-   morto di call_fn_one (edit da criterio, non urgente).
+   estendere fx-sm: default-param, return-hint, namespaced, generator-via-
+   stringa (l'ammissione simple_call è più larga delle fixture); (b)
+   fx-sm-div + §3.26: callback-invalida con array VUOTO (oracle TypeError,
+   phpr [] muto); (c) **sonda FUORI-UB**: decomporre il bundle strmap prima
+   di usare il coeff come UB altrui; (d) unreachable! sul braccio morto di
+   call_fn_one (da criterio, non urgente).
 3. **Leva (obbligo di ritmo)** — candidata per NOME: **autoload
    array-callable [obj,method] k=1** (quota ORM Composer PAGANTE; UB dal
    sito autoload 7,0±3,0 + componenti CONTATE sul bundle, mai per
