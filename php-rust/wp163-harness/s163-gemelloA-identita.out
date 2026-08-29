@@ -1,0 +1,6 @@
+== s163 gemello A — identita' (criterio au1 p.6) ==
+ricetta: SOURCE_DATE_EPOCH=0 CARGO_INCREMENTAL=0 cargo build --release (root workspace, target CANONICO ~/Claude/php-rust-output — lezione S-162: mai target dedicato)
+build a freddo post-prune: rc=0, primo tentativo
+hash misurato: 20c63af44bfd077a == pin s162 20c63af44bfd077a AL BYTE
+stash: phpr-old-target/release/phpr-s163-gemelloA (cmp rc=0)
+ESITO: braccio A VALIDO per s163-ab-au1.sh

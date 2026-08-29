@@ -1,0 +1,66 @@
+2,7c2,9
+< # s162-census-am2.sh — arbitrato census L-AM2 (criterio s162-criterio-am2.md
+< # p.5, dovuto: smoke +67,5 FUORI banda [4;19] SOPRA). Probe-B = tree HEAD con
+< # edit; probe-A = copia − s162-am2-edit.patch (4 file, loc_dente.rs = test,
+< # fuori da -p php-cli, DICHIARATO). Driver m-strmap-census.php 200×1000;
+< # attesa PRE-REGISTRATA: Delta hostcall_n = 200000 ESATTO su array_map, altri
+< # nomi zero. Struttura+parser COPIA DICHIARATA della FASE 1 di
+---
+> # s163-census-au1.sh — arbitrato census L-AU1 (criterio s163-criterio-au1.md
+> # p.3, dovuto: smoke +45,5 FUORI banda [12;30] SOPRA). Probe-B = tree HEAD con
+> # edit; probe-A = copia − s163-au1-edit.patch (3 file, loc_dente.rs = test,
+> # fuori da -p php-cli, DICHIARATO). Driver m-arrload-census.php N=200000;
+> # attesa PRE-REGISTRATA SULLO STRUMENTO (vecargs-at-bind per host-call):
+> # Delta hostcall_n = 200000 ESATTO su class_exists (il solo vec![arg] di
+> # try_autoload transita dal bind; elems-Vec e to_vec del nome NON transitano
+> # e restano contati DAL SORGENTE, criterio p.3), altri nomi zero. Struttura+parser COPIA DICHIARATA della FASE 1 di
+10c12
+< # s162-census-am2-verdetto.out; rc SOLO da census-out/census.done.
+---
+> # s163-census-au1-verdetto.out; rc SOLO da census-out/census.done.
+14,15c16,17
+< H="$REPO/wp162-harness"; OUT="$H/census-out"; mkdir -p "$OUT"
+< VERD="$H/s162-census-am2-verdetto.out"
+---
+> H="$REPO/wp163-harness"; OUT="$H/census-out"; mkdir -p "$OUT"
+> VERD="$H/s163-census-au1-verdetto.out"
+17,19c19,21
+< PATCH="$H/s162-am2-edit.patch"
+< DRV="$H/m-strmap-census.php"
+< SRC="/private/tmp/s162-census"
+---
+> PATCH="$H/s163-au1-edit.patch"
+> DRV="$H/m-arrload-census.php"
+> SRC="/private/tmp/s163-census"
+26,27c28,29
+< grep -qi "s-162\|s162" "$LOCK" 2>/dev/null || { echo "rc=9 lock assente/altrui" | tee -a "$VERD"; fin 9; }
+< echo "== s162 arbitrato census L-AM2 (criterio am2 p.5; probe-B = tree HEAD con edit, probe-A = copia − patch 4 file; driver 200×1000; smoke +67,5 FUORI banda SOPRA) ==" >> "$VERD"
+---
+> grep -qi "s-163\|s163" "$LOCK" 2>/dev/null || { echo "rc=9 lock assente/altrui" | tee -a "$VERD"; fin 9; }
+> echo "== s163 arbitrato census L-AU1 (criterio au1 p.3; probe-B = tree HEAD con edit, probe-A = copia − patch 3 file; driver N=200000; smoke +45,5 FUORI banda [12;30] SOPRA) ==" >> "$VERD"
+37,38c39,40
+< { [ "$NP" = 4 ] && [ "$NREJ" = 0 ]; } || { echo "rc=6 patch guardia: patching=$NP (atteso 4) rej=$NREJ (atteso 0)" >> "$VERD"; fin 6; }
+< echo "patch inversa: 4 file (calls/mod/host + loc_dente=test fuori da -p php-cli, DICHIARATO), zero rej" >> "$VERD"
+---
+> { [ "$NP" = 3 ] && [ "$NREJ" = 0 ]; } || { echo "rc=6 patch guardia: patching=$NP (atteso 3) rej=$NREJ (atteso 0)" >> "$VERD"; fin 6; }
+> echo "patch inversa: 3 file (calls/mod + loc_dente=test fuori da -p php-cli, DICHIARATO), zero rej" >> "$VERD"
+50c52
+<     grep -q "^SM-OK 200200$" "$OUT/run-$ARM-r$Rr.out" || { echo "rc=8 marcatore SM-OK 200200 assente ($ARM r$Rr)" >> "$VERD"; fin 8; }
+---
+>     grep -q "^MALC-OK 200000$" "$OUT/run-$ARM-r$Rr.out" || { echo "rc=8 marcatore MALC-OK 200000 assente ($ARM r$Rr)" >> "$VERD"; fin 8; }
+87,88c89,90
+< print("conteggi r1 per-NOME (arbitro: array_map):")
+< for k in ("array_map","range","count"):
+---
+> print("conteggi r1 per-NOME (arbitro: class_exists):")
+> for k in ("class_exists","spl_autoload_register","count"):
+91,92c93,94
+< if nA.get("array_map",0) - nB.get("array_map",0) != 200000: fuori.append("array_map")
+< altri = [k for k in sorted(set(nA) | set(nB)) if k != "array_map" and nA.get(k,0) != nB.get(k,0)]
+---
+> if nA.get("class_exists",0) - nB.get("class_exists",0) != 200000: fuori.append("class_exists")
+> altri = [k for k in sorted(set(nA) | set(nB)) if k != "class_exists" and nA.get(k,0) != nB.get(k,0)]
+100c102
+<     print("CONTEGGI: attese p.5 ESATTE (Delta 1 passaggio vec-args/elemento CONFERMATO su array_map; resto zero) — il fast path MORDE il SOLO cammino atteso; D_smoke misura il bundle PROPRIO del sito strmap (to_vec nome + find_fn_ci + vec + bind), FUORI-UB SOPRA resta reperto A VERBALE per il R=5")
+---
+>     print("CONTEGGI: attesa strumentale ESATTA (Delta 1 vecargs-at-bind/miss CONFERMATO su class_exists; resto zero) — il fast path MORDE il SOLO cammino atteso; D_smoke misura il bundle PROPRIO del sito (vec-args + elems-Vec + to_vec nome + dispatch: rebind/visibilita'/frame plumbing), FUORI-UB SOPRA resta reperto A VERBALE per il R=5")

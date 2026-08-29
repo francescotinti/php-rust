@@ -1,0 +1,145 @@
+diff --git a/php-rust/crates/php-runtime/src/vm/calls.rs b/php-rust/crates/php-runtime/src/vm/calls.rs
+index 60d1d320..d1aa678e 100644
+--- a/php-rust/crates/php-runtime/src/vm/calls.rs
++++ b/php-rust/crates/php-runtime/src/vm/calls.rs
+@@ -720,6 +720,37 @@ impl<'m> Vm<'m> {
+         self.drive_to_return(baseline)
+     }
+ 
++    /// L-AU1 (S-163): arity-1 mirror of [`Self::call_callable`] for a
++    /// pre-admitted `[object, method]` array callable — same baseline/drive
++    /// contract as [`Self::call_fn_one`], no args-Vec, no elems-Vec, no
++    /// method-name copy. Admission (per loader, per miss, by the caller in
++    /// `try_autoload`): public non-static user method, `simple_call` with
++    /// exactly one parameter, no private homonym in the receiver's ancestor
++    /// chain — the `MethodIc` fill predicate, so the resolution is
++    /// scope-independent and skipping `parent_private_rebind` + the
++    /// visibility check is sound for every calling scope.
++    pub(super) fn call_method_one(
++        &mut self,
++        defc: usize,
++        midx: usize,
++        cid: usize,
++        this: Zval,
++        arg: Zval,
++    ) -> Result<Zval, PhpError> {
++        let baseline = self.frames.len();
++        self.push_method_frame_one(defc, midx, cid, this, arg)?;
++        if self.frames.len() == baseline {
++            // Mirror of call_callable's no-frame arm: unreachable for a user
++            // method body (which always pushes a frame); kept for structural
++            // equality with the full path.
++            return Ok(self.frames[baseline - 1]
++                .stack
++                .pop()
++                .expect("host callable result on the caller stack"));
++        }
++        self.drive_to_return(baseline)
++    }
++
+     /// Normalise the `$newThis` argument of `bindTo`/`bind`/`call`: an object
+     /// binds, `null` (or anything else) clears the binding (step 19-6).
+     fn closure_this_arg(v: Option<Zval>) -> Option<Zval> {
+diff --git a/php-rust/crates/php-runtime/src/vm/mod.rs b/php-rust/crates/php-runtime/src/vm/mod.rs
+index 8b28b59f..f99fa0a9 100644
+--- a/php-rust/crates/php-runtime/src/vm/mod.rs
++++ b/php-rust/crates/php-runtime/src/vm/mod.rs
+@@ -11481,6 +11481,33 @@ impl<'m> Vm<'m> {
+         self.enter_callee(frame)
+     }
+ 
++    /// L-AU1 (S-163): install a frame for a pre-admitted instance method
++    /// with a single by-value argument, without materializing an args-Vec.
++    /// Mirrors `dispatch_instance_call`'s usable arm at `deref: false`
++    /// (the autoload site never sets `RET_DEREF`) minus `bind_params`' Vec:
++    /// the intake equals its simple-call arm at arity 1 (`argc = 1;
++    /// slots[0] = decay_arg(arg)`); `this`/`class`/`static_class` are set
++    /// exactly as there (LSB = receiver's actual class).
++    fn push_method_frame_one(
++        &mut self,
++        defc: usize,
++        midx: usize,
++        cid: usize,
++        this: Zval,
++        arg: Zval,
++    ) -> Result<(), PhpError> {
++        let callee = &self.classes[defc].methods[midx].func;
++        debug_assert!(callee.simple_call && callee.n_params == 1);
++        let m = self.class_mod(defc);
++        let mut frame = self.pooled_frame(callee, m);
++        frame.argc = 1;
++        frame.slots[0] = decay_arg(arg);
++        frame.this = Some(this);
++        frame.class = Some(defc);
++        frame.static_class = Some(cid);
++        self.enter_callee(frame)
++    }
++
+     /// Like [`Self::push_magic_call`] but the forwarded `$args` array also carries
+     /// any **named arguments** keyed by name (string keys), matching PHP's `__call`
+     /// behaviour for `$obj->missing(x: 1)` (Session A).
+@@ -12155,9 +12182,44 @@ impl<'m> Vm<'m> {
+                     }
+                 }
+             }
+-            let call = match &fast {
+-                Some(cl) => self.call_closure_one(cl, arg.clone()).map(drop),
+-                None => self.call_callable(loader, vec![arg.clone()]).map(drop),
++            // L-AU1 (S-163): loader `[obj, metodo]` Composer-style — metodo
++            // utente PUBLIC non-static `simple_call` arità-1 senza ombra
++            // private nella catena del ricevitore (predicato IC-fill:
++            // risoluzione scope-indipendente). La chiamata per-miss va via
++            // call_method_one, senza args-Vec né elems-Vec né copia del
++            // nome. Elementi DIRETTI (non-Ref); ogni altra forma resta su
++            // call_callable INVARIATO (criterio s163-criterio-au1.md).
++            let mut fastm = None;
++            if fast.is_none() {
++                if let Zval::Array(a) = &loader {
++                    if a.len() == 2 {
++                        let mut it = a.iter();
++                        let e0 = it.next().map(|(_, v)| v);
++                        let e1 = it.next().map(|(_, v)| v);
++                        if let (Some(t @ Zval::Object(_)), Some(Zval::Str(mname))) = (e0, e1) {
++                            let cid = object_class_id(t).expect("object class id");
++                            let mb = mname.as_bytes();
++                            if let Some((defc, midx)) = resolve_method_runtime(&self.classes, cid, mb) {
++                                let cm = &self.classes[defc].methods[midx];
++                                if cm.visibility == Visibility::Public
++                                    && !cm.is_static
++                                    && cm.func.simple_call
++                                    && cm.func.n_params == 1
++                                    && !private_shadow_in_chain(&self.classes, cid, mb)
++                                {
++                                    fastm = Some((defc, midx, cid, t.clone()));
++                                }
++                            }
++                        }
++                    }
++                }
++            }
++            let call = match (&fast, fastm) {
++                (Some(cl), _) => self.call_closure_one(cl, arg.clone()).map(drop),
++                (None, Some((defc, midx, cid, this))) => {
++                    self.call_method_one(defc, midx, cid, this, arg.clone()).map(drop)
++                }
++                (None, None) => self.call_callable(loader, vec![arg.clone()]).map(drop),
+             };
+             if let Err(e) = call {
+                 outcome = Err(e);
+diff --git a/php-rust/crates/php-runtime/tests/loc_dente.rs b/php-rust/crates/php-runtime/tests/loc_dente.rs
+index 83d3c643..55ced369 100644
+--- a/php-rust/crates/php-runtime/tests/loc_dente.rs
++++ b/php-rust/crates/php-runtime/tests/loc_dente.rs
+@@ -51,7 +51,11 @@ fn nessun_sorgente_rs_oltre_cap() {
+         // p.1) — mod.rs +16 (push_fn_frame_one), host.rs +18 (fast path
+         // array_map string-callable); calls.rs (+38) resta fuori allowlist
+         // sotto il cap 2000.
+-        ("php-runtime/src/vm/mod.rs", 25847, "monolite VM — bersaglio A2; +16 L-AM2 S-162 PRE-dichiarato"),
++        // S-163 L-AU1: salita PRE-dichiarata (criterio s163-criterio-au1.md
++        // p.1) — mod.rs +62 (push_method_frame_one +28, ammissione
++        // array-callable in try_autoload +34); calls.rs (+31,
++        // call_method_one) resta fuori allowlist sotto il cap 2000.
++        ("php-runtime/src/vm/mod.rs", 25909, "monolite VM — bersaglio A2; +62 L-AU1 S-163 PRE-dichiarato"),
+         ("php-runtime/src/vm/host.rs", 7726, "hostcall — backlog A2; +18 L-AM2 S-162 PRE-dichiarato"),
+         // S-156: salita DICHIARATA +29 (leva HD2-hostcall: braccio
+         // CallHostBuiltin, pop diretti ≤4) — verbale wp156-harness/s156-promo.
