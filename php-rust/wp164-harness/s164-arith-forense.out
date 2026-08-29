@@ -1,0 +1,17 @@
+== S-164 p.2 FASE 1 — forense tick arith dai verdetti di RECORD (criterio s164-criterio-arith.md p.2; NESSUN run) ==
+grade=VERDICT  # derivazione meccanica dai promo-verdetti s158..s163 (fonti citate riga per riga)
+fonte s161: wp161-harness promo — arith_phpr_netto_s=2.35 arith_oracle_netto_s=0.44 rapporto=5.3 spread_o=0.01 spread_p=0.03
+fonte s162: wp162-harness promo — arith_phpr_netto_s=2.35 arith_oracle_netto_s=0.43 rapporto=5.5 spread_o=0.00 spread_p=0.04
+fonte s163: wp163-harness promo — arith_phpr_netto_s=2.35 arith_oracle_netto_s=0.43 rapporto=5.5 spread_o=0.00 spread_p=0.02
+fonte s158/s159: arith_oracle_netto_s=0.43 (entrambe) — storia oracle PRE-s161 = 0.43
+numeratore phpr: 2.35 == 2.35 == 2.35 (FERMO attraverso le tre promo; guardie A/B delle leve coerenti: D sotto soglia)
+denominatore oracle: 0.44 (s161) -> 0.43 (s162,s163) = RITORNO al valore storico 0.43 (s158,s159); l'outlier e' s161
+quantizzazione: /usr/bin/time -p ha quanto 0.01 s; su netto oracle 0.43 il quanto del RAPPORTO ~ 5.47*0.01/0.43 = 0.13
+  -> un centesimo del denominatore muove il rapporto di ~0.13: 2.35/0.44=5.34 vs 2.35/0.43=5.47 (riportati 5.3 vs 5.5)
+LETTURA (fase 1): il tick 5,3->5,5 NON e' una regressione phpr a s162 — e' l'oracle tornato al SUO storico piu' la
+  quantizzazione del giudice a 2 decimali (giudice QUANTIZZATO: REGOLE §3 / az.rev. S-154, tick 0.13 > soglia/4=0.025)
+companion (a verbale, non allarme): creep phpr 2.32 (s158) -> 2.33/2.34 (s159) -> 2.35 (s161+): +0.6 ns/iter CUMULATO
+  in ~3 pin, ogni passo sotto la soglia guardia (4 ns/iter) — si annota per il trend, nessuna azione
+fase 2 (rimisura de-quantizzata N=250M, tick rapporto ~0.026) PRE-REGISTRATA nel criterio p.3-4: conferma attesa
+  (a) phpr fermo tra stash ±0.20 su ~11.75 e (b) oracle in [2.15;2.20] => indagine CHIUSA a verdetto denominatore
+ESITO fase 1: rc=0 (forense agli atti; la DOVUTA si chiude col rc della fase 2)
