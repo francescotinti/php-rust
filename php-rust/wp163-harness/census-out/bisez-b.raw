@@ -1,0 +1,166 @@
+pid=34599 tag=lower_span tid=ThreadId(1) t0_us=0 t1_us=12803 da=46676915 df=40060991 clamped=0 /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp163-harness/m-arrload-census.php
+pid=34599 tag=root name=created-dead-rc1[n=0] bytes=0
+pid=34599 tag=root name=lazy-init[n=0] bytes=0
+pid=34599 tag=root name=reflect-object-bound[n=0] bytes=0
+pid=34599 tag=root name=reflect-method-info-cache[n=0] bytes=0
+pid=34599 tag=root name=var-dump-debug[n=0] bytes=0
+pid=34599 tag=roots_total bytes=259408 truncated=0
+pid=34599 tag=walk_recon ch=str reached_n=4211 reached_b=252528 live_n=4617 live_b=276202
+pid=34599 tag=walk_recon ch=arr reached_n=10 reached_b=5952 live_n=10 live_b=5824
+pid=34599 tag=walk_recon ch=obj reached_n=1 reached_b=160 live_n=1 live_b=160
+pid=34599 tag=arr_shape repr=packed b=0 n=5 bytes=320
+pid=34599 tag=arr_shape repr=packed b=1 n=2 bytes=256
+pid=34599 tag=arr_shape repr=packed b=2 n=1 bytes=128
+pid=34599 tag=arr_shape repr=hashed b=6 n=2 bytes=5248
+pid=34599 tag=seedclass name=PDOStatement full=261195 body=233290 doc=0
+pid=34599 tag=seedclass name=ReflectionClass full=214320 body=183473 doc=0
+pid=34599 tag=seedclass name=PDO full=195764 body=151775 doc=0
+pid=34599 tag=seedclass name=DateTime full=188233 body=173093 doc=0
+pid=34599 tag=seedclass name=BcMath\Number full=174633 body=153659 doc=0
+pid=34599 tag=seedclass name=SimpleXMLElement full=170672 body=150139 doc=0
+pid=34599 tag=seedclass name=mysqli full=159018 body=121757 doc=0
+pid=34599 tag=seedclass name=XSLTProcessor full=145731 body=110551 doc=0
+pid=34599 tag=seedclass name=ReflectionMethod full=133227 body=115602 doc=0
+pid=34599 tag=seedclass name=tidy full=108808 body=90284 doc=0
+pid=34599 tag=seedclass name=ReflectionProperty full=106996 body=88266 doc=0
+pid=34599 tag=seedclass name=ReflectionParameter full=106947 body=88683 doc=0
+pid=34599 tag=seedclass name=DOMNode full=101199 body=86529 doc=0
+pid=34599 tag=seedclass name=DateTimeImmutable full=94277 body=80891 doc=0
+pid=34599 tag=seedclass name=mysqli_stmt full=94123 body=72898 doc=0
+pid=34599 tag=seedclass name=ReflectionFunction full=87013 body=75329 doc=0
+pid=34599 tag=seedclass name=DOMDocument full=80601 body=58031 doc=0
+pid=34599 tag=seedclass name=mysqli_result full=78868 body=64429 doc=0
+pid=34599 tag=seedclass name=GMP full=75949 body=65382 doc=0
+pid=34599 tag=seedclass name=ZipArchive full=71030 body=48140 doc=0
+pid=34599 tag=seedclass name=SQLite3 full=62284 body=50324 doc=0
+pid=34599 tag=seedclass name=SplDoublyLinkedList full=60130 body=47567 doc=0
+pid=34599 tag=seedclass name=ReflectionAttribute full=57447 body=45647 doc=0
+pid=34599 tag=seedclass name=Dom\Node full=52765 body=49336 doc=0
+pid=34599 tag=seedclass name=DateTimeZone full=52293 body=44945 doc=0
+pid=34599 tag=seedclass name=SplPriorityQueue full=50701 body=42473 doc=0
+pid=34599 tag=seedclass name=DOMElement full=48245 body=40252 doc=0
+pid=34599 tag=seedclass name=DOMAttr full=48072 body=40234 doc=0
+pid=34599 tag=seedclass name=tidyNode full=47814 body=33630 doc=0
+pid=34599 tag=seedclass name=SplObjectStorage full=44530 body=31859 doc=0
+pid=34599 tag=seedclass name=ReflectionClassConstant full=42919 body=34441 doc=0
+pid=34599 tag=seedclass name=RecursiveDirectoryIterator full=40858 body=32953 doc=0
+pid=34599 tag=seedclass name=RegexIterator full=38502 body=27327 doc=0
+pid=34599 tag=seedclass name=SQLite3Stmt full=37983 body=28951 doc=0
+pid=34599 tag=seedclass name=FilesystemIterator full=36363 body=27084 doc=0
+pid=34599 tag=seedclass name=RecursiveIteratorIterator full=36161 body=26348 doc=0
+pid=34599 tag=seedclass name=DOMCharacterData full=35382 body=30025 doc=0
+pid=34599 tag=seedclass name=ReflectionExtension full=35379 body=31922 doc=0
+pid=34599 tag=seedclass name=SplFixedArray full=34877 body=26540 doc=0
+pid=34599 tag=seedclass name=DOMXPath full=33223 body=27067 doc=0
+pid=34599 tag=seedclass name=PhpToken full=28865 body=21911 doc=0
+pid=34599 tag=seedclass name=WeakMap full=28308 body=23879 doc=0
+pid=34599 tag=seedclass name=SQLite3Result full=25795 body=20322 doc=0
+pid=34599 tag=seedclass name=Exception full=24952 body=16262 doc=0
+pid=34599 tag=seedclass name=Error full=24948 body=16262 doc=0
+pid=34599 tag=seedclass name=SplFileObject full=22291 body=15329 doc=0
+pid=34599 tag=seedclass name=AppendIterator full=21436 body=17220 doc=0
+pid=34599 tag=seedclass name=DirectoryIterator full=21416 body=15622 doc=0
+pid=34599 tag=seedsum src=classes n=172 full=4186593 body=3335098 doc=844 firma=850651
+pid=34599 tag=seedsum src=traits n=0 full=0 body=0 doc=0 firma=0
+pid=34599 tag=seedsum src=main_hir n=1 full=10016 body=5942 doc=0 firma=4074
+pid=34599 tag=seedsum src=main_fns n=317 full=937476 body=757435 doc=0 firma=180041
+pid=34599 tag=seedlen units=0 distinct=0 top=
+pid=34599 tag=prefixsum tables=0 stub=0 fnshare=0 proper=0 prefix=0 split_tot=0 slotnames_tot=0 fnvec_tot=0 sc_tot=0
+pid=34599 tag=unitsum2 units=0 paths=0 dup_units=0 dup_bytes_counted=0 dup_net=0
+pid=34599 tag=netguard nested_windows=0
+pid=34599 tag=reloc skipped_fns=0 skipped_classes=0 unexpected=0
+pid=34599 tag=unitcache hit_intra=0 hit_cross=0 miss_cold=0 miss_fp=0 miss_dc=0 miss_nostat=0 inserts=0 fp_replaced=0 ways_evictions=0 metadata_calls=0 entries=0 bytes_counted=0 paths=0 superseded_paths=0 superseded_entries=0 stub_elided_units=0 stub_classes_elided=0 elide_align_miss=0 elide_align_hit=0 miss_dc_base=0 miss_dc_remap=0 miss_dc_locals=0 seed_prefix_short=0 parked_modules=0 parked_bytes=0 defer_relowers=0 defer_relower_ns=0 stranded_keys_superseded=0 stranded_entries_dropped=0 main_probe=0 main_hit=0 main_put=0 main_impure_skip=0 main_probe_fail=0 include_hit_main_reject=0 main_evicted=0 retained_walk_bytes=0 retained_walk_nodes=0 stranded_bytes_dropped=0 uclog=0 rw_main_net=0 program_floor_share=0 rw_budget=0 rw_budget_rule=rw_bytes-program_floor_share+rw_main_net arm=cli-server alloc_id=memcount-v2-s82 rw_rule=cache-as-owner-FLOOR rw_main_net_rule=net-at-lower stranded_rule=unique-at-drop gross=1
+pid=34599 tag=boundset stubs_entries=0 prelude_classes=171 prelude_fns=317
+pid=34599 tag=compilens lower_ns=0 compile_ns=0 units=0 map_ns=18750 map_entries=172 remap_ns=0 remap_entries=0 read_ns=0 lexparse_ns=0 lowerhir_ns=0 lowers=0 lower_partial_ns=0 lower_partials=0
+pid=34599 tag=lcsum paths=0 compiles=0 lower_ns=0 compile_ns=0 dup_paths=0 dup_compiles=0 dup_lc_ns=0 dup_fp_ns=0 dup_cold_ns=0
+pid=34599 tag=opkind_sum n_ops=0 owned=0 funcs=0
+pid=34599 tag=modlit uniq_n=0 uniq_bytes=0 content_dup_n=0 content_dup_bytes=0
+pid=34599 tag=modrecon units=0 uniq_mods=0 dead_units=0 mod_owned=0 fns_priv=0 fns_shared=0 cls_priv=0 cls_shared=0 owned_priv=0 net_tot=0 counted_v1_tot=0 rc_residue=0
+pid=34599 tag=censusown bytes=0 hits_rows=0 hits_on=1
+pid=34599 tag=cellskip skips=0
+pid=34599 tag=cellpark parks=0 drainfails=0 ap1busy=0
+pid=34599 tag=teardown reg=0 broken=0 busy=0 alive_after=0
+pid=34599 tag=defermini calls=0 net_b=0
+pid=34599 tag=exit str.live=86005 str.peak=276265 str.cum=420441 str.cum_n=7373 str.live_n=1384 arr.live=5760 arr.peak=5824 arr.cum=5824 arr.cum_n=10 arr.live_n=9 obj.live=160 obj.peak=160 obj.cum=160 obj.cum_n=1 obj.live_n=1 unit.live=0 unit.peak=0 unit.cum=0 unit.cum_n=0 unit.live_n=0 created=1 units=0 unit_slack=0 proxy_peak=282249 s143.arrbuf_n=3 s143.propsbuf_n=0 s143.galloc_n=783881 s143.gfree_n=746122 s143.zval_size=16 s144.rczval_n=0 s144.rczval_prop_n=0 s144.vecargs_n=200000 s144.grealloc_n=13813 s144.objsynth_n=0 s145.clone_scalar_n=5 s145.clone_str_n=800000 s145.clone_arr_n=200001 s145.clone_obj_n=400003 s145.clone_ref_n=0 s145.clone_rcother_n=0
+s147mv pid=34599 site=255 name=outside scalar=5 str=800000 arr=200001 obj=400003 ref=0 rcother=0 tot=1400009
+s147dg pid=34599 prev=outside cur=outside n=1400009
+s148tag pid=34599 tag=0 name=none n=183873 attr=7386 b=63904187 hist=84288,15435,11852,5258,2394,949,49315,5447,6577,1898,460
+s148tag pid=34599 tag=1 name=frame n=2 attr=0 b=128 hist=0,0,0,2,0,0,0,0,0,0,0
+s148tag pid=34599 tag=2 name=hostcall n=600008 attr=200000 b=17800648 hist=400001,0,1,200003,1,1,1,0,0,0,0
+s148tag pid=34599 tag=4 name=arrgrow n=3 attr=1 b=192 hist=0,0,0,3,0,0,0,0,0,0,0
+s148sum pid=34599 galloc_n=783886 sum_n=783886
+s149name pid=34599 name=class_exists n=600006 attr=200000 b=17800568
+s149name pid=34599 name=spl_autoload_register n=2 attr=0 b=80
+s149sum pid=34599 hostcall_n=600008 sum_name_n=600008 unnamed_n=0 overflow=0
+pid=34599 tag=mi_proc win=0 ckpt=exit_mi mono_ms=112 phys=45203984 phys_peak=45203984 rss=54607872 peak_rss=54607872 commit=62586880 peak_commit=62586880
+pid=34599 tag=ctx win=0 ckpt=exit_mi mono_ms=112 top=none
+pid=34599 tag=mi_bin win=0 ckpt=exit_mi src=defer visit=NULLHEAP
+pid=34599 tag=mi_bin win=0 ckpt=exit_mi src=main size=8 reserved=196584 committed=176112 used_b=83456 used_n=10432 areas=3
+pid=34599 tag=mi_bin win=0 ckpt=exit_mi src=main size=64 reserved=196416 committed=192384 used_b=77888 used_n=1217 areas=3
+pid=34599 tag=mi_bin win=0 ckpt=exit_mi src=main size=640 reserved=1632000 committed=1632000 used_b=1399680 used_n=2187 areas=25
+pid=34599 tag=mi_bin win=0 ckpt=exit_mi src=main size=8192 reserved=196608 committed=196608 used_b=147456 used_n=18 areas=3
+pid=34599 tag=mi_bin win=0 ckpt=exit_mi src=main size=96 reserved=130944 committed=93696 used_b=20352 used_n=212 areas=2
+pid=34599 tag=mi_bin win=0 ckpt=exit_mi src=main size=32 reserved=196512 committed=184256 used_b=78752 used_n=2461 areas=3
+pid=34599 tag=mi_bin win=0 ckpt=exit_mi src=main size=768 reserved=456960 committed=418560 used_b=335616 used_n=437 areas=7
+pid=34599 tag=mi_bin win=0 ckpt=exit_mi src=main size=320 reserved=65280 committed=65280 used_b=29440 used_n=92 areas=1
+pid=34599 tag=mi_bin win=0 ckpt=exit_mi src=main size=16 reserved=196560 committed=172000 used_b=62800 used_n=3925 areas=3
+pid=34599 tag=mi_bin win=0 ckpt=exit_mi src=main size=384 reserved=195840 committed=145920 used_b=80640 used_n=210 areas=3
+pid=34599 tag=mi_bin win=0 ckpt=exit_mi src=main size=2560 reserved=192000 committed=192000 used_b=130560 used_n=51 areas=3
+pid=34599 tag=mi_bin win=0 ckpt=exit_mi src=main size=256 reserved=913920 committed=913920 used_b=586752 used_n=2292 areas=14
+pid=34599 tag=mi_bin win=0 ckpt=exit_mi src=main size=160 reserved=1766880 committed=1766880 used_b=1510240 used_n=9439 areas=27
+pid=34599 tag=mi_bin win=0 ckpt=exit_mi src=main size=1024 reserved=1179648 committed=1159168 used_b=784384 used_n=766 areas=18
+pid=34599 tag=mi_bin win=0 ckpt=exit_mi src=main size=2048 reserved=327680 committed=303104 used_b=176128 used_n=86 areas=5
+pid=34599 tag=mi_bin win=0 ckpt=exit_mi src=main size=4096 reserved=196608 committed=196608 used_b=122880 used_n=30 areas=3
+pid=34599 tag=mi_bin win=0 ckpt=exit_mi src=main size=1280 reserved=456960 committed=418560 used_b=253440 used_n=198 areas=7
+pid=34599 tag=mi_bin win=0 ckpt=exit_mi src=main size=1536 reserved=258048 committed=211968 used_b=153600 used_n=100 areas=4
+pid=34599 tag=mi_bin win=0 ckpt=exit_mi src=main size=10240 reserved=122880 committed=122880 used_b=30720 used_n=3 areas=2
+pid=34599 tag=mi_bin win=0 ckpt=exit_mi src=main size=48 reserved=196560 committed=196320 used_b=89712 used_n=1869 areas=3
+pid=34599 tag=mi_bin win=0 ckpt=exit_mi src=main size=3584 reserved=322560 committed=322560 used_b=279552 used_n=78 areas=5
+pid=34599 tag=mi_bin win=0 ckpt=exit_mi src=main size=7168 reserved=193536 committed=179200 used_b=107520 used_n=15 areas=3
+pid=34599 tag=mi_bin win=0 ckpt=exit_mi src=main size=16384 reserved=524288 committed=114688 used_b=49152 used_n=3 areas=1
+pid=34599 tag=mi_bin win=0 ckpt=exit_mi src=main size=49152 reserved=491520 committed=98304 used_b=0 used_n=0 areas=1
+pid=34599 tag=mi_bin win=0 ckpt=exit_mi src=main size=32768 reserved=524288 committed=131072 used_b=32768 used_n=1 areas=1
+pid=34599 tag=mi_bin win=0 ckpt=exit_mi src=main size=896 reserved=65408 committed=60928 used_b=17920 used_n=20 areas=1
+pid=34599 tag=mi_bin win=0 ckpt=exit_mi src=main size=1792 reserved=129024 committed=129024 used_b=68096 used_n=38 areas=2
+pid=34599 tag=mi_bin win=0 ckpt=exit_mi src=main size=128 reserved=130816 committed=106368 used_b=32000 used_n=250 areas=2
+pid=34599 tag=mi_bin win=0 ckpt=exit_mi src=main size=512 reserved=520192 committed=520192 used_b=389120 used_n=760 areas=8
+pid=34599 tag=mi_bin win=0 ckpt=exit_mi src=main size=80 reserved=65520 committed=57120 used_b=19200 used_n=240 areas=1
+pid=34599 tag=mi_bin win=0 ckpt=exit_mi src=main size=14336 reserved=516096 committed=200704 used_b=129024 used_n=9 areas=1
+pid=34599 tag=mi_bin win=0 ckpt=exit_mi src=main size=112 reserved=65520 committed=32256 used_b=15456 used_n=138 areas=1
+pid=34599 tag=mi_bin win=0 ckpt=exit_mi src=main size=3072 reserved=129024 committed=129024 used_b=89088 used_n=29 areas=2
+pid=34599 tag=mi_bin win=0 ckpt=exit_mi src=main size=5120 reserved=61440 committed=61440 used_b=30720 used_n=6 areas=1
+pid=34599 tag=mi_bin win=0 ckpt=exit_mi src=main size=40960 reserved=491520 committed=245760 used_b=40960 used_n=1 areas=1
+pid=34599 tag=mi_bin win=0 ckpt=exit_mi src=main size=28672 reserved=516096 committed=114688 used_b=114688 used_n=4 areas=1
+pid=34599 tag=mi_bin win=0 ckpt=exit_mi src=main size=6144 reserved=61440 committed=61440 used_b=24576 used_n=4 areas=1
+pid=34599 tag=mi_bin win=0 ckpt=exit_mi src=main size=192 reserved=65472 committed=52416 used_b=12096 used_n=63 areas=1
+pid=34599 tag=mi_bin win=0 ckpt=exit_mi src=main size=448 reserved=65408 committed=44352 used_b=8512 used_n=19 areas=1
+pid=34599 tag=mi_bin win=0 ckpt=exit_mi src=main size=12288 reserved=516096 committed=184320 used_b=24576 used_n=2 areas=1
+pid=34599 tag=mi_bin win=0 ckpt=exit_mi src=main size=24576 reserved=516096 committed=98304 used_b=24576 used_n=1 areas=1
+pid=34599 tag=mi_bin win=0 ckpt=exit_mi src=main size=65536 reserved=524288 committed=65536 used_b=0 used_n=0 areas=1
+pid=34599 tag=mi_bin win=0 ckpt=exit_mi src=main size=1048576 reserved=491520 committed=81920 used_b=0 used_n=0 areas=1
+pid=34599 tag=mi_bin win=0 ckpt=exit_mi src=main size=20480 reserved=512000 committed=430080 used_b=20480 used_n=1 areas=1
+pid=34599 tag=mi_bin win=0 ckpt=exit_mi src=main size=224 reserved=65408 committed=65408 used_b=11648 used_n=52 areas=1
+pid=34599 tag=mi_option win=0 ckpt=exit_mi name=arena_eager_commit ord=4 val=2
+pid=34599 tag=mi_option win=0 ckpt=exit_mi name=purge_delay ord=15 val=1000
+pid=34599 tag=mi_option win=0 ckpt=exit_mi name=page_full_retain ord=36 val=2
+pid=34599 tag=env_readback win=0 ckpt=exit_mi name=MIMALLOC_ARENA_EAGER_COMMIT val=unset
+pid=34599 tag=env_readback win=0 ckpt=exit_mi name=MIMALLOC_PURGE_DELAY val=unset
+pid=34599 tag=env_readback win=0 ckpt=exit_mi name=MIMALLOC_PAGE_FULL_RETAIN val=unset
+pid=34599 tag=env_readback win=0 ckpt=exit_mi name=RUST_MIN_STACK val=unset
+pid=34599 tag=mi_theap_pages win=0 ckpt=exit_mi heap=0 pages=181 committed=12607472 used_blocks=37762 free_pages=3 free_committed=245760
+pid=34599 tag=mi_theap_bin win=0 ckpt=exit_mi heap=0 bin=49152 free_pages=1 free_committed=98304
+pid=34599 tag=mi_theap_bin win=0 ckpt=exit_mi heap=0 bin=65536 free_pages=1 free_committed=65536
+pid=34599 tag=mi_theap_bin win=0 ckpt=exit_mi heap=0 bin=1048576 free_pages=1 free_committed=81920
+pid=34599 tag=mi_theap_pages win=0 ckpt=exit_mi heaps_total=1 heap_overflow=0 declared=heap-by-visit-index,noalloc-visitors-A-MS50 (KL-90-3)
+pid=34599 tag=mi_arena_json win=0 ckpt=exit_mi json={   "stat_version": 5,   "mimalloc_version": 30302,   "process": {     "elapsed_msecs": 130,     "user_msecs": 108,     "system_msecs": 11,     "page_faults": 0,     "rss_current": 54624256,     "rss_peak": 54624256,     "commit_current": 62586880,     "commit_peak": 62586880   },   "pages": { "total": 366, "peak": 240, "current": 181 },   "reserved": { "total": 1078263808, "peak": 1078263808, "current": 1078263808 },   "committed": { "total": 62586880, "peak": 62586880, "current": 62586880 },   "reset": 0,   "purged": 0,   "page_committed": { "total": 0, "peak": 0, "current": 0 },   "pages_abandoned": { "total": 153, "peak": 140, "current": 66 },   "threads": { "total": 1, "peak": 1, "current": 1 },   "malloc_normal": { "total": 0, "peak": 0, "current": 0 },   "malloc_huge": { "total": 39911424, "peak": 39911424, "current": 39911424 },   "malloc_requested": { "total": 0, "peak": 0, "current": 0 },   "mmap_calls": 3,   "commit_calls": 0,   "reset_calls": 0,   "purge_calls": 0,   "arena_count": 1,   "malloc_normal_count": 0,   "malloc_huge_count": 6,   "malloc_guarded_count": 0,   "arena_rollback_count": 0,   "arena_purges": 0,   "pages_extended": 0,   "pages_retire": 0,   "page_searches": 8913,   "page_searches_count": 3702,   "segments": { "total": 0, "peak": 0, "current": 0 },   "segments_abandoned": { "total": 0, "peak": 0, "current": 0 },   "segments_cache": { "total": 0, "peak": 0, "current": 0 },   "_segments_reserved": { "total": 0, "peak": 0, "current": 0 },   "heaps": { "total": 1, "peak": 1, "current": 1 },   "theaps": { "total": 0, "peak": 0, "current": 0 },   "pages_reclaim_on_alloc": 0,   "pages_reclaim_on_free": 81,   "pages_reabandon_full": 0,   "pages_unabandon_busy_wait": 0,   "heaps_delete_wait": 0,   "malloc_bins": [     { "total": 0, "peak": 0, "current": 0, "block_size": 8, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 8, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 16, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 24, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 32, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 40, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 48, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 56, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 64, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 80, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 96, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 112, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 128, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 160, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 192, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 224, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 256, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 320, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 384, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 448, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 512, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 640, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 768, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 896, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 1024, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 1280, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 1536, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 1792, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 2048, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 2560, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 3072, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 3584, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 4096, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 5120, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 6144, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 7168, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 8192, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 10240, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 12288, "page_size": 524288 },     { "total": 0, "peak": 0, "current": 0, "block_size": 14336, "page_size": 524288 },     { "total": 0, "peak": 0, "current": 0, "block_size": 16384, "page_size": 524288 },     { "total": 0, "peak": 0, "current": 0, "block_size": 20480, "page_size": 524288 },     { "total": 0, "peak": 0, "current": 0, "block_size": 24576, "page_size": 524288 },     { "total": 0, "peak": 0, "current": 0, "block_size": 28672, "page_size": 524288 },     { "total": 0, "peak": 0, "current": 0, "block_size": 32768, "page_size": 524288 },     { "total": 0, "peak": 0, "current": 0, "block_size": 40960, "page_size": 524288 },     { "total": 0, "peak": 0, "current": 0, "block_size": 49152, "page_size": 524288 },     { "total": 0, "peak": 0, "current": 0, "block_size": 57344, "page_size": 524288 },     { "total": 0, "peak": 0, "current": 0, "block_size": 65536, "page_size": 524288 },     { "total": 0, "peak": 0, "current": 0, "block_size": 81920, "page_size": 524288 },     { "total": 0, "peak": 0, "current": 0, "block_size": 98304, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 114688, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 131072, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 163840, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 196608, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 229376, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 262144, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 327680, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 393216, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 458752, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 524288, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 655360, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 786432, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 917504, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 1048576, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 1310720, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 1572864, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 1835008, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 2097152, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 2621440, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 3145728, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 3670016, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 4194304, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 524296, "page_size": 0 }   ],   "page_bins": [     { "total": 0, "peak": 0, "current": 0, "block_size": 8, "page_size": 65536 },     { "total": 3, "peak": 3, "current": 3, "block_size": 8, "page_size": 65536 },     { "total": 3, "peak": 3, "current": 3, "block_size": 16, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 24, "page_size": 65536 },     { "total": 6, "peak": 5, "current": 3, "block_size": 32, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 40, "page_size": 65536 },     { "total": 7, "peak": 6, "current": 3, "block_size": 48, "page_size": 65536 },     { "total": 0, "peak": 0, "current": 0, "block_size": 56, "page_size": 65536 },     { "total": 5, "peak": 4, "current": 3, "block_size": 64, "page_size": 65536 },     { "total": 1, "peak": 1, "current": 1, "block_size": 80, "page_size": 65536 },     { "total": 2, "peak": 2, "current": 2, "block_size": 96, "page_size": 65536 },     { "total": 1, "peak": 1, "current": 1, "block_size": 112, "page_size": 65536 },     { "total": 2, "peak": 2, "current": 2, "block_size": 128, "page_size": 65536 },     { "total": 38, "peak": 30, "current": 27, "block_size": 160, "page_size": 65536 },     { "total": 2, "peak": 1, "current": 1, "block_size": 192, "page_size": 65536 },     { "total": 5, "peak": 3, "current": 1, "block_size": 224, "page_size": 65536 },     { "total": 20, "peak": 15, "current": 14, "block_size": 256, "page_size": 65536 },     { "total": 2, "peak": 2, "current": 1, "block_size": 320, "page_size": 65536 },     { "total": 7, "peak": 3, "current": 3, "block_size": 384, "page_size": 65536 },     { "total": 1, "peak": 1, "current": 1, "block_size": 448, "page_size": 65536 },     { "total": 27, "peak": 11, "current": 8, "block_size": 512, "page_size": 65536 },     { "total": 30, "peak": 28, "current": 25, "block_size": 640, "page_size": 65536 },     { "total": 22, "peak": 8, "current": 7, "block_size": 768, "page_size": 65536 },     { "total": 1, "peak": 1, "current": 1, "block_size": 896, "page_size": 65536 },     { "total": 21, "peak": 21, "current": 18, "block_size": 1024, "page_size": 65536 },     { "total": 11, "peak": 11, "current": 7, "block_size": 1280, "page_size": 65536 },     { "total": 10, "peak": 6, "current": 4, "block_size": 1536, "page_size": 65536 },     { "total": 3, "peak": 3, "current": 2, "block_size": 1792, "page_size": 65536 },     { "total": 6, "peak": 6, "current": 5, "block_size": 2048, "page_size": 65536 },     { "total": 12, "peak": 6, "current": 3, "block_size": 2560, "page_size": 65536 },     { "total": 16, "peak": 4, "current": 2, "block_size": 3072, "page_size": 65536 },     { "total": 6, "peak": 6, "current": 5, "block_size": 3584, "page_size": 65536 },     { "total": 20, "peak": 5, "current": 3, "block_size": 4096, "page_size": 65536 },     { "total": 16, "peak": 10, "current": 1, "block_size": 5120, "page_size": 65536 },     { "total": 6, "peak": 3, "current": 1, "block_size": 6144, "page_size": 65536 },     { "total": 4, "peak": 4, "current": 3, "block_size": 7168, "page_size": 65536 },     { "total": 7, "peak": 5, "current": 3, "block_size": 8192, "page_size": 65536 },     { "total": 16, "peak": 11, "current": 2, "block_size": 10240, "page_size": 65536 },     { "total": 3, "peak": 1, "current": 1, "block_size": 12288, "page_size": 524288 },     { "total": 1, "peak": 1, "current": 1, "block_size": 14336, "page_size": 524288 },     { "total": 1, "peak": 1, "current": 1, "block_size": 16384, "page_size": 524288 },     { "total": 3, "peak": 1, "current": 1, "block_size": 20480, "page_size": 524288 },     { "total": 4, "peak": 1, "current": 1, "block_size": 24576, "page_size": 524288 },     { "total": 1, "peak": 1, "current": 1, "block_size": 28672, "page_size": 524288 },     { "total": 1, "peak": 1, "current": 1, "block_size": 32768, "page_size": 524288 },     { "total": 1, "peak": 1, "current": 1, "block_size": 40960, "page_size": 524288 },     { "total": 1, "peak": 1, "current": 1, "block_size": 49152, "page_size": 524288 },     { "total": 0, "peak": 0, "current": 0, "block_size": 57344, "page_size": 524288 },     { "total": 2, "peak": 1, "current": 1, "block_size": 65536, "page_size": 524288 },     { "total": 1, "peak": 1, "current": 1, "block_size": 81920, "page_size": 524288 },     { "total": 0, "peak": 0, "current": 0, "block_size": 98304, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 114688, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 131072, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 163840, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 196608, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 229376, "page_size": 4194304 },     { "total": 1, "peak": 1, "current": 1, "block_size": 262144, "page_size": 4194304 },     { "total": 1, "peak": 1, "current": 0, "block_size": 327680, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 393216, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 458752, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 524288, "page_size": 4194304 },     { "total": 0, "peak": 0, "current": 0, "block_size": 655360, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 786432, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 917504, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 1048576, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 1310720, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 1572864, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 1835008, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 2097152, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 2621440, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 3145728, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 3670016, "page_size": 0 },     { "total": 0, "peak": 0, "current": 0, "block_size": 4194304, "page_size": 0 },     { "total": 6, "peak": 0, "current": 0, "block_size": 524296, "page_size": 0 }   ],   "chunk_bins": [     { "total": 1, "peak": 1, "current": 1, "bin": "S" },     { "total": 0, "peak": 0, "current": 0, "bin": "X" },     { "total": 1, "peak": 1, "current": 1, "bin": "M" },     { "total": 0, "peak": 0, "current": 0, "bin": "L" },     { "total": 0, "peak": 0, "current": 0, "bin": "H" },     { "total": 0, "peak": 0, "current": 0, "bin": " " }   ] } 
+pid=34599 tag=mi_arena win=0 ckpt=exit_mi key=committed total=62586880 peak=62586880 current=62586880
+pid=34599 tag=mi_arena win=0 ckpt=exit_mi key=reserved total=1078263808 peak=1078263808 current=1078263808
+pid=34599 tag=mi_arena win=0 ckpt=exit_mi key=pages total=366 peak=240 current=181
+pid=34599 tag=mi_arena win=0 ckpt=exit_mi key=page_committed total=0 peak=0 current=0
+pid=34599 tag=mi_arena win=0 ckpt=exit_mi key=arena_count val=1
+pid=34599 tag=mi_arena win=0 ckpt=exit_mi key=purged val=0
+pid=34599 tag=mi_arena win=0 ckpt=exit_mi key=reset val=0
+pid=34599 tag=mi_arena win=0 ckpt=exit_mi key=purge_calls val=0
+pid=34599 tag=mi_arena win=0 ckpt=exit_mi key=mmap_calls val=3
+pid=34599 tag=mi_arena_chunk_bins win=0 ckpt=exit_mi "chunk_bins": [     { "total": 1, "peak": 1, "current": 1, "bin": "S" },     { "total": 0, "peak": 0, "current": 0, "bin": "X" },     { "total": 1, "peak": 1, "current": 1, "bin": "M" },     { "total": 0, "peak": 0, "current": 0, "bin": "L" },     { "total": 0, "peak": 0, "current": 0, "bin": "H" },     { "total": 0, "peak": 0, "current": 0, "bin": " " }   ]
+pid=34599 tag=exit_mi str.live=86005 str.peak=276265 str.cum=420441 str.cum_n=7373 str.live_n=1384 arr.live=5760 arr.peak=5824 arr.cum=5824 arr.cum_n=10 arr.live_n=9 obj.live=160 obj.peak=160 obj.cum=160 obj.cum_n=1 obj.live_n=1 unit.live=0 unit.peak=0 unit.cum=0 unit.cum_n=0 unit.live_n=0 created=1 units=0 unit_slack=0 proxy_peak=282249 s143.arrbuf_n=3 s143.propsbuf_n=0 s143.galloc_n=784053 s143.gfree_n=746294 s143.zval_size=16 s144.rczval_n=0 s144.rczval_prop_n=0 s144.vecargs_n=200000 s144.grealloc_n=13851 s144.objsynth_n=0 s145.clone_scalar_n=5 s145.clone_str_n=800000 s145.clone_arr_n=200001 s145.clone_obj_n=400003 s145.clone_ref_n=0 s145.clone_rcother_n=0

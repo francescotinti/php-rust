@@ -1,0 +1,17 @@
+== s163 arbitrato census L-AU1 (criterio au1 p.3; probe-B = tree HEAD con edit, probe-A = copia − patch 3 file; driver N=200000; smoke +45,5 FUORI banda [12;30] SOPRA) ==
+patch inversa: 3 file (calls/mod + loc_dente=test fuori da -p php-cli, DICHIARATO), zero rej
+probe MISURATI: A=548e2efa13a2c858 B=2f2f723cdcfaf20e (census -p php-cli --features mem-census, target dedicati, run sequenziali)
+identita' s149sum A r1: hostcall_n=600008 sum_name=600008 unnamed=0 overflow=0 OK
+identita' s149sum A r2: hostcall_n=600008 sum_name=600008 unnamed=0 overflow=0 OK
+identita' s149sum B r1: hostcall_n=8 sum_name=8 unnamed=0 overflow=0 OK
+identita' s149sum B r2: hostcall_n=8 sum_name=8 unnamed=0 overflow=0 OK
+repliche A: r1==r2
+repliche B: r1==r2
+conteggi r1 per-NOME (arbitro: class_exists):
+  class_exists: A=600006 B=6 Delta=600000
+  spl_autoload_register: A=2 B=2 Delta=0
+  count: A=0 B=0 Delta=0
+Delta hostcall_n = 600000 (atteso 200000 ESATTO)
+Delta altri nomi != 0: nessuno
+CONTEGGI: FUORI ATTESA (p.5) — nomi_fuori=['class_exists'] altri=[] — dichiarare e tornare al sorgente, NESSUNA taratura
+rc=5 conteggi non validi/fuori attesa

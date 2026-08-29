@@ -1,0 +1,28 @@
+== APPENDICE ARBITRATO census L-AU1 (S-163) — errore di pre-registro DICHIARATO sull'UNITÀ dello strumento ==
+1. ERRORE DICHIARATO: lo script attendeva Delta hostcall_n=200000 leggendo il
+   contatore come "vecargs-at-bind"; memcensus (s148_attr_note, crosswalk
+   righe 1849-1857 + s149_dump_lines) definisce n/hostcall_n = TUTTE le
+   allocazioni sotto il hostcall corrente, attr = sottoinsieme s144
+   (vecargs al funnel bind/decay), other = n−attr. Stessa classe d'errore
+   del p.5-vs-p.1 di s162: l'attesa contraddiceva il criterio au1 p.3 dello
+   STESSO harness (bundle CONTATO = 3 alloc/miss). NESSUNA taratura: la
+   derivazione si corregge dal sorgente dello strumento.
+2. ATTESA CORRETTA (da criterio p.3, unità giusta): Delta = 3×200000 =
+   600000 — MISURATA ESATTA (600000; repliche r1==r2 su entrambi i bracci;
+   identita' s149sum OK 4/4; unico nome class_exists; altri nomi zero).
+3. MECCANISMO NOMINATO per-alloc (bisezione a 7 forme, driver
+   m-au1-bisez-{a,a2,a3,b2,b3,c} + m-arrload-census, raw in census-out/):
+   generico [obj,m] = 3/miss (attr=1: vec![arg] al bind; +elems-Vec collect
+   +to_vec del nome, fuori funnel) · generico closure = 2/miss (vec![arg] +
+   Box FrameExt di ext_mut().closure_id) · AL2-fast closure = 1/miss
+   (SOLO Box FrameExt, attr=0) · AU1-fast [obj,m] = 0/miss · chiamata
+   COMPILATA $cb(x) = 0 (stack→slot, mai al funnel). Sovradeterminazione
+   coerente con s161 (Delta AL2 = 2−1 = 1/miss ESATTO, retro-conferma).
+4. REPERTI A VERBALE: (i) FUORI-UB SOPRA del giudice (D=+45,5 vs tetto 30):
+   il bundle rimosso comprende ANCHE il plumbing di dispatch (resolve +
+   rebind + visibilita' + drop delle Vec) oltre le 3 alloc — stessa classe
+   del reperto strmap s162; NESSUN coeff nuovo (criterio p.3). (ii) il fast
+   path AL2 alloca ancora 1 Box FrameExt/miss per closure_id — candidata
+   leva futura per NOME: L-AL3 ext-pool/closure_id fuori da FrameExt.
+ESITO ARBITRATO: rc=0 — R=5 AUTORIZZATO (attesa corretta CONFERMATA ESATTA;
+il fast path morde il SOLO cammino atteso).
