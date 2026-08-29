@@ -1,0 +1,105 @@
+2,25c2,14
+< # s162-orm-coppia.sh — coppia dbal+ORM sul pin s161 = rimisura DOVUTA (pin
+< # nuovo + finestra s161 CONTAMINATA: cifra NULLA, attesa-AF1 NON chiusa)
+< # (criterio s162-criterio-orm.md; copia DICHIARATA di s161-orm-coppia.sh,
+< # manifest s162-orm-copia.diff; adattamenti: pin s161 ec0a636ad0c42005,
+< # path wp162, blocco ATTESA a GIUDIZIO SINGOLO oracle-normalizzato:
+< # attesa-AF1 EREDITATA vs RIF s160-finestra [34,96;35,20] gambe PULITE,
+< # ORA_REF=4,95 (oracle net 4,96/4,94 dichiarate); attesa [0,0;0,035] s =
+< # tetto DICHIARATO (census 1,83M passaggi x 17,0+2,0 ns sonda s161);
+< # attesa-AL2 su ORM ~ZERO DICHIARATA (loader Composer ARRAY-callable, NON
+< # ammesso dal fast path k=1: il tetto NON sale). SENTINELLA CONTAMINAZIONE
+< # (lezione S-161): oracle net fuori dal SUO rif storico ⇒ cifra NULLA anche
+< # a flag per-gamba muti — giudizio nella LETTURA, blocco meccanico intatto.
+< # I TRE ADATTAMENTI dell'istruttoria S-160 ORA NEL CANONE (criterio p.1):
+< # (i) RODAGGIO non giudicante dopo i floors (1 gamba orm+dbal per motore,
+< # ictx/s a verbale come companion); (ii) QUIESCENZA per gamba giudicata
+< # (s129-quiescenza.sh, retry x3); (iii) SCALETTA A DUE ESTREMI in _classe
+< # (COMP solo a intervallo INTERO dentro la banda). EMENDE az.rev. S-157
+< # #3-#4 EREDITATE (header coi pin dall'HASH MISURATO + sentinella
+< # language-server nel verdetto); FIX estrazione summ()/names() LC_ALL=C
+< # EREDITATO: ORM + dbal, N=2 per
+< # lato, oracle prima poi phpr per gamba, workspace ri-untarrato, watchdog,
+< # /usr/bin/time -l, pavimenti per-binario PER WORKSPACE, gate contesa ictx/s.
+< # ADATTAMENTO lock (ereditato): il lock misura è della SESSIONE — lo
+< # script lo VERIFICA soltanto (veto «lock di finestra con trap EXIT altrui»).
+---
+> # s163-orm-coppia.sh — coppia dbal+ORM sul pin s162 (DOVUTA: pin nuovo)
+> # (criterio s163-criterio-orm.md; copia DICHIARATA di s162-orm-coppia.sh,
+> # manifest s163-orm-copia.diff; adattamenti: pin s162 20c63af44bfd077a,
+> # path wp163, RIF NUOVO = finestra s162 gambe PULITE [34,47;34,51],
+> # ORA_REF=4,885 (oracle net 4,87/4,90 dichiarate), rapporto registrato
+> # S-162 [7,035;7,086]; attesa L-AM2 su ORM ~ZERO DICHIARATA (Doctrine:
+> # closures e builtin-string NON ammessi dal fast path utente k=1; quota
+> # utente-string NON censita => tetto ~0); attesa-AF1 resta APERTA per
+> # AMPIEZZA, NON risolta da questa coppia (bracci entrambi post-AF1).
+> # SENTINELLA CONTAMINAZIONE (lezione S-161): oracle net fuori dal SUO rif
+> # storico => cifra NULLA anche a flag per-gamba muti; parita' resta valida.
+> # TRE adattamenti NEL CANONE ereditati: rodaggio non giudicante, quiescenza
+> # per gamba (retry x3), scaletta a DUE estremi. rc SOLO da orm-out/rimisura.done.
+29c18
+< H="$REPO/wp162-harness"
+---
+> H="$REPO/wp163-harness"
+36c25
+< VERD="$H/s162-orm-coppia-verdetto.out"
+---
+> VERD="$H/s163-orm-coppia-verdetto.out"
+41c30
+< [ "$PINM" = "ec0a636ad0c42005" ] || { echo "rc=9 pin!=s161" > "$OUT/rimisura.done"; exit 9; }
+---
+> [ "$PINM" = "20c63af44bfd077a" ] || { echo "rc=9 pin!=s162" > "$OUT/rimisura.done"; exit 9; }
+162c151
+< print("coppia-s162 (user CPU; pavimenti PARZIALI phpunit --version: orm o=%.3f p=%.3f · dbal o=%.3f p=%.3f)" % (fo, fp, dfo, dfp))
+---
+> print("coppia-s163 (user CPU; pavimenti PARZIALI phpunit --version: orm o=%.3f p=%.3f · dbal o=%.3f p=%.3f)" % (fo, fp, dfo, dfp))
+190c179
+< # --- ATTESA L-AF1 (criterio s162-criterio-orm.md p.2, aritmetica meccanica) ---
+---
+> # --- ATTESA L-AM2 (criterio s163-criterio-orm.md p.3, aritmetica meccanica) ---
+193,194c182,183
+< REF2_MIN, REF2_MAX = 34.96, 35.20  # RIF s160-finestra gambe PULITE (4/4, nessuna nota)
+< ORA_REF2 = 4.95                    # media DICHIARATA gambe oracle finestra s160 (4,96/4,94)
+---
+> REF2_MIN, REF2_MAX = 34.47, 34.51  # RIF s162-finestra gambe PULITE (2/2, sentinella negativa)
+> ORA_REF2 = 4.885                   # media DICHIARATA gambe oracle finestra s162 (4,87/4,90)
+196,197c185,186
+< RREF_LO, RREF_HI = 7.077, 7.097    # rapporto net registrato S-160 (companion)
+< ATT_LO, ATT_HI = 0.0, 0.035        # attesa L-AF1: TETTO dichiarato (census s149 1,83M passaggi x 17,0+2,0 ns sonda s161; frazione ammessa/elementi NON censiti); attesa-AL2 ~ZERO (Composer array-callable NON ammesso): il tetto NON sale
+---
+> RREF_LO, RREF_HI = 7.035, 7.086    # rapporto net registrato S-162 (companion)
+> ATT_LO, ATT_HI = 0.0, 0.0          # attesa L-AM2: tetto ~0 DICHIARATO (Doctrine: closures e builtin-string NON ammessi dal fast path k=1; quota utente-string NON censita => sotto-risoluzione; attesa-AF1 resta APERTA, non risolta da questa coppia)
+203c192
+<     print(f"attesa-AF1 assoluto (companion): phpr_orm_net_new=[{nn[0]:.2f}; {nn[1]:.2f}] ref=[{REF2_MIN}; {REF2_MAX}] Delta=[{d_min:+.2f}; {d_max:+.2f}] s")
+---
+>     print(f"attesa-AM2 assoluto (companion): phpr_orm_net_new=[{nn[0]:.2f}; {nn[1]:.2f}] ref=[{REF2_MIN}; {REF2_MAX}] Delta=[{d_min:+.2f}; {d_max:+.2f}] s")
+215,216c204,205
+<     print(f"attesa-AF1 ORACLE-NORMALIZZATO (CANONICO coppia): net_norm=[{n2[0]:.2f}; {n2[1]:.2f}] (ORA_REF={ORA_REF2}, oracle_net_gambe={[round(x,2) for x in on]}) Delta_norm=[{dn2_min:+.2f}; {dn2_max:+.2f}] s")
+<     print(f"rapporto net (companion): [{rr[0]:.3f}; {rr[1]:.3f}] vs registrato S-160 [{RREF_LO}; {RREF_HI}]")
+---
+>     print(f"attesa-AM2 ORACLE-NORMALIZZATO (CANONICO coppia): net_norm=[{n2[0]:.2f}; {n2[1]:.2f}] (ORA_REF={ORA_REF2}, oracle_net_gambe={[round(x,2) for x in on]}) Delta_norm=[{dn2_min:+.2f}; {dn2_max:+.2f}] s")
+>     print(f"rapporto net (companion): [{rr[0]:.3f}; {rr[1]:.3f}] vs registrato S-162 [{RREF_LO}; {RREF_HI}]")
+219c208
+<         print("attesa-AF1: CIFRA NULLA (parita' rotta) — nessun giudizio")
+---
+>         print("attesa-AM2: CIFRA NULLA (parita' rotta) — nessun giudizio")
+221c210
+<         print(f"attesa-AF1: DIREZIONE GIU' FUORI RUMORE (Delta_norm_min {dn2_min:.2f} >= {RES}) — OLTRE l'attesa a tetto {ATT_LO}-{ATT_HI}: dichiarare, nessuna attribuzione senza census ORM proprio")
+---
+>         print(f"attesa-AM2: DIREZIONE GIU' FUORI RUMORE (Delta_norm_min {dn2_min:.2f} >= {RES}) — OLTRE l'attesa a tetto {ATT_LO}-{ATT_HI}: dichiarare, nessuna attribuzione senza census ORM proprio")
+223c212
+<         print(f"attesa-AF1: REGRESSIONE SEGNALATA (Delta_norm_max {dn2_max:.2f} < -{RES}) — indagine PRIMA di ogni altra leva")
+---
+>         print(f"attesa-AM2: REGRESSIONE SEGNALATA (Delta_norm_max {dn2_max:.2f} < -{RES}) — indagine PRIMA di ogni altra leva")
+225c214
+<         print(f"attesa-AF1: COMPATIBILE (Delta_norm dentro il rumore ±{RES}; attesa a tetto {ATT_LO}-{ATT_HI} SOTTO risoluzione — esito dichiarato, nessuna cifra attribuita a L-AF1)")
+---
+>         print(f"attesa-AM2: COMPATIBILE (Delta_norm dentro il rumore ±{RES}; attesa a tetto {ATT_LO}-{ATT_HI} SOTTO risoluzione — esito dichiarato, nessuna cifra attribuita a L-AM2)")
+227c216
+<         print(f"attesa-AF1: NON RISOLTA (intervallo Delta_norm a cavallo di {RES}) — si dichiara")
+---
+>         print(f"attesa-AM2: NON RISOLTA (intervallo Delta_norm a cavallo di {RES}) — si dichiara")
+241c230
+< { echo "== s162 coppia dbal+ORM (pin s161 MISURATO $PINM vs oracle 8.5.7; criterio s162-criterio-orm.md) =="
+---
+> { echo "== s163 coppia dbal+ORM (pin s162 MISURATO $PINM vs oracle 8.5.7; criterio s163-criterio-orm.md) =="
