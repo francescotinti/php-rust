@@ -1,80 +1,79 @@
 # NEXT_SESSION — phpr: OBIETTIVO PARITÀ (≥1×) con l'oracle; ≤3× = tappa (REGOLE §1)
-⏱ **FONDAMENTALI**: **S-161 = sonda AF1 SALDATA (stash FERMI D=+17,0±2,0;
-coeff PER-SITO: refl 12,0±2,5 · arrfilter 17,0±2,0 · autoload solo-segno;
-orologio §4 SPENTO) + coppia t11 @ s160 COMPATIBILE 1,765 (4/6 pulite;
-banda_ON NON fondata) + ORM @ s160 parità VALIDA ma CIFRA NULLA (finestra
-CONTAMINATA: ictx 227-1769 ovunque, oracle 5,36/5,25 fuori dal SUO rif;
-attesa-AF1 «GIU'» = artefatto probabile, NON chiusa) + leva L-AL2 PROMOSSA
-(pin NUOVO s161)**: smoke +5,5 fuori banda SOTTO → arbitrato census Δ=1/miss
-ESATTO → R=5 **D=+5,0 SOPRA SOGLIA** 17/17 guardie, SOTTO-MODELLO ·
-promozione rc=0 SENZA rettifiche · revisione MISURA: REGGE CON RILIEVI (6,
-recepiti qui) · leve S-161: **1 (promossa)** · incidenti **19 + 2 in
-ratifica (#20 #21)** · QUESITI UTENTE: (a) T2/A2 sospendere (racc. S-155);
-(b) census server (11° slitt.); (c) #20 #21 + (d) emenda §3 (praticata,
-ratifica pendente).
+⏱ **FONDAMENTALI**: **S-162 = ordine COMPLETO: rimisura AL2 su stash FERMI
+(autoload 7,0±3,0, rev. S-161 #1-#2 assolte — TABELLA PER-SITO a cifre
+proprie: refl 12,0±2,5 · arrfilter 17,0±2,0 · autoload 7,0±3,0 · strmap
+65,0±1,0) + coppia t12 @ s161 COMPATIBILE 1,767 **6/6 PULITE** (quiete
+dichiarata uptime/top; **banda_ON FONDATA=0,018**, tentativo t11 CHIUSO) +
+ORM RIVALIDATO [7,035;7,086] (sentinella contaminazione NEGATIVA: oracle
+-1,2% dal SUO rif; assoluto MIGLIORA [+0,45;+0,73]s, rev. #3 praticata;
+attesa-AF1 NON risolta per AMPIEZZA, coerente col tetto ~0; dbal
+[7,391;7,440] con riserva ictx-oracle) + leva L-AM2 PROMOSSA (pin NUOVO
+s162)**: smoke +67,5 FUORI banda [4;19] SOPRA → census **2 alloc/elemento
+ESATTE** (vec+nome; attesa p.5 contraddiceva p.1: errore pre-registro
+DICHIARATO) → R=5 **D=+65,0** 18/18 guardie → promo rc=0 SENZA rettifiche,
+conferma post-pin +68,0 CIFRA PIENA · §3.26 a catalogo · leve S-162: **1
+(promossa) + rimisura** · incidenti **19 + 2 in ratifica (#20 #21), 0
+nuovi** · QUESITI UTENTE PENDENTI: (a) T2/A2 sospendere (racc. S-155);
+(b) census server (12° slitt.); (c) ratifica #20 #21; (d) emenda §3
+(praticata anche in S-162, ratifica pendente).
 
-## Scoreboard (pin s161 phpr ec0a636ad0c42005 + server cad5cf83fa2309c9)
-**arith 5,3 · prop 5,6 · calls 4,9 · str 4,3 · arr 3,3 · re 2,6** (micro R=5
-promo s161; calls 4,7→4,9 e arr 3,2→3,3 = tick denominatore, guardie A/B
-della leva TUTTE verdi: calls D=+0,7 arr D=0,0 — se il tick calls persiste
-alla prossima promo, indagine) · WP t11 mediana 1,765 (4/6 pulite) · media
-2,437–2,447 · ORM/dbal @ s160 CIFRA NULLA (rif resta s160: 7,077–7,097 /
-7,541–7,550) · corpus **1412×2** · batteria 1748/0/2 (cap loc **25831**/7708).
+## Scoreboard (pin s162 phpr 20c63af44bfd077a + server f6d4a63b23b963da)
+**arith 5,5 · prop 5,5 · calls 4,8 · str 4,2 · arr 3,1 · re 2,5** (micro R=5
+promo s162; rif s161 5,3/5,6/4,9/4,3/3,3/2,6 — tick arith ↑0,2 con guardia
+A/B VERDE D=-0,2: se persiste alla promo s163, indagine) · WP t12 mediana
+1,767 (6/6) · banda_ON 0,018 · media 2,426–2,445 · ORM [7,035;7,086] (rif
+NUOVO candidato; storico s160 [7,077;7,097]) · dbal [7,391;7,440] riserva ·
+corpus **1412×2** · batteria 1748/0/2 (cap loc **25847/7726**).
 
-## §S-162 — ordine (rev. S-161 recepita: azioni #1-#5)
-0. **Rimisura AL2 su stash FERMI** (rev. #1: phpr-s160 vs phpr-s161, stile
-   sonda AF1, cifra 5,0±IC propria — fino ad allora «direzione firmata,
-   magnitudine non tarata»); registro = TABELLA PER-SITO (rev. #2).
-1. **Coppia WP t12 + ORM/dbal al pin s161** (DOVUTA: pin nuovo) in finestra
-   QUIETA — assorbe la rimisura ORM (contaminata) e il tentativo integrativo
-   banda pair (t11 N=4<5, ≥5 pulite); companion ASSOLUTO nominato nella
-   lettura (rev. #3: a s161 il GIU' normalizzato conviveva con assoluto
-   NEGATIVO [-2,12;-0,17] — tensione a verbale). Prima di lanciare:
-   top/uptime dichiarati; attesa L-AL2 su ORM ~ZERO (Composer array-callable
-   NON ammesso) — RIF ORM resta s160 [34,96;35,20] / [7,077;7,097]
-   ORA_REF=4,95; su WP attesa sotto-risoluzione dichiarata.
-2. **Leva (obbligo di ritmo)** — candidata per NOME: **array_map
-   string-callable** (to_vec/elemento; census array_map 7,73M passaggi ORM
-   pre-AM1, frazione string-callable NON censita → il criterio la classifica
-   e fonda l'UB sul sito più SIMILE del modello per-sito, bivio dichiarato);
-   alternativa: MethodCall.borrow k=2 (aperture). Banda smoke VINCOLANTE
-   EREDITATA nel giudice + emenda smoke (rev. #4): guardia che morde a R=2
-   pretende arbitrato DICHIARATO come la banda; conferma post-pin con
-   rumore > attesa/2 = «solo segno» (rev. #5).
-3. **Emenda §3** (se l'utente ratifica #20/#21 + emenda): recepire in REGOLE
-   la formula già praticata (verifica POSITIVA path + marcatore + OUT nuova).
-4. Se la coppia t12 esce pulita 6/6: fondare banda_ON e chiudere il
-   tentativo integrativo.
+## §S-163 — ordine
+1. **Coppia WP t13 + ORM/dbal al pin s162** (DOVUTA: pin nuovo) in finestra
+   QUIETA (uptime/top dichiarati pre-lancio; catena lancio→pair→orm come
+   s162). Attesa L-AM2 su WP/ORM: il criterio CLASSIFICA le forme (Doctrine
+   usa closures e builtin-string 'strtoupper' NON ammessi; quota utente-string
+   NON censita) ⇒ attesa dichiarata sotto-risoluzione/~zero. RIF ORM per il
+   giudizio: s162 [7,035;7,086] gambe pulite, ORA_REF=4,885 (oracle 4,87/4,90)
+   — banda giudizio mediana WP INVARIATA [1,738;1,799] + t12=1,767.
+2. **Leva (obbligo di ritmo)** — candidata per NOME: **autoload
+   array-callable [obj,method] k=1** (quota ORM Composer PAGANTE: il loader
+   vero è ClassLoader::loadClass — superficie più larga di L-AL2; UB dal
+   sito autoload 7,0±3,0 + componenti PROPRIE contate sul bundle, lezione
+   s162: si CONTANO le alloc, mai per analogia). Alternativa:
+   MethodCall.borrow k=2 (aperture).
+3. **Emenda §3 + quesiti (a)-(d)** se l'utente ratifica/risponde.
+4. Companion: annotare il tick arith alla promo; dbal riserva (se ricorre su
+   finestra quieta, istruttoria denominatore-corto).
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
-array_map string-callable · MethodCall.borrow k=2 · elementi/chiamata
-array_map-filter non censiti · autoload array-callable [obj,method] k=1
-(quota ORM Composer PAGANTE, superficie più larga) · gamba server census
-(11°) · §3.25 · §3.24+§3.23 · slot-load · §3.22 · depr. float→int · warning
-×2 · div. RMW · objmap → GC · evalcls 316,9× · refl 42,4× · re +2 ·
-§3.13/§3.12-i/§3.14/§3.21 · get_gc · latin1 (dbal 3921/626) · dbal 10 nomi ·
-divergenze array_map a catalogo · CI: corpus-FAIL d'ambiente 3 backtrace.
+autoload array-callable k=1 · MethodCall.borrow k=2 · elementi/frazioni
+array_map-filter-string non censiti · gamba server census (12°) · §3.26
+(by-ref muto + undefined TypeError, catalogate s162) · §3.25 · §3.24+§3.23 ·
+slot-load · §3.22 · depr. float→int · warning ×2 · div. RMW · objmap → GC ·
+evalcls 316,9× · refl 42,4× · re +2 · §3.13/§3.12-i/§3.14/§3.21 · get_gc ·
+latin1 (dbal 3921/626) · dbal 10 nomi · CI: corpus-FAIL d'ambiente 3
+backtrace · attesa-AF1 (aperta, si risolve solo con più gambe ORM).
 
 ## NON riproporre (i veti restano; dettaglio nei concili archiviati)
-**S-161: coeff di famiglia trasportato tra siti (si prezza il BUNDLE del
-sito) · chiudere un'attesa su finestra con oracle fuori dal SUO riferimento
-(contaminazione sistemica: il flag a mediana non basta).**
-S-160: gate-fixture A==B senza marcatore · copia-gate senza verifica
-riga-per-riga. S-159..S-152: giudizio d'intervallo da UN estremo · chiudere
-attese su gambe ictx-segnalate · banda smoke senza denti · famiglia dal
-prezzo del giudice · cifra dalla sola finestra · assoluti cross-finestra non
-normalizzati · fette <risoluzione · braccio A non-gemello (§7-bis) · leve a
-scala SUITE. Trasversali: BOLT/NaN-boxing/PGO · pin senza collaudo ·
-differenze A/B come cifra · componenti prezzate · denominatori a memoria ·
-rc da pipe · edit coi build in volo · promozione sotto banda · claim di
-ASSENZA oltre risoluzione · giudice sotto-risoluto.
-**Riscritto** 2026-08-29 (chiusura S-161; storia in `sessions/` · `gaps/`).
-Pre-flight S-162: pin phpr **s161 ec0a636a**d0c42005 + server **cad5cf83**
-fa2309c9 (SOLO via pin-*.sh) · Data 10G al prune (CI requeue <7G: guardare
-il feed) · MySQL wp8 con l'elenco · uploads sotto guardia · corpus 1412 ·
-batteria cap loc 25831/7708 · stash: phpr-s161 · php-server-s161 ·
-phpr-s161-al2-B (==pin) · phpr-s161-gemelloA (==pin s160) · gemello A per
-S-162: ricetta dal tree s161 (cold byte-id N=5) · lock misura da CREARE ·
-lettura: REGOLE.md → QUI → wp161-harness/{s161-sonda-af1,s161-pair-verdetto-
-t11,s161-orm-coppia(+LETTURA),s161-al2,s161-census-al2,s161-promo}-verdetto
-.out → revisione.md → sessions/WP_SESSION_161.md → PERF_MAP.md.
+**S-162: gemello in target DEDICATO (il path del target è cotto nel binario:
+solo target CANONICO del pin) · attesa census per ANALOGIA col sito
+precedente (si CONTANO le alloc del bundle p.1).**
+S-161: coeff di famiglia trasportato tra siti · chiudere attese su finestra
+con oracle fuori dal SUO riferimento. S-160..S-152: gate-fixture A==B senza
+marcatore · copia-gate senza verifica riga-per-riga · giudizio d'intervallo
+da UN estremo · chiudere attese su gambe ictx-segnalate · banda smoke senza
+denti · famiglia dal prezzo del giudice · cifra dalla sola finestra · fette
+<risoluzione · braccio A non-gemello (§7-bis) · leve a scala SUITE.
+Trasversali: BOLT/NaN-boxing/PGO · pin senza collaudo · differenze A/B come
+cifra · componenti prezzate · denominatori a memoria · rc da pipe · edit coi
+build in volo · promozione sotto banda · claim di ASSENZA oltre risoluzione.
+**Riscritto** 2026-08-29 (chiusura S-162; storia in `sessions/` · `gaps/`).
+Pre-flight S-163: pin phpr **s162 20c63af4**4bfd077a + server **f6d4a63b**
+23b963da (SOLO via pin-*.sh) · Data 13G al prune (CI requeue <7G: feed) ·
+MySQL wp8 con l'elenco · uploads sotto guardia · corpus 1412 · batteria cap
+25847/7726 · stash: phpr-s162 · php-server-s162 · phpr-s162-am2-B (==pin) ·
+phpr-s162-gemelloA (==pin s161) · gemello A per S-163: ricetta dal tree s162
+nel target CANONICO (lezione s162) · lock misura da CREARE · AppleDouble
+bonificati (se ricompaiono nel bare CI, ripulire prima dei push) · lettura:
+REGOLE.md → QUI → wp162-harness/{s162-al2-rimisura,s162-pair-verdetto-t12,
+s162-orm-coppia(+LETTURA),s162-am2smoke,s162-census-am2(+APPENDICE),
+s162-am2r5,s162-promo}-verdetto.out → revisione.md → sessions/
+WP_SESSION_162.md → PERF_MAP.md.
