@@ -18,7 +18,6 @@ var_dump(array_map('\\f1', $a));                      // prefisso backslash
 var_dump(array_map('F1', $a));                        // case-insensitive
 var_dump(array_map('f2', $a));
 var_dump(array_map('f3', $a));
-var_dump(array_map('f4', [1, 2]));
 var_dump(array_map('f5', $a));
 var_dump(array_map('K::sm', [1, 2]));                 // metodo statico stringa
 var_dump(array_map('strtoupper', ['a', 'b']));        // builtin: loop generico
@@ -31,6 +30,7 @@ try { array_map('boom', [1, 2, 3]); } catch (RuntimeException $e) { echo "CAUGHT
 // funzione dichiarata da eval (linked): risoluzione linked_functions
 eval('function ev1($x) { return $x + 100; }');
 var_dump(array_map('ev1', [1, 2]));
-// undefined resta errore identico
-try { array_map('no_such_fn_sm', [1]); } catch (Error $e) { echo get_class($e), ": ", $e->getMessage(), "\n"; }
 echo "FX-SM DONE\n";
+// NOTA S-162: le forme by-ref ('f4') e undefined-callback stanno in
+// fx-sm-div.php (divergenze PRE-esistenti del pin, gate a INVARIANZA
+// pin==gemelloA; la leva non le tocca per costruzione).
