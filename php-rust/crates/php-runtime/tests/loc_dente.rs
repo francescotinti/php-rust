@@ -47,8 +47,12 @@ fn nessun_sorgente_rs_oltre_cap() {
         // array_map); calls.rs (+21) resta fuori allowlist sotto il cap 2000.
         // S-161: salita DICHIARATA +21 (leva L-AL2: fast path loader autoload
         // k=1 in try_autoload — criterio s161-criterio-al2.md p.1).
-        ("php-runtime/src/vm/mod.rs", 25831, "monolite VM — bersaglio A2; +21 L-AL2 S-161 PRE-dichiarato"),
-        ("php-runtime/src/vm/host.rs", 7708, "hostcall — backlog A2; +25 L-AF1 S-160 PRE-dichiarato"),
+        // S-162 L-AM2: salita PRE-dichiarata (criterio s162-criterio-am2.md
+        // p.1) — mod.rs +16 (push_fn_frame_one), host.rs +18 (fast path
+        // array_map string-callable); calls.rs (+38) resta fuori allowlist
+        // sotto il cap 2000.
+        ("php-runtime/src/vm/mod.rs", 25847, "monolite VM — bersaglio A2; +16 L-AM2 S-162 PRE-dichiarato"),
+        ("php-runtime/src/vm/host.rs", 7726, "hostcall — backlog A2; +18 L-AM2 S-162 PRE-dichiarato"),
         // S-156: salita DICHIARATA +29 (leva HD2-hostcall: braccio
         // CallHostBuiltin, pop diretti ≤4) — verbale wp156-harness/s156-promo.
         ("php-runtime/src/vm/run.rs", 6815, "run_loop — ULTIMO o mai (A2)"),

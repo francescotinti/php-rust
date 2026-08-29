@@ -1993,6 +1993,24 @@ impl<'m> super::Vm<'m> {
                         }
                     }
                 }
+                // L-AM2 (S-162): 1 array + STRING-callable a funzione UTENTE
+                // simple_call arità-1 — risoluzione UNA volta per chiamata
+                // (niente to_vec del nome, scan «::» né find_fn_ci
+                // per-elemento), poi dispatch per-elemento senza args-Vec via
+                // call_fn_one (stesso contratto di call_closure_one). Ogni
+                // altra forma (builtin, "Class::method", array-callable,
+                // closure non ammessa) cade sul loop generico sotto,
+                // invariato per costruzione: un nome che non risolve a
+                // funzione utente semplice arità-1 non entra qui.
+                if let Zval::Str(s) = &cb {
+                    if let Some((fm, idx)) = self.resolve_fn_one(s.as_bytes()) {
+                        for (k, v) in entries {
+                            let mapped = self.call_fn_one(fm, idx, v)?;
+                            out.insert(k, mapped);
+                        }
+                        return Ok(Zval::Array(Rc::new(out)));
+                    }
+                }
             }
             for (k, v) in entries {
                 let mapped = if null_cb { v } else { self.call_callable(cb.clone(), vec![v])? };

@@ -682,6 +682,44 @@ impl<'m> Vm<'m> {
         self.drive_to_return(baseline)
     }
 
+    /// L-AM2 (S-162): once-per-host-call resolution of a plain string
+    /// callable to a user function admitted for the arity-1 no-Vec path.
+    /// Mirrors `invoke_named`'s user-function resolution (leading-backslash
+    /// strip, `find_fn_ci`, then `linked_functions`); admission is
+    /// `simple_call` with exactly one parameter. Any other shape — builtin,
+    /// `"Class::method"` (never a function name), a name that does not
+    /// resolve — returns `None` and stays on the generic loop. Hoisting is
+    /// idempotent: a user name that already resolves cannot change its
+    /// resolution mid-call (redefinition is fatal; linking only adds names).
+    pub(super) fn resolve_fn_one(&self, name: &[u8]) -> Option<(&'m Module, usize)> {
+        let name = name.strip_prefix(b"\\").unwrap_or(name);
+        let hit = self
+            .module
+            .find_fn_ci(name)
+            .map(|i| (self.module, i))
+            .or_else(|| self.linked_functions.get(LcKey::new(name).as_slice()).copied())?;
+        let f = &hit.0.functions[hit.1];
+        (f.simple_call && f.n_params == 1).then_some(hit)
+    }
+
+    /// L-AM2 (S-162): arity-1 mirror of [`Self::call_callable`] for a
+    /// pre-admitted user function named by a string callable — same
+    /// baseline/drive contract as [`Self::call_closure_one`], no args-Vec.
+    pub(super) fn call_fn_one(&mut self, fmod: &'m Module, idx: usize, arg: Zval) -> Result<Zval, PhpError> {
+        let baseline = self.frames.len();
+        self.push_fn_frame_one(fmod, idx, arg)?;
+        if self.frames.len() == baseline {
+            // Mirror of call_callable's no-frame arm: unreachable for a user
+            // function body (which always pushes a frame); kept for
+            // structural equality with the full path.
+            return Ok(self.frames[baseline - 1]
+                .stack
+                .pop()
+                .expect("host callable result on the caller stack"));
+        }
+        self.drive_to_return(baseline)
+    }
+
     /// Normalise the `$newThis` argument of `bindTo`/`bind`/`call`: an object
     /// binds, `null` (or anything else) clears the binding (step 19-6).
     fn closure_this_arg(v: Option<Zval>) -> Option<Zval> {

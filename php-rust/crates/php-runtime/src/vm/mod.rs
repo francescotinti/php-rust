@@ -11465,6 +11465,22 @@ impl<'m> Vm<'m> {
         self.enter_callee(frame)
     }
 
+    /// L-AM2 (S-162): install a frame for a pre-admitted user function with
+    /// a single by-value argument, without materializing an args-Vec.
+    /// Admission (checked once by the caller, per host call, via
+    /// [`Self::resolve_fn_one`]): `simple_call && n_params == 1`; a host
+    /// value is never an `ArgPlace`. Mirrors `invoke_named`'s user-function
+    /// arm minus `bind_params`' Vec: the intake equals its simple-call arm
+    /// at arity 1 (`argc = 1; slots[0] = decay_arg(arg)`).
+    fn push_fn_frame_one(&mut self, fmod: &'m Module, idx: usize, arg: Zval) -> Result<(), PhpError> {
+        let callee = &fmod.functions[idx];
+        debug_assert!(callee.simple_call && callee.n_params == 1);
+        let mut frame = self.pooled_frame(callee, fmod);
+        frame.argc = 1;
+        frame.slots[0] = decay_arg(arg);
+        self.enter_callee(frame)
+    }
+
     /// Like [`Self::push_magic_call`] but the forwarded `$args` array also carries
     /// any **named arguments** keyed by name (string keys), matching PHP's `__call`
     /// behaviour for `$obj->missing(x: 1)` (Session A).
