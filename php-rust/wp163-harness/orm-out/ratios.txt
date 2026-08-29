@@ -1,0 +1,17 @@
+coppia-s163 (user CPU; pavimenti PARZIALI phpunit --version: orm o=0.060 p=0.070 · dbal o=0.060 p=0.190)
+grade=VERDICT  # derivazione meccanica dai .time
+orm_leg1: oracle_user=4.91 (sys=0.46) phpr_user=34.37 (sys=1.21) ratio_raw=7.000 ratio_net=7.072
+orm_leg2: oracle_user=4.90 (sys=0.48) phpr_user=34.50 (sys=1.22) ratio_raw=7.041 ratio_net=7.114
+orm_ictx_abs: oracle1=47 phpr1=955 oracle2=49 phpr2=115
+orm_ictx/s (gate emenda S-127): oracle1=8.7 phpr1=26.8 oracle2=9.1 phpr2=3.2  SEGNALATE(>1,5x med): ['phpr1']
+dbal_leg1: oracle_user=1.13 (sys=0.21) phpr_user=8.29 (sys=0.38) ratio_raw=7.336 ratio_net=7.570
+dbal_leg2: oracle_user=1.15 (sys=0.21) phpr_user=8.25 (sys=0.38) ratio_raw=7.174 ratio_net=7.394
+dbal_ictx_abs: oracle1=110 phpr1=58 oracle2=66 phpr2=60
+dbal_ictx/s (gate emenda S-127): oracle1=80.9 phpr1=6.7 oracle2=48.2 phpr2=6.9  SEGNALATE(>1,5x med): ['oracle1', 'oracle2']
+dbal_parita': phpr_failset_stabile=True |phpr_fail|=10 |diff_vs_oracle|=10
+dbal_diff_nomi: Doctrine\DBAL\Tests\Functional\PortabilityTest::testCaseConversion with data set "lower" (Doctrine\DBAL\ColumnCase Enum (LOWER), ['test_int', 'test_string', 'test_null']) | Doctrine\DBAL\Tests\Functional\PortabilityTest::testCaseConversion with data set "upper" (Doctrine\DBAL\ColumnCase Enum (UPPER), ['TEST_INT', 'TEST_STRING', 'TEST_NULL']) | Doctrine\DBAL\Tests\Functional\PortabilityTest::testCaseConversionColumnName with data set "lower" (Doctrine\DBAL\ColumnCase Enum (LOWER), ['test_int', 'test_string', 'test_null']) | Doctrine\DBAL\Tests\Functional\PortabilityTest::testCaseConversionColumnName with data set "upper" (Doctrine\DBAL\ColumnCase Enum (UPPER), ['TEST_INT', 'TEST_STRING', 'TEST_NULL']) | Doctrine\DBAL\Tests\Functional\PortabilityTest::testFetchAllNullColumn | Doctrine\DBAL\Tests\Functional\PortabilityTest::testFetchColumn with data set "int" ('Test_Int', [1, 2]) | Doctrine\DBAL\Tests\Functional\PortabilityTest::testFetchColumn with data set "string" ('Test_String', ['foo', 'foo']) | Doctrine\DBAL\Tests\Functional\PortabilityTest::testFullFetchMode | Doctrine\DBAL\Tests\Functional\PortabilityTest::testGetDatabaseName | Doctrine\DBAL\Tests\Schema\Name\Parser\GenericNameParserTest::testValidInput with data set #11 ('schéma."übermäßigkeit".`àçcên...ràctér', [Doctrine\DBAL\Schema\Name\Identifier Object (...), Doctrine\DBAL\Schema\Name\Identifier Object (...), Doctrine\DBAL\Schema\Name\Identifier Object (...), Doctrine\DBAL\Schema\Name\Identifier Object (...), Doctrine\DBAL\Schema\Name\Identifier Object (...)])
+attesa-AM2 assoluto (companion): phpr_orm_net_new=[34.30; 34.43] ref=[34.47; 34.51] Delta=[+0.04; +0.21] s
+attesa-AM2 ORACLE-NORMALIZZATO (CANONICO coppia): net_norm=[34.55; 34.75] (ORA_REF=4.885, oracle_net_gambe=[4.85, 4.84]) Delta_norm=[-0.28; -0.04] s
+rapporto net (companion): [7.072; 7.114] vs registrato S-162 [7.035; 7.086]
+attesa-AM2: COMPATIBILE (Delta_norm dentro il rumore ±0.293; attesa a tetto 0.0-0.0 SOTTO risoluzione — esito dichiarato, nessuna cifra attribuita a L-AM2)
+gambe ictx SEGNALATE ['phpr1'] — a verbale (rodaggio nel canone; se ricorre, istruttoria dedicata)

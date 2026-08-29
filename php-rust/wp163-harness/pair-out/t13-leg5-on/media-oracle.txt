@@ -1,0 +1,28 @@
+Installing...
+Running as single site... To run multisite, use -c tests/phpunit/multisite.xml
+Not running ajax tests. To execute these, use --group ajax.
+Not running ms-files tests. To execute these, use --group ms-files.
+Not running external-http tests. To execute these, use --group external-http.
+PHPUnit 9.6.35 by Sebastian Bergmann and contributors.
+
+Warning:       Your XML configuration validates against a deprecated schema.
+Suggestion:    Migrate your XML configuration using "--migrate-configuration"!
+
+..........................................................SSSSS  63 / 762 (  8%)
+SSSSSSSSSSSSSSSSSSSSSSSS....................................... 126 / 762 ( 16%)
+................................SSSS........................... 189 / 762 ( 24%)
+...............................SS........SSSSSSSSSSSSSS........ 252 / 762 ( 33%)
+............................................................... 315 / 762 ( 41%)
+............................................................... 378 / 762 ( 49%)
+............................................................... 441 / 762 ( 57%)
+......................................................S........ 504 / 762 ( 66%)
+............................................................... 567 / 762 ( 74%)
+.............SS................................................ 630 / 762 ( 82%)
+............................................................... 693 / 762 ( 90%)
+............................................................... 756 / 762 ( 99%)
+......                                                          762 / 762 (100%)
+
+Time: 00:27.449, Memory: 235.00 MB
+
+OK, but incomplete, skipped, or risky tests!
+Tests: 762, Assertions: 1912, Skipped: 52.

@@ -11,3 +11,25 @@ uploads-guard: restore verificato (count=3) — backup conservato in /Volumes/Ex
 11:56:41 quiescenza leg1-on rc=0 tentativo-gate=1 (file: pair-out/quiesce-t13-leg1-on.rc)
 11:56:41 gamba on-1 START
 /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp109-harness/pair109.sh: line 38: rustc: command not found
+12:22:04 gamba on-1 rc=0
+12:22:29 quiescenza leg2-on rc=0 tentativo-gate=1 (file: pair-out/quiesce-t13-leg2-on.rc)
+12:22:29 gamba on-2 START
+/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp109-harness/pair109.sh: line 38: rustc: command not found
+12:47:48 gamba on-2 rc=0
+12:48:14 quiescenza leg3-on rc=0 tentativo-gate=1 (file: pair-out/quiesce-t13-leg3-on.rc)
+12:48:14 gamba on-3 START
+/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp109-harness/pair109.sh: line 38: rustc: command not found
+13:13:39 gamba on-3 rc=0
+13:14:04 quiescenza leg4-on rc=0 tentativo-gate=1 (file: pair-out/quiesce-t13-leg4-on.rc)
+13:14:04 gamba on-4 START
+/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp109-harness/pair109.sh: line 38: rustc: command not found
+13:39:22 gamba on-4 rc=0
+13:39:48 quiescenza leg5-on rc=0 tentativo-gate=1 (file: pair-out/quiesce-t13-leg5-on.rc)
+13:39:48 gamba on-5 START
+/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp109-harness/pair109.sh: line 38: rustc: command not found
+14:05:03 gamba on-5 rc=0
+14:05:28 quiescenza leg6-on rc=0 tentativo-gate=1 (file: pair-out/quiesce-t13-leg6-on.rc)
+14:05:28 gamba on-6 START
+/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp109-harness/pair109.sh: line 38: rustc: command not found
+14:30:38 gamba on-6 rc=0
+14:30:38 DONE rc=0 (fonte rc: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp163-harness/pair-out/pair163-t13.done)

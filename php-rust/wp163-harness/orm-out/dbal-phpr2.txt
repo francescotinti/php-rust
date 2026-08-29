@@ -1,0 +1,262 @@
+PHPUnit 11.5.50 by Sebastian Bergmann and contributors.
+
+Runtime:       PHP 8.5.7
+Configuration: /private/tmp/phpr-s163-orm/dbal-work/phpunit.xml.dist
+
+.............................................................   61 / 3921 (  1%)
+......SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS......................  122 / 3921 (  3%)
+........SS........S..SSSSS.S..S..S.S.........................  183 / 3921 (  4%)
+.............................................................  244 / 3921 (  6%)
+.....SSS............................SSS........S.............  305 / 3921 (  7%)
+.............................................................  366 / 3921 (  9%)
+..................................SSSSSSSSSSSSSSSSSSSSSSSSSSS  427 / 3921 ( 10%)
+S.SSSSSSSSSS...SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS  488 / 3921 ( 12%)
+SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS  549 / 3921 ( 14%)
+SSSS.........SSSSSS.S.S.SS.....S.................S.....SS....  610 / 3921 ( 15%)
+...............................EEEEEEEEESSSSSSSSS............  671 / 3921 ( 17%)
+.......S....S........SSS.SSSS...................SSSSSSSSSSSSS  732 / 3921 ( 18%)
+SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS..............................  793 / 3921 ( 20%)
+..........I....IIIIIIIIISSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS  854 / 3921 ( 21%)
+SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS  915 / 3921 ( 23%)
+SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS  976 / 3921 ( 24%)
+SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS 1037 / 3921 ( 26%)
+SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS.SSS..........S... 1098 / 3921 ( 28%)
+.S.........S.SSS...S....S.................................... 1159 / 3921 ( 29%)
+.................SSSSSSSI..S...S..S..........S..............S 1220 / 3921 ( 31%)
+S.SSSSS........................S...S..SSSSSSSSSSSS........S.S 1281 / 3921 ( 32%)
+.S.SS............S........................................... 1342 / 3921 ( 34%)
+........................SSS.................................. 1403 / 3921 ( 35%)
+............................................................. 1464 / 3921 ( 37%)
+................S............................................ 1525 / 3921 ( 38%)
+.............SS..S........................................... 1586 / 3921 ( 40%)
+............S................................................ 1647 / 3921 ( 42%)
+.........SS..S............................................... 1708 / 3921 ( 43%)
+.........S................................................... 1769 / 3921 ( 45%)
+......SS..S.................................................. 1830 / 3921 ( 46%)
+.......S..................................................... 1891 / 3921 ( 48%)
+....SS..S.................................................... 1952 / 3921 ( 49%)
+............................................................. 2013 / 3921 ( 51%)
+..S.......................................................... 2074 / 3921 ( 52%)
+SS........................................................... 2135 / 3921 ( 54%)
+.S..........................................................S 2196 / 3921 ( 56%)
+S........................................................SSS. 2257 / 3921 ( 57%)
+............................................................. 2318 / 3921 ( 59%)
+......................................................SSS.... 2379 / 3921 ( 60%)
+............................................................. 2440 / 3921 ( 62%)
+............................................................. 2501 / 3921 ( 63%)
+............................................................. 2562 / 3921 ( 65%)
+.........................SSS................................. 2623 / 3921 ( 66%)
+............................................................. 2684 / 3921 ( 68%)
+..................................................S.......... 2745 / 3921 ( 70%)
+..............................................S.............. 2806 / 3921 ( 71%)
+................................II........S.................. 2867 / 3921 ( 73%)
+............................................................. 2928 / 3921 ( 74%)
+............................................................. 2989 / 3921 ( 76%)
+............................................................. 3050 / 3921 ( 77%)
+............................................................. 3111 / 3921 ( 79%)
+............................................................. 3172 / 3921 ( 80%)
+............................................................. 3233 / 3921 ( 82%)
+............................................................. 3294 / 3921 ( 84%)
+............................................................. 3355 / 3921 ( 85%)
+.........................E................................... 3416 / 3921 ( 87%)
+............................................................. 3477 / 3921 ( 88%)
+............................................................. 3538 / 3921 ( 90%)
+............................................................. 3599 / 3921 ( 91%)
+............................................................. 3660 / 3921 ( 93%)
+............................................................. 3721 / 3921 ( 94%)
+............................................................. 3782 / 3921 ( 96%)
+............................................................. 3843 / 3921 ( 98%)
+............................................................. 3904 / 3921 ( 99%)
+.................                                             3921 / 3921 (100%)
+
+Time: 00:06.457, Memory: 1.91 MB
+
+There were 10 errors:
+
+1) Doctrine\DBAL\Tests\Functional\PortabilityTest::testFullFetchMode
+TypeError: Doctrine\DBAL\Portability\OptimizeFlags::__invoke(): Argument #2 ($flags) must be of type int, null given, called in /private/tmp/phpr-s163-orm/dbal-work/vendor/phpunit/phpunit/phpunit on line 42
+
+/private/tmp/phpr-s163-orm/dbal-work/src/Portability/Driver.php:42
+/private/tmp/phpr-s163-orm/dbal-work/src/Connection.php:222
+/private/tmp/phpr-s163-orm/dbal-work/src/Connection.php:893
+/private/tmp/phpr-s163-orm/dbal-work/src/Schema/AbstractSchemaManager.php:1034
+/private/tmp/phpr-s163-orm/dbal-work/tests/FunctionalTestCase.php:104
+/private/tmp/phpr-s163-orm/dbal-work/tests/FunctionalTestCase.php:120
+/private/tmp/phpr-s163-orm/dbal-work/tests/Functional/PortabilityTest.php:203
+/private/tmp/phpr-s163-orm/dbal-work/tests/Functional/PortabilityTest.php:34
+
+2) Doctrine\DBAL\Tests\Functional\PortabilityTest::testCaseConversion with data set "lower" (Doctrine\DBAL\ColumnCase Enum (LOWER), ['test_int', 'test_string', 'test_null'])
+TypeError: Doctrine\DBAL\Portability\OptimizeFlags::__invoke(): Argument #2 ($flags) must be of type int, null given, called in /private/tmp/phpr-s163-orm/dbal-work/vendor/phpunit/phpunit/phpunit on line 42
+
+/private/tmp/phpr-s163-orm/dbal-work/src/Portability/Driver.php:42
+/private/tmp/phpr-s163-orm/dbal-work/src/Driver/Middleware/AbstractDriverMiddleware.php:27
+/private/tmp/phpr-s163-orm/dbal-work/src/Portability/Driver.php:39
+/private/tmp/phpr-s163-orm/dbal-work/src/Connection.php:222
+/private/tmp/phpr-s163-orm/dbal-work/src/Connection.php:893
+/private/tmp/phpr-s163-orm/dbal-work/src/Schema/AbstractSchemaManager.php:1034
+/private/tmp/phpr-s163-orm/dbal-work/tests/FunctionalTestCase.php:104
+/private/tmp/phpr-s163-orm/dbal-work/tests/FunctionalTestCase.php:120
+/private/tmp/phpr-s163-orm/dbal-work/tests/Functional/PortabilityTest.php:203
+/private/tmp/phpr-s163-orm/dbal-work/tests/Functional/PortabilityTest.php:59
+
+3) Doctrine\DBAL\Tests\Functional\PortabilityTest::testCaseConversion with data set "upper" (Doctrine\DBAL\ColumnCase Enum (UPPER), ['TEST_INT', 'TEST_STRING', 'TEST_NULL'])
+TypeError: Doctrine\DBAL\Portability\OptimizeFlags::__invoke(): Argument #2 ($flags) must be of type int, null given, called in /private/tmp/phpr-s163-orm/dbal-work/vendor/phpunit/phpunit/phpunit on line 42
+
+/private/tmp/phpr-s163-orm/dbal-work/src/Portability/Driver.php:42
+/private/tmp/phpr-s163-orm/dbal-work/src/Driver/Middleware/AbstractDriverMiddleware.php:27
+/private/tmp/phpr-s163-orm/dbal-work/src/Portability/Driver.php:39
+/private/tmp/phpr-s163-orm/dbal-work/src/Driver/Middleware/AbstractDriverMiddleware.php:27
+/private/tmp/phpr-s163-orm/dbal-work/src/Portability/Driver.php:39
+/private/tmp/phpr-s163-orm/dbal-work/src/Connection.php:222
+/private/tmp/phpr-s163-orm/dbal-work/src/Connection.php:893
+/private/tmp/phpr-s163-orm/dbal-work/src/Schema/AbstractSchemaManager.php:1034
+/private/tmp/phpr-s163-orm/dbal-work/tests/FunctionalTestCase.php:104
+/private/tmp/phpr-s163-orm/dbal-work/tests/FunctionalTestCase.php:120
+/private/tmp/phpr-s163-orm/dbal-work/tests/Functional/PortabilityTest.php:203
+/private/tmp/phpr-s163-orm/dbal-work/tests/Functional/PortabilityTest.php:59
+
+4) Doctrine\DBAL\Tests\Functional\PortabilityTest::testCaseConversionColumnName with data set "lower" (Doctrine\DBAL\ColumnCase Enum (LOWER), ['test_int', 'test_string', 'test_null'])
+TypeError: Doctrine\DBAL\Portability\OptimizeFlags::__invoke(): Argument #2 ($flags) must be of type int, null given, called in /private/tmp/phpr-s163-orm/dbal-work/vendor/phpunit/phpunit/phpunit on line 42
+
+/private/tmp/phpr-s163-orm/dbal-work/src/Portability/Driver.php:42
+/private/tmp/phpr-s163-orm/dbal-work/src/Driver/Middleware/AbstractDriverMiddleware.php:27
+/private/tmp/phpr-s163-orm/dbal-work/src/Portability/Driver.php:39
+/private/tmp/phpr-s163-orm/dbal-work/src/Driver/Middleware/AbstractDriverMiddleware.php:27
+/private/tmp/phpr-s163-orm/dbal-work/src/Portability/Driver.php:39
+/private/tmp/phpr-s163-orm/dbal-work/src/Driver/Middleware/AbstractDriverMiddleware.php:27
+/private/tmp/phpr-s163-orm/dbal-work/src/Portability/Driver.php:39
+/private/tmp/phpr-s163-orm/dbal-work/src/Connection.php:222
+/private/tmp/phpr-s163-orm/dbal-work/src/Connection.php:893
+/private/tmp/phpr-s163-orm/dbal-work/src/Schema/AbstractSchemaManager.php:1034
+/private/tmp/phpr-s163-orm/dbal-work/tests/FunctionalTestCase.php:104
+/private/tmp/phpr-s163-orm/dbal-work/tests/FunctionalTestCase.php:120
+/private/tmp/phpr-s163-orm/dbal-work/tests/Functional/PortabilityTest.php:203
+/private/tmp/phpr-s163-orm/dbal-work/tests/Functional/PortabilityTest.php:72
+
+5) Doctrine\DBAL\Tests\Functional\PortabilityTest::testCaseConversionColumnName with data set "upper" (Doctrine\DBAL\ColumnCase Enum (UPPER), ['TEST_INT', 'TEST_STRING', 'TEST_NULL'])
+TypeError: Doctrine\DBAL\Portability\OptimizeFlags::__invoke(): Argument #2 ($flags) must be of type int, null given, called in /private/tmp/phpr-s163-orm/dbal-work/vendor/phpunit/phpunit/phpunit on line 42
+
+/private/tmp/phpr-s163-orm/dbal-work/src/Portability/Driver.php:42
+/private/tmp/phpr-s163-orm/dbal-work/src/Driver/Middleware/AbstractDriverMiddleware.php:27
+/private/tmp/phpr-s163-orm/dbal-work/src/Portability/Driver.php:39
+/private/tmp/phpr-s163-orm/dbal-work/src/Driver/Middleware/AbstractDriverMiddleware.php:27
+/private/tmp/phpr-s163-orm/dbal-work/src/Portability/Driver.php:39
+/private/tmp/phpr-s163-orm/dbal-work/src/Driver/Middleware/AbstractDriverMiddleware.php:27
+/private/tmp/phpr-s163-orm/dbal-work/src/Portability/Driver.php:39
+/private/tmp/phpr-s163-orm/dbal-work/src/Driver/Middleware/AbstractDriverMiddleware.php:27
+/private/tmp/phpr-s163-orm/dbal-work/src/Portability/Driver.php:39
+/private/tmp/phpr-s163-orm/dbal-work/src/Connection.php:222
+/private/tmp/phpr-s163-orm/dbal-work/src/Connection.php:893
+/private/tmp/phpr-s163-orm/dbal-work/src/Schema/AbstractSchemaManager.php:1034
+/private/tmp/phpr-s163-orm/dbal-work/tests/FunctionalTestCase.php:104
+/private/tmp/phpr-s163-orm/dbal-work/tests/FunctionalTestCase.php:120
+/private/tmp/phpr-s163-orm/dbal-work/tests/Functional/PortabilityTest.php:203
+/private/tmp/phpr-s163-orm/dbal-work/tests/Functional/PortabilityTest.php:72
+
+6) Doctrine\DBAL\Tests\Functional\PortabilityTest::testFetchColumn with data set "int" ('Test_Int', [1, 2])
+TypeError: Doctrine\DBAL\Portability\OptimizeFlags::__invoke(): Argument #2 ($flags) must be of type int, null given, called in /private/tmp/phpr-s163-orm/dbal-work/vendor/phpunit/phpunit/phpunit on line 42
+
+/private/tmp/phpr-s163-orm/dbal-work/src/Portability/Driver.php:42
+/private/tmp/phpr-s163-orm/dbal-work/src/Driver/Middleware/AbstractDriverMiddleware.php:27
+/private/tmp/phpr-s163-orm/dbal-work/src/Portability/Driver.php:39
+/private/tmp/phpr-s163-orm/dbal-work/src/Driver/Middleware/AbstractDriverMiddleware.php:27
+/private/tmp/phpr-s163-orm/dbal-work/src/Portability/Driver.php:39
+/private/tmp/phpr-s163-orm/dbal-work/src/Driver/Middleware/AbstractDriverMiddleware.php:27
+/private/tmp/phpr-s163-orm/dbal-work/src/Portability/Driver.php:39
+/private/tmp/phpr-s163-orm/dbal-work/src/Driver/Middleware/AbstractDriverMiddleware.php:27
+/private/tmp/phpr-s163-orm/dbal-work/src/Portability/Driver.php:39
+/private/tmp/phpr-s163-orm/dbal-work/src/Driver/Middleware/AbstractDriverMiddleware.php:27
+/private/tmp/phpr-s163-orm/dbal-work/src/Portability/Driver.php:39
+/private/tmp/phpr-s163-orm/dbal-work/src/Connection.php:222
+/private/tmp/phpr-s163-orm/dbal-work/src/Connection.php:893
+/private/tmp/phpr-s163-orm/dbal-work/src/Schema/AbstractSchemaManager.php:1034
+/private/tmp/phpr-s163-orm/dbal-work/tests/FunctionalTestCase.php:104
+/private/tmp/phpr-s163-orm/dbal-work/tests/FunctionalTestCase.php:120
+/private/tmp/phpr-s163-orm/dbal-work/tests/Functional/PortabilityTest.php:203
+/private/tmp/phpr-s163-orm/dbal-work/tests/Functional/PortabilityTest.php:120
+
+7) Doctrine\DBAL\Tests\Functional\PortabilityTest::testFetchColumn with data set "string" ('Test_String', ['foo', 'foo'])
+TypeError: Doctrine\DBAL\Portability\OptimizeFlags::__invoke(): Argument #2 ($flags) must be of type int, null given, called in /private/tmp/phpr-s163-orm/dbal-work/vendor/phpunit/phpunit/phpunit on line 42
+
+/private/tmp/phpr-s163-orm/dbal-work/src/Portability/Driver.php:42
+/private/tmp/phpr-s163-orm/dbal-work/src/Driver/Middleware/AbstractDriverMiddleware.php:27
+/private/tmp/phpr-s163-orm/dbal-work/src/Portability/Driver.php:39
+/private/tmp/phpr-s163-orm/dbal-work/src/Driver/Middleware/AbstractDriverMiddleware.php:27
+/private/tmp/phpr-s163-orm/dbal-work/src/Portability/Driver.php:39
+/private/tmp/phpr-s163-orm/dbal-work/src/Driver/Middleware/AbstractDriverMiddleware.php:27
+/private/tmp/phpr-s163-orm/dbal-work/src/Portability/Driver.php:39
+/private/tmp/phpr-s163-orm/dbal-work/src/Driver/Middleware/AbstractDriverMiddleware.php:27
+/private/tmp/phpr-s163-orm/dbal-work/src/Portability/Driver.php:39
+/private/tmp/phpr-s163-orm/dbal-work/src/Driver/Middleware/AbstractDriverMiddleware.php:27
+/private/tmp/phpr-s163-orm/dbal-work/src/Portability/Driver.php:39
+/private/tmp/phpr-s163-orm/dbal-work/src/Driver/Middleware/AbstractDriverMiddleware.php:27
+/private/tmp/phpr-s163-orm/dbal-work/src/Portability/Driver.php:39
+/private/tmp/phpr-s163-orm/dbal-work/src/Connection.php:222
+/private/tmp/phpr-s163-orm/dbal-work/src/Connection.php:893
+/private/tmp/phpr-s163-orm/dbal-work/src/Schema/AbstractSchemaManager.php:1034
+/private/tmp/phpr-s163-orm/dbal-work/tests/FunctionalTestCase.php:104
+/private/tmp/phpr-s163-orm/dbal-work/tests/FunctionalTestCase.php:120
+/private/tmp/phpr-s163-orm/dbal-work/tests/Functional/PortabilityTest.php:203
+/private/tmp/phpr-s163-orm/dbal-work/tests/Functional/PortabilityTest.php:120
+
+8) Doctrine\DBAL\Tests\Functional\PortabilityTest::testFetchAllNullColumn
+TypeError: Doctrine\DBAL\Portability\OptimizeFlags::__invoke(): Argument #2 ($flags) must be of type int, null given, called in /private/tmp/phpr-s163-orm/dbal-work/vendor/phpunit/phpunit/phpunit on line 42
+
+/private/tmp/phpr-s163-orm/dbal-work/src/Portability/Driver.php:42
+/private/tmp/phpr-s163-orm/dbal-work/src/Driver/Middleware/AbstractDriverMiddleware.php:27
+/private/tmp/phpr-s163-orm/dbal-work/src/Portability/Driver.php:39
+/private/tmp/phpr-s163-orm/dbal-work/src/Driver/Middleware/AbstractDriverMiddleware.php:27
+/private/tmp/phpr-s163-orm/dbal-work/src/Portability/Driver.php:39
+/private/tmp/phpr-s163-orm/dbal-work/src/Driver/Middleware/AbstractDriverMiddleware.php:27
+/private/tmp/phpr-s163-orm/dbal-work/src/Portability/Driver.php:39
+/private/tmp/phpr-s163-orm/dbal-work/src/Driver/Middleware/AbstractDriverMiddleware.php:27
+/private/tmp/phpr-s163-orm/dbal-work/src/Portability/Driver.php:39
+/private/tmp/phpr-s163-orm/dbal-work/src/Driver/Middleware/AbstractDriverMiddleware.php:27
+/private/tmp/phpr-s163-orm/dbal-work/src/Portability/Driver.php:39
+/private/tmp/phpr-s163-orm/dbal-work/src/Driver/Middleware/AbstractDriverMiddleware.php:27
+/private/tmp/phpr-s163-orm/dbal-work/src/Portability/Driver.php:39
+/private/tmp/phpr-s163-orm/dbal-work/src/Driver/Middleware/AbstractDriverMiddleware.php:27
+/private/tmp/phpr-s163-orm/dbal-work/src/Portability/Driver.php:39
+/private/tmp/phpr-s163-orm/dbal-work/src/Connection.php:222
+/private/tmp/phpr-s163-orm/dbal-work/src/Connection.php:893
+/private/tmp/phpr-s163-orm/dbal-work/src/Schema/AbstractSchemaManager.php:1034
+/private/tmp/phpr-s163-orm/dbal-work/tests/FunctionalTestCase.php:104
+/private/tmp/phpr-s163-orm/dbal-work/tests/FunctionalTestCase.php:120
+/private/tmp/phpr-s163-orm/dbal-work/tests/Functional/PortabilityTest.php:203
+/private/tmp/phpr-s163-orm/dbal-work/tests/Functional/PortabilityTest.php:145
+
+9) Doctrine\DBAL\Tests\Functional\PortabilityTest::testGetDatabaseName
+TypeError: Doctrine\DBAL\Portability\OptimizeFlags::__invoke(): Argument #2 ($flags) must be of type int, null given, called in /private/tmp/phpr-s163-orm/dbal-work/vendor/phpunit/phpunit/phpunit on line 42
+
+/private/tmp/phpr-s163-orm/dbal-work/src/Portability/Driver.php:42
+/private/tmp/phpr-s163-orm/dbal-work/src/Driver/Middleware/AbstractDriverMiddleware.php:27
+/private/tmp/phpr-s163-orm/dbal-work/src/Portability/Driver.php:39
+/private/tmp/phpr-s163-orm/dbal-work/src/Driver/Middleware/AbstractDriverMiddleware.php:27
+/private/tmp/phpr-s163-orm/dbal-work/src/Portability/Driver.php:39
+/private/tmp/phpr-s163-orm/dbal-work/src/Driver/Middleware/AbstractDriverMiddleware.php:27
+/private/tmp/phpr-s163-orm/dbal-work/src/Portability/Driver.php:39
+/private/tmp/phpr-s163-orm/dbal-work/src/Driver/Middleware/AbstractDriverMiddleware.php:27
+/private/tmp/phpr-s163-orm/dbal-work/src/Portability/Driver.php:39
+/private/tmp/phpr-s163-orm/dbal-work/src/Driver/Middleware/AbstractDriverMiddleware.php:27
+/private/tmp/phpr-s163-orm/dbal-work/src/Portability/Driver.php:39
+/private/tmp/phpr-s163-orm/dbal-work/src/Driver/Middleware/AbstractDriverMiddleware.php:27
+/private/tmp/phpr-s163-orm/dbal-work/src/Portability/Driver.php:39
+/private/tmp/phpr-s163-orm/dbal-work/src/Driver/Middleware/AbstractDriverMiddleware.php:27
+/private/tmp/phpr-s163-orm/dbal-work/src/Portability/Driver.php:39
+/private/tmp/phpr-s163-orm/dbal-work/src/Driver/Middleware/AbstractDriverMiddleware.php:27
+/private/tmp/phpr-s163-orm/dbal-work/src/Portability/Driver.php:39
+/private/tmp/phpr-s163-orm/dbal-work/src/Connection.php:222
+/private/tmp/phpr-s163-orm/dbal-work/src/Connection.php:790
+/private/tmp/phpr-s163-orm/dbal-work/src/Connection.php:330
+/private/tmp/phpr-s163-orm/dbal-work/src/Connection.php:161
+/private/tmp/phpr-s163-orm/dbal-work/tests/Functional/PortabilityTest.php:155
+
+10) Doctrine\DBAL\Tests\Schema\Name\Parser\GenericNameParserTest::testValidInput with data set #11 ('schéma."übermäßigkeit".`àçcên...ràctér', [Doctrine\DBAL\Schema\Name\Identifier Object (...), Doctrine\DBAL\Schema\Name\Identifier Object (...), Doctrine\DBAL\Schema\Name\Identifier Object (...), Doctrine\DBAL\Schema\Name\Identifier Object (...), Doctrine\DBAL\Schema\Name\Identifier Object (...)])
+Doctrine\DBAL\Schema\Name\Parser\Exception\ExpectedDot: Expected dot at position 9, got "�".
+
+/private/tmp/phpr-s163-orm/dbal-work/src/Schema/Name/Parser/Exception/ExpectedDot.php:17
+/private/tmp/phpr-s163-orm/dbal-work/src/Schema/Name/Parser/GenericNameParser.php:90
+/private/tmp/phpr-s163-orm/dbal-work/tests/Schema/Name/Parser/GenericNameParserTest.php:33
+
+ERRORS!
+Tests: 3921, Assertions: 5550, Errors: 10, Skipped: 626, Incomplete: 13.

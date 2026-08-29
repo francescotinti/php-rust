@@ -1,0 +1,8 @@
+pair109-ratios modo=on: rapporti dai .time (output macchina, non prosa)
+grade=VERDICT  # derivazione meccanica riproducibile dai raw
+formato=ascii-nudo
+media_user_cpu_oracle=21.16 media_user_cpu_phpr=52.18 ratio=2.466
+media_peak_footprint_oracle=391873376 media_peak_footprint_phpr=1070974344 ratio=2.733
+full_master_cpu_oracle=442.40 full_master_cpu_phpr=780.13 ratio=1.763
+full_peak_footprint_oracle=759006384 full_peak_footprint_phpr=1935460368 ratio=2.550
+full_peak_footprint_phpr_MiB=1845.80
