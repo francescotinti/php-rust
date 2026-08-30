@@ -62,7 +62,10 @@ fn nessun_sorgente_rs_oltre_cap() {
         // S-165 L-MC1: salita PRE-dichiarata +79 (fast path borrow-IC k≤2 in
         // Op::MethodCall — criterio s165-criterio-mc1.md p.6); calls.rs −6
         // (unreachable!×2, az.rev. S-163 #4) resta fuori allowlist sotto 2000.
-        ("php-runtime/src/vm/run.rs", 6894, "run_loop — ULTIMO o mai (A2); +79 L-MC1 S-165 PRE-dichiarato"),
+        // S-165 L-MC1b: +20 DICHIARATI (forma outline: corpo in
+        // methodcall_fast #[inline(never)], cura layout — arbitrato
+        // s165-arbitrato-guardie.md; l'arm di run_loop torna a ~10 righe).
+        ("php-runtime/src/vm/run.rs", 6914, "run_loop — ULTIMO o mai (A2); +99 L-MC1b S-165 dichiarato"),
         ("php-runtime/tests/eval.rs", 4773, "batteria eval"),
         ("php-builtins/tests/builtins.rs", 4772, "batteria builtins"),
         ("php-runtime/src/lower/mod.rs", 3838, "lowering"),
