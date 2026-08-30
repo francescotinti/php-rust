@@ -5249,6 +5249,85 @@ impl<'m> super::Vm<'m> {
                     }
                 }
                 Op::MethodCall { method, argc, ic, deref } => {
+                    // L-MC1 (S-165): borrow-IC fast path k≤2 — l'IC-hit legge
+                    // il ricevitore IN PLACE (pattern ThisMethodCall, WP-36) e
+                    // gli argomenti passano DIRETTAMENTE dalla pila del
+                    // chiamante ai primi slot del callee (H-D forma 2, S-105).
+                    // Ammissione: recv Object DIRETTO in pila (non-Ref), IC
+                    // hit, callee simple_call ad arità esatta. Un ArgPlace si
+                    // materializza QUI con la catena del funnel (simple_call ⇒
+                    // maschera by-ref tutta falsa ⇒ R-fetch), in ordine
+                    // sorgente, flush alla riga della CALL. Soundness IC =
+                    // ThisMethodCall: un Fiber non è mai NEL cache
+                    // (`method_call` devia prima del fill site di
+                    // `dispatch_instance_call`, suo unico scrittore);
+                    // Generator/Closure non sono `Zval::Object`. L'ordine di
+                    // pop (0..n).rev() eredita il caveat last-ref di H-D
+                    // (S-106-D-9). Criterio: wp165-harness/s165-criterio-mc1.md.
+                    let n = *argc as usize;
+                    let mut fast = None;
+                    if n <= 2 {
+                        let stack = &self.frames[top].stack;
+                        if let Some(ridx) = stack.len().checked_sub(n + 1) {
+                            if let Zval::Object(o) = &stack[ridx] {
+                                let cid = o.borrow().class_id as usize;
+                                if let Some((defc, midx)) = ic.get(cid) {
+                                    let callee = &self.classes[defc].methods[midx].func;
+                                    if callee.simple_call && callee.n_params as usize == n {
+                                        fast = Some((defc, midx, cid));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if let Some((defc, midx, cid)) = fast {
+                        let callee = &self.classes[defc].methods[midx].func;
+                        let m = self.class_mod(defc);
+                        let mut frame = self.pooled_frame(callee, m);
+                        // Copia value-context di un ritorno `&m()` (WP-53).
+                        if *deref && callee.by_ref && !callee.is_generator {
+                            frame.flags.set(FrameFlags::RET_DEREF, true);
+                        }
+                        #[cfg(feature = "mem-census")]
+                        php_types::memcensus::arity_note(n);
+                        frame.argc = n as u32;
+                        let mut has_place = false;
+                        for i in (0..n).rev() {
+                            let a = self.frames[top].stack.pop().expect("MethodCall argument");
+                            has_place |= matches!(a, Zval::ArgPlace(_));
+                            frame.slots[i] = a;
+                        }
+                        let recv = self.frames[top].stack.pop().expect("MethodCall receiver");
+                        if has_place {
+                            for i in 0..n {
+                                let a = std::mem::replace(&mut frame.slots[i], Zval::Undef);
+                                frame.slots[i] = if let Zval::ArgPlace(p) = a {
+                                    let base = match p.base {
+                                        ArgPlaceBase::Local(s) => FieldBase::Local(s),
+                                        ArgPlaceBase::Global(s) => FieldBase::Global(s),
+                                        ArgPlaceBase::Superglobal(x) => FieldBase::Superglobal(x),
+                                        ArgPlaceBase::This => FieldBase::This,
+                                    };
+                                    self.arg_place_read(top, base, &p)?
+                                } else {
+                                    a
+                                };
+                            }
+                            // R-fetch warnings alla riga della CALL (specchio
+                            // di `method_call`).
+                            let line = self.cur_line(top);
+                            self.flush_diags(line)?;
+                        }
+                        for i in 0..n {
+                            let a = std::mem::replace(&mut frame.slots[i], Zval::Undef);
+                            frame.slots[i] = decay_arg(a);
+                        }
+                        frame.this = Some(recv);
+                        frame.class = Some(defc);
+                        frame.static_class = Some(cid); // LSB = classe del ricevitore
+                        self.enter_callee(frame)?;
+                        continue;
+                    }
                     let args = self.pop_keys(top, *argc); // source order
                     let recv = self.frames[top].stack.pop().expect("MethodCall receiver");
                     // V5 (S-119 treno-2): il frame vuole l'handle POSSEDUTO —

@@ -1,0 +1,116 @@
+2,5c2,5
+< # s164-ab-al3.sh <BPATH> <BEXP8> <TAG> <R> <AEXP8> [DSMOKE_MISSLOAD] — LEVA
+< # L-AL3 FrameExt riciclato via pool sul fast path closure (criterio
+< # s164-criterio-al3.md). COPIA DICHIARATA di s163-ab-au1.sh (manifest
+< # s164-ab-copia.diff, diff INTERO + grep path: lezione incidente S-164 #1)
+---
+> # s165-ab-mc1.sh <BPATH> <BEXP8> <TAG> <R> <AEXP8> [DSMOKE_MC2] — LEVA
+> # L-MC1 borrow-IC fast path k≤2 su Op::MethodCall (criterio
+> # s165-criterio-mc1.md). COPIA DICHIARATA di s164-ab-al3.sh (manifest
+> # s165-ab-copia.diff, diff INTERO + grep path: lezione incidente S-164 #1)
+7,20c7,17
+< #  (a) GIUDICE: missload (m-missload.php wp158, N=10000000 miss closure
+< #      arity-1 DICHIARATO; n_fixed lo pinna comunque);
+< #  (b) UB dal bundle CONTATO (criterio p.2): 1 alloc/chiamata x coeff
+< #      sito-autoload 7,0±3,0 ⇒ attesa [4;10]; D>10+rumore FUORI-UB SOPRA;
+< #      dentro ⇒ bundle coerente col coeff di sito (nessun coeff nuovo);
+< #  (c) guardie: arrload NUOVA (presidio DIRETTO L-AU1, wp163) + strmap
+< #      (L-AM2) + arrfilter (L-AF1) + arrmap (L-AM1) + refl + hostargs +
+< #      backtrace24 + obj* + le sei = 19; comparatore STRETTO;
+< #  (d) BANDA SMOKE VINCOLANTE (criterio p.3c): al R=2 il copione impone
+< #      D_smoke in [4;10] — fuori banda rc=6 (arbitrato census PRIMA del
+< #      R=5); EMENDA rev. S-161 #4 EREDITATA (guardia che morde a R=2 =
+< #      arbitrato dichiarato);
+< #  (e) A = GEMELLO dal tree corrente s163 (phpr-s164-gemelloA), hash atteso
+< #      dal run; header con hash MISURATI; sentinella LS; lock s164.
+---
+> #  (a) GIUDICE: mc2 (wp165-harness/m-mc2.php, N=20000000 dal sorgente,
+> #      $o->f($s,1) k=2 con ArgPlace su $s; n_fixed lo pinna comunque);
+> #  (b) UB dal bundle CONTATO (criterio p.4): alloc args-Vec ≈0 (lezione AL3)
+> #      + salto method_call+dispatch_instance_call ⇒ attesa/banda [4;30];
+> #  (c) guardie: le 19 di al3sm + missload (presidio AL2/AU1) = 20;
+> #  (d) BANDA SMOKE VINCOLANTE al R≤3; EMENDA rev. S-161 #4 EREDITATA
+> #      (guardia che morde allo smoke = arbitrato dichiarato);
+> #  (e) az.rev. S-164 #5: verdetto SOTTO SOGLIA con rumore>4 = VIETATO
+> #      (rc=8, si estende R prima di ogni verdetto «non pagante»);
+> #  (f) A = pin s163 dallo stash (phpr-s163), hash atteso dal run; header
+> #      con hash MISURATI; sentinella LS; lock s165.
+32c29
+< A="/Volumes/Extreme Pro/Claude/phpr-old-target/release/phpr-s164-gemelloA"
+---
+> A="/Volumes/Extreme Pro/Claude/phpr-old-target/release/phpr-s163"
+37c34
+< VERD="$H/s164-$TAG-verdetto.out"
+---
+> VERD="$H/s165-$TAG-verdetto.out"
+45c42
+< if ! grep -qi "s-164\|s164" "$LOCK" 2>/dev/null; then
+---
+> if ! grep -qi "s-165\|s165" "$LOCK" 2>/dev/null; then
+54,57c51,52
+< # Identita' bracci (az.rev. S-157 #3): A = gemello ricostruito dal tree s162;
+< # l'hash ATTESO arriva dal run (byte==pin atteso anche a freddo), altrimenti
+< # arbitrato a CONTENUTO con regioni pre-registrate — verbale
+< # s163-gemelloA-identita.out. Gli hash MISURATI finiscono nell'header.
+---
+> # Identita' bracci (az.rev. S-157 #3): A = pin s163 dallo stash canonico;
+> # hash MISURATI nell'header.
+59c54
+< [ "$AM" = "$AEXP" ] || { echo "A misurato $AM != atteso $AEXP (gemello tree s163) — STOP" | tee -a "$VERD"; echo 1 > "$RC"; exit 1; }
+---
+> [ "$AM" = "$AEXP" ] || { echo "A misurato $AM != atteso $AEXP (pin s163) — STOP" | tee -a "$VERD"; echo 1 > "$RC"; exit 1; }
+67,71c62,66
+< src_of() { case "$1" in arrload) echo "$W163";; strmap) echo "$W162";; arrfilter) echo "$W160";; arrmap) echo "$W159";; refl|missload|hostargs|backtrace) echo "$W158";; objalloc|objchurn|objmap|objdatains|objallocni|objdropdef) echo "$M";; *) echo "$M97";; esac; }
+< php_of() { case "$1" in arrload) echo "m-arrload.php";; strmap) echo "m-strmap.php";; arrfilter) echo "m-arrfilter.php";; arrmap) echo "m-arrmap.php";; refl) echo "m-refl.php";; missload) echo "m-missload.php";; hostargs) echo "m-hostargs.php";; backtrace) echo "m-backtrace24.php";; *) echo "$1.php";; esac; }
+< n_fixed() { case "$1" in arrload) echo 10000000;; strmap) echo 10000000;; arrfilter) echo 10000000;; arrmap) echo 10000000;; refl) echo 10000000;; missload) echo 10000000;; hostargs) echo 10000000;; backtrace) echo 2400000;; arith) echo 150000000;; prop) echo 90000000;; calls) echo 60000000;; str) echo 28000000;; arr) echo 30000000;; re) echo 12000000;; *) echo "";; esac; }
+< CATS_JUDGE="missload"
+< CATS_GUARD="arrload strmap arrfilter arrmap refl hostargs backtrace objdropdef objchurn objdatains objalloc objallocni objmap arith prop calls str arr re"
+---
+> src_of() { case "$1" in mc2) echo "$H";; arrload) echo "$W163";; strmap) echo "$W162";; arrfilter) echo "$W160";; arrmap) echo "$W159";; refl|missload|hostargs|backtrace) echo "$W158";; objalloc|objchurn|objmap|objdatains|objallocni|objdropdef) echo "$M";; *) echo "$M97";; esac; }
+> php_of() { case "$1" in mc2) echo "m-mc2.php";; arrload) echo "m-arrload.php";; strmap) echo "m-strmap.php";; arrfilter) echo "m-arrfilter.php";; arrmap) echo "m-arrmap.php";; refl) echo "m-refl.php";; missload) echo "m-missload.php";; hostargs) echo "m-hostargs.php";; backtrace) echo "m-backtrace24.php";; *) echo "$1.php";; esac; }
+> n_fixed() { case "$1" in mc2) echo 20000000;; arrload) echo 10000000;; strmap) echo 10000000;; arrfilter) echo 10000000;; arrmap) echo 10000000;; refl) echo 10000000;; missload) echo 10000000;; hostargs) echo 10000000;; backtrace) echo 2400000;; arith) echo 150000000;; prop) echo 90000000;; calls) echo 60000000;; str) echo 28000000;; arr) echo 30000000;; re) echo 12000000;; *) echo "";; esac; }
+> CATS_JUDGE="mc2"
+> CATS_GUARD="missload arrload strmap arrfilter arrmap refl hostargs backtrace objdropdef objchurn objdatains objalloc objallocni objmap arith prop calls str arr re"
+74c69
+< echo "== s164-ab-al3 $TAG: A=$AM MISURATO (gemello dal tree corrente s163) B=$BM MISURATO R=$R ordine ALTERNATO; giudice=missload N=10000000 miss closure dichiarato; soglia=max(4, drop-1); UB dal bundle CONTATO: 1 alloc/chiamata x coeff sito-autoload 7,0±3,0 ⇒ attesa [4;10]; BANDA SMOKE VINCOLANTE [4;10] nel giudice + emenda rev. S-161 #4; guardie arrload(N=10M, presidio DIRETTO L-AU1) + strmap(N=10M, L-AM2) + arrfilter(N=10M, L-AF1) + arrmap(N=10M, L-AM1) + refl(N=10M) + hostargs(N=10M) + backtrace24(N=2,4M) + obj* + sei, comparatore STRETTO; quiescenza rc=$QRC; rc autoritativo = ab-out/$TAG.rc =="
+---
+> echo "== s165-ab-mc1 $TAG: A=$AM MISURATO (pin s163 dallo stash) B=$BM MISURATO R=$R ordine ALTERNATO; giudice=mc2 N=20000000 \$o->f(\$s,1) k=2 ArgPlace dichiarato; soglia=max(4, drop-1) + VIETO su rumore>4 (az.rev. S-164 #5, rc=8); UB dal bundle CONTATO: alloc args-Vec ≈0 (lezione AL3) + salto method_call+dispatch_instance_call ⇒ attesa/BANDA SMOKE VINCOLANTE [4;30] + emenda rev. S-161 #4; guardie missload(N=10M, presidio AL2/AU1) + arrload(N=10M, L-AU1) + strmap(N=10M, L-AM2) + arrfilter(N=10M, L-AF1) + arrmap(N=10M, L-AM1) + refl(N=10M) + hostargs(N=10M) + backtrace24(N=2,4M) + obj* + sei, comparatore STRETTO; quiescenza rc=$QRC; rc autoritativo = ab-out/$TAG.rc =="
+101,103c96,98
+< if len(sys.argv) > 3 and sys.argv[3]: dsmoke["missload"] = float(sys.argv[3])
+< UB_LO, UB_HI = 4.0, 10.0  # criterio al3 p.2: bundle CONTATO 1 alloc/chiamata x coeff sito-autoload 7,0±3,0 — bivio MECCANICO
+< SB_LO, SB_HI = 4.0, 10.0  # banda smoke VINCOLANTE (criterio p.3c) = attesa dal bundle
+---
+> if len(sys.argv) > 3 and sys.argv[3]: dsmoke["mc2"] = float(sys.argv[3])
+> UB_LO, UB_HI = 4.0, 30.0  # criterio mc1 p.4: bundle CONTATO (alloc ≈0 + salto funnel) — bivio MECCANICO
+> SB_LO, SB_HI = 4.0, 30.0  # banda smoke VINCOLANTE (criterio p.4) = attesa dal bundle
+120c115
+< JUDGES = ("missload",)
+---
+> JUDGES = ("mc2",)
+132c127
+<         print(f"GIUDICE {cat}: A={ma:.1f} B={mb:.1f} ns/miss D={delta:+.1f} soglia={thr:.1f} (rumore drop-1: A'={ra:.1f} B'={rb:.1f}) -> {'SOPRA SOGLIA' if ok else 'SOTTO SOGLIA'}")
+---
+>         print(f"GIUDICE {cat}: A={ma:.1f} B={mb:.1f} ns/iter D={delta:+.1f} soglia={thr:.1f} (rumore drop-1: A'={ra:.1f} B'={rb:.1f}) -> {'SOPRA SOGLIA' if ok else 'SOTTO SOGLIA'}")
+140c135
+<             ub_es = "DENTRO l'attesa [4;10] (bundle 1-alloc COERENTE col coeff sito-autoload; nessun coeff nuovo)"
+---
+>             ub_es = "DENTRO l'attesa [4;30] (bundle salto-funnel; alloc ≈0 per lezione AL3)"
+145c140,143
+<         if R == 2 and cat not in dsmoke:
+---
+>         if not ok and noise > 4.0:
+>             verdict_rc = 8
+>             print(f"AZ.REV. S-164 #5: rumore drop-1 {noise:.1f} > 4 — verdetto «non pagante» VIETATO a questo R: rc=8, ESTENDERE R prima di ogni verdetto")
+>         if cat not in dsmoke and R <= 3:
+147c145
+<             print(f"BANDA SMOKE VINCOLANTE {cat}: D_smoke={delta:+.1f} in [{SB_LO};{SB_HI}] -> {'OK, si procede al R=5' if inband else 'FUORI BANDA: rc=6, ARBITRATO census PRIMA del R=5 (criterio p.5)'}")
+---
+>             print(f"BANDA SMOKE VINCOLANTE {cat}: D_smoke={delta:+.1f} in [{SB_LO};{SB_HI}] -> {'OK, si procede al R=5' if inband else 'FUORI BANDA: rc=6, ARBITRATO census PRIMA del R=5 (criterio p.4)'}")
+156,158c154,156
+<             if R == 2:
+<                 print(f"EMENDA rev. S-161 #4: guardia {cat} morde a R=2 — ARBITRATO DICHIARATO DOVUTO prima del R=5 (come la banda, mai assoluzione ex post)")
+< print("ESITO: " + {0:"SOPRA SOGLIA (giudice ok, guardie ok)",4:"SOTTO SOGLIA (giudice)",5:"GUARDIA MORDE",6:"FUORI BANDA SMOKE (arbitrato dovuto)"}[verdict_rc])
+---
+>             if R <= 3:
+>                 print(f"EMENDA rev. S-161 #4: guardia {cat} morde allo smoke — ARBITRATO DICHIARATO DOVUTO prima del R=5 (come la banda, mai assoluzione ex post)")
+> print("ESITO: " + {0:"SOPRA SOGLIA (giudice ok, guardie ok)",4:"SOTTO SOGLIA (giudice)",5:"GUARDIA MORDE",6:"FUORI BANDA SMOKE (arbitrato dovuto)",8:"RUMORE>SOGLIA: R INSUFFICIENTE (az.rev. S-164 #5)"}[verdict_rc])

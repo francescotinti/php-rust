@@ -59,7 +59,10 @@ fn nessun_sorgente_rs_oltre_cap() {
         ("php-runtime/src/vm/host.rs", 7726, "hostcall — backlog A2; +18 L-AM2 S-162 PRE-dichiarato"),
         // S-156: salita DICHIARATA +29 (leva HD2-hostcall: braccio
         // CallHostBuiltin, pop diretti ≤4) — verbale wp156-harness/s156-promo.
-        ("php-runtime/src/vm/run.rs", 6815, "run_loop — ULTIMO o mai (A2)"),
+        // S-165 L-MC1: salita PRE-dichiarata +79 (fast path borrow-IC k≤2 in
+        // Op::MethodCall — criterio s165-criterio-mc1.md p.6); calls.rs −6
+        // (unreachable!×2, az.rev. S-163 #4) resta fuori allowlist sotto 2000.
+        ("php-runtime/src/vm/run.rs", 6894, "run_loop — ULTIMO o mai (A2); +79 L-MC1 S-165 PRE-dichiarato"),
         ("php-runtime/tests/eval.rs", 4773, "batteria eval"),
         ("php-builtins/tests/builtins.rs", 4772, "batteria builtins"),
         ("php-runtime/src/lower/mod.rs", 3838, "lowering"),

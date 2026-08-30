@@ -709,13 +709,10 @@ impl<'m> Vm<'m> {
         let baseline = self.frames.len();
         self.push_fn_frame_one(fmod, idx, arg)?;
         if self.frames.len() == baseline {
-            // Mirror of call_callable's no-frame arm: unreachable for a user
-            // function body (which always pushes a frame); kept for
-            // structural equality with the full path.
-            return Ok(self.frames[baseline - 1]
-                .stack
-                .pop()
-                .expect("host callable result on the caller stack"));
+            // Az.rev. S-163 #4 (rimontato S-165): un callee UTENTE pre-ammesso
+            // spinge SEMPRE un frame — un braccio "no-frame" qui maschererebbe
+            // una rottura dell'ammissione: irraggiungibile DICHIARATO.
+            unreachable!("call_fn_one: pre-admitted user callee pushed no frame");
         }
         self.drive_to_return(baseline)
     }
@@ -740,13 +737,10 @@ impl<'m> Vm<'m> {
         let baseline = self.frames.len();
         self.push_method_frame_one(defc, midx, cid, this, arg)?;
         if self.frames.len() == baseline {
-            // Mirror of call_callable's no-frame arm: unreachable for a user
-            // method body (which always pushes a frame); kept for structural
-            // equality with the full path.
-            return Ok(self.frames[baseline - 1]
-                .stack
-                .pop()
-                .expect("host callable result on the caller stack"));
+            // Az.rev. S-163 #4 (rimontato S-165): un metodo UTENTE pre-ammesso
+            // spinge SEMPRE un frame — un braccio "no-frame" qui maschererebbe
+            // una rottura dell'ammissione: irraggiungibile DICHIARATO.
+            unreachable!("call_method_one: pre-admitted user method pushed no frame");
         }
         self.drive_to_return(baseline)
     }
