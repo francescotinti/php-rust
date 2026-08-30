@@ -23,10 +23,11 @@ curato in sessione).
   CURATO. Incidente S-164 #1: sed senza mappa wp163→wp164 ⇒ scritto nel
   harness chiuso (copia-gate verificato PARZIALE); bonificato, originali
   s163 salvi in git (a4954127).
-3·Indagine arith CHIUSA rc=0: fase 1 forense (phpr 2,35×3 FERMO; outlier =
-  oracle 0,44 di s161) + fase 2 de-quantizzata N=250M su stash byte-verificati
-  (max−min 0,080; rapporti VERI 5,426/5,454/5,417). Companion: creep +0,6
-  ns/iter cumulato da s158 sotto soglia, a verbale.
+3·Indagine arith CHIUSA **su s161→s163** rc=0 (claim emendato post-revisione:
+  la banda 0,40 non esclude il creep 0,15 e il braccio s158 non c'era):
+  fase 1 forense (phpr 2,35×3 FERMO; outlier = oracle 0,44 di s161) + fase 2
+  de-quantizzata N=250M su stash byte-verificati (max−min 0,080; rapporti
+  VERI 5,426/5,454/5,417). Creep da s158 = NOTA APERTA (giudice a 3 decimali).
 4·L-AL3 CADUTA (verbale s164-al3-STOP.md): smoke D=+0,0; census Δ=199998
   (rc=5 FUORI ATTESA di 1; spiegazione post-hoc dichiarata: buffer del Vec
   del pool) ⇒ p.3b non pagante ⇒ revert AL BYTE (fea4a2d0). unreachable! ×2

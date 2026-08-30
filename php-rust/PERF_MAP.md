@@ -1,7 +1,27 @@
 # PERF_MAP — phpr vs PHP oracle 8.5.7, mappa multi-workload
 
-Aggiornata: **2026-08-30 (S-163)** · pin phpr **s163 fea4a2d0** + server
-**s163 8d76d6f1** NUOVI (**S-163 = PROMOZIONE leva L-AU1 «autoload
+Aggiornata: **2026-08-30 (S-164)** · pin **INVARIATO s163 fea4a2d0 + 8d76d6f1**
+(**S-164 = NESSUNA promozione: leva L-AL3 «pool di Box FrameExt sul fast path
+closure» TENTATA con A/B COMPLETO e CADUTA A VERDETTO** — smoke m-missload
+D=+0,0 (A=282,0 B=282,0, soglia 6,0) col census che CONFERMA la rimozione
+dell'alloc (Δ=199998/200000; rc=5 FUORI ATTESA di 1: reperto post-hoc =
+buffer del Vec del pool, rerun in aperture) ⇒ criterio p.3b «non pagante»,
+revert AL BYTE fea4a2d0; **meccanismo nominato: alloc+dealloc mimalloc ≈
+freelist ≈ pool, l'init del box resta nei due bracci ⇒ la classe Box/Vec-
+pooling puro SENZA cambio di dispatch è RIDIMENSIONATA — il coeff per-sito
+7,0±3,0 impacchettava alloc+dispatch delle leve promosse**; disasm bl
+run_loop 6033==6033 Δ=0; gemello A al byte SOLO con ricetta (build nudo
+1492be21 morso dal gate); php-server NON riproduce (661b490c ≠ 8d76d6f1,
+istruttoria S-165, canonico ripristinato dallo stash); **coppia t14+ORM @
+s163 ASSOLTA**: WP t14 mediana 1,761 COMPATIBILE 6/6 PULITE **banda_ON
+0,011 RECORD** · media 2,341-2,450 · ORM [7,066;7,111] VALIDO (attesa-AU1
+COMPATIBILE tetto ~0; registrato resta s162) · dbal [7,459;7,491] ictx 3ª
+coppia ⇒ istruttoria MATURA; **indagine arith CHIUSA su s161→s163: il tick
+5,3→5,5 era QUANTIZZAZIONE del giudice a 2 decimali** (de-quantizzato N=250M
+su stash fermi: 5,426/5,454/5,417; phpr max−min 0,080; creep da s158 nota
+aperta); census AU1 RIESEGUITO rc=0 Δ=600000 ESATTO (incidente S-163
+CURATO); verdetti `wp164-harness/s164-*.out` + s164-al3-STOP.md) · storico
+S-163: pin phpr **s163 fea4a2d0** + server **s163 8d76d6f1** NUOVI (**S-163 = PROMOZIONE leva L-AU1 «autoload
 array-callable [obj,metodo] UTENTE k=1 senza args-Vec: ammissione PER-LOADER
 col predicato IC-fill (PUBLIC non-static simple_call arità-1 senza ombra
 private), dispatch per-miss via call_method_one/push_method_frame_one; ogni
