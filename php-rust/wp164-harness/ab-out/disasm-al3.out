@@ -1,0 +1,5 @@
+== s164 disasm gate L-AL3 (pre-smoke, agli atti) ==
+metodo: otool -tv | awk dal simbolo ^__ZN..run_loop..: al simbolo successivo, conteggio campi $2==bl (emenda awk s164: il primo awk agganciava un bl VERSO run_loop, conteggio 0 su entrambi — scartato)
+phpr-s164-gemelloA (==pin s163): bl_run_loop=6033
+phpr-s164-al3-B    (b0f0f766):   bl_run_loop=6033
+Delta=0

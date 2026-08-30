@@ -14,8 +14,11 @@
    SOPRA 10 ⇒ FUORI-UB SOPRA: arbitrato census DOVUTO prima del R=5.
 3. CENSUS (unità dello strumento: hostcall_n = TUTTE le alloc sotto il tag):
    driver wp161-harness/m-missload-census.php (N=200000, read-only); attesa
-   Δ hostcall_n = 200000 ESATTO su class_exists (1 Box/iter), altri nomi
-   zero. **Esito che FERMA (pre-registrato, ANCHE in ns, az.rev. S-163 #3)**:
+   Δ hostcall_n = **199999 ESATTO** su class_exists (1 Box/iter in A; in B la
+   PRIMA chiamata alloca a pool exts VUOTO, dalle successive il box
+   ping-ponga via recycle_frame ⇒ 1 alloc residua) — EMENDA PRE-RUN
+   dichiarata S-164: il criterio originario diceva 200000, svista sul
+   cold-start del pool, corretta PRIMA dell'arbitrato; altri nomi zero. **Esito che FERMA (pre-registrato, ANCHE in ns, az.rev. S-163 #3)**:
    (a) Δ ≠ 200000 ESATTO o altri nomi ≠ 0 ⇒ STOP, si torna al sorgente,
    NESSUNA taratura; (b) D_smoke < 4 ns/iter (= soglia) pur con census
    esatto ⇒ leva NON PAGANTE ⇒ STOP dichiarato senza promo (il riciclo non

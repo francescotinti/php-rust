@@ -1,0 +1,71 @@
+2,11c2,10
+< # s164-census-au1-rerun.sh — RIESECUZIONE arbitrato census L-AU1 (cura
+< # incidente S-163: census.done scritto a mano; REGOLE §3 — la guardia si
+< # emenda solo RIESEGUENDO il criterio emendato). COPIA DICHIARATA di
+< # s163-census-au1.sh col SOLO emendamento dell'attesa NEL SORGENTE:
+< # l'unita' dello strumento e' hostcall_n = TUTTE le alloc sotto il tag
+< # (letta dal sorgente di memcensus, S-163). Probe-B = tree HEAD con edit
+< # (pin s164=fea4a2d0); probe-A = copia − patch s163 (3 file). Driver
+< # m-arrload-census.php N=200000; attesa EMENDATA: Delta hostcall_n =
+< # 600000 ESATTO su class_exists (3 alloc/miss: args-Vec + elems-Vec +
+< # to_vec del nome, ledger APPENDICE s163), altri nomi zero. Struttura+parser COPIA DICHIARATA della FASE 1 di
+---
+> # s164-census-al3.sh — arbitrato census L-AL3 (criterio s164-criterio-al3.md
+> # p.3 EMENDATO PRE-RUN: attesa 199999; dovuto: smoke D=+0.0 FUORI banda
+> # [4;10] SOTTO + guardie arrload/objdropdef a R=2). COPIA DICHIARATA di
+> # s164-census-au1-rerun.sh; adattamenti: patch = s164-al3-edit.patch
+> # (2 file, patching=2), driver = wp161-harness/m-missload-census.php
+> # (marcatore ML-OK 200000), attesa Delta hostcall_n = 199999 ESATTO su
+> # class_exists (1 Box/iter in A; in B 1 alloc residua a freddo, pool exts
+> # vuoto alla prima chiamata), altri nomi zero. Probe-B = tree HEAD con
+> # edit AL3; probe-A = copia − patch. Struttura+parser COPIA DICHIARATA della FASE 1 di
+18,19c17,18
+< H="$REPO/wp164-harness"; OUT="$H/census-out"; mkdir -p "$OUT"  # FIX incidente S-164 #1: il sed s163->s164 non mappava wp163 (eseguito col path del harness CHIUSO)
+< VERD="$H/s164-census-au1-verdetto.out"
+---
+> H="$REPO/wp164-harness"; OUT="$H/census-out"; mkdir -p "$OUT"
+> VERD="$H/s164-census-al3-verdetto.out"
+21,24c20,23
+< PATCH="$REPO/wp163-harness/s163-au1-edit.patch"  # input read-only dal harness s163
+< DRV="$REPO/wp163-harness/m-arrload-census.php"   # driver IDENTICO s163, read-only
+< SRC="/private/tmp/s164-census"
+< : > "$VERD"; RCF="$OUT/census.done"; rm -f "$RCF"
+---
+> PATCH="$H/s164-al3-edit.patch"
+> DRV="$REPO/wp161-harness/m-missload-census.php"  # driver read-only wp161 (ML-OK 200000)
+> SRC="/private/tmp/s164-census-al3"
+> : > "$VERD"; RCF="$OUT/census-al3.done"; rm -f "$RCF"
+31c30
+< echo "== s164 RIESECUZIONE census L-AU1 (attesa EMENDATA 600000 = 3 alloc/miss, unita' hostcall_n=TUTTE le alloc; probe-B = tree HEAD, probe-A = copia − patch s163; driver N=200000) ==" >> "$VERD"
+---
+> echo "== s164 arbitrato census L-AL3 (attesa 199999 = 1 Box/iter meno 1 a freddo, unita' hostcall_n=TUTTE le alloc; probe-B = tree HEAD con AL3, probe-A = copia − patch; driver N=200000) ==" >> "$VERD"
+41,42c40,41
+< { [ "$NP" = 3 ] && [ "$NREJ" = 0 ]; } || { echo "rc=6 patch guardia: patching=$NP (atteso 3) rej=$NREJ (atteso 0)" >> "$VERD"; fin 6; }
+< echo "patch inversa: 3 file (calls/mod + loc_dente=test fuori da -p php-cli, DICHIARATO), zero rej" >> "$VERD"
+---
+> { [ "$NP" = 2 ] && [ "$NREJ" = 0 ]; } || { echo "rc=6 patch guardia: patching=$NP (atteso 2) rej=$NREJ (atteso 0)" >> "$VERD"; fin 6; }
+> echo "patch inversa: 2 file (vm/mod.rs + vm/calls.rs), zero rej" >> "$VERD"
+54c53
+<     grep -q "^MALC-OK 200000$" "$OUT/run-$ARM-r$Rr.out" || { echo "rc=8 marcatore MALC-OK 200000 assente ($ARM r$Rr)" >> "$VERD"; fin 8; }
+---
+>     grep -q "^ML-OK 200000$" "$OUT/run-$ARM-r$Rr.out" || { echo "rc=8 marcatore ML-OK 200000 assente ($ARM r$Rr)" >> "$VERD"; fin 8; }
+95c94
+< if nA.get("class_exists",0) - nB.get("class_exists",0) != 600000: fuori.append("class_exists")
+---
+> if nA.get("class_exists",0) - nB.get("class_exists",0) != 199999: fuori.append("class_exists")
+98c97
+< print(f"Delta hostcall_n = {dh} (atteso 600000 ESATTO — attesa EMENDATA: 3 alloc/miss)")
+---
+> print(f"Delta hostcall_n = {dh} (atteso 199999 ESATTO — 1 Box/iter meno 1 alloc a freddo del pool)")
+100c99
+< if fuori or altri or dh != 600000:
+---
+> if fuori or altri or dh != 199999:
+104c103
+<     print("CONTEGGI: attesa EMENDATA ESATTA (Delta 3 alloc/miss CONFERMATO su class_exists: args-Vec + elems-Vec + to_vec del nome; resto zero) — rc emesso DALLO SCRIPT: incidente S-163 CURATO")
+---
+>     print("CONTEGGI: attesa ESATTA (Delta 199999 CONFERMATO: il pool elimina il Box/iter, 1 residuo a freddo; resto zero) — la leva RIMUOVE l'alloc ma D_smoke=+0.0: leva NON PAGANTE (criterio p.3b), STOP dichiarato")
+109c108
+< echo "ESITO: rc=0 (riesecuzione agli atti — census.done DALLO SCRIPT, incidente S-163 curato)" >> "$VERD"
+---
+> echo "ESITO: rc=0 (arbitrato agli atti — verdetto leva dal criterio p.3: census esatto + D=0 => NON PAGANTE / census fuori => attribuzione errata)" >> "$VERD"
