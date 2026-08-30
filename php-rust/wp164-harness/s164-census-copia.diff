@@ -22,9 +22,11 @@
 < # s163-census-au1-verdetto.out; rc SOLO da census-out/census.done.
 ---
 > # s164-census-au1-verdetto.out; rc SOLO da census-out/census.done.
-17c19
+16,17c18,19
+< H="$REPO/wp163-harness"; OUT="$H/census-out"; mkdir -p "$OUT"
 < VERD="$H/s163-census-au1-verdetto.out"
 ---
+> H="$REPO/wp164-harness"; OUT="$H/census-out"; mkdir -p "$OUT"  # FIX incidente S-164 #1: il sed s163->s164 non mappava wp163 (eseguito col path del harness CHIUSO)
 > VERD="$H/s164-census-au1-verdetto.out"
 19,21c21,23
 < PATCH="$H/s163-au1-edit.patch"

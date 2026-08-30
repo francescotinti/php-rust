@@ -15,7 +15,7 @@
 set -u
 export PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin:"$HOME/.cargo/bin"
 REPO="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust"
-H="$REPO/wp163-harness"; OUT="$H/census-out"; mkdir -p "$OUT"
+H="$REPO/wp164-harness"; OUT="$H/census-out"; mkdir -p "$OUT"  # FIX incidente S-164 #1: il sed s163->s164 non mappava wp163 (eseguito col path del harness CHIUSO)
 VERD="$H/s164-census-au1-verdetto.out"
 LOCK=/private/tmp/phpr-measure.lock
 PATCH="$REPO/wp163-harness/s163-au1-edit.patch"  # input read-only dal harness s163
