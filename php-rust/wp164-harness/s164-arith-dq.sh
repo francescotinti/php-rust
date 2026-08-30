@@ -23,13 +23,12 @@ RCF="$OUT/arith-dq.done"; rm -f "$RCF"
 fin(){ echo "rc=$1 $(date +%T)" > "$RCF"; exit "$1"; }
 
 [ -e /private/tmp/phpr-measure.lock ] || { echo "rc=9 measure-lock ASSENTE" >> "$VERD"; fin 9; }
-declare -A BIN EXP
-BIN[s161]="$ST/phpr-s161"; EXP[s161]=ec0a636ad0c42005
-BIN[s162]="$ST/phpr-s162"; EXP[s162]=20c63af44bfd077a
-BIN[s163]="$ST/phpr-s163"; EXP[s163]=fea4a2d040a0d8d0
+# bash 3.2 (macOS): niente declare -A — mappe via funzioni case (fix rc=2 al primo lancio, run mai partito)
+bin_of(){ case "$1" in O) echo "$ORACLE";; s161) echo "$ST/phpr-s161";; s162) echo "$ST/phpr-s162";; s163) echo "$ST/phpr-s163";; esac; }
+exp_of(){ case "$1" in s161) echo ec0a636ad0c42005;; s162) echo 20c63af44bfd077a;; s163) echo fea4a2d040a0d8d0;; esac; }
 for k in s161 s162 s163; do
-  hh=$(shasum -a 256 "${BIN[$k]}" | cut -c1-16)
-  [ "$hh" = "${EXP[$k]}" ] || { echo "rc=9 stash $k hash=$hh atteso=${EXP[$k]}" >> "$VERD"; fin 9; }
+  hh=$(shasum -a 256 "$(bin_of "$k")" | cut -c1-16)
+  [ "$hh" = "$(exp_of "$k")" ] || { echo "rc=9 stash $k hash=$hh atteso=$(exp_of "$k")" >> "$VERD"; fin 9; }
 done
 N=$(awk 'match($0, /\$i<[0-9]+/) {print substr($0, RSTART+3, RLENGTH-3); exit}' "$DRV")
 [ "$N" = "250000000" ] || { echo "rc=8 N driver=$N atteso 250000000" >> "$VERD"; fin 8; }
@@ -45,25 +44,24 @@ median() { printf '%s\n' "$@" | sort -n | awk '{v[NR]=$1} END{print (NR%2)?v[(NR
 } >> "$VERD"
 
 # pavimenti per-binario R=5 (empty.php dal micro canonico, read-only)
-declare -A FLR
 for k in O s161 s162 s163; do
-  b="$ORACLE"; [ "$k" != O ] && b="${BIN[$k]}"
+  b="$(bin_of "$k")"
   fs=(); for r in 1 2 3 4 5; do fs+=("$(user_cpu "$b" "$MIC/empty.php")"); done
-  FLR[$k]=$(median "${fs[@]}")
-  echo "pavimento_${k}_s=${FLR[$k]}" >> "$VERD"
+  eval "FLR_$k=\$(median \"\${fs[@]}\")"
+  eval "echo \"pavimento_${k}_s=\$FLR_$k\"" >> "$VERD"
 done
 # misure interleaved a rotazione (raw.log azzerato: niente residui di run precedenti)
 rm -f "$OUT/raw.log"
 for r in 1 2 3 4 5; do
   for k in O s161 s162 s163; do
-    b="$ORACLE"; [ "$k" != O ] && b="${BIN[$k]}"
+    b="$(bin_of "$k")"
     v=$(user_cpu "$b" "$DRV")
     echo "raw r$r $k=$v" >> "$OUT/raw.log"
   done
 done
 python3 - "$VERD" <<PYE
 import statistics
-flr = {"O": ${FLR[O]}, "s161": ${FLR[s161]}, "s162": ${FLR[s162]}, "s163": ${FLR[s163]}}
+flr = {"O": ${FLR_O}, "s161": ${FLR_s161}, "s162": ${FLR_s162}, "s163": ${FLR_s163}}
 raw = {}
 for l in open("$OUT/raw.log"):
     t = l.split()
