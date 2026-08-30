@@ -1,0 +1,13 @@
+== s165-ab-mc1 mc1sm: A=fea4a2d0 MISURATO (pin s163 dallo stash) B=9838e732 MISURATO R=3 ordine ALTERNATO; giudice=mc2 N=20000000 $o->f($s,1) k=2 ArgPlace dichiarato; soglia=max(4, drop-1) + VIETO su rumore>4 (az.rev. S-164 #5, rc=8); UB dal bundle CONTATO: alloc args-Vec ≈0 (lezione AL3) + salto method_call+dispatch_instance_call ⇒ attesa/BANDA SMOKE VINCOLANTE [4;30] + emenda rev. S-161 #4; guardie missload(N=10M, presidio AL2/AU1) + arrload(N=10M, L-AU1) + strmap(N=10M, L-AM2) + arrfilter(N=10M, L-AF1) + arrmap(N=10M, L-AM1) + refl(N=10M) + hostargs(N=10M) + backtrace24(N=2,4M) + obj* + sei, comparatore STRETTO; quiescenza rc=0; rc autoritativo = ab-out/mc1sm.rc ==
+sentinella language-server inizio finestra (az.rev. S-157 #4): /Applications/Antigravity /Users/francescotinti/.antigravity-ide/extensions/rust-lang.rust-analyzer-0.3.3025-darwin-arm64/server/rust-analyzer /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.96.0-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer 
+cat=mc2 N=20000000 floor_A=0.02 floor_B=0.03
+  coppia1 [AB]: rawA=3.42 rawB=3.06
+  coppia2 [BA]: rawA=3.43 rawB=3.06
+  coppia3 [AB]: rawA=3.46 rawB=3.06
+cat=missload N=10000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=2.81 rawB=2.89
+  coppia2 [BA]: rawA=2.81 rawB=2.88
+  coppia3 [AB]: rawA=2.80 rawB=2.89
+cat=arrload N=10000000 floor_A=0.02 floor_B=0.03
+  coppia1 [AB]: rawA=2.96 rawB=3.03
+  coppia2 [BA]: rawA=2.94 rawB=3.04

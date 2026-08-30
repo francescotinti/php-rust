@@ -1,0 +1,5 @@
+== s165 disasm gate L-MC1 (pre-smoke, agli atti) ==
+metodo: otool -tv | awk CUMULATIVO su TUTTE le sezioni di simbolo ^__ZN..run_loop..: (variante dichiarata vs s164 che contava la sola prima sezione: 6033 sul medesimo binario pin), campi $2==bl
+phpr-s163 (pin, braccio A): bl_run_loop=6082
+phpr-s165-mc1-B (9838e732): bl_run_loop=6127
+Delta=+45 DICHIARATO (corpo del fast path L-MC1 nel handler; nessun flip d'inliner del loop: entrambe le sezioni presenti)
