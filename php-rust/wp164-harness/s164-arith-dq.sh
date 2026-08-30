@@ -38,7 +38,7 @@ median() { printf '%s\n' "$@" | sort -n | awk '{v[NR]=$1} END{print (NR%2)?v[(NR
 
 { echo "== S-164 p.2 FASE 2 — arith de-quantizzata (criterio s164-criterio-arith.md p.3-4; N=$N; R=5 rotazione O->161->162->163) =="
   echo "grade=VERDICT  # rc autoritativo = arith-out/arith-dq.done"
-  echo "bracci: oracle=$("$ORACLE" -r 'echo PHP_VERSION;') s161=${EXP[s161]} s162=${EXP[s162]} s163=${EXP[s163]} (byte-verificati)"
+  echo "bracci: oracle=$("$ORACLE" -r 'echo PHP_VERSION;') s161=$(exp_of s161) s162=$(exp_of s162) s163=$(exp_of s163) (byte-verificati)"
   echo "sentinella igiene INIZIO: $(uptime | tr -s ' ')"
   echo "  mediaanalysisd_cpu=$(top -l 2 -stats pid,cpu,command 2>/dev/null | awk '/mediaanalysisd/ {v=$2} END {print (v==""?0:v)}')"
 } >> "$VERD"
