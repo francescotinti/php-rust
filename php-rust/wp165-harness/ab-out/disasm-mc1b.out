@@ -1,0 +1,5 @@
+== s165 disasm gate L-MC1b (pre-smoke, agli atti) ==
+metodo: identico a disasm-mc1.out (otool -tv, awk cumulativo sezioni run_loop, $2==bl)
+phpr-s163 (pin, braccio A): bl_run_loop=6082
+phpr-s165-mc1b-B (f8e09681): bl_run_loop=6086
+Delta=+4 DICHIARATO (ammissione arità + call a methodcall_fast #[inline(never)]; il +45 della forma inline e' rientrato: corpo FUORI dal loop come da arbitrato)
