@@ -1,0 +1,85 @@
+2,9c2,10
+< # s163-ab-au1.sh <BPATH> <BEXP8> <TAG> <R> <AEXP8> [DSMOKE_ARRLOAD] — LEVA
+< # L-AU1 autoload array-callable [obj,metodo] k=1 senza args-Vec (criterio
+< # s163-criterio-au1.md). COPIA DICHIARATA di s162-ab-am2.sh (manifest
+< # s163-ab-copia.diff) coi SOLI adattamenti del criterio:
+< #  (a) GIUDICE: arrload (m-arrload.php wp163-harness, N=10000000 miss
+< #      DICHIARATO; n_fixed lo pinna comunque);
+< #  (b) UB dal bundle CONTATO (criterio p.3): 3 alloc/miss x coeff
+< #      sito-autoload 7,0±3,0 ⇒ attesa [12;30]; D>30+rumore FUORI-UB SOPRA;
+---
+> # s164-ab-al3.sh <BPATH> <BEXP8> <TAG> <R> <AEXP8> [DSMOKE_MISSLOAD] — LEVA
+> # L-AL3 FrameExt riciclato via pool sul fast path closure (criterio
+> # s164-criterio-al3.md). COPIA DICHIARATA di s163-ab-au1.sh (manifest
+> # s164-ab-copia.diff, diff INTERO + grep path: lezione incidente S-164 #1)
+> # coi SOLI adattamenti del criterio:
+> #  (a) GIUDICE: missload (m-missload.php wp158, N=10000000 miss closure
+> #      arity-1 DICHIARATO; n_fixed lo pinna comunque);
+> #  (b) UB dal bundle CONTATO (criterio p.2): 1 alloc/chiamata x coeff
+> #      sito-autoload 7,0±3,0 ⇒ attesa [4;10]; D>10+rumore FUORI-UB SOPRA;
+11,16c12,16
+< #  (c) guardie: strmap NUOVA (presidio DIRETTO L-AM2, wp162) + missload
+< #      (presidio DIRETTO L-AL2, stesso try_autoload) + arrfilter (L-AF1) +
+< #      arrmap (L-AM1) + refl + hostargs + backtrace24 + obj* + le sei = 19;
+< #      comparatore STRETTO;
+< #  (d) BANDA SMOKE VINCOLANTE (criterio p.3): al R=2 il copione impone
+< #      D_smoke in [12;30] — fuori banda rc=6 (arbitrato census PRIMA del
+---
+> #  (c) guardie: arrload NUOVA (presidio DIRETTO L-AU1, wp163) + strmap
+> #      (L-AM2) + arrfilter (L-AF1) + arrmap (L-AM1) + refl + hostargs +
+> #      backtrace24 + obj* + le sei = 19; comparatore STRETTO;
+> #  (d) BANDA SMOKE VINCOLANTE (criterio p.3c): al R=2 il copione impone
+> #      D_smoke in [4;10] — fuori banda rc=6 (arbitrato census PRIMA del
+19,20c19,20
+< #  (e) A = GEMELLO dal tree corrente s162 (phpr-s163-gemelloA), hash atteso
+< #      dal run; header con hash MISURATI; sentinella LS; lock s163.
+---
+> #  (e) A = GEMELLO dal tree corrente s163 (phpr-s164-gemelloA), hash atteso
+> #      dal run; header con hash MISURATI; sentinella LS; lock s164.
+31c31,32
+< A="/Volumes/Extreme Pro/Claude/phpr-old-target/release/phpr-s163-gemelloA"
+---
+> W163="$REPO/wp163-harness"
+> A="/Volumes/Extreme Pro/Claude/phpr-old-target/release/phpr-s164-gemelloA"
+36c37
+< VERD="$H/s163-$TAG-verdetto.out"
+---
+> VERD="$H/s164-$TAG-verdetto.out"
+44c45
+< if ! grep -qi "s-163\|s163" "$LOCK" 2>/dev/null; then
+---
+> if ! grep -qi "s-164\|s164" "$LOCK" 2>/dev/null; then
+58c59
+< [ "$AM" = "$AEXP" ] || { echo "A misurato $AM != atteso $AEXP (gemello tree s161) — STOP" | tee -a "$VERD"; echo 1 > "$RC"; exit 1; }
+---
+> [ "$AM" = "$AEXP" ] || { echo "A misurato $AM != atteso $AEXP (gemello tree s163) — STOP" | tee -a "$VERD"; echo 1 > "$RC"; exit 1; }
+66c67
+< src_of() { case "$1" in arrload) echo "$H";; strmap) echo "$W162";; arrfilter) echo "$W160";; arrmap) echo "$W159";; refl|missload|hostargs|backtrace) echo "$W158";; objalloc|objchurn|objmap|objdatains|objallocni|objdropdef) echo "$M";; *) echo "$M97";; esac; }
+---
+> src_of() { case "$1" in arrload) echo "$W163";; strmap) echo "$W162";; arrfilter) echo "$W160";; arrmap) echo "$W159";; refl|missload|hostargs|backtrace) echo "$W158";; objalloc|objchurn|objmap|objdatains|objallocni|objdropdef) echo "$M";; *) echo "$M97";; esac; }
+69,70c70,71
+< CATS_JUDGE="arrload"
+< CATS_GUARD="strmap missload arrfilter arrmap refl hostargs backtrace objdropdef objchurn objdatains objalloc objallocni objmap arith prop calls str arr re"
+---
+> CATS_JUDGE="missload"
+> CATS_GUARD="arrload strmap arrfilter arrmap refl hostargs backtrace objdropdef objchurn objdatains objalloc objallocni objmap arith prop calls str arr re"
+73c74
+< echo "== s163-ab-au1 $TAG: A=$AM MISURATO (gemello dal tree corrente s162) B=$BM MISURATO R=$R ordine ALTERNATO; giudice=arrload N=10000000 miss dichiarato; soglia=max(4, drop-1); UB dal bundle CONTATO: 3 alloc/miss x coeff sito-autoload 7,0±3,0 ⇒ attesa [12;30]; BANDA SMOKE VINCOLANTE [12;30] nel giudice + emenda rev. S-161 #4; guardie strmap(N=10M, presidio DIRETTO L-AM2) + missload(N=10M, L-AL2 stesso try_autoload) + arrfilter(N=10M, L-AF1) + arrmap(N=10M, L-AM1) + refl(N=10M) + hostargs(N=10M) + backtrace24(N=2,4M) + obj* + sei, comparatore STRETTO; quiescenza rc=$QRC; rc autoritativo = ab-out/$TAG.rc =="
+---
+> echo "== s164-ab-al3 $TAG: A=$AM MISURATO (gemello dal tree corrente s163) B=$BM MISURATO R=$R ordine ALTERNATO; giudice=missload N=10000000 miss closure dichiarato; soglia=max(4, drop-1); UB dal bundle CONTATO: 1 alloc/chiamata x coeff sito-autoload 7,0±3,0 ⇒ attesa [4;10]; BANDA SMOKE VINCOLANTE [4;10] nel giudice + emenda rev. S-161 #4; guardie arrload(N=10M, presidio DIRETTO L-AU1) + strmap(N=10M, L-AM2) + arrfilter(N=10M, L-AF1) + arrmap(N=10M, L-AM1) + refl(N=10M) + hostargs(N=10M) + backtrace24(N=2,4M) + obj* + sei, comparatore STRETTO; quiescenza rc=$QRC; rc autoritativo = ab-out/$TAG.rc =="
+100,102c101,103
+< if len(sys.argv) > 3 and sys.argv[3]: dsmoke["arrload"] = float(sys.argv[3])
+< UB_LO, UB_HI = 12.0, 30.0  # criterio au1 p.3: bundle CONTATO 3 alloc/miss x coeff sito-autoload [4;10] — bivio MECCANICO
+< SB_LO, SB_HI = 12.0, 30.0  # banda smoke VINCOLANTE (criterio p.3) = attesa dal bundle
+---
+> if len(sys.argv) > 3 and sys.argv[3]: dsmoke["missload"] = float(sys.argv[3])
+> UB_LO, UB_HI = 4.0, 10.0  # criterio al3 p.2: bundle CONTATO 1 alloc/chiamata x coeff sito-autoload 7,0±3,0 — bivio MECCANICO
+> SB_LO, SB_HI = 4.0, 10.0  # banda smoke VINCOLANTE (criterio p.3c) = attesa dal bundle
+119c120
+< JUDGES = ("arrload",)
+---
+> JUDGES = ("missload",)
+139c140
+<             ub_es = "DENTRO l'attesa [12;30] (bundle 3-alloc COERENTE col coeff sito-autoload; nessun coeff nuovo)"
+---
+>             ub_es = "DENTRO l'attesa [4;10] (bundle 1-alloc COERENTE col coeff sito-autoload; nessun coeff nuovo)"
