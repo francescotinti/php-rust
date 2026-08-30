@@ -1,0 +1,17 @@
+== s164 arbitrato census L-AL3 (attesa 199999 = 1 Box/iter meno 1 a freddo, unita' hostcall_n=TUTTE le alloc; probe-B = tree HEAD con AL3, probe-A = copia − patch; driver N=200000) ==
+patch inversa: 2 file (vm/mod.rs + vm/calls.rs), zero rej
+probe MISURATI: A=bb0cad1aafe4730f B=248da84e2390e905 (census -p php-cli --features mem-census, target dedicati, run sequenziali)
+identita' s149sum A r1: hostcall_n=200008 sum_name=200008 unnamed=0 overflow=0 OK
+identita' s149sum A r2: hostcall_n=200008 sum_name=200008 unnamed=0 overflow=0 OK
+identita' s149sum B r1: hostcall_n=10 sum_name=10 unnamed=0 overflow=0 OK
+identita' s149sum B r2: hostcall_n=10 sum_name=10 unnamed=0 overflow=0 OK
+repliche A: r1==r2
+repliche B: r1==r2
+conteggi r1 per-NOME (arbitro: class_exists):
+  class_exists: A=200006 B=8 Delta=199998
+  spl_autoload_register: A=2 B=2 Delta=0
+  count: A=0 B=0 Delta=0
+Delta hostcall_n = 199998 (atteso 199999 ESATTO — 1 Box/iter meno 1 alloc a freddo del pool)
+Delta altri nomi != 0: nessuno
+CONTEGGI: FUORI ATTESA (p.5) — nomi_fuori=['class_exists'] altri=[] — dichiarare e tornare al sorgente, NESSUNA taratura
+rc=5 conteggi non validi/fuori attesa
