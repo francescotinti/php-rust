@@ -11,3 +11,15 @@ cat=missload N=10000000 floor_A=0.02 floor_B=0.02
 cat=arrload N=10000000 floor_A=0.02 floor_B=0.03
   coppia1 [AB]: rawA=2.96 rawB=3.03
   coppia2 [BA]: rawA=2.94 rawB=3.04
+  coppia3 [AB]: rawA=2.97 rawB=3.04
+cat=strmap N=10000000 floor_A=0.02 floor_B=0.03
+  coppia1 [AB]: rawA=1.04 rawB=1.05
+  coppia2 [BA]: rawA=1.03 rawB=1.04
+  coppia3 [AB]: rawA=1.05 rawB=1.06
+cat=arrfilter N=10000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=1.79 rawB=1.83
+  coppia2 [BA]: rawA=1.79 rawB=1.82
+  coppia3 [AB]: rawA=1.80 rawB=1.83
+cat=arrmap N=10000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=1.16 rawB=1.16
+  coppia2 [BA]: rawA=1.16 rawB=1.17
