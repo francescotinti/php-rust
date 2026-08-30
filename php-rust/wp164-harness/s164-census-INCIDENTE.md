@@ -20,8 +20,9 @@ La cura dell'incidente S-163 è ASSOLTA nel suo canale autoritativo.
 
 **Bonifica (S-164, ore 04:2x)**: artefatti del rerun SPOSTATI in
 `wp164-harness/census-out/` (32 file) + verdetto in `wp164-harness/`;
-`wp163-harness/census-out/` resta vuota (gli originali s163 non sono
-recuperabili); riga `H` corretta nello script col marcatore del fix; il
+`wp163-harness/census-out/` resta vuota nel working tree; **EMENDA (S-164,
+scoperta al diff): i census-out s163 erano TRACCIATI — gli originali vivono
+in git al commit a4954127, nulla è perso**; riga `H` corretta nello script; il
 manifest `s164-census-copia.diff` in git documenta la versione ESEGUITA.
 
 **Lezione**: il copia-gate si verifica sul DIFF INTERO più un grep dei path

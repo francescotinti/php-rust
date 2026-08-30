@@ -2798,7 +2798,19 @@ impl<'m> Frame<'m> {
 #[derive(Default)]
 struct FramePool {
     bufs: Vec<(Vec<Zval>, Vec<Zval>)>,
+    /// L-AL3 (S-164): bounded freelist of `FrameExt` boxes, recycled at
+    /// [`Vm::recycle_frame`] with fields ALWAYS reset to default while
+    /// pooled (a defaulted box is semantically identical to `ext: None`;
+    /// no reader treats mere presence as a flag). Fed to the closure fast
+    /// path (`push_closure_frame_one`), whose per-call `Box<FrameExt>` was
+    /// the last allocation on that path (census s163, AL2-fast = 1).
+    exts: Vec<Box<FrameExt>>,
 }
+
+/// L-AL3: depth cap of [`FramePool::exts`] — small on purpose (one box per
+/// closure-call nesting level in flight is plenty; beyond it, dropping the
+/// box costs exactly what the pre-lever path paid).
+const EXT_POOL_DEPTH: usize = 8;
 
 /// Max retained buffer pairs.
 const FRAME_POOL_DEPTH: usize = 64;
@@ -2819,6 +2831,21 @@ impl FramePool {
             && stack.capacity() <= FRAME_POOL_MAX_CAP
         {
             self.bufs.push((slots, stack));
+        }
+    }
+
+    /// L-AL3: pop a pooled (defaulted) `FrameExt` box, if any.
+    #[inline]
+    fn take_ext(&mut self) -> Option<Box<FrameExt>> {
+        self.exts.pop()
+    }
+
+    /// L-AL3: pool a `FrameExt` box; the CALLER has already reset it to
+    /// default. Beyond the cap the box just drops (= pre-lever cost).
+    #[inline]
+    fn put_ext(&mut self, b: Box<FrameExt>) {
+        if self.exts.len() < EXT_POOL_DEPTH {
+            self.exts.push(b);
         }
     }
 }
@@ -4653,7 +4680,18 @@ impl<'m> Vm<'m> {
         let mut stack = std::mem::take(&mut frame.stack);
         slots.clear();
         stack.clear();
+        // L-AL3 (S-164): recycle the ext box instead of deallocating it.
+        // `ext` is Frame's LAST field, so the derived Drop released its
+        // Rc-bearing contents after every other field's — the reset below
+        // happens after `drop(frame)`, reproducing that exact point in the
+        // release order; a defaulted pooled box holds no Zvals (no
+        // per-request retain risk).
+        let ext = frame.ext.take();
         drop(frame);
+        if let Some(mut b) = ext {
+            *b = FrameExt::default();
+            self.frame_pool.put_ext(b);
+        }
         self.frame_pool.put(slots, stack);
     }
 
@@ -11450,6 +11488,13 @@ impl<'m> Vm<'m> {
         };
         debug_assert!(callee.simple_call && callee.n_params == 1);
         let mut frame = self.pooled_frame(callee, m);
+        // L-AL3 (S-164): reuse a pooled (defaulted) ext box — the fast
+        // path's only remaining allocation (census s163); ext_mut() falls
+        // back to Box::default on a cold pool.
+        debug_assert!(frame.ext.is_none());
+        if let Some(b) = self.frame_pool.take_ext() {
+            frame.ext = Some(b);
+        }
         frame.ext_mut().closure_id = Some(cl.id);
         for (slot, val) in &cl.captures {
             frame.slots[*slot as usize] = val.clone();

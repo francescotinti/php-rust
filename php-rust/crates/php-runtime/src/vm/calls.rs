@@ -709,13 +709,10 @@ impl<'m> Vm<'m> {
         let baseline = self.frames.len();
         self.push_fn_frame_one(fmod, idx, arg)?;
         if self.frames.len() == baseline {
-            // Mirror of call_callable's no-frame arm: unreachable for a user
-            // function body (which always pushes a frame); kept for
-            // structural equality with the full path.
-            return Ok(self.frames[baseline - 1]
-                .stack
-                .pop()
-                .expect("host callable result on the caller stack"));
+            // S-164 (az.rev. S-163 #4): a pre-admitted USER body always
+            // pushes a frame — the old silent fallback masked a broken
+            // admission predicate; a dead twin arm dies LOUD.
+            unreachable!("call_fn_one: pre-admitted user body pushed no frame");
         }
         self.drive_to_return(baseline)
     }
@@ -740,13 +737,10 @@ impl<'m> Vm<'m> {
         let baseline = self.frames.len();
         self.push_method_frame_one(defc, midx, cid, this, arg)?;
         if self.frames.len() == baseline {
-            // Mirror of call_callable's no-frame arm: unreachable for a user
-            // method body (which always pushes a frame); kept for structural
-            // equality with the full path.
-            return Ok(self.frames[baseline - 1]
-                .stack
-                .pop()
-                .expect("host callable result on the caller stack"));
+            // S-164 (az.rev. S-163 #4): a pre-admitted USER body always
+            // pushes a frame — the old silent fallback masked a broken
+            // admission predicate; a dead twin arm dies LOUD.
+            unreachable!("call_method_one: pre-admitted user body pushed no frame");
         }
         self.drive_to_return(baseline)
     }
