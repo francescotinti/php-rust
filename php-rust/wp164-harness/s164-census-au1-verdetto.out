@@ -1,0 +1,17 @@
+== s164 RIESECUZIONE census L-AU1 (attesa EMENDATA 600000 = 3 alloc/miss, unita' hostcall_n=TUTTE le alloc; probe-B = tree HEAD, probe-A = copia − patch s163; driver N=200000) ==
+patch inversa: 3 file (calls/mod + loc_dente=test fuori da -p php-cli, DICHIARATO), zero rej
+probe MISURATI: A=548e2efa13a2c858 B=2f2f723cdcfaf20e (census -p php-cli --features mem-census, target dedicati, run sequenziali)
+identita' s149sum A r1: hostcall_n=600008 sum_name=600008 unnamed=0 overflow=0 OK
+identita' s149sum A r2: hostcall_n=600008 sum_name=600008 unnamed=0 overflow=0 OK
+identita' s149sum B r1: hostcall_n=8 sum_name=8 unnamed=0 overflow=0 OK
+identita' s149sum B r2: hostcall_n=8 sum_name=8 unnamed=0 overflow=0 OK
+repliche A: r1==r2
+repliche B: r1==r2
+conteggi r1 per-NOME (arbitro: class_exists):
+  class_exists: A=600006 B=6 Delta=600000
+  spl_autoload_register: A=2 B=2 Delta=0
+  count: A=0 B=0 Delta=0
+Delta hostcall_n = 600000 (atteso 600000 ESATTO — attesa EMENDATA: 3 alloc/miss)
+Delta altri nomi != 0: nessuno
+CONTEGGI: attesa EMENDATA ESATTA (Delta 3 alloc/miss CONFERMATO su class_exists: args-Vec + elems-Vec + to_vec del nome; resto zero) — rc emesso DALLO SCRIPT: incidente S-163 CURATO
+ESITO: rc=0 (riesecuzione agli atti — census.done DALLO SCRIPT, incidente S-163 curato)

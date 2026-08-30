@@ -1,0 +1,22 @@
+== S-164 p.2 FASE 2 — arith de-quantizzata (criterio s164-criterio-arith.md p.3-4; N=250000000; R=5 rotazione O->161->162->163) ==
+grade=VERDICT  # rc autoritativo = arith-out/arith-dq.done
+bracci: oracle=8.5.7 s161=ec0a636ad0c42005 s162=20c63af44bfd077a s163=fea4a2d040a0d8d0 (byte-verificati)
+sentinella igiene INIZIO:  4:45 up 1 day, 18:56, 2 users, load averages: 1.67 1.79 1.92
+  mediaanalysisd_cpu=0.0
+pavimento_O_s=0.05
+pavimento_s161_s=0.02
+pavimento_s162_s=0.02
+pavimento_s163_s=0.02
+O_mediana_s=2.210 netto_s=2.160 spread_s=0.020
+s161_mediana_s=11.740 netto_s=11.720 spread_s=0.160
+s162_mediana_s=11.800 netto_s=11.780 spread_s=0.110
+s163_mediana_s=11.720 netto_s=11.700 spread_s=0.150
+rapporto_s161=5.426
+rapporto_s162=5.454
+rapporto_s163=5.417
+phpr_maxmin_s=0.080 (attesa a: <=0.40)
+oracle_netto_s=2.160 (attesa b: [2.15; 2.20])
+ATTESE (a)+(b) CONFERMATE: tick 5,3->5,5 = quantizzazione + centesimo oracle s161, NESSUNA regressione phpr — indagine CHIUSA
+sentinella igiene FINE:  4:48 up 1 day, 18:59, 2 users, load averages: 1.87 1.84 1.91
+  mediaanalysisd_cpu=0.0
+ESITO: rc=0
