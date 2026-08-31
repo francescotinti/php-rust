@@ -1,0 +1,153 @@
+== s165-ab-mc1 mc1dr5: A=fea4a2d0 MISURATO (pin s163 dallo stash) B=1fd8757d MISURATO R=5 ordine ALTERNATO; giudice=mc2 N=20000000 $o->f($s,1) k=2 ArgPlace dichiarato; soglia=max(4, drop-1) + VIETO su rumore>4 (az.rev. S-164 #5, rc=8); UB dal bundle CONTATO: alloc args-Vec ≈0 (lezione AL3) + salto method_call+dispatch_instance_call ⇒ attesa/BANDA SMOKE VINCOLANTE [4;30] + emenda rev. S-161 #4; guardie missload(N=10M, presidio AL2/AU1) + arrload(N=10M, L-AU1) + strmap(N=10M, L-AM2) + arrfilter(N=10M, L-AF1) + arrmap(N=10M, L-AM1) + refl(N=10M) + hostargs(N=10M) + backtrace24(N=2,4M) + obj* + sei, comparatore STRETTO; quiescenza rc=0; rc autoritativo = ab-out/mc1dr5.rc ==
+sentinella language-server inizio finestra (az.rev. S-157 #4): /Applications/Antigravity /Users/francescotinti/.antigravity-ide/extensions/rust-lang.rust-analyzer-0.3.3025-darwin-arm64/server/rust-analyzer /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.96.0-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer 
+cat=mc2 N=20000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=3.41 rawB=3.07
+  coppia2 [BA]: rawA=3.39 rawB=3.12
+  coppia3 [AB]: rawA=3.44 rawB=3.12
+  coppia4 [BA]: rawA=3.42 rawB=3.15
+  coppia5 [AB]: rawA=3.41 rawB=3.14
+cat=missload N=10000000 floor_A=0.03 floor_B=0.02
+  coppia1 [AB]: rawA=2.82 rawB=2.80
+  coppia2 [BA]: rawA=2.81 rawB=2.81
+  coppia3 [AB]: rawA=2.81 rawB=2.82
+  coppia4 [BA]: rawA=2.80 rawB=2.82
+  coppia5 [AB]: rawA=2.82 rawB=2.82
+cat=arrload N=10000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=2.96 rawB=2.99
+  coppia2 [BA]: rawA=2.97 rawB=2.99
+  coppia3 [AB]: rawA=2.96 rawB=2.98
+  coppia4 [BA]: rawA=2.96 rawB=2.99
+  coppia5 [AB]: rawA=2.95 rawB=2.98
+cat=strmap N=10000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=1.04 rawB=1.03
+  coppia2 [BA]: rawA=1.04 rawB=1.03
+  coppia3 [AB]: rawA=1.04 rawB=1.03
+  coppia4 [BA]: rawA=1.04 rawB=1.03
+  coppia5 [AB]: rawA=1.03 rawB=1.02
+cat=arrfilter N=10000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=1.80 rawB=1.84
+  coppia2 [BA]: rawA=1.82 rawB=1.84
+  coppia3 [AB]: rawA=1.79 rawB=1.84
+  coppia4 [BA]: rawA=1.82 rawB=1.83
+  coppia5 [AB]: rawA=1.81 rawB=1.84
+cat=arrmap N=10000000 floor_A=0.03 floor_B=0.02
+  coppia1 [AB]: rawA=1.16 rawB=1.16
+  coppia2 [BA]: rawA=1.16 rawB=1.17
+  coppia3 [AB]: rawA=1.16 rawB=1.16
+  coppia4 [BA]: rawA=1.17 rawB=1.16
+  coppia5 [AB]: rawA=1.16 rawB=1.16
+cat=refl N=10000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=3.78 rawB=3.57
+  coppia2 [BA]: rawA=3.56 rawB=3.53
+  coppia3 [AB]: rawA=3.58 rawB=3.56
+  coppia4 [BA]: rawA=3.56 rawB=3.59
+  coppia5 [AB]: rawA=3.57 rawB=3.54
+cat=hostargs N=10000000 floor_A=0.03 floor_B=0.02
+  coppia1 [AB]: rawA=1.99 rawB=2.00
+  coppia2 [BA]: rawA=1.98 rawB=1.98
+  coppia3 [AB]: rawA=1.99 rawB=1.99
+  coppia4 [BA]: rawA=1.99 rawB=1.99
+  coppia5 [AB]: rawA=1.98 rawB=2.00
+cat=backtrace N=2400000 floor_A=0.03 floor_B=0.02
+  coppia1 [AB]: rawA=1.11 rawB=1.11
+  coppia2 [BA]: rawA=1.12 rawB=1.13
+  coppia3 [AB]: rawA=1.11 rawB=1.11
+  coppia4 [BA]: rawA=1.12 rawB=1.12
+  coppia5 [AB]: rawA=1.11 rawB=1.13
+cat=objdropdef N=3000000 floor_A=0.02 floor_B=0.03
+  coppia1 [AB]: rawA=3.09 rawB=3.10
+  coppia2 [BA]: rawA=3.09 rawB=3.08
+  coppia3 [AB]: rawA=3.09 rawB=3.07
+  coppia4 [BA]: rawA=3.10 rawB=3.09
+  coppia5 [AB]: rawA=3.09 rawB=3.10
+cat=objchurn N=3000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=3.57 rawB=3.57
+  coppia2 [BA]: rawA=3.57 rawB=3.61
+  coppia3 [AB]: rawA=3.55 rawB=3.55
+  coppia4 [BA]: rawA=3.57 rawB=3.56
+  coppia5 [AB]: rawA=3.59 rawB=3.57
+cat=objdatains N=3000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=2.88 rawB=2.90
+  coppia2 [BA]: rawA=2.90 rawB=2.91
+  coppia3 [AB]: rawA=2.88 rawB=2.90
+  coppia4 [BA]: rawA=2.89 rawB=2.91
+  coppia5 [AB]: rawA=2.89 rawB=2.90
+cat=objalloc N=3000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=2.43 rawB=2.41
+  coppia2 [BA]: rawA=2.42 rawB=2.41
+  coppia3 [AB]: rawA=2.43 rawB=2.43
+  coppia4 [BA]: rawA=2.41 rawB=2.43
+  coppia5 [AB]: rawA=2.41 rawB=2.42
+cat=objallocni N=3000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=2.23 rawB=2.22
+  coppia2 [BA]: rawA=2.22 rawB=2.22
+  coppia3 [AB]: rawA=2.23 rawB=2.22
+  coppia4 [BA]: rawA=2.22 rawB=2.21
+  coppia5 [AB]: rawA=2.21 rawB=2.23
+cat=objmap N=3000000 floor_A=0.03 floor_B=0.02
+  coppia1 [AB]: rawA=0.37 rawB=0.38
+  coppia2 [BA]: rawA=0.37 rawB=0.38
+  coppia3 [AB]: rawA=0.37 rawB=0.39
+  coppia4 [BA]: rawA=0.37 rawB=0.37
+  coppia5 [AB]: rawA=0.37 rawB=0.37
+cat=arith N=150000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=7.03 rawB=7.08
+  coppia2 [BA]: rawA=7.00 rawB=7.03
+  coppia3 [AB]: rawA=7.03 rawB=7.06
+  coppia4 [BA]: rawA=7.01 rawB=7.08
+  coppia5 [AB]: rawA=6.99 rawB=7.07
+cat=prop N=90000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=6.97 rawB=7.11
+  coppia2 [BA]: rawA=7.00 rawB=7.16
+  coppia3 [AB]: rawA=6.97 rawB=7.16
+  coppia4 [BA]: rawA=6.98 rawB=7.15
+  coppia5 [AB]: rawA=6.99 rawB=7.15
+cat=calls N=60000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=6.43 rawB=6.44
+  coppia2 [BA]: rawA=6.39 rawB=6.54
+  coppia3 [AB]: rawA=6.38 rawB=6.48
+  coppia4 [BA]: rawA=6.39 rawB=6.47
+  coppia5 [AB]: rawA=6.38 rawB=6.52
+cat=str N=28000000 floor_A=0.02 floor_B=0.03
+  coppia1 [AB]: rawA=4.42 rawB=4.39
+  coppia2 [BA]: rawA=4.43 rawB=4.41
+  coppia3 [AB]: rawA=4.45 rawB=4.39
+  coppia4 [BA]: rawA=4.42 rawB=4.39
+  coppia5 [AB]: rawA=4.42 rawB=4.38
+cat=arr N=30000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=4.53 rawB=4.49
+  coppia2 [BA]: rawA=4.51 rawB=4.54
+  coppia3 [AB]: rawA=4.48 rawB=4.46
+  coppia4 [BA]: rawA=4.52 rawB=4.53
+  coppia5 [AB]: rawA=4.53 rawB=4.55
+cat=re N=12000000 floor_A=0.03 floor_B=0.02
+  coppia1 [AB]: rawA=5.51 rawB=5.48
+  coppia2 [BA]: rawA=5.47 rawB=5.48
+  coppia3 [AB]: rawA=5.48 rawB=5.50
+  coppia4 [BA]: rawA=5.49 rawB=5.51
+  coppia5 [AB]: rawA=5.53 rawB=5.52
+GIUDICE mc2: A=169.5 B=155.0 ns/iter D=+14.5 soglia=4.0 (rumore drop-1: A'=1.5 B'=1.5) -> SOPRA SOGLIA
+riconciliazione mc2: D_smoke=+14.5 D_R5=+14.5 |diff|=0.0 banda=4.0 -> in banda
+riconciliazione UB mc2: D=+14.5 vs attesa [4.0;30.0]+rumore=1.5 -> DENTRO l'attesa [4;30] (bundle salto-funnel; alloc ≈0 per lezione AL3)
+guardia missload: A=278.0 B=280.0 D=-2.0 soglia_reg=-8.0 [banda fondata=8.0; rumore drop-1 A'=2.0 B'=1.0] -> ok
+guardia arrload: A=294.0 B=297.0 D=-3.0 soglia_reg=-4.0 [max(4, drop-1); rumore drop-1 A'=1.0 B'=1.0] -> ok
+guardia strmap: A=102.0 B=101.0 D=+1.0 soglia_reg=-4.0 [max(4, drop-1); rumore drop-1 A'=0.0 B'=0.0] -> ok
+guardia arrfilter: A=179.0 B=182.0 D=-3.0 soglia_reg=-6.0 [banda fondata=6.0; rumore drop-1 A'=2.0 B'=0.0] -> ok
+guardia arrmap: A=113.0 B=114.0 D=-1.0 soglia_reg=-4.0 [max(4, drop-1); rumore drop-1 A'=0.0 B'=0.0] -> ok
+guardia refl: A=355.0 B=354.0 D=+1.0 soglia_reg=-5.0 [max(4, drop-1); rumore drop-1 A'=2.0 B'=5.0] -> ok
+guardia hostargs: A=196.0 B=197.0 D=-1.0 soglia_reg=-4.0 [max(4, drop-1); rumore drop-1 A'=1.0 B'=2.0] -> ok
+guardia backtrace: A=450.0 B=458.3 D=-8.3 soglia_reg=-8.3 [max(4, drop-1); rumore drop-1 A'=4.2 B'=8.3] -> REGRESSIONE
+guardia objdropdef: A=1023.3 B=1020.0 D=+3.3 soglia_reg=-6.7 [max(4, drop-1); rumore drop-1 A'=0.0 B'=6.7] -> ok
+guardia objchurn: A=1183.3 B=1183.3 D=+0.0 soglia_reg=-6.7 [banda fondata=6.7; rumore drop-1 A'=6.7 B'=6.7] -> ok
+guardia objdatains: A=956.7 B=960.0 D=-3.3 soglia_reg=-6.7 [max(4, drop-1); rumore drop-1 A'=6.7 B'=3.3] -> ok
+guardia objalloc: A=800.0 B=800.0 D=+0.0 soglia_reg=-13.3 [banda fondata=13.3; rumore drop-1 A'=6.7 B'=6.7] -> ok
+guardia objallocni: A=733.3 B=733.3 D=+0.0 soglia_reg=-10.0 [banda fondata=10.0; rumore drop-1 A'=3.3 B'=3.3] -> ok
+guardia objmap: A=113.3 B=120.0 D=-6.7 soglia_reg=-4.0 [banda fondata=3.3; rumore drop-1 A'=0.0 B'=3.3] -> REGRESSIONE
+guardia arith: A=46.6 B=47.0 D=-0.4 soglia_reg=-4.0 [SL=0.94; rumore drop-1 A'=0.3 B'=0.1] -> ok
+guardia prop: A=77.3 B=79.2 D=-1.9 soglia_reg=-4.0 [SL=0.8; rumore drop-1 A'=0.2 B'=0.1] -> ok
+guardia calls: A=106.2 B=107.7 D=-1.5 soglia_reg=-4.0 [SL=0.73; rumore drop-1 A'=0.2 B'=1.3] -> ok
+guardia str: A=157.1 B=155.7 D=+1.4 soglia_reg=-4.0 [SL=2.89; rumore drop-1 A'=0.4 B'=0.4] -> ok
+guardia arr: A=150.0 B=150.3 D=-0.3 soglia_reg=-4.0 [SL=2.49; rumore drop-1 A'=0.7 B'=2.0] -> ok
+guardia re: A=455.0 B=456.7 D=-1.7 soglia_reg=-4.5 [SL=4.46; rumore drop-1 A'=3.3 B'=2.5] -> ok
+ESITO: GUARDIA MORDE
+sentinella language-server fine finestra: /Applications/Antigravity /Users/francescotinti/.antigravity-ide/extensions/rust-lang.rust-analyzer-0.3.3025-darwin-arm64/server/rust-analyzer /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.96.0-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer 
