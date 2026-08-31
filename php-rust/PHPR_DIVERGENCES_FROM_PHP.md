@@ -1120,6 +1120,32 @@ byte-id) e l'unregister di un ALTRO loader (fx-au t8, byte-id): il caso
 misto è nuovo. Corredo: in Zend la rimozione del bucket corrente mette
 l'iteratore sulla sentinella di fine, qualunque cosa segua.
 
+### 3.28 🟡 argomenti di chiamata: ordine di VALUTAZIONE (SEND_VAR_EX) e timing/ordine dei dtor dei temp (S-166, fixture fx-mc2, PRE-esistenti alla leva L-MC1d)
+
+Scoperte con `wp165-harness/fx-mc2.php` (probe del revisore S-165); **pin
+s165 == stash s163 BYTE-IDENTICI** su ogni caso ⇒ divergenze del FUNNEL,
+non della leva. Due membri della stessa famiglia:
+(i) **ordine di valutazione**: Zend valuta gli argomenti LEFT-TO-RIGHT
+(`$o->add($a[], new R)`: l'Error «Cannot use [] for reading» scatta PRIMA
+di costruire `R`, che non nasce mai); phpr valuta i value-arg al push e
+DIFFERISCE i place (SEND_VAR_EX) alla materializzazione ⇒ `R` nasce e
+muore, il suo dtor appare, il riuso degli handle-id diverge. Vale per ogni
+place con side-effect (`__get`, warning) che PRECEDE un value-arg.
+(ii) **timing/ordine dei dtor dei temp-argomento al ritorno**: Zend
+distrugge i temp PRIMA che il valore di ritorno sia consumato
+(`dtor:Da 9`) e in ordine slot diretto (`Dx, Dy`); phpr DOPO il consumo
+(`9 dtor:Da`) e in ordine slot inverso (`Dy, Dx`) — stessa radice
+timing-only delle entry WP-46/WP-56. Conteggi e contenuti identici.
+
+### 3.29 🟡 `Fiber` non è `final`: phpr accetta `class X extends Fiber` (S-166, fixture fx-mc2-fib)
+
+L'oracle 8.5 muore a compile («Class MyFib cannot extend final class
+Fiber»); phpr compila ed esegue (i metodi Fiber su un'istanza subclass
+passano comunque da `fiber_method`). Nota di sistema: il linguaggio stesso
+rende IRREALIZZABILE il caso «Fiber-subclass nell'IC» temuto dalla
+revisione S-165 — la soundness IC è garantita due volte. Perimetro
+probabile: enforcement di `final` sulle classi NATIVE (da censire).
+
 ## 4. Punti di forza da NON toccare (invarianti verificati byte-identici)
 
 Per evitare regressioni, questi comportamenti sono **già** byte-identici con
