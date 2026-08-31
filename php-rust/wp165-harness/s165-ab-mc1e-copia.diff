@@ -1,0 +1,8 @@
+34c34
+< VERD="$H/s165-$TAG-verdetto.out"
+---
+> VERD="$H/s165-$TAG-verdetto.out"  # copione EMENDATO (banda-layout fondata, criterio-nulledit ESITO D)
+104c104
+< BAND = {"objalloc":13.3,"objmap":3.3,"objallocni":10.0,"objchurn":6.7}
+---
+> BAND = {"objalloc":13.3,"objmap":3.3,"objallocni":10.0,"objchurn":6.7,"missload":8.0,"arrfilter":6.0}

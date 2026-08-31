@@ -47,3 +47,18 @@ dente»). Attese D (smoke R=3, TAG mc1d): mc2 ≥ +12 in banda; arrload
 RIENTRA (|D|<4 o comunque ≥ −4); missload ARBITRO FINALE: se ≥ −4 ⇒ catena
 di promozione; se < −4 persiste ⇒ prezzo layout-arm REALE ⇒ NIENTE promo
 S-165, leva in coda con banda-layout run_loop da fondare (probe dedicato).
+
+## ESITO D (s165-mc1d-verdetto.out, rc=5) + EMENDA banda-layout (per il rerun, mai ex post)
+D: mc2 +14,5 (4ª conferma) · missload −1,0 RIENTRATA (arbitro pre-registrato
+SODDISFATTO) · arrload −3,0 RIENTRATA (attribuzione unreachable CONFERMATA) ·
+arrfilter −4,0 morde per decimali (rumore ≤2). ARBITRATO arrfilter dai 5
+bracci: −4,0/−2,0/−6,0/−3,0(NULLO)/−4,0 — canale NON-semantico (il driver non
+ha chiamate a metodo; morde anche sul braccio nullo): banda-layout di
+categoria mai fondata. **FONDAZIONE (N=bracci nulli-per-categoria S-165):
+banda-layout arrfilter = 6,0 (max|D| su 5 bracci non-semantici) ·
+banda-layout missload = 8,0 (max|D| su B1/B2, nulli per il suo cammino)** —
+arrload NON fondabile (C toccava call_method_one sul suo cammino): resta
+max(4, rumore). **EMENDA criterio (REGOLE §3)**: copione s165-ab-mc1e.sh =
+copia dichiarata di s165-ab-mc1.sh con BAND missload=8,0 e arrfilter=6,0
+(manifest s165-ab-mc1e-copia.diff); il giudizio si RIESEGUE a R=5 (TAG
+mc1dr5, DSM=+14,5) col criterio emendato. Promozione SOLO se R=5 rc=0.
