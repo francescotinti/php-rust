@@ -1,3 +1,14 @@
+== s166 coppia dbal+ORM (pin s165 MISURATO 1fd8757d2f72dc3e vs oracle 8.5.7; criterio s166-criterio-orm.md) ==
+# estrazione summ/names con LC_ALL=C + grep -a (fix az.rev. S-155 #4); reperto conteggi dbal phpr vs oracle A VERBALE (companion, non arbitra)
+# ADATTAMENTI (i)-(iii) dall'istruttoria p.1 + az.rev. S-159 #1: rodaggio non giudicante, quiescenza per gamba, scaletta a due estremi
+sentinella language-server inizio finestra (az.rev. S-157 #4): /Applications/Antigravity /Users/francescotinti/.antigravity-ide/extensions/rust-lang.rust-analyzer-0.3.3025-darwin-arm64/server/rust-analyzer /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.96.0-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer 
+sentinella language-server fine finestra: /Applications/Antigravity /Users/francescotinti/.antigravity-ide/extensions/rust-lang.rust-analyzer-0.3.3025-darwin-arm64/server/rust-analyzer /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.96.0-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer 
+rodaggio (NON giudicato, companion istruttoria) ictx/s: orm_oracle=16.0 orm_phpr=46.4 dbal_oracle=62.9 dbal_phpr=77.8
+quiescenza orm-leg1: rc=0 (file: orm-out/quiesce-orm-leg1.rc)
+quiescenza dbal-leg1: rc=0 (file: orm-out/quiesce-dbal-leg1.rc)
+quiescenza orm-leg2: rc=0 (file: orm-out/quiesce-orm-leg2.rc)
+quiescenza dbal-leg2: rc=0 (file: orm-out/quiesce-dbal-leg2.rc)
+floor_user_med3 orm: oracle=0.06 phpr=0.07 · dbal: oracle=0.06 phpr=0.19 (phpunit --version, pavimento PARZIALE dichiarato)
 coppia-s166 (user CPU; pavimenti PARZIALI phpunit --version: orm o=0.060 p=0.070 · dbal o=0.060 p=0.190)
 grade=VERDICT  # derivazione meccanica dai .time
 orm_leg1: oracle_user=4.93 (sys=0.45) phpr_user=34.42 (sys=1.18) ratio_raw=6.982 ratio_net=7.053
@@ -15,3 +26,13 @@ attesa-MC1 ORACLE-NORMALIZZATO (CANONICO coppia): net_norm=[34.31; 34.46] (ORA_R
 rapporto net (companion): [7.023; 7.053] vs registrato S-162 [7.035; 7.086]
 attesa-MC1: COMPATIBILE (Delta_norm dentro il rumore ±0.293; attesa a tetto 0.0-0.0 SOTTO risoluzione — esito dichiarato, nessuna cifra attribuita a L-AU1)
 gambe ictx SEGNALATE ['oracle2', 'phpr1'] — a verbale (rodaggio nel canone; se ricorre, istruttoria dedicata)
+parita': orm phpr per NOME vs baseline 16 · dbal fail-set stabile tra gambe — rc=0 (0=tutte valide)
+orm  oracle1: Tests: 3484, Assertions: 12003, Skipped: 59, Incomplete: 2.
+orm  phpr1:   Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, Skipped: 59, Incomplete: 2.
+dbal oracle1: Tests: 3929, Assertions: 5706, Skipped: 594, Incomplete: 13.
+dbal phpr1:   Tests: 3921, Assertions: 5550, Errors: 10, Skipped: 626, Incomplete: 13.
+orm  oracle2: Tests: 3484, Assertions: 12003, Skipped: 59, Incomplete: 2.
+orm  phpr2:   Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, Skipped: 59, Incomplete: 2.
+dbal oracle2: Tests: 3929, Assertions: 5706, Skipped: 594, Incomplete: 13.
+dbal phpr2:   Tests: 3921, Assertions: 5550, Errors: 10, Skipped: 626, Incomplete: 13.
+NOTA: nel messaggio COMPATIBILE resta l'etichetta stantia «L-AU1» (residuo del copione ereditato, cosmetico — la voce giudicante è attesa-MC1); dichiarato qui, fix nel copione della prossima coppia.

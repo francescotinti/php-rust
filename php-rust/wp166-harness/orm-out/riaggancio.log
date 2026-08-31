@@ -29,3 +29,11 @@
 2026-09-01 01:07:51 indexer_cpu=0 calm=5
 2026-09-01 01:08:23 indexer_cpu=0.1 calm=6
 2026-09-01 01:08:23 quiete continua — rilancio s166-lancio-orm.sh
+2026-09-01 01:23:36 attesa quiete continua (6x30s <5% mediaanalysisd+mdworker)
+2026-09-01 01:23:38 indexer_cpu=0 calm=1
+2026-09-01 01:24:10 indexer_cpu=0 calm=2
+2026-09-01 01:24:42 indexer_cpu=0 calm=3
+2026-09-01 01:25:14 indexer_cpu=0 calm=4
+2026-09-01 01:25:46 indexer_cpu=0 calm=5
+2026-09-01 01:26:18 indexer_cpu=0.8 calm=6
+2026-09-01 01:26:18 quiete continua — rilancio s166-lancio-orm.sh
