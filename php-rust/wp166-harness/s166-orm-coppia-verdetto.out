@@ -1,0 +1,39 @@
+== s166 coppia dbal+ORM (pin s165 MISURATO 1fd8757d2f72dc3e vs oracle 8.5.7; criterio s166-criterio-orm.md) ==
+# estrazione summ/names con LC_ALL=C + grep -a (fix az.rev. S-155 #4); reperto conteggi dbal phpr vs oracle A VERBALE (companion, non arbitra)
+# ADATTAMENTI (i)-(iii) dall'istruttoria p.1 + az.rev. S-159 #1: rodaggio non giudicante, quiescenza per gamba, scaletta a due estremi
+sentinella language-server inizio finestra (az.rev. S-157 #4): /Applications/Antigravity /Users/francescotinti/.antigravity-ide/extensions/rust-lang.rust-analyzer-0.3.3025-darwin-arm64/server/rust-analyzer /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.96.0-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv 
+sentinella language-server fine finestra: /Applications/Antigravity /Users/francescotinti/.antigravity-ide/extensions/rust-lang.rust-analyzer-0.3.3025-darwin-arm64/server/rust-analyzer /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.96.0-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv 
+rodaggio (NON giudicato, companion istruttoria) ictx/s: orm_oracle=27.1 orm_phpr=112.8 dbal_oracle=403.2 dbal_phpr=255.9
+quiescenza orm-leg1: rc=0 (file: orm-out/quiesce-orm-leg1.rc)
+quiescenza dbal-leg1: rc=0 (file: orm-out/quiesce-dbal-leg1.rc)
+quiescenza orm-leg2: rc=0 (file: orm-out/quiesce-orm-leg2.rc)
+quiescenza dbal-leg2: rc=0 (file: orm-out/quiesce-dbal-leg2.rc)
+floor_user_med3 orm: oracle=0.06 phpr=0.07 · dbal: oracle=0.06 phpr=0.19 (phpunit --version, pavimento PARZIALE dichiarato)
+coppia-s166 (user CPU; pavimenti PARZIALI phpunit --version: orm o=0.060 p=0.070 · dbal o=0.060 p=0.190)
+grade=VERDICT  # derivazione meccanica dai .time
+orm_leg1: oracle_user=5.08 (sys=0.52) phpr_user=36.59 (sys=1.55) ratio_raw=7.203 ratio_net=7.275
+orm_leg2: oracle_user=5.12 (sys=0.49) phpr_user=35.52 (sys=1.41) ratio_raw=6.938 ratio_net=7.006
+orm_ictx_abs: oracle1=1677 phpr1=19347 oracle2=1375 phpr2=5730
+orm_ictx/s (gate emenda S-127): oracle1=285.2 phpr1=495.8 oracle2=242.1 phpr2=153.2  SEGNALATE(>1,5x med): ['phpr1']
+dbal_leg1: oracle_user=1.19 (sys=0.22) phpr_user=8.55 (sys=0.43) ratio_raw=7.185 ratio_net=7.398
+dbal_leg2: oracle_user=1.15 (sys=0.21) phpr_user=8.36 (sys=0.37) ratio_raw=7.270 ratio_net=7.495
+dbal_ictx_abs: oracle1=581 phpr1=1883 oracle2=307 phpr2=145
+dbal_ictx/s (gate emenda S-127): oracle1=389.9 phpr1=208.1 oracle2=214.7 phpr2=16.6  SEGNALATE(>1,5x med): ['phpr1']
+dbal_parita': phpr_failset_stabile=True |phpr_fail|=10 |diff_vs_oracle|=10
+dbal_diff_nomi: Doctrine\DBAL\Tests\Functional\PortabilityTest::testCaseConversion with data set "lower" (Doctrine\DBAL\ColumnCase Enum (LOWER), ['test_int', 'test_string', 'test_null']) | Doctrine\DBAL\Tests\Functional\PortabilityTest::testCaseConversion with data set "upper" (Doctrine\DBAL\ColumnCase Enum (UPPER), ['TEST_INT', 'TEST_STRING', 'TEST_NULL']) | Doctrine\DBAL\Tests\Functional\PortabilityTest::testCaseConversionColumnName with data set "lower" (Doctrine\DBAL\ColumnCase Enum (LOWER), ['test_int', 'test_string', 'test_null']) | Doctrine\DBAL\Tests\Functional\PortabilityTest::testCaseConversionColumnName with data set "upper" (Doctrine\DBAL\ColumnCase Enum (UPPER), ['TEST_INT', 'TEST_STRING', 'TEST_NULL']) | Doctrine\DBAL\Tests\Functional\PortabilityTest::testFetchAllNullColumn | Doctrine\DBAL\Tests\Functional\PortabilityTest::testFetchColumn with data set "int" ('Test_Int', [1, 2]) | Doctrine\DBAL\Tests\Functional\PortabilityTest::testFetchColumn with data set "string" ('Test_String', ['foo', 'foo']) | Doctrine\DBAL\Tests\Functional\PortabilityTest::testFullFetchMode | Doctrine\DBAL\Tests\Functional\PortabilityTest::testGetDatabaseName | Doctrine\DBAL\Tests\Schema\Name\Parser\GenericNameParserTest::testValidInput with data set #11 ('schéma."übermäßigkeit".`àçcên...ràctér', [Doctrine\DBAL\Schema\Name\Identifier Object (...), Doctrine\DBAL\Schema\Name\Identifier Object (...), Doctrine\DBAL\Schema\Name\Identifier Object (...), Doctrine\DBAL\Schema\Name\Identifier Object (...), Doctrine\DBAL\Schema\Name\Identifier Object (...)])
+attesa-MC1 assoluto (companion): phpr_orm_net_new=[35.45; 36.52] ref=[34.47; 34.51] Delta=[-2.05; -0.94] s
+attesa-MC1 ORACLE-NORMALIZZATO (CANONICO coppia): net_norm=[34.22; 35.54] (ORA_REF=4.885, oracle_net_gambe=[5.02, 5.06]) Delta_norm=[-1.07; +0.29] s
+rapporto net (companion): [7.006; 7.275] vs registrato S-162 [7.035; 7.086]
+SENTINELLA ORACLE FUORI BANDA [4.83;4.94]: gambe [5.02, 5.06] — Delta_norm NON GIUDICANTE (emenda S-166), istruttoria drift dedicata
+gambe ictx SEGNALATE ['phpr1'] — a verbale (rodaggio nel canone; se ricorre, istruttoria dedicata)
+parita': orm phpr per NOME vs baseline 16 · dbal fail-set stabile tra gambe — rc=0 (0=tutte valide)
+orm  oracle1: Tests: 3484, Assertions: 12003, Skipped: 59, Incomplete: 2.
+orm  phpr1:   Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, Skipped: 59, Incomplete: 2.
+dbal oracle1: Tests: 3929, Assertions: 5706, Skipped: 594, Incomplete: 13.
+dbal phpr1:   Tests: 3921, Assertions: 5550, Errors: 10, Skipped: 626, Incomplete: 13.
+orm  oracle2: Tests: 3484, Assertions: 12003, Skipped: 59, Incomplete: 2.
+orm  phpr2:   Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, Skipped: 59, Incomplete: 2.
+dbal oracle2: Tests: 3929, Assertions: 5706, Skipped: 594, Incomplete: 13.
+dbal phpr2:   Tests: 3921, Assertions: 5550, Errors: 10, Skipped: 626, Incomplete: 13.
+== NOTA DI SESSIONE (riaggancio, regola pre-dichiarata «un solo ritento») ==
+Sentinella E2 morsa ANCHE al riaggancio (oracle net 5,02/5,06; ictx elevati su tutte le gambe di ENTRAMBI i motori: carico notturno, non drift — R=5 oracle-only S-165 in finestra quieta: mediana 4,860). CIFRA ORM RINVIATA a S-167 (finestra quieta), NESSUN loop di ritenti; parita' VALIDA in entrambi i tentativi (ORM baseline 16, dbal fail-set stabile 10). Le emende E1/E2 hanno retto il loro mandato: due finestre contaminate DICHIARATE invece di due cifre sporche a registro.

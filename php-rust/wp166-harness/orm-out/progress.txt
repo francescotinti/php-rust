@@ -1,31 +1,31 @@
-23:38:47 sentinella LS inizio: /Applications/Antigravity /Users/francescotinti/.antigravity-ide/extensions/rust-lang.rust-analyzer-0.3.3025-darwin-arm64/server/rust-analyzer /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.96.0-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv 
-23:38:56 floors: orm o=0.06 p=0.07 · dbal o=0.06 p=0.19
-23:39:03 orm rodaggio-oracle START
-23:39:13 orm rodaggio-oracle rc=0
-23:39:18 orm rodaggio-phpr START
-23:39:58 orm rodaggio-phpr rc=2
-23:40:02 dbal rodaggio-oracle START
-23:40:07 dbal rodaggio-oracle rc=0
-23:40:11 dbal rodaggio-phpr START
-23:40:21 dbal rodaggio-phpr rc=2
-23:40:31 quiescenza orm-leg1 rc=0 tentativo-gate=1 (file: orm-out/quiesce-orm-leg1.rc)
-23:40:36 orm oracle1 START
-23:40:46 orm oracle1 rc=0
-23:40:50 orm phpr1 START
-23:41:30 orm phpr1 rc=2
-23:41:40 quiescenza dbal-leg1 rc=0 tentativo-gate=1 (file: orm-out/quiesce-dbal-leg1.rc)
-23:41:44 dbal oracle1 START
-23:41:49 dbal oracle1 rc=0
-23:41:53 dbal phpr1 START
-23:42:03 dbal phpr1 rc=2
-23:42:13 quiescenza orm-leg2 rc=0 tentativo-gate=1 (file: orm-out/quiesce-orm-leg2.rc)
-23:42:18 orm oracle2 START
-23:42:28 orm oracle2 rc=0
-23:42:32 orm phpr2 START
-23:43:12 orm phpr2 rc=2
-23:43:23 quiescenza dbal-leg2 rc=0 tentativo-gate=1 (file: orm-out/quiesce-dbal-leg2.rc)
-23:43:26 dbal oracle2 START
-23:43:31 dbal oracle2 rc=0
-23:43:35 dbal phpr2 START
-23:43:45 dbal phpr2 rc=2
-23:43:45 DONE rc=0
+23:48:42 sentinella LS inizio: /Applications/Antigravity /Users/francescotinti/.antigravity-ide/extensions/rust-lang.rust-analyzer-0.3.3025-darwin-arm64/server/rust-analyzer /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.96.0-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv 
+23:48:52 floors: orm o=0.06 p=0.07 · dbal o=0.06 p=0.19
+23:48:57 orm rodaggio-oracle START
+23:49:07 orm rodaggio-oracle rc=0
+23:49:11 orm rodaggio-phpr START
+23:49:51 orm rodaggio-phpr rc=2
+23:49:56 dbal rodaggio-oracle START
+23:50:01 dbal rodaggio-oracle rc=0
+23:50:05 dbal rodaggio-phpr START
+23:50:15 dbal rodaggio-phpr rc=2
+23:50:25 quiescenza orm-leg1 rc=0 tentativo-gate=1 (file: orm-out/quiesce-orm-leg1.rc)
+23:50:30 orm oracle1 START
+23:50:40 orm oracle1 rc=0
+23:50:44 orm phpr1 START
+23:51:24 orm phpr1 rc=2
+23:51:35 quiescenza dbal-leg1 rc=0 tentativo-gate=1 (file: orm-out/quiesce-dbal-leg1.rc)
+23:51:39 dbal oracle1 START
+23:51:44 dbal oracle1 rc=0
+23:51:47 dbal phpr1 START
+23:51:57 dbal phpr1 rc=2
+23:52:08 quiescenza orm-leg2 rc=0 tentativo-gate=1 (file: orm-out/quiesce-orm-leg2.rc)
+23:52:12 orm oracle2 START
+23:52:22 orm oracle2 rc=0
+23:52:27 orm phpr2 START
+23:53:07 orm phpr2 rc=2
+23:53:17 quiescenza dbal-leg2 rc=0 tentativo-gate=1 (file: orm-out/quiesce-dbal-leg2.rc)
+23:53:21 dbal oracle2 START
+23:53:26 dbal oracle2 rc=0
+23:53:30 dbal phpr2 START
+23:53:40 dbal phpr2 rc=2
+23:53:40 DONE rc=0

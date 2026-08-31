@@ -69,7 +69,7 @@ SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS.SSS...... 1098 / 3929 ( 27%)
 ............................................................. 3904 / 3929 ( 99%)
 .........................                                     3929 / 3929 (100%)
 
-Time: 00:01.087, Memory: 62.00 MB
+Time: 00:01.073, Memory: 62.00 MB
 
 OK, but there were issues!
 Tests: 3929, Assertions: 5706, Skipped: 594, Incomplete: 13.
