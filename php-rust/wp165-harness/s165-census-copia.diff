@@ -1,0 +1,95 @@
+2,13c2,11
+< # s164-census-al3.sh — arbitrato census L-AL3 (criterio s164-criterio-al3.md
+< # p.3 EMENDATO PRE-RUN: attesa 199999; dovuto: smoke D=+0.0 FUORI banda
+< # [4;10] SOTTO + guardie arrload/objdropdef a R=2). COPIA DICHIARATA di
+< # s164-census-au1-rerun.sh; adattamenti: patch = s164-al3-edit.patch
+< # (2 file, patching=2), driver = wp161-harness/m-missload-census.php
+< # (marcatore ML-OK 200000), attesa Delta hostcall_n = 199999 ESATTO su
+< # class_exists (1 Box/iter in A; in B 1 alloc residua a freddo, pool exts
+< # vuoto alla prima chiamata), altri nomi zero. Probe-B = tree HEAD con
+< # edit AL3; probe-A = copia − patch. Struttura+parser COPIA DICHIARATA della FASE 1 di
+< # s161-sonda-af1.sh; adattamento SPAZIO dichiarato: build/run SEQUENZIALI con
+< # rm del target A prima del build B (Data ~12G). Esiti a FILE:
+< # s164-census-au1-verdetto.out; rc SOLO da census-out/census.done.
+---
+> # s165-census-al3.sh — az.rev. S-164 #2: rerun census AL3 con attesa che
+> # NOMINA il +1 (criterio s165-census-al3-attesa.md, PRE-registrato). COPIA
+> # DICHIARATA di s164-census-al3.sh (manifest s165-census-copia.diff);
+> # adattamenti: (i) il tree e' s165 SENZA AL3 ⇒ probe-A = copia LISCIA,
+> # probe-B = copia + patch AVANTI (patching=2 rej=0) + DISCRIMINANTE
+> # `exts: Vec::with_capacity(EXT_POOL_DEPTH)` via Default manuale (python a
+> # sostituzioni ASSERITE, pattern S-164): il buffer del Vec nasce a VM-init,
+> # FUORI dal conteggio hostcall; (ii) attesa: class_exists A=200006 B=7
+> # Delta=199999 ESATTO (il +1 di S-164 DEVE sparire), altri nomi 0; (iii)
+> # esito = verifica del MECCANISMO (il verdetto leva AL3 p.3b non dipende).
+17,18c15,16
+< H="$REPO/wp164-harness"; OUT="$H/census-out"; mkdir -p "$OUT"
+< VERD="$H/s164-census-al3-verdetto.out"
+---
+> H="$REPO/wp165-harness"; OUT="$H/census-out"; mkdir -p "$OUT"
+> VERD="$H/s165-census-al3-verdetto.out"
+20c18
+< PATCH="$H/s164-al3-edit.patch"
+---
+> PATCH="$REPO/wp164-harness/s164-al3-edit.patch"
+22c20
+< SRC="/private/tmp/s164-census-al3"
+---
+> SRC="/private/tmp/s165-census-al3"
+29,30c27,28
+< grep -qi "s-164\|s164" "$LOCK" 2>/dev/null || { echo "rc=9 lock assente/altrui" | tee -a "$VERD"; fin 9; }
+< echo "== s164 arbitrato census L-AL3 (attesa 199999 = 1 Box/iter meno 1 a freddo, unita' hostcall_n=TUTTE le alloc; probe-B = tree HEAD con AL3, probe-A = copia − patch; driver N=200000) ==" >> "$VERD"
+---
+> grep -qi "s-165\|s165" "$LOCK" 2>/dev/null || { echo "rc=9 lock assente/altrui" | tee -a "$VERD"; fin 9; }
+> echo "== s165 rerun census L-AL3 (attesa 199999 col +1 NOMINATO: with_capacity sposta il buffer del Vec exts FUORI dal conteggio; probe-A = tree s165 LISCIO, probe-B = copia + patch AL3 + discriminante; driver N=200000) ==" >> "$VERD"
+32c30
+< rm -rf "$SRC"; mkdir -p "$SRC/B/php-rust" "$SRC/A"
+---
+> rm -rf "$SRC"; mkdir -p "$SRC/A/php-rust" "$SRC/B"
+34c32
+<   cp -R "$REPO/$f" "$SRC/B/php-rust/" || { echo "rc=7 copia tree ($f)" >> "$VERD"; fin 7; }
+---
+>   cp -R "$REPO/$f" "$SRC/A/php-rust/" || { echo "rc=7 copia tree ($f)" >> "$VERD"; fin 7; }
+36,39c34,37
+< cp -R "$SRC/B/php-rust" "$SRC/A/php-rust" || { echo "rc=7 copia A" >> "$VERD"; fin 7; }
+< ( cd "$SRC/A" && patch -R -p1 --no-backup-if-mismatch < "$PATCH" ) > "$OUT/patchR.log" 2>&1 \
+<   || { echo "rc=6 patch -R fallita (log census-out/patchR.log)" >> "$VERD"; fin 6; }
+< NP=$(grep -c "^patching file" "$OUT/patchR.log"); NREJ=$(/usr/bin/find "$SRC/A" -name "*.rej" | wc -l | tr -d ' ')
+---
+> cp -R "$SRC/A/php-rust" "$SRC/B/php-rust" || { echo "rc=7 copia B" >> "$VERD"; fin 7; }
+> ( cd "$SRC/B" && patch -p1 --no-backup-if-mismatch < "$PATCH" ) > "$OUT/patchF.log" 2>&1 \
+>   || { echo "rc=6 patch avanti fallita (log census-out/patchF.log)" >> "$VERD"; fin 6; }
+> NP=$(grep -c "^patching file" "$OUT/patchF.log"); NREJ=$(/usr/bin/find "$SRC/B" -name "*.rej" | wc -l | tr -d ' ')
+41c39,52
+< echo "patch inversa: 2 file (vm/mod.rs + vm/calls.rs), zero rej" >> "$VERD"
+---
+> echo "patch avanti: 2 file (vm/mod.rs + vm/calls.rs), zero rej" >> "$VERD"
+> /opt/homebrew/bin/python3 - "$SRC/B/php-rust/crates/php-runtime/src/vm/mod.rs" >> "$VERD" 2>&1 <<'PYD'
+> import sys
+> p = sys.argv[1]; s = open(p).read()
+> old = "#[derive(Default)]\nstruct FramePool {"
+> assert s.count(old) == 1, f"derive-anchor count={s.count(old)}"
+> s = s.replace(old, "struct FramePool {")
+> anchor = "const EXT_POOL_DEPTH: usize = 8;"
+> assert s.count(anchor) == 1, f"const-anchor count={s.count(anchor)}"
+> s = s.replace(anchor, anchor + "\n\nimpl Default for FramePool {\n    fn default() -> Self {\n        FramePool { bufs: Vec::new(), exts: Vec::with_capacity(EXT_POOL_DEPTH) }\n    }\n}")
+> open(p, "w").write(s)
+> print("discriminante with_capacity: sostituzioni ASSERITE 2/2 applicate (Default manuale)")
+> PYD
+> [ $? -eq 0 ] || { echo "rc=6 discriminante fallito" >> "$VERD"; fin 6; }
+97c108
+< print(f"Delta hostcall_n = {dh} (atteso 199999 ESATTO — 1 Box/iter meno 1 alloc a freddo del pool)")
+---
+> print(f"Delta hostcall_n = {dh} (atteso 199999 ESATTO — col buffer del Vec exts spostato a VM-init il +1 di S-164 DEVE sparire)")
+100c111
+<     print(f"CONTEGGI: FUORI ATTESA (p.5) — nomi_fuori={fuori} altri={altri} — dichiarare e tornare al sorgente, NESSUNA taratura")
+---
+>     print(f"CONTEGGI: FUORI ATTESA — nomi_fuori={fuori} altri={altri} — l'attribuzione «+1 = buffer del Vec» e' FALSA: si torna al sorgente, INCIDENTE da contare (seconda spiegazione caduta sullo stesso arbitro)")
+103c114
+<     print("CONTEGGI: attesa ESATTA (Delta 199999 CONFERMATO: il pool elimina il Box/iter, 1 residuo a freddo; resto zero) — la leva RIMUOVE l'alloc ma D_smoke=+0.0: leva NON PAGANTE (criterio p.3b), STOP dichiarato")
+---
+>     print("CONTEGGI: attesa ESATTA — il +1 di S-164 e' VERIFICATO come buffer del Vec exts (da post-hoc a PROVATO); meccanismo del verbale AL3 CONFERMATO, criterio coerente in TUTTE le clausole")
+108c119
+< echo "ESITO: rc=0 (arbitrato agli atti — verdetto leva dal criterio p.3: census esatto + D=0 => NON PAGANTE / census fuori => attribuzione errata)" >> "$VERD"
+---
+> echo "ESITO: rc=0 (az.rev. S-164 #2 CHIUSA: +1 nominato e provato)" >> "$VERD"

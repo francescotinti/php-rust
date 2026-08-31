@@ -1,0 +1,12 @@
+== s165 R=5 oracle-only ORM (criterio §B2 PRE-registrato; ORA_REF=4.885; soglia ri-fondazione |Δ|>0.03; banda sentinella [4.83;4.94]) ==
+sentinella LS inizio: /Applications/Antigravity /Users/francescotinti/.antigravity-ide/extensions/rust-lang.rust-analyzer-0.3.3025-darwin-arm64/server/rust-analyzer /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.96.0-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer 
+floor_user_med3 oracle=0.06 (phpunit --version)
+leg1: user=4.92 summary=[Tests: 3484, Assertions: 12003, Skipped: 59, Incomplete: 2.]
+leg2: user=4.96 summary=[Tests: 3484, Assertions: 12003, Skipped: 59, Incomplete: 2.]
+leg3: user=4.95 summary=[Tests: 3484, Assertions: 12003, Skipped: 59, Incomplete: 2.]
+leg4: user=4.92 summary=[Tests: 3484, Assertions: 12003, Skipped: 59, Incomplete: 2.]
+leg5: user=4.92 summary=[Tests: 3484, Assertions: 12003, Skipped: 59, Incomplete: 2.]
+nets=[4.86, 4.9, 4.89, 4.86, 4.86] mediana=4.860 ORA_REF=4.885 |delta|=0.025
+banda sentinella [4.83;4.94]: TUTTE dentro
+VERDETTO: ORA_REF=4.885 REGGE (delta <= 0.03); banda sentinella attiva dalla prossima coppia
+sentinella LS fine: /Applications/Antigravity /Users/francescotinti/.antigravity-ide/extensions/rust-lang.rust-analyzer-0.3.3025-darwin-arm64/server/rust-analyzer /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.96.0-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer 
