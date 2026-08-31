@@ -1,6 +1,29 @@
 # PERF_MAP — phpr vs PHP oracle 8.5.7, mappa multi-workload
 
-Aggiornata: **2026-08-30 (S-164)** · pin **INVARIATO s163 fea4a2d0 + 8d76d6f1**
+Aggiornata: **2026-08-31 (S-165)** · pin **NUOVO s165 phpr 1fd8757d2f72dc3e +
+server cf7afe37f29016a8** (**S-165 = PROMOZIONE leva L-MC1d «MethodCall.borrow
+k≤2, forma outline»: fast path IC-hit su Op::MethodCall argc≤2 — ricevitore
+letto IN PLACE (pattern ThisMethodCall) + bind diretto pila→slot (H-D forma 2),
+callee simple_call ad arità esatta, ArgPlace materializzato nel path; corpo in
+`methodcall_fast` #[inline(never)] (bl run_loop 6082→6086, Δ=+4)** con catena
+rc=0: giudice proprio **m-mc2 (=$o->f($s,1) k=2) 170,5→155,5 ns/iter D=+14,5
+(−8,5%)**, R=5 riconc. |0,0| rumore 1,5; percorso a QUATTRO bracci: B1 inline
++19,0/+17,5 (guardie morse da layout run_loop +45 bl) → B2 outline +16,0 →
+**C NULL-EDIT (giudice-controllo +3,5 = il segnale è della leva; attribuisce
+arrload −5 agli unreachable!×2 e fonda BANDA-LAYOUT host-call: missload 8,0 ·
+arrfilter 6,0)** → D leva pura +14,5 con missload/arrload RIENTRATE; guardie
+backtrace/objmap morse a R=5 = QUANTIZZAZIONE, ri-risolte a tick≤1ns rc=0
+(REGOLE §3 az.rev. S-154); unreachable!×2 NON montati (costano ~5 ns su
+arrload, az.rev. S-163 #4 chiusa a MISURA); batteria 1748 rc=0 (churn della
+batteria senza env ricetta SANATO al byte), corpus 1412×2 rc=0, micro promo
+5,4·5,6·4,9·4,2·3,2·2,6 (tick denominatore, guardie A/B D≈0); ricetta server
+PROVATA ×2 (feature axum-server — ipotesi S-164 corroborata); az.rev. S-164
+5/5 chiuse: creep arith REFUTATO (Δ=+0,12<0,52 N=250M) · census AL3
+Δ=199999 ESATTO (+1 PROVATO = buffer Vec exts via with_capacity) · ORA_REF
+4,885 REGGE (mediana R=5 4,860) + banda sentinella ORM [4,83;4,94] ATTIVA ·
+istruttoria dbal ictx = artefatto del DENOMINATORE, emenda per-motore proposta;
+**coppia WP+ORM DOVUTA in S-166**; verdetti `wp165-harness/s165-*.out` +
+s165-criterio-nulledit.md) · storico S-164: pin INVARIATO s163 fea4a2d0 + 8d76d6f1
 (**S-164 = NESSUNA promozione: leva L-AL3 «pool di Box FrameExt sul fast path
 closure» TENTATA con A/B COMPLETO e CADUTA A VERDETTO** — smoke m-missload
 D=+0,0 (A=282,0 B=282,0, soglia 6,0) col census che CONFERMA la rimozione
