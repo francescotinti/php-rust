@@ -31,3 +31,19 @@ Build ricetta A′, stash via pin-phpr.sh --braccio s165-nulledit-C.
      NON si promuove in S-165; reperto a verbale e coda.
 3. Ogni esito va a verbale con: bl run_loop di C (atteso ≈6082, l'edit non
    tocca run.rs), fixture fx-mc A==C, parità 2 modi dello stash script.
+
+## ESITO C (s165-nulledit-verdetto.out, rc=5) + braccio D PRE-registrato
+C: giudice mc2 +3,5 SOTTO soglia (CONTROLLO: il segnale +16..+19 è della
+leva) · arrload −5,0 (rumore 2) ANCHE sul nullo ⇒ costo degli unreachable!×2
+(call_method_one sul cammino) · missload +1,0 PULITO su C ⇒ i suoi morsi su
+B1/B2 = layout INTERNO di run_loop (l'edit dell'arm sposta gli altri arm) ·
+host-call NON toccate su C tutte |D|<4 ⇒ banda-layout globale NON fondata ≥4
+· objchurn −20 con rumore 16,7 = morso marginale nel suo carattere di rumore
+(a verbale). DECISIONE (ramo pre-registrato «C pulito sulle non toccate» +
+attribuzione arrload): **braccio D = MC1b PURA senza unreachable!×2**
+(calls.rs torna al pin; az.rev. S-163 #4 chiusa con verdetto di misura:
+«unreachable!×2 costa ~5 ns su arrload: NON si monta, verbale al posto del
+dente»). Attese D (smoke R=3, TAG mc1d): mc2 ≥ +12 in banda; arrload
+RIENTRA (|D|<4 o comunque ≥ −4); missload ARBITRO FINALE: se ≥ −4 ⇒ catena
+di promozione; se < −4 persiste ⇒ prezzo layout-arm REALE ⇒ NIENTE promo
+S-165, leva in coda con banda-layout run_loop da fondare (probe dedicato).

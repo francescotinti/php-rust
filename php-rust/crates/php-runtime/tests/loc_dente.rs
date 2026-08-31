@@ -60,8 +60,10 @@ fn nessun_sorgente_rs_oltre_cap() {
         // S-156: salita DICHIARATA +29 (leva HD2-hostcall: braccio
         // CallHostBuiltin, pop diretti ≤4) — verbale wp156-harness/s156-promo.
         // S-165 L-MC1: salita PRE-dichiarata +79 (fast path borrow-IC k≤2 in
-        // Op::MethodCall — criterio s165-criterio-mc1.md p.6); calls.rs −6
-        // (unreachable!×2, az.rev. S-163 #4) resta fuori allowlist sotto 2000.
+        // Op::MethodCall — criterio s165-criterio-mc1.md p.6). Gli
+        // unreachable!×2 in calls.rs (az.rev. S-163 #4) sono stati RIMOSSI a
+        // verdetto di misura (braccio C null-edit: −5 ns su arrload —
+        // s165-criterio-nulledit.md): l'azione si chiude a verbale, non a dente.
         // S-165 L-MC1b: +20 DICHIARATI (forma outline: corpo in
         // methodcall_fast #[inline(never)], cura layout — arbitrato
         // s165-arbitrato-guardie.md; l'arm di run_loop torna a ~10 righe).
