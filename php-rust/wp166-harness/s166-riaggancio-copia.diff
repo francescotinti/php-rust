@@ -1,0 +1,26 @@
+2c2
+< # s164-riaggancio-orm.sh — plumbing di RIAGGANCIO dopo rc=8 (quiescenza-fail
+---
+> # s166-riaggancio-orm.sh — plumbing di RIAGGANCIO dopo cifra NON GIUDICANTE (sentinella E2: oracle net 4,98/5,20 fuori [4,83;4,94], ictx storm bilaterale
+4,8c4,8
+< # finestra: 32 file mossi + commit ⇒ Spotlight — a verbale). Adattamento
+< # DICHIARATO di s163-riaggancio-orm.sh: predicato RAFFORZATO alla quiete
+< # CONTINUA 6 campioni ×30s <5% (stesso predicato del lancio pair t14,
+< # az.rev. S-163 #5) e sorveglia ANCHE mdworker; poi exec s164-lancio-orm.sh
+< # (riverifica pair164-t14.done rc=0; i gate di quiescenza PER GAMBA restano
+---
+> # poi cifra a S-167 se sporca di nuovo). Adattamento
+> # DICHIARATO di s164-riaggancio-orm.sh: predicato RAFFORZATO alla quiete
+> # CONTINUA 6 campioni ×30s <5% (stesso predicato del lancio pair t15,
+> # az.rev. S-163 #5) e sorveglia ANCHE mdworker; poi exec s166-lancio-orm.sh
+> # (riverifica pair166-t15.done rc=0; i gate di quiescenza PER GAMBA restano
+12c12
+< H="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp164-harness"
+---
+> H="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp166-harness"
+22,23c22,23
+< echo "$(date '+%F %T') quiete continua — rilancio s164-lancio-orm.sh" >> "$LOG"
+< exec /bin/bash "$H/s164-lancio-orm.sh"
+---
+> echo "$(date '+%F %T') quiete continua — rilancio s166-lancio-orm.sh" >> "$LOG"
+> exec /bin/bash "$H/s166-lancio-orm.sh"
