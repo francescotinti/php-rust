@@ -1,0 +1,2 @@
+patching file 'php-rust/crates/php-runtime/src/vm/calls.rs'
+patching file 'php-rust/crates/php-runtime/src/vm/mod.rs'

@@ -1,0 +1,3 @@
+== s165 rerun census L-AL3 (attesa 199999 col +1 NOMINATO: with_capacity sposta il buffer del Vec exts FUORI dal conteggio; probe-A = tree s165 LISCIO, probe-B = copia + patch AL3 + discriminante; driver N=200000) ==
+patch avanti: 2 file (vm/mod.rs + vm/calls.rs), zero rej
+discriminante with_capacity: sostituzioni ASSERITE 2/2 applicate (Default manuale)
