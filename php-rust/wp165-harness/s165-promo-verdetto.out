@@ -1,0 +1,16 @@
+== S-165 PROMOZIONE L-MC1d «MethodCall.borrow k≤2, forma outline» — catena §6 (build→hash→batteria→re-hash→stash→corpus→micro) ==
+candidato: phpr-s165-mc1d-D = 1fd8757d2f72dc3e (build ricetta A′ dal tree = pin + run.rs L-MC1b outline; calls.rs AL PIN — unreachable!×2 rimossi a verdetto di misura, braccio C)
+A/B: smoke mc1d +14,5 in banda [4;30] → R=5 mc1dr5 D=+14,5 riconc. |0,0| rumore 1,5 (storia bracci: B1 inline +19,0/+17,5 ma layout-run_loop morde; B2 outline +16,0; C nullo +3,5 = CONTROLLO; D +14,5)
+guardie: 18/20 pulite a mc1dr5; missload/arrfilter con banda-layout FONDATA (8,0/6,0, criterio-nulledit ESITO D, copione emendato mc1e con manifest); backtrace/objmap morse da QUANTIZZAZIONE e RI-RISOLTE a tick≤1ns rc=0 (s165-ririsolvi-verdetto.out: −4,17=1 tick / −1,67) ⇒ R=5 rc=0 EMENDATO
+disasm: bl run_loop 6082→6086 (Δ=+4 dichiarato, corpo outline #[inline(never)])
+fixture: fx-mc A==B1==B2==C==D IDENTICI (oracle diff = solo divergenza a catalogo «toplevel main CLI senza warning Undefined variable»)
+denti: run.rs 6815→6914 PRE-dichiarato (+99 L-MC1b); mod.rs/host.rs INVARIATI; calls.rs 1507 al pin
+-- segue: batteria, re-hash, stash pin s165, corpus 2 modi, micro promo R=5, pin server --
+batteria: cargo test --release rc=0 (30 suite ok, 1748 passed; rc dal comando)
+churn DICHIARATO: la batteria senza env ricetta ha rilinkato phpr (bf90145f); build ricetta → TORNATO AL BYTE 1fd8757d (classe nota, cura pin-server R3; nessun sorgente toccato)
+stash: PIN phpr s165 = 1fd8757d2f72dc3e (pin-phpr.sh s165, smoke 2 modi OK, registro aggiornato)
+corpus: rc=0 (gate canonico ×2 modi, live runner; log /private/tmp/s165-corpus.log)
+micro promo R=5 rc=0: arith 5,4 · prop 5,6 · calls 4,9 · str 4,2 · arr 3,2 · re 2,6 (calls 4,7→4,9 e prop 5,5→5,6 = tick del denominatore oracle 0,42-0,44 s, lezione S-164: la guardia A/B sugli STESSI binari dice D≈0 su calls/prop; nessuna regressione firmata)
+pin server: s165 = cf7afe37f29016a8 (pin-server.sh, feature axum-server; build ×2 IDENTICA cf7afe37, phpr intatto ⇒ az.rev. S-164 #4 CHIUSA: ricetta scritta E provata; ipotesi «ricostruzione S-164 senza feature» corroborata, questione 8d76d6f1 superata dalla rotazione del pin)
+fixture bilaterali: fx-mc su oracle E phpr (A==D; diff oracle = divergenza a catalogo) + golden corpus content ×2 modi
+== PROMOZIONE rc=0 — PIN s165: phpr 1fd8757d2f72dc3e + server cf7afe37f29016a8 · giudice proprio mc2 170,5→155,5 ns/iter (D=+14,5, −8,5%) · sei categorie invariate entro tick · coppia WP+ORM DOVUTA in S-166 (pin nuovo, regola focus-oggetti) ==
