@@ -67,7 +67,9 @@ fn nessun_sorgente_rs_oltre_cap() {
         // S-165 L-MC1b: +20 DICHIARATI (forma outline: corpo in
         // methodcall_fast #[inline(never)], cura layout — arbitrato
         // s165-arbitrato-guardie.md; l'arm di run_loop torna a ~10 righe).
-        ("php-runtime/src/vm/run.rs", 6914, "run_loop — ULTIMO o mai (A2); +99 L-MC1b S-165 dichiarato"),
+        // S-166 L-MCk: +3 DICHIARATI (cade il cap argc≤2, solo commento-leva
+        // nell'arm — criterio s166-criterio-mck.md p.5).
+        ("php-runtime/src/vm/run.rs", 6917, "run_loop — ULTIMO o mai (A2); +102 L-MCk S-166 dichiarato"),
         ("php-runtime/tests/eval.rs", 4773, "batteria eval"),
         ("php-builtins/tests/builtins.rs", 4772, "batteria builtins"),
         ("php-runtime/src/lower/mod.rs", 3838, "lowering"),

@@ -5255,9 +5255,12 @@ impl<'m> super::Vm<'m> {
                     // s165-arbitrato-guardie.md ha mostrato che la variante
                     // inline (mc1r5) pagava un prezzo di LAYOUT su run_loop
                     // (missload/arrload persistenti a R=5); qui il loop paga
-                    // solo l'ammissione d'arità e una call.
+                    // solo l'ammissione d'arità e una call. L-MCk (S-166):
+                    // cade il cap argc≤2 — il gate vero (simple_call ad
+                    // arità ESATTA + IC-hit + recv Object) vive già dentro
+                    // `methodcall_fast`; criterio s166-criterio-mck.md.
                     let n = *argc as usize;
-                    if n <= 2 && self.methodcall_fast(top, n, ic, *deref)? {
+                    if self.methodcall_fast(top, n, ic, *deref)? {
                         continue;
                     }
                     let args = self.pop_keys(top, *argc); // source order
