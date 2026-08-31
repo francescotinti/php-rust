@@ -15,3 +15,4 @@ pin server: s165 = cf7afe37f29016a8 (pin-server.sh, feature axum-server; build �
 fixture bilaterali: fx-mc su oracle E phpr (A==D; diff oracle = divergenza a catalogo) + golden corpus content ×2 modi
 == PROMOZIONE rc=0 — PIN s165: phpr 1fd8757d2f72dc3e + server cf7afe37f29016a8 · giudice proprio mc2 170,5→155,5 ns/iter (D=+14,5, −8,5%) · sei categorie invariate entro tick · coppia WP+ORM DOVUTA in S-166 (pin nuovo, regola focus-oggetti) ==
 post-promo (azioni revisione S-164): az.2 census AL3 rc=0 — Δ=199999 ESATTO, +1 PROVATO = buffer Vec exts (discriminante with_capacity) · az.3 ORM oracle R=5 rc=0 — mediana 4,860, ORA_REF 4,885 REGGE (|Δ|=0,025), banda sentinella [4,83;4,94] ATTIVA · az.4 ricetta server provata ×2 (cf7afe37 riprodotto) · az.1 creep arith: copione pronto, in attesa fine flare mediaanalysisd (quiete continua)
+az.1 creep arith rc=0: REFUTATO (s158 46,76 vs s165 46,64; Δ=+0,12 < 0,52) — TUTTE e 5 le azioni revisione S-164 CHIUSE

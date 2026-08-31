@@ -1,1 +1,9 @@
-quiescenza FAIL
+== s165 arith-creep s158↔s165 (criterio in testa allo script; A=92b0aea3 B=1fd8757d MISURATI; N=250000000 R=5) ==
+floor_A=0.03 floor_B=0.02
+  coppia1 [AB]: rawA=11.71 rawB=11.79
+  coppia2 [BA]: rawA=11.83 rawB=11.71
+  coppia3 [AB]: rawA=11.75 rawB=11.66
+  coppia4 [BA]: rawA=11.62 rawB=11.61
+  coppia5 [AB]: rawA=11.72 rawB=11.68
+A(s158)=46.76 B(s165)=46.64 ns/iter Delta=A-B=+0.12 soglia=0.52 (rumore drop-1 A'=0.52 B'=0.40)
+VERDETTO: creep REFUTATO alla risoluzione 0,5 ns/iter — nota CHIUSA
