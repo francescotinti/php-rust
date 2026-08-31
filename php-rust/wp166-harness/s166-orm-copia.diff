@@ -1,0 +1,99 @@
+2,10c2,12
+< # s164-orm-coppia.sh — coppia dbal+ORM sul pin s163 (DOVUTA: pin nuovo)
+< # (criterio s164-criterio-orm.md; copia DICHIARATA di s163-orm-coppia.sh,
+< # manifest s164-orm-copia.diff; adattamenti: pin s163 fea4a2d040a0d8d0,
+< # path wp164, RIF INVARIATO = registrato s162 (2 gambe s163 NON aggiornano):
+< # ORA_REF=4,885 (oracle net 4,87/4,90 dichiarate), rapporto registrato
+< # S-162 [7,035;7,086]; attesa L-AU1 su ORM ~ZERO DICHIARATA (Composer/
+< # Doctrine a REGIME = classmap hit, i miss autoload [obj,metodo] RARI;
+< # quota miss NON censita => tetto ~0); attesa-AF1 resta APERTA per
+< # AMPIEZZA, NON risolta da questa coppia (bracci entrambi post-AF1).
+---
+> # s166-orm-coppia.sh — coppia dbal+ORM sul pin s165 (DOVUTA: pin nuovo)
+> # (criterio s166-criterio-orm.md; copia DICHIARATA di s164-orm-coppia.sh,
+> # manifest s166-orm-copia.diff; adattamenti: pin s165 1fd8757d2f72dc3e,
+> # path wp166; RIF INVARIATO = registrato s162: ORA_REF=4,885 (REGGE per
+> # R=5 oracle-only S-165, mediana 4,860), rapporto registrato S-162
+> # [7,035;7,086]; DUE EMENDE dal verbale S-165 (entrambe PRE-registrate):
+> # (E1) segnalazione ictx PER MOTORE (istruttoria ictx CHIUSA: firma =
+> # denominatore su bracci 6-7x diversi); (E2) banda sentinella oracle
+> # [4,83;4,94] VINCOLANTE (gamba fuori => Delta_norm NON giudicante);
+> # attesa L-MC1d su ORM: direzione <=0, magnitudine NON pre-registrabile
+> # (quota chiamate a metodo AMMESSE non censita); attesa-AF1 resta APERTA.
+18c20
+< H="$REPO/wp164-harness"
+---
+> H="$REPO/wp166-harness"
+25c27
+< VERD="$H/s164-orm-coppia-verdetto.out"
+---
+> VERD="$H/s166-orm-coppia-verdetto.out"
+30c32
+< [ "$PINM" = "fea4a2d040a0d8d0" ] || { echo "rc=9 pin!=s163" > "$OUT/rimisura.done"; exit 9; }
+---
+> [ "$PINM" = "1fd8757d2f72dc3e" ] || { echo "rc=9 pin!=s163" > "$OUT/rimisura.done"; exit 9; }
+151c153
+< print("coppia-s164 (user CPU; pavimenti PARZIALI phpunit --version: orm o=%.3f p=%.3f · dbal o=%.3f p=%.3f)" % (fo, fp, dfo, dfp))
+---
+> print("coppia-s166 (user CPU; pavimenti PARZIALI phpunit --version: orm o=%.3f p=%.3f · dbal o=%.3f p=%.3f)" % (fo, fp, dfo, dfp))
+168,170c170,176
+<     vals = [v for v in rate.values() if v >= 0]
+<     med = statistics.median(vals) if vals else 0
+<     flag = [k for k, v in rate.items() if med > 0 and v > 1.5*med]
+---
+>     # EMENDA S-166 (istruttoria s165 CHIUSA: firma ictx = DENOMINATORE, bracci
+>     # 6-7x diversi in durata): la segnalazione si giudica PER MOTORE.
+>     flag = []
+>     for eng in ("oracle", "phpr"):
+>         ev = {k: v for k, v in rate.items() if k.startswith(eng) and v >= 0}
+>         emed = statistics.median(list(ev.values())) if ev else 0
+>         flag += [k for k, v in ev.items() if emed > 0 and v > 1.5*emed]
+179c185
+< # --- ATTESA L-AU1 (criterio s164-criterio-orm.md p.3, aritmetica meccanica) ---
+---
+> # --- ATTESA L-MC1d (criterio s166-criterio-orm.md p.3, aritmetica meccanica) ---
+183a190
+> SENT_LO, SENT_HI = 4.83, 4.94      # EMENDA S-166: banda sentinella oracle PRE-registrata (s165-istruttoria-ictx-orm.md B1, VINCOLANTE; ORA_REF REGGE per R=5 s165 mediana 4.860)
+186c193
+< ATT_LO, ATT_HI = 0.0, 0.0          # attesa L-AU1: tetto ~0 DICHIARATO (Composer/Doctrine a REGIME = classmap hit, i miss autoload [obj,metodo] RARI; quota miss NON censita => sotto-risoluzione; attesa-AF1 resta APERTA, non risolta da questa coppia)
+---
+> ATT_LO, ATT_HI = 0.0, 0.0          # attesa L-MC1d DICHIARATA: direzione <=0 (mai peggiorare); magnitudine NON pre-registrabile (quota di chiamate a metodo AMMESSE — simple_call arita' esatta IC-hit — nel workload doctrine NON censita); GIU' = coerente con la leva, da dichiarare SENZA ripartizione senza census proprio (Composer/Doctrine a REGIME = classmap hit, i miss autoload [obj,metodo] RARI; quota miss NON censita => sotto-risoluzione; attesa-AF1 resta APERTA, non risolta da questa coppia)
+192c199
+<     print(f"attesa-AU1 assoluto (companion): phpr_orm_net_new=[{nn[0]:.2f}; {nn[1]:.2f}] ref=[{REF2_MIN}; {REF2_MAX}] Delta=[{d_min:+.2f}; {d_max:+.2f}] s")
+---
+>     print(f"attesa-MC1 assoluto (companion): phpr_orm_net_new=[{nn[0]:.2f}; {nn[1]:.2f}] ref=[{REF2_MIN}; {REF2_MAX}] Delta=[{d_min:+.2f}; {d_max:+.2f}] s")
+202a210
+>     sent_fuori = [round(x, 2) for x in on if not (SENT_LO <= x <= SENT_HI)]
+204c212
+<     print(f"attesa-AU1 ORACLE-NORMALIZZATO (CANONICO coppia): net_norm=[{n2[0]:.2f}; {n2[1]:.2f}] (ORA_REF={ORA_REF2}, oracle_net_gambe={[round(x,2) for x in on]}) Delta_norm=[{dn2_min:+.2f}; {dn2_max:+.2f}] s")
+---
+>     print(f"attesa-MC1 ORACLE-NORMALIZZATO (CANONICO coppia): net_norm=[{n2[0]:.2f}; {n2[1]:.2f}] (ORA_REF={ORA_REF2}, oracle_net_gambe={[round(x,2) for x in on]}) Delta_norm=[{dn2_min:+.2f}; {dn2_max:+.2f}] s")
+206a215,216
+>     if sent_fuori:
+>         print(f"SENTINELLA ORACLE FUORI BANDA [{SENT_LO};{SENT_HI}]: gambe {sent_fuori} — Delta_norm NON GIUDICANTE (emenda S-166), istruttoria drift dedicata")
+208c218,220
+<         print("attesa-AU1: CIFRA NULLA (parita' rotta) — nessun giudizio")
+---
+>         print("attesa-MC1: CIFRA NULLA (parita' rotta) — nessun giudizio")
+>     elif sent_fuori:
+>         pass  # giudizio sospeso dalla sentinella (riga sopra)
+210c222
+<         print(f"attesa-AU1: DIREZIONE GIU' FUORI RUMORE (Delta_norm_min {dn2_min:.2f} >= {RES}) — OLTRE l'attesa a tetto {ATT_LO}-{ATT_HI}: dichiarare, nessuna attribuzione senza census ORM proprio")
+---
+>         print(f"attesa-MC1: DIREZIONE GIU' FUORI RUMORE (Delta_norm_min {dn2_min:.2f} >= {RES}) — OLTRE l'attesa a tetto {ATT_LO}-{ATT_HI}: dichiarare, nessuna attribuzione senza census ORM proprio")
+212c224
+<         print(f"attesa-AU1: REGRESSIONE SEGNALATA (Delta_norm_max {dn2_max:.2f} < -{RES}) — indagine PRIMA di ogni altra leva")
+---
+>         print(f"attesa-MC1: REGRESSIONE SEGNALATA (Delta_norm_max {dn2_max:.2f} < -{RES}) — indagine PRIMA di ogni altra leva")
+214c226
+<         print(f"attesa-AU1: COMPATIBILE (Delta_norm dentro il rumore ±{RES}; attesa a tetto {ATT_LO}-{ATT_HI} SOTTO risoluzione — esito dichiarato, nessuna cifra attribuita a L-AU1)")
+---
+>         print(f"attesa-MC1: COMPATIBILE (Delta_norm dentro il rumore ±{RES}; attesa a tetto {ATT_LO}-{ATT_HI} SOTTO risoluzione — esito dichiarato, nessuna cifra attribuita a L-AU1)")
+216c228
+<         print(f"attesa-AU1: NON RISOLTA (intervallo Delta_norm a cavallo di {RES}) — si dichiara")
+---
+>         print(f"attesa-MC1: NON RISOLTA (intervallo Delta_norm a cavallo di {RES}) — si dichiara")
+230c242
+< { echo "== s164 coppia dbal+ORM (pin s163 MISURATO $PINM vs oracle 8.5.7; criterio s164-criterio-orm.md) =="
+---
+> { echo "== s166 coppia dbal+ORM (pin s165 MISURATO $PINM vs oracle 8.5.7; criterio s166-criterio-orm.md) =="
