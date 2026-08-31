@@ -1,5 +1,5 @@
 #!/bin/bash
-# s166-lancio-orm.sh — catena p.1: attende pair164-t15.done; SOLO se rc=0
+# s166-lancio-orm.sh — catena p.1: attende pair166-t15.done; SOLO se rc=0
 # lancia s166-orm-coppia.sh (MAPPA_SP dedicato APFS). Un pair fallito NON
 # fa partire l'ORM: la sessione istruisce prima.
 # Adattamento dichiarato di s164-lancio-orm.sh (plumbing, esiti da .done).
@@ -7,7 +7,7 @@ set -u
 export PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin
 H="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp166-harness"
 LOG="$H/orm-out/lancio-orm.log"; mkdir -p "$H/orm-out"
-PD="$H/pair-out/pair164-t15.done"
+PD="$H/pair-out/pair166-t15.done"
 echo "$(date '+%F %T') attesa $PD" >> "$LOG"
 while [ ! -e "$PD" ]; do sleep 120; done
 if ! grep -q '^rc=0' "$PD"; then

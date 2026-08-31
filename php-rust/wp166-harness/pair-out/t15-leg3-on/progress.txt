@@ -1,0 +1,13 @@
+uploads-guard: backup OK (3 file → /Volumes/Extreme Pro/Claude/uploads-backups/uploads-20260831-110818.tar.gz), uploads azzerata
+11:08:18 media oracle
+11:08:52 media oracle rc=0
+11:08:52 media phpr modo=on
+11:09:59 media phpr rc=0
+11:09:59 full oracle
+11:19:39 full oracle rc=1
+11:19:39 full phpr modo=on
+11:35:33 full phpr rc=1
+uploads-guard: restore verificato (count=3) — backup conservato in /Volumes/Extreme Pro/Claude/uploads-backups/uploads-20260831-110818.tar.gz
+11:35:33 media: failure IDENTICI per NOME (0 nomi)
+11:35:33 full: failure DIVERSI per NOME — vedi full.failnames.diff
+11:35:33 pair109 modo=on DONE gate_void=0

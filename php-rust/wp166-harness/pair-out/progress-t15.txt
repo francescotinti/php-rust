@@ -1,0 +1,34 @@
+10:10:16 sentinella LS inizio: /Applications/Antigravity /Users/francescotinti/.antigravity-ide/extensions/rust-lang.rust-analyzer-0.3.3025-darwin-arm64/server/rust-analyzer /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.96.0-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer 
+10:10:41 quiescenza warmup rc=0 tentativo-gate=1 (file: pair-out/quiesce-t15-warmup.rc)
+uploads-guard: backup OK (3 file → /Volumes/Extreme Pro/Claude/uploads-backups/uploads-20260831-101041.tar.gz), uploads azzerata
+10:10:42 warmup media oracle
+10:11:17 warmup media oracle rc=0
+10:11:17 warmup media phpr (on)
+10:12:24 warmup media phpr rc=0
+uploads-guard: restore verificato (count=3) — backup conservato in /Volumes/Extreme Pro/Claude/uploads-backups/uploads-20260831-101041.tar.gz
+10:12:24 warmup DONE (mai giudicata)
+10:12:49 quiescenza leg1-on rc=0 tentativo-gate=1 (file: pair-out/quiesce-t15-leg1-on.rc)
+10:12:50 gamba on-1 START
+/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp109-harness/pair109.sh: line 38: rustc: command not found
+10:40:10 gamba on-1 rc=0
+10:40:35 quiescenza leg2-on rc=0 tentativo-gate=1 (file: pair-out/quiesce-t15-leg2-on.rc)
+10:40:35 gamba on-2 START
+/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp109-harness/pair109.sh: line 38: rustc: command not found
+11:07:52 gamba on-2 rc=0
+11:08:17 quiescenza leg3-on rc=0 tentativo-gate=1 (file: pair-out/quiesce-t15-leg3-on.rc)
+11:08:17 gamba on-3 START
+/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp109-harness/pair109.sh: line 38: rustc: command not found
+11:35:33 gamba on-3 rc=0
+11:35:59 quiescenza leg4-on rc=0 tentativo-gate=1 (file: pair-out/quiesce-t15-leg4-on.rc)
+11:35:59 gamba on-4 START
+/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp109-harness/pair109.sh: line 38: rustc: command not found
+12:03:13 gamba on-4 rc=0
+12:03:38 quiescenza leg5-on rc=0 tentativo-gate=1 (file: pair-out/quiesce-t15-leg5-on.rc)
+12:03:38 gamba on-5 START
+/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp109-harness/pair109.sh: line 38: rustc: command not found
+12:30:54 gamba on-5 rc=0
+12:31:19 quiescenza leg6-on rc=0 tentativo-gate=1 (file: pair-out/quiesce-t15-leg6-on.rc)
+12:31:19 gamba on-6 START
+/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp109-harness/pair109.sh: line 38: rustc: command not found
+12:58:32 gamba on-6 rc=0
+12:58:32 DONE rc=0 (fonte rc: /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp166-harness/pair-out/pair166-t15.done)

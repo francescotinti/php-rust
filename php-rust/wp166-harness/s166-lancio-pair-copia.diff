@@ -1,0 +1,30 @@
+2,3c2,3
+< # s164-lancio-pair.sh — catena p.1: attende la quiete CI (cargo/rustc/
+< # phpt-runner: run 4754d04ab2cf in volo all'apertura; il lock S-164 tiene
+---
+> # s166-lancio-pair.sh — catena p.1: attende la quiete CI (cargo/rustc/
+> # phpt-runner: job CI in volo al lancio; il lock S-166 tiene
+7,8c7,8
+< # finestra quieta (uptime + top nel log) e lancia s164-pair.sh t14.
+< # Adattamento DICHIARATO di s163-lancio-pair.sh: AGGIUNTO il blocco
+---
+> # finestra quieta (uptime + top nel log) e lancia s166-pair.sh t15.
+> # Adattamento DICHIARATO di s164-lancio-pair.sh: AGGIUNTO il blocco
+12,13c12,13
+< H="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp164-harness"
+< LOG="$H/pair-out/lancio-t14.log"; mkdir -p "$H/pair-out"
+---
+> H="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp166-harness"
+> LOG="$H/pair-out/lancio-t15.log"; mkdir -p "$H/pair-out"
+31,32c31,32
+< Q="$H/pair-out/quiet-decl-t14.txt"
+< { echo "== dichiarazione finestra quieta t14 $(date '+%F %T') =="
+---
+> Q="$H/pair-out/quiet-decl-t15.txt"
+> { echo "== dichiarazione finestra quieta t15 $(date '+%F %T') =="
+36,37c36,37
+< echo "$(date '+%F %T') quiete raggiunta — dichiarazione in quiet-decl-t14.txt — lancio pair t14" >> "$LOG"
+< exec /bin/bash "$H/s164-pair.sh" t14
+---
+> echo "$(date '+%F %T') quiete raggiunta — dichiarazione in quiet-decl-t15.txt — lancio pair t15" >> "$LOG"
+> exec /bin/bash "$H/s166-pair.sh" t15

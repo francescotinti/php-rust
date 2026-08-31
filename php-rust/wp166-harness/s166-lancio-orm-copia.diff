@@ -1,0 +1,30 @@
+2,3c2,3
+< # s164-lancio-orm.sh — catena p.1: attende pair164-t14.done; SOLO se rc=0
+< # lancia s164-orm-coppia.sh (MAPPA_SP dedicato APFS). Un pair fallito NON
+---
+> # s166-lancio-orm.sh — catena p.1: attende pair166-t15.done; SOLO se rc=0
+> # lancia s166-orm-coppia.sh (MAPPA_SP dedicato APFS). Un pair fallito NON
+5c5
+< # Adattamento dichiarato di s163-lancio-orm.sh (plumbing, esiti da .done).
+---
+> # Adattamento dichiarato di s164-lancio-orm.sh (plumbing, esiti da .done).
+8c8
+< H="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp164-harness"
+---
+> H="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp166-harness"
+10c10
+< PD="$H/pair-out/pair164-t14.done"
+---
+> PD="$H/pair-out/pair166-t15.done"
+14c14
+<   echo "$(date '+%F %T') pair t14 NON rc=0 ($(cat "$PD")) — ORM NON lanciato" >> "$LOG"
+---
+>   echo "$(date '+%F %T') pair t15 NON rc=0 ($(cat "$PD")) — ORM NON lanciato" >> "$LOG"
+18c18
+< SPD=/private/tmp/phpr-s164-orm; mkdir -p "$SPD"
+---
+> SPD=/private/tmp/phpr-s166-orm; mkdir -p "$SPD"
+20c20
+< MAPPA_SP="$SPD" exec /bin/bash "$H/s164-orm-coppia.sh"
+---
+> MAPPA_SP="$SPD" exec /bin/bash "$H/s166-orm-coppia.sh"

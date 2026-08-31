@@ -1,0 +1,88 @@
+Tests_Actions::test_priority_callback_order with data set "float ASC" (array(9.5, 10.0), array('action', 'action2'), 'Implicit conversion from floa...cision')
+Tests_Actions::test_priority_callback_order with data set "float DESC" (array(10.0, 9.5), array('action2', 'action'), 'Implicit conversion from floa...cision')
+Tests_Admin_IncludesPost::test_post_exists_should_not_match_a_page_for_post
+Tests_Admin_IncludesPost::test_post_exists_should_not_match_invalid_post_type_and_status_combined
+Tests_Admin_IncludesPost::test_post_exists_should_only_match_correct_post_status
+Tests_Admin_IncludesPost::test_post_exists_should_support_post_status
+Tests_Admin_IncludesPost::test_post_exists_should_support_post_type
+Tests_Admin_IncludesPost::test_post_exists_should_support_post_type_status_combined
+Tests_Admin_WpListTable::test_should_throw_deprecation_when_getting_dynamic_property
+Tests_Admin_WpListTable::test_should_throw_deprecation_when_isset_of_dynamic_property
+Tests_Admin_WpListTable::test_should_throw_deprecation_when_setting_dynamic_property
+Tests_Admin_WpListTable::test_should_throw_deprecation_when_unset_of_dynamic_property
+Tests_Admin_wpPostsListTable::test_search_hierarchical_pages_first_page
+Tests_Diff_WpTextDiffRendererTable::test_should_throw_deprecation_when_getting_dynamic_property
+Tests_Diff_WpTextDiffRendererTable::test_should_throw_deprecation_when_isset_of_dynamic_property
+Tests_Diff_WpTextDiffRendererTable::test_should_throw_deprecation_when_setting_dynamic_property
+Tests_Diff_WpTextDiffRendererTable::test_should_throw_deprecation_when_unset_of_dynamic_property
+Tests_Filesystem_WpOpcacheInvalidateDirectory::test_should_trigger_error_with_invalid_dir with data set "INF" (INF)
+Tests_Filesystem_WpOpcacheInvalidateDirectory::test_should_trigger_error_with_invalid_dir with data set "NAN" (NAN)
+Tests_Filesystem_WpOpcacheInvalidateDirectory::test_should_trigger_error_with_invalid_dir with data set "a non-empty array" (array('directory_path'))
+Tests_Filesystem_WpOpcacheInvalidateDirectory::test_should_trigger_error_with_invalid_dir with data set "a non-empty object" (stdClass Object (...))
+Tests_Filesystem_WpOpcacheInvalidateDirectory::test_should_trigger_error_with_invalid_dir with data set "a string with carriage returns" ('\r')
+Tests_Filesystem_WpOpcacheInvalidateDirectory::test_should_trigger_error_with_invalid_dir with data set "a string with new lines" ('\n')
+Tests_Filesystem_WpOpcacheInvalidateDirectory::test_should_trigger_error_with_invalid_dir with data set "a string with spaces" ('   ')
+Tests_Filesystem_WpOpcacheInvalidateDirectory::test_should_trigger_error_with_invalid_dir with data set "a string with tabs" ('	')
+Tests_Filesystem_WpOpcacheInvalidateDirectory::test_should_trigger_error_with_invalid_dir with data set "an empty array" (array())
+Tests_Filesystem_WpOpcacheInvalidateDirectory::test_should_trigger_error_with_invalid_dir with data set "an empty object" (stdClass Object ())
+Tests_Filesystem_WpOpcacheInvalidateDirectory::test_should_trigger_error_with_invalid_dir with data set "an empty string" ('')
+Tests_Filesystem_WpOpcacheInvalidateDirectory::test_should_trigger_error_with_invalid_dir with data set "false" (false)
+Tests_Filesystem_WpOpcacheInvalidateDirectory::test_should_trigger_error_with_invalid_dir with data set "float -1.0" (-1.0)
+Tests_Filesystem_WpOpcacheInvalidateDirectory::test_should_trigger_error_with_invalid_dir with data set "float 0.0" (0.0)
+Tests_Filesystem_WpOpcacheInvalidateDirectory::test_should_trigger_error_with_invalid_dir with data set "float 1.0" (1.0)
+Tests_Filesystem_WpOpcacheInvalidateDirectory::test_should_trigger_error_with_invalid_dir with data set "int -1" (-1)
+Tests_Filesystem_WpOpcacheInvalidateDirectory::test_should_trigger_error_with_invalid_dir with data set "int 0" (0)
+Tests_Filesystem_WpOpcacheInvalidateDirectory::test_should_trigger_error_with_invalid_dir with data set "int 1" (1)
+Tests_Filesystem_WpOpcacheInvalidateDirectory::test_should_trigger_error_with_invalid_dir with data set "null" (null)
+Tests_Filesystem_WpOpcacheInvalidateDirectory::test_should_trigger_error_with_invalid_dir with data set "true" (true)
+Tests_Filters::test_priority_callback_order with data set "float ASC" (array(9.5, 10.0), array('filter', 'filter2'), 'Implicit conversion from floa...cision')
+Tests_Filters::test_priority_callback_order with data set "float DESC" (array(10.0, 9.5), array('filter2', 'filter'), 'Implicit conversion from floa...cision')
+Tests_Formatting_wpStripAllTags::test_wp_strip_all_tags_should_return_empty_string_and_trigger_an_error_for_non_string_arg with data set "a non-empty array" (array('a string'))
+Tests_Formatting_wpStripAllTags::test_wp_strip_all_tags_should_return_empty_string_and_trigger_an_error_for_non_string_arg with data set "a non-empty object" (stdClass Object (...))
+Tests_Formatting_wpStripAllTags::test_wp_strip_all_tags_should_return_empty_string_and_trigger_an_error_for_non_string_arg with data set "an empty array" (array())
+Tests_Formatting_wpStripAllTags::test_wp_strip_all_tags_should_return_empty_string_and_trigger_an_error_for_non_string_arg with data set "an empty object" (stdClass Object ())
+Tests_Formatting_wpTrimExcerpt::test_should_generate_excerpt_for_empty_values
+Tests_Functions::test_wp_is_stream with data set #2 ('ftp://example.com', true)
+Tests_Functions_CleanDirsizeCache::test_clean_dirsize_cache_with_invalid_inputs with data set "array" (array('.', './second/path/'), '<code>clean_dirsize_cache()</...code>.')
+Tests_Functions_CleanDirsizeCache::test_clean_dirsize_cache_with_invalid_inputs with data set "bool false" (false, '<code>clean_dirsize_cache()</...code>.')
+Tests_Functions_CleanDirsizeCache::test_clean_dirsize_cache_with_invalid_inputs with data set "empty string" ('', '<code>clean_dirsize_cache()</...code>.')
+Tests_Functions_CleanDirsizeCache::test_clean_dirsize_cache_with_invalid_inputs with data set "null" (null, '<code>clean_dirsize_cache()</...code>.')
+Tests_Functions_WpTriggerError::test_should_trigger_deprecation with data set "HTML links are present in message" ('some_function', '<a href="https://example.com"...ge</a>', 'some_function(): <a href="htt...ge</a>')
+Tests_Functions_WpTriggerError::test_should_trigger_deprecation with data set "allowed HTML elements are present in message" ('some_function', '<strong>expected</strong> the...essage', 'some_function(): <strong>expe...essage')
+Tests_Functions_WpTriggerError::test_should_trigger_deprecation with data set "disallowed HTML elements are present in message" ('some_function', '<script>alert("expected the f...cript>', 'some_function(): alert("expec...sage")')
+Tests_Functions_WpTriggerError::test_should_trigger_deprecation with data set "function name and message are given" ('some_function', 'expected the function name and message', 'some_function(): expected the...essage')
+Tests_Functions_WpTriggerError::test_should_trigger_deprecation with data set "function name is given" ('some_function', '', 'some_function(): ')
+Tests_Functions_WpTriggerError::test_should_trigger_deprecation with data set "message is given" ('', 'expect only the message', 'expect only the message')
+Tests_Functions_WpTriggerError::test_should_trigger_notice with data set "HTML links are present in message" ('some_function', '<a href="https://example.com"...ge</a>', 'some_function(): <a href="htt...ge</a>')
+Tests_Functions_WpTriggerError::test_should_trigger_notice with data set "allowed HTML elements are present in message" ('some_function', '<strong>expected</strong> the...essage', 'some_function(): <strong>expe...essage')
+Tests_Functions_WpTriggerError::test_should_trigger_notice with data set "disallowed HTML elements are present in message" ('some_function', '<script>alert("expected the f...cript>', 'some_function(): alert("expec...sage")')
+Tests_Functions_WpTriggerError::test_should_trigger_notice with data set "function name and message are given" ('some_function', 'expected the function name and message', 'some_function(): expected the...essage')
+Tests_Functions_WpTriggerError::test_should_trigger_notice with data set "function name is given" ('some_function', '', 'some_function(): ')
+Tests_Functions_WpTriggerError::test_should_trigger_notice with data set "message is given" ('', 'expect only the message', 'expect only the message')
+Tests_Functions_WpTriggerError::test_should_trigger_warning with data set "HTML links are present in message" ('some_function', '<a href="https://example.com"...ge</a>', 'some_function(): <a href="htt...ge</a>')
+Tests_Functions_WpTriggerError::test_should_trigger_warning with data set "allowed HTML elements are present in message" ('some_function', '<strong>expected</strong> the...essage', 'some_function(): <strong>expe...essage')
+Tests_Functions_WpTriggerError::test_should_trigger_warning with data set "disallowed HTML elements are present in message" ('some_function', '<script>alert("expected the f...cript>', 'some_function(): alert("expec...sage")')
+Tests_Functions_WpTriggerError::test_should_trigger_warning with data set "function name and message are given" ('some_function', 'expected the function name and message', 'some_function(): expected the...essage')
+Tests_Functions_WpTriggerError::test_should_trigger_warning with data set "function name is given" ('some_function', '', 'some_function(): ')
+Tests_Functions_WpTriggerError::test_should_trigger_warning with data set "message is given" ('', 'expect only the message', 'expect only the message')
+Tests_Functions_WpUniquePrefixedId::test_should_raise_notice_and_use_empty_string_prefix_when_nonstring_given with data set "prefix as (bool) false" (false, 5, 'wp_unique_prefixed_id(): The ...given.', array('1', '2', '3', '4', '5'))
+Tests_Functions_WpUniquePrefixedId::test_should_raise_notice_and_use_empty_string_prefix_when_nonstring_given with data set "prefix as (double) 98.7" (98.7, 6, 'wp_unique_prefixed_id(): The ...given.', array('1', '2', '3', '4', '5', '6'))
+Tests_Functions_WpUniquePrefixedId::test_should_raise_notice_and_use_empty_string_prefix_when_nonstring_given with data set "prefix as (int) 0" (0, 3, 'wp_unique_prefixed_id(): The ...given.', array('1', '2', '3'))
+Tests_Functions_WpUniquePrefixedId::test_should_raise_notice_and_use_empty_string_prefix_when_nonstring_given with data set "prefix as (int) 1" (1, 4, 'wp_unique_prefixed_id(): The ...given.', array('1', '2', '3', '4'))
+Tests_Functions_WpUniquePrefixedId::test_should_raise_notice_and_use_empty_string_prefix_when_nonstring_given with data set "prefix as null" (null, 2, 'wp_unique_prefixed_id(): The ...given.', array('1', '2'))
+Tests_HTTP_IncludeOldRequestsClass::test_should_include_old_requests_class
+Tests_Hooks_ApplyFilters::test_priority_callback_order with data set "float ASC" (array(9.5, 10.0), array('filter', 'filter2'), 'Implicit conversion from floa...cision')
+Tests_Hooks_ApplyFilters::test_priority_callback_order with data set "float DESC" (array(10.0, 9.5), array('filter2', 'filter'), 'Implicit conversion from floa...cision')
+Tests_Hooks_DoAction::test_priority_callback_order with data set "float ASC" (array(9.5, 10.0), array('action', 'action2'), 'Implicit conversion from floa...cision')
+Tests_Hooks_DoAction::test_priority_callback_order with data set "float DESC" (array(10.0, 9.5), array('action2', 'action'), 'Implicit conversion from floa...cision')
+Tests_Locale::test_get_weekday_undefined_index
+Tests_Option_wpUserSettings::test_wp_user_settings_does_not_throw_deprecation_notice_for_setcookie
+Tests_User_Query::test_should_throw_deprecation_when_getting_dynamic_property
+Tests_User_Query::test_should_throw_deprecation_when_isset_of_dynamic_property
+Tests_User_Query::test_should_throw_deprecation_when_setting_dynamic_property
+Tests_User_Query::test_should_throw_deprecation_when_unset_of_dynamic_property
+Tests_WP_Generate_Tag_Cloud::test_should_include_tag_link_position_class
+WP_REST_Block_Directory_Controller_Test::test_get_items_wdotorg_unavailable
+WP_REST_Plugins_Controller_Test::test_create_item_wdotorg_unreachable
+WP_Test_REST_Schema_Sanitization::test_format_validation_is_applied_if_missing_type
+WP_Test_REST_Schema_Validation::test_format_validation_is_applied_if_missing_type
