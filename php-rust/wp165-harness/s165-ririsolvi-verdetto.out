@@ -1,0 +1,16 @@
+== s165 ri-risoluzione guardie quantizzate (bracci di record A=fea4a2d0 B=1fd8757d; criterio in testa allo script) ==
+cat=backtrace96 N=9600000 floor_A=0.02 floor_B=0.03
+  coppia1 [AB]: rawA=4.40 rawB=4.44
+  coppia2 [BA]: rawA=4.38 rawB=4.43
+  coppia3 [AB]: rawA=4.36 rawB=4.38
+  coppia4 [BA]: rawA=4.40 rawB=4.42
+  coppia5 [AB]: rawA=4.38 rawB=4.44
+cat=objmap12 N=12000000 floor_A=0.02 floor_B=0.02
+  coppia1 [AB]: rawA=1.40 rawB=1.51
+  coppia2 [BA]: rawA=1.41 rawB=1.43
+  coppia3 [AB]: rawA=1.42 rawB=1.44
+  coppia4 [BA]: rawA=1.42 rawB=1.43
+  coppia5 [AB]: rawA=1.41 rawB=1.43
+guardia backtrace96: A=454.17 B=458.33 D=-4.17 soglia_reg=-4.17 (tick<=1ns; rumore A'=4.17 B'=2.08) -> PULITA (morso mc1dr5 = quantizzazione arbitrata)
+guardia objmap12: A=115.83 B=117.50 D=-1.67 soglia_reg=-4.00 (tick<=1ns; rumore A'=1.67 B'=0.83) -> PULITA (morso mc1dr5 = quantizzazione arbitrata)
+ESITO: GUARDIE ARBITRATE — R=5 mc1dr5 si integra a rc=0 EMENDATO
