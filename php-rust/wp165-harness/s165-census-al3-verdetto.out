@@ -1,3 +1,18 @@
 == s165 rerun census L-AL3 (attesa 199999 col +1 NOMINATO: with_capacity sposta il buffer del Vec exts FUORI dal conteggio; probe-A = tree s165 LISCIO, probe-B = copia + patch AL3 + discriminante; driver N=200000) ==
 patch avanti: 2 file (vm/mod.rs + vm/calls.rs), zero rej
 discriminante with_capacity: sostituzioni ASSERITE 2/2 applicate (Default manuale)
+probe MISURATI: A=51e1c47a765ebee7 B=993d82f275961b13 (census -p php-cli --features mem-census, target dedicati, run sequenziali)
+identita' s149sum A r1: hostcall_n=200008 sum_name=200008 unnamed=0 overflow=0 OK
+identita' s149sum A r2: hostcall_n=200008 sum_name=200008 unnamed=0 overflow=0 OK
+identita' s149sum B r1: hostcall_n=9 sum_name=9 unnamed=0 overflow=0 OK
+identita' s149sum B r2: hostcall_n=9 sum_name=9 unnamed=0 overflow=0 OK
+repliche A: r1==r2
+repliche B: r1==r2
+conteggi r1 per-NOME (arbitro: class_exists):
+  class_exists: A=200006 B=7 Delta=199999
+  spl_autoload_register: A=2 B=2 Delta=0
+  count: A=0 B=0 Delta=0
+Delta hostcall_n = 199999 (atteso 199999 ESATTO — col buffer del Vec exts spostato a VM-init il +1 di S-164 DEVE sparire)
+Delta altri nomi != 0: nessuno
+CONTEGGI: attesa ESATTA — il +1 di S-164 e' VERIFICATO come buffer del Vec exts (da post-hoc a PROVATO); meccanismo del verbale AL3 CONFERMATO, criterio coerente in TUTTE le clausole
+ESITO: rc=0 (az.rev. S-164 #2 CHIUSA: +1 nominato e provato)
