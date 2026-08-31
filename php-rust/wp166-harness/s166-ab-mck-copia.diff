@@ -1,0 +1,66 @@
+2,5c2,5
+< # s165-ab-mc1.sh <BPATH> <BEXP8> <TAG> <R> <AEXP8> [DSMOKE_MC2] — LEVA
+< # L-MC1 borrow-IC fast path k≤2 su Op::MethodCall (criterio
+< # s165-criterio-mc1.md). COPIA DICHIARATA di s164-ab-al3.sh (manifest
+< # s165-ab-copia.diff, diff INTERO + grep path: lezione incidente S-164 #1)
+---
+> # s166-ab-mc1e.sh <BPATH> <BEXP8> <TAG> <R> <AEXP8> [DSMOKE_MC2] — LEVA
+> # L-MCk: cade il cap argc≤2 (giudice k=3) (criterio
+> # s166-criterio-mck.md). COPIA DICHIARATA di s164-ab-al3.sh (manifest
+> # s166-ab-mck-copia.diff, diff INTERO + grep path: lezione incidente S-164 #1)
+7c7
+< #  (a) GIUDICE: mc2 (wp165-harness/m-mc2.php, N=20000000 dal sorgente,
+---
+> #  (a) GIUDICE: mc3 (wp165-harness/m-mc3.php, N=20000000 dal sorgente,
+16,17c16,17
+< #  (f) A = pin s163 dallo stash (phpr-s163), hash atteso dal run; header
+< #      con hash MISURATI; sentinella LS; lock s165.
+---
+> #  (f) A = pin s165 dallo stash (phpr-s165), hash atteso dal run; header
+> #      con hash MISURATI; sentinella LS; lock s166.
+29c29
+< A="/Volumes/Extreme Pro/Claude/phpr-old-target/release/phpr-s163"
+---
+> A="/Volumes/Extreme Pro/Claude/phpr-old-target/release/phpr-s165"
+34c34
+< VERD="$H/s165-$TAG-verdetto.out"  # copione EMENDATO (banda-layout fondata, criterio-nulledit ESITO D)
+---
+> VERD="$H/s166-$TAG-verdetto.out"  # copione EMENDATO (banda-layout fondata, criterio-nulledit ESITO D)
+42c42
+< if ! grep -qi "s-165\|s165" "$LOCK" 2>/dev/null; then
+---
+> if ! grep -qi "s-166\|s166" "$LOCK" 2>/dev/null; then
+51c51
+< # Identita' bracci (az.rev. S-157 #3): A = pin s163 dallo stash canonico;
+---
+> # Identita' bracci (az.rev. S-157 #3): A = pin s165 dallo stash canonico;
+54c54
+< [ "$AM" = "$AEXP" ] || { echo "A misurato $AM != atteso $AEXP (pin s163) — STOP" | tee -a "$VERD"; echo 1 > "$RC"; exit 1; }
+---
+> [ "$AM" = "$AEXP" ] || { echo "A misurato $AM != atteso $AEXP (pin s165) — STOP" | tee -a "$VERD"; echo 1 > "$RC"; exit 1; }
+62,66c62,66
+< src_of() { case "$1" in mc2) echo "$H";; arrload) echo "$W163";; strmap) echo "$W162";; arrfilter) echo "$W160";; arrmap) echo "$W159";; refl|missload|hostargs|backtrace) echo "$W158";; objalloc|objchurn|objmap|objdatains|objallocni|objdropdef) echo "$M";; *) echo "$M97";; esac; }
+< php_of() { case "$1" in mc2) echo "m-mc2.php";; arrload) echo "m-arrload.php";; strmap) echo "m-strmap.php";; arrfilter) echo "m-arrfilter.php";; arrmap) echo "m-arrmap.php";; refl) echo "m-refl.php";; missload) echo "m-missload.php";; hostargs) echo "m-hostargs.php";; backtrace) echo "m-backtrace24.php";; *) echo "$1.php";; esac; }
+< n_fixed() { case "$1" in mc2) echo 20000000;; arrload) echo 10000000;; strmap) echo 10000000;; arrfilter) echo 10000000;; arrmap) echo 10000000;; refl) echo 10000000;; missload) echo 10000000;; hostargs) echo 10000000;; backtrace) echo 2400000;; arith) echo 150000000;; prop) echo 90000000;; calls) echo 60000000;; str) echo 28000000;; arr) echo 30000000;; re) echo 12000000;; *) echo "";; esac; }
+< CATS_JUDGE="mc2"
+< CATS_GUARD="missload arrload strmap arrfilter arrmap refl hostargs backtrace objdropdef objchurn objdatains objalloc objallocni objmap arith prop calls str arr re"
+---
+> src_of() { case "$1" in mc3) echo "$H";; mc2) echo "$REPO/wp165-harness";; arrload) echo "$W163";; strmap) echo "$W162";; arrfilter) echo "$W160";; arrmap) echo "$W159";; refl|missload|hostargs|backtrace) echo "$W158";; objalloc|objchurn|objmap|objdatains|objallocni|objdropdef) echo "$M";; *) echo "$M97";; esac; }
+> php_of() { case "$1" in mc3) echo "m-mc3.php";; mc2) echo "m-mc2.php";; arrload) echo "m-arrload.php";; strmap) echo "m-strmap.php";; arrfilter) echo "m-arrfilter.php";; arrmap) echo "m-arrmap.php";; refl) echo "m-refl.php";; missload) echo "m-missload.php";; hostargs) echo "m-hostargs.php";; backtrace) echo "m-backtrace24.php";; *) echo "$1.php";; esac; }
+> n_fixed() { case "$1" in mc3) echo 20000000;; mc2) echo 20000000;; arrload) echo 10000000;; strmap) echo 10000000;; arrfilter) echo 10000000;; arrmap) echo 10000000;; refl) echo 10000000;; missload) echo 10000000;; hostargs) echo 10000000;; backtrace) echo 2400000;; arith) echo 150000000;; prop) echo 90000000;; calls) echo 60000000;; str) echo 28000000;; arr) echo 30000000;; re) echo 12000000;; *) echo "";; esac; }
+> CATS_JUDGE="mc3"
+> CATS_GUARD="mc2 missload arrload strmap arrfilter arrmap refl hostargs backtrace objdropdef objchurn objdatains objalloc objallocni objmap arith prop calls str arr re"
+69c69
+< echo "== s165-ab-mc1 $TAG: A=$AM MISURATO (pin s163 dallo stash) B=$BM MISURATO R=$R ordine ALTERNATO; giudice=mc2 N=20000000 \$o->f(\$s,1) k=2 ArgPlace dichiarato; soglia=max(4, drop-1) + VIETO su rumore>4 (az.rev. S-164 #5, rc=8); UB dal bundle CONTATO: alloc args-Vec ≈0 (lezione AL3) + salto method_call+dispatch_instance_call ⇒ attesa/BANDA SMOKE VINCOLANTE [4;30] + emenda rev. S-161 #4; guardie missload(N=10M, presidio AL2/AU1) + arrload(N=10M, L-AU1) + strmap(N=10M, L-AM2) + arrfilter(N=10M, L-AF1) + arrmap(N=10M, L-AM1) + refl(N=10M) + hostargs(N=10M) + backtrace24(N=2,4M) + obj* + sei, comparatore STRETTO; quiescenza rc=$QRC; rc autoritativo = ab-out/$TAG.rc =="
+---
+> echo "== s166-ab-mck $TAG: A=$AM MISURATO (pin s165 dallo stash) B=$BM MISURATO R=$R ordine ALTERNATO; giudice=mc3 N=20000000 \$o->f(\$s,1,0) k=3 ArgPlace dichiarato; soglia=max(4, drop-1) + VIETO su rumore>4 (az.rev. S-164 #5, rc=8); UB dal bundle CONTATO: alloc args-Vec ≈0 (lezione AL3) + salto method_call+dispatch_instance_call ⇒ attesa/BANDA SMOKE VINCOLANTE [4;30] + emenda rev. S-161 #4; guardie missload(N=10M, presidio AL2/AU1) + arrload(N=10M, L-AU1) + strmap(N=10M, L-AM2) + arrfilter(N=10M, L-AF1) + arrmap(N=10M, L-AM1) + refl(N=10M) + hostargs(N=10M) + backtrace24(N=2,4M) + obj* + sei, comparatore STRETTO; quiescenza rc=$QRC; rc autoritativo = ab-out/$TAG.rc =="
+96,97c96,97
+< if len(sys.argv) > 3 and sys.argv[3]: dsmoke["mc2"] = float(sys.argv[3])
+< UB_LO, UB_HI = 4.0, 30.0  # criterio mc1 p.4: bundle CONTATO (alloc ≈0 + salto funnel) — bivio MECCANICO
+---
+> if len(sys.argv) > 3 and sys.argv[3]: dsmoke["mc3"] = float(sys.argv[3])
+> UB_LO, UB_HI = 4.0, 30.0  # criterio mck p.3: bundle CONTATO (alloc ≈0 + salto funnel) — bivio MECCANICO
+115c115
+< JUDGES = ("mc2",)
+---
+> JUDGES = ("mc3",)
