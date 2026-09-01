@@ -37,5 +37,4 @@ copione census senza pulizia della copia-sorgente; curato, raw fuori repo).
   sottrattiva (§4): il 99% «indiziato» della fetta 0 alloca i mock, non li
   sostituisce.
 - ⭐ un copione che copia un albero lo pulisce nell'epilogo (ENOSPC in
-  finestra); raw pesanti fuori repo, path nel verdetto; mai commit
-  concatenati all'esito di un collaudo.
+  finestra); raw fuori repo; mai commit concatenati a un collaudo.
