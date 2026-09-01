@@ -1,27 +1,45 @@
 diff --git a/crates/php-runtime/src/bytecode.rs b/crates/php-runtime/src/bytecode.rs
-index de5f8e9a..0817150e 100644
+index de5f8e9a..a91bd8ff 100644
 --- a/crates/php-runtime/src/bytecode.rs
 +++ b/crates/php-runtime/src/bytecode.rs
-@@ -1451,6 +1451,10 @@ pub struct Func {
+@@ -1429,6 +1429,17 @@ pub enum Operand {
+ /// body, or (later) a method body. Self-contained — owns its instructions and
+ /// constant pool — so it can outlive the parser arena and be cached, mirroring
+ /// [`crate::hir::FnDecl`].
++/// MOCK m1 (S-168): newtype dei consts pre-materializzati. `Zval` non è
++/// `PartialEq`; `consts_z` è funzione PURA di `consts` (già confrontato dal
++/// derive di `Func`), quindi l'uguaglianza qui è per lunghezza — dichiarato.
++#[derive(Debug, Clone, Default)]
++pub struct ConstsZ(pub Vec<Zval>);
++impl PartialEq for ConstsZ {
++    fn eq(&self, other: &Self) -> bool {
++        self.0.len() == other.0.len()
++    }
++}
++
+ #[derive(Debug, Clone, PartialEq)]
+ pub struct Func {
+     /// Name as written (original case); empty for the script body / an anonymous
+@@ -1451,6 +1462,10 @@ pub struct Func {
      pub lines: Vec<Line>,
      /// Per-function constant pool, indexed by [`Op::PushConst`].
      pub consts: Vec<Const>,
 +    /// MOCK m1 (S-168, criterio s168-criterio-mock.md): consts PRE-MATERIALIZZATI
 +    /// in `Zval` al lowering — il handler fuso li legge per riferimento senza
 +    /// `to_zval`. Braccio di MISURA, non leva promossa.
-+    pub consts_z: Vec<Zval>,
++    pub consts_z: ConstsZ,
      /// Function-local `static $v` variables (name → cell id + initial value),
      /// for `getStaticVariables()`. Empty for synthetic thunks. Ids are relocated
      /// at module load alongside the `Op::Static*` cells.
 diff --git a/crates/php-runtime/src/compile/func.rs b/crates/php-runtime/src/compile/func.rs
-index 43fe8b48..9b62f53b 100644
+index 43fe8b48..4f9210ff 100644
 --- a/crates/php-runtime/src/compile/func.rs
 +++ b/crates/php-runtime/src/compile/func.rs
 @@ -93,6 +93,7 @@ pub(super) fn compile_body(
          ops: c.ops,
          lines: c.lines,
          consts: c.consts,
-+        consts_z: Vec::new(),
++        consts_z: Default::default(),
          static_vars: c.static_vars,
          // Named locals plus the high-water mark of compiler temporaries.
          n_slots: n_locals + c.n_temps_max,
@@ -30,7 +48,7 @@ index 43fe8b48..9b62f53b 100644
      if ctx.reg_lower {
          super::reg_lower::lower_func(&mut f);
 +        // MOCK m1 (S-168): predecode dei consts in Zval dopo il lowering.
-+        f.consts_z = f.consts.iter().map(|c| c.to_zval()).collect();
++        f.consts_z = crate::bytecode::ConstsZ(f.consts.iter().map(|c| c.to_zval()).collect());
      }
      Ok(f)
  }
@@ -38,7 +56,7 @@ index 43fe8b48..9b62f53b 100644
          ops: vec![Op::Fatal(0)],
          lines: vec![fd.line],
          consts: vec![Const::Str(php_types::PhpStr::new(msg.into_bytes()))],
-+        consts_z: Vec::new(),
++        consts_z: Default::default(),
          static_vars: Vec::new(),
          slot_names: fd.slots.to_vec().into_boxed_slice(),
          seed_slots: 0,
@@ -46,7 +64,7 @@ index 43fe8b48..9b62f53b 100644
          ops: c.ops,
          lines: c.lines,
          consts: c.consts,
-+        consts_z: Vec::new(),
++        consts_z: Default::default(),
          static_vars: Vec::new(),
          n_slots: c.n_temps_max,
          max_temps: 0,
@@ -54,7 +72,7 @@ index 43fe8b48..9b62f53b 100644
          ops: c.ops,
          lines: c.lines,
          consts: c.consts,
-+        consts_z: Vec::new(),
++        consts_z: Default::default(),
          static_vars: Vec::new(),
          n_slots: c.n_temps_max,
          max_temps: 0,
@@ -62,7 +80,7 @@ index 43fe8b48..9b62f53b 100644
          ops: c.ops,
          lines: c.lines,
          consts: c.consts,
-+        consts_z: Vec::new(),
++        consts_z: Default::default(),
          static_vars: Vec::new(),
          n_slots: c.n_temps_max,
          max_temps: 0,
@@ -70,12 +88,12 @@ index 43fe8b48..9b62f53b 100644
          ops: vec![Op::Fatal(0)],
          lines: vec![0],
          consts: vec![Const::Str(php_types::PhpStr::new(msg.into_bytes()))],
-+        consts_z: Vec::new(),
++        consts_z: Default::default(),
          static_vars: Vec::new(),
          n_slots: 0,
          max_temps: 0,
 diff --git a/crates/php-runtime/src/vm/run.rs b/crates/php-runtime/src/vm/run.rs
-index 9df135a2..90852bb4 100644
+index 9df135a2..d05b7199 100644
 --- a/crates/php-runtime/src/vm/run.rs
 +++ b/crates/php-runtime/src/vm/run.rs
 @@ -146,6 +146,54 @@ fn ident_class(v: &Zval) -> Option<u8> {
@@ -143,8 +161,8 @@ index 9df135a2..90852bb4 100644
 +                    // tre letture) sul SOLO cammino veloce; ogni miss ricade nel
 +                    // cammino ORIGINALE verbatim (sotto, con i consts m1). Braccio di
 +                    // MISURA per il controllo di ADDITIVITÀ, non leva promossa.
-+                    let cva = &func.consts_z[*ca as usize];
-+                    let cvb = &func.consts_z[*cb as usize];
++                    let cva = &func.consts_z.0[*ca as usize];
++                    let cvb = &func.consts_z.0[*cb as usize];
 +                    let fast = {
 +                        let slots = &self.frames[top].slots;
 +                        let la_v = &slots[*la as usize];
@@ -182,7 +200,7 @@ index 9df135a2..90852bb4 100644
                      // H-A2), stesso reg_store_slot.
 -                    let cva = func.consts[*ca as usize].to_zval();
 +                    // MOCK m1 (S-168): consts per RIFERIMENTO da consts_z (niente to_zval).
-+                    let cva = &func.consts_z[*ca as usize];
++                    let cva = &func.consts_z.0[*ca as usize];
                      let a = 'r: {
                          {
                              let lv = &self.frames[top].slots[*la as usize];
@@ -198,7 +216,7 @@ index 9df135a2..90852bb4 100644
 +                        self.binary_value_ab(*opa, lhs, cva.clone())?
                      };
 -                    let cvb = func.consts[*cb as usize].to_zval();
-+                    let cvb = &func.consts_z[*cb as usize];
++                    let cvb = &func.consts_z.0[*cb as usize];
                      let bv = 'r: {
                          {
                              let lv = &self.frames[top].slots[*lb as usize];
