@@ -1,6 +1,17 @@
 # PERF_MAP — phpr vs PHP oracle 8.5.7, mappa multi-workload
 
-Aggiornata: **2026-09-01 sera (S-168)** · pin **INVARIATO s166 092dcff4+caa4e4b2**
+Aggiornata: **2026-09-02 notte (S-169)** · pin **INVARIATO s166 092dcff4+caa4e4b2**
+(**S-169 = az.rev. S-168 eseguite (sola misura)**: m5 8 Nop/iter => **dispatch
+puro 1,75 ns/op (±0,05) = costo per-op INTERO dell'oracle (1,80)**; e2 14,7 =
+2×1,75 + 2 corpi => corpo CmpJmpSC/IncDecSlotJmp ≈5,6 ns/op; m7 (m2 senza
+guardia) +5,60 => guardia 0,4; m4b R=9 +2,88 (Sweep/iter ≈2,9) e m3 R=9 −2,60
+riproducibili; decomposizione dq 46,7 = loop 14,7 + Sweep 2,9 + BinarySCSCDst
+1,75 + ~27,4 corpo (nominati consts 4,7 + BinOp 5,4; **~17,5 NON nominati**:
+guardie, read_slot clone, funnel, store+gc_note, bounds) => il divario è il
+CORPO di OGNI handler, non il dispatch · xctrace-2: c3=discarded fissata con
+mutante casuale bilaterale => mispredict REFUTATO firmato; c0 solo per
+esclusione (mutante crc32 fallito: stallo) · incidente ENOSPC ktrace (10G)
+curato · DELIBERA R4 all'utente; verdetti wp169-harness/s169-*.out)
 (**S-168 = FETTA 0-bis MOCK sottrattivi** sul handler fuso BinarySCSCDst, A=m0
 braccio nullo (ricetta neutra, D −0,24, bl 6036=6036), giudice arith-dq R=5:
 m1 consts-predecode +4,72 · m2 BinOp cotto +5,20 · m3 hoist frames[top] −2,28 (0)
