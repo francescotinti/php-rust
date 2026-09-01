@@ -12,3 +12,4 @@
 Nominati ai canali: interno-handler ~23 ns (61%) + delivery-indiziato ~14,5 (38%) ⇒ firma ≥60% RAGGIUNTA (99% indiziato); 2 canali REFUTATI (pila, mispredict). CANALE DOMINANTE ≥15 ⇒ **GO-leva F1/F2 CONCESSO SUB JUDICE**: il gate di Gregg (chiusura SOTTRATTIVA ≥90% coi mock m1-m3) resta DOVUTO PRIMA della prima leva di trasformazione — i mock sono la prossima mezza-sessione di misura.
 Kill NON scattati: aggredibile indiziato ~37,5 ≥ 21; mock ancora da prezzare (il loro <10 resta vivo come kill).
 INCIDENTE S-167 #1 CONTATO: il copione census (f0d) non rimuoveva la COPIA-SORGENTE in /private/tmp ⇒ ENOSPC in finestra (c), traccia p-dq corrotta, ri-registrata; cura: rm della copia nel copione + pulizia; disciplina disco violata dal MIO artefatto.
+raw: /Volumes/Extreme Pro/Claude/phpr-raw-out/s167-f0c/
