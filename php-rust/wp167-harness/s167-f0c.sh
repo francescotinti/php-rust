@@ -20,7 +20,7 @@ MU="$H/arith-branchmut.php"
 OUT="$H/f0-out"; mkdir -p "$OUT"
 VERD="$H/s167-f0c-verdetto.out"; RC="$OUT/f0c.rc"
 [ -e "$VERD" ] && { echo "verdetto ESISTE" >&2; exit 7; }
-grep -qi "s167" /private/tmp/phpr-measure.lock 2>/dev/null || { echo "lock assente" | tee -a "$VERD"; echo 9 > "$RC"; exit 9; }
+grep -qi "s167\|s-167" /private/tmp/phpr-measure.lock 2>/dev/null || { echo "lock assente" | tee -a "$VERD"; echo 9 > "$RC"; exit 9; }
 PM="$(shasum -a 256 "$P" | cut -c1-8)"
 [ "$PM" = 092dcff4 ] || { echo "pin!=s166 ($PM)" | tee -a "$VERD"; echo 1 > "$RC"; exit 1; }
 {

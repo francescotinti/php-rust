@@ -1,0 +1,14 @@
+== S-167 FETTA 0 — VERDETTO (criterio s167-criterio-f0.md; gap finestra 37,88 ns/iter, pin s166 vs oracle) ==
+(a) REG_LOWER: OFF 127,12 → ON 46,48 ⇒ il lowering paga GIA' 80,6 ns/iter (miniera scavata; il residuo da nominare è il 46,5 ON).
+(b) STRIDE: D=+0,44 ≤ 0,5 ⇒ canale PILA/D-CACHE REFUTATO (KS-LE-167-1 parte 1 non scatta: il canale è refutato, non muto-e-uguale).
+(c) xctrace quote top-down BILATERALI (strumento COLLAUDATO: mutante branch 11,93× su c1):
+    · c1 (mispredict/discarded, semantica FISSATA dal mutante): phpr 0,005 vs oracle 0,031 = 0,17× ⇒ canale BRANCH-MISPREDICT REFUTATO — il match gigante è BEN predetto, phpr meglio dell'oracle;
+    · c0 («useful»-indiziata: quota dominante, scende nei mutanti): phpr 0,646×46,5=30,0 ns vs oracle 0,788×8,64=6,8 ⇒ ~23 ns/iter = LAVORO IN PIU' ESEGUITO nell'interno-handler (istruzioni, non stalli) — 61% del gap, COERENTE col reperto Hejlsberg (to_zval, match BinOp, bounds, gc_note);
+    · c2 (delivery-INDIZIATA: mutante-2 icache debole +0,038, semantica NON fissata — dichiarato): phpr 0,340×46,5=15,8 vs oracle 1,3 ⇒ ~14,5 ns/iter front-end-indiziati (38%);
+    · attribuzioni DA QUOTE = indizi forti bilaterali, NON firme sottrattive (§4: direzione+meccanismo, magnitudine non ripartita).
+(d) drop-census: strumento a COPERTURA PARZIALE (mutante Δ=+4 vs +200000) ⇒ INDISPONIBILE come canale; companion: 4 drop_s/iter + 2 ops/iter ai siti dcn!.
+(e) tetto-fuso: NON eseguito — la condizione era «(c) firma front-end»: il front-end è INDIZIATO ma non firmato, e il canale dominante è l'interno-handler ⇒ (e) resta in canna per l'esito-mock.
+== ESITO MECCANICO ==
+Nominati ai canali: interno-handler ~23 ns (61%) + delivery-indiziato ~14,5 (38%) ⇒ firma ≥60% RAGGIUNTA (99% indiziato); 2 canali REFUTATI (pila, mispredict). CANALE DOMINANTE ≥15 ⇒ **GO-leva F1/F2 CONCESSO SUB JUDICE**: il gate di Gregg (chiusura SOTTRATTIVA ≥90% coi mock m1-m3) resta DOVUTO PRIMA della prima leva di trasformazione — i mock sono la prossima mezza-sessione di misura.
+Kill NON scattati: aggredibile indiziato ~37,5 ≥ 21; mock ancora da prezzare (il loro <10 resta vivo come kill).
+INCIDENTE S-167 #1 CONTATO: il copione census (f0d) non rimuoveva la COPIA-SORGENTE in /private/tmp ⇒ ENOSPC in finestra (c), traccia p-dq corrotta, ri-registrata; cura: rm della copia nel copione + pulizia; disciplina disco violata dal MIO artefatto.

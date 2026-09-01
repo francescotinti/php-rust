@@ -1,0 +1,15 @@
+== s167 F0 braccio (c) xctrace bottleneck bilaterale (pin 092dcff4; template CPU Counters; adattamento quote DICHIARATO in testa allo script) ==
+./s167-f0c.sh: line 28: 38966 Abort trap: 6           xctrace record --template 'CPU Counters' --output "$T" --launch -- "$B" "$D" > "$OUT/f0c-$tag.rec.log" 2>&1
+record FALLITO (p-dq)
+== RIVERDETTO (c) su xml salvati/ri-registrati (ENOSPC curato; p-dq/p-mut ri-registrate una alla volta) ==
+o-dq: quote c0..c3 = 0.788 0.031 0.147 0.034 (campioni 599)
+o-mut: quote c0..c3 = 0.824 0.004 0.143 0.029 (campioni 886)
+p-dq: quote c0..c3 = 0.646 0.005 0.340 0.009 (campioni 2016)
+p-mut: quote c0..c3 = 0.674 0.065 0.206 0.055 (campioni 4302)
+MUTANTE: colonna mispredict-indiziata = c1 (Δquota +0.059, mut/dq = 11.93x, soglia 2x)
+firma front-end (c1 su arith-dq): phpr=0.005 oracle=0.031 rapporto=0.17x (soglia >=2x)
+rc=0
+== MUTANTE-2 (icache, 2000 statement srotolati) ==
+p-imut: quote c0..c3 = 0.611 0.002 0.378 0.008 (campioni 1413)
+Δquote imut−dq: c0:-0.035 c1:-0.003 c2:+0.038 c3:-0.000
+colonna che sale col footprint bytecode: c2 ⇒ c2 = Instruction Delivery (front-end)
