@@ -22,6 +22,8 @@ DER="${2:?derivato}"
 MAN="${3:?manifest}"
 SESS="${4:?sess attesa (es. s167)}"
 ALLOW="${5:-__nessun_allow__}"
+NUM="${SESS#s}"
+SESSFAM="s${NUM}|pair${NUM}|wp${NUM}-harness|t[0-9]+"  # famiglia della sessione attesa (tentativi inclusi)
 [ -s "$BASE" ] || { echo "rc=7 base mancante: $BASE"; exit 7; }
 [ -s "$DER" ]  || { echo "rc=7 derivato mancante: $DER"; exit 7; }
 diff "$BASE" "$DER" > "$MAN"
@@ -29,14 +31,16 @@ RES="$MAN.residui.$$"; : > "$RES"
 # (2) nomi di scrittura con tag stantio
 grep -nE '(^|[^A-Za-z])(VERD=|RC=|RCF=|LOG=|OUT=|DONE=)|\.done|\.rc([^a-z]|$)|\.log' "$DER" \
  | grep -E 's1[0-9]{2}|t1[0-9]|pair1[0-9]{2}|wp1[0-9]{2}' \
- | grep -v -E "${SESS}|$ALLOW" >> "$RES" || true
-# (3) etichette sessione/tentativo/harness stantie (ovunque nel derivato)
-grep -noE 's1[0-9]{2}|pair1[0-9]{2}|wp1[0-9]{2}-harness' "$DER" \
- | grep -v -E "${SESS}|$ALLOW" | sort -u >> "$RES" || true
+ | grep -v -E "${SESSFAM}|$ALLOW" >> "$RES" || true
+# (3) etichette sessione/tentativo/harness stantie: righe INTERE (l'estrazione
+# -o del token nudo impediva all'allow di matchare il CONTESTO — fix S-167)
+grep -nE 's1[0-9]{2}|pair1[0-9]{2}|wp1[0-9]{2}-harness' "$DER" \
+ | grep -v -E "${SESSFAM}|$ALLOW" | sort -u >> "$RES" || true
 {
 echo ""
 echo "== copia-gate v2 (az.rev.1 S-166) =="
 echo "base=$BASE derivato=$DER sess_attesa=$SESS allow=[$ALLOW]"
+sort -u "$RES" -o "$RES"
 if [ -s "$RES" ]; then
   echo "RESIDUI SOSPETTI ($(wc -l < "$RES" | tr -d ' ')) — correggere o dichiarare nell'allow UNO A UNO:"
   cat "$RES"
