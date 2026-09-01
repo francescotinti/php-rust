@@ -37,5 +37,4 @@ residuo `wp168-harness` nel build script sfuggito a copia-gate v2).
 - ⭐⭐ il collaudo di parità A==B deve controllare l'output ATTESO, non solo
   l'uguaglianza (due errori identici passano: colonna e2 vacua per m5/m7).
 - ⭐⭐ copia-gate v2 passa una riga con etichetta stantia E corrente insieme
-  (`wp168-harness` accanto a `s169`): il gate va per TOKEN, non per riga.
-- ⭐ xctrace lascia `.ktrace` da GB in $TMPDIR: purge nel copione, sempre.
+  (`wp168-harness` accanto a `s169`): il gate va per TOKEN, non per riga. ⭐ xctrace lascia `.ktrace` da GB in $TMPDIR: purge nel copione, sempre.
