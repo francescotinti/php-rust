@@ -37,5 +37,4 @@ di run `ab-out/build-m0.out` finito in un commit, poi untracked + .gitignore).
   (m4 ha speso un A/B intero per un braccio nullo; m4b l'ha dimostrato in 1 s).
 - ⭐⭐ un kill pre-registrato che scatta per 0,08 ns si ESEGUE (meccanico) ma si
   DICHIARA a filo: la banda del kill andava pre-registrata come la soglia.
-- ⭐ la soglia di un controllo positivo non può scalare col rumore dell'effetto
-  (10×rumore su far=40 ns nascondeva un morso di 3,7×): emenda + riesecuzione.
+- ⭐ la soglia di un controllo positivo non scala col rumore dell'effetto (10×rumore su far=40 ns nascondeva un morso 3,7×): emenda + riesecuzione.
