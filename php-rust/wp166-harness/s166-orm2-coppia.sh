@@ -2,7 +2,7 @@
 # s166-orm2-coppia.sh — coppia dbal+ORM sul pin s166 (DOVUTA: pin nuovo)
 # (criterio s166-criterio-orm.md; copia DICHIARATA di s164-orm-coppia.sh,
 # manifest s166-orm-copia.diff; adattamenti: pin s166 092dcff431bef876,
-# path wp166; RIF INVARIATO = registrato s162: ORA_REF=4,885 (REGGE per
+# path wp166; RIF AGGIORNATO (sanatura az.rev.4; era «INVARIATO», contraddiceva r.~188): ORA_REF=4,885 (REGGE per
 # R=5 oracle-only S-165, mediana 4,860), rapporto registrato S-162
 # [7,035;7,086]; DUE EMENDE dal verbale S-165 (entrambe PRE-registrate):
 # (E1) segnalazione ictx PER MOTORE (istruttoria ictx CHIUSA: firma =

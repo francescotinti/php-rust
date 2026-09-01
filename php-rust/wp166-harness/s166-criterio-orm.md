@@ -13,3 +13,11 @@
    di chiamate a metodo AMMESSE — simple_call arità esatta IC-hit — nel
    workload doctrine NON censita): un GIU' si dichiara SENZA ripartizione
    (census ORM proprio = apertura). rc SOLO da orm-out/rimisura.done.
+
+## REGOLA RIF (az.rev.4 S-166 — vincola ogni coppia futura)
+Il RIF (REF2/RREF/ORA_REF) si aggiorna SOLO se: (i) l'ultima coppia ha cifra
+VALIDA (sentinella quieta su TUTTE le gambe) E (ii) l'aggiornamento è
+dichiarato NEL CRITERIO della coppia successiva PRIMA del run — mai nel solo
+commento del copione — con le gambe fondanti (minimo 2 valide) e la storia
+del RIF precedente. Un RIF a 2 gambe è DICHIARATO fragile: alla prima coppia
+valida successiva si allarga il pool o si rifonda.
