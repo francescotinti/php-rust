@@ -1,0 +1,20 @@
+diff --git a/crates/php-runtime/src/compile/mod.rs b/crates/php-runtime/src/compile/mod.rs
+index 675d2c1a..cb4b9d2f 100644
+--- a/crates/php-runtime/src/compile/mod.rs
++++ b/crates/php-runtime/src/compile/mod.rs
+@@ -988,6 +988,15 @@ impl<'a> FnCompiler<'a> {
+             // peephole a valle: nessun indirizzo si sposta. Il grado (`main`)
+             // deve coincidere: un `main: true` fa anche il re-seed delle
+             // demozioni leggere, che un `main: false` non farebbe.
++            // MOCK m5 (S-169, criterio wp169-harness/s169-criterio.md): 8 `Op::Nop`
++            // dopo ogni statement-espressione, PRIMA dello Sweep (così il Block
++            // non riemette il suo): misura il costo PURO del dispatch per-op
++            // (handler vuoto). Braccio di MISURA, mai promuovibile.
++            if matches!(s.kind, StmtKind::Expr(_)) {
++                for _ in 0..8 {
++                    self.emit(Op::Nop);
++                }
++            }
+             let dup_block_sweep = matches!(s.kind, StmtKind::Block(_))
+                 && matches!(self.ops.last(), Some(Op::Sweep { main }) if *main == self.is_main);
+             if !dup_block_sweep && !self.sweep_elidable(&s.kind, start) {

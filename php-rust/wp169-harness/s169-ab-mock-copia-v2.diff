@@ -1,0 +1,49 @@
+2,3c2,3
+< # s168-ab-mock.sh <APATH> <AEXP8> <BPATH> <BEXP8> <TAG> — MOCK sottrattivi F0
+< # (criterio s168-criterio-mock.md): A = braccio di riferimento (pin s166 dallo
+---
+> # s169-ab-mock.sh <APATH> <AEXP8> <BPATH> <BEXP8> <TAG> [R] — MOCK sottrattivi F0 (S-169: R parametrico, default 5; soglia DECOMPOSIZIONE = max(rumore, SL 0,94) stampata ACCANTO al pavimento 4 — az.rev.1 S-168)
+> # (criterio s169-criterio-mock.md): A = braccio di riferimento (pin s166 dallo
+7c7
+< # COPIA DICHIARATA di wp167-harness/s167-f0ab.sh (manifest s168-ab-mock-copia.diff
+---
+> # COPIA DICHIARATA di wp167-harness/s167-f0ab.sh (manifest s169-ab-mock-copia.diff
+11c11
+< # rc autoritativo = ab-out/<TAG>.rc; verdetto s168-<TAG>-verdetto.out.
+---
+> # rc autoritativo = ab-out/<TAG>.rc; verdetto s169-<TAG>-verdetto.out.
+15c15
+< A="${1:?APATH}"; AEXP="${2:?AEXP8}"; BB="${3:?BPATH}"; BEXP="${4:?BEXP8}"; TAG="${5:?TAG}"
+---
+> A="${1:?APATH}"; AEXP="${2:?AEXP8}"; BB="${3:?BPATH}"; BEXP="${4:?BEXP8}"; TAG="${5:?TAG}"; R="${6:-5}"
+21c21
+< VERD="$H/s168-$TAG-verdetto.out"; RC="$OUT/$TAG.rc"
+---
+> VERD="$H/s169-$TAG-verdetto.out"; RC="$OUT/$TAG.rc"
+23c23
+< grep -qi "s168\|s-168" /private/tmp/phpr-measure.lock 2>/dev/null || { echo "lock assente" | tee -a "$VERD"; echo 9 > "$RC"; exit 9; }
+---
+> grep -qi "s169\|s-168" /private/tmp/phpr-measure.lock 2>/dev/null || { echo "lock assente" | tee -a "$VERD"; echo 9 > "$RC"; exit 9; }
+31c31
+< echo "== s168 MOCK $TAG — A=$AM MISURATO ($A) B=$BM MISURATO ($BB); giudice arith-dq N=250M + E2 loop nudo bilaterale; R=5 ABAB alternato; criterio s168-criterio-mock.md =="
+---
+> echo "== s169 MOCK $TAG — A=$AM MISURATO ($A) B=$BM MISURATO ($BB); giudice arith-dq N=250M + E2 loop nudo bilaterale; R=$R ABAB alternato; criterio s169-criterio.md =="
+40c40
+< for i in 1 2 3 4 5; do
+---
+> for i in $(seq 1 "$R"); do
+53c53,54
+< def med(v): return v[2]
+---
+> def med(v):
+>     n = len(v); return v[n//2] if n % 2 else (v[n//2-1]+v[n//2])/2
+57c58
+< D = med(dqA)-med(dqB); noise = max(dr1(dqA), dr1(dqB)); thr = max(4.0, noise, 0.94)
+---
+> D = med(dqA)-med(dqB); noise = max(dr1(dqA), dr1(dqB)); thr = max(4.0, noise, 0.94); thrd = max(noise, 0.94)
+58a60
+> print(f"DECOMPOSIZIONE (az.rev.1 S-168, soglia = max(rumore, SL 0,94) SENZA pavimento 4): soglia_dec={thrd:.2f} -> {'DIREZIONE FIRMATA' if abs(D) >= thrd else 'sotto il rumore'} ({'B più veloce' if D > 0 else 'B più lento'}; R={len(rows)})")
+
+== copia-gate v2 (az.rev.1 S-166) ==
+base=../wp168-harness/s168-ab-mock.sh derivato=s169-ab-mock.sh sess_attesa=s169 allow=[wp164-harness|wp129-harness|S-168|s167-f0ab|pin s166|s129-quiescenza]
+nessun residuo fuori allow — esito: rc=0

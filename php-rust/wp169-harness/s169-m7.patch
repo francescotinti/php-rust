@@ -1,0 +1,122 @@
+diff --git a/crates/php-runtime/src/vm/run.rs b/crates/php-runtime/src/vm/run.rs
+index 9df135a2..840101fb 100644
+--- a/crates/php-runtime/src/vm/run.rs
++++ b/crates/php-runtime/src/vm/run.rs
+@@ -146,6 +146,54 @@ fn ident_class(v: &Zval) -> Option<u8> {
+     })
+ }
+ 
++// MOCK m2 (S-168, criterio s168-criterio-mock.md): l'arm Long di
++// `binary_fast` COTTO per operatore (corpo VERBATIM, l'op non è più un dato a
++// runtime); ogni altra coppia di tag cade al funnel generico. Braccio di
++// MISURA, non leva promossa.
++#[inline(always)]
++fn mock_long_mul(lhs: &Zval, rhs: &Zval) -> Option<Zval> {
++    match (lhs, rhs) {
++        (Zval::Long(l), Zval::Long(r)) => Some(match l.checked_mul(*r) {
++            Some(s) => Zval::Long(s),
++            None => Zval::Double(*l as f64 * *r as f64),
++        }),
++        _ => None,
++    }
++}
++#[inline(always)]
++fn mock_long_sub(lhs: &Zval, rhs: &Zval) -> Option<Zval> {
++    match (lhs, rhs) {
++        (Zval::Long(l), Zval::Long(r)) => Some(match l.checked_sub(*r) {
++            Some(s) => Zval::Long(s),
++            None => Zval::Double(*l as f64 - *r as f64),
++        }),
++        _ => None,
++    }
++}
++#[inline(always)]
++fn mock_long_add(lhs: &Zval, rhs: &Zval) -> Option<Zval> {
++    match (lhs, rhs) {
++        (Zval::Long(l), Zval::Long(r)) => Some(match l.checked_add(*r) {
++            Some(s) => Zval::Long(s),
++            None => Zval::Double(*l as f64 + *r as f64),
++        }),
++        _ => None,
++    }
++}
++#[inline(always)]
++fn mock_long_shr(lhs: &Zval, rhs: &Zval) -> Option<Zval> {
++    match (lhs, rhs) {
++        (Zval::Long(l), Zval::Long(r)) => {
++            let (l, r) = (*l, *r);
++            if r < 0 {
++                return None;
++            }
++            Some(if r >= 64 { Zval::Long(if l < 0 { -1 } else { 0 }) } else { Zval::Long(l >> r) })
++        }
++        _ => None,
++    }
++}
++
+ /// WP-33 T1a: monomorphic fast paths for the hottest operand tag pairs
+ /// (census-driven: Concat/NotIdentical (Str,Str) ~30M each per WP suite
+ /// run, Long arithmetic/compares, cross-class `===` constants). Tried
+@@ -1958,6 +2006,54 @@ impl<'m> super::Vm<'m> {
+                     self.frames[top].stack.push(res);
+                 }
+                 Op::BinarySCSCDst { opa, la, ca, opb, lb, cb, op, opd, l, dst } => {
++                    // MOCK m2 (S-168, criterio s168-criterio-mock.md): BinOp «cotto» —
++                    // sulla tupla (Mul,Shr,Sub,Add) del driver i 4 `binary_fast(op,..)`
++                    // diventano 4 funzioni monomorfe Long (corpo VERBATIM); guardie
++                    // Undef/Ref, read_slot, funnel e reg_store_slot IDENTICI al ramo
++                    // originale (sotto, `else`). Il costo della guardia sulla tupla
++                    // resta nel mock = stima CONSERVATIVA dichiarata. Braccio di MISURA.
++                    // MOCK m7 (S-169, criterio wp169-harness/s169-criterio.md): m2 SENZA
++                    // guardia sulla tupla — prezza la guardia (D_m7 − D_m2). Semantica
++                    // NON preservata fuori dal driver (Mul/Shr/Sub/Add): sola MISURA.
++                    #[allow(clippy::overly_complex_bool_expr)]
++                    if true || matches!((*opa, *opb, *op, *opd), (BinOp::Mul, BinOp::Shr, BinOp::Sub, BinOp::Add)) {
++                        let cva = func.consts[*ca as usize].to_zval();
++                        let a = 'r: {
++                            {
++                                let lv = &self.frames[top].slots[*la as usize];
++                                if !matches!(lv, Zval::Undef | Zval::Ref(_)) {
++                                    if let Some(v) = mock_long_mul(lv, &cva) {
++                                        break 'r v;
++                                    }
++                                }
++                            }
++                            let lhs = self.reg_load_slot(top, func, *la);
++                            self.binary_value_ab(*opa, lhs, cva)?
++                        };
++                        let cvb = func.consts[*cb as usize].to_zval();
++                        let bv = 'r: {
++                            {
++                                let lv = &self.frames[top].slots[*lb as usize];
++                                if !matches!(lv, Zval::Undef | Zval::Ref(_)) {
++                                    if let Some(v) = mock_long_shr(lv, &cvb) {
++                                        break 'r v;
++                                    }
++                                }
++                            }
++                            let lhs = self.reg_load_slot(top, func, *lb);
++                            self.binary_value_ab(*opb, lhs, cvb)?
++                        };
++                        let res = match mock_long_sub(&a, &bv) {
++                            Some(v) => v,
++                            None => self.binary_value_ab(*op, a, bv)?,
++                        };
++                        let lhs = read_slot(&self.frames[top].slots[*l as usize]);
++                        let res = match mock_long_add(&lhs, &res) {
++                            Some(v) => v,
++                            None => self.binary_value_ab(*opd, lhs, res)?,
++                        };
++                        self.reg_store_slot(top, *dst, res)?;
++                    } else {
+                     // S-108 lotto-2 W10: l'albero BinarySCSC ESATTO (tre
+                     // funnel, ordine a→b→combine) poi la coda BinarySTDst
+                     // sul risultato senza transito di pila — stessa
+@@ -2003,6 +2099,7 @@ impl<'m> super::Vm<'m> {
+                         None => self.binary_value_ab(*opd, lhs, res)?,
+                     };
+                     self.reg_store_slot(top, *dst, res)?;
++                    }
+                 }
+                 Op::LoadVarPushConst { slot, cidx } => {
+                     // S-108 lotto-2 W13: pura coppia di push — LoadVar

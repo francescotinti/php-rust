@@ -1,0 +1,46 @@
+2,3c2,3
+< # s168-mock-build.sh prep <tag> [patch…] | build <tag> | chain <tag…> — build di un MOCK da
+< # COPIA dell'albero (tree==pin al byte + patch dichiarate `s168-*.patch`
+---
+> # s169-mock-build.sh prep <tag> [patch…] | build <tag> | chain <tag…> — build di un MOCK da
+> # COPIA dell'albero (tree==pin al byte + patch dichiarate `s169-*.patch`
+6c6
+< # /private/tmp/s168-mock-tgt (mai php-rust-output). `prep` è SINCRONO (copia +
+---
+> # /private/tmp/s169-mock-tgt (mai php-rust-output). `prep` è SINCRONO (copia +
+8c8
+< # la copia); `build` va detached. Esiti: bin /private/tmp/s168-mock-bin/phpr-<tag>,
+---
+> # la copia); `build` va detached. Esiti: bin /private/tmp/s169-mock-bin/phpr-<tag>,
+13c13
+< # file!()/panic-location): la copia vive a un path FISSO /private/tmp/s168-mock-src
+---
+> # file!()/panic-location): la copia vive a un path FISSO /private/tmp/s169-mock-src
+15c15
+< # prep+build in sequenza (patch = s168-<tag>.patch, nessuna per m0).
+---
+> # prep+build in sequenza (patch = s169-<tag>.patch, nessuna per m0).
+21c21
+<     if [ "$t" = m0 ]; then "$SELF" prep "$t" || exit $?; else "$SELF" prep "$t" "$(dirname "$SELF")/s168-$t.patch" || exit $?; fi
+---
+>     if [ "$t" = m0 ]; then "$SELF" prep "$t" || exit $?; else "$SELF" prep "$t" "$(dirname "$SELF")/s169-$t.patch" || exit $?; fi
+26,27c26,27
+< H="$REPO/wp168-harness"; OUT="$H/ab-out"; mkdir -p "$OUT" /private/tmp/s168-mock-bin
+< SRC="/private/tmp/s168-mock-src"
+---
+> H="$REPO/wp168-harness"; OUT="$H/ab-out"; mkdir -p "$OUT" /private/tmp/s169-mock-bin
+> SRC="/private/tmp/s169-mock-src"
+43c43
+< ( cd "$SRC/php-rust" && SOURCE_DATE_EPOCH=0 CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/private/tmp/s168-mock-tgt \
+---
+> ( cd "$SRC/php-rust" && SOURCE_DATE_EPOCH=0 CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/private/tmp/s169-mock-tgt \
+47,48c47,48
+< cp /private/tmp/s168-mock-tgt/release/phpr "/private/tmp/s168-mock-bin/phpr-$TAG" || { echo 7 > "$RC"; rm -rf "$SRC"; touch "$DONE"; exit 7; }
+< echo "bin=/private/tmp/s168-mock-bin/phpr-$TAG hash=$(shasum -a 256 "/private/tmp/s168-mock-bin/phpr-$TAG" | cut -c1-16) fine $(date '+%F %T')" >> "$RES"
+---
+> cp /private/tmp/s169-mock-tgt/release/phpr "/private/tmp/s169-mock-bin/phpr-$TAG" || { echo 7 > "$RC"; rm -rf "$SRC"; touch "$DONE"; exit 7; }
+> echo "bin=/private/tmp/s169-mock-bin/phpr-$TAG hash=$(shasum -a 256 "/private/tmp/s169-mock-bin/phpr-$TAG" | cut -c1-16) fine $(date '+%F %T')" >> "$RES"
+
+== copia-gate v2 (az.rev.1 S-166) ==
+base=../wp168-harness/s168-mock-build.sh derivato=s169-mock-build.sh sess_attesa=s169 allow=[S-167|pin!=s166]
+nessun residuo fuori allow — esito: rc=0

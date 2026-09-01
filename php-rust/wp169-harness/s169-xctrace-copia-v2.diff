@@ -1,0 +1,61 @@
+2c2,3
+< # s168-xctrace.sh — SANATURE az.rev.2+4 S-167 sul braccio (c) xctrace 'CPU
+---
+> # s169-xctrace.sh — XCTRACE-2 (criterio s169-criterio.md p.3): mutante branch NON predicibile (rbm) + mutante c0 (crc32 L1) bilaterali. Derivato da s168-xctrace.sh. Testo originale S-168:
+> # s169-xctrace.sh — SANATURE az.rev.2+4 S-167 sul braccio (c) xctrace 'CPU
+8c9
+< # COPIA DICHIARATA di wp167-harness/s167-f0c.sh (manifest s168-xctrace-copia.diff
+---
+> # COPIA DICHIARATA di wp167-harness/s167-f0c.sh (manifest s169-xctrace-copia.diff
+17,18c18,19
+< MU="$H/../wp167-harness/arith-branchmut.php"
+< MS="$H/arith-memstall.php"
+---
+> RB="$H/../wp168-harness/arith-rbranchmut.php"
+> C0="$H/arith-c0mut.php"
+20c21
+< VERD="$H/s168-xctrace-verdetto.out"; RC="$OUT/xctrace.rc"
+---
+> VERD="$H/s169-xctrace-verdetto.out"; RC="$OUT/xctrace.rc"
+22c23
+< grep -qi "s168\|s-168" /private/tmp/phpr-measure.lock 2>/dev/null || { echo "lock assente" | tee -a "$VERD"; echo 9 > "$RC"; exit 9; }
+---
+> grep -qi "s169\|s-168" /private/tmp/phpr-measure.lock 2>/dev/null || { echo "lock assente" | tee -a "$VERD"; echo 9 > "$RC"; exit 9; }
+26,27c27,28
+< echo "== s168 xctrace sanature (pin $PM; template CPU Counters; repliche R=3 p-dq/o-dq/o-mut + mutante backend memstall bilaterale) =="
+< for tag in p-dq-1 o-dq-1 o-mut-1 p-dq-2 o-dq-2 o-mut-2 p-dq-3 o-dq-3 o-mut-3 p-ms o-ms; do
+---
+> echo "== s169 xctrace sanature (pin $PM; template CPU Counters; repliche R=3 p-dq/o-dq/o-mut + mutante backend memstall bilaterale) =="
+> for tag in p-dq o-dq p-rbm o-rbm p-c0 o-c0; do
+29c30
+<   case "$tag" in *-dq-*) D="$DQ";; *-mut-*) D="$MU";; *-ms) D="$MS";; esac
+---
+>   case "$tag" in *-dq) D="$DQ";; *-rbm) D="$RB";; *-c0) D="$C0";; esac
+54c55
+< for tag in ("p-dq-1","p-dq-2","p-dq-3","o-dq-1","o-dq-2","o-dq-3","o-mut-1","o-mut-2","o-mut-3","p-ms","o-ms"):
+---
+> for tag in ("p-dq","o-dq","p-rbm","o-rbm","p-c0","o-c0"):
+59,71c60,64
+< def spread(pref):
+<     rs = [res[f"{pref}-{k}"] for k in (1,2,3)]
+<     return [ (sum(r[i] for r in rs)/3, max(r[i] for r in rs)-min(r[i] for r in rs)) for i in range(4)]
+< for pref in ("p-dq","o-dq","o-mut"):
+<     sp = spread(pref)
+<     print(f"REPLICHE {pref}: media±spread c0..c3 = " + " ".join(f"{m:.3f}±{s:.3f}" for m,s in sp))
+< odq, omut = spread("o-dq"), spread("o-mut")
+< print(f"o-mut c1 vs o-dq c1: {omut[1][0]:.3f} vs {odq[1][0]:.3f} (spread {omut[1][1]:.3f}/{odq[1][1]:.3f}) -> {'ANOMALIA CONFERMATA (riproducibile)' if omut[1][0] < odq[1][0]-max(odq[1][1],omut[1][1]) else 'NON riproducibile: era rumore N=1'}")
+< pdq = spread("p-dq")
+< for side, ms, base in (("phpr", res["p-ms"], [m for m,_ in pdq]), ("oracle", res["o-ms"], [m for m,_ in odq])):
+<     d = [ms[i]-base[i] for i in range(4)]
+<     ci = max(range(4), key=lambda i: d[i])
+<     print(f"MUTANTE BACKEND {side}: Δquote memstall−dq c0..c3 = " + " ".join(f"{x:+.3f}" for x in d) + f" -> colonna che sale = c{ci}")
+---
+> for side in ("p","o"):
+>     for mut, att in (("rbm","c3 (discarded) se il mutante branch casuale morde"),("c0","c0 (useful) se c0 è lavoro retiring")):
+>         d = [res[f"{side}-{mut}"][i]-res[f"{side}-dq"][i] for i in range(4)]
+>         ci = max(range(4), key=lambda i: d[i])
+>         print(f"MUTANTE {mut} {'phpr' if side=='p' else 'oracle'}: Δquote vs dq c0..c3 = " + " ".join(f"{x:+.3f}" for x in d) + f" -> colonna che sale = c{ci} (attesa: {att})")
+
+== copia-gate v2 (az.rev.1 S-166) ==
+base=../wp168-harness/s168-xctrace.sh derivato=s169-xctrace.sh sess_attesa=s169 allow=[wp164-harness|wp167-harness|wp168-harness|S-167|S-168|s167-f0c|pin!=s166]
+nessun residuo fuori allow — esito: rc=0
