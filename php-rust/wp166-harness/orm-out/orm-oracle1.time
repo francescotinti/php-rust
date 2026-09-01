@@ -1,20 +1,20 @@
 
 Using DB driver Doctrine\DBAL\Logging\Driver
-        5.44 real         4.90 user         0.48 sys
-           192266240  maximum resident set size
+        5.34 real         4.88 user         0.45 sys
+           192118784  maximum resident set size
                    0  average shared memory size
                    0  average unshared data size
                    0  average unshared stack size
-               12183  page reclaims
-                 203  page faults
+               12283  page reclaims
+                  96  page faults
                    0  swaps
                    0  block input operations
                    0  block output operations
                    0  messages sent
                    0  messages received
                    0  signals received
-                 231  voluntary context switches
-                1031  involuntary context switches
-         36174512572  instructions retired
-         11260211913  cycles elapsed
-           173982392  peak memory footprint
+                  21  voluntary context switches
+                  52  involuntary context switches
+         36092920166  instructions retired
+         11148100614  cycles elapsed
+           173802120  peak memory footprint

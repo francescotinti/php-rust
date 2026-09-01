@@ -1,17 +1,17 @@
 coppia-s166 (user CPU; pavimenti PARZIALI phpunit --version: orm o=0.060 p=0.070 · dbal o=0.060 p=0.190)
 grade=VERDICT  # derivazione meccanica dai .time
-orm_leg1: oracle_user=4.93 (sys=0.45) phpr_user=34.42 (sys=1.18) ratio_raw=6.982 ratio_net=7.053
-orm_leg2: oracle_user=4.94 (sys=0.45) phpr_user=34.34 (sys=1.17) ratio_raw=6.951 ratio_net=7.023
-orm_ictx_abs: oracle1=82 phpr1=1476 oracle2=1415 phpr2=414
-orm_ictx/s (gate emenda S-127): oracle1=15.2 phpr1=41.4 oracle2=261.1 phpr2=11.7  SEGNALATE(>1,5x med): ['oracle2', 'phpr1']
-dbal_leg1: oracle_user=1.15 (sys=0.20) phpr_user=8.17 (sys=0.37) ratio_raw=7.104 ratio_net=7.321
-dbal_leg2: oracle_user=1.16 (sys=0.21) phpr_user=8.23 (sys=0.36) ratio_raw=7.095 ratio_net=7.309
-dbal_ictx_abs: oracle1=120 phpr1=90 oracle2=96 phpr2=143
-dbal_ictx/s (gate emenda S-127): oracle1=87.6 phpr1=10.5 oracle2=69.1 phpr2=16.6  contesa ok
+orm_leg1: oracle_user=4.88 (sys=0.45) phpr_user=34.43 (sys=1.25) ratio_raw=7.055 ratio_net=7.129
+orm_leg2: oracle_user=4.98 (sys=0.48) phpr_user=34.28 (sys=1.21) ratio_raw=6.884 ratio_net=6.953
+orm_ictx_abs: oracle1=52 phpr1=664 oracle2=49 phpr2=174
+orm_ictx/s (gate emenda S-127): oracle1=9.7 phpr1=18.5 oracle2=8.9 phpr2=4.9  SEGNALATE(>1,5x med): ['phpr1']
+dbal_leg1: oracle_user=1.15 (sys=0.21) phpr_user=8.26 (sys=0.37) ratio_raw=7.183 ratio_net=7.404
+dbal_leg2: oracle_user=1.15 (sys=0.21) phpr_user=8.24 (sys=0.37) ratio_raw=7.165 ratio_net=7.385
+dbal_ictx_abs: oracle1=323 phpr1=57 oracle2=392 phpr2=63
+dbal_ictx/s (gate emenda S-127): oracle1=222.8 phpr1=6.5 oracle2=272.2 phpr2=7.3  contesa ok
 dbal_parita': phpr_failset_stabile=True |phpr_fail|=10 |diff_vs_oracle|=10
 dbal_diff_nomi: Doctrine\DBAL\Tests\Functional\PortabilityTest::testCaseConversion with data set "lower" (Doctrine\DBAL\ColumnCase Enum (LOWER), ['test_int', 'test_string', 'test_null']) | Doctrine\DBAL\Tests\Functional\PortabilityTest::testCaseConversion with data set "upper" (Doctrine\DBAL\ColumnCase Enum (UPPER), ['TEST_INT', 'TEST_STRING', 'TEST_NULL']) | Doctrine\DBAL\Tests\Functional\PortabilityTest::testCaseConversionColumnName with data set "lower" (Doctrine\DBAL\ColumnCase Enum (LOWER), ['test_int', 'test_string', 'test_null']) | Doctrine\DBAL\Tests\Functional\PortabilityTest::testCaseConversionColumnName with data set "upper" (Doctrine\DBAL\ColumnCase Enum (UPPER), ['TEST_INT', 'TEST_STRING', 'TEST_NULL']) | Doctrine\DBAL\Tests\Functional\PortabilityTest::testFetchAllNullColumn | Doctrine\DBAL\Tests\Functional\PortabilityTest::testFetchColumn with data set "int" ('Test_Int', [1, 2]) | Doctrine\DBAL\Tests\Functional\PortabilityTest::testFetchColumn with data set "string" ('Test_String', ['foo', 'foo']) | Doctrine\DBAL\Tests\Functional\PortabilityTest::testFullFetchMode | Doctrine\DBAL\Tests\Functional\PortabilityTest::testGetDatabaseName | Doctrine\DBAL\Tests\Schema\Name\Parser\GenericNameParserTest::testValidInput with data set #11 ('schéma."übermäßigkeit".`àçcên...ràctér', [Doctrine\DBAL\Schema\Name\Identifier Object (...), Doctrine\DBAL\Schema\Name\Identifier Object (...), Doctrine\DBAL\Schema\Name\Identifier Object (...), Doctrine\DBAL\Schema\Name\Identifier Object (...), Doctrine\DBAL\Schema\Name\Identifier Object (...)])
-attesa-MC1 assoluto (companion): phpr_orm_net_new=[34.27; 34.35] ref=[34.47; 34.51] Delta=[+0.12; +0.24] s
-attesa-MC1 ORACLE-NORMALIZZATO (CANONICO coppia): net_norm=[34.31; 34.46] (ORA_REF=4.885, oracle_net_gambe=[4.87, 4.88]) Delta_norm=[+0.01; +0.20] s
-rapporto net (companion): [7.023; 7.053] vs registrato S-162 [7.035; 7.086]
-attesa-MC1: COMPATIBILE (Delta_norm dentro il rumore ±0.293; attesa a tetto 0.0-0.0 SOTTO risoluzione — esito dichiarato, nessuna cifra attribuita a L-AU1)
-gambe ictx SEGNALATE ['oracle2', 'phpr1'] — a verbale (rodaggio nel canone; se ricorre, istruttoria dedicata)
+attesa-MC1 assoluto (companion): phpr_orm_net_new=[34.21; 34.36] ref=[34.27; 34.35] Delta=[-0.09; +0.14] s
+attesa-MC1 ORACLE-NORMALIZZATO (CANONICO coppia): net_norm=[33.97; 34.82] (ORA_REF=4.885, oracle_net_gambe=[4.82, 4.92]) Delta_norm=[-0.55; +0.38] s
+rapporto net (companion): [6.953; 7.129] vs registrato S-162 [7.023; 7.053]
+SENTINELLA ORACLE FUORI BANDA [4.83;4.94]: gambe [4.82] — Delta_norm NON GIUDICANTE (emenda S-166), istruttoria drift dedicata
+gambe ictx SEGNALATE ['phpr1'] — a verbale (rodaggio nel canone; se ricorre, istruttoria dedicata)

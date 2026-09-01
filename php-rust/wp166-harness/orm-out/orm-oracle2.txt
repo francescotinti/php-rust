@@ -1,7 +1,7 @@
 PHPUnit 11.5.56 by Sebastian Bergmann and contributors.
 
 Runtime:       PHP 8.5.7
-Configuration: /private/tmp/phpr-s166-orm/orm-work/phpunit.xml.dist
+Configuration: /private/tmp/phpr-s166-orm2/orm-work/phpunit.xml.dist
 
 .............................................................   61 / 3484 (  1%)
 .............................................................  122 / 3484 (  3%)
@@ -62,7 +62,7 @@ S............................................................ 1281 / 3484 ( 36%)
 .SS.......................................................... 3477 / 3484 ( 99%)
 .......                                                       3484 / 3484 (100%)
 
-Time: 00:05.017, Memory: 138.50 MB
+Time: 00:05.057, Memory: 138.50 MB
 
 OK, but there were issues!
 Tests: 3484, Assertions: 12003, Skipped: 59, Incomplete: 2.

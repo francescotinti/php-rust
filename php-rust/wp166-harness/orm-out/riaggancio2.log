@@ -1,2 +1,21 @@
 2026-09-01 15:07:32 attesa quiete continua (6x30s <5% mediaanalysisd+mdworker)
 2026-09-01 15:07:34 indexer_cpu=4.3 calm=1
+2026-09-01 15:08:06 indexer_cpu=6.7 calm=0
+2026-09-01 15:08:38 indexer_cpu=9.5 calm=0
+2026-09-01 15:09:10 indexer_cpu=6.2 calm=0
+2026-09-01 15:09:43 indexer_cpu=9.8 calm=0
+2026-09-01 15:10:15 indexer_cpu=9.6 calm=0
+2026-09-01 15:10:47 indexer_cpu=11.6 calm=0
+2026-09-01 15:11:19 indexer_cpu=9.6 calm=0
+2026-09-01 15:11:51 indexer_cpu=9.4 calm=0
+2026-09-01 15:12:23 indexer_cpu=12.6 calm=0
+2026-09-01 15:12:55 indexer_cpu=8.7 calm=0
+2026-09-01 15:13:27 indexer_cpu=10 calm=0
+2026-09-01 15:14:00 indexer_cpu=8.8 calm=0
+2026-09-01 15:14:32 indexer_cpu=0 calm=1
+2026-09-01 15:15:04 indexer_cpu=0.1 calm=2
+2026-09-01 15:15:36 indexer_cpu=0 calm=3
+2026-09-01 15:16:08 indexer_cpu=0 calm=4
+2026-09-01 15:16:40 indexer_cpu=0 calm=5
+2026-09-01 15:17:13 indexer_cpu=0 calm=6
+2026-09-01 15:17:13 quiete continua — rilancio s166-lancio-orm2.sh
