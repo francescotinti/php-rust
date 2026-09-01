@@ -1,0 +1,30 @@
+2c2
+< # s166-orm-coppia.sh — coppia dbal+ORM sul pin s165 (DOVUTA: pin nuovo)
+---
+> # s166-orm2-coppia.sh — coppia dbal+ORM sul pin s166 (DOVUTA: pin nuovo)
+4c4
+< # manifest s166-orm-copia.diff; adattamenti: pin s165 1fd8757d2f72dc3e,
+---
+> # manifest s166-orm-copia.diff; adattamenti: pin s166 092dcff431bef876,
+11c11
+< # attesa L-MC1d su ORM: direzione <=0, magnitudine NON pre-registrabile
+---
+> # attesa L-MCk su ORM: direzione <=0, magnitudine NON pre-registrabile
+32c32
+< [ "$PINM" = "1fd8757d2f72dc3e" ] || { echo "rc=9 pin!=s163" > "$OUT/rimisura.done"; exit 9; }
+---
+> [ "$PINM" = "092dcff431bef876" ] || { echo "rc=9 pin!=s166" > "$OUT/rimisura.done"; exit 9; }
+188c188
+< REF2_MIN, REF2_MAX = 34.47, 34.51  # RIF s162-finestra gambe PULITE (2/2, sentinella negativa)
+---
+> REF2_MIN, REF2_MAX = 34.27, 34.35  # RIF AGGIORNATO: finestra VALIDA s166-mattina @ pin s165 (sentinella quieta 4,87/4,88) — dichiarato
+192,193c192,193
+< RREF_LO, RREF_HI = 7.035, 7.086    # rapporto net registrato S-162 (companion)
+< ATT_LO, ATT_HI = 0.0, 0.0          # attesa L-MC1d DICHIARATA: direzione <=0 (mai peggiorare); magnitudine NON pre-registrabile (quota di chiamate a metodo AMMESSE — simple_call arita' esatta IC-hit — nel workload doctrine NON censita); GIU' = coerente con la leva, da dichiarare SENZA ripartizione senza census proprio (Composer/Doctrine a REGIME = classmap hit, i miss autoload [obj,metodo] RARI; quota miss NON censita => sotto-risoluzione; attesa-AF1 resta APERTA, non risolta da questa coppia)
+---
+> RREF_LO, RREF_HI = 7.023, 7.053    # rapporto net registrato s166-mattina @ pin s165 (companion)
+> ATT_LO, ATT_HI = 0.0, 0.0          # attesa L-MCk DICHIARATA: direzione <=0 (mai peggiorare); magnitudine NON pre-registrabile (quota di chiamate a metodo AMMESSE — simple_call arita' esatta IC-hit — nel workload doctrine NON censita); GIU' = coerente con la leva, da dichiarare SENZA ripartizione senza census proprio (Composer/Doctrine a REGIME = classmap hit, i miss autoload [obj,metodo] RARI; quota miss NON censita => sotto-risoluzione; attesa-AF1 resta APERTA, non risolta da questa coppia)
+226c226
+<         print(f"attesa-MC1: COMPATIBILE (Delta_norm dentro il rumore ±{RES}; attesa a tetto {ATT_LO}-{ATT_HI} SOTTO risoluzione — esito dichiarato, nessuna cifra attribuita a L-AU1)")
+---
+>         print(f"attesa-MC1: COMPATIBILE (Delta_norm dentro il rumore ±{RES}; attesa a tetto {ATT_LO}-{ATT_HI} SOTTO risoluzione — esito dichiarato, nessuna cifra attribuita alla leva)")

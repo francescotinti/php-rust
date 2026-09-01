@@ -1,0 +1,20 @@
+7c7
+< # finestra quieta (uptime + top nel log) e lancia s166-pair.sh t15.
+---
+> # finestra quieta (uptime + top nel log) e lancia s166-pair2.sh t16.
+13c13
+< LOG="$H/pair-out/lancio-t15.log"; mkdir -p "$H/pair-out"
+---
+> LOG="$H/pair-out/lancio-t16.log"; mkdir -p "$H/pair-out"
+31,32c31,32
+< Q="$H/pair-out/quiet-decl-t15.txt"
+< { echo "== dichiarazione finestra quieta t15 $(date '+%F %T') =="
+---
+> Q="$H/pair-out/quiet-decl-t16.txt"
+> { echo "== dichiarazione finestra quieta t16 $(date '+%F %T') =="
+36,37c36,37
+< echo "$(date '+%F %T') quiete raggiunta — dichiarazione in quiet-decl-t15.txt — lancio pair t15" >> "$LOG"
+< exec /bin/bash "$H/s166-pair.sh" t15
+---
+> echo "$(date '+%F %T') quiete raggiunta — dichiarazione in quiet-decl-t16.txt — lancio pair t16" >> "$LOG"
+> exec /bin/bash "$H/s166-pair2.sh" t16
