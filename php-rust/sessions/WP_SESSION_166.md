@@ -10,7 +10,7 @@ arith 5,4 = · prop 5,5 (5,6↓tick) · calls 4,8 (4,9↓tick) · str 4,2 = · a
 conservato · **WP t15 1,746 (banda_ON 0,005 RECORD) e t16 1,749, entrambe
 COMPATIBILI** (assetto post-leve da 1,761) · ORM registrato **[7,023;7,053]**
 (finestra valida @ s165) · corpus 1412×2 · **leve spedite: 1 PROMOSSA** ·
-incidenti: 1 (+1 recidiva dichiarata).
+incidenti: 1 (+2 recidive di classe copia: 1 dichiarata, 1 trovata dal revisore).
 
 ## Esiti secchi
 1·fx-mc2 (az.rev.1 S-165): pin==funnel BYTE-ID su error-path/__get/deref=false/
