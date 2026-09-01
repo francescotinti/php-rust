@@ -16,7 +16,7 @@ for f in crates Cargo.toml Cargo.lock rust-toolchain.toml .cargo; do
   cp -R "$REPO/$f" "$SRC/php-rust/" || { echo "rc=7 copia ($f)" >> "$VERD"; echo 7 > "$RC"; exit 7; }
 done
 ( cd "$SRC/php-rust" && SOURCE_DATE_EPOCH=0 CARGO_INCREMENTAL=0 CARGO_TARGET_DIR="$SRC/tgt" \
-  cargo build --release -p php-cli --features zval-census ) > "$OUT/f0d-build.log" 2>&1 \
+  cargo build --release -p php-cli --features zval-census,mem-census ) > "$OUT/f0d-build.log" 2>&1 \
   || { echo "rc=7 build probe (log f0-out/f0d-build.log)" >> "$VERD"; echo 7 > "$RC"; exit 7; }
 P="$SRC/tgt/release/phpr"
 {

@@ -1,0 +1,8 @@
+== s167 F0 braccio (d) drop-census (probe d8898170 da tree==pin; driver N=2M; mutante +200000 DropS atteso) ==
+repliche main: r1==r2 · mutante: r1==r2
+conteggi/iter (main, N=2M): drop_s=4.000 ops=2.000
+MUTANTE DropS: mut=0 attesa=base(0)+200000 Delta=0 -> FUORI ATTESA
+ESITO: rc=5
+== RIVERDETTO (parser emendato, STESSI raw — dichiarato) ==
+Bug del parser (chiave DropS vs drop_s) SMASCHERATO DAL MUTANTE al primo giro; col parser giusto: main drop_s=4,000/iter · ops=2,000/iter ai siti dcn! (CmpJmpSC 2 drop/op + op-statement 2/iter); mutante mut/iter drop_s=4,0 ops=3,0 · Delta drop_s=+4 TOTALE vs attesa +200000 ⇒ la stringa temporanea muore a un sito SENZA hook dcn! (overwrite dello slot).
+VERDETTO (d): STRUMENTO A COPERTURA PARZIALE — il mutante prova che dcn! NON censisce tutte le drop ⇒ (d) INDISPONIBILE come canale-verdetto (clausola del criterio); conteggi per-sito a COMPANION. Il canale interno-handler si prezza per SOTTRAZIONE con i mock m1-m3. rc=5 CONFERMATO (strumento fuori attesa), esito DICHIARATO e non assolto.

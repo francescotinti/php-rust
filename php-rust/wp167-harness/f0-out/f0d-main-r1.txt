@@ -1,0 +1,15 @@
+zvalcensus slot_reads=2000001 slot_reads_rc=0 slot_reads_avoided=0 would_take=0 would_take_rc=0 would_take_safe=0 would_take_safe_rc=0 would_take_safe_str=0 would_take_safe_ref=0 sites_total=0 sites_movable=0 sites_safe=0
+zvalcensus_s101 propget_val=0 propget_val_rc=0 propset_val=0 propset_val_rc=0 bindst_opnd=0 bindst_opnd_rc=0 recv_clone_load=0 recv_clone_prop=0 recv_drop_pop=0 gcnote_total=2000002 gcnote_scalar=2000002 gcnote_obj=0 gcnote_site_pop=0 gcnote_site_propset_old=0
+zvalcensus_s145 gcnote_cont=0
+zvalcensus_s140 hint_checks=0 hint_checks_rc=0 hint_avoided=0
+zvalcensus_s147 would_take_safe_arr=0 would_take_safe_obj=0
+zvalcensus_s142 rd1_arrays=1 rd1_elems=1 rd1_tombs=0
+stackcensus site=PushConst ops=4 push=4 pop=0 peek=0 len=0 elem=0 drop_s=0 drop_c=0
+stackcensus site=CmpJmpSC ops=2000001 push=0 pop=0 peek=0 len=0 elem=0 drop_s=4000002 drop_c=0
+stackcensus site=Sweep ops=2000003 push=0 pop=0 peek=0 len=0 elem=0 drop_s=0 drop_c=0
+stackcensus_tot push=4 pop=0 peek=0 len=0 elem=0 drop_s=4000002 drop_c=0
+alloccensus galloc_bytes=63839018 gfree_bytes=59794924 galloc_n=183586 gfree_n=145865
+realloccensus n=13664 old_bytes=5513856 new_bytes=8502394
+allochist le16=84146 le32=15417 le48=11834 le64=5266 le96=2312 le128=955 le256=49290 le512=5448 le1k=6572 le4k=1887 gt4k=459
+freehist le16=69372 le32=13750 le48=10120 le64=2403 le96=2561 le128=983 le256=35930 le512=4965 le1k=3329 le4k=1889 gt4k=563
+argarity a0=0 a1=0 a2=0 a3=0 a4=0 ge5=0
