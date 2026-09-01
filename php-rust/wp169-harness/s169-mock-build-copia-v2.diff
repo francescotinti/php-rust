@@ -28,7 +28,7 @@
 < H="$REPO/wp168-harness"; OUT="$H/ab-out"; mkdir -p "$OUT" /private/tmp/s168-mock-bin
 < SRC="/private/tmp/s168-mock-src"
 ---
-> H="$REPO/wp168-harness"; OUT="$H/ab-out"; mkdir -p "$OUT" /private/tmp/s169-mock-bin
+> H="$REPO/wp169-harness"; OUT="$H/ab-out"; mkdir -p "$OUT" /private/tmp/s169-mock-bin
 > SRC="/private/tmp/s169-mock-src"
 43c43
 < ( cd "$SRC/php-rust" && SOURCE_DATE_EPOCH=0 CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/private/tmp/s168-mock-tgt \
@@ -42,5 +42,5 @@
 > echo "bin=/private/tmp/s169-mock-bin/phpr-$TAG hash=$(shasum -a 256 "/private/tmp/s169-mock-bin/phpr-$TAG" | cut -c1-16) fine $(date '+%F %T')" >> "$RES"
 
 == copia-gate v2 (az.rev.1 S-166) ==
-base=../wp168-harness/s168-mock-build.sh derivato=s169-mock-build.sh sess_attesa=s169 allow=[S-167|pin!=s166]
+base=wp168-harness/s168-mock-build.sh derivato=wp169-harness/s169-mock-build.sh sess_attesa=s169 allow=[S-167|pin!=s166]
 nessun residuo fuori allow — esito: rc=0

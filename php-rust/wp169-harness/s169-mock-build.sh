@@ -23,7 +23,7 @@ if [ "$MODE" = chain ]; then
   done; exit 0
 fi
 REPO="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust"
-H="$REPO/wp168-harness"; OUT="$H/ab-out"; mkdir -p "$OUT" /private/tmp/s169-mock-bin
+H="$REPO/wp169-harness"; OUT="$H/ab-out"; mkdir -p "$OUT" /private/tmp/s169-mock-bin
 SRC="/private/tmp/s169-mock-src"
 RC="$OUT/build-$TAG.rc"; LOG="$OUT/build-$TAG.log"; RES="$OUT/build-$TAG.out"; DONE="$OUT/build-$TAG.done"
 if [ "$MODE" = prep ]; then
