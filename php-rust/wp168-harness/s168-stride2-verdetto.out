@@ -1,0 +1,13 @@
+== s168 STRIDE sanatura — pin s166 092dcff4 MISURATO; R=5 interleaved; N dal sorgente: dq=250000000 stride=250000000 stride2=250000000 near=20000000 far=20000000 ==
+layout (PHPR_DUMP_OPS, dichiarato): dq $s=slot0 $i=slot1 (stessa linea) · stride S-167 $s=14 $i=15 (STESSA linea, byte 224-255) · stride2 $s=0 $i=15 (linee 0 e 3, DISTINTE)
+sentinella LS: /Applications/Antigravity /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.96.0-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer 
+floor phpr=0.01
+  giro1: dq=11.65 stride=11.79 stride2=11.70 near=1.82 far=6.76
+  giro2: dq=11.57 stride=11.67 stride2=11.67 near=1.80 far=7.74
+  giro3: dq=11.75 stride=11.66 stride2=11.58 near=1.80 far=7.46
+  giro4: dq=11.68 stride=11.65 stride2=11.77 near=1.79 far=7.21
+  giro5: dq=11.76 stride=11.63 stride2=11.66 near=1.78 far=6.33
+dq=46.68 stride(S-167, stessa linea)=46.60 D=-0.08 · stride2(linee distinte)=46.64 D2=-0.04 ns/iter (rumore drop-1 dq'=0.44 st'=0.16 st2'=0.48; soglia=max(0,5, rumore)=0.50)
+CONTROLLO POSITIVO D-cache: near=89.5 far=360.0 ns/iter D=+270.5 (rumore near'=1.0 far'=49.0) -> MORDE: il cronometro vede il D-cache
+VERDETTO: canale pila/D-cache su \$s/\$i NON RILEVATO a risoluzione 0.50 ns/iter CON layout verificato (linee distinte) E strumento collaudato dal controllo positivo ⇒ REFUTATO alla risoluzione dichiarata
+ESITO rc=0

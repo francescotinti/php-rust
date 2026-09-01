@@ -1,0 +1,19 @@
+diff --git a/crates/php-runtime/src/compile/mod.rs b/crates/php-runtime/src/compile/mod.rs
+index 675d2c1a..6a768e2c 100644
+--- a/crates/php-runtime/src/compile/mod.rs
++++ b/crates/php-runtime/src/compile/mod.rs
+@@ -1029,6 +1029,14 @@ impl<'a> FnCompiler<'a> {
+                 | StmtKind::Break(_)
+                 | StmtKind::Continue(_)
+                 | StmtKind::Goto(_)
++                // MOCK m4b (S-168, criterio s168-criterio-mock.md p.8): NESSUN
++                // Sweep dopo statement-espressione E blocchi (il corpo del `for`
++                // è un Block: m4 ne elideva solo lo statement interno e il Block
++                // riemetteva il suo — dump 0006). Misura il costo del dispatch
++                // `Op::Sweep` per iterazione; semantica GC/dtor NON preservata:
++                // braccio di MISURA, mai promuovibile così.
++                | StmtKind::Expr(_)
++                | StmtKind::Block(_)
+         ) {
+             return true;
+         }

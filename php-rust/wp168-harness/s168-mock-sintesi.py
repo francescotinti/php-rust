@@ -22,7 +22,7 @@ def bl(tag):
     if not os.path.exists(p): return "n/d"
     v = re.findall(r"bl=(\d+)", open(p).read()); return f"A={v[0]} B={v[1]} Δ={int(v[1])-int(v[0]):+d}" if len(v) == 2 else "n/d"
 out = ["== S-168 MOCK sottrattivi F0 — SINTESI MECCANICA (criterio s168-criterio-mock.md p.4; A=m0 braccio nullo; giudice arith-dq N=250M; R=5) =="]
-R = {t: parse(t) for t in ("m0", "m1", "m2", "m3", "m123")}
+R = {t: parse(t) for t in ("m0", "m1", "m2", "m3", "m123", "m4")}
 for t, r in R.items():
     if r is None: out.append(f"{t}: verdetto ASSENTE"); continue
     if "err" in r: out.append(f"{t}: {r['err']}"); continue
@@ -41,6 +41,13 @@ if len(mocks) == 3:
     out.append(f"mock NOMINATI (≥soglia, guardia e2 ok): {', '.join(f'{t}={d:+.2f}' for t, d in named) or 'nessuno'}; Σ nominati={sum_named:.2f} (Σ grezza m1+m2+m3={sum_raw:+.2f})")
     out.append(f"CHIUSURA = (e2 + Σ mock nominati)/dq = ({e2:.2f}+{sum_named:.2f})/{dq:.2f} = {closure*100:.1f}% -> " + ("≥90%: GO F1/F2" if closure >= 0.9 else ("85–90%: decomposizione da completare in UNA sessione prima di codice" if closure >= 0.85 else "<85%: NESSUN codice di leva")))
     out.append(f"KILL ⚖️ regola 4 (Σ mock < 10 ns/iter): Σ={sum_named:.2f} -> " + ("SCATTA: R1 «interno-handler via compilatore» ESAURITO su arith ⇒ delibera R4 al concilio" if sum_named < 10 else "non scatta"))
+    m4 = R.get("m4")
+    if m4 and "err" not in m4:
+        d4 = m4["D"] if (m4["D"] >= m4["thr"] and m4["ge2"] == "ok") else 0.0
+        tot = e2 + sum_named + d4
+        out.append(f"m4 dispatch Sweep/iter (criterio p.8): D={m4['D']:+.2f} soglia={m4['thr']:.2f} -> {'NOMINATO' if d4 else 'non nominato (0)'}; Σ mock CON m4 = {sum_named + d4:.2f} -> kill p.4 {'SCATTA' if sum_named + d4 < 10 else 'NON scatta'}; CHIUSURA CON m4 = ({e2:.2f}+{sum_named:.2f}+{d4:.2f})/{dq:.2f} = {tot/dq*100:.1f}%")
+        resid = dq - tot
+        out.append(f"RESIDUO non nominato = {resid:.2f} ns/iter = corpo del handler BinarySCSCDst al netto di consts (m1) e match BinOp (m2) [+ frames[top] non rilevato]; per-op: controllo-loop {e2/2:.2f} ns/op (2 op) · Sweep {d4:.2f} · statement {dq - e2 - d4:.2f}; oracle: loop {ref['e2O']/2:.2f} ns/op · statement {ref['stO']:.2f}")
     m123 = R.get("m123")
     if m123 and "err" not in m123:
         noise = max(m["nB"] for m in mocks + [m123]); band = max(4.0, noise)

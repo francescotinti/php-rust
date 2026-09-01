@@ -1,0 +1,13 @@
+== s168 MOCK m4 — A=36d73812 MISURATO (/private/tmp/s168-mock-bin/phpr-m0) B=c6e54b6f MISURATO (/private/tmp/s168-mock-bin/phpr-m4); giudice arith-dq N=250M + E2 loop nudo bilaterale; R=5 ABAB alternato; criterio s168-criterio-mock.md ==
+sentinella LS: /Applications/Antigravity /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.96.0-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer 
+floors: A=0.01 B=0.01 oracle=0.05
+  coppia1 [AB]: dqA=11.65 dqB=11.77 e2A=3.68 e2B=3.68 dqO=2.21 e2O=0.92
+  coppia2 [BA]: dqA=11.66 dqB=11.68 e2A=3.68 e2B=3.68 dqO=2.21 e2O=0.95
+  coppia3 [AB]: dqA=11.68 dqB=11.72 e2A=3.68 e2B=3.70 dqO=2.21 e2O=0.95
+  coppia4 [BA]: dqA=11.69 dqB=11.53 e2A=3.68 e2B=3.68 dqO=2.21 e2O=0.88
+  coppia5 [AB]: dqA=11.78 dqB=11.60 e2A=3.68 e2B=3.68 dqO=2.21 e2O=0.88
+GIUDICE arith-dq: A=46.68 B=46.68 ns/iter D=A−B=+0.00 soglia=4.00 (rumore drop-1 A'=0.16 B'=0.68) -> NON nominato (vale 0)
+E2 loop nudo: A=14.68 B=14.68 oracle=3.48 ns/iter; guardia |e2B−e2A|=0.00 ≤ 4.00 -> ok
+statement (dq−e2): A=32.00 oracle=5.16 gap-statement=26.84; controllo-loop: A=14.68 oracle=3.48 gap-loop=11.20; riferimento finestra: dq oracle=8.64 gap totale=38.04
+ESITO rc=4
+sentinella LS fine: /Applications/Antigravity /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.96.0-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer 
