@@ -1,0 +1,105 @@
+2,4c2,7
+< # s167-f0ab.sh — FETTA 0, bracci (a)+(b) del criterio s167-criterio-f0.md
+< # (PRE-registrato): (a) A/B PHPR_REG_LOWER on/off sul PIN s166 · (b) gemello
+< # data-stride vs arith-dq (entrambi ON). + riferimento oracle della finestra.
+---
+> # s168-ab-mock.sh <BPATH> <BEXP8> <TAG> — MOCK sottrattivi F0 (criterio
+> # s168-criterio-mock.md): A = pin s166 dallo stash (phpr-s166) vs B = mock;
+> # giudice arith-dq N=250M; braccio E2 «loop nudo» bilaterale (A, B, oracle).
+> # COPIA DICHIARATA di wp167-harness/s167-f0ab.sh (manifest s168-ab-mock-copia.diff
+> # + copia-gate v2) coi SOLI adattamenti del criterio: due binari (A stash, B
+> # mock, hash MISURATI), ordine ABAB alternato, colonne e2, verdetto per TAG.
+6c9
+< # rc autoritativo = f0-out/f0ab.rc; verdetto s167-f0ab-verdetto.out.
+---
+> # rc autoritativo = ab-out/<TAG>.rc; verdetto s168-<TAG>-verdetto.out.
+10c13,14
+< P=~/Claude/php-rust-output/release/phpr
+---
+> A="/Volumes/Extreme Pro/Claude/phpr-old-target/release/phpr-s166"
+> BB="${1:?BPATH}"; BEXP="${2:?BEXP8}"; TAG="${3:?TAG}"
+13c17
+< ST="$H/arith-stride.php"
+---
+> E2="$H/arith-e2.php"
+15,16c19,20
+< OUT="$H/f0-out"; mkdir -p "$OUT"
+< VERD="$H/s167-f0ab-verdetto.out"; RC="$OUT/f0ab.rc"
+---
+> OUT="$H/ab-out"; mkdir -p "$OUT"
+> VERD="$H/s168-$TAG-verdetto.out"; RC="$OUT/$TAG.rc"
+18,21c22,26
+< grep -qi "s167\|s-167" /private/tmp/phpr-measure.lock 2>/dev/null || { echo "lock assente" | tee -a "$VERD"; echo 9 > "$RC"; exit 9; }
+< "$H/../wp129-harness/s129-quiescenza.sh" "$OUT/quiesce-f0ab.rc" > /dev/null 2>&1 || { echo "quiescenza FAIL" | tee -a "$VERD"; echo 8 > "$RC"; exit 8; }
+< PM="$(shasum -a 256 "$P" | cut -c1-8)"
+< [ "$PM" = 092dcff4 ] || { echo "pin!=s166 ($PM)" | tee -a "$VERD"; echo 1 > "$RC"; exit 1; }
+---
+> grep -qi "s168\|s-168" /private/tmp/phpr-measure.lock 2>/dev/null || { echo "lock assente" | tee -a "$VERD"; echo 9 > "$RC"; exit 9; }
+> "$H/../wp129-harness/s129-quiescenza.sh" "$OUT/quiesce-$TAG.rc" > /dev/null 2>&1 || { echo "quiescenza FAIL" | tee -a "$VERD"; echo 8 > "$RC"; exit 8; }
+> AM="$(shasum -a 256 "$A" | cut -c1-8)"; BM="$(shasum -a 256 "$BB" | cut -c1-8)"
+> [ "$AM" = 092dcff4 ] || { echo "A!=pin s166 ($AM)" | tee -a "$VERD"; echo 1 > "$RC"; exit 1; }
+> [ "$BM" = "$BEXP" ] || { echo "B misurato $BM != atteso $BEXP" | tee -a "$VERD"; echo 1 > "$RC"; exit 1; }
+25c30
+< echo "== s167 F0 bracci (a)+(b) — pin s166 $PM MISURATO; giudice arith-dq N=250M; R=5 interleaved; criterio s167-criterio-f0.md =="
+---
+> echo "== s168 MOCK $TAG — A=$AM MISURATO (pin s166 stash) B=$BM MISURATO; giudice arith-dq N=250M + E2 loop nudo bilaterale; R=5 ABAB alternato; criterio s168-criterio-mock.md =="
+27,29c32,38
+< FON=$(floor3 env -u PHPR_REG_LOWER "$P"); FOFF=$(floor3 env PHPR_REG_LOWER=0 "$P"); FO=$(floor3 "$O")
+< echo "floors: on=$FON off=$FOFF oracle=$FO"
+< TSV="$OUT/f0ab-runs.tsv"; : > "$TSV"
+---
+> for D in "$DQ" "$E2"; do
+>   "$A" "$D" > "$OUT/$TAG-A.out" 2>&1; "$BB" "$D" > "$OUT/$TAG-B.out" 2>&1
+>   diff -q "$OUT/$TAG-A.out" "$OUT/$TAG-B.out" > /dev/null || { echo "output DIVERGE su $(basename "$D") — STOP"; echo 2 > "$RC"; exit 2; }
+> done
+> FA=$(floor3 "$A"); FB=$(floor3 "$BB"); FO=$(floor3 "$O")
+> echo "floors: A=$FA B=$FB oracle=$FO"
+> TSV="$OUT/$TAG-runs.tsv"; : > "$TSV"
+31,35c40,44
+<   TON=$(ucpu env -u PHPR_REG_LOWER "$P" "$DQ"); TOFF=$(ucpu env PHPR_REG_LOWER=0 "$P" "$DQ")
+<   TDQ=$(ucpu env -u PHPR_REG_LOWER "$P" "$DQ"); TST=$(ucpu env -u PHPR_REG_LOWER "$P" "$ST")
+<   TOR=$(ucpu "$O" "$DQ")
+<   printf '%s\t%s\t%s\t%s\t%s\n' "$TON" "$TOFF" "$TDQ" "$TST" "$TOR" >> "$TSV"
+<   echo "  giro$i: on=$TON off=$TOFF dq=$TDQ stride=$TST oracle=$TOR"
+---
+>   if [ $((i % 2)) -eq 1 ]; then TA=$(ucpu "$A" "$DQ"); TB=$(ucpu "$BB" "$DQ"); ord=AB; else TB=$(ucpu "$BB" "$DQ"); TA=$(ucpu "$A" "$DQ"); ord=BA; fi
+>   EA=$(ucpu "$A" "$E2"); EB=$(ucpu "$BB" "$E2")
+>   TOR=$(ucpu "$O" "$DQ"); EOR=$(ucpu "$O" "$E2")
+>   printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$TA" "$TB" "$EA" "$EB" "$TOR" "$EOR" >> "$TSV"
+>   echo "  coppia$i [$ord]: dqA=$TA dqB=$TB e2A=$EA e2B=$EB dqO=$TOR e2O=$EOR"
+37c46
+< python3 - "$TSV" "$FON" "$FOFF" "$FO" <<'PY'
+---
+> python3 - "$TSV" "$FA" "$FB" "$FO" <<'PY'
+40c49
+< fon, foff, fo = map(float, sys.argv[2:5])
+---
+> fa, fb, fo = map(float, sys.argv[2:5])
+46,53c55,66
+< on, off, dq, st, orc = col(0,fon), col(1,foff), col(2,fon), col(3,fon), col(4,fo)
+< print(f"(a) REG_LOWER: on={med(on):.2f} off={med(off):.2f} ns/iter D_ab={med(off)-med(on):+.2f} (rumore on'={dr1(on):.2f} off'={dr1(off):.2f}) — costo GIA' pagato dal lowering, non ricontare")
+< d_st = med(st)-med(dq)
+< print(f"(b) STRIDE: dq={med(dq):.2f} stride={med(st):.2f} D={d_st:+.2f} (rumore dq'={dr1(dq):.2f} st'={dr1(st):.2f})")
+< ref = "REFUTATO (KS-LE-167-1 parte 1: |D|<=0,5)" if abs(d_st) <= 0.5 else "NON refutato: canale pila/D-cache VIVO"
+< print(f"    canale pila/D-cache: {ref}")
+< gap = med(dq)-med(orc)
+< print(f"riferimento finestra: oracle={med(orc):.2f} (rumore {dr1(orc):.2f}) gap={gap:.2f} ns/iter (dossier: 38,2)")
+---
+> dqA, dqB, e2A, e2B, dqO, e2O = col(0,fa), col(1,fb), col(2,fa), col(3,fb), col(4,fo), col(5,fo)
+> D = med(dqA)-med(dqB); noise = max(dr1(dqA), dr1(dqB)); thr = max(4.0, noise, 0.94)
+> print(f"GIUDICE arith-dq: A={med(dqA):.2f} B={med(dqB):.2f} ns/iter D=A−B={D:+.2f} soglia={thr:.2f} (rumore drop-1 A'={dr1(dqA):.2f} B'={dr1(dqB):.2f}) -> {'NOMINATO' if D >= thr else 'NON nominato (vale 0)'}")
+> De2 = med(e2B)-med(e2A); ne2 = max(dr1(e2A), dr1(e2B)); g = max(4.0, ne2)
+> print(f"E2 loop nudo: A={med(e2A):.2f} B={med(e2B):.2f} oracle={med(e2O):.2f} ns/iter; guardia |e2B−e2A|={abs(De2):.2f} ≤ {g:.2f} -> {'ok' if abs(De2) <= g else 'MORDE (rc=5, D sospeso)'}")
+> stA, stO = med(dqA)-med(e2A), med(dqO)-med(e2O)
+> print(f"statement (dq−e2): A={stA:.2f} oracle={stO:.2f} gap-statement={stA-stO:.2f}; controllo-loop: A={med(e2A):.2f} oracle={med(e2O):.2f} gap-loop={med(e2A)-med(e2O):.2f}; riferimento finestra: dq oracle={med(dqO):.2f} gap totale={med(dqA)-med(dqO):.2f}")
+> rc = 0
+> if abs(De2) > g: rc = 5
+> elif D < thr: rc = 8 if noise > 4.0 else 4
+> print(f"ESITO rc={rc}")
+> sys.exit(rc)
+55a69
+> echo "sentinella LS fine: $(pgrep -fl 'rust-analyzer|Antigravity|serena' 2>/dev/null | grep -v pgrep | awk '{print $2}' | sort -u | tr '\n' ' ')"
+
+== copia-gate v2 (az.rev.1 S-166) ==
+base=../wp167-harness/s167-f0ab.sh derivato=s168-ab-mock.sh sess_attesa=s168 allow=[wp164-harness|wp129-harness|wp167-harness/s167-f0ab.sh|az.rev. S-164|s166 \(stash\)|phpr-s166|pin s166|s129-quiescenza]
+nessun residuo fuori allow — esito: rc=0
