@@ -239,7 +239,7 @@ rod_ictx(){ # companion istruttoria: ictx/s delle gambe di rodaggio (FUORI dal g
   python3 -c "print(f'{$i/$r:.1f}')" 2>/dev/null || echo "n/d"
 }
 
-{ echo "== s166 coppia dbal+ORM (pin s165 MISURATO $PINM vs oracle 8.5.7; criterio s166-criterio-orm.md) =="
+{ echo "== s166 coppia dbal+ORM (pin s166 MISURATO $PINM vs oracle 8.5.7; criterio s166-criterio-orm.md) =="
   echo "# estrazione summ/names con LC_ALL=C + grep -a (fix az.rev. S-155 #4); reperto conteggi dbal phpr vs oracle A VERBALE (companion, non arbitra)"
   echo "# ADATTAMENTI (i)-(iii) dall'istruttoria p.1 + az.rev. S-159 #1: rodaggio non giudicante, quiescenza per gamba, scaletta a due estremi"
   echo "sentinella language-server inizio finestra (az.rev. S-157 #4): ${LS_START:-nessuno}"
