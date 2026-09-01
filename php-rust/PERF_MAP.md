@@ -1,7 +1,27 @@
 # PERF_MAP — phpr vs PHP oracle 8.5.7, mappa multi-workload
 
-Aggiornata: **2026-08-31 (S-165)** · pin **NUOVO s165 phpr 1fd8757d2f72dc3e +
-server cf7afe37f29016a8** (**S-165 = PROMOZIONE leva L-MC1d «MethodCall.borrow
+Aggiornata: **2026-09-01 (S-166)** · pin **NUOVO s166 phpr 092dcff431bef876 +
+server caa4e4b2638686a9** (**S-166 = PROMOZIONE leva L-MCk «cade il cap
+argc≤2 dal fast path MethodCall»: edit di UN predicato — il gate vero
+(simple_call arità esatta + IC-hit + recv Object) vive già in
+`methodcall_fast` — con catena rc=0: giudice proprio **m-mc3 (k=3)
+202,5→181,0 ns/iter D=+21,5 (−10,6%)**, smoke rc=0 al PRIMO colpo (+20,0),
+riconc. |1,5|, guardia nuova mc2 D≈0 CONFERMATA (+3,0: la leva S-165 è
+conservata), 21/21 guardie con banda-layout fondata; disasm bl 6086→6085
+(Δ=−1 atteso CENTRATO); fixture fx-mc/fx-mc2/fx-mck A==B (fx-mck ==oracle);
+churn batteria dichiarato INTRINSECO a cargo test (ipotesi-env S-165
+refutata), cura rebuild-ricetta tornata al byte ×2; micro promo
+5,4·5,5·4,8·4,2·3,2·2,5. **DUE coppie assolte**: t15@s165 WP 1,746
+COMPATIBILE (banda_ON 0,005 RECORD) + ORM cifra valida **[7,023;7,053] =
+NUOVO RIFERIMENTO** (2 finestre contaminate DICHIARATE dalle emende E1
+ictx-per-motore/E2 sentinella [4,83;4,94], collaudate sul campo) · t16@s166
+WP 1,749 COMPATIBILE 6/6, ORM parità valida, cifra non giudicante per 1
+tick (lato veloce 4,82) — ri-fondazione banda in apertura PRE-registrata;
+fx-mc2: L-MC1d BYTE-ID al funnel anche su error-path (rilievi semantici
+S-165 non osservabili), catalogo +§3.28/+§3.29; incidente #1 (lanci senza
+copia-gate) + recidiva VERD-naming DICHIARATI; verdetti
+`wp166-harness/s166-*.out`) · storico S-165: pin phpr 1fd8757d2f72dc3e +
+server cf7afe37f29016a8 (**S-165 = PROMOZIONE leva L-MC1d «MethodCall.borrow
 k≤2, forma outline»: fast path IC-hit su Op::MethodCall argc≤2 — ricevitore
 letto IN PLACE (pattern ThisMethodCall) + bind diretto pila→slot (H-D forma 2),
 callee simple_call ad arità esatta, ArgPlace materializzato nel path; corpo in
