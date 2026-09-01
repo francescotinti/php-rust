@@ -31,11 +31,15 @@
 <   case "$tag" in *-dq-*) D="$DQ";; *-mut-*) D="$MU";; *-ms) D="$MS";; esac
 ---
 >   case "$tag" in *-dq) D="$DQ";; *-rbm) D="$RB";; *-c0) D="$C0";; esac
-54c55
+35a37,39
+>   # EMENDA S-169 (ENOSPC #2): xctrace lascia `instruments*.ktrace` (0,4-4 GB l'uno)
+>   # in $DARWIN_USER_TEMP_DIR — 22 file = 10 GB dopo S-167/168/169: si purgano qui.
+>   rm -rf "$(getconf DARWIN_USER_TEMP_DIR)"/instruments*.ktrace
+54c58
 < for tag in ("p-dq-1","p-dq-2","p-dq-3","o-dq-1","o-dq-2","o-dq-3","o-mut-1","o-mut-2","o-mut-3","p-ms","o-ms"):
 ---
 > for tag in ("p-dq","o-dq","p-rbm","o-rbm","p-c0","o-c0"):
-59,71c60,64
+59,71c63,67
 < def spread(pref):
 <     rs = [res[f"{pref}-{k}"] for k in (1,2,3)]
 <     return [ (sum(r[i] for r in rs)/3, max(r[i] for r in rs)-min(r[i] for r in rs)) for i in range(4)]

@@ -34,6 +34,9 @@ for tag in p-dq o-dq p-rbm o-rbm p-c0 o-c0; do
   xctrace export --input "$T" --xpath '//trace-toc/run[@number="1"]/data/table[@schema="CounterMetricByThread"]' > "$OUT/xc-$tag.xml" 2>/dev/null \
     || { echo "export FALLITO ($tag)"; echo 7 > "$RC"; exit 7; }
   rm -rf "$T"
+  # EMENDA S-169 (ENOSPC #2): xctrace lascia `instruments*.ktrace` (0,4-4 GB l'uno)
+  # in $DARWIN_USER_TEMP_DIR — 22 file = 10 GB dopo S-167/168/169: si purgano qui.
+  rm -rf "$(getconf DARWIN_USER_TEMP_DIR)"/instruments*.ktrace
 done
 python3 - "$OUT" <<'PY'
 import sys, re
