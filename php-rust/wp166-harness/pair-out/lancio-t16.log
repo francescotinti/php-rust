@@ -1,1 +1,9 @@
 2026-09-01 11:57:00 attesa quiete CI
+2026-09-01 11:58:00 CI quieta — attesa quiete continua anti-flare (6x30s <5%)
+2026-09-01 11:58:02 mediaanalysisd=0.0 calm=1
+2026-09-01 11:58:34 mediaanalysisd=0.0 calm=2
+2026-09-01 11:59:06 mediaanalysisd=0.0 calm=3
+2026-09-01 11:59:38 mediaanalysisd=0.0 calm=4
+2026-09-01 12:00:10 mediaanalysisd=0.0 calm=5
+2026-09-01 12:00:42 mediaanalysisd=0.0 calm=6
+2026-09-01 12:00:43 quiete raggiunta — dichiarazione in quiet-decl-t16.txt — lancio pair t16

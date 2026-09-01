@@ -1,0 +1,18 @@
+      945.37 real       739.16 user        40.04 sys
+          1604075520  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+             1760701  page reclaims
+               10850  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+              597414  messages sent
+              600218  messages received
+                   0  signals received
+              572698  voluntary context switches
+               69988  involuntary context switches
+       4128345874493  instructions retired
+       1349934058824  cycles elapsed
+          1941276664  peak memory footprint

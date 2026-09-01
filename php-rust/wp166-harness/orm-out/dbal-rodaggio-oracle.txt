@@ -1,7 +1,7 @@
 PHPUnit 11.5.50 by Sebastian Bergmann and contributors.
 
 Runtime:       PHP 8.5.7
-Configuration: /private/tmp/phpr-s166-orm/dbal-work/phpunit.xml.dist
+Configuration: /private/tmp/phpr-s166-orm2/dbal-work/phpunit.xml.dist
 
 .............................................................   61 / 3929 (  1%)
 .............................................................  122 / 3929 (  3%)
@@ -69,7 +69,7 @@ SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS.SSS...... 1098 / 3929 ( 27%)
 ............................................................. 3904 / 3929 ( 99%)
 .........................                                     3929 / 3929 (100%)
 
-Time: 00:01.068, Memory: 62.00 MB
+Time: 00:01.043, Memory: 62.00 MB
 
 OK, but there were issues!
 Tests: 3929, Assertions: 5706, Skipped: 594, Incomplete: 13.

@@ -1,0 +1,65 @@
+== s166 coppia WP full+media sul pin s166 MISURATO phpr=092dcff431bef876 server=caa4e4b2638686a9 tentativo=t16 (criteri s132/s146/s148 EREDITATI + s166-criterio-pair-t16.md: giudizio a MEDIANA per finestra, az.rev.3 S-149) ==
+grade=VERDICT  # derivazione meccanica dai .time; rc autoritativo = pair-out/pair166-t16.done
+# full: cpu=user+sys (etichettato); media: CANONICA=user-only + companion (az.rev. S-128 #3)
+# az.rev. S-131 #3: riferimento PER CONFIGURAZIONE, ON-ONLY = canonico; firma per gamba
+# az.rev. S-136 #2: lettura firma PRE-REGISTRATA: >150% med MOTORE = SPORCA (esclusa); 120-150% = ELEVATA (nel canone, annotata); <=120% pulita
+quiescenza warmup: rc=0 (file: pair-out/quiesce-t16-warmup.rc)
+quiescenza leg1-on: rc=0 (file: pair-out/quiesce-t16-leg1-on.rc)
+quiescenza leg2-on: rc=0 (file: pair-out/quiesce-t16-leg2-on.rc)
+quiescenza leg3-on: rc=0 (file: pair-out/quiesce-t16-leg3-on.rc)
+quiescenza leg4-on: rc=0 (file: pair-out/quiesce-t16-leg4-on.rc)
+quiescenza leg5-on: rc=0 (file: pair-out/quiesce-t16-leg5-on.rc)
+quiescenza leg6-on: rc=0 (file: pair-out/quiesce-t16-leg6-on.rc)
+leg1-on: ictx/s oracle=1074 phpr=85  contesa ok
+  firma leg1-on: ictx%med oracle=99% phpr=107% rank_cpu_oracle=5/6 (1=piu' veloce)
+leg2-on: ictx/s oracle=1080 phpr=66  contesa ok
+  firma leg2-on: ictx%med oracle=100% phpr=82% rank_cpu_oracle=4/6 (1=piu' veloce)
+leg3-on: ictx/s oracle=1075 phpr=63  contesa ok
+  firma leg3-on: ictx%med oracle=99% phpr=79% rank_cpu_oracle=2/6 (1=piu' veloce)
+leg4-on: ictx/s oracle=1123 phpr=115  contesa ok
+  firma leg4-on: ictx%med oracle=104% phpr=145% rank_cpu_oracle=3/6 (1=piu' veloce)  ELEVATA(120-150% med MOTORE: resta nel canone, annotata — az.rev. S-136 #2)
+leg5-on: ictx/s oracle=1243 phpr=97  contesa ok
+  firma leg5-on: ictx%med oracle=115% phpr=121% rank_cpu_oracle=6/6 (1=piu' veloce)  ELEVATA(120-150% med MOTORE: resta nel canone, annotata — az.rev. S-136 #2)
+leg6-on: ictx/s oracle=1087 phpr=74  contesa ok
+  firma leg6-on: ictx%med oracle=100% phpr=93% rank_cpu_oracle=1/6 (1=piu' veloce)
+ictx_s_mediana_oracle=1084 ictx_s_mediana_phpr=80  # PER MOTORE
+gambe pulite: ['leg1-on', 'leg2-on', 'leg3-on', 'leg4-on', 'leg5-on', 'leg6-on']
+leg1-on: full_oracle_cpu=448.91 full_phpr_cpu=784.80 proprio=1.748 peak_phpr_MiB=1843.6
+leg2-on: full_oracle_cpu=448.49 full_phpr_cpu=779.57 proprio=1.738 peak_phpr_MiB=1860.1
+leg3-on: full_oracle_cpu=444.73 full_phpr_cpu=777.89 proprio=1.749 peak_phpr_MiB=1849.3
+leg4-on: full_oracle_cpu=445.13 full_phpr_cpu=790.15 proprio=1.775 peak_phpr_MiB=1830.4
+leg5-on: full_oracle_cpu=450.96 full_phpr_cpu=780.04 proprio=1.730 peak_phpr_MiB=1836.4
+leg6-on: full_oracle_cpu=444.41 full_phpr_cpu=779.20 proprio=1.753 peak_phpr_MiB=1851.3
+replica_peak_senza_inserzione (p.5): leg1-on=1843.6 leg2-on=1860.1 leg3-on=1849.3 leg4-on=1830.4 leg5-on=1836.4 leg6-on=1851.3
+replica_peak lettura: 6/6 alte (>=1830) -> livello ALTO unico (il doppio livello NON si riproduce)
+matrice full (gambe PULITE) phpr(riga)/oracle(colonna):
+  leg1-on/leg1-on=1.748  leg1-on/leg2-on=1.750  leg1-on/leg3-on=1.765  leg1-on/leg4-on=1.763  leg1-on/leg5-on=1.740  leg1-on/leg6-on=1.766
+  leg2-on/leg1-on=1.737  leg2-on/leg2-on=1.738  leg2-on/leg3-on=1.753  leg2-on/leg4-on=1.751  leg2-on/leg5-on=1.729  leg2-on/leg6-on=1.754
+  leg3-on/leg1-on=1.733  leg3-on/leg2-on=1.734  leg3-on/leg3-on=1.749  leg3-on/leg4-on=1.748  leg3-on/leg5-on=1.725  leg3-on/leg6-on=1.750
+  leg4-on/leg1-on=1.760  leg4-on/leg2-on=1.762  leg4-on/leg3-on=1.777  leg4-on/leg4-on=1.775  leg4-on/leg5-on=1.752  leg4-on/leg6-on=1.778
+  leg5-on/leg1-on=1.738  leg5-on/leg2-on=1.739  leg5-on/leg3-on=1.754  leg5-on/leg4-on=1.752  leg5-on/leg5-on=1.730  leg5-on/leg6-on=1.755
+  leg6-on/leg1-on=1.736  leg6-on/leg2-on=1.737  leg6-on/leg3-on=1.752  leg6-on/leg4-on=1.750  leg6-on/leg5-on=1.728  leg6-on/leg6-on=1.753
+full_intervallo_PULITO_misto=1.725-1.778  # companion (miscela config)
+coppie_proprie_PULITE_miste=1.730-1.775 (N=6)
+coppie_proprie_user_only_miste=1.738-1.781
+full_on_only_coppie_proprie=1.730-1.775 (N=6) CANONICO
+full_on_only_intervallo=1.725-1.778
+mediana_t16=1.749 (N=6 coppie proprie ON PULITE; mediane storiche t1=1.799 t2=1.738 t3=1.789 t4=1.781 t5=1.757 t6=1.771 t7=1.795 t8=1.754 t9=1.767 t10=1.760 t11=1.765 t12=1.767 t13=1.763 t14=1.761 t15=1.746)
+giudizio_MEDIANA (canonico, criterio t16 p.2): COMPATIBILE (mediana in [1.738; 1.799]) — nessun claim
+companion banda-unione (descrittivo): coppie in [1.722-1.823]: 6/6
+banda_ON_fondata=0.045 (max-min di N=6 coppie proprie ON PULITE; unione finestre nel verdetto di sessione)
+media_leg1-on: user_only_CANONICA=2.437 user+sys_companion=2.394
+media_leg2-on: user_only_CANONICA=2.435 user+sys_companion=2.386
+media_leg3-on: user_only_CANONICA=2.434 user+sys_companion=2.378
+media_leg4-on: user_only_CANONICA=2.419 user+sys_companion=2.361
+media_leg5-on: user_only_CANONICA=2.505 user+sys_companion=2.475
+media_leg6-on: user_only_CANONICA=2.422 user+sys_companion=2.362
+parita_leg1-on: media=OK(vuoto) full=OK(solo wp_is_stream #2)
+parita_leg2-on: media=OK(vuoto) full=OK(solo wp_is_stream #2)
+parita_leg3-on: media=OK(vuoto) full=OK(solo wp_is_stream #2)
+parita_leg4-on: media=OK(vuoto) full=OK(solo wp_is_stream #2)
+parita_leg5-on: media=OK(vuoto) full=OK(solo wp_is_stream #2)
+parita_leg6-on: media=OK(vuoto) full=OK(solo wp_is_stream #2)
+deriva_test (s148 p.4, N=6 critico 0,829): rho_A(leg,peak)=-0.143 -> nessuna firma di deriva; rho_B(peak,rapporto)=-0.200 -> accoppiamento NON confermato
+sentinella language-server inizio finestra (az.rev. S-157 #4): /Applications/Antigravity /Users/francescotinti/.antigravity-ide/extensions/rust-lang.rust-analyzer-0.3.3025-darwin-arm64/server/rust-analyzer /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.96.0-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer 
+sentinella language-server fine finestra: /Applications/Antigravity /Users/francescotinti/.antigravity-ide/extensions/rust-lang.rust-analyzer-0.3.3025-darwin-arm64/server/rust-analyzer /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.96.0-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer 
