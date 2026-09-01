@@ -1,0 +1,17 @@
+== s169 xctrace sanature (pin 092dcff4; template CPU Counters; repliche R=3 p-dq/o-dq/o-mut + mutante backend memstall bilaterale) ==
+p-dq: quote c0..c3 = 0.643 0.021 0.329 0.007 (campioni 2864)
+o-dq: quote c0..c3 = 0.825 0.035 0.117 0.024 (campioni 950)
+p-rbm: quote c0..c3 = 0.642 0.069 0.205 0.084 (campioni 6281)
+o-rbm: quote c0..c3 = 0.528 0.011 0.104 0.357 (campioni 2037)
+p-c0: quote c0..c3 = 0.182 0.742 0.051 0.024 (campioni 415)
+o-c0: quote c0..c3 = 0.142 0.841 0.014 0.002 (campioni 4545)
+MUTANTE rbm phpr: Δquote vs dq c0..c3 = -0.001 +0.048 -0.124 +0.077 -> colonna che sale = c3 (attesa: c3 (discarded) se il mutante branch casuale morde)
+MUTANTE c0 phpr: Δquote vs dq c0..c3 = -0.460 +0.721 -0.278 +0.017 -> colonna che sale = c1 (attesa: c0 (useful) se c0 è lavoro retiring)
+MUTANTE rbm oracle: Δquote vs dq c0..c3 = -0.298 -0.024 -0.012 +0.334 -> colonna che sale = c3 (attesa: c3 (discarded) se il mutante branch casuale morde)
+MUTANTE c0 oracle: Δquote vs dq c0..c3 = -0.683 +0.807 -0.102 -0.021 -> colonna che sale = c1 (attesa: c0 (useful) se c0 è lavoro retiring)
+== LETTURA (S-169, xctrace-2) ==
+(1) c3 = DISCARDED FISSATA BILATERALMENTE e NON circolare: il mutante branch NON predicibile (LCG bit 30) alza c3 su ENTRAMBI i motori (phpr 0,007→0,084; oracle 0,024→0,357) e nulla d'altro sale; il branchmut S-167 (periodo ~10) non lo faceva sull'oracle ⇒ il collaudo S-167 era invalido, questo regge.
+(2) MISPREDICT su arith-dq ora FIRMATO (non più «non firmato»): c3 phpr 0,007 vs oracle 0,024 — phpr scarta MENO; la refutazione del canale mispredict S-167 REGGE con colonna giusta e mutante giusto.
+(3) Mutante c0 (crc32 4 KB) FALLITO come positivo: alza c1 (+0,72/+0,81), non c0 — crc32 è una catena di dipendenza table-lookup byte-per-byte ⇒ stallo backend, non throughput retiring: ipotesi di disegno errata, dichiarata. c0 resta fissata SOLO per esclusione ESAUSTIVA (il template top-down ha 4 categorie e c1/c2/c3 sono ora fissate ognuna dal proprio mutante non circolare ⇒ c0 = Useful/Retiring); un mutante positivo di c0 (throughput retiring puro: es. `str_repeat`/memset o somma su array L1) resta dovuto.
+(4) Quote dq (N=1 qui, N=3 in S-168 con spread ≤0,014 phpr / ±0,1 oracle): phpr c0 0,643 c1 0,021 c2 0,329 c3 0,007 · oracle 0,825 0,035 0,117 0,024 ⇒ il tempo in più di phpr è per il 65% «useful» (istruzioni in più che si ritirano) e per il 33% delivery (front-end), con MENO stalli e MENO scarti dell'oracle — coerente col reperto mock S-169: il corpo dei handler esegue più istruzioni, non aspetta.
+(5) INCIDENTE #1 S-169 (ENOSPC da 22 ktrace temporanei di xctrace = 10 GB): curato con purge nel copione; Data 17,8G liberi a fine.
