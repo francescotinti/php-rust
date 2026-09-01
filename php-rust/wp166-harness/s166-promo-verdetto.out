@@ -1,0 +1,9 @@
+== S-166 PROMOZIONE L-MCk «cade il cap argc≤2 dal fast path MethodCall» — catena §6 completa ==
+candidato: phpr-s166-mck-B = 092dcff431bef876 (edit: SOLO il predicato n<=2 nell'arm; gate vero già in methodcall_fast)
+A/B: smoke mcksm rc=0 PRIMO COLPO (mc3 +20,0 in banda [4;30], rumore ≤2; guardia nuova mc2 +5,0) → R=5 mckr5 rc=0 (mc3 202,5→181,0 D=+21,5, riconc. |1,5|, rumore ≤1; mc2 +3,0; 21/21 guardie) — un tentativo-gate bruciato dal flare mediaanalysisd, archiviato (mckr5-tentativo1-gate-fail.log), ritento a quiete continua 6x30s
+fixture: fx-mc + fx-mc2 + fx-mck A==B IDENTICI (fx-mck anche ==oracle: k=3/k=5 ammesse, by-ref/hint escluse, ArgPlace+Err a k=3)
+disasm: bl run_loop 6086→6085 (Δ=−1 = il test caduto, attesa criterio p.5 CENTRATA)
+denti: run.rs 6914→6917 dichiarato (+3 commento-leva)
+batteria: rc=0 (1748) — CHURN ANCHE con env ricetta (ee936cc2): ipotesi S-165 «era l'env» REFUTATA, il relink è intrinseco a cargo test; cura = build ricetta post-batteria → TORNATO AL BYTE 092dcff4
+corpus: rc=0 (×2 modi, nomi+golden+off↔on) · micro promo R=5 rc=0: arith 5,4 · prop 5,5 · calls 4,8 · str 4,2 · arr 3,2 · re 2,5 (tick in linea, nessuna regressione)
+== PROMOZIONE rc=0 — PIN s166: phpr 092dcff431bef876 + server caa4e4b2638686a9 · giudice proprio mc3 202,5→181,0 (−10,6%); mc2 resta ~155 (leva S-165 conservata) · il fast path method-call copre ORA TUTTE le arità simple_call · coppia WP+ORM DOVUTA in S-167 (pin nuovo) ==
