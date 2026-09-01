@@ -1,0 +1,19 @@
+== S-169 az.rev. — SINTESI MECCANICA (criterio s169-criterio.md p.4; A=m0; arith-dq N=250M) ==
+m5: A=46.60 B=60.60 D=-14.00 rumore=0.40 pavimento=4.00 soglia_dec=0.94 -> DIREZIONE FIRMATA; guardia e2 ok
+m7: A=46.92 B=41.32 D=+5.60 rumore=0.60 pavimento=4.00 soglia_dec=0.94 -> DIREZIONE FIRMATA; guardia e2 ok
+m4b9: A=46.72 B=43.84 D=+2.88 rumore=0.68 pavimento=4.00 soglia_dec=0.94 -> DIREZIONE FIRMATA; guardia e2 ok
+m39: A=46.76 B=49.36 D=-2.60 rumore=0.76 pavimento=4.00 soglia_dec=0.94 -> DIREZIONE FIRMATA; guardia e2 ok
+DISPATCH puro per-op (8 Nop): 1.75 ns/op (±0.05); controllo-loop e2=14.68 = 2 dispatch (3.50) + 2 corpi ⇒ corpo medio CmpJmpSC/IncDecSlotJmp = 5.59 ns/op; oracle e2=3.60 ⇒ 1.80 ns/op TOTALI
+statement 32,0 (S-168, dq−e2) = Sweep 2.88 (dispatch 1.75 + corpo 1.13) + dispatch BinarySCSCDst 1.75 + corpo BinarySCSCDst ≈ 27.4 ns/iter — di cui nominati m1 4,72 + m2 5,20 (m7 5,60) ⇒ corpo NON nominato ≈ 17.5 (guardie Undef/Ref, read_slot clone, 4 funnel, reg_store_slot+gc_note, bounds)
+per-op phpr vs oracle: dispatch 1,75 vs (oracle totale 1.80/op); handler banale (CmpJmpSC/IncDecSlotJmp) corpo 5.59 ⇒ 7.34 ns/op contro 1.80: il rapporto per-op è 4.1×; il corpo del handler fuso (27.4) è 3.7× un handler banale
+GUARDIA tupla m2: D_m7 − D_m2 = +5.60 − 5,20 = +0.40 ns/iter (rumore 0.60) -> m2 «pieno» (BinOp cotto senza guardia) = +5.60
+m4b (Sweep) R=9: D=+2.88 rumore=0.68 soglia_dec=0.94 -> DIREZIONE FIRMATA (S-168 R=5: +2,96)
+m3 (hoist, forma cambiata) R=9: D=-2.60 rumore=0.76 soglia_dec=0.94 -> DIREZIONE FIRMATA (S-168 R=5: −2,28)
+== LETTURA (fatti, S-169 — az.rev. S-168 eseguite; sola misura) ==
+· Bracci: m5 0687666b (8 Nop/iter) · m7 c1c48ad1 (m2 senza guardia) a stash `phpr-s169-*` e registro; m4b/m3 rimisurati dagli stash s168 a R=9. A = m0. Output A==B su dq per tutti; colonna E2 di m5/m7 INVALIDA (emenda p.6), valida per m4b9/m39 (14,68/14,72).
+· DISPATCH PURO = 1,75 ns/op (±0,05): è pari all'INTERO costo per-op dell'oracle (1,80). Il divario sugli op banali NON è il dispatch: è il CORPO del handler (CmpJmpSC/IncDecSlotJmp ≈5,6 ns/op l'uno per «leggi slot, confronta/incrementa, salta»).
+· Decomposizione del dq 46,7 (phpr) vs 8,64 (oracle): controllo-loop 14,7 (2×1,75 dispatch + 2×5,6 corpo) · Sweep 2,9 (1,75+1,1) · BinarySCSCDst 1,75 dispatch + ~27,4 corpo, di cui nominati consts 4,7 (m1) + BinOp match 5,2-5,6 (m2/m7) e ~17,5 NON nominati (guardie Undef/Ref, read_slot clone, 4 funnel binary_fast/binary_value_ab, reg_store_slot+gc_note, bounds). Nominato per meccanismo: 1,75×4 + 2,9 + 4,7 + 5,6 = 20,2 = 43% del dq; per esclusione il resto è «corpo dei handler» (2×5,6 + 17,5 = 28,7 = 61%).
+· m3 R=9 −2,60 (S-168 −2,28): riproducibile, B più lento ⇒ la ristrutturazione costa più di quanto l'hoist renda; componente frames[top] resta CONFUSA (m3-puro non scrivibile in safe Rust senza cambio di forma).
+· m4b R=9 +2,88 (S-168 +2,96): riproducibile ⇒ Sweep/iter ≈2,9 a direzione firmata (sotto pavimento 4: 0 nel conto a pavimento, 2,9 nella decomposizione).
+· Guardia tupla m2 = 0,4 (sotto rumore 0,6): m2 pieno ≈5,4-5,6.
+· PER LA DELIBERA R4 (dell'utente): Σ nominata a pavimento (S-168) 9,92 · Σ grezza m1+m2+m4b 12,9 · con m5 il quadro cambia di natura: il costo per-op di phpr è 7,3 vs 1,8 ns e SOLO 1,75 è dispatch ⇒ una campagna che «riduce il numero di op» (fusione, predecode) o «alleggerisce il dispatch» (threaded, fn-table) ha tetto ~1,75 ns/op eliminato; il bersaglio grosso è il corpo di OGNI handler (banale 5,6; fuso 27,4): accesso slot, guardie, Result/`?`, gc_note, clone/drop Zval — voci R2/R3 «forma sigillata» (regola 8) o una fetta F3 «guardie/slow-path outlined» generalizzata a tutti gli handler.

@@ -1,0 +1,18 @@
+== s169 MOCK m39 — A=36d73812 MISURATO (/Volumes/Extreme Pro/Claude/phpr-old-target/release/phpr-s168-m0) B=105be053 MISURATO (/Volumes/Extreme Pro/Claude/phpr-old-target/release/phpr-s168-m3); giudice arith-dq N=250M + E2 loop nudo bilaterale; R=9 ABAB alternato; criterio s169-criterio.md ==
+sentinella LS: /Applications/Antigravity /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.96.0-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer 
+floors: A=0.01 B=0.00 oracle=0.05
+  coppia1 [AB]: dqA=11.70 dqB=12.39 e2A=3.67 e2B=3.71 dqO=2.21 e2O=0.95
+  coppia2 [BA]: dqA=11.69 dqB=12.30 e2A=3.68 e2B=3.68 dqO=2.21 e2O=0.89
+  coppia3 [AB]: dqA=11.78 dqB=12.22 e2A=3.70 e2B=3.69 dqO=2.21 e2O=0.83
+  coppia4 [BA]: dqA=11.74 dqB=12.38 e2A=3.68 e2B=3.69 dqO=2.21 e2O=0.94
+  coppia5 [AB]: dqA=11.64 dqB=12.26 e2A=3.68 e2B=3.68 dqO=2.21 e2O=0.90
+  coppia6 [BA]: dqA=11.82 dqB=12.37 e2A=3.67 e2B=3.68 dqO=2.21 e2O=0.89
+  coppia7 [AB]: dqA=11.59 dqB=12.29 e2A=3.68 e2B=3.68 dqO=2.21 e2O=0.95
+  coppia8 [BA]: dqA=11.73 dqB=12.34 e2A=3.67 e2B=3.68 dqO=2.21 e2O=0.95
+  coppia9 [AB]: dqA=11.67 dqB=12.35 e2A=3.68 e2B=3.68 dqO=2.21 e2O=0.85
+GIUDICE arith-dq: A=46.76 B=49.36 ns/iter D=A−B=-2.60 soglia=4.00 (rumore drop-1 A'=0.76 B'=0.52) -> NON nominato (vale 0)
+DECOMPOSIZIONE (az.rev.1 S-168, soglia = max(rumore, SL 0,94) SENZA pavimento 4): soglia_dec=0.94 -> DIREZIONE FIRMATA (B più lento; R=9)
+E2 loop nudo: A=14.68 B=14.72 oracle=3.40 ns/iter; guardia |e2B−e2A|=0.04 ≤ 4.00 -> ok
+statement (dq−e2): A=32.08 oracle=5.24 gap-statement=26.84; controllo-loop: A=14.68 oracle=3.40 gap-loop=11.28; riferimento finestra: dq oracle=8.64 gap totale=38.12
+ESITO rc=4
+sentinella LS fine: /Applications/Antigravity /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.96.0-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer 

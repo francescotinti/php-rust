@@ -15,12 +15,15 @@ out = ["== S-169 az.rev. — SINTESI MECCANICA (criterio s169-criterio.md p.4; A
 R = {t: parse(t) for t in ("m5", "m7", "m4b9", "m39")}
 for t, r in R.items():
     out.append(f"{t}: " + ("ASSENTE" if r is None else (r["err"] if "err" in r else f"A={r['A']:.2f} B={r['B']:.2f} D={r['D']:+.2f} rumore={r['n']:.2f} pavimento={r['thr']:.2f} soglia_dec={r['dec']:.2f} -> {r['dir']}; guardia e2 {r['ge2']}")))
-m5 = R.get("m5")
-if m5 and "err" not in m5:
+m5 = R.get("m5"); e2src = R.get("m4b9") or R.get("m39")  # emenda p.6: e2 di m5/m7 invalida, si usa quella di m4b9
+if m5 and "err" not in m5 and e2src:
+    m5 = dict(m5, e2A=e2src["e2A"], e2O=e2src["e2O"])
     disp = -m5["D"]/8; dn = m5["n"]/8
     body = (m5["e2A"] - 2*disp)/2
+    sw = R["m4b9"]["D"] if R.get("m4b9") else 3.0
     out.append(f"DISPATCH puro per-op (8 Nop): {disp:.2f} ns/op (±{dn:.2f}); controllo-loop e2={m5['e2A']:.2f} = 2 dispatch ({2*disp:.2f}) + 2 corpi ⇒ corpo medio CmpJmpSC/IncDecSlotJmp = {body:.2f} ns/op; oracle e2={m5['e2O']:.2f} ⇒ {m5['e2O']/2:.2f} ns/op TOTALI")
-    out.append(f"statement 32,0 (S-168) = dispatch BinarySCSCDst {disp:.2f} + Sweep (dispatch {disp:.2f} + corpo) + corpo handler ⇒ corpo BinarySCSCDst ≈ {32.0 - 2*disp - 3.0 + disp:.1f} ns/iter (Sweep ≈3 da m4b: corpo Sweep ≈ {3.0 - disp:.1f})")
+    out.append(f"statement 32,0 (S-168, dq−e2) = Sweep {sw:.2f} (dispatch {disp:.2f} + corpo {sw-disp:.2f}) + dispatch BinarySCSCDst {disp:.2f} + corpo BinarySCSCDst ≈ {32.0 - sw - disp:.1f} ns/iter — di cui nominati m1 4,72 + m2 5,20 (m7 5,60) ⇒ corpo NON nominato ≈ {32.0 - sw - disp - 4.72 - 5.20:.1f} (guardie Undef/Ref, read_slot clone, 4 funnel, reg_store_slot+gc_note, bounds)")
+    out.append(f"per-op phpr vs oracle: dispatch 1,75 vs (oracle totale {m5['e2O']/2:.2f}/op); handler banale (CmpJmpSC/IncDecSlotJmp) corpo {body:.2f} ⇒ {disp+body:.2f} ns/op contro {m5['e2O']/2:.2f}: il rapporto per-op è {(disp+body)/(m5['e2O']/2):.1f}×; il corpo del handler fuso ({32.0 - sw - disp:.1f}) è {(32.0 - sw - disp)/(disp+body):.1f}× un handler banale")
 m7 = R.get("m7")
 if m7 and "err" not in m7:
     out.append(f"GUARDIA tupla m2: D_m7 − D_m2 = {m7['D']:+.2f} − 5,20 = {m7['D']-5.20:+.2f} ns/iter (rumore {m7['n']:.2f}) -> m2 «pieno» (BinOp cotto senza guardia) = {m7['D']:+.2f}")
