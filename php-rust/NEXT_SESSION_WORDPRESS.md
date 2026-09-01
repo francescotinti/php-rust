@@ -9,8 +9,11 @@ sanature S-167 chiuse: stride REFUTATO (layout verificato + controllo
 positivo), xctrace c1=backend/c3=discarded/c0=useful (etichetta S-167
 corretta; refutazione mispredict regge su c3), branchmut S-167 PREDICIBILE** ·
 leve: 0 (sanzionato) · incidenti: 2 (catena sotto timeout tool → daemonizer;
-output di run in un commit → untracked) · revisione (semantica): vedi
-wp168-harness/revisione.md · QUESITI UTENTE: (a) delibera R4 (concilio?);
+output di run in un commit → untracked) · revisione (semantica): REGGE CON
+RILIEVI — kill «A FILO, non deliberabile da solo» (Σ grezza 12,9 >10 a
+registro), portata del kill = UN handler (E2: 11,1 ns nei 2 op di controllo
+mai toccati), m3 «confuso», Sweep ≈3 nel residuo (≈19), mispredict «NON
+FIRMATO» (c3 circolare) · QUESITI UTENTE: (a) delibera R4 (concilio?);
 (b) T2/A2; (c) census server (18° slitt.); (d) ratifiche §3.
 
 ## Scoreboard (pin INVARIATO s166 phpr 092dcff431bef876 + server caa4e4b2638686a9)
@@ -28,12 +31,17 @@ E2 loop nudo 14,7 vs 3,56 · WP 1,746-1,749 · ORM [7,023;7,053] (RIF) · corpus
    qualunque leva; (ii) leggere il kill «a filo» come non-decisivo e rieseguire
    i mock con soglia/banda del kill pre-registrate (R alto, tick 0,04) — solo se
    l'utente lo ratifica; (iii) R2/R3 restano chiuse (veti confermati).
-   Nessun codice F1/F2 senza delibera.
-2. **Sanature residue** (timebox ½ sessione): rbranchmut (LCG bit 30) su
-   xctrace bilaterale per rifissare c3 con un mutante NON predicibile · mock
-   del residuo ~22 ns dentro BinarySCSCDst (guardie Undef/Ref, read_slot clone,
-   reg_store_slot+gc_note) SOLO se la delibera lo chiede.
-3. Az.rev. S-168 (revisione.md) · quesiti (a)-(d) se l'utente ratifica.
+   Nessun codice F1/F2 senza delibera. Az.rev.1: la delibera riceve ENTRAMBE
+   le cifre (9,92 nominata / 12,9 grezza) — il conto a pavimento 4 azzera
+   componenti a direzione firmata: soglia = rumore SEPARATA dal pavimento.
+2. **Az.rev. S-168 PRIMA della delibera** (misura, ½ sessione): mock sui DUE
+   handler di controllo (CmpJmpSC/IncDecSlotJmp: «handler vuoto») con giudice
+   E2 · ri-misura m4b e m3-puro (solo hoist, forma invariata) a R esteso ·
+   m2 senza guardia (tupla via flag di build) · rbranchmut (LCG bit 30) +
+   mutante proprio di c0 su xctrace PRIMA di ogni lettura di c3.
+3. Sanature/quesiti (a)-(d) se l'utente ratifica; residuo ≈19 ns dentro
+   BinarySCSCDst (guardie Undef/Ref, read_slot clone, store+gc_note) SOLO se
+   la delibera lo chiede.
 
 ## Aperture per NOME (si pesca solo se blocca o avanza l'oggetto)
 delibera R4 · mock handler-vuoto per-op · rbranchmut · residuo-handler (guardie ·
