@@ -1,0 +1,101 @@
+2,12c2,10
+< # s167-f0c.sh — FETTA 0 braccio (c): counters CPU bilaterali via xctrace
+< # (criterio s167-criterio-f0.md, ADATTAMENTO DICHIARATO: il template 'CPU
+< # Counters' di Instruments 16 espone QUOTE top-down per-campione
+< # (uint64-array a 4 colonne; legenda del template: Cycles/Delivery/
+< # Discarded/Processing-Useful) e NON branch-miss grezzi ⇒ (i) la semantica
+< # di colonna si fissa EMPIRICAMENTE col MUTANTE branch (la colonna che
+< # schizza su branchmut = scarti da mispredict); (ii) collaudo strumento:
+< # quella colonna deve crescere >=2x di quota su phpr-branchmut vs phpr-dq,
+< # altrimenti (c) INDISPONIBILE dichiarato; (iii) firma front-end: quota
+< # (delivery+discarded) phpr >= 2x oracle su arith-dq.
+< # rc autoritativo = f0-out/f0c.rc; verdetto s167-f0c-verdetto.out.
+---
+> # s168-xctrace.sh — SANATURE az.rev.2+4 S-167 sul braccio (c) xctrace 'CPU
+> # Counters' (quote top-down a 4 colonne, per-campione): (i) REPLICHE R=3 per
+> # lato (p-dq, o-dq) e del mutante branch oracle (o-mut ×3: spiegare c1
+> # 0,031→0,004); (ii) MUTANTE BACKEND arith-memstall.php (un miss DRAM/iter, su
+> # ENTRAMBI i motori): la colonna che schizza = Processing/backend ⇒ c0 fissata
+> # per ESCLUSIONE (c1=discarded e c2=delivery già fissate in S-167).
+> # COPIA DICHIARATA di wp167-harness/s167-f0c.sh (manifest s168-xctrace-copia.diff
+> # + copia-gate v2). Le .trace si cancellano dopo l'export (spazio); gli .xml
+> # vanno FUORI repo a fine sessione. rc autoritativo = ab-out/xctrace.rc.
+19,21c17,20
+< MU="$H/arith-branchmut.php"
+< OUT="$H/f0-out"; mkdir -p "$OUT"
+< VERD="$H/s167-f0c-verdetto.out"; RC="$OUT/f0c.rc"
+---
+> MU="$H/../wp167-harness/arith-branchmut.php"
+> MS="$H/arith-memstall.php"
+> OUT="$H/ab-out"; mkdir -p "$OUT"
+> VERD="$H/s168-xctrace-verdetto.out"; RC="$OUT/xctrace.rc"
+23c22
+< grep -qi "s167\|s-167" /private/tmp/phpr-measure.lock 2>/dev/null || { echo "lock assente" | tee -a "$VERD"; echo 9 > "$RC"; exit 9; }
+---
+> grep -qi "s168\|s-168" /private/tmp/phpr-measure.lock 2>/dev/null || { echo "lock assente" | tee -a "$VERD"; echo 9 > "$RC"; exit 9; }
+27,28c26,27
+< echo "== s167 F0 braccio (c) xctrace bottleneck bilaterale (pin $PM; template CPU Counters; adattamento quote DICHIARATO in testa allo script) =="
+< for tag in o-dq o-mut p-dq p-mut; do
+---
+> echo "== s168 xctrace sanature (pin $PM; template CPU Counters; repliche R=3 p-dq/o-dq/o-mut + mutante backend memstall bilaterale) =="
+> for tag in p-dq-1 o-dq-1 o-mut-1 p-dq-2 o-dq-2 o-mut-2 p-dq-3 o-dq-3 o-mut-3 p-ms o-ms; do
+30,32c29,31
+<   case "$tag" in *-dq) D="$DQ";; *-mut) D="$MU";; esac
+<   T="$OUT/f0c-$tag.trace"; rm -rf "$T"
+<   xctrace record --template 'CPU Counters' --output "$T" --launch -- "$B" "$D" > "$OUT/f0c-$tag.rec.log" 2>&1 \
+---
+>   case "$tag" in *-dq-*) D="$DQ";; *-mut-*) D="$MU";; *-ms) D="$MS";; esac
+>   T="$OUT/xc-$tag.trace"; rm -rf "$T"
+>   xctrace record --template 'CPU Counters' --output "$T" --launch -- "$B" "$D" > "$OUT/xc-$tag.rec.log" 2>&1 \
+34c33
+<   xctrace export --input "$T" --xpath '//trace-toc/run[@number="1"]/data/table[@schema="CounterMetricByThread"]' > "$OUT/f0c-$tag.xml" 2>/dev/null \
+---
+>   xctrace export --input "$T" --xpath '//trace-toc/run[@number="1"]/data/table[@schema="CounterMetricByThread"]' > "$OUT/xc-$tag.xml" 2>/dev/null \
+36c35
+<   rm -rf "$T"   # spazio: i .trace pesano; i dati vivono negli .xml
+---
+>   rm -rf "$T"
+43c42
+<     for m in re.finditer(r'<duration[^>]*>(\d+)</duration>.*?<uint64-array[^>]*fmt="[^"]*">([\d ]+)</uint64-array>', open(f"{out}/f0c-{tag}.xml").read(), re.S):
+---
+>     for m in re.finditer(r'<duration[^>]*>(\d+)</duration>.*?<uint64-array[^>]*fmt="[^"]*">([\d ]+)</uint64-array>', open(f"{out}/xc-{tag}.xml").read(), re.S):
+47c46
+<     rows = rows[len(rows)//10 : -max(1, len(rows)//10)]  # scarto 10% ai bordi
+---
+>     rows = rows[len(rows)//10 : -max(1, len(rows)//10)]
+55c54
+< for tag in ("o-dq","o-mut","p-dq","p-mut"):
+---
+> for tag in ("p-dq-1","p-dq-2","p-dq-3","o-dq-1","o-dq-2","o-dq-3","o-mut-1","o-mut-2","o-mut-3","p-ms","o-ms"):
+59,70c58,71
+<     print(f"{tag}: quote colonne c0..c3 = " + " ".join(f"{v:.3f}" for v in r[0]) + f" (campioni {r[1]})")
+< # mutante: colonna che cresce di piu' su phpr mut vs dq
+< deltas = [res["p-mut"][i]-res["p-dq"][i] for i in range(4)]
+< ci = max(range(4), key=lambda i: deltas[i])
+< ratio = res["p-mut"][ci]/max(res["p-dq"][ci], 1e-9)
+< print(f"MUTANTE: colonna mispredict-indiziata = c{ci} (Δquota {deltas[ci]:+.3f}, quota mut/dq = {ratio:.2f}x)")
+< if ratio < 2.0:
+<     print("STRUMENTO NON MORDE (ratio<2) — (c) INDISPONIBILE dichiarato"); sys.exit(5)
+< # firma front-end su dq: quota c_i (mispredict) + eventuale colonna delivery
+< fe_p, fe_o = res["p-dq"][ci], res["o-dq"][ci]
+< print(f"firma front-end (colonna c{ci} su arith-dq): phpr={fe_p:.3f} oracle={fe_o:.3f} rapporto={fe_p/max(fe_o,1e-9):.2f}x (soglia criterio: >=2x)")
+< print("quote INTERE dq a verbale per la lettura congiunta (delivery/processing): vedi righe sopra")
+---
+>     print(f"{tag}: quote c0..c3 = " + " ".join(f"{v:.3f}" for v in r[0]) + f" (campioni {r[1]})")
+> def spread(pref):
+>     rs = [res[f"{pref}-{k}"] for k in (1,2,3)]
+>     return [ (sum(r[i] for r in rs)/3, max(r[i] for r in rs)-min(r[i] for r in rs)) for i in range(4)]
+> for pref in ("p-dq","o-dq","o-mut"):
+>     sp = spread(pref)
+>     print(f"REPLICHE {pref}: media±spread c0..c3 = " + " ".join(f"{m:.3f}±{s:.3f}" for m,s in sp))
+> odq, omut = spread("o-dq"), spread("o-mut")
+> print(f"o-mut c1 vs o-dq c1: {omut[1][0]:.3f} vs {odq[1][0]:.3f} (spread {omut[1][1]:.3f}/{odq[1][1]:.3f}) -> {'ANOMALIA CONFERMATA (riproducibile)' if omut[1][0] < odq[1][0]-max(odq[1][1],omut[1][1]) else 'NON riproducibile: era rumore N=1'}")
+> pdq = spread("p-dq")
+> for side, ms, base in (("phpr", res["p-ms"], [m for m,_ in pdq]), ("oracle", res["o-ms"], [m for m,_ in odq])):
+>     d = [ms[i]-base[i] for i in range(4)]
+>     ci = max(range(4), key=lambda i: d[i])
+>     print(f"MUTANTE BACKEND {side}: Δquote memstall−dq c0..c3 = " + " ".join(f"{x:+.3f}" for x in d) + f" -> colonna che sale = c{ci}")
+
+== copia-gate v2 (az.rev.1 S-166) ==
+base=../wp167-harness/s167-f0c.sh derivato=s168-xctrace.sh sess_attesa=s168 allow=[wp164-harness|wp167-harness|S-167|s167-f0c|pin!=s166]
+nessun residuo fuori allow — esito: rc=0
