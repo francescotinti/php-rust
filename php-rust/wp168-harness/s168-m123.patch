@@ -1,0 +1,226 @@
+diff --git a/crates/php-runtime/src/bytecode.rs b/crates/php-runtime/src/bytecode.rs
+index de5f8e9a..0817150e 100644
+--- a/crates/php-runtime/src/bytecode.rs
++++ b/crates/php-runtime/src/bytecode.rs
+@@ -1451,6 +1451,10 @@ pub struct Func {
+     pub lines: Vec<Line>,
+     /// Per-function constant pool, indexed by [`Op::PushConst`].
+     pub consts: Vec<Const>,
++    /// MOCK m1 (S-168, criterio s168-criterio-mock.md): consts PRE-MATERIALIZZATI
++    /// in `Zval` al lowering — il handler fuso li legge per riferimento senza
++    /// `to_zval`. Braccio di MISURA, non leva promossa.
++    pub consts_z: Vec<Zval>,
+     /// Function-local `static $v` variables (name → cell id + initial value),
+     /// for `getStaticVariables()`. Empty for synthetic thunks. Ids are relocated
+     /// at module load alongside the `Op::Static*` cells.
+diff --git a/crates/php-runtime/src/compile/func.rs b/crates/php-runtime/src/compile/func.rs
+index 43fe8b48..9b62f53b 100644
+--- a/crates/php-runtime/src/compile/func.rs
++++ b/crates/php-runtime/src/compile/func.rs
+@@ -93,6 +93,7 @@ pub(super) fn compile_body(
+         ops: c.ops,
+         lines: c.lines,
+         consts: c.consts,
++        consts_z: Vec::new(),
+         static_vars: c.static_vars,
+         // Named locals plus the high-water mark of compiler temporaries.
+         n_slots: n_locals + c.n_temps_max,
+@@ -164,6 +165,8 @@ pub(super) fn compile_body(
+     // esplicito nei due valori via `compile_program_with_mode`.
+     if ctx.reg_lower {
+         super::reg_lower::lower_func(&mut f);
++        // MOCK m1 (S-168): predecode dei consts in Zval dopo il lowering.
++        f.consts_z = f.consts.iter().map(|c| c.to_zval()).collect();
+     }
+     Ok(f)
+ }
+@@ -260,6 +263,7 @@ pub(super) fn stub_func(fd: &FnDecl, err: &CompileError) -> Func {
+         ops: vec![Op::Fatal(0)],
+         lines: vec![fd.line],
+         consts: vec![Const::Str(php_types::PhpStr::new(msg.into_bytes()))],
++        consts_z: Vec::new(),
+         static_vars: Vec::new(),
+         slot_names: fd.slots.to_vec().into_boxed_slice(),
+         seed_slots: 0,
+@@ -367,6 +371,7 @@ pub(super) fn compile_prop_init(items: &[(Box<[u8]>, &Expr)], ctx: &ProgramCtx,
+         ops: c.ops,
+         lines: c.lines,
+         consts: c.consts,
++        consts_z: Vec::new(),
+         static_vars: Vec::new(),
+         n_slots: c.n_temps_max,
+         max_temps: 0,
+@@ -413,6 +418,7 @@ pub(super) fn compile_default_thunk(value: &Expr, ctx: &ProgramCtx, cur_class: O
+         ops: c.ops,
+         lines: c.lines,
+         consts: c.consts,
++        consts_z: Vec::new(),
+         static_vars: Vec::new(),
+         n_slots: c.n_temps_max,
+         max_temps: 0,
+@@ -456,6 +462,7 @@ pub(super) fn compile_const_thunk(name: &[u8], value: &Expr, ctx: &ProgramCtx, d
+         ops: c.ops,
+         lines: c.lines,
+         consts: c.consts,
++        consts_z: Vec::new(),
+         static_vars: Vec::new(),
+         n_slots: c.n_temps_max,
+         max_temps: 0,
+@@ -519,6 +526,7 @@ pub(super) fn const_stub(name: &[u8], err: &CompileError) -> Func {
+         ops: vec![Op::Fatal(0)],
+         lines: vec![0],
+         consts: vec![Const::Str(php_types::PhpStr::new(msg.into_bytes()))],
++        consts_z: Vec::new(),
+         static_vars: Vec::new(),
+         n_slots: 0,
+         max_temps: 0,
+diff --git a/crates/php-runtime/src/vm/run.rs b/crates/php-runtime/src/vm/run.rs
+index 9df135a2..90852bb4 100644
+--- a/crates/php-runtime/src/vm/run.rs
++++ b/crates/php-runtime/src/vm/run.rs
+@@ -146,6 +146,54 @@ fn ident_class(v: &Zval) -> Option<u8> {
+     })
+ }
+ 
++// MOCK m2 (S-168, criterio s168-criterio-mock.md): l'arm Long di
++// `binary_fast` COTTO per operatore (corpo VERBATIM, l'op non è più un dato a
++// runtime); ogni altra coppia di tag cade al funnel generico. Braccio di
++// MISURA, non leva promossa.
++#[inline(always)]
++fn mock_long_mul(lhs: &Zval, rhs: &Zval) -> Option<Zval> {
++    match (lhs, rhs) {
++        (Zval::Long(l), Zval::Long(r)) => Some(match l.checked_mul(*r) {
++            Some(s) => Zval::Long(s),
++            None => Zval::Double(*l as f64 * *r as f64),
++        }),
++        _ => None,
++    }
++}
++#[inline(always)]
++fn mock_long_sub(lhs: &Zval, rhs: &Zval) -> Option<Zval> {
++    match (lhs, rhs) {
++        (Zval::Long(l), Zval::Long(r)) => Some(match l.checked_sub(*r) {
++            Some(s) => Zval::Long(s),
++            None => Zval::Double(*l as f64 - *r as f64),
++        }),
++        _ => None,
++    }
++}
++#[inline(always)]
++fn mock_long_add(lhs: &Zval, rhs: &Zval) -> Option<Zval> {
++    match (lhs, rhs) {
++        (Zval::Long(l), Zval::Long(r)) => Some(match l.checked_add(*r) {
++            Some(s) => Zval::Long(s),
++            None => Zval::Double(*l as f64 + *r as f64),
++        }),
++        _ => None,
++    }
++}
++#[inline(always)]
++fn mock_long_shr(lhs: &Zval, rhs: &Zval) -> Option<Zval> {
++    match (lhs, rhs) {
++        (Zval::Long(l), Zval::Long(r)) => {
++            let (l, r) = (*l, *r);
++            if r < 0 {
++                return None;
++            }
++            Some(if r >= 64 { Zval::Long(if l < 0 { -1 } else { 0 }) } else { Zval::Long(l >> r) })
++        }
++        _ => None,
++    }
++}
++
+ /// WP-33 T1a: monomorphic fast paths for the hottest operand tag pairs
+ /// (census-driven: Concat/NotIdentical (Str,Str) ~30M each per WP suite
+ /// run, Long arithmetic/compares, cross-class `===` constants). Tried
+@@ -1958,37 +2006,75 @@ impl<'m> super::Vm<'m> {
+                     self.frames[top].stack.push(res);
+                 }
+                 Op::BinarySCSCDst { opa, la, ca, opb, lb, cb, op, opd, l, dst } => {
++                    // MOCK m123 (S-168, criterio s168-criterio-mock.md): COMPOSIZIONE
++                    // m1 (consts per riferimento da consts_z) + m2 (BinOp cotto sulla
++                    // tupla (Mul,Shr,Sub,Add)) + m3 (hoist frames[top].slots per le
++                    // tre letture) sul SOLO cammino veloce; ogni miss ricade nel
++                    // cammino ORIGINALE verbatim (sotto, con i consts m1). Braccio di
++                    // MISURA per il controllo di ADDITIVITÀ, non leva promossa.
++                    let cva = &func.consts_z[*ca as usize];
++                    let cvb = &func.consts_z[*cb as usize];
++                    let fast = {
++                        let slots = &self.frames[top].slots;
++                        let la_v = &slots[*la as usize];
++                        let lb_v = &slots[*lb as usize];
++                        if matches!((*opa, *opb, *op, *opd), (BinOp::Mul, BinOp::Shr, BinOp::Sub, BinOp::Add))
++                            && !matches!(la_v, Zval::Undef | Zval::Ref(_))
++                            && !matches!(lb_v, Zval::Undef | Zval::Ref(_))
++                        {
++                            match (mock_long_mul(la_v, cva), mock_long_shr(lb_v, cvb)) {
++                                (Some(a), Some(bv)) => Some((a, bv, read_slot(&slots[*l as usize]))),
++                                _ => None,
++                            }
++                        } else {
++                            None
++                        }
++                    };
++                    match fast {
++                        Some((a, bv, lhs)) => {
++                            let res = match mock_long_sub(&a, &bv) {
++                                Some(v) => v,
++                                None => self.binary_value_ab(*op, a, bv)?,
++                            };
++                            let res = match mock_long_add(&lhs, &res) {
++                                Some(v) => v,
++                                None => self.binary_value_ab(*opd, lhs, res)?,
++                            };
++                            self.reg_store_slot(top, *dst, res)?;
++                        }
++                        None => {
+                     // S-108 lotto-2 W10: l'albero BinarySCSC ESATTO (tre
+                     // funnel, ordine a→b→combine) poi la coda BinarySTDst
+                     // sul risultato senza transito di pila — stessa
+                     // read_slot silenziosa del lhs, stessa coda (guardia
+                     // binary_fast + funnel, come l'op non fusa da S-112
+                     // H-A2), stesso reg_store_slot.
+-                    let cva = func.consts[*ca as usize].to_zval();
++                    // MOCK m1 (S-168): consts per RIFERIMENTO da consts_z (niente to_zval).
++                    let cva = &func.consts_z[*ca as usize];
+                     let a = 'r: {
+                         {
+                             let lv = &self.frames[top].slots[*la as usize];
+                             if !matches!(lv, Zval::Undef | Zval::Ref(_)) {
+-                                if let Some(v) = binary_fast(*opa, lv, &cva) {
++                                if let Some(v) = binary_fast(*opa, lv, cva) {
+                                     break 'r v;
+                                 }
+                             }
+                         }
+                         let lhs = self.reg_load_slot(top, func, *la);
+-                        self.binary_value_ab(*opa, lhs, cva)?
++                        self.binary_value_ab(*opa, lhs, cva.clone())?
+                     };
+-                    let cvb = func.consts[*cb as usize].to_zval();
++                    let cvb = &func.consts_z[*cb as usize];
+                     let bv = 'r: {
+                         {
+                             let lv = &self.frames[top].slots[*lb as usize];
+                             if !matches!(lv, Zval::Undef | Zval::Ref(_)) {
+-                                if let Some(v) = binary_fast(*opb, lv, &cvb) {
++                                if let Some(v) = binary_fast(*opb, lv, cvb) {
+                                     break 'r v;
+                                 }
+                             }
+                         }
+                         let lhs = self.reg_load_slot(top, func, *lb);
+-                        self.binary_value_ab(*opb, lhs, cvb)?
++                        self.binary_value_ab(*opb, lhs, cvb.clone())?
+                     };
+                     let res = match binary_fast(*op, &a, &bv) {
+                         Some(v) => v,
+@@ -2003,6 +2089,8 @@ impl<'m> super::Vm<'m> {
+                         None => self.binary_value_ab(*opd, lhs, res)?,
+                     };
+                     self.reg_store_slot(top, *dst, res)?;
++                        }
++                    }
+                 }
+                 Op::LoadVarPushConst { slot, cidx } => {
+                     // S-108 lotto-2 W13: pura coppia di push — LoadVar

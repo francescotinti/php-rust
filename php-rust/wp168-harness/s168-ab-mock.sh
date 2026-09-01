@@ -1,6 +1,8 @@
 #!/bin/bash
-# s168-ab-mock.sh <BPATH> <BEXP8> <TAG> — MOCK sottrattivi F0 (criterio
-# s168-criterio-mock.md): A = pin s166 dallo stash (phpr-s166) vs B = mock;
+# s168-ab-mock.sh <APATH> <AEXP8> <BPATH> <BEXP8> <TAG> — MOCK sottrattivi F0
+# (criterio s168-criterio-mock.md): A = braccio di riferimento (pin s166 dallo
+# stash, o m0 «braccio nullo» stessa ricetta/copia — EMENDA: m0 36d73812 != pin
+# perché i path della copia entrano nel binario) vs B = mock; hash MISURATI;
 # giudice arith-dq N=250M; braccio E2 «loop nudo» bilaterale (A, B, oracle).
 # COPIA DICHIARATA di wp167-harness/s167-f0ab.sh (manifest s168-ab-mock-copia.diff
 # + copia-gate v2) coi SOLI adattamenti del criterio: due binari (A stash, B
@@ -10,8 +12,7 @@
 set -u
 export PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin
 H="$(cd -P "$(dirname -- "$0")" && pwd -P)"
-A="/Volumes/Extreme Pro/Claude/phpr-old-target/release/phpr-s166"
-BB="${1:?BPATH}"; BEXP="${2:?BEXP8}"; TAG="${3:?TAG}"
+A="${1:?APATH}"; AEXP="${2:?AEXP8}"; BB="${3:?BPATH}"; BEXP="${4:?BEXP8}"; TAG="${5:?TAG}"
 O=/opt/homebrew/opt/php/bin/php
 DQ="$H/../wp164-harness/arith-dq.php"
 E2="$H/arith-e2.php"
@@ -22,12 +23,12 @@ VERD="$H/s168-$TAG-verdetto.out"; RC="$OUT/$TAG.rc"
 grep -qi "s168\|s-168" /private/tmp/phpr-measure.lock 2>/dev/null || { echo "lock assente" | tee -a "$VERD"; echo 9 > "$RC"; exit 9; }
 "$H/../wp129-harness/s129-quiescenza.sh" "$OUT/quiesce-$TAG.rc" > /dev/null 2>&1 || { echo "quiescenza FAIL" | tee -a "$VERD"; echo 8 > "$RC"; exit 8; }
 AM="$(shasum -a 256 "$A" | cut -c1-8)"; BM="$(shasum -a 256 "$BB" | cut -c1-8)"
-[ "$AM" = 092dcff4 ] || { echo "A!=pin s166 ($AM)" | tee -a "$VERD"; echo 1 > "$RC"; exit 1; }
+[ "$AM" = "$AEXP" ] || { echo "A misurato $AM != atteso $AEXP" | tee -a "$VERD"; echo 1 > "$RC"; exit 1; }
 [ "$BM" = "$BEXP" ] || { echo "B misurato $BM != atteso $BEXP" | tee -a "$VERD"; echo 1 > "$RC"; exit 1; }
 ucpu(){ { /usr/bin/time -p perl -e 'alarm 900; exec @ARGV or die' -- "$@" > /dev/null; } 2>&1 | awk '/^user/{print $2}'; }
 floor3(){ local a b c; a=$(ucpu "$@" "$EMPTY"); b=$(ucpu "$@" "$EMPTY"); c=$(ucpu "$@" "$EMPTY"); printf '%s\n%s\n%s\n' "$a" "$b" "$c" | sort -n | awk 'NR==2'; }
 {
-echo "== s168 MOCK $TAG — A=$AM MISURATO (pin s166 stash) B=$BM MISURATO; giudice arith-dq N=250M + E2 loop nudo bilaterale; R=5 ABAB alternato; criterio s168-criterio-mock.md =="
+echo "== s168 MOCK $TAG — A=$AM MISURATO ($A) B=$BM MISURATO ($BB); giudice arith-dq N=250M + E2 loop nudo bilaterale; R=5 ABAB alternato; criterio s168-criterio-mock.md =="
 echo "sentinella LS: $(pgrep -fl 'rust-analyzer|Antigravity|serena' 2>/dev/null | grep -v pgrep | awk '{print $2}' | sort -u | tr '\n' ' ')"
 for D in "$DQ" "$E2"; do
   "$A" "$D" > "$OUT/$TAG-A.out" 2>&1; "$BB" "$D" > "$OUT/$TAG-B.out" 2>&1
