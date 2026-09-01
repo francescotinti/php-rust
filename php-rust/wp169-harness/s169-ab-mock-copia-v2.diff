@@ -16,6 +16,10 @@
 < A="${1:?APATH}"; AEXP="${2:?AEXP8}"; BB="${3:?BPATH}"; BEXP="${4:?BEXP8}"; TAG="${5:?TAG}"
 ---
 > A="${1:?APATH}"; AEXP="${2:?AEXP8}"; BB="${3:?BPATH}"; BEXP="${4:?BEXP8}"; TAG="${5:?TAG}"; R="${6:-5}"
+18c18
+< E2="$H/arith-e2.php"
+---
+> E2="$H/../wp168-harness/arith-e2.php"
 21c21
 < VERD="$H/s168-$TAG-verdetto.out"; RC="$OUT/$TAG.rc"
 ---
@@ -45,5 +49,5 @@
 > print(f"DECOMPOSIZIONE (az.rev.1 S-168, soglia = max(rumore, SL 0,94) SENZA pavimento 4): soglia_dec={thrd:.2f} -> {'DIREZIONE FIRMATA' if abs(D) >= thrd else 'sotto il rumore'} ({'B più veloce' if D > 0 else 'B più lento'}; R={len(rows)})")
 
 == copia-gate v2 (az.rev.1 S-166) ==
-base=../wp168-harness/s168-ab-mock.sh derivato=s169-ab-mock.sh sess_attesa=s169 allow=[wp164-harness|wp129-harness|S-168|s167-f0ab|pin s166|s129-quiescenza]
+base=../wp168-harness/s168-ab-mock.sh derivato=s169-ab-mock.sh sess_attesa=s169 allow=[wp164-harness|wp129-harness|wp168-harness/arith-e2|S-168|s167-f0ab|pin s166|s129-quiescenza]
 nessun residuo fuori allow — esito: rc=0

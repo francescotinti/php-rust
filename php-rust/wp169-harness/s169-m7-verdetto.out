@@ -1,0 +1,3 @@
+== s169 MOCK m7 — A=36d73812 MISURATO (/Volumes/Extreme Pro/Claude/phpr-old-target/release/phpr-s168-m0) B=c1c48ad1 MISURATO (/private/tmp/s169-mock-bin/phpr-m7); giudice arith-dq N=250M + E2 loop nudo bilaterale; R=5 ABAB alternato; criterio s169-criterio.md ==
+sentinella LS: /Applications/Antigravity /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.96.0-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer 
+floors: A=0.01 B=0.00 oracle=0.05

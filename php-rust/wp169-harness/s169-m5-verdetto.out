@@ -1,0 +1,14 @@
+== s169 MOCK m5 — A=36d73812 MISURATO (/Volumes/Extreme Pro/Claude/phpr-old-target/release/phpr-s168-m0) B=0687666b MISURATO (/private/tmp/s169-mock-bin/phpr-m5); giudice arith-dq N=250M + E2 loop nudo bilaterale; R=5 ABAB alternato; criterio s169-criterio.md ==
+sentinella LS: /Applications/Antigravity /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.96.0-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer 
+floors: A=0.00 B=0.00 oracle=0.05
+  coppia1 [AB]: dqA=11.65 dqB=15.19 e2A=0.01 e2B=0.01 dqO=2.23 e2O=0.05
+  coppia2 [BA]: dqA=11.64 dqB=15.15 e2A=0.01 e2B=0.00 dqO=2.26 e2O=0.05
+  coppia3 [AB]: dqA=11.69 dqB=15.21 e2A=0.01 e2B=0.01 dqO=2.21 e2O=0.05
+  coppia4 [BA]: dqA=11.70 dqB=15.09 e2A=0.01 e2B=0.01 dqO=2.21 e2O=0.05
+  coppia5 [AB]: dqA=11.65 dqB=15.12 e2A=0.01 e2B=0.01 dqO=2.21 e2O=0.05
+GIUDICE arith-dq: A=46.60 B=60.60 ns/iter D=A−B=-14.00 soglia=4.00 (rumore drop-1 A'=0.20 B'=0.40) -> NON nominato (vale 0)
+DECOMPOSIZIONE (az.rev.1 S-168, soglia = max(rumore, SL 0,94) SENZA pavimento 4): soglia_dec=0.94 -> DIREZIONE FIRMATA (B più lento; R=5)
+E2 loop nudo: A=0.04 B=0.04 oracle=0.00 ns/iter; guardia |e2B−e2A|=0.00 ≤ 4.00 -> ok
+statement (dq−e2): A=46.56 oracle=8.64 gap-statement=37.92; controllo-loop: A=0.04 oracle=0.00 gap-loop=0.04; riferimento finestra: dq oracle=8.64 gap totale=37.96
+ESITO rc=4
+sentinella LS fine: /Applications/Antigravity /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.96.0-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer 
