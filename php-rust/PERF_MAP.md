@@ -1,7 +1,20 @@
 # PERF_MAP — phpr vs PHP oracle 8.5.7, mappa multi-workload
 
-Aggiornata: **2026-09-01 (S-166)** · pin **NUOVO s166 phpr 092dcff431bef876 +
-server caa4e4b2638686a9** (**S-166 = PROMOZIONE leva L-MCk «cade il cap
+Aggiornata: **2026-09-01 (S-167)** · pin **INVARIATO s166 092dcff4+caa4e4b2**
+(**S-167 = ⚖️ CONCILIO 9/9 GO-CONDIZIONATO alla campagna R1 «interno-handler
+prima, dispatch poi» (vincolano wp167-harness/COUNCIL+verbali) + FETTA 0 a
+VERDETTO EMENDATO**: reg-lower paga GIÀ 80,6 ns/iter (OFF 127,1→ON 46,5) ·
+pila NON RILEVATA ≤0,5 (stride +0,44; controllo positivo dovuto) ·
+**MISPREDICT REFUTATO bilaterale** (c1: phpr 0,005 vs oracle 0,031 — il
+match gigante è ben predetto) · ripartizione INDIZIARIA: interno-handler
+~23 ns (61%) DOMINANTE + delivery-indiziato ~14,5 (identità aritmetica
+delle quote DICHIARATA: chiusura vera ai mock m1-m3, gate ≥90% Gregg,
+S-168) · strumenti collaudati dai MUTANTI (2 morsi utili: parser census +
+copertura parziale dcn!; colonna mispredict fissata 11,9×) · drop-census
+INDISPONIBILE dichiarato · GO-leva F1/F2 SUB JUDICE; incidente ENOSPC
+curato (copia-albero, raw fuori repo); verdetti wp167-harness/s167-*.out)
+· storico S-166: pin NUOVO s166 phpr 092dcff431bef876 +
+server caa4e4b2638686a9 (**S-166 = PROMOZIONE leva L-MCk «cade il cap
 argc≤2 dal fast path MethodCall»: edit di UN predicato — il gate vero
 (simple_call arità esatta + IC-hit + recv Object) vive già in
 `methodcall_fast` — con catena rc=0: giudice proprio **m-mc3 (k=3)
