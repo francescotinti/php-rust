@@ -1,0 +1,5 @@
+== s166 disasm gate L-MCk (pre-smoke, agli atti) ==
+metodo: identico a disasm-mc1b.out (otool, awk cumulativo, $2==bl)
+phpr-s165 (pin, A): bl_run_loop=6086
+phpr-s166-mck-B (092dcff4): bl_run_loop=6085
+Delta=-1 DICHIARATO (cade il test n<=2, attesa criterio p.5 CENTRATA)
