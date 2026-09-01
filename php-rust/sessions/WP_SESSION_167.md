@@ -26,8 +26,7 @@ copione census senza pulizia della copia-sorgente; curato, raw fuori repo).
   oracle 0,031)**; quote ⇒ interno-handler ~23 ns (61%) + delivery-indiziato
   ~14,5 · (d) drop-census INDISPONIBILE (mutante: copertura parziale) ·
   (e) non scattato. **GO-leva F1/F2 SUB JUDICE del gate mock ≥90% (Gregg)**.
-4·Rettifiche a storia: commit «rc=0» scritto prima dell'esito (rettificato) —
-  lezione: mai concatenare commit al collaudo nello stesso comando.
+4·Rettifica a storia: un commit «rc=0» scritto PRIMA dell'esito, rettificato.
 
 ## ⭐ Lezioni (max 3)
 - ⭐⭐ i MUTANTI degli strumenti pagano DOPPIO: uno ha smascherato prima il
@@ -37,6 +36,6 @@ copione census senza pulizia della copia-sorgente; curato, raw fuori repo).
 - ⭐⭐ un'attribuzione DA QUOTE è indizio bilaterale forte ma NON firma
   sottrattiva (§4): il 99% «indiziato» della fetta 0 alloca i mock, non li
   sostituisce.
-- ⭐ ogni copione che COPIA un albero deve pulire la copia nel suo epilogo
-  (l'ENOSPC ha corrotto una traccia in finestra); i raw pesanti vivono fuori
-  repo col path citato nel verdetto.
+- ⭐ un copione che copia un albero lo pulisce nell'epilogo (ENOSPC in
+  finestra); raw pesanti fuori repo, path nel verdetto; mai commit
+  concatenati all'esito di un collaudo.
