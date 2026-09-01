@@ -1,0 +1,11 @@
+== s169 e2-check — A=36d73812 (m0) vs m5/m7 dagli stash; R=5; output confrontato con l'ATTESO oracle ('0') ==
+loop nudo sotto m5: CmpJmpSC IncDecSlotJmp 
+floors: A=0.01 m5=0.01 m7=0.00
+  giro1: A=3.69 m5=3.69 m7=3.68
+  giro2: A=3.68 m5=3.70 m7=3.68
+  giro3: A=3.68 m5=3.70 m7=3.68
+  giro4: A=3.74 m5=3.70 m7=3.68
+  giro5: A=3.68 m5=3.70 m7=3.68
+e2 m5: A=14.68 B=14.76 |D|=0.08 ≤ 4.00 -> guardia ok (rumore A'=0.04 B'=0.00)
+e2 m7: A=14.68 B=14.72 |D|=0.04 ≤ 4.00 -> guardia ok (rumore A'=0.04 B'=0.00)
+e2_A (per il conto di m5) = 14.68 ns/iter MISURATO in questo run

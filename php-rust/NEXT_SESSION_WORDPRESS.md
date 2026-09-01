@@ -11,7 +11,11 @@ pila REFUTATA (controllo positivo) · mispredict REFUTATO firmato (c3 fissata co
 mutante casuale bilaterale) · c0 solo per esclusione · S-170 = DELIBERA R4
 DELL'UTENTE PRIMA di ogni codice** · leve: 0+0 (sanzionato) · incidenti: 2+1
 (ENOSPC ktrace) · revisioni: S-168 semantica REGGE CON RILIEVI (emende applicate),
-S-169 processo: wp169-harness/revisione.md · QUESITI: (a) delibera R4;
+S-169 processo: REGGE CON RILIEVI (pre-flight saltato: il feed CI diceva già
+disk-low; e2 rimisurata ok; 4 casi di UNA classe «copione derivato non
+collaudato contro l'atteso»; 1,75 = limite inferiore; c2 indiziata ⇒ c0 non
+chiusa; mispredict «trascurabile», non firma; lock ha fermato la CI ~304 job)
+· QUESITI: (a) delibera R4; (e) potare/azzerare la coda CI (≈100 h)?;
 (b) T2/A2; (c) census server (19° slitt.); (d) ratifiche §3.
 
 ## Scoreboard (pin INVARIATO s166 phpr 092dcff431bef876 + server caa4e4b2638686a9)
@@ -33,9 +37,11 @@ run.rs 6917 · mod.rs 25909 · host.rs 7726.
    (IncDecSlotJmp/CmpJmpSC senza guardie/bounds sul cammino Long) su E2 R=5,
    A=m0; poi decomposizione del residuo ~17,5 di BinarySCSCDst a bracci
    (guardie · read_slot clone · store+gc_note · funnel) — SOLA MISURA.
-3. Sanature residue: mutante c0 POSITIVO (throughput retiring: str_repeat/
-   array_sum L1) · copia-gate v2 per TOKEN (lezione S-169) · collaudo A==B
-   contro output ATTESO (oracle) nei copioni derivati.
+3. Az.rev. S-169 (processo): pre-flight OBBLIGATORIO anche in-conversazione ·
+   copia-gate v2 per TOKEN + `[ -s ]` sui file letti + parità contro output
+   ATTESO (rigenerare i manifest) · mutante c0 POSITIVO (throughput retiring:
+   str_repeat/array_sum L1) e c2 declassata a «indiziata» · c3 anche in ns/iter
+   · rimozione lock = passo esplicito di chiusura, coda CI nello scoreboard.
 4. Quesiti (a)-(d) se ratificati.
 
 ## Aperture per NOME
@@ -60,7 +66,8 @@ BOLT/PGO · pin senza collaudo · rc da pipe · promozione sotto banda.
 **Riscritto** 2026-09-02 notte (chiusura S-169; storia in `sessions/` · `gaps/`).
 Pre-flight S-170: pin phpr **s166 092dcff4**31bef876 + server **caa4e4b2**
 638686a9 (SOLO via pin-*.sh; stash bracci `phpr-s168-*`/`phpr-s169-*` NON pin)
-· Data ≥10G (**controllare $DARWIN_USER_TEMP_DIR/instruments*.ktrace**) · MySQL
+· Data ≥10G (**controllare $DARWIN_USER_TEMP_DIR/instruments*.ktrace e il
+CI_FEED: disk-low = STOP**) · MySQL
 wp8 con l'elenco · uploads sotto guardia · corpus 1412 · lock misura da CREARE ·
 **NESSUNA coppia dovuta** · CI: coda lunga (~290 job da S-168/169) — leggere il
 feed · lettura: REGOLE.md → QUI → wp169-harness/s169-verdetto.out +
