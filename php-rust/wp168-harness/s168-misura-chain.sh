@@ -21,6 +21,9 @@ for t in m1 m2 m3 m123; do
   fi
 done
 M0="$BIN/phpr-m0"; PIN="$STASH/phpr-s166"
+# criterio p.5: disasm bl run_loop A/B per ogni braccio (pin vs m0, m0 vs mN)
+"$R/wp160-harness/s160-disasm-bl.sh" "$PIN" "$M0" "$OUT/disasm-m0.out" >> "$LOG" 2>&1
+for t in m1 m2 m3 m123; do "$R/wp160-harness/s160-disasm-bl.sh" "$M0" "$BIN/phpr-$t" "$OUT/disasm-$t.out" >> "$LOG" 2>&1; done
 run_ab(){ # <A> <B> <tag>
   "$H/s168-ab-mock.sh" "$1" "$(h8 "$1")" "$2" "$(h8 "$2")" "$3"; rc=$?
   say "ab $3 rc=$rc"; case "$rc" in 1|2|7|9) say "STOP apparato"; touch "$OUT/chain.done"; exit "$rc";; esac

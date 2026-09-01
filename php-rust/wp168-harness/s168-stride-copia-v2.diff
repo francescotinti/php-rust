@@ -1,4 +1,4 @@
-2,6c2,9
+2,6c2,13
 < # s167-f0ab.sh — FETTA 0, bracci (a)+(b) del criterio s167-criterio-f0.md
 < # (PRE-registrato): (a) A/B PHPR_REG_LOWER on/off sul PIN s166 · (b) gemello
 < # data-stride vs arith-dq (entrambi ON). + riferimento oracle della finestra.
@@ -12,42 +12,46 @@
 > # 1023 vs 4194303: il cronometro DEVE vedere il D-cache). COPIA DICHIARATA di
 > # wp167-harness/s167-f0ab.sh (manifest s168-stride-copia.diff + copia-gate v2).
 > # ns/iter=(med raw−floor)/N con N dal sorgente; rumore drop-1.
-> # rc autoritativo = ab-out/stride.rc; verdetto s168-stride-verdetto.out.
-11d13
+> # rc autoritativo = ab-out/<TAG>.rc; verdetto s168-<TAG>-verdetto.out (TAG env, default stride).
+> # EMENDA DICHIARATA (S-168 23:30, dopo il 1° run TAG=stride rc=5): la soglia del
+> # controllo positivo «D > 10×rumore» era mal posta — il rumore del braccio far
+> # SCALA con l'effetto (40 ns su D=+239, near 89→far 328 = 3,7×) ⇒ soglia
+> # emendata: D ≥ max(10 ns, 3×rumore). Il criterio emendato si RIESEGUE (REGOLE §3).
+11d17
 < O=/opt/homebrew/opt/php/bin/php
-13c15,17
+13c19,21
 < ST="$H/arith-stride.php"
 ---
 > ST="$H/../wp167-harness/arith-stride.php"
 > ST2="$H/../wp167-harness/arith-stride2.php"
 > NEAR="$H/arith-dcnear.php"; FAR="$H/arith-dcfar.php"
-15,16c19,20
+15,16c23,24
 < OUT="$H/f0-out"; mkdir -p "$OUT"
 < VERD="$H/s167-f0ab-verdetto.out"; RC="$OUT/f0ab.rc"
 ---
 > OUT="$H/ab-out"; mkdir -p "$OUT"
-> VERD="$H/s168-stride-verdetto.out"; RC="$OUT/stride.rc"
-18,19c22,23
+> TAG="${TAG:-stride}"; VERD="$H/s168-$TAG-verdetto.out"; RC="$OUT/$TAG.rc"
+18,19c26,27
 < grep -qi "s167\|s-167" /private/tmp/phpr-measure.lock 2>/dev/null || { echo "lock assente" | tee -a "$VERD"; echo 9 > "$RC"; exit 9; }
 < "$H/../wp129-harness/s129-quiescenza.sh" "$OUT/quiesce-f0ab.rc" > /dev/null 2>&1 || { echo "quiescenza FAIL" | tee -a "$VERD"; echo 8 > "$RC"; exit 8; }
 ---
 > grep -qi "s168\|s-168" /private/tmp/phpr-measure.lock 2>/dev/null || { echo "lock assente" | tee -a "$VERD"; echo 9 > "$RC"; exit 9; }
-> "$H/../wp129-harness/s129-quiescenza.sh" "$OUT/quiesce-stride.rc" > /dev/null 2>&1 || { echo "quiescenza FAIL" | tee -a "$VERD"; echo 8 > "$RC"; exit 8; }
-23a28
+> "$H/../wp129-harness/s129-quiescenza.sh" "$OUT/quiesce-$TAG.rc" > /dev/null 2>&1 || { echo "quiescenza FAIL" | tee -a "$VERD"; echo 8 > "$RC"; exit 8; }
+23a32
 > nof(){ awk 'match($0, /\$i<[0-9]+/) {print substr($0, RSTART+3, RLENGTH-3); exit}' "$1"; }
-25c30,31
+25c34,35
 < echo "== s167 F0 bracci (a)+(b) — pin s166 $PM MISURATO; giudice arith-dq N=250M; R=5 interleaved; criterio s167-criterio-f0.md =="
 ---
 > echo "== s168 STRIDE sanatura — pin s166 $PM MISURATO; R=5 interleaved; N dal sorgente: dq=$(nof "$DQ") stride=$(nof "$ST") stride2=$(nof "$ST2") near=$(nof "$NEAR") far=$(nof "$FAR") =="
 > echo "layout (PHPR_DUMP_OPS, dichiarato): dq \$s=slot0 \$i=slot1 (stessa linea) · stride S-167 \$s=14 \$i=15 (STESSA linea, byte 224-255) · stride2 \$s=0 \$i=15 (linee 0 e 3, DISTINTE)"
-27,29c33,34
+27,29c37,38
 < FON=$(floor3 env -u PHPR_REG_LOWER "$P"); FOFF=$(floor3 env PHPR_REG_LOWER=0 "$P"); FO=$(floor3 "$O")
 < echo "floors: on=$FON off=$FOFF oracle=$FO"
 < TSV="$OUT/f0ab-runs.tsv"; : > "$TSV"
 ---
 > F=$(floor3 env -u PHPR_REG_LOWER "$P"); echo "floor phpr=$F"
-> TSV="$OUT/stride-runs.tsv"; : > "$TSV"
-31,35c36,39
+> TSV="$OUT/$TAG-runs.tsv"; : > "$TSV"
+31,35c40,43
 <   TON=$(ucpu env -u PHPR_REG_LOWER "$P" "$DQ"); TOFF=$(ucpu env PHPR_REG_LOWER=0 "$P" "$DQ")
 <   TDQ=$(ucpu env -u PHPR_REG_LOWER "$P" "$DQ"); TST=$(ucpu env -u PHPR_REG_LOWER "$P" "$ST")
 <   TOR=$(ucpu "$O" "$DQ")
@@ -58,18 +62,18 @@
 >   T4=$(ucpu "$P" "$NEAR"); T5=$(ucpu "$P" "$FAR")
 >   printf '%s\t%s\t%s\t%s\t%s\n' "$T1" "$T2" "$T3" "$T4" "$T5" >> "$TSV"
 >   echo "  giro$i: dq=$T1 stride=$T2 stride2=$T3 near=$T4 far=$T5"
-37c41
+37c45
 < python3 - "$TSV" "$FON" "$FOFF" "$FO" <<'PY'
 ---
 > python3 - "$TSV" "$F" "$(nof "$DQ")" "$(nof "$NEAR")" <<'PY'
-40,42c44,45
+40,42c48,49
 < fon, foff, fo = map(float, sys.argv[2:5])
 < N = 250e6
 < def col(i, f): return sorted((float(r[i])-f)/N*1e9 for r in rows)
 ---
 > f = float(sys.argv[2]); N = float(sys.argv[3]); NN = float(sys.argv[4])
 > def col(i, n): return sorted((float(r[i])-f)/n*1e9 for r in rows)
-46,53c49,58
+46,53c53,62
 < on, off, dq, st, orc = col(0,fon), col(1,foff), col(2,fon), col(3,fon), col(4,fo)
 < print(f"(a) REG_LOWER: on={med(on):.2f} off={med(off):.2f} ns/iter D_ab={med(off)-med(on):+.2f} (rumore on'={dr1(on):.2f} off'={dr1(off):.2f}) — costo GIA' pagato dal lowering, non ricontare")
 < d_st = med(st)-med(dq)
@@ -83,9 +87,9 @@
 > n = max(dr1(dq), dr1(st), dr1(st2)); thr = max(0.5, n)
 > print(f"dq={med(dq):.2f} stride(S-167, stessa linea)={med(st):.2f} D={med(st)-med(dq):+.2f} · stride2(linee distinte)={med(st2):.2f} D2={med(st2)-med(dq):+.2f} ns/iter (rumore drop-1 dq'={dr1(dq):.2f} st'={dr1(st):.2f} st2'={dr1(st2):.2f}; soglia=max(0,5, rumore)={thr:.2f})")
 > dpos = med(far)-med(near)
-> print(f"CONTROLLO POSITIVO D-cache: near={med(near):.1f} far={med(far):.1f} ns/iter D={dpos:+.1f} (rumore near'={dr1(near):.1f} far'={dr1(far):.1f}) -> {'MORDE: il cronometro vede il D-cache' if dpos > 10*max(dr1(near),dr1(far),0.5) else 'NON MORDE: strumento cieco, verdetto stride INDISPONIBILE'}")
+> print(f"CONTROLLO POSITIVO D-cache: near={med(near):.1f} far={med(far):.1f} ns/iter D={dpos:+.1f} (rumore near'={dr1(near):.1f} far'={dr1(far):.1f}) -> {'MORDE: il cronometro vede il D-cache' if dpos >= max(10.0, 3*max(dr1(near),dr1(far))) else 'NON MORDE: strumento cieco, verdetto stride INDISPONIBILE'}")
 > d2 = med(st2)-med(dq)
-> if dpos <= 10*max(dr1(near),dr1(far),0.5): rc = 5
+> if dpos < max(10.0, 3*max(dr1(near),dr1(far))): rc = 5
 > elif abs(d2) <= thr: rc = 0; print(f"VERDETTO: canale pila/D-cache su \\$s/\\$i NON RILEVATO a risoluzione {thr:.2f} ns/iter CON layout verificato (linee distinte) E strumento collaudato dal controllo positivo ⇒ REFUTATO alla risoluzione dichiarata")
 > else: rc = 4; print(f"VERDETTO: D2={d2:+.2f} > soglia: il layout degli slot MUOVE il tempo — canale pila VIVO (KS-LE-167-1 da rileggere)")
 > print(f"ESITO rc={rc}"); sys.exit(rc)

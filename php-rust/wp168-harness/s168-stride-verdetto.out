@@ -1,0 +1,12 @@
+== s168 STRIDE sanatura — pin s166 092dcff4 MISURATO; R=5 interleaved; N dal sorgente: dq=250000000 stride=250000000 stride2=250000000 near=20000000 far=20000000 ==
+layout (PHPR_DUMP_OPS, dichiarato): dq $s=slot0 $i=slot1 (stessa linea) · stride S-167 $s=14 $i=15 (STESSA linea, byte 224-255) · stride2 $s=0 $i=15 (linee 0 e 3, DISTINTE)
+sentinella LS: /Applications/Antigravity /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.96.0-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer 
+floor phpr=0.01
+  giro1: dq=11.55 stride=11.82 stride2=11.77 near=1.80 far=6.61
+  giro2: dq=11.80 stride=11.74 stride2=11.65 near=1.80 far=5.81
+  giro3: dq=11.76 stride=11.68 stride2=11.78 near=1.79 far=6.61
+  giro4: dq=11.75 stride=11.81 stride2=11.71 near=1.79 far=6.58
+  giro5: dq=11.71 stride=11.68 stride2=11.61 near=1.79 far=5.67
+dq=46.96 stride(S-167, stessa linea)=46.92 D=-0.04 · stride2(linee distinte)=46.80 D2=-0.16 ns/iter (rumore drop-1 dq'=0.36 st'=0.52 st2'=0.52; soglia=max(0,5, rumore)=0.52)
+CONTROLLO POSITIVO D-cache: near=89.0 far=328.5 ns/iter D=+239.5 (rumore near'=0.5 far'=40.0) -> NON MORDE: strumento cieco, verdetto stride INDISPONIBILE
+ESITO rc=5
