@@ -13,3 +13,7 @@ Nominati ai canali: interno-handler ~23 ns (61%) + delivery-indiziato ~14,5 (38%
 Kill NON scattati: aggredibile indiziato ~37,5 ≥ 21; mock ancora da prezzare (il loro <10 resta vivo come kill).
 INCIDENTE S-167 #1 CONTATO: il copione census (f0d) non rimuoveva la COPIA-SORGENTE in /private/tmp ⇒ ENOSPC in finestra (c), traccia p-dq corrotta, ri-registrata; cura: rm della copia nel copione + pulizia; disciplina disco violata dal MIO artefatto.
 raw: /Volumes/Extreme Pro/Claude/phpr-raw-out/s167-f0c/
+== EMENDA post-revisione (az.5, lente misura — dichiarata) ==
+(1) Il «99% indiziato» è un'IDENTITA' ARITMETICA (le quote di un template che somma a 1, moltiplicate per il tempo, chiudono per costruzione): NON è una chiusura nel senso del criterio — la chiusura VERA resta ai mock sottrattivi (gate ≥90%). Il verdetto si legge: «2 canali REFUTATI + ripartizione INDIZIARIA del residuo (interno-handler dominante)», niente di più.
+(2) FALSO CORRETTO: «c0 scende nei mutanti» — su p-mut c0 SALE (0,674 vs 0,646); c0 resta a semantica NON fissata (mutante proprio dovuto, az.2 S-168).
+(3) STRIDE derubricata: «canale pila NON RILEVATO alla risoluzione 0,5» (refutazione piena solo dopo controllo positivo, az.3 S-168). (4) Quote oracle a N=1: repliche R≥3 dovute (az.4), incl. spiegare o-mut c1 0,031→0,004.
