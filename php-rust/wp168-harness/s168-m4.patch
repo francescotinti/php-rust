@@ -1,0 +1,16 @@
+diff --git a/crates/php-runtime/src/compile/mod.rs b/crates/php-runtime/src/compile/mod.rs
+index 675d2c1a..11eccfb3 100644
+--- a/crates/php-runtime/src/compile/mod.rs
++++ b/crates/php-runtime/src/compile/mod.rs
+@@ -1029,6 +1029,11 @@ impl<'a> FnCompiler<'a> {
+                 | StmtKind::Break(_)
+                 | StmtKind::Continue(_)
+                 | StmtKind::Goto(_)
++                // MOCK m4 (S-168, criterio s168-criterio-mock.md): NESSUN Sweep
++                // dopo gli statement-espressione — misura il costo del dispatch
++                // `Op::Sweep` per iterazione su arith-dq (semantica GC/dtor NON
++                // preservata: braccio di MISURA, mai promuovibile così).
++                | StmtKind::Expr(_)
+         ) {
+             return true;
+         }

@@ -1,1 +1,18 @@
 == s168 xctrace sanature (pin 092dcff4; template CPU Counters; repliche R=3 p-dq/o-dq/o-mut + mutante backend memstall bilaterale) ==
+p-dq-1: quote c0..c3 = 0.644 0.020 0.329 0.007 (campioni 2705)
+p-dq-2: quote c0..c3 = 0.658 0.016 0.320 0.006 (campioni 1313)
+p-dq-3: quote c0..c3 = 0.653 0.022 0.321 0.004 (campioni 1558)
+o-dq-1: quote c0..c3 = 0.808 0.048 0.114 0.029 (campioni 864)
+o-dq-2: quote c0..c3 = 0.763 0.063 0.141 0.033 (campioni 825)
+o-dq-3: quote c0..c3 = 0.708 0.045 0.197 0.050 (campioni 458)
+o-mut-1: quote c0..c3 = 0.826 0.007 0.138 0.030 (campioni 1017)
+o-mut-2: quote c0..c3 = 0.861 0.016 0.088 0.035 (campioni 873)
+o-mut-3: quote c0..c3 = 0.862 0.007 0.101 0.031 (campioni 793)
+p-ms: quote c0..c3 = 0.187 0.754 0.054 0.005 (campioni 2449)
+o-ms: quote c0..c3 = 0.301 0.575 0.095 0.029 (campioni 769)
+REPLICHE p-dq: media±spread c0..c3 = 0.652±0.014 0.019±0.006 0.323±0.009 0.006±0.003
+REPLICHE o-dq: media±spread c0..c3 = 0.760±0.100 0.052±0.018 0.151±0.082 0.037±0.021
+REPLICHE o-mut: media±spread c0..c3 = 0.849±0.036 0.010±0.009 0.109±0.049 0.032±0.006
+o-mut c1 vs o-dq c1: 0.010 vs 0.052 (spread 0.009/0.018) -> ANOMALIA CONFERMATA (riproducibile)
+MUTANTE BACKEND phpr: Δquote memstall−dq c0..c3 = -0.464 +0.735 -0.270 -0.001 -> colonna che sale = c1
+MUTANTE BACKEND oracle: Δquote memstall−dq c0..c3 = -0.459 +0.523 -0.056 -0.008 -> colonna che sale = c1
