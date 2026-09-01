@@ -66,6 +66,7 @@ nello stesso atto perché appenda in QUESTA sezione.)
 
 | pin (sha256/16) | sessione | collaudato | evidenza |
 |---|---|---|---|
+| 8cfe84995f9da35a | s168-m2 BRACCIO (sorgente @ 1fd2d262; riga da pin-phpr.sh --braccio) | smoke parità 2 modi OK 2026-09-01 23:03:12 — braccio di misura, NON pin | stash `phpr-s168-m2` |
 | b8ec65563867dfeb | s168-m1 BRACCIO (sorgente @ ae8b441d; riga da pin-phpr.sh --braccio) | smoke parità 2 modi OK 2026-09-01 23:03:08 — braccio di misura, NON pin | stash `phpr-s168-m1` |
 | 36d73812b1010a4b | s168-m0 BRACCIO (sorgente @ 1888bc8f; riga da pin-phpr.sh --braccio) | smoke parità 2 modi OK 2026-09-01 22:50:55 — braccio di misura, NON pin | stash `phpr-s168-m0` |
 | 092dcff431bef876 | s166 (sorgente @ 26ae107d; riga da pin-phpr.sh) | smoke parità 2 modi OK 2026-09-01 09:54:12 — batteria/corpus/fixture/micro DOVUTI a parte | stash `phpr-s166` |
