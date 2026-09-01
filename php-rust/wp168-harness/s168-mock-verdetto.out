@@ -1,0 +1,22 @@
+== S-168 MOCK sottrattivi F0 — SINTESI MECCANICA (criterio s168-criterio-mock.md p.4; A=m0 braccio nullo; giudice arith-dq N=250M; R=5) ==
+m0: A=46.60 B=46.84 D=-0.24 soglia=4.00 rumore(A'=0.48,B'=0.28) -> NON; e2 A=14.72 B=14.72 guardia ok; bl run_loop A=6036 B=6036 Δ=+0; rc=4
+m1: A=46.72 B=42.00 D=+4.72 soglia=4.00 rumore(A'=0.20,B'=0.60) -> NOMINATO; e2 A=14.68 B=14.72 guardia ok; bl run_loop A=6036 B=6032 Δ=-4; rc=0
+m2: A=46.84 B=41.64 D=+5.20 soglia=4.00 rumore(A'=0.32,B'=0.08) -> NOMINATO; e2 A=14.72 B=14.88 guardia ok; bl run_loop A=6036 B=6063 Δ=+27; rc=0
+m3: A=47.08 B=49.36 D=-2.28 soglia=4.00 rumore(A'=0.20,B'=0.32) -> NON; e2 A=14.72 B=14.80 guardia ok; bl run_loop A=6036 B=6047 Δ=+11; rc=4
+m123: A=46.60 B=38.60 D=+8.00 soglia=4.00 rumore(A'=0.16,B'=0.28) -> NOMINATO; e2 A=14.72 B=14.72 guardia ok; bl run_loop A=6036 B=6043 Δ=+7; rc=0
+m4b: A=46.60 B=43.64 D=+2.96 soglia=4.00 rumore(A'=0.64,B'=0.68) -> NON; e2 A=14.72 B=14.68 guardia ok; bl run_loop A=6036 B=6036 Δ=+0; rc=4
+braccio NULLO m0 vs pin: D=-0.24 (soglia 4.00) -> ricetta/copia NEUTRA (in banda)
+controllo-loop (E2 su A=m0) = 14.68 ns/iter (31.4% di dq 46.72); oracle: e2=3.56 dq=8.64; gap totale=38.08 (statement 26.96 + loop 11.12)
+mock NOMINATI (≥soglia, guardia e2 ok): m1=+4.72, m2=+5.20; Σ nominati=9.92 (Σ grezza m1+m2+m3=+7.64)
+CHIUSURA = (e2 + Σ mock nominati)/dq = (14.68+9.92)/46.72 = 52.7% -> <85%: NESSUN codice di leva
+KILL ⚖️ regola 4 (Σ mock < 10 ns/iter): Σ=9.92 -> SCATTA: R1 «interno-handler via compilatore» ESAURITO su arith ⇒ delibera R4 al concilio
+m4b dispatch Sweep/iter (criterio p.8-9): D=+2.96 soglia=4.00 -> non nominato (0); Σ mock CON m4 = 9.92 -> kill p.4 SCATTA; CHIUSURA CON m4 = (14.68+9.92+0.00)/46.72 = 52.7%
+RESIDUO non nominato = 22.12 ns/iter = corpo del handler BinarySCSCDst al netto di consts (m1) e match BinOp (m2) [+ frames[top] non rilevato]; per-op: controllo-loop 7.34 ns/op (2 op) · Sweep 0.00 · statement 32.04; oracle: loop 1.78 ns/op · statement 5.08
+ADDITIVITÀ: D_m123=+8.00 vs Σ grezza=+7.64 |diff|=0.36 banda=4.00 -> componenti INDIPENDENTI
+== LETTURA (fatti, S-168) ==
+· Bracci: m0 (nullo) 36d73812 · m1 b8ec6556 · m2 8cfe8499 · m3 105be053 · m123 a6d1da64 · m4 c6e54b6f (NULLO: Sweep del loop ancora emesso, D=0,00) · m4b 07521ec1 — tutti a stash `phpr-s168-*` e a registro via pin-phpr.sh --braccio (smoke parità 2 modi); output A==B su dq ed e2 per ogni coppia; A=m0 dopo l'emenda p.7 (m0≠pin: ricetta `-p php-cli`, NON il path: m0 riproducibile al byte su due path; m0 vs pin D=−0,24, bl 6036=6036 ⇒ neutro).
+· Il KILL ⚖️ (regola 4: Σ mock <10) SCATTA per 0,08 ns/iter (9,92) con rumore drop-1 0,2–0,6 e tick 0,04: esito MECCANICO come pre-registrato; il margine è dichiarato, la delibera (R4) spetta al concilio/utente, non a questa sessione.
+· m4b (Sweep per iterazione): D=+2,96 con rumore 0,64/0,68 — direzione firmata (il dispatch Sweep costa ~3 ns/iter), sotto il pavimento 4 ⇒ vale 0 nel conto; con m4b la Σ grezza compilatore (m1+m2+m4b) sarebbe 12,9: NON si conta (regola del pavimento), si registra come indizio.
+· REPERTO E2 (nuovo, bilaterale): controllo-loop = 2 op (CmpJmpSC+IncDecSlotJmp) = 14,7 ns/iter su phpr vs 3,56 oracle ⇒ 7,3 ns/op contro 1,8: il costo per-op di dispatch+handler banale è 4×, e pesa il 31% del dq. Statement (BinarySCSCDst [+Sweep]) = 32,0 vs 5,1 oracle: di questi 27 ns di gap, m1+m2 ne nominano 9,9; RESIDUO ~22 ns/iter DENTRO il handler (guardie Undef/Ref, read_slot clone, reg_store_slot+gc_note, bounds, 4 funnel) — nominato per ESCLUSIONE, non per braccio.
+· ADDITIVITÀ regge (m123 8,00 vs Σ grezza 7,64, |diff| 0,36 ≤ 4): m3 negativo (−2,28) è costo reale della ristrutturazione, non rumore (rumore 0,2/0,3).
+· Chiusura 52,7% (<85%): nessun codice di leva in S-168 (⚖️ regola 3/4 rispettate: fetta 0-bis di sola misura).
