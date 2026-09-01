@@ -1,0 +1,12 @@
+== s167 F0 bracci (a)+(b) — pin s166 092dcff4 MISURATO; giudice arith-dq N=250M; R=5 interleaved; criterio s167-criterio-f0.md ==
+sentinella LS: /Applications/Antigravity /Users/francescotinti/.antigravity-ide/extensions/rust-lang.rust-analyzer-0.3.3025-darwin-arm64/server/rust-analyzer /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.96.0-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer 
+floors: on=0.01 off=0.01 oracle=0.05
+  giro1: on=11.58 off=31.90 dq=11.64 stride=11.67 oracle=2.21
+  giro2: on=11.62 off=31.74 dq=11.63 stride=11.75 oracle=2.21
+  giro3: on=11.70 off=31.79 dq=11.73 stride=11.60 oracle=2.21
+  giro4: on=11.75 off=31.91 dq=11.60 stride=11.80 oracle=2.21
+  giro5: on=11.63 off=31.60 dq=12.07 stride=11.79 oracle=2.21
+(a) REG_LOWER: on=46.48 off=127.12 ns/iter D_ab=+80.64 (rumore on'=0.48 off'=0.68) — costo GIA' pagato dal lowering, non ricontare
+(b) STRIDE: dq=46.52 stride=46.96 D=+0.44 (rumore dq'=0.52 st'=0.52)
+    canale pila/D-cache: REFUTATO (KS-LE-167-1 parte 1: |D|<=0,5)
+riferimento finestra: oracle=8.64 (rumore 0.00) gap=37.88 ns/iter (dossier: 38,2)
