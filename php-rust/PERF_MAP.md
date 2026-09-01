@@ -1,6 +1,18 @@
 # PERF_MAP — phpr vs PHP oracle 8.5.7, mappa multi-workload
 
-Aggiornata: **2026-09-01 (S-167)** · pin **INVARIATO s166 092dcff4+caa4e4b2**
+Aggiornata: **2026-09-01 sera (S-168)** · pin **INVARIATO s166 092dcff4+caa4e4b2**
+(**S-168 = FETTA 0-bis MOCK sottrattivi** sul handler fuso BinarySCSCDst, A=m0
+braccio nullo (ricetta neutra, D −0,24, bl 6036=6036), giudice arith-dq R=5:
+m1 consts-predecode +4,72 · m2 BinOp cotto +5,20 · m3 hoist frames[top] −2,28 (0)
+· m123 +8,00 additivo · m4b no-Sweep +2,96 (sotto pavimento) ⇒ **Σ nominati
+9,92 < 10 ⇒ KILL ⚖️ regola 4 SCATTA a filo (margine 0,08 dichiarato) ⇒ delibera
+R4 al concilio; chiusura 52,7%, nessun codice di leva** · **REPERTO E2**:
+controllo-loop 2 op = 14,7 ns/iter vs 3,56 oracle (7,3 vs 1,8 ns/op), statement
+32,0 vs 5,1, residuo ~22 ns dentro il handler per esclusione · sanature: stride
+S-167 era sulla STESSA linea (slot 14/15) — stride2 (0/15) D2 −0,04 + controllo
+positivo +270 ⇒ pila REFUTATA a 0,5 · xctrace: c1=backend-stall (etichetta S-167
+corretta), c3=discarded, c0=useful; refutazione mispredict regge su c3; branchmut
+S-167 predicibile ⇒ rbranchmut per S-169; verdetti wp168-harness/s168-*.out)
 (**S-167 = ⚖️ CONCILIO 9/9 GO-CONDIZIONATO alla campagna R1 «interno-handler
 prima, dispatch poi» (vincolano wp167-harness/COUNCIL+verbali) + FETTA 0 a
 VERDETTO EMENDATO**: reg-lower paga GIÀ 80,6 ns/iter (OFF 127,1→ON 46,5) ·
