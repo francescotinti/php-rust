@@ -1,0 +1,86 @@
+diff --git a/php-rust/crates/php-runtime/src/vm/run.rs b/php-rust/crates/php-runtime/src/vm/run.rs
+index 9df135a2..d74b4ee1 100644
+--- a/php-rust/crates/php-runtime/src/vm/run.rs
++++ b/php-rust/crates/php-runtime/src/vm/run.rs
+@@ -2021,8 +2021,23 @@ impl<'m> super::Vm<'m> {
+                 Op::IncDecSlotJmp { slot, inc, addr } => {
+                     // S-107 lotto: il trigramma IncDecSlot;Pop;Jump del
+                     // back-edge di loop — incremento poi salto incondizionato.
+-                    self.incdec_slot_discard(top, *slot, *inc)?;
+-                    self.frames[top].ip = *addr as usize;
++                    // MOCK m8 (S-170, criterio wp170-harness/s170-criterio.md):
++                    // cammino Long MAGRO — incremento IN PLACE con wrapping_add
++                    // (niente checked_add, niente riscrittura del Zval intero,
++                    // niente Result/`?`); fuori dal Long cade al corpo originale.
++                    // Semantica NON preservata sull'overflow: braccio di MISURA.
++                    // MOCK m9 (S-170): m8 + bounds ELISI (get_unchecked su frames[top],
++                    // slots[i]) — unsafe: braccio di MISURA, MAI promuovibile (RULEBOOK §0).
++                    // SAFETY(mock): top < frames.len() e slot < n_slots per costruzione
++                    // del compilatore; vale SOLO come braccio di misura.
++                    if let Zval::Long(l) =
++                        unsafe { self.frames.get_unchecked_mut(top).slots.get_unchecked_mut(*slot as usize) }
++                    {
++                        *l = l.wrapping_add(if *inc { 1 } else { -1 });
++                    } else {
++                        self.incdec_slot_discard(top, *slot, *inc)?;
++                    }
++                    unsafe { self.frames.get_unchecked_mut(top) }.ip = *addr as usize;
+                 }
+                 Op::CmpJmpSS { op, l, r, addr, when } => {
+                     let res = 'r: {
+@@ -2048,7 +2063,38 @@ impl<'m> super::Vm<'m> {
+                 }
+                 Op::CmpJmpSC { op, slot, cidx, addr, when } => {
+                     scn!(CmpJmpSC: op);
+-                    let cv = func.consts[*cidx as usize].to_zval();
++                    // MOCK m8 (S-170, criterio wp170-harness/s170-criterio.md):
++                    // cammino Long MAGRO — const `Int` letto SENZA to_zval, slot
++                    // Long SENZA guardia Undef/Ref (ridondante col match), confronto
++                    // a `bool` diretto SENZA Zval::Bool/to_bool/diags, SENZA `?`;
++                    // ogni altro caso cade al corpo originale. Braccio di MISURA.
++                    let fast: Option<bool> = if let (
++                        crate::bytecode::Const::Int(c),
++                        Zval::Long(l),
++                    ) = (
++                        // MOCK m9 (S-170): bounds ELISI — unsafe, braccio di MISURA.
++                        // SAFETY(mock): cidx < consts.len(), top < frames.len(),
++                        // slot < n_slots per costruzione del compilatore.
++                        unsafe { func.consts.get_unchecked(*cidx as usize) },
++                        unsafe { self.frames.get_unchecked(top).slots.get_unchecked(*slot as usize) },
++                    ) {
++                        let (l, c) = (*l, *c);
++                        match op {
++                            BinOp::Lt => Some(l < c),
++                            BinOp::Le => Some(l <= c),
++                            BinOp::Gt => Some(l > c),
++                            BinOp::Ge => Some(l >= c),
++                            BinOp::Eq | BinOp::Identical => Some(l == c),
++                            BinOp::NotEq | BinOp::NotIdentical => Some(l != c),
++                            _ => None,
++                        }
++                    } else {
++                        None
++                    };
++                    let jump = match fast {
++                        Some(b) => b,
++                        None => {
++                            let cv = func.consts[*cidx as usize].to_zval();
+                     dcn!(CmpJmpSC: &cv); // il const materializzato muore nell'arm (fast o slow)
+                     let res = 'r: {
+                         {
+@@ -2062,9 +2108,12 @@ impl<'m> super::Vm<'m> {
+                         let lhs = self.reg_load_slot(top, func, *slot);
+                         self.binary_value_ab(*op, lhs, cv)?
+                     };
+-                    dcn!(CmpJmpSC: &res); // il Bool temporaneo muore dopo to_bool
+-                    if convert::to_bool(&res, &mut self.diags) == *when {
+-                        self.frames[top].ip = *addr as usize;
++                            dcn!(CmpJmpSC: &res); // il Bool temporaneo muore dopo to_bool
++                            convert::to_bool(&res, &mut self.diags)
++                        }
++                    };
++                    if jump == *when {
++                        unsafe { self.frames.get_unchecked_mut(top) }.ip = *addr as usize;
+                     }
+                 }
+                 Op::ConcatN(n) => {

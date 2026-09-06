@@ -1,0 +1,73 @@
+diff --git a/php-rust/crates/php-runtime/src/vm/run.rs b/php-rust/crates/php-runtime/src/vm/run.rs
+index 9df135a2..911ce291 100644
+--- a/php-rust/crates/php-runtime/src/vm/run.rs
++++ b/php-rust/crates/php-runtime/src/vm/run.rs
+@@ -2021,7 +2021,16 @@ impl<'m> super::Vm<'m> {
+                 Op::IncDecSlotJmp { slot, inc, addr } => {
+                     // S-107 lotto: il trigramma IncDecSlot;Pop;Jump del
+                     // back-edge di loop — incremento poi salto incondizionato.
+-                    self.incdec_slot_discard(top, *slot, *inc)?;
++                    // MOCK m8 (S-170, criterio wp170-harness/s170-criterio.md):
++                    // cammino Long MAGRO — incremento IN PLACE con wrapping_add
++                    // (niente checked_add, niente riscrittura del Zval intero,
++                    // niente Result/`?`); fuori dal Long cade al corpo originale.
++                    // Semantica NON preservata sull'overflow: braccio di MISURA.
++                    if let Zval::Long(l) = &mut self.frames[top].slots[*slot as usize] {
++                        *l = l.wrapping_add(if *inc { 1 } else { -1 });
++                    } else {
++                        self.incdec_slot_discard(top, *slot, *inc)?;
++                    }
+                     self.frames[top].ip = *addr as usize;
+                 }
+                 Op::CmpJmpSS { op, l, r, addr, when } => {
+@@ -2048,7 +2057,35 @@ impl<'m> super::Vm<'m> {
+                 }
+                 Op::CmpJmpSC { op, slot, cidx, addr, when } => {
+                     scn!(CmpJmpSC: op);
+-                    let cv = func.consts[*cidx as usize].to_zval();
++                    // MOCK m8 (S-170, criterio wp170-harness/s170-criterio.md):
++                    // cammino Long MAGRO — const `Int` letto SENZA to_zval, slot
++                    // Long SENZA guardia Undef/Ref (ridondante col match), confronto
++                    // a `bool` diretto SENZA Zval::Bool/to_bool/diags, SENZA `?`;
++                    // ogni altro caso cade al corpo originale. Braccio di MISURA.
++                    let fast: Option<bool> = if let (
++                        crate::bytecode::Const::Int(c),
++                        Zval::Long(l),
++                    ) = (
++                        &func.consts[*cidx as usize],
++                        &self.frames[top].slots[*slot as usize],
++                    ) {
++                        let (l, c) = (*l, *c);
++                        match op {
++                            BinOp::Lt => Some(l < c),
++                            BinOp::Le => Some(l <= c),
++                            BinOp::Gt => Some(l > c),
++                            BinOp::Ge => Some(l >= c),
++                            BinOp::Eq | BinOp::Identical => Some(l == c),
++                            BinOp::NotEq | BinOp::NotIdentical => Some(l != c),
++                            _ => None,
++                        }
++                    } else {
++                        None
++                    };
++                    let jump = match fast {
++                        Some(b) => b,
++                        None => {
++                            let cv = func.consts[*cidx as usize].to_zval();
+                     dcn!(CmpJmpSC: &cv); // il const materializzato muore nell'arm (fast o slow)
+                     let res = 'r: {
+                         {
+@@ -2062,8 +2099,11 @@ impl<'m> super::Vm<'m> {
+                         let lhs = self.reg_load_slot(top, func, *slot);
+                         self.binary_value_ab(*op, lhs, cv)?
+                     };
+-                    dcn!(CmpJmpSC: &res); // il Bool temporaneo muore dopo to_bool
+-                    if convert::to_bool(&res, &mut self.diags) == *when {
++                            dcn!(CmpJmpSC: &res); // il Bool temporaneo muore dopo to_bool
++                            convert::to_bool(&res, &mut self.diags)
++                        }
++                    };
++                    if jump == *when {
+                         self.frames[top].ip = *addr as usize;
+                     }
+                 }
