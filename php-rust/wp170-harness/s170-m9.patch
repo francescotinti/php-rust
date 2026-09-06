@@ -1,7 +1,7 @@
-diff --git a/php-rust/crates/php-runtime/src/vm/run.rs b/php-rust/crates/php-runtime/src/vm/run.rs
+diff --git a/crates/php-runtime/src/vm/run.rs b/crates/php-runtime/src/vm/run.rs
 index 9df135a2..d74b4ee1 100644
---- a/php-rust/crates/php-runtime/src/vm/run.rs
-+++ b/php-rust/crates/php-runtime/src/vm/run.rs
+--- a/crates/php-runtime/src/vm/run.rs
++++ b/crates/php-runtime/src/vm/run.rs
 @@ -2021,8 +2021,23 @@ impl<'m> super::Vm<'m> {
                  Op::IncDecSlotJmp { slot, inc, addr } => {
                      // S-107 lotto: il trigramma IncDecSlot;Pop;Jump del
