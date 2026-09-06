@@ -1,0 +1,2 @@
+<?php // MUTANTE c0 POSITIVO (S-170 criterio p.6, az.rev. S-169 #4): lavoro RETIRING puro per iterazione — array_sum di 1024 interi L1-residenti (catena di add interi: 1 ritiro/ciclo, nessun miss di memoria, loop predicibile). crc32 (S-169) falliva: table-lookup byte-per-byte = stallo backend (c1). N=2M ⇒ 2G add.
+$a=range(1,1024); $s=0; for($i=0;$i<2000000;$i++){ $s += $i*3 - ($i>>2); $t=array_sum($a); } echo $s,"\n";
