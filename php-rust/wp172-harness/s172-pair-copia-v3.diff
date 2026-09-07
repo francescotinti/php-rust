@@ -1,0 +1,50 @@
+2,3c2,3
+< # s171-pair.sh <tentativo> — S-164 p.1a: coppia full/media WP @ pin s171 (DOVUTA: pin nuovo)
+< # criteri s132/s146/s148 EREDITATI INVARIATI + s171-criterio-pair-t17.md
+---
+> # s172-pair.sh <tentativo> — S-164 p.1a: coppia full/media WP @ pin s172 (DOVUTA: pin nuovo)
+> # criteri s132/s146/s148 EREDITATI INVARIATI + s172-criterio-pair-t18.md
+7,8c7,8
+< # verifica POSITIVA + manifest s171-pair-copia-v3.diff) coi SOLI adattamenti:
+< # nomi s171/pair171/wp171-harness/t17; pin s171 (phpr b360b293 + server
+---
+> # verifica POSITIVA + manifest s172-pair-copia-v3.diff) coi SOLI adattamenti:
+> # nomi s172/pair171/wp171-harness/t18; pin s172 (phpr b360b293 + server
+27c27
+< VERD="$H/s171-pair-verdetto-$T.out"
+---
+> VERD="$H/s172-pair-verdetto-$T.out"
+41,42c41,42
+< PIN_ATTESO="b360b2933eddfe18"
+< SRV_ATTESO="b3ddaede545ba894"
+---
+> PIN_ATTESO="5f2dff7d17ebed79"
+> SRV_ATTESO="812f7962952da67f"
+157c157
+< print(f"== s171 coppia WP full+media sul pin s171 MISURATO phpr={PINH} server={SRVH} tentativo={T} (criteri s132/s146/s148 EREDITATI + s171-criterio-pair-t17.md: giudizio a MEDIANA per finestra, az.rev.3 S-149) ==")
+---
+> print(f"== s172 coppia WP full+media sul pin s172 MISURATO phpr={PINH} server={SRVH} tentativo={T} (criteri s132/s146/s148 EREDITATI + s172-criterio-pair-t18.md: giudizio a MEDIANA per finestra, az.rev.3 S-149) ==")
+231,232c231,232
+<         # s171-criterio-pair-t17.md p.2 (az.rev.3 S-149): GIUDIZIO CANONICO a
+<         # MEDIANA per finestra vs mediane storiche t1=1,799 t2=1,738 t3=1,789 t4=1,781 t5=1,757 t6=1,771 t7=1,795 t8=1,754 t9=1,767 t10=1,760 t11=1,765 t12=1,767 t13=1,763 t14=1,761 t15=1,746 t16=1,749;
+---
+>         # s172-criterio-pair-t18.md p.2 (az.rev.3 S-149): GIUDIZIO CANONICO a
+>         # MEDIANA per finestra vs mediane storiche t1=1,799 t2=1,738 t3=1,789 t4=1,781 t5=1,757 t6=1,771 t7=1,795 t8=1,754 t9=1,767 t10=1,760 t11=1,765 t12=1,767 t13=1,763 t14=1,761 t15=1,746 t16=1,749 t17=1,776;
+235,240c235,240
+<         med_t17 = statistics.median(props)
+<         print(f"mediana_t17={med_t17:.3f} (N={len(props)} coppie proprie ON PULITE; mediane storiche t1=1.799 t2=1.738 t3=1.789 t4=1.781 t5=1.757 t6=1.771 t7=1.795 t8=1.754 t9=1.767 t10=1.760 t11=1.765 t12=1.767 t13=1.763 t14=1.761 t15=1.746 t16=1.749)")
+<         if MED_LO <= med_t17 <= MED_HI:
+<             print(f"giudizio_MEDIANA (canonico, criterio t17 p.2): COMPATIBILE (mediana in [{MED_LO}; {MED_HI}]) — nessun claim")
+<         elif med_t17 < MED_LO:
+<             print(f"giudizio_MEDIANA (canonico, criterio t17 p.2): direzione GIU' SEGNALATA (mediana {med_t17:.3f} < {MED_LO}) — attesa L-SL1 su WP dichiarata SOTTO-risoluzione (criterio t17 p.3): NON attribuibile senza census proprio")
+---
+>         med_t18 = statistics.median(props)
+>         print(f"mediana_t18={med_t18:.3f} (N={len(props)} coppie proprie ON PULITE; mediane storiche t1=1.799 t2=1.738 t3=1.789 t4=1.781 t5=1.757 t6=1.771 t7=1.795 t8=1.754 t9=1.767 t10=1.760 t11=1.765 t12=1.767 t13=1.763 t14=1.761 t15=1.746 t16=1.749 t17=1.776)")
+>         if MED_LO <= med_t18 <= MED_HI:
+>             print(f"giudizio_MEDIANA (canonico, criterio t18 p.2): COMPATIBILE (mediana in [{MED_LO}; {MED_HI}]) — nessun claim")
+>         elif med_t18 < MED_LO:
+>             print(f"giudizio_MEDIANA (canonico, criterio t18 p.2): direzione GIU' SEGNALATA (mediana {med_t18:.3f} < {MED_LO}) — attesa L-SL2 su WP dichiarata SOTTO-risoluzione (criterio t18 p.3): NON attribuibile senza census proprio")
+242c242
+<             print(f"giudizio_MEDIANA (canonico, criterio t17 p.2): REGRESSIONE SEGNALATA (mediana {med_t17:.3f} > {MED_HI}) — indagine PRIMA di ogni altra leva")
+---
+>             print(f"giudizio_MEDIANA (canonico, criterio t18 p.2): REGRESSIONE SEGNALATA (mediana {med_t18:.3f} > {MED_HI}) — indagine PRIMA di ogni altra leva")

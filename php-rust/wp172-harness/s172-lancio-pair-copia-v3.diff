@@ -1,0 +1,24 @@
+2c2
+< # s171-lancio-pair.sh — catena p.1: attende la quiete CI (cargo/rustc/
+---
+> # s172-lancio-pair.sh — catena p.1: attende la quiete CI (cargo/rustc/
+7c7
+< # finestra quieta (uptime + top nel log) e lancia s171-pair.sh t17.
+---
+> # finestra quieta (uptime + top nel log) e lancia s172-pair.sh t18.
+13c13
+< LOG="$H/pair-out/lancio-t17.log"; mkdir -p "$H/pair-out"
+---
+> LOG="$H/pair-out/lancio-t18.log"; mkdir -p "$H/pair-out"
+31,32c31,32
+< Q="$H/pair-out/quiet-decl-t17.txt"
+< { echo "== dichiarazione finestra quieta t17 $(date '+%F %T') =="
+---
+> Q="$H/pair-out/quiet-decl-t18.txt"
+> { echo "== dichiarazione finestra quieta t18 $(date '+%F %T') =="
+36,37c36,37
+< echo "$(date '+%F %T') quiete raggiunta — dichiarazione in quiet-decl-t17.txt — lancio pair t17" >> "$LOG"
+< exec /bin/bash "$H/s171-pair.sh" t17
+---
+> echo "$(date '+%F %T') quiete raggiunta — dichiarazione in quiet-decl-t18.txt — lancio pair t18" >> "$LOG"
+> exec /bin/bash "$H/s172-pair.sh" t18

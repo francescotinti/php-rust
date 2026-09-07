@@ -38,8 +38,8 @@ step(){ echo "$(date +%H:%M:%S) $1" >> "$OUT/progress-$T.txt"; }
 : > "$OUT/progress-$T.txt"
 rm -f "$DONE"
 
-PIN_ATTESO="PIN_S172_DA_INSERIRE"
-SRV_ATTESO="SRV_S172_DA_INSERIRE"
+PIN_ATTESO="5f2dff7d17ebed79"
+SRV_ATTESO="812f7962952da67f"
 PIN="$(shasum -a 256 "$PHPR" | cut -c1-16)"
 SRV="$(shasum -a 256 "$HOME/Claude/php-rust-output/release/php-server" | cut -c1-16)"
 if [ "$PIN" != "$PIN_ATTESO" ] || [ "$SRV" != "$SRV_ATTESO" ]; then

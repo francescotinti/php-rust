@@ -1,0 +1,28 @@
+2,4c2,4
+< # s171-orm-coppia.sh — coppia dbal+ORM sul pin s171 (DOVUTA: pin nuovo)
+< # (criterio s171-criterio-orm.md; copia DICHIARATA di s166-orm2-coppia.sh,
+< # manifest s171-orm-copia-v3.diff; adattamenti: pin s171 b360b2933eddfe18,
+---
+> # s172-orm-coppia.sh — coppia dbal+ORM sul pin s172 (DOVUTA: pin nuovo)
+> # (criterio s172-criterio-orm.md; copia DICHIARATA di s166-orm2-coppia.sh,
+> # manifest s172-orm-copia-v3.diff; adattamenti: pin s172 b360b2933eddfe18,
+27c27
+< VERD="$H/s171-orm-coppia-verdetto.out"
+---
+> VERD="$H/s172-orm-coppia-verdetto.out"
+32c32
+< [ "$PINM" = "b360b2933eddfe18" ] || { echo "rc=9 pin!=s171" > "$OUT/rimisura.done"; exit 9; }
+---
+> [ "$PINM" = "5f2dff7d17ebed79" ] || { echo "rc=9 pin!=s172" > "$OUT/rimisura.done"; exit 9; }
+153c153
+< print("coppia-s171 (user CPU; pavimenti PARZIALI phpunit --version: orm o=%.3f p=%.3f · dbal o=%.3f p=%.3f)" % (fo, fp, dfo, dfp))
+---
+> print("coppia-s172 (user CPU; pavimenti PARZIALI phpunit --version: orm o=%.3f p=%.3f · dbal o=%.3f p=%.3f)" % (fo, fp, dfo, dfp))
+185c185
+< # --- ATTESA L-MC1d (criterio s171-criterio-orm.md p.3, aritmetica meccanica) ---
+---
+> # --- ATTESA L-MC1d (criterio s172-criterio-orm.md p.3, aritmetica meccanica) ---
+242c242
+< { echo "== s171 coppia dbal+ORM (pin s171 MISURATO $PINM vs oracle 8.5.7; criterio s171-criterio-orm.md) =="
+---
+> { echo "== s172 coppia dbal+ORM (pin s172 MISURATO $PINM vs oracle 8.5.7; criterio s172-criterio-orm.md) =="

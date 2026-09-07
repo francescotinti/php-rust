@@ -29,7 +29,7 @@ p(){ echo "$(date +%H:%M:%S) $1" >> "$OUT/progress.txt"; }
 : > "$OUT/progress.txt"
 rm -f "$OUT/rimisura.done"
 PINM="$(shasum -a 256 "$PHPR" | cut -c1-16)"
-[ "$PINM" = "PIN_S172_DA_INSERIRE" ] || { echo "rc=9 pin!=s172" > "$OUT/rimisura.done"; exit 9; }
+[ "$PINM" = "5f2dff7d17ebed79" ] || { echo "rc=9 pin!=s172" > "$OUT/rimisura.done"; exit 9; }
 # lock della SESSIONE: si VERIFICA soltanto (niente creazione né trap).
 LOCK=/private/tmp/phpr-measure.lock
 [ -e "$LOCK" ] || { echo "rc=6 measure-lock ASSENTE (finestra non aperta)" > "$OUT/rimisura.done"; exit 6; }

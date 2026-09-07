@@ -1,0 +1,22 @@
+2,3c2,3
+< # s171-lancio-orm.sh — catena p.1: attende pair171-t17.done; SOLO se rc=0
+< # lancia s171-orm-coppia.sh (MAPPA_SP dedicato APFS). Un pair fallito NON
+---
+> # s172-lancio-orm.sh — catena p.1: attende pair171-t18.done; SOLO se rc=0
+> # lancia s172-orm-coppia.sh (MAPPA_SP dedicato APFS). Un pair fallito NON
+10c10
+< PD="$H/pair-out/pair171-t17.done"
+---
+> PD="$H/pair-out/pair171-t18.done"
+14c14
+<   echo "$(date '+%F %T') pair t17 NON rc=0 ($(cat "$PD")) — ORM NON lanciato" >> "$LOG"
+---
+>   echo "$(date '+%F %T') pair t18 NON rc=0 ($(cat "$PD")) — ORM NON lanciato" >> "$LOG"
+18c18
+< SPD=/private/tmp/phpr-s171-orm; mkdir -p "$SPD"
+---
+> SPD=/private/tmp/phpr-s172-orm; mkdir -p "$SPD"
+20c20
+< MAPPA_SP="$SPD" exec /bin/bash "$H/s171-orm-coppia.sh"
+---
+> MAPPA_SP="$SPD" exec /bin/bash "$H/s172-orm-coppia.sh"
