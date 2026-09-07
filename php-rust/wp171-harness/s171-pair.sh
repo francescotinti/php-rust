@@ -5,8 +5,8 @@
 # az.rev.3 S-149; banda-unione degradata a companion descrittivo).
 # COPIA DICHIARATA di wp163-harness/s163-pair.sh (collaudo: copia-gate a
 # verifica POSITIVA + manifest s171-pair-copia-v3.diff) coi SOLI adattamenti:
-# nomi s171/pair171/wp171-harness/t17; pin s171 (phpr __PIN8__ + server
-# __SRV8__); mediane storiche con t11=1,765 t12=1,767 t13=1,763 t14=1,761 t15=1,746 t16=1,749 (banda giudizio INVARIATA
+# nomi s171/pair171/wp171-harness/t17; pin s171 (phpr b360b293 + server
+# b3ddaede); mediane storiche con t11=1,765 t12=1,767 t13=1,763 t14=1,761 t15=1,746 t16=1,749 (banda giudizio INVARIATA
 # [1,738;1,799]); attesa di leva nel messaggio GIU': L-AU1 (non L-AL2),
 # dichiarata SOTTO-risoluzione (quota utente-string WP mai censita;
 # forme WP prevalenti: closures e builtin-string NON ammesse dal fast path);
@@ -38,8 +38,8 @@ step(){ echo "$(date +%H:%M:%S) $1" >> "$OUT/progress-$T.txt"; }
 : > "$OUT/progress-$T.txt"
 rm -f "$DONE"
 
-PIN_ATTESO="__PIN_S171__"
-SRV_ATTESO="__SRV_S171__"
+PIN_ATTESO="b360b2933eddfe18"
+SRV_ATTESO="b3ddaede545ba894"
 PIN="$(shasum -a 256 "$PHPR" | cut -c1-16)"
 SRV="$(shasum -a 256 "$HOME/Claude/php-rust-output/release/php-server" | cut -c1-16)"
 if [ "$PIN" != "$PIN_ATTESO" ] || [ "$SRV" != "$SRV_ATTESO" ]; then

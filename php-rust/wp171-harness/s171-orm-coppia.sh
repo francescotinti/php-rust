@@ -1,7 +1,7 @@
 #!/bin/bash
 # s171-orm-coppia.sh — coppia dbal+ORM sul pin s171 (DOVUTA: pin nuovo)
 # (criterio s171-criterio-orm.md; copia DICHIARATA di s166-orm2-coppia.sh,
-# manifest s171-orm-copia-v3.diff; adattamenti: pin s171 __PIN_S171__,
+# manifest s171-orm-copia-v3.diff; adattamenti: pin s171 b360b2933eddfe18,
 # path wp166; RIF AGGIORNATO (sanatura az.rev.4; era «INVARIATO», contraddiceva r.~188): ORA_REF=4,885 (REGGE per
 # R=5 oracle-only S-165, mediana 4,860), rapporto registrato S-162
 # [7,035;7,086]; DUE EMENDE dal verbale S-165 (entrambe PRE-registrate):
@@ -29,7 +29,7 @@ p(){ echo "$(date +%H:%M:%S) $1" >> "$OUT/progress.txt"; }
 : > "$OUT/progress.txt"
 rm -f "$OUT/rimisura.done"
 PINM="$(shasum -a 256 "$PHPR" | cut -c1-16)"
-[ "$PINM" = "__PIN_S171__" ] || { echo "rc=9 pin!=s171" > "$OUT/rimisura.done"; exit 9; }
+[ "$PINM" = "b360b2933eddfe18" ] || { echo "rc=9 pin!=s171" > "$OUT/rimisura.done"; exit 9; }
 # lock della SESSIONE: si VERIFICA soltanto (niente creazione né trap).
 LOCK=/private/tmp/phpr-measure.lock
 [ -e "$LOCK" ] || { echo "rc=6 measure-lock ASSENTE (finestra non aperta)" > "$OUT/rimisura.done"; exit 6; }

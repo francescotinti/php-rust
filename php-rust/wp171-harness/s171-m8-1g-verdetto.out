@@ -1,0 +1,16 @@
+== s171 az.rev.#4 m8-1g — A=36d73812 MISURATO (/private/tmp/s171-bins/M0) B=eedebc68 MISURATO (/private/tmp/s171-bins/M8); GIUDICE arith-e2-1g N=1000000000 (loop nudo, N dal driver) + GUARDIA arith-dq N=250000000 bilaterale; R=5 ABAB alternato ==
+sentinella LS: /Applications/Antigravity /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.96.0-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer 
+parità arith-dq: A==B==atteso oracle (85937499750000000 )
+parità arith-e2-1g: A==B==atteso oracle (0 )
+floors: A=0.03 B=0.03 oracle=0.05
+  coppia1 [AB su E2-1g]: e2A=15.38 e2B=10.96 dqA=11.93 dqB=10.50 e2O=3.20 dqO=2.48
+  coppia2 [BA su E2-1g]: e2A=14.92 e2B=10.79 dqA=11.72 dqB=10.23 e2O=3.37 dqO=2.21
+  coppia3 [AB su E2-1g]: e2A=15.15 e2B=10.46 dqA=11.74 dqB=10.26 e2O=3.16 dqO=2.21
+  coppia4 [BA su E2-1g]: e2A=14.93 e2B=10.50 dqA=11.69 dqB=10.20 e2O=3.43 dqO=2.22
+  coppia5 [AB su E2-1g]: e2A=14.79 e2B=10.50 dqA=11.73 dqB=10.40 e2O=3.33 dqO=2.22
+GIUDICE arith-e2-1g (loop nudo, 2 op/iter, tick 0,01): A=14.900 B=10.470 ns/iter D=A−B=+4.430 soglia=4.00 (rumore drop-1 A'=0.360 B'=0.330) -> NOMINATO; S-170 a N=250M: D=+4,08 a filo (2 tick) -> CONFERMATO oltre il tick
+DECOMPOSIZIONE: soglia_dec=0.94 -> DIREZIONE FIRMATA (B più veloce; R=5)
+per-op (2 op/iter): A=7.450 B=5.235 oracle=1.640 ns/op
+GUARDIA arith-dq (sola-regressione): A=46.80 B=40.92 oracle=8.68 ns/iter; dqB−dqA=-5.88 vs 4.00 -> ok; miglioramento su dq REGISTRATO, non contato
+ESITO rc=0
+sentinella LS fine: /Applications/Antigravity /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.96.0-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer 

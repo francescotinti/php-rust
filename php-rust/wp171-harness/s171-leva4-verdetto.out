@@ -1,0 +1,19 @@
+== s171 LEVA leva4 — A=092dcff4 MISURATO (/private/tmp/s171-bins/A) B=34afdc54 MISURATO (/private/tmp/s171-bins/B) C=85adbfc0 MISURATO (/private/tmp/s171-bins/C, tetto m13); GIUDICI arith-dq N=250000000 E arith-e2 N=250000000 (N dal driver); R=5 ABAB alternato su ogni giudice; criterio s171-criterio.md ==
+sentinella LS: /Applications/Antigravity /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.96.0-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer 
+parità arith-dq: A==B==C==atteso oracle (85937499750000000 )
+parità arith-e2: A==B==C==atteso oracle (0 )
+floors: A=0.02 B=0.02 C=0.02 oracle=0.05
+  coppia1 [AB]: dqA=11.76 dqB=5.87 e2A=3.71 e2B=2.68 | dqC=6.15 e2C=3.75 | dqO=2.21 e2O=0.87
+  coppia2 [BA]: dqA=11.71 dqB=5.88 e2A=3.71 e2B=2.64 | dqC=6.15 e2C=3.77 | dqO=2.21 e2O=0.85
+  coppia3 [AB]: dqA=11.63 dqB=5.99 e2A=3.68 e2B=2.64 | dqC=6.14 e2C=3.78 | dqO=2.21 e2O=0.94
+  coppia4 [BA]: dqA=11.69 dqB=5.86 e2A=3.70 e2B=2.70 | dqC=6.14 e2C=3.77 | dqO=2.21 e2O=0.95
+  coppia5 [AB]: dqA=11.77 dqB=5.88 e2A=3.68 e2B=2.68 | dqC=6.13 e2C=3.76 | dqO=2.21 e2O=0.92
+GIUDICE arith-dq: A=46.76 B=23.44 ns/iter D=A−B=+23.32 soglia=4.00 (rumore drop-1 A'=0.32 B'=0.08) -> NOMINATO; direzione FIRMATA (B più veloce); regressione (D < −max(4,rumore)): no
+  tetto C=m13 arith-dq: C=24.48; contrasto B−C=-1.04 (DIREZIONE+BANDA: C è binario di altro albero); oracle=8.64; B/oracle=2.71× (A/oracle 5.41×, C/oracle 2.83×)
+GIUDICE arith-e2: A=14.72 B=10.64 ns/iter D=A−B=+4.08 soglia=4.00 (rumore drop-1 A'=0.12 B'=0.24) -> NOMINATO; direzione FIRMATA (B più veloce); regressione (D < −max(4,rumore)): no
+  tetto C=m13 arith-e2: C=15.00; contrasto B−C=-4.36 (DIREZIONE+BANDA: C è binario di altro albero); oracle=3.48; B/oracle=3.06× (A/oracle 4.23×, C/oracle 4.31×)
+BANDA B−C (dq) = -1.04 -> ≤5: tetto riprodotto entro il match per op
+KILL-1 (D_dq < 10): NON scatta; attesa D_dq ∈ [17;26]: CENTRATA (+23.32); attesa D_e2 ≈ +4: +4.08
+statement (dq−e2, lettura non giudicante): A=32.04 B=12.80 C=9.48 oracle=5.16
+PROMOZIONE (p.3: D_dq NOMINATA e D_e2 ≥ −rumore): AMMESSA; ESITO rc=0
+sentinella LS fine: /Applications/Antigravity /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.96.0-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer 

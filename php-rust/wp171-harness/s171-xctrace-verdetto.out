@@ -1,0 +1,3 @@
+== s171 xctrace az.rev.#2 (p=pin 092dcff4, b=candidato 34afdc54, m=m13 85adbfc0; template CPU Counters; arith-dq N=250000000) ==
+/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp171-harness/s171-xctrace.sh: line 31: 81914 Trace/BPT trap: 5       xctrace record --template 'CPU Counters' --output "$T" --launch -- "$B" "$DQ" > "$OUT/xc-$tag.rec.log" 2>&1
+record FALLITO (b-dq)
