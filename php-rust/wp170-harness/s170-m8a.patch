@@ -19,7 +19,7 @@
                      self.frames[top].ip = *addr as usize;
                  }
                  Op::CmpJmpSS { op, l, r, addr, when } => {
-@@ -2048,22 +2058,35 @@
+@@ -2048,22 +2058,37 @@
                  }
                  Op::CmpJmpSC { op, slot, cidx, addr, when } => {
                      scn!(CmpJmpSC: op);
@@ -58,14 +58,16 @@
 +                            BinOp::NotEq | BinOp::NotIdentical => Some(l != c),
 +                            _ => None,
 +                        }
-+                    }                         // MOCK m8a: ramo lento ABORTIVO (prova di esclusività del fast path).
-+                        None => unreachable!("mock m8a: slow path CmpJmpSC"),
-+res); // il Bool temporaneo muore dopo to_bool
-+                            convert::to_bool(&res, &mut self.diags)
-+                        }
++                    } else {
++                        None
                      };
 -                    dcn!(CmpJmpSC: &res); // il Bool temporaneo muore dopo to_bool
 -                    if convert::to_bool(&res, &mut self.diags) == *when {
++                    let jump = match fast {
++                        Some(b) => b,
++                        // MOCK m8a: ramo lento ABORTIVO (prova di esclusività del fast path).
++                        None => unreachable!("mock m8a: slow path CmpJmpSC"),
++                    };
 +                    if jump == *when {
                          self.frames[top].ip = *addr as usize;
                      }
