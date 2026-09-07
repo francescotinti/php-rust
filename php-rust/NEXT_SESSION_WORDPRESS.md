@@ -1,75 +1,72 @@
 # NEXT_SESSION — phpr: OBIETTIVO PARITÀ (≥1×) con l'oracle; ≤3× = tappa (REGOLE §1)
-⏱ **FONDAMENTALI**: **S-170 = DELIBERA R4 dell'utente = (i) campagna «corpo del
-handler», eseguita come SOLA MISURA con mock magri su ENTRAMBI i giudici: handler
-banali (e2) m8 +4,08 (a filo) / m9 +5,64 ⇒ per-op 7,32→4,50 vs 1,76; handler fuso
-BinarySCSCDst (dq) m12 funnel i64 +17,16 / m13 corpo magro totale +22,20 ⇒ dq 46,8→24,6
-= 2,84× (pin 5,4×), corpo fuso 27,5→5,1; guardie (+1,44) e store (+1,20) da soli NON
-pesano: pesa la FORMA (Zval temporanei, funnel Option<Zval>, clone/drop, bounds).
-Kill pre-registrati NON scattati, soglia alta (≥20) superata ⇒ la «forma sigillata
-Long» (regola 8) è la PROSSIMA LEVA DA MISURARE COME CODICE** · xctrace-3: c0
-positivo fallito 2×, c0 per esclusione, c2 delivery 15,8 vs 0,84 ns/iter indiziata ·
-leve: 0 (sanzionato) · incidenti: 2 (pavimenti S-167..169 su file inesistente, ≤0,02;
-target gads-mcp cancellata) + 4 difetti di copione curati in corsa · revisione S-170:
-lente MISURA (vedi wp170-harness/revisione.md) · sessioni senza misura: 0.
+⏱ **FONDAMENTALI**: **S-171 = LEVA L-SL1 «forma sigillata Long» fetta 1 PROMOSSA
+(pin NUOVO s171)**: BinarySCSCDst = catena i64 GENERICA (arm Long di binary_fast verbatim,
+un match per op) + store in place + corpo esatto `#[cold]`; CmpJmpSC a bool diretto; IncDec
+`checked_add` in place; zero unsafe. A/B R=5 tre bracci: **dq 46,76→23,44 (D +23,32;
+2,71× l'oracle)**, **e2 14,72→10,64 (+4,08)**, **B−m13 −1,04**: la forma generica
+riproduce il tetto driver-shaped (attesa «≈17» della rev. S-170 caduta in direzione
+favorevole). Gate pieni rc=0; **micro arith 5,4→2,7 = TAPPA ≤3× RAGGIUNTA su arith** ·
+leve: 1 · incidenti: 1 (xctrace crash → ktrace 8,4G, Data 21→2G) + 3 difetti copione curati
+· revisione S-171 (lente SEMANTICA, wp171-harness/revisione.md): REGGE CON RILIEVI —
+fast path NON provato «preso» sulla fixture (serve mutante abortivo), typed-ref della
+fixture nominale, forme non-driver senza dump, census cambia significato (dcn/slot_read).
+· sessioni senza misura: 0.
 
-## Scoreboard (pin INVARIATO s166 phpr 092dcff431bef876 + server caa4e4b2638686a9)
-**arith 5,4 · prop 5,5 · calls 4,8 · str 4,2 · arr 3,2 · re 2,5** · mc2 ~155 /
-mc3 181 · arith-dq 46,6 vs 8,64 (mock m13 24,6) · E2 14,64 vs 3,3-3,6 (mock m9 9,00)
-· dispatch 1,75/op · WP 1,746-1,749 · ORM [7,023;7,053] (RIF) · corpus 1412×2 ·
-batteria 1748 · denti: run.rs 6917 · mod.rs 25909 · host.rs 7726 · coda CI: 1 (HEAD).
+## Scoreboard (pin NUOVO s171 phpr b360b2933eddfe18 + server b3ddaede545ba894)
+**arith 2,7 · prop 5,2 · calls 4,8 · str 4,1 · arr 3,2 · re 2,5** · mc2 ~155 / mc3 181
+(non rimisurati) · arith-dq 23,44 vs 8,64 · E2 10,64 vs 3,48 · dispatch 1,75/op ·
+**WP/ORM: coppia t17 in corso al lancio di questa rotazione (pair-out/pair171-t17.done,
+orm-out/rimisura.done; verdetti s171-pair-verdetto-t17.out / s171-orm-coppia-verdetto.out)**,
+rif. precedenti WP 1,746-1,749 · ORM [7,023;7,053] · corpus 1412×2 · batteria 1748 · denti:
+run.rs 7091 (cap dichiarato) · mod.rs 25909 · host.rs 7726 · coda CI: da potare a HEAD.
 
-## §S-171 — ordine
-1. **LEVA CODICE «forma sigillata Long», fetta 1** (prima leva vera dopo 3 sessioni di
-   sola misura): criterio PRIMA (≤10 righe, soglia max(4, rumore, banda-layout),
-   giudici arith-dq E arith-e2, R=5, guardie non-bersaglio a sola regressione);
-   (a) BinarySCSCDst: catena i64 con guardia tupla, fallback al corpo esatto su
-   overflow/shift/tipi (forma m12, SAFE, niente get_unchecked); (b) CmpJmpSC +
-   IncDecSlotJmp: cammino Long senza to_zval/guardia ridondante/Zval::Bool,
-   `checked_add` con fallback ESATTO (forma m8 semantica-preservante). Attesa dai mock (tetto
-   m13 = limite superiore, revisione S-170): dq −17..−22 + e2 −4 ⇒ arith-dq ≈ 25-30
-   ⇒ ~2,9-3,4×: la TAPPA ≤3× su arith è possibile, NON garantita dalla fetta 1.
-   Gate pieni: batteria, corpus 1412 per NOME ×2, fixture bilaterali, micro R=5,
-   **coppia WP+ORM DOVUTA al pin nuovo**; disasm bl run_loop prima/dopo.
-2. **Se (1) nominata e promossa**: piano di generalizzazione a forme (census S-164:
-   quali handler caldi delle categorie prop/calls/str hanno la stessa forma Zval-temp
-   + funnel) — misura per categoria, non aggregato.
-3. Az.rev. revisione S-170 (lente misura, REGGE CON RILIEVI): (a) xctrace m0 vs
-   m13 su dq — la colonna che cala (c0 o c2) fissa c2 senza circolarità; (b) leva
-   con slow path `#[cold]` outlined e store in place (non additività: m13−m12 +5,04);
-   (c) soglia della leva contro m0 E contro m13 (tetto = limite superiore: BinOp
-   cotto incluso, atteso generico ≈17 ⇒ ~3,0-3,4×: tappa NON garantita); (d) m8 a
-   N=1G (tick 0,01), N letto dal driver nel giudice; (e) nessuna cifra composta
-   (Sweep/dispatch/m123) nel criterio: solo D interni al run.
-4. c0/c2: mutante di DELIVERY non circolare (corpo gonfio vs magro su E2) prima di
-   contare c2.
-5. Quesiti residui: (b) T2/A2; (c) census server (20° slitt.); (d) ratifiche §3.
+## §S-172 — ordine
+1. **Esiti coppia t17** (se non letti in chiusura S-171): giudizio a mediana [1,738;1,799],
+   ORM banda sentinella; una regressione FUORI banda blocca il p.3.
+2. **Az.rev. S-171** (revisione, PRIMA di generalizzare): (a) mutante abortivo su B
+   (`Some(r)→Some(r+1)` in BinarySCSCDst, `long_cmp_i64` negata) contro fx-sl1: righe
+   rotte NOMINATE (dq100, bitops, lt-loop, dec-loop), revert al byte; (b) fx-sl1 ESTESA:
+   typed reference VERO (`class C{public int $p;} $r=&$o->p; $r += …` + overflow →
+   TypeError/float) e Shl con r∈[1,63) su l negativo; (c) dump ops di fx-sl1 con conteggio
+   BinarySCSCDst/CmpJmpSC/IncDecSlotJmp per riga, archiviato; (d) nota census: il calo di
+   dcn/slot_read su CmpJmpSC/BinarySCSCDst è NON-materializzazione (L-SL1), non meno lavoro.
+3. **Generalizzazione a forme (REGOLA 8 → fetta 2)**: census S-164 delle categorie
+   prop/calls/str: quali handler caldi hanno la stessa forma «Zval temporaneo + funnel
+   Option<Zval> + clone/drop»; per OGNI categoria: criterio proprio (giudice = micro della
+   categoria + guardie a sola regressione), mock magro PRIMA (come S-170) SOLO se il
+   corpo non è già leggibile, poi leva safe con corpo esatto `#[cold]`; misura per
+   categoria, mai aggregato. Candidata prima: **prop 5,2** (scarto maggiore dopo arith).
+4. **xctrace #2** (az.rev. S-170, APERTA): pin/B/m13 su dq, SOLO con Data ≥20G, purge
+   ktrace in `trap EXIT` (un record ≈8G anche se crasha); `xctrace record` è crashato su
+   B («Trace/BPT trap»): provare `--time-limit` o template senza --launch (attach).
+5. Quesiti residui: c0 positivo (kernel ILP-ricco) · Sweep/iter 2,9 · (b) T2/A2 · census
+   server (21° slitt.) · ratifiche §3.
 
 ## Aperture per NOME
-forma sigillata Long (fetta 1: BinarySCSCDst + CmpJmpSC/IncDecSlotJmp) ·
-generalizzazione a forme · residuo 2,75/op accesso slot (doppia indirezione
-Vec→Frame→Vec: misurabile solo con cambio di forma) · tupla guard 0,4 · mutante
-delivery · c0 positivo (kernel ILP-ricco) · Sweep/iter 2,9 · F1/F2 (SOSPESE: tetto
-1,75/op) · tetto-fuso · autoload statiche · sonda strmap · banda sentinella ORM · gamba
-server census (20°) · §3.28 · §3.29 · §3.27 · §3.26 · §3.25 · §3.24+§3.23 ·
-slot-load · §3.22 · depr. float→int · warning ×2 · div. RMW · objmap → GC · evalcls
-316,9× · refl 42,4× · re +2 · get_gc · latin1 · dbal 10 nomi.
+generalizzazione a forme (prop → calls → str) · mutante abortivo fx-sl1 · typed-ref vero ·
+dump forme non-driver · census dcn/slot_read · xctrace pin/B/m13 · disco Data (10G
+consumati da NON-progetto durante la promozione: capire in pre-flight) · residuo slot
+2,75/op · tupla guard · Sweep/iter · F1/F2 (SOSPESE) · autoload statiche · sonda strmap ·
+banda sentinella ORM (4,82) · gamba server census · §3.28 · §3.29 · §3.27 · §3.26 · §3.25 ·
+§3.24+§3.23 · slot-load · §3.22 · depr. float→int · warning ×2 · div. RMW · objmap → GC ·
+evalcls 316,9× · refl 42,4× · re +2 · get_gc · latin1 · dbal 10 nomi.
 
 ## NON riproporre (i veti restano)
-**S-170: driver o pavimento senza `[ -e ]`/`[ -s ]` E senza collaudo contro l'atteso
-· patch da `git diff` senza `--relative`/path check (git root ≠ repo dir) · wrapper
-con path non quotati · `rm -rf` di una target Rust intera (tenere i binari) · mutante
-c0 a catena seriale (crc32, array_sum) · promuovere un mock unsafe (m9/m13 = misura).**
-S-169: A==B senza atteso · copia-gate per riga · xctrace senza purge ktrace · sessione
-senza pre-flight. S-168: mock senza dump · catena sotto timeout tool · output di run
-nel repo · soglia che scala col rumore · kill senza banda. Trasversali:
-NaN-boxing/fn-table/arena (⚖️) · BOLT/PGO · pin senza collaudo · rc da pipe ·
-promozione sotto banda.
-**Riscritto** 2026-09-07 notte (chiusura S-170; storia in `sessions/` · `gaps/`).
-Pre-flight S-171: pin phpr **s166 092dcff4**31bef876 + server **caa4e4b2**638686a9
-(SOLO via pin-*.sh; stash bracci `phpr-s168-*`/`phpr-s169-*`/`phpr-s170-*` NON pin) ·
-Data ≥10G (oggi 20G; CI target + build canonica ~10G: controllare `$DARWIN_USER_TEMP_
-DIR/instruments*.ktrace` e CI_FEED) · MySQL wp8 con l'elenco · uploads sotto guardia ·
-corpus 1412 · lock misura da CREARE (oggi RIMOSSO in chiusura) · **coppia DOVUTA se il
-pin cambia** · CI: runner rilanciato su HEAD, leggere il feed · lettura: REGOLE.md → QUI
-→ wp170-harness/s170-verdetto.out + s170-verdetto-b.out + revisione.md →
-s170-criterio.md/-b.md (forme dei mock = specifica della leva) → WP_SESSION_170 → PERF_MAP.
+**S-171: lock senza il TOKEN che il copione cerca (`s171`, non «S-171») · attese/lanci con
+`phpr`/`php-server` nell'argv (quiescenza `pgrep -f` = falso positivo: symlink neutri) ·
+xctrace senza `trap EXIT` di purge e senza Data ≥20G · attesa bl «+2..+4» per corpi
+outlined (le chiamate ESCONO da run_loop: Δ negativo) · build/run di phpr durante la coppia
+(quiete per gamba) · fixture con diag nel gate bilaterale (CLI oracle duplica su stderr con
+log_errors: `-d log_errors=0`).** S-170: driver/pavimento senza `[ -e ]` e collaudo ·
+patch senza `--relative` · wrapper con path non quotati · `rm -rf` di target intere ·
+promuovere mock unsafe. Trasversali: NaN-boxing/fn-table/arena (⚖️) · BOLT/PGO · pin senza
+collaudo · rc da pipe · promozione sotto banda · cifre composte tra binari diversi.
+**Riscritto** 2026-09-07 sera (chiusura S-171; storia in `sessions/` · `gaps/`).
+Pre-flight S-172: pin phpr **s171 b360b293**3eddfe18 + server **b3ddaede**545ba894 (SOLO
+via pin-*.sh; stash bracci `phpr-s171-sl1-B` e `phpr-s170-*` NON pin) · Data ≥10G (≥20G
+se xctrace; oggi il disco è sceso a 2G per consumo esterno al progetto: `du` di ~/Library
+e /private/var PRIMA di misurare) · MySQL wp8 con l'elenco · uploads sotto guardia ·
+corpus 1412 · lock misura da CREARE COL TOKEN `s172` · coppia dovuta SOLO se il pin
+cambia · CI: coda potata a HEAD in chiusura S-171, leggere il feed · lettura: REGOLE.md →
+QUI → wp171-harness/s171-verdetto.out + revisione.md → s171-leva4-verdetto.out →
+s171-criterio.md → WP_SESSION_171 → PERF_MAP.
