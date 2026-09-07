@@ -1146,6 +1146,15 @@ rende IRREALIZZABILE il caso «Fiber-subclass nell'IC» temuto dalla
 revisione S-165 — la soundness IC è garantita due volte. Perimetro
 probabile: enforcement di `final` sulle classi NATIVE (da censire).
 
+### 3.30 🟡 default di proprietà `float` scritto come literal int NON coerce a float (S-172, fixture fx-sl2-div)
+
+`class T2 { public float $f = 1; }` → oracle `var_dump($t->f)` = `float(1)`
+(coercizione int→float del default a compile della classe); phpr = `int(1)`.
+La scrittura a runtime coerce correttamente (`$t->f = $t->y + 1` → `float(4)`
+== oracle, presidiata in fx-sl2 bilaterale). PRE-esistente alla leva L-SL2
+(pin s171 == candidato); perimetro probabile: coercizione dei default
+tipizzati (anche `?float`, promozione nel costruttore, `static`), da censire.
+
 ## 4. Punti di forza da NON toccare (invarianti verificati byte-identici)
 
 Per evitare regressioni, questi comportamenti sono **già** byte-identici con
