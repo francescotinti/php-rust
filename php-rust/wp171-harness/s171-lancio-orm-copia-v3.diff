@@ -1,0 +1,34 @@
+2,3c2,3
+< # s166-lancio-orm.sh — catena p.1: attende pair166-t16.done; SOLO se rc=0
+< # lancia s166-orm2-coppia.sh (MAPPA_SP dedicato APFS). Un pair fallito NON
+---
+> # s171-lancio-orm.sh — catena p.1: attende pair171-t17.done; SOLO se rc=0
+> # lancia s171-orm-coppia.sh (MAPPA_SP dedicato APFS). Un pair fallito NON
+5c5
+< # Adattamento dichiarato di s164-lancio-orm.sh (plumbing, esiti da .done).
+---
+> # Adattamento dichiarato di s166-lancio-orm2.sh (plumbing, esiti da .done).
+8c8
+< H="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp166-harness"
+---
+> H="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp171-harness"
+10c10
+< PD="$H/pair-out/pair166-t16.done"
+---
+> PD="$H/pair-out/pair171-t17.done"
+14c14
+<   echo "$(date '+%F %T') pair t16 NON rc=0 ($(cat "$PD")) — ORM NON lanciato" >> "$LOG"
+---
+>   echo "$(date '+%F %T') pair t17 NON rc=0 ($(cat "$PD")) — ORM NON lanciato" >> "$LOG"
+18c18
+< SPD=/private/tmp/phpr-s166-orm2; mkdir -p "$SPD"
+---
+> SPD=/private/tmp/phpr-s171-orm; mkdir -p "$SPD"
+20c20
+< MAPPA_SP="$SPD" exec /bin/bash "$H/s166-orm2-coppia.sh"
+---
+> MAPPA_SP="$SPD" exec /bin/bash "$H/s171-orm-coppia.sh"
+
+== copia-gate v3 PER TOKEN (az.rev. S-169) ==
+base=wp166-harness/s166-lancio-orm2.sh derivato=wp171-harness/s171-lancio-orm.sh sess_attesa=s171 allow=[COPIA DICHIARATA|Adattamento|S-1[0-9][0-9]|s166-lancio-orm2|s164]
+nessun token stantio fuori allow — esito: rc=0

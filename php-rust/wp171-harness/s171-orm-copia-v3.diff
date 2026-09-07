@@ -1,0 +1,44 @@
+2,4c2,4
+< # s166-orm2-coppia.sh — coppia dbal+ORM sul pin s166 (DOVUTA: pin nuovo)
+< # (criterio s166-criterio-orm.md; copia DICHIARATA di s164-orm-coppia.sh,
+< # manifest s166-orm-copia.diff; adattamenti: pin s166 092dcff431bef876,
+---
+> # s171-orm-coppia.sh — coppia dbal+ORM sul pin s171 (DOVUTA: pin nuovo)
+> # (criterio s171-criterio-orm.md; copia DICHIARATA di s166-orm2-coppia.sh,
+> # manifest s171-orm-copia-v3.diff; adattamenti: pin s171 __PIN_S171__,
+11c11
+< # attesa L-MCk su ORM: direzione <=0, magnitudine NON pre-registrabile
+---
+> # attesa L-SL1 su ORM: direzione <=0, magnitudine NON pre-registrabile
+20c20
+< H="$REPO/wp166-harness"
+---
+> H="$REPO/wp171-harness"
+27c27
+< VERD="$H/s166-orm-coppia-verdetto.out"
+---
+> VERD="$H/s171-orm-coppia-verdetto.out"
+32c32
+< [ "$PINM" = "092dcff431bef876" ] || { echo "rc=9 pin!=s166" > "$OUT/rimisura.done"; exit 9; }
+---
+> [ "$PINM" = "__PIN_S171__" ] || { echo "rc=9 pin!=s171" > "$OUT/rimisura.done"; exit 9; }
+153c153
+< print("coppia-s166 (user CPU; pavimenti PARZIALI phpunit --version: orm o=%.3f p=%.3f · dbal o=%.3f p=%.3f)" % (fo, fp, dfo, dfp))
+---
+> print("coppia-s171 (user CPU; pavimenti PARZIALI phpunit --version: orm o=%.3f p=%.3f · dbal o=%.3f p=%.3f)" % (fo, fp, dfo, dfp))
+185c185
+< # --- ATTESA L-MC1d (criterio s166-criterio-orm.md p.3, aritmetica meccanica) ---
+---
+> # --- ATTESA L-MC1d (criterio s171-criterio-orm.md p.3, aritmetica meccanica) ---
+193c193
+< ATT_LO, ATT_HI = 0.0, 0.0          # attesa L-MCk DICHIARATA: direzione <=0 (mai peggiorare); magnitudine NON pre-registrabile (quota di chiamate a metodo AMMESSE — simple_call arita' esatta IC-hit — nel workload doctrine NON censita); GIU' = coerente con la leva, da dichiarare SENZA ripartizione senza census proprio (Composer/Doctrine a REGIME = classmap hit, i miss autoload [obj,metodo] RARI; quota miss NON censita => sotto-risoluzione; attesa-AF1 resta APERTA, non risolta da questa coppia)
+---
+> ATT_LO, ATT_HI = 0.0, 0.0          # attesa L-SL1 DICHIARATA: direzione <=0 (mai peggiorare); magnitudine NON pre-registrabile (quota di chiamate a metodo AMMESSE — simple_call arita' esatta IC-hit — nel workload doctrine NON censita); GIU' = coerente con la leva, da dichiarare SENZA ripartizione senza census proprio (Composer/Doctrine a REGIME = classmap hit, i miss autoload [obj,metodo] RARI; quota miss NON censita => sotto-risoluzione; attesa-AF1 resta APERTA, non risolta da questa coppia)
+242c242
+< { echo "== s166 coppia dbal+ORM (pin s166 MISURATO $PINM vs oracle 8.5.7; criterio s166-criterio-orm.md) =="
+---
+> { echo "== s171 coppia dbal+ORM (pin s171 MISURATO $PINM vs oracle 8.5.7; criterio s171-criterio-orm.md) =="
+
+== copia-gate v3 PER TOKEN (az.rev. S-169) ==
+base=wp166-harness/s166-orm2-coppia.sh derivato=wp171-harness/s171-orm-coppia.sh sess_attesa=s171 allow=[COPIA DICHIARATA|copia DICHIARATA|S-1[0-9][0-9]|s166-mattina|pin s165|s166-orm2-coppia|s16[2-6]|s129|s147|wp125-harness|wp13-harness|wp9-harness|wp129-harness]
+nessun token stantio fuori allow — esito: rc=0
