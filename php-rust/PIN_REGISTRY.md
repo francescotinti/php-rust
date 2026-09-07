@@ -67,6 +67,7 @@ nello stesso atto perché appenda in QUESTA sezione.)
 
 | pin (sha256/16) | sessione | collaudato | evidenza |
 |---|---|---|---|
+| 5f2dff7d17ebed79 | s172 (sorgente @ 0b024384; riga da pin-phpr.sh) | smoke parità 2 modi OK 2026-09-07 23:55:36 — batteria/corpus/fixture/micro DOVUTI a parte | stash `phpr-s172` |
 | e396498bfa1419a4 | s172-sl2-C BRACCIO (sorgente @ 18fe36c9; riga da pin-phpr.sh --braccio) | smoke parità 2 modi OK 2026-09-07 23:35:46 — braccio di misura, NON pin | stash `phpr-s172-sl2-C` |
 | 260fbc3ba73f6b0e | s172-sl2-B BRACCIO (sorgente @ 57b21f4b; riga da pin-phpr.sh --braccio) | smoke parità 2 modi OK 2026-09-07 23:35:43 — braccio di misura, NON pin | stash `phpr-s172-sl2-B` |
 | b360b2933eddfe18 | s171 (sorgente @ 9ecf6f0a; riga da pin-phpr.sh) | smoke parità 2 modi OK 2026-09-07 19:06:37 — batteria/corpus/fixture/micro DOVUTI a parte | stash `phpr-s171` |
