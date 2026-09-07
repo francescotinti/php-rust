@@ -22,6 +22,11 @@ rm -rf "$SRC"; mkdir -p "$SRC"
 git archive "$SHA" crates Cargo.toml Cargo.lock rust-toolchain.toml .cargo 2>/dev/null | tar -x -C "$SRC" \
   || { echo "archivio FALLITO" >> "$RES"; echo 7 > "$RC"; touch "$DONE"; exit 7; }
 [ -s "$SRC/Cargo.toml" ] || { echo "archivio VUOTO" >> "$RES"; echo 7 > "$RC"; touch "$DONE"; exit 7; }
+# EMENDA S-172 (incidente di copione, prima corsa C): `git archive` dà ai file l'mtime del
+# COMMIT, più vecchio del fingerprint lasciato nel target condiviso dalla build precedente
+# ⇒ cargo li crede freschi e NON ricompila (C == B al byte, fermato dalla guardia della
+# catena). I sorgenti estratti si toccano a "adesso": il fingerprint per mtime torna vero.
+/usr/bin/find "$SRC" -type f -exec touch {} +
 ( cd "$SRC" && SOURCE_DATE_EPOCH=0 CARGO_INCREMENTAL=0 CARGO_TARGET_DIR="$TGT" cargo build --release -p php-cli ) > "$LOG" 2>&1
 brc=$?
 if [ "$brc" -ne 0 ]; then echo "BUILD FALLITA rc=$brc (log $LOG)" >> "$RES"; echo "$brc" > "$RC"; touch "$DONE"; exit "$brc"; fi
