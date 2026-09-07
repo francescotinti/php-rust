@@ -1,0 +1,85 @@
+2,10c2,7
+< # s170-ab-mock.sh <APATH> <AEXP8> <BPATH> <BEXP8> <TAG> [R] — MOCK «handler banale magro» (S-170, criterio s170-criterio.md p.2):
+< # GIUDICE = arith-e2 (loop nudo: CmpJmpSC + IncDecSlotJmp, N=250M); GUARDIA = arith-dq bilaterale a SOLA-REGRESSIONE.
+< # A = braccio di riferimento (m0 ricostruito in S-170, hash MISURATO) vs B = mock (m8/m9); hash MISURATI.
+< # COPIA DICHIARATA di wp169-harness/s169-ab-mock.sh (manifest s170-ab-mock-copia-v3.diff
+< # + copia-gate v3 PER TOKEN) coi SOLI adattamenti del criterio: giudice E2 ↔ guardia dq
+< # scambiati; lock per TOKEN (`grep -qw s170`); `[ -s ]` sui driver e sugli attesi;
+< # parità di A e B contro l'output ATTESO dell'ORACLE (non solo A==B; az.rev. S-169 #3).
+< # R=5 interleaved per coppia (ABAB sul giudice E2); ns/iter=(med raw−floor)/N; rumore drop-1.
+< # rc autoritativo = ab-out/<TAG>.rc; verdetto s170-<TAG>-verdetto.out.
+---
+> # s171-ab-m8-1g.sh <APATH> <AEXP8> <BPATH> <BEXP8> <TAG> [R] — az.rev. S-170 #4: m8 RIMISURATO a N=1G (tick 0,01 ns/iter,
+> # `time -p` a 0,01 s) con N LETTO DAL DRIVER; A = m0 (stash phpr-s168-m0 36d73812 == m0 S-170 al byte) vs B = m8 (stash phpr-s170-m8).
+> # GIUDICE = arith-e2-1g (wp171-harness/arith-e2-1g.php, derivato dichiarato di arith-e2 con N=1e9); GUARDIA = arith-dq (N dal driver)
+> # bilaterale a SOLA-REGRESSIONE. COPIA DICHIARATA di wp170-harness/s170-ab-mock.sh (manifest s171-ab-m8-1g-copia-v3.diff + copia-gate v3
+> # PER TOKEN) coi SOLI adattamenti: driver del giudice, N dal driver (due N), lock per TOKEN s171. Parità di A e B contro l'ATTESO oracle.
+> # R=5 interleaved per coppia (ABAB sul giudice); ns/iter=(med raw−floor)/N; rumore drop-1. rc autoritativo = ab-out/<TAG>.rc.
+17c14
+< E2="$H/../wp168-harness/arith-e2.php"
+---
+> E2="$H/arith-e2-1g.php"
+20c17
+< VERD="$H/s170-$TAG-verdetto.out"; RC="$OUT/$TAG.rc"
+---
+> VERD="$H/s171-$TAG-verdetto.out"; RC="$OUT/$TAG.rc"
+23,24c20,21
+< [ -e "$EMPTY" ] || { echo "driver del pavimento assente: $EMPTY (VUOTO per costruzione: [ -e ], emenda S-170 p.4)" | tee -a "$VERD"; echo 7 > "$RC"; exit 7; }
+< grep -qw s170 /private/tmp/phpr-measure.lock 2>/dev/null || { echo "lock s170 assente (per TOKEN)" | tee -a "$VERD"; echo 9 > "$RC"; exit 9; }
+---
+> [ -e "$EMPTY" ] || { echo "driver del pavimento assente: $EMPTY (VUOTO per costruzione: [ -e ])" | tee -a "$VERD"; echo 7 > "$RC"; exit 7; }
+> grep -qw s171 /private/tmp/phpr-measure.lock 2>/dev/null || { echo "lock s171 assente (per TOKEN)" | tee -a "$VERD"; echo 9 > "$RC"; exit 9; }
+28a26,28
+> NDQ=$(awk 'match($0, /\$i<[0-9]+/) {print substr($0, RSTART+3, RLENGTH-3); exit}' "$DQ")
+> NE2=$(awk 'match($0, /\$i<[0-9]+/) {print substr($0, RSTART+3, RLENGTH-3); exit}' "$E2")
+> [ -n "$NDQ" ] && [ -n "$NE2" ] || { echo "N non leggibile dal driver (dq='$NDQ' e2='$NE2')" | tee -a "$VERD"; echo 7 > "$RC"; exit 7; }
+32c32
+< echo "== s170 MOCK $TAG — A=$AM MISURATO ($A) B=$BM MISURATO ($BB); GIUDICE arith-e2 N=250M (loop nudo) + GUARDIA arith-dq bilaterale; R=$R ABAB alternato; criterio s170-criterio.md =="
+---
+> echo "== s171 az.rev.#4 $TAG — A=$AM MISURATO ($A) B=$BM MISURATO ($BB); GIUDICE arith-e2-1g N=$NE2 (loop nudo, N dal driver) + GUARDIA arith-dq N=$NDQ bilaterale; R=$R ABAB alternato =="
+34d33
+< # PARITÀ vs ATTESO: l'atteso è l'output dell'ORACLE sullo stesso driver (generato qui, una volta per driver, `[ -s ]`).
+50c49
+<   TOR=$(ucpu "$O" "$DQ"); EOR=$(ucpu "$O" "$E2")
+---
+>   EOR=$(ucpu "$O" "$E2"); TOR=$(ucpu "$O" "$DQ")
+52c51
+<   echo "  coppia$i [$ord su E2]: e2A=$EA e2B=$EB dqA=$TA dqB=$TB e2O=$EOR dqO=$TOR"
+---
+>   echo "  coppia$i [$ord su E2-1g]: e2A=$EA e2B=$EB dqA=$TA dqB=$TB e2O=$EOR dqO=$TOR"
+54c53
+< python3 - "$TSV" "$FA" "$FB" "$FO" <<'PY'
+---
+> python3 - "$TSV" "$FA" "$FB" "$FO" "$NDQ" "$NE2" <<'PY'
+57,59c56,57
+< fa, fb, fo = map(float, sys.argv[2:5])
+< N = 250e6
+< def col(i, f): return sorted((float(r[i])-f)/N*1e9 for r in rows)
+---
+> fa, fb, fo = map(float, sys.argv[2:5]); ndq = float(sys.argv[5]); ne2 = float(sys.argv[6])
+> def col(i, f, n): return sorted((float(r[i])-f)/n*1e9 for r in rows)
+61c59
+<     n = len(v); return v[n//2] if n % 2 else (v[n//2-1]+v[n//2])/2
+---
+>     k = len(v); return v[k//2] if k % 2 else (v[k//2-1]+v[k//2])/2
+64c62
+< dqA, dqB, e2A, e2B, dqO, e2O = col(0,fa), col(1,fb), col(2,fa), col(3,fb), col(4,fo), col(5,fo)
+---
+> dqA, dqB, e2A, e2B, dqO, e2O = col(0,fa,ndq), col(1,fb,ndq), col(2,fa,ne2), col(3,fb,ne2), col(4,fo,ndq), col(5,fo,ne2)
+66,71c64,68
+< print(f"GIUDICE arith-e2 (loop nudo, 2 op/iter): A={med(e2A):.2f} B={med(e2B):.2f} ns/iter D=A−B={D:+.2f} soglia={thr:.2f} (rumore drop-1 A'={dr1(e2A):.2f} B'={dr1(e2B):.2f}) -> {'NOMINATO' if D >= thr else 'NON nominato (vale 0)'}")
+< print(f"DECOMPOSIZIONE (soglia = max(rumore, SL 0,94) SENZA pavimento 4): soglia_dec={thrd:.2f} -> {'DIREZIONE FIRMATA' if abs(D) >= thrd else 'sotto il rumore'} ({'B più veloce' if D > 0 else 'B più lento'}; R={len(rows)})")
+< print(f"per-op (2 op/iter): A={med(e2A)/2:.2f} B={med(e2B)/2:.2f} oracle={med(e2O)/2:.2f} ns/op; residuo B a dispatch 1,75/op (limite inferiore S-169) = corpo magro ≈ {med(e2B)/2-1.75:.2f} ns/op")
+< Ddq = med(dqB)-med(dqA); ndq = max(dr1(dqA), dr1(dqB)); g = max(4.0, ndq)
+< print(f"GUARDIA arith-dq (sola-regressione): A={med(dqA):.2f} B={med(dqB):.2f} oracle={med(dqO):.2f} ns/iter; dqB−dqA={Ddq:+.2f} vs {g:.2f} -> {'ok' if Ddq <= g else 'REGRESSIONE (rc=5, D sospeso)'}{'; miglioramento su dq REGISTRATO (stessi 2 op nel loop), non contato' if Ddq < -thrd else ''}")
+< print(f"riferimento finestra: gap-loop A={med(e2A)-med(e2O):.2f} B={med(e2B)-med(e2O):.2f}; dq gap totale A={med(dqA)-med(dqO):.2f} B={med(dqB)-med(dqO):.2f}")
+---
+> print(f"GIUDICE arith-e2-1g (loop nudo, 2 op/iter, tick 0,01): A={med(e2A):.3f} B={med(e2B):.3f} ns/iter D=A−B={D:+.3f} soglia={thr:.2f} (rumore drop-1 A'={dr1(e2A):.3f} B'={dr1(e2B):.3f}) -> {'NOMINATO' if D >= thr else 'NON nominato (vale 0)'}; S-170 a N=250M: D=+4,08 a filo (2 tick) -> {'CONFERMATO oltre il tick' if D >= 4.0 else 'NON confermato'}")
+> print(f"DECOMPOSIZIONE: soglia_dec={thrd:.2f} -> {'DIREZIONE FIRMATA' if abs(D) >= thrd else 'sotto il rumore'} ({'B più veloce' if D > 0 else 'B più lento'}; R={len(rows)})")
+> print(f"per-op (2 op/iter): A={med(e2A)/2:.3f} B={med(e2B)/2:.3f} oracle={med(e2O)/2:.3f} ns/op")
+> Ddq = med(dqB)-med(dqA); ndq_ = max(dr1(dqA), dr1(dqB)); g = max(4.0, ndq_)
+> print(f"GUARDIA arith-dq (sola-regressione): A={med(dqA):.2f} B={med(dqB):.2f} oracle={med(dqO):.2f} ns/iter; dqB−dqA={Ddq:+.2f} vs {g:.2f} -> {'ok' if Ddq <= g else 'REGRESSIONE (rc=5, D sospeso)'}{'; miglioramento su dq REGISTRATO, non contato' if Ddq < -thrd else ''}")
+
+== copia-gate v3 PER TOKEN (az.rev. S-169) ==
+base=wp170-harness/s170-ab-mock.sh derivato=wp171-harness/s171-ab-m8-1g.sh sess_attesa=s171 allow=[COPIA DICHIARATA|az\.rev\.|S-170|s168-m0|s170-m8|wp164-harness|wp168-harness|wp160-harness|wp129-harness|wp170-harness]
+nessun token stantio fuori allow — esito: rc=0

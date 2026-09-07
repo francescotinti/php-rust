@@ -1,0 +1,111 @@
+2,14c2,9
+< # s170-xctrace.sh — XCTRACE-3 (criterio s170-criterio.md p.6): mutante c0 POSITIVO (arith-c0pos.php: array_sum L1, retiring puro) bilaterale + baseline p/o-dq fresche; c3 ANCHE in ns/iter (az.rev. S-169 #4). Derivato da s169-xctrace.sh. Testo originale S-169:
+< # s169-xctrace.sh — XCTRACE-2 (criterio s169-criterio.md p.3): mutante branch NON predicibile (rbm) + mutante c0 (crc32 L1) bilaterali. Derivato da s168-xctrace.sh. Testo originale S-168:
+< # s169-xctrace.sh — SANATURE az.rev.2+4 S-167 sul braccio (c) xctrace 'CPU
+< # Counters' (quote top-down a 4 colonne, per-campione): (i) REPLICHE R=3 per
+< # lato (p-dq, o-dq) e del mutante branch oracle (o-mut ×3: spiegare c1
+< # 0,031→0,004); (ii) MUTANTE BACKEND arith-memstall.php (un miss DRAM/iter, su
+< # ENTRAMBI i motori): la colonna che schizza = Processing/backend ⇒ c0 fissata
+< # per ESCLUSIONE (c1=discarded e c2=delivery già fissate in S-167).
+< # COPIA DICHIARATA di wp169-harness/s169-xctrace.sh (manifest s170-xctrace-copia-v3.diff
+< # + copia-gate v3 PER TOKEN). Le .trace si cancellano dopo l'export (spazio); gli .xml
+< # vanno FUORI repo a fine sessione. rc autoritativo = ab-out/xctrace.rc.
+< # S-170: lock per TOKEN, `[ -s ]` su driver/xml, GUARDIA DISCO Data ≥10G prima di
+< # ogni record (pre-flight lesson S-169), purge ktrace dopo ogni export.
+---
+> # s171-xctrace.sh <BPATH> <BEXP8> — az.rev. S-170 #2: xctrace 'CPU Counters' (quote top-down c0..c3) su arith-dq per TRE bracci:
+> # p-dq = pin s166 (stesso sorgente di m0 36d73812, altro path di build: dichiarato), b-dq = candidato L-SL1, m-dq = tetto m13
+> # (stash phpr-s170-m13). La colonna che CALA da p a m13 (e da p a B) fissa la semantica di c2 senza circolarità: se cala c2 il
+> # −22 del mock è FRONT-END (delivery: corpi grossi = icache/BTB) e la leva deve tenere il ramo lento fuori linea; se cala c0 è
+> # lavoro retiring. Nessun mutante c0 positivo qui (quesito separato). COPIA DICHIARATA di wp170-harness/s170-xctrace.sh
+> # (manifest s171-xctrace-copia-v3.diff + copia-gate v3 PER TOKEN) coi SOLI adattamenti: bracci p/b/m su dq (niente c0pos,
+> # niente oracle), lock per TOKEN s171, N dal driver. Le .trace si cancellano dopo l'export; purge ktrace dopo ogni export;
+> # GUARDIA DISCO Data ≥10G prima di ogni record. rc autoritativo = ab-out/xctrace.rc.
+19c14,15
+< O=/opt/homebrew/opt/php/bin/php
+---
+> BB="${1:?BPATH}"; BEXP="${2:?BEXP8}"
+> M="/Volumes/Extreme Pro/Claude/phpr-old-target/release/phpr-s170-m13"
+21d16
+< C0="$H/arith-c0pos.php"
+23c18
+< VERD="$H/s170-xctrace-verdetto.out"; RC="$OUT/xctrace.rc"
+---
+> VERD="$H/s171-xctrace-verdetto.out"; RC="$OUT/xctrace.rc"
+25,27c20,22
+< for f in "$DQ" "$C0" "$P" "$O"; do [ -s "$f" ] || { echo "file assente o VUOTO: $f" | tee -a "$VERD"; echo 7 > "$RC"; exit 7; }; done
+< grep -qw s170 /private/tmp/phpr-measure.lock 2>/dev/null || { echo "lock s170 assente (per TOKEN)" | tee -a "$VERD"; echo 9 > "$RC"; exit 9; }
+< PM="$(shasum -a 256 "$P" | cut -c1-8)"
+---
+> for f in "$DQ" "$P" "$BB" "$M"; do [ -s "$f" ] || { echo "file assente o VUOTO: $f" | tee -a "$VERD"; echo 7 > "$RC"; exit 7; }; done
+> grep -qw s171 /private/tmp/phpr-measure.lock 2>/dev/null || { echo "lock s171 assente (per TOKEN)" | tee -a "$VERD"; echo 9 > "$RC"; exit 9; }
+> PM="$(shasum -a 256 "$P" | cut -c1-8)"; BM="$(shasum -a 256 "$BB" | cut -c1-8)"; MM="$(shasum -a 256 "$M" | cut -c1-8)"
+28a24,27
+> [ "$BM" = "$BEXP" ] || { echo "B misurato $BM != atteso $BEXP" | tee -a "$VERD"; echo 1 > "$RC"; exit 1; }
+> [ "$MM" = 85adbfc0 ] || { echo "m13!=85adbfc0 ($MM)" | tee -a "$VERD"; echo 1 > "$RC"; exit 1; }
+> NDQ=$(awk 'match($0, /\$i<[0-9]+/) {print substr($0, RSTART+3, RLENGTH-3); exit}' "$DQ")
+> [ -n "$NDQ" ] || { echo "N non leggibile dal driver" | tee -a "$VERD"; echo 7 > "$RC"; exit 7; }
+31,38c30,32
+< echo "== s170 xctrace-3 (pin $PM; template CPU Counters; p/o-dq + mutante c0 POSITIVO array_sum L1 bilaterale; c3 anche in ns/iter) =="
+< # parità del mutante contro l'ATTESO oracle (az.rev. S-169 #3)
+< "$O" "$C0" > "$OUT/expected-arith-c0pos.out" 2>&1; "$P" "$C0" > "$OUT/xc-p-c0.parity.out" 2>&1
+< [ -s "$OUT/expected-arith-c0pos.out" ] && cmp -s "$OUT/expected-arith-c0pos.out" "$OUT/xc-p-c0.parity.out" || { echo "c0pos: output phpr ≠ atteso oracle — STOP"; echo 2 > "$RC"; exit 2; }
+< echo "parità c0pos: phpr==oracle ($(tr '\n' ' ' < "$OUT/expected-arith-c0pos.out"))"
+< for tag in p-dq o-dq p-c0 o-c0; do
+<   case "$tag" in o-*) B="$O";; p-*) B="$P";; esac
+<   case "$tag" in *-dq) D="$DQ";; *-c0) D="$C0";; esac
+---
+> echo "== s171 xctrace az.rev.#2 (p=pin $PM, b=candidato $BM, m=m13 $MM; template CPU Counters; arith-dq N=$NDQ) =="
+> for tag in p-dq b-dq m-dq; do
+>   case "$tag" in p-*) B="$P";; b-*) B="$BB";; m-*) B="$M";; esac
+42c36
+<   xctrace record --template 'CPU Counters' --output "$T" --launch -- "$B" "$D" > "$OUT/xc-$tag.rec.log" 2>&1 \
+---
+>   xctrace record --template 'CPU Counters' --output "$T" --launch -- "$B" "$DQ" > "$OUT/xc-$tag.rec.log" 2>&1 \
+48,49d41
+<   # EMENDA S-169 (ENOSPC #2): xctrace lascia `instruments*.ktrace` (0,4-4 GB l'uno)
+<   # in $DARWIN_USER_TEMP_DIR — 22 file = 10 GB dopo S-167/168/169: si purgano qui.
+52,55c44,46
+< # ns/iter dei driver dq (1 run per lato, N=250M, floor non sottratto: lettura di riferimento per c3 in ns/iter)
+< NSP=$(ucpu "$P" "$DQ"); NSO=$(ucpu "$O" "$DQ")
+< echo "dq user s (1 run, per c3 in ns/iter): phpr=$NSP oracle=$NSO"
+< python3 - "$OUT" "$NSP" "$NSO" <<'PY'
+---
+> NSP=$(ucpu "$P" "$DQ"); NSB=$(ucpu "$BB" "$DQ"); NSM=$(ucpu "$M" "$DQ")
+> echo "dq user s (1 run, per quote in ns/iter; floor non sottratto): pin=$NSP B=$NSB m13=$NSM"
+> python3 - "$OUT" "$NSP" "$NSB" "$NSM" "$NDQ" <<'PY'
+57c48,49
+< out = sys.argv[1]; nsp = float(sys.argv[2])/250e6*1e9; nso = float(sys.argv[3])/250e6*1e9
+---
+> out = sys.argv[1]; n = float(sys.argv[5])
+> ns = {"p-dq": float(sys.argv[2])/n*1e9, "b-dq": float(sys.argv[3])/n*1e9, "m-dq": float(sys.argv[4])/n*1e9}
+72c64
+< for tag in ("p-dq","o-dq","p-c0","o-c0"):
+---
+> for tag in ("p-dq","b-dq","m-dq"):
+76,86c68,76
+<     print(f"{tag}: quote c0..c3 = " + " ".join(f"{v:.3f}" for v in r[0]) + f" (campioni {r[1]})")
+< print(f"c3 (discarded) in ns/iter su dq: phpr {res['p-dq'][3]*nsp:.2f} (quota {res['p-dq'][3]:.3f} × {nsp:.1f}) vs oracle {res['o-dq'][3]*nso:.2f} (quota {res['o-dq'][3]:.3f} × {nso:.1f}); c2 (delivery): phpr {res['p-dq'][2]*nsp:.2f} vs oracle {res['o-dq'][2]*nso:.2f} ns/iter — c2 resta INDIZIATA (semantica non fissata)")
+< ok = True
+< for side in ("p","o"):
+<     d = [res[f"{side}-c0"][i]-res[f"{side}-dq"][i] for i in range(4)]
+<     ci = max(range(4), key=lambda i: d[i])
+<     verdict = "POSITIVO: c0 = useful/retiring FISSATA" if ci == 0 else f"FALLITO (sale c{ci}): c0 resta per esclusione"
+<     if ci != 0: ok = False
+<     print(f"MUTANTE c0pos {'phpr' if side=='p' else 'oracle'}: Δquote vs dq c0..c3 = " + " ".join(f"{x:+.3f}" for x in d) + f" -> colonna che sale = c{ci} (attesa c0) -> {verdict}")
+< print("ESITO: c0 fissata da mutante POSITIVO su ENTRAMBI i motori" if ok else "ESITO: mutante c0 positivo NON riuscito su almeno un motore — dichiarare")
+< sys.exit(0 if ok else 4)
+---
+>     print(f"{tag}: quote c0..c3 = " + " ".join(f"{v:.3f}" for v in r[0]) + f" (campioni {r[1]}); in ns/iter = " + " ".join(f"{v*ns[tag]:.2f}" for v in r[0]) + f" (× {ns[tag]:.1f})")
+> rc = 0
+> for tag, lab in (("m-dq","m13"),("b-dq","B")):
+>     d = [res[tag][i]*ns[tag]-res["p-dq"][i]*ns["p-dq"] for i in range(4)]
+>     ci = min(range(4), key=lambda i: d[i])
+>     print(f"Δ ns/iter {lab}−pin per colonna c0..c3 = " + " ".join(f"{x:+.2f}" for x in d) + f" -> colonna che CALA di più = c{ci} ({'FRONT-END/delivery: c2 = fetch/decode/resteer' if ci == 2 else 'retiring: c0 = lavoro utile' if ci == 0 else 'backend' if ci == 1 else 'discarded'})")
+> c2m = res["m-dq"][2]*ns["m-dq"]-res["p-dq"][2]*ns["p-dq"]; c0m = res["m-dq"][0]*ns["m-dq"]-res["p-dq"][0]*ns["p-dq"]
+> print(f"LETTURA: su m13 cala c2 di {c2m:+.2f} e c0 di {c0m:+.2f} ns/iter -> {'il taglio del mock è prevalentemente FRONT-END (c2 = delivery fissata dal contrasto)' if abs(c2m) > abs(c0m) else 'il taglio del mock è prevalentemente RETIRING (c0): c2 NON fissata da questo contrasto'}")
+> sys.exit(rc)
+
+== copia-gate v3 PER TOKEN (az.rev. S-169) ==
+base=wp170-harness/s170-xctrace.sh derivato=wp171-harness/s171-xctrace.sh sess_attesa=s171 allow=[COPIA DICHIARATA|az\.rev\.|S-170|s170-m13|pin s166|s166 \(|wp164-harness|wp170-harness]
+nessun token stantio fuori allow — esito: rc=0
