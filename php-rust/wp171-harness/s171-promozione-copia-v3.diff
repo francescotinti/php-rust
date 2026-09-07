@@ -286,9 +286,5 @@
 > note "PROMOZIONE COMPLETA rc=0 (da promo-out/rcb): pin s171 = $H2"
 
 == copia-gate v3 PER TOKEN (az.rev. S-169) ==
-base=wp163-harness/s163-promozione.sh derivato=wp171-harness/s171-promozione.sh sess_attesa=s171 allow=[COPIA DICHIARATA|DIVERGENZE DICHIARATE|s163-promozione|stash s166|phpr-s166|s166 \(|S-1[0-9][0-9]|s125|s109|s129|s160|wp16[0-9]-harness|wp1[0-3][0-9]-harness|wp9-harness|wp13-harness|L-[A-Z]+[0-9a-z]*|§3\.]
-RESIDUI PER TOKEN (3) — correggere o dichiarare nell'allow UNO A UNO:
-170:[s166]   "$REF" "$f" > "$OUT/$n-s166.out" 2>&1
-174:[s166]   if diff -q "$OUT/$n-s166.out" "$OUT/$n-pin.out" > /dev/null; then
-177:[s166]     diff "$OUT/$n-s166.out" "$OUT/$n-pin.out" > "$OUT/$n.diff" || true
-esito: rc=3
+base=wp163-harness/s163-promozione.sh derivato=wp171-harness/s171-promozione.sh sess_attesa=s171 allow=[COPIA DICHIARATA|DIVERGENZE DICHIARATE|s163-promozione|stash s166|phpr-s166|s166 \(|-s166\.out|S-1[0-9][0-9]|s125|s109|s129|s160|wp16[0-9]-harness|wp1[0-3][0-9]-harness|wp9-harness|wp13-harness|L-[A-Z]+[0-9a-z]*|§3\.]
+nessun token stantio fuori allow — esito: rc=0
