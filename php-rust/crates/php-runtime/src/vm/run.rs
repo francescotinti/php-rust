@@ -263,6 +263,67 @@ fn binary_fast(b: BinOp, lhs: &Zval, rhs: &Zval) -> Option<Zval> {
     })
 }
 
+/// S-171 L-SL1 «forma sigillata Long» (wp171-harness/s171-criterio.md p.1):
+/// the Long→Long subset of [`binary_fast`]'s `(Long, Long)` arm on bare
+/// `i64`, VERBATIM. An arm that would leave the Long domain (overflow →
+/// Double, `y<0` shift → ArithmeticError, Div/Mod/Pow/Concat → generic)
+/// answers `None` and the caller falls back to the exact generic body,
+/// which recomputes from scratch. No Zval is materialised on the hit path.
+#[inline(always)]
+fn long_arith_i64(b: BinOp, l: i64, r: i64) -> Option<i64> {
+    use BinOp::*;
+    Some(match b {
+        Add => l.checked_add(r)?,
+        Sub => l.checked_sub(r)?,
+        Mul => l.checked_mul(r)?,
+        BitAnd => l & r,
+        BitOr => l | r,
+        BitXor => l ^ r,
+        Shl => {
+            if r < 0 {
+                return None;
+            }
+            if r >= 64 {
+                0
+            } else {
+                ((l as u64) << r) as i64
+            }
+        }
+        Shr => {
+            if r < 0 {
+                return None;
+            }
+            if r >= 64 {
+                if l < 0 {
+                    -1
+                } else {
+                    0
+                }
+            } else {
+                l >> r
+            }
+        }
+        _ => return None,
+    })
+}
+
+/// S-171 L-SL1: the comparison subset of [`binary_fast`]'s `(Long, Long)`
+/// arm as a bare `bool` — no `Zval::Bool`, no `to_bool`, no diagnostics
+/// possible. `Spaceship` and every non-comparison answer `None`.
+#[inline(always)]
+fn long_cmp_i64(b: BinOp, l: i64, r: i64) -> Option<bool> {
+    use BinOp::*;
+    Some(match b {
+        Lt => l < r,
+        Le => l <= r,
+        Gt => l > r,
+        Ge => l >= r,
+        Eq | Identical => l == r,
+        NotEq | NotIdentical => l != r,
+        _ => return None,
+    })
+}
+
 /// WP-34 flatten join for an all-Str `ConcatN`, kept OUT of `run_loop`
 /// (WP-33 ⭐⭐: extra rarely-taken code in the dispatch loop costs ~3%).
 #[inline(never)]
@@ -336,6 +397,107 @@ impl<'m> super::Vm<'m> {
         Ok(())
     }
 
+    /// S-171 L-SL1: corpo ESATTO di `Op::BinarySCSCDst` (S-108 lotto-2 W10 +
+    /// S-112 H-A2b, INVARIATO) tenuto fuori linea — vi si arriva solo quando
+    /// il cammino i64 dell'arm non copre l'istanza (tag, overflow, shift
+    /// negativo, Div/Mod/Pow); ricomputa da zero, il fast path non ha
+    /// lasciato tracce.
+    #[cold]
+    #[inline(never)]
+    #[allow(clippy::too_many_arguments)]
+    fn binary_scsc_dst_slow(
+        &mut self,
+        top: usize,
+        func: &crate::bytecode::Func,
+        opa: BinOp,
+        la: u16,
+        ca: u16,
+        opb: BinOp,
+        lb: u16,
+        cb: u16,
+        op: BinOp,
+        opd: BinOp,
+        l: u16,
+        dst: u16,
+    ) -> Result<(), PhpError> {
+        // S-108 lotto-2 W10: l'albero BinarySCSC ESATTO (tre
+        // funnel, ordine a→b→combine) poi la coda BinarySTDst
+        // sul risultato senza transito di pila — stessa
+        // read_slot silenziosa del lhs, stessa coda (guardia
+        // binary_fast + funnel, come l'op non fusa da S-112
+        // H-A2), stesso reg_store_slot.
+        let cva = func.consts[ca as usize].to_zval();
+        let a = 'r: {
+            {
+                let lv = &self.frames[top].slots[la as usize];
+                if !matches!(lv, Zval::Undef | Zval::Ref(_)) {
+                    if let Some(v) = binary_fast(opa, lv, &cva) {
+                        break 'r v;
+                    }
+                }
+            }
+            let lhs = self.reg_load_slot(top, func, la);
+            self.binary_value_ab(opa, lhs, cva)?
+        };
+        let cvb = func.consts[cb as usize].to_zval();
+        let bv = 'r: {
+            {
+                let lv = &self.frames[top].slots[lb as usize];
+                if !matches!(lv, Zval::Undef | Zval::Ref(_)) {
+                    if let Some(v) = binary_fast(opb, lv, &cvb) {
+                        break 'r v;
+                    }
+                }
+            }
+            let lhs = self.reg_load_slot(top, func, lb);
+            self.binary_value_ab(opb, lhs, cvb)?
+        };
+        let res = match binary_fast(op, &a, &bv) {
+            Some(v) => v,
+            None => self.binary_value_ab(op, a, bv)?,
+        };
+        let lhs = read_slot(&self.frames[top].slots[l as usize]);
+        // S-112 H-A2b: stessa guardia inline del combine qui
+        // sopra — hoisting puro della prima riga di
+        // binary_value_ab, il miss resta al funnel.
+        let res = match binary_fast(opd, &lhs, &res) {
+            Some(v) => v,
+            None => self.binary_value_ab(opd, lhs, res)?,
+        };
+        self.reg_store_slot(top, dst, res)
+    }
+
+    /// S-171 L-SL1: corpo ESATTO di `Op::CmpJmpSC` (materializzazione del
+    /// const, guardia + binary_fast + funnel, to_bool con diags) fuori
+    /// linea; restituisce il bool del confronto, il salto resta all'arm.
+    #[cold]
+    #[inline(never)]
+    fn cmp_jmp_sc_slow(
+        &mut self,
+        top: usize,
+        func: &crate::bytecode::Func,
+        op: BinOp,
+        slot: u16,
+        cidx: u16,
+    ) -> Result<bool, PhpError> {
+        let cv = func.consts[cidx as usize].to_zval();
+        dcn!(CmpJmpSC: &cv); // il const materializzato muore nell'arm (fast o slow)
+        let res = 'r: {
+            {
+                let lv = &self.frames[top].slots[slot as usize];
+                if !matches!(lv, Zval::Undef | Zval::Ref(_)) {
+                    if let Some(v) = binary_fast(op, lv, &cv) {
+                        break 'r v;
+                    }
+                }
+            }
+            let lhs = self.reg_load_slot(top, func, slot);
+            self.binary_value_ab(op, lhs, cv)?
+        };
+        dcn!(CmpJmpSC: &res); // il Bool temporaneo muore dopo to_bool
+        Ok(convert::to_bool(&res, &mut self.diags))
+    }
+
     /// Corpo di `Op::Stringify` dopo il pop (S-107 lotto): UN solo sito
     /// possiede la semantica — condiviso con [`Op::StringifySlot`], frame
     /// `__toString` (RET_STRINGIFY) compreso.
@@ -398,14 +560,25 @@ impl<'m> super::Vm<'m> {
     fn incdec_slot_discard(&mut self, top: usize, slot: u16, inc: bool) -> Result<(), PhpError> {
         let i = slot as usize;
         // WP-33 T1c guard (identica al braccio IncDecSlot): Long puro senza
-        // overflow = op di registro, nessun diag possibile.
-        if let Zval::Long(l) = &self.frames[top].slots[i] {
-            let l = *l;
+        // overflow = op di registro, nessun diag possibile. S-171 L-SL1
+        // (criterio p.1c): il payload si aggiorna IN PLACE — nessuna
+        // riscrittura del Zval intero, nessun drop dell'old; l'overflow e
+        // ogni altro tag vanno al corpo ESATTO fuori linea.
+        if let Zval::Long(l) = &mut self.frames[top].slots[i] {
             if let Some(n) = l.checked_add(if inc { 1 } else { -1 }) {
-                self.frames[top].slots[i] = Zval::Long(n);
+                *l = n;
                 return Ok(());
             }
         }
+        self.incdec_slot_discard_slow(top, i, inc)
+    }
+
+    /// S-171 L-SL1: corpo ESATTO di [`Self::incdec_slot_discard`] oltre il
+    /// Long senza overflow (Undef→Null, `compute_incdec`, `raise_diags`,
+    /// `store_slot`, nello stesso ordine di prima), tenuto fuori linea.
+    #[cold]
+    #[inline(never)]
+    fn incdec_slot_discard_slow(&mut self, top: usize, i: usize, inc: bool) -> Result<(), PhpError> {
         if matches!(self.frames[top].slots[i], Zval::Undef) {
             self.frames[top].slots[i] = Zval::Null;
         }
@@ -1958,51 +2131,53 @@ impl<'m> super::Vm<'m> {
                     self.frames[top].stack.push(res);
                 }
                 Op::BinarySCSCDst { opa, la, ca, opb, lb, cb, op, opd, l, dst } => {
-                    // S-108 lotto-2 W10: l'albero BinarySCSC ESATTO (tre
-                    // funnel, ordine a→b→combine) poi la coda BinarySTDst
-                    // sul risultato senza transito di pila — stessa
-                    // read_slot silenziosa del lhs, stessa coda (guardia
-                    // binary_fast + funnel, come l'op non fusa da S-112
-                    // H-A2), stesso reg_store_slot.
-                    let cva = func.consts[*ca as usize].to_zval();
-                    let a = 'r: {
-                        {
-                            let lv = &self.frames[top].slots[*la as usize];
-                            if !matches!(lv, Zval::Undef | Zval::Ref(_)) {
-                                if let Some(v) = binary_fast(*opa, lv, &cva) {
-                                    break 'r v;
-                                }
+                    // S-171 L-SL1 «forma sigillata Long» (criterio
+                    // wp171-harness/s171-criterio.md p.1a): quando i tre slot
+                    // sono Long e i due const sono Int, la catena a→b→combine→
+                    // dst gira INTERA su i64 (`long_arith_i64` = arm Long→Long
+                    // di binary_fast, VERBATIM, un match per op: forma
+                    // GENERICA, nessuna tupla cotta) senza Zval temporanei,
+                    // senza to_zval/read_slot/guardie; il risultato si scrive
+                    // IN PLACE sul payload di un dst già Long (= store_slot su
+                    // Long: nessun typed-ref, gc_note di un Long è no-op).
+                    // Ogni miss (tag, overflow, shift negativo, Div/Mod/Pow)
+                    // va al corpo ESATTO fuori linea, che ricomputa da zero:
+                    // il fast path non ha effetti collaterali.
+                    let fast = {
+                        let fr = &self.frames[top];
+                        if let (
+                            Zval::Long(xa),
+                            Zval::Long(xb),
+                            Zval::Long(xl),
+                            crate::bytecode::Const::Int(ka),
+                            crate::bytecode::Const::Int(kb),
+                        ) = (
+                            &fr.slots[*la as usize],
+                            &fr.slots[*lb as usize],
+                            &fr.slots[*l as usize],
+                            &func.consts[*ca as usize],
+                            &func.consts[*cb as usize],
+                        ) {
+                            long_arith_i64(*opa, *xa, *ka)
+                                .and_then(|a| long_arith_i64(*opb, *xb, *kb).map(|b| (a, b)))
+                                .and_then(|(a, b)| long_arith_i64(*op, a, b))
+                                .and_then(|r| long_arith_i64(*opd, *xl, r))
+                        } else {
+                            None
+                        }
+                    };
+                    match fast {
+                        Some(r) => {
+                            if let Zval::Long(x) = &mut self.frames[top].slots[*dst as usize] {
+                                *x = r;
+                            } else {
+                                self.reg_store_slot(top, *dst, Zval::Long(r))?;
                             }
                         }
-                        let lhs = self.reg_load_slot(top, func, *la);
-                        self.binary_value_ab(*opa, lhs, cva)?
-                    };
-                    let cvb = func.consts[*cb as usize].to_zval();
-                    let bv = 'r: {
-                        {
-                            let lv = &self.frames[top].slots[*lb as usize];
-                            if !matches!(lv, Zval::Undef | Zval::Ref(_)) {
-                                if let Some(v) = binary_fast(*opb, lv, &cvb) {
-                                    break 'r v;
-                                }
-                            }
-                        }
-                        let lhs = self.reg_load_slot(top, func, *lb);
-                        self.binary_value_ab(*opb, lhs, cvb)?
-                    };
-                    let res = match binary_fast(*op, &a, &bv) {
-                        Some(v) => v,
-                        None => self.binary_value_ab(*op, a, bv)?,
-                    };
-                    let lhs = read_slot(&self.frames[top].slots[*l as usize]);
-                    // S-112 H-A2b: stessa guardia inline del combine qui
-                    // sopra — hoisting puro della prima riga di
-                    // binary_value_ab, il miss resta al funnel.
-                    let res = match binary_fast(*opd, &lhs, &res) {
-                        Some(v) => v,
-                        None => self.binary_value_ab(*opd, lhs, res)?,
-                    };
-                    self.reg_store_slot(top, *dst, res)?;
+                        None => self.binary_scsc_dst_slow(
+                            top, func, *opa, *la, *ca, *opb, *lb, *cb, *op, *opd, *l, *dst,
+                        )?,
+                    }
                 }
                 Op::LoadVarPushConst { slot, cidx } => {
                     // S-108 lotto-2 W13: pura coppia di push — LoadVar
@@ -2048,22 +2223,21 @@ impl<'m> super::Vm<'m> {
                 }
                 Op::CmpJmpSC { op, slot, cidx, addr, when } => {
                     scn!(CmpJmpSC: op);
-                    let cv = func.consts[*cidx as usize].to_zval();
-                    dcn!(CmpJmpSC: &cv); // il const materializzato muore nell'arm (fast o slow)
-                    let res = 'r: {
-                        {
-                            let lv = &self.frames[top].slots[*slot as usize];
-                            if !matches!(lv, Zval::Undef | Zval::Ref(_)) {
-                                if let Some(v) = binary_fast(*op, lv, &cv) {
-                                    break 'r v;
-                                }
-                            }
-                        }
-                        let lhs = self.reg_load_slot(top, func, *slot);
-                        self.binary_value_ab(*op, lhs, cv)?
+                    // S-171 L-SL1 (criterio p.1b): const `Int` e slot `Long`
+                    // letti al posto (niente to_zval; niente guardia
+                    // Undef/Ref: il match sul tag la ingloba), confronto a
+                    // `bool` diretto (`long_cmp_i64` = arm Long/Long di
+                    // binary_fast, VERBATIM) senza Zval::Bool/to_bool/diags;
+                    // ogni altro caso va al corpo ESATTO fuori linea.
+                    let fast = match (&func.consts[*cidx as usize], &self.frames[top].slots[*slot as usize]) {
+                        (crate::bytecode::Const::Int(c), Zval::Long(l)) => long_cmp_i64(*op, *l, *c),
+                        _ => None,
                     };
-                    dcn!(CmpJmpSC: &res); // il Bool temporaneo muore dopo to_bool
-                    if convert::to_bool(&res, &mut self.diags) == *when {
+                    let jump = match fast {
+                        Some(b) => b,
+                        None => self.cmp_jmp_sc_slow(top, func, *op, *slot, *cidx)?,
+                    };
+                    if jump == *when {
                         self.frames[top].ip = *addr as usize;
                     }
                 }
