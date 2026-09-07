@@ -51,7 +51,7 @@
 52c56
 <          "$H/fx-sl1.php" "$H/fx-sl1-div.php" \
 ---
->          "$H/fx-sl1.php" "$H/fx-sl1-div.php" "$H/fx-sl2.php" "$H/prop-dq.php" \
+>          "$H/fx-sl1.php" "$H/fx-sl1-div.php" "$H/fx-sl2.php" "$H/fx-sl2-div.php" "$H/prop-dq.php" \
 57c61
 <          "$REF" "$STASH/phpr-s171-sl1-B"; do
 ---
@@ -88,29 +88,30 @@
 ---
 >     diff "$OUT/$n-s171.out" "$OUT/$n-pin.out" > "$OUT/$n.diff" || true
 >     stop "gate $n: pin DIVERGE dallo stash s171 (promo-out/$n.diff)"
-195a200
-> bilat fxsl2 "$H/fx-sl2.php" "FX-SL2 DONE" "presidio DIRETTO L-SL2: P1 bigramma fuso e P2 BinarySTDst — overflow/shift/Div/Mod/Pow/Concat/Double/stringa/null/bool/Ref/typed int-float/readonly/hook set/dinamica" -d log_errors=0 -d display_errors=1
-204,205c209,210
+195a200,201
+> bilat fxsl2 "$H/fx-sl2.php" "FX-SL2 DONE" "presidio DIRETTO L-SL2 (forme P1 in loop a 2 iterazioni = IC calda): P1 bigramma fuso e P2 BinarySTDst — overflow/shift/Div/Mod/Pow/Concat/Double/stringa/null/bool/Ref/typed int-float/readonly (anche in scope)/private/hook set/__set/ereditata/dinamica" -d log_errors=0 -d display_errors=1
+> invar fxsl2div "$H/fx-sl2-div.php" "FX-SL2-DIV DONE" "§3.30 default float da literal int PRE-esistente INVARIATO"
+204,205c210,211
 < PHPR="$BIN" R=5 "$SRC/wp97-harness/micro/run-micro.sh" > "$OUT/micro-pin-s171.out" 2>&1
 < note "promozione micro pin s171: $(grep -E '^rapporto_' "$OUT/micro-pin-s171.out" | tr '\n' ' ')"
 ---
 > PHPR="$BIN" R=5 "$SRC/wp97-harness/micro/run-micro.sh" > "$OUT/micro-pin-s172.out" 2>&1
 > note "promozione micro pin s172: $(grep -E '^rapporto_' "$OUT/micro-pin-s172.out" | tr '\n' ' ')"
-207,208c212,213
+207,208c213,214
 < # ---- conferma POST-PIN arith-dq (divergenza (5)): R=5 pin s171 vs stash s166 ----
 < DQ="$SRC/wp164-harness/arith-dq.php"
 ---
 > # ---- conferma POST-PIN prop-dq (divergenza (5)): R=5 pin s172 vs stash s171 ----
 > DQ="$H/prop-dq.php"
-232c237
+232c238
 < note "conferma post-pin arith-dq (pin s171 vs stash s166): $CONF (attesa: segno +, D nell'intorno del D_dq dell'A/B; rumore > attesa/2 ⇒ SOLO SEGNO)"
 ---
 > note "conferma post-pin prop-dq (pin s172 vs stash s171): $CONF (attesa: segno +, D nell'intorno del D_prop del braccio promosso nell'A/B; rumore > attesa/2 ⇒ SOLO SEGNO)"
-262c267
+262c268
 < "$SRC/scripts/pin-server.sh" s171 > "$OUT/pin-server.log" 2>&1
 ---
 > "$SRC/scripts/pin-server.sh" s172 > "$OUT/pin-server.log" 2>&1
-268c273
+268c274
 < note "PROMOZIONE COMPLETA rc=0 (da promo-out/rcb): pin s171 = $H2"
 ---
 > note "PROMOZIONE COMPLETA rc=0 (da promo-out/rcb): pin s172 = $H2"

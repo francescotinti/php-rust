@@ -4,64 +4,82 @@
 // `$o->x = $o->y OP C` (PropGetSlotRecv + BinaryTCPropSetPop), P2 = `$s OP= $o->x`
 // (PropGetSlot + BinarySTDst). Ogni cammino che ESCE dal dominio Long deve cadere al
 // corpo esatto: overflow, shift fuori range, Div/Mod/Pow/Concat, prop/slot Double,
-// stringa numerica, null, bool, Ref, typed int/float, readonly, hook set, dinamica.
+// stringa numerica, null, bool, Ref, typed int/float, readonly, hook set, __set,
+// private in scope, ereditata, dinamica.
+// OGNI forma P1 gira in un loop a 2 iterazioni: la 1ª riempie l'IC del sito (get e set),
+// la 2ª entra nel probe sigillato (revisione S-172 rilievo 4: single-shot = IC fredda =
+// presidio vuoto). P2 non ha IC: single-shot basta.
 // SENZA forme che emettono diagnostici (quelle stanno in fx-sl2-div.php).
 function show($label, $v) { echo $label, ': '; var_dump($v); }
 class P { public $x = 0; public $y = 1; }
+class Sub extends P {}
 class T { public int $x = 0; public int $y = 1; public float $f = 1.5; }
+class T2 { public float $f = 1; public int $y = 3; }
 class RO { public function __construct(public readonly int $x = 0, public int $y = 1) {} }
+class RO3 { public readonly int $x; public int $y = 1; public function set() { $o = $this; $o->x = $o->y + 1; } }
+class PV { private int $x = 0; public int $y = 1; public function run() { $o = $this; for ($k = 0; $k < 2; $k++) { $o->x = $o->y + 1; } return $o->x; } }
 class H { public int $log = 0; public int $y = 1; public int $x = 0 { set { $this->log++; $this->x = $value * 2; } } }
+class MS { public $y = 1; private $d = []; public function __set($n, $v) { $this->d[$n] = $v * 10; } public function __get($n) { return $this->d[$n] ?? null; } }
 function g($v) { return $v; }
 
-// --- P1: $o->x = $o->y OP C (bigramma fuso, dominio Long e uscite) ---
+// --- P1: $o->x = $o->y OP C (bigramma fuso, dominio Long e uscite; 2 iterazioni per forma) ---
 $o = new P; for ($i = 0; $i < 100; $i++) { $o->x = $o->y + 1; $o->y = $o->x + 1; } show('p1-loop100', [$o->x, $o->y]);
 $o = new P; $o->y = PHP_INT_MAX - 3; for ($i = 0; $i < 5; $i++) { $o->x = $o->y + 1; $o->y = $o->x; } show('p1-loop-overflow', $o->y);
 $o = new P; $o->y = 7;
-$o->x = $o->y + 3; show('p1-add', $o->x);
-$o->x = $o->y - 10; show('p1-sub', $o->x);
-$o->x = $o->y * 3; show('p1-mul', $o->x);
-$o->x = $o->y & 3; show('p1-and', $o->x);
-$o->x = $o->y | 8; show('p1-or', $o->x);
-$o->x = $o->y ^ 5; show('p1-xor', $o->x);
-$o->x = $o->y << 3; show('p1-shl', $o->x);
-$o->x = $o->y >> 1; show('p1-shr', $o->x);
-$o->x = $o->y << 64; show('p1-shl-64', $o->x);
-$o->x = $o->y >> 70; show('p1-shr-70', $o->x);
-$o->x = $o->y << 63; show('p1-shl-63', $o->x);
-$o->y = -7; $o->x = $o->y << 5; show('p1-shl-neg-l', $o->x); $o->x = $o->y >> 2; show('p1-shr-neg-l', $o->x); $o->x = $o->y >> 70; show('p1-shr-70-neg', $o->x);
+for ($k = 0; $k < 2; $k++) { $o->x = $o->y + 3; } show('p1-add', $o->x);
+for ($k = 0; $k < 2; $k++) { $o->x = $o->y - 10; } show('p1-sub', $o->x);
+for ($k = 0; $k < 2; $k++) { $o->x = $o->y * 3; } show('p1-mul', $o->x);
+for ($k = 0; $k < 2; $k++) { $o->x = $o->y & 3; } show('p1-and', $o->x);
+for ($k = 0; $k < 2; $k++) { $o->x = $o->y | 8; } show('p1-or', $o->x);
+for ($k = 0; $k < 2; $k++) { $o->x = $o->y ^ 5; } show('p1-xor', $o->x);
+for ($k = 0; $k < 2; $k++) { $o->x = $o->y << 3; } show('p1-shl', $o->x);
+for ($k = 0; $k < 2; $k++) { $o->x = $o->y >> 1; } show('p1-shr', $o->x);
+for ($k = 0; $k < 2; $k++) { $o->x = $o->y << 64; } show('p1-shl-64', $o->x);
+for ($k = 0; $k < 2; $k++) { $o->x = $o->y >> 70; } show('p1-shr-70', $o->x);
+for ($k = 0; $k < 2; $k++) { $o->x = $o->y << 63; } show('p1-shl-63', $o->x);
+$o->y = -7;
+for ($k = 0; $k < 2; $k++) { $o->x = $o->y << 5; } show('p1-shl-neg-l', $o->x);
+for ($k = 0; $k < 2; $k++) { $o->x = $o->y >> 2; } show('p1-shr-neg-l', $o->x);
+for ($k = 0; $k < 2; $k++) { $o->x = $o->y >> 70; } show('p1-shr-70-neg', $o->x);
 $o->y = 7;
-$o->x = $o->y / 2; show('p1-div-inexact', $o->x);
-$o->x = $o->y / 7; show('p1-div-exact', $o->x);
-$o->x = $o->y % 4; show('p1-mod', $o->x);
-$o->x = $o->y ** 2; show('p1-pow', $o->x);
-$o->x = $o->y ** 70; show('p1-pow-overflow', $o->x);
-$o->x = $o->y . 'a'; show('p1-concat', $o->x);
-try { $o->x = $o->y / 0; } catch (DivisionByZeroError $e) { echo "p1-div-zero: ", get_class($e), ' ', $e->getMessage(), "\n"; }
-try { $o->x = $o->y % 0; } catch (DivisionByZeroError $e) { echo "p1-mod-zero: ", get_class($e), ' ', $e->getMessage(), "\n"; }
-$o->y = PHP_INT_MIN; $o->x = $o->y % -1; show('p1-mod-min-neg1', $o->x);
-$o->y = PHP_INT_MAX; $o->x = $o->y + 1; show('p1-add-overflow', $o->x);
-$o->x = $o->y * 2; show('p1-mul-overflow', $o->x);
-$o->y = PHP_INT_MIN; $o->x = $o->y - 1; show('p1-sub-overflow', $o->x);
-$o->y = 2.5; $o->x = $o->y + 1; show('p1-double-src', $o->x);
-$o->y = "5"; $o->x = $o->y + 1; show('p1-numstr-src', $o->x);
-$o->y = null; $o->x = $o->y + 1; show('p1-null-src', $o->x);
-$o->y = true; $o->x = $o->y + 1; show('p1-bool-src', $o->x);
-$o->y = 4; $o->x = 1.5; $o->x = $o->y + 1; show('p1-double-dst', $o->x);
-$o->x = "s"; $o->x = $o->y + 1; show('p1-str-dst', $o->x);
-$o->x = null; $o->x = $o->y + 1; show('p1-null-dst', $o->x);
-$o->x = [1]; $o->x = $o->y + 1; show('p1-arr-dst', $o->x);
-$o->x = 0; $r = &$o->x; $o->x = $o->y + 1; show('p1-dst-ref', $o->x); show('p1-dst-ref-alias', $r); unset($r);
-$o2 = new P; $q = &$o2->y; $o2->y = 4; $o2->x = $o2->y + 1; show('p1-src-ref', $o2->x); unset($q);
-$o3 = new P; $o3->x = 5; $o3->x = $o3->x + 1; show('p1-self', $o3->x);
-$a = new P; $b = new P; $b->y = 9; $a->x = $b->y + 1; show('p1-two-objs', [$a->x, $b->x]);
-$t = new T; $t->y = 5; $t->x = $t->y + 1; show('p1-typed-int', $t->x);
-$t->y = PHP_INT_MAX; try { $t->x = $t->y + 1; show('p1-typed-int-overflow', $t->x); } catch (TypeError $e) { echo "p1-typed-int-overflow: ", get_class($e), ' ', $e->getMessage(), "\n"; }
-$t->y = 3; $t->f = $t->y + 1; show('p1-typed-float-dst', $t->f);
-$t->f = 2.0; $t->x = $t->f + 1; show('p1-typed-int-from-float', $t->x);
-$ro = new RO(5, 7); try { $ro->x = $ro->y + 1; show('p1-readonly', $ro->x); } catch (Error $e) { echo "p1-readonly: ", get_class($e), ' ', $e->getMessage(), "\n"; }
-$h = new H; $h->y = 5; $h->x = $h->y + 1; show('p1-hook-set', [$h->x, $h->log]);
-$d = new stdClass; $d->y = 3; $d->x = $d->y + 1; show('p1-dynamic', $d->x);
-$d->x = $d->x + 1; show('p1-dynamic-self', $d->x);
+for ($k = 0; $k < 2; $k++) { $o->x = $o->y / 2; } show('p1-div-inexact', $o->x);
+for ($k = 0; $k < 2; $k++) { $o->x = $o->y / 7; } show('p1-div-exact', $o->x);
+for ($k = 0; $k < 2; $k++) { $o->x = $o->y % 4; } show('p1-mod', $o->x);
+for ($k = 0; $k < 2; $k++) { $o->x = $o->y ** 2; } show('p1-pow', $o->x);
+for ($k = 0; $k < 2; $k++) { $o->x = $o->y ** 70; } show('p1-pow-overflow', $o->x);
+for ($k = 0; $k < 2; $k++) { $o->x = $o->y . 'a'; } show('p1-concat', $o->x);
+for ($k = 0; $k < 2; $k++) { try { $o->x = $o->y / 0; } catch (DivisionByZeroError $e) { echo "p1-div-zero#$k: ", get_class($e), ' ', $e->getMessage(), "\n"; } }
+for ($k = 0; $k < 2; $k++) { try { $o->x = $o->y % 0; } catch (DivisionByZeroError $e) { echo "p1-mod-zero#$k: ", get_class($e), ' ', $e->getMessage(), "\n"; } }
+$o->y = PHP_INT_MIN; for ($k = 0; $k < 2; $k++) { $o->x = $o->y % -1; } show('p1-mod-min-neg1', $o->x);
+$o->y = PHP_INT_MAX; for ($k = 0; $k < 2; $k++) { $o->x = $o->y + 1; } show('p1-add-overflow', $o->x);
+for ($k = 0; $k < 2; $k++) { $o->x = $o->y * 2; } show('p1-mul-overflow', $o->x);
+$o->y = PHP_INT_MIN; for ($k = 0; $k < 2; $k++) { $o->x = $o->y - 1; } show('p1-sub-overflow', $o->x);
+$o->y = 2.5; for ($k = 0; $k < 2; $k++) { $o->x = $o->y + 1; } show('p1-double-src', $o->x);
+$o->y = "5"; for ($k = 0; $k < 2; $k++) { $o->x = $o->y + 1; } show('p1-numstr-src', $o->x);
+$o->y = null; for ($k = 0; $k < 2; $k++) { $o->x = $o->y + 1; } show('p1-null-src', $o->x);
+$o->y = true; for ($k = 0; $k < 2; $k++) { $o->x = $o->y + 1; } show('p1-bool-src', $o->x);
+$o->y = 4; $o->x = 1.5; for ($k = 0; $k < 2; $k++) { $o->x = $o->y + 1; } show('p1-double-dst', $o->x);
+$o->x = "s"; for ($k = 0; $k < 2; $k++) { $o->x = $o->y + 1; } show('p1-str-dst', $o->x);
+$o->x = null; for ($k = 0; $k < 2; $k++) { $o->x = $o->y + 1; } show('p1-null-dst', $o->x);
+$o->x = [1]; for ($k = 0; $k < 2; $k++) { $o->x = $o->y + 1; } show('p1-arr-dst', $o->x);
+$o->x = 0; $r = &$o->x; for ($k = 0; $k < 2; $k++) { $o->x = $o->y + 1; } show('p1-dst-ref', $o->x); show('p1-dst-ref-alias', $r); unset($r);
+$o2 = new P; $q = &$o2->y; $o2->y = 4; for ($k = 0; $k < 2; $k++) { $o2->x = $o2->y + 1; } show('p1-src-ref', $o2->x); unset($q);
+$o3 = new P; $o3->x = 5; for ($k = 0; $k < 2; $k++) { $o3->x = $o3->x + 1; } show('p1-self', $o3->x);
+$a = new P; $b = new P; $b->y = 9; for ($k = 0; $k < 2; $k++) { $a->x = $b->y + 1; } show('p1-two-objs', [$a->x, $b->x]);
+$sb = new Sub; $sb->y = 8; for ($k = 0; $k < 2; $k++) { $sb->x = $sb->y + 2; } show('p1-inherited', $sb->x);
+$t = new T; $t->y = 5; for ($k = 0; $k < 2; $k++) { $t->x = $t->y + 1; } show('p1-typed-int', $t->x);
+$t->y = PHP_INT_MAX; for ($k = 0; $k < 2; $k++) { try { $t->x = $t->y + 1; show("p1-typed-int-overflow#$k", $t->x); } catch (TypeError $e) { echo "p1-typed-int-overflow#$k: ", get_class($e), ' ', $e->getMessage(), "\n"; } }
+$t->y = 3; for ($k = 0; $k < 2; $k++) { $t->f = $t->y + 1; } show('p1-typed-float-dst', $t->f);
+$t->f = 2.0; for ($k = 0; $k < 2; $k++) { $t->x = $t->f + 1; } show('p1-typed-int-from-float', $t->x);
+$t2 = new T2; for ($k = 0; $k < 2; $k++) { $t2->f = $t2->y + 1; } show('p1-typed-float-from-long', $t2->f); // il default `float $f = 1` (int(1) vs float(1)) sta in fx-sl2-div (§3.30)
+$ro = new RO(5, 7); for ($k = 0; $k < 2; $k++) { try { $ro->x = $ro->y + 1; show("p1-readonly#$k", $ro->x); } catch (Error $e) { echo "p1-readonly#$k: ", get_class($e), ' ', $e->getMessage(), "\n"; } }
+$ro3 = new RO3; for ($k = 0; $k < 2; $k++) { try { $ro3->set(); show("p1-readonly-inscope#$k", $ro3->x); } catch (Error $e) { echo "p1-readonly-inscope#$k: ", get_class($e), ' ', $e->getMessage(), "\n"; } }
+$pv = new PV; show('p1-private-inscope', $pv->run());
+for ($k = 0; $k < 2; $k++) { try { $pv->x = $pv->y + 1; show("p1-private-outscope#$k", 'written'); } catch (Error $e) { echo "p1-private-outscope#$k: ", get_class($e), ' ', $e->getMessage(), "\n"; } }
+$h = new H; $h->y = 5; for ($k = 0; $k < 2; $k++) { $h->x = $h->y + 1; } show('p1-hook-set', [$h->x, $h->log]);
+$ms = new MS; for ($k = 0; $k < 2; $k++) { $ms->x = $ms->y + 1; } show('p1-magic-set', $ms->x);
+$d = new stdClass; $d->y = 3; for ($k = 0; $k < 2; $k++) { $d->x = $d->y + 1; } show('p1-dynamic', $d->x);
+for ($k = 0; $k < 2; $k++) { $d->x = $d->x + 1; } show('p1-dynamic-self', $d->x);
 
 // --- P2: $s OP= $o->x (PropGetSlot + BinarySTDst) ---
 $o = new P; $o->x = 7; $s = 10;
