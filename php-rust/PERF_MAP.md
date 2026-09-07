@@ -1,6 +1,17 @@
 # PERF_MAP — phpr vs PHP oracle 8.5.7, mappa multi-workload
 
-Aggiornata: **2026-09-07 notte (S-170)** · pin **INVARIATO s166 092dcff4+caa4e4b2**
+Aggiornata: **2026-09-07 sera (S-171)** · pin **NUOVO s171 phpr b360b2933eddfe18 + server b3ddaede545ba894**
+(**S-171 = LEVA L-SL1 «forma sigillata Long» fetta 1 PROMOSSA** (criterio wp171-harness/
+s171-criterio.md): BinarySCSCDst = catena i64 GENERICA (`long_arith_i64` = arm Long di
+binary_fast verbatim, un match per op) + store in place + corpo esatto `#[cold]`; CmpJmpSC
+a bool diretto; IncDec `checked_add` in place; zero unsafe. A/B R=5 tre bracci: **dq
+46,76→23,44 (D +23,32; 2,71× l'oracle, pin s166 5,41×)**, **e2 14,72→10,64 (+4,08)**,
+B−m13 −1,04 = tetto riprodotto dalla forma generica. Promozione rc=0: batteria 1748/0,
+corpus 1412×2 zero flip, 15 fixture byte-id (fx-sl1 nuova), ORM 16 == baseline, hk 0E/0F;
+**micro arith 5,4→2,7 = TAPPA ≤3× RAGGIUNTA su arith** · prop 5,2 · calls 4,8 · str 4,1 ·
+arr 3,2 · re 2,5 · dente run.rs 6917→7091 dichiarato · az.rev. S-170 #4 CHIUSA (m8 a N=1G
++4,43), #2 xctrace APERTA (crash record su B, ktrace 8,4G = incidente) · coppia WP+ORM t17
+lanciata al pin nuovo · verdetti wp171-harness/s171-verdetto.out)
 (**S-170 = DELIBERA R4 utente = (i) «corpo del handler», SOLA MISURA con mock magri
 su ENTRAMBI i giudici**: handler banali (e2) m8 magro safe **+4,08 a filo** / m9 +bounds
 **+5,64** ⇒ per-op 7,32→4,50 vs oracle 1,76, residuo 2,75/op = accesso slot; handler
