@@ -18,7 +18,7 @@ fixture nominale, forme non-driver senza dump, census cambia significato (dcn/sl
 **WP t17 1,776 in banda [1,738;1,799] (compatibile, nessun claim; t15/t16 1,746/1,749) ·
 ORM t17 net [6,980;7,076] vs registrato [7,023;7,053] compatibile (sentinella oracle 4,95 =
 1 tick fuori, Δ_norm non giudicante, come t16)** · corpus 1412×2 · batteria 1748 · denti:
-run.rs 7091 (cap dichiarato) · mod.rs 25909 · host.rs 7726 · coda CI: da potare a HEAD.
+run.rs 7091 (cap dichiarato) · mod.rs 25909 · host.rs 7726 · coda CI: potata a HEAD (1 job).
 
 ## §S-172 — ordine
 1. Coppia t17 LETTA in S-171 (WP e ORM compatibili): nessuna istruttoria; resta dovuta la
@@ -66,7 +66,7 @@ Pre-flight S-172: pin phpr **s171 b360b293**3eddfe18 + server **b3ddaede**545ba8
 via pin-*.sh; stash bracci `phpr-s171-sl1-B` e `phpr-s170-*` NON pin) · Data ≥10G (≥20G
 se xctrace; oggi il disco è sceso a 2G per consumo esterno al progetto: `du` di ~/Library
 e /private/var PRIMA di misurare) · MySQL wp8 con l'elenco · uploads sotto guardia ·
-corpus 1412 · lock misura da CREARE COL TOKEN `s172` · CI: runner in REQUEUE «disk-low» finché Data <10G (S-171 chiusa a 7G: il job HEAD 644f665a resta in coda) · coppia dovuta SOLO se il pin
+corpus 1412 · lock misura da CREARE COL TOKEN `s172` · CI: runner in REQUEUE «disk-low» finché Data <10G (S-171 chiusa a 7G: il job HEAD resta in coda) · coppia dovuta SOLO se il pin
 cambia · CI: coda potata a HEAD in chiusura S-171, leggere il feed · lettura: REGOLE.md →
 QUI → wp171-harness/s171-verdetto.out + revisione.md → s171-leva4-verdetto.out →
 s171-criterio.md → WP_SESSION_171 → PERF_MAP.
