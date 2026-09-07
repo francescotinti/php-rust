@@ -1,0 +1,17 @@
+== s170 MOCK m8 — A=36d73812 MISURATO (/private/tmp/s170-mock-bin/phpr-m0) B=eedebc68 MISURATO (/private/tmp/s170-mock-bin/phpr-m8); GIUDICE arith-e2 N=250M (loop nudo) + GUARDIA arith-dq bilaterale; R=5 ABAB alternato; criterio s170-criterio.md ==
+sentinella LS: /Applications/Antigravity /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.96.0-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer 
+parità arith-dq: A==B==atteso oracle (85937499750000000 )
+parità arith-e2: A==B==atteso oracle (0 )
+floors: A=0.02 B=0.02 oracle=0.05
+  coppia1 [AB su E2]: e2A=3.67 e2B=2.66 dqA=11.64 dqB=10.17 e2O=0.90 dqO=2.21
+  coppia2 [BA su E2]: e2A=3.68 e2B=2.65 dqA=11.67 dqB=10.23 e2O=0.95 dqO=2.21
+  coppia3 [AB su E2]: e2A=3.69 e2B=2.65 dqA=11.59 dqB=10.36 e2O=0.95 dqO=2.21
+  coppia4 [BA su E2]: e2A=3.68 e2B=2.66 dqA=11.78 dqB=10.15 e2O=0.95 dqO=2.21
+  coppia5 [AB su E2]: e2A=3.68 e2B=2.66 dqA=11.74 dqB=10.31 e2O=0.90 dqO=2.21
+GIUDICE arith-e2 (loop nudo, 2 op/iter): A=14.64 B=10.56 ns/iter D=A−B=+4.08 soglia=4.00 (rumore drop-1 A'=0.04 B'=0.04) -> NOMINATO
+DECOMPOSIZIONE (soglia = max(rumore, SL 0,94) SENZA pavimento 4): soglia_dec=0.94 -> DIREZIONE FIRMATA (B più veloce; R=5)
+per-op (2 op/iter): A=7.32 B=5.28 oracle=1.80 ns/op; residuo B a dispatch 1,75/op (limite inferiore S-169) = corpo magro ≈ 3.53 ns/op
+GUARDIA arith-dq (sola-regressione): A=46.60 B=40.84 oracle=8.64 ns/iter; dqB−dqA=-5.76 vs 4.00 -> ok; miglioramento su dq REGISTRATO (stessi 2 op nel loop), non contato
+riferimento finestra: gap-loop A=11.04 B=6.96; dq gap totale A=37.96 B=32.20
+ESITO rc=0
+sentinella LS fine: /Applications/Antigravity /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.96.0-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer 

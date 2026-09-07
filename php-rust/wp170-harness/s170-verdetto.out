@@ -1,0 +1,9 @@
+== S-170 MOCK «handler banale MAGRO» — SINTESI MECCANICA (criterio s170-criterio.md p.2-3; A=m0 36d73812 riproducibile al byte; giudice arith-e2 N=250M, 2 op/iter; R=5 ABAB) ==
+m8: A=14.64 B=10.56 D=+4.08 rumore=0.04 soglia=4.00 soglia_dec=0.94 -> NOMINATO; per-op B=5.28 (A 7.32, oracle 1.80); guardia dq ok (dqB−dqA=-5.76, REGISTRATO non contato); rc=0
+m9: A=14.64 B=9.00 D=+5.64 rumore=0.04 soglia=4.00 soglia_dec=0.94 -> NOMINATO; per-op B=4.50 (A 7.32, oracle 1.76); guardia dq ok (dqB−dqA=-6.84, REGISTRATO non contato); rc=0
+BOUNDS (D_m9 − D_m8) = +1.56 ns/iter (+0.78 ns/op) vs soglia_dec 0.94 -> DIREZIONE FIRMATA (cifra da differenza tra bracci, non ripartita)
+GUARDIE+MATERIALIZZAZIONE Zval+Result (m8) = +4.08 ns/iter (+2.04 ns/op) -> NOMINATO (a filo: soglia 4,00, rumore 0.04)
+RESIDUO m9 per-op = 4.50 − dispatch 1,75 (limite inferiore S-169) = 2.75 ns/op = «accesso slot (doppia indirezione Vec→Frame→Vec) + resto» NON nominato; per-op phpr m9 4.50 vs oracle 1.76 = 2.56× (pin: 4.16×)
+KILL pre-registrato (D_m9 < 4): NON scatta (D_m9=+5.64) -> ipotesi «corpo di ogni handler» REGGE sui banali; campagna (i) SI APRE (sola misura: criterio-b BinarySCSCDst)
+ATTESA p.3 (e2 → ~7,5, D_m9 ≈ 7): NON raggiunta (e2_m9=9.00, D=+5.64): guardie+bounds valgono 2.82 ns/op dei 5,6 di corpo; il resto (2.75) sta nell'accesso slot/scrittura e nel resto del corpo
+dq (guardia, REGISTRATO): m8 46.60→40.84 (-5.76), m9 46.44→39.60 (-6.84); oracle dq 8.64

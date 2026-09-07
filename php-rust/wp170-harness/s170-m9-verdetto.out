@@ -1,0 +1,17 @@
+== s170 MOCK m9 — A=36d73812 MISURATO (/private/tmp/s170-mock-bin/phpr-m0) B=0e0dde77 MISURATO (/private/tmp/s170-mock-bin/phpr-m9); GIUDICE arith-e2 N=250M (loop nudo) + GUARDIA arith-dq bilaterale; R=5 ABAB alternato; criterio s170-criterio.md ==
+sentinella LS: /Applications/Antigravity /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.96.0-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer 
+parità arith-dq: A==B==atteso oracle (85937499750000000 )
+parità arith-e2: A==B==atteso oracle (0 )
+floors: A=0.02 B=0.02 oracle=0.05
+  coppia1 [AB su E2]: e2A=3.68 e2B=2.28 dqA=11.63 dqB=9.96 e2O=0.87 dqO=2.22
+  coppia2 [BA su E2]: e2A=3.68 e2B=2.23 dqA=11.78 dqB=9.88 e2O=0.95 dqO=2.21
+  coppia3 [AB su E2]: e2A=3.68 e2B=2.27 dqA=11.61 dqB=9.92 e2O=0.85 dqO=2.21
+  coppia4 [BA su E2]: e2A=3.68 e2B=2.27 dqA=11.72 dqB=9.88 e2O=0.95 dqO=2.21
+  coppia5 [AB su E2]: e2A=3.68 e2B=2.27 dqA=11.62 dqB=10.00 e2O=0.93 dqO=2.21
+GIUDICE arith-e2 (loop nudo, 2 op/iter): A=14.64 B=9.00 ns/iter D=A−B=+5.64 soglia=4.00 (rumore drop-1 A'=0.00 B'=0.04) -> NOMINATO
+DECOMPOSIZIONE (soglia = max(rumore, SL 0,94) SENZA pavimento 4): soglia_dec=0.94 -> DIREZIONE FIRMATA (B più veloce; R=5)
+per-op (2 op/iter): A=7.32 B=4.50 oracle=1.76 ns/op; residuo B a dispatch 1,75/op (limite inferiore S-169) = corpo magro ≈ 2.75 ns/op
+GUARDIA arith-dq (sola-regressione): A=46.44 B=39.60 oracle=8.64 ns/iter; dqB−dqA=-6.84 vs 4.00 -> ok; miglioramento su dq REGISTRATO (stessi 2 op nel loop), non contato
+riferimento finestra: gap-loop A=11.12 B=5.48; dq gap totale A=37.80 B=30.96
+ESITO rc=0
+sentinella LS fine: /Applications/Antigravity /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.96.0-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer 
