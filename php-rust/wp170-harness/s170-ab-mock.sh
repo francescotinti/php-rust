@@ -15,7 +15,7 @@ A="${1:?APATH}"; AEXP="${2:?AEXP8}"; BB="${3:?BPATH}"; BEXP="${4:?BEXP8}"; TAG="
 O=/opt/homebrew/opt/php/bin/php
 DQ="$H/../wp164-harness/arith-dq.php"
 E2="$H/../wp168-harness/arith-e2.php"
-EMPTY="$H/../wp164-harness/empty.php"
+EMPTY="$H/../wp160-harness/empty.php"
 OUT="$H/ab-out"; mkdir -p "$OUT"
 VERD="$H/s170-$TAG-verdetto.out"; RC="$OUT/$TAG.rc"
 [ -e "$VERD" ] && { echo "verdetto ESISTE — TAG nuovo" >&2; exit 7; }

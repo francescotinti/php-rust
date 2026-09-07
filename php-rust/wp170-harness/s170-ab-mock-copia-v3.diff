@@ -19,6 +19,10 @@
 > # parità di A e B contro l'output ATTESO dell'ORACLE (non solo A==B; az.rev. S-169 #3).
 > # R=5 interleaved per coppia (ABAB sul giudice E2); ns/iter=(med raw−floor)/N; rumore drop-1.
 > # rc autoritativo = ab-out/<TAG>.rc; verdetto s170-<TAG>-verdetto.out.
+19c18
+< EMPTY="$H/../wp164-harness/empty.php"
+---
+> EMPTY="$H/../wp160-harness/empty.php"
 21c20
 < VERD="$H/s169-$TAG-verdetto.out"; RC="$OUT/$TAG.rc"
 ---
