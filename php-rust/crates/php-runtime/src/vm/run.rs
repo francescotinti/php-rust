@@ -498,6 +498,50 @@ impl<'m> super::Vm<'m> {
         Ok(convert::to_bool(&res, &mut self.diags))
     }
 
+
+    /// S-172 L-SL2: corpo ESATTO di `Op::BinarySTDst` (S-106 H-A1 + S-112
+    /// H-A2c, INVARIATO: pop del rhs, `read_slot` silenziosa del lhs, guardia
+    /// binary_fast + funnel binary_value_ab, reg_store_slot) tenuto fuori
+    /// linea — vi si arriva solo quando il cammino i64 dell'arm non copre
+    /// l'istanza (tag, overflow, Div/Mod/Pow, shift negativo); ricomputa da
+    /// zero, il fast path non ha lasciato tracce.
+    #[cold]
+    #[inline(never)]
+    #[allow(unused_variables)]
+    fn binary_st_dst_slow(
+        &mut self,
+        top: usize,
+        func: &crate::bytecode::Func,
+        ip: usize,
+        b: BinOp,
+        l: u16,
+        dst: u16,
+    ) -> Result<(), PhpError> {
+        #[cfg(feature = "zval-census")]
+        super::zvalcensus::note_slot_load_site(func, ip, &self.frames[top].slots[l as usize]);
+        #[cfg(feature = "zval-census")]
+        super::zvalcensus::note_recv_load(&self.frames[top].slots[l as usize]);
+        scn!(BinarySTDst: Pop = 1);
+        let rhs = self.frames[top].stack.pop().expect("BinarySTDst rhs");
+        let lhs = read_slot(&self.frames[top].slots[l as usize]);
+        #[cfg(feature = "zval-census")]
+        {
+            super::zvalcensus::note_prop_val(2, &lhs);
+            super::zvalcensus::note_prop_val(2, &rhs);
+        }
+        dcn!(BinarySTDst: &lhs); // consumati dalla coda (fast o funnel)
+        dcn!(BinarySTDst: &rhs);
+        // S-112 H-A2c: guardia binary_fast inline (hoisting puro
+        // della prima riga di binary_value_ab), miss al funnel.
+        let res = match binary_fast(b, &lhs, &rhs) {
+            Some(v) => v,
+            None => self.binary_value_ab(b, lhs, rhs)?,
+        };
+        // il valore corrente del dst muore nello store
+        dcn!(BinarySTDst: &self.frames[top].slots[dst as usize]);
+        self.reg_store_slot(top, dst, res)
+    }
+
     /// Corpo di `Op::Stringify` dopo il pop (S-107 lotto): UN solo sito
     /// possiede la semantica — condiviso con [`Op::StringifySlot`], frame
     /// `__toString` (RET_STRINGIFY) compreso.
@@ -2040,35 +2084,37 @@ impl<'m> super::Vm<'m> {
                 }
                 Op::BinarySTDst { op: b, l, dst } => {
                     // S-106 leva H-A1 (ha1-criterio.out): fonde il tris
-                    // `LoadSlot(l); Swap; BinaryDst{op,dst}` del compound
-                    // assign. Semantica IDENTICA per costruzione: stessa
-                    // read_slot silenziosa (lhs), stessi binary_value_ab e
-                    // reg_store_slot del braccio BinaryDst — la fusione
-                    // elide solo dispatch e transiti di pila.
-                    #[cfg(feature = "zval-census")]
-                    super::zvalcensus::note_slot_load_site(func, ip, &self.frames[top].slots[*l as usize]);
-                    #[cfg(feature = "zval-census")]
-                    super::zvalcensus::note_recv_load(&self.frames[top].slots[*l as usize]);
+                    // `LoadSlot(l); Swap; BinaryDst{op,dst}` del compound assign;
+                    // corpo ESATTO in `binary_st_dst_slow` (S-172).
                     scn!(BinarySTDst: op);
-                    scn!(BinarySTDst: Pop = 1);
-                    let rhs = self.frames[top].stack.pop().expect("BinarySTDst rhs");
-                    let lhs = read_slot(&self.frames[top].slots[*l as usize]);
-                    #[cfg(feature = "zval-census")]
-                    {
-                        super::zvalcensus::note_prop_val(2, &lhs);
-                        super::zvalcensus::note_prop_val(2, &rhs);
-                    }
-                    dcn!(BinarySTDst: &lhs); // consumati dalla coda (fast o funnel)
-                    dcn!(BinarySTDst: &rhs);
-                    // S-112 H-A2c: guardia binary_fast inline (hoisting puro
-                    // della prima riga di binary_value_ab), miss al funnel.
-                    let res = match binary_fast(*b, &lhs, &rhs) {
-                        Some(v) => v,
-                        None => self.binary_value_ab(*b, lhs, rhs)?,
+                    // S-172 L-SL2 «forma sigillata Long» fetta 2 = prop (criterio
+                    // wp172-harness/s172-criterio.md p.2b): rhs in cima alla pila
+                    // Long e slot l Long ⇒ catena i64 (`long_arith_i64` = arm Long
+                    // di binary_fast, VERBATIM), pop del Long e scrittura IN PLACE
+                    // su un dst già Long (= store_slot su Long: nessun typed-ref,
+                    // gc_note di un Long è no-op); ogni miss (tag, overflow,
+                    // Div/Mod/Pow, shift negativo) va al corpo ESATTO fuori linea,
+                    // che ricomputa da zero: il fast path non ha effetti
+                    // collaterali. I `dcn!` restano nel corpo esatto (sul hit
+                    // nessun Zval è materializzato).
+                    let fast = {
+                        let fr = &self.frames[top];
+                        match (fr.stack.last(), &fr.slots[*l as usize]) {
+                            (Some(Zval::Long(rv)), Zval::Long(lv)) => long_arith_i64(*b, *lv, *rv),
+                            _ => None,
+                        }
                     };
-                    // il valore corrente del dst muore nello store
-                    dcn!(BinarySTDst: &self.frames[top].slots[*dst as usize]);
-                    self.reg_store_slot(top, *dst, res)?;
+                    match fast {
+                        Some(r) => {
+                            self.frames[top].stack.pop();
+                            if let Zval::Long(x) = &mut self.frames[top].slots[*dst as usize] {
+                                *x = r;
+                            } else {
+                                self.reg_store_slot(top, *dst, Zval::Long(r))?;
+                            }
+                        }
+                        None => self.binary_st_dst_slow(top, func, ip, *b, *l, *dst)?,
+                    }
                 }
                 Op::BinaryTC { op: b, cidx } => {
                     // S-107 lotto: BinarySC a lhs di PILA (bigram
