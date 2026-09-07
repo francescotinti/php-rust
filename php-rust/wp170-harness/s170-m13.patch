@@ -15,12 +15,12 @@
 +                        // m13: bounds ELISI (unsafe: braccio di MISURA, MAI promuovibile).
 +                        // SAFETY(mock): top < frames.len(), la/lb/l < n_slots, ca/cb < consts.len() per costruzione del compilatore.
 +                        let fr = unsafe { self.frames.get_unchecked(top) };
-+                        let (Zval::Long(xa), Zval::Long(xb), Zval::Long(xl)) = unsafe {
++                        let sl3 = unsafe {
 +                            (fr.slots.get_unchecked(*la as usize), fr.slots.get_unchecked(*lb as usize), fr.slots.get_unchecked(*l as usize))
-+                        } else { break 'f None };
-+                        let (crate::bytecode::Const::Int(ka), crate::bytecode::Const::Int(kb)) = unsafe {
-+                            (func.consts.get_unchecked(*ca as usize), func.consts.get_unchecked(*cb as usize))
-+                        } else { break 'f None };
++                        };
++                        let (Zval::Long(xa), Zval::Long(xb), Zval::Long(xl)) = sl3 else { break 'f None };
++                        let kk = unsafe { (func.consts.get_unchecked(*ca as usize), func.consts.get_unchecked(*cb as usize)) };
++                        let (crate::bytecode::Const::Int(ka), crate::bytecode::Const::Int(kb)) = kk else { break 'f None };
 +                        if *kb < 0 || *kb >= 64 { break 'f None; }
 +                        let Some(a) = xa.checked_mul(*ka) else { break 'f None };
 +                        let b = *xb >> *kb;
