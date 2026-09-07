@@ -1,0 +1,14 @@
+== s172 mutante abortivo L-SL1 (corsa 2) — pin b360b2933eddfe18 (sorgente = commit 5d87222b89cc, run.rs e3b0c44298fc1c14), fixture 90 righe, Data 9.8G 2026-09-07 23:22:43 ==
+M1: binario 5a918c48834e3246 rc_fixture=0
+M1: righe ROTTE (9): bitops dq100 dst==src shl-64 shl-neg-l shl-neg-l-62 shr-64 shr-70-neg shr-neg-l 
+M2: binario ad5d14eefce76f70 rc_fixture=0
+M2: righe ROTTE (13): cmp(2) cmp(3) cmp(4) dec-loop dq100 ge-loop inc-loop-neg inc-max-loop lt-loop lt-max lt-numstr-loop ne-loop nid-loop 
+M1: attese TUTTE rotte -> fast path PRESO su ogni riga attesa
+M1: righe fuori-dominio INTATTE (nessuna presa fuori dominio)
+M1 a verdetto: assign-form INTATTA -> forma NON abbassata a BinarySCSCDst o dst aliasato (da leggere in reg_lower)
+M1 a verdetto: dst==src ROTTA -> forma abbassata a BinarySCSCDst e fast path preso
+M1 a verdetto: shl-63 INTATTA -> atteso: 21−MIN overflow su Sub ⇒ corpo esatto per costruzione
+M2: attese TUTTE rotte -> fast path PRESO su ogni riga attesa
+M2: VIOLAZIONE dominio — rotte: lt-numstr-loop (fast path preso FUORI dominio)
+SORGENTE: run.rs.orig 95a662073ec13202 ≠ commit e3b0c44298fc1c14 — INCIDENTE
+ESITO rc=3 (0 = fast path preso su tutte le attese, dominio rispettato; 1 = attese non rotte; 5 = presa fuori dominio) — Data 9.7G fine 2026-09-07 23:28:41

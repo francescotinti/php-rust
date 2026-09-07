@@ -1,0 +1,116 @@
+2,10c2,14
+< # s171-promozione.sh <cand_hash16> — gate di promozione LEVA L-SL1
+< # («forma sigillata Long» fetta 1: BinarySCSCDst i64 generica + CmpJmpSC/
+< # IncDecSlotJmp magri, slow path #[cold]) — S-171, criterio s171-criterio.md p.5.
+< # COPIA DICHIARATA di wp163-harness/s163-promozione.sh (manifest
+< # s171-promozione-copia-v3.diff + copia-gate v3); DIVERGENZE DICHIARATE:
+< #  (1) tag s171, harness wp171; candidato = hash argomento (A/B R=5 in
+< #      s171-leva-verdetto.out: giudici arith-dq E arith-e2); candidato stashato
+< #      phpr-s171-sl1-B via pin-phpr.sh --braccio; stash di riferimento per i
+< #      gate «pin==stash» = phpr-s166 (092dcff431bef876), non più s162;
+---
+> # s172-promozione.sh <cand_hash16> <braccio> — gate di promozione LEVA L-SL2
+> # («forma sigillata Long» fetta 2 = prop: P1 bigramma fuso PropGetSlotRecv+
+> # BinaryTCPropSetPop sigillato, P2 BinarySTDst sigillato, corpi esatti #[cold])
+> # — S-172, criterio wp172-harness/s172-criterio.md p.6.
+> # COPIA DICHIARATA di wp171-harness/s171-promozione.sh (manifest
+> # s172-promozione-copia-v3.diff + copia-gate v3); DIVERGENZE DICHIARATE:
+> #  (1) tag s172, harness wp172 (fixture S-171 ereditate in BYTE-COPIA verificata
+> #      cmp); candidato = hash argomento + BRACCIO promosso (B=P1, C=P1+P2; A/B R=5
+> #      in s172-leva-verdetto.out: giudice prop-dq, guardia arith-dq); candidato
+> #      stashato phpr-s172-sl2-<braccio> via pin-phpr.sh --braccio; stash di
+> #      riferimento per i gate «pin==stash» = phpr-s171 (b360b2933eddfe18);
+> #      **fx-sl2 NUOVA bilaterale** (presidio DIRETTO L-SL2, oracle==pin già sul
+> #      pin s171); conferma post-pin = prop-dq (non arith-dq);
+17c21
+< #      bilaterali + sonda-bt/fx-refl/fx-sm-div/fx-au-div pin==stash s166
+---
+> #      bilaterali + sonda-bt/fx-refl/fx-sm-div/fx-au-div pin==stash s171
+19c23
+< #      fx-mc/fx-mc2/fx-mc2-fib pin==stash s166 (S-165/166, §3.28/§3.29) +
+---
+> #      fx-mc/fx-mc2/fx-mc2-fib pin==stash s171 (S-165/166, §3.28/§3.29) +
+25,26c29,30
+< #      s166 (forme con diag: §3.11 + §3.13 PRE-esistenti, INVARIATE);
+< #  (5) conferma POST-PIN: arith-dq R=5 pin s171 vs stash phpr-s166 (attesa segno
+---
+> #      s171 (forme con diag: §3.11 + §3.13 PRE-esistenti, INVARIATE);
+> #  (5) conferma POST-PIN: arith-dq R=5 pin s172 vs stash phpr-s171 (attesa segno
+33c37
+< H="$SRC/wp171-harness"
+---
+> H="$SRC/wp172-harness"
+42,44c46,48
+< VERD="$H/s171-promo-verdetto.out"
+< CAND_EXP="${1:?uso: s171-promozione.sh <cand_hash16>}"
+< REF="$STASH/phpr-s166"; REF_EXP="092dcff431bef876"
+---
+> VERD="$H/s172-promo-verdetto.out"
+> CAND_EXP="${1:?uso: s172-promozione.sh <cand_hash16> <braccio B|C>}"; ARM="${2:?braccio promosso (B=P1, C=P1+P2)}"
+> REF="$STASH/phpr-s171"; REF_EXP="b360b2933eddfe18"
+52c56
+<          "$H/fx-sl1.php" "$H/fx-sl1-div.php" \
+---
+>          "$H/fx-sl1.php" "$H/fx-sl1-div.php" "$H/fx-sl2.php" "$H/prop-dq.php" \
+57c61
+<          "$REF" "$STASH/phpr-s171-sl1-B"; do
+---
+>          "$REF" "$STASH/phpr-s172-sl2-$ARM"; do
+60c64
+< [ "$(shasum -a 256 "$REF" | cut -c1-16)" = "$REF_EXP" ] || stop "PRE: stash phpr-s166 hash != $REF_EXP — STOP"
+---
+> [ "$(shasum -a 256 "$REF" | cut -c1-16)" = "$REF_EXP" ] || stop "PRE: stash phpr-s171 hash != $REF_EXP — STOP"
+97c101
+<   CSTASH="$STASH/phpr-s171-sl1-B"
+---
+>   CSTASH="$STASH/phpr-s172-sl2-$ARM"
+134c138
+< "$SRC/scripts/pin-phpr.sh" s171 > "$OUT/pin.log" 2>&1
+---
+> "$SRC/scripts/pin-phpr.sh" s172 > "$OUT/pin.log" 2>&1
+167c171
+< # gate INVARIANTE: pin==stash s166 byte-id (+ marcatore quando preteso)
+---
+> # gate INVARIANTE: pin==stash s171 byte-id (+ marcatore quando preteso)
+170c174
+<   "$REF" "$f" > "$OUT/$n-s166.out" 2>&1
+---
+>   "$REF" "$f" > "$OUT/$n-s171.out" 2>&1
+174,175c178,179
+<   if diff -q "$OUT/$n-s166.out" "$OUT/$n-pin.out" > /dev/null; then
+<     note "promozione gate $n: pin==stash s166 BYTE-ID ($d)"
+---
+>   if diff -q "$OUT/$n-s171.out" "$OUT/$n-pin.out" > /dev/null; then
+>     note "promozione gate $n: pin==stash s171 BYTE-ID ($d)"
+177,178c181,182
+<     diff "$OUT/$n-s166.out" "$OUT/$n-pin.out" > "$OUT/$n.diff" || true
+<     stop "gate $n: pin DIVERGE dallo stash s166 (promo-out/$n.diff)"
+---
+>     diff "$OUT/$n-s171.out" "$OUT/$n-pin.out" > "$OUT/$n.diff" || true
+>     stop "gate $n: pin DIVERGE dallo stash s171 (promo-out/$n.diff)"
+195a200
+> bilat fxsl2 "$H/fx-sl2.php" "FX-SL2 DONE" "presidio DIRETTO L-SL2: P1 bigramma fuso e P2 BinarySTDst — overflow/shift/Div/Mod/Pow/Concat/Double/stringa/null/bool/Ref/typed int-float/readonly/hook set/dinamica" -d log_errors=0 -d display_errors=1
+204,205c209,210
+< PHPR="$BIN" R=5 "$SRC/wp97-harness/micro/run-micro.sh" > "$OUT/micro-pin-s171.out" 2>&1
+< note "promozione micro pin s171: $(grep -E '^rapporto_' "$OUT/micro-pin-s171.out" | tr '\n' ' ')"
+---
+> PHPR="$BIN" R=5 "$SRC/wp97-harness/micro/run-micro.sh" > "$OUT/micro-pin-s172.out" 2>&1
+> note "promozione micro pin s172: $(grep -E '^rapporto_' "$OUT/micro-pin-s172.out" | tr '\n' ' ')"
+207,208c212,213
+< # ---- conferma POST-PIN arith-dq (divergenza (5)): R=5 pin s171 vs stash s166 ----
+< DQ="$SRC/wp164-harness/arith-dq.php"
+---
+> # ---- conferma POST-PIN prop-dq (divergenza (5)): R=5 pin s172 vs stash s171 ----
+> DQ="$H/prop-dq.php"
+232c237
+< note "conferma post-pin arith-dq (pin s171 vs stash s166): $CONF (attesa: segno +, D nell'intorno del D_dq dell'A/B; rumore > attesa/2 ⇒ SOLO SEGNO)"
+---
+> note "conferma post-pin prop-dq (pin s172 vs stash s171): $CONF (attesa: segno +, D nell'intorno del D_prop del braccio promosso nell'A/B; rumore > attesa/2 ⇒ SOLO SEGNO)"
+262c267
+< "$SRC/scripts/pin-server.sh" s171 > "$OUT/pin-server.log" 2>&1
+---
+> "$SRC/scripts/pin-server.sh" s172 > "$OUT/pin-server.log" 2>&1
+268c273
+< note "PROMOZIONE COMPLETA rc=0 (da promo-out/rcb): pin s171 = $H2"
+---
+> note "PROMOZIONE COMPLETA rc=0 (da promo-out/rcb): pin s172 = $H2"

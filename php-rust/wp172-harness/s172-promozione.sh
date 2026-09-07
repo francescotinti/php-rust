@@ -1,13 +1,17 @@
 #!/bin/bash
-# s172-promozione.sh <cand_hash16> — gate di promozione LEVA L-SL1
-# («forma sigillata Long» fetta 1: BinarySCSCDst i64 generica + CmpJmpSC/
-# IncDecSlotJmp magri, slow path #[cold]) — S-171, criterio s172-criterio.md p.5.
-# COPIA DICHIARATA di wp163-harness/s163-promozione.sh (manifest
+# s172-promozione.sh <cand_hash16> <braccio> — gate di promozione LEVA L-SL2
+# («forma sigillata Long» fetta 2 = prop: P1 bigramma fuso PropGetSlotRecv+
+# BinaryTCPropSetPop sigillato, P2 BinarySTDst sigillato, corpi esatti #[cold])
+# — S-172, criterio wp172-harness/s172-criterio.md p.6.
+# COPIA DICHIARATA di wp171-harness/s171-promozione.sh (manifest
 # s172-promozione-copia-v3.diff + copia-gate v3); DIVERGENZE DICHIARATE:
-#  (1) tag s172, harness wp171; candidato = hash argomento (A/B R=5 in
-#      s172-leva-verdetto.out: giudici arith-dq E arith-e2); candidato stashato
-#      phpr-s172-sl1-B via pin-phpr.sh --braccio; stash di riferimento per i
-#      gate «pin==stash» = phpr-s171 (b360b2933eddfe18), non più s162;
+#  (1) tag s172, harness wp172 (fixture S-171 ereditate in BYTE-COPIA verificata
+#      cmp); candidato = hash argomento + BRACCIO promosso (B=P1, C=P1+P2; A/B R=5
+#      in s172-leva-verdetto.out: giudice prop-dq, guardia arith-dq); candidato
+#      stashato phpr-s172-sl2-<braccio> via pin-phpr.sh --braccio; stash di
+#      riferimento per i gate «pin==stash» = phpr-s171 (b360b2933eddfe18);
+#      **fx-sl2 NUOVA bilaterale** (presidio DIRETTO L-SL2, oracle==pin già sul
+#      pin s171); conferma post-pin = prop-dq (non arith-dq);
 #  (2) inventario batteria: baseline s125 + denti — i denti aggiunti S-126..S-170
 #      NON sono elencati qui: nomi NUOVI si DICHIARANO (nota), nomi SPARITI
 #      fermano (stop); conteggio a verbale; debug_backtrace_array_fields verde;
@@ -40,7 +44,7 @@ QUIESCE="$SRC/wp129-harness/s129-quiescenza.sh"
 SP="${PROMO_SP:?PROMO_SP (workdir APFS per i gate ORM/hk) richiesto}"
 OUT="$H/promo-out"; mkdir -p "$OUT"
 VERD="$H/s172-promo-verdetto.out"
-CAND_EXP="${1:?uso: s172-promozione.sh <cand_hash16>}"
+CAND_EXP="${1:?uso: s172-promozione.sh <cand_hash16> <braccio B|C>}"; ARM="${2:?braccio promosso (B=P1, C=P1+P2)}"
 REF="$STASH/phpr-s171"; REF_EXP="b360b2933eddfe18"
 note(){ echo "$1"; echo "$1" >> "$VERD"; }
 stop(){ note "$1"; echo 1 > "$OUT/rcb"; exit 1; }
@@ -49,12 +53,12 @@ stop(){ note "$1"; echo 1 > "$OUT/rcb"; exit 1; }
 for f in "$H/fx-ce.php" "$H/fx-am.php" "$H/fx-af.php" "$H/fx-refl.php" \
          "$H/fx-sm.php" "$H/fx-sm-div.php" "$H/fx-au.php" "$H/fx-au-div.php" \
          "$H/fx-mc.php" "$H/fx-mc2.php" "$H/fx-mc2-fib.php" "$H/fx-mck.php" \
-         "$H/fx-sl1.php" "$H/fx-sl1-div.php" \
+         "$H/fx-sl1.php" "$H/fx-sl1-div.php" "$H/fx-sl2.php" "$H/prop-dq.php" \
          "$H/sonda-bt-autoload.php" "$SRC/wp164-harness/arith-dq.php" \
          "$H/empty.php" "$QUIESCE" "$WD" "$GATES/orm-work.tgz" "$GATES/hk-work.tgz" \
          "$SRC/wp125-harness/orm-baseline-failnames.txt" \
          "$SRC/wp125-harness/promo-out/batteria-nomi.txt" \
-         "$REF" "$STASH/phpr-s172-sl1-B"; do
+         "$REF" "$STASH/phpr-s172-sl2-$ARM"; do
   [ -s "$f" ] || stop "PRE: path d'ingresso MANCANTE: $f — STOP"
 done
 [ "$(shasum -a 256 "$REF" | cut -c1-16)" = "$REF_EXP" ] || stop "PRE: stash phpr-s171 hash != $REF_EXP — STOP"
@@ -94,7 +98,7 @@ PY
 if [ "$HB" = "$CAND_EXP" ]; then
   note "promozione: build ricetta riproduce il candidato $HB AL BYTE"
 else
-  CSTASH="$STASH/phpr-s172-sl1-B"
+  CSTASH="$STASH/phpr-s172-sl2-$ARM"
   [ "$(shasum -a 256 "$CSTASH" | cut -c1-16)" = "$CAND_EXP" ] || stop "stash candidato != $CAND_EXP — STOP"
   ident_contenuto "$BIN" "$CSTASH" > "$OUT/ident-contenuto.txt" 2>&1     || { cat "$OUT/ident-contenuto.txt" >> "$VERD"; stop "build $HB DIVERGE dal candidato OLTRE il meccanismo nominato — STOP"; }
   cat "$OUT/ident-contenuto.txt" >> "$VERD"
@@ -193,6 +197,7 @@ invar fxmc2 "$H/fx-mc2.php" "" "§3.28 ordine SEND_VAR_EX/dtor temp PRE-esistent
 invar fxmc2fib "$H/fx-mc2-fib.php" "" "§3.29 Fiber non final PRE-esistente INVARIATO"
 bilat fxsl1 "$H/fx-sl1.php" "FX-SL1 DONE" "presidio DIRETTO L-SL1: overflow/shift/Div/Mod/Pow/Ref/Double/stringa/null/bool/dst==l/typed-ref/IncDec limiti/CmpJmpSC 8 forme" -d log_errors=0 -d display_errors=1
 invar fxsl1div "$H/fx-sl1-div.php" "FX-SL1-DIV DONE" "forme con diag §3.11/§3.13 PRE-esistenti INVARIATE"
+bilat fxsl2 "$H/fx-sl2.php" "FX-SL2 DONE" "presidio DIRETTO L-SL2: P1 bigramma fuso e P2 BinarySTDst — overflow/shift/Div/Mod/Pow/Concat/Double/stringa/null/bool/Ref/typed int-float/readonly/hook set/dinamica" -d log_errors=0 -d display_errors=1
 
 QOK=1
 for t in $(seq 1 30); do
@@ -204,8 +209,8 @@ done
 PHPR="$BIN" R=5 "$SRC/wp97-harness/micro/run-micro.sh" > "$OUT/micro-pin-s172.out" 2>&1
 note "promozione micro pin s172: $(grep -E '^rapporto_' "$OUT/micro-pin-s172.out" | tr '\n' ' ')"
 
-# ---- conferma POST-PIN arith-dq (divergenza (5)): R=5 pin s172 vs stash s171 ----
-DQ="$SRC/wp164-harness/arith-dq.php"
+# ---- conferma POST-PIN prop-dq (divergenza (5)): R=5 pin s172 vs stash s171 ----
+DQ="$H/prop-dq.php"
 NDQ=$(awk 'match($0, /\$i<[0-9]+/) {print substr($0, RSTART+3, RLENGTH-3); exit}' "$DQ")
 ucpu(){ { /usr/bin/time -p perl -e 'alarm 900; exec @ARGV or die' -- "$1" "$2" > /dev/null; } 2>&1 | awk '/^user/{print $2}'; }
 floor3(){ local a b c; a=$(ucpu "$1" "$2"); b=$(ucpu "$1" "$2"); c=$(ucpu "$1" "$2"); printf '%s\n%s\n%s\n' "$a" "$b" "$c" | sort -n | awk 'NR==2'; }
@@ -229,7 +234,7 @@ segni=sum(1 for a,b in zip(na,nb) if a>b)
 print(f"D={d:+.2f} rumore={noise:.2f} segni={segni}/5 A={med(na):.2f} B={med(nb):.2f} ns/iter (N={int(n)} dal driver)")
 PY
 )
-note "conferma post-pin arith-dq (pin s172 vs stash s171): $CONF (attesa: segno +, D nell'intorno del D_dq dell'A/B; rumore > attesa/2 ⇒ SOLO SEGNO)"
+note "conferma post-pin prop-dq (pin s172 vs stash s171): $CONF (attesa: segno +, D nell'intorno del D_prop del braccio promosso nell'A/B; rumore > attesa/2 ⇒ SOLO SEGNO)"
 
 # ---- gate ORM per NOME ----
 rm -rf "$SP/orm-work" && mkdir -p "$SP" && tar xzf "$GATES/orm-work.tgz" -C "$SP" || stop "untar orm-work"
