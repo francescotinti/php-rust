@@ -69,7 +69,12 @@ fn nessun_sorgente_rs_oltre_cap() {
         // s165-arbitrato-guardie.md; l'arm di run_loop torna a ~10 righe).
         // S-166 L-MCk: +3 DICHIARATI (cade il cap argc≤2, solo commento-leva
         // nell'arm — criterio s166-criterio-mck.md p.5).
-        ("php-runtime/src/vm/run.rs", 6917, "run_loop — ULTIMO o mai (A2); +102 L-MCk S-166 dichiarato"),
+        // S-171 L-SL1: +174 DICHIARATI (criterio s171-criterio.md p.4: due helper
+        // i64 = arm Long di binary_fast verbatim, tre corpi ESATTI spostati fuori
+        // linea in metodi #[cold] — il codice dell'arm non cresce, si sposta — e
+        // commenti-leva). Il dente ha morso alla promozione (batteria tentativo 1
+        // rc=101): salita a verbale in wp171-harness/s171-verdetto.out.
+        ("php-runtime/src/vm/run.rs", 7091, "run_loop — ULTIMO o mai (A2); +102 L-MCk S-166 + 174 L-SL1 S-171 dichiarati"),
         ("php-runtime/tests/eval.rs", 4773, "batteria eval"),
         ("php-builtins/tests/builtins.rs", 4772, "batteria builtins"),
         ("php-runtime/src/lower/mod.rs", 3838, "lowering"),
