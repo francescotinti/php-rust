@@ -1,6 +1,18 @@
 # PERF_MAP — phpr vs PHP oracle 8.5.7, mappa multi-workload
 
-Aggiornata: **2026-09-02 notte (S-169)** · pin **INVARIATO s166 092dcff4+caa4e4b2**
+Aggiornata: **2026-09-07 notte (S-170)** · pin **INVARIATO s166 092dcff4+caa4e4b2**
+(**S-170 = DELIBERA R4 utente = (i) «corpo del handler», SOLA MISURA con mock magri
+su ENTRAMBI i giudici**: handler banali (e2) m8 magro safe **+4,08 a filo** / m9 +bounds
+**+5,64** ⇒ per-op 7,32→4,50 vs oracle 1,76, residuo 2,75/op = accesso slot; handler
+fuso BinarySCSCDst (dq) m10 guardie +1,44 e m11 store +1,20 SOTTO pavimento, **m12
+funnel i64 +17,16**, **m13 corpo magro totale +22,20** ⇒ **dq 46,8→24,6 = 2,84×** (pin
+5,4×), statement 32,1→9,7 vs 5,1, corpo fuso 27,5→5,1; differenze dichiarate: funnel+
+read_slot+guardie +9,16 (m12−m123), store+bounds +5,04 (m13−m12); kill NON scattati,
+soglia ≥20 superata ⇒ **forma sigillata Long = leva da misurare come CODICE (S-171)**;
+estrapolazione dichiarata m13+m9 ⇒ dq ≈18,9 ≈2,2× · xctrace-3: c0 positivo (array_sum)
+FALLITO bilaterale (catena seriale ≠ retiring), quote dq replicate N=2, c2 delivery
+15,8 vs 0,84 ns/iter INDIZIATA · incidente ereditato: pavimenti S-167..169 su
+`empty.php` inesistente (≤0,02 ns/iter) · verdetti wp170-harness/s170-verdetto*.out)
 (**S-169 = az.rev. S-168 eseguite (sola misura)**: m5 8 Nop/iter => **dispatch
 puro 1,75 ns/op (±0,05) = costo per-op INTERO dell'oracle (1,80)**; e2 14,7 =
 2×1,75 + 2 corpi => corpo CmpJmpSC/IncDecSlotJmp ≈5,6 ns/op; m7 (m2 senza
