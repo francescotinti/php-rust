@@ -1,0 +1,294 @@
+2,30c2,29
+< # s163-promozione.sh <cand_hash16> — gate di promozione LEVA L-AU1
+< # (autoload array-callable [obj,metodo] UTENTE k=1 senza args-Vec) — S-163.
+< # COPIA DICHIARATA di wp162-harness/s162-promozione.sh; DIVERGENZE DICHIARATE:
+< #  (1) tag s163, harness wp163; candidato fea4a2d040a0d8d0 (A/B R=5 in
+< #      s163-au1r5d-verdetto.out: giudice arrload VINTO D=+42,0 rumore
+< #      2,0/4,0, riconc. smoke |3,5|<4,0 in banda; ARBITRATO census
+< #      rc=0-con-APPENDICE: errore di pre-registro sull'UNITA' dello
+< #      strumento DICHIARATO, attesa corretta Delta=3 alloc/miss CONFERMATA
+< #      ESATTA con bisezione a 7 forme ⇒ FUORI-UB SOPRA a verbale (plumbing
+< #      oltre le alloc); 19 guardie NESSUN morso; braccio A = GEMELLO
+< #      20c63af4 == pin s162 AL BYTE al PRIMO tentativo; tag au1r5/b/c
+< #      bruciati da flare mediaanalysisd, a verbale; candidato stashato
+< #      phpr-s163-au1-B);
+< #  (2) inventario batteria = baseline s125 + i DUE denti (rczval +
+< #      loc_dente A4) — L-AU1 non aggiunge test; salita loc mod.rs
+< #      25847→25909 PRE-dichiarata e committata;
+< #  (3) corpus: ZERO flip attesi (fast path solo [obj,metodo] utente PUBLIC
+< #      non-static simple arita' 1 senza ombra private) — rc!=0 = STOP secco;
+< #  (4) fixture chain INVARIATA (10 gate) + fx-ce (bilaterale) + sonda-bt e
+< #      fx-refl (pin==stash s162) + fx-am/fx-af (bilaterali) + fx-sm ESTESO
+< #      S-163 (bilaterale) + fx-sm-div ESTESO S-163 (pin==stash s162, 3
+< #      divergenze §3.26) + fx-au NUOVO (bilaterale: presidio DIRETTO L-AU1)
+< #      + fx-au-div NUOVO (pin==stash s162, §3.27) — ereditate in BYTE-COPIA
+< #      wp163 verificata cmp;
+< #  (5) conferma POST-PIN: m-arrload R=5 pin s163 vs stash phpr-s162
+< #      (attesa segno +, intorno +42,0; rumore > attesa/2 = 21,0 ⇒ SOLO SEGNO);
+< #  (6) disasm run_loop AGLI ATTI pre-promo (bl 6043==6043, Δ=0 —
+< #      ab-out/disasm-au1.out);
+< #  (7) micro R=5 = run-micro.sh come s162 (scoreboard al pin nuovo).
+---
+> # s171-promozione.sh <cand_hash16> — gate di promozione LEVA L-SL1
+> # («forma sigillata Long» fetta 1: BinarySCSCDst i64 generica + CmpJmpSC/
+> # IncDecSlotJmp magri, slow path #[cold]) — S-171, criterio s171-criterio.md p.5.
+> # COPIA DICHIARATA di wp163-harness/s163-promozione.sh (manifest
+> # s171-promozione-copia-v3.diff + copia-gate v3); DIVERGENZE DICHIARATE:
+> #  (1) tag s171, harness wp171; candidato = hash argomento (A/B R=5 in
+> #      s171-leva-verdetto.out: giudici arith-dq E arith-e2); candidato stashato
+> #      phpr-s171-sl1-B via pin-phpr.sh --braccio; stash di riferimento per i
+> #      gate «pin==stash» = phpr-s166 (092dcff431bef876), non più s162;
+> #  (2) inventario batteria: baseline s125 + denti — i denti aggiunti S-126..S-170
+> #      NON sono elencati qui: nomi NUOVI si DICHIARANO (nota), nomi SPARITI
+> #      fermano (stop); conteggio a verbale; debug_backtrace_array_fields verde;
+> #  (3) corpus: ZERO flip attesi (i fast path sono sottoinsiemi ESATTI degli arm
+> #      Long di binary_fast; ogni miss ricomputa il corpo originale) — rc!=0 = STOP;
+> #  (4) fixture chain s109 INVARIATA (10 gate) + fx-ce/fx-am/fx-af/fx-sm/fx-au
+> #      bilaterali + sonda-bt/fx-refl/fx-sm-div/fx-au-div pin==stash s166
+> #      (ereditate in BYTE-COPIA wp171 verificata cmp) + fx-mck bilaterale e
+> #      fx-mc/fx-mc2/fx-mc2-fib pin==stash s166 (S-165/166, §3.28/§3.29) +
+> #      **fx-sl1 NUOVA bilaterale** (presidio DIRETTO L-SL1: overflow, shift,
+> #      Div/Mod/Pow, Ref/Double/stringa/null/bool, dst==l, typed by-ref, IncDec ai
+> #      limiti, CmpJmpSC 8 forme; oracle con `-d log_errors=0 -d display_errors=1`
+> #      perché il CLI oracle DUPLICA i diag su stderr con log_errors — dichiarato,
+> #      la fixture bilaterale non emette diag) + **fx-sl1-div NUOVA** pin==stash
+> #      s166 (forme con diag: §3.11 + §3.13 PRE-esistenti, INVARIATE);
+> #  (5) conferma POST-PIN: arith-dq R=5 pin s171 vs stash phpr-s166 (attesa segno
+> #      +, intorno del D_dq dell'A/B; rumore > attesa/2 ⇒ SOLO SEGNO);
+> #  (6) disasm run_loop AGLI ATTI in fase A/B (ab-out/disasm-sl1.out), non qui;
+> #  (7) micro R=5 = run-micro.sh (scoreboard al pin nuovo) — INVARIATO.
+34c33
+< H="$SRC/wp163-harness"
+---
+> H="$SRC/wp171-harness"
+43,44c42,44
+< VERD="$H/s163-promo-verdetto.out"
+< CAND_EXP="${1:?uso: s163-promozione.sh <cand_hash16>}"
+---
+> VERD="$H/s171-promo-verdetto.out"
+> CAND_EXP="${1:?uso: s171-promozione.sh <cand_hash16>}"
+> REF="$STASH/phpr-s166"; REF_EXP="092dcff431bef876"
+51c51,53
+<          "$H/sonda-bt-autoload.php" "$H/m-arrload.php" \
+---
+>          "$H/fx-mc.php" "$H/fx-mc2.php" "$H/fx-mc2-fib.php" "$H/fx-mck.php" \
+>          "$H/fx-sl1.php" "$H/fx-sl1-div.php" \
+>          "$H/sonda-bt-autoload.php" "$SRC/wp164-harness/arith-dq.php" \
+55c57
+<          "$STASH/phpr-s162" "$STASH/phpr-s163-au1-B"; do
+---
+>          "$REF" "$STASH/phpr-s171-sl1-B"; do
+57a60
+> [ "$(shasum -a 256 "$REF" | cut -c1-16)" = "$REF_EXP" ] || stop "PRE: stash phpr-s166 hash != $REF_EXP — STOP"
+94c97
+<   CSTASH="$STASH/phpr-s163-au1-B"
+---
+>   CSTASH="$STASH/phpr-s171-sl1-B"
+110,111c113,115
+< if [ "$NEW_ONLY" = "nessun_sorgente_rs_oltre_cap rczval_pattern_resta_nel_funnel" ] && [ -z "$GONE" ]; then
+<   INV="baseline s125 + i DUE denti dichiarati (rczval + loc_dente A4)"
+---
+> NNEW=$(printf '%s' "$NEW_ONLY" | wc -w | tr -d ' ')
+> if [ -z "$GONE" ]; then
+>   INV="baseline s125 + $NNEW denti (dichiarati: $NEW_ONLY)"
+113c117
+<   INV="DIVERGE (nuovi='$NEW_ONLY' spariti='$GONE' — diff in promo-out/batteria-inv.diff)"
+---
+>   INV="DIVERGE (SPARITI='$(printf '%s' "$GONE" | tr '\n' ' ')' — diff in promo-out/batteria-inv.diff)"
+118c122
+< case "$INV" in DIVERGE*) stop "inventario batteria DIVERGE";; esac
+---
+> case "$INV" in DIVERGE*) stop "inventario batteria DIVERGE (nomi spariti)";; esac
+130c134
+< "$SRC/scripts/pin-phpr.sh" s163 > "$OUT/pin.log" 2>&1
+---
+> "$SRC/scripts/pin-phpr.sh" s171 > "$OUT/pin.log" 2>&1
+138c142
+< note "promozione corpus-gate: rc=0 — nomi==congelato (1412), CONTENUTO==golden, off-on zero (ZERO flip come atteso, L-AM2)"
+---
+> note "promozione corpus-gate: rc=0 — nomi==congelato (1412), CONTENUTO==golden, off-on zero (ZERO flip come atteso, L-SL1)"
+149,234c153,195
+< # ---- gate fx-ce: bilaterale oracle==pin byte-id (MARCATORE preteso) ----
+< "$ORACLE" "$H/fx-ce.php" > "$OUT/fxce-oracle.out" 2>&1
+< "$BIN" "$H/fx-ce.php" > "$OUT/fxce-pin.out" 2>&1
+< [ -s "$OUT/fxce-pin.out" ] || stop "gate fx-ce: output pin VUOTO (file/probe rotto)"
+< if diff -q "$OUT/fxce-oracle.out" "$OUT/fxce-pin.out" > /dev/null; then
+<   note "promozione gate fx-ce: oracle==pin BYTE-ID (12 forme class/interface/trait_exists)"
+< else
+<   diff "$OUT/fxce-oracle.out" "$OUT/fxce-pin.out" > "$OUT/fxce.diff" || true
+<   stop "gate fx-ce: DIVERGE (promo-out/fxce.diff)"
+< fi
+< # ---- gate sonda-bt: pin==stash s162 byte-id (§3.25 — presidio L-AL2 ereditato) ----
+< "$STASH/phpr-s162" "$H/sonda-bt-autoload.php" > "$OUT/sonda-bt-s162.out" 2>&1
+< "$BIN" "$H/sonda-bt-autoload.php" > "$OUT/sonda-bt-pin.out" 2>&1
+< [ -s "$OUT/sonda-bt-pin.out" ] || stop "gate sonda-bt: output pin VUOTO"
+< if diff -q "$OUT/sonda-bt-s162.out" "$OUT/sonda-bt-pin.out" > /dev/null; then
+<   note "promozione gate sonda-bt: pin==stash s162 BYTE-ID (contratto autoload/backtrace §3.25 invariato — presidio L-AL2 ereditato)"
+< else
+<   stop "gate sonda-bt: pin DIVERGE dallo stash s162 (promo-out/sonda-bt-pin.out)"
+< fi
+< # ---- gate fx-refl: pin==stash s162 byte-id ----
+< "$STASH/phpr-s162" "$H/fx-refl.php" > "$OUT/fxrefl-s162.out" 2>&1
+< "$BIN" "$H/fx-refl.php" > "$OUT/fxrefl-pin.out" 2>&1
+< [ -s "$OUT/fxrefl-pin.out" ] || stop "gate fx-refl: output pin VUOTO"
+< if diff -q "$OUT/fxrefl-s162.out" "$OUT/fxrefl-pin.out" > /dev/null; then
+<   note "promozione gate fx-refl: pin==stash s162 BYTE-ID (contratto __reflect_* L-RF2 invariato)"
+< else
+<   stop "gate fx-refl: pin DIVERGE dallo stash s162 (promo-out/fxrefl-pin.out)"
+< fi
+< # ---- gate fx-am: bilaterale oracle==pin byte-id + MARCATORE ----
+< "$ORACLE" "$H/fx-am.php" > "$OUT/fxam-oracle.out" 2>&1
+< "$BIN" "$H/fx-am.php" > "$OUT/fxam-pin.out" 2>&1
+< grep -q "FXAM-END" "$OUT/fxam-pin.out" || stop "gate fx-am: MARCATORE FXAM-END assente (lezione #21)"
+< if diff -q "$OUT/fxam-oracle.out" "$OUT/fxam-pin.out" > /dev/null; then
+<   note "promozione gate fx-am: oracle==pin BYTE-ID (20 forme array_map v2, fast E pieno)"
+< else
+<   diff "$OUT/fxam-oracle.out" "$OUT/fxam-pin.out" > "$OUT/fxam.diff" || true
+<   stop "gate fx-am: DIVERGE (promo-out/fxam.diff)"
+< fi
+< # ---- gate fx-af: bilaterale oracle==pin byte-id + MARCATORE ----
+< "$ORACLE" "$H/fx-af.php" > "$OUT/fxaf-oracle.out" 2>&1
+< "$BIN" "$H/fx-af.php" > "$OUT/fxaf-pin.out" 2>&1
+< grep -q "FXAF-END" "$OUT/fxaf-pin.out" || stop "gate fx-af: MARCATORE FXAF-END assente (lezione #21)"
+< if diff -q "$OUT/fxaf-oracle.out" "$OUT/fxaf-pin.out" > /dev/null; then
+<   note "promozione gate fx-af: oracle==pin BYTE-ID (13 forme array_filter, fast E pieno)"
+< else
+<   diff "$OUT/fxaf-oracle.out" "$OUT/fxaf-pin.out" > "$OUT/fxaf.diff" || true
+<   stop "gate fx-af: DIVERGE (promo-out/fxaf.diff)"
+< fi
+< # ---- gate fx-sm: bilaterale oracle==pin byte-id + MARCATORE (presidio DIRETTO L-AM2) ----
+< "$ORACLE" "$H/fx-sm.php" > "$OUT/fxsm-oracle.out" 2>&1
+< "$BIN" "$H/fx-sm.php" > "$OUT/fxsm-pin.out" 2>&1
+< grep -q "FX-SM DONE" "$OUT/fxsm-pin.out" || stop "gate fx-sm: MARCATORE FX-SM DONE assente (lezione #21)"
+< if diff -q "$OUT/fxsm-oracle.out" "$OUT/fxsm-pin.out" > /dev/null; then
+<   note "promozione gate fx-sm: oracle==pin BYTE-ID (forme string-callable, fast E pieno — presidio DIRETTO L-AM2)"
+< else
+<   diff "$OUT/fxsm-oracle.out" "$OUT/fxsm-pin.out" > "$OUT/fxsm.diff" || true
+<   stop "gate fx-sm: DIVERGE (promo-out/fxsm.diff)"
+< fi
+< # ---- gate fx-sm-div: pin==stash s162 INVARIANTE + MARCATORE (divergenze pre-esistenti) ----
+< "$STASH/phpr-s162" "$H/fx-sm-div.php" > "$OUT/fxsmdiv-s162.out" 2>&1
+< "$BIN" "$H/fx-sm-div.php" > "$OUT/fxsmdiv-pin.out" 2>&1
+< grep -q "FX-SM-DIV DONE" "$OUT/fxsmdiv-pin.out" || stop "gate fx-sm-div: MARCATORE FX-SM-DIV DONE assente"
+< if diff -q "$OUT/fxsmdiv-s162.out" "$OUT/fxsmdiv-pin.out" > /dev/null; then
+<   note "promozione gate fx-sm-div: pin==stash s162 BYTE-ID (3 divergenze §3.26 PRE-esistenti INVARIATE, fixture ESTESA S-163)"
+< else
+<   stop "gate fx-sm-div: pin DIVERGE dallo stash s162 (promo-out/fxsmdiv-pin.out)"
+< fi
+< # ---- gate fx-au: bilaterale oracle==pin byte-id + MARCATORE (presidio DIRETTO L-AU1) ----
+< "$ORACLE" "$H/fx-au.php" > "$OUT/fxau-oracle.out" 2>&1
+< "$BIN" "$H/fx-au.php" > "$OUT/fxau-pin.out" 2>&1
+< grep -q "FX-AU DONE" "$OUT/fxau-pin.out" || stop "gate fx-au: MARCATORE FX-AU DONE assente (lezione #21)"
+< if diff -q "$OUT/fxau-oracle.out" "$OUT/fxau-pin.out" > /dev/null; then
+<   note "promozione gate fx-au: oracle==pin BYTE-ID (10 forme loader array-callable, fast E pieno — presidio DIRETTO L-AU1)"
+< else
+<   diff "$OUT/fxau-oracle.out" "$OUT/fxau-pin.out" > "$OUT/fxau.diff" || true
+<   stop "gate fx-au: DIVERGE (promo-out/fxau.diff)"
+< fi
+< # ---- gate fx-au-div: pin==stash s162 INVARIANTE + MARCATORE (§3.27 pre-esistente) ----
+< "$STASH/phpr-s162" "$H/fx-au-div.php" > "$OUT/fxaudiv-s162.out" 2>&1
+< "$BIN" "$H/fx-au-div.php" > "$OUT/fxaudiv-pin.out" 2>&1
+< grep -q "FX-AU-DIV DONE" "$OUT/fxaudiv-pin.out" || stop "gate fx-au-div: MARCATORE FX-AU-DIV DONE assente"
+< if diff -q "$OUT/fxaudiv-s162.out" "$OUT/fxaudiv-pin.out" > /dev/null; then
+<   note "promozione gate fx-au-div: pin==stash s162 BYTE-ID (divergenza §3.27 PRE-esistente INVARIATA, a catalogo)"
+< else
+<   stop "gate fx-au-div: pin DIVERGE dallo stash s162 (promo-out/fxaudiv-pin.out)"
+< fi
+---
+> # gate BILATERALE: oracle==pin byte-id (+ marcatore quando preteso)
+> bilat(){ # $1=nome $2=file $3=marcatore("" = nessuno) $4=descrizione $5..=opzioni oracle
+>   local n="$1" f="$2" m="$3" d="$4"; shift 4
+>   "$ORACLE" "$@" "$f" > "$OUT/$n-oracle.out" 2>&1
+>   "$BIN" "$f" > "$OUT/$n-pin.out" 2>&1
+>   [ -s "$OUT/$n-pin.out" ] || stop "gate $n: output pin VUOTO (file/probe rotto)"
+>   [ -z "$m" ] || grep -q "$m" "$OUT/$n-pin.out" || stop "gate $n: MARCATORE $m assente (lezione #21)"
+>   if diff -q "$OUT/$n-oracle.out" "$OUT/$n-pin.out" > /dev/null; then
+>     note "promozione gate $n: oracle==pin BYTE-ID ($d)"
+>   else
+>     diff "$OUT/$n-oracle.out" "$OUT/$n-pin.out" > "$OUT/$n.diff" || true
+>     stop "gate $n: DIVERGE (promo-out/$n.diff)"
+>   fi
+> }
+> # gate INVARIANTE: pin==stash s166 byte-id (+ marcatore quando preteso)
+> invar(){ # $1=nome $2=file $3=marcatore("" = nessuno) $4=descrizione
+>   local n="$1" f="$2" m="$3" d="$4"
+>   "$REF" "$f" > "$OUT/$n-s166.out" 2>&1
+>   "$BIN" "$f" > "$OUT/$n-pin.out" 2>&1
+>   [ -s "$OUT/$n-pin.out" ] || stop "gate $n: output pin VUOTO"
+>   [ -z "$m" ] || grep -q "$m" "$OUT/$n-pin.out" || stop "gate $n: MARCATORE $m assente"
+>   if diff -q "$OUT/$n-s166.out" "$OUT/$n-pin.out" > /dev/null; then
+>     note "promozione gate $n: pin==stash s166 BYTE-ID ($d)"
+>   else
+>     diff "$OUT/$n-s166.out" "$OUT/$n-pin.out" > "$OUT/$n.diff" || true
+>     stop "gate $n: pin DIVERGE dallo stash s166 (promo-out/$n.diff)"
+>   fi
+> }
+> bilat fxce "$H/fx-ce.php" "" "12 forme class/interface/trait_exists"
+> invar sonda-bt "$H/sonda-bt-autoload.php" "" "contratto autoload/backtrace §3.25 invariato"
+> invar fxrefl "$H/fx-refl.php" "" "contratto __reflect_* L-RF2 invariato"
+> bilat fxam "$H/fx-am.php" "FXAM-END" "20 forme array_map v2, fast E pieno"
+> bilat fxaf "$H/fx-af.php" "FXAF-END" "13 forme array_filter, fast E pieno"
+> bilat fxsm "$H/fx-sm.php" "FX-SM DONE" "forme string-callable, fast E pieno — presidio L-AM2"
+> invar fxsmdiv "$H/fx-sm-div.php" "FX-SM-DIV DONE" "3 divergenze §3.26 PRE-esistenti INVARIATE"
+> bilat fxau "$H/fx-au.php" "FX-AU DONE" "10 forme loader array-callable — presidio L-AU1"
+> invar fxaudiv "$H/fx-au-div.php" "FX-AU-DIV DONE" "divergenza §3.27 PRE-esistente INVARIATA"
+> bilat fxmck "$H/fx-mck.php" "" "method-call k=3/k=5 — presidio L-MCk (S-166: ==oracle)"
+> invar fxmc "$H/fx-mc.php" "" "method-call fast path L-MC1 (S-165) invariato"
+> invar fxmc2 "$H/fx-mc2.php" "" "§3.28 ordine SEND_VAR_EX/dtor temp PRE-esistente INVARIATO"
+> invar fxmc2fib "$H/fx-mc2-fib.php" "" "§3.29 Fiber non final PRE-esistente INVARIATO"
+> bilat fxsl1 "$H/fx-sl1.php" "FX-SL1 DONE" "presidio DIRETTO L-SL1: overflow/shift/Div/Mod/Pow/Ref/Double/stringa/null/bool/dst==l/typed-ref/IncDec limiti/CmpJmpSC 8 forme" -d log_errors=0 -d display_errors=1
+> invar fxsl1div "$H/fx-sl1-div.php" "FX-SL1-DIV DONE" "forme con diag §3.11/§3.13 PRE-esistenti INVARIATE"
+243,244c204,205
+< PHPR="$BIN" R=5 "$SRC/wp97-harness/micro/run-micro.sh" > "$OUT/micro-pin-s163.out" 2>&1
+< note "promozione micro pin s163: $(grep -E '^rapporto_' "$OUT/micro-pin-s163.out" | tr '\n' ' ')"
+---
+> PHPR="$BIN" R=5 "$SRC/wp97-harness/micro/run-micro.sh" > "$OUT/micro-pin-s171.out" 2>&1
+> note "promozione micro pin s171: $(grep -E '^rapporto_' "$OUT/micro-pin-s171.out" | tr '\n' ' ')"
+246,248c207,209
+< # ---- conferma POST-PIN m-arrload (divergenza (5)): R=5 pin vs stash s162 ----
+< AOLD="$STASH/phpr-s162"
+< [ "$(shasum -a 256 "$AOLD" | cut -c1-16)" = "20c63af44bfd077a" ] || stop "stash phpr-s162 hash inatteso"
+---
+> # ---- conferma POST-PIN arith-dq (divergenza (5)): R=5 pin s171 vs stash s166 ----
+> DQ="$SRC/wp164-harness/arith-dq.php"
+> NDQ=$(awk 'match($0, /\$i<[0-9]+/) {print substr($0, RSTART+3, RLENGTH-3); exit}' "$DQ")
+251c212
+< FA=$(floor3 "$AOLD" "$H/empty.php"); FB=$(floor3 "$BIN" "$H/empty.php")
+---
+> FA=$(floor3 "$REF" "$SRC/wp160-harness/empty.php"); FB=$(floor3 "$BIN" "$SRC/wp160-harness/empty.php")
+254c215
+<   if [ $((i % 2)) -eq 1 ]; then TA=$(ucpu "$AOLD" "$H/m-arrload.php"); TB=$(ucpu "$BIN" "$H/m-arrload.php"); else TB=$(ucpu "$BIN" "$H/m-arrload.php"); TA=$(ucpu "$AOLD" "$H/m-arrload.php"); fi
+---
+>   if [ $((i % 2)) -eq 1 ]; then TA=$(ucpu "$REF" "$DQ"); TB=$(ucpu "$BIN" "$DQ"); else TB=$(ucpu "$BIN" "$DQ"); TA=$(ucpu "$REF" "$DQ"); fi
+257c218
+< CONF=$(python3 - "$CT" <<'PY'
+---
+> CONF=$(python3 - "$CT" "$NDQ" <<'PY'
+260c221
+< n=10000000.0
+---
+> n=float(sys.argv[2])
+268c229
+< print(f"D={d:+.1f} rumore={noise:.1f} segni={segni}/5 A={med(na):.1f} B={med(nb):.1f}")
+---
+> print(f"D={d:+.2f} rumore={noise:.2f} segni={segni}/5 A={med(na):.2f} B={med(nb):.2f} ns/iter (N={int(n)} dal driver)")
+271c232
+< note "conferma post-pin m-arrload (pin s163 vs stash s162, drift-tree da dichiarare): $CONF (attesa: segno +, D nell'intorno di +42,0 ± rumore+drift; rev. S-161 #5: rumore > attesa/2 = 21,0 ⇒ SOLO SEGNO)"
+---
+> note "conferma post-pin arith-dq (pin s171 vs stash s166): $CONF (attesa: segno +, D nell'intorno del D_dq dell'A/B; rumore > attesa/2 ⇒ SOLO SEGNO)"
+301c262
+< "$SRC/scripts/pin-server.sh" s163 > "$OUT/pin-server.log" 2>&1
+---
+> "$SRC/scripts/pin-server.sh" s171 > "$OUT/pin-server.log" 2>&1
+307c268
+< note "PROMOZIONE COMPLETA rc=0 (da promo-out/rcb): pin s163 = $H2"
+---
+> note "PROMOZIONE COMPLETA rc=0 (da promo-out/rcb): pin s171 = $H2"
+
+== copia-gate v3 PER TOKEN (az.rev. S-169) ==
+base=wp163-harness/s163-promozione.sh derivato=wp171-harness/s171-promozione.sh sess_attesa=s171 allow=[COPIA DICHIARATA|DIVERGENZE DICHIARATE|s163-promozione|stash s166|phpr-s166|s166 \(|S-1[0-9][0-9]|s125|s109|s129|s160|wp16[0-9]-harness|wp1[0-3][0-9]-harness|wp9-harness|wp13-harness|L-[A-Z]+[0-9a-z]*|§3\.]
+RESIDUI PER TOKEN (3) — correggere o dichiarare nell'allow UNO A UNO:
+170:[s166]   "$REF" "$f" > "$OUT/$n-s166.out" 2>&1
+174:[s166]   if diff -q "$OUT/$n-s166.out" "$OUT/$n-pin.out" > /dev/null; then
+177:[s166]     diff "$OUT/$n-s166.out" "$OUT/$n-pin.out" > "$OUT/$n.diff" || true
+esito: rc=3
