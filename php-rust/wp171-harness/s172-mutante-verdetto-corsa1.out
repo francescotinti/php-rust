@@ -1,0 +1,12 @@
+== s172 mutante abortivo L-SL1 — pin b360b2933eddfe18 (repo @ 9da09ed5, run.rs 95a662073ec13202), fixture 87 righe, Data 10.8G 2026-09-07 23:12:13 ==
+M1: binario 5a918c48834e3246 rc_fixture=0
+M1: righe ROTTE (5): bitops dq100 shl-64 shr-64 shr-70-neg 
+M2: binario ad5d14eefce76f70 rc_fixture=0
+M2: righe ROTTE (7): cmp(2) cmp(3) cmp(4) dec-loop dq100 inc-loop-neg inc-max-loop 
+M1: attese NON rotte: shl-63 dst==src shl-neg-l shl-neg-l-62 shr-neg-l -> fast path NON preso (o forma non abbassata) su queste
+M1: righe fuori-dominio INTATTE (nessuna presa fuori dominio)
+M1: assign-form INTATTA -> la forma assign NON passa dal fast path (da leggere in reg_lower)
+M2: attese NON rotte: lt-loop ge-loop ne-loop nid-loop lt-max -> fast path NON preso (o forma non abbassata) su queste
+M2: righe fuori-dominio INTATTE (nessuna presa fuori dominio)
+REPO: crates intatto, run.rs 95a662073ec13202 == 95a662073ec13202 (mai toccato: mutanti nati in copia)
+ESITO rc=1 (0 = fast path preso su tutte le attese, dominio rispettato; 1 = attese non rotte; 5 = presa fuori dominio) — Data 9.8G fine 2026-09-07 23:18:15
