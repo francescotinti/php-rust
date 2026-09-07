@@ -66,6 +66,7 @@ nello stesso atto perché appenda in QUESTA sezione.)
 
 | pin (sha256/16) | sessione | collaudato | evidenza |
 |---|---|---|---|
+| eedebc688d7c65e9 | s170-m8 BRACCIO (sorgente @ c7447087; riga da pin-phpr.sh --braccio) | smoke parità 2 modi OK 2026-09-07 02:04:40 — braccio di misura, NON pin | stash `phpr-s170-m8` |
 | c1c48ad1a6b84b41 | s169-m7 BRACCIO (sorgente @ 81bc6c9b; riga da pin-phpr.sh --braccio) | smoke parità 2 modi OK 2026-09-02 00:21:06 — braccio di misura, NON pin | stash `phpr-s169-m7` |
 | 0687666be0a4db88 | s169-m5 BRACCIO (sorgente @ c9b43c27; riga da pin-phpr.sh --braccio) | smoke parità 2 modi OK 2026-09-02 00:20:54 — braccio di misura, NON pin | stash `phpr-s169-m5` |
 | 07521ec16f3f3418 | s168-m4b BRACCIO (sorgente @ 6d093c7b; riga da pin-phpr.sh --braccio) | smoke parità 2 modi OK 2026-09-01 23:46:32 — braccio di misura, NON pin | stash `phpr-s168-m4b` |
