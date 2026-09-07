@@ -13,7 +13,6 @@ guardia hash, emenda touch; #2 push manuale durante la catena in collisione col 
 pin-phpr.sh → rc=1 sul solo push, ripresa dal corpus-gate con pre-condizioni) · dente run.rs
 7091→7200 DICHIARATO (+109) dopo un morso in promozione (tentativo 1 rc=101, come S-171) · §3.30
 catalogata (default `float $f = 1` resta int, pre-esistente) · coda CI: 12 job trattenuti dal lock.
-
 ## Esiti secchi (criterio wp172-harness/s172-criterio.md pre-registrato; verdetti s172-leva-verdetto.out, s172-verdetto.out, s172-promo-verdetto.out)
 1·**Az.rev. S-171** (wp171-harness/s172-azrev-verdetto.out): mutante M1 (+1 sul fast path) rompe 9
   righe = tutte le attese + dst==src; M2 (cmp negato) 13 = tutte le attese; fuori dominio INTATTE
