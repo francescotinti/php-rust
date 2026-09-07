@@ -23,18 +23,19 @@
 < VERD="$H/s169-$TAG-verdetto.out"; RC="$OUT/$TAG.rc"
 ---
 > VERD="$H/s170-$TAG-verdetto.out"; RC="$OUT/$TAG.rc"
-23c22,23
+23c22,24
 < grep -qi "s169\|s-168" /private/tmp/phpr-measure.lock 2>/dev/null || { echo "lock assente" | tee -a "$VERD"; echo 9 > "$RC"; exit 9; }
 ---
-> for f in "$DQ" "$E2" "$EMPTY" "$A" "$BB" "$O"; do [ -s "$f" ] || { echo "file assente o VUOTO: $f" | tee -a "$VERD"; echo 7 > "$RC"; exit 7; }; done
+> for f in "$DQ" "$E2" "$A" "$BB" "$O"; do [ -s "$f" ] || { echo "file assente o VUOTO: $f" | tee -a "$VERD"; echo 7 > "$RC"; exit 7; }; done
+> [ -e "$EMPTY" ] || { echo "driver del pavimento assente: $EMPTY (VUOTO per costruzione: [ -e ], emenda S-170 p.4)" | tee -a "$VERD"; echo 7 > "$RC"; exit 7; }
 > grep -qw s170 /private/tmp/phpr-measure.lock 2>/dev/null || { echo "lock s170 assente (per TOKEN)" | tee -a "$VERD"; echo 9 > "$RC"; exit 9; }
-31c31
+31c32
 < echo "== s169 MOCK $TAG — A=$AM MISURATO ($A) B=$BM MISURATO ($BB); giudice arith-dq N=250M + E2 loop nudo bilaterale; R=$R ABAB alternato; criterio s169-criterio.md =="
 ---
 > echo "== s170 MOCK $TAG — A=$AM MISURATO ($A) B=$BM MISURATO ($BB); GIUDICE arith-e2 N=250M (loop nudo) + GUARDIA arith-dq bilaterale; R=$R ABAB alternato; criterio s170-criterio.md =="
-32a33
+32a34
 > # PARITÀ vs ATTESO: l'atteso è l'output dell'ORACLE sullo stesso driver (generato qui, una volta per driver, `[ -s ]`).
-34,35c35,41
+34,35c36,42
 <   "$A" "$D" > "$OUT/$TAG-A.out" 2>&1; "$BB" "$D" > "$OUT/$TAG-B.out" 2>&1
 <   diff -q "$OUT/$TAG-A.out" "$OUT/$TAG-B.out" > /dev/null || { echo "output DIVERGE su $(basename "$D") — STOP"; echo 2 > "$RC"; exit 2; }
 ---
@@ -45,17 +46,17 @@
 >   cmp -s "$OUT/$TAG-A-$n.out" "$EXP" || { echo "output A ≠ ATTESO oracle su $n ($(head -c 60 "$OUT/$TAG-A-$n.out" | tr '\n' ' ')) — STOP"; echo 2 > "$RC"; exit 2; }
 >   cmp -s "$OUT/$TAG-B-$n.out" "$EXP" || { echo "output B ≠ ATTESO oracle su $n ($(head -c 60 "$OUT/$TAG-B-$n.out" | tr '\n' ' ')) — STOP"; echo 2 > "$RC"; exit 2; }
 >   echo "parità $n: A==B==atteso oracle ($(tr '\n' ' ' < "$EXP"))"
-41,42c47,48
+41,42c48,49
 <   if [ $((i % 2)) -eq 1 ]; then TA=$(ucpu "$A" "$DQ"); TB=$(ucpu "$BB" "$DQ"); ord=AB; else TB=$(ucpu "$BB" "$DQ"); TA=$(ucpu "$A" "$DQ"); ord=BA; fi
 <   EA=$(ucpu "$A" "$E2"); EB=$(ucpu "$BB" "$E2")
 ---
 >   if [ $((i % 2)) -eq 1 ]; then EA=$(ucpu "$A" "$E2"); EB=$(ucpu "$BB" "$E2"); ord=AB; else EB=$(ucpu "$BB" "$E2"); EA=$(ucpu "$A" "$E2"); ord=BA; fi
 >   TA=$(ucpu "$A" "$DQ"); TB=$(ucpu "$BB" "$DQ")
-45c51
+45c52
 <   echo "  coppia$i [$ord]: dqA=$TA dqB=$TB e2A=$EA e2B=$EB dqO=$TOR e2O=$EOR"
 ---
 >   echo "  coppia$i [$ord su E2]: e2A=$EA e2B=$EB dqA=$TA dqB=$TB e2O=$EOR dqO=$TOR"
-58,64c64,70
+58,64c65,71
 < D = med(dqA)-med(dqB); noise = max(dr1(dqA), dr1(dqB)); thr = max(4.0, noise, 0.94); thrd = max(noise, 0.94)
 < print(f"GIUDICE arith-dq: A={med(dqA):.2f} B={med(dqB):.2f} ns/iter D=A−B={D:+.2f} soglia={thr:.2f} (rumore drop-1 A'={dr1(dqA):.2f} B'={dr1(dqB):.2f}) -> {'NOMINATO' if D >= thr else 'NON nominato (vale 0)'}")
 < print(f"DECOMPOSIZIONE (az.rev.1 S-168, soglia = max(rumore, SL 0,94) SENZA pavimento 4): soglia_dec={thrd:.2f} -> {'DIREZIONE FIRMATA' if abs(D) >= thrd else 'sotto il rumore'} ({'B più veloce' if D > 0 else 'B più lento'}; R={len(rows)})")
@@ -71,7 +72,7 @@
 > Ddq = med(dqB)-med(dqA); ndq = max(dr1(dqA), dr1(dqB)); g = max(4.0, ndq)
 > print(f"GUARDIA arith-dq (sola-regressione): A={med(dqA):.2f} B={med(dqB):.2f} oracle={med(dqO):.2f} ns/iter; dqB−dqA={Ddq:+.2f} vs {g:.2f} -> {'ok' if Ddq <= g else 'REGRESSIONE (rc=5, D sospeso)'}{'; miglioramento su dq REGISTRATO (stessi 2 op nel loop), non contato' if Ddq < -thrd else ''}")
 > print(f"riferimento finestra: gap-loop A={med(e2A)-med(e2O):.2f} B={med(e2B)-med(e2O):.2f}; dq gap totale A={med(dqA)-med(dqO):.2f} B={med(dqB)-med(dqO):.2f}")
-66c72
+66c73
 < if abs(De2) > g: rc = 5
 ---
 > if Ddq > g: rc = 5
