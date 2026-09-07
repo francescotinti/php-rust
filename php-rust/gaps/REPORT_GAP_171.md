@@ -18,9 +18,11 @@ Pin: phpr b360b2933eddfe18 + server b3ddaede545ba894 (promozione rc=0, wp171-har
 - Contrasto col tetto mock m13 (S-170): B−C = −1,04 su dq (banda ≤5: tetto riprodotto).
 
 ## Suite (coppia t17 al pin s171, DOVUTA)
-In corso al momento della rotazione: esiti in wp171-harness/s171-pair-verdetto-t17.out e
-s171-orm-coppia-verdetto.out (rif. precedenti: WP 1,746-1,749 mediana t15/t16; ORM [7,023;7,053]).
-Attesa dichiarata: direzione ≤0, magnitudine SOTTO-risoluzione (quota Long-loop in WP/ORM non censita).
+- WP full (6 gambe ON): mediana t17 = **1,776** in banda [1,738;1,799] → COMPATIBILE, nessun claim
+  (t15/t16 1,746/1,749: +0,03 dentro banda); media user-only 2,43-2,44; peak phpr 1724-1766 MiB.
+- ORM: rapporto net **[6,980; 7,076]** vs registrato [7,023;7,053] → COMPATIBILE; Δ_norm non
+  giudicante (sentinella oracle 4,95 = 1 tick fuori banda); parità ORM 16 nomi, dbal 10 stabile.
+Attesa dichiarata (direzione ≤0, magnitudine sotto-risoluzione): esito COMPATIBILE su entrambe.
 
 ## Residuo nominato (direzione, non magnitudine)
 arith-dq 23,44 = e2 10,64 + statement 12,80 (oracle 5,16): il divario residuo sta ora per ~metà

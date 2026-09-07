@@ -5,8 +5,8 @@ il ciclo aritmetico passa da 5,4 a 2,7 volte l'oracle, e il pin nuovo ha superat
 gate (batteria, corpus, 15 fixture, ORM, http-kernel) al primo giro utile.
 **SCOREBOARD** (pin NUOVO **s171 phpr b360b2933eddfe18 + server b3ddaede545ba894**):
 **arith 2,7 ↓↓ (5,4) · prop 5,2 ↓ (5,5) · calls 4,8 = · str 4,1 ↓ (4,2) · arr 3,2 = · re 2,5 =**
-· WP/ORM: coppia t17 DOVUTA lanciata 19:27 (esiti in wp171-harness/s171-pair-verdetto-t17.out
-e s171-orm-coppia-verdetto.out; rif. precedenti WP 1,746-1,749 · ORM [7,023;7,053]) ·
+· **coppia t17 DOVUTA misurata: WP 1,776 in banda [1,738;1,799] (compatibile; t15/t16
+1,746/1,749) · ORM net [6,980;7,076] vs [7,023;7,053] compatibile** (sentinella 4,95 = 1 tick) ·
 **leve spedite: 1 (L-SL1 promossa)** · incidenti: **1** (#1 xctrace crash sul braccio B
 lascia 8,4G di ktrace: Data 21G→2G, purgato; classe S-169) + 3 difetti di copione curati in
 corsa PRIMA di ogni numero (lock senza token `s171`; quiescenza a falso positivo per argv

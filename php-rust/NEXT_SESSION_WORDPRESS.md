@@ -15,14 +15,14 @@ fixture nominale, forme non-driver senza dump, census cambia significato (dcn/sl
 ## Scoreboard (pin NUOVO s171 phpr b360b2933eddfe18 + server b3ddaede545ba894)
 **arith 2,7 · prop 5,2 · calls 4,8 · str 4,1 · arr 3,2 · re 2,5** · mc2 ~155 / mc3 181
 (non rimisurati) · arith-dq 23,44 vs 8,64 · E2 10,64 vs 3,48 · dispatch 1,75/op ·
-**WP/ORM: coppia t17 in corso al lancio di questa rotazione (pair-out/pair171-t17.done,
-orm-out/rimisura.done; verdetti s171-pair-verdetto-t17.out / s171-orm-coppia-verdetto.out)**,
-rif. precedenti WP 1,746-1,749 · ORM [7,023;7,053] · corpus 1412×2 · batteria 1748 · denti:
+**WP t17 1,776 in banda [1,738;1,799] (compatibile, nessun claim; t15/t16 1,746/1,749) ·
+ORM t17 net [6,980;7,076] vs registrato [7,023;7,053] compatibile (sentinella oracle 4,95 =
+1 tick fuori, Δ_norm non giudicante, come t16)** · corpus 1412×2 · batteria 1748 · denti:
 run.rs 7091 (cap dichiarato) · mod.rs 25909 · host.rs 7726 · coda CI: da potare a HEAD.
 
 ## §S-172 — ordine
-1. **Esiti coppia t17** (se non letti in chiusura S-171): giudizio a mediana [1,738;1,799],
-   ORM banda sentinella; una regressione FUORI banda blocca il p.3.
+1. Coppia t17 LETTA in S-171 (WP e ORM compatibili): nessuna istruttoria; resta dovuta la
+   ri-fondazione PRE-registrata della banda sentinella ORM (4,82 e 4,95 = estremi osservati).
 2. **Az.rev. S-171** (revisione, PRIMA di generalizzare): (a) mutante abortivo su B
    (`Some(r)→Some(r+1)` in BinarySCSCDst, `long_cmp_i64` negata) contro fx-sl1: righe
    rotte NOMINATE (dq100, bitops, lt-loop, dec-loop), revert al byte; (b) fx-sl1 ESTESA:
