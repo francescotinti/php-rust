@@ -1,0 +1,17 @@
+== s170 RESIDUO m11 — A=36d73812 MISURATO (/private/tmp/s170-mock-bin/phpr-m0) B=af8a452f MISURATO (/private/tmp/s170-mock-bin/phpr-m11); GIUDICE arith-dq N=250M + GUARDIA arith-e2 bilaterale; R=5 ABAB alternato; criterio s170-criterio-b.md ==
+sentinella LS: /Applications/Antigravity /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.96.0-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer 
+parità arith-dq: A==B==atteso oracle (85937499750000000 )
+parità arith-e2: A==B==atteso oracle (0 )
+floors: A=0.02 B=0.02 oracle=0.05
+  coppia1 [AB su dq]: dqA=11.75 dqB=11.43 e2A=3.68 e2B=3.71 dqO=2.21 e2O=0.95
+  coppia2 [BA su dq]: dqA=11.72 dqB=11.47 e2A=3.68 e2B=3.78 dqO=2.21 e2O=0.95
+  coppia3 [AB su dq]: dqA=11.67 dqB=11.40 e2A=3.68 e2B=3.77 dqO=2.21 e2O=0.95
+  coppia4 [BA su dq]: dqA=11.73 dqB=11.42 e2A=3.68 e2B=3.76 dqO=2.21 e2O=0.76
+  coppia5 [AB su dq]: dqA=11.77 dqB=11.43 e2A=3.68 e2B=3.74 dqO=2.21 e2O=0.95
+GIUDICE arith-dq: A=46.84 B=45.64 ns/iter D=A−B=+1.20 soglia=4.00 (rumore drop-1 A'=0.20 B'=0.12) -> NON nominato (vale 0)
+DECOMPOSIZIONE (soglia = max(rumore, SL 0,94) SENZA pavimento 4): soglia_dec=0.94 -> DIREZIONE FIRMATA (B più veloce; R=5)
+statement (dq−e2): A=32.20 B=30.68 oracle=5.04; residuo B oltre Sweep 2,9 + dispatch 1,75 (S-169) = corpo BinarySCSCDst B ≈ 26.03 (A ≈ 27.55)
+GUARDIA arith-e2 (sola-regressione): A=14.64 B=14.96 oracle=3.60 ns/iter; e2B−e2A=+0.32 vs 4.00 -> ok
+riferimento finestra: dq gap totale A=38.20 B=37.00
+ESITO rc=4
+sentinella LS fine: /Applications/Antigravity /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.96.0-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer 

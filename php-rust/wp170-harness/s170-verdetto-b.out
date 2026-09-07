@@ -1,0 +1,11 @@
+== S-170 RESIDUO BinarySCSCDst a bracci — SINTESI MECCANICA (criterio-b p.2-3; A=m0 36d73812; giudice arith-dq N=250M, guardia e2; R=5 ABAB) ==
+m10: A=46.56 B=45.12 D=+1.44 rumore=0.32 soglia=4.00 soglia_dec=0.94 -> NON (direzione FIRMATA, vale 0); statement A=31.92 B=30.48 (oracle 5.32); corpo fuso B ≈ 25.83; guardia e2 +0.00 ok
+m11: A=46.84 B=45.64 D=+1.20 rumore=0.20 soglia=4.00 soglia_dec=0.94 -> NON (direzione FIRMATA, vale 0); statement A=32.20 B=30.68 (oracle 5.04); corpo fuso B ≈ 26.03; guardia e2 +0.32 ok
+m12: A=46.60 B=29.44 D=+17.16 rumore=0.12 soglia=4.00 soglia_dec=0.94 -> NOMINATO; statement A=31.96 B=14.60 (oracle 5.40); corpo fuso B ≈ 9.95; guardia e2 +0.20 ok
+m13: A=46.76 B=24.56 D=+22.20 rumore=0.28 soglia=4.00 soglia_dec=0.94 -> NOMINATO; statement A=32.12 B=9.72 (oracle 5.08); corpo fuso B ≈ 5.07; guardia e2 +0.20 ok
+m10 guardie +1.44 · m11 store +1.20: ENTRAMBI sotto pavimento (attese p.3: ≤1 e 2-5 — m11 SOTTO attesa: lo store da solo non pesa)
+m12 funnel i64 = +17.16 NOMINATO (attesa ≥10,1: RAGGIUNTA); per DIFFERENZA dichiarata: funnel+read_slot+guardie = D_m12 − D_m123(8,00 S-168) = +9.16 ns/iter (non ripartita)
+m13 corpo magro totale = +22.20 NOMINATO; per DIFFERENZA dichiarata: store in place + bounds = D_m13 − D_m12 = +5.04
+RESIDUO m13: corpo fuso ≈ 5.07 ns/iter (era ≈27.47) = «accesso slot + tupla guard 0,4 + resto» NON nominato; statement m13 9.72 vs oracle 5.08 = 1.91× (pin 6.32×)
+KILL-b pre-registrato: D_m13 < 15 -> NON scatta; D_m13 ≥ 20 -> SÌ ⇒ il corpo è ≥73% del residuo: la fetta «forma sigillata Long» (regola 8) è la prossima leva DA MISURARE COME CODICE (S-171), non da spedire
+dq m13 24.56 vs oracle 8,64 = 2.84× (pin 5,4×); ESTRAPOLAZIONE dichiarata (non misurata): m13 + m9 (−5,64 su e2) ⇒ dq ≈ 18.92 ≈ 2.19×
