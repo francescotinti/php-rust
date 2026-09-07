@@ -1,0 +1,72 @@
+--- a/crates/php-runtime/src/vm/run.rs
++++ b/crates/php-runtime/src/vm/run.rs
+@@ -2021,7 +2021,17 @@
+                 Op::IncDecSlotJmp { slot, inc, addr } => {
+                     // S-107 lotto: il trigramma IncDecSlot;Pop;Jump del
+                     // back-edge di loop — incremento poi salto incondizionato.
+-                    self.incdec_slot_discard(top, *slot, *inc)?;
++                    // MOCK m8 (S-170, criterio wp170-harness/s170-criterio.md):
++                    // cammino Long MAGRO — incremento IN PLACE con wrapping_add
++                    // (niente checked_add, niente riscrittura del Zval intero,
++                    // niente Result/`?`); fuori dal Long cade al corpo originale.
++                    // Semantica NON preservata sull'overflow: braccio di MISURA.
++                    if let Zval::Long(l) = &mut self.frames[top].slots[*slot as usize] {
++                        *l = l.wrapping_add(if *inc { 1 } else { -1 });
++                    } else {
++                        // MOCK m8a (S-170 az.rev. revisione #1): ramo lento ABORTIVO — prova che il fast path è ESCLUSIVO sul driver.
++                        unreachable!("mock m8a: slow path IncDecSlotJmp");
++                    }
+                     self.frames[top].ip = *addr as usize;
+                 }
+                 Op::CmpJmpSS { op, l, r, addr, when } => {
+@@ -2048,22 +2058,35 @@
+                 }
+                 Op::CmpJmpSC { op, slot, cidx, addr, when } => {
+                     scn!(CmpJmpSC: op);
+-                    let cv = func.consts[*cidx as usize].to_zval();
+-                    dcn!(CmpJmpSC: &cv); // il const materializzato muore nell'arm (fast o slow)
+-                    let res = 'r: {
+-                        {
+-                            let lv = &self.frames[top].slots[*slot as usize];
+-                            if !matches!(lv, Zval::Undef | Zval::Ref(_)) {
+-                                if let Some(v) = binary_fast(*op, lv, &cv) {
+-                                    break 'r v;
+-                                }
+-                            }
+-                        }
+-                        let lhs = self.reg_load_slot(top, func, *slot);
+-                        self.binary_value_ab(*op, lhs, cv)?
++                    // MOCK m8 (S-170, criterio wp170-harness/s170-criterio.md):
++                    // cammino Long MAGRO — const `Int` letto SENZA to_zval, slot
++                    // Long SENZA guardia Undef/Ref (ridondante col match), confronto
++                    // a `bool` diretto SENZA Zval::Bool/to_bool/diags, SENZA `?`;
++                    // ogni altro caso cade al corpo originale. Braccio di MISURA.
++                    let fast: Option<bool> = if let (
++                        crate::bytecode::Const::Int(c),
++                        Zval::Long(l),
++                    ) = (
++                        &func.consts[*cidx as usize],
++                        &self.frames[top].slots[*slot as usize],
++                    ) {
++                        let (l, c) = (*l, *c);
++                        match op {
++                            BinOp::Lt => Some(l < c),
++                            BinOp::Le => Some(l <= c),
++                            BinOp::Gt => Some(l > c),
++                            BinOp::Ge => Some(l >= c),
++                            BinOp::Eq | BinOp::Identical => Some(l == c),
++                            BinOp::NotEq | BinOp::NotIdentical => Some(l != c),
++                            _ => None,
++                        }
++                    }                         // MOCK m8a: ramo lento ABORTIVO (prova di esclusività del fast path).
++                        None => unreachable!("mock m8a: slow path CmpJmpSC"),
++res); // il Bool temporaneo muore dopo to_bool
++                            convert::to_bool(&res, &mut self.diags)
++                        }
+                     };
+-                    dcn!(CmpJmpSC: &res); // il Bool temporaneo muore dopo to_bool
+-                    if convert::to_bool(&res, &mut self.diags) == *when {
++                    if jump == *when {
+                         self.frames[top].ip = *addr as usize;
+                     }
+                 }

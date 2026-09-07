@@ -1,0 +1,87 @@
+--- a/crates/php-runtime/src/vm/run.rs
++++ b/crates/php-runtime/src/vm/run.rs
+@@ -1958,51 +1958,41 @@
+                     self.frames[top].stack.push(res);
+                 }
+                 Op::BinarySCSCDst { opa, la, ca, opb, lb, cb, op, opd, l, dst } => {
+-                    // S-108 lotto-2 W10: l'albero BinarySCSC ESATTO (tre
+-                    // funnel, ordine a→b→combine) poi la coda BinarySTDst
+-                    // sul risultato senza transito di pila — stessa
+-                    // read_slot silenziosa del lhs, stessa coda (guardia
+-                    // binary_fast + funnel, come l'op non fusa da S-112
+-                    // H-A2), stesso reg_store_slot.
+-                    let cva = func.consts[*ca as usize].to_zval();
+-                    let a = 'r: {
+-                        {
+-                            let lv = &self.frames[top].slots[*la as usize];
+-                            if !matches!(lv, Zval::Undef | Zval::Ref(_)) {
+-                                if let Some(v) = binary_fast(*opa, lv, &cva) {
+-                                    break 'r v;
+-                                }
+-                            }
++                    // MOCK m12 (S-170 criterio-b): FUNNEL i64 — catena Long intera senza Zval
++                    // temporanei/binary_fast/to_zval/read_slot/guardie; guardia tupla TENUTA (+0,4
++                    // conservativo, S-169); overflow/shift fuori range/tipi diversi ⇒ corpo ORIGINALE.
++                    // Braccio di MISURA, non leva.
++                    let fast: Option<i64> = 'f: {
++                        if !matches!((*opa, *opb, *op, *opd), (BinOp::Mul, BinOp::Shr, BinOp::Sub, BinOp::Add)) {
++                            break 'f None;
+                         }
+-                        let lhs = self.reg_load_slot(top, func, *la);
+-                        self.binary_value_ab(*opa, lhs, cva)?
+-                    };
+-                    let cvb = func.consts[*cb as usize].to_zval();
+-                    let bv = 'r: {
+-                        {
+-                            let lv = &self.frames[top].slots[*lb as usize];
+-                            if !matches!(lv, Zval::Undef | Zval::Ref(_)) {
+-                                if let Some(v) = binary_fast(*opb, lv, &cvb) {
+-                                    break 'r v;
+-                                }
+-                            }
+-                        }
+-                        let lhs = self.reg_load_slot(top, func, *lb);
+-                        self.binary_value_ab(*opb, lhs, cvb)?
+-                    };
+-                    let res = match binary_fast(*op, &a, &bv) {
+-                        Some(v) => v,
+-                        None => self.binary_value_ab(*op, a, bv)?,
+-                    };
+-                    let lhs = read_slot(&self.frames[top].slots[*l as usize]);
+-                    // S-112 H-A2b: stessa guardia inline del combine qui
+-                    // sopra — hoisting puro della prima riga di
+-                    // binary_value_ab, il miss resta al funnel.
+-                    let res = match binary_fast(*opd, &lhs, &res) {
+-                        Some(v) => v,
+-                        None => self.binary_value_ab(*opd, lhs, res)?,
++                        // m13: bounds ELISI (unsafe: braccio di MISURA, MAI promuovibile).
++                        // SAFETY(mock): top < frames.len(), la/lb/l < n_slots, ca/cb < consts.len() per costruzione del compilatore.
++                        let fr = unsafe { self.frames.get_unchecked(top) };
++                        let sl3 = unsafe {
++                            (fr.slots.get_unchecked(*la as usize), fr.slots.get_unchecked(*lb as usize), fr.slots.get_unchecked(*l as usize))
++                        };
++                        let (Zval::Long(xa), Zval::Long(xb), Zval::Long(xl)) = sl3 else { break 'f None };
++                        let kk = unsafe { (func.consts.get_unchecked(*ca as usize), func.consts.get_unchecked(*cb as usize)) };
++                        let (crate::bytecode::Const::Int(ka), crate::bytecode::Const::Int(kb)) = kk else { break 'f None };
++                        if *kb < 0 || *kb >= 64 { break 'f None; }
++                        let Some(a) = xa.checked_mul(*ka) else { break 'f None };
++                        let b = *xb >> *kb;
++                        let Some(r) = a.checked_sub(b) else { break 'f None };
++                        let Some(r) = xl.checked_add(r) else { break 'f None };
++                        Some(r)
+                     };
+-                    self.reg_store_slot(top, *dst, res)?;
++                    if let Some(r) = fast {
++                        // m13: store IN PLACE a bounds elisi (unsafe, braccio di MISURA).
++                        let stored = {
++                            let sl = unsafe { self.frames.get_unchecked_mut(top).slots.get_unchecked_mut(*dst as usize) };
++                            if let Zval::Long(x) = sl { *x = r; true } else { false }
++                        };
++                        if !stored { self.reg_store_slot(top, *dst, Zval::Long(r))?; }
++                    } else {
++                        // MOCK m13a (S-170 az.rev. revisione #1): ramo lento ABORTIVO — prova che il fast path è ESCLUSIVO sul driver.
++                        unreachable!("mock m13a: slow path BinarySCSCDst");
++                    }
+                 }
+                 Op::LoadVarPushConst { slot, cidx } => {
+                     // S-108 lotto-2 W13: pura coppia di push — LoadVar

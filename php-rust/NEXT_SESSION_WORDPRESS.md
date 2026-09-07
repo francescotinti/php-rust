@@ -25,16 +25,23 @@ batteria 1748 · denti: run.rs 6917 · mod.rs 25909 · host.rs 7726 · coda CI: 
    (a) BinarySCSCDst: catena i64 con guardia tupla, fallback al corpo esatto su
    overflow/shift/tipi (forma m12, SAFE, niente get_unchecked); (b) CmpJmpSC +
    IncDecSlotJmp: cammino Long senza to_zval/guardia ridondante/Zval::Bool,
-   `checked_add` con fallback ESATTO (forma m8 semantica-preservante). Attesa dai mock:
-   dq −17 (m12) + e2 −4 (m8) ⇒ arith-dq ≈ 25 ⇒ ~2,9× = TAPPA ≤3× su arith.
+   `checked_add` con fallback ESATTO (forma m8 semantica-preservante). Attesa dai mock (tetto
+   m13 = limite superiore, revisione S-170): dq −17..−22 + e2 −4 ⇒ arith-dq ≈ 25-30
+   ⇒ ~2,9-3,4×: la TAPPA ≤3× su arith è possibile, NON garantita dalla fetta 1.
    Gate pieni: batteria, corpus 1412 per NOME ×2, fixture bilaterali, micro R=5,
    **coppia WP+ORM DOVUTA al pin nuovo**; disasm bl run_loop prima/dopo.
 2. **Se (1) nominata e promossa**: piano di generalizzazione a forme (census S-164:
    quali handler caldi delle categorie prop/calls/str hanno la stessa forma Zval-temp
    + funnel) — misura per categoria, non aggregato.
-3. Az.rev. revisione S-170 (lente misura) — vedi revisione.md.
-4. c0/c2: mutante di DELIVERY non circolare (corpo gonfio artificiale vs magro su
-   E2: se c2 scende con m9 il front-end è parte del corpo) prima di contare c2.
+3. Az.rev. revisione S-170 (lente misura, REGGE CON RILIEVI): (a) xctrace m0 vs
+   m13 su dq — la colonna che cala (c0 o c2) fissa c2 senza circolarità; (b) leva
+   con slow path `#[cold]` outlined e store in place (non additività: m13−m12 +5,04);
+   (c) soglia della leva contro m0 E contro m13 (tetto = limite superiore: BinOp
+   cotto incluso, atteso generico ≈17 ⇒ ~3,0-3,4×: tappa NON garantita); (d) m8 a
+   N=1G (tick 0,01), N letto dal driver nel giudice; (e) nessuna cifra composta
+   (Sweep/dispatch/m123) nel criterio: solo D interni al run.
+4. c0/c2: mutante di DELIVERY non circolare (corpo gonfio vs magro su E2) prima di
+   contare c2.
 5. Quesiti residui: (b) T2/A2; (c) census server (20° slitt.); (d) ratifiche §3.
 
 ## Aperture per NOME

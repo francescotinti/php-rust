@@ -7,3 +7,7 @@ RESIDUO m9 per-op = 4.50 − dispatch 1,75 (limite inferiore S-169) = 2.75 ns/op
 KILL pre-registrato (D_m9 < 4): NON scatta (D_m9=+5.64) -> ipotesi «corpo di ogni handler» REGGE sui banali; campagna (i) SI APRE (sola misura: criterio-b BinarySCSCDst)
 ATTESA p.3 (e2 → ~7,5, D_m9 ≈ 7): NON raggiunta (e2_m9=9.00, D=+5.64): guardie+bounds valgono 2.82 ns/op dei 5,6 di corpo; il resto (2.75) sta nell'accesso slot/scrittura e nel resto del corpo
 dq (guardia, REGISTRATO): m8 46.60→40.84 (-5.76), m9 46.44→39.60 (-6.84); oracle dq 8.64
+== EMENDA post-revisione (revisione.md, lente MISURA — REGGE CON RILIEVI; dichiarata) ==
+(1) FAST PATH: fino al mutante abortivo (m8a/m13a: fallback → unreachable!, az.rev. #1) le cifre di m8/m9/m12/m13 sono «per magnitudine»: l'esclusività del ramo veloce sul driver non era provata da output = atteso. Esito del mutante: vedi riga in coda a questo file.
+(2) m8 a +4,08 = 2 tick (0,04) sopra soglia con A che deriva 14,64↔14,72 tra sessioni: il claim sui banali REGGE SU m9 (+5,64), m8 è «a filo, direzione firmata»; N=250e6 cablato nel giudice (az.rev.: N letto dal driver).
+(3) Le cifre «residuo 2,75/op» e ogni sottrazione di dispatch 1,75/Sweep 2,9 (S-169) sono DIREZIONE, non magnitudine (REGOLE §3): restano a registro come lettura, non come verdetto.
