@@ -1,6 +1,19 @@
 # PERF_MAP — phpr vs PHP oracle 8.5.7, mappa multi-workload
 
-Aggiornata: **2026-09-07 sera (S-171)** · pin **NUOVO s171 phpr b360b2933eddfe18 + server b3ddaede545ba894**
+Aggiornata: **2026-09-08 notte (S-172)** · pin **NUOVO s172 phpr 5f2dff7d17ebed79 + server 812f7962952da67f**
+(**S-172 = LEVA L-SL2 «forma sigillata Long» fetta 2 = PROP PROMOSSA** (criterio wp172-harness/
+s172-criterio.md): P1 = probe sigillato nel bigramma fuso PropGetSlotRecv+BinaryTCPropSetPop
+(guardie IC VERBATIM, `long_arith_i64`, store in place su prop Long via `get_slot_mut`, miss ⇒
+sentiero fuso storico) + P2 = BinarySTDst con catena i64 e corpo esatto `binary_st_dst_slow`
+#[cold]; zero unsafe. A/B R=5 tre bracci: **prop-dq 72,60→57,53 (P1, +15,07) →52,87 (P1+P2,
++19,73; 3,78× l'oracle, pin s171 5,19×)**, attese [8;20]/[12;30] centrate, C−B +4,67 solo
+direzione, guardia arith-dq senza regressione; promozione rc=0 (tentativo 1 rc=101 = dente
+run.rs 7200 dichiarato; tentativo 2 + ripresa dal corpus-gate dopo collisione di push):
+batteria 1748/0, corpus 1412×2 zero flip, 17 fixture byte-id (fx-sl2 nuova, forme P1 in loop =
+IC calda; fx-sl2-div §3.30), **micro prop 5,2→3,8 · arr 3,2→3,0** · arith 2,7 · calls 4,7 ·
+str 4,1 · re 2,5, conferma post-pin prop-dq +20,07 5/5, ORM 16 == baseline, hk 0E/0F ·
+az.rev. S-171 CHIUSE (mutante abortivo rc=0: fixture S-171 per metà vuota, curata) · coppia
+t18 lanciata al pin nuovo · verdetti wp172-harness/s172-verdetto.out)
 (**S-171 = LEVA L-SL1 «forma sigillata Long» fetta 1 PROMOSSA** (criterio wp171-harness/
 s171-criterio.md): BinarySCSCDst = catena i64 GENERICA (`long_arith_i64` = arm Long di
 binary_fast verbatim, un match per op) + store in place + corpo esatto `#[cold]`; CmpJmpSC
