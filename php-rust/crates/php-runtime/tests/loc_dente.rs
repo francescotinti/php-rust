@@ -74,7 +74,13 @@ fn nessun_sorgente_rs_oltre_cap() {
         // linea in metodi #[cold] — il codice dell'arm non cresce, si sposta — e
         // commenti-leva). Il dente ha morso alla promozione (batteria tentativo 1
         // rc=101): salita a verbale in wp171-harness/s171-verdetto.out.
-        ("php-runtime/src/vm/run.rs", 7091, "run_loop — ULTIMO o mai (A2); +102 L-MCk S-166 + 174 L-SL1 S-171 dichiarati"),
+        // S-172 L-SL2 fetta 2 (prop): +109 DICHIARATI (criterio wp172-harness/
+        // s172-criterio.md p.5: probe sigillato nel bigramma fuso L-A — ~63
+        // righe di cui 11 commento —, BinarySTDst con corpo ESATTO uscito in
+        // binary_st_dst_slow #[cold] — +46 netti di cui ~20 commento). Il dente
+        // ha morso alla promozione (tentativo 1 rc=101): salita a verbale in
+        // wp172-harness/s172-verdetto.out.
+        ("php-runtime/src/vm/run.rs", 7200, "run_loop — ULTIMO o mai (A2); +102 L-MCk S-166 + 174 L-SL1 S-171 + 109 L-SL2 S-172 dichiarati"),
         ("php-runtime/tests/eval.rs", 4773, "batteria eval"),
         ("php-builtins/tests/builtins.rs", 4772, "batteria builtins"),
         ("php-runtime/src/lower/mod.rs", 3838, "lowering"),
