@@ -6,9 +6,11 @@
 < # finestra quieta (uptime + top nel log) e lancia s171-pair.sh t17.
 ---
 > # finestra quieta (uptime + top nel log) e lancia s172-pair.sh t18.
-13c13
+12,13c12,13
+< H="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp171-harness"
 < LOG="$H/pair-out/lancio-t17.log"; mkdir -p "$H/pair-out"
 ---
+> H="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp172-harness"
 > LOG="$H/pair-out/lancio-t18.log"; mkdir -p "$H/pair-out"
 31,32c31,32
 < Q="$H/pair-out/quiet-decl-t17.txt"

@@ -9,7 +9,7 @@
 # anti-flare tra attesa CI e dichiarazione; il resto INVARIATO.
 set -u
 export PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin
-H="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp171-harness"
+H="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp172-harness"
 LOG="$H/pair-out/lancio-t18.log"; mkdir -p "$H/pair-out"
 echo "$(date '+%F %T') attesa quiete CI" >> "$LOG"
 while pgrep -qx cargo || pgrep -qx rustc || pgrep -qf phpt-runner; do sleep 60; done

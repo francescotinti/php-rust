@@ -5,7 +5,7 @@
 # Adattamento dichiarato di s166-lancio-orm2.sh (plumbing, esiti da .done).
 set -u
 export PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin
-H="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp171-harness"
+H="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp172-harness"
 LOG="$H/orm-out/lancio-orm.log"; mkdir -p "$H/orm-out"
 PD="$H/pair-out/pair171-t18.done"
 echo "$(date '+%F %T') attesa $PD" >> "$LOG"

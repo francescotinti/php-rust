@@ -4,6 +4,10 @@
 ---
 > # s172-lancio-orm.sh — catena p.1: attende pair171-t18.done; SOLO se rc=0
 > # lancia s172-orm-coppia.sh (MAPPA_SP dedicato APFS). Un pair fallito NON
+8c8
+< H="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp171-harness"
+---
+> H="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp172-harness"
 10c10
 < PD="$H/pair-out/pair171-t17.done"
 ---
