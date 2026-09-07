@@ -4691,6 +4691,69 @@ impl<'m> super::Vm<'m> {
                         let Some((cid1, gslot)) = ic.get(sk) else {
                             break 'f false;
                         };
+                        // S-172 L-SL2 «forma sigillata Long» fetta 2 = prop (criterio
+                        // wp172-harness/s172-criterio.md p.2a): sul double-hit con prop
+                        // letto Long, const Int e `long_arith_i64` (arm Long di
+                        // binary_fast, VERBATIM) in dominio, il risultato si scrive IN
+                        // PLACE sul payload del prop di destinazione se è già Long
+                        // (= replace_slot + gc_note di un Long, no-op), altrimenti per
+                        // write_property_at come nel sentiero fuso; nessun Zval
+                        // temporaneo (yv, cv, value, old). Guardie get/set-side
+                        // IDENTICHE al sentiero fuso storico qui sotto; ogni miss (tag,
+                        // overflow, Div/Mod/Pow, shift negativo) vi ricade e ricomputa
+                        // da zero: il probe non ha effetti.
+                        let sealed: Option<i64> = 'l: {
+                            let crate::bytecode::Const::Int(k) = &func.consts[*cidx as usize] else {
+                                break 'l None;
+                            };
+                            let b = o.borrow();
+                            if b.class_id + 1 != cid1 || b.lazy.is_some() {
+                                break 'l None;
+                            }
+                            let Some(Zval::Long(y)) = b.props.get_slot(gslot) else {
+                                break 'l None;
+                            };
+                            long_arith_i64(*b2, *y, *k)
+                        };
+                        if let Some(r) = sealed {
+                            let Zval::Object(ro) = &self.frames[top].slots[*recv as usize] else {
+                                break 'f false;
+                            };
+                            let Some((cid2, sslot)) = set_ic.get(sk) else {
+                                break 'f false;
+                            };
+                            let in_place = {
+                                let rb = ro.borrow();
+                                if rb.class_id + 1 != cid2 || rb.lazy.is_some() || rb.info.is_enum_case {
+                                    break 'f false;
+                                }
+                                match rb.props.get_slot(sslot) {
+                                    Some(Zval::Long(_)) => true,
+                                    Some(Zval::Ref(_)) => {
+                                        if !self.typed_refs.is_empty() {
+                                            break 'f false;
+                                        }
+                                        false
+                                    }
+                                    Some(_) => false,
+                                    None => break 'f false,
+                                }
+                            };
+                            if in_place {
+                                if let Some(Zval::Long(x)) = ro.borrow_mut().props.get_slot_mut(sslot) {
+                                    *x = r;
+                                }
+                            } else if let Some(old) = write_property_at(
+                                &self.frames[top].slots[*recv as usize],
+                                set_name,
+                                Some(sslot),
+                                Zval::Long(r),
+                            )? {
+                                self.gc_note(&old);
+                            }
+                            self.frames[top].ip = ip + 2;
+                            break 'f true;
+                        }
                         let yv = {
                             let b = o.borrow();
                             if b.class_id + 1 != cid1 || b.lazy.is_some() {
