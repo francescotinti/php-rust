@@ -1,0 +1,42 @@
+--- a/crates/php-runtime/src/vm/run.rs
++++ b/crates/php-runtime/src/vm/run.rs
+@@ -1958,6 +1958,31 @@
+                     self.frames[top].stack.push(res);
+                 }
+                 Op::BinarySCSCDst { opa, la, ca, opb, lb, cb, op, opd, l, dst } => {
++                    // MOCK m12 (S-170 criterio-b): FUNNEL i64 — catena Long intera senza Zval
++                    // temporanei/binary_fast/to_zval/read_slot/guardie; guardia tupla TENUTA (+0,4
++                    // conservativo, S-169); overflow/shift fuori range/tipi diversi ⇒ corpo ORIGINALE.
++                    // Braccio di MISURA, non leva.
++                    let fast: Option<i64> = 'f: {
++                        if !matches!((*opa, *opb, *op, *opd), (BinOp::Mul, BinOp::Shr, BinOp::Sub, BinOp::Add)) {
++                            break 'f None;
++                        }
++                        let fr = &self.frames[top];
++                        let (Zval::Long(xa), Zval::Long(xb), Zval::Long(xl)) =
++                            (&fr.slots[*la as usize], &fr.slots[*lb as usize], &fr.slots[*l as usize])
++                        else { break 'f None };
++                        let (crate::bytecode::Const::Int(ka), crate::bytecode::Const::Int(kb)) =
++                            (&func.consts[*ca as usize], &func.consts[*cb as usize])
++                        else { break 'f None };
++                        if *kb < 0 || *kb >= 64 { break 'f None; }
++                        let Some(a) = xa.checked_mul(*ka) else { break 'f None };
++                        let b = *xb >> *kb;
++                        let Some(r) = a.checked_sub(b) else { break 'f None };
++                        let Some(r) = xl.checked_add(r) else { break 'f None };
++                        Some(r)
++                    };
++                    if let Some(r) = fast {
++                        self.reg_store_slot(top, *dst, Zval::Long(r))?;
++                    } else {
+                     // S-108 lotto-2 W10: l'albero BinarySCSC ESATTO (tre
+                     // funnel, ordine a→b→combine) poi la coda BinarySTDst
+                     // sul risultato senza transito di pila — stessa
+@@ -2003,6 +2028,7 @@
+                         None => self.binary_value_ab(*opd, lhs, res)?,
+                     };
+                     self.reg_store_slot(top, *dst, res)?;
++                    }
+                 }
+                 Op::LoadVarPushConst { slot, cidx } => {
+                     // S-108 lotto-2 W13: pura coppia di push — LoadVar

@@ -1,0 +1,30 @@
+--- a/crates/php-runtime/src/vm/run.rs
++++ b/crates/php-runtime/src/vm/run.rs
+@@ -1968,10 +1968,9 @@
+                     let a = 'r: {
+                         {
+                             let lv = &self.frames[top].slots[*la as usize];
+-                            if !matches!(lv, Zval::Undef | Zval::Ref(_)) {
+-                                if let Some(v) = binary_fast(*opa, lv, &cva) {
+-                                    break 'r v;
+-                                }
++                            // MOCK m10 (S-170 criterio-b): guardia Undef/Ref RIMOSSA — braccio di MISURA.
++                            if let Some(v) = binary_fast(*opa, lv, &cva) {
++                                break 'r v;
+                             }
+                         }
+                         let lhs = self.reg_load_slot(top, func, *la);
+@@ -1981,10 +1980,9 @@
+                     let bv = 'r: {
+                         {
+                             let lv = &self.frames[top].slots[*lb as usize];
+-                            if !matches!(lv, Zval::Undef | Zval::Ref(_)) {
+-                                if let Some(v) = binary_fast(*opb, lv, &cvb) {
+-                                    break 'r v;
+-                                }
++                            // MOCK m10 (S-170 criterio-b): guardia Undef/Ref RIMOSSA — braccio di MISURA.
++                            if let Some(v) = binary_fast(*opb, lv, &cvb) {
++                                break 'r v;
+                             }
+                         }
+                         let lhs = self.reg_load_slot(top, func, *lb);

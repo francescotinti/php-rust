@@ -1,0 +1,56 @@
+2,9c2,8
+< # s170-ab-mock.sh <APATH> <AEXP8> <BPATH> <BEXP8> <TAG> [R] — MOCK «handler banale magro» (S-170, criterio s170-criterio.md p.2):
+< # GIUDICE = arith-e2 (loop nudo: CmpJmpSC + IncDecSlotJmp, N=250M); GUARDIA = arith-dq bilaterale a SOLA-REGRESSIONE.
+< # A = braccio di riferimento (m0 ricostruito in S-170, hash MISURATO) vs B = mock (m8/m9); hash MISURATI.
+< # COPIA DICHIARATA di wp169-harness/s169-ab-mock.sh (manifest s170-ab-mock-copia-v3.diff
+< # + copia-gate v3 PER TOKEN) coi SOLI adattamenti del criterio: giudice E2 ↔ guardia dq
+< # scambiati; lock per TOKEN (`grep -qw s170`); `[ -s ]` sui driver e sugli attesi;
+< # parità di A e B contro l'output ATTESO dell'ORACLE (non solo A==B; az.rev. S-169 #3).
+< # R=5 interleaved per coppia (ABAB sul giudice E2); ns/iter=(med raw−floor)/N; rumore drop-1.
+---
+> # s170-ab-dq.sh <APATH> <AEXP8> <BPATH> <BEXP8> <TAG> [R] — bracci del RESIDUO di BinarySCSCDst (S-170, criterio-b p.2):
+> # GIUDICE = arith-dq (N=250M); GUARDIA = arith-e2 bilaterale a SOLA-REGRESSIONE (i bracci non toccano il controllo-loop).
+> # A = m0 ricostruito in S-170 (hash MISURATO) vs B = mock (m10..m13); hash MISURATI.
+> # COPIA DICHIARATA di s170-ab-mock.sh (manifest s170-ab-dq-copia-v3.diff + copia-gate v3 PER TOKEN)
+> # col SOLO adattamento del criterio-b: giudice dq ↔ guardia e2 scambiati (ABAB sul giudice dq).
+> # Lock per TOKEN (`grep -qw s170`); `[ -s ]` sui driver e sugli attesi ([ -e ] sul pavimento, VUOTO per costruzione);
+> # parità di A e B contro l'output ATTESO dell'ORACLE. R=5; ns/iter=(med raw−floor)/N; rumore drop-1.
+32c31
+< echo "== s170 MOCK $TAG — A=$AM MISURATO ($A) B=$BM MISURATO ($BB); GIUDICE arith-e2 N=250M (loop nudo) + GUARDIA arith-dq bilaterale; R=$R ABAB alternato; criterio s170-criterio.md =="
+---
+> echo "== s170 RESIDUO $TAG — A=$AM MISURATO ($A) B=$BM MISURATO ($BB); GIUDICE arith-dq N=250M + GUARDIA arith-e2 bilaterale; R=$R ABAB alternato; criterio s170-criterio-b.md =="
+48,49c47,48
+<   if [ $((i % 2)) -eq 1 ]; then EA=$(ucpu "$A" "$E2"); EB=$(ucpu "$BB" "$E2"); ord=AB; else EB=$(ucpu "$BB" "$E2"); EA=$(ucpu "$A" "$E2"); ord=BA; fi
+<   TA=$(ucpu "$A" "$DQ"); TB=$(ucpu "$BB" "$DQ")
+---
+>   if [ $((i % 2)) -eq 1 ]; then TA=$(ucpu "$A" "$DQ"); TB=$(ucpu "$BB" "$DQ"); ord=AB; else TB=$(ucpu "$BB" "$DQ"); TA=$(ucpu "$A" "$DQ"); ord=BA; fi
+>   EA=$(ucpu "$A" "$E2"); EB=$(ucpu "$BB" "$E2")
+52c51
+<   echo "  coppia$i [$ord su E2]: e2A=$EA e2B=$EB dqA=$TA dqB=$TB e2O=$EOR dqO=$TOR"
+---
+>   echo "  coppia$i [$ord su dq]: dqA=$TA dqB=$TB e2A=$EA e2B=$EB dqO=$TOR e2O=$EOR"
+65,66c64,65
+< D = med(e2A)-med(e2B); noise = max(dr1(e2A), dr1(e2B)); thr = max(4.0, noise, 0.94); thrd = max(noise, 0.94)
+< print(f"GIUDICE arith-e2 (loop nudo, 2 op/iter): A={med(e2A):.2f} B={med(e2B):.2f} ns/iter D=A−B={D:+.2f} soglia={thr:.2f} (rumore drop-1 A'={dr1(e2A):.2f} B'={dr1(e2B):.2f}) -> {'NOMINATO' if D >= thr else 'NON nominato (vale 0)'}")
+---
+> D = med(dqA)-med(dqB); noise = max(dr1(dqA), dr1(dqB)); thr = max(4.0, noise, 0.94); thrd = max(noise, 0.94)
+> print(f"GIUDICE arith-dq: A={med(dqA):.2f} B={med(dqB):.2f} ns/iter D=A−B={D:+.2f} soglia={thr:.2f} (rumore drop-1 A'={dr1(dqA):.2f} B'={dr1(dqB):.2f}) -> {'NOMINATO' if D >= thr else 'NON nominato (vale 0)'}")
+68,71c67,71
+< print(f"per-op (2 op/iter): A={med(e2A)/2:.2f} B={med(e2B)/2:.2f} oracle={med(e2O)/2:.2f} ns/op; residuo B a dispatch 1,75/op (limite inferiore S-169) = corpo magro ≈ {med(e2B)/2-1.75:.2f} ns/op")
+< Ddq = med(dqB)-med(dqA); ndq = max(dr1(dqA), dr1(dqB)); g = max(4.0, ndq)
+< print(f"GUARDIA arith-dq (sola-regressione): A={med(dqA):.2f} B={med(dqB):.2f} oracle={med(dqO):.2f} ns/iter; dqB−dqA={Ddq:+.2f} vs {g:.2f} -> {'ok' if Ddq <= g else 'REGRESSIONE (rc=5, D sospeso)'}{'; miglioramento su dq REGISTRATO (stessi 2 op nel loop), non contato' if Ddq < -thrd else ''}")
+< print(f"riferimento finestra: gap-loop A={med(e2A)-med(e2O):.2f} B={med(e2B)-med(e2O):.2f}; dq gap totale A={med(dqA)-med(dqO):.2f} B={med(dqB)-med(dqO):.2f}")
+---
+> stA, stB, stO = med(dqA)-med(e2A), med(dqB)-med(e2B), med(dqO)-med(e2O)
+> print(f"statement (dq−e2): A={stA:.2f} B={stB:.2f} oracle={stO:.2f}; residuo B oltre Sweep 2,9 + dispatch 1,75 (S-169) = corpo BinarySCSCDst B ≈ {stB-2.9-1.75:.2f} (A ≈ {stA-2.9-1.75:.2f})")
+> De2 = med(e2B)-med(e2A); ne2 = max(dr1(e2A), dr1(e2B)); g = max(4.0, ne2)
+> print(f"GUARDIA arith-e2 (sola-regressione): A={med(e2A):.2f} B={med(e2B):.2f} oracle={med(e2O):.2f} ns/iter; e2B−e2A={De2:+.2f} vs {g:.2f} -> {'ok' if De2 <= g else 'REGRESSIONE (rc=5, D sospeso)'}{'; variazione firmata su e2 = LAYOUT, dichiarata' if abs(De2) >= thrd else ''}")
+> print(f"riferimento finestra: dq gap totale A={med(dqA)-med(dqO):.2f} B={med(dqB)-med(dqO):.2f}")
+73c73
+< if Ddq > g: rc = 5
+---
+> if De2 > g: rc = 5
+
+== copia-gate v3 PER TOKEN (az.rev. S-169) ==
+base=wp170-harness/s170-ab-mock.sh derivato=wp170-harness/s170-ab-dq.sh sess_attesa=s170 allow=[wp1(64|68|29|60)-harness|az\.rev\. S-169|s129-quiescenza]
+nessun token stantio fuori allow — esito: rc=0

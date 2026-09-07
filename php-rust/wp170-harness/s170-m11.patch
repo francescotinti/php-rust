@@ -1,0 +1,20 @@
+--- a/crates/php-runtime/src/vm/run.rs
++++ b/crates/php-runtime/src/vm/run.rs
+@@ -2002,7 +2002,16 @@
+                         Some(v) => v,
+                         None => self.binary_value_ab(*opd, lhs, res)?,
+                     };
+-                    self.reg_store_slot(top, *dst, res)?;
++                    // MOCK m11 (S-170 criterio-b): store MAGRO — Long su Long scritto IN PLACE
++                    // (niente typed_refs check, store_slot, gc_note, Result/`?`); altrimenti originale.
++                    // Braccio di MISURA, non leva.
++                    let stored = if let Zval::Long(n) = &res {
++                        let n = *n;
++                        if let Zval::Long(x) = &mut self.frames[top].slots[*dst as usize] { *x = n; true } else { false }
++                    } else { false };
++                    if !stored {
++                        self.reg_store_slot(top, *dst, res)?;
++                    }
+                 }
+                 Op::LoadVarPushConst { slot, cidx } => {
+                     // S-108 lotto-2 W13: pura coppia di push — LoadVar
