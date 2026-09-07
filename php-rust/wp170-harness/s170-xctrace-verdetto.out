@@ -1,2 +1,11 @@
 == s170 xctrace-3 (pin 092dcff4; template CPU Counters; p/o-dq + mutante c0 POSITIVO array_sum L1 bilaterale; c3 anche in ns/iter) ==
 parità c0pos: phpr==oracle (5499998000000 )
+dq user s (1 run, per c3 in ns/iter): phpr=11.81 oracle=2.21
+p-dq: quote c0..c3 = 0.645 0.013 0.335 0.007 (campioni 1726)
+o-dq: quote c0..c3 = 0.869 0.015 0.095 0.021 (campioni 441)
+p-c0: quote c0..c3 = 0.385 0.598 0.015 0.002 (campioni 5827)
+o-c0: quote c0..c3 = 0.618 0.024 0.333 0.025 (campioni 983)
+c3 (discarded) in ns/iter su dq: phpr 0.34 (quota 0.007 × 47.2) vs oracle 0.18 (quota 0.021 × 8.8); c2 (delivery): phpr 15.81 vs oracle 0.84 ns/iter — c2 resta INDIZIATA (semantica non fissata)
+MUTANTE c0pos phpr: Δquote vs dq c0..c3 = -0.260 +0.585 -0.320 -0.005 -> colonna che sale = c1 (attesa c0) -> FALLITO (sale c1): c0 resta per esclusione
+MUTANTE c0pos oracle: Δquote vs dq c0..c3 = -0.251 +0.009 +0.238 +0.004 -> colonna che sale = c2 (attesa c0) -> FALLITO (sale c2): c0 resta per esclusione
+ESITO: mutante c0 positivo NON riuscito su almeno un motore — dichiarare

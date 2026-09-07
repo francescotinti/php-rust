@@ -1,0 +1,63 @@
+2,8c2,7
+< # s170-misura-chain.sh — finestra di misura S-170 (sequenziale, detached; criterio s170-criterio.md p.6):
+< # (0) build verdi m0/m8/m9 (`[ -s ]` sui .rc); (1) dump del loop E2 di m8 e m9: DEVE essere
+< # esattamente CmpJmpSC + IncDecSlotJmp (2 op, nessun Nop); (2) attesa quiete (s129-quiescenza, max 3 h);
+< # (3) bracci --braccio s170-m8/m9 + disasm bl vs m0; (4) se hash(m0-s170) ≠ 36d73812 (phpr-s168-m0):
+< # A/B m0-s170 vs phpr-s168-m0 R=5 = banda-copia; (5) A/B m8 R=5, m9 R=5 con A = m0-s170.
+< # COPIA DICHIARATA di wp169-harness/s169-misura-chain.sh (manifest s170-misura-chain-copia-v3.diff).
+< # Log ab-out/chain.log; fine = ab-out/chain.done. STOP solo su rc di apparato.
+---
+> # s170-misura-chain-b.sh — finestra di misura S-170 criterio-b (sequenziale, detached; p.4):
+> # (0) build verdi m10..m13 (`[ -s ]` sui .rc); (1) dump del loop dq di ogni braccio: DEVE essere
+> # CmpJmpSC · BinarySCSCDst · Sweep · IncDecSlotJmp (4 op); (2) attesa quiete (s129-quiescenza, max 3 h);
+> # (3) bracci --braccio s170-m10..m13 + disasm bl vs m0; (4) A/B m10, m11, m12, m13 R=5 con A = m0-s170
+> # (giudice dq, guardia e2: s170-ab-dq.sh). COPIA DICHIARATA di s170-misura-chain.sh (manifest v3).
+> # Log ab-out/chain-b.log; fine = ab-out/chain-b.done. STOP solo su rc di apparato.
+12c11
+< LOG="$OUT/chain.log"; : > "$LOG"; rm -f "$OUT/chain.done"
+---
+> LOG="$OUT/chain-b.log"; : > "$LOG"; rm -f "$OUT/chain-b.done"
+14c13
+< M0="$BIN/phpr-m0"; M0OLD="$STASH/phpr-s168-m0"; E2="$R/wp168-harness/arith-e2.php"
+---
+> M0="$BIN/phpr-m0"; DQ="$R/wp164-harness/arith-dq.php"
+17,21c16,21
+< stop(){ say "STOP: $*"; touch "$OUT/chain.done"; exit "${2:-7}"; }
+< for t in m0 m8 m9; do [ -s "$OUT/build-$t.rc" ] && [ "$(cat "$OUT/build-$t.rc")" = 0 ] || stop "build $t non verde" 7; [ -s "$BIN/phpr-$t" ] || stop "binario $t assente" 7; done
+< [ -s "$E2" ] || stop "driver E2 assente/vuoto" 7
+< for t in m8 m9; do
+<   LOOP=$(PHPR_DUMP_OPS=1 "$BIN/phpr-$t" "$E2" 2>&1 | sed -n '/^-- {main}/,/Ret/p' | sed -n '/CmpJmpSC/,/IncDecSlotJmp/p' | awk '{print $2}' | tr '\n' ' ')
+---
+> stop(){ say "STOP: $*"; touch "$OUT/chain-b.done"; exit "${2:-7}"; }
+> [ -s "$M0" ] || stop "m0 assente" 7
+> for t in m10 m11 m12 m13; do [ -s "$OUT/build-$t.rc" ] && [ "$(cat "$OUT/build-$t.rc")" = 0 ] || stop "build $t non verde" 7; [ -s "$BIN/phpr-$t" ] || stop "binario $t assente" 7; done
+> [ -s "$DQ" ] || stop "driver dq assente/vuoto" 7
+> for t in m10 m11 m12 m13; do
+>   LOOP=$(PHPR_DUMP_OPS=1 "$BIN/phpr-$t" "$DQ" 2>&1 | sed -n '/^-- {main}/,/Ret/p' | sed -n '/CmpJmpSC/,/IncDecSlotJmp/p' | awk '{print $2}' | tr '\n' ' ')
+23c23
+<   [ "$LOOP" = "CmpJmpSC IncDecSlotJmp " ] || stop "loop $t ≠ CmpJmpSC+IncDecSlotJmp (2 op)" 5
+---
+>   [ "$LOOP" = "CmpJmpSC BinarySCSCDst Sweep IncDecSlotJmp " ] || stop "loop $t ≠ 4 op attesi" 5
+25c25
+< n=0; until "$R/wp129-harness/s129-quiescenza.sh" "$OUT/quiesce-wait.rc" > "$OUT/quiesce-wait.log" 2>&1; do n=$((n+1)); [ $n -ge 180 ] && stop "quiete mai raggiunta ($n attese)" 8; /bin/sleep 60; done
+---
+> n=0; until "$R/wp129-harness/s129-quiescenza.sh" "$OUT/quiesce-wait-b.rc" > "$OUT/quiesce-wait-b.log" 2>&1; do n=$((n+1)); [ $n -ge 180 ] && stop "quiete mai raggiunta ($n attese)" 8; /bin/sleep 60; done
+27c27
+< for t in m8 m9; do
+---
+> for t in m10 m11 m12 m13; do
+31,36c31,33
+< run_ab(){ "$H/s170-ab-mock.sh" "$M0" "$(h8 "$M0")" "$1" "$(h8 "$1")" "$2" "$3"; rc=$?; say "ab $2 R=$3 rc=$rc"; case "$rc" in 1|2|7|8|9) stop "apparato ab $2 rc=$rc" "$rc";; esac; }
+< say "m0-s170 hash=$(h8 "$M0") vs phpr-s168-m0 36d73812"
+< if [ "$(h8 "$M0")" != "36d73812" ]; then run_ab "$M0OLD" m0x 5; else say "m0 riproducibile al byte: banda-copia non dovuta"; fi
+< run_ab "$BIN/phpr-m8" m8 5
+< run_ab "$BIN/phpr-m9" m9 5
+< touch "$OUT/chain.done"; say "fine"
+---
+> run_ab(){ "$H/s170-ab-dq.sh" "$M0" "$(h8 "$M0")" "$1" "$(h8 "$1")" "$2" "$3"; rc=$?; say "ab $2 R=$3 rc=$rc"; case "$rc" in 1|2|7|8|9) stop "apparato ab $2 rc=$rc" "$rc";; esac; }
+> for t in m10 m11 m12 m13; do run_ab "$BIN/phpr-$t" "$t" 5; done
+> touch "$OUT/chain-b.done"; say "fine"
+
+== copia-gate v3 PER TOKEN (az.rev. S-169) ==
+base=wp170-harness/s170-misura-chain.sh derivato=wp170-harness/s170-misura-chain-b.sh sess_attesa=s170 allow=[wp1(64|68|29|60)-harness|s129-quiescenza|s160-disasm]
+nessun token stantio fuori allow — esito: rc=0
