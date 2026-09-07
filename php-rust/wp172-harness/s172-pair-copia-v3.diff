@@ -9,7 +9,11 @@
 < # nomi s171/pair171/wp171-harness/t17; pin s171 (phpr b360b293 + server
 ---
 > # verifica POSITIVA + manifest s172-pair-copia-v3.diff) coi SOLI adattamenti:
-> # nomi s172/pair171/wp171-harness/t18; pin s172 (phpr b360b293 + server
+> # nomi s172/pair171/wp172-harness/t18; pin s172 (phpr 5f2dff7d + server 812f7962; era
+22c22
+< H="$REPO/wp171-harness"
+---
+> H="$REPO/wp172-harness"
 27c27
 < VERD="$H/s171-pair-verdetto-$T.out"
 ---

@@ -6,6 +6,10 @@
 > # s172-orm-coppia.sh — coppia dbal+ORM sul pin s172 (DOVUTA: pin nuovo)
 > # (criterio s172-criterio-orm.md; copia DICHIARATA di s166-orm2-coppia.sh,
 > # manifest s172-orm-copia-v3.diff; adattamenti: pin s172 b360b2933eddfe18,
+20c20
+< H="$REPO/wp171-harness"
+---
+> H="$REPO/wp172-harness"
 27c27
 < VERD="$H/s171-orm-coppia-verdetto.out"
 ---

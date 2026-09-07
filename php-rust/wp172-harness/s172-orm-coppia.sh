@@ -17,7 +17,7 @@
 set -u
 export PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin
 REPO="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust"
-H="$REPO/wp171-harness"
+H="$REPO/wp172-harness"
 GATES="/Volumes/Extreme Pro/Claude/wp9-harness/gates"
 WD="/Volumes/Extreme Pro/Claude/wp13-harness/run-with-watchdog.sh"
 ORACLE=/opt/homebrew/opt/php/bin/php

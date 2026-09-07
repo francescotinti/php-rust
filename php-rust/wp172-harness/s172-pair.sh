@@ -5,7 +5,7 @@
 # az.rev.3 S-149; banda-unione degradata a companion descrittivo).
 # COPIA DICHIARATA di wp163-harness/s163-pair.sh (collaudo: copia-gate a
 # verifica POSITIVA + manifest s172-pair-copia-v3.diff) coi SOLI adattamenti:
-# nomi s172/pair171/wp171-harness/t18; pin s172 (phpr b360b293 + server
+# nomi s172/pair171/wp172-harness/t18; pin s172 (phpr 5f2dff7d + server 812f7962; era
 # b3ddaede); mediane storiche con t11=1,765 t12=1,767 t13=1,763 t14=1,761 t15=1,746 t16=1,749 (banda giudizio INVARIATA
 # [1,738;1,799]); attesa di leva nel messaggio GIU': L-AU1 (non L-AL2),
 # dichiarata SOTTO-risoluzione (quota utente-string WP mai censita;
@@ -19,7 +19,7 @@
 set -u
 export PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin
 REPO="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust"
-H="$REPO/wp171-harness"
+H="$REPO/wp172-harness"
 H109="$REPO/wp109-harness"
 QUIESCE="$REPO/wp129-harness/s129-quiescenza.sh"
 T="${1:?tentativo (es. t2)}"
