@@ -31,7 +31,6 @@ quotati; let-else su blocco unsafe) · coda CI: potata a HEAD (delibera), runner
   replicate N=2; c2 delivery 15,8 vs 0,84 ns/iter INDIZIATA (front-end).
 4·Apparato: copia-gate **v3 per TOKEN** (riga mista morde v3, passa v2); parità vs
   ATTESO oracle; lock per token. 5·Estrapolazione DICHIARATA: m13+m9 ⇒ dq ≈18,9 ≈2,2×.
-
 ## ⭐ Lezioni (max 3)
 - ⭐⭐ il pavimento va collaudato contro l'ATTESO come ogni driver: tre sessioni hanno
   misurato il floor su un file inesistente senza che nessun gate lo vedesse.
