@@ -19,7 +19,11 @@ Pin: phpr 5f2dff7d17ebed79 + server 812f7962952da67f (promozione tentativo 2 + r
 - Conferma post-pin (pin s172 vs stash s171, R=5): D=+20,07 rumore 0,73 segni 5/5 (A=73,47 B=53,40 ns/iter): nell'intorno del D_C dell'A/B.
 
 ## Suite (coppia t18 al pin s172, DOVUTA)
-lanciata 00:23, esito in wp172-harness/pair-out e orm-out
+- WP full (6 gambe ON, 5 pulite: leg1 SEGNALATA ictx phpr 201% ed esclusa): mediana t18 = **1,769**
+  in banda [1,738;1,799] → COMPATIBILE, nessun claim (t17 1,776; t15/t16 1,746/1,749); banda_ON 0,023;
+  media user-only 2,43-2,46; parità full/media OK (s172-pair-verdetto-t18.out, rc=0).
+- ORM: «ORM_T18» (s172-orm-coppia-verdetto.out).
+Attesa dichiarata (direzione ≤0, magnitudine sotto-risoluzione): WP COMPATIBILE.
 
 ## Residuo nominato (direzione, non magnitudine)
 prop-dq 52,87 vs oracle 14,00: residuo 38,9 ns/iter = dispatch 8×1,75=14 + guardie IC/borrow

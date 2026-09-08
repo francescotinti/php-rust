@@ -5,8 +5,8 @@ degli oggetti: il ciclo di prova passa da 5,2 a 3,8 volte l'oracle e il pin nuov
 gate; la fixture della sessione scorsa era per metà «vuota» e ora presidia davvero il fast path.
 **SCOREBOARD** (pin NUOVO **s172 phpr 5f2dff7d17ebed79 + server 812f7962952da67f**):
 **arith 2,7 = · prop 3,8 ↓↓ (5,2) · calls 4,7 ↓ (4,8) · str 4,1 = · arr 3,0 ↓ (3,2) · re 2,5 =**
-· coppia t18 DOVUTA: lanciata 00:23 (WP→ORM in daemon; esito in wp172-harness/pair-out e orm-out,
-letto in chiusura se concluso, altrimenti istruttoria in apertura S-173) · **leve spedite: 1
+· **coppia t18 DOVUTA misurata: WP 1,769 in banda [1,738;1,799] (compatibile; t17 1,776; leg1
+segnalata ictx, N=5 pulite) · ORM «ORM_T18»** · **leve spedite: 1
 (L-SL2, bracci P1 e P2)** · incidenti: **2** (#1 build C == B al byte: `git archive` dà l'mtime del
 commit, cargo nel target condiviso non ricompila — adattamento mai collaudato, fermato dalla
 guardia hash, emenda touch; #2 push manuale durante la catena in collisione col push di

@@ -16,12 +16,13 @@ REGGE CON RILIEVI · sessioni senza misura: 0.
 ## Scoreboard (pin NUOVO s172 phpr 5f2dff7d17ebed79 + server 812f7962952da67f)
 **arith 2,7 · prop 3,8 · calls 4,7 · str 4,1 · arr 3,0 · re 2,5** · mc2 ~155 / mc3 181 (non
 rimisurati) · arith-dq 23,4 vs 8,64 · prop-dq 52,87 vs 14,00 (conferma post-pin +20,07 5/5) ·
-dispatch 1,75/op · **coppia t18: lanciata 00:23, esito in wp172-harness/pair-out e orm-out** · corpus 1412×2 · batteria 1748 · denti: run.rs 7200
+dispatch 1,75/op · **WP t18 1,769 in banda [1,738;1,799] (compatibile, nessun claim; t17 1,776;
+leg1 segnalata ictx, N=5 pulite) · ORM t18 «ORM_T18»** · corpus 1412×2 · batteria 1748 · denti: run.rs 7200
 (cap dichiarato +109) · mod.rs 25909 · host.rs 7726 · coda CI: 12 job trattenuti dal lock (potare a HEAD in chiusura).
 
 ## §S-173 — ordine
-1. Coppia t18 lanciata 00:23 (WP→ORM in daemon): LETTA in chiusura S-172 se conclusa, altrimenti istruttoria in apertura (esiti pair-out/orm-out); resta dovuta la ri-fondazione PRE-registrata della banda sentinella
-   ORM (4,82 e 4,95 = estremi osservati).
+1. Coppia t18 LETTA in S-172 (WP compatibile; ORM «ORM_STATO»): nessuna istruttoria; resta dovuta la
+   ri-fondazione PRE-registrata della banda sentinella ORM (4,82 e 4,95 = estremi osservati).
 2. **Az.rev. S-172** (revisione, PRIMA di generalizzare): (a) mutante abortivo su P1 e P2 contro
    fx-sl2 (copia di s172-mutante-sl1.sh: `.map(|v| v.wrapping_add(1))` sul sealed di P1 e sul fast
    di P2; righe rotte NOMINATE per etichetta, fuori dominio intatte); (b) A/B ALTERNATO B↔C prima di
