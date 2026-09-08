@@ -22,7 +22,7 @@ Pin: phpr 5f2dff7d17ebed79 + server 812f7962952da67f (promozione tentativo 2 + r
 - WP full (6 gambe ON, 5 pulite: leg1 SEGNALATA ictx phpr 201% ed esclusa): mediana t18 = **1,769**
   in banda [1,738;1,799] → COMPATIBILE, nessun claim (t17 1,776; t15/t16 1,746/1,749); banda_ON 0,023;
   media user-only 2,43-2,46; parità full/media OK (s172-pair-verdetto-t18.out, rc=0).
-- ORM: «ORM_T18» (s172-orm-coppia-verdetto.out).
+- ORM: net [7,090;7,092] vs registrato s166 [7,023;7,053] (+0,04, dentro lo storico S-164 [7,066;7,111]); Δ_norm [−0,38;−0,29] NON risolta (a cavallo di 0,293); sentinella oracle 4,87/4,88 IN banda (valida); parità ORM 16 · dbal 10 stabili — nessun claim, VOCE da rivedere in S-173 (regola 4: se resta >7,05 istruttoria) (s172-orm-coppia-verdetto.out).
 Attesa dichiarata (direzione ≤0, magnitudine sotto-risoluzione): WP COMPATIBILE.
 
 ## Residuo nominato (direzione, non magnitudine)

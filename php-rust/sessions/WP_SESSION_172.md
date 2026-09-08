@@ -6,7 +6,7 @@ gate; la fixture della sessione scorsa era per metà «vuota» e ora presidia da
 **SCOREBOARD** (pin NUOVO **s172 phpr 5f2dff7d17ebed79 + server 812f7962952da67f**):
 **arith 2,7 = · prop 3,8 ↓↓ (5,2) · calls 4,7 ↓ (4,8) · str 4,1 = · arr 3,0 ↓ (3,2) · re 2,5 =**
 · **coppia t18 DOVUTA misurata: WP 1,769 in banda [1,738;1,799] (compatibile; t17 1,776; leg1
-segnalata ictx, N=5 pulite) · ORM «ORM_T18»** · **leve spedite: 1
+segnalata ictx, N=5 pulite) · ORM net [7,090;7,092] vs registrato s166 [7,023;7,053] (+0,04, dentro lo storico S-164 [7,066;7,111]); Δ_norm [−0,38;−0,29] NON risolta (a cavallo di 0,293); sentinella oracle 4,87/4,88 IN banda (valida); parità ORM 16 · dbal 10 stabili, da rivedere)** · **leve spedite: 1
 (L-SL2, bracci P1 e P2)** · incidenti: **2** (#1 build C == B al byte: `git archive` dà l'mtime del
 commit, cargo nel target condiviso non ricompila — adattamento mai collaudato, fermato dalla
 guardia hash, emenda touch; #2 push manuale durante la catena in collisione col push di

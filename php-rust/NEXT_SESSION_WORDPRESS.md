@@ -17,11 +17,11 @@ REGGE CON RILIEVI · sessioni senza misura: 0.
 **arith 2,7 · prop 3,8 · calls 4,7 · str 4,1 · arr 3,0 · re 2,5** · mc2 ~155 / mc3 181 (non
 rimisurati) · arith-dq 23,4 vs 8,64 · prop-dq 52,87 vs 14,00 (conferma post-pin +20,07 5/5) ·
 dispatch 1,75/op · **WP t18 1,769 in banda [1,738;1,799] (compatibile, nessun claim; t17 1,776;
-leg1 segnalata ictx, N=5 pulite) · ORM t18 «ORM_T18»** · corpus 1412×2 · batteria 1748 · denti: run.rs 7200
+leg1 segnalata ictx, N=5 pulite) · ORM t18 net [7,090;7,092] vs registrato s166 [7,023;7,053] (+0,04, dentro lo storico S-164 [7,066;7,111]); Δ_norm [−0,38;−0,29] NON risolta (a cavallo di 0,293); sentinella oracle 4,87/4,88 IN banda (valida); parità ORM 16 · dbal 10 stabili — nessun claim, VOCE da rivedere in S-173 (regola 4: se resta >7,05 istruttoria)** · corpus 1412×2 · batteria 1748 · denti: run.rs 7200
 (cap dichiarato +109) · mod.rs 25909 · host.rs 7726 · coda CI: 12 job trattenuti dal lock (potare a HEAD in chiusura).
 
 ## §S-173 — ordine
-1. Coppia t18 LETTA in S-172 (WP compatibile; ORM «ORM_STATO»): nessuna istruttoria; resta dovuta la
+1. Coppia t18 LETTA in S-172 (WP compatibile; ORM net [7,090;7,092] +0,04 sopra il registrato, Δ_norm non risolta, sentinella valida: da RIVEDERE, non istruttoria): nessuna istruttoria; resta dovuta la
    ri-fondazione PRE-registrata della banda sentinella ORM (4,82 e 4,95 = estremi osservati).
 2. **Az.rev. S-172** (revisione, PRIMA di generalizzare): (a) mutante abortivo su P1 e P2 contro
    fx-sl2 (copia di s172-mutante-sl1.sh: `.map(|v| v.wrapping_add(1))` sul sealed di P1 e sul fast
