@@ -1,0 +1,93 @@
+#!/bin/bash
+# s173-ab-bc.sh <BPATH> <BEXP8> <CPATH> <CEXP8> <TAG> [R] — az.rev. S-172 #2 (revisione.md rilievo 1, NEXT §S-173 p.2b):
+# A/B ALTERNATO fra i due bracci di S-172, B = P1 (stash phpr-s172-sl2-B 260fbc3b) e C = P1+P2 (stash phpr-s172-sl2-C
+# e396498b, contenuto == pin s172 a meno di LC_UUID/firma) — in S-172 C stava SEMPRE in 5ª/6ª posizione (mai alternato):
+# il contrasto C−B = +4,67 valeva solo come DIREZIONE. Qui B e C si alternano BC/CB per coppia: la D è un A/B proprio
+# (stesso albero, commit consecutivi c419f29a→59ca87fb) e può attribuire a P2 una CIFRA se nominata (criterio s173-azrev-criterio.md).
+# COPIA DICHIARATA di s172-ab-leva.sh (manifest s173-ab-bc-copia.diff) coi SOLI adattamenti: due bracci al posto di tre,
+# alternanza BC/CB, statistica D=B−C (positivo = P2 paga), attese/kill del criterio S-173, lock TOKEN s173, nessuna promozione
+# (i bracci sono già misurati e promossi: il verdetto è di ATTRIBUZIONE). Giudice prop-dq (N dal driver), guardia arith-dq
+# a SOLA regressione (BinarySTDst sta in ogni `$s OP= expr`: arith-dq è BinarySCSCDst, non lo tocca — guardia cieca dichiarata).
+# R=5; ns/iter=(med raw−floor)/N; rumore drop-1. rc autoritativo = ab-out/<TAG>.rc; verdetto s173-<TAG>-verdetto.out.
+set -u
+export PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin
+H="$(cd -P "$(dirname -- "$0")" && pwd -P)"
+BB="${1:?BPATH}"; BEXP="${2:?BEXP8}"; CC="${3:?CPATH}"; CEXP="${4:?CEXP8}"; TAG="${5:?TAG}"; R="${6:-5}"
+O=/opt/homebrew/opt/php/bin/php
+PD="$H/prop-dq.php"
+GD="$H/../wp164-harness/arith-dq.php"
+EMPTY="$H/../wp160-harness/empty.php"
+OUT="$H/ab-out"; mkdir -p "$OUT"
+VERD="$H/s173-$TAG-verdetto.out"; RC="$OUT/$TAG.rc"
+[ -e "$VERD" ] && { echo "verdetto ESISTE — TAG nuovo" >&2; exit 7; }
+for f in "$PD" "$GD" "$BB" "$CC" "$O"; do [ -s "$f" ] || { echo "file assente o VUOTO: $f" | tee -a "$VERD"; echo 7 > "$RC"; exit 7; }; done
+[ -e "$EMPTY" ] || { echo "driver del pavimento assente: $EMPTY (VUOTO per costruzione: [ -e ], emenda S-170 p.4)" | tee -a "$VERD"; echo 7 > "$RC"; exit 7; }
+grep -qw s173 /private/tmp/phpr-measure.lock 2>/dev/null || { echo "lock s173 assente (per TOKEN)" | tee -a "$VERD"; echo 9 > "$RC"; exit 9; }
+"$H/../wp129-harness/s129-quiescenza.sh" "$OUT/quiesce-$TAG.rc" > /dev/null 2>&1 || { echo "quiescenza FAIL" | tee -a "$VERD"; echo 8 > "$RC"; exit 8; }
+BM="$(shasum -a 256 "$BB" | cut -c1-8)"; CM="$(shasum -a 256 "$CC" | cut -c1-8)"
+[ "$BM" = "$BEXP" ] || { echo "B misurato $BM != atteso $BEXP" | tee -a "$VERD"; echo 1 > "$RC"; exit 1; }
+[ "$CM" = "$CEXP" ] || { echo "C misurato $CM != atteso $CEXP" | tee -a "$VERD"; echo 1 > "$RC"; exit 1; }
+# N del giudice e della guardia EMESSI dal sorgente (KS-GR-105-2; az.rev. S-170 #4): mai cablati
+NPD=$(awk 'match($0, /\$i<[0-9]+/) {print substr($0, RSTART+3, RLENGTH-3); exit}' "$PD")
+NGD=$(awk 'match($0, /\$i<[0-9]+/) {print substr($0, RSTART+3, RLENGTH-3); exit}' "$GD")
+[ -n "$NPD" ] && [ -n "$NGD" ] || { echo "N non leggibile dal driver (prop='$NPD' dq='$NGD')" | tee -a "$VERD"; echo 7 > "$RC"; exit 7; }
+ucpu(){ { /usr/bin/time -p perl -e 'alarm 900; exec @ARGV or die' -- "$@" > /dev/null; } 2>&1 | awk '/^user/{print $2}'; }
+floor3(){ local a b c; a=$(ucpu "$@" "$EMPTY"); b=$(ucpu "$@" "$EMPTY"); c=$(ucpu "$@" "$EMPTY"); printf '%s\n%s\n%s\n' "$a" "$b" "$c" | sort -n | awk 'NR==2'; }
+{
+echo "== s173 A/B ALTERNATO $TAG — B=$BM MISURATO ($BB, P1) C=$CM MISURATO ($CC, P1+P2); GIUDICE prop-dq N=$NPD (bersaglio) E GUARDIA arith-dq N=$NGD (sola regressione; N dal driver); R=$R BC/CB alternato su giudice e guardia; criterio s173-azrev-criterio.md =="
+echo "sentinella LS: $(pgrep -fl 'rust-analyzer|Antigravity|serena' 2>/dev/null | grep -v pgrep | awk '{print $2}' | sort -u | tr '\n' ' ')"
+# PARITÀ vs ATTESO: l'atteso è l'output dell'ORACLE sullo stesso driver (generato qui, una volta per driver, `[ -s ]`).
+for D in "$PD" "$GD"; do
+  n="$(basename "$D" .php)"; EXP="$OUT/expected-$n.out"
+  [ -s "$EXP" ] || "$O" "$D" > "$EXP" 2>&1
+  [ -s "$EXP" ] || { echo "atteso VUOTO per $n — STOP"; echo 2 > "$RC"; exit 2; }
+  "$BB" "$D" > "$OUT/$TAG-B-$n.out" 2>&1; "$CC" "$D" > "$OUT/$TAG-C-$n.out" 2>&1
+  cmp -s "$OUT/$TAG-B-$n.out" "$EXP" || { echo "output B ≠ ATTESO oracle su $n ($(head -c 60 "$OUT/$TAG-B-$n.out" | tr '\n' ' ')) — STOP"; echo 2 > "$RC"; exit 2; }
+  cmp -s "$OUT/$TAG-C-$n.out" "$EXP" || { echo "output C ≠ ATTESO oracle su $n ($(head -c 60 "$OUT/$TAG-C-$n.out" | tr '\n' ' ')) — STOP"; echo 2 > "$RC"; exit 2; }
+  echo "parità $n: B==C==atteso oracle ($(tr '\n' ' ' < "$EXP"))"
+done
+FB=$(floor3 "$BB"); FC=$(floor3 "$CC"); FO=$(floor3 "$O")
+echo "floors: B=$FB C=$FC oracle=$FO"
+TSV="$OUT/$TAG-runs.tsv"; : > "$TSV"
+for i in $(seq 1 "$R"); do
+  if [ $((i % 2)) -eq 1 ]; then
+    TB=$(ucpu "$BB" "$PD"); TC=$(ucpu "$CC" "$PD"); EB=$(ucpu "$BB" "$GD"); EC=$(ucpu "$CC" "$GD"); ord=BC
+  else
+    TC=$(ucpu "$CC" "$PD"); TB=$(ucpu "$BB" "$PD"); EC=$(ucpu "$CC" "$GD"); EB=$(ucpu "$BB" "$GD"); ord=CB
+  fi
+  TOR=$(ucpu "$O" "$PD"); EOR=$(ucpu "$O" "$GD")
+  printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$TB" "$TC" "$EB" "$EC" "$TOR" "$EOR" >> "$TSV"
+  echo "  coppia$i [$ord]: propB=$TB propC=$TC dqB=$EB dqC=$EC | propO=$TOR dqO=$EOR"
+done
+python3 - "$TSV" "$FB" "$FC" "$FO" "$NPD" "$NGD" <<'PY'
+import sys
+rows = [l.split() for l in open(sys.argv[1])]
+fb, fc, fo = map(float, sys.argv[2:5]); npd = float(sys.argv[5]); ngd = float(sys.argv[6])
+def col(i, f, n): return sorted((float(r[i])-f)/n*1e9 for r in rows)
+def med(v):
+    k = len(v); return v[k//2] if k % 2 else (v[k//2-1]+v[k//2])/2
+def dr1(v):
+    m = med(v); w = sorted(v, key=lambda x:(abs(x-m),x))[:-1]; return max(w)-min(w)
+pB, pC, gB, gC = col(0,fb,npd), col(1,fc,npd), col(2,fb,ngd), col(3,fc,ngd)
+pO, gO = col(4,fo,npd), col(5,fo,ngd)
+def stat(name, A, X, lab):
+    D = med(A)-med(X); noise = max(dr1(A), dr1(X)); thr = max(4.0, noise, 0.94); thrd = max(noise, 0.94)
+    nom = D >= thr; reg = D < -max(4.0, noise)
+    print(f"{name} {lab}: B={med(A):.2f} {lab}={med(X):.2f} ns/iter D=B−{lab}={D:+.2f} soglia={thr:.2f} (rumore drop-1 B'={dr1(A):.2f} {lab}'={dr1(X):.2f}) -> {'NOMINATO' if nom else 'NON nominato (vale 0)'}; direzione {'FIRMATA' if abs(D) >= thrd else 'sotto il rumore'} ({lab+' più veloce' if D > 0 else lab+' più lento'}); regressione (D < −max(4,rumore)): {'SÌ' if reg else 'no'}")
+    return D, noise, nom, reg
+print(f"GIUDICE prop-dq (bersaglio): oracle={med(pO):.2f} ns/iter; B/oracle={med(pB)/med(pO):.2f}× C/oracle={med(pC)/med(pO):.2f}×")
+DC, nC, nomC, regC = stat("GIUDICE prop-dq", pB, pC, "C")
+print(f"ATTRIBUZIONE P2 (criterio S-173 p.2): D=B−C={DC:+.2f} ∈ [2;8]: {'CENTRATA' if 2 <= DC <= 8 else 'FUORI'}; " + ("CIFRA a P2 = %+.2f ns/iter (nominata, A/B alternato proprio)" % DC if nomC else ("solo DIREZIONE (firmata, sotto la soglia di nomina: nessuna cifra)" if abs(DC) >= max(nC, 0.94) else "KILL-2: P2 NON attribuibile (sotto il rumore) — la direzione S-172 (+4,67 non alternato) NON si riproduce")))
+print(f"GUARDIA arith-dq (sola regressione): oracle={med(gO):.2f}")
+_, _, _, regG = stat("GUARDIA arith-dq", gB, gC, "C")
+rc = 0
+if regC: print("prop-dq: C REGREDISCE rispetto a B (P2 più lento oltre 4 ns) — P2 cade a verdetto (rc=5)"); rc = 5
+if regG: print("GUARDIA arith-dq: regressione C vs B (rc=5)"); rc = 5
+if rc == 0 and not nomC: rc = 4 if abs(DC) >= max(nC, 0.94) else 6
+print(f"ESITO rc={rc} (0 = cifra attribuita a P2; 4 = solo direzione; 6 = sotto il rumore, KILL-2; 5 = regressione)")
+sys.exit(rc)
+PY
+prc=$?
+echo "sentinella LS fine: $(pgrep -fl 'rust-analyzer|Antigravity|serena' 2>/dev/null | grep -v pgrep | awk '{print $2}' | sort -u | tr '\n' ' ')"
+echo "$prc" > "$RC"; exit "$prc"
+} >> "$VERD" 2>&1

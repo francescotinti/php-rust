@@ -21,10 +21,15 @@ STASH="/Volumes/Extreme Pro/Claude/phpr-old-target/release"
 # target dedicato). La riga a registro è marcata BRACCIO (non pin): i gate
 # del protocollo PIN non sono implicati.
 MODE=pin
+# Az.rev. S-172 #3 (S-173): il braccio nasce da un COMMIT sorgente (target dedicato da
+# `git archive <sha>`), che può NON essere HEAD allo stash — la riga a registro deve
+# citare QUEL commit, non HEAD: terzo argomento OBBLIGATORIO `<commit>` (verificato
+# esistente); HEAD resta la fonte SOLO in modalità pin (build dall'albero corrente).
 if [ "${1:-}" = "--braccio" ]; then
   MODE=braccio; shift
-  TAG="${1:?uso: pin-phpr.sh --braccio <tag> <binario>}"
-  BIN="${2:?uso: pin-phpr.sh --braccio <tag> <binario>}"
+  TAG="${1:?uso: pin-phpr.sh --braccio <tag> <binario> <commit-sorgente>}"
+  BIN="${2:?uso: pin-phpr.sh --braccio <tag> <binario> <commit-sorgente>}"
+  SRC_COMMIT="${3:?uso: pin-phpr.sh --braccio <tag> <binario> <commit-sorgente>}"
   [ -f "$BIN" ] || { echo "STOP: binario braccio '$BIN' inesistente."; exit 1; }
 else
   TAG="${1:?uso: pin-phpr.sh <tag, es. s107> | --braccio <tag> <binario>}"
@@ -60,7 +65,9 @@ REPO="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust"
 cd "$REPO"
 HEAD_SHA=$(git rev-parse --short HEAD)
 if [ "$MODE" = braccio ]; then
-  ROW="| $H | $TAG BRACCIO (sorgente @ $HEAD_SHA; riga da pin-phpr.sh --braccio) | smoke parità 2 modi OK $(date '+%F %T') — braccio di misura, NON pin | stash \`phpr-$TAG\` |"
+  git cat-file -e "${SRC_COMMIT}^{commit}" 2>/dev/null || { echo "STOP: commit sorgente '$SRC_COMMIT' inesistente nel repo => registro NON scritto (stash $STASH/phpr-$TAG già copiato: rimuoverlo o rilanciare col commit giusto)."; exit 1; }
+  SRC_SHA=$(git rev-parse --short "$SRC_COMMIT")
+  ROW="| $H | $TAG BRACCIO (sorgente @ $SRC_SHA, dichiarato; HEAD allo stash $HEAD_SHA; riga da pin-phpr.sh --braccio) | smoke parità 2 modi OK $(date '+%F %T') — braccio di misura, NON pin | stash \`phpr-$TAG\` |"
 else
   ROW="| $H | $TAG (sorgente @ $HEAD_SHA; riga da pin-phpr.sh) | smoke parità 2 modi OK $(date '+%F %T') — batteria/corpus/fixture/micro DOVUTI a parte | stash \`phpr-$TAG\` |"
 fi
