@@ -30,6 +30,12 @@ harnesses in `../wpNNN-harness/`, migration rules in `../migration/RULEBOOK.md`.
   track, **closed 0E/0F** (session 8, 2026-07-14).
 - `NEXT_SESSION.md` — superseded generic kickoff (pointer to the WP route).
 
+## archive/ — frozen changelogs of the divergence catalogue
+- `DIVERGENCES_CHANGELOG_2026-07.md` (2026-07-09 → 07-27, WP-1..27) and
+  `DIVERGENCES_CHANGELOG_2026-08.md` (2026-08-03 → 08-13, S-96..134): the
+  history of additions/closures of `PHPR_DIVERGENCES_FROM_PHP.md`, which by
+  rule holds ONLY open entries; later closures are traced in `../sessions/`.
+
 ## gemini/ — external model reviews (Gemini), chronological
 Second-opinion analyses requested during the perf arc (WP-38..WP-44
 rebuttals, Rust-constraints notes, early feedback). Inputs to session
