@@ -1,12 +1,14 @@
 # doc/ — documentation archive
 
 Historical and reference documentation moved out of the repo root
-(2026-07-24, post WP-49). The **live** documents stay in the root:
-`README.md`, `COVERAGE.md`, `TODO.md`, `NEXT_SESSION_WORDPRESS.md`
-(current route), `FOOTPRINT_CPU_ROADMAP.md` (active roadmap),
-`PHPR_DIVERGENCES_FROM_PHP.md` (living divergence catalog), `CLAUDE.md`.
-Session history lives in `../sessions/`, perf-gap snapshots in `../gaps/`,
-migration rules in `../migration/RULEBOOK.md`.
+(2026-07-24, post WP-49; index refreshed 2026-09-10). The **live** documents
+stay in the root: `README.md`, `COVERAGE.md`, `TODO.md`, `REGOLE.md` (the
+measurement/promotion protocol, single list), `NEXT_SESSION_WORDPRESS.md`
+(current route), `PERF_MAP.md` (multi-workload perf map), `PIN_REGISTRY.md`
+(promoted binaries by hash), `PHPR_DIVERGENCES_FROM_PHP.md` (living divergence
+catalog), `CLAUDE.md`. Session history lives in `../sessions/`, perf-gap
+snapshots in `../gaps/` (trend in `GAP_TREND.md`), per-session measurement
+harnesses in `../wpNNN-harness/`, migration rules in `../migration/RULEBOOK.md`.
 
 ## architecture/ — long-term direction (still current, consulted on demand)
 - `VISION_AND_ROADMAP.md` — overall project vision.
@@ -16,6 +18,9 @@ migration rules in `../migration/RULEBOOK.md`.
   (native vs FFI vs class surfaces).
 
 ## plans-archive/ — executed or closed plans (kept as record)
+- `FOOTPRINT_CPU_ROADMAP.md` — the 2026-07 "council" plan that opened the
+  footprint/CPU arc (12× footprint, 2.66× CPU at the time); **superseded** by
+  `REGOLE.md` + `NEXT_SESSION_WORDPRESS.md` (moved here 2026-09-10).
 - `REGISTER_BYTECODE_PLAN.md` — register-bytecode arc; **closed at stage 1**
   (WP-44 verdict, three forms falsified). Code comments still cite its §4/§5.
 - `refactor_plan_for_claude_2026.md`, `refactor_plan_claude_review_2026.md`,

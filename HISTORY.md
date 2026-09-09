@@ -389,5 +389,5 @@ non solo il codice: decisioni (`02-mapping-table.md`), log per step
 
 ---
 
-*Generato con assistenza AI (Claude Fable 5 / Opus 4.8). Codice e commenti tecnici
+*Generato con assistenza AI (Claude Fable 5 / 5.1, Opus 4.8). Codice e commenti tecnici
 in inglese, diario in italiano.*

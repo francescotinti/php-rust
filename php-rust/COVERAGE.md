@@ -7,7 +7,7 @@ functions with `function_exists()` inside `phpr` (grouped by
 `ReflectionFunction::getExtensionName()`); the corpus number is the real pass
 count of the upstream Zend test suite under `phpt-runner`.
 
-_Last measured: 2026-08-07 (S-110; fresh probe + fresh corpus run) ·
+_Last measured: 2026-09-10 (pin of S-172; fresh probe + fresh corpus run) ·
 reference: PHP 8.5.7 (`get_defined_functions()`)._
 
 ---
@@ -18,11 +18,11 @@ reference: PHP 8.5.7 (`get_defined_functions()`)._
 | --- | --- |
 | Internal functions implemented | **1017 / 2143** (47%) |
 | — of which **core / language stdlib** (standard + Core + date) | **539 / 654** (82%) |
-| Zend test corpus (`Zend/tests/*.phpt`) | **2652 passing** — 65.2% of runnable (2652/4067) |
+| Zend test corpus (`Zend/tests/*.phpt`) | **2655 passing** — 65.3% of runnable (2655/4067) |
 | **WordPress core test suite** | **full effective parity** — single-site 30,472 tests AND multisite 31,278 tests each at **a single declared name-diff**, stable by name across runs |
 | Fully-complete areas | ctype, json, SimpleXML, zlib, bcmath, tokenizer, session, **xml**, **fileinfo**, **tidy**, PDO core |
 
-Corpus breakdown: 5305 total · **2652 pass** · 1415 fail · 1238 skip (skips are
+Corpus breakdown: 5305 total · **2655 pass** · 1412 fail · 1238 skip (skips are
 mostly tests that need an extension `phpr` hasn't ported, or SAPI-specific
 setup; the runner executes `--INI--` sections as `php -d`-style overrides).
 
@@ -123,51 +123,20 @@ core language stdlib).
 XSLTProcessor (system libxslt FFI, incl. `registerPHPFunctions` callbacks),
 ZipArchive (write side), XMLReader-level SAX** are implemented as classes.
 **The WordPress track is at a single divergent test name on both the full
-single-site and multisite suites** — current work is performance: the
-specializing-interpreter arc plus the GC work now hold the media benchmark
-at **~2.61×** the oracle's CPU (from 4.1×), and the memory-attribution arc
-(exact reached-vs-live reconciliation over every VM root) has cut the
-peak-footprint gap **from 11.9× to ~4.16×** with the retained-module
-channel shrunk by its exact measured slack (100.0% predicted-vs-actual).
-The attributed full-suite CPU residual (3.4×, cycle-collector walk) was
-cut to **~2.5×** by a Zend-style purge of refcount-dead roots at the GC
-trigger (rounds 1005→297, freed conserved to +0.5%), to **~2.41×** (WP-50)
-by closing the statement-sweep fast-path band the purge floor had opened,
-to **~2.31×** (WP-51) by fusing the classify walk's three side tables
-into one pre-reserved map, and to **~2.14×** (WP-52) by **in-node walk
-marks**: discovery is stamped on the nodes themselves (an epoch-guarded
-8-byte mark on objects, arrays and closures) and all walk state lives in
-one contiguous record table, eliminating hashing per edge entirely —
-census classify −42.7% (109.4s→62.7s) with every collector count
-conserved to the digit. A cold-boxed rare-feature pointer on `Object`
-(readonly/typed-unset sets behind one `Option<Box>`, −56B/instance
-measured) landed alongside. A growth-gated full-scan collect at the GC
-boundary also landed free — its census counters showed the pinned
-`created` channel is *teardown* garbage, alive until the harness's final
-unwind, so no mid-run cadence can reclaim it on this workload; the lever
-stays for Zend-ceiling coverage of long-running processes. WP-54 then
-applied the owner-level attribution method to CPU-seconds (sampled call
-trees over the full run, reconciled against the master clock): it
-falsified three backlog levers in one pass and exposed the
-reflection-descriptor memo — keyed by *queried* class, 96% of its
-entries inherited duplicates minted per PHPUnit mock (hit-rate 11.7%).
-Re-keying it on the **declaring class** took the memo to a 96.7%
-hit-rate and was worth **−7.4% CPU** and −5.8% peak on the media A/B
-alone. WP-55 closed the measured O(n²) `.=` append gap with a
-**growable string representation** (`hash + Vec<u8>`) and a fused
-assign-op that extends the buffer **in place at unique refcount**
-(mirroring `zend_string_extend`; aliases and interned literals fall
-back to copy-on-write by construction): the micro-probe went 499ms →
-2ms — byte-parity with the oracle — and the full suite gained −2.6%
-same-evening (the +8B-per-string layout cost measured within its ≤2%
-guard). WP-56 opened the heap-to-handle arc with a **keyless
-hashed-array index**: the duplicated-key `FxHashMap` became a single
-Zend-style table of `u32` position slots probing against the entry
-storage — −62B/array measured across 4.75M array deaths (~300MB/run
-less allocation churn), **−1.8% peak footprint and −2.7% full-suite
-CPU same-evening at zero media-CPU cost**, landing at **~2.06×** CPU /
-**~4.08×** peak with every parity gate identical by name. Then Laravel
-validation. See NEXT_SESSION_WORDPRESS.md.
+single-site and multisite suites**, stable by name across every run — the
+current work is performance, toward parity (1×) with the oracle's CPU. The
+backbone is a six-category micro benchmark (same PHP source on both engines,
+per-binary startup floors subtracted); at the S-172 pin it reads **arith 2.7× ·
+regex 2.5× · array 3.0× · property 3.8× · string 4.1× · calls 4.7×** (August:
+9.3 / 3.5 / 3.9 / 7.9 / 5.3 / 5.1). On real applications the **full WordPress
+suite runs at ~1.77×** the oracle's CPU (median of the last measured pair,
+band [1.74; 1.80]; from 4.1× at the start of the arc) and the Doctrine ORM
+suite at ~7.1× (from 8.4×). Every promoted build passes the same gates: the
+Rust test battery (1,748), the frozen Zend fail-set **by name** in two
+execution modes, bilateral fixtures run on both engines, and the micro
+benchmark at R=5; the per-session trail is in `sessions/` and
+`gaps/GAP_TREND.md`, the multi-workload map in `PERF_MAP.md`, the measurement
+protocol in `REGOLE.md`. Then Laravel validation. See NEXT_SESSION_WORDPRESS.md.
 
 ---
 

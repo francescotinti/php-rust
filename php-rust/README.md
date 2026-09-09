@@ -5,37 +5,39 @@ a lexer, compiler, bytecode VM, and a growing standard library — no C PHP link
 in. The goal is to run **real PHP applications** byte-identically to the reference
 interpreter, not to pass a toy subset.
 
-> **Status: the entire WordPress core test suite runs at effective oracle
-> parity.** Single-site (30,472 tests, wordpress-develop trunk) differs from
-> the reference interpreter by **a single test name — one deliberate,
-> catalogued divergence** — and multisite (31,278 tests) confirms the same
-> **single divergence**, both stable by name across runs.
-> WordPress 7.0.1 installs and serves on **real MySQL** (native `mysqli`
+> **Status (2026-09-10, pin of session S-172): the entire WordPress core test
+> suite runs at effective oracle parity.** Single-site (30,472 tests,
+> wordpress-develop trunk) differs from the reference interpreter by **a single
+> test name — one deliberate, catalogued divergence** — and multisite (31,278
+> tests) confirms the same **single divergence**, both stable by name across
+> runs. WordPress 7.0.1 installs and serves on **real MySQL** (native `mysqli`
 > wire protocol) through the built-in `phpr -S` server SAPI — front pages,
 > login, REST, pretty permalinks and wp-admin **byte-identical** over HTTP;
-> the media pipeline reaches byte parity via the **system
-> libgd/libxslt/libtidy through FFI** (ext/tidy is complete, 24/24
-> functions; ext/xsl has a real `registerPHPFunctions` trampoline). Also at
-> parity: Composer, PHPUnit 9/11/13 (including process isolation), Doctrine
-> ORM/DBAL, PDO/SQLite, Monolog, wp-cli, **symfony/http-kernel CLOSED at 0
-> errors / 0 failures** (1665 tests) and http-foundation. The runtime has
-> real IANA timezones (system TZif, timelib gap/fold semantics), a
-> cycle-collecting GC with Zend-style adaptive thresholds and Zend-faithful
-> destructor timing, property hooks, lazy objects, fibers, and an
-> opcache-like per-request unit cache. Current front: **performance** — the
-> backbone is a six-category micro benchmark (same PHP source on both
-> engines, per-binary startup floors subtracted) currently at **arith 9.3× ·
-> property 7.9× · calls 5.1× · string 5.3× · array 3.9× · regex 3.5×** the
-> oracle's CPU, target ≤3× per category; a run of fused-superinstruction
-> lots took string ops from 10 to 8 ops/iter (−15% on the judge). On the
-> real-application aggregate the **full WordPress-suite CPU is ~1.87×**
-> (bimodal same-evening pair, historic best 1.842×), the media group
-> ~2.61–2.67×, and full-suite peak footprint **2.31×** (from 11.9× at the
-> start of the arc). Latest measured finding (Instruments top-down
-> counters, both engines): the arith/property gap is **frontend-bound** —
-> phpr stalls a third of its cycles on instruction delivery in the
-> dispatch-heavy judges vs the oracle's 3% — which names the next lever:
-> a threaded-dispatch experiment under its own A/B.
+> the media pipeline reaches byte parity via the **system libgd/libxslt/libtidy
+> through FFI**. Also at parity: Composer, PHPUnit 9/11/13 (including process
+> isolation), Doctrine ORM (3 err / 13 fail, stable by name) and DBAL (0/0),
+> PDO/SQLite, Monolog, wp-cli, **symfony/http-kernel CLOSED at 0 errors / 0
+> failures** (1665 tests) and http-foundation. The runtime has real IANA
+> timezones (system TZif, timelib gap/fold semantics), a cycle-collecting GC
+> with Zend-style adaptive thresholds and Zend-faithful destructor timing,
+> property hooks, lazy objects, fibers, and an opcache-like per-request unit
+> cache. **Current front: performance, target parity (1×) with the oracle's
+> CPU.** The backbone is a six-category micro benchmark (same PHP source on
+> both engines, per-binary startup floors subtracted), today at **arith 2.7× ·
+> regex 2.5× · array 3.0× · property 3.8× · string 4.1× · calls 4.7×** (from
+> 9.3 / 3.5 / 3.9 / 7.9 / 5.3 / 5.1 in August); the ≤3× stage is reached on
+> arith and regex. On the real-application aggregate the **full
+> WordPress-suite CPU is ~1.77×** the oracle (median of the last measured
+> pair, band [1.74; 1.80]) and the Doctrine ORM suite ~7.1×. The measured
+> finding that fixed the route: pure dispatch costs 1.75 ns/op (as much as
+> the whole oracle instruction), so the gap lives in the **body of the
+> handlers** — the lifecycle of temporary Zvals around each operation. The
+> lever that followed, a *sealed Long form* keeping hot integer arithmetic and
+> property read-modify-write on bare `i64` with zero `unsafe`, halved the
+> arith judge and took property access from 5.2× to 3.8×; it is now being
+> applied to calls and strings. Every lever runs under the written protocol
+> in [REGOLE.md](REGOLE.md) (pre-registered criterion, interleaved A/B,
+> scripted promotion gate, adversarial end-of-session review).
 
 ## Coverage at a glance
 
@@ -43,7 +45,7 @@ interpreter, not to pass a toy subset.
 | --- | --- |
 | Core / language stdlib functions | **539 / 654 (82%)** |
 | All internal functions | 1017 / 2143 (47%) |
-| Zend test corpus passing | **2652** (65.2% of runnable) |
+| Zend test corpus passing | **2655** (65.3% of runnable) |
 | WordPress core suite | **effective parity** (single-site AND multisite: **1** declared name-diff each) |
 
 Full, measured breakdown → **[COVERAGE.md](COVERAGE.md)**.
@@ -138,34 +140,21 @@ positional `router.php` argument is honoured exactly like `phpr -S`.
 Near-term, highest-leverage work (see [COVERAGE.md](COVERAGE.md) for the data,
 [TODO.md](TODO.md) for the full list):
 
-1. **Performance** — the WordPress suite is at parity; a data-driven
-   specializing-interpreter arc (typed fast paths, bigram-fused opcodes,
-   scope-aware inline caches, call-site specialization, Zend-style fast
-   shutdown) took the media benchmark from 4.1× to **~2.61×** the
-   oracle's CPU, and the **memory-attribution arc** (exact
-   reached-vs-live reconciliation over every VM root) cut the
-   peak-footprint gap **from 11.9× to ~4.16×**; the full-suite CPU
-   residual was attributed — measured, not suspected — first to the
-   cycle-collector classify walk (four successive levers: Zend-style
-   purge of refcount-dead roots, closure of the statement-sweep
-   fast-path band, fusion of the classifier's bookkeeping tables,
-   epoch-guarded in-node walk marks — census classify −42.7%, every
-   count conserved), then — via the same owner-level method applied to
-   CPU-seconds (sampled call trees reconciled against the master
-   clock) — to the reflection-descriptor memo (re-keyed on the
-   *declaring* class: **−7.4% CPU** alone) and to an O(n²) `.=` append
-   gap closed by a growable string representation with in-place
-   append at unique refcount (probe 499ms → 2ms = oracle), and — first
-   tranche of the heap-to-handle arc — a keyless hashed-array index
-   (single Zend-style table, no duplicated key: −62B/array measured on
-   4.75M array deaths, −1.8% peak footprint, −2.7% full-suite CPU
-   same-evening at zero media-CPU cost): the full suite stands at
-   **~2.06×** (from 3.4×), peak footprint at **~4.08×**. Plan:
+1. **Performance to parity** — the WordPress suite is at parity and the
+   route is fixed by measurement (see the status above and
+   [PERF_MAP.md](PERF_MAP.md) for the multi-workload map,
+   [gaps/GAP_TREND.md](gaps/GAP_TREND.md) for the per-session trend): sealed
+   forms on the remaining hot handler bodies — property fetch + arithmetic
+   peephole, then the call frame, then string concatenation and `substr` —
+   each under its own pre-registered criterion and category-level judge, with
+   the WordPress/ORM pair re-measured at every new pin. Vetoed by measurement:
+   NaN-boxing, function-table dispatch, object arena, BOLT/PGO. Plan:
    NEXT_SESSION_WORDPRESS.md.
 2. **Laravel** as the second framework validation target once the perf
-   pass lands.
-3. Remaining extension surfaces on demand — ext/tidy (one WP test dataset),
-   xmlwriter, calendar, sockets.
+   front lands (user decision).
+3. Remaining extension surfaces on demand — xmlwriter, calendar, sockets; the
+   un-started database / crypto / network extensions are the bulk of the
+   function gap.
 
 Longer-term direction (server SAPI, async, single-binary distribution):
 [doc/architecture/ASYNC_AND_DISTRIBUTION_ROADMAP.md](doc/architecture/ASYNC_AND_DISTRIBUTION_ROADMAP.md) ·

@@ -6,63 +6,35 @@ as they complete. Deliberate behavioural deviations are catalogued in
 [`PHPR_DIVERGENCES_FROM_PHP.md`](PHPR_DIVERGENCES_FROM_PHP.md); measured
 coverage in [`COVERAGE.md`](COVERAGE.md).
 
-Current state (2026-08-07, post session S-110, fresh corpus run): Zend corpus
-**2652** passing (65.2% of runnable; gate baseline **1415** fails by name —
-frozen set re-declared in S-109 after the lotto-3 batch; full pair on the
-new pin measured in-band, `gaps/REPORT_GAP_110.md`) · internal functions
-**1017/2143, 47%** (core stdlib **539/654, 82%**). **WORDPRESS: the full
-single-site core PHPUnit suite (30,472 tests, wordpress-develop trunk) AND
-multisite (31,278 tests) are each at a SINGLE declared name-diff vs the
-oracle** (honest `stream_get_wrappers`), stable by name across runs. WP
-installs and serves on **real MySQL** via native `mysqli`;
-wp-admin/front/REST/permalinks **byte-identical over HTTP** (`phpr -S`
-SAPI); media byte-parity on **system libgd FFI** (+exif + fileinfo native);
-XSLT on **system libxslt** with the real **registerPHPFunctions/php:function
-trampoline** (xsl phpt 63/64). The GC is now a **Zend-model cycle collector
-over objects AND containers** (Weak root buffer, Zend-exact
-`gc_collect_cycles()` counts, real `gc_enable`/`gc_status`; gc family
-36→14 fails, WP-46). Perf: the specializing-interpreter arc (WP-29..44)
-plus the GC arc hold the media benchmark at **~2.61×** the oracle's CPU;
-the **memory attribution arc (WP-45..48)** — exact reached-vs-live
-reconciliation per allocation over every Zval-bearing VM field — found
-the dominant holder (an uneviced ReflectionMethod-descriptor memo, 456k
-entries/2.48G under PHPUnit mocks) and cut the **peak-footprint gap from 11.9× to ~4.16×**; the full-suite CPU residual (3.4× vs 2.06×) was
-attributed entirely to the cycle-collector classify walk (WP-48,
-measured), then cut by four successive levers: WP-49's lazy purge of
-refcount-dead tombstones at the trigger (**3.4×→~2.5×**, rounds
-1005→297, freed conserved), WP-50's closure of the statement-sweep
-fast-path band (**~2.41×**; the inline form regressed — hot-arm I-cache
-law — cure = bound cached in a field), WP-51's fusion of the
-classifier's three bookkeeping tables into one pre-reserved map
-(**~2.31×**; census classify −33s reconciles the same-night full A/B
-to the digit), and WP-52's **in-node walk marks** (**~2.14×**;
-epoch-guarded 8-byte mark on objects/arrays/closures + one contiguous
-record table = ZERO hash lookups per edge; census classify **−42.7%**,
-109.4s→62.7s, every collector count conserved; media A/B −0.57% new
-6/6, peak physical +0.61% — kept and verbalized). WP-52 also
-cold-boxed `Object`'s rare feature sets behind one `Option<Box>`
-(**−56B/instance measured**, obj churn −2.02GB; `dyn_entries`
-deliberately excluded — it is stdClass's storage, a hot path). WP-51's
-growth-gated boundary collect proved the pinned `created` channel
-(353.7MB at exit) is **teardown garbage**, unreachable by any mid-run
-cadence (kept for long-running coverage). WP-53 shipped Fase 2
-(ret_shape+RET_DEREF absorbed DerefTop, Sweep emit-time elision:
-−5.66% dispatch = only −0.9% CPU — levers are now quoted in ns/event
-first). WP-54 applied the attribution method to **CPU-seconds**
-(sampled call trees over the full run) and re-keyed the
-reflect-descriptor memo on its true owner, the **declaring class**
-(96% of entries were inherited duplicates, hit-rate 11.7%→96.7%):
-**−7.4% media CPU (2.61×, all-time best), −5.8% peak**. WP-55 shipped
-**growable PhpStr + a fused `.=` op with in-place append at unique
-refcount** (probe 499ms→2ms = oracle; full −2.6% same-evening). WP-56
-opened the heap-to-handle arc: **keyless hashed-array index** (single
-Zend-style table, u32 position slots, no duplicated key) — −62B/array
-on 4.75M deaths, **−1.8% peak, full −2.7% same-evening → ~2.06×
-(all-time best), peak ~4.08×, zero media-CPU cost**
-(NEXT_SESSION_WORDPRESS.md). Other stacks at parity: **symfony/http-kernel
-CLOSED 0/0 (1665)**, http-foundation 0 errors, Doctrine ORM 3484 (3E/13F
-declared, stable by name) + DBAL 3769/0/0, PHPUnit 9/11/13, Composer,
-wp-cli, Monolog. Laravel afterwards as validation.
+Current state (2026-09-10, pin of session S-172, fresh corpus run): Zend corpus
+**2655** passing (65.3% of runnable; promotion gate = frozen
+fail-set **1412** by name, in two execution modes) · internal functions
+**1017/2143, 47%** (core stdlib **539/654, 82%**) · Rust test battery **1748**.
+**WORDPRESS: the full single-site core PHPUnit suite (30,472 tests,
+wordpress-develop trunk) AND multisite (31,278 tests) are each at a SINGLE
+declared name-diff vs the oracle** (honest `stream_get_wrappers`), stable by
+name across runs. WP installs and serves on **real MySQL** via native
+`mysqli`; wp-admin/front/REST/permalinks **byte-identical over HTTP** (`phpr
+-S` SAPI); media byte-parity on **system libgd FFI** (+exif + fileinfo
+native); XSLT on **system libxslt** with the real
+**registerPHPFunctions/php:function trampoline**; ext/tidy complete on the
+system libtidy. The GC is a **Zend-model cycle collector over objects AND
+containers** (Weak root buffer, Zend-exact `gc_collect_cycles()` counts).
+Other stacks at parity: **symfony/http-kernel CLOSED 0/0 (1665)**,
+http-foundation 0 errors, Doctrine ORM 3484 (3E/13F declared, stable by name)
++ DBAL 3769/0/0, PHPUnit 9/11/13, Composer, wp-cli, Monolog.
+**PERF (the current front, REGOLE.md §1: target parity 1×, stage ≤3× per
+micro-category):** micro at the S-172 pin **arith 2.7 · prop 3.8 · calls 4.7
+· str 4.1 · arr 3.0 · re 2.5** (S-110: 9.3 / 7.9 / 5.1 / 5.3 / 3.9 / 3.5);
+full WordPress suite **~1.77×** (pair t18, band [1.738; 1.799]); Doctrine ORM
+~7.1×. Route since the S-167 council: threaded/hot-cluster dispatch refuted
+(pure dispatch 1.75 ns/op = the whole oracle instruction), the gap is the
+**handler body** (temporary-Zval lifecycle); the *sealed Long form* (S-171
+arith, S-172 property) is being generalized to calls and strings, one
+pre-registered criterion per category. Vetoed by measurement: NaN-boxing,
+fn-table dispatch, object arena, BOLT/PGO. Session trail: `sessions/`,
+`gaps/GAP_TREND.md`, `PERF_MAP.md`; route: NEXT_SESSION_WORDPRESS.md. Laravel
+afterwards as validation.
 
 ---
 
