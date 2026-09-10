@@ -68,6 +68,7 @@ nello stesso atto perché appenda in QUESTA sezione.)
 
 | pin (sha256/16) | sessione | collaudato | evidenza |
 |---|---|---|---|
+| 8a58fb19ce092328 | s173-f3-B BRACCIO (sorgente @ 2006d11d, dichiarato; HEAD allo stash 91296281; riga da pin-phpr.sh --braccio) | smoke parità 2 modi OK 2026-09-10 02:17:45 — braccio di misura, NON pin | stash `phpr-s173-f3-B` |
 | 5f2dff7d17ebed79 | s172 (sorgente @ 0b024384; riga da pin-phpr.sh) | smoke parità 2 modi OK 2026-09-07 23:55:36 — batteria/corpus/fixture/micro DOVUTI a parte | stash `phpr-s172` |
 | e396498bfa1419a4 | s172-sl2-C BRACCIO (sorgente @ 59ca87fb — corretto S-173 az.rev. #3: la riga citava HEAD-allo-stash 18fe36c9; riga da pin-phpr.sh --braccio) | smoke parità 2 modi OK 2026-09-07 23:35:46 — braccio di misura, NON pin | stash `phpr-s172-sl2-C` |
 | 260fbc3ba73f6b0e | s172-sl2-B BRACCIO (sorgente @ c419f29a — corretto S-173 az.rev. #3: la riga citava HEAD-allo-stash 57b21f4b; riga da pin-phpr.sh --braccio) | smoke parità 2 modi OK 2026-09-07 23:35:43 — braccio di misura, NON pin | stash `phpr-s172-sl2-B` |
