@@ -1,0 +1,86 @@
+--- s172-orm-coppia.sh	2026-09-08 00:21:17
++++ s173-orm-coppia.sh	2026-09-10 02:27:35
+@@ -1,15 +1,17 @@
+ #!/bin/bash
+-# s172-orm-coppia.sh — coppia dbal+ORM sul pin s172 (DOVUTA: pin nuovo)
+-# (criterio s172-criterio-orm.md; copia DICHIARATA di s166-orm2-coppia.sh,
+-# manifest s172-orm-copia-v3.diff; adattamenti: pin s172 b360b2933eddfe18,
+-# path wp166; RIF AGGIORNATO (sanatura az.rev.4; era «INVARIATO», contraddiceva r.~188): ORA_REF=4,885 (REGGE per
++# s173-orm-coppia.sh — coppia dbal+ORM sul pin s173 (DOVUTA: pin nuovo)
++# (criterio s173-criterio-orm.md; copia DICHIARATA di s172-orm-coppia.sh,
++# manifest s173-orm-coppia-copia.diff; adattamenti: pin s173 = placeholder
++# __PIN_S173__ (inserito DOPO la promozione; era 5f2dff7d17ebed79), nota t18
++# sul rapporto registrato, attesa fetta 3; RIF AGGIORNATO (sanatura az.rev.4; era «INVARIATO», contraddiceva r.~188): ORA_REF=4,885 (REGGE per
+ # R=5 oracle-only S-165, mediana 4,860), rapporto registrato S-162
+ # [7,035;7,086]; DUE EMENDE dal verbale S-165 (entrambe PRE-registrate):
+ # (E1) segnalazione ictx PER MOTORE (istruttoria ictx CHIUSA: firma =
+ # denominatore su bracci 6-7x diversi); (E2) banda sentinella oracle
+ # [4,83;4,94] VINCOLANTE (gamba fuori => Delta_norm NON giudicante);
+-# attesa L-SL1 su ORM: direzione <=0, magnitudine NON pre-registrabile
+-# (quota chiamate a metodo AMMESSE non censita); attesa-AF1 resta APERTA.
++# attesa fetta 3 (P3 peephole + P4 borrow unico) su ORM: direzione <=0,
++# magnitudine NON pre-registrabile; attesa-AF1 resta APERTA.
++# NOTA t18 (S-172): rapporto net t18 [7,090;7,092] da rivedere; se in S-173 resta >7,05 scatta la regola 4.
+ # SENTINELLA CONTAMINAZIONE (lezione S-161): oracle net fuori dal SUO rif
+ # storico => cifra NULLA anche a flag per-gamba muti; parita' resta valida.
+ # TRE adattamenti NEL CANONE ereditati: rodaggio non giudicante, quiescenza
+@@ -24,12 +26,12 @@
+ PHPR="$HOME/Claude/php-rust-output/release/phpr"
+ SP="${MAPPA_SP:?MAPPA_SP (workdir APFS) richiesto}"
+ OUT="$H/orm-out"; mkdir -p "$OUT"
+-VERD="$H/s172-orm-coppia-verdetto.out"
++VERD="$H/s173-orm-coppia-verdetto.out"
+ p(){ echo "$(date +%H:%M:%S) $1" >> "$OUT/progress.txt"; }
+ : > "$OUT/progress.txt"
+ rm -f "$OUT/rimisura.done"
+ PINM="$(shasum -a 256 "$PHPR" | cut -c1-16)"
+-[ "$PINM" = "5f2dff7d17ebed79" ] || { echo "rc=9 pin!=s172" > "$OUT/rimisura.done"; exit 9; }
++[ "$PINM" = "__PIN_S173__" ] || { echo "rc=9 pin!=s173" > "$OUT/rimisura.done"; exit 9; }
+ # lock della SESSIONE: si VERIFICA soltanto (niente creazione né trap).
+ LOCK=/private/tmp/phpr-measure.lock
+ [ -e "$LOCK" ] || { echo "rc=6 measure-lock ASSENTE (finestra non aperta)" > "$OUT/rimisura.done"; exit 6; }
+@@ -150,7 +152,7 @@
+     return d
+ def failset(f):
+     return set(x.strip() for x in open(f) if x.strip()) if os.path.exists(f) else set()
+-print("coppia-s172 (user CPU; pavimenti PARZIALI phpunit --version: orm o=%.3f p=%.3f · dbal o=%.3f p=%.3f)" % (fo, fp, dfo, dfp))
++print("coppia-s173 (user CPU; pavimenti PARZIALI phpunit --version: orm o=%.3f p=%.3f · dbal o=%.3f p=%.3f)" % (fo, fp, dfo, dfp))
+ print("grade=VERDICT  # derivazione meccanica dai .time")
+ new_net = {}; ora_net = {}; ratio_net = {}
+ orm_flags = []
+@@ -182,15 +184,15 @@
+ diff = sorted(s1 - o1)
+ print(f"dbal_parita': phpr_failset_stabile={s1 == s2} |phpr_fail|={len(s1)} |diff_vs_oracle|={len(diff)}")
+ if diff[:20]: print("dbal_diff_nomi: " + " | ".join(diff[:20]))
+-# --- ATTESA L-MC1d (criterio s172-criterio-orm.md p.3, aritmetica meccanica) ---
++# --- ATTESA L-MC1d (criterio s173-criterio-orm.md p.3, aritmetica meccanica) ---
+ # Giudizio CANONICO su net ORACLE-NORMALIZZATO EREDITATO; scaletta a DUE
+ # ESTREMI NEL CANONE (S-160); replica-AL1 RIMOSSA (attesa CHIUSA S-160).
+ REF2_MIN, REF2_MAX = 34.27, 34.35  # RIF AGGIORNATO: finestra VALIDA s166-mattina @ pin s165 (sentinella quieta 4,87/4,88) — dichiarato
+ ORA_REF2 = 4.885                   # media DICHIARATA gambe oracle finestra s162 (4,87/4,90)
+ SENT_LO, SENT_HI = 4.83, 4.94      # EMENDA S-166: banda sentinella oracle PRE-registrata (s165-istruttoria-ictx-orm.md B1, VINCOLANTE; ORA_REF REGGE per R=5 s165 mediana 4.860)
+ RES = 0.293                        # risoluzione KS-146-1
+-RREF_LO, RREF_HI = 7.023, 7.053    # rapporto net registrato s166-mattina @ pin s165 (companion)
+-ATT_LO, ATT_HI = 0.0, 0.0          # attesa L-SL1 DICHIARATA: direzione <=0 (mai peggiorare); magnitudine NON pre-registrabile (quota di chiamate a metodo AMMESSE — simple_call arita' esatta IC-hit — nel workload doctrine NON censita); GIU' = coerente con la leva, da dichiarare SENZA ripartizione senza census proprio (Composer/Doctrine a REGIME = classmap hit, i miss autoload [obj,metodo] RARI; quota miss NON censita => sotto-risoluzione; attesa-AF1 resta APERTA, non risolta da questa coppia)
++RREF_LO, RREF_HI = 7.023, 7.053    # rapporto net registrato s166-mattina @ pin s165 (companion) — NON cambiato; NOTA t18 [7,090;7,092] da rivedere; se in S-173 resta >7,05 scatta la regola 4
++ATT_LO, ATT_HI = 0.0, 0.0          # attesa fetta 3 (P3 peephole + P4 borrow unico) DICHIARATA: direzione <=0 (mai peggiorare); magnitudine NON pre-registrabile (quota di chiamate a metodo AMMESSE — simple_call arita' esatta IC-hit — nel workload doctrine NON censita); GIU' = coerente con la leva, da dichiarare SENZA ripartizione senza census proprio (Composer/Doctrine a REGIME = classmap hit, i miss autoload [obj,metodo] RARI; quota miss NON censita => sotto-risoluzione; attesa-AF1 resta APERTA, non risolta da questa coppia)
+ nn = sorted(new_net.get("orm", []))
+ on = ora_net.get("orm", [])
+ rr = sorted(ratio_net.get("orm", []))
+@@ -211,6 +213,7 @@
+     n2, dn2_min, dn2_max = _norm(ORA_REF2, REF2_MIN, REF2_MAX)
+     print(f"attesa-MC1 ORACLE-NORMALIZZATO (CANONICO coppia): net_norm=[{n2[0]:.2f}; {n2[1]:.2f}] (ORA_REF={ORA_REF2}, oracle_net_gambe={[round(x,2) for x in on]}) Delta_norm=[{dn2_min:+.2f}; {dn2_max:+.2f}] s")
+     print(f"rapporto net (companion): [{rr[0]:.3f}; {rr[1]:.3f}] vs registrato S-162 [{RREF_LO}; {RREF_HI}]")
++    print("nota t18 (S-172): rapporto net t18 [7,090;7,092] da rivedere; se in S-173 resta >7,05 scatta la regola 4" + (f" — t19 min={rr[0]:.3f} >7,05: RESTA SOPRA, regola 4 SCATTA" if rr[0] > 7.05 else f" — t19 min={rr[0]:.3f} <=7,05: rientra"))
+     c2 = _classe(dn2_min, dn2_max)
+     if sent_fuori:
+         print(f"SENTINELLA ORACLE FUORI BANDA [{SENT_LO};{SENT_HI}]: gambe {sent_fuori} — Delta_norm NON GIUDICANTE (emenda S-166), istruttoria drift dedicata")
+@@ -239,7 +242,7 @@
+   python3 -c "print(f'{$i/$r:.1f}')" 2>/dev/null || echo "n/d"
+ }
+ 
+-{ echo "== s172 coppia dbal+ORM (pin s172 MISURATO $PINM vs oracle 8.5.7; criterio s172-criterio-orm.md) =="
++{ echo "== s173 coppia dbal+ORM (pin s173 MISURATO $PINM vs oracle 8.5.7; criterio s173-criterio-orm.md) =="
+   echo "# estrazione summ/names con LC_ALL=C + grep -a (fix az.rev. S-155 #4); reperto conteggi dbal phpr vs oracle A VERBALE (companion, non arbitra)"
+   echo "# ADATTAMENTI (i)-(iii) dall'istruttoria p.1 + az.rev. S-159 #1: rodaggio non giudicante, quiescenza per gamba, scaletta a due estremi"
+   echo "sentinella language-server inizio finestra (az.rev. S-157 #4): ${LS_START:-nessuno}"
