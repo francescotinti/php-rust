@@ -1,0 +1,22 @@
+== s173 LEVA f3 — A=5f2dff7d MISURATO (/private/tmp/s173-bins/A, pin s172) B=8a58fb19 MISURATO (/private/tmp/s173-bins/B, P3) C=19c0540e MISURATO (/private/tmp/s173-bins/C, P3+P4); GIUDICE prop-dq N=150000000 (bersaglio) E GUARDIA arith-dq N=250000000 (sola regressione; N dal driver); R=5 ordine dei tre bracci RUOTATO per coppia su giudice e guardia; criterio s173-criterio.md ==
+sentinella LS: /Applications/Antigravity /Users/francescotinti/.antigravity-ide/extensions/rust-lang.rust-analyzer-0.3.3041-darwin-arm64/server/rust-analyzer /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.96.0-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv 
+parità prop-dq: A==B==C==atteso oracle (300000000 )
+parità arith-dq: A==B==C==atteso oracle (85937499750000000 )
+floors: A=0.02 B=0.02 C=0.02 oracle=0.05
+  coppia1 [ABC]: propA=7.90 propB=6.77 propC=6.18 dqA=5.99 dqB=5.97 dqC=5.94 | propO=2.14 dqO=2.21
+  coppia2 [CBA]: propA=7.89 propB=6.76 propC=6.19 dqA=5.95 dqB=5.95 dqC=5.96 | propO=2.14 dqO=2.21
+  coppia3 [BCA]: propA=7.92 propB=6.76 propC=6.18 dqA=5.97 dqB=5.94 dqC=5.93 | propO=2.14 dqO=2.21
+  coppia4 [ACB]: propA=7.89 propB=6.76 propC=6.19 dqA=5.93 dqB=5.94 dqC=5.94 | propO=2.14 dqO=2.21
+  coppia5 [CAB]: propA=7.90 propB=6.79 propC=6.19 dqA=5.97 dqB=5.94 dqC=5.97 | propO=2.14 dqO=2.21
+GIUDICE prop-dq (bersaglio): oracle=13.93 ns/iter; A/oracle=3.77× B/oracle=3.22× C/oracle=2.95×
+GIUDICE prop-dq B: A=52.53 B=44.93 ns/iter D=A−B=+7.60 soglia=4.00 (rumore drop-1 A'=0.07 B'=0.07) -> NOMINATO; direzione FIRMATA (B più veloce); regressione (D < −max(4,rumore)): no
+GIUDICE prop-dq C: A=52.53 C=41.13 ns/iter D=A−C=+11.40 soglia=4.00 (rumore drop-1 A'=0.07 C'=0.07) -> NOMINATO; direzione FIRMATA (C più veloce); regressione (D < −max(4,rumore)): no
+CONTRASTO prop-dq (P4, ALTERNATO) C: B=44.93 C=41.13 ns/iter D=B−C=+3.80 soglia=4.00 (rumore drop-1 B'=0.07 C'=0.07) -> NON nominato (vale 0); direzione FIRMATA (C più veloce); regressione (D < −max(4,rumore)): no
+ATTRIBUZIONE P4: B−C=+3.80 ∈ [0,5;4]: CENTRATA; solo DIREZIONE
+ATTESE p.4: D_B ∈ [2;8]: CENTRATA (+7.60); D_C ∈ [2,5;12]: CENTRATA (+11.40); KILL-3 (D_C < 2): NON scatta
+GUARDIA arith-dq (sola regressione): oracle=8.64
+GUARDIA arith-dq B: A=23.80 B=23.68 ns/iter D=A−B=+0.12 soglia=4.00 (rumore drop-1 A'=0.16 B'=0.04) -> NON nominato (vale 0); direzione sotto il rumore (B più veloce); regressione (D < −max(4,rumore)): no
+GUARDIA arith-dq C: A=23.80 C=23.68 ns/iter D=A−C=+0.12 soglia=4.00 (rumore drop-1 A'=0.16 C'=0.12) -> NON nominato (vale 0); direzione sotto il rumore (C più veloce); regressione (D < −max(4,rumore)): no
+PROMOZIONE (p.4: braccio con D maggiore, nominato, guardia senza regressione): AMMESSA — braccio C (D=+11.40)
+ESITO rc=0
+sentinella LS fine: /Applications/Antigravity /Users/francescotinti/.antigravity-ide/extensions/rust-lang.rust-analyzer-0.3.3041-darwin-arm64/server/rust-analyzer /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.96.0-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv 
