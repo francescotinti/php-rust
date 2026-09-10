@@ -24,7 +24,7 @@ function g($v) { return $v; }
 
 // --- P1: $o->x = $o->y OP C (bigramma fuso, dominio Long e uscite; 2 iterazioni per forma) ---
 $o = new P; for ($i = 0; $i < 100; $i++) { $o->x = $o->y + 1; $o->y = $o->x + 1; } show('p1-loop100', [$o->x, $o->y]);
-$o = new P; $o->y = PHP_INT_MAX - 3; for ($i = 0; $i < 5; $i++) { $o->x = $o->y + 1; $o->y = $o->x; } show('p1-loop-overflow', $o->y);
+$o = new P; $o->y = PHP_INT_MAX - 3; for ($i = 0; $i < 5; $i++) { $o->x = $o->y + 1; if ($i === 1) show('p1-loop-overflow-step', $o->x); $o->y = $o->x; } show('p1-loop-overflow', $o->y); // -step (S-173): il float finale satura, il +1 del mutante non si vede
 $o = new P; $o->y = 7;
 for ($k = 0; $k < 2; $k++) { $o->x = $o->y + 3; } show('p1-add', $o->x);
 for ($k = 0; $k < 2; $k++) { $o->x = $o->y - 10; } show('p1-sub', $o->x);
@@ -86,7 +86,7 @@ $o = new P; $o->x = 7; $s = 10;
 $s += $o->x; show('p2-add', $s);
 $s -= $o->x; show('p2-sub', $s);
 $s *= $o->x; show('p2-mul', $s);
-$s &= $o->x; show('p2-and', $s);
+$s = 70; $s &= $o->x; show('p2-and', $s); // reset (S-173): 85&7+1 == 70&7 coincidenza del mutante
 $s |= $o->x; show('p2-or', $s);
 $s ^= $o->x; show('p2-xor', $s);
 $s = 3; $s <<= $o->x; show('p2-shl', $s);
@@ -114,7 +114,7 @@ $o->x = 4; $s = 0; for ($i = 0; $i < 100; $i++) { $s += $o->x; } show('p2-loop10
 $arr = [5]; $s = 1; $s += $arr[0]; show('p2-arr-src', $s);
 $s = 1; $s += g(3); show('p2-call-src', $s);
 $s = 1; $s += g(2.5); show('p2-call-double-src', $s);
-$o->x = 5; $s = PHP_INT_MAX - 10; for ($i = 0; $i < 4; $i++) { $s += $o->x; } show('p2-loop-overflow', $s);
+$o->x = 5; $s = PHP_INT_MAX - 10; for ($i = 0; $i < 4; $i++) { $s += $o->x; if ($i === 0) show('p2-loop-overflow-step', $s); } show('p2-loop-overflow', $s); // -step (S-173): il float finale satura
 // --- micro prop.php in piccolo: le due forme insieme ---
 $o = new P; $s = 0; for ($i = 0; $i < 1000; $i++) { $o->x = $o->y + 1; $s += $o->x; } show('prop-micro-1000', $s);
 echo "FX-SL2 DONE\n";

@@ -4790,6 +4790,38 @@ impl<'m> super::Vm<'m> {
                         // IDENTICHE al sentiero fuso storico qui sotto; ogni miss (tag,
                         // overflow, Div/Mod/Pow, shift negativo) vi ricade e ricomputa
                         // da zero: il probe non ha effetti.
+                        // S-173 L-SL2 fetta 3 P4 (criterio s173-criterio.md p.2): quando
+                        // recv == slot il ricevitore della scrittura È l'oggetto letto:
+                        // UN solo `borrow_mut` copre le guardie get-side (class_id, lazy)
+                        // e set-side (class_id, enum, slot presente e Long) del probe
+                        // sigillato qui sotto, la lettura di y e la scrittura in place di
+                        // r — le STESSE guardie, un RefCell in meno ×2 e un class_id in
+                        // meno. Copre SOLO il caso in place (dst già Long); ogni altro
+                        // esito (miss di dominio, dst non-Long/Ref/assente) cade al probe
+                        // sigillato sotto, che ricomputa da zero: nessun effetto.
+                        if *recv == *slot {
+                            if let crate::bytecode::Const::Int(k) = &func.consts[*cidx as usize] {
+                                if let Some((cid2, sslot)) = set_ic.get(sk) {
+                                    let mut bm = o.borrow_mut();
+                                    if bm.class_id + 1 == cid1
+                                        && bm.class_id + 1 == cid2
+                                        && bm.lazy.is_none()
+                                        && !bm.info.is_enum_case
+                                    {
+                                        if let Some(Zval::Long(y)) = bm.props.get_slot(gslot) {
+                                            if let Some(r) = long_arith_i64(*b2, *y, *k) {
+                                                if let Some(Zval::Long(x)) = bm.props.get_slot_mut(sslot) {
+                                                    *x = r;
+                                                    drop(bm);
+                                                    self.frames[top].ip = ip + 2;
+                                                    break 'f true;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                         let sealed: Option<i64> = 'l: {
                             let crate::bytecode::Const::Int(k) = &func.consts[*cidx as usize] else {
                                 break 'l None;
