@@ -4615,6 +4615,48 @@ impl<'m> super::Vm<'m> {
                     self.prop_get_entry(top, obj, name, ic)?;
                 }
                 Op::PropGetSlot { slot, name, ic } => {
+                    // S-173 L-SL2 fetta 3 P3 (criterio wp172-harness/s173-criterio.md
+                    // p.2): peephole runtime sul bigramma `$s OP= $o->x`
+                    // (questo op + BinarySTDst). Guardie IC VERBATIM dall'hit qui
+                    // sotto (scope_key, ic.get, class_id, lazy) + dominio del fast
+                    // path di BinarySTDst (prop Long, slot l Long, `long_arith_i64`
+                    // in dominio): il risultato va in place su dst Long — altrimenti
+                    // `reg_store_slot(Long(r))`, P2 verbatim — con `ip+2`: nessun
+                    // push/pop del Long, un dispatch in meno. OGNI miss cade al
+                    // sentiero storico sotto, da zero: il probe non tocca stato.
+                    #[cfg(not(any(feature = "zval-census", feature = "op-census")))]
+                    if let Some(Op::BinarySTDst { op: b2, l, dst }) = func.ops.get(ip + 1) {
+                        let sealed: Option<i64> = 'l: {
+                            let fr = &self.frames[top];
+                            let Zval::Object(o) = &fr.slots[*slot as usize] else {
+                                break 'l None;
+                            };
+                            let sk = crate::bytecode::PropIc::scope_key(fr.class);
+                            let Some((cid1, pslot)) = ic.get(sk) else {
+                                break 'l None;
+                            };
+                            let Zval::Long(lv) = &fr.slots[*l as usize] else {
+                                break 'l None;
+                            };
+                            let b = o.borrow();
+                            if b.class_id + 1 != cid1 || b.lazy.is_some() {
+                                break 'l None;
+                            }
+                            let Some(Zval::Long(y)) = b.props.get_slot(pslot) else {
+                                break 'l None;
+                            };
+                            long_arith_i64(*b2, *lv, *y)
+                        };
+                        if let Some(r) = sealed {
+                            if let Zval::Long(x) = &mut self.frames[top].slots[*dst as usize] {
+                                *x = r;
+                            } else {
+                                self.reg_store_slot(top, *dst, Zval::Long(r))?;
+                            }
+                            self.frames[top].ip = ip + 2;
+                            continue;
+                        }
+                    }
                     // S-107 lotto: LoadVar (parità warning via reg_load_slot)
                     // + PropGet ESATTO — stesso metodo condiviso (IC-hit +
                     // fallback), zero biforcazione.
