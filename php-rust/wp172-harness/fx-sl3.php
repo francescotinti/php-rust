@@ -49,6 +49,10 @@ $s = 1.5; for ($k = 0; $k < 2; $k++) { $s += $o->x; } show('p3-double-dst', $s);
 $s = "10"; for ($k = 0; $k < 2; $k++) { $s += $o->x; } show('p3-numstr-dst', $s);
 $s = null; for ($k = 0; $k < 2; $k++) { $s += $o->x; } show('p3-null-dst', $s);
 $s = true; for ($k = 0; $k < 2; $k++) { $s += $o->x; } show('p3-bool-dst', $s);
+// -each (S-173 corsa 2): il dst torna non-Long a OGNI iterazione (senza reset, null/bool/numstr diventano Long dopo la 1ª: in dominio dalla 2ª)
+for ($k = 0; $k < 2; $k++) { $s = null; $s += $o->x; } show('p3-null-dst-each', $s);
+for ($k = 0; $k < 2; $k++) { $s = true; $s += $o->x; } show('p3-bool-dst-each', $s);
+for ($k = 0; $k < 2; $k++) { $s = "10"; $s += $o->x; } show('p3-numstr-dst-each', $s);
 $o->x = 2.5; $s = 1; for ($k = 0; $k < 2; $k++) { $s += $o->x; } show('p3-double-src', $s);
 $o->x = "7"; $s = 1; for ($k = 0; $k < 2; $k++) { $s += $o->x; } show('p3-numstr-src', $s);
 $o->x = null; $s = 1; for ($k = 0; $k < 2; $k++) { $s += $o->x; } show('p3-null-src', $s);
@@ -73,12 +77,14 @@ $os = new Q; for ($k = 0; $k < 2; $k++) { try { $os += $os->x; show("p3-dst-is-o
 $o = new P; $o->y = 7; for ($k = 0; $k < 2; $k++) { $o->x = $o->y + 3; } show('p4-same', $o->x);
 $o->y = 7; for ($k = 0; $k < 2; $k++) { $o->x = $o->y * 3; } show('p4-same-mul', $o->x);
 $o->y = -7; for ($k = 0; $k < 2; $k++) { $o->x = $o->y >> 1; } show('p4-same-shr-neg', $o->x);
-$o->y = 7; for ($k = 0; $k < 2; $k++) { $o->x = $o->x + $o->y; } show('p4-self-rhs', $o->x);
+$o->x = 5; $o->y = 7; for ($k = 0; $k < 2; $k++) { $o->x = $o->x + $o->y; } show('p4-self-rhs', $o->x); // reset di x (S-173 corsa 2: cascata dal blocco precedente)
 $o->x = 5; for ($k = 0; $k < 2; $k++) { $o->x = $o->x + 1; } show('p4-self', $o->x);
 $o->y = 7; for ($k = 0; $k < 2; $k++) { $o->y = $o->y + 1; } show('p4-self-y', $o->y);
 $o->y = PHP_INT_MAX; for ($k = 0; $k < 2; $k++) { $o->x = $o->y + 1; } show('p4-overflow', $o->x);
 $o->y = 7; $o->x = 1.5; for ($k = 0; $k < 2; $k++) { $o->x = $o->y + 1; } show('p4-dst-double', $o->x);
 $o->x = "s"; for ($k = 0; $k < 2; $k++) { $o->x = $o->y + 1; } show('p4-dst-str', $o->x);
+for ($k = 0; $k < 2; $k++) { $o->x = 1.5; $o->x = $o->y + 1; } show('p4-dst-double-each', $o->x); // -each (S-173 corsa 2): dst non-Long a ogni iterazione
+for ($k = 0; $k < 2; $k++) { $o->x = "s"; $o->x = $o->y + 1; } show('p4-dst-str-each', $o->x);
 $o->x = 0; $r = &$o->x; for ($k = 0; $k < 2; $k++) { $o->x = $o->y + 1; } show('p4-dst-ref', $o->x); show('p4-dst-ref-alias', $r); unset($r);
 $o3 = new P; $q3 = &$o3->y; $o3->y = 4; for ($k = 0; $k < 2; $k++) { $o3->x = $o3->y + 1; } show('p4-src-ref', $o3->x); unset($q3);
 $o4 = new P; $o4->y = 2.5; for ($k = 0; $k < 2; $k++) { $o4->x = $o4->y + 1; } show('p4-src-double', $o4->x);

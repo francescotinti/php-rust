@@ -1,0 +1,24 @@
+== s173 mutante abortivo fetta 3 (P3/P4) — riferimento braccio C 19c0540e03d590a8 (sorgente = commit 64c55cc2970f, run.rs c545abce62233cb8), fixture 100 righe, Extreme 2772G 2026-09-10 02:31:43 ==
+SOLO=1: binari della corsa precedente riusati (MP3 4d184b5648c3cc26, MP4 99a8cb8dff721fab); nessuna build
+MP3: binario 4d184b5648c3cc26 rc_fixture=0
+MP3: blocchi ROTTI (22): p3-add p3-and p3-bool-dst p3-loop-overflow p3-loop-overflow-step p3-loop100 p3-magic-class-plain-src p3-mul p3-null-dst p3-numstr-dst p3-or p3-shl p3-shl-64 p3-shl-neg-l p3-shr p3-shr-64 p3-shr-neg-l p3-sub p3-twice p3-typed-src p3-xor prop-micro-1000 
+MP4: binario 99a8cb8dff721fab rc_fixture=0
+MP4: blocchi ROTTI (9): p4-dst-double p4-dst-str p4-other-class p4-same p4-same-mul p4-same-shr-neg p4-self p4-self-y prop-micro-1000 
+copertura MP3: 80 etichette nel riferimento, non classificate: nessuna
+copertura MP4: 80 etichette nel riferimento, non classificate: nessuna
+MP3: attese TUTTE rotte -> fast path PRESO su ogni blocco atteso
+MP3: blocchi fuori-dominio INTATTI (nessuna presa fuori dominio)
+MP3 a verdetto: p3-numstr-dst ROTTO -> peephole PRESO (IC get riempita su questa forma)
+MP3 a verdetto: p3-null-dst ROTTO -> peephole PRESO (IC get riempita su questa forma)
+MP3 a verdetto: p3-bool-dst ROTTO -> peephole PRESO (IC get riempita su questa forma)
+MP3 a verdetto: p3-typed-src ROTTO -> peephole PRESO (IC get riempita su questa forma)
+MP3 a verdetto: p3-magic-class-plain-src ROTTO -> peephole PRESO (IC get riempita su questa forma)
+MP3 a verdetto: p3-dynamic-src INTATTO -> peephole NON preso (IC get non riempita o forma diversa)
+MP4: attese TUTTE rotte -> fast path PRESO su ogni blocco atteso
+MP4: blocchi fuori-dominio INTATTI (nessuna presa fuori dominio)
+MP4 a verdetto: p4-dst-double ROTTO -> borrow unico PRESO
+MP4 a verdetto: p4-dst-str ROTTO -> borrow unico PRESO
+MP4 a verdetto: p4-this-private INTATTO -> borrow unico NON preso (forma non abbassata al bigramma o IC non riempita)
+MP4 a verdetto: p4-dynamic INTATTO -> borrow unico NON preso (forma non abbassata al bigramma o IC non riempita)
+MP4 a verdetto: p4-self-rhs INTATTO -> borrow unico NON preso (forma non abbassata al bigramma o IC non riempita)
+ESITO rc=0 (0 = fast path preso su tutte le attese, dominio rispettato; 1 = attese non rotte; 5 = presa fuori dominio; 7 = copertura) fine 2026-09-10 02:31:44

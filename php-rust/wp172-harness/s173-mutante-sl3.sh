@@ -25,6 +25,10 @@
 #   MP4 = {p4-overflow p4-dst-double p4-dst-str p4-dst-ref p4-dst-ref-alias p4-src-ref p4-src-double
 #   p4-two-objs p4-typed p4-typed-float-dst p4-readonly#0 p4-readonly#1 p4-enum#0
 #   p4-enum#1} + TUTTI i blocchi p3-*.
+# CORSA 1 (s173-mutante3-verdetto-corsa1.out, rc=5): «violazioni» p3-numstr/null/bool-dst e p4-dst-double/str =
+# il dst DIVENTA Long dopo la 1ª iterazione (in dominio dalla 2ª): non una presa fuori dominio ma fixture non
+# discriminante ⇒ varianti `-each` con reset dentro il loop (INTATTE attese) e le originali a VERDETTO;
+# p4-self-rhs ROTTO = cascata (x non azzerato) ⇒ reset aggiunto, resta a verdetto (attesa INTATTA).
 # Esiti: VERD (committato) + ab-out/s173-mut3/*; rc SOLO da ab-out/s173-mut3.done.
 set -u
 export PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin:"$HOME/.cargo/bin"
@@ -121,14 +125,14 @@ verdetto(){ # $1=nome $2=attese $3=intatte
 build_run MP3 'long_arith_i64(*b2, *lv, *y)' 'long_arith_i64(*b2, *lv, *y).map(|v| v.wrapping_add(1))'
 build_run MP4 'if let Some(r) = long_arith_i64(*b2, *y, *k) {' 'if let Some(r) = long_arith_i64(*b2, *y, *k).map(|v| v.wrapping_add(1)) {'
 
-P3ALL="p3-add p3-sub p3-mul p3-and p3-or p3-xor p3-shl p3-shr p3-shl-64 p3-shr-64 p3-shl-neg-l p3-shr-neg-l p3-shl-neg#0 p3-shl-neg#1 p3-div p3-div-exact p3-mod p3-pow p3-concat p3-div-zero#0 p3-div-zero#1 p3-add-overflow p3-sub-overflow p3-mul-overflow p3-double-dst p3-numstr-dst p3-null-dst p3-bool-dst p3-double-src p3-numstr-src p3-null-src p3-dst-ref p3-dst-ref-alias p3-src-ref p3-typed-ref p3-typed-ref-overflow#0 p3-typed-ref-overflow#1 p3-typed-src p3-magic-get-src p3-magic-class-plain-src p3-hook-get-src p3-dynamic-src p3-enum-src p3-loop100 p3-loop-overflow-step p3-loop-overflow p3-no-peephole p3-rhs-expr p3-twice p3-dst-is-obj#0 p3-dst-is-obj#1"
-P4ALL="p4-same p4-same-mul p4-same-shr-neg p4-self-rhs p4-self p4-self-y p4-overflow p4-dst-double p4-dst-str p4-dst-ref p4-dst-ref-alias p4-src-ref p4-src-double p4-two-objs p4-other-class p4-typed p4-typed-float-dst p4-readonly#0 p4-readonly#1 p4-this-private p4-dynamic p4-enum#0 p4-enum#1"
+P3ALL="p3-add p3-sub p3-mul p3-and p3-or p3-xor p3-shl p3-shr p3-shl-64 p3-shr-64 p3-shl-neg-l p3-shr-neg-l p3-shl-neg#0 p3-shl-neg#1 p3-div p3-div-exact p3-mod p3-pow p3-concat p3-div-zero#0 p3-div-zero#1 p3-add-overflow p3-sub-overflow p3-mul-overflow p3-double-dst p3-numstr-dst p3-null-dst p3-bool-dst p3-null-dst-each p3-bool-dst-each p3-numstr-dst-each p3-double-src p3-numstr-src p3-null-src p3-dst-ref p3-dst-ref-alias p3-src-ref p3-typed-ref p3-typed-ref-overflow#0 p3-typed-ref-overflow#1 p3-typed-src p3-magic-get-src p3-magic-class-plain-src p3-hook-get-src p3-dynamic-src p3-enum-src p3-loop100 p3-loop-overflow-step p3-loop-overflow p3-no-peephole p3-rhs-expr p3-twice p3-dst-is-obj#0 p3-dst-is-obj#1"
+P4ALL="p4-same p4-same-mul p4-same-shr-neg p4-self-rhs p4-self p4-self-y p4-overflow p4-dst-double p4-dst-str p4-dst-double-each p4-dst-str-each p4-dst-ref p4-dst-ref-alias p4-src-ref p4-src-double p4-two-objs p4-other-class p4-typed p4-typed-float-dst p4-readonly#0 p4-readonly#1 p4-this-private p4-dynamic p4-enum#0 p4-enum#1"
 ATT3="p3-add p3-sub p3-mul p3-and p3-or p3-xor p3-shl p3-shr p3-shl-64 p3-shr-64 p3-shl-neg-l p3-shr-neg-l p3-loop100 p3-loop-overflow-step p3-loop-overflow p3-twice prop-micro-1000"
-INT3="p3-shl-neg#0 p3-shl-neg#1 p3-div p3-div-exact p3-mod p3-pow p3-concat p3-div-zero#0 p3-div-zero#1 p3-add-overflow p3-sub-overflow p3-mul-overflow p3-double-dst p3-numstr-dst p3-null-dst p3-bool-dst p3-double-src p3-numstr-src p3-null-src p3-dst-ref p3-dst-ref-alias p3-src-ref p3-typed-ref p3-typed-ref-overflow#0 p3-typed-ref-overflow#1 p3-magic-get-src p3-hook-get-src p3-enum-src p3-no-peephole p3-rhs-expr p3-dst-is-obj#0 p3-dst-is-obj#1 $P4ALL"
-VER3="p3-typed-src p3-magic-class-plain-src p3-dynamic-src"
+INT3="p3-shl-neg#0 p3-shl-neg#1 p3-div p3-div-exact p3-mod p3-pow p3-concat p3-div-zero#0 p3-div-zero#1 p3-add-overflow p3-sub-overflow p3-mul-overflow p3-double-dst p3-null-dst-each p3-bool-dst-each p3-numstr-dst-each p3-double-src p3-numstr-src p3-null-src p3-dst-ref p3-dst-ref-alias p3-src-ref p3-typed-ref p3-typed-ref-overflow#0 p3-typed-ref-overflow#1 p3-magic-get-src p3-hook-get-src p3-enum-src p3-no-peephole p3-rhs-expr p3-dst-is-obj#0 p3-dst-is-obj#1 $P4ALL"
+VER3="p3-numstr-dst p3-null-dst p3-bool-dst p3-typed-src p3-magic-class-plain-src p3-dynamic-src"
 ATT4="p4-same p4-same-mul p4-same-shr-neg p4-self p4-self-y p4-other-class prop-micro-1000"
-INT4="p4-overflow p4-dst-double p4-dst-str p4-dst-ref p4-dst-ref-alias p4-src-ref p4-src-double p4-two-objs p4-typed p4-typed-float-dst p4-readonly#0 p4-readonly#1 p4-enum#0 p4-enum#1 $P3ALL"
-VER4="p4-this-private p4-dynamic p4-self-rhs"
+INT4="p4-overflow p4-dst-double-each p4-dst-str-each p4-dst-ref p4-dst-ref-alias p4-src-ref p4-src-double p4-two-objs p4-typed p4-typed-float-dst p4-readonly#0 p4-readonly#1 p4-enum#0 p4-enum#1 $P3ALL"
+VER4="p4-dst-double p4-dst-str p4-this-private p4-dynamic p4-self-rhs"
 python3 - "$OUT/ref.out" "$ATT3 $INT3 $VER3" "$ATT4 $INT4 $VER4" <<'PY' >> "$VERD" || fin 7
 import sys, re
 labels = []
