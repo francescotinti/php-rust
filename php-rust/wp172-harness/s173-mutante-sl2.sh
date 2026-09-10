@@ -51,6 +51,7 @@
 # = 6; p2-or subito dopo ROTTA ⇒ reset `$s = 70`); p1-private-inscope = DOMINIO: la IC set non si riempie su
 # classi non-plain (private/typed: p1-typed-* INTATTI coerenti) ⇒ probe NON preso, corretto: spostata a VERDETTO
 # (perimetro dichiarato: il probe sigillato copre SOLO classi plain_set_props — leva futura «typed»).
+# CORSA 2 (SOLO=1, stessi binari): p1/p2-loop-overflow a VERDETTO (saturazione per costruzione), presidio = righe -step.
 # Esiti: VERD (committato) + ab-out/s173-mut/*; rc SOLO da ab-out/s173-mut.done.
 set -u
 export PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin:"$HOME/.cargo/bin"
@@ -158,11 +159,12 @@ P1ALL="p1-loop100 p1-loop-overflow p1-loop-overflow-step p1-add p1-sub p1-mul p1
 P2ALL="p2-loop-overflow-step p2-add p2-sub p2-mul p2-and p2-or p2-xor p2-shl p2-shr p2-shl-64 p2-shr-64 p2-shl-neg-l p2-shr-neg-l p2-shl-neg p2-div p2-div-exact p2-mod p2-pow p2-concat p2-div-zero p2-add-overflow p2-sub-overflow p2-mul-overflow p2-double-dst p2-numstr-dst p2-null-dst p2-bool-dst p2-double-src p2-numstr-src p2-null-src p2-dst-ref p2-dst-ref-alias p2-typed-ref p2-typed-ref-overflow p2-loop100 p2-arr-src p2-call-src p2-call-double-src p2-loop-overflow"
 ATT1="p1-loop100 p1-loop-overflow-step p1-add p1-sub p1-mul p1-and p1-or p1-xor p1-shl p1-shr p1-shl-64 p1-shr-70 p1-shl-neg-l p1-shr-neg-l p1-shr-70-neg p1-double-dst p1-str-dst p1-null-dst p1-arr-dst p1-dst-ref p1-dst-ref-alias p1-self p1-two-objs p1-inherited prop-micro-1000"
 INT1="p1-div-inexact p1-div-exact p1-mod p1-pow p1-pow-overflow p1-concat p1-div-zero#0 p1-div-zero#1 p1-mod-zero#0 p1-mod-zero#1 p1-mod-min-neg1 p1-add-overflow p1-mul-overflow p1-sub-overflow p1-double-src p1-numstr-src p1-null-src p1-bool-src p1-src-ref p1-typed-int-overflow#0 p1-typed-int-overflow#1 p1-typed-int-from-float p1-readonly#0 p1-readonly#1 p1-readonly-inscope#0 p1-readonly-inscope#1 p1-private-outscope#0 p1-private-outscope#1 p1-hook-set p1-magic-set $P2ALL"
-VER1="p1-private-inscope p1-shl-63 p1-typed-int p1-typed-float-dst p1-typed-float-from-long p1-dynamic p1-dynamic-self"
-ATT2="p2-loop-overflow-step p2-add p2-sub p2-mul p2-and p2-or p2-xor p2-shl p2-shr p2-shl-64 p2-shr-64 p2-shl-neg-l p2-shr-neg-l p2-loop100 p2-arr-src p2-call-src p2-loop-overflow prop-micro-1000"
+VER1="p1-loop-overflow p1-private-inscope p1-shl-63 p1-typed-int p1-typed-float-dst p1-typed-float-from-long p1-dynamic p1-dynamic-self"
+ATT2="p2-loop-overflow-step p2-add p2-sub p2-mul p2-and p2-or p2-xor p2-shl p2-shr p2-shl-64 p2-shr-64 p2-shl-neg-l p2-shr-neg-l p2-loop100 p2-arr-src p2-call-src prop-micro-1000"
+VER2="p2-loop-overflow"
 INT2="p2-shl-neg p2-div p2-div-exact p2-mod p2-pow p2-concat p2-div-zero p2-add-overflow p2-sub-overflow p2-mul-overflow p2-double-dst p2-numstr-dst p2-null-dst p2-bool-dst p2-double-src p2-numstr-src p2-null-src p2-dst-ref p2-dst-ref-alias p2-typed-ref p2-typed-ref-overflow p2-call-double-src $P1ALL"
 # copertura: ogni etichetta del pin deve stare in ATT/INT/VER del proprio mutante (fixture ≠ copione ⇒ rc=7)
-python3 - "$OUT/pin.out" "$ATT1 $INT1 $VER1" "$ATT2 $INT2" <<'PY' >> "$VERD" || fin 7
+python3 - "$OUT/pin.out" "$ATT1 $INT1 $VER1" "$ATT2 $INT2 $VER2" <<'PY' >> "$VERD" || fin 7
 import sys, re
 labels = []
 for line in open(sys.argv[1], encoding='utf-8', errors='replace'):
@@ -178,9 +180,11 @@ PY
 RC=0
 verdetto MP1 "$ATT1" "$INT1" || RC=$?
 for v in $VER1; do
+  [ "$v" = p1-loop-overflow ] && { grep -qxF "$v" "$OUT/MP1.rotte" && note "MP1 a verdetto: $v ROTTO (inatteso: il float finale satura)" || note "MP1 a verdetto: $v INTATTO -> atteso per costruzione: il float finale SATURA (non discriminante; presidio = p1-loop-overflow-step)"; continue; }
   grep -qxF "$v" "$OUT/MP1.rotte" && note "MP1 a verdetto: $v ROTTO -> probe sigillato PRESO (IC set riempita su questa forma)" || note "MP1 a verdetto: $v INTATTO -> probe NON preso (IC set non riempita, slot assente o fuori dominio)"
 done
 verdetto MP2 "$ATT2" "$INT2" || RC=$?
+for v in $VER2; do grep -qxF "$v" "$OUT/MP2.rotte" && note "MP2 a verdetto: $v ROTTO (inatteso: il float finale satura)" || note "MP2 a verdetto: $v INTATTO -> atteso per costruzione: il float finale SATURA (non discriminante; presidio = p2-loop-overflow-step)"; done
 [ "$RC" = 2 ] && RC=5
 
 # --- epilogo: repo intatto al byte, mutante non conservato ---

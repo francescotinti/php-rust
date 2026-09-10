@@ -30,7 +30,7 @@
 > identici). **Precisate** con la misura: §1.2, §1.4, §2.1 (hang su
 > overflow), §2.3, §2.4 (`ftell`/`file_put_contents` su wrapper utente),
 > §2.7, §3.1 (UCS-2 SBAGLIATO, UTF-32 assente), §3.3-bis, §3.6, §3.8 (vi),
-> §3.28, §3.30. **Aggiunta** §3.31. Numerazione STABILE (le voci si citano
+> §3.28, §3.30. **Aggiunte** §3.31 e §3.32 (S-173). Numerazione STABILE (le voci si citano
 > per nome nei verbali): i numeri delle voci rimosse non si riassegnano; il
 > §3.4 non è mai stato assegnato.
 
@@ -1050,6 +1050,19 @@ il 2026-09-10 e rimossa dal catalogo). Unico residuo: `call_user_func('proc_open
 con zero argomenti — l'oracle lancia `ArgumentCountError: proc_open() expects
 at least 3 arguments`, phpr non lancia nulla. `popen` resta ASSENTE
 (correct-or-absent: manca la risorsa pipe).
+
+### 3.32 🟡 `Deprecated: Creation of dynamic property` riporta un NUMERO DI RIGA sbagliato (S-173, fixture fx-sl3-div)
+
+Il messaggio è a parità, la riga no: l'oracle cita la riga dell'assegnazione
+(`$g->z = 1;` → «on line 5»), phpr cita la riga 1 (o, dentro un file con
+funzioni, la riga di una definizione precedente: fx-sl3 → «line 11» al posto
+di 92). Sonda minima 2026-09-10 (`class G {public $y=3;} $g=new G; $g->z=1;`
+→ oracle line 5, phpr line 1; stessa cosa in un loop `for` e con rhs da
+chiamata). Meccanismo indiziato: il diag nasce nella scrittura di proprietà
+(sentiero `write_property`/`prop_set_entry`) con la riga corrente del frame
+NON aggiornata dal sito dell'assegnazione. PRE-esistente alla leva fetta 3
+(pin s172 == stash s171 sulla forma). Presidio: fx-sl3-div (pin==stash).
+
 
 ## 4. Punti di forza da NON toccare (invarianti verificati byte-identici)
 
