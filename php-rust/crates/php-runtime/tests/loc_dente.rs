@@ -80,7 +80,13 @@ fn nessun_sorgente_rs_oltre_cap() {
         // binary_st_dst_slow #[cold] — +46 netti di cui ~20 commento). Il dente
         // ha morso alla promozione (tentativo 1 rc=101): salita a verbale in
         // wp172-harness/s172-verdetto.out.
-        ("php-runtime/src/vm/run.rs", 7200, "run_loop — ULTIMO o mai (A2); +102 L-MCk S-166 + 174 L-SL1 S-171 + 109 L-SL2 S-172 dichiarati"),
+        // S-173 L-SL2 fetta 3 (prop residuo): +74 DICHIARATI (criterio wp172-harness/
+        // s173-criterio.md p.5: P3 peephole runtime PropGetSlot+BinarySTDst ~42 righe
+        // di cui 10 commento, P4 borrow unico nel probe sigillato ~32 di cui 9
+        // commento; nessun corpo nuovo). Il dente ha morso alla promozione
+        // (tentativo 1 rc=101, come S-171/S-172): salita a verbale in
+        // wp172-harness/s173-verdetto.out.
+        ("php-runtime/src/vm/run.rs", 7274, "run_loop — ULTIMO o mai (A2); +102 L-MCk S-166 + 174 L-SL1 S-171 + 109 L-SL2 S-172 + 74 fetta 3 S-173 dichiarati"),
         ("php-runtime/tests/eval.rs", 4773, "batteria eval"),
         ("php-builtins/tests/builtins.rs", 4772, "batteria builtins"),
         ("php-runtime/src/lower/mod.rs", 3838, "lowering"),
