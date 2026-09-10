@@ -1,0 +1,150 @@
+--- s172-promozione.sh	2026-09-07 23:54:17
++++ s173-promozione.sh	2026-09-10 02:17:08
+@@ -1,8 +1,12 @@
+ #!/bin/bash
+-# s172-promozione.sh <cand_hash16> <braccio> — gate di promozione LEVA L-SL2
+-# («forma sigillata Long» fetta 2 = prop: P1 bigramma fuso PropGetSlotRecv+
+-# BinaryTCPropSetPop sigillato, P2 BinarySTDst sigillato, corpi esatti #[cold])
+-# — S-172, criterio wp172-harness/s172-criterio.md p.6.
++# s173-promozione.sh <cand_hash16> <braccio> — gate di promozione LEVA L-SL2 fetta 3
++# (prop residuo: P3 peephole runtime PropGetSlot+BinarySTDst, P4 borrow unico nel
++# probe sigillato quando recv==slot; nessun corpo nuovo, miss ai sentieri storici)
++# — S-173, criterio wp172-harness/s173-criterio.md p.6. COPIA DICHIARATA di s172-promozione.sh
++# (manifest s173-promozione-copia.diff); adattamenti: tag s173, stash di riferimento phpr-s172,
++# candidato phpr-s173-f3-<braccio> (B=P3, C=P3+P4), fx-sl3 NUOVA bilaterale + fx-sl3-div invariante
++# (§3.32), conferma post-pin prop-dq vs stash s172, mutante P3/P4 (s173-mutante-sl3.sh) ESEGUITO
++# PRIMA di questo copione (verdetto s173-mutante3-verdetto.out rc=0 richiesto in PRE).
+ # COPIA DICHIARATA di wp171-harness/s171-promozione.sh (manifest
+ # s172-promozione-copia-v3.diff + copia-gate v3); DIVERGENZE DICHIARATE:
+ #  (1) tag s172, harness wp172 (fixture S-171 ereditate in BYTE-COPIA verificata
+@@ -43,9 +47,9 @@
+ QUIESCE="$SRC/wp129-harness/s129-quiescenza.sh"
+ SP="${PROMO_SP:?PROMO_SP (workdir APFS per i gate ORM/hk) richiesto}"
+ OUT="$H/promo-out"; mkdir -p "$OUT"
+-VERD="$H/s172-promo-verdetto.out"
+-CAND_EXP="${1:?uso: s172-promozione.sh <cand_hash16> <braccio B|C>}"; ARM="${2:?braccio promosso (B=P1, C=P1+P2)}"
+-REF="$STASH/phpr-s171"; REF_EXP="b360b2933eddfe18"
++VERD="$H/s173-promo-verdetto.out"
++CAND_EXP="${1:?uso: s173-promozione.sh <cand_hash16> <braccio B|C>}"; ARM="${2:?braccio promosso (B=P3, C=P3+P4)}"
++REF="$STASH/phpr-s172"; REF_EXP="5f2dff7d17ebed79"
+ note(){ echo "$1"; echo "$1" >> "$VERD"; }
+ stop(){ note "$1"; echo 1 > "$OUT/rcb"; exit 1; }
+ 
+@@ -53,15 +57,16 @@
+ for f in "$H/fx-ce.php" "$H/fx-am.php" "$H/fx-af.php" "$H/fx-refl.php" \
+          "$H/fx-sm.php" "$H/fx-sm-div.php" "$H/fx-au.php" "$H/fx-au-div.php" \
+          "$H/fx-mc.php" "$H/fx-mc2.php" "$H/fx-mc2-fib.php" "$H/fx-mck.php" \
+-         "$H/fx-sl1.php" "$H/fx-sl1-div.php" "$H/fx-sl2.php" "$H/fx-sl2-div.php" "$H/prop-dq.php" \
++         "$H/fx-sl1.php" "$H/fx-sl1-div.php" "$H/fx-sl2.php" "$H/fx-sl2-div.php" "$H/fx-sl3.php" "$H/fx-sl3-div.php" "$H/prop-dq.php" "$H/s173-mutante3-verdetto.out" \
+          "$H/sonda-bt-autoload.php" "$SRC/wp164-harness/arith-dq.php" \
+          "$H/empty.php" "$QUIESCE" "$WD" "$GATES/orm-work.tgz" "$GATES/hk-work.tgz" \
+          "$SRC/wp125-harness/orm-baseline-failnames.txt" \
+          "$SRC/wp125-harness/promo-out/batteria-nomi.txt" \
+-         "$REF" "$STASH/phpr-s172-sl2-$ARM"; do
++         "$REF" "$STASH/phpr-s173-f3-$ARM"; do
+   [ -s "$f" ] || stop "PRE: path d'ingresso MANCANTE: $f — STOP"
+ done
+-[ "$(shasum -a 256 "$REF" | cut -c1-16)" = "$REF_EXP" ] || stop "PRE: stash phpr-s171 hash != $REF_EXP — STOP"
++[ "$(shasum -a 256 "$REF" | cut -c1-16)" = "$REF_EXP" ] || stop "PRE: stash phpr-s172 hash != $REF_EXP — STOP"
++grep -q "^ESITO rc=0" "$H/s173-mutante3-verdetto.out" || stop "PRE: mutante P3/P4 non a rc=0 (s173-mutante3-verdetto.out) — STOP"
+ 
+ cd "$SRC" || exit 4
+ git diff --quiet -- crates/ || stop "PRE: crates/ sporco — STOP"
+@@ -98,7 +103,7 @@
+ if [ "$HB" = "$CAND_EXP" ]; then
+   note "promozione: build ricetta riproduce il candidato $HB AL BYTE"
+ else
+-  CSTASH="$STASH/phpr-s172-sl2-$ARM"
++  CSTASH="$STASH/phpr-s173-f3-$ARM"
+   [ "$(shasum -a 256 "$CSTASH" | cut -c1-16)" = "$CAND_EXP" ] || stop "stash candidato != $CAND_EXP — STOP"
+   ident_contenuto "$BIN" "$CSTASH" > "$OUT/ident-contenuto.txt" 2>&1     || { cat "$OUT/ident-contenuto.txt" >> "$VERD"; stop "build $HB DIVERGE dal candidato OLTRE il meccanismo nominato — STOP"; }
+   cat "$OUT/ident-contenuto.txt" >> "$VERD"
+@@ -135,7 +140,7 @@
+ [ "$H2" = "$HB" ] || stop "re-hash post-batteria $H2 != $HB (churn) — STOP"
+ note "promozione: churn batteria neutralizzato (build ricetta → $H2 al byte)"
+ 
+-"$SRC/scripts/pin-phpr.sh" s172 > "$OUT/pin.log" 2>&1
++"$SRC/scripts/pin-phpr.sh" s173 > "$OUT/pin.log" 2>&1
+ prc=$?; echo "$prc" > "$OUT/pin.rc"
+ [ "$prc" = 0 ] || stop "pin-phpr.sh rc=$prc"
+ note "promozione: $(tail -1 "$OUT/pin.log")"
+@@ -143,7 +148,7 @@
+ "$SRC/scripts/corpus-gate.sh" "$RUNNER" "$OUT/corpus"
+ crc=$?; echo "$crc" > "$OUT/corpus-rc"
+ [ "$crc" = 0 ] || stop "corpus-gate rc=$crc — divergenza (3) non ammette flip: STOP"
+-note "promozione corpus-gate: rc=0 — nomi==congelato (1412), CONTENUTO==golden, off-on zero (ZERO flip come atteso, L-SL1)"
++note "promozione corpus-gate: rc=0 — nomi==congelato (1412), CONTENUTO==golden, off-on zero (ZERO flip come atteso, fetta 3)"
+ 
+ PHPR_PIN_ATTESO="$H2" "$SRC/wp109-harness/s109-fixture-chain.sh" > "$OUT/fixture-chain.out" 2>&1
+ frc=$?; echo "$frc" > "$OUT/fixture-chain.rc"
+@@ -168,18 +173,18 @@
+     stop "gate $n: DIVERGE (promo-out/$n.diff)"
+   fi
+ }
+-# gate INVARIANTE: pin==stash s171 byte-id (+ marcatore quando preteso)
++# gate INVARIANTE: pin==stash s172 byte-id (+ marcatore quando preteso)
+ invar(){ # $1=nome $2=file $3=marcatore("" = nessuno) $4=descrizione
+   local n="$1" f="$2" m="$3" d="$4"
+-  "$REF" "$f" > "$OUT/$n-s171.out" 2>&1
++  "$REF" "$f" > "$OUT/$n-s172.out" 2>&1
+   "$BIN" "$f" > "$OUT/$n-pin.out" 2>&1
+   [ -s "$OUT/$n-pin.out" ] || stop "gate $n: output pin VUOTO"
+   [ -z "$m" ] || grep -q "$m" "$OUT/$n-pin.out" || stop "gate $n: MARCATORE $m assente"
+-  if diff -q "$OUT/$n-s171.out" "$OUT/$n-pin.out" > /dev/null; then
+-    note "promozione gate $n: pin==stash s171 BYTE-ID ($d)"
++  if diff -q "$OUT/$n-s172.out" "$OUT/$n-pin.out" > /dev/null; then
++    note "promozione gate $n: pin==stash s172 BYTE-ID ($d)"
+   else
+-    diff "$OUT/$n-s171.out" "$OUT/$n-pin.out" > "$OUT/$n.diff" || true
+-    stop "gate $n: pin DIVERGE dallo stash s171 (promo-out/$n.diff)"
++    diff "$OUT/$n-s172.out" "$OUT/$n-pin.out" > "$OUT/$n.diff" || true
++    stop "gate $n: pin DIVERGE dallo stash s172 (promo-out/$n.diff)"
+   fi
+ }
+ bilat fxce "$H/fx-ce.php" "" "12 forme class/interface/trait_exists"
+@@ -199,6 +204,8 @@
+ invar fxsl1div "$H/fx-sl1-div.php" "FX-SL1-DIV DONE" "forme con diag §3.11/§3.13 PRE-esistenti INVARIATE"
+ bilat fxsl2 "$H/fx-sl2.php" "FX-SL2 DONE" "presidio DIRETTO L-SL2 (forme P1 in loop a 2 iterazioni = IC calda): P1 bigramma fuso e P2 BinarySTDst — overflow/shift/Div/Mod/Pow/Concat/Double/stringa/null/bool/Ref/typed int-float/readonly (anche in scope)/private/hook set/__set/ereditata/dinamica" -d log_errors=0 -d display_errors=1
+ invar fxsl2div "$H/fx-sl2-div.php" "FX-SL2-DIV DONE" "§3.30 default float da literal int PRE-esistente INVARIATO"
++bilat fxsl3 "$H/fx-sl3.php" "FX-SL3 DONE" "presidio DIRETTO fetta 3 (loop a 2 = IC calda): P3 peephole \$s OP= \$o->x e P4 borrow unico recv==slot — overflow/shift/Div/Mod/Pow/Concat/Double/stringa/null/bool/Ref/typed-ref/__get/hook get/enum/dinamica/dst==slot/controlli negativi" -d log_errors=0 -d display_errors=1
++invar fxsl3div "$H/fx-sl3-div.php" "FX-SL3-DIV DONE" "§3.32 riga del Deprecated prop dinamica PRE-esistente INVARIATA"
+ 
+ QOK=1
+ for t in $(seq 1 30); do
+@@ -207,10 +214,10 @@
+ done
+ [ "$QOK" = 0 ] || stop "quiescenza MAI PASS in 30 tentativi — STOP prima delle misure"
+ 
+-PHPR="$BIN" R=5 "$SRC/wp97-harness/micro/run-micro.sh" > "$OUT/micro-pin-s172.out" 2>&1
+-note "promozione micro pin s172: $(grep -E '^rapporto_' "$OUT/micro-pin-s172.out" | tr '\n' ' ')"
++PHPR="$BIN" R=5 "$SRC/wp97-harness/micro/run-micro.sh" > "$OUT/micro-pin-s173.out" 2>&1
++note "promozione micro pin s173: $(grep -E '^rapporto_' "$OUT/micro-pin-s173.out" | tr '\n' ' ')"
+ 
+-# ---- conferma POST-PIN prop-dq (divergenza (5)): R=5 pin s172 vs stash s171 ----
++# ---- conferma POST-PIN prop-dq (divergenza (5)): R=5 pin s173 vs stash s172 ----
+ DQ="$H/prop-dq.php"
+ NDQ=$(awk 'match($0, /\$i<[0-9]+/) {print substr($0, RSTART+3, RLENGTH-3); exit}' "$DQ")
+ ucpu(){ { /usr/bin/time -p perl -e 'alarm 900; exec @ARGV or die' -- "$1" "$2" > /dev/null; } 2>&1 | awk '/^user/{print $2}'; }
+@@ -235,7 +242,7 @@
+ print(f"D={d:+.2f} rumore={noise:.2f} segni={segni}/5 A={med(na):.2f} B={med(nb):.2f} ns/iter (N={int(n)} dal driver)")
+ PY
+ )
+-note "conferma post-pin prop-dq (pin s172 vs stash s171): $CONF (attesa: segno +, D nell'intorno del D_prop del braccio promosso nell'A/B; rumore > attesa/2 ⇒ SOLO SEGNO)"
++note "conferma post-pin prop-dq (pin s173 vs stash s172): $CONF (attesa: segno +, D nell'intorno del D_prop del braccio promosso nell'A/B; rumore > attesa/2 ⇒ SOLO SEGNO)"
+ 
+ # ---- gate ORM per NOME ----
+ rm -rf "$SP/orm-work" && mkdir -p "$SP" && tar xzf "$GATES/orm-work.tgz" -C "$SP" || stop "untar orm-work"
+@@ -265,11 +272,11 @@
+   stop "gate http-kernel: E=$HE F=$HF (attesi 0/0) · $HSUMM"
+ fi
+ 
+-"$SRC/scripts/pin-server.sh" s172 > "$OUT/pin-server.log" 2>&1
++"$SRC/scripts/pin-server.sh" s173 > "$OUT/pin-server.log" 2>&1
+ src_rc=$?; echo "$src_rc" > "$OUT/pin-server.rc"
+ [ "$src_rc" = 0 ] || stop "pin-server.sh rc=$src_rc"
+ note "promozione server: $(grep '^PIN server' "$OUT/pin-server.log" | tail -1)"
+ 
+ echo 0 > "$OUT/rcb"
+-note "PROMOZIONE COMPLETA rc=0 (da promo-out/rcb): pin s172 = $H2"
++note "PROMOZIONE COMPLETA rc=0 (da promo-out/rcb): pin s173 = $H2"
+ exit 0
