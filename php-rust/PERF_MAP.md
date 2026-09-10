@@ -1,6 +1,22 @@
 # PERF_MAP — phpr vs PHP oracle 8.5.7, mappa multi-workload
 
-Aggiornata: **2026-09-08 notte (S-172)** · pin **NUOVO s172 phpr 5f2dff7d17ebed79 + server 812f7962952da67f**
+Aggiornata: **2026-09-10 notte (S-173)** · pin **NUOVO s173 phpr da4921a52eba0187 + server 2d2adc4549a820e0**
+(**S-173 = LEVA L-SL2 fetta 3 «prop, residuo del corpo» PROMOSSA** (criterio wp172-harness/
+s173-criterio.md): P3 = peephole runtime `Op::PropGetSlot`+`BinarySTDst` (guardie IC get verbatim +
+dominio i64 di BinarySTDst, store in place su dst Long altrimenti `reg_store_slot`, `ip+2`:
+niente push/pop, un dispatch in meno) + P4 = un solo `borrow_mut` nel probe sigillato P1 quando
+recv == slot; zero unsafe, nessun corpo nuovo. A/B R=5 coi TRE bracci RUOTATI per coppia:
+**prop-dq 52,53→44,93 (P3, +7,60) →41,13 (P3+P4, +11,40; 2,95× l'oracle, pin s172 3,77×)**,
+attese [2;8]/[2,5;12] centrate, KILL-3 no, guardia arith-dq piatta; C−B +3,80 firmato NON
+nominato ⇒ P4 solo direzione (appaiate +3,87); disasm bl 5974→5983→5986 (+12 dichiarato);
+mutante P3/P4 rc=0 (corsa 2: forme -each col reset nel loop = prova del dominio); promozione
+rc=0 al tentativo 2 (t1 rc=101 = dente run.rs 7274 > cap 7200, alzato DICHIARANDO): build ricetta = candidato a contenuto (da4921a5 vs 19c0540e: soli LC_UUID/firma), batteria 1748/0 (+2 denti dichiarati), churn neutralizzato al byte, corpus 1412×2 ZERO flip, fixture chain 10/10, 19 gate byte-id (fx-sl3 NUOVA + fx-sl3-div), micro R=5, conferma post-pin prop-dq +11,67 rumore 0,93 segni 5/5 (52,93→41,27), ORM 16 nomi == baseline (3484: 3E/13F), hk 1665 0E/0F: **micro arith 2,8 · prop 3,0 · calls 4,8 · str 4,1 · arr 3,1 · re 2,5** · az.rev. S-172 TUTTE CHIUSE: mutante P1/P2 rc=0 (typed/private/
+dynamic FUORI perimetro: IC set solo su classi plain), A/B alternato B↔C ⇒ **P2 = [4,87;5,60]
+ns/iter CIFRA** (S-172 aveva solo la direzione), `--braccio` col commit sorgente, PIN_REGISTRY
+corretto · §3.32 catalogata (riga del Deprecated per prop dinamica) · revisione lente MISURA:
+REGGE CON RILIEVI (drop-1 = tick, banda tra run 1,14, 0,94 non ri-derivato, decomposizioni =
+ipotesi) · coppia t19 t19 LANCIATA al pin s173 in chiusura S-173 (03:07, pair → orm in catena via s173-lancio-*.sh): DA LEGGERE in S-174 (attesa direzione ≤0; ORM: regola 4 se net resta >7,05) · verdetti wp172-harness/s173-verdetto.out)
+
 (**S-172 = LEVA L-SL2 «forma sigillata Long» fetta 2 = PROP PROMOSSA** (criterio wp172-harness/
 s172-criterio.md): P1 = probe sigillato nel bigramma fuso PropGetSlotRecv+BinaryTCPropSetPop
 (guardie IC VERBATIM, `long_arith_i64`, store in place su prop Long via `get_slot_mut`, miss ⇒

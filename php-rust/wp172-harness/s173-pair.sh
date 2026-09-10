@@ -5,7 +5,7 @@
 # az.rev.3 S-149; banda-unione degradata a companion descrittivo).
 # COPIA DICHIARATA di wp172-harness/s172-pair.sh (manifest
 # s173-pair-copia.diff) coi SOLI adattamenti:
-# nomi s173/pair172/t19; pin s173 = placeholder __PIN_S173__/__SRV_S173__
+# nomi s173/pair172/t19; pin s173 = placeholder da4921a52eba0187/2d2adc4549a820e0
 # (inseriti DOPO la promozione; era phpr 5f2dff7d + server 812f7962);
 # mediane storiche con t17=1,776 t18=1,769 (banda giudizio INVARIATA
 # [1,738;1,799]); attesa di leva nel messaggio GIU': fetta 3 (P3 peephole $s OP= $o->x + P4 borrow unico): direzione ≤0, SOTTO-risoluzione (quota prop-Long in WP non censita);
@@ -37,8 +37,8 @@ step(){ echo "$(date +%H:%M:%S) $1" >> "$OUT/progress-$T.txt"; }
 : > "$OUT/progress-$T.txt"
 rm -f "$DONE"
 
-PIN_ATTESO="__PIN_S173__"
-SRV_ATTESO="__SRV_S173__"
+PIN_ATTESO="da4921a52eba0187"
+SRV_ATTESO="2d2adc4549a820e0"
 PIN="$(shasum -a 256 "$PHPR" | cut -c1-16)"
 SRV="$(shasum -a 256 "$HOME/Claude/php-rust-output/release/php-server" | cut -c1-16)"
 if [ "$PIN" != "$PIN_ATTESO" ] || [ "$SRV" != "$SRV_ATTESO" ]; then

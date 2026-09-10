@@ -1,0 +1,37 @@
+lock CI: presente (finestra di sessione, non lo tocco)
+  cluster 0x838-0x847: LC_UUID
+  cluster 0xe50940-0xe5095f: firma
+  tot 48 B in 2 cluster
+promozione: identità candidato a CONTENUTO (cluster LC_UUID/firma/banner) — pin effettivo = da4921a52eba0187 (dichiarato)
+promozione batteria: rc=0 (da promo-out/batteria.rc) · 1748/0/2 · inventario: baseline s125 + 2 denti (dichiarati: nessun_sorgente_rs_oltre_cap rczval_pattern_resta_nel_funnel)
+promozione batteria: debug_backtrace_array_fields VERDE
+promozione: churn batteria neutralizzato (build ricetta → da4921a52eba0187 al byte)
+promozione: PIN phpr s173 = da4921a52eba0187 (smoke parità 2 modi OK, stash phpr-s173, registrato+committato). I gate del protocollo (batteria/corpus/fixture/micro) restano dovuti.
+promozione corpus-gate: rc=0 — nomi==congelato (1412), CONTENUTO==golden, off-on zero (ZERO flip come atteso, fetta 3)
+promozione fixture chain: rc=0 (10 gate: hc1 move recv fx20 fx21 w9 preg teardown stash backtrace)
+promozione gate fxce: oracle==pin BYTE-ID (12 forme class/interface/trait_exists)
+promozione gate sonda-bt: pin==stash s172 BYTE-ID (contratto autoload/backtrace §3.25 invariato)
+promozione gate fxrefl: pin==stash s172 BYTE-ID (contratto __reflect_* L-RF2 invariato)
+promozione gate fxam: oracle==pin BYTE-ID (20 forme array_map v2, fast E pieno)
+promozione gate fxaf: oracle==pin BYTE-ID (13 forme array_filter, fast E pieno)
+promozione gate fxsm: oracle==pin BYTE-ID (forme string-callable, fast E pieno — presidio L-AM2)
+promozione gate fxsmdiv: pin==stash s172 BYTE-ID (3 divergenze §3.26 PRE-esistenti INVARIATE)
+promozione gate fxau: oracle==pin BYTE-ID (10 forme loader array-callable — presidio L-AU1)
+promozione gate fxaudiv: pin==stash s172 BYTE-ID (divergenza §3.27 PRE-esistente INVARIATA)
+promozione gate fxmck: oracle==pin BYTE-ID (method-call k=3/k=5 — presidio L-MCk (S-166: ==oracle))
+promozione gate fxmc: pin==stash s172 BYTE-ID (method-call fast path L-MC1 (S-165) invariato)
+promozione gate fxmc2: pin==stash s172 BYTE-ID (§3.28 ordine SEND_VAR_EX/dtor temp PRE-esistente INVARIATO)
+promozione gate fxmc2fib: pin==stash s172 BYTE-ID (§3.29 Fiber non final PRE-esistente INVARIATO)
+promozione gate fxsl1: oracle==pin BYTE-ID (presidio DIRETTO L-SL1: overflow/shift/Div/Mod/Pow/Ref/Double/stringa/null/bool/dst==l/typed-ref/IncDec limiti/CmpJmpSC 8 forme)
+promozione gate fxsl1div: pin==stash s172 BYTE-ID (forme con diag §3.11/§3.13 PRE-esistenti INVARIATE)
+promozione gate fxsl2: oracle==pin BYTE-ID (presidio DIRETTO L-SL2 (forme P1 in loop a 2 iterazioni = IC calda): P1 bigramma fuso e P2 BinarySTDst — overflow/shift/Div/Mod/Pow/Concat/Double/stringa/null/bool/Ref/typed int-float/readonly (anche in scope)/private/hook set/__set/ereditata/dinamica)
+promozione gate fxsl2div: pin==stash s172 BYTE-ID (§3.30 default float da literal int PRE-esistente INVARIATO)
+promozione gate fxsl3: oracle==pin BYTE-ID (presidio DIRETTO fetta 3 (loop a 2 = IC calda): P3 peephole $s OP= $o->x e P4 borrow unico recv==slot — overflow/shift/Div/Mod/Pow/Concat/Double/stringa/null/bool/Ref/typed-ref/__get/hook get/enum/dinamica/dst==slot/controlli negativi)
+promozione gate fxsl3div: pin==stash s172 BYTE-ID (§3.32 riga del Deprecated prop dinamica PRE-esistente INVARIATA)
+promozione quiescenza: PASS al tentativo 1
+promozione micro pin s173: rapporto_arith=2.8  [derivata: companion 1.19/0.43] rapporto_prop=3.0  [derivata: companion 1.25/0.42] rapporto_calls=4.8  [derivata: companion 2.09/0.44] rapporto_str=4.1  [derivata: companion 0.62/0.15] rapporto_arr=3.1  [derivata: companion 0.89/0.29] rapporto_re=2.5  [derivata: companion 0.91/0.36] 
+conferma post-pin prop-dq (pin s173 vs stash s172): D=+11.67 rumore=0.93 segni=5/5 A=52.93 B=41.27 ns/iter (N=150000000 dal driver) (attesa: segno +, D nell'intorno del D_prop del braccio promosso nell'A/B; rumore > attesa/2 ⇒ SOLO SEGNO)
+promozione gate ORM: fail-set per NOME == baseline (16 nomi) · Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, Skipped: 59, Incomplete: 2.
+promozione gate http-kernel: 0E/0F · Tests: 1665, Assertions: 3850, PHPUnit Warnings: 2, Warnings: 5, Deprecations: 128.
+promozione server: PIN server s173 = 2d2adc4549a820e0 @ 25025572 (smoke OK, stashato, registrato+committato). pin phpr INVARIATO (da4921a52eba0187)
+PROMOZIONE COMPLETA rc=0 (da promo-out/rcb): pin s173 = da4921a52eba0187
