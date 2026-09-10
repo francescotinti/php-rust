@@ -60,7 +60,7 @@ composte tra binari diversi.
 Pre-flight S-174: README/COVERAGE pubblici sono al pin s172 (docs af234ee3): risincronizzare via gh-status-sync a inizio S-174 (corpus 20 min, non durante la coppia). Pre-flight S-174: pin phpr **s173 da4921a52eba0187** + server **2d2adc4549a820e0** (SOLO via pin-*.sh; stash bracci
 `phpr-s173-f3-B/C` NON pin) · Data ≥10G (≥20G se xctrace; corpus-gate ~5G transitori) · MySQL wp8 con
 l'elenco (S-173: era GIÙ, riavviato col daemonizer perl double-fork+setsid sul datadir esterno) ·
-uploads sotto guardia · corpus 1412 · lock misura da CREARE COL TOKEN `s174` · CI: coda 17 job, ultimo evento «DONE af234ee33993 OK 2026-09-10 01:53:52»; runner in disk-low finché Data <10G (target canonica potata in chiusura) · coppia
+uploads sotto guardia · corpus 1412 · lock: `/private/tmp/phpr-measure.lock` con token `s173` LASCIATO VIVO per la coppia t19 in corso — in S-174 verificare che pair/orm siano FINITI (.done) e SOSTITUIRLO col token `s174` · CI: coda 17 job, ultimo evento «DONE af234ee33993 OK 2026-09-10 01:53:52»; runner in disk-low finché Data <10G (target canonica potata in chiusura) · coppia
 dovuta SOLO se il pin cambia · lettura: REGOLE.md → QUI → wp172-harness/s173-verdetto.out +
 revisione-s173.md → s173-f3-verdetto.out → s173-criterio.md → s173-azrev-criterio.md → WP_SESSION_173 →
 PERF_MAP.
