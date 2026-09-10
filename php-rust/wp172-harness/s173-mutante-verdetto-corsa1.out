@@ -1,0 +1,19 @@
+== s173 mutante abortivo L-SL2 (P1/P2) — pin 5f2dff7d17ebed79 (sorgente = commit 907dd019fcbf, run.rs 0d16d8d7f45dbe68), fixture 120 righe, Data 10.3G, Extreme 2780G (target di build) 2026-09-10 01:57:35 ==
+MP1: binario 3e9f9310f4c1b7c9 rc_fixture=0
+MP1: blocchi ROTTI (25): p1-add p1-and p1-arr-dst p1-double-dst p1-dst-ref p1-dst-ref-alias p1-inherited p1-loop100 p1-mul p1-null-dst p1-or p1-self p1-shl p1-shl-63 p1-shl-64 p1-shl-neg-l p1-shr p1-shr-70 p1-shr-70-neg p1-shr-neg-l p1-str-dst p1-sub p1-two-objs p1-xor prop-micro-1000 
+MP2: binario e51b3b5e24b6ee0c rc_fixture=0
+MP2: blocchi ROTTI (15): p2-add p2-arr-src p2-call-src p2-loop100 p2-mul p2-or p2-shl p2-shl-64 p2-shl-neg-l p2-shr p2-shr-64 p2-shr-neg-l p2-sub p2-xor prop-micro-1000 
+copertura MP1: 100 etichette nel pin, non classificate: nessuna
+copertura MP2: 100 etichette nel pin, non classificate: nessuna
+MP1: attese NON rotte: p1-loop-overflow p1-private-inscope -> fast path NON preso (o forma non abbassata) su questi
+MP1: blocchi fuori-dominio INTATTI (nessuna presa fuori dominio)
+MP1 a verdetto: p1-shl-63 ROTTO -> probe sigillato PRESO (IC set riempita su questa forma)
+MP1 a verdetto: p1-typed-int INTATTO -> probe NON preso (IC set non riempita, slot assente o fuori dominio)
+MP1 a verdetto: p1-typed-float-dst INTATTO -> probe NON preso (IC set non riempita, slot assente o fuori dominio)
+MP1 a verdetto: p1-typed-float-from-long INTATTO -> probe NON preso (IC set non riempita, slot assente o fuori dominio)
+MP1 a verdetto: p1-dynamic INTATTO -> probe NON preso (IC set non riempita, slot assente o fuori dominio)
+MP1 a verdetto: p1-dynamic-self INTATTO -> probe NON preso (IC set non riempita, slot assente o fuori dominio)
+MP2: attese NON rotte: p2-and p2-loop-overflow -> fast path NON preso (o forma non abbassata) su questi
+MP2: blocchi fuori-dominio INTATTI (nessuna presa fuori dominio)
+SORGENTE: run.rs del mutante (prima dell'edit) 0d16d8d7f45dbe68 == commit 907dd019fcbf (repo non toccato: mutanti nati dall'archivio del commit)
+ESITO rc=1 (0 = fast path preso su tutte le attese, dominio rispettato; 1 = attese non rotte; 5 = presa fuori dominio; 7 = copertura) — Data 11.0G fine 2026-09-10 02:04:03

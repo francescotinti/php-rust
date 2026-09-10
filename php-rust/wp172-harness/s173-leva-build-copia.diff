@@ -1,0 +1,29 @@
+--- wp172-harness/s172-leva-build.sh	2026-09-07 23:32:55
++++ wp172-harness/s173-leva-build.sh	2026-09-10 02:04:14
+@@ -1,18 +1,17 @@
+ #!/bin/bash
+-# s172-leva-build.sh <COMMIT> <BRACCIO> — build di un braccio candidato (L-SL2, criterio p.3)
+-# da un COMMIT dichiarato (git archive → /private/tmp/s172-src-<BRACCIO>: il repo può
+-# intanto avanzare) con la ricetta del pin (SOURCE_DATE_EPOCH=0 CARGO_INCREMENTAL=0
+-# cargo build --release -p php-cli) in TARGET DEDICATO /private/tmp/s172-leva-tgt
+-# (condiviso tra B e C: build SEQUENZIALI; mai php-rust-output). COPIA DICHIARATA di
+-# wp171-harness/s171-leva-build.sh; adattamenti: sorgente = archivio del commit invece
+-# dell'albero di lavoro (la guardia «crates puliti» diventa «commit esistente»),
+-# nome braccio nei file di esito. Esiti: ab-out/build-<BRACCIO>.out/.rc/.done.
++# s173-leva-build.sh <COMMIT> <BRACCIO> — build di un braccio candidato (L-SL2 fetta 3, criterio
++# s173-criterio.md p.3) da un COMMIT dichiarato (git archive → $SRC: il repo può intanto
++# avanzare) con la ricetta del pin (SOURCE_DATE_EPOCH=0 CARGO_INCREMENTAL=0 cargo build
++# --release -p php-cli) in TARGET DEDICATO (condiviso tra B e C: build SEQUENZIALI; mai
++# php-rust-output). COPIA DICHIARATA di s172-leva-build.sh (manifest s173-leva-build-copia.diff);
++# adattamenti: TAG s173, target e sorgente sul disco ESTERNO (Data ~10G in S-173: il target
++# del mutante vi ha già costruito senza incidenti), esiti in ab-out/build-<BRACCIO>.*.
+ set -u
+ export PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin:"$HOME/.cargo/bin"
+ REPO="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust"
+ C="${1:?COMMIT}"; B="${2:?BRACCIO}"
+ H="$REPO/wp172-harness"; OUT="$H/ab-out"; mkdir -p "$OUT"
+-TGT=/private/tmp/s172-leva-tgt; SRC="/private/tmp/s172-src-$B"
++TGT="/Volumes/Extreme Pro/Claude/s173-leva-tgt"; SRC="/Volumes/Extreme Pro/Claude/s173-src-$B"
+ RC="$OUT/build-$B.rc"; LOG="$OUT/build-$B.log"; RES="$OUT/build-$B.out"; DONE="$OUT/build-$B.done"
+ rm -f "$RC" "$DONE"
+ cd "$REPO" || { echo 4 > "$RC"; touch "$DONE"; exit 4; }
