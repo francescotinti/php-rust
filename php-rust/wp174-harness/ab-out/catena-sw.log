@@ -1,0 +1,16 @@
+2026-09-13 22:42:43 catena sw avviata
+A=da4921a52eba0187 Z=19c0540e03d590a8 B=56dc1af8106664bf C=b6c4b5876971d76d
+parità arith-dq: A==Z==B==C==oracle; dump {main} A==Z==B==C (26 righe)
+parità prop-dq: A==Z==B==C==oracle; dump {main} A==Z==B==C (37 righe)
+fx-sw1: candidati == oracle byte-id (88 righe)
+fx-sl3: candidati == oracle byte-id (86 righe)
+fx-sl2: candidati == oracle byte-id (118 righe)
+fx-sl1: candidati == oracle byte-id (68 righe)
+fx-sl3-div: B==pin, C==pin byte-id (§3.32 invariata)
+braccio B: BRACCIO phpr s174-sw-B = 56dc1af8106664bf (smoke parità 2 modi OK, stash phpr-s174-sw-B, registrato+committato). Braccio di misura: NON è un pin.
+braccio C: BRACCIO phpr s174-sw-C = b6c4b5876971d76d (smoke parità 2 modi OK, stash phpr-s174-sw-C, registrato+committato). Braccio di misura: NON è un pin.
+A da4921a5: sym=__ZN11php_runtime2vm3run37_$LT$impl$u20$php_runtime..vm..Vm$GT$8run_loop17h4a24220b788aa3c6E bl=5986
+Z 19c0540e: sym=__ZN11php_runtime2vm3run37_$LT$impl$u20$php_runtime..vm..Vm$GT$8run_loop17h4a24220b788aa3c6E bl=5986
+B 56dc1af8: sym=__ZN11php_runtime2vm3run37_$LT$impl$u20$php_runtime..vm..Vm$GT$8run_loop17h4a24220b788aa3c6E bl=5988
+C b6c4b587: sym=__ZN11php_runtime2vm3run37_$LT$impl$u20$php_runtime..vm..Vm$GT$8run_loop17h4a24220b788aa3c6E bl=5993
+2026-09-13 22:46:55 exec lanciatore

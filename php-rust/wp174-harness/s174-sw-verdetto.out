@@ -1,0 +1,23 @@
+== s174 LEVA sw — A=da4921a5 MISURATO (/private/tmp/s174-bins/A, pin s173) Z=19c0540e MISURATO (/private/tmp/s174-bins/Z, A0 stessa sorgente del pin) B=56dc1af8 MISURATO (/private/tmp/s174-bins/B, sweep-in-op) C=b6c4b587 MISURATO (/private/tmp/s174-bins/C, B+back-edge fuso); GIUDICE arith-dq N=250000000 (bersaglio) E GUARDIA prop-dq N=150000000 (sola regressione; N dal driver); R=5 ordine dei quattro bracci RUOTATO per coppia su giudice e guardia; banda tra run vs PREV dq=23.68 prop=41.13; criterio s174-criterio.md ==
+sentinella LS: /Applications/Antigravity /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.96.0-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv 
+parità arith-dq: A==Z==B==C==atteso oracle (85937499750000000 )
+parità prop-dq: A==Z==B==C==atteso oracle (300000000 )
+floors: A=0.02 Z=0.02 B=0.02 C=0.02 oracle=0.05
+  coppia1 [AZBC]: dqA=6.01 dqZ=6.07 dqB=5.78 dqC=5.10 propA=6.21 propZ=6.22 propB=5.75 propC=5.44 | dqO=2.21 propO=2.20
+  coppia2 [CBZA]: dqA=6.01 dqZ=6.06 dqB=5.69 dqC=5.12 propA=6.19 propZ=6.19 propB=5.75 propC=5.42 | dqO=2.21 propO=2.14
+  coppia3 [BCAZ]: dqA=6.12 dqZ=6.01 dqB=5.68 dqC=5.11 propA=6.30 propZ=6.21 propB=5.78 propC=5.42 | dqO=2.27 propO=2.15
+  coppia4 [ZACB]: dqA=6.03 dqZ=6.33 dqB=5.77 dqC=5.17 propA=6.22 propZ=6.30 propB=5.75 propC=5.48 | dqO=2.55 propO=2.29
+  coppia5 [CZAB]: dqA=6.04 dqZ=6.14 dqB=5.70 dqC=5.21 propA=6.37 propZ=6.26 propB=5.93 propC=5.52 | dqO=2.22 propO=2.14
+LAYOUT arith-dq: A=24.04 Z=24.20 ⇒ SL in-run (colonna) 0.16 / (appaiata) 0.24 ns/iter — confronto 0,94 (arith S-168): sotto; banda tra run |A−PREV 23.68| = 0.36 (rumore drop-1 A'=0.12 Z'=0.52)
+LAYOUT prop-dq: A=41.33 Z=41.33 ⇒ SL in-run (colonna) 0.00 / (appaiata) 0.00 ns/iter — confronto 0,94 (arith S-168): sotto; banda tra run |A−PREV 41.13| = 0.20 (rumore drop-1 A'=0.73 Z'=0.47)
+GIUDICE arith-dq (bersaglio): oracle=8.68 ns/iter; A/oracle=2.77× Z/oracle=2.79× B/oracle=2.62× C/oracle=2.35×
+GIUDICE arith-dq B: A=24.04 B=22.72 ns/iter D=A−B colonna=+1.32 appaiata=+1.28 soglia=4.00 (rumore drop-1 A'=0.12 B'=0.36, SL=0.24) -> NON nominato (vale 0); direzione FIRMATA (B più veloce); regressione (D < −max(4,rumore)): no
+GIUDICE arith-dq C: A=24.04 C=20.40 ns/iter D=A−C colonna=+3.64 appaiata=+3.56 soglia=4.00 (rumore drop-1 A'=0.12 C'=0.28, SL=0.24) -> NON nominato (vale 0); direzione FIRMATA (C più veloce); regressione (D < −max(4,rumore)): no
+CONTRASTO arith-dq (back-edge fuso, ALTERNATO) C: B=22.72 C=20.40 ns/iter D=B−C colonna=+2.32 appaiata=+2.28 soglia=4.00 (rumore drop-1 B'=0.36 C'=0.28, SL=0.24) -> NON nominato (vale 0); direzione FIRMATA (C più veloce); regressione (D < −max(4,rumore)): no
+ATTESE p.4: D_B ∈ [1;3]: CENTRATA (+1.32/+1.28); KILL-B (D_B < max(1, SL)): NON scatta; D_C ∈ [2,5;6]: CENTRATA (+3.64/+3.56); C−B ∈ [1;3]: CENTRATA (+2.32/+2.28)
+GUARDIA prop-dq (sola regressione; D = direzione, magnitudine NON ripartita — attesa dichiarata [2;6], non giudicata): oracle=14.00 ns/iter; A/oracle=2.95× B/oracle=2.73× C/oracle=2.58×
+GUARDIA prop-dq B: A=41.33 B=38.20 ns/iter D=A−B colonna=+3.13 appaiata=+3.07 soglia=4.00 (rumore drop-1 A'=0.73 B'=0.20, SL=0.00) -> NON nominato (vale 0); direzione FIRMATA (B più veloce); regressione (D < −max(4,rumore)): no
+GUARDIA prop-dq C: A=41.33 C=36.13 ns/iter D=A−C colonna=+5.20 appaiata=+5.13 soglia=4.00 (rumore drop-1 A'=0.73 C'=0.40, SL=0.00) -> CIFRA = [+5.13;+5.20] (entrambi gli stimatori nominano); direzione FIRMATA (C più veloce); regressione (D < −max(4,rumore)): no
+PROMOZIONE: NON ammessa — miglior braccio C D=+3.56 NON nominato (rc=4: solo direzione)
+ESITO rc=4
+sentinella LS fine: /Applications/Antigravity /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.96.0-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv 

@@ -1,0 +1,24 @@
+1a2
+> # s174-ab-leva-bis.sh — CRITERIO-BIS (s174-criterio-bis.md): prop-dq CO-BERSAGLIO; COPIA DICHIARATA di s174-ab-leva.sh (manifest s174-ab-leva-bis-copia.diff), solo regola di promozione (p.2) e attese prop.
+24c25
+< VERD="$H/s174-$TAG-verdetto.out"; RC="$OUT/$TAG.rc"
+---
+> VERD="$H/s174-$TAG-verdetto.out"  # criterio-bis: TAG sw2; RC="$OUT/$TAG.rc"
+113,115c114,118
+< print(f"GUARDIA prop-dq (sola regressione; D = direzione, magnitudine NON ripartita — attesa dichiarata [2;6], non giudicata): oracle={med(pO):.2f} ns/iter; A/oracle={med(pA)/med(pO):.2f}× B/oracle={med(pB)/med(pO):.2f}× C/oracle={med(pC)/med(pO):.2f}×")
+< _, _, _, _, regGB = stat("GUARDIA prop-dq", pA, pB, "B", "A", SLp)
+< _, _, _, _, regGC = stat("GUARDIA prop-dq", pA, pC, "C", "A", SLp)
+---
+> print(f"BERSAGLIO-BIS prop-dq (criterio-bis p.2: co-bersaglio a nomina): oracle={med(pO):.2f} ns/iter; A/oracle={med(pA)/med(pO):.2f}× B/oracle={med(pB)/med(pO):.2f}× C/oracle={med(pC)/med(pO):.2f}×")
+> DPBc, DPBp, nPB, nomPB, regGB = stat("BERSAGLIO-BIS prop-dq", pA, pB, "B", "A", SLp)
+> DPCc, DPCp, nPC, nomPC, regGC = stat("BERSAGLIO-BIS prop-dq", pA, pC, "C", "A", SLp)
+> DPB, DPC = min(DPBc, DPBp), min(DPCc, DPCp)
+> print(f"ATTESE BIS prop-dq: D_B ∈ [1,5;4]: {'CENTRATA' if 1.5 <= DPB <= 4 else 'FUORI'} ({DPBc:+.2f}/{DPBp:+.2f}); D_C ∈ [2;6]: {'CENTRATA' if 2 <= DPC <= 6 else 'FUORI'} ({DPCc:+.2f}/{DPCp:+.2f})")
+118c121
+< cands = [(DC, 'C', nomC, nC, regGC), (DB, 'B', nomB, nB, regGB)]
+---
+> cands = [(max(DC, DPC), 'C', nomC or nomPC, max(nC, nPC), regGC), (max(DB, DPB), 'B', nomB or nomPB, max(nB, nPB), regGB)]
+128c131
+<         print(f"PROMOZIONE (p.4: braccio con D maggiore, nominato da ENTRAMBI gli stimatori, guardia senza regressione): AMMESSA — braccio {lab} (D={D:+.2f})")
+---
+>         print(f"PROMOZIONE (criterio-bis p.2: braccio nominato su ALMENO un bersaglio da ENTRAMBI gli stimatori, senza regressione sull'altro): AMMESSA — braccio {lab} (D max={D:+.2f}; arith C {DCc:+.2f}/{DCp:+.2f} nom={nomC}, prop C {DPCc:+.2f}/{DPCp:+.2f} nom={nomPC})")
