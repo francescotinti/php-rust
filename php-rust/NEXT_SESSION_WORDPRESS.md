@@ -25,9 +25,12 @@ dispatch 1,75/op · **coppia t19: t19 LETTA (S-173, 2026-09-10 06:12): WP median
 2. **Az.rev. S-173** (revisione, PRIMA di nuove leve): (a) nei `.out` la banda tra run (stesso codice, binari diversi) accanto al drop-1 e 0,94 RI-DERIVATO su prop-dq (`s173-ab-leva.sh:80` lo importa dal giudice arith); (b) il copione A/B stampi ANCHE la mediana delle differenze appaiate, cifra P2 come intervallo [4,87;5,60]; (c) decomposizioni del residuo senza cifre o marcate «ipotesi» (fatto S-173 in NEXT/REPORT_GAP/verdetto: verificare); (d) il verdetto del mutante nomini i blocchi `-each` INTATTI come prova del dominio (oggi sono solo nelle liste INT).
 3. **Prop, dove sta il residuo** (prop-dq 41,13 − 13,93 = 27,2 ns/iter; IPOTESI di riparto, cifre da altri binari: dispatch 7×1,75=12,3 + Sweep×2
    ≈5,8 + CmpJmpSC/IncDec ≈7 + corpi ≈2): il corpo prop è quasi ESAURITO sul giudice — il residuo è
-   dispatch+Sweep+controllo di loop (comune a TUTTE le categorie). Candidate: (a) Sweep elidibile
-   quando il frame non ha temporanei vivi (census dal dump: 2 Sweep/iter su 7 op), (b) fusione
-   CmpJmpSC+IncDecSlotJmp in un op di loop (bigramma 0012/0019 = loop `for` canonico); criterio
+   dispatch+Sweep+controllo di loop (comune a TUTTE le categorie). Candidate: (a) Sweep = sweep GC di fine
+   statement (run.rs 6888: buffer note refcount + demozioni + pressione, fast-path noop già in WP-39): NON elidibile
+   staticamente per «assenza di temporanei» (il corpo esatto di BinarySCSCDst/BinarySTDst/PropSet può rilasciare
+   un contenitore ⇒ gc_note); leva percorribile = FUSIONE dello Sweep nell op precedente (bit sweep_after, stesso
+   controllo noop senza dispatch; attesa ≤2 dal mock m4b 2,9, kill <1); elisione statica solo op-per-op «mai-note»
+   provate sul corpo esatto; (b) fusione CmpJmpSC+IncDecSlotJmp (bigramma 0012/0019 = loop `for` canonico), bracci separati; criterio
    proprio, giudice arith-dq (loop puro) + prop-dq guardia; mock magro PRIMA se il corpo non è leggibile.
 4. **Perimetro typed**: IC set non riempita su classi con prop tipizzate/private (mutante S-173) ⇒ P1/P4
    non mordono sul PHP moderno (WP/ORM usano typed props): census WP/ORM delle forme `$o->x = $o->y OP C`
