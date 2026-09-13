@@ -22,3 +22,4 @@ MP4 a verdetto: p4-this-private INTATTO -> borrow unico NON preso (forma non abb
 MP4 a verdetto: p4-dynamic INTATTO -> borrow unico NON preso (forma non abbassata al bigramma o IC non riempita)
 MP4 a verdetto: p4-self-rhs INTATTO -> borrow unico NON preso (forma non abbassata al bigramma o IC non riempita)
 ESITO rc=0 (0 = fast path preso su tutte le attese, dominio rispettato; 1 = attese non rotte; 5 = presa fuori dominio; 7 = copertura) fine 2026-09-10 02:31:44
+NOTA post-revisione S-174 (az.rev. S-173 (d), s174-azrev-criterio.md p.4): blocchi -each col reset DENTRO il loop, attesi INTATTI e INTATTI per NOME (assenti da ab-out/s173-mut3/MP3.rotte 22 righe e MP4.rotte 9 righe, letti 2026-09-13): MP3 = p3-null-dst-each p3-bool-dst-each p3-numstr-dst-each · MP4 = p4-dst-double-each p4-dst-str-each — prova del dominio (il dst resettato a null/bool/numstr/double/str a OGNI iterazione non è mai preso dal fast path), non riclassificazione.
