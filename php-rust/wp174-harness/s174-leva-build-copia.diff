@@ -1,0 +1,18 @@
+2,3c2,3
+< # s173-leva-build.sh <COMMIT> <BRACCIO> — build di un braccio candidato (L-SL2 fetta 3, criterio
+< # s173-criterio.md p.3) da un COMMIT dichiarato (git archive → $SRC: il repo può intanto
+---
+> # s174-leva-build.sh <COMMIT> <BRACCIO> — build di un braccio candidato (leva «Sweep-in-op», criterio
+> # s174-criterio.md p.3) da un COMMIT dichiarato (git archive → $SRC: il repo può intanto
+6,7c6,7
+< # php-rust-output). COPIA DICHIARATA di s172-leva-build.sh (manifest s173-leva-build-copia.diff);
+< # adattamenti: TAG s173, target e sorgente sul disco ESTERNO (Data ~10G in S-173: il target
+---
+> # php-rust-output). COPIA DICHIARATA di s173-leva-build.sh (manifest s174-leva-build-copia.diff);
+> # adattamenti: TAG s174, harness wp174; target e sorgente sul disco ESTERNO (Data ~9G in S-174; il target
+13,14c13,14
+< H="$REPO/wp172-harness"; OUT="$H/ab-out"; mkdir -p "$OUT"
+< TGT="/Volumes/Extreme Pro/Claude/s173-leva-tgt"; SRC="/Volumes/Extreme Pro/Claude/s173-src-$B"
+---
+> H="$REPO/wp174-harness"; OUT="$H/ab-out"; mkdir -p "$OUT"
+> TGT="/Volumes/Extreme Pro/Claude/s174-leva-tgt"; SRC="/Volumes/Extreme Pro/Claude/s174-src-$B"

@@ -617,6 +617,41 @@ impl<'m> super::Vm<'m> {
         self.incdec_slot_discard_slow(top, i, inc)
     }
 
+    /// S-174 «sweep-in-op» (criterio wp174-harness/s174-criterio.md p.2): il
+    /// corpo di [`Op::Sweep`] è INERTE quando il frame è in un distruttore
+    /// (Frame::in_destructor) o quando vale il fast-path WP-39/WP-50 del
+    /// handler: buffer delle note vuoto (cursore in coda), nessuna demozione
+    /// light da ri-esaminare per un main sweep, pressione del cycle collector
+    /// sotto `gc_sweep_bound`. UN solo testo: il handler `Op::Sweep` lo
+    /// richiama; gli op fusi lo interrogano sullo Sweep SEGUENTE
+    /// (`sweep_skip_next`) DOPO ogni loro effetto, dal solo sentiero in place
+    /// su Long (nessun drop, nessuna chiamata PHP possibile) — si scavalca
+    /// SOLO uno Sweep che non farebbe nulla; nessuna elisione statica.
+    #[inline(always)]
+    fn sweep_idle(&self, top: usize, main: bool) -> bool {
+        self.frames[top].flags.get(FrameFlags::IN_DESTRUCTOR)
+            || (self.gc_buf_head >= self.gc_buf.len()
+                && (!main || self.gc_light_demoted.is_empty())
+                && (!self.gc_enabled
+                    || self.gc_cycle_roots.len() + self.gc_ctr_roots.len() < self.gc_sweep_bound))
+    }
+
+    /// Vero se `func.ops[at]` è uno `Sweep` inerte (vedi [`Self::sweep_idle`]):
+    /// l'op fuso può allora saltarlo senza dispatch. Nelle build census
+    /// risponde SEMPRE falso: lo Sweep resta contato dal suo handler.
+    #[inline(always)]
+    fn sweep_skip_next(&self, top: usize, func: &Func, at: usize) -> bool {
+        #[cfg(any(feature = "op-census", feature = "gc-census"))]
+        {
+            let _ = (top, func, at);
+            false
+        }
+        #[cfg(not(any(feature = "op-census", feature = "gc-census")))]
+        {
+            matches!(func.ops.get(at), Some(Op::Sweep { main }) if self.sweep_idle(top, *main))
+        }
+    }
+
     /// S-171 L-SL1: corpo ESATTO di [`Self::incdec_slot_discard`] oltre il
     /// Long senza overflow (Undef→Null, `compute_incdec`, `raise_diags`,
     /// `store_slot`, nello stesso ordine di prima), tenuto fuori linea.
@@ -2109,6 +2144,11 @@ impl<'m> super::Vm<'m> {
                             self.frames[top].stack.pop();
                             if let Zval::Long(x) = &mut self.frames[top].slots[*dst as usize] {
                                 *x = r;
+                                // S-174 «sweep-in-op» B (criterio p.2): dal solo
+                                // sentiero in place, Sweep seguente inerte ⇒ ip+2.
+                                if self.sweep_skip_next(top, func, ip + 1) {
+                                    self.frames[top].ip = ip + 2;
+                                }
                             } else {
                                 self.reg_store_slot(top, *dst, Zval::Long(r))?;
                             }
@@ -2216,6 +2256,13 @@ impl<'m> super::Vm<'m> {
                         Some(r) => {
                             if let Zval::Long(x) = &mut self.frames[top].slots[*dst as usize] {
                                 *x = r;
+                                // S-174 «sweep-in-op» B (criterio p.2): dal solo
+                                // sentiero in place, se lo Sweep seguente è inerte
+                                // (`sweep_skip_next`, predicato del handler valutato
+                                // DOPO l'effetto) lo si scavalca senza dispatch.
+                                if self.sweep_skip_next(top, func, ip + 1) {
+                                    self.frames[top].ip = ip + 2;
+                                }
                             } else {
                                 self.reg_store_slot(top, *dst, Zval::Long(r))?;
                             }
@@ -4650,6 +4697,12 @@ impl<'m> super::Vm<'m> {
                         if let Some(r) = sealed {
                             if let Zval::Long(x) = &mut self.frames[top].slots[*dst as usize] {
                                 *x = r;
+                                // S-174 «sweep-in-op» B (criterio p.2): dal solo
+                                // sentiero in place, Sweep a ip+2 inerte ⇒ ip+3.
+                                if self.sweep_skip_next(top, func, ip + 2) {
+                                    self.frames[top].ip = ip + 3;
+                                    continue;
+                                }
                             } else {
                                 self.reg_store_slot(top, *dst, Zval::Long(r))?;
                             }
@@ -4813,7 +4866,13 @@ impl<'m> super::Vm<'m> {
                                                 if let Some(Zval::Long(x)) = bm.props.get_slot_mut(sslot) {
                                                     *x = r;
                                                     drop(bm);
-                                                    self.frames[top].ip = ip + 2;
+                                                    // S-174 «sweep-in-op» B (criterio p.2): scrittura in place
+                                                    // compiuta, nessun effetto pendente: Sweep a ip+2 inerte ⇒ ip+3.
+                                                    self.frames[top].ip = if self.sweep_skip_next(top, func, ip + 2) {
+                                                        ip + 3
+                                                    } else {
+                                                        ip + 2
+                                                    };
                                                     break 'f true;
                                                 }
                                             }
@@ -4871,7 +4930,14 @@ impl<'m> super::Vm<'m> {
                             )? {
                                 self.gc_note(&old);
                             }
-                            self.frames[top].ip = ip + 2;
+                            // S-174 «sweep-in-op» B (criterio p.2): SOLO dal sentiero in
+                            // place (write_property_at può notare l'old): Sweep a ip+2
+                            // inerte ⇒ ip+3.
+                            self.frames[top].ip = if in_place && self.sweep_skip_next(top, func, ip + 2) {
+                                ip + 3
+                            } else {
+                                ip + 2
+                            };
                             break 'f true;
                         }
                         let yv = {
@@ -6909,11 +6975,13 @@ impl<'m> super::Vm<'m> {
                         // note buffer is empty here), no purge, no collect.
                         // Full census: 1.014,7M light entries, ~805M of them
                         // band-only.
-                        let noop = self.gc_buf_head >= self.gc_buf.len()
-                            && (!*main || self.gc_light_demoted.is_empty())
-                            && (!self.gc_enabled
-                                || self.gc_cycle_roots.len() + self.gc_ctr_roots.len()
-                                    < self.gc_sweep_bound);
+                        // S-174 «sweep-in-op» (criterio wp174-harness/s174-criterio.md
+                        // p.2): il predicato qui sopra vive in `sweep_idle` — UN
+                        // solo testo, condiviso con gli op che lo interrogano
+                        // sullo Sweep SEGUENTE (`sweep_skip_next`) dopo i loro
+                        // effetti. Qui, sotto `!IN_DESTRUCTOR`, vale il solo
+                        // fast-path WP-39/WP-50.
+                        let noop = self.sweep_idle(top, *main);
                         #[cfg(feature = "gc-census")]
                         if noop
                             && self.gc_enabled
