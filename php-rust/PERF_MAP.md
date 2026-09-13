@@ -1,6 +1,21 @@
 # PERF_MAP — phpr vs PHP oracle 8.5.7, mappa multi-workload
 
-Aggiornata: **2026-09-10 notte (S-173)** · pin **NUOVO s173 phpr da4921a52eba0187 + server 2d2adc4549a820e0**
+Aggiornata: **2026-09-13 sera (S-174)** · pin **INVARIATO s173 phpr da4921a52eba0187 + server 2d2adc4549a820e0**
+(**S-174 = LEVA «Sweep-in-op» AMMESSA a criterio-bis, promozione DIFFERITA (Data 4G)** (criteri
+wp174-harness/s174-criterio.md + s174-criterio-bis.md): B = predicato inerte di `Op::Sweep` estratto in
+`sweep_idle` (un solo testo) e `sweep_skip_next` a fine op dai soli sentieri in place su Long
+(BinarySCSCDst, BinarySTDst, peephole P3, probe P1/P4) ⇒ Sweep inerte scavalcato senza dispatch; C = B +
+back-edge fuso IncDecSlotJmp→CmpJmpSC (`long_cmp_i64` verbatim); zero unsafe; spente sotto census. A/B R=5
+a 4 bracci ruotati (A pin, Z gemello del pin 19c0540e = controllo nullo, B 56dc1af8, C b6c4b587), mediane
+per colonna E appaiate, banda tra run |A−PREV| e |A−Z| nei .out: **corsa 1 rc=4** (arith-dq C +3,64/+3,56
+5/5 < pavimento 4; prop-dq guardia C [5,13;5,20]) ⇒ criterio-bis (prop-dq co-bersaglio, commit prima del
+lancio) ⇒ **corsa 2 rc=0: prop-dq 41,33/42,07→36,13/36,47 = CIFRA [5,07;5,60] (2,95×→2,58-2,60×),
+arith-dq 24,04/24,44→20,40/20,92 solo direzione (2,77-2,82×→2,35-2,41×), C−B +1,96 direzione, nessuna
+regressione**; disasm bl 5986→5988→5993; fx-sw1 NUOVA bilaterale 88 righe; mutante MS/MC: corsa 1 rc=1 (attese a loop non discriminanti; p1-loop idempotente) → corsa 3 (loop con echo, coppie per sito) → corsa 4 rc=0: MS 11/11 ROTTE = i 5 siti provati (BinarySTDst, P3, P1, P4, BinarySCSCDst) coi controlli p3-site-ctl/p1-site-typed INTATTI, MC 29/29 ROTTE, nessuna presa fuori dominio; lezioni: `$l = $l + (…)` NON è BinarySCSCDst (serve `+=`), classe con prop tipizzata = probe P1/P4 mai preso; dente
+run.rs cap 7274→7361 dichiarato; candidato stashato phpr-s174-sw-C; coppia NON dovuta (pin invariato) ·
+az.rev. S-173 TUTTE chiuse · gh-status-sync: corpus 2655 e fns 1017/2143 identici · revisione S-174 (lente
+SEMANTICA): REGGE CON RILIEVI (artefatti fixture v1, mutante senza forme a loop/siti P1-P4-SCSC, criterio-bis a dati visti) — (1)(2) chiuse in sessione: fixture v4 + mutante corsa 4 rc=0 (MS 11/11 coi 5 siti, MC 29/29) · verdetti wp174-harness/s174-verdetto.out, s174-sw-verdetto.out, s174-sw2-verdetto.out)
+
 (**S-173 = LEVA L-SL2 fetta 3 «prop, residuo del corpo» PROMOSSA** (criterio wp172-harness/
 s173-criterio.md): P3 = peephole runtime `Op::PropGetSlot`+`BinarySTDst` (guardie IC get verbatim +
 dominio i64 di BinarySTDst, store in place su dst Long altrimenti `reg_store_slot`, `ip+2`:

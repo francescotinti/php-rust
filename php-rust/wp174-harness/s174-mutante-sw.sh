@@ -32,6 +32,14 @@
 #   MC = {stdst-dtor stdst-dtor-twice stdst-dtor-double stdst-dtor-null stdst-dtor-concat
 #   stdst-dtor-overflow stdst-dtor-div p3 p3-dtor p4-dtor light window e-dtor for-double-slot
 #   for-double-const for-str-const for-slot-bound}.
+# CORSA 3 (replica alla revisione S-174, rilievo 2 + azione 4): fixture v3 = forme a LOOP con echo nel corpo (scavalco
+# osservabile per iterazione) e coppie per SITO (p3-site/p1-site/p4-site/scsc-site ATTESE ROTTE, p3-site-ctl con
+# statement intermedio NON fuso ATTESA INTATTA); REGOLA: un blocco NON discriminante va «a verdetto», mai «intatto
+# atteso» ⇒ stdst-dtor-loop for-dtor p3-chain spostati in VERS. Gamba «pressione GC» del predicato: NON provata da MS
+# (rinviata a S-175: blocco con gc_status() dentro il loop).
+# CORSA 4 (fixture v4): scsc-* nella forma ESATTA di arith-dq (`$l += $a*3 - ($b>>1)`: in v1-v3 `$l = $l + (…)` NON era
+# BinarySCSCDst, zero occorrenze nel dump) e siti P1/P4 su classe PLAIN P2 (P ha `int $x` ⇒ IC set non riempita:
+# p1-site-typed resta INTATTO atteso = perimetro S-173).
 # Esiti: VERD (committato) + ab-out/s174-mutsw/*; rc SOLO da ab-out/s174-mutsw.done.
 set -u
 export PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin:"$HOME/.cargo/bin"
@@ -128,10 +136,10 @@ verdetto(){ # $1=nome $2=attese $3=intatte
 build_run MS 'matches!(func.ops.get(at), Some(Op::Sweep { main }) if self.sweep_idle(top, *main))' 'matches!(func.ops.get(at), Some(Op::Sweep { .. }))'
 build_run MC 'if let Some(jump) = long_cmp_i64(*c_op, *l, *c) {' 'if let Some(jump) = long_cmp_i64(*c_op, *l, *c).map(|b| !b) {'
 
-ATTS="stdst-dtor stdst-dtor-twice p3-dtor light window"
-INTS="stdst-dtor-loop for-dtor p3-chain stdst-dtor-double stdst-dtor-null stdst-dtor-concat stdst-dtor-overflow stdst-dtor-div scsc-loop scsc-overflow scsc-double-dst p3 p1-loop p4-loop e-dtor for-lt for-gt-dec for-le for-ne for-double-slot for-double-const for-str-const for-overflow-edge for-overflow-float for-empty for-nested for-null-init for-continue for-slot-bound for-const-lhs while-lt for-step2"
-VERS="p1-chain p4-chain p4-dtor pressure collected pressure-on collected-on"
-ATTC="for-lt for-gt-dec for-le for-ne for-overflow-edge for-empty for-nested for-continue for-dtor for-const-lhs stdst-dtor-loop scsc-loop scsc-double-dst p1-loop p4-loop p3-chain p1-chain p4-chain"
+ATTS="stdst-dtor stdst-dtor-twice p3-dtor light window stdst-dtor-loop-echo for-dtor-echo p3-site p1-site p4-site scsc-site"
+INTS="p3-site-ctl p1-site-typed stdst-dtor-double stdst-dtor-null stdst-dtor-concat stdst-dtor-overflow stdst-dtor-div scsc-loop scsc-overflow scsc-double-dst p3 p1-loop p4-loop e-dtor for-lt for-gt-dec for-le for-ne for-double-slot for-double-const for-str-const for-overflow-edge for-overflow-float for-empty for-nested for-null-init for-continue for-slot-bound for-const-lhs while-lt for-step2"
+VERS="stdst-dtor-loop for-dtor p3-chain p1-chain p4-chain p4-dtor pressure collected pressure-on collected-on"
+ATTC="stdst-dtor-loop-echo for-dtor-echo p3-site p3-site-ctl p1-site p1-site-typed p4-site scsc-site for-lt for-gt-dec for-le for-ne for-overflow-edge for-empty for-nested for-continue for-dtor for-const-lhs stdst-dtor-loop scsc-loop scsc-double-dst p1-loop p4-loop p3-chain p1-chain p4-chain"
 INTC="stdst-dtor stdst-dtor-twice stdst-dtor-double stdst-dtor-null stdst-dtor-concat stdst-dtor-overflow stdst-dtor-div p3 p3-dtor p4-dtor light window e-dtor for-double-slot for-double-const for-str-const for-slot-bound"
 VERC="for-null-init for-overflow-float scsc-overflow for-step2 while-lt pressure collected pressure-on collected-on"
 python3 - "$OUT/ref.out" "$ATTS $INTS $VERS" "$ATTC $INTC $VERC" <<'PY' >> "$VERD" || fin 7
