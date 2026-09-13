@@ -15,7 +15,7 @@ dynamic FUORI perimetro: IC set solo su classi plain), A/B alternato B↔C ⇒ *
 ns/iter CIFRA** (S-172 aveva solo la direzione), `--braccio` col commit sorgente, PIN_REGISTRY
 corretto · §3.32 catalogata (riga del Deprecated per prop dinamica) · revisione lente MISURA:
 REGGE CON RILIEVI (drop-1 = tick, banda tra run 1,14, 0,94 non ri-derivato, decomposizioni =
-ipotesi) · coppia t19 t19 LANCIATA al pin s173 in chiusura S-173 (03:07, pair → orm in catena via s173-lancio-*.sh): DA LEGGERE in S-174 (attesa direzione ≤0; ORM: regola 4 se net resta >7,05) · verdetti wp172-harness/s173-verdetto.out)
+ipotesi) · coppia t19 t19 LETTA (S-173, 2026-09-10 06:12): WP mediana 1,772 in banda [1,738;1,799] = COMPATIBILE, 6/6 gambe pulite, banda_ON 0,052 (s173-pair-verdetto-t19.out rc=0); ORM net [6,988;7,012] vs registrato [7,023;7,053] ⇒ RIENTRA sotto 7,05, regola 4 NON scatta (la voce t18 [7,090;7,092] si chiude); Δ_norm [+0,02;+0,21] nel rumore ±0,293, sentinella oracle 4,94/4,93 in banda (a filo dell estremo 4,94), parità ORM 16 · dbal 10 stabili (s173-orm-coppia-verdetto.out rc=0) · verdetti wp172-harness/s173-verdetto.out)
 
 (**S-172 = LEVA L-SL2 «forma sigillata Long» fetta 2 = PROP PROMOSSA** (criterio wp172-harness/
 s172-criterio.md): P1 = probe sigillato nel bigramma fuso PropGetSlotRecv+BinaryTCPropSetPop

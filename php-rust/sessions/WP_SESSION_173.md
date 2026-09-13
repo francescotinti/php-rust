@@ -5,9 +5,9 @@ fa con un solo «prestito»: il ciclo di prova scende sotto 3× l'oracle sul giu
 cure promesse dalla revisione S-172 sono state eseguite e misurate PRIMA di questa leva.
 **SCOREBOARD** (pin NUOVO **s173 phpr da4921a52eba0187 + server 2d2adc4549a820e0**):
 **arith 2,8 (2,7: tick) · prop 3,0 ↓↓ (3,8) · calls 4,8 (4,7: tick) · str 4,1 = · arr 3,1 (3,0: tick, guardia di P3 senza regressione) · re 2,5 =** · **prop-dq 41,13 vs oracle 13,93 =
-2,95× (pin s172: 52,53 = 3,77×)** · **coppia t19: __** · **leve spedite: 1 (fetta 3, bracci P3 e
+2,95× (pin s172: 52,53 = 3,77×)** · **coppia t19: WP 1,772 COMPATIBILE (6/6 pulite) · ORM net [6,988;7,012] RIENTRA <7,05, regola 4 non scatta** · **leve spedite: 1 (fetta 3, bracci P3 e
 P3+P4)** · incidenti: **1** (#1 log della build C cancellato durante la build, scambiato per residuo
-S-172: esito da .rc/hash, log perso) · dente run.rs __ · §3.32 catalogata (riga del Deprecated per
+S-172: esito da .rc/hash, log perso) · dente run.rs 7274 (cap 7200→7274 dichiarato) · §3.32 catalogata (riga del Deprecated per
 prop dinamica) · perimetro dichiarato: il probe sigillato prop (P1/P4) copre SOLO classi plain (IC set
 non riempita su typed/private) — leva futura «prop typed» a TODO.
 ## Esiti secchi (criteri PRE-registrati s173-azrev-criterio.md + s173-criterio.md; verdetti s173-*.out)

@@ -16,12 +16,12 @@ wp172-harness/revisione-s173.md): REGGE CON RILIEVI (drop-1 0,07 = tick; banda t
 ## Scoreboard (pin NUOVO s173 phpr da4921a52eba0187 + server 2d2adc4549a820e0)
 **arith 2,8 (2,7: tick) · prop 3,0 ↓↓ (3,8) · calls 4,8 (4,7: tick) · str 4,1 = · arr 3,1 (3,0: tick, guardia di P3 senza regressione) · re 2,5 =** · mc2 ~155 / mc3 181 (non
 rimisurati) · arith-dq 23,8 vs 8,64 · **prop-dq 41,13 vs 13,93 = 2,95×** (conferma post-pin +11,67 rumore 0,93 segni 5/5) ·
-dispatch 1,75/op · **coppia t19: t19 LANCIATA al pin s173 in chiusura S-173 (03:07, pair → orm in catena via s173-lancio-*.sh): DA LEGGERE in S-174 (attesa direzione ≤0; ORM: regola 4 se net resta >7,05)** · corpus 1412×2 · batteria 1748/0 · denti: run.rs 7274 (cap dichiarato 7200→7274)
+dispatch 1,75/op · **coppia t19: t19 LETTA (S-173, 2026-09-10 06:12): WP mediana 1,772 in banda [1,738;1,799] = COMPATIBILE, 6/6 gambe pulite, banda_ON 0,052 (s173-pair-verdetto-t19.out rc=0); ORM net [6,988;7,012] vs registrato [7,023;7,053] ⇒ RIENTRA sotto 7,05, regola 4 NON scatta (la voce t18 [7,090;7,092] si chiude); Δ_norm [+0,02;+0,21] nel rumore ±0,293, sentinella oracle 4,94/4,93 in banda (a filo dell estremo 4,94), parità ORM 16 · dbal 10 stabili (s173-orm-coppia-verdetto.out rc=0)** · corpus 1412×2 · batteria 1748/0 · denti: run.rs 7274 (cap dichiarato 7200→7274)
 · mod.rs 25909 · host.rs 7726 · coda CI: coda 17 job, ultimo evento «DONE af234ee33993 OK 2026-09-10 01:53:52»; runner in disk-low finché Data <10G (target canonica potata in chiusura).
 
 ## §S-174 — ordine
-1. Coppia t19 (lanciata al pin s173 in chiusura S-173): leggere s173-pair-verdetto-t19.out e s173-orm-coppia-verdetto.out (rc SOLO dai .done in pair-out/orm-out); WP in banda [1,738;1,799] = compatibile, nessun claim; ORM net >7,05 ⇒ istruttoria (regola 4). ORM: se net resta > 7,05
-   scatta la regola 4 (istruttoria) — voce in sospeso da t18 [7,090;7,092].
+1. Coppia t19 LETTA in S-173 (dopo la chiusura): WP 1,772 COMPATIBILE (6/6 pulite), ORM net [6,988;7,012] RIENTRA sotto 7,05 ⇒ regola 4 NON scatta, voce t18 CHIUSA; nessuna istruttoria. Resta dovuta la ri-fondazione PRE-registrata della banda sentinella ORM (4,94 osservato = estremo della banda [4,83;4,94]: se in S-174 esce
+   dalla banda, la voce si riapre).
 2. **Az.rev. S-173** (revisione, PRIMA di nuove leve): (a) nei `.out` la banda tra run (stesso codice, binari diversi) accanto al drop-1 e 0,94 RI-DERIVATO su prop-dq (`s173-ab-leva.sh:80` lo importa dal giudice arith); (b) il copione A/B stampi ANCHE la mediana delle differenze appaiate, cifra P2 come intervallo [4,87;5,60]; (c) decomposizioni del residuo senza cifre o marcate «ipotesi» (fatto S-173 in NEXT/REPORT_GAP/verdetto: verificare); (d) il verdetto del mutante nomini i blocchi `-each` INTATTI come prova del dominio (oggi sono solo nelle liste INT).
 3. **Prop, dove sta il residuo** (prop-dq 41,13 − 13,93 = 27,2 ns/iter; IPOTESI di riparto, cifre da altri binari: dispatch 7×1,75=12,3 + Sweep×2
    ≈5,8 + CmpJmpSC/IncDec ≈7 + corpi ≈2): il corpo prop è quasi ESAURITO sul giudice — il residuo è
@@ -60,7 +60,7 @@ composte tra binari diversi.
 Pre-flight S-174: README/COVERAGE pubblici sono al pin s172 (docs af234ee3): risincronizzare via gh-status-sync a inizio S-174 (corpus 20 min, non durante la coppia). Pre-flight S-174: pin phpr **s173 da4921a52eba0187** + server **2d2adc4549a820e0** (SOLO via pin-*.sh; stash bracci
 `phpr-s173-f3-B/C` NON pin) · Data ≥10G (≥20G se xctrace; corpus-gate ~5G transitori) · MySQL wp8 con
 l'elenco (S-173: era GIÙ, riavviato col daemonizer perl double-fork+setsid sul datadir esterno) ·
-uploads sotto guardia · corpus 1412 · lock: `/private/tmp/phpr-measure.lock` con token `s173` LASCIATO VIVO per la coppia t19 in corso — in S-174 verificare che pair/orm siano FINITI (.done) e SOSTITUIRLO col token `s174` · CI: coda 17 job, ultimo evento «DONE af234ee33993 OK 2026-09-10 01:53:52»; runner in disk-low finché Data <10G (target canonica potata in chiusura) · coppia
+uploads sotto guardia · corpus 1412 · lock misura da CREARE COL TOKEN `s174` (il lock s173 è stato rimosso a coppia t19 finita) · CI: coda 17 job, ultimo evento «DONE af234ee33993 OK 2026-09-10 01:53:52»; runner in disk-low finché Data <10G (target canonica potata in chiusura) · coppia
 dovuta SOLO se il pin cambia · lettura: REGOLE.md → QUI → wp172-harness/s173-verdetto.out +
 revisione-s173.md → s173-f3-verdetto.out → s173-criterio.md → s173-azrev-criterio.md → WP_SESSION_173 →
 PERF_MAP.

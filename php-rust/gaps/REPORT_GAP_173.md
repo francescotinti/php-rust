@@ -20,8 +20,8 @@ Pin: phpr da4921a52eba0187 + server 2d2adc4549a820e0 (promozione braccio C, wp17
 - Conferma post-pin (pin s173 vs stash s172, R=5): +11,67 rumore 0,93 segni 5/5.
 
 ## Suite (coppia t19 al pin s173, DOVUTA)
-- WP full: t19 LANCIATA al pin s173 in chiusura S-173 (03:07, pair → orm in catena via s173-lancio-*.sh): DA LEGGERE in S-174 (attesa direzione ≤0; ORM: regola 4 se net resta >7,05)
-- ORM: t19 LANCIATA al pin s173 in chiusura S-173 (03:07, pair → orm in catena via s173-lancio-*.sh): DA LEGGERE in S-174 (attesa direzione ≤0; ORM: regola 4 se net resta >7,05)
+- WP full: t19 LETTA (S-173, 2026-09-10 06:12): WP mediana 1,772 in banda [1,738;1,799] = COMPATIBILE, 6/6 gambe pulite, banda_ON 0,052 (s173-pair-verdetto-t19.out rc=0); ORM net [6,988;7,012] vs registrato [7,023;7,053] ⇒ RIENTRA sotto 7,05, regola 4 NON scatta (la voce t18 [7,090;7,092] si chiude); Δ_norm [+0,02;+0,21] nel rumore ±0,293, sentinella oracle 4,94/4,93 in banda (a filo dell estremo 4,94), parità ORM 16 · dbal 10 stabili (s173-orm-coppia-verdetto.out rc=0)
+- ORM: t19 LETTA (S-173, 2026-09-10 06:12): WP mediana 1,772 in banda [1,738;1,799] = COMPATIBILE, 6/6 gambe pulite, banda_ON 0,052 (s173-pair-verdetto-t19.out rc=0); ORM net [6,988;7,012] vs registrato [7,023;7,053] ⇒ RIENTRA sotto 7,05, regola 4 NON scatta (la voce t18 [7,090;7,092] si chiude); Δ_norm [+0,02;+0,21] nel rumore ±0,293, sentinella oracle 4,94/4,93 in banda (a filo dell estremo 4,94), parità ORM 16 · dbal 10 stabili (s173-orm-coppia-verdetto.out rc=0)
 
 ## Residuo nominato (direzione, non magnitudine — IPOTESI: le cifre per-op vengono da altri binari, S-169; revisione rilievo 6)
 prop-dq 41,13 vs oracle 13,93: residuo 27,2 ns/iter = dispatch 7×1,75=12,3 + Sweep×2 (~5,8) +
