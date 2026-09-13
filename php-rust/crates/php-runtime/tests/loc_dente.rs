@@ -86,7 +86,10 @@ fn nessun_sorgente_rs_oltre_cap() {
         // commento; nessun corpo nuovo). Il dente ha morso alla promozione
         // (tentativo 1 rc=101, come S-171/S-172): salita a verbale in
         // wp172-harness/s173-verdetto.out.
-        ("php-runtime/src/vm/run.rs", 7274, "run_loop — ULTIMO o mai (A2); +102 L-MCk S-166 + 174 L-SL1 S-171 + 109 L-SL2 S-172 + 74 fetta 3 S-173 dichiarati"),
+        // S-174 «Sweep-in-op» (criterio wp174-harness/s174-criterio.md p.5): +87 netti
+        // (sweep_idle/sweep_skip_next + 5 siti in place + back-edge fuso, commenti
+        // inclusi), cap alzato DICHIARANDO prima della promozione (differita: Data).
+        ("php-runtime/src/vm/run.rs", 7361, "run_loop — ULTIMO o mai (A2); +102 L-MCk S-166 + 174 L-SL1 S-171 + 109 L-SL2 S-172 + 74 fetta 3 S-173 + 87 Sweep-in-op S-174 dichiarati"),
         ("php-runtime/tests/eval.rs", 4773, "batteria eval"),
         ("php-builtins/tests/builtins.rs", 4772, "batteria builtins"),
         ("php-runtime/src/lower/mod.rs", 3838, "lowering"),
