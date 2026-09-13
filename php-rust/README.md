@@ -28,7 +28,7 @@ interpreter, not to pass a toy subset.
 > 9.3 / 3.5 / 3.9 / 7.9 / 5.3 / 5.1 in August); the ≤3× stage is reached on
 > arith and regex. On the real-application aggregate the **full
 > WordPress-suite CPU is ~1.77×** the oracle (median of the last measured
-> pair, band [1.74; 1.80]) and the Doctrine ORM suite ~7.1×. The measured
+> pair, band [1.74; 1.80]) and the Doctrine ORM suite ~7.0×. The measured
 > finding that fixed the route: pure dispatch costs 1.75 ns/op (as much as
 > the whole oracle instruction), so the gap lives in the **body of the
 > handlers** — the lifecycle of temporary Zvals around each operation. The

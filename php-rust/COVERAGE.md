@@ -131,7 +131,7 @@ regex 2.5× · array 3.1× · property 3.0× · string 4.1× · calls 4.8×** (A
 9.3 / 3.5 / 3.9 / 7.9 / 5.3 / 5.1). On real applications the **full WordPress
 suite runs at ~1.77×** the oracle's CPU (median of the last measured pair,
 band [1.74; 1.80]; from 4.1× at the start of the arc) and the Doctrine ORM
-suite at ~7.1× (from 8.4×). Every promoted build passes the same gates: the
+suite at ~7.0× (from 8.4×). Every promoted build passes the same gates: the
 Rust test battery (1,748), the frozen Zend fail-set **by name** in two
 execution modes, bilateral fixtures run on both engines, and the micro
 benchmark at R=5; the per-session trail is in `sessions/` and
