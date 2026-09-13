@@ -13,14 +13,19 @@
 #   MC (back-edge fuso): `if let Some(jump) = long_cmp_i64(*c_op, *l, *c) {`
 #       → `if let Some(jump) = long_cmp_i64(*c_op, *l, *c).map(|b| !b) {`
 # ATTESA PRE-registrata (blocchi ROTTI):
-#   MS ⊇ {stdst-dtor stdst-dtor-twice stdst-dtor-loop light window for-dtor p3-dtor p3-chain}
+#   MS ⊇ {stdst-dtor stdst-dtor-twice p3-dtor light window}
 #   MC ⊇ {for-lt for-gt-dec for-le for-ne for-overflow-edge for-empty for-nested for-continue for-dtor
 #         for-const-lhs stdst-dtor-loop scsc-loop scsc-double-dst p1-loop p4-loop p3-chain p1-chain p4-chain}
 # A VERDETTO: MS p1-chain p4-chain (Sweep dopo P1/P4 in place con nota pendente dal mk() precedente) ·
 #   p4-dtor (PropSetPop: NON fuso, attesa intatta) · pressure/collected (cicli: attesa intatta) ·
 #   MC for-null-init (null→Long dopo la 1ª iterazione) · for-overflow-float · scsc-overflow · for-step2
 #   (`$i += 2`: back-edge non IncDecSlotJmp) · while-lt · pressure/pressure-on (`$i < $k` = CmpJmpSS).
-# DEVONO restare INTATTE: MS = {stdst-dtor-double stdst-dtor-null stdst-dtor-concat stdst-dtor-overflow
+# CORSA 1 (s174-mutante-sw-verdetto-corsa1.out, rc=1): MS «attese non rotte» stdst-dtor-loop for-dtor p3-chain =
+# attese MAL POSTE: nelle forme a LOOP lo Sweep dello statement `for` (dopo il CmpJmpSC d'uscita, NON fuso)
+# drena la nota dell'ultima iterazione PRIMA di «post» e le intermedie le drena il light sweep dentro mk():
+# l'ordine osservabile non cambia ⇒ INTATTE attese (prova del presidio a valle, non del dominio); MC «attesa
+# non rotta» p1-loop = fixture IDEMPOTENTE (z = y+2 a ogni giro) ⇒ contatore aggiunto, resta ATTESA ROTTA.
+# DEVONO restare INTATTE: MS = {stdst-dtor-loop for-dtor p3-chain stdst-dtor-double stdst-dtor-null stdst-dtor-concat stdst-dtor-overflow
 #   stdst-dtor-div scsc-loop scsc-overflow scsc-double-dst p3 p1-loop p4-loop e-dtor for-lt for-gt-dec
 #   for-le for-ne for-double-slot for-double-const for-str-const for-overflow-edge for-overflow-float
 #   for-empty for-nested for-null-init for-continue for-slot-bound for-const-lhs while-lt for-step2};
@@ -123,8 +128,8 @@ verdetto(){ # $1=nome $2=attese $3=intatte
 build_run MS 'matches!(func.ops.get(at), Some(Op::Sweep { main }) if self.sweep_idle(top, *main))' 'matches!(func.ops.get(at), Some(Op::Sweep { .. }))'
 build_run MC 'if let Some(jump) = long_cmp_i64(*c_op, *l, *c) {' 'if let Some(jump) = long_cmp_i64(*c_op, *l, *c).map(|b| !b) {'
 
-ATTS="stdst-dtor stdst-dtor-twice stdst-dtor-loop light window for-dtor p3-dtor p3-chain"
-INTS="stdst-dtor-double stdst-dtor-null stdst-dtor-concat stdst-dtor-overflow stdst-dtor-div scsc-loop scsc-overflow scsc-double-dst p3 p1-loop p4-loop e-dtor for-lt for-gt-dec for-le for-ne for-double-slot for-double-const for-str-const for-overflow-edge for-overflow-float for-empty for-nested for-null-init for-continue for-slot-bound for-const-lhs while-lt for-step2"
+ATTS="stdst-dtor stdst-dtor-twice p3-dtor light window"
+INTS="stdst-dtor-loop for-dtor p3-chain stdst-dtor-double stdst-dtor-null stdst-dtor-concat stdst-dtor-overflow stdst-dtor-div scsc-loop scsc-overflow scsc-double-dst p3 p1-loop p4-loop e-dtor for-lt for-gt-dec for-le for-ne for-double-slot for-double-const for-str-const for-overflow-edge for-overflow-float for-empty for-nested for-null-init for-continue for-slot-bound for-const-lhs while-lt for-step2"
 VERS="p1-chain p4-chain p4-dtor pressure collected pressure-on collected-on"
 ATTC="for-lt for-gt-dec for-le for-ne for-overflow-edge for-empty for-nested for-continue for-dtor for-const-lhs stdst-dtor-loop scsc-loop scsc-double-dst p1-loop p4-loop p3-chain p1-chain p4-chain"
 INTC="stdst-dtor stdst-dtor-twice stdst-dtor-double stdst-dtor-null stdst-dtor-concat stdst-dtor-overflow stdst-dtor-div p3 p3-dtor p4-dtor light window e-dtor for-double-slot for-double-const for-str-const for-slot-bound"
