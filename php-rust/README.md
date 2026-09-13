@@ -5,7 +5,7 @@ a lexer, compiler, bytecode VM, and a growing standard library — no C PHP link
 in. The goal is to run **real PHP applications** byte-identically to the reference
 interpreter, not to pass a toy subset.
 
-> **Status (2026-09-10, pin of session S-172): the entire WordPress core test
+> **Status (2026-09-13, pin of session S-173): the entire WordPress core test
 > suite runs at effective oracle parity.** Single-site (30,472 tests,
 > wordpress-develop trunk) differs from the reference interpreter by **a single
 > test name — one deliberate, catalogued divergence** — and multisite (31,278
@@ -23,8 +23,8 @@ interpreter, not to pass a toy subset.
 > property hooks, lazy objects, fibers, and an opcache-like per-request unit
 > cache. **Current front: performance, target parity (1×) with the oracle's
 > CPU.** The backbone is a six-category micro benchmark (same PHP source on
-> both engines, per-binary startup floors subtracted), today at **arith 2.7× ·
-> regex 2.5× · array 3.0× · property 3.8× · string 4.1× · calls 4.7×** (from
+> both engines, per-binary startup floors subtracted), today at **arith 2.8× ·
+> regex 2.5× · array 3.1× · property 3.0× · string 4.1× · calls 4.8×** (from
 > 9.3 / 3.5 / 3.9 / 7.9 / 5.3 / 5.1 in August); the ≤3× stage is reached on
 > arith and regex. On the real-application aggregate the **full
 > WordPress-suite CPU is ~1.77×** the oracle (median of the last measured

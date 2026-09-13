@@ -6,7 +6,7 @@ as they complete. Deliberate behavioural deviations are catalogued in
 [`PHPR_DIVERGENCES_FROM_PHP.md`](PHPR_DIVERGENCES_FROM_PHP.md); measured
 coverage in [`COVERAGE.md`](COVERAGE.md).
 
-Current state (2026-09-10, pin of session S-172, fresh corpus run): Zend corpus
+Current state (2026-09-13, pin of session S-173, fresh corpus run): Zend corpus
 **2655** passing (65.3% of runnable; promotion gate = frozen
 fail-set **1412** by name, in two execution modes) · internal functions
 **1017/2143, 47%** (core stdlib **539/654, 82%**) · Rust test battery **1748**.
@@ -24,10 +24,10 @@ Other stacks at parity: **symfony/http-kernel CLOSED 0/0 (1665)**,
 http-foundation 0 errors, Doctrine ORM 3484 (3E/13F declared, stable by name)
 + DBAL 3769/0/0, PHPUnit 9/11/13, Composer, wp-cli, Monolog.
 **PERF (the current front, REGOLE.md §1: target parity 1×, stage ≤3× per
-micro-category):** micro at the S-172 pin **arith 2.7 · prop 3.8 · calls 4.7
-· str 4.1 · arr 3.0 · re 2.5** (S-110: 9.3 / 7.9 / 5.1 / 5.3 / 3.9 / 3.5);
-full WordPress suite **~1.77×** (pair t18, band [1.738; 1.799]); Doctrine ORM
-~7.1×. Route since the S-167 council: threaded/hot-cluster dispatch refuted
+micro-category):** micro at the S-173 pin **arith 2.8 · prop 3.0 · calls 4.8
+· str 4.1 · arr 3.1 · re 2.5** (S-110: 9.3 / 7.9 / 5.1 / 5.3 / 3.9 / 3.5);
+full WordPress suite **~1.77×** (pair t19, band [1.738; 1.799]); Doctrine ORM
+~7.0×. Route since the S-167 council: threaded/hot-cluster dispatch refuted
 (pure dispatch 1.75 ns/op = the whole oracle instruction), the gap is the
 **handler body** (temporary-Zval lifecycle); the *sealed Long form* (S-171
 arith, S-172 property) is being generalized to calls and strings, one
