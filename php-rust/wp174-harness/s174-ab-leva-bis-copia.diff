@@ -3,7 +3,7 @@
 24c25
 < VERD="$H/s174-$TAG-verdetto.out"; RC="$OUT/$TAG.rc"
 ---
-> VERD="$H/s174-$TAG-verdetto.out"  # criterio-bis: TAG sw2; RC="$OUT/$TAG.rc"
+> VERD="$H/s174-$TAG-verdetto.out"; RC="$OUT/$TAG.rc"  # criterio-bis: TAG sw2 (EMENDA 23:05: il commento inglobava RC — incidente di copione #1 S-174)
 113,115c114,118
 < print(f"GUARDIA prop-dq (sola regressione; D = direzione, magnitudine NON ripartita — attesa dichiarata [2;6], non giudicata): oracle={med(pO):.2f} ns/iter; A/oracle={med(pA)/med(pO):.2f}× B/oracle={med(pB)/med(pO):.2f}× C/oracle={med(pC)/med(pO):.2f}×")
 < _, _, _, _, regGB = stat("GUARDIA prop-dq", pA, pB, "B", "A", SLp)

@@ -1,0 +1,26 @@
+== s174 LEVA sw2 — A=da4921a5 MISURATO (/private/tmp/s174-bins/A, pin s173) Z=19c0540e MISURATO (/private/tmp/s174-bins/Z, A0 stessa sorgente del pin) B=56dc1af8 MISURATO (/private/tmp/s174-bins/B, sweep-in-op) C=b6c4b587 MISURATO (/private/tmp/s174-bins/C, B+back-edge fuso); GIUDICE arith-dq N=250000000 (bersaglio) E GUARDIA prop-dq N=150000000 (sola regressione; N dal driver); R=5 ordine dei quattro bracci RUOTATO per coppia su giudice e guardia; banda tra run vs PREV dq=23.68 prop=41.13; criterio s174-criterio.md ==
+sentinella LS: /Applications/Antigravity /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.96.0-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv 
+parità arith-dq: A==Z==B==C==atteso oracle (85937499750000000 )
+parità prop-dq: A==Z==B==C==atteso oracle (300000000 )
+floors: A=0.03 Z=0.03 B=0.03 C=0.03 oracle=0.06
+  coppia1 [AZBC]: dqA=6.13 dqZ=6.07 dqB=5.75 dqC=5.26 propA=7.04 propZ=6.28 propB=5.92 propC=5.50 | dqO=2.23 propO=2.15
+  coppia2 [CBZA]: dqA=6.36 dqZ=6.26 dqB=5.80 dqC=5.74 propA=6.35 propZ=6.54 propB=5.76 propC=6.04 | dqO=2.23 propO=2.16
+  coppia3 [BCAZ]: dqA=6.14 dqZ=6.09 dqB=5.74 dqC=5.17 propA=6.26 propZ=6.32 propB=5.86 propC=5.50 | dqO=2.22 propO=2.21
+  coppia4 [ZACB]: dqA=6.95 dqZ=6.26 dqB=5.78 dqC=5.35 propA=6.34 propZ=8.29 propB=6.29 propC=5.75 | dqO=2.23 propO=2.15
+  coppia5 [CZAB]: dqA=6.02 dqZ=6.20 dqB=5.74 dqC=5.18 propA=6.22 propZ=6.25 propB=6.19 propC=5.42 | dqO=2.49 propO=2.19
+LAYOUT arith-dq: A=24.44 Z=24.68 ⇒ SL in-run (colonna) 0.24 / (appaiata) 0.24 ns/iter — confronto 0,94 (arith S-168): sotto; banda tra run |A−PREV 23.68| = 0.76 (rumore drop-1 A'=1.36 Z'=0.68)
+LAYOUT prop-dq: A=42.07 Z=41.93 ⇒ SL in-run (colonna) 0.13 / (appaiata) 0.40 ns/iter — confronto 0,94 (arith S-168): sotto; banda tra run |A−PREV 41.13| = 0.94 (rumore drop-1 A'=0.87 Z'=1.93)
+GIUDICE arith-dq (bersaglio): oracle=8.68 ns/iter; A/oracle=2.82× Z/oracle=2.84× B/oracle=2.64× C/oracle=2.41×
+GIUDICE arith-dq B: A=24.44 B=22.88 ns/iter D=A−B colonna=+1.56 appaiata=+1.60 soglia=4.00 (rumore drop-1 A'=1.36 B'=0.16, SL=0.24) -> NON nominato (vale 0); direzione FIRMATA (B più veloce); regressione (D < −max(4,rumore)): no
+GIUDICE arith-dq C: A=24.44 C=20.92 ns/iter D=A−C colonna=+3.52 appaiata=+3.48 soglia=4.00 (rumore drop-1 A'=1.36 C'=0.72, SL=0.24) -> NON nominato (vale 0); direzione FIRMATA (C più veloce); regressione (D < −max(4,rumore)): no
+CONTRASTO arith-dq (back-edge fuso, ALTERNATO) C: B=22.88 C=20.92 ns/iter D=B−C colonna=+1.96 appaiata=+1.96 soglia=4.00 (rumore drop-1 B'=0.16 C'=0.72, SL=0.24) -> NON nominato (vale 0); direzione FIRMATA (C più veloce); regressione (D < −max(4,rumore)): no
+ATTESE p.4: D_B ∈ [1;3]: CENTRATA (+1.56/+1.60); KILL-B (D_B < max(1, SL)): NON scatta; D_C ∈ [2,5;6]: CENTRATA (+3.52/+3.48); C−B ∈ [1;3]: CENTRATA (+1.96/+1.96)
+BERSAGLIO-BIS prop-dq (criterio-bis p.2: co-bersaglio a nomina): oracle=14.00 ns/iter; A/oracle=3.00× B/oracle=2.80× C/oracle=2.60×
+BERSAGLIO-BIS prop-dq B: A=42.07 B=39.27 ns/iter D=A−B colonna=+2.80 appaiata=+2.67 soglia=4.00 (rumore drop-1 A'=0.87 B'=2.87, SL=0.40) -> NON nominato (vale 0); direzione sotto il rumore/SL (B più veloce); regressione (D < −max(4,rumore)): no
+BERSAGLIO-BIS prop-dq C: A=42.07 C=36.47 ns/iter D=A−C colonna=+5.60 appaiata=+5.07 soglia=4.00 (rumore drop-1 A'=0.87 C'=2.20, SL=0.40) -> CIFRA = [+5.07;+5.60] (entrambi gli stimatori nominano); direzione FIRMATA (C più veloce); regressione (D < −max(4,rumore)): no
+ATTESE BIS prop-dq: D_B ∈ [1,5;4]: CENTRATA (+2.80/+2.67); D_C ∈ [2;6]: CENTRATA (+5.60/+5.07)
+PROMOZIONE (criterio-bis p.2: braccio nominato su ALMENO un bersaglio da ENTRAMBI gli stimatori, senza regressione sull'altro): AMMESSA — braccio C (D max=+5.07; arith C +3.52/+3.48 nom=False, prop C +5.60/+5.07 nom=True)
+ESITO rc=0
+sentinella LS fine: /Applications/Antigravity /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.96.0-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv 
+/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp174-harness/s174-ab-leva-bis.sh: line 140: RC: unbound variable
+NOTA 23:05 (incidente di copione #1 S-174, contato): il copione bis è caduto DOPO «ESITO rc=0» su «RC: unbound variable» (riga 140) — il commento aggiunto alla riga VERD aveva inglobato l'assegnazione RC; ab-out/sw2.rc scritto da RI-ANALISI DETERMINISTICA del tsv (stesso blocco python, floors dal verdetto: esito identico riga per riga), copione emendato e committato; la misura NON è stata ripetuta. Rumore di questa corsa: arith A' 1,36 (dqA 6,95 in coppia4), prop Z' 1,93 (propZ 8,29 in coppia4) e propA 7,04 in coppia1: flare; le soglie (max(4, rumore, SL)) restano 4,00 e la nomina di C su prop-dq regge con entrambi gli stimatori; su arith-dq C resta solo direzione in ENTRAMBE le corse (+3,64/+3,56 e +3,52/+3,48).

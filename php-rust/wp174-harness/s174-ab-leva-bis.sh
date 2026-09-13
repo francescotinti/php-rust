@@ -22,7 +22,7 @@ GD="$H/../wp164-harness/arith-dq.php"
 PD="$H/../wp172-harness/prop-dq.php"
 EMPTY="$H/../wp160-harness/empty.php"
 OUT="$H/ab-out"; mkdir -p "$OUT"
-VERD="$H/s174-$TAG-verdetto.out"  # criterio-bis: TAG sw2; RC="$OUT/$TAG.rc"
+VERD="$H/s174-$TAG-verdetto.out"; RC="$OUT/$TAG.rc"  # criterio-bis: TAG sw2 (EMENDA 23:05: il commento inglobava RC — incidente di copione #1 S-174)
 [ -e "$VERD" ] && { echo "verdetto ESISTE — TAG nuovo" >&2; exit 7; }
 for f in "$PD" "$GD" "$A" "$ZZ" "$BB" "$CC" "$O"; do [ -s "$f" ] || { echo "file assente o VUOTO: $f" | tee -a "$VERD"; echo 7 > "$RC"; exit 7; }; done
 [ -e "$EMPTY" ] || { echo "driver del pavimento assente: $EMPTY (VUOTO per costruzione: [ -e ], emenda S-170 p.4)" | tee -a "$VERD"; echo 7 > "$RC"; exit 7; }
