@@ -1,0 +1,4 @@
+2c2
+< # s172-lancio-ab.sh <script> <args…> — lanciatore: attende la QUIETE (gate separato
+---
+> # s174-lancio-ab.sh — BYTE-COPIA di ../wp172-harness/s172-lancio-ab.sh (H = wp174-harness). Originale: s172-lancio-ab.sh <script> <args…> — lanciatore: attende la QUIETE (gate separato
