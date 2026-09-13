@@ -2290,7 +2290,26 @@ impl<'m> super::Vm<'m> {
                     // S-107 lotto: il trigramma IncDecSlot;Pop;Jump del
                     // back-edge di loop — incremento poi salto incondizionato.
                     self.incdec_slot_discard(top, *slot, *inc)?;
-                    self.frames[top].ip = *addr as usize;
+                    // S-174 leva «Sweep-in-op» braccio C = «back-edge fuso» (criterio
+                    // wp174-harness/s174-criterio.md p.2): se la meta del salto è il
+                    // CmpJmpSC di testa del loop e il suo fast path è in dominio (const
+                    // Int, slot Long: `long_cmp_i64` VERBATIM dal handler), il confronto
+                    // si decide QUI e `ip` va direttamente alla meta del CmpJmpSC (o
+                    // all'op che lo segue): un dispatch in meno per iterazione. Ogni miss
+                    // ⇒ `ip = addr`, il CmpJmpSC gira come oggi (corpo esatto compreso).
+                    // Spento sotto op-census (il CmpJmpSC resta contato dal suo handler).
+                    let a = *addr as usize;
+                    self.frames[top].ip = a;
+                    #[cfg(not(feature = "op-census"))]
+                    if let Some(Op::CmpJmpSC { op: c_op, slot: c_slot, cidx, addr: c_addr, when }) = func.ops.get(a) {
+                        if let (crate::bytecode::Const::Int(c), Zval::Long(l)) =
+                            (&func.consts[*cidx as usize], &self.frames[top].slots[*c_slot as usize])
+                        {
+                            if let Some(jump) = long_cmp_i64(*c_op, *l, *c) {
+                                self.frames[top].ip = if jump == *when { *c_addr as usize } else { a + 1 };
+                            }
+                        }
+                    }
                 }
                 Op::CmpJmpSS { op, l, r, addr, when } => {
                     let res = 'r: {
