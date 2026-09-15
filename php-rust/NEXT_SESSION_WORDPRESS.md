@@ -12,7 +12,11 @@ unico), (b) liste INT = soli discriminanti (corsa 5 rc=0), (c) solo segno. **Moc
 A=sorgente del pin, Z=pin controllo nullo, B=MS, C=M3, R=5): **arith D_B +2,36 direzione · prop D_B +4,67 CIFRA**, M3
 +0,80/+1,93 ⇒ tetto NOMINATO su prop-dq: la leva si disegna. Leve: 1 · A/B eseguiti: 1 (mock) · incidenti: **1** (#1
 igiene: micro e conferma post-pin nella finestra con updater Little Bird attivo e Data 0,47G, non nel .out ⇒ micro a
-GUARDIA, da rimisurare) · revisione S-175 (lente PROCESSO): vedi wp174-harness/revisione-s175.md · sessioni senza misura: 0.
+GUARDIA, da rimisurare) · revisione S-175 (lente PROCESSO, wp174-harness/revisione-s175.md): REGGE CON RILIEVI — (1) divergenza «momento della
+raccolta GC» NON era a catalogo ⇒ SANATA in sessione: §3.33 in PHPR_DIVERGENCES (az.rev. (a) chiusa per NOME); (2) mock
+lanciato dopo ORM rc=8 contro il criterio p.5 (quiete s129 PASS nel copione; tetto 4,67 a filo del rumore 0,93): rerun dopo
+ORM rc=0 in S-176 col lanciatore che gata su `^rc=0`; (3) micro/conferma non di record (incidente #1); (4) catena: STOP a
+commit fallito, ogni lanciatore nuovo committato PRIMA del run; (5) istruttoria drift sentinella ORM prima della prossima coppia · sessioni senza misura: 0.
 
 ## Scoreboard (pin NUOVO s175 phpr 5de14d6856d760a8 + server 9b9179d4dd3d95bd)
 **arith 2,3 ↓ · prop 2,6 ↓ · calls 4,6 ↓ · str 4,0 ↓ · arr 3,1 = · re 2,5 =** (micro a GUARDIA: finestra sporca) ·

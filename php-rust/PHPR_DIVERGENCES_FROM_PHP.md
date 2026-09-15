@@ -1064,6 +1064,19 @@ NON aggiornata dal sito dell'assegnazione. PRE-esistente alla leva fetta 3
 (pin s172 == stash s171 sulla forma). Presidio: fx-sl3-div (pin==stash).
 
 
+### 3.33 🟡 Momento della raccolta automatica dei cicli: allo Sweep di fine statement in phpr, lazy (all'inserimento di una radice a buffer pieno) in Zend (S-175, fixture wp174-harness/fixtures/fx-sw2-gc.php)
+
+Con `gc_disable()`, 60 000 cicli a oggetti (`$o->self = $o`) accumulati e poi `gc_enable()`, phpr esegue la
+raccolta al PRIMO Sweep di fine statement che vede «gc on ∧ radici ≥ bound» (bound base 50 000, adattivo), Zend
+solo quando una NUOVA radice entra nel buffer pieno (soglia 10 001): `gc_status()['runs']` letto subito dopo
+`gc_enable()` vale +1 su phpr e +0 sull'oracle (fx-sw2-gc: `gcp-fused: d=1` vs `d=0`, così `gcp-ctl`, `gcp-loop`,
+`gcp-scsc`). Il TOTALE raccolto a valle (`gc_collect_cycles()`) è identico; divergono solo il momento e il conteggio
+`runs`/`roots` a un istante dato (i valori `threshold`/`buffer_size` riportati da `gc_status()` sono quelli di Zend, non
+quelli di phpr: già annotato in `ho_gc_status`). Deliberata (trigger a confine di statement = WP-21/WP-46/WP-47);
+perimetro: solo codice che legge `gc_status()` tra l'abilitazione e la successiva creazione di una radice. Giudice
+della fixture: INVARIANZA pin == stash (non bilaterale). Un ciclo via `$a = []; $a[] = &$a;` NON lascia radici in
+nessuno dei due motori (la riassegnazione scrive attraverso il riferimento): non usarlo come pressione GC.
+
 ## 4. Punti di forza da NON toccare (invarianti verificati byte-identici)
 
 Per evitare regressioni, questi comportamenti sono **già** byte-identici con
