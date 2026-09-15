@@ -1,6 +1,25 @@
 # PERF_MAP — phpr vs PHP oracle 8.5.7, mappa multi-workload
 
-Aggiornata: **2026-09-13 sera (S-174)** · pin **INVARIATO s173 phpr da4921a52eba0187 + server 2d2adc4549a820e0**
+Aggiornata: **2026-09-15 notte (S-175)** · pin **NUOVO s175 phpr 5de14d6856d760a8 + server 9b9179d4dd3d95bd**
+(**S-175 = PROMOZIONE della leva «Sweep-in-op» braccio C a PIN s175** (s174-promozione.sh emendato per il tag,
+manifest s174-promozione-tag-s175.diff; verdetto wp174-harness/s174-promo-verdetto.out): build ricetta = candidato a
+contenuto (5de14d68 vs b6c4b587: 48 B in 2 cluster LC_UUID/firma), batteria 1748/0/2, corpus 1412 ×2 ZERO flip, fixture
+chain 10/10, 20 gate byte-id (fx-sw1 NUOVA), micro R=5 (a GUARDIA: finestra con updater attivo, incidente #1, rimisura
+S-176), conferma post-pin arith-dq 23,76→20,20 (+3,56, rumore 0,16, 5/5) = SOLO SEGNO, ORM 16 nomi, hk 0E/0F, server
+9b9179d4 ⇒ rc=0: **micro arith 2,3 · prop 2,6 · calls 4,6 · str 4,0 · arr 3,1 · re 2,5** · coppia DOVUTA t20: WP 1,765
+COMPATIBILE [1,738;1,799] (6/6 pulite, banda ON 0,026) · ORM t3 rc=0 (t1/t2 rc=8 quiescenza vs flare mediaanalysisd ⇒
+pre-attesa anti-flare): rapporto [6,936;7,014] ≤7,05, Δ abs [−0,24;−0,12] nel rumore, sentinella oracle 4,97 FUORI
+[4,83;4,94] ⇒ Delta_norm non giudicante (voce riaperta) · az.rev. S-174 TUTTE chiuse: (a) gamba pressione GC = fixture
+fx-sw2-gc.php (cicli a OGGETTI; gc_enable() inline nel rhs dell'op fuso) a giudice INVARIANZA pin==stash s173 (l'oracle
+raccoglie lazy: divergenza dichiarata) + mutanti MS/M3 rc=0 (MS rompe gcp-fused/gcp-loop; M3 = 3ª clausola forzata rompe
+fused/ctl/loop/scsc ⇒ clausola VIVA nel testo unico letto da handler e siti fusi), (b) liste INT del mutante S-174 = soli
+blocchi discriminanti (corsa 5 rc=0), (c) conferma a solo segno · **MOCK «flag gc-idle»** (s175-criterio-mock.md; A=sorgente
+del pin 20,08/36,13, Z=pin s175 controllo nullo |A−Z| 0,24/0,07, B=MS predicato mai letto ai siti fusi, C=M3; R=5 rotazione):
+**arith D_B +2,36 direzione · prop D_B +4,67 CIFRA** (rumore ≤0,93), M3 +0,80/+1,93 ⇒ tetto NOMINATO: leva flag gc-idle in
+S-176 (1 load al posto di 3 load + somma + 2 confronti) · residuo arith-dq 20,08 vs 8,64 = 2,32×: predicato 2,36 + dispatch
+3 op (~5,25) + corpi (~3,8) [ipotesi] · ambiente: Data 10,5G→0,47G durante i gate (updater app utente + swap 9G nel volume VM),
+updater fermato e cache bloccata per la finestra, watchdog, build potata (5,67G) · verdetti wp174-harness/s175-*.out)
+
 (**S-174 = LEVA «Sweep-in-op» AMMESSA a criterio-bis, promozione DIFFERITA (Data 4G)** (criteri
 wp174-harness/s174-criterio.md + s174-criterio-bis.md): B = predicato inerte di `Op::Sweep` estratto in
 `sweep_idle` (un solo testo) e `sweep_skip_next` a fine op dai soli sentieri in place su Long
