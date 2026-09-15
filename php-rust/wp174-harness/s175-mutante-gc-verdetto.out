@@ -1,0 +1,19 @@
+== s175 mutante abortivo «pressione GC» (MS/M3) — riferimento braccio C b6c4b5876971d76d (sorgente = commit 883cb598ff4b, run.rs dace7adbd02539ff), stash s173 da4921a52eba0187, fixture 54 righe, Extreme 2771G 2026-09-15 02:56:45 ==
+INVARIANZA: candidato C == stash s173 BYTE-ID (gcp-fused: d=1 s=1 gcp-ctl: d=1 s=1 gcp-loop: 1,1 s=2 gcp-scsc: d=1 l=11 gcp-under: d=0 s=1 gcp-off: d=0 s=1 FX-SW2 DONE )
+ORACLE (dichiarato): == riferimento a meno dei conteggi di raccolta; oracle grezzo: gcp-fused: d=0 s=1 gcp-ctl: d=0 s=1 gcp-loop: 0,0 s=2 gcp-scsc: d=0 l=11 gcp-under: d=0 s=1 gcp-off: d=0 s=1 FX-SW2 DONE  — divergenza di MOMENTO della raccolta (lazy vs Sweep di fine statement), a catalogo
+MS: binario dcd73bf42232e01f rc_fixture=0
+MS: blocchi ROTTI (2): gcp-fused gcp-loop 
+M3: binario e49d601dbe3b59df rc_fixture=0
+M3: blocchi ROTTI (4): gcp-ctl gcp-fused gcp-loop gcp-scsc 
+copertura MS: 6 etichette nel riferimento, non classificate: nessuna
+copertura M3: 6 etichette nel riferimento, non classificate: nessuna
+MS: attese TUTTE rotte -> il predicato mutato decide su ogni blocco atteso
+MS: blocchi intatti per NOME (discriminanti, nessuna presa fuori dominio): gcp-ctl gcp-scsc 
+MS a verdetto: gcp-under INTATTO -> nessuna raccolta in nessun binario (3ª clausola inerte per gc off / radici < bound)
+MS a verdetto: gcp-off INTATTO -> nessuna raccolta in nessun binario (3ª clausola inerte per gc off / radici < bound)
+M3: attese TUTTE rotte -> il predicato mutato decide su ogni blocco atteso
+M3: blocchi intatti per NOME (discriminanti, nessuna presa fuori dominio): 
+M3 a verdetto: gcp-under INTATTO -> la 3ª clausola non decide (gc off / radici < bound)
+M3 a verdetto: gcp-off INTATTO -> la 3ª clausola non decide (gc off / radici < bound)
+SORGENTE: run.rs del mutante (prima dell'edit) dace7adbd02539ff == commit 883cb598ff4b
+ESITO rc=0 (0 = 3ª clausola VIVA nel predicato unico e letta dai siti fusi; 1 = attese non rotte; 5 = presa fuori dominio; 7 = copertura) fine 2026-09-15 03:02:37
