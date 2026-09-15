@@ -1,0 +1,55 @@
+--- /private/tmp/claude-501/-Volumes-Extreme-Pro-Claude-php-8-5-7/37842f54-7fdb-4acf-8192-7dcd003ea67d/scratchpad/s174-promozione.pre.sh	2026-09-15 02:27:25
++++ s174-promozione.sh	2026-09-15 02:27:25
+@@ -9,6 +9,9 @@
+ # phpr-s173 (da4921a52eba0187), candidato phpr-s174-sw-<braccio> (B, C), conferma post-pin
+ # arith-dq (giudice della leva) vs stash s173, mutante MS/MC (s174-mutante-sw.sh) ESEGUITO
+ # PRIMA di questo copione (verdetto s174-mutante-sw-verdetto.out rc=0 richiesto in PRE).
++# EMENDA S-175 (dichiarata, manifest s174-promozione-tag-s175.diff): la promozione avviene in
++# S-175 (differita da S-174 per Data <10G) ⇒ TAG del pin/stash/micro = s175 (pin-phpr.sh s175,
++# pin-server.sh s175, micro-pin-s175.out, nota finale); verdetti e promo-out restano in wp174-harness.
+ # COPIA DICHIARATA di wp171-harness/s171-promozione.sh (manifest
+ # s172-promozione-copia-v3.diff + copia-gate v3); DIVERGENZE DICHIARATE:
+ #  (1) tag s172, harness wp172 (fixture S-171 ereditate in BYTE-COPIA verificata
+@@ -143,7 +146,7 @@
+ [ "$H2" = "$HB" ] || stop "re-hash post-batteria $H2 != $HB (churn) — STOP"
+ note "promozione: churn batteria neutralizzato (build ricetta → $H2 al byte)"
+ 
+-"$SRC/scripts/pin-phpr.sh" s174 > "$OUT/pin.log" 2>&1
++"$SRC/scripts/pin-phpr.sh" s175 > "$OUT/pin.log" 2>&1
+ prc=$?; echo "$prc" > "$OUT/pin.rc"
+ [ "$prc" = 0 ] || stop "pin-phpr.sh rc=$prc"
+ note "promozione: $(tail -1 "$OUT/pin.log")"
+@@ -218,8 +221,8 @@
+ done
+ [ "$QOK" = 0 ] || stop "quiescenza MAI PASS in 30 tentativi — STOP prima delle misure"
+ 
+-PHPR="$BIN" R=5 "$SRC/wp97-harness/micro/run-micro.sh" > "$OUT/micro-pin-s174.out" 2>&1
+-note "promozione micro pin s174: $(grep -E '^rapporto_' "$OUT/micro-pin-s174.out" | tr '\n' ' ')"
++PHPR="$BIN" R=5 "$SRC/wp97-harness/micro/run-micro.sh" > "$OUT/micro-pin-s175.out" 2>&1
++note "promozione micro pin s175: $(grep -E '^rapporto_' "$OUT/micro-pin-s175.out" | tr '\n' ' ')"
+ 
+ # ---- conferma POST-PIN arith-dq (divergenza (5)): R=5 pin s174 vs stash s173 ----
+ DQ="$SRC/wp164-harness/arith-dq.php"
+@@ -246,7 +249,7 @@
+ print(f"D={d:+.2f} rumore={noise:.2f} segni={segni}/5 A={med(na):.2f} B={med(nb):.2f} ns/iter (N={int(n)} dal driver)")
+ PY
+ )
+-note "conferma post-pin arith-dq (pin s174 vs stash s173): $CONF (attesa: segno +, D nell'intorno del D_dq del braccio promosso nell'A/B; rumore > attesa/2 ⇒ SOLO SEGNO)"
++note "conferma post-pin arith-dq (pin s175 vs stash s173): $CONF (attesa: segno +, D nell'intorno del D_dq del braccio promosso nell'A/B; rumore > attesa/2 ⇒ SOLO SEGNO)"
+ 
+ # ---- gate ORM per NOME ----
+ rm -rf "$SP/orm-work" && mkdir -p "$SP" && tar xzf "$GATES/orm-work.tgz" -C "$SP" || stop "untar orm-work"
+@@ -276,11 +279,11 @@
+   stop "gate http-kernel: E=$HE F=$HF (attesi 0/0) · $HSUMM"
+ fi
+ 
+-"$SRC/scripts/pin-server.sh" s174 > "$OUT/pin-server.log" 2>&1
++"$SRC/scripts/pin-server.sh" s175 > "$OUT/pin-server.log" 2>&1
+ src_rc=$?; echo "$src_rc" > "$OUT/pin-server.rc"
+ [ "$src_rc" = 0 ] || stop "pin-server.sh rc=$src_rc"
+ note "promozione server: $(grep '^PIN server' "$OUT/pin-server.log" | tail -1)"
+ 
+ echo 0 > "$OUT/rcb"
+-note "PROMOZIONE COMPLETA rc=0 (da promo-out/rcb): pin s174 = $H2"
++note "PROMOZIONE COMPLETA rc=0 (da promo-out/rcb): pin s175 = $H2"
+ exit 0
