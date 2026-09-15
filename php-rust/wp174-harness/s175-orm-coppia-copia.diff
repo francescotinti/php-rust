@@ -1,0 +1,72 @@
+--- ../wp172-harness/s173-orm-coppia.sh	2026-09-10 03:02:57
++++ s175-orm-coppia.sh	2026-09-15 02:40:38
+@@ -1,4 +1,10 @@
+ #!/bin/bash
++# s175-orm-coppia.sh — coppia dbal+ORM sul pin s175 (DOVUTA: pin nuovo, promozione Sweep-in-op C S-175).
++# COPIA DICHIARATA di wp172-harness/s173-orm-coppia.sh (manifest s175-orm-coppia-copia.diff); adattamenti: harness
++# wp174, pin s175 = 5de14d6856d760a8, nota t19 (rapporto net [6,988;7,012] RIENTRATO <7,05: regola 4 non scattata;
++# se t20 torna >7,05 la voce si riapre), attesa Sweep-in-op (direzione ≤0, magnitudine NON pre-registrabile);
++# RIF, E1, E2 (banda sentinella [4,83;4,94]: 4,94 = estremo osservato t19 — fuori banda ⇒ Delta_norm NON giudicante,
++# voce riaperta) INVARIATI. Testo S-173 conservato sotto per storia.
+ # s173-orm-coppia.sh — coppia dbal+ORM sul pin s173 (DOVUTA: pin nuovo)
+ # (criterio s173-criterio-orm.md; copia DICHIARATA di s172-orm-coppia.sh,
+ # manifest s173-orm-coppia-copia.diff; adattamenti: pin s173 = placeholder
+@@ -19,19 +25,19 @@
+ set -u
+ export PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin
+ REPO="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust"
+-H="$REPO/wp172-harness"
++H="$REPO/wp174-harness"
+ GATES="/Volumes/Extreme Pro/Claude/wp9-harness/gates"
+ WD="/Volumes/Extreme Pro/Claude/wp13-harness/run-with-watchdog.sh"
+ ORACLE=/opt/homebrew/opt/php/bin/php
+ PHPR="$HOME/Claude/php-rust-output/release/phpr"
+ SP="${MAPPA_SP:?MAPPA_SP (workdir APFS) richiesto}"
+ OUT="$H/orm-out"; mkdir -p "$OUT"
+-VERD="$H/s173-orm-coppia-verdetto.out"
++VERD="$H/s175-orm-coppia-verdetto.out"
+ p(){ echo "$(date +%H:%M:%S) $1" >> "$OUT/progress.txt"; }
+ : > "$OUT/progress.txt"
+ rm -f "$OUT/rimisura.done"
+ PINM="$(shasum -a 256 "$PHPR" | cut -c1-16)"
+-[ "$PINM" = "da4921a52eba0187" ] || { echo "rc=9 pin!=s173" > "$OUT/rimisura.done"; exit 9; }
++[ "$PINM" = "5de14d6856d760a8" ] || { echo "rc=9 pin!=s175" > "$OUT/rimisura.done"; exit 9; }
+ # lock della SESSIONE: si VERIFICA soltanto (niente creazione né trap).
+ LOCK=/private/tmp/phpr-measure.lock
+ [ -e "$LOCK" ] || { echo "rc=6 measure-lock ASSENTE (finestra non aperta)" > "$OUT/rimisura.done"; exit 6; }
+@@ -152,7 +158,7 @@
+     return d
+ def failset(f):
+     return set(x.strip() for x in open(f) if x.strip()) if os.path.exists(f) else set()
+-print("coppia-s173 (user CPU; pavimenti PARZIALI phpunit --version: orm o=%.3f p=%.3f · dbal o=%.3f p=%.3f)" % (fo, fp, dfo, dfp))
++print("coppia-s175 (user CPU; pavimenti PARZIALI phpunit --version: orm o=%.3f p=%.3f · dbal o=%.3f p=%.3f)" % (fo, fp, dfo, dfp))
+ print("grade=VERDICT  # derivazione meccanica dai .time")
+ new_net = {}; ora_net = {}; ratio_net = {}
+ orm_flags = []
+@@ -192,7 +198,7 @@
+ SENT_LO, SENT_HI = 4.83, 4.94      # EMENDA S-166: banda sentinella oracle PRE-registrata (s165-istruttoria-ictx-orm.md B1, VINCOLANTE; ORA_REF REGGE per R=5 s165 mediana 4.860)
+ RES = 0.293                        # risoluzione KS-146-1
+ RREF_LO, RREF_HI = 7.023, 7.053    # rapporto net registrato s166-mattina @ pin s165 (companion) — NON cambiato; NOTA t18 [7,090;7,092] da rivedere; se in S-173 resta >7,05 scatta la regola 4
+-ATT_LO, ATT_HI = 0.0, 0.0          # attesa fetta 3 (P3 peephole + P4 borrow unico) DICHIARATA: direzione <=0 (mai peggiorare); magnitudine NON pre-registrabile (quota di chiamate a metodo AMMESSE — simple_call arita' esatta IC-hit — nel workload doctrine NON censita); GIU' = coerente con la leva, da dichiarare SENZA ripartizione senza census proprio (Composer/Doctrine a REGIME = classmap hit, i miss autoload [obj,metodo] RARI; quota miss NON censita => sotto-risoluzione; attesa-AF1 resta APERTA, non risolta da questa coppia)
++ATT_LO, ATT_HI = 0.0, 0.0          # attesa Sweep-in-op (B+C, S-175) DICHIARATA [testo S-173 segue]: direzione <=0 (mai peggiorare); magnitudine NON pre-registrabile (quota di chiamate a metodo AMMESSE — simple_call arita' esatta IC-hit — nel workload doctrine NON censita); GIU' = coerente con la leva, da dichiarare SENZA ripartizione senza census proprio (Composer/Doctrine a REGIME = classmap hit, i miss autoload [obj,metodo] RARI; quota miss NON censita => sotto-risoluzione; attesa-AF1 resta APERTA, non risolta da questa coppia)
+ nn = sorted(new_net.get("orm", []))
+ on = ora_net.get("orm", [])
+ rr = sorted(ratio_net.get("orm", []))
+@@ -213,7 +219,7 @@
+     n2, dn2_min, dn2_max = _norm(ORA_REF2, REF2_MIN, REF2_MAX)
+     print(f"attesa-MC1 ORACLE-NORMALIZZATO (CANONICO coppia): net_norm=[{n2[0]:.2f}; {n2[1]:.2f}] (ORA_REF={ORA_REF2}, oracle_net_gambe={[round(x,2) for x in on]}) Delta_norm=[{dn2_min:+.2f}; {dn2_max:+.2f}] s")
+     print(f"rapporto net (companion): [{rr[0]:.3f}; {rr[1]:.3f}] vs registrato S-162 [{RREF_LO}; {RREF_HI}]")
+-    print("nota t18 (S-172): rapporto net t18 [7,090;7,092] da rivedere; se in S-173 resta >7,05 scatta la regola 4" + (f" — t19 min={rr[0]:.3f} >7,05: RESTA SOPRA, regola 4 SCATTA" if rr[0] > 7.05 else f" — t19 min={rr[0]:.3f} <=7,05: rientra"))
++    print("nota t19 (S-173): rapporto net t19 [6,988;7,012] RIENTRATO <=7,05 (regola 4 non scattata); se t20 torna >7,05 la voce si riapre" + (f" — t20 min={rr[0]:.3f} >7,05: VOCE RIAPERTA" if rr[0] > 7.05 else f" — t20 min={rr[0]:.3f} <=7,05: resta rientrata"))
+     c2 = _classe(dn2_min, dn2_max)
+     if sent_fuori:
+         print(f"SENTINELLA ORACLE FUORI BANDA [{SENT_LO};{SENT_HI}]: gambe {sent_fuori} — Delta_norm NON GIUDICANTE (emenda S-166), istruttoria drift dedicata")
+@@ -242,7 +248,7 @@
+   python3 -c "print(f'{$i/$r:.1f}')" 2>/dev/null || echo "n/d"
+ }
+ 
+-{ echo "== s173 coppia dbal+ORM (pin s173 MISURATO $PINM vs oracle 8.5.7; criterio s173-criterio-orm.md) =="
++{ echo "== s175 coppia dbal+ORM (pin s175 MISURATO $PINM vs oracle 8.5.7; criterio s175-criterio-orm.md) =="
+   echo "# estrazione summ/names con LC_ALL=C + grep -a (fix az.rev. S-155 #4); reperto conteggi dbal phpr vs oracle A VERBALE (companion, non arbitra)"
+   echo "# ADATTAMENTI (i)-(iii) dall'istruttoria p.1 + az.rev. S-159 #1: rodaggio non giudicante, quiescenza per gamba, scaletta a due estremi"
+   echo "sentinella language-server inizio finestra (az.rev. S-157 #4): ${LS_START:-nessuno}"
