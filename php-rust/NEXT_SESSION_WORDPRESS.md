@@ -46,11 +46,11 @@ CI: lock s175 ⇒ job in skipped-busy dalla sera del 13 (job 51ca44dbba04 in req
 6. **Emenda del canone ORM** (lezione 3): pre-attesa anti-flare / assestamento a streak PRIMA del gate di quiescenza per
    gamba (copia dichiarata da s175-pair.sh); banda sentinella oracle: istruttoria drift (t19 4,94, t20 4,97).
 7. Quesiti residui: ictx oracle1 segnalata (a verbale) · c0 positivo · census server (25° slitt.) · ratifiche §3 · dtor-in-dtor
-   (catalogo per NOME in PHPR_DIVERGENCES) · momento della raccolta GC (statement vs lazy: catalogo, già in ho_gc_status).
+   (catalogo per NOME in PHPR_DIVERGENCES) · momento della raccolta GC = §3.33 CATALOGATA (S-175).
 
 ## Aperture per NOME
 flag gc-idle (leva) · census «op in place + Sweep» WP/ORM · micro pulite s175 · banda sentinella ORM (4,97) · emenda canone
-ORM anti-flare · dtor-in-dtor (catalogo) · momento raccolta GC (catalogo) · IC set typed (fetta 4) · census typed · calls → str ·
+ORM anti-flare · dtor-in-dtor (catalogo) · IC set typed (fetta 4) · census typed · calls → str ·
 assign-form · §3.32 · §3.30 · residuo slot 2,75/op · tupla guard · F1/F2 (SOSPESE) · autoload statiche · sonda strmap · gamba
 server census · §3.28 · §3.29 · §3.27 · §3.26 · §3.25 · §3.24+§3.23 · slot-load · §3.22 · depr. float→int · warning ×2 ·
 div. RMW · objmap → GC · evalcls 316,9× · refl 42,4× · re +2 · get_gc · latin1 · dbal 10 nomi · pavimento 4 ns/iter su loop corti.
