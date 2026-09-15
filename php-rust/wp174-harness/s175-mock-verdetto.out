@@ -1,0 +1,24 @@
+== s175 MOCK mock — A=b6c4b587 MISURATO (/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp174-harness/ab-out/phpr-C, braccio C = sorgente del pin s175) Z=5de14d68 MISURATO (/Users/francescotinti/Claude/php-rust-output/release/phpr, pin s175 gemello a contenuto = controllo nullo) B=dcd73bf4 MISURATO (/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp174-harness/ab-out/s175-mutgc/phpr-MS, MS: predicato sempre vero ai siti fusi = TETTO flag gc-idle) C=e49d601d MISURATO (/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp174-harness/ab-out/s175-mutgc/phpr-M3, M3: 3ª clausola tolta); GIUDICE arith-dq N=250000000 (bersaglio) E GUARDIA prop-dq N=150000000 (sola regressione; N dal driver); R=5 ordine dei quattro bracci RUOTATO per coppia su giudice e guardia; banda tra run vs PREV dq=20.92 prop=36.47; criterio s175-criterio-mock.md ==
+sentinella LS: /Applications/Antigravity /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.96.0-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv 
+parità arith-dq: A==Z==B==C==atteso oracle (85937499750000000 )
+parità prop-dq: A==Z==B==C==atteso oracle (300000000 )
+floors: A=0.03 Z=0.02 B=0.03 C=0.02 oracle=0.05
+  coppia1 [AZBC]: dqA=5.05 dqZ=5.10 dqB=4.46 dqC=4.83 propA=5.45 propZ=5.46 propB=4.86 propC=5.17 | dqO=2.21 propO=2.83
+  coppia2 [CBZA]: dqA=5.05 dqZ=5.11 dqB=4.48 dqC=4.84 propA=5.60 propZ=5.42 propB=4.71 propC=5.16 | dqO=2.21 propO=2.15
+  coppia3 [BCAZ]: dqA=5.05 dqZ=5.11 dqB=4.46 dqC=4.82 propA=5.45 propZ=5.41 propB=4.85 propC=5.15 | dqO=2.21 propO=2.15
+  coppia4 [ZACB]: dqA=5.05 dqZ=5.10 dqB=4.47 dqC=4.84 propA=5.44 propZ=5.44 propB=4.74 propC=5.15 | dqO=2.21 propO=2.16
+  coppia5 [CZAB]: dqA=5.05 dqZ=5.10 dqB=4.45 dqC=4.92 propA=5.47 propZ=5.43 propB=4.75 propC=5.15 | dqO=2.21 propO=2.15
+LAYOUT arith-dq: A=20.08 Z=20.32 ⇒ SL in-run (colonna) 0.24 / (appaiata) 0.24 ns/iter — confronto 0,94 (arith S-168): sotto; banda tra run |A−PREV 20.92| = 0.84 (rumore drop-1 A'=0.00 Z'=0.04)
+LAYOUT prop-dq: A=36.13 Z=36.07 ⇒ SL in-run (colonna) 0.07 / (appaiata) 0.20 ns/iter — confronto 0,94 (arith S-168): sotto; banda tra run |A−PREV 36.47| = 0.34 (rumore drop-1 A'=0.20 Z'=0.20)
+GIUDICE arith-dq (bersaglio): oracle=8.64 ns/iter; A/oracle=2.32× Z/oracle=2.35× B/oracle=2.05× C/oracle=2.23×
+GIUDICE arith-dq B: A=20.08 B=17.72 ns/iter D=A−B colonna=+2.36 appaiata=+2.36 soglia=4.00 (rumore drop-1 A'=0.00 B'=0.08, SL=0.24) -> NON nominato (vale 0); direzione FIRMATA (B più veloce); regressione (D < −max(4,rumore)): no
+GIUDICE arith-dq C: A=20.08 C=19.28 ns/iter D=A−C colonna=+0.80 appaiata=+0.80 soglia=4.00 (rumore drop-1 A'=0.00 C'=0.08, SL=0.24) -> NON nominato (vale 0); direzione FIRMATA (C più veloce); regressione (D < −max(4,rumore)): no
+CONTRASTO arith-dq (M3 vs MS: costo delle clausole 1-2 del predicato) C: B=17.72 C=19.28 ns/iter D=B−C colonna=-1.56 appaiata=-1.52 soglia=4.00 (rumore drop-1 B'=0.08 C'=0.08, SL=0.24) -> NON nominato (vale 0); direzione FIRMATA (C più lento); regressione (D < −max(4,rumore)): no
+ATTESE MOCK arith (criterio-mock p.3): D_B ∈ [0,5;3]: CENTRATA (+2.36/+2.36); D_C ≤ D_B (la 3ª clausola è un SOTTO-costo): sì (+0.80/+0.80)
+GIUDICE-2 prop-dq (mock: co-bersaglio, 2 Sweep/iter): oracle=14.00 ns/iter; A/oracle=2.58× B/oracle=2.25× C/oracle=2.44×
+GIUDICE-2 prop-dq B: A=36.13 B=31.47 ns/iter D=A−B colonna=+4.67 appaiata=+4.67 soglia=4.00 (rumore drop-1 A'=0.20 B'=0.93, SL=0.20) -> CIFRA = [+4.67;+4.67] (entrambi gli stimatori nominano); direzione FIRMATA (B più veloce); regressione (D < −max(4,rumore)): no
+GIUDICE-2 prop-dq C: A=36.13 C=34.20 ns/iter D=A−C colonna=+1.93 appaiata=+1.93 soglia=4.00 (rumore drop-1 A'=0.20 C'=0.07, SL=0.20) -> NON nominato (vale 0); direzione FIRMATA (C più veloce); regressione (D < −max(4,rumore)): no
+ATTESE MOCK prop (criterio-mock p.3): D_B ∈ [1;6]: CENTRATA (+4.67/+4.67); D_C ≤ D_B: sì (+1.93/+1.93)
+MOCK: tetto NOMINATO (arith B +2.36/+2.36 nom=False; prop B +4.67/+4.67 nom=True) ⇒ la leva «flag gc-idle» ha un tetto ≥ pavimento su almeno un giudice: si disegna (rc=0); quota 3ª clausola (M3): arith +0.80/+0.80, prop +1.93/+1.93 (direzione)
+ESITO rc=0
+sentinella LS fine: /Applications/Antigravity /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.96.0-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv 
