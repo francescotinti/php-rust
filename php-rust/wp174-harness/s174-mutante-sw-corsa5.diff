@@ -1,0 +1,39 @@
+--- /private/tmp/claude-501/-Volumes-Extreme-Pro-Claude-php-8-5-7/37842f54-7fdb-4acf-8192-7dcd003ea67d/scratchpad/s174-mutante-sw.pre.sh	2026-09-15 02:37:55
++++ s174-mutante-sw.sh	2026-09-15 02:37:55
+@@ -40,6 +40,11 @@
+ # CORSA 4 (fixture v4): scsc-* nella forma ESATTA di arith-dq (`$l += $a*3 - ($b>>1)`: in v1-v3 `$l = $l + (…)` NON era
+ # BinarySCSCDst, zero occorrenze nel dump) e siti P1/P4 su classe PLAIN P2 (P ha `int $x` ⇒ IC set non riempita:
+ # p1-site-typed resta INTATTO atteso = perimetro S-173).
++# CORSA 5 (S-175, az.rev. S-174 (b), regola azione 4 applicata alle LISTE): INTATTE = SOLO blocchi DISCRIMINANTI —
++#   MS: forme fuori dominio CON distruttore (si romperebbero se il sito prendesse il sentiero in place su dst non-Long)
++#   + controlli per sito; MC: forme di miss del CmpJmpSC (slot non-Long / const non-Int / bound in slot / while / step2:
++#   si romperebbero se il back-edge fuso le prendesse). Tutto il resto (nessuna nota pendente / nessun for canonico)
++#   va «a verdetto». Lock accettato anche col TOKEN s175 (dichiarato). Verdetto corsa 4 conservato in -corsa4.out.
+ # Esiti: VERD (committato) + ab-out/s174-mutsw/*; rc SOLO da ab-out/s174-mutsw.done.
+ set -u
+ export PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin:"$HOME/.cargo/bin"
+@@ -56,7 +61,7 @@
+ fin(){ echo "rc=$1 $(date +%T)" > "$DONE"; exit "$1"; }
+ note(){ echo "$*" >> "$VERD"; }
+ 
+-grep -qw s174 "$LOCK" 2>/dev/null || { note "rc=9 lock s174 assente (per TOKEN)"; fin 9; }
++grep -qwE "s174|s175" "$LOCK" 2>/dev/null || { note "rc=9 lock s174/s175 assente (per TOKEN)"; fin 9; }
+ [ -s "$FX" ] || { note "rc=7 fixture assente"; fin 7; }
+ PH=$(shasum -a 256 "$REF" | cut -c1-16)
+ [ "$PH" = "$REF_ATTESO" ] || { note "rc=9 riferimento $PH ≠ atteso $REF_ATTESO"; fin 9; }
+@@ -137,11 +142,11 @@
+ build_run MC 'if let Some(jump) = long_cmp_i64(*c_op, *l, *c) {' 'if let Some(jump) = long_cmp_i64(*c_op, *l, *c).map(|b| !b) {'
+ 
+ ATTS="stdst-dtor stdst-dtor-twice p3-dtor light window stdst-dtor-loop-echo for-dtor-echo p3-site p1-site p4-site scsc-site"
+-INTS="p3-site-ctl p1-site-typed stdst-dtor-double stdst-dtor-null stdst-dtor-concat stdst-dtor-overflow stdst-dtor-div scsc-loop scsc-overflow scsc-double-dst p3 p1-loop p4-loop e-dtor for-lt for-gt-dec for-le for-ne for-double-slot for-double-const for-str-const for-overflow-edge for-overflow-float for-empty for-nested for-null-init for-continue for-slot-bound for-const-lhs while-lt for-step2"
+-VERS="stdst-dtor-loop for-dtor p3-chain p1-chain p4-chain p4-dtor pressure collected pressure-on collected-on"
++INTS="p3-site-ctl p1-site-typed stdst-dtor-double stdst-dtor-null stdst-dtor-concat stdst-dtor-overflow stdst-dtor-div"
++VERS="stdst-dtor-loop for-dtor p3-chain p1-chain p4-chain p4-dtor pressure collected pressure-on collected-on scsc-loop scsc-overflow scsc-double-dst p3 p1-loop p4-loop e-dtor for-lt for-gt-dec for-le for-ne for-double-slot for-double-const for-str-const for-overflow-edge for-overflow-float for-empty for-nested for-null-init for-continue for-slot-bound for-const-lhs while-lt for-step2"
+ ATTC="stdst-dtor-loop-echo for-dtor-echo p3-site p3-site-ctl p1-site p1-site-typed p4-site scsc-site for-lt for-gt-dec for-le for-ne for-overflow-edge for-empty for-nested for-continue for-dtor for-const-lhs stdst-dtor-loop scsc-loop scsc-double-dst p1-loop p4-loop p3-chain p1-chain p4-chain"
+-INTC="stdst-dtor stdst-dtor-twice stdst-dtor-double stdst-dtor-null stdst-dtor-concat stdst-dtor-overflow stdst-dtor-div p3 p3-dtor p4-dtor light window e-dtor for-double-slot for-double-const for-str-const for-slot-bound"
+-VERC="for-null-init for-overflow-float scsc-overflow for-step2 while-lt pressure collected pressure-on collected-on"
++INTC="for-double-slot for-double-const for-str-const for-slot-bound while-lt for-step2"
++VERC="for-null-init for-overflow-float scsc-overflow pressure collected pressure-on collected-on stdst-dtor stdst-dtor-twice stdst-dtor-double stdst-dtor-null stdst-dtor-concat stdst-dtor-overflow stdst-dtor-div p3 p3-dtor p4-dtor light window e-dtor"
+ python3 - "$OUT/ref.out" "$ATTS $INTS $VERS" "$ATTC $INTC $VERC" <<'PY' >> "$VERD" || fin 7
+ import sys, re
+ labels = []

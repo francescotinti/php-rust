@@ -1,0 +1,211 @@
+--- s174-mutante-sw.sh	2026-09-15 02:37:55
++++ s175-mutante-gc.sh	2026-09-15 02:37:36
+@@ -1,83 +1,73 @@
+ #!/bin/bash
+-# s174-mutante-sw.sh — leva «Sweep-in-op» (criterio s174-criterio.md p.5): MUTANTE ABORTIVO dei due
+-# sentieri fusi contro fixtures/fx-sw1.php. Prova che (MS) lo Sweep viene scavalcato SOLO dopo gli op fusi
+-# in place e che la scelta dipende dal predicato (mutante = scavalca SEMPRE dopo gli op fusi: i blocchi
+-# con temporaneo morto nello statement DEVONO rompersi nell'ORDINE, gli altri restare INTATTI per NOME)
+-# e che (MC) il back-edge fuso decide il confronto SOLO su slot Long / const Int (mutante = confronto
+-# negato: i `for` Long/Int si rompono, i miss restano intatti).
+-# COPIA DICHIARATA di ../wp172-harness/s173-mutante-sl3.sh (manifest s174-mutante-sw-copia.diff); adattamenti:
+-# tag s174/harness wp174, riferimento = braccio C (ab-out/phpr-C), fixture fx-sw1 (marcatore FX-SW1 DONE),
+-# mutanti MS/MC, verdetto che NOMINA gli intatti attesi (az.rev. S-173 (d)).
+-#   MS (sweep_skip_next): `matches!(func.ops.get(at), Some(Op::Sweep { main }) if self.sweep_idle(top, *main))`
+-#       → `matches!(func.ops.get(at), Some(Op::Sweep { .. }))`
+-#   MC (back-edge fuso): `if let Some(jump) = long_cmp_i64(*c_op, *l, *c) {`
+-#       → `if let Some(jump) = long_cmp_i64(*c_op, *l, *c).map(|b| !b) {`
+-# ATTESA PRE-registrata (blocchi ROTTI):
+-#   MS ⊇ {stdst-dtor stdst-dtor-twice p3-dtor light window}
+-#   MC ⊇ {for-lt for-gt-dec for-le for-ne for-overflow-edge for-empty for-nested for-continue for-dtor
+-#         for-const-lhs stdst-dtor-loop scsc-loop scsc-double-dst p1-loop p4-loop p3-chain p1-chain p4-chain}
+-# A VERDETTO: MS p1-chain p4-chain (Sweep dopo P1/P4 in place con nota pendente dal mk() precedente) ·
+-#   p4-dtor (PropSetPop: NON fuso, attesa intatta) · pressure/collected (cicli: attesa intatta) ·
+-#   MC for-null-init (null→Long dopo la 1ª iterazione) · for-overflow-float · scsc-overflow · for-step2
+-#   (`$i += 2`: back-edge non IncDecSlotJmp) · while-lt · pressure/pressure-on (`$i < $k` = CmpJmpSS).
+-# CORSA 1 (s174-mutante-sw-verdetto-corsa1.out, rc=1): MS «attese non rotte» stdst-dtor-loop for-dtor p3-chain =
+-# attese MAL POSTE: nelle forme a LOOP lo Sweep dello statement `for` (dopo il CmpJmpSC d'uscita, NON fuso)
+-# drena la nota dell'ultima iterazione PRIMA di «post» e le intermedie le drena il light sweep dentro mk():
+-# l'ordine osservabile non cambia ⇒ INTATTE attese (prova del presidio a valle, non del dominio); MC «attesa
+-# non rotta» p1-loop = fixture IDEMPOTENTE (z = y+2 a ogni giro) ⇒ contatore aggiunto, resta ATTESA ROTTA.
+-# DEVONO restare INTATTE: MS = {stdst-dtor-loop for-dtor p3-chain stdst-dtor-double stdst-dtor-null stdst-dtor-concat stdst-dtor-overflow
+-#   stdst-dtor-div scsc-loop scsc-overflow scsc-double-dst p3 p1-loop p4-loop e-dtor for-lt for-gt-dec
+-#   for-le for-ne for-double-slot for-double-const for-str-const for-overflow-edge for-overflow-float
+-#   for-empty for-nested for-null-init for-continue for-slot-bound for-const-lhs while-lt for-step2};
+-#   MC = {stdst-dtor stdst-dtor-twice stdst-dtor-double stdst-dtor-null stdst-dtor-concat
+-#   stdst-dtor-overflow stdst-dtor-div p3 p3-dtor p4-dtor light window e-dtor for-double-slot
+-#   for-double-const for-str-const for-slot-bound}.
+-# CORSA 3 (replica alla revisione S-174, rilievo 2 + azione 4): fixture v3 = forme a LOOP con echo nel corpo (scavalco
+-# osservabile per iterazione) e coppie per SITO (p3-site/p1-site/p4-site/scsc-site ATTESE ROTTE, p3-site-ctl con
+-# statement intermedio NON fuso ATTESA INTATTA); REGOLA: un blocco NON discriminante va «a verdetto», mai «intatto
+-# atteso» ⇒ stdst-dtor-loop for-dtor p3-chain spostati in VERS. Gamba «pressione GC» del predicato: NON provata da MS
+-# (rinviata a S-175: blocco con gc_status() dentro il loop).
+-# CORSA 4 (fixture v4): scsc-* nella forma ESATTA di arith-dq (`$l += $a*3 - ($b>>1)`: in v1-v3 `$l = $l + (…)` NON era
+-# BinarySCSCDst, zero occorrenze nel dump) e siti P1/P4 su classe PLAIN P2 (P ha `int $x` ⇒ IC set non riempita:
+-# p1-site-typed resta INTATTO atteso = perimetro S-173).
+-# CORSA 5 (S-175, az.rev. S-174 (b), regola azione 4 applicata alle LISTE): INTATTE = SOLO blocchi DISCRIMINANTI —
+-#   MS: forme fuori dominio CON distruttore (si romperebbero se il sito prendesse il sentiero in place su dst non-Long)
+-#   + controlli per sito; MC: forme di miss del CmpJmpSC (slot non-Long / const non-Int / bound in slot / while / step2:
+-#   si romperebbero se il back-edge fuso le prendesse). Tutto il resto (nessuna nota pendente / nessun for canonico)
+-#   va «a verdetto». Lock accettato anche col TOKEN s175 (dichiarato). Verdetto corsa 4 conservato in -corsa4.out.
+-# Esiti: VERD (committato) + ab-out/s174-mutsw/*; rc SOLO da ab-out/s174-mutsw.done.
++# s175-mutante-gc.sh — mutante abortivo della gamba «pressione GC» del predicato sweep_idle (az.rev. S-174 (a),
++# revisione S-174 azione 3). COPIA DICHIARATA di s174-mutante-sw.sh (manifest s175-mutante-gc-copia.diff);
++# DIVERGENZE DICHIARATE: (1) fixture fx-sw2-gc.php (marcatore FX-SW2 DONE), cicli a OGGETTI (`$o->self = $o`:
++# un ciclo via `$a[] = &$a` NON lascia radici, sondato S-175), gc_enable() INLINE nel rhs dell'op fuso;
++# (2) giudice di INVARIANZA pin/candidato == stash s173 byte-id (NON bilaterale: l'oracle raccoglie lazy —
++# all'inserimento di una radice a buffer pieno — phpr allo Sweep di fine statement: divergenza a catalogo,
++# ho_gc_status) + oracle == riferimento a meno dei soli conteggi «d=»/«gcp-loop:» (normalizzati);
++# (3) mutanti: MS = predicato sempre vero nel helper (needle INVARIATO da S-174) e M3 = 3ª clausola di sweep_idle
++# (`!gc_enabled || radici < gc_sweep_bound`) forzata VERA (`&& true)`): tocca il testo UNICO del predicato, letto
++# dal handler Op::Sweep E dai siti fusi ⇒ atteso ROTTO ovunque la 3ª clausola decide (fused, ctl, loop, scsc);
++# MC non pertinente (nessun back-edge in gioco: omesso); (4) tag s175 (lock per TOKEN s175, out ab-out/s175-mutgc,
++# verdetto s175-mutante-gc-verdetto.out, target/sorgente s175-mutgc*).
++# ATTESE: MS ROTTE = {gcp-fused gcp-loop} (Sweep scavalcato dopo l'op fuso: la raccolta slitta allo statement
++#   dopo la lettura); MS INTATTE per NOME (discriminanti: si romperebbero SOLO se `$s = $s + …` / `$z = …` fossero
++#   fusi) = {gcp-ctl gcp-scsc}; a verdetto (NON discriminanti: nessuna raccolta in nessun binario) = {gcp-under gcp-off}.
++#   M3 ROTTE = {gcp-fused gcp-ctl gcp-loop gcp-scsc}; M3 intatte attese: nessuna; a verdetto = {gcp-under gcp-off}.
++# REGOLA (S-174, azione 4): un blocco NON discriminante va «a verdetto», mai «intatto atteso».
++# Esiti: VERD (committato) + ab-out/s175-mutgc/*; rc SOLO da ab-out/s175-mutgc.done.
+ set -u
+ export PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin:"$HOME/.cargo/bin"
+ REPO="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust"
+-H="$REPO/wp174-harness"; OUT="$H/ab-out/s174-mutsw"; mkdir -p "$OUT"
+-VERD="$H/s174-mutante-sw-verdetto.out"; DONE="$H/ab-out/s174-mutsw.done"; rm -f "$DONE"
++H="$REPO/wp174-harness"; OUT="$H/ab-out/s175-mutgc"; mkdir -p "$OUT"
++VERD="$H/s175-mutante-gc-verdetto.out"; DONE="$H/ab-out/s175-mutgc.done"; rm -f "$DONE"
+ LOCK=/private/tmp/phpr-measure.lock
+-REF="${REF:-$H/ab-out/phpr-C}"; REF_ATTESO="${REF_ATTESO:?hash16 atteso del braccio C}"
+-COMMIT="${COMMIT:?commit sorgente del braccio C}"
+-FX="$H/fixtures/fx-sw1.php"
+-SRC="/Volumes/Extreme Pro/Claude/s174-mutsw"; TGT="/Volumes/Extreme Pro/Claude/s174-mutsw-tgt"
++STASH="/Volumes/Extreme Pro/Claude/phpr-old-target/release"
++REF="${REF:-$STASH/phpr-s174-sw-C}"; REF_ATTESO="${REF_ATTESO:-b6c4b5876971d76d}"
++S173="$STASH/phpr-s173"; S173_ATTESO="da4921a52eba0187"
++ORACLE=/opt/homebrew/opt/php/bin/php
++COMMIT="${COMMIT:-883cb598}"
++FX="$H/fixtures/fx-sw2-gc.php"
++SRC="/Volumes/Extreme Pro/Claude/s175-mutgc"; TGT="/Volumes/Extreme Pro/Claude/s175-mutgc-tgt"
+ RS=crates/php-runtime/src/vm/run.rs
+ : > "$VERD"
+ fin(){ echo "rc=$1 $(date +%T)" > "$DONE"; exit "$1"; }
+ note(){ echo "$*" >> "$VERD"; }
+ 
+-grep -qwE "s174|s175" "$LOCK" 2>/dev/null || { note "rc=9 lock s174/s175 assente (per TOKEN)"; fin 9; }
++grep -qw s175 "$LOCK" 2>/dev/null || { note "rc=9 lock s175 assente (per TOKEN)"; fin 9; }
+ [ -s "$FX" ] || { note "rc=7 fixture assente"; fin 7; }
+ PH=$(shasum -a 256 "$REF" | cut -c1-16)
+ [ "$PH" = "$REF_ATTESO" ] || { note "rc=9 riferimento $PH ≠ atteso $REF_ATTESO"; fin 9; }
++[ "$(shasum -a 256 "$S173" | cut -c1-16)" = "$S173_ATTESO" ] || { note "rc=9 stash s173 ≠ $S173_ATTESO"; fin 9; }
+ cd "$REPO" || fin 4
+ SHA0=$(git rev-parse --verify "$COMMIT^{commit}") || { note "rc=7 commit $COMMIT inesistente"; fin 7; }
+ RS_H0=$(git show "$SHA0:./$RS" | shasum -a 256 | cut -c1-16)
+ SOLO="${SOLO:-0}"
+ AVX=$(df -k "/Volumes/Extreme Pro" | awk 'NR>1{printf "%.0f", $4/1048576}')
+-note "== s174 mutante abortivo «Sweep-in-op» (MS/MC) — riferimento braccio C $PH (sorgente = commit ${SHA0:0:12}, run.rs $RS_H0), fixture $(wc -l < "$FX" | tr -d ' ') righe, Extreme ${AVX}G $(date '+%F %T') =="
++note "== s175 mutante abortivo «pressione GC» (MS/M3) — riferimento braccio C $PH (sorgente = commit ${SHA0:0:12}, run.rs $RS_H0), stash s173 $S173_ATTESO, fixture $(wc -l < "$FX" | tr -d ' ') righe, Extreme ${AVX}G $(date '+%F %T') =="
+ awk -v a="$AVX" 'BEGIN{exit !(a+0 < 15)}' && { note "rc=8 Extreme ${AVX}G < 15G: niente build"; fin 8; }
+ 
+-perl -e 'alarm 60; exec @ARGV or die' -- "$REF" "$FX" > "$OUT/ref.out" 2>&1
+-grep -q "FX-SW1 DONE" "$OUT/ref.out" || { note "rc=7 riferimento: marcatore assente"; fin 7; }
++perl -e 'alarm 120; exec @ARGV or die' -- "$REF" "$FX" > "$OUT/ref.out" 2>&1
++grep -q "FX-SW2 DONE" "$OUT/ref.out" || { note "rc=7 riferimento: marcatore assente"; fin 7; }
++perl -e 'alarm 120; exec @ARGV or die' -- "$S173" "$FX" > "$OUT/s173.out" 2>&1
++if diff -q "$OUT/ref.out" "$OUT/s173.out" > /dev/null; then
++  note "INVARIANZA: candidato C == stash s173 BYTE-ID ($(tr '\n' ' ' < "$OUT/ref.out" | cut -c1-160))"
++else
++  diff "$OUT/ref.out" "$OUT/s173.out" > "$OUT/invarianza.diff" || true
++  note "rc=2 INVARIANZA: candidato C ≠ stash s173 (ab-out/s175-mutgc/invarianza.diff)"; fin 2
++fi
++"$ORACLE" -d log_errors=0 -d display_errors=1 "$FX" > "$OUT/oracle.out" 2>&1
++norm(){ sed -E 's/d=-?[0-9]+/d=_/; s/^gcp-loop: [-0-9,]+/gcp-loop: _/' "$1"; }
++if diff -q <(norm "$OUT/ref.out") <(norm "$OUT/oracle.out") > /dev/null; then
++  note "ORACLE (dichiarato): == riferimento a meno dei conteggi di raccolta; oracle grezzo: $(tr '\n' ' ' < "$OUT/oracle.out" | cut -c1-160) — divergenza di MOMENTO della raccolta (lazy vs Sweep di fine statement), a catalogo"
++else
++  diff "$OUT/ref.out" "$OUT/oracle.out" > "$OUT/oracle.diff" || true
++  note "rc=2 ORACLE: diverge OLTRE i conteggi di raccolta (ab-out/s175-mutgc/oracle.diff)"; fin 2
++fi
+ 
+ if [ "$SOLO" = 1 ]; then
+-  note "SOLO=1: binari della corsa precedente riusati (MS $(shasum -a 256 "$OUT/phpr-MS" | cut -c1-16), MC $(shasum -a 256 "$OUT/phpr-MC" | cut -c1-16)); nessuna build"
++  note "SOLO=1: binari della corsa precedente riusati (MS $(shasum -a 256 "$OUT/phpr-MS" | cut -c1-16), M3 $(shasum -a 256 "$OUT/phpr-M3" | cut -c1-16)); nessuna build"
+ else
+ rm -rf "$SRC"; mkdir -p "$SRC/php-rust"
+ git archive "$SHA0" crates Cargo.toml Cargo.lock rust-toolchain.toml .cargo 2>/dev/null | tar -x -C "$SRC/php-rust" \
+@@ -111,17 +101,17 @@
+     cp "$SRC/run.rs.orig" "$SRC/php-rust/$RS"
+     perl -0pi -e "s/\Q$needle\E/$repl/" "$SRC/php-rust/$RS"
+     local nrep; nrep=$(diff "$SRC/run.rs.orig" "$SRC/php-rust/$RS" | grep -c '^>')
+-    [ "$nrep" = 1 ] || { note "rc=6 $n: il mutante ha toccato $nrep righe (attesa 1)"; fin 6; }
++    [ "$nrep" = 1 ] || { note "rc=6 $n: il mutante ha scritto $nrep righe (attesa 1)"; fin 6; }
+     diff -u "$SRC/run.rs.orig" "$SRC/php-rust/$RS" > "$OUT/$n.diff"
+     /usr/bin/touch "$SRC/php-rust/$RS"
+     ( cd "$SRC/php-rust" && SOURCE_DATE_EPOCH=0 CARGO_INCREMENTAL=0 CARGO_TARGET_DIR="$TGT" \
+         cargo build --release -p php-cli ) > "$OUT/build-$n.log" 2>&1 \
+-      || { note "rc=4 $n: build FALLITA (ab-out/s174-mutsw/build-$n.log)"; fin 4; }
++      || { note "rc=4 $n: build FALLITA (ab-out/s175-mutgc/build-$n.log)"; fin 4; }
+     local mh; mh=$(shasum -a 256 "$TGT/release/phpr" | cut -c1-16)
+     [ "$mh" != "$PH" ] || { note "rc=6 $n: binario == riferimento (mutante NON entrato)"; fin 6; }
+     cp "$TGT/release/phpr" "$OUT/phpr-$n"
+   fi
+-  perl -e 'alarm 60; exec @ARGV or die' -- "$OUT/phpr-$n" "$FX" > "$OUT/$n.out" 2>&1
++  perl -e 'alarm 120; exec @ARGV or die' -- "$OUT/phpr-$n" "$FX" > "$OUT/$n.out" 2>&1
+   local rrc=$?
+   note "$n: binario $(shasum -a 256 "$OUT/phpr-$n" | cut -c1-16) rc_fixture=$rrc"
+   rotte "$OUT/ref.out" "$OUT/$n.out" | sort -u > "$OUT/$n.rotte"
+@@ -133,28 +123,25 @@
+   for a in $2; do grep -qxF "$a" "$OUT/$n.rotte" || miss="$miss $a"; done
+   local viol=""
+   for a in $3; do grep -qxF "$a" "$OUT/$n.rotte" && viol="$viol $a"; done
+-  [ -z "$miss" ] && note "$n: attese TUTTE rotte -> fast path PRESO su ogni blocco atteso" || { note "$n: attese NON rotte:$miss -> fast path NON preso (o forma non abbassata) su questi"; bad=1; }
+-  [ -z "$viol" ] && note "$n: blocchi fuori-dominio INTATTI per NOME (nessuna presa fuori dominio): $(for a in $3; do grep -qxF "$a" "$OUT/$n.rotte" || printf '%s ' "$a"; done)" || { note "$n: VIOLAZIONE dominio — rotti:$viol (fast path preso FUORI dominio)"; bad=2; }
++  [ -z "$miss" ] && note "$n: attese TUTTE rotte -> il predicato mutato decide su ogni blocco atteso" || { note "$n: attese NON rotte:$miss -> il predicato mutato NON decide su questi"; bad=1; }
++  [ -z "$viol" ] && note "$n: blocchi intatti per NOME (discriminanti, nessuna presa fuori dominio): $(for a in $3; do grep -qxF "$a" "$OUT/$n.rotte" || printf '%s ' "$a"; done)" || { note "$n: VIOLAZIONE dominio — rotti:$viol"; bad=2; }
+   return $bad
+ }
+ 
++N3=$'&& (!self.gc_enabled\n                    || self.gc_cycle_roots.len() + self.gc_ctr_roots.len() < self.gc_sweep_bound))'
+ build_run MS 'matches!(func.ops.get(at), Some(Op::Sweep { main }) if self.sweep_idle(top, *main))' 'matches!(func.ops.get(at), Some(Op::Sweep { .. }))'
+-build_run MC 'if let Some(jump) = long_cmp_i64(*c_op, *l, *c) {' 'if let Some(jump) = long_cmp_i64(*c_op, *l, *c).map(|b| !b) {'
++build_run M3 "$N3" '&& true)'
+ 
+-ATTS="stdst-dtor stdst-dtor-twice p3-dtor light window stdst-dtor-loop-echo for-dtor-echo p3-site p1-site p4-site scsc-site"
+-INTS="p3-site-ctl p1-site-typed stdst-dtor-double stdst-dtor-null stdst-dtor-concat stdst-dtor-overflow stdst-dtor-div"
+-VERS="stdst-dtor-loop for-dtor p3-chain p1-chain p4-chain p4-dtor pressure collected pressure-on collected-on scsc-loop scsc-overflow scsc-double-dst p3 p1-loop p4-loop e-dtor for-lt for-gt-dec for-le for-ne for-double-slot for-double-const for-str-const for-overflow-edge for-overflow-float for-empty for-nested for-null-init for-continue for-slot-bound for-const-lhs while-lt for-step2"
+-ATTC="stdst-dtor-loop-echo for-dtor-echo p3-site p3-site-ctl p1-site p1-site-typed p4-site scsc-site for-lt for-gt-dec for-le for-ne for-overflow-edge for-empty for-nested for-continue for-dtor for-const-lhs stdst-dtor-loop scsc-loop scsc-double-dst p1-loop p4-loop p3-chain p1-chain p4-chain"
+-INTC="for-double-slot for-double-const for-str-const for-slot-bound while-lt for-step2"
+-VERC="for-null-init for-overflow-float scsc-overflow pressure collected pressure-on collected-on stdst-dtor stdst-dtor-twice stdst-dtor-double stdst-dtor-null stdst-dtor-concat stdst-dtor-overflow stdst-dtor-div p3 p3-dtor p4-dtor light window e-dtor"
+-python3 - "$OUT/ref.out" "$ATTS $INTS $VERS" "$ATTC $INTC $VERC" <<'PY' >> "$VERD" || fin 7
++ATTS="gcp-fused gcp-loop"; INTS="gcp-ctl gcp-scsc"; VERS="gcp-under gcp-off"
++ATT3="gcp-fused gcp-ctl gcp-loop gcp-scsc"; INT3=""; VER3="gcp-under gcp-off"
++python3 - "$OUT/ref.out" "$ATTS $INTS $VERS" "$ATT3 $INT3 $VER3" <<'PY' >> "$VERD" || fin 7
+ import sys, re
+ labels = []
+ for line in open(sys.argv[1], encoding='utf-8', errors='replace'):
+     m = re.match(r"^([A-Za-z0-9_().'#=-]+): ", line)
+     if m and m.group(1) not in labels: labels.append(m.group(1))
+ rc = 0
+-for nome, lst in (("MS", sys.argv[2]), ("MC", sys.argv[3])):
++for nome, lst in (("MS", sys.argv[2]), ("M3", sys.argv[3])):
+     s = set(lst.split()); miss = [l for l in labels if l not in s]
+     print(f"copertura {nome}: {len(labels)} etichette nel riferimento, non classificate: {' '.join(miss) or 'nessuna'}")
+     if miss: rc = 7
+@@ -162,14 +149,14 @@
+ PY
+ RC=0
+ verdetto MS "$ATTS" "$INTS" || RC=$?
+-for v in $VERS; do grep -qxF "$v" "$OUT/MS.rotte" && note "MS a verdetto: $v ROTTO -> Sweep scavalcato dopo un op fuso con nota pendente (forma fusa)" || note "MS a verdetto: $v INTATTO -> nessuno scavalco osservabile (op non fuso o nessuna nota pendente)"; done
+-verdetto MC "$ATTC" "$INTC" || RC=$?
+-for v in $VERC; do grep -qxF "$v" "$OUT/MC.rotte" && note "MC a verdetto: $v ROTTO -> back-edge fuso PRESO (slot Long / const Int all'atto del salto)" || note "MC a verdetto: $v INTATTO -> back-edge fuso NON preso (forma non abbassata a IncDecSlotJmp→CmpJmpSC o miss)"; done
++for v in $VERS; do grep -qxF "$v" "$OUT/MS.rotte" && note "MS a verdetto: $v ROTTO (inatteso: nessuna raccolta prevista)" || note "MS a verdetto: $v INTATTO -> nessuna raccolta in nessun binario (3ª clausola inerte per gc off / radici < bound)"; done
++verdetto M3 "$ATT3" "$INT3" || RC=$?
++for v in $VER3; do grep -qxF "$v" "$OUT/M3.rotte" && note "M3 a verdetto: $v ROTTO (inatteso)" || note "M3 a verdetto: $v INTATTO -> la 3ª clausola non decide (gc off / radici < bound)"; done
+ [ "$RC" = 2 ] && RC=5
+ if [ "$SOLO" != 1 ]; then
+   RS_H1=$(shasum -a 256 "$SRC/run.rs.orig" | cut -c1-16)
+   [ "$RS_H0" = "$RS_H1" ] && note "SORGENTE: run.rs del mutante (prima dell'edit) $RS_H1 == commit ${SHA0:0:12}" || { note "SORGENTE: run.rs.orig $RS_H1 ≠ commit $RS_H0 — INCIDENTE"; RC=3; }
+ fi
+ rm -rf "$TGT" "$SRC"
+-note "ESITO rc=$RC (0 = fast path preso su tutte le attese, dominio rispettato; 1 = attese non rotte; 5 = presa fuori dominio; 7 = copertura) fine $(date '+%F %T')"
++note "ESITO rc=$RC (0 = 3ª clausola VIVA nel predicato unico e letta dai siti fusi; 1 = attese non rotte; 5 = presa fuori dominio; 7 = copertura) fine $(date '+%F %T')"
+ fin $RC

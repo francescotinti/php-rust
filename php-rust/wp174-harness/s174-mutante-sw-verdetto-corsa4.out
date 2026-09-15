@@ -1,0 +1,32 @@
+== s174 mutante abortivo «Sweep-in-op» (MS/MC) — riferimento braccio C b6c4b5876971d76d (sorgente = commit 883cb598ff4b, run.rs dace7adbd02539ff), fixture 87 righe, Extreme 2767G 2026-09-13 23:22:22 ==
+SOLO=1: binari della corsa precedente riusati (MS dcd73bf42232e01f, MC 33541d4215bcab94); nessuna build
+MS: binario dcd73bf42232e01f rc_fixture=0
+MS: blocchi ROTTI (11): for-dtor-echo light p1-site p3-dtor p3-site p4-site scsc-site stdst-dtor stdst-dtor-loop-echo stdst-dtor-twice window 
+MC: binario 33541d4215bcab94 rc_fixture=0
+MC: blocchi ROTTI (29): for-const-lhs for-continue for-dtor for-dtor-echo for-empty for-gt-dec for-le for-lt for-ne for-nested for-null-init for-overflow-edge for-overflow-float p1-chain p1-loop p1-site p1-site-typed p3-chain p3-site p3-site-ctl p4-chain p4-loop p4-site scsc-double-dst scsc-loop scsc-overflow scsc-site stdst-dtor-loop stdst-dtor-loop-echo 
+copertura MS: 52 etichette nel riferimento, non classificate: nessuna
+copertura MC: 52 etichette nel riferimento, non classificate: nessuna
+MS: attese TUTTE rotte -> fast path PRESO su ogni blocco atteso
+MS: blocchi fuori-dominio INTATTI per NOME (nessuna presa fuori dominio): p3-site-ctl p1-site-typed stdst-dtor-double stdst-dtor-null stdst-dtor-concat stdst-dtor-overflow stdst-dtor-div scsc-loop scsc-overflow scsc-double-dst p3 p1-loop p4-loop e-dtor for-lt for-gt-dec for-le for-ne for-double-slot for-double-const for-str-const for-overflow-edge for-overflow-float for-empty for-nested for-null-init for-continue for-slot-bound for-const-lhs while-lt for-step2 
+MS a verdetto: stdst-dtor-loop INTATTO -> nessuno scavalco osservabile (op non fuso o nessuna nota pendente)
+MS a verdetto: for-dtor INTATTO -> nessuno scavalco osservabile (op non fuso o nessuna nota pendente)
+MS a verdetto: p3-chain INTATTO -> nessuno scavalco osservabile (op non fuso o nessuna nota pendente)
+MS a verdetto: p1-chain INTATTO -> nessuno scavalco osservabile (op non fuso o nessuna nota pendente)
+MS a verdetto: p4-chain INTATTO -> nessuno scavalco osservabile (op non fuso o nessuna nota pendente)
+MS a verdetto: p4-dtor INTATTO -> nessuno scavalco osservabile (op non fuso o nessuna nota pendente)
+MS a verdetto: pressure INTATTO -> nessuno scavalco osservabile (op non fuso o nessuna nota pendente)
+MS a verdetto: collected INTATTO -> nessuno scavalco osservabile (op non fuso o nessuna nota pendente)
+MS a verdetto: pressure-on INTATTO -> nessuno scavalco osservabile (op non fuso o nessuna nota pendente)
+MS a verdetto: collected-on INTATTO -> nessuno scavalco osservabile (op non fuso o nessuna nota pendente)
+MC: attese TUTTE rotte -> fast path PRESO su ogni blocco atteso
+MC: blocchi fuori-dominio INTATTI per NOME (nessuna presa fuori dominio): stdst-dtor stdst-dtor-twice stdst-dtor-double stdst-dtor-null stdst-dtor-concat stdst-dtor-overflow stdst-dtor-div p3 p3-dtor p4-dtor light window e-dtor for-double-slot for-double-const for-str-const for-slot-bound 
+MC a verdetto: for-null-init ROTTO -> back-edge fuso PRESO (slot Long / const Int all'atto del salto)
+MC a verdetto: for-overflow-float ROTTO -> back-edge fuso PRESO (slot Long / const Int all'atto del salto)
+MC a verdetto: scsc-overflow ROTTO -> back-edge fuso PRESO (slot Long / const Int all'atto del salto)
+MC a verdetto: for-step2 INTATTO -> back-edge fuso NON preso (forma non abbassata a IncDecSlotJmp→CmpJmpSC o miss)
+MC a verdetto: while-lt INTATTO -> back-edge fuso NON preso (forma non abbassata a IncDecSlotJmp→CmpJmpSC o miss)
+MC a verdetto: pressure INTATTO -> back-edge fuso NON preso (forma non abbassata a IncDecSlotJmp→CmpJmpSC o miss)
+MC a verdetto: collected INTATTO -> back-edge fuso NON preso (forma non abbassata a IncDecSlotJmp→CmpJmpSC o miss)
+MC a verdetto: pressure-on INTATTO -> back-edge fuso NON preso (forma non abbassata a IncDecSlotJmp→CmpJmpSC o miss)
+MC a verdetto: collected-on INTATTO -> back-edge fuso NON preso (forma non abbassata a IncDecSlotJmp→CmpJmpSC o miss)
+ESITO rc=0 (0 = fast path preso su tutte le attese, dominio rispettato; 1 = attese non rotte; 5 = presa fuori dominio; 7 = copertura) fine 2026-09-13 23:22:23
