@@ -1,0 +1,48 @@
+== s176 LEVA flag — A=5de14d68 MISURATO (/Users/francescotinti/Claude/php-rust-output/release/phpr, pin s175) Z=b6c4b587 MISURATO (/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp174-harness/ab-out/phpr-C, gemello a contenuto del pin = SL in-run) B=6c7bbb55 MISURATO (/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp176-harness/ab-out/s176-flag/phpr-B, LEVA flag gc-idle: candidata) C=dcd73bf4 MISURATO (/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp174-harness/ab-out/s175-mutgc/phpr-MS, MS = tetto S-175, mutante SCORRETTO: solo contrasto) — R=5, N: arith-dq=250000000 prop-dq=150000000, PREV A: 20.08 / 36.13, 2026-09-16 23:16:43 ==
+sentinella LS: /Applications/Antigravity /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.96.0-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv 
+parità arith-dq: A==Z==B==C==atteso oracle (85937499750000000 )
+parità prop-dq: A==Z==B==C==atteso oracle (300000000 )
+floors: A=0.03 Z=0.03 B=0.02 C=0.03 oracle=0.05
+  coppia1 [AZBC]: dqA=5.10 dqZ=5.08 dqB=4.83 dqC=4.51 propA=5.46 propZ=5.54 propB=5.05 propC=4.83 | dqO=2.24 propO=2.17
+  coppia2 [CBZA]: dqA=5.10 dqZ=5.15 dqB=4.90 dqC=4.75 propA=5.47 propZ=5.45 propB=5.04 propC=4.90 | dqO=2.22 propO=2.21
+  coppia3 [BCAZ]: dqA=5.19 dqZ=5.12 dqB=4.81 dqC=4.65 propA=5.43 propZ=5.50 propB=5.04 propC=4.92 | dqO=2.35 propO=2.16
+  coppia4 [ZACB]: dqA=5.10 dqZ=5.09 dqB=4.99 dqC=4.48 propA=5.50 propZ=5.49 propB=5.07 propC=4.76 | dqO=2.23 propO=2.16
+  coppia5 [CZAB]: dqA=5.10 dqZ=5.06 dqB=4.79 dqC=4.51 propA=5.42 propZ=5.44 propB=5.03 propC=4.76 | dqO=2.21 propO=2.15
+LAYOUT arith-dq: A=20.28 Z=20.24 ⇒ SL in-run (colonna) 0.04 / (appaiata) 0.08 ns/iter — confronto 0,94 (arith S-168): sotto; banda tra run |A−PREV 20.08| = 0.20 (rumore drop-1 A'=0.00 Z'=0.24)
+LAYOUT prop-dq: A=36.20 Z=36.40 ⇒ SL in-run (colonna) 0.20 / (appaiata) 0.13 ns/iter — confronto 0,94 (arith S-168): sotto; banda tra run |A−PREV 36.13| = 0.07 (rumore drop-1 A'=0.47 Z'=0.40)
+GIUDICE prop-dq (BERSAGLIO, 2 Sweep/iter fusi): oracle=14.07 ns/iter; A/oracle=2.57× Z/oracle=2.59× B/oracle=2.38× C/oracle=2.27×
+GIUDICE prop-dq B: A=36.20 B=33.47 ns/iter D=A−B colonna=+2.73 appaiata=+2.67 soglia=4.00 (rumore drop-1 A'=0.47 B'=0.13, SL=0.20) -> NON nominato (vale 0); direzione FIRMATA (B più veloce); regressione (D < −max(4,rumore)): no
+TETTO prop-dq (MS, contrasto) C: A=36.20 C=32.00 ns/iter D=A−C colonna=+4.20 appaiata=+4.20 soglia=4.00 (rumore drop-1 A'=0.47 C'=0.93, SL=0.20) -> CIFRA = [+4.20;+4.20] (entrambi gli stimatori nominano); direzione FIRMATA (C più veloce); regressione (D < −max(4,rumore)): no
+CONTRASTO prop-dq (B vs tetto MS: quota del predicato che il flag NON recupera) C: B=33.47 C=32.00 ns/iter D=B−C colonna=+1.47 appaiata=+1.53 soglia=4.00 (rumore drop-1 B'=0.13 C'=0.93, SL=0.20) -> NON nominato (vale 0); direzione FIRMATA (C più veloce); regressione (D < −max(4,rumore)): no
+ATTESE LEVA prop (criterio-flag p.3): D_B ∈ [2;5]: CENTRATA (+2.73/+2.67); quota del tetto: 63% (tetto +4.20/+4.20)
+GUARDIA arith-dq (sola regressione, 1 Sweep/iter fuso): oracle=8.72 ns/iter; A/oracle=2.33× Z/oracle=2.32× B/oracle=2.21× C/oracle=2.06×
+GUARDIA arith-dq B: A=20.28 B=19.24 ns/iter D=A−B colonna=+1.04 appaiata=+1.04 soglia=4.00 (rumore drop-1 A'=0.00 B'=0.44, SL=0.08) -> NON nominato (vale 0); direzione FIRMATA (B più veloce); regressione (D < −max(4,rumore)): no
+TETTO arith-dq (MS, contrasto) C: A=20.28 C=17.92 ns/iter D=A−C colonna=+2.36 appaiata=+2.36 soglia=4.00 (rumore drop-1 A'=0.00 C'=0.68, SL=0.08) -> NON nominato (vale 0); direzione FIRMATA (C più veloce); regressione (D < −max(4,rumore)): no
+ATTESE LEVA arith (criterio-flag p.3, direzione): D_B ∈ [1;2,5]: CENTRATA (+1.04/+1.04); regressione: no
+SOLO DIREZIONE: prop-dq +2.73/+2.67 sopra max(1,rumore,SL) ma sotto la soglia ⇒ guadagno parziale TENUTO (feedback keep-partial-wins), promozione rimandata a rerun (rc=3)
+ESITO rc=3
+sentinella LS fine: /Applications/Antigravity /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.96.0-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv 
+== finestra A/B flag gc-idle: quiescenza PASS al tentativo 1, Data 13G, bracci A=5de14d68 Z=b6c4b587 B=6c7bbb55 C=dcd73bf4 ==
+-- sentinelle INIZIO 2026-09-16 23:16:32: Data=13G · total = 17408.00M  used = 16184.25M  free = 1223.75M  (encrypted) · load averages: 3.33 5.48 6.17
+   updater: 
+   top-8 CPU:
+     202.2 /Applications/Google
+      56.1 /Applications/Google
+      40.1 /System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer
+      37.1 /Applications/Google
+      19.9 /Applications/Google
+      17.6 /Applications/Google
+      13.0 /Applications/Google
+      10.6 /System/Library/CoreServices/ControlCenter.app/Contents/MacOS/ControlCenter
+-- sentinelle FINE 2026-09-16 23:21:22: Data=14G · total = 16384.00M  used = 14927.44M  free = 1456.56M  (encrypted) · load averages: 3.43 4.33 5.43
+   updater: 
+   top-8 CPU:
+      30.3 /Applications/Google
+      10.2 /System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer
+       5.8 /Applications/Ghostty.app/Contents/MacOS/ghostty
+       5.1 /usr/libexec/fskitd
+       5.0 /System/Library/PrivateFrameworks/UVFSXPCService.framework/Versions/A/XPCServices/UVFSService.xpc/Contents/MacOS/UVFSService
+       5.0 /Applications/Google
+       4.2 claude
+       4.2 /usr/libexec/sysmond
+watchdog: 10 campioni, Data min=13G, allarmi=0
