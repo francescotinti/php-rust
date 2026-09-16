@@ -32,3 +32,5 @@ wp103-harness/stack-census-out/
 wp103-harness/peak-ab-out/
 wp103-harness/hd-census-out/
 wp176-harness/micro-out/
+wp176-harness/ab-out/
+wp176-harness/orm-out/
