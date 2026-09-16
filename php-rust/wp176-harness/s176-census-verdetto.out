@@ -1,0 +1,82 @@
+== s176 CENSUS «op in place + Sweep» WP media + ORM — CONTEGGI, mai tempo (criterio s176-criterio-census.md) 2026-09-16 23:29:55 ==
+census_phpr=5855e4949e400705 (build op-census da HEAD 9b3a432c52cb: probe, MAI parità)
+orm run_rc=2 parità per NOME vs baseline16: == baseline16 · summary: Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, Skipped: 59, Incomplete: 2.
+media run_rc=0 parità (nomi falliti): OK(vuoto) · summary: Tests: 762, Assertions: 1912, Skipped: 52.
+--- sentinelle (non-gate) ---
+orm pre=CLEAN
+orm post=CLEAN
+media pre=CLEAN
+media post=CLEAN
+--- ORM ---
+processi(dump)=1 ops_totali=544121112 Sweep_dispatch(=Σ X->Sweep)=59191097 (10.88% degli op)
+X -> Sweep (tutte le righe, % dei Sweep):
+      14415714  StoreSlot -> Sweep  (24.4%)
+      10994732  JumpIfFalse -> Sweep  (18.6%)
+       9914828  Pop -> Sweep  (16.8%)
+       8827820  PropSetPop -> Sweep  (14.9%)
+       5462608  Jump -> Sweep  (9.2%)
+       1972714  CmpJmpConst -> Sweep  (3.3%)
+       1800025  IterPop -> Sweep  (3.0%)
+       1660118  CmpJmpSC -> Sweep  (2.8%)
+       1586751  CmpJmp -> Sweep  (2.7%)
+        828940  Sweep -> Sweep  (1.4%)
+        667110  BinarySTDst -> Sweep  (1.1%)
+        457170  CmpJmpSS -> Sweep  (0.8%)
+        266223  BinaryDst -> Sweep  (0.4%)
+        120258  UnsetPath -> Sweep  (0.2%)
+         59571  IncDecSlotPop -> Sweep  (0.1%)
+         50460  FieldUnset -> Sweep  (0.1%)
+         44298  BinarySCDst -> Sweep  (0.1%)
+         41846  BinaryTCPropSetPop -> Sweep  (0.1%)
+          9654  EndFinally -> Sweep  (0.0%)
+          8503  Ret -> Sweep  (0.0%)
+          1173  JumpIfTrue -> Sweep  (0.0%)
+           309  IncDecSlotJmp -> Sweep  (0.0%)
+           262  DeclareFn -> Sweep  (0.0%)
+             7  PropUnset -> Sweep  (0.0%)
+             3  DeclareTrait -> Sweep  (0.0%)
+IncDecSlotJmp -> X:
+        414803  IncDecSlotJmp -> CmpJmpSS
+          8537  IncDecSlotJmp -> CmpJmpSC
+          5999  IncDecSlotJmp -> LoadVar
+           309  IncDecSlotJmp -> Sweep
+--- media ---
+processi(dump)=16 ops_totali=648099129 Sweep_dispatch(=Σ X->Sweep)=45812629 (7.07% degli op)
+X -> Sweep (tutte le righe, % dei Sweep):
+      11097935  JumpIfFalse -> Sweep  (24.2%)
+      10150190  Pop -> Sweep  (22.2%)
+       8249493  StoreSlot -> Sweep  (18.0%)
+       5427708  PropSetPop -> Sweep  (11.8%)
+       5156135  Jump -> Sweep  (11.3%)
+       1316861  Sweep -> Sweep  (2.9%)
+       1070196  CmpJmpConst -> Sweep  (2.3%)
+        868916  IterPop -> Sweep  (1.9%)
+        753648  BinarySTDst -> Sweep  (1.6%)
+        651748  CmpJmpSC -> Sweep  (1.4%)
+        557356  CmpJmp -> Sweep  (1.2%)
+        152029  StaticAlias -> Sweep  (0.3%)
+        117376  IncDecSlotPop -> Sweep  (0.3%)
+         90812  FieldUnset -> Sweep  (0.2%)
+         49895  CmpJmpSS -> Sweep  (0.1%)
+         48376  UnsetPath -> Sweep  (0.1%)
+         14650  BinaryDst -> Sweep  (0.0%)
+         13369  PropUnset -> Sweep  (0.0%)
+          6822  DeclareFn -> Sweep  (0.0%)
+          6029  BinarySSDst -> Sweep  (0.0%)
+          4282  BinarySCDst -> Sweep  (0.0%)
+          2292  IncDecSlotJmp -> Sweep  (0.0%)
+          2284  DefineConst -> Sweep  (0.0%)
+          1528  Ret -> Sweep  (0.0%)
+          1277  JumpIfTrue -> Sweep  (0.0%)
+           955  Echo -> Sweep  (0.0%)
+           273  BindGlobalDyn -> Sweep  (0.0%)
+           177  DeclareClass -> Sweep  (0.0%)
+            15  BinaryTCPropSetPop -> Sweep  (0.0%)
+             2  EndFinally -> Sweep  (0.0%)
+IncDecSlotJmp -> X:
+         71867  IncDecSlotJmp -> CmpJmpSS
+          5741  IncDecSlotJmp -> LoadVar
+          2292  IncDecSlotJmp -> Sweep
+          1553  IncDecSlotJmp -> CmpJmpSC
+            63  IncDecSlotJmp -> LoadVarPushConst
+ESITO rc=0 (0 = parità entrambe le gambe; 1 = parità diverge: i conteggi restano a verbale) fine 2026-09-16 23:29:56
