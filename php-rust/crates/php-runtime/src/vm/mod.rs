@@ -782,6 +782,7 @@ pub fn vm_new<'m>(
         gc_cycle_threshold: Vm::GC_CYCLE_THRESHOLD,
         gc_purge_floor: 0,
         gc_sweep_bound: Vm::GC_CYCLE_THRESHOLD,
+        gc_idle: [true; 2],
         gc_light_demoted: HashSet::default(),
         shutdown_fns: Vec::new(),
         generators: HashMap::default(),
@@ -1072,6 +1073,7 @@ pub fn run_module_with_hir<'m>(
                     bo.gc.set_cycle_root(true);
                     drop(bo);
                     vm.gc_cycle_roots.insert(id);
+                    vm.gc_idle_set([false; 2]);
                 }
             }
         }
@@ -3338,6 +3340,16 @@ pub struct Vm<'m> {
     /// (full A/B stesso-giorno: leva-1-sola 848,1s vs old 828,9/832,7s;
     /// the WP-44 law again — hot-arm SIZE is the cost, not the work).
     gc_sweep_bound: usize,
+    /// S-176 «flag gc-idle» (criterio wp176-harness/s176-criterio-flag.md):
+    /// the statement-sweep idle predicate CACHED, indexed by `main`
+    /// (`[light, main]`): `gc_idle[0]` = note buffer drained ∧ collector
+    /// pressure under `gc_sweep_bound`; `gc_idle[1]` = the same ∧ no light
+    /// demotion pending. `sweep_idle` (run.rs) reads ONE byte instead of
+    /// three fields + a sum + two compares. Conservative under-approximation:
+    /// every site that can turn the predicate FALSE stores `[false; 2]`
+    /// (`gc_idle_set`), and `gc_sweep` recomputes it EXACTLY on every exit
+    /// (`gc_refresh_idle`) — a false flag only costs a sweep body entry.
+    gc_idle: [bool; 2],
     /// Objects a LIGHT (in-body) sweep demoted to `gc_cycle_roots` since the
     /// last MAIN sweep. A temp consumed off the operand stack mid-statement is
     /// not gc_note'd, so its death is only observable by re-checking the
@@ -3871,6 +3883,7 @@ impl<'m> Vm<'m> {
         self.gc_cycle_roots.clear();
         self.gc_light_demoted.clear();
         self.gc_ctr_roots.clear();
+        self.gc_refresh_idle();
 
         // Resource IDs & caches
         self.next_object_id = 1;
@@ -3973,6 +3986,7 @@ impl<'m> Vm<'m> {
                     b.gc.set_birth(false);
                     drop(b);
                     self.gc_buf.push(Some(Rc::clone(rc)));
+                    self.gc_idle_set([false; 2]);
                     #[cfg(feature = "gc-census")]
                     gc_census::note_inserted();
                 }
@@ -4084,6 +4098,7 @@ impl<'m> Vm<'m> {
         b.gc.set_birth(birth);
         drop(b);
         self.gc_buf.push(Some(Rc::clone(rc)));
+        self.gc_idle_set([false; 2]);
         true
     }
 
@@ -4095,6 +4110,7 @@ impl<'m> Vm<'m> {
     fn gc_root_arr(&mut self, a: &Rc<PhpArray>) {
         if Rc::weak_count(a) == 0 {
             self.gc_ctr_roots.push(CtrWeak::Arr(Rc::downgrade(a)));
+            self.gc_idle_set([false; 2]);
         }
     }
 
@@ -4103,6 +4119,7 @@ impl<'m> Vm<'m> {
     fn gc_root_clo(&mut self, c: &Rc<Closure>) {
         if Rc::weak_count(c) == 0 {
             self.gc_ctr_roots.push(CtrWeak::Clo(Rc::downgrade(c)));
+            self.gc_idle_set([false; 2]);
         }
     }
 
@@ -4132,6 +4149,18 @@ impl<'m> Vm<'m> {
     /// statement boundaries, and every synchronous caller) first re-seeds what
     /// LIGHT sweeps demoted, so unhooked mid-statement temp deaths are caught.
     fn gc_sweep_impl(&mut self, resume: Option<(usize, usize)>, main: bool) -> Result<(), PhpError> {
+        // S-176 «flag gc-idle»: the ONE exit of every sweep body (statement
+        // handler, lazy reset/materialize, shutdown destructors) — recompute
+        // the cached idle predicate EXACTLY, on the error path too (a
+        // scheduled destructor's throw). See `gc_idle`, s176-criterio-flag.md.
+        let r = self.gc_sweep_body(resume, main);
+        self.gc_refresh_idle();
+        r
+    }
+
+    /// Body of [`Self::gc_sweep_impl`] — never call directly: the wrapper owns
+    /// the `gc_idle` refresh.
+    fn gc_sweep_body(&mut self, resume: Option<(usize, usize)>, main: bool) -> Result<(), PhpError> {
         #[cfg(feature = "gc-census")]
         gc_census::sweep(main);
         #[cfg(feature = "mem-census")]
@@ -5147,6 +5176,32 @@ impl<'m> Vm<'m> {
     #[inline]
     fn gc_refresh_sweep_bound(&mut self) {
         self.gc_sweep_bound = self.gc_cycle_threshold.max(self.gc_purge_floor);
+        self.gc_idle_set([false; 2]);
+    }
+
+    /// S-176 «flag gc-idle»: the ONE store of `gc_idle` (dirty sites pass
+    /// `[false; 2]`, `gc_refresh_idle` passes the exact value). The M-flag
+    /// mutant (s176-criterio-flag.md p.5) neutralises this line alone.
+    #[inline(always)]
+    fn gc_idle_set(&mut self, v: [bool; 2]) { self.gc_idle = v; }
+
+    /// The idle predicate of the statement sweep, computed from its inputs
+    /// (the text that `sweep_idle` read inline until S-175 — WP-39/WP-50
+    /// fast path: buffer cursor at the end, no light demotion pending for a
+    /// main sweep, collector pressure under the cached bound).
+    #[inline]
+    fn gc_idle_compute(&self) -> [bool; 2] {
+        let base = self.gc_buf_head >= self.gc_buf.len()
+            && (!self.gc_enabled
+                || self.gc_cycle_roots.len() + self.gc_ctr_roots.len() < self.gc_sweep_bound);
+        [base, base && self.gc_light_demoted.is_empty()]
+    }
+
+    /// Recompute `gc_idle` exactly — on every exit of `gc_sweep` and at reset.
+    #[inline]
+    fn gc_refresh_idle(&mut self) {
+        let v = self.gc_idle_compute();
+        self.gc_idle_set(v);
     }
 
     fn collect_cycles(&mut self) -> Result<i64, PhpError> {
@@ -5176,6 +5231,7 @@ impl<'m> Vm<'m> {
                         bo.gc.set_cycle_root(true);
                         drop(bo);
                         self.gc_cycle_roots.insert(id);
+                        self.gc_idle_set([false; 2]);
                     }
                 }
             }
@@ -5362,6 +5418,9 @@ impl<'m> Vm<'m> {
                         }
                     }
                 }
+                // S-176: roots were (re)inserted above — the `Ref` is live
+                // inside the loop, so the flag store sits after it.
+                self.gc_idle_set([false; 2]);
             }
             // Destroy phase. Detach every non-excluded white's contents
             // first, then free: a white's properties may hold the last

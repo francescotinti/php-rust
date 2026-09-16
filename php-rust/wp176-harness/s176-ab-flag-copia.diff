@@ -1,0 +1,113 @@
+--- php-rust/wp174-harness/s175-ab-mock.sh	2026-09-15 02:45:38
++++ php-rust/wp176-harness/s176-ab-flag.sh	2026-09-16 23:07:13
+@@ -1,38 +1,29 @@
+ #!/bin/bash
+-# s175-ab-mock.sh — MOCK MAGRO del «flag gc-idle» (NEXT S-175 p.3a; criterio s175-criterio-mock.md): COPIA DICHIARATA di
+-# s174-ab-leva-bis.sh (manifest s175-ab-mock-copia.diff) coi SOLI adattamenti: bracci A = braccio C (sorgente del pin s175,
+-# ab-out/phpr-C b6c4b587), Z = pin s175 (gemello a contenuto: controllo nullo), B = MS (predicato sweep_idle SEMPRE vero ai
+-# siti fusi: TETTO del guadagno di un flag gc-idle a costo zero), C = M3 (SOLA 3ª clausola tolta: quota di «gc on ∧ radici < bound»);
+-# B e C sono semanticamente SCORRETTI (mutanti): MAI promozione — il verdetto è KILL/tetto; TAG mock; lock per TOKEN s175;
+-# PREV_* = valori del braccio C nella corsa sw2 (20,92 / 36,47). Tutto il resto INVARIATO (testo S-174 sotto per storia).
+-# s174-ab-leva-bis.sh — CRITERIO-BIS (s174-criterio-bis.md): prop-dq CO-BERSAGLIO; COPIA DICHIARATA di s174-ab-leva.sh (manifest s174-ab-leva-bis-copia.diff), solo regola di promozione (p.2) e attese prop.
+-# s174-ab-leva.sh <APATH> <AEXP8> <ZPATH> <ZEXP8> <BPATH> <BEXP8> <CPATH> <CEXP8> <TAG> [R] [PREV_DQ_A] [PREV_PROP_A]
+-# — leva «Sweep-in-op» (S-174, criterio s174-criterio.md p.3-4): GIUDICE BERSAGLIO = arith-dq (N LETTO DAL
+-# DRIVER); GUARDIA = prop-dq a SOLA REGRESSIONE (il suo D è riportato come direzione, magnitudine non ripartita);
+-# bracci A=pin s173, Z=A0 (STESSA sorgente del pin ricostruita: banda-layout SL in-run, az.rev. S-173 (a)),
+-# B=sweep-in-op, C=B+back-edge fuso — B e C dallo STESSO albero, commit consecutivi. ORDINE DEI QUATTRO BRACCI
+-# RUOTATO PER COPPIA (AZBC, CBZA, BCAZ, ZACB, CZAB, BAZC: C mai in posizione fissa).
+-# COPIA DICHIARATA di ../wp172-harness/s173-ab-leva.sh (manifest s174-ab-leva-copia.diff + copia-gate per TOKEN
+-# s174) coi SOLI adattamenti: quarto braccio Z, giudice/guardia scambiati, az.rev. S-173 (a) banda tra run
+-# (PREV_* = ultima misura dello STESSO binario a contenuto, argomenti dichiarati) e SL in-run = |A−Z| per giudice
+-# al posto del 0,94 importato (riportato a confronto), (b) mediana delle DIFFERENZE APPAIATE accanto a quella
+-# per colonna (cifra = intervallo se ENTRAMBI nominano). Lock per TOKEN (`grep -qw s174`); `[ -s ]` sui driver
+-# e sugli attesi ([ -e ] sul pavimento, VUOTO per costruzione); parità di A, Z, B e C contro l'ORACLE.
+-# R=5; ns/iter=(med raw−floor)/N; rumore drop-1. rc autoritativo = ab-out/<TAG>.rc; verdetto s174-<TAG>-verdetto.out.
++# s176-ab-flag.sh — A/B della leva «flag gc-idle» (criterio s176-criterio-flag.md p.2-4): COPIA DICHIARATA di
++# ../wp174-harness/s175-ab-mock.sh (manifest s176-ab-flag-copia.diff) coi SOLI adattamenti: (1) bracci A = pin s175
++# (5de14d68), Z = ab-out/phpr-C di S-174/175 (b6c4b587, gemello a contenuto ⇒ SL in-run), B = LEVA flag gc-idle
++# (candidata), C = MS (dcd73bf4, tetto S-175: mutante SCORRETTO, solo contrasto B−C); (2) GIUDICE BERSAGLIO = prop-dq a
++# nomina (attesa D_B ∈ [2;5]), GUARDIA = arith-dq a SOLA regressione (direzione attesa [1;2,5]); (3) esiti p.4:
++# rc=0 CANDIDATA (prop nominato da ENTRAMBI gli stimatori, arith senza regressione) · rc=3 SOLO DIREZIONE
++# (max(1,rumore,SL) ≤ D_B prop < soglia) · rc=4 KILL (D_B prop < max(1,rumore,SL)) · rc=8 SL sopra 4; (4) lock per
++# TOKEN s176; verdetto s176-<TAG>-verdetto.out; PREV_* = A del mock S-175 (20,08 / 36,13). Tutto il resto INVARIATO
++# (misura: R=5, rotazione dei 4 bracci per coppia, floors med3 per binario, ns/iter=(med raw−floor)/N con N LETTO
++# dal driver, mediane per colonna e appaiate, rumore drop-1, parità dei 4 bracci contro l'ORACLE prima di misurare).
++# Uso: s176-ab-flag.sh <APATH> <AEXP8> <ZPATH> <ZEXP8> <BPATH> <BEXP8> <CPATH> <CEXP8> <TAG> [R] [PREV_DQ_A] [PREV_PROP_A]
+ set -u
+ export PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin
+ H="$(cd -P "$(dirname -- "$0")" && pwd -P)"
+-A="${1:?APATH}"; AEXP="${2:?AEXP8}"; ZZ="${3:?ZPATH}"; ZEXP="${4:?ZEXP8}"; BB="${5:?BPATH}"; BEXP="${6:?BEXP8}"; CC="${7:?CPATH}"; CEXP="${8:?CEXP8}"; TAG="${9:?TAG}"; R="${10:-5}"; PREVDQ="${11:-23.68}"; PREVPD="${12:-41.13}"
++A="${1:?APATH}"; AEXP="${2:?AEXP8}"; ZZ="${3:?ZPATH}"; ZEXP="${4:?ZEXP8}"; BB="${5:?BPATH}"; BEXP="${6:?BEXP8}"; CC="${7:?CPATH}"; CEXP="${8:?CEXP8}"; TAG="${9:?TAG}"; R="${10:-5}"; PREVDQ="${11:-20.08}"; PREVPD="${12:-36.13}"
+ O=/opt/homebrew/opt/php/bin/php
+ GD="$H/../wp164-harness/arith-dq.php"
+ PD="$H/../wp172-harness/prop-dq.php"
+ EMPTY="$H/../wp160-harness/empty.php"
+ OUT="$H/ab-out"; mkdir -p "$OUT"
+-VERD="$H/s175-$TAG-verdetto.out"; RC="$OUT/$TAG.rc"  # criterio-bis: TAG sw2 (EMENDA 23:05: il commento inglobava RC — incidente di copione #1 S-174)
++VERD="$H/s176-$TAG-verdetto.out"; RC="$OUT/$TAG.rc"
+ [ -e "$VERD" ] && { echo "verdetto ESISTE — TAG nuovo" >&2; exit 7; }
+ for f in "$PD" "$GD" "$A" "$ZZ" "$BB" "$CC" "$O"; do [ -s "$f" ] || { echo "file assente o VUOTO: $f" | tee -a "$VERD"; echo 7 > "$RC"; exit 7; }; done
+ [ -e "$EMPTY" ] || { echo "driver del pavimento assente: $EMPTY (VUOTO per costruzione: [ -e ], emenda S-170 p.4)" | tee -a "$VERD"; echo 7 > "$RC"; exit 7; }
+-grep -qw s175 /private/tmp/phpr-measure.lock 2>/dev/null || { echo "lock s175 assente (per TOKEN)" | tee -a "$VERD"; echo 9 > "$RC"; exit 9; }
++grep -qw s176 /private/tmp/phpr-measure.lock 2>/dev/null || { echo "lock s176 assente (per TOKEN)" | tee -a "$VERD"; echo 9 > "$RC"; exit 9; }
+ "$H/../wp129-harness/s129-quiescenza.sh" "$OUT/quiesce-$TAG.rc" > /dev/null 2>&1 || { echo "quiescenza FAIL" | tee -a "$VERD"; echo 8 > "$RC"; exit 8; }
+ AM="$(shasum -a 256 "$A" | cut -c1-8)"; ZM="$(shasum -a 256 "$ZZ" | cut -c1-8)"; BM="$(shasum -a 256 "$BB" | cut -c1-8)"; CM="$(shasum -a 256 "$CC" | cut -c1-8)"
+ [ "$AM" = "$AEXP" ] || { echo "A misurato $AM != atteso $AEXP" | tee -a "$VERD"; echo 1 > "$RC"; exit 1; }
+@@ -46,7 +37,7 @@
+ ucpu(){ { /usr/bin/time -p perl -e 'alarm 900; exec @ARGV or die' -- "$@" > /dev/null; } 2>&1 | awk '/^user/{print $2}'; }
+ floor3(){ local a b c; a=$(ucpu "$@" "$EMPTY"); b=$(ucpu "$@" "$EMPTY"); c=$(ucpu "$@" "$EMPTY"); printf '%s\n%s\n%s\n' "$a" "$b" "$c" | sort -n | awk 'NR==2'; }
+ {
+-echo "== s175 MOCK $TAG — A=$AM MISURATO ($A, braccio C = sorgente del pin s175) Z=$ZM MISURATO ($ZZ, pin s175 gemello a contenuto = controllo nullo) B=$BM MISURATO ($BB, MS: predicato sempre vero ai siti fusi = TETTO flag gc-idle) C=$CM MISURATO ($CC, M3: 3ª clausola tolta); GIUDICE arith-dq N=$NGD (bersaglio) E GUARDIA prop-dq N=$NPD (sola regressione; N dal driver); R=$R ordine dei quattro bracci RUOTATO per coppia su giudice e guardia; banda tra run vs PREV dq=$PREVDQ prop=$PREVPD; criterio s175-criterio-mock.md =="
++echo "== s176 LEVA $TAG — A=$AM MISURATO ($A, pin s175) Z=$ZM MISURATO ($ZZ, gemello a contenuto del pin = SL in-run) B=$BM MISURATO ($BB, LEVA flag gc-idle: candidata) C=$CM MISURATO ($CC, MS = tetto S-175, mutante SCORRETTO: solo contrasto) — R=$R, N: arith-dq=$NGD prop-dq=$NPD, PREV A: $PREVDQ / $PREVPD, $(date '+%F %T') =="
+ echo "sentinella LS: $(pgrep -fl 'rust-analyzer|Antigravity|serena' 2>/dev/null | grep -v pgrep | awk '{print $2}' | sort -u | tr '\n' ' ')"
+ # PARITÀ vs ATTESO: l'atteso è l'output dell'ORACLE sullo stesso driver (generato qui, una volta per driver, `[ -s ]`).
+ for D in "$GD" "$PD"; do
+@@ -109,29 +100,30 @@
+     elif nomc or nomp: cifra = "nomina UN solo stimatore ⇒ solo DIREZIONE (cifra negata)"
+     else: cifra = "NON nominato (vale 0)"
+     dirs = 'FIRMATA' if min(abs(Dc), abs(Dp)) >= thrd else 'sotto il rumore/SL'
+-    print(f"{name} {lab}: {alab}={med(A):.2f} {lab}={med(X):.2f} ns/iter D={alab}−{lab} colonna={Dc:+.2f} appaiata={Dp:+.2f} soglia={thr:.2f} (rumore drop-1 {alab}'={dr1(A):.2f} {lab}'={dr1(X):.2f}, SL={sl:.2f}) -> {cifra}; direzione {dirs} ({lab+' più veloce' if Dc > 0 else lab+' più lento'}); regressione (D < −max(4,rumore)): {'SÌ' if reg else 'no'}")
++    print(f"{name} {lab}: {alab}={med(A):.2f} {lab}={med(X):.2f} ns/iter D={alab}−{lab} colonna={Dc:+.2f} appaiata={Dp:+.2f} soglia={thr:.2f} (rumore drop-1 {alab}'={dr1(A):.2f} {lab}'={dr1(X):.2f}, SL={sl:.2f}) -> {cifra}; direzione {dirs} ({lab} {'più veloce' if Dc > 0 else 'più lento'}); regressione (D < −max(4,rumore)): {'SÌ' if reg else 'no'}")
+     return Dc, Dp, noise, nom, reg
+-print(f"GIUDICE arith-dq (bersaglio): oracle={med(gO):.2f} ns/iter; A/oracle={med(gA)/med(gO):.2f}× Z/oracle={med(gZ)/med(gO):.2f}× B/oracle={med(gB)/med(gO):.2f}× C/oracle={med(gC)/med(gO):.2f}×")
+-DBc, DBp, nB, nomB, _ = stat("GIUDICE arith-dq", gA, gB, "B", "A", SLg)
+-DCc, DCp, nC, nomC, _ = stat("GIUDICE arith-dq", gA, gC, "C", "A", SLg)
+-DCBc, DCBp, nCB, nomCB, regCB = stat("CONTRASTO arith-dq (M3 vs MS: costo delle clausole 1-2 del predicato)", gB, gC, "C", "B", SLg)
+-DB, DC, DCB = min(DBc, DBp), min(DCc, DCp), min(DCBc, DCBp)
+-print(f"ATTESE MOCK arith (criterio-mock p.3): D_B ∈ [0,5;3]: {'CENTRATA' if 0.5 <= DB <= 3 else 'FUORI'} ({DBc:+.2f}/{DBp:+.2f}); D_C ≤ D_B (la 3ª clausola è un SOTTO-costo): {'sì' if DC <= DB + max(nC, SLg) else 'NO'} ({DCc:+.2f}/{DCp:+.2f})")
+-print(f"GIUDICE-2 prop-dq (mock: co-bersaglio, 2 Sweep/iter): oracle={med(pO):.2f} ns/iter; A/oracle={med(pA)/med(pO):.2f}× B/oracle={med(pB)/med(pO):.2f}× C/oracle={med(pC)/med(pO):.2f}×")
+-DPBc, DPBp, nPB, nomPB, regGB = stat("GIUDICE-2 prop-dq", pA, pB, "B", "A", SLp)
+-DPCc, DPCp, nPC, nomPC, regGC = stat("GIUDICE-2 prop-dq", pA, pC, "C", "A", SLp)
++print(f"GIUDICE prop-dq (BERSAGLIO, 2 Sweep/iter fusi): oracle={med(pO):.2f} ns/iter; A/oracle={med(pA)/med(pO):.2f}× Z/oracle={med(pZ)/med(pO):.2f}× B/oracle={med(pB)/med(pO):.2f}× C/oracle={med(pC)/med(pO):.2f}×")
++DPBc, DPBp, nPB, nomPB, regPB = stat("GIUDICE prop-dq", pA, pB, "B", "A", SLp)
++DPCc, DPCp, nPC, nomPC, _ = stat("TETTO prop-dq (MS, contrasto)", pA, pC, "C", "A", SLp)
++DPBCc, DPBCp, nPBC, _, _ = stat("CONTRASTO prop-dq (B vs tetto MS: quota del predicato che il flag NON recupera)", pB, pC, "C", "B", SLp)
+ DPB, DPC = min(DPBc, DPBp), min(DPCc, DPCp)
+-print(f"ATTESE MOCK prop (criterio-mock p.3): D_B ∈ [1;6]: {'CENTRATA' if 1 <= DPB <= 6 else 'FUORI'} ({DPBc:+.2f}/{DPBp:+.2f}); D_C ≤ D_B: {'sì' if DPC <= DPB + max(nPC, SLp) else 'NO'} ({DPCc:+.2f}/{DPCp:+.2f})")
++print(f"ATTESE LEVA prop (criterio-flag p.3): D_B ∈ [2;5]: {'CENTRATA' if 2 <= DPB <= 5 else 'FUORI'} ({DPBc:+.2f}/{DPBp:+.2f}); quota del tetto: {DPB/DPC*100 if DPC > 0 else float('nan'):.0f}% (tetto {DPCc:+.2f}/{DPCp:+.2f})")
++print(f"GUARDIA arith-dq (sola regressione, 1 Sweep/iter fuso): oracle={med(gO):.2f} ns/iter; A/oracle={med(gA)/med(gO):.2f}× Z/oracle={med(gZ)/med(gO):.2f}× B/oracle={med(gB)/med(gO):.2f}× C/oracle={med(gC)/med(gO):.2f}×")
++DBc, DBp, nB, nomB, regB = stat("GUARDIA arith-dq", gA, gB, "B", "A", SLg)
++DCc, DCp, nC, nomC, _ = stat("TETTO arith-dq (MS, contrasto)", gA, gC, "C", "A", SLg)
++DB = min(DBc, DBp)
++print(f"ATTESE LEVA arith (criterio-flag p.3, direzione): D_B ∈ [1;2,5]: {'CENTRATA' if 1 <= DB <= 2.5 else 'FUORI'} ({DBc:+.2f}/{DBp:+.2f}); regressione: {'SÌ' if regB else 'no'}")
+ if rc == 8:
+     print("ESITO rc=8"); sys.exit(8)
+-# MOCK (criterio-mock p.4): B e C sono mutanti SCORRETTI ⇒ MAI promozione; l'esito è il TETTO del guadagno di un flag gc-idle
+-KB = DB < max(1.0, nB, SLg) and DPB < max(1.0, nPB, SLp)
+-if KB:
+-    print("KILL-MOCK: D_B < max(1, rumore, SL) su ENTRAMBI i giudici ⇒ il predicato costa sotto la risoluzione: la leva «flag gc-idle» è MORTA (rc=4)"); rc = 4
+-elif nomB or nomPB:
+-    print(f"MOCK: tetto NOMINATO (arith B {DBc:+.2f}/{DBp:+.2f} nom={nomB}; prop B {DPBc:+.2f}/{DPBp:+.2f} nom={nomPB}) ⇒ la leva «flag gc-idle» ha un tetto ≥ pavimento su almeno un giudice: si disegna (rc=0); quota 3ª clausola (M3): arith {DCc:+.2f}/{DCp:+.2f}, prop {DPCc:+.2f}/{DPCp:+.2f} (direzione)")
++# ESITI (criterio-flag p.4)
++if DPB < max(1.0, nPB, SLp):
++    print(f"KILL: D_B prop {DPBc:+.2f}/{DPBp:+.2f} < max(1, rumore {nPB:.2f}, SL {SLp:.2f}) ⇒ il costo sta nei load/cmp singoli, non nella somma: leva MORTA, revert al byte (rc=4)"); rc = 4
++elif regB:
++    print(f"GUARDIA: arith-dq REGREDISCE ({DBc:+.2f}/{DBp:+.2f}) ⇒ nessuna promozione (rc=5)"); rc = 5
++elif nomPB:
++    print(f"CANDIDATA: prop-dq NOMINATO da entrambi gli stimatori [{min(DPBc,DPBp):+.2f};{max(DPBc,DPBp):+.2f}] (soglia max(4,rumore,SL)), arith senza regressione ({DBc:+.2f}/{DBp:+.2f}) ⇒ promozione con copia dichiarata di s174-promozione.sh (tag s176) + coppia dovuta (rc=0)")
+ else:
+-    print(f"MOCK: tetto solo DIREZIONE (arith B {DBc:+.2f}/{DBp:+.2f}; prop B {DPBc:+.2f}/{DPBp:+.2f}: sopra il rumore, sotto il pavimento 4 su entrambi) ⇒ flag gc-idle ammesso SOLO come componente di una leva più larga (rc=3)"); rc = 3
++    print(f"SOLO DIREZIONE: prop-dq {DPBc:+.2f}/{DPBp:+.2f} sopra max(1,rumore,SL) ma sotto la soglia ⇒ guadagno parziale TENUTO (feedback keep-partial-wins), promozione rimandata a rerun (rc=3)"); rc = 3
+ print(f"ESITO rc={rc}")
+ sys.exit(rc)
+ PY

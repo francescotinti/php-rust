@@ -627,13 +627,13 @@ impl<'m> super::Vm<'m> {
     /// (`sweep_skip_next`) DOPO ogni loro effetto, dal solo sentiero in place
     /// su Long (nessun drop, nessuna chiamata PHP possibile) — si scavalca
     /// SOLO uno Sweep che non farebbe nulla; nessuna elisione statica.
+    /// S-176 «flag gc-idle» (wp176-harness/s176-criterio-flag.md): il
+    /// fast-path è CACHED in `Vm::gc_idle[main]` (mod.rs: `gc_idle_compute`
+    /// è il testo delle tre clausole, `gc_idle_set` l'unico store) — qui un
+    /// solo byte letto, mai le tre clausole.
     #[inline(always)]
     fn sweep_idle(&self, top: usize, main: bool) -> bool {
-        self.frames[top].flags.get(FrameFlags::IN_DESTRUCTOR)
-            || (self.gc_buf_head >= self.gc_buf.len()
-                && (!main || self.gc_light_demoted.is_empty())
-                && (!self.gc_enabled
-                    || self.gc_cycle_roots.len() + self.gc_ctr_roots.len() < self.gc_sweep_bound))
+        self.frames[top].flags.get(FrameFlags::IN_DESTRUCTOR) || self.gc_idle[main as usize]
     }
 
     /// Vero se `func.ops[at]` è uno `Sweep` inerte (vedi [`Self::sweep_idle`]):

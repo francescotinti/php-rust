@@ -184,6 +184,7 @@ impl<'m> super::Vm<'m> {
     /// in Zend) and mirror the state into the `zend.enable_gc` directive.
     pub(super) fn ho_gc_enable(&mut self, on: bool) -> Result<Zval, PhpError> {
         self.gc_enabled = on;
+        self.gc_idle_set([false; 2]);
         self.ini_set_local(b"zend.enable_gc", if on { b"1".to_vec() } else { b"0".to_vec() });
         Ok(Zval::Null)
     }

@@ -503,6 +503,7 @@ impl<'m> Vm<'m> {
         // zend.enable_gc is the live collector switch (WP-46).
         if name == b"zend.enable_gc" {
             self.gc_enabled = ini_bool(&self.ini.0[&name[..]].local);
+            self.gc_idle_set([false; 2]);
         }
         Ok(Zval::Str(PhpStr::new(old)))
     }
