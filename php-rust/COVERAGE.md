@@ -7,7 +7,7 @@ functions with `function_exists()` inside `phpr` (grouped by
 `ReflectionFunction::getExtensionName()`); the corpus number is the real pass
 count of the upstream Zend test suite under `phpt-runner`.
 
-_Last measured: 2026-09-13 (pin of S-173; fresh probe + fresh corpus run) ·
+_Last measured: 2026-09-16 (pin of S-175; fresh probe + fresh corpus run) ·
 reference: PHP 8.5.7 (`get_defined_functions()`)._
 
 ---
@@ -126,8 +126,8 @@ ZipArchive (write side), XMLReader-level SAX** are implemented as classes.
 single-site and multisite suites**, stable by name across every run — the
 current work is performance, toward parity (1×) with the oracle's CPU. The
 backbone is a six-category micro benchmark (same PHP source on both engines,
-per-binary startup floors subtracted); at the S-173 pin it reads **arith 2.8× ·
-regex 2.5× · array 3.1× · property 3.0× · string 4.1× · calls 4.8×** (August:
+per-binary startup floors subtracted); at the S-175 pin it reads **arith 2.4× ·
+regex 2.5× · array 3.0× · property 2.6× · string 4.1× · calls 4.6×** (August:
 9.3 / 3.5 / 3.9 / 7.9 / 5.3 / 5.1). On real applications the **full WordPress
 suite runs at ~1.77×** the oracle's CPU (median of the last measured pair,
 band [1.74; 1.80]; from 4.1× at the start of the arc) and the Doctrine ORM

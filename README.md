@@ -14,17 +14,17 @@
 phpr script.php        # a drop-in for `php`, but it's Rust all the way down
 ```
 
-> **Status (2026-09-10, session S-172 pin).** The **entire WordPress core test
+> **Status (2026-09-16, session S-175 pin).** The **entire WordPress core test
 > suite** (30,472 tests single-site, 31,278 multisite, wordpress-develop trunk)
 > runs at **effective oracle parity** — one deliberate, catalogued name-diff — on
 > **real MySQL** through a native `mysqli` wire protocol and the built-in server
 > SAPI. Composer, PHPUnit 9/11/13, Doctrine ORM/DBAL, symfony/http-kernel (0/0),
 > http-foundation, wp-cli and Monolog run at parity too. **The current front is
 > performance**, measured on a six-category micro benchmark against the
-> reference interpreter's CPU: **arith 2.7× · regex 2.5× · array 3.0× ·
-> property 3.8× · string 4.1× · calls 4.7×** (from 9.3 / 3.5 / 3.9 / 7.9 / 5.3
+> reference interpreter's CPU: **arith 2.4× · regex 2.5× · array 3.0× ·
+> property 2.6× · string 4.1× · calls 4.6×** (from 9.3 / 3.5 / 3.9 / 7.9 / 5.3
 > / 5.1 in August), the full WordPress suite at **~1.77×** the oracle's CPU.
-> Target: **parity (1×)**; the ≤3× stage is reached on arith and regex, with array at the threshold.
+> Target: **parity (1×)**; the ≤3× stage is reached on arith, regex and property, with array at the threshold.
 
 ---
 
@@ -84,7 +84,7 @@ application to fall.
 | **8. Real Composer** | `composer require monolog/monolog` **end-to-end**: resolution, HTTPS download (rustls), unzip, autoload — and the package **runs** | ✅ Done |
 | **8b. Real ecosystem** | **PHPUnit 9/11/13 byte-identical** (incl. process isolation); Doctrine **DBAL 3769 / 0 / 0**, **ORM 3484 tests at 3 err / 13 fail, stable by name**; **symfony/http-kernel CLOSED 1665 tests 0/0**, http-foundation 0 errors; Monolog, wp-cli, collections, inflector, instantiator… | ✅ Done |
 | **9. Real application** | **WordPress 7.0.1 on real MySQL** (native `mysqli`), served by the built-in SAPI byte-identically; **full core PHPUnit suite at effective parity, single-site AND multisite**; media pipeline at byte parity on system libgd/libxslt/libtidy via FFI | ✅ Done |
-| **10. Performance** | Parity with the oracle's CPU. Stage ≤3× per micro-category: reached on arith and regex, array at the threshold; property, string and calls in progress. WordPress full suite ~1.77× | 🔄 **Current front** |
+| **10. Performance** | Parity with the oracle's CPU. Stage ≤3× per micro-category: reached on arith, regex and property, array at the threshold; string and calls in progress. WordPress full suite ~1.77× | 🔄 **Current front** |
 | **11. Second framework** | Laravel as the next validation target (same gate recipe as ORM/http-kernel) | ⏳ Queued |
 | **12. Async & single-binary** | Tokio event loop + resident Axum web server, standalone distribution | ⏳ Future |
 | **13. JIT (Tier 3)** | Clean bytecode → Cranelift/LLVM for on-the-fly machine code | 🔭 Vision |
@@ -188,7 +188,7 @@ All three historical "dragons" of a PHP port have been confronted:
   PHP strings (PDO/sqlite, mysqli, dom/simplexml, curl), and **FFI to the very same system
   dylibs the oracle uses** where byte parity is a property of the library (gd, xslt, tidy, zlib).
 
-**Fidelity** (at 2026-09-10, pin of session S-172): differential type-juggling vs real PHP at
+**Fidelity** (at 2026-09-16, pin of session S-175): differential type-juggling vs real PHP at
 **0 mismatches** (37,835 cases — the *operator* differential, a metric distinct from the `.phpt`
 corpus); **1,748** green Rust unit/integration tests; on the official `Zend/tests` corpus
 **2655 phpt pass** (65.3% of the runnable ones, with a frozen "zero pass→fail
@@ -217,17 +217,17 @@ whole trail is in `php-rust/sessions/` and `php-rust/gaps/GAP_TREND.md`.
 
 Micro benchmark, same PHP source on both engines, ratio of user CPU (phpr / PHP 8.5.7):
 
-| category | Aug 2026 (S-110) | **Sep 2026 (S-172)** | stage ≤3× |
+| category | Aug 2026 (S-110) | **Sep 2026 (S-175)** | stage ≤3× |
 |---|---:|---:|:---:|
-| arith | 9.3× | **2.7×** | ✅ |
+| arith | 9.3× | **2.4×** | ✅ |
 | regex | 3.5× | **2.5×** | ✅ |
 | array | 3.9× | **3.0×** | ✅ |
-| property | 7.9× | **3.8×** | 🔄 |
+| property | 7.9× | **2.6×** | ✅ |
 | string | 5.3× | **4.1×** | 🔄 |
-| calls | 5.1× | **4.7×** | 🔄 |
+| calls | 5.1× | **4.6×** | 🔄 |
 
 Real applications: **WordPress full suite ~1.77×** the oracle's CPU (from 4.1× at the start
-of the arc; the peak-footprint gap went from 11.9× to ~2.3×, last ratio measured in August), **Doctrine ORM suite ~7.1×**
+of the arc; the peak-footprint gap went from 11.9× to ~2.3×, last ratio measured in August), **Doctrine ORM suite ~7.0×**
 (from 8.4×; object-heavy, the hardest workload on the map).
 
 What the measurements established, in order: the threaded-dispatch hypothesis was refuted
