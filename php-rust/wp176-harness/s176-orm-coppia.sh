@@ -2,8 +2,8 @@
 # s176-orm-coppia.sh — coppia dbal+ORM col CANONE EMENDATO (S-176, istruttoria s176-istruttoria-sentinella-orm.md +
 # criterio s176-criterio-orm.md): COPIA DICHIARATA di s175-orm-coppia.sh (manifest s176-orm-coppia-copia.diff) coi SOLI
 # adattamenti: (E3) quiesce_gate = assestamento a STREAK di mediaanalysisd PRIMA di ogni tentativo del gate (blocco di
-# s175-pair.sh, retry x3) al posto della pausa fissa 30 s; (E4) ORA_REF=4,96 (mediana 18 gambe pulite S-162..S-175),
-# banda sentinella [4,86;5,06] = ORA_REF ±2 %, REF2 ri-normalizzata [34,87;34,95] = [34,27;34,35]×4,96/4,875 (4,875 =
+# s175-pair.sh, retry x3) al posto della pausa fissa 30 s; (E4) ORA_REF=4,94 (mediana 18 gambe pulite S-162..S-175; rilievo 6 rev. S-176),
+# banda sentinella [4,84;5,04] = ORA_REF ±2 %, REF2 ri-normalizzata [34,73;34,81] = [34,27;34,35]×4,94/4,875 (4,875 =
 # media oracle della finestra di riferimento s166-mattina 4,87/4,88); harness wp176, verdetto s176-orm-coppia-verdetto.out,
 # PIN atteso passato via env PIN_ATTESO (default s175). Tutto il resto INVARIATO; testo S-175 conservato sotto per storia.
 # s175-orm-coppia.sh — coppia dbal+ORM sul pin s175 (DOVUTA: pin nuovo, promozione Sweep-in-op C S-175).
@@ -218,9 +218,9 @@ if diff[:20]: print("dbal_diff_nomi: " + " | ".join(diff[:20]))
 # --- ATTESA L-MC1d (criterio s173-criterio-orm.md p.3, aritmetica meccanica) ---
 # Giudizio CANONICO su net ORACLE-NORMALIZZATO EREDITATO; scaletta a DUE
 # ESTREMI NEL CANONE (S-160); replica-AL1 RIMOSSA (attesa CHIUSA S-160).
-REF2_MIN, REF2_MAX = 34.87, 34.95  # EMENDA E4 (S-176): [34,27;34,35]x4,96/4,875 ri-normalizzata alla nuova ORA_REF; RIF AGGIORNATO: finestra VALIDA s166-mattina @ pin s165 (sentinella quieta 4,87/4,88) — dichiarato
-ORA_REF2 = 4.96                    # EMENDA E4 (S-176): mediana delle 18 gambe oracle pulite S-162..S-175 (istruttoria s176); era 4,885 (finestra s162 fredda)
-SENT_LO, SENT_HI = 4.86, 5.06      # EMENDA E4 (S-176): ORA_REF +-2 % = spread storico delle gambe pulite (4,88..5,03), fuori = macchina anomala; era [4,83;4,94] EMENDA S-166: banda sentinella oracle PRE-registrata (s165-istruttoria-ictx-orm.md B1, VINCOLANTE; ORA_REF REGGE per R=5 s165 mediana 4.860)
+REF2_MIN, REF2_MAX = 34.73, 34.81  # EMENDA E4 (S-176, sanata rev. rilievo 6): [34,27;34,35]x4,94/4,875 ri-normalizzata alla nuova ORA_REF; RIF AGGIORNATO: finestra VALIDA s166-mattina @ pin s165 (sentinella quieta 4,87/4,88) — dichiarato
+ORA_REF2 = 4.94                    # EMENDA E4 (S-176, sanata rev. rilievo 6): mediana delle 18 gambe oracle pulite S-162..S-175 (istruttoria s176); era 4,885 (finestra s162 fredda)
+SENT_LO, SENT_HI = 4.84, 5.04      # EMENDA E4 (S-176, sanata rev. rilievo 6): ORA_REF +-2 % = spread storico delle gambe pulite (4,88..5,03), fuori = macchina anomala; era [4,83;4,94] EMENDA S-166: banda sentinella oracle PRE-registrata (s165-istruttoria-ictx-orm.md B1, VINCOLANTE; ORA_REF REGGE per R=5 s165 mediana 4.860)
 RES = 0.293                        # risoluzione KS-146-1
 RREF_LO, RREF_HI = 7.023, 7.053    # rapporto net registrato s166-mattina @ pin s165 (companion) — NON cambiato; NOTA t18 [7,090;7,092] da rivedere; se in S-173 resta >7,05 scatta la regola 4
 ATT_LO, ATT_HI = 0.0, 0.0          # attesa Sweep-in-op (B+C, S-175) DICHIARATA [testo S-173 segue]: direzione <=0 (mai peggiorare); magnitudine NON pre-registrabile (quota di chiamate a metodo AMMESSE — simple_call arita' esatta IC-hit — nel workload doctrine NON censita); GIU' = coerente con la leva, da dichiarare SENZA ripartizione senza census proprio (Composer/Doctrine a REGIME = classmap hit, i miss autoload [obj,metodo] RARI; quota miss NON censita => sotto-risoluzione; attesa-AF1 resta APERTA, non risolta da questa coppia)

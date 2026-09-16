@@ -4,20 +4,20 @@ promossa) + census Sweep/typed su WP-ORM + canone ORM emendato.** Pin INVARIATO 
 **9b9179d4dd3d95bd**; **tree = pin + flag gc-idle** (commit d1849bc: `Vm::gc_idle [bool;2]` indice main, `sweep_idle` legge
 UN byte, `gc_idle_set` unico store, ricalcolo esatto a ogni uscita di `gc_sweep_impl`; mutante MF morde fx-sw2-gc/fx-sw1;
 B a parità) + contatori census (feature op-census, fuori dal binario di parità). A/B R=5 a 4 bracci (s176-flag-verdetto.out):
-**prop-dq 36,20→33,47 = +2,73/+2,67** (rumore 0,47, SL 0,20, attesa [2;5] centrata, 63 % del tetto MS +4,20 CIFRA) ·
+**prop-dq 36,20→33,47 = +2,73/+2,67** (rumore 0,47, SL 0,20, attesa [2;5] centrata; ~60 % del tetto MS +4,20 = companion, non cifra: D «vale 0» a criterio) ·
 arith-dq +1,04 · nessuna regressione ⇒ **rc=3**: sotto il pavimento 4, veto «promozione sotto banda», guadagno tenuto
 (keep-partial-wins) con **obiettivo NOMINATO: promozione del tree COMPOSTA con la prossima leva prop-dq** (p.1). Micro di
 RECORD (finestra pulita, sentinelle nel .out, incidente #1 S-175 SANATO): arith 2,4 · prop 2,6 · calls 4,6 · str 4,1 · arr 3,0
 · re 2,5. gh-status-sync fatto a mano (sonda 1017/2143, corpus 2655/1412 identici; root README era fermo a S-172). **Census
 «op in place + Sweep»** (s176-census-verdetto.out, parità ORM/media rc=0): Sweep = 10,88 % degli op ORM / 7,07 % media, forme
 in place su Long ≈2 % dei Sweep ⇒ la coppia NON vede Sweep-in-op né il flag; predecessori reali StoreSlot/JumpIfFalse/Pop/
-PropSetPop/Jump; lettura (ipotesi, non cifra): ORM ~63 ns/op vs ~6,7 nei micro ⇒ tutti i Sweep ORM ≈0,5 %: il 7× è nei CORPI.
+PropSetPop/Jump; lettura (ipotesi, non cifra): ORM ~63 ns/op vs ~6,7 nei micro ⇒ i Sweep di ORM stanno sotto la risoluzione della coppia: il 7× è nei CORPI (il flag resta però letto da ogni Op::Sweep: 59M/ORM, rilievo 4).
 **Census typed** (s176-census-typed-verdetto.out): ORM 8,99M scritture prop: **miss 55,4 % · IC plain 36,5 % · typed 8,1 %**;
 media plain 82,4 % · miss 17,6 % · typed 0 % ⇒ fetta 4 ammissibile (<10 %) con presidio typed; perimetro vero su ORM = IC MISS.
 **ORM**: istruttoria sentinella (banda [4,83;4,94] fondata su finestra fredda; storico 4,88..5,08) ⇒ canone E3 (assestamento a
-streak nel gate per gamba) + E4 (ORA_REF 4,96, banda [4,86;5,06], REF2 [34,87;34,95]) PRE-registrato: s176-orm-coppia.sh +
+streak nel gate per gamba) + E4 (ORA_REF 4,94, banda [4,84;5,04], REF2 [34,73;34,81] — sanata in chiusura, rilievo 6) PRE-registrato: s176-orm-coppia.sh +
 s176-criterio-orm.md, si esegue alla prossima coppia. Leve: 1 · A/B: 1 · incidenti: **0** · revisione S-176 (lente MISURA):
-wp176-harness/revisione-s176.md — esito e azioni riportati in WP_SESSION_176 · sessioni senza misura: 0.
+wp176-harness/revisione-s176.md: REGGE CON RILIEVI (63 % cifra indebita → companion; PREV su binario diverso; «rerun» irraggiungibile ⇒ composizione; il flag è letto da OGNI Op::Sweep ⇒ il census non lo esclude su ORM; «0,5 %» vietata da §3; E4 mediana 4,94 SANATA) — azioni in p.1/p.4 · sessioni senza misura: 0.
 
 ## Scoreboard (pin s175 INVARIATO; micro DI RECORD)
 **arith 2,4 = · prop 2,6 = · calls 4,6 = · str 4,1 = · arr 3,0 = · re 2,5 =** · giudici: prop-dq pin 36,20 = 2,57× (tree con
@@ -41,7 +41,7 @@ corpus 2655 (1412 congelati) · batteria 1748/0/2 (S-175, non rilanciata) · CI:
    dominante è la leva con più perimetro su ORM.
 3. **calls 4,6 → str 4,1** (p.5 S-176 non eseguito): census Call/BinarySS/Ret e args-Vec sui driver calls.php/str.php e su ORM
    (copia del census), poi leva sui corpi con criterio PRIMA.
-4. Coppia dovuta SOLO a pin nuovo (p.1); la voce ORM riaperta (sentinella 4,97) si chiude con la prima coppia sotto E4.
+4. Coppia dovuta SOLO a pin nuovo (p.1); la voce ORM riaperta (sentinella 4,97) si chiude con la prima coppia sotto E4 (sanata: 4,94 / [4,84;5,04] / REF2 [34,73;34,81]). Azioni revisore: A/B composto a TRE bracci con PREV dello STESSO binario e anti-flare micro; coppia ORM anche sul braccio flag-solo (il flag è letto da ogni Sweep); tie-break drop-1 dichiarato; batteria+corpus sul tree PRIMA di ogni A/B che lo usi come braccio (HEAD porta il flag senza batteria: CI ferma).
 5. Quesiti residui: ictx oracle1 a verbale · c0 positivo · census server (26° slitt.) · ratifiche §3 · dtor-in-dtor (catalogo) ·
    «Sweep-skip esteso» a StoreSlot/Pop/PropSetPop→Sweep (56 % dei Sweep ORM) = leva SOLO per i micro (su ORM ≤0,5 %): non prioritaria.
 

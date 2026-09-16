@@ -8,8 +8,8 @@ assente): **arith 2,4 · prop 2,6 · calls 4,6 · str 4,1 · arr 3,0 · re 2,5**
 ≤0,05 s) · gh-status-sync a mano (sonda 1017/2143, corpus 2655/1412 identici) · **LEVA flag gc-idle** (`Vm::gc_idle [bool;2]`
 indice main, cached: `sweep_idle` legge UN byte; `gc_idle_set` unico store dai siti sporcanti, ricalcolo ESATTO a ogni uscita
 di `gc_sweep_impl`; mutante MF «flag mai aggiornato» rompe fx-sw2-gc 4 blocchi + fx-sw1; B a parità byte-id): A/B R=5 a 4
-bracci (A pin, Z gemello, B flag, C MS tetto) **prop-dq 36,20→33,47 = D +2,73/+2,67 (rumore 0,47, SL 0,20; 63 % del tetto
-MS +4,20 CIFRA) · arith-dq 20,28→19,24 = +1,04** attese centrate, nessuna regressione ⇒ **rc=3 SOLA DIREZIONE**: sotto il
+bracci (A pin, Z gemello, B flag, C MS tetto) **prop-dq 36,20→33,47 = D +2,73/+2,67 (rumore 0,47, SL 0,20; ~60 % del tetto
+MS +4,20 = companion, non cifra) · arith-dq 20,28→19,24 = +1,04** attese centrate, nessuna regressione ⇒ **rc=3 SOLA DIREZIONE**: sotto il
 pavimento 4, niente promozione (veto sotto banda), guadagno TENUTO nel tree (keep-partial-wins) — obiettivo NOMINATO: si
 promuove COMPOSTO con la prossima leva su prop-dq quando D(pin s175 → tree) ≥ max(4, rumore) in un solo A/B · **census
 «op in place + Sweep»** (sezioni nuove del census oltre la top-40): Sweep = **10,88 % degli op ORM (59,2M) / 7,07 % media
@@ -17,13 +17,13 @@ promuove COMPOSTO con la prossima leva su prop-dq quando D(pin s175 → tree) �
 ≈2 % dei Sweep ⇒ la coppia WP/ORM NON vede Sweep-in-op né il flag (attese sotto-risoluzione confermate); predecessori
 reali StoreSlot 24 %/18 %, JumpIfFalse 19/24 %, Pop 17/22 %, PropSetPop 15/12 %, Jump 9/11 %; IncDecSlotJmp→CmpJmpSS 415k vs
 →CmpJmpSC 8,5k (ORM) ⇒ il back-edge fuso SC è raro fuori dai micro; LETTURA di costo (ipotesi, non cifra): ORM 544M op in
-34,5 s = ~63 ns/op contro ~6,7 ns/op dei micro ⇒ eliminare TUTTI i Sweep di ORM vale ~0,5 % (sotto la risoluzione 0,293 s):
+34,5 s = ~63 ns/op contro ~6,7 ns/op dei micro ⇒ i Sweep di ORM stanno sotto la risoluzione della coppia (lettura, non cifra — rilievo 5):
 il 7× di ORM sta nei CORPI (call/prop/str/builtin), non nel dispatch — rotta S-169 confermata · **census typed** (contatori
 prop_set IC plain/typed/miss): ORM 8,99M scritture: **miss 55,4 % · IC plain 36,5 % · IC typed 8,1 %**; media 5,53M: plain
 82,4 % · miss 17,6 % · typed 0,0 % ⇒ fetta 4 ammissibile (<10 %) con presidio typed, ma il perimetro vero su ORM è l'IC MISS
 (55 %: polimorfismo/proxy lazy/fill mancato — da censire per CAUSA) · **canone ORM emendato** (istruttoria
 s176-istruttoria-sentinella-orm.md: banda [4,83;4,94] fondata su finestra fredda S-162..166, storico gambe pulite 4,88..5,08):
-E3 assestamento a streak anti-flare nel gate per gamba + E4 ORA_REF 4,96, banda [4,86;5,06], REF2 [34,87;34,95] — copione
+E3 assestamento a streak anti-flare nel gate per gamba + E4 ORA_REF 4,94, banda [4,84;5,04], REF2 [34,73;34,81] (sanata: rilievo 6) — copione
 s176-orm-coppia.sh PRE-registrato per la prossima coppia · ambiente: swap 15-18G nel container (Chrome/Antigravity), Data
 15→11→14G, MySQL wp8 riavviato dopo reboot · incidenti: 0 · leve: 1 (A/B eseguito) · sessioni senza misura: 0)
 
