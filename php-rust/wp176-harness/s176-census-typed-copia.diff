@@ -1,0 +1,81 @@
+--- s176-census.sh	2026-09-16 23:24:30
++++ s176-census-typed.sh	2026-09-16 23:29:24
+@@ -1,4 +1,9 @@
+ #!/bin/bash
++# s176-census-typed.sh — CENSUS «typed» (NEXT §S-176 p.4; criterio s176-criterio-census-typed.md): COPIA DICHIARATA di
++# s176-census.sh (manifest s176-census-typed-copia.diff) coi SOLI adattamenti: out census-typed-out/, verdetto
++# s176-census-typed-verdetto.out, smoke a esito esatto sulla sezione «prop_set entry (S-176 typed)» (classe typed ⇒
++# ic_hit_typed ≥1, plain ⇒ ic_hit_plain ≥1), parser che aggrega anche quella sezione; build op-census da HEAD coi
++# contatori (census.rs/run.rs S-176). Testo originale sotto.
+ # s176-census.sh — CENSUS «op in place + Sweep» su WP media + ORM (NEXT §S-176 p.3; criterio s176-criterio-census.md).
+ # COPIA DICHIARATA di wp147-harness/s147-census-orm.sh (gamba ORM: untar orm-work.tgz su APFS, phpunit --no-coverage,
+ # watchdog 1800 s, parità per NOME vs baseline16) + /Volumes/Extreme Pro/Claude/wp53-harness/census53.sh (gamba media:
+@@ -13,13 +18,13 @@
+ set -u
+ export PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin:"$HOME/.cargo/bin"
+ REPO="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust"
+-H="$REPO/wp176-harness"; OUT="$H/census-out"; mkdir -p "$OUT"
+-VERD="$H/s176-census-verdetto.out"; DONE="$OUT/census.done"; rm -f "$DONE"
++H="$REPO/wp176-harness"; OUT="$H/census-typed-out"; mkdir -p "$OUT"
++VERD="$H/s176-census-typed-verdetto.out"; DONE="$OUT/census.done"; rm -f "$DONE"
+ GATES="/Volumes/Extreme Pro/Claude/wp9-harness/gates"
+ WPDEV="/Users/francescotinti/Claude/wpdev"
+ GUARD="/Volumes/Extreme Pro/Claude/wp62-harness/uploads-guard.sh"
+ CT="/Volumes/Extreme Pro/Claude/phpr-census-target"; CB="$CT/release/phpr"
+-SP="/private/tmp/phpr-s176-census"; mkdir -p "$SP"
++SP="/private/tmp/phpr-s176-census-typed"; mkdir -p "$SP"
+ p(){ echo "$(date +%H:%M:%S) $1" >> "$OUT/progress.txt"; }
+ fin(){ echo "rc=$1 $(date +%T)" > "$DONE"; exit "$1"; }
+ : > "$OUT/progress.txt"; : > "$VERD"
+@@ -38,14 +43,17 @@
+ cat > "$OUT/smoke176.php" <<'PHP'
+ <?php
+ class P { public int $x = 0; }
+-$o = new P; $s = 0;
+-for ($i = 0; $i < 1000; $i++) { $o->x += 1; $s += $o->x; }
++class Q { public $y = 0; }
++$o = new P; $q = new Q; $s = 0;
++for ($i = 0; $i < 1000; $i++) { $o->x = $o->x + 1; $q->y = $q->y + 1; $s += $o->x + $q->y; }
+ echo $s, "\n";
+ PHP
+ rm -f "$OUT/smoke-op.txt"
+ PHPR_OP_CENSUS="$OUT/smoke-op.txt" "$CB" "$OUT/smoke176.php" > "$OUT/smoke176.out" 2>&1
+ grep -q "^-- bigrams X -> Sweep (all) --" "$OUT/smoke-op.txt" && grep -qE "^ *[0-9]+  [A-Za-z]+ -> Sweep$" "$OUT/smoke-op.txt" \
+-  && grep -qE "^ *[0-9]+  IncDecSlotJmp -> [A-Za-z]+$" "$OUT/smoke-op.txt" || { echo "rc=8 smoke: sezioni S-176 assenti o vuote (census-out/smoke-op.txt)" >> "$VERD"; fin 8; }
++  && grep -qE "^ *[0-9]+  IncDecSlotJmp -> [A-Za-z]+$" "$OUT/smoke-op.txt" || { echo "rc=8 smoke: sezioni S-176 assenti o vuote (census-typed-out/smoke-op.txt)" >> "$VERD"; fin 8; }
++grep -q "^-- prop_set entry (S-176 typed) --" "$OUT/smoke-op.txt" && grep -qE "^ *[1-9][0-9]*  prop_set ic_hit_typed$" "$OUT/smoke-op.txt" \
++  && grep -qE "^ *[1-9][0-9]*  prop_set ic_hit_plain$" "$OUT/smoke-op.txt" || { echo "rc=8 smoke typed: ic_hit_typed/ic_hit_plain assenti o 0 (census-typed-out/smoke-op.txt)" >> "$VERD"; fin 8; }
+ p "smoke PASS ($(grep -c ' -> Sweep$' "$OUT/smoke-op.txt") righe X->Sweep)"
+ 
+ busy(){ { pgrep -x rustc || pgrep -x cargo; } > /dev/null 2>&1 && echo BUSY || echo CLEAN; }
+@@ -81,13 +89,16 @@
+ # ---- aggregazione per NOME su tutti i processi (dump appesi) ----
+ agg(){ python3 - "$1" <<'PY'
+ import sys, re, collections
+-tot = 0; sw = collections.Counter(); idj = collections.Counter(); sec = None; dumps = 0
++tot = 0; sw = collections.Counter(); idj = collections.Counter(); ps = collections.Counter(); sec = None; dumps = 0
+ for line in open(sys.argv[1], encoding='utf-8', errors='replace'):
+     m = re.match(r"^== PHPR_OP_CENSUS: (\d+) ops dispatched ==", line)
+     if m: tot += int(m.group(1)); dumps += 1; sec = None; continue
+     if line.startswith("-- bigrams X -> Sweep (all) --"): sec = "sw"; continue
+     if line.startswith("-- bigrams IncDecSlotJmp -> X (all) --"): sec = "idj"; continue
++    if line.startswith("-- prop_set entry (S-176 typed) --"): sec = "ps"; continue
+     if line.startswith("-- "): sec = None; continue
++    mp = re.match(r"^\s*(\d+)\s+prop_set (\S+)$", line)
++    if mp and sec == "ps": ps[mp.group(2)] += int(mp.group(1)); continue
+     m = re.match(r"^\s*(\d+)\s+(\S+) -> (\S+)$", line)
+     if m and sec == "sw": sw[m.group(2)] += int(m.group(1))
+     elif m and sec == "idj": idj[m.group(3)] += int(m.group(1))
+@@ -97,9 +108,11 @@
+ for k, v in sw.most_common(): print(f"  {v:>12}  {k} -> Sweep  ({v/S*100 if S else 0:.1f}%)")
+ print("IncDecSlotJmp -> X:")
+ for k, v in idj.most_common(): print(f"  {v:>12}  IncDecSlotJmp -> {k}")
++P = sum(ps.values())
++print(f"prop_set entry (typed): totale={P} " + " ".join(f"{k}={v} ({v/P*100 if P else 0:.1f}%)" for k, v in ps.most_common()) + f"  quota_typed={ps['ic_hit_typed']/P*100 if P else 0:.1f}%")
+ PY
+ }
+-{ echo "== s176 CENSUS «op in place + Sweep» WP media + ORM — CONTEGGI, mai tempo (criterio s176-criterio-census.md) $(date '+%F %T') =="
++{ echo "== s176 CENSUS «typed» (prop_set IC plain/typed/miss) + Sweep WP media + ORM — CONTEGGI, mai tempo (criterio s176-criterio-census-typed.md) $(date '+%F %T') =="
+   echo "census_phpr=$CH (build op-census da HEAD ${SHA:0:12}: probe, MAI parità)"
+   echo "orm run_rc=$ORC parità per NOME vs baseline16: $ORMPAR · summary: $(tr -d '\0' < "$OUT/run-orm.txt" | sed -n 's/^\(Tests: .*\)$/\1/p' | tail -1)"
+   echo "media run_rc=$MRC parità (nomi falliti): $MEDPAR · summary: $(tr -d '\0' < "$OUT/run-media.txt" | sed -n 's/^\(Tests: .*\)$/\1/p' | tail -1)"

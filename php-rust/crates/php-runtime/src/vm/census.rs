@@ -534,6 +534,17 @@ impl OpCensus {
                 let _ = writeln!(o, "{:>12}  IncDecSlotJmp -> {}", c, OP_NAMES[n]);
             }
         }
+        // S-176 census «typed»: prop_set_entry outcomes of this process
+        // (see `census_prop_set`); read-and-reset so a long-lived process
+        // dumping twice never double counts.
+        let _ = writeln!(o, "-- prop_set entry (S-176 typed) --");
+        for (n, c) in [
+            ("ic_hit_plain", &PROP_SET_IC_PLAIN),
+            ("ic_hit_typed", &PROP_SET_IC_TYPED),
+            ("miss", &PROP_SET_MISS),
+        ] {
+            let _ = writeln!(o, "{:>12}  prop_set {}", c.swap(0, std::sync::atomic::Ordering::Relaxed), n);
+        }
         let _ = writeln!(o, "-- Binary/CmpJmp type pairs (top 40) --");
         let mut pairs: Vec<(u64, usize)> = self
             .binary
@@ -647,6 +658,19 @@ pub fn census_concat_site(site: usize, lhs: &Zval, rhs: &Zval) {
             census.concat_site(site, lhs, rhs);
         }
     });
+}
+
+/// S-176 census «typed» (wp176-harness/s176-criterio-census-typed.md p.2):
+/// `prop_set_entry` outcome counters — IC hit on a plain class, IC hit on a
+/// typed class (TY bit: coercion inside the IC arm, S-134), full-path miss.
+/// Call sites are `#[cfg(feature = "op-census")]`-gated in run.rs; the
+/// counters are read (and reset) by the census dump of this process.
+pub static PROP_SET_IC_PLAIN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+pub static PROP_SET_IC_TYPED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+pub static PROP_SET_MISS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+#[inline(always)]
+pub fn census_prop_set(counter: &std::sync::atomic::AtomicU64) {
+    counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 }
 
 /// Dump and clear at end of run. `PHPR_OP_CENSUS=1` prints on STDERR;

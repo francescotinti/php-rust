@@ -968,6 +968,14 @@ impl<'m> super::Vm<'m> {
                     // e ri-onora le typed_refs sul post-coercizione come il
                     // blocco del cammino pieno; ogni altro salto del ramo NP
                     // è un fatto di classe provato al fill.
+                    // S-176 census «typed» (op-census builds only): IC hit
+                    // on a typed (TY) vs plain class.
+                    #[cfg(feature = "op-census")]
+                    super::census::census_prop_set(if raw & crate::bytecode::PropIc::TY != 0 {
+                        &super::census::PROP_SET_IC_TYPED
+                    } else {
+                        &super::census::PROP_SET_IC_PLAIN
+                    });
                     if raw & crate::bytecode::PropIc::TY != 0 {
                         let ocid = o.borrow().class_id as usize;
                         value = self.coerce_typed_prop_write(ocid, name, value)?;
@@ -1002,6 +1010,9 @@ impl<'m> super::Vm<'m> {
                 }
             }
         }
+        // S-176 census «typed»: not served by the IC (fill/slow path).
+        #[cfg(feature = "op-census")]
+        super::census::census_prop_set(&super::census::PROP_SET_MISS);
         // FAST PATH (WP-25): overwrite of a *present* slot on a
         // non-lazy, non-enum instance of a class whose declared
         // properties are all plain for writing (public, symmetric,
