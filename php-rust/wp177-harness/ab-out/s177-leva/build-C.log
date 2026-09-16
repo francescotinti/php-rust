@@ -326,3 +326,4 @@ help: use `let _ = ...` to ignore the resulting value
     |             +++++++
 
    Compiling php-cli v0.1.0 (/Volumes/Extreme Pro/Claude/s177-leva/php-rust/crates/php-cli)
+warning: `php-builtins` (lib) generated 4 warnings
