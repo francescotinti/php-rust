@@ -43,7 +43,7 @@ corpus 2655 (1412 congelati) · batteria 1748/0/2 (S-175, non rilanciata) · CI:
    (copia del census), poi leva sui corpi con criterio PRIMA.
 4. Coppia dovuta SOLO a pin nuovo (p.1); la voce ORM riaperta (sentinella 4,97) si chiude con la prima coppia sotto E4 (sanata: 4,94 / [4,84;5,04] / REF2 [34,73;34,81]). Azioni revisore: A/B composto a TRE bracci con PREV dello STESSO binario e anti-flare micro; coppia ORM anche sul braccio flag-solo (il flag è letto da ogni Sweep); tie-break drop-1 dichiarato; batteria+corpus sul tree PRIMA di ogni A/B che lo usi come braccio (HEAD porta il flag senza batteria: CI ferma).
 5. Quesiti residui: ictx oracle1 a verbale · c0 positivo · census server (26° slitt.) · ratifiche §3 · dtor-in-dtor (catalogo) ·
-   «Sweep-skip esteso» a StoreSlot/Pop/PropSetPop→Sweep (56 % dei Sweep ORM) = leva SOLO per i micro (su ORM ≤0,5 %): non prioritaria.
+   «Sweep-skip esteso» a StoreSlot/Pop/PropSetPop→Sweep (56 % dei Sweep ORM) = leva SOLO per i micro (su ORM sotto la risoluzione della coppia, lettura): non prioritaria.
 
 ## Aperture per NOME
 leva composta prop-dq (flag + fetta 4 typed-skip o corpi prop) · census IC miss ORM per causa · calls → str census/leva · coppia
