@@ -272,6 +272,14 @@ fn binary_fast(b: BinOp, lhs: &Zval, rhs: &Zval) -> Option<Zval> {
 #[inline(always)]
 fn long_arith_i64(b: BinOp, l: i64, r: i64) -> Option<i64> {
     use BinOp::*;
+    // S-177 L-CM1 (b) (wp177-harness/s177-criterio-cm1.md p.2b): `Add` è
+    // l'op dominante dei sentieri sigillati (prop-dq, `+=`); provato PRIMA
+    // del match, un ramo invece della catena di confronti (disasm del pin:
+    // cmp #7 · cmp #1 · cbz prima dell'`adds`). Stesso `checked_add`, stesso
+    // `None`: il testo dell'arm sotto resta invariato.
+    if let Add = b {
+        return l.checked_add(r);
+    }
     Some(match b {
         Add => l.checked_add(r)?,
         Sub => l.checked_sub(r)?,
@@ -857,7 +865,7 @@ impl<'m> super::Vm<'m> {
         // `__get`, `Undef` = typed-uninit fatal, other class, lazy
         // wrapper) falls through to the paths that own it.
         if let Zval::Object(o) = &target {
-            if let Some((cid1, slot)) = ic.get(sk) {
+            if let Some((cid1, slot)) = ic.get(sk, self.ic_epoch) {
                 let b = o.borrow();
                 if b.class_id + 1 == cid1 && b.lazy.is_none() {
                     if let Some(v) = b.props.get_slot(slot) {
@@ -948,7 +956,7 @@ impl<'m> super::Vm<'m> {
         // ones (lazy, enum, present slot, Ref×typed_refs) are
         // re-checked here.
         if let Zval::Object(o) = &target {
-            if let Some((cid1, raw)) = ic.get(crate::bytecode::PropIc::scope_key(cur)) {
+            if let Some((cid1, raw)) = ic.get(crate::bytecode::PropIc::scope_key(cur), self.ic_epoch) {
                 let slot = raw & crate::bytecode::PropIc::SLOT_MASK;
                 let hit = {
                     let b = o.borrow();
@@ -1045,7 +1053,7 @@ impl<'m> super::Vm<'m> {
                     .get(&name[..])
                     .and_then(|pi| pi.slot);
                 if let Some(i) = slot {
-                    ic.fill(fcid, crate::bytecode::PropIc::scope_key(cur), i);
+                    ic.fill(fcid, crate::bytecode::PropIc::scope_key(cur), i, self.ic_epoch);
                 }
                 if let Some(old) = write_property_at(&target, name, slot, value.clone())? {
                     #[cfg(feature = "zval-census")]
@@ -1141,7 +1149,7 @@ impl<'m> super::Vm<'m> {
                     // hook-free in blocco — see PropIc).
                     if let Some(i) = slot {
                         if self.classes[ocid].plain_set_props {
-                            ic.fill(ocid as u32, crate::bytecode::PropIc::scope_key(cur), i);
+                            ic.fill(ocid as u32, crate::bytecode::PropIc::scope_key(cur), i, self.ic_epoch);
                         }
                     }
                     Cow::Borrowed(k)
@@ -1205,7 +1213,7 @@ impl<'m> super::Vm<'m> {
                             } else {
                                 0
                             };
-                        ic.fill(ocid as u32, crate::bytecode::PropIc::scope_key(cur), i | bits);
+                        ic.fill(ocid as u32, crate::bytecode::PropIc::scope_key(cur), i | bits, self.ic_epoch);
                     }
                 }
             }
@@ -1300,7 +1308,7 @@ impl<'m> super::Vm<'m> {
                             // (every access re-pays slot_of).
                             if let Some(pi) = ci.prop_info.get(&name[..]) {
                                 if let Some(i) = pi.slot {
-                                    ic.fill(b.class_id, sk, i);
+                                    ic.fill(b.class_id, sk, i, self.ic_epoch);
                                 }
                             }
                             // deref_clone: a slot holding a Ref
@@ -1367,7 +1375,7 @@ impl<'m> super::Vm<'m> {
                     // unguarded read must dispatch the hook).
                     if let Some(i) = slot {
                         if !self.hook_guarded(oid, &name) {
-                            ic.fill(ocid as u32, sk, i);
+                            ic.fill(ocid as u32, sk, i, self.ic_epoch);
                         }
                     }
                     Cow::Borrowed(k)
@@ -4709,7 +4717,7 @@ impl<'m> super::Vm<'m> {
                                 break 'l None;
                             };
                             let sk = crate::bytecode::PropIc::scope_key(fr.class);
-                            let Some((cid1, pslot)) = ic.get(sk) else {
+                            let Some((cid1, pslot)) = ic.get(sk, self.ic_epoch) else {
                                 break 'l None;
                             };
                             let Zval::Long(lv) = &fr.slots[*l as usize] else {
@@ -4751,7 +4759,7 @@ impl<'m> super::Vm<'m> {
                     let mut hit: Option<Zval> = None;
                     if let Zval::Object(o) = &self.frames[top].slots[*slot as usize] {
                         let sk = crate::bytecode::PropIc::scope_key(self.frames[top].class);
-                        if let Some((cid1, pslot)) = ic.get(sk) {
+                        if let Some((cid1, pslot)) = ic.get(sk, self.ic_epoch) {
                             let b = o.borrow();
                             if b.class_id + 1 == cid1 && b.lazy.is_none() {
                                 if let Some(v) = b.props.get_slot(pslot) {
@@ -4786,7 +4794,7 @@ impl<'m> super::Vm<'m> {
                     let mut hit: Option<Zval> = None;
                     if let Zval::Object(o) = &self.frames[top].slots[*slot as usize] {
                         let sk = crate::bytecode::PropIc::scope_key(self.frames[top].class);
-                        if let Some((cid1, pslot)) = ic.get(sk) {
+                        if let Some((cid1, pslot)) = ic.get(sk, self.ic_epoch) {
                             let b = o.borrow();
                             if b.class_id + 1 == cid1 && b.lazy.is_none() {
                                 if let Some(v) = b.props.get_slot(pslot) {
@@ -4859,7 +4867,7 @@ impl<'m> super::Vm<'m> {
                         let Zval::Object(o) = &self.frames[top].slots[*slot as usize] else {
                             break 'f false;
                         };
-                        let Some((cid1, gslot)) = ic.get(sk) else {
+                        let Some((cid1, gslot)) = ic.get(sk, self.ic_epoch) else {
                             break 'f false;
                         };
                         // S-172 L-SL2 «forma sigillata Long» fetta 2 = prop (criterio
@@ -4884,7 +4892,7 @@ impl<'m> super::Vm<'m> {
                         // sigillato sotto, che ricomputa da zero: nessun effetto.
                         if *recv == *slot {
                             if let crate::bytecode::Const::Int(k) = &func.consts[*cidx as usize] {
-                                if let Some((cid2, sslot)) = set_ic.get(sk) {
+                                if let Some((cid2, sslot)) = set_ic.get(sk, self.ic_epoch) {
                                     let mut bm = o.borrow_mut();
                                     if bm.class_id + 1 == cid1
                                         && bm.class_id + 1 == cid2
@@ -4928,7 +4936,7 @@ impl<'m> super::Vm<'m> {
                             let Zval::Object(ro) = &self.frames[top].slots[*recv as usize] else {
                                 break 'f false;
                             };
-                            let Some((cid2, sslot)) = set_ic.get(sk) else {
+                            let Some((cid2, sslot)) = set_ic.get(sk, self.ic_epoch) else {
                                 break 'f false;
                             };
                             let in_place = {
@@ -4990,7 +4998,7 @@ impl<'m> super::Vm<'m> {
                         let Zval::Object(ro) = &self.frames[top].slots[*recv as usize] else {
                             break 'f false;
                         };
-                        let Some((cid2, sslot)) = set_ic.get(sk) else {
+                        let Some((cid2, sslot)) = set_ic.get(sk, self.ic_epoch) else {
                             break 'f false;
                         };
                         {
@@ -5031,7 +5039,7 @@ impl<'m> super::Vm<'m> {
                         let mut hit: Option<Zval> = None;
                         if let Zval::Object(o) = &self.frames[top].slots[*slot as usize] {
                             let sk = crate::bytecode::PropIc::scope_key(self.frames[top].class);
-                            if let Some((cid1, pslot)) = ic.get(sk) {
+                            if let Some((cid1, pslot)) = ic.get(sk, self.ic_epoch) {
                                 let b = o.borrow();
                                 if b.class_id + 1 == cid1 && b.lazy.is_none() {
                                     if let Some(v) = b.props.get_slot(pslot) {
@@ -5062,7 +5070,7 @@ impl<'m> super::Vm<'m> {
                     let sk = crate::bytecode::PropIc::scope_key(self.frames[top].class);
                     let mut hit: Option<Zval> = None;
                     if let Some(Zval::Object(o)) = &self.frames[top].this {
-                        if let Some((cid1, slot)) = ic.get(sk) {
+                        if let Some((cid1, slot)) = ic.get(sk, self.ic_epoch) {
                             let b = o.borrow();
                             if b.class_id + 1 == cid1 && b.lazy.is_none() {
                                 if let Some(v) = b.props.get_slot(slot) {
@@ -5295,7 +5303,7 @@ impl<'m> super::Vm<'m> {
                     // is re-checked here. An absent/Undef slot falls through
                     // (undefined-prop warning, dynamic creation, `__get`).
                     if let Zval::Object(o) = &obj_d {
-                        if let Some((cid1, slot)) = ic.get(crate::bytecode::PropIc::scope_key(cur)) {
+                        if let Some((cid1, slot)) = ic.get(crate::bytecode::PropIc::scope_key(cur), self.ic_epoch) {
                             let hit = {
                                 let b = o.borrow();
                                 b.class_id + 1 == cid1
@@ -5343,7 +5351,7 @@ impl<'m> super::Vm<'m> {
                                         && !b.info.is_enum_case
                                         && self.classes[b.class_id as usize].plain_set_props
                                     {
-                                        ic.fill(b.class_id, crate::bytecode::PropIc::scope_key(cur), i);
+                                        ic.fill(b.class_id, crate::bytecode::PropIc::scope_key(cur), i, self.ic_epoch);
                                     }
                                 }
                                 Cow::Borrowed(k)
@@ -5483,7 +5491,7 @@ impl<'m> super::Vm<'m> {
                     // present non-`Undef` PUBLIC slot on the cached class
                     // answers with zero hashing; anything else falls through.
                     if let Zval::Object(o) = &recv {
-                        if let Some((cid1, slot)) = ic.get(crate::bytecode::PropIc::scope_key(cur)) {
+                        if let Some((cid1, slot)) = ic.get(crate::bytecode::PropIc::scope_key(cur), self.ic_epoch) {
                             let b = o.borrow();
                             if b.class_id + 1 == cid1 && b.lazy.is_none() {
                                 if let Some(v) = b.props.get_slot(slot) {
@@ -5516,7 +5524,7 @@ impl<'m> super::Vm<'m> {
                                         // PropGet).
                                         if let Some(pi) = ci.prop_info.get(&name[..]) {
                                             if let Some(i) = pi.slot {
-                                                ic.fill(b.class_id, crate::bytecode::PropIc::scope_key(cur), i);
+                                                ic.fill(b.class_id, crate::bytecode::PropIc::scope_key(cur), i, self.ic_epoch);
                                             }
                                         }
                                         let set = !matches!(v.deref_clone(), Zval::Null | Zval::Undef);
@@ -5567,7 +5575,7 @@ impl<'m> super::Vm<'m> {
                                 // empty this execution).
                                 if let Some(i) = slot {
                                     if !self.hook_guarded(oid, &name) {
-                                        ic.fill(ocid as u32, crate::bytecode::PropIc::scope_key(cur), i);
+                                        ic.fill(ocid as u32, crate::bytecode::PropIc::scope_key(cur), i, self.ic_epoch);
                                     }
                                 }
                                 prop_isset_at(&target, &key, slot)
@@ -5739,7 +5747,7 @@ impl<'m> super::Vm<'m> {
                     let mut hit = None;
                     if let Some(Zval::Object(o)) = &self.frames[top].this {
                         let cid = o.borrow().class_id as usize;
-                        if let Some((defc, midx)) = ic.get(cid) {
+                        if let Some((defc, midx)) = ic.get(cid, self.ic_epoch) {
                             hit = Some((defc, midx, cid, Zval::Object(Rc::clone(o))));
                         }
                     }
@@ -7061,7 +7069,7 @@ impl<'m> super::Vm<'m> {
             if let Some(ridx) = stack.len().checked_sub(n + 1) {
                 if let Zval::Object(o) = &stack[ridx] {
                     let cid = o.borrow().class_id as usize;
-                    if let Some((defc, midx)) = ic.get(cid) {
+                    if let Some((defc, midx)) = ic.get(cid, self.ic_epoch) {
                         let callee = &self.classes[defc].methods[midx].func;
                         if callee.simple_call && callee.n_params as usize == n {
                             fast = Some((defc, midx, cid));

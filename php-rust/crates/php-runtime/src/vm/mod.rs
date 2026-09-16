@@ -783,6 +783,7 @@ pub fn vm_new<'m>(
         gc_purge_floor: 0,
         gc_sweep_bound: Vm::GC_CYCLE_THRESHOLD,
         gc_idle: [true; 2],
+        ic_epoch: crate::bytecode::ic_epoch(),
         gc_light_demoted: HashSet::default(),
         shutdown_fns: Vec::new(),
         generators: HashMap::default(),
@@ -3350,6 +3351,11 @@ pub struct Vm<'m> {
     /// (`gc_idle_set`), and `gc_sweep` recomputes it EXACTLY on every exit
     /// (`gc_refresh_idle`) — a false flag only costs a sweep body entry.
     gc_idle: [bool; 2],
+    /// S-177 L-CM1 (wp177-harness/s177-criterio-cm1.md p.2a): l'epoch delle
+    /// inline cache (`bytecode::ic_epoch()`) letta UNA volta alla costruzione,
+    /// subito dopo il bump; ogni `PropIc`/`MethodIc` get/fill la riceve da
+    /// qui invece di rileggere il thread-local a ogni hit.
+    ic_epoch: u64,
     /// Objects a LIGHT (in-body) sweep demoted to `gc_cycle_roots` since the
     /// last MAIN sweep. A temp consumed off the operand stack mid-statement is
     /// not gc_note'd, so its death is only observable by re-checking the
@@ -11622,7 +11628,7 @@ impl<'m> Vm<'m> {
         // private same-name method anywhere in the ancestor chain —
         // `Closure::bind` can bring any scope through this site).
         if let Some(ic) = ic {
-            if let Some((defc, midx)) = ic.get(cid) {
+            if let Some((defc, midx)) = ic.get(cid, self.ic_epoch) {
                 let callee = &self.classes[defc].methods[midx].func;
                 let m = self.class_mod(defc);
                 let mut frame = self.pooled_frame(callee, m);
@@ -11665,7 +11671,7 @@ impl<'m> Vm<'m> {
                     if self.classes[defc].methods[midx].visibility == Visibility::Public
                         && !private_shadow_in_chain(&self.classes, cid, method)
                     {
-                        ic.fill(cid, defc, midx);
+                        ic.fill(cid, defc, midx, self.ic_epoch);
                     }
                 }
                 let callee = &self.classes[defc].methods[midx].func;
@@ -11991,7 +11997,7 @@ impl<'m> Vm<'m> {
         // fill predicate is just "public winner" (visibility is the only
         // scope-dependent step). LSB/forwarding/$this run identically below.
         let mut resolved = None;
-        let usable = match ic.and_then(|ic| ic.get(start)) {
+        let usable = match ic.and_then(|ic| ic.get(start, self.ic_epoch)) {
             Some(hit) => Some(hit),
             None => {
                 resolved = resolve_method_runtime(&self.classes, start, method);
@@ -12000,7 +12006,7 @@ impl<'m> Vm<'m> {
                 });
                 if let (Some(ic), Some((defc, midx))) = (ic, usable) {
                     if self.classes[defc].methods[midx].visibility == Visibility::Public {
-                        ic.fill(start, defc, midx);
+                        ic.fill(start, defc, midx, self.ic_epoch);
                     }
                 }
                 usable
@@ -22154,15 +22160,18 @@ mod tests {
         let a = crate::bytecode::PropIc::default();
         let b = crate::bytecode::PropIc::default();
         assert!(a == b);
-        a.fill(7, 0, 3);
+        let e = crate::bytecode::ic_epoch();
+        a.fill(7, 0, 3, e);
         assert!(a == b);
         let c = a.clone();
-        assert_eq!(c.get(0), a.get(0));
-        c.fill(9, 0, 1);
-        assert_eq!(a.get(0), Some((10, 1)), "clone shares the cell");
-        assert_eq!(a.get(5), None, "scope is part of the key (WP-35)");
+        assert_eq!(c.get(0, e), a.get(0, e));
+        c.fill(9, 0, 1, e);
+        assert_eq!(a.get(0, e), Some((10, 1)), "clone shares the cell");
+        assert_eq!(a.get(5, e), None, "scope is part of the key (WP-35)");
+        // S-177 L-CM1: l'epoch è un argomento — un valore diverso invalida.
+        assert_eq!(a.get(0, e + 1), None, "epoch mismatch invalidates");
         crate::bytecode::bump_ic_epoch();
-        assert_eq!(a.get(0), None, "epoch bump invalidates");
+        assert_eq!(a.get(0, crate::bytecode::ic_epoch()), None, "epoch bump invalidates");
     }
 
     #[test]
@@ -22421,15 +22430,18 @@ mod tests {
         let a = crate::bytecode::MethodIc::default();
         let b = crate::bytecode::MethodIc::default();
         assert!(a == b);
-        a.fill(7, 3, 2);
+        let e = crate::bytecode::ic_epoch();
+        a.fill(7, 3, 2, e);
         assert!(a == b);
-        assert_eq!(a.get(7), Some((3, 2)));
-        assert_eq!(a.get(8), None, "different receiver class misses");
+        assert_eq!(a.get(7, e), Some((3, 2)));
+        assert_eq!(a.get(8, e), None, "different receiver class misses");
         let c = a.clone();
-        c.fill(9, 4, 1);
-        assert_eq!(a.get(9), Some((4, 1)), "clone shares the cell");
+        c.fill(9, 4, 1, e);
+        assert_eq!(a.get(9, e), Some((4, 1)), "clone shares the cell");
+        // S-177 L-CM1: l'epoch è un argomento — un valore diverso invalida.
+        assert_eq!(a.get(9, e + 1), None, "epoch mismatch invalidates");
         crate::bytecode::bump_ic_epoch();
-        assert_eq!(a.get(9), None, "epoch bump invalidates");
+        assert_eq!(a.get(9, crate::bytecode::ic_epoch()), None, "epoch bump invalidates");
     }
 
     #[test]

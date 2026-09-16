@@ -173,8 +173,13 @@ pub fn bump_ic_epoch() {
     });
 }
 
+/// S-177 L-CM1 (wp177-harness/s177-criterio-cm1.md p.2a): letta UNA volta da
+/// `Vm::new` (subito dopo il bump) e cached in `Vm::ic_epoch`; gli hit/fill
+/// delle IC ricevono quel valore invece di rileggere il thread-local a ogni
+/// accesso (nel pin: reload dell'indirizzo TLV dallo stack + load dell'epoch
+/// a ogni hit, 30 siti in run_loop).
 #[inline]
-fn ic_epoch() -> u64 {
+pub fn ic_epoch() -> u64 {
     IC_EPOCH.with(|e| e.get())
 }
 
@@ -215,14 +220,16 @@ impl PropIc {
     /// The cached `(class_id + 1, slot)` when filled IN THIS RUN for
     /// exactly this calling scope (see [`PropIc::scope_key`]).
     #[inline]
-    pub fn get(&self, scope_key: u32) -> Option<(u32, u32)> {
-        let (epoch, cid1, sk, slot) = self.0.get();
-        (cid1 != 0 && sk == scope_key && epoch == ic_epoch()).then_some((cid1, slot))
+    /// `epoch` = `Vm::ic_epoch` (S-177 L-CM1): lo stesso valore del
+    /// thread-local per tutta la vita del Vm, senza rileggerlo a ogni hit.
+    pub fn get(&self, scope_key: u32, epoch: u64) -> Option<(u32, u32)> {
+        let (e, cid1, sk, slot) = self.0.get();
+        (cid1 != 0 && sk == scope_key && e == epoch).then_some((cid1, slot))
     }
 
     #[inline]
-    pub fn fill(&self, class_id: u32, scope_key: u32, slot: u32) {
-        self.0.set((ic_epoch(), class_id + 1, scope_key, slot));
+    pub fn fill(&self, class_id: u32, scope_key: u32, slot: u32, epoch: u64) {
+        self.0.set((epoch, class_id + 1, scope_key, slot));
     }
 
     /// Key form of a calling scope: `ClassId + 1`, `0` for no scope
@@ -271,16 +278,17 @@ impl MethodIc {
     /// The cached `(defining ClassId, method idx)` when filled IN THIS RUN
     /// for exactly this receiver class.
     #[inline]
-    pub fn get(&self, cid: usize) -> Option<(usize, usize)> {
-        let (epoch, cid1, defc, midx) = self.0.get();
-        (cid1 as usize == cid + 1 && epoch == ic_epoch())
+    /// `epoch` = `Vm::ic_epoch` (S-177 L-CM1, come [`PropIc::get`]).
+    pub fn get(&self, cid: usize, epoch: u64) -> Option<(usize, usize)> {
+        let (e, cid1, defc, midx) = self.0.get();
+        (cid1 as usize == cid + 1 && e == epoch)
             .then_some((defc as usize, midx as usize))
     }
 
     #[inline]
-    pub fn fill(&self, cid: usize, defc: usize, midx: usize) {
+    pub fn fill(&self, cid: usize, defc: usize, midx: usize, epoch: u64) {
         self.0
-            .set((ic_epoch(), cid as u32 + 1, defc as u32, midx as u32));
+            .set((epoch, cid as u32 + 1, defc as u32, midx as u32));
     }
 }
 
