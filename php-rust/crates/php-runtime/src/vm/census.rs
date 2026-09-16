@@ -506,6 +506,34 @@ impl OpCensus {
         for &(c, i) in bi.iter().take(40) {
             let _ = writeln!(o, "{:>12}  {} -> {}", c, OP_NAMES[i / N_OPS], OP_NAMES[i % N_OPS]);
         }
+        // S-176 census «op in place + Sweep» (NEXT §S-176 p.3): EVERY bigram
+        // into `Sweep` and out of `IncDecSlotJmp`, whatever the rank — the
+        // top-40 cut hides the real reach of the fused in-place sites
+        // (Sweep-in-op S-174/175, flag gc-idle S-176) on WP/ORM. Counting
+        // only: no timing figure ever comes from here.
+        let by_name = |n: &str| OP_NAMES.iter().position(|&x| x == n);
+        if let Some(sw) = by_name("Sweep") {
+            let _ = writeln!(o, "-- bigrams X -> Sweep (all) --");
+            let mut v: Vec<(u64, usize)> = (0..N_OPS)
+                .map(|p| (self.bigram[p * N_OPS + sw], p))
+                .filter(|&(c, _)| c > 0)
+                .collect();
+            v.sort_unstable_by(|a, b| b.cmp(a));
+            for &(c, p) in &v {
+                let _ = writeln!(o, "{:>12}  {} -> Sweep", c, OP_NAMES[p]);
+            }
+        }
+        if let Some(idj) = by_name("IncDecSlotJmp") {
+            let _ = writeln!(o, "-- bigrams IncDecSlotJmp -> X (all) --");
+            let mut v: Vec<(u64, usize)> = (0..N_OPS)
+                .map(|n| (self.bigram[idj * N_OPS + n], n))
+                .filter(|&(c, _)| c > 0)
+                .collect();
+            v.sort_unstable_by(|a, b| b.cmp(a));
+            for &(c, n) in &v {
+                let _ = writeln!(o, "{:>12}  IncDecSlotJmp -> {}", c, OP_NAMES[n]);
+            }
+        }
         let _ = writeln!(o, "-- Binary/CmpJmp type pairs (top 40) --");
         let mut pairs: Vec<(u64, usize)> = self
             .binary
