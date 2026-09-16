@@ -1,0 +1,13 @@
+== s176 bracci leva «flag gc-idle» — riferimento A = pin s175 5de14d6856d760a8, sorgente = commit d1849bc15260 (mod.rs 7e8eb0bb93f7d4ba), fixture fx-sw2-gc 54 righe + fx-sw1 87 righe, Extreme 2721G 2026-09-16 23:07:47 ==
+RIFERIMENTO: pin fx-sw2-gc gcp-fused: d=1 s=1 gcp-ctl: d=1 s=1 gcp-loop: 1,1 s=2 gcp-scsc: d=1 l=11 gcp-under: d=0 s=1 gcp-off: d=0 s=1 FX-SW2 DONE  · fx-sw1 pin==oracle BYTE-ID
+B: binario 6c7bbb5502b302ae rc_fixture=0
+B: fx-sw2-gc blocchi ROTTI vs pin (0): 
+B: fx-sw1 == oracle BYTE-ID
+MF: binario 0f1464c4b14e9c14 rc_fixture=0
+MF: fx-sw2-gc blocchi ROTTI vs pin (4): gcp-ctl gcp-fused gcp-loop gcp-scsc 
+MF: fx-sw1 DIVERGE dall'oracle (126 righe di diff)
+B: fx-sw2-gc == pin BYTE-ID (invarianza)
+MF: attese ROTTE (gcp-fused gcp-loop) -> il flag è letto dai siti fusi/handler
+MF: fx-sw1 diverge dall'oracle (atteso)
+SORGENTE: mod.rs archiviato 7e8eb0bb93f7d4ba == commit d1849bc15260
+ESITO rc=0 (0 = bracci pronti: B a parità e MF morde; 1 = MF non morde; 2 = B diverge; 3 = sorgente) fine 2026-09-16 23:14:52
