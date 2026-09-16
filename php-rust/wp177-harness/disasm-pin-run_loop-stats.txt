@@ -1,0 +1,8 @@
+== disasm run_loop del pin s175 5de14d6856d760a8 (objdump -d --disassemble-symbols=run_loop, scratchpad S-177) 2026-09-17 01:50 ==
+istr=71745 reload_sp=7891 spill_sp=3379 bl=5993 branch_cond=5957 · frame ≥0x3000 (3× `sub sp, sp, #0x1000` nel prologo; offset [sp,#0x3400] in uso)
+prologo: 6 `blr` = chiamate ai thunk TLV ISSATE all'ingresso (descrittore IC_EPOCH 0x100d00b98 → indirizzo salvato in [sp,#0x440])
+hit IC: `ldr xN,[sp,#0x440]` → `ldr xN,[xN]` (epoch) → `cmp` → `b.ne` : 30 siti nella funzione (esempi 1002677ac, 1002684e4)
+ipotesi «chiamata TLV a ogni hit» REFUTATA (nessun blr fuori dal prologo); costo residuo per hit = una load dipendente in più (reload dallo stack) + load epoch
+op pointer spillato in [sp,#0x470] e ricaricato nei bracci prima di ogni accesso ai campi (es. 1002677c0, 100282958, 100282a24)
+long_arith_i64 inlinato: catena `cmp #7/b.gt · cmp #1/b.gt · cbz` → `adds` (Add = 3 rami prima dell'adds; Sub = 4) · Op = 48 B (`madd ×0x30`) · Zval = 16 B (`lsl #4`)
+b.vs/b.vc (aritmetica i64 con overflow) = 30 siti; cluster dei fast path: 27930-28692 (2 istanze), 41438-41456, 43153-43571 (6), 45795-45948 (3), 49781-49787

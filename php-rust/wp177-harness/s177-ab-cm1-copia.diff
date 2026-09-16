@@ -1,0 +1,113 @@
+--- wp176-harness/s176-ab-flag.sh	2026-09-16 23:07:13
++++ wp177-harness/s177-ab-cm1.sh	2026-09-17 01:30:18
+@@ -1,29 +1,30 @@
+ #!/bin/bash
+-# s176-ab-flag.sh — A/B della leva «flag gc-idle» (criterio s176-criterio-flag.md p.2-4): COPIA DICHIARATA di
+-# ../wp174-harness/s175-ab-mock.sh (manifest s176-ab-flag-copia.diff) coi SOLI adattamenti: (1) bracci A = pin s175
+-# (5de14d68), Z = ab-out/phpr-C di S-174/175 (b6c4b587, gemello a contenuto ⇒ SL in-run), B = LEVA flag gc-idle
+-# (candidata), C = MS (dcd73bf4, tetto S-175: mutante SCORRETTO, solo contrasto B−C); (2) GIUDICE BERSAGLIO = prop-dq a
+-# nomina (attesa D_B ∈ [2;5]), GUARDIA = arith-dq a SOLA regressione (direzione attesa [1;2,5]); (3) esiti p.4:
+-# rc=0 CANDIDATA (prop nominato da ENTRAMBI gli stimatori, arith senza regressione) · rc=3 SOLO DIREZIONE
+-# (max(1,rumore,SL) ≤ D_B prop < soglia) · rc=4 KILL (D_B prop < max(1,rumore,SL)) · rc=8 SL sopra 4; (4) lock per
+-# TOKEN s176; verdetto s176-<TAG>-verdetto.out; PREV_* = A del mock S-175 (20,08 / 36,13). Tutto il resto INVARIATO
+-# (misura: R=5, rotazione dei 4 bracci per coppia, floors med3 per binario, ns/iter=(med raw−floor)/N con N LETTO
+-# dal driver, mediane per colonna e appaiate, rumore drop-1, parità dei 4 bracci contro l'ORACLE prima di misurare).
+-# Uso: s176-ab-flag.sh <APATH> <AEXP8> <ZPATH> <ZEXP8> <BPATH> <BEXP8> <CPATH> <CEXP8> <TAG> [R] [PREV_DQ_A] [PREV_PROP_A]
++# s177-ab-cm1.sh — A/B della leva COMPOSTA «flag gc-idle + L-CM1» (criterio s177-criterio-cm1.md p.3-5): COPIA
++# DICHIARATA di ../wp176-harness/s176-ab-flag.sh (manifest s177-ab-cm1-copia.diff) coi SOLI adattamenti: (1) bracci
++# A = pin s175 (5de14d68), Z = wp174 ab-out/phpr-C (b6c4b587, gemello a contenuto ⇒ SL in-run), B = tree col flag
++# (wp176 ab-out/s176-flag/phpr-B 6c7bbb55), C = tree + L-CM1 (candidata COMPOSTA); (2) GIUDICE prop-dq: D_comp = A−C
++# (promozione del tree se nominata da ENTRAMBI gli stimatori), D_lev = B−C (leva sola, attesa [1;3]), D_flag = A−B
++# (replica same-binary, attesa [2;4]); GUARDIA arith-dq a SOLA regressione su A−C (attesa direzione ≈0 su B−C);
++# (3) esiti p.5: rc=0 PROMOZIONE · rc=3 SOLA DIREZIONE · rc=4 KILL L-CM1 (D_lev < max(1,rumore,SL)) · rc=5 regressione
++# arith · rc=8 SL sopra 4; (4) lock per TOKEN s177; verdetto s177-<TAG>-verdetto.out; PREV_* = A di S-176 (20,28 / 36,20,
++# STESSO binario = pin). Tutto il resto INVARIATO (misura: R=5, rotazione dei 4 bracci per coppia, floors med3 per
++# binario, ns/iter=(med raw−floor)/N con N LETTO dal driver, mediane per colonna e appaiate, rumore drop-1, parità dei
++# 4 bracci contro l'ORACLE prima di misurare).
++# Uso: s177-ab-cm1.sh <APATH> <AEXP8> <ZPATH> <ZEXP8> <BPATH> <BEXP8> <CPATH> <CEXP8> <TAG> [R] [PREV_DQ_A] [PREV_PROP_A]
+ set -u
+ export PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin
+ H="$(cd -P "$(dirname -- "$0")" && pwd -P)"
+-A="${1:?APATH}"; AEXP="${2:?AEXP8}"; ZZ="${3:?ZPATH}"; ZEXP="${4:?ZEXP8}"; BB="${5:?BPATH}"; BEXP="${6:?BEXP8}"; CC="${7:?CPATH}"; CEXP="${8:?CEXP8}"; TAG="${9:?TAG}"; R="${10:-5}"; PREVDQ="${11:-20.08}"; PREVPD="${12:-36.13}"
++A="${1:?APATH}"; AEXP="${2:?AEXP8}"; ZZ="${3:?ZPATH}"; ZEXP="${4:?ZEXP8}"; BB="${5:?BPATH}"; BEXP="${6:?BEXP8}"; CC="${7:?CPATH}"; CEXP="${8:?CEXP8}"; TAG="${9:?TAG}"; R="${10:-5}"; PREVDQ="${11:-20.28}"; PREVPD="${12:-36.20}"
+ O=/opt/homebrew/opt/php/bin/php
+ GD="$H/../wp164-harness/arith-dq.php"
+ PD="$H/../wp172-harness/prop-dq.php"
+ EMPTY="$H/../wp160-harness/empty.php"
+ OUT="$H/ab-out"; mkdir -p "$OUT"
+-VERD="$H/s176-$TAG-verdetto.out"; RC="$OUT/$TAG.rc"
++VERD="$H/s177-$TAG-verdetto.out"; RC="$OUT/$TAG.rc"
+ [ -e "$VERD" ] && { echo "verdetto ESISTE — TAG nuovo" >&2; exit 7; }
+ for f in "$PD" "$GD" "$A" "$ZZ" "$BB" "$CC" "$O"; do [ -s "$f" ] || { echo "file assente o VUOTO: $f" | tee -a "$VERD"; echo 7 > "$RC"; exit 7; }; done
+ [ -e "$EMPTY" ] || { echo "driver del pavimento assente: $EMPTY (VUOTO per costruzione: [ -e ], emenda S-170 p.4)" | tee -a "$VERD"; echo 7 > "$RC"; exit 7; }
+-grep -qw s176 /private/tmp/phpr-measure.lock 2>/dev/null || { echo "lock s176 assente (per TOKEN)" | tee -a "$VERD"; echo 9 > "$RC"; exit 9; }
++grep -qw s177 /private/tmp/phpr-measure.lock 2>/dev/null || { echo "lock s177 assente (per TOKEN)" | tee -a "$VERD"; echo 9 > "$RC"; exit 9; }
+ "$H/../wp129-harness/s129-quiescenza.sh" "$OUT/quiesce-$TAG.rc" > /dev/null 2>&1 || { echo "quiescenza FAIL" | tee -a "$VERD"; echo 8 > "$RC"; exit 8; }
+ AM="$(shasum -a 256 "$A" | cut -c1-8)"; ZM="$(shasum -a 256 "$ZZ" | cut -c1-8)"; BM="$(shasum -a 256 "$BB" | cut -c1-8)"; CM="$(shasum -a 256 "$CC" | cut -c1-8)"
+ [ "$AM" = "$AEXP" ] || { echo "A misurato $AM != atteso $AEXP" | tee -a "$VERD"; echo 1 > "$RC"; exit 1; }
+@@ -37,7 +38,7 @@
+ ucpu(){ { /usr/bin/time -p perl -e 'alarm 900; exec @ARGV or die' -- "$@" > /dev/null; } 2>&1 | awk '/^user/{print $2}'; }
+ floor3(){ local a b c; a=$(ucpu "$@" "$EMPTY"); b=$(ucpu "$@" "$EMPTY"); c=$(ucpu "$@" "$EMPTY"); printf '%s\n%s\n%s\n' "$a" "$b" "$c" | sort -n | awk 'NR==2'; }
+ {
+-echo "== s176 LEVA $TAG — A=$AM MISURATO ($A, pin s175) Z=$ZM MISURATO ($ZZ, gemello a contenuto del pin = SL in-run) B=$BM MISURATO ($BB, LEVA flag gc-idle: candidata) C=$CM MISURATO ($CC, MS = tetto S-175, mutante SCORRETTO: solo contrasto) — R=$R, N: arith-dq=$NGD prop-dq=$NPD, PREV A: $PREVDQ / $PREVPD, $(date '+%F %T') =="
++echo "== s177 LEVA COMPOSTA $TAG — A=$AM MISURATO ($A, pin s175) Z=$ZM MISURATO ($ZZ, gemello a contenuto del pin = SL in-run) B=$BM MISURATO ($BB, tree col flag gc-idle S-176) C=$CM MISURATO ($CC, tree + L-CM1: candidata COMPOSTA) — R=$R, N: arith-dq=$NGD prop-dq=$NPD, PREV A (stesso binario, S-176): $PREVDQ / $PREVPD, $(date '+%F %T') =="
+ echo "sentinella LS: $(pgrep -fl 'rust-analyzer|Antigravity|serena' 2>/dev/null | grep -v pgrep | awk '{print $2}' | sort -u | tr '\n' ' ')"
+ # PARITÀ vs ATTESO: l'atteso è l'output dell'ORACLE sullo stesso driver (generato qui, una volta per driver, `[ -s ]`).
+ for D in "$GD" "$PD"; do
+@@ -83,10 +84,10 @@
+ gA, gZ, gB, gC, gO = col(0,fa,ngd), col(1,fz,ngd), col(2,fb,ngd), col(3,fc,ngd), col(8,fo,ngd)
+ pA, pZ, pB, pC, pO = col(4,fa,npd), col(5,fz,npd), col(6,fb,npd), col(7,fc,npd), col(9,fo,npd)
+ rc = 0
+-# az.rev. S-173 (a): SL in-run = |A−Z| (stessa sorgente, layout diverso) per giudice; banda tra run = |A oggi − A ultima misura|
++# az.rev. S-173 (a): SL in-run = |A−Z| (stessa sorgente, layout diverso) per giudice; banda tra run = |A oggi − A ultima misura| (STESSO binario)
+ def layout(name, A, Z, prev):
+     sl = abs(med(A)-med(Z)); slp = abs(pmed(A, Z)); band = abs(med(A)-prev)
+-    print(f"LAYOUT {name}: A={med(A):.2f} Z={med(Z):.2f} ⇒ SL in-run (colonna) {sl:.2f} / (appaiata) {slp:.2f} ns/iter — confronto 0,94 (arith S-168): {'SOPRA' if max(sl, slp) > 0.94 else 'sotto'}; banda tra run |A−PREV {prev:.2f}| = {band:.2f} (rumore drop-1 A'={dr1(A):.2f} Z'={dr1(Z):.2f})")
++    print(f"LAYOUT {name}: A={med(A):.2f} Z={med(Z):.2f} ⇒ SL in-run (colonna) {sl:.2f} / (appaiata) {slp:.2f} ns/iter — confronto 0,94 (arith S-168): {'SOPRA' if max(sl, slp) > 0.94 else 'sotto'}; banda tra run same-binary |A−PREV {prev:.2f}| = {band:.2f} (rumore drop-1 A'={dr1(A):.2f} Z'={dr1(Z):.2f})")
+     return max(sl, slp)
+ SLg = layout("arith-dq", gA, gZ, prevdq)
+ SLp = layout("prop-dq", pA, pZ, prevpd)
+@@ -103,27 +104,26 @@
+     print(f"{name} {lab}: {alab}={med(A):.2f} {lab}={med(X):.2f} ns/iter D={alab}−{lab} colonna={Dc:+.2f} appaiata={Dp:+.2f} soglia={thr:.2f} (rumore drop-1 {alab}'={dr1(A):.2f} {lab}'={dr1(X):.2f}, SL={sl:.2f}) -> {cifra}; direzione {dirs} ({lab} {'più veloce' if Dc > 0 else 'più lento'}); regressione (D < −max(4,rumore)): {'SÌ' if reg else 'no'}")
+     return Dc, Dp, noise, nom, reg
+ print(f"GIUDICE prop-dq (BERSAGLIO, 2 Sweep/iter fusi): oracle={med(pO):.2f} ns/iter; A/oracle={med(pA)/med(pO):.2f}× Z/oracle={med(pZ)/med(pO):.2f}× B/oracle={med(pB)/med(pO):.2f}× C/oracle={med(pC)/med(pO):.2f}×")
+-DPBc, DPBp, nPB, nomPB, regPB = stat("GIUDICE prop-dq", pA, pB, "B", "A", SLp)
+-DPCc, DPCp, nPC, nomPC, _ = stat("TETTO prop-dq (MS, contrasto)", pA, pC, "C", "A", SLp)
+-DPBCc, DPBCp, nPBC, _, _ = stat("CONTRASTO prop-dq (B vs tetto MS: quota del predicato che il flag NON recupera)", pB, pC, "C", "B", SLp)
+-DPB, DPC = min(DPBc, DPBp), min(DPCc, DPCp)
+-print(f"ATTESE LEVA prop (criterio-flag p.3): D_B ∈ [2;5]: {'CENTRATA' if 2 <= DPB <= 5 else 'FUORI'} ({DPBc:+.2f}/{DPBp:+.2f}); quota del tetto: {DPB/DPC*100 if DPC > 0 else float('nan'):.0f}% (tetto {DPCc:+.2f}/{DPCp:+.2f})")
++DCc, DCp, nPC, nomPC, regPC = stat("GIUDICE prop-dq COMPOSTA (D_comp: promozione del tree)", pA, pC, "C", "A", SLp)
++DLc, DLp, nPL, nomPL, regPL = stat("LEVA prop-dq L-CM1 sola (D_lev)", pB, pC, "C", "B", SLp)
++DFc, DFp, nPF, nomPF, regPF = stat("FLAG prop-dq replica same-binary S-176 (D_flag)", pA, pB, "B", "A", SLp)
++DC, DL, DF = min(DCc, DCp), min(DLc, DLp), min(DFc, DFp)
++print(f"ATTESE (criterio-cm1 p.4): D_lev ∈ [1;3]: {'CENTRATA' if 1 <= DL <= 3 else 'FUORI'} ({DLc:+.2f}/{DLp:+.2f}); D_flag ∈ [2;4]: {'CENTRATA' if 2 <= DF <= 4 else 'FUORI'} ({DFc:+.2f}/{DFp:+.2f}; S-176: +2,73/+2,67)")
+ print(f"GUARDIA arith-dq (sola regressione, 1 Sweep/iter fuso): oracle={med(gO):.2f} ns/iter; A/oracle={med(gA)/med(gO):.2f}× Z/oracle={med(gZ)/med(gO):.2f}× B/oracle={med(gB)/med(gO):.2f}× C/oracle={med(gC)/med(gO):.2f}×")
+-DBc, DBp, nB, nomB, regB = stat("GUARDIA arith-dq", gA, gB, "B", "A", SLg)
+-DCc, DCp, nC, nomC, _ = stat("TETTO arith-dq (MS, contrasto)", gA, gC, "C", "A", SLg)
+-DB = min(DBc, DBp)
+-print(f"ATTESE LEVA arith (criterio-flag p.3, direzione): D_B ∈ [1;2,5]: {'CENTRATA' if 1 <= DB <= 2.5 else 'FUORI'} ({DBc:+.2f}/{DBp:+.2f}); regressione: {'SÌ' if regB else 'no'}")
++DGc, DGp, nG, nomG, regG = stat("GUARDIA arith-dq COMPOSTA", gA, gC, "C", "A", SLg)
++DGLc, DGLp, nGL, nomGL, regGL = stat("GUARDIA arith-dq L-CM1 sola (Add-first: attesa |D| < 1)", gB, gC, "C", "B", SLg)
++print(f"ATTESE LEVA arith (criterio-cm1 p.4): |D_lev arith| < 1: {'CENTRATA' if max(abs(DGLc), abs(DGLp)) < 1 else 'FUORI'} ({DGLc:+.2f}/{DGLp:+.2f}); regressione composta: {'SÌ' if regG else 'no'}")
+ if rc == 8:
+     print("ESITO rc=8"); sys.exit(8)
+-# ESITI (criterio-flag p.4)
+-if DPB < max(1.0, nPB, SLp):
+-    print(f"KILL: D_B prop {DPBc:+.2f}/{DPBp:+.2f} < max(1, rumore {nPB:.2f}, SL {SLp:.2f}) ⇒ il costo sta nei load/cmp singoli, non nella somma: leva MORTA, revert al byte (rc=4)"); rc = 4
+-elif regB:
+-    print(f"GUARDIA: arith-dq REGREDISCE ({DBc:+.2f}/{DBp:+.2f}) ⇒ nessuna promozione (rc=5)"); rc = 5
+-elif nomPB:
+-    print(f"CANDIDATA: prop-dq NOMINATO da entrambi gli stimatori [{min(DPBc,DPBp):+.2f};{max(DPBc,DPBp):+.2f}] (soglia max(4,rumore,SL)), arith senza regressione ({DBc:+.2f}/{DBp:+.2f}) ⇒ promozione con copia dichiarata di s174-promozione.sh (tag s176) + coppia dovuta (rc=0)")
++# ESITI (criterio-cm1 p.5)
++if regG:
++    print(f"GUARDIA: arith-dq REGREDISCE su A−C ({DGc:+.2f}/{DGp:+.2f}) ⇒ leva SOSPESA, nessuna promozione (rc=5)"); rc = 5
++elif DL < max(1.0, nPL, SLp):
++    print(f"KILL L-CM1: D_lev {DLc:+.2f}/{DLp:+.2f} < max(1, rumore {nPL:.2f}, SL {SLp:.2f}) ⇒ le load/rami tolti non pesano: revert al byte del commit L-CM1, il flag resta com'è (rc=4)"); rc = 4
++elif nomPC:
++    print(f"PROMOZIONE: D_comp prop-dq NOMINATA da entrambi gli stimatori [{min(DCc,DCp):+.2f};{max(DCc,DCp):+.2f}] (soglia max(4,rumore,SL)), arith senza regressione ({DGc:+.2f}/{DGp:+.2f}) ⇒ promozione del TREE INTERO con copia dichiarata di s174-promozione.sh (tag s177) + coppia t21 + ORM E3/E4 (rc=0)")
+ else:
+-    print(f"SOLO DIREZIONE: prop-dq {DPBc:+.2f}/{DPBp:+.2f} sopra max(1,rumore,SL) ma sotto la soglia ⇒ guadagno parziale TENUTO (feedback keep-partial-wins), promozione rimandata a rerun (rc=3)"); rc = 3
++    print(f"SOLO DIREZIONE: D_comp {DCc:+.2f}/{DCp:+.2f} sotto la soglia, D_lev {DLc:+.2f}/{DLp:+.2f} ≥ max(1,rumore,SL) ⇒ L-CM1 TENUTA nel tree col flag (keep-partial-wins), promozione ancora composta (rc=3)"); rc = 3
+ print(f"ESITO rc={rc}")
+ sys.exit(rc)
+ PY
