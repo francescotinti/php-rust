@@ -1,2 +1,10 @@
 == s177 braccio C leva L-CM1 — riferimento A = pin s175 5de14d6856d760a8, sorgente = commit d3d3fbc5d7eb, fixture fx-sw2-gc 54 righe + fx-sw1 87 righe + fx-sl1/fx-sl2/fx-sl3, Extreme 2718G 2026-09-17 01:31:44 ==
 RIFERIMENTO: pin fx-sw2-gc gcp-fused: d=1 s=1 gcp-ctl: d=1 s=1 gcp-loop: 1,1 s=2 gcp-scsc: d=1 l=11 gcp-under: d=0 s=1 gcp-off: d=0 s=1 FX-SW2 DONE  · fx-sw1 pin==oracle BYTE-ID
+C: binario 62d1a2e3b47a0d5a (commit d3d3fbc5d7eb)
+C: fx-sw2-gc == pin BYTE-ID (invarianza)
+C: fxsw1 == oracle BYTE-ID
+C: fxsl1 == oracle BYTE-ID
+C: fxsl2 == oracle BYTE-ID
+C: fxsl3 == oracle BYTE-ID
+DISASM C run_loop: istr=72032 bl=5983 blr=5 sp_refs=12109 (pin s175: istr=71745 bl=5993 blr=6 sp_refs=11270 — wp177-harness/disasm-pin-run_loop-stats.txt)
+ESITO rc=0 (0 = C a parità: braccio pronto; 2 = C diverge) fine 2026-09-17 01:37:38
