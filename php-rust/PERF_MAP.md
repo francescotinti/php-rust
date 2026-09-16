@@ -1,6 +1,32 @@
 # PERF_MAP — phpr vs PHP oracle 8.5.7, mappa multi-workload
 
-Aggiornata: **2026-09-15 notte (S-175)** · pin **NUOVO s175 phpr 5de14d6856d760a8 + server 9b9179d4dd3d95bd**
+Aggiornata: **2026-09-16 sera (S-176)** · pin **INVARIATO s175 phpr 5de14d6856d760a8 + server 9b9179d4dd3d95bd**
+(**S-176 = micro DI RECORD + leva «flag gc-idle» a SOLA DIREZIONE + census Sweep/typed WP-ORM + canone ORM emendato** (criteri
+wp176-harness/s176-criterio-flag.md, s176-criterio-census.md, s176-criterio-census-typed.md, s176-criterio-orm.md; verdetti
+wp176-harness/s176-*.out): micro R=5 di record in finestra pulita (quiescenza t1, Data 15G, watchdog 0 allarmi, updater
+assente): **arith 2,4 · prop 2,6 · calls 4,6 · str 4,1 · arr 3,0 · re 2,5** (i tick vs S-175 sono arrotondamenti a spread
+≤0,05 s) · gh-status-sync a mano (sonda 1017/2143, corpus 2655/1412 identici) · **LEVA flag gc-idle** (`Vm::gc_idle [bool;2]`
+indice main, cached: `sweep_idle` legge UN byte; `gc_idle_set` unico store dai siti sporcanti, ricalcolo ESATTO a ogni uscita
+di `gc_sweep_impl`; mutante MF «flag mai aggiornato» rompe fx-sw2-gc 4 blocchi + fx-sw1; B a parità byte-id): A/B R=5 a 4
+bracci (A pin, Z gemello, B flag, C MS tetto) **prop-dq 36,20→33,47 = D +2,73/+2,67 (rumore 0,47, SL 0,20; 63 % del tetto
+MS +4,20 CIFRA) · arith-dq 20,28→19,24 = +1,04** attese centrate, nessuna regressione ⇒ **rc=3 SOLA DIREZIONE**: sotto il
+pavimento 4, niente promozione (veto sotto banda), guadagno TENUTO nel tree (keep-partial-wins) — obiettivo NOMINATO: si
+promuove COMPOSTO con la prossima leva su prop-dq quando D(pin s175 → tree) ≥ max(4, rumore) in un solo A/B · **census
+«op in place + Sweep»** (sezioni nuove del census oltre la top-40): Sweep = **10,88 % degli op ORM (59,2M) / 7,07 % media
+(45,8M)**; predecessori in place su Long (BinarySTDst 1,1/1,6 %, BinaryTCPropSetPop 0,1 %, BinarySCDst/BinaryDst/IncDecSlotPop)
+≈2 % dei Sweep ⇒ la coppia WP/ORM NON vede Sweep-in-op né il flag (attese sotto-risoluzione confermate); predecessori
+reali StoreSlot 24 %/18 %, JumpIfFalse 19/24 %, Pop 17/22 %, PropSetPop 15/12 %, Jump 9/11 %; IncDecSlotJmp→CmpJmpSS 415k vs
+→CmpJmpSC 8,5k (ORM) ⇒ il back-edge fuso SC è raro fuori dai micro; LETTURA di costo (ipotesi, non cifra): ORM 544M op in
+34,5 s = ~63 ns/op contro ~6,7 ns/op dei micro ⇒ eliminare TUTTI i Sweep di ORM vale ~0,5 % (sotto la risoluzione 0,293 s):
+il 7× di ORM sta nei CORPI (call/prop/str/builtin), non nel dispatch — rotta S-169 confermata · **census typed** (contatori
+prop_set IC plain/typed/miss): ORM 8,99M scritture: **miss 55,4 % · IC plain 36,5 % · IC typed 8,1 %**; media 5,53M: plain
+82,4 % · miss 17,6 % · typed 0,0 % ⇒ fetta 4 ammissibile (<10 %) con presidio typed, ma il perimetro vero su ORM è l'IC MISS
+(55 %: polimorfismo/proxy lazy/fill mancato — da censire per CAUSA) · **canone ORM emendato** (istruttoria
+s176-istruttoria-sentinella-orm.md: banda [4,83;4,94] fondata su finestra fredda S-162..166, storico gambe pulite 4,88..5,08):
+E3 assestamento a streak anti-flare nel gate per gamba + E4 ORA_REF 4,96, banda [4,86;5,06], REF2 [34,87;34,95] — copione
+s176-orm-coppia.sh PRE-registrato per la prossima coppia · ambiente: swap 15-18G nel container (Chrome/Antigravity), Data
+15→11→14G, MySQL wp8 riavviato dopo reboot · incidenti: 0 · leve: 1 (A/B eseguito) · sessioni senza misura: 0)
+
 (**S-175 = PROMOZIONE della leva «Sweep-in-op» braccio C a PIN s175** (s174-promozione.sh emendato per il tag,
 manifest s174-promozione-tag-s175.diff; verdetto wp174-harness/s174-promo-verdetto.out): build ricetta = candidato a
 contenuto (5de14d68 vs b6c4b587: 48 B in 2 cluster LC_UUID/firma), batteria 1748/0/2, corpus 1412 ×2 ZERO flip, fixture
