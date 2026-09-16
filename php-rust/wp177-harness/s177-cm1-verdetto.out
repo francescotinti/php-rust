@@ -1,0 +1,49 @@
+== s177 LEVA COMPOSTA cm1 — A=5de14d68 MISURATO (/Users/francescotinti/Claude/php-rust-output/release/phpr, pin s175) Z=b6c4b587 MISURATO (/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp174-harness/ab-out/phpr-C, gemello a contenuto del pin = SL in-run) B=6c7bbb55 MISURATO (/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp176-harness/ab-out/s176-flag/phpr-B, tree col flag gc-idle S-176) C=62d1a2e3 MISURATO (/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp177-harness/ab-out/s177-leva/phpr-C, tree + L-CM1: candidata COMPOSTA) — R=5, N: arith-dq=250000000 prop-dq=150000000, PREV A (stesso binario, S-176): 20.28 / 36.20, 2026-09-17 01:41:17 ==
+sentinella LS: /Applications/Antigravity /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.96.0-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv 
+parità arith-dq: A==Z==B==C==atteso oracle (85937499750000000 )
+parità prop-dq: A==Z==B==C==atteso oracle (300000000 )
+floors: A=0.03 Z=0.03 B=0.03 C=0.03 oracle=0.05
+  coppia1 [AZBC]: dqA=8.32 dqZ=8.24 dqB=7.79 dqC=7.65 propA=8.23 propZ=8.04 propB=7.63 propC=7.62 | dqO=3.57 propO=3.36
+  coppia2 [CBZA]: dqA=8.29 dqZ=8.34 dqB=7.81 dqC=7.80 propA=8.19 propZ=8.21 propB=7.66 propC=7.58 | dqO=3.67 propO=3.44
+  coppia3 [BCAZ]: dqA=8.29 dqZ=8.23 dqB=7.75 dqC=7.80 propA=8.13 propZ=8.24 propB=7.69 propC=7.73 | dqO=3.81 propO=3.51
+  coppia4 [ZACB]: dqA=8.45 dqZ=8.48 dqB=8.07 dqC=7.65 propA=8.33 propZ=8.55 propB=7.94 propC=7.87 | dqO=3.83 propO=3.45
+  coppia5 [CZAB]: dqA=8.32 dqZ=8.61 dqB=8.28 dqC=7.85 propA=8.23 propZ=8.44 propB=8.12 propC=7.74 | dqO=3.61 propO=3.43
+LAYOUT arith-dq: A=33.16 Z=33.24 ⇒ SL in-run (colonna) 0.08 / (appaiata) 0.12 ns/iter — confronto 0,94 (arith S-168): sotto; banda tra run same-binary |A−PREV 20.28| = 12.88 (rumore drop-1 A'=0.12 Z'=1.00)
+LAYOUT prop-dq: A=54.67 Z=54.73 ⇒ SL in-run (colonna) 0.07 / (appaiata) 0.73 ns/iter — confronto 0,94 (arith S-168): sotto; banda tra run same-binary |A−PREV 36.20| = 18.47 (rumore drop-1 A'=0.67 Z'=2.67)
+GIUDICE prop-dq (BERSAGLIO, 2 Sweep/iter fusi): oracle=22.60 ns/iter; A/oracle=2.42× Z/oracle=2.42× B/oracle=2.26× C/oracle=2.27×
+GIUDICE prop-dq COMPOSTA (D_comp: promozione del tree) C: A=54.67 C=51.33 ns/iter D=A−C colonna=+3.33 appaiata=+3.27 soglia=4.00 (rumore drop-1 A'=0.67 C'=1.67, SL=0.73) -> NON nominato (vale 0); direzione FIRMATA (C più veloce); regressione (D < −max(4,rumore)): no
+LEVA prop-dq L-CM1 sola (D_lev) C: B=51.07 C=51.33 ns/iter D=B−C colonna=-0.27 appaiata=+0.47 soglia=4.00 (rumore drop-1 B'=2.07 C'=1.67, SL=0.73) -> NON nominato (vale 0); direzione sotto il rumore/SL (C più lento); regressione (D < −max(4,rumore)): no
+FLAG prop-dq replica same-binary S-176 (D_flag) B: A=54.67 B=51.07 ns/iter D=A−B colonna=+3.60 appaiata=+2.93 soglia=4.00 (rumore drop-1 A'=0.67 B'=2.07, SL=0.73) -> NON nominato (vale 0); direzione FIRMATA (B più veloce); regressione (D < −max(4,rumore)): no
+ATTESE (criterio-cm1 p.4): D_lev ∈ [1;3]: FUORI (-0.27/+0.47); D_flag ∈ [2;4]: CENTRATA (+3.60/+2.93; S-176: +2,73/+2,67)
+GUARDIA arith-dq (sola regressione, 1 Sweep/iter fuso): oracle=14.48 ns/iter; A/oracle=2.29× Z/oracle=2.30× B/oracle=2.15× C/oracle=2.15×
+GUARDIA arith-dq COMPOSTA C: A=33.16 C=31.08 ns/iter D=A−C colonna=+2.08 appaiata=+1.96 soglia=4.00 (rumore drop-1 A'=0.12 C'=0.80, SL=0.12) -> NON nominato (vale 0); direzione FIRMATA (C più veloce); regressione (D < −max(4,rumore)): no
+GUARDIA arith-dq L-CM1 sola (Add-first: attesa |D| < 1) C: B=31.12 C=31.08 ns/iter D=B−C colonna=+0.04 appaiata=+0.56 soglia=4.00 (rumore drop-1 B'=1.28 C'=0.80, SL=0.12) -> NON nominato (vale 0); direzione sotto il rumore/SL (C più veloce); regressione (D < −max(4,rumore)): no
+ATTESE LEVA arith (criterio-cm1 p.4): |D_lev arith| < 1: CENTRATA (+0.04/+0.56); regressione composta: no
+KILL L-CM1: D_lev -0.27/+0.47 < max(1, rumore 2.07, SL 0.73) ⇒ le load/rami tolti non pesano: revert al byte del commit L-CM1, il flag resta com'è (rc=4)
+ESITO rc=4
+sentinella LS fine: /Applications/Antigravity /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.96.0-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv 
+== finestra A/B composta flag+L-CM1: quiescenza PASS al tentativo 5, Data 13G, bracci A=5de14d68 Z=b6c4b587 B=6c7bbb55 C=62d1a2e3 ==
+-- sentinelle INIZIO 2026-09-17 01:41:06: Data=13G · total = 16384.00M  used = 15764.88M  free = 619.12M  (encrypted) · load averages: 5.90 9.45 13.71
+   updater: 
+   top-8 CPU:
+     114.4 /Applications/Google
+     101.1 /Applications/Google
+     100.0 /Applications/Google
+      99.3 /Applications/Google
+       5.6 /System/Library/CoreServices/loginwindow.app/Contents/MacOS/loginwindow
+       4.9 claude
+       3.0 /Applications/Google
+       2.1 /Users/francescotinti/.local/bin/claude
+-- sentinelle FINE 2026-09-17 01:48:42: Data=15G · total = 15360.00M  used = 14554.25M  free = 805.75M  (encrypted) · load averages: 9.89 8.15 11.08
+   updater: 
+   top-8 CPU:
+     125.7 /Applications/Google
+     101.6 /Applications/Google
+     100.0 /Applications/Google
+      99.4 /Applications/Google
+      99.4 /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rustc
+      11.4 /usr/libexec/sysmond
+       5.6 /Applications/Google
+       3.4 claude
+watchdog: 16 campioni, Data min=13G, allarmi=0
+NOTA S-177 2026-09-17 01:50:34: finestra cm1 CONTAMINATA (A 54,67 vs PREV 36,20 same-binary; oracle 22,60 vs 14,07; arith A 33,16 vs 20,28: +60 % uniforme; top-8 INIZIO/FINE Chrome ×4 a ~100 %) ⇒ rc=4 NON è cifra né direzione: rerun cm1b con emende E1 (gate banda same-binary) ed E2 (calma CPU totale)

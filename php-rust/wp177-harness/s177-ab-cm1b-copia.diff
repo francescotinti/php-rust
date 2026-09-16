@@ -1,0 +1,29 @@
+--- s177-ab-cm1.sh	2026-09-17 01:30:18
++++ s177-ab-cm1b.sh	2026-09-17 01:50:34
+@@ -1,5 +1,5 @@
+ #!/bin/bash
+-# s177-ab-cm1.sh — A/B della leva COMPOSTA «flag gc-idle + L-CM1» (criterio s177-criterio-cm1.md p.3-5): COPIA
++# s177-ab-cm1b.sh — RERUN (finestra cm1 contaminata) con EMENDA E1 (gate banda same-binary) — A/B della leva COMPOSTA «flag gc-idle + L-CM1» (criterio s177-criterio-cm1.md p.3-5): COPIA
+ # DICHIARATA di ../wp176-harness/s176-ab-flag.sh (manifest s177-ab-cm1-copia.diff) coi SOLI adattamenti: (1) bracci
+ # A = pin s175 (5de14d68), Z = wp174 ab-out/phpr-C (b6c4b587, gemello a contenuto ⇒ SL in-run), B = tree col flag
+ # (wp176 ab-out/s176-flag/phpr-B 6c7bbb55), C = tree + L-CM1 (candidata COMPOSTA); (2) GIUDICE prop-dq: D_comp = A−C
+@@ -10,7 +10,7 @@
+ # STESSO binario = pin). Tutto il resto INVARIATO (misura: R=5, rotazione dei 4 bracci per coppia, floors med3 per
+ # binario, ns/iter=(med raw−floor)/N con N LETTO dal driver, mediane per colonna e appaiate, rumore drop-1, parità dei
+ # 4 bracci contro l'ORACLE prima di misurare).
+-# Uso: s177-ab-cm1.sh <APATH> <AEXP8> <ZPATH> <ZEXP8> <BPATH> <BEXP8> <CPATH> <CEXP8> <TAG> [R] [PREV_DQ_A] [PREV_PROP_A]
++# Uso: s177-ab-cm1b.sh <APATH> <AEXP8> <ZPATH> <ZEXP8> <BPATH> <BEXP8> <CPATH> <CEXP8> <TAG> [R] [PREV_DQ_A] [PREV_PROP_A]
+ set -u
+ export PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin
+ H="$(cd -P "$(dirname -- "$0")" && pwd -P)"
+@@ -91,6 +91,10 @@
+     return max(sl, slp)
+ SLg = layout("arith-dq", gA, gZ, prevdq)
+ SLp = layout("prop-dq", pA, pZ, prevpd)
++# EMENDA E1 (S-177, finestra cm1 CONTAMINATA da app utente: A 54,67 vs PREV 36,20 same-binary): banda same-binary |A−PREV| > 4 su un giudice ⇒ nessun verdetto (rc=8)
++BANDp = abs(med(pA)-prevpd); BANDg = abs(med(gA)-prevdq)
++if BANDp > 4.0 or BANDg > 4.0:
++    print(f"BANDA same-binary FUORI: |A−PREV| prop {BANDp:.2f} / arith {BANDg:.2f} > 4 ⇒ finestra CONTAMINATA (pesi esterni): nessun verdetto (rc=8, emenda E1 S-177)"); rc = 8
+ if SLg > 4.0 or SLp > 4.0:
+     print(f"SL in-run SOPRA il pavimento 4 (arith {SLg:.2f}, prop {SLp:.2f}): banda-layout > soglia — nessun verdetto, si estende R (rc=8)"); rc = 8
+ def stat(name, A, X, lab, alab, sl):

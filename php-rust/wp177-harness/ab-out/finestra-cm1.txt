@@ -1,0 +1,24 @@
+== finestra A/B composta flag+L-CM1: quiescenza PASS al tentativo 5, Data 13G, bracci A=5de14d68 Z=b6c4b587 B=6c7bbb55 C=62d1a2e3 ==
+-- sentinelle INIZIO 2026-09-17 01:41:06: Data=13G · total = 16384.00M  used = 15764.88M  free = 619.12M  (encrypted) · load averages: 5.90 9.45 13.71
+   updater: 
+   top-8 CPU:
+     114.4 /Applications/Google
+     101.1 /Applications/Google
+     100.0 /Applications/Google
+      99.3 /Applications/Google
+       5.6 /System/Library/CoreServices/loginwindow.app/Contents/MacOS/loginwindow
+       4.9 claude
+       3.0 /Applications/Google
+       2.1 /Users/francescotinti/.local/bin/claude
+-- sentinelle FINE 2026-09-17 01:48:42: Data=15G · total = 15360.00M  used = 14554.25M  free = 805.75M  (encrypted) · load averages: 9.89 8.15 11.08
+   updater: 
+   top-8 CPU:
+     125.7 /Applications/Google
+     101.6 /Applications/Google
+     100.0 /Applications/Google
+      99.4 /Applications/Google
+      99.4 /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rustc
+      11.4 /usr/libexec/sysmond
+       5.6 /Applications/Google
+       3.4 claude
+watchdog: 16 campioni, Data min=13G, allarmi=0

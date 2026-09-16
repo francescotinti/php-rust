@@ -1,0 +1,86 @@
+p3-add: int(24)
+p3-sub: int(-4)
+p3-mul: int(490)
+p3-and: int(6)
+p3-or: int(15)
+p3-xor: int(3)
+p3-shl: int(49152)
+p3-shr: int(0)
+p3-shl-64: int(0)
+p3-shr-64: int(-1)
+p3-shl-neg-l: int(-7168)
+p3-shr-neg-l: int(-1)
+p3-shl-neg#0: ArithmeticError Bit shift by negative number
+p3-shl-neg#1: ArithmeticError Bit shift by negative number
+p3-div: float(1.1111111111111112)
+p3-div-exact: int(1)
+p3-mod: int(1)
+p3-pow: int(512)
+p3-concat: string(4) "ab33"
+p3-div-zero#0: DivisionByZeroError Division by zero
+p3-div-zero#1: DivisionByZeroError Division by zero
+p3-add-overflow: float(9.223372036854776E+18)
+p3-sub-overflow: float(1.8446744073709552E+19)
+p3-mul-overflow: float(2.5521177519070385E+38)
+p3-double-dst: float(5.5)
+p3-numstr-dst: int(14)
+p3-null-dst: int(4)
+p3-bool-dst: int(5)
+p3-null-dst-each: int(2)
+p3-bool-dst-each: int(3)
+p3-numstr-dst-each: int(12)
+p3-double-src: float(6)
+p3-numstr-src: int(15)
+p3-null-src: int(1)
+p3-dst-ref: int(7)
+p3-dst-ref-alias: int(7)
+p3-src-ref: int(9)
+p3-typed-ref: int(7)
+p3-typed-ref-overflow#0: TypeError Cannot assign float to reference held by property T::$x of type int
+p3-typed-ref-overflow#1: TypeError Cannot assign float to reference held by property T::$x of type int
+p3-typed-src: int(11)
+p3-magic-get-src: int(9)
+p3-magic-class-plain-src: int(7)
+p3-hook-get-src: int(25)
+p3-dynamic-src: int(7)
+p3-enum-src: int(15)
+p3-loop100: int(400)
+p3-loop-overflow-step: int(9223372036854775807)
+p3-loop-overflow: float(9.223372036854776E+18)
+p3-no-peephole: int(12)
+p3-rhs-expr: int(14)
+p3-twice: int(24)
+p3-dst-is-obj#0: TypeError Unsupported operand types: Q + int
+p3-dst-is-obj#1: TypeError Unsupported operand types: Q + int
+p4-same: int(10)
+p4-same-mul: int(21)
+p4-same-shr-neg: int(-4)
+p4-self-rhs: int(19)
+p4-self: int(7)
+p4-self-y: int(9)
+p4-overflow: float(9.223372036854776E+18)
+p4-dst-double: int(8)
+p4-dst-str: int(8)
+p4-dst-double-each: int(8)
+p4-dst-str-each: int(8)
+p4-dst-ref: int(8)
+p4-dst-ref-alias: int(8)
+p4-src-ref: int(5)
+p4-src-double: float(3.5)
+p4-two-objs: array(2) {
+  [0]=>
+  int(10)
+  [1]=>
+  int(0)
+}
+p4-other-class: int(12)
+p4-typed: int(6)
+p4-typed-float-dst: float(4)
+p4-readonly#0: Error Cannot modify readonly property RO::$x
+p4-readonly#1: Error Cannot modify readonly property RO::$x
+p4-this-private: int(2)
+p4-dynamic: int(4)
+p4-enum#0: Error Cannot create dynamic property E::$x
+p4-enum#1: Error Cannot create dynamic property E::$x
+prop-micro-1000: int(2000)
+FX-SL3 DONE
