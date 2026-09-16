@@ -545,6 +545,32 @@ impl OpCensus {
         ] {
             let _ = writeln!(o, "{:>12}  prop_set {}", c.swap(0, std::sync::atomic::Ordering::Relaxed), n);
         }
+        // S-177 census «IC miss per causa»: stato al miss (psm_*) ed esito
+        // della risoluzione lenta (psr_*), read-and-reset.
+        let _ = writeln!(o, "-- prop_set miss (S-177 causa) --");
+        for (n, c) in [
+            ("psm_ic_empty", &PSM_IC_EMPTY),
+            ("psm_ic_scope", &PSM_IC_SCOPE),
+            ("psm_ic_class", &PSM_IC_CLASS),
+            ("psm_obj_lazy", &PSM_OBJ_LAZY),
+            ("psm_obj_enum", &PSM_OBJ_ENUM),
+            ("psm_slot_absent", &PSM_SLOT_ABSENT),
+            ("psm_ref_typed", &PSM_REF_TYPED),
+            ("psm_other", &PSM_OTHER),
+            ("psm_nonobj", &PSM_NONOBJ),
+            ("psm_init_props", &PSM_INIT_PROPS),
+            ("psr_plain_fast", &PSR_PLAIN_FAST),
+            ("psr_np_fill_untyped", &PSR_NP_FILL_UNTYPED),
+            ("psr_np_fill_typed", &PSR_NP_FILL_TYPED),
+            ("psr_np_nofill", &PSR_NP_NOFILL),
+            ("psr_dynamic", &PSR_DYNAMIC),
+            ("psr_private_mangled", &PSR_PRIVATE_MANGLED),
+            ("psr_readonly", &PSR_READONLY),
+            ("psr_hook_magic", &PSR_HOOK_MAGIC),
+            ("psr_denied", &PSR_DENIED),
+        ] {
+            let _ = writeln!(o, "{:>12}  prop_set {}", c.swap(0, std::sync::atomic::Ordering::Relaxed), n);
+        }
         let _ = writeln!(o, "-- Binary/CmpJmp type pairs (top 40) --");
         let mut pairs: Vec<(u64, usize)> = self
             .binary
@@ -668,6 +694,29 @@ pub fn census_concat_site(site: usize, lhs: &Zval, rhs: &Zval) {
 pub static PROP_SET_IC_PLAIN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 pub static PROP_SET_IC_TYPED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 pub static PROP_SET_MISS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+/// S-177 census «IC miss per causa» (wp177-harness/s177-criterio-census-miss.md
+/// p.2): STATO della cella/oggetto al miss dell'IC di `prop_set_entry` (PSM_*,
+/// una per miss) ed ESITO della risoluzione lenta (PSR_*, non esclusivi).
+/// Stessa disciplina read-and-reset dei contatori S-176.
+pub static PSM_IC_EMPTY: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+pub static PSM_IC_SCOPE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+pub static PSM_IC_CLASS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+pub static PSM_OBJ_LAZY: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+pub static PSM_OBJ_ENUM: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+pub static PSM_SLOT_ABSENT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+pub static PSM_REF_TYPED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+pub static PSM_OTHER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+pub static PSM_NONOBJ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+pub static PSM_INIT_PROPS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+pub static PSR_PLAIN_FAST: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+pub static PSR_NP_FILL_UNTYPED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+pub static PSR_NP_FILL_TYPED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+pub static PSR_NP_NOFILL: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+pub static PSR_DYNAMIC: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+pub static PSR_PRIVATE_MANGLED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+pub static PSR_READONLY: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+pub static PSR_HOOK_MAGIC: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+pub static PSR_DENIED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 #[inline(always)]
 pub fn census_prop_set(counter: &std::sync::atomic::AtomicU64) {
     counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);

@@ -232,6 +232,14 @@ impl PropIc {
         self.0.set((epoch, class_id + 1, scope_key, slot));
     }
 
+    /// S-177 census «IC miss per causa» (op-census builds only): la cella
+    /// grezza `(epoch, class_id + 1, scope_key, slot|bits)` per il
+    /// classificatore del miss in `prop_set_entry`.
+    #[cfg(feature = "op-census")]
+    pub fn raw(&self) -> (u64, u32, u32, u32) {
+        self.0.get()
+    }
+
     /// Key form of a calling scope: `ClassId + 1`, `0` for no scope
     /// (global code / free functions).
     #[inline]

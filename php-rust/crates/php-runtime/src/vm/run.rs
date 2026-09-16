@@ -934,6 +934,9 @@ impl<'m> super::Vm<'m> {
         // The slot is the declared one (unconditional, mangled for a
         // private) regardless of the running scope.
         if self.frames[top].flags.get(FrameFlags::INIT_PROPS) {
+            // S-177 census «IC miss per causa»: thunk prop_init (prima dell'IC).
+            #[cfg(feature = "op-census")]
+            super::census::census_prop_set(&super::census::PSM_INIT_PROPS);
             let key = match object_class_id(&target) {
                 Some(ocid) => self.prop_decl_storage_key(ocid, name),
                 None => Cow::Borrowed(&name[..]),
@@ -1021,6 +1024,37 @@ impl<'m> super::Vm<'m> {
         // S-176 census «typed»: not served by the IC (fill/slow path).
         #[cfg(feature = "op-census")]
         super::census::census_prop_set(&super::census::PROP_SET_MISS);
+        // S-177 census «IC miss per causa» (wp177-harness/s177-criterio-census-miss.md
+        // p.2): STATO della cella e dell'oggetto al miss (una causa per miss, nell'ordine
+        // delle guardie dell'hit qui sopra).
+        #[cfg(feature = "op-census")]
+        {
+            use super::census as cz;
+            let reason = if let Zval::Object(o) = &target {
+                let (e, cid1, csk, raw) = ic.raw();
+                let b = o.borrow();
+                if cid1 == 0 || e != self.ic_epoch {
+                    &cz::PSM_IC_EMPTY
+                } else if csk != crate::bytecode::PropIc::scope_key(cur) {
+                    &cz::PSM_IC_SCOPE
+                } else if b.class_id + 1 != cid1 {
+                    &cz::PSM_IC_CLASS
+                } else if b.lazy.is_some() {
+                    &cz::PSM_OBJ_LAZY
+                } else if b.info.is_enum_case {
+                    &cz::PSM_OBJ_ENUM
+                } else {
+                    match b.props.get_slot(raw & crate::bytecode::PropIc::SLOT_MASK) {
+                        None => &cz::PSM_SLOT_ABSENT,
+                        Some(Zval::Ref(_)) => &cz::PSM_REF_TYPED,
+                        Some(_) => &cz::PSM_OTHER,
+                    }
+                }
+            } else {
+                &cz::PSM_NONOBJ
+            };
+            cz::census_prop_set(reason);
+        }
         // FAST PATH (WP-25): overwrite of a *present* slot on a
         // non-lazy, non-enum instance of a class whose declared
         // properties are all plain for writing (public, symmetric,
@@ -1045,6 +1079,8 @@ impl<'m> super::Vm<'m> {
                 (ok, b.class_id)
             };
             if fast {
+                #[cfg(feature = "op-census")]
+                super::census::census_prop_set(&super::census::PSR_PLAIN_FAST);
                 // IC fill from the fast path too (see PropGet):
                 // plain_set_props classes never reach the general
                 // resolve, so without this the cache stays cold.
@@ -1095,6 +1131,8 @@ impl<'m> super::Vm<'m> {
             let mut np_fillable = false;
             if !self.hook_guarded(oid, name) {
                 if let Some(func) = self.prop_hook(cid, name, true) {
+                    #[cfg(feature = "op-census")]
+                    super::census::census_prop_set(&super::census::PSR_HOOK_MAGIC);
                     if !DISCARD {
                         self.frames[top].stack.push(value.clone());
                     }
@@ -1103,6 +1141,8 @@ impl<'m> super::Vm<'m> {
                 }
                 // A virtual hooked property with no set hook is read-only.
                 if self.is_virtual_hooked(cid, name) {
+                    #[cfg(feature = "op-census")]
+                    super::census::census_prop_set(&super::census::PSR_HOOK_MAGIC);
                     return Err(PhpError::Error(format!(
                         "Property {}::${} is read-only",
                         String::from_utf8_lossy(&self.classes[cid].name),
@@ -1123,6 +1163,8 @@ impl<'m> super::Vm<'m> {
             if let Some((defc, midx, oid)) =
                 self.magic_applies_resolved(o, name, &access, MagicKind::Set, b"__set")
             {
+                #[cfg(feature = "op-census")]
+                super::census::census_prop_set(&super::census::PSR_HOOK_MAGIC);
                 // The expression yields the assigned value; __set's own
                 // return is discarded into a throwaway cell.
                 if !DISCARD {
@@ -1144,6 +1186,10 @@ impl<'m> super::Vm<'m> {
             key = match access {
                 PropAccess::Slot { key: k, slot } => {
                     slot_idx = slot;
+                    #[cfg(feature = "op-census")]
+                    if k != &name[..] {
+                        super::census::census_prop_set(&super::census::PSR_PRIVATE_MANGLED);
+                    }
                     // IC fill: only from a plain_set_props class
                     // (public, symmetric, untyped, non-readonly,
                     // hook-free in blocco — see PropIc).
@@ -1155,9 +1201,15 @@ impl<'m> super::Vm<'m> {
                     Cow::Borrowed(k)
                 }
                 PropAccess::Denied { decl, vis } => {
+                    #[cfg(feature = "op-census")]
+                    super::census::census_prop_set(&super::census::PSR_DENIED);
                     return Err(prop_access_error(&self.classes, decl, name, vis))
                 }
-                PropAccess::Dynamic => Cow::Borrowed(&name[..]),
+                PropAccess::Dynamic => {
+                    #[cfg(feature = "op-census")]
+                    super::census::census_prop_set(&super::census::PSR_DYNAMIC);
+                    Cow::Borrowed(&name[..])
+                }
             };
             // PHP 8.4 asymmetric visibility: a declared slot whose set
             // visibility excludes this scope cannot be assigned (the
@@ -1178,6 +1230,8 @@ impl<'m> super::Vm<'m> {
             };
             if declared_slot {
                 if let Some(decl) = ro_decl {
+                    #[cfg(feature = "op-census")]
+                    super::census::census_prop_set(&super::census::PSR_READONLY);
                     if o.borrow().readonly_clone_writable(&key) {
                         // Permitted re-initialisation during `__clone` (8.3).
                         let mut ob = o.borrow_mut();
@@ -1203,6 +1257,8 @@ impl<'m> super::Vm<'m> {
             // strutturalmente ASSENTE — con un `__set` il typed-unset DEVE
             // dispatchare il magic: l'assenza è ciò che rende il salto del
             // magic-check un fatto di classe e non di istanza.
+            #[cfg(feature = "op-census")]
+            let mut np_filled = false;
             if np_fillable && declared_slot && ro_decl.is_none() && key.as_ref() == &name[..] {
                 if let Some(i) = slot_idx {
                     if resolve_method_runtime(&self.classes, ocid, b"__set").is_none() {
@@ -1213,9 +1269,24 @@ impl<'m> super::Vm<'m> {
                             } else {
                                 0
                             };
+                        #[cfg(feature = "op-census")]
+                        {
+                            np_filled = true;
+                            super::census::census_prop_set(if bits & crate::bytecode::PropIc::TY != 0 {
+                                &super::census::PSR_NP_FILL_TYPED
+                            } else {
+                                &super::census::PSR_NP_FILL_UNTYPED
+                            });
+                        }
                         ic.fill(ocid as u32, crate::bytecode::PropIc::scope_key(cur), i | bits, self.ic_epoch);
                     }
                 }
+            }
+            // S-177 census: slot dichiarato con key == name che NON riempie l'IC
+            // (hook guardato, `__set` presente, readonly): resta miss per sempre.
+            #[cfg(feature = "op-census")]
+            if declared_slot && key.as_ref() == &name[..] && !np_filled {
+                super::census::census_prop_set(&super::census::PSR_NP_NOFILL);
             }
             // PHP 8.2: creating an *undeclared* property on a class that
             // does not allow dynamic properties is deprecated (the
