@@ -1,8 +1,0 @@
-2026-09-17 01:31:44 attesa /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp177-harness/ab-out/s177-leva.done con rc=0
-2026-09-17 01:38:25 quiescenza tentativo 1 FAIL: QUIESCENZA-FAIL: loadavg1 6.40 >= 6
-2026-09-17 01:39:05 quiescenza tentativo 2 FAIL: QUIESCENZA-FAIL: loadavg1 8.12 >= 6
-2026-09-17 01:39:45 quiescenza tentativo 3 FAIL: QUIESCENZA-FAIL: loadavg1 6.52 >= 6
-2026-09-17 01:40:26 quiescenza tentativo 4 FAIL: QUIESCENZA-FAIL: loadavg1 6.42 >= 6
-2026-09-17 01:41:06 finestra aperta (quiescenza t5, Data 13G, C=62d1a2e3) — s177-ab-cm1.sh cm1 R=5
-2026-09-17 01:48:42 s177-ab-cm1.sh rc=4
-2026-09-17 01:48:42 fine rc=0 (A/B eseguito in finestra pulita; criterio rc=4)
