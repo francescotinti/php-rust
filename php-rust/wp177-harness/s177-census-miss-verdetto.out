@@ -1,0 +1,58 @@
+== s177 CENSUS «IC miss di prop_set per CAUSA» WP media + ORM — CONTEGGI, mai tempo (criterio s177-criterio-census-miss.md) 2026-09-17 02:01:51 ==
+census_phpr=d5495bd0e9bb7b8d (build op-census dal ramo s177-census c639748a154b: probe, MAI parità)
+orm run_rc=2 parità per NOME vs baseline16: == baseline16 · summary: Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, Skipped: 59, Incomplete: 2.
+media run_rc=0 parità (nomi falliti): OK(vuoto) · summary: Tests: 762, Assertions: 1912, Skipped: 52.
+--- sentinelle (non-gate) ---
+orm pre=BUSY
+orm post=CLEAN
+media pre=CLEAN
+media post=CLEAN
+--- ORM ---
+processi(dump)=1 ops_totali=544121232
+prop_set entry (typed): totale=8988882 miss=4979840 (55.4%) ic_hit_plain=3277200 (36.5%) ic_hit_typed=731842 (8.1%)
+prop_set MISS per CAUSA (stato al miss, % del miss 4979840; Σpsm=4979840):
+       4748327  psm_ic_empty  (95.4%)
+        230633  psm_ic_class  (4.6%)
+          9219  psm_init_props  (0.2%)
+           880  psm_ref_typed  (0.0%)
+             0  psm_ic_scope  (0.0%)
+             0  psm_obj_lazy  (0.0%)
+             0  psm_obj_enum  (0.0%)
+             0  psm_slot_absent  (0.0%)
+             0  psm_other  (0.0%)
+             0  psm_nonobj  (0.0%)
+prop_set MISS esito della risoluzione (psr_*, non esclusivi, % del miss 4979840):
+       4233429  psr_private_mangled  (85.0%)
+       2950438  psr_readonly  (59.2%)
+        512105  psr_np_nofill  (10.3%)
+        188539  psr_np_fill_typed  (3.8%)
+         40242  psr_plain_fast  (0.8%)
+          5497  psr_np_fill_untyped  (0.1%)
+            20  psr_dynamic  (0.0%)
+             8  psr_hook_magic  (0.0%)
+             0  psr_denied  (0.0%)
+--- media ---
+processi(dump)=16 ops_totali=648099431
+prop_set entry (typed): totale=5534568 ic_hit_plain=4559010 (82.4%) miss=975231 (17.6%) ic_hit_typed=327 (0.0%)
+prop_set MISS per CAUSA (stato al miss, % del miss 975231; Σpsm=975231):
+        951005  psm_ic_empty  (97.5%)
+         25050  psm_init_props  (2.6%)
+         23074  psm_ic_class  (2.4%)
+          1152  psm_slot_absent  (0.1%)
+             0  psm_ic_scope  (0.0%)
+             0  psm_obj_lazy  (0.0%)
+             0  psm_obj_enum  (0.0%)
+             0  psm_ref_typed  (0.0%)
+             0  psm_other  (0.0%)
+             0  psm_nonobj  (0.0%)
+prop_set MISS esito della risoluzione (psr_*, non esclusivi, % del miss 975231):
+        609848  psr_private_mangled  (62.5%)
+        227325  psr_np_nofill  (23.3%)
+         87210  psr_plain_fast  (8.9%)
+         28248  psr_dynamic  (2.9%)
+         22578  psr_np_fill_untyped  (2.3%)
+            16  psr_np_fill_typed  (0.0%)
+             6  psr_hook_magic  (0.0%)
+             0  psr_readonly  (0.0%)
+             0  psr_denied  (0.0%)
+ESITO rc=0 (0 = parità entrambe le gambe; 1 = parità diverge: i conteggi restano a verbale) fine 2026-09-17 02:01:51
