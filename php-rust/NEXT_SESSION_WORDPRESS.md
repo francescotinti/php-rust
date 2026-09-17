@@ -2,7 +2,7 @@
 ⏱ **FONDAMENTALI**: **S-177 = leva composta prop-dq «L-CM1» costruita a parità e misurata in finestra CONTAMINATA (rerun
 cm1b in coda) + census IC miss ORM per CAUSA (private/readonly) + CI potata.** Pin INVARIATO phpr **5de14d6856d760a8** +
 server **9b9179d4dd3d95bd**; **tree main (d3d3fbc5+) = pin + flag gc-idle (S-176) + L-CM1** (`Vm::ic_epoch` cached: PropIc/
-MethodIc get+fill con epoch esplicita, 30 siti; Add-first in `long_arith_i64`); braccio C 62d1a2e3 a PARITÀ (fx-sw2-gc
+MethodIc get+fill con epoch esplicita, 30 siti; Add-first in `long_arith_i64`; semantica identica SOTTO A-DS15, altrimenti più restrittiva); braccio C 62d1a2e3 a PARITÀ (fx-sw2-gc
 invarianza, fx-sw1/sl1/sl2/sl3 byte-id). Fetta 4 typed-skip ESCLUSA (classe plain: P4 prende sempre; census micro typed 0).
 Disasm del pin (wp177-harness/disasm-pin-run_loop-stats.txt): 6 `blr` tutti nel prologo ⇒ «TLV a ogni hit» REFUTATA; ogni hit
 IC = reload TLV dallo stack + load epoch + cmp (30 siti). **A/B cm1 rc=4 SENZA VALORE**: finestra contaminata (A stesso binario
@@ -29,16 +29,18 @@ congelati) · batteria 1748/0/2 (S-175; tree NON collaudato: CI a chiusura) · C
    op-census) · **CI_FEED**: esito del job 710d823c (tree + flag) e dei successivi (d3d3fbc5 = + L-CM1) · **LEGGERE
    s177-cm1b-verdetto.out / ab-out/cm1b.rc**: se rc=0 ⇒ p.1a; se 4 ⇒ `git revert` di d3d3fbc5 (L-CM1 al byte), tree = flag
    solo, p.1b; se 8/assente ⇒ rilanciare s177-lancio-cm1b.sh (token: il copione esige `s177` nel lock — rilanciare col
-   lock s177 PRIMA di crearne uno s178, o copiare con token s178) · Serena attiva PRIMA del Rust.
+   lock s177 PRIMA di crearne uno s178, o copiare con token s178) · correggere il commento del lanciatore cm1b (cita `s177-criterio-cm1b.md` inesistente: è s177-criterio-cm1.md) a run finito · Serena attiva PRIMA del Rust.
 1a. (cm1b rc=0) **PROMOZIONE del tree** con `PROMO_SP=/private/tmp/phpr-promo-s178 s177-promozione.sh 62d1a2e3b47a0d5a`
    (registro braccio: `scripts/pin-phpr.sh --braccio s177-cm1 wp177-harness/ab-out/s177-leva/phpr-C d3d3fbc5`) → coppia t21
    (`PIN_ATTESO/SRV_ATTESO` dal pin nuovo in s177-pair.sh: s177-lancio-pair.sh → s177-lancio-orm.sh, canone ORM E3/E4).
-1b. (cm1b rc=3/4) **LEVA S-178 = fill dell'IC per gli SLOT PRIVATI nello scope dichiarante** (perimetro: 4,2M scritture ORM =
-   47 % di tutte le scritture prop; media 62 % dei miss): oggi `prop_set_entry` riempie NP solo con `key == name`; la cella
+1b. (cm1b rc=3/4) **LEVA S-178 = fill dell'IC per gli SLOT PRIVATI nello scope dichiarante** (perimetro = TETTO 4,2M scritture
+   ORM: private∩readonly ≥44 % del miss, PHPUnit 13 `readonly class` ×523 domina ⇒ PRIMA contatori private∩readonly /
+   private∩¬readonly + top-10 classi (copia di s177-census-miss.sh); se PHPUnit domina, dichiararlo nel giudice ORM): oggi `prop_set_entry` riempie NP solo con `key == name`; la cella
    è già (classe, scope)-keyed (WP-35) e `write_property_at(…, Some(slot))` usa il nome solo nel fallback a indice stantio
    (impossibile a class_id combaciante) ⇒ fill con la chiave mangled ammesso nello scope dichiarante, guardie per-oggetto
    dell'hit INVARIATE; readonly (59 %) SOLO con bit RO che conserva `mark_readonly_init`/`readonly_write_error` (o fuori
-   perimetro, dichiarato). Giudice: nuovo micro `prop-priv` (`$this->x = $this->x + 1` in metodo, classe con `private`),
+   perimetro, dichiarato); VINCOLI (rilievo 6): fill solo con obj_class == scope (un figlio con layout spostato ha
+   `slot: None`), fallback di `write_property_at` per KEY mangled (oggi scrive `name`), mutante «slot stantio su figlio». Giudice: nuovo micro `prop-priv` (`$this->x = $this->x + 1` in metodo, classe con `private`),
    criterio PRIMA; guardie prop-dq/arith-dq a sola regressione; fixture bilaterale NUOVA (private/protected/readonly/
    scope figlio/Closure::bind/__set/hook) + mutante «fill privato in scope sbagliato» che DEVE mordere. Coppia ORM attesa
    direzione ≤0 con quota 47 % delle scritture (SOTTO-risoluzione dichiarata finché non censita nel tempo).
