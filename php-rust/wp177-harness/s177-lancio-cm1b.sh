@@ -1,5 +1,5 @@
 #!/bin/bash
-# s177-lancio-cm1b.sh — RERUN (cm1 contaminata) con EMENDA E2 (calma CPU totale) — lanciatore dell'A/B della leva COMPOSTA «flag gc-idle + L-CM1» (criterio s177-criterio-cm1b.md
+# s177-lancio-cm1b.sh — RERUN (cm1 contaminata) con EMENDA E2 (calma CPU totale) — lanciatore dell'A/B della leva COMPOSTA «flag gc-idle + L-CM1» (criterio s177-criterio-cm1.md
 # p.7): COPIA DICHIARATA di ../wp176-harness/s176-lancio-flag.sh (manifest s177-lancio-cm1b-copia.diff) coi SOLI
 # adattamenti: attende ab-out/s177-leva.done con `rc=0` (contenuto), bracci A=pin s175 Z=wp174 ab-out/phpr-C
 # B=wp176 ab-out/s176-flag/phpr-B (6c7bbb55) C=ab-out/s177-leva/phpr-C (hash letto dal binario), token s177, nomi

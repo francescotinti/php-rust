@@ -7,15 +7,14 @@ invarianza, fx-sw1/sl1/sl2/sl3 byte-id). Fetta 4 typed-skip ESCLUSA (classe plai
 Disasm del pin (wp177-harness/disasm-pin-run_loop-stats.txt): 6 `blr` tutti nel prologo ⇒ «TLV a ogni hit» REFUTATA; ogni hit
 IC = reload TLV dallo stack + load epoch + cmp (30 siti). **A/B cm1 rc=4 SENZA VALORE**: finestra contaminata (A stesso binario
 54,67 vs PREV 36,20, oracle 22,60 vs 14,07, +60 % uniforme, Chrome ×4 a 100 % col gate s129 PASS) ⇒ emende E1 (banda
-same-binary |A−PREV| > 4 ⇒ rc=8) ed E2 (calma CPU totale <150 % ×4) in s177-ab-cm1b.sh / s177-lancio-cm1b.sh; **rerun cm1b
-LANCIATO detached (attende la calma, tetto 90 min): esito in wp177-harness/s177-cm1b-verdetto.out + ab-out/cm1b.rc,
-ab-out/lancio-cm1b.done** (rc=0 promozione · 3 direzione · 4 KILL L-CM1 (revert al byte di d3d3fbc5, flag resta) · 5 regr. ·
-8 nessun verdetto). **Census miss per causa** (ramo `s177-census` c639748a; rc=0 parità): ORM 4,98M miss = **ic_empty 95,4 %**,
+same-binary |A−PREV| > 4 ⇒ rc=8) ed E2 (calma CPU totale <150 % ×4) in s177-ab-cm1b.sh / s177-lancio-cm1b.sh; **rerun cm1b chiuso rc=8: calma CPU mai raggiunta in 90 min (CPU utente 430-1000 %) ⇒ L-CM1 SENZA verdetto, A/B da
+rifare in S-178** (esiti attesi: rc=0 promozione · 3 direzione · 4 KILL (revert al byte di d3d3fbc5, flag resta) · 5 regr. · 8 nessun verdetto). **Census miss per causa** (ramo `s177-census` c639748a; rc=0 parità): ORM 4,98M miss = **ic_empty 95,4 %**,
 ic_class 4,6 %, lazy 0; esito **private_mangled 85,0 % · readonly 59,2 %** · np_nofill 10,3 % · np_fill_typed 3,8 % ·
 plain_fast 0,8 %; media 975k = ic_empty 97,5 %, private_mangled 62,5 %, np_nofill 23,3 %, plain_fast 8,9 %, dynamic 2,9 %.
 CI: 40 job = replay S-174 col dente storico (batteria-FAIL ATTESI), coda potata a HEAD (queue-pruned-s177); il runner
-attende la rimozione del lock ⇒ batteria+corpus sul tree girano a chiusura (leggere CI_FEED in apertura). Leve: 1 · A/B: 1
-(+1 rerun in coda) · incidenti: **1** (gate cieco ai pesi utente) · revisione S-177 (lente SEMANTICA): wp177-harness/revisione-s177.md.
+attende la rimozione del lock ⇒ il job 710d823c (tree + flag) gira a chiusura; il tree con L-CM1 (d3d3fbc5) NON è in coda
+(gli commit S-177 non risultano accodati): batteria+corpus del tree = promozione o `cargo test` su target separata. Leve: 1 · A/B: 1
+(+ rerun cm1b rc=8 senza finestra) · incidenti: **1** (gate cieco ai pesi utente) · revisione S-177 (lente SEMANTICA): wp177-harness/revisione-s177.md.
 
 ## Scoreboard (pin s175 INVARIATO; micro NON rimisurati, riferimenti S-176)
 **arith 2,4 = · prop 2,6 = · calls 4,6 = · str 4,1 = · arr 3,0 = · re 2,5 =** · giudici: prop-dq pin 36,20 = 2,57× (tree con
@@ -26,10 +25,11 @@ congelati) · batteria 1748/0/2 (S-175; tree NON collaudato: CI a chiusura) · C
 0. **PRE-FLIGHT**: Data ≥10G E `vm.swapusage` (16-17G in S-177: Chrome/Antigravity) · **CPU utente**: `ps -Ao %cpu` somma
    <150 % prima di OGNI misura (E2: Chrome ×4 a 100 % ha contaminato cm1) · MySQL wp8 con l'elenco · lock col TOKEN `s178` ·
    pin s175 per hash · tree pulito (`git diff --quiet -- crates/`), ramo `main` (il ramo `s177-census` porta SOLO contatori
-   op-census) · **CI_FEED**: esito del job 710d823c (tree + flag) e dei successivi (d3d3fbc5 = + L-CM1) · **LEGGERE
-   s177-cm1b-verdetto.out / ab-out/cm1b.rc**: se rc=0 ⇒ p.1a; se 4 ⇒ `git revert` di d3d3fbc5 (L-CM1 al byte), tree = flag
-   solo, p.1b; se 8/assente ⇒ rilanciare s177-lancio-cm1b.sh (token: il copione esige `s177` nel lock — rilanciare col
-   lock s177 PRIMA di crearne uno s178, o copiare con token s178) · correggere il commento del lanciatore cm1b (cita `s177-criterio-cm1b.md` inesistente: è s177-criterio-cm1.md) a run finito · Serena attiva PRIMA del Rust.
+   op-census) · **CI_FEED**: esito del job 710d823c (tree + flag) e dei successivi (d3d3fbc5 = + L-CM1) · **A/B L-CM1 da rifare**: copie a token s178 di
+   s177-lancio-cm1b.sh + s177-ab-cm1b.sh (sed s177→s178 nei soli token/nomi, manifest) con E1/E2, A CALMA VERIFICATA (E2
+   passa solo con CPU totale <150 %: se Chrome resta a 4×100 %, la sessione lo dichiara e non misura); bracci INVARIATI
+   (A pin, Z b6c4b587, B 6c7bbb55, C ab-out/s177-leva/phpr-C 62d1a2e3); esiti: rc=0 ⇒ p.1a; rc=4 ⇒ `git revert` di
+   d3d3fbc5 (L-CM1 al byte), tree = flag solo, p.1b; rc=3 ⇒ p.1b · correggere il commento del lanciatore cm1b (cita `s177-criterio-cm1b.md` inesistente: è s177-criterio-cm1.md) a run finito · Serena attiva PRIMA del Rust.
 1a. (cm1b rc=0) **PROMOZIONE del tree** con `PROMO_SP=/private/tmp/phpr-promo-s178 s177-promozione.sh 62d1a2e3b47a0d5a`
    (registro braccio: `scripts/pin-phpr.sh --braccio s177-cm1 wp177-harness/ab-out/s177-leva/phpr-C d3d3fbc5`) → coppia t21
    (`PIN_ATTESO/SRV_ATTESO` dal pin nuovo in s177-pair.sh: s177-lancio-pair.sh → s177-lancio-orm.sh, canone ORM E3/E4).
