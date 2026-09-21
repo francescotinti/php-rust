@@ -1499,7 +1499,7 @@ impl<'m> Vm<'m> {
             return Ok(Some((keys, value)));
         }
         let scope = self.frames[top].class;
-        let Some((cid1, bits)) = ic.get(PropIc::scope_key(scope), self.ic_epoch) else {
+        let Some((cid1, bits)) = ic.get(PropIc::scope_key(scope)) else {
             return Ok(Some((keys, value)));
         };
         if bits & PropIc::NP == 0 {
@@ -1645,7 +1645,7 @@ impl<'m> Vm<'m> {
             return Ok(RmwFastOut::Miss(keys));
         }
         let scope = self.frames[top].class;
-        let Some((cid1, bits)) = ic.get(PropIc::scope_key(scope), self.ic_epoch) else {
+        let Some((cid1, bits)) = ic.get(PropIc::scope_key(scope)) else {
             return Ok(RmwFastOut::Miss(keys));
         };
         if bits & PropIc::NP == 0 {
@@ -1832,7 +1832,7 @@ impl<'m> Vm<'m> {
             return;
         }
         debug_assert_eq!(si & !PropIc::SLOT_MASK, 0);
-        ic.fill(cid as u32, PropIc::scope_key(scope), si | PropIc::NP, self.ic_epoch);
+        ic.fill(cid as u32, PropIc::scope_key(scope), si | PropIc::NP);
     }
 
     /// [`Self::field_set`] for a COMPOUND write (`+=`, `++`): the container
