@@ -296,4 +296,4 @@ project's golden rule: **the oracle is always right.**
 
 ## 📄 License
 
-MIT.
+[PHP License 3.01](LICENSE).

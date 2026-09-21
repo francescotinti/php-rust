@@ -302,4 +302,4 @@ assente**). La regola d'oro del progetto: **l'oracolo ha sempre ragione.**
 
 ## 📄 Licenza
 
-MIT.
+[PHP License 3.01](LICENSE).
