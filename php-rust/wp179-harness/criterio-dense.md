@@ -1,0 +1,9 @@
+# S-179 — criterio denso, PRIMA dei nuovi run
+1. Serie 1/256–1/1024 respinta: dopo due repliche, qualunque terza lascia mediane distanti almeno 5,9813%, sopra 5%; interrompere le sole repliche diventate inutili, preservare raw e motivo. Non cambiare retroattivamente soglie.
+2. Nuova serie diagnostica dello STESSO binario e workload: R=3 off/time16/off/time64, seed 20011/30011/40009; nessuna nuova build o produzione. Densità 1/16 e 1/64 riducono la varianza rispetto ai campioni radi; non garantiscono assenza di bias locale.
+3. Invariati E2 <150% ×4 a 30s, background <150% durante, Data≥10GiB, watchdog, lock proprio, cache fissata e parità per nome. Ogni corsa/ritentativo ha nome nuovo; massimo 10 tentativi per corsa, invalidi esclusi.
+4. Stessa regione Instant, floor per processo, metadati/aggregazione fuori, guardie aggiuntive SOLO count; somma HT inclusiva dalla suite, con possibili rientri annidati, non tempo CPU esclusivo né speedup.
+5. Giudice di perturbazione: mediane user CPU time16/off e time64/off entro ±5%; mediana off nuova contro controllo puro stessa toolchain entro ±5%, off nuova/vecchia entro ±5%, deriva off primo/ultimo entro ±5%.
+6. Giudice di stabilità: mediane delle stime private non-RO tra 1/16 e 1/64 entro 5%; nessun valore validato prima di R=3 completo. Classi <200 campioni complessivi dichiarate sottocampionate; intervalli riportati sono min/max osservati, non confidence interval.
+7. Quota ammissibile rimane census separato validato: il timer non consente costo del solo sottoinsieme ammissibile. Nessuna conversione dei conteggi in speedup, nessuna ripartizione CPU dal wall.
+8. Se fallisce quiete/perturbazione/stabilità, consegnare limite concreto e dati count; nessuna ulteriore modifica di soglia per ottenere un risultato positivo. Revisore adversariale finale indipendente.

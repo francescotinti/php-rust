@@ -1,0 +1,131 @@
+2,12c2,11
+< # s177-promozione.sh <cand_hash16> — gate di promozione del TREE INTERO «flag gc-idle (S-176) + L-CM1 (S-177)»
+< # (criterio wp177-harness/s177-criterio-cm1.md p.5, esito rc=0 dell'A/B s177-cm1-verdetto.out). COPIA DICHIARATA di
+< # ../wp174-harness/s174-promozione.sh (manifest s177-promozione-copia.diff) coi SOLI adattamenti: (1) tag s177
+< # (harness wp177: verdetto s177-promo-verdetto.out, promo-out; fixture ereditate INVARIATE in wp172-harness e
+< # wp174-harness/fixtures); (2) stash di riferimento = phpr-s175 (5de14d6856d760a8) per i gate «pin==stash»; candidato =
+< # braccio C dell'A/B (ab-out/s177-leva/phpr-C, hash argomento; registro BRACCIO via pin-phpr.sh --braccio s177-cm1
+< # PRIMA di questo copione); (3) PRE: nessun mutante (criterio p.6) — al suo posto l'A/B a rc=0 (ESITO rc=0 in
+< # s177-cm1-verdetto.out); (4) conferma POST-PIN sul GIUDICE della leva = prop-dq (pin s177 vs stash s175, attesa segno +,
+< # D nell'intorno di D_comp dell'A/B; rumore > attesa/2 ⇒ SOLO SEGNO); (5) pin-phpr.sh s177 / pin-server.sh s177 /
+< # micro-pin-s177.out; (6) corpus: ZERO flip attesi (L-CM1 non cambia alcun esito: stesso epoch, stesso checked_add).
+< # Tutto il resto INVARIATO (testo S-174/175 conservato sotto).
+---
+> # s180-promozione.sh — gate di RI-PIN del tree «pin s175 + flag gc-idle (S-176)» sotto la ricetta EMENDATA
+> # (toolchain 1.98.1, commit 4a6c78cf; L-CM1 revertata al byte in b3e48919). COPIA DICHIARATA di
+> # ../wp177-harness/s177-promozione.sh (manifest s180-promozione-copia.diff) coi SOLI adattamenti: (1) tag s180
+> # (harness wp180: verdetto s180-promo-verdetto.out, promo-out); (2) NESSUN candidato/braccio: il pin nasce dalla build
+> # ricetta di HEAD sulla target canonica (modalità pin di pin-phpr.sh), quindi via il controllo di identità col braccio C
+> # e la precondizione «A/B rc=0» (sostituita dalla DICHIARAZIONE: ri-pin per cambio toolchain, nessuna leva); (3) guardia
+> # disco Data (≥3G) prima di ogni gamba pesante (Data 12G all'apertura, swap 11,4G); (4) conferma post-pin prop-dq = pin
+> # s180 (1.98.1) vs stash s175 (1.96.0): stesso sorgente, toolchain diversa ⇒ SOLA DIREZIONE, lettura, nessuna attesa;
+> # (5) corpus: ZERO flip attesi (stesso sorgente del pin s175 + flag spento di default); (6) pin-server.sh s180.
+> # Tutto il resto INVARIATO (testo S-177 conservato sotto).
+18c17
+< H7="$SRC/wp177-harness"
+---
+> H8="$SRC/wp180-harness"
+26,29c25,27
+< OUT="$H7/promo-out"; mkdir -p "$OUT"
+< VERD="$H7/s177-promo-verdetto.out"
+< CAND_EXP="${1:?uso: s177-promozione.sh <cand_hash16>}"
+< CAND="$H7/ab-out/s177-leva/phpr-C"
+---
+> OUT="$H8/promo-out"; mkdir -p "$OUT"
+> VERD="$H8/s180-promo-verdetto.out"
+> disk_guard(){ local g; g=$(df -g /System/Volumes/Data | awk 'NR==2{print $4}'); [ "${g:-0}" -ge 3 ] || stop "guardia disco: Data ${g}G < 3G prima di $1 — STOP"; note "guardia disco: Data ${g}G prima di $1"; }
+38c36
+<          "$H/fx-sl1.php" "$H/fx-sl1-div.php" "$H/fx-sl2.php" "$H/fx-sl2-div.php" "$H/fx-sl3.php" "$H/fx-sl3-div.php" "$H/prop-dq.php" "$H4/fixtures/fx-sw1.php" "$H7/s177-cm1-verdetto.out" \
+---
+>          "$H/fx-sl1.php" "$H/fx-sl1-div.php" "$H/fx-sl2.php" "$H/fx-sl2-div.php" "$H/fx-sl3.php" "$H/fx-sl3-div.php" "$H/prop-dq.php" "$H4/fixtures/fx-sw1.php" \
+43c41
+<          "$REF" "$CAND"; do
+---
+>          "$REF"; do
+47,48c45
+< [ "$(shasum -a 256 "$CAND" | cut -c1-16)" = "$CAND_EXP" ] || stop "PRE: candidato phpr-C hash != $CAND_EXP — STOP"
+< grep -q "^ESITO rc=0" "$H7/s177-cm1-verdetto.out" || stop "PRE: A/B composto non a rc=0 (s177-cm1-verdetto.out) — STOP"
+---
+> note "PRE: ri-pin DICHIARATO (S-180): stesso sorgente del pin s175 + flag gc-idle, toolchain 1.96.0→1.98.1 (rustc $(rustc --version | cut -d' ' -f2)), L-CM1 revertata; nessuna leva, nessun candidato"
+53a51
+> disk_guard build
+58,88c56,57
+< ident_contenuto(){ # $1=fileA $2=fileB — 0 se cluster tutti nominati, cap 160 B
+<   local le; le=$(otool -l "$1" | awk '/cmd LC_SEGMENT_64/{seg=""} /segname __LINKEDIT/{seg=1} seg && /fileoff/{print $2; exit}')
+<   python3 - "$1" "$2" "${le:-0}" <<'PY'
+< import sys
+< a=open(sys.argv[1],"rb").read(); b=open(sys.argv[2],"rb").read(); le=int(sys.argv[3])
+< if len(a)!=len(b): print("dimensioni diverse"); sys.exit(1)
+< d=[i for i,(x,y) in enumerate(zip(a,b)) if x!=y]
+< if len(d)>160: print(f"{len(d)} byte > cap 160"); sys.exit(1)
+< cl=[]
+< for i in d:
+<     if cl and i-cl[-1][1]<=64: cl[-1][1]=i
+<     else: cl.append([i,i])
+< bad=[]
+< for s,e in cl:
+<     ctx=a[max(0,s-64):e+64]+b[max(0,s-64):e+64]
+<     if s<4096 and e-s+1<=16: k="LC_UUID"
+<     elif le and s>=le: k="firma"
+<     elif b"Jan  1 1970" in ctx or b"00:00:00" in ctx or b"built on" in ctx: k="banner"
+<     else: k="NON-CLASSIFICATO"; bad.append((s,e))
+<     print(f"  cluster 0x{s:x}-0x{e:x}: {k}")
+< print(f"  tot {len(d)} B in {len(cl)} cluster")
+< sys.exit(1 if bad else 0)
+< PY
+< }
+< if [ "$HB" = "$CAND_EXP" ]; then
+<   note "promozione: build ricetta riproduce il candidato $HB AL BYTE"
+< else
+<   ident_contenuto "$BIN" "$CAND" > "$OUT/ident-contenuto.txt" 2>&1     || { cat "$OUT/ident-contenuto.txt" >> "$VERD"; stop "build $HB DIVERGE dal candidato OLTRE il meccanismo nominato — STOP"; }
+<   cat "$OUT/ident-contenuto.txt" >> "$VERD"
+<   note "promozione: identità candidato a CONTENUTO (cluster LC_UUID/firma/banner) — pin effettivo = $HB (dichiarato)"
+< fi
+---
+> note "promozione: build ricetta di HEAD $(git rev-parse --short HEAD) = candidato pin s180 $HB (toolchain 1.98.1)"
+> disk_guard batteria
+120c89
+< "$SRC/scripts/pin-phpr.sh" s177 > "$OUT/pin.log" 2>&1
+---
+> "$SRC/scripts/pin-phpr.sh" s180 > "$OUT/pin.log" 2>&1
+124a94
+> disk_guard corpus
+128c98
+< note "promozione corpus-gate: rc=0 — nomi==congelato (1412), CONTENUTO==golden, off-on zero (ZERO flip come atteso, flag gc-idle + L-CM1)"
+---
+> note "promozione corpus-gate: rc=0 — nomi==congelato (1412), CONTENUTO==golden, off-on zero (ZERO flip come atteso: stesso sorgente s175 + flag spento, toolchain 1.98.1)"
+187a158,169
+> # E2 (emenda S-177, lezione: gate s129 cieco ai pesi utente): calma CPU TOTALE <150 % per 4 campioni a 30 s
+> # PRIMA della quiescenza; fino a 30 tentativi, poi STOP senza micro.
+> cpu_tot(){ ps -Ao %cpu= | awk '{s+=$1} END{printf "%.0f", s}'; }
+> E2OK=1
+> for t in $(seq 1 30); do
+>   ok=1; smp=""
+>   for k in 1 2 3 4; do c=$(cpu_tot); smp="$smp $c"; [ "$c" -lt 150 ] || ok=0; sleep 30; done
+>   if [ "$ok" = 1 ]; then E2OK=0; note "promozione E2 calma CPU: PASS al tentativo $t (campioni:$smp %)"; break; fi
+>   note "promozione E2 calma CPU: tentativo $t FALLITO (campioni:$smp %)"
+> done
+> [ "$E2OK" = 0 ] || stop "E2 calma CPU MAI raggiunta in 30 tentativi — STOP prima delle misure"
+> 
+195,196c177,178
+< PHPR="$BIN" R=5 "$SRC/wp97-harness/micro/run-micro.sh" > "$OUT/micro-pin-s177.out" 2>&1
+< note "promozione micro pin s177: $(grep -E '^rapporto_' "$OUT/micro-pin-s177.out" | tr '\n' ' ')"
+---
+> PHPR="$BIN" R=5 "$SRC/wp97-harness/micro/run-micro.sh" > "$OUT/micro-pin-s180.out" 2>&1
+> note "promozione micro pin s180: $(grep -E '^rapporto_' "$OUT/micro-pin-s180.out" | tr '\n' ' ')"
+198c180
+< # ---- conferma POST-PIN prop-dq (divergenza (4)): R=5 pin s177 vs stash s175 ----
+---
+> # ---- conferma POST-PIN prop-dq: R=5 pin s180 (1.98.1) vs stash s175 (1.96.0) — stesso sorgente: SOLA DIREZIONE ----
+223c205
+< note "conferma post-pin prop-dq (pin s177 vs stash s175): $CONF (attesa: segno +, D nell'intorno di D_comp dell'A/B; rumore > attesa/2 ⇒ SOLO SEGNO)"
+---
+> note "conferma post-pin prop-dq (pin s180 vs stash s175, toolchain diversa, stesso sorgente): $CONF (LETTURA a sola direzione: nessuna attesa, nessuna cifra attribuibile)"
+253c235
+< "$SRC/scripts/pin-server.sh" s177 > "$OUT/pin-server.log" 2>&1
+---
+> "$SRC/scripts/pin-server.sh" s180 > "$OUT/pin-server.log" 2>&1
+259c241
+< note "PROMOZIONE COMPLETA rc=0 (da promo-out/rcb): pin s177 = $H2"
+---
+> note "PROMOZIONE COMPLETA rc=0 (da promo-out/rcb): pin s180 = $H2"
