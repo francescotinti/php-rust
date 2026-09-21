@@ -1,6 +1,6 @@
 # NEXT_SESSION — phpr: OBIETTIVO PARITÀ (≥1×) con l'oracle; ≤3× = tappa (REGOLE §1)
 ⏱ **FONDAMENTALI**: **S-180 = ratifica delle sessioni diagnostiche S-178/S-179 (ChatGPT Astra 6: la leva «fill IC slot privati»
-CADE su misura di tempo, ≈1,1 % della suite ORM) + revert L-CM1 al byte + dente LOC sanato (dichiarato) + RI-PIN s180 sotto toolchain
+DECLASSATA a bassa priorità su misura di tempo, tetto inclusivo ≈1,1 % della suite ORM) + revert L-CM1 al byte + dente LOC sanato (dichiarato) + RI-PIN s180 sotto toolchain
 Rust 1.98.1 con TUTTI i gate rc=0 + coppia t21/ORM lanciata in catena.** **PIN NUOVO phpr `884399fc52277119` + server
 `045fe03356ee73e5`** (sorgente c2b572ef: pin s175 + gc-idle S-176 + toolchain 1.98.1; L-CM1 revertata b3e48919); tree == pin.
 Ratifiche: licenza **PHP-3.01** · `AGENTS.md` (mappa delle fonti, non stato) · `rust-toolchain.toml` 1.98.1 (da qui OGNI braccio è
@@ -63,4 +63,4 @@ NaN-boxing/fn-table/arena (⚖️) · BOLT/PGO · pin senza collaudo · rc da pi
 Pre-flight S-181: pin phpr **s180 884399fc52277119** + server **045fe03356ee73e5** (tree == pin) · toolchain 1.98.1 · **Data ≥10G +
 swap + E2 CPU totale <150 %** · MySQL wp8 con l'elenco · uploads sotto guardia · corpus 1412 · lock col TOKEN `s181` · CI feed ·
 lettura: REGOLE.md → QUI → wp180-harness/s180-promo-verdetto.out → s180-pair-verdetto-t21.out (+ ORM) → revisione-s180.md →
-s180-criterio-ripin.md → wp179-harness/REPORT-resume.md (perché il privato è caduto) → WP_SESSION_180 → gaps/GAP_TREND → PERF_MAP.
+s180-criterio-ripin.md → wp179-harness/REPORT-resume.md (perché il privato è declassato) → WP_SESSION_180 → gaps/GAP_TREND → PERF_MAP.
