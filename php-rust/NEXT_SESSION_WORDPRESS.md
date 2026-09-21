@@ -4,9 +4,10 @@ CADE su misura di tempo, ≈1,1 % della suite ORM) + revert L-CM1 al byte + dent
 Rust 1.98.1 con TUTTI i gate rc=0 + coppia t21/ORM lanciata in catena.** **PIN NUOVO phpr `884399fc52277119` + server
 `045fe03356ee73e5`** (sorgente c2b572ef: pin s175 + gc-idle S-176 + toolchain 1.98.1; L-CM1 revertata b3e48919); tree == pin.
 Ratifiche: licenza **PHP-3.01** · `AGENTS.md` (mappa delle fonti, non stato) · `rust-toolchain.toml` 1.98.1 (da qui OGNI braccio è
-same-toolchain col pin s180; i numeri ≤s175 restano attribuiti a 1.96.0). **Fill privato/readonly = CADUTO con meccanismo**
-(wp179-harness/REPORT-resume.md: 1,795M private¬RO = 36 % dei miss, 68 % ammissibili alle 7 guardie, ma cammino lento ≈0,42 s /
-37 s): NON riproporre senza una cifra di tempo nuova. Leve: 0 (anomalia dichiarata) · A/B: 0 · misure di record: micro s180 +
+same-toolchain col pin s180; i numeri ≤s175 restano attribuiti a 1.96.0). **Fill privato = DECLASSATO a bassa priorità su misura di tempo**
+(wp179-harness/REPORT-resume.md, ricalcolo S-180 dai raw confermato 0,4176/0,4316 s: 1,795M private¬RO = 36 % dei miss, 68 % ammissibili
+alle 7 guardie, cammino lento ≈0,42 s / 37 s INCLUSIVO, non tetto rigoroso; **readonly NON misurato**): NON riproporre senza una
+cifra di tempo del SOLO sottoinsieme. Leve: 0 (anomalia dichiarata; **serie senza leva S-178/S-179/S-180 = 3: S-181 DEVE spedirne una**) · A/B: 0 · misure di record: micro s180 +
 conferma prop-dq · incidenti: 0 · revisione S-180 (lente PROCESSO): wp180-harness/revisione-s180.md.
 
 ## Scoreboard (PIN s180, micro R=5 di record 2026-09-22 00:0x, E2 PASS t3, quiescenza t1)
@@ -32,9 +33,12 @@ CI: coda 3 job (4c2d3c4b, bffaaf8f, c2b572ef) in attesa del lock; ATTESI verdi (
    verbale in wp177-harness; ricostruire come braccio C same-toolchain sopra il pin s180 e misurare con E1/E2; attesa piccola
    (sotto 4 ns/iter probabile ⇒ solo direzione).
 3. **Coppia**: dovuta a ogni pin nuovo — se t21/ORM di S-180 sono chiuse e compatibili, nessuna coppia in S-181 salvo pin nuovo.
-4. Quesiti residui: readonly write-once (49 % dei miss ORM) senza cifra di tempo (bassa priorità, stessa sorte del privato) ·
+4. Quesiti residui: readonly write-once (49 % dei miss ORM) NON MISURATO (nessuna cifra di tempo: sorte da misurare, non presunta) ·
    ictx oracle1 · c0 positivo · census server (28° slitt.) · ratifiche §3 · dtor-in-dtor · Sweep-skip esteso (micro-only) ·
-   sito phprust.com ancora «MIT» (allineare nel suo progetto) · gh-status-sync a mano (skill con `model:` — solo a inizio sessione).
+   sito phprust.com ancora «MIT» (allineare nel suo progetto) · gh-status-sync a mano (skill con `model:` — solo a inizio sessione) ·
+   **licenza PHP-3.01 ratificata col testo integrale: clausole 4 («PHP» nel nome del prodotto: php-rust/phpr) e 6 non adattate —
+   DECISIONE UTENTE richiesta** (rilievo 8) · copia S-181 della catena: HEAD + `git status --porcelain` PRIMA della build, `hk.rc`
+   nel verdetto (rilievi 3/4) · purge `._*` in wp180-harness/{promo,pair,orm}-out a coppia chiusa (rilievo 9).
 
 ## Aperture per NOME
 coppia t21 + ORM E3/E4 (in corso/da leggere) · CI 3 job (attesi verdi) · leva calls (S-181) · str 4,1 · L-CM1 come braccio C
@@ -44,7 +48,7 @@ server census · §3.28 · §3.29 · §3.27 · §3.26 · §3.25 · §3.24+§3.23
 objmap → GC · evalcls 316,9× · refl 42,4× · re +2 · get_gc · latin1 · dbal 10 nomi · pavimento 4 ns/iter su loop corti.
 
 ## NON riproporre (i veti restano)
-**S-180: leve scelte su census di FREQUENZA senza cifra di TEMPO del cammino (S-179 ha ridotto «47 % delle scritture» a ≈1 % della
+**S-180: chiudere un fronte su una misura singola altrui (S-179 = tetto inclusivo: «bassa priorità», non «caduta») · leve scelte su census di FREQUENZA senza cifra di TEMPO del cammino (S-179 ha ridotto «47 % delle scritture» a ≈1 % della
 suite) · fill IC privato/readonly senza una misura di tempo nuova · A/B braccio-vs-pin s175 (toolchain diversa: solo direzione) ·
 cambio di toolchain o ricetta a metà arco di misura · tenere nel tree una leva senza verdetto oltre due sessioni · file `._*`
 AppleDouble in phpr-ci (uccidono il runner) · daemonize.pl senza `mkdir -p` della cartella del log · `.rs` nel testo di un comando
