@@ -2,4 +2,4 @@
 # devono rompersi per un cambio di compilatore non deliberato.
 # Aggiornare = decisione esplicita con gate integrale verde sulla nuova.
 [toolchain]
-channel = "1.96.0"
+channel = "1.98.1"
