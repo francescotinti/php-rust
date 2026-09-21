@@ -1,0 +1,40 @@
+4c4
+< # nomi s175/pair177/t21; harness wp174; pin s175 = phpr 5de14d6856d760a8 + server PLACEHOLDER (inserito DOPO
+---
+> # nomi s175/pair180/t21; harness wp174; pin s175 = phpr 5de14d6856d760a8 + server PLACEHOLDER (inserito DOPO
+9c9
+< # criteri s132/s146/s148 EREDITATI INVARIATI + s177-criterio-pair-t21.md
+---
+> # criteri s132/s146/s148 EREDITATI INVARIATI + s180-criterio-pair-t21.md
+27c27
+< H="$REPO/wp177-harness"
+---
+> H="$REPO/wp180-harness"
+32c32
+< VERD="$H/s177-pair-verdetto-$T.out"
+---
+> VERD="$H/s180-pair-verdetto-$T.out"
+37c37
+< DONE="$OUT/pair177-$T.done"
+---
+> DONE="$OUT/pair180-$T.done"
+46,47c46,47
+< PIN_ATTESO="${PIN_ATTESO:-PLACEHOLDER-PIN-S177}"
+< SRV_ATTESO="${SRV_ATTESO:-PLACEHOLDER-SRV-S177}"
+---
+> PIN_ATTESO="${PIN_ATTESO:-PLACEHOLDER-PIN-S180}"
+> SRV_ATTESO="${SRV_ATTESO:-PLACEHOLDER-SRV-S180}"
+162,163c162,163
+< print(f"== s177 coppia WP full+media sul pin s177 MISURATO phpr={PINH} server={SRVH} tentativo={T} (criteri s132/s146/s148 EREDITATI + s177-criterio-pair-t21.md: giudizio a MEDIANA per finestra, az.rev.3 S-149) ==")
+< print(f"grade=VERDICT  # derivazione meccanica dai .time; rc autoritativo = pair-out/pair177-{T}.done")
+---
+> print(f"== s180 coppia WP full+media sul pin s180 MISURATO phpr={PINH} server={SRVH} tentativo={T} (criteri s132/s146/s148 EREDITATI + s180-criterio-pair-t21.md: giudizio a MEDIANA per finestra, az.rev.3 S-149) ==")
+> print(f"grade=VERDICT  # derivazione meccanica dai .time; rc autoritativo = pair-out/pair180-{T}.done")
+236c236
+<         # s177-criterio-pair-t21.md p.2 (az.rev.3 S-149): GIUDIZIO CANONICO a
+---
+>         # s180-criterio-pair-t21.md p.2 (az.rev.3 S-149): GIUDIZIO CANONICO a
+245c245
+<             print(f"giudizio_MEDIANA (canonico, criterio t21 p.2): direzione GIU' SEGNALATA (mediana {med_t21:.3f} < {MED_LO}) — attesa flag gc-idle + L-CM1 (predicato Sweep cached in un byte + epoch IC cached nel Vm + Add-first): direzione ≤0, SOTTO-risoluzione (quota «op in place + Sweep» e for canonici in WP non censita) (criterio t21 p.3): NON attribuibile senza census proprio")
+---
+>             print(f"giudizio_MEDIANA (canonico, criterio t21 p.2): direzione GIU' SEGNALATA (mediana {med_t21:.3f} < {MED_LO}) — attesa: NESSUNA pre-registrata (toolchain 1.98.1 + gc-idle tenuta S-176) — lettura")

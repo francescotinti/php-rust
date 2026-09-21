@@ -1,0 +1,24 @@
+2c2
+< # s177-lancio-orm.sh — catena p.1: attende pair177-t21.done; SOLO se rc=0
+---
+> # s180-lancio-orm.sh — catena p.1: attende pair180-t21.done; SOLO se rc=0
+5c5
+< # COPIA DICHIARATA di s172-lancio-orm.sh (manifest s177-lancio-orm-copia.diff): soli nomi s177/t21/pair177.
+---
+> # COPIA DICHIARATA di s172-lancio-orm.sh (manifest s180-lancio-orm-copia.diff): soli nomi s180/t21/pair180.
+8c8
+< REPO="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust"; H="$REPO/wp177-harness"
+---
+> REPO="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust"; H="$REPO/wp180-harness"
+10c10
+< PD="$H/pair-out/pair177-t21.done"
+---
+> PD="$H/pair-out/pair180-t21.done"
+18c18
+< SPD=/private/tmp/phpr-s177-orm; mkdir -p "$SPD"
+---
+> SPD=/private/tmp/phpr-s180-orm; mkdir -p "$SPD"
+20c20
+< PIN_ATTESO="${PIN_ATTESO:?pin s177 atteso}" MAPPA_SP="$SPD" exec /bin/bash "$REPO/wp176-harness/s176-orm-coppia.sh"
+---
+> PIN_ATTESO="${PIN_ATTESO:?pin s180 atteso}" MAPPA_SP="$SPD" exec /bin/bash "$REPO/wp176-harness/s176-orm-coppia.sh"

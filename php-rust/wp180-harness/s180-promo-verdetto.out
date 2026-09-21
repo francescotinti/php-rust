@@ -1,0 +1,3 @@
+PRE: ri-pin DICHIARATO (S-180): stesso sorgente del pin s175 + flag gc-idle, toolchain 1.96.0→1.98.1 (rustc 1.98.1), L-CM1 revertata; nessuna leva, nessun candidato
+lock CI: presente (finestra di sessione, non lo tocco)
+guardia disco: Data 22G prima di build

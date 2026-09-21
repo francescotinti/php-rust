@@ -1,0 +1,20 @@
+2c2
+< # s177-lancio-pair.sh — catena p.1: attende la quiete CI (cargo/rustc/
+---
+> # s180-lancio-pair.sh — catena p.1: attende la quiete CI (cargo/rustc/
+7,9c7,9
+< # finestra quieta (uptime + top nel log) e lancia s177-pair.sh t21.
+< # COPIA DICHIARATA di s172-lancio-pair.sh (manifest s177-lancio-pair-copia.diff):
+< # soli nomi s177/t21; il resto INVARIATO (blocco anti-flare EREDITATO).
+---
+> # finestra quieta (uptime + top nel log) e lancia s180-pair.sh t21.
+> # COPIA DICHIARATA di s172-lancio-pair.sh (manifest s180-lancio-pair-copia.diff):
+> # soli nomi s180/t21; il resto INVARIATO (blocco anti-flare EREDITATO).
+12c12
+< H="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp177-harness"
+---
+> H="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp180-harness"
+37c37
+< exec /bin/bash "$H/s177-pair.sh" t21
+---
+> exec /bin/bash "$H/s180-pair.sh" t21

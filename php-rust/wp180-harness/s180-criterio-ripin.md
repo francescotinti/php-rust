@@ -7,3 +7,5 @@
 5. **Igiene**: lock `s180` presente per tutta la catena (CI in attesa); guardia disco Data ≥3G prima di build/batteria/corpus (apertura: Data 12G, swap 11,4/12G — dichiarato); CPU utente 1 % all'apertura; nessun altro cargo/misura in finestra.
 6. **Esiti**: rc=0 ⇒ pin s180 registrato, tree == pin, NEXT/PIN_REGISTRY/PERF_MAP aggiornati; qualunque `stop` ⇒ pin resta s175, causa a verbale, niente stash (REGOLE §2).
 7. **Coppia WP/ORM**: dovuta a ogni pin nuovo (utente 2026-08-12). Si esegue DOPO la catena se la finestra regge (E2 calma CPU); altrimenti dichiarata in coda a S-181 con i copioni t21/ORM E3/E4 già pronti (s177-pair.sh → copie a token s180).
+
+**Emenda dichiarata (S-180, prima dell'esito)**: al p.1/p.3 «flag gc-idle spento di default» è impreciso — gc-idle (S-176) è una LEVA interna sempre attiva (bit `Vm::gc_idle`, direzione +2,73 su prop-dq sotto pavimento, tenuta). Il pin s180 = s175 + gc-idle + toolchain 1.98.1. Attesa corpus invariata (zero flip: il braccio B di S-176 era a parità byte-id). La nota del copione (s180-promozione.sh, corpus) porta la stessa imprecisione: non emendata perché in esecuzione.
