@@ -89,7 +89,7 @@ fn nessun_sorgente_rs_oltre_cap() {
         // S-174 «Sweep-in-op» (criterio wp174-harness/s174-criterio.md p.5): +87 netti
         // (sweep_idle/sweep_skip_next + 5 siti in place + back-edge fuso, commenti
         // inclusi), cap alzato DICHIARANDO prima della promozione (differita: Data).
-        ("php-runtime/src/vm/run.rs", 7372, "run_loop — ULTIMO o mai (A2); +102 L-MCk S-166 + 174 L-SL1 S-171 + 109 L-SL2 S-172 + 74 fetta 3 S-173 + 87 Sweep-in-op S-174 + 11 flag gc-idle S-176 (DICHIARATO S-180) dichiarati"),
+        ("php-runtime/src/vm/run.rs", 7404, "run_loop — ULTIMO o mai (A2); +102 L-MCk S-166 + 174 L-SL1 S-171 + 109 L-SL2 S-172 + 74 fetta 3 S-173 + 87 Sweep-in-op S-174 + 11 flag gc-idle S-176 (DICHIARATO S-180) + 32 L-CR1 S-181 (DICHIARATO) dichiarati"),
         ("php-runtime/tests/eval.rs", 4773, "batteria eval"),
         ("php-builtins/tests/builtins.rs", 4772, "batteria builtins"),
         ("php-runtime/src/lower/mod.rs", 3838, "lowering"),

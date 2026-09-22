@@ -3740,13 +3740,36 @@ impl<'m> super::Vm<'m> {
                         // osservata; il dente handle-id/cascata è a backlog.
                         #[cfg(feature = "mem-census")]
                         php_types::memcensus::arity_note(n);
-                        let mut frame = self.pooled_frame(callee, m);
-                        frame.argc = n as u32;
-                        for i in (0..n).rev() {
-                            let a = self.frames[top].stack.pop().expect("call argument");
-                            frame.slots[i] = decay_arg(a);
+                        // L-CR1 (S-181, wp181-harness/s181-criterio-cr1.md):
+                        // (a) il frame nasce DENTRO `frames` (push dei buffer
+                        // del pool) e gli argomenti passano per split_at_mut —
+                        // nessun Frame per valore attraverso `enter_callee`,
+                        // il cui ramo simple_call è solo trace + push
+                        // (replicato qui al byte; `decay_arg` non esegue
+                        // codice utente ⇒ l'ordine push/pop non è osservabile);
+                        // (b) arità ESATTA per costruzione (argc == n_params ≥
+                        // required) ⇒ il `CheckArity` in testa al corpo non
+                        // può fallire: si entra a ip=1.
+                        if log::log_enabled!(target: "phpr::call", log::Level::Trace) {
+                            log::trace!(
+                                target: "phpr::call",
+                                "enter {}() (depth {})",
+                                String::from_utf8_lossy(&callee.name),
+                                self.frames.len() + 1
+                            );
                         }
-                        self.enter_callee(frame)?;
+                        let (slots, stack) = self.frame_pool.take();
+                        self.frames.push(super::Frame::with_buffers(callee, m, slots, stack));
+                        let (caller, entered) = self.frames.split_at_mut(top + 1);
+                        let cf = &mut entered[0];
+                        cf.argc = n as u32;
+                        for i in (0..n).rev() {
+                            let a = caller[top].stack.pop().expect("call argument");
+                            cf.slots[i] = decay_arg(a);
+                        }
+                        if matches!(callee.ops.first(), Some(Op::CheckArity { .. })) {
+                            cf.ip = 1;
+                        }
                     } else {
                         let mut args = Vec::with_capacity(n);
                         for _ in 0..n {
@@ -4271,11 +4294,12 @@ impl<'m> super::Vm<'m> {
                     // Ret-shaping bits and CLONE_INIT (WP-53; flags are not
                     // mutated between here and the frame pop).
                     let fl = self.frames[top].flags.bits();
+                    // L-CR1 (S-181) (c): la guardia magic esiste solo con
+                    // `ext`: niente Vec vuoto costruito e iterato a ogni Ret.
                     let guard = self
                         .frames[top]
                         .ext_opt_mut()
-                        .map(|e| std::mem::take(&mut e.guard_release))
-                        .unwrap_or_default();
+                        .map(|e| std::mem::take(&mut e.guard_release));
                     // A `clone`-driven `__clone` is finishing: revoke any remaining
                     // readonly re-init permission on the copy (PHP 8.3), so writes
                     // after the clone — or via a manual `__clone()` — fatal again.
@@ -4316,8 +4340,10 @@ impl<'m> super::Vm<'m> {
                         self.gc_note_frame(&dead);
                         self.recycle_frame(dead);
                     }
-                    for key in guard {
-                        self.magic_guard.remove(&key);
+                    if let Some(guard) = guard {
+                        for key in guard {
+                            self.magic_guard.remove(&key);
+                        }
                     }
                     if let Some(cell) = ret_cell {
                         // Init thunk / discarded magic return: store into the cell;
@@ -7114,6 +7140,12 @@ impl<'m> super::Vm<'m> {
         frame.this = Some(recv);
         frame.class = Some(defc);
         frame.static_class = Some(cid); // LSB = classe del ricevitore
+        // L-CR1 (S-181) (b): arità esatta per ammissione ⇒ il `CheckArity`
+        // in testa al corpo non può fallire (argc == n_params ≥ required):
+        // ingresso a ip=1.
+        if matches!(callee.ops.first(), Some(Op::CheckArity { .. })) {
+            frame.ip = 1;
+        }
         self.enter_callee(frame)?;
         Ok(true)
     }
