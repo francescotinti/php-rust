@@ -1,0 +1,57 @@
+--- wp181-harness/s181-lancio-cr1.sh	2026-09-22 13:50:39
++++ wp181-harness/s181-lancio-cr1b.sh	2026-09-22 14:15:12
+@@ -1,17 +1,17 @@
+ #!/bin/bash
+-# s181-lancio-cr1.sh — lanciatore dell'A/B della leva L-CR1 (criterio s181-criterio-cr1.md p.3/p.7): COPIA DICHIARATA di
+-# ../wp177-harness/s177-lancio-cm1b.sh (manifest s181-lancio-cr1-copia.diff) coi SOLI adattamenti: attende
++# s181-lancio-cr1b.sh — RERUN (finestra cr1 a GUARDIA: un campione con GoogleUpdater --wake-all alle 14:11:48, Data 12G) — lanciatore dell'A/B della leva L-CR1 (criterio s181-criterio-cr1b.md p.3/p.7): COPIA DICHIARATA di
++# ../wp177-harness/s177-lancio-cm1b.sh (manifest s181-lancio-cr1b-copia.diff) coi SOLI adattamenti: attende
+ # ab-out/s181-leva.done con `rc=0` (contenuto: bracci a parità E mutante che morde), bracci A=pin s180 Z=ab-out/s181-leva/
+ # phpr-Z B=ab-out/s181-leva/phpr-B (hash letti dai binari) passati come SYMLINK NEUTRI arm-A/arm-Z/arm-B (il gate s129 cerca
+-# «phpr» negli argv), token s181, nomi cr1, PREV same-binary prop-dq 34.20, tentativi di quiescenza 60, copione
+-# s181-ab-cr1.sh a 3 bracci. rc (ab-out/lancio-cr1.rc): 0 = A/B eseguito in finestra pulita (rc del criterio in
+-# ab-out/cr1.rc) · 6 = finestra sporca · 7 = bracci/build assenti o build rc≠0 · 8 = quiescenza mai PASS · 9 = pre-condizioni.
++# «phpr» negli argv), token s181, nomi cr1b, PREV same-binary prop-dq 34.20, tentativi di quiescenza 60, copione
++# s181-ab-cr1b.sh a 3 bracci. rc (ab-out/lancio-cr1b.rc): 0 = A/B eseguito in finestra pulita (rc del criterio in
++# ab-out/cr1b.rc) · 6 = finestra sporca · 7 = bracci/build assenti o build rc≠0 · 8 = quiescenza mai PASS · 9 = pre-condizioni.
+ set -u
+ export PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin
+ SRC="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust"
+ H="$SRC/wp181-harness"; O="$H/ab-out"; mkdir -p "$O"
+-LOG="$O/lancio-cr1.log"; LRC="$O/lancio-cr1.rc"; LDONE="$O/lancio-cr1.done"; WDL="$O/watchdog-cr1.log"; ALARM="$O/watchdog-cr1.alarm"
+-DECL="$O/finestra-cr1.txt"
++LOG="$O/lancio-cr1b.log"; LRC="$O/lancio-cr1b.rc"; LDONE="$O/lancio-cr1b.done"; WDL="$O/watchdog-cr1b.log"; ALARM="$O/watchdog-cr1b.alarm"
++DECL="$O/finestra-cr1b.txt"
+ PIN="$HOME/Claude/php-rust-output/release/phpr"; PIN8=884399fc
+ Z="$O/s181-leva/phpr-Z"
+ B="$O/s181-leva/phpr-B"
+@@ -54,9 +54,9 @@
+ done
+ Q=0
+ for i in $(seq 1 60); do
+-  /bin/bash "$SRC/wp129-harness/s129-quiescenza.sh" "$O/quiesce-cr1.rc" > "$O/quiesce-cr1-$i.log" 2>&1
+-  if [ "$(cat "$O/quiesce-cr1.rc" 2>/dev/null)" = 0 ]; then Q=$i; break; fi
+-  l "quiescenza tentativo $i FAIL: $(tail -1 "$O/quiesce-cr1-$i.log")"; sleep 30
++  /bin/bash "$SRC/wp129-harness/s129-quiescenza.sh" "$O/quiesce-cr1b.rc" > "$O/quiesce-cr1b-$i.log" 2>&1
++  if [ "$(cat "$O/quiesce-cr1b.rc" 2>/dev/null)" = 0 ]; then Q=$i; break; fi
++  l "quiescenza tentativo $i FAIL: $(tail -1 "$O/quiesce-cr1b-$i.log")"; sleep 30
+ done
+ [ "$Q" -gt 0 ] || fine 8 "quiescenza mai PASS in 60 tentativi"
+ { echo "== finestra A/B L-CR1: quiescenza PASS al tentativo $Q, Data ${D0}G, bracci A=$PIN8 Z=$Z8 B=$B8 =="; sentinelle INIZIO; } > "$DECL"
+@@ -66,12 +66,12 @@
+     if [ "$d" -lt 10 ] || [ -n "$s" ]; then echo "ALLARME" >> "$WDL"; touch "$ALARM"; fi
+     sleep 30; done ) &
+ WD=$!
+-l "finestra aperta (quiescenza t$Q, Data ${D0}G, B=$B8) — s181-ab-cr1.sh cr1 R=5"
+-/bin/bash "$H/s181-ab-cr1.sh" "$O/arm-A" "$PIN8" "$O/arm-Z" "$Z8" "$O/arm-B" "$B8" cr1 5 34.20
++l "finestra aperta (quiescenza t$Q, Data ${D0}G, B=$B8) — s181-ab-cr1b.sh cr1b R=5"
++/bin/bash "$H/s181-ab-cr1b.sh" "$O/arm-A" "$PIN8" "$O/arm-Z" "$Z8" "$O/arm-B" "$B8" cr1b 5 34.20
+ ARC=$?
+ kill "$WD" 2>/dev/null; wait "$WD" 2>/dev/null
+ { sentinelle FINE; echo "watchdog: $(wc -l < "$WDL" | tr -d ' ') campioni, Data min=$(awk -F'Data=' '{split($2,a,"G"); print a[1]}' "$WDL" | sort -n | head -1)G, allarmi=$(grep -c ALLARME "$WDL")"; } >> "$DECL"
+-cat "$DECL" >> "$H/s181-cr1-verdetto.out" 2>/dev/null
+-l "s181-ab-cr1.sh rc=$ARC"
++cat "$DECL" >> "$H/s181-cr1b-verdetto.out" 2>/dev/null
++l "s181-ab-cr1b.sh rc=$ARC"
+ [ -e "$ALARM" ] && fine 6 "finestra SPORCA (watchdog): verdetto a GUARDIA"
+ fine 0 "A/B eseguito in finestra pulita; criterio rc=$ARC"

@@ -1,0 +1,49 @@
+== s181 LEVA L-CR1 cr1 — A=884399fc MISURATO (/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp181-harness/ab-out/arm-A, pin s180) Z=ec8d3551 MISURATO (/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp181-harness/ab-out/arm-Z, gemello del pin ricostruito) B=5ed39690 MISURATO (/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp181-harness/ab-out/arm-B, tree + L-CR1) — R=5, N: calls-dq=60000000 arith-dq=250000000 prop-dq=150000000, PREV prop-dq A (stesso binario, S-180): 34.20, 2026-09-22 14:08:58 ==
+sentinella LS: /Applications/Antigravity /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.98.1-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv 
+parità calls-dq: A==Z==B==atteso oracle (60000000 )
+parità arith-dq: A==Z==B==atteso oracle (85937499750000000 )
+parità prop-dq: A==Z==B==atteso oracle (300000000 )
+floors: A=0.02 Z=0.02 B=0.02 oracle=0.05
+  coppia1 [AZB]: callsA=5.98 callsZ=5.95 callsB=5.46 propA=5.12 propZ=5.24 propB=4.74 dqA=4.98 dqZ=4.78 dqB=4.60 | callsO=1.36 propO=2.16 dqO=2.22
+  coppia2 [BAZ]: callsA=5.97 callsZ=5.96 callsB=5.49 propA=5.10 propZ=5.11 propB=4.74 dqA=4.94 dqZ=4.98 dqB=4.59 | callsO=1.32 propO=2.15 dqO=2.21
+  coppia3 [ZBA]: callsA=5.94 callsZ=5.98 callsB=5.45 propA=5.10 propZ=5.14 propB=4.73 dqA=4.96 dqZ=4.96 dqB=4.59 | callsO=1.38 propO=2.15 dqO=2.21
+  coppia4 [ABZ]: callsA=5.95 callsZ=5.97 callsB=5.49 propA=5.14 propZ=5.10 propB=4.73 dqA=4.82 dqZ=4.99 dqB=4.54 | callsO=1.35 propO=2.16 dqO=2.21
+  coppia5 [BZA]: callsA=6.00 callsZ=5.98 callsB=5.46 propA=5.23 propZ=5.14 propB=4.74 dqA=4.93 dqZ=4.99 dqB=4.60 | callsO=1.39 propO=2.15 dqO=2.21
+LAYOUT calls-dq: A=99.17 Z=99.17 ⇒ |A−Z| (colonna) 0.00 / (appaiata) 0.17 ns/iter; banda tra run same-binary |A−PREV| = n/d (nessun PREV same-toolchain: la A di oggi diventa PREV) (rumore drop-1 A'=0.67 Z'=0.33)
+LAYOUT prop-dq: A=34.00 Z=34.13 ⇒ |A−Z| (colonna) 0.13 / (appaiata) 0.07 ns/iter; banda tra run same-binary |A−PREV| = 0.20 (rumore drop-1 A'=0.27 Z'=0.27)
+LAYOUT arith-dq: A=19.68 Z=19.84 ⇒ |A−Z| (colonna) 0.16 / (appaiata) 0.16 ns/iter; banda tra run same-binary |A−PREV| = n/d (nessun PREV same-toolchain: la A di oggi diventa PREV) (rumore drop-1 A'=0.20 Z'=0.12)
+GIUDICE calls-dq (BERSAGLIO, 1 Call+CheckArity+BinarySS+Ret per iter): oracle=21.83 ns/iter; A/oracle=4.54× Z/oracle=4.54× B/oracle=4.15×
+GIUDICE calls-dq L-CR1 (D = A−B) B: A=99.17 B=90.67 ns/iter D=A−B colonna=+8.50 appaiata=+8.17 soglia=4.00 (rumore drop-1 A'=0.67 B'=0.67, SL=0.17) segni 5/5 -> CIFRA = [+8.17;+8.50] (entrambi gli stimatori nominano); direzione FIRMATA (B più veloce); regressione (D < −max(4,rumore)): no
+ATTESA (criterio-cr1 p.4): D ∈ [4;12]: CENTRATA (+8.50/+8.17)
+GUARDIA prop-dq (sola regressione, nessun Call nel loop): oracle=14.00 ns/iter; A/oracle=2.43× Z/oracle=2.44× B/oracle=2.25×
+GUARDIA prop-dq (attesa |D| < 1) B: A=34.00 B=31.47 ns/iter D=A−B colonna=+2.53 appaiata=+2.53 soglia=4.00 (rumore drop-1 A'=0.27 B'=0.07, SL=0.13) segni 5/5 -> NON nominato (vale 0); direzione FIRMATA (B più veloce); regressione (D < −max(4,rumore)): no
+GUARDIA arith-dq (sola regressione, nessun Call nel loop): oracle=8.64 ns/iter; A/oracle=2.28× Z/oracle=2.30× B/oracle=2.12×
+GUARDIA arith-dq (attesa |D| < 1) B: A=19.68 B=18.28 ns/iter D=A−B colonna=+1.40 appaiata=+1.40 soglia=4.00 (rumore drop-1 A'=0.20 B'=0.04, SL=0.16) segni 5/5 -> NON nominato (vale 0); direzione FIRMATA (B più veloce); regressione (D < −max(4,rumore)): no
+PREV per la prossima misura (same-binary pin s180): calls-dq A=99.17 arith-dq A=19.68 prop-dq A=34.00 (S-180: 34.20)
+PROMOZIONE: D calls-dq NOMINATA da entrambi gli stimatori [+8.17;+8.50] (soglia max(4,rumore,SL)), guardie senza regressione ⇒ promozione del TREE con copia dichiarata di s180-promozione.sh (tag s181) + coppia t22 + ORM E3/E4 (rc=0)
+ESITO rc=0
+sentinella LS fine: /Applications/Antigravity /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.98.1-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv 
+== finestra A/B L-CR1: quiescenza PASS al tentativo 1, Data 11G, bracci A=884399fc Z=ec8d3551 B=5ed39690 ==
+-- sentinelle INIZIO 2026-09-22 14:08:48: Data=12G · total = 13312.00M  used = 12214.12M  free = 1097.88M  (encrypted) · load averages: 2.92 3.93 5.01
+   updater: 
+   top-8 CPU:
+     195.9 /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/Metadata.framework/Versions/A/Support/corespotlightd
+      16.6 /System/Library/PrivateFrameworks/UVFSXPCService.framework/Versions/A/XPCServices/UVFSService.xpc/Contents/MacOS/UVFSService
+      16.6 /usr/libexec/fskitd
+      11.7 /Applications/Google
+       7.5 /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/Metadata.framework/Versions/A/Support/mds
+       3.7 /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/Metadata.framework/Versions/A/Support/mds_stores
+       3.2 /Applications/Google
+       3.0 /System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer
+-- sentinelle FINE 2026-09-22 14:14:24: Data=12G · total = 13312.00M  used = 12270.56M  free = 1041.44M  (encrypted) · load averages: 3.90 3.56 4.44
+   updater: 
+   top-8 CPU:
+      21.0 /System/Library/PrivateFrameworks/PhotoLibraryServices.framework/Versions/A/Support/photolibraryd
+      19.6 /System/Library/PrivateFrameworks/UVFSXPCService.framework/Versions/A/XPCServices/UVFSService.xpc/Contents/MacOS/UVFSService
+      19.3 com.macpaw.CleanMyMac5.HealthMonitor
+      18.0 /System/Library/PrivateFrameworks/MediaAnalysis.framework/Versions/A/mediaanalysisd
+      13.8 /usr/libexec/fskitd
+      11.6 /Applications/Google
+       4.2 /usr/libexec/sysmond
+       3.4 /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/FSEvents.framework/Versions/A/Support/fseventsd
+watchdog: 13 campioni, Data min=G, allarmi=1
