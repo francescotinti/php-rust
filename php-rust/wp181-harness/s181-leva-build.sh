@@ -96,7 +96,7 @@ import sys
 p = sys.argv[1]; s = open(p).read()
 i = s.index('Op::Call { func, argc } => {')
 j = s.index('bind_params(&mut frame, args);\n', i)
-assert j - i < 4000, 'sito lento troppo lontano'
+assert j - i < 8000, 'sito lento troppo lontano'
 ins = 'bind_params(&mut frame, args);\n                        if matches!(callee.ops.first(), Some(Op::CheckArity { .. })) { frame.ip = 1; } // MUTANTE s181\n'
 s = s[:j] + ins + s[j + len('bind_params(&mut frame, args);\n'):]
 open(p, 'w').write(s)
