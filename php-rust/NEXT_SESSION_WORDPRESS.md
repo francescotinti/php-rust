@@ -1,7 +1,7 @@
 # NEXT_SESSION — phpr: OBIETTIVO PARITÀ (≥1×) con l'oracle; ≤3× = tappa (REGOLE §1)
 ⏱ **FONDAMENTALI**: **S-180 = ratifica delle sessioni diagnostiche S-178/S-179 (ChatGPT Astra 6: la leva «fill IC slot privati»
 DECLASSATA a bassa priorità su misura di tempo, tetto inclusivo ≈1,1 % della suite ORM) + revert L-CM1 al byte + dente LOC sanato (dichiarato) + RI-PIN s180 sotto toolchain
-Rust 1.98.1 con TUTTI i gate rc=0 + coppia t21/ORM lanciata in catena.** **PIN NUOVO phpr `884399fc52277119` + server
+Rust 1.98.1 con TUTTI i gate rc=0 + coppia t21 COMPATIBILE (1,744) + ORM E3/E4 in catena.** **PIN NUOVO phpr `884399fc52277119` + server
 `045fe03356ee73e5`** (sorgente c2b572ef: pin s175 + gc-idle S-176 + toolchain 1.98.1; L-CM1 revertata b3e48919); tree == pin.
 Ratifiche: licenza **PHP-3.01** · `AGENTS.md` (mappa delle fonti, non stato) · `rust-toolchain.toml` 1.98.1 (da qui OGNI braccio è
 same-toolchain col pin s180; i numeri ≤s175 restano attribuiti a 1.96.0). **Fill privato = DECLASSATO a bassa priorità su misura di tempo**
@@ -13,8 +13,8 @@ conferma prop-dq · incidenti: 0 · revisione S-180 (lente PROCESSO): wp180-harn
 ## Scoreboard (PIN s180, micro R=5 di record 2026-09-22 00:0x, E2 PASS t3, quiescenza t1)
 **arith 2,2 ↓ · prop 2,4 ↓ · calls 4,5 ↓ · str 4,1 = · arr 2,9 ↓ · re 2,5 =** (vs s175: direzione toolchain+gc-idle, NON ripartita) ·
 giudici: prop-dq pin s180 34,20 (s175 36,20: D +2,00 5/5 rumore 0,40, sola direzione) · arith-dq NON rimisurato (s175 20,28) ·
-WP t21: **COPPIA IN CORSO/DA LEGGERE** (pair-out/pair180-t21.done, s180-pair-verdetto-t21.out; riferimento t20 1,765 banda
-[1,738;1,799]) · ORM: **DA LEGGERE** (wp176-harness/orm-out/rimisura.done + s176-orm-coppia-verdetto.out → copiare in
+**WP t21 1,744 COMPATIBILE** (rc=0; N=6 pulite 1,728-1,759, banda_ON 0,030; t20 1,765; media 2,42-2,44; leg4 parità full: 3 test
+Tests_Fonts_WpFontCollection_GetData da RETE, voce esterna da osservare a t22) · ORM: **DA LEGGERE** (wp176-harness/orm-out/rimisura.done + s176-orm-coppia-verdetto.out → copiare in
 wp180-harness/s180-orm-coppia-verdetto.out; riferimento [6,936;7,014]) · corpus 2655 (1412 congelati) · batteria 1748/0/2 (s180) ·
 CI: coda 3 job (4c2d3c4b, bffaaf8f, c2b572ef) in attesa del lock; ATTESI verdi (dente sanato, batteria del tree rc=0).
 
@@ -41,7 +41,7 @@ CI: coda 3 job (4c2d3c4b, bffaaf8f, c2b572ef) in attesa del lock; ATTESI verdi (
    nel verdetto (rilievi 3/4) · purge `._*` in wp180-harness/{promo,pair,orm}-out a coppia chiusa (rilievo 9).
 
 ## Aperture per NOME
-coppia t21 + ORM E3/E4 (in corso/da leggere) · CI 3 job (attesi verdi) · leva calls (S-181) · str 4,1 · L-CM1 come braccio C
+ORM E3/E4 (da leggere se non chiusa) · voce rete Tests_Fonts_WpFontCollection_GetData (t21 leg4) · CI 3 job (attesi verdi) · leva calls (S-181) · str 4,1 · L-CM1 come braccio C
 same-toolchain (opzionale) · readonly write-once senza cifra · arith-dq da rimisurare sul pin s180 · Sweep-skip esteso (micro-only) ·
 dtor-in-dtor · §3.32 · §3.30 · residuo slot 2,75/op · tupla guard · F1/F2 (SOSPESE) · autoload statiche · sonda strmap · gamba
 server census · §3.28 · §3.29 · §3.27 · §3.26 · §3.25 · §3.24+§3.23 · slot-load · §3.22 · depr. float→int · warning ×2 · div. RMW ·
