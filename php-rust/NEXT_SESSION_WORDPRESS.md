@@ -35,7 +35,7 @@ CI: job in coda da 172814ae a HEAD partono al rilascio del lock (ATTESI verdi: b
 4. **Coppia**: dovuta a ogni pin nuovo (t24 = rimisura di istruttoria sul pin s181; t25 SOLO con pin nuovo).
 5. Quesiti residui: readonly write-once NON MISURATO (49 % dei miss ORM) · ictx oracle1 · c0 positivo · census server (29° slitt.) ·
    ratifiche §3 · dtor-in-dtor · Sweep-skip esteso · sito phprust.com «MIT» · gh-status-sync a mano (skill con `model:`) ·
-   **licenza PHP-3.01 clausole 4/6 non adattate — DECISIONE UTENTE richiesta** (rilievo 8 S-180, ancora aperto) · E3 (updater ≥2 campioni)
+   licenza PHP-3.01 clausole 4/6: DECISO dall'utente (2026-09-22) — si risolverà più avanti CAMBIANDO la licenza; non è un blocco né una decisione da richiedere (rilievo 8 S-180 chiuso come «differito») · E3 (updater ≥2 campioni)
    da tenere o togliere nel lanciatore-modello (rilievo 5) · divergenza dtor del locale al ritorno = famiglia §3.28 (ii) (osservata in fx-cr1).
 
 ## Aperture per NOME
