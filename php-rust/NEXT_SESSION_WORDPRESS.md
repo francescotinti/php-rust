@@ -6,21 +6,22 @@ CIFRA [+8,00;+8,17] (cr1c di record; cr1/cr1b repliche concordi a guardia per un
 su layout diverso. Guardie: **prop-dq +2,40/+2,47 (5/5, replicata post-pin)** e arith-dq +0,72: effetto TRASVERSALE deterministico
 (sp_refs di run_loop −8 %), quota del meccanismo NON ripartita (rilievi 1-4 revisione S-181). Leve: 1 (PROMOSSA) · A/B: 3 corse ·
 incidenti: 1 (lanciatore cr1b con nome del copione errato, rc=127 senza misura) · revisione S-181 (lente MISURA): wp181-harness/revisione-s181.md.
-**Coppia t22 + ORM E3/E4: IN CORSO alla chiusura** (catena s181-lancio-coppia.sh partita 15:34): se non lette in S-181, leggere PRIMA di tutto
-`wp181-harness/pair-out/pair181-t22.done` + `s181-pair-verdetto-t22.out` e `wp176-harness/s176-orm-coppia-verdetto.out` (copiarlo in wp181 come S-180).
+**COPPIA LETTA: WP t23 mediana **1,799** = bordo superiore della banda [1,738;1,799] ⇒ giudizio canonico REGRESSIONE SEGNALATA (coppie proprie 1,735/1,783/1,799/1,799/1,809/1,814, banda_ON 0,079 vs 0,030 a t21; media user-only 2,44-2,53 vs 2,42-2,44: finestra più lenta su TUTTE le gambe, macchina in uso con carico 4-5,5; t22 abortita rc=8 per loadavg 7,9) — VOCE, non cifra.** **ORM sul pin s181 FINESTRA CONTAMINATA: leg1 net 6,721 · leg2 8,250 SEGNALATA dal gate ictx (phpr2 5250/s vs 188, user 43,3 s vs 34,9, sys 3,28), sentinella oracle 5,25/5,30 FUORI banda [4,84;5,04] ⇒ nessun claim, regola 4 NON giudicabile; parità ORM 16 · dbal 10 ok; dbal [7,472;7,909] (wp181-harness/s181-orm-coppia-verdetto.out).** ⇒ **ISTRUTTORIA in apertura di S-182 (criterio t22 p.1: «indagine PRIMA di ogni altra leva»): rerun WP t24 + ORM E3/E4 in finestra NOTTURNA quieta (carico <3, nessuna app utente); se t24 rientra in banda e ORM torna ≤7,05 ⇒ t23/ORM-s181 = contaminazione ambientale dichiarata; se persiste ⇒ reperto CONTRO L-CR1 (attesa era ≤0), istruttoria vera prima di ogni leva.**
 
 ## Scoreboard (PIN s181, micro R=5 di record 2026-09-22 15:2x, E2 PASS t8, quiescenza t3)
 **arith 2,1 ↓ · prop 2,3 ↓ · calls 4,0 ↓↓ · str 4,1 = · arr 2,8 ↓ · re 2,6 ↑** (vs s180 2,2/2,4/4,5/4,1/2,9/2,5) · giudici sul pin s181: calls-dq 90,50
-(stash s180 98,50) · prop-dq 31,60 (s180 34,07) · arith-dq B 18,24 (A 18,96, cr1c) · **WP t22: in corso** (t21 1,744, banda [1,738;1,799]) ·
-**ORM: in corso** (t21 [7,008;7,060], leg2 a filo di 7,05: regola 4) · corpus 2655 (1412 congelati) · batteria 1748/0/2 (s181, denti dichiarati) ·
+(stash s180 98,50) · prop-dq 31,60 (s180 34,07) · arith-dq B 18,24 (A 18,96, cr1c) · **WP t23 1,799 REGRESSIONE SEGNALATA a filo (voce)** (t21 1,744, banda [1,738;1,799]) ·
+**ORM s181 [6,721;8,250] CONTAMINATA (leg2 ictx, sentinella fuori banda: nessun claim)** (t21 [7,008;7,060], regola 4 sospesa alla rimisura) · corpus 2655 (1412 congelati) · batteria 1748/0/2 (s181, denti dichiarati) ·
 CI: job in coda da 172814ae a HEAD partono al rilascio del lock (ATTESI verdi: batteria del tree rc=0, cap LOC run.rs 7404 dichiarato).
 
 ## §S-182 — ordine
 0. **PRE-FLIGHT**: pin s181 per hash (phpr 19a2faa83a492745, server b2802f08c5887e77) · rustc 1.98.1 · Data ≥10G + swap (S-181: 11G→5G
    in batteria per lo swap; cache Google 1,5G purgata) · **CPU totale <150 % ×4 prima di OGNI misura (E2: l'IDE + questo processo
    pesano 70-80 %: silenzio durante le finestre)** · MySQL wp8 · lock col TOKEN `s182` · tree pulito · CI_FEED (job da 172814ae) ·
-   **coppia t22/ORM**: se non chiuse in S-181 leggere i `.done`; WP fuori banda ⇒ istruttoria; **ORM: se leg2 resta >7,05 a t22 senza che
-   Δ_norm lo spieghi ⇒ ISTRUTTORIA (regola 4) PRIMA di ogni leva** · Serena attiva PRIMA del Rust · purge `._*` in wp181-harness/*-out.
+   **ISTRUTTORIA OBBLIGATORIA (primo atto, prima di ogni leva)**: WP t24 (copia di s181-pair.sh con tentativo t24, pre-gate di carico <3 ×6,
+   finestra NOTTURNA senza app utente) + ORM E3/E4 (s176-orm-coppia.sh, PIN_ATTESO s181) ⇒ se t24 in banda E ORM ≤7,05 con sentinella in banda:
+   t23/ORM-s181 = contaminazione ambientale DICHIARATA (chiusa); altrimenti reperto contro L-CR1 (attesa ≤0) e istruttoria vera
+   (gambe media/full per motore, ictx, replica peak) · Serena attiva PRIMA del Rust · `._*` purgati a chiusura (wp181 456, phpr-ci 6787).
 1. **SCOMPOSIZIONE L-CR1 (az.rev. S-181, rilievi 1-4)**: bracci same-toolchain sopra il pin s181: P = placebo (modifica innocua in
    run_loop: misura la banda-layout del CANDIDATO), −a (senza split_at_mut/push diretto), −b (senza ip=1), −c (guardia Ret com'era);
    giudice calls-dq + prop-dq/arith-dq con ESITO ESPLICITO dell'attesa |D|<1 nello script (non solo regressione); attesa: (b) ≈ 3-4
@@ -31,14 +32,14 @@ CI: job in coda da 172814ae a HEAD partono al rilascio del lock (ATTESI verdi: b
    Frame (take dei buffer in place + truncate: ordine di drop IDENTICO da provare con fx-sw2-gc/fx-cr1 + mutante); disasm bl/sp_refs
    prima/dopo. Criterio PRIMA; A/B a 3 bracci R=5 con E1 (PREV same-binary: calls-dq 90,50 · prop-dq 31,60 sul pin s181) + E2 + E3.
 3. **str 4,1×** = seconda categoria peggiore (census str: concat/interpolazione, quota Zval::Str clone/alloc) — dopo calls.
-4. **Coppia**: dovuta a ogni pin nuovo (t22 di S-181 in corso; t23 SOLO con pin nuovo).
+4. **Coppia**: dovuta a ogni pin nuovo (t24 = rimisura di istruttoria sul pin s181; t25 SOLO con pin nuovo).
 5. Quesiti residui: readonly write-once NON MISURATO (49 % dei miss ORM) · ictx oracle1 · c0 positivo · census server (29° slitt.) ·
    ratifiche §3 · dtor-in-dtor · Sweep-skip esteso · sito phprust.com «MIT» · gh-status-sync a mano (skill con `model:`) ·
    **licenza PHP-3.01 clausole 4/6 non adattate — DECISIONE UTENTE richiesta** (rilievo 8 S-180, ancora aperto) · E3 (updater ≥2 campioni)
    da tenere o togliere nel lanciatore-modello (rilievo 5) · divergenza dtor del locale al ritorno = famiglia §3.28 (ii) (osservata in fx-cr1).
 
 ## Aperture per NOME
-**VOCE ORM [7,008;7,060] a filo di 7,05 (regola 4 a t22)** · quota trasversale di L-CR1 (prop-dq +2,47 non ripartita) · meccanismo (a) vs disasm (bl +9) ·
+**VOCE WP t23 1,799 a filo (regressione segnalata) + ORM s181 contaminata (istruttoria S-182)** · VOCE ORM [7,008;7,060] a filo di 7,05 (regola 4 sospesa) · quota trasversale di L-CR1 (prop-dq +2,47 non ripartita) · meccanismo (a) vs disasm (bl +9) ·
 CheckArity a compile-time · Frame in place al Ret · str 4,1 · readonly write-once senza cifra · voce rete Tests_Fonts (t21 leg4) · Sweep-skip
 esteso · dtor-in-dtor · §3.32 · §3.30 · §3.28 (ii) dtor locale al ritorno · residuo slot 2,75/op · tupla guard · F1/F2 (SOSPESE) · autoload statiche ·
 sonda strmap · gamba server census · §3.29 · §3.27 · §3.26 · §3.25 · §3.24+§3.23 · slot-load · §3.22 · depr. float→int · warning ×2 · div. RMW ·
