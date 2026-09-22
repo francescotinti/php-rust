@@ -1,0 +1,93 @@
+--- wp180-harness/s180-pair.sh	2026-09-21 23:47:06
++++ wp181-harness/s181-pair.sh	2026-09-22 14:16:16
+@@ -1,12 +1,17 @@
+ #!/bin/bash
++# s181-pair.sh <tentativo> — coppia full/media WP @ pin s181 (DOVUTA: pin nuovo, promozione L-CR1 S-181).
++# COPIA DICHIARATA di wp180-harness/s180-pair.sh (manifest s181-pair-copia.diff) coi SOLI adattamenti:
++# nomi s181/pair181/t22; harness wp181; pin s181 = PIN_ATTESO/SRV_ATTESO dagli stash (s181-lancio-coppia.sh);
++# mediane storiche con t21=1,744 (banda giudizio INVARIATA [1,738;1,799]); attesa di leva nel messaggio GIU': L-CR1
++# direzione ≤0 SOTTO-risoluzione. Tutto il resto INVARIATO (testo S-180 conservato sotto).
+ # s175-pair.sh <tentativo> — coppia full/media WP @ pin s175 (DOVUTA: pin nuovo, promozione Sweep-in-op C S-175).
+ # COPIA DICHIARATA di wp172-harness/s173-pair.sh (manifest s175-pair-copia.diff) coi SOLI adattamenti:
+-# nomi s175/pair180/t21; harness wp174; pin s175 = phpr 5de14d6856d760a8 + server PLACEHOLDER (inserito DOPO
++# nomi s175/pair181/t22; harness wp174; pin s175 = phpr 5de14d6856d760a8 + server PLACEHOLDER (inserito DOPO
+ # pin-server.sh, dichiarazione nel criterio); mediane storiche con t19=1,772 (banda giudizio INVARIATA [1,738;1,799]);
+ # attesa di leva nel messaggio GIU': Sweep-in-op (B+C): direzione ≤0, SOTTO-risoluzione (quota «op in place + Sweep»
+ # e for canonici in WP non censita). Tutto il resto INVARIATO (testo S-173 conservato sotto per storia).
+ # s173-pair.sh <tentativo> — S-164 p.1a: coppia full/media WP @ pin s173 (DOVUTA: pin nuovo)
+-# criteri s132/s146/s148 EREDITATI INVARIATI + s180-criterio-pair-t21.md
++# criteri s132/s146/s148 EREDITATI INVARIATI + s181-criterio-pair-t22.md
+ # (GIUDIZIO CANONICO a MEDIANA per finestra vs t1=1,799 t2=1,738 t3=1,789 t4=1,781 t5=1,757 t6=1,771 t7=1,795 t8=1,754 t9=1,767 t10=1,760 t11=1,765 t12=1,767 t13=1,763 t14=1,761 t15=1,746 t16=1,749 t17=1,776 t18=1,769 —
+ # az.rev.3 S-149; banda-unione degradata a companion descrittivo).
+ # COPIA DICHIARATA di wp172-harness/s172-pair.sh (manifest
+@@ -24,17 +29,17 @@
+ set -u
+ export PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin
+ REPO="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust"
+-H="$REPO/wp180-harness"
++H="$REPO/wp181-harness"
+ H109="$REPO/wp109-harness"
+ QUIESCE="$REPO/wp129-harness/s129-quiescenza.sh"
+ T="${1:?tentativo (es. t2)}"
+ OUT="$H/pair-out"; mkdir -p "$OUT"
+-VERD="$H/s180-pair-verdetto-$T.out"
++VERD="$H/s181-pair-verdetto-$T.out"
+ if [ -e "$VERD" ]; then
+   echo "verdetto $VERD ESISTE — tentativo nuovo = file nuovo (az.rev. S-131 #5)" >&2
+   exit 7
+ fi
+-DONE="$OUT/pair180-$T.done"
++DONE="$OUT/pair181-$T.done"
+ WPDEV="/Users/francescotinti/Claude/wpdev"
+ ORACLE=/opt/homebrew/opt/php/bin/php
+ PHPR="$HOME/Claude/php-rust-output/release/phpr"
+@@ -43,8 +48,8 @@
+ : > "$OUT/progress-$T.txt"
+ rm -f "$DONE"
+ 
+-PIN_ATTESO="${PIN_ATTESO:-PLACEHOLDER-PIN-S180}"
+-SRV_ATTESO="${SRV_ATTESO:-PLACEHOLDER-SRV-S180}"
++PIN_ATTESO="${PIN_ATTESO:-PLACEHOLDER-PIN-S181}"
++SRV_ATTESO="${SRV_ATTESO:-PLACEHOLDER-SRV-S181}"
+ PIN="$(shasum -a 256 "$PHPR" | cut -c1-16)"
+ SRV="$(shasum -a 256 "$HOME/Claude/php-rust-output/release/php-server" | cut -c1-16)"
+ if [ "$PIN" != "$PIN_ATTESO" ] || [ "$SRV" != "$SRV_ATTESO" ]; then
+@@ -159,8 +164,8 @@
+         m = re.search(r"^\s*(\d+)\s+peak memory footprint", l); d.update(pf=int(m.group(1))) if m else None
+     return d
+ legs = ["leg1-on", "leg2-on", "leg3-on", "leg4-on", "leg5-on", "leg6-on"]
+-print(f"== s180 coppia WP full+media sul pin s180 MISURATO phpr={PINH} server={SRVH} tentativo={T} (criteri s132/s146/s148 EREDITATI + s180-criterio-pair-t21.md: giudizio a MEDIANA per finestra, az.rev.3 S-149) ==")
+-print(f"grade=VERDICT  # derivazione meccanica dai .time; rc autoritativo = pair-out/pair180-{T}.done")
++print(f"== s181 coppia WP full+media sul pin s181 MISURATO phpr={PINH} server={SRVH} tentativo={T} (criteri s132/s146/s148 EREDITATI + s181-criterio-pair-t22.md: giudizio a MEDIANA per finestra, az.rev.3 S-149) ==")
++print(f"grade=VERDICT  # derivazione meccanica dai .time; rc autoritativo = pair-out/pair181-{T}.done")
+ print("# full: cpu=user+sys (etichettato); media: CANONICA=user-only + companion (az.rev. S-128 #3)")
+ print("# az.rev. S-131 #3: riferimento PER CONFIGURAZIONE, ON-ONLY = canonico; firma per gamba")
+ print("# az.rev. S-136 #2: lettura firma PRE-REGISTRATA: >150% med MOTORE = SPORCA (esclusa); 120-150% = ELEVATA (nel canone, annotata); <=120% pulita")
+@@ -233,18 +238,18 @@
+     print(f"full_{cfg}_only_coppie_proprie={min(props):.3f}-{max(props):.3f} (N={len(props)}){canon}")
+     print(f"full_{cfg}_only_intervallo={min(sp.values())/max(so.values()):.3f}-{max(sp.values())/min(so.values()):.3f}")
+     if cfg == "on":
+-        # s180-criterio-pair-t21.md p.2 (az.rev.3 S-149): GIUDIZIO CANONICO a
+-        # MEDIANA per finestra vs mediane storiche t1=1,799 t2=1,738 t3=1,789 t4=1,781 t5=1,757 t6=1,771 t7=1,795 t8=1,754 t9=1,767 t10=1,760 t11=1,765 t12=1,767 t13=1,763 t14=1,761 t15=1,746 t16=1,749 t17=1,776 t18=1,769 t19=1,772 t20=1,765;
++        # s181-criterio-pair-t22.md p.2 (az.rev.3 S-149): GIUDIZIO CANONICO a
++        # MEDIANA per finestra vs mediane storiche t1=1,799 t2=1,738 t3=1,789 t4=1,781 t5=1,757 t6=1,771 t7=1,795 t8=1,754 t9=1,767 t10=1,760 t11=1,765 t12=1,767 t13=1,763 t14=1,761 t15=1,746 t16=1,749 t17=1,776 t18=1,769 t19=1,772 t20=1,765 t21=1,744;
+         # la banda-unione resta SOLO companion descrittivo.
+         MED_LO, MED_HI = 1.738, 1.799
+-        med_t21 = statistics.median(props)
+-        print(f"mediana_t21={med_t21:.3f} (N={len(props)} coppie proprie ON PULITE; mediane storiche t1=1.799 t2=1.738 t3=1.789 t4=1.781 t5=1.757 t6=1.771 t7=1.795 t8=1.754 t9=1.767 t10=1.760 t11=1.765 t12=1.767 t13=1.763 t14=1.761 t15=1.746 t16=1.749 t17=1.776 t18=1.769 t19=1.772 t20=1.765)")
+-        if MED_LO <= med_t21 <= MED_HI:
+-            print(f"giudizio_MEDIANA (canonico, criterio t21 p.2): COMPATIBILE (mediana in [{MED_LO}; {MED_HI}]) — nessun claim")
+-        elif med_t21 < MED_LO:
+-            print(f"giudizio_MEDIANA (canonico, criterio t21 p.2): direzione GIU' SEGNALATA (mediana {med_t21:.3f} < {MED_LO}) — attesa: NESSUNA pre-registrata (toolchain 1.98.1 + gc-idle tenuta S-176) — lettura")
++        med_t22 = statistics.median(props)
++        print(f"mediana_t22={med_t22:.3f} (N={len(props)} coppie proprie ON PULITE; mediane storiche t1=1.799 t2=1.738 t3=1.789 t4=1.781 t5=1.757 t6=1.771 t7=1.795 t8=1.754 t9=1.767 t10=1.760 t11=1.765 t12=1.767 t13=1.763 t14=1.761 t15=1.746 t16=1.749 t17=1.776 t18=1.769 t19=1.772 t20=1.765 t21=1.744)")
++        if MED_LO <= med_t22 <= MED_HI:
++            print(f"giudizio_MEDIANA (canonico, criterio t22 p.2): COMPATIBILE (mediana in [{MED_LO}; {MED_HI}]) — nessun claim")
++        elif med_t22 < MED_LO:
++            print(f"giudizio_MEDIANA (canonico, criterio t22 p.2): direzione GIU' SEGNALATA (mediana {med_t22:.3f} < {MED_LO}) — attesa: L-CR1 Call/Ret magri (calls-dq D=[+8,17;+8,50] ns/chiamata): direzione ≤0 SOTTO-risoluzione (quota chiamate utente ad arità esatta nel workload WP non censita) — lettura")
+         else:
+-            print(f"giudizio_MEDIANA (canonico, criterio t21 p.2): REGRESSIONE SEGNALATA (mediana {med_t21:.3f} > {MED_HI}) — indagine PRIMA di ogni altra leva")
++            print(f"giudizio_MEDIANA (canonico, criterio t22 p.2): REGRESSIONE SEGNALATA (mediana {med_t22:.3f} > {MED_HI}) — indagine PRIMA di ogni altra leva")
+         print(f"companion banda-unione (descrittivo): coppie in [1.722-1.823]: {sum(1 for r in props if 1.722 <= r <= 1.823)}/{len(props)}")
+         # s140-criterio-pair.md p.4: FONDAZIONE banda ON-config (N>=5 gambe pulite)
+         if len(props) >= 5:
