@@ -1,66 +1,62 @@
 # NEXT_SESSION — phpr: OBIETTIVO PARITÀ (≥1×) con l'oracle; ≤3× = tappa (REGOLE §1)
-⏱ **FONDAMENTALI**: **S-180 = ratifica delle sessioni diagnostiche S-178/S-179 (ChatGPT Astra 6: la leva «fill IC slot privati»
-DECLASSATA a bassa priorità su misura di tempo, tetto inclusivo ≈1,1 % della suite ORM) + revert L-CM1 al byte + dente LOC sanato (dichiarato) + RI-PIN s180 sotto toolchain
-Rust 1.98.1 con TUTTI i gate rc=0 + coppia t21 COMPATIBILE (1,744) + ORM [7,008;7,060] (voce a filo di 7,05).** **PIN NUOVO phpr `884399fc52277119` + server
-`045fe03356ee73e5`** (sorgente c2b572ef: pin s175 + gc-idle S-176 + toolchain 1.98.1; L-CM1 revertata b3e48919); tree == pin.
-Ratifiche: licenza **PHP-3.01** · `AGENTS.md` (mappa delle fonti, non stato) · `rust-toolchain.toml` 1.98.1 (da qui OGNI braccio è
-same-toolchain col pin s180; i numeri ≤s175 restano attribuiti a 1.96.0). **Fill privato = DECLASSATO a bassa priorità su misura di tempo**
-(wp179-harness/REPORT-resume.md, ricalcolo S-180 dai raw confermato 0,4176/0,4316 s: 1,795M private¬RO = 36 % dei miss, 68 % ammissibili
-alle 7 guardie, cammino lento ≈0,42 s / 37 s INCLUSIVO, non tetto rigoroso; **readonly NON misurato**): NON riproporre senza una
-cifra di tempo del SOLO sottoinsieme. Leve: 0 (anomalia dichiarata; **serie senza leva S-178/S-179/S-180 = 3: S-181 DEVE spedirne una**) · A/B: 0 · misure di record: micro s180 +
-conferma prop-dq · incidenti: 0 · revisione S-180 (lente PROCESSO): wp180-harness/revisione-s180.md.
+⏱ **FONDAMENTALI**: **S-181 = leva L-CR1 «Call/Ret magri» PROMOSSA, PIN NUOVO phpr `19a2faa83a492745` + server `b2802f08c5887e77`**
+(sorgente leva 172814ae, HEAD alla build f5f746cf, tree == pin; toolchain 1.98.1). Micro s181: **arith 2,1 · prop 2,3 · calls 4,0 · str 4,1 · arr 2,8 · re 2,6**
+(calls 4,5→4,0 = leva; il resto tick/trasversale). **calls-dq** (giudice nuovo, N=60M): 98,83→90,83 ns/iter (oracle 21,67; 4,56×→4,19×),
+CIFRA [+8,00;+8,17] (cr1c di record; cr1/cr1b repliche concordi a guardia per un campione di GoogleUpdater), conferma post-pin +8,00 5/5
+su layout diverso. Guardie: **prop-dq +2,40/+2,47 (5/5, replicata post-pin)** e arith-dq +0,72: effetto TRASVERSALE deterministico
+(sp_refs di run_loop −8 %), quota del meccanismo NON ripartita (rilievi 1-4 revisione S-181). Leve: 1 (PROMOSSA) · A/B: 3 corse ·
+incidenti: 1 (lanciatore cr1b con nome del copione errato, rc=127 senza misura) · revisione S-181 (lente MISURA): wp181-harness/revisione-s181.md.
+**Coppia t22 + ORM E3/E4: IN CORSO alla chiusura** (catena s181-lancio-coppia.sh partita 15:34): se non lette in S-181, leggere PRIMA di tutto
+`wp181-harness/pair-out/pair181-t22.done` + `s181-pair-verdetto-t22.out` e `wp176-harness/s176-orm-coppia-verdetto.out` (copiarlo in wp181 come S-180).
 
-## Scoreboard (PIN s180, micro R=5 di record 2026-09-22 00:0x, E2 PASS t3, quiescenza t1)
-**arith 2,2 ↓ · prop 2,4 ↓ · calls 4,5 ↓ · str 4,1 = · arr 2,9 ↓ · re 2,5 =** (vs s175: direzione toolchain+gc-idle, NON ripartita) ·
-giudici: prop-dq pin s180 34,20 (s175 36,20: D +2,00 5/5 rumore 0,40, sola direzione) · arith-dq NON rimisurato (s175 20,28) ·
-**WP t21 1,744 COMPATIBILE** (rc=0; N=6 pulite 1,728-1,759, banda_ON 0,030; t20 1,765; media 2,42-2,44; leg4 parità full DIVERSA su
-test da RETE (Fonts GetData + REST Attachments from_url, ~10 nomi): voce esterna transitoria da osservare a t22) · ORM net **[7,008;7,060]** (rc=0; t20 [6,936;7,014], registrato S-162 [7,023;7,053], storico S-164 [7,066;7,111]; leg2 7,060 >7,05 A FILO ⇒ VOCE riaperta, regola 4: istruttoria se persiste a t22; sentinella oracle 4,96/4,93 IN banda [4,84;5,04]; parità ORM 16 nomi · dbal 10 stabili; dbal net [7,440;7,463]) (wp180-harness/s180-orm-coppia-verdetto.out) · corpus 2655 (1412 congelati) · batteria 1748/0/2 (s180) ·
-CI: lock rimosso a chiusura (03:3x): job in coda da 4c2d3c4b a HEAD partono in sequenza; ATTESI verdi (dente sanato, batteria del tree rc=0).
+## Scoreboard (PIN s181, micro R=5 di record 2026-09-22 15:2x, E2 PASS t8, quiescenza t3)
+**arith 2,1 ↓ · prop 2,3 ↓ · calls 4,0 ↓↓ · str 4,1 = · arr 2,8 ↓ · re 2,6 ↑** (vs s180 2,2/2,4/4,5/4,1/2,9/2,5) · giudici sul pin s181: calls-dq 90,50
+(stash s180 98,50) · prop-dq 31,60 (s180 34,07) · arith-dq B 18,24 (A 18,96, cr1c) · **WP t22: in corso** (t21 1,744, banda [1,738;1,799]) ·
+**ORM: in corso** (t21 [7,008;7,060], leg2 a filo di 7,05: regola 4) · corpus 2655 (1412 congelati) · batteria 1748/0/2 (s181, denti dichiarati) ·
+CI: job in coda da 172814ae a HEAD partono al rilascio del lock (ATTESI verdi: batteria del tree rc=0, cap LOC run.rs 7404 dichiarato).
 
-## §S-181 — ordine
-0. **PRE-FLIGHT**: pin s180 per hash (phpr 884399fc52277119, server 045fe03356ee73e5) · `rustc --version` = 1.98.1 nel
-   workspace · Data ≥10G + `vm.swapusage` · **CPU totale <150 % ×4 (E2) prima di OGNI misura** · MySQL wp8 con l'elenco · lock
-   col TOKEN `s181` · tree pulito · **CI_FEED**: esiti dei job 4c2d3c4b/bffaaf8f/c2b572ef (attesi OK; se batteria-FAIL leggere
-   `phpr-ci/out/<sha12>/batteria.log`) · **coppia t21/ORM**: se non chiusa in S-180, leggere i `.done` PRIMA di tutto: WP fuori
-   banda ⇒ istruttoria; **ORM t21 = [7,008;7,060] con leg2 >7,05 a filo: se t22 (dovuta al prossimo pin) resta >7,05, istruttoria
-   (regola 4) PRIMA di ogni leva; oggi nessun claim (toolchain+gc-idle non ripartite)** · Serena attiva PRIMA del Rust.
-1. **LEVA S-181 = calls 4,5× (peggior rapporto) → str 4,1×**: census Call/Ret/args-Vec/SEND sui driver micro `calls` e su ORM
-   (feature op-census su ramo separato, copia di s177-census-miss.sh); criterio PRIMA; bersaglio = il CORPO del handler di chiamata
-   (rotta S-169: dispatch = oracle, i corpi pesano); giudice nuovo `calls-dq` (N dal driver) + guardie prop-dq/arith-dq a sola
-   regressione; A/B a 3 bracci (A pin s180, Z gemello same-toolchain, B leva) R=5 ABAB con E1 (|A−PREV| ≤4) + E2; soglia
-   max(4 ns/iter, rumore, banda-layout). Promozione via copia di s180-promozione.sh (tag s181, candidato = braccio B).
-2. **L-CM1 (opzionale, solo se la finestra è calma e p.1 è chiuso)**: il meccanismo (una load in meno per hit IC, Add-first) è a
-   verbale in wp177-harness; ricostruire come braccio C same-toolchain sopra il pin s180 e misurare con E1/E2; attesa piccola
-   (sotto 4 ns/iter probabile ⇒ solo direzione).
-3. **Coppia**: dovuta a ogni pin nuovo (t21/ORM di S-180 chiuse: WP compatibile, ORM voce a filo) — coppia t22 SOLO con pin nuovo.
-4. Quesiti residui: readonly write-once (49 % dei miss ORM) NON MISURATO (nessuna cifra di tempo: sorte da misurare, non presunta) ·
-   ictx oracle1 · c0 positivo · census server (28° slitt.) · ratifiche §3 · dtor-in-dtor · Sweep-skip esteso (micro-only) ·
-   sito phprust.com ancora «MIT» (allineare nel suo progetto) · gh-status-sync a mano (skill con `model:` — solo a inizio sessione) ·
-   **licenza PHP-3.01 ratificata col testo integrale: clausole 4 («PHP» nel nome del prodotto: php-rust/phpr) e 6 non adattate —
-   DECISIONE UTENTE richiesta** (rilievo 8) · copia S-181 della catena: HEAD + `git status --porcelain` PRIMA della build, `hk.rc`
-   nel verdetto (rilievi 3/4) · purge `._*` in wp180-harness/{promo,pair,orm}-out a coppia chiusa (rilievo 9).
+## §S-182 — ordine
+0. **PRE-FLIGHT**: pin s181 per hash (phpr 19a2faa83a492745, server b2802f08c5887e77) · rustc 1.98.1 · Data ≥10G + swap (S-181: 11G→5G
+   in batteria per lo swap; cache Google 1,5G purgata) · **CPU totale <150 % ×4 prima di OGNI misura (E2: l'IDE + questo processo
+   pesano 70-80 %: silenzio durante le finestre)** · MySQL wp8 · lock col TOKEN `s182` · tree pulito · CI_FEED (job da 172814ae) ·
+   **coppia t22/ORM**: se non chiuse in S-181 leggere i `.done`; WP fuori banda ⇒ istruttoria; **ORM: se leg2 resta >7,05 a t22 senza che
+   Δ_norm lo spieghi ⇒ ISTRUTTORIA (regola 4) PRIMA di ogni leva** · Serena attiva PRIMA del Rust · purge `._*` in wp181-harness/*-out.
+1. **SCOMPOSIZIONE L-CR1 (az.rev. S-181, rilievi 1-4)**: bracci same-toolchain sopra il pin s181: P = placebo (modifica innocua in
+   run_loop: misura la banda-layout del CANDIDATO), −a (senza split_at_mut/push diretto), −b (senza ip=1), −c (guardia Ret com'era);
+   giudice calls-dq + prop-dq/arith-dq con ESITO ESPLICITO dell'attesa |D|<1 nello script (non solo regressione); attesa: (b) ≈ 3-4
+   ns (un dispatch + handler), (a) ≈ 0-2 (il disasm dice che il Frame viaggia ancora per valore), trasversale ≈ 2,5 su prop-dq.
+   Mutante ip=1 anche sul cammio lento di methodcall (rilievo 7). Riscrivere il meccanismo (a) a verbale con le cifre.
+2. **LEVA S-182 = Frame davvero in place o CheckArity a compile-time**: (i) `CheckArity` eliminato dal bytecode per TUTTE le forme
+   (bind_params/binder controllano l'arità: ORM 12,9M op, media 46k — oggi saltato solo sui fast path); (ii) Ret senza copia del
+   Frame (take dei buffer in place + truncate: ordine di drop IDENTICO da provare con fx-sw2-gc/fx-cr1 + mutante); disasm bl/sp_refs
+   prima/dopo. Criterio PRIMA; A/B a 3 bracci R=5 con E1 (PREV same-binary: calls-dq 90,50 · prop-dq 31,60 sul pin s181) + E2 + E3.
+3. **str 4,1×** = seconda categoria peggiore (census str: concat/interpolazione, quota Zval::Str clone/alloc) — dopo calls.
+4. **Coppia**: dovuta a ogni pin nuovo (t22 di S-181 in corso; t23 SOLO con pin nuovo).
+5. Quesiti residui: readonly write-once NON MISURATO (49 % dei miss ORM) · ictx oracle1 · c0 positivo · census server (29° slitt.) ·
+   ratifiche §3 · dtor-in-dtor · Sweep-skip esteso · sito phprust.com «MIT» · gh-status-sync a mano (skill con `model:`) ·
+   **licenza PHP-3.01 clausole 4/6 non adattate — DECISIONE UTENTE richiesta** (rilievo 8 S-180, ancora aperto) · E3 (updater ≥2 campioni)
+   da tenere o togliere nel lanciatore-modello (rilievo 5) · divergenza dtor del locale al ritorno = famiglia §3.28 (ii) (osservata in fx-cr1).
 
 ## Aperture per NOME
-**VOCE ORM [7,008;7,060] a filo di 7,05 (regola 4: istruttoria a t22 se persiste)** · voce rete Tests_Fonts_WpFontCollection_GetData (t21 leg4) · CI 3 job (attesi verdi) · leva calls (S-181) · str 4,1 · L-CM1 come braccio C
-same-toolchain (opzionale) · readonly write-once senza cifra · arith-dq da rimisurare sul pin s180 · Sweep-skip esteso (micro-only) ·
-dtor-in-dtor · §3.32 · §3.30 · residuo slot 2,75/op · tupla guard · F1/F2 (SOSPESE) · autoload statiche · sonda strmap · gamba
-server census · §3.28 · §3.29 · §3.27 · §3.26 · §3.25 · §3.24+§3.23 · slot-load · §3.22 · depr. float→int · warning ×2 · div. RMW ·
+**VOCE ORM [7,008;7,060] a filo di 7,05 (regola 4 a t22)** · quota trasversale di L-CR1 (prop-dq +2,47 non ripartita) · meccanismo (a) vs disasm (bl +9) ·
+CheckArity a compile-time · Frame in place al Ret · str 4,1 · readonly write-once senza cifra · voce rete Tests_Fonts (t21 leg4) · Sweep-skip
+esteso · dtor-in-dtor · §3.32 · §3.30 · §3.28 (ii) dtor locale al ritorno · residuo slot 2,75/op · tupla guard · F1/F2 (SOSPESE) · autoload statiche ·
+sonda strmap · gamba server census · §3.29 · §3.27 · §3.26 · §3.25 · §3.24+§3.23 · slot-load · §3.22 · depr. float→int · warning ×2 · div. RMW ·
 objmap → GC · evalcls 316,9× · refl 42,4× · re +2 · get_gc · latin1 · dbal 10 nomi · pavimento 4 ns/iter su loop corti.
 
 ## NON riproporre (i veti restano)
-**S-180: chiudere un fronte su una misura singola altrui (S-179 = tetto inclusivo: «bassa priorità», non «caduta») · leve scelte su census di FREQUENZA senza cifra di TEMPO del cammino (S-179 ha ridotto «47 % delle scritture» a ≈1 % della
-suite) · fill IC privato/readonly senza una misura di tempo nuova · A/B braccio-vs-pin s175 (toolchain diversa: solo direzione) ·
-cambio di toolchain o ricetta a metà arco di misura · tenere nel tree una leva senza verdetto oltre due sessioni · file `._*`
-AppleDouble in phpr-ci (uccidono il runner) · daemonize.pl senza `mkdir -p` della cartella del log · `.rs` nel testo di un comando
-git (hook).** S-177: misure col gate s129 solo (E1/E2 obbligatorie) · ipotesi di costo su TLS senza disasm · fetta 4 typed-skip ·
-edit del sorgente sul tree mentre un braccio lo usa · lanciatori con token cablato senza copia · verdetti rc≠8 letti come cifra con
-|A−PREV| >4. S-176: promozione a sola direzione · cifre di tempo dai census · edit di un copione MENTRE gira · `cargo build` sulla
-target canonica fuori catena · sleep in foreground. S-175: misure con Data <10G o senza watchdog · token phpr/php-server negli argv
-delle attese · cache bloccate oltre la finestra. S-174: skill con `model:` a metà sessione · banda-layout da ricostruzione. S-173..170:
-attese senza reset del dst · `a || b && c` senza graffe · lock senza TOKEN · `rm -rf` di target intere · mock unsafe. Trasversali:
-NaN-boxing/fn-table/arena (⚖️) · BOLT/PGO · pin senza collaudo · rc da pipe · promozione sotto banda · cifre composte.
-**Riscritto** 2026-09-22 (chiusura S-180; storia in `sessions/` · `gaps/`).
-Pre-flight S-181: pin phpr **s180 884399fc52277119** + server **045fe03356ee73e5** (tree == pin) · toolchain 1.98.1 · **Data ≥10G +
-swap + E2 CPU totale <150 %** · MySQL wp8 con l'elenco · uploads sotto guardia · corpus 1412 · lock col TOKEN `s181` · CI feed ·
-lettura: REGOLE.md → QUI → wp180-harness/s180-promo-verdetto.out → s180-pair-verdetto-t21.out (+ ORM) → revisione-s180.md →
-s180-criterio-ripin.md → wp179-harness/REPORT-resume.md (perché il privato è declassato) → WP_SESSION_180 → gaps/GAP_TREND → PERF_MAP.
+**S-181: cifra di una leva composta senza scomposizione né placebo (la cifra è «binario vs pin») · guardie a sola regressione con attesa
+pre-registrata muta · meccanismo dichiarato senza il disasm che lo conferma (bl atteso −1, misurato +9) · copie di lanciatori con sed
+globale sul tag (ha rinominato il copione invocato: rc=127) · limiti cablati nei patch dei mutanti (4000 caratteri) · finestre senza E3 con
+updater periodico (un campione da 30 s ⇒ guardia) · misure con l'IDE attivo sopra 150 % totale.** S-180: chiudere un fronte su una misura
+singola altrui · leve scelte su census di FREQUENZA senza cifra di TEMPO · fill IC privato/readonly senza misura di tempo nuova · A/B
+braccio-vs-pin s175 · cambio di toolchain a metà arco · leva nel tree senza verdetto oltre due sessioni · `._*` in phpr-ci · daemonize senza
+`mkdir -p` · `.rs` nel testo di un comando git. S-177: misure col gate s129 solo · ipotesi TLS senza disasm · edit del sorgente sul tree
+mentre un braccio lo usa · verdetti rc≠8 con |A−PREV| >4. S-176..170: promozione a sola direzione · cifre da census · edit di un copione
+mentre gira · build sulla target canonica fuori catena · sleep in foreground · Data <10G senza watchdog · token phpr/php-server negli argv
+delle attese · skill con `model:` a metà sessione · lock senza TOKEN · rm -rf di target intere. Trasversali: NaN-boxing/fn-table/arena (⚖️) ·
+BOLT/PGO · pin senza collaudo · rc da pipe · promozione sotto banda · cifre composte.
+**Riscritto** 2026-09-22 (chiusura S-181; storia in `sessions/` · `gaps/`).
+Pre-flight S-182: pin phpr **s181 19a2faa83a492745** + server **b2802f08c5887e77** (tree == pin) · toolchain 1.98.1 · Data ≥10G + swap + E2 ·
+MySQL wp8 · uploads sotto guardia · corpus 1412 · lock col TOKEN `s182` · CI feed · lettura: REGOLE.md → QUI → wp181-harness/s181-cr1c-verdetto.out
+→ s181-promo-verdetto.out → revisione-s181.md → s181-criterio-cr1.md → (pair t22 + ORM) → WP_SESSION_181 → gaps/GAP_TREND → PERF_MAP.
