@@ -71,6 +71,7 @@ nello stesso atto perché appenda in QUESTA sezione.)
 
 | pin (sha256/16) | sessione | collaudato | evidenza |
 |---|---|---|---|
+| 19a2faa83a492745 | s181 (sorgente @ f5f746cf; riga da pin-phpr.sh) | smoke parità 2 modi OK 2026-09-22 14:55:08 — batteria/corpus/fixture/micro DOVUTI a parte | stash `phpr-s181` |
 | 884399fc52277119 | s180 (sorgente @ 4c2d3c4b = HEAD alla build; «bffaaf8f» della riga automatica = HEAD al rev-parse post-build, crates identici — rettifica S-180 rilievo 3) | smoke parità 2 modi OK 2026-09-21 23:53:37 — batteria/corpus/fixture/micro DOVUTI a parte | stash `phpr-s180` |
 | 5de14d6856d760a8 | s175 (sorgente @ b761818b; riga da pin-phpr.sh) | smoke parità 2 modi OK 2026-09-15 02:37:08 — batteria/corpus/fixture/micro DOVUTI a parte | stash `phpr-s175` |
 | b6c4b5876971d76d | s174-sw-C BRACCIO (sorgente @ 883cb598, dichiarato; HEAD allo stash 52f140fe; riga da pin-phpr.sh --braccio) | smoke parità 2 modi OK 2026-09-13 22:46:51 — braccio di misura, NON pin | stash `phpr-s174-sw-C` |
