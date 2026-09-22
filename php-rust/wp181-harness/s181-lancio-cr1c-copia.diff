@@ -1,0 +1,65 @@
+--- wp181-harness/s181-lancio-cr1.sh	2026-09-22 13:50:39
++++ wp181-harness/s181-lancio-cr1c.sh	2026-09-22 14:32:49
+@@ -1,17 +1,17 @@
+ #!/bin/bash
+-# s181-lancio-cr1.sh — lanciatore dell'A/B della leva L-CR1 (criterio s181-criterio-cr1.md p.3/p.7): COPIA DICHIARATA di
+-# ../wp177-harness/s177-lancio-cm1b.sh (manifest s181-lancio-cr1-copia.diff) coi SOLI adattamenti: attende
++# s181-lancio-cr1c.sh — TERZA corsa sotto EMENDA E3 dichiarata (cr1 e cr1b: verdetti CONCORDI [+8,17;+8,50]/[+8,33;+8,50] ma a GUARDIA per UN campione da 30 s di GoogleUpdater --wake-all ciascuna; E3: l'updater è ALLARME solo se persiste ≥2 campioni consecutivi, Data <10G resta allarme secco) — RERUN (finestra cr1 a GUARDIA: un campione con GoogleUpdater --wake-all alle 14:11:48, Data 12G) — lanciatore dell'A/B della leva L-CR1 (criterio s181-criterio-cr1c.md p.3/p.7): COPIA DICHIARATA di
++# ../wp177-harness/s177-lancio-cm1b.sh (manifest s181-lancio-cr1c-copia.diff) coi SOLI adattamenti: attende
+ # ab-out/s181-leva.done con `rc=0` (contenuto: bracci a parità E mutante che morde), bracci A=pin s180 Z=ab-out/s181-leva/
+ # phpr-Z B=ab-out/s181-leva/phpr-B (hash letti dai binari) passati come SYMLINK NEUTRI arm-A/arm-Z/arm-B (il gate s129 cerca
+-# «phpr» negli argv), token s181, nomi cr1, PREV same-binary prop-dq 34.20, tentativi di quiescenza 60, copione
+-# s181-ab-cr1.sh a 3 bracci. rc (ab-out/lancio-cr1.rc): 0 = A/B eseguito in finestra pulita (rc del criterio in
+-# ab-out/cr1.rc) · 6 = finestra sporca · 7 = bracci/build assenti o build rc≠0 · 8 = quiescenza mai PASS · 9 = pre-condizioni.
++# «phpr» negli argv), token s181, nomi cr1c, PREV same-binary prop-dq 34.20, tentativi di quiescenza 60, copione
++# s181-ab-cr1c.sh a 3 bracci. rc (ab-out/lancio-cr1c.rc): 0 = A/B eseguito in finestra pulita (rc del criterio in
++# ab-out/cr1c.rc) · 6 = finestra sporca · 7 = bracci/build assenti o build rc≠0 · 8 = quiescenza mai PASS · 9 = pre-condizioni.
+ set -u
+ export PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin
+ SRC="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust"
+ H="$SRC/wp181-harness"; O="$H/ab-out"; mkdir -p "$O"
+-LOG="$O/lancio-cr1.log"; LRC="$O/lancio-cr1.rc"; LDONE="$O/lancio-cr1.done"; WDL="$O/watchdog-cr1.log"; ALARM="$O/watchdog-cr1.alarm"
+-DECL="$O/finestra-cr1.txt"
++LOG="$O/lancio-cr1c.log"; LRC="$O/lancio-cr1c.rc"; LDONE="$O/lancio-cr1c.done"; WDL="$O/watchdog-cr1c.log"; ALARM="$O/watchdog-cr1c.alarm"
++DECL="$O/finestra-cr1c.txt"
+ PIN="$HOME/Claude/php-rust-output/release/phpr"; PIN8=884399fc
+ Z="$O/s181-leva/phpr-Z"
+ B="$O/s181-leva/phpr-B"
+@@ -54,24 +54,26 @@
+ done
+ Q=0
+ for i in $(seq 1 60); do
+-  /bin/bash "$SRC/wp129-harness/s129-quiescenza.sh" "$O/quiesce-cr1.rc" > "$O/quiesce-cr1-$i.log" 2>&1
+-  if [ "$(cat "$O/quiesce-cr1.rc" 2>/dev/null)" = 0 ]; then Q=$i; break; fi
+-  l "quiescenza tentativo $i FAIL: $(tail -1 "$O/quiesce-cr1-$i.log")"; sleep 30
++  /bin/bash "$SRC/wp129-harness/s129-quiescenza.sh" "$O/quiesce-cr1c.rc" > "$O/quiesce-cr1c-$i.log" 2>&1
++  if [ "$(cat "$O/quiesce-cr1c.rc" 2>/dev/null)" = 0 ]; then Q=$i; break; fi
++  l "quiescenza tentativo $i FAIL: $(tail -1 "$O/quiesce-cr1c-$i.log")"; sleep 30
+ done
+ [ "$Q" -gt 0 ] || fine 8 "quiescenza mai PASS in 60 tentativi"
+ { echo "== finestra A/B L-CR1: quiescenza PASS al tentativo $Q, Data ${D0}G, bracci A=$PIN8 Z=$Z8 B=$B8 =="; sentinelle INIZIO; } > "$DECL"
+ : > "$WDL"
+-( while :; do d=$(data_g); s=$(updater | head -1)
++( prev=0; while :; do d=$(data_g); s=$(updater | head -1)
+     echo "$(date '+%T') Data=${d}G${s:+ UPDATER:$s}" >> "$WDL"
+-    if [ "$d" -lt 10 ] || [ -n "$s" ]; then echo "ALLARME" >> "$WDL"; touch "$ALARM"; fi
+-    sleep 30; done ) &
++    if [ -n "$s" ]; then cur=1; else cur=0; fi
++    # EMENDA E3 (S-181): updater = ALLARME solo se visto in 2 campioni CONSECUTIVI (≥60 s); Data <10G allarme secco
++    if [ "$d" -lt 10 ] || { [ "$cur" = 1 ] && [ "$prev" = 1 ]; }; then echo "ALLARME" >> "$WDL"; touch "$ALARM"; fi
++    prev=$cur; sleep 30; done ) &
+ WD=$!
+-l "finestra aperta (quiescenza t$Q, Data ${D0}G, B=$B8) — s181-ab-cr1.sh cr1 R=5"
+-/bin/bash "$H/s181-ab-cr1.sh" "$O/arm-A" "$PIN8" "$O/arm-Z" "$Z8" "$O/arm-B" "$B8" cr1 5 34.20
++l "finestra aperta (quiescenza t$Q, Data ${D0}G, B=$B8) — s181-ab-cr1c.sh cr1c R=5"
++/bin/bash "$H/s181-ab-cr1.sh" "$O/arm-A" "$PIN8" "$O/arm-Z" "$Z8" "$O/arm-B" "$B8" cr1c 5 34.20
+ ARC=$?
+ kill "$WD" 2>/dev/null; wait "$WD" 2>/dev/null
+-{ sentinelle FINE; echo "watchdog: $(wc -l < "$WDL" | tr -d ' ') campioni, Data min=$(awk -F'Data=' '{split($2,a,"G"); print a[1]}' "$WDL" | sort -n | head -1)G, allarmi=$(grep -c ALLARME "$WDL")"; } >> "$DECL"
+-cat "$DECL" >> "$H/s181-cr1-verdetto.out" 2>/dev/null
+-l "s181-ab-cr1.sh rc=$ARC"
++{ sentinelle FINE; echo "watchdog: $(wc -l < "$WDL" | tr -d ' ') campioni, Data min=$(sed -n 's/.*Data=\([0-9]*\)G.*/\1/p' "$WDL" | sort -n | head -1)G, campioni con updater=$(grep -c UPDATER "$WDL"), allarmi=$(grep -c ALLARME "$WDL")"; } >> "$DECL"
++cat "$DECL" >> "$H/s181-cr1c-verdetto.out" 2>/dev/null
++l "s181-ab-cr1c.sh rc=$ARC"
+ [ -e "$ALARM" ] && fine 6 "finestra SPORCA (watchdog): verdetto a GUARDIA"
+ fine 0 "A/B eseguito in finestra pulita; criterio rc=$ARC"

@@ -1,0 +1,49 @@
+== s181 LEVA L-CR1 cr1b — A=884399fc MISURATO (/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp181-harness/ab-out/arm-A, pin s180) Z=ec8d3551 MISURATO (/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp181-harness/ab-out/arm-Z, gemello del pin ricostruito) B=5ed39690 MISURATO (/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp181-harness/ab-out/arm-B, tree + L-CR1) — R=5, N: calls-dq=60000000 arith-dq=250000000 prop-dq=150000000, PREV prop-dq A (stesso binario, S-180): 34.20, 2026-09-22 14:26:14 ==
+sentinella LS: /Applications/Antigravity /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.98.1-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv 
+parità calls-dq: A==Z==B==atteso oracle (60000000 )
+parità arith-dq: A==Z==B==atteso oracle (85937499750000000 )
+parità prop-dq: A==Z==B==atteso oracle (300000000 )
+floors: A=0.02 Z=0.03 B=0.02 oracle=0.05
+  coppia1 [AZB]: callsA=5.96 callsZ=5.94 callsB=5.44 propA=5.13 propZ=5.12 propB=4.74 dqA=4.93 dqZ=4.77 dqB=4.63 | callsO=1.39 propO=2.16 dqO=2.21
+  coppia2 [BAZ]: callsA=5.96 callsZ=5.96 callsB=5.49 propA=5.23 propZ=5.23 propB=4.73 dqA=4.77 dqZ=4.77 dqB=4.54 | callsO=1.33 propO=2.17 dqO=2.22
+  coppia3 [ZBA]: callsA=5.95 callsZ=6.00 callsB=5.43 propA=5.17 propZ=5.24 propB=4.73 dqA=4.98 dqZ=4.80 dqB=4.58 | callsO=1.39 propO=2.16 dqO=2.21
+  coppia4 [ABZ]: callsA=5.97 callsZ=5.96 callsB=5.46 propA=5.11 propZ=5.51 propB=4.73 dqA=4.74 dqZ=4.77 dqB=4.54 | callsO=1.32 propO=2.15 dqO=2.21
+  coppia5 [BZA]: callsA=5.94 callsZ=5.98 callsB=5.46 propA=5.16 propZ=5.10 propB=4.78 dqA=4.73 dqZ=4.78 dqB=4.59 | callsO=1.39 propO=2.15 dqO=2.21
+LAYOUT calls-dq: A=99.00 Z=98.83 ⇒ |A−Z| (colonna) 0.17 / (appaiata) 0.17 ns/iter; banda tra run same-binary |A−PREV| = n/d (nessun PREV same-toolchain: la A di oggi diventa PREV) (rumore drop-1 A'=0.33 Z'=0.67)
+LAYOUT prop-dq: A=34.27 Z=34.67 ⇒ |A−Z| (colonna) 0.40 / (appaiata) 0.07 ns/iter; banda tra run same-binary |A−PREV| = 0.07 (rumore drop-1 A'=0.40 Z'=0.93)
+LAYOUT arith-dq: A=19.00 Z=18.96 ⇒ |A−Z| (colonna) 0.04 / (appaiata) 0.04 ns/iter; banda tra run same-binary |A−PREV| = n/d (nessun PREV same-toolchain: la A di oggi diventa PREV) (rumore drop-1 A'=0.80 Z'=0.04)
+GIUDICE calls-dq (BERSAGLIO, 1 Call+CheckArity+BinarySS+Ret per iter): oracle=22.33 ns/iter; A/oracle=4.43× Z/oracle=4.43× B/oracle=4.06×
+GIUDICE calls-dq L-CR1 (D = A−B) B: A=99.00 B=90.67 ns/iter D=A−B colonna=+8.33 appaiata=+8.50 soglia=4.00 (rumore drop-1 A'=0.33 B'=0.50, SL=0.17) segni 5/5 -> CIFRA = [+8.33;+8.50] (entrambi gli stimatori nominano); direzione FIRMATA (B più veloce); regressione (D < −max(4,rumore)): no
+ATTESA (criterio-cr1 p.4): D ∈ [4;12]: CENTRATA (+8.33/+8.50)
+GUARDIA prop-dq (sola regressione, nessun Call nel loop): oracle=14.07 ns/iter; A/oracle=2.44× Z/oracle=2.46× B/oracle=2.23×
+GUARDIA prop-dq (attesa |D| < 1) B: A=34.27 B=31.40 ns/iter D=A−B colonna=+2.87 appaiata=+2.60 soglia=4.00 (rumore drop-1 A'=0.40 B'=0.07, SL=0.40) segni 5/5 -> NON nominato (vale 0); direzione FIRMATA (B più veloce); regressione (D < −max(4,rumore)): no
+GUARDIA arith-dq (sola regressione, nessun Call nel loop): oracle=8.64 ns/iter; A/oracle=2.20× Z/oracle=2.19× B/oracle=2.11×
+GUARDIA arith-dq (attesa |D| < 1) B: A=19.00 B=18.24 ns/iter D=A−B colonna=+0.76 appaiata=+0.92 soglia=4.00 (rumore drop-1 A'=0.80 B'=0.20, SL=0.04) segni 5/5 -> NON nominato (vale 0); direzione sotto il rumore/SL (B più veloce); regressione (D < −max(4,rumore)): no
+PREV per la prossima misura (same-binary pin s180): calls-dq A=99.00 arith-dq A=19.00 prop-dq A=34.27 (S-180: 34.20)
+PROMOZIONE: D calls-dq NOMINATA da entrambi gli stimatori [+8.33;+8.50] (soglia max(4,rumore,SL)), guardie senza regressione ⇒ promozione del TREE con copia dichiarata di s180-promozione.sh (tag s181) + coppia t22 + ORM E3/E4 (rc=0)
+ESITO rc=0
+sentinella LS fine: /Applications/Antigravity /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.98.1-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv 
+== finestra A/B L-CR1: quiescenza PASS al tentativo 1, Data 11G, bracci A=884399fc Z=ec8d3551 B=5ed39690 ==
+-- sentinelle INIZIO 2026-09-22 14:26:04: Data=11G · total = 13312.00M  used = 12437.44M  free = 874.56M  (encrypted) · load averages: 1.99 2.73 3.52
+   updater: 81303 /Library/Application Support/Google/GoogleUpdater/Current/GoogleUpdater.app/Contents/MacOS/GoogleUpdater --wake-all --enable-logging --vmodule=*/components/update_client/*=2,*/chrome/enterprise_companion/*=2,*/chrome/updater/*=2 --system 81305 /Library/Application Support/Google/GoogleUpdater/152.0.7933.0/GoogleUpdater.app/Contents/MacOS/GoogleUpdater --crash-handler --system --database=/Library/Application Support/Google/GoogleUpdater/152.0.7933.0/Crashpad --url=https://clients2.google.com/cr/report --annotation=prod=Update4 --annotation=ver=152.0.7933.0 --handshake-fd=6 81306 /Library/Application Support/Google/GoogleUpdater/152.0.7933.0/GoogleUpdater.app/Contents/MacOS/GoogleUpdater --wake --system 
+   top-8 CPU:
+       9.3 /Applications/Google
+       8.1 com.macpaw.CleanMyMac5.HealthMonitor
+       3.3 /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/Metadata.framework/Versions/A/Support/corespotlightd
+       3.1 /usr/libexec/mdmclient
+       2.5 /System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer
+       2.3 /Applications/Google
+       2.0 /Applications/Google
+       2.0 /Users/francescotinti/.antigravity-ide/extensions/anthropic.claude-code-2.1.278-darwin-arm64/resources/native-binary/claude
+-- sentinelle FINE 2026-09-22 14:31:30: Data=11G · total = 13312.00M  used = 12169.69M  free = 1142.31M  (encrypted) · load averages: 3.25 2.93 3.32
+   updater: 
+   top-8 CPU:
+      59.8 /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/Metadata.framework/Versions/A/Support/corespotlightd
+      17.9 /System/Library/PrivateFrameworks/UVFSXPCService.framework/Versions/A/XPCServices/UVFSService.xpc/Contents/MacOS/UVFSService
+      13.3 /System/Library/PrivateFrameworks/PhotoLibraryServices.framework/Versions/A/Support/photolibraryd
+      12.4 /System/Library/PrivateFrameworks/MediaAnalysis.framework/Versions/A/mediaanalysisd
+      11.2 /usr/libexec/fskitd
+       9.3 /Applications/Google
+       4.5 /usr/libexec/sysmond
+       2.4 /sbin/launchd
+watchdog: 12 campioni, Data min=G, allarmi=1
