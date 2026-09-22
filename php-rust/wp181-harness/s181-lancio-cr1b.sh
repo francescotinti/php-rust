@@ -67,7 +67,7 @@ done
     sleep 30; done ) &
 WD=$!
 l "finestra aperta (quiescenza t$Q, Data ${D0}G, B=$B8) — s181-ab-cr1b.sh cr1b R=5"
-/bin/bash "$H/s181-ab-cr1b.sh" "$O/arm-A" "$PIN8" "$O/arm-Z" "$Z8" "$O/arm-B" "$B8" cr1b 5 34.20
+/bin/bash "$H/s181-ab-cr1.sh" "$O/arm-A" "$PIN8" "$O/arm-Z" "$Z8" "$O/arm-B" "$B8" cr1b 5 34.20
 ARC=$?
 kill "$WD" 2>/dev/null; wait "$WD" 2>/dev/null
 { sentinelle FINE; echo "watchdog: $(wc -l < "$WDL" | tr -d ' ') campioni, Data min=$(awk -F'Data=' '{split($2,a,"G"); print a[1]}' "$WDL" | sort -n | head -1)G, allarmi=$(grep -c ALLARME "$WDL")"; } >> "$DECL"
