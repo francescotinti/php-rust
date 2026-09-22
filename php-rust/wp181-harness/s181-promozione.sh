@@ -36,7 +36,7 @@ for f in "$H/fx-ce.php" "$H/fx-am.php" "$H/fx-af.php" "$H/fx-refl.php" \
          "$H/fx-sm.php" "$H/fx-sm-div.php" "$H/fx-au.php" "$H/fx-au-div.php" \
          "$H/fx-mc.php" "$H/fx-mc2.php" "$H/fx-mc2-fib.php" "$H/fx-mck.php" \
          "$H/fx-sl1.php" "$H/fx-sl1-div.php" "$H/fx-sl2.php" "$H/fx-sl2-div.php" "$H/fx-sl3.php" "$H/fx-sl3-div.php" "$H/prop-dq.php" "$H4/fixtures/fx-sw1.php" \
-         "$H8/fx-cr1.php" "$H8/calls-dq.php" "$CAND" "$H8/ab-out/cr1.rc" \
+         "$H8/fx-cr1.php" "$H8/calls-dq.php" "$CAND" "$H8/ab-out/cr1c.rc" \
          "$H/sonda-bt-autoload.php" "$SRC/wp164-harness/arith-dq.php" \
          "$H/empty.php" "$QUIESCE" "$WD" "$GATES/orm-work.tgz" "$GATES/hk-work.tgz" \
          "$SRC/wp125-harness/orm-baseline-failnames.txt" \
@@ -45,9 +45,9 @@ for f in "$H/fx-ce.php" "$H/fx-am.php" "$H/fx-af.php" "$H/fx-refl.php" \
   [ -s "$f" ] || stop "PRE: path d'ingresso MANCANTE: $f — STOP"
 done
 [ "$(shasum -a 256 "$REF" | cut -c1-16)" = "$REF_EXP" ] || stop "PRE: stash phpr-s180 hash != $REF_EXP — STOP"
-[ "$(cat "$H8/ab-out/cr1.rc")" = 0 ] || stop "PRE: A/B cr1 rc=$(cat "$H8/ab-out/cr1.rc") ≠ 0 — nessuna promozione senza nomina — STOP"
+[ "$(cat "$H8/ab-out/cr1c.rc")" = 0 ] || stop "PRE: A/B cr1c rc=$(cat "$H8/ab-out/cr1c.rc") ≠ 0 — nessuna promozione senza nomina — STOP"
 CH=$(shasum -a 256 "$CAND" | cut -c1-16)
-note "PRE: candidato = braccio B $CH (commit $CAND_COMMIT, A/B cr1 rc=0); REF = stash s180 $REF_EXP"
+note "PRE: candidato = braccio B $CH (commit $CAND_COMMIT, A/B cr1c rc=0); REF = stash s180 $REF_EXP"
 
 cd "$SRC" || exit 4
 git diff --quiet -- crates/ || stop "PRE: crates/ sporco — STOP"
