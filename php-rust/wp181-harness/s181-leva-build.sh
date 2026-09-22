@@ -9,6 +9,11 @@
 # B == oracle byte-id con marcatore FX-CR1 DONE; (4) disasm run_loop di B E del pin s180 agli atti (istr/bl/blr/sp_refs).
 # rc (ab-out/s181-leva.done): 0 = B a parità e mutante che morde ⇒ bracci pronti · 2 = B diverge · 3 = mutante NON morde
 # (fixture non presidia: niente misura) · 4 = build fallita · 6 = B == pin · 7 = file/commit · 8 = disco · 9 = lock/pin.
+# EMENDE dichiarate S-181 (dopo la corsa 1 rc=7 «sito lento troppo lontano» e la corsa 2 rc=3): (5) SKIP_BUILD=1 riusa i tre
+# binari phpr-Z/B/M già costruiti nella corsa 2 (hash riletti dai file), i gate di parità e il mutante si rieseguono;
+# (6) forma del mutante: righe dell'oracle SPARITE in M = solo righe ACE (MACE < NACE) e righe IN PIÙ di M = solo warning
+# «Undefined variable»/vuote (la corsa 2 ha mostrato esattamente questa forma: ACE 5→2, +8 righe warning/vuote);
+# (7) simbolo run_loop col mangling v0 (`…2Vm8run_loop`) oltre al legacy `8run_loop17h`.
 set -u
 export PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin:"$HOME/.cargo/bin"
 REPO="/Volumes/Extreme Pro/Claude/php-rust-experiment"
@@ -79,6 +84,12 @@ for k in a:
 PY
 }
 
+if [ "${SKIP_BUILD:-0}" = 1 ] && [ -s "$OUT/phpr-Z" ] && [ -s "$OUT/phpr-B" ] && [ -s "$OUT/phpr-M" ]; then
+  ZH=$(shasum -a 256 "$OUT/phpr-Z" | cut -c1-16); BH=$(shasum -a 256 "$OUT/phpr-B" | cut -c1-16); MH=$(shasum -a 256 "$OUT/phpr-M" | cut -c1-16)
+  note "SKIP_BUILD=1 (emenda 5): riuso dei binari della corsa 2 — Z $ZH$( [ "$ZH" = "$PH" ] && echo ' == pin' || echo " ≠ pin $PH (gemello a contenuto)") · B $BH · M $MH"
+  [ "$BH" != "$PH" ] || { note "rc=6 B: binario == pin"; fin 6; }
+  [ "$MH" != "$BH" ] || { note "rc=7 M: binario == B"; fin 7; }
+else
 # Z = sorgente del pin nella target separata (gemello: se byte-id col pin lo si dichiara)
 archivio "$SHAZ" || { note "rc=7 archivio Z fallito"; fin 7; }
 ZH=$(build Z) || { note "rc=4 Z: build FALLITA (ab-out/s181-leva/build-Z.log)"; fin 4; }
@@ -106,6 +117,7 @@ PY
 MH=$(build M) || { note "rc=4 M: build FALLITA (ab-out/s181-leva/build-M.log)"; fin 4; }
 [ "$MH" != "$BH" ] || { note "rc=7 M: binario == B (mutante NON entrato)"; fin 7; }
 note "M: binario $MH (B + mutante ip=1 sul cammino lento)"
+fi
 
 RC=0
 perl -e 'alarm 120; exec @ARGV or die' -- "$OUT/phpr-B" "$FX2" > "$OUT/B.out" 2>&1
@@ -128,17 +140,18 @@ bilat fxcr1 "$FXCR" "FX-CR1 DONE" -d log_errors=0 -d display_errors=1
 # mutante: DEVE divergere dall'oracle su fx-cr1 ESATTAMENTE sulle righe ACE (esito esatto, mai «diverso da»)
 perl -e 'alarm 120; exec @ARGV or die' -- "$OUT/phpr-M" "$FXCR" > "$OUT/fxcr1-M.out" 2>&1
 MACE=$(grep -c '^ACE' "$OUT/fxcr1-M.out")
-NONACE_DIFF=$(diff <(grep -v '^ACE' "$OUT/fxcr1-oracle.out") <(grep -v '^ACE' "$OUT/fxcr1-M.out") | grep -c '^[<>]')
-if [ "$MACE" -lt "$NACE" ] && [ "$NONACE_DIFF" -eq 0 ]; then
-  note "MUTANTE: morde — righe ACE oracle $NACE vs M $MACE (le altre righe identiche): la fixture presidia il rischio (b)"
+diff "$OUT/fxcr1-oracle.out" "$OUT/fxcr1-M.out" > "$OUT/fxcr1-M.diff" || true
+GONE_NONACE=$(grep '^<' "$OUT/fxcr1-M.diff" | grep -vc '^< ACE')
+EXTRA_BAD=$(grep '^>' "$OUT/fxcr1-M.diff" | grep -vcE '^> (Warning: Undefined variable \$[a-z]+ in .* on line [0-9]+)?$')
+if [ "$MACE" -lt "$NACE" ] && [ "$GONE_NONACE" -eq 0 ] && [ "$EXTRA_BAD" -eq 0 ]; then
+  note "MUTANTE: morde (emenda 6) — righe ACE oracle $NACE vs M $MACE; sparite solo righe ACE, in più solo warning «Undefined variable» ($(grep -c '^> Warning' "$OUT/fxcr1-M.diff")): la fixture presidia il rischio (b)"
 else
-  diff "$OUT/fxcr1-oracle.out" "$OUT/fxcr1-M.out" > "$OUT/fxcr1-M.diff" || true
-  note "MUTANTE: NON morde nella forma attesa (ACE oracle $NACE vs M $MACE, righe non-ACE diverse $NONACE_DIFF; ab-out/s181-leva/fxcr1-M.diff) -> rc=3"; [ "$RC" -eq 0 ] && RC=3
+  note "MUTANTE: NON morde nella forma attesa (ACE oracle $NACE vs M $MACE, sparite non-ACE $GONE_NONACE, in più non-warning $EXTRA_BAD; ab-out/s181-leva/fxcr1-M.diff) -> rc=3"; [ "$RC" -eq 0 ] && RC=3
 fi
 
 # disasm agli atti (p.6): istr/bl/blr/sp_refs di run_loop di B vs pin s180 (S-104: ogni leva su run_loop pretende il disasm)
 dis(){ # $1=binario $2=etichetta
-  local sym; sym=$(nm -n "$1" | awk '{print $3}' | grep -i '8run_loop17h' | head -n 1)
+  local sym; sym=$(nm -n "$1" | awk '{print $3}' | grep -iE '8run_loop17h|2Vm8run_loop$' | head -n 1)
   [ -n "$sym" ] || { echo "simbolo run_loop non trovato"; return; }
   objdump -d --no-show-raw-insn --disassemble-symbols="$sym" "$1" > "$OUT/disasm-$2-run_loop.s" 2>/dev/null
   echo "istr=$(grep -cE '^ *[0-9a-f]+:' "$OUT/disasm-$2-run_loop.s") bl=$(grep -cE '[[:space:]]bl[[:space:]]' "$OUT/disasm-$2-run_loop.s") blr=$(grep -cE '[[:space:]]blr[[:space:]]' "$OUT/disasm-$2-run_loop.s") sp_refs=$(grep -c '\[sp' "$OUT/disasm-$2-run_loop.s")"

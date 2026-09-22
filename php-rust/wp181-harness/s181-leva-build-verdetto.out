@@ -1,0 +1,12 @@
+== s181 bracci Z/B/M leva L-CR1 — riferimento A = pin s180 884399fc52277119, sorgente B = commit 172814aed413, Z = commit 243682e7cf1b, fixture fx-sw2-gc 54 righe + fx-sw1 87 righe + fx-sl1/fx-sl2/fx-sl3 + fx-cr1 59 righe, Extreme 2454G 2026-09-22 14:05:47 ==
+RIFERIMENTO: pin fx-sw2-gc gcp-fused: d=1 s=1 gcp-ctl: d=1 s=1 gcp-loop: 1,1 s=2 gcp-scsc: d=1 l=11 gcp-under: d=0 s=1 gcp-off: d=0 s=1 FX-SW2 DONE  · fx-sw1 pin==oracle BYTE-ID · fx-cr1 pin==oracle BYTE-ID (righe ACE: 5)
+SKIP_BUILD=1 (emenda 5): riuso dei binari della corsa 2 — Z ec8d3551b6520a50 ≠ pin 884399fc52277119 (gemello a contenuto) · B 5ed396908bc485f9 · M e6f308eb4fab4c79
+B: fx-sw2-gc == pin BYTE-ID (invarianza)
+B: fxsw1 == oracle BYTE-ID
+B: fxsl1 == oracle BYTE-ID
+B: fxsl2 == oracle BYTE-ID
+B: fxsl3 == oracle BYTE-ID
+B: fxcr1 == oracle BYTE-ID
+MUTANTE: morde (emenda 6) — righe ACE oracle 5 vs M 2; sparite solo righe ACE, in più solo warning «Undefined variable» (4): la fixture presidia il rischio (b)
+DISASM run_loop: pin s180 istr=72168 bl=6123 blr=12 sp_refs=11616 · B istr=72321 bl=6132 blr=13 sp_refs=10685
+ESITO rc=0 (0 = B a parità e mutante che morde: bracci pronti; 2 = B diverge; 3 = mutante non morde) fine 2026-09-22 14:05:52
