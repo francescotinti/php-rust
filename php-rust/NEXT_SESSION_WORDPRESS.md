@@ -1,7 +1,7 @@
 # NEXT_SESSION — phpr: OBIETTIVO PARITÀ (≥1×) con l'oracle; ≤3× = tappa (REGOLE §1)
 ⏱ **FONDAMENTALI**: **S-180 = ratifica delle sessioni diagnostiche S-178/S-179 (ChatGPT Astra 6: la leva «fill IC slot privati»
 DECLASSATA a bassa priorità su misura di tempo, tetto inclusivo ≈1,1 % della suite ORM) + revert L-CM1 al byte + dente LOC sanato (dichiarato) + RI-PIN s180 sotto toolchain
-Rust 1.98.1 con TUTTI i gate rc=0 + coppia t21 COMPATIBILE (1,744) + ORM E3/E4 in catena.** **PIN NUOVO phpr `884399fc52277119` + server
+Rust 1.98.1 con TUTTI i gate rc=0 + coppia t21 COMPATIBILE (1,744) + ORM [7,008;7,060] (voce a filo di 7,05).** **PIN NUOVO phpr `884399fc52277119` + server
 `045fe03356ee73e5`** (sorgente c2b572ef: pin s175 + gc-idle S-176 + toolchain 1.98.1; L-CM1 revertata b3e48919); tree == pin.
 Ratifiche: licenza **PHP-3.01** · `AGENTS.md` (mappa delle fonti, non stato) · `rust-toolchain.toml` 1.98.1 (da qui OGNI braccio è
 same-toolchain col pin s180; i numeri ≤s175 restano attribuiti a 1.96.0). **Fill privato = DECLASSATO a bassa priorità su misura di tempo**
@@ -13,17 +13,17 @@ conferma prop-dq · incidenti: 0 · revisione S-180 (lente PROCESSO): wp180-harn
 ## Scoreboard (PIN s180, micro R=5 di record 2026-09-22 00:0x, E2 PASS t3, quiescenza t1)
 **arith 2,2 ↓ · prop 2,4 ↓ · calls 4,5 ↓ · str 4,1 = · arr 2,9 ↓ · re 2,5 =** (vs s175: direzione toolchain+gc-idle, NON ripartita) ·
 giudici: prop-dq pin s180 34,20 (s175 36,20: D +2,00 5/5 rumore 0,40, sola direzione) · arith-dq NON rimisurato (s175 20,28) ·
-**WP t21 1,744 COMPATIBILE** (rc=0; N=6 pulite 1,728-1,759, banda_ON 0,030; t20 1,765; media 2,42-2,44; leg4 parità full: 3 test
-Tests_Fonts_WpFontCollection_GetData da RETE, voce esterna da osservare a t22) · ORM: **DA LEGGERE** (wp176-harness/orm-out/rimisura.done + s176-orm-coppia-verdetto.out → copiare in
-wp180-harness/s180-orm-coppia-verdetto.out; riferimento [6,936;7,014]) · corpus 2655 (1412 congelati) · batteria 1748/0/2 (s180) ·
-CI: coda 3 job (4c2d3c4b, bffaaf8f, c2b572ef) in attesa del lock; ATTESI verdi (dente sanato, batteria del tree rc=0).
+**WP t21 1,744 COMPATIBILE** (rc=0; N=6 pulite 1,728-1,759, banda_ON 0,030; t20 1,765; media 2,42-2,44; leg4 parità full DIVERSA su
+test da RETE (Fonts GetData + REST Attachments from_url, ~10 nomi): voce esterna transitoria da osservare a t22) · ORM net **[7,008;7,060]** (rc=0; t20 [6,936;7,014], registrato S-162 [7,023;7,053], storico S-164 [7,066;7,111]; leg2 7,060 >7,05 A FILO ⇒ VOCE riaperta, regola 4: istruttoria se persiste a t22; sentinella oracle 4,96/4,93 IN banda [4,84;5,04]; parità ORM 16 nomi · dbal 10 stabili; dbal net [7,440;7,463]) (wp180-harness/s180-orm-coppia-verdetto.out) · corpus 2655 (1412 congelati) · batteria 1748/0/2 (s180) ·
+CI: lock rimosso a chiusura (03:3x): job in coda da 4c2d3c4b a HEAD partono in sequenza; ATTESI verdi (dente sanato, batteria del tree rc=0).
 
 ## §S-181 — ordine
 0. **PRE-FLIGHT**: pin s180 per hash (phpr 884399fc52277119, server 045fe03356ee73e5) · `rustc --version` = 1.98.1 nel
    workspace · Data ≥10G + `vm.swapusage` · **CPU totale <150 % ×4 (E2) prima di OGNI misura** · MySQL wp8 con l'elenco · lock
    col TOKEN `s181` · tree pulito · **CI_FEED**: esiti dei job 4c2d3c4b/bffaaf8f/c2b572ef (attesi OK; se batteria-FAIL leggere
    `phpr-ci/out/<sha12>/batteria.log`) · **coppia t21/ORM**: se non chiusa in S-180, leggere i `.done` PRIMA di tutto: WP fuori
-   banda o ORM >7,05 ⇒ istruttoria (regola 4) prima di ogni leva · Serena attiva PRIMA del Rust.
+   banda ⇒ istruttoria; **ORM t21 = [7,008;7,060] con leg2 >7,05 a filo: se t22 (dovuta al prossimo pin) resta >7,05, istruttoria
+   (regola 4) PRIMA di ogni leva; oggi nessun claim (toolchain+gc-idle non ripartite)** · Serena attiva PRIMA del Rust.
 1. **LEVA S-181 = calls 4,5× (peggior rapporto) → str 4,1×**: census Call/Ret/args-Vec/SEND sui driver micro `calls` e su ORM
    (feature op-census su ramo separato, copia di s177-census-miss.sh); criterio PRIMA; bersaglio = il CORPO del handler di chiamata
    (rotta S-169: dispatch = oracle, i corpi pesano); giudice nuovo `calls-dq` (N dal driver) + guardie prop-dq/arith-dq a sola
@@ -32,7 +32,7 @@ CI: coda 3 job (4c2d3c4b, bffaaf8f, c2b572ef) in attesa del lock; ATTESI verdi (
 2. **L-CM1 (opzionale, solo se la finestra è calma e p.1 è chiuso)**: il meccanismo (una load in meno per hit IC, Add-first) è a
    verbale in wp177-harness; ricostruire come braccio C same-toolchain sopra il pin s180 e misurare con E1/E2; attesa piccola
    (sotto 4 ns/iter probabile ⇒ solo direzione).
-3. **Coppia**: dovuta a ogni pin nuovo — se t21/ORM di S-180 sono chiuse e compatibili, nessuna coppia in S-181 salvo pin nuovo.
+3. **Coppia**: dovuta a ogni pin nuovo (t21/ORM di S-180 chiuse: WP compatibile, ORM voce a filo) — coppia t22 SOLO con pin nuovo.
 4. Quesiti residui: readonly write-once (49 % dei miss ORM) NON MISURATO (nessuna cifra di tempo: sorte da misurare, non presunta) ·
    ictx oracle1 · c0 positivo · census server (28° slitt.) · ratifiche §3 · dtor-in-dtor · Sweep-skip esteso (micro-only) ·
    sito phprust.com ancora «MIT» (allineare nel suo progetto) · gh-status-sync a mano (skill con `model:` — solo a inizio sessione) ·
@@ -41,7 +41,7 @@ CI: coda 3 job (4c2d3c4b, bffaaf8f, c2b572ef) in attesa del lock; ATTESI verdi (
    nel verdetto (rilievi 3/4) · purge `._*` in wp180-harness/{promo,pair,orm}-out a coppia chiusa (rilievo 9).
 
 ## Aperture per NOME
-ORM E3/E4 (da leggere se non chiusa) · voce rete Tests_Fonts_WpFontCollection_GetData (t21 leg4) · CI 3 job (attesi verdi) · leva calls (S-181) · str 4,1 · L-CM1 come braccio C
+**VOCE ORM [7,008;7,060] a filo di 7,05 (regola 4: istruttoria a t22 se persiste)** · voce rete Tests_Fonts_WpFontCollection_GetData (t21 leg4) · CI 3 job (attesi verdi) · leva calls (S-181) · str 4,1 · L-CM1 come braccio C
 same-toolchain (opzionale) · readonly write-once senza cifra · arith-dq da rimisurare sul pin s180 · Sweep-skip esteso (micro-only) ·
 dtor-in-dtor · §3.32 · §3.30 · residuo slot 2,75/op · tupla guard · F1/F2 (SOSPESE) · autoload statiche · sonda strmap · gamba
 server census · §3.28 · §3.29 · §3.27 · §3.26 · §3.25 · §3.24+§3.23 · slot-load · §3.22 · depr. float→int · warning ×2 · div. RMW ·
