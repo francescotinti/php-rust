@@ -1,0 +1,54 @@
+1a2,6
+> # s184-pair.sh <tentativo> — S-184: coppia full/media WP @ pin s182 (DOVUTA: pin nuovo, promozione COMPOSTA L-RT1+L-RT2; criterio
+> # s184-criterio-coppia-t25.md). COPIA DICHIARATA di wp182-harness/s182-pair.sh (manifest s184-pair-copia.diff) coi SOLI adattamenti:
+> # nomi s184/pair184/t25; harness wp184; pin s182 = PIN_ATTESO/SRV_ATTESO dagli stash (avvio-coppia-s184.sh); mediane storiche
+> # + t24=1,770 (banda giudizio INVARIATA [1,738;1,799]); messaggi GIÙ/REGRESSIONE riferiti a L-RT1+L-RT2 (pin NUOVO: la direzione
+> # è della leva, sotto-risoluzione dichiarata). Tutto il resto INVARIATO (testo S-182/S-181 conservato sotto).
+37c42
+< H="$REPO/wp182-harness"
+---
+> H="$REPO/wp184-harness"
+42c47
+< VERD="$H/s182-pair-verdetto-$T.out"
+---
+> VERD="$H/s184-pair-verdetto-$T.out"
+47c52
+< DONE="$OUT/pair182-$T.done"
+---
+> DONE="$OUT/pair184-$T.done"
+56,57c61,62
+< PIN_ATTESO="${PIN_ATTESO:-PLACEHOLDER-PIN-S181}"
+< SRV_ATTESO="${SRV_ATTESO:-PLACEHOLDER-SRV-S181}"
+---
+> PIN_ATTESO="${PIN_ATTESO:-PLACEHOLDER-PIN-S182}"
+> SRV_ATTESO="${SRV_ATTESO:-PLACEHOLDER-SRV-S182}"
+172,173c177,178
+< print(f"== s182 ISTRUTTORIA t24: RIMISURA coppia WP full+media sul pin s181 MISURATO phpr={PINH} server={SRVH} tentativo={T} (criteri s132/s146/s148 EREDITATI + s182-criterio-istruttoria.md: giudizio a MEDIANA per finestra, az.rev.3 S-149) ==")
+< print(f"grade=VERDICT  # derivazione meccanica dai .time; rc autoritativo = pair-out/pair182-{T}.done")
+---
+> print(f"== s184 coppia t25: WP full+media @ pin s182 MISURATO phpr={PINH} server={SRVH} tentativo={T} (criteri s132/s146/s148 EREDITATI + s184-criterio-coppia-t25.md: giudizio a MEDIANA per finestra, az.rev.3 S-149) ==")
+> print(f"grade=VERDICT  # derivazione meccanica dai .time; rc autoritativo = pair-out/pair184-{T}.done")
+246,247c251,252
+<         # s182-criterio-istruttoria.md p.4 (az.rev.3 S-149): GIUDIZIO CANONICO a
+<         # MEDIANA per finestra vs mediane storiche t1=1,799 t2=1,738 t3=1,789 t4=1,781 t5=1,757 t6=1,771 t7=1,795 t8=1,754 t9=1,767 t10=1,760 t11=1,765 t12=1,767 t13=1,763 t14=1,761 t15=1,746 t16=1,749 t17=1,776 t18=1,769 t19=1,772 t20=1,765 t21=1,744 t23=1,799 (t22 abortita);
+---
+>         # s184-criterio-coppia-t25.md p.4 (az.rev.3 S-149): GIUDIZIO CANONICO a
+>         # MEDIANA per finestra vs mediane storiche t1=1,799 t2=1,738 t3=1,789 t4=1,781 t5=1,757 t6=1,771 t7=1,795 t8=1,754 t9=1,767 t10=1,760 t11=1,765 t12=1,767 t13=1,763 t14=1,761 t15=1,746 t16=1,749 t17=1,776 t18=1,769 t19=1,772 t20=1,765 t21=1,744 t23=1,799 (t22 abortita) t24=1,770;
+250,255c255,260
+<         med_t24 = statistics.median(props)
+<         print(f"mediana_t24={med_t24:.3f} (N={len(props)} coppie proprie ON PULITE; mediane storiche t1=1.799 t2=1.738 t3=1.789 t4=1.781 t5=1.757 t6=1.771 t7=1.795 t8=1.754 t9=1.767 t10=1.760 t11=1.765 t12=1.767 t13=1.763 t14=1.761 t15=1.746 t16=1.749 t17=1.776 t18=1.769 t19=1.772 t20=1.765 t21=1.744 t23=1.799)")
+<         if MED_LO <= med_t24 <= MED_HI:
+<             print(f"giudizio_MEDIANA (canonico, criterio istruttoria p.4): COMPATIBILE (mediana in [{MED_LO}; {MED_HI}]) — nessun claim")
+<         elif med_t24 < MED_LO:
+<             print(f"giudizio_MEDIANA (canonico, criterio istruttoria p.4): direzione GIU' SEGNALATA (mediana {med_t24:.3f} < {MED_LO}) — stesso pin s181 (rimisura di istruttoria): lettura, non è una leva")
+---
+>         med_t25 = statistics.median(props)
+>         print(f"mediana_t25={med_t25:.3f} (N={len(props)} coppie proprie ON PULITE; mediane storiche t1=1.799 t2=1.738 t3=1.789 t4=1.781 t5=1.757 t6=1.771 t7=1.795 t8=1.754 t9=1.767 t10=1.760 t11=1.765 t12=1.767 t13=1.763 t14=1.761 t15=1.746 t16=1.749 t17=1.776 t18=1.769 t19=1.772 t20=1.765 t21=1.744 t23=1.799 t24=1.770; riferimento L-RT1+L-RT2: t24=1.770)")
+>         if MED_LO <= med_t25 <= MED_HI:
+>             print(f"giudizio_MEDIANA (canonico, criterio coppia-t25 p.4): COMPATIBILE (mediana in [{MED_LO}; {MED_HI}]) — L-RT1+L-RT2 sotto-risoluzione su WP (dichiarato); vs t24=1.770: {'≤' if med_t25 <= 1.770 else '>'} (direzione, non cifra)")
+>         elif med_t25 < MED_LO:
+>             print(f"giudizio_MEDIANA (canonico, criterio coppia-t25 p.4): direzione GIU' SEGNALATA (mediana {med_t25:.3f} < {MED_LO}) — pin NUOVO s182: coerente con L-RT1+L-RT2 (attesa ≤0), magnitudine non ripartita")
+257c262
+<             print(f"giudizio_MEDIANA (canonico, criterio istruttoria p.4): REGRESSIONE SEGNALATA (mediana {med_t24:.3f} > {MED_HI}) — in finestra pulita = REPERTO contro L-CR1 (criterio istruttoria p.5)")
+---
+>             print(f"giudizio_MEDIANA (canonico, criterio coppia-t25 p.4): REGRESSIONE SEGNALATA (mediana {med_t25:.3f} > {MED_HI}) — in finestra pulita = REPERTO contro L-RT1+L-RT2 (criterio coppia-t25 p.5: regola 4, indagine prima di ogni leva)")

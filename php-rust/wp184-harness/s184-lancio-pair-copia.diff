@@ -1,0 +1,50 @@
+2,12c2,5
+< # s182-lancio-pair-t24.sh — ISTRUTTORIA S-182 (criterio s182-criterio-istruttoria.md p.3): attende la quiete CI (cargo/rustc/
+< # phpt-runner: job CI in volo al lancio; il lock S-171 tiene
+< # ferma la coda), POI esige quiete CONTINUA anti-flare (criterio p.6,
+< # az.rev. S-163 #5: 6 campioni consecutivi x30s con mediaanalysisd <5%,
+< # predicato del riaggancio-r5b s163 ora PRE-registrato), DICHIARA la
+< # finestra quieta (uptime + top nel log) e lancia s182-pair.sh t24.
+< # COPIA DICHIARATA di s181-lancio-pair-t23.sh (manifest s182-lancio-pair-copia.diff):
+< # nomi s182/t24 + QUATTRO EMENDE t24 dichiarate: (i) lock col TOKEN s183 (istruttoria eseguita in S-183: apparato nato in S-182, retoken dichiarato) scritto qui dopo la quiete CI,
+< # (ii) pre-gate loadavg1 <3 (era <5), (iii) E2 calma CPU totale <150 % ×4 (predicato copiato da
+< # s181-promozione.sh, ripetuto finché passa), (iv) watchdog disco Data a 60 s (s181-pair.sh NON ne ha uno;
+< # veto S-17x: Data <10G senza watchdog). Il resto INVARIATO (blocco anti-flare EREDITATO).
+---
+> # s184-lancio-pair-t25.sh — COPPIA t25 @ pin s182 (criterio s184-criterio-coppia-t25.md p.3): COPIA DICHIARATA di
+> # ../wp182-harness/s182-lancio-pair-t24.sh (manifest s184-lancio-pair-copia.diff) coi SOLI adattamenti: nomi s184/t25/pair184,
+> # lock TOKEN s184, s184-pair.sh t25, PIÙ il gate sentinella «processo singolo >50 % CPU» ×2 (az.rev. S-183 #3, come
+> # s184-lancio-rt2.sh) dopo E2. Il resto INVARIATO (testo S-182 conservato sotto).
+15,16c8,9
+< H="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp182-harness"
+< LOG="$H/pair-out/lancio-t24.log"; mkdir -p "$H/pair-out"
+---
+> H="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp184-harness"
+> LOG="$H/pair-out/lancio-t25.log"; mkdir -p "$H/pair-out"
+26,27c19,20
+< echo "s183 istruttoria t24 (apparato S-182) $(date '+%F %T') pid=$$" > "$MLOCK"
+< echo "$(date '+%F %T') lock scritto: $MLOCK (TOKEN s183)" >> "$LOG"
+---
+> echo "s184 coppia t25 @ pin s182 $(date '+%F %T') pid=$$" > "$MLOCK"
+> echo "$(date '+%F %T') lock scritto: $MLOCK (TOKEN s184)" >> "$LOG"
+54a48,51
+> # GATE sentinella (az.rev. S-183 #3): nessun processo singolo > 50 % CPU al SECONDO campione di `top -l 2`, ×2 consecutivi
+> hog(){ /usr/bin/top -l 2 -n 1 -o cpu -stats cpu,command 2>/dev/null | tail -1 | awk '$1+0 > 50 {print}'; }
+> hc=0
+> while [ "$hc" -lt 2 ]; do hg=$(hog); if [ -z "$hg" ]; then hc=$((hc+1)); else hc=0; echo "$(date '+%F %T') processo singolo >50 % CPU: $hg — attesa" >> "$LOG"; fi; [ "$hc" -lt 2 ] && sleep 30; done
+57c54
+< ( WD="$H/pair-out/watchdog-t24.txt"; PD="$H/pair-out/pair182-t24.done"; t0=$(date +%s); tdone=0
+---
+> ( WD="$H/pair-out/watchdog-t25.txt"; PD="$H/pair-out/pair184-t25.done"; t0=$(date +%s); tdone=0
+67,68c64,65
+< Q="$H/pair-out/quiet-decl-t24.txt"
+< { echo "== dichiarazione finestra quieta t24 $(date '+%F %T') =="
+---
+> Q="$H/pair-out/quiet-decl-t25.txt"
+> { echo "== dichiarazione finestra quieta t25 $(date '+%F %T') =="
+72,73c69,70
+< echo "$(date '+%F %T') quiete raggiunta — dichiarazione in quiet-decl-t24.txt — lancio pair t24" >> "$LOG"
+< exec /bin/bash "$H/s182-pair.sh" t24
+---
+> echo "$(date '+%F %T') quiete raggiunta — dichiarazione in quiet-decl-t25.txt — lancio pair t25" >> "$LOG"
+> exec /bin/bash "$H/s184-pair.sh" t25
