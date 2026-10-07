@@ -1077,6 +1077,20 @@ perimetro: solo codice che legge `gc_status()` tra l'abilitazione e la successiv
 della fixture: INVARIANZA pin == stash (non bilaterale). Un ciclo via `$a = []; $a[] = &$a;` NON lascia radici in
 nessuno dei due motori (la riassegnazione scrive attraverso il riferimento): non usarlo come pressione GC.
 
+### 3.34 🔴 Confronto `==` tra oggetti con proprietà ricorsive: STACK OVERFLOW (SIGABRT) invece dell'`Error` «Nesting level too deep - recursive dependency?» (S-184, Zend/tests/bug63882.phpt)
+
+`$a->x = $a; $b->x = $b; var_dump($a == $b)`: Zend protegge la ricorsione in `zend_std_compare_objects`
+(`Z_IS_RECURSIVE` ⇒ `Error` catturabile «Nesting level too deep - recursive dependency?»), phpr ricorre senza guardia
+in `php_types::ops::loose_eq` (iteratore delle proprietà → `loose_eq` → …) finché il thread del test esaurisce la pila:
+`thread has overflowed its stack` / `fatal runtime error: stack overflow, aborting`, SIGABRT, rc 134 (confermato col
+runner del pin s182 `896bc9852a5f2ae7`, `--run-one`). È la fonte dei crash report `phpt-runner` ×1 per modo a ogni
+corpus-gate (`--isolate`: muore il figlio `--run-one`; il gate resta rc=0 perché il nome è nel fail-set congelato).
+Gli array ricorsivi (`recursive_array_comparison.phpt`) NON abortiscono (rc 0): la guardia manca solo sul ramo oggetti.
+Cura: contatore di profondità (o marca di ricorsione sulle proprietà) che lanci l'`Error` di Zend; cita il fail
+`bug63882.phpt` da flippare (1412 → 1411). Collaterale operativo: ReportCrash simbolizza il binario LTO per ore
+(S-184: 108 min CPU, SIGTERM ignorato, serve `kill -9`) ⇒ la sentinella CPU di fine finestra (az.rev. S-184 #4) deve
+elencarlo.
+
 ## 4. Punti di forza da NON toccare (invarianti verificati byte-identici)
 
 Per evitare regressioni, questi comportamenti sono **già** byte-identici con
