@@ -1,0 +1,100 @@
+2,12c2,9
+< # s181-promozione.sh — gate di PROMOZIONE del tree «pin s180 + L-CR1 Call/Ret magri» (criterio s181-criterio-cr1.md p.5).
+< # COPIA DICHIARATA di ../wp180-harness/s180-promozione.sh (manifest s181-promozione-copia.diff) coi SOLI adattamenti:
+< # (1) tag s181 (harness wp181: verdetto s181-promo-verdetto.out, promo-out); (2) CANDIDATO = braccio B dell'A/B
+< # (ab-out/s181-leva/phpr-B, commit 172814ae): precondizione A/B rc=0 (ab-out/cr1.rc) e HEAD == commit del candidato;
+< # (3) az.rev. S-180 rilievo 3: HEAD e `git status --porcelain` registrati PRIMA della build; la build ricetta sulla target
+< # canonica si confronta col braccio B (target separata): hash uguale = identità al byte, diverso = «candidato a
+< # contenuto» dichiarato (LC_UUID/firma), MAI stop; (4) REF = stash phpr-s180 (884399fc52277119) per i gate invarianti;
+< # (5) gate bilaterale NUOVO fx-cr1 (marcatore FX-CR1 DONE); (6) corpus: ZERO flip attesi (semantica identica per
+< # costruzione); (7) conferma post-pin = calls-dq R=5 pin s181 vs stash s180 (STESSA toolchain 1.98.1: cifra attesa ≈ D
+< # dell'A/B) + prop-dq (guardia); (8) rilievo 4: `hk.rc` nel verdetto accanto al summary; (9) pin-server.sh s181.
+< # Tutto il resto INVARIATO (testo S-180/S-177 conservato sotto).
+---
+> # s184-promozione.sh — gate di PROMOZIONE COMPOSTA del tree «pin s181 + L-RT1 + L-RT2» (criterio s184-criterio-rt2.md p.5).
+> # COPIA DICHIARATA di ../wp181-harness/s181-promozione.sh (manifest s184-promozione-copia.diff) coi SOLI adattamenti:
+> # (1) tag s182 (harness wp184: verdetto s184-promo-verdetto.out, promo-out); (2) CANDIDATO = braccio B dell'A/B composto
+> # (ab-out/s184-leva/phpr-B ce6ae73f, commit 454a77c3): precondizione A/B rc=0 (ab-out/rt2.rc) e commit in HEAD;
+> # (3) REF = stash phpr-s181 (19a2faa83a492745) per i gate invarianti; (4) gate bilaterali NUOVI fx-rt1 (FX-RT1 DONE) e
+> # fx-rt2 (FX-RT2 DONE) accanto a fx-cr1; (5) corpus: ZERO flip attesi (semantica identica per costruzione, batteria CI
+> # 1748/0 su 454a77c3); (6) conferma post-pin = calls-dq R=5 pin s182 vs stash s181 (stessa toolchain 1.98.1: attesa
+> # D ≈ [+12,50;+13,17] dell'A/B) + prop-dq (guardia); (7) pin-server.sh s182. Testo S-181/S-180/S-177 conservato sotto:
+18a16
+> H9="$SRC/wp184-harness"; H3="$SRC/wp182-harness"
+26,27c24,25
+< OUT="$H8/promo-out"; mkdir -p "$OUT"
+< VERD="$H8/s181-promo-verdetto.out"
+---
+> OUT="$H9/promo-out"; mkdir -p "$OUT"
+> VERD="$H9/s184-promo-verdetto.out"
+29,30c27,28
+< REF="$STASH/phpr-s180"; REF_EXP="884399fc52277119"
+< CAND="$H8/ab-out/s181-leva/phpr-B"; CAND_COMMIT="${CAND_COMMIT:-172814ae}"
+---
+> REF="$STASH/phpr-s181"; REF_EXP="19a2faa83a492745"
+> CAND="$H9/ab-out/s184-leva/phpr-B"; CAND_COMMIT="${CAND_COMMIT:-454a77c3}"
+39c37
+<          "$H8/fx-cr1.php" "$H8/calls-dq.php" "$CAND" "$H8/ab-out/cr1c.rc" \
+---
+>          "$H8/fx-cr1.php" "$H9/calls-dq.php" "$H3/fx-rt1.php" "$H9/fx-rt2.php" "$CAND" "$H9/ab-out/rt2.rc" \
+47,48c45,46
+< [ "$(shasum -a 256 "$REF" | cut -c1-16)" = "$REF_EXP" ] || stop "PRE: stash phpr-s180 hash != $REF_EXP — STOP"
+< [ "$(cat "$H8/ab-out/cr1c.rc")" = 0 ] || stop "PRE: A/B cr1c rc=$(cat "$H8/ab-out/cr1c.rc") ≠ 0 — nessuna promozione senza nomina — STOP"
+---
+> [ "$(shasum -a 256 "$REF" | cut -c1-16)" = "$REF_EXP" ] || stop "PRE: stash phpr-s181 hash != $REF_EXP — STOP"
+> [ "$(cat "$H9/ab-out/rt2.rc")" = 0 ] || stop "PRE: A/B rt2 rc=$(cat "$H9/ab-out/rt2.rc") ≠ 0 — nessuna promozione senza nomina — STOP"
+50c48
+< note "PRE: candidato = braccio B $CH (commit $CAND_COMMIT, A/B cr1c rc=0); REF = stash s180 $REF_EXP"
+---
+> note "PRE: candidato = braccio B $CH (commit $CAND_COMMIT, A/B rt2 rc=0, cifra composta [+12,50;+13,17]); REF = stash s181 $REF_EXP"
+105c103
+< "$SRC/scripts/pin-phpr.sh" s181 > "$OUT/pin.log" 2>&1
+---
+> "$SRC/scripts/pin-phpr.sh" s182 > "$OUT/pin.log" 2>&1
+114c112
+< note "promozione corpus-gate: rc=0 — nomi==congelato (1412), CONTENUTO==golden, off-on zero (ZERO flip come atteso: L-CR1 a semantica identica per costruzione)"
+---
+> note "promozione corpus-gate: rc=0 — nomi==congelato (1412), CONTENUTO==golden, off-on zero (ZERO flip come atteso: L-RT1+L-RT2 a semantica identica per costruzione)"
+142c140
+<   "$REF" "$f" > "$OUT/$n-s180.out" 2>&1
+---
+>   "$REF" "$f" > "$OUT/$n-s181.out" 2>&1
+146,147c144,145
+<   if diff -q "$OUT/$n-s180.out" "$OUT/$n-pin.out" > /dev/null; then
+<     note "promozione gate $n: pin==stash s180 BYTE-ID ($d)"
+---
+>   if diff -q "$OUT/$n-s181.out" "$OUT/$n-pin.out" > /dev/null; then
+>     note "promozione gate $n: pin==stash s181 BYTE-ID ($d)"
+149,150c147,148
+<     diff "$OUT/$n-s180.out" "$OUT/$n-pin.out" > "$OUT/$n.diff" || true
+<     stop "gate $n: pin DIVERGE dallo stash s180 (promo-out/$n.diff)"
+---
+>     diff "$OUT/$n-s181.out" "$OUT/$n-pin.out" > "$OUT/$n.diff" || true
+>     stop "gate $n: pin DIVERGE dallo stash s181 (promo-out/$n.diff)"
+173a172,173
+> bilat fxrt1 "$H3/fx-rt1.php" "FX-RT1 DONE" "presidio DIRETTO L-RT1 (S-183): cicli locali array/oggetto + gc_collect_cycles, ricorsione, foreach, dinamiche, metodo" -d log_errors=0 -d display_errors=1
+> bilat fxrt2 "$H9/fx-rt2.php" "FX-RT2 DONE" "presidio DIRETTO L-RT2 (S-184): ammissione del Ret fuso — hint int/nullable/TypeError, by-ref alias e deref, forma 0 annidata/null/locali, ret_cell thunk statico, INIT_PROPS, __toString, dtor con chiamata" -d log_errors=0 -d display_errors=1
+194,195c194,195
+< PHPR="$BIN" R=5 "$SRC/wp97-harness/micro/run-micro.sh" > "$OUT/micro-pin-s181.out" 2>&1
+< note "promozione micro pin s181: $(grep -E '^rapporto_' "$OUT/micro-pin-s181.out" | tr '\n' ' ')"
+---
+> PHPR="$BIN" R=5 "$SRC/wp97-harness/micro/run-micro.sh" > "$OUT/micro-pin-s182.out" 2>&1
+> note "promozione micro pin s182: $(grep -E '^rapporto_' "$OUT/micro-pin-s182.out" | tr '\n' ' ')"
+197c197
+< # ---- conferma POST-PIN: R=5 pin s181 vs stash s180 (STESSA toolchain 1.98.1) su calls-dq (bersaglio) e prop-dq (guardia) ----
+---
+> # ---- conferma POST-PIN: R=5 pin s182 vs stash s181 (STESSA toolchain 1.98.1) su calls-dq (bersaglio) e prop-dq (guardia) ----
+223,224c223,224
+< note "conferma post-pin calls-dq (pin s181 vs stash s180, stessa toolchain): $(conferma "$H8/calls-dq.php" calls) (attesa: D ≈ cifra dell'A/B cr1)"
+< note "conferma post-pin prop-dq (guardia, pin s181 vs stash s180): $(conferma "$H/prop-dq.php" prop) (attesa |D| < 1: sola lettura)"
+---
+> note "conferma post-pin calls-dq (pin s182 vs stash s181, stessa toolchain): $(conferma "$H9/calls-dq.php" calls) (attesa: D ≈ cifra composta dell'A/B rt2 [+12,50;+13,17])"
+> note "conferma post-pin prop-dq (guardia, pin s182 vs stash s181): $(conferma "$H/prop-dq.php" prop) (attesa |D| < 1: sola lettura)"
+254c254
+< "$SRC/scripts/pin-server.sh" s181 > "$OUT/pin-server.log" 2>&1
+---
+> "$SRC/scripts/pin-server.sh" s182 > "$OUT/pin-server.log" 2>&1
+260c260
+< note "PROMOZIONE COMPLETA rc=0 (da promo-out/rcb): pin s181 = $H2"
+---
+> note "PROMOZIONE COMPLETA rc=0 (da promo-out/rcb): pin s182 = $H2"

@@ -1,0 +1,17 @@
+2c2,3
+< # s181-lancio-promo.sh — lanciatore DETACHED della catena di promozione s181 (s181-promozione.sh).
+---
+> # s184-lancio-promo.sh — lanciatore DETACHED della catena di promozione COMPOSTA s184 → pin s182 (s184-promozione.sh).
+> # COPIA DICHIARATA di ../wp181-harness/s181-lancio-promo.sh (manifest s184-lancio-promo-copia.diff): soli path/tag.
+10c11
+< H="$SRC/wp181-harness"; O="$H/promo-out"; mkdir -p "$O"
+---
+> H="$SRC/wp184-harness"; O="$H/promo-out"; mkdir -p "$O"
+12c13
+< export PROMO_SP="/private/tmp/promo-s181-sp"
+---
+> export PROMO_SP="/private/tmp/promo-s184-sp"
+22c23
+< "$H/s181-promozione.sh" >> "$LOG" 2>&1
+---
+> "$H/s184-promozione.sh" >> "$LOG" 2>&1
