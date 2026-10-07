@@ -1,0 +1,61 @@
+2,15c2,5
+< # s183-ab-rt1.sh — A/B della leva L-RT1 «Ret in place» (criterio s183-criterio-rt1.md p.3-5): COPIA DICHIARATA di
+< # ../wp181-harness/s181-ab-cr1.sh (manifest s183-ab-rt1-copia.diff) coi SOLI adattamenti: A = pin s181, token s183, PREV prop-dq 31,60,
+< # attesa [+1;+4], ESITO ESPLICITO dell'attesa |D|<1 sulle guardie (rilievo 1 S-181), verdetto s183-<TAG>. Testo S-181 sotto:
+< # ---- (1) TRE bracci: A = pin s180
+< # (884399fc), Z = gemello del pin ricostruito nella target separata (se byte-id: |A−Z| = solo rumore, dichiarato), B = tree
+< # + L-CR1 (ab-out/s181-leva/phpr-B); (2) GIUDICE NUOVO calls-dq (wp181-harness/calls-dq.php, N dal driver): D = A−B,
+< # NOMINATA se ≥ max(4, rumore, SL) con ENTRAMBI gli stimatori; GUARDIE prop-dq e arith-dq a SOLA regressione (D < −max(4,
+< # rumore)); (3) esiti p.5: rc=0 PROMOZIONE · rc=3 SOLA DIREZIONE (max(rumore,SL) ≤ D < soglia, segni R/R) · rc=4 KILL ·
+< # rc=5 regressione di una guardia · rc=8 E1 (|A−PREV| prop-dq > 4) o SL > 4; (4) lock per TOKEN s181; verdetto
+< # s181-<TAG>-verdetto.out; PREV prop-dq = 34,20 (pin s180, S-180); arith-dq e calls-dq senza PREV same-toolchain (la A di
+< # oggi diventa PREV, dichiarato). Tutto il resto INVARIATO (R=5, rotazione dei bracci per coppia, floors med3 per binario,
+< # ns/iter=(med raw−floor)/N con N LETTO dal driver, mediane per colonna e appaiate, rumore drop-1, parità dei bracci contro
+< # l'ORACLE prima di misurare). I bracci arrivano come SYMLINK NEUTRI (arm-A/arm-Z/arm-B: il gate s129 cerca «phpr» negli argv).
+< # Uso: s181-ab-cr1.sh <APATH> <AEXP8> <ZPATH> <ZEXP8> <BPATH> <BEXP8> <TAG> [R] [PREV_PROP_A]
+---
+> # s184-ab-rt2.sh — A/B della LEVA COMPOSTA L-RT1 (nel tree) + L-RT2 «Ret fuso» (criterio s184-criterio-rt2.md p.3-5): COPIA DICHIARATA di
+> # ../wp182-harness/s183-ab-rt1.sh (manifest s184-ab-rt2-copia.diff) coi SOLI adattamenti: token s184, PREV prop-dq 31,27 (S-183),
+> # D = cifra COMPOSTA pin s181 → tree, attesa [3,5;6,5], promozione se D ≥ max(4, rumore, |A−Z|) con ENTRAMBI gli stimatori, rc=3 con
+> # SOTTOCASO (RT2 DIREZIONE se D ≥ 2,83+max(rumore,SL), altrimenti RT2 NULLA ⇒ revert), verdetto s184-<TAG>. Testo S-183/S-181 sotto:
+19c9
+< A="${1:?APATH}"; AEXP="${2:?AEXP8}"; ZZ="${3:?ZPATH}"; ZEXP="${4:?ZEXP8}"; BB="${5:?BPATH}"; BEXP="${6:?BEXP8}"; TAG="${7:?TAG}"; R="${8:-5}"; PREVPD="${9:-31.60}"
+---
+> A="${1:?APATH}"; AEXP="${2:?AEXP8}"; ZZ="${3:?ZPATH}"; ZEXP="${4:?ZEXP8}"; BB="${5:?BPATH}"; BEXP="${6:?BEXP8}"; TAG="${7:?TAG}"; R="${8:-5}"; PREVPD="${9:-31.27}"
+26c16
+< VERD="$H/s183-$TAG-verdetto.out"; RC="$OUT/$TAG.rc"
+---
+> VERD="$H/s184-$TAG-verdetto.out"; RC="$OUT/$TAG.rc"
+30c20
+< grep -qw s183 /private/tmp/phpr-measure.lock 2>/dev/null || { echo "lock s183 assente (per TOKEN)" | tee -a "$VERD"; echo 9 > "$RC"; exit 9; }
+---
+> grep -qw s184 /private/tmp/phpr-measure.lock 2>/dev/null || { echo "lock s184 assente (per TOKEN)" | tee -a "$VERD"; echo 9 > "$RC"; exit 9; }
+44c34
+< echo "== s183 LEVA L-RT1 $TAG — A=$AM MISURATO ($A, pin s181) Z=$ZM MISURATO ($ZZ, gemello del pin ricostruito$( [ "$ZM" = "$AM" ] && echo ' — BYTE-ID col pin: |A−Z| = solo rumore, SL in-run NON stimabile' )) B=$BM MISURATO ($BB, tree + L-CR1) — R=$R, N: calls-dq=$NCD arith-dq=$NGD prop-dq=$NPD, PREV prop-dq A (stesso binario, S-181/S-183: 31,60/31,73/31,60): $PREVPD, $(date '+%F %T') =="
+---
+> echo "== s184 LEVA COMPOSTA L-RT1+L-RT2 $TAG — A=$AM MISURATO ($A, pin s181) Z=$ZM MISURATO ($ZZ, gemello del pin ricostruito$( [ "$ZM" = "$AM" ] && echo ' — BYTE-ID col pin: |A−Z| = solo rumore, SL in-run NON stimabile' )) B=$BM MISURATO ($BB, tree = L-RT1 + L-RT2) — R=$R, N: calls-dq=$NCD arith-dq=$NGD prop-dq=$NPD, PREV prop-dq A (stesso binario, S-183: 31,27): $PREVPD, $(date '+%F %T') =="
+118c108
+< DCc, DCp, nC, nomC, regC, sgC = stat("GIUDICE calls-dq L-RT1 (D = A−B)", cA, cB, "B", "A", SLc)
+---
+> DCc, DCp, nC, nomC, regC, sgC = stat("GIUDICE calls-dq COMPOSTA L-RT1+L-RT2 (D = A−B, pin s181 → tree)", cA, cB, "B", "A", SLc)
+120c110
+< print(f"ATTESA (criterio-rt1 p.4): D ∈ [1;4]: {'CENTRATA' if 1 <= DC <= 4 else 'FUORI'} ({DCc:+.2f}/{DCp:+.2f})")
+---
+> print(f"ATTESA (criterio-rt2 p.4): D composta ∈ [3,5;6,5]: {'CENTRATA' if 3.5 <= DC <= 6.5 else 'FUORI'} ({DCc:+.2f}/{DCp:+.2f}); quota propria di L-RT2 = D − [2,50;2,83] di L-RT1 = INDICATIVA (regola 3: non cifra)")
+134c124
+<     print(f"PROMOZIONE: D calls-dq NOMINATA da entrambi gli stimatori [{min(DCc,DCp):+.2f};{max(DCc,DCp):+.2f}] (soglia max(4,rumore,SL)), guardie senza regressione ⇒ promozione del TREE con copia dichiarata di s180-promozione.sh (tag s181) + coppia t22 + ORM E3/E4 (rc=0)")
+---
+>     print(f"PROMOZIONE: D calls-dq NOMINATA da entrambi gli stimatori [{min(DCc,DCp):+.2f};{max(DCc,DCp):+.2f}] (soglia max(4,rumore,SL)), guardie senza regressione ⇒ promozione COMPOSTA del TREE (L-RT1+L-RT2) con copia dichiarata di s181-promozione.sh (tag s182, CARGO_TARGET_DIR esplicito) + coppia t25 + ORM (rc=0)")
+136c126,131
+<     print(f"SOLO DIREZIONE: D {DCc:+.2f}/{DCp:+.2f} ≥ max(rumore {nC:.2f}, SL {SLc:.2f}) con segni {sgC}/{R} ma sotto la soglia ⇒ L-RT1 TENUTA nel tree (keep-partial-wins), non promossa (rc=3)"); rc = 3
+---
+>     rt1hi = 2.83
+>     if DC >= rt1hi + max(nC, SLc):
+>         print(f"SOLO DIREZIONE composta: D {DCc:+.2f}/{DCp:+.2f} ≥ max(rumore {nC:.2f}, SL {SLc:.2f}) con segni {sgC}/{R} ma sotto la soglia; SOTTOCASO RT2 DIREZIONE (D ≥ 2,83 + max(rumore,SL) = {rt1hi + max(nC, SLc):.2f}) ⇒ L-RT2 TENUTA nel tree con L-RT1 SOLO a CI batteria+corpus OK sul commit (criterio-rt2 p.5; rc=3)")
+>     else:
+>         print(f"SOLO DIREZIONE composta: D {DCc:+.2f}/{DCp:+.2f} ≥ max(rumore {nC:.2f}, SL {SLc:.2f}) con segni {sgC}/{R} ma sotto la soglia; SOTTOCASO RT2 NULLA (D < 2,83 + max(rumore,SL) = {rt1hi + max(nC, SLc):.2f}: la composta non supera L-RT1 sola) ⇒ REVERT del commit L-RT2, il tree torna a L-RT1 sola (criterio-rt2 p.5; rc=3)")
+>     rc = 3
+138c133
+<     print(f"KILL L-RT1: D {DCc:+.2f}/{DCp:+.2f} < max(rumore {nC:.2f}, SL {SLc:.2f}) o segni misti ({sgC}/{R}) ⇒ i corpi tolti non pesano: revert al byte del commit L-RT1, meccanismo a verbale (rc=4)"); rc = 4
+---
+>     print(f"KILL L-RT2: D composta {DCc:+.2f}/{DCp:+.2f} < max(rumore {nC:.2f}, SL {SLc:.2f}) o segni misti ({sgC}/{R}) ⇒ revert al byte del commit L-RT2 (L-RT1 resta sul suo A/B S-183), meccanismo a verbale (rc=4)"); rc = 4

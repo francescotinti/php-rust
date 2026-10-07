@@ -1,0 +1,135 @@
+2,19c2,7
+< # s183-leva-build.sh — bracci Z (gemello del pin s181) e B (leva L-RT1) + MUTANTE (criterio s183-criterio-rt1.md p.2/p.3/p.6):
+< # COPIA DICHIARATA di ../wp181-harness/s181-leva-build.sh (manifest s183-leva-build-copia.diff) coi SOLI adattamenti: pin s181, token s183,
+< # tag s183-leva, target sulla SPARSEBUNDLE, MUTANTE = «fast path di Ret SENZA le note GC» (esito esatto: fx-cr1 diverge dall'oracle con
+< # SOLE righe `dtor …` cambiate, oppure ≥1 blocco di fx-sw2-gc rotto), disasm atteso bl −2. Testo S-181 conservato sotto:
+< # ----
+< # (1) TRE build nella stessa target separata: Z = sorgente del pin (ZCOMMIT, atteso == pin al byte ⇒ SL in-run NON
+< # stimabile, dichiarato), B = commit della leva (COMMIT), M = B + mutante «ip=1 anche sul cammino LENTO di Call»
+< # (sostituzione sull'archivio, mai sul tree) che DEVE rompere fx-cr1 sulle righe ACE (esito ESATTO); (2) pin atteso s180
+< # 884399fc52277119, tag s181 (out ab-out/s181-leva, sorgente/target /Volumes/Extreme Pro/Claude/s181-leva{,-tgt});
+< # (3) parità: fx-sw2-gc B == pin a blocchi, fx-sw1/fx-sl1/fx-sl2/fx-sl3 B == oracle byte-id, PIÙ fx-cr1 (nuova, S-181)
+< # B == oracle byte-id con marcatore FX-CR1 DONE; (4) disasm run_loop di B E del pin s180 agli atti (istr/bl/blr/sp_refs).
+< # rc (ab-out/s181-leva.done): 0 = B a parità e mutante che morde ⇒ bracci pronti · 2 = B diverge · 3 = mutante NON morde
+< # (fixture non presidia: niente misura) · 4 = build fallita · 6 = B == pin · 7 = file/commit · 8 = disco · 9 = lock/pin.
+< # EMENDE dichiarate S-181 (dopo la corsa 1 rc=7 «sito lento troppo lontano» e la corsa 2 rc=3): (5) SKIP_BUILD=1 riusa i tre
+< # binari phpr-Z/B/M già costruiti nella corsa 2 (hash riletti dai file), i gate di parità e il mutante si rieseguono;
+< # (6) forma del mutante: righe dell'oracle SPARITE in M = solo righe ACE (MACE < NACE) e righe IN PIÙ di M = solo warning
+< # «Undefined variable»/vuote (la corsa 2 ha mostrato esattamente questa forma: ACE 5→2, +8 righe warning/vuote);
+< # (7) simbolo run_loop col mangling v0 (`…2Vm8run_loop`) oltre al legacy `8run_loop17h`.
+---
+> # s184-leva-build.sh — bracci Z (gemello del pin s181) e B (tree = L-RT1 + L-RT2) + MUTANTE (criterio s184-criterio-rt2.md p.3/p.6):
+> # COPIA DICHIARATA di ../wp182-harness/s183-leva-build.sh (manifest s184-leva-build-copia.diff) coi SOLI adattamenti: token s184,
+> # tag s184-leva, fixture fx-rt2 (NUOVA) in riferimento + parità + bersaglio del mutante, MUTANTE = «ammissione del Ret fuso SENZA i bit
+> # di forma» (shape/flags/ret_cell tolti dall'ammissione; esito esatto: M diverge dall'oracle su fx-rt2 su ≥1 riga e TUTTE le righe
+> # cambiate sono etichettate RT2-), DISASM come GATE (az.rev. S-183 #2): |Δbl| ≤ 10 e |Δsp_refs| ≤ 40 di B vs tree-RT1 9ef70777
+> # (ab-out/s183-leva/phpr-B), altrimenti rc=5 «meccanismo da rileggere». Testo S-183/S-181 conservato sotto:
+23,24c11,12
+< H="$REPO/php-rust/wp182-harness"; H1="$REPO/php-rust/wp181-harness"; OUT="$H/ab-out/s183-leva"; mkdir -p "$OUT"
+< VERD="$H/s183-leva-build-verdetto.out"; DONE="$H/ab-out/s183-leva.done"; rm -f "$DONE"
+---
+> H="$REPO/php-rust/wp184-harness"; H1="$REPO/php-rust/wp181-harness"; H3="$REPO/php-rust/wp182-harness"; OUT="$H/ab-out/s184-leva"; mkdir -p "$OUT"
+> VERD="$H/s184-leva-build-verdetto.out"; DONE="$H/ab-out/s184-leva.done"; rm -f "$DONE"
+35,36c23,24
+< FXRT="$H/fx-rt1.php"
+< SRC="/Volumes/Extreme Pro/Claude/s183-leva"; BUNDLE_MP="$HOME/Claude/phpr-target"; TGT="$BUNDLE_MP/s183-leva-tgt"
+---
+> FXRT="$H3/fx-rt1.php"; FXRT2="$H/fx-rt2.php"; TREE_RT1="$H3/ab-out/s183-leva/phpr-B"
+> SRC="/Volumes/Extreme Pro/Claude/s184-leva"; BUNDLE_MP="$HOME/Claude/phpr-target"; TGT="$BUNDLE_MP/s184-leva-tgt"
+41c29
+< grep -qw s183 "$LOCK" 2>/dev/null || { note "rc=9 lock s183 assente (per TOKEN)"; fin 9; }
+---
+> grep -qw s184 "$LOCK" 2>/dev/null || { note "rc=9 lock s184 assente (per TOKEN)"; fin 9; }
+43c31
+< for f in "$FX2" "$FX1" "$H2/fx-sl1.php" "$H2/fx-sl2.php" "$H2/fx-sl3.php" "$FXCR" "$FXRT"; do [ -s "$f" ] || { note "rc=7 fixture assente: $f"; fin 7; }; done
+---
+> for f in "$FX2" "$FX1" "$H2/fx-sl1.php" "$H2/fx-sl2.php" "$H2/fx-sl3.php" "$FXCR" "$FXRT" "$FXRT2" "$TREE_RT1"; do [ -s "$f" ] || { note "rc=7 fixture assente: $f"; fin 7; }; done
+50c38
+< note "== s183 bracci Z/B/M leva L-RT1 — riferimento A = pin s181 $PH, sorgente B = commit ${SHA0:0:12}, Z = commit ${SHAZ:0:12}, fixture fx-sw2-gc $(wc -l < "$FX2" | tr -d ' ') righe + fx-sw1 $(wc -l < "$FX1" | tr -d ' ') righe + fx-sl1/fx-sl2/fx-sl3 + fx-cr1 $(wc -l < "$FXCR" | tr -d ' ') righe, Extreme ${AVX}G $(date '+%F %T') =="
+---
+> note "== s184 bracci Z/B/M leva COMPOSTA L-RT1+L-RT2 — riferimento A = pin s181 $PH, tree-RT1 $(shasum -a 256 "$TREE_RT1" | cut -c1-8), sorgente B = commit ${SHA0:0:12}, Z = commit ${SHAZ:0:12}, fixture fx-sw2-gc $(wc -l < "$FX2" | tr -d ' ') righe + fx-sw1 $(wc -l < "$FX1" | tr -d ' ') righe + fx-sl1/fx-sl2/fx-sl3 + fx-cr1 $(wc -l < "$FXCR" | tr -d ' ') righe, Extreme ${AVX}G $(date '+%F %T') =="
+67a56,59
+> "$ORACLE" -d log_errors=0 -d display_errors=1 "$FXRT2" > "$OUT/fxrt2-oracle.out" 2>&1
+> perl -e 'alarm 120; exec @ARGV or die' -- "$PIN" "$FXRT2" > "$OUT/fxrt2-pin.out" 2>&1
+> grep -q "FX-RT2 DONE" "$OUT/fxrt2-pin.out" || { note "rc=7 riferimento: marcatore FX-RT2 assente sul pin"; fin 7; }
+> diff -q "$OUT/fxrt2-oracle.out" "$OUT/fxrt2-pin.out" > /dev/null || { note "rc=7 fx-rt2: pin ≠ oracle (fixture non bilaterale a monte)"; fin 7; }
+69c61
+< note "RIFERIMENTO: pin fx-sw2-gc $(tr '\n' ' ' < "$OUT/ref.out" | cut -c1-160) · fx-sw1 pin==oracle BYTE-ID · fx-cr1 pin==oracle BYTE-ID (righe ACE: $NACE)"
+---
+> note "RIFERIMENTO: pin fx-sw2-gc $(tr '\n' ' ' < "$OUT/ref.out" | cut -c1-160) · fx-sw1 pin==oracle BYTE-ID · fx-cr1 pin==oracle BYTE-ID (righe ACE: $NACE) · fx-rt1/fx-rt2 pin==oracle BYTE-ID"
+106c98
+< ZH=$(build Z) || { note "rc=4 Z: build FALLITA (ab-out/s183-leva/build-Z.log)"; fin 4; }
+---
+> ZH=$(build Z) || { note "rc=4 Z: build FALLITA (ab-out/s184-leva/build-Z.log)"; fin 4; }
+111c103
+< BH=$(build B) || { note "rc=4 B: build FALLITA (ab-out/s183-leva/build-B.log)"; fin 4; }
+---
+> BH=$(build B) || { note "rc=4 B: build FALLITA (ab-out/s184-leva/build-B.log)"; fin 4; }
+115c107
+< # M = B + mutante: fast path di Ret SENZA le note GC (sostituzione sull'ARCHIVIO, mai sul tree) — DEVE divergere su fx-cr1 (righe dtor) o fx-sw2-gc
+---
+> # M = B + mutante: ammissione del Ret FUSO senza i bit di FORMA (shape/flags/ret_cell) — sostituzione sull'ARCHIVIO, mai sul tree — DEVE divergere su fx-rt2 (righe RT2-)
+119,122c111,116
+< old = ('                        for v in &slots {\n                            self.gc_note(v);\n                        }\n'
+<        '                        for v in &stack {\n                            self.gc_note(v);\n                        }\n')
+< assert s.count(old) == 1, 'sito fast path Ret non unico'
+< s = s.replace(old, '                        // MUTANTE s183: note GC SALTATE sul fast path di Ret\n')
+---
+> old = ('                        f.func.ret_shape == 0\n'
+>        '                            && f.flags.bits() == 0\n'
+>        '                            && f.ret_cell.is_none()\n'
+>        '                            && f.this.is_none()\n')
+> assert s.count(old) == 1, 'sito ammissione Ret fuso non unico'
+> s = s.replace(old, '                        // MUTANTE s184: ammissione SENZA shape/flags/ret_cell\n                        f.this.is_none()\n')
+127c121,122
+< MH=$(build M) || { note "rc=4 M: build FALLITA (ab-out/s183-leva/build-M.log)"; fin 4; }
+---
+> grep -q 'MUTANTE s184' "$SRC/php-rust/crates/php-runtime/src/vm/run.rs" || { note "rc=7 mutante NON scritto (verifica grep dopo la patch, lezione S-183 #3)"; fin 7; }
+> MH=$(build M) || { note "rc=4 M: build FALLITA (ab-out/s184-leva/build-M.log)"; fin 4; }
+129c124
+< note "M: binario $MH (B + mutante: Ret fast path senza note GC)"
+---
+> note "M: binario $MH (B + mutante: ammissione del Ret fuso senza shape/flags/ret_cell)"
+142c137
+<   if diff -q "$OUT/$n-oracle.out" "$OUT/$n-B.out" > /dev/null; then note "B: $n == oracle BYTE-ID"; else diff "$OUT/$n-oracle.out" "$OUT/$n-B.out" > "$OUT/$n.diff" || true; note "B: $n DIVERGE dall'oracle ($(wc -l < "$OUT/$n.diff" | tr -d ' ') righe, ab-out/s183-leva/$n.diff) -> rc=2"; RC=2; fi
+---
+>   if diff -q "$OUT/$n-oracle.out" "$OUT/$n-B.out" > /dev/null; then note "B: $n == oracle BYTE-ID"; else diff "$OUT/$n-oracle.out" "$OUT/$n-B.out" > "$OUT/$n.diff" || true; note "B: $n DIVERGE dall'oracle ($(wc -l < "$OUT/$n.diff" | tr -d ' ') righe, ab-out/s184-leva/$n.diff) -> rc=2"; RC=2; fi
+149a145
+> bilat fxrt2 "$FXRT2" "FX-RT2 DONE" -d log_errors=0 -d display_errors=1
+151,158c147,152
+< # mutante: DEVE divergere dall'oracle su fx-cr1 con SOLE righe «dtor …» cambiate (esito esatto), oppure rompere ≥1 blocco di fx-sw2-gc
+< perl -e 'alarm 120; exec @ARGV or die' -- "$OUT/phpr-M" "$FXRT" > "$OUT/fxrt1-M.out" 2>&1
+< diff "$OUT/fxrt1-oracle.out" "$OUT/fxrt1-M.out" > "$OUT/fxrt1-M.diff" || true
+< MCH=$(grep -c '^[<>]' "$OUT/fxrt1-M.diff"); MBAD=$(grep '^[<>]' "$OUT/fxrt1-M.diff" | grep -vcE '^[<>] (dtor |collect[0-9]+: |[0-9]+$)')
+< perl -e 'alarm 120; exec @ARGV or die' -- "$OUT/phpr-M" "$FX2" > "$OUT/M.out" 2>&1
+< rotte "$OUT/ref.out" "$OUT/M.out" | sort -u > "$OUT/M.rotte"; MR=$(wc -l < "$OUT/M.rotte" | tr -d ' ')
+< if { [ "$MCH" -gt 0 ] && [ "$MBAD" -eq 0 ]; } || [ "$MR" -gt 0 ]; then
+<   note "MUTANTE: morde — fx-rt1 righe cambiate $MCH (non dtor/collect $MBAD) · fx-sw2-gc blocchi rotti $MR ($(tr '\n' ' ' < "$OUT/M.rotte")): la fixture presidia il rischio (note GC / ordine dei rilasci)"
+---
+> # mutante: DEVE divergere dall'oracle su fx-rt2 con ≥1 riga cambiata e TUTTE le righe cambiate etichettate RT2- (esito esatto, criterio-rt2 p.3)
+> perl -e 'alarm 120; exec @ARGV or die' -- "$OUT/phpr-M" "$FXRT2" > "$OUT/fxrt2-M.out" 2>&1
+> diff "$OUT/fxrt2-oracle.out" "$OUT/fxrt2-M.out" > "$OUT/fxrt2-M.diff" || true
+> MCH=$(grep -c '^[<>]' "$OUT/fxrt2-M.diff"); MBAD=$(grep '^[<>]' "$OUT/fxrt2-M.diff" | grep -vc '^[<>] RT2-')
+> if [ "$MCH" -gt 0 ] && [ "$MBAD" -eq 0 ]; then
+>   note "MUTANTE: morde — fx-rt2 righe cambiate $MCH, tutte RT2- (non RT2- $MBAD): etichette $(grep '^[<>]' "$OUT/fxrt2-M.diff" | sed 's/^[<>] \(RT2-[a-z-]*\).*/\1/' | sort -u | tr '\n' ' ') — la fixture presidia l'ammissione"
+160c154
+<   note "MUTANTE: NON morde nella forma attesa (fx-rt1 cambiate $MCH, non dtor/collect $MBAD; fx-sw2-gc rotti $MR; ab-out/s183-leva/fxrt1-M.diff) -> rc=3"; [ "$RC" -eq 0 ] && RC=3
+---
+>   note "MUTANTE: NON morde nella forma attesa (fx-rt2 cambiate $MCH, non RT2- $MBAD; ab-out/s184-leva/fxrt2-M.diff) -> rc=3"; [ "$RC" -eq 0 ] && RC=3
+170c164,173
+< note "DISASM run_loop: pin s181 $(dis "$PIN" pin) · Z $(dis "$OUT/phpr-Z" Z) · B $(dis "$OUT/phpr-B" B) (atteso bl −2: gc_note_frame e recycle_frame non chiamate sul fast path)"
+---
+> DPIN=$(dis "$PIN" pin); DZ=$(dis "$OUT/phpr-Z" Z); DB=$(dis "$OUT/phpr-B" B); DT=$(dis "$TREE_RT1" treeRT1)
+> note "DISASM run_loop: pin s181 $DPIN · Z $DZ · tree-RT1 9ef70777 $DT · B $DB"
+> num(){ echo "$1" | sed -n "s/.*$2=\([0-9]*\).*/\1/p"; }
+> BLB=$(num "$DB" bl); BLT=$(num "$DT" bl); SPB=$(num "$DB" sp_refs); SPT=$(num "$DT" sp_refs)
+> if [ -n "$BLB" ] && [ -n "$BLT" ] && [ -n "$SPB" ] && [ -n "$SPT" ]; then
+>   DBL=$((BLB-BLT)); DSP=$((SPB-SPT))
+>   if [ "${DBL#-}" -le 10 ] && [ "${DSP#-}" -le 40 ]; then note "GATE disasm (az.rev. S-183 #2): Δbl=$DBL (|·|≤10) Δsp_refs=$DSP (|·|≤40) vs tree-RT1 ⇒ RISPETTATO"; else note "GATE disasm: Δbl=$DBL Δsp_refs=$DSP FUORI tolleranza (|Δbl|≤10, |Δsp_refs|≤40) ⇒ meccanismo da rileggere, niente misura -> rc=5"; [ "$RC" -eq 0 ] && RC=5; fi
+> else
+>   note "GATE disasm: conteggi non leggibili (B='$DB' tree='$DT') -> rc=5"; [ "$RC" -eq 0 ] && RC=5
+> fi
+172c175
+< note "ESITO rc=$RC (0 = B a parità e mutante che morde: bracci pronti; 2 = B diverge; 3 = mutante non morde) fine $(date '+%F %T')"
+---
+> note "ESITO rc=$RC (0 = B a parità, mutante che morde, disasm in tolleranza: bracci pronti; 2 = B diverge; 3 = mutante non morde; 5 = disasm fuori tolleranza) fine $(date '+%F %T')"

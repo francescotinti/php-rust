@@ -4254,6 +4254,48 @@ impl<'m> super::Vm<'m> {
                     self.frames[top].stack.push(result);
                 }
                 Op::Ret => {
+                    // L-RT2 (S-184, wp184-harness/s184-criterio-rt2.md): Ret FUSO della
+                    // funzione semplice. Forma 0 (`ret_shape == 0`: niente hint, non
+                    // by-ref), nessun flag (niente RET_*, INIT_PROPS, CLONE_INIT,
+                    // IN_DESTRUCTOR), nessuna `ret_cell`, più l'ammissione strutturale
+                    // di L-RT1 (this/iters/ext/dyn_vars assenti) e un chiamante sotto.
+                    // È la composizione dei rami che il cammino generale (sotto)
+                    // prenderebbe con questi stessi valori: ogni test qui è la
+                    // condizione che là rende il ramo saltato un no-op; il rilascio
+                    // (take, note GC, clear, truncate, put) è quello di L-RT1 nello
+                    // stesso ordine. Ogni altro frame passa dal cammino di prima.
+                    let fused = {
+                        let f = &self.frames[top];
+                        f.func.ret_shape == 0
+                            && f.flags.bits() == 0
+                            && f.ret_cell.is_none()
+                            && f.this.is_none()
+                            && f.iters.is_empty()
+                            && f.ext.is_none()
+                            && f.dyn_vars.is_none()
+                            && top > 0
+                    };
+                    if fused {
+                        let f = &mut self.frames[top];
+                        let ret = f.stack.pop().unwrap_or(Zval::Null);
+                        let mut slots = std::mem::take(&mut f.slots);
+                        let mut stack = std::mem::take(&mut f.stack);
+                        for v in &slots {
+                            self.gc_note(v);
+                        }
+                        for v in &stack {
+                            self.gc_note(v);
+                        }
+                        slots.clear();
+                        stack.clear();
+                        self.frames.truncate(top);
+                        self.frame_pool.put(slots, stack);
+                        if self.frames.len() == baseline {
+                            return Ok(RunExit::Returned(ret));
+                        }
+                        self.frames[top - 1].stack.push(ret);
+                        continue;
+                    }
                     let mut ret = self.frames[top].stack.pop().unwrap_or(Zval::Null);
                     let func = self.frames[top].func;
                     // WP-53 (Fase 2.1): `ret_shape` folds the hint/by_ref/
