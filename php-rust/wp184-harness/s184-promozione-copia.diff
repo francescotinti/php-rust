@@ -47,54 +47,70 @@
 < note "PRE: candidato = braccio B $CH (commit $CAND_COMMIT, A/B cr1c rc=0); REF = stash s180 $REF_EXP"
 ---
 > note "PRE: candidato = braccio B $CH (commit $CAND_COMMIT, A/B rt2 rc=0, cifra composta [+12,50;+13,17]); REF = stash s181 $REF_EXP"
-105c103
+100d97
+< [ "$(stat -f %m "$BIN")" -ge "$T0" ] || stop "build2: $BIN NON ricostruito (mtime < inizio build) — STOP"
+102,103c99,108
+< [ "$H2" = "$HB" ] || stop "re-hash post-batteria $H2 != $HB (churn) — STOP"
+< note "promozione: churn batteria neutralizzato (build ricetta → $H2 al byte)"
+---
+> if [ "$(stat -f %m "$BIN")" -ge "$T0" ]; then
+>   [ "$H2" = "$HB" ] || stop "re-hash post-batteria $H2 != $HB (churn) — STOP"
+>   note "promozione: churn batteria neutralizzato (build ricetta → $H2 al byte)"
+> else
+>   # EMENDA S-184 (REGOLE §5, lettera-gate che morde: il controllo «ricostruito» del rilievo 1 S-182 vale per la build 1,
+>   # che DEVE toccare la canonica; dopo la batteria senza churn cargo è legittimamente un no-op e il gate vero è l'hash)
+>   [ "$H2" = "$HB" ] || stop "build2 no-op ma hash $H2 != $HB (churn non sanato) — STOP"
+>   grep -q 'Compiling' "$OUT/build2.log" && stop "build2: cargo ha compilato ma $BIN non è stato riscritto (target sbagliata?) — STOP"
+>   note "promozione: batteria SENZA churn — build2 no-op dichiarato (binario intatto, hash $H2 == build 1; emenda S-184 del gate rilievo 1 S-182)"
+> fi
+105c110
 < "$SRC/scripts/pin-phpr.sh" s181 > "$OUT/pin.log" 2>&1
 ---
 > "$SRC/scripts/pin-phpr.sh" s182 > "$OUT/pin.log" 2>&1
-114c112
+114c119
 < note "promozione corpus-gate: rc=0 — nomi==congelato (1412), CONTENUTO==golden, off-on zero (ZERO flip come atteso: L-CR1 a semantica identica per costruzione)"
 ---
 > note "promozione corpus-gate: rc=0 — nomi==congelato (1412), CONTENUTO==golden, off-on zero (ZERO flip come atteso: L-RT1+L-RT2 a semantica identica per costruzione)"
-142c140
+142c147
 <   "$REF" "$f" > "$OUT/$n-s180.out" 2>&1
 ---
 >   "$REF" "$f" > "$OUT/$n-s181.out" 2>&1
-146,147c144,145
+146,147c151,152
 <   if diff -q "$OUT/$n-s180.out" "$OUT/$n-pin.out" > /dev/null; then
 <     note "promozione gate $n: pin==stash s180 BYTE-ID ($d)"
 ---
 >   if diff -q "$OUT/$n-s181.out" "$OUT/$n-pin.out" > /dev/null; then
 >     note "promozione gate $n: pin==stash s181 BYTE-ID ($d)"
-149,150c147,148
+149,150c154,155
 <     diff "$OUT/$n-s180.out" "$OUT/$n-pin.out" > "$OUT/$n.diff" || true
 <     stop "gate $n: pin DIVERGE dallo stash s180 (promo-out/$n.diff)"
 ---
 >     diff "$OUT/$n-s181.out" "$OUT/$n-pin.out" > "$OUT/$n.diff" || true
 >     stop "gate $n: pin DIVERGE dallo stash s181 (promo-out/$n.diff)"
-173a172,173
+173a179,180
 > bilat fxrt1 "$H3/fx-rt1.php" "FX-RT1 DONE" "presidio DIRETTO L-RT1 (S-183): cicli locali array/oggetto + gc_collect_cycles, ricorsione, foreach, dinamiche, metodo" -d log_errors=0 -d display_errors=1
 > bilat fxrt2 "$H9/fx-rt2.php" "FX-RT2 DONE" "presidio DIRETTO L-RT2 (S-184): ammissione del Ret fuso — hint int/nullable/TypeError, by-ref alias e deref, forma 0 annidata/null/locali, ret_cell thunk statico, INIT_PROPS, __toString, dtor con chiamata" -d log_errors=0 -d display_errors=1
-194,195c194,195
+194,195c201,202
 < PHPR="$BIN" R=5 "$SRC/wp97-harness/micro/run-micro.sh" > "$OUT/micro-pin-s181.out" 2>&1
 < note "promozione micro pin s181: $(grep -E '^rapporto_' "$OUT/micro-pin-s181.out" | tr '\n' ' ')"
 ---
 > PHPR="$BIN" R=5 "$SRC/wp97-harness/micro/run-micro.sh" > "$OUT/micro-pin-s182.out" 2>&1
 > note "promozione micro pin s182: $(grep -E '^rapporto_' "$OUT/micro-pin-s182.out" | tr '\n' ' ')"
-197c197
+197c204
 < # ---- conferma POST-PIN: R=5 pin s181 vs stash s180 (STESSA toolchain 1.98.1) su calls-dq (bersaglio) e prop-dq (guardia) ----
 ---
 > # ---- conferma POST-PIN: R=5 pin s182 vs stash s181 (STESSA toolchain 1.98.1) su calls-dq (bersaglio) e prop-dq (guardia) ----
-223,224c223,224
+223,224c230,231
 < note "conferma post-pin calls-dq (pin s181 vs stash s180, stessa toolchain): $(conferma "$H8/calls-dq.php" calls) (attesa: D ≈ cifra dell'A/B cr1)"
 < note "conferma post-pin prop-dq (guardia, pin s181 vs stash s180): $(conferma "$H/prop-dq.php" prop) (attesa |D| < 1: sola lettura)"
 ---
 > note "conferma post-pin calls-dq (pin s182 vs stash s181, stessa toolchain): $(conferma "$H9/calls-dq.php" calls) (attesa: D ≈ cifra composta dell'A/B rt2 [+12,50;+13,17])"
 > note "conferma post-pin prop-dq (guardia, pin s182 vs stash s181): $(conferma "$H/prop-dq.php" prop) (attesa |D| < 1: sola lettura)"
-254c254
+254c261
 < "$SRC/scripts/pin-server.sh" s181 > "$OUT/pin-server.log" 2>&1
 ---
 > "$SRC/scripts/pin-server.sh" s182 > "$OUT/pin-server.log" 2>&1
-260c260
+260c267
 < note "PROMOZIONE COMPLETA rc=0 (da promo-out/rcb): pin s181 = $H2"
 ---
 > note "PROMOZIONE COMPLETA rc=0 (da promo-out/rcb): pin s182 = $H2"

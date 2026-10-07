@@ -95,10 +95,17 @@ T0=$(date +%s)
 SOURCE_DATE_EPOCH=0 CARGO_INCREMENTAL=0 cargo build --release > "$OUT/build2.log" 2>&1
 rc=$?; echo "$rc" > "$OUT/build2.rc"
 [ "$rc" = 0 ] || stop "build2 rc=$rc"
-[ "$(stat -f %m "$BIN")" -ge "$T0" ] || stop "build2: $BIN NON ricostruito (mtime < inizio build) — STOP"
 H2=$(shasum -a 256 "$BIN" | cut -c1-16)
-[ "$H2" = "$HB" ] || stop "re-hash post-batteria $H2 != $HB (churn) — STOP"
-note "promozione: churn batteria neutralizzato (build ricetta → $H2 al byte)"
+if [ "$(stat -f %m "$BIN")" -ge "$T0" ]; then
+  [ "$H2" = "$HB" ] || stop "re-hash post-batteria $H2 != $HB (churn) — STOP"
+  note "promozione: churn batteria neutralizzato (build ricetta → $H2 al byte)"
+else
+  # EMENDA S-184 (REGOLE §5, lettera-gate che morde: il controllo «ricostruito» del rilievo 1 S-182 vale per la build 1,
+  # che DEVE toccare la canonica; dopo la batteria senza churn cargo è legittimamente un no-op e il gate vero è l'hash)
+  [ "$H2" = "$HB" ] || stop "build2 no-op ma hash $H2 != $HB (churn non sanato) — STOP"
+  grep -q 'Compiling' "$OUT/build2.log" && stop "build2: cargo ha compilato ma $BIN non è stato riscritto (target sbagliata?) — STOP"
+  note "promozione: batteria SENZA churn — build2 no-op dichiarato (binario intatto, hash $H2 == build 1; emenda S-184 del gate rilievo 1 S-182)"
+fi
 
 "$SRC/scripts/pin-phpr.sh" s182 > "$OUT/pin.log" 2>&1
 prc=$?; echo "$prc" > "$OUT/pin.rc"
