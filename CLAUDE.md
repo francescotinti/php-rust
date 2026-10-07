@@ -37,6 +37,10 @@ Reimplementazione moderna di PHP 8.5 in Rust, guidata dal comportamento osservab
 - Runner .phpt: `cargo run -p phpt-runner -- <dir o file .phpt>` (`--isolate`, `--list-fails`)
 - Logging: `PHPR_LOG=debug|trace` (stderr), `PHPR_LOG_FILE=<path>`,
   `PHPR_LOG_CONFIG=<log4rs.yaml>` (vedi `php-runtime/src/logging.rs`)
+- Run lunghe (build, A/B, catene): SEMPRE detached con
+  `perl "/Volumes/Extreme Pro/Claude/wp58-harness/daemonize.pl" <log> <cmd…>` (vive FUORI
+  dal repo); esiti solo da file `.done`/`.rc`; dopo il lancio leggere il log del daemonizer
+  (gli errori di exec finiscono lì) e `pgrep`.
 
 > **Build / filesystem:** il volume esterno "Extreme Pro" NON supporta la
 > compilazione incrementale di Rust (non hard-linka la cache). Gli artefatti vivono
@@ -47,5 +51,7 @@ Reimplementazione moderna di PHP 8.5 in Rust, guidata dal comportamento osservab
 > esterno sono solo letti.
 > Engine: VM a bytecode unico (pipeline mago AST→HIR→bytecode→VM); il vecchio
 > tree-walker `eval/` è stato eliminato. Lowering in `php-runtime/src/lower/`,
-> VM in `php-runtime/src/vm/` (mod.rs ~26k righe, loop caldo in `run.rs` ~7,4k con
-> cap LOC dichiarato — usare Serena; un hook BLOCCA grep/cat sui .rs via Bash).
+> VM in `php-runtime/src/vm/` (mod.rs ~26k righe, loop caldo in `run.rs` ~7,5k con
+> cap LOC dichiarato in `tests/loc_dente.rs` — usare Serena). L'hook blocca OGNI segmento
+> Bash con grep/sed/awk/cat/head/tail che citi `crates/` o un token `.rs`, anche dentro
+> stringhe o heredoc: gli script che nominano file `.rs` si scrivono col tool Write.

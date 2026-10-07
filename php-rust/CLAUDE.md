@@ -77,17 +77,30 @@ emendamenti passano dal sign-off dell'utente e dal handoff.
 - **Build di sviluppo**: `cargo build --profile dev-release` (S-182: eredita release,
   `incremental = true`, lto off, cgu 16; edit tipico 27 s contro 148 s del release, parità
   arith verificata). Binario in `target/dev-release/phpr`: MAI pin, MAI braccio di misura,
-  MAI CI. La ricetta del pin resta `cargo build --release` (fat LTO, cgu 1). Il profilo
-  debug non si usa (rigenera ~3,8G di artefatti).
+  MAI CI; binario in `~/Claude/phpr-target/dev-output/dev-release/phpr`. La ricetta del pin
+  resta `cargo build --release` (fat LTO, cgu 1). Il profilo debug non si usa (~3,8G).
+- **Hash, non mtime**: cargo ricrea `release/<bin>` come COPIA del `deps/` con mtime
+  conservato (0 «Compiling»): un gate «binario ricostruito» si fa sull'hash; per forzare
+  un relink vero `cargo clean --release -p php-cli -p phpt-runner` nella canonica.
+- La ricetta è deterministica solo nella STESSA target (il percorso della target entra nel
+  binario): confronti di hash canonica↔canonica. `pin-server.sh` costruisce con
+  `--features axum-server`: un `cargo build --release` del workspace sulla canonica cambia
+  il feature set del server (non è non-determinismo).
 - Unit: `cargo test --release` → rc dal comando, MAI da pipe; il workspace non deve
   MAI regredire la batteria dichiarata in NEXT_SESSION_WORDPRESS.md (il numero cresce
   coi denti nuovi).
-- Corpus: `scripts/corpus-gate.sh` (fail-set CONGELATO per NOME, ×2 modi). Il runner
+- Corpus: `scripts/corpus-gate.sh <phpt-runner> <outdir>` (fail-set CONGELATO per NOME, ×2 modi). Il runner
   grezzo `~/Claude/php-rust-output/release/phpt-runner --list-fails --isolate "/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests"`
   (foreground, timeout 600000) serve solo per indagine; delta con `comm`.
   Disciplina **zero pass→fail**.
-- Potatura target a fine sessione: `scripts/target-prune.sh`. CI locale per-commit
+- Potatura target a fine sessione: `scripts/target-prune.sh <pin_phpr16> <pin_server16>`
+  (tiene i 3 binari pinnati). CI locale per-commit
   (allarme precoce, NON gate di record): `ci/README.md`, feed `phpr-ci/CI_FEED.log`.
+- **Processi e finestre**: le sonde/monitor vivono in un FILE (`bash -c` inline coi nomi
+  degli script nell'argv fa scattare il `pgrep -f` di coordinatori e runner CI); mai
+  lanciare un daemon mentre il tree è in checkout detached; mai build, CI e misura
+  concorrenti (S-184: swap 15G, Data 2G, phpt-runner OOM) — Data ≥10G e app pesanti
+  chiuse PRIMA della finestra.
 - Oracle: `/opt/homebrew/opt/php/bin/php` (PHP 8.5.7, lo stesso degli script);
   CLI nostro `phpr` = `~/Claude/php-rust-output/release/phpr` (pin). Metodo:
   `diff <(oracle x.php) <(phpr x.php)` finché IDENTICAL.
