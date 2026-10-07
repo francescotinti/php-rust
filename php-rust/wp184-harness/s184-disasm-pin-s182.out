@@ -1,0 +1,11 @@
+== s184 disasm run_loop del PIN s182 (az.rev. S-184 #3) — binario canonico ~/Claude/php-rust-output/release/phpr hash 159eee40be506171, 2026-10-07 23:10 ==
+ricetta: nm -n | run_loop → objdump -d --no-show-raw-insn --disassemble-symbols (identica a s184-leva-build.sh); file: ab-out/s184-leva/disasm-pins182-run_loop.s (fuori repo)
+pin s181 (f5f746cf) : istr=72321 bl=6132 blr=13 sp_refs=10685 bl_ret_slow=0
+Z                   : istr=72321 bl=6132 blr=13 sp_refs=10685 bl_ret_slow=0
+tree-RT1 (9ef70777) : istr=72457 bl=6141 blr=13 sp_refs=10706 bl_ret_slow=0
+braccio B (ce6ae73f): istr=72016 bl=6105 blr=13 sp_refs=10782 bl_ret_slow=1
+PIN s182 (159eee40) : istr=72016 bl=6105 blr=13 sp_refs=10782 bl_ret_slow=1
+pin_vs_B: run_loop IDENTICO istruzione per istruzione (diff al netto di indirizzi/simboli: 0 righe di codice; differiscono solo le 2 righe di intestazione objdump = percorso del file)
+pin_vs_Z: Δistr=-305 Δbl=-27 Δsp_refs=+97   # costo osservato della forma 2 (bl ret_slow fuori linea nel loop caldo) sul pin
+pin_vs_treeRT1: Δistr=-441 Δbl=-36 Δsp_refs=+76   # = verdetto s184-rt2 (gate forma 2, emenda p.8)
+SOGLIA DERIVATA, scritta UNA volta: una leva futura su run_loop pre-registra Δsp_refs ≤ +97 vs pin s182 (base: Z→pin della leva composta promossa); se il gate morde si rifà la build, non la soglia.
