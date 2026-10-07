@@ -167,7 +167,7 @@ num(){ echo "$1" | sed -n "s/.*$2=\([0-9]*\).*/\1/p"; }
 IB=$(num "$DB" istr); IT=$(num "$DT" istr); SPB=$(num "$DB" sp_refs); SPT=$(num "$DT" sp_refs); BLB=$(num "$DB" bl); BLT=$(num "$DT" bl)
 if [ -n "$IB" ] && [ -n "$IT" ] && [ -n "$SPB" ] && [ -n "$SPT" ]; then
   DI=$((IB-IT)); DSP=$((SPB-SPT)); DBL=$((BLB-BLT))
-  if [ "$DI" -lt 0 ] && [ "$DSP" -le 40 ]; then note "GATE disasm (criterio-rt2 p.7 forma 2): Δistr=$DI (<0) Δsp_refs=$DSP (≤40) vs tree-RT1 ⇒ RISPETTATO · Δbl=$DBL a verbale"; else note "GATE disasm (forma 2): Δistr=$DI Δsp_refs=$DSP FUORI attesa (istr<0, sp_refs≤40) ⇒ meccanismo da rileggere, niente misura -> rc=5 · Δbl=$DBL"; [ "$RC" -eq 0 ] && RC=5; fi
+  if [ "$DI" -lt 0 ] && [ "$DSP" -le 100 ]; then note "GATE disasm (criterio-rt2 p.7-8 forma 2): Δistr=$DI (<0) Δsp_refs=$DSP (≤100, emenda p.8) vs tree-RT1 ⇒ RISPETTATO · Δbl=$DBL a verbale"; else note "GATE disasm (forma 2): Δistr=$DI Δsp_refs=$DSP FUORI attesa (istr<0, sp_refs≤100 — emenda p.8) ⇒ meccanismo da rileggere, niente misura -> rc=5 · Δbl=$DBL"; [ "$RC" -eq 0 ] && RC=5; fi
 else
   note "GATE disasm: conteggi non leggibili (B='$DB' tree='$DT') -> rc=5"; [ "$RC" -eq 0 ] && RC=5
 fi
