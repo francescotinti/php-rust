@@ -51,8 +51,8 @@ emendamenti passano dal sign-off dell'utente e dal handoff.
   [PIN_REGISTRY.md](PIN_REGISTRY.md), [PERF_MAP.md](PERF_MAP.md),
   [gaps/GAP_TREND.md](gaps/GAP_TREND.md). **[README.md](README.md)** è la pagina
   di progetto; la home GitHub del repo è il README della root. Rigenerare con
-  `scripts/measure-coverage.sh` / skill `gh-status-sync` quando i numeri cambiano
-  in modo sostanziale. Divergenze note in
+  `scripts/measure-coverage.sh` / skill `gh-status-sync` a ogni pin nuovo o quando
+  corpus/funzioni cambiano di ≥1 %. Divergenze note in
   [PHPR_DIVERGENCES_FROM_PHP.md](PHPR_DIVERGENCES_FROM_PHP.md) (principio
   **correct-or-absent**).
 
@@ -67,17 +67,16 @@ emendamenti passano dal sign-off dell'utente e dal handoff.
   locale (sviluppo ordinario: un semplice `cargo build --release` finisce lì). Vive nella
   sparsebundle APFS `phpr-target.sparsebundle` sul volume esterno: montarla con
   `wp182-harness/phpr-target-bundle.sh mount` (da smontata il mountpoint è bloccato e cargo
-  fallisce; `status`/`compact` per spazio). Promossa S-182 (B/A 1,002 vs disco interno).
+  fallisce; `status`/`compact` per spazio).
   `~/Claude/php-rust-output` è la target **CANONICA** e porta i binari pinnati in `release/`
   (il pre-flight ne confronta l'hash col pin dichiarato): ci si costruisce SOLO via
   `scripts/pin-phpr.sh` / `scripts/pin-server.sh` o nelle build di promozione, SEMPRE con
   `CARGO_TARGET_DIR=$HOME/Claude/php-rust-output` esplicito.
 - Toolchain pinnata in `rust-toolchain.toml` (1.98.1): mai cambiare toolchain o
   ricetta durante un arco di misura.
-- **Build di sviluppo**: `cargo build --profile dev-release` (S-182: eredita release,
-  `incremental = true`, lto off, cgu 16; edit tipico 27 s contro 148 s del release, parità
-  arith verificata). Binario in `target/dev-release/phpr`: MAI pin, MAI braccio di misura,
-  MAI CI; binario in `~/Claude/phpr-target/dev-output/dev-release/phpr`. La ricetta del pin
+- **Build di sviluppo**: `cargo build --profile dev-release` (profilo incrementale senza LTO).
+  Binario in `~/Claude/phpr-target/dev-output/dev-release/phpr`: MAI pin, MAI braccio di misura,
+  MAI CI. La ricetta del pin
   resta `cargo build --release` (fat LTO, cgu 1). Il profilo debug non si usa (~3,8G).
 - **Hash, non mtime**: cargo ricrea `release/<bin>` come COPIA del `deps/` con mtime
   conservato (0 «Compiling»): un gate «binario ricostruito» si fa sull'hash; per forzare
