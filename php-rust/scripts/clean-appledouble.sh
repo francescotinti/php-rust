@@ -10,7 +10,9 @@
 #   scripts/clean-appledouble.sh --check  # exit 1 if any exist in the working tree
 set -euo pipefail
 
-root="$(cd "$(dirname "$0")/.." && pwd)"
+# Scope = whole git checkout (S-184: the repo-root `.claude/rules/` lives one level above
+# php-rust/ and its `._*.md` twins get counted as always-loaded rules); fallback = php-rust/.
+root="$(git -C "$(dirname "$0")" rev-parse --show-toplevel 2>/dev/null || (cd "$(dirname "$0")/.." && pwd))"
 cd "$root"
 
 case "${1:-}" in
