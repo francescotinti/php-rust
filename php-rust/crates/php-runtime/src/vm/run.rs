@@ -4296,161 +4296,12 @@ impl<'m> super::Vm<'m> {
                         self.frames[top - 1].stack.push(ret);
                         continue;
                     }
-                    let mut ret = self.frames[top].stack.pop().unwrap_or(Zval::Null);
-                    let func = self.frames[top].func;
-                    // WP-53 (Fase 2.1): `ret_shape` folds the hint/by_ref/
-                    // generator declaration facts into one precomputed byte —
-                    // the common shape-0 function skips the whole prologue on
-                    // a single load+branch (was: `ret_hint.clone()` + three
-                    // scattered field reads at every one of 62,6M returns).
-                    let shape = func.ret_shape;
-                    if shape != 0 {
-                        // Coerce the returned value to a scalar return hint
-                        // (weak, or checked under strict_types) — step 14. A
-                        // by-reference function returns an alias, so its
-                        // return type stays unenforced, and a generator's
-                        // declared type describes the returned *generator*
-                        // (both excluded from RS_HINT at construction); the
-                        // init-thunk / magic path (`ret_cell`) carries no hint.
-                        if shape & Func::RS_HINT != 0 && self.frames[top].ret_cell.is_none() {
-                            let hint = func.ret_hint.as_ref().expect("RS_HINT implies ret_hint");
-                            // The function's own unit governs its return check.
-                            let strict = self.frames[top].module.strict;
-                            match self.coerce_or_check_hint(ret, hint, strict) {
-                                Ok(c) => ret = c,
-                                Err(given) => {
-                                    return Err(self.return_type_error(func, hint, &given))
-                                }
-                            }
-                        }
-                        // A by-ref function that returned a plain value (the
-                        // in-body notice already fired) still hands the caller
-                        // a *reference* in Zend — so `$t = &f()` binds it
-                        // silently instead of raising a second notice.
-                        if shape & Func::RS_WRAP != 0 && !matches!(ret, Zval::Ref(_)) {
-                            ret = Zval::Ref(php_types::zcell(ret));
-                        }
-                    }
-                    let ret_cell = self.frames[top].ret_cell.take();
-                    // ONE load of the packed flag byte covers the four
-                    // Ret-shaping bits and CLONE_INIT (WP-53; flags are not
-                    // mutated between here and the frame pop).
-                    let fl = self.frames[top].flags.bits();
-                    // L-CR1 (S-181) (c): la guardia magic esiste solo con
-                    // `ext`: niente Vec vuoto costruito e iterato a ogni Ret.
-                    let guard = self
-                        .frames[top]
-                        .ext_opt_mut()
-                        .map(|e| std::mem::take(&mut e.guard_release));
-                    // A `clone`-driven `__clone` is finishing: revoke any remaining
-                    // readonly re-init permission on the copy (PHP 8.3), so writes
-                    // after the clone — or via a manual `__clone()` — fatal again.
-                    if fl & FrameFlags::CLONE_INIT != 0 {
-                        if let Some(Zval::Object(o)) = self.frames[top].this.clone() {
-                            o.borrow_mut().clear_readonly_clone_writable();
-                        }
-                    }
-                    // L-OL1-F1 «stampo»: a prop-init thunk finishing REGULARLY
-                    // (every INIT_PROPS frame runs on a fresh, pre-ctor
-                    // instance) snapshots the class's complete default table;
-                    // later allocations clone it and skip this thunk. An
-                    // unwinding thunk never reaches Ret, so a failed
-                    // evaluation is retried at the next `new`, like Zend.
-                    if fl & FrameFlags::INIT_PROPS != 0 {
-                        if let (Some(cid), Some(Zval::Object(o))) =
-                            (self.frames[top].class, self.frames[top].this.as_ref())
-                        {
-                            let cc = self.classes[cid];
-                            if cc.props_template.0.get().is_none() {
-                                let _ = cc.props_template.0.set(o.borrow().props.clone());
-                            }
-                        }
-                    }
-                    // L-RT1 (S-183, wp182-harness/s183-criterio-rt1.md): Ret IN PLACE
-                    // ad AMMISSIONE — un frame senza `$this`, iteratori, `ext` e
-                    // variabili dinamiche (ogni funzione semplice) rilascia SOLO
-                    // slots e stack: le note GC nello STESSO ordine di
-                    // `gc_note_frame` (slots poi stack), lo svuotamento nello STESSO
-                    // ordine di `recycle_frame` (slots poi stack, front-to-back), e il
-                    // Frame residuo (campi Copy/None/vuoti: nessun Rc) muore con
-                    // `truncate` invece di viaggiare per valore attraverso `pop` +
-                    // `recycle_frame`. Ogni altro frame (main, metodi, foreach, ext)
-                    // passa dal cammino di prima, INVARIATO.
-                    let in_place = self.frames.len() > 1 && {
-                        let f = &self.frames[top];
-                        f.this.is_none() && f.iters.is_empty() && f.ext.is_none() && f.dyn_vars.is_none()
-                    };
-                    if in_place {
-                        let mut slots = std::mem::take(&mut self.frames[top].slots);
-                        let mut stack = std::mem::take(&mut self.frames[top].stack);
-                        for v in &slots {
-                            self.gc_note(v);
-                        }
-                        for v in &stack {
-                            self.gc_note(v);
-                        }
-                        slots.clear();
-                        stack.clear();
-                        self.frames.truncate(top);
-                        self.frame_pool.put(slots, stack);
-                    } else {
-                        let dead = self.frames.pop().expect("Ret pops the active frame");
-                        if self.frames.is_empty() && !self.final_flush {
-                            // The script `main` is returning: park its frame — the
-                            // slots ARE the global variables, and Zend keeps them
-                            // alive through the shutdown-function phase. Object
-                            // destruction is unaffected (survivors are driven from
-                            // `created`, not from this frame's drop).
-                            self.retired_main = Some(dead);
-                        } else {
-                            // The returning frame's locals, leftover operands and `$this`
-                            // release their references now: note any tracked objects so
-                            // the next sweep reconsiders them (drives destruction of an
-                            // object whose last reference was a returning function's local).
-                            self.gc_note_frame(&dead);
-                            self.recycle_frame(dead);
-                        }
-                    }
-                    if let Some(guard) = guard {
-                        for key in guard {
-                            self.magic_guard.remove(&key);
-                        }
-                    }
-                    if let Some(cell) = ret_cell {
-                        // Init thunk / discarded magic return: store into the cell;
-                        // the caller already has (or re-reads) its own value.
-                        *cell.borrow_mut() = ret;
-                    } else {
-                        // Priority order preserved from the original if-chain
-                        // (isset > bool > stringify > deref); the common
-                        // flag-free return takes the first branch on the byte
-                        // already loaded above.
-                        const RET_SHAPING: u8 = FrameFlags::RET_ISSET
-                            | FrameFlags::RET_BOOL
-                            | FrameFlags::RET_STRINGIFY
-                            | FrameFlags::RET_DEREF;
-                        let v = if fl & RET_SHAPING == 0 {
-                            ret
-                        } else if fl & FrameFlags::RET_ISSET != 0 {
-                            Zval::Bool(!matches!(ret.deref_clone(), Zval::Null))
-                        } else if fl & FrameFlags::RET_BOOL != 0 {
-                            Zval::Bool(convert::to_bool(&ret, &mut self.diags))
-                        } else if fl & FrameFlags::RET_STRINGIFY != 0 {
-                            Zval::Str(convert::to_zstr(&ret, &mut self.diags))
-                        } else {
-                            ret.deref_clone()
-                        };
-                        // The frame that owned this bounded run has returned: hand
-                        // the value back to whoever started it (the host, for the
-                        // top-level run; `resume_generator`, for a generator body).
-                        if self.frames.len() == baseline {
-                            return Ok(RunExit::Returned(v));
-                        }
-                        self.frames
-                            .last_mut()
-                            .expect("a non-baseline Ret has a caller")
-                            .stack
-                            .push(v);
+                    // Ogni altro Ret (forma ≠ 0, flag, ret_cell, $this, foreach, ext,
+                    // $$, main) passa dal cammino generale, FUORI LINEA (`ret_slow`,
+                    // L-RT2 forma 2: il corpo del handler non resta duplicato dentro
+                    // `run_loop`; il disasm di forma 1 contava +547 istr / +245 sp_refs).
+                    if let Some(exit) = self.ret_slow(top, baseline)? {
+                        return Ok(exit);
                     }
                 }
                 Op::Yield { has_key } => {
@@ -7219,6 +7070,171 @@ impl<'m> super::Vm<'m> {
         }
         self.enter_callee(frame)?;
         Ok(true)
+    }
+
+    /// `Op::Ret`, cammino GENERALE (L-RT2 forma 2, S-184): il corpo storico del
+    /// handler, spostato fuori da `run_loop` al byte (solo i `return` cambiano
+    /// forma: `Some(exit)` = la corsa delimitata è finita, `None` = valore
+    /// spinto sul chiamante, si prosegue). Il fast path fuso resta inline nel
+    /// handler; qui passano forma ≠ 0, flag, `ret_cell`, `$this`, foreach,
+    /// `ext`, `$$` e il ritorno di `main`.
+    #[inline(never)]
+    fn ret_slow(&mut self, top: usize, baseline: usize) -> Result<Option<RunExit>, PhpError> {
+        let mut ret = self.frames[top].stack.pop().unwrap_or(Zval::Null);
+        let func = self.frames[top].func;
+        // WP-53 (Fase 2.1): `ret_shape` folds the hint/by_ref/
+        // generator declaration facts into one precomputed byte —
+        // the common shape-0 function skips the whole prologue on
+        // a single load+branch (was: `ret_hint.clone()` + three
+        // scattered field reads at every one of 62,6M returns).
+        let shape = func.ret_shape;
+        if shape != 0 {
+            // Coerce the returned value to a scalar return hint
+            // (weak, or checked under strict_types) — step 14. A
+            // by-reference function returns an alias, so its
+            // return type stays unenforced, and a generator's
+            // declared type describes the returned *generator*
+            // (both excluded from RS_HINT at construction); the
+            // init-thunk / magic path (`ret_cell`) carries no hint.
+            if shape & Func::RS_HINT != 0 && self.frames[top].ret_cell.is_none() {
+                let hint = func.ret_hint.as_ref().expect("RS_HINT implies ret_hint");
+                // The function's own unit governs its return check.
+                let strict = self.frames[top].module.strict;
+                match self.coerce_or_check_hint(ret, hint, strict) {
+                    Ok(c) => ret = c,
+                    Err(given) => return Err(self.return_type_error(func, hint, &given)),
+                }
+            }
+            // A by-ref function that returned a plain value (the
+            // in-body notice already fired) still hands the caller
+            // a *reference* in Zend — so `$t = &f()` binds it
+            // silently instead of raising a second notice.
+            if shape & Func::RS_WRAP != 0 && !matches!(ret, Zval::Ref(_)) {
+                ret = Zval::Ref(php_types::zcell(ret));
+            }
+        }
+        let ret_cell = self.frames[top].ret_cell.take();
+        // ONE load of the packed flag byte covers the four
+        // Ret-shaping bits and CLONE_INIT (WP-53; flags are not
+        // mutated between here and the frame pop).
+        let fl = self.frames[top].flags.bits();
+        // L-CR1 (S-181) (c): la guardia magic esiste solo con
+        // `ext`: niente Vec vuoto costruito e iterato a ogni Ret.
+        let guard = self
+            .frames[top]
+            .ext_opt_mut()
+            .map(|e| std::mem::take(&mut e.guard_release));
+        // A `clone`-driven `__clone` is finishing: revoke any remaining
+        // readonly re-init permission on the copy (PHP 8.3), so writes
+        // after the clone — or via a manual `__clone()` — fatal again.
+        if fl & FrameFlags::CLONE_INIT != 0 {
+            if let Some(Zval::Object(o)) = self.frames[top].this.clone() {
+                o.borrow_mut().clear_readonly_clone_writable();
+            }
+        }
+        // L-OL1-F1 «stampo»: a prop-init thunk finishing REGULARLY
+        // (every INIT_PROPS frame runs on a fresh, pre-ctor
+        // instance) snapshots the class's complete default table;
+        // later allocations clone it and skip this thunk. An
+        // unwinding thunk never reaches Ret, so a failed
+        // evaluation is retried at the next `new`, like Zend.
+        if fl & FrameFlags::INIT_PROPS != 0 {
+            if let (Some(cid), Some(Zval::Object(o))) =
+                (self.frames[top].class, self.frames[top].this.as_ref())
+            {
+                let cc = self.classes[cid];
+                if cc.props_template.0.get().is_none() {
+                    let _ = cc.props_template.0.set(o.borrow().props.clone());
+                }
+            }
+        }
+        // L-RT1 (S-183, wp182-harness/s183-criterio-rt1.md): Ret IN PLACE
+        // ad AMMISSIONE — un frame senza `$this`, iteratori, `ext` e
+        // variabili dinamiche (ogni funzione semplice) rilascia SOLO
+        // slots e stack: le note GC nello STESSO ordine di
+        // `gc_note_frame` (slots poi stack), lo svuotamento nello STESSO
+        // ordine di `recycle_frame` (slots poi stack, front-to-back), e il
+        // Frame residuo (campi Copy/None/vuoti: nessun Rc) muore con
+        // `truncate` invece di viaggiare per valore attraverso `pop` +
+        // `recycle_frame`. Ogni altro frame (main, metodi, foreach, ext)
+        // passa dal cammino di prima, INVARIATO.
+        let in_place = self.frames.len() > 1 && {
+            let f = &self.frames[top];
+            f.this.is_none() && f.iters.is_empty() && f.ext.is_none() && f.dyn_vars.is_none()
+        };
+        if in_place {
+            let mut slots = std::mem::take(&mut self.frames[top].slots);
+            let mut stack = std::mem::take(&mut self.frames[top].stack);
+            for v in &slots {
+                self.gc_note(v);
+            }
+            for v in &stack {
+                self.gc_note(v);
+            }
+            slots.clear();
+            stack.clear();
+            self.frames.truncate(top);
+            self.frame_pool.put(slots, stack);
+        } else {
+            let dead = self.frames.pop().expect("Ret pops the active frame");
+            if self.frames.is_empty() && !self.final_flush {
+                // The script `main` is returning: park its frame — the
+                // slots ARE the global variables, and Zend keeps them
+                // alive through the shutdown-function phase. Object
+                // destruction is unaffected (survivors are driven from
+                // `created`, not from this frame's drop).
+                self.retired_main = Some(dead);
+            } else {
+                // The returning frame's locals, leftover operands and `$this`
+                // release their references now: note any tracked objects so
+                // the next sweep reconsiders them (drives destruction of an
+                // object whose last reference was a returning function's local).
+                self.gc_note_frame(&dead);
+                self.recycle_frame(dead);
+            }
+        }
+        if let Some(guard) = guard {
+            for key in guard {
+                self.magic_guard.remove(&key);
+            }
+        }
+        if let Some(cell) = ret_cell {
+            // Init thunk / discarded magic return: store into the cell;
+            // the caller already has (or re-reads) its own value.
+            *cell.borrow_mut() = ret;
+        } else {
+            // Priority order preserved from the original if-chain
+            // (isset > bool > stringify > deref); the common
+            // flag-free return takes the first branch on the byte
+            // already loaded above.
+            const RET_SHAPING: u8 = FrameFlags::RET_ISSET
+                | FrameFlags::RET_BOOL
+                | FrameFlags::RET_STRINGIFY
+                | FrameFlags::RET_DEREF;
+            let v = if fl & RET_SHAPING == 0 {
+                ret
+            } else if fl & FrameFlags::RET_ISSET != 0 {
+                Zval::Bool(!matches!(ret.deref_clone(), Zval::Null))
+            } else if fl & FrameFlags::RET_BOOL != 0 {
+                Zval::Bool(convert::to_bool(&ret, &mut self.diags))
+            } else if fl & FrameFlags::RET_STRINGIFY != 0 {
+                Zval::Str(convert::to_zstr(&ret, &mut self.diags))
+            } else {
+                ret.deref_clone()
+            };
+            // The frame that owned this bounded run has returned: hand
+            // the value back to whoever started it (the host, for the
+            // top-level run; `resume_generator`, for a generator body).
+            if self.frames.len() == baseline {
+                return Ok(Some(RunExit::Returned(v)));
+            }
+            self.frames
+                .last_mut()
+                .expect("a non-baseline Ret has a caller")
+                .stack
+                .push(v);
+        }
+        Ok(None)
     }
 
     /// Navigate a place (base + `steps`; `keys` already popped, source order) to

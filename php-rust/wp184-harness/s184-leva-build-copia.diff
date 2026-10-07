@@ -22,8 +22,8 @@
 > # COPIA DICHIARATA di ../wp182-harness/s183-leva-build.sh (manifest s184-leva-build-copia.diff) coi SOLI adattamenti: token s184,
 > # tag s184-leva, fixture fx-rt2 (NUOVA) in riferimento + parità + bersaglio del mutante, MUTANTE = «ammissione del Ret fuso SENZA i bit
 > # di forma» (shape/flags/ret_cell tolti dall'ammissione; esito esatto: M diverge dall'oracle su fx-rt2 su ≥1 riga e TUTTE le righe
-> # cambiate sono etichettate RT2-), DISASM come GATE (az.rev. S-183 #2): |Δbl| ≤ 10 e |Δsp_refs| ≤ 40 di B vs tree-RT1 9ef70777
-> # (ab-out/s183-leva/phpr-B), altrimenti rc=5 «meccanismo da rileggere». Testo S-183/S-181 conservato sotto:
+> # cambiate sono RT2- o righe del fatal/perse dopo l'abort — emenda p.7a), DISASM come GATE (az.rev. S-183 #2, emenda p.7b forma 2):
+> # istr(B) < istr(tree-RT1 9ef70777) e sp_refs(B) ≤ +40 (ab-out/s183-leva/phpr-B), altrimenti rc=5 «meccanismo da rileggere». Testo S-183/S-181 conservato sotto:
 23,24c11,12
 < H="$REPO/php-rust/wp182-harness"; H1="$REPO/php-rust/wp181-harness"; OUT="$H/ab-out/s183-leva"; mkdir -p "$OUT"
 < VERD="$H/s183-leva-build-verdetto.out"; DONE="$H/ab-out/s183-leva.done"; rm -f "$DONE"
@@ -109,7 +109,7 @@
 > # mutante: DEVE divergere dall'oracle su fx-rt2 con ≥1 riga cambiata e TUTTE le righe cambiate etichettate RT2- (esito esatto, criterio-rt2 p.3)
 > perl -e 'alarm 120; exec @ARGV or die' -- "$OUT/phpr-M" "$FXRT2" > "$OUT/fxrt2-M.out" 2>&1
 > diff "$OUT/fxrt2-oracle.out" "$OUT/fxrt2-M.out" > "$OUT/fxrt2-M.diff" || true
-> MCH=$(grep -c '^[<>]' "$OUT/fxrt2-M.diff"); MBAD=$(grep '^[<>]' "$OUT/fxrt2-M.diff" | grep -vc '^[<>] RT2-')
+> MCH=$(grep -c '^[<>]' "$OUT/fxrt2-M.diff"); MBAD=$(grep '^[<>]' "$OUT/fxrt2-M.diff" | grep -vcE '^[<>] (RT2-|FX-RT2 DONE|Fatal error|Stack trace|#[0-9]|  thrown)|^[<>] ?$')
 > if [ "$MCH" -gt 0 ] && [ "$MBAD" -eq 0 ]; then
 >   note "MUTANTE: morde — fx-rt2 righe cambiate $MCH, tutte RT2- (non RT2- $MBAD): etichette $(grep '^[<>]' "$OUT/fxrt2-M.diff" | sed 's/^[<>] \(RT2-[a-z-]*\).*/\1/' | sort -u | tr '\n' ' ') — la fixture presidia l'ammissione"
 160c154
@@ -122,10 +122,10 @@
 > DPIN=$(dis "$PIN" pin); DZ=$(dis "$OUT/phpr-Z" Z); DB=$(dis "$OUT/phpr-B" B); DT=$(dis "$TREE_RT1" treeRT1)
 > note "DISASM run_loop: pin s181 $DPIN · Z $DZ · tree-RT1 9ef70777 $DT · B $DB"
 > num(){ echo "$1" | sed -n "s/.*$2=\([0-9]*\).*/\1/p"; }
-> BLB=$(num "$DB" bl); BLT=$(num "$DT" bl); SPB=$(num "$DB" sp_refs); SPT=$(num "$DT" sp_refs)
-> if [ -n "$BLB" ] && [ -n "$BLT" ] && [ -n "$SPB" ] && [ -n "$SPT" ]; then
->   DBL=$((BLB-BLT)); DSP=$((SPB-SPT))
->   if [ "${DBL#-}" -le 10 ] && [ "${DSP#-}" -le 40 ]; then note "GATE disasm (az.rev. S-183 #2): Δbl=$DBL (|·|≤10) Δsp_refs=$DSP (|·|≤40) vs tree-RT1 ⇒ RISPETTATO"; else note "GATE disasm: Δbl=$DBL Δsp_refs=$DSP FUORI tolleranza (|Δbl|≤10, |Δsp_refs|≤40) ⇒ meccanismo da rileggere, niente misura -> rc=5"; [ "$RC" -eq 0 ] && RC=5; fi
+> IB=$(num "$DB" istr); IT=$(num "$DT" istr); SPB=$(num "$DB" sp_refs); SPT=$(num "$DT" sp_refs); BLB=$(num "$DB" bl); BLT=$(num "$DT" bl)
+> if [ -n "$IB" ] && [ -n "$IT" ] && [ -n "$SPB" ] && [ -n "$SPT" ]; then
+>   DI=$((IB-IT)); DSP=$((SPB-SPT)); DBL=$((BLB-BLT))
+>   if [ "$DI" -lt 0 ] && [ "$DSP" -le 40 ]; then note "GATE disasm (criterio-rt2 p.7 forma 2): Δistr=$DI (<0) Δsp_refs=$DSP (≤40) vs tree-RT1 ⇒ RISPETTATO · Δbl=$DBL a verbale"; else note "GATE disasm (forma 2): Δistr=$DI Δsp_refs=$DSP FUORI attesa (istr<0, sp_refs≤40) ⇒ meccanismo da rileggere, niente misura -> rc=5 · Δbl=$DBL"; [ "$RC" -eq 0 ] && RC=5; fi
 > else
 >   note "GATE disasm: conteggi non leggibili (B='$DB' tree='$DT') -> rc=5"; [ "$RC" -eq 0 ] && RC=5
 > fi
