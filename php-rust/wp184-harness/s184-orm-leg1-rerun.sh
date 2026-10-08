@@ -1,4 +1,11 @@
 #!/bin/bash
+# s184-orm-leg1-rerun.sh — S-184 bis (2026-10-08): RILANCIO della SOLA gamba 1 ORM (oracle1+phpr1) della coppia t25 @ pin
+# s182, dopo che il phpr della gamba 1 notturna ha completato la suite (output identico alla gamba 2) e NON e' uscito
+# (ucciso dal watchdog dopo 600 s, rc=124, .time senza user). COPIA DICHIARATA di ../wp176-harness/s176-orm-coppia.sh
+# (manifest s184-orm-leg1-rerun-copia.diff) coi SOLI adattamenti: (1) gambe giudicate = solo leg 1 (leg 2 ORM e dbal 1-2
+# della notte restano in orm-out e il giudice li rilegge); (2) WORKLOADS default = orm; (3) progress.txt in APPEND;
+# (4) i file orm-*1 della notte conservati come *.t25-hang PRIMA del run, con verifica ls; (5) intestazione del verdetto
+# marcata RERUN. H/OUT restano wp176-harness (stessa cartella dati, stesso lock TOKEN s184). Tutto il resto INVARIATO.
 # EMENDA S-184 bis (2026-10-08, dichiarata): giudice con guardia sui .time incompleti (exit 7 => RC=7, VERDETTO NON EMESSO); vedi blocco python.
 # s176-orm-coppia.sh — coppia dbal+ORM col CANONE EMENDATO (S-176, istruttoria s176-istruttoria-sentinella-orm.md +
 # criterio s176-criterio-orm.md): COPIA DICHIARATA di s175-orm-coppia.sh (manifest s176-orm-coppia-copia.diff) coi SOLI
@@ -42,8 +49,11 @@ SP="${MAPPA_SP:?MAPPA_SP (workdir APFS) richiesto}"
 OUT="$H/orm-out"; mkdir -p "$OUT"
 VERD="$H/s176-orm-coppia-verdetto.out"
 p(){ echo "$(date +%H:%M:%S) $1" >> "$OUT/progress.txt"; }
-: > "$OUT/progress.txt"
+echo "== RERUN gamba 1 ORM (S-184 bis) $(date '+%F %T') ==" >> "$OUT/progress.txt"
 rm -f "$OUT/rimisura.done"
+for f in orm-oracle1.txt orm-oracle1.time orm-phpr1.txt orm-phpr1.time orm-phpr1.failnames; do [ -e "$OUT/$f" ] && mv "$OUT/$f" "$OUT/$f.t25-hang"; done
+ls "$OUT/orm-phpr1.time.t25-hang" > /dev/null 2>&1 || { echo "rc=8 conserva-notte (orm-phpr1.time.t25-hang assente)" > "$OUT/rimisura.done"; exit 8; }
+[ -e "$OUT/orm-phpr1.time" ] && { echo "rc=8 orm-phpr1.time ancora presente dopo mv" > "$OUT/rimisura.done"; exit 8; }
 PINM="$(shasum -a 256 "$PHPR" | cut -c1-16)"
 PIN_ATTESO="${PIN_ATTESO:-5de14d6856d760a8}"
 [ "$PINM" = "$PIN_ATTESO" ] || { echo "rc=9 pin!=$PIN_ATTESO" > "$OUT/rimisura.done"; exit 9; }
@@ -123,7 +133,7 @@ run_leg(){ # W TGZ DIR TIMEOUT ENGINE LABEL
   return 0
 }
 
-WLS="${WORKLOADS:-orm dbal}"
+WLS="${WORKLOADS:-orm}"
 
 # ADATTAMENTO (i) DICHIARATO (istruttoria p.1): RODAGGIO non giudicante — una
 # gamba per motore e workload, scarica il transitorio primo-run (leg1 598/s ->
@@ -138,7 +148,7 @@ case " $WLS " in *" dbal "*)
   run_leg dbal dbal-work.tgz dbal-work 3600 "$PHPR"   "rodaggio-phpr" ;;
 esac
 
-for leg in 1 2; do
+for leg in 1; do
   case " $WLS " in *" orm "*)
     quiesce_gate "orm-leg$leg"
     run_leg orm orm-work.tgz orm-work 3600 "$ORACLE" "oracle$leg"
@@ -283,7 +293,7 @@ rod_ictx(){ # companion istruttoria: ictx/s delle gambe di rodaggio (FUORI dal g
   python3 -c "print(f'{$i/$r:.1f}')" 2>/dev/null || echo "n/d"
 }
 
-{ echo "== s175 coppia dbal+ORM (pin s175 MISURATO $PINM vs oracle 8.5.7; criterio s175-criterio-orm.md) =="
+{ echo "== s175 coppia dbal+ORM (pin s175 MISURATO $PINM vs oracle 8.5.7; criterio s175-criterio-orm.md) == [RERUN S-184 bis $(date '+%F %T'): SOLO gamba 1 ORM rimisurata; leg2 ORM e dbal 1-2 dalla finestra notturna t25, stesso lock TOKEN s184]"
   echo "# estrazione summ/names con LC_ALL=C + grep -a (fix az.rev. S-155 #4); reperto conteggi dbal phpr vs oracle A VERBALE (companion, non arbitra)"
   echo "# ADATTAMENTI (i)-(iii) dall'istruttoria p.1 + az.rev. S-159 #1: rodaggio non giudicante, quiescenza per gamba, scaletta a due estremi"
   echo "sentinella language-server inizio finestra (az.rev. S-157 #4): ${LS_START:-nessuno}"

@@ -1,0 +1,28 @@
+1a2,8
+> # s184-orm-leg1-rerun.sh — S-184 bis (2026-10-08): RILANCIO della SOLA gamba 1 ORM (oracle1+phpr1) della coppia t25 @ pin
+> # s182, dopo che il phpr della gamba 1 notturna ha completato la suite (output identico alla gamba 2) e NON e' uscito
+> # (ucciso dal watchdog dopo 600 s, rc=124, .time senza user). COPIA DICHIARATA di ../wp176-harness/s176-orm-coppia.sh
+> # (manifest s184-orm-leg1-rerun-copia.diff) coi SOLI adattamenti: (1) gambe giudicate = solo leg 1 (leg 2 ORM e dbal 1-2
+> # della notte restano in orm-out e il giudice li rilegge); (2) WORKLOADS default = orm; (3) progress.txt in APPEND;
+> # (4) i file orm-*1 della notte conservati come *.t25-hang PRIMA del run, con verifica ls; (5) intestazione del verdetto
+> # marcata RERUN. H/OUT restano wp176-harness (stessa cartella dati, stesso lock TOKEN s184). Tutto il resto INVARIATO.
+45c52
+< : > "$OUT/progress.txt"
+---
+> echo "== RERUN gamba 1 ORM (S-184 bis) $(date '+%F %T') ==" >> "$OUT/progress.txt"
+46a54,56
+> for f in orm-oracle1.txt orm-oracle1.time orm-phpr1.txt orm-phpr1.time orm-phpr1.failnames; do [ -e "$OUT/$f" ] && mv "$OUT/$f" "$OUT/$f.t25-hang"; done
+> ls "$OUT/orm-phpr1.time.t25-hang" > /dev/null 2>&1 || { echo "rc=8 conserva-notte (orm-phpr1.time.t25-hang assente)" > "$OUT/rimisura.done"; exit 8; }
+> [ -e "$OUT/orm-phpr1.time" ] && { echo "rc=8 orm-phpr1.time ancora presente dopo mv" > "$OUT/rimisura.done"; exit 8; }
+126c136
+< WLS="${WORKLOADS:-orm dbal}"
+---
+> WLS="${WORKLOADS:-orm}"
+141c151
+< for leg in 1 2; do
+---
+> for leg in 1; do
+286c296
+< { echo "== s175 coppia dbal+ORM (pin s175 MISURATO $PINM vs oracle 8.5.7; criterio s175-criterio-orm.md) =="
+---
+> { echo "== s175 coppia dbal+ORM (pin s175 MISURATO $PINM vs oracle 8.5.7; criterio s175-criterio-orm.md) == [RERUN S-184 bis $(date '+%F %T'): SOLO gamba 1 ORM rimisurata; leg2 ORM e dbal 1-2 dalla finestra notturna t25, stesso lock TOKEN s184]"
