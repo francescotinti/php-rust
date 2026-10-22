@@ -438,7 +438,11 @@ const XPATH_NUMBER: c_int = 3;
 const XPATH_STRING: c_int = 4;
 
 extern "C" {
+    // macOS system libxml2 (~2.9.x) exports these as `valuePop`/`valuePush`;
+    // libxml2 2.x (Linux) renamed them to `xmlXPathValuePop`/`xmlXPathValuePush`.
+    #[cfg_attr(not(target_os = "macos"), link_name = "xmlXPathValuePop")]
     fn valuePop(ctxt: *mut c_void) -> *mut c_void;
+    #[cfg_attr(not(target_os = "macos"), link_name = "xmlXPathValuePush")]
     fn valuePush(ctxt: *mut c_void, value: *mut c_void) -> c_int;
     fn xmlXPathFreeObject(obj: *mut c_void);
     fn xmlXPathCastToString(obj: *mut c_void) -> *mut c_char;
