@@ -4,14 +4,21 @@
 // carries its own libjpeg-turbo/libpng/libwebp/libavif codec choices, so a
 // Rust-crate reimplementation (image/imageproc) would diverge on every encode.
 fn main() {
-    println!("cargo:rustc-link-search=native=/opt/homebrew/opt/gd/lib");
+    // macOS: gd lives in a Homebrew keg, not the default library path.
+    // Linux: libgd is in the system library path; no explicit search needed.
+    if cfg!(target_os = "macos") {
+        println!("cargo:rustc-link-search=native=/opt/homebrew/opt/gd/lib");
+    }
     println!("cargo:rustc-link-lib=dylib=gd");
     // ext/xsl (src/xsltio.rs): the **system** libxslt/libexslt/libxml2 — the
     // same /usr/lib dylibs the PHP oracle links (they live in the dyld shared
     // cache; the linker resolves them through the SDK .tbd stubs).
     // ext/tidy (src/tidyio.rs): the **system** libtidy — the same Homebrew
     // keg the PHP oracle was configured against (--with-tidy=tidy-html5).
-    println!("cargo:rustc-link-search=native=/opt/homebrew/opt/tidy-html5/lib");
+    // macOS: tidy lives in a Homebrew keg. Linux: system library path.
+    if cfg!(target_os = "macos") {
+        println!("cargo:rustc-link-search=native=/opt/homebrew/opt/tidy-html5/lib");
+    }
     println!("cargo:rustc-link-lib=dylib=tidy");
     println!("cargo:rustc-link-lib=dylib=xslt");
     println!("cargo:rustc-link-lib=dylib=exslt");
