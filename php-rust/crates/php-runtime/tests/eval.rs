@@ -4553,6 +4553,28 @@ fn magic_function_class_method() {
 }
 
 #[test]
+fn magic_class_method_in_enum() {
+    // Enum methods see the enum as their class (Zend/tests/enum/__class__.phpt,
+    // enum/__method__.phpt) — so do closures and `self::m(...)` inside them.
+    assert_eq!(
+        out("<?php enum E { case A; function m(){ echo __CLASS__,'|',__FUNCTION__,'|',__METHOD__; } } E::A->m();"),
+        "E|m|E::m"
+    );
+    assert_eq!(
+        out("<?php namespace N; enum E { case A; static function s(){ echo __METHOD__; } } E::s();"),
+        "N\\E::s"
+    );
+    assert_eq!(
+        out("<?php enum E { case A; function m(){ return function(){ echo __FUNCTION__,'|',__CLASS__; }; } } (E::A->m())();"),
+        "{closure:E::m():1}|E"
+    );
+    assert_eq!(
+        out("<?php enum E { case A; static function s(){ echo 's'; } static function f(){ return self::s(...); } } (E::f())();"),
+        "s"
+    );
+}
+
+#[test]
 fn magic_top_level_and_closure() {
     // At the top level every name-scoped magic constant is the empty string.
     assert_eq!(out("<?php echo '['.__FUNCTION__.']'.'['.__CLASS__.']';"), "[][]");
