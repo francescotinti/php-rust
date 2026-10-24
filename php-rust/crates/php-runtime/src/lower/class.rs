@@ -1131,6 +1131,8 @@ impl<'f> Lowerer<'f> {
         let mut enum_cases = Vec::new();
         let mut uses: Vec<&TraitUse> = Vec::new();
         let mut abstract_req: Vec<Box<[u8]>> = Vec::new();
+        // As in `lower_class`: `__CLASS__`/`__METHOD__`/closure scope = the enum.
+        let saved_cls = self.cur_class.replace(name.clone());
         for member in en.members.iter() {
             match member {
                 ClassLikeMember::EnumCase(c) => {
@@ -1163,6 +1165,7 @@ impl<'f> Lowerer<'f> {
                 }
             }
         }
+        self.cur_class = saved_cls;
         if !uses.is_empty() {
             let props: Vec<crate::hir::PropDecl> = Vec::new();
             let static_props: Vec<crate::hir::StaticPropDecl> = Vec::new();
