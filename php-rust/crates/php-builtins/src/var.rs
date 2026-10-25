@@ -1046,6 +1046,16 @@ pub(crate) fn filter_var(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError>
         275 => {
             if validate_ip(s.as_bytes(), flags) { Ok(Zval::Str(s)) } else { Ok(miss()) }
         }
+        // FILTER_VALIDATE_EMAIL: php_filter_validate_email — the 320-octet cap,
+        // then the logical_filters.c pattern (`\pL\pN` + `/u` under FILTER_FLAG_EMAIL_UNICODE).
+        274 => {
+            if validate_email(s.as_bytes(), flags) { Ok(Zval::Str(s)) } else { Ok(default_or_miss()) }
+        }
+        // FILTER_VALIDATE_DOMAIN: php_filter_validate_domain_ex (FILTER_FLAG_HOSTNAME
+        // adds the alnum/`-` label rules).
+        277 => {
+            if validate_domain(s.as_bytes(), flags) { Ok(Zval::Str(s)) } else { Ok(default_or_miss()) }
+        }
         // FILTER_VALIDATE_MAC (same file): 17-byte `xx:xx:…`/`xx-xx-…` or
         // 14-byte EUI-64 `xxxx.xxxx.xxxx`. The `separator` option must be one
         // character; a mismatch is a plain validation miss.
@@ -1350,6 +1360,57 @@ fn validate_mac(b: &[u8], sep: Option<u8>) -> bool {
         }
         if !b[off..off + length].iter().all(|c| c.is_ascii_hexdigit()) {
             return false;
+        }
+    }
+    true
+}
+
+/// `php_filter_validate_email`: at most 320 bytes, then a full match of the
+/// logical_filters.c pattern (`regexp1`, or `regexp0` under FILTER_FLAG_EMAIL_UNICODE).
+fn validate_email(b: &[u8], flags: i64) -> bool {
+    const FLAG_EMAIL_UNICODE: i64 = 1_048_576;
+    const PATTERN: &[u8] = br"/^(?!(?:(?:\x22?\x5C[\x00-\x7E]\x22?)|(?:\x22?[^\x5C\x22]\x22?)){255,})(?!(?:(?:\x22?\x5C[\x00-\x7E]\x22?)|(?:\x22?[^\x5C\x22]\x22?)){65,}@)(?:(?:[\x21\x23-\x27\x2A\x2B\x2D\x2F-\x39\x3D\x3F\x5E-\x7E]+)|(?:\x22(?:[\x01-\x08\x0B\x0C\x0E-\x1F\x21\x23-\x5B\x5D-\x7F]|(?:\x5C[\x00-\x7F]))*\x22))(?:\.(?:(?:[\x21\x23-\x27\x2A\x2B\x2D\x2F-\x39\x3D\x3F\x5E-\x7E]+)|(?:\x22(?:[\x01-\x08\x0B\x0C\x0E-\x1F\x21\x23-\x5B\x5D-\x7F]|(?:\x5C[\x00-\x7F]))*\x22)))*@(?:(?:(?!.*[^.]{64,})(?:(?:(?:xn--)?[a-z0-9]+(?:-+[a-z0-9]+)*\.){1,126}){1,}(?:(?:[a-z][a-z0-9]*)|(?:(?:xn--)[a-z0-9]+))(?:-+[a-z0-9]+)*)|(?:\[(?:(?:IPv6:(?:(?:[a-f0-9]{1,4}(?::[a-f0-9]{1,4}){7})|(?:(?!(?:.*[a-f0-9][:\]]){7,})(?:[a-f0-9]{1,4}(?::[a-f0-9]{1,4}){0,5})?::(?:[a-f0-9]{1,4}(?::[a-f0-9]{1,4}){0,5})?)))|(?:(?:IPv6:(?:(?:[a-f0-9]{1,4}(?::[a-f0-9]{1,4}){5}:)|(?:(?!(?:.*[a-f0-9]:){5,})(?:[a-f0-9]{1,4}(?::[a-f0-9]{1,4}){0,3})?::(?:[a-f0-9]{1,4}(?::[a-f0-9]{1,4}){0,3}:)?)))?(?:(?:25[0-5])|(?:2[0-4][0-9])|(?:1[0-9]{2})|(?:[1-9]?[0-9]))(?:\.(?:(?:25[0-5])|(?:2[0-4][0-9])|(?:1[0-9]{2})|(?:[1-9]?[0-9]))){3}))\]))$/iD";
+    const PATTERN_UNICODE: &[u8] = br"/^(?!(?:(?:\x22?\x5C[\x00-\x7E]\x22?)|(?:\x22?[^\x5C\x22]\x22?)){255,})(?!(?:(?:\x22?\x5C[\x00-\x7E]\x22?)|(?:\x22?[^\x5C\x22]\x22?)){65,}@)(?:(?:[\x21\x23-\x27\x2A\x2B\x2D\x2F-\x39\x3D\x3F\x5E-\x7E\pL\pN]+)|(?:\x22(?:[\x01-\x08\x0B\x0C\x0E-\x1F\x21\x23-\x5B\x5D-\x7F\pL\pN]|(?:\x5C[\x00-\x7F]))*\x22))(?:\.(?:(?:[\x21\x23-\x27\x2A\x2B\x2D\x2F-\x39\x3D\x3F\x5E-\x7E\pL\pN]+)|(?:\x22(?:[\x01-\x08\x0B\x0C\x0E-\x1F\x21\x23-\x5B\x5D-\x7F\pL\pN]|(?:\x5C[\x00-\x7F]))*\x22)))*@(?:(?:(?!.*[^.]{64,})(?:(?:(?:xn--)?[a-z0-9]+(?:-+[a-z0-9]+)*\.){1,126}){1,}(?:(?:[a-z][a-z0-9]*)|(?:(?:xn--)[a-z0-9]+))(?:-+[a-z0-9]+)*)|(?:\[(?:(?:IPv6:(?:(?:[a-f0-9]{1,4}(?::[a-f0-9]{1,4}){7})|(?:(?!(?:.*[a-f0-9][:\]]){7,})(?:[a-f0-9]{1,4}(?::[a-f0-9]{1,4}){0,5})?::(?:[a-f0-9]{1,4}(?::[a-f0-9]{1,4}){0,5})?)))|(?:(?:IPv6:(?:(?:[a-f0-9]{1,4}(?::[a-f0-9]{1,4}){5}:)|(?:(?!(?:.*[a-f0-9]:){5,})(?:[a-f0-9]{1,4}(?::[a-f0-9]{1,4}){0,3})?::(?:[a-f0-9]{1,4}(?::[a-f0-9]{1,4}){0,3}:)?)))?(?:(?:25[0-5])|(?:2[0-4][0-9])|(?:1[0-9]{2})|(?:[1-9]?[0-9]))(?:\.(?:(?:25[0-5])|(?:2[0-4][0-9])|(?:1[0-9]{2})|(?:[1-9]?[0-9]))){3}))\]))$/iDu";
+    if b.len() > 320 {
+        return false;
+    }
+    let pat = if flags & FLAG_EMAIL_UNICODE != 0 { PATTERN_UNICODE } else { PATTERN };
+    php_runtime::preg::compile(pat).is_some_and(|re| {
+        php_runtime::preg::subject_text(b, php_runtime::preg::pattern_is_unicode(pat))
+            .is_some_and(|st| re.captures(st.as_str()).is_some())
+    })
+}
+
+/// `php_filter_validate_domain_ex`: ≤253 bytes (one trailing dot ignored), no
+/// empty label, labels ≤63 bytes. Out-of-range reads see NUL like the C string.
+fn validate_domain(b: &[u8], flags: i64) -> bool {
+    const FLAG_HOSTNAME: i64 = 1_048_576;
+    let hostname = flags & FLAG_HOSTNAME != 0;
+    let at = |i: usize| b.get(i).copied().unwrap_or(0);
+    let mut l = b.len();
+    if l > 0 && b[l - 1] == b'.' {
+        l -= 1;
+    }
+    if l > 253 {
+        return false;
+    }
+    if at(0) == b'.' || (hostname && !at(0).is_ascii_alphanumeric()) {
+        return false;
+    }
+    let mut label = 1u8;
+    for i in 0..l {
+        if b[i] == b'.' {
+            if at(i + 1) == b'.'
+                || (hostname && (!at(i - 1).is_ascii_alphanumeric() || !at(i + 1).is_ascii_alphanumeric()))
+            {
+                return false;
+            }
+            label = 1;
+        } else {
+            if label > 63 || (hostname && (b[i] != b'-' || at(i + 1) == 0) && !b[i].is_ascii_alphanumeric()) {
+                return false;
+            }
+            label += 1;
         }
     }
     true
