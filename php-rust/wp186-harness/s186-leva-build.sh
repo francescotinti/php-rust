@@ -91,9 +91,19 @@ old = ('                        // The compiler only emits CallBuiltin for value
        '                        _ => return Err(undefined_builtin(&name)),\n'
        '                    };\n')
 assert s.count(old) == 1, 'sito lookup CallBuiltin non unico'
-new = old + ('                    // MUTANTE s186: spin ~200 ns per CallBuiltin (strumento vivo della fetta 0; Instant::elapsed ~20 ns ⇒ soglia 180)\n'
-             '                    { let t = std::time::Instant::now(); while t.elapsed() < std::time::Duration::from_nanos(180) { std::hint::spin_loop(); } }\n')
+new = old + ('                    builtin_spin_mutant_s186(); // MUTANTE s186: spin ~200 ns per CallBuiltin, fuori linea (il self cade nel SUO simbolo = classe builtin)\n')
 s = s.replace(old, new)
+# EMENDA rev. S-186 #1: spin SENZA clock in una funzione #[inline(never)] dal nome catturato dalla regola `builtin` di xc-classi.py
+# (uno spin inline su Instant::now/elapsed cadeva nei frame del clock e nel self di run_loop: strumento MUTO per costruzione).
+s += ('\n/// MUTANTE s186 (strumento vivo della fetta 0): ~200 ns di lavoro dipendente, mai inline, nessun clock.\n'
+      '#[inline(never)]\n'
+      'pub fn builtin_spin_mutant_s186() {\n'
+      '    let mut x = 0u64;\n'
+      '    for i in 0..120u64 {\n'
+      '        x = std::hint::black_box(x.wrapping_mul(6364136223846793005).wrapping_add(i));\n'
+      '    }\n'
+      '    std::hint::black_box(x);\n'
+      '}\n')
 open(p, 'w').write(s)
 print('mutante applicato')
 PY
@@ -164,10 +174,52 @@ for pair in "fxsw1:$FX1" "fxsl1:$H2/fx-sl1.php" "fxsl2:$H2/fx-sl2.php" "fxsl3:$H
   cmp -s "$OUT/$n-M.out" "$OUT/$n-pinref.out" || { MB=$((MB+1)); note "M ≠ pin su $n (il mutante cambia byte: NON ammesso) -> rc=3"; }
 done
 if [ "$MB" -eq 0 ]; then note "M == pin BYTE-ID su 9 fixture (mutante puramente temporale)"; else [ "$RC" -eq 0 ] && RC=3; fi
-# smoke temporale del mutante (non gate): str.php micro, user CPU pin vs M
+# TARATURA del mutante (gate, emenda rev. S-186 #1): builtin-dq.php (N CallBuiltin dal sorgente), user CPU pin vs M, R=3 interleaved,
+# ns/chiamata = (med M − med pin)/N; PRE-registrato [120;320] ns (atteso ~200), altrimenti rc=3; la cifra va in mutante-ns.txt
+# e la fetta 0 la legge per la finestra di ΔM (0,85-1,15 × 11,91M × ns).
 ucpu(){ { /usr/bin/time -p perl -e 'alarm 900; exec @ARGV or die' -- "$@" > /dev/null; } 2>&1 | awk '/^user/{print $2}'; }
-MS="$REPO/php-rust/wp97-harness/micro/str.php"
-note "smoke mutante (non gate, str.php user CPU): pin $(ucpu "$PIN" "$MS") s · M $(ucpu "$OUT/phpr-M" "$MS") s"
+BD="$H/builtin-dq.php"; NBD=$(awk 'match($0, /\$i < [0-9]+/) {print substr($0, RSTART+5, RLENGTH-5); exit}' "$BD")
+TP=""; TM=""
+for r in 1 2 3; do TP="$TP $(ucpu "$PIN" "$BD")"; TM="$TM $(ucpu "$OUT/phpr-M" "$BD")"; done
+NSM=$(python3 -c 'import sys
+p=sorted(map(float,sys.argv[1].split())); m=sorted(map(float,sys.argv[2].split())); n=float(sys.argv[3])
+print("%.1f" % ((m[1]-p[1])/n*1e9))' "$TP" "$TM" "$NBD")
+echo "$NSM" > "$OUT/mutante-ns.txt"
+if python3 -c 'import sys; v=float(sys.argv[1]); sys.exit(0 if 120.0 <= v <= 320.0 else 1)' "$NSM"; then
+  note "TARATURA mutante: $NSM ns/CallBuiltin (N=$NBD; pin [$TP ] · M [$TM ] s) ∈ [120;320] ⇒ OK (ab-out/s186-leva/mutante-ns.txt)"
+else
+  note "TARATURA mutante: $NSM ns/CallBuiltin FUORI [120;320] (pin [$TP ] · M [$TM ]) -> rc=3"; [ "$RC" -eq 0 ] && RC=3
+fi
+# ATTRIBUZIONE del mutante (gate, emenda rev. S-186 #1): xctrace Time Profiler su builtin-dq.php per pin e M, classi via xc-classi.py;
+# ΔM nella classe builtin ≥ 75 % di ΔM totale, altrimenti lo strumento è MUTO per costruzione -> rc=3.
+XC="$H/xc-classi.py"; KT="$(getconf DARWIN_USER_TEMP_DIR)"
+for arm in pin M; do
+  case "$arm" in pin) bin="$PIN";; M) bin="$OUT/phpr-M";; esac
+  rm -rf "$OUT/attr-$arm.trace"
+  xcrun xctrace record --template 'Time Profiler' --output "$OUT/attr-$arm.trace" --target-stdout /dev/null --launch -- "$bin" "$BD" > "$OUT/attr-$arm.rec.log" 2>&1
+  xcrun xctrace export --input "$OUT/attr-$arm.trace" --xpath '//trace-toc/run[@number="1"]/data/table[@schema="time-profile"]' > "$OUT/attr-$arm.xml" 2>/dev/null
+  python3 -I "$XC" "$OUT/attr-$arm.xml" "$OUT/attr-$arm.classi.tsv" "$OUT/attr-$arm.top.tsv" > "$OUT/attr-$arm.classi.log" 2>&1
+  rm -rf "$OUT/attr-$arm.trace" "$KT"/instruments*.ktrace
+done
+ATTR=$(python3 -c 'import sys
+def load(p):
+    d={}
+    for l in open(p):
+        f=l.rstrip("\n").split("\t")
+        if len(f)>=2:
+            try: d[f[0]]=float(f[1])
+            except ValueError: pass
+    return d
+p=load(sys.argv[1]); m=load(sys.argv[2])
+dt=m.get("TOTAL",0)-p.get("TOTAL",0); db=m.get("builtin",0)-p.get("builtin",0)
+q=db/dt if dt>0 else 0.0
+print("%.2f %.2f %.2f" % (dt, db, q))' "$OUT/attr-pin.classi.tsv" "$OUT/attr-M.classi.tsv" 2>/dev/null)
+set -- $ATTR
+if [ -n "${3:-}" ] && python3 -c 'import sys; sys.exit(0 if float(sys.argv[1]) >= 0.75 and float(sys.argv[2]) > 0 else 1)' "$3" "$1"; then
+  note "ATTRIBUZIONE mutante: ΔM totale $1 s, in classe builtin $2 s = quota $3 (≥ 0,75) ⇒ strumento VIVO per costruzione (attr-M.classi.tsv)"
+else
+  note "ATTRIBUZIONE mutante: ΔM totale ${1:-n/d} s, builtin ${2:-n/d} s, quota ${3:-n/d} < 0,75 o export fallito ⇒ strumento MUTO per costruzione -> rc=3"; [ "$RC" -eq 0 ] && RC=3
+fi
 
 # C: stdout byte-identico a B2 su tutte le fixture (stderr porta le righe census-time) + strumento vivo (count>0 su call_fast)
 CB=0

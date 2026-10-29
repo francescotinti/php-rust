@@ -174,7 +174,7 @@
 < # M = B + mutante: Ret fuso del METODO senza la nota GC di $this (gc_note_this tolta) — sostituzione sull'ARCHIVIO, mai sul tree — DEVE divergere su fx-mc2 (righe MC2-dtor*)
 ---
 > # M = sorgente del pin + MUTANTE temporale: spin ~200 ns in Op::CallBuiltin, dopo la lookup nel registry (archivio, mai il tree)
-123,127c90,96
+123,127c90,106
 < old = ('                        if self.frames[top].this.is_some() {\n'
 <        '                            self.gc_note_this(top);\n'
 <        '                        }\n')
@@ -185,10 +185,20 @@
 >        '                        _ => return Err(undefined_builtin(&name)),\n'
 >        '                    };\n')
 > assert s.count(old) == 1, 'sito lookup CallBuiltin non unico'
-> new = old + ('                    // MUTANTE s186: spin ~200 ns per CallBuiltin (strumento vivo della fetta 0; Instant::elapsed ~20 ns ⇒ soglia 180)\n'
->              '                    { let t = std::time::Instant::now(); while t.elapsed() < std::time::Duration::from_nanos(180) { std::hint::spin_loop(); } }\n')
+> new = old + ('                    builtin_spin_mutant_s186(); // MUTANTE s186: spin ~200 ns per CallBuiltin, fuori linea (il self cade nel SUO simbolo = classe builtin)\n')
 > s = s.replace(old, new)
-132,135c101,119
+> # EMENDA rev. S-186 #1: spin SENZA clock in una funzione #[inline(never)] dal nome catturato dalla regola `builtin` di xc-classi.py
+> # (uno spin inline su Instant::now/elapsed cadeva nei frame del clock e nel self di run_loop: strumento MUTO per costruzione).
+> s += ('\n/// MUTANTE s186 (strumento vivo della fetta 0): ~200 ns di lavoro dipendente, mai inline, nessun clock.\n'
+>       '#[inline(never)]\n'
+>       'pub fn builtin_spin_mutant_s186() {\n'
+>       '    let mut x = 0u64;\n'
+>       '    for i in 0..120u64 {\n'
+>       '        x = std::hint::black_box(x.wrapping_mul(6364136223846793005).wrapping_add(i));\n'
+>       '    }\n'
+>       '    std::hint::black_box(x);\n'
+>       '}\n')
+132,135c111,129
 < grep -q 'MUTANTE s185' "$SRC/php-rust/crates/php-runtime/src/vm/run.rs" || { note "rc=7 mutante NON scritto (verifica grep dopo la patch, lezione S-183 #3)"; fin 7; }
 < MH=$(build M) || { note "rc=4 M: build FALLITA (ab-out/s185-leva/build-M.log)"; fin 4; }
 < [ "$MH" != "$BH" ] || { note "rc=7 M: binario == B (mutante NON entrato)"; fin 7; }
@@ -213,7 +223,7 @@
 > CH=$(build C "--features census-time") || { note "rc=4 C: build FALLITA (ab-out/s186-leva/build-C.log)"; fin 4; }
 > [ "$CH" != "$B2H" ] || { note "rc=6 C: binario == B2 (feature census-time NON entrata)"; fin 6; }
 > note "C: binario $CH (commit ${SHAC:0:12}, --features census-time)"
-139,148c123,140
+139,148c133,150
 < perl -e 'alarm 120; exec @ARGV or die' -- "$OUT/phpr-B" "$FX2" > "$OUT/B.out" 2>&1
 < rotte "$OUT/ref.out" "$OUT/B.out" | sort -u > "$OUT/B.rotte"
 < if diff -q "$OUT/ref.out" "$OUT/B.out" > /dev/null; then note "B: fx-sw2-gc == pin BYTE-ID (invarianza)"; else diff "$OUT/ref.out" "$OUT/B.out" > "$OUT/B-invarianza.diff" || true; note "B: fx-sw2-gc ≠ pin — blocchi ROTTI ($(wc -l < "$OUT/B.rotte" | tr -d ' ')): $(tr '\n' ' ' < "$OUT/B.rotte") -> rc=2"; RC=2; fi
@@ -243,7 +253,7 @@
 >     if [ "$n" = fxmc2 ]; then note "$arm: fx-mc2 DIVERGE dall'oracle ($(grep -c '^[<>]' "$OUT/$n-$arm.diff") righe: C1 timing §3.35, emenda Pedersen — ab-out/s186-leva/$n-$arm.diff = candidato expected-diff, NON gate)"
 >     else note "$arm: $n DIVERGE dall'oracle ($(grep -c '^[<>]' "$OUT/$n-$arm.diff") righe, ab-out/s186-leva/$n-$arm.diff) -> rc=2"; RC=2; fi
 >   fi
-150,157c142,156
+150,157c152,166
 < bilat fxsw1 "$FX1" "FX-SW1 DONE"
 < bilat fxsl1 "$H2/fx-sl1.php" "FX-SL1 DONE" -d log_errors=0 -d display_errors=1
 < bilat fxsl2 "$H2/fx-sl2.php" "FX-SL2 DONE" -d log_errors=0 -d display_errors=1
@@ -268,16 +278,13 @@
 >   if ! diff -q "$OUT/$n-B.out" "$OUT/$n-B2.out" > /dev/null; then diff "$OUT/$n-B.out" "$OUT/$n-B2.out" > "$OUT/$n-B2-vs-B.diff" || true; note "B2 ≠ B su $n ($(grep -c '^[<>]' "$OUT/$n-B2-vs-B.diff") righe: la cura O(1) cambia byte — controesempio (b), a verbale) -> rc=2"; RC=2; fi
 > done
 > [ "$RC" -eq 0 ] && note "B2 == B BYTE-ID su tutte le fixture (la cura O(1) non cambia byte)"
-159,167c158,170
+159,164c168,189
 < # mutante: DEVE divergere dall'oracle su fx-mc2 con ≥1 riga cambiata e TUTTE le righe cambiate etichettate MC2-dtor (esito esatto, criterio-mc2 p.3)
 < perl -e 'alarm 120; exec @ARGV or die' -- "$OUT/phpr-M" "$FXMC2" > "$OUT/fxmc2-M.out" 2>&1
 < diff "$OUT/fxmc2-oracle.out" "$OUT/fxmc2-M.out" > "$OUT/fxmc2-M.diff" || true
 < MCH=$(grep -c '^[<>]' "$OUT/fxmc2-M.diff"); MBAD=$(grep '^[<>]' "$OUT/fxmc2-M.diff" | grep -vcE '^[<>] MC2-dtor')
 < if [ "$MCH" -gt 0 ] && [ "$MBAD" -eq 0 ]; then
 <   note "MUTANTE: morde — fx-mc2 righe cambiate $MCH, tutte MC2-dtor (non MC2-dtor $MBAD): etichette $(grep '^[<>]' "$OUT/fxmc2-M.diff" | sed 's/^[<>] \(MC2-[a-z-]*\).*/\1/' | sort -u | tr '\n' ' ') — la fixture presidia la nota GC di \$this"
-< else
-<   note "MUTANTE: NON morde nella forma attesa (fx-mc2 cambiate $MCH, non MC2-dtor $MBAD; ab-out/s185-leva/fxmc2-M.diff) -> rc=3"; [ "$RC" -eq 0 ] && RC=3
-< fi
 ---
 > # M: byte-identico al PIN su TUTTE le fixture (il morso del mutante è di TEMPO, letto nella fetta 0) — altrimenti rc=3
 > MB=0
@@ -288,11 +295,55 @@
 >   cmp -s "$OUT/$n-M.out" "$OUT/$n-pinref.out" || { MB=$((MB+1)); note "M ≠ pin su $n (il mutante cambia byte: NON ammesso) -> rc=3"; }
 > done
 > if [ "$MB" -eq 0 ]; then note "M == pin BYTE-ID su 9 fixture (mutante puramente temporale)"; else [ "$RC" -eq 0 ] && RC=3; fi
-> # smoke temporale del mutante (non gate): str.php micro, user CPU pin vs M
+> # TARATURA del mutante (gate, emenda rev. S-186 #1): builtin-dq.php (N CallBuiltin dal sorgente), user CPU pin vs M, R=3 interleaved,
+> # ns/chiamata = (med M − med pin)/N; PRE-registrato [120;320] ns (atteso ~200), altrimenti rc=3; la cifra va in mutante-ns.txt
+> # e la fetta 0 la legge per la finestra di ΔM (0,85-1,15 × 11,91M × ns).
 > ucpu(){ { /usr/bin/time -p perl -e 'alarm 900; exec @ARGV or die' -- "$@" > /dev/null; } 2>&1 | awk '/^user/{print $2}'; }
-> MS="$REPO/php-rust/wp97-harness/micro/str.php"
-> note "smoke mutante (non gate, str.php user CPU): pin $(ucpu "$PIN" "$MS") s · M $(ucpu "$OUT/phpr-M" "$MS") s"
-169c172,183
+> BD="$H/builtin-dq.php"; NBD=$(awk 'match($0, /\$i < [0-9]+/) {print substr($0, RSTART+5, RLENGTH-5); exit}' "$BD")
+> TP=""; TM=""
+> for r in 1 2 3; do TP="$TP $(ucpu "$PIN" "$BD")"; TM="$TM $(ucpu "$OUT/phpr-M" "$BD")"; done
+> NSM=$(python3 -c 'import sys
+> p=sorted(map(float,sys.argv[1].split())); m=sorted(map(float,sys.argv[2].split())); n=float(sys.argv[3])
+> print("%.1f" % ((m[1]-p[1])/n*1e9))' "$TP" "$TM" "$NBD")
+> echo "$NSM" > "$OUT/mutante-ns.txt"
+> if python3 -c 'import sys; v=float(sys.argv[1]); sys.exit(0 if 120.0 <= v <= 320.0 else 1)' "$NSM"; then
+>   note "TARATURA mutante: $NSM ns/CallBuiltin (N=$NBD; pin [$TP ] · M [$TM ] s) ∈ [120;320] ⇒ OK (ab-out/s186-leva/mutante-ns.txt)"
+166c191
+<   note "MUTANTE: NON morde nella forma attesa (fx-mc2 cambiate $MCH, non MC2-dtor $MBAD; ab-out/s185-leva/fxmc2-M.diff) -> rc=3"; [ "$RC" -eq 0 ] && RC=3
+---
+>   note "TARATURA mutante: $NSM ns/CallBuiltin FUORI [120;320] (pin [$TP ] · M [$TM ]) -> rc=3"; [ "$RC" -eq 0 ] && RC=3
+167a193,222
+> # ATTRIBUZIONE del mutante (gate, emenda rev. S-186 #1): xctrace Time Profiler su builtin-dq.php per pin e M, classi via xc-classi.py;
+> # ΔM nella classe builtin ≥ 75 % di ΔM totale, altrimenti lo strumento è MUTO per costruzione -> rc=3.
+> XC="$H/xc-classi.py"; KT="$(getconf DARWIN_USER_TEMP_DIR)"
+> for arm in pin M; do
+>   case "$arm" in pin) bin="$PIN";; M) bin="$OUT/phpr-M";; esac
+>   rm -rf "$OUT/attr-$arm.trace"
+>   xcrun xctrace record --template 'Time Profiler' --output "$OUT/attr-$arm.trace" --target-stdout /dev/null --launch -- "$bin" "$BD" > "$OUT/attr-$arm.rec.log" 2>&1
+>   xcrun xctrace export --input "$OUT/attr-$arm.trace" --xpath '//trace-toc/run[@number="1"]/data/table[@schema="time-profile"]' > "$OUT/attr-$arm.xml" 2>/dev/null
+>   python3 -I "$XC" "$OUT/attr-$arm.xml" "$OUT/attr-$arm.classi.tsv" "$OUT/attr-$arm.top.tsv" > "$OUT/attr-$arm.classi.log" 2>&1
+>   rm -rf "$OUT/attr-$arm.trace" "$KT"/instruments*.ktrace
+> done
+> ATTR=$(python3 -c 'import sys
+> def load(p):
+>     d={}
+>     for l in open(p):
+>         f=l.rstrip("\n").split("\t")
+>         if len(f)>=2:
+>             try: d[f[0]]=float(f[1])
+>             except ValueError: pass
+>     return d
+> p=load(sys.argv[1]); m=load(sys.argv[2])
+> dt=m.get("TOTAL",0)-p.get("TOTAL",0); db=m.get("builtin",0)-p.get("builtin",0)
+> q=db/dt if dt>0 else 0.0
+> print("%.2f %.2f %.2f" % (dt, db, q))' "$OUT/attr-pin.classi.tsv" "$OUT/attr-M.classi.tsv" 2>/dev/null)
+> set -- $ATTR
+> if [ -n "${3:-}" ] && python3 -c 'import sys; sys.exit(0 if float(sys.argv[1]) >= 0.75 and float(sys.argv[2]) > 0 else 1)' "$3" "$1"; then
+>   note "ATTRIBUZIONE mutante: ΔM totale $1 s, in classe builtin $2 s = quota $3 (≥ 0,75) ⇒ strumento VIVO per costruzione (attr-M.classi.tsv)"
+> else
+>   note "ATTRIBUZIONE mutante: ΔM totale ${1:-n/d} s, builtin ${2:-n/d} s, quota ${3:-n/d} < 0,75 o export fallito ⇒ strumento MUTO per costruzione -> rc=3"; [ "$RC" -eq 0 ] && RC=3
+> fi
+169c224,235
 < # disasm agli atti (p.6): istr/bl/blr/sp_refs di run_loop di B vs pin s180 (S-104: ogni leva su run_loop pretende il disasm)
 ---
 > # C: stdout byte-identico a B2 su tutte le fixture (stderr porta le righe census-time) + strumento vivo (count>0 su call_fast)
@@ -307,10 +358,10 @@
 > if [ "$CB" -eq 0 ] && [ "${CC:-0}" -gt 0 ]; then note "C: stdout == B2 su 5 fixture; census-time vivo (call_fast count=$CC su fx-mc2; righe: $(grep -c '^census-time' "$OUT/fxmc2-C.err"))"; else note "C: stdout diverso ($CB) o census MUTO (call_fast count='${CC:-}') -> rc=3"; [ "$RC" -eq 0 ] && RC=3; fi
 > 
 > # disasm agli atti: istr/bl/blr/sp_refs di run_loop di B e B2 vs il PIN s183 (gate Δsp_refs ≤ +97; Δbl/Δistr a verbale: l'hook della cura 22/10 è noto)
-176,177d189
+176,177d241
 < DPIN=$(dis "$PIN" pin); DZ=$(dis "$OUT/phpr-Z" Z); DB=$(dis "$OUT/phpr-B" B); DT="$DPIN"
 < note "DISASM run_loop: pin s182 $DPIN · Z $DZ · B $DB (gate vs il PIN: Δsp_refs ≤ +97, |Δbl| ≤ 2 — criterio-mc2 p.6)"
-179,185c191,202
+179,185c243,254
 < IB=$(num "$DB" istr); IT=$(num "$DT" istr); SPB=$(num "$DB" sp_refs); SPT=$(num "$DT" sp_refs); BLB=$(num "$DB" bl); BLT=$(num "$DT" bl)
 < if [ -n "$IB" ] && [ -n "$IT" ] && [ -n "$SPB" ] && [ -n "$SPT" ]; then
 <   DI=$((IB-IT)); DSP=$((SPB-SPT)); DBL=$((BLB-BLT))
@@ -331,7 +382,7 @@
 >     note "GATE disasm $arm: conteggi non leggibili ($arm='$DB' pin='$DPIN') -> rc=5"; [ "$RC" -eq 0 ] && RC=5
 >   fi
 > done
-187c204
+187c256
 < note "ESITO rc=$RC (0 = B a parità, mutante che morde, disasm in tolleranza: bracci pronti; 2 = B diverge; 3 = mutante non morde; 5 = disasm fuori tolleranza) fine $(date '+%F %T')"
 ---
 > note "ESITO rc=$RC (0 = B/B2 a parità, M byte-id col pin, C vivo, disasm in tolleranza: bracci pronti; 2 = B/B2 divergono; 3 = M cambia byte o C muto; 5 = disasm fuori tolleranza) fine $(date '+%F %T')"
