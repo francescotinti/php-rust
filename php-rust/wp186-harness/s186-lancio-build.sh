@@ -16,6 +16,6 @@ if pgrep -qx cargo || pgrep -qx rustc || pgrep -qf phpt-runner; then
   sleep 60
 fi
 echo "$(date '+%F %T') CI quieta — build" >> "$LOG"
-ZCOMMIT="$ZCOMMIT" BCOMMIT="$BCOMMIT" CCOMMIT="$CCOMMIT" /bin/bash "$H/s186-leva-build.sh" > "$H/ab-out/s186-leva-build.log" 2>&1
+ZCOMMIT="$ZCOMMIT" BCOMMIT="$BCOMMIT" CCOMMIT="$CCOMMIT" SKIP_BUILD="${SKIP_BUILD:-0}" REBUILD_M="${REBUILD_M:-0}" SPIN_ITER="${SPIN_ITER:-65}" /bin/bash "$H/s186-leva-build.sh" > "$H/ab-out/s186-leva-build.log" 2>&1
 rc=$?
 echo "$(date '+%F %T') build fine rc=$rc ($(cat "$H/ab-out/s186-leva.done" 2>/dev/null))" >> "$LOG"

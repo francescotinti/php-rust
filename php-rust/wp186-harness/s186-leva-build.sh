@@ -73,45 +73,58 @@ build(){ # $1=etichetta $2=feature flags (opz.) → stampa hash16; log in $OUT/b
   cp "$TGT/release/phpr" "$OUT/phpr-$1"; shasum -a 256 "$OUT/phpr-$1" | cut -c1-16
 }
 
-if [ "${SKIP_BUILD:-0}" = 1 ] && [ -s "$OUT/phpr-Z" ] && [ -s "$OUT/phpr-B" ] && [ -s "$OUT/phpr-B2" ] && [ -s "$OUT/phpr-C" ] && [ -s "$OUT/phpr-M" ]; then
-  ZH=$(shasum -a 256 "$OUT/phpr-Z" | cut -c1-16); BH=$(shasum -a 256 "$OUT/phpr-B" | cut -c1-16); B2H=$(shasum -a 256 "$OUT/phpr-B2" | cut -c1-16)
-  CH=$(shasum -a 256 "$OUT/phpr-C" | cut -c1-16); MH=$(shasum -a 256 "$OUT/phpr-M" | cut -c1-16)
-  note "SKIP_BUILD=1 (emenda 5 S-184): riuso dichiarato dei binari — Z $ZH$( [ "$ZH" = "$PH" ] && echo ' == pin' || echo " ≠ pin $PH") · B $BH · B2 $B2H · C $CH · M $MH"
-else
-# Z = sorgente del pin nella target separata (gemello: se byte-id col pin lo si dichiara)
-archivio "$SHAZ" || { note "rc=7 archivio Z fallito"; fin 7; }
-ZH=$(build Z) || { note "rc=4 Z: build FALLITA (ab-out/s186-leva/build-Z.log)"; fin 4; }
-if [ "$ZH" = "$PH" ]; then note "Z: binario $ZH == pin BYTE-ID (gemello byte-id: |A−Z| misura il solo rumore — dichiarato)"; else note "Z: binario $ZH ≠ pin $PH (gemello a contenuto: SL in-run stimabile)"; fi
-
-# M = sorgente del pin + MUTANTE temporale: spin ~200 ns in Op::CallBuiltin, dopo la lookup nel registry (archivio, mai il tree)
-python3 - "$SRC/php-rust/crates/php-runtime/src/vm/run.rs" <<'PY' || { echo "mutante non applicato" >> "$OUT/mutante.err"; }
+build_m(){ # M = sorgente del pin + MUTANTE temporale: spin ~200 ns in Op::CallBuiltin, dopo la lookup nel registry (archivio, mai il tree)
+archivio "$SHAZ" || { note "rc=7 archivio M fallito"; fin 7; }
+rm -f "$OUT/mutante.err"
+python3 - "$SRC/php-rust/crates/php-runtime/src/vm/run.rs" "${SPIN_ITER:-65}" <<'PY' || { echo "mutante non applicato" >> "$OUT/mutante.err"; }
 import sys
-p = sys.argv[1]; s = open(p).read()
-old = ('                        // The compiler only emits CallBuiltin for value builtins.\n'
-       '                        _ => return Err(undefined_builtin(&name)),\n'
-       '                    };\n')
-assert s.count(old) == 1, 'sito lookup CallBuiltin non unico'
-new = old + ('                    builtin_spin_mutant_s186(); // MUTANTE s186: spin ~200 ns per CallBuiltin, fuori linea (il self cade nel SUO simbolo = classe builtin)\n')
+p = sys.argv[1]; s = open(p).read(); iters = int(sys.argv[2])
+# corsa 1 (29/10): spin chiamato DENTRO il braccio CallBuiltin di run_loop ⇒ +100 ns/chiamata finivano nel self di run_loop (layout
+# del dispatcher perturbato: quota builtin 0,73 < 0,75). Corsa 2: il sito è l'ingresso di `value_builtin_call` (corpo FUORI dal
+# dispatcher, L-HD2 forma-2): run_loop resta al byte, il self dello spin cade nel suo simbolo (classe builtin).
+old = ('    ) -> Result<Zval, PhpError> {\n'
+       '        // A whole-object exporter initializes a lazy argument first\n'
+       '        // (PHP 8.4, init_trigger_var_export); the pure builtin then\n')
+assert s.count(old) == 1, 'ingresso di value_builtin_call non unico'
+new = ('    ) -> Result<Zval, PhpError> {\n'
+       '        builtin_spin_mutant_s186(); // MUTANTE s186: spin ~200 ns per CallBuiltin, fuori linea e fuori dal dispatcher\n'
+       '        // A whole-object exporter initializes a lazy argument first\n'
+       '        // (PHP 8.4, init_trigger_var_export); the pure builtin then\n')
 s = s.replace(old, new)
 # EMENDA rev. S-186 #1: spin SENZA clock in una funzione #[inline(never)] dal nome catturato dalla regola `builtin` di xc-classi.py
 # (uno spin inline su Instant::now/elapsed cadeva nei frame del clock e nel self di run_loop: strumento MUTO per costruzione).
+# corsa 1 (29/10 22:28): 120 iterazioni = 371 ns/CallBuiltin (3,1 ns/iter: black_box forza lo store) ⇒ si RIFÀ la build con 65 (soglia invariata)
 s += ('\n/// MUTANTE s186 (strumento vivo della fetta 0): ~200 ns di lavoro dipendente, mai inline, nessun clock.\n'
       '#[inline(never)]\n'
       'pub fn builtin_spin_mutant_s186() {\n'
       '    let mut x = 0u64;\n'
-      '    for i in 0..120u64 {\n'
+      '    for i in 0..%du64 {\n'
       '        x = std::hint::black_box(x.wrapping_mul(6364136223846793005).wrapping_add(i));\n'
       '    }\n'
       '    std::hint::black_box(x);\n'
-      '}\n')
+      '}\n' % iters)
 open(p, 'w').write(s)
-print('mutante applicato')
+print('mutante applicato, iterazioni', iters)
 PY
 [ -e "$OUT/mutante.err" ] && { note "rc=7 mutante non applicabile (sito non trovato)"; fin 7; }
 grep -q 'MUTANTE s186' "$SRC/php-rust/crates/php-runtime/src/vm/run.rs" || { note "rc=7 mutante NON scritto (verifica grep dopo la patch, lezione S-183 #3)"; fin 7; }
 MH=$(build M) || { note "rc=4 M: build FALLITA (ab-out/s186-leva/build-M.log)"; fin 4; }
 [ "$MH" != "$ZH" ] || { note "rc=7 M: binario == Z (mutante NON entrato)"; fin 7; }
-note "M: binario $MH (sorgente del pin + spin ~200 ns in CallBuiltin)"
+note "M: binario $MH (sorgente del pin + spin ${SPIN_ITER:-65} iterazioni in CallBuiltin)"
+}
+
+if [ "${SKIP_BUILD:-0}" = 1 ] && [ -s "$OUT/phpr-Z" ] && [ -s "$OUT/phpr-B" ] && [ -s "$OUT/phpr-B2" ] && [ -s "$OUT/phpr-C" ] && [ -s "$OUT/phpr-M" ]; then
+  ZH=$(shasum -a 256 "$OUT/phpr-Z" | cut -c1-16); BH=$(shasum -a 256 "$OUT/phpr-B" | cut -c1-16); B2H=$(shasum -a 256 "$OUT/phpr-B2" | cut -c1-16)
+  CH=$(shasum -a 256 "$OUT/phpr-C" | cut -c1-16); MH=$(shasum -a 256 "$OUT/phpr-M" | cut -c1-16)
+  note "SKIP_BUILD=1 (emenda 5 S-184): riuso dichiarato dei binari — Z $ZH$( [ "$ZH" = "$PH" ] && echo ' == pin' || echo " ≠ pin $PH") · B $BH · B2 $B2H · C $CH · M $MH"
+  # REBUILD_M=1: si rifà SOLO M (taratura fuori finestra nella corsa precedente: la build si rifà, non la soglia)
+  if [ "${REBUILD_M:-0}" = 1 ]; then OLDM="$MH"; build_m; [ "$MH" != "$OLDM" ] || { note "rc=7 M: binario identico alla corsa precedente (mutante NON cambiato)"; fin 7; }; fi
+else
+# Z = sorgente del pin nella target separata (gemello: se byte-id col pin lo si dichiara)
+archivio "$SHAZ" || { note "rc=7 archivio Z fallito"; fin 7; }
+ZH=$(build Z) || { note "rc=4 Z: build FALLITA (ab-out/s186-leva/build-Z.log)"; fin 4; }
+if [ "$ZH" = "$PH" ]; then note "Z: binario $ZH == pin BYTE-ID (gemello byte-id: |A−Z| misura il solo rumore — dichiarato)"; else note "Z: binario $ZH ≠ pin $PH (gemello a contenuto: SL in-run stimabile)"; fi
+build_m
 
 # B = tree con la cura 22/10 com'è (census-time spenta)
 archivio "$SHAB" || { note "rc=7 archivio B fallito"; fin 7; }
@@ -229,8 +242,9 @@ for pair in "fxsw1:$FX1" "fxcr1:$FXCR" "fxrt1:$FXRT" "fxrt2:$FXRT2" "fxmc2:$FXMC
   perl -e 'alarm 300; exec @ARGV or die' -- "$OUT/phpr-B2" "$f" > "$OUT/$n-B2so.out" 2> /dev/null
   cmp -s "$OUT/$n-C.out" "$OUT/$n-B2so.out" || { CB=$((CB+1)); note "C ≠ B2 su stdout di $n -> rc=3"; }
 done
-CC=$(awk -F'\t' '$1=="census-time" && $2=="call_fast" {print $3}' "$OUT/fxmc2-C.err" 2>/dev/null)
-if [ "$CB" -eq 0 ] && [ "${CC:-0}" -gt 0 ]; then note "C: stdout == B2 su 5 fixture; census-time vivo (call_fast count=$CC su fx-mc2; righe: $(grep -c '^census-time' "$OUT/fxmc2-C.err"))"; else note "C: stdout diverso ($CB) o census MUTO (call_fast count='${CC:-}') -> rc=3"; [ "$RC" -eq 0 ] && RC=3; fi
+# strumento vivo = conteggio ret_fast > 0 (fx-mc2 è tutta metodi: call_fast può essere 0 — corsa 1 rc=3 per questo, emenda dichiarata)
+CC=$(awk -F'\t' '$1=="census-time" && $2=="ret_fast" {print $3}' "$OUT/fxmc2-C.err" 2>/dev/null)
+if [ "$CB" -eq 0 ] && [ "${CC:-0}" -gt 0 ]; then note "C: stdout == B2 su 5 fixture; census-time vivo (ret_fast count=$CC su fx-mc2; righe: $(grep -c '^census-time' "$OUT/fxmc2-C.err"))"; else note "C: stdout diverso ($CB) o census MUTO (ret_fast count='${CC:-}') -> rc=3"; [ "$RC" -eq 0 ] && RC=3; fi
 
 # disasm agli atti: istr/bl/blr/sp_refs di run_loop di B e B2 vs il PIN s183 (gate Δsp_refs ≤ +97; Δbl/Δistr a verbale: l'hook della cura 22/10 è noto)
 dis(){ # $1=binario $2=etichetta
