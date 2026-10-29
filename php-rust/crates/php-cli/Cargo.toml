@@ -31,6 +31,10 @@ sonda-price = ["php-runtime/sonda-price"]
 # movimenti Zval al sito VM (righe s147mv/s147dg via mem-census). Solo
 # strumentazione — mai parità.
 op-census = ["php-runtime/op-census"]
+# S-186 fetta 0, braccio C: tempi per classe di meccanismo (Instant 1/64) +
+# ammissioni fast/generale, riga TSV su stderr a fine processo. Solo
+# strumentazione — mai parità.
+census-time = ["php-runtime/census-time"]
 
 [dependencies]
 php-types.workspace = true

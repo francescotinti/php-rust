@@ -2001,6 +2001,8 @@ impl<'m> super::Vm<'m> {
                     }
                 }
                 Op::ConcatAssignSlot(s) => {
+                    #[cfg(feature = "census-time")]
+                    let _ct = super::census_time::scope(super::census_time::Class::Str);
                     // Fused `$s .= rhs` (WP-55): body out of the loop
                     // (WP-33 discipline), arm = one call + push.
                     let r = self.concat_assign_slot(top, *s)?;
@@ -2365,6 +2367,8 @@ impl<'m> super::Vm<'m> {
                     }
                 }
                 Op::ConcatN(n) => {
+                    #[cfg(feature = "census-time")]
+                    let _ct = super::census_time::scope(super::census_time::Class::Str);
                     // Flattened concat chain (WP-34): every part arrived
                     // through `Stringify` or as a Str literal, so the join is
                     // pure — one allocation instead of n-1 left-associated
@@ -2375,6 +2379,8 @@ impl<'m> super::Vm<'m> {
                     self.concat_n(top, n)?;
                 }
                 Op::ConcatNConst { n, cidx } => {
+                    #[cfg(feature = "census-time")]
+                    let _ct = super::census_time::scope(super::census_time::Class::Str);
                     // S-109 F2: la parte literal (Str per guardia della
                     // finestra) è l'ultimo push del join; poi lo STESSO
                     // corpo di ConcatN (concat_n, helper condiviso).
@@ -2468,10 +2474,14 @@ impl<'m> super::Vm<'m> {
                     self.frames[top].stack.push(Zval::Long(1));
                 }
                 Op::Stringify => {
+                    #[cfg(feature = "census-time")]
+                    let _ct = super::census_time::scope(super::census_time::Class::Str);
                     let v = self.frames[top].stack.pop().expect("Stringify operand");
                     self.stringify_entry(top, v)?;
                 }
                 Op::StringifySlot { slot } => {
+                    #[cfg(feature = "census-time")]
+                    let _ct = super::census_time::scope(super::census_time::Class::Str);
                     // S-107 lotto: LoadVar (parità warning via reg_load_slot)
                     // + Stringify ESATTO — stesso metodo condiviso, frame
                     // __toString compreso.
@@ -2499,6 +2509,8 @@ impl<'m> super::Vm<'m> {
                     self.frames[top].stack.push(Zval::Array(Rc::new(PhpArray::new())));
                 }
                 Op::ArrayPush => {
+                    #[cfg(feature = "census-time")]
+                    let _ct = super::census_time::scope(super::census_time::Class::Arr);
                     let value = self.frames[top].stack.pop().expect("ArrayPush value");
                     let mut arr = self.frames[top].stack.pop().expect("ArrayPush array");
                     if let Zval::Array(rc) = &mut arr {
@@ -2564,6 +2576,8 @@ impl<'m> super::Vm<'m> {
                     self.frames[top].stack.push(arr);
                 }
                 Op::FetchDim => {
+                    #[cfg(feature = "census-time")]
+                    let _ct = super::census_time::scope(super::census_time::Class::Arr);
                     let key = self.frames[top].stack.pop().expect("FetchDim key");
                     let base = self.frames[top].stack.pop().expect("FetchDim base");
                     // WP-33 T1b guard: Array base + Long/Str key (census:
@@ -2619,6 +2633,8 @@ impl<'m> super::Vm<'m> {
                     self.frames[top].stack.push(v);
                 }
                 Op::FetchDimList => {
+                    #[cfg(feature = "census-time")]
+                    let _ct = super::census_time::scope(super::census_time::Class::Arr);
                     // A `list()` element read: undefined-key warns, a scalar
                     // base stays silent (Zend's list path).
                     let key = self.frames[top].stack.pop().expect("FetchDimList key");
@@ -2631,6 +2647,8 @@ impl<'m> super::Vm<'m> {
                     self.frames[top].stack.push(v);
                 }
                 Op::CoalesceFetchDim => {
+                    #[cfg(feature = "census-time")]
+                    let _ct = super::census_time::scope(super::census_time::Class::Arr);
                     let key = self.frames[top].stack.pop().expect("CoalesceFetchDim key");
                     let base = self.frames[top].stack.pop().expect("CoalesceFetchDim base");
                     // WP-33 T1b guard (silent twin of the FetchDim guard):
@@ -3716,6 +3734,8 @@ impl<'m> super::Vm<'m> {
                     self.frames[top].stack.push(v);
                 }
                 Op::Call { func, argc } => {
+                    #[cfg(feature = "census-time")]
+                    let _ct = super::census_time::scope(super::census_time::Class::CallFast);
                     let m = self.frames[top].module;
                     let callee = &m.functions[*func as usize];
                     // Pop argc args (pushed left-to-right) and bind them to the
@@ -3768,6 +3788,8 @@ impl<'m> super::Vm<'m> {
                             cf.ip = 1;
                         }
                     } else {
+                        #[cfg(feature = "census-time")]
+                        super::census_time::tick(super::census_time::Class::CallGeneral);
                         let mut args = Vec::with_capacity(n);
                         for _ in 0..n {
                             args.push(self.frames[top].stack.pop().expect("call argument"));
@@ -3866,11 +3888,17 @@ impl<'m> super::Vm<'m> {
                     // NOME (stesso perimetro del tag, criterio p.1).
                     #[cfg(feature = "mem-census")]
                     let _s149 = php_types::memcensus::s149_name_scope(&name[..]);
+                    #[cfg(feature = "census-time")]
+                    let _ct = super::census_time::scope(super::census_time::Class::Builtin);
+                    #[cfg(feature = "census-time")]
+                    let _cl = super::census_time::scope(super::census_time::Class::BuiltinLookup);
                     let f = match self.registry.get(&name[..]) {
                         Some(Builtin::Value(f)) => *f,
                         // The compiler only emits CallBuiltin for value builtins.
                         _ => return Err(undefined_builtin(&name)),
                     };
+                    #[cfg(feature = "census-time")]
+                    drop(_cl);
                     // L-HD2 forma-2 (S-125): per arità <=4 gli argomenti passano
                     // per POP DIRETTI in un array esatto sullo stack nativo —
                     // niente split_off (coppia malloc+free per chiamata, canale
@@ -3961,6 +3989,8 @@ impl<'m> super::Vm<'m> {
                     self.frames[top].stack.push(result);
                 }
                 Op::CallHostBuiltin { name, argc } => {
+                    #[cfg(feature = "census-time")]
+                    let _ct = super::census_time::scope(super::census_time::Class::HostBuiltin);
                     // S-148 (census): estensione dinamica del builtin nel
                     // tag `hostcall` della partizione galloc.
                     #[cfg(feature = "mem-census")]
@@ -4251,6 +4281,8 @@ impl<'m> super::Vm<'m> {
                     self.frames[top].stack.push(result);
                 }
                 Op::Ret => {
+                    #[cfg(feature = "census-time")]
+                    let _ct = super::census_time::scope(super::census_time::Class::RetFast);
                     // L-RT2 (S-184, wp184-harness/s184-criterio-rt2.md): Ret FUSO della
                     // funzione semplice. Forma 0 (`ret_shape == 0`: niente hint, non
                     // by-ref), nessun flag (niente RET_*, INIT_PROPS, CLONE_INIT,
@@ -4308,6 +4340,8 @@ impl<'m> super::Vm<'m> {
                     // $$, main) passa dal cammino generale, FUORI LINEA (`ret_slow`,
                     // L-RT2 forma 2: il corpo del handler non resta duplicato dentro
                     // `run_loop`; il disasm di forma 1 contava +547 istr / +245 sp_refs).
+                    #[cfg(feature = "census-time")]
+                    super::census_time::tick(super::census_time::Class::RetSlow);
                     if let Some(exit) = self.ret_slow(top, baseline)? {
                         return Ok(exit);
                     }
@@ -4642,12 +4676,16 @@ impl<'m> super::Vm<'m> {
                     }
                 }
                 Op::PropGet { name, ic } => {
+                    #[cfg(feature = "census-time")]
+                    let _ct = super::census_time::scope(super::census_time::Class::Prop);
                     scn!(PropGet: op);
                     scn!(PropGet: Pop = 1);
                     let obj = self.frames[top].stack.pop().expect("PropGet object");
                     self.prop_get_entry(top, obj, name, ic)?;
                 }
                 Op::PropGetSlot { slot, name, ic } => {
+                    #[cfg(feature = "census-time")]
+                    let _ct = super::census_time::scope(super::census_time::Class::Prop);
                     // S-173 L-SL2 fetta 3 P3 (criterio wp172-harness/s173-criterio.md
                     // p.2): peephole runtime sul bigramma `$s OP= $o->x`
                     // (questo op + BinarySTDst). Guardie IC VERBATIM dall'hit qui
@@ -4729,6 +4767,8 @@ impl<'m> super::Vm<'m> {
                     self.prop_get_entry(top, obj, name, ic)?;
                 }
                 Op::PropDimGetConst { slot, name, key, ic } => {
+                    #[cfg(feature = "census-time")]
+                    let _ct = super::census_time::scope(super::census_time::Class::Prop);
                     // S-145 «FR1» (criterio s145-criterio-fr1.md): hit =
                     // elemento letto through-borrow — l'`Rc<PhpArray>` della
                     // prop NON viene clonato — e composito saltato (`ip+3`);
@@ -4780,6 +4820,8 @@ impl<'m> super::Vm<'m> {
                     self.prop_get_entry(top, obj, name, ic)?;
                 }
                 Op::PropGetSlotRecv { recv, slot, name, ic } => {
+                    #[cfg(feature = "census-time")]
+                    let _ct = super::census_time::scope(super::census_time::Class::Prop);
                     // S-108 lotto-2 W9a: LoadSlot ESATTO (push silente del
                     // ricevitore) poi PropGetSlot intero (parità warning +
                     // prop_get_entry condivisa). La sospensione hook/__get
@@ -5010,6 +5052,8 @@ impl<'m> super::Vm<'m> {
                     }
                 }
                 Op::ThisPropGet { name, ic } => {
+                    #[cfg(feature = "census-time")]
+                    let _ct = super::census_time::scope(super::census_time::Class::Prop);
                     // Fused `$this->name` (WP-34): the IC hit borrows the
                     // receiver in place — no This clone, no stack round-trip.
                     // Everything else clones the receiver once and takes the
@@ -5135,6 +5179,8 @@ impl<'m> super::Vm<'m> {
                     self.frames[top].stack.push(v);
                 }
                 Op::PropSet { name, ic } => {
+                    #[cfg(feature = "census-time")]
+                    let _ct = super::census_time::scope(super::census_time::Class::Prop);
                     scn!(PropSet: op);
                     scn!(PropSet: Pop = 2);
                     let value = self.frames[top].stack.pop().expect("PropSet value");
@@ -5142,6 +5188,8 @@ impl<'m> super::Vm<'m> {
                     self.prop_set_entry::<false>(top, obj, value, name, ic)?;
                 }
                 Op::PropSetPop { name, ic } => {
+                    #[cfg(feature = "census-time")]
+                    let _ct = super::census_time::scope(super::census_time::Class::Prop);
                     // S-107 lotto: PropSet ESATTO (stesso metodo, DISCARD
                     // monomorfizzato dal const-generic) senza il push del
                     // valore assegnato che il Pop scartava.
@@ -5237,6 +5285,8 @@ impl<'m> super::Vm<'m> {
                     self.frames[top].stack.push(result);
                 }
                 Op::PropIncDec { name, inc, pre, ic } => {
+                    #[cfg(feature = "census-time")]
+                    let _ct = super::census_time::scope(super::census_time::Class::Prop);
                     let obj = self.frames[top].stack.pop().expect("PropIncDec object");
                     let cur = self.frames[top].class;
                     // V3 (S-119 treno-2): il ricevitore è POSSEDUTO (pop) —
@@ -5658,6 +5708,8 @@ impl<'m> super::Vm<'m> {
                     }
                 }
                 Op::MethodCall { method, argc, ic, deref } => {
+                    #[cfg(feature = "census-time")]
+                    let _ct = super::census_time::scope(super::census_time::Class::MCall);
                     // L-MC1b (S-165): fast path borrow-IC k≤2 in forma
                     // OUTLINE — corpo e ammissione in `methodcall_fast`
                     // (#[inline(never)]): l'arbitrato
@@ -5672,6 +5724,8 @@ impl<'m> super::Vm<'m> {
                     if self.methodcall_fast(top, n, ic, *deref)? {
                         continue;
                     }
+                    #[cfg(feature = "census-time")]
+                    super::census_time::tick(super::census_time::Class::MCallGeneral);
                     let args = self.pop_keys(top, *argc); // source order
                     let recv = self.frames[top].stack.pop().expect("MethodCall receiver");
                     // V5 (S-119 treno-2): il frame vuole l'handle POSSEDUTO —
@@ -5680,6 +5734,8 @@ impl<'m> super::Vm<'m> {
                     self.method_call(top, this, &method, args, Some(&ic), *deref)?;
                 }
                 Op::ThisMethodCall { method, ic } => {
+                    #[cfg(feature = "census-time")]
+                    let _ct = super::census_time::scope(super::census_time::Class::MCall);
                     // Fused zero-argument `$this->m()` (WP-36): the IC hit
                     // reads the receiver in place and enters the callee like
                     // the hit inside `dispatch_instance_call`, line for line.
@@ -5723,6 +5779,8 @@ impl<'m> super::Vm<'m> {
                             ))
                         }
                     };
+                    #[cfg(feature = "census-time")]
+                    super::census_time::tick(super::census_time::Class::MCallGeneral);
                     self.method_call(top, this, &method, Vec::new(), Some(&ic), true)?;
                 }
                 Op::MethodCallArgs { method, deref } => {

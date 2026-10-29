@@ -53,6 +53,11 @@ ic-stats = []
 # libmimalloc-sys/extended entra SOLO con questa feature (il binario di
 # parità non la attiva; il crate è già nel lock come dep di mimalloc).
 sonda-price = ["dep:libmimalloc-sys"]
+# S-186 fetta 0, braccio C (concilio S-186 Q2): per-class wall-time estimate
+# of the VM mechanisms, Instant sampled 1/64 + fast/general admission counts
+# (PHPR_CENSUS_TIME). Same convention as the other census features: SOLO
+# build di strumentazione — mai nel pin, mai una cifra di verdetto.
+census-time = []
 
 [dependencies]
 php-types.workspace = true

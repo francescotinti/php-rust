@@ -55,6 +55,10 @@ mod census;
 // builds only, mirror of the op-census conventions.
 #[cfg(feature = "gc-census")]
 mod gc_census;
+// S-186 fetta 0, braccio C: tempi per classe di meccanismo (Instant 1/64) +
+// ammissioni fast/generale. Stessa convenzione: build di strumentazione soltanto.
+#[cfg(feature = "census-time")]
+mod census_time;
 // S-95.0 leva A-ZV1: contatori del meccanismo per «il clone che muore subito»
 // (design95-leva-zval.md). Stessa convenzione: build di strumentazione soltanto.
 #[cfg(feature = "zval-census")]
@@ -2073,6 +2077,8 @@ pub fn run_module_with_hir<'m>(
     census::ic_stats::dump();
     #[cfg(feature = "gc-census")]
     gc_census::dump();
+    #[cfg(feature = "census-time")]
+    census_time::dump();
     // WP-60 P2(a): un-park the VM before it is destructured/forgotten — the
     // atexit window (win 0) must render tag=ctx as "none", never a dangling
     // pointer (a Drop impl is not an option: both paths below move fields
@@ -3791,6 +3797,8 @@ impl<'m> Vm<'m> {
         }
         #[cfg(feature = "gc-census")]
         gc_census::dump();
+        #[cfg(feature = "census-time")]
+        census_time::dump();
 
         // B-65.2: end-of-run flush — the last uc_log events of this VM (final
         // includes, shutdown-path probes) land before the outcome is built.
@@ -4200,6 +4208,8 @@ impl<'m> Vm<'m> {
         // handler, lazy reset/materialize, shutdown destructors) — recompute
         // the cached idle predicate EXACTLY, on the error path too (a
         // scheduled destructor's throw). See `gc_idle`, s176-criterio-flag.md.
+        #[cfg(feature = "census-time")]
+        let _ct = census_time::scope(census_time::Class::Sweep);
         let r = self.gc_sweep_body(resume, main);
         self.gc_refresh_idle();
         r
@@ -12547,6 +12557,8 @@ impl<'m> Vm<'m> {
     /// Fatal if the class is non-instantiable (abstract / interface / enum) or
     /// could not be compiled. Shared by [`Op::Alloc`] and [`Op::AllocStatic`].
     fn alloc_object(&mut self, cid: ClassId) -> Result<Zval, PhpError> {
+        #[cfg(feature = "census-time")]
+        let _ct = census_time::scope(census_time::Class::New);
         let cc = self.classes[cid]; // &'m CompiledClass: detach from `self` borrow
 
         match cc.instantiable {
