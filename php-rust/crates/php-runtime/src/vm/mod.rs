@@ -4180,14 +4180,18 @@ impl<'m> Vm<'m> {
     /// scheduled sweep in flight (`gc_buf_head != 0`: its Sweep op re-runs after
     /// the destructor it pushed), of the cycle collector, and of a caller that
     /// is a destructor body (its sweeps are silent — Frame::in_destructor).
+    /// S-186 cura O(1) (concilio Q3, team-meccanismo): only the tail `[before..)`
+    /// is probed — `before` = buffer length BEFORE this Ret's notes. Complete
+    /// because whatever dies at this Ret is noted here, and a note pushes a new
+    /// candidate to the tail or re-queues an already-buffered one to the tail
+    /// (`gc_note_slow`); a temp dead without a note waits for the Sweep (form 2).
     #[inline]
-    fn gc_sweep_after_ret(&mut self, caller: usize) -> Result<(), PhpError> {
+    fn gc_sweep_after_ret(&mut self, caller: usize, before: usize) -> Result<(), PhpError> {
         if self.gc_buf_head == 0
             && !self.gc_buf.is_empty()
             && !self.gc_collecting
             && !self.frames[caller].flags.get(FrameFlags::IN_DESTRUCTOR)
-            && self
-                .gc_buf
+            && self.gc_buf[before.min(self.gc_buf.len())..]
                 .iter()
                 .any(|s| s.as_ref().is_some_and(|o| Rc::strong_count(o) == 2))
         {

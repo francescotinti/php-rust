@@ -4315,6 +4315,7 @@ impl<'m> super::Vm<'m> {
                         let ret = f.stack.pop().unwrap_or(Zval::Null);
                         let mut slots = std::mem::take(&mut f.slots);
                         let mut stack = std::mem::take(&mut f.stack);
+                        let before = self.gc_buf.len(); // S-186 cura O(1): tail probe only
                         for v in &slots {
                             self.gc_note(v);
                         }
@@ -4329,7 +4330,7 @@ impl<'m> super::Vm<'m> {
                         self.frames.truncate(top);
                         self.frame_pool.put(slots, stack);
                         // §3.35: dying locals destruct at `leave` (mod.rs `gc_sweep_after_ret`).
-                        self.gc_sweep_after_ret(top - 1)?;
+                        self.gc_sweep_after_ret(top - 1, before)?;
                         if self.frames.len() == baseline {
                             return Ok(RunExit::Returned(ret));
                         }
@@ -7192,6 +7193,7 @@ impl<'m> super::Vm<'m> {
     /// `ext`, `$$` e il ritorno di `main`.
     #[inline(never)]
     fn ret_slow(&mut self, top: usize, baseline: usize) -> Result<Option<RunExit>, PhpError> {
+        let before = self.gc_buf.len(); // S-186 cura O(1): tail probe only (notes follow)
         let mut ret = self.frames[top].stack.pop().unwrap_or(Zval::Null);
         let func = self.frames[top].func;
         // WP-53 (Fase 2.1): `ret_shape` folds the hint/by_ref/
@@ -7309,7 +7311,7 @@ impl<'m> super::Vm<'m> {
         // a destructor frame's own return keeps the scheduled-sweep protocol
         // (the Sweep op that pushed it re-runs when it returns).
         if top > 0 && fl & FrameFlags::IN_DESTRUCTOR == 0 {
-            self.gc_sweep_after_ret(top - 1)?;
+            self.gc_sweep_after_ret(top - 1, before)?;
         }
         if let Some(guard) = guard {
             for key in guard {
