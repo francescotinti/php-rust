@@ -129,9 +129,10 @@ rm -rf "$SP/orm-work"
 
 # --- verdetto (criterio p.4-p.9) ---
 DOBJ="$H/guardia-out-b/dobj.txt"
-python3 -I - "$OUT" "$VERD" "$PINM" "$MH" "$CH" "$STRUM" "$DOBJ" <<'PY'
+MUTNS="$H/ab-out/s186-leva/mutante-ns.txt"
+python3 -I - "$OUT" "$VERD" "$PINM" "$MH" "$CH" "$STRUM" "$DOBJ" "$MUTNS" <<'PY'
 import sys, os, re, statistics
-OUT, VERD, PINM, MH, CH, STRUM, DOBJ = sys.argv[1:8]
+OUT, VERD, PINM, MH, CH, STRUM, DOBJ, MUTNS = sys.argv[1:9]
 CLASSES = ["dispatch","call_ret","prop_ic","str","arr_hash","obj_life","alloc","builtin","compile","libc","kernel","pavimento","other"]
 PAV = ("pavimento","kernel")          # pavimento comune = PDO/sqlite3/avvio + syscalls (dichiarato)
 NAMED = [c for c in CLASSES if c != "other"]
@@ -243,12 +244,24 @@ for c, t in tetti.items():
     stato = "MODELLO FALSO (>2× il tetto)" if dc > 2 * t else ("sopra il tetto, entro 2×" if dc > t else "entro il tetto")
     if dc > 2 * t: falso.append(c)
     say(f"  {c}: Δ={dc:+.2f} s vs tetto {t:.2f} s ⇒ {stato}")
-# mutante
+# mutante — finestra CALIBRATA dalla build (ab-out/s186-leva/mutante-ns.txt: ns per CallBuiltin, pre-registrati [120;320]):
+# ΔM atteso = [0,85;1,15] × 11,91e6 × ns_spin; file assente ⇒ ripiego [2,1;2,7] s DICHIARATO.
+N_CB = 11.91e6
+ns_spin = None
+if os.path.exists(MUTNS):
+    try: ns_spin = float(open(MUTNS).read().split()[0])
+    except Exception: ns_spin = None
+if ns_spin is not None:
+    lo, hi = 0.85 * N_CB * ns_spin / 1e9, 1.15 * N_CB * ns_spin / 1e9
+    fin_txt = f"spin calibrato {ns_spin:.0f} ns/CallBuiltin ⇒ atteso [0,85;1,15]×11,91M×{ns_spin:.0f} ns = [{lo:.2f};{hi:.2f}] s"
+else:
+    lo, hi = 2.1, 2.7
+    fin_txt = "mutante-ns.txt ASSENTE ⇒ ripiego alla finestra fissa [2,1;2,7] s (200 ns nominali), DICHIARATO"
 dM = M["M"]["TOTAL"] - M["P"]["TOTAL"]
 dMb = M["M"]["builtin"] - M["P"]["builtin"]
 quota = (dMb / dM) if dM > 0 else 0.0
-vivo = (2.1 <= dM <= 2.7) and quota >= 0.75
-say(f"MUTANTE (spin 200 ns in CallBuiltin, atteso +2,38 s su 11,91M): ΔM = M_total − P_total = {M['M']['TOTAL']:.2f} − {M['P']['TOTAL']:.2f} = {dM:+.2f} s (atteso [2,1;2,7]); Δ in classe builtin = {dMb:+.2f} s = {quota*100:.0f}% di ΔM (atteso ≥75 %) ⇒ strumento {'VIVO' if vivo else 'MUTO'}")
+vivo = (lo <= dM <= hi) and quota >= 0.75
+say(f"MUTANTE (spin fuori linea `builtin_spin_mutant_s186` in CallBuiltin, self nel proprio simbolo → classe builtin; {fin_txt}): ΔM = M_total − P_total = {M['M']['TOTAL']:.2f} − {M['P']['TOTAL']:.2f} = {dM:+.2f} s; Δ in classe builtin = {dMb:+.2f} s = {quota*100:.0f}% di ΔM (atteso ≥75 %) ⇒ strumento {'VIVO' if vivo else 'MUTO'}")
 wM = [walls[f'M{r}'][0] for r in range(1, R+1) if f'M{r}' in walls]; wP = [walls[f'P{r}'][0] for r in range(1, R+1) if f'P{r}' in walls]
 if wM and wP: say(f"  wall M−P (mediane) = {med(wM)-med(wP):+.2f} s (controllo, non giudice)")
 # calibrazione C — classi di C: call_fast, call_general, mcall, mcall_general, ret_fast, ret_slow, prop, str, arr, new,
@@ -259,15 +272,26 @@ if wM and wP: say(f"  wall M−P (mediane) = {med(wM)-med(wP):+.2f} s (controllo
 # contenere codice utente annidato (riportato a parte, non sommato).
 MAP = {"call_ret": ["call_fast","mcall","ret_fast"], "prop_ic": ["prop"], "str": ["str"], "arr_hash": ["arr"], "obj_life": ["new","sweep"], "builtin": ["builtin"]}
 NOTE = {"arr_hash": " (C: solo FetchDim*/ArrayPush/CoalesceFetchDim, store dim NON strumentati — dichiarato)"}
+# Gli scope di C sono INCLUSIVI (il Ret contiene lo sweep che esegue; builtin contiene corpo e allocazioni; call_ret contiene
+# push del frame e decay degli argomenti), le classi xctrace sono SELF per simbolo: il ±15 % vale per le classi a foglia
+# (prop, str, arr, new, sweep); per call_ret e builtin C è un TETTO della classe xctrace (C ≥ xctrace = «TETTO (inclusivo ≥
+# self)», contraddizione SOLO se C < xctrace × 0,85).
+INCLUSIVE = {"call_ret", "builtin"}
 if cens:
-    say("CALIBRAZIONE C (Instant 1/64 per classe, estensione ×64; confronto con xctrace su P, ±15 %):")
+    say("CALIBRAZIONE C (Instant 1/64 per classe, estensione ×64; confronto con xctrace su P: ±15 % sulle classi a foglia, TETTO inclusivo su call_ret/builtin):")
     for xc_c, cls in MAP.items():
         est = sum(med([x[2] for x in cens[k]]) for k in cls if k in cens) / 1e9
         if est < 0.5:
             say(f"  {xc_c}: C={est:.2f} s < 0,5 s: fuori confronto{NOTE.get(xc_c, '')}"); continue
         px = M["P"][xc_c]
         dev = (px - est) / est if est > 0 else float('inf')
-        say(f"  {xc_c}: C={est:.2f} s · xctrace P={px:.2f} s · scarto {dev*100:+.0f}% ⇒ {'CALIBRA' if abs(dev) <= 0.15 else 'NON calibra: conta solo xctrace (dichiarato)'}{NOTE.get(xc_c, '')}")
+        if xc_c in INCLUSIVE:
+            if est >= px: esito = "TETTO (inclusivo ≥ self): coerente"
+            elif est >= 0.85 * px: esito = "C sotto il self entro il 15 %: COMPATIBILE (inclusivo)"
+            else: esito = "NON calibra (C < xctrace × 0,85: l'unica direzione che contraddice): conta solo xctrace (dichiarato)"
+        else:
+            esito = "CALIBRA" if abs(dev) <= 0.15 else "NON calibra: conta solo xctrace (dichiarato)"
+        say(f"  {xc_c}: C={est:.2f} s · xctrace P={px:.2f} s · scarto {dev*100:+.0f}% ⇒ {esito}{NOTE.get(xc_c, '')}")
     def cnt(k): return med([x[0] for x in cens[k]]) if k in cens else None
     def est_s(k): return (med([x[2] for x in cens[k]]) / 1e9) if k in cens else None
     fmt = lambda v: "n/d" if v is None else f"{v:.0f}"

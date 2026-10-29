@@ -52,8 +52,9 @@ RULES = [
     ("str",       re.compile(r"(zend_string|concat_function|smart_str|zend_strpprintf|zend_long_to_str|zend_ulong_to_str|_zend_string|php_sprintf|zend_spprintf|zend_vspprintf|zend_memn|zend_str|zend_binary|zend_interned|zend_dtoa|zend_gcvt|zend_strtod|xbuf_format|php_printf_to_smart|php_conv|php_formatted|zend_strval|zval_get_string|zend_make_printable|zend_concat|zend_ascii|zendi_smart_str|_zval_get_string|php_addslashes|php_str_|zend_is_identical|zend_rope|zend_flf_concat|zend_smart_str|string_cold|zend_accel_str)")),
     ("arr_hash",  re.compile(r"(zend_hash|_zend_hash|zend_array|zend_new_array|zend_inline_hash|zend_symtable|array_init|zend_sort|zend_insert_sort|zend_fetch_dimension_address|zend_find_array|php_array_|zend_array_dup|zend_array_destroy|zend_vm_dim|zend_assign_to_variable|zend_assign_dim|zval_get_long|zendi_|zend_compare|compare_function|zend_is_true|zend_is_numeric|_is_numeric|zend_add_|add_function|sub_function|mul_function|div_function|mod_function|zend_binary_op|zend_operators|zval_update_constant|zend_atol|zend_long|zend_fetch_dim|zend_assign_op|increment_function|decrement_function|is_equal_function|is_smaller|zend_hash_packed|zend_array_count|zend_fetch_list|zend_wrong_string_offset|zend_fe_|zend_iterator|zend_object_iterator|zend_user_it)")),
     ("builtin",   re.compile(r"(^php _?(zif_|zim_|zm_|php_|spl_|date_|pcre|mbfl|json|dom_|lxb|lexbor|ir_|mysqlnd|ini_|session|reflection|timelib|zend_fetch_resource|zend_parse_|zend_parse_arg|zend_wrong_param|zend_list|zend_register_resource|zend_throw|zend_error|zend_exception|zend_class_implements|zend_implement|zend_ce_|php_output|php_var|php_implode|php_explode|php_trim|php_strtr|php_ucfirst|php_basename|php_math|php_round|php_random|php_mt_|_php_math|zend_is_iterable|zend_get_executed|zend_get_callable|zend_make_callable|array_|str_|zend_wrong_|zend_argument|zend_type_error|zend_value_error|zend_strtol|zend_dval|zend_ini_|php_info|zend_get_type|zend_zval_type|zend_get_parameters|_call_user_function|zend_eval|zend_include|zend_exceptions|zend_throw_exception|zend_clear_exception|zend_rethrow|zend_dispatch_try|cleanup_unfinished|zend_object_std_dtor_props)|^php <deduplicated_symbol>)")),
-    # --- phpr: crate php-builtins / host builtins (prima dei generici, per NOME di modulo) ---
-    ("builtin",   re.compile(r"(php_builtins::|php_cli::builtins|::builtins::|CallBuiltin|hostcall|HostBuiltin|host_builtin|call_host|::ext::|::stdlib::|::spl::|::pcre::|regex::|::json::|serde|var_dump|var_export|sprintf|printf|format_fn|::registry|Registry|undefined_builtin|Builtin)")),
+    # --- phpr: crate php-builtins / host builtins (prima dei generici, per NOME di modulo); il MUTANTE S-186
+    #     (`builtin_spin_mutant_s186`, spin fuori linea in CallBuiltin) deve cadere QUI (criterio p.6) ---
+    ("builtin",   re.compile(r"(builtin_spin_mutant_s186|builtin|php_builtins::|php_cli::builtins|::builtins::|CallBuiltin|hostcall|HostBuiltin|host_builtin|call_host|::ext::|::stdlib::|::spl::|::pcre::|regex::|::json::|serde|var_dump|var_export|sprintf|printf|format_fn|::registry|Registry|undefined_builtin|Builtin)")),
     # --- phpr: ciclo di vita oggetto (alloc, nota, sweep, dtor, drop-glue di Object) ---
     ("obj_life",  re.compile(r"(gc_|sweep|destruct|Destruct|gc_track|gc_note|new_object|ObjectStore|objects::|::object::|Object\b|Object::|\bdtor|cycle|::gc::|release_child|unbuffer|collect|drop_glue.*(Object|RefCell|object)|drop_in_place.*(Object|RefCell|object)|Weak|WeakHandle|__destruct|obj_free|instantiate|new_instance|Op::New|op_new|::new_obj)")),
     # --- phpr: call/ret (fast vs generale), frame ---
@@ -85,6 +86,8 @@ def demangle(name):
     if name.startswith("_R"):
         s = name[2:]
         parts = []
+        inst = []            # indici dei nomi di crate incontrati DOPO il primo path (crate di istanziazione dei generici)
+        crate_next = False
         i, n = 0, len(s)
         while i < n:
             ch = s[i]
@@ -96,9 +99,13 @@ def demangle(name):
                     j += 1  # identifier starting with a digit/underscore is prefixed by `_`
                 ident = s[j:j + ln]
                 if ident and ln > 0:
+                    if crate_next and parts:
+                        inst.append(len(parts))
                     parts.append(ident)
+                crate_next = False
                 i = j + ln
             elif ch == "C" and i + 1 < n and s[i + 1] == "s":
+                crate_next = True
                 i = _skip_base62(s, i + 2)            # crate hash `Cs<base62>_`, then the crate name identifier follows
             elif ch == "B" or ch == "s":
                 i = _skip_base62(s, i + 1)            # backref `B<base62>_` / disambiguator `s<base62>_`
@@ -114,6 +121,9 @@ def demangle(name):
                     i += 1
             else:
                 i += 1  # tags: N<ns> M X Y I E L R Q K A S P O F T D G etc.
+        # il crate di ISTANZIAZIONE in coda (`drop_glue<Zval>` istanziato in php_builtins) non è un path: si toglie
+        if inst and inst[-1] == len(parts) - 1 and len(parts) > 1:
+            parts.pop()
         parts = [p for p in parts if p]
         if parts:
             return "::".join(parts)
