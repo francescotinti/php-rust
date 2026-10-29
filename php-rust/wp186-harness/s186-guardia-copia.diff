@@ -1,0 +1,308 @@
+2,10c2,10
+< # s185-ab-mc2.sh — A/B della LEVA (a) «metodi» L-MR1 «Ret fuso dei metodi» + L-MC2 «MethodCall in pila» (criterio s185-criterio-mc2.md
+< # p.4-5): COPIA DICHIARATA di ../wp184-harness/s184-ab-rt2.sh (manifest s185-ab-mc2-copia.diff, generatore gen-ab-mc2.py) coi SOLI
+< # adattamenti: token s185, GIUDICE mcalls-dq ($o->m($s,1), N dal sorgente) al posto di calls-dq, GUARDIA calls-dq al posto di arith-dq
+< # (prop-dq resta), PREV prop-dq 31,60 (pin s182), attesa [4;9], promozione se D ≥ max(4, rumore, |A−Z|) con ENTRAMBI gli stimatori,
+< # rc=3 = sola direzione (leva tenuta a CI OK), rc=4 kill, verdetto s185-<TAG>. Testo S-184 sotto:
+< # s184-ab-rt2.sh — A/B della LEVA COMPOSTA L-RT1 (nel tree) + L-RT2 «Ret fuso» (criterio s184-criterio-rt2.md p.3-5): COPIA DICHIARATA di
+< # ../wp182-harness/s183-ab-rt1.sh (manifest s184-ab-rt2-copia.diff) coi SOLI adattamenti: token s184, PREV prop-dq 31,27 (S-183),
+< # D = cifra COMPOSTA pin s181 → tree, attesa [3,5;6,5], promozione se D ≥ max(4, rumore, |A−Z|) con ENTRAMBI gli stimatori, rc=3 con
+< # SOTTOCASO (RT2 DIREZIONE se D ≥ 2,83+max(rumore,SL), altrimenti RT2 NULLA ⇒ revert), verdetto s184-<TAG>. Testo S-183/S-181 sotto:
+---
+> # s186-guardia.sh — GUARDIA A BUFFER PIENO della cura 22/10 (`gc_sweep_after_ret` O(|gc_buf|) per Ret; concilio S-186, PROMOZIONE s184
+> # ordine obbligato punto (2); criterio s186-criterio-guardia.md): COPIA DICHIARATA di ../wp185-harness/s185-ab-mc2.sh (manifest
+> # s186-guardia-copia.diff) coi SOLI adattamenti: ingressi per ENV (PIN/Z/B/R) al posto dei posizionali, A = pin s183 9a6ae11bf7e900ef
+> # verificato per hash (rc=9), Z = gemello del pin ricostruito, B = tree (pin + cura 22/10), lock SOLO verificato (rc=6 se assente),
+> # TAG (b = tree com'è, b2 = tree + cura O(1)) che nomina guardia-out-$TAG/ e il verdetto; dobj.txt (D_obj del pin, un float) per la fetta 0;
+> # GIUDICI: mcalls-dq + calls-dq (ereditati) + ret-buf-dq K∈{0,4,16} (NUOVI: K oggetti vivi in gc_buf a ogni Ret), E3 Hoare
+> # (array_map N=1e5/2e5, ratio ≤2,5), companion obj-churn (D_obj ns/oggetto), micro R=5 su pin e B; verdetto rc=0 PASS / 5 MORDE / 8 no-verdetto.
+> # prop-dq, PREV e attesa [4;9] della leva TOLTI (nessuna leva: è una guardia a SOLA REGRESSIONE). Variabili scalari via eval (bash 3.2:
+> # niente declare -A). Testo S-185 conservato nel manifest.
+12c12
+< export PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin
+---
+> export PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin
+14c14,17
+< A="${1:?APATH}"; AEXP="${2:?AEXP8}"; ZZ="${3:?ZPATH}"; ZEXP="${4:?ZEXP8}"; BB="${5:?BPATH}"; BEXP="${6:?BEXP8}"; TAG="${7:?TAG}"; R="${8:-5}"; PREVPD="${9:-31.60}"
+---
+> A="${PIN:-$HOME/Claude/php-rust-output/release/phpr}"; AEXP="9a6ae11bf7e900ef"
+> ZZ="${Z:-$H/ab-out/s186-leva/phpr-Z}"; BB="${B:-$H/ab-out/s186-leva/phpr-B}"; R="${R:-5}"; RE3="${RE3:-3}"
+> # TAG: la catena esegue la guardia DUE volte — b (B = tree con la cura 22/10 com'è) e b2 (B = phpr-B2, tree + cura O(1), ordine (3))
+> TAG="${TAG:-b}"
+16,18c19,24
+< CD="$H/mcalls-dq.php"
+< GD="$H/calls-dq.php"
+< PD="$H/../wp172-harness/prop-dq.php"
+---
+> CD="$H/../wp185-harness/mcalls-dq.php"
+> GD="$H/../wp185-harness/calls-dq.php"
+> K0="$H/ret-buf-dq-k0.php"; K4="$H/ret-buf-dq-k4.php"; K16="$H/ret-buf-dq-k16.php"
+> E3A="$H/e3-churn-1e5.php"; E3B="$H/e3-churn-2e5.php"
+> OBJ="$H/obj-churn.php"
+> MICRO="$H/../wp97-harness/micro/run-micro.sh"
+20,30c26,37
+< OUT="$H/ab-out"; mkdir -p "$OUT"
+< VERD="$H/s185-$TAG-verdetto.out"; RC="$OUT/$TAG.rc"
+< [ -e "$VERD" ] && { echo "verdetto ESISTE — TAG nuovo" >&2; exit 7; }
+< for f in "$CD" "$PD" "$GD" "$A" "$ZZ" "$BB" "$O"; do [ -s "$f" ] || { echo "file assente o VUOTO: $f" | tee -a "$VERD"; echo 7 > "$RC"; exit 7; }; done
+< [ -e "$EMPTY" ] || { echo "driver del pavimento assente: $EMPTY (VUOTO per costruzione: [ -e ], emenda S-170 p.4)" | tee -a "$VERD"; echo 7 > "$RC"; exit 7; }
+< grep -qw s185 /private/tmp/phpr-measure.lock 2>/dev/null || { echo "lock s185 assente (per TOKEN)" | tee -a "$VERD"; echo 9 > "$RC"; exit 9; }
+< "$H/../wp129-harness/s129-quiescenza.sh" "$OUT/quiesce-$TAG.rc" > /dev/null 2>&1 || { echo "quiescenza FAIL" | tee -a "$VERD"; echo 8 > "$RC"; exit 8; }
+< AM="$(shasum -a 256 "$A" | cut -c1-8)"; ZM="$(shasum -a 256 "$ZZ" | cut -c1-8)"; BM="$(shasum -a 256 "$BB" | cut -c1-8)"
+< [ "$AM" = "$AEXP" ] || { echo "A misurato $AM != atteso $AEXP" | tee -a "$VERD"; echo 1 > "$RC"; exit 1; }
+< [ "$ZM" = "$ZEXP" ] || { echo "Z misurato $ZM != atteso $ZEXP" | tee -a "$VERD"; echo 1 > "$RC"; exit 1; }
+< [ "$BM" = "$BEXP" ] || { echo "B misurato $BM != atteso $BEXP" | tee -a "$VERD"; echo 1 > "$RC"; exit 1; }
+---
+> OUT="$H/guardia-out-$TAG"; mkdir -p "$OUT"
+> VERD="$H/s186-guardia-verdetto-$TAG.out"; RC="$OUT/guardia.rc"; DONE="$OUT/guardia.done"; rm -f "$DONE"
+> fin(){ echo "$1" > "$RC"; echo "rc=$1 $(date '+%F %T')" > "$DONE"; exit "$1"; }
+> [ -e "$VERD" ] && { echo "verdetto ESISTE ($VERD) — spostarlo prima di rilanciare" >&2; fin 7; }
+> for f in "$CD" "$GD" "$K0" "$K4" "$K16" "$E3A" "$E3B" "$OBJ" "$MICRO" "$A" "$ZZ" "$BB" "$O"; do [ -s "$f" ] || { echo "file assente o VUOTO: $f" | tee -a "$VERD"; fin 7; }; done
+> [ -e "$EMPTY" ] || { echo "driver del pavimento assente: $EMPTY (VUOTO per costruzione: [ -e ], emenda S-170 p.4)" | tee -a "$VERD"; fin 7; }
+> # lock della SESSIONE: si VERIFICA soltanto (il lanciatore lo scrive col TOKEN s186)
+> [ -e /private/tmp/phpr-measure.lock ] || { echo "measure-lock ASSENTE (finestra non aperta)" | tee -a "$VERD"; fin 6; }
+> "$H/../wp129-harness/s129-quiescenza.sh" "$OUT/quiesce-guardia.rc" > /dev/null 2>&1 || { echo "quiescenza FAIL" | tee -a "$VERD"; fin 8; }
+> AM="$(shasum -a 256 "$A" | cut -c1-16)"; ZM="$(shasum -a 256 "$ZZ" | cut -c1-16)"; BM="$(shasum -a 256 "$BB" | cut -c1-16)"
+> [ "$AM" = "$AEXP" ] || { echo "A misurato $AM != pin s183 atteso $AEXP" | tee -a "$VERD"; fin 9; }
+> [ "$BM" != "$AM" ] || { echo "B == pin ($BM): la cura NON è nel binario B" | tee -a "$VERD"; fin 9; }
+32,35c39,46
+< NCD=$(awk 'match($0, /\$i<[0-9]+/) {print substr($0, RSTART+3, RLENGTH-3); exit}' "$CD")
+< NGD=$(awk 'match($0, /\$i<[0-9]+/) {print substr($0, RSTART+3, RLENGTH-3); exit}' "$GD")
+< NPD=$(awk 'match($0, /\$i<[0-9]+/) {print substr($0, RSTART+3, RLENGTH-3); exit}' "$PD")
+< [ -n "$NCD" ] && [ -n "$NPD" ] && [ -n "$NGD" ] || { echo "N non leggibile dal driver (mcalls='$NCD' calls='$NGD' prop='$NPD')" | tee -a "$VERD"; echo 7 > "$RC"; exit 7; }
+---
+> nsrc(){ awk 'match($0, /\$i<[0-9]+/) {print substr($0, RSTART+3, RLENGTH-3); exit}' "$1"; }
+> ne3(){ awk 'match($0, /\$N = [0-9]+;/) {print substr($0, RSTART+5, RLENGTH-6); exit}' "$1"; }
+> NCD=$(nsrc "$CD"); NGD=$(nsrc "$GD"); NK0=$(nsrc "$K0"); NK4=$(nsrc "$K4"); NK16=$(nsrc "$K16"); NOBJ=$(nsrc "$OBJ"); NE3A=$(ne3 "$E3A"); NE3B=$(ne3 "$E3B")
+> for v in "$NCD" "$NGD" "$NK0" "$NK4" "$NK16" "$NOBJ" "$NE3A" "$NE3B"; do [ -n "$v" ] || { echo "N non leggibile da un driver (mcalls='$NCD' calls='$NGD' k0='$NK0' k4='$NK4' k16='$NK16' obj='$NOBJ' e3='$NE3A/$NE3B')" | tee -a "$VERD"; fin 7; }; done
+> [ "$NK0" = "$NK4" ] && [ "$NK0" = "$NK16" ] || { echo "N dei ret-buf-dq non uniforme ($NK0/$NK4/$NK16)" | tee -a "$VERD"; fin 7; }
+> # Ret per iterazione dei ret-buf-dq (pin + M metodi inline nello STESSO statement): EMESSO dal sorgente, il giudice normalizza a ns/Ret
+> rpi(){ awk 'match($0, /RETS_PER_ITER=[0-9]+/) {print substr($0, RSTART+14, RLENGTH-14); exit}' "$1"; }
+> RPI=$(rpi "$K0"); [ -n "$RPI" ] && [ "$RPI" = "$(rpi "$K4")" ] && [ "$RPI" = "$(rpi "$K16")" ] || { echo "RETS_PER_ITER non leggibile o non uniforme ('$RPI'/'$(rpi "$K4")'/'$(rpi "$K16")')" | tee -a "$VERD"; fin 7; }
+37a49,50
+> binof(){ case "$1" in A) echo "$A";; Z) echo "$ZZ";; B) echo "$BB";; O) echo "$O";; esac; }
+> drvof(){ case "$1" in cd) echo "$CD";; gd) echo "$GD";; k0) echo "$K0";; k4) echo "$K4";; k16) echo "$K16";; esac; }
+39c52,53
+< echo "== s185 LEVA (a) L-MR1+L-MC2 $TAG — A=$AM MISURATO ($A, pin s182) Z=$ZM MISURATO ($ZZ, gemello del pin ricostruito$( [ "$ZM" = "$AM" ] && echo ' — BYTE-ID col pin: |A−Z| = solo rumore, SL in-run NON stimabile' )) B=$BM MISURATO ($BB, tree = pin + L-MR1 + L-MC2) — R=$R, N: mcalls-dq=$NCD calls-dq=$NGD prop-dq=$NPD, PREV prop-dq A (stesso binario, S-184: 31,60): $PREVPD, $(date '+%F %T') =="
+---
+> echo "== s186 GUARDIA a buffer pieno (cura 22/10) TAG=$TAG — A=$AM pin s183 ($A) Z=$ZM ($ZZ, gemello del pin ricostruito$( [ "$ZM" = "$AM" ] && echo ' — BYTE-ID col pin: |A−Z| = solo rumore, SL in-run NON stimabile' )) B=$BM ($BB, tree = pin + cura) oracle=$("$O" -r 'echo PHP_VERSION;') · R=$R RE3=$RE3 · $(date '+%F %T') =="
+> echo "N dal sorgente: mcalls-dq=$NCD calls-dq=$NGD ret-buf-dq K0/K4/K16=$NK0 iter × $RPI Ret/iter (giudice in ns/Ret) e3=$NE3A/$NE3B obj-churn=$NOBJ"
+42c56
+< for D in "$CD" "$GD" "$PD"; do
+---
+> for D in "$CD" "$GD" "$K0" "$K4" "$K16" "$E3A" "$E3B" "$OBJ"; do
+45c59
+<   [ -s "$EXP" ] || { echo "atteso VUOTO per $n — STOP"; echo 2 > "$RC"; exit 2; }
+---
+>   [ -s "$EXP" ] || { echo "atteso VUOTO per $n — STOP"; fin 2; }
+47,49c61,63
+<     case "$arm" in A) bin="$A";; Z) bin="$ZZ";; B) bin="$BB";; esac
+<     "$bin" "$D" > "$OUT/$TAG-$arm-$n.out" 2>&1
+<     cmp -s "$OUT/$TAG-$arm-$n.out" "$EXP" || { echo "output $arm ≠ ATTESO oracle su $n ($(head -c 60 "$OUT/$TAG-$arm-$n.out" | tr '\n' ' ')) — STOP"; echo 2 > "$RC"; exit 2; }
+---
+>     bin=$(binof "$arm")
+>     perl -e 'alarm 900; exec @ARGV or die' -- "$bin" "$D" > "$OUT/parita-$arm-$n.out" 2>&1
+>     cmp -s "$OUT/parita-$arm-$n.out" "$EXP" || { echo "output $arm ≠ ATTESO oracle su $n ($(head -c 60 "$OUT/parita-$arm-$n.out" | tr '\n' ' ')) — STOP"; fin 2; }
+54,55c68,70
+< echo "floors: A=$FA Z=$FZ B=$FB oracle=$FO"
+< TSV="$OUT/$TAG-runs.tsv"; : > "$TSV"
+---
+> echo "floors (user, med3 di empty.php): A=$FA Z=$FZ B=$FB oracle=$FO"
+> # (b) ABAB R interleaved sui 5 giudici: colonne per giudice = A Z B O (20 colonne: cd gd k0 k4 k16 × A Z B O)
+> TSV="$OUT/guardia-runs.tsv"; : > "$TSV"
+59,65c74,76
+<   CA=; CZ=; CB=; PA=; PZ=; PB=; GA=; GZ=; GB=
+<   for x in $(echo "$ord" | sed 's/./& /g'); do
+<     case "$x" in
+<       A) CA=$(ucpu "$A" "$CD"); PA=$(ucpu "$A" "$PD"); GA=$(ucpu "$A" "$GD");;
+<       Z) CZ=$(ucpu "$ZZ" "$CD"); PZ=$(ucpu "$ZZ" "$PD"); GZ=$(ucpu "$ZZ" "$GD");;
+<       B) CB=$(ucpu "$BB" "$CD"); PB=$(ucpu "$BB" "$PD"); GB=$(ucpu "$BB" "$GD");;
+<     esac
+---
+>   for x in $(echo "$ord" | sed 's/./& /g') O; do
+>     bin=$(binof "$x")
+>     for j in cd gd k0 k4 k16; do v=$(ucpu "$bin" "$(drvof "$j")"); eval "T_${x}_${j}=\$v"; done
+67,69c78,85
+<   COR=$(ucpu "$O" "$CD"); POR=$(ucpu "$O" "$PD"); GOR=$(ucpu "$O" "$GD")
+<   printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$CA" "$CZ" "$CB" "$PA" "$PZ" "$PB" "$GA" "$GZ" "$GB" "$COR" "$POR" "$GOR" >> "$TSV"
+<   echo "  coppia$i [$ord]: callsA=$CA callsZ=$CZ callsB=$CB propA=$PA propZ=$PZ propB=$PB dqA=$GA dqZ=$GZ dqB=$GB | callsO=$COR propO=$POR dqO=$GOR"
+---
+>   row=""; line=""
+>   for j in cd gd k0 k4 k16; do
+>     cell=""
+>     for x in A Z B O; do eval "v=\$T_${x}_${j}"; row="$row$v	"; cell="$cell/$v"; done
+>     line="$line $j=${cell#/}"
+>   done
+>   printf '%s\n' "${row%	}" >> "$TSV"
+>   echo "  coppia$i [$ord] (A/Z/B/O):$line"
+71,75c87,122
+< python3 - "$TSV" "$FA" "$FZ" "$FB" "$FO" "$NCD" "$NPD" "$NGD" "$PREVPD" "$R" <<'PY'
+< import sys
+< rows = [l.split() for l in open(sys.argv[1])]
+< fa, fz, fb, fo = map(float, sys.argv[2:6]); ncd = float(sys.argv[6]); npd = float(sys.argv[7]); ngd = float(sys.argv[8]); prevpd = float(sys.argv[9]); R = int(sys.argv[10])
+< def col(i, f, n): return [(float(r[i])-f)/n*1e9 for r in rows]
+---
+> # (c) E3 Hoare: A e B alternati, RE3 corse per N, user CPU grezzo (stesso pavimento dentro il rapporto: si dichiara)
+> E3TSV="$OUT/e3-runs.tsv"; : > "$E3TSV"
+> for i in $(seq 1 "$RE3"); do
+>   if [ $((i % 2)) = 1 ]; then ord="A B"; else ord="B A"; fi
+>   for x in $ord; do bin=$(binof "$x"); v=$(ucpu "$bin" "$E3A"); eval "E_${x}_1=\$v"; v=$(ucpu "$bin" "$E3B"); eval "E_${x}_2=\$v"; done
+>   printf '%s\t%s\t%s\t%s\n' "$E_A_1" "$E_A_2" "$E_B_1" "$E_B_2" >> "$E3TSV"
+>   echo "  e3 corsa$i [$ord]: A 1e5=$E_A_1 2e5=$E_A_2 · B 1e5=$E_B_1 2e5=$E_B_2"
+> done
+> # (d) companion obj-churn: O, A, B interleaved, R corse
+> OBJTSV="$OUT/obj-runs.tsv"; : > "$OBJTSV"
+> OORDS="OAB ABO BOA OBA AOB BAO"
+> for i in $(seq 1 "$R"); do
+>   ord=$(echo "$OORDS" | awk -v k="$i" '{print $(((k-1)%6)+1)}')
+>   for x in $(echo "$ord" | sed 's/./& /g'); do bin=$(binof "$x"); v=$(ucpu "$bin" "$OBJ"); eval "J_${x}=\$v"; done
+>   printf '%s\t%s\t%s\n' "$J_O" "$J_A" "$J_B" >> "$OBJTSV"
+>   echo "  obj-churn corsa$i [$ord]: O=$J_O A=$J_A B=$J_B"
+> done
+> # (e) micro R (run-micro.sh, spina dorsale): pin poi B — rapporto per categoria (user CPU netto pavimento, come da canone)
+> PHPR="$A" ORACLE="$O" R="$R" /bin/bash "$MICRO" > "$OUT/micro-pin.out" 2>&1 || echo "micro pin: rc $? (vedi guardia-out-$TAG/micro-pin.out)"
+> PHPR="$BB" ORACLE="$O" R="$R" /bin/bash "$MICRO" > "$OUT/micro-B.out" 2>&1 || echo "micro B: rc $? (vedi guardia-out-$TAG/micro-B.out)"
+> echo "micro pin: $(grep -oE 'rapporto_[a-z]+=[0-9.]+' "$OUT/micro-pin.out" | tr '\n' ' ')"
+> echo "micro B:   $(grep -oE 'rapporto_[a-z]+=[0-9.]+' "$OUT/micro-B.out" | tr '\n' ' ')"
+> # (f) VERDETTO pre-registrato (criterio s186-criterio-guardia.md)
+> python3 - "$TSV" "$E3TSV" "$OBJTSV" "$OUT/micro-pin.out" "$OUT/micro-B.out" "$FA" "$FZ" "$FB" "$FO" "$NCD" "$NGD" "$NK0" "$NOBJ" "$R" "$RPI" "$OUT/dobj.txt" <<'PY'
+> import sys, re
+> dobj_path = sys.argv[16]
+> rows = [l.split() for l in open(sys.argv[1]) if l.strip()]
+> e3 = [list(map(float, l.split())) for l in open(sys.argv[2]) if l.strip()]
+> ob = [list(map(float, l.split())) for l in open(sys.argv[3]) if l.strip()]
+> mpin = open(sys.argv[4]).read(); mB = open(sys.argv[5]).read()
+> fa, fz, fb, fo = map(float, sys.argv[6:10]); ncd, ngd, nk, nobj = map(float, sys.argv[10:14]); R = int(sys.argv[14]); rpi = float(sys.argv[15])
+> FL = {'A': fa, 'Z': fz, 'B': fb, 'O': fo}
+> # ret-buf-dq: ns per RET (N iterazioni × RETS_PER_ITER Ret), così la soglia 4 ns vale per Ret come nei giudici a 1 Ret/iter
+> J = ['mcalls-dq', 'calls-dq', 'ret-buf-dq-K0', 'ret-buf-dq-K4', 'ret-buf-dq-K16']; NN = [ncd, ngd, nk*rpi, nk*rpi, nk*rpi]
+> ARMS = ['A', 'Z', 'B', 'O']
+> def col(j, arm): i = j*4 + ARMS.index(arm); return [(float(r[i]) - FL[arm]) / NN[j] * 1e9 for r in rows]
+79,80c126,127
+<     m = med(v); w = sorted(v, key=lambda x:(abs(x-m),x))[:-1]; return max(w)-min(w)
+< def pmed(X, Y): return med([x-y for x, y in zip(X, Y)])   # mediana delle differenze APPAIATE (az.rev. S-173 (b))
+---
+>     m = med(v); w = sorted(v, key=lambda x: (abs(x-m), x))[:-1]; return max(w)-min(w) if len(w) > 1 else 0.0
+> def pmed(X, Y): return med([x-y for x, y in zip(X, Y)])
+82,122c129,179
+< cA, cZ, cB, cO = col(0,fa,ncd), col(1,fz,ncd), col(2,fb,ncd), col(9,fo,ncd)
+< pA, pZ, pB, pO = col(3,fa,npd), col(4,fz,npd), col(5,fb,npd), col(10,fo,npd)
+< gA, gZ, gB, gO = col(6,fa,ngd), col(7,fz,ngd), col(8,fb,ngd), col(11,fo,ngd)
+< rc = 0
+< # az.rev. S-173 (a): SL in-run = |A−Z| per giudice (se Z è byte-id col pin: SOLO rumore, dichiarato in testa); banda tra run = |A oggi − A ultima misura| (STESSO binario)
+< def layout(name, A, Z, prev):
+<     sl = abs(med(A)-med(Z)); slp = abs(pmed(A, Z))
+<     band = "n/d (nessun PREV same-toolchain: la A di oggi diventa PREV)" if prev is None else f"{abs(med(A)-prev):.2f}"
+<     print(f"LAYOUT {name}: A={med(A):.2f} Z={med(Z):.2f} ⇒ |A−Z| (colonna) {sl:.2f} / (appaiata) {slp:.2f} ns/iter; banda tra run same-binary |A−PREV| = {band} (rumore drop-1 A'={dr1(A):.2f} Z'={dr1(Z):.2f})")
+<     return max(sl, slp)
+< SLc = layout("mcalls-dq", cA, cZ, None)
+< SLp = layout("prop-dq", pA, pZ, prevpd)
+< SLg = layout("calls-dq", gA, gZ, None)
+< # EMENDA E1 (S-177): banda same-binary |A−PREV| > 4 su prop-dq ⇒ finestra contaminata: nessun verdetto (rc=8)
+< BANDp = abs(med(pA)-prevpd)
+< if BANDp > 4.0:
+<     print(f"BANDA same-binary FUORI: |A−PREV| prop-dq {BANDp:.2f} > 4 ⇒ finestra CONTAMINATA (pesi esterni): nessun verdetto (rc=8, emenda E1 S-177)"); rc = 8
+< if SLc > 4.0 or SLp > 4.0 or SLg > 4.0:
+<     print(f"|A−Z| SOPRA il pavimento 4 (mcalls {SLc:.2f}, prop {SLp:.2f}, calls {SLg:.2f}): banda-layout/rumore > soglia — nessun verdetto, si estende R (rc=8)"); rc = 8
+< def stat(name, A, X, lab, alab, sl):
+<     Dc = med(A)-med(X); Dp = pmed(A, X); noise = max(dr1(A), dr1(X)); thr = max(4.0, noise, sl); thrd = max(noise, sl)
+<     nomc, nomp = Dc >= thr, Dp >= thr; nom = nomc and nomp
+<     reg = min(Dc, Dp) < -max(4.0, noise)
+<     sg = signs(A, X)
+<     if nom: cifra = f"CIFRA = [{min(Dc,Dp):+.2f};{max(Dc,Dp):+.2f}] (entrambi gli stimatori nominano)"
+<     elif nomc or nomp: cifra = "nomina UN solo stimatore ⇒ solo DIREZIONE (cifra negata)"
+<     else: cifra = "NON nominato (vale 0)"
+<     dirs = 'FIRMATA' if min(abs(Dc), abs(Dp)) >= thrd else 'sotto il rumore/SL'
+<     print(f"{name} {lab}: {alab}={med(A):.2f} {lab}={med(X):.2f} ns/iter D={alab}−{lab} colonna={Dc:+.2f} appaiata={Dp:+.2f} soglia={thr:.2f} (rumore drop-1 {alab}'={dr1(A):.2f} {lab}'={dr1(X):.2f}, SL={sl:.2f}) segni {sg}/{R} -> {cifra}; direzione {dirs} ({lab} {'più veloce' if Dc > 0 else 'più lento'}); regressione (D < −max(4,rumore)): {'SÌ' if reg else 'no'}")
+<     return Dc, Dp, noise, nom, reg, sg
+< print(f"GIUDICE mcalls-dq (BERSAGLIO, 1 MethodCall+Ret di metodo+BinarySS per iter): oracle={med(cO):.2f} ns/iter; A/oracle={med(cA)/med(cO):.2f}× Z/oracle={med(cZ)/med(cO):.2f}× B/oracle={med(cB)/med(cO):.2f}×")
+< DCc, DCp, nC, nomC, regC, sgC = stat("GIUDICE mcalls-dq leva (a) L-MR1+L-MC2 (D = A−B, pin s182 → tree)", cA, cB, "B", "A", SLc)
+< DC = min(DCc, DCp)
+< print(f"ATTESA (criterio-mc2 p.4): D ∈ [4;9]: {'CENTRATA' if 4.0 <= DC <= 9.0 else 'FUORI'} ({DCc:+.2f}/{DCp:+.2f}); ripartizione a1/a2 NON misurata (regola 4: direzione+meccanismo, magnitudine composta)")
+< print(f"GUARDIA prop-dq (sola regressione, nessun Ret di metodo nel loop): oracle={med(pO):.2f} ns/iter; A/oracle={med(pA)/med(pO):.2f}× Z/oracle={med(pZ)/med(pO):.2f}× B/oracle={med(pB)/med(pO):.2f}×")
+< DPc, DPp, nP, nomP, regP, sgP = stat("GUARDIA prop-dq (attesa |D| < 1)", pA, pB, "B", "A", SLp)
+< print(f"GUARDIA prop-dq ESITO attesa |D|<1: {'RISPETTATA' if max(abs(DPc),abs(DPp)) < 1 else ('VIOLATA — segni pieni: effetto TRASVERSALE firmato' if sgP in (0,R) else 'VIOLATA — segni misti')} (D {DPc:+.2f}/{DPp:+.2f}, segni {sgP}/{R})")
+< print(f"GUARDIA calls-dq (sola regressione, Ret fuso della funzione libera già ammesso): oracle={med(gO):.2f} ns/iter; A/oracle={med(gA)/med(gO):.2f}× Z/oracle={med(gZ)/med(gO):.2f}× B/oracle={med(gB)/med(gO):.2f}×")
+< DGc, DGp, nG, nomG, regG, sgG = stat("GUARDIA calls-dq (attesa |D| < 1)", gA, gB, "B", "A", SLg)
+< print(f"GUARDIA calls-dq ESITO attesa |D|<1: {'RISPETTATA' if max(abs(DGc),abs(DGp)) < 1 else ('VIOLATA — segni pieni: effetto TRASVERSALE firmato' if sgG in (0,R) else 'VIOLATA — segni misti')} (D {DGc:+.2f}/{DGp:+.2f}, segni {sgG}/{R})")
+< print(f"PREV per la prossima misura (same-binary pin s182): mcalls-dq A={med(cA):.2f} calls-dq A={med(gA):.2f} prop-dq A={med(pA):.2f} (PREV: {prevpd:.2f})")
+---
+> rc = 0; morde = []
+> print(f"floors: A={fa} Z={fz} B={fb} O={fo}; N: mcalls={ncd:.0f} calls={ngd:.0f} ret-buf-dq={nk:.0f}×{rpi:.0f} Ret (ns/Ret) obj-churn={nobj:.0f}; corse valide R={len(rows)}")
+> D = {}
+> for j, name in enumerate(J):
+>     cA, cZ, cB, cO = col(j, 'A'), col(j, 'Z'), col(j, 'B'), col(j, 'O')
+>     sl = max(abs(med(cA)-med(cZ)), abs(pmed(cA, cZ)))
+>     print(f"LAYOUT {name}: A={med(cA):.2f} Z={med(cZ):.2f} ⇒ |A−Z| colonna {abs(med(cA)-med(cZ)):.2f} / appaiata {abs(pmed(cA,cZ)):.2f} ns/iter (rumore drop-1 A'={dr1(cA):.2f} Z'={dr1(cZ):.2f})")
+>     if sl > 4.0:
+>         print(f"|A−Z| {sl:.2f} > 4 su {name}: banda-layout/rumore sopra soglia — nessun verdetto (rc=8)"); rc = 8
+>     Dc = med(cB) - med(cA); Dp = pmed(cB, cA); noise = max(dr1(cA), dr1(cB)); thr = max(4.0, noise, sl); sg = signs(cB, cA)
+>     D[name] = (Dc, Dp, noise, sl, thr)
+>     print(f"GIUDICE {name}: oracle={med(cO):.2f} ns/iter · A={med(cA):.2f} ({med(cA)/med(cO):.2f}×) Z={med(cZ):.2f} B={med(cB):.2f} ({med(cB)/med(cO):.2f}×) · D=B−A colonna={Dc:+.2f} appaiata={Dp:+.2f} soglia={thr:.2f} (rumore drop-1 {noise:.2f}, SL {sl:.2f}) segni B>A {sg}/{R}")
+> # (i) K=0 e giudici ereditati: |D| < max(rumore, 4, SL)
+> for name in ('mcalls-dq', 'calls-dq', 'ret-buf-dq-K0'):
+>     Dc, Dp, noise, sl, thr = D[name]
+>     ok = max(abs(Dc), abs(Dp)) < thr
+>     print(f"ATTESA (i) {name} |D| < max(rumore, 4, SL)={thr:.2f}: {'PASS' if ok else 'VIOLATA'} (|D| colonna {abs(Dc):.2f} appaiata {abs(Dp):.2f})")
+>     if not ok: morde.append(f"(i) {name} D {Dc:+.2f}/{Dp:+.2f}")
+> # (ii) K piatto: D_B(K) − D_B(K0) < max(rumore, 4)
+> D0c, D0p, n0, _, _ = D['ret-buf-dq-K0']
+> for name in ('ret-buf-dq-K4', 'ret-buf-dq-K16'):
+>     Dc, Dp, noise, sl, thr = D[name]
+>     gc, gp = Dc - D0c, Dp - D0p; t = max(4.0, noise, n0)
+>     ok = max(abs(gc), abs(gp)) < t
+>     print(f"ATTESA (ii) {name} piatto: D_B(K)−D_B(K0) colonna {gc:+.2f} appaiata {gp:+.2f} vs soglia {t:.2f}: {'PASS' if ok else 'MORDE-K (lineare in K)'}")
+>     if not ok: morde.append(f"(ii) {name} Δ {gc:+.2f}/{gp:+.2f}")
+> # (iii) E3
+> a1 = med([r[0] for r in e3]); a2 = med([r[1] for r in e3]); b1 = med([r[2] for r in e3]); b2 = med([r[3] for r in e3])
+> ra = a2/a1 if a1 > 0 else float('nan'); rb = b2/b1 if b1 > 0 else float('nan')
+> print(f"E3 Hoare array_map(fn ⇒ new A, range(1,N)): A 1e5={a1:.2f}s 2e5={a2:.2f}s ratio={ra:.2f} · B 1e5={b1:.2f}s 2e5={b2:.2f}s ratio={rb:.2f} (user grezzo, pavimento dentro — dichiarato)")
+> ok = rb <= 2.5
+> print(f"ATTESA (iii) ratio_B ≤ 2,5: {'PASS' if ok else 'MORDE-E3 (quadratico)'} (ratio_A {ra:.2f} a confronto)")
+> if not ok: morde.append(f"(iii) E3 ratio_B {rb:.2f}")
+> # (iv) micro: rapporto_B ≤ rapporto_pin + 0,2 (tolleranza fissa: il rapporto è già una mediana netta su R corse; spread a verbale)
+> def micro(txt):
+>     return dict(re.findall(r'rapporto_([a-z]+)=([0-9.]+)', txt)), dict((c, (so, sp)) for c, so, sp in re.findall(r'([a-z]+)_spread_oracle_s=([0-9.]+)\s+[a-z]+_spread_phpr_s=([0-9.]+)', txt))
+> rp, spp = micro(mpin); rb_, spb = micro(mB)
+> for c in ('arith', 'prop', 'calls', 'str', 'arr', 're'):
+>     if c not in rp or c not in rb_:
+>         print(f"micro {c}: n/d (pin {rp.get(c)} B {rb_.get(c)})"); morde.append(f"(iv) micro {c} n/d"); continue
+>     p, b = float(rp[c]), float(rb_[c]); tol = 0.2
+>     ok = b <= p + tol
+>     print(f"micro {c}: pin {p:.1f}× B {b:.1f}× (tolleranza +{tol:.1f}; spread phpr s pin/B {spp.get(c, ('?','?'))[1]}/{spb.get(c, ('?','?'))[1]}): {'PASS' if ok else 'REGRESSIONE'}")
+>     if not ok: morde.append(f"(iv) micro {c} {p:.1f}→{b:.1f}")
+> # (v) obj-churn companion
+> oo = med([r[0] for r in ob]) - fo; oa = med([r[1] for r in ob]) - fa; obb = med([r[2] for r in ob]) - fb
+> dobj_pin = (oa-oo)/nobj*1e9
+> print(f"OBJ-CHURN (companion, nessun gate): oracle netto {oo:.3f}s pin {oa:.3f}s B {obb:.3f}s su {nobj:.0f} oggetti ⇒ D_obj(pin)={dobj_pin:.0f} ns/oggetto · D_obj(B)={(obb-oo)/nobj*1e9:.0f} ns/oggetto · B−pin={(obb-oa)/nobj*1e9:+.0f} ns/oggetto (tetto oggetti della fetta 0 = N_obj × D_obj)")
+> # dobj.txt: UN float = D_obj del pin A in ns/oggetto, letto dalla fetta 0 per il tetto oggetti
+> open(dobj_path, 'w').write(f"{dobj_pin:.1f}\n")
+> print("PREV per la prossima misura (same-binary pin s183): " + " ".join(f"{n} A={med(col(j,'A')):.2f}" for j, n in enumerate(J)) + " (ret-buf-dq: la A di oggi diventa PREV)")
+124,136c181,185
+<     print("ESITO rc=8"); sys.exit(8)
+< # ESITI (criterio-cr1 p.5)
+< if regP or regG:
+<     print(f"GUARDIA: regressione su {'prop-dq ' if regP else ''}{'calls-dq' if regG else ''} (prop {DPc:+.2f}/{DPp:+.2f}, arith {DGc:+.2f}/{DGp:+.2f}) ⇒ leva SOSPESA, nessuna promozione (rc=5)"); rc = 5
+< elif nomC:
+<     print(f"PROMOZIONE: D mcalls-dq NOMINATA da entrambi gli stimatori [{min(DCc,DCp):+.2f};{max(DCc,DCp):+.2f}] (soglia max(4,rumore,SL)), guardie senza regressione ⇒ promozione del TREE (L-MR1+L-MC2) con copia dichiarata di s184-promozione.sh (tag s183, CARGO_TARGET_DIR esplicito) + coppia WP/ORM NOTTURNA (rc=0)")
+< elif DC >= max(nC, SLc) and sgC == R:
+<     print(f"SOLO DIREZIONE: D {DCc:+.2f}/{DCp:+.2f} ≥ max(rumore {nC:.2f}, SL {SLc:.2f}) con segni {sgC}/{R} ma sotto la soglia ⇒ leva (a) TENUTA nel tree SOLO a CI batteria+corpus OK sul commit, nessuna promozione (criterio-mc2 p.5; rc=3)")
+<     rc = 3
+< else:
+<     print(f"KILL leva (a): D {DCc:+.2f}/{DCp:+.2f} < max(rumore {nC:.2f}, SL {SLc:.2f}) o segni misti ({sgC}/{R}) ⇒ revert al byte del commit L-MR1+L-MC2, meccanismo a verbale (rc=4)"); rc = 4
+< print(f"ESITO rc={rc}")
+< sys.exit(rc)
+---
+>     print("ESITO rc=8 (nessun verdetto: |A−Z| sopra soglia, si estende R)"); sys.exit(8)
+> if morde:
+>     print("GUARDIA MORDE: " + " · ".join(morde) + " ⇒ cura O(1) PRIMA della promozione s184 (ordine obbligato (3)), guardia da ri-eseguire (rc=5)"); sys.exit(5)
+> print("GUARDIA PASS: (i) K=0 e giudici ereditati sotto soglia, (ii) K piatto, (iii) E3 ≤ 2,5, (iv) micro senza regressione ⇒ pin s184 com'è; cura O(1) = leva per NOME dopo la fetta 0 (rc=0)")
+> sys.exit(0)
+140,141c189,192
+< echo "$prc" > "$RC"; exit "$prc"
+< } >> "$VERD" 2>&1
+---
+> echo "ESITO rc=$prc $(date '+%F %T')"
+> } 2>&1 | tee -a "$VERD"
+> prc=$(sed -n 's/^ESITO rc=\([0-9]*\).*/\1/p' "$VERD" | tail -1)
+> fin "${prc:-7}"
