@@ -1,0 +1,294 @@
+2,11c2,11
+< # s186-fetta0.sh — S-186 FETTA 0 (delibera concilio S-186 Q2, firmata 2026-10-23; criterio s186-criterio-fetta0.md):
+< # profilo di TEMPO bilaterale (`xctrace` Time Profiler, 1 ms, `--launch`) su UNA gamba ORM intera (orm-work.tgz, phpunit
+< # --no-coverage), per immagine+simbolo SELF in classi pre-registrate (xc-classi.py). Bracci: O oracle · P pin s183 ·
+< # M mutante (spin 200 ns in CallBuiltin, ab-out/s186-leva/phpr-M) · C census-time (ab-out/s186-leva/phpr-C, NON profilato:
+< # contatori Instant 1/64 per classe su stderr: call_fast call_general mcall mcall_general ret_fast ret_slow prop str arr new
+< # sweep builtin_lookup builtin hostbuiltin; D_obj dal companion della guardia in guardia-out-b/dobj.txt). R=3 round
+< # interleaved (O P M C · P O C M · M C O P) + UNA gamba di riferimento NON profilata per O e P (`/usr/bin/time -l`:
+< # overhead del profiler dichiarato). Esiti SOLO in
+< # fetta0-out/fetta0.{rc,done} e nel verdetto s186-fetta0-verdetto.out; progresso in fetta0-out/progress.txt.
+< # Script NUOVO (nessun genitore): le regole di finestra stanno nel lanciatore (s186-lancio-catena.sh).
+---
+> # s186-fetta0-mutante.sh — S-186 bis (decisione utente 2026-10-30 08:54, opzione (b)): RILANCIO del SOLO test del mutante
+> # della fetta 0 col GEMELLO Z profilato — ΔM = M − Z (stesso recipe/target: via il rumore di layout di `run_loop` che il
+> # confronto M − P del 29/10 portava in dispatch). Soglie INVARIATE (criterio s186-criterio-fetta0.md p.6, EMENDA 30/10):
+> # finestra [0,85;1,15] × 11,91M × ns_spin (ab-out/s186-leva/mutante-ns.txt) E quota builtin ≥ 75 % di ΔM. Bracci: Z
+> # (ab-out/s186-leva/phpr-Z, 23c0a94c26db62eb) · M (phpr-M, a3bfe3e373a89489), R=3 interleaved (Z M · M Z · Z M), nessun O/P/C,
+> # nessuna gamba di riferimento. rc 0 = strumento VIVO (la rotta B RIAPRE: il verdetto dei CANALI del 30/10 resta quello scritto) ·
+> # 4 = MUTO (B muore definitivamente) · 7 strumento · 8 gambe invalide · 6 lock · 9 pin. Esiti SOLO in fetta0-mut-out/
+> # fetta0-mut.{rc,done} e nel verdetto s186-fetta0-mutante-verdetto.out; progresso in fetta0-mut-out/progress.txt.
+> # COPIA DICHIARATA di s186-fetta0.sh (manifest s186-fetta0-mutante-copia.diff) coi SOLI adattamenti: bracci Z/M, ordini,
+> # uscite in fetta0-mut-out, verdetto ridotto al mutante (ΔM, quota builtin, delta dispatch M − Z a controllo, delta per classe).
+16,17c16,17
+< OUT="$H/fetta0-out"; mkdir -p "$OUT"
+< VERD="$H/s186-fetta0-verdetto.out"; RCF="$OUT/fetta0.rc"; DONE="$OUT/fetta0.done"; rm -f "$DONE" "$RCF"
+---
+> OUT="$H/fetta0-mut-out"; mkdir -p "$OUT"
+> VERD="$H/s186-fetta0-mutante-verdetto.out"; RCF="$OUT/fetta0-mut.rc"; DONE="$OUT/fetta0-mut.done"; rm -f "$DONE" "$RCF"
+22d21
+< ORACLE=/opt/homebrew/opt/php/bin/php
+23a23
+> ZWIN="$H/ab-out/s186-leva/phpr-Z"
+25d24
+< CEN="$H/ab-out/s186-leva/phpr-C"
+28a28,29
+> Z_ATTESO="${Z_ATTESO:-23c0a94c26db62eb}"
+> M_ATTESO="${M_ATTESO:-a3bfe3e373a89489}"
+37a39
+> [ -s "$ZWIN" ] || fin 7 "braccio Z assente ($ZWIN)"
+39d40
+< [ -s "$CEN" ] || fin 7 "braccio C assente ($CEN)"
+40a42
+> [ -s "$H/ab-out/s186-leva/mutante-ns.txt" ] || fin 7 "mutante-ns.txt assente (taratura della build)"
+44,45c46,49
+< MH="$(shasum -a 256 "$MUT" | cut -c1-16)"; CH="$(shasum -a 256 "$CEN" | cut -c1-16)"
+< p "pin $PINM == atteso · M $MH · C $CH · oracle $("$ORACLE" -r 'echo PHP_VERSION;') opcache.enable_cli=$("$ORACLE" -r 'echo ini_get("opcache.enable_cli")===""?"0":ini_get("opcache.enable_cli");') jit=$("$ORACLE" -r 'echo ini_get("opcache.jit") ?: "n/d";')"
+---
+> ZH="$(shasum -a 256 "$ZWIN" | cut -c1-16)"; MH="$(shasum -a 256 "$MUT" | cut -c1-16)"
+> [ "$ZH" = "$Z_ATTESO" ] || fin 9 "Z $ZH != atteso $Z_ATTESO"
+> [ "$MH" = "$M_ATTESO" ] || fin 9 "M $MH != atteso $M_ATTESO"
+> p "pin $PINM == atteso · Z $ZH · M $MH · ns_spin $(cat "$H/ab-out/s186-leva/mutante-ns.txt")"
+53,54c57
+< engine(){ case "$1" in O) echo "$ORACLE";; P) echo "$PHPR";; M) echo "$MUT";; C) echo "$CEN";; esac; }
+< eopts(){ case "$1" in O) echo "-d memory_limit=-1";; *) echo "";; esac; }
+---
+> engine(){ case "$1" in Z) echo "$ZWIN";; M) echo "$MUT";; esac; }
+56,58c59,61
+< leg_prof(){ # $1=braccio (O|P|M) $2=round → gamba PROFILATA; esiti in $OUT/<tag>.*
+<   local arm="$1" r="$2" tag="$1$2" E o T t0 t1 xrc
+<   E="$(engine "$arm")"; o="$(eopts "$arm")"
+---
+> leg_prof(){ # $1=braccio (Z|M) $2=round → gamba PROFILATA; esiti in $OUT/<tag>.*
+>   local arm="$1" r="$2" tag="$1$2" E T t0 t1 xrc
+>   E="$(engine "$arm")"
+64c67
+<       --launch -- "$E" $o vendor/bin/phpunit --no-coverage > "$OUT/$tag.rec.log" 2>&1 < /dev/null )
+---
+>       --launch -- "$E" vendor/bin/phpunit --no-coverage > "$OUT/$tag.rec.log" 2>&1 < /dev/null )
+80,110c83
+< leg_census(){ # $1=round → braccio C NON profilato (census-time su stderr)
+<   local r="$1" tag="C$1" t0 t1 rc
+<   ws || { p "$tag untar FALLITO"; return 7; }
+<   p "$tag START (census, non profilato)"
+<   t0=$(now)
+<   ( cd "$SP/orm-work" && /usr/bin/time -l "$CEN" vendor/bin/phpunit --no-coverage > "$OUT/$tag.txt" 2> "$OUT/$tag.err" )
+<   rc=$?
+<   t1=$(now)
+<   echo "$tag wall=$(python3 -c "print('%.3f' % ($t1-$t0))") xrc=$rc" >> "$OUT/walls.txt"
+<   LC_ALL=C grep -a '^census-time' "$OUT/$tag.err" > "$OUT/$tag.census.tsv" || true
+<   if valid "$OUT/$tag.txt"; then echo "$tag VALID" >> "$OUT/validity.txt"; else echo "$tag INVALID" >> "$OUT/validity.txt"; fi
+<   p "$tag fine rc=$rc righe census $(wc -l < "$OUT/$tag.census.tsv" | tr -d ' ') $(tail -1 "$OUT/validity.txt")"
+<   return 0
+< }
+< 
+< leg_ref(){ # $1=braccio (O|P) → gamba di RIFERIMENTO non profilata (/usr/bin/time -l): overhead del profiler
+<   local arm="$1" tag="ref-$1" E o t0 t1 rc
+<   E="$(engine "$arm")"; o="$(eopts "$arm")"
+<   ws || { p "$tag untar FALLITO"; return 7; }
+<   p "$tag START (riferimento non profilato)"
+<   t0=$(now)
+<   ( cd "$SP/orm-work" && /usr/bin/time -l "$E" $o vendor/bin/phpunit --no-coverage > "$OUT/$tag.txt" 2> "$OUT/$tag.time" )
+<   rc=$?
+<   t1=$(now)
+<   echo "$tag wall=$(python3 -c "print('%.3f' % ($t1-$t0))") xrc=$rc" >> "$OUT/walls.txt"
+<   if valid "$OUT/$tag.txt"; then echo "$tag VALID" >> "$OUT/validity.txt"; else echo "$tag INVALID" >> "$OUT/validity.txt"; fi
+<   p "$tag fine rc=$rc user=$(awk '/[0-9.]+ *user/{for(i=1;i<=NF;i++) if($i=="user"){print $(i-1)}}' "$OUT/$tag.time")"
+<   return 0
+< }
+< 
+< # --- R=3 round interleaved (ordine pre-registrato, criterio p.2) ---
+---
+> # --- R=3 round interleaved (ordine pre-registrato: Z M · M Z · Z M) ---
+112c85
+< ORDINI="O_P_M_C P_O_C_M M_C_O_P"
+---
+> ORDINI="Z_M M_Z Z_M"
+117,120c90
+<     case "$arm" in
+<       C) leg_census "$r" || STRUM=1;;
+<       *) leg_prof "$arm" "$r" || STRUM=1;;
+<     esac
+---
+>     leg_prof "$arm" "$r" || STRUM=1
+123,125d92
+< # --- riferimento non profilato (uno per motore) ---
+< leg_ref O || STRUM=1
+< leg_ref P || STRUM=1
+130,131c97
+< # --- verdetto (criterio p.4-p.9) ---
+< DOBJ="$H/guardia-out-b/dobj.txt"
+---
+> # --- verdetto (criterio p.6, EMENDA 30/10: comparatore Z; finestra e quota INVARIATE) ---
+133,135c99,101
+< python3 -I - "$OUT" "$VERD" "$PINM" "$MH" "$CH" "$STRUM" "$DOBJ" "$MUTNS" <<'PY'
+< import sys, os, re, statistics
+< OUT, VERD, PINM, MH, CH, STRUM, DOBJ, MUTNS = sys.argv[1:9]
+---
+> python3 -I - "$OUT" "$VERD" "$PINM" "$ZH" "$MH" "$STRUM" "$MUTNS" <<'PY'
+> import sys, os, re
+> OUT, VERD, PINM, ZH, MH, STRUM, MUTNS = sys.argv[1:8]
+137,138d102
+< PAV = ("pavimento","kernel")          # pavimento comune = PDO/sqlite3/avvio + syscalls (dichiarato)
+< NAMED = [c for c in CLASSES if c != "other"]
+162,163c126,127
+< say(f"== S-186 FETTA 0 — profilo di tempo bilaterale ORM (xctrace Time Profiler 1 ms, --launch, self per immagine+simbolo) — pin P {PINM} · M {MH} · C {CH} · R={R} interleaved ==")
+< say(f"strumento: {'TUTTE le gambe registrate/esportate/classificate' if STRUM == '0' else 'ALMENO UNA gamba senza record/export/classi (rc=7 se un braccio resta sotto 2 round validi)'}")
+---
+> say(f"== S-186 bis FETTA 0 — SOLO MUTANTE col gemello Z (xctrace Time Profiler 1 ms, --launch, self per immagine+simbolo) — pin {PINM} (NON profilato) · Z {ZH} · M {MH} · R={R} interleaved Z M · M Z · Z M — EMENDA 30/10 (firma utente 08:54): ΔM = M − Z, finestra e quota INVARIATE ==")
+> say(f"strumento: {'TUTTE le gambe registrate/esportate/classificate' if STRUM == '0' else 'ALMENO UNA gamba senza record/export/classi (rc=8 se un braccio resta sotto 2 round validi)'}")
+165c129
+< for arm in "OPM":
+---
+> for arm in "ZM":
+176c140
+< for arm in "OPM":
+---
+> for arm in "ZM":
+181,194d144
+< # census C
+< cens = {}
+< ccount = 0
+< for r in range(1, R+1):
+<     f = os.path.join(OUT, f"C{r}.census.tsv")
+<     if not os.path.exists(f) or not validity.get(f"C{r}", False): continue
+<     ccount += 1
+<     for l in open(f):
+<         t = l.rstrip("\n").split("\t")
+<         if len(t) >= 5 and t[0] == "census-time":
+<             cls, cnt, smp, est = t[1], int(t[2]), int(t[3]), float(t[4])
+<             cens.setdefault(cls, []).append((cnt, smp, est))
+< say(f"  C: round validi {ccount}; classi census: " + (", ".join(f"{k}: n={med([x[0] for x in v]):.0f} campioni={med([x[1] for x in v]):.0f} est={med([x[2] for x in v])/1e9:.2f}s" for k, v in sorted(cens.items())) if cens else "NESSUNA riga census-time (braccio C muto: calibrazione NON eseguita, dichiarato)"))
+< n_obj = med([x[0] for x in cens["new"]]) if "new" in cens else None
+197,246c147,152
+< M = {arm: {c: med([d[c] for d in arms[arm]]) for c in CLASSES + ["TOTAL"]} for arm in "OPM"}
+< def net(arm): return M[arm]["TOTAL"] - sum(M[arm][c] for c in PAV)
+< def chiusura(arm):
+<     n = net(arm)
+<     return (sum(M[arm][c] for c in NAMED if c not in PAV) / n) if n > 0 else 0.0
+< for arm in "OPM":
+<     say(f"MEDIANE {arm}: " + " ".join(f"{c}={M[arm][c]:.2f}" for c in CLASSES) + f" TOTAL={M[arm]['TOTAL']:.2f} pavimento(pav+kernel)={sum(M[arm][c] for c in PAV):.2f} NETTO={net(arm):.2f} chiusura={chiusura(arm)*100:.1f}% other={M[arm]['other']:.2f}")
+< # riferimento non profilato
+< for arm in "OP":
+<     tf = os.path.join(OUT, f"ref-{arm}.time")
+<     u = None
+<     if os.path.exists(tf):
+<         for l in open(tf, errors="replace"):
+<             m = re.search(r"([\d.]+)\s+user", l)
+<             if m: u = float(m.group(1))
+<     w = walls.get(f"ref-{arm}", (float('nan'), -1))
+<     say(f"RIFERIMENTO non profilato {arm}: user={u if u is not None else 'n/d'} s wall={w[0]:.1f}s {'VALID' if validity.get(f'ref-{arm}') else 'INVALID'} · profilato TOTAL(Running)={M[arm]['TOTAL']:.2f} s ⇒ overhead profiler = {(M[arm]['TOTAL']-u) if u is not None else float('nan'):+.2f} s (dichiarato, non sottratto)")
+< surplus = net("P") - net("O")
+< say(f"SURPLUS netto P−O = {net('P'):.2f} − {net('O'):.2f} = {surplus:.2f} s (riferimento t27: REF2 [34,23;34,31] vs ORA_REF 4,870 ⇒ ≈29,4 s)")
+< chi_ok = chiusura("P") >= 0.85 and chiusura("O") >= 0.85
+< say(f"CHIUSURA ≥85 %: P {chiusura('P')*100:.1f}% O {chiusura('O')*100:.1f}% ⇒ {'OK' if chi_ok else 'FALLITA (classi non chiudono: other troppo grande)'}")
+< go, nom = [], []
+< say("CANALI (classe: P_c − O_c, P_c/O_c):")
+< for c in NAMED:
+<     if c in PAV: continue
+<     dc = M["P"][c] - M["O"][c]
+<     ratio = (M["P"][c] / M["O"][c]) if M["O"][c] > 0 else float('inf')
+<     flag = ""
+<     if dc >= 3.0 and ratio >= 3: go.append(c); flag = " ⇒ GO-LEVA (≥3,0 s E ratio ≥3)"
+<     elif 1.5 <= dc < 3.0: nom.append(c); flag = " ⇒ NOMINATO a registro (in [1,5;3,0) s, non leva)"
+<     elif dc >= 3.0: flag = " (≥3,0 s ma ratio <3: non leva, a registro)"
+<     say(f"  {c}: P={M['P'][c]:.2f} O={M['O'][c]:.2f} Δ={dc:+.2f} s ratio={ratio:.2f}{flag}")
+< # tetti pre-registrati
+< say("TETTI pre-registrati (classe >2× il tetto ⇒ modello falso, dichiarato):")
+< tetti = {"call_ret": 2.1, "prop_ic": 1.2}
+< dobj = None
+< if os.path.exists(DOBJ):
+<     try: dobj = float(open(DOBJ).read().split()[0])
+<     except Exception: dobj = None
+< if n_obj is not None and dobj is not None:
+<     tetti["obj_life"] = n_obj * dobj / 1e9
+<     say(f"  tetto oggetti = N_obj {n_obj:.0f} × D_obj {dobj:.1f} ns = {tetti['obj_life']:.2f} s")
+< else:
+<     say(f"  tetto oggetti n/d (N_obj={'n/d' if n_obj is None else int(n_obj)}, D_obj={'n/d' if dobj is None else dobj}) — dichiarato")
+< falso = []
+< for c, t in tetti.items():
+<     dc = M["P"][c] - M["O"][c]
+<     stato = "MODELLO FALSO (>2× il tetto)" if dc > 2 * t else ("sopra il tetto, entro 2×" if dc > t else "entro il tetto")
+<     if dc > 2 * t: falso.append(c)
+<     say(f"  {c}: Δ={dc:+.2f} s vs tetto {t:.2f} s ⇒ {stato}")
+---
+> M = {arm: {c: med([d[c] for d in arms[arm]]) for c in CLASSES + ["TOTAL"]} for arm in "ZM"}
+> for arm in "ZM":
+>     say(f"MEDIANE {arm}: " + " ".join(f"{c}={M[arm][c]:.2f}" for c in CLASSES) + f" TOTAL={M[arm]['TOTAL']:.2f}")
+> say("DELTA per classe M − Z (controllo: il rumore di layout del 29/10 stava in dispatch, +0,59 s con M − P):")
+> for c in CLASSES:
+>     say(f"  {c}: Z={M['Z'][c]:.2f} M={M['M'][c]:.2f} Δ={M['M'][c]-M['Z'][c]:+.2f} s")
+260,261c166,168
+< dM = M["M"]["TOTAL"] - M["P"]["TOTAL"]
+< dMb = M["M"]["builtin"] - M["P"]["builtin"]
+---
+> dM = M["M"]["TOTAL"] - M["Z"]["TOTAL"]
+> dMb = M["M"]["builtin"] - M["Z"]["builtin"]
+> dMd = M["M"]["dispatch"] - M["Z"]["dispatch"]
+263,302c170,177
+< vivo = (lo <= dM <= hi) and quota >= 0.75
+< say(f"MUTANTE (spin fuori linea `builtin_spin_mutant_s186` in CallBuiltin, self nel proprio simbolo → classe builtin; {fin_txt}): ΔM = M_total − P_total = {M['M']['TOTAL']:.2f} − {M['P']['TOTAL']:.2f} = {dM:+.2f} s; Δ in classe builtin = {dMb:+.2f} s = {quota*100:.0f}% di ΔM (atteso ≥75 %) ⇒ strumento {'VIVO' if vivo else 'MUTO'}")
+< wM = [walls[f'M{r}'][0] for r in range(1, R+1) if f'M{r}' in walls]; wP = [walls[f'P{r}'][0] for r in range(1, R+1) if f'P{r}' in walls]
+< if wM and wP: say(f"  wall M−P (mediane) = {med(wM)-med(wP):+.2f} s (controllo, non giudice)")
+< # calibrazione C — classi di C: call_fast, call_general, mcall, mcall_general, ret_fast, ret_slow, prop, str, arr, new,
+< # sweep, builtin_lookup, builtin, hostbuiltin. Nella calibrazione si SOMMANO solo le classi a tempo: call_fast+mcall+ret_fast
+< # → call_ret · prop → prop_ic · str → str · arr → arr_hash (SOLO FetchDim*/ArrayPush/CoalesceFetchDim: gli STORE dim non sono
+< # strumentati, dichiarato) · new+sweep → obj_life · builtin → builtin. call_general/mcall_general/ret_slow sono SOLI CONTEGGI
+< # di ammissione (est_ns=0: mai sommati); builtin_lookup è SOTTO-scope di builtin (quota lookup, non sommata); hostbuiltin può
+< # contenere codice utente annidato (riportato a parte, non sommato).
+< MAP = {"call_ret": ["call_fast","mcall","ret_fast"], "prop_ic": ["prop"], "str": ["str"], "arr_hash": ["arr"], "obj_life": ["new","sweep"], "builtin": ["builtin"]}
+< NOTE = {"arr_hash": " (C: solo FetchDim*/ArrayPush/CoalesceFetchDim, store dim NON strumentati — dichiarato)"}
+< # Gli scope di C sono INCLUSIVI (il Ret contiene lo sweep che esegue; builtin contiene corpo e allocazioni; call_ret contiene
+< # push del frame e decay degli argomenti), le classi xctrace sono SELF per simbolo: il ±15 % vale per le classi a foglia
+< # (prop, str, arr, new, sweep); per call_ret e builtin C è un TETTO della classe xctrace (C ≥ xctrace = «TETTO (inclusivo ≥
+< # self)», contraddizione SOLO se C < xctrace × 0,85).
+< INCLUSIVE = {"call_ret", "builtin"}
+< if cens:
+<     say("CALIBRAZIONE C (Instant 1/64 per classe, estensione ×64; confronto con xctrace su P: ±15 % sulle classi a foglia, TETTO inclusivo su call_ret/builtin):")
+<     for xc_c, cls in MAP.items():
+<         est = sum(med([x[2] for x in cens[k]]) for k in cls if k in cens) / 1e9
+<         if est < 0.5:
+<             say(f"  {xc_c}: C={est:.2f} s < 0,5 s: fuori confronto{NOTE.get(xc_c, '')}"); continue
+<         px = M["P"][xc_c]
+<         dev = (px - est) / est if est > 0 else float('inf')
+<         if xc_c in INCLUSIVE:
+<             if est >= px: esito = "TETTO (inclusivo ≥ self): coerente"
+<             elif est >= 0.85 * px: esito = "C sotto il self entro il 15 %: COMPATIBILE (inclusivo)"
+<             else: esito = "NON calibra (C < xctrace × 0,85: l'unica direzione che contraddice): conta solo xctrace (dichiarato)"
+<         else:
+<             esito = "CALIBRA" if abs(dev) <= 0.15 else "NON calibra: conta solo xctrace (dichiarato)"
+<         say(f"  {xc_c}: C={est:.2f} s · xctrace P={px:.2f} s · scarto {dev*100:+.0f}% ⇒ {esito}{NOTE.get(xc_c, '')}")
+<     def cnt(k): return med([x[0] for x in cens[k]]) if k in cens else None
+<     def est_s(k): return (med([x[2] for x in cens[k]]) / 1e9) if k in cens else None
+<     fmt = lambda v: "n/d" if v is None else f"{v:.0f}"
+<     say(f"  AMMISSIONE (soli conteggi, mai sommati): call fast {fmt(cnt('call_fast'))} / generale {fmt(cnt('call_general'))} · mcall fast {fmt(cnt('mcall'))} / generale {fmt(cnt('mcall_general'))} · ret fuso {fmt(cnt('ret_fast'))} / ret_slow {fmt(cnt('ret_slow'))}")
+<     bl, bb = est_s("builtin_lookup"), est_s("builtin")
+<     hb = est_s("hostbuiltin")
+<     quota_l = (bl / bb * 100) if (bl is not None and bb) else float('nan')
+<     say(f"  BUILTIN: lookup per nome = {('n/d' if bl is None else f'{bl:.2f} s')} = quota {quota_l:.0f}% del corpo builtin {('n/d' if bb is None else f'{bb:.2f} s')} (sotto-scope, non sommato) · hostbuiltin {('n/d' if hb is None else f'{hb:.2f} s')} (può annidare codice utente: a parte, non sommato)")
+---
+> in_win = lo <= dM <= hi
+> vivo = in_win and quota >= 0.75
+> say(f"MUTANTE (spin fuori linea `builtin_spin_mutant_s186` in CallBuiltin, self nel proprio simbolo → classe builtin; {fin_txt}): ΔM = M_total − Z_total = {M['M']['TOTAL']:.2f} − {M['Z']['TOTAL']:.2f} = {dM:+.2f} s ⇒ finestra {'RISPETTATA' if in_win else 'VIOLATA'}; Δ in classe builtin = {dMb:+.2f} s = {quota*100:.0f}% di ΔM (atteso ≥75 %) ⇒ quota {'RISPETTATA' if quota >= 0.75 else 'VIOLATA'}; Δ dispatch M − Z = {dMd:+.2f} s (controllo del rumore di layout) ⇒ strumento {'VIVO' if vivo else 'MUTO'}")
+> wM = [walls[f'M{r}'][0] for r in range(1, R+1) if f'M{r}' in walls]; wZ = [walls[f'Z{r}'][0] for r in range(1, R+1) if f'Z{r}' in walls]
+> if wM and wZ: say(f"  wall M−Z (mediane) = {med(wM)-med(wZ):+.2f} s (controllo, non giudice)")
+> say("LETTURA del 29/10 a registro: M − P = +2,36 s (finestra [1,66;2,25] violata), builtin 62 % ⇒ rc=4 per lettera (comparatore pin ≠ gemello): resta scritta in s186-fetta0-verdetto.out")
+> if vivo:
+>     say("ESITO: strumento VIVO col comparatore Z ⇒ il kill del 29/10 era dello strumento, non della realtà: la rotta B RIAPRE e il verdetto dei CANALI del 30/10 (dispatch Δ+12,0 s GO · obj_life Δ+4,32 s GO) resta quello scritto (rc=0)"); rc = 0
+304,313c179
+<     say("CALIBRAZIONE C: non eseguita (nessuna riga census): conta solo xctrace, dichiarato")
+< # esito
+< if not vivo:
+<     say(f"ESITO: mutante MUTO ⇒ strumento non provato ⇒ B MUORE in questa sessione (rc=4); riga 1 del NEXT scrive D"); rc = 4
+< elif not chi_ok:
+<     say(f"ESITO: chiusura <85 % ⇒ il modello a classi non copre il netto ⇒ B MUORE in questa sessione (rc=4); riga 1 del NEXT scrive D"); rc = 4
+< elif not go:
+<     say(f"ESITO: nessun canale con Δ ≥3,0 s E ratio ≥3 (nominati: {', '.join(nom) if nom else 'nessuno'}) ⇒ B MUORE in questa sessione (rc=4); riga 1 del NEXT scrive D"); rc = 4
+< else:
+<     say(f"ESITO: GO-LEVA sui canali {', '.join(go)} (nominati a registro: {', '.join(nom) if nom else 'nessuno'}; modello falso su: {', '.join(falso) if falso else 'nessuna classe'}) ⇒ rotta B GO, fetta successiva per NOME sul canale maggiore (rc=0)"); rc = 0
+---
+>     say("ESITO: mutante MUTO anche col comparatore Z ⇒ strumento non provato ⇒ B MUORE definitivamente (rc=4); riga 1 del NEXT resta a D"); rc = 4
+319c185
+< fin "$prc" "verdetto s186-fetta0-verdetto.out"
+---
+> fin "$prc" "verdetto s186-fetta0-mutante-verdetto.out"

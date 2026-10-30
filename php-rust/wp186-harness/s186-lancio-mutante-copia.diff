@@ -1,0 +1,69 @@
+1a2,9
+> # s186-lancio-mutante.sh — S-186 bis (decisione utente 2026-10-30 08:54, opzione (b)): finestra PROPRIA per il SOLO rilancio
+> # del test del mutante della fetta 0 col gemello Z (s186-fetta0-mutante.sh): gate di finestra EREDITATI e IDENTICI (quiete CI,
+> # anti-flare 6x30 s, loadavg1 <3 x6, E2 <150 % x4, processo singolo >50 % x2, dichiarazione uptime+top) -> lock TOKEN s186bis
+> # -> pin s183 == stash per hash E bracci Z/M presenti -> s186-fetta0-mutante.sh -> lock rimosso; esiti SOLO in
+> # catena-out/catena-s186bis.done (`rc=<fetta0-mut rc> fetta0mut=[..]`). NON si lancia di giorno (la macchina serve all'utente).
+> # COPIA DICHIARATA di s186-lancio-catena.sh (manifest s186-lancio-mutante-copia.diff) coi SOLI adattamenti: controllo bracci
+> # Z e M, TOKEN s186bis, blocco finale = solo s186-fetta0-mutante.sh (niente guardia), done/log/watchdog/dichiarazione su
+> # *-s186bis / *-mutante. NESSUNA igiene FS qui. Testo S-186 conservato sotto:
+33,36c41,44
+< LOG="$H/catena-out/lancio-catena.log"; mkdir -p "$H/catena-out"
+< DONE="$H/catena-out/catena-s186.done"; rm -f "$DONE"
+< # ADATTAMENTO S-186: i bracci della build serale (s186-leva-build.sh) devono esistere PRIMA di aprire la finestra
+< for b in Z B B2 M C; do
+---
+> LOG="$H/catena-out/lancio-mutante.log"; mkdir -p "$H/catena-out"
+> DONE="$H/catena-out/catena-s186bis.done"; rm -f "$DONE"
+> # ADATTAMENTO S-186 bis: i bracci Z e M della build serale (s186-leva-build.sh, corsa 2) devono esistere PRIMA di aprire la finestra
+> for b in Z M; do
+39c47
+< echo "$(date '+%F %T') bracci Z/B/B2/M/C presenti: $(cd "$H/ab-out/s186-leva" && shasum -a 256 phpr-Z phpr-B phpr-B2 phpr-M phpr-C | cut -c1-16 | tr '\n' ' ')" >> "$LOG"
+---
+> echo "$(date '+%F %T') bracci Z/M presenti: $(cd "$H/ab-out/s186-leva" && shasum -a 256 phpr-Z phpr-M | cut -c1-16 | tr '\n' ' ')" >> "$LOG"
+49,50c57,58
+< echo "s186 catena guardia+fetta0 @ pin s183 $(date '+%F %T') pid=$$" > "$MLOCK"
+< echo "$(date '+%F %T') lock scritto: $MLOCK (TOKEN s186)" >> "$LOG"
+---
+> echo "s186bis rilancio mutante fetta0 (Z vs M) @ pin s183 $(date '+%F %T') pid=$$" > "$MLOCK"
+> echo "$(date '+%F %T') lock scritto: $MLOCK (TOKEN s186bis)" >> "$LOG"
+84c92
+< ( WD="$H/catena-out/watchdog-catena.txt"; PD="$H/catena-out/catena-s186.done"; t0=$(date +%s); tdone=0
+---
+> ( WD="$H/catena-out/watchdog-mutante.txt"; PD="$H/catena-out/catena-s186bis.done"; t0=$(date +%s); tdone=0
+94,95c102,103
+< Q="$H/catena-out/quiet-decl-catena.txt"
+< { echo "== dichiarazione finestra quieta catena S-186 (guardia + fetta 0) $(date '+%F %T') =="
+---
+> Q="$H/catena-out/quiet-decl-mutante.txt"
+> { echo "== dichiarazione finestra quieta S-186 bis (rilancio mutante fetta 0, Z vs M) $(date '+%F %T') =="
+99c107
+< echo "$(date '+%F %T') quiete raggiunta — dichiarazione in quiet-decl-catena.txt — guardia a buffer pieno, poi fetta 0" >> "$LOG"
+---
+> echo "$(date '+%F %T') quiete raggiunta — dichiarazione in quiet-decl-mutante.txt — fetta 0 mutante (Z vs M)" >> "$LOG"
+106,120c114,116
+< echo "$(date '+%F %T') pin $PC == stash s183 — GUARDIA a buffer pieno ×2 (PIN=pin, Z/B/B2=ab-out/s186-leva, TAG b poi b2)" >> "$LOG"
+< # (1) guardia della cura 22/10 a buffer PIENO (ordine obbligato team-governo p.2), DUE corse in sequenza:
+< #     TAG=b  con B = phpr-B  (tree con la cura 22/10 com'è)           -> guardia-out-b/guardia.done, s186-guardia-verdetto-b.out
+< #     TAG=b2 con B = phpr-B2 (tree + cura O(1), concilio Q3 accolta)   -> guardia-out-b2/guardia.done, s186-guardia-verdetto-b2.out
+< PIN="$HOME/Claude/php-rust-output/release/phpr" Z="$H/ab-out/s186-leva/phpr-Z" B="$H/ab-out/s186-leva/phpr-B" R=5 RE3=3 TAG=b /bin/bash "$H/s186-guardia.sh"
+< rc1=$?
+< GR="$(cat "$H/guardia-out-b/guardia.done" 2>/dev/null)"
+< echo "$(date '+%F %T') guardia b fine rc=$rc1 ($GR) — verdetto s186-guardia-verdetto-b.out" >> "$LOG"
+< PIN="$HOME/Claude/php-rust-output/release/phpr" Z="$H/ab-out/s186-leva/phpr-Z" B="$H/ab-out/s186-leva/phpr-B2" R=5 RE3=3 TAG=b2 /bin/bash "$H/s186-guardia.sh"
+< rc1b=$?
+< GR2="$(cat "$H/guardia-out-b2/guardia.done" 2>/dev/null)"
+< echo "$(date '+%F %T') guardia b2 fine rc=$rc1b ($GR2) — verdetto s186-guardia-verdetto-b2.out" >> "$LOG"
+< # (2) fetta 0: xctrace O/P/M R=3 + C census (criterio s186-criterio-fetta0.md); esito in fetta0-out/fetta0.done
+< echo "$(date '+%F %T') fetta 0 (MAPPA_SP=$SPD)" >> "$LOG"
+< PIN_ATTESO="$PIN_ATTESO" MAPPA_SP="$SPD" /bin/bash "$H/s186-fetta0.sh"
+---
+> echo "$(date '+%F %T') pin $PC == stash s183 — fetta 0 mutante (MAPPA_SP=$SPD)" >> "$LOG"
+> # blocco finale S-186 bis: SOLO il rilancio del mutante (criterio p.6 EMENDA 30/10); esito in fetta0-mut-out/fetta0-mut.done
+> PIN_ATTESO="$PIN_ATTESO" MAPPA_SP="$SPD" /bin/bash "$H/s186-fetta0-mutante.sh"
+122,123c118,119
+< FR="$(cat "$H/fetta0-out/fetta0.done" 2>/dev/null)"
+< fine "fetta 0 fine rc=$rc2 ($FR) — verdetto s186-fetta0-verdetto.out; lock rimosso" "rc=$rc2 guardia_b=[$GR] guardia_b2=[$GR2] fetta0=[$FR]" "$rc2"
+---
+> FR="$(cat "$H/fetta0-mut-out/fetta0-mut.done" 2>/dev/null)"
+> fine "fetta 0 mutante fine rc=$rc2 ($FR) — verdetto s186-fetta0-mutante-verdetto.out; lock rimosso" "rc=$rc2 fetta0mut=[$FR]" "$rc2"
