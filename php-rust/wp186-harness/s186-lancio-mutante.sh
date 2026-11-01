@@ -6,7 +6,8 @@
 # catena-out/catena-s186bis.done (`rc=<fetta0-mut rc> fetta0mut=[..]`). NON si lancia di giorno (la macchina serve all'utente).
 # COPIA DICHIARATA di s186-lancio-catena.sh (manifest s186-lancio-mutante-copia.diff) coi SOLI adattamenti: controllo bracci
 # Z e M, TOKEN s186bis, blocco finale = solo s186-fetta0-mutante.sh (niente guardia), done/log/watchdog/dichiarazione su
-# *-s186bis / *-mutante. NESSUNA igiene FS qui. Testo S-186 conservato sotto:
+# *-s186bis / *-mutante, PIÙ (01/11) il gate «modo sviluppatore acceso» (rc=7) prima della finestra. NESSUNA igiene FS qui.
+# Testo S-186 conservato sotto:
 # s186-lancio-catena.sh — S-186: CATENA NOTTURNA UNICA (delibera concilio S-186 firmata 2026-10-23; criterio
 # s186-criterio-fetta0.md): gate di finestra EREDITATI (quiete CI, anti-flare 6x30 s, loadavg1 <3 x6, E2 <150 % x4,
 # processo singolo >50 % x2, dichiarazione uptime+top) -> lock TOKEN s186 -> pin s183 == stash per hash E bracci
@@ -45,6 +46,11 @@ for b in Z M; do
   [ -s "$H/ab-out/s186-leva/phpr-$b" ] || { echo "$(date '+%F %T') braccio $b ASSENTE (ab-out/s186-leva/phpr-$b): niente finestra" >> "$LOG"; echo "rc=7 braccio $b assente" > "$DONE"; exit 7; }
 done
 echo "$(date '+%F %T') bracci Z/M presenti: $(cd "$H/ab-out/s186-leva" && shasum -a 256 phpr-Z phpr-M | cut -c1-16 | tr '\n' ' ')" >> "$LOG"
+# ADATTAMENTO S-186 bis (01/11, rilievo pre-lancio): xctrace --launch senza modo sviluppatore blocca phpr in dyld (veto S-186) e
+# la notte uscirebbe senza campioni in silenzio: il modo sviluppatore (DevToolsSecurity) deve risultare acceso PRIMA della finestra
+DEVST="$(DevToolsSecurity -status 2>&1)"
+case "$DEVST" in *enabled*) : ;; *) echo "$(date '+%F %T') modo sviluppatore SPENTO ($DEVST): niente finestra" >> "$LOG"; echo "rc=7 modo sviluppatore spento" > "$DONE"; exit 7 ;; esac
+echo "$(date '+%F %T') modo sviluppatore: $DEVST" >> "$LOG"
 echo "$(date '+%F %T') attesa quiete CI" >> "$LOG"
 while pgrep -qx cargo || pgrep -qx rustc || pgrep -qf phpt-runner; do sleep 60; done
 sleep 60
