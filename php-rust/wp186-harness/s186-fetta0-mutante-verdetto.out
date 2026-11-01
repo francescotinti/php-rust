@@ -1,0 +1,29 @@
+== S-186 bis FETTA 0 — SOLO MUTANTE col gemello Z (xctrace Time Profiler 1 ms, --launch, self per immagine+simbolo) — pin 9a6ae11bf7e900ef (NON profilato) · Z 23c0a94c26db62eb · M a3bfe3e373a89489 · R=3 interleaved Z M · M Z · Z M — EMENDA 30/10 (firma utente 08:54): ΔM = M − Z, finestra e quota INVARIATE ==
+strumento: TUTTE le gambe registrate/esportate/classificate
+  Z1: VALID wall=325.1s xrc=54 dispatch=12.37 call_ret=1.77 prop_ic=2.10 str=0.50 arr_hash=3.58 obj_life=4.75 alloc=1.59 builtin=0.98 compile=1.75 libc=3.22 kernel=1.20 pavimento=0.74 other=1.23 TOTAL=35.75
+  Z2: VALID wall=41.2s xrc=54 dispatch=12.46 call_ret=1.80 prop_ic=2.12 str=0.53 arr_hash=3.48 obj_life=4.76 alloc=1.45 builtin=1.03 compile=1.66 libc=3.25 kernel=1.12 pavimento=0.76 other=1.21 TOTAL=35.62
+  Z3: VALID wall=41.7s xrc=54 dispatch=12.39 call_ret=1.82 prop_ic=2.10 str=0.49 arr_hash=3.55 obj_life=4.91 alloc=1.55 builtin=0.99 compile=1.72 libc=3.08 kernel=1.03 pavimento=0.72 other=1.18 TOTAL=35.53
+  M1: VALID wall=44.3s xrc=54 dispatch=12.80 call_ret=1.84 prop_ic=2.17 str=0.58 arr_hash=3.46 obj_life=4.87 alloc=1.56 builtin=2.46 compile=1.74 libc=3.27 kernel=1.12 pavimento=0.77 other=1.16 TOTAL=37.80
+  M2: VALID wall=44.3s xrc=54 dispatch=12.85 call_ret=1.78 prop_ic=2.21 str=0.56 arr_hash=3.65 obj_life=4.91 alloc=1.56 builtin=2.37 compile=1.65 libc=3.34 kernel=1.20 pavimento=0.78 other=1.16 TOTAL=38.00
+  M3: VALID wall=43.3s xrc=54 dispatch=12.76 call_ret=1.72 prop_ic=2.25 str=0.56 arr_hash=3.52 obj_life=4.89 alloc=1.52 builtin=2.51 compile=1.76 libc=3.24 kernel=1.16 pavimento=0.71 other=1.19 TOTAL=37.80
+MEDIANE Z: dispatch=12.39 call_ret=1.80 prop_ic=2.10 str=0.50 arr_hash=3.55 obj_life=4.76 alloc=1.55 builtin=0.99 compile=1.72 libc=3.22 kernel=1.12 pavimento=0.74 other=1.21 TOTAL=35.62
+MEDIANE M: dispatch=12.80 call_ret=1.78 prop_ic=2.21 str=0.56 arr_hash=3.52 obj_life=4.89 alloc=1.56 builtin=2.46 compile=1.74 libc=3.27 kernel=1.16 pavimento=0.77 other=1.16 TOTAL=37.80
+DELTA per classe M − Z (controllo: il rumore di layout del 29/10 stava in dispatch, +0,59 s con M − P):
+  dispatch: Z=12.39 M=12.80 Δ=+0.41 s
+  call_ret: Z=1.80 M=1.78 Δ=-0.02 s
+  prop_ic: Z=2.10 M=2.21 Δ=+0.11 s
+  str: Z=0.50 M=0.56 Δ=+0.07 s
+  arr_hash: Z=3.55 M=3.52 Δ=-0.04 s
+  obj_life: Z=4.76 M=4.89 Δ=+0.13 s
+  alloc: Z=1.55 M=1.56 Δ=+0.01 s
+  builtin: Z=0.99 M=2.46 Δ=+1.47 s
+  compile: Z=1.72 M=1.74 Δ=+0.02 s
+  libc: Z=3.22 M=3.27 Δ=+0.06 s
+  kernel: Z=1.12 M=1.16 Δ=+0.04 s
+  pavimento: Z=0.74 M=0.77 Δ=+0.03 s
+  other: Z=1.21 M=1.16 Δ=-0.04 s
+MUTANTE (spin fuori linea `builtin_spin_mutant_s186` in CallBuiltin, self nel proprio simbolo → classe builtin; spin calibrato 164 ns/CallBuiltin ⇒ atteso [0,85;1,15]×11,91M×164 ns = [1.66;2.25] s): ΔM = M_total − Z_total = 37.80 − 35.62 = +2.18 s ⇒ finestra RISPETTATA; Δ in classe builtin = +1.47 s = 67% di ΔM (atteso ≥75 %) ⇒ quota VIOLATA; Δ dispatch M − Z = +0.41 s (controllo del rumore di layout) ⇒ strumento MUTO
+  wall M−Z (mediane) = +2.60 s (controllo, non giudice)
+LETTURA del 29/10 a registro: M − P = +2,36 s (finestra [1,66;2,25] violata), builtin 62 % ⇒ rc=4 per lettera (comparatore pin ≠ gemello): resta scritta in s186-fetta0-verdetto.out
+ESITO: mutante MUTO anche col comparatore Z ⇒ strumento non provato ⇒ B MUORE definitivamente (rc=4); riga 1 del NEXT resta a D
+ESITO rc=4
