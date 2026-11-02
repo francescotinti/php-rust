@@ -210,6 +210,8 @@ fn run(
     // recursively dropped (WP-39 fast shutdown — post-semantic, Zend-style).
     // The `-S` server path never reaches here and keeps per-request drops.
     php_runtime::vm::FAST_SHUTDOWN.store(true, std::sync::atomic::Ordering::Relaxed);
+    // CLI SAPI semantics (issue #1): program output goes to fd 1 as it is produced.
+    php_runtime::vm::cli_stream::STREAM_STDOUT.store(true, std::sync::atomic::Ordering::Relaxed);
     let registry = registry();
     // PHP CLI `$argv` / `$_SERVER['argv']`: element 0 is the script path, the rest
     // are the arguments after it (`phpr script.php a b` → ['script.php','a','b']).
@@ -219,8 +221,10 @@ fn run(
     }));
     match result {
         Ok(Ok(outcome)) => {
+            // Only what the write-through did not already send (late diagnostics, banners).
+            let tail = outcome.rendered.get(php_runtime::vm::cli_stream::sent()..).unwrap_or(&[]);
             let mut stdout = std::io::stdout().lock();
-            let _ = stdout.write_all(&outcome.rendered);
+            let _ = stdout.write_all(tail);
             let _ = stdout.flush();
             match outcome.exit_code {
                 Some(code) => ExitCode::from(code),

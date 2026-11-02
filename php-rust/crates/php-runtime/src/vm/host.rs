@@ -5757,19 +5757,20 @@ impl<'m> super::Vm<'m> {
                     _ => None,
                 };
                 match fd {
-                    Some(fd) => {
+                    // Read set: bytes already buffered on STDIN count as ready, as in PHP (issue #2).
+                    Some(fd) if !(set == 0 && fd == 0 && php_types::stream::stdin_buffered() > 0) => {
                         plan.push((set, k.clone(), Some(fds.len())));
                         fds.push(libc::pollfd { fd, events, revents: 0 });
                     }
-                    None => {
-                        // No descriptor (php://memory &c.): always ready.
+                    _ => {
+                        // No descriptor (php://memory &c.) or buffered STDIN: always ready.
                         plan.push((set, k.clone(), None));
                         ready_now += 1;
                     }
                 }
             }
         }
-        let n = if fds.is_empty() {
+        let _ = if fds.is_empty() {
             0
         } else {
             // With in-process streams already ready, don't block.
@@ -5795,7 +5796,6 @@ impl<'m> super::Vm<'m> {
                 }
             }
         }
-        let _ = n;
         let [r_out, w_out, e_out] = outs;
         let mut result = PhpArray::new();
         let _ = result.append(Zval::Long(count));

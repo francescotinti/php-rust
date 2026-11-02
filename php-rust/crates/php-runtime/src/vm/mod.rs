@@ -75,6 +75,7 @@ pub mod liveness;
 mod sondaprice;
 mod coroutines;
 mod dom;
+pub mod cli_stream;
 mod exceptions;
 mod xmlparser;
 mod host;
@@ -1043,9 +1044,8 @@ pub fn run_module_with_hir<'m>(
         // so the script's buffered output precedes the "Fatal error:" block.
         vm.flush_all_output_buffers();
         if is_link_fatal {
-            // Compile/link-time fatal (e.g. an enum implementing Serializable):
-            // a plain banner with the declaration site — no throwable wrapping,
-            // no stack trace.
+            // Compile/link-time fatal (e.g. an enum implementing Serializable): a plain
+            // banner with the declaration site — no throwable wrapping, no stack trace.
             let file = String::from_utf8_lossy(&module.file);
             let block = format!("\nFatal error: {} in {} on line {}\n", err.message(), file, line);
             vm.rendered.extend_from_slice(block.as_bytes());
@@ -5857,8 +5857,7 @@ impl<'m> Vm<'m> {
             // renders stay raw: the buffers are already flushed and a handler
             // must not run this late.
             if to_stderr {
-                // Zend's stderr display drops the leading blank line
-                // (oracle-probed, cure319-stderr).
+                // Zend's stderr display drops the leading blank line (oracle-probed, cure319-stderr).
                 use std::io::Write;
                 let _ = std::io::stderr().write_all(block.strip_prefix(b"\n").unwrap_or(&block));
             } else if self.final_flush {
@@ -5996,6 +5995,7 @@ impl<'m> Vm<'m> {
             }
             self.stdout.extend_from_slice(bytes);
             self.rendered.extend_from_slice(bytes);
+            cli_stream::drain_if_on(&self.rendered);
         }
         Ok(())
     }
@@ -6091,10 +6091,10 @@ impl<'m> Vm<'m> {
         };
         self.flush_diags(line)?;
         self.write_output(&produced)?;
-        // Stream writes to stdout bypass the ob stack (see Ctx::direct_out).
-        if !direct.is_empty() {
+        if !direct.is_empty() { // stream writes to stdout bypass the ob stack (see Ctx::direct_out)
             self.stdout.extend_from_slice(&direct);
             self.rendered.extend_from_slice(&direct);
+            cli_stream::drain_if_on(&self.rendered);
         }
         res
     }
