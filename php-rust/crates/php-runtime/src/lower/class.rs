@@ -1115,8 +1115,7 @@ impl<'f> Lowerer<'f> {
             }),
             None => None,
         };
-        // Marker interfaces (D-23.7) + any user `implements`. The markers are the
-        // global `UnitEnum`/`BackedEnum`; user interfaces resolve in-namespace.
+        // Marker interfaces (D-23.7: global `UnitEnum`/`BackedEnum`) + user `implements` (in-namespace).
         let mut iface_names: Vec<Box<[u8]>> = vec![(b"UnitEnum" as &[u8]).into()];
         if enum_backing.is_some() {
             iface_names.push((b"BackedEnum" as &[u8]).into());
@@ -1131,8 +1130,7 @@ impl<'f> Lowerer<'f> {
         let mut enum_cases = Vec::new();
         let mut uses: Vec<&TraitUse> = Vec::new();
         let mut abstract_req: Vec<Box<[u8]>> = Vec::new();
-        // As in `lower_class`: `__CLASS__`/`__METHOD__`/closure scope = the enum.
-        let saved_cls = self.cur_class.replace(name.clone());
+        let saved_cls = self.cur_class.replace(name.clone()); // as `lower_class`: scope = the enum
         for member in en.members.iter() {
             match member {
                 ClassLikeMember::EnumCase(c) => {
@@ -1213,8 +1211,7 @@ impl<'f> Lowerer<'f> {
             static_props: Vec::new(),
             consts,
             methods,
-            // Enums implement any interface methods concretely, so none are left
-            // abstract (step 47).
+            // Enums implement interface methods concretely: none is left abstract (step 47).
             abstract_methods: Vec::new(),
             abstract_sigs: Vec::new(),
             is_enum: true,

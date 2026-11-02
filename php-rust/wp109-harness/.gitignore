@@ -6,6 +6,12 @@ pair-out-off/
 census-out/
 ab-out/
 abx-out/
-corpus-gate/
+# corpus-gate: log e progress restano fuori; fail-set congelati ×2 e golden sono
+# GATE, non output (REGOLE §5 GATE AUDITABILE, concilio S-186 firma 2026-10-23).
+corpus-gate/*
+!corpus-gate/corpus-s109-off.fails
+!corpus-gate/corpus-s109-on.fails
+!corpus-gate/golden-content-off.tsv
+!corpus-gate/golden-content-on.tsv
 fixture-out/
 list-out/
