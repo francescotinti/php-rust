@@ -317,6 +317,56 @@ pub enum StreamBackend {
     },
 }
 
+
+/// The STDIN read buffer, owned by phpr (GitHub issue #2, S-187 2026-11-02).
+/// PHP's `php://stdin` keeps an 8 KiB read buffer and `stream_select` counts its
+/// unread bytes as readable. `std::io::stdin()` keeps the same kind of buffer but
+/// hides it from poll(2) and offers no non-blocking probe, so a `fread(STDIN, 1)`
+/// that pulled `abc` in one go left `bc` invisible to `stream_select`. STDIN reads
+/// now go through this buffer: one raw `read(2)` on fd 0 refills it, and
+/// [`stdin_buffered`] reports what is left for `stream_select`.
+struct StdinBuf {
+    data: Vec<u8>,
+    pos: usize,
+}
+static STDIN_BUF: std::sync::Mutex<StdinBuf> =
+    std::sync::Mutex::new(StdinBuf { data: Vec::new(), pos: 0 });
+
+/// Unread bytes held in the STDIN buffer — what `stream_select` must count as ready.
+pub fn stdin_buffered() -> usize {
+    let b = STDIN_BUF.lock().unwrap_or_else(|e| e.into_inner());
+    b.data.len() - b.pos
+}
+
+/// Serve `buf` from the STDIN buffer, refilling it with ONE `read(2)` of up to
+/// 8 KiB when empty (fd 0 is borrowed, never closed). `Ok(0)` only at EOF.
+fn stdin_read(buf: &mut [u8]) -> std::io::Result<usize> {
+    let mut b = STDIN_BUF.lock().unwrap_or_else(|e| e.into_inner());
+    if b.pos >= b.data.len() {
+        b.data.clear();
+        b.data.resize(8192, 0);
+        b.pos = 0;
+        let mut fd0 = std::mem::ManuallyDrop::new(unsafe {
+            <std::fs::File as std::os::fd::FromRawFd>::from_raw_fd(0)
+        });
+        let n = match fd0.read(&mut b.data) {
+            Ok(n) => n,
+            Err(e) => {
+                b.data.clear();
+                return Err(e);
+            }
+        };
+        b.data.truncate(n);
+        if n == 0 {
+            return Ok(0);
+        }
+    }
+    let n = buf.len().min(b.data.len() - b.pos);
+    buf[..n].copy_from_slice(&b.data[b.pos..b.pos + n]);
+    b.pos += n;
+    Ok(n)
+}
+
 /// A `proc_open` child process: the handle, the command line it was launched
 /// with (`proc_get_status`'s `command`), and the exit code once collected —
 /// PHP reports `exitcode` from cache after the first wait.
@@ -485,7 +535,7 @@ impl Stream {
         match &mut self.backend {
             StreamBackend::File(f) => f.read(buf),
             StreamBackend::Memory(c) => c.read(buf),
-            StreamBackend::Stdin => std::io::stdin().read(buf),
+            StreamBackend::Stdin => stdin_read(buf),
             StreamBackend::ChildStdout(p) => p.read(buf),
             StreamBackend::ChildStderr(p) => p.read(buf),
             StreamBackend::Tcp(t) => t.read(buf),
@@ -707,7 +757,7 @@ impl Stream {
             let r = match &mut self.backend {
                 StreamBackend::File(f) => f.read(&mut one),
                 StreamBackend::Memory(c) => c.read(&mut one),
-                StreamBackend::Stdin => std::io::stdin().read(&mut one),
+                StreamBackend::Stdin => stdin_read(&mut one),
                 StreamBackend::ChildStdout(p) => p.read(&mut one),
                 StreamBackend::ChildStderr(p) => p.read(&mut one),
                 StreamBackend::Tcp(t) => t.read(&mut one),
