@@ -438,7 +438,11 @@ const XPATH_NUMBER: c_int = 3;
 const XPATH_STRING: c_int = 4;
 
 extern "C" {
+    // libxml2 >= 2.12 exports the XPath value stack as `xmlXPathValuePop`/
+    // `xmlXPathValuePush` (old names gone by 2.15): build.rs probes the version.
+    #[cfg_attr(libxml_xpath_new_names, link_name = "xmlXPathValuePop")]
     fn valuePop(ctxt: *mut c_void) -> *mut c_void;
+    #[cfg_attr(libxml_xpath_new_names, link_name = "xmlXPathValuePush")]
     fn valuePush(ctxt: *mut c_void, value: *mut c_void) -> c_int;
     fn xmlXPathFreeObject(obj: *mut c_void);
     fn xmlXPathCastToString(obj: *mut c_void) -> *mut c_char;

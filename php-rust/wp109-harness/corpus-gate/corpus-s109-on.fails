@@ -405,8 +405,6 @@
 /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/dynamic_prop_deprecation_002.phpt
 /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/e_strict-deprecated.phpt
 /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/empty_str_offset.phpt
-/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/enum/__class__.phpt
-/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/enum/__method__.phpt
 /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/enum/ast-dumper.phpt
 /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/enum/backed-duplicate-int.phpt
 /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/enum/backed-duplicate-string.phpt
