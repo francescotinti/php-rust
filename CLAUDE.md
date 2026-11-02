@@ -42,6 +42,10 @@ Reimplementazione moderna di PHP 8.5 in Rust, guidata dal comportamento osservab
   `perl "/Volumes/Extreme Pro/Claude/wp58-harness/daemonize.pl" <log> <cmd…>` (vive FUORI
   dal repo); esiti solo da file `.done`/`.rc`; dopo il lancio leggere il log del daemonizer
   (gli errori di exec finiscono lì) e `pgrep`.
+- Finestre di misura: xctrace `--launch` richiede il modo sviluppatore acceso (`DevToolsSecurity
+  -status` = enabled; si spegne ai riavvii, i lanciatori escono rc=7). CleanMyMac: dopo il Quit
+  restano HealthMonitor/FinderSync, rilanciati da launchd →
+  `launchctl bootout gui/$(id -u)/com.macpaw.CleanMyMac5.HealthMonitor`.
 
 > **Build / filesystem:** MAI build sul volume esterno "Extreme Pro" (niente hard link,
 > cache cargo rotta): target canonica `~/Claude/php-rust-output` (pin) e di sviluppo
@@ -53,3 +57,10 @@ Reimplementazione moderna di PHP 8.5 in Rust, guidata dal comportamento osservab
 > cap LOC dichiarato in `tests/loc_dente.rs` — usare Serena). L'hook blocca OGNI segmento
 > Bash con grep/sed/awk/cat/head/tail che citi `crates/` o un token `.rs`, anche dentro
 > stringhe o heredoc: gli script che nominano file `.rs` si scrivono col tool Write.
+> L'hook morde anche `git`/`wc`/`grep` che citino `crates/` in un pathspec: costruire il percorso
+> senza il letterale (`C=$(printf 'cra%s' tes); git add -A -- "$C/php-cli/tests"`) o usare pathspec
+> di directory; conteggi LOC con python sul percorso costruito
+> (`python3 -c 'import sys; print(sum(1 for _ in open(sys.argv[1],"rb")))' "$C/…"`).
+> Output CLI: write-through in `php-runtime/src/vm/cli_stream.rs` (flag `STREAM_STDOUT` impostato
+> SOLO da `phpr`, come `FAST_SHUTDOWN`); server, phpt-runner e test leggono `Vm::rendered`. STDIN ha
+> il buffer di phpr in `php-types/src/stream.rs` (`stdin_buffered()` consultato da `ho_stream_select`).

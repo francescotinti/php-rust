@@ -105,6 +105,13 @@ emendamenti passano dal sign-off dell'utente e dal handoff.
   2 commit e 2 job CI in coda oltre a quelli della sessione.
 - Dente LOC: `cargo test --profile dev-release -p php-runtime --test loc_dente` (0,05 s); un
   commento si cambia a saldo di righe.
+- File al cap LOC esatto (vm/mod.rs, vm/host.rs, vm/run.rs, php-builtins/src/file.rs,
+  tests/builtins.rs, tests/eval.rs, lower/class.rs): il codice nuovo va in un FILE NUOVO (non
+  elencati: cap 2000) e gli agganci si pagano a saldo di righe compattando commenti; il cap sale
+  SOLO nel commit di promozione (REGOLE §8).
+- Denti di comportamento del PROCESSO (stdout, stdin, segnali): `php-cli/tests/*.rs` con
+  `Command::new(env!("CARGO_BIN_EXE_phpr"))` + `env_clear()`, deterministici (SIGKILL via
+  `posix_kill`, stdin scritto in una volta), rosso prima e verde dopo il fix.
 - Script bash generati: mai `$this`/`$nome` PHP in doppi apici sotto `set -u` (muore a run-time,
   `bash -n` non lo vede): `\$this`, con assert nel generatore.
 - **Processi e finestre**: le sonde/monitor vivono in un FILE (`bash -c` inline coi nomi
@@ -116,3 +123,12 @@ emendamenti passano dal sign-off dell'utente e dal handoff.
   CLI nostro `phpr` = `~/Claude/php-rust-output/release/phpr` (pin). Metodo:
   `diff <(oracle x.php) <(phpr x.php)` finché IDENTICAL.
 - Commit **e** push a ogni step concluso (no chiedere).
+
+## Contributi GitHub (PR e issue esterni)
+- Lettura: `gh pr list/view/diff -R francescotinti/php-rust`; `git fetch origin pull/N/head:pr/N`.
+- Atterraggio: branch da `main`, cherry-pick (autori preservati, `--author` se serve), commit di
+  emenda separati, gate completi (build, loc_dente, batteria, corpus-gate ×2, oracle),
+  `merge --ff-only` in `main`, poi `main` nella branch di lavoro. `origin` ha DUE push-URL
+  (GitHub + CI locale): ogni push accoda un job CI.
+- GitHub non marca merged i cherry-pick: `gh pr comment` con esito/emende/SHA e `gh pr close`; le
+  issue si chiudono da sole solo con «Fixes #N» nel messaggio del commit arrivato su `main`.
