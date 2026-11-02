@@ -1,0 +1,23 @@
+EMENDA DICHIARATA del fail-set congelato s109 (file LOCALI non tracciati: wp109-harness/.gitignore ignora corpus-gate/ per
+REGOLE §10; questo .out è il registro auditabile — DA APPLICARE sul Mac al prossimo pre-flight). Causa: `lower_enum` non impostava
+`cur_class` (a differenza di `lower_class`) ⇒ `__CLASS__` = "" e `__METHOD__` senza «Enum::» nei metodi di enum, closure senza
+classe di definizione, `self::m(...)` in un enum rifiutato come «dynamic first-class callable». Cura fuori sessione 2026-10-24
+(richiesta utente: «trova un test php nuovo che fallisce e correggilo»), dente `magic_class_method_in_enum` in tests/eval.rs.
+Ambiente: macchina Linux/WSL (NON il Mac del progetto): php-src 8.5.7 dal tarball php.net, phpt-runner dev-release dal tree
+(profilo dev-release, non il pin), librerie di sistema senza -dev (stub di link locali). Baseline dello STESSO runner prima della
+cura: 2658 pass · 1409 fail · 1238 skip == congelato emendato 22/10 (1409 per modo).
+
+NOMI (fail → pass, da togliere da corpus-s109-{off,on}.fails e da golden-content-{off,on}.tsv): 1409 → 1407 per modo
+  -/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/enum/__class__.phpt
+  -/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/enum/__method__.phpt
+NUOVI FAIL: nessuno (entrambi i modi, PHPR_REG_LOWER=0 e assente=ON); NOMI identici nei due modi; off↔on byte-id fuori carve-out 3.
+SKIP: 1238 → 1238 (nessuno skip cambia esito).
+
+CONTENUTO dei 1407 restanti, prima ↔ dopo (sha256 del chunk, stessa macchina): identico tranne
+  carve-out settype_{bool,int,string}_nan_with_error_handler3.phpt (non deterministici, già esclusi dal gate)
+  lazy_objects/gh20873.phpt   «isolated worker timed out» → «crashed (SIGABRT)»: NESSUN enum nel test (bytecode invariato);
+                              da solo crasha a ~3,6 s / 1,1 GB, sotto carico supera il cap di 10 s — flap di timing, pre-esistente.
+I golden del Mac NON sono ri-basabili da qui (i chunk portano i path della macchina): replay corpus-gate.sh sul Mac dopo l'emenda.
+Batteria `cargo test --release` (PHPR_ALLOW_MISSING_ORACLE=1, niente oracle 8.5.7 qui): 1753/0/2 rc=0 (1752 + 1 dente nuovo).
+Dente LOC: class.rs 2168 → 2171, tests/eval.rs 4773 → 4795 (cap alzati DICHIARANDO in loc_dente.rs).
+Generato con assistenza AI (Claude Opus 5.5).
