@@ -1144,6 +1144,43 @@ ri-lowerare il trait per classe usante. Costo non banale: fuori dal perimetro
 S-187. Da cercare per NOME nel congelato prima di curare (`__CLASS__` in
 `Zend/tests/traits/`).
 
+### 3.37 (CURATA S-187, 2026-11-02) CLI: output trattenuto fino all'uscita, `flush()` muto, `stream_select` cieco sul buffer di STDIN — GitHub #1 e #2
+
+Fino al pin s183 `phpr` accumulava TUTTO l'output del programma in `Vm::rendered`
+e lo scriveva una volta sola a fine run: `flush()` era un no-op, `fflush(STDOUT)`
+svuotava uno stdout Rust vuoto, un processo ucciso perdeva l'output, e ciò che
+andava su `/dev/stdout`, STDERR o da un figlio con fd 1 ereditato usciva PRIMA
+dell'output del programma. PHP CLI (`sapi_cli_ub_write`) consegna ogni chunk a
+`write(2)` subito, senza output buffering e con implicit flush.
+
+Cura (commit 72f688c3): modulo `vm/cli_stream.rs` — flag di processo
+`STREAM_STDOUT` impostato SOLO da `phpr` per la run dello script (accanto a
+`FAST_SHUTDOWN`) e cursore dei byte già inviati su `rendered` (append-only); i
+due siti di scrittura top-level della VM (`write_output`, `Ctx::direct_out`)
+scaricano la coda su fd 1, la CLI scrive a fine run solo `rendered[sent..]`
+(diagnostiche tardive, banner fatal). Server, phpt-runner e test in-process non
+toccano il flag: buffer come prima. Ordine `echo`/`fwrite(STDOUT)`/`/dev/stdout`/
+STDERR/`ob_*` ora byte-identico all'oracle.
+
+PREZZO DICHIARATO (fedeltà, non regressione): una `write(2)` per chunk come PHP.
+1M di `echo $i, "\n"` separati: pin 0,19 s → cura 1,98 s, oracle 2,02 s (2M
+syscall); 1M righe in una sola `echo` 0,16 → 0,20 s. I micro di record e le
+gambe WP/ORM stampano poche righe: fuori banda del rumore.
+
+STDIN (#2): `fread(STDIN, 1)` leggeva via `std::io::stdin()`, il cui BufReader
+da 8 KiB inghiottiva i byte arrivati insieme senza offrire una sonda non
+bloccante: `stream_select` (poll su fd 0) rispondeva «niente» e `ESC [ A`
+arrivava come `ESC`. Cura in `php-types/src/stream.rs`: buffer STDIN di phpr
+(una `read(2)` grezza fino a 8 KiB su fd 0, servito a fread/fgets) e
+`ho_stream_select` conta pronta una voce STDIN del read-set con byte in buffer
+(regola di `php_stream_select`: `writepos - readpos > 0`). `fgets` su 1M righe
+in pipe: 0,26 → 0,31 s (dev-release vs release, stesso ordine).
+
+Dente: `php-cli/tests/cli_streams.rs` (processo vero: echo + fwrite + flush poi
+SIGKILL su sé stesso; `abc` in una sola scrittura al loop di select), rosso prima
+e verde dopo. Resta: `stream_get_meta_data()['unread_bytes']` = 0 fisso
+(host.rs al cap) — apertura per NOME.
+
 ## 4. Punti di forza da NON toccare (invarianti verificati byte-identici)
 
 Per evitare regressioni, questi comportamenti sono **già** byte-identici con
