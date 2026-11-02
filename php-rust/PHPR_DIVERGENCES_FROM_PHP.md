@@ -1120,6 +1120,30 @@ prima di «E1:», phpr ora al primo Ret dentro il catch — `getMessage()` — i
 nota GC al punto di morte dell'operando (pop dei temp oggetto nei FetchProp/MethodCall su temporaneo, unwind): da
 cercare per NOME nel fail-set congelato prima di toccare il loop caldo.
 
+### 3.36 `__CLASS__` e `__METHOD__` dentro i metodi di TRAIT (trovata S-187, 2026-11-02, a margine del PR #4)
+
+In PHP le costanti magiche dentro un metodo di trait sono legate alla classe
+USANTE a tempo di binding: `__CLASS__` vale il nome della classe (o enum) che fa
+`use T;`, `__METHOD__` vale `T::m` (col nome del TRAIT), `__TRAIT__` vale `T`.
+phpr lowera i corpi dei trait una volta sola, alla dichiarazione del trait, con
+`cur_class` vuoto: `__CLASS__` = `""` e `__METHOD__` = `m` (senza prefisso).
+`__TRAIT__`, `__FUNCTION__` e `self::class` sono fedeli.
+
+```php
+trait T { function t(){ echo __CLASS__, '|', __TRAIT__, '|', __METHOD__, '|', self::class; } }
+class C { use T; } (new C)->t();      // oracle: C|T|T::t|C   phpr: |T|t|C
+enum  U { use T; case Q; } U::Q->t(); // oracle: U|T|T::t|U   phpr: |T|t|U
+```
+
+Pre-esistente al PR #4 (il pin s183 dà lo stesso output); vale per classi ed
+enum allo stesso modo: `lower_class` e `lower_enum` ripristinano `cur_class`
+PRIMA di `flatten_into`, e comunque i corpi del trait sono già lowerati. Cura
+possibile: emettere per `__CLASS__`/`__METHOD__` nei trait un placeholder
+risolto al binding (Zend lo risolve a runtime sulla classe chiamante), oppure
+ri-lowerare il trait per classe usante. Costo non banale: fuori dal perimetro
+S-187. Da cercare per NOME nel congelato prima di curare (`__CLASS__` in
+`Zend/tests/traits/`).
+
 ## 4. Punti di forza da NON toccare (invarianti verificati byte-identici)
 
 Per evitare regressioni, questi comportamenti sono **già** byte-identici con
