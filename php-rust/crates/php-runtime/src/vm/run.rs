@@ -809,6 +809,7 @@ impl<'m> super::Vm<'m> {
         } else {
             (lhs, rhs)
         };
+        self.gc_note(&lhs); self.gc_note(&rhs); // S-190: slow-path operands die at this call's end — noted where their holder dies (§3.35; `$o->p op= [new X]` lowers to Swap;Binary;PropSet, the magic `__set` Ret then sees X)
         self.apply_binop_ovl(b, &lhs, &rhs)
     }
 
@@ -4315,7 +4316,6 @@ impl<'m> super::Vm<'m> {
                         let ret = f.stack.pop().unwrap_or(Zval::Null);
                         let mut slots = std::mem::take(&mut f.slots);
                         let mut stack = std::mem::take(&mut f.stack);
-                        let before = self.gc_buf.len(); // S-186 cura O(1): tail probe only
                         for v in &slots {
                             self.gc_note(v);
                         }
@@ -4329,8 +4329,10 @@ impl<'m> super::Vm<'m> {
                         stack.clear();
                         self.frames.truncate(top);
                         self.frame_pool.put(slots, stack);
-                        // §3.35: dying locals destruct at `leave` (mod.rs `gc_sweep_after_ret`).
-                        self.gc_sweep_after_ret(top - 1, before)?;
+                        // §3.35: dying locals destruct at `leave` — S-190 cursor probe (vm/gc_probe), out of line.
+                        if self.gc_probe_mark < self.gc_buf.len() {
+                            self.gc_ret_probe(top - 1)?;
+                        }
                         if self.frames.len() == baseline {
                             return Ok(RunExit::Returned(ret));
                         }
@@ -7193,7 +7195,6 @@ impl<'m> super::Vm<'m> {
     /// `ext`, `$$` e il ritorno di `main`.
     #[inline(never)]
     fn ret_slow(&mut self, top: usize, baseline: usize) -> Result<Option<RunExit>, PhpError> {
-        let before = self.gc_buf.len(); // S-186 cura O(1): tail probe only (notes follow)
         let mut ret = self.frames[top].stack.pop().unwrap_or(Zval::Null);
         let func = self.frames[top].func;
         // WP-53 (Fase 2.1): `ret_shape` folds the hint/by_ref/
@@ -7307,11 +7308,10 @@ impl<'m> super::Vm<'m> {
                 self.recycle_frame(dead);
             }
         }
-        // §3.35: dying locals destruct at `leave` (mod.rs `gc_sweep_after_ret`);
-        // a destructor frame's own return keeps the scheduled-sweep protocol
-        // (the Sweep op that pushed it re-runs when it returns).
-        if top > 0 && fl & FrameFlags::IN_DESTRUCTOR == 0 {
-            self.gc_sweep_after_ret(top - 1, before)?;
+        // §3.35: dying locals destruct at `leave` (S-190 cursor probe, vm/gc_probe); a destructor
+        // frame's own return keeps the scheduled-sweep protocol (its Sweep op re-runs when it returns).
+        if top > 0 && fl & FrameFlags::IN_DESTRUCTOR == 0 && self.gc_probe_mark < self.gc_buf.len() {
+            self.gc_ret_probe(top - 1)?;
         }
         if let Some(guard) = guard {
             for key in guard {

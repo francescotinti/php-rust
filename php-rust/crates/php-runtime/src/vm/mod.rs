@@ -81,6 +81,7 @@ mod coroutines;
 mod dom;
 pub mod cli_stream;
 mod exceptions;
+mod gc_probe;
 mod xmlparser;
 mod host;
 mod ini;
@@ -775,6 +776,7 @@ pub fn vm_new<'m>(
         destructed: HashSet::default(),
         gc_buf: Vec::new(),
         gc_buf_head: 0,
+        gc_probe_mark: 0,
         gc_cycle_roots: HashSet::default(),
         gc_ctr_roots: Vec::new(),
         gc_classify_last_nodes: Cell::new(0),
@@ -3314,6 +3316,8 @@ pub struct Vm<'m> {
     /// field, not a sweep local — a sweep that schedules a destructor breaks
     /// out mid-drain and the re-run continues here.
     gc_buf_head: usize,
+    /// S-190 cursor: buffer length at the last Ret probe that scanned (`gc_probe`).
+    gc_probe_mark: usize,
     /// Possible roots of *cyclic* garbage (mirrors Zend's root buffer feeding
     /// `gc_collect_cycles`): a candidate the sweep popped that was not
     /// collectable lost a reference but still has holders — if those holders
@@ -3886,8 +3890,7 @@ impl<'m> Vm<'m> {
         self.created.clear();
         self.destructed.clear();
         self.teardown_weaks.clear();
-        self.gc_buf.clear();
-        self.gc_buf_head = 0;
+        self.gc_buf_reset();
         self.gc_cycle_roots.clear();
         self.gc_light_demoted.clear();
         self.gc_ctr_roots.clear();
@@ -4166,39 +4169,7 @@ impl<'m> Vm<'m> {
     }
 
 
-    /// §3.35 (forms 1 and 3): Zend frees a returning frame's CVs and arguments
-    /// at `leave` (`i_free_compiled_variables`, first to last), so a local whose
-    /// last reference died with the frame runs its `__destruct` BEFORE the
-    /// caller continues — `echo "x: ", f(), "\n"` prints the destructor ahead of
-    /// the value. phpr's Ret only NOTES the dying values (or finds them already
-    /// buffered since birth) and left them to the caller's statement-end Sweep.
-    /// Called after the release (slots and stack cleared, frame gone): if a
-    /// buffered candidate is collectable NOW (`created` + buffer clone = 2), the
-    /// buffer is drained synchronously and FIFO — note/birth order, Zend's
-    /// forward CV order — as a LIGHT sweep (demotions are re-seeded by the next
-    /// main sweep, like any mid-statement one). Stays out of the way of a
-    /// scheduled sweep in flight (`gc_buf_head != 0`: its Sweep op re-runs after
-    /// the destructor it pushed), of the cycle collector, and of a caller that
-    /// is a destructor body (its sweeps are silent — Frame::in_destructor).
-    /// S-186 cura O(1) (concilio Q3, team-meccanismo): only the tail `[before..)`
-    /// is probed — `before` = buffer length BEFORE this Ret's notes. Complete
-    /// because whatever dies at this Ret is noted here, and a note pushes a new
-    /// candidate to the tail or re-queues an already-buffered one to the tail
-    /// (`gc_note_slow`); a temp dead without a note waits for the Sweep (form 2).
-    #[inline]
-    fn gc_sweep_after_ret(&mut self, caller: usize, before: usize) -> Result<(), PhpError> {
-        if self.gc_buf_head == 0
-            && !self.gc_buf.is_empty()
-            && !self.gc_collecting
-            && !self.frames[caller].flags.get(FrameFlags::IN_DESTRUCTOR)
-            && self.gc_buf[before.min(self.gc_buf.len())..]
-                .iter()
-                .any(|s| s.as_ref().is_some_and(|o| Rc::strong_count(o) == 2))
-        {
-            self.gc_sweep_impl(None, false)?;
-        }
-        Ok(())
-    }
+    // §3.35 forms (1)/(3): the leave-time probe is `gc_ret_probe` in vm/gc_probe (S-190 cursor; 22/10 whole scan → S-186 tail → cursor).
 
     /// The sweep body. `resume = Some((top, ip))` is the statement-level mode:
     /// a found destructor is *scheduled* (frame pushed, `ip` rewound so the
@@ -4431,6 +4402,7 @@ impl<'m> Vm<'m> {
                     }
                 }
                 self.gc_buf_head = 0;
+                self.gc_probe_mark = 0; // S-190: drained buffer, cursor rewinds
                 break;
             };
 
@@ -5402,6 +5374,7 @@ impl<'m> Vm<'m> {
                 }
             }
             self.gc_buf_head = 0;
+            self.gc_probe_mark = 0; // S-190: drained buffer, cursor rewinds
             let mut roots: Vec<u32> = Vec::new();
             for id in self.gc_cycle_roots.drain().collect::<Vec<_>>() {
                 if let Some(o) = self.created.get(&id) {

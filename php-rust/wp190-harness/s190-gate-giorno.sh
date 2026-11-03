@@ -31,12 +31,18 @@ for m in off on; do
     f="$ZT/$t"; [ -f "$f" ] || { note "FAIL: manca $f"; RC=1; continue; }
     n=$(basename "$t" .phpt)
     PHPR_REG_LOWER=$flag perl -e 'alarm 120; exec @ARGV or die' -- "$RUNNER" --list-fails --isolate "$f" 2>&1 | tr -d '\0' > "$OUT/$n.$m.log"
-    python3 - "$OUT/$n.$m.log" "$f" "$FROZ/golden-content-$m.tsv" "$FROZ/corpus-s109-$m.fails" "$m" "$n" >> "$VERD" <<'PY'
+    python3 - "$OUT/$n.$m.log" "$f" "$FROZ/golden-content-$m.tsv" "$FROZ/corpus-s109-$m.fails" "$m" "$n" "${REF_NORM_DIR:-/Volumes/Extreme Pro/Claude/phpr-ci/out/8d5f1598a41b/corpus}/$m.norm" <<'PY' | tee -a "$VERD"
 import hashlib, re, sys
-log, path, golden, frozen, mode, name = sys.argv[1:7]
+# Giudice: in un run a file singolo la CODA del chunk (fino a fine output) differisce da quella del run intero, quindi il
+# digest grezzo non è confrontabile: si confronta il TESTO del chunk (rstrip) col chunk di riferimento estratto dal norm
+# della CI che ha prodotto il golden (8d5f1598, corpus-gate OK) e si verifica che quel riferimento abbia il digest golden.
+log, path, golden, frozen, mode, name, refnorm = sys.argv[1:8]
 txt = open(log, encoding="utf-8", errors="replace").read()
+reftxt = open(refnorm, encoding="utf-8", errors="replace").read()
+refchunks = dict(re.findall(r"^--- (.+?) ---\n(.*?)(?=^--- .+? ---$|\Z)", reftxt, re.S | re.M))
 m = re.search(r"^failures: (\d+)$", txt, re.M)
-fails = int(m.group(1)) if m else -1
+mf = re.search(r"^fail:\s+(\d+)$", txt, re.M)
+fails = int(m.group(1)) if m else (int(mf.group(1)) if mf else -1)  # the runner omits "failures:" when 0
 chunks = {k: v for k, v in re.findall(r"^--- (.+?) ---\n(.*?)(?=^--- .+? ---$|\Z)", txt, re.S | re.M)}
 gold = {}
 for line in open(golden, encoding="utf-8"):
@@ -53,11 +59,17 @@ else:
         print(f"FAIL [{mode}] {name}: atteso FAIL col golden, invece PASSA (fail→pass: golden da ri-basare SOLO con voce di catalogo)")
         ok = False
     else:
-        d = hashlib.sha256(chunks[path].encode("utf-8", "surrogateescape")).hexdigest()
-        ok = gold.get(path) == d
-        print(f"{'OK  ' if ok else 'FAIL'} [{mode}] {name}: digest {d[:16]} {'==' if ok else '!='} golden {gold.get(path, 'assente')[:16]}")
-        if not ok:
-            print("    chunk attuale:"); print("    " + chunks[path].replace("\n", "\n    ").rstrip())
+        ref = refchunks.get(path)
+        refd = hashlib.sha256(ref.encode("utf-8", "surrogateescape")).hexdigest() if ref is not None else None
+        if ref is None or refd != gold.get(path):
+            print(f"FAIL [{mode}] {name}: riferimento CI assente o con digest {str(refd)[:16]} != golden {gold.get(path, 'assente')[:16]} (giudice VOID)")
+            ok = False
+        else:
+            ok = chunks[path].rstrip() == ref.rstrip()
+            print(f"{'OK  ' if ok else 'FAIL'} [{mode}] {name}: testo del chunk {'==' if ok else '!='} riferimento golden {refd[:16]}")
+            if not ok:
+                print("    chunk attuale:"); print("    " + chunks[path].replace("\n", "\n    ").rstrip())
+                print("    chunk golden:"); print("    " + ref.replace("\n", "\n    ").rstrip())
 sys.exit(0 if ok else 1)
 PY
     [ "${PIPESTATUS[0]}" = 0 ] || RC=1
@@ -79,7 +91,11 @@ bilat(){ # $1=nome $2=file $3=marcatore $4..=opzioni oracle
   else diff "$OUT/$n-oracle.out" "$OUT/$n-tree.out" > "$OUT/$n.diff" || true; note "FAIL $n DIVERGE dall'oracle ($(grep -c '^[<>]' "$OUT/$n.diff") righe, $OUT/$n.diff)"; RC=1; fi
 }
 bilat fxsw1 "$REPO/wp174-harness/fixtures/fx-sw1.php" "FX-SW1 DONE"
-bilat fxsw2 "$REPO/wp174-harness/fixtures/fx-sw2-gc.php" ""
+# fx-sw2-gc: fixture di CONTEGGI GC (§3.33), confrontata col PIN (invarianza, come s186-leva-build), non con l'oracle
+PIN="$HOME/Claude/php-rust-output/release/phpr"
+perl -e 'alarm 300; exec @ARGV or die' -- "$PIN" "$REPO/wp174-harness/fixtures/fx-sw2-gc.php" > "$OUT/fxsw2-pin.out" 2>&1
+perl -e 'alarm 300; exec @ARGV or die' -- "$PHPR" "$REPO/wp174-harness/fixtures/fx-sw2-gc.php" > "$OUT/fxsw2-tree.out" 2>&1
+if grep -q "FX-SW2 DONE" "$OUT/fxsw2-tree.out" && cmp -s "$OUT/fxsw2-pin.out" "$OUT/fxsw2-tree.out"; then note "OK   fxsw2 == pin BYTE-ID (invarianza GC)"; else diff "$OUT/fxsw2-pin.out" "$OUT/fxsw2-tree.out" > "$OUT/fxsw2.diff" || true; note "FAIL fxsw2 ≠ pin ($(grep -c '^[<>]' "$OUT/fxsw2.diff") righe, $OUT/fxsw2.diff)"; RC=1; fi
 bilat fxsl1 "$REPO/wp172-harness/fx-sl1.php" "FX-SL1 DONE" -d log_errors=0 -d display_errors=1
 bilat fxsl2 "$REPO/wp172-harness/fx-sl2.php" "FX-SL2 DONE" -d log_errors=0 -d display_errors=1
 bilat fxsl3 "$REPO/wp172-harness/fx-sl3.php" "FX-SL3 DONE" -d log_errors=0 -d display_errors=1

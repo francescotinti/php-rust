@@ -1231,8 +1231,8 @@ impl<'m> Vm<'m> {
         self.autoloaders.clear();
         // WP-49 root buffers: the gc buffer holds STRONG clones of noted
         // objects — without this drain every cycle member it noted survives
-        // the break (alive_after read 20/req instead of ~0).
-        self.gc_buf.clear();
+        // the break (alive_after read 20/req instead of ~0). S-190: cursors too.
+        self.gc_buf_reset();
         // Whatever the dtor-walk registered (pre-drop weaks) plus anything
         // born AFTER it (session flush / stream finalizers) still in the
         // strong store.
