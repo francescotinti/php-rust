@@ -25,4 +25,4 @@ Generato con assistenza AI (Claude Fable 5). Revisore: agente fresco, senza il c
 - #5 ACCOLTO: braccio `Pphpr` (`phpr -S` del pin) in ogni ciclo.
 - #6 ACCOLTO: etichetta DIREZIONE sulla riga P0/Ooff.
 - #7 ACCOLTO in parte: W=20; opcache ini in testa; «senza cron» e sentinella LS restano dichiarati, non curati.
-- Esito t2: vedi `s188-wp-server-pair-verdetto-t2.out` e verbale.
+- **Esito t2 (03/11 02:58–03:45, `s188-wp-server-pair-verdetto-t2.out`, rc=0)**: 15/15 boot a 308 richieste esatte, 8 boot sporchi scartati e ripetuti (c1-Pphpr×1 c1-P0×2 c2-P0×2 c2-Ooff×1 c3-O×1 c3-Ooff×1: la scheda ricaricava ogni ~45 s), 0 celle VOID, spread ≤1,1 %. Cifre sovrapponibili a t1 entro il rumore (P/O front 9,49 vs 9,44; login 13,04 vs 13,08): la stima «<1 %» del rilievo #1 è confermata. Equivalenza Pphpr/P = 1,00 su ogni URL (#5 chiuso). mysqld 1,1–5,2 ms/req, companion «pagina servita» P/O 8,85–11,72 (#4). 2,09 GHz su ogni boot, IPC 3,83 vs 2,91 (#3 dichiarato). Le riserve sono sanate: **t2 = record citabile**.

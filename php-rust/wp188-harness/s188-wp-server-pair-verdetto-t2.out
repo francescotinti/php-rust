@@ -1,0 +1,62 @@
+== s188 coppia server WP modo NATIVO: php-server 674f6b9730da41ff (cli-server, no --axum) + controllo phpr 9a6ae11bf7e900ef (-S) vs PHP 8.5.7 php -S | git=741df98d driver_sha=bdd51ffa744746f8 tentativo=t2 epoch=1793673920 ==
+grade=VERDICT  # VERDICT solo con W>=10 K>=30 R>=3; rc autoritativo = pair-out/pair188-t2.done
+protocollo: processo SINGOLO per lato · W=20 K=30 R=3 boot/braccio, ordine ciclo P,Pphpr,O,P0,Ooff · canonica = Δ user-CPU proc_pid_rusage / K (ms) · spread ≤2% su R boot altrimenti cella VOID · wall curl secondario · nessun pavimento sottratto (asset = riga informativa) · DISABLE_WP_CRON via env · post /2026/07/hello-world/ · tripwire Connections = GATE · GATE richieste/boot = 308 (boot sporco scartato e ripetuto, max 3)
+opcache sonda in-band: P=nofn Pphpr=nofn O=true P0=nofn Ooff=false · oracle ini: validate_timestamps=1 jit=disable jit_buffer=64M · PHP_CLI_SERVER_WORKERS=unset
+igiene: tree_pids=[1] · richieste/boot nel log=['308'] (attese 308) · boot scartati e ripetuti: c1-Pphpr×1 c1-P0×2 c2-P0×2 c2-Ooff×1 c3-O×1 c3-Ooff×1 · boot VOID finali: 0  · sentinella LS inizio: /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.98.1-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv  · fine: /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.98.1-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv 
+classe di core (companion, da time -l: cycles/(user+sys), instr/cycles per boot): c1-P=2.09GHz/IPC 3.83 c1-Pphpr=2.09GHz/IPC 3.83 c1-O=2.09GHz/IPC 2.91 c1-P0=2.09GHz/IPC 3.50 c1-Ooff=2.09GHz/IPC 3.13 c2-P=2.09GHz/IPC 3.83 c2-Pphpr=2.09GHz/IPC 3.83 c2-O=2.09GHz/IPC 2.92 c2-P0=2.09GHz/IPC 3.50 c2-Ooff=2.09GHz/IPC 3.13 c3-P=2.09GHz/IPC 3.83 c3-Pphpr=2.09GHz/IPC 3.83 c3-O=2.09GHz/IPC 2.91 c3-P0=2.09GHz/IPC 3.48 c3-Ooff=2.09GHz/IPC 3.14
+
+braccio P = phpr default (php-server modo nativo) — unità: ms user-CPU/req del processo server; [per ciclo] mediana spread
+  front  cpu=[292.88 293.27 294.64] med=293.27 spread=0.6% ok  sys=16.59 instr/req=2537.66M mysqld(u+s)/req=4.05 ΔQuestions/blocco=1024 wall med=317.0 p25=315.2 p75=318.3  Δconn=[31,31,31] (atteso 31)
+  post   cpu=[348.61 347.35 346.77] med=347.35 spread=0.5% ok  sys=17.56 instr/req=2972.07M mysqld(u+s)/req=4.59 ΔQuestions/blocco=1144 wall med=372.8 p25=371.5 p75=374.2  Δconn=[31,31,31] (atteso 31)
+  feed   cpu=[154.69 155.34 153.71] med=154.69 spread=1.1% ok  sys=14.77 instr/req=1331.71M mysqld(u+s)/req=3.15 ΔQuestions/blocco=814 wall med=175.0 p25=174.6 p75=176.2  Δconn=[31,31,31] (atteso 31)
+  login  cpu=[111.35 110.48 110.25] med=110.48 spread=1.0% ok  sys=12.37 instr/req=936.44M mysqld(u+s)/req=1.92 ΔQuestions/blocco=454 wall med=127.3 p25=126.8 p75=127.6  Δconn=[31,31,31] (atteso 31)
+  rest   cpu=[174.67 175.12 175.43] med=175.12 spread=0.4% ok  sys=14.75 instr/req=1499.29M mysqld(u+s)/req=3.19 ΔQuestions/blocco=874 wall med=196.5 p25=195.7 p75=197.0  Δconn=[31,31,31] (atteso 31)
+  asset  cpu=[0.02 0.02 0.02] med=0.02 spread=3.4% ok  sys=0.08 instr/req=0.46M mysqld(u+s)/req=0.03 ΔQuestions/blocco=4 wall med=0.7 p25=0.7 p75=0.7  Δconn=[1,1,1] (atteso 1)
+  peak lifetime_max_phys_footprint (intero processo) per boot: c1=333MiB/tl=333 c2=334MiB/tl=334 c3=335MiB/tl=335
+
+braccio Pphpr = controllo `phpr -S` (pin phpr) — unità: ms user-CPU/req del processo server; [per ciclo] mediana spread
+  front  cpu=[294.22 294.63 294.66] med=294.63 spread=0.1% ok  sys=16.65 instr/req=2536.39M mysqld(u+s)/req=3.94 ΔQuestions/blocco=1024 wall med=318.5 p25=317.0 p75=319.8  Δconn=[31,31,31] (atteso 31)
+  post   cpu=[348.88 347.67 347.16] med=347.67 spread=0.5% ok  sys=16.96 instr/req=2971.04M mysqld(u+s)/req=4.53 ΔQuestions/blocco=1144 wall med=372.8 p25=371.4 p75=373.8  Δconn=[31,31,31] (atteso 31)
+  feed   cpu=[155.47 154.30 155.71] med=155.47 spread=0.9% ok  sys=14.89 instr/req=1331.96M mysqld(u+s)/req=3.11 ΔQuestions/blocco=814 wall med=175.8 p25=175.3 p75=176.9  Δconn=[31,31,31] (atteso 31)
+  login  cpu=[110.34 110.99 110.98] med=110.98 spread=0.6% ok  sys=12.20 instr/req=936.14M mysqld(u+s)/req=1.82 ΔQuestions/blocco=454 wall med=127.2 p25=126.7 p75=127.6  Δconn=[31,31,31] (atteso 31)
+  rest   cpu=[174.95 175.81 176.21] med=175.81 spread=0.7% ok  sys=14.86 instr/req=1499.59M mysqld(u+s)/req=3.23 ΔQuestions/blocco=874 wall med=196.7 p25=195.4 p75=197.8  Δconn=[31,31,31] (atteso 31)
+  asset  cpu=[0.02 0.02 0.02] med=0.02 spread=7.2% ok  sys=0.08 instr/req=0.46M mysqld(u+s)/req=0.03 ΔQuestions/blocco=4 wall med=0.7 p25=0.7 p75=0.7  Δconn=[1,1,1] (atteso 1)
+  peak lifetime_max_phys_footprint (intero processo) per boot: c1=333MiB/tl=333 c2=326MiB/tl=326 c3=331MiB/tl=331
+
+braccio O = oracle php -S opcache ON — unità: ms user-CPU/req del processo server; [per ciclo] mediana spread
+  front  cpu=[30.85 30.91 31.10] med=30.91 spread=0.8% ok  sys=3.25 instr/req=212.69M mysqld(u+s)/req=2.70 ΔQuestions/blocco=964 wall med=38.6 p25=38.4 p75=39.0  Δconn=[31,31,31] (atteso 31)
+  post   cpu=[35.49 35.41 35.48] med=35.48 spread=0.2% ok  sys=3.47 instr/req=237.53M mysqld(u+s)/req=3.08 ΔQuestions/blocco=1084 wall med=44.1 p25=43.8 p75=44.3  Δconn=[31,31,31] (atteso 31)
+  feed   cpu=[14.74 14.60 14.71] med=14.71 spread=1.0% ok  sys=2.38 instr/req=104.13M mysqld(u+s)/req=2.12 ΔQuestions/blocco=754 wall med=21.2 p25=21.1 p75=21.5  Δconn=[31,31,31] (atteso 31)
+  login  cpu=[8.54 8.46 8.49] med=8.49 spread=0.9% ok  sys=0.90 instr/req=54.57M mysqld(u+s)/req=1.13 ΔQuestions/blocco=394 wall med=11.4 p25=11.2 p75=11.6  Δconn=[31,31,31] (atteso 31)
+  rest   cpu=[18.01 17.91 17.94] med=17.94 spread=0.6% ok  sys=2.42 instr/req=126.02M mysqld(u+s)/req=2.16 ΔQuestions/blocco=814 wall med=24.8 p25=24.6 p75=25.0  Δconn=[31,31,31] (atteso 31)
+  asset  cpu=[0.02 0.02 0.02] med=0.02 spread=5.0% ok  sys=0.07 instr/req=0.35M mysqld(u+s)/req=0.03 ΔQuestions/blocco=4 wall med=0.7 p25=0.7 p75=0.7  Δconn=[1,1,1] (atteso 1)
+  peak lifetime_max_phys_footprint (intero processo) per boot: c1=43MiB/tl=43 c2=43MiB/tl=43 c3=43MiB/tl=43
+
+braccio P0 = phpr PHPR_UNIT_CACHE=0 — unità: ms user-CPU/req del processo server; [per ciclo] mediana spread
+  front  cpu=[685.52 683.31 689.41] med=685.52 spread=0.9% ok  sys=37.67 instr/req=5402.05M mysqld(u+s)/req=4.74 ΔQuestions/blocco=1024 wall med=730.6 p25=728.6 p75=734.5  Δconn=[31,31,31] (atteso 31)
+  post   cpu=[742.02 742.34 742.18] med=742.18 spread=0.0% ok  sys=39.04 instr/req=5845.61M mysqld(u+s)/req=5.16 ΔQuestions/blocco=1144 wall med=788.9 p25=784.0 p75=794.7  Δconn=[31,31,31] (atteso 31)
+  feed   cpu=[549.23 549.63 552.95] med=549.63 spread=0.7% ok  sys=35.24 instr/req=4194.76M mysqld(u+s)/req=3.90 ΔQuestions/blocco=814 wall med=590.4 p25=588.6 p75=594.7  Δconn=[31,31,31] (atteso 31)
+  login  cpu=[513.87 512.04 512.67] med=512.67 spread=0.4% ok  sys=33.68 instr/req=3840.34M mysqld(u+s)/req=2.69 ΔQuestions/blocco=454 wall med=550.7 p25=546.5 p75=553.4  Δconn=[31,31,31] (atteso 31)
+  rest   cpu=[568.24 568.43 570.10] med=568.43 spread=0.3% ok  sys=35.29 instr/req=4356.58M mysqld(u+s)/req=3.98 ΔQuestions/blocco=874 wall med=610.6 p25=608.0 p75=615.5  Δconn=[31,31,31] (atteso 31)
+  asset  cpu=[0.02 0.02 0.02] med=0.02 spread=5.0% ok  sys=0.08 instr/req=0.46M mysqld(u+s)/req=0.03 ΔQuestions/blocco=4 wall med=0.7 p25=0.7 p75=0.7  Δconn=[1,1,1] (atteso 1)
+  peak lifetime_max_phys_footprint (intero processo) per boot: c1=264MiB/tl=264 c2=245MiB/tl=245 c3=264MiB/tl=264
+
+braccio Ooff = oracle -d opcache.enable=0 — unità: ms user-CPU/req del processo server; [per ciclo] mediana spread
+  front  cpu=[165.93 165.63 165.47] med=165.63 spread=0.3% ok  sys=16.74 instr/req=1192.48M mysqld(u+s)/req=3.33 ΔQuestions/blocco=964 wall med=187.6 p25=187.1 p75=188.4  Δconn=[31,31,31] (atteso 31)
+  post   cpu=[172.02 171.75 170.56] med=171.75 spread=0.9% ok  sys=16.95 instr/req=1220.10M mysqld(u+s)/req=3.75 ΔQuestions/blocco=1084 wall med=194.5 p25=194.0 p75=195.0  Δconn=[31,31,31] (atteso 31)
+  feed   cpu=[145.80 146.19 145.17] med=145.80 spread=0.7% ok  sys=15.68 instr/req=1057.96M mysqld(u+s)/req=2.73 ΔQuestions/blocco=754 wall med=166.2 p25=165.3 p75=167.1  Δconn=[31,31,31] (atteso 31)
+  login  cpu=[138.79 139.10 138.23] med=138.79 spread=0.6% ok  sys=14.33 instr/req=1004.77M mysqld(u+s)/req=1.68 ΔQuestions/blocco=394 wall med=155.5 p25=155.2 p75=155.9  Δconn=[31,31,31] (atteso 31)
+  rest   cpu=[150.15 149.89 148.96] med=149.89 spread=0.8% ok  sys=15.70 instr/req=1082.24M mysqld(u+s)/req=2.78 ΔQuestions/blocco=814 wall med=170.5 p25=170.0 p75=170.9  Δconn=[31,31,31] (atteso 31)
+  asset  cpu=[0.03 0.02 0.02] med=0.02 spread=9.1% ok  sys=0.07 instr/req=0.35M mysqld(u+s)/req=0.03 ΔQuestions/blocco=4 wall med=0.7 p25=0.7 p75=0.7  Δconn=[1,1,1] (atteso 1)
+  peak lifetime_max_phys_footprint (intero processo) per boot: c1=47MiB/tl=47 c2=47MiB/tl=47 c3=47MiB/tl=47
+
+rapporti per ciclo (stesso ciclo) P/O: front [9.49 9.49 9.48] med=9.49 · post [9.82 9.81 9.77] med=9.81 · feed [10.50 10.64 10.45] med=10.50 · login [13.04 13.06 12.98] med=13.04 · rest [9.70 9.78 9.78] med=9.78 · asset [0.88 0.89 0.92] med=0.89
+equivalenza misurata Pphpr/P (php-server modo nativo vs phpr -S, stesso pin): front [1.00 1.00 1.00] med=1.00 · post [1.00 1.00 1.00] med=1.00 · feed [1.01 0.99 1.01] med=1.01 · login [0.99 1.00 1.01] med=1.00 · rest [1.00 1.00 1.00] med=1.00 · asset [1.02 0.92 0.94] med=0.94
+companion «pagina servita» (server+mysqld) P/O: front [8.85 8.85 8.81] med=8.85 · post [9.16 9.14 9.10] med=9.14 · feed [9.36 9.52 9.32] med=9.36 · login [11.72 11.72 11.67] med=11.72 · rest [8.82 8.88 8.89] med=8.88 · asset [0.92 0.85 1.00] med=0.92
+rapporti P0/Ooff (entrambi senza cache; DIREZIONE: opcache.enable=0 spegne anche l'ottimizzatore Zend): front [4.13 4.13 4.17] med=4.13 · post [4.31 4.32 4.35] med=4.32 · feed [3.77 3.76 3.81] med=3.77 · login [3.70 3.68 3.71] med=3.70 · rest [3.78 3.79 3.83] med=3.79 · asset [0.84 0.95 0.88] med=0.88
+rapporti P0/P (lavoro evitato dalla cache unità): front [2.34 2.33 2.34] med=2.34 · post [2.13 2.14 2.14] med=2.14 · feed [3.55 3.54 3.60] med=3.55 · login [4.62 4.63 4.65] med=4.63 · rest [3.25 3.25 3.25] med=3.25 · asset [1.05 1.05 1.01] med=1.05
+rapporti Ooff/O (lavoro evitato dall'opcache): front [5.38 5.36 5.32] med=5.36 · post [4.85 4.85 4.81] med=4.85 · feed [9.89 10.02 9.87] med=9.89 · login [16.26 16.44 16.28] med=16.28 · rest [8.34 8.37 8.30] med=8.34 · asset [1.10 0.98 1.06] med=1.06
+companion netto-asset P/O: front=9.50 · post=9.79 · feed=10.53 · login=13.04 · rest=9.77
+parità avvisoria body rest c1 P vs O: BYTE-ID
+celle VOID: nessuna
+rc=0
