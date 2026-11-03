@@ -207,6 +207,10 @@ pub mod census_alloc {
 
 #[cfg(feature = "axum-server")]
 mod worker_pool;
+// S-188 (Tappa 2): web-SAPI bridge of the axum front end (routing shared with
+// `phpr -S` via php_types::docroot; WebRequest installed on the worker thread).
+#[cfg(feature = "axum-server")]
+mod axum_web;
 
 const USAGE: &str = "usage: php-server [--host HOST] [--port PORT] [--docroot|-t DIR] [--axum] [--workers N] [--tier0] [ROUTER.php]\n\
        defaults: --host 127.0.0.1 --port 8080 --docroot . --cli-server --workers 0 (= CPU count, axum mode only)\n\
@@ -219,19 +223,21 @@ fn missing(flag: &str) -> ExitCode {
 
 #[cfg(feature = "axum-server")]
 mod axum_handler {
+    use std::net::SocketAddr;
     use std::process::ExitCode;
     use std::sync::Arc;
     use axum::{
-        http::{StatusCode, Uri},
-        extract::State,
-        Router, response::IntoResponse,
+        http::StatusCode,
+        extract::{ConnectInfo, State},
+        Router, response::{IntoResponse, Response},
     };
     use tokio::sync::oneshot;
 
     /// S-77.6.5.2.3: Application state (shared server-lifetime).
     pub struct AppState {
         pool: Arc<crate::worker_pool::WorkerPool>,
-        docroot: String,
+        /// S-188: host/port/canonical docroot for `$_SERVER` and the docroot walk.
+        cfg: crate::axum_web::ServeCfg,
         /// A-PP4 gate hook (Council WP-80): DISPATCHER-side panic trigger,
         /// armed only by PHPR_TEST_WORKER_PANIC (same env as the worker
         /// trigger, distinct magic path). Unarmed, the path is an ordinary
@@ -239,18 +245,24 @@ mod axum_handler {
         test_panic: bool,
     }
 
-    /// PHP handler accepting path.php requests
+    /// The request handler: magic probe paths first (answered here), then the
+    /// cli-server docroot walk (S-188, axum_web::route) — statics and 404 from
+    /// the dispatcher, PHP scripts through the worker pool with their web request.
     async fn php_handler(
         State(state): State<Arc<AppState>>,
-        uri: Uri,
-    ) -> impl IntoResponse {
+        ConnectInfo(peer): ConnectInfo<SocketAddr>,
+        req: axum::extract::Request,
+    ) -> Response {
         // Extract path from request URI
-        let path = uri.path().to_string();
+        let path = req.uri().path().to_string();
         let request_path = if path.is_empty() || path == "/" {
             "/index.php".to_string()
         } else {
             path
         };
+        // S-188: the cli-server log line per request (method + target as sent).
+        let log_method = req.method().as_str().to_string();
+        let log_target = req.uri().path_and_query().map(|pq| pq.as_str().to_string()).unwrap_or_else(|| "/".to_string());
 
         // S-79.0.3 (A-AH13/A-DL5): idle-window probe — answered from the
         // ROUTER task, no pool, no worker, no Vm. The driver brackets an
@@ -265,7 +277,7 @@ mod axum_handler {
             // line — same in-band tag (A-DL10). Appended LAST: the idle
             // parser reads fields $3/$5 positionally.
             eprintln!("census-global: calls={calls} bytes={bytes} gross=1");
-            return (StatusCode::OK, b"census-global\n".to_vec());
+            return (StatusCode::OK, b"census-global\n".to_vec()).into_response();
         }
 
         // A-BG32 (Council WP-84): drain the per-request ns samples to
@@ -276,7 +288,7 @@ mod axum_handler {
         // census build (KL-84-3). ends_with-anchored (S-78.1 lesson).
         if request_path.ends_with("/__reqns") {
             if !crate::worker_pool::req_ns_armed() {
-                return (StatusCode::OK, b"reqns: unarmed\n".to_vec());
+                return (StatusCode::OK, b"reqns: unarmed\n".to_vec()).into_response();
             }
             let mut v = crate::worker_pool::REQ_NS
                 .lock()
@@ -296,7 +308,7 @@ mod axum_handler {
             v.clear();
             drop(v);
             eprintln!("{line}");
-            return (StatusCode::OK, format!("reqns-drained n={n}\n").into_bytes());
+            return (StatusCode::OK, format!("reqns-drained n={n}\n").into_bytes()).into_response();
         }
 
         // A-DL49 (Council WP-91, Leijen): in-request census at the PEAK —
@@ -359,7 +371,8 @@ mod axum_handler {
                 return (
                     StatusCode::OK,
                     format!("census-dumped win=9 ckpt=peak_inreq{suffix} w={w}\n").into_bytes(),
-                );
+                )
+                    .into_response();
             }
         }
 
@@ -382,54 +395,48 @@ mod axum_handler {
         // filesystem behind it; union builds fall through to a plain 404.
         let census_self =
             cfg!(feature = "mem-census") && request_path.ends_with("/__census_self");
-        // Read PHP source from disk (docroot + request_path)
-        let file_path = format!("{}{}", state.docroot, request_path);
-        let source = if census_self {
-            Vec::new()
+
+        // S-188: the cli-server docroot walk (shared, php_types::docroot) — a
+        // static file or the 404 page is answered here; a PHP script travels
+        // to the pool with its WebRequest (method, URI, PATH_INFO, query,
+        // headers, body, peer) — A-BB5 superseded: the census "resid" channel
+        // now includes the request body by declaration. A-TH8: the script
+        // name stays the resolved FILESYSTEM path (error banners, unit-cache key).
+        let (meta, web) = if census_self {
+            (
+                crate::worker_pool::WorkerHandlerMeta { path: "/__census_self".to_string(), source: Vec::new() },
+                None,
+            )
         } else {
-            match std::fs::read(&file_path) {
-                Ok(s) => s,
-                Err(e) => {
-                    let msg = format!("404: {} ({})\n", file_path, e);
-                    return (StatusCode::NOT_FOUND, msg.into_bytes());
+            match crate::axum_web::route(&state.cfg, peer, req).await {
+                crate::axum_web::Routed::Ready(resp) => {
+                    crate::axum_web::log_request(peer, resp.status().as_u16(), &log_method, &log_target);
+                    return resp;
                 }
+                crate::axum_web::Routed::Script { meta, web } => (meta, Some(web)),
             }
         };
 
         // Create oneshot channel for response
         let (tx, rx) = oneshot::channel();
 
-        // Build handler metadata. A-BB5 (Council WP-78): HTTP method/body are
-        // intentionally NOT carried — the Vm has no channel for them yet
-        // (request_start seeds web superglobals from the SAPI layer, not from
-        // here); carrying dead allocs across the channel would be counted as
-        // "Axum overhead" by the census. Wiring real request metadata into the
-        // superglobals is WP-79+ scope.
-        // S-78.1.4 (A-TH8): the script name is the resolved FILESYSTEM path
-        // (FPM's SCRIPT_FILENAME), not the request URI — error banners must
-        // carry the same path the oracle renders for full-body cmp.
-        let meta = crate::worker_pool::WorkerHandlerMeta {
-            path: if census_self { "/__census_self".to_string() } else { file_path.clone() },
-            source,
-        };
-
         // Dispatch to worker pool
-        let task = crate::worker_pool::WorkerTask {
-            meta,
-            response_tx: tx,
-        };
+        let task = crate::worker_pool::WorkerTask { meta, web, response_tx: tx };
 
         if let Err(e) = state.pool.dispatch(task) {
             let msg = format!("Pool dispatch failed: {}\n", e);
-            return (StatusCode::INTERNAL_SERVER_ERROR, msg.into_bytes());
+            return (StatusCode::INTERNAL_SERVER_ERROR, msg.into_bytes()).into_response();
         }
 
         // Await response from worker
         match rx.await {
-            Ok((body, status)) => (status, body),
+            Ok(response) => {
+                crate::axum_web::log_request(peer, response.status, &log_method, &log_target);
+                crate::axum_web::into_response(response)
+            }
             Err(_) => {
                 let msg = b"Worker dropped response channel\n".to_vec();
-                (StatusCode::INTERNAL_SERVER_ERROR, msg)
+                (StatusCode::INTERNAL_SERVER_ERROR, msg).into_response()
             }
         }
     }
@@ -479,11 +486,19 @@ mod axum_handler {
             return ExitCode::SUCCESS;
         }
 
-        // Resolve docroot
-        let docroot_str = docroot
-            .and_then(|d| d.to_str())
-            .unwrap_or(".")
-            .to_string();
+        // Resolve docroot: canonical, and chdir there like the cli-server
+        // (oracle-pinned: getcwd() = docroot, relative fopen resolves there) — S-188.
+        let docroot_path = std::path::PathBuf::from(docroot.unwrap_or(std::ffi::OsStr::new(".")));
+        let docroot_canon = match std::fs::canonicalize(&docroot_path) {
+            Ok(p) => p,
+            Err(_) => {
+                eprintln!("Directory {} does not exist.", docroot_path.display());
+                return ExitCode::from(1);
+            }
+        };
+        std::env::set_current_dir(&docroot_canon)
+            .unwrap_or_else(|e| eprintln!("php-server: chdir to the docroot failed: {e}"));
+        let docroot_str = docroot_canon.to_string_lossy().into_owned();
 
         // Initialize worker pool (A-BB3: size from --workers; 0 = CPU count.
         // Each worker retains its own RetainSet: footprint scales ~linearly
@@ -493,7 +508,7 @@ mod axum_handler {
 
         let app_state = Arc::new(AppState {
             pool: Arc::clone(&pool),
-            docroot: docroot_str.clone(),
+            cfg: crate::axum_web::ServeCfg { host: host.to_string(), port, docroot: docroot_canon },
             test_panic: std::env::var_os("PHPR_TEST_WORKER_PANIC").is_some(),
         });
 
@@ -541,7 +556,8 @@ mod axum_handler {
             }
             eprintln!("php-server: shutdown signal received, draining");
         };
-        if let Err(e) = axum::serve(listener, app)
+        // S-188: peer address for $_SERVER['REMOTE_ADDR'/'REMOTE_PORT'].
+        if let Err(e) = axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
             .with_graceful_shutdown(shutdown)
             .await
         {
@@ -648,6 +664,12 @@ fn main() -> ExitCode {
 
     #[cfg(feature = "axum-server")]
     if use_axum {
+        // S-188: the SAPI name is folded at compile time (prelude included) —
+        // set it BEFORE the runtime and the pool exist, like `phpr -S` does.
+        php_types::sapi::set_sapi_name("cli-server");
+        if router.is_some() {
+            eprintln!("php-server: router script is not honoured in --axum mode (TODO(port) §3.9) — ignored");
+        }
         // A-MS4 (strong form) + A-PP4 (Council WP-80): fail-fast lives in
         // the panic HOOK — no unwind survives anywhere in the server. A
         // panic inside an axum task was otherwise swallowed by tokio (dead

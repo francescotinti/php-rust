@@ -129,10 +129,8 @@ mod implementation {
         }
     }
 
-    /// Per-request handler metadata (sent to worker, not the Vm).
-    /// A-BB5 (Council WP-78): deliberately minimal — HTTP method/body have no
-    /// channel into the Vm yet (superglobal seeding is SAPI-layer work, WP-79+);
-    /// dead fields here would be counted as pool overhead by the alloc census.
+    /// Per-request handler metadata (sent to worker, not the Vm). A-BB5 is
+    /// superseded by S-188: the HTTP request travels in `WorkerTask::web`.
     pub struct WorkerHandlerMeta {
         /// Resolved FILESYSTEM path of the script (FPM's SCRIPT_FILENAME) —
         /// error banners render it, and the full-body oracle cmp in run-gate
@@ -141,10 +139,12 @@ mod implementation {
         pub source: Vec<u8>,
     }
 
-    /// Task sent from Axum handler to worker thread (metadata only, Vm lives in worker).
+    /// Task sent from Axum handler to worker thread (Vm lives in worker). S-188:
+    /// `web` is installed on the WORKER thread around the request (axum_web::RequestScope).
     pub struct WorkerTask {
         pub meta: WorkerHandlerMeta,
-        pub response_tx: oneshot::Sender<(Vec<u8>, StatusCode)>,
+        pub web: Option<php_types::sapi::WebRequest>,
+        pub response_tx: oneshot::Sender<crate::axum_web::WorkerResponse>,
     }
 
     /// A-BG32 (Council WP-84): per-request timing probe, armed once by
@@ -539,7 +539,7 @@ mod implementation {
             let mut prelude_collected = false;
 
             // Main request loop: each request gets a fresh RetainSet + fresh Vm
-            while let Some(task) = rx.blocking_recv() {
+            while let Some(mut task) = rx.blocking_recv() {
                 dispatched += 1; // A-PP36: counted at pickup, before any outcome
                 // Pickup: the task leaves the QUEUE (it stays OUTSTANDING
                 // until its response is sent). S-80.0.3 tripwire (KH81-2): a
@@ -572,7 +572,8 @@ mod implementation {
                 // memory, the campaign drains them via the __reqns probe
                 // AFTER the timed window.
                 let req_t0 = req_ns_armed().then(std::time::Instant::now);
-                let (response, status) = {
+                let scope = crate::axum_web::RequestScope::install(task.web.take());
+                let response = {
                     // A-DL49 v2 (Council WP-91, requalified LIVE S-90.0):
                     // the peak census is PER-WORKER SELF — this worker
                     // walks its OWN default heap from its own thread
@@ -600,10 +601,7 @@ mod implementation {
                                 );
                                 std::process::abort();
                             }
-                            (
-                                format!("census-self thr={worker_idx}\n").into_bytes(),
-                                StatusCode::OK,
-                            )
+                            crate::axum_web::WorkerResponse::plain(format!("census-self thr={worker_idx}\n").into_bytes(), StatusCode::OK)
                         } else {
                             execute_request(&reg, &task.meta)
                         }
@@ -618,7 +616,8 @@ mod implementation {
                         v.push(t0.elapsed().as_nanos() as u64);
                     }
                 }
-                task.response_tx.send((response, status)).ok();
+                drop(scope); // web request cleared + upload tmp files removed BEFORE the response leaves
+                task.response_tx.send(response).ok();
                 // Response sent: the request leaves the server — only now
                 // does OUTSTANDING drop (A-TH9: dec-after-send is what makes
                 // the closed-sequential watermark verdict-grade; A-PP-63:
@@ -759,7 +758,7 @@ mod implementation {
     pub fn execute_request(
         reg: &php_runtime::Registry,
         meta: &WorkerHandlerMeta,
-    ) -> (Vec<u8>, StatusCode) {
+    ) -> crate::axum_web::WorkerResponse {
         // S-78.1.5: request-lifetime RetainSet (P-2 pin, the CLI main's
         // machinery). SAFETY (A-MS2): !Send + !Sync — constructed HERE on
         // the calling worker's stack, never crosses a thread boundary
@@ -818,7 +817,7 @@ mod implementation {
         retain: &php_runtime::RetainSet,
         reg: &php_runtime::Registry,
         meta: &WorkerHandlerMeta,
-    ) -> (Vec<u8>, StatusCode) {
+    ) -> crate::axum_web::WorkerResponse {
         // A-BB9 (S-78.1.6): NO per-request allocs in the fast path — the path
         // bytes are borrowed (no clone) and the lossy String is built only in
         // the error branches (it was unconditional: the census would have
@@ -880,24 +879,14 @@ mod implementation {
         // that body (KS-DS-78-5, PHPR_DIVERGENCES_FROM_PHP.md §php-server).
         let mut unit = match php_runtime::main_unit_acquire(name, source, reg, true) {
             Ok(u) => u,
-            Err(php_runtime::MainAcquireError::Lower(php_runtime::LowerError::Fatal {
-                message,
-                line,
-            })) => {
-                let file_s = String::from_utf8_lossy(name);
-                let msg = format!(
-                    "\nFatal error: {message} in {file_s} on line {line}\nStack trace:\n#0 {{main}}\n"
-                )
-                .into_bytes();
-                return (msg, StatusCode::INTERNAL_SERVER_ERROR);
+            // S-188: the shared builders are web-aware — html banner + 200 under
+            // the web SAPI (oracle php -S), the CLI-anchored plain form + 500 otherwise.
+            Err(php_runtime::MainAcquireError::Lower(php_runtime::LowerError::Fatal { message, line })) => {
+                return crate::axum_web::WorkerResponse::from_outcome(php_runtime::compile_fatal_outcome(name, &message, line));
             }
-            Err(php_runtime::MainAcquireError::Lower(e)) => {
-                let msg = format!("\nParse error: {e}\n").into_bytes();
-                return (msg, StatusCode::INTERNAL_SERVER_ERROR);
-            }
+            Err(php_runtime::MainAcquireError::Lower(e)) => return crate::axum_web::parse_error(&e.to_string()),
             Err(php_runtime::MainAcquireError::Unsupported(what)) => {
-                let msg = format!("PHP Unsupported: {}\n", what).into_bytes();
-                return (msg, StatusCode::INTERNAL_SERVER_ERROR);
+                return crate::axum_web::WorkerResponse::plain(format!("PHP Unsupported: {}\n", what).into_bytes(), StatusCode::INTERNAL_SERVER_ERROR);
             }
         };
 
@@ -944,9 +933,9 @@ mod implementation {
         // shutdown destructors) — mirrors run_module_with_hir exactly.
         vm.final_flush = true;
 
-        // Epilogue mirrors run_module_with_hir (A-TH8 fatal contract):
-        // - exit()/die() is a CLEAN termination → HTTP 200, body = captured
-        //   output (FPM semantics; the CLI surfaces the code, HTTP cannot)
+        // Epilogue mirrors run_module_with_hir (A-TH8 fatal contract; S-188: with a
+        // web request installed the status is the script's — fatal = 200 + html):
+        // - exit()/die() is a CLEAN termination → the code the script set or 200
         // - an uncaught throwable routed to set_exception_handler is NOT a
         //   fatal (no banner, 200 — same as the CLI main)
         // - a link fatal renders the plain banner (no throwable wrapping)
@@ -992,8 +981,9 @@ mod implementation {
         // Body = `rendered` ONLY: it is the CLI-faithful stream (stdout with
         // diagnostics inline + fatal tail); appending `stdout` too DOUBLED every
         // body — caught by the absolute-content gate tests (S-78.0, the head -1
-        // check in the old HTTP gate was blind to it).
-        let response = std::mem::take(&mut vm.rendered);
+        // check in the old HTTP gate was blind to it). S-188: the response
+        // HEAD (headers/status/error_log) is taken in the same capture.
+        let response = crate::axum_web::finish(&mut vm, fatal.is_some());
 
         // 4. request_end: reset ephemeral state for next request
         // (G-APERTURA-2 gate: sequential requests must produce byte-identical output)
@@ -1067,14 +1057,9 @@ mod implementation {
             );
         }
 
-        // A-PP4/A-TH5/A-DS4: runtime fatal → 500 (was an accidental 200; the
-        // KS-M3 verbale claimed 500 — now true). Body stays byte-parity.
-        let status = if fatal.is_some() {
-            StatusCode::INTERNAL_SERVER_ERROR
-        } else {
-            StatusCode::OK
-        };
-        (response, status)
+        // Status: the web SAPI's (response_code or 200) or the CLI-anchored
+        // fatal→500 — decided in axum_web::finish, before request_end().
+        response
     }
 
     /// Gate tests (A-SK3/A-PP3, Council WP-78). They only compile under the
@@ -1117,9 +1102,9 @@ mod implementation {
         fn gate_apertura2_two_requests_worker_loop_form_byte_parity() {
             let reg = registry();
             let r1 = php_runtime::RetainSet::new();
-            let (b1, s1) = execute_with_retain(&r1, &reg, &meta("<?php echo \"hello axum\\n\";"));
+            let (b1, s1) = execute_with_retain(&r1, &reg, &meta("<?php echo \"hello axum\\n\";")).pair();
             let r2 = php_runtime::RetainSet::new();
-            let (b2, s2) = execute_with_retain(&r2, &reg, &meta("<?php echo \"hello axum\\n\";"));
+            let (b2, s2) = execute_with_retain(&r2, &reg, &meta("<?php echo \"hello axum\\n\";")).pair();
             assert_eq!(s1, StatusCode::OK);
             assert_eq!(s2, StatusCode::OK);
             assert_eq!(
@@ -1138,7 +1123,7 @@ mod implementation {
             for i in 1..=3 {
                 // Worker_loop form (A-MS2): fresh RetainSet per request.
                 let retain = php_runtime::RetainSet::new();
-                let (body, status) = execute_with_retain(&retain, &reg, &meta(src));
+                let (body, status) = execute_with_retain(&retain, &reg, &meta(src)).pair();
                 assert_eq!(status, StatusCode::OK);
                 assert_eq!(
                     body, b"1",
@@ -1157,9 +1142,9 @@ mod implementation {
             let src = "<?php ob_start(); echo \"buffered-bytes\";";
             // Worker_loop form (A-MS2): fresh RetainSet per request.
             let ra = php_runtime::RetainSet::new();
-            let (b1, _) = execute_with_retain(&ra, &reg, &meta(src));
+            let (b1, _) = execute_with_retain(&ra, &reg, &meta(src)).pair();
             let rb = php_runtime::RetainSet::new();
-            let (b2, _) = execute_with_retain(&rb, &reg, &meta(src));
+            let (b2, _) = execute_with_retain(&rb, &reg, &meta(src)).pair();
             let retain = php_runtime::RetainSet::new();
             assert_eq!(b1, b"buffered-bytes", "OB content lost on request 1");
             assert_eq!(b1, b2, "second request diverges (KS-PP-1)");
@@ -1209,7 +1194,7 @@ mod implementation {
             // Runtime fatal: undefined function — render_fatal's uncaught-Error
             // form (the one the corpus pins byte-identical to the oracle).
             let (body, status) =
-                execute_with_retain(&retain, &reg, &meta("<?php nope_missing_fn();"));
+                execute_with_retain(&retain, &reg, &meta("<?php nope_missing_fn();")).pair();
             assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
             assert_eq!(
                 body,
@@ -1223,7 +1208,7 @@ mod implementation {
             // worker_loop form) is clean (boundary discipline).
             let retain2 = php_runtime::RetainSet::new();
             let (ok_body, ok_status) =
-                execute_with_retain(&retain2, &reg, &meta("<?php echo \"alive\";"));
+                execute_with_retain(&retain2, &reg, &meta("<?php echo \"alive\";")).pair();
             assert_eq!(ok_status, StatusCode::OK);
             assert_eq!(ok_body, b"alive");
         }
@@ -1239,7 +1224,7 @@ mod implementation {
                 &retain,
                 &reg,
                 &meta("<?php echo \"out\"; exit(3); echo \"never\";"),
-            );
+            ).pair();
             assert_eq!(status, StatusCode::OK, "exit() must not map to an error status");
             assert_eq!(body, b"out");
         }
@@ -1270,7 +1255,7 @@ mod implementation {
             for req in 1..=4 {
                 // Worker_loop shape: fresh RetainSet per request (S-78.1.5).
                 let retain = php_runtime::RetainSet::new();
-                let (b, s) = execute_with_retain(&retain, &reg, &meta(&src));
+                let (b, s) = execute_with_retain(&retain, &reg, &meta(&src)).pair();
                 assert_eq!(s, StatusCode::OK);
                 assert_eq!(
                     b, b"12",
@@ -1335,7 +1320,7 @@ mod implementation {
                         path: warm_file.display().to_string(),
                         source: warm_src.as_bytes().to_vec(),
                     },
-                );
+                ).pair();
                 assert_eq!(status, StatusCode::OK, "pre-warm request failed (A-PP30)");
                 assert_eq!(body, b"w", "pre-warm body diverged (A-PP30)");
             }
@@ -1364,7 +1349,7 @@ mod implementation {
                     &retain,
                     &reg,
                     &WorkerHandlerMeta { path: path.clone(), source: src.as_bytes().to_vec() },
-                );
+                ).pair();
                 assert_eq!(
                     status,
                     StatusCode::INTERNAL_SERVER_ERROR,
@@ -1425,7 +1410,7 @@ mod implementation {
                 &retain,
                 &reg,
                 &WorkerHandlerMeta { path: ok_path, source: b"<?php echo \"ok\";".to_vec() },
-            );
+            ).pair();
             assert_eq!(status, StatusCode::OK, "positive control request failed");
             assert_eq!(body, b"ok", "positive control body diverged");
             assert_eq!(
@@ -1486,7 +1471,7 @@ mod implementation {
                         path: file.display().to_string(),
                         source: src.as_bytes().to_vec(),
                     },
-                );
+                ).pair();
                 assert_eq!(
                     status,
                     StatusCode::INTERNAL_SERVER_ERROR,
@@ -1530,10 +1515,11 @@ mod implementation {
                 meta: meta(
                     "<?php\nenum LF38 implements Serializable { case A; }\necho \"never-reached\";",
                 ),
+                web: None,
                 response_tx: tx,
             })
             .expect("dispatch of first task failed (A-PP38)");
-            let (body, status) = rx.blocking_recv().expect("worker dropped response (A-PP38)");
+            let (body, status) = rx.blocking_recv().expect("worker dropped response (A-PP38)").pair();
             assert_eq!(
                 status,
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -1555,11 +1541,12 @@ mod implementation {
                 meta: meta(
                     "<?php\nenum LF38 implements Serializable { case A; }\necho \"never-reached\";",
                 ),
+                web: None,
                 response_tx: tx2,
             })
             .expect("dispatch of second task failed (A-PP45)");
             let (body2, status2) =
-                rx2.blocking_recv().expect("worker dropped response 2 (A-PP45)");
+                rx2.blocking_recv().expect("worker dropped response 2 (A-PP45)").pair();
             assert_eq!(
                 status2,
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -1617,11 +1604,12 @@ mod implementation {
                             path: cf.to_string_lossy().into_owned(),
                             source: std::fs::read(&cf).expect("read clean fixture (A-PP47)"),
                         },
+                        web: None,
                         response_tx: txc,
                     })
                     .expect("dispatch of clean task failed (A-PP47)");
                     let (bodyc, statusc) =
-                        rxc.blocking_recv().expect("worker dropped clean response (A-PP47)");
+                        rxc.blocking_recv().expect("worker dropped clean response (A-PP47)").pair();
                     assert_eq!(statusc, StatusCode::OK, "clean request must 200 (A-PP47)");
                     assert_eq!(
                         String::from_utf8_lossy(&bodyc),
@@ -1664,7 +1652,7 @@ mod implementation {
             for i in 1..=3 {
                 // Worker_loop form (A-MS2): fresh RetainSet per request.
                 let retain = php_runtime::RetainSet::new();
-                let (body, status) = execute_with_retain(&retain, &reg, &meta(src));
+                let (body, status) = execute_with_retain(&retain, &reg, &meta(src)).pair();
                 assert_eq!(status, StatusCode::OK);
                 assert_eq!(
                     body,
@@ -1685,7 +1673,7 @@ mod implementation {
             let src = "<?php set_exception_handler(function ($e) { \
                        echo \"handled:\" . $e->getMessage(); }); \
                        throw new Exception(\"boom\");";
-            let (body, status) = execute_with_retain(&retain, &reg, &meta(src));
+            let (body, status) = execute_with_retain(&retain, &reg, &meta(src)).pair();
             assert_eq!(status, StatusCode::OK);
             assert_eq!(
                 body,
@@ -1704,7 +1692,7 @@ mod implementation {
             let reg = registry();
             let retain = php_runtime::RetainSet::new();
             let before = crate::census_alloc::snapshot();
-            let (b, s) = execute_with_retain(&retain, &reg, &meta("<?php echo \"x\";"));
+            let (b, s) = execute_with_retain(&retain, &reg, &meta("<?php echo \"x\";")).pair();
             assert_eq!(s, StatusCode::OK);
             assert_eq!(b, b"x");
             let after = crate::census_alloc::snapshot();
@@ -1730,7 +1718,7 @@ mod implementation {
             // Request 1: hello — a1 > 0 (prelude lowered+compiled fresh),
             // a3 == 0 (no include anywhere in the request).
             let retain = php_runtime::RetainSet::new();
-            let (b, s) = execute_with_retain(&retain, &reg, &meta("<?php echo \"h\";"));
+            let (b, s) = execute_with_retain(&retain, &reg, &meta("<?php echo \"h\";")).pair();
             assert_eq!(s, StatusCode::OK);
             assert_eq!(b, b"h");
             let ((a1, _), (a3, _)) = census::LAST_SPLIT.with(|c| c.get());
@@ -1744,7 +1732,7 @@ mod implementation {
             std::fs::write(&lib, "<?php function split_lib_f() { return 7; }").unwrap();
             let src = format!("<?php require '{}'; echo split_lib_f();", lib.display());
             let retain = php_runtime::RetainSet::new();
-            let (b, s) = execute_with_retain(&retain, &reg, &meta(&src));
+            let (b, s) = execute_with_retain(&retain, &reg, &meta(&src)).pair();
             assert_eq!(s, StatusCode::OK);
             assert_eq!(b, b"7");
             let ((a1, _), (a3_miss, _)) = census::LAST_SPLIT.with(|c| c.get());
@@ -1753,7 +1741,7 @@ mod implementation {
 
             // Request 3: same include — thread-local unit cache HIT, a3 == 0.
             let retain = php_runtime::RetainSet::new();
-            let (b, s) = execute_with_retain(&retain, &reg, &meta(&src));
+            let (b, s) = execute_with_retain(&retain, &reg, &meta(&src)).pair();
             assert_eq!(s, StatusCode::OK);
             assert_eq!(b, b"7");
             let (_, (a3_hit, _)) = census::LAST_SPLIT.with(|c| c.get());
@@ -1820,13 +1808,14 @@ mod implementation {
                 let (tx, rx) = oneshot::channel();
                 pool.dispatch(WorkerTask {
                     meta: meta("<?php for ($i = 0; $i < 50000; $i++);"),
+                    web: None,
                     response_tx: tx,
                 })
                 .unwrap();
                 rxs.push(rx);
             }
             for rx in rxs {
-                let (_, s) = rx.blocking_recv().unwrap();
+                let (_, s) = rx.blocking_recv().unwrap().pair();
                 assert_eq!(s, StatusCode::OK);
             }
             let peak = census::QUEUE_DEPTH_MAX.load(std::sync::atomic::Ordering::Relaxed);
@@ -1859,10 +1848,11 @@ mod implementation {
                 let (tx, rx) = oneshot::channel();
                 pool.dispatch(WorkerTask {
                     meta: meta("<?php echo \"w\";"),
+                    web: None,
                     response_tx: tx,
                 })
                 .unwrap();
-                let (b, s) = rx.blocking_recv().unwrap();
+                let (b, s) = rx.blocking_recv().unwrap().pair();
                 assert_eq!(s, StatusCode::OK);
                 assert_eq!(b, b"w");
                 // A-TH22 (Council WP-83): the rescoped window doc ADMITS
@@ -1944,13 +1934,13 @@ mod implementation {
             let reg = registry();
             // r1: clean hello pins the per-request a1 baseline.
             let r1 = php_runtime::RetainSet::new();
-            let (_, s) = execute_with_retain(&r1, &reg, &meta("<?php echo \"a\";"));
+            let (_, s) = execute_with_retain(&r1, &reg, &meta("<?php echo \"a\";")).pair();
             assert_eq!(s, StatusCode::OK);
             let ((a1_clean, _), _) = census::LAST_SPLIT.with(|c| c.get());
             assert!(a1_clean > 0, "clean hello did not move a1 (KG-79.A)");
             // r2: lower-time fatal — early-returns BEFORE the census emitter.
             let r2 = php_runtime::RetainSet::new();
-            let (_, s) = execute_with_retain(&r2, &reg, &meta("<?php goto x;"));
+            let (_, s) = execute_with_retain(&r2, &reg, &meta("<?php goto x;")).pair();
             assert_eq!(
                 s,
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -1965,7 +1955,7 @@ mod implementation {
             );
             // r3: the next request's split must be its OWN, not clean+residue.
             let r3 = php_runtime::RetainSet::new();
-            let (b, s) = execute_with_retain(&r3, &reg, &meta("<?php echo \"a\";"));
+            let (b, s) = execute_with_retain(&r3, &reg, &meta("<?php echo \"a\";")).pair();
             assert_eq!(s, StatusCode::OK);
             assert_eq!(b, b"a");
             let ((a1_after, _), _) = census::LAST_SPLIT.with(|c| c.get());
@@ -1990,7 +1980,7 @@ mod implementation {
                 p = lib.display()
             );
             let retain = php_runtime::RetainSet::new();
-            let (b, s) = execute_with_retain(&retain, &reg, &meta(&src));
+            let (b, s) = execute_with_retain(&retain, &reg, &meta(&src)).pair();
             assert_eq!(s, StatusCode::OK);
             assert_eq!(b, b"xx");
             assert_eq!(
@@ -2022,7 +2012,7 @@ mod implementation {
             use std::sync::atomic::Ordering;
             let before = census::DRAINED_CALLS.load(Ordering::Relaxed);
             let r = php_runtime::RetainSet::new();
-            let (_, s) = execute_with_retain(&r, &reg, &meta("<?php goto x;"));
+            let (_, s) = execute_with_retain(&r, &reg, &meta("<?php goto x;")).pair();
             assert_eq!(s, StatusCode::INTERNAL_SERVER_ERROR);
             let after = census::DRAINED_CALLS.load(Ordering::Relaxed);
             assert!(
@@ -2043,10 +2033,11 @@ mod implementation {
             let (tx, rx) = oneshot::channel();
             let task = WorkerTask {
                 meta: meta("<?php echo \"drain\";"),
+                web: None,
                 response_tx: tx,
             };
             pool.dispatch(task).unwrap();
-            let (body, status) = rx.blocking_recv().unwrap();
+            let (body, status) = rx.blocking_recv().unwrap().pair();
             assert_eq!(status, StatusCode::OK);
             assert_eq!(body, b"drain");
             let Ok(pool) = Arc::try_unwrap(pool) else {
@@ -2062,6 +2053,8 @@ pub use implementation::{
     REQ_NS, WorkerHandlerMeta, WorkerPool, WorkerPoolContext, WorkerTask, census_probe_active,
     req_ns_armed,
 };
+#[cfg(all(test, feature = "axum-server"))]
+pub use implementation::execute_request; // S-188: the axum_web teeth drive one request on this thread
 // API di testimonianza per le PATCH-SONDA di sessione (WP-93 A-PP-67):
 // nessun consumatore in-tree per costruzione — le sonde si applicano come
 // patch temporanee in finestra di misura. L'allow è la DICHIARAZIONE:
