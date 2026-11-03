@@ -1,0 +1,208 @@
+--- /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp189-harness/../wp188-harness/s188-throughput.sh	2026-11-03 14:07:26
++++ /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp189-harness/s189-guardia-ax.sh	2026-11-03 19:29:58
+@@ -1,54 +1,60 @@
+ #!/bin/bash
+-# s188-throughput.sh <tentativo> — S-188 Tappa 2: throughput WordPress, server residente
+-# (`php-server --axum --workers 4`, pin s188) vs oracle `php -S` a 4 worker, carico `ab` chiuso
+-# per livello C ∈ {1,4,8}; criterio s188-criterio-throughput.md. Struttura e igiene ereditate da
+-# s188-wp-server-pair.sh (quiescenza per boot, gate richieste, rusage dell'albero, GHz da time -l).
+-# Variabili: C_LEVELS ("1 4 8") N (150) WARM (20) R (3) PIN_ATTESO (hash server pin s188).
+-# rc SOLO da pair-out/tp188-<t>.done. Generato con assistenza AI (Claude Fable 5).
++# s189-guardia-ax.sh <tentativo> — S-189 FETTA 1: guardia di NON-REGRESSIONE del throughput WordPress
++# fra `php-server --axum --workers 4` pin s188 (AXold, stash) e pin s189 (AXnew, canonica), interallacciati
++# nella STESSA finestra, carico `ab` chiuso per livello C ∈ {1,4,8}; criterio s189-criterio-guardia-ax.md.
++# COPIA DICHIARATA di ../wp188-harness/s188-throughput.sh (manifest s189-guardia-ax-copia.diff, generatore
++# gen-fetta1.py) coi SOLI adattamenti: nomi s189/ga189, bracci AXold/AXnew (due binari, due hash), warm-up
++# a -c W (unit cache di ogni worker calda), lock TOKEN s189, giudice SOSTITUITO (AXnew/AXold per cella e
++# per ciclo, bande [0,97;1,05] a C=4/8 e [0,95;1,05] a C=1, p99 e cpu/req companion). Il resto INVARIATO.
++# Variabili: C_LEVELS N WARM R PIN_ATTESO (hash s189) PIN_OLD (hash s188) SRVOLD (stash). rc SOLO da
++# pair-out/ga189-<t>.done. Generato con assistenza AI (Claude Fable 5).
+ set -u
+ export PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin
+ REPO="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust"
+-H="$REPO/wp188-harness"
++H="$REPO/wp189-harness"
+ QUIESCE="$REPO/wp129-harness/s129-quiescenza.sh"
+ T="${1:?tentativo (es. t1, dry1)}"
+ OUT="$H/pair-out"; mkdir -p "$OUT"
+-VERD="$H/s188-throughput-verdetto-$T.out"
+-DONE="$OUT/tp188-$T.done"
++VERD="$H/s189-guardia-ax-verdetto-$T.out"
++DONE="$OUT/ga189-$T.done"
+ C_LEVELS="${C_LEVELS:-1 4 8}"; N="${N:-150}"; WARM="${WARM:-20}"; R="${R:-3}"; WORKERS=4
+-ARMS="${ARMS:-AX O4}"
++ARMS="${ARMS:-AXold AXnew}"
+ PORT=8080; BASE="http://127.0.0.1:$PORT"
+ WPDEV="$HOME/Claude/wpdev/src"
+-SRVBIN="$HOME/Claude/php-rust-output/release/php-server"
++SRVNEW="$HOME/Claude/php-rust-output/release/php-server"
++SRVOLD="${SRVOLD:-/Volumes/Extreme Pro/Claude/phpr-old-target/release/php-server-s188}"
+ ORACLE="/opt/homebrew/opt/php/bin/php"
+-PIN_ATTESO="${PIN_ATTESO:?PIN_ATTESO (hash server pin s188) obbligatorio}"
++PIN_ATTESO="${PIN_ATTESO:?PIN_ATTESO (hash server pin s189 = AXnew) obbligatorio}"
++PIN_OLD="${PIN_OLD:-97b58fd225ca7289}"
+ SOCK=/private/tmp/mysql-wp8.sock
+ MLOCK=/private/tmp/phpr-measure.lock
+ URLS="front:/ post:/2026/07/hello-world/ feed:/?feed=rss2 login:/wp-login.php rest:/wp-json/wp/v2/posts"
+-RU="$H/rusage188.py"
++RU="$REPO/wp188-harness/rusage188.py"
+ NURL=$(echo $URLS | wc -w | tr -d ' '); NLEV=$(echo $C_LEVELS | wc -w | tr -d ' ')
+ EXPECTED_REQ=$(( 1 + NLEV * NURL * (WARM + N) ))
+ step(){ echo "$(date +%H:%M:%S) $1" >> "$OUT/tp-progress-$T.txt"; }
+-fin(){ echo "rc=$1 ${2:-}" > "$DONE"; echo "$1" > "$OUT/tp188-$T.rc"; step "DONE rc=$1 ${2:-}"; exit "$1"; }
+-: > "$OUT/tp-progress-$T.txt"; rm -f "$DONE" "$OUT/tp188-$T.rc"
++fin(){ echo "rc=$1 ${2:-}" > "$DONE"; echo "$1" > "$OUT/ga189-$T.rc"; step "DONE rc=$1 ${2:-}"; exit "$1"; }
++: > "$OUT/tp-progress-$T.txt"; rm -f "$DONE" "$OUT/ga189-$T.rc"
+ SRVPID=""; TIMEPID=""
+ cleanup(){ [ -n "$SRVPID" ] && kill -TERM "$SRVPID" 2>/dev/null; pkill -TERM -f -- "--port $PORT" 2>/dev/null; pkill -TERM -f "127.0.0.1:$PORT" 2>/dev/null; }
+ trap cleanup EXIT
+ 
+ [ -e "$VERD" ] && fin 7 verdetto-esiste
+ command -v ab >/dev/null || fin 2 "ab non trovato"
+-SRV="$(shasum -a 256 "$SRVBIN" | cut -c1-16)"
+-[ "$SRV" = "$PIN_ATTESO" ] || fin 9 "pin server $SRV ≠ $PIN_ATTESO"
+-[ -r "$MLOCK" ] && grep -q 's188' "$MLOCK" || fin 4 "lock assente o senza TOKEN s188"
++SRV="$(shasum -a 256 "$SRVNEW" | cut -c1-16)"; OLDH="$(shasum -a 256 "$SRVOLD" | cut -c1-16)"
++[ "$SRV" = "$PIN_ATTESO" ] || fin 9 "pin server nuovo $SRV ≠ $PIN_ATTESO"
++[ "$OLDH" = "$PIN_OLD" ] || fin 9 "pin server vecchio $OLDH ≠ $PIN_OLD"
++[ -r "$MLOCK" ] && grep -q 's189' "$MLOCK" || fin 4 "lock assente o senza TOKEN s188"
+ if lsof -nP -iTCP:"$PORT" -sTCP:LISTEN >/dev/null 2>&1 || pgrep -f "127.0.0.1:$PORT" >/dev/null 2>&1 || pgrep -f -- "--port $PORT" >/dev/null 2>&1; then fin 3 "porta $PORT occupata"; fi
+ mysqladmin -S "$SOCK" -uroot ping 2>/dev/null | grep -q alive || fin 5 "MySQL wp8 giù"
+ MQ(){ mysql -S "$SOCK" -uroot -N -e "$1" 2>/dev/null; }
+ [ "$(MQ "SELECT option_value FROM wp.wp_options WHERE option_name='siteurl'")" = "$BASE" ] || fin 5 "siteurl ≠ $BASE"
+ [ "$(grep -c WP_BENCH_DISABLE_CRON "$WPDEV/wp-config.php")" = 1 ] || fin 5 "wp-config senza WP_BENCH_DISABLE_CRON"
+ GIT_REV="$(git -C "$REPO" rev-parse --short HEAD 2>/dev/null || echo no-git)"
+-DRIVER_SHA="$(shasum -a 256 "$H/s188-throughput.sh" "$RU" | shasum -a 256 | cut -c1-16)"
++DRIVER_SHA="$(shasum -a 256 "$H/s189-guardia-ax.sh" "$RU" | shasum -a 256 | cut -c1-16)"
+ PHPV="$("$ORACLE" -r 'echo PHP_VERSION;')"
+ if [ "$N" -ge 150 ] && [ "$R" -ge 3 ] && [ "$NLEV" -ge 3 ]; then GRADE=VERDICT; else GRADE=DRY; fi
+-step "identità: server=$SRV git=$GIT_REV driver_sha=$DRIVER_SHA php=$PHPV C=[$C_LEVELS] N=$N WARM=$WARM R=$R req/boot=$EXPECTED_REQ grade=$GRADE"
++step "identità: server_new=$SRV server_old=$OLDH git=$GIT_REV driver_sha=$DRIVER_SHA php=$PHPV C=[$C_LEVELS] N=$N WARM=$WARM R=$R req/boot=$EXPECTED_REQ grade=$GRADE"
+ 
+ quiesce_gate(){
+   local attempt q
+@@ -78,7 +84,8 @@
+   mkdir -p "$D"; rm -f "$D"/*
+   cd "$WPDEV" || fin 2 wpdev
+   case "$arm" in
+-    AX) env WP_BENCH_DISABLE_CRON=1 /usr/bin/time -l "$SRVBIN" --axum --workers "$WORKERS" --host 127.0.0.1 --port "$PORT" -t "$WPDEV" > /dev/null 2> "$D/server.log" & ;;
++    AXold) env WP_BENCH_DISABLE_CRON=1 /usr/bin/time -l "$SRVOLD" --axum --workers "$WORKERS" --host 127.0.0.1 --port "$PORT" -t "$WPDEV" > /dev/null 2> "$D/server.log" & ;;
++    AXnew) env WP_BENCH_DISABLE_CRON=1 /usr/bin/time -l "$SRVNEW" --axum --workers "$WORKERS" --host 127.0.0.1 --port "$PORT" -t "$WPDEV" > /dev/null 2> "$D/server.log" & ;;
+     O4) env WP_BENCH_DISABLE_CRON=1 PHP_CLI_SERVER_WORKERS=$WORKERS /usr/bin/time -l "$ORACLE" -S "127.0.0.1:$PORT" -t "$WPDEV" > /dev/null 2> "$D/server.log" & ;;
+   esac
+   TIMEPID=$!
+@@ -89,7 +96,7 @@
+   step "$(basename "$D") boot ok pid=$SRVPID tree=$(tree | wc -w | tr -d ' ')"
+   for lev in $C_LEVELS; do
+     for entry in $URLS; do u="${entry%%:*}"; path="${entry#*:}"
+-      ab -q -c "$lev" -n "$WARM" "$BASE$path" > /dev/null 2>&1
++      ab -q -c "$WORKERS" -n "$WARM" "$BASE$path" > /dev/null 2>&1  # S-189: warm-up a -c W (ogni unit cache calda)
+       python3 "$RU" $(tree) > "$D/c$lev-$u.ru0" || echo "rusage $u" >> "$D/VOID"
+       ab -q -c "$lev" -n "$N" "$BASE$path" > "$D/c$lev-$u.ab" 2>&1 || echo "ab rc≠0 c$lev $u" >> "$D/VOID"
+       sleep 0.3
+@@ -120,16 +127,19 @@
+   done
+ done
+ 
+-python3 - "$OUT" "$T" "$SRV" "$GIT_REV" "$DRIVER_SHA" "$C_LEVELS" "$N" "$R" "$PHPV" "$GRADE" "$URLS" "$ARMS" "$EXPECTED_REQ" > "$VERD" <<'PY'
++python3 - "$OUT" "$T" "$SRV" "$OLDH" "$GIT_REV" "$DRIVER_SHA" "$C_LEVELS" "$N" "$R" "$PHPV" "$GRADE" "$URLS" "$ARMS" "$EXPECTED_REQ" > "$VERD" <<'PY'
+ import os, re, statistics, sys, glob
+-out, T, SRV, GIT, DSHA, CL, N, R, PHPV, GRADE, URLS, ARMS, EXPREQ = sys.argv[1:14]
++out, T, NEW, OLD, GIT, DSHA, CL, N, R, PHPV, GRADE, URLS, ARMS, EXPREQ = sys.argv[1:15]
+ levels = CL.split(); N = int(N); R = int(R); urls = [e.split(":", 1)[0] for e in URLS.split()]; arms = ARMS.split()
+-label = {"AX": "php-server --axum --workers 4 (pin s188)", "O4": "oracle php -S, PHP_CLI_SERVER_WORKERS=4"}
++label = {"AXold": f"php-server --axum --workers 4 pin s188 {OLD} (stash)", "AXnew": f"php-server --axum --workers 4 pin s189 {NEW} (canonica)"}
++BAND = {lev: ((0.95, 1.05) if lev == "1" else (0.97, 1.05)) for lev in levels}
+ def rd(p): return open(p, errors="replace").read() if os.path.exists(p) else ""
+ def ru(p):
+     v = rd(p).split(); return [int(x) for x in v] if len(v) == 5 else None
+ def abf(txt, key):
+     m = re.search(key + r":\s+([\d.]+)", txt); return float(m.group(1)) if m else None
++def p99(txt):
++    m = re.search(r"^\s*99%\s+(\d+)", txt, re.M); return float(m.group(1)) if m else None
+ boot = {}
+ for c in range(1, R + 1):
+     for a in arms:
+@@ -146,22 +156,21 @@
+             for u in urls:
+                 t = rd(f"{d}/c{lev}-{u}.ab"); r0, r1 = ru(f"{d}/c{lev}-{u}.ru0"), ru(f"{d}/c{lev}-{u}.ru1")
+                 rps = abf(t, "Requests per second"); failed = abf(t, "Failed requests"); non2 = abf(t, "Non-2xx responses")
+-                tpr = abf(t, r"Time per request:\s+[\d.]+ \[ms\] \(mean\)\s*\nTime per request") or abf(t, "Time per request")
+-                cell = {"rps": rps, "failed": failed, "non2xx": non2 or 0.0, "tpr": tpr,
++                cell = {"rps": rps, "failed": failed, "non2xx": non2 or 0.0, "p99": p99(t),
+                         "ok": bool(rps and failed == 0.0 and not non2 and not b["void"] and r0 and r1)}
+-                if r0 and r1: cell["cpu"] = (r1[0] + r1[1] - r0[0] - r0[1]) / N / 1e6; cell["ucpu"] = (r1[0] - r0[0]) / N / 1e6
++                if r0 and r1: cell["cpu"] = (r1[0] + r1[1] - r0[0] - r0[1]) / N / 1e6
+                 b["cell"][(lev, u)] = cell
+         boot[(c, a)] = b
+-print(f"== s188 throughput WP: php-server {SRV} --axum --workers 4 vs PHP {PHPV} php -S ×4 worker | git={GIT} driver_sha={DSHA} tentativo={T} epoch={int(__import__('time').time())} ==")
+-print(f"grade={GRADE}  # VERDICT solo con N>=150 R>=3 e i tre livelli; rc autoritativo = pair-out/tp188-{T}.done")
+-print(f"protocollo: ab chiuso per livello C={levels}, warm-up escluso, N={N} per cella, R={R} boot/braccio ordine AX,O4 · canonica = req/s (ab) · companion = CPU (user+sys) dell'albero/req, user/req, time/request · spread ≤5% su R altrimenti cella VOID · gate richieste/boot={EXPREQ} · DISABLE_WP_CRON via env")
++print(f"== s189 FETTA 1 guardia AX (NON-REGRESSIONE, mai record): AXnew {NEW} vs AXold {OLD}, --axum --workers 4, WordPress, PHP {PHPV} assente per disegno | git={GIT} driver_sha={DSHA} tentativo={T} epoch={int(__import__('time').time())} ==")
++print(f"grade={GRADE}  # VERDICT solo con N>=150 R>=3 e i tre livelli; rc autoritativo = pair-out/ga189-{T}.done")
++print(f"protocollo: ab chiuso per livello C={levels}, warm-up -n 20 a -c 4 escluso, N={N} per cella, R={R} cicli ordine AXold,AXnew nella STESSA finestra · canonica = AXnew/AXold req/s per cella nello stesso ciclo, mediana dei {R} · bande pre-registrate C=4/8 [0,97;1,05], C=1 [0,95;1,05] · spread ≤5% per braccio altrimenti cella VOID · mediana fuori banda con un ciclo dentro ⇒ VOID (rimisura), {R} cicli concordi fuori ⇒ KILL (KS-189-5) · companion p99 (C=8 nuovo ≤ vecchio; >1,10× REPERTO) e cpu(u+s)/req (±2%) · gate richieste/boot={EXPREQ}")
+ voids = [f"c{c}-{a}({boot[(c,a)]['void'][:50]})" for c in range(1, R + 1) for a in arms if boot[(c, a)]["void"]]
+ retried = [f"c{c}-{a}×{boot[(c,a)]['voids']}" for c in range(1, R + 1) for a in arms if boot[(c, a)]["voids"]]
+ print(f"igiene: tree_pids per braccio {sorted(set((a, boot[(c,a)]['tree']) for c in range(1,R+1) for a in arms))} · richieste/boot={sorted(set(boot[k]['req'] for k in boot))} (attese {EXPREQ}) · boot scartati: {' '.join(retried) or 'nessuno'} · boot VOID finali: {len(voids)} {' '.join(voids)}")
+ print("classe di core (time -l): " + " ".join(f"c{c}-{a}={boot[(c,a)]['ghz']:.2f}GHz/IPC {boot[(c,a)]['ipc']:.2f}" for c in range(1, R + 1) for a in arms if boot[(c, a)]["ghz"]))
+-rc = 0; med = {}
++rc = 0; med = {}; per = {}
+ for a in arms:
+-    print(f"\nbraccio {a} = {label.get(a, a)} — req/s [per ciclo] mediana spread · CPU(u+s)/req ms · user/req · time/req ms")
++    print(f"\nbraccio {a} = {label.get(a, a)} — req/s [per ciclo] mediana spread · p99 ms · CPU(u+s)/req ms")
+     for lev in levels:
+         for u in urls:
+             cells = [boot[(c, a)]["cell"][(lev, u)] for c in range(1, R + 1)]
+@@ -169,23 +178,37 @@
+             valid = all(x["ok"] for x in cells) and len(rps) == R
+             spread = (max(rps) - min(rps)) / statistics.median(rps) if len(rps) >= 2 else None
+             void = (not valid) or (R >= 3 and spread is not None and spread > 0.05)
+-            if not void: med[(a, lev, u)] = statistics.median(rps)
++            if not void:
++                med[(a, lev, u)] = statistics.median(rps); per[(a, lev, u)] = [x["rps"] for x in cells]
+             else: rc = rc or 1
+-            cpu = statistics.median([x["cpu"] for x in cells if x.get("cpu") is not None] or [0]); ucpu = statistics.median([x["ucpu"] for x in cells if x.get("ucpu") is not None] or [0])
+-            tpr = statistics.median([x["tpr"] for x in cells if x.get("tpr")] or [0]); fl = sum(int(x["failed"] or 0) for x in cells); n2 = sum(int(x["non2xx"]) for x in cells)
++            p9 = statistics.median([x["p99"] for x in cells if x.get("p99") is not None] or [0]); cpu = statistics.median([x["cpu"] for x in cells if x.get("cpu") is not None] or [0])
+             sp = f"{spread*100:.1f}%" if spread is not None else "n/a"
+-            print(f"  C={lev:<2} {u:<6} rps=[{' '.join(f'{v:.1f}' for v in rps)}] med={statistics.median(rps) if rps else float('nan'):.1f} spread={sp} {'VOID' if void else 'ok'}  cpu/req={cpu:.1f} user/req={ucpu:.1f} t/req={tpr:.1f} failed={fl} non2xx={n2}")
+-def ratio(a, b, lev, u):
+-    return med[(a, lev, u)] / med[(b, lev, u)] if (a, lev, u) in med and (b, lev, u) in med and med[(b, lev, u)] else None
+-if "AX" in arms and "O4" in arms:
+-    print("\nO4/AX req/s per cella: " + " · ".join(f"C={lev} {u}={r:.2f}" if (r := ratio('O4', 'AX', lev, u)) else f"C={lev} {u}=VOID" for lev in levels for u in urls))
+-for a in arms:
+-    if len(levels) >= 2:
+-        print(f"scaling {a} req/s C{levels[1]}/C{levels[0]}: " + " · ".join(f"{u}={med[(a,levels[1],u)]/med[(a,levels[0],u)]:.2f}" if (a,levels[1],u) in med and (a,levels[0],u) in med else f"{u}=VOID" for u in urls))
+-    if len(levels) >= 3:
+-        print(f"scaling {a} req/s C{levels[2]}/C{levels[1]}: " + " · ".join(f"{u}={med[(a,levels[2],u)]/med[(a,levels[1],u)]:.2f}" if (a,levels[2],u) in med and (a,levels[1],u) in med else f"{u}=VOID" for u in urls))
+-print(f"celle VOID: {' '.join(f'{a}/C{lev}/{u}' for a in arms for lev in levels for u in urls if (a, lev, u) not in med) or 'nessuna'}")
+-print(f"rc={rc}"); sys.exit(rc)
++            print(f"  C={lev:<2} {u:<6} rps=[{' '.join(f'{v:.1f}' for v in rps)}] med={statistics.median(rps) if rps else float('nan'):.1f} spread={sp} {'VOID' if void else 'ok'}  p99={p9:.0f} cpu/req={cpu:.1f} failed={sum(int(x['failed'] or 0) for x in cells)} non2xx={sum(int(x['non2xx']) for x in cells)}")
++kills = []; voidc = []
++print("\nAXnew/AXold req/s per cella [per ciclo] mediana banda esito:")
++for lev in levels:
++    lo, hi = BAND[lev]
++    for u in urls:
++        if ("AXnew", lev, u) not in med or ("AXold", lev, u) not in med:
++            print(f"  C={lev:<2} {u:<6} VOID (cella senza mediana)"); voidc.append(f"C{lev}/{u}"); continue
++        rs = [n / o for n, o in zip(per[("AXnew", lev, u)], per[("AXold", lev, u)]) if o]
++        m = statistics.median(rs); inside = [lo <= r <= hi for r in rs]
++        if lo <= m <= hi: esito = "ok"
++        elif any(inside): esito = "VOID (rimisura: un ciclo dentro)"; voidc.append(f"C{lev}/{u}")
++        else: esito = "KILL (3 cicli concordi fuori banda)" if m < lo else "REPERTO >1,05 (attribuire prima di promuovere)"; kills.append(f"C{lev}/{u}={m:.3f}")
++        print(f"  C={lev:<2} {u:<6} [{' '.join(f'{r:.3f}' for r in rs)}] med={m:.3f} banda=[{lo:.2f};{hi:.2f}] {esito}")
++def comp(key, name, thr):
++    rows = []
++    for lev in levels:
++        for u in urls:
++            n = statistics.median([boot[(c, "AXnew")]["cell"][(lev, u)].get(key) or 0 for c in range(1, R + 1)])
++            o = statistics.median([boot[(c, "AXold")]["cell"][(lev, u)].get(key) or 0 for c in range(1, R + 1)])
++            rows.append(f"C={lev} {u}={n/o:.3f}" + (" REPERTO" if o and n / o > thr else "") if o else f"C={lev} {u}=n/a")
++    print(f"companion {name} nuovo/vecchio (REPERTO se > {thr}): " + " · ".join(rows))
++comp("p99", "p99", 1.10); comp("cpu", "cpu(u+s)/req", 1.02)
++print(f"celle VOID: {' '.join(voidc) or 'nessuna'} · KILL/REPERTO: {' '.join(kills) or 'nessuno'}")
++if kills: rc = 2
++print(f"rc={rc}  # 0 = tutte le celle in banda · 1 = celle VOID (rimisura) · 2 = KS-189-5 (cura NON promossa)"); sys.exit(rc)
+ PY
+ JRC=$?
+ fin "$JRC" "giudice"
