@@ -10,6 +10,9 @@ import stat
 import sys
 
 T = sys.argv[1] if len(sys.argv) > 1 else "t1"
+# secondo argomento "catena": il lanciatore esegue s188-catena-t3.sh (coppia t3 + throughput t1)
+CHAIN = len(sys.argv) > 2 and sys.argv[2] == "catena"
+EXEC_TARGET = f'exec /bin/bash "$H/s188-catena-t3.sh"' if CHAIN else f'exec /bin/bash "$H/s188-wp-server-pair.sh" {T}'
 H = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.join(H, "..", "wp184-harness", "s184-lancio-pair-t25.sh")
 DST = os.path.join(H, "s188-lancio.sh")
@@ -42,7 +45,7 @@ SUBS = [
      f'{{ echo "== dichiarazione finestra quieta {T} $(date \'+%F %T\') =="'),
     ('quiete raggiunta — dichiarazione in quiet-decl-t25.txt — lancio pair t25',
      f'quiete raggiunta — dichiarazione in quiet-decl-{T}.txt — lancio coppia server WP {T}'),
-    ('exec /bin/bash "$H/s184-pair.sh" t25', f'exec /bin/bash "$H/s188-wp-server-pair.sh" {T}'),
+    ('exec /bin/bash "$H/s184-pair.sh" t25', EXEC_TARGET),
 ]
 for old, new in SUBS:
     n = s.count(old)

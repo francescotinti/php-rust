@@ -388,14 +388,14 @@ pub fn compile_fatal_outcome(file: &[u8], message: &str, line: Line) -> VmOutcom
     // host's stderr log (the response still carries the X-Powered-By header).
     if php_types::sapi::web_request().is_some() {
         let rendered = format!(
-            "<br />\n<b>Fatal error</b>:  {message} in <b>{file_s}</b> on line <b>{line}</b><br />\n"
+            "<br />\n<b>Fatal error</b>:  {message} in <b>{file_s}</b> on line <b>{line}</b><br />\nStack trace:\n#0 {{main}}\n"
         );
         return VmOutcome {
             rendered: rendered.into_bytes(),
             fatal: Some(PhpError::Error(message.to_string())),
             headers: vec![b"X-Powered-By: PHP/8.5.7".to_vec()],
             error_log: vec![
-                format!("PHP Fatal error:  {message} in {file_s} on line {line}").into_bytes(),
+                format!("PHP Fatal error:  {message} in {file_s} on line {line}\nStack trace:\n#0 {{main}}").into_bytes(),
             ],
             ..VmOutcome::default()
         };

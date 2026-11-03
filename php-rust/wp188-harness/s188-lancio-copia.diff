@@ -4,26 +4,26 @@
 < # lock TOKEN s184, s184-pair.sh t25, PIÙ il gate sentinella «processo singolo >50 % CPU» ×2 (az.rev. S-183 #3, come
 < # s184-lancio-rt2.sh) dopo E2. Il resto INVARIATO (testo S-182 conservato sotto).
 ---
-> # s188-lancio.sh — COPPIA SERVER WP t2 @ pin s183 (criterio s188-criterio-server-pair.md p.6): COPIA DICHIARATA di
+> # s188-lancio.sh — COPPIA SERVER WP t3 @ pin s183 (criterio s188-criterio-server-pair.md p.6): COPIA DICHIARATA di
 > # ../wp184-harness/s184-lancio-pair-t25.sh (manifest s188-lancio-copia.diff, generatore gen-lancio-s188.py) coi SOLI
-> # adattamenti: nomi s188/t2/pair188, harness wp188, lock TOKEN s188, exec s188-wp-server-pair.sh t2, attesa post-.done del
+> # adattamenti: nomi s188/t3/pair188, harness wp188, lock TOKEN s188, exec s188-wp-server-pair.sh t3, attesa post-.done del
 > # watchdog 10 min (nessun ORM). Il resto INVARIATO (testo S-184 conservato sotto).
 8,9c8,9
 < H="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp184-harness"
 < LOG="$H/pair-out/lancio-t25.log"; mkdir -p "$H/pair-out"
 ---
 > H="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp188-harness"
-> LOG="$H/pair-out/lancio-t2.log"; mkdir -p "$H/pair-out"
+> LOG="$H/pair-out/lancio-t3.log"; mkdir -p "$H/pair-out"
 19,20c19,20
 < echo "s184 coppia t25 @ pin s182 $(date '+%F %T') pid=$$" > "$MLOCK"
 < echo "$(date '+%F %T') lock scritto: $MLOCK (TOKEN s184)" >> "$LOG"
 ---
-> echo "s188 coppia server WP t2 @ pin s183 $(date '+%F %T') pid=$$" > "$MLOCK"
+> echo "s188 coppia server WP t3 @ pin s183 $(date '+%F %T') pid=$$" > "$MLOCK"
 > echo "$(date '+%F %T') lock scritto: $MLOCK (TOKEN s188)" >> "$LOG"
 54c54
 < ( WD="$H/pair-out/watchdog-t25.txt"; PD="$H/pair-out/pair184-t25.done"; t0=$(date +%s); tdone=0
 ---
-> ( WD="$H/pair-out/watchdog-t2.txt"; PD="$H/pair-out/pair188-t2.done"; t0=$(date +%s); tdone=0
+> ( WD="$H/pair-out/watchdog-t3.txt"; PD="$H/pair-out/pair188-t3.done"; t0=$(date +%s); tdone=0
 59c59
 <     { [ "$tdone" != 0 ] && [ $((now-tdone)) -ge 14400 ]; } && break
 ---
@@ -32,11 +32,11 @@
 < Q="$H/pair-out/quiet-decl-t25.txt"
 < { echo "== dichiarazione finestra quieta t25 $(date '+%F %T') =="
 ---
-> Q="$H/pair-out/quiet-decl-t2.txt"
-> { echo "== dichiarazione finestra quieta t2 $(date '+%F %T') =="
+> Q="$H/pair-out/quiet-decl-t3.txt"
+> { echo "== dichiarazione finestra quieta t3 $(date '+%F %T') =="
 69,70c69,70
 < echo "$(date '+%F %T') quiete raggiunta — dichiarazione in quiet-decl-t25.txt — lancio pair t25" >> "$LOG"
 < exec /bin/bash "$H/s184-pair.sh" t25
 ---
-> echo "$(date '+%F %T') quiete raggiunta — dichiarazione in quiet-decl-t2.txt — lancio coppia server WP t2" >> "$LOG"
-> exec /bin/bash "$H/s188-wp-server-pair.sh" t2
+> echo "$(date '+%F %T') quiete raggiunta — dichiarazione in quiet-decl-t3.txt — lancio coppia server WP t3" >> "$LOG"
+> exec /bin/bash "$H/s188-catena-t3.sh"

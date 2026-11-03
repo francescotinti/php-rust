@@ -23,7 +23,8 @@ l "CI ferma; coda residua: $(ls -1 "$CIQ" 2>/dev/null | grep -vc '^\._') (se >0:
 SC=$(shasum -a 256 "$HOME/Claude/php-rust-output/release/php-server" | cut -c1-16)
 [ "$SC" = "$SRV_ATTESO" ] || { l "php-server canonico $SC ≠ pin s183 $SRV_ATTESO — coppia NON lanciata"; exit 9; }
 [ -x "$H/s188-lancio.sh" ] || { l "s188-lancio.sh assente (generarlo con gen-lancio-s188.py) — coppia NON lanciata"; exit 2; }
-l "pin s183 server=$SC == canonico — lancio s188-lancio.sh"
+l "pin server=$SC == atteso — lancio s188-lancio.sh (PIN_ATTESO esportato per la catena)"
+export PIN_ATTESO="$SRV_ATTESO"
 perl "$DZ" "$H/pair-out/lancio-dz.log" /bin/bash "$H/s188-lancio.sh"
 sleep 5
 l "lanciato (daemonize): $(pgrep -fl 's188-lancio' | grep -v pgrep | awk '{print $1}' | tr '\n' ' ')"

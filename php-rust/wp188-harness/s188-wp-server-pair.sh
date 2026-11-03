@@ -27,7 +27,9 @@ VERD="$H/s188-wp-server-pair-verdetto-$T.out"
 DONE="$OUT/pair188-$T.done"
 # CONN_GATE default 1: promosso ADVISORY→GATE dal dry1 (03/11 00:54: Δ=K+1 esatto su ogni URL PHP, entrambi i lati; criterio p.8)
 W="${W:-20}"; K="${K:-30}"; R="${R:-3}"; DRAIN="${DRAIN:-1}"; CONN_GATE="${CONN_GATE:-1}"
-ARMS="P Pphpr O P0 Ooff"
+# t3 (Tappa 2, criterio p.13): braccio A = php-server --axum --workers 1 (processo singolo, thread worker);
+# Pphpr ritirato (equivalenza 1,00 misurata in t2). ARMS resta sovrascrivibile dall'ambiente.
+ARMS="${ARMS:-P A O P0 Ooff}"
 PORT=8080; BASE="http://127.0.0.1:$PORT"
 WPDEV="$HOME/Claude/wpdev/src"
 SRVBIN="$HOME/Claude/php-rust-output/release/php-server"
@@ -47,7 +49,7 @@ fin(){ echo "rc=$1 ${2:-}" > "$DONE"; echo "$1" > "$OUT/pair188-$T.rc"; step "DO
 : > "$OUT/progress-$T.txt"
 rm -f "$DONE" "$OUT/pair188-$T.rc"
 SRVPID=""; TIMEPID=""
-cleanup(){ rm -f "$PROBE"; [ -n "$SRVPID" ] && kill -TERM "$SRVPID" 2>/dev/null; [ -n "${WDPID:-}" ] && kill "$WDPID" 2>/dev/null; }
+cleanup(){ rm -f "$PROBE"; [ -n "$SRVPID" ] && kill -TERM "$SRVPID" 2>/dev/null; [ -n "${WDPID:-}" ] && kill "$WDPID" 2>/dev/null; pkill -TERM -f -- "--port $PORT" 2>/dev/null; }
 trap cleanup EXIT
 
 # ---- Fase 0: rifiuti e identità ------------------------------------------------------------------
@@ -58,7 +60,7 @@ SRV="$(shasum -a 256 "$SRVBIN" | cut -c1-16)"; PHPRH="$(shasum -a 256 "$PHPRBIN"
 [ "$PHPRH" = "$PHPR_ATTESO" ] || { step "ABORT pin: phpr=$PHPRH atteso $PHPR_ATTESO"; fin 9 pin-mismatch-phpr; }
 [ -r "$MLOCK" ] && grep -q 's188' "$MLOCK" || fin 4 "lock $MLOCK assente o senza TOKEN s188"
 [ -z "${PHP_CLI_SERVER_WORKERS:-}" ] || fin 2 "PHP_CLI_SERVER_WORKERS deve essere unset"
-if lsof -nP -iTCP:"$PORT" -sTCP:LISTEN >/dev/null 2>&1 || pgrep -f "127.0.0.1:$PORT" >/dev/null 2>&1; then fin 3 "porta $PORT occupata"; fi
+if lsof -nP -iTCP:"$PORT" -sTCP:LISTEN >/dev/null 2>&1 || pgrep -f "127.0.0.1:$PORT" >/dev/null 2>&1 || pgrep -f -- "--port $PORT" >/dev/null 2>&1; then fin 3 "porta $PORT occupata"; fi
 mysqladmin -S "$SOCK" -uroot ping 2>/dev/null | grep -q alive || fin 5 "MySQL wp8 giù ($SOCK)"
 MQ(){ mysql -S "$SOCK" -uroot -N -e "$1" 2>/dev/null; }
 MYPID="$(pgrep -x mysqld | head -1)"; [ -n "$MYPID" ] || fin 5 "pid mysqld non trovato"
@@ -136,6 +138,7 @@ run_boot(){
   case "$arm" in
     P)     env WP_BENCH_DISABLE_CRON=1 /usr/bin/time -l "$SRVBIN" --host 127.0.0.1 --port "$PORT" -t "$WPDEV" > /dev/null 2> "$D/server.log" & ;;
     Pphpr) env WP_BENCH_DISABLE_CRON=1 /usr/bin/time -l "$PHPRBIN" -S "127.0.0.1:$PORT" -t "$WPDEV" > /dev/null 2> "$D/server.log" & ;;
+    A)     env WP_BENCH_DISABLE_CRON=1 /usr/bin/time -l "$SRVBIN" --axum --workers 1 --host 127.0.0.1 --port "$PORT" -t "$WPDEV" > /dev/null 2> "$D/server.log" & ;;
     P0)    env WP_BENCH_DISABLE_CRON=1 PHPR_UNIT_CACHE=0 /usr/bin/time -l "$SRVBIN" --host 127.0.0.1 --port "$PORT" -t "$WPDEV" > /dev/null 2> "$D/server.log" & ;;
     O)     env WP_BENCH_DISABLE_CRON=1 /usr/bin/time -l "$ORACLE" -S "127.0.0.1:$PORT" -t "$WPDEV" > /dev/null 2> "$D/server.log" & ;;
     Ooff)  env WP_BENCH_DISABLE_CRON=1 /usr/bin/time -l "$ORACLE" -d opcache.enable=0 -S "127.0.0.1:$PORT" -t "$WPDEV" > /dev/null 2> "$D/server.log" & ;;
@@ -207,7 +210,7 @@ W, K, R, EXPREQ = int(W), int(K), int(R), int(EXPREQ); CONN_GATE = CONN_GATE == 
 urls = [e.split(":", 1)[0] for e in URLS.split()]
 paths = dict(e.split(":", 1) for e in URLS.split())
 arms = ARMS.split()
-label = {"P": "phpr default (php-server modo nativo)", "Pphpr": "controllo `phpr -S` (pin phpr)", "O": "oracle php -S opcache ON", "P0": "phpr PHPR_UNIT_CACHE=0", "Ooff": "oracle -d opcache.enable=0"}
+label = {"P": "phpr default (php-server modo nativo)", "Pphpr": "controllo `phpr -S` (pin phpr)", "A": "php-server --axum --workers 1 (server residente, Tappa 2)", "O": "oracle php -S opcache ON", "P0": "phpr PHPR_UNIT_CACHE=0", "Ooff": "oracle -d opcache.enable=0"}
 def exp_conn(u):  # asset: via statica, nessuna connessione MySQL — solo la query di stato stessa
     return 1 if u == "asset" else K + 1
 def rd(p):
@@ -307,7 +310,11 @@ def ratios(x, y, withmy=False):
         outl.append(f"{u} [{' '.join(f'{v:.2f}' for v in per)}] med={statistics.median(per) if per else float('nan'):.2f}{tag}")
     return " · ".join(outl)
 print("\nrapporti per ciclo (stesso ciclo) P/O: " + ratios("P", "O"))
-print("equivalenza misurata Pphpr/P (php-server modo nativo vs phpr -S, stesso pin): " + ratios("Pphpr", "P"))
+if "A" in arms:
+    print("rapporti A/O (axum --workers 1 vs oracle): " + ratios("A", "O"))
+    print("rapporti A/P (axum vs modo nativo, stesso binario; attesa pre-registrata ≈1,00, scarto >5 % = reperto): " + ratios("A", "P"))
+if "Pphpr" in arms:
+    print("equivalenza misurata Pphpr/P (php-server modo nativo vs phpr -S, stesso pin): " + ratios("Pphpr", "P"))
 print("companion «pagina servita» (server+mysqld) P/O: " + ratios("P", "O", True))
 print("rapporti P0/Ooff (entrambi senza cache; DIREZIONE: opcache.enable=0 spegne anche l'ottimizzatore Zend): " + ratios("P0", "Ooff"))
 print("rapporti P0/P (lavoro evitato dalla cache unità): " + ratios("P0", "P"))

@@ -256,7 +256,8 @@ fatal_check fatal_compile yes
 fatal_check exit_code     yes
 fatal_check parse_err     no
 # parse envelope form under the web SAPI (the only assert parity allows here — KS-DS-78-5)
-if ! head -c 25 "$OUTDIR/parse_err.1" | cmp -s - <(printf '<br />\n<b>Parse error</b>:  '); then
+PENV="$(printf '<br />\n<b>Parse error</b>:  ')"
+if ! head -c "${#PENV}" "$OUTDIR/parse_err.1" | cmp -s - <(printf '%s' "$PENV"); then
   echo "FAIL parse_err: body does not start with the html '<br />\\n<b>Parse error</b>:  ' envelope:"
   head -2 "$OUTDIR/parse_err.1"
   FAILS=$((FAILS+1))
