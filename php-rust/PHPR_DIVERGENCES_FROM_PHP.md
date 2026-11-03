@@ -653,28 +653,43 @@ output osservabile (il gate lo asserisce):
   del main (ora emesso). Bordo reale per i temi WP; da chiudere con un fronte
   scope-hygiene dedicato.
 
-### 3.9 php-server (Axum SAPI): corpi d'errore HTTP (S-78.1.4, A-DS10 Council WP-79)
-- **Contratto A-TH8** (gate: `wp78-harness/gate-axum/run-gate.sh` fixture
-  fatal + test cargo `fatal_maps_to_http_500_compile_and_runtime`): ogni
-  fatal (compile E runtime) → **HTTP 500** con body = STDOUT CLI byte-parity
-  (il worker rende via `Vm::render_fatal`, la stessa funzione del main;
-  script name = path FILESYSTEM risolto, come SCRIPT_FILENAME FPM).
-  `exit()/die()` → **200** con l'output catturato (terminazione pulita FPM;
-  il codice di uscita non ha canale HTTP). Throwable non catturato con
-  `set_exception_handler` attivo → **200** senza banner (epilogo del main).
-- **DIVERGENZA 1 — html_errors** (A-DS10): php-fpm/cli-server di default ha
-  `html_errors=1` e serve l'error-page con markup (`<br />\n<b>Fatal
-  error</b>: …`); phpr in modalità `--axum` serve la forma PIANA del CLI
-  (`\nFatal error: … Stack trace…`). Scelta deliberata: la parità
-  byte-per-byte è ancorata all'oracle CLI (display_errors=On), il canale
-  html_errors del web SAPI non è ancora cablato nel worker Axum.
-- **DIVERGENZA 2 — messaggio dei Parse error**: il testo del diagnostico
-  del parser phpr NON è quello Zend (`syntax error, unexpected token …`)
-  ma il dump del parser interno (`UnexpectedToken(…Span…)`). L'ENVELOPE è
-  quello dell'oracolo (`\nParse error: {msg}\n`, HTTP 500), il testo dentro
-  DIVERGE. **Nessun claim di parity su questi body** (KS-DS-78-5); vale
-  anche per il CLI phpr (stderr `PHP Parse error: {dump}`; l'oracolo con
-  display_errors=On stampa il Parse error anche su stdout, phpr no).
+### 3.9 php-server (Axum SAPI): corpi d'errore HTTP e residui del ponte web (S-78.1.4, A-DS10 Council WP-79; RI-ANCORATO S-188, 2026-11-03)
+- **Contratto A-TH8 (forma S-188)**: il handler axum installa per richiesta lo
+  stesso `WebRequest` di `phpr -S` (php-server/src/axum_web, `RequestScope`
+  sul thread del worker) ⇒ lo status è quello del web SAPI, come nella
+  cli-server: `response_code` dello script o **200**. Un fatal (compile E
+  runtime) è **200 + banner html** (`<br />\n<b>Fatal error</b>:  …`),
+  `exit()/die()` conserva il codice impostato (`http_response_code`) o 200,
+  un parse error è 200 con l'envelope html; **500 SOLO per guasto del motore**
+  (lowering non-fatal, `Unsupported`, panic). Evidenza oracle `php -S`:
+  `wp188-harness/oracle-fatal-status.out` (200 ×4). Gate:
+  `wp78-harness/gate-axum/run-gate.sh` confronta status e body con un oracle
+  `php -S` sulla porta PORT+1 (non più con lo stdout CLI); test cargo
+  `axum_web::tests::fatals_under_web_sapi_are_200_html_banners`. Senza
+  `WebRequest` installato (test in-modulo, `__census_self`) resta la forma
+  pre-S-188 ancorata al CLI: fatal → 500 con body piano
+  (`fatal_maps_to_http_500_compile_and_runtime`).
+- **DIVERGENZA 1 — html_errors: CHIUSA S-188.** Il worker axum rende i banner
+  nella forma html del web SAPI (gli stessi byte della cli-server).
+- **DIVERGENZA 2 — messaggio dei Parse error**: INVARIATA. Il testo del
+  diagnostico del parser phpr NON è quello Zend; l'envelope è quello
+  dell'oracle (html sotto il web SAPI, `\nParse error: {msg}\n` + 500 nella
+  forma CLI del worker senza richiesta). Nessun claim di parity su questi body
+  (KS-DS-78-5).
+- **Residui del ponte axum dichiarati S-188 (`TODO(port)`)**: (a) i nomi degli
+  header di richiesta arrivano a PHP in minuscolo (crate `http`): `$_SERVER`
+  `HTTP_*` è identico, `getallheaders()` restituisce chiavi minuscole; (b)
+  ordine degli header di risposta, `content-length` e `date` sono di hyper
+  (la cli-server echeggia `Host` e manda `Connection: close` senza
+  Content-Length per gli script); (c) la reason phrase custom di
+  `header("HTTP/1.1 404 Custom")` non è emessa sul filo (loggata su stderr
+  quando differisce da quella canonica); (d) un valore di header con byte di
+  controllo che il crate `http` rifiuta viene scartato con nota su stderr (la
+  cli-server lo scrive grezzo); (e) lo script router passato a `--axum` è
+  ignorato (avviso all'avvio); (f) il body della richiesta attraversa il
+  canale worker (A-BB5 superato: il canale census «resid» cresce della sua
+  taglia, dichiarato). Accettazione WordPress sul canale axum:
+  `wp188-harness/battery61-axum.sh` (copia dichiarata di `battery61.sh`).
 
 ### 3.10 🔴 Argomenti `string` dei builtin: coercizione con warning invece di `TypeError` (S-96.0)
 

@@ -1,0 +1,59 @@
+2,5c2,5
+< # battery61.sh — S-94.0 OGGETTO #2: la batteria di accettazione WordPress di
+< # WP-61, resa RIPRODUCIBILE sul MODO NATIVO (criterio 5 della chiusura del
+< # fronte; debito di 31 sessioni: l'accettazione WP-61 era un verdetto
+< # storico senza harness in repo).
+---
+> # battery61-axum.sh — S-188 Tappa 2 C5: COPIA DICHIARATA di wp94-harness/battery61.sh
+> # (generatore gen-battery61-axum.py, manifest battery61-axum-copia.diff) coi SOLI adattamenti:
+> # braccio phpr = `php-server --axum --workers ${WORKERS:-4}` (PHPSERVER), pkill/pgrep estesi alla
+> # forma `--port N`, OUT in wp188-harness, etichette. Il resto INVARIATO (testo S-94.0 sotto).
+18c18,19
+< PHPR=${PHPR:-$HOME/Claude/php-rust-output/release/phpr}
+---
+> PHPSERVER=${PHPSERVER:-$HOME/Claude/php-rust-output/release/php-server}
+> WORKERS=${WORKERS:-4}
+21c22
+< OUT="${OUT:-/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp94-harness/battery61-out}"
+---
+> OUT="${OUT:-/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp188-harness/battery61-axum-out}"
+25c26
+< rm -f "$OUT/battery61.done"
+---
+> rm -f "$OUT/battery61-axum.done"
+30,32c31,33
+<   [ "$who" = oracle ] && bin="$ORACLE" || bin="$PHPR"
+<   pkill -f "127.0.0.1:$PORT" 2>/dev/null; sleep 1
+<   if pgrep -f "127.0.0.1:$PORT" >/dev/null; then echo "STALE SERVER on $PORT"; exit 3; fi
+---
+>   [ "$who" = oracle ] && bin="$ORACLE" || bin="$PHPSERVER"
+>   pkill -f "127.0.0.1:$PORT" 2>/dev/null; pkill -f -- "--port $PORT" 2>/dev/null; sleep 1
+>   if pgrep -f "127.0.0.1:$PORT" >/dev/null || pgrep -f -- "--port $PORT" >/dev/null; then echo "STALE SERVER on $PORT"; exit 3; fi
+37c38,42
+<   ( cd "$WPDEV" && PHP_CLI_SERVER_WORKERS=4 "$bin" -S "127.0.0.1:$PORT" -t "$WPDEV" >/dev/null 2>"$d/server.log" ) &
+---
+>   if [ "$who" = oracle ]; then
+>     ( cd "$WPDEV" && PHP_CLI_SERVER_WORKERS=4 "$bin" -S "127.0.0.1:$PORT" -t "$WPDEV" >/dev/null 2>"$d/server.log" ) &
+>   else
+>     ( cd "$WPDEV" && "$bin" --axum --workers "$WORKERS" --host 127.0.0.1 --port "$PORT" -t "$WPDEV" >/dev/null 2>"$d/server.log" ) &
+>   fi
+54c59
+<   kill $srv 2>/dev/null; pkill -f "127.0.0.1:$PORT" 2>/dev/null; sleep 1
+---
+>   kill $srv 2>/dev/null; pkill -f "127.0.0.1:$PORT" 2>/dev/null; pkill -f -- "--port $PORT" 2>/dev/null; sleep 1
+67c72
+<   echo "battery61 — accettazione WordPress sul MODO NATIVO (phpr -S vs php -S)"
+---
+>   echo "battery61-axum — accettazione WordPress sul canale AXUM (php-server --axum --workers $WORKERS vs php -S)"
+70c75
+<   echo "phpr=$(shasum -a 256 "$PHPR" | cut -c1-16)"
+---
+>   echo "php-server=$(shasum -a 256 "$PHPSERVER" | cut -c1-16) workers=$WORKERS"
+96,98c101,103
+<   echo "battery61 rc=$rc"
+< } | tee "$OUT/battery61.out"
+< echo "rc=$rc $(date +%T)" > "$OUT/battery61.done"
+---
+>   echo "battery61-axum rc=$rc"
+> } | tee "$OUT/battery61-axum.out"
+> echo "rc=$rc $(date +%T)" > "$OUT/battery61-axum.done"

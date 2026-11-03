@@ -197,22 +197,44 @@ for fx in include_gate static_methods; do
   [ "$ok" = 1 ] && echo "OK  $fx: 3 bodies == oracle"
 done
 
-# --- A-TH8 fatal contract (S-78.1.4, Council WP-79) — KH79-2/KS-DS-78-5 ------
-# Every fatal (compile AND runtime) → HTTP 500 with the FULL oracle-CLI stdout
-# as body; exit() → 200 with captured output; parse error → 500 with the
-# "\nParse error: " envelope (message text is a REGISTERED divergence, no
-# oracle cmp — PHPR_DIVERGENCES_FROM_PHP.md 3.9). Each fatal runs TWICE:
-# byte-parity across requests AND worker survival.
-req_st() { # req_st <fixture> <bodyfile> -> echoes http status
-  curl -s -m 5 -o "$2" -w '%{http_code}' -X POST "http://127.0.0.1:$PORT/$1"
+# --- A-TH8 fatal contract, RE-ANCHORED S-188 (Tappa 2, criterio s188-criterio-axum-wp.md p.3)
+# The axum worker now runs scripts under the WEB SAPI (WebRequest installed per
+# request, like `phpr -S`), so the reference for error bodies and statuses is
+# the oracle's cli-server SAPI, not its CLI: `php -S` answers EVERY fatal
+# (compile and runtime) with HTTP 200 and the html_errors banner, exit() with
+# 200 and the captured output, a parse error with 200 and the html envelope
+# (evidence: wp188-harness/oracle-fatal-status.out, pre-registered 200 x4).
+# Hence: a SECOND server — the oracle `php -S` on PORT+1 serving the same
+# fixtures — provides status + body per fixture; phpr must match the status
+# and (fatal_runtime, fatal_compile, exit_code) the FULL body; parse_err keeps
+# only the envelope assert (message text = registered divergence §3.9).
+# Each fatal still runs TWICE on phpr: byte-parity across requests AND worker
+# survival. 500 is reserved for engine-level failures (never a PHP fatal).
+OPORT=$((PORT+1))
+pkill -f "127.0.0.1:$OPORT" 2>/dev/null && sleep 1
+( cd "$HERE/fixtures" && "$ORACLE" -S "127.0.0.1:$OPORT" -t "$HERE/fixtures" > /dev/null 2> "$OUTDIR/oracle-server.log" ) &
+OSRV=$!
+oup=0
+for _ in $(seq 1 100); do
+  if curl -s -o /dev/null -m 1 "http://127.0.0.1:$OPORT/hello.php"; then oup=1; break; fi
+  sleep 0.1
+done
+if [ "$oup" != 1 ]; then
+  echo "FAIL: oracle php -S did not come up on $OPORT (see $OUTDIR/oracle-server.log)"
+  kill "$SRV" "$OSRV" 2>/dev/null; echo "FAIL oracle-server-up [git $GIT_REV]" > "$VERDICT"; exit 1
+fi
+echo "oracle php -S (cli-server SAPI) on $OPORT: the error-contract reference (S-188)"
+req_st() { # req_st <port> <fixture> <bodyfile> -> echoes http status
+  curl -s -m 5 -o "$3" -w '%{http_code}' -X POST "http://127.0.0.1:$1/$2"
 }
 
-fatal_check() { # fatal_check <name> <want_status> <oracle_cmp:yes|no>
-  local name="$1" want="$2" cmp_oracle="$3" st1 st2
-  st1=$(req_st "$name.php" "$OUTDIR/$name.1")
-  st2=$(req_st "$name.php" "$OUTDIR/$name.2")
+fatal_check() { # fatal_check <name> <oracle_cmp:yes|no>
+  local name="$1" cmp_oracle="$2" st1 st2 want
+  want=$(req_st "$OPORT" "$name.php" "$OUTDIR/$name.expected")
+  st1=$(req_st "$PORT" "$name.php" "$OUTDIR/$name.1")
+  st2=$(req_st "$PORT" "$name.php" "$OUTDIR/$name.2")
   if [ "$st1" != "$want" ] || [ "$st2" != "$want" ]; then
-    echo "FAIL $name: status $st1/$st2 != $want (A-TH8)"
+    echo "FAIL $name: status $st1/$st2 != oracle php -S $want (A-TH8 re-anchored S-188)"
     FAILS=$((FAILS+1))
   fi
   if ! cmp -s "$OUTDIR/$name.1" "$OUTDIR/$name.2"; then
@@ -220,29 +242,30 @@ fatal_check() { # fatal_check <name> <want_status> <oracle_cmp:yes|no>
     FAILS=$((FAILS+1))
   fi
   if [ "$cmp_oracle" = yes ]; then
-    "$ORACLE" "$HERE/fixtures/$name.php" > "$OUTDIR/$name.expected" 2>/dev/null
     if ! cmp -s "$OUTDIR/$name.1" "$OUTDIR/$name.expected"; then
-      echo "FAIL $name: body != oracle CLI stdout (KH79-2 full-body cmp):"
+      echo "FAIL $name: body != oracle php -S body (KH79-2 full-body cmp, web SAPI):"
       diff "$OUTDIR/$name.expected" "$OUTDIR/$name.1" | head -8
       FAILS=$((FAILS+1))
     fi
   fi
+  echo "    $name: status oracle=$want phpr=$st1/$st2"
 }
 
-fatal_check fatal_runtime 500 yes
-fatal_check fatal_compile 500 yes
-fatal_check exit_code     200 yes
-fatal_check parse_err     500 no
-# parse envelope form (the only assert parity allows here — KS-DS-78-5)
-if ! head -c 14 "$OUTDIR/parse_err.1" | cmp -s - <(printf '\nParse error: '); then
-  echo "FAIL parse_err: body does not start with the '\\nParse error: ' envelope:"
+fatal_check fatal_runtime yes
+fatal_check fatal_compile yes
+fatal_check exit_code     yes
+fatal_check parse_err     no
+# parse envelope form under the web SAPI (the only assert parity allows here — KS-DS-78-5)
+if ! head -c 25 "$OUTDIR/parse_err.1" | cmp -s - <(printf '<br />\n<b>Parse error</b>:  '); then
+  echo "FAIL parse_err: body does not start with the html '<br />\\n<b>Parse error</b>:  ' envelope:"
   head -2 "$OUTDIR/parse_err.1"
   FAILS=$((FAILS+1))
 fi
+kill "$OSRV" 2>/dev/null; wait "$OSRV" 2>/dev/null
 # Worker survival after the fatal batch (boundary discipline)
 req hello.php > "$OUTDIR/hello.after-fatals"
 if cmp -s "$OUTDIR/hello.after-fatals" "$OUTDIR/hello.expected"; then
-  echo "OK  fatal contract: 4 fixtures conform (500/500/200/500), workers alive"
+  echo "OK  fatal contract: 4 fixtures conform to the oracle php -S (status + body), workers alive"
 else
   echo "FAIL: hello diverges after fatal batch — worker state polluted"
   FAILS=$((FAILS+1))

@@ -1,5 +1,9 @@
 # GIUDIZIO DI SENSO — WordPress su Axum (S-93.0 p.C, primo atto scritto, zero codice)
 
+> **Voce RIAPERTA per nome S-188 (2026-11-03, decisione utente):** il cablaggio è stato fatto
+> (php-server/src/axum_web, criterio `wp188-harness/s188-criterio-axum-wp.md`) per misurare il
+> server residente contro l'oracle su WordPress; la lettura sotto resta valida come storia.
+
 Sede deliberata dalla direttiva utente 2026-08-03 (§WP-93 p.C): il fronte
 C si apre SOLO dopo la chiusura di B, e il primo atto è questo giudizio.
 B è chiuso in questa sessione: B1 siti nominati, B2 natura decisa, B3
