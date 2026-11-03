@@ -13,6 +13,9 @@
 ## Passi
 1. Revisione adversariale di fine sessione (lente PROCESSO) e sue azioni.
 2. Poi la roadmap: cura O(1) v2 → pin s184 (phpr ricostruito: php-cli consuma php-types, §3.39 entra nel pin) → t26/t28 → merge a firma. Aperture nuove: §3.9 (l) backpressure-ad-attesa, design189 (`WorkerTask.probe` per il watermark), `ini_set('default_socket_timeout')`.
+## Osservazioni post-sessione (WordPress acceso su `--axum` pin s189, 4 worker, cron ATTIVO, navigazione admin dell'utente 22:46–22:52, log `/Volumes/Extreme Pro/Claude/wp189-run/wp-axum.log`)
+- 4613 richieste: 200 ×4608, 302 ×1 (login POST, corretto), **403 ×4 su `GET /wp-json/wp/v2/types/post?context=edit`** = il loopback «REST API availability» di Site Health (cookie + `X-WP-Nonce`): sull'oracle atteso 200 ⇒ **da verificare bilateralmente, probabile divergenza nuova** (nonce/cookie nel loopback o header lowercase §3.9 b) — apertura per NOME. `wp-cron.php` iniziale 200 senza stallo (coda condivisa al lavoro); home a cache calda 0,31–0,34 s (prima richiesta per worker 1,5–1,9 s).
+- **Footprint 2,6 GiB** (`phys_footprint` 2611 MiB, lifetime 2641) dopo ~4600 richieste con admin ed editor: ×4 worker con unit cache per thread + ritenzione (S-188: +140 MiB dopo UNA admin-ajax). Non è una misura (nessun protocollo), è un reperto da istruire: apertura per NOME «footprint del residente sotto admin».
 ## Lezioni
 - Un dente di concorrenza «a due client concorrenti» è una gara: la forma deterministica è L=W+1 richieste SEQUENZIALI dalla stessa richiesta (⌊L/W⌋ stalli), provata dall'impronta per-thread in-band.
 - I contatori census sono globali al processo: ogni test che muove il pool, in qualunque modulo, prende il lock dei test census.
