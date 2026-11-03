@@ -1048,10 +1048,10 @@ pub fn run_module_with_hir<'m>(
         // so the script's buffered output precedes the "Fatal error:" block.
         vm.flush_all_output_buffers();
         if is_link_fatal {
-            // Compile/link-time fatal (e.g. an enum implementing Serializable): a plain
-            // banner with the declaration site — no throwable wrapping, no stack trace.
+            // Compile/link-time fatal (e.g. an enum implementing Serializable): a banner
+            // with the declaration site — no throwable wrapping; html form under the web SAPI (S-188).
             let file = String::from_utf8_lossy(&module.file);
-            let block = format!("\nFatal error: {} in {} on line {}\n", err.message(), file, line);
+            let block = websapi::link_fatal_banner(vm.web, &err.message(), &file, line);
             vm.rendered.extend_from_slice(block.as_bytes());
         } else {
             vm.render_fatal(err, line);

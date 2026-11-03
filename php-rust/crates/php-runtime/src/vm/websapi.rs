@@ -523,6 +523,18 @@ pub struct WebResponseHead {
     pub error_log: Vec<Vec<u8>>,
 }
 
+/// The banner of a LINK-time fatal (class/enum linking, before any opcode runs),
+/// shared by the CLI main, `phpr -S` and the axum worker: under the web SAPI the
+/// html_errors form (oracle `php -S`, S-188 probe: no stack trace in the body),
+/// the plain CLI form otherwise.
+pub fn link_fatal_banner(web: bool, message: &str, file: &str, line: impl std::fmt::Display) -> String {
+    if web {
+        format!("<br />\n<b>Fatal error</b>:  {message} in <b>{file}</b> on line <b>{line}</b><br />\n")
+    } else {
+        format!("\nFatal error: {message} in {file} on line {line}\n")
+    }
+}
+
 impl<'m> Vm<'m> {
     /// Move the response head out of the Vm (headers, status, reason,
     /// error_log) — call BEFORE `request_end()`, which resets them.

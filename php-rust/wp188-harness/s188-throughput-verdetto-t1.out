@@ -1,0 +1,47 @@
+== s188 throughput WP: php-server 97b58fd225ca7289 --axum --workers 4 vs PHP 8.5.7 php -S ×4 worker | git=fea51add driver_sha=159c8252e70f872f tentativo=t1 epoch=1793718425 ==
+grade=VERDICT  # VERDICT solo con N>=150 R>=3 e i tre livelli; rc autoritativo = pair-out/tp188-t1.done
+protocollo: ab chiuso per livello C=['1', '4', '8'], warm-up escluso, N=150 per cella, R=3 boot/braccio ordine AX,O4 · canonica = req/s (ab) · companion = CPU (user+sys) dell'albero/req, user/req, time/request · spread ≤5% su R altrimenti cella VOID · gate richieste/boot=2551 · DISABLE_WP_CRON via env
+igiene: tree_pids per braccio [('AX', '1'), ('O4', '5')] · richieste/boot=['2551'] (attese 2551) · boot scartati: nessuno · boot VOID finali: 0 
+classe di core (time -l): c1-AX=2.10GHz/IPC 3.96 c1-O4=2.10GHz/IPC 3.07 c2-AX=2.09GHz/IPC 3.98 c2-O4=2.11GHz/IPC 3.09 c3-AX=2.09GHz/IPC 3.95 c3-O4=2.11GHz/IPC 3.07
+
+braccio AX = php-server --axum --workers 4 (pin s188) — req/s [per ciclo] mediana spread · CPU(u+s)/req ms · user/req · time/req ms
+  C=1  front  rps=[3.2 3.2 3.2] med=3.2 spread=0.9% ok  cpu/req=308.3 user/req=291.8 t/req=313.5 failed=0 non2xx=0
+  C=1  post   rps=[2.7 2.7 2.7] med=2.7 spread=1.1% ok  cpu/req=361.9 user/req=344.6 t/req=367.8 failed=0 non2xx=0
+  C=1  feed   rps=[5.9 5.8 5.8] med=5.8 spread=0.9% ok  cpu/req=167.5 user/req=153.3 t/req=171.2 failed=0 non2xx=0
+  C=1  login  rps=[8.0 8.0 8.0] med=8.0 spread=0.4% ok  cpu/req=122.5 user/req=110.6 t/req=124.8 failed=0 non2xx=0
+  C=1  rest   rps=[5.2 5.2 5.2] med=5.2 spread=1.4% ok  cpu/req=189.3 user/req=174.6 t/req=193.1 failed=0 non2xx=0
+  C=4  front  rps=[12.6 12.7 12.6] med=12.6 spread=0.8% ok  cpu/req=299.9 user/req=284.8 t/req=79.2 failed=0 non2xx=0
+  C=4  post   rps=[10.8 10.8 10.7] med=10.8 spread=1.3% ok  cpu/req=351.0 user/req=336.0 t/req=92.6 failed=0 non2xx=0
+  C=4  feed   rps=[23.6 23.6 23.4] med=23.6 spread=0.8% ok  cpu/req=159.5 user/req=146.0 t/req=42.4 failed=0 non2xx=0
+  C=4  login  rps=[32.1 33.0 32.9] med=32.9 spread=2.8% ok  cpu/req=115.2 user/req=104.0 t/req=30.4 failed=0 non2xx=0
+  C=4  rest   rps=[20.9 21.0 20.8] med=20.9 spread=0.8% ok  cpu/req=180.0 user/req=166.5 t/req=47.7 failed=0 non2xx=0
+  C=8  front  rps=[12.7 12.8 12.7] med=12.7 spread=1.1% ok  cpu/req=298.9 user/req=284.2 t/req=78.7 failed=0 non2xx=0
+  C=8  post   rps=[10.8 10.8 10.8] med=10.8 spread=0.8% ok  cpu/req=350.8 user/req=335.7 t/req=92.5 failed=0 non2xx=0
+  C=8  feed   rps=[23.6 23.7 23.5] med=23.6 spread=0.8% ok  cpu/req=159.9 user/req=146.3 t/req=42.4 failed=0 non2xx=0
+  C=8  login  rps=[33.1 33.1 33.0] med=33.1 spread=0.5% ok  cpu/req=114.7 user/req=103.8 t/req=30.2 failed=0 non2xx=0
+  C=8  rest   rps=[20.8 21.0 20.9] med=20.9 spread=1.1% ok  cpu/req=181.0 user/req=166.9 t/req=47.9 failed=0 non2xx=0
+
+braccio O4 = oracle php -S, PHP_CLI_SERVER_WORKERS=4 — req/s [per ciclo] mediana spread · CPU(u+s)/req ms · user/req · time/req ms
+  C=1  front  rps=[26.8 26.6 27.0] med=26.8 spread=1.3% ok  cpu/req=33.5 user/req=30.1 t/req=37.4 failed=0 non2xx=0
+  C=1  post   rps=[23.9 23.8 23.9] med=23.9 spread=0.8% ok  cpu/req=37.6 user/req=34.1 t/req=41.8 failed=0 non2xx=0
+  C=1  feed   rps=[53.5 53.9 53.2] med=53.5 spread=1.3% ok  cpu/req=15.7 user/req=13.4 t/req=18.7 failed=0 non2xx=0
+  C=1  login  rps=[100.3 100.5 99.3] med=100.3 spread=1.2% ok  cpu/req=8.5 user/req=7.4 t/req=10.0 failed=0 non2xx=0
+  C=1  rest   rps=[45.7 46.1 45.6] med=45.7 spread=1.1% ok  cpu/req=18.7 user/req=16.4 t/req=21.9 failed=0 non2xx=0
+  C=4  front  rps=[104.3 106.3 106.5] med=106.3 spread=2.1% ok  cpu/req=32.9 user/req=29.7 t/req=9.4 failed=0 non2xx=0
+  C=4  post   rps=[92.7 91.4 92.8] med=92.7 spread=1.5% ok  cpu/req=37.7 user/req=34.3 t/req=10.8 failed=0 non2xx=0
+  C=4  feed   rps=[214.6 214.4 210.5] med=214.4 spread=1.9% ok  cpu/req=15.8 user/req=13.5 t/req=4.7 failed=0 non2xx=0
+  C=4  login  rps=[387.4 398.4 394.2] med=394.2 spread=2.8% ok  cpu/req=8.5 user/req=7.5 t/req=2.5 failed=0 non2xx=0
+  C=4  rest   rps=[178.5 178.7 178.0] med=178.5 spread=0.4% ok  cpu/req=19.0 user/req=16.7 t/req=5.6 failed=0 non2xx=0
+  C=8  front  rps=[128.1 131.1 131.9] med=131.1 spread=2.9% ok  cpu/req=33.5 user/req=30.0 t/req=7.6 failed=0 non2xx=0
+  C=8  post   rps=[111.7 112.0 114.9] med=112.0 spread=2.9% ok  cpu/req=38.3 user/req=34.4 t/req=8.9 failed=0 non2xx=0
+  C=8  feed   rps=[260.9 259.0 258.6] med=259.0 spread=0.9% ok  cpu/req=16.3 user/req=13.7 t/req=3.9 failed=0 non2xx=0
+  C=8  login  rps=[481.2 463.1 478.2] med=478.2 spread=3.8% ok  cpu/req=8.9 user/req=7.8 t/req=2.1 failed=0 non2xx=0
+  C=8  rest   rps=[217.5 210.9 217.5] med=217.5 spread=3.0% ok  cpu/req=19.7 user/req=17.0 t/req=4.6 failed=0 non2xx=0
+
+O4/AX req/s per cella: C=1 front=8.39 · C=1 post=8.80 · C=1 feed=9.17 · C=1 login=12.52 · C=1 rest=8.81 · C=4 front=8.42 · C=4 post=8.58 · C=4 feed=9.09 · C=4 login=12.00 · C=4 rest=8.52 · C=8 front=10.31 · C=8 post=10.35 · C=8 feed=10.98 · C=8 login=14.47 · C=8 rest=10.41
+scaling AX req/s C4/C1: front=3.96 · post=3.97 · feed=4.04 · login=4.10 · rest=4.04
+scaling AX req/s C8/C4: front=1.01 · post=1.00 · feed=1.00 · login=1.01 · rest=1.00
+scaling O4 req/s C4/C1: front=3.97 · post=3.87 · feed=4.01 · login=3.93 · rest=3.91
+scaling O4 req/s C8/C4: front=1.23 · post=1.21 · feed=1.21 · login=1.21 · rest=1.22
+celle VOID: nessuna
+rc=0

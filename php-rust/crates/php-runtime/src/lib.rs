@@ -68,7 +68,7 @@ pub use vm::{
 // SAPI boundary, A-TH14; call-sites grep-gated by gate-lever-pins.sh).
 pub use vm::{compile_fatal_outcome, main_unit_acquire, run_source_probed, MainAcquireError, MainLever, MainUnit};
 // S-188 (axum web SAPI): the response head the worker takes before request_end().
-pub use vm::websapi::WebResponseHead;
+pub use vm::websapi::{link_fatal_banner, WebResponseHead};
 // A-PP20 (Council WP-83): entry-probe test surface for the worker's
 // link-fatal-never-published tooth (counters + direct key probe).
 pub use vm::{uc_entry_count, uc_main_entry_count, uc_main_key_in_cache, uc_main_stats};

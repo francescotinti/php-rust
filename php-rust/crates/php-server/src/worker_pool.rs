@@ -961,8 +961,8 @@ mod implementation {
             vm.flush_all_output_buffers();
             if is_link_fatal {
                 let file = String::from_utf8_lossy(&unit.module.file);
-                let block =
-                    format!("\nFatal error: {} in {} on line {}\n", err.message(), file, line);
+                let block = php_runtime::link_fatal_banner( // S-188: html form under the web SAPI
+                    php_types::sapi::web_request().is_some(), &err.message(), &file, line);
                 vm.rendered.extend_from_slice(block.as_bytes());
             } else {
                 vm.render_fatal(err, line);

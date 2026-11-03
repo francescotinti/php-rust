@@ -689,7 +689,28 @@ output osservabile (il gate lo asserisce):
   ignorato (avviso all'avvio); (f) il body della richiesta attraversa il
   canale worker (A-BB5 superato: il canale census «resid» cresce della sua
   taglia, dichiarato). Accettazione WordPress sul canale axum:
-  `wp188-harness/battery61-axum.sh` (copia dichiarata di `battery61.sh`).
+  `wp188-harness/battery61-axum.sh` (copia dichiarata di `battery61.sh`;
+  confronta status line + body, NON gli header).
+- **Residui aggiunti dalla revisione SEMANTICA S-188 (`wp188-harness/revisione-s188-t2-axum.md`)**:
+  (g) request target: il frammento `/x#y` è troncato dal crate `http`
+  (REQUEST_URI `/x`; la cli-server lo conserva), un target absolute-form
+  perde schema+host, byte non-ASCII nel path ⇒ 400 di hyper PRIMA del
+  handler (la cli-server li accetta grezzi); (h) **pool a code per-worker con
+  round-robin cieco**: una richiesta che WordPress fa verso se stesso
+  (loopback bloccante di Site Health, `wp_remote_*`) ha probabilità 1/W di
+  cadere nella coda del worker che la attende ⇒ stallo fino al timeout del
+  client (`php -S` a N worker usa accept condiviso). È la macchineria della
+  misura per-thread (A-PP36): una coda condivisa cambia quel contratto ⇒
+  APERTURA per nome (concilio); oggi `--workers ≥ 4` e cron disattivato nelle
+  misure; (i) la riga di log per richiesta non porta `- detail` del fatal né
+  `- No such file or directory` sul 404, e mancano `Accepted`/`Closing`;
+  (j) body di richiesta oltre il cap di 512 MiB ⇒ body vuoto (la cli-server
+  tronca); (k) header `x-phpr-pid` su ogni risposta (strumento di misura
+  A-BG51, assente nella cli-server). CURATI dalla stessa revisione: il fatal
+  di LINK (enum che implementa Serializable) sotto il web SAPI rende la forma
+  html dell'oracle `php -S` (banner senza stack trace nel body; helper
+  `link_fatal_banner` condiviso con `phpr -S` e il main CLI) e uno script non
+  leggibile risponde 500 nudo come la cli-server.
 
 ### 3.10 🔴 Argomenti `string` dei builtin: coercizione con warning invece di `TypeError` (S-96.0)
 

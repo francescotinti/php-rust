@@ -223,8 +223,12 @@ pub async fn route(cfg: &ServeCfg, peer: SocketAddr, req: axum::extract::Request
             let source = match std::fs::read(&file) {
                 Ok(s) => s,
                 Err(e) => {
-                    let msg = format!("404: {} ({})\n", file.display(), e);
-                    return Routed::Ready((StatusCode::NOT_FOUND, msg).into_response());
+                    // The cli-server answers an unreadable script with a bare 500
+                    // (server.rs write_bare_error); the reason goes to the log.
+                    eprintln!("[{}] php-server: cannot read {}: {e}", asctime_local(), file.display());
+                    let mut hm = HeaderMap::new();
+                    hm.insert(header::CONTENT_TYPE, HeaderValue::from_static("text/html; charset=UTF-8"));
+                    return Routed::Ready((StatusCode::INTERNAL_SERVER_ERROR, hm, Vec::new()).into_response());
                 }
             };
             let body = match axum::body::to_bytes(body, BODY_CAP).await {
@@ -477,6 +481,14 @@ mod tests {
         let r = run("<?php echo 'pre'; function f( {", Some(web("GET", "/gate.php", None, &[], b"")));
         assert_eq!(r.status, 200);
         assert!(String::from_utf8_lossy(&r.body).starts_with("<br />\n<b>Parse error</b>:  "));
+        // link-time fatal (enum implementing Serializable): html banner under the
+        // web SAPI (oracle php -S probe 03/11: no stack trace in the body), plain otherwise
+        let r = run("<?php\nenum LF implements Serializable { case A; }\necho 'never';", Some(web("GET", "/gate.php", None, &[], b"")));
+        assert_eq!(r.status, 200);
+        assert!(String::from_utf8_lossy(&r.body).contains("<br />\n<b>Fatal error</b>:  Enum LF"), "{:?}", String::from_utf8_lossy(&r.body));
+        let r = run("<?php\nenum LF2 implements Serializable { case A; }", None);
+        assert_eq!(r.status, 500);
+        assert!(String::from_utf8_lossy(&r.body).contains("\nFatal error: Enum LF2"), "{:?}", String::from_utf8_lossy(&r.body));
         // and the pre-S-188 CLI-anchored contract without a web request: 500 + plain
         let r = run("<?php goto nope;", None);
         assert_eq!(r.status, 500);
