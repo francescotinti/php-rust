@@ -1,12 +1,12 @@
 #!/bin/bash
-# s188-lancio.sh — COPPIA SERVER WP t1 @ pin s183 (criterio s188-criterio-server-pair.md p.6): COPIA DICHIARATA di
+# s188-lancio.sh — COPPIA SERVER WP t2 @ pin s183 (criterio s188-criterio-server-pair.md p.6): COPIA DICHIARATA di
 # ../wp184-harness/s184-lancio-pair-t25.sh (manifest s188-lancio-copia.diff, generatore gen-lancio-s188.py) coi SOLI
-# adattamenti: nomi s188/t1/pair188, harness wp188, lock TOKEN s188, exec s188-wp-server-pair.sh t1, attesa post-.done del
+# adattamenti: nomi s188/t2/pair188, harness wp188, lock TOKEN s188, exec s188-wp-server-pair.sh t2, attesa post-.done del
 # watchdog 10 min (nessun ORM). Il resto INVARIATO (testo S-184 conservato sotto).
 set -u
 export PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin
 H="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp188-harness"
-LOG="$H/pair-out/lancio-t1.log"; mkdir -p "$H/pair-out"
+LOG="$H/pair-out/lancio-t2.log"; mkdir -p "$H/pair-out"
 echo "$(date '+%F %T') attesa quiete CI" >> "$LOG"
 while pgrep -qx cargo || pgrep -qx rustc || pgrep -qf phpt-runner; do sleep 60; done
 sleep 60
@@ -16,7 +16,7 @@ if pgrep -qx cargo || pgrep -qx rustc || pgrep -qf phpt-runner; then
 fi
 # EMENDA t24 (i): LOCK col TOKEN s183 — apre la finestra multi-gamba (la CI si mette in mutex sul lock); rimosso a chiusura di sessione
 MLOCK=/private/tmp/phpr-measure.lock
-echo "s188 coppia server WP t1 @ pin s183 $(date '+%F %T') pid=$$" > "$MLOCK"
+echo "s188 coppia server WP t2 @ pin s183 $(date '+%F %T') pid=$$" > "$MLOCK"
 echo "$(date '+%F %T') lock scritto: $MLOCK (TOKEN s188)" >> "$LOG"
 # predicato anti-flare PRE-registrato (criterio p.6b): quiete CONTINUA 6x30s
 echo "$(date '+%F %T') CI quieta — attesa quiete continua anti-flare (6x30s <5%)" >> "$LOG"
@@ -51,7 +51,7 @@ hc=0
 while [ "$hc" -lt 2 ]; do hg=$(hog); if [ -z "$hg" ]; then hc=$((hc+1)); else hc=0; echo "$(date '+%F %T') processo singolo >50 % CPU: $hg — attesa" >> "$LOG"; fi; [ "$hc" -lt 2 ] && sleep 30; done
 # EMENDA t24 (iv): watchdog disco Data (campione a 60 s in pair-out/watchdog-t24.txt; allarme <8G a verbale, NON abortisce: le misure sono a user-CPU);
 # vive finché pair182-t24.done esiste da 4 h (copre l'ORM) o 14 h totali
-( WD="$H/pair-out/watchdog-t1.txt"; PD="$H/pair-out/pair188-t1.done"; t0=$(date +%s); tdone=0
+( WD="$H/pair-out/watchdog-t2.txt"; PD="$H/pair-out/pair188-t2.done"; t0=$(date +%s); tdone=0
   while :; do
     f=$(df -g /System/Volumes/Data | awk 'NR==2{print $4}'); a=""; [ "${f:-0}" -lt 8 ] && a=" ALLARME<8G"
     echo "$(date '+%F %T') Data=${f}G swap=$(sysctl -n vm.swapusage | awk '{print $6}')$a" >> "$WD"
@@ -61,10 +61,10 @@ while [ "$hc" -lt 2 ]; do hg=$(hog); if [ -z "$hg" ]; then hc=$((hc+1)); else hc
     sleep 60
   done ) > /dev/null 2>&1 &
 # dichiarazione finestra QUIETA (criterio p.6c): uptime + top
-Q="$H/pair-out/quiet-decl-t1.txt"
-{ echo "== dichiarazione finestra quieta t1 $(date '+%F %T') =="
+Q="$H/pair-out/quiet-decl-t2.txt"
+{ echo "== dichiarazione finestra quieta t2 $(date '+%F %T') =="
   uptime
   top -l 1 -n 8 -o cpu -stats pid,cpu,command 2>/dev/null | tail -12
 } > "$Q" 2>&1
-echo "$(date '+%F %T') quiete raggiunta — dichiarazione in quiet-decl-t1.txt — lancio coppia server WP t1" >> "$LOG"
-exec /bin/bash "$H/s188-wp-server-pair.sh" t1
+echo "$(date '+%F %T') quiete raggiunta — dichiarazione in quiet-decl-t2.txt — lancio coppia server WP t2" >> "$LOG"
+exec /bin/bash "$H/s188-wp-server-pair.sh" t2

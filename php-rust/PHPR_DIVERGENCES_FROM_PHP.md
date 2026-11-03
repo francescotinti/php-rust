@@ -1181,6 +1181,40 @@ SIGKILL su sé stesso; `abc` in una sola scrittura al loop di select), rosso pri
 e verde dopo. Resta: `stream_get_meta_data()['unread_bytes']` = 0 fisso
 (host.rs al cap) — apertura per NOME.
 
+### 3.38 🟡 `max_execution_time` non applicato sotto il server integrato (`phpr -S` / `php-server` modo nativo) — trovata S-188, 2026-11-03, misurando WordPress
+
+Sotto il SAPI `cli-server` PHP applica `max_execution_time` (default 30 dal
+php.ini): uno script che gira più a lungo è troncato con `Fatal error: Maximum
+execution time of 30 seconds exceeded` (o `30+2` sulla forma del server) e la
+risposta esce a 200 col banner; il processo `php -S` che serve un cron di
+WordPress oltre il limite muore con esso. phpr semina `max_execution_time=30`
+nelle superglobali/ini della richiesta web (`vm/mod.rs`, `request_start`) e
+`ini_get` lo riporta, ma non esiste alcun orologio di esecuzione: `vm/ini.rs`
+lo dichiara «report-only», `set_time_limit` convalida l'argomento e basta
+(`vm/host.rs`, posture CLI). Lo script finisce quando finisce.
+
+```php
+// busy33.php servito da -S: loop di 33 s
+echo ini_get('max_execution_time');       // oracle 30 · phpr 30
+// oracle: Fatal error: Maximum execution time of 30 seconds exceeded (a 30,0 s)
+// phpr:   "done after 33 s" (a 33,0 s)
+```
+
+Riproduzione S-188 (`wp188-harness`, sonde del 03/11): stesso albero WordPress,
+`wp-cron.php` con il controllo settimanale di Site Health (loopback verso il
+server stesso): l'oracle `php -S` viene ucciso a 30 s nel trasporto curl di
+`Requests`, phpr serve la richiesta in 38 s con 200. In CLI (`phpr script.php`)
+non c'è divergenza: anche php-cli ha `max_execution_time=0`.
+
+Posture: la fedeltà vuole il timer (Zend lo implementa con `setitimer`/segnale e
+controllo al prossimo tick; `set_time_limit` lo riarma); correct-or-absent
+direbbe almeno di NON riportare 30 quando non si applica. Cura possibile:
+contatore di scadenza nel loop della VM controllato ai back-edge/call (già
+esiste il punto di sondaggio dello Sweep), fatal con lo stesso banner, armato
+SOLO con `web_request()` presente o `set_time_limit(n>0)`. Fuori perimetro
+S-188 Tappa 1 (misura); da cercare per NOME nel congelato prima di curare
+(`max_execution_time`, `set_time_limit` in `tests/basic/` e `sapi/cli/tests/`).
+
 ## 4. Punti di forza da NON toccare (invarianti verificati byte-identici)
 
 Per evitare regressioni, questi comportamenti sono **già** byte-identici con
