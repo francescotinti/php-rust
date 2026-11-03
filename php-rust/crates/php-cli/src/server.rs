@@ -7,7 +7,8 @@
 //! Content-Length, static files with the cli-server mime map and
 //! `Content-Length`, the exact 404 template, and the asctime-stamped stderr
 //! log (`Accepted` / `[code]: METHOD URI` / `Closing`, PHP diagnostics
-//! interleaved).
+//! interleaved). The docroot walk, mime map, reason phrases, 404 page and
+//! log stamp are shared with php-server through `php_types::docroot` (S-188).
 
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
@@ -16,155 +17,14 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
+use php_types::docroot::{
+    asctime_local, mime_for_ext, normalize_path, not_found_page, percent_decode_path, split_target,
+    status_reason, translate, Resolved,
+};
 use php_types::sapi::WebRequest;
-
-use crate::mime::MIME_TYPE_MAP;
-
-/// The 404 page of the cli-server, byte-identical (URI interpolated).
-const ERROR_PAGE_HEAD: &str = "<!doctype html><html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>404 Not Found</title><style>\nbody { background-color: #fcfcfc; color: #333333; margin: 0; padding:0; }\nh1 { font-size: 1.5em; font-weight: normal; background-color: #9999cc; min-height:2em; line-height:2em; border-bottom: 1px inset black; margin: 0; }\nh1, p { padding-left: 10px; }\ncode.url { background-color: #eeeeee; font-family:monospace; padding:0 2px;}\n</style>\n</head><body><h1>Not Found</h1><p>The requested resource <code class=\"url\">";
-const ERROR_PAGE_TAIL: &str = "</code> was not found on this server.</p></body></html>";
-
-/// PHP's reason-phrase table (main/http_status_codes.h).
-fn status_reason(code: i64) -> &'static str {
-    match code {
-        100 => "Continue",
-        101 => "Switching Protocols",
-        200 => "OK",
-        201 => "Created",
-        202 => "Accepted",
-        203 => "Non-Authoritative Information",
-        204 => "No Content",
-        205 => "Reset Content",
-        206 => "Partial Content",
-        300 => "Multiple Choices",
-        301 => "Moved Permanently",
-        302 => "Found",
-        303 => "See Other",
-        304 => "Not Modified",
-        305 => "Use Proxy",
-        307 => "Temporary Redirect",
-        308 => "Permanent Redirect",
-        400 => "Bad Request",
-        401 => "Unauthorized",
-        402 => "Payment Required",
-        403 => "Forbidden",
-        404 => "Not Found",
-        405 => "Method Not Allowed",
-        406 => "Not Acceptable",
-        407 => "Proxy Authentication Required",
-        408 => "Request Timeout",
-        409 => "Conflict",
-        410 => "Gone",
-        411 => "Length Required",
-        412 => "Precondition Failed",
-        413 => "Request Entity Too Large",
-        414 => "Request-URI Too Long",
-        415 => "Unsupported Media Type",
-        416 => "Requested Range Not Satisfiable",
-        417 => "Expectation Failed",
-        426 => "Upgrade Required",
-        428 => "Precondition Required",
-        429 => "Too Many Requests",
-        431 => "Request Header Fields Too Large",
-        451 => "Unavailable For Legal Reasons",
-        500 => "Internal Server Error",
-        501 => "Not Implemented",
-        502 => "Bad Gateway",
-        503 => "Service Unavailable",
-        504 => "Gateway Timeout",
-        505 => "HTTP Version Not Supported",
-        506 => "Variant Also Negotiates",
-        511 => "Network Authentication Required",
-        _ => "Unknown Status Code",
-    }
-}
-
-/// The mime type for a file extension (lowercased lookup, sorted table).
-fn mime_for_ext(ext: &[u8]) -> Option<&'static str> {
-    let ext = String::from_utf8_lossy(&ext.to_ascii_lowercase()).into_owned();
-    MIME_TYPE_MAP
-        .binary_search_by(|(e, _)| (*e).cmp(ext.as_str()))
-        .ok()
-        .map(|i| MIME_TYPE_MAP[i].1)
-}
-
-/// Local time as asctime ("Tue Jul 14 17:24:55 2026" — day space-padded),
-/// the cli-server log timestamp.
-fn asctime_local() -> String {
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0);
-    let mut tm: libc::tm = unsafe { std::mem::zeroed() };
-    unsafe {
-        let t = now as libc::time_t;
-        libc::localtime_r(&t, &mut tm);
-    }
-    const WDAYS: [&str; 7] = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-    const MONS: [&str; 12] = [
-        "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-    ];
-    format!(
-        "{} {} {:2} {:02}:{:02}:{:02} {}",
-        WDAYS[tm.tm_wday.clamp(0, 6) as usize],
-        MONS[tm.tm_mon.clamp(0, 11) as usize],
-        tm.tm_mday,
-        tm.tm_hour,
-        tm.tm_min,
-        tm.tm_sec,
-        tm.tm_year + 1900
-    )
-}
 
 fn log_line(msg: &str) {
     eprintln!("[{}] {}", asctime_local(), msg);
-}
-
-/// Percent-decode a URL *path* (no `+` → space — that is query-only).
-fn percent_decode_path(s: &[u8]) -> Vec<u8> {
-    let mut out = Vec::with_capacity(s.len());
-    let mut i = 0;
-    while i < s.len() {
-        if s[i] == b'%' && i + 2 < s.len() {
-            let hi = (s[i + 1] as char).to_digit(16);
-            let lo = (s[i + 2] as char).to_digit(16);
-            if let (Some(h), Some(l)) = (hi, lo) {
-                out.push((h * 16 + l) as u8);
-                i += 3;
-                continue;
-            }
-        }
-        out.push(s[i]);
-        i += 1;
-    }
-    out
-}
-
-/// Normalize a decoded path: resolve `.`/`..` segments, clamping at the root
-/// (the oracle serves `GET /../x` as `/x`). Preserves a trailing slash.
-fn normalize_path(path: &[u8]) -> Vec<u8> {
-    let trailing = path.ends_with(b"/");
-    let mut segs: Vec<&[u8]> = Vec::new();
-    for seg in path.split(|&b| b == b'/') {
-        match seg {
-            b"" | b"." => {}
-            b".." => {
-                segs.pop();
-            }
-            s => segs.push(s),
-        }
-    }
-    let mut out = Vec::new();
-    for s in &segs {
-        out.push(b'/');
-        out.extend_from_slice(s);
-    }
-    if out.is_empty() {
-        out.push(b'/');
-    } else if trailing {
-        out.push(b'/');
-    }
-    out
 }
 
 /// One parsed HTTP request off the socket.
@@ -323,89 +183,6 @@ fn read_chunked_body(stream: &mut TcpStream, already: Vec<u8>) -> Option<Vec<u8>
     }
 }
 
-/// What the docroot walk resolved the request path to.
-enum Resolved {
-    /// A PHP script: absolute file, its vpath, and any PATH_INFO.
-    Script(PathBuf, Vec<u8>, Option<Vec<u8>>),
-    /// A static file on disk.
-    Static(PathBuf),
-    NotFound,
-}
-
-/// Translate a decoded, normalized path against the docroot; an unresolved
-/// path falls back to the DOCROOT index.php with the whole decoded path as
-/// PATH_INFO (oracle-pinned: SCRIPT_NAME=/index.php, PHP_SELF=
-/// /index.php/robots.txt) — this is what serves WordPress' virtual routes
-/// (/robots.txt, /wp-json/) without a router script.
-fn translate(docroot: &Path, path: &[u8]) -> Resolved {
-    match translate_walk(docroot, path) {
-        Resolved::NotFound => {
-            let root_index = docroot.join("index.php");
-            if root_index.is_file() {
-                return Resolved::Script(root_index, b"/index.php".to_vec(), Some(path.to_vec()));
-            }
-            Resolved::NotFound
-        }
-        hit => hit,
-    }
-}
-
-/// The docroot walk: longest existing file prefix wins (the remainder is
-/// PATH_INFO for scripts), a directory tries `index.php` then `index.html`
-/// (cli-server order).
-fn translate_walk(docroot: &Path, path: &[u8]) -> Resolved {
-    let rel = &path[1.min(path.len())..];
-    let mut acc = docroot.to_path_buf();
-    let mut vpath: Vec<u8> = Vec::new();
-    let segs: Vec<&[u8]> = if rel.is_empty() {
-        Vec::new()
-    } else {
-        rel.split(|&b| b == b'/').collect()
-    };
-    for (i, seg) in segs.iter().enumerate() {
-        if seg.is_empty() {
-            continue;
-        }
-        acc.push(std::ffi::OsStr::from_bytes(seg));
-        vpath.push(b'/');
-        vpath.extend_from_slice(seg);
-        let Ok(meta) = std::fs::metadata(&acc) else { return Resolved::NotFound };
-        if meta.is_file() {
-            let rest: Vec<u8> = segs[i + 1..]
-                .iter()
-                .flat_map(|s| {
-                    let mut v = vec![b'/'];
-                    v.extend_from_slice(s);
-                    v
-                })
-                .collect();
-            let path_info = (!rest.is_empty()).then_some(rest);
-            if vpath.to_ascii_lowercase().ends_with(b".php") {
-                return Resolved::Script(acc, vpath, path_info);
-            }
-            return if path_info.is_none() {
-                Resolved::Static(acc)
-            } else {
-                Resolved::NotFound
-            };
-        }
-    }
-    // Landed on a directory: try the index files.
-    for idx in [&b"index.php"[..], &b"index.html"[..]] {
-        let cand = acc.join(std::ffi::OsStr::from_bytes(idx));
-        if cand.is_file() {
-            vpath.push(b'/');
-            vpath.extend_from_slice(idx);
-            return if idx.ends_with(b".php") {
-                Resolved::Script(cand, vpath, None)
-            } else {
-                Resolved::Static(cand)
-            };
-        }
-    }
-    Resolved::NotFound
-}
-
 /// The response head shared by every kind of response.
 fn response_head(
     protocol: (u8, u8),
@@ -450,14 +227,8 @@ fn handle_client(
     let Some(req) = read_request(stream) else { return };
     let head = req.method == b"HEAD";
     let host = header_value(&req.headers, b"host").map(|v| v.to_vec());
-    // A bare trailing `?` registers no QUERY_STRING (oracle-pinned).
-    let (path_part, query) = match req.target.iter().position(|&b| b == b'?') {
-        Some(p) if p + 1 < req.target.len() => {
-            (&req.target[..p], Some(req.target[p + 1..].to_vec()))
-        }
-        Some(p) => (&req.target[..p], None),
-        None => (&req.target[..], None),
-    };
+    // A bare trailing `?` registers no QUERY_STRING (oracle-pinned; shared walk in php-types).
+    let (path_part, query) = split_target(&req.target);
     let decoded = normalize_path(&percent_decode_path(path_part));
     let uri_label = format!(
         "{} {}",
@@ -570,9 +341,7 @@ fn handle_client(
             log_request(&peer, 200, &uri_label, None);
         }
         Resolved::NotFound => {
-            let mut page = ERROR_PAGE_HEAD.as_bytes().to_vec();
-            page.extend_from_slice(&decoded);
-            page.extend_from_slice(ERROR_PAGE_TAIL.as_bytes());
+            let page = not_found_page(&decoded);
             if !router_prefix.is_empty() {
                 let _ = stream.write_all(&router_prefix);
             }

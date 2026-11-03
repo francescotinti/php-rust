@@ -1,7 +1,8 @@
 //! MIME map of PHP's cli-server (generated from sapi/cli/mime_type_map.h, PHP 8.5.7).
+//! Lives in php-types since S-188 so both web SAPI hosts (php-cli `-S`, php-server axum) share it.
 //! Extension (lowercase) -> mime type; lookup via binary search (the source is sorted).
 
-pub(crate) static MIME_TYPE_MAP: &[(&str, &str)] = &[
+pub static MIME_TYPE_MAP: &[(&str, &str)] = &[
     ("123", "application/vnd.lotus-1-2-3"),
     ("1km", "application/vnd.1000minds.decision-model+xml"),
     ("3dml", "text/vnd.in3d.3dml"),

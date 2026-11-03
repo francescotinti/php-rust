@@ -13,6 +13,8 @@ pub mod numstr;
 mod object;
 pub mod ops;
 pub mod sapi;
+pub mod docroot;
+pub mod mime;
 pub mod stream;
 pub mod tz;
 pub mod gdio;

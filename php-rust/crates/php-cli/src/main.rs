@@ -14,7 +14,6 @@ use std::process::ExitCode;
 use php_builtins::registry;
 use php_runtime::run_source_with_argv;
 
-mod mime;
 mod server;
 
 /// The evaluator's per-request workload is allocation-bound (Zval/PhpArray
