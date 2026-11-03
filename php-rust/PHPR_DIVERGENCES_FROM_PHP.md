@@ -696,8 +696,10 @@ output osservabile (il gate lo asserisce):
   (REQUEST_URI `/x`; la cli-server lo conserva), un target absolute-form
   perde schema+host, byte non-ASCII nel path ⇒ 400 di hyper PRIMA del
   handler (la cli-server li accetta grezzi); (h) **pool a code per-worker con
-  round-robin cieco — IN CURA S-189 (concilio `wp189-harness/concilio/
-  COUNCIL_WP189_REVIEWS.md`, firma 2026-11-03)**: fino al pin s188
+  round-robin cieco — CURATA S-189 (concilio `wp189-harness/concilio/
+  COUNCIL_WP189_REVIEWS.md`, firma 2026-11-03; pin server s189
+  `80eea401b71c2be7` PROMOSSO la sera stessa: FETTA 1 t2 15/15 celle in banda
+  [0,989;1,005], tripwire W=1 0,998/1,008, `s189-guardia-ax-verdetto-t2.out`)**: fino al pin s188
   (`97b58fd225ca7289`) una richiesta che fa L loopback HTTP SEQUENZIALI verso
   il proprio server (WordPress: editor temi/plugin 100 s con REVERT della
   modifica, auto-updater 50 s con ROLLBACK, Site Health 5–10 s ×5, cron

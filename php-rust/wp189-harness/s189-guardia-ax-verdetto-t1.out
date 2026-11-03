@@ -1,0 +1,60 @@
+== s189 FETTA 1 guardia AX (NON-REGRESSIONE, mai record): AXnew 80eea401b71c2be7 vs AXold 97b58fd225ca7289, --axum --workers 4, WordPress, PHP 8.5.7 assente per disegno | git=d0de3178 driver_sha=7b0f3c1496e21bc4 tentativo=t1 epoch=1793738455 ==
+grade=VERDICT  # VERDICT solo con N>=150 R>=3 e i tre livelli; rc autoritativo = pair-out/ga189-t1.done
+protocollo: ab chiuso per livello C=['1', '4', '8'], warm-up -n 20 a -c 4 escluso, N=150 per cella, R=3 cicli ordine AXold,AXnew nella STESSA finestra · canonica = AXnew/AXold req/s per cella nello stesso ciclo, mediana dei 3 · bande pre-registrate C=4/8 [0,97;1,05], C=1 [0,95;1,05] · spread ≤5% per braccio altrimenti cella VOID · mediana fuori banda con un ciclo dentro ⇒ VOID (rimisura), 3 cicli concordi fuori ⇒ KILL (KS-189-5) · companion p99 (C=8 nuovo ≤ vecchio; >1,10× REPERTO) e cpu(u+s)/req (±2%) · gate richieste/boot=2551
+igiene: tree_pids per braccio [('AXnew', '1'), ('AXold', '1')] · richieste/boot=['2551'] (attese 2551) · boot scartati: nessuno · boot VOID finali: 0 
+classe di core (time -l): c1-AXold=2.10GHz/IPC 3.93 c1-AXnew=2.09GHz/IPC 3.95 c2-AXold=2.09GHz/IPC 3.94 c2-AXnew=2.10GHz/IPC 3.93 c3-AXold=2.10GHz/IPC 3.92 c3-AXnew=2.10GHz/IPC 3.94
+
+braccio AXold = php-server --axum --workers 4 pin s188 97b58fd225ca7289 (stash) — req/s [per ciclo] mediana spread · p99 ms · CPU(u+s)/req ms
+  C=1  front  rps=[3.2 3.2 3.2] med=3.2 spread=0.3% ok  p99=337 cpu/req=310.5 failed=0 non2xx=0
+  C=1  post   rps=[2.7 2.7 2.7] med=2.7 spread=0.0% ok  p99=396 cpu/req=365.6 failed=0 non2xx=0
+  C=1  feed   rps=[5.8 5.8 5.8] med=5.8 spread=0.2% ok  p99=185 cpu/req=168.5 failed=0 non2xx=0
+  C=1  login  rps=[8.0 8.0 8.0] med=8.0 spread=0.3% ok  p99=128 cpu/req=122.9 failed=0 non2xx=0
+  C=1  rest   rps=[5.1 5.1 5.1] med=5.1 spread=0.2% ok  p99=199 cpu/req=190.4 failed=0 non2xx=0
+  C=4  front  rps=[12.6 12.7 12.6] med=12.6 spread=1.0% ok  p99=330 cpu/req=300.3 failed=0 non2xx=0
+  C=4  post   rps=[10.7 10.7 10.7] med=10.7 spread=0.5% ok  p99=410 cpu/req=353.1 failed=0 non2xx=0
+  C=4  feed   rps=[23.0 23.4 23.5] med=23.4 spread=2.1% ok  p99=182 cpu/req=160.9 failed=0 non2xx=0
+  C=4  login  rps=[32.9 32.7 32.9] med=32.9 spread=0.4% ok  p99=124 cpu/req=115.1 failed=0 non2xx=0
+  C=4  rest   rps=[20.9 20.9 20.9] med=20.9 spread=0.4% ok  p99=188 cpu/req=180.2 failed=0 non2xx=0
+  C=8  front  rps=[12.7 12.6 12.5] med=12.6 spread=1.3% ok  p99=663 cpu/req=300.4 failed=0 non2xx=0
+  C=8  post   rps=[10.8 10.8 10.0] med=10.8 spread=7.4% VOID  p99=786 cpu/req=352.7 failed=0 non2xx=0
+  C=8  feed   rps=[23.5 23.6 23.4] med=23.5 spread=0.6% ok  p99=337 cpu/req=160.5 failed=0 non2xx=0
+  C=8  login  rps=[32.8 32.8 31.8] med=32.8 spread=3.2% ok  p99=268 cpu/req=115.6 failed=0 non2xx=0
+  C=8  rest   rps=[21.0 20.8 20.8] med=20.8 spread=0.8% ok  p99=377 cpu/req=181.2 failed=0 non2xx=0
+
+braccio AXnew = php-server --axum --workers 4 pin s189 80eea401b71c2be7 (canonica) — req/s [per ciclo] mediana spread · p99 ms · CPU(u+s)/req ms
+  C=1  front  rps=[3.2 3.2 3.2] med=3.2 spread=0.3% ok  p99=344 cpu/req=309.0 failed=0 non2xx=0
+  C=1  post   rps=[2.7 2.7 2.7] med=2.7 spread=0.4% ok  p99=401 cpu/req=364.5 failed=0 non2xx=0
+  C=1  feed   rps=[5.8 5.8 5.8] med=5.8 spread=0.0% ok  p99=180 cpu/req=168.2 failed=0 non2xx=0
+  C=1  login  rps=[8.0 8.0 8.0] med=8.0 spread=0.3% ok  p99=129 cpu/req=122.9 failed=0 non2xx=0
+  C=1  rest   rps=[5.1 5.1 5.1] med=5.1 spread=0.6% ok  p99=208 cpu/req=190.9 failed=0 non2xx=0
+  C=4  front  rps=[12.7 12.3 12.6] med=12.6 spread=3.1% ok  p99=348 cpu/req=300.8 failed=0 non2xx=0
+  C=4  post   rps=[10.8 10.5 10.7] med=10.7 spread=2.7% ok  p99=466 cpu/req=353.2 failed=0 non2xx=0
+  C=4  feed   rps=[23.6 23.6 23.3] med=23.6 spread=0.9% ok  p99=167 cpu/req=159.8 failed=0 non2xx=0
+  C=4  login  rps=[32.5 32.9 32.9] med=32.9 spread=1.1% ok  p99=121 cpu/req=115.0 failed=0 non2xx=0
+  C=4  rest   rps=[20.9 20.7 20.6] med=20.7 spread=1.5% ok  p99=217 cpu/req=181.8 failed=0 non2xx=0
+  C=8  front  rps=[12.7 12.7 12.7] med=12.7 spread=0.2% ok  p99=633 cpu/req=298.8 failed=0 non2xx=0
+  C=8  post   rps=[10.8 10.7 10.8] med=10.8 spread=0.5% ok  p99=764 cpu/req=352.5 failed=0 non2xx=0
+  C=8  feed   rps=[23.7 23.6 23.6] med=23.6 spread=0.2% ok  p99=329 cpu/req=159.6 failed=0 non2xx=0
+  C=8  login  rps=[32.9 33.0 32.6] med=32.9 spread=1.1% ok  p99=254 cpu/req=115.4 failed=0 non2xx=0
+  C=8  rest   rps=[20.8 21.0 21.0] med=21.0 spread=0.7% ok  p99=371 cpu/req=180.3 failed=0 non2xx=0
+
+AXnew/AXold req/s per cella [per ciclo] mediana banda esito:
+  C=1  front  [1.006 1.003 1.003] med=1.003 banda=[0.95;1.05] ok
+  C=1  post   [1.004 1.000 1.004] med=1.004 banda=[0.95;1.05] ok
+  C=1  feed   [1.002 1.002 1.003] med=1.002 banda=[0.95;1.05] ok
+  C=1  login  [1.004 0.999 1.000] med=1.000 banda=[0.95;1.05] ok
+  C=1  rest   [1.000 0.998 0.996] med=0.998 banda=[0.95;1.05] ok
+  C=4  front  [1.011 0.970 0.998] med=0.998 banda=[0.97;1.05] ok
+  C=4  post   [1.008 0.979 0.996] med=0.996 banda=[0.97;1.05] ok
+  C=4  feed   [1.023 1.008 0.993] med=1.008 banda=[0.97;1.05] ok
+  C=4  login  [0.991 1.005 1.002] med=1.002 banda=[0.97;1.05] ok
+  C=4  rest   [0.998 0.988 0.988] med=0.988 banda=[0.97;1.05] ok
+  C=8  front  [1.004 1.006 1.015] med=1.006 banda=[0.97;1.05] ok
+  C=8  post   VOID (cella senza mediana)
+  C=8  feed   [1.008 1.003 1.010] med=1.008 banda=[0.97;1.05] ok
+  C=8  login  [1.003 1.005 1.027] med=1.005 banda=[0.97;1.05] ok
+  C=8  rest   [0.992 1.007 1.006] med=1.006 banda=[0.97;1.05] ok
+companion p99 nuovo/vecchio (REPERTO se > 1.1): C=1 front=1.021 · C=1 post=1.013 · C=1 feed=0.973 · C=1 login=1.008 · C=1 rest=1.045 · C=4 front=1.055 · C=4 post=1.137 REPERTO · C=4 feed=0.918 · C=4 login=0.976 · C=4 rest=1.154 REPERTO · C=8 front=0.955 · C=8 post=0.972 · C=8 feed=0.976 · C=8 login=0.948 · C=8 rest=0.984
+companion cpu(u+s)/req nuovo/vecchio (REPERTO se > 1.02): C=1 front=0.995 · C=1 post=0.997 · C=1 feed=0.998 · C=1 login=1.000 · C=1 rest=1.003 · C=4 front=1.002 · C=4 post=1.000 · C=4 feed=0.993 · C=4 login=0.999 · C=4 rest=1.009 · C=8 front=0.995 · C=8 post=0.999 · C=8 feed=0.995 · C=8 login=0.998 · C=8 rest=0.995
+celle VOID: C8/post · KILL/REPERTO: nessuno
+rc=1  # 0 = tutte le celle in banda · 1 = celle VOID (rimisura) · 2 = KS-189-5 (cura NON promossa)

@@ -9,7 +9,7 @@ export PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin
 H="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp188-harness"
 DZ="/Volumes/Extreme Pro/Claude/wp58-harness/daemonize.pl"
 CIQ="/Volumes/Extreme Pro/Claude/phpr-ci/queue"
-SRV_ATTESO="${SRV_ATTESO:-97b58fd225ca7289}"  # pin server s188
+SRV_ATTESO="${SRV_ATTESO:-80eea401b71c2be7}"  # pin server s189 (promosso 03/11 sera; prima s188 97b58fd225ca7289)
 LOG="$H/pair-out/avvio.log"; mkdir -p "$H/pair-out"
 l(){ echo "$(date '+%F %T') $*" >> "$LOG"; }
 ci_viva(){ pgrep -f 'ci/ci-runner.sh' > /dev/null 2>&1 || pgrep -qx cargo || pgrep -qx rustc; }

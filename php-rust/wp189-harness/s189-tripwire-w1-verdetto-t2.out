@@ -1,0 +1,17 @@
+== s189 FETTA 1 tripwire W=1 (NON-REGRESSIONE, mai cifra): Anew 80eea401b71c2be7 vs Aold 97b58fd225ca7289, --axum --workers 1 | git=d0de3178 driver_sha=6222a2ac21653243 tentativo=t2 ==
+grade=VERDICT  # VERDICT solo con W>=10 K>=30 R>=3; rc autoritativo = pair-out/tw189-t2.done
+protocollo: processo singolo, W=10 warm-up poi K=30 misurate per URL, R=3 boot/braccio interallacciati Aold,Anew · canonica = Δ user-CPU proc_pid_rusage / K (ms) · spread ≤2% su R altrimenti cella VOID · |Anew/Aold − 1| ≤ 2% (mediana dei rapporti per ciclo) altrimenti KILL KS-189-6 · gate richieste/boot=81
+igiene: richieste/boot=['81'] (attese 81) · boot scartati: nessuno · celle VOID: 0 
+
+braccio Aold — ms user-CPU/req [per ciclo] mediana spread
+  front  cpu=[293.74 294.23 294.28] med=294.23 spread=0.2% ok
+  login  cpu=[108.93 109.98 109.58] med=109.58 spread=1.0% ok
+
+braccio Anew — ms user-CPU/req [per ciclo] mediana spread
+  front  cpu=[293.18 292.47 294.65] med=293.18 spread=0.7% ok
+  login  cpu=[109.55 110.84 111.37] med=110.84 spread=1.6% ok
+
+Anew/Aold per ciclo (stesso ciclo) e mediana — tripwire ±2%:
+  front  [0.998 0.994 1.001] med=0.998 ok
+  login  [1.006 1.008 1.016] med=1.008 ok
+rc=0  # 0 = tripwire tenuto · 1 = celle VOID · 2 = KS-189-6 HALT ()
