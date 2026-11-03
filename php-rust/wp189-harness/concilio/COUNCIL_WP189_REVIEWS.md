@@ -4,6 +4,16 @@ VINCOLANTE) · Fase 2: 3 team (`team-meccanismo` Hoare·Matsakis·Hejlsberg·Bak
 Klabnik·Stogov) · Questa sintesi recepisce; i dissensi restano a registro col nome della sedia. Dossier: `COUNCIL_DOSSIER.md`.
 **Le scritture che toccano riga 1 del NEXT, le lettere dei concili precedenti, `gaps/VETI.md` e QUALSIASI riga di codice entrano SOLO con la firma dell'utente.**
 
+## FIRMA DELL'UTENTE (2026-11-03, in chat)
+**Firmato**: Q1 (A) coda condivisa · **Q2 con DEVIAZIONE dalla sintesi: la barriera `__census_self` GUARDATA si costruisce in S-189** (posizione delle otto sedie
+Hoare·Matsakis·Hejlsberg·Bak·Leijen·Gregg·web-runtime·Stogov: latch per-pool in `WorkerPoolContext` sotto `mem-census`, mai static; pre-check
+`census_outstanding_now()==0` nel handler PRIMA delle W push con 409 + `census-self REFUSED outstanding=N`; `Mutex+Condvar` con `wait_timeout` 5 s; scadenza ⇒
+riga `tag=census_self_incomplete arrived=<n> w=<W>` + abort A-MS31; `wait()` fuori da ogni lock e PRIMA di `ProbeWindow::arm()`; W da `handles.len()`; a W>1 il
+self-census resta NON verdict-grade e `inflight_max==W` è DICHIARATO nel raw — il rifiuto in-band di Pedersen/Klabnik passa a dissenso a registro) · Q3 dente
+sequenziale + A/B stessa finestra · riga 1 del NEXT (598 car.) con scarico S-168 in `gaps/VETI.md`. Il testo di Q2 sotto resta come deliberato dai team; vale la firma.
+**Nota dell'utente (agente laterale) su §3.39**: cura breve del timeout del wrapper `http://` (contesto `timeout` o `default_socket_timeout`=60 → `timeout_global`
+di ureq) accodata come commit SEPARATO dopo la Parte B, con criterio e sonda bilaterale sull'oracle; `php-builtins/src/file.rs` è al cap ⇒ file nuovo.
+
 ## §FONDAMENTALI (apertura obbligata)
 Oggetto: il pool `--axum` ha una coda per worker e un dispatcher round-robin cieco; un loopback bloccante di WordPress (editor temi 100 s con REVERT della
 modifica, auto-updater 50 s con ROLLBACK, Site Health 5–10 s, cron settimanale, update-core) cade sul worker che lo attende e stalla fino al timeout PHP.

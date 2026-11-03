@@ -696,13 +696,43 @@ output osservabile (il gate lo asserisce):
   (REQUEST_URI `/x`; la cli-server lo conserva), un target absolute-form
   perde schema+host, byte non-ASCII nel path ⇒ 400 di hyper PRIMA del
   handler (la cli-server li accetta grezzi); (h) **pool a code per-worker con
-  round-robin cieco**: una richiesta che WordPress fa verso se stesso
-  (loopback bloccante di Site Health, `wp_remote_*`) ha probabilità 1/W di
-  cadere nella coda del worker che la attende ⇒ stallo fino al timeout del
-  client (`php -S` a N worker usa accept condiviso). È la macchineria della
-  misura per-thread (A-PP36): una coda condivisa cambia quel contratto ⇒
-  APERTURA per nome (concilio); oggi `--workers ≥ 4` e cron disattivato nelle
-  misure; (i) la riga di log per richiesta non porta `- detail` del fatal né
+  round-robin cieco — IN CURA S-189 (concilio `wp189-harness/concilio/
+  COUNCIL_WP189_REVIEWS.md`, firma 2026-11-03)**: fino al pin s188
+  (`97b58fd225ca7289`) una richiesta che fa L loopback HTTP SEQUENZIALI verso
+  il proprio server (WordPress: editor temi/plugin 100 s con REVERT della
+  modifica, auto-updater 50 s con ROLLBACK, Site Health 5–10 s ×5, cron
+  settimanale, update-core) manda l'i-esima al worker k+i: su server idle
+  stallano ⌊L/W⌋ interne per richiesta in modo DETERMINISTICO (l'i ≡ 0 mod W
+  colpisce il worker k che la attende; il singolo loopback a W ≥ 2 idle non
+  stalla mai), sotto traffico concorrente ≈ 1/W per loopback; lo stallo dura
+  fino al timeout lato PHP. L'oracle `php -S` con `PHP_CLI_SERVER_WORKERS=N`
+  (N figli + il master = N+1 acceptor) e php-fpm fanno `accept` sullo STESSO
+  socket: il backlog del kernel è una coda condivisa e un processo occupato non
+  accetta mai. Cura deliberata: coda condivisa FIFO (`Mutex<VecDeque>` +
+  `Condvar`, `php-server/src/dispatch.rs`); dente `wp189-harness/gate-loopback`
+  bilaterale con controllo positivo ROSSO sul pin s188 (criterio
+  `s189-criterio-loopback.md`). Conservati per NOME come fedeltà: a W=1 il
+  loopback bloccante stalla fino al timeout del client come `php -S` a 1
+  processo; a W worker, W loopback concorrenti stallano come l'oracle; la
+  richiesta interna orfana (client scaduto) viene eseguita comunque al pickup,
+  byte già nel socket, POST inclusi; NESSUN timeout nel handler e nessun 503
+  (invenzioni: l'oracle non li emette). Legata a §3.38: sotto `php -S` vige
+  `max_execution_time=30` e su macOS arm64 Zend arma `ITIMER_REAL` (parete),
+  quindi l'oracle tronca la richiesta esterna dell'editor (loopback 100 s) a
+  30 s con banner 200, phpr aspetta i 100 s e WordPress reverte. Contratto di
+  misura emendato per nome (A-PP36/37/42, KS-PP-87-3/89-2, KH78-2: insieme
+  esatto {0..W-1} delle righe `worker_dispatch`, Σcount == nreq + orphan;
+  `count == nreq/W` solo sui pin ≤ s188; W=1 unico modo census); (l) **coda
+  interna illimitata + corpo letto PRIMA del dispatch**: hyper accetta senza
+  limite e phpr legge sorgente e corpo sul thread tokio prima di accodare ⇒
+  residenza ∝ connessioni accettate (≤ 512 MiB per corpo), dove il kernel di
+  `php -S` limita a `listen(SOMAXCONN)` (macOS 128), scarta i SYN oltre e il
+  figlio legge il corpo DOPO l'accept (≤ W corpi in heap): divergenza di
+  SOVRACCARICO, non di semantica; mai 503 (la lettera «bounded + 503» del
+  concilio WP-77.5 è SUPERATA nella forma 503); apertura per nome
+  «backpressure-ad-attesa» (semaforo all'ingresso del handler prima di `route`,
+  o `tower::limit`, o cap di in-flight che sospende l'accept), fuori perimetro
+  S-189; (i) la riga di log per richiesta non porta `- detail` del fatal né
   `- No such file or directory` sul 404, e mancano `Accepted`/`Closing`;
   (j) body di richiesta oltre il cap di 512 MiB ⇒ body vuoto (la cli-server
   tronca); (k) header `x-phpr-pid` su ogni risposta (strumento di misura
@@ -1250,6 +1280,39 @@ esiste il punto di sondaggio dello Sweep), fatal con lo stesso banner, armato
 SOLO con `web_request()` presente o `set_time_limit(n>0)`. Fuori perimetro
 S-188 Tappa 1 (misura); da cercare per NOME nel congelato prima di curare
 (`max_execution_time`, `set_time_limit` in `tests/basic/` e `sapi/cli/tests/`).
+
+Nota S-189 (concilio, Stogov): `HARDCODED_INI` «max_execution_time=0» vale SOLO
+per il SAPI `cli` (`sapi/cli/php_cli.c`), sotto `php -S` vige il php.ini e il
+timer è armato a ogni richiesta; su Apple Silicon Zend usa `ITIMER_REAL`
+(`Zend/zend_execute_API.c`, SIGALRM: tempo di PARETE, l'attesa su socket conta),
+su Linux il timer CPU. La fixture `busy33` è neutra fra i due; un loopback NO:
+l'oracle tronca a 30 s di parete la richiesta esterna dell'editor temi (loopback
+100 s), phpr no — vedi §3.9 (h). Un dente di loopback deve restare sotto i 30 s.
+
+### 3.39 🟡 Wrapper stream `http://` senza timeout (`file_get_contents`/`fopen` su URL) — trovata S-189, 2026-11-03, dal concilio sulla coda condivisa
+
+PHP applica al wrapper `http://` il `timeout` del contesto
+(`stream_context_create(['http' => ['timeout' => n]])`) o, in difetto,
+`default_socket_timeout` (60 s; `ext/standard/http_fopen_wrapper.c`, opzione
+`PHP_STREAM_OPTION_READ_TIMEOUT`) su connect E lettura: un server che accetta e
+tace fa fallire la lettura dopo 60 s con warning. phpr: `parse_http_options`
+(`php-builtins/src/file.rs`) legge method/content/header/ignore_errors/
+max_redirects e IGNORA `timeout`; l'agent `ureq` di `http_get` non imposta
+`timeout_global` ⇒ `file_get_contents('http://…')` attende a oltranza e il
+`timeout` di contesto è ignorato in silenzio (viola correct-or-absent: almeno
+`TODO(port)`). Effetti: in CLI uno script resta appeso per sempre su un server
+muto; sotto `php-server --axum` ogni lettura così bloccata toglie un worker al
+pool in modo PERMANENTE (W pagine simultanee = pool morto, dove PHP si sblocca
+a 60 s). **curl NON coinvolto**: `curl_*` onora `CURLOPT_TIMEOUT(_MS)`/
+`CONNECTTIMEOUT` (`php-builtins/src/curl.rs`, `timeout_global`), e WordPress
+preferisce il trasporto curl in `Requests` ⇒ i loopback di WordPress e il dente
+`gate-loopback` (che usa curl) non ne soffrono. Aperta per NOME dal concilio
+S-189 con kill-switch proprio (KS-189-14: promozione della coda condivisa
+sospesa se la voce non è aperta per nome); cura breve accodata come commit
+separato dopo la Parte B (leggere `timeout` del contesto, in difetto
+`default_socket_timeout` → `timeout_global`; `ini_get('default_socket_timeout')`
+deve riportare 60; sonda bilaterale sull'oracle con server che accetta e tace;
+`file.rs` è al cap LOC ⇒ file nuovo).
 
 ## 4. Punti di forza da NON toccare (invarianti verificati byte-identici)
 
