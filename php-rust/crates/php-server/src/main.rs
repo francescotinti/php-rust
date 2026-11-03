@@ -211,6 +211,10 @@ mod worker_pool;
 // `phpr -S` via php_types::docroot; WebRequest installed on the worker thread).
 #[cfg(feature = "axum-server")]
 mod axum_web;
+// S-189 (Council, signed 2026-11-03): shared FIFO work queue of the worker pool
+// (C2: tests only; C3 wires it into worker_pool and lifts the `test` cfg).
+#[cfg(all(test, feature = "axum-server"))]
+mod dispatch;
 
 const USAGE: &str = "usage: php-server [--host HOST] [--port PORT] [--docroot|-t DIR] [--axum] [--workers N] [--tier0] [ROUTER.php]\n\
        defaults: --host 127.0.0.1 --port 8080 --docroot . --cli-server --workers 0 (= CPU count, axum mode only)\n\
