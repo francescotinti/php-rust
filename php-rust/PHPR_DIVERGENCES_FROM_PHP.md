@@ -1289,7 +1289,23 @@ su Linux il timer CPU. La fixture `busy33` è neutra fra i due; un loopback NO:
 l'oracle tronca a 30 s di parete la richiesta esterna dell'editor temi (loopback
 100 s), phpr no — vedi §3.9 (h). Un dente di loopback deve restare sotto i 30 s.
 
-### 3.39 🟡 Wrapper stream `http://` senza timeout (`file_get_contents`/`fopen` su URL) — trovata S-189, 2026-11-03, dal concilio sulla coda condivisa
+### 3.39 ✅ (CURATA S-189 nel tree, 2026-11-03 sera; residuo `ini_set` dichiarato) Wrapper stream `http://` senza timeout (`file_get_contents`/`fopen` su URL) — trovata S-189 dal concilio sulla coda condivisa
+
+**Cura** (commit S-189 «§3.39»): `parse_http_options` legge `timeout` (float, anche
+stringa numerica) e `http_get` imposta `timeout_global` di ureq = `timeout` del
+contesto, altrimenti il `default_socket_timeout` compilato (60 s; ≤0 = nessun
+timeout, come `-1` in PHP); allo scadere il warning è quello dell'oracle
+(`Failed to open stream: HTTP request failed!`). Modulo nuovo
+`php-builtins/src/http_timeout` (file.rs è al cap). Prove: sonda oracle 03/11
+(contesto 1,0 → `false` a 1004 ms; ini 2 → 2000 ms; phpr pin 9a6ae11bf7e900ef
+APPESO oltre 6 s) e dente `php-cli/tests/http_wrapper_timeout` (server muto nel
+test, contesto 1,0 ⇒ `bool(false)` + warning dell'oracle a ≈1 s; rosso per
+costruzione sul tree pre-cura: supera il bound di 8 s). **Residuo `TODO(port)`**:
+la tabella INI vive nella Vm e i builtins non la vedono ⇒ `ini_set('default_socket_timeout', n)`
+non è onorato (stessa posture di `fsockopen`/`stream_socket_client`, 60 s costanti).
+Il phpr PINNATO (s183) non ha la cura: entra col prossimo pin phpr (promozione s184).
+
+Testo originale della voce (storico):
 
 PHP applica al wrapper `http://` il `timeout` del contesto
 (`stream_context_create(['http' => ['timeout' => n]])`) o, in difetto,

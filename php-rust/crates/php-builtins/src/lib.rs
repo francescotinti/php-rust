@@ -23,6 +23,7 @@ mod html;
 mod idn;
 mod file;
 mod format;
+mod http_timeout; // §3.39 (S-189): http:// wrapper timeout (context `timeout` / default 60 s)
 mod exif;
 mod fileinfo;
 mod gmp;

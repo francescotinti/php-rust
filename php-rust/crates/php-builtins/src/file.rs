@@ -446,6 +446,7 @@ struct HttpOptions {
     content: Option<Vec<u8>>,
     ignore_errors: bool,
     max_redirects: Option<u32>,
+    timeout: Option<f64>, // §3.39: context `timeout` (s); None → default_socket_timeout
 }
 
 /// A context value as bytes (string), transparently following a reference.
@@ -486,10 +487,8 @@ fn push_header_lines(out: &mut Vec<Vec<u8>>, raw: &[u8]) {
 }
 
 /// Extract the `http` wrapper options from a stream-context resource (arg #3 of
-/// file_get_contents). Absent/foreign context → defaults. SSL options are not
-/// read here: ureq's default secure verification already matches PHP's
-/// verify_peer / system-CA defaults (explicit verify_peer=false / custom cafile
-/// is Phase 3b).
+/// file_get_contents); absent/foreign context → defaults. SSL options are not read
+/// here (ureq's secure default = PHP's verify_peer default; custom cafile = Phase 3b).
 fn parse_http_options(context: Option<&Zval>) -> HttpOptions {
     let mut o = HttpOptions::default();
     let Some(Zval::Resource(rc)) = context else {
@@ -527,17 +526,16 @@ fn parse_http_options(context: Option<&Zval>) -> HttpOptions {
     if let Some(n) = http.get(&Key::from_bytes(b"max_redirects")).and_then(ctx_i64) {
         o.max_redirects = Some(n.max(0) as u32);
     }
+    o.timeout = http.get(&Key::from_bytes(b"timeout")).and_then(crate::http_timeout::ctx_f64);
     o
 }
 
-/// GET/POST an http(s):// URL via the rustls-backed `ureq` transport, honouring
-/// the `http` stream-context options, and returning the response body. A non-2xx
-/// status (without `ignore_errors`) or transport error yields `None` after a PHP
-/// "Failed to open stream" Warning — mirroring the http wrapper making
-/// `file_get_contents` return `false`. Response header lines are captured for any
-/// status (so a 4xx status stays readable via `http_get_last_response_headers()`,
-/// as Composer relies on). TLS uses ureq's default secure verification against the
-/// bundled webpki roots, matching PHP's `verify_peer` default.
+/// GET/POST an http(s):// URL via the rustls-backed `ureq` transport, honouring the
+/// `http` stream-context options (incl. `timeout`, §3.39), returning the body. A
+/// non-2xx status (without `ignore_errors`), a timeout or a transport error yields
+/// `None` after a "Failed to open stream" Warning (= `file_get_contents` false).
+/// Header lines are captured for any status (`http_get_last_response_headers()`,
+/// Composer); TLS = ureq's secure default against the webpki roots (PHP verify_peer).
 fn http_get(url: &[u8], context: Option<&Zval>, caller: &str, ctx: &mut Ctx) -> Option<Vec<u8>> {
     let Ok(url_str) = std::str::from_utf8(url) else {
         return None;
@@ -550,11 +548,13 @@ fn http_get(url: &[u8], context: Option<&Zval>, caller: &str, ctx: &mut Ctx) -> 
     };
     // A non-2xx status is not a transport error here (we still want the headers).
     // max_redirects mirrors PHP's http wrapper default of 20.
-    let agent: ureq::Agent = ureq::Agent::config_builder()
+    let mut cfg = ureq::Agent::config_builder()
         .http_status_as_error(false)
-        .max_redirects(opts.max_redirects.unwrap_or(20))
-        .build()
-        .into();
+        .max_redirects(opts.max_redirects.unwrap_or(20));
+    if let Some(d) = crate::http_timeout::http_wrapper_timeout(opts.timeout) {
+        cfg = cfg.timeout_global(Some(d)); // §3.39: connect + read, like PHP's READ_TIMEOUT
+    }
+    let agent: ureq::Agent = cfg.build().into();
     // Build an explicit request so any method (GET/POST/…) is handled uniformly.
     let method = ureq::http::Method::from_bytes(opts.method.as_deref().unwrap_or(b"GET"))
         .unwrap_or(ureq::http::Method::GET);
@@ -598,6 +598,10 @@ fn http_get(url: &[u8], context: Option<&Zval>, caller: &str, ctx: &mut Ctx) -> 
                 None
             }
         }
+        Err(ureq::Error::Timeout(_)) => {
+            warn("HTTP request failed!".to_string()); // PHP's wording on a socket timeout (§3.39)
+            None
+        }
         Err(e) => {
             warn(e.to_string());
             None
@@ -605,9 +609,7 @@ fn http_get(url: &[u8], context: Option<&Zval>, caller: &str, ctx: &mut Ctx) -> 
     }
 }
 
-/// `http_get_last_response_headers()` (PHP 8.4+): the response header lines of
-/// the last http(s):// stream read (status line then "Name: value" entries), or
-/// `null` when none has occurred.
+/// `http_get_last_response_headers()` (PHP 8.4+): header lines of the last http(s):// read, or `null`.
 pub fn http_get_last_response_headers(_argv: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
     Ok(LAST_RESPONSE_HEADERS.with(|c| match c.borrow().as_ref() {
         Some(lines) => {
@@ -627,9 +629,8 @@ pub fn http_clear_last_response_headers(_argv: &[Zval], _ctx: &mut Ctx) -> Resul
     Ok(Zval::Null)
 }
 
-/// `file_get_contents($filename, $use_include_path = false, $context = null,
-/// $offset = 0, $length = null)` (step 51c, pure builtin — no resource). Reads
-/// the whole file, then applies `$offset`/`$length`. Missing → Warning + false.
+/// `file_get_contents($filename, $use_include_path = false, $context = null, $offset = 0,
+/// $length = null)` (step 51c, pure builtin): whole file, then `$offset`/`$length`; missing → Warning + false.
 pub fn file_get_contents(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
     use std::os::unix::ffi::OsStrExt;
     let Some(name_arg) = argv.first() else {
@@ -638,9 +639,7 @@ pub fn file_get_contents(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError>
         ));
     };
     let name = ctx.to_zstr(name_arg);
-    // http(s):// URLs go through the rustls-backed HTTP transport rather than the
-    // filesystem (the openssl/Composer-network filone); `$offset`/`$length` still
-    // apply to the fetched body below, as for a file.
+    // http(s):// URLs go through the rustls-backed transport (Composer filone); `$offset`/`$length` still apply.
     let mut data = if is_http_url(name.as_bytes()) {
         match http_get(name.as_bytes(), argv.get(2), "file_get_contents", ctx) {
             Some(body) => body,
