@@ -1,0 +1,7 @@
+# S-189 dente unitario no_idle_worker_while_queue_nonempty — run sul tree C2 (dispatcher round-robin, PRIMA del cablaggio). Generato con assistenza AI (Claude Fable 5).
+git=5306ee88 (+ il test in working tree) data=2026-11-03_19:03:43 cmd: cargo test --profile dev-release -p php-server --features axum-server no_idle_worker
+test worker_pool::implementation::tests::no_idle_worker_while_queue_nonempty ... FAILED
+thread 'worker_pool::implementation::tests::no_idle_worker_while_queue_nonempty' (3527177) panicked at crates/php-server/src/worker_pool.rs:2077:13:
+C answered after 1.55134025s: it waited behind the long A while a worker was idle (round-robin stall, S-189)
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 24 filtered out; finished in 1.55s
+rc= (atteso: 1 = ROSSO)

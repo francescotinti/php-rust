@@ -212,8 +212,8 @@ mod worker_pool;
 #[cfg(feature = "axum-server")]
 mod axum_web;
 // S-189 (Council, signed 2026-11-03): shared FIFO work queue of the worker pool
-// (C2: tests only; C3 wires it into worker_pool and lifts the `test` cfg).
-#[cfg(all(test, feature = "axum-server"))]
+// (the accept-queue semantics of `php -S`/FPM; tooth wp189-harness/gate-loopback).
+#[cfg(feature = "axum-server")]
 mod dispatch;
 
 const USAGE: &str = "usage: php-server [--host HOST] [--port PORT] [--docroot|-t DIR] [--axum] [--workers N] [--tier0] [ROUTER.php]\n\
@@ -393,12 +393,54 @@ mod axum_handler {
         // A-DL49 v2 (Council WP-91, requalified LIVE in S-90.0): the
         // per-worker SELF census travels THROUGH the pool so it runs ON a
         // worker thread (the subproc heap-visit cannot see live foreign
-        // theaps — smoke: heaps_total=1, 42% coverage at peak). W
-        // sequential calls cover the W workers under round-robin; the
-        // judge pins DISTINCT heap pointers, never the order. No
-        // filesystem behind it; union builds fall through to a plain 404.
-        let census_self =
-            cfg!(feature = "mem-census") && request_path.ends_with("/__census_self");
+        // theaps — smoke: heaps_total=1, 42% coverage at peak). S-189
+        // (signed Q2): with the shared FIFO no dispatch order covers the W
+        // workers, so ONE call fans out ONE task per worker and each worker
+        // holds its task on the per-pool latch until all W hold theirs
+        // (distinct heaps by pigeonhole); the judge pins DISTINCT heap
+        // pointers, never the order. Precondition made mechanical: the pool
+        // must be quiescent (outstanding == 0, Acquire) — otherwise W-1
+        // workers would park behind a busy one (deadlock class KS-PP-6):
+        // refused in-band, a VOID row for the judge. At W>1 the self-census
+        // is not verdict-grade (inflight_max == W by construction, declared).
+        // No filesystem behind it; union builds fall through to a plain 404.
+        #[cfg(feature = "mem-census")]
+        if request_path.ends_with("/__census_self") {
+            let outstanding = crate::worker_pool::census_outstanding_now();
+            if outstanding != 0 {
+                let msg = format!("census-self REFUSED outstanding={outstanding}\n");
+                return (StatusCode::CONFLICT, msg.into_bytes()).into_response();
+            }
+            let wn = state.pool.worker_count();
+            let mut rxs = Vec::with_capacity(wn);
+            for _ in 0..wn {
+                let (tx, rx) = oneshot::channel();
+                let task = crate::worker_pool::WorkerTask {
+                    meta: crate::worker_pool::WorkerHandlerMeta {
+                        path: "/__census_self".to_string(),
+                        source: Vec::new(),
+                    },
+                    web: None,
+                    response_tx: tx,
+                };
+                if let Err(e) = state.pool.dispatch(task) {
+                    let msg = format!("Pool dispatch failed: {e}\n");
+                    return (StatusCode::INTERNAL_SERVER_ERROR, msg.into_bytes()).into_response();
+                }
+                rxs.push(rx);
+            }
+            let mut body = Vec::new();
+            for rx in rxs {
+                match rx.await {
+                    Ok(r) => body.extend_from_slice(&r.body),
+                    Err(_) => {
+                        let msg = b"Worker dropped response channel\n".to_vec();
+                        return (StatusCode::INTERNAL_SERVER_ERROR, msg).into_response();
+                    }
+                }
+            }
+            return (StatusCode::OK, body).into_response();
+        }
 
         // S-188: the cli-server docroot walk (shared, php_types::docroot) — a
         // static file or the 404 page is answered here; a PHP script travels
@@ -406,19 +448,12 @@ mod axum_handler {
         // headers, body, peer) — A-BB5 superseded: the census "resid" channel
         // now includes the request body by declaration. A-TH8: the script
         // name stays the resolved FILESYSTEM path (error banners, unit-cache key).
-        let (meta, web) = if census_self {
-            (
-                crate::worker_pool::WorkerHandlerMeta { path: "/__census_self".to_string(), source: Vec::new() },
-                None,
-            )
-        } else {
-            match crate::axum_web::route(&state.cfg, peer, req).await {
-                crate::axum_web::Routed::Ready(resp) => {
-                    crate::axum_web::log_request(peer, resp.status().as_u16(), &log_method, &log_target);
-                    return resp;
-                }
-                crate::axum_web::Routed::Script { meta, web } => (meta, Some(web)),
+        let (meta, web) = match crate::axum_web::route(&state.cfg, peer, req).await {
+            crate::axum_web::Routed::Ready(resp) => {
+                crate::axum_web::log_request(peer, resp.status().as_u16(), &log_method, &log_target);
+                return resp;
             }
+            crate::axum_web::Routed::Script { meta, web } => (meta, Some(web)),
         };
 
         // Create oneshot channel for response

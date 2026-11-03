@@ -883,6 +883,15 @@ if [ -z "$EXEC_LN" ] || [ -z "$SEND_LN" ] || [ "$EXEC_LN" -ge "$SEND_LN" ]; then
 else
   echo "OK  worker_pool.rs: A-PP23 send-after-execute (line $SEND_LN after $EXEC_LN)"
 fi
+# S-189 (Council, signed 2026-11-03; Klabnik R6): the round-robin index is GONE — the pool
+# dispatches through ONE shared FIFO (crate dispatch). Any `next_worker` back in the worker
+# pool means the shared queue was bypassed "for the measurement" (KS-189-10/KS-189-13).
+if grep -q 'next_worker' "$WORKER"; then
+  echo "FAIL: next_worker present in worker_pool — the shared FIFO was bypassed (S-189)"
+  FAILS=$((FAILS+1))
+else
+  echo "OK  worker_pool.rs: no next_worker (S-189 shared FIFO)"
+fi
 # decoy: the region counter must bite (flush OUTSIDE the fn body != inside)
 cat > "$TMPD/pp23.rs" <<'EOF'
     pub fn request_shutdown(&mut self) {

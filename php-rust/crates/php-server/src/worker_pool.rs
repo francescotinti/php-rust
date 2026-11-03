@@ -9,7 +9,7 @@
 //! - Cross-request reuse of compiled units is the THREAD-LOCAL unit cache
 //!   (WP-63/66, Rc-owned, fingerprinted, ways-evicted — the opcache analogy);
 //!   the RetainSet never was a lookup structure (write-only pin)
-//! - Axum → mpsc → Worker → execute_request() → Response → Axum (S-80.0.4:
+//! - Axum → shared FIFO (dispatch, S-189) → Worker → execute_request() → Response → Axum (S-80.0.4:
 //!   the RetainSet is constructed INSIDE the sealed entry-point — the
 //!   &RetainSet form is module-private, KS-MS-81-3)
 //! - Vm and RetainSet never leave the owning worker thread (!Send)
@@ -44,8 +44,9 @@
 
 #[cfg(feature = "axum-server")]
 mod implementation {
+    use crate::dispatch::SharedQueue;
     use std::sync::Arc;
-    use tokio::sync::{mpsc, oneshot};
+    use tokio::sync::oneshot;
 
     // A-MS34 (Council WP-87, Matsakis): in axum mode the GLOBAL abort
     // hook fires BEFORE any unwind, so the census probe's own
@@ -118,6 +119,9 @@ mod implementation {
     /// Server-lifetime context: shared state for entire server duration.
     pub struct WorkerPoolContext {
         // TODO: registry: Arc<php_runtime::Registry>,
+        /// S-189 (signed Q2): per-pool `__census_self` latch, sized from the EFFECTIVE W in `new` (never a process static).
+        #[cfg(feature = "mem-census")]
+        pub census_latch: std::sync::OnceLock<crate::dispatch::CensusLatch>,
     }
 
     impl WorkerPoolContext {
@@ -125,6 +129,8 @@ mod implementation {
         pub fn new() -> Arc<Self> {
             Arc::new(WorkerPoolContext {
                 // TODO: registry: Arc::new(php_builtins::registry()),
+                #[cfg(feature = "mem-census")]
+                census_latch: std::sync::OnceLock::new(),
             })
         }
     }
@@ -168,6 +174,9 @@ mod implementation {
     // A-MS3 positive control (WP-72 lesson: an all-negative counter is a failed
     // check): the only value that crosses the Axum→worker channel MUST be Send.
     static_assertions::assert_impl_all!(WorkerTask: Send);
+    // S-189 (Hoare R2): "exactly one worker per task" is now OWNERSHIP — pop_front moves a non-Clone task out under the lock.
+    static_assertions::assert_not_impl_any!(WorkerTask: Clone);
+    static_assertions::assert_impl_all!(SharedQueue<WorkerTask>: Send, Sync);
 
     /// S-78.1.6 census counters (A-BB8/A-BG7, Council WP-79). Queue depth is
     /// the KH78-2 OBSERVABLE: a closed-sequential measurement run where any
@@ -331,10 +340,9 @@ mod implementation {
     /// pin) + a FRESH Vm, both dead at request end (A-MS6 — isolation by Vm
     /// death, A-DS2; leak-freedom by RetainSet death, KS-DS-78-4).
     pub struct WorkerPool {
-        senders: Vec<mpsc::UnboundedSender<WorkerTask>>,
-        // (worker_count() = senders.len(): the EFFECTIVE W after the
-        //  0 = CPU-count default resolves — the A-PP28 in-band stamp.)
-        next_worker: std::sync::atomic::AtomicUsize,
+        // S-189: ONE shared FIFO (crate::dispatch) — any idle worker takes the next task, a busy one
+        // never gets one (the accept queue of `php -S`/FPM). worker_count() = handles.len() (A-PP28).
+        queue: Arc<SharedQueue<WorkerTask>>,
         // A-MS7/A-DL6 (Council WP-79): join handles retained so shutdown()
         // can prove worker teardown before process-exit stats are read
         // (KS-MS-5/KL-78-4: exit figures without a join are ADVISORY).
@@ -347,26 +355,19 @@ mod implementation {
         /// every `reqns:` drain line so the slope verdict can refuse W>1
         /// samples mechanically (KS-PP-85-1).
         pub fn worker_count(&self) -> usize {
-            self.senders.len()
+            self.handles.len()
         }
 
         /// Create pool with N worker threads (default: CPU count).
         ///
         /// Each worker thread:
-        /// - Receives WorkerTask via mpsc channel
+        /// - Pops WorkerTask from the shared FIFO (S-189)
         /// - Per request: declares a fresh RetainSet (P-67.5 drop order),
         ///   creates a FRESH Vm that borrows it, runs the lifecycle to
         ///   completion, then drops Vm and RetainSet (in that order)
         ///
-        /// Lifecycle inside worker (P-67.5 drop order, per REQUEST):
-        /// ```ignore
-        /// while let Some(task) = rx.recv() {
-        ///     let retain = RetainSet::new();  // request-lifetime pin
-        ///     let mut vm = Vm { retain: &retain, ... };  // Borrowed
-        ///     (task.handler)();  // request_start/shutdown/end inside
-        ///     // vm dropped before retain, retain dropped before next request
-        /// }
-        /// ```
+        /// Lifecycle inside worker (P-67.5 drop order, per REQUEST): pop task → RetainSet
+        /// (request-lifetime pin) → Vm borrowing it → request_start/shutdown/end → drop Vm, then RetainSet.
         pub fn new(context: Arc<WorkerPoolContext>, num_workers: usize) -> Arc<Self> {
             let num = if num_workers == 0 {
                 num_cpus::get()
@@ -374,10 +375,16 @@ mod implementation {
                 num_workers
             };
 
-            let mut senders = Vec::new();
+            let queue = SharedQueue::new(num);
+            #[cfg(feature = "mem-census")]
+            {
+                let _ = context.census_latch.set(crate::dispatch::CensusLatch::new(num));
+                let got = context.census_latch.get().map(|l| l.size());
+                assert_eq!(got, Some(num), "WorkerPoolContext reused across pools of different W (S-189 latch)");
+            }
             let mut handles = Vec::new();
             for _i in 0..num {
-                let (tx, rx) = mpsc::unbounded_channel::<WorkerTask>();
+                let q = Arc::clone(&queue);
                 let ctx = Arc::clone(&context);
 
                 // Spawn worker thread (P-67.5: RetainSet before Vm).
@@ -400,7 +407,7 @@ mod implementation {
                     // a broken invariant.
                     let unwind =
                         std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                            let dispatched = Self::worker_loop(ctx, rx, worker_idx);
+                            let (dispatched, orphaned) = Self::worker_loop(ctx, q, worker_idx);
                             // A-PP39 (Council WP-88, Pedersen): the dispatch
                             // row exists on EVERY arm — W123/ABBA ran on the
                             // union arm where the census emission below is
@@ -409,9 +416,10 @@ mod implementation {
                             // The counter is unconditional; one stderr line
                             // at teardown costs nothing and gives the
                             // verdict its per-thread mapping in-band.
+                            // S-189: orphan = responses whose client had gone; Σcount == nreq + orphan.
                             #[cfg(not(feature = "mem-census"))]
                             eprintln!(
-                                "tag=worker_dispatch thr={worker_idx} count={dispatched} arm=union"
+                                "tag=worker_dispatch thr={worker_idx} count={dispatched} orphan={orphaned} arm=union"
                             );
                             // A-DL24 (Council WP-85): worker teardown — the
                             // channel is closed and THIS thread's unit cache
@@ -446,7 +454,7 @@ mod implementation {
                                     // without rows; KS-PP-87-3).
                                     php_types::memcensus::census_line(&format!(
                                         "tag=worker_dispatch thr={worker_idx} count={dispatched} \
-                                         arm=axum-worker alloc_id={}",
+                                         orphan={orphaned} arm=axum-worker alloc_id={}",
                                         php_types::memcensus::ALLOC_ID
                                     ));
                                     php_runtime::memcensus_unitcache_main_rows(worker_idx);
@@ -474,15 +482,10 @@ mod implementation {
                     }
                 });
 
-                senders.push(tx);
                 handles.push(handle);
             }
 
-            Arc::new(WorkerPool {
-                senders,
-                next_worker: std::sync::atomic::AtomicUsize::new(0),
-                handles,
-            })
+            Arc::new(WorkerPool { queue, handles })
         }
 
         /// Worker thread main loop (P-67.5 drop order enforced per request).
@@ -503,16 +506,13 @@ mod implementation {
         /// - Two sequential requests → byte-identical output (G-APERTURA-2 gate)
         fn worker_loop(
             _context: Arc<WorkerPoolContext>,
-            mut rx: mpsc::UnboundedReceiver<WorkerTask>,
+            queue: Arc<SharedQueue<WorkerTask>>,
             #[cfg_attr(not(feature = "mem-census"), allow(unused_variables))] worker_idx: usize,
-        ) -> u64 {
-            // A-PP36 (Council WP-87, Pedersen): per-thread DISPATCH COUNT,
-            // returned to the teardown for the in-band census row — a
-            // phantom dispatch (connect accepted, aborted pre-publish)
-            // consumes round-robin without emitting rows: request-ordinal
-            // claims from a raw whose dispatch counts don't match the
-            // protocol's expectation are VOID (KS-PP-87-3).
+        ) -> (u64, u64) {
+            // A-PP36 (Council WP-87, Pedersen): per-thread DISPATCH COUNT for the teardown row. S-189: worker_idx is
+            // the thread's ORDINAL, not a queue index; at W>1 only the exact row set and Σcount == nreq + orphan are verdict-grade.
             let mut dispatched: u64 = 0;
+            let mut orphaned: u64 = 0;
             // Build the PHP builtins registry ONCE per worker (A-DL5/A-PP5:
             // registry() is NOT cached — building it per request was pure churn
             // that would have polluted the WP-78 alloc census).
@@ -539,7 +539,7 @@ mod implementation {
             let mut prelude_collected = false;
 
             // Main request loop: each request gets a fresh RetainSet + fresh Vm
-            while let Some(mut task) = rx.blocking_recv() {
+            while let Some(mut task) = queue.pop_blocking() {
                 dispatched += 1; // A-PP36: counted at pickup, before any outcome
                 // Pickup: the task leaves the QUEUE (it stays OUTSTANDING
                 // until its response is sent). S-80.0.3 tripwire (KH81-2): a
@@ -586,6 +586,14 @@ mod implementation {
                     #[cfg(feature = "mem-census")]
                     {
                         if task.meta.path.ends_with("/__census_self") {
+                            // S-189 (signed Q2): hold this gang task until all W workers hold theirs (distinct heaps by
+                            // pigeonhole); outside every lock, BEFORE the probe window; a 5 s miss aborts (instrument, A-MS31).
+                            if let Some(latch) = _context.census_latch.get() {
+                                if let Err(arrived) = latch.wait(std::time::Duration::from_secs(5)) {
+                                    eprintln!("tag=census_self_incomplete arrived={arrived} w={}", latch.size());
+                                    std::process::abort();
+                                }
+                            }
                             let probe_window = ProbeWindow::arm();
                             let probe = std::panic::catch_unwind(|| {
                                 php_types::memcensus::census_line(&format!(
@@ -617,7 +625,11 @@ mod implementation {
                     }
                 }
                 drop(scope); // web request cleared + upload tmp files removed BEFORE the response leaves
-                task.response_tx.send(response).ok();
+                // S-189 (web-runtime R4): client gone (e.g. a loopback that timed out) — served anyway like
+                // `php -S` on a dead socket; counted, never silent (KS-PP-87-3).
+                if task.response_tx.send(response).is_err() {
+                    orphaned += 1;
+                }
                 // Response sent: the request leaves the server — only now
                 // does OUTSTANDING drop (A-TH9: dec-after-send is what makes
                 // the closed-sequential watermark verdict-grade; A-PP-63:
@@ -646,19 +658,20 @@ mod implementation {
                     php_types::memcensus::mi_collect_on_thread();
                 }
             }
-            dispatched // A-PP36: handed to the teardown's in-band row
+            (dispatched, orphaned) // A-PP36: handed to the teardown's in-band row
         }
 
-        /// A-MS7/A-DL6 (Council WP-79): deterministic teardown — drop every
-        /// sender (each worker's blocking_recv() then yields None and its
-        /// loop ends) and JOIN every worker before returning. Only after this
+        /// A-MS7/A-DL6 (Council WP-79): deterministic teardown — close the
+        /// shared queue (each worker's pop_blocking() drains what is queued,
+        /// then yields None and its loop ends) and JOIN every worker before
+        /// returning. Only after this
         /// may process-exit figures (/usr/bin/time -l, MIMALLOC_SHOW_STATS)
         /// be read as verdict-grade (KS-MS-5/KL-78-4). Consumes the pool:
         /// call via Arc::try_unwrap once the router (the only other owner)
         /// has been dropped.
         pub fn shutdown(self) {
-            let WorkerPool { senders, handles, .. } = self;
-            drop(senders);
+            let WorkerPool { queue, handles } = self;
+            queue.close();
             let n = handles.len();
             for h in handles {
                 // A panicked worker has already aborted the process (A-PP9),
@@ -684,22 +697,18 @@ mod implementation {
             }
         }
 
-        /// Dispatch task to next available worker (round-robin).
-        /// Caller must create the oneshot channel, hold the receiver,
-        /// pass the sender to WorkerTask, and await the receiver.
+        /// Dispatch task to the shared FIFO (S-189): the next IDLE worker takes it — no blind
+        /// round-robin queuing a loopback behind the worker waiting for it (tooth: wp189-harness/gate-loopback).
+        /// Caller creates the oneshot, holds the receiver, passes the sender in WorkerTask, awaits.
         pub fn dispatch(&self, task: WorkerTask) -> Result<(), String> {
-            let idx = self
-                .next_worker
-                .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-                % self.senders.len();
-
             // A-TH1/A-BB13/A-MS1 (Council WP-80, KH80-4): increment BEFORE
             // send. With inc-after-send the worker's pickup decrement could
             // precede the increment: usize underflow (wrap to MAX) and a
             // watermark that can UNDER-count — a fail-open observable for
-            // KH78-2. Inc → send → recv → dec makes underflow impossible:
-            // every decrement is preceded by its own increment (the channel
-            // provides the happens-before edge). S-80.0.3: OUTSTANDING gets
+            // KH78-2. Inc → push → pop → dec makes underflow impossible:
+            // every decrement is preceded by its own increment (the queue's
+            // mutex provides the happens-before edge: release in push,
+            // acquire in pop). S-80.0.3: OUTSTANDING gets
             // the same inc-before-send edge; its dec is after the response
             // send in the worker (A-TH9).
             #[cfg(any(feature = "census-instrumentation", feature = "mem-census"))]
@@ -718,15 +727,10 @@ mod implementation {
                 census::ARRIVALS.fetch_add(1, Ordering::Relaxed);
             }
 
-            if self.senders[idx].send(task).is_err() {
-                // Failed send: no worker will ever pick this task up, so no
-                // decrement will pair with the increments above — undo both.
-                // A-PP37 (Council WP-88) DECLARED: `next_worker` is NOT
-                // restored either — a failed send leaves a round-robin
-                // ghost (the next dispatch skips one slot). Marginal by
-                // construction (sends fail only at teardown when channels
-                // close), but any per-thread dispatch-map verdict on a run
-                // containing a dispatch Err is VOID (KS-PP-88-2 context).
+            if self.queue.push(task).is_err() {
+                // Failed push (queue closed at teardown): nobody will pick this task up, so no
+                // decrement pairs with the increments above — undo both. S-189: the task comes back
+                // unconsumed, no slot taken — the A-PP37 round-robin ghost is CLOSED.
                 // A-MS16 (Council WP-82) DECLARED: the note_* watermarks ran
                 // BEFORE the send and are NOT undone here — a failed dispatch
                 // leaves a ghost in QUEUE_DEPTH_MAX/OUTSTANDING_MAX. A run
@@ -739,7 +743,7 @@ mod implementation {
                     census::QUEUE_DEPTH.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
                     census::OUTSTANDING.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
                 }
-                return Err("worker channel closed".to_string());
+                return Err("worker queue closed".to_string());
             }
 
             Ok(())
@@ -1067,14 +1071,14 @@ mod implementation {
     /// `cargo test --release -p php-server --features axum-server` (A-SK4);
     /// the default workspace suite covers none of this file.
     #[cfg(test)]
-    mod tests {
+    pub mod tests {
         use super::*;
 
         // A-SK8: the depth counters are process-global — every test that
         // drives a WorkerPool (and thus dispatch's inc/dec) serializes here,
         // so watermark resets and end-of-drain assertions cannot race with
         // another test's pool traffic.
-        static DEPTH_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        pub static DEPTH_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
         // A-PP14/A-MS14 class: the DRAINED_* ledger is process-global — the
         // two fatal-generating tests serialize here so the positive control
@@ -2045,6 +2049,8 @@ mod implementation {
             };
             pool.shutdown();
         }
+
+
     }
 }
 
@@ -2054,7 +2060,7 @@ pub use implementation::{
     req_ns_armed,
 };
 #[cfg(all(test, feature = "axum-server"))]
-pub use implementation::execute_request; // S-188: the axum_web teeth drive one request on this thread
+pub use implementation::{execute_request, tests::DEPTH_TEST_LOCK}; // S-188/S-189: the axum_web teeth drive the pool too
 // API di testimonianza per le PATCH-SONDA di sessione (WP-93 A-PP-67):
 // nessun consumatore in-tree per costruzione — le sonde si applicano come
 // patch temporanee in finestra di misura. L'allow è la DICHIARAZIONE:

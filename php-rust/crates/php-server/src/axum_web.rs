@@ -521,4 +521,40 @@ mod tests {
         let Ok(pool) = Arc::try_unwrap(pool) else { panic!("pool still shared") };
         pool.shutdown();
     }
+
+
+    /// S-189 (Council, signed 2026-11-03; Klabnik R5, Pedersen R9): the in-CI
+    /// falsifier of the shared queue. With per-worker queues and blind
+    /// round-robin a fresh W=2 pool sends A→w0, B→w1, C→w0, so C waits behind
+    /// the long A (RED on the C2 tree: wp189-harness/s189-tooth-red-c2.out);
+    /// with the shared FIFO w1 takes C as soon as B is done (GREEN). Bounds
+    /// live in the assert messages — never a sleep as synchronisation (A-TH25).
+    #[test]
+    fn no_idle_worker_while_queue_nonempty() {
+        // the census counters are process-global: serialize with the pool tests (A-SK8)
+        let _guard = crate::worker_pool::DEPTH_TEST_LOCK.lock().unwrap();
+        let ctx = WorkerPoolContext::new();
+        let pool = WorkerPool::new(ctx, 2);
+        let mut rxs = Vec::new();
+        for src in ["<?php usleep(1500000); echo \"A\";", "<?php echo \"B\";", "<?php echo \"C\";"] {
+            let (tx, rx) = oneshot::channel();
+            pool.dispatch(WorkerTask { meta: meta(src), web: None, response_tx: tx }).unwrap();
+            rxs.push(rx);
+        }
+        let t0 = std::time::Instant::now();
+        let c = rxs.pop().unwrap();
+        let b = rxs.pop().unwrap();
+        let a = rxs.pop().unwrap();
+        assert_eq!(b.blocking_recv().unwrap().body, b"B");
+        assert_eq!(c.blocking_recv().unwrap().body, b"C");
+        let t_c = t0.elapsed();
+        assert!(
+            t_c < std::time::Duration::from_millis(1000),
+            "C answered after {t_c:?}: it waited behind the long A while a worker was idle (round-robin stall, S-189)"
+        );
+        assert_eq!(a.blocking_recv().unwrap().body, b"A");
+        assert!(t0.elapsed() < std::time::Duration::from_millis(5000), "A did not finish within 5 s");
+        let Ok(pool) = Arc::try_unwrap(pool) else { panic!("pool still shared") };
+        pool.shutdown();
+    }
 }
