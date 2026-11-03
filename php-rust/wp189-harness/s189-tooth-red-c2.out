@@ -5,3 +5,12 @@ thread 'worker_pool::implementation::tests::no_idle_worker_while_queue_nonempty'
 C answered after 1.55134025s: it waited behind the long A while a worker was idle (round-robin stall, S-189)
 test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 24 filtered out; finished in 1.55s
 rc= (atteso: 1 = ROSSO)
+
+# PROVA 2 (azione sulla revisione S-189 rilievo 1): il dente COMMITTATO (axum_web tests di HEAD d2a0ab2a) sul tree C2 5306ee88 via git archive + target separata — 2026-11-03_22:41:04
+cmd: CARGO_TARGET_DIR=/Users/francescotinti/Claude/phpr-target/dev-output-red cargo test --profile dev-release -p php-server --features axum-server no_idle_worker (nell'archivio; lock DEPTH_TEST_LOCK tolto: nato in C3)
+test axum_web::tests::no_idle_worker_while_queue_nonempty ... FAILED
+thread 'axum_web::tests::no_idle_worker_while_queue_nonempty' (4000892) panicked at crates/php-server/src/axum_web.rs:524:9:
+C answered after 1.555784417s: it waited behind the long A while a worker was idle (round-robin stall, S-189)
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 24 filtered out; finished in 1.56s
+error: test failed, to rerun pass `-p php-server --bin php-server`
+rc=101 (atteso: 101 = ROSSO)

@@ -148,15 +148,19 @@ for lev in levels:
         elif any(inside): esito = "VOID (rimisura: un ciclo dentro)"; voidc.append(f"C{lev}/{u}")
         else: esito = "KILL (3 cicli concordi fuori banda)" if m < lo else "REPERTO >1,05 (attribuire prima di promuovere)"; kills.append(f"C{lev}/{u}={m:.3f}")
         print(f"  C={lev:<2} {u:<6} [{' '.join(f'{r:.3f}' for r in rs)}] med={m:.3f} banda=[{lo:.2f};{hi:.2f}] {esito}")
-def comp(key, name, thr):
+def comp(key, name, thr, only_lev=None):
+    # criterio p.4: il REPERTO p99 è definito SOLO a C=8 (revisione S-189 rilievo 4: a C=4 era un over-flag);
+    # cpu/req ±2% su ogni cella. Le altre celle p99 restano stampate come advisory.
     rows = []
     for lev in levels:
         for u in urls:
             n = statistics.median([boot[(c, "AXnew")]["cell"][(lev, u)].get(key) or 0 for c in range(1, R + 1)])
             o = statistics.median([boot[(c, "AXold")]["cell"][(lev, u)].get(key) or 0 for c in range(1, R + 1)])
-            rows.append(f"C={lev} {u}={n/o:.3f}" + (" REPERTO" if o and n / o > thr else "") if o else f"C={lev} {u}=n/a")
-    print(f"companion {name} nuovo/vecchio (REPERTO se > {thr}): " + " · ".join(rows))
-comp("p99", "p99", 1.10); comp("cpu", "cpu(u+s)/req", 1.02)
+            flag = " REPERTO" if o and n / o > thr and (only_lev is None or lev == only_lev) else ""
+            rows.append(f"C={lev} {u}={n/o:.3f}{flag}" if o else f"C={lev} {u}=n/a")
+    scope = f" a C={only_lev}, advisory altrove" if only_lev else ""
+    print(f"companion {name} nuovo/vecchio (REPERTO se > {thr}{scope}): " + " · ".join(rows))
+comp("p99", "p99", 1.10, only_lev="8"); comp("cpu", "cpu(u+s)/req", 1.02)
 print(f"celle VOID: {' '.join(voidc) or 'nessuna'} · KILL/REPERTO: {' '.join(kills) or 'nessuno'}")
 if kills: rc = 2
 print(f"rc={rc}  # 0 = tutte le celle in banda · 1 = celle VOID (rimisura) · 2 = KS-189-5 (cura NON promossa)"); sys.exit(rc)

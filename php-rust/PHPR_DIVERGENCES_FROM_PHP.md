@@ -1305,7 +1305,11 @@ test, contesto 1,0 ⇒ `bool(false)` + warning dell'oracle a ≈1 s; rosso per
 costruzione sul tree pre-cura: supera il bound di 8 s). **Residuo `TODO(port)`**:
 la tabella INI vive nella Vm e i builtins non la vedono ⇒ `ini_set('default_socket_timeout', n)`
 non è onorato (stessa posture di `fsockopen`/`stream_socket_client`, 60 s costanti).
-Il phpr PINNATO (s183) non ha la cura: entra col prossimo pin phpr (promozione s184).
+Il phpr PINNATO (s183) e il **server pin s189** (`80eea401b71c2be7` @ 747300b7, costruito PRIMA
+di questo commit) NON hanno la cura: entra col prossimo pin (promozione s184 per phpr; il server
+alla successiva rotazione). Gate §5 della cura: suite `php-builtins` e `php-cli` a dev-release
+(`wp189-harness/s189-http-timeout-gate.out`); batteria completa e corpus-gate ×2 dovuti alla
+promozione, dichiarati (revisione S-189, rilievo 7).
 
 Testo originale della voce (storico):
 

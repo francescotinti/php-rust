@@ -1,5 +1,5 @@
 --- /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp189-harness/../wp188-harness/s188-lancio.sh	2026-11-03 13:29:35
-+++ /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp189-harness/s189-lancio.sh	2026-11-03 19:29:58
++++ /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp189-harness/s189-lancio.sh	2026-11-03 22:41:17
 @@ -1,12 +1,12 @@
  #!/bin/bash
 -# s188-lancio.sh — COPPIA SERVER WP t3 @ pin s183 (criterio s188-criterio-server-pair.md p.6): COPIA DICHIARATA di
