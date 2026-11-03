@@ -1,0 +1,19 @@
+== oracle-fatal-status: PHP 8.5.7 (cli) (built: Jun  2 2026 20:59:56) (NTS) · php -S (cli-server) · fixtures wp78-harness/gate-axum · 2026-11-03 09:31:51 ==
+fatal_runtime  http 200 · 377 B · head: pre~<br />~<b>Fatal error</b>:  Uncaught Error: Call to unde
+fatal_compile  http 200 · 224 B · head: <br />~<b>Fatal error</b>:  'goto' to undefined label 'nope'
+exit_code      http 200 · 16 B · head: out-before-exit~
+parse_err      http 200 · 229 B · head: <br />~<b>Parse error</b>:  syntax error, unexpected token &
+-- cli (phpr -S expectation for the SAME fixtures is this SAPI's, not the CLI's) --
+fatal_runtime  cli rc=255 · 343 B
+fatal_compile  cli rc=255 · 190 B
+exit_code      cli rc=3 · 16 B
+parse_err      cli rc=255 · 185 B
+-- server.log (stderr dell'oracle) --
+[Tue Nov  3 09:31:51 2026] PHP 8.5.7 Development Server (http://127.0.0.1:8199) started
+[Tue Nov  3 09:31:51 2026] 127.0.0.1:61568 [200]: GET /hello.php
+[Tue Nov  3 09:31:51 2026] PHP Fatal error:  Uncaught Error: Call to undefined function nope_missing_fn() in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/gate-axum/fixtures/fatal_runtime.php:6
+Stack trace:
+#0 {main}
+  thrown in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/gate-axum/fixtures/fatal_runtime.php on line 6
+[Tue Nov  3 09:31:51 2026] 127.0.0.1:61569 [200]: POST /fatal_runtime.php - Uncaught Error: Call to undefined function nope_missing_fn() in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp78-harness/gate-axum/fixtures/fatal_runtime.php:6
+Stack trace:
