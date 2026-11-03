@@ -94,7 +94,7 @@ mod gd;
 mod tidy;
 mod xslt;
 mod tokenizer;
-mod websapi;
+pub mod websapi;
 use arrays::*;
 use calls::*;
 use oop::*;
@@ -382,7 +382,7 @@ pub fn run_source(name: &[u8], source: &[u8]) -> Result<VmOutcome, VmRunError> {
 /// Build the [`VmOutcome`] for a compile-time PHP `Fatal error:` (E2; mirrors
 /// `eval::compile_fatal_outcome`): rendered like a runtime fatal but without the
 /// "Uncaught" prefix or "thrown in" tail.
-fn compile_fatal_outcome(file: &[u8], message: &str, line: Line) -> VmOutcome {
+pub fn compile_fatal_outcome(file: &[u8], message: &str, line: Line) -> VmOutcome {
     let file_s = String::from_utf8_lossy(file);
     // Under the web SAPI the fatal renders in html_errors form and feeds the
     // host's stderr log (the response still carries the X-Powered-By header).

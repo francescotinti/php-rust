@@ -502,7 +502,40 @@ pub(super) fn seed_web_superglobals(superglobals: &mut [Zval; 8], req: &WebReque
 /// `epoch` (UTC) as PHP's cookie/HTTP date (shared with the server host).
 use php_types::sapi::http_date;
 
+/// The response head a web SAPI host writes ahead of the body: what the
+/// script set through `header()` / `http_response_code()` / `setcookie()` /
+/// `session_start()`, plus the `log_errors` lines for the host's stderr log.
+/// Taken from the Vm by [`Vm::take_web_response`] BEFORE `request_end()`
+/// (capture-before-reset, the KS-PP-2 rule) — the axum worker's counterpart of
+/// the `VmOutcome` fields the one-shot `run_source*` paths fill (S-188).
+#[derive(Debug, Default)]
+pub struct WebResponseHead {
+    /// Whether a web request was installed for this run (`request_start`
+    /// seeded the web superglobals); `false` = CLI semantics.
+    pub web: bool,
+    /// Full `Name: value` lines in send order (replace semantics applied).
+    pub headers: Vec<Vec<u8>>,
+    /// Status set by the script (`None` = 200 under the web SAPI).
+    pub code: Option<i64>,
+    /// Custom reason phrase from a raw `header("HTTP/1.1 404 Custom")`.
+    pub reason: Option<Vec<u8>>,
+    /// `log_errors` lines ("PHP Warning:  … in F on line N").
+    pub error_log: Vec<Vec<u8>>,
+}
+
 impl<'m> Vm<'m> {
+    /// Move the response head out of the Vm (headers, status, reason,
+    /// error_log) — call BEFORE `request_end()`, which resets them.
+    pub fn take_web_response(&mut self) -> WebResponseHead {
+        WebResponseHead {
+            web: self.web,
+            headers: std::mem::take(&mut self.response_headers),
+            code: self.response_code,
+            reason: std::mem::take(&mut self.response_reason),
+            error_log: std::mem::take(&mut self.error_log),
+        }
+    }
+
     /// The header name of a full `Name: value` line (empty when malformed).
     fn header_line_name(line: &[u8]) -> &[u8] {
         match line.iter().position(|&b| b == b':') {

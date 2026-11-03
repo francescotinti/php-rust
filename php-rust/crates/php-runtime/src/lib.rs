@@ -66,7 +66,9 @@ pub use vm::{
 // A-BB6 (design79): main-unit cache API — acquire/publish for the worker
 // SAPI, run_source_probed for the cli-server (probe = ONE parameter at the
 // SAPI boundary, A-TH14; call-sites grep-gated by gate-lever-pins.sh).
-pub use vm::{main_unit_acquire, run_source_probed, MainAcquireError, MainLever, MainUnit};
+pub use vm::{compile_fatal_outcome, main_unit_acquire, run_source_probed, MainAcquireError, MainLever, MainUnit};
+// S-188 (axum web SAPI): the response head the worker takes before request_end().
+pub use vm::websapi::WebResponseHead;
 // A-PP20 (Council WP-83): entry-probe test surface for the worker's
 // link-fatal-never-published tooth (counters + direct key probe).
 pub use vm::{uc_entry_count, uc_main_entry_count, uc_main_key_in_cache, uc_main_stats};
