@@ -51,3 +51,7 @@ wp188-harness/pair-out/
 wp188-harness/battery61-axum-out/
 wp189-harness/gate-loopback/out/
 wp189-harness/pair-out/
+wp190-harness/gate-out/
+wp190-harness/corpus-out/
+wp190-harness/ab-out/
+wp190-harness/guardia-out-*/

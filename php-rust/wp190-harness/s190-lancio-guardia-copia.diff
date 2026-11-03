@@ -1,0 +1,95 @@
+--- /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp190-harness/../wp186-harness/s186-lancio-catena.sh	2026-11-02 16:48:47
++++ /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp190-harness/s190-lancio-guardia.sh	2026-11-03 23:32:30
+@@ -1,4 +1,10 @@
+ #!/bin/bash
++# s190-lancio-guardia.sh — S-190 cura O(1) v2: FINESTRA NOTTURNA della sola GUARDIA a buffer pieno (criterio
++# s190-criterio-o1v2.md p.7): gate di finestra EREDITATI (quiete CI, anti-flare 6x30 s, loadavg1 <3 x6, E2 <150 % x4,
++# processo singolo >50 % x2, dichiarazione uptime+top) -> lock TOKEN s190 -> pin s183 == stash per hash E bracci Z (riuso
++# wp186) + B3 (wp190) presenti -> s186-guardia.sh TAG=b3 (B = phpr-B3) -> lock rimosso; esito in catena-out/catena-s190.done.
++# COPIA DICHIARATA di ../wp186-harness/s186-lancio-catena.sh (manifest s190-lancio-guardia-copia.diff, generatore
++# gen-lancio-guardia-s190.py) coi SOLI adattamenti elencati nel generatore. Testo S-186 conservato sotto:
+ # s186-lancio-catena.sh — S-186: CATENA NOTTURNA UNICA (delibera concilio S-186 firmata 2026-10-23; criterio
+ # s186-criterio-fetta0.md): gate di finestra EREDITATI (quiete CI, anti-flare 6x30 s, loadavg1 <3 x6, E2 <150 % x4,
+ # processo singolo >50 % x2, dichiarazione uptime+top) -> lock TOKEN s186 -> pin s183 == stash per hash E bracci
+@@ -29,14 +35,15 @@
+ # s184-lancio-rt2.sh) dopo E2. Il resto INVARIATO (testo S-182 conservato sotto).
+ set -u
+ export PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin
+-H="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp186-harness"
++H="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp190-harness"
++H186="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp186-harness"
+ LOG="$H/catena-out/lancio-catena.log"; mkdir -p "$H/catena-out"
+-DONE="$H/catena-out/catena-s186.done"; rm -f "$DONE"
++DONE="$H/catena-out/catena-s190.done"; rm -f "$DONE"
+ # ADATTAMENTO S-186: i bracci della build serale (s186-leva-build.sh) devono esistere PRIMA di aprire la finestra
+-for b in Z B B2 M C; do
+-  [ -s "$H/ab-out/s186-leva/phpr-$b" ] || { echo "$(date '+%F %T') braccio $b ASSENTE (ab-out/s186-leva/phpr-$b): niente finestra" >> "$LOG"; echo "rc=7 braccio $b assente" > "$DONE"; exit 7; }
+-done
+-echo "$(date '+%F %T') bracci Z/B/B2/M/C presenti: $(cd "$H/ab-out/s186-leva" && shasum -a 256 phpr-Z phpr-B phpr-B2 phpr-M phpr-C | cut -c1-16 | tr '\n' ' ')" >> "$LOG"
++ZB="$H186/ab-out/s186-leva/phpr-Z"; B3B="$H/ab-out/s190-leva/phpr-B3"
++[ -s "$ZB" ] || { echo "$(date '+%F %T') braccio Z ASSENTE ($ZB): niente finestra" >> "$LOG"; echo "rc=7 braccio Z assente" > "$DONE"; exit 7; }
++[ -s "$B3B" ] || { echo "$(date '+%F %T') braccio B3 ASSENTE ($B3B): niente finestra" >> "$LOG"; echo "rc=7 braccio B3 assente" > "$DONE"; exit 7; }
++echo "$(date '+%F %T') bracci Z/B3 presenti: Z $(shasum -a 256 "$ZB" | cut -c1-16) B3 $(shasum -a 256 "$B3B" | cut -c1-16)" >> "$LOG"
+ echo "$(date '+%F %T') attesa quiete CI" >> "$LOG"
+ while pgrep -qx cargo || pgrep -qx rustc || pgrep -qf phpt-runner; do sleep 60; done
+ sleep 60
+@@ -46,8 +53,8 @@
+ fi
+ # EMENDA t24 (i): LOCK col TOKEN s183 — apre la finestra multi-gamba (la CI si mette in mutex sul lock); rimosso a chiusura di sessione
+ MLOCK=/private/tmp/phpr-measure.lock
+-echo "s186 catena guardia+fetta0 @ pin s183 $(date '+%F %T') pid=$$" > "$MLOCK"
+-echo "$(date '+%F %T') lock scritto: $MLOCK (TOKEN s186)" >> "$LOG"
++echo "s190 guardia b3 (cura O(1) v2) @ pin s183 $(date '+%F %T') pid=$$" > "$MLOCK"
++echo "$(date '+%F %T') lock scritto: $MLOCK (TOKEN s190)" >> "$LOG"
+ # predicato anti-flare PRE-registrato (criterio p.6b): quiete CONTINUA 6x30s
+ echo "$(date '+%F %T') CI quieta — attesa quiete continua anti-flare (6x30s <5%)" >> "$LOG"
+ calm=0
+@@ -81,7 +88,7 @@
+ while [ "$hc" -lt 2 ]; do hg=$(hog); if [ -z "$hg" ]; then hc=$((hc+1)); else hc=0; echo "$(date '+%F %T') processo singolo >50 % CPU: $hg — attesa" >> "$LOG"; fi; [ "$hc" -lt 2 ] && sleep 30; done
+ # EMENDA t24 (iv): watchdog disco Data (campione a 60 s in pair-out/watchdog-t24.txt; allarme <8G a verbale, NON abortisce: le misure sono a user-CPU);
+ # vive finché pair182-t24.done esiste da 4 h (copre l'ORM) o 14 h totali
+-( WD="$H/catena-out/watchdog-catena.txt"; PD="$H/catena-out/catena-s186.done"; t0=$(date +%s); tdone=0
++( WD="$H/catena-out/watchdog-catena.txt"; PD="$H/catena-out/catena-s190.done"; t0=$(date +%s); tdone=0
+   while :; do
+     f=$(df -g /System/Volumes/Data | awk 'NR==2{print $4}'); a=""; [ "${f:-0}" -lt 8 ] && a=" ALLARME<8G"
+     echo "$(date '+%F %T') Data=${f}G swap=$(sysctl -n vm.swapusage | awk '{print $6}')$a" >> "$WD"
+@@ -92,32 +99,19 @@
+   done ) > /dev/null 2>&1 &
+ # dichiarazione finestra QUIETA (criterio p.6c): uptime + top
+ Q="$H/catena-out/quiet-decl-catena.txt"
+-{ echo "== dichiarazione finestra quieta catena S-186 (guardia + fetta 0) $(date '+%F %T') =="
++{ echo "== dichiarazione finestra quieta S-190 (guardia b3) $(date '+%F %T') =="
+   uptime
+   top -l 1 -n 8 -o cpu -stats pid,cpu,command 2>/dev/null | tail -12
+ } > "$Q" 2>&1
+-echo "$(date '+%F %T') quiete raggiunta — dichiarazione in quiet-decl-catena.txt — guardia a buffer pieno, poi fetta 0" >> "$LOG"
++echo "$(date '+%F %T') quiete raggiunta — dichiarazione in quiet-decl-catena.txt — guardia b3" >> "$LOG"
+ REPO="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust"; STASH="/Volumes/Extreme Pro/Claude/phpr-old-target/release"
+ fine(){ echo "$(date '+%F %T') $1" >> "$LOG"; echo "$2" > "$DONE"; rm -f "$MLOCK"; exit "$3"; }
+ PIN_ATTESO=$(shasum -a 256 "$STASH/phpr-s183" | cut -c1-16); PC=$(shasum -a 256 "$HOME/Claude/php-rust-output/release/phpr" | cut -c1-16)
+ [ "$PC" = "$PIN_ATTESO" ] || fine "pin canonico $PC != stash s183 $PIN_ATTESO" "rc=9 pin" 9
+ [ "$PIN_ATTESO" = "9a6ae11bf7e900ef" ] || fine "stash s183 $PIN_ATTESO != 9a6ae11bf7e900ef" "rc=9 stash183" 9
+-SPD=/private/tmp/phpr-s186-orm; mkdir -p "$SPD"
+-echo "$(date '+%F %T') pin $PC == stash s183 — GUARDIA a buffer pieno ×2 (PIN=pin, Z/B/B2=ab-out/s186-leva, TAG b poi b2)" >> "$LOG"
+-# (1) guardia della cura 22/10 a buffer PIENO (ordine obbligato team-governo p.2), DUE corse in sequenza:
+-#     TAG=b  con B = phpr-B  (tree con la cura 22/10 com'è)           -> guardia-out-b/guardia.done, s186-guardia-verdetto-b.out
+-#     TAG=b2 con B = phpr-B2 (tree + cura O(1), concilio Q3 accolta)   -> guardia-out-b2/guardia.done, s186-guardia-verdetto-b2.out
+-PIN="$HOME/Claude/php-rust-output/release/phpr" Z="$H/ab-out/s186-leva/phpr-Z" B="$H/ab-out/s186-leva/phpr-B" R=5 RE3=3 TAG=b /bin/bash "$H/s186-guardia.sh"
++echo "$(date '+%F %T') pin $PC == stash s183 — GUARDIA a buffer pieno TAG=b3 (PIN=pin, Z=$ZB, B=$B3B)" >> "$LOG"
++# guardia della cura O(1) v2 (criterio s190 p.7): stesso giudice di S-186, braccio B = phpr-B3
++PIN="$HOME/Claude/php-rust-output/release/phpr" Z="$ZB" B="$B3B" R=5 RE3=3 TAG=b3 /bin/bash "$H186/s186-guardia.sh"
+ rc1=$?
+-GR="$(cat "$H/guardia-out-b/guardia.done" 2>/dev/null)"
+-echo "$(date '+%F %T') guardia b fine rc=$rc1 ($GR) — verdetto s186-guardia-verdetto-b.out" >> "$LOG"
+-PIN="$HOME/Claude/php-rust-output/release/phpr" Z="$H/ab-out/s186-leva/phpr-Z" B="$H/ab-out/s186-leva/phpr-B2" R=5 RE3=3 TAG=b2 /bin/bash "$H/s186-guardia.sh"
+-rc1b=$?
+-GR2="$(cat "$H/guardia-out-b2/guardia.done" 2>/dev/null)"
+-echo "$(date '+%F %T') guardia b2 fine rc=$rc1b ($GR2) — verdetto s186-guardia-verdetto-b2.out" >> "$LOG"
+-# (2) fetta 0: xctrace O/P/M R=3 + C census (criterio s186-criterio-fetta0.md); esito in fetta0-out/fetta0.done
+-echo "$(date '+%F %T') fetta 0 (MAPPA_SP=$SPD)" >> "$LOG"
+-PIN_ATTESO="$PIN_ATTESO" MAPPA_SP="$SPD" /bin/bash "$H/s186-fetta0.sh"
+-rc2=$?
+-FR="$(cat "$H/fetta0-out/fetta0.done" 2>/dev/null)"
+-fine "fetta 0 fine rc=$rc2 ($FR) — verdetto s186-fetta0-verdetto.out; lock rimosso" "rc=$rc2 guardia_b=[$GR] guardia_b2=[$GR2] fetta0=[$FR]" "$rc2"
++GR="$(cat "$H186/guardia-out-b3/guardia.done" 2>/dev/null)"
++fine "guardia b3 fine rc=$rc1 ($GR) — verdetto wp186-harness/s186-guardia-verdetto-b3.out; lock rimosso" "rc=$rc1 guardia_b3=[$GR]" "$rc1"
