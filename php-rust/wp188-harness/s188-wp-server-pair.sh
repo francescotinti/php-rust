@@ -35,7 +35,7 @@ WPDEV="$HOME/Claude/wpdev/src"
 SRVBIN="$HOME/Claude/php-rust-output/release/php-server"
 PHPRBIN="$HOME/Claude/php-rust-output/release/phpr"
 ORACLE="/opt/homebrew/opt/php/bin/php"
-PIN_ATTESO="${PIN_ATTESO:-674f6b9730da41ff}"
+PIN_ATTESO="${PIN_ATTESO:-97b58fd225ca7289}"  # pin server s188 (t3); t1/t2 misurati sul pin s183 674f6b9730da41ff
 PHPR_ATTESO="${PHPR_ATTESO:-9a6ae11bf7e900ef}"
 SOCK=/private/tmp/mysql-wp8.sock
 MLOCK=/private/tmp/phpr-measure.lock
@@ -90,6 +90,8 @@ WDPID=$!
 
 quiesce_gate(){ # $1=etichetta — gate SEPARATO, rc nel suo file (s184: streak mediaanalysisd + retry ×3)
   local attempt q
+  # SKIP_QUIESCE=1 salta il gate SOLO in un dry run (grade=DRY): collaudo dell'harness mentre la CI costruisce; mai per un record
+  if [ "${SKIP_QUIESCE:-0}" = 1 ] && [ "$GRADE" = DRY ]; then step "quiescenza $1 SALTATA (dry run, SKIP_QUIESCE=1)"; return 0; fi
   for attempt in 1 2 3; do
     local w=0 streak=0 c
     while :; do

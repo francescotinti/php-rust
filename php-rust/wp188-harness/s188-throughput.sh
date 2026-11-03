@@ -52,6 +52,8 @@ step "identità: server=$SRV git=$GIT_REV driver_sha=$DRIVER_SHA php=$PHPV C=[$C
 
 quiesce_gate(){
   local attempt q
+  # SKIP_QUIESCE=1 salta il gate SOLO in un dry run (grade=DRY): collaudo dell'harness mentre la CI costruisce; mai per un record
+  if [ "${SKIP_QUIESCE:-0}" = 1 ] && [ "$GRADE" = DRY ]; then step "quiescenza $1 SALTATA (dry run, SKIP_QUIESCE=1)"; return 0; fi
   for attempt in 1 2 3; do
     local w=0 streak=0 c
     while :; do
