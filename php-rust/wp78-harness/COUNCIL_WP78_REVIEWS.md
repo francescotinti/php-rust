@@ -329,3 +329,5 @@ Ho letto NEXT_SESSION, WP_SESSION_77_6_5_2_4, il verbale .3 e il codice (main.rs
 ---
 
 **Chiusura concilio**: 2026-07-31. Verbali VINCOLANTI per il design WP-78 (S-78.0 sanatoria pre-misura obbligatoria).
+
+**Nota S-189 (firma 2026-11-03)**: KH78-2 / KB-78-2 / A-BB8 emendate per nome — «profondità QUEUE_DEPTH (globale: somma delle W code sui pin ≤ s188, coda unica dai pin ≥ s189; a W=1 la stessa grandezza) > 1 in misura ⇒ VOID», semantica «FIFO di dispatch, non di accept»; A-MS2/A-MS3, A-DS2/KS-DS-78-1 INVARIATE. Testo vincolante: `wp189-harness/concilio/COUNCIL_WP189_REVIEWS.md`.

@@ -74,3 +74,5 @@ della rotazione.
 Il fronte NON si dichiara chiuso (legge feedback-no-front-closure): si
 chiude coi criteri 1 (attribuzione slope al canale m91), 3 (battery) e 5
 (batteria WordPress nativa).
+
+**S-189 (concilio, firma 2026-11-03)**: il pool `--axum` passa da code per-worker con round-robin cieco a UNA coda condivisa FIFO (accept condiviso di `php -S`/FPM): a W=1 il loopback bloccante stalla come l'oracle (fedeltà), nessun timeout nel handler, nessun 503; dente `wp189-harness/gate-loopback` con controllo positivo rosso sul pin s188. Il canale axum resta misura + WordPress (S-188), non si dichiara chiuso.

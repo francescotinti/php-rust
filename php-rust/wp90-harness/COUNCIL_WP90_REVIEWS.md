@@ -401,3 +401,5 @@ ri-emesso come A-SK53-bis. I colpi:
 | KG-90-1 | battery FAIL senza riga esito nel ledger | PASS successivo PROVISIONAL |
 | KG-90-2 | estrattore che può emettere 0 su riga assente in min/LSQ | blocco VOID |
 | KG-90-3 | identity con srv_boot_epoch assente/incoerente | raw VOID |
+
+**Nota S-189 (firma 2026-11-03)**: A-PP42 / KS-PP-89-2 emendate per nome — VDISP esige W righe `worker_dispatch` con thr-set ESATTO {0..W-1} e Σcount == nreq + orphan (+1 per `/__census_self` sullo slope a W=1); `count == nreq/W` SOLO per pin ≤ s188; il dispatcher in vigore (round-robin | FIFO condivisa) va DICHIARATO nel raw, mai assunto. Le campagne ×W (m88, m90) e la composizione warm per-worker valgono per pin ≤ s188; `verdict86-90.sh` restano l'archivio dei pin round-robin (pin ≥ s189 = template nuovo). Testo vincolante: `wp189-harness/concilio/COUNCIL_WP189_REVIEWS.md`.

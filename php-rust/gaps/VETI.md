@@ -18,3 +18,4 @@ Generato con assistenza AI (Claude Fable 5). Il NEXT tiene solo i veti delle ult
 - `$this`/`$nome` PHP in doppi apici sotto `set -u` (S-185: `\$this` + assert nel generatore)
 - mutante senza prova sui binari PRIMA del lancio (S-185; S-186 #5: attribuzione xctrace a gate della build)
 - attesa «nessuna nuova chiamata nel loop» senza contare la chiamata della leva stessa (S-185)
+- 2026-11-03 (delibera S-189, firma utente): KILL A REGISTRO S-168 — Σ mock 9,92 < 10 ⇒ R1 chiusa; R4 eseguita come «corpo del handler» (S-170) SENZA tappa reale, sanata in S-186 — SCARICATO dalla riga 1 del NEXT (REGOLE §8: un kill resta in riga 1 fino al concilio seguente; S-186 bis e S-189 lo sono). Non si ripropone: nessuna campagna di nucleo senza tappa sul carico reale dichiarata.

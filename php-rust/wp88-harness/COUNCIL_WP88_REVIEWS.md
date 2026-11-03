@@ -369,3 +369,5 @@ Stogov ha interrogato l'oracle vivo). I colpi della tornata:
 | KG-88-1 | raw sovrascritto same-label | ENTRAMBE le versioni VOID |
 | KG-88-2 | claim d'ordine non ricostruibile dal contenuto versionato | claim VOID |
 | KG-88-3 | .done scritto con FAILS>0 o non consumato dal verdict | marker VOID |
+
+**Nota S-189 (firma 2026-11-03)**: A-PP37 emendata per nome — il verdict esige W righe `worker_dispatch` con insieme esatto e Σcount == nreq + orphan; la MAPPA == nreq/W è attesa SOLO su pin round-robin ≤ s188; la coda condivisa non ha slot: `push` su coda chiusa restituisce il task ⇒ nessun ghost di dispatch (clausola CHIUSA); il ghost dei watermark `note_*` (A-MS16) RESTA. Testo vincolante: `wp189-harness/concilio/COUNCIL_WP189_REVIEWS.md`.

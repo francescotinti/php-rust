@@ -396,3 +396,5 @@ Le cifre 🔵 (`MEASURE85_RESULTS.md:40-46`) da raw VOID: il corpus cifre (`gate
 
 ---
 
+
+**Nota S-189 (firma 2026-11-03)**: A-PP36 e KS-PP-87-3 emendate per nome — il dispatch-count per-thread resta in-band a teardown su ogni arm, con `orphan=<n>`; l'«atteso» è Σcount == nreq + orphan con insieme ESATTO {0..W-1} delle righe; la ripartizione per-thread è attesa SOLO sui pin round-robin ≤ s188 (`97b58fd225ca7289`), dai pin ≥ s189 (coda condivisa) la mappa a W>1 non è verdict-grade. Verdetti d'archivio intatti. Testo vincolante: `wp189-harness/concilio/COUNCIL_WP189_REVIEWS.md` §LA FORMA.
