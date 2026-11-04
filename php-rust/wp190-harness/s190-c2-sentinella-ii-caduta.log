@@ -1,0 +1,47 @@
+warning: function `xmlCanonicPath` is never used
+  --> crates/php-types/src/xsltio.rs:61:8
+   |
+61 |     fn xmlCanonicPath(path: *const c_char) -> *mut c_char;
+   |        ^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `php-types` (lib) generated 1 warning
+   Compiling php-runtime v0.1.0 (/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/crates/php-runtime)
+warning: variable does not need to be mutable
+     --> crates/php-runtime/src/vm/mod.rs:20632:13
+      |
+20632 |         let mut cost_at = |k: usize, base: usize| -> f64 {
+      |             ----^^^^^^^
+      |             |
+      |             help: remove this `mut`
+      |
+      = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: `php-runtime` (lib test) generated 1 warning (run `cargo fix --lib -p php-runtime --tests` to apply 1 suggestion)
+    Finished `dev-release` profile [optimized] target(s) in 41.43s
+     Running unittests src/lib.rs (/Users/francescotinti/Claude/phpr-target/dev-output/dev-release/deps/php_runtime-a6454d18f7a1db3a)
+
+running 4 tests
+test vm::tests::frame_drop_order_sentinel_generator_and_extras ... ok
+test vm::tests::frame_drop_order_sentinel_ret_shaping_and_finally ... ok
+test vm::tests::gc_drop_order_sentinel_note_demote_cascade ... ok
+test vm::tests::frame_drop_order_sentinel_iters_this_dynvars ... FAILED
+
+failures:
+
+---- vm::tests::frame_drop_order_sentinel_iters_this_dynvars stdout ----
+
+thread 'vm::tests::frame_drop_order_sentinel_iters_this_dynvars' (4363195) panicked at crates/php-runtime/src/vm/mod.rs:22619:9:
+assertion `left == right` failed
+  left: [91, 97, 50, 93, 91, 97, 49, 93, 114, 91, 97, 51, 93, 46, 91, 98, 49, 93, 91, 116, 104, 105, 115, 93, 109, 91, 98, 50, 93, 46, 91, 99, 50, 93, 91, 99, 49, 93, 113, 91, 99, 51, 93, 46, 91, 120, 50, 93, 91, 120, 51, 93, 91, 120, 49, 93, 122, 91, 120, 52, 93, 46]
+ right: [91, 97, 49, 93, 91, 97, 50, 93, 114, 91, 97, 51, 93, 46, 91, 98, 49, 93, 91, 116, 104, 105, 115, 93, 109, 91, 98, 50, 93, 46, 91, 99, 50, 93, 91, 99, 49, 93, 113, 91, 99, 51, 93, 46, 91, 120, 51, 93, 91, 120, 50, 93, 91, 120, 49, 93, 122, 91, 120, 52, 93, 46]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    vm::tests::frame_drop_order_sentinel_iters_this_dynvars
+
+test result: FAILED. 3 passed; 1 failed; 0 ignored; 0 measured; 704 filtered out; finished in 0.04s
+
+error: test failed, to rerun pass `-p php-runtime --lib`

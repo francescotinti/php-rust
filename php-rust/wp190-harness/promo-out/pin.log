@@ -1,0 +1,5 @@
+To https://github.com/francescotinti/php-rust.git
+   608934f6..b7812fac  s186-firma -> s186-firma
+To /Volumes/Extreme Pro/Claude/phpr-ci/repo.git
+   608934f6..b7812fac  s186-firma -> s186-firma
+PIN phpr s184 = 60b10d857eb0343a (smoke parità 2 modi OK, stash phpr-s184, registrato+committato). I gate del protocollo (batteria/corpus/fixture/micro) restano dovuti.

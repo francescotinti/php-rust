@@ -1,0 +1,195 @@
+== s190 gate di giorno tag=c1-passo2 REPLAY=1: rigiudicato 2026-11-04_09:45:22 dai log di gate-out/c1-passo2 (mtime 2026-11-04_00:13:20); binari NON rilanciati ==
+OK   [off] bug49893: atteso PASS (non nel congelato) — failures=0
+OK   [off] bug47771: testo del chunk == riferimento golden e89acabb946cf26a
+OK   [off] bug53511: testo del chunk == riferimento golden 23cf4cc7b0ca4321
+OK   [off] assign_coalesce_002: testo del chunk == riferimento golden 7abc7fa9a0a31e47
+FAIL [off] temporary_cleaning_013: testo del chunk != riferimento golden 5ec49c822149eff3
+    chunk attuale:
+    @@ EXPECTF first diff at line 2 @@
+      caught Exception 1
+    - caught Exception 2
+    - caught Exception 3
+    - caught Exception 4
+    - caught Exception 5
+    - 
+    - Deprecated: Creation of dynamic property class@anonymous::$foo is deprecated in %s on line %d
+    - caught Exception 6
+    - caught Exception 7
+    - caught Exception 8
+    - caught Exception 9
+    - caught Exception 10
+    - 
+    - Deprecated: Creation of dynamic property class@anonymous::$foo is deprecated in %s on line %d
+    - caught Exception 11
+    - 
+    - Deprecated: Creation of dynamic property class@anonymous::$foo is deprecated in %s on line %d
+    - caught Exception 12
+    - caught Exception 13
+    - 
+    - Deprecated: Creation of dynamic property class@anonymous::$foo is deprecated in %s on line %d
+      … (+25 more expected lines)
+    + array(1) {
+    +   [0]=>
+    +   int(0)
+    + }
+    + caught Exception 2
+    + array(1) {
+    +   [0]=>
+    +   int(0)
+    + }
+    + caught Exception 3
+    + array(1) {
+    +   [0]=>
+    +   int(0)
+    + }
+    + caught Exception 4
+    + array(1) {
+    +   [0]=>
+    +   int(0)
+    + }
+    + caught Exception 5
+      … (+2 more actual lines)
+    chunk golden:
+    @@ EXPECTF first diff at line 2 @@
+      caught Exception 1
+    - caught Exception 2
+    - caught Exception 3
+    - caught Exception 4
+    - caught Exception 5
+    - 
+    - Deprecated: Creation of dynamic property class@anonymous::$foo is deprecated in %s on line %d
+    - caught Exception 6
+    - caught Exception 7
+    - caught Exception 8
+    - caught Exception 9
+    - caught Exception 10
+    - 
+    - Deprecated: Creation of dynamic property class@anonymous::$foo is deprecated in %s on line %d
+    - caught Exception 11
+    - 
+    - Deprecated: Creation of dynamic property class@anonymous::$foo is deprecated in %s on line %d
+    - caught Exception 12
+    - caught Exception 13
+    - 
+    - Deprecated: Creation of dynamic property class@anonymous::$foo is deprecated in %s on line %d
+      … (+25 more expected lines)
+    + array(1) {
+    +   [0]=>
+    +   int(0)
+    + }
+    + caught Exception 2
+    + array(1) {
+    +   [0]=>
+    +   int(0)
+    + }
+    + caught Exception 3
+    + array(1) {
+    +   [0]=>
+    +   int(0)
+    + }
+    + caught Exception 4
+    + caught Exception 5
+    + 
+    + Fatal error: Uncaught TypeError: Unsupported operand types: array + array in /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/temporary_cleaning/temporary_cleaning_013.php:45
+OK   [on] bug49893: atteso PASS (non nel congelato) — failures=0
+OK   [on] bug47771: testo del chunk == riferimento golden e89acabb946cf26a
+OK   [on] bug53511: testo del chunk == riferimento golden 23cf4cc7b0ca4321
+OK   [on] assign_coalesce_002: testo del chunk == riferimento golden 7abc7fa9a0a31e47
+FAIL [on] temporary_cleaning_013: testo del chunk != riferimento golden 5ec49c822149eff3
+    chunk attuale:
+    @@ EXPECTF first diff at line 2 @@
+      caught Exception 1
+    - caught Exception 2
+    - caught Exception 3
+    - caught Exception 4
+    - caught Exception 5
+    - 
+    - Deprecated: Creation of dynamic property class@anonymous::$foo is deprecated in %s on line %d
+    - caught Exception 6
+    - caught Exception 7
+    - caught Exception 8
+    - caught Exception 9
+    - caught Exception 10
+    - 
+    - Deprecated: Creation of dynamic property class@anonymous::$foo is deprecated in %s on line %d
+    - caught Exception 11
+    - 
+    - Deprecated: Creation of dynamic property class@anonymous::$foo is deprecated in %s on line %d
+    - caught Exception 12
+    - caught Exception 13
+    - 
+    - Deprecated: Creation of dynamic property class@anonymous::$foo is deprecated in %s on line %d
+      … (+25 more expected lines)
+    + array(1) {
+    +   [0]=>
+    +   int(0)
+    + }
+    + caught Exception 2
+    + array(1) {
+    +   [0]=>
+    +   int(0)
+    + }
+    + caught Exception 3
+    + array(1) {
+    +   [0]=>
+    +   int(0)
+    + }
+    + caught Exception 4
+    + array(1) {
+    +   [0]=>
+    +   int(0)
+    + }
+    + caught Exception 5
+      … (+2 more actual lines)
+    chunk golden:
+    @@ EXPECTF first diff at line 2 @@
+      caught Exception 1
+    - caught Exception 2
+    - caught Exception 3
+    - caught Exception 4
+    - caught Exception 5
+    - 
+    - Deprecated: Creation of dynamic property class@anonymous::$foo is deprecated in %s on line %d
+    - caught Exception 6
+    - caught Exception 7
+    - caught Exception 8
+    - caught Exception 9
+    - caught Exception 10
+    - 
+    - Deprecated: Creation of dynamic property class@anonymous::$foo is deprecated in %s on line %d
+    - caught Exception 11
+    - 
+    - Deprecated: Creation of dynamic property class@anonymous::$foo is deprecated in %s on line %d
+    - caught Exception 12
+    - caught Exception 13
+    - 
+    - Deprecated: Creation of dynamic property class@anonymous::$foo is deprecated in %s on line %d
+      … (+25 more expected lines)
+    + array(1) {
+    +   [0]=>
+    +   int(0)
+    + }
+    + caught Exception 2
+    + array(1) {
+    +   [0]=>
+    +   int(0)
+    + }
+    + caught Exception 3
+    + array(1) {
+    +   [0]=>
+    +   int(0)
+    + }
+    + caught Exception 4
+    + caught Exception 5
+    + 
+    + Fatal error: Uncaught TypeError: Unsupported operand types: array + array in /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/temporary_cleaning/temporary_cleaning_013.php:45
+OK   fxsw1 == oracle BYTE-ID
+OK   fxsw2 == pin BYTE-ID (invarianza GC)
+OK   fxsl1 == oracle BYTE-ID
+OK   fxsl2 == oracle BYTE-ID
+OK   fxsl3 == oracle BYTE-ID
+OK   fxcr1 == oracle BYTE-ID
+OK   fxrt1 == oracle BYTE-ID
+OK   fxrt2 == oracle BYTE-ID
+OK   fxmc2: diff == fx-mc2.expected-diff (vuoto ⇒ byte-id)
+== esito rc=1 2026-11-04_09:45:23 ==

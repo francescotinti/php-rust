@@ -1,0 +1,76 @@
+   Compiling serde_json v1.0.150
+   Compiling smallvec v1.15.2
+   Compiling tracing v0.1.44
+   Compiling httparse v1.10.1
+   Compiling form_urlencoded v1.2.2
+   Compiling http v1.4.2
+   Compiling socket2 v0.6.4
+warning: function `xmlCanonicPath` is never used
+  --> crates/php-types/src/xsltio.rs:61:8
+   |
+61 |     fn xmlCanonicPath(path: *const c_char) -> *mut c_char;
+   |        ^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `php-types` (lib) generated 1 warning
+   Compiling icu_normalizer v2.2.0
+   Compiling mago-database v1.30.0
+   Compiling parking_lot_core v0.9.12
+   Compiling rusqlite v0.40.1
+   Compiling parking_lot v0.12.5
+   Compiling idna_adapter v1.2.2
+   Compiling idna v1.1.0
+   Compiling mago-span v1.30.0
+   Compiling url v2.5.8
+   Compiling mago-syntax-core v1.30.0
+   Compiling ureq-proto v0.6.0
+   Compiling ureq v3.3.0
+   Compiling schemars v1.2.1
+   Compiling serde-sarif v0.8.0
+   Compiling mysql_common v0.37.3
+   Compiling log4rs v1.4.0
+   Compiling mago-php-version v1.30.0
+   Compiling mysql v28.0.0
+   Compiling mago-reporting v1.30.0
+   Compiling mago-syntax v1.30.0
+   Compiling php-runtime v0.1.0 (/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/crates/php-runtime)
+   Compiling php-builtins v0.1.0 (/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/crates/php-builtins)
+warning: function `gc_enable` is never used
+  --> crates/php-builtins/src/env.rs:19:8
+   |
+19 | pub fn gc_enable(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+   |        ^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `gc_enabled` is never used
+  --> crates/php-builtins/src/env.rs:24:8
+   |
+24 | pub fn gc_enabled(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+   |        ^^^^^^^^^^
+
+warning: function `gc_status` is never used
+  --> crates/php-builtins/src/env.rs:38:8
+   |
+38 | pub fn gc_status(_args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
+   |        ^^^^^^^^^
+
+warning: unused `Result` that must be used
+   --> crates/php-builtins/src/net.rs:151:13
+    |
+151 |             out.append(Zval::Str(PhpStr::new(v4.ip().to_string().into_bytes())));
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+    = note: `#[warn(unused_must_use)]` (part of `#[warn(unused)]`) on by default
+help: use `let _ = ...` to ignore the resulting value
+    |
+151 |             let _ = out.append(Zval::Str(PhpStr::new(v4.ip().to_string().into_bytes())));
+    |             +++++++
+
+   Compiling php-cli v0.1.0 (/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/crates/php-cli)
+   Compiling phpt-runner v0.1.0 (/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/crates/phpt-runner)
+warning: `php-builtins` (lib) generated 4 warnings
+   Compiling php-server v0.1.0 (/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/crates/php-server)
+    Finished `release` profile [optimized] target(s) in 2m 34s

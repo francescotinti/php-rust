@@ -1,0 +1,69 @@
+--- /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/exceptions/bug47771.phpt ---
+@@ EXPECT first diff at line 1 @@
++ Destr
+  Exception: TEST_EXCEPTION
+
+--- /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/exceptions/bug53511.phpt ---
+@@ EXPECTF first diff at line 3 @@
+  Fatal error: Uncaught Exception: ops 1 in %sbug53511.php:4
+  Stack trace:
+- #0 %sbug53511.php(12): Foo->__destruct()
++ #0 /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/exceptions/bug53511.php(13): Foo->__destruct()
+  #1 %sbug53511.php(17): test()
+
+--- /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/coalesce/assign_coalesce_002.phpt ---
+@@ EXPECT first diff at line 6 @@
+  }
+  id(foo)
+- dtor
+- string(3) "foo"
+- id(foo)
+- dtor
++ string(3) "foo"
++ id(foo)
++ 1
+  string(3) "foo"
+
+--- /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/temporary_cleaning/temporary_cleaning_013.phpt ---
+@@ EXPECTF first diff at line 2 @@
+  caught Exception 1
+- caught Exception 2
+- caught Exception 3
+- caught Exception 4
+- caught Exception 5
+- 
+- Deprecated: Creation of dynamic property class@anonymous::$foo is deprecated in %s on line %d
+- caught Exception 6
+- caught Exception 7
+- caught Exception 8
+- caught Exception 9
+- caught Exception 10
+- 
+- Deprecated: Creation of dynamic property class@anonymous::$foo is deprecated in %s on line %d
+- caught Exception 11
+- 
+- Deprecated: Creation of dynamic property class@anonymous::$foo is deprecated in %s on line %d
+- caught Exception 12
+- caught Exception 13
+- 
+- Deprecated: Creation of dynamic property class@anonymous::$foo is deprecated in %s on line %d
+  … (+25 more expected lines)
++ array(1) {
++   [0]=>
++   int(0)
++ }
++ caught Exception 2
++ array(1) {
++   [0]=>
++   int(0)
++ }
++ caught Exception 3
++ array(1) {
++   [0]=>
++   int(0)
++ }
++ caught Exception 4
++ caught Exception 5
++ 
++ Fatal error: Uncaught TypeError: Unsupported operand types: array + array in /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/temporary_cleaning/temporary_cleaning_013.php:45
+

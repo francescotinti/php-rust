@@ -1,7 +1,10 @@
 #!/bin/bash
 # avvio-s190.sh — S-190: attende il DRENAGGIO della CI (runner morto ×2 a 60 s, niente cargo/rustc), verifica pin phpr
 # canonico == s183 e bracci Z (wp186) + B3 (wp190) presenti, poi daemonizza s190-lancio-guardia.sh (→ s186-guardia.sh
-# TAG=b3, che eredita il lock TOKEN s190 scritto dal lanciatore). Derivato dal pattern di ../wp189-harness/avvio-s189.sh.
+# TAG=b3, che eredita il lock TOKEN s190 scritto dal lanciatore). Derivato da ../wp189-harness/avvio-s189.sh (manifest
+# avvio-s190-copia.diff, aggiunto il 04/11 — rilievo 7 revisione S-190): tolti i controlli del server (SRV_ATTESO, stash
+# s188, PIN_ATTESO/PIN_OLD), aggiunti pin phpr == s183, bracci Z/B3 presenti, lanciatore presente, verdetto b3 assente;
+# log in catena-out/ invece di pair-out/; attesa di drenaggio compattata su una riga.
 # Il nome NON contiene «harness/s1NN-» né «phpr» di proposito. Generato con assistenza AI (Claude Fable 5).
 set -u
 export PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin

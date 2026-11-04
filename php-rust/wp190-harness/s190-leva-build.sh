@@ -2,7 +2,9 @@
 # s190-leva-build.sh — S-190 cura O(1) v2: costruisce il SOLO braccio B3 (tree con la v2, B3COMMIT) nella target separata
 # della bundle, da ARCHIVIO (mai il tree), con la ricetta del pin (`cargo build --release -p php-cli`, SOURCE_DATE_EPOCH=0,
 # CARGO_INCREMENTAL=0). Il gemello Z è RIUSATO da ../wp186-harness/ab-out/s186-leva/phpr-Z (23c0a94c, dichiarato). Script NUOVO
-# col pattern di ../wp186-harness/s186-leva-build.sh (archivio(), build(), bilat(), dis() ripresi alla lettera; tolti M, C, xctrace):
+# col pattern di ../wp186-harness/s186-leva-build.sh: archivio() e dis() ripresi alla lettera; build() SENZA il parametro
+# feature-flag (un solo braccio, nessun braccio C census-time); bilat() RISCRITTA (passa le opzioni "$@" anche a phpr e
+# confronta fx-mc2 con l'expected-diff); tolti M, C, xctrace (dichiarazione corretta il 04/11, rilievo 7 revisione S-190):
 # gate = pin canonico s183 per hash, Data ≥10G, Extreme ≥15G, bundle montata; B3 ≠ pin; 9 fixture bilaterali vs oracle (fx-mc2
 # contro wp186-harness/fx-mc2.expected-diff VUOTO); fx-sw2-gc vs pin (invarianza, a verbale); DISASM run_loop B3 vs pin:
 # Δsp_refs ≤ +97 E |Δbl| ≤ 2 (regola irrigidita S-186) = gate rc=5. Esiti SOLO in ab-out/s190-leva.done; verdetto

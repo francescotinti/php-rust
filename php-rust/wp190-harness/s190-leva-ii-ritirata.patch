@@ -1,0 +1,18 @@
+# s190-leva-ii-ritirata.patch — la leva (ii) del criterio p.4 («niente ri-accodamento in coda se strong_count > 3»),
+# PROVATA nel working tree fra a8f3d701 (C1) e 6053b255 (C2) e MAI committata: ricostruita qui il 04/11 (rilievo 2 della
+# revisione S-190) dagli edit della sessione, verbatim. Binario dev-release che la conteneva: phpr 8b7cd717f045e0f3 /
+# phpt-runner 0e918d6d2f2308ab (catena s190-c2-catena-c2.out, 00:42–00:56). Prova della bocciatura: s190-c2-sentinella-
+# ii-caduta.log (frame_drop_order_sentinel_iters_this_dynvars: `[a2][a1]r…[x2][x3]` invece di `[a1][a2]r…[x3][x2]`).
+# Sede: crates/php-runtime/src/vm/mod.rs, fn gc_note_slow, ramo «già nel buffer», prima di `let pos = b.gc.pos();`.
+# Lezione registrata (diario S-190): una leva provata vive in un commit proprio, anche se poi si ritira.
+--- a/php-rust/crates/php-runtime/src/vm/mod.rs
++++ b/php-rust/crates/php-runtime/src/vm/mod.rs
+@@ gc_note_slow: else branch (already buffered) @@
+                     // (a release note never flips it — `gc_buf_push`).
++                    // S-190 (ii): the noter's own clone is still alive here, so a count > 3 (created + buffer +
++                    // noter + ≥1 other holder) cannot reach the collectable 2 at this boundary: no tail move (the
++                    // 64 moves/statement of a live `$this` were the K0 cost); a later hooked release re-notes it.
++                    if Rc::strong_count(rc) > 3 {
++                        return;
++                    }
+                     let pos = b.gc.pos();

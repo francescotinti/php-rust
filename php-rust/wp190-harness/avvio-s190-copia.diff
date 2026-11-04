@@ -1,0 +1,56 @@
+2,5c2,7
+< # avvio-s189.sh — S-189 FETTA 1 (criterio s189-criterio-guardia-ax.md p.7): derivato dal pattern di
+< # ../wp188-harness/avvio-s188.sh. Attende il DRENAGGIO della CI (runner morto ×2 a 60 s, niente cargo/rustc),
+< # verifica che php-server canonico == pin s189 (SRV_ATTESO) e che lo stash del pin s188 abbia l'hash atteso,
+< # poi daemonizza s189-lancio.sh (→ s189-catena-fetta1.sh, che eredita il lock TOKEN s189 scritto dal lanciatore).
+---
+> # avvio-s190.sh — S-190: attende il DRENAGGIO della CI (runner morto ×2 a 60 s, niente cargo/rustc), verifica pin phpr
+> # canonico == s183 e bracci Z (wp186) + B3 (wp190) presenti, poi daemonizza s190-lancio-guardia.sh (→ s186-guardia.sh
+> # TAG=b3, che eredita il lock TOKEN s190 scritto dal lanciatore). Derivato da ../wp189-harness/avvio-s189.sh (manifest
+> # avvio-s190-copia.diff, aggiunto il 04/11 — rilievo 7 revisione S-190): tolti i controlli del server (SRV_ATTESO, stash
+> # s188, PIN_ATTESO/PIN_OLD), aggiunti pin phpr == s183, bracci Z/B3 presenti, lanciatore presente, verdetto b3 assente;
+> # log in catena-out/ invece di pair-out/; attesa di drenaggio compattata su una riga.
+9c11
+< H="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp189-harness"
+---
+> P="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust"; H="$P/wp190-harness"
+12,15c14
+< SRV_ATTESO="${SRV_ATTESO:?SRV_ATTESO obbligatorio (hash server pin s189)}"
+< OLD_ATTESO="${OLD_ATTESO:-97b58fd225ca7289}"
+< SRVOLD="${SRVOLD:-/Volumes/Extreme Pro/Claude/phpr-old-target/release/php-server-s188}"
+< LOG="$H/pair-out/avvio.log"; mkdir -p "$H/pair-out"
+---
+> LOG="$H/catena-out/avvio.log"; mkdir -p "$H/catena-out"
+18c17
+< l "attesa drenaggio CI (runner morto ×2 a 60 s, niente cargo/rustc); coda ora: $(ls -1 "$CIQ" 2>/dev/null | grep -vc '^\._')"
+---
+> l "attesa drenaggio CI; coda ora: $(ls -1 "$CIQ" 2>/dev/null | grep -vc '^\._')"
+20,32c19,28
+< while [ "$n" -lt 2 ]; do
+<   if ci_viva; then n=0; else n=$((n+1)); fi
+<   sleep 60
+< done
+< l "CI ferma; coda residua: $(ls -1 "$CIQ" 2>/dev/null | grep -vc '^\._') (se >0: CI stallata, dichiarare nel verbale)"
+< SC=$(shasum -a 256 "$HOME/Claude/php-rust-output/release/php-server" | cut -c1-16)
+< [ "$SC" = "$SRV_ATTESO" ] || { l "php-server canonico $SC ≠ pin s189 $SRV_ATTESO — FETTA 1 NON lanciata"; exit 9; }
+< SO=$(shasum -a 256 "$SRVOLD" 2>/dev/null | cut -c1-16)
+< [ "$SO" = "$OLD_ATTESO" ] || { l "stash pin s188 $SO ≠ $OLD_ATTESO ($SRVOLD) — FETTA 1 NON lanciata"; exit 9; }
+< [ -x "$H/s189-lancio.sh" ] || { l "s189-lancio.sh assente (generarlo con gen-fetta1.py) — FETTA 1 NON lanciata"; exit 2; }
+< l "pin server=$SC == atteso, stash s188=$SO — lancio s189-lancio.sh (PIN_ATTESO/PIN_OLD esportati per la catena)"
+< export PIN_ATTESO="$SRV_ATTESO" PIN_OLD="$OLD_ATTESO" SRVOLD
+< perl "$DZ" "$H/pair-out/lancio-dz.log" /bin/bash "$H/s189-lancio.sh"
+---
+> while [ "$n" -lt 2 ]; do if ci_viva; then n=0; else n=$((n+1)); fi; sleep 60; done
+> l "CI ferma; coda residua: $(ls -1 "$CIQ" 2>/dev/null | grep -vc '^\._')"
+> PC=$(shasum -a 256 "$HOME/Claude/php-rust-output/release/phpr" | cut -c1-16)
+> [ "$PC" = "9a6ae11bf7e900ef" ] || { l "phpr canonico $PC ≠ pin s183 — guardia NON lanciata"; exit 9; }
+> [ -s "$P/wp186-harness/ab-out/s186-leva/phpr-Z" ] || { l "braccio Z assente — guardia NON lanciata"; exit 7; }
+> [ -s "$H/ab-out/s190-leva/phpr-B3" ] || { l "braccio B3 assente (s190-leva-build.sh) — guardia NON lanciata"; exit 7; }
+> [ -x "$H/s190-lancio-guardia.sh" ] || { l "s190-lancio-guardia.sh assente (gen-lancio-guardia-s190.py) — guardia NON lanciata"; exit 2; }
+> [ -e "$P/wp186-harness/s186-guardia-verdetto-b3.out" ] && { l "verdetto b3 ESISTE già: spostarlo prima"; exit 7; }
+> l "pin ok, bracci ok — lancio s190-lancio-guardia.sh"
+> perl "$DZ" "$H/catena-out/lancio-dz.log" /bin/bash "$H/s190-lancio-guardia.sh"
+34c30
+< l "lanciato (daemonize): $(pgrep -fl 's189-lancio' | grep -v pgrep | awk '{print $1}' | tr '\n' ' ')"
+---
+> l "lanciato (daemonize): $(pgrep -fl 's190-lancio' | grep -v pgrep | awk '{print $1}' | tr '\n' ' ')"
