@@ -1,0 +1,48 @@
+1a2,6
+> # s191-guardia-ax.sh <tentativo> — S-191 coppia server: guardia di NON-REGRESSIONE del throughput AXnew = pin s190 (canonica,
+> # 721b7802e2d12058) vs AXold = pin s189 (stash, 80eea401b71c2be7), stesso giudice di S-189 (bande [0,95;1,05] a C=1,
+> # [0,97;1,05] a C=4/8). COPIA DICHIARATA di ../wp189-harness/s189-guardia-ax.sh (manifest s191-guardia-ax-copia.diff,
+> # generatore gen-notte-s191.py) coi SOLI adattamenti: harness wp191, done ga191, lock TOKEN s191, SRVOLD/PIN_OLD default s189;
+> # le etichette «pin s188/s189» nel testo S-189 sotto si leggono «s189 (AXold) / s190 (AXnew)». Testo S-189 conservato:
+10c15
+< # pair-out/ga189-<t>.done. Generato con assistenza AI (Claude Fable 5).
+---
+> # pair-out/ga191-<t>.done. Generato con assistenza AI (Claude Fable 5).
+14c19
+< H="$REPO/wp189-harness"
+---
+> H="$REPO/wp191-harness"
+18,19c23,24
+< VERD="$H/s189-guardia-ax-verdetto-$T.out"
+< DONE="$OUT/ga189-$T.done"
+---
+> VERD="$H/s191-guardia-ax-verdetto-$T.out"
+> DONE="$OUT/ga191-$T.done"
+25c30
+< SRVOLD="${SRVOLD:-/Volumes/Extreme Pro/Claude/phpr-old-target/release/php-server-s188}"
+---
+> SRVOLD="${SRVOLD:-/Volumes/Extreme Pro/Claude/phpr-old-target/release/php-server-s189}"
+28c33
+< PIN_OLD="${PIN_OLD:-97b58fd225ca7289}"
+---
+> PIN_OLD="${PIN_OLD:-80eea401b71c2be7}"
+36,37c41,42
+< fin(){ echo "rc=$1 ${2:-}" > "$DONE"; echo "$1" > "$OUT/ga189-$T.rc"; step "DONE rc=$1 ${2:-}"; exit "$1"; }
+< : > "$OUT/tp-progress-$T.txt"; rm -f "$DONE" "$OUT/ga189-$T.rc"
+---
+> fin(){ echo "rc=$1 ${2:-}" > "$DONE"; echo "$1" > "$OUT/ga191-$T.rc"; step "DONE rc=$1 ${2:-}"; exit "$1"; }
+> : > "$OUT/tp-progress-$T.txt"; rm -f "$DONE" "$OUT/ga191-$T.rc"
+47c52
+< [ -r "$MLOCK" ] && grep -q 's189' "$MLOCK" || fin 4 "lock assente o senza TOKEN s188"
+---
+> [ -r "$MLOCK" ] && grep -q 's191' "$MLOCK" || fin 4 "lock assente o senza TOKEN s188"
+134c139
+< label = {"AXold": f"php-server --axum --workers 4 pin s188 {OLD} (stash)", "AXnew": f"php-server --axum --workers 4 pin s189 {NEW} (canonica)"}
+---
+> label = {"AXold": f"php-server --axum --workers 4 pin s189 {OLD} (stash)", "AXnew": f"php-server --axum --workers 4 pin s190 {NEW} (canonica)"}
+164,165c169,170
+< print(f"== s189 FETTA 1 guardia AX (NON-REGRESSIONE, mai record): AXnew {NEW} vs AXold {OLD}, --axum --workers 4, WordPress, PHP {PHPV} assente per disegno | git={GIT} driver_sha={DSHA} tentativo={T} epoch={int(__import__('time').time())} ==")
+< print(f"grade={GRADE}  # VERDICT solo con N>=150 R>=3 e i tre livelli; rc autoritativo = pair-out/ga189-{T}.done")
+---
+> print(f"== s191 coppia server guardia AX (NON-REGRESSIONE; in banda ⇒ s190 server di record): AXnew s190 {NEW} vs AXold s189 {OLD}, --axum --workers 4, WordPress, PHP {PHPV} assente per disegno | git={GIT} driver_sha={DSHA} tentativo={T} epoch={int(__import__('time').time())} ==")
+> print(f"grade={GRADE}  # VERDICT solo con N>=150 R>=3 e i tre livelli; rc autoritativo = pair-out/ga191-{T}.done")

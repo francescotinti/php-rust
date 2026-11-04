@@ -1,0 +1,56 @@
+2c2,8
+< # s184-pair.sh <tentativo> — S-184: coppia full/media WP @ pin s182 (DOVUTA: pin nuovo, promozione COMPOSTA L-RT1+L-RT2; criterio
+---
+> # s191-pair.sh <tentativo> — S-191: coppia full/media WP t26 @ pin s184 (DOVUTA: pin nuovo con TRE cambiamenti per nome — cura
+> # §3.35 + O(1) v2, routing php-types S-188, §3.39 — più main 72f688c3; t25 era @ s182). COPIA DICHIARATA di
+> # ../wp184-harness/s184-pair.sh (manifest s191-pair-copia.diff, generatore gen-notte-s191.py) coi SOLI adattamenti: nomi
+> # s191/pair191/t26; harness wp191; PIN_ATTESO/SRV_ATTESO dal lanciatore (s184 / server s190); mediane storiche + t25=1,747
+> # (banda giudizio INVARIATA [1,738;1,799]); messaggi riferiti al pin s184 (tre cause: attribuzione per braccio, mai d'ufficio
+> # alla cura O(1)). Tutto il resto INVARIATO (testo S-184/S-182/S-181 conservato sotto).
+> # s184-pair.sh <tentativo> — S-184: coppia full/media WP @ pin s182 (DOVUTA: pin nuovo, promozione COMPOSTA pin s184 (§3.35+O(1) v2, php-types, §3.39: attribuzione per braccio); criterio
+5c11
+< # + t24=1,770 (banda giudizio INVARIATA [1,738;1,799]); messaggi GIÙ/REGRESSIONE riferiti a L-RT1+L-RT2 (pin NUOVO: la direzione
+---
+> # + t24=1,770 (banda giudizio INVARIATA [1,738;1,799]); messaggi GIÙ/REGRESSIONE riferiti a pin s184 (§3.35+O(1) v2, php-types, §3.39: attribuzione per braccio) (pin NUOVO: la direzione
+42c48
+< H="$REPO/wp184-harness"
+---
+> H="$REPO/wp191-harness"
+47c53
+< VERD="$H/s184-pair-verdetto-$T.out"
+---
+> VERD="$H/s191-pair-verdetto-$T.out"
+52c58
+< DONE="$OUT/pair184-$T.done"
+---
+> DONE="$OUT/pair191-$T.done"
+61,62c67,68
+< PIN_ATTESO="${PIN_ATTESO:-PLACEHOLDER-PIN-S182}"
+< SRV_ATTESO="${SRV_ATTESO:-PLACEHOLDER-SRV-S182}"
+---
+> PIN_ATTESO="${PIN_ATTESO:-PLACEHOLDER-PIN-S184}"
+> SRV_ATTESO="${SRV_ATTESO:-PLACEHOLDER-SRV-S190}"
+177,178c183,184
+< print(f"== s184 coppia t25: WP full+media @ pin s182 MISURATO phpr={PINH} server={SRVH} tentativo={T} (criteri s132/s146/s148 EREDITATI + s184-criterio-coppia-t25.md: giudizio a MEDIANA per finestra, az.rev.3 S-149) ==")
+< print(f"grade=VERDICT  # derivazione meccanica dai .time; rc autoritativo = pair-out/pair184-{T}.done")
+---
+> print(f"== s191 coppia t26: WP full+media @ pin s184 MISURATO phpr={PINH} server={SRVH} tentativo={T} (criteri s132/s146/s148 EREDITATI + s184-criterio-coppia-t25.md: giudizio a MEDIANA per finestra, az.rev.3 S-149) ==")
+> print(f"grade=VERDICT  # derivazione meccanica dai .time; rc autoritativo = pair-out/pair191-{T}.done")
+255,260c261,266
+<         med_t25 = statistics.median(props)
+<         print(f"mediana_t25={med_t25:.3f} (N={len(props)} coppie proprie ON PULITE; mediane storiche t1=1.799 t2=1.738 t3=1.789 t4=1.781 t5=1.757 t6=1.771 t7=1.795 t8=1.754 t9=1.767 t10=1.760 t11=1.765 t12=1.767 t13=1.763 t14=1.761 t15=1.746 t16=1.749 t17=1.776 t18=1.769 t19=1.772 t20=1.765 t21=1.744 t23=1.799 t24=1.770; riferimento L-RT1+L-RT2: t24=1.770)")
+<         if MED_LO <= med_t25 <= MED_HI:
+<             print(f"giudizio_MEDIANA (canonico, criterio coppia-t25 p.4): COMPATIBILE (mediana in [{MED_LO}; {MED_HI}]) — L-RT1+L-RT2 sotto-risoluzione su WP (dichiarato); vs t24=1.770: {'≤' if med_t25 <= 1.770 else '>'} (direzione, non cifra)")
+<         elif med_t25 < MED_LO:
+<             print(f"giudizio_MEDIANA (canonico, criterio coppia-t25 p.4): direzione GIU' SEGNALATA (mediana {med_t25:.3f} < {MED_LO}) — pin NUOVO s182: coerente con L-RT1+L-RT2 (attesa ≤0), magnitudine non ripartita")
+---
+>         med_t26 = statistics.median(props)
+>         print(f"mediana_t26={med_t26:.3f} (N={len(props)} coppie proprie ON PULITE; mediane storiche t1=1.799 t2=1.738 t3=1.789 t4=1.781 t5=1.757 t6=1.771 t7=1.795 t8=1.754 t9=1.767 t10=1.760 t11=1.765 t12=1.767 t13=1.763 t14=1.761 t15=1.746 t16=1.749 t17=1.776 t18=1.769 t19=1.772 t20=1.765 t21=1.744 t23=1.799 t24=1.770 t25=1.747; riferimento pin s184 (§3.35+O(1) v2, php-types, §3.39: attribuzione per braccio): t24=1.770 t25=1.747)")
+>         if MED_LO <= med_t26 <= MED_HI:
+>             print(f"giudizio_MEDIANA (canonico, criterio coppia-t25 p.4): COMPATIBILE (mediana in [{MED_LO}; {MED_HI}]) — pin s184 (§3.35+O(1) v2, php-types, §3.39: attribuzione per braccio) sotto-risoluzione su WP (dichiarato); vs t25=1.747: {'≤' if med_t26 <= 1.747 else '>'} (direzione, non cifra)")
+>         elif med_t26 < MED_LO:
+>             print(f"giudizio_MEDIANA (canonico, criterio coppia-t25 p.4): direzione GIU' SEGNALATA (mediana {med_t26:.3f} < {MED_LO}) — pin NUOVO s184: coerente con pin s184 (§3.35+O(1) v2, php-types, §3.39: attribuzione per braccio) (attesa ≤0), magnitudine non ripartita")
+262c268
+<             print(f"giudizio_MEDIANA (canonico, criterio coppia-t25 p.4): REGRESSIONE SEGNALATA (mediana {med_t25:.3f} > {MED_HI}) — in finestra pulita = REPERTO contro L-RT1+L-RT2 (criterio coppia-t25 p.5: regola 4, indagine prima di ogni leva)")
+---
+>             print(f"giudizio_MEDIANA (canonico, criterio coppia-t25 p.4): REGRESSIONE SEGNALATA (mediana {med_t26:.3f} > {MED_HI}) — in finestra pulita = REPERTO contro pin s184 (§3.35+O(1) v2, php-types, §3.39: attribuzione per braccio) (criterio coppia-t25 p.5: regola 4, indagine prima di ogni leva)")
