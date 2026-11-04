@@ -1,0 +1,4 @@
+1c1
+< C1: dtor:Q E1:Cannot use [] for reading ids:2,4
+---
+> C1: E1:dtor:Q dtor:R Cannot use [] for reading ids:3,2

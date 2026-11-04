@@ -1,0 +1,140 @@
+stdst-dtor: begin
+dtor-a
+post 15
+stdst-dtor-twice: begin
+dtor-a1
+dtor-a2
+post 20
+stdst-dtor-loop: begin
+dtor-l0
+dtor-l1
+dtor-l2
+post 3
+stdst-dtor-double: begin
+dtor-f
+post 3.5
+stdst-dtor-null: begin
+dtor-n
+post 2
+stdst-dtor-concat: begin
+dtor-c
+post 71
+stdst-dtor-overflow: begin
+dtor-o
+post 9.2233720368548E+18
+stdst-dtor-div: begin
+dtor-d
+post 4
+scsc-loop: 44
+scsc-overflow: 5.5340232221128655E+19
+scsc-double-dst: 22.5
+p3: 4
+p1-loop: 6 3
+p4-loop: 15
+p3-dtor: begin
+dtor-p3t
+post 4
+p3-chain: begin
+dtor-pc0
+dtor-pc1
+post 8
+p1-chain: begin
+dtor-qc0
+dtor-qc1
+post 6
+p4-chain: begin
+dtor-rc0
+dtor-rc1
+post 10
+p4-dtor: begin
+dtor-p4t
+post 1
+stdst-dtor-loop-echo: begin
+dtor-le0
+i0
+dtor-le1
+i1
+dtor-le2
+i2
+post 3
+for-dtor-echo: begin
+dtor-fd0
+i0
+dtor-fd1
+i1
+dtor-fd2
+i2
+post 3
+p3-site: begin
+dtor-p3s0
+k0
+dtor-p3s1
+k1
+post 8
+p3-site-ctl: begin
+dtor-p3c0
+k0
+dtor-p3c1
+k1
+post 2
+p1-site: begin
+dtor-p1s0
+k0
+dtor-p1s1
+k1
+post 6
+p1-site-typed: begin
+dtor-p1t0
+k0
+dtor-p1t1
+k1
+post 6
+p4-site: begin
+dtor-p4s0
+k0
+dtor-p4s1
+k1
+post 10
+scsc-site: begin
+dtor-sc0
+k0
+dtor-sc1
+k1
+post 22
+light: begin
+dtor-lt
+post-in 1
+post 1
+window: begin
+dtor-w1
+post 104
+e-dtor: begin
+post-in 4
+post
+pressure: 5000
+collected: 1
+pressure-on: 20000
+collected-on: 1
+for-lt: 45
+for-gt-dec: 55
+for-le: 6
+for-ne: 4
+for-double-slot: 3 3.0
+for-double-const: 3
+for-str-const: 3
+for-overflow-edge: 2 9223372036854775807
+for-overflow-float: 5 true
+for-empty: 3
+for-nested: 6
+for-null-init: 2 2
+for-dtor: begin
+dtor-fe0
+dtor-fe1
+dtor-fe2
+post 3
+for-continue: 4
+for-slot-bound: 3
+for-const-lhs: 3
+while-lt: 3
+for-step2: 2
+FX-SW1 DONE

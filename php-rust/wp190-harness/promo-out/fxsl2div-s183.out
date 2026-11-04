@@ -1,0 +1,3 @@
+p1-float-default-long-literal: int(1)
+p1-typed-float-from-long-div: float(4)
+FX-SL2-DIV DONE

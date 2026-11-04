@@ -1,0 +1,38 @@
+MC2-plain: 3 7
+MC2-static: 8
+MC2-hint: int(5)
+MC2-hint-fail: TypeError
+MC2-wrap: 2
+MC2-deref: 3
+MC2-tostr: tostr 5
+MC2-get: get:zz
+MC2-set: k=5
+MC2-isset: true false
+MC2-clone: 8 7
+MC2-foreach: 2
+MC2-ext: 4
+MC2-dyn: 9 0
+MC2-gen: 12
+MC2-closure: 7
+MC2-null: NULL
+MC2-place: 3 7
+MC2-dtor: a 2
+MC2-dtor-local: 5
+MC2-dtor: t 2
+MC2-dtor-temp: 9
+MC2-dtor-after: fine
+MC2-dtor-unset: 13
+MC2-dtor: z 2
+MC2-dtor-unset-after
+MC2-dtor-late-created
+MC2-dtor: late 2
+MC2-dtor-late: 3
+MC2-dtor: local 2
+MC2-dtor: recv 2
+MC2-order-after
+MC2-dtor-cascade: R
+MC2-dtor-cascade-unset
+MC2-dtor-cascade: RC
+MC2-dtor-cascade: 2
+MC2-dtor-cascade-after
+FX-MC2 DONE
