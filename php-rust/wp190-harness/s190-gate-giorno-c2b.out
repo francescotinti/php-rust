@@ -1,0 +1,21 @@
+== s190 gate di giorno tag=c2b git=6053b255 phpr=e7370bbe7d08d743 runner=34dd26b723ef0286 2026-11-04_01:13:53 (dev-release: NON verdetto) ==
+OK   [off] bug49893: atteso PASS (non nel congelato) — failures=0
+OK   [off] bug47771: testo del chunk == riferimento golden e89acabb946cf26a
+OK   [off] bug53511: testo del chunk == riferimento golden 23cf4cc7b0ca4321
+OK   [off] assign_coalesce_002: testo del chunk == riferimento golden 7abc7fa9a0a31e47
+OK   [off] temporary_cleaning_013: testo del chunk == riferimento golden 5ec49c822149eff3
+OK   [on] bug49893: atteso PASS (non nel congelato) — failures=0
+OK   [on] bug47771: testo del chunk == riferimento golden e89acabb946cf26a
+OK   [on] bug53511: testo del chunk == riferimento golden 23cf4cc7b0ca4321
+OK   [on] assign_coalesce_002: testo del chunk == riferimento golden 7abc7fa9a0a31e47
+OK   [on] temporary_cleaning_013: testo del chunk == riferimento golden 5ec49c822149eff3
+OK   fxsw1 == oracle BYTE-ID
+OK   fxsw2 == pin BYTE-ID (invarianza GC)
+OK   fxsl1 == oracle BYTE-ID
+OK   fxsl2 == oracle BYTE-ID
+OK   fxsl3 == oracle BYTE-ID
+OK   fxcr1 == oracle BYTE-ID
+OK   fxrt1 == oracle BYTE-ID
+OK   fxrt2 == oracle BYTE-ID
+OK   fxmc2: diff == fx-mc2.expected-diff (vuoto ⇒ byte-id)
+== esito rc=0 2026-11-04_01:13:58 ==

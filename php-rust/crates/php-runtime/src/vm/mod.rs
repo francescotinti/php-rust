@@ -4010,6 +4010,16 @@ impl<'m> Vm<'m> {
                     // (a release note never flips it — `gc_buf_push`).
                     // S-190: skipping this move for a live object (count > 3) was tried and RETIRED — the FIFO
                     // position is order, not just liveness (sentinel iters_this_dynvars: a1/a2 and x2/x3 swapped).
+                    // (iv-b): already the TAIL slot ⇒ the move is the identity (no hole, no push); only the probe
+                    // window re-opens on it so the next `Ret` still sees this release (cursor invariant).
+                    if self.gc_buf.last().is_some_and(|s| s.as_ref().is_some_and(|l| Rc::ptr_eq(l, rc))) {
+                        drop(b);
+                        let p = self.gc_buf.len() - 1;
+                        if p >= self.gc_buf_head && self.gc_probe_mark > p {
+                            self.gc_probe_mark = p;
+                        }
+                        return;
+                    }
                     let pos = b.gc.pos();
                     drop(b);
                     if let Some(p) = pos.filter(|&p| p >= self.gc_buf_head) {
@@ -4700,8 +4710,13 @@ impl<'m> Vm<'m> {
         // LIFO reuse order (gh10168: the second `new Test` must reuse the
         // NEWEST freed id).
         if let Zval::Object(o) = this {
-            let id = o.borrow().id;
-            if self.destructed.contains(&id) && !self.created.contains_key(&id) {
+            // S-190 (iv-a): the DESTRUCTED mirror flag stands in for the id-set probe (kept in step at every
+            // insert/remove/clear) — no hash lookup on the common path of a method `Ret`.
+            let (id, destructed) = {
+                let b = o.borrow();
+                (b.id, b.gc.destructed())
+            };
+            if destructed && !self.created.contains_key(&id) {
                 // OBS-7 (INV-RECV-1): destructed non-created cascade,
                 // exact count.
                 if Rc::strong_count(o) == 1 {

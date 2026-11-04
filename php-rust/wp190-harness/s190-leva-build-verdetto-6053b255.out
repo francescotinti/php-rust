@@ -1,0 +1,14 @@
+01:00:52 == s190 braccio B3 — A = pin s183 9a6ae11bf7e900ef · Z (riuso S-186) 23c0a94c26db62eb · B3 = 6053b25558d3 · Extreme 2400G Data 11G
+01:04:05 B3: binario 53cfa4cb35b40423 (commit 6053b25558d3, cura O(1) v2)
+01:04:07 B3: fx-sw2-gc == pin BYTE-ID (invarianza)
+01:04:07 B3: fxsw1 == oracle BYTE-ID
+01:04:07 B3: fxsl1 == oracle BYTE-ID
+01:04:08 B3: fxsl2 == oracle BYTE-ID
+01:04:08 B3: fxsl3 == oracle BYTE-ID
+01:04:08 B3: fxcr1 == oracle BYTE-ID
+01:04:08 B3: fxrt1 == oracle BYTE-ID
+01:04:08 B3: fxrt2 == oracle BYTE-ID
+01:04:08 B3: fx-mc2 diff == expected-diff (vuoto ⇒ byte-id)
+01:04:10 DISASM run_loop: pin s183 istr=72030 bl=6107 blr=13 sp_refs=10784 · B3 istr=72064 bl=6109 blr=13 sp_refs=10794
+01:04:10 GATE disasm B3 vs pin: Δsp_refs=10 (≤ +97) Δbl=2 (|Δbl| ≤ 2) ⇒ RISPETTATO · Δistr=34
+01:04:11 ESITO rc=0 (0 = B3 a parità e disasm in tolleranza: braccio pronto; 2 = fixture divergono; 5 = disasm fuori) fine 2026-11-04 01:04:11

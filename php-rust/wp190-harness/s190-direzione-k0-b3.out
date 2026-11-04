@@ -1,0 +1,10 @@
+== s190 direzione K0 tag=b3 A=pin 9a6ae11bf7e900ef · B=tree 53cfa4cb35b40423 · R=3 · 2026-11-04 01:04:50 (DIREZIONE, non verdetto) ==
+pavimento empty.php med3: A=0.02 s · B=0.02 s
+k0: N=1000000 rets/iter=65 · A=[ 6.67 6.62 6.53 ] s · B=[ 7.08 7.04 7.07 ] s · D(B−A) appaiato=[ 6.31 6.46 8.31 ] ns/Ret-o-iter · mediana 6.46
+k4: N=1000000 rets/iter=65 · A=[ 8.97 8.99 9.08 ] s · B=[ 9.56 9.51 9.56 ] s · D(B−A) appaiato=[ 9.08 8.00 7.38 ] ns/Ret-o-iter · mediana 8.00
+k16: N=1000000 rets/iter=65 · A=[ 15.57 15.55 15.51 ] s · B=[ 16.05 16.09 16.15 ] s · D(B−A) appaiato=[ 7.38 8.31 9.85 ] ns/Ret-o-iter · mediana 8.31
+mcalls: N=60000000 rets/iter=1 · A=[ 7.60 7.66 7.68 ] s · B=[ 7.80 7.84 7.82 ] s · D(B−A) appaiato=[ 3.33 3.00 2.33 ] ns/Ret-o-iter · mediana 3.00
+calls: N=60000000 rets/iter=1 · A=[ 4.74 4.67 4.68 ] s · B=[ 4.78 4.68 4.74 ] s · D(B−A) appaiato=[ 0.67 0.17 1.00 ] ns/Ret-o-iter · mediana 0.67
+DIREZIONE: D(K0)=6.46 ns/Ret (>= 4: K0 ancora caro) · K piatto OK (K4−K0=1.54, K16−K0=1.85)
+rc=1
+fine 2026-11-04 01:09:19
