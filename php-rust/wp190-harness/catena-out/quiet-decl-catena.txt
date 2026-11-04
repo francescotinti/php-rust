@@ -1,0 +1,14 @@
+== dichiarazione finestra quieta S-190 (guardia b3) 2026-11-04 02:29:09 ==
+ 2:29  up 2 days,  4:36, 2 users, load averages: 1.11 1.54 2.24
+Networks: packets: 19057054/16G in, 17466348/14G out.
+Disks: 40207745/716G read, 138201100/1156G written.
+
+PID    %CPU COMMAND         
+98362  0.0  remoting_agent_p
+98360  0.0  remoting_me2me_h
+98358  0.0  trustdFileHelper
+98353  0.0  ReportCrash     
+98351  0.0  trustd          
+98348  0.0  SiriSuggestionsB
+98347  0.0  MENotificationAg
+98346  0.0  MTLAssetUpgrader

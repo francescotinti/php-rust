@@ -1,0 +1,129 @@
+2,11c2,16
+< # s185-promozione.sh — gate di PROMOZIONE COMPOSTA del tree «pin s182 + L-MR1 + L-MC2» (criterio s185-criterio-mc2.md p.5).
+< # COPIA DICHIARATA di ../wp184-harness/s184-promozione.sh (manifest s185-promozione-copia.diff, generatore
+< # gen-promozione-s185.py) coi SOLI adattamenti: (1) tag s183 (harness wp185: verdetto s185-promo-verdetto.out, promo-out);
+< # (2) CANDIDATO = braccio B dell'A/B mc2 (ab-out/s185-leva/phpr-B 7466bf61, commit 4176ea3a): precondizione A/B rc=0
+< # (ab-out/mc2.rc) e commit in HEAD; (3) REF = stash phpr-s182 (159eee40be506171) per i gate invarianti; (4) gate bilaterale
+< # NUOVO fx-mc2 di wp185 (FX-MC2 DONE, nome fxmc2s185: il nome fxmc2 è già del gate invariante §3.28 di wp172) accanto a
+< # fx-rt1/fx-rt2; (5) corpus: ZERO flip attesi (semantica identica per costruzione, prova per nome criterio-mc2 p.8, batteria
+< # CI 1748/0 su 4176ea3a..84980b05); (6) conferma post-pin = mcalls-dq R=5 pin s183 vs stash s182 (stessa toolchain 1.98.1:
+< # attesa D ≈ [+19,00;+19,17] dell'A/B) + calls-dq e prop-dq (guardie, attesa |D| < 1); (7) pin-server.sh s183.
+< # Testo S-184/S-181/S-180/S-177 conservato sotto:
+---
+> # s190-promozione.sh — gate di PROMOZIONE COMPOSTA del tree «pin s183 + cura §3.34/§3.35 (22/10) + O(1) v2 (S-190) + routing
+> # cli-server in php-types (S-188) + timeout wrapper http §3.39 (S-189) + main 72f688c3 (S-187: PR #3/#4/#7, portabilità Linux)
+> # + feature census-time 901515b6 (gated, mai attiva nel pin)» → pin phpr s184 (criterio wp190-harness/s190-criterio-o1v2.md
+> # p.7, NEXT ordine 3). COPIA DICHIARATA di ../wp185-harness/s185-promozione.sh (manifest s190-promozione-copia.diff,
+> # generatore gen-promozione-s190.py) coi SOLI adattamenti: (1) tag s184 (harness wp190: verdetto s190-promo-verdetto.out,
+> # promo-out); (2) CANDIDATO = braccio B3 della guardia (ab-out/s190-leva/phpr-B3 ad57fc29, commit 8bff279e): precondizione
+> # guardia b3 rc=0 (catena-out/catena-s190.done) e commit in HEAD; (3) REF = stash phpr-s183 (9a6ae11bf7e900ef) per i gate
+> # invarianti; (4) gate wp172 fx-mc2 (§3.28) da INVARIANTE a DICHIARATO: diff(oracle, pin) == fx-mc2-wp172.expected-diff
+> # (la cura 22/10 ha curato il caso (ii) C4 — == oracle — e mosso la forma del caso (i) C1: né invariante vs s183 né byte-id;
+> # funzione expdiff NUOVA); gate invariante NUOVO fx-sw2-gc (conteggi GC §3.33 vs stash s183); (5) corpus: ZERO flip attesi
+> # (corpus-gate ×2 verde sul tree in dev-release — catena c2b — e in CI su cbc3ce5a/a28c376f; nomi 1407 per modo);
+> # (6) conferma post-pin = ret-buf-dq-k0 R=5 pin s184 vs stash s183 (bersaglio della guardia b3: attesa A−B ≈ −200 ns/iter
+> # = 65 Ret × −3,08; tetto 65 × 4 = 260) + mcalls-dq (attesa ≈ −2,33) + calls-dq/prop-dq (|D| < 1); (7) pin-server.sh s190
+> # (il server riporta la cura O(1) v2: s189 portava la v1); (8) ri-dichiarazione delle salite LOC entrate dopo s183 (REGOLE §8).
+> # Testo S-185/S-184/S-181/S-180/S-177 conservato sotto:
+19a25
+> H11="$SRC/wp190-harness"; H12="$SRC/wp186-harness"
+27,28c33,34
+< OUT="$H10/promo-out"; mkdir -p "$OUT"
+< VERD="$H10/s185-promo-verdetto.out"
+---
+> OUT="$H11/promo-out"; mkdir -p "$OUT"
+> VERD="$H11/s190-promo-verdetto.out"
+30,31c36,37
+< REF="$STASH/phpr-s182"; REF_EXP="159eee40be506171"
+< CAND="$H10/ab-out/s185-leva/phpr-B"; CAND_COMMIT="${CAND_COMMIT:-4176ea3a}"
+---
+> REF="$STASH/phpr-s183"; REF_EXP="9a6ae11bf7e900ef"
+> CAND="$H11/ab-out/s190-leva/phpr-B3"; CAND_COMMIT="${CAND_COMMIT:-8bff279e}"
+40c46
+<          "$H8/fx-cr1.php" "$H9/calls-dq.php" "$H3/fx-rt1.php" "$H9/fx-rt2.php" "$H10/fx-mc2.php" "$H10/mcalls-dq.php" "$CAND" "$H10/ab-out/mc2.rc" \
+---
+>          "$H8/fx-cr1.php" "$H9/calls-dq.php" "$H3/fx-rt1.php" "$H9/fx-rt2.php" "$H10/fx-mc2.php" "$H10/mcalls-dq.php" "$H12/ret-buf-dq-k0.php" "$H4/fixtures/fx-sw2-gc.php" "$H11/fx-mc2-wp172.expected-diff" "$CAND" "$H11/catena-out/catena-s190.done" \
+48,49c54,55
+< [ "$(shasum -a 256 "$REF" | cut -c1-16)" = "$REF_EXP" ] || stop "PRE: stash phpr-s182 hash != $REF_EXP — STOP"
+< [ "$(cat "$H10/ab-out/mc2.rc")" = 0 ] || stop "PRE: A/B mc2 rc=$(cat "$H10/ab-out/mc2.rc") ≠ 0 — nessuna promozione senza nomina — STOP"
+---
+> [ "$(shasum -a 256 "$REF" | cut -c1-16)" = "$REF_EXP" ] || stop "PRE: stash phpr-s183 hash != $REF_EXP — STOP"
+> grep -q '^rc=0 ' "$H11/catena-out/catena-s190.done" || stop "PRE: guardia b3 NON verde ($(cat "$H11/catena-out/catena-s190.done")) — nessuna promozione senza guardia rc=0 — STOP"
+51c57,59
+< note "PRE: candidato = braccio B $CH (commit $CAND_COMMIT, A/B mc2 rc=0, cifra composta [+19,00;+19,17]); REF = stash s182 $REF_EXP"
+---
+> note "PRE: candidato = braccio B3 $CH (commit $CAND_COMMIT, guardia b3 rc=0 04/11 02:45: K0 +3,08 ns/Ret, K piatto, mcalls +2,33, E3 2,17, micro 6/6); REF = stash s183 $REF_EXP"
+> note "PRE: DICHIARAZIONE dei cambiamenti del pin s184 rispetto a s183 (per nome): (a) cura §3.34/§3.35 (4aa30319, 22/10: dtor dei locali al leave) + cura O(1) v2 (S-190: cursore gc_probe_mark, vm/gc_probe, nota operandi binop lento, leva iv); (b) routing cli-server spostato in php-types (S-188 C1); (c) timeout del wrapper http §3.39 (S-189, php-builtins/http_timeout); inoltre main 72f688c3 (S-187: PR #3/#4/#7 portabilità Linux) e feature census-time (901515b6, gated OFF nel pin). Se t26/t28 differiscono da t25/t27 l'attribuzione va istruita per braccio, mai d'ufficio alla cura O(1)."
+> note "PRE: salite LOC entrate dopo s183 (REGOLE §8, ri-dichiarate qui come in S-186 #4): vm/mod.rs cap 25990 → 26082 e vm/run.rs cap 7543 → 7611 (commit 4aa30319 §3.35, 901515b6 census-time, f600e32f O(1) v1); S-190 NON alza alcun cap (mod.rs 26072 ≤ 26082, run.rs 7611 = cap, gc_probe.rs nuovo 78)."
+113c121
+< "$SRC/scripts/pin-phpr.sh" s183 > "$OUT/pin.log" 2>&1
+---
+> "$SRC/scripts/pin-phpr.sh" s184 > "$OUT/pin.log" 2>&1
+122c130
+< note "promozione corpus-gate: rc=0 — nomi==congelato (1412), CONTENUTO==golden, off-on zero (ZERO flip come atteso: L-MR1+L-MC2 a semantica identica per costruzione, prova per nome criterio-mc2 p.8)"
+---
+> note "promozione corpus-gate: rc=0 — nomi==congelato (1407 per modo), CONTENUTO==golden, off-on zero (ZERO flip come atteso: corpus-gate ×2 verde sul tree, catena c2b, e CI OK su cbc3ce5a/a28c376f)"
+147c155
+< # gate INVARIANTE: pin==stash s182 byte-id (+ marcatore quando preteso)
+---
+> # gate INVARIANTE: pin==stash s183 byte-id (+ marcatore quando preteso)
+150c158
+<   "$REF" "$f" > "$OUT/$n-s182.out" 2>&1
+---
+>   "$REF" "$f" > "$OUT/$n-s183.out" 2>&1
+154,155c162,163
+<   if diff -q "$OUT/$n-s182.out" "$OUT/$n-pin.out" > /dev/null; then
+<     note "promozione gate $n: pin==stash s182 BYTE-ID ($d)"
+---
+>   if diff -q "$OUT/$n-s183.out" "$OUT/$n-pin.out" > /dev/null; then
+>     note "promozione gate $n: pin==stash s183 BYTE-ID ($d)"
+157,158c165,166
+<     diff "$OUT/$n-s182.out" "$OUT/$n-pin.out" > "$OUT/$n.diff" || true
+<     stop "gate $n: pin DIVERGE dallo stash s182 (promo-out/$n.diff)"
+---
+>     diff "$OUT/$n-s183.out" "$OUT/$n-pin.out" > "$OUT/$n.diff" || true
+>     stop "gate $n: pin DIVERGE dallo stash s183 (promo-out/$n.diff)"
+160a169,178
+> # gate DICHIARATO (S-190): diff(oracle, pin) == expected-diff committato — per un caso che la cura 22/10 ha MOSSO
+> # (né invariante vs stash né byte-id con l'oracle): la forma residua è dichiarata per nome nel catalogo.
+> expdiff(){ # $1=nome $2=file $3=expected-diff $4=descrizione
+>   local n="$1" f="$2" e="$3" d="$4"
+>   "$ORACLE" "$f" > "$OUT/$n-oracle.out" 2>&1
+>   "$BIN" "$f" > "$OUT/$n-pin.out" 2>&1
+>   [ -s "$OUT/$n-pin.out" ] || stop "gate $n: output pin VUOTO"
+>   diff "$OUT/$n-oracle.out" "$OUT/$n-pin.out" > "$OUT/$n.diff" || true
+>   if cmp -s "$OUT/$n.diff" "$e"; then note "promozione gate $n: diff(oracle,pin) == expected-diff ($d)"; else stop "gate $n: diff(oracle,pin) ≠ expected-diff dichiarato (promo-out/$n.diff vs $e)"; fi
+> }
+172c190
+< invar fxmc2 "$H/fx-mc2.php" "" "§3.28 ordine SEND_VAR_EX/dtor temp PRE-esistente INVARIATO"
+---
+> expdiff fxmc2 "$H/fx-mc2.php" "$H11/fx-mc2-wp172.expected-diff" "§3.28: (ii) C4 CURATA dalla cura 22/10 (== oracle), (i) C1 residua nella forma post-22/10 — expected-diff dichiarato S-190"
+180a199
+> invar fxsw2gc "$H4/fixtures/fx-sw2-gc.php" "FX-SW2 DONE" "§3.33 fixture di CONTEGGI GC: invariante vs stash s183 (come in s186/s190-leva-build), non bilaterale"
+205,206c224,225
+< PHPR="$BIN" R=5 "$SRC/wp97-harness/micro/run-micro.sh" > "$OUT/micro-pin-s183.out" 2>&1
+< note "promozione micro pin s183: $(grep -E '^rapporto_' "$OUT/micro-pin-s183.out" | tr '\n' ' ')"
+---
+> PHPR="$BIN" R=5 "$SRC/wp97-harness/micro/run-micro.sh" > "$OUT/micro-pin-s184.out" 2>&1
+> note "promozione micro pin s184: $(grep -E '^rapporto_' "$OUT/micro-pin-s184.out" | tr '\n' ' ')"
+208c227
+< # ---- conferma POST-PIN: R=5 pin s183 vs stash s182 (STESSA toolchain 1.98.1) su mcalls-dq (bersaglio) e calls-dq/prop-dq (guardie) ----
+---
+> # ---- conferma POST-PIN: R=5 pin s184 vs stash s183 (STESSA toolchain 1.98.1) su ret-buf-dq-k0 (bersaglio della guardia b3) e mcalls-dq/calls-dq/prop-dq (guardie); D = A(stash) − B(pin): negativo = pin più lento ----
+234,236c253,256
+< note "conferma post-pin mcalls-dq (pin s183 vs stash s182, stessa toolchain): $(conferma "$H10/mcalls-dq.php" mcalls) (attesa: D ≈ cifra composta dell'A/B mc2 [+19,00;+19,17])"
+< note "conferma post-pin calls-dq (guardia, pin s183 vs stash s182): $(conferma "$H9/calls-dq.php" calls) (attesa |D| < 1: Ret fuso delle funzioni già ammesso)"
+< note "conferma post-pin prop-dq (guardia, pin s183 vs stash s182): $(conferma "$H/prop-dq.php" prop) (attesa |D| < 1: sola lettura)"
+---
+> note "conferma post-pin ret-buf-dq-k0 (pin s184 vs stash s183, stessa toolchain; ns/iter = 65 Ret): $(conferma "$H12/ret-buf-dq-k0.php" k0) (attesa: D ≈ −200 ns/iter = 65 × −3,08 della guardia b3; tetto |D| < 260 = 65 × 4)"
+> note "conferma post-pin mcalls-dq (guardia, pin s184 vs stash s183): $(conferma "$H10/mcalls-dq.php" mcalls) (attesa: D ≈ −2,33 della guardia b3, |D| < 4)"
+> note "conferma post-pin calls-dq (guardia, pin s184 vs stash s183): $(conferma "$H9/calls-dq.php" calls) (attesa |D| < 1: guardia b3 +0,33)"
+> note "conferma post-pin prop-dq (guardia, pin s184 vs stash s183): $(conferma "$H/prop-dq.php" prop) (attesa |D| < 1: sola lettura)"
+266c286
+< "$SRC/scripts/pin-server.sh" s183 > "$OUT/pin-server.log" 2>&1
+---
+> "$SRC/scripts/pin-server.sh" s190 > "$OUT/pin-server.log" 2>&1
+272c292
+< note "PROMOZIONE COMPLETA rc=0 (da promo-out/rcb): pin s183 = $H2"
+---
+> note "PROMOZIONE COMPLETA rc=0 (da promo-out/rcb): pin s184 = $H2"

@@ -1091,7 +1091,11 @@ stessa cura sposta in C1 (forma (i), ancora divergente) i `dtor:Q dtor:R`
 PRIMA del testo dell'Error (al Ret di `getMessage()`): il gate INVARIANTE
 `fxmc2` (wp172, `invar` nella promozione) morde il prossimo candidato e va
 emendato DICHIARANDO (ri-basato sul nuovo pin, o convertito in `bilat`
-sulle sole righe C2-C4).
+sulle sole righe C2-C4). **EMENDATO S-190 (04/11, promozione s184)**: il gate
+diventa `expdiff` — `diff(oracle, pin) == wp190-harness/fx-mc2-wp172.expected-diff`
+(un solo hunk, C1: oracle `dtor:Q E1:… ids:2,4`, phpr `E1:dtor:Q dtor:R … ids:3,2`;
+C2-C4 == oracle). Dry-run 04/11 09:35 col braccio B3: 23 gate di promozione,
+tutti i bilaterali == oracle e tutti gli invarianti == stash s183 tranne questo.
 L'«ordine slot inverso» (`Dy, Dx`) NON si riproduce su una funzione utente
 a due argomenti (entrambi `Dx, Dy`, verificato 2026-09-10): resta la sola
 componente di timing.

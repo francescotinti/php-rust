@@ -1,0 +1,36 @@
+2,10c2,8
+< # s185-lancio-promo.sh — lanciatore DETACHED della catena di promozione COMPOSTA s185 → pin s183 (s185-promozione.sh).
+< # COPIA DICHIARATA di ../wp184-harness/s184-lancio-promo.sh (manifest s185-lancio-promo-copia.diff): path/tag PIÙ
+< # (i) attesa quiete CI (nessun cargo/rustc/phpt-runner, coda CI vuota; doppia verifica a 60 s, come s185-lancio-leva.sh) e
+< # (ii) lock TOKEN s185-promo scritto dal lanciatore PRIMA della catena e rimosso a fine corsa (la CI si mette in mutex sul
+< # lock e sul pattern harness/s1NN-): in S-184 il lock era della sessione, qui la catena corre di giorno con la CI attiva.
+< # Via daemonize.pl; nessun token «phpr»/«php-server» nell'argv (falso positivo di s129-quiescenza,
+< # memoria quiescenza-pgrep-argv-false-positive): PROMO_SP è esportata QUI, non passata sulla riga di comando,
+< # e il suo valore non contiene il token. Sentinelle (Data, swap, CPU totale, top-5) a inizio e fine nel log.
+< # Esiti: promo-out/lancio-promo.rc (rc della catena, letto da promo-out/rcb) + lancio-promo.done.
+---
+> # s190-lancio-promo.sh — lanciatore DETACHED della catena di promozione COMPOSTA s190 → pin s184 (s190-promozione.sh).
+> # COPIA DICHIARATA di ../wp185-harness/s185-lancio-promo.sh (manifest s190-lancio-promo-copia.diff, generatore
+> # gen-promozione-s190.py): SOLI path/tag (wp190, PROMO_SP promo-s190-sp, lock TOKEN s190-promo). Come in S-185: attesa
+> # quiete CI (nessun cargo/rustc/phpt-runner, coda vuota; doppia verifica a 60 s), lock scritto dal lanciatore PRIMA della
+> # catena e rimosso a fine corsa. Via daemonize.pl; nessun token «phpr»/«php-server» nell'argv (falso positivo di
+> # s129-quiescenza): PROMO_SP è esportata QUI e il suo valore non contiene il token. Sentinelle (Data, swap, CPU totale,
+> # top-5) a inizio e fine nel log. Esiti: promo-out/lancio-promo.rc (rc della catena, letto da promo-out/rcb) + lancio-promo.done.
+14c12
+< H="$SRC/wp185-harness"; O="$H/promo-out"; mkdir -p "$O"
+---
+> H="$SRC/wp190-harness"; O="$H/promo-out"; mkdir -p "$O"
+16c14
+< export PROMO_SP="/private/tmp/promo-s185-sp"
+---
+> export PROMO_SP="/private/tmp/promo-s190-sp"
+31,32c29,30
+< echo "s185 promozione pin s183 $(date '+%F %T') pid=$$" > "$MLOCK"
+< l "CI quieta — lock scritto: $MLOCK (TOKEN s185-promo)"
+---
+> echo "s190 promozione pin s184 $(date '+%F %T') pid=$$" > "$MLOCK"
+> l "CI quieta — lock scritto: $MLOCK (TOKEN s190-promo)"
+34c32
+< "$H/s185-promozione.sh" >> "$LOG" 2>&1
+---
+> "$H/s190-promozione.sh" >> "$LOG" 2>&1

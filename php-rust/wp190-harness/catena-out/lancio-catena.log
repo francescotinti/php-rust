@@ -1,0 +1,20 @@
+2026-11-04 02:20:28 bracci Z/B3 presenti: Z 23c0a94c26db62eb B3 ad57fc29064c1272
+2026-11-04 02:20:28 attesa quiete CI
+2026-11-04 02:21:28 lock scritto: /private/tmp/phpr-measure.lock (TOKEN s190)
+2026-11-04 02:21:28 CI quieta — attesa quiete continua anti-flare (6x30s <5%)
+2026-11-04 02:21:29 mediaanalysisd=0.0 calm=1
+2026-11-04 02:22:01 mediaanalysisd=0.0 calm=2
+2026-11-04 02:22:32 mediaanalysisd=0.0 calm=3
+2026-11-04 02:23:03 mediaanalysisd=0.0 calm=4
+2026-11-04 02:23:35 mediaanalysisd=0.0 calm=5
+2026-11-04 02:24:06 mediaanalysisd=0.0 calm=6
+2026-11-04 02:24:06 loadavg1=1.21 lc=1
+2026-11-04 02:24:36 loadavg1=1.41 lc=2
+2026-11-04 02:25:06 loadavg1=1.74 lc=3
+2026-11-04 02:25:36 loadavg1=2.04 lc=4
+2026-11-04 02:26:06 loadavg1=1.68 lc=5
+2026-11-04 02:26:36 loadavg1=1.50 lc=6
+2026-11-04 02:28:36 E2 calma CPU: PASS al tentativo 1 (campioni: 2 9 2 22 %)
+2026-11-04 02:29:09 quiete raggiunta — dichiarazione in quiet-decl-catena.txt — guardia b3
+2026-11-04 02:29:10 pin 9a6ae11bf7e900ef == stash s183 — GUARDIA a buffer pieno TAG=b3 (PIN=pin, Z=/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp186-harness/ab-out/s186-leva/phpr-Z, B=/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp190-harness/ab-out/s190-leva/phpr-B3)
+2026-11-04 02:45:02 guardia b3 fine rc=0 (rc=0 2026-11-04 02:45:01) — verdetto wp186-harness/s186-guardia-verdetto-b3.out; lock rimosso
