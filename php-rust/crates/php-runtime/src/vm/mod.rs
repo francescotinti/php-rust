@@ -4008,6 +4008,8 @@ impl<'m> Vm<'m> {
                     // B's constructor-sweep demotion and `$this` re-note had
                     // queued B ahead of A. The BIRTH mark is kept as it is
                     // (a release note never flips it — `gc_buf_push`).
+                    // S-190: skipping this move for a live object (count > 3) was tried and RETIRED — the FIFO
+                    // position is order, not just liveness (sentinel iters_this_dynvars: a1/a2 and x2/x3 swapped).
                     let pos = b.gc.pos();
                     drop(b);
                     if let Some(p) = pos.filter(|&p| p >= self.gc_buf_head) {
