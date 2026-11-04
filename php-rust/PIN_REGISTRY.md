@@ -76,6 +76,7 @@ nello stesso atto perché appenda in QUESTA sezione.)
 
 | pin (sha256/16) | sessione | collaudato | evidenza |
 |---|---|---|---|
+| 60b10d857eb0343a | s184 (sorgente @ 608934f6; riga da pin-phpr.sh) | smoke parità 2 modi OK 2026-11-04 09:49:06 — batteria/corpus/fixture/micro DOVUTI a parte | stash `phpr-s184` |
 | 9a6ae11bf7e900ef | s183 (sorgente @ 483e970f; riga da pin-phpr.sh) | smoke parità 2 modi OK 2026-10-16 10:23:42 — PROMOZIONE COMPLETA rc=0 10:47 (edit dichiarato; wp185-harness/s185-promo-verdetto.out: batteria 1748/0/2, corpus zero flip, fixture 10, 23 gate byte-id, micro R=5, conferma mcalls-dq +19,50, ORM per nome, hk 0E/0F) | stash `phpr-s183` |
 | 159eee40be506171 | s182 (sorgente @ 61a737b5; riga da pin-phpr.sh) | smoke parità 2 modi OK 2026-10-07 19:59:13 — batteria/corpus/fixture/micro DOVUTI a parte | stash `phpr-s182` |
 | 19a2faa83a492745 | s181 (sorgente @ f5f746cf; riga da pin-phpr.sh) | smoke parità 2 modi OK 2026-09-22 14:55:08 — batteria/corpus/fixture/micro DOVUTI a parte | stash `phpr-s181` |
