@@ -1,0 +1,22 @@
+2026-11-06 05:12:47 lock altrui assente: procedo
+2026-11-06 05:12:47 bracci Z/B3 presenti: Z 23c0a94c26db62eb B3 60b10d857eb0343a
+2026-11-06 05:12:47 attesa quiete CI
+2026-11-06 05:13:47 lock scritto: /private/tmp/phpr-measure.lock (TOKEN s191b4)
+2026-11-06 05:13:47 CI quieta — attesa quiete continua anti-flare (6x30s <5%)
+2026-11-06 05:13:49 mediaanalysisd=0.0 calm=1
+2026-11-06 05:14:20 mediaanalysisd=0.0 calm=2
+2026-11-06 05:14:52 mediaanalysisd=0.0 calm=3
+2026-11-06 05:15:23 mediaanalysisd=0.0 calm=4
+2026-11-06 05:15:54 mediaanalysisd=0.0 calm=5
+2026-11-06 05:16:26 mediaanalysisd=0.0 calm=6
+2026-11-06 05:16:26 loadavg1=1.39 lc=1
+2026-11-06 05:16:56 loadavg1=1.29 lc=2
+2026-11-06 05:17:26 loadavg1=1.36 lc=3
+2026-11-06 05:17:56 loadavg1=2.13 lc=4
+2026-11-06 05:18:26 loadavg1=1.81 lc=5
+2026-11-06 05:18:56 loadavg1=1.57 lc=6
+2026-11-06 05:20:56 E2 calma CPU: PASS al tentativo 1 (campioni: 4 4 3 6 %)
+2026-11-06 05:21:29 quiete raggiunta — dichiarazione in quiet-decl-b4.txt — guardia b4
+2026-11-06 05:21:29 stash s183 9a6ae11bf7e900ef · stash s184 60b10d857eb0343a · Z ok — GUARDIA b4 (A=stash s183, Z, B=stash s184), fino a 3 tentativi sul gate s129
+2026-11-06 05:21:29 verdetto b4 «quiescenza FAIL» conservato come -b4-t1.out
+2026-11-06 05:37:22 guardia b4 fine rc=5 (rc=5 2026-11-06 05:37:22) — verdetto wp186-harness/s186-guardia-verdetto-b4.out; lock rimosso

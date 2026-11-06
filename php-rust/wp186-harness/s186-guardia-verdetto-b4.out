@@ -1,0 +1,56 @@
+== s186 GUARDIA a buffer pieno (cura 22/10) TAG=b4 — A=9a6ae11bf7e900ef pin s183 (/Volumes/Extreme Pro/Claude/phpr-old-target/release/phpr-s183) Z=23c0a94c26db62eb (/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp186-harness/ab-out/s186-leva/phpr-Z, gemello del pin ricostruito) B=60b10d857eb0343a (/Volumes/Extreme Pro/Claude/phpr-old-target/release/phpr-s184, tree = pin + cura) oracle=8.5.7 · R=5 RE3=3 · 2026-11-06 05:21:40 ==
+N dal sorgente: mcalls-dq=60000000 calls-dq=60000000 ret-buf-dq K0/K4/K16=1000000 iter × 65 Ret/iter (giudice in ns/Ret) e3=100000/200000 obj-churn=1000000
+sentinella LS: /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.98.1-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv 
+parità mcalls-dq: A==Z==B==atteso oracle (60000000 )
+parità calls-dq: A==Z==B==atteso oracle (60000000 )
+parità ret-buf-dq-k0: A==Z==B==atteso oracle (64002016 )
+parità ret-buf-dq-k4: A==Z==B==atteso oracle (64002016 )
+parità ret-buf-dq-k16: A==Z==B==atteso oracle (64002016 )
+parità e3-churn-1e5: A==Z==B==atteso oracle (100000 )
+parità e3-churn-2e5: A==Z==B==atteso oracle (200000 )
+parità obj-churn: A==Z==B==atteso oracle (ok )
+floors (user, med3 di empty.php): A=0.03 Z=0.02 B=0.03 oracle=0.05
+  coppia1 [AZB] (A/Z/B/O): cd=7.63/7.67/7.77/1.35 gd=4.71/4.72/4.72/1.40 k0=6.51/6.53/6.79/1.48 k4=9.02/9.02/9.24/1.69 k16=15.56/15.57/15.79/2.30
+  coppia2 [BAZ] (A/Z/B/O): cd=7.65/7.61/7.83/1.40 gd=4.66/4.77/4.74/1.40 k0=6.56/6.65/6.84/1.46 k4=9.05/9.02/9.27/1.65 k16=15.50/15.55/15.80/2.28
+  coppia3 [ZBA] (A/Z/B/O): cd=7.63/7.63/7.81/1.40 gd=4.69/4.69/4.71/1.40 k0=6.54/6.62/6.89/1.47 k4=8.98/9.02/9.33/1.69 k16=15.46/15.56/15.86/2.27
+  coppia4 [ABZ] (A/Z/B/O): cd=7.63/7.65/7.72/1.41 gd=4.73/4.70/4.77/1.40 k0=6.64/6.60/6.88/1.45 k4=8.98/9.04/9.27/1.68 k16=15.47/15.56/15.81/2.29
+  coppia5 [BZA] (A/Z/B/O): cd=7.64/7.67/7.81/1.40 gd=4.73/4.67/4.70/1.40 k0=6.50/6.56/6.83/1.45 k4=8.97/8.97/9.24/1.68 k16=15.58/15.49/15.80/2.29
+  e3 corsa1 [A B]: A 1e5=0.12 2e5=0.26 · B 1e5=0.12 2e5=0.23
+  e3 corsa2 [B A]: A 1e5=0.12 2e5=0.26 · B 1e5=0.12 2e5=0.26
+  e3 corsa3 [A B]: A 1e5=0.12 2e5=0.27 · B 1e5=0.12 2e5=0.26
+  obj-churn corsa1 [OAB]: O=0.08 A=0.25 B=0.25
+  obj-churn corsa2 [ABO]: O=0.08 A=0.25 B=0.25
+  obj-churn corsa3 [BOA]: O=0.08 A=0.25 B=0.25
+  obj-churn corsa4 [OBA]: O=0.08 A=0.24 B=0.25
+  obj-churn corsa5 [AOB]: O=0.08 A=0.25 B=0.24
+micro pin: rapporto_arith=2.1 rapporto_prop=2.3 rapporto_calls=3.5 rapporto_str=4.3 rapporto_arr=3.0 rapporto_re=2.6 
+micro B:   rapporto_arith=2.2 rapporto_prop=2.3 rapporto_calls=3.5 rapporto_str=4.3 rapporto_arr=2.9 rapporto_re=2.6 
+floors: A=0.03 Z=0.02 B=0.03 O=0.05; N: mcalls=60000000 calls=60000000 ret-buf-dq=1000000×65 Ret (ns/Ret) obj-churn=1000000; corse valide R=5
+LAYOUT mcalls-dq: A=126.67 Z=127.17 ⇒ |A−Z| colonna 0.50 / appaiata 0.50 ns/iter (rumore drop-1 A'=0.17 Z'=0.67)
+GIUDICE mcalls-dq: oracle=22.50 ns/iter · A=126.67 (5.63×) Z=127.17 B=129.67 (5.76×) · D=B−A colonna=+3.00 appaiata=+2.83 soglia=4.00 (rumore drop-1 1.00, SL 0.50) segni B>A 5/5
+LAYOUT calls-dq: A=78.00 Z=78.00 ⇒ |A−Z| colonna 0.00 / appaiata 0.17 ns/iter (rumore drop-1 A'=0.67 Z'=0.83)
+GIUDICE calls-dq: oracle=22.50 ns/iter · A=78.00 (3.47×) Z=78.00 B=78.17 (3.47×) · D=B−A colonna=+0.17 appaiata=+0.33 soglia=4.00 (rumore drop-1 0.67, SL 0.17) segni B>A 4/5
+LAYOUT ret-buf-dq-K0: A=100.15 Z=101.23 ⇒ |A−Z| colonna 1.08 / appaiata 1.08 ns/iter (rumore drop-1 A'=0.92 Z'=1.38)
+GIUDICE ret-buf-dq-K0: oracle=21.69 ns/iter · A=100.15 (4.62×) Z=101.23 B=104.77 (4.83×) · D=B−A colonna=+4.62 appaiata=+4.31 soglia=4.00 (rumore drop-1 0.92, SL 1.08) segni B>A 5/5
+LAYOUT ret-buf-dq-K4: A=137.69 Z=138.46 ⇒ |A−Z| colonna 0.77 / appaiata 0.15 ns/iter (rumore drop-1 A'=0.77 Z'=0.31)
+GIUDICE ret-buf-dq-K4: oracle=25.08 ns/iter · A=137.69 (5.49×) Z=138.46 B=142.15 (5.67×) · D=B−A colonna=+4.46 appaiata=+4.15 soglia=4.00 (rumore drop-1 0.77, SL 0.77) segni B>A 5/5
+LAYOUT ret-buf-dq-K16: A=238.00 Z=239.08 ⇒ |A−Z| colonna 1.08 / appaiata 0.92 ns/iter (rumore drop-1 A'=1.54 Z'=0.31)
+GIUDICE ret-buf-dq-K16: oracle=34.46 ns/iter · A=238.00 (6.91×) Z=239.08 B=242.62 (7.04×) · D=B−A colonna=+4.62 appaiata=+4.62 soglia=4.00 (rumore drop-1 1.54, SL 1.08) segni B>A 5/5
+ATTESA (i) mcalls-dq |D| < max(rumore, 4, SL)=4.00: PASS (|D| colonna 3.00 appaiata 2.83)
+ATTESA (i) calls-dq |D| < max(rumore, 4, SL)=4.00: PASS (|D| colonna 0.17 appaiata 0.33)
+ATTESA (i) ret-buf-dq-K0 |D| < max(rumore, 4, SL)=4.00: VIOLATA (|D| colonna 4.62 appaiata 4.31)
+ATTESA (ii) ret-buf-dq-K4 piatto: D_B(K)−D_B(K0) colonna -0.15 appaiata -0.15 vs soglia 4.00: PASS
+ATTESA (ii) ret-buf-dq-K16 piatto: D_B(K)−D_B(K0) colonna +0.00 appaiata +0.31 vs soglia 4.00: PASS
+E3 Hoare array_map(fn ⇒ new A, range(1,N)): A 1e5=0.12s 2e5=0.26s ratio=2.17 · B 1e5=0.12s 2e5=0.26s ratio=2.17 (user grezzo, pavimento dentro — dichiarato)
+ATTESA (iii) ratio_B ≤ 2,5: PASS (ratio_A 2.17 a confronto)
+micro arith: pin 2.1× B 2.2× (tolleranza +0.2; spread phpr s pin/B 0.01/0.02): PASS
+micro prop: pin 2.3× B 2.3× (tolleranza +0.2; spread phpr s pin/B 0.01/0.00): PASS
+micro calls: pin 3.5× B 3.5× (tolleranza +0.2; spread phpr s pin/B 0.02/0.02): PASS
+micro str: pin 4.3× B 4.3× (tolleranza +0.2; spread phpr s pin/B 0.01/0.01): PASS
+micro arr: pin 3.0× B 2.9× (tolleranza +0.2; spread phpr s pin/B 0.03/0.02): PASS
+micro re: pin 2.6× B 2.6× (tolleranza +0.2; spread phpr s pin/B 0.01/0.01): PASS
+OBJ-CHURN (companion, nessun gate): oracle netto 0.030s pin 0.220s B 0.220s su 1000000 oggetti ⇒ D_obj(pin)=190 ns/oggetto · D_obj(B)=190 ns/oggetto · B−pin=+0 ns/oggetto (tetto oggetti della fetta 0 = N_obj × D_obj)
+PREV per la prossima misura (same-binary pin s183): mcalls-dq A=126.67 calls-dq A=78.00 ret-buf-dq-K0 A=100.15 ret-buf-dq-K4 A=137.69 ret-buf-dq-K16 A=238.00 (ret-buf-dq: la A di oggi diventa PREV)
+GUARDIA MORDE: (i) ret-buf-dq-K0 D +4.62/+4.31 ⇒ cura O(1) PRIMA della promozione s184 (ordine obbligato (3)), guardia da ri-eseguire (rc=5)
+sentinella LS fine: /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.98.1-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv 
+ESITO rc=5 2026-11-06 05:37:22

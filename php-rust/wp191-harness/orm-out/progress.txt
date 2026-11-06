@@ -15,3 +15,31 @@
 01:33:14 quiescenza orm-leg1 rc=0 tentativo-gate=1 (file: orm-out/quiesce-orm-leg1.rc)
 01:33:18 orm oracle1 START
 01:33:28 orm oracle1 rc=0
+01:33:32 orm phpr1 START
+01:34:13 orm phpr1 rc=2
+01:34:23 assestamento dbal-leg1 (att.1): streak rotta a 2 da 56.8%
+01:34:23 assestamento dbal-leg1 (att.1): mediaanalysisd 56.8% (attesa ~15s)
+01:34:53 assestamento dbal-leg1 (att.1): streak rotta a 3 da 17.1%
+01:34:53 assestamento dbal-leg1 (att.1): mediaanalysisd 17.1% (attesa ~30s)
+01:35:13 assestamento dbal-leg1 (att.1): streak rotta a 1 da 89.6%
+01:35:13 assestamento dbal-leg1 (att.1): mediaanalysisd 89.6% (attesa ~45s)
+01:35:54 quiescenza dbal-leg1 rc=0 tentativo-gate=1 (file: orm-out/quiesce-dbal-leg1.rc)
+01:35:57 dbal oracle1 START
+01:36:02 dbal oracle1 rc=0
+01:36:06 dbal phpr1 START
+01:36:16 dbal phpr1 rc=2
+01:36:21 assestamento orm-leg2 (att.1): streak rotta a 1 da 70.2%
+01:36:21 assestamento orm-leg2 (att.1): mediaanalysisd 70.2% (attesa ~15s)
+01:36:36 assestamento orm-leg2 (att.1): mediaanalysisd 214.2% (attesa ~30s)
+01:36:51 assestamento orm-leg2 (att.1): mediaanalysisd 223.3% (attesa ~45s)
+01:37:32 quiescenza orm-leg2 rc=0 tentativo-gate=1 (file: orm-out/quiesce-orm-leg2.rc)
+01:37:36 orm oracle2 START
+01:37:46 orm oracle2 rc=0
+01:37:50 orm phpr2 START
+01:38:30 orm phpr2 rc=2
+01:38:56 quiescenza dbal-leg2 rc=0 tentativo-gate=1 (file: orm-out/quiesce-dbal-leg2.rc)
+01:38:59 dbal oracle2 START
+01:39:04 dbal oracle2 rc=0
+01:39:08 dbal phpr2 START
+01:39:18 dbal phpr2 rc=2
+01:39:19 DONE rc=0

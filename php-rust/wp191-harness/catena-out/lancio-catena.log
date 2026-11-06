@@ -22,3 +22,6 @@
 2026-11-06 01:30:07 quiete raggiunta — dichiarazione in quiet-decl-catena.txt — (1) guardia b4, (2) t28, (3) server t3, (4) t26
 2026-11-06 01:30:07 pin 60b10d857eb0343a == stash s184 · stash s183 9a6ae11bf7e900ef · server 721b7802e2d12058 / stash s189 80eea401b71c2be7 · Z ok — (1) GUARDIA b4 (A=stash s183, Z, B=stash s184, R=5)
 2026-11-06 01:30:17 guardia b4 fine rc=8 (rc=8 2026-11-06 01:30:17) — verdetto wp186-harness/s186-guardia-verdetto-b4.out — (2) ORM t28 (E5: ORA_REF2 4,870 SENT [4,81;4,93] = oracle invariato; REF2 [34,23;34,31] = riferimento phpr s182: Delta_norm legge s184 vs s182)
+2026-11-06 01:39:19 t28 fine rc=0 (rc=0 01:39:19) — verdetto s191-orm-coppia-verdetto-t28.out — (3) coppia server t3: s190 canonica vs s189 stash
+2026-11-06 02:18:32 server t3 fine rc=0 (guardia_t3=[rc=0 giudice] tripwire_t3=[rc=0 giudice] 2026-11-06 02:18:32) — (4) WP t26 full+media @ pin s184 (ULTIMA: le gambe media risvegliano mediaanalysisd)
+2026-11-06 05:11:43 notte fine: b4 rc=8 · t28 rc=0 · server t3 rc=0 · t26 rc=0; lock rimosso
