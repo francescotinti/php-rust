@@ -1,0 +1,14 @@
+== dichiarazione finestra quieta NOTTE S-191 (b4, t28, server t3, t26) 2026-11-06 01:30:06 ==
+ 1:30  up 4 days,  3:37, 3 users, load averages: 1.78 2.48 2.86
+Networks: packets: 33267100/28G in, 25967995/19G out.
+Disks: 94768233/1703G read, 251360237/2017G written.
+
+PID    %CPU COMMAND         
+96693  0.0  usermanagerd    
+96437  0.0  mds_stores      
+95382  0.0  callservicesd   
+95379  0.0  SidecarRelay    
+95143  0.0  spotlightknowled
+95058  0.0  ContextStoreAgen
+91239  0.0  appstorecomponen
+90552  0.0  tccd            

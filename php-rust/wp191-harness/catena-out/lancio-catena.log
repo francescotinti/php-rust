@@ -1,0 +1,24 @@
+2026-11-06 01:18:51 attesa quiete CI
+2026-11-06 01:19:51 lock scritto: /private/tmp/phpr-measure.lock (TOKEN s191)
+2026-11-06 01:19:51 CI quieta — attesa quiete continua anti-flare (6x30s <5%)
+2026-11-06 01:19:53 mediaanalysisd=0.0 calm=1
+2026-11-06 01:20:24 mediaanalysisd=196.9 calm=0
+2026-11-06 01:20:55 mediaanalysisd=210.8 calm=0
+2026-11-06 01:21:27 mediaanalysisd=0.0 calm=1
+2026-11-06 01:21:58 mediaanalysisd=0.0 calm=2
+2026-11-06 01:22:29 mediaanalysisd=0.0 calm=3
+2026-11-06 01:23:01 mediaanalysisd=0.0 calm=4
+2026-11-06 01:23:32 mediaanalysisd=0.0 calm=5
+2026-11-06 01:24:03 mediaanalysisd=0.0 calm=6
+2026-11-06 01:24:03 loadavg1=4.50 lc=0
+2026-11-06 01:24:33 loadavg1=3.26 lc=0
+2026-11-06 01:25:03 loadavg1=2.79 lc=1
+2026-11-06 01:25:33 loadavg1=2.94 lc=2
+2026-11-06 01:26:03 loadavg1=2.29 lc=3
+2026-11-06 01:26:34 loadavg1=2.26 lc=4
+2026-11-06 01:27:04 loadavg1=2.05 lc=5
+2026-11-06 01:27:34 loadavg1=1.76 lc=6
+2026-11-06 01:29:34 E2 calma CPU: PASS al tentativo 1 (campioni: 95 98 139 137 %)
+2026-11-06 01:30:07 quiete raggiunta — dichiarazione in quiet-decl-catena.txt — (1) guardia b4, (2) t28, (3) server t3, (4) t26
+2026-11-06 01:30:07 pin 60b10d857eb0343a == stash s184 · stash s183 9a6ae11bf7e900ef · server 721b7802e2d12058 / stash s189 80eea401b71c2be7 · Z ok — (1) GUARDIA b4 (A=stash s183, Z, B=stash s184, R=5)
+2026-11-06 01:30:17 guardia b4 fine rc=8 (rc=8 2026-11-06 01:30:17) — verdetto wp186-harness/s186-guardia-verdetto-b4.out — (2) ORM t28 (E5: ORA_REF2 4,870 SENT [4,81;4,93] = oracle invariato; REF2 [34,23;34,31] = riferimento phpr s182: Delta_norm legge s184 vs s182)

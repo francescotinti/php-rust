@@ -1,0 +1,17 @@
+01:30:18 sentinella LS inizio: /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.98.1-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rust-analyzer /Users/francescotinti/.rustup/toolchains/stable-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv 
+01:30:26 floors: orm o=0.06 p=0.07 · dbal o=0.06 p=0.19
+01:30:30 orm rodaggio-oracle START
+01:30:40 orm rodaggio-oracle rc=0
+01:30:45 orm rodaggio-phpr START
+01:31:25 orm rodaggio-phpr rc=2
+01:31:29 dbal rodaggio-oracle START
+01:31:34 dbal rodaggio-oracle rc=0
+01:31:38 dbal rodaggio-phpr START
+01:31:48 dbal rodaggio-phpr rc=2
+01:31:48 assestamento orm-leg1 (att.1): mediaanalysisd 12.0% (attesa ~15s)
+01:32:03 assestamento orm-leg1 (att.1): mediaanalysisd 12.5% (attesa ~30s)
+01:32:18 assestamento orm-leg1 (att.1): mediaanalysisd 22.6% (attesa ~45s)
+01:32:33 assestamento orm-leg1 (att.1): mediaanalysisd 27.6% (attesa ~60s)
+01:33:14 quiescenza orm-leg1 rc=0 tentativo-gate=1 (file: orm-out/quiesce-orm-leg1.rc)
+01:33:18 orm oracle1 START
+01:33:28 orm oracle1 rc=0
