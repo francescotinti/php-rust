@@ -77,6 +77,14 @@ impl<'m> Vm<'m> {
     /// not see the notes answered here (instrument builds under-count them).
     #[inline(always)]
     pub(super) fn gc_note_this_tail(&mut self, top: usize) -> bool {
+        let hit = self.gc_note_this_tail_inner(top);
+        #[cfg(feature = "census-time")]
+        census_time::note_this(hit);
+        hit
+    }
+
+    #[inline(always)]
+    fn gc_note_this_tail_inner(&mut self, top: usize) -> bool {
         let Some(Zval::Object(o)) = &self.frames[top].this else { return false };
         {
             let b = o.borrow();

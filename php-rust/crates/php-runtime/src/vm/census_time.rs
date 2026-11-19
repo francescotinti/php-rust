@@ -216,6 +216,12 @@ pub fn this_mcall_general(vm: &super::Vm<'_>, top: usize) {
     h2("this_mcall_general", reason.to_string());
 }
 
+/// The `$this` note of a fused method `Ret`: did the S-192 tail short path
+/// answer it (`hit`), or did it go down the general note chain?
+pub fn note_this(hit: bool) {
+    h2("note_this", if hit { "tail_short_path" } else { "general_chain" }.to_string());
+}
+
 /// Dump once at end of run (called next to `gc_census::dump`).
 pub fn dump() {
     let report = C.with(|c| {

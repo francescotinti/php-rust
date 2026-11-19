@@ -1,0 +1,46 @@
+== s192 censimento h2 tag=c2 git=825836d8 C=91eb7ebe07202477 phpunit rc=2 2026-11-19 08:57:15 (soli conteggi) ==
+Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, Skipped: 59, Incomplete: 2.
+census-time	call_fast	2093
+census-time	call_general	206
+census-time	mcall	20229655
+census-time	mcall_general	7667706
+census-time	ret_fast	33269514
+census-time	ret_slow	17049969
+census-time	prop	39033055
+census-time	str	9628015
+census-time	arr	16208854
+census-time	new	3178969
+census-time	sweep	19563099
+census-time	builtin_lookup	11912513
+census-time	builtin	11912513
+census-time	hostbuiltin	6437340
+census-h2	mcall_general	not_simple+hint	3878998
+census-h2	mcall_general	ic_miss	2843559
+census-h2	mcall_general	arity_fewer_args	187432
+census-h2	mcall_general	not_simple+variadic	47939
+census-h2	mcall_general	not_simple+hint+byref	15623
+census-h2	mcall_general	arity_more_args	6335
+census-h2	mcall_general	recv_other	59
+census-h2	mcall_general	not_simple+hint+variadic	47
+census-h2	mcall_general	not_simple+hint+generator	15
+census-h2	note_this	general_chain	10159734
+census-h2	note_this	tail_short_path	291878
+census-h2	ret_slow	shape1	14139106
+census-h2	ret_slow	ext	1102734
+census-h2	ret_slow	shape1+flags0x4	976398
+census-h2	ret_slow	ret_cell	445239
+census-h2	ret_slow	shape1+ext	196311
+census-h2	ret_slow	shape1+ret_cell	136989
+census-h2	ret_slow	shape2+flags0x8	17261
+census-h2	ret_slow	shape1+iters	16195
+census-h2	ret_slow	flags0x40	8193
+census-h2	ret_slow	iters	6809
+census-h2	ret_slow	flags0x4	1727
+census-h2	ret_slow	flags0x1+ext	1625
+census-h2	ret_slow	flags0x10	861
+census-h2	ret_slow	flags0x20+ret_cell	505
+census-h2	ret_slow	ret_cell+ext	8
+census-h2	ret_slow	shape2	4
+census-h2	ret_slow	dyn_vars	2
+census-h2	ret_slow	main	2
+census-h2	this_mcall_general	ic_miss	687699
