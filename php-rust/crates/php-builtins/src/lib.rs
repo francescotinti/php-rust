@@ -22,6 +22,7 @@ mod env;
 mod html;
 mod idn;
 mod file;
+mod realpath_cache;
 mod format;
 mod http_timeout; // §3.39 (S-189): http:// wrapper timeout (context `timeout` / default 60 s)
 mod exif;
@@ -272,11 +273,11 @@ pub fn registry() -> Registry {
     add(b"is_writeable", file::is_writable);
     add(b"is_executable", file::is_executable);
     add(b"filetype", file::filetype);
-    add(b"realpath", file::realpath);
+    add(b"realpath", realpath_cache::realpath);
     add(b"getcwd", file::getcwd);
-    add(b"chdir", file::chdir);
+    add(b"chdir", realpath_cache::chdir);
     add(b"sys_get_temp_dir", file::sys_get_temp_dir);
-    add(b"clearstatcache", file::clearstatcache);
+    add(b"clearstatcache", realpath_cache::clearstatcache);
     add(b"stat", file::stat);
     add(b"lstat", file::lstat);
     add(b"fstat", file::fstat);
@@ -288,10 +289,10 @@ pub fn registry() -> Registry {
     add(b"fileinode", file::fileinode);
     add(b"fileowner", file::fileowner);
     add(b"filegroup", file::filegroup);
-    add(b"unlink", file::unlink);
+    add(b"unlink", realpath_cache::unlink);
     add(b"mkdir", file::mkdir);
-    add(b"rmdir", file::rmdir);
-    add(b"rename", file::rename);
+    add(b"rmdir", realpath_cache::rmdir);
+    add(b"rename", realpath_cache::rename);
     add(b"copy", file::copy);
     add(b"touch", file::touch);
     add(b"symlink", file::symlink);

@@ -1448,7 +1448,7 @@ pub(crate) fn strip_file_wrapper(p: &[u8]) -> &[u8] {
 }
 
 /// The OS path for a builtin's first argument (raw bytes → `OsString`).
-fn arg_os_path(argv: &[Zval], ctx: &mut Ctx) -> std::ffi::OsString {
+pub(crate) fn arg_os_path(argv: &[Zval], ctx: &mut Ctx) -> std::ffi::OsString {
     use std::os::unix::ffi::OsStrExt;
     // ctx.to_zstr honors a precomputed `__toString` (SplFileInfo paths).
     let s = ctx.to_zstr(&argv[0]);
@@ -1586,22 +1586,6 @@ pub fn filetype(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
                 .push(Diag::Warning(format!("filetype(): Lstat failed for {shown}")));
             Ok(Zval::Bool(false))
         }
-    }
-}
-
-/// `realpath`: the canonical absolute path (symlinks + `..` resolved), or
-/// `false` if any component is missing.
-pub fn realpath(argv: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
-    use std::os::unix::ffi::OsStrExt;
-    let mut p = arg_os_path(argv, ctx);
-    // PHP quirk: realpath("") resolves the current directory (Symfony Process
-    // builds its cwd through this, and "" must NOT read as failure).
-    if p.is_empty() {
-        p = std::ffi::OsString::from(".");
-    }
-    match std::fs::canonicalize(&p) {
-        Ok(abs) => Ok(Zval::Str(PhpStr::new(abs.as_os_str().as_bytes().to_vec()))),
-        Err(_) => Ok(Zval::Bool(false)),
     }
 }
 

@@ -7246,7 +7246,7 @@ impl<'m> Vm<'m> {
         candidates
             .into_iter()
             .find(|c| c.is_file())
-            .map(|c| std::fs::canonicalize(&c).unwrap_or(c))
+            .map(|c| php_types::realpath_cache::canonicalize(&c).unwrap_or(c))
     }
 
     /// `include`/`require`(`_once`) the file named by `path_val` (step 57, Phase 2).

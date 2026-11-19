@@ -16,6 +16,7 @@ pub mod sapi;
 pub mod docroot;
 pub mod mime;
 pub mod stream;
+pub mod realpath_cache;
 pub mod tz;
 pub mod gdio;
 pub mod big5;
