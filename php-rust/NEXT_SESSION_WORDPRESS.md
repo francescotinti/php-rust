@@ -26,5 +26,5 @@ rotta B MORTA 01/11 · §3.36 `__CLASS__`/`__METHOD__` nei trait (S-187) · `unr
 **S-185**: `$this`/`$nome` in doppi apici sotto `set -u` · mutante senza prova sui binari prima del lancio · attesa «nessuna nuova chiamata» senza contare la chiamata della leva. **S-184**: giudice che scrive rc=0 con `.time` mancanti · watchdog che campiona solo il wrapper.
 **Più vecchi di 3 sessioni**: `gaps/VETI.md` (REGOLE §8), per NOME, non si potano.
 
-**Riscritto** 2026-11-19 12:40 (S-192: anatomia del profilo, quattro leve nel tree in attesa della coppia a gruppo; storia in `sessions/` · `gaps/`).
+**Riscritto** 2026-11-19 12:40 (S-192: quattro leve nel tree; storia in `sessions/`).
 Pre-flight: pin phpr **s184 60b10d857eb0343a** + server **s190 721b7802e2d12058** di record (canonica potata) · tree = `main` 72f688c3 (S-187: PR #3/#4/#7, batteria 1757/0, corpus 1407 ×2) + S-188 + S-189 + S-190 (…cbc3ce5a), branch `s186-firma` · CI GitHub `main` rossa al solo passo mem-census (Linux) · MySQL wp8 SU (datadir esterno) · bundle montata · dev-release = tree (mai pin).
