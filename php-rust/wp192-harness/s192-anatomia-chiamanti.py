@@ -91,6 +91,7 @@ for f, n in fam.most_common(18):
     lines.append(f"  {n:7d}  {100 * n / total:5.1f} %  {f}")
 for title, pred in (("(libsystem_platform.dylib) — memmove/memcpy/bzero", lambda n: n == "(libsystem_platform.dylib)"),
                     ("SipHash + hashbrown", lambda n: family(n).startswith("hash:")),
+                    ("SOLO SipHash (i residui fuori regola)", lambda n: family(n) == "hash: SipHash"),
                     ("Zval clone + drop glue", lambda n: family(n) in ("zval clone", "zval/drop glue")),
                     ("(libsystem_kernel.dylib)", lambda n: n == "(libsystem_kernel.dylib)"),
                     ("mimalloc", lambda n: family(n) == "alloc: mimalloc")):

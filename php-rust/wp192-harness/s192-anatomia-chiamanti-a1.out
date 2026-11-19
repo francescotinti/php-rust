@@ -48,6 +48,20 @@ CHI PAGA SipHash + hashbrown: 2295 campioni (5.7 %) — primo chiamante phpr:
        45    0.1 %  NtCs4n::KQmRT_11p::vm::Vm::resolve_class_autoload_with
        37    0.1 %  nIjj::KQmRT_11p::vm::host::Vm::ho_get_declared
 
+CHI PAGA SOLO SipHash (i residui fuori regola): 862 campioni (2.1 %) — primo chiamante phpr:
+      573    1.4 %  nIjj::KQmRT_11p::lower::lower_source_impl
+      180    0.4 %  nIjj::KQmRT_11p::vm::run::Vm::run_loop
+       30    0.1 %  NtCs4n::KQmRT_11p::vm::Vm::next_id
+       22    0.1 %  nIjj::KQmRT_11p::vm::host_reflect::Vm::ho_reflect_method_names
+       12    0.0 %  3::hash::random::RandomState::Mbv00yxn::core::hash::BuildHasher::hash_one::Wlmu::regex_automata
+       12    0.0 %  NtCs4n::KQmRT_11p::vm::Vm::gc_release_cascade
+        7    0.0 %  nIjj::KQmRT_11p::vm::host_reflect::Vm::ho_reflect_method_info
+        6    0.0 %  Nt::nIjj::KQmRT_11p::lower::Scope::slot_for
+        5    0.0 %  xn::core::hash::BuildHasher::hash_one::Wlmu::regex_automata::util::determinize::state::State::N
+        4    0.0 %  nIjj::KQmRT_11p::compile::class::compile_class
+        4    0.0 %  NtCs4n::KQmRT_11p::vm::Vm::gc_release_child
+        2    0.0 %  NtCs4n::KQmRT_11p::vm::Vm::seed_stub_mask
+
 CHI PAGA Zval clone + drop glue: 2314 campioni (5.7 %) — primo chiamante phpr:
      1106    2.7 %  nIjj::KQmRT_11p::vm::run::Vm::run_loop
       224    0.6 %  NtCs4n::KQmRT_11p::vm::Vm::recycle_frame
