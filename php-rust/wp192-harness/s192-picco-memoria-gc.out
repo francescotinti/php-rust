@@ -1,0 +1,8 @@
+== s192 picco di memoria tag=gc Z=d5537e59a4a23dc8 L=df39c0a92937db0f 2026-11-19 16:46:26 ==
+ORM Z: rss=711.7 MiB footprint=753.4 MiB · Tests: 3484, Assertions: 11989, Errors: 
+ORM L: rss=768.1 MiB footprint=750.7 MiB · Tests: 3484, Assertions: 11989, Errors: 
+ORM L: rss=667.0 MiB footprint=744.2 MiB · Tests: 3484, Assertions: 11989, Errors: 
+ORM Z: rss=702.2 MiB footprint=752.4 MiB · Tests: 3484, Assertions: 11989, Errors: 
+WP  Z: rss=1117.2 MiB footprint=1022.5 MiB · Tests: 762, Assertions: 1912, Skipped: 5
+WP  L: rss=1101.9 MiB footprint=1023.7 MiB · Tests: 762, Assertions: 1912, Skipped: 5
+uploads-guard restore rc=0
