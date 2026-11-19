@@ -4726,7 +4726,7 @@ impl<'m> super::Vm<'m> {
                 "array_diff(): Argument #1 ($array) must be of type array".to_string(),
             ));
         };
-        let mut seen: Vec<Vec<u8>> = Vec::new();
+        let mut seen: rustc_hash::FxHashSet<Vec<u8>> = Default::default(); // S-192: was a Vec + linear `contains`
         for (i, a) in args.iter().enumerate().skip(1) {
             let Zval::Array(arr) = a.deref_clone() else {
                 return Err(PhpError::TypeError(format!(
@@ -4735,7 +4735,7 @@ impl<'m> super::Vm<'m> {
                 )));
             };
             for (_, v) in arr.iter() {
-                seen.push(self.vm_stringify(&v.deref_clone())?.as_bytes().to_vec());
+                seen.insert(self.vm_stringify(&v.deref_clone())?.as_bytes().to_vec());
             }
         }
         let mut out = PhpArray::new();
