@@ -1,0 +1,10 @@
+== s192 direzione L−Z tag=g2 A=gemello Z 87a3eb67f9b48e70 · B=leva L bfa4f431e5e4ac64 · R=5 · 2026-11-19 03:35:30 (DIREZIONE, non verdetto) ==
+pavimento empty.php med3: A=0.02 s · B=0.02 s
+k0: N=1000000 rets/iter=65 · A=[ 6.93 6.82 6.86 6.86 6.84 ] s · B=[ 6.50 6.49 6.55 6.47 6.53 ] s · D(B−A) appaiato=[ -6.62 -5.08 -4.77 -6.00 -4.77 ] ns/Ret-o-iter · mediana -5.08
+k4: N=1000000 rets/iter=65 · A=[ 9.28 9.26 9.36 9.23 9.36 ] s · B=[ 9.02 9.03 8.99 9.04 9.05 ] s · D(B−A) appaiato=[ -4.00 -3.54 -5.69 -2.92 -4.77 ] ns/Ret-o-iter · mediana -4.00
+k16: N=1000000 rets/iter=65 · A=[ 15.82 15.94 15.89 15.85 15.76 ] s · B=[ 15.57 15.49 15.45 15.47 15.46 ] s · D(B−A) appaiato=[ -3.85 -6.92 -6.77 -5.85 -4.62 ] ns/Ret-o-iter · mediana -5.85
+mcalls: N=60000000 rets/iter=1 · A=[ 7.80 7.85 7.87 7.75 7.85 ] s · B=[ 7.91 7.84 7.88 7.89 7.85 ] s · D(B−A) appaiato=[ 1.83 -0.17 0.17 2.33 0.00 ] ns/Ret-o-iter · mediana 0.17
+calls: N=60000000 rets/iter=1 · A=[ 4.70 4.72 4.66 4.74 4.75 ] s · B=[ 4.74 4.74 4.74 4.72 4.75 ] s · D(B−A) appaiato=[ 0.67 0.33 1.33 -0.33 0.00 ] ns/Ret-o-iter · mediana 0.33
+DIREZIONE: D(K0)=-5.08 ns/Ret (< 0: la leva guadagna) · K piatto OK (K4−K0=1.08, K16−K0=-0.77)
+rc=0
+fine 2026-11-19 03:42:56

@@ -16,7 +16,7 @@ until tail -1 "$FEED" | grep -q '^DONE' && ! pgrep -x cargo >/dev/null; do sleep
 build(){ # $1=arm letter $2=commit
   local SRC="$BT/s192-src$1" TGT="$BT/s192-arm$1"
   rm -rf "$SRC"; mkdir -p "$SRC" || return 1
-  git -C "$P/.." archive "$2" php-rust/crates php-rust/Cargo.toml php-rust/Cargo.lock php-rust/rust-toolchain.toml php-rust/.cargo 2>/dev/null | tar -x -C "$SRC" || return 1
+  git -C "$P/.." archive "$2" php-rust/crates php-rust/Cargo.toml php-rust/Cargo.lock php-rust/rust-toolchain.toml php-rust/.cargo 2>/dev/null | tar -x -m -C "$SRC" || return 1  # -m: archive mtimes are commit times, cargo would keep stale rlibs
   ( cd "$SRC/php-rust" && SOURCE_DATE_EPOCH=0 CARGO_INCREMENTAL=0 CARGO_TARGET_DIR="$TGT" cargo build --release -p php-cli ) > "$O/gemelli-$TAG-build$1.log" 2>&1 || return 1
   cp "$TGT/release/phpr" "$O/phpr-$TAG-$1" || return 1
   echo "arm $1 commit $2 hash $(shasum -a 256 "$O/phpr-$TAG-$1" | cut -c1-16) $(date '+%F %T')" >> "$O/gemelli-$TAG.log"
