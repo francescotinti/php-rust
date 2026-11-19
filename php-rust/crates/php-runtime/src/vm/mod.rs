@@ -777,6 +777,7 @@ pub fn vm_new<'m>(
         gc_buf: Vec::new(),
         gc_buf_head: 0,
         gc_probe_mark: 0,
+        magic_memo: Default::default(),
         gc_cycle_roots: HashSet::default(),
         gc_ctr_roots: Vec::new(),
         gc_classify_last_nodes: Cell::new(0),
@@ -3318,6 +3319,7 @@ pub struct Vm<'m> {
     gc_buf_head: usize,
     /// S-190 cursor: buffer length at the last Ret probe that scanned (`gc_probe`).
     gc_probe_mark: usize,
+    magic_memo: std::cell::RefCell<Vec<gc_probe::MagicMemo>>, // S-192: per-class __destruct/__construct lookups
     /// Possible roots of *cyclic* garbage (mirrors Zend's root buffer feeding
     /// `gc_collect_cycles`): a candidate the sweep popped that was not
     /// collectable lost a reference but still has holders — if those holders
@@ -4477,7 +4479,7 @@ impl<'m> Vm<'m> {
                 self.gc_cascade(&o);
                 continue;
             }
-            if let Some((defc, midx)) = resolve_method_runtime(&self.classes, cid, b"__destruct") {
+            if let Some((defc, midx)) = self.magic_method(cid, 0) {
                 log::debug!(target: "phpr::gc", "destruct: {}#{}", String::from_utf8_lossy(&self.classes[cid].name), id);
                 self.destructed.insert(id);
                 o.borrow().gc.set_destructed(true);
@@ -4605,7 +4607,7 @@ impl<'m> Vm<'m> {
                     && !rc.borrow().gc.buffered()
                     && self.created.get(&id).is_some_and(|c| Rc::ptr_eq(c, rc))
                     && (self.destructed.contains(&id)
-                        || resolve_method_runtime(&self.classes, cid, b"__destruct").is_none());
+                        || self.magic_method(cid, 0).is_none());
                 if exclusive {
                     self.created.remove(&id);
                     self.gc_cycle_roots.remove(&id);
@@ -5456,7 +5458,7 @@ impl<'m> Vm<'m> {
                 if lazy_wrapper || self.destructed.contains(&id) {
                     continue;
                 }
-                if resolve_method_runtime(&self.classes, cid, b"__destruct").is_some() {
+                if self.magic_method(cid, 0).is_some() {
                     dtor_w.push(id);
                 }
             }
@@ -12536,7 +12538,7 @@ impl<'m> Vm<'m> {
         if !matches!(cc.instantiable, Instantiable::Yes) {
             return Ok(());
         }
-        let Some((defc, midx)) = resolve_method_runtime(&self.classes, cid, b"__construct") else {
+        let Some((defc, midx)) = self.magic_method(cid, 1) else {
             return Ok(());
         };
         let vis = self.classes[defc].methods[midx].visibility;

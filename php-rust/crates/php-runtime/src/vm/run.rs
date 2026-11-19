@@ -6267,7 +6267,7 @@ impl<'m> super::Vm<'m> {
                     let recv = self.frames[top].stack.pop().expect("InvokeCtor receiver");
                     let this = recv.deref_clone();
                     let cid = object_class_id(&this).expect("InvokeCtor on a non-object");
-                    match resolve_method_runtime(&self.classes, cid, b"__construct") {
+                    match self.magic_method(cid, 1) {
                         Some((defc, midx)) => {
                             // Deferred place arguments (SEND_VAR_EX) resolve against
                             // the now-known constructor's by-ref mask.
@@ -6306,7 +6306,7 @@ impl<'m> super::Vm<'m> {
                     let recv = self.frames[top].stack.pop().expect("InvokeCtorArgs receiver");
                     let this = recv.deref_clone();
                     let cid = object_class_id(&this).expect("InvokeCtorArgs on a non-object");
-                    match resolve_method_runtime(&self.classes, cid, b"__construct") {
+                    match self.magic_method(cid, 1) {
                         Some((defc, midx)) => {
                             let callee = &self.classes[defc].methods[midx].func;
                             let mut frame = if named.is_empty() {

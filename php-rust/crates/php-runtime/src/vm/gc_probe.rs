@@ -39,7 +39,53 @@
 //! (disasm gate |Δbl| ≤ 2 vs the pin, Δsp_refs ≤ +97).
 use super::*;
 
+/// S-192 (criterion `wp192-harness/s192-criterio-candidate.md`, lever B): the
+/// memoised answer of the by-name lookup of `__destruct` (kind 0) and
+/// `__construct` (kind 1) for one class id. `class` is the address of the
+/// class the answer was computed for: a different class at the same id (a
+/// stub replaced by the real class) invalidates the entry.
+#[derive(Clone, Copy, Default)]
+pub(super) struct MagicMemo {
+    class: usize,
+    state: [u8; 2], // 0 = not asked yet, 1 = absent, 2 = `hit`
+    hit: [(u32, u32); 2],
+}
+
 impl<'m> Vm<'m> {
+    /// `resolve_method_runtime(classes, cid, "__destruct" | "__construct")`
+    /// through the per-VM memo: the GC asks the first for every dying object
+    /// (almost always a miss, which walks the whole parent chain) and `new`
+    /// asks the second at every instantiation. Same answer by construction
+    /// once the class and its ancestors are linked — which holds for every
+    /// class that has an instance or is being instantiated.
+    pub(super) fn magic_method(&self, cid: ClassId, kind: usize) -> Option<(ClassId, usize)> {
+        const NAMES: [&[u8]; 2] = [b"__destruct", b"__construct"];
+        let Some(class) = self.classes.get(cid) else {
+            return resolve_method_runtime(&self.classes, cid, NAMES[kind]);
+        };
+        let ptr = *class as *const CompiledClass as usize;
+        let mut memo = self.magic_memo.borrow_mut();
+        if memo.len() <= cid {
+            memo.resize(cid + 1, MagicMemo::default());
+        }
+        let e = &mut memo[cid];
+        if e.class != ptr {
+            *e = MagicMemo { class: ptr, ..MagicMemo::default() };
+        }
+        match e.state[kind] {
+            1 => None,
+            2 => Some((e.hit[kind].0 as usize, e.hit[kind].1 as usize)),
+            _ => {
+                let r = resolve_method_runtime(&self.classes, cid, NAMES[kind]);
+                e.state[kind] = if r.is_some() { 2 } else { 1 };
+                if let Some((d, m)) = r {
+                    e.hit[kind] = (d as u32, m as u32);
+                }
+                r
+            }
+        }
+    }
+
     /// Probe the candidates buffered since the last scan; when one is
     /// collectable NOW (`created` + buffer clone = 2) drain the buffer
     /// synchronously and FIFO as a LIGHT sweep. Stays out of the way of a
@@ -109,5 +155,6 @@ impl<'m> Vm<'m> {
         self.gc_buf.clear();
         self.gc_buf_head = 0;
         self.gc_probe_mark = 0;
+        self.magic_memo.borrow_mut().clear(); // class addresses may be reused by the next request's modules
     }
 }

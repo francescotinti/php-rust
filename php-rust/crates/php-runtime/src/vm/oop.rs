@@ -1184,7 +1184,7 @@ impl<'m> Vm<'m> {
             if o.borrow().lazy.is_some() {
                 continue;
             }
-            if let Some((defc, midx)) = resolve_method_runtime(&self.classes, cid, b"__destruct") {
+            if let Some((defc, midx)) = self.magic_method(cid, 0) {
                 self.destructed.insert(id);
                 o.borrow().gc.set_destructed(true);
                 let callee = &self.classes[defc].methods[midx].func;
