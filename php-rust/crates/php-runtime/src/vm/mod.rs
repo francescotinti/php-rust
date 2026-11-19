@@ -6413,10 +6413,11 @@ impl<'m> Vm<'m> {
         let mut prog_remap: Vec<ClassId> = Vec::with_capacity(program.classes.len());
         let mut retained_remap: Vec<ClassId> = Vec::new();
         let mut new_locals: Vec<usize> = Vec::new();
-        let mut k = 0usize; // retained (module.classes) cursor
+        let (mut k, mut lower) = (0usize, Vec::<u8>::new()); // retained (module.classes) cursor; S-192 reused lowercase buffer
         for (i, cd) in program.classes.iter().enumerate() {
-            let lower = cd.name.to_ascii_lowercase();
-            let registered = self.class_index.get(&lower).copied();
+            lower.clear();
+            lower.extend(cd.name.iter().map(u8::to_ascii_lowercase));
+            let registered = self.class_index.get(lower.as_slice()).copied();
             // Mirror of the compile-side predicate: the unit's own conditionals
             // and its genuinely-new names were materialized, everything else
             // (masked classes + whole seed prefix) was elided.
@@ -7129,13 +7130,17 @@ impl<'m> Vm<'m> {
     /// never registered (name absent from `class_index`) also compiles in full,
     /// preserving today's behaviour.
     fn seed_stub_mask(&self, program: &Program) -> Vec<bool> {
+        let mut lower: Vec<u8> = Vec::new(); // S-192: one buffer, not one allocation per class per include
         program
             .classes
             .iter()
             .enumerate()
             .map(|(i, cd)| {
-                !program.conditional_classes.contains(&i)
-                    && self.class_index.contains_key(&cd.name.to_ascii_lowercase())
+                !program.conditional_classes.contains(&i) && {
+                    lower.clear();
+                    lower.extend(cd.name.iter().map(u8::to_ascii_lowercase));
+                    self.class_index.contains_key(lower.as_slice())
+                }
             })
             .collect()
     }
