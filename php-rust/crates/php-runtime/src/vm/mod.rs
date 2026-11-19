@@ -17,7 +17,6 @@
 
 use std::borrow::Cow;
 use std::cell::{Cell, RefCell};
-use std::collections::BTreeMap;
 use std::rc::Rc;
 
 /// Fx-hashed engine maps (class/function/constant tables, caches, GC sets):
@@ -771,7 +770,7 @@ pub fn vm_new<'m>(
         closure_statics: HashMap::default(),
         magic_guard: HashSet::default(),
         typed_refs: Vec::new(),
-        created: BTreeMap::new(),
+        created: Default::default(),
         teardown_weaks: Vec::new(),
         destructed: HashSet::default(),
         gc_buf: Vec::new(),
@@ -3284,7 +3283,7 @@ pub struct Vm<'m> {
     /// ref lets the destruction sweep detect unreachability
     /// (`Rc::strong_count == 1` ⇒ only this tracking ref remains); entries are
     /// removed as they are destructed or at shutdown.
-    created: BTreeMap<u32, Rc<RefCell<Object>>>,
+    created: php_types::idmap::IdMap<Rc<RefCell<Object>>>,
     /// S-72.4: weak mirror of the store captured by the teardown dtor-walk
     /// (which consumes `created` wholesale) so the break phase can still
     /// reach the surviving cycles. Populated only during shutdown.

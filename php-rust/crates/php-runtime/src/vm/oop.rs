@@ -1168,7 +1168,7 @@ impl<'m> Vm<'m> {
     }
 
     /// One store-order destructor round over a snapshot of the object store.
-    fn dtor_walk_round(&mut self, survivors: std::collections::BTreeMap<u32, Rc<RefCell<Object>>>) {
+    fn dtor_walk_round(&mut self, survivors: php_types::idmap::IdMap<Rc<RefCell<Object>>>) {
         for (_, o) in survivors.iter() {
             let (cid, id) = {
                 let b = o.borrow();
