@@ -1,0 +1,49 @@
+carico: orm
+== s192 anatomia tag=a1 git=ebe9ad94 wall=0.0s samply rc=-1 2026-11-19 09:27:37 (profilo: direzione) ==
+Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, PHPUnit Warnings: 554, Skipped: 59, Incomplete: 2, Risky: 10.
+campioni totali 40401 · in phpr 34810 · run_loop proprio 6902 (17.1 %) · indirizzi distinti nel loop 1144
+attribuiti a una riga 75.9 % dei campioni di run_loop
+
+BRACCI di run_loop per campioni PROPRI (quota del proprio di run_loop · cumulata · quota del totale):
+  non attribuito                        1666   24.1 %   24.1 %    4.1 %
+  testata(dispatch)                     1508   21.8 %   46.0 %    3.7 %
+  run_loop(altro)                        449    6.5 %   52.5 %    1.1 %
+  Op::Ret                                419    6.1 %   58.6 %    1.0 %
+  Op::PropSetPop                         356    5.2 %   63.7 %    0.9 %
+  Op::LoadVar                            272    3.9 %   67.7 %    0.7 %
+  Op::PushConst                          252    3.7 %   71.3 %    0.6 %
+  Op::ThisPropGet                        175    2.5 %   73.8 %    0.4 %
+  Op::CallHostBuiltin                    122    1.8 %   75.6 %    0.3 %
+  Op::StoreSlot                          111    1.6 %   77.2 %    0.3 %
+  Op::Sweep                              106    1.5 %   78.8 %    0.3 %
+  Op::JumpIfFalse                        106    1.5 %   80.3 %    0.3 %
+  Op::FetchDim                            80    1.2 %   81.5 %    0.2 %
+  Op::CallBuiltin                         78    1.1 %   82.6 %    0.2 %
+  Op::IterNext                            76    1.1 %   83.7 %    0.2 %
+  Op::MethodCall                          58    0.8 %   84.5 %    0.1 %
+  Op::IssetPath                           57    0.8 %   85.4 %    0.1 %
+  Op::ThisMethodCall                      56    0.8 %   86.2 %    0.1 %
+  Op::CmpJmpConst                         56    0.8 %   87.0 %    0.1 %
+  Op::Unary                               49    0.7 %   87.7 %    0.1 %
+  Op::Include                             47    0.7 %   88.4 %    0.1 %
+  Op::CmpJmpSC                            43    0.6 %   89.0 %    0.1 %
+  Op::LoadVarPushConst                    42    0.6 %   89.6 %    0.1 %
+  Op::AssignPath                          36    0.5 %   90.1 %    0.1 %
+  Op::Pop                                 36    0.5 %   90.6 %    0.1 %
+
+FUORI dal loop, primi 15 simboli per campioni propri (quota del totale):
+     3635    9.0 %  (libsystem_platform.dylib)
+     1809    4.5 %  (libsystem_kernel.dylib)
+     1481    3.7 %  _RINvNtCs8Mbv00yxnRz_4core3ptr9drop_glueNtNtCsePzg45LyhTm_9php_types4zval4ZvalECs4nIjj9KQm
+     1368    3.4 %  _RNvXs0_NtCsePzg45LyhTm_9php_types4zvalNtB5_4ZvalNtNtCs8Mbv00yxnRz_4core5clone5Clone5clone
+     1032    2.6 %  _RNvMs6_NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm20collect_cycles_inner
+      876    2.2 %  _RNvMs6_NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm13gc_sweep_body
+      862    2.1 %  _RNvXs3_NtNtCs8Mbv00yxnRz_4core4hash3sipINtB5_6HasherNtB5_11Sip13RoundsENtB7_6Hasher5write
+      722    1.8 %  _RNvMs6_NtCsePzg45LyhTm_9php_types6objectNtB5_11PropsLayout7slot_of
+      624    1.5 %  _RNvNtNtCs4nIjj9KQmRT_11php_runtime2vm3oop22resolve_method_runtime
+      480    1.2 %  mi_malloc_aligned
+      477    1.2 %  mi_free
+      470    1.2 %  _RNvMNtNtCs4nIjj9KQmRT_11php_runtime2vm4hostNtB4_2Vm13ho_array_diff
+      459    1.1 %  _RINvMs1_NtCs3fRkGY2FHAU_9hashbrown3mapINtB6_7HashMapINtNtCshxvaOLs88l5_5alloc5boxed3BoxSh
+      431    1.1 %  _RINvMs1_NtCs3fRkGY2FHAU_9hashbrown3mapINtB6_7HashMapINtNtCshxvaOLs88l5_5alloc3vec3VechEjN
+      411    1.0 %  _RNvMs6_NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm12gc_note_slow

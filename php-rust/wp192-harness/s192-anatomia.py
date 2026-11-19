@@ -19,6 +19,9 @@ GATES = pathlib.Path("/Volumes/Extreme Pro/Claude/wp9-harness/gates")
 FEED = pathlib.Path("/Volumes/Extreme Pro/Claude/phpr-ci/CI_FEED.log")
 RUN_RS = P / "crates/php-runtime/src/vm/run.rs"
 tag = sys.argv[1]
+work = sys.argv[2] if len(sys.argv) > 2 else "orm"  # orm | wp (WordPress phpunit --group media, uploads under the guard)
+WPDEV = pathlib.Path.home() / "Claude/wpdev"
+GUARD = "/Volumes/Extreme Pro/Claude/wp62-harness/uploads-guard.sh"
 out = H / f"s192-anatomia-{tag}.out"
 rcf = O / f"anatomia-{tag}.rc"
 O.mkdir(parents=True, exist_ok=True)
@@ -55,20 +58,51 @@ if not DSYM.exists():
     fin(7)
 
 # one ORM leg under samply
-shutil.rmtree(SP / "orm-work", ignore_errors=True)
-SP.mkdir(parents=True, exist_ok=True)
-with tarfile.open(GATES / "orm-work.tgz") as t:
-    t.extractall(SP)
 prof = O / f"anatomia-{tag}.prof.json"
-prof.unlink(missing_ok=True)
+REUSE = os.environ.get("ANALYZE_ONLY") == "1" and prof.exists()  # re-read an existing profile, no new run
+if not REUSE:
+    prof.unlink(missing_ok=True)
+
+
+def record(cwd, args):
+    with (O / f"anatomia-{tag}.txt").open("w") as so, (O / f"anatomia-{tag}.err").open("w") as se:
+        return subprocess.run(["samply", "record", "--save-only", "-o", str(prof), "--rate", "1000", "--", str(BIN)] + args,
+                              cwd=cwd, stdout=so, stderr=se, env=dict(os.environ, MIMALLOC_PURGE_DELAY="0"))
+
+
 t0 = time.time()
-with (O / f"anatomia-{tag}.txt").open("w") as so, (O / f"anatomia-{tag}.err").open("w") as se:
-    proc = subprocess.run(["samply", "record", "--save-only", "-o", str(prof), "--rate", "1000", "--",
-                           str(BIN), "vendor/bin/phpunit", "--no-coverage"], cwd=SP / "orm-work", stdout=so, stderr=se)
+if REUSE:
+    proc = subprocess.CompletedProcess([], -1)
+elif work == "orm":
+    shutil.rmtree(SP / "orm-work", ignore_errors=True)
+    SP.mkdir(parents=True, exist_ok=True)
+    with tarfile.open(GATES / "orm-work.tgz") as t:
+        t.extractall(SP)
+    proc = record(SP / "orm-work", ["vendor/bin/phpunit", "--no-coverage"])
+else:
+    # the WordPress leg of the pair harness (s191-pair.sh): uploads guard, fresh wptests, phpunit --group media
+    up = WPDEV / "src/wp-content/uploads"
+    with (O / f"anatomia-{tag}-guard.log").open("w") as gl:
+        if subprocess.run([GUARD, "backup-wipe"], stdout=gl, stderr=gl).returncode != 0:
+            say("uploads-guard backup-wipe FALLITO: niente gamba WP")
+            fin(4)
+        try:
+            r = subprocess.run(["mysql", "-h", "127.0.0.1", "-u", "root", "-e",
+                                "DROP DATABASE IF EXISTS wptests; CREATE DATABASE wptests; GRANT ALL ON wptests.* TO 'wp'@'%';"],
+                               stdout=gl, stderr=gl)
+            if r.returncode != 0:
+                say("reset di wptests FALLITO")
+                fin(3)
+            proc = record(WPDEV, ["vendor/bin/phpunit", "--group", "media"])
+        finally:
+            subprocess.run(["find", str(up), "-mindepth", "1", "-delete"], stdout=gl, stderr=gl)
+            g = subprocess.run([GUARD, "restore"], stdout=gl, stderr=gl)
+            say(f"uploads-guard restore rc={g.returncode}")
 wall = time.time() - t0
 txt = (O / f"anatomia-{tag}.txt").read_bytes().replace(b"\0", b"").decode("utf-8", "replace")
 tests = [l for l in txt.splitlines() if l.startswith("Tests:") or l.startswith("OK")]
 shutil.rmtree(SP / "orm-work", ignore_errors=True)
+say(f"carico: {work}")
 git = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=P, capture_output=True, text=True).stdout.strip()
 say(f"== s192 anatomia tag={tag} git={git} wall={wall:.1f}s samply rc={proc.returncode} {time.strftime('%F %T')} (profilo: direzione) ==")
 say(tests[-1] if tests else "phpunit: nessuna riga Tests")
@@ -93,7 +127,7 @@ for th in d["threads"]:
         leaf[(lib, ft["address"][fr])] += 1
 total = sum(leaf.values())
 mine = {a: n for (lib, a), n in leaf.items() if lib == "phpr" and a is not None and a >= 0}
-DW = str(DSYM / "Contents/Resources/DWARF/phpr")
+DW = str(BIN)  # atos finds the packed dSYM next to the binary (its DWARF file carries a hash suffix)
 addrs = sorted(mine)
 af = O / f"anatomia-{tag}.addrs.txt"
 af.write_text("\n".join(hex(0x100000000 + a) for a in addrs) + "\n")
@@ -159,5 +193,5 @@ say("")
 say("FUORI dal loop, primi 15 simboli per campioni propri (quota del totale):")
 for sym, n in self_sym.most_common(15):
     say(f"  {n:7d}  {100 * n / total:5.1f} %  {sym}")
-ok = bool(tests) and tests[-1].startswith("Tests: 3484") and (loop_total - unattributed) / loop_total >= 0.95
+ok = bool(tests) and (work != "orm" or tests[-1].startswith("Tests: 3484")) and (loop_total - unattributed) / loop_total >= 0.95
 fin(0 if ok else 1)
