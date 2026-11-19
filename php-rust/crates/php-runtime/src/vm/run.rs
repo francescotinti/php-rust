@@ -4344,7 +4344,7 @@ impl<'m> super::Vm<'m> {
                     // L-RT2 forma 2: il corpo del handler non resta duplicato dentro
                     // `run_loop`; il disasm di forma 1 contava +547 istr / +245 sp_refs).
                     #[cfg(feature = "census-time")]
-                    super::census_time::tick(super::census_time::Class::RetSlow);
+                    super::census_time::ret_slow(&self.frames[top], top);
                     if let Some(exit) = self.ret_slow(top, baseline)? {
                         return Ok(exit);
                     }
@@ -5728,7 +5728,7 @@ impl<'m> super::Vm<'m> {
                         continue;
                     }
                     #[cfg(feature = "census-time")]
-                    super::census_time::tick(super::census_time::Class::MCallGeneral);
+                    super::census_time::mcall_general(self, top, n, ic);
                     let args = self.pop_keys(top, *argc); // source order
                     let recv = self.frames[top].stack.pop().expect("MethodCall receiver");
                     // V5 (S-119 treno-2): il frame vuole l'handle POSSEDUTO —
@@ -5783,7 +5783,7 @@ impl<'m> super::Vm<'m> {
                         }
                     };
                     #[cfg(feature = "census-time")]
-                    super::census_time::tick(super::census_time::Class::MCallGeneral);
+                    super::census_time::this_mcall_general(self, top);
                     self.method_call(top, this, &method, Vec::new(), Some(&ic), true)?;
                 }
                 Op::MethodCallArgs { method, deref } => {

@@ -123,6 +123,99 @@ pub fn tick(class: Class) {
     });
 }
 
+thread_local! {
+    /// S-192 h2 census: WHY an event left the fast path — `(kind, reason) -> count`.
+    static H2: std::cell::RefCell<std::collections::BTreeMap<(&'static str, String), u64>> =
+        const { std::cell::RefCell::new(std::collections::BTreeMap::new()) };
+}
+
+fn h2(kind: &'static str, reason: String) {
+    H2.with(|m| *m.borrow_mut().entry((kind, reason)).or_insert(0) += 1);
+}
+
+/// `ret_slow` admission: counts it and records which conditions of the fused
+/// `Op::Ret` test failed (all of them, joined — the test is a conjunction).
+pub fn ret_slow(f: &super::Frame<'_>, top: usize) {
+    tick(Class::RetSlow);
+    let mut r = Vec::new();
+    if f.func.ret_shape != 0 {
+        r.push(format!("shape{}", f.func.ret_shape));
+    }
+    if f.flags.bits() != 0 {
+        r.push(format!("flags{:#x}", f.flags.bits()));
+    }
+    if f.ret_cell.is_some() {
+        r.push("ret_cell".to_string());
+    }
+    if !f.iters.is_empty() {
+        r.push("iters".to_string());
+    }
+    if f.ext.is_some() {
+        r.push("ext".to_string());
+    }
+    if f.dyn_vars.is_some() {
+        r.push("dyn_vars".to_string());
+    }
+    if top == 0 {
+        r.push("main".to_string());
+    }
+    h2("ret_slow", r.join("+"));
+}
+
+/// General-path admission of `Op::MethodCall`: counts it and records the
+/// first condition of `methodcall_fast` that refused the call (the operand
+/// stack is still intact when the op falls through).
+pub fn mcall_general(vm: &super::Vm<'_>, top: usize, n: usize, ic: &crate::bytecode::MethodIc) {
+    tick(Class::MCallGeneral);
+    let stack = &vm.frames[top].stack;
+    let reason = match stack.len().checked_sub(n + 1).map(|i| &stack[i]) {
+        None => "stack".to_string(),
+        Some(php_types::Zval::Object(o)) => {
+            let cid = o.borrow().class_id as usize;
+            match ic.get(cid) {
+                None => "ic_miss".to_string(),
+                Some((defc, midx)) => {
+                    let c = &vm.classes[defc].methods[midx].func;
+                    if !c.simple_call {
+                        let mut r = vec!["not_simple".to_string()];
+                        if c.has_hints {
+                            r.push("hint".to_string());
+                        }
+                        if c.param_by_ref.iter().any(|b| *b) {
+                            r.push("byref".to_string());
+                        }
+                        if c.variadic_slot.is_some() {
+                            r.push("variadic".to_string());
+                        }
+                        if c.is_generator {
+                            r.push("generator".to_string());
+                        }
+                        r.join("+")
+                    } else if n < c.n_params as usize {
+                        "arity_fewer_args".to_string()
+                    } else {
+                        "arity_more_args".to_string()
+                    }
+                }
+            }
+        }
+        Some(php_types::Zval::Ref(_)) => "recv_ref".to_string(),
+        Some(_) => "recv_other".to_string(),
+    };
+    h2("mcall_general", reason);
+}
+
+/// General-path admission of `Op::ThisMethodCall` (zero-argument `$this->m()`).
+pub fn this_mcall_general(vm: &super::Vm<'_>, top: usize) {
+    tick(Class::MCallGeneral);
+    let reason = match &vm.frames[top].this {
+        Some(php_types::Zval::Object(_)) => "ic_miss",
+        Some(_) => "this_not_object",
+        None => "no_this",
+    };
+    h2("this_mcall_general", reason.to_string());
+}
+
 /// Dump once at end of run (called next to `gc_census::dump`).
 pub fn dump() {
     let report = C.with(|c| {
@@ -135,6 +228,11 @@ pub fn dump() {
             let est = if sampled > 0 { (nanos as u128 * count as u128 / sampled as u128) as u64 } else { 0 };
             s.push_str(&format!("census-time\t{}\t{count}\t{sampled}\t{est}\n", NAMES[i]));
         }
+        H2.with(|m| {
+            for ((kind, reason), n) in m.borrow().iter() {
+                s.push_str(&format!("census-h2\t{kind}\t{reason}\t{n}\n"));
+            }
+        });
         Some(s)
     });
     let Some(report) = report else { return };
