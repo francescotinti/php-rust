@@ -1,0 +1,8 @@
+== s192 gemelli ORM tag=s192ad Z=aa8eabad L=0eca36da R=5 2026-11-19 12:13:03 (direzione, non verdetto) ==
+braccio Z commit aa8eabad hash 51f754b29fd3fd1e 12:15:33
+braccio L commit 0eca36da hash 945ef0244faff79a 12:18:23
+user Z=[42.86 43.54 45.10 42.73 41.85] s · L=[41.77 43.67 43.98 41.57 41.59] s
+L−Z appaiato=[-2.54 +0.29 -2.49 -2.70 -0.61] % · mediana -2.49 % · dispersione di Z (max−min)/mediana 7.60 %
+system Z=[2.74 3.01 3.43 2.68 2.55] s · L=[2.70 3.17 3.15 2.56 2.56] s
+L−Z appaiato su user+system=[-2.48 +0.62 -2.90 -2.80 -0.54] % · mediana -2.48 % · dispersione di Z 9.08 %
+DIREZIONE: L−Z ≤ −1,0 %: attesa rispettata · fine 2026-11-19 12:27:59
