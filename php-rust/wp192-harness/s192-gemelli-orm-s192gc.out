@@ -1,0 +1,8 @@
+== s192 gemelli ORM tag=s192gc Z=623287d3 L=debbca2f R=5 2026-11-19 14:44:29 (direzione, non verdetto) ==
+braccio Z commit 623287d3 hash d5537e59a4a23dc8 14:46:55
+braccio L commit debbca2f hash df39c0a92937db0f 14:49:19
+user Z=[35.65 35.49 35.65 35.59 35.35] s · L=[33.93 33.70 33.59 34.19 33.82] s
+L−Z appaiato=[-4.84 -5.03 -5.80 -3.93 -4.32] % · mediana -4.84 % · dispersione di Z (max−min)/mediana 0.85 %
+system Z=[1.48 1.45 1.47 1.47 1.46] s · L=[1.48 1.45 1.45 1.53 1.47] s
+L−Z appaiato su user+system=[-4.67 -4.84 -5.62 -3.63 -4.13] % · mediana -4.67 % · dispersione di Z 0.88 %
+DIREZIONE: L−Z ≤ −1,0 %: attesa rispettata · fine 2026-11-19 14:56:43

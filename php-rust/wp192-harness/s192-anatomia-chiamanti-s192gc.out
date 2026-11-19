@@ -1,0 +1,133 @@
+== s192 anatomia/chiamanti tag=s192gc campioni 36519 (profilo: direzione) ==
+
+FAMIGLIE per campioni propri:
+    10846   29.7 %  altro
+     6996   19.2 %  vm: run_loop
+     3881   10.6 %  php_types
+     2666    7.3 %  vm: gc
+     2174    6.0 %  zval/drop glue
+     1965    5.4 %  (_platform_memmove libsystem_platform.dylib)
+     1683    4.6 %  hash: hashbrown
+     1341    3.7 %  alloc: mimalloc
+     1270    3.5 %  (_platform_memcmp libsystem_platform.dylib)
+      688    1.9 %  regex
+      651    1.8 %  std core
+      382    1.0 %  hash: SipHash
+      342    0.9 %  (__open_nocancel libsystem_kernel.dylib)
+      316    0.9 %  php_builtins
+      273    0.7 %  (__getdirentries64 libsystem_kernel.dylib)
+      184    0.5 %  (__getattrlist libsystem_kernel.dylib)
+      182    0.5 %  (madvise libsystem_kernel.dylib)
+      142    0.4 %  (stat libsystem_kernel.dylib)
+
+CHI PAGA memmove (copie vere): 1965 campioni (5.4 %) — primo chiamante phpr:
+      213    0.6 %  nIjj::KQmRT_11p::lower::lower_source_impl
+      171    0.5 %  Vdb
+      143    0.4 %  nIjj::KQmRT_11p::compile::compile_program_impl_mode
+      143    0.4 %  NtCs4n::KQmRT_11p::vm::Vm::seed_stub_mask
+      139    0.4 %  NtCs4n::KQmRT_11p::vm::Vm::unit_remap_elided
+      118    0.3 %  nIjj::KQmRT_11p::vm::host::Vm::ho_get_declared
+      110    0.3 %  nIjj::KQmRT_11p::vm::run::Vm::run_loop
+      108    0.3 %  nIjj::KQmRT_11p::vm::run::concat_n_join
+       94    0.3 %  _mi_theap_realloc_zero
+       81    0.2 %  NtCs4n::KQmRT_11p::vm::Vm::value_satisfies_class
+       75    0.2 %  HczowBQxF::php_builtins::file::scandir
+       35    0.1 %  nIjj::KQmRT_11p::vm::calls::Vm::enter_callee
+
+CHI PAGA memcmp (confronti di byte): 1492 campioni (4.1 %) — primo chiamante phpr:
+      414    1.1 %  HczowBQxF::php_builtins::string::strpos
+      279    0.8 %  NtCseP::LyhTm_9php_types6objectNtB5_11PropsLayout7slo
+      180    0.5 %  nIjj::KQmRT_11p::vm::oop::resolve_prop_access
+      121    0.3 %  LyhTm::php_types::array::KeyIndex::lookup
+       99    0.3 %  nIjj::KQmRT_11p::vm::run::Vm::run_loop
+       88    0.2 %  binCollFunc
+       34    0.1 %  NtCs4n::KQmRT_11p::vm::Vm::coerce_typed_prop_write
+       24    0.1 %  NtCs4n::KQmRT_11p::vm::Vm::value_satisfies_class
+       23    0.1 %  NtCs4n::KQmRT_11p::vm::Vm::unit_remap_elided
+       22    0.1 %  NtCs4n::KQmRT_11p::vm::Vm::seed_stub_mask
+       22    0.1 %  NtCs4n::KQmRT_11p::vm::Vm::lower_unit
+       19    0.1 %  NtCs4n::KQmRT_11p::vm::Vm::ensure_static
+
+CHI PAGA (libsystem_platform.dylib) — tutta la libreria: 3279 campioni (9.0 %) — primo chiamante phpr:
+      339    0.9 %  HczowBQxF::php_builtins::string::strpos
+      232    0.6 %  NtCseP::LyhTm_9php_types6objectNtB5_11PropsLayout7slo
+      217    0.6 %  nIjj::KQmRT_11p::lower::lower_source_impl
+      193    0.5 %  nIjj::KQmRT_11p::vm::run::Vm::run_loop
+      173    0.5 %  Vdb
+      165    0.5 %  nIjj::KQmRT_11p::vm::oop::resolve_prop_access
+      164    0.4 %  NtCs4n::KQmRT_11p::vm::Vm::seed_stub_mask
+      161    0.4 %  NtCs4n::KQmRT_11p::vm::Vm::unit_remap_elided
+      156    0.4 %  nIjj::KQmRT_11p::compile::compile_program_impl_mode
+      125    0.3 %  nIjj::KQmRT_11p::vm::host::Vm::ho_get_declared
+      108    0.3 %  LyhTm::php_types::array::KeyIndex::lookup
+      108    0.3 %  nIjj::KQmRT_11p::vm::run::concat_n_join
+
+CHI PAGA SipHash + hashbrown: 2065 campioni (5.7 %) — primo chiamante phpr:
+      373    1.0 %  nIjj::KQmRT_11p::lower::lower_source_impl
+      332    0.9 %  nIjj::KQmRT_11p::vm::oop::resolve_prop_access
+      319    0.9 %  nIjj::KQmRT_11p::vm::run::Vm::run_loop
+      233    0.6 %  nIjj::KQmRT_11p::compile::compile_program_impl_mode
+       81    0.2 %  NtCs4n::KQmRT_11p::vm::Vm::gc_sweep_body
+       74    0.2 %  NtCs4n::KQmRT_11p::vm::Vm::value_satisfies_class
+       71    0.2 %  NtCs4n::KQmRT_11p::vm::Vm::unit_remap_elided
+       68    0.2 %  NtCs4n::KQmRT_11p::vm::Vm::lower_unit
+       67    0.2 %  NtCs4n::KQmRT_11p::vm::Vm::seed_stub_mask
+       62    0.2 %  NtCs4n::KQmRT_11p::vm::Vm::resolve_class_autoload_with
+       51    0.1 %  NtCs4n::KQmRT_11p::vm::Vm::coerce_typed_prop_write
+       37    0.1 %  nIjj::KQmRT_11p::vm::host::Vm::ho_get_declared
+
+CHI PAGA SOLO SipHash (i residui fuori regola): 382 campioni (1.0 %) — primo chiamante phpr:
+      180    0.5 %  nIjj::KQmRT_11p::vm::run::Vm::run_loop
+       93    0.3 %  nIjj::KQmRT_11p::lower::lower_source_impl
+       30    0.1 %  NtCs4n::KQmRT_11p::vm::Vm::next_id
+       19    0.1 %  nIjj::KQmRT_11p::vm::host_reflect::Vm::ho_reflect_method_names
+       16    0.0 %  nIjj::KQmRT_11p::vm::host_reflect::Vm::ho_reflect_method_info
+       12    0.0 %  NtCs4n::KQmRT_11p::vm::Vm::gc_release_cascade
+       12    0.0 %  3::hash::random::RandomState::Mbv00yxn::core::hash::BuildHasher::hash_one::Wlmu::regex_automata
+        8    0.0 %  NtCs4n::KQmRT_11p::vm::Vm::gc_release_child
+        4    0.0 %  xn::core::hash::BuildHasher::hash_one::Wlmu::regex_automata::util::determinize::state::State::N
+        2    0.0 %  NtCs4n::KQmRT_11p::vm::Vm::seed_stub_mask
+        2    0.0 %  nIjj::KQmRT_11p::vm::fp_mix_key
+        2    0.0 %  nIjj::KQmRT_11p::vm::fp_mix
+
+CHI PAGA Zval clone + drop glue: 2174 campioni (6.0 %) — primo chiamante phpr:
+     1001    2.7 %  nIjj::KQmRT_11p::vm::run::Vm::run_loop
+      204    0.6 %  NtCs4n::KQmRT_11p::vm::Vm::recycle_frame
+       85    0.2 %  nIjj::KQmRT_11p::vm::calls::Vm::enter_callee
+       84    0.2 %  NtCs4n::KQmRT_11p::vm::Vm::collect_cycles_inner
+       55    0.2 %  LyhTm::php_types::object::drop_bounded
+       53    0.1 %  NtCs4n::KQmRT_11p::vm::Vm::gc_sweep_body
+       51    0.1 %  nIjj::KQmRT_11p::vm::run::Vm::binary_value_ab
+       41    0.1 %  :l5_5allo::rc::Rc::Mbv00yxn::core::cell::RefCell::LyhTm_9php_types6object6ObjectEE9drop_slowB1i
+       40    0.1 %  nIjj::KQmRT_11p::vm::run::Vm::ret_slow
+       38    0.1 %  nIjj::KQmRT_11p::vm::calls::bind_params
+       37    0.1 %  NtCs4n::KQmRT_11p::vm::Vm::field_magic_probe
+       34    0.1 %  NtC::nIjj::KQmRT_11p::vm::Frame::with_buffers
+
+CHI PAGA (libsystem_kernel.dylib): 1356 campioni (3.7 %) — primo chiamante phpr:
+      273    0.7 %  HczowBQxF::php_builtins::file::scandir
+      251    0.7 %  bW::w_3::sys::fs::read_dir
+      241    0.7 %  bW::w_3::sys::fs::unix::canonicalize
+      140    0.4 %  bW::w_3::env::current_dir
+      125    0.3 %  bW::w_3::sys::fs::metadata
+      122    0.3 %  mi_arena_try_alloc_at
+       83    0.2 %  bW::w_3::sys::fs::unix::File::open_c
+       60    0.2 %  mi_os_decommit_ex
+       22    0.1 %  bW::w_3::io::buffered::bufwriter::BufWriter::stdio::StdoutRaw::flush_buf
+       12    0.0 %  bW::w_3::io::default_read_to_end::fs::File
+       10    0.0 %  l5_5allo::sync::Arc::bW::w_3::sys::fs::unix::InnerReadDir::drop_slow
+        6    0.0 %  bW::w_3::sys::pal::unix::time::Timespec::now
+
+CHI PAGA mimalloc: 1341 campioni (3.7 %) — primo chiamante phpr:
+      135    0.4 %  nIjj::KQmRT_11p::vm::run::Vm::run_loop
+      124    0.3 %  NtCsh::l5_5allo::raw_vec::RawVecInner::finish_grow::nIjj::KQmRT_11p
+       76    0.2 %  NtCsh::l5_5allo::raw_vec::RawVecInner::finish_grow::LyhTm::php_types
+       49    0.1 %  nIjj::KQmRT_11p::lower::lower_source_impl
+       35    0.1 %  ?
+       34    0.1 %  nIjj::KQmRT_11p::vm::host::Vm::ho_get_declared
+       32    0.1 %  nIjj::KQmRT_11p::compile::compile_program_impl_mode
+       31    0.1 %  NtCs4n::KQmRT_11p::vm::Vm::unit_remap_elided
+       30    0.1 %  Nt::LyhTm_9php_types5arrayNtB5_8PhpArrayNtNtNtCs8::core::ops::drop::Drop::drop
+       28    0.1 %  NtCs4n::KQmRT_11p::vm::Vm::value_satisfies_class
+       25    0.1 %  nIjj::KQmRT_11p::vm::calls::Vm::drive_to_return
+       24    0.1 %  nIjj::KQmRT_11p::vm::calls::bind_params
