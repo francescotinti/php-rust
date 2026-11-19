@@ -12,6 +12,9 @@ P = pathlib.Path("/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust")
 O = P / "wp192-harness/out"
 BIN = str(pathlib.Path.home() / "Claude/phpr-target/s192-armD/release/phpr")
 tag = sys.argv[1]
+_keep = O / f"anatomia-{tag}.bin" / "phpr"
+if _keep.exists():  # the profile's own binary (see s192-anatomia.py)
+    BIN = str(_keep)
 raw = (O / f"anatomia-{tag}.prof.json").read_bytes()
 d = json.loads(gzip.decompress(raw) if raw[:2] == b"\x1f\x8b" else raw)
 libs = [l.get("name") for l in d["libs"]]
@@ -65,9 +68,26 @@ pretty = [lite(n.split(" (in ")[0]) for n in names]
 sym = dict(zip(addrs, pretty))
 
 
+# exact system-library symbols from samply's presymbolicated sidecar, when the profile has one
+ext_sym = {}
+side = O / f"anatomia-{tag}.prof.syms.json"
+if side.exists():
+    sj = json.loads(side.read_text())
+    strs = sj.get("string_table", [])
+    for lib in sj.get("data", []):
+        ext_sym[lib.get("debug_name")] = sorted((e["rva"], e.get("size") or 0, strs[e["symbol"]]) for e in lib.get("symbol_table", []))
+
+
+def ext_name(lib, a):
+    for rva, size, nm in ext_sym.get(lib, ()):
+        if a is not None and rva <= a < rva + max(size, 1):
+            return nm + " "
+    return ""
+
+
 def name(fr):
     lib, a = fr
-    return sym.get(a, "?") if lib == "phpr" else f"({lib})"
+    return sym.get(a, "?") if lib == "phpr" else f"({ext_name(lib, a)}{lib})"
 
 
 def family(n):
@@ -89,11 +109,13 @@ for ch, n in stacks.items():
 lines = [f"== s192 anatomia/chiamanti tag={tag} campioni {total} (profilo: direzione) ==", "", "FAMIGLIE per campioni propri:"]
 for f, n in fam.most_common(18):
     lines.append(f"  {n:7d}  {100 * n / total:5.1f} %  {f}")
-for title, pred in (("(libsystem_platform.dylib) — memmove/memcpy/bzero", lambda n: n == "(libsystem_platform.dylib)"),
+for title, pred in (("memmove (copie vere)", lambda n: n.startswith("(_platform_memmove")),
+                    ("memcmp (confronti di byte)", lambda n: "memcmp" in n and (n.startswith("(") or n.startswith("DYLD"))),
+                    ("(libsystem_platform.dylib) — tutta la libreria", lambda n: n.endswith("libsystem_platform.dylib)")),
                     ("SipHash + hashbrown", lambda n: family(n).startswith("hash:")),
                     ("SOLO SipHash (i residui fuori regola)", lambda n: family(n) == "hash: SipHash"),
                     ("Zval clone + drop glue", lambda n: family(n) in ("zval clone", "zval/drop glue")),
-                    ("(libsystem_kernel.dylib)", lambda n: n == "(libsystem_kernel.dylib)"),
+                    ("(libsystem_kernel.dylib)", lambda n: n.endswith("libsystem_kernel.dylib)")),
                     ("mimalloc", lambda n: family(n) == "alloc: mimalloc")):
     callers = collections.Counter()
     tot = 0

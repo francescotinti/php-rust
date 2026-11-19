@@ -59,11 +59,12 @@ def leg(binary, label):
     SP.mkdir(parents=True, exist_ok=True)
     with tarfile.open(GATES / "orm-work.tgz") as t:
         t.extractall(SP)
-    before = resource.getrusage(resource.RUSAGE_CHILDREN).ru_utime
+    b0 = resource.getrusage(resource.RUSAGE_CHILDREN)
     with (O / f"gemelli-orm-{tag}-{label}.txt").open("w") as so:
         subprocess.run([str(binary), "vendor/bin/phpunit", "--no-coverage"], cwd=SP / "orm-work", stdout=so,
                        stderr=subprocess.DEVNULL, env=dict(os.environ, MIMALLOC_PURGE_DELAY="0"))
-    u = resource.getrusage(resource.RUSAGE_CHILDREN).ru_utime - before
+    b1 = resource.getrusage(resource.RUSAGE_CHILDREN)
+    u = (b1.ru_utime - b0.ru_utime, b1.ru_stime - b0.ru_stime)  # (user, system) CPU of the leg
     txt = (O / f"gemelli-orm-{tag}-{label}.txt").read_bytes().replace(b"\0", b"").decode("utf-8", "replace")
     ok = any(l.startswith("Tests: 3484,") for l in txt.splitlines())
     return u, ok
@@ -73,13 +74,18 @@ while subprocess.run(["pgrep", "-x", "cargo"], capture_output=True).returncode =
         not FEED.read_text().strip().splitlines()[-1].startswith("DONE"):
     time.sleep(30)
 note(f"== s192 gemelli ORM tag={tag} Z={cz} L={cl} R={R} {time.strftime('%F %T')} (direzione, non verdetto) ==")
-z = build(cz, "Z")
-l = build(cl, "L")
+if os.environ.get("REUSE") == "1":  # judge again on the binaries of an earlier run with this tag (suffix of the new tag)
+    src_tag = os.environ["REUSE_TAG"]
+    z, l = O / f"phpr-orm-{src_tag}-Z", O / f"phpr-orm-{src_tag}-L"
+    note(f"binari RIUSATI dalla corsa {src_tag}: Z {hashlib.sha256(z.read_bytes()).hexdigest()[:16]} · L {hashlib.sha256(l.read_bytes()).hexdigest()[:16]}")
+else:
+    z = build(cz, "Z")
+    l = build(cl, "L")
 if z is None or l is None:
     note("build FALLITA")
     fin(7)
 leg(z, "warm")  # unjudged warm-up (file cache)
-tz, tl, d = [], [], []
+tz, tl, d, sz, sl, dt = [], [], [], [], [], []
 for r in range(R):
     order = [("Z", z), ("L", l)] if r % 2 == 0 else [("L", l), ("Z", z)]
     got = {}
@@ -89,11 +95,16 @@ for r in range(R):
             note(f"gamba {name}{r} NON valida (Tests: 3484 assente)")
             fin(7)
         got[name] = u
-    tz.append(got["Z"]); tl.append(got["L"])
-    d.append(100 * (got["L"] - got["Z"]) / got["Z"])
+    tz.append(got["Z"][0]); tl.append(got["L"][0])
+    sz.append(got["Z"][1]); sl.append(got["L"][1])
+    d.append(100 * (got["L"][0] - got["Z"][0]) / got["Z"][0])
+    dt.append(100 * (sum(got["L"]) - sum(got["Z"])) / sum(got["Z"]))
 shutil.rmtree(SP / "orm-work", ignore_errors=True)
 med = statistics.median(d)
 note(f"user Z=[{' '.join('%.2f' % v for v in tz)}] s · L=[{' '.join('%.2f' % v for v in tl)}] s")
 note(f"L−Z appaiato=[{' '.join('%+.2f' % v for v in d)}] % · mediana {med:+.2f} % · dispersione di Z (max−min)/mediana {100 * (max(tz) - min(tz)) / statistics.median(tz):.2f} %")
+tot_z = [a + b for a, b in zip(tz, sz)]
+note(f"system Z=[{' '.join('%.2f' % v for v in sz)}] s · L=[{' '.join('%.2f' % v for v in sl)}] s")
+note(f"L−Z appaiato su user+system=[{' '.join('%+.2f' % v for v in dt)}] % · mediana {statistics.median(dt):+.2f} % · dispersione di Z {100 * (max(tot_z) - min(tot_z)) / statistics.median(tot_z):.2f} %")
 note(f"DIREZIONE: {'L−Z ≤ −1,0 %: attesa rispettata' if med <= -1.0 else 'attesa NON rispettata'} · fine {time.strftime('%F %T')}")
 fin(0 if med <= -1.0 else 1)

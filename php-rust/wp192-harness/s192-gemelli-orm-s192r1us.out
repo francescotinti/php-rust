@@ -1,0 +1,7 @@
+== s192 gemelli ORM tag=s192r1us Z=9b6a2b8e L=15019848 R=5 2026-11-19 11:43:06 (direzione, non verdetto) ==
+binari RIUSATI dalla corsa s192r1: Z ad2d48ec06c3fc70 · L 51f754b29fd3fd1e
+user Z=[37.88 36.60 36.51 36.84 36.60] s · L=[36.28 36.95 36.58 36.20 36.61] s
+L−Z appaiato=[-4.22 +0.96 +0.21 -1.72 +0.03] % · mediana +0.03 % · dispersione di Z (max−min)/mediana 3.75 %
+system Z=[2.22 2.00 1.92 2.09 1.95] s · L=[1.55 1.56 1.53 1.64 1.49] s
+L−Z appaiato su user+system=[-5.65 -0.23 -0.81 -2.79 -1.17] % · mediana -1.17 % · dispersione di Z 4.34 %
+DIREZIONE: attesa NON rispettata · fine 2026-11-19 11:50:56

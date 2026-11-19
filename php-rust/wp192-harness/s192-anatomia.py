@@ -51,8 +51,15 @@ with (O / f"anatomia-{tag}-build.log").open("w") as lg:
     r = subprocess.run(["cargo", "build", "--release", "-p", "php-cli"], cwd=P, env=env, stdout=lg, stderr=lg)
 if r.returncode != 0:
     fin(7)
-BIN = TGT / "release/phpr"
-DSYM = TGT / "release/phpr.dSYM"
+KEEP = O / f"anatomia-{tag}.bin"  # the profile's OWN binary + dSYM: a later rebuild of the arm must not relabel old addresses
+if os.environ.get("ANALYZE_ONLY") == "1" and (KEEP / "phpr").exists():
+    BIN, DSYM = KEEP / "phpr", KEEP / "phpr.dSYM"
+else:
+    shutil.rmtree(KEEP, ignore_errors=True)
+    KEEP.mkdir(parents=True)
+    shutil.copy2(TGT / "release/phpr", KEEP / "phpr")
+    shutil.copytree(TGT / "release/phpr.dSYM", KEEP / "phpr.dSYM")
+    BIN, DSYM = KEEP / "phpr", KEEP / "phpr.dSYM"
 if not DSYM.exists():
     say("dSYM assente")
     fin(7)
@@ -66,7 +73,7 @@ if not REUSE:
 
 def record(cwd, args):
     with (O / f"anatomia-{tag}.txt").open("w") as so, (O / f"anatomia-{tag}.err").open("w") as se:
-        return subprocess.run(["samply", "record", "--save-only", "-o", str(prof), "--rate", "1000", "--", str(BIN)] + args,
+        return subprocess.run(["samply", "record", "--save-only", "--unstable-presymbolicate", "-o", str(prof), "--rate", "1000", "--", str(BIN)] + args,
                               cwd=cwd, stdout=so, stderr=se, env=dict(os.environ, MIMALLOC_PURGE_DELAY="0"))
 
 
@@ -136,9 +143,27 @@ if len(plain) != len(addrs):
     say(f"atos: {len(plain)} righe per {len(addrs)} indirizzi")
     fin(7)
 self_sym = collections.Counter()
+# system libraries: exact symbol from samply's presymbolicated sidecar when present (atos mislabels the shared cache)
+side = prof.with_suffix("").with_suffix(".syms.json") if prof.name.endswith(".prof.json") else None
+side = pathlib.Path(str(prof)[:-len(".json")] + ".syms.json")
+ext_sym = {}
+if side.exists():
+    sj = json.loads(side.read_text())
+    strs = sj.get("string_table", [])
+    for lib in sj.get("data", []):
+        ext_sym[lib.get("debug_name")] = sorted((e["rva"], e.get("size") or 0, strs[e["symbol"]]) for e in lib.get("symbol_table", []))
+
+
+def ext_name(lib, a):
+    for rva, size, name in ext_sym.get(lib, ()):
+        if rva <= a < rva + max(size, 1):
+            return name
+    return "?"
+
+
 for (lib, a), n in leaf.items():
     if lib != "phpr":
-        self_sym[f"({lib})"] += n
+        self_sym[f"{ext_name(lib, a) if a is not None else '?'} ({lib})"] += n
 loop_addr = {}
 line_of = {}
 for a, ln in zip(addrs, plain):
@@ -190,8 +215,8 @@ for arm, n in by_arm.most_common(25):
     cum += n
     say(f"  {arm:34s} {n:7d}  {100 * n / loop_total:5.1f} %  {100 * cum / loop_total:5.1f} %  {100 * n / total:5.1f} %")
 say("")
-say("FUORI dal loop, primi 15 simboli per campioni propri (quota del totale):")
-for sym, n in self_sym.most_common(15):
+say("FUORI dal loop, primi 30 simboli per campioni propri (quota del totale):")
+for sym, n in self_sym.most_common(30):
     say(f"  {n:7d}  {100 * n / total:5.1f} %  {sym}")
 ok = bool(tests) and (work != "orm" or tests[-1].startswith("Tests: 3484")) and (loop_total - unattributed) / loop_total >= 0.95
 fin(0 if ok else 1)

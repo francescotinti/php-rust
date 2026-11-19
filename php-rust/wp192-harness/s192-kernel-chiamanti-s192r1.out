@@ -1,0 +1,23 @@
+s192r1 kernel 1488 (3.8 %)
+   278  0.7%  next               <- HczowBQxF_12php_builtins4file7scandir @ file.rs:2394
+   261  0.7%  canonicalize       <- LyhTm_9php_types14realpath_cache12canonicalize @ realpath_cache.rs:42
+   240  0.6%  read_dir           <- HczowBQxF_12php_builtins4file7scandir @ file.rs:2377
+   157  0.4%  current_dir        <- HczowBQxF_12php_builtins4file6getcwd @ file.rs:1595
+   139  0.4%  ?                  <- ? @ arena.c:267
+    88  0.2%  open_c             <- nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop @ run.rs:4526
+    80  0.2%  ?                  <- ? @ os.c:586
+    63  0.2%  metadata           <- LyhTm_9php_types14realpath_cache12canonicalize @ realpath_cache.rs:38
+    45  0.1%  metadata           <- HczowBQxF_12php_builtins4file6is_dir @ file.rs:1512
+    25  0.1%  metadata           <- nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop @ run.rs:4526
+    22  0.1%  flush_buf          <- nIjj9KQmRT_11php_runtime2vm10cli_stream5drain @ cli_stream.rs:41
+    14  0.0%  drop               <- HczowBQxF_12php_builtins4file7scandir @ file.rs:2394
+    13  0.0%  _                  <- nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop @ run.rs:4526
+    10  0.0%  metadata           <- HczowBQxF_12php_builtins4file7is_file @ file.rs:1468
+    10  0.0%  canonicalize       <- HczowBQxF_12php_builtins14realpath_cache8realpath @ realpath_cache.rs:19
+     8  0.0%  metadata           <- HczowBQxF_12php_builtins4file11file_exists @ file.rs:1462
+     6  0.0%  now                <- HczowBQxF_12php_builtins4date6hrtime @ date.rs:2123
+     5  0.0%  inner              <- nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop @ run.rs:4526
+     3  0.0%  write_all          <- nIjj9KQmRT_11php_runtime2vm10cli_stream5drain @ cli_stream.rs:40
+     3  0.0%  open_c             <- HczowBQxF_12php_builtins4file17file_put_contents @ file.rs:965
+     2  0.0%  now                <- LyhTm_9php_types14realpath_cache12canonicalize @ realpath_cache.rs:32
+     2  0.0%  mkdir              <- HczowBQxF_12php_builtins4file5mkdir @ file.rs:2035

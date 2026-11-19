@@ -6,6 +6,9 @@ import collections, gzip, json, pathlib, subprocess, sys
 O = pathlib.Path("/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp192-harness/out")
 BIN = str(pathlib.Path.home() / "Claude/phpr-target/s192-armD/release/phpr")
 tag, keys = sys.argv[1], sys.argv[2:]
+_keep = O / f"anatomia-{tag}.bin" / "phpr"
+if _keep.exists():  # the profile's own binary (see s192-anatomia.py)
+    BIN = str(_keep)
 raw = (O / f"anatomia-{tag}.prof.json").read_bytes()
 d = json.loads(gzip.decompress(raw) if raw[:2] == b"\x1f\x8b" else raw)
 libs = [l.get("name") for l in d["libs"]]
