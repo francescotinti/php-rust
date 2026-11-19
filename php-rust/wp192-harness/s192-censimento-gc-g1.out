@@ -1,0 +1,13 @@
+== s192 censimento GC tag=g1 git=f102e52b C=3dfb97e05e3b23a2 phpunit rc=2 2026-11-19 17:18:48 (soli conteggi) ==
+Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, Skipped: 59, Incomplete: 2.
+== PHPR_GC_CENSUS ==
+notes 158743063 (inserted 34432123)
+sweeps main 43803 / light 19519296 / band_skipped 13618365
+candidates freed 2071013 / demoted 37050371
+collects 32 (roots 887519 freed 609894) threshold_last 50000
+collect calls 12 (explicit 0) distinct_obj_roots 98732 reroot 210816 live_roots 333841
+destructors 8193
+classify_ms 1155
+reflect cache hits 445588 / misses 5279 / evictions 0
+reflect inserts declared 4715 / inherited 564
+walk obj nodes 1045752 (leaf 275603) slots 5434465 (leaf 1208878) other nodes 1961068
