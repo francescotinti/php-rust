@@ -20,7 +20,7 @@
 4. Etichetta «copie di memoria 9 %» sbagliata due volte (prima tutta la libreria di sistema, poi una scomposizione con nomi errati): corretta coi simboli di samply. 5. Profili vecchi rianalizzati con un binario ricostruito (nomi sbagliati): ogni profilo ora conserva il suo binario. 6. Leva di sistema giudicata sul solo tempo utente al primo giro.
 3. Direzione misurata con Data a 8G (< 10G) e CI/language server attivi a tratti: per questo è direzione e non record.
 ## Passi
-1. S-193: promozione s185 (copia dichiarata di `s190-promozione.sh`) e catena notturna a gruppo (guardia K0 sul canonico, ORM, WP, server); l'ordine promozione/coppia lo decide l'utente all'apertura.
+1. S-193: promozione s185 (copia dichiarata di `s190-promozione.sh`) e catena notturna a gruppo (guardia K0 sul canonico, ORM, WP, server); ordine DECISO dall'utente il 19/11: promozione di giorno, poi la notte la conferma o la smentisce.
 2. Decisioni rimaste da S-191: REGOLE guardia-su-canonica, `photolibraryd` nell'anti-flare, merge su `main`.
 3. Aperture nuove per nome nel NEXT (include O(classi), `array_diff` stringhe, GC a liberazione differita).
 ## Lezioni
