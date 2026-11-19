@@ -1,6 +1,6 @@
-# WP_SESSION_192 — leva di costo K0: dove stava davvero il costo della cura O(1) (2026-11-19 01:30 → 03:55, sessione APERTA) — Generato con assistenza AI (Claude Fable 5.2)
-**In una frase**: il rincaro di ogni ritorno di metodo introdotto dalla cura O(1) è stato tolto dal tree con tre righe (e qualcosa in più: ora quel caso è più veloce di prima della cura), ma è una cifra di direzione: il verdetto di notte sul binario canonico e la promozione sono ancora da fare.
-**SCOREBOARD** (PIN phpr s184 `60b10d857eb0343a`, server s190 `721b7802e2d12058`, INVARIATI): arith 2,2 → · prop 2,3 → · calls 3,5 → · str 4,3 → · arr 2,9 → · re 2,5 → (nessuna rimisura) · WP t26 1,751 · ORM t28 [7,045; 7,136] · **leve spedite: 0** (1 nel tree, 0ac0b35b, non promossa) · batteria non rieseguita (catena di giorno ×2 verde) · corpus 1407 ×2.
+# WP_SESSION_192 — dal costo K0 all'anatomia del profilo: sei leve nel tree (2026-11-19 01:30 → 18:15, CHIUSA) — Generato con assistenza AI (Claude Fable 5.2)
+**In una frase**: partiti per togliere un rincaro del GC, si è scoperto col profilo che il tempo non sta nel loop dell'interprete ma è sparso; sei correzioni mirate sono nel codice (la più grossa, il registro degli oggetti vivi, vale da sola quasi il 5 % sul carico ORM), ma nessuna è ancora promossa: il giudizio di notte sul binario canonico è rinviato alla prossima sessione.
+**SCOREBOARD** (PIN phpr s184 `60b10d857eb0343a`, server s190 `721b7802e2d12058`, INVARIATI): arith 2,2 → · prop 2,3 → · calls 3,5 → · str 4,3 → · arr 2,9 → · re 2,5 → (nessuna rimisura) · WP t26 1,751 · ORM t28 [7,045; 7,136] · **leve spedite: 0** (anomalia dichiarata: 6 nel tree, promozione a S-193) · batteria 1773/0/2 · corpus 1407 ×2 · gamba ORM a gemelli 36,5 → 33,8 s (direzione).
 ## Esiti secchi (branch `s186-firma`, 1ea1c6f1 → 0ac0b35b + registro; main INTATTO)
 - **Pre-flight**: pin per hash ✓, dischi 2411G/11G ✓, bundle montata ✓, lock assente ✓, modo sviluppatore ✓; **MySQL wp8 GIÙ** (non serve a questa gamba: da rialzare prima di ogni gate WP).
 - **C0** criterio `wp192-harness/s192-criterio-k0.md` PRIMA del codice (5de4229b).
@@ -19,10 +19,10 @@
 4. Etichetta «copie di memoria 9 %» sbagliata due volte (prima tutta la libreria di sistema, poi una scomposizione con nomi errati): corretta coi simboli di samply. 5. Profili vecchi rianalizzati con un binario ricostruito (nomi sbagliati): ogni profilo ora conserva il suo binario. 6. Leva di sistema giudicata sul solo tempo utente al primo giro.
 3. Direzione misurata con Data a 8G (< 10G) e CI/language server attivi a tratti: per questo è direzione e non record.
 ## Passi
-1. **Decisione utente**: verdetto di notte (guardia `s186-guardia.sh` sul binario canonico) e promozione del passo 2; restano aperte le decisioni di S-191 (REGOLE guardia-su-canonica, anti-flare `photolibraryd`, merge su `main`).
-2. mcalls +3 ns/iter: un solo Ret di metodo per istruzione ⇒ push + sonda + Sweep per un ricevente vivo; leva a parte con criterio proprio.
-3. Rotta (da firmare): il censimento h2 è FATTO e dice che l'ammissione vale poco sull'ORM; la domanda vera diventa il self del loop caldo (12 s nella fetta 0). Proposta: anatomia per op del dispatch con lo strumento a gemelli (ogni leva giudicabile di giorno in minuti), e l'ammissione del tipo di ritorno al Ret fuso solo come leva piccola e sicura.
+1. S-193: promozione s185 (copia dichiarata di `s190-promozione.sh`) e catena notturna a gruppo (guardia K0 sul canonico, ORM, WP, server); l'ordine promozione/coppia lo decide l'utente all'apertura.
+2. Decisioni rimaste da S-191: REGOLE guardia-su-canonica, `photolibraryd` nell'anti-flare, merge su `main`.
+3. Aperture nuove per nome nel NEXT (include O(classi), `array_diff` stringhe, GC a liberazione differita).
 ## Lezioni
-- Un modello di costo si prova con un gemello PRIMA di scriverci una leva: la bisezione costa 15 minuti, la leva 1 è costata una catena intera.
-- Il costo in un loop caldo gigante può stare nella forma del codice e non nella sua esecuzione: una chiamata mai eseguita vale 3,4 ns.
-- Mai toccare uno script in esecuzione; mai riusare una target con sorgenti d'archivio senza `tar -m`.
+- Prima il profilo, poi la leva: il loop dell'interprete era il 15-17 % e non la voce dominante; la leva più grossa (registro degli oggetti) non era in nessuna stima iniziale ed è uscita leggendo i campioni per simbolo.
+- Un modello di costo si prova con un gemello prima di scriverci sopra: due leve (salto della sonda, buffer per include) erano nulle e sono state ritirate; una terza valeva solo sul driver sintetico e non sul carico.
+- Lo strumento va verificato quanto la leva: etichette di sistema sbagliate due volte, profili rianalizzati con un binario ricostruito, una leva di sistema giudicata sul tempo utente, uno script toccato in corsa.
