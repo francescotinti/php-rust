@@ -383,11 +383,9 @@ impl<'f> Lowerer<'f> {
                 if self.traits.contains_key(&key) {
                     return Ok(None); // top-level, already hoisted
                 }
-                let mut asts: std::collections::HashMap<Vec<u8>, &Trait> =
-                    std::collections::HashMap::new();
+                let mut asts: rustc_hash::FxHashMap<Vec<u8>, &Trait> = Default::default();
                 asts.insert(key.clone(), t);
-                let mut in_progress: std::collections::HashSet<Vec<u8>> =
-                    std::collections::HashSet::new();
+                let mut in_progress: rustc_hash::FxHashSet<Vec<u8>> = Default::default();
                 self.resolve_trait(&key, &asts, &mut in_progress)?;
                 // Detach from the compile-time table (only the executed branch
                 // may register it; a sibling same-name branch re-lowers).

@@ -1,0 +1,4 @@
+build dev-release: rc=0
+catena S-190: rc=0 (wp190-harness/s190-c2-catena-s192h1.out)
+batteria cargo test --release: rc=0 (passati/falliti/ignorati 1768/0/2)
+esito rc=0 2026-11-19 10:25:06

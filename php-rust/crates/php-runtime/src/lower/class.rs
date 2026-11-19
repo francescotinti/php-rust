@@ -1,5 +1,5 @@
 //! HIR lowering of classes, interfaces, traits, enums, methods, properties, closures and arrow functions. Split out of `lower.rs` (step 61).
-use std::collections::{HashMap, HashSet};
+use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet}; // S-192: FxHash for engine maps (RULEBOOK, internal hashing)
 
 use mago_span::HasSpan;
 use mago_syntax::ast::{
@@ -25,7 +25,7 @@ impl<'f> Lowerer<'f> {
     /// Each is resolved on demand (so a trait may `use` another declared later)
     /// with a cycle guard; nested `use` clauses are flattened in (D-21.8).
     pub(super) fn lower_traits(&mut self, stmts: &[Statement]) -> Result<(), LowerError> {
-        let mut asts: HashMap<Vec<u8>, &Trait> = HashMap::new();
+        let mut asts: HashMap<Vec<u8>, &Trait> = HashMap::default();
         for s in stmts {
             if let Statement::Trait(t) = s {
                 // S-72.6 (WP-72): the trait table is keyed by FQN — two
@@ -60,7 +60,7 @@ impl<'f> Lowerer<'f> {
                 asts.insert(key, t);
             }
         }
-        let mut in_progress: HashSet<Vec<u8>> = HashSet::new();
+        let mut in_progress: HashSet<Vec<u8>> = HashSet::default();
         let names: Vec<Vec<u8>> = asts.keys().cloned().collect();
         for n in names {
             self.resolve_trait(&n, &asts, &mut in_progress)?;
@@ -224,7 +224,7 @@ impl<'f> Lowerer<'f> {
 
         // --- collect adaptations across all `use` clauses ---
         // (trait_lc, method_lc) excluded by an `insteadof` (the losers).
-        let mut excluded: HashSet<(Vec<u8>, Vec<u8>)> = HashSet::new();
+        let mut excluded: HashSet<(Vec<u8>, Vec<u8>)> = HashSet::default();
         // `T::m as [vis] alias;` / `m as [vis] alias;` requests, applied last.
         struct Alias {
             trait_lc: Option<Vec<u8>>,
@@ -275,7 +275,7 @@ impl<'f> Lowerer<'f> {
         }
 
         // --- flatten members, applying exclusions + collision detection ---
-        let mut from_trait: HashMap<Vec<u8>, (Box<[u8]>, Box<[u8]>)> = HashMap::new();
+        let mut from_trait: HashMap<Vec<u8>, (Box<[u8]>, Box<[u8]>)> = HashMap::default();
         let mut seen_p = own_p.clone();
         let mut seen_s = own_s.clone();
         let mut seen_c = own_c.clone();
@@ -2086,7 +2086,7 @@ impl<'f> Lowerer<'f> {
 
         // Collect free variables of the body, then keep those that name an
         // enclosing-scope variable and are not the arrow's own parameters.
-        let mut param_names: HashMap<&[u8], ()> = HashMap::new();
+        let mut param_names: HashMap<&[u8], ()> = HashMap::default();
         for p in af.parameter_list.parameters.iter() {
             param_names.insert(strip_dollar(p.variable.name), ());
         }

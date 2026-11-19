@@ -14,7 +14,7 @@
 //! phpt-runner's capability scan (step 6) turns these into motivated SKIPs.
 
 use std::borrow::Cow;
-use std::collections::{HashMap, HashSet};
+use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet}; // S-192: FxHash for engine maps (RULEBOOK, internal hashing)
 
 use bumpalo::Bump;
 use mago_database::file::File;
@@ -347,7 +347,7 @@ fn lower_source_impl(
             low.classes = sclasses.to_vec();
             low.seed_class_len = sclasses.len();
             low.seed_conditional = seed_conditional.clone();
-            let mut ci: HashMap<Vec<u8>, usize> = HashMap::new();
+            let mut ci: HashMap<Vec<u8>, usize> = HashMap::default();
             for (i, cd) in sclasses.iter().enumerate() {
                 // WP-70 S-70.2: a seed entry is eagerly resolvable only if its
                 // name is DECLARED (runtime class table) — a conditional
@@ -519,7 +519,7 @@ type GotoSite<'a> = (&'a [u8], BarrierStack, Line);
 /// of, the innermost such barrier (the first mismatching stack entry) picks the
 /// message — the same one PHP reports.
 fn validate_goto(body: &[Stmt]) -> Result<(), LowerError> {
-    let mut labels: LabelMap = HashMap::new();
+    let mut labels: LabelMap = HashMap::default();
     let mut gotos: Vec<GotoSite> = Vec::new();
     let mut counter: u32 = 0;
     collect_goto(body, &mut Vec::new(), &mut counter, &mut labels, &mut gotos)?;
@@ -1083,12 +1083,12 @@ struct Lowerer<'f> {
     fn_index: HashMap<Vec<u8>, usize>,
     /// Indices into `functions` that are *conditional* declarations (registered at
     /// run time by `DeclareFn`, not resolvable by name eagerly).
-    conditional_fns: HashSet<usize>,
+    conditional_fns: std::collections::HashSet<usize>,
     /// Traits declared inside a branch, registered at run time (DeclareTrait).
     conditional_traits: Vec<(Vec<u8>, LoweredTrait)>,
     /// Indices into `classes` that are *conditional* declarations (registered at
     /// run time by `DeclareClass`, not resolvable by name eagerly).
-    conditional_classes: HashSet<usize>,
+    conditional_classes: std::collections::HashSet<usize>,
     /// Start offsets of the class-like statements the hoist RESERVED (WP-69
     /// S-69.1 family): a statement re-declaring an in-use name is not hoisted
     /// — it stays a runtime (re)declaration whose `DeclareClass` raises
@@ -1263,10 +1263,10 @@ impl<'f> Lowerer<'f> {
             locals: None,
             after_closing_tag: false,
             functions: Vec::new(),
-            fn_index: HashMap::new(),
-            conditional_fns: HashSet::new(),
-            conditional_classes: HashSet::new(),
-            hoisted_class_spans: HashSet::new(),
+            fn_index: HashMap::default(),
+            conditional_fns: std::collections::HashSet::new(),
+            conditional_classes: std::collections::HashSet::new(),
+            hoisted_class_spans: HashSet::default(),
             conditional_traits: Vec::new(),
             closures: Vec::new(),
             prog_name: prog_name.into(),
@@ -1275,18 +1275,18 @@ impl<'f> Lowerer<'f> {
             static_count: 0,
             strict: false,
             classes: Vec::new(),
-            class_index: HashMap::new(),
+            class_index: HashMap::default(),
             seed_class_len: 0,
             seed_conditional: std::collections::HashSet::new(),
             used_conditional_seed: std::cell::Cell::new(false),
-            traits: HashMap::new(),
+            traits: HashMap::default(),
             cur_class: None,
             cur_function: None,
             cur_trait: None,
             cur_namespace: Vec::new(),
-            use_classes: HashMap::new(),
-            use_functions: HashMap::new(),
-            use_consts: HashMap::new(),
+            use_classes: HashMap::default(),
+            use_functions: HashMap::default(),
+            use_consts: HashMap::default(),
             promoted: Vec::new(),
             hook_prop: None,
             hook_backed: false,

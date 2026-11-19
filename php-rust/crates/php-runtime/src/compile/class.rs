@@ -38,12 +38,12 @@ pub(super) fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> C
     // Property hooks (step 50), flattened parent-first like the layout: a
     // most-derived `get`/`set` overrides the inherited one. A *virtual* hooked
     // property (no backing) is excluded from the object layout below.
-    let mut prop_hooks: HashMap<Box<[u8]>, PropHooks> = HashMap::new();
+    let mut prop_hooks: HashMap<Box<[u8]>, PropHooks> = HashMap::default();
     // Property names that have backing storage somewhere in the chain (a plain
     // declaration, or a backed hooked one). A hooked property that overrides an
     // inherited *plain* property is itself backed — so it is not "virtual" and a
     // hook-less read/write reaches the backing rather than being write/read-only.
-    let mut backed_seen: HashSet<Box<[u8]>> = HashSet::new();
+    let mut backed_seen: HashSet<Box<[u8]>> = HashSet::default();
     for &x in &chain {
         let cname = PhpStr::new(ctx.classes[x].name.to_vec());
         for p in &ctx.classes[x].props {
@@ -337,7 +337,7 @@ pub(super) fn compile_class(cid: ClassId, cd: &ClassDecl, ctx: &ProgramCtx) -> C
 
     // Per-property attributes (`#[Attr] public int $x`), same two-thunk scheme,
     // keyed by the own property name (not flattened). Empty key absent.
-    let mut prop_attributes: HashMap<Box<[u8]>, Vec<CompiledAttribute>> = HashMap::new();
+    let mut prop_attributes: std::collections::HashMap<Box<[u8]>, Vec<CompiledAttribute>> = std::collections::HashMap::new();
     for p in &cd.props {
         if p.attributes.is_empty() {
             continue;
