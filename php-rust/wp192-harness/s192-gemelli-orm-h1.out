@@ -1,0 +1,6 @@
+== s192 gemelli ORM tag=h1 Z=02f07422 L=8b253f18 R=5 2026-11-19 10:25:58 (direzione, non verdetto) ==
+braccio Z commit 02f07422 hash 884c5714e92a89e3 10:28:25
+braccio L commit 8b253f18 hash ad2d48ec06c3fc70 10:30:49
+user Z=[36.72 36.97 36.66 36.51 36.55] s · L=[36.03 36.03 35.88 35.89 36.07] s
+L−Z appaiato=[-1.88 -2.54 -2.14 -1.69 -1.30] % · mediana -1.88 % · dispersione di Z (max−min)/mediana 1.26 %
+DIREZIONE: L−Z ≤ −1,0 %: attesa rispettata · fine 2026-11-19 10:38:35
