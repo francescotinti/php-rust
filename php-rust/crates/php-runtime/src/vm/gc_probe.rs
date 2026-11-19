@@ -67,27 +67,29 @@ impl<'m> Vm<'m> {
         Ok(())
     }
 
-    /// S-192 (criterion `wp192-harness/s192-criterio-k0.md`): the probe's
-    /// answer computed IN LINE for the one window a method `Ret` produces at
-    /// every return — a single tail slot (the live `$this` re-noted by
-    /// `gc_note_slow` (iv-b)) that is not collectable. Returns `true` when the
-    /// call can be skipped, after leaving exactly the state `gc_ret_probe`
-    /// would leave: cursor advanced unless one of its three guards holds.
-    /// Every other window (wider, or a tail with count 2) answers `false`.
+    /// S-192 (criterion `wp192-harness/s192-criterio-k0.md`, step 2): the `$this` note of a method `Ret` when the receiver is
+    /// a live object that is ALREADY the tail slot of the buffer — the case
+    /// of every method return after the first in a statement. It performs
+    /// exactly what `gc_note_receiver → gc_note → gc_note_slow` (iv-b) does
+    /// there (re-open the probe window on the tail slot) with one borrow and
+    /// no receiver move; `false` sends every other receiver down that chain.
+    /// Known gap: the `gc-census`/`zval-census` counters inside `gc_note` do
+    /// not see the notes answered here (instrument builds under-count them).
     #[inline(always)]
-    pub(super) fn gc_probe_idle(&mut self, caller: usize) -> bool {
-        let len = self.gc_buf.len();
-        if self.gc_probe_mark + 1 != len {
-            return false;
-        }
-        if self.gc_buf.last().is_some_and(|s| s.as_ref().is_some_and(|o| Rc::strong_count(o) == 2)) {
-            return false;
-        }
-        if self.gc_buf_head == 0
-            && !self.gc_collecting
-            && !self.frames.get(caller).is_some_and(|f| f.flags.get(FrameFlags::IN_DESTRUCTOR))
+    pub(super) fn gc_note_this_tail(&mut self, top: usize) -> bool {
+        let Some(Zval::Object(o)) = &self.frames[top].this else { return false };
         {
-            self.gc_probe_mark = len;
+            let b = o.borrow();
+            if b.gc.destructed() || !b.gc.buffered() {
+                return false;
+            }
+        }
+        if !self.gc_buf.last().is_some_and(|s| s.as_ref().is_some_and(|l| Rc::ptr_eq(l, o))) {
+            return false;
+        }
+        let p = self.gc_buf.len() - 1;
+        if p >= self.gc_buf_head && self.gc_probe_mark > p {
+            self.gc_probe_mark = p;
         }
         true
     }

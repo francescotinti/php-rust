@@ -1,0 +1,9 @@
+== s192 bisezione K0 tag=e2 N=1000000x65 Ret R=5 2026-11-19 03:02:07 (attribuzione, non verdetto) ==
+build 483e970f hash b7b75d57372ecd3b 03:05:01
+build fe2c3db27a93f05824cd2fdadfbfb44c253856e8 hash 0bdef7fa37b132d4 03:07:27
+build dc6029a69d7c7faf2951ac0287f28c522e3e7625 hash 5dc39a59404c31ff 03:09:51
+build 75e0caedabc2582dc21705aafc7561d1f2138e8f hash 3626fc936325cc77 03:12:16
+fe2c3db27a93f05824cd2fdadfbfb44c253856e8 vs 483e970f: ref=[6.58 6.57 6.60 6.47 6.60] s · B=[6.54 6.53 6.58 6.53 6.54] s · D appaiato=[-0.71 -0.56 -0.41 +1.00 -0.89] ns/Ret · mediana -0.56
+dc6029a69d7c7faf2951ac0287f28c522e3e7625 vs 483e970f: ref=[6.61 6.59 6.60 6.64 6.53] s · B=[6.46 6.50 6.50 6.48 6.48] s · D appaiato=[-2.31 -1.38 -1.56 -2.41 -0.72] ns/Ret · mediana -1.56
+75e0caedabc2582dc21705aafc7561d1f2138e8f vs 483e970f: ref=[6.59 6.51 6.63 6.61 6.56] s · B=[6.52 6.48 6.42 6.46 6.43] s · D appaiato=[-1.03 -0.34 -3.19 -2.37 -2.14] ns/Ret · mediana -2.14
+fine 2026-11-19 03:15:37

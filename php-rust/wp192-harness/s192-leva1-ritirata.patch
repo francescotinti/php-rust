@@ -1,0 +1,141 @@
+From 8dbf88fb081207b8f35a57f4ef78db9fae4a4387 Mon Sep 17 00:00:00 2001
+From: Francesco Tinti <francesco.tinti@activemind.it>
+Date: Thu, 19 Nov 2026 01:50:50 +0100
+Subject: [PATCH] =?UTF-8?q?perf:=20S-192=20C1=20=E2=80=94=20K0=20cost=20le?=
+ =?UTF-8?q?ver:=20the=20Ret-boundary=20probe=20is=20answered=20in=20line?=
+ =?UTF-8?q?=20when=20its=20window=20is=20a=20single=20non-collectable=20ta?=
+ =?UTF-8?q?il=20slot=20(gc=5Fprobe=5Fidle),=20same=20end=20state=20as=20gc?=
+ =?UTF-8?q?=5Fret=5Fprobe=20by=20construction?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Day chain s192k0 rc=0 on dev-release 6d7e9674: day gate (5 tests x2 modes, 9 fixtures), loc_dente (hot loop file at its cap, zero-line change), drop-order sentinels 4/4, leave_dtor 4/4, corpus-gate x2 (names == frozen 1407, digest == golden, off<->on zero diffs). Cost direction not yet measured.
+
+Co-Authored-By: Claude Fable 5.2 <noreply@anthropic.com>
+---
+ .../crates/php-runtime/src/vm/gc_probe.rs     | 25 +++++++++++++++++++
+ php-rust/crates/php-runtime/src/vm/run.rs     |  4 +--
+ .../wp190-harness/s190-c2-catena-s192k0.out   | 14 +++++++++++
+ .../wp190-harness/s190-c2-catena-s192k0.rc    |  1 +
+ .../wp190-harness/s190-gate-giorno-s192k0.out | 21 ++++++++++++++++
+ 5 files changed, 63 insertions(+), 2 deletions(-)
+ create mode 100644 php-rust/wp190-harness/s190-c2-catena-s192k0.out
+ create mode 100644 php-rust/wp190-harness/s190-c2-catena-s192k0.rc
+ create mode 100644 php-rust/wp190-harness/s190-gate-giorno-s192k0.out
+
+diff --git a/php-rust/crates/php-runtime/src/vm/gc_probe.rs b/php-rust/crates/php-runtime/src/vm/gc_probe.rs
+index e65fe764..2db5c212 100644
+--- a/php-rust/crates/php-runtime/src/vm/gc_probe.rs
++++ b/php-rust/crates/php-runtime/src/vm/gc_probe.rs
+@@ -67,6 +67,31 @@ impl<'m> Vm<'m> {
+         Ok(())
+     }
+ 
++    /// S-192 (criterion `wp192-harness/s192-criterio-k0.md`): the probe's
++    /// answer computed IN LINE for the one window a method `Ret` produces at
++    /// every return — a single tail slot (the live `$this` re-noted by
++    /// `gc_note_slow` (iv-b)) that is not collectable. Returns `true` when the
++    /// call can be skipped, after leaving exactly the state `gc_ret_probe`
++    /// would leave: cursor advanced unless one of its three guards holds.
++    /// Every other window (wider, or a tail with count 2) answers `false`.
++    #[inline(always)]
++    pub(super) fn gc_probe_idle(&mut self, caller: usize) -> bool {
++        let len = self.gc_buf.len();
++        if self.gc_probe_mark + 1 != len {
++            return false;
++        }
++        if self.gc_buf.last().is_some_and(|s| s.as_ref().is_some_and(|o| Rc::strong_count(o) == 2)) {
++            return false;
++        }
++        if self.gc_buf_head == 0
++            && !self.gc_collecting
++            && !self.frames.get(caller).is_some_and(|f| f.flags.get(FrameFlags::IN_DESTRUCTOR))
++        {
++            self.gc_probe_mark = len;
++        }
++        true
++    }
++
+     /// Drop every buffered candidate and rewind both cursors (request reset,
+     /// shutdown). The sweep tail and `collect_cycles` drain in place and reset
+     /// `gc_probe_mark` themselves.
+diff --git a/php-rust/crates/php-runtime/src/vm/run.rs b/php-rust/crates/php-runtime/src/vm/run.rs
+index 4b03d95c..f421e7a6 100644
+--- a/php-rust/crates/php-runtime/src/vm/run.rs
++++ b/php-rust/crates/php-runtime/src/vm/run.rs
+@@ -4330,7 +4330,7 @@ impl<'m> super::Vm<'m> {
+                         self.frames.truncate(top);
+                         self.frame_pool.put(slots, stack);
+                         // §3.35: dying locals destruct at `leave` — S-190 cursor probe (vm/gc_probe), out of line.
+-                        if self.gc_probe_mark < self.gc_buf.len() {
++                        if self.gc_probe_mark < self.gc_buf.len() && !self.gc_probe_idle(top - 1) {
+                             self.gc_ret_probe(top - 1)?;
+                         }
+                         if self.frames.len() == baseline {
+@@ -7310,7 +7310,7 @@ impl<'m> super::Vm<'m> {
+         }
+         // §3.35: dying locals destruct at `leave` (S-190 cursor probe, vm/gc_probe); a destructor
+         // frame's own return keeps the scheduled-sweep protocol (its Sweep op re-runs when it returns).
+-        if top > 0 && fl & FrameFlags::IN_DESTRUCTOR == 0 && self.gc_probe_mark < self.gc_buf.len() {
++        if top > 0 && fl & FrameFlags::IN_DESTRUCTOR == 0 && self.gc_probe_mark < self.gc_buf.len() && !self.gc_probe_idle(top - 1) {
+             self.gc_ret_probe(top - 1)?;
+         }
+         if let Some(guard) = guard {
+diff --git a/php-rust/wp190-harness/s190-c2-catena-s192k0.out b/php-rust/wp190-harness/s190-c2-catena-s192k0.out
+new file mode 100644
+index 00000000..1a2a0b30
+--- /dev/null
++++ b/php-rust/wp190-harness/s190-c2-catena-s192k0.out
+@@ -0,0 +1,14 @@
++== s190 catena C2 tag=s192k0 git=5de4229b phpr=6d7e96740f22f0bc runner=6539071aab546bfd 2026-11-19 01:35:41 ==
++gate di giorno: rc=0 (/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp190-harness/s190-gate-giorno-s192k0.out)
++loc_dente: rc=0
++sentinelle drop-order: rc=0 test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 704 filtered out; fi
++leave_dtor_cmp_recursion: rc=0 test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
++corpus-gate ×2: rc=0
++  corpus-gate (live runner=6539071aab546bfd) 2026-11-19 01:50:30
++  gate CORPUS(off) NOMI: == congelato s109 (1407)
++  gate CORPUS(off) CONTENUTO: digest == golden (1404 test, carve-out 3)
++  gate CORPUS(on) NOMI: == congelato s109 (1407)
++  gate CORPUS(on) CONTENUTO: digest == golden (1404 test, carve-out 3)
++  gate CORPUS off↔on: rc=0 — CORPUS-DIFF: ZERO differenze per-test off<->on fuori carve-out
++  CORPUS-GATE COMPLESSIVO: rc=0 (nomi E contenuto E off↔on; rc in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp190-harness/corpus-out/s192k0/corpus-gate.rc)
++== esito catena rc=0 2026-11-19 01:50:30 ==
+diff --git a/php-rust/wp190-harness/s190-c2-catena-s192k0.rc b/php-rust/wp190-harness/s190-c2-catena-s192k0.rc
+new file mode 100644
+index 00000000..573541ac
+--- /dev/null
++++ b/php-rust/wp190-harness/s190-c2-catena-s192k0.rc
+@@ -0,0 +1 @@
++0
+diff --git a/php-rust/wp190-harness/s190-gate-giorno-s192k0.out b/php-rust/wp190-harness/s190-gate-giorno-s192k0.out
+new file mode 100644
+index 00000000..e8800480
+--- /dev/null
++++ b/php-rust/wp190-harness/s190-gate-giorno-s192k0.out
+@@ -0,0 +1,21 @@
++== s190 gate di giorno tag=s192k0 git=5de4229b phpr=6d7e96740f22f0bc runner=6539071aab546bfd 2026-11-19_01:35:42 (dev-release: NON verdetto) ==
++OK   [off] bug49893: atteso PASS (non nel congelato) — failures=0
++OK   [off] bug47771: testo del chunk == riferimento golden e89acabb946cf26a
++OK   [off] bug53511: testo del chunk == riferimento golden 23cf4cc7b0ca4321
++OK   [off] assign_coalesce_002: testo del chunk == riferimento golden 7abc7fa9a0a31e47
++OK   [off] temporary_cleaning_013: testo del chunk == riferimento golden 5ec49c822149eff3
++OK   [on] bug49893: atteso PASS (non nel congelato) — failures=0
++OK   [on] bug47771: testo del chunk == riferimento golden e89acabb946cf26a
++OK   [on] bug53511: testo del chunk == riferimento golden 23cf4cc7b0ca4321
++OK   [on] assign_coalesce_002: testo del chunk == riferimento golden 7abc7fa9a0a31e47
++OK   [on] temporary_cleaning_013: testo del chunk == riferimento golden 5ec49c822149eff3
++OK   fxsw1 == oracle BYTE-ID
++OK   fxsw2 == pin BYTE-ID (invarianza GC)
++OK   fxsl1 == oracle BYTE-ID
++OK   fxsl2 == oracle BYTE-ID
++OK   fxsl3 == oracle BYTE-ID
++OK   fxcr1 == oracle BYTE-ID
++OK   fxrt1 == oracle BYTE-ID
++OK   fxrt2 == oracle BYTE-ID
++OK   fxmc2: diff == fx-mc2.expected-diff (vuoto ⇒ byte-id)
++== esito rc=0 2026-11-19_01:35:48 ==
+-- 
+2.50.1 (Apple Git-155)
+

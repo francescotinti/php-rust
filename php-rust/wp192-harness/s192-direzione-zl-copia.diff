@@ -1,0 +1,29 @@
+2c2,3
+< # s190-direzione-k0.sh <tag> — S-190 C2, A/B di DIREZIONE (NON verdetto; il giudice resta la guardia b3 di notte): costo per Ret
+---
+> # s192-direzione-zl.sh <tag> — S-192, COPIA DICHIARATA di s190-direzione-k0.sh (adattamenti: A = gemello Z da env senza
+> # controllo dell'hash del pin; percorsi in wp192-harness; regola: rc=0 sse D(K0) = L−Z < 0). Testo originale: A/B di DIREZIONE (NON verdetto; il giudice resta la guardia b3 di notte): costo per Ret
+10c11
+< P="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust"; H="$P/wp190-harness"; H6="$P/wp186-harness"
+---
+> P="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust"; H="$P/wp192-harness"; H6="$P/wp186-harness"
+12c13
+< A="${PIN:-$HOME/Claude/php-rust-output/release/phpr}"; AEXP="9a6ae11bf7e900ef"
+---
+> A="${A:?A = gemello Z}"
+16c17
+< VERD="$H/s190-direzione-k0-$TAG.out"; OUT="$H/ab-out/direzione-$TAG"; mkdir -p "$OUT"
+---
+> VERD="$H/s192-direzione-zl-$TAG.out"; OUT="$H/out/direzione-zl-$TAG"; mkdir -p "$OUT"
+19d19
+< [ "$AM" = "$AEXP" ] || { note "rc=9 A $AM != pin s183 $AEXP"; exit 9; }
+26c26
+< note "== s190 direzione K0 tag=$TAG A=pin $AM · B=tree $BM · R=$R · $(date '+%F %T') (DIREZIONE, non verdetto) =="
+---
+> note "== s192 direzione L−Z tag=$TAG A=gemello Z $AM · B=leva L $BM · R=$R · $(date '+%F %T') (DIREZIONE, non verdetto) =="
+45,46c45,46
+< ok0 = k0 < 4.0; flat = abs(k4 - k0) < 4.0 and abs(k16 - k0) < 4.0
+< print(f"DIREZIONE: D(K0)={k0:.2f} ns/Ret ({'< 4 OK' if ok0 else '>= 4: K0 ancora caro'}) · K piatto {'OK' if flat else 'NO'} (K4−K0={k4-k0:.2f}, K16−K0={k16-k0:.2f})")
+---
+> ok0 = k0 < 0.0; flat = abs(k4 - k0) < 4.0 and abs(k16 - k0) < 4.0
+> print(f"DIREZIONE: D(K0)={k0:.2f} ns/Ret ({'< 0: la leva guadagna' if ok0 else '>= 0: nessun guadagno'}) · K piatto {'OK' if flat else 'NO'} (K4−K0={k4-k0:.2f}, K16−K0={k16-k0:.2f})")

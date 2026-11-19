@@ -4741,6 +4741,9 @@ impl<'m> Vm<'m> {
     /// drop glue, bounds check, `gc_note_receiver`): fuori linea, UNA chiamata.
     #[inline(never)]
     fn gc_note_this(&mut self, top: usize) {
+        if self.gc_note_this_tail(top) {
+            return; // S-192: live receiver already in the tail slot (vm/gc_probe)
+        }
         let this = self.frames[top].this.take();
         if let Some(this) = &this {
             self.gc_note_receiver(this);
