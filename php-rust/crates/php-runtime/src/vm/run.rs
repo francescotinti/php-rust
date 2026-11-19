@@ -4330,7 +4330,7 @@ impl<'m> super::Vm<'m> {
                         self.frames.truncate(top);
                         self.frame_pool.put(slots, stack);
                         // §3.35: dying locals destruct at `leave` — S-190 cursor probe (vm/gc_probe), out of line.
-                        if self.gc_probe_mark < self.gc_buf.len() {
+                        if self.gc_probe_mark < self.gc_buf.len() && !self.gc_probe_idle(top - 1) {
                             self.gc_ret_probe(top - 1)?;
                         }
                         if self.frames.len() == baseline {
@@ -7310,7 +7310,7 @@ impl<'m> super::Vm<'m> {
         }
         // §3.35: dying locals destruct at `leave` (S-190 cursor probe, vm/gc_probe); a destructor
         // frame's own return keeps the scheduled-sweep protocol (its Sweep op re-runs when it returns).
-        if top > 0 && fl & FrameFlags::IN_DESTRUCTOR == 0 && self.gc_probe_mark < self.gc_buf.len() {
+        if top > 0 && fl & FrameFlags::IN_DESTRUCTOR == 0 && self.gc_probe_mark < self.gc_buf.len() && !self.gc_probe_idle(top - 1) {
             self.gc_ret_probe(top - 1)?;
         }
         if let Some(guard) = guard {

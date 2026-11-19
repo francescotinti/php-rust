@@ -67,6 +67,31 @@ impl<'m> Vm<'m> {
         Ok(())
     }
 
+    /// S-192 (criterion `wp192-harness/s192-criterio-k0.md`): the probe's
+    /// answer computed IN LINE for the one window a method `Ret` produces at
+    /// every return — a single tail slot (the live `$this` re-noted by
+    /// `gc_note_slow` (iv-b)) that is not collectable. Returns `true` when the
+    /// call can be skipped, after leaving exactly the state `gc_ret_probe`
+    /// would leave: cursor advanced unless one of its three guards holds.
+    /// Every other window (wider, or a tail with count 2) answers `false`.
+    #[inline(always)]
+    pub(super) fn gc_probe_idle(&mut self, caller: usize) -> bool {
+        let len = self.gc_buf.len();
+        if self.gc_probe_mark + 1 != len {
+            return false;
+        }
+        if self.gc_buf.last().is_some_and(|s| s.as_ref().is_some_and(|o| Rc::strong_count(o) == 2)) {
+            return false;
+        }
+        if self.gc_buf_head == 0
+            && !self.gc_collecting
+            && !self.frames.get(caller).is_some_and(|f| f.flags.get(FrameFlags::IN_DESTRUCTOR))
+        {
+            self.gc_probe_mark = len;
+        }
+        true
+    }
+
     /// Drop every buffered candidate and rewind both cursors (request reset,
     /// shutdown). The sweep tail and `collect_cycles` drain in place and reset
     /// `gc_probe_mark` themselves.
