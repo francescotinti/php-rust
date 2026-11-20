@@ -1,0 +1,15 @@
+== S-194 traffico, carico ORM: rilettura del profilo s192gc (36519 campioni, sorgente = pin s185, binario s192-armD) — DIREZIONE, non verdetto ==
+validita p.4: totale 36519 = s192-anatomia-s192gc.out OK
+INCLUSIVO (campioni, % del totale):
+  drop_glue Zval 2415 6,6 | Zval::clone 1820 5,0 | gc_sweep_body 2575 7,1 (collect_cycles 1318 3,6) | ret_slow 1853 5,1
+  lower_unit 1295 3,5 | enter_callee 1017 2,8 | slot_of 984 2,7 | coerce_or_check_hint 882 2,4 (value_satisfies_class 420 1,2)
+  resolve_prop_access 711 1,9 (HashMap::get 512) | magic_applies_resolved 697 1,9 | strpos 563 1,5 | gc_note_slow 486 1,3 | recycle_frame 436 1,2
+IPOTESI «memcmp + slot_of = una ricerca lineare per nome»: CONFERMATA IN PARTE. slot_of 984: 586 da magic_applies_resolved (oop.rs:1031), 136 da field_get; memcmp 1492: strpos 414, slot_of 279, resolve_prop_access 180, KeyIndex::lookup 121. memmove 1965 NON e traffico di valori: lowering/compilazione/passate per include ~760, sqlite 171.
+LIMITE DI STRUMENTO: Zval::clone e una foglia senza frame: 747 dei suoi 1820 campioni saltano il chiamante (run_loop) e cadono su drive_to_return@calls.rs:1104; i cloni dentro il loop non si attribuiscono a una riga con questo profilo.
+CANDIDATE che passano il p.6 (>= 1,5 % inclusivo, meccanismo a riga, semantica invariata):
+  1 magic_applies(_resolved)  697 1,9 %  presenza cercata per NOME (contains + get = due scansioni) con lo slot gia risolto; field_magic_probe la chiama due volte per passo (mod.rs:13971/13973) e risolve l'accesso prima di sapere se la classe ha il metodo magico
+  2 strpos/find_sub           563 1,5 %  ricerca ingenua: un confronto di fetta (memcmp) per posizione; memchr::memmem gia dipendenza di php-builtins
+  3 coerce_or_check_hint      882 2,4 %  value_satisfies_class (420) alloca il nome minuscolo a ogni controllo di tipo + una ricerca hash
+NON passano: clone/drop nel loop (sparsi, non attribuibili a riga), memmove (include: aperture gia a nome), resolve_prop_access fuori da magic (cura = prop_ic, disegno).
+GC (sweep 7,1 %) e ret_slow (5,1 %) restano le voci grosse: sono la rotta B e le chiamate (guardia in finestra calma prima).
+somma attaccabile dichiarata: ~4-5 % dei campioni ORM, recupero atteso minore. WordPress: s194-traffico-wp.out (gamba nuova, a CI quieta).
