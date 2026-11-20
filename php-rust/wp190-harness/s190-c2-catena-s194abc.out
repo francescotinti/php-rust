@@ -1,0 +1,14 @@
+== s190 catena C2 tag=s194abc git=3ddccc7e phpr=d087b5d44a8fb107 runner=29486ca6bdccc54a 2026-11-21 00:02:35 ==
+gate di giorno: rc=0 (/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp190-harness/s190-gate-giorno-s194abc.out)
+loc_dente: rc=0
+sentinelle drop-order: rc=0 test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 704 filtered out; fi
+leave_dtor_cmp_recursion: rc=0 test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
+corpus-gate ×2: rc=0
+  corpus-gate (live runner=29486ca6bdccc54a) 2026-11-21 00:17:02
+  gate CORPUS(off) NOMI: == congelato s109 (1407)
+  gate CORPUS(off) CONTENUTO: digest == golden (1404 test, carve-out 3)
+  gate CORPUS(on) NOMI: == congelato s109 (1407)
+  gate CORPUS(on) CONTENUTO: digest == golden (1404 test, carve-out 3)
+  gate CORPUS off↔on: rc=0 — CORPUS-DIFF: ZERO differenze per-test off<->on fuori carve-out
+  CORPUS-GATE COMPLESSIVO: rc=0 (nomi E contenuto E off↔on; rc in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp190-harness/corpus-out/s194abc/corpus-gate.rc)
+== esito catena rc=0 2026-11-21 00:17:02 ==

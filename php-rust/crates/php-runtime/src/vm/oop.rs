@@ -197,6 +197,20 @@ pub(super) fn resolve_method_runtime(classes: &[&CompiledClass], start: ClassId,
     None
 }
 
+/// ASCII-lowercase name into buf when it fits, else into heap: no
+/// allocation for the class names of ordinary type hints (S-194).
+pub(super) fn lc_name<'a>(name: &[u8], buf: &'a mut [u8; 128], heap: &'a mut Vec<u8>) -> &'a [u8] {
+    if name.len() <= buf.len() {
+        let b = &mut buf[..name.len()];
+        b.copy_from_slice(name);
+        b.make_ascii_lowercase();
+        b
+    } else {
+        *heap = name.to_ascii_lowercase();
+        heap
+    }
+}
+
 /// The class id of an object value (following a reference), or `None` for a
 /// non-object.
 pub(super) fn object_class_id(v: &Zval) -> Option<ClassId> {
@@ -994,8 +1008,25 @@ impl<'m> Vm<'m> {
         magic_name: &[u8],
     ) -> Option<(ClassId, usize, u32)> {
         let cid = o.borrow().class_id as usize;
+        // S-194: no magic method on the class means None whatever the access
+        // resolves to: skip the resolve and the presence scans.
+        self.magic_lookup(cid, magic_name)?;
         let access = resolve_prop_access(&self.classes, cid, name, cur_class);
         self.magic_applies_resolved(o, name, &access, kind, magic_name)
+    }
+
+    /// resolve_method_runtime(classes, cid, magic_name) through the per-class
+    /// memo of [`Self::magic_method`] for the four property accessors (S-194).
+    #[inline]
+    fn magic_lookup(&self, cid: ClassId, magic_name: &[u8]) -> Option<(ClassId, usize)> {
+        let kind = match magic_name {
+            b"__get" => 2,
+            b"__set" => 3,
+            b"__isset" => 4,
+            b"__unset" => 5,
+            _ => return resolve_method_runtime(&self.classes, cid, magic_name),
+        };
+        self.magic_method(cid, kind)
     }
 
     /// [`Self::magic_applies`] with the property access already resolved by
@@ -1013,9 +1044,11 @@ impl<'m> Vm<'m> {
         kind: MagicKind,
         magic_name: &[u8],
     ) -> Option<(ClassId, usize, u32)> {
-        let (cid, oid, present, accessible) = {
+        // S-194: asked FIRST (memoized per class). Every check below can only
+        // turn a hit into None, so the order is free.
+        let (defc, midx) = self.magic_lookup(o.borrow().class_id as usize, magic_name)?;
+        let (oid, present, accessible) = {
             let obj = o.borrow();
-            let cid = obj.class_id as usize;
             // Presence is judged at the *resolved* slot: a declared-but-unset
             // private (mangled key) triggers magic from its own scope; a parent's
             // private resolved `Dynamic` from a child scope is "present" only if a
@@ -1032,7 +1065,7 @@ impl<'m> Vm<'m> {
                 PropAccess::Dynamic => (obj.props.contains(name) && !undef_unset(name), true),
                 PropAccess::Denied { .. } => (obj.props.contains(name), false),
             };
-            (cid, obj.id, present, accessible)
+            (obj.id, present, accessible)
         };
         if present && accessible {
             return None;
@@ -1040,7 +1073,6 @@ impl<'m> Vm<'m> {
         if !self.magic_guard.is_empty() && self.magic_guard.contains(&(oid, kind, name.to_vec())) {
             return None;
         }
-        let (defc, midx) = resolve_method_runtime(&self.classes, cid, magic_name)?;
         Some((defc, midx, oid))
     }
 

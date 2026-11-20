@@ -47,8 +47,8 @@ use super::*;
 #[derive(Clone, Copy, Default)]
 pub(super) struct MagicMemo {
     class: usize,
-    state: [u8; 2], // 0 = not asked yet, 1 = absent, 2 = `hit`
-    hit: [(u32, u32); 2],
+    state: [u8; 6], // 0 = not asked yet, 1 = absent, 2 = `hit`
+    hit: [(u32, u32); 6],
 }
 
 impl<'m> Vm<'m> {
@@ -59,7 +59,7 @@ impl<'m> Vm<'m> {
     /// once the class and its ancestors are linked — which holds for every
     /// class that has an instance or is being instantiated.
     pub(super) fn magic_method(&self, cid: ClassId, kind: usize) -> Option<(ClassId, usize)> {
-        const NAMES: [&[u8]; 2] = [b"__destruct", b"__construct"];
+        const NAMES: [&[u8]; 6] = [b"__destruct", b"__construct", b"__get", b"__set", b"__isset", b"__unset"]; // 2..=5: S-194, asked by magic_lookup
         let Some(class) = self.classes.get(cid) else {
             return resolve_method_runtime(&self.classes, cid, NAMES[kind]);
         };
