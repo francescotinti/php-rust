@@ -1,0 +1,17 @@
+== s193 coppia server tripwire W=1 (NON-REGRESSIONE, mai cifra): Anew s191 c413398a44f9b0a4 vs Aold s190 721b7802e2d12058, --axum --workers 1 | git=81d8b1fe driver_sha=bdfe1baff33f39b8 tentativo=t4 ==
+grade=VERDICT  # VERDICT solo con W>=10 K>=30 R>=3; rc autoritativo = pair-out/tw193-t4.done
+protocollo: processo singolo, W=10 warm-up poi K=30 misurate per URL, R=3 boot/braccio interallacciati Aold,Anew · canonica = Δ user-CPU proc_pid_rusage / K (ms) · spread ≤2% su R altrimenti cella VOID · |Anew/Aold − 1| ≤ 2% (mediana dei rapporti per ciclo) altrimenti KILL KS-189-6 · gate richieste/boot=81
+igiene: richieste/boot=['81'] (attese 81) · boot scartati: nessuno · celle VOID: 0 
+
+braccio Aold — ms user-CPU/req [per ciclo] mediana spread
+  front  cpu=[292.65 291.77 292.08] med=292.08 spread=0.3% ok
+  login  cpu=[109.88 110.06 110.08] med=110.06 spread=0.2% ok
+
+braccio Anew — ms user-CPU/req [per ciclo] mediana spread
+  front  cpu=[288.42 288.86 291.65] med=288.86 spread=1.1% ok
+  login  cpu=[107.25 107.33 105.39] med=107.25 spread=1.8% ok
+
+Anew/Aold per ciclo (stesso ciclo) e mediana — tripwire ±2%:
+  front  [0.986 0.990 0.999] med=0.990 ok
+  login  [0.976 0.975 0.957] med=0.975 KILL (KS-189-6: |Δ|>2%)
+rc=2  # 0 = tripwire tenuto · 1 = celle VOID · 2 = KS-189-6 HALT (login=0.975)

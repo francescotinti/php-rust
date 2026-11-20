@@ -1,0 +1,14 @@
+== dichiarazione finestra quieta NOTTE S-193 (coda: guardia b5b) 2026-11-20 22:34:24 ==
+22:34  up 1 day,  2:23, 2 users, load averages: 2.02 2.23 2.06
+Networks: packets: 38935355/17G in, 36239694/13G out.
+Disks: 37838822/555G read, 65825298/616G written.
+
+PID    %CPU COMMAND         
+98824  0.0  mysqld          
+98655  0.0  bash            
+97176  0.0  PlugInLibrarySer
+97167  0.0  com.apple.fskit.
+97160  0.0  fskit_agent     
+96757  0.0  intelligenceflow
+96756  0.0  feedbackd       
+96015  0.0  TextThumbnailExt

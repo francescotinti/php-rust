@@ -1,0 +1,14 @@
+== dichiarazione finestra quieta NOTTE S-193 (b5, t29, server t4, t27) 2026-11-20 19:00:19 ==
+19:00  up 22:49, 3 users, load averages: 1.16 1.70 2.69
+Networks: packets: 6483088/6576M in, 3828883/2643M out.
+Disks: 36524130/535G read, 54048050/494G written.
+
+PID    %CPU COMMAND         
+98824  0.0  mysqld          
+98655  0.0  bash            
+97176  0.0  PlugInLibrarySer
+97167  0.0  com.apple.fskit.
+97160  0.0  fskit_agent     
+96757  0.0  intelligenceflow
+96756  0.0  feedbackd       
+96015  0.0  TextThumbnailExt

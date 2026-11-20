@@ -1,0 +1,20 @@
+2026-11-20 19:03:40 attesa fine catena (catena-s193.done presente e lock assente)
+2026-11-20 22:25:43 attesa quiete CI
+2026-11-20 22:26:43 lock scritto: /private/tmp/phpr-measure.lock (TOKEN s193)
+2026-11-20 22:26:43 CI quieta — attesa quiete continua anti-flare (6x30s <5%)
+2026-11-20 22:26:44 mediaanalysisd=0.0 calm=1
+2026-11-20 22:27:16 mediaanalysisd=0.0 calm=2
+2026-11-20 22:27:47 mediaanalysisd=0.0 calm=3
+2026-11-20 22:28:18 mediaanalysisd=0.0 calm=4
+2026-11-20 22:28:50 mediaanalysisd=0.0 calm=5
+2026-11-20 22:29:21 mediaanalysisd=0.0 calm=6
+2026-11-20 22:29:21 loadavg1=1.94 lc=1
+2026-11-20 22:29:51 loadavg1=2.00 lc=2
+2026-11-20 22:30:21 loadavg1=1.88 lc=3
+2026-11-20 22:30:51 loadavg1=1.60 lc=4
+2026-11-20 22:31:21 loadavg1=2.47 lc=5
+2026-11-20 22:31:51 loadavg1=2.27 lc=6
+2026-11-20 22:33:51 E2 calma CPU: PASS al tentativo 1 (campioni: 91 112 74 35 %)
+2026-11-20 22:34:24 quiete raggiunta — dichiarazione in quiet-decl-coda.txt — guardia b5b
+2026-11-20 22:34:25 pin canonico d9d6429301f60f4e == stash s185 · stash s183 9a6ae11bf7e900ef · server c413398a44f9b0a4 / stash s190 721b7802e2d12058 · Z ok — GUARDIA b5b (A=stash s183, Z, B=CANONICO s185, R=5)
+2026-11-20 22:50:02 coda fine: guardia b5b rc=5 (rc=5 2026-11-20 22:50:02); lock rimosso

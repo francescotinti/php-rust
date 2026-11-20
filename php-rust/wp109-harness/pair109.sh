@@ -35,7 +35,7 @@ reset_env() {
   echo "phpr=$(shasum -a 256 "$PHPR" | cut -c1-16)"
   echo "php_server=$(shasum -a 256 "$HOME/Claude/php-rust-output/release/php-server" | cut -c1-16)"
   echo "oracle=$("$ORACLE" -v | head -1)"
-  echo "rustc=$(cd "$H/.." && rustc -Vv | tr '\n' ';')"
+  echo "rustc=$(cd "$H/.." && "$HOME/.cargo/bin/rustc" -Vv | tr '\n' ';')"
   echo "head=$(git -C "$H/.." rev-parse --short=12 HEAD)"
   echo "epoch=$(date +%s)"
 } > "$OUT/pair109.identity"

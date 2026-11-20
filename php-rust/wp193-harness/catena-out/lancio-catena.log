@@ -1,0 +1,22 @@
+2026-11-20 18:51:38 attesa quiete CI
+2026-11-20 18:52:38 lock scritto: /private/tmp/phpr-measure.lock (TOKEN s193)
+2026-11-20 18:52:38 CI quieta — attesa quiete continua anti-flare (6x30s <5%)
+2026-11-20 18:52:40 mediaanalysisd=0.0 calm=1
+2026-11-20 18:53:11 mediaanalysisd=0.0 calm=2
+2026-11-20 18:53:42 mediaanalysisd=0.0 calm=3
+2026-11-20 18:54:14 mediaanalysisd=0.0 calm=4
+2026-11-20 18:54:45 mediaanalysisd=0.0 calm=5
+2026-11-20 18:55:16 mediaanalysisd=0.0 calm=6
+2026-11-20 18:55:16 loadavg1=1.88 lc=1
+2026-11-20 18:55:46 loadavg1=1.59 lc=2
+2026-11-20 18:56:16 loadavg1=1.55 lc=3
+2026-11-20 18:56:46 loadavg1=1.43 lc=4
+2026-11-20 18:57:16 loadavg1=1.26 lc=5
+2026-11-20 18:57:46 loadavg1=1.37 lc=6
+2026-11-20 18:59:47 E2 calma CPU: PASS al tentativo 1 (campioni: 36 11 11 25 %)
+2026-11-20 19:00:19 quiete raggiunta — dichiarazione in quiet-decl-catena.txt — (1) guardia b5, (2) t29, (3) server t4, (4) t27
+2026-11-20 19:00:20 pin canonico d9d6429301f60f4e == stash s185 · stash s183 9a6ae11bf7e900ef · server c413398a44f9b0a4 / stash s190 721b7802e2d12058 · Z ok — (1) GUARDIA b5 (A=stash s183, Z, B=CANONICO s185, R=5)
+2026-11-20 19:00:20 guardia b5 fine rc=8 (rc=8 2026-11-20 19:00:20) — verdetto wp186-harness/s186-guardia-verdetto-b5.out — (2) ORM t29 (E5 INVARIATE: ORA_REF2 4,870 SENT [4,81;4,93]; REF2 [34,23;34,31] = riferimento phpr s182: Delta_norm legge s185 vs s182)
+2026-11-20 19:05:58 t29 fine rc=0 (rc=0 19:05:58) — verdetto s193-orm-coppia-verdetto-t29.out — (3) coppia server t4: s191 canonica vs s190 stash
+2026-11-20 19:45:11 server t4 fine rc=2 (guardia_t4=[rc=2 giudice] tripwire_t4=[rc=2 giudice] 2026-11-20 19:45:11) — (4) WP t27 full+media @ pin s185 (ULTIMA: le gambe media risvegliano mediaanalysisd)
+2026-11-20 22:25:12 notte fine: b5 rc=8 · t29 rc=0 · server t4 rc=2 · t27 rc=0; lock rimosso
