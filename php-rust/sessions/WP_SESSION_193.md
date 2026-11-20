@@ -1,0 +1,24 @@
+# WP_SESSION_193 — promozione del pin s185 e notte di conferma (2026-11-20, CHIUSA) — Generato con assistenza AI (Claude Fable 5.2)
+**In una frase**: le sei correzioni scritte nella sessione scorsa sono diventate il binario ufficiale; la notte di misura dice che WordPress e il carico ORM girano più veloci di prima (WordPress per la prima volta sotto tutta la sua storia), e il lavoro è stato unito al ramo principale.
+**SCOREBOARD** (PIN phpr **s185** `d9d6429301f60f4e`, server **s191** `c413398a44f9b0a4` di record per delibera): arith 2,1 ↓ · prop 2,3 → · calls 3,5 → · str 4,1 ↓ · arr 2,9 → · re 2,5 → (micro R=5 sul pin) · **WP t27 1,705** (t26 1,751) · **ORM t29 [6,449; 6,576]** (t28 [7,045; 7,136]) · **leve spedite: 6** (quelle di S-192, ora nel pin) · batteria 1773/0/2 · corpus 1407 ×2.
+## Esiti secchi (branch `s186-firma` d9cef09b → 274658af; `main` = stesso commit, merge ff il 20/11)
+- **Pre-flight**: pin per hash ✓ · bundle SMONTATA (rimontata) · MySQL wp8 GIÙ (rialzato col datadir esterno) · Data 9G < 10G ⇒ tolte le toolchain `stable` e 1.96.0 con conferma dell'utente (default 1.98.1), Data 11-12G · pulizia: 20 target vecchie sull'esterno (≈173G) e tre nella bundle.
+- **Promozione s185** (`s193-promozione.sh`, copia dichiarata di S-190; `s193-promo-verdetto.out` rc=0): batteria 1773/0/2 · corpus 1407 ×2 zero flip · 25 gate fixture + catena dei 10 · micro R=5 · ORM per nome = baseline (16) · http-kernel 0E/0F · conferme vs stash s184: K0 +370 ns/iter a favore (5/5), mcalls/calls piatti (D +0,00), prop +0,33 · `pin-server.sh s191` · gate server sul pinnato: loopback 7/7, battery61-axum 6/6.
+- **Notte** (`s193-lancio-notte.sh`, criterio `s193-criterio-notte.md` scritto prima; sei copie dichiarate di S-191): **ORM t29 rc=0**, rapporto netto [6,449; 6,576], Δ_norm fuori rumore, fail-set per nome = baseline · **WP t27 rc=0**, mediana 1,705, 6/6 coppie pulite [1,683; 1,707], sotto la banda storica [1,738; 1,799], nessuna firma di deriva · **server t4 rc=2**: AXnew/AXold 1,030–1,087 (sette celle sopra 1,05, due VOID a C=1), CPU per richiesta 0,92–0,97, tripwire login 0,975 ⇒ fuori banda sul lato VELOCE.
+- **Guardia di costo**: b5 caduta al gate (rc=8, nessuna cifra); ripetuta in coda come **b5b rc=5** (emenda p.8 scritta prima): K0 D −0,46 (b4: +4,62) ⇒ rientrato · **mcalls-dq D +4,33/+4,00 su soglia 4,00, 5/5** (b4 su s184: +3,00; confronto diretto s185 vs s184 di giorno: +0,00) ⇒ costo ereditato da s184, a filo di soglia · K4 −5,23 e K16 −22,92 (favorevoli; il giudice «piatto» è a due code).
+- **Delibere dell'utente (20/11)**: s191 server di RECORD per attribuzione, senza rimisura (criterio p.9) · REGOLE §6 guardia di costo sul binario canonico · `photolibraryd` nell'anti-flare (regola in `shell-harness.md`, nessuno script ancora) · merge ff di `s186-firma` su `main` (72f688c3 → 274658af), senza rieseguire i gate sul commit di testa.
+- **Fix**: `wp109-harness/pair109.sh` chiama `rustc` per percorso (campo `rustc=` della scheda di gamba vuoto almeno da S-191 sotto PATH chiuso). **GitHub**: risposta di ringraziamento alla issue #9.
+## Incidenti (contati: 7)
+1. Bundle `phpr-target` smontata da sola durante una CI (causa NON trovata): due `phpt-runner` al 98 % CPU, fermati dall'utente; job CI 532efc65 rosso per infrastruttura.
+2. Guardia b5 caduta per una sonda INLINE dell'assistente col nome del binario nell'argv (regola `shell-harness.md` violata): una misura persa, rifatta in coda.
+3. Criterio della coppia server con banda simmetrica copiata da S-191, mentre s191 porta le leve del runtime: esito rosso per un guadagno; chiuso con una delibera sugli stessi numeri, non con una rimisura.
+4. Guardia di costo eseguita DOPO la promozione (ordine dell'utente del 19/11), contro la regola approvata la stessa sera.
+5. Due commit con `NEXT` fuori budget (corretti subito) · 6. lettura sbagliata di mcalls-dq («apertura cresciuta») prima del confronto diretto · 7. Data sotto 10G al pre-flight.
+## Passi
+1. Decidere con l'utente la rotta di S-194: tappa D chiede WP ≤1,5 (oggi 1,705), ORM ≤5 (oggi ~6,5), micro ≤3× 6/6 (calls 3,5 e str 4,1 fuori).
+2. Prossimo lanciatore: `photolibraryd` nel predicato anti-flare, banda server col lato alto libero, sonde solo in file.
+3. Residui: istruttoria mcalls-dq (dove s184 ha perso ~3 ns su s183) · le due azioni della revisione S-192 · causa dello smontaggio della bundle.
+## Lezioni
+- Durante una finestra di misura l'assistente non lancia nulla che porti il nome dei binari nella riga di comando: le sonde stanno in un file.
+- Una banda copiata va riletta contro ciò che è cambiato: se nel binario nuovo entra altro oltre all'oggetto del confronto, «più veloce» non può essere un reperto.
+- Un numero di guardia si legge insieme al confronto diretto: +4,33 contro s183 e +0,00 contro s184 dicono cose diverse.
