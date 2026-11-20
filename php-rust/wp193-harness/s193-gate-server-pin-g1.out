@@ -1,0 +1,4 @@
+== s193 gate server sul PIN s191 tag=g1 php-server=c413398a44f9b0a4 Data=11G 2026-11-20 17:27:49 ==
+gate-loopback: rc=0 · PASS old=97b58fd225ca7289 new=c413398a44f9b0a4 git=59901286 2026-11-20_17:29:01 arms=[ old3=PASS new3=PASS old1=PASS new1=PASS oracle3=PASS oracle1=PASS neg=PASS ] (gate-loopback.sh)
+battery61-axum: rc=0 · 6-admin NORM-ID status='HTTP/1.1 200 OK' bytes=143127/143127 (differisce SOLO nei nonce a 10 hex — sessioni di login distinte per costruzione)  battery61-axum rc=0 
+esito rc=0 2026-11-20 17:29:13
