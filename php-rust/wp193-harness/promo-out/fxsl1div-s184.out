@@ -1,0 +1,26 @@
+
+Deprecated: Implicit conversion from float 2.5 to int loses precision in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp172-harness/fx-sl1-div.php on line 11
+double-slot-shr: float(6.5)
+
+Warning: Undefined variable $undef in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp172-harness/fx-sl1-div.php on line 11
+
+Warning: Undefined variable $undef in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp172-harness/fx-sl1-div.php on line 11
+undef-slot: int(0)
+undef-dst: int(13)
+
+Warning: Decrement on type null has no effect, this will change in the next major version of PHP in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp172-harness/fx-sl1-div.php on line 15
+dec-null: NULL
+
+Deprecated: Increment on non-numeric string is deprecated, use str_increment() instead in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp172-harness/fx-sl1-div.php on line 16
+inc-str: string(1) "b"
+
+Deprecated: Increment on non-numeric string is deprecated, use str_increment() instead in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp172-harness/fx-sl1-div.php on line 17
+inc-str-carry: string(2) "Ba"
+
+Warning: Increment on type bool has no effect, this will change in the next major version of PHP in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp172-harness/fx-sl1-div.php on line 18
+inc-bool: bool(true)
+inc-undef: int(1)
+
+Warning: Undefined variable $undef2 in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp172-harness/fx-sl1-div.php on line 20
+undef-lt true
+FX-SL1-DIV DONE

@@ -1,0 +1,22 @@
+cyc_arr: a
+collect1: dtor a
+1
+cyc_obj: 2
+collect2: dtor bb
+1
+dtor p1
+dtor p2
+plain: 2
+method: m
+collect3: dtor m
+1
+rec: 3
+collect4: dtor rec
+1
+foreach: f12
+collect5: dtor f
+1
+dynvar: d
+collect6: dtor d
+1
+FX-RT1 DONE

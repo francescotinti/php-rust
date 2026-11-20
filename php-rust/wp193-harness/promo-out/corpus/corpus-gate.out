@@ -1,0 +1,7 @@
+corpus-gate (live runner=bcf5a1db07c5b523) 2026-11-20 16:53:24
+gate CORPUS(off) NOMI: == congelato s109 (1407)
+gate CORPUS(off) CONTENUTO: digest == golden (1404 test, carve-out 3)
+gate CORPUS(on) NOMI: == congelato s109 (1407)
+gate CORPUS(on) CONTENUTO: digest == golden (1404 test, carve-out 3)
+gate CORPUS off↔on: rc=0 — CORPUS-DIFF: ZERO differenze per-test off<->on fuori carve-out
+CORPUS-GATE COMPLESSIVO: rc=0 (nomi E contenuto E off↔on; rc in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp193-harness/promo-out/corpus/corpus-gate.rc)

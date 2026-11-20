@@ -1,0 +1,13 @@
+t1-def: defined
+t1-miss: miss
+t2-miss: miss
+t3-def: defined
+t4-def: defined
+t5-miss: miss
+t6-miss: miss
+CAUGHT au
+L8 fired
+t8-miss: miss
+t9-def: defined
+t10-miss: miss
+FX-AU DONE

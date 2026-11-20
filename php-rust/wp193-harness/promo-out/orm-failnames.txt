@@ -1,0 +1,16 @@
+Doctrine\Tests\ORM\EntityManagerTest::testItPreservesTheOriginalExceptionOnRollbackFailure
+Doctrine\Tests\ORM\Functional\HydrationCacheTest::testHydrationCache
+Doctrine\Tests\ORM\Functional\LifecycleCallbackTest::testLifecycleListenerChangeUpdateChangeSet
+Doctrine\Tests\ORM\Functional\NewOperatorTest::testClassCantBeInstantiatedException
+Doctrine\Tests\ORM\Functional\PropertyHooksTest::testMappingVirtualPropertyIsNotSupported
+Doctrine\Tests\ORM\Hydration\AbstractHydratorTest::testToIterableIfYieldAndBreakBeforeFinishAlwaysCleansUp
+Doctrine\Tests\ORM\Mapping\XmlMappingDriverTest::testDefaultFieldType
+Doctrine\Tests\ORM\Mapping\XmlMappingDriverTest::testEntityCustomGenerator
+Doctrine\Tests\ORM\Mapping\XmlMappingDriverTest::testInvalidEntityOrMappedSuperClassShouldMentionParentClasses
+Doctrine\Tests\ORM\Mapping\XmlMappingDriverTest::testValidateIncorrectXmlSchema with data set #0 ('Doctrine\Tests\Models\DDC889\...9Class', [1])
+Doctrine\Tests\ORM\Mapping\XmlMappingDriverTest::testValidateIncorrectXmlSchema with data set #1 ('Doctrine\Tests\ORM\Mapping\Us...ibutes', [2, 2, 1])
+Doctrine\Tests\ORM\Mapping\XmlMappingDriverTest::testValidateIncorrectXmlSchema with data set #2 ('Doctrine\Tests\ORM\Mapping\Us...ibutes', [1])
+Doctrine\Tests\ORM\Mapping\XmlMappingDriverTest::testValidateIncorrectXmlSchema with data set #3 ('Doctrine\Tests\Models\Project...apping', [2])
+Doctrine\Tests\ORM\Mapping\XmlMappingDriverTest::testXmlValidationEnabled
+Doctrine\Tests\ORM\Tools\DebugTest::testExportObjectWithReference
+Doctrine\Tests\ORM\UnitOfWorkTest::testItPreservesTheOriginalExceptionOnRollbackFailure

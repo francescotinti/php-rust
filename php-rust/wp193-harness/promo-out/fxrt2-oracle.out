@@ -1,0 +1,14 @@
+RT2-hint: int(5)
+RT2-hint-fail: TypeError
+RT2-hint-null: NULL
+RT2-wrap: 2
+RT2-deref: 3
+RT2-plain: 3 7
+RT2-null: NULL
+RT2-many: 1
+RT2-cell: 6 2
+RT2-init: 7 1
+RT2-tostr: tostr 5
+RT2-dtor: a 2
+RT2-dtor-ret: 1
+FX-RT2 DONE

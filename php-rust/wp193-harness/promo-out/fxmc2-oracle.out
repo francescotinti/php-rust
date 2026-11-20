@@ -1,0 +1,5 @@
+C1: dtor:Q E1:Cannot use [] for reading ids:2,4
+C2: get:p 7 get:boom E2:boom
+C3: 42
+C4: dtor:Da 9 dtor:Dx dtor:Dy 0 
+done

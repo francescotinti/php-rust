@@ -1,0 +1,37 @@
+exact: 3
+exact3: 1|x|2.5
+noargs: n
+nested: 7
+fga exact: 2:5,6
+fga surplus: 3:5,6,7
+opt one: 21
+opt two: 12
+byref: 99
+rec: 50
+dtor a
+mk: a
+usesobj: b!
+dtor b
+m exact: 6
+one: 8
+s: 5
+opt2 one: a5 opt2 two: ab
+loop m: 4 k2:5
+loop m: 5 k2:6
+loop m: 6 k2:7
+ACE: Too few arguments to function add(), 1 passed in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp181-harness/fx-cr1.php on line 44 and exactly 2 expected
+ACE m: Too few arguments to function K::m(), 1 passed in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp181-harness/fx-cr1.php on line 45 and exactly 2 expected
+ACE3: Too few arguments to function three(), 2 passed in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp181-harness/fx-cr1.php on line 46 and exactly 3 expected
+ACE s: Too few arguments to function K::s(), 1 passed in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp181-harness/fx-cr1.php on line 47 and exactly 2 expected
+ACE nested: Too few arguments to function nested(), 0 passed in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp181-harness/fx-cr1.php on line 48 and exactly 1 expected
+dyn: 5
+cuf: 9
+cufa: 1|2|3
+closure: pq
+byval: 6 5
+ref arg: 6
+typed: 3
+TE: TypeError
+dtor c
+inner_dtor: c?
+FX-CR1 DONE
