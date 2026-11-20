@@ -1,0 +1,47 @@
+1a2,5
+> # s193-tripwire-w1.sh <tentativo> — S-193 coppia server: tripwire W=1 Anew = pin s191 (canonica) vs Aold = pin s190 (stash),
+> # |Anew/Aold − 1| ≤ 2 %. COPIA DICHIARATA di ../wp191-harness/s191-tripwire-w1.sh (manifest s193-tripwire-w1-copia.diff,
+> # generatore gen-notte-s193.py) coi SOLI adattamenti: harness wp193, done tw193, lock TOKEN s193, SRVOLD/PIN_OLD default s190,
+> # etichette s190/s191, DRIVER_SHA su QUESTO script. Testo S-191/S-189 sotto:
+12c16
+< # gate richieste e contaminazione pgrep ereditati da s188-wp-server-pair.sh. rc SOLO da pair-out/tw191-<t>.done.
+---
+> # gate richieste e contaminazione pgrep ereditati da s188-wp-server-pair.sh. rc SOLO da pair-out/tw193-<t>.done.
+17c21
+< H="$REPO/wp191-harness"
+---
+> H="$REPO/wp193-harness"
+20,21c24,25
+< VERD="$H/s191-tripwire-w1-verdetto-$T.out"
+< DONE="$OUT/tw191-$T.done"
+---
+> VERD="$H/s193-tripwire-w1-verdetto-$T.out"
+> DONE="$OUT/tw193-$T.done"
+28c32
+< SRVOLD="${SRVOLD:-/Volumes/Extreme Pro/Claude/phpr-old-target/release/php-server-s189}"
+---
+> SRVOLD="${SRVOLD:-/Volumes/Extreme Pro/Claude/phpr-old-target/release/php-server-s190}"
+30c34
+< PIN_OLD="${PIN_OLD:-80eea401b71c2be7}"
+---
+> PIN_OLD="${PIN_OLD:-721b7802e2d12058}"
+37,38c41,42
+< fin(){ echo "rc=$1 ${2:-}" > "$DONE"; echo "$1" > "$OUT/tw191-$T.rc"; step "DONE rc=$1 ${2:-}"; exit "$1"; }
+< : > "$OUT/tw-progress-$T.txt"; rm -f "$DONE" "$OUT/tw191-$T.rc"
+---
+> fin(){ echo "rc=$1 ${2:-}" > "$DONE"; echo "$1" > "$OUT/tw193-$T.rc"; step "DONE rc=$1 ${2:-}"; exit "$1"; }
+> : > "$OUT/tw-progress-$T.txt"; rm -f "$DONE" "$OUT/tw193-$T.rc"
+47c51
+< [ -r "$MLOCK" ] && grep -q 's191' "$MLOCK" || fin 4 "lock assente o senza TOKEN s189"
+---
+> [ -r "$MLOCK" ] && grep -q 's193' "$MLOCK" || fin 4 "lock assente o senza TOKEN s189"
+52c56
+< DRIVER_SHA="$(shasum -a 256 "$H/s189-tripwire-w1.sh" "$RU" | shasum -a 256 | cut -c1-16)"
+---
+> DRIVER_SHA="$(shasum -a 256 "$H/s193-tripwire-w1.sh" "$RU" | shasum -a 256 | cut -c1-16)"
+116,117c120,121
+< print(f"== s191 coppia server tripwire W=1 (NON-REGRESSIONE, mai cifra): Anew s190 {NEW} vs Aold s189 {OLD}, --axum --workers 1 | git={GIT} driver_sha={DSHA} tentativo={T} ==")
+< print(f"grade={GRADE}  # VERDICT solo con W>=10 K>=30 R>=3; rc autoritativo = pair-out/tw191-{T}.done")
+---
+> print(f"== s193 coppia server tripwire W=1 (NON-REGRESSIONE, mai cifra): Anew s191 {NEW} vs Aold s190 {OLD}, --axum --workers 1 | git={GIT} driver_sha={DSHA} tentativo={T} ==")
+> print(f"grade={GRADE}  # VERDICT solo con W>=10 K>=30 R>=3; rc autoritativo = pair-out/tw193-{T}.done")

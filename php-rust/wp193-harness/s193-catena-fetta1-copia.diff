@@ -1,0 +1,23 @@
+1a2,5
+> # s193-catena-fetta1.sh — S-193 coppia server s191 (AXnew, canonica) vs s190 (AXold, stash), tentativo t4, nella finestra
+> # della notte (lock TOKEN s193). COPIA DICHIARATA di ../wp191-harness/s191-catena-fetta1.sh (manifest
+> # s193-catena-fetta1-copia.diff, generatore gen-notte-s193.py) coi SOLI adattamenti: harness wp193, PIN_OLD default s190,
+> # script s193-*, done ga193/tw193. Testo S-191/S-189 sotto:
+12c16
+< H="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp191-harness"
+---
+> H="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp193-harness"
+15c19
+< export PIN_ATTESO PIN_OLD="${PIN_OLD:-80eea401b71c2be7}"
+---
+> export PIN_ATTESO PIN_OLD="${PIN_OLD:-721b7802e2d12058}"
+17,20c21,24
+< /bin/bash "$H/s191-guardia-ax.sh" "$T"
+< G=$(cat "$OUT/ga191-$T.done" 2>/dev/null || echo "rc=99 manca")
+< /bin/bash "$H/s191-tripwire-w1.sh" "$T"
+< W=$(cat "$OUT/tw191-$T.done" 2>/dev/null || echo "rc=99 manca")
+---
+> /bin/bash "$H/s193-guardia-ax.sh" "$T"
+> G=$(cat "$OUT/ga193-$T.done" 2>/dev/null || echo "rc=99 manca")
+> /bin/bash "$H/s193-tripwire-w1.sh" "$T"
+> W=$(cat "$OUT/tw193-$T.done" 2>/dev/null || echo "rc=99 manca")

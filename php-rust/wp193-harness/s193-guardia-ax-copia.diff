@@ -1,0 +1,52 @@
+1a2,6
+> # s193-guardia-ax.sh <tentativo> — S-193 coppia server: guardia di NON-REGRESSIONE del throughput AXnew = pin s191 (canonica,
+> # c413398a44f9b0a4) vs AXold = pin s190 (stash, 721b7802e2d12058), stesso giudice di S-189/S-191. COPIA DICHIARATA di
+> # ../wp191-harness/s191-guardia-ax.sh (manifest s193-guardia-ax-copia.diff, generatore gen-notte-s193.py) coi SOLI adattamenti:
+> # harness wp193, done ga193, lock TOKEN s193, SRVOLD/PIN_OLD default s190, etichette s190/s191, e DRIVER_SHA calcolato su
+> # QUESTO script (in S-191 puntava a un file s189 assente dalla cartella: etichetta rotta, non un giudice). Testo sotto:
+15c20
+< # pair-out/ga191-<t>.done. Generato con assistenza AI (Claude Fable 5).
+---
+> # pair-out/ga193-<t>.done. Generato con assistenza AI (Claude Fable 5).
+19c24
+< H="$REPO/wp191-harness"
+---
+> H="$REPO/wp193-harness"
+23,24c28,29
+< VERD="$H/s191-guardia-ax-verdetto-$T.out"
+< DONE="$OUT/ga191-$T.done"
+---
+> VERD="$H/s193-guardia-ax-verdetto-$T.out"
+> DONE="$OUT/ga193-$T.done"
+30c35
+< SRVOLD="${SRVOLD:-/Volumes/Extreme Pro/Claude/phpr-old-target/release/php-server-s189}"
+---
+> SRVOLD="${SRVOLD:-/Volumes/Extreme Pro/Claude/phpr-old-target/release/php-server-s190}"
+33c38
+< PIN_OLD="${PIN_OLD:-80eea401b71c2be7}"
+---
+> PIN_OLD="${PIN_OLD:-721b7802e2d12058}"
+41,42c46,47
+< fin(){ echo "rc=$1 ${2:-}" > "$DONE"; echo "$1" > "$OUT/ga191-$T.rc"; step "DONE rc=$1 ${2:-}"; exit "$1"; }
+< : > "$OUT/tp-progress-$T.txt"; rm -f "$DONE" "$OUT/ga191-$T.rc"
+---
+> fin(){ echo "rc=$1 ${2:-}" > "$DONE"; echo "$1" > "$OUT/ga193-$T.rc"; step "DONE rc=$1 ${2:-}"; exit "$1"; }
+> : > "$OUT/tp-progress-$T.txt"; rm -f "$DONE" "$OUT/ga193-$T.rc"
+52c57
+< [ -r "$MLOCK" ] && grep -q 's191' "$MLOCK" || fin 4 "lock assente o senza TOKEN s188"
+---
+> [ -r "$MLOCK" ] && grep -q 's193' "$MLOCK" || fin 4 "lock assente o senza TOKEN s188"
+59c64
+< DRIVER_SHA="$(shasum -a 256 "$H/s189-guardia-ax.sh" "$RU" | shasum -a 256 | cut -c1-16)"
+---
+> DRIVER_SHA="$(shasum -a 256 "$H/s193-guardia-ax.sh" "$RU" | shasum -a 256 | cut -c1-16)"
+139c144
+< label = {"AXold": f"php-server --axum --workers 4 pin s189 {OLD} (stash)", "AXnew": f"php-server --axum --workers 4 pin s190 {NEW} (canonica)"}
+---
+> label = {"AXold": f"php-server --axum --workers 4 pin s190 {OLD} (stash)", "AXnew": f"php-server --axum --workers 4 pin s191 {NEW} (canonica)"}
+169,170c174,175
+< print(f"== s191 coppia server guardia AX (NON-REGRESSIONE; in banda ⇒ s190 server di record): AXnew s190 {NEW} vs AXold s189 {OLD}, --axum --workers 4, WordPress, PHP {PHPV} assente per disegno | git={GIT} driver_sha={DSHA} tentativo={T} epoch={int(__import__('time').time())} ==")
+< print(f"grade={GRADE}  # VERDICT solo con N>=150 R>=3 e i tre livelli; rc autoritativo = pair-out/ga191-{T}.done")
+---
+> print(f"== s193 coppia server guardia AX (NON-REGRESSIONE; in banda ⇒ s191 server di record): AXnew s191 {NEW} vs AXold s190 {OLD}, --axum --workers 4, WordPress, PHP {PHPV} assente per disegno | git={GIT} driver_sha={DSHA} tentativo={T} epoch={int(__import__('time').time())} ==")
+> print(f"grade={GRADE}  # VERDICT solo con N>=150 R>=3 e i tre livelli; rc autoritativo = pair-out/ga193-{T}.done")
