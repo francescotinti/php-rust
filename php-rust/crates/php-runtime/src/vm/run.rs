@@ -60,7 +60,7 @@ pub extern "C" fn phpr_null_lever_pad() -> u64 {
 
 /// A file op that a userland stream wrapper (`stream_wrapper_register`) can
 /// service via its `stream_*` methods, if its first argument is a `UserStream`.
-fn is_user_stream_op(name: &[u8]) -> bool {
+pub(super) fn is_user_stream_op(name: &[u8]) -> bool {
     matches!(
         name,
         b"fread"
@@ -1403,14 +1403,14 @@ impl<'m> super::Vm<'m> {
     fn value_builtin_call(
         &mut self,
         top: usize,
-        f: crate::builtin::BuiltinFn,
+        f: crate::builtin::BuiltinFn, fl: u8,
         name: &std::rc::Rc<[u8]>,
         args: &mut [Zval],
     ) -> Result<Zval, PhpError> {
         // A whole-object exporter initializes a lazy argument first
         // (PHP 8.4, init_trigger_var_export); the pure builtin then
         // formats the realized instance.
-        if matches!(&name[..], b"var_export" | b"print_r") {
+        if fl & super::builtin_fast::BF_EXPORT != 0 {
             for a in &mut *args {
                 if self.is_lazy_value(a) {
                     *a = self.realize_full(a)?;
@@ -1422,7 +1422,7 @@ impl<'m> super::Vm<'m> {
         // if that method touches its state — and dumps the returned
         // array under the object header. Results handed to the builtin
         // via `var_dump_debug` (taken in `run_value_builtin`).
-        if name[..] == *b"var_dump" {
+        if fl & super::builtin_fast::BF_VAR_DUMP != 0 {
             self.var_dump_debug = self.compute_debug_info(args)?;
         }
         // `count($obj)`/`sizeof($obj)` on a Countable dispatches its
@@ -1430,7 +1430,7 @@ impl<'m> super::Vm<'m> {
         // arrays. A non-Countable object still TypeErrors in the
         // builtin below, matching PHP.
         if args.len() == 1
-            && (name[..] == *b"count" || name[..] == *b"sizeof")
+            && fl & super::builtin_fast::BF_COUNT != 0
         {
             if let Some(obj) = self.as_countable(&args[0]) {
                 return self.call_method_sync(obj, b"count", Vec::new());
@@ -1441,7 +1441,7 @@ impl<'m> super::Vm<'m> {
         // wrapper object's stream_* methods (VM re-entrant), never the
         // pure value builtin. Only fires for UserStream resources, so
         // ordinary file I/O is untouched.
-        if !args.is_empty() && is_user_stream_op(&name) {
+        if !args.is_empty() && fl & super::builtin_fast::BF_USER_STREAM != 0 {
             if let Some(rc) = user_stream_rc(&args[0]) {
                 let line = self.cur_line(top);
                 self.flush_diags(line)?;
@@ -1451,7 +1451,7 @@ impl<'m> super::Vm<'m> {
             }
         }
         // `file_get_contents("scheme://…")` on a registered wrapper.
-        if !args.is_empty() && name[..] == *b"file_get_contents" {
+        if !args.is_empty() && fl & super::builtin_fast::BF_FGC != 0 {
             if let Some(path) = user_wrapper_url(&args[0], &self.stream_wrappers) {
                 let line = self.cur_line(top);
                 self.flush_diags(line)?;
@@ -1462,7 +1462,7 @@ impl<'m> super::Vm<'m> {
         }
         // Stat-family / image / exif builtins on a wrapper URL:
         // url_stat or read-to-EOF through the wrapper object.
-        if !args.is_empty() && is_user_wrapper_path_op(&name) {
+        if !args.is_empty() && fl & super::builtin_fast::BF_WRAPPER_PATH != 0 {
             if let Some(path) = user_wrapper_url(&args[0], &self.stream_wrappers) {
                 let line = self.cur_line(top);
                 self.flush_diags(line)?;
@@ -1477,9 +1477,9 @@ impl<'m> super::Vm<'m> {
         // `stringify_args`, taken in `run_value_builtin`). The `deep`
         // family (`implode`/`str_replace`) also coerces array
         // *elements*, so its precompute recurses into array arguments.
-        if value_builtin_string_coerces(&name) {
+        if fl & super::builtin_fast::BF_STR_COERCE != 0 {
             self.stringify_args = self.compute_stringify(args, false)?;
-        } else if value_builtin_string_coerces_deep(&name, args) {
+        } else if fl & super::builtin_fast::BF_STR_COERCE_DEEP != 0 && value_builtin_string_coerces_deep(&name, args) {
             self.stringify_args = self.compute_stringify(args, true)?;
         }
         let line = self.cur_line(top);
@@ -3878,7 +3878,7 @@ impl<'m> super::Vm<'m> {
                     let frame = build_named_frame(callee, m, &qn, positional, named)?;
                     self.enter_callee(frame)?;
                 }
-                Op::CallBuiltin { name, argc } => {
+                Op::CallBuiltin { name, argc, f, fl } => {
                     // S-148 (census): estensione dinamica del builtin nel
                     // tag `hostcall` della partizione galloc.
                     #[cfg(feature = "mem-census")]
@@ -3893,11 +3893,7 @@ impl<'m> super::Vm<'m> {
                     let _ct = super::census_time::scope(super::census_time::Class::Builtin);
                     #[cfg(feature = "census-time")]
                     let _cl = super::census_time::scope(super::census_time::Class::BuiltinLookup);
-                    let f = match self.registry.get(&name[..]) {
-                        Some(Builtin::Value(f)) => *f,
-                        // The compiler only emits CallBuiltin for value builtins.
-                        _ => return Err(undefined_builtin(&name)),
-                    };
+                    let (f, fl) = (f.0, *fl); // S-194 D: resolved at compile time (was a by-name registry lookup per call)
                     #[cfg(feature = "census-time")]
                     drop(_cl);
                     // L-HD2 forma-2 (S-125): per arità <=4 gli argomenti passano
@@ -3909,32 +3905,32 @@ impl<'m> super::Vm<'m> {
                     // resta il Vec. Corpo (rami freddi inclusi) in
                     // `value_builtin_call`, fuori dal dispatcher.
                     let result = match *argc {
-                        0 => self.value_builtin_call(top, f, name, &mut [])?,
+                        0 => self.value_builtin_call(top, f, fl, name, &mut [])?,
                         1 => {
                             let a0 = self.frames[top].stack.pop().expect("builtin args");
-                            self.value_builtin_call(top, f, name, &mut [a0])?
+                            self.value_builtin_call(top, f, fl, name, &mut [a0])?
                         }
                         2 => {
                             let a1 = self.frames[top].stack.pop().expect("builtin args");
                             let a0 = self.frames[top].stack.pop().expect("builtin args");
-                            self.value_builtin_call(top, f, name, &mut [a0, a1])?
+                            self.value_builtin_call(top, f, fl, name, &mut [a0, a1])?
                         }
                         3 => {
                             let a2 = self.frames[top].stack.pop().expect("builtin args");
                             let a1 = self.frames[top].stack.pop().expect("builtin args");
                             let a0 = self.frames[top].stack.pop().expect("builtin args");
-                            self.value_builtin_call(top, f, name, &mut [a0, a1, a2])?
+                            self.value_builtin_call(top, f, fl, name, &mut [a0, a1, a2])?
                         }
                         4 => {
                             let a3 = self.frames[top].stack.pop().expect("builtin args");
                             let a2 = self.frames[top].stack.pop().expect("builtin args");
                             let a1 = self.frames[top].stack.pop().expect("builtin args");
                             let a0 = self.frames[top].stack.pop().expect("builtin args");
-                            self.value_builtin_call(top, f, name, &mut [a0, a1, a2, a3])?
+                            self.value_builtin_call(top, f, fl, name, &mut [a0, a1, a2, a3])?
                         }
                         _ => {
                             let mut args = self.pop_keys(top, *argc);
-                            self.value_builtin_call(top, f, name, &mut args)?
+                            self.value_builtin_call(top, f, fl, name, &mut args)?
                         }
                     };
                     self.frames[top].stack.push(result);

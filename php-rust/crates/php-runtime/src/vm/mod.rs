@@ -81,6 +81,7 @@ mod dom;
 pub mod cli_stream;
 mod exceptions;
 mod gc_probe;
+pub(crate) mod builtin_fast;
 mod xmlparser;
 mod host;
 mod ini;
@@ -6065,7 +6066,7 @@ impl<'m> Vm<'m> {
         args: &[Zval],
         line: Line,
     ) -> Result<Zval, PhpError> {
-        self.flush_diags(line)?;
+        let mut flushed = self.diags_pending(); if flushed { self.flush_diags(line)?; } // S-194 D: in-line test
         // PHP's ZPP dereferences a reference argument for every by-value
         // parameter, and the Value family is by-value by construction — but a
         // dynamic call site (unknown callee ⇒ prefer-ref sends) can deliver
@@ -6081,8 +6082,7 @@ impl<'m> Vm<'m> {
         };
         let mut produced = Vec::new();
         let mut direct = Vec::new();
-        // A `var_dump` arg-walk left the objects' `__debugInfo()` results here;
-        // take them so the pure builtin can render them (empty for every other).
+        // A `var_dump` arg-walk left the objects' `__debugInfo()` results here (empty for every other builtin).
         let debug_info = std::mem::take(&mut self.var_dump_debug);
         // Likewise, a string-coercing builtin's arg-walk may have precomputed
         // `__toString()` results (empty for every builtin that does not coerce).
@@ -6097,8 +6097,8 @@ impl<'m> Vm<'m> {
             };
             f(args, &mut ctx)
         };
-        self.flush_diags(line)?;
-        self.write_output(&produced)?;
+        if self.diags_pending() { flushed = true; self.flush_diags(line)?; }
+        if flushed || !produced.is_empty() { self.write_output(&produced)?; } // an empty write only drained what a flush rendered
         if !direct.is_empty() { // stream writes to stdout bypass the ob stack (see Ctx::direct_out)
             self.stdout.extend_from_slice(&direct);
             self.rendered.extend_from_slice(&direct);

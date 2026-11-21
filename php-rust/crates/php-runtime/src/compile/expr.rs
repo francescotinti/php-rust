@@ -1290,7 +1290,7 @@ impl<'a> super::FnCompiler<'a> {
         }
         // Builtins: classify by-value vs by-reference-first via the registry.
         match self.ctx.registry.get(bname) {
-            Some(Builtin::Value(_)) => {
+            Some(&Builtin::Value(bf)) => {
                 // An unqualified call inside a namespace still resolves the
                 // NAMESPACED function first at run time, even when the bare
                 // name is a builtin: phpunit-bridge's ClockMock eval-declares
@@ -1321,7 +1321,7 @@ impl<'a> super::FnCompiler<'a> {
                     return self.emit_builtin_spread(bname, args);
                 }
                 self.push_value_args(args)?;
-                self.emit(Op::CallBuiltin { name: bname.into(), argc: args.len() as u32 });
+                self.emit(Op::CallBuiltin { name: bname.into(), argc: args.len() as u32, f: crate::vm::builtin_fast::BuiltinPtr(bf), fl: crate::vm::builtin_fast::value_builtin_flags(bname) });
                 Ok(())
             }
             Some(Builtin::RefFirst(_)) => self.call_ref_builtin(bname, args),

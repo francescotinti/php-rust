@@ -6,7 +6,7 @@ import collections, gzip, json, os, pathlib, re, subprocess, sys
 P = pathlib.Path("/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust")
 O = P / "wp192-harness/out"
 H = P / "wp194-harness"
-BIN = str(O / "anatomia-s194w.bin" / "phpr")
+BIN = os.environ.get("S194_BIN", str(O / "anatomia-s194w.bin" / "phpr"))  # S194_BIN / S194_SUF: another profile binary and an output suffix
 fx, n = sys.argv[1], sys.argv[2]
 prof = H / "primitive" / f"{fx}.prof.json"
 prof.unlink(missing_ok=True)
@@ -58,4 +58,4 @@ for k, c in syms.most_common(14):
 out.append("  righe (simbolo file:riga):")
 for (sym, f, no), c in lines.most_common(34):
     out.append(f"  {c:6d} {100 * c / total:5.1f}%  {sym} {f}:{no}  | {text(f, no)}")
-(H / f"s194-profilo-{fx}.out").write_text("\n".join(out) + "\n")
+(H / f"s194-profilo-{fx}{os.environ.get('S194_SUF', '')}.out").write_text("\n".join(out) + "\n")

@@ -872,7 +872,7 @@ pub enum Op {
     /// against a `Ctx { out, diags }` borrowed from the VM. Builtins that need the
     /// evaluator (higher-order, class-introspection, `define`/`defined`/`constant`)
     /// are *not* emitted — the compiler rejects them so the VM never sees them.
-    CallBuiltin { name: Rc<[u8]>, argc: u32 },
+    CallBuiltin { name: Rc<[u8]>, argc: u32, f: crate::vm::builtin_fast::BuiltinPtr, fl: u8 },
     /// `f(comp…)` into a by-value builtin where at least one component is a spread
     /// `...$src` (step 56b): one value per leading component is on the stack;
     /// `spreads[i]` marks a spread source (expanded via `spread_pairs`) vs a plain
