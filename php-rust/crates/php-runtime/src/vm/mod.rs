@@ -11501,7 +11501,7 @@ impl<'m> Vm<'m> {
     /// implicit class (`Closure`; `Generator`/`Iterator`/`Traversable`); a real
     /// object walks its ancestry. A non-object or an unknown name is `false`.
     fn value_satisfies_class(&self, v: &Zval, name: &[u8]) -> bool {
-        let lc = name.strip_prefix(b"\\").unwrap_or(name).to_ascii_lowercase();
+        let (mut buf, mut heap) = ([0u8; 128], Vec::new()); let lc = lc_name(name.strip_prefix(b"\\").unwrap_or(name), &mut buf, &mut heap);
         match v {
             Zval::Closure(_) => lc == b"closure",
             Zval::Generator(_) => {

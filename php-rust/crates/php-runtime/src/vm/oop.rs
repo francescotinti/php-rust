@@ -197,6 +197,20 @@ pub(super) fn resolve_method_runtime(classes: &[&CompiledClass], start: ClassId,
     None
 }
 
+/// ASCII-lowercase name into buf when it fits, else into heap: no
+/// allocation for the class names of ordinary type hints (S-194).
+pub(super) fn lc_name<'a>(name: &[u8], buf: &'a mut [u8; 128], heap: &'a mut Vec<u8>) -> &'a [u8] {
+    if name.len() <= buf.len() {
+        let b = &mut buf[..name.len()];
+        b.copy_from_slice(name);
+        b.make_ascii_lowercase();
+        b
+    } else {
+        *heap = name.to_ascii_lowercase();
+        heap
+    }
+}
+
 /// The class id of an object value (following a reference), or `None` for a
 /// non-object.
 pub(super) fn object_class_id(v: &Zval) -> Option<ClassId> {
