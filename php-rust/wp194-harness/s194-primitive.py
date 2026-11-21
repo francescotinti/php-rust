@@ -110,7 +110,13 @@ def measure(eng, path, n):
 def main():
     gen()
     rows, notes = [], []
-    only = set(sys.argv[2:])
+    import argparse, hashlib
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--out", default="s194-primitive"); ap.add_argument("--bin"); ap.add_argument("--base"); ap.add_argument("--only", default="")
+    A = ap.parse_args()
+    if A.bin: ENG["phpr"] = os.path.expanduser(A.bin)
+    only = set(x for x in A.only.split(",") if x)
+    sha = hashlib.sha256(open(ENG["phpr"], "rb").read()).hexdigest()[:16]
     for name, fam, _, div in F + G + L:
         if only and name not in only: continue
         path = os.path.join(FX, name + ".php")
@@ -128,7 +134,7 @@ def main():
         print(name, "ok" if ok else "NULLA", flush=True)
     base = {r[0]: r[2] for r in rows}
     out = []
-    out.append("== S-194 primitive: istruzioni ritirate per iterazione (differenziale N1/N2), pin phpr contro oracle. DIREZIONE ==")
+    out.append(f"== S-194 primitive: istruzioni ritirate per iterazione (differenziale N1/N2), phpr {ENG['phpr']} sha {sha} contro oracle. DIREZIONE ==")
     out.append(f"{'fixture':15s} {'fam':8s} {'php':>8s} {'phpr':>8s} {'x':>5s} | {'php net':>8s} {'phpr net':>8s} {'x net':>6s} {'eccesso':>8s} | {'cyc x':>5s} {'IPC php':>7s} {'IPC phpr':>8s} {'disp%':>5s}")
     for name, fam, per, ok, worst in rows:
         nb = "g_noop" if fam == "global" else ("lit_noop" if fam == "literal" else "noop")
@@ -137,8 +143,25 @@ def main():
         xn = f"{nri / npi:6.2f}" if npi > 2 else "     -"
         out.append(f"{name:15s} {fam:8s} {pi:8.1f} {ri:8.1f} {ri / pi:5.2f} | {npi:8.1f} {nri:8.1f} {xn} {nri - npi:8.1f} | {rc / pc:5.2f} {pi / pc:7.2f} {ri / rc:8.2f} {worst:5.2f}" + ("" if ok else "  NULLA"))
     out.append("note: " + ("; ".join(notes) if notes else "nessuna fixture nulla"))
-    open(os.path.join(HERE, (sys.argv[1] if len(sys.argv) > 1 else "s194-primitive") + ".out"), "w").write("\n".join(out) + "\n")
-    return 0
+    rc = 0
+    if A.base:
+        base_i = {}
+        for ln in open(os.path.join(HERE, A.base)):
+            p = ln.split()
+            if len(p) > 4 and p[0] != "fixture" and not ln.startswith(("==", "note", "confronto", "  ")):
+                try: base_i[p[0]] = float(p[3])
+                except ValueError: pass
+        out.append(f"confronto con {A.base} (istruzioni lorde phpr per iterazione; soglia di non-regressione +1,0 %):")
+        worse = 0
+        for name, fam, per, ok, worst in rows:
+            if name in base_i:
+                d = (per["phpr"][0] / base_i[name] - 1) * 100
+                if d > 1.0: worse += 1
+                if abs(d) >= 1.0: out.append(f"  {name:16s} {base_i[name]:9.1f} -> {per['phpr'][0]:9.1f}  {d:+6.1f} %")
+        out.append(f"  fixture peggiorate oltre +1 %: {worse}")
+        rc = 3 if worse else 0
+    open(os.path.join(HERE, A.out + ".out"), "w").write("\n".join(out) + "\n")
+    return rc
 
 if __name__ == "__main__":
     sys.exit(main())
