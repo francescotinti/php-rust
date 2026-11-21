@@ -7,7 +7,7 @@ function run($n) {
   $s = 0; $x = 0; $t = ''; $f = 0.0; $o = new C; $u = "hello"; $w = str_repeat("abcdef", 5);
   $a = range(0, 1023); $h = ['alpha' => 1, 'beta' => 2, 'gamma' => 3]; $k = []; for ($j = 0; $j < 1024; $j++) { $k["k$j"] = $j; }
   $c = function ($a) { return $a + 1; }; $r = range(0, 99); $subj = "the quick brown fox jumps over the lazy dog 12345";
-  for ($i = 0; $i < $n; $i++) { $t = new C; }
+  for ($i = 0; $i < $n; $i++) { $q = new C; }
   echo $s, "|", strlen((string)$t), "|", $x, "\n";
 }
 run((int)$argv[1]);

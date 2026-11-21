@@ -1,0 +1,7 @@
+noop ok
+new_obj ok
+new_ctor ok
+lit_noop ok
+lit_assign_const ok
+lit_add_assign ok
+lit_add ok

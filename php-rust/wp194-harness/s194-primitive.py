@@ -44,8 +44,8 @@ F = [
  ("static_prop", "prop", "$s += C::$sp;", 1),
  ("class_const", "prop", "$s += C::K;", 1),
  ("instanceof", "prop", "if ($o instanceof C) { $s++; }", 1),
- ("new_obj", "object", "$t = new C;", 1),
- ("new_ctor", "object", "$t = new D($i);", 1),
+ ("new_obj", "object", "$q = new C;", 1),
+ ("new_ctor", "object", "$q = new D($i);", 1),
  ("arr_int_read", "array", "$s += $a[$i & 1023];", 1),
  ("arr_int_write", "array", "$a[$i & 1023] = $i;", 1),
  ("arr_isset", "array", "if (isset($a[$i & 1023])) { $s++; }", 1),
@@ -70,6 +70,13 @@ G = [
  ("g_call_user2", "global", "$s = f2($s, 1);", 1),
  ("g_prop_rw", "global", "$o->x = $o->y + 1; $s += $o->x;", 1),
 ]
+# literal loop bound (the shape of the official micro benchmarks): one file per N
+L = [
+ ("lit_noop", "literal", "", 1),
+ ("lit_assign_const", "literal", "$x = 1;", 1),
+ ("lit_add_assign", "literal", "$s += $i;", 1),
+ ("lit_add", "literal", "$s = $s + $i;", 1),
+]
 TAIL = ' echo $s, "|", strlen((string)$t), "|", $x, "\\n";'
 
 def gen():
@@ -80,6 +87,12 @@ def gen():
     for name, _, body, _ in G:
         src = "<?php\n" + PRE + "$n = (int)$argv[1];\n" + SETUP + "for ($i = 0; $i < $n; $i++) { " + body + " }\n" + TAIL + "\n"
         open(os.path.join(FX, name + ".php"), "w").write(src)
+
+def lit_path(name, n):
+    body = [b for (nm, _, b, _) in L if nm == name][0]
+    p = os.path.join(FX, f"{name}_{n}.php")
+    open(p, "w").write("<?php\n" + PRE + "function run($n) {\n  " + SETUP + "  for ($i = 0; $i < " + str(n) + "; $i++) { " + body + " }\n " + TAIL + "\n}\nrun((int)$argv[1]);\n")
+    return p
 
 def once(eng, path, n):
     p = subprocess.run(["/usr/bin/time", "-l", ENG[eng], path, str(n)], capture_output=True)
@@ -97,13 +110,16 @@ def measure(eng, path, n):
 def main():
     gen()
     rows, notes = [], []
-    for name, fam, _, div in F + G:
+    only = set(sys.argv[2:])
+    for name, fam, _, div in F + G + L:
+        if only and name not in only: continue
         path = os.path.join(FX, name + ".php")
         n1 = N1 // div; n2 = 3 * n1
+        paths = (lit_path(name, n1), lit_path(name, n2)) if fam == "literal" else (path, path)
         per = {}; outs = {}; ok = True; worst = 0.0
         for eng in ("php", "phpr"):
-            rc1, o1, i1, c1, s1 = measure(eng, path, n1)
-            rc2, o2, i2, c2, s2 = measure(eng, path, n2)
+            rc1, o1, i1, c1, s1 = measure(eng, paths[0], n1)
+            rc2, o2, i2, c2, s2 = measure(eng, paths[1], n2)
             if rc1 or rc2: ok = False; notes.append(f"{name}: rc {eng} {rc1}/{rc2}")
             outs[eng] = (o1, o2); worst = max(worst, s1, s2)
             per[eng] = ((i2 - i1) / (n2 - n1), (c2 - c1) / (n2 - n1))
@@ -115,13 +131,13 @@ def main():
     out.append("== S-194 primitive: istruzioni ritirate per iterazione (differenziale N1/N2), pin phpr contro oracle. DIREZIONE ==")
     out.append(f"{'fixture':15s} {'fam':8s} {'php':>8s} {'phpr':>8s} {'x':>5s} | {'php net':>8s} {'phpr net':>8s} {'x net':>6s} {'eccesso':>8s} | {'cyc x':>5s} {'IPC php':>7s} {'IPC phpr':>8s} {'disp%':>5s}")
     for name, fam, per, ok, worst in rows:
-        nb = "g_noop" if fam == "global" else "noop"
+        nb = "g_noop" if fam == "global" else ("lit_noop" if fam == "literal" else "noop")
         pi, pc = per["php"]; ri, rc = per["phpr"]
         npi = pi - base[nb]["php"][0]; nri = ri - base[nb]["phpr"][0]
         xn = f"{nri / npi:6.2f}" if npi > 2 else "     -"
         out.append(f"{name:15s} {fam:8s} {pi:8.1f} {ri:8.1f} {ri / pi:5.2f} | {npi:8.1f} {nri:8.1f} {xn} {nri - npi:8.1f} | {rc / pc:5.2f} {pi / pc:7.2f} {ri / rc:8.2f} {worst:5.2f}" + ("" if ok else "  NULLA"))
     out.append("note: " + ("; ".join(notes) if notes else "nessuna fixture nulla"))
-    open(os.path.join(HERE, "s194-primitive.out"), "w").write("\n".join(out) + "\n")
+    open(os.path.join(HERE, (sys.argv[1] if len(sys.argv) > 1 else "s194-primitive") + ".out"), "w").write("\n".join(out) + "\n")
     return 0
 
 if __name__ == "__main__":

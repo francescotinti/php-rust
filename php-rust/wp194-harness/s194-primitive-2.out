@@ -1,0 +1,10 @@
+== S-194 primitive: istruzioni ritirate per iterazione (differenziale N1/N2), pin phpr contro oracle. DIREZIONE ==
+fixture         fam           php     phpr     x |  php net phpr net  x net  eccesso | cyc x IPC php IPC phpr disp%
+noop            loop         34.9    199.9  5.73 |      0.0      0.0      -      0.0 |  4.20    6.68     9.11  2.14
+new_obj         object      427.0   3231.7  7.57 |    392.1   3031.8   7.73   2639.7 |  7.15    6.32     6.69  0.04
+new_ctor        object      842.0   6209.9  7.37 |    807.1   6010.0   7.45   5202.8 |  8.80    6.70     5.62  0.02
+lit_noop        literal      35.0    122.0  3.48 |      0.0      0.0      -      0.0 |  2.10    4.58     7.60  2.00
+lit_assign_const literal      55.1    329.7  5.99 |     20.1    207.7  10.36    187.7 |  5.26    6.68     7.60  0.14
+lit_add_assign  literal      81.0    356.1  4.40 |     45.9    234.1   5.09    188.1 |  6.24   10.63     7.49  0.10
+lit_add         literal      75.8    312.0  4.11 |     40.8    190.0   4.66    149.2 |  4.73    9.31     8.10  0.04
+note: nessuna fixture nulla
