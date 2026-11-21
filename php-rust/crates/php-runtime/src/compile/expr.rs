@@ -1310,11 +1310,7 @@ impl<'a> super::FnCompiler<'a> {
                     for a in args {
                         self.expr(a)?;
                     }
-                    self.emit(Op::CallNsFallback {
-                        name: name.into(),
-                        fallback: fb.into(),
-                        argc: args.len() as u32,
-                    });
+                    self.emit(crate::vm::builtin_fast::ns_builtin_op(name, fb, bname, args.len(), bf));
                     return Ok(());
                 }
                 if args.iter().any(|a| matches!(a.kind, ExprKind::Spread(_))) {

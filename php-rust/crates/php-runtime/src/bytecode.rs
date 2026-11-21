@@ -174,7 +174,7 @@ pub fn bump_ic_epoch() {
 }
 
 #[inline]
-fn ic_epoch() -> u64 {
+pub(crate) fn ic_epoch() -> u64 {
     IC_EPOCH.with(|e| e.get())
 }
 
@@ -524,9 +524,9 @@ pub enum Op {
     /// hoisted user function nor a builtin). Pop `argc` arguments and dispatch by
     /// name at run time trying the namespaced `name` first, then the global
     /// `fallback` — exactly PHP's two-step lookup, so a function defined in another
-    /// unit (autoloaded / included) still binds. When neither is defined the
-    /// catchable "Call to undefined function `name`()" reports the namespaced name.
+    /// unit (autoloaded / included) still binds; when neither is defined the catchable "Call to undefined function `name`()" reports the namespaced name.
     CallNsFallback { name: Rc<[u8]>, fallback: Rc<[u8]>, argc: u32 },
+    CallNsBuiltin { name: Rc<[u8]>, f: crate::vm::builtin_fast::BuiltinPtr, bind: crate::vm::builtin_fast::NsBind, argc: u16, fl: u8, bare: u8 }, // S-194 N: CallNsFallback whose global fallback is a value builtin, resolved at compile time and bound once per site and run (the builtin name is the last `bare` bytes of `name`)
     /// `[callee, argsArray] -> [result]` — a dynamic call with argument unpacking
     /// `$f(...$a)` (CLO). Pop the runtime argument array (its values become the
     /// positional arguments, in order) and the callee beneath it, then dispatch

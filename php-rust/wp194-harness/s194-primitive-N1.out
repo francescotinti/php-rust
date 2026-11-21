@@ -1,0 +1,27 @@
+== S-194 primitive: istruzioni ritirate per iterazione (differenziale N1/N2), phpr /Users/francescotinti/Claude/phpr-target/s192-armD/release/phpr sha 68f685e24e4132ad contro oracle. DIREZIONE ==
+fixture         fam           php     phpr     x |  php net phpr net  x net  eccesso | cyc x IPC php IPC phpr disp%
+noop            loop         34.5    200.1  5.81 |      0.0      0.0      -      0.0 |  6.32    8.19     7.52  2.60
+assign_const    loop         55.3    408.0  7.38 |     20.8    207.9   9.99    187.1 |  7.40    7.38     7.37  0.11
+add_assign      arith        81.1    434.2  5.36 |     46.6    234.2   5.02    187.6 |  5.75    7.95     7.41  0.13
+call_user0      calls       172.0    834.9  4.85 |    137.5    634.8   4.62    497.3 |  3.57    4.99     6.78  0.04
+builtin_strlen  builtin      99.8    517.1  5.18 |     65.3    317.1   4.86    251.8 |  6.21    9.04     7.54  0.09
+builtin_abs     builtin     195.1    662.2  3.39 |    160.7    462.1   2.88    301.5 |  3.75    8.70     7.87  0.05
+builtin_count   builtin     106.2    517.1  4.87 |     71.8    317.0   4.42    245.2 |  5.69    8.92     7.63  0.11
+builtin_pi      builtin     129.3    494.1  3.82 |     94.8    294.0   3.10    199.2 |  3.93    7.69     7.48  0.09
+builtin_abs_lit builtin     192.9    637.1  3.30 |    158.5    437.1   2.76    278.6 |  3.97    9.38     7.80  0.05
+builtin_intdiv  builtin     218.9    843.8  3.86 |    184.4    643.7   3.49    459.3 |  4.31    8.44     7.54  0.07
+builtin_strcont builtin     271.1   1546.8  5.71 |    236.7   1346.7   5.69   1110.1 |  5.86    6.95     6.77  0.05
+builtin_strlen2 builtin     141.9    787.4  5.55 |    107.4    587.3   5.47    479.9 |  5.28    6.96     7.32  0.06
+str_substr      string      180.4   1321.5  7.32 |    146.0   1121.4   7.68    975.4 |  7.03    6.00     6.25  0.09
+str_official    string      554.1   1851.5  3.34 |    519.7   1651.4   3.18   1131.8 |  3.37    6.88     6.83  0.75
+preg_match      regex      3080.0   5287.8  1.72 |   3045.5   5087.8   1.67   2042.2 |  2.38    7.63     5.49  0.28
+ns_noop         ns           34.8    199.9  5.74 |      0.0      0.0      -      0.0 |  2.87    4.40     8.81  0.19
+ns_strlen       ns          210.8    597.0  2.83 |    176.0    397.1   2.26    221.1 |  3.16    8.87     7.96  0.09
+ns_strlen_q     ns           99.8    517.0  5.18 |     65.0    317.1   4.88    252.1 |  6.60    9.46     7.43  0.08
+ns_count        ns          231.2    581.0  2.51 |    196.4    381.1   1.94    184.7 |  3.02    9.29     7.72  0.10
+ns_abs          ns          217.9    714.1  3.28 |    183.1    514.2   2.81    331.1 |  3.74    8.85     7.75  0.12
+ns_abs_q        ns          195.1    661.9  3.39 |    160.2    462.0   2.88    301.7 |  3.92    9.05     7.85  0.10
+ns_call_user0   ns          181.7    835.0  4.60 |    146.8    635.1   4.32    488.3 |  4.87    7.18     6.77  0.18
+note: nessuna fixture nulla
+confronto con s194-primitive-ded.out (istruzioni lorde phpr per iterazione; soglia di non-regressione +1,0 %):
+  fixture peggiorate oltre +1 %: 0

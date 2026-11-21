@@ -1404,7 +1404,7 @@ impl<'m> super::Vm<'m> {
         &mut self,
         top: usize,
         f: crate::builtin::BuiltinFn, fl: u8,
-        name: &std::rc::Rc<[u8]>,
+        name: &[u8],
         args: &mut [Zval],
     ) -> Result<Zval, PhpError> {
         // A whole-object exporter initializes a lazy argument first
@@ -3011,6 +3011,7 @@ impl<'m> super::Vm<'m> {
                     let callee = self.frames[top].stack.pop().expect("CallValue callee");
                     self.invoke_value(callee, args)?;
                 }
+                Op::CallNsBuiltin { name, f, bind, argc, fl, bare } => self.call_ns_builtin(top, name, f.0, bind, *argc, *fl, *bare)?,
                 Op::CallNsFallback { name, fallback, argc } => {
                     let n = *argc as usize;
                     let mut args = Vec::with_capacity(n);
@@ -3935,8 +3936,8 @@ impl<'m> super::Vm<'m> {
                     };
                     self.frames[top].stack.push(result);
                 }
-                Op::Strlen { name, f } => self.len_op(top, name, f.0, false)?, // S-194: dedicated ops, body in builtin_fast
-                Op::Count { name, f } => self.len_op(top, name, f.0, true)?,
+                Op::Strlen { name, f } => self.len_op(top, name, f.0, None, false)?, // S-194: dedicated ops, body in builtin_fast
+                Op::Count { name, f } => self.len_op(top, name, f.0, None, true)?,
                 Op::CallBuiltinSpread { name, spreads } => {
                     // A registry builtin runs via its Value fn; a VM host
                     // builtin (`json_encode(...$args)`, Elastica's stringify)

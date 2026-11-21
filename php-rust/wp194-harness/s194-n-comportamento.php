@@ -7,10 +7,10 @@ class Dbg { public $a = 1; function __debugInfo() { return ['x' => 2]; } }
 function site($v) { return strlen($v); }
 function site2($v) { return strtoupper($v); }
 function byref(&$x) { return strlen($x) . ':' . strtoupper($x) . ':' . count([$x]); }
-$s = "hello"; $q = &$s; $a = [3, 1, 2];
+$d = new Dbg; $s = "hello"; $q = &$s; $a = [3, 1, 2]; // $d first: its object id must not depend on the lifetime of the temporaries below (pre-existing divergence, out/n-id-sonda.out)
 echo strlen($s), "|", strlen($q), "|", count($a), "|", abs(-4), "|", str_repeat("ab", 2), "|", substr($s, 1, 3), "|", byref($s), "|", pi() > 3, "|", max(1, 2, 3, 4, 5, 6), "|", implode(",", $a), "\n";
 echo strlen(new S), "|", trim(new S), "|", count(new K), "|", sizeof($a), "|", count($a, COUNT_RECURSIVE), "|", str_replace("a", "b", new S), "\n";
-var_dump(new Dbg); var_dump(strlen("x"));
+var_dump($d); var_dump(strlen("x"));
 echo "before|"; printf("%s|%d\n", [1], 5);
 try { echo strlen([]); } catch (\TypeError $e) { echo "T:", $e->getMessage(), "\n"; }
 try { echo count(5); } catch (\TypeError $e) { echo "T:", $e->getMessage(), "\n"; }

@@ -129,7 +129,7 @@ fn visit_addrs(op: &mut Op, f: &mut impl FnMut(&mut Addr)) {
         | Op::PushRef { .. } | Op::MakeRef { .. } | Op::PushArgPlace { .. }
         | Op::BindRefTo { .. } | Op::BindRefToChecked { .. } | Op::DerefTop { .. }
         | Op::MakeClosure { .. } | Op::MakeFcc { .. } | Op::CallValue { .. }
-        | Op::CallNsFallback { .. } | Op::CallValueArgs { .. }
+        | Op::CallNsFallback { .. } | Op::CallNsBuiltin { .. } | Op::CallValueArgs { .. }
         | Op::CallNsFallbackArgs { .. } | Op::Throw { .. } | Op::Rethrow { .. }
         | Op::ParkReturn { .. } | Op::Binary { .. } | Op::BinaryAdd { .. }
         | Op::Unary { .. } | Op::Cast { .. } | Op::BinarySS { .. }
@@ -377,7 +377,7 @@ fn bin_op_of(op: &Op) -> Option<BinOp> {
         | Op::MakeRef { .. } | Op::PushArgPlace { .. } | Op::BindRefTo { .. }
         | Op::BindRefToChecked { .. } | Op::DerefTop { .. }
         | Op::MakeClosure { .. } | Op::MakeFcc { .. } | Op::CallValue { .. }
-        | Op::CallNsFallback { .. } | Op::CallValueArgs { .. }
+        | Op::CallNsFallback { .. } | Op::CallNsBuiltin { .. } | Op::CallValueArgs { .. }
         | Op::CallNsFallbackArgs { .. } | Op::Throw { .. } | Op::Rethrow { .. }
         | Op::CatchMatch { .. } | Op::EndFinally { .. } | Op::ParkReturn { .. }
         | Op::ParkJump { .. } | Op::Unary { .. } | Op::Cast { .. }

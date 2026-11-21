@@ -82,6 +82,45 @@ pub(crate) fn value_builtin_op(name: &[u8], argc: u32, bf: crate::builtin::Built
     }
 }
 
+/// S-194 package N: the per-site binding of an unqualified builtin call inside
+/// a namespace. Holds the IC epoch of the run in which the site was verified
+/// to reach the global builtin (0 = never). Modules are shared across runs,
+/// so the cell is keyed on the epoch exactly like the property / method
+/// caches, and — like them — it is invisible to structural equality.
+#[derive(Clone, Default)]
+pub struct NsBind(std::cell::Cell<u64>);
+
+impl PartialEq for NsBind {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
+}
+
+impl std::fmt::Debug for NsBind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("bind")
+    }
+}
+
+/// The op of an unqualified call inside a namespace whose global fallback
+/// `fb` is the value builtin `bname`: `CallNsBuiltin` when the namespaced
+/// `name` ends in `\\` + the builtin's own name, the by-name
+/// `CallNsFallback` otherwise.
+pub(crate) fn ns_builtin_op(name: &[u8], fb: &[u8], bname: &[u8], argc: usize, bf: crate::builtin::BuiltinFn) -> crate::bytecode::Op {
+    use crate::bytecode::Op;
+    let tail = fb == bname
+        && fb.len() < 256
+        && argc <= u16::MAX as usize
+        && name.len() > fb.len()
+        && name.ends_with(fb)
+        && name[name.len() - fb.len() - 1] == b'\\';
+    if tail {
+        Op::CallNsBuiltin { name: name.into(), f: BuiltinPtr(bf), bind: NsBind::default(), argc: argc as u16, fl: value_builtin_flags(bname), bare: fb.len() as u8 }
+    } else {
+        Op::CallNsFallback { name: name.into(), fallback: fb.into(), argc: argc as u32 }
+    }
+}
+
 impl<'m> Vm<'m> {
     /// Whether `flush_diags` has anything to do (pending diagnostics or line
     /// marks to retire): the in-line test that lets the common builtin call
@@ -104,7 +143,7 @@ impl<'m> Vm<'m> {
         top: usize,
         f: crate::builtin::BuiltinFn,
         fl: u8,
-        name: &std::rc::Rc<[u8]>,
+        name: &[u8],
         args: &mut [super::Zval],
     ) -> Result<super::Zval, super::PhpError> {
         use super::Zval;
@@ -169,8 +208,9 @@ impl<'m> Vm<'m> {
     pub(super) fn len_op(
         &mut self,
         top: usize,
-        name: &std::rc::Rc<[u8]>,
+        name: &[u8],
         f: crate::builtin::BuiltinFn,
+        fl: Option<u8>,
         count: bool,
     ) -> Result<(), super::PhpError> {
         use super::Zval;
@@ -187,7 +227,7 @@ impl<'m> Vm<'m> {
                 }
             }
         }
-        self.len_op_slow(top, name, f)
+        self.len_op_slow(top, name, f, fl)
     }
 
     #[cold]
@@ -195,11 +235,74 @@ impl<'m> Vm<'m> {
     fn len_op_slow(
         &mut self,
         top: usize,
-        name: &std::rc::Rc<[u8]>,
+        name: &[u8],
         f: crate::builtin::BuiltinFn,
+        fl: Option<u8>,
     ) -> Result<(), super::PhpError> {
         let a0 = self.frames[top].stack.pop().expect("builtin args");
-        let result = self.value_builtin_fast(top, f, value_builtin_flags(name), name, &mut [a0])?;
+        let fl = fl.unwrap_or_else(|| value_builtin_flags(name));
+        let result = self.value_builtin_fast(top, f, fl, name, &mut [a0])?;
+        self.frames[top].stack.push(result);
+        Ok(())
+    }
+
+    /// S-194 package N: `Op::CallNsBuiltin`. PHP binds an unqualified call
+    /// inside a namespace once per call site: the namespaced function if it
+    /// exists when the site first runs, the global one otherwise. The first
+    /// execution in a run checks that the namespaced name is not callable
+    /// (and that no user function shadows the builtin) and binds the site;
+    /// from then on the call goes straight to the builtin path of
+    /// `CallBuiltin`. While the namespaced name is callable the by-name
+    /// dispatch runs, unchanged.
+    #[inline(never)]
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn call_ns_builtin(
+        &mut self,
+        top: usize,
+        name: &[u8],
+        f: crate::builtin::BuiltinFn,
+        bind: &NsBind,
+        argc: u16,
+        fl: u8,
+        bare: u8,
+    ) -> Result<(), super::PhpError> {
+        let bname = &name[name.len() - bare as usize..];
+        let epoch = crate::bytecode::ic_epoch();
+        if bind.0.get() != epoch {
+            if self.is_name_callable(name)
+                || self.module.find_fn_ci(bname).is_some()
+                || self.linked_functions.contains_key(super::LcKey::new(bname).as_slice())
+            {
+                let args = self.pop_keys(top, argc as u32);
+                return self.invoke_named_fallback(name, bname, args);
+            }
+            bind.0.set(epoch);
+        }
+        if argc == 1 && (fl & BF_COUNT != 0 || (fl == BF_STR_COERCE && bname == b"strlen")) {
+            return self.len_op(top, bname, f, Some(fl), fl & BF_COUNT != 0);
+        }
+        let result = match argc {
+            0 => self.value_builtin_fast(top, f, fl, bname, &mut [])?,
+            1 => {
+                let a0 = self.frames[top].stack.pop().expect("builtin args");
+                self.value_builtin_fast(top, f, fl, bname, &mut [a0])?
+            }
+            2 => {
+                let a1 = self.frames[top].stack.pop().expect("builtin args");
+                let a0 = self.frames[top].stack.pop().expect("builtin args");
+                self.value_builtin_fast(top, f, fl, bname, &mut [a0, a1])?
+            }
+            3 => {
+                let a2 = self.frames[top].stack.pop().expect("builtin args");
+                let a1 = self.frames[top].stack.pop().expect("builtin args");
+                let a0 = self.frames[top].stack.pop().expect("builtin args");
+                self.value_builtin_fast(top, f, fl, bname, &mut [a0, a1, a2])?
+            }
+            _ => {
+                let mut args = self.pop_keys(top, argc as u32);
+                self.value_builtin_fast(top, f, fl, bname, &mut args)?
+            }
+        };
         self.frames[top].stack.push(result);
         Ok(())
     }

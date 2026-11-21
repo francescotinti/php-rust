@@ -1,0 +1,6 @@
+== /opt/homebrew/opt/php/bin/php
+5|abc|7| bbc  object(Dbg)#1 (1) { 5 object(Dbg)#1 (1) { 7 object(Dbg)#1 (1) {  bbc  object(Dbg)#1 (1) { 
+== /Users/francescotinti/Claude/php-rust-output/release/phpr
+5|abc|7| bbc  object(Dbg)#4 (1) { 5 object(Dbg)#4 (1) { 7 object(Dbg)#4 (1) {  bbc  object(Dbg)#4 (1) { 
+== /Users/francescotinti/Claude/phpr-target/s192-armD/release/phpr
+5|abc|7| bbc  object(Dbg)#4 (1) { 5 object(Dbg)#4 (1) { 7 object(Dbg)#4 (1) {  bbc  object(Dbg)#4 (1) { 

@@ -374,7 +374,7 @@ fn effect(op: &Op, park_targets: &[usize]) -> Effect {
         | Op::CallBuiltinSpread { .. }
         | Op::CallHostBuiltin { .. }
         | Op::CallNamed { .. }
-        | Op::CallNsFallback { .. }
+        | Op::CallNsFallback { .. } | Op::CallNsBuiltin { .. }
         | Op::CallNsFallbackArgs { .. }
         | Op::CallSpread { .. }
         | Op::CallValue { .. }
@@ -639,7 +639,7 @@ fn renounce(func: &Func) -> (bool, Bits) {
             | Op::CallArgs { .. }
             | Op::CallArrayMultisort { .. }
             | Op::CallNamed { .. }
-            | Op::CallNsFallback { .. }
+            | Op::CallNsFallback { .. } | Op::CallNsBuiltin { .. }
             | Op::CallNsFallbackArgs { .. }
             | Op::CallSpread { .. }
             | Op::CallValue { .. }
