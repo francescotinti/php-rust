@@ -82,6 +82,7 @@ pub mod cli_stream;
 mod exceptions;
 mod gc_probe;
 pub(crate) mod builtin_fast;
+pub(crate) mod call_bind;
 mod xmlparser;
 mod host;
 mod ini;
@@ -719,6 +720,7 @@ pub fn vm_new<'m>(
         seed_static: main_hir.map_or(0, |p| p.static_count),
         seed_globals: main_hir.map(|p| p.slots.clone()).unwrap_or_default(),
         linked_functions: HashMap::default(),
+        bound_fns: Vec::new(), ic_epoch: crate::bytecode::ic_epoch(),
         included_files: HashSet::default(),
         #[cfg(feature = "relbase-probe")]
         relbase_remap: (0..module.classes.len().max(65536)).collect(),
@@ -3106,6 +3108,7 @@ pub struct Vm<'m> {
     /// they are callable by name after the unit returns. The defining module is
     /// kept so the function's frame resolves its own bytecode indices.
     linked_functions: HashMap<Vec<u8>, (&'m Module, usize)>,
+    bound_fns: Vec<(&'m Module, usize)>, ic_epoch: u64, // S-194 F: targets of the bound call sites of this run (vm/call_bind) and the run's IC epoch
     /// Resolved (canonical) paths already loaded by `include_once`/`require_once`
     /// (step 57, Phase 2), so a repeat `_once` of the same file no-ops and returns
     /// `true` without re-running it.

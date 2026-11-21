@@ -1357,17 +1357,11 @@ impl<'a> super::FnCompiler<'a> {
                 // must alias the caller's cell, not receive a copy.
                 if let Some(fb) = fallback {
                     self.push_dyn_args(args)?;
-                    self.emit(Op::CallNsFallback {
-                        name: name.into(),
-                        fallback: fb.into(),
-                        argc: args.len() as u32,
-                    });
+                    self.emit(crate::vm::call_bind::by_name_op(name, Some(fb), args.len()));
                     return Ok(());
                 }
-                let k = self.konst(Const::Str(php_types::PhpStr::new(name)));
-                self.emit(Op::PushConst(k));
-                self.push_dyn_args(args)?;
-                self.emit(Op::CallValue { argc: args.len() as u32 });
+                self.push_dyn_args(args)?; // S-194 F: no callee constant, the by-name op binds the site (was PushConst + CallValue)
+                self.emit(crate::vm::call_bind::by_name_op(name, None, args.len()));
                 Ok(())
             }
         }
@@ -1951,7 +1945,7 @@ impl<'a> super::FnCompiler<'a> {
                     return Ok(());
                 }
                 self.push_value_args(rest)?;
-                self.emit(Op::CallBuiltinRef { name: name.into(), slot, argc: rest.len() as u32 });
+                { let (f, sc) = crate::vm::builtin_fast::ref_parts(&self.ctx.registry, name); self.emit(Op::CallBuiltinRef { name: name.into(), slot, argc: rest.len() as u32, f, sc }); }
                 Ok(())
             }
             // A bare static property as the by-reference argument
@@ -1964,7 +1958,7 @@ impl<'a> super::FnCompiler<'a> {
                 self.static_prop_rmw(class, &prop, &[], true, |c, place| {
                     let slot = local_slot(place);
                     c.push_value_args(rest)?;
-                    c.emit(Op::CallBuiltinRef { name: nm.into(), slot, argc: rest.len() as u32 });
+                    { let (f, sc) = crate::vm::builtin_fast::ref_parts(&c.ctx.registry, &nm); c.emit(Op::CallBuiltinRef { name: nm.into(), slot, argc: rest.len() as u32, f, sc }); }
                     Ok(())
                 })
             }
@@ -1980,10 +1974,8 @@ impl<'a> super::FnCompiler<'a> {
                     let (base, steps) = self.field_path(&place)?;
                     self.emit(Op::MakeRef { base, steps: steps.into() });
                     self.push_value_args(rest)?;
-                    self.emit(Op::CallBuiltinRefCell {
-                        name: name.into(),
-                        argc: rest.len() as u32,
-                    });
+                    let (f, sc) = crate::vm::builtin_fast::ref_parts(&self.ctx.registry, name);
+                    self.emit(Op::CallBuiltinRefCell { name: name.into(), argc: rest.len() as u32, f, sc });
                     return Ok(());
                 }
                 // An *indexed* static property
@@ -2006,7 +1998,7 @@ impl<'a> super::FnCompiler<'a> {
                         let (base, psteps) = c.field_path(place)?;
                         c.emit(Op::MakeRef { base, steps: psteps.into() });
                         c.push_value_args(rest)?;
-                        c.emit(Op::CallBuiltinRefCell { name: nm.into(), argc: rest.len() as u32 });
+                        { let (f, sc) = crate::vm::builtin_fast::ref_parts(&c.ctx.registry, &nm); c.emit(Op::CallBuiltinRefCell { name: nm.into(), argc: rest.len() as u32, f, sc }); }
                         Ok(())
                     });
                 }
@@ -2030,10 +2022,8 @@ impl<'a> super::FnCompiler<'a> {
                     let (base, fsteps) = self.field_path(&place)?;
                     self.emit(Op::MakeRef { base, steps: fsteps.into() });
                     self.push_value_args(rest)?;
-                    self.emit(Op::CallBuiltinRefCell {
-                        name: name.into(),
-                        argc: rest.len() as u32,
-                    });
+                    let (f, sc) = crate::vm::builtin_fast::ref_parts(&self.ctx.registry, name);
+                    self.emit(Op::CallBuiltinRefCell { name: name.into(), argc: rest.len() as u32, f, sc });
                     self.clear_temp_binding(root_tmp);
                     self.free_temp();
                     return Ok(());

@@ -115,10 +115,38 @@ pub(crate) fn ns_builtin_op(name: &[u8], fb: &[u8], bname: &[u8], argc: usize, b
         && name.ends_with(fb)
         && name[name.len() - fb.len() - 1] == b'\\';
     if tail {
-        Op::CallNsBuiltin { name: name.into(), f: BuiltinPtr(bf), bind: NsBind::default(), argc: argc as u16, fl: value_builtin_flags(bname), bare: fb.len() as u8 }
+        Op::CallNsBuiltin { name: name.into(), f: BuiltinPtr(bf), bind: NsBind::default(), argc: argc as u16, fl: value_builtin_flags(bname), bare: fb.len() as u8, kind: match (bname, argc) { (b"strlen", 1) => 1, (b"count" | b"sizeof", 1) => 2, _ => 0 } }
     } else {
-        Op::CallNsFallback { name: name.into(), fallback: fb.into(), argc: argc as u32 }
+        super::call_bind::by_name_op(name, Some(fb), argc)
     }
+}
+
+/// S-194 package F: a by-reference-first builtin resolved at compile time
+/// (the counterpart of [`BuiltinPtr`] for `CallBuiltinRef` / `CallBuiltinRefCell`).
+#[derive(Clone, Copy)]
+pub struct RefPtr(pub crate::builtin::BuiltinRefFn);
+
+impl PartialEq for RefPtr {
+    fn eq(&self, o: &Self) -> bool {
+        std::ptr::fn_addr_eq(self.0, o.0)
+    }
+}
+
+impl std::fmt::Debug for RefPtr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("fn")
+    }
+}
+
+/// The resolved pointer of the by-reference-first builtin `name` (`None` if
+/// the registry has none: the handler raises the undefined-function error)
+/// and whether it string-coerces its target's elements.
+pub(crate) fn ref_parts(reg: &crate::builtin::Registry, name: &[u8]) -> (Option<RefPtr>, bool) {
+    let f = match reg.get(name) {
+        Some(crate::builtin::Builtin::RefFirst(f)) => Some(RefPtr(*f)),
+        _ => None,
+    };
+    (f, super::calls::ref_builtin_string_coerces(name))
 }
 
 impl<'m> Vm<'m> {
@@ -265,9 +293,10 @@ impl<'m> Vm<'m> {
         argc: u16,
         fl: u8,
         bare: u8,
+        kind: u8,
     ) -> Result<(), super::PhpError> {
         let bname = &name[name.len() - bare as usize..];
-        let epoch = crate::bytecode::ic_epoch();
+        let epoch = self.ic_epoch;
         if bind.0.get() != epoch {
             if self.is_name_callable(name)
                 || self.module.find_fn_ci(bname).is_some()
@@ -278,8 +307,9 @@ impl<'m> Vm<'m> {
             }
             bind.0.set(epoch);
         }
-        if argc == 1 && (fl & BF_COUNT != 0 || (fl == BF_STR_COERCE && bname == b"strlen")) {
-            return self.len_op(top, bname, f, Some(fl), fl & BF_COUNT != 0);
+        if kind != 0 {
+            // the dedicated strlen (1) / count (2) path, chosen at compile time
+            return self.len_op(top, bname, f, Some(fl), kind == 2);
         }
         let result = match argc {
             0 => self.value_builtin_fast(top, f, fl, bname, &mut [])?,

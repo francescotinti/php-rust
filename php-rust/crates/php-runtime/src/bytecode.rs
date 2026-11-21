@@ -525,8 +525,8 @@ pub enum Op {
     /// name at run time trying the namespaced `name` first, then the global
     /// `fallback` — exactly PHP's two-step lookup, so a function defined in another
     /// unit (autoloaded / included) still binds; when neither is defined the catchable "Call to undefined function `name`()" reports the namespaced name.
-    CallNsFallback { name: Rc<[u8]>, fallback: Rc<[u8]>, argc: u32 },
-    CallNsBuiltin { name: Rc<[u8]>, f: crate::vm::builtin_fast::BuiltinPtr, bind: crate::vm::builtin_fast::NsBind, argc: u16, fl: u8, bare: u8 }, // S-194 N: CallNsFallback whose global fallback is a value builtin, resolved at compile time and bound once per site and run (the builtin name is the last `bare` bytes of `name`)
+    CallNsFallback { name: Rc<[u8]>, fallback: Rc<[u8]>, argc: u32, bind: crate::vm::call_bind::FnBind },
+    CallNsBuiltin { name: Rc<[u8]>, f: crate::vm::builtin_fast::BuiltinPtr, bind: crate::vm::builtin_fast::NsBind, argc: u16, fl: u8, bare: u8, kind: u8 }, // S-194 N: CallNsFallback whose global fallback is a value builtin, resolved at compile time and bound once per site and run (the builtin name is the last `bare` bytes of `name`)
     /// `[callee, argsArray] -> [result]` — a dynamic call with argument unpacking
     /// `$f(...$a)` (CLO). Pop the runtime argument array (its values become the
     /// positional arguments, in order) and the callee beneath it, then dispatch
@@ -944,7 +944,7 @@ pub enum Op {
     /// (`sort`, `array_push`, …): its first argument is the variable in `slot`,
     /// handed to the builtin as `&mut Zval` (write-through), and `argc` is the
     /// count of the remaining by-value arguments on the stack.
-    CallBuiltinRef { name: Rc<[u8]>, slot: Slot, argc: u32 },
+    CallBuiltinRef { name: Rc<[u8]>, slot: Slot, argc: u32, f: Option<crate::vm::builtin_fast::RefPtr>, sc: bool },
     /// `[comp0, …, compN] -> [result]` — [`Op::CallBuiltinRef`] whose by-value
     /// *rest* arguments include a spread (`array_push($a, ...$b)`): one stack value
     /// per component, `spreads[i]` marking spread *sources* to flatten at run time
@@ -957,7 +957,7 @@ pub enum Op {
     /// builtin mutates the cell in place (write-through to the property / element).
     /// Registry `RefFirst` builtins only — host by-ref builtins (callback-driven)
     /// keep the slot/temp paths.
-    CallBuiltinRefCell { name: Rc<[u8]>, argc: u32 },
+    CallBuiltinRefCell { name: Rc<[u8]>, argc: u32, f: Option<crate::vm::builtin_fast::RefPtr>, sc: bool },
     /// `[v] -> ` (frame ends) — pop the return value and unwind the current
     /// frame to the caller, which receives it on *its* operand stack. A function
     /// body with no explicit `return` ends with `PushConst(null); Ret`.

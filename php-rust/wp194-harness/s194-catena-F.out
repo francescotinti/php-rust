@@ -1,0 +1,10 @@
+braccio (ricetta del pin + tabelle di riga): rc=0 sha=396bc08e1d4cb669
+comportamento N contro l'ORACLE (gate: identico): rc=0 (25 righe, diff 0)
+comportamento F contro l'ORACLE (gate: identico): rc=0 (16 righe, diff 0)
+comportamento dbis contro il PIN s185 (gate: identico): rc=0
+comportamento dedicate contro il PIN s185 (gate: identico): rc=0
+bytecode: CallNsFallback (legato per sito) nella funzione di prova = 1 (attesi >= 1)
+accettazione s194F: rc=0
+sonda primitive F: rc=0
+profilo x_global_user2: rc=0
+fine rc=0 2026-11-21 21:00:49

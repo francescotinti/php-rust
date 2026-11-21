@@ -3011,16 +3011,8 @@ impl<'m> super::Vm<'m> {
                     let callee = self.frames[top].stack.pop().expect("CallValue callee");
                     self.invoke_value(callee, args)?;
                 }
-                Op::CallNsBuiltin { name, f, bind, argc, fl, bare } => self.call_ns_builtin(top, name, f.0, bind, *argc, *fl, *bare)?,
-                Op::CallNsFallback { name, fallback, argc } => {
-                    let n = *argc as usize;
-                    let mut args = Vec::with_capacity(n);
-                    for _ in 0..n {
-                        args.push(self.frames[top].stack.pop().expect("CallNsFallback argument"));
-                    }
-                    args.reverse();
-                    self.invoke_named_fallback(&name, &fallback, args)?;
-                }
+                Op::CallNsBuiltin { name, f, bind, argc, fl, bare, kind } => self.call_ns_builtin(top, name, f.0, bind, *argc, *fl, *bare, *kind)?,
+                Op::CallNsFallback { name, fallback, argc, bind } => self.call_by_name(top, name, fallback, *argc, bind)?, // S-194 F: bound once per site (vm/call_bind)
                 Op::CallValueArgs => {
                     // Spread `$f(...$a)`: the arguments are the values of a runtime
                     // array (the callee sits beneath it), expanded in order.
@@ -4165,11 +4157,8 @@ impl<'m> super::Vm<'m> {
                     }
                     self.frames[top].stack.push(result);
                 }
-                Op::CallBuiltinRef { name, slot, argc } => {
-                    let f = match self.registry.get(&name[..]) {
-                        Some(Builtin::RefFirst(f)) => *f,
-                        _ => return Err(undefined_builtin(&name)),
-                    };
+                Op::CallBuiltinRef { name, slot, argc, f, sc } => {
+                    let Some(f) = f else { return Err(undefined_builtin(&name)) }; // S-194 F: resolved at compile time
                     let rest = self.pop_keys(top, *argc);
                     // Mirror `eval`'s ref-builtin rendering (E1): flush, run, append
                     // the builtin's output, then flush its own warnings.
@@ -4180,21 +4169,21 @@ impl<'m> super::Vm<'m> {
                         .into_iter()
                         .map(|a| if self.is_lazy_value(&a) { self.proxy_view(a) } else { a })
                         .collect();
-                    let line = self.cur_line(top);
-                    self.flush_diags(line)?;
+                    let flushed = self.diags_pending(); // S-194 F: flushes and the empty write only when there is something to do
+                    if flushed { let line = self.cur_line(top); self.flush_diags(line)?; }
                     // Precompute __toString for a natural-sort's Stringable
                     // elements so the pure comparator can order them (empty for
                     // every other ref builtin).
-                    let stringify = if ref_builtin_string_coerces(&name) {
+                    let stringify = if *sc {
                         let roots = ref_stringify_roots(&self.frames[top].slots[*slot as usize].clone());
                         self.compute_stringify(&roots, false)?
                     } else {
                         std::collections::HashMap::new()
                     };
                     let mut produced = Vec::new();
-                    let result = builtin_ref_call(f, &mut self.frames[top].slots[*slot as usize], &rest, &mut produced, &mut self.diags, &stringify);
-                    self.write_output(&produced)?;
-                    self.flush_diags(line)?;
+                    let result = builtin_ref_call(f.0, &mut self.frames[top].slots[*slot as usize], &rest, &mut produced, &mut self.diags, &stringify);
+                    if flushed || !produced.is_empty() { self.write_output(&produced)?; }
+                    if self.diags_pending() { let line = self.cur_line(top); self.flush_diags(line)?; }
                     let result = result?;
                     self.frames[top].stack.push(result);
                 }
@@ -4248,23 +4237,20 @@ impl<'m> super::Vm<'m> {
                     let result = result?;
                     self.frames[top].stack.push(result);
                 }
-                Op::CallBuiltinRefCell { name, argc } => {
+                Op::CallBuiltinRefCell { name, argc, f, sc } => {
                     // By-ref-first builtin on a non-variable place (`array_pop($o->q)`):
                     // the target is a `Zval::Ref` cell (from `MakeRef`) beneath the
                     // by-value rest args; mutate it in place, writing through to the
                     // property / array element.
-                    let f = match self.registry.get(&name[..]) {
-                        Some(Builtin::RefFirst(f)) => *f,
-                        _ => return Err(undefined_builtin(&name)),
-                    };
+                    let Some(f) = f else { return Err(undefined_builtin(&name)) };
                     let rest = self.pop_keys(top, *argc);
                     let cell = match self.frames[top].stack.pop().expect("CallBuiltinRefCell ref") {
                         Zval::Ref(rc) => rc,
                         other => php_types::zcell(other),
                     };
-                    let line = self.cur_line(top);
-                    self.flush_diags(line)?;
-                    let stringify = if ref_builtin_string_coerces(&name) {
+                    let flushed = self.diags_pending();
+                    if flushed { let line = self.cur_line(top); self.flush_diags(line)?; }
+                    let stringify = if *sc {
                         let roots = ref_stringify_roots(&cell.borrow().clone());
                         self.compute_stringify(&roots, false)?
                     } else {
@@ -4273,10 +4259,10 @@ impl<'m> super::Vm<'m> {
                     let mut produced = Vec::new();
                     let result = {
                         let mut leaf = cell.borrow_mut();
-                        builtin_ref_call(f, &mut leaf, &rest, &mut produced, &mut self.diags, &stringify)
+                        builtin_ref_call(f.0, &mut leaf, &rest, &mut produced, &mut self.diags, &stringify)
                     };
-                    self.write_output(&produced)?;
-                    self.flush_diags(line)?;
+                    if flushed || !produced.is_empty() { self.write_output(&produced)?; }
+                    if self.diags_pending() { let line = self.cur_line(top); self.flush_diags(line)?; }
                     let result = result?;
                     self.frames[top].stack.push(result);
                 }

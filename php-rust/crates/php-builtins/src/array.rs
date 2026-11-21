@@ -714,7 +714,7 @@ pub fn krsort(arr: &mut Zval, args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpE
 /// (keys of the remaining elements are left unchanged); NULL on an empty array.
 pub fn array_pop(arr: &mut Zval, _args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
     let rc = as_array_mut(arr, "array_pop")?;
-    let last_key = rc.iter().last().map(|(k, _)| k.clone());
+    let last_key = rc.iter().next_back().map(|(k, _)| k.clone());
     match last_key {
         Some(k) => {
             let a = Rc::make_mut(rc);
@@ -1471,12 +1471,12 @@ pub fn array_first(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
 
 pub fn array_last(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
     let arr = arr_arg(args, "array_last")?;
-    Ok(arr.iter().last().map(|(_, v)| v.deref_clone()).unwrap_or(Zval::Null))
+    Ok(arr.iter().next_back().map(|(_, v)| v.deref_clone()).unwrap_or(Zval::Null))
 }
 
 pub fn array_key_last(args: &[Zval], _ctx: &mut Ctx) -> Result<Zval, PhpError> {
     let arr = arr_arg(args, "array_key_last")?;
-    Ok(arr.iter().last().map(|(k, _)| key_to_zval(&k)).unwrap_or(Zval::Null))
+    Ok(arr.iter().next_back().map(|(k, _)| key_to_zval(&k)).unwrap_or(Zval::Null))
 }
 
 /// array_diff($array, ...$excludes): elements of $array (keys preserved) whose
