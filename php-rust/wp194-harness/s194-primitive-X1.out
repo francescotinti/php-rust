@@ -1,0 +1,20 @@
+== S-194 primitive: istruzioni ritirate per iterazione (differenziale N1/N2), phpr /Users/francescotinti/Claude/phpr-target/s192-armD/release/phpr sha 68f685e24e4132ad contro oracle. DIREZIONE ==
+fixture         fam           php     phpr     x |  php net phpr net  x net  eccesso | cyc x IPC php IPC phpr disp%
+noop            loop         34.9    199.7  5.72 |      0.0      0.0      -      0.0 |  2.84    4.47     9.00  3.43
+call_user2      calls       269.1   1188.9  4.42 |    234.2    989.1   4.22    754.9 |  3.71    5.69     6.77  0.05
+preg_match      regex      3078.9   5286.5  1.72 |   3044.0   5086.8   1.67   2042.8 |  2.32    7.37     5.45  0.27
+ns_noop         ns           34.9    199.9  5.72 |      0.0      0.0      -      0.0 |  2.52    4.30     9.75  0.12
+ns_user2        ns          289.1   1189.1  4.11 |    254.2    989.2   3.89    735.0 |  4.19    6.88     6.75  0.06
+ns_xfile_user2  ns          289.0   2338.5  8.09 |    254.1   2138.6   8.42   1884.5 |  9.38    7.06     6.09  0.03
+ns_xfile_user2_q ns          288.9   2211.1  7.65 |    254.0   2011.2   7.92   1757.2 | 10.63    7.74     5.57  0.08
+x_global_user2  loop        289.0   2254.1  7.80 |    254.1   2054.3   8.09   1800.2 |  9.60    7.05     5.73  0.08
+builtin_reset   loop        320.9    652.1  2.03 |    286.0    452.3   1.58    166.3 |  1.62    5.98     7.51  0.03
+ns_reset        ns          339.0    652.0  1.92 |    304.1    452.2   1.49    148.1 |  1.61    6.19     7.39  0.02
+builtin_pushpop loop        452.9   3305.3  7.30 |    418.0   3105.5   7.43   2687.5 |  8.27    7.63     6.73  0.05
+ns_pushpop      ns          502.0   3305.7  6.58 |    467.1   3105.8   6.65   2638.7 |  8.41    8.62     6.74  0.07
+builtin_fexists loop        279.0   1438.2  5.16 |    244.0   1238.5   5.07    994.4 |  6.91    8.66     6.46  0.06
+ns_fexists      ns          297.2   1438.1  4.84 |    262.3   1238.2   4.72    976.0 |  6.24    8.22     6.37  0.04
+builtin_inarray loop        175.3   1008.1  5.75 |    140.4    808.3   5.76    667.9 |  6.27    7.92     7.27  0.08
+ns_inarray      ns          190.2   1041.1  5.47 |    155.3    841.3   5.42    686.0 |  5.55    7.47     7.37  0.05
+ns_preg_match   ns         3113.2   5285.4  1.70 |   3078.3   5085.6   1.65   2007.3 |  2.46    7.87     5.44  0.06
+note: nessuna fixture nulla

@@ -92,6 +92,23 @@ NS = [
  ("ns_abs_q", "ns", "$s += \\abs($i);", 1),
  ("ns_call_user0", "ns", "f0();", 1),
 ]
+# cross-file user functions and by-reference / host builtins, inside and outside a namespace: (name, family, header after <?php, body, divisor)
+XLIB = {"x_lib_ns.php": "<?php\nnamespace App;\nfunction libf2($a, $b) { return $a + $b; }\n", "x_lib_g.php": "<?php\nfunction glibf2($a, $b) { return $a + $b; }\n"}
+X = [
+ ("ns_user2", "ns", "namespace App;\n", "$s = f2($s, 1);", 1),
+ ("ns_xfile_user2", "ns", "namespace App;\nrequire __DIR__ . '/x_lib_ns.php';\n", "$s = libf2($s, 1);", 1),
+ ("ns_xfile_user2_q", "ns", "namespace App;\nrequire __DIR__ . '/x_lib_ns.php';\n", "$s = \\App\\libf2($s, 1);", 1),
+ ("x_global_user2", "loop", "require __DIR__ . '/x_lib_g.php';\n", "$s = glibf2($s, 1);", 1),
+ ("builtin_reset", "loop", "", "$s += reset($h);", 1),
+ ("ns_reset", "ns", "namespace App;\n", "$s += reset($h);", 1),
+ ("builtin_pushpop", "loop", "", "array_push($r, 1); array_pop($r);", 1),
+ ("ns_pushpop", "ns", "namespace App;\n", "array_push($r, 1); array_pop($r);", 1),
+ ("builtin_fexists", "loop", "", "if (function_exists('strlen')) { $s++; }", 1),
+ ("ns_fexists", "ns", "namespace App;\n", "if (function_exists('strlen')) { $s++; }", 1),
+ ("builtin_inarray", "loop", "", "if (in_array(2, $h)) { $s++; }", 1),
+ ("ns_inarray", "ns", "namespace App;\n", "if (in_array(2, $h)) { $s++; }", 1),
+ ("ns_preg_match", "ns", "namespace App;\n", r"if (preg_match('/(\w+)\s+(\d+)/', $subj, $m)) { $s++; }", 10),
+]
 TAIL = ' echo $s, "|", strlen((string)$t), "|", $x, "\\n";'
 
 def gen():
@@ -105,6 +122,12 @@ def gen():
 
     for name, _, body, _ in NS:
         src = "<?php\nnamespace App;\n" + PRE + "function run($n) {\n  " + SETUP + "  for ($i = 0; $i < $n; $i++) { " + body + " }\n " + TAIL + "\n}\nrun((int)$argv[1]);\n"
+        open(os.path.join(FX, name + ".php"), "w").write(src)
+
+    for fn_, txt in XLIB.items():
+        open(os.path.join(FX, fn_), "w").write(txt)
+    for name, _, head, body, _ in X:
+        src = "<?php\n" + head + PRE + "function run($n) {\n  " + SETUP + "  for ($i = 0; $i < $n; $i++) { " + body + " }\n " + TAIL + "\n}\nrun((int)$argv[1]);\n"
         open(os.path.join(FX, name + ".php"), "w").write(src)
 
 def lit_path(name, n):
@@ -136,7 +159,7 @@ def main():
     if A.bin: ENG["phpr"] = os.path.expanduser(A.bin)
     only = set(x for x in A.only.split(",") if x)
     sha = hashlib.sha256(open(ENG["phpr"], "rb").read()).hexdigest()[:16]
-    for name, fam, _, div in F + G + L + NS:
+    for name, fam, _, div in F + G + L + NS + [(n_, f_, b_, d_) for (n_, f_, _h, b_, d_) in X]:
         if only and name not in only: continue
         path = os.path.join(FX, name + ".php")
         n1 = N1 // div; n2 = 3 * n1

@@ -1,0 +1,50 @@
+== profilo fixture builtin_pushpop N=40000000: 40735 campioni, samply rc=0 (direzione) ==
+   16568  40.7%  HczowBQxF_12php_builtins5array9array_pop
+   10176  25.0%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop
+    1626   4.0%  nIjj9KQmRT_11php_runtime2vm5calls16builtin_ref_call
+    1551   3.8%  _NtCs3fRkGY2FHAU_9hashbrown3mapINtB6_7HashMapINtNtCshxvaOLs88l5_5alloc3vec3VechENtNtCs4nIjj9KQmRT_11php_runtime7builtin7BuiltinNtCsdnIwS7Na5wv_10rustc_hash13FxBuildHasherE3getShEB1r_
+    1503   3.7%  (libsystem_platform.dylib)
+    1342   3.3%  _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm11flush_diags
+    1072   2.6%  _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm12write_output
+    1068   2.6%  _NtCsePzg45LyhTm_9php_types5arrayNtB5_8PhpArray6remove
+     958   2.4%  Mbv00yxnRz_4core3ptr9drop_glueNtNtCsePzg45LyhTm_9php_types4zval4ZvalECs4nIjj9KQmRT_11php_runtime
+     645   1.6%  nIjj9KQmRT_11php_runtime2vm10cli_stream5drain
+     636   1.6%  _NtCsePzg45LyhTm_9php_types5arrayNtB5_8PhpArray6insert
+     384   0.9%  l5_5alloc2rcINtB5_2RcNtNtCsePzg45LyhTm_9php_types5array8PhpArrayE8make_mutCs4nIjj9KQmRT_11php_runtime
+     335   0.8%  LyhTm_9php_types7convert7to_bool
+     332   0.8%  _NtCsePzg45LyhTm_9php_types5arrayNtB5_8PhpArray6append
+  righe (simbolo file:riga):
+   16198  39.8%  HczowBQxF_12php_builtins5array9array_pop array.rs:717  | 
+    1619   4.0%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:1556  | match op {
+     958   2.4%  Mbv00yxnRz_4core3ptr9drop_glueNtNtCsePzg45LyhTm_9php_types4zval4ZvalECs4nIjj9KQmRT_11php_runtime mod.rs:823  | 
+     901   2.2%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:4199  | self.frames[top].stack.push(result);
+     854   2.1%  _NtCs3fRkGY2FHAU_9hashbrown3mapINtB6_7HashMapINtNtCshxvaOLs88l5_5alloc3vec3VechENtNtCs4nIjj9KQmRT_11php_runtime7builtin7BuiltinNtCsdnIwS7Na5wv_10rustc_hash13FxBuildHasherE3getShEB1r_ map.rs:1288  | 
+     783   1.9%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:1502  | if self.frames.len() > MAX_CALL_DEPTH {
+     762   1.9%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:1541  | let op = &func.ops[ip];
+     701   1.7%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:4200  | }
+     660   1.6%  _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm11flush_diags mod.rs:5714  | 
+     553   1.4%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:4195  | let result = builtin_ref_call(f, &mut self.frames[top].slots[*slot as usize], &rest, &mut produced, 
+     540   1.3%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:4182  | .collect();
+     539   1.3%  _NtCsePzg45LyhTm_9php_types5arrayNtB5_8PhpArray6remove array.rs:1002  | 
+     531   1.3%  nIjj9KQmRT_11php_runtime2vm5calls16builtin_ref_call calls.rs:17  | let empty_debug = std::collections::HashMap::new();
+     504   1.2%  _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm11flush_diags mod.rs:5687  | 
+     478   1.2%  nIjj9KQmRT_11php_runtime2vm5calls16builtin_ref_call calls.rs:31  | }
+     477   1.2%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:4198  | let result = result?;
+     403   1.0%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:4183  | let line = self.cur_line(top);
+     338   0.8%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:4173  | let rest = self.pop_keys(top, *argc);
+     334   0.8%  nIjj9KQmRT_11php_runtime2vm10cli_stream5drain cli_stream.rs:34  | let sent = SENT.load(Ordering::Relaxed);
+     311   0.8%  nIjj9KQmRT_11php_runtime2vm10cli_stream5drain cli_stream.rs:43  | }
+     299   0.7%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:1560  | let v = self.frames[top].func.consts[*i as usize].to_zval();
+     297   0.7%  _NtCs3fRkGY2FHAU_9hashbrown3mapINtB6_7HashMapINtNtCshxvaOLs88l5_5alloc3vec3VechENtNtCs4nIjj9KQmRT_11php_runtime7builtin7BuiltinNtCsdnIwS7Na5wv_10rustc_hash13FxBuildHasherE3getShEB1r_ map.rs:1284  | 
+     287   0.7%  _NtCs3fRkGY2FHAU_9hashbrown3mapINtB6_7HashMapINtNtCshxvaOLs88l5_5alloc3vec3VechENtNtCs4nIjj9KQmRT_11php_runtime7builtin7BuiltinNtCsdnIwS7Na5wv_10rustc_hash13FxBuildHasherE3getShEB1r_ map.rs:0  | 
+     283   0.7%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:4169  | let f = match self.registry.get(&name[..]) {
+     272   0.7%  _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm12write_output mod.rs:5974  | 
+     232   0.6%  _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm12write_output mod.rs:6006  | 
+     232   0.6%  _NtCsePzg45LyhTm_9php_types5arrayNtB5_8PhpArray6append array.rs:913  | 
+     226   0.6%  OUTLINED_FUNCTION_41 free.c:0  | 
+     220   0.5%  nIjj9KQmRT_11php_runtime2vm5calls16builtin_ref_call calls.rs:6  | pub(super) fn builtin_ref_call(
+     216   0.5%  LyhTm_9php_types7convert7to_bool convert.rs:13  | match v {
+     198   0.5%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:2337  | if let Some(v) = binary_fast(*op, lv, rv) {
+     195   0.5%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:4192  | std::collections::HashMap::new()
+     189   0.5%  _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm12write_output mod.rs:6010  | 
+     186   0.5%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:2306  | self.incdec_slot_discard(top, *slot, *inc)?;

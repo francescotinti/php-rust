@@ -1,0 +1,4 @@
+6c6
+< gh:a|gh:b|lh:c
+---
+> gh:a|lh:b|lh:c
