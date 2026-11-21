@@ -1,0 +1,5 @@
+*.ops
+*.prof.json
+*.prof.syms.json
+*.addrs
+lit_*_*.php
