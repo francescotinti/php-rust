@@ -1,0 +1,13 @@
+noop ok
+assign_const ok
+add_assign ok
+float_add ok
+builtin_strlen ok
+builtin_abs ok
+builtin_count ok
+builtin_pi ok
+builtin_abs_lit ok
+builtin_intdiv ok
+builtin_ord NULLA
+builtin_strcont ok
+builtin_strlen2 ok

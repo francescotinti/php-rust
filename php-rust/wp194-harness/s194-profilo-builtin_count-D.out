@@ -1,0 +1,50 @@
+== profilo fixture builtin_count N=40000000: 9436 campioni, samply rc=0 (direzione) ==
+    4652  49.3%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop
+    1544  16.4%  _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm17run_value_builtin
+     970  10.3%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm18value_builtin_call
+     831   8.8%  Mbv00yxnRz_4core3ptr9drop_glueNtNtCsePzg45LyhTm_9php_types4zval4ZvalECs4nIjj9KQmRT_11php_runtime
+     452   4.8%  LyhTm_9php_types7convert7to_bool
+     446   4.7%  _NtCsePzg45LyhTm_9php_types4zvalNtB5_4ZvalNtNtCs8Mbv00yxnRz_4core5clone5Clone5clone
+     323   3.4%  HczowBQxF_12php_builtins5array5count
+     107   1.1%  (libdyld.dylib)
+      21   0.2%  (libsystem_platform.dylib)
+      10   0.1%  nIjj9KQmRT_11php_runtime7compile4func12compile_body
+       8   0.1%  _11mago_syntax5lexerNtB2_5Lexer7advance
+       6   0.1%  _NtNtNtCslgvlIqPj547_11mago_syntax3ast3ast10expressionNtB5_10ExpressionNtCsiqUURHyj9Hw_9mago_span7HasSpan4span
+       6   0.1%  mi_page_free_list_extend
+       6   0.1%  nIjj9KQmRT_11php_runtime5lower4exprNtB4_7Lowerer10lower_expr
+  righe (simbolo file:riga):
+     831   8.8%  Mbv00yxnRz_4core3ptr9drop_glueNtNtCsePzg45LyhTm_9php_types4zval4ZvalECs4nIjj9KQmRT_11php_runtime mod.rs:823  | 
+     790   8.4%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:1556  | match op {
+     345   3.7%  _NtCsePzg45LyhTm_9php_types4zvalNtB5_4ZvalNtNtCs8Mbv00yxnRz_4core5clone5Clone5clone zval.rs:15  | #[cfg_attr(not(feature = "mem-census"), derive(Clone))]
+     337   3.6%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:1502  | if self.frames.len() > MAX_CALL_DEPTH {
+     324   3.4%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:1541  | let op = &func.ops[ip];
+     283   3.0%  LyhTm_9php_types7convert7to_bool convert.rs:13  | match v {
+     276   2.9%  _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm17run_value_builtin mod.rs:6108  | 
+     263   2.8%  _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm17run_value_builtin mod.rs:6091  | 
+     247   2.6%  _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm17run_value_builtin mod.rs:6086  | 
+     237   2.5%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:2318  | if let Some(Op::CmpJmpSC { op: c_op, slot: c_slot, cidx, addr: c_addr, when }) = func.ops.get(a) {
+     222   2.4%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm18value_builtin_call run.rs:1403  | fn value_builtin_call(
+     218   2.3%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:2337  | if let Some(v) = binary_fast(*op, lv, rv) {
+     211   2.2%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:1664  | let v = read_slot(&self.frames[top].slots[*slot as usize]);
+     207   2.2%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:2306  | self.incdec_slot_discard(top, *slot, *inc)?;
+     203   2.2%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:3910  | let a0 = self.frames[top].stack.pop().expect("builtin args");
+     191   2.0%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm18value_builtin_call run.rs:0  | }
+     182   1.9%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:2151  | match (fr.stack.last(), &fr.slots[*l as usize]) {
+     178   1.9%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:1507  | let top = self.frames.len() - 1;
+     166   1.8%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm18value_builtin_call run.rs:1487  | }
+     157   1.7%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:2316  | self.frames[top].ip = a;
+     152   1.6%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:2152  | (Some(Zval::Long(rv)), Zval::Long(lv)) => long_arith_i64(*b, *lv, *rv),
+     151   1.6%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:1647  | if matches!(self.frames[top].slots[*slot as usize], Zval::Undef) {
+     141   1.5%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:2163  | if self.sweep_skip_next(top, func, ip + 1) {
+     139   1.5%  HczowBQxF_12php_builtins5array5count array.rs:117  | 
+     132   1.4%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm18value_builtin_call run.rs:1485  | let line = self.cur_line(top);
+     121   1.3%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:3936  | self.frames[top].stack.push(result);
+     119   1.3%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:2159  | if let Zval::Long(x) = &mut self.frames[top].slots[*dst as usize] {
+     118   1.3%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:2332  | let lv = &fr.slots[*l as usize];
+     108   1.1%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:1508  | let ip = self.frames[top].ip;
+     104   1.1%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:2335  | && !matches!(rv, Zval::Undef | Zval::Ref(_))
+     101   1.1%  _NtCsePzg45LyhTm_9php_types4zvalNtB5_4ZvalNtNtCs8Mbv00yxnRz_4core5clone5Clone5clone zval.rs:24  | Array(Rc<PhpArray>),
+      95   1.0%  _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm17run_value_builtin mod.rs:6063  | 
+      95   1.0%  _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm17run_value_builtin mod.rs:6102  | 
+      95   1.0%  HczowBQxF_12php_builtins5array5count array.rs:110  | 

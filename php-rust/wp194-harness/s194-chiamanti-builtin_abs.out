@@ -1,0 +1,13 @@
+== chiamanti fixture builtin_abs: 8591 campioni, binario /Users/francescotinti/Claude/phpr-target/s192-armD/release/phpr (direzione) ==
+-- foglia ~ 'drop_glue': 470 campioni (5.5 %)
+     188   2.2%  drop_glue<?> mod.rs:823 <- nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:3912 <- _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm3run mod.rs:6120
+     174   2.0%  drop_glue<?> mod.rs:823 <- nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop lib.rs:0 <- _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm3run mod.rs:6120
+     106   1.2%  drop_glue<?> mod.rs:823 <- nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:2158 <- _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm3run mod.rs:6120
+       1   0.0%  drop_glue<?> mod.rs:0 <- drop_glue<?> mod.rs:823 <- nIjj9KQmRT_11php_runtime7compile4func12compile_body func.rs:166
+       1   0.0%  drop_glue<?> mod.rs:823 <- drop_glue<?> mod.rs:823 <- _NtCshxvaOLs88l5_5alloc2rcINtB5_2RcNtNtCs4nIjj9KQmRT_11php_runtime8bytecode6ModuleE9drop_slowBH_ rc.rs:402
+-- foglia ~ 'clone': 221 campioni (2.6 %)
+     213   2.5%  _NtCsePzg45LyhTm_9php_types4zvalNtB5_4ZvalNtNtCs8Mbv00yxnRz_4core5clone5Clone5clone zval.rs:15 <- _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm3run mod.rs:6120 <- nIjj9KQmRT_11php_runtime2vm19run_module_with_hir mod.rs:1028
+       7   0.1%  _NtCsePzg45LyhTm_9php_types4zvalNtB5_4ZvalNtNtCs8Mbv00yxnRz_4core5clone5Clone5clone zval.rs:21 <- _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm3run mod.rs:6120 <- nIjj9KQmRT_11php_runtime2vm19run_module_with_hir mod.rs:1028
+       1   0.0%  nIjj9KQmRT_11php_runtime8bytecodeNtB5_2OpNtNtCs8Mbv00yxnRz_4core5clone5Clone5clone bytecode.rs:338 <- nIjj9KQmRT_11php_runtime7compile9reg_lower11fuse_window reg_lower.rs:710 <- nIjj9KQmRT_11php_runtime7compile4func12compile_body func.rs:166
+-- foglia ~ 'libdyld': 74 campioni (0.9 %)
+      74   0.9%  (libdyld.dylib) <- nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm18value_builtin_call run.rs:1486 <- nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:3911

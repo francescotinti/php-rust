@@ -1,0 +1,24 @@
+== chiamanti fixture builtin_strlen: 11093 campioni, binario /Users/francescotinti/Claude/phpr-target/s192-armD/release/phpr (direzione) ==
+-- foglia ~ 'drop_glue': 617 campioni (5.6 %)
+     312   2.8%  drop_glue<?> mod.rs:823 <- nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:3912 <- _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm3run mod.rs:6120
+     159   1.4%  drop_glue<?> mod.rs:823 <- nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop lib.rs:0 <- _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm3run mod.rs:6120
+     142   1.3%  drop_glue<?> mod.rs:823 <- nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:2158 <- _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm3run mod.rs:6120
+       3   0.0%  drop_glue<?> mod.rs:823 <- drop_glue<?> mod.rs:823 <- drop_glue<?> mod.rs:823
+       1   0.0%  drop_glue<?> mod.rs:0 <- drop_glue<?> mod.rs:823 <- nIjj9KQmRT_11php_runtime7compile4func12compile_body func.rs:166
+-- foglia ~ 'clone': 212 campioni (1.9 %)
+     183   1.6%  _NtCsePzg45LyhTm_9php_types4zvalNtB5_4ZvalNtNtCs8Mbv00yxnRz_4core5clone5Clone5clone zval.rs:15 <- _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm3run mod.rs:6120 <- nIjj9KQmRT_11php_runtime2vm19run_module_with_hir mod.rs:1028
+      29   0.3%  _NtCsePzg45LyhTm_9php_types4zvalNtB5_4ZvalNtNtCs8Mbv00yxnRz_4core5clone5Clone5clone zval.rs:23 <- _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm3run mod.rs:6120 <- nIjj9KQmRT_11php_runtime2vm19run_module_with_hir mod.rs:1028
+-- foglia ~ 'libdyld': 186 campioni (1.7 %)
+      97   0.9%  (libdyld.dylib) <- nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm18value_builtin_call run.rs:1486 <- nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:3911
+      89   0.8%  (libdyld.dylib) <- nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm18value_builtin_call run.rs:1481 <- nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:3911
+-- foglia ~ 'to_bool': 440 campioni (4.0 %)
+     276   2.5%  LyhTm_9php_types7convert7to_bool convert.rs:13 <- nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:2346 <- _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm3run mod.rs:6120
+      85   0.8%  LyhTm_9php_types7convert7to_bool convert.rs:12 <- nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:2346 <- _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm3run mod.rs:6120
+      79   0.7%  LyhTm_9php_types7convert7to_bool convert.rs:36 <- nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:2346 <- _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm3run mod.rs:6120
+-- foglia ~ 'to_zstr': 640 campioni (5.8 %)
+     226   2.0%  LyhTm_9php_types7convert7to_zstr convert.rs:247 <- HczowBQxF_12php_builtins3var6strlen var.rs:743 <- _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm17run_value_builtin mod.rs:6098
+     191   1.7%  LyhTm_9php_types7convert7to_zstr convert.rs:197 <- HczowBQxF_12php_builtins3var6strlen var.rs:743 <- _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm17run_value_builtin mod.rs:6098
+      97   0.9%  LyhTm_9php_types7convert7to_zstr convert.rs:196 <- HczowBQxF_12php_builtins3var6strlen var.rs:743 <- _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm17run_value_builtin mod.rs:6098
+      97   0.9%  nIjj9KQmRT_11php_runtime7builtinNtB2_3Ctx7to_zstr builtin.rs:47 <- HczowBQxF_12php_builtins3var6strlen var.rs:743 <- _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm17run_value_builtin mod.rs:6098
+      26   0.2%  nIjj9KQmRT_11php_runtime7builtinNtB2_3Ctx7to_zstr builtin.rs:0 <- HczowBQxF_12php_builtins3var6strlen var.rs:743 <- _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm17run_value_builtin mod.rs:6098
+       3   0.0%  LyhTm_9php_types7convert7to_zstr convert.rs:205 <- HczowBQxF_12php_builtins3var6strlen var.rs:743 <- _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm17run_value_builtin mod.rs:6098
