@@ -1,0 +1,64 @@
+carico: orm
+== s192 anatomia tag=s194abc git=1e9354a5 wall=40.5s samply rc=2 2026-11-21 01:10:20 (profilo: direzione) ==
+Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, PHPUnit Warnings: 554, Skipped: 59, Incomplete: 2, Risky: 10.
+campioni totali 36057 · in phpr 31552 · run_loop proprio 7046 (19.5 %) · indirizzi distinti nel loop 1147
+attribuiti a una riga 74.8 % dei campioni di run_loop
+
+BRACCI di run_loop per campioni PROPRI (quota del proprio di run_loop · cumulata · quota del totale):
+  non attribuito                        1777   25.2 %   25.2 %    4.9 %
+  testata(dispatch)                     1567   22.2 %   47.5 %    4.3 %
+  run_loop(altro)                        455    6.5 %   53.9 %    1.3 %
+  Op::Ret                                393    5.6 %   59.5 %    1.1 %
+  Op::PropSetPop                         373    5.3 %   64.8 %    1.0 %
+  Op::LoadVar                            265    3.8 %   68.5 %    0.7 %
+  Op::PushConst                          246    3.5 %   72.0 %    0.7 %
+  Op::ThisPropGet                        175    2.5 %   74.5 %    0.5 %
+  Op::CallHostBuiltin                    159    2.3 %   76.8 %    0.4 %
+  Op::JumpIfFalse                        123    1.7 %   78.5 %    0.3 %
+  Op::Sweep                              107    1.5 %   80.0 %    0.3 %
+  Op::CallBuiltin                        104    1.5 %   81.5 %    0.3 %
+  Op::StoreSlot                           90    1.3 %   82.8 %    0.2 %
+  Op::FetchDim                            75    1.1 %   83.9 %    0.2 %
+  Op::MethodCall                          73    1.0 %   84.9 %    0.2 %
+  Op::IterNext                            65    0.9 %   85.8 %    0.2 %
+  Op::CmpJmpConst                         49    0.7 %   86.5 %    0.1 %
+  Op::Unary                               49    0.7 %   87.2 %    0.1 %
+  Op::Include                             44    0.6 %   87.8 %    0.1 %
+  Op::ThisMethodCall                      43    0.6 %   88.4 %    0.1 %
+  Op::IssetPath                           41    0.6 %   89.0 %    0.1 %
+  Op::FieldAssign                         40    0.6 %   89.6 %    0.1 %
+  Op::LoadVarPushConst                    40    0.6 %   90.2 %    0.1 %
+  Op::AssignPath                          38    0.5 %   90.7 %    0.1 %
+  Op::InvokeMethod                        38    0.5 %   91.2 %    0.1 %
+
+FUORI dal loop, primi 30 simboli per campioni propri (quota del totale):
+     2017    5.6 %  _platform_memmove (libsystem_platform.dylib)
+     1423    3.9 %  _RINvNtCs8Mbv00yxnRz_4core3ptr9drop_glueNtNtCsePzg45LyhTm_9php_types4zval4ZvalECs4nIjj9KQm
+     1323    3.7 %  _RNvXs0_NtCsePzg45LyhTm_9php_types4zvalNtB5_4ZvalNtNtCs8Mbv00yxnRz_4core5clone5Clone5clone
+      800    2.2 %  _platform_memcmp (libsystem_platform.dylib)
+      573    1.6 %  _RNvMs6_NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm13gc_sweep_body
+      541    1.5 %  _RNvMs6_NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm20collect_cycles_inner
+      477    1.3 %  mi_malloc_aligned
+      472    1.3 %  _RNvMs6_NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm12gc_note_slow
+      464    1.3 %  mi_free
+      448    1.2 %  _RINvMs1_NtCs3fRkGY2FHAU_9hashbrown3mapINtB6_7HashMapINtNtCshxvaOLs88l5_5alloc3vec3VechEjN
+      394    1.1 %  _RNvMNtNtCs4nIjj9KQmRT_11php_runtime2vm5callsNtB4_2Vm12enter_callee
+      394    1.1 %  _RNvXs3_NtNtCs8Mbv00yxnRz_4core4hash3sipINtB5_6HasherNtB5_11Sip13RoundsENtB7_6Hasher5write
+      368    1.0 %  __open_nocancel (libsystem_kernel.dylib)
+      368    1.0 %  _RNvMs3_NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_5Frame12with_buffers
+      351    1.0 %  _RINvMs1_NtCs3fRkGY2FHAU_9hashbrown3mapINtB6_7HashMapINtNtCshxvaOLs88l5_5alloc5boxed3BoxSh
+      348    1.0 %  _RNvMNtNtCs4nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8ret_slow
+      333    0.9 %  sqlite3VdbeExec
+      310    0.9 %  _RNvMs6_NtCsePzg45LyhTm_9php_types6objectNtB5_11PropsLayout7slot_of
+      304    0.8 %  _RNvNtNtCs4nIjj9KQmRT_11php_runtime2vm3oop22resolve_method_runtime
+      295    0.8 %  __getdirentries64 (libsystem_kernel.dylib)
+      269    0.7 %  _RNvMs0_NtCsePzg45LyhTm_9php_types5arrayNtB5_8KeyIndex6lookup.885
+      265    0.7 %  _RNvMNtCs3fRkGY2FHAU_9hashbrown11rustc_entryINtNtB4_3map7HashMapINtNtCshxvaOLs88l5_5alloc3
+      259    0.7 %  _RNCNvMs6_NtCs4nIjj9KQmRT_11php_runtime2vmNtB7_2Vm11gc_classify0B9_
+      234    0.6 %  _RNvMNtNtCs4nIjj9KQmRT_11php_runtime2vm4hostNtB4_2Vm13ho_array_diff
+      221    0.6 %  _RINvMs6_NtCs3fRkGY2FHAU_9hashbrown3rawINtB6_8RawTableTINtNtCshxvaOLs88l5_5alloc3vec3VechE
+      216    0.6 %  madvise (libsystem_kernel.dylib)
+      209    0.6 %  _RNvMs6_NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm20coerce_or_check_hint
+      202    0.6 %  OUTLINED_FUNCTION_41
+      201    0.6 %  _RNvXs2_NtNtCs8Mbv00yxnRz_4core3str5lossyNtB5_10Utf8ChunksNtNtNtNtB9_4iter6traits8iterator
+      193    0.5 %  _RNvNtCs4nIjj9KQmRT_11php_runtime5lower17lower_source_impl

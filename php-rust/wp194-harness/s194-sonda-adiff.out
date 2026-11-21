@@ -1,0 +1,7 @@
+== sonda adiff 2026-11-21 01:15:34 load={ 5.75 4.45 3.63 } cargo=1 (direzione) ==
+php out=9500 user=0.13
+phpr out=9500 user=0.37
+php out=9500 user=0.15
+phpr out=9500 user=0.37
+php out=9500 user=0.15
+phpr out=9500 user=0.36
