@@ -1,0 +1,38 @@
+5|5|0|4|3|6|5:1
+5|3|1|0|[ts]5
+pre|
+Deprecated: strlen(): Passing null to parameter #1 ($string) of type string is deprecated in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/s194-dedicate-comportamento.php on line 12
+0|post
+T:strlen(): Argument #1 ($string) must be of type string, array given
+TypeError:strlen(): Argument #1 ($string) must be of type string, N given
+3|3|0|3|5|5|[arr]3|[cnt]7
+T:count(): Argument #1 ($value) must be of type Countable|array, null given
+T:count(): Argument #1 ($value) must be of type Countable|array, int given
+T:count(): Argument #1 ($value) must be of type Countable|array, string given
+T:count(): Argument #1 ($value) must be of type Countable|array, float given
+T:count(): Argument #1 ($value) must be of type Countable|array, N given
+u1|
+Warning: Undefined variable $undef1 in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/s194-dedicate-comportamento.php on line 17
+
+Deprecated: strlen(): Passing null to parameter #1 ($string) of type string is deprecated in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/s194-dedicate-comportamento.php on line 17
+0|u2
+c1|
+Warning: Undefined variable $undef2 in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/s194-dedicate-comportamento.php on line 18
+T:count(): Argument #1 ($value) must be of type Countable|array, null given
+w|
+Warning: Undefined variable $undef3 in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/s194-dedicate-comportamento.php on line 19
+
+Deprecated: strlen(): Passing null to parameter #1 ($string) of type string is deprecated in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/s194-dedicate-comportamento.php on line 19
+8|
+Warning: Undefined variable $undef4 in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/s194-dedicate-comportamento.php on line 19
+2
+ob:53
+5|3|5|1,2|1,0
+5|3|5|3
+ST:strlen(): Argument #1 ($string) must be of type string, int given
+ST:strlen(): Argument #1 ($string) must be of type string, null given
+3|2
+shadow:abc|shadowc|3|2
+4|3|1|1
+8998
+3|2|1|1
