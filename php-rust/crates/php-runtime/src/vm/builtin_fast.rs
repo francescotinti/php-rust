@@ -77,4 +77,73 @@ impl<'m> Vm<'m> {
     pub(super) fn diags_pending(&self) -> bool {
         self.diags_rendered < self.diags.len() || !self.diag_line_marks.is_empty()
     }
+
+    /// S-194 D-bis: the call of a value builtin from the dispatcher. The common
+    /// case — no special-path flag beyond string coercion / `count`, nothing
+    /// pending to flush, no reference argument and (for the flagged families)
+    /// no object argument — calls the builtin directly: one level instead of
+    /// three, the two hand-over maps lent in place (empty by invariant), the
+    /// source line computed only if the epilogue needs it. Everything else
+    /// goes through `value_builtin_call`, unchanged.
+    #[inline(never)]
+    pub(super) fn value_builtin_fast(
+        &mut self,
+        top: usize,
+        f: crate::builtin::BuiltinFn,
+        fl: u8,
+        name: &std::rc::Rc<[u8]>,
+        args: &mut [super::Zval],
+    ) -> Result<super::Zval, super::PhpError> {
+        use super::Zval;
+        if fl & !(BF_STR_COERCE | BF_COUNT) != 0
+            || self.diags_pending()
+            || args.iter().any(|a| matches!(a, Zval::Ref(_)) || (fl != 0 && matches!(a, Zval::Object(_))))
+        {
+            return self.value_builtin_call(top, f, fl, name, args);
+        }
+        debug_assert!(self.var_dump_debug.is_empty() && self.stringify_args.is_empty());
+        let (mut produced, mut direct) = (Vec::new(), Vec::new());
+        let res = {
+            let mut ctx = super::Ctx {
+                out: &mut produced,
+                diags: &mut self.diags,
+                direct_out: &mut direct,
+                debug_info: &self.var_dump_debug,
+                stringify: &self.stringify_args,
+            };
+            f(args, &mut ctx)
+        };
+        if self.diags_pending() || !produced.is_empty() || !direct.is_empty() {
+            return self.value_builtin_epilogue(top, &produced, &direct, res);
+        }
+        res
+    }
+
+    /// The observable tail of a value-builtin call that produced something:
+    /// the builtin's own warnings, then its output, then its direct stream
+    /// writes — the same order as `run_value_builtin`.
+    #[cold]
+    #[inline(never)]
+    fn value_builtin_epilogue(
+        &mut self,
+        top: usize,
+        produced: &[u8],
+        direct: &[u8],
+        res: Result<super::Zval, super::PhpError>,
+    ) -> Result<super::Zval, super::PhpError> {
+        let line = self.cur_line(top);
+        let flushed = self.diags_pending();
+        if flushed {
+            self.flush_diags(line)?;
+        }
+        if flushed || !produced.is_empty() {
+            self.write_output(produced)?;
+        }
+        if !direct.is_empty() {
+            self.stdout.extend_from_slice(direct);
+            self.rendered.extend_from_slice(direct);
+            super::cli_stream::drain_if_on(&self.rendered);
+        }
+        res
+    }
 }

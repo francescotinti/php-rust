@@ -38,3 +38,15 @@ Attesa del D-bis da questo registro: `abs` −150, `count` −200, `strlen` −2
 - **Divergenza dall'oracle**: `ord("hello")` in PHP 8.5 emette un avviso di deprecazione (stringa non di un byte); phpr no (fixture `builtin_ord` NULLA, tolta dalla sonda). Apertura per nome.
 - `str_contains` a 1592 istruzioni (oracle 236): due coercizioni a stringa con clone + precalcolo `__toString`; rientra nelle voci (2) e (3).
 - Il cammino dinamico (`invoke_named`: `$f($x)`, `call_user_func`, callback di `array_map`) chiama `run_value_builtin` direttamente con lo stesso precalcolo: nessuna fixture lo misura oggi.
+- **Altre due divergenze preesistenti dall'oracle** (uguali sul pin s185, viste dalle prove di comportamento del D-bis): `strlen(null)` senza l'avviso di deprecazione «Passing null to parameter»; `print_r` di un oggetto ignora `__debugInfo()`. Aperture per nome.
+
+## 5. Consuntivo dopo il D-bis (`s194-primitive-Dbis.out`, istruzioni nette; stima del §3 → misurato)
+| Prova | D | D-bis | delta misurato | stima §3 | oracle |
+|---|---|---|---|---|---|
+| `abs($i)` | 558 | 457 | −101 | −150 | 160 |
+| `count($h)` | 609 | 454 | −155 | −200 | 71 |
+| `strlen($u)` | 718 | 501 | −217 | −250 | 64 |
+| `substr($w, -30)` | 1368 | 1118 | −250 | −250 | 145 |
+| `pi()` | 397 | 290 | −107 | — | 94 |
+| `intdiv($i, 3)` | 742 | 639 | −103 | — | 184 |
+Per passo: B1 −33 · B2 −97 (stringhe) / −40 (`count`) · B3 −67/−88. La chiamata vera più semplice (`abs`) è ora a **2,85×** l'oracle (era 3,50×; prima di D 5,3×). Catena di chiamata residua ≈ 100 istruzioni in una sola funzione; il resto è ciclo e pila (pacchetti A e B).

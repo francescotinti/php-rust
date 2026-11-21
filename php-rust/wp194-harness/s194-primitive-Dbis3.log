@@ -1,0 +1,15 @@
+noop ok
+assign_const ok
+add_assign ok
+call_user0 ok
+builtin_strlen ok
+builtin_abs ok
+builtin_count ok
+builtin_pi ok
+builtin_abs_lit ok
+builtin_intdiv ok
+builtin_strcont ok
+builtin_strlen2 ok
+str_substr ok
+str_official ok
+preg_match ok

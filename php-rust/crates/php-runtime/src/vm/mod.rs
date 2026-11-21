@@ -6082,21 +6082,21 @@ impl<'m> Vm<'m> {
         };
         let mut produced = Vec::new();
         let mut direct = Vec::new();
-        // A `var_dump` arg-walk left the objects' `__debugInfo()` results here (empty for every other builtin).
-        let debug_info = std::mem::take(&mut self.var_dump_debug);
-        // Likewise, a string-coercing builtin's arg-walk may have precomputed
-        // `__toString()` results (empty for every builtin that does not coerce).
-        let stringify = std::mem::take(&mut self.stringify_args);
+        // A `var_dump` arg-walk left the objects' `__debugInfo()` results in `var_dump_debug`, and a
+        // string-coercing builtin's arg-walk its `__toString()` results in `stringify_args` (both empty
+        // for every other builtin): lent in place, emptied after the call only when filled (S-194 D-bis).
         let res = {
             let mut ctx = Ctx {
                 out: &mut produced,
                 diags: &mut self.diags,
                 direct_out: &mut direct,
-                debug_info: &debug_info,
-                stringify: &stringify,
+                debug_info: &self.var_dump_debug,
+                stringify: &self.stringify_args,
             };
             f(args, &mut ctx)
         };
+        if !self.var_dump_debug.is_empty() { self.var_dump_debug = Default::default(); }
+        if !self.stringify_args.is_empty() { self.stringify_args = Default::default(); }
         if self.diags_pending() { flushed = true; self.flush_diags(line)?; }
         if flushed || !produced.is_empty() { self.write_output(&produced)?; } // an empty write only drained what a flush rendered
         if !direct.is_empty() { // stream writes to stdout bypass the ob stack (see Ctx::direct_out)

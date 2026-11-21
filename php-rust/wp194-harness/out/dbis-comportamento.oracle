@@ -1,0 +1,38 @@
+[ts]5|[ts]abc|3|3:REF|[cnt]7|3|3
+object(Dbg)#2 (1) {
+  ["x"]=>
+  int(2)
+}
+int(1)
+int(3)
+bool(true)
+[ts] abc ,1|[ts] bbc |[ts]y
+before|PHP Warning:  Array to string conversion in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/s194-dbis-comportamento.php on line 11
+
+Warning: Array to string conversion in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/s194-dbis-comportamento.php on line 11
+Array|5
+xOKPHP Deprecated:  strlen(): Passing null to parameter #1 ($string) of type string is deprecated in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/s194-dbis-comportamento.php on line 12
+
+Deprecated: strlen(): Passing null to parameter #1 ($string) of type string is deprecated in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/s194-dbis-comportamento.php on line 12
+0
+|---|3
+E:Division by zero
+T:strlen(): Argument #1 ($string) must be of type string, array given
+T:count(): Argument #1 ($value) must be of type Countable|array, S given
+[ts]5|[ts]abc|AREF
+90:Array
+(
+    [0] => 1
+    [1] => Dbg Object
+        (
+            [x] => 2
+        )
+
+)
+abc
+direct
+1,234.5|Z|2|{"a":1}
+PHP Warning:  Undefined variable $undefined_var in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/s194-dbis-comportamento.php on line 20
+
+Warning: Undefined variable $undefined_var in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/s194-dbis-comportamento.php on line 20
+50

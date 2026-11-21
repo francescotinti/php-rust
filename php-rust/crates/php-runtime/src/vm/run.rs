@@ -1400,7 +1400,7 @@ impl<'m> super::Vm<'m> {
     /// argomenti già sfilati dalla pila (array esatto per arità <=4, Vec oltre)
     /// e restituisce il valore da pushare. Fuori da `run_loop` di proposito:
     /// i rami freddi non pesano sul layout del dispatcher.
-    fn value_builtin_call(
+    pub(super) fn value_builtin_call(
         &mut self,
         top: usize,
         f: crate::builtin::BuiltinFn, fl: u8,
@@ -1430,7 +1430,7 @@ impl<'m> super::Vm<'m> {
         // arrays. A non-Countable object still TypeErrors in the
         // builtin below, matching PHP.
         if args.len() == 1
-            && fl & super::builtin_fast::BF_COUNT != 0
+            && fl & super::builtin_fast::BF_COUNT != 0 && matches!(args[0], Zval::Object(_) | Zval::Ref(_))
         {
             if let Some(obj) = self.as_countable(&args[0]) {
                 return self.call_method_sync(obj, b"count", Vec::new());
@@ -1477,8 +1477,8 @@ impl<'m> super::Vm<'m> {
         // `stringify_args`, taken in `run_value_builtin`). The `deep`
         // family (`implode`/`str_replace`) also coerces array
         // *elements*, so its precompute recurses into array arguments.
-        if fl & super::builtin_fast::BF_STR_COERCE != 0 {
-            self.stringify_args = self.compute_stringify(args, false)?;
+        if fl & super::builtin_fast::BF_STR_COERCE != 0 { if args.iter().any(|a| matches!(a, Zval::Object(_) | Zval::Ref(_))) {
+            self.stringify_args = self.compute_stringify(args, false)?; }
         } else if fl & super::builtin_fast::BF_STR_COERCE_DEEP != 0 && value_builtin_string_coerces_deep(&name, args) {
             self.stringify_args = self.compute_stringify(args, true)?;
         }
@@ -3905,32 +3905,32 @@ impl<'m> super::Vm<'m> {
                     // resta il Vec. Corpo (rami freddi inclusi) in
                     // `value_builtin_call`, fuori dal dispatcher.
                     let result = match *argc {
-                        0 => self.value_builtin_call(top, f, fl, name, &mut [])?,
+                        0 => self.value_builtin_fast(top, f, fl, name, &mut [])?,
                         1 => {
                             let a0 = self.frames[top].stack.pop().expect("builtin args");
-                            self.value_builtin_call(top, f, fl, name, &mut [a0])?
+                            self.value_builtin_fast(top, f, fl, name, &mut [a0])?
                         }
                         2 => {
                             let a1 = self.frames[top].stack.pop().expect("builtin args");
                             let a0 = self.frames[top].stack.pop().expect("builtin args");
-                            self.value_builtin_call(top, f, fl, name, &mut [a0, a1])?
+                            self.value_builtin_fast(top, f, fl, name, &mut [a0, a1])?
                         }
                         3 => {
                             let a2 = self.frames[top].stack.pop().expect("builtin args");
                             let a1 = self.frames[top].stack.pop().expect("builtin args");
                             let a0 = self.frames[top].stack.pop().expect("builtin args");
-                            self.value_builtin_call(top, f, fl, name, &mut [a0, a1, a2])?
+                            self.value_builtin_fast(top, f, fl, name, &mut [a0, a1, a2])?
                         }
                         4 => {
                             let a3 = self.frames[top].stack.pop().expect("builtin args");
                             let a2 = self.frames[top].stack.pop().expect("builtin args");
                             let a1 = self.frames[top].stack.pop().expect("builtin args");
                             let a0 = self.frames[top].stack.pop().expect("builtin args");
-                            self.value_builtin_call(top, f, fl, name, &mut [a0, a1, a2, a3])?
+                            self.value_builtin_fast(top, f, fl, name, &mut [a0, a1, a2, a3])?
                         }
                         _ => {
                             let mut args = self.pop_keys(top, *argc);
-                            self.value_builtin_call(top, f, fl, name, &mut args)?
+                            self.value_builtin_fast(top, f, fl, name, &mut args)?
                         }
                     };
                     self.frames[top].stack.push(result);

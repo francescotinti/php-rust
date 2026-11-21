@@ -1,0 +1,18 @@
+10,11c10
+< before|PHP Warning:  Array to string conversion in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/s194-dbis-comportamento.php on line 11
+< 
+---
+> before|
+14,17c13
+< xOKPHP Deprecated:  strlen(): Passing null to parameter #1 ($string) of type string is deprecated in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/s194-dbis-comportamento.php on line 12
+< 
+< Deprecated: strlen(): Passing null to parameter #1 ($string) of type string is deprecated in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/s194-dbis-comportamento.php on line 12
+< 0
+---
+> xOK0
+28c24
+<             [x] => 2
+---
+>             [a] => 1
+35d30
+< PHP Warning:  Undefined variable $undefined_var in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/s194-dbis-comportamento.php on line 20
