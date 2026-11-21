@@ -1,0 +1,50 @@
+== profilo fixture assign_const N=100000000: 11133 campioni, samply rc=0 (direzione) ==
+    9149  82.2%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop
+    1045   9.4%  LyhTm_9php_types7convert7to_bool
+     809   7.3%  Mbv00yxnRz_4core3ptr9drop_glueNtNtCsePzg45LyhTm_9php_types4zval4ZvalECs4nIjj9KQmRT_11php_runtime
+      28   0.3%  (libsystem_platform.dylib)
+       6   0.1%  _11mago_syntax5lexerNtB2_5Lexer7advance
+       5   0.0%  (libsystem_kernel.dylib)
+       5   0.0%  nIjj9KQmRT_11php_runtime5lower4exprNtB4_7Lowerer10lower_expr
+       5   0.0%  _NtNtNtCslgvlIqPj547_11mago_syntax3ast3ast10expressionNtB5_10ExpressionNtCsiqUURHyj9Hw_9mago_span7HasSpan4span
+       4   0.0%  mi_page_free_list_extend
+       4   0.0%  nIjj9KQmRT_11php_runtime7compile4exprNtB4_10FnCompiler4call
+       3   0.0%  uxfCBug_13mago_database4fileNtB2_4File3new
+       3   0.0%  _11mago_syntax5lexerNtB2_5Lexer31scan_identifier_or_keyword_info
+       3   0.0%  _NtNtNtCslgvlIqPj547_11mago_syntax3ast3ast9statementNtB5_9StatementNtCsiqUURHyj9Hw_9mago_span7HasSpan4span
+       3   0.0%  nIjj9KQmRT_11php_runtime7compileNtB4_10FnCompiler5konst
+  righe (simbolo file:riga):
+    2310  20.7%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:1556  | match op {
+     809   7.3%  Mbv00yxnRz_4core3ptr9drop_glueNtNtCsePzg45LyhTm_9php_types4zval4ZvalECs4nIjj9KQmRT_11php_runtime mod.rs:823  | 
+     761   6.8%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:1682  | let old = store_slot(&mut self.frames[top].slots[*s as usize], v);
+     662   5.9%  LyhTm_9php_types7convert7to_bool convert.rs:13  | match v {
+     625   5.6%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:1560  | let v = self.frames[top].func.consts[*i as usize].to_zval();
+     601   5.4%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:1541  | let op = &func.ops[ip];
+     589   5.3%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:1507  | let top = self.frames.len() - 1;
+     552   5.0%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:1502  | if self.frames.len() > MAX_CALL_DEPTH {
+     470   4.2%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:2318  | if let Some(Op::CmpJmpSC { op: c_op, slot: c_slot, cidx, addr: c_addr, when }) = func.ops.get(a) {
+     446   4.0%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:2337  | if let Some(v) = binary_fast(*op, lv, rv) {
+     414   3.7%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:2306  | self.incdec_slot_discard(top, *slot, *inc)?;
+     404   3.6%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:1681  | let v = self.frames[top].stack.pop().expect("StoreSlot on empty stack");
+     316   2.8%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:2316  | self.frames[top].ip = a;
+     274   2.5%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:7006  | if !self.frames[top].flags.get(FrameFlags::IN_DESTRUCTOR) {
+     240   2.2%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:1561  | self.frames[top].stack.push(v);
+     237   2.1%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:2332  | let lv = &fr.slots[*l as usize];
+     216   1.9%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:2335  | && !matches!(rv, Zval::Undef | Zval::Ref(_))
+     207   1.9%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:2333  | let rv = &fr.slots[*r as usize];
+     199   1.8%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:1683  | self.gc_note(&old);
+     197   1.8%  LyhTm_9php_types7convert7to_bool convert.rs:12  | pub fn to_bool(v: &Zval, diags: &mut Diags) -> bool {
+     195   1.8%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:1554  | self.frames[top].ip = ip + 1;
+     186   1.7%  LyhTm_9php_types7convert7to_bool convert.rs:36  | }
+      24   0.2%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:2334  | if !matches!(lv, Zval::Undef | Zval::Ref(_))
+      22   0.2%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop lib.rs:0  | 
+      22   0.2%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:2346  | if convert::to_bool(&res, &mut self.diags) == *when {
+      17   0.2%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:2331  | let fr = &self.frames[top];
+       4   0.0%  mi_page_free_list_extend page.c:605  | 
+       4   0.0%  nIjj9KQmRT_11php_runtime7compile4exprNtB4_10FnCompiler4call expr.rs:1108  | 
+       4   0.0%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:0  | }
+       3   0.0%  _11mago_syntax5lexerNtB2_5Lexer31scan_identifier_or_keyword_info mod.rs:1056  | 
+       2   0.0%  uxfCBug_13mago_database4fileNtB2_4File3new file.rs:98  | bytes = &bytes[..n];
+       2   0.0%  _11mago_syntax6parser8internal10expressionNtB6_6Parser32parse_expression_with_precedence expression.rs:125  | 
+       2   0.0%  nIjj9KQmRT_11php_runtime5lower4exprNtB4_7Lowerer10lower_expr expr.rs:91  | 
+       2   0.0%  _NtNtNtCslgvlIqPj547_11mago_syntax3ast3ast10expressionNtB5_10ExpressionNtCsiqUURHyj9Hw_9mago_span7HasSpan4span expression.rs:477  | 
