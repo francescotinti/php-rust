@@ -1,0 +1,3 @@
+pin rc=255 righe=6
+oracle rc=0
+diff oracle/pin righe=31

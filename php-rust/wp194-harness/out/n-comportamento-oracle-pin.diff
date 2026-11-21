@@ -1,0 +1,31 @@
+2,25c2,6
+< [ts]5|[ts]abc|[cnt]7|3|3|[ts] bbc 
+< object(App\Dbg)#1 (1) {
+<   ["x"]=>
+<   int(2)
+< }
+< int(1)
+< before|
+< Warning: Array to string conversion in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/s194-n-comportamento.php on line 14
+< Array|5
+< T:strlen(): Argument #1 ($string) must be of type string, array given
+< T:count(): Argument #1 ($value) must be of type Countable|array, int given
+< E:Division by zero
+< U:Call to undefined function App\nosuchfn()
+< 39:Array
+< (
+<     [0] => 1
+<     [1] => 2
+< )
+< abc
+< 5|3|5|5|5
+< 3|ABC
+< 3|shadow:abc|ABC
+< ABC|late:abc
+< 45750|1000
+---
+> [ts]5|[ts]abc|
+> Fatal error: Uncaught TypeError: count(): Argument #1 ($value) must be of type Countable|array, App\K given in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/s194-n-comportamento.php:12
+> Stack trace:
+> #0 {main}
+>   thrown in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/s194-n-comportamento.php on line 12

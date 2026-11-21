@@ -1,0 +1,6 @@
+5|5|3|4|abab|ell|5:HELLO:1|1|6|3,1,2
+[ts]5|[ts]abc|
+Fatal error: Uncaught TypeError: count(): Argument #1 ($value) must be of type Countable|array, App\K given in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/s194-n-comportamento.php:12
+Stack trace:
+#0 {main}
+  thrown in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/s194-n-comportamento.php on line 12
