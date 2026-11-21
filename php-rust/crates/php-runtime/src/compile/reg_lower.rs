@@ -149,7 +149,7 @@ fn visit_addrs(op: &mut Op, f: &mut impl FnMut(&mut Addr)) {
         | Op::EmptyPath { .. } | Op::UnsetPath { .. } | Op::Call { .. }
         | Op::DeclareFn { .. } | Op::DeclareClass { .. } | Op::DeclareTrait { .. }
         | Op::DeclareDeferred { .. } | Op::NewAnonDeferred { .. }
-        | Op::CallBuiltin { .. } | Op::CallBuiltinSpread { .. }
+        | Op::CallBuiltin { .. } | Op::CallBuiltinSpread { .. } | Op::Strlen { .. } | Op::Count { .. }
         | Op::CallHostBuiltin { .. } | Op::CallHostBuiltinRef { .. }
         | Op::CallHostBuiltinOut { .. } | Op::CallHostBuiltinScanf { .. }
         | Op::CallArrayMultisort { .. } | Op::ConstFetch { .. }
@@ -402,7 +402,7 @@ fn bin_op_of(op: &Op) -> Option<BinOp> {
         | Op::EmptyPath { .. } | Op::UnsetPath { .. } | Op::Call { .. }
         | Op::DeclareFn { .. } | Op::DeclareClass { .. } | Op::DeclareTrait { .. }
         | Op::DeclareDeferred { .. } | Op::NewAnonDeferred { .. }
-        | Op::CallBuiltin { .. } | Op::CallBuiltinSpread { .. }
+        | Op::CallBuiltin { .. } | Op::CallBuiltinSpread { .. } | Op::Strlen { .. } | Op::Count { .. }
         | Op::CallHostBuiltin { .. } | Op::CallHostBuiltinRef { .. }
         | Op::CallHostBuiltinOut { .. } | Op::CallHostBuiltinScanf { .. }
         | Op::CallArrayMultisort { .. } | Op::ConstFetch { .. }

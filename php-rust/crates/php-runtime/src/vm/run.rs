@@ -3935,6 +3935,8 @@ impl<'m> super::Vm<'m> {
                     };
                     self.frames[top].stack.push(result);
                 }
+                Op::Strlen { name, f } => self.len_op(top, name, f.0, false)?, // S-194: dedicated ops, body in builtin_fast
+                Op::Count { name, f } => self.len_op(top, name, f.0, true)?,
                 Op::CallBuiltinSpread { name, spreads } => {
                     // A registry builtin runs via its Value fn; a VM host
                     // builtin (`json_encode(...$args)`, Elastica's stringify)

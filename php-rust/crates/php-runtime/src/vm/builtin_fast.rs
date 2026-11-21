@@ -69,6 +69,19 @@ pub(crate) fn value_builtin_flags(name: &[u8]) -> u8 {
     f
 }
 
+/// The op of a by-value builtin call: the dedicated `Strlen` / `Count` for
+/// the one-argument `strlen` and `count`/`sizeof` (S-194, user waiver),
+/// `CallBuiltin` for everything else.
+pub(crate) fn value_builtin_op(name: &[u8], argc: u32, bf: crate::builtin::BuiltinFn) -> crate::bytecode::Op {
+    use crate::bytecode::Op;
+    let f = BuiltinPtr(bf);
+    match (name, argc) {
+        (b"strlen", 1) => Op::Strlen { name: name.into(), f },
+        (b"count" | b"sizeof", 1) => Op::Count { name: name.into(), f },
+        _ => Op::CallBuiltin { name: name.into(), argc, f, fl: value_builtin_flags(name) },
+    }
+}
+
 impl<'m> Vm<'m> {
     /// Whether `flush_diags` has anything to do (pending diagnostics or line
     /// marks to retire): the in-line test that lets the common builtin call
@@ -145,5 +158,49 @@ impl<'m> Vm<'m> {
             super::cli_stream::drain_if_on(&self.rendered);
         }
         res
+    }
+
+    /// S-194 (user waiver of the no-new-ops rule, limited to these two):
+    /// `Op::Strlen` / `Op::Count`. With nothing pending to flush and a string
+    /// (resp. an array) on top of the stack, the top is replaced in place by
+    /// its length. Every other case pops the argument and runs today's
+    /// builtin path, so coercions, warnings and errors are the builtin's own.
+    #[inline(always)]
+    pub(super) fn len_op(
+        &mut self,
+        top: usize,
+        name: &std::rc::Rc<[u8]>,
+        f: crate::builtin::BuiltinFn,
+        count: bool,
+    ) -> Result<(), super::PhpError> {
+        use super::Zval;
+        if !self.diags_pending() {
+            if let Some(v) = self.frames[top].stack.last_mut() {
+                let n = match (&*v, count) {
+                    (Zval::Str(s), false) => Some(s.len()),
+                    (Zval::Array(a), true) => Some(a.len()),
+                    _ => None,
+                };
+                if let Some(n) = n {
+                    *v = Zval::Long(n as i64);
+                    return Ok(());
+                }
+            }
+        }
+        self.len_op_slow(top, name, f)
+    }
+
+    #[cold]
+    #[inline(never)]
+    fn len_op_slow(
+        &mut self,
+        top: usize,
+        name: &std::rc::Rc<[u8]>,
+        f: crate::builtin::BuiltinFn,
+    ) -> Result<(), super::PhpError> {
+        let a0 = self.frames[top].stack.pop().expect("builtin args");
+        let result = self.value_builtin_fast(top, f, value_builtin_flags(name), name, &mut [a0])?;
+        self.frames[top].stack.push(result);
+        Ok(())
     }
 }

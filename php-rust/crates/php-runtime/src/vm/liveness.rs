@@ -369,7 +369,7 @@ fn effect(op: &Op, park_targets: &[usize]) -> Effect {
         | Op::BinaryTCPropSetPop { .. }
         | Op::Call { .. }
         | Op::CallArgs { .. }
-        | Op::CallBuiltin { .. }
+        | Op::CallBuiltin { .. } | Op::Strlen { .. } | Op::Count { .. }
         | Op::CallBuiltinRefCell { .. }
         | Op::CallBuiltinSpread { .. }
         | Op::CallHostBuiltin { .. }
@@ -547,7 +547,7 @@ fn renounce(func: &Func) -> (bool, Bits) {
             // stessa strada di ri-lowering: rinuncia per prudenza, non perche'
             // sia provato che legga lo scope.
             Op::NewAnonDeferred { .. } | Op::DeclareDeferred { .. } => whole = true,
-            Op::CallBuiltin { name, .. }
+            Op::CallBuiltin { name, .. } | Op::Strlen { name, .. } | Op::Count { name, .. }
             | Op::CallBuiltinSpread { name, .. }
             | Op::CallHostBuiltin { name, .. }
             | Op::CallHostBuiltinRef { name, .. }

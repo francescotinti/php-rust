@@ -50,3 +50,12 @@ Attesa del D-bis da questo registro: `abs` −150, `count` −200, `strlen` −2
 | `pi()` | 397 | 290 | −107 | — | 94 |
 | `intdiv($i, 3)` | 742 | 639 | −103 | — | 184 |
 Per passo: B1 −33 · B2 −97 (stringhe) / −40 (`count`) · B3 −67/−88. La chiamata vera più semplice (`abs`) è ora a **2,85×** l'oracle (era 3,50×; prima di D 5,3×). Catena di chiamata residua ≈ 100 istruzioni in una sola funzione; il resto è ciclo e pila (pacchetti A e B).
+
+## 6. Dopo le istruzioni dedicate (deroga utente 21/11; `s194-primitive-ded.out`)
+| Prova | prima di D | D | D-bis | dedicate | oracle | rapporto |
+|---|---|---|---|---|---|---|
+| `strlen($u)` | 1017 | 718 | 501 | **315** | 65 | 4,8× |
+| `count($h)` | 894 | 609 | 454 | **317** | 71 | 4,4× |
+| `strlen($u) + strlen($w)` | — | 1389 | 953 | **583** | 108 | 5,4× |
+L'op dedicato in sé costa ~80 istruzioni (315 − 234 di `$s += $i`); quelle 234 sono carico + somma, e sotto ci sono le 200 del ciclo vuoto.
+- **Divergenze preesistenti del pin dall'oracle viste dalle prove `s194-dedicate-comportamento.php`** (non toccate, aperture per nome): `strlen(null)` senza avviso di deprecazione · `strlen` di un oggetto senza `__toString` dà un avviso invece del `TypeError` · sotto `declare(strict_types=1)` `strlen(5)` e `strlen(null)` non lanciano `TypeError` · **in questo file gli avvisi «Undefined variable» non escono affatto** (`strlen($undef)`, `count($undef)`, `echo $undef`), mentre in `s194-dbis-comportamento.php` uno esce: da istruire.

@@ -1,6 +1,7 @@
 5|5|0|4|3|6|5:1
 5|3|1|0|[ts]5
-pre|
+pre|PHP Deprecated:  strlen(): Passing null to parameter #1 ($string) of type string is deprecated in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/s194-dedicate-comportamento.php on line 12
+
 Deprecated: strlen(): Passing null to parameter #1 ($string) of type string is deprecated in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/s194-dedicate-comportamento.php on line 12
 0|post
 T:strlen(): Argument #1 ($string) must be of type string, array given
@@ -11,19 +12,25 @@ T:count(): Argument #1 ($value) must be of type Countable|array, int given
 T:count(): Argument #1 ($value) must be of type Countable|array, string given
 T:count(): Argument #1 ($value) must be of type Countable|array, float given
 T:count(): Argument #1 ($value) must be of type Countable|array, N given
-u1|
+u1|PHP Warning:  Undefined variable $undef1 in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/s194-dedicate-comportamento.php on line 17
+
 Warning: Undefined variable $undef1 in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/s194-dedicate-comportamento.php on line 17
+PHP Deprecated:  strlen(): Passing null to parameter #1 ($string) of type string is deprecated in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/s194-dedicate-comportamento.php on line 17
 
 Deprecated: strlen(): Passing null to parameter #1 ($string) of type string is deprecated in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/s194-dedicate-comportamento.php on line 17
 0|u2
-c1|
+c1|PHP Warning:  Undefined variable $undef2 in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/s194-dedicate-comportamento.php on line 18
+
 Warning: Undefined variable $undef2 in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/s194-dedicate-comportamento.php on line 18
 T:count(): Argument #1 ($value) must be of type Countable|array, null given
-w|
+w|PHP Warning:  Undefined variable $undef3 in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/s194-dedicate-comportamento.php on line 19
+
 Warning: Undefined variable $undef3 in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/s194-dedicate-comportamento.php on line 19
+PHP Deprecated:  strlen(): Passing null to parameter #1 ($string) of type string is deprecated in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/s194-dedicate-comportamento.php on line 19
 
 Deprecated: strlen(): Passing null to parameter #1 ($string) of type string is deprecated in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/s194-dedicate-comportamento.php on line 19
-8|
+8|PHP Warning:  Undefined variable $undef4 in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/s194-dedicate-comportamento.php on line 19
+
 Warning: Undefined variable $undef4 in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/s194-dedicate-comportamento.php on line 19
 2
 ob:53

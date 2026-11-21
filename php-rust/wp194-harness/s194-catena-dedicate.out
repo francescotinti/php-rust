@@ -1,0 +1,8 @@
+braccio (ricetta del pin + tabelle di riga): rc=0 sha=6aa05dfb1e97e755
+comportamento contro l'oracle (informativo: divergenze preesistenti se uguali al pin): diff 46 righe
+comportamento contro il PIN s185 (gate: identico): rc=0 (23 righe)
+bytecode: op dedicati nei cicli strlen/count = 194 (attesi >= 2)
+accettazione s194ded: rc=0
+sonda primitive ded: rc=0
+profilo builtin_strlen: rc=0
+fine rc=0 2026-11-21 18:12:26

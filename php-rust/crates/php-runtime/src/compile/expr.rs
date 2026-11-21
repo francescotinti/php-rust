@@ -1321,7 +1321,7 @@ impl<'a> super::FnCompiler<'a> {
                     return self.emit_builtin_spread(bname, args);
                 }
                 self.push_value_args(args)?;
-                self.emit(Op::CallBuiltin { name: bname.into(), argc: args.len() as u32, f: crate::vm::builtin_fast::BuiltinPtr(bf), fl: crate::vm::builtin_fast::value_builtin_flags(bname) });
+                self.emit(crate::vm::builtin_fast::value_builtin_op(bname, args.len() as u32, bf));
                 Ok(())
             }
             Some(Builtin::RefFirst(_)) => self.call_ref_builtin(bname, args),

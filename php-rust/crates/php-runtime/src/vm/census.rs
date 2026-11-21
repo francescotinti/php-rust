@@ -13,7 +13,7 @@ use crate::bytecode::Op;
 use crate::hir::BinOp;
 use php_types::Zval;
 
-pub const N_OPS: usize = 200;
+pub const N_OPS: usize = 202;
 
 pub const OP_NAMES: [&str; N_OPS] = [
     "PushConst", "Pop", "Dup", "LoadSlot", "LoadVar", "PushUndef", "StoreSlot", "Swap",
@@ -46,6 +46,7 @@ pub const OP_NAMES: [&str; N_OPS] = [
     "ConcatNConst",
     "BinaryAdd",
     "PropDimGetConst",
+    "Strlen", "Count",
 ];
 
 pub fn op_index(op: &Op) -> usize {
@@ -271,6 +272,9 @@ pub fn op_index(op: &Op) -> usize {
         Op::BinaryAdd => 198,
         // S-145 FR1: dim-read fuso a chiave costante.
         Op::PropDimGetConst { .. } => 199,
+        // S-194: dedicated strlen / count (user waiver).
+        Op::Strlen { .. } => 200,
+        Op::Count { .. } => 201,
     }
 }
 
@@ -762,7 +766,11 @@ mod tests {
         // S-145 FR1: PropDimGetConst chiude ora la tabella (append in coda,
         // nessun indice esistente rinumerato) — ogni distanza dal fondo
         // cresce di 1, emendata QUI in blocco.
-        assert_eq!(op_index(&Op::ConcatAssignSlot(0)), N_OPS - 23);
+        // EMENDAMENTO DICHIARATO S-194: Strlen/Count (deroga utente alla regola
+        // «niente istruzioni nuove») chiudono ora la tabella, in coda: ogni
+        // distanza dal fondo cresce di 2 (il `- 2` esplicito qui sotto).
+        assert_eq!((OP_NAMES[N_OPS - 2], OP_NAMES[N_OPS - 1]), ("Strlen", "Count"));
+        assert_eq!(op_index(&Op::ConcatAssignSlot(0)), N_OPS - 2 - 23);
         assert_eq!(
             op_index(&Op::CmpJmpSC {
                 op: crate::hir::BinOp::Lt,
@@ -771,33 +779,33 @@ mod tests {
                 addr: 0,
                 when: true
             }),
-            N_OPS - 16
+            N_OPS - 2 - 16
         );
-        assert_eq!(OP_NAMES[N_OPS - 16], "CmpJmpSC");
+        assert_eq!(OP_NAMES[N_OPS - 2 - 16], "CmpJmpSC");
         assert_eq!(
             op_index(&Op::BinarySTDst { op: crate::hir::BinOp::Add, l: 0, dst: 0 }),
-            N_OPS - 15
+            N_OPS - 2 - 15
         );
-        assert_eq!(OP_NAMES[N_OPS - 15], "BinarySTDst");
+        assert_eq!(OP_NAMES[N_OPS - 2 - 15], "BinarySTDst");
         assert_eq!(
             op_index(&Op::BinaryTC { op: crate::hir::BinOp::Add, cidx: 0 }),
-            N_OPS - 14
+            N_OPS - 2 - 14
         );
-        assert_eq!(OP_NAMES[N_OPS - 14], "BinaryTC");
+        assert_eq!(OP_NAMES[N_OPS - 2 - 14], "BinaryTC");
         assert_eq!(
             op_index(&Op::IncDecSlotJmp { slot: 0, inc: true, addr: 0 }),
-            N_OPS - 11
+            N_OPS - 2 - 11
         );
-        assert_eq!(OP_NAMES[N_OPS - 11], "IncDecSlotJmp");
-        assert_eq!(op_index(&Op::StringifySlot { slot: 0 }), N_OPS - 8);
-        assert_eq!(OP_NAMES[N_OPS - 8], "StringifySlot");
-        assert_eq!(op_index(&Op::LoadVarPushConst { slot: 0, cidx: 0 }), N_OPS - 4);
-        assert_eq!(OP_NAMES[N_OPS - 4], "LoadVarPushConst");
-        assert_eq!(op_index(&Op::ConcatNConst { n: 0, cidx: 0 }), N_OPS - 3);
-        assert_eq!(OP_NAMES[N_OPS - 3], "ConcatNConst");
-        assert_eq!(op_index(&Op::BinaryAdd), N_OPS - 2);
-        assert_eq!(OP_NAMES[N_OPS - 2], "BinaryAdd");
-        assert_eq!(OP_NAMES[N_OPS - 1], "PropDimGetConst");
+        assert_eq!(OP_NAMES[N_OPS - 2 - 11], "IncDecSlotJmp");
+        assert_eq!(op_index(&Op::StringifySlot { slot: 0 }), N_OPS - 2 - 8);
+        assert_eq!(OP_NAMES[N_OPS - 2 - 8], "StringifySlot");
+        assert_eq!(op_index(&Op::LoadVarPushConst { slot: 0, cidx: 0 }), N_OPS - 2 - 4);
+        assert_eq!(OP_NAMES[N_OPS - 2 - 4], "LoadVarPushConst");
+        assert_eq!(op_index(&Op::ConcatNConst { n: 0, cidx: 0 }), N_OPS - 2 - 3);
+        assert_eq!(OP_NAMES[N_OPS - 2 - 3], "ConcatNConst");
+        assert_eq!(op_index(&Op::BinaryAdd), N_OPS - 2 - 2);
+        assert_eq!(OP_NAMES[N_OPS - 2 - 2], "BinaryAdd");
+        assert_eq!(OP_NAMES[N_OPS - 2 - 1], "PropDimGetConst");
     }
 
     #[test]

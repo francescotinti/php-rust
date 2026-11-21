@@ -870,9 +870,9 @@ pub enum Op {
     /// `name` (resolved in the [`crate::builtin::Registry`] at run time, as the
     /// tree-walker does). Arguments are popped into a `&[Zval]`; the builtin runs
     /// against a `Ctx { out, diags }` borrowed from the VM. Builtins that need the
-    /// evaluator (higher-order, class-introspection, `define`/`defined`/`constant`)
-    /// are *not* emitted — the compiler rejects them so the VM never sees them.
+    /// evaluator (higher-order, class-introspection, `define`…) are *not* emitted (the compiler rejects them).
     CallBuiltin { name: Rc<[u8]>, argc: u32, f: crate::vm::builtin_fast::BuiltinPtr, fl: u8 },
+    Strlen { name: Rc<[u8]>, f: crate::vm::builtin_fast::BuiltinPtr }, Count { name: Rc<[u8]>, f: crate::vm::builtin_fast::BuiltinPtr }, // S-194 (user waiver): dedicated `strlen($x)` / `count($x)`, `[x] -> [len]`; every non-trivial case falls back to the CallBuiltin path
     /// `f(comp…)` into a by-value builtin where at least one component is a spread
     /// `...$src` (step 56b): one value per leading component is on the stack;
     /// `spreads[i]` marks a spread source (expanded via `spread_pairs`) vs a plain
