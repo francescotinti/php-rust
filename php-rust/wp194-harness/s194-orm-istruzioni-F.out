@@ -1,0 +1,10 @@
+== s194 ORM istruzioni ritirate per gamba, REPS=2, 2026-11-21 21:01:31 (direzione sul lavoro, non verdetto di tempo) ==
+binario pin = /Users/francescotinti/Claude/php-rust-output/release/phpr sha d9d6429301f60f4e
+binario preN = /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/out/phpr-orm-istr-preN sha 5a55745eda4827dd
+binario N = /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/out/phpr-orm-istr-N sha 22b954b4bc336223
+binario F = e074b5f8 sha 6e9bcd3308cee0fb
+pin        istruzioni   265.160 G (dispersione 0.03 %)  vs pin  +0.00 %  cicli   73.194 G  user  33.64 s  | Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, PHP
+preN       istruzioni   248.247 G (dispersione 0.01 %)  vs pin  -6.38 %  cicli   69.377 G  user  31.84 s  | Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, PHP
+N          istruzioni   247.815 G (dispersione 0.00 %)  vs pin  -6.54 %  cicli   69.426 G  user  31.85 s  | Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, PHP
+F          istruzioni   247.847 G (dispersione 0.02 %)  vs pin  -6.53 %  cicli   68.961 G  user  31.64 s  | Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, PHP
+fine rc=0 2026-11-21 21:08:59

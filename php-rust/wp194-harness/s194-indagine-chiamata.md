@@ -72,3 +72,12 @@ Tutte le prove dei §1-6 sono nello spazio globale. Dentro `namespace App;` una 
 | `f0()` funzione utente del namespace | 636 | 138 | 4,6× |
 Lettura: i guadagni di D, D-bis e degli op dedicati valgono solo per lo spazio globale (WordPress) e per le chiamate qualificate. Nel codice a namespace (ORM, librerie moderne) ogni builtin chiamato senza `\` costa ~5400-5900 istruzioni, **circa 17× il cammino globale di phpr e 30× l'oracle**: è la voce singola più grossa trovata oggi. Zend risolve la coppia (nome col namespace, nome globale) una volta e tiene il risultato nella cache del sito di chiamata. **Apertura per nome: «fallback di namespace risolto una volta»** (pacchetto N, da decidere con l'utente).
 - **Dopo il pacchetto N** (`s194-criterio-N.md` p.9, `s194-primitive-N.out`): `strlen` in namespace 5934 → **397** (2,3× l'oracle), `count` 5562 → **381** (1,9×), `abs` 5369 → **514** (2,8×). Corretto insieme un bug del pin: `count($oggettoCountable)` senza `\` in un namespace era un `TypeError` fatale. Resta per nome: funzione utente di un altro file chiamata senza `\` da un namespace (ancora `CallNsFallback` per nome a ogni chiamata, nessuna fixture); i builtin per riferimento e gli host builtin in namespace (non misurati).
+
+## 8. Il carico vero: istruzioni dell'intera suite ORM (`s194-orm-istruzioni-F.out`)
+| Binario | Istruzioni di una gamba (3484 test) | contro il pin |
+|---|---|---|
+| pin s185 | 265,16 G | — |
+| a+b+c, D, D-bis, op dedicati | 248,25 G | −6,38 % |
+| + N (builtin in namespace) | 247,82 G | −6,54 % |
+| + F (funzioni di altri file, builtin per riferimento, `array_pop`) | 247,85 G | −6,53 % |
+Lettura: la sonda in ciclo misura il costo di UN'operazione; il carico ORM dice quanto quell'operazione ricorre. N e F, che sulla sonda valgono −93 % e −37/−58 %, sull'ORM valgono rispettivamente −0,17 % e zero. Per la tappa ORM (da ~6,5× a 5× ≈ −23 % di lavoro) servono le cause che toccano OGNI op (pacchetti A e B) o un registro dei costi fatto sul carico ORM stesso, non altre correzioni mirate scelte dalla sonda. Manca lo stesso conteggio per WordPress.
