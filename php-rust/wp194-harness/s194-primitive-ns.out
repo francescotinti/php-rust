@@ -1,0 +1,15 @@
+== S-194 primitive: istruzioni ritirate per iterazione (differenziale N1/N2), phpr /Users/francescotinti/Claude/phpr-target/s192-armD/release/phpr sha 6aa05dfb1e97e755 contro oracle. DIREZIONE ==
+fixture         fam           php     phpr     x |  php net phpr net  x net  eccesso | cyc x IPC php IPC phpr disp%
+noop            loop         26.7    200.9  7.52 |      0.0      0.0      -      0.0 |  6.39    6.88     8.10  3.11
+call_user0      calls       169.2    835.0  4.93 |    142.5    634.2   4.45    491.7 |  3.62    4.92     6.72  2.88
+builtin_strlen  builtin      93.3    516.1  5.53 |     66.5    315.3   4.74    248.7 |  7.64   10.22     7.40  1.66
+builtin_abs     builtin     188.8    655.9  3.47 |    162.0    455.0   2.81    293.0 |  3.77    8.64     7.96  1.85
+builtin_count   builtin     102.4    517.8  5.06 |     75.6    316.9   4.19    241.3 |  5.05    7.39     7.40  2.66
+ns_noop         ns           35.4    198.9  5.62 |      0.0      0.0      -      0.0 |  2.50    4.22     9.46  2.63
+ns_strlen       ns          211.4   6132.9 29.01 |    176.0   5934.0  33.72   5758.1 | 40.71    8.60     6.13  1.73
+ns_strlen_q     ns          107.0    516.2  4.82 |     71.6    317.3   4.43    245.8 |  5.41    8.48     7.55  2.03
+ns_count        ns          231.1   5761.2 24.93 |    195.7   5562.4  28.43   5366.7 | 42.91    8.77     5.09  1.63
+ns_abs          ns          217.6   5567.6 25.59 |    182.2   5368.8  29.47   5186.6 | 63.01    9.46     3.84  1.62
+ns_abs_q        ns          201.8    656.0  3.25 |    166.4    457.2   2.75    290.8 |  3.86    9.37     7.88  1.86
+ns_call_user0   ns          173.5    835.1  4.81 |    138.1    636.2   4.61    498.1 |  4.95    6.99     6.80  1.64
+note: nessuna fixture nulla

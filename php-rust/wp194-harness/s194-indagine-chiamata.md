@@ -59,3 +59,15 @@ Per passo: B1 −33 · B2 −97 (stringhe) / −40 (`count`) · B3 −67/−88. 
 | `strlen($u) + strlen($w)` | — | 1389 | 953 | **583** | 108 | 5,4× |
 L'op dedicato in sé costa ~80 istruzioni (315 − 234 di `$s += $i`); quelle 234 sono carico + somma, e sotto ci sono le 200 del ciclo vuoto.
 - **Divergenze preesistenti del pin dall'oracle viste dalle prove `s194-dedicate-comportamento.php`** (non toccate, aperture per nome): `strlen(null)` senza avviso di deprecazione · `strlen` di un oggetto senza `__toString` dà un avviso invece del `TypeError` · sotto `declare(strict_types=1)` `strlen(5)` e `strlen(null)` non lanciano `TypeError` · **in questo file gli avvisi «Undefined variable» non escono affatto** (`strlen($undef)`, `count($undef)`, `echo $undef`), mentre in `s194-dbis-comportamento.php` uno esce: da istruire.
+
+## 7. Chiamate non qualificate DENTRO un namespace (nota di revisione del 21/11; `s194-primitive-ns.out`, braccio sha `6aa05dfb1e97e755`)
+Tutte le prove dei §1-6 sono nello spazio globale. Dentro `namespace App;` una chiamata scritta `strlen($x)` (senza `\`, senza `use function`) NON arriva a `CallBuiltin`/`Strlen`: il compilatore emette `CallNsFallback` (`compile/expr.rs`, ramo `fallback`), che a OGNI chiamata alloca un `Vec` per gli argomenti, fa `is_name_callable` sul nome col namespace, poi sul nome globale, poi `invoke_named` che risolve di nuovo per nome (`vm/calls.rs` `invoke_named_fallback`).
+| Prova (istruzioni nette per giro) | phpr | oracle | rapporto |
+|---|---|---|---|
+| `strlen($u)` in namespace | **5934** | 176 | 33,7× |
+| `count($h)` in namespace | **5562** | 196 | 28,4× |
+| `abs($i)` in namespace | **5369** | 182 | 29,5× |
+| `\strlen($u)` qualificata | 317 | 72 | 4,4× |
+| `\abs($i)` qualificata | 457 | 166 | 2,8× |
+| `f0()` funzione utente del namespace | 636 | 138 | 4,6× |
+Lettura: i guadagni di D, D-bis e degli op dedicati valgono solo per lo spazio globale (WordPress) e per le chiamate qualificate. Nel codice a namespace (ORM, librerie moderne) ogni builtin chiamato senza `\` costa ~5400-5900 istruzioni, **circa 17× il cammino globale di phpr e 30× l'oracle**: è la voce singola più grossa trovata oggi. Zend risolve la coppia (nome col namespace, nome globale) una volta e tiene il risultato nella cache del sito di chiamata. **Apertura per nome: «fallback di namespace risolto una volta»** (pacchetto N, da decidere con l'utente).

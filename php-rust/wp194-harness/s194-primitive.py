@@ -82,6 +82,16 @@ L = [
  ("lit_add_assign", "literal", "$s += $i;", 1),
  ("lit_add", "literal", "$s = $s + $i;", 1),
 ]
+# inside a namespace: an unqualified builtin call must first rule out a same-named namespaced function (the shape of ORM / modern code)
+NS = [
+ ("ns_noop", "ns", "", 1),
+ ("ns_strlen", "ns", "$s += strlen($u);", 1),
+ ("ns_strlen_q", "ns", "$s += \\strlen($u);", 1),
+ ("ns_count", "ns", "$s += count($h);", 1),
+ ("ns_abs", "ns", "$s += abs($i);", 1),
+ ("ns_abs_q", "ns", "$s += \\abs($i);", 1),
+ ("ns_call_user0", "ns", "f0();", 1),
+]
 TAIL = ' echo $s, "|", strlen((string)$t), "|", $x, "\\n";'
 
 def gen():
@@ -91,6 +101,10 @@ def gen():
         open(os.path.join(FX, name + ".php"), "w").write(src)
     for name, _, body, _ in G:
         src = "<?php\n" + PRE + "$n = (int)$argv[1];\n" + SETUP + "for ($i = 0; $i < $n; $i++) { " + body + " }\n" + TAIL + "\n"
+        open(os.path.join(FX, name + ".php"), "w").write(src)
+
+    for name, _, body, _ in NS:
+        src = "<?php\nnamespace App;\n" + PRE + "function run($n) {\n  " + SETUP + "  for ($i = 0; $i < $n; $i++) { " + body + " }\n " + TAIL + "\n}\nrun((int)$argv[1]);\n"
         open(os.path.join(FX, name + ".php"), "w").write(src)
 
 def lit_path(name, n):
@@ -122,7 +136,7 @@ def main():
     if A.bin: ENG["phpr"] = os.path.expanduser(A.bin)
     only = set(x for x in A.only.split(",") if x)
     sha = hashlib.sha256(open(ENG["phpr"], "rb").read()).hexdigest()[:16]
-    for name, fam, _, div in F + G + L:
+    for name, fam, _, div in F + G + L + NS:
         if only and name not in only: continue
         path = os.path.join(FX, name + ".php")
         n1 = N1 // div; n2 = 3 * n1
@@ -142,7 +156,7 @@ def main():
     out.append(f"== S-194 primitive: istruzioni ritirate per iterazione (differenziale N1/N2), phpr {ENG['phpr']} sha {sha} contro oracle. DIREZIONE ==")
     out.append(f"{'fixture':15s} {'fam':8s} {'php':>8s} {'phpr':>8s} {'x':>5s} | {'php net':>8s} {'phpr net':>8s} {'x net':>6s} {'eccesso':>8s} | {'cyc x':>5s} {'IPC php':>7s} {'IPC phpr':>8s} {'disp%':>5s}")
     for name, fam, per, ok, worst in rows:
-        nb = "g_noop" if fam == "global" else ("lit_noop" if fam == "literal" else "noop")
+        nb = {"global": "g_noop", "literal": "lit_noop", "ns": "ns_noop"}.get(fam, "noop")
         pi, pc = per["php"]; ri, rc = per["phpr"]
         npi = pi - base[nb]["php"][0]; nri = ri - base[nb]["phpr"][0]
         xn = f"{nri / npi:6.2f}" if npi > 2 else "     -"

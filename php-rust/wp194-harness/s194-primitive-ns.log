@@ -1,0 +1,12 @@
+noop ok
+call_user0 ok
+builtin_strlen ok
+builtin_abs ok
+builtin_count ok
+ns_noop ok
+ns_strlen ok
+ns_strlen_q ok
+ns_count ok
+ns_abs ok
+ns_abs_q ok
+ns_call_user0 ok
