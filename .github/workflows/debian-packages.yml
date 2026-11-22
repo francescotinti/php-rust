@@ -9,7 +9,7 @@
 # gate for main): it does not run unit tests (they live in ci.yml and
 # in the local oracle gates) and it only reacts to the packaging branch.
 #
-# Toolchain stance (php-rust pins rustc/cargo 1.98.1, REGOLE §AGENTS):
+# Toolchain stance (php-rust pins rustc/cargo 1.98.1):
 # the job builds with Debian's packaged rustc/cargo — debian:sid ships
 # 1.98.x today, exactly the pin. The pin-guard step FAILS LOUDLY when
 # sid drifts to another compiler: a toolchain change must be a
@@ -52,7 +52,7 @@ jobs:
         # Build-Depends declared in debian/control.
         run: |
           apt-get update -qq
-          apt-get install -y --no-install-recommends dpkg-dev curl
+          apt-get install -y --no-install-recommends dpkg-dev curl ca-certificates
           apt-get build-dep -y .
 
       - name: Report build environment
