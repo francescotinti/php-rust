@@ -1,0 +1,100 @@
+== s194 C0a motivi di uscita dal cammino corto (census-time), sorgente 6066e088, build rc=0, 2026-11-22 20:57:20 ==
+-- orm: Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, PHPUnit Warnings: 554, Skipped: 5 | dump s194-c0-motivi-orm.txt presente
+   classe call_fast                  2093
+   classe call_general                206
+   classe mcall                  21346424
+   classe mcall_general           7711944
+   classe ret_fast               34935006
+   classe ret_slow               17119767
+   classe prop                   42241846
+   classe str                     9673873
+   classe arr                    16756796
+   classe new                     3675174
+   classe sweep                  21112634
+   classe builtin_lookup         12121094
+   classe builtin                12121094
+   classe hostbuiltin             7905390
+   motivo ret_slow        14194247  shape1
+   motivo note_this       11715496  general_chain
+   motivo mcall_general       3884110  not_simple+hint
+   motivo mcall_general       2856823  ic_miss
+   motivo ret_slow         1103375  ext
+   motivo ret_slow          976398  shape1+flags0x4
+   motivo this_mcall_general        710477  ic_miss
+   motivo ret_slow          456411  ret_cell
+   motivo note_this         300353  tail_short_path
+   motivo ret_slow          196311  shape1+ext
+   motivo mcall_general        190516  arity_fewer_args
+   motivo ret_slow          137189  shape1+ret_cell
+   motivo mcall_general         47939  not_simple+variadic
+   motivo ret_slow           17261  shape2+flags0x8
+   motivo ret_slow           17202  shape1+iters
+   motivo mcall_general         15623  not_simple+hint+byref
+   motivo ret_slow            8193  flags0x40
+   motivo ret_slow            6809  iters
+   motivo mcall_general          6335  arity_more_args
+   motivo ret_slow            3363  flags0x4
+   motivo ret_slow            1625  flags0x1+ext
+   motivo ret_slow             862  flags0x10
+   motivo ret_slow             505  flags0x20+ret_cell
+   motivo mcall_general            59  recv_other
+   motivo mcall_general            47  not_simple+hint+variadic
+   motivo mcall_general            15  not_simple+hint+generator
+   motivo ret_slow               8  ret_cell+ext
+   motivo ret_slow               4  shape2
+   motivo ret_slow               2  dyn_vars
+   motivo ret_slow               2  main
+uploads-guard restore rc=0
+-- wp: Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73. | dump s194-c0-motivi-wp.txt presente
+   classe call_fast              52997850
+   classe call_general           12118028
+   classe mcall                 138135059
+   classe mcall_general          57229197
+   classe ret_fast              362590110
+   classe ret_slow               88841599
+   classe prop                  321018146
+   classe str                   178428671
+   classe arr                   306834098
+   classe new                    21199090
+   classe sweep                 250408899
+   classe builtin_lookup        223890013
+   classe builtin               223890013
+   classe hostbuiltin            27216022
+   motivo note_this      107255565  general_chain
+   motivo ret_slow        67730316  shape1
+   motivo mcall_general      17834158  not_simple+hint
+   motivo mcall_general      14045420  arity_fewer_args
+   motivo mcall_general      12942643  ic_miss
+   motivo this_mcall_general       9394771  ic_miss
+   motivo ret_slow         9040624  ext
+   motivo ret_slow         7271460  shape1+flags0x4
+   motivo note_this        6888757  tail_short_path
+   motivo mcall_general       2369750  not_simple+byref
+   motivo ret_slow         2260805  iters
+   motivo ret_slow         2176865  ret_cell
+   motivo mcall_general        342223  not_simple+variadic
+   motivo mcall_general        231648  recv_ref
+   motivo ret_slow          178470  shape1+ret_cell
+   motivo ret_slow           57017  shape1+ext
+   motivo ret_slow           54312  shape1+iters
+   motivo mcall_general         47777  not_simple+hint+byref
+   motivo ret_slow           33123  flags0x40
+   motivo ret_slow           20015  flags0x40+ret_cell
+   motivo ret_slow            7371  flags0x1+ext
+   motivo mcall_general          6951  arity_more_args
+   motivo mcall_general          6877  not_simple+hint+generator
+   motivo ret_slow            6143  flags0x10
+   motivo mcall_general          4958  not_simple+generator
+   motivo this_mcall_general          1796  this_not_object
+   motivo ret_slow            1448  flags0x4
+   motivo ret_slow            1373  ret_cell+ext
+   motivo ret_slow            1163  dyn_vars
+   motivo ret_slow             453  ext+dyn_vars
+   motivo ret_slow             343  shape2+flags0x8
+   motivo mcall_general           165  not_simple+hint+variadic
+   motivo ret_slow             146  main
+   motivo ret_slow              72  flags0x40+main
+   motivo ret_slow              62  shape2
+   motivo mcall_general            60  recv_other
+   motivo ret_slow              18  iters+ext
+fine rc=0 2026-11-22 21:12:42
