@@ -17,3 +17,15 @@
    - **Chiamate di metodo, WordPress**: 138,1 M, 57,2 M (41 %) generali: tipi dei parametri 17,8 M, **meno argomenti dei parametri (valori di default) 14,0 M**, cache mancata 12,9 M + 9,4 M, by-ref 2,4 M.
    - **Funzioni (`Call`), WordPress**: 53,0 M corte, 12,1 M generali (motivo non ancora diviso).
    - **L'ipotesi del p.2 regge**: il primo motivo, su entrambi i carichi, sono i tipi dichiarati. Stima (NON misura, la dà C0b): se il ritorno corto costa ~280 istruzioni, quello generale ne costa ~1300 sull'ORM; ammettere al cammino corto i ritorni tipizzati il cui valore ha già il tipo giusto varrebbe fino al ~6 % dell'ORM e al ~3–4 % di WordPress. Sopra la soglia di esistenza del p.5.
+7. **C0b fatto (22/11 notte, `s194-registro-op.out` rc=0 su `093e866a`: il registro con le etichette di ramo; istruzioni LORDE per esecuzione, il residuo dell'aggancio è ~65–100)**:
+   | Ramo | ORM | WordPress |
+   |---|---|---|
+   | Ritorno, cammino corto | ~706 (17,8 M) | ~835 (269,0 M) |
+   | Ritorno, generale per tipo dichiarato | 1040 (15,5 M) | 859 (74,8 M) |
+   | Ritorno, generale per altro motivo | 740 (1,6 M) | 892 (13,3 M) |
+   | Chiamata di metodo, veloce | ~415 (8,7 M) | ~503 (38,4 M) |
+   | Chiamata di metodo, generale | 1849 (7,0 M) | 1295 (47,2 M) |
+   | `$this->m()`, generale | 1276 (0,7 M) | 1165 (9,3 M) contro ~411 veloce |
+   | Funzione, generale | — (206) | 1243 (11,9 M) contro ~408 veloce |
+8. **Lettura, e correzione dell'ipotesi del p.2**: (a) **il ritorno «corto» non è corto**: costa quanto quello generale su WordPress (835 contro 859) e poco meno sull'ORM. Il costo del ritorno è lo smontaggio del frame (distruzione dei locali, note al GC, sonda dei distruttori), non il controllo del tipo: curare i ritorni tipizzati vale ~1,8 % dell'ORM e ~0 su WordPress, non il 6 % stimato al p.6. (b) **Il cammino generale delle chiamate costa 2,5–4,5 volte quello veloce**: portarlo al costo del veloce varrebbe ~4 % dell'ORM e ~1,4 % di WordPress. (c) **Il ritorno in sé** (10 % dell'ORM, 6,5 % di WordPress) è la voce più grande e non si sa ancora cosa contiene: lo dice il profilo (C0c).
+9. **Ordine dentro C, da questi numeri**: 1º profilo dello smontaggio del frame al ritorno (C0c), 2º cammino generale delle chiamate (tipi dei parametri, valori di default, cache mancata; vettore degli argomenti allocato a ogni chiamata), 3º ritorno tipizzato sul cammino corto. Le attese numeriche di ciascuna cura si scrivono qui sotto prima del suo codice.
