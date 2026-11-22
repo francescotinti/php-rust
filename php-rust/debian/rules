@@ -10,15 +10,26 @@
 %:
 	dh $@
 
-CARGO := /usr/bin/cargo
+# Toolchain contract: by default the build uses Debian's own
+# rustc/cargo — on the targeting suite these equal the version pinned
+# in rust-toolchain.toml (the project pin), which keeps the build fully
+# deterministic and out of rustup's reach.
+#
+# A caller MAY supply both CARGO and RUSTC (absolute paths of a complete
+# toolchain pair, e.g. resolved via rustup) when Debian's compiler is
+# not the pinned one — the CI lane does exactly that (see
+# .github/workflows/debian-packages.yml): Debian's rustc when it matches
+# the pin, the rustup-installed pinned toolchain otherwise. Both variables
+# must name the SAME toolchain; only one is never honoured.
+CARGO ?= /usr/bin/cargo
+export RUSTC ?= /usr/bin/rustc
 
-# Deterministic toolchain: Debian's rustc/cargo 1.98.1 — the same version
-# this project pins in rust-toolchain.toml. RUSTC is exported so cargo
-# never resolves rustc through the rustup shim in ~/.cargo/bin (which
-# auto-installs toolchains and can mix compiler versions inside one
-# build): PATH is restricted for the same reason (plain /usr/bin/tools),
-# and build rustc resolves below the layered/modules working-core PATH.
-export RUSTC := /usr/bin/rustc
+# The rustup proxy shims live in ~/.cargo/bin and resolve by CWD
+# toolchain file — the build must never reach them (broken-cache
+# incident: one shim mixed three compiler versions in one build).
+# Both paths above are absolute, so the shims are never needed; strip
+# the directory from PATH to be sure, also under a rustup-provided
+# toolchain.
 export PATH := /usr/bin:/bin:/usr/sbin:/sbin
 
 # Build artifacts NEVER inside the source tree (project rule: no run

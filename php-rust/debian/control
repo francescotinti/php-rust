@@ -12,7 +12,8 @@ Build-Depends: debhelper-compat (= 13),
                libxml2-dev,
                libxslt1-dev,
                libgd-dev,
-               libtidy-dev
+               libtidy-dev,
+               libclang-dev
 Rules-Requires-Root: no
 Homepage: https://github.com/francescotinti/php-rust
 Vcs-Git: https://github.com/francescotinti/php-rust.git

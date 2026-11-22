@@ -10,12 +10,16 @@
 # in the local oracle gates) and it only reacts to the packaging branch.
 #
 # Toolchain stance (php-rust pins rustc/cargo 1.98.1):
-# the job builds with Debian's packaged rustc/cargo — debian:sid ships
-# 1.98.x today, exactly the pin. The pin-guard step FAILS LOUDLY when
-# sid drifts to another compiler: a toolchain change must be a
-# deliberate decision, never something a moving container tag smuggles
-# into a build. If the guard fires, update the image reference and
-# rust-toolchain.toml in one deliberate commit.
+#   - Debian's rustc/cargo when they MATCH the pin — fully deterministic,
+#     no rustup involved (debian:sid ships 1.98.x today);
+#   - when Debian's compiler is not the pinned one (either direction),
+#     install the PINNED toolchain with rustup and build with it. A
+#     compiler change is a deliberate decision expressed by the pin, not
+#     something a moving container tag smuggles in.
+# The resolved absolute toolchain pair is handed to dpkg-buildpackage
+# via CARGO/RUSTC (debian/rules honours both). debian/rules strips
+# ~/.cargo/bin from the build PATH, so rustup's proxy shims stay inert
+# even in rustup mode.
 name: debian-packages
 
 on:
@@ -62,20 +66,32 @@ jobs:
           rustc --version
           cargo --version
 
-      # debian/rules pins RUSTC=/usr/bin/rustc (Debian's compiler) so
-      # cargo never resolves through any rustup shim; this guard asserts
-      # that compiler is the one the project pins.
-      - name: Toolchain pin guard (1.98.1)
+      # Resolves the build toolchain per the lane's policy and exposes
+      # the absolute paths via step outputs.
+      - name: Resolve toolchain (Debian's, or the pin via rustup)
+        id: toolchain
         run: |
           pinned=$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)
-          actual=$(rustc --version | awk '{print $2}')
-          echo "pinned: $pinned, debian sid ships: $actual"
-          if [ "$pinned" != "$actual" ]; then
-            echo "::error::debian:sid rustc ($actual) != pinned toolchain ($pinned). Pin the container image and update the pin in one deliberate commit."
-            exit 1
+          debian_rustc=$(rustc --version | awk '{print $2}')
+          echo "pinned: $pinned, debian sid ships: $debian_rustc"
+          if [ "$pinned" = "$debian_rustc" ]; then
+            echo "cargo=/usr/bin/cargo" >> "$GITHUB_OUTPUT"
+            echo "rustc=/usr/bin/rustc" >> "$GITHUB_OUTPUT"
+          else
+            echo "Debian rustc ($debian_rustc) != pin ($pinned): installing the pinned toolchain via rustup"
+            apt-get install -y --no-install-recommends rustup
+            rustup toolchain install "$pinned" --profile minimal
+            cargo_bin=$(rustup which --toolchain "$pinned" cargo)
+            rustc_bin=$(rustup which --toolchain "$pinned" rustc)
+            echo "cargo=$cargo_bin" >> "$GITHUB_OUTPUT"
+            echo "rustc=$rustc_bin" >> "$GITHUB_OUTPUT"
           fi
+          cat "$GITHUB_OUTPUT" | sed 's/^/resolved: /'
 
       - name: Build packages
+        env:
+          CARGO: ${{ steps.toolchain.outputs.cargo }}
+          RUSTC: ${{ steps.toolchain.outputs.rustc }}
         run: |
           dpkg-buildpackage -us -uc
 
