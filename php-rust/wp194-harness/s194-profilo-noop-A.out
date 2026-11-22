@@ -1,0 +1,50 @@
+== profilo fixture noop N=40000000: 1421 campioni, samply rc=0 (direzione) ==
+    1319  92.8%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop
+      20   1.4%  (libsystem_platform.dylib)
+       8   0.6%  _NtNtNtCslgvlIqPj547_11mago_syntax3ast3ast10expressionNtB5_10ExpressionNtCsiqUURHyj9Hw_9mago_span7HasSpan4span
+       7   0.5%  mi_page_free_list_extend
+       5   0.4%  nIjj9KQmRT_11php_runtime7compile4func12compile_body
+       5   0.4%  nIjj9KQmRT_11php_runtime7compile4exprNtB4_10FnCompiler4call
+       4   0.3%  nIjj9KQmRT_11php_runtime5lower4exprNtB4_7Lowerer10lower_expr
+       3   0.2%  _11mago_syntax5lexerNtB2_5Lexer7advance
+       3   0.2%  _11mago_syntax6parser8internal10expressionNtB6_6Parser32parse_expression_with_precedence
+       3   0.2%  (libsystem_kernel.dylib)
+       2   0.1%  _11mago_syntax6parser8internal13function_like9parameterNtB8_6Parser34parse_function_like_parameter_list
+       2   0.1%  _11mago_syntax6parser8internal10expressionNtB6_6Parser22parse_infix_expression
+       2   0.1%  nIjj9KQmRT_11php_runtime5lower4stmtNtB4_7Lowerer11lower_stmts
+       2   0.1%  nIjj9KQmRT_11php_runtime7compileNtB4_10FnCompiler8block_of
+  righe (simbolo file:riga):
+     600  42.2%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:2315  | self.backedge_cmp(top, func, a);
+     202  14.2%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:2302  | self.incdec_slot_discard(top, *slot, *inc)?;
+     193  13.6%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:1557  | match op {
+     126   8.9%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:2312  | self.frames[top].ip = a;
+     102   7.2%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:1503  | if self.frames.len() > MAX_CALL_DEPTH {
+      95   6.7%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:1542  | let op = &func.ops[ip];
+       7   0.5%  mi_page_free_list_extend page.c:605  | 
+       5   0.4%  nIjj9KQmRT_11php_runtime7compile4exprNtB4_10FnCompiler4call expr.rs:1108  | 
+       4   0.3%  _NtNtNtCslgvlIqPj547_11mago_syntax3ast3ast10expressionNtB5_10ExpressionNtCsiqUURHyj9Hw_9mago_span7HasSpan4span expression.rs:470  | 
+       3   0.2%  _11mago_syntax6parser8internal10expressionNtB6_6Parser32parse_expression_with_precedence expression.rs:125  | 
+       2   0.1%  _11mago_syntax5lexerNtB2_5Lexer7advance mod.rs:1049  | 
+       2   0.1%  _11mago_syntax6parser8internal13function_like9parameterNtB8_6Parser34parse_function_like_parameter_list parameter.rs:21  | 
+       2   0.1%  _NtNtNtCslgvlIqPj547_11mago_syntax3ast3ast10expressionNtB5_10ExpressionNtCsiqUURHyj9Hw_9mago_span7HasSpan4span expression.rs:477  | 
+       2   0.1%  nIjj9KQmRT_11php_runtime7compile4func12compile_body func.rs:86  | thread_jumps(&mut c.ops, &c.lines);
+       2   0.1%  nIjj9KQmRT_11php_runtime7compile4func12compile_body func.rs:166  | super::reg_lower::lower_func(&mut f);
+       2   0.1%  nIjj9KQmRT_11php_runtime7compile4exprNtB6_10FnCompiler4call0B8_ expr.rs:965  | 
+       2   0.1%  Mbv00yxnRz_4core3ptr9drop_glueNtNtCs4nIjj9KQmRT_11php_runtime3hir8ExprKindEBF_ mod.rs:823  | 
+       1   0.1%  _11mago_syntax6parser6streamNtB2_11TokenStream16fill_buffer_slow stream.rs:292  | Stderr,
+       1   0.1%  _11mago_syntax6parser8internal10expressionNtB6_6Parser20parse_lhs_expression expression.rs:217  | 
+       1   0.1%  _NtCslgvlIqPj547_11mago_syntax5tokenNtB5_9TokenKind10is_keyword mod.rs:396  | 
+       1   0.1%  _11mago_syntax5lexerNtB2_5Lexer7advance mod.rs:197  | 
+       1   0.1%  _11mago_syntax6parser8internal8argumentNtB6_6Parser22parse_partial_argument argument.rs:60  | 
+       1   0.1%  _11mago_syntax6parser8internal10expressionNtB6_6Parser22parse_infix_expression expression.rs:785  | 
+       1   0.1%  Y3ugz6OFE_16mago_syntax_core5inputNtB2_5Input32match_sequence_ignore_whitespace input.rs:538  | 
+       1   0.1%  _NtCs3fRkGY2FHAU_9hashbrown3mapINtB5_7HashMapINtNtCshxvaOLs88l5_5alloc3vec3VechEjNtCsdnIwS7Na5wv_10rustc_hash13FxBuildHasherE6insertCs4nIjj9KQmRT_11php_runtime map.rs:1822  | 
+       1   0.1%  nIjj9KQmRT_11php_runtime5lower4exprNtB4_7Lowerer10lower_expr expr.rs:49  | 
+       1   0.1%  nIjj9KQmRT_11php_runtime5lower4exprNtB4_7Lowerer10member_sel expr.rs:892  | 
+       1   0.1%  nIjj9KQmRT_11php_runtime5lower4stmtNtB4_7Lowerer11lower_stmts stmt.rs:21  | out.push(st);
+       1   0.1%  nIjj9KQmRT_11php_runtime5lower5classNtB5_7Lowerer16lower_class_bodyINtNtNtCs8Mbv00yxnRz_4core5slice4iter4IterNtNtNtNtNtCslgvlIqPj547_11mago_syntax3ast3ast10class_like6member15ClassLikeMemberEEB7_ lib.rs:0  | 
+       1   0.1%  nIjj9KQmRT_11php_runtime5lower4stmtNtB4_7Lowerer11lower_stmts stmt.rs:20  | if let Some(st) = self.lower_stmt(s)? {
+       1   0.1%  _NtNtNtCslgvlIqPj547_11mago_syntax3ast3ast9statementNtB5_9StatementNtCsiqUURHyj9Hw_9mago_span7HasSpan4span statement.rs:204  | 
+       1   0.1%  _NtNtNtCslgvlIqPj547_11mago_syntax3ast3ast10expressionNtB5_10ExpressionNtCsiqUURHyj9Hw_9mago_span7HasSpan4span expression.rs:0  | 
+       1   0.1%  nIjj9KQmRT_11php_runtime5lower4exprNtB4_7Lowerer10lower_expr expr.rs:607  | 
+       1   0.1%  _NtNtNtCslgvlIqPj547_11mago_syntax3ast3ast10expressionNtB5_10ExpressionNtCsiqUURHyj9Hw_9mago_span7HasSpan4span expression.rs:464  | 

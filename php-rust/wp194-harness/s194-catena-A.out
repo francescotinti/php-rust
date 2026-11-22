@@ -1,0 +1,10 @@
+braccio (ricetta del pin + tabelle di riga): rc=0 sha=2f292be396294619
+comportamento N contro l'ORACLE (gate: identico): rc=0 (25 righe, diff 0)
+comportamento F contro l'ORACLE (gate: identico): rc=0 (16 righe, diff 0)
+comportamento A contro il PIN s185 (gate: identico): rc=0 (346 righe)
+comportamento dbis contro il PIN s185 (gate: identico): rc=0
+comportamento dedicate contro il PIN s185 (gate: identico): rc=0
+accettazione s194A: rc=0
+sonda primitive A: rc=0
+profilo noop: rc=0
+fine rc=0 2026-11-22 02:09:54

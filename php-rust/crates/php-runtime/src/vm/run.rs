@@ -4,6 +4,7 @@
 use std::borrow::Cow;
 
 use super::*;
+mod cmp_fast;
 
 // S-102 punto 4 (A-BA-103-1): hook compatti del census pila operandi —
 // `scn!(Sito: op)` conta una esecuzione dell'arm, `scn!(Sito: Prim = n)`
@@ -2014,8 +2015,7 @@ impl<'m> super::Vm<'m> {
                     // Binary+JumpIfX by construction (shared binary_value;
                     // to_bool on a Bool is free and emits no diag) — minus
                     // the Zval::Bool stack round-trip and one dispatch.
-                    let r = self.binary_value(top, *op)?;
-                    if convert::to_bool(&r, &mut self.diags) == *when {
+                    if self.cmp_jmp_stack(top, *op)? == *when {
                         self.frames[top].ip = *addr as usize;
                     }
                 }
@@ -2024,11 +2024,7 @@ impl<'m> super::Vm<'m> {
                     // PushConst dispatch and its stack round-trip disappear;
                     // the compare runs through binary_value_ab — identical
                     // semantics to Binary/CmpJmp by construction.
-                    let x = self.frames[top].stack.pop().expect("CmpJmpConst operand");
-                    let c = func.consts[*cidx as usize].to_zval();
-                    let (lhs, rhs) = if *const_lhs { (c, x) } else { (x, c) };
-                    let r = self.binary_value_ab(*op, lhs, rhs)?;
-                    if convert::to_bool(&r, &mut self.diags) == *when {
+                    if self.cmp_jmp_const(top, func, *op, *cidx, *const_lhs)? == *when {
                         self.frames[top].ip = *addr as usize;
                     }
                 }
@@ -2314,36 +2310,12 @@ impl<'m> super::Vm<'m> {
                     // Spento sotto op-census (il CmpJmpSC resta contato dal suo handler).
                     let a = *addr as usize;
                     self.frames[top].ip = a;
+                    // S-194 A3: the same for a `CmpJmpSS` head (limit in a variable).
                     #[cfg(not(feature = "op-census"))]
-                    if let Some(Op::CmpJmpSC { op: c_op, slot: c_slot, cidx, addr: c_addr, when }) = func.ops.get(a) {
-                        if let (crate::bytecode::Const::Int(c), Zval::Long(l)) =
-                            (&func.consts[*cidx as usize], &self.frames[top].slots[*c_slot as usize])
-                        {
-                            if let Some(jump) = long_cmp_i64(*c_op, *l, *c) {
-                                self.frames[top].ip = if jump == *when { *c_addr as usize } else { a + 1 };
-                            }
-                        }
-                    }
+                    self.backedge_cmp(top, func, a);
                 }
                 Op::CmpJmpSS { op, l, r, addr, when } => {
-                    let res = 'r: {
-                        {
-                            let fr = &self.frames[top];
-                            let lv = &fr.slots[*l as usize];
-                            let rv = &fr.slots[*r as usize];
-                            if !matches!(lv, Zval::Undef | Zval::Ref(_))
-                                && !matches!(rv, Zval::Undef | Zval::Ref(_))
-                            {
-                                if let Some(v) = binary_fast(*op, lv, rv) {
-                                    break 'r v;
-                                }
-                            }
-                        }
-                        let lhs = self.reg_load_slot(top, func, *l);
-                        let rhs = self.reg_load_slot(top, func, *r);
-                        self.binary_value_ab(*op, lhs, rhs)?
-                    };
-                    if convert::to_bool(&res, &mut self.diags) == *when {
+                    if self.cmp_jmp_ss(top, func, *op, *l, *r)? == *when {
                         self.frames[top].ip = *addr as usize;
                     }
                 }
@@ -2452,14 +2424,12 @@ impl<'m> super::Vm<'m> {
                     self.frames[top].ip = *addr as usize;
                 }
                 Op::JumpIfFalse(addr) => {
-                    let c = self.frames[top].stack.pop().expect("JumpIfFalse cond");
-                    if !convert::to_bool(&c, &mut self.diags) {
+                    if !self.pop_cond(top) {
                         self.frames[top].ip = *addr as usize;
                     }
                 }
                 Op::JumpIfTrue(addr) => {
-                    let c = self.frames[top].stack.pop().expect("JumpIfTrue cond");
-                    if convert::to_bool(&c, &mut self.diags) {
+                    if self.pop_cond(top) {
                         self.frames[top].ip = *addr as usize;
                     }
                 }
