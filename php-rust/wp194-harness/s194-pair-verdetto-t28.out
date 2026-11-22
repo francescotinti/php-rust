@@ -1,0 +1,63 @@
+== s194 coppia t28: WP full+media @ pin s186 MISURATO phpr=9977cc4b1cf19991 server=c413398a44f9b0a4 tentativo=t28 (criteri s132/s146/s148 EREDITATI + s184-criterio-coppia-t25.md: giudizio a MEDIANA per finestra, az.rev.3 S-149) ==
+grade=VERDICT  # derivazione meccanica dai .time; rc autoritativo = pair-out/pair194-t28.done
+# full: cpu=user+sys (etichettato); media: CANONICA=user-only + companion (az.rev. S-128 #3)
+# az.rev. S-131 #3: riferimento PER CONFIGURAZIONE, ON-ONLY = canonico; firma per gamba
+# az.rev. S-136 #2: lettura firma PRE-REGISTRATA: >150% med MOTORE = SPORCA (esclusa); 120-150% = ELEVATA (nel canone, annotata); <=120% pulita
+quiescenza warmup: rc=0 (file: pair-out/quiesce-t28-warmup.rc)
+quiescenza leg1-on: rc=0 (file: pair-out/quiesce-t28-leg1-on.rc)
+quiescenza leg2-on: rc=0 (file: pair-out/quiesce-t28-leg2-on.rc)
+quiescenza leg3-on: rc=0 (file: pair-out/quiesce-t28-leg3-on.rc)
+quiescenza leg4-on: rc=0 (file: pair-out/quiesce-t28-leg4-on.rc)
+quiescenza leg5-on: rc=0 (file: pair-out/quiesce-t28-leg5-on.rc)
+quiescenza leg6-on: rc=0 (file: pair-out/quiesce-t28-leg6-on.rc)
+leg1-on: ictx/s oracle=1160 phpr=78  contesa ok
+  firma leg1-on: ictx%med oracle=100% phpr=96% rank_cpu_oracle=2/6 (1=piu' veloce)
+leg2-on: ictx/s oracle=1361 phpr=68  contesa ok
+  firma leg2-on: ictx%med oracle=117% phpr=83% rank_cpu_oracle=1/6 (1=piu' veloce)
+leg3-on: ictx/s oracle=1152 phpr=204  SEGNALATA(>1,5x med MOTORE)
+  firma leg3-on: ictx%med oracle=99% phpr=251% rank_cpu_oracle=4/6 (1=piu' veloce)
+leg4-on: ictx/s oracle=1265 phpr=748  SEGNALATA(>1,5x med MOTORE)
+  firma leg4-on: ictx%med oracle=109% phpr=916% rank_cpu_oracle=3/6 (1=piu' veloce)
+leg5-on: ictx/s oracle=1164 phpr=85  contesa ok
+  firma leg5-on: ictx%med oracle=100% phpr=104% rank_cpu_oracle=6/6 (1=piu' veloce)
+leg6-on: ictx/s oracle=1149 phpr=74  contesa ok
+  firma leg6-on: ictx%med oracle=99% phpr=91% rank_cpu_oracle=5/6 (1=piu' veloce)
+ictx_s_mediana_oracle=1162 ictx_s_mediana_phpr=82  # PER MOTORE
+gambe pulite: ['leg1-on', 'leg2-on', 'leg5-on', 'leg6-on']
+leg1-on: full_oracle_cpu=440.47 full_phpr_cpu=727.29 proprio=1.651 peak_phpr_MiB=1758.3
+leg2-on: full_oracle_cpu=438.15 full_phpr_cpu=723.93 proprio=1.652 peak_phpr_MiB=1777.4
+leg3-on: full_oracle_cpu=442.44 full_phpr_cpu=728.05 proprio=1.646 peak_phpr_MiB=1779.1
+leg4-on: full_oracle_cpu=441.59 full_phpr_cpu=724.83 proprio=1.641 peak_phpr_MiB=1777.4
+leg5-on: full_oracle_cpu=445.68 full_phpr_cpu=731.10 proprio=1.640 peak_phpr_MiB=1776.4
+leg6-on: full_oracle_cpu=445.19 full_phpr_cpu=730.80 proprio=1.642 peak_phpr_MiB=1779.2
+replica_peak_senza_inserzione (p.5): leg1-on=1758.3 leg2-on=1777.4 leg3-on=1779.1 leg4-on=1777.4 leg5-on=1776.4 leg6-on=1779.2
+replica_peak lettura: 6/6 basse (<=1825) -> livello BASSO unico (il doppio livello NON si riproduce)
+matrice full (gambe PULITE) phpr(riga)/oracle(colonna):
+  leg1-on/leg1-on=1.651  leg1-on/leg2-on=1.660  leg1-on/leg5-on=1.632  leg1-on/leg6-on=1.634
+  leg2-on/leg1-on=1.644  leg2-on/leg2-on=1.652  leg2-on/leg5-on=1.624  leg2-on/leg6-on=1.626
+  leg5-on/leg1-on=1.660  leg5-on/leg2-on=1.669  leg5-on/leg5-on=1.640  leg5-on/leg6-on=1.642
+  leg6-on/leg1-on=1.659  leg6-on/leg2-on=1.668  leg6-on/leg5-on=1.640  leg6-on/leg6-on=1.642
+full_intervallo_PULITO_misto=1.624-1.669  # companion (miscela config)
+coppie_proprie_PULITE_miste=1.640-1.652 (N=4)
+coppie_proprie_user_only_miste=1.640-1.658
+full_on_only_coppie_proprie=1.640-1.652 (N=4) CANONICO
+full_on_only_intervallo=1.624-1.669
+mediana_t28=1.646 (N=4 coppie proprie ON PULITE; mediane storiche t1=1.799 t2=1.738 t3=1.789 t4=1.781 t5=1.757 t6=1.771 t7=1.795 t8=1.754 t9=1.767 t10=1.760 t11=1.765 t12=1.767 t13=1.763 t14=1.761 t15=1.746 t16=1.749 t17=1.776 t18=1.769 t19=1.772 t20=1.765 t21=1.744 t23=1.799 t24=1.770 t25=1.747 t26=1.751 t27=1.705; riferimento pin s186 (leve di S-194: attribuzione per leva): t24=1.770 t25=1.747 t26=1.751 t27=1.705)
+giudizio_MEDIANA (canonico, criterio coppia-t25 p.4): direzione GIU' SEGNALATA (mediana 1.646 < 1.738) — pin NUOVO s186: coerente con pin s186 (leve di S-194: attribuzione per leva) (attesa ≤0), magnitudine non ripartita
+companion banda-unione (descrittivo): coppie in [1.722-1.823]: 0/4
+banda_ON: N=4 INSUFFICIENTE (<5 gambe pulite) — tentativo da integrare (criterio p.4)
+media_leg1-on: user_only_CANONICA=2.373 user+sys_companion=2.328
+media_leg2-on: user_only_CANONICA=2.361 user+sys_companion=2.313
+media_leg3-on: user_only_CANONICA=2.368 user+sys_companion=2.328 (SEGNALATA)
+media_leg4-on: user_only_CANONICA=2.367 user+sys_companion=2.323 (SEGNALATA)
+media_leg5-on: user_only_CANONICA=2.386 user+sys_companion=2.349
+media_leg6-on: user_only_CANONICA=2.391 user+sys_companion=2.358
+parita_leg1-on: media=OK(vuoto) full=OK(solo wp_is_stream #2)
+parita_leg2-on: media=OK(vuoto) full=OK(solo wp_is_stream #2)
+parita_leg3-on: media=OK(vuoto) full=OK(solo wp_is_stream #2)
+parita_leg4-on: media=OK(vuoto) full=OK(solo wp_is_stream #2)
+parita_leg5-on: media=OK(vuoto) full=OK(solo wp_is_stream #2)
+parita_leg6-on: media=OK(vuoto) full=OK(solo wp_is_stream #2)
+deriva_test: gambe pulite N=4 < 6 -> SOTTO-CAMPIONATO, nessuna soglia applicata (s148 p.4)
+sentinella language-server inizio finestra (az.rev. S-157 #4): /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.98.1-aarch64-apple-darwin/bin/rust-analyzer /Users/francescotinti/.rustup/toolchains/1.98.1-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv 
+sentinella language-server fine finestra: /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.98.1-aarch64-apple-darwin/bin/rust-analyzer /Users/francescotinti/.rustup/toolchains/1.98.1-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv 

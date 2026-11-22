@@ -1,0 +1,14 @@
+== s194 notte: confronto con la notte del 20/11 (criterio s194-criterio-notte.md p.5) ==
+ORM t30 [6.075; 6.119] contro t29 [6.449; 6.576]: CONFERMATA
+WordPress t28 mediana 1.646 contro t27 1.705 [1.683; 1.707]: CONFERMATA
+guardia b6 (righe con D, da leggere contro b5b: K0 -0,46 · mcalls-dq +4,33; soglie del criterio p.5):
+   GIUDICE mcalls-dq: oracle=22.00 ns/iter · A=126.67 (5.76×) Z=126.67 B=131.67 (5.98×) · D=B−A colonna=+5.00 appaiata=+4.67 soglia=4.00 (rumore drop-1 0.83, SL 0.00) segni B>A 5/5
+   GIUDICE calls-dq: oracle=22.50 ns/iter · A=78.17 (3.47×) Z=78.67 B=80.33 (3.57×) · D=B−A colonna=+2.17 appaiata=+2.33 soglia=4.00 (rumore drop-1 1.00, SL 0.67) segni B>A 5/5
+   GIUDICE ret-buf-dq-K0: oracle=22.00 ns/iter · A=100.31 (4.56×) Z=101.23 B=98.31 (4.47×) · D=B−A colonna=-2.00 appaiata=-1.54 soglia=4.00 (rumore drop-1 0.92, SL 1.08) segni B>A 0/5
+   GIUDICE ret-buf-dq-K4: oracle=24.92 ns/iter · A=137.38 (5.51×) Z=138.31 B=131.23 (5.27×) · D=B−A colonna=-6.15 appaiata=-6.15 soglia=4.00 (rumore drop-1 0.92, SL 1.08) segni B>A 0/5
+   GIUDICE ret-buf-dq-K16: oracle=34.15 ns/iter · A=238.62 (6.99×) Z=238.77 B=213.54 (6.25×) · D=B−A colonna=-25.08 appaiata=-24.92 soglia=4.00 (rumore drop-1 0.62, SL 0.31) segni B>A 0/5
+   ATTESA (i) mcalls-dq |D| < max(rumore, 4, SL)=4.00: VIOLATA (|D| colonna 5.00 appaiata 4.67)
+   ATTESA (i) calls-dq |D| < max(rumore, 4, SL)=4.00: PASS (|D| colonna 2.17 appaiata 2.33)
+   ATTESA (i) ret-buf-dq-K0 |D| < max(rumore, 4, SL)=4.00: PASS (|D| colonna 2.00 appaiata 1.54)
+   GUARDIA MORDE: (i) mcalls-dq D +5.00/+4.67 · (ii) ret-buf-dq-K4 Δ -4.15/-4.62 · (ii) ret-buf-dq-K16 Δ -23.08/-23.38 ⇒ cura O(1) PRIMA della promozione s184 (ordine obbligato (3)), guardia da ri-eseguire (rc=5)
+   ESITO rc=5 2026-11-22 18:07:23
