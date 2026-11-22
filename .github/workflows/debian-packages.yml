@@ -1,0 +1,107 @@
+# Debian packaging build lane.
+#
+# Builds the phpr Debian packages (php-rust/debian) on the same distro
+# the packages target and publishes them as workflow artifacts:
+#   - phpr-cli_*_amd64.deb, phpr-server_*_amd64.deb
+#   - native source set (.dsc, .tar.xz) + .changes/.buildinfo
+#
+# This lane is deliberately SEPARATE from ci.yml (the build-and-test
+# gate for main): it does not run unit tests (they live in ci.yml and
+# in the local oracle gates) and it only reacts to the packaging branch.
+#
+# Toolchain stance (php-rust pins rustc/cargo 1.98.1, REGOLE §AGENTS):
+# the job builds with Debian's packaged rustc/cargo — debian:sid ships
+# 1.98.x today, exactly the pin. The pin-guard step FAILS LOUDLY when
+# sid drifts to another compiler: a toolchain change must be a
+# deliberate decision, never something a moving container tag smuggles
+# into a build. If the guard fires, update the image reference and
+# rust-toolchain.toml in one deliberate commit.
+name: debian-packages
+
+on:
+  push:
+    branches: [debian-packaging]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# The workspace layout: the git repo ROOT contains php-rust/ (the cargo
+# workspace + debian/). dpkg-buildpackage runs in php-rust/ and writes
+# its artifacts (../) to the repo root.
+defaults:
+  run:
+    working-directory: php-rust
+
+concurrency:
+  group: debian-packages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-packages:
+    runs-on: ubuntu-latest
+    # Same distro family as the packaging target (this box's verification
+    # host: Debian forky/sid, rustc/cargo 1.98.1 = the project pin).
+    container: docker.io/library/debian:sid
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Report build environment
+        run: |
+          cat /etc/os-release | head -2
+          dpkg --print-architecture
+          rustc --version
+          cargo --version
+
+      # The single source of truth for build inputs is debian/control
+      # (all toolchain + FFI dev packages are declared there for clean
+      # chroots) — apt-get build-dep keeps this step in sync with it.
+      - name: Install build dependencies (from debian/control)
+        run: |
+          apt-get update -qq
+          apt-get install -y --no-install-recommends dpkg-dev curl
+          apt-get build-dep -y .
+
+      # debian/rules pins RUSTC=/usr/bin/rustc (Debian's compiler) so
+      # cargo never resolves through any rustup shim; this guard asserts
+      # that compiler is the one the project pins.
+      - name: Toolchain pin guard (1.98.1)
+        run: |
+          pinned=$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)
+          actual=$(rustc --version | awk '{print $2}')
+          echo "pinned: $pinned, debian sid ships: $actual"
+          if [ "$pinned" != "$actual" ]; then
+            echo "::error::debian:sid rustc ($actual) != pinned toolchain ($pinned). Pin the container image and update the pin in one deliberate commit."
+            exit 1
+          fi
+
+      - name: Build packages
+        run: |
+          dpkg-buildpackage -us -uc
+
+      - name: Lintian (fail on errors; warnings reported)
+        run: |
+          apt-get install -y --no-install-recommends lintian
+          lintian --pedantic --fail-on error ../*.changes
+
+      # Installed-package smoke: the same tests autopkgtest would run on
+      # a real testbed (debian/tests/{cli,server}), executed as root in
+      # this container. dpkg -i needs no dependency resolution here: the
+      # build-dep step already installed every runtime library.
+      - name: Smoke test (installed packages)
+        run: |
+          dpkg -i ../phpr-cli_*_amd64.deb ../phpr-server_*_amd64.deb
+          debian/tests/cli
+          debian/tests/server
+
+      - name: Collect artifacts
+        run: |
+          ls -l ..
+          mkdir -p /tmp/out && cp ../*.deb ../*.dsc ../*.tar.xz ../*.changes ../*.buildinfo /tmp/out/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phpr-debian-packages-amd64
+          path: /tmp/out/*
+          if-no-files-found: error
