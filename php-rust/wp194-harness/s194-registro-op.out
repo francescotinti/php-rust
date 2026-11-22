@@ -1,0 +1,226 @@
+== s194 registro delle istruzioni per op, sorgente d0c153b928842dac948b53176ba76eaed572fdcf, build rc=0, 2026-11-22 12:33:27 ==
+-- sanita' sulla sonda assign_const: 5.00 op per giro, 723.0 istruzioni attribuite per giro (produzione braccio A: 331; il residuo dell'aggancio si tara a parte: s194-registro-op-taratura.py)
+-- orm: Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, PHPUnit Warnings: 554, Skipped: 5 | dump s194-registro-op-orm.txt presente
+   1 dump; processo principale qui sotto; sottoprocessi: 0 op, 0 istruzioni attribuite
+   == PHPR_OP_CENSUS: 583564867 ops dispatched ==
+   == PHPR_OP_INSTR: attributed 295659530540 | before first op 4965959 | after last op 8059379 | thread total 2159982003775 | read bias 1528 | nested loops 2490151 | charged to a resumed caller 515829076
+   -- instructions by op (sum, share, count, mean, min) --
+       31301215017  10.59%       7905390     3959.5     440  CallHostBuiltin
+       29569698343  10.00%      34935006      846.4     280  Ret
+       18526220138   6.27%          6125  3024689.0   27304  Include
+       18316139018   6.20%      63990306      286.2     121  Sweep
+       17835516884   6.03%      12121094     1471.4     238  CallBuiltin
+       16447049737   5.56%      15731339     1045.5     392  MethodCall
+       14979604247   5.07%       9832858     1523.4     515  PropSetPop
+       11806273249   3.99%      62990859      187.4     180  LoadVar
+       11313595884   3.83%       2435085     4646.1    1878  FieldIsset
+        9630340926   3.26%      56957082      169.1     147  PushConst
+        9248197591   3.13%        356081    25972.2    1049  CallHostBuiltinOut
+        8636036758   2.92%      29799843      289.8     209  ThisPropGet
+        5869321787   1.99%      38205534      153.6     137  JumpIfFalse
+        4910047112   1.66%      19205667      255.7     168  StoreSlot
+        4815390669   1.63%      12791744      376.4     273  FetchDim
+        4643385863   1.57%      10988152      422.6     166  CmpJmpConst
+        4094243124   1.38%       1630614     2510.9     865  FieldAssign
+        3024182395   1.02%       2646505     1142.7     599  Alloc
+        2904452469   0.98%       2778355     1045.4     612  AssignPath
+        2853607170   0.97%       8699248      328.0     148  IterNext
+        2846035182   0.96%       5615085      506.9     388  ThisMethodCall
+        2838867632   0.96%       2078580     1365.8     545  StaticCall
+        2786892604   0.94%      17540863      158.9     138  Pop
+        2606871597   0.88%           269  9690972.5  237589  DeclareDeferred
+        2510957326   0.85%      20040114      125.3     116  Jump
+        2490971431   0.84%      14851070      167.7     152  This
+        2260995635   0.76%       7205918      313.8     158  CmpJmpSC
+        2110269401   0.71%       8502190      248.2     243  Unary
+        2069514869   0.70%        812149     2548.2     341  InvokeCtor
+        1997615342   0.68%       3052961      654.3     311  IssetPath
+        1960486076   0.66%        934904     2097.0    1318  AllocDynamic
+        1884298950   0.64%       2322859      811.2     464  InvokeMethod
+        1867218194   0.63%       7903944      236.2     224  LoadVarPushConst
+        1732053319   0.59%        586720     2952.1    1408  StaticCallDynamic
+        1648350297   0.56%      12749213      129.3     128  CheckArity
+        1561786926   0.53%       5225170      298.9     151  CmpJmp
+        1430658560   0.48%       5715336      250.3     185  PushRef
+        1392166333   0.47%       3584210      388.4     243  StampThrowable
+        1390808467   0.47%       2530485      549.6     412  ConcatN
+        1388337643   0.47%       5140471      270.1     261  Stringify
+        1373906917   0.46%       8420274      163.2     156  Dup
+        1356009189   0.46%       1832326      740.0     263  IterInit
+        1077436028   0.36%            74  14559946.3  6074958  Eval
+        1051715005   0.36%        361035     2913.1     222  Cast
+        1022869979   0.35%       4118173      248.4     246  ClassConst
+         894539726   0.30%       1640315      545.3     503  StaticPropGet
+         823052313   0.28%       1815629      453.3     191  IterPop
+         791982852   0.27%       1572363      503.7     441  PushArgPlace
+         744785317   0.25%       2271651      327.9     278  ArrayPush
+         730128261   0.25%       3584210      203.7     202  InitProps
+         698222388   0.24%        338037     2065.5    1219  InvokeCtorArgs
+         666868442   0.23%       3014547      221.2     201  ArrayInit
+         604729901   0.20%       1326589      455.9     217  CoalesceFetchDim
+         579943064   0.20%       3386452      171.3     155  LoadSlot
+         577763789   0.20%        331891     1740.8    1050  MakeClosure
+         488227077   0.17%        923335      528.8     317  ArrayInsert
+         472249576   0.16%       1721817      274.3     232  BinaryTC
+         466595547   0.16%        800200      583.1     470  InstanceOfDynamic
+         449350370   0.15%        649938      691.4     463  ConcatNConst
+         432506339   0.15%        547477      790.0     474  ClassConstFromValue
+   -- instructions by builtin name (sum, count, mean; top 80) --
+        8572217204         39195   218706.9  __pdo_run
+        8012694087        290311    27600.4  preg_match
+        5529552009         14027   394207.7  scandir
+        2847765407       2348719     1212.5  strpos
+        2749613177          4722   582298.4  array_diff
+        2355537605        469192     5020.4  debug_backtrace
+        1839539628          2288   803994.6  get_declared_classes
+        1762572447        450868     3909.3  __reflect_method_info
+        1761331202         27099    64996.2  realpath
+        1487355533       1771434      839.6  class_exists
+        1393742513         99165    14054.8  array_map
+        1322359532        583490     2266.3  str_replace
+        1305627237       4179187      312.4  is_object
+        1213997256       1133872     1070.7  __reflect_class_real_name
+        1177476334         18757    62775.3  __pdo_exec
+        1117321982         38871    28744.4  __pdo_prepare
+        1084699829          6969   155646.4  getcwd
+        1074804701        715906     1501.3  __reflect_class_loc
+         982424271         34895    28153.7  preg_replace
+         776334639         43477    17856.2  __lazy_set_raw
+         635452777        924227      687.6  assert
+         531595413        265232     2004.3  in_array
+         512661991        218364     2347.7  array_filter
+         453086839          1201   377258.0  __reflect_method_names
+         448409074         84891     5282.2  __reflect_prop_details
+         397161650        198198     2003.9  array_merge
+         394251609        563666      699.4  array_key_exists
+         374961639         63658     5890.3  __reflect_prop_attr_new
+         348430865         24382    14290.5  is_dir
+         318759319        176557     1805.4  implode
+         311292337        234362     1328.3  method_exists
+         287762904        926236      310.7  is_array
+         256656800        400137      641.4  strtolower
+         254065621        365495      695.1  spl_object_id
+         250950747       1106678      226.8  count
+         247511996         32840     7536.9  __reflect_prop_attributes
+         240242570        772298      311.1  is_string
+         231271794         18679    12381.4  preg_match_all
+         228797419        285020      802.7  ltrim
+         218992829        124168     1763.7  __reflect_prop_declaring_class
+         215413482         70743     3045.0  sprintf
+         193452286         16258    11898.9  preg_split
+         173254810         75127     2306.2  __reflect_prop_type
+         160036050         30877     5183.0  gc_status
+         137383501        116949     1174.7  property_exists
+uploads-guard restore rc=0
+-- wp: Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73. | dump s194-registro-op-wp.txt presente
+   72 dump; processo principale qui sotto; sottoprocessi: 171397965 op, 454158315183 istruzioni attribuite
+   == PHPR_OP_CENSUS: 10535294270 ops dispatched ==
+   == PHPR_OP_INSTR: attributed 4568924490849 | before first op 32487744 | after last op 6231891 | thread total 38207747123351 | read bias 1536 | nested loops 24435923 | charged to a resumed caller 25257
+   -- instructions by op (sum, share, count, mean, min) --
+      749549984472  16.41%     219888294     3408.8     249  CallBuiltin
+      365315862798   8.00%    1336590292      273.3     110  Sweep
+      296718464785   6.49%     357153803      830.8     272  Ret
+      217122340730   4.75%    1209609515      179.5     166  LoadVar
+      215777509324   4.72%      26257251     8217.8     418  CallHostBuiltin
+      195591897039   4.28%     270261593      723.7     303  IssetPath
+      174599600652   3.82%    1132152564      154.2     136  PushConst
+      137089449710   3.00%      58263863     2352.9     853  FieldAssign
+      133662682442   2.93%     117887486     1133.8     602  AssignPath
+      106719154700   2.34%     103023269     1035.9     372  CallNsFallback
+      103410576460   2.26%     704863325      146.7     129  JumpIfFalse
+      101884621648   2.23%      26787369     3803.5     211  Cast
+       87760681414   1.92%     387806902      226.3     153  StoreSlot
+       84532924940   1.85%     160333126      527.2     303  ArrayInsert
+       83428249903   1.83%     507348145      164.4     129  Pop
+       83409890793   1.83%      19676735     4239.0    1293  FieldIsset
+       79544919939   1.74%      85596565      929.3     376  MethodCall
+       72518691652   1.59%     193666281      374.5     259  FetchDim
+       70440202783   1.54%     232400894      303.1     133  IterNext
+       70315967522   1.54%       9502528     7399.7     676  CallHostBuiltinOut
+       68085813642   1.49%      58490977     1164.0     507  PropSetPop
+       55737188815   1.22%     242509103      229.8     169  PushRef
+       53188397585   1.16%      44659096     1191.0     908  IncDecPath
+       51046401763   1.12%     211737232      241.1     230  Unary
+       46980642331   1.03%     178048908      263.9     253  BindRef
+       46748143340   1.02%     186818472      250.2     198  ThisPropGet
+       45147683063   0.99%     385345256      117.2     108  Jump
+       42240965158   0.92%     110913896      380.8     154  CmpJmpConst
+       39289326529   0.86%         30439  1290756.2   25248  Include
+       34086458063   0.75%     147394209      231.3     212  LoadVarPushConst
+       34021148704   0.74%      36584838      929.9     254  IterInit
+       33096904850   0.72%      15445311     2142.8    1066  Clone
+       30901071408   0.68%      52098178      593.1     271  Call
+       29657150260   0.65%      95157721      311.7     263  ArrayPush
+       29196738721   0.64%     121222063      240.9     144  CmpJmpSC
+       27423892079   0.60%      50728606      540.6     379  ThisMethodCall
+       24780306328   0.54%      50887223      487.0     405  ConcatN
+       21995048364   0.48%     181482806      121.2     112  CheckArity
+       20690988126   0.45%      36104994      573.1     183  IterPop
+       20003673057   0.44%      94416549      211.9     185  ArrayInit
+       19782266527   0.43%     158377858      124.9     114  FillDefault
+       19008215917   0.42%      60523330      314.1     301  StringifySlot
+       17090319896   0.37%      31386324      544.5     303  EmptyPath
+       16543223722   0.36%      51520995      321.1     208  PropGetSlot
+       16373057733   0.36%      11512667     1422.2     537  StaticCall
+       14975621580   0.33%      94868051      157.9     145  This
+       14109864594   0.31%       2581641     5465.5    2098  FieldEmpty
+       13459482514   0.29%       6448472     2087.2    1265  AllocDynamic
+       12919258416   0.28%       5180046     2494.0     419  MakeRef
+       12287497397   0.27%      46008358      267.1     255  Stringify
+       12028905480   0.26%      10531872     1142.1     590  Alloc
+       11765788830   0.26%      82962971      141.8     128  JumpIfTrue
+       11330817189   0.25%       8019218     1413.0     500  PropIncDec
+        9650960682   0.21%       3233666     2984.5    2194  FieldUnset
+        8216255533   0.18%      11006003      746.5     148  Count
+        8188466059   0.18%       4964917     1649.3     573  PropGetSilent
+        7951841839   0.17%      28082187      283.2     140  CmpJmp
+        7612084723   0.17%      46752636      162.8     146  LoadSlot
+        6651911265   0.15%      42884840      155.1     147  Dup
+        6402809041   0.14%      11372888      563.0     449  ConcatNConst
+   -- instructions by builtin name (sum, count, mean; top 80) --
+      400638038032          1205  332479699.6  password_hash
+       76382259332      13251500     5764.0  array_merge
+       49389670757           328  150578264.5  __gd_copy
+       42964871037        536934    80018.9  __mysqli_query
+       39021615279       5738504     6800.0  preg_match
+       38221704360           339  112748390.4  password_verify
+       32546675044        816026    39884.4  array_unique
+       20928409938       2878761     7269.9  preg_replace
+       18362072372          7305  2513630.7  glob
+       18033588126      13420574     1343.7  in_array
+       16589752959       4132236     4014.7  str_replace
+       15807849100       2641559     5984.3  call_user_func_array
+       14061804836        321455    43744.2  array_diff
+       12865457416           339  37951201.8  __gd_encode
+        8238388961        391403    21048.4  array_map
+        8216255376      11005978      746.5  count
+        8180782465      26944764      303.6  is_array
+        7316396008         52195   140174.3  file_get_contents
+        7238565054         60820   119016.2  getcwd
+        7092964091         67945   104392.7  is_readable
+        6852961882       9656540      709.7  trim
+        6515724816       3581551     1819.2  strspn
+        6294079845      20612532      305.4  is_object
+        5968917435        205973    28979.1  preg_match_all
+        5922030885      15256530      388.2  ord
+        5732695368           247  23209293.0  __gd_decode_auto
+        5445084815        522044    10430.3  get_object_vars
+        5400214838      17813802      303.1  is_string
+        4817224919       3302346     1458.7  defined
+        4628593921        123177    37576.8  serialize
+        4627606620         22245   208029.1  scandir
+        4579445130        370458    12361.6  preg_split
+        4416662239       4376147     1009.3  strpos
+        4391866174       1063974     4127.8  __reflect_method_info
+        4147579905       2695033     1539.0  explode
+        4082921780       6743561      605.5  substr
+        4071264376          4859   837881.1  get_declared_classes
+        3785966133        341704    11079.7  preg_replace_callback
+        3676063378        285158    12891.3  file_exists
+        3528800995        810553     4353.6  random_int
+        3524985503       2624330     1343.2  str_contains
+        3504901775       1281701     2734.6  sprintf
+        3457312796         77756    44463.6  unserialize
+        3293955841        552049     5966.8  md5
+        3252606055       4969462      654.5  strtoupper
+fine rc=0 2026-11-22 14:10:41

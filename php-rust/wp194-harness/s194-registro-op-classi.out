@@ -1,0 +1,174 @@
+== orm: 583564867 op, attribuito lordo 295.7 G; produzione braccio A 246.8 G ==
+   == PHPR_OP_INSTR: attributed 295659530540 | before first op 4965959 | after last op 8059379 | thread total 2159982003775 | read bias 1528 | nested loops 2490151 | charged to a resumed caller 5158290760 ==
+-- K = 50: netto 266.5 G (+8.0 % sulla produzione), 457 per op
+   chiamate utente e ritorni            58.1 G   21.8 % istr   13.9 % op         717 per op
+   builtin                              57.9 G   21.7 % istr    3.8 % op        2585 per op
+   oggetti e proprieta'                 51.2 G   19.2 % istr   14.2 % op         620 per op
+   pila e variabili                     25.6 G    9.6 % istr   31.3 % op         140 per op
+   compilazione/include                 22.3 G    8.4 % istr    0.0 % op     3308761 per op
+   salti, confronti, aritmetica         17.2 G    6.4 % istr   17.4 % op         169 per op
+   array                                15.9 G    6.0 % istr    6.8 % op         401 per op
+   Sweep (pulizia dei temporanei)       15.1 G    5.7 % istr   11.0 % op         236 per op
+   stringhe                              3.2 G    1.2 % istr    1.7 % op         333 per op
+   altro                                 0.0 G    0.0 % istr    0.0 % op         152 per op
+-- K = 65: netto 257.7 G (+4.4 % sulla produzione), 442 per op
+   builtin                              57.6 G   22.3 % istr    3.8 % op        2570 per op
+   chiamate utente e ritorni            56.8 G   22.1 % istr   13.9 % op         702 per op
+   oggetti e proprieta'                 50.0 G   19.4 % istr   14.2 % op         605 per op
+   pila e variabili                     22.8 G    8.9 % istr   31.3 % op         125 per op
+   compilazione/include                 22.3 G    8.7 % istr    0.0 % op     3308746 per op
+   salti, confronti, aritmetica         15.6 G    6.1 % istr   17.4 % op         154 per op
+   array                                15.3 G    6.0 % istr    6.8 % op         386 per op
+   Sweep (pulizia dei temporanei)       14.2 G    5.5 % istr   11.0 % op         221 per op
+   stringhe                              3.1 G    1.2 % istr    1.7 % op         318 per op
+   altro                                 0.0 G    0.0 % istr    0.0 % op         137 per op
+-- K = 80: netto 249.0 G (+0.9 % sulla produzione), 427 per op
+   builtin                              57.2 G   23.0 % istr    3.8 % op        2555 per op
+   chiamate utente e ritorni            55.6 G   22.3 % istr   13.9 % op         687 per op
+   oggetti e proprieta'                 48.7 G   19.6 % istr   14.2 % op         590 per op
+   compilazione/include                 22.3 G    9.0 % istr    0.0 % op     3308731 per op
+   pila e variabili                     20.1 G    8.1 % istr   31.3 % op         110 per op
+   array                                14.7 G    5.9 % istr    6.8 % op         371 per op
+   salti, confronti, aritmetica         14.1 G    5.7 % istr   17.4 % op         139 per op
+   Sweep (pulizia dei temporanei)       13.2 G    5.3 % istr   11.0 % op         206 per op
+   stringhe                              2.9 G    1.2 % istr    1.7 % op         303 per op
+   altro                                 0.0 G    0.0 % istr    0.0 % op         122 per op
+-- i 25 op piu' costosi (K = 65): quota, netto per op, milioni di esecuzioni
+   CallHostBuiltin       11.9 %        3894        7.9 M
+   Ret                   10.6 %         781       34.9 M
+   Include                7.2 %     3024624        0.0 M
+   CallBuiltin            6.6 %        1406       12.1 M
+   MethodCall             6.0 %         980       15.7 M
+   PropSetPop             5.6 %        1458        9.8 M
+   Sweep                  5.5 %         221       64.0 M
+   FieldIsset             4.3 %        4581        2.4 M
+   CallHostBuiltinOut     3.6 %       25907        0.4 M
+   LoadVar                3.0 %         122       63.0 M
+   ThisPropGet            2.6 %         225       29.8 M
+   PushConst              2.3 %         104       57.0 M
+   FieldAssign            1.5 %        2446        1.6 M
+   FetchDim               1.5 %         311       12.8 M
+   CmpJmpConst            1.5 %         358       11.0 M
+   StoreSlot              1.4 %         191       19.2 M
+   JumpIfFalse            1.3 %          89       38.2 M
+   Alloc                  1.1 %        1078        2.6 M
+   AssignPath             1.1 %         980        2.8 M
+   StaticCall             1.0 %        1301        2.1 M
+   DeclareDeferred        1.0 %     9690907        0.0 M
+   ThisMethodCall         1.0 %         442        5.6 M
+   IterNext               0.9 %         263        8.7 M
+   InvokeCtor             0.8 %        2483        0.8 M
+   AllocDynamic           0.7 %        2032        0.9 M
+-- builtin per nome (lordo: K pesa solo sui piu' leggeri): i primi 25
+   __pdo_run                      3.3 %        218707 per chiamata       39195 chiamate
+   preg_match                     3.1 %         27600 per chiamata      290311 chiamate
+   scandir                        2.1 %        394208 per chiamata       14027 chiamate
+   strpos                         1.1 %          1212 per chiamata     2348719 chiamate
+   array_diff                     1.1 %        582298 per chiamata        4722 chiamate
+   debug_backtrace                0.9 %          5020 per chiamata      469192 chiamate
+   get_declared_classes           0.7 %        803995 per chiamata        2288 chiamate
+   __reflect_method_info          0.7 %          3909 per chiamata      450868 chiamate
+   realpath                       0.7 %         64996 per chiamata       27099 chiamate
+   class_exists                   0.6 %           840 per chiamata     1771434 chiamate
+   array_map                      0.5 %         14055 per chiamata       99165 chiamate
+   str_replace                    0.5 %          2266 per chiamata      583490 chiamate
+   is_object                      0.5 %           312 per chiamata     4179187 chiamate
+   __reflect_class_real_name      0.5 %          1071 per chiamata     1133872 chiamate
+   __pdo_exec                     0.5 %         62775 per chiamata       18757 chiamate
+   __pdo_prepare                  0.4 %         28744 per chiamata       38871 chiamate
+   getcwd                         0.4 %        155646 per chiamata        6969 chiamate
+   __reflect_class_loc            0.4 %          1501 per chiamata      715906 chiamate
+   preg_replace                   0.4 %         28154 per chiamata       34895 chiamate
+   __lazy_set_raw                 0.3 %         17856 per chiamata       43477 chiamate
+   assert                         0.2 %           688 per chiamata      924227 chiamate
+   in_array                       0.2 %          2004 per chiamata      265232 chiamate
+   array_filter                   0.2 %          2348 per chiamata      218364 chiamate
+   __reflect_method_names         0.2 %        377258 per chiamata        1201 chiamate
+   __reflect_prop_details         0.2 %          5282 per chiamata       84891 chiamate
+== wp: 10535294270 op, attribuito lordo 4568.9 G; produzione braccio A 3780.0 G ==
+   == PHPR_OP_INSTR: attributed 4568924490849 | before first op 32487744 | after last op 6231891 | thread total 38207747123351 | read bias 1536 | nested loops 24435923 | charged to a resumed caller 25257261022 ==
+-- K = 50: netto 4042.2 G (+6.9 % sulla produzione), 384 per op
+   builtin                            1044.9 G   25.8 % istr    2.8 % op        3579 per op
+   array                               680.3 G   16.8 % istr   12.7 % op         507 per op
+   chiamate utente e ritorni           613.3 G   15.2 % istr   11.7 % op         496 per op
+   pila e variabili                    496.2 G   12.3 % istr   35.4 % op         133 per op
+   oggetti e proprieta'                478.7 G   11.8 % istr    5.8 % op         787 per op
+   salti, confronti, aritmetica        331.0 G    8.2 % istr   17.2 % op         182 per op
+   Sweep (pulizia dei temporanei)      298.5 G    7.4 % istr   12.7 % op         223 per op
+   stringhe                             56.9 G    1.4 % istr    1.7 % op         324 per op
+   compilazione/include                 40.5 G    1.0 % istr    0.0 % op     1305478 per op
+   altro                                 1.8 G    0.0 % istr    0.0 % op        1716 per op
+-- K = 65: netto 3884.1 G (+2.8 % sulla produzione), 369 per op
+   builtin                            1040.5 G   26.8 % istr    2.8 % op        3564 per op
+   array                               660.2 G   17.0 % istr   12.7 % op         492 per op
+   chiamate utente e ritorni           594.8 G   15.3 % istr   11.7 % op         481 per op
+   oggetti e proprieta'                469.6 G   12.1 % istr    5.8 % op         772 per op
+   pila e variabili                    440.3 G   11.3 % istr   35.4 % op         118 per op
+   salti, confronti, aritmetica        303.7 G    7.8 % istr   17.2 % op         167 per op
+   Sweep (pulizia dei temporanei)      278.4 G    7.2 % istr   12.7 % op         208 per op
+   stringhe                             54.3 G    1.4 % istr    1.7 % op         309 per op
+   compilazione/include                 40.5 G    1.0 % istr    0.0 % op     1305463 per op
+   altro                                 1.8 G    0.0 % istr    0.0 % op        1701 per op
+-- K = 80: netto 3726.1 G (-1.4 % sulla produzione), 354 per op
+   builtin                            1036.1 G   27.8 % istr    2.8 % op        3549 per op
+   array                               640.0 G   17.2 % istr   12.7 % op         477 per op
+   chiamate utente e ritorni           576.2 G   15.5 % istr   11.7 % op         466 per op
+   oggetti e proprieta'                460.5 G   12.4 % istr    5.8 % op         757 per op
+   pila e variabili                    384.4 G   10.3 % istr   35.4 % op         103 per op
+   salti, confronti, aritmetica        276.5 G    7.4 % istr   17.2 % op         152 per op
+   Sweep (pulizia dei temporanei)      258.4 G    6.9 % istr   12.7 % op         193 per op
+   stringhe                             51.7 G    1.4 % istr    1.7 % op         294 per op
+   compilazione/include                 40.5 G    1.1 % istr    0.0 % op     1305448 per op
+   altro                                 1.7 G    0.0 % istr    0.0 % op        1686 per op
+-- i 25 op piu' costosi (K = 65): quota, netto per op, milioni di esecuzioni
+   CallBuiltin           18.9 %        3344      219.9 M
+   Sweep                  7.2 %         208     1336.6 M
+   Ret                    7.0 %         766      357.2 M
+   CallHostBuiltin        5.5 %        8153       26.3 M
+   IssetPath              4.6 %         659      270.3 M
+   LoadVar                3.6 %         114     1209.6 M
+   FieldAssign            3.4 %        2288       58.3 M
+   AssignPath             3.2 %        1069      117.9 M
+   PushConst              2.6 %          89     1132.2 M
+   Cast                   2.6 %        3738       26.8 M
+   CallNsFallback         2.6 %         971      103.0 M
+   FieldIsset             2.1 %        4174       19.7 M
+   ArrayInsert            1.9 %         462      160.3 M
+   MethodCall             1.9 %         864       85.6 M
+   CallHostBuiltinOut     1.8 %        7335        9.5 M
+   PropSetPop             1.7 %        1099       58.5 M
+   StoreSlot              1.6 %         161      387.8 M
+   FetchDim               1.5 %         309      193.7 M
+   JumpIfFalse            1.5 %          82      704.9 M
+   IterNext               1.4 %         238      232.4 M
+   Pop                    1.3 %          99      507.3 M
+   IncDecPath             1.3 %        1126       44.7 M
+   PushRef                1.0 %         165      242.5 M
+   Include                1.0 %     1290691        0.0 M
+   Unary                  1.0 %         176      211.7 M
+-- builtin per nome (lordo: K pesa solo sui piu' leggeri): i primi 25
+   password_hash                 10.3 %     332479700 per chiamata        1205 chiamate
+   array_merge                    2.0 %          5764 per chiamata    13251500 chiamate
+   __gd_copy                      1.3 %     150578264 per chiamata         328 chiamate
+   __mysqli_query                 1.1 %         80019 per chiamata      536934 chiamate
+   preg_match                     1.0 %          6800 per chiamata     5738504 chiamate
+   password_verify                1.0 %     112748390 per chiamata         339 chiamate
+   array_unique                   0.8 %         39884 per chiamata      816026 chiamate
+   preg_replace                   0.5 %          7270 per chiamata     2878761 chiamate
+   glob                           0.5 %       2513631 per chiamata        7305 chiamate
+   in_array                       0.5 %          1344 per chiamata    13420574 chiamate
+   str_replace                    0.4 %          4015 per chiamata     4132236 chiamate
+   call_user_func_array           0.4 %          5984 per chiamata     2641559 chiamate
+   array_diff                     0.4 %         43744 per chiamata      321455 chiamate
+   __gd_encode                    0.3 %      37951202 per chiamata         339 chiamate
+   array_map                      0.2 %         21048 per chiamata      391403 chiamate
+   count                          0.2 %           746 per chiamata    11005978 chiamate
+   is_array                       0.2 %           304 per chiamata    26944764 chiamate
+   file_get_contents              0.2 %        140174 per chiamata       52195 chiamate
+   getcwd                         0.2 %        119016 per chiamata       60820 chiamate
+   is_readable                    0.2 %        104393 per chiamata       67945 chiamate
+   trim                           0.2 %           710 per chiamata     9656540 chiamate
+   strspn                         0.2 %          1819 per chiamata     3581551 chiamate
+   is_object                      0.2 %           305 per chiamata    20612532 chiamate
+   preg_match_all                 0.2 %         28979 per chiamata      205973 chiamate
+   ord                            0.2 %           388 per chiamata    15256530 chiamate
