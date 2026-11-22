@@ -17,10 +17,12 @@ if [ "$out" != '[1,"two"]' ]; then
 fi
 
 # The package must hold the /usr/bin/php alternative at priority 85.
+# (Non-fatal: if a higher-priority PHP is installed, /usr/bin/php can
+# legitimately point elsewhere; the registration itself must exist.)
 if ! update-alternatives --query php 2>/dev/null | grep -q '^Value: /usr/bin/phpr$'; then
     echo "note: /usr/bin/php not currently pointing at phpr (higher-priority PHP installed?)" >&2
 fi
-if ! update-alternatives --query php 2>/dev/null | grep -q '^/usr/bin/phpr$'; then
+if ! update-alternatives --query php 2>/dev/null | grep -q '^Alternative: /usr/bin/phpr$'; then
     echo "FAIL: phpr not registered as a php alternative" >&2
     exit 1
 fi
