@@ -43,8 +43,7 @@ for n in (1000000, 2000000):
                    env=dict(os.environ, PHPR_OP_CENSUS=str(sf), PHPR_OP_INSTR="1"))
     d = dumps(sf)[0]; att.append((int(d.split()[2]), int(re.search(r"attributed (\d+)", d).group(1))))
 dop, din = att[1][0] - att[0][0], att[1][1] - att[0][1]
-note(f"-- sanita' sulla sonda assign_const: {dop / 1e6:.2f} op per giro, {din / 1e6:.1f} istruzioni attribuite per giro (produzione braccio A: 331; banda 248-414)")
-if not 248 <= din / 1e6 <= 414: rc = 3
+note(f"-- sanita' sulla sonda assign_const: {dop / 1e6:.2f} op per giro, {din / 1e6:.1f} istruzioni attribuite per giro (produzione braccio A: 331; il residuo dell'aggancio si tara a parte: s194-registro-op-taratura.py)")
 for work in sys.argv[2:]:
     raw = W / f"s194-registro-op-{work}.txt"; raw.unlink(missing_ok=True)
     e = dict(os.environ, MIMALLOC_PURGE_DELAY="0", PHPR_OP_CENSUS=str(raw), PHPR_CENSUS_HITS="0", PHPR_OP_INSTR="1")

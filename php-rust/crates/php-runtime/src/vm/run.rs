@@ -1488,6 +1488,8 @@ impl<'m> super::Vm<'m> {
     }
 
     pub(super) fn run_loop(&mut self, baseline: usize) -> Result<RunExit, PhpError> {
+        #[cfg(feature = "op-census")]
+        let _nest = super::census::NestGuard::enter();
         // WP-60 P2(a): park the VM for the census window-context renderer
         // (tag=ctx). Two relaxed stores, census builds only.
         #[cfg(feature = "mem-census")]

@@ -411,6 +411,55 @@ struct InstrLedger {
     cur_name: Option<std::rc::Rc<[u8]>>,
     /// Instructions between arming and the first op.
     pre: u64,
+    /// Ops suspended by a nested `run_loop` (callback, destructor, autoload,
+    /// generator): restored when it returns, so the caller's tail is charged
+    /// to the caller and not to the nested loop's last op.
+    stack: Vec<(Option<usize>, Option<std::rc::Rc<[u8]>>)>,
+    /// The current op was restored from `stack` (not a new execution).
+    resumed: bool,
+    /// Instructions charged through a restore, and nested loops seen.
+    resumed_sum: u64,
+    nested: u64,
+}
+
+/// One per `run_loop` activation in a ledger run (see `InstrLedger::stack`).
+#[cfg(feature = "op-census")]
+pub struct NestGuard(bool);
+
+#[cfg(feature = "op-census")]
+impl NestGuard {
+    pub fn enter() -> Self {
+        NestGuard(CENSUS.with(|c| {
+            match c.borrow_mut().as_deref_mut().and_then(|c| c.ledger.as_deref_mut()) {
+                Some(l) => {
+                    l.nested += 1;
+                    l.stack.push((l.cur, l.cur_name.clone()));
+                    true
+                }
+                None => false,
+            }
+        }))
+    }
+}
+
+#[cfg(feature = "op-census")]
+impl Drop for NestGuard {
+    fn drop(&mut self) {
+        if !self.0 {
+            return;
+        }
+        let _ = CENSUS.try_with(|c| {
+            if let Some(l) = c.borrow_mut().as_deref_mut().and_then(|c| c.ledger.as_deref_mut()) {
+                l.close(instr_now());
+                if let Some((cur, name)) = l.stack.pop() {
+                    l.cur = cur;
+                    l.cur_name = name;
+                    l.resumed = true;
+                }
+                l.t0 = instr_now();
+            }
+        });
+    }
 }
 
 #[cfg(all(feature = "op-census", target_os = "macos"))]
@@ -450,6 +499,10 @@ impl InstrLedger {
             cur: None,
             cur_name: None,
             pre: 0,
+            stack: Vec::new(),
+            resumed: false,
+            resumed_sum: 0,
+            nested: 0,
         })
     }
 
@@ -459,11 +512,15 @@ impl InstrLedger {
             None => self.pre += d,
             Some(i) => {
                 self.sum[i] += d;
-                self.min[i] = self.min[i].min(d);
+                if self.resumed {
+                    self.resumed_sum += d;
+                } else {
+                    self.min[i] = self.min[i].min(d);
+                }
                 if let Some(n) = self.cur_name.take() {
                     match self.by_name.get_mut(&*n) {
                         Some(e) => {
-                            e.0 += 1;
+                            e.0 += u64::from(!self.resumed);
                             e.1 += d;
                         }
                         None => {
@@ -477,6 +534,7 @@ impl InstrLedger {
 
     fn open(&mut self, op: &Op) {
         self.cur = Some(op_index(op));
+        self.resumed = false;
         self.cur_name = match op {
             Op::CallBuiltin { name, .. }
             | Op::Strlen { name, .. }
@@ -500,8 +558,8 @@ impl InstrLedger {
         let total: u64 = self.sum.iter().sum();
         let _ = writeln!(
             o,
-            "== PHPR_OP_INSTR: attributed {total} | before first op {} | after last op {tail} | thread total {end} | read bias {} ==",
-            self.pre, self.bias
+            "== PHPR_OP_INSTR: attributed {total} | before first op {} | after last op {tail} | thread total {end} | read bias {} | nested loops {} | charged to a resumed caller {} ==",
+            self.pre, self.bias, self.nested, self.resumed_sum
         );
         let _ = writeln!(o, "-- instructions by op (sum, share, count, mean, min) --");
         let mut idx: Vec<usize> = (0..N_OPS).filter(|&i| ops[i] > 0).collect();

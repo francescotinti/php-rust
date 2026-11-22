@@ -1,0 +1,10 @@
+== s194 taratura del registro: residuo K per op (binario di strumentazione, aggancio spento contro registro) ==
+noop             op/giro  2.00  vero    176.9  registro    305.3  K =   64.2
+assign_const     op/giro  5.00  vero    434.9  registro    835.3  K =   80.1
+add              op/giro  4.00  vero    396.0  registro    685.0  K =   72.3
+builtin_strlen   op/giro  6.00  vero    574.5  registro    912.8  K =   56.4
+prop_read        op/giro  5.00  vero    521.5  registro    919.5  K =   79.6
+call_f2: fixture assente
+arr_int_read     op/giro  7.00  vero    828.2  registro   1228.2  K =   57.1
+concat: fixture assente
+K min 56.4  max 80.1  media 68.3

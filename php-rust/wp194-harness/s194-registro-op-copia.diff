@@ -24,7 +24,7 @@
 < note(f"== s194 censimento degli op, sorgente {c}, build rc={r.returncode}, {time.strftime('%F %T')} ==")
 ---
 > note(f"== s194 registro delle istruzioni per op, sorgente {c}, build rc={r.returncode}, {time.strftime('%F %T')} ==")
-33a36,47
+33a36,46
 > def dumps(p):
 >     return sorted((d for d in re.split(r"(?m)^(?=== PHPR_OP_CENSUS: )", p.read_text(errors="replace")) if d.startswith("== PHPR_OP_CENSUS")),
 >                   key=lambda d: -int(d.split()[2]))
@@ -35,9 +35,8 @@
 >                    env=dict(os.environ, PHPR_OP_CENSUS=str(sf), PHPR_OP_INSTR="1"))
 >     d = dumps(sf)[0]; att.append((int(d.split()[2]), int(re.search(r"attributed (\d+)", d).group(1))))
 > dop, din = att[1][0] - att[0][0], att[1][1] - att[0][1]
-> note(f"-- sanita' sulla sonda assign_const: {dop / 1e6:.2f} op per giro, {din / 1e6:.1f} istruzioni attribuite per giro (produzione braccio A: 331; banda 248-414)")
-> if not 248 <= din / 1e6 <= 414: rc = 3
-35,37c49,51
+> note(f"-- sanita' sulla sonda assign_const: {dop / 1e6:.2f} op per giro, {din / 1e6:.1f} istruzioni attribuite per giro (produzione braccio A: 331; il residuo dell'aggancio si tara a parte: s194-registro-op-taratura.py)")
+35,37c48,50
 <     raw = W / f"s194-censimento-op-{work}.txt"; raw.unlink(missing_ok=True)
 <     e = dict(os.environ, MIMALLOC_PURGE_DELAY="0", PHPR_OP_CENSUS=str(raw), PHPR_CENSUS_HITS="0")
 <     so = O / f"censimento-op-{work}-stdout.txt"
@@ -45,11 +44,11 @@
 >     raw = W / f"s194-registro-op-{work}.txt"; raw.unlink(missing_ok=True)
 >     e = dict(os.environ, MIMALLOC_PURGE_DELAY="0", PHPR_OP_CENSUS=str(raw), PHPR_CENSUS_HITS="0", PHPR_OP_INSTR="1")
 >     so = O / f"registro-op-{work}-stdout.txt"
-43c57
+43c56
 <         with (O / "censimento-op-guard.log").open("w") as gl:
 ---
 >         with (O / "registro-op-guard.log").open("w") as gl:
-57c71,75
+57c70,74
 <         for l in raw.read_text(errors="replace").splitlines()[:70]: note("   " + l[:200])
 ---
 >         ds = dumps(raw); kids = sum(int(re.search(r"attributed (\d+)", d).group(1)) for d in ds[1:])
