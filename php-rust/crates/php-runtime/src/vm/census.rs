@@ -420,6 +420,20 @@ struct InstrLedger {
     /// Instructions charged through a restore, and nested loops seen.
     resumed_sum: u64,
     nested: u64,
+    /// S-194 C0b: the current op declared a branch (`census_branch`), e.g. the
+    /// general path of a return; its gap is also charged to that tag.
+    cur_tag: Option<&'static str>,
+    by_tag: std::collections::BTreeMap<&'static str, (u64, u64)>,
+}
+
+/// S-194 C0b: tag the op being executed with the branch it took (ledger runs only).
+#[cfg(feature = "op-census")]
+pub fn census_branch(tag: &'static str) {
+    CENSUS.with(|c| {
+        if let Some(l) = c.borrow_mut().as_deref_mut().and_then(|c| c.ledger.as_deref_mut()) {
+            l.cur_tag = Some(tag);
+        }
+    });
 }
 
 /// One per `run_loop` activation in a ledger run (see `InstrLedger::stack`).
@@ -503,6 +517,8 @@ impl InstrLedger {
             resumed: false,
             resumed_sum: 0,
             nested: 0,
+            cur_tag: None,
+            by_tag: std::collections::BTreeMap::new(),
         })
     }
 
@@ -512,6 +528,11 @@ impl InstrLedger {
             None => self.pre += d,
             Some(i) => {
                 self.sum[i] += d;
+                if let Some(t) = self.cur_tag.take() {
+                    let e = self.by_tag.entry(t).or_insert((0, 0));
+                    e.0 += 1;
+                    e.1 += d;
+                }
                 if self.resumed {
                     self.resumed_sum += d;
                 } else {
@@ -535,6 +556,7 @@ impl InstrLedger {
     fn open(&mut self, op: &Op) {
         self.cur = Some(op_index(op));
         self.resumed = false;
+        self.cur_tag = None;
         self.cur_name = match op {
             Op::CallBuiltin { name, .. }
             | Op::Strlen { name, .. }
@@ -561,6 +583,10 @@ impl InstrLedger {
             "== PHPR_OP_INSTR: attributed {total} | before first op {} | after last op {tail} | thread total {end} | read bias {} | nested loops {} | charged to a resumed caller {} ==",
             self.pre, self.bias, self.nested, self.resumed_sum
         );
+        let _ = writeln!(o, "-- instructions by branch tag (sum, count, mean; gross) --");
+        for (t, e) in &self.by_tag {
+            let _ = writeln!(o, "{:>15}  {:>12}  {:>9.1}  {}", e.1, e.0, e.1 as f64 / e.0.max(1) as f64, t);
+        }
         let _ = writeln!(o, "-- instructions by op (sum, share, count, mean, min) --");
         let mut idx: Vec<usize> = (0..N_OPS).filter(|&i| ops[i] > 0).collect();
         idx.sort_by_key(|&i| std::cmp::Reverse(self.sum[i]));

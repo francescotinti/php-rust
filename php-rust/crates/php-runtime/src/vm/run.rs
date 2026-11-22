@@ -3756,6 +3756,8 @@ impl<'m> super::Vm<'m> {
                     } else {
                         #[cfg(feature = "census-time")]
                         super::census_time::tick(super::census_time::Class::CallGeneral);
+                        #[cfg(feature = "op-census")]
+                        super::census::census_branch("Call: cammino generale");
                         let mut args = Vec::with_capacity(n);
                         for _ in 0..n {
                             args.push(self.frames[top].stack.pop().expect("call argument"));
@@ -4302,6 +4304,8 @@ impl<'m> super::Vm<'m> {
                     // `run_loop`; il disasm di forma 1 contava +547 istr / +245 sp_refs).
                     #[cfg(feature = "census-time")]
                     super::census_time::ret_slow(&self.frames[top], top);
+                    #[cfg(feature = "op-census")]
+                    super::census::census_branch(if self.frames[top].func.ret_shape != 0 { "Ret: generale, tipo di ritorno dichiarato" } else { "Ret: generale, altro motivo" });
                     if let Some(exit) = self.ret_slow(top, baseline)? {
                         return Ok(exit);
                     }
@@ -5686,6 +5690,8 @@ impl<'m> super::Vm<'m> {
                     }
                     #[cfg(feature = "census-time")]
                     super::census_time::mcall_general(self, top, n, ic);
+                    #[cfg(feature = "op-census")]
+                    super::census::census_branch("MethodCall: cammino generale");
                     let args = self.pop_keys(top, *argc); // source order
                     let recv = self.frames[top].stack.pop().expect("MethodCall receiver");
                     // V5 (S-119 treno-2): il frame vuole l'handle POSSEDUTO —
@@ -5741,6 +5747,8 @@ impl<'m> super::Vm<'m> {
                     };
                     #[cfg(feature = "census-time")]
                     super::census_time::this_mcall_general(self, top);
+                    #[cfg(feature = "op-census")]
+                    super::census::census_branch("ThisMethodCall: cammino generale");
                     self.method_call(top, this, &method, Vec::new(), Some(&ic), true)?;
                 }
                 Op::MethodCallArgs { method, deref } => {
