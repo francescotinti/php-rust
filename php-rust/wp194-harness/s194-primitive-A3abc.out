@@ -1,0 +1,73 @@
+== S-194 primitive: istruzioni ritirate per iterazione (differenziale N1/N2), phpr /Users/francescotinti/Claude/phpr-target/s192-armD/release/phpr sha 9d43c6d9ff202b5b contro oracle. DIREZIONE ==
+fixture         fam           php     phpr     x |  php net phpr net  x net  eccesso | cyc x IPC php IPC phpr disp%
+noop            loop         34.7    149.1  4.29 |      0.0      0.0      -      0.0 |  3.37    5.68     7.25  3.99
+assign_const    loop         54.7    358.1  6.54 |     20.0    209.1  10.44    189.1 |  5.93    6.54     7.22  0.21
+add             arith        75.9    338.7  4.46 |     41.2    189.7   4.61    148.5 |  4.76    8.12     7.61  1.79
+add_assign      arith        80.9    382.9  4.73 |     46.2    233.9   5.07    187.7 |  6.86    9.73     6.71  0.08
+call_user0      calls       172.0    784.3  4.56 |    137.3    635.3   4.63    498.0 |  3.62    5.25     6.62  0.06
+call_user2      calls       268.9   1137.9  4.23 |    234.2    988.9   4.22    754.7 |  3.51    5.39     6.50  0.05
+builtin_strlen  builtin     100.1    465.9  4.65 |     65.4    316.8   4.84    251.4 |  6.61    9.31     6.56  0.09
+builtin_abs     builtin     195.3    611.1  3.13 |    160.6    462.1   2.88    301.4 |  3.94    9.51     7.54  0.11
+builtin_count   builtin     105.7    466.1  4.41 |     71.0    317.1   4.47    246.1 |  6.36    9.63     6.68  0.09
+builtin_pi      builtin     129.0    443.0  3.44 |     94.2    293.9   3.12    199.7 |  4.16    8.71     7.20  0.06
+builtin_abs_lit builtin     192.9    586.0  3.04 |    158.2    437.0   2.76    278.8 |  3.76    9.39     7.58  0.17
+builtin_intdiv  builtin     219.0    793.0  3.62 |    184.3    644.0   3.49    459.7 |  4.30    8.72     7.35  0.05
+builtin_strcont builtin     270.9   1495.6  5.52 |    236.2   1346.5   5.70   1110.3 |  5.90    7.11     6.65  0.03
+builtin_strlen2 builtin     142.0    735.9  5.18 |    107.3    586.8   5.47    479.6 |  5.34    6.97     6.77  0.08
+str_substr      string      180.0   1270.7  7.06 |    145.3   1121.7   7.72    976.4 |  7.38    6.37     6.10  0.08
+str_official    string      556.8   1799.9  3.23 |    522.1   1650.9   3.16   1128.8 |  3.31    7.01     6.85  0.09
+preg_match      regex      3078.0   5228.4  1.70 |   3043.3   5079.3   1.67   2036.0 |  2.72    8.59     5.36  0.22
+ns_noop         ns           34.6    149.0  4.30 |      0.0      0.0      -      0.0 |  2.35    4.77     8.73  0.14
+ns_strlen       ns          211.1    517.0  2.45 |    176.5    368.0   2.09    191.5 |  2.94    8.61     7.18  0.17
+ns_strlen_q     ns          100.1    466.0  4.65 |     65.5    317.0   4.84    251.5 |  6.64    9.73     6.82  0.06
+ns_count        ns          230.8    516.0  2.24 |    196.2    367.0   1.87    170.8 |  2.74    8.71     7.11  0.10
+ns_abs          ns          218.1    654.2  3.00 |    183.5    505.1   2.75    321.7 |  3.45    8.69     7.57  0.12
+ns_abs_q        ns          194.9    611.0  3.13 |    160.3    462.0   2.88    301.7 |  3.86    9.14     7.42  1.67
+ns_call_user0   ns          182.1    783.9  4.30 |    147.5    634.9   4.30    487.4 |  3.93    6.12     6.70  0.08
+ns_user2        ns          288.9   1137.8  3.94 |    254.3    988.8   3.89    734.5 |  4.13    6.92     6.60  0.05
+ns_xfile_user2  ns          289.0   1446.7  5.01 |    254.4   1297.7   5.10   1043.3 |  5.62    7.04     6.27  0.08
+ns_xfile_user2_q ns          289.1   1446.5  5.00 |    254.4   1297.5   5.10   1043.1 |  6.30    7.75     6.15  0.04
+x_global_user2  loop        289.2   1447.1  5.00 |    254.5   1298.1   5.10   1043.6 |  5.88    7.26     6.17  0.03
+builtin_reset   loop        321.3    601.1  1.87 |    286.6    452.1   1.58    165.5 |  1.55    5.85     7.07  1.59
+ns_reset        ns          338.8    600.8  1.77 |    304.2    451.8   1.49    147.6 |  1.63    6.39     6.97  0.13
+builtin_pushpop loop        453.1   1438.1  3.17 |    418.4   1289.1   3.08    870.7 |  3.70    7.89     6.77  0.09
+ns_pushpop      ns          501.9   1438.3  2.87 |    467.2   1289.3   2.76    822.1 |  3.46    8.15     6.74  1.31
+builtin_fexists loop        279.0   1367.0  4.90 |    244.3   1217.9   4.99    973.7 |  5.98    7.39     6.06  0.05
+builtin_inarray loop        174.4    937.0  5.37 |    139.7    787.9   5.64    648.2 |  5.94    7.54     6.82  1.23
+note: nessuna fixture nulla
+confronto con s194-primitive-F.out (istruzioni lorde phpr per iterazione; soglia di non-regressione +1,0 %):
+  noop                 200.0 ->     149.1   -25.5 %
+  assign_const         408.1 ->     358.1   -12.2 %
+  add                  390.0 ->     338.7   -13.1 %
+  add_assign           434.0 ->     382.9   -11.8 %
+  call_user0           835.0 ->     784.3    -6.1 %
+  call_user2          1189.1 ->    1137.9    -4.3 %
+  builtin_strlen       516.8 ->     465.9    -9.9 %
+  builtin_abs          662.1 ->     611.1    -7.7 %
+  builtin_count        517.0 ->     466.1    -9.8 %
+  builtin_pi           494.1 ->     443.0   -10.3 %
+  builtin_abs_lit      637.4 ->     586.0    -8.1 %
+  builtin_intdiv       844.2 ->     793.0    -6.1 %
+  builtin_strcont     1546.8 ->    1495.6    -3.3 %
+  builtin_strlen2      787.2 ->     735.9    -6.5 %
+  str_substr          1321.6 ->    1270.7    -3.8 %
+  str_official        1851.1 ->    1799.9    -2.8 %
+  preg_match          5286.2 ->    5228.4    -1.1 %
+  ns_noop              200.1 ->     149.0   -25.5 %
+  ns_strlen            568.1 ->     517.0    -9.0 %
+  ns_strlen_q          517.0 ->     466.0    -9.9 %
+  ns_count             566.9 ->     516.0    -9.0 %
+  ns_abs               704.0 ->     654.2    -7.1 %
+  ns_abs_q             662.0 ->     611.0    -7.7 %
+  ns_call_user0        835.1 ->     783.9    -6.1 %
+  ns_user2            1189.1 ->    1137.8    -4.3 %
+  ns_xfile_user2      1497.7 ->    1446.7    -3.4 %
+  ns_xfile_user2_q    1497.6 ->    1446.5    -3.4 %
+  x_global_user2      1497.6 ->    1447.1    -3.4 %
+  builtin_reset        652.0 ->     601.1    -7.8 %
+  ns_reset             652.1 ->     600.8    -7.9 %
+  builtin_pushpop     1489.4 ->    1438.1    -3.4 %
+  ns_pushpop          1489.6 ->    1438.3    -3.4 %
+  builtin_fexists     1438.2 ->    1367.0    -5.0 %
+  builtin_inarray     1008.0 ->     937.0    -7.0 %
+  fixture peggiorate oltre +1 %: 0

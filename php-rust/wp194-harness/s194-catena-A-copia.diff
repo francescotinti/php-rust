@@ -1,0 +1,46 @@
+2,5c2,5
+< # s194-catena-F.sh — S-194 package F (the four items left outside package N), verification chain (criterion s194-criterio-F.md).
+< # Derived from the package N chain (manifest s194-catena-F-copia.diff); the ONLY adaptations: tag, one more behaviour gate
+< # (F teeth identical to the ORACLE reference recorded before the code), bytecode check on the cross-file fixture,
+< # base = the package N reading, profile of x_global_user2. Outcomes: s194-catena-F.out, out/catena-F.done.
+---
+> # s194-catena-A.sh — S-194 package A, step A3 (compare-and-branch without an intermediate value), verification chain
+> # (criterion s194-criterio-A.md). Derived from the package F chain (manifest s194-catena-A-copia.diff); the ONLY adaptations:
+> # tag, one more behaviour gate (A tooth identical to the PIN reference recorded before the code), no bytecode check (no new op),
+> # base = the package F reading, profile of noop. Outcomes: s194-catena-A.out, out/catena-A.done.
+10c10
+< ARM="$HOME/Claude/phpr-target/s192-armD"; V="$W/s194-catena-F.out"; mkdir -p "$W/out"; : > "$V"; rm -f "$W/out/catena-F.done"
+---
+> ARM="$HOME/Claude/phpr-target/s192-armD"; V="$W/s194-catena-A.out"; mkdir -p "$W/out"; : > "$V"; rm -f "$W/out/catena-A.done"
+12c12
+< fine() { echo "fine rc=$1 $(date '+%F %T')" >> "$V"; echo "$1" > "$W/out/catena-F.done"; exit "$1"; }
+---
+> fine() { echo "fine rc=$1 $(date '+%F %T')" >> "$V"; echo "$1" > "$W/out/catena-A.done"; exit "$1"; }
+18c18
+< CARGO_TARGET_DIR="$ARM" CARGO_PROFILE_RELEASE_DEBUG=line-tables-only CARGO_PROFILE_RELEASE_SPLIT_DEBUGINFO=packed cargo build --release -p php-cli > "$W/out/catena-F-braccio.log" 2>&1
+---
+> CARGO_TARGET_DIR="$ARM" CARGO_PROFILE_RELEASE_DEBUG=line-tables-only CARGO_PROFILE_RELEASE_SPLIT_DEBUGINFO=packed cargo build --release -p php-cli > "$W/out/catena-A-braccio.log" 2>&1
+33a34,37
+> "$ARM/release/phpr" "$W/s194-a-comportamento.php" > "$W/out/a-comp-catena.txt" 2>&1
+> diff "$W/out/a-comp-pin-rif.txt" "$W/out/a-comp-catena.txt" > "$W/out/a-comp-catena.diff"
+> c=$?; echo "comportamento A contro il PIN s185 (gate: identico): rc=$c ($(wc -l < "$W/out/a-comp-pin-rif.txt" | tr -d ' ') righe)" >> "$V"
+> [ "$c" = 0 ] || fine 3
+40,44c44,45
+< PHPR_DUMP_OPS=1 "$ARM/release/phpr" "$W/primitive/x_global_user2.php" 3 2> "$W/primitive/x_global_user2.ops" > /dev/null
+< n=$(awk '/^-- fn /{p=0} /^-- fn run /{p=1} p' "$W/primitive/x_global_user2.ops" | grep -c -E '^[0-9]+ CallNsFallback ')
+< echo "bytecode: CallNsFallback (legato per sito) nella funzione di prova = $n (attesi >= 1)" >> "$V"; [ "$n" -ge 1 ] || fine 5
+< bash "$H/s192-accettazione.sh" s194F > "$W/out/catena-F-accettazione.log" 2>&1
+< a=$(cat "$H/out/accettazione-s194F.rc" 2>/dev/null || echo 99); echo "accettazione s194F: rc=$a" >> "$V"
+---
+> bash "$H/s192-accettazione.sh" s194A > "$W/out/catena-A-accettazione.log" 2>&1
+> a=$(cat "$H/out/accettazione-s194A.rc" 2>/dev/null || echo 99); echo "accettazione s194A: rc=$a" >> "$V"
+46,49c47,50
+< bash "$W/s194-primitive.sh" F --bin "$ARM/release/phpr" --base s194-primitive-N.out
+< echo "sonda primitive F: rc=$(cat "$W/s194-primitive-F.rc")" >> "$V"
+< S194_BIN="$ARM/release/phpr" S194_SUF=-F python3 "$W/s194-profilo-fixture.py" x_global_user2 40000000 > "$W/out/catena-F-profilo.log" 2>&1
+< echo "profilo x_global_user2: rc=$?" >> "$V"
+---
+> bash "$W/s194-primitive.sh" A --bin "$ARM/release/phpr" --base s194-primitive-F.out
+> echo "sonda primitive A: rc=$(cat "$W/s194-primitive-A.rc")" >> "$V"
+> S194_BIN="$ARM/release/phpr" S194_SUF=-A python3 "$W/s194-profilo-fixture.py" noop 40000000 > "$W/out/catena-A-profilo.log" 2>&1
+> echo "profilo noop: rc=$?" >> "$V"

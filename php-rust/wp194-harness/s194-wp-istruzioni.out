@@ -1,0 +1,9 @@
+== s194 WordPress (phpunit full) istruzioni ritirate per gamba, 2026-11-22 00:43:40 (direzione sul lavoro, non verdetto di tempo) ==
+binario pin = /Users/francescotinti/Claude/php-rust-output/release/phpr sha d9d6429301f60f4e
+binario N = /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/out/phpr-orm-istr-N sha 22b954b4bc336223
+binario F = /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/out/phpr-orm-istr-F sha 6e9bcd3308cee0fb
+pin        istruzioni  4032.826 G (dispersione 0.09 %)  vs pin  +0.00 %  cicli 1319.613 G  user 720.97 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
+N          istruzioni  3879.483 G (dispersione 0.00 %)  vs pin  -3.80 %  cicli 1264.023 G  user 695.99 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
+F          istruzioni  3797.974 G (dispersione 0.00 %)  vs pin  -5.82 %  cicli 1248.038 G  user 686.68 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
+uploads-guard restore rc=0
+fine rc=0 2026-11-22 01:40:21
