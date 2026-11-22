@@ -47,21 +47,20 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - name: Install build dependencies (from debian/control)
+        # debian:sid ships no compiler: rustc/cargo arrive HERE, via the
+        # Build-Depends declared in debian/control.
+        run: |
+          apt-get update -qq
+          apt-get install -y --no-install-recommends dpkg-dev curl
+          apt-get build-dep -y .
+
       - name: Report build environment
         run: |
           cat /etc/os-release | head -2
           dpkg --print-architecture
           rustc --version
           cargo --version
-
-      # The single source of truth for build inputs is debian/control
-      # (all toolchain + FFI dev packages are declared there for clean
-      # chroots) — apt-get build-dep keeps this step in sync with it.
-      - name: Install build dependencies (from debian/control)
-        run: |
-          apt-get update -qq
-          apt-get install -y --no-install-recommends dpkg-dev curl
-          apt-get build-dep -y .
 
       # debian/rules pins RUSTC=/usr/bin/rustc (Debian's compiler) so
       # cargo never resolves through any rustup shim; this guard asserts
