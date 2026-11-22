@@ -1,0 +1,177 @@
+== PHPR_OP_CENSUS: 583563507 ops dispatched ==
+-- op counts (top 40) --
+    63990034  10.97%  Sweep
+    62990859  10.79%  LoadVar
+    56956810   9.76%  PushConst
+    38205534   6.55%  JumpIfFalse
+    34935006   5.99%  Ret
+    29799843   5.11%  ThisPropGet
+    20039842   3.43%  Jump
+    19205667   3.29%  StoreSlot
+    17540863   3.01%  Pop
+    15731339   2.70%  MethodCall
+    14851070   2.54%  This
+    12791744   2.19%  FetchDim
+    12749213   2.18%  CheckArity
+    12121094   2.08%  CallBuiltin
+    10988152   1.88%  CmpJmpConst
+     9832858   1.68%  PropSetPop
+     8699248   1.49%  IterNext
+     8502190   1.46%  Unary
+     8420274   1.44%  Dup
+     7905390   1.35%  CallHostBuiltin
+     7903944   1.35%  LoadVarPushConst
+     7205918   1.23%  CmpJmpSC
+     5715336   0.98%  PushRef
+     5615085   0.96%  ThisMethodCall
+     5225170   0.90%  CmpJmp
+     5140471   0.88%  Stringify
+     4118173   0.71%  ClassConst
+     3584210   0.61%  InitProps
+     3584210   0.61%  StampThrowable
+     3386452   0.58%  LoadSlot
+     3160646   0.54%  FillDefault
+     3052961   0.52%  IssetPath
+     3014547   0.52%  ArrayInit
+     2778355   0.48%  AssignPath
+     2743322   0.47%  JumpIfTrue
+     2646505   0.45%  Alloc
+     2530485   0.43%  ConcatN
+     2435085   0.42%  FieldIsset
+     2322859   0.40%  InvokeMethod
+     2305623   0.40%  JumpIfNotNull
+-- bigrams (top 40) --
+    17402937  Sweep -> LoadVar
+    15901135  StoreSlot -> Sweep
+    13971472  PushConst -> Ret
+    11978893  JumpIfFalse -> Sweep
+    11088492  Sweep -> Jump
+    10303034  JumpIfFalse -> PushConst
+    10105211  Pop -> Sweep
+     9884475  This -> LoadVar
+     9849371  Sweep -> PushConst
+     9824402  PropSetPop -> Sweep
+     9772939  PushConst -> JumpIfFalse
+     8476112  LoadVar -> CallBuiltin
+     7636924  LoadVar -> MethodCall
+     7308907  LoadVar -> PropSetPop
+     7196446  Sweep -> This
+     7180531  Unary -> JumpIfFalse
+     7159165  LoadVar -> LoadVar
+     6685171  Ret -> Pop
+     6581818  Jump -> Sweep
+     6452941  MethodCall -> CheckArity
+     5984284  JumpIfFalse -> LoadVar
+     5957105  Jump -> IterNext
+     5639964  Ret -> JumpIfFalse
+     5542348  JumpIfFalse -> ThisPropGet
+     5398092  CmpJmpConst -> PushConst
+     5260975  PushConst -> PushConst
+     5239307  MethodCall -> ThisPropGet
+     5167162  ThisPropGet -> CmpJmpConst
+     4599533  Sweep -> CmpJmpSC
+     4471933  Ret -> Ret
+     4195019  LoadVar -> FetchDim
+     4158735  ThisPropGet -> Stringify
+     4152758  LoadVarPushConst -> FetchDim
+     4118965  Ret -> StoreSlot
+     4107101  ClassConst -> PushConst
+     3991663  ThisMethodCall -> ThisPropGet
+     3704534  Sweep -> ThisPropGet
+     3683787  PushConst -> Jump
+     3622027  CallBuiltin -> Unary
+     3592538  PushConst -> FetchDim
+-- bigrams X -> Sweep (all) --
+    15901135  StoreSlot -> Sweep
+    11978893  JumpIfFalse -> Sweep
+    10105211  Pop -> Sweep
+     9824402  PropSetPop -> Sweep
+     6581818  Jump -> Sweep
+     1973308  CmpJmpConst -> Sweep
+     1803784  IterPop -> Sweep
+     1672277  CmpJmpSC -> Sweep
+     1592519  CmpJmp -> Sweep
+      835102  Sweep -> Sweep
+      667099  BinarySTDst -> Sweep
+      457170  CmpJmpSS -> Sweep
+      268519  BinaryDst -> Sweep
+      120258  UnsetPath -> Sweep
+       59581  IncDecSlotPop -> Sweep
+       50460  FieldUnset -> Sweep
+       44298  BinarySCDst -> Sweep
+       41846  BinaryTCPropSetPop -> Sweep
+        9654  EndFinally -> Sweep
+        1173  JumpIfTrue -> Sweep
+         635  Echo -> Sweep
+         311  Ret -> Sweep
+         309  IncDecSlotJmp -> Sweep
+         262  DeclareFn -> Sweep
+           7  PropUnset -> Sweep
+           3  DeclareTrait -> Sweep
+-- bigrams IncDecSlotJmp -> X (all) --
+      414803  IncDecSlotJmp -> CmpJmpSS
+        8537  IncDecSlotJmp -> CmpJmpSC
+        5999  IncDecSlotJmp -> LoadVar
+         309  IncDecSlotJmp -> Sweep
+-- prop_set entry (S-176 typed) --
+     4252564  prop_set ic_hit_plain
+      731842  prop_set ic_hit_typed
+     5001058  prop_set miss
+-- Binary/CmpJmp type pairs (top 40) --
+     2768468  Identical (Long, Long)
+      885997  Identical (Str, Str)
+      573451  NotIdentical (Str, Str)
+      373487  BitAnd (Long, Long)
+      344704  Lt (Long, Long)
+      337003  Identical (ObjLike, ObjLike)
+      240511  Eq (Bool, Bool)
+      121397  Eq (Long, Long)
+       83152  NotIdentical (Bool, Str)
+       77443  NotIdentical (Long, Long)
+       73434  Sub (Long, Long)
+       69413  Identical (Null, Null)
+       45893  NotIdentical (Array, Array)
+       44884  Identical (Array, Array)
+       42252  NotIdentical (Str, ObjLike)
+       38765  NotIdentical (Str, Null)
+       38632  BitOr (Long, Long)
+       30564  Identical (Bool, Bool)
+       29747  NotIdentical (Array, ObjLike)
+       26834  Ge (Long, Long)
+       25068  Eq (Str, Str)
+       15172  NotIdentical (ObjLike, ObjLike)
+       14136  Eq (ObjLike, ObjLike)
+        9736  Gt (Long, Double)
+        8907  Gt (Long, Long)
+        5949  NotIdentical (Long, ObjLike)
+        5237  Identical (Null, ObjLike)
+        4198  NotIdentical (Null, Str)
+        3778  Identical (Null, Str)
+        3612  Le (Double, Double)
+        3557  NotIdentical (Bool, ObjLike)
+        3016  NotIdentical (Null, Bool)
+        2928  NotIdentical (Bool, Bool)
+        2239  NotEq (Bool, Bool)
+        2219  NotIdentical (Null, ObjLike)
+        1662  NotIdentical (Null, Long)
+        1042  Gt (Double, Double)
+        1042  NotIdentical (Null, Null)
+         912  Identical (Array, Str)
+         798  Identical (Str, ObjLike)
+-- FetchDim base x key --
+        2465  base=Null key=Str
+          60  base=Bool key=Long
+         448  base=Bool key=Str
+     2389252  base=Str key=Long
+     3922628  base=Array key=Long
+     7802241  base=Array key=Str
+         342  base=ObjLike key=Long
+         891  base=ObjLike key=Str
+           6  base=Ref key=Str
+-- IncDecSlot slot tags --
+       48105  Long
+-- ConcatAssign non-local sites (lhs bytes = O(n^2) copy volume) --
+        5209 ev  lhs_b=386 rhs_b=20716 avg_lhs=0  ArrElem(AssignOpPath)
+        hist log2(lhs): b0=5108 b2=77 b3=21 b4=2 b7=1
+         594 ev  lhs_b=9306 rhs_b=10862 avg_lhs=15  Field(FieldAssignOp)
+        hist log2(lhs): b0=192 b4=192 b5=153 b6=49 b7=8

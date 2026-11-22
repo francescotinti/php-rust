@@ -1,0 +1,145 @@
+== s194 censimento degli op, sorgente a88b1d05, build rc=0, 2026-11-22 02:43:17 ==
+-- orm: Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, PHPUnit Warnings: 554, Skipped: 5 | dump s194-censimento-op-orm.txt presente
+   == PHPR_OP_CENSUS: 583563507 ops dispatched ==
+   -- op counts (top 40) --
+       63990034  10.97%  Sweep
+       62990859  10.79%  LoadVar
+       56956810   9.76%  PushConst
+       38205534   6.55%  JumpIfFalse
+       34935006   5.99%  Ret
+       29799843   5.11%  ThisPropGet
+       20039842   3.43%  Jump
+       19205667   3.29%  StoreSlot
+       17540863   3.01%  Pop
+       15731339   2.70%  MethodCall
+       14851070   2.54%  This
+       12791744   2.19%  FetchDim
+       12749213   2.18%  CheckArity
+       12121094   2.08%  CallBuiltin
+       10988152   1.88%  CmpJmpConst
+        9832858   1.68%  PropSetPop
+        8699248   1.49%  IterNext
+        8502190   1.46%  Unary
+        8420274   1.44%  Dup
+        7905390   1.35%  CallHostBuiltin
+        7903944   1.35%  LoadVarPushConst
+        7205918   1.23%  CmpJmpSC
+        5715336   0.98%  PushRef
+        5615085   0.96%  ThisMethodCall
+        5225170   0.90%  CmpJmp
+        5140471   0.88%  Stringify
+        4118173   0.71%  ClassConst
+        3584210   0.61%  InitProps
+        3584210   0.61%  StampThrowable
+        3386452   0.58%  LoadSlot
+        3160646   0.54%  FillDefault
+        3052961   0.52%  IssetPath
+        3014547   0.52%  ArrayInit
+        2778355   0.48%  AssignPath
+        2743322   0.47%  JumpIfTrue
+        2646505   0.45%  Alloc
+        2530485   0.43%  ConcatN
+        2435085   0.42%  FieldIsset
+        2322859   0.40%  InvokeMethod
+        2305623   0.40%  JumpIfNotNull
+   -- bigrams (top 40) --
+       17402937  Sweep -> LoadVar
+       15901135  StoreSlot -> Sweep
+       13971472  PushConst -> Ret
+       11978893  JumpIfFalse -> Sweep
+       11088492  Sweep -> Jump
+       10303034  JumpIfFalse -> PushConst
+       10105211  Pop -> Sweep
+        9884475  This -> LoadVar
+        9849371  Sweep -> PushConst
+        9824402  PropSetPop -> Sweep
+        9772939  PushConst -> JumpIfFalse
+        8476112  LoadVar -> CallBuiltin
+        7636924  LoadVar -> MethodCall
+        7308907  LoadVar -> PropSetPop
+        7196446  Sweep -> This
+        7180531  Unary -> JumpIfFalse
+        7159165  LoadVar -> LoadVar
+        6685171  Ret -> Pop
+        6581818  Jump -> Sweep
+        6452941  MethodCall -> CheckArity
+        5984284  JumpIfFalse -> LoadVar
+        5957105  Jump -> IterNext
+        5639964  Ret -> JumpIfFalse
+        5542348  JumpIfFalse -> ThisPropGet
+        5398092  CmpJmpConst -> PushConst
+        5260975  PushConst -> PushConst
+        5239307  MethodCall -> ThisPropGet
+uploads-guard restore rc=0
+-- wp: Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73. | dump s194-censimento-op-wp.txt presente
+   == PHPR_OP_CENSUS: 3704639 ops dispatched ==
+   -- op counts (top 40) --
+         506214  13.66%  Sweep
+         452345  12.21%  LoadVar
+         348544   9.41%  PushConst
+         271782   7.34%  JumpIfFalse
+         165457   4.47%  Pop
+         147477   3.98%  StoreSlot
+         118995   3.21%  Jump
+         114546   3.09%  Ret
+          92924   2.51%  Unary
+          89469   2.42%  CallBuiltin
+          84230   2.27%  FetchDim
+          83119   2.24%  PushRef
+          77962   2.10%  IssetPath
+          69381   1.87%  LoadVarPushConst
+          63590   1.72%  CheckArity
+          60609   1.64%  IterNext
+          58839   1.59%  ThisPropGet
+          58433   1.58%  FillDefault
+          54038   1.46%  BindRef
+          48833   1.32%  This
+          42563   1.15%  CmpJmpConst
+          39868   1.08%  CallNsFallback
+          34935   0.94%  CmpJmpSC
+          34924   0.94%  ArrayInsert
+          32938   0.89%  AssignPath
+          31602   0.85%  MethodCall
+          30214   0.82%  JumpIfTrue
+          28591   0.77%  PropSetPop
+          27762   0.75%  ArrayInit
+          24185   0.65%  ArrayPush
+          22228   0.60%  FieldAssign
+          22108   0.60%  LoadSlot
+          21412   0.58%  CallHostBuiltin
+          21084   0.57%  StringifySlot
+          19567   0.53%  Call
+          15125   0.41%  Dup
+          13993   0.38%  EmptyPath
+          12426   0.34%  IncDecPath
+          12299   0.33%  Stringify
+          12134   0.33%  Cast
+   -- bigrams (top 40) --
+         175123  Sweep -> LoadVar
+         123537  JumpIfFalse -> Sweep
+         121522  Pop -> Sweep
+         119085  StoreSlot -> Sweep
+          88796  Sweep -> Jump
+          80307  Unary -> JumpIfFalse
+          74127  Sweep -> PushConst
+          73889  LoadVar -> LoadVar
+          60547  JumpIfFalse -> PushConst
+          54900  LoadVar -> CallBuiltin
+          54038  BindRef -> Pop
+          51208  JumpIfFalse -> LoadVar
+          48154  Jump -> IterNext
+          46227  LoadVarPushConst -> FetchDim
+          43595  CallBuiltin -> JumpIfFalse
+          42929  PushRef -> PushRef
+          41774  LoadVar -> IssetPath
+          40886  PushConst -> PushConst
+          40343  IssetPath -> Unary
+          40204  Jump -> Sweep
+          38323  Ret -> StoreSlot
+          38322  LoadVar -> Ret
+          35471  IssetPath -> JumpIfFalse
+          34294  CallNsFallback -> CheckArity
+          33774  PushConst -> IssetPath
+          33594  IterNext -> LoadVar
+          32832  PushConst -> StoreSlot
+fine rc=0 2026-11-22 02:58:54

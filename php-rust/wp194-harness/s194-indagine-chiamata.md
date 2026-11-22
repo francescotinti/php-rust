@@ -81,3 +81,11 @@ Lettura: i guadagni di D, D-bis e degli op dedicati valgono solo per lo spazio g
 | + N (builtin in namespace) | 247,82 G | −6,54 % |
 | + F (funzioni di altri file, builtin per riferimento, `array_pop`) | 247,85 G | −6,53 % |
 Lettura: la sonda in ciclo misura il costo di UN'operazione; il carico ORM dice quanto quell'operazione ricorre. N e F, che sulla sonda valgono −93 % e −37/−58 %, sull'ORM valgono rispettivamente −0,17 % e zero. Per la tappa ORM (da ~6,5× a 5× ≈ −23 % di lavoro) servono le cause che toccano OGNI op (pacchetti A e B) o un registro dei costi fatto sul carico ORM stesso, non altre correzioni mirate scelte dalla sonda. Manca lo stesso conteggio per WordPress.
+
+## 9. Carico vero: WordPress in istruzioni, pacchetto A, censimento degli op (22/11)
+- **WordPress intero** (`s194-wp-istruzioni.out`, pin due volte, rumore 0,09 %): pin 4032,8 G · fino a N −3,80 % · F −5,82 % (F da solo −2,10 %: sull'ORM era zero) · A3 −0,43 % su F.
+- **ORM intero**: A3 −0,51 % su F (`s194-orm-istruzioni-A.out`).
+- **A0**: la testa del ciclo di dispatch vale ~12–14 istruzioni per op (stima dal profilo); un op banale ne costa 70–100 nella sonda. A1 e A2 non fatti (criterio A p.4).
+- **Censimento degli op sull'ORM** (`s194-censimento-op.out`, build di strumentazione su `a88b1d05`): 583,6 M di op per 246,8 G di istruzioni ⇒ **~423 istruzioni per op in media**. Per numero: Sweep 11,0 %, LoadVar 10,8 %, PushConst 9,8 %, JumpIfFalse 6,5 %, Ret 6,0 %, ThisPropGet 5,1 %, Jump 3,4 %, StoreSlot 3,3 %, Pop 3,0 %, MethodCall 2,7 %. Il costo NON sta negli op banali (anche a 70 l'uno, i primi tre farebbero ~13 G su 247): sta in pochi op pesanti e nel runtime sotto di loro (chiamate, metodi, proprietà, GC, compilazione degli include). La sonda a cicli misura il contrario del carico.
+- **Censimento su WordPress: NULLO** (3,7 M di op: il file è stato scritto da un sottoprocesso, non dal processo principale). Da rifare con un file per pid.
+- **Errore di processo mio**: due `cargo check` lanciati mentre girava il conteggio WordPress (regola «mai build e misura insieme»). Le istruzioni non dipendono dal carico della macchina e le dispersioni lo confermano (0,09 % e 0,00 %), ma la regola è stata violata.
