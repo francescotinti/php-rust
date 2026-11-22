@@ -1,0 +1,7 @@
+== s194 WordPress (phpunit full) istruzioni ritirate per gamba, 2026-11-22 02:12:24 (direzione sul lavoro, non verdetto di tempo) ==
+binario F = /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/out/phpr-orm-istr-F sha 6e9bcd3308cee0fb
+binario A = /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/out/phpr-orm-istr-A sha 2f292be396294619
+F          istruzioni  3796.253 G (dispersione 0.00 %)  vs F  +0.00 %  cicli 1240.003 G  user 684.19 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
+A          istruzioni  3779.983 G (dispersione 0.00 %)  vs F  -0.43 %  cicli 1248.315 G  user 687.08 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
+uploads-guard restore rc=0
+fine rc=0 2026-11-22 02:39:53

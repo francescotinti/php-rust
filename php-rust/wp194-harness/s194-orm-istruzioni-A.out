@@ -1,0 +1,6 @@
+== s194 ORM istruzioni ritirate per gamba, REPS=2, 2026-11-22 02:09:54 (direzione sul lavoro, non verdetto di tempo) ==
+binario F = /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/out/phpr-orm-istr-F sha 6e9bcd3308cee0fb
+binario A = /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/out/phpr-orm-istr-A sha 2f292be396294619
+F          istruzioni   248.016 G (dispersione 0.13 %)  vs F  +0.00 %  cicli   69.412 G  user  31.75 s  | Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, PHP
+A          istruzioni   246.754 G (dispersione 0.03 %)  vs F  -0.51 %  cicli   68.900 G  user  31.61 s  | Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, PHP
+fine rc=0 2026-11-22 02:12:24
