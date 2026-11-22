@@ -1,0 +1,44 @@
+2c2,4
+< """s194-censimento-op.py <commit> <orm|wp> ... — S-194: which VM ops the REAL workloads execute (op census, instrumentation build).
+---
+> """s194-c0-motivi.py <commit> <orm|wp> ... — S-194 package C, step C0a: how many calls and returns leave the short path on the REAL workloads, and why (census-time + h2 reasons).
+> Derived from s194-censimento-op.py (manifest s194-c0-motivi-copia.diff). Only adaptations: output names, feature census-time with
+> PHPR_CENSUS_TIME=<file>, and the report sums the dumps of all processes by key.
+5c7
+< Output: s194-censimento-op-<workload>.txt (raw dump), s194-censimento-op.out (head), out/censimento-op.rc.
+---
+> Output: s194-c0-motivi-<workload>.txt (raw dump), s194-c0-motivi.out (head), out/c0-motivi.rc.
+16c18
+< out = W / "s194-censimento-op.out"; rcf = O / "censimento-op.rc"; rcf.unlink(missing_ok=True)
+---
+> out = W / "s194-c0-motivi.out"; rcf = O / "c0-motivi.rc"; rcf.unlink(missing_ok=True)
+29,31c31,33
+< with (O / "censimento-op-build.log").open("w") as lg:
+<     r = subprocess.run(["cargo", "build", "--release", "-p", "php-cli", "--features", "op-census"], cwd=SRC / "php-rust", env=env, stdout=lg, stderr=lg)
+< note(f"== s194 censimento degli op, sorgente {c}, build rc={r.returncode}, {time.strftime('%F %T')} ==")
+---
+> with (O / "c0-motivi-build.log").open("w") as lg:
+>     r = subprocess.run(["cargo", "build", "--release", "-p", "php-cli", "--features", "census-time"], cwd=SRC / "php-rust", env=env, stdout=lg, stderr=lg)
+> note(f"== s194 C0a motivi di uscita dal cammino corto (census-time), sorgente {c}, build rc={r.returncode}, {time.strftime('%F %T')} ==")
+35,37c37,39
+<     raw = W / f"s194-censimento-op-{work}.txt"; raw.unlink(missing_ok=True)
+<     e = dict(os.environ, MIMALLOC_PURGE_DELAY="0", PHPR_OP_CENSUS=str(raw), PHPR_CENSUS_HITS="0")
+<     so = O / f"censimento-op-{work}-stdout.txt"
+---
+>     raw = W / f"s194-c0-motivi-{work}.txt"; raw.unlink(missing_ok=True)
+>     e = dict(os.environ, MIMALLOC_PURGE_DELAY="0", PHPR_CENSUS_TIME=str(raw))
+>     so = O / f"c0-motivi-{work}-stdout.txt"
+43c45
+<         with (O / "censimento-op-guard.log").open("w") as gl:
+---
+>         with (O / "c0-motivi-guard.log").open("w") as gl:
+57c59,65
+<         for l in raw.read_text(errors="replace").splitlines()[:70]: note("   " + l[:200])
+---
+>         cls, h2 = {}, {}
+>         for l in raw.read_text(errors="replace").splitlines():
+>             a = l.split("\t")
+>             if a[0] == "census-time" and len(a) == 5: cls[a[1]] = cls.get(a[1], 0) + int(a[2])
+>             elif a[0] == "census-h2" and len(a) == 4: h2[(a[1], a[2])] = h2.get((a[1], a[2]), 0) + int(a[3])
+>         for k, v in cls.items(): note(f"   classe {k:16s} {v:>14d}")
+>         for (k, r), v in sorted(h2.items(), key=lambda kv: -kv[1])[:45]: note(f"   motivo {k:10s} {v:>13d}  {r[:150]}")
