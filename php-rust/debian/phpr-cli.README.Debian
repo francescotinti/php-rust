@@ -1,0 +1,42 @@
+phpr-cli for Debian
+==================
+
+Drop-in usage
+-------------
+phpr-cli registers /usr/bin/phpr as a /usr/bin/php alternative with
+priority 85 (the "8.5 slot": php8.4-cli registers 84, php8.6-cli 86).
+It can be installed side by side with php8.4-cli or php8.6-cli: the
+highest priority wins /usr/bin/php, and
+
+    update-alternatives --config php
+
+switches the winner interactively. It cannot coexist with php8.5-cli:
+this package Provides php8.5-cli and therefore Conflicts with the
+real one.
+
+What is honestly provided
+-------------------------
+Provides: php-cli, php8.5-cli, php-json, php8.5-json. The json
+extension is built in. The phpapi-* extension ABI is deliberately NOT
+provided: phpr does not load binary PHP extensions, so the packaged
+php8.5-*/php8.6-* extension modules have no effect on phpr, and
+depending on phpr will not satisfy tools that need a real phpapi.
+
+Known gaps by design (correct-or-absent)
+---------------------------------------
+phpr is a behaviour reimplementation of PHP 8.5.7; anything it cannot
+implement faithfully is left absent rather than approximated:
+
+  * No php.ini is read. There is no /etc/php/8.5/ tree shipped for
+    this reason (php.ini directives are simply not honoured). A small
+    set of INI entries is honoured via `-d key=value` on the command
+    line.
+  * The -v, -m, -i, -l, -w and --ini switches of the reference CLI
+    are not implemented (calling `php -v` reports the failure to open
+    the file "-v"). If your tooling depends on them, keep the stock
+    interpreter selected via update-alternatives.
+  * phar, phpize and php-config are not implemented.
+  * Binary PHP extensions cannot be loaded.
+
+If a missing feature matters to you, report it against the php-rust
+project: https://github.com/francescotinti/php-rust/issues

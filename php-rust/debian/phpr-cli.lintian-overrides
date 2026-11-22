@@ -1,0 +1,13 @@
+# Installed as /usr/share/lintian/overrides/phpr-cli (via
+# debian/phpr-cli.install); justifies the tags that stem from upstream
+# (php-rust) being a statically-linked Rust binary.
+#
+# "curl": the binary embeds no C code from curl. The HTTP client is the
+# pure-Rust ureq crate (with rustls); lintian matches on curl-related
+# protocol strings. Static Rust crates cannot be replaced by a system
+# libcurl at packaging level.
+phpr-cli: embedded-library curl [usr/bin/phpr]
+# "libyaml": same class — the unsafe-libyaml Rust crate (a transitive
+# dependency via serde_yaml/mysql parsing), not the C libyaml; nothing
+# is linked against the system libyaml.
+phpr-cli: embedded-library libyaml [usr/bin/phpr]

@@ -1,0 +1,38 @@
+#!/bin/sh
+# Installed-package smoke test for phpr-cli: arithmetic, argv, the
+# update-alternatives registration and a json round-trip (the package
+# claims Provides: php-json).
+set -e
+
+out=$(/usr/bin/phpr -r 'echo 6*7;')
+if [ "$out" != "42" ]; then
+    echo "FAIL: arithmetic, got '$out'" >&2
+    exit 1
+fi
+
+out=$(/usr/bin/phpr -r 'echo json_encode(json_decode("[1,\"two\"]"));')
+if [ "$out" != '[1,"two"]' ]; then
+    echo "FAIL: json round-trip, got '$out'" >&2
+    exit 1
+fi
+
+# The package must hold the /usr/bin/php alternative at priority 85.
+if ! update-alternatives --query php 2>/dev/null | grep -q '^Value: /usr/bin/phpr$'; then
+    echo "note: /usr/bin/php not currently pointing at phpr (higher-priority PHP installed?)" >&2
+fi
+if ! update-alternatives --query php 2>/dev/null | grep -q '^/usr/bin/phpr$'; then
+    echo "FAIL: phpr not registered as a php alternative" >&2
+    exit 1
+fi
+
+# A script with argv passthrough, the common cron/CLI shape.
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+printf '<?php echo $argv[1] . $argv[2];' > "$tmp/args.php"
+out=$(/usr/bin/phpr "$tmp/args.php" foo bar)
+if [ "$out" != "foobar" ]; then
+    echo "FAIL: script argv, got '$out'" >&2
+    exit 1
+fi
+
+echo "cli smoke OK: 42, json round-trip, alternatives, argv"

@@ -1,0 +1,7 @@
+# Local shlibs knowledge for dpkg-shlibdeps: phpr links the system
+# libtidy (byte-parity FFI, like libgd/libxml2/libxslt/zlib). On build
+# hosts where libtidy58 is not installed, dpkg-shlibdeps cannot map
+# libtidy.so.58 to its package; the mapping is stable, so declare it
+# locally. The runtime dependency is also stated explicitly in
+# debian/control (libgd3, libtidy58).
+libtidy 58 libtidy58

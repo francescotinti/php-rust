@@ -1,0 +1,110 @@
+.TH PHPR 1 "November 2026" "php-rust" "User Commands"
+.SH NAME
+phpr \- command-line interpreter for PHP scripts (Rust reimplementation)
+.SH SYNOPSIS
+.B phpr
+.RB [ \-d
+.IR key = value ]...
+.RB [ \-n ]
+.RB [ \-f ]
+.IR script.php
+.RI [ args ...]
+.br
+.B phpr \-r
+.I code
+.br
+.B phpr \-S
+.IR addr : port
+.RB [ \-t
+.IR docroot ]
+.RI [ router.php ]
+.SH DESCRIPTION
+.B phpr
+is the CLI SAPI of the php-rust project, a behaviour-compatible
+reimplementation of PHP 8.5.7 written in Rust. It executes unmodified
+PHP scripts with the same observable behaviour as the reference
+interpreter, byte-for-byte for everything that lands in PHP strings
+and output streams. Scripts read from stdin and
+.B #!
+shebang lines are supported, like the reference CLI.
+.PP
+On Debian,
+.BR update-alternatives (1)
+exposes
+.B phpr
+as
+.RI /usr/bin/php
+(priority 85), so tools invoking
+.B php
+keep working. Use
+.B "update-alternatives --config php"
+to select among installed interpreters (php8.4-cli, php8.6-cli, ...).
+.SH OPTIONS
+.TP
+.BI \-d " key=value"
+Sets the INI entry
+.I key
+to
+.I value
+for this process (no
+.B =
+means an empty value). Only entries the engine implements are
+honoured.
+.TP
+.B \-n
+Accepted for compatibility; the reference CLI skips php.ini with it.
+.B phpr
+never loads a php.ini at all \(em this flag is a no-op.
+.TP
+.BI \-f " script"
+Interpret
+.IR script .
+.TP
+.BI \-r " code"
+Run
+.I code
+inline (implicit leading
+.BR "<?php " ).
+.TP
+.BI \-S " addr:port"
+Start the built-in development web server (cli-server SAPI, a
+work-alike of
+.BR "php \-S" ) .
+.TP
+.BI \-t " docroot"
+Document root for
+.BR \-S .
+.SH ARGUMENTS
+Any argument after the script name is passed to the script via
+.B $argv
+(as
+.B $_SERVER['argv']
+). With no script argument the program is read from stdin.
+.SH FILES
+phpr reads no
+.BR php.ini ;
+the engine has no configuration file (see
+.BR BUGS ).
+.SH BUGS
+Correct-or-absent is a project rule: what the reference CLI supports
+and phpr does not is left out rather than approximated. Currently
+absent: the
+.BR \-v ,
+.BR \-m ,
+.BR \-i ,
+.B \-l ,
+.B \-w
+and
+.B \-\-ini
+switches; loading of php.ini and per-directory INI handling; loading
+of binary PHP extensions (the packaged php8.5-* and php8.6-* extension
+modules have no effect on
+.BR phpr ).
+.SH SEE ALSO
+For the web server with a worker pool and a systemd service, see
+.BR php-server (1).
+The reference interpreter:
+.BR php (1).
+.SH AUTHOR
+php-rust by Francesco Tinti. This manual page was written for the
+Debian project.

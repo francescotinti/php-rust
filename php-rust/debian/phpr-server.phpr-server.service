@@ -1,0 +1,21 @@
+[Unit]
+Description=phpr standalone PHP web server
+Documentation=file:/usr/share/doc/phpr-server/README.Debian
+After=network.target
+
+[Service]
+Type=exec
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/html
+EnvironmentFile=-/etc/default/phpr-server
+ExecStart=/usr/bin/php-server --axum --host ${PHPR_HOST} --port ${PHPR_PORT} --docroot ${PHPR_DOCROOT} --workers ${PHPR_WORKERS}
+Restart=on-failure
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectHome=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,6 @@
+Name: php
+Link: /usr/bin/php
+Alternative: /usr/bin/phpr
+Dependents:
+ /usr/share/man/man1/php.1.gz php.1.gz /usr/share/man/man1/phpr.1.gz
+Priority: 85

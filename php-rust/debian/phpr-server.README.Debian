@@ -1,0 +1,37 @@
+phpr-server for Debian
+======================
+
+This is NOT php-fpm
+-------------------
+php-server speaks plain HTTP and serves a document root itself; it
+does not implement the FastCGI protocol, so an nginx/Apache
+`fastcgi_pass` configuration will not talk to it and this package
+intentionally does not Provide php-fpm. To publish sites behind a real
+web server, use a reverse proxy:
+
+    location / { proxy_pass http://127.0.0.1:8080; }
+
+Service
+-------
+phpr-server.service runs /usr/bin/php-server --axum as www-data,
+enabled by default on 127.0.0.1:8080 with document root
+/var/www/html. All knobs live in /etc/default/phpr-server:
+
+    PHPR_HOST=127.0.0.1
+    PHPR_PORT=8080
+    PHPR_DOCROOT=/var/www/html
+    PHPR_WORKERS=0   # 0 = one worker per CPU
+
+After changing it: systemctl restart phpr-server.
+
+Notes
+-----
+ * --axum mode does not honour a router.php script (the cli-server
+   mode, `php-server` without --axum, does).
+ * PHP scripts run per-request on a fresh VM in a fixed worker pool;
+   there is no request killer / slowlog / process manager like FPM's
+   (pm.max_children), only the fixed --workers count.
+ * SIGTERM performs a graceful drain and exit; there is no reload
+   signal semantics (restart the unit instead).
+
+Feature requests and gaps: https://github.com/francescotinti/php-rust/issues
