@@ -1,0 +1,25 @@
+1a2,5
+> # s194-orm-coppia-t30.sh — S-194: coppia dbal+ORM t30 @ pin s186 (DOVUTA: pin nuovo con le leve di S-194; t29 era @ s185).
+> # COPIA DICHIARATA di ../wp193-harness/s193-orm-coppia-t29.sh (manifest s194-orm-coppia-t30-copia.diff, generatore
+> # gen-notte-s194.py) coi SOLI adattamenti: harness wp194 (orm-out, verdetto s194-orm-coppia-verdetto-t30.out), PIN_ATTESO
+> # default s186, etichette t30/s186. Costanti E5 dal lanciatore, INVARIATE. Testo S-193/S-191/S-185 sotto:
+51c55
+< H="$REPO/wp193-harness"
+---
+> H="$REPO/wp194-harness"
+58c62
+< VERD="$H/s193-orm-coppia-verdetto-t29.out"
+---
+> VERD="$H/s194-orm-coppia-verdetto-t30.out"
+63c67
+< PIN_ATTESO="${PIN_ATTESO:-d9d6429301f60f4e}"
+---
+> PIN_ATTESO="${PIN_ATTESO:-9977cc4b1cf19991}"
+203c207
+< print("coppia-t29 @ s185 (user CPU; pavimenti PARZIALI phpunit --version: orm o=%.3f p=%.3f · dbal o=%.3f p=%.3f) — costanti giudice: %s" % (fo, fp, dfo, dfp, "E5 (istruttoria DRIFT)" if E5 else "canone E4 (S-176)"))
+---
+> print("coppia-t30 @ s186 (user CPU; pavimenti PARZIALI phpunit --version: orm o=%.3f p=%.3f · dbal o=%.3f p=%.3f) — costanti giudice: %s" % (fo, fp, dfo, dfp, "E5 (istruttoria DRIFT)" if E5 else "canone E4 (S-176)"))
+305c309
+< { echo "== s193 coppia t29 dbal+ORM (pin s185 MISURATO $PINM vs oracle 8.5.7; criterio s185-criterio-istruttoria-orm.md p.5-6) =="
+---
+> { echo "== s194 coppia t30 dbal+ORM (pin s186 MISURATO $PINM vs oracle 8.5.7; criterio s185-criterio-istruttoria-orm.md p.5-6) =="
