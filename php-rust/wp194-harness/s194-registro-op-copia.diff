@@ -1,0 +1,59 @@
+2c2,4
+< """s194-censimento-op.py <commit> <orm|wp> ... — S-194: which VM ops the REAL workloads execute (op census, instrumentation build).
+---
+> """s194-registro-op.py <commit> <orm|wp> ... — S-194: retired instructions per VM op type on the REAL workloads (instruction ledger, PHPR_OP_INSTR).
+> Derived from s194-censimento-op.py (manifest s194-registro-op-copia.diff). Only adaptations: output names, PHPR_OP_INSTR=1,
+> a probe sanity run before the workloads, and the report picks the MAIN process dump (the largest) instead of the first.
+5c7
+< Output: s194-censimento-op-<workload>.txt (raw dump), s194-censimento-op.out (head), out/censimento-op.rc.
+---
+> Output: s194-registro-op-<workload>.txt (raw dump), s194-registro-op.out (head), out/registro-op.rc.
+7c9
+< import os, pathlib, shutil, subprocess, sys, tarfile, time
+---
+> import os, pathlib, re, shutil, subprocess, sys, tarfile, time
+16c18
+< out = W / "s194-censimento-op.out"; rcf = O / "censimento-op.rc"; rcf.unlink(missing_ok=True)
+---
+> out = W / "s194-registro-op.out"; rcf = O / "registro-op.rc"; rcf.unlink(missing_ok=True)
+29c31
+< with (O / "censimento-op-build.log").open("w") as lg:
+---
+> with (O / "registro-op-build.log").open("w") as lg:
+31c33
+< note(f"== s194 censimento degli op, sorgente {c}, build rc={r.returncode}, {time.strftime('%F %T')} ==")
+---
+> note(f"== s194 registro delle istruzioni per op, sorgente {c}, build rc={r.returncode}, {time.strftime('%F %T')} ==")
+33a36,47
+> def dumps(p):
+>     return sorted((d for d in re.split(r"(?m)^(?=== PHPR_OP_CENSUS: )", p.read_text(errors="replace")) if d.startswith("== PHPR_OP_CENSUS")),
+>                   key=lambda d: -int(d.split()[2]))
+> att = []
+> for n in (1000000, 2000000):
+>     sf = O / f"registro-op-sonda-{n}.txt"; sf.unlink(missing_ok=True)
+>     subprocess.run([str(B), str(W / "primitive/assign_const.php"), str(n)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+>                    env=dict(os.environ, PHPR_OP_CENSUS=str(sf), PHPR_OP_INSTR="1"))
+>     d = dumps(sf)[0]; att.append((int(d.split()[2]), int(re.search(r"attributed (\d+)", d).group(1))))
+> dop, din = att[1][0] - att[0][0], att[1][1] - att[0][1]
+> note(f"-- sanita' sulla sonda assign_const: {dop / 1e6:.2f} op per giro, {din / 1e6:.1f} istruzioni attribuite per giro (produzione braccio A: 331; banda 248-414)")
+> if not 248 <= din / 1e6 <= 414: rc = 3
+35,37c49,51
+<     raw = W / f"s194-censimento-op-{work}.txt"; raw.unlink(missing_ok=True)
+<     e = dict(os.environ, MIMALLOC_PURGE_DELAY="0", PHPR_OP_CENSUS=str(raw), PHPR_CENSUS_HITS="0")
+<     so = O / f"censimento-op-{work}-stdout.txt"
+---
+>     raw = W / f"s194-registro-op-{work}.txt"; raw.unlink(missing_ok=True)
+>     e = dict(os.environ, MIMALLOC_PURGE_DELAY="0", PHPR_OP_CENSUS=str(raw), PHPR_CENSUS_HITS="0", PHPR_OP_INSTR="1")
+>     so = O / f"registro-op-{work}-stdout.txt"
+43c57
+<         with (O / "censimento-op-guard.log").open("w") as gl:
+---
+>         with (O / "registro-op-guard.log").open("w") as gl:
+57c71,75
+<         for l in raw.read_text(errors="replace").splitlines()[:70]: note("   " + l[:200])
+---
+>         ds = dumps(raw); kids = sum(int(re.search(r"attributed (\d+)", d).group(1)) for d in ds[1:])
+>         note(f"   {len(ds)} dump; processo principale qui sotto; sottoprocessi: {sum(int(d.split()[2]) for d in ds[1:])} op, {kids} istruzioni attribuite")
+>         m = ds[0].splitlines(); cut = next(i for i, l in enumerate(m) if l.startswith("-- op counts"))
+>         nm = next(i for i, l in enumerate(m) if l.startswith("-- instructions by builtin name"))
+>         for l in m[:min(cut, 63)] + m[nm:nm + 46]: note("   " + l[:200])

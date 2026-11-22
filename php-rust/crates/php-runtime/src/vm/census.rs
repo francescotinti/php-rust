@@ -389,6 +389,149 @@ pub struct OpCensus {
     /// them.
     pending_prop_concat: Option<(u64, u64)>,
     last: usize,
+    /// S-194 instruction ledger (`PHPR_OP_INSTR`), see [`InstrLedger`].
+    ledger: Option<Box<InstrLedger>>,
+}
+
+/// S-194 (wp194-harness/s194-criterio-registro-op.md): thread instruction
+/// counter read at hook entry and exit; the gap between one op's exit read and
+/// the next op's entry read is charged to the first op's type (and, for the
+/// call-a-builtin-by-name ops, to the builtin name). The census's own work
+/// sits between the entry and the exit read, so it is never charged.
+struct InstrLedger {
+    sum: Box<[u64; N_OPS]>,
+    min: Box<[u64; N_OPS]>,
+    by_name: std::collections::HashMap<Vec<u8>, (u64, u64)>,
+    /// Calibrated cost of one counter read (subtracted from every gap).
+    bias: u64,
+    /// Counter at the last exit read.
+    t0: u64,
+    /// Op charged by the next entry read (`None` before the first op).
+    cur: Option<usize>,
+    cur_name: Option<std::rc::Rc<[u8]>>,
+    /// Instructions between arming and the first op.
+    pre: u64,
+}
+
+#[cfg(all(feature = "op-census", target_os = "macos"))]
+extern "C" {
+    fn thread_selfcounts(kind: i32, buf: *mut u64, nbytes: usize) -> i32;
+}
+
+/// Instructions retired by the calling thread so far (0 off macOS).
+fn instr_now() -> u64 {
+    #[cfg(all(feature = "op-census", target_os = "macos"))]
+    {
+        let mut b = [0u64; 2];
+        // SAFETY: kind 1 fills exactly two u64 (instructions, cycles) and the
+        // buffer is 16 bytes; the call only writes into it.
+        unsafe { thread_selfcounts(1, b.as_mut_ptr(), 16) };
+        b[0]
+    }
+    #[cfg(not(all(feature = "op-census", target_os = "macos")))]
+    0
+}
+
+impl InstrLedger {
+    fn new() -> Box<Self> {
+        let mut gaps = [0u64; 9];
+        let mut p = instr_now();
+        for g in gaps.iter_mut() {
+            let t = instr_now();
+            *g = t - p;
+            p = t;
+        }
+        Box::new(InstrLedger {
+            sum: vec![0u64; N_OPS].into_boxed_slice().try_into().unwrap(),
+            min: vec![u64::MAX; N_OPS].into_boxed_slice().try_into().unwrap(),
+            by_name: std::collections::HashMap::new(),
+            bias: *gaps.iter().min().unwrap(),
+            t0: instr_now(),
+            cur: None,
+            cur_name: None,
+            pre: 0,
+        })
+    }
+
+    fn close(&mut self, t: u64) {
+        let d = (t - self.t0).saturating_sub(self.bias);
+        match self.cur {
+            None => self.pre += d,
+            Some(i) => {
+                self.sum[i] += d;
+                self.min[i] = self.min[i].min(d);
+                if let Some(n) = self.cur_name.take() {
+                    match self.by_name.get_mut(&*n) {
+                        Some(e) => {
+                            e.0 += 1;
+                            e.1 += d;
+                        }
+                        None => {
+                            self.by_name.insert(n.to_vec(), (1, d));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fn open(&mut self, op: &Op) {
+        self.cur = Some(op_index(op));
+        self.cur_name = match op {
+            Op::CallBuiltin { name, .. }
+            | Op::Strlen { name, .. }
+            | Op::Count { name, .. }
+            | Op::CallNsBuiltin { name, .. }
+            | Op::CallBuiltinSpread { name, .. }
+            | Op::CallHostBuiltin { name, .. }
+            | Op::CallHostBuiltinRef { name, .. }
+            | Op::CallHostBuiltinOut { name, .. }
+            | Op::CallBuiltinRef { name, .. }
+            | Op::CallBuiltinRefSpread { name, .. } => Some(name.clone()),
+            _ => None,
+        };
+        self.t0 = instr_now();
+    }
+
+    fn render(&self, ops: &[u64; N_OPS], o: &mut String) {
+        use std::fmt::Write as _;
+        let end = instr_now();
+        let tail = (end - self.t0).saturating_sub(self.bias);
+        let total: u64 = self.sum.iter().sum();
+        let _ = writeln!(
+            o,
+            "== PHPR_OP_INSTR: attributed {total} | before first op {} | after last op {tail} | thread total {end} | read bias {} ==",
+            self.pre, self.bias
+        );
+        let _ = writeln!(o, "-- instructions by op (sum, share, count, mean, min) --");
+        let mut idx: Vec<usize> = (0..N_OPS).filter(|&i| ops[i] > 0).collect();
+        idx.sort_by_key(|&i| std::cmp::Reverse(self.sum[i]));
+        for &i in &idx {
+            let _ = writeln!(
+                o,
+                "{:>15}  {:5.2}%  {:>12}  {:>9.1}  {:>6}  {}",
+                self.sum[i],
+                self.sum[i] as f64 * 100.0 / total.max(1) as f64,
+                ops[i],
+                self.sum[i] as f64 / ops[i] as f64,
+                if self.min[i] == u64::MAX { 0 } else { self.min[i] },
+                OP_NAMES[i]
+            );
+        }
+        let _ = writeln!(o, "-- instructions by builtin name (sum, count, mean; top 80) --");
+        let mut nm: Vec<(&Vec<u8>, &(u64, u64))> = self.by_name.iter().collect();
+        nm.sort_by_key(|(_, e)| std::cmp::Reverse(e.1));
+        for (n, e) in nm.iter().take(80) {
+            let _ = writeln!(
+                o,
+                "{:>15}  {:>12}  {:>9.1}  {}",
+                e.1,
+                e.0,
+                e.1 as f64 / e.0.max(1) as f64,
+                String::from_utf8_lossy(n)
+            );
+        }
+    }
 }
 
 impl OpCensus {
@@ -405,6 +548,7 @@ impl OpCensus {
             concat_hist: [[0; N_CONCAT_BUCKETS]; N_CONCAT_SITES],
             pending_prop_concat: None,
             last: N_OPS - 1, // Nop: harmless first-bigram seed
+            ledger: std::env::var_os("PHPR_OP_INSTR").map(|_| InstrLedger::new()),
         }
     }
 
@@ -484,6 +628,9 @@ impl OpCensus {
         let mut o = String::with_capacity(8192);
         let total: u64 = self.ops.iter().sum();
         let _ = writeln!(o, "== PHPR_OP_CENSUS: {total} ops dispatched ==");
+        if let Some(l) = self.ledger.as_deref() {
+            l.render(&self.ops, &mut o);
+        }
         let mut idx: Vec<usize> = (0..N_OPS).collect();
         idx.sort_by_key(|&i| std::cmp::Reverse(self.ops[i]));
         let _ = writeln!(o, "-- op counts (top 40) --");
@@ -646,7 +793,13 @@ pub fn census_arm() -> bool {
 pub fn census_record(op: &Op, stack: &[Zval], slots: &[Zval]) {
     CENSUS.with(|c| {
         if let Some(census) = c.borrow_mut().as_deref_mut() {
+            if let Some(l) = census.ledger.as_deref_mut() {
+                l.close(instr_now());
+            }
             census.record(op, stack, slots);
+            if let Some(l) = census.ledger.as_deref_mut() {
+                l.open(op);
+            }
         }
     });
 }
