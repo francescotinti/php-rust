@@ -1,0 +1,139 @@
+2,13c2,12
+< # s193-promozione.sh — gate di PROMOZIONE del tree «pin s184 + SEI leve di S-192» → pin phpr s185 (NEXT §S-193 ordine 2;
+< # ordine deciso dall'utente il 19/11: promozione di giorno, poi la notte la conferma o la smentisce; s184 resta nello stash).
+< # COPIA DICHIARATA di ../wp190-harness/s190-promozione.sh (manifest s193-promozione-copia.diff, generatore
+< # gen-promozione-s193.py) coi SOLI adattamenti: (1) tag s185 (harness wp193: verdetto s193-promo-verdetto.out, promo-out);
+< # (2) CANDIDATO = braccio B dei gemelli s192gc (target s192-armB sulla bundle, df39c0a92937db0f, commit debbca2f = ultimo
+< # commit di codice: da lì a HEAD solo documenti); precondizione = ultima catena di accettazione S-192 rc=0
+< # (wp190-harness/s190-c2-catena-s192gc.rc) e commit in HEAD; (3) REF = stash phpr-s184 (60b10d857eb0343a) per i gate
+< # invarianti; (4) gate di fixture INVARIATI nella forma (dry-run 20/11: 25/25 verdi col candidato), sole etichette s183 → s184;
+< # (5) corpus: ZERO flip attesi (corpus-gate ×2 verde a ogni leva di S-192); (6) conferma post-pin = ret-buf-dq-k0 R=5 pin s185
+< # vs stash s184 col SEGNO di S-192 (gemelli g3: K0 −5,08 ns/Ret a favore della leva ⇒ attesa D = A−B ≈ +330 ns/iter) +
+< # mcalls-dq/calls-dq/prop-dq (guardie, attese piatte); (7) pin-server.sh s191; (8) dichiarazione LOC: S-192 non alza cap.
+< # Testo S-190/S-185/S-184/S-181/S-180/S-177 conservato sotto:
+---
+> # s194-promozione.sh — gate di PROMOZIONE DI GRUPPO del tree «pin s185 + leve di S-194» → pin phpr s186 (delibera utente 22/11;
+> # criterio wp194-harness/s194-criterio-promozione.md; s185 resta nello stash).
+> # COPIA DICHIARATA di ../wp193-harness/s193-promozione.sh (manifest s194-promozione-copia.diff, generatore
+> # gen-promozione-s194.py) coi SOLI adattamenti: (1) tag s186 (harness wp194: verdetto s194-promo-verdetto.out, promo-out);
+> # (2) CANDIDATO = braccio con la ricetta del pin su HEAD (target s192-armD sulla bundle, commit d0c153b9 = ultimo commit di
+> # codice); precondizione = catena di accettazione su HEAD rc=0 (wp192-harness/out/accettazione-s194P.rc); (3) REF = stash
+> # phpr-s185 (d9d6429301f60f4e) per i gate invarianti; (4) gate di fixture INVARIATI nella forma, sole etichette s184 → s185;
+> # (5) CINQUE gate nuovi = i denti di comportamento di S-194 (n, f bilaterali; dbis, dedicate, a invarianti); (6) conferma
+> # post-pin = guardia di costo sul binario della canonica (REGOLE §6), attese piatte o favorevoli; (7) il passo pin-server.sh
+> # è TOLTO (criterio p.9: il server s191 di record non si tocca; la canonica si ripristina dallo stash con verifica d'hash); (8) dichiarazione LOC: S-194 non alza cap.
+> # Testo S-193/S-190/S-185/S-184/S-181/S-180/S-177 conservato sotto:
+22c21
+< H11="$SRC/wp190-harness"; H12="$SRC/wp186-harness"; H13="$SRC/wp193-harness"
+---
+> H11="$SRC/wp190-harness"; H12="$SRC/wp186-harness"; H13="$SRC/wp193-harness"; H14="$SRC/wp194-harness"
+30,31c29,30
+< OUT="$H13/promo-out"; mkdir -p "$OUT"
+< VERD="$H13/s193-promo-verdetto.out"
+---
+> OUT="$H14/promo-out"; mkdir -p "$OUT"
+> VERD="$H14/s194-promo-verdetto.out"
+33,34c32,33
+< REF="$STASH/phpr-s184"; REF_EXP="60b10d857eb0343a"
+< CAND="$HOME/Claude/phpr-target/s192-armB/release/phpr"; CAND_COMMIT="${CAND_COMMIT:-debbca2f}"
+---
+> REF="$STASH/phpr-s185"; REF_EXP="d9d6429301f60f4e"
+> CAND="$HOME/Claude/phpr-target/s192-armD/release/phpr"; CAND_COMMIT="${CAND_COMMIT:-d0c153b9}"
+43c42
+<          "$H8/fx-cr1.php" "$H9/calls-dq.php" "$H3/fx-rt1.php" "$H9/fx-rt2.php" "$H10/fx-mc2.php" "$H10/mcalls-dq.php" "$H12/ret-buf-dq-k0.php" "$H4/fixtures/fx-sw2-gc.php" "$H11/fx-mc2-wp172.expected-diff" "$CAND" "$H11/s190-c2-catena-s192gc.rc" \
+---
+>          "$H8/fx-cr1.php" "$H9/calls-dq.php" "$H3/fx-rt1.php" "$H9/fx-rt2.php" "$H10/fx-mc2.php" "$H10/mcalls-dq.php" "$H12/ret-buf-dq-k0.php" "$H4/fixtures/fx-sw2-gc.php" "$H11/fx-mc2-wp172.expected-diff" "$CAND" "$SRC/wp192-harness/out/accettazione-s194P.rc" "$H14/s194-n-comportamento.php" "$H14/s194-f-comportamento.php" "$H14/s194-dbis-comportamento.php" "$H14/s194-dedicate-comportamento.php" "$H14/s194-a-comportamento.php" \
+51,52c50,51
+< [ "$(shasum -a 256 "$REF" | cut -c1-16)" = "$REF_EXP" ] || stop "PRE: stash phpr-s184 hash != $REF_EXP — STOP"
+< [ "$(cat "$H11/s190-c2-catena-s192gc.rc")" = 0 ] || stop "PRE: catena di accettazione s192gc rc=$(cat "$H11/s190-c2-catena-s192gc.rc") ≠ 0 — nessuna promozione senza accettazione verde — STOP"
+---
+> [ "$(shasum -a 256 "$REF" | cut -c1-16)" = "$REF_EXP" ] || stop "PRE: stash phpr-s185 hash != $REF_EXP — STOP"
+> [ "$(cat "$SRC/wp192-harness/out/accettazione-s194P.rc")" = 0 ] || stop "PRE: catena di accettazione s194P rc=$(cat "$SRC/wp192-harness/out/accettazione-s194P.rc") ≠ 0 — nessuna promozione senza accettazione verde — STOP"
+54,56c53,55
+< note "PRE: candidato = braccio B $CH (commit $CAND_COMMIT, gemelli ORM s192gc; accettazione S-192 rc=0 su ogni leva: batteria 1773/0/2, corpus-gate ×2, sentinelle); REF = stash s184 $REF_EXP"
+< note "PRE: DICHIARAZIONE dei cambiamenti del pin s185 rispetto a s184 (per nome, criteri wp192-harness/s192-criterio-*.md): (a) K0 gc_note_this_tail (0ac0b35b); (b) hasher Fx in lower/compile (8b253f18); (c) cache realpath validata (15019848); (d) array_diff a insieme hash (0eca36da, 82244d79); (e) memo __destruct/__construct (1b11e848); (f) registro oggetti vivi IdMap (debbca2f); inoltre contatori census-time (bb0e84dd, cec724cf: gated OFF nel pin). Cifre S-192 = DIREZIONE su una gamba ORM; WordPress mai rimisurato: se t27/t29 differiscono da t26/t28 l'attribuzione va istruita per leva, mai d'ufficio."
+< note "PRE: LOC (REGOLE §8): S-192 NON alza alcun cap (il dente loc_dente non è toccato dalla promozione s184, a485e626; resta nella batteria di questa catena)."
+---
+> note "PRE: candidato = braccio su HEAD $CH (commit $CAND_COMMIT; catena s194-catena-P rc=0: denti di comportamento, accettazione s194P, sonda); REF = stash s185 $REF_EXP"
+> note "PRE: DICHIARAZIONE dei cambiamenti del pin s186 rispetto a s185 (per nome, criteri wp194-harness/s194-criterio-*.md): leve a/b/c accessori magici (1e9354a5, cd32184f); D builtin per valore risolti una volta (6d2a0e6d); D-bis (dd371530); op dedicati Strlen/Count per deroga utente (182da85d); N builtin in namespace (0588daa4); F funzioni di altri file legate per sito (e074b5f8); A3 confronti senza valore intermedio (a88b1d05); inoltre registro delle istruzioni (d5674650, d0c153b9: dietro op-census, spento nel pin). Cifre di S-194 = ISTRUZIONI sul carico vero (ORM -7,0 %, WordPress -6,2 %), non tempo: il tempo lo dice la notte."
+> note "PRE: LOC (REGOLE §8): S-194 NON alza alcun cap (diff del dente loc_dente vuoto da e0a71c40; il dente resta nella batteria di questa catena)."
+76c75
+< if [ "$HB" = "$CH" ]; then note "promozione: build ricetta di HEAD $HEAD0 = braccio B $CH AL BYTE"; else note "promozione: build ricetta di HEAD $HEAD0 = $HB ≠ braccio B $CH (target separata: candidato A CONTENUTO, dichiarato — LC_UUID/firma; il pin nasce da QUESTA build)"; fi
+---
+> if [ "$HB" = "$CH" ]; then note "promozione: build ricetta di HEAD $HEAD0 = braccio $CH AL BYTE"; else note "promozione: build ricetta di HEAD $HEAD0 = $HB ≠ braccio $CH (target separata: candidato A CONTENUTO, dichiarato — LC_UUID/firma; il pin nasce da QUESTA build)"; fi
+118c117
+< "$SRC/scripts/pin-phpr.sh" s185 > "$OUT/pin.log" 2>&1
+---
+> "$SRC/scripts/pin-phpr.sh" s186 > "$OUT/pin.log" 2>&1
+127c126
+< note "promozione corpus-gate: rc=0 — nomi==congelato (1407 per modo), CONTENUTO==golden, off-on zero (ZERO flip come atteso: corpus-gate ×2 verde a ogni leva di S-192, catene s192*)"
+---
+> note "promozione corpus-gate: rc=0 — nomi==congelato (1407 per modo), CONTENUTO==golden, off-on zero (ZERO flip come atteso: corpus-gate ×2 verde a ogni leva di S-194 e nella catena s194P)"
+152c151
+< # gate INVARIANTE: pin==stash s184 byte-id (+ marcatore quando preteso)
+---
+> # gate INVARIANTE: pin==stash s185 byte-id (+ marcatore quando preteso)
+155c154
+<   "$REF" "$f" > "$OUT/$n-s184.out" 2>&1
+---
+>   "$REF" "$f" > "$OUT/$n-s185.out" 2>&1
+159,160c158,159
+<   if diff -q "$OUT/$n-s184.out" "$OUT/$n-pin.out" > /dev/null; then
+<     note "promozione gate $n: pin==stash s184 BYTE-ID ($d)"
+---
+>   if diff -q "$OUT/$n-s185.out" "$OUT/$n-pin.out" > /dev/null; then
+>     note "promozione gate $n: pin==stash s185 BYTE-ID ($d)"
+162,163c161,162
+<     diff "$OUT/$n-s184.out" "$OUT/$n-pin.out" > "$OUT/$n.diff" || true
+<     stop "gate $n: pin DIVERGE dallo stash s184 (promo-out/$n.diff)"
+---
+>     diff "$OUT/$n-s185.out" "$OUT/$n-pin.out" > "$OUT/$n.diff" || true
+>     stop "gate $n: pin DIVERGE dallo stash s185 (promo-out/$n.diff)"
+196c195
+< invar fxsw2gc "$H4/fixtures/fx-sw2-gc.php" "FX-SW2 DONE" "§3.33 fixture di CONTEGGI GC: invariante vs stash s184 (dry-run 20/11 verde anche con IdMap e gc_note_this_tail), non bilaterale"
+---
+> invar fxsw2gc "$H4/fixtures/fx-sw2-gc.php" "FX-SW2 DONE" "§3.33 fixture di CONTEGGI GC: invariante vs stash s185 (prova a secco 22/11 col candidato), non bilaterale"
+201a201,207
+> # ---- gate NUOVI di S-194 (criterio p.5): i denti di comportamento delle leve promosse ----
+> bilat s194n "$H14/s194-n-comportamento.php" "" "dente N (S-194): builtin non qualificati in un namespace, ombra di funzione utente, dichiarazione tardiva" -d log_errors=0 -d display_errors=1
+> bilat s194f "$H14/s194-f-comportamento.php" "" "dente F (S-194): funzioni di altri file legate per sito, builtin per riferimento" -d log_errors=0 -d display_errors=1
+> invar s194dbis "$H14/s194-dbis-comportamento.php" "" "dente D-bis (S-194): cammino diretto dei builtin per valore INVARIATO"
+> invar s194ded "$H14/s194-dedicate-comportamento.php" "" "dente Strlen/Count (S-194): coercizioni, avvisi, TypeError INVARIATI"
+> invar s194a "$H14/s194-a-comportamento.php" "" "dente A3 (S-194): confronti fra interi/float/stringhe/null/riferimenti INVARIATI (non bilaterale: tre avvisi Undefined variable PRE-esistenti)"
+> 
+221,222c227,228
+< PHPR="$BIN" R=5 "$SRC/wp97-harness/micro/run-micro.sh" > "$OUT/micro-pin-s185.out" 2>&1
+< note "promozione micro pin s185: $(grep -E '^rapporto_' "$OUT/micro-pin-s185.out" | tr '\n' ' ')"
+---
+> PHPR="$BIN" R=5 "$SRC/wp97-harness/micro/run-micro.sh" > "$OUT/micro-pin-s186.out" 2>&1
+> note "promozione micro pin s186: $(grep -E '^rapporto_' "$OUT/micro-pin-s186.out" | tr '\n' ' ')"
+224c230
+< # ---- conferma POST-PIN: R=5 pin s185 vs stash s184 (STESSA toolchain 1.98.1) su ret-buf-dq-k0 (bersaglio della leva K0) e mcalls-dq/calls-dq/prop-dq (guardie); D = A(stash) − B(pin): POSITIVO = pin più veloce ----
+---
+> # ---- conferma POST-PIN = guardia di costo sul binario della canonica (REGOLE §6): R=5 pin s186 vs stash s185 (STESSA toolchain 1.98.1) su ret-buf-dq-k0, mcalls-dq, calls-dq, prop-dq; D = A(stash) − B(pin): POSITIVO = pin più veloce ----
+250,253c256,259
+< note "conferma post-pin ret-buf-dq-k0 (pin s185 vs stash s184, stessa toolchain; ns/iter = 65 Ret): $(conferma "$H12/ret-buf-dq-k0.php" k0) (attesa col segno di S-192: D ≈ +330 ns/iter = 65 × 5,08 dei gemelli g3; D ≤ 0 = leva K0 non confermata sul canonico, da dichiarare)"
+< note "conferma post-pin mcalls-dq (guardia, pin s185 vs stash s184): $(conferma "$H10/mcalls-dq.php" mcalls) (attesa piatta: gemelli g3 +0,33; |D| < 4)"
+< note "conferma post-pin calls-dq (guardia, pin s185 vs stash s184): $(conferma "$H9/calls-dq.php" calls) (attesa piatta: gemelli g3 +0,50; |D| < 4)"
+< note "conferma post-pin prop-dq (guardia, pin s185 vs stash s184): $(conferma "$H/prop-dq.php" prop) (attesa |D| < 1: sola lettura)"
+---
+> note "conferma post-pin ret-buf-dq-k0 (guardia, pin s186 vs stash s185, stessa toolchain; ns/iter = 65 Ret): $(conferma "$H12/ret-buf-dq-k0.php" k0) (attesa piatta o favorevole: nessuna leva di S-194 bersaglia il Ret; D ≤ −260 ns/iter = −4 ns/Ret con 5/5 segni = regressione da dichiarare)"
+> note "conferma post-pin mcalls-dq (guardia, pin s186 vs stash s185): $(conferma "$H10/mcalls-dq.php" mcalls) (attesa piatta o favorevole; D ≤ −4 con 5/5 segni = regressione da dichiarare)"
+> note "conferma post-pin calls-dq (guardia, pin s186 vs stash s185): $(conferma "$H9/calls-dq.php" calls) (attesa piatta o favorevole; D ≤ −4 con 5/5 segni = regressione da dichiarare)"
+> note "conferma post-pin prop-dq (guardia, pin s186 vs stash s185): $(conferma "$H/prop-dq.php" prop) (attesa piatta o favorevole; D ≤ −4 con 5/5 segni = regressione da dichiarare)"
+283,286c289,294
+< "$SRC/scripts/pin-server.sh" s191 > "$OUT/pin-server.log" 2>&1
+< src_rc=$?; echo "$src_rc" > "$OUT/pin-server.rc"
+< [ "$src_rc" = 0 ] || stop "pin-server.sh rc=$src_rc"
+< note "promozione server: $(grep '^PIN server' "$OUT/pin-server.log" | tail -1)"
+---
+> # criterio s194 p.9: il server s191 di record NON si tocca. La build del workspace nella canonica ha però riscritto
+> # release/php-server (senza la feature del pin): lo si RIPRISTINA dallo stash e si verifica l'hash del pin di record.
+> SRV_EXP="c413398a44f9b0a4"
+> cp "$STASH/php-server-s191" "$HOME/Claude/php-rust-output/release/php-server" || stop "server: ripristino dallo stash FALLITO"
+> [ "$(shasum -a 256 "$HOME/Claude/php-rust-output/release/php-server" | cut -c1-16)" = "$SRV_EXP" ] || stop "server: hash dopo il ripristino != $SRV_EXP — STOP"
+> note "promozione server: passo pin-server.sh TOLTO (criterio s194 p.9); canonica ripristinata dallo stash php-server-s191 = $SRV_EXP (pin di record intatto)"
+289c297
+< note "PROMOZIONE COMPLETA rc=0 (da promo-out/rcb): pin s185 = $H2"
+---
+> note "PROMOZIONE COMPLETA rc=0 (da promo-out/rcb): pin s186 = $H2"
