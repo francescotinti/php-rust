@@ -10,16 +10,19 @@
 # in the local oracle gates) and it only reacts to the packaging branch.
 #
 # Toolchain stance (php-rust pins rustc/cargo 1.98.1):
-#   - Debian's rustc/cargo when they MATCH the pin — fully deterministic,
-#     no rustup involved (debian:sid ships 1.98.x today);
-#   - when Debian's compiler is not the pinned one (either direction),
-#     install the PINNED toolchain with rustup and build with it. A
-#     compiler change is a deliberate decision expressed by the pin, not
-#     something a moving container tag smuggles in.
-# The resolved absolute toolchain pair is handed to dpkg-buildpackage
-# via CARGO/RUSTC (debian/rules honours both). debian/rules strips
-# ~/.cargo/bin from the build PATH, so rustup's proxy shims stay inert
-# even in rustup mode.
+#   The lane builds on debian:trixie, whose rustc (1.85) can never
+#   satisfy the "rustc (>= 1.98)" Build-Depends. The PINNED toolchain
+#   therefore ALWAYS arrives via rustup — fetched with curl from the
+#   official https://sh.rustup.rs installer, never from the Debian
+#   archive — so the compiler follows the pin, not the suite. The
+#   resolved absolute toolchain pair is handed to dpkg-buildpackage
+#   via CARGO/RUSTC (debian/rules honours both). debian/rules strips
+#   ~/.cargo/bin from the build PATH, so rustup's proxy shims stay
+#   inert even in rustup mode.
+#
+# The workspace layout: the git repo ROOT contains php-rust/ (the cargo
+# workspace + debian/). dpkg-buildpackage runs in php-rust/ and writes
+# its artifacts (../) to the repo root.
 name: debian-packages
 
 on:
@@ -30,9 +33,6 @@ on:
 permissions:
   contents: read
 
-# The workspace layout: the git repo ROOT contains php-rust/ (the cargo
-# workspace + debian/). dpkg-buildpackage runs in php-rust/ and writes
-# its artifacts (../) to the repo root.
 defaults:
   run:
     working-directory: php-rust
@@ -44,48 +44,54 @@ concurrency:
 jobs:
   build-packages:
     runs-on: ubuntu-latest
-    # Same distro family as the packaging target (this box's verification
-    # host: Debian forky/sid, rustc/cargo 1.98.1 = the project pin).
-    container: docker.io/library/debian:sid
+    # The packaging target distro. trixie's rustc is older than the
+    # pin (1.85 vs 1.98.1), so the compiler never comes from apt here:
+    # the pinned toolchain is rustup-installed in a later step.
+    container: docker.io/library/debian:trixie
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v5
 
-      - name: Install build dependencies (from debian/control)
-        # debian:sid ships no compiler: rustc/cargo arrive HERE, via the
-        # Build-Depends declared in debian/control.
-        run: |
-          apt-get update -qq
-          apt-get install -y --no-install-recommends dpkg-dev curl ca-certificates
-          apt-get build-dep -y .
-
       - name: Report build environment
         run: |
-          cat /etc/os-release | head -2
+          head -2 /etc/os-release
           dpkg --print-architecture
-          rustc --version
-          cargo --version
 
-      # Resolves the build toolchain per the lane's policy and exposes
-      # the absolute paths via step outputs.
-      - name: Resolve toolchain (Debian's, or the pin via rustup)
+      - name: Install build dependencies
+        # trixie cannot resolve "rustc (>= 1.98)" (debian/control), so
+        # apt-get build-dep is out: install the Build-Depends EXPLICITLY,
+        # MINUS rustc/cargo — the pinned toolchain arrives via rustup in
+        # the next step. libgd3/libtidy58 come along as runtime
+        # dependencies of the -dev packages, so the later `dpkg -i`
+        # smoke step needs no extra dependency resolution. lintian ships
+        # here too for the gate below.
+        run: |
+          apt-get update -qq
+          apt-get install -y --no-install-recommends \
+            dpkg-dev curl ca-certificates \
+            build-essential debhelper cmake pkgconf \
+            zlib1g-dev libxml2-dev libxslt1-dev libgd-dev libtidy-dev \
+            libclang-dev lintian
+
+      # Installs the pinned toolchain per the lane's policy and exposes
+      # the absolute paths via step outputs. rustup itself comes from
+      # the official installer (curl), the toolchain from the pin in
+      # rust-toolchain.toml.
+      - name: Install the pinned toolchain (rustup via curl)
         id: toolchain
         run: |
           pinned=$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)
-          debian_rustc=$(rustc --version | awk '{print $2}')
-          echo "pinned: $pinned, debian sid ships: $debian_rustc"
-          if [ "$pinned" = "$debian_rustc" ]; then
-            echo "cargo=/usr/bin/cargo" >> "$GITHUB_OUTPUT"
-            echo "rustc=/usr/bin/rustc" >> "$GITHUB_OUTPUT"
-          else
-            echo "Debian rustc ($debian_rustc) != pin ($pinned): installing the pinned toolchain via rustup"
-            apt-get install -y --no-install-recommends rustup
-            rustup toolchain install "$pinned" --profile minimal
-            cargo_bin=$(rustup which --toolchain "$pinned" cargo)
-            rustc_bin=$(rustup which --toolchain "$pinned" rustc)
-            echo "cargo=$cargo_bin" >> "$GITHUB_OUTPUT"
-            echo "rustc=$rustc_bin" >> "$GITHUB_OUTPUT"
-          fi
+          echo "pinned: $pinned"
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+            | sh -s -- -y --profile minimal --default-toolchain none
+          . "$HOME/.cargo/env"
+          rustup toolchain install "$pinned" --profile minimal
+          cargo_bin=$(rustup which --toolchain "$pinned" cargo)
+          rustc_bin=$(rustup which --toolchain "$pinned" rustc)
+          echo "cargo=$cargo_bin" >> "$GITHUB_OUTPUT"
+          echo "rustc=$rustc_bin" >> "$GITHUB_OUTPUT"
+          "$rustc_bin" --version
+          "$cargo_bin" --version
           cat "$GITHUB_OUTPUT" | sed 's/^/resolved: /'
 
       - name: Build packages
@@ -93,11 +99,16 @@ jobs:
           CARGO: ${{ steps.toolchain.outputs.cargo }}
           RUSTC: ${{ steps.toolchain.outputs.rustc }}
         run: |
-          dpkg-buildpackage -us -uc
+          # -d (no check-builddeps): dpkg cannot see the rustup
+          # toolchain, and trixie's apt rustc could never satisfy
+          # ">= 1.98" anyway. Every other Build-Depend was installed
+          # explicitly in the earlier step; the lane was validated
+          # end-to-end on trixie (build, lintian gate, dpkg -i, both
+          # packaged smoke tests green).
+          dpkg-buildpackage -us -uc -d
 
       - name: Lintian (fail on errors; warnings reported)
         run: |
-          apt-get install -y --no-install-recommends lintian
           lintian --pedantic --fail-on error ../*.changes
 
       # Installed-package smoke: the same tests autopkgtest would run on

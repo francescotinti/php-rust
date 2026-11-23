@@ -11,15 +11,17 @@
 	dh $@
 
 # Toolchain contract: by default the build uses Debian's own
-# rustc/cargo — on the targeting suite these equal the version pinned
-# in rust-toolchain.toml (the project pin), which keeps the build fully
-# deterministic and out of rustup's reach.
+# rustc/cargo WHEN they equal the version pinned in rust-toolchain.toml
+# (the project pin). Debian trixie ships an older rustc (1.85 today)
+# and can never satisfy the pin from apt, so trixie builds (the CI
+# lane, .github/workflows/debian-packages.yml) never rely on Debian's
+# compiler: the lane installs the PINNED toolchain with rustup
+# (https://sh.rustup.rs) and passes the absolute pair below via
+# CARGO/RUSTC.
 #
 # A caller MAY supply both CARGO and RUSTC (absolute paths of a complete
 # toolchain pair, e.g. resolved via rustup) when Debian's compiler is
-# not the pinned one — the CI lane does exactly that (see
-# .github/workflows/debian-packages.yml): Debian's rustc when it matches
-# the pin, the rustup-installed pinned toolchain otherwise. Both variables
+# not the pinned one. Both variables
 # must name the SAME toolchain; only one is never honoured.
 CARGO ?= /usr/bin/cargo
 export RUSTC ?= /usr/bin/rustc
