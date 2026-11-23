@@ -122,6 +122,24 @@ emendamenti passano dal sign-off dell'utente e dal handoff.
 - Oracle: `/opt/homebrew/opt/php/bin/php` (PHP 8.5.7, lo stesso degli script);
   CLI nostro `phpr` = `~/Claude/php-rust-output/release/phpr` (pin). Metodo:
   `diff <(oracle x.php) <(phpr x.php)` finché IDENTICAL.
+- Corpus, cura che fa PASSARE test congelati: il gate esce rc=1 lo stesso. Emenda DICHIARATA
+  (script + `.out` nell'harness di sessione) di `wp109-harness/corpus-gate/corpus-s109-{off,on}.fails`
+  e dei digest in `golden-content-{off,on}.tsv`; mai a mano, sempre zero pass→fail.
+- Op nuova in `bytecode.rs`: aggiornare anche `vm/census.rs` (`N_OPS`, `OP_NAMES`, `op_index`, il
+  test che conta dalla coda della tabella), le due liste di `compile/reg_lower.rs` e i due bracci
+  di `vm/liveness.rs`.
+- Un ramo raro dentro un handler caldo costa anche se non viene mai preso (S-194: +1,4 % sulle
+  chiamate di metodo): corpo in una fn `#[cold] #[inline(never)]` o op dedicata, e sonda di
+  costo PRIMA dell'accettazione.
+- Denti con atteso = stdout dell'oracle (`phpr -r`): confrontare con `.trim_end()`; nello script
+  PHP niente nomi di funzione che sono builtin (`pi`, …).
+- Mai `git add wp<N>-harness` intero (binari di braccio e uscite di run non tracciati): `git add -u`
+  più l'elenco esplicito dei file nuovi.
+- Tipi debole/stretto: `call_callable` è l'imbuto delle callback dei builtin (sempre debole, come
+  Zend); `call_user_func[_array]` passa da `call_callable_site` (resta stretta). Reflection invoke
+  vive nel prelude PHP: un chiamante con `func.file == b"prelude"` conta come debole.
+- Accettazione di un passo: `wp192-harness/s192-accettazione.sh <tag>` (batteria + corpus ×2, esito
+  in `.rc`). Conto in istruzioni sul carico intero: `wp194-harness/s194-{orm,wp}-istruzioni.py`.
 - Commit **e** push a ogni step concluso (no chiedere).
 
 ## Contributi GitHub (PR e issue esterni)
