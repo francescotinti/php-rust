@@ -39,5 +39,16 @@ foreach (rgen() as $g) { echo $g; } echo "\n"; t(fn() => rfe([1, 2, 3])); t(fn()
 t(fn() => (new R)->self_()); t(fn() => (new R2)->st()); t(fn() => (new R2)->bad()); t(fn() => (new R)->i("4")); t(fn() => (new R)->i("z")); t(fn() => R::si("8")); t(fn() => R::si([])); t(fn() => (new R)->mixed_(null)); echo \strlen(new R), "\n";
 $ref = 5; $al = &$ref; t(fn() => ri($al)); $os = new A; $os->n = 3; $or = &$os; t(fn() => rc($or)->n);
 echo \array_sum(\array_map('App\ri', ["1", 2, 3.0])), "|", \implode(",", \array_map(fn(int $x): int => $x * 2, [1, "2"])), "\n";
+// C2: typed METHOD parameters with variable arguments (deferred places), exact and not, defaults, undefined variable and key
+class T2 { function a(int $x, ?A $y = null, string $z = "d"): string { return $x . ($y ? 'A' : '-') . $z; } function o(A $a): A { return $a; } function f(float $f, bool $b, array $r) { return \var_export([$f, $b, \count($r)], true); } }
+function fa(int $x, ?A $y, string $z): string { return $x . ($y ? 'A' : '-') . $z; }
+$t2 = new T2; $n1 = 3; $n2 = "5"; $n3 = 2.0; $oa = new A; $oz = new Z; $nul = null; $ar2 = ['k' => 7, 's' => "9"]; $rf = &$n1; $st = "zz";
+echo $t2->a($n1), "|", $t2->a($n2), "|", $t2->a($n3), "|", $t2->a($n1, $oa, $n2), "|", $t2->a($n1, $nul, $st), "|", $t2->a($rf), "|", $t2->a($ar2['k']), "|", $t2->a($ar2['s']), "|", $t2->a($ar2['no'] ?? 1), "\n";
+echo fa($n1, $oa, $st), "|", fa($n1, $nul, $st), "|", fa($n2, $oa, $n1), "|", fa($rf, $oa, $st), "|", $t2->f($n3, true, $ar2), "|", $t2->f($n1, $n1, []), "|", \get_class($t2->o($oa)), "\n";
+foreach ([fn() => $t2->a($n1, $oz), fn() => $t2->a($st), fn() => $t2->o($oz), fn() => $t2->o($nul), fn() => fa($n1, $oz, $st), fn() => fa($st, $oa, $st), fn() => $t2->f($st, true, []), fn() => $t2->f($n3, true, $n1)] as $f) { t($f); }
+try { echo $t2->a($undef1), "\n"; } catch (\TypeError $e) { echo "T:", $e->getMessage(), "\n"; }
+try { echo $t2->a($ar2['missing']), "\n"; } catch (\TypeError $e) { echo "T:", $e->getMessage(), "\n"; }
+try { echo fa($undef2, $oa, $st), "\n"; } catch (\TypeError $e) { echo "T:", $e->getMessage(), "\n"; }
+for ($i = 0; $i < 3; $i++) { $mix = [1, "2", 3.0][$i]; echo $t2->a($mix), fa($mix, null, "x"), ","; } echo "\n";
 require __DIR__ . '/s194-c-comportamento-strict.php';
 echo "end\n";

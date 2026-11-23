@@ -1522,6 +1522,11 @@ pub struct Func {
     /// fast paths engage only when every declared slot receives a value,
     /// so the callee's default prologue sees no `Undef` — same as today.
     pub simple_call: bool,
+    /// S-194 C2: not `simple_call` ONLY because of declared parameter types (no
+    /// by-reference parameter, no variadic, not a generator). A call at exact arity
+    /// whose arguments already have those types as they are may then take the fast
+    /// entry (`Vm::args_hints_exact`); every other call keeps the general path.
+    pub hints_only: bool,
     /// The declared scalar return type hint (step 14), enforced on the returned
     /// value at [`Op::Ret`]. `None` for an absent / non-scalar return type, and
     /// left unenforced for a by-reference function (which returns an alias).

@@ -1440,13 +1440,20 @@ impl<'m> Vm<'m> {
     /// false and the return takes `ret_slow`, unchanged.
     #[inline(never)]
     pub(super) fn ret_hint_exact(&self, top: usize) -> bool {
-        use crate::hir::{HintKind, ScalarType};
         let f = &self.frames[top];
         // The structural admission of the fused return (run_loop, `Op::Ret`), shape apart.
         if !(top > 0 && f.flags.bits() == 0 && f.ret_cell.is_none() && f.iters.is_empty() && f.ext.is_none() && f.dyn_vars.is_none()) {
             return false;
         }
         let (Some(hint), Some(v)) = (f.func.ret_hint.as_ref(), f.stack.last()) else { return false };
+        self.hint_exact(hint, v)
+    }
+
+    /// S-194 C1b/C2: `v` ALREADY has the declared type `hint` as it is — exactly the cases where
+    /// `coerce_or_check_hint` hands its input back unchanged and raises nothing.
+    #[inline]
+    fn hint_exact(&self, hint: &TypeHint, v: &Zval) -> bool {
+        use crate::hir::{HintKind, ScalarType};
         match (&hint.kind, v) {
             (_, Zval::Null) => hint.nullable,
             (HintKind::Scalar(ScalarType::Int), Zval::Long(_))
@@ -1458,6 +1465,49 @@ impl<'m> Vm<'m> {
             (HintKind::Class(name), Zval::Object(_)) => self.value_satisfies_class(v, name),
             _ => false,
         }
+    }
+
+    /// S-194 C2: the `n` arguments on top of frame `top`'s operand stack can enter `callee` (a
+    /// [`Func::hints_only`] function, exact arity checked by the caller) through the fast entry: no
+    /// deferred place among them, and every argument of a typed parameter already has the declared
+    /// type as it is ([`Self::hint_exact`]: never a reference, never a coercion). An untyped
+    /// parameter takes any value, as on the `simple_call` entry.
+    #[inline(never)]
+    pub(super) fn args_hints_exact(&self, callee: &Func, top: usize, n: usize) -> bool {
+        let st = &self.frames[top].stack;
+        let Some(base) = st.len().checked_sub(n) else { return false };
+        callee.param_hints.len() == n
+            && callee.param_hints.iter().zip(&st[base..]).all(|(h, v)| match h {
+                Some(hint) => self.hint_exact(hint, v),
+                None => !matches!(v, Zval::ArgPlace(_)),
+            })
+    }
+
+    /// S-194 C2: `Op::Call` of a [`Func::hints_only`] function at exact arity whose arguments
+    /// [`Self::args_hints_exact`] admitted: the `simple_call` entry of `run_loop`, statement for
+    /// statement (frame born inside `frames`, arguments decayed straight into the leading slots,
+    /// `CheckArity` skipped). `false` = not admitted, nothing touched, the general path runs.
+    #[inline(never)]
+    pub(super) fn call_typed_fast(&mut self, callee: &'m Func, m: &'m Module, top: usize, n: usize) -> bool {
+        if n != callee.n_params as usize || !self.args_hints_exact(callee, top, n) {
+            return false;
+        }
+        if log::log_enabled!(target: "phpr::call", log::Level::Trace) {
+            log::trace!(target: "phpr::call", "enter {}() (depth {})", String::from_utf8_lossy(&callee.name), self.frames.len() + 1);
+        }
+        let (slots, stack) = self.frame_pool.take();
+        self.frames.push(Frame::with_buffers(callee, m, slots, stack));
+        let (caller, entered) = self.frames.split_at_mut(top + 1);
+        let cf = &mut entered[0];
+        cf.argc = n as u32;
+        for i in (0..n).rev() {
+            let a = caller[top].stack.pop().expect("call argument");
+            cf.slots[i] = decay_arg(a);
+        }
+        if matches!(callee.ops.first(), Some(Op::CheckArity { .. })) {
+            cf.ip = 1;
+        }
+        true
     }
 
     /// S-194 C1b: the fused return of `run_loop`'s `Op::Ret` arm, statement for statement and in

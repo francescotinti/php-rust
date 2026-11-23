@@ -3753,7 +3753,7 @@ impl<'m> super::Vm<'m> {
                         if matches!(callee.ops.first(), Some(Op::CheckArity { .. })) {
                             cf.ip = 1;
                         }
-                    } else {
+                    } else if !(callee.hints_only && self.call_typed_fast(callee, m, top, n)) { // S-194 C2
                         #[cfg(feature = "census-time")]
                         super::census_time::tick(super::census_time::Class::CallGeneral);
                         #[cfg(feature = "op-census")]
@@ -7045,7 +7045,7 @@ impl<'m> super::Vm<'m> {
                     let cid = o.borrow().class_id as usize;
                     if let Some((defc, midx)) = ic.get(cid) {
                         let callee = &self.classes[defc].methods[midx].func;
-                        if callee.simple_call && callee.n_params as usize == n {
+                        if callee.n_params as usize == n && (callee.simple_call || callee.hints_only) { // S-194 C2: typed parameters too
                             fast = Some((defc, midx, cid));
                         }
                     }
@@ -7070,7 +7070,7 @@ impl<'m> super::Vm<'m> {
             let st = &self.frames[top].stack;
             st[st.len() - n..].iter().any(|a| matches!(a, Zval::ArgPlace(_)))
         };
-        if !has_place {
+        if !has_place && (callee.simple_call || self.args_hints_exact(callee, top, n)) { // S-194 C2: a typed callee enters here only with exact arguments, else below (`enter_callee` checks)
             if log::log_enabled!(target: "phpr::call", log::Level::Trace) {
                 log::trace!(
                     target: "phpr::call",
