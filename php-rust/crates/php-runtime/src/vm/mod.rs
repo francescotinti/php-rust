@@ -11504,16 +11504,16 @@ impl<'m> Vm<'m> {
     /// implicit class (`Closure`; `Generator`/`Iterator`/`Traversable`); a real
     /// object walks its ancestry. A non-object or an unknown name is `false`.
     fn value_satisfies_class(&self, v: &Zval, name: &[u8]) -> bool {
-        let (mut buf, mut heap) = ([0u8; 128], Vec::new()); let lc = lc_name(name.strip_prefix(b"\\").unwrap_or(name), &mut buf, &mut heap);
+        let name = name.strip_prefix(b"\\").unwrap_or(name);
         match v {
-            Zval::Closure(_) => lc == b"closure",
+            Zval::Closure(_) => name.eq_ignore_ascii_case(b"closure"),
             Zval::Generator(_) => {
-                matches!(&lc[..], b"generator" | b"iterator" | b"traversable")
+                [&b"generator"[..], b"iterator", b"traversable"].iter().any(|n| name.eq_ignore_ascii_case(n))
             }
             Zval::Object(o) => {
-                // A value satisfies a class/interface type hint if it is-a that
-                // type — including implemented interfaces (transitively), not just
-                // the parent chain. Mirrors `instanceof` (`is_instance_of`).
+                // Is-a, implemented interfaces included (mirrors `instanceof`). S-194 C1c: the exact class answers before lowercase + table.
+                if self.classes.get(o.borrow().class_id as usize).is_some_and(|c| c.name.eq_ignore_ascii_case(name)) { return true; }
+                let (mut buf, mut heap) = ([0u8; 128], Vec::new()); let lc = lc_name(name, &mut buf, &mut heap);
                 matches!(self.class_index.get(&lc[..]),
                     Some(&target) if self.instance_of(o.borrow().class_id as usize, target))
             }

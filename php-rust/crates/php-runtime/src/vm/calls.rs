@@ -1351,7 +1351,7 @@ impl<'m> Vm<'m> {
                 if func.param_by_ref.get(i).copied().unwrap_or(false) {
                     continue;
                 }
-                let Some(hint) = func.param_hints.get(i).cloned().flatten() else {
+                let Some(hint) = func.param_hints.get(i).and_then(|h| h.as_ref()) else {
                     continue;
                 };
                 if matches!(self.frames[top].slots[i], Zval::Undef) {
@@ -1384,7 +1384,7 @@ impl<'m> Vm<'m> {
             let v = vslot as usize;
             let by_ref = func.param_by_ref.get(v).copied().unwrap_or(false);
             if !by_ref {
-                if let Some(hint) = func.param_hints.get(v).cloned().flatten() {
+                if let Some(hint) = func.param_hints.get(v).and_then(|h| h.as_ref()) {
                     let strict = caller_strict;
                     let items: Vec<(Key, Zval)> = match &self.frames[top].slots[v] {
                         Zval::Array(a) => {
@@ -1431,6 +1431,64 @@ impl<'m> Vm<'m> {
             }
         }
         Ok(())
+    }
+
+    /// S-194 C1b: whether the value on top of frame `top`'s operand stack ALREADY has the
+    /// function's declared return type as it is — exactly the cases where
+    /// `coerce_or_check_hint` hands its input back unchanged and raises nothing. Every
+    /// other case (a reference, a union, a coercion, a mismatch, an empty stack) answers
+    /// false and the return takes `ret_slow`, unchanged.
+    #[inline(never)]
+    pub(super) fn ret_hint_exact(&self, top: usize) -> bool {
+        use crate::hir::{HintKind, ScalarType};
+        let f = &self.frames[top];
+        // The structural admission of the fused return (run_loop, `Op::Ret`), shape apart.
+        if !(top > 0 && f.flags.bits() == 0 && f.ret_cell.is_none() && f.iters.is_empty() && f.ext.is_none() && f.dyn_vars.is_none()) {
+            return false;
+        }
+        let (Some(hint), Some(v)) = (f.func.ret_hint.as_ref(), f.stack.last()) else { return false };
+        match (&hint.kind, v) {
+            (_, Zval::Null) => hint.nullable,
+            (HintKind::Scalar(ScalarType::Int), Zval::Long(_))
+            | (HintKind::Scalar(ScalarType::Float), Zval::Double(_))
+            | (HintKind::Scalar(ScalarType::String), Zval::Str(_))
+            | (HintKind::Scalar(ScalarType::Bool), Zval::Bool(_))
+            | (HintKind::Array, Zval::Array(_))
+            | (HintKind::Object, Zval::Object(_)) => true,
+            (HintKind::Class(name), Zval::Object(_)) => self.value_satisfies_class(v, name),
+            _ => false,
+        }
+    }
+
+    /// S-194 C1b: the fused return of `run_loop`'s `Op::Ret` arm, statement for statement and in
+    /// the same order (take, GC notes, `$this` note, clear, truncate, pool, leave probe), for a typed
+    /// function whose value [`Self::ret_hint_exact`] admitted. `None` = value pushed on the caller.
+    pub(super) fn ret_typed_fused(&mut self, top: usize, baseline: usize) -> Result<Option<RunExit>, PhpError> {
+        let f = &mut self.frames[top];
+        let ret = f.stack.pop().unwrap_or(Zval::Null);
+        let mut slots = std::mem::take(&mut f.slots);
+        let mut stack = std::mem::take(&mut f.stack);
+        for v in &slots {
+            self.gc_note(v);
+        }
+        for v in &stack {
+            self.gc_note(v);
+        }
+        if self.frames[top].this.is_some() {
+            self.gc_note_this(top);
+        }
+        slots.clear();
+        stack.clear();
+        self.frames.truncate(top);
+        self.frame_pool.put(slots, stack);
+        if self.gc_probe_mark < self.gc_buf.len() {
+            self.gc_ret_probe(top - 1)?;
+        }
+        if self.frames.len() == baseline {
+            return Ok(Some(RunExit::Returned(ret)));
+        }
+        self.frames[top - 1].stack.push(ret);
+        Ok(None)
     }
 
     /// The callee's name as PHP renders it in a type error: `Class::method` for a

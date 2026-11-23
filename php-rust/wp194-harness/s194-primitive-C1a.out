@@ -1,0 +1,27 @@
+== S-194 primitive: istruzioni ritirate per iterazione (differenziale N1/N2), phpr /Users/francescotinti/Claude/phpr-target/s192-armD/release/phpr sha 822e091186587613 contro oracle. DIREZIONE ==
+fixture         fam           php     phpr     x |  php net phpr net  x net  eccesso | cyc x IPC php IPC phpr disp%
+noop            loop         34.9    123.0  3.52 |      0.0      0.0      -      0.0 | 679.73 1579.58     8.18  3.84
+call_user0      calls       176.0    757.1  4.30 |    141.1    634.1   4.49    492.9 |  3.41    5.19     6.54  1.40
+call_user2      calls       270.5   1112.2  4.11 |    235.5    989.2   4.20    753.6 |  3.49    5.42     6.39  1.35
+call_typed      calls       302.9   2171.2  7.17 |    267.9   2048.2   7.64   1780.2 |  6.76    6.01     6.37  1.65
+call_method     calls       304.6   1688.1  5.54 |    269.7   1565.1   5.80   1295.4 |  6.81    8.04     6.54  1.37
+call_static     calls       267.9   1398.4  5.22 |    233.0   1275.4   5.47   1042.4 |  5.19    6.06     6.10  1.48
+call_closure    calls       348.0   1730.8  4.97 |    313.0   1607.8   5.14   1294.8 |  6.09    7.26     5.92  1.53
+call_this_inc   calls       316.8   2025.3  6.39 |    281.8   1902.3   6.75   1620.5 |  6.74    6.41     6.08  0.33
+new_ctor        object      841.9   6085.5  7.23 |    806.9   5962.5   7.39   5155.6 |  8.77    6.68     5.51  0.07
+ns_noop         ns           35.0    123.1  3.52 |      0.0      0.0      -      0.0 |  1.93    4.87     8.90  0.12
+ns_user2        ns          289.0   1112.1  3.85 |    254.0    989.0   3.89    735.0 |  4.48    7.51     6.45  0.28
+ret_typed_only  calls       282.6   1422.6  5.03 |    247.7   1299.6   5.25   1051.9 |  4.64    5.72     6.21  0.18
+ret_typed_class calls       676.1   1909.2  2.82 |    641.2   1786.2   2.79   1145.0 |  2.38    5.40     6.40  1.01
+call_typed_class calls       709.9   2277.5  3.21 |    675.0   2154.5   3.19   1479.5 |  2.97    6.11     6.60  0.07
+call_typed_iface calls      1031.0   3844.6  3.73 |    996.1   3721.6   3.74   2725.5 |  3.74    6.06     6.05  1.04
+mcall_typed     calls       567.7   3511.8  6.19 |    532.8   3388.8   6.36   2856.0 |  6.40    6.27     6.07  1.68
+mcall_typed_class calls      1430.2   4402.6  3.08 |   1395.3   4279.6   3.07   2884.3 |  3.07    5.74     5.76  0.69
+note: nessuna fixture nulla
+confronto con s194-primitive-C0.out (istruzioni lorde phpr per iterazione; soglia di non-regressione +1,0 %):
+  call_typed          2278.8 ->    2171.2    -4.7 %
+  call_typed_class    2437.4 ->    2277.5    -6.6 %
+  call_typed_iface    4002.7 ->    3844.6    -3.9 %
+  mcall_typed         3566.2 ->    3511.8    -1.5 %
+  mcall_typed_class    4561.1 ->    4402.6    -3.5 %
+  fixture peggiorate oltre +1 %: 0

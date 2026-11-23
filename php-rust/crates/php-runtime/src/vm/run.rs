@@ -7160,6 +7160,7 @@ impl<'m> super::Vm<'m> {
     /// `ext`, `$$` e il ritorno di `main`.
     #[inline(never)]
     fn ret_slow(&mut self, top: usize, baseline: usize) -> Result<Option<RunExit>, PhpError> {
+        if self.frames[top].func.ret_shape == Func::RS_HINT && self.ret_hint_exact(top) { return self.ret_typed_fused(top, baseline); } // S-194 C1b
         let mut ret = self.frames[top].stack.pop().unwrap_or(Zval::Null);
         let func = self.frames[top].func;
         // WP-53 (Fase 2.1): `ret_shape` folds the hint/by_ref/
