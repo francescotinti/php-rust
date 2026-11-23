@@ -8,3 +8,4 @@
 6. **Guardia di costo post-pin** (REGOLE §6): pin s187 contro stash s186 su `ret-buf-dq-k0`, `mcalls-dq`, `calls-dq`, `prop-dq`; attesa piatta o favorevole (C1/C2 toccano solo funzioni tipizzate); D ≤ −4 ns/iter con 5/5 segni = regressione da dichiarare all'utente.
 7. **Verdetto di tempo = la notte**; fino ad allora WP e ORM in tempo restano quelli di s186.
 8. **Se la catena si ferma**: niente soglie ritoccate; si scrive il gate che ha morso e decide l'utente. Data < 10G al lancio = il lanciatore non parte (veto S-188).
+9. **Prova a secco (23/11 17:07, `out/b-dryrun.out`)**: primo giro 1 gate su 31 morde: `fxmc` (invariante) diverge dallo stash s186 per il solo avviso «Undefined variable $undef2» che la cura 8 aggiunge; il candidato coincide con l'ORACLE su quel file ⇒ `fxmc` passa a bilaterale (argomento del generatore). Secondo giro: 0 su 31.
