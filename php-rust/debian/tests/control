@@ -1,0 +1,7 @@
+Tests: cli
+Restrictions: allow-stderr
+Depends: @, phpr-cli
+
+Tests: server
+Restrictions: allow-stderr
+Depends: @, phpr-server, curl

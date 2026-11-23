@@ -1,0 +1,94 @@
+#!/usr/bin/make -f
+
+# phpr — Debian packaging.
+#
+# The build uses Debian's own cargo (the project pins rustc/cargo 1.98
+# via rust-toolchain.toml, which this suite ships). The path is absolute
+# so the rustup shim (which would try to download the pinned toolchain)
+# is never invoked from inside dpkg-buildpackage.
+
+%:
+	dh $@
+
+# Toolchain contract: by default the build uses Debian's own
+# rustc/cargo WHEN they equal the version pinned in rust-toolchain.toml
+# (the project pin). Debian trixie ships an older rustc (1.85 today)
+# and can never satisfy the pin from apt, so trixie builds (the CI
+# lane, .github/workflows/debian-packages.yml) never rely on Debian's
+# compiler: the lane installs the PINNED toolchain with rustup
+# (https://sh.rustup.rs) and passes the absolute pair below via
+# CARGO/RUSTC.
+#
+# A caller MAY supply both CARGO and RUSTC (absolute paths of a complete
+# toolchain pair, e.g. resolved via rustup) when Debian's compiler is
+# not the pinned one. Both variables
+# must name the SAME toolchain; only one is never honoured.
+CARGO ?= /usr/bin/cargo
+export RUSTC ?= /usr/bin/rustc
+
+# The rustup proxy shims live in ~/.cargo/bin and resolve by CWD
+# toolchain file — the build must never reach them (broken-cache
+# incident: one shim mixed three compiler versions in one build).
+# Both paths above are absolute, so the shims are never needed; strip
+# the directory from PATH to be sure, also under a rustup-provided
+# toolchain.
+export PATH := /usr/bin:/bin:/usr/sbin:/sbin
+
+# Build artifacts NEVER inside the source tree (project rule: no run
+# output in the repo). The cache survives builds; delete it to force a
+# cold build.
+export CARGO_TARGET_DIR ?= $(HOME)/.cache/phpr-deb-target
+
+# onig-sys otherwise builds environment-dependent (system libonig via
+# pkg-config when installed, vendored source otherwise). Pin the
+# vendored static build so the package is identical everywhere and
+# needs neither libonig-dev at build time nor libonig at runtime.
+# zlib is different: byte-parity with PHP mandates the SYSTEM zlib,
+# which stays a dynamic link (zlib1g-dev Build-Dep, zlib1g Depends).
+export RUSTONIG_STATIC_LIBONIG = 1
+
+override_dh_auto_build:
+	$(CARGO) build --release -p php-cli
+	$(CARGO) build --release -p php-server --features axum-server
+
+override_dh_auto_test:
+	# The upstream test battery (phpt corpus, differential suites vs the
+	# reference PHP oracle, harness-based micro benches) needs fixtures and
+	# machinery that live outside the source tree; it is not runnable from
+	# a package build. Installed-package smoke tests run via autopkgtest
+	# (debian/tests/).
+
+override_dh_auto_install:
+	install -D -m 0755 $(CARGO_TARGET_DIR)/release/phpr \
+		debian/phpr-cli/usr/bin/phpr
+	install -D -m 0755 $(CARGO_TARGET_DIR)/release/php-server \
+		debian/phpr-server/usr/bin/php-server
+# systemd unit: compat 13 no longer auto-installs debian/package.service
+# (that ended at compat 10); dh_installsystemd/dh_installinit only add the
+# maintainer-script enable/start snippets for units found in the staging
+# tree, so stage it here.
+	install -D -m 0644 debian/phpr-server.phpr-server.service \
+		debian/phpr-server/usr/lib/systemd/system/phpr-server.service
+# Lintian override files: the canonical binary-package location is a
+# FILE named after the package.
+	install -D -m 0644 debian/phpr-cli.lintian-overrides \
+		debian/phpr-cli/usr/share/lintian/overrides/phpr-cli
+	install -D -m 0644 debian/phpr-server.lintian-overrides \
+		debian/phpr-server/usr/share/lintian/overrides/phpr-server
+
+# The release profile strips debuginfo (cargo default), so the binaries
+# carry a symbol table but no DWARF: automatic -dbgsym packages would
+# contain symbol-only files with no debug value.
+override_dh_strip:
+	dh_strip --no-automatic-dbgsym
+
+# dpkg-shlibdeps resolves SONAMEs through the dpkg database, not the
+# filesystem. On a full build host (Build-Depends: libtidy-dev =>
+# libtidy58 installed) this is automatic. SHLIB_AUX_DIR (optional,
+# environment-supplied) covers hosts that stage the runtime libraries
+# outside the dpkg database: the SONAME -> package mapping itself is
+# declared in debian/shlibs.local either way.
+ifneq (,$(SHLIB_AUX_DIR))
+override_dh_shlibdeps:
+	dh_shlibdeps -l$(SHLIB_AUX_DIR)
+endif

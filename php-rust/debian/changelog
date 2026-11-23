@@ -1,0 +1,16 @@
+phpr (0.1.0) unstable; urgency=medium
+
+  * Initial Debian packaging of the php-rust workspace.
+  * phpr-cli: ships /usr/bin/phpr; provides the Debian virtual packages
+    php-cli and php8.5-cli (plus php-json); conflicts with and replaces
+    php8.5-cli; registers /usr/bin/php via update-alternatives at
+    priority 85. No php.ini handling (the engine reads none), no
+    -v/-m/-i/-l switches yet; documented in README.Debian.
+  * phpr-server: ships /usr/bin/php-server (union build, cli-server +
+    axum-server features) and a hardened systemd service running as
+    www-data, configured via /etc/default/phpr-server. Makes no
+    php-fpm claim (no FastCGI).
+  * Tests: installed-package smoke tests via autopkgtest (CLI + server).
+  * No debian/watch: upstream develops in git without release tarballs.
+
+ -- Francesco Tinti <francesco.tinti@activemind.it>  Sun, 22 Nov 2026 12:00:00 +0100

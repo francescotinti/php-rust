@@ -1,0 +1,68 @@
+Source: phpr
+Section: php
+Priority: optional
+Maintainer: Francesco Tinti <francesco.tinti@activemind.it>
+Standards-Version: 4.7.4
+# Toolchain note (trixie): the rustc/cargo Build-Depends below pin the
+# compiler for suites that ship a matching rustc via apt (the
+# verification host runs Debian forky/sid). Debian trixie ships
+# rustc 1.85 and can never satisfy ">= 1.98": a trixie build (the CI
+# lane in .github/workflows/debian-packages.yml) installs these
+# Build-Depends explicitly MINUS rustc/cargo, installs the pinned
+# toolchain with rustup (https://sh.rustup.rs, fetched with curl) and
+# builds with `dpkg-buildpackage -d`, passing the absolute toolchain
+# pair via CARGO/RUSTC (debian/rules honours both).
+Build-Depends: debhelper-compat (= 13),
+               rustc (>= 1.98),
+               cargo (>= 1.98),
+               cmake,
+               pkgconf,
+               zlib1g-dev,
+               libxml2-dev,
+               libxslt1-dev,
+               libgd-dev,
+               libtidy-dev,
+               libclang-dev
+Rules-Requires-Root: no
+Homepage: https://github.com/francescotinti/php-rust
+Vcs-Git: https://github.com/francescotinti/php-rust.git
+Vcs-Browser: https://github.com/francescotinti/php-rust
+
+Package: phpr-cli
+Architecture: any
+Depends: libgd3, libtidy58, ${shlibs:Depends}, ${misc:Depends}
+Provides: php-cli, php8.5-cli, php-json, php8.5-json
+Conflicts: php8.5-cli
+Replaces: php8.5-cli
+Description: command-line interpreter for PHP scripts (Rust reimplementation)
+ phpr is a from-scratch reimplementation of PHP 8.5.7 in Rust (the
+ php-rust project). It runs unmodified PHP scripts with the same
+ observable behaviour as the reference interpreter, byte-for-byte for
+ everything that lands in PHP strings and output streams.
+ .
+ This package installs the /usr/bin/phpr interpreter and registers it
+ with update-alternatives as /usr/bin/php (priority 85, the 8.5 slot),
+ so tooling that invokes "php" keeps working. It can coexist with the
+ packaged php8.4-cli / php8.6-cli; it conflicts with php8.5-cli, whose
+ package name it also Provides.
+ .
+ Known gaps vs the reference CLI (deliberate, documented in
+ /usr/share/doc/phpr-cli/README.Debian): no php.ini is read, the
+ -v/-m/-i/-l/-w/--ini switches are not implemented, and php8.5-*
+ extension modules from the archive have no effect on phpr.
+
+Package: phpr-server
+Architecture: any
+Depends: libgd3, libtidy58, ${shlibs:Depends}, ${misc:Depends}
+Description: standalone PHP web server (php -S work-alike)
+ php-server is the web SAPI of the php-rust project: a standalone HTTP
+ server (a work-alike of "php -S") that serves a document root and
+ executes PHP requests via the phpr engine, in two modes: the
+ sequential cli-server mode and an Axum-based multi-worker mode
+ (shared FIFO queue, one fresh VM per request).
+ .
+ This is NOT FastCGI: it does not speak the FPM protocol and therefore
+ does not replace php8.5-fpm behind nginx/Apache fastcgi_pass. Front
+ it with any reverse proxy over plain HTTP instead. The service runs
+ as www-data and is configured through /etc/default/phpr-server
+ (host, port, document root, worker count).

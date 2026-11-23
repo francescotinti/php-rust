@@ -1,0 +1,11 @@
+# Packaging build state (dh_* staging trees and generated bookkeeping):
+# regenerable on every dpkg-buildpackage run, never committed.
+/.debhelper/
+/debhelper-build-stamp
+/files
+/*.substvars
+/*.debhelper.log
+/*.debhelper
+/phpr-cli/
+/phpr-server/
+/tmp/

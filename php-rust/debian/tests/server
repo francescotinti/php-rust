@@ -1,0 +1,42 @@
+#!/bin/sh
+# Installed-package smoke test for phpr-server: run the packaged
+# binary in --axum mode against a throwaway document root and fetch
+# a rendered PHP page over HTTP.
+set -e
+
+docroot=$(mktemp -d)
+trap 'rm -rf "$docroot"; [ -n "${srv:-}" ] && kill "$srv" 2>/dev/null || true' EXIT
+printf '<?php echo "hello " . (6*7);' > "$docroot/index.php"
+
+/usr/bin/php-server --axum --host 127.0.0.1 --port 18099 --docroot "$docroot" &
+srv=$!
+
+# Wait for the listener (the server binds before logging readiness).
+i=0
+while ! curl -sf -o /dev/null http://127.0.0.1:18099/ 2>/dev/null; do
+    i=$((i+1))
+    if [ "$i" -gt 50 ]; then
+        echo "FAIL: server never came up" >&2
+        exit 1
+    fi
+    sleep 0.1
+done
+
+out=$(curl -sf http://127.0.0.1:18099/)
+if [ "$out" != "hello 42" ]; then
+    echo "FAIL: rendered page, got '$out'" >&2
+    exit 1
+fi
+
+# Static file from the docroot walk.
+printf 'static' > "$docroot/data.txt"
+out=$(curl -sf http://127.0.0.1:18099/data.txt)
+if [ "$out" != "static" ]; then
+    echo "FAIL: static file, got '$out'" >&2
+    exit 1
+fi
+
+kill "$srv"
+wait "$srv" 2>/dev/null || true
+srv=
+echo "server smoke OK: php page + static file over HTTP"

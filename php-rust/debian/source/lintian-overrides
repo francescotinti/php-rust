@@ -1,0 +1,9 @@
+# lintian (from trixie on) raises license-problem-php-license as an
+# ERROR for any PHP-licensed software that is not the PHP interpreter
+# itself; sid's lintian did not emit it. The PHP License 3.01 is the
+# deliberate, documented licensing decision of this project (AGENTS.md,
+# "Licenza"; debian/copyright keeps the canonical text), so the tag is
+# overridden at source level: the --fail-on error gate of the CI lane
+# (.github/workflows/debian-packages.yml) stays meaningful on every
+# suite without special-casing the build distro.
+license-problem-php-license

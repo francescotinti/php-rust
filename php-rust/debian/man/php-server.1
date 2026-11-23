@@ -1,0 +1,70 @@
+.TH PHP-SERVER 1 "November 2026" "php-rust" "User Commands"
+.SH NAME
+php-server \- standalone PHP web server (php \-S work-alike)
+.SH SYNOPSIS
+.B php-server
+.RI [ options ]
+.RI [ ROUTER.php ]
+.SH DESCRIPTION
+.B php-server
+is the web SAPI of the php-rust project: a standalone HTTP server that
+serves a document root and executes PHP requests through the phpr
+engine. It speaks plain HTTP \(em it is
+.B not
+a FastCGI backend and does not implement the FPM protocol, so it
+cannot replace php*-fpm behind nginx/Apache
+.BR fastcgi_pass .
+Front it with any reverse proxy over HTTP instead.
+.PP
+Two modes are selected at startup:
+.TP
+.B cli-server (default)
+Byte-faithful work-alike of the reference
+.BR "php \-S" :
+one thread, sequential request handling, honours a
+.I ROUTER.php
+router script.
+.TP
+.B \-\-axum
+Axum front end with a pool of N OS worker threads sharing one FIFO
+queue; each request runs on a fresh VM (no state leaks between
+requests). Note: a router script is
+.B not
+honoured in this mode; single-process SIGTERM/SIGINT drains cleanly.
+.SH OPTIONS
+.TP
+.BI \-\-host " HOST"
+Listen address (default: 127.0.0.1).
+.TP
+.BI \-\-port " PORT"
+Listen port (default: 8080).
+.TP
+.BI \-\-docroot " DIR" | " \-t DIR"
+Document root; resolved to its canonical path and made the process
+working directory (default: current directory).
+.TP
+.BI \-\-workers " N"
+Worker count in \-\-axum mode; 0 means one worker per CPU (ignored by
+the cli-server mode).
+.TP
+.B \-\-tier0
+Axum-only diagnostic baseline: static 200 response, no pool, no VM.
+.TP
+.B \-\-help
+Usage summary.
+.SH SYSTEMD
+On Debian the
+.B phpr\-server.service
+unit runs this program in \-\-axum mode as the
+.B www\-data
+user, with settings taken from
+.IR /etc/default/phpr\-server
+(PHPR_HOST, PHPR_PORT, PHPR_DOCROOT, PHPR_WORKERS). Enabled by default
+\(em see
+.BR systemctl (1).
+.SH SEE ALSO
+The CLI interpreter:
+.BR phpr (1).
+.SH AUTHOR
+php-rust by Francesco Tinti. This manual page was written for the
+Debian project.

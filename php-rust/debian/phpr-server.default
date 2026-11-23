@@ -1,0 +1,16 @@
+# Runtime settings for phpr-server.service (see phpr-server(1) and
+# /usr/share/doc/phpr-server/README.Debian). Restart the service after
+# editing: systemctl restart phpr-server
+
+# Listen address. Keep this on loopback if a front proxy terminates TLS.
+PHPR_HOST=127.0.0.1
+
+# Listen port.
+PHPR_PORT=8080
+
+# Document root; resolved to its canonical path and made the working
+# directory of the server process.
+PHPR_DOCROOT=/var/www/html
+
+# Worker thread count (--axum mode). 0 = one worker per CPU.
+PHPR_WORKERS=0

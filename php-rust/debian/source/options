@@ -1,0 +1,13 @@
+# Native tarball hygiene: the git tree carries per-session measurement
+# harnesses (wp*-harness), session diaries, the vet catalogue and local
+# tool configs that are development-history material, not needed to
+# build or run phpr. tar-ignore patterns go straight to tar(1) --exclude
+# (Files-Excluded in debian/copyright has no effect on 3.0 (native)).
+tar-ignore = "wp*-harness*"
+tar-ignore = "sessions*"
+tar-ignore = "gaps*"
+tar-ignore = ".claude*"
+tar-ignore = ".cargo*"
+tar-ignore = "._*"
+tar-ignore = ".DS_Store"
+tar-ignore = "phpr-target-bundle.sh"

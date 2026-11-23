@@ -1,0 +1,14 @@
+# Installed as /usr/share/lintian/overrides/phpr-server (via
+# debian/phpr-server.install). Same justifications as phpr-cli, plus
+# the deliberate /var/www/html default.
+#
+# The default document root /var/www/html is deliberate (see
+# README.Debian and the unit's PHPR_DOCROOT): the server refuses to
+# start with a non-existent docroot, so a package-owned default is
+# needed. This matches long-standing practice of nginx/apache2 in the
+# archive and the FHS exception lintian itself documents for /var/www.
+phpr-server: dir-or-file-in-var-www [var/www/html/]
+# "curl": pure-Rust ureq/rustls crates, no C curl embedded.
+phpr-server: embedded-library curl [usr/bin/php-server]
+# "libyaml": the unsafe-libyaml Rust crate, not the C libyaml.
+phpr-server: embedded-library libyaml [usr/bin/php-server]
