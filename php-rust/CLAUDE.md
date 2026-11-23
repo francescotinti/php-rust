@@ -10,7 +10,8 @@
 - **Vexp** (`mcp__vexp__*`) per il C di php-src e per orientarsi a basso costo di
   token — `get_skeleton`, `expand_vexp_ref`, `run_pipeline`, `index_status`.
 
-grep/cat/Read sui `.rs` via Bash sono **BLOCCATI** dall'hook `serena-vexp-guard.sh`
+grep/cat/sed/head/tail sui `.rs` via Bash sono **BLOCCATI** dall'hook `serena-vexp-guard.sh`
+(il tool Read funziona, ma per navigare ed editare vale Serena)
 (e `git add` di `.rs`: usare `git add -u` + `git commit -F`). Non è un fallback:
 usare Serena. Vale soprattutto per i file grossi
 (`crates/php-runtime/src/vm/mod.rs` ~26k righe, `run.rs` ~7,4k con cap LOC dichiarato).
@@ -59,6 +60,7 @@ emendamenti passano dal sign-off dell'utente e dal handoff.
   **correct-or-absent**).
 
 ## Build & test (regole)
+### Target e ricetta
 - **⚠️ FILESYSTEM — il volume esterno "Extreme Pro" NON supporta la compilazione
   incrementale di Rust** (non sa hard-linkare la cache → cargo stampa "hard linking
   files … failed" e può lasciare binari stale/incoerenti). TUTTI gli artefatti di
@@ -87,6 +89,7 @@ emendamenti passano dal sign-off dell'utente e dal handoff.
   binario): confronti di hash canonica↔canonica. `pin-server.sh` costruisce con
   `--features axum-server`: un `cargo build --release` del workspace sulla canonica cambia
   il feature set del server (non è non-determinismo).
+### Gate: batteria, corpus, LOC, denti
 - Unit: `cargo test --release` → rc dal comando, MAI da pipe; il workspace non deve
   MAI regredire la batteria dichiarata in NEXT_SESSION_WORDPRESS.md (il numero cresce
   coi denti nuovi).
@@ -112,6 +115,7 @@ emendamenti passano dal sign-off dell'utente e dal handoff.
 - Denti di comportamento del PROCESSO (stdout, stdin, segnali): `php-cli/tests/*.rs` con
   `Command::new(env!("CARGO_BIN_EXE_phpr"))` + `env_clear()`, deterministici (SIGKILL via
   `posix_kill`, stdin scritto in una volta), rosso prima e verde dopo il fix.
+### Processi, finestre, commit
 - Script bash generati: mai `$this`/`$nome` PHP in doppi apici sotto `set -u` (muore a run-time,
   `bash -n` non lo vede): `\$this`, con assert nel generatore.
 - **Processi e finestre**: le sonde/monitor vivono in un FILE (`bash -c` inline coi nomi

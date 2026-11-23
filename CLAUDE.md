@@ -13,10 +13,11 @@ Reimplementazione moderna di PHP 8.5 in Rust, guidata dal comportamento osservab
 ## Convenzioni
 
 - Lingua diario: italiano. Lingua codice e commenti: inglese.
-- Branch: `main`. Conventional commits in inglese (`feat:`, `docs:`, `test:`, `chore:`).
+- Branch di lavoro: quella dichiarata in `php-rust/NEXT_SESSION_WORDPRESS.md` (`main` riceve solo
+  merge ff per delibera). Conventional commits in inglese (`feat:`, `docs:`, `test:`, `chore:`).
 - Processo (misura, pin, gate, rotazione): SOLO `php-rust/REGOLE.md`. Commit+push a ogni
   passo, mai con build red. File `.rs` mai nei comandi git: `git add -u` + `git commit -F`.
-- Ogni file di diary dichiara "Generato con assistenza AI (Claude Fable 5)".
+- Ogni file di diary dichiara "Generato con assistenza AI (Claude Fable 5.2)".
 - Le stringhe PHP sono byte (`[u8]`), MAI `String`/UTF-8.
 - Baseline .phpt committata: non deve mai regredire tra step.
 
