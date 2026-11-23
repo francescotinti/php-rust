@@ -14,3 +14,8 @@ pin        istruzioni  3780.393 G (dispersione 0.00 %)  vs pin  +0.00 %  cicli 1
 C1         istruzioni  3765.310 G (dispersione 0.00 %)  vs pin  -0.40 %  cicli 1248.815 G  user 684.10 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
 uploads-guard restore rc=0
 fine rc=0 2026-11-23 11:19:36
+== s194 WordPress (phpunit full) istruzioni ritirate per gamba, 2026-11-23 11:51:46 (direzione sul lavoro, non verdetto di tempo) ==
+binario C2 = /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/out/phpr-c2b sha 3c3afd5ce19355aa
+C2         istruzioni  3754.961 G (dispersione 0.00 %)  vs C2  +0.00 %  cicli 1240.964 G  user 682.41 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
+uploads-guard restore rc=0
+fine rc=0 2026-11-23 12:05:33

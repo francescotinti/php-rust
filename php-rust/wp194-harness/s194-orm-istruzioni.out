@@ -12,3 +12,9 @@ binario C1 = /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harn
 pin        istruzioni   246.948 G (dispersione 0.06 %)  vs pin  +0.00 %  cicli   69.589 G  user  31.83 s  | Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, PHP
 C1         istruzioni   244.121 G (dispersione 0.12 %)  vs pin  -1.14 %  cicli   68.860 G  user  31.30 s  | Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, PHP
 fine rc=0 2026-11-23 10:51:51
+== s194 ORM istruzioni ritirate per gamba, REPS=2, 2026-11-23 11:49:16 (direzione sul lavoro, non verdetto di tempo) ==
+binario C1 = /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/out/phpr-c1e sha 58754f51d1593c89
+binario C2 = /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/out/phpr-c2b sha 3c3afd5ce19355aa
+C1         istruzioni   244.066 G (dispersione 0.02 %)  vs C1  +0.00 %  cicli   69.437 G  user  31.67 s  | Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, PHP
+C2         istruzioni   242.322 G (dispersione 0.04 %)  vs C1  -0.71 %  cicli   68.718 G  user  31.32 s  | Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, PHP
+fine rc=0 2026-11-23 11:51:46
