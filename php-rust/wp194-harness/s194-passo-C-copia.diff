@@ -1,0 +1,10 @@
+2,3c2,3
+< # s194-passo.sh <tag> [base.out] — S-194 D-bis, one measured step: pin-recipe arm build of the current tree, then the primitive probe
+< # on the builtin/string fixtures against the D reading. Outcome: s194-passo-<tag>.out, out/passo-<tag>.done.
+---
+> # s194-passo-C.sh <tag> [base.out] — S-194 package C (declared copy of s194-passo.sh, see gen-passo-C.py), one measured step: pin-recipe arm build of the current tree, then the primitive probe
+> # on the call/return fixtures against the pin reading C0. Outcome: s194-passo-<tag>.out, out/passo-<tag>.done.
+17c17
+< bash "$W/s194-primitive.sh" "$T" --bin "$ARM/release/phpr" --base "${2:-s194-primitive-D.out}" --only noop,add,add_assign,assign_const,call_user0,builtin_strlen,builtin_abs,builtin_count,builtin_pi,builtin_abs_lit,builtin_intdiv,builtin_strcont,builtin_strlen2,str_substr,str_official,preg_match,ns_noop,ns_strlen,ns_strlen_q,ns_count,ns_abs,ns_abs_q,ns_call_user0,call_user2,ns_user2,ns_xfile_user2,ns_xfile_user2_q,x_global_user2,builtin_reset,ns_reset,builtin_pushpop,ns_pushpop,builtin_fexists,builtin_inarray
+---
+> bash "$W/s194-primitive.sh" "$T" --bin "$ARM/release/phpr" --base "${2:-s194-primitive-C0.out}" --only noop,ns_noop,call_user0,call_user2,call_typed,call_method,call_static,call_closure,call_this_inc,new_ctor,ns_user2,ret_typed_only,ret_typed_class,call_typed_class,call_typed_iface,mcall_typed,mcall_typed_class

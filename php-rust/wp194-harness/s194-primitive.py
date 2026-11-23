@@ -108,6 +108,13 @@ X = [
  ("builtin_inarray", "loop", "", "if (in_array(2, $h)) { $s++; }", 1),
  ("ns_inarray", "ns", "namespace App;\n", "if (in_array(2, $h)) { $s++; }", 1),
  ("ns_preg_match", "ns", "namespace App;\n", r"if (preg_match('/(\w+)\s+(\d+)/', $subj, $m)) { $s++; }", 10),
+ # S-194 package C1: declared types on the call path and on the return (s194-criterio-C.md p.13)
+ ("ret_typed_only", "calls", "function rt($a, $b): int { return $a + $b; }\n", "$s = rt($s, 1);", 1),
+ ("ret_typed_class", "calls", "function rc($o): C { return $o; }\n", "$q = rc($o);", 1),
+ ("call_typed_class", "calls", "function fc(C $o, $a) { return $a + 1; }\n", "$s = fc($o, $s);", 1),
+ ("call_typed_iface", "calls", "interface I {} class E implements I {} function fi(I $o, $a) { return $a + 1; }\nfunction fe($a) { static $e; $e ??= new E; return fi($e, $a); }\n", "$s = fe($s);", 1),
+ ("mcall_typed", "calls", "class M { function mt(int $a): int { return $a + 1; } }\nfunction gm() { static $m; return $m ??= new M; }\n", "$s = gm()->mt($s);", 1),
+ ("mcall_typed_class", "calls", "class M { function mc(C $o, $a): C { return $o; } }\nfunction gm() { static $m; return $m ??= new M; }\n", "$q = gm()->mc($o, $s);", 1),
 ]
 TAIL = ' echo $s, "|", strlen((string)$t), "|", $x, "\\n";'
 
