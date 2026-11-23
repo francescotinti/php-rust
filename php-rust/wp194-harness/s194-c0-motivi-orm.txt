@@ -1,0 +1,44 @@
+census-time	call_fast	2093	33	930497
+census-time	call_general	206	0	0
+census-time	mcall	21346424	333538	3647673832
+census-time	mcall_general	7711944	0	0
+census-time	ret_fast	34935006	545860	6784534005
+census-time	ret_slow	17119767	0	0
+census-time	prop	42241846	660029	3842507442
+census-time	str	9673873	151155	597727527
+census-time	arr	16756796	261825	1155924524
+census-time	new	3675174	57425	596916545
+census-time	sweep	21112634	329885	1702536028
+census-time	builtin_lookup	12121094	189393	412668041
+census-time	builtin	12121094	189393	3378418970
+census-time	hostbuiltin	7905390	123522	8246205543
+census-h2	mcall_general	arity_fewer_args	190516
+census-h2	mcall_general	arity_more_args	6335
+census-h2	mcall_general	ic_miss	2856823
+census-h2	mcall_general	not_simple+hint	3884110
+census-h2	mcall_general	not_simple+hint+byref	15623
+census-h2	mcall_general	not_simple+hint+generator	15
+census-h2	mcall_general	not_simple+hint+variadic	47
+census-h2	mcall_general	not_simple+variadic	47939
+census-h2	mcall_general	recv_other	59
+census-h2	note_this	general_chain	11715496
+census-h2	note_this	tail_short_path	300353
+census-h2	ret_slow	dyn_vars	2
+census-h2	ret_slow	ext	1103375
+census-h2	ret_slow	flags0x1+ext	1625
+census-h2	ret_slow	flags0x10	862
+census-h2	ret_slow	flags0x20+ret_cell	505
+census-h2	ret_slow	flags0x4	3363
+census-h2	ret_slow	flags0x40	8193
+census-h2	ret_slow	iters	6809
+census-h2	ret_slow	main	2
+census-h2	ret_slow	ret_cell	456411
+census-h2	ret_slow	ret_cell+ext	8
+census-h2	ret_slow	shape1	14194247
+census-h2	ret_slow	shape1+ext	196311
+census-h2	ret_slow	shape1+flags0x4	976398
+census-h2	ret_slow	shape1+iters	17202
+census-h2	ret_slow	shape1+ret_cell	137189
+census-h2	ret_slow	shape2	4
+census-h2	ret_slow	shape2+flags0x8	17261
+census-h2	this_mcall_general	ic_miss	710477
