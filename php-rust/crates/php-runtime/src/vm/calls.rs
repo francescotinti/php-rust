@@ -646,9 +646,24 @@ impl<'m> Vm<'m> {
     /// unwinds out (its frames dropped) so it propagates through the host builtin.
     /// A value-builtin / generator-function callable pushes no frame — its result
     /// (or `Generator` handle) is taken straight off the caller's stack.
+    #[cold]
+    #[inline(never)]
+    pub(super) fn push_undef_arg_place(&mut self, top: usize, slot: Slot) {
+        // S-194 (`Op::PushRefArg`): the undefined variable becomes a step-less arg place named after its slot.
+        let name = self.frames[top].func.slot_names.get(slot as usize).cloned().unwrap_or_default();
+        let place = ArgPlace { base: ArgPlaceBase::Local(slot), steps: Default::default(), keys: Default::default(), name };
+        self.frames[top].stack.push(Zval::ArgPlace(Rc::new(place)));
+    }
     pub(super) fn call_callable(&mut self, callee: Zval, args: Vec<Zval>) -> Result<Zval, PhpError> {
+        self.host_weak = true; // S-194: the callee's declared parameter types are weak whatever the caller's unit
+        self.call_callable_site(callee, args)
+    }
+    /// [`Self::call_callable`] for `call_user_func[_array]`: Zend compiles those into a direct call, so the calling unit's `strict_types` applies.
+    pub(super) fn call_callable_site(&mut self, callee: Zval, args: Vec<Zval>) -> Result<Zval, PhpError> {
         let baseline = self.frames.len();
-        self.invoke_value(callee, args)?;
+        let entered = self.invoke_value(callee, args);
+        self.host_weak = false;
+        entered?;
         if self.frames.len() == baseline {
             // No frame pushed: a value builtin (or a generator-function callable,
             // whose `Generator` handle is the call's value) left its result on the
@@ -1323,8 +1338,9 @@ impl<'m> Vm<'m> {
         // strict_types governs the CALL SITE's unit (Zend: the caller's file
         // decides argument coercion) — captured before the callee is pushed. A
         // strict main script must not leak strictness into weak vendor units.
+        // S-194: a callee entered by a host builtin (`array_map`, `usort`…) is always weak, like a call from a Zend internal function.
         let caller_strict =
-            self.frames.last().map(|f| f.module.strict).unwrap_or(self.module.strict);
+            !self.host_weak && self.frames.last().map(|f| f.module.strict && f.func.file.as_ref() != b"prelude").unwrap_or(self.module.strict);
         // Push the callee frame, then coerce/check each by-value argument against
         // its declared hint *within* that frame (step 14 / 16): PHP throws an
         // argument TypeError inside the function, so its stack trace shows this call
@@ -1348,19 +1364,25 @@ impl<'m> Vm<'m> {
                 if Some(i as Slot) == func.variadic_slot {
                     continue;
                 }
-                if func.param_by_ref.get(i).copied().unwrap_or(false) {
-                    continue;
-                }
                 let Some(hint) = func.param_hints.get(i).and_then(|h| h.as_ref()) else {
                     continue;
                 };
                 if matches!(self.frames[top].slots[i], Zval::Undef) {
                     continue;
                 }
-                let val = self.frames[top].slots[i].clone();
+                // S-194: a typed by-reference parameter checks the REFERENT and writes the coerced value through the reference (Zend's zend_verify_arg_type on the dereferenced zval).
+                let by_ref = func.param_by_ref.get(i).copied().unwrap_or(false);
+                let val = match (&self.frames[top].slots[i], by_ref) {
+                    (Zval::Ref(cell), true) => cell.borrow().clone(),
+                    (_, true) => continue,
+                    (v, false) => v.clone(),
+                };
                 match self.coerce_or_check_hint(val, &hint, strict) {
                     // The frame stays pushed on the error path so the unwind's trace
                     // capture includes this call; unwind then pops it.
+                    Ok(c) if by_ref => {
+                        if let Zval::Ref(cell) = &self.frames[top].slots[i] { *cell.borrow_mut() = c; }
+                    }
                     Ok(c) => self.frames[top].slots[i] = c,
                     Err(given) => {
                         return Err(self.arg_type_error(
@@ -1562,10 +1584,20 @@ impl<'m> Vm<'m> {
     /// statement's site (PHP reports the *return* line, not the declaration), which
     /// `__toString` renders as the standard "… in <file>:<line>" suffix.
     pub(super) fn return_type_error(&self, f: &Func, hint: &TypeHint, given: &str) -> PhpError {
+        // S-194: `static` is reported as the called class (`?P2`, `P|int`), like Zend.
+        let called = self.frames.last().and_then(|fr| fr.static_class).and_then(|c| self.classes.get(c)).map(|c| c.name.to_vec());
+        let named = |k: &HintKind| match (k, &called) {
+            (HintKind::Class(n), Some(c)) if &n[..] == b"static" => HintKind::Class(c[..].into()),
+            _ => k.clone(),
+        };
+        let kind = match &hint.kind {
+            HintKind::Union(ms) => HintKind::Union(ms.iter().map(named).collect()),
+            k => named(k),
+        };
         PhpError::TypeError(format!(
             "{}(): Return value must be of type {}, {} returned",
             self.qualified_callee_name(f),
-            hint.display_name(),
+            TypeHint { kind, nullable: hint.nullable }.display_name(),
             given,
         ))
     }

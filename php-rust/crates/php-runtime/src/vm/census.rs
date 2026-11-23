@@ -13,7 +13,7 @@ use crate::bytecode::Op;
 use crate::hir::BinOp;
 use php_types::Zval;
 
-pub const N_OPS: usize = 203;
+pub const N_OPS: usize = 204;
 
 pub const OP_NAMES: [&str; N_OPS] = [
     "PushConst", "Pop", "Dup", "LoadSlot", "LoadVar", "PushUndef", "StoreSlot", "Swap",
@@ -46,7 +46,7 @@ pub const OP_NAMES: [&str; N_OPS] = [
     "ConcatNConst",
     "BinaryAdd",
     "PropDimGetConst",
-    "Strlen", "Count", "CallNsBuiltin",
+    "Strlen", "Count", "CallNsBuiltin", "PushRefArg",
 ];
 
 pub fn op_index(op: &Op) -> usize {
@@ -276,6 +276,7 @@ pub fn op_index(op: &Op) -> usize {
         Op::Strlen { .. } => 200,
         Op::Count { .. } => 201,
         Op::CallNsBuiltin { .. } => 202, // S-194 N
+        Op::PushRefArg(..) => 203, // S-194 p.17
     }
 }
 
@@ -1007,9 +1008,9 @@ mod tests {
         // EMENDAMENTO DICHIARATO S-194: Strlen/Count (deroga utente alla regola
         // «niente istruzioni nuove») chiudono ora la tabella, in coda: ogni
         // distanza dal fondo cresce di 2; pacchetto N: `CallNsBuiltin` in coda, +1
-        // (il `- 3` esplicito qui sotto).
-        assert_eq!((OP_NAMES[N_OPS - 3], OP_NAMES[N_OPS - 2], OP_NAMES[N_OPS - 1]), ("Strlen", "Count", "CallNsBuiltin"));
-        assert_eq!(op_index(&Op::ConcatAssignSlot(0)), N_OPS - 3 - 23);
+        // (il `- 3` esplicito qui sotto). S-194 p.17: `PushRefArg` in coda, +1 (ora `- 4`).
+        assert_eq!((OP_NAMES[N_OPS - 4], OP_NAMES[N_OPS - 3], OP_NAMES[N_OPS - 2], OP_NAMES[N_OPS - 1]), ("Strlen", "Count", "CallNsBuiltin", "PushRefArg"));
+        assert_eq!(op_index(&Op::ConcatAssignSlot(0)), N_OPS - 4 - 23);
         assert_eq!(
             op_index(&Op::CmpJmpSC {
                 op: crate::hir::BinOp::Lt,
@@ -1018,33 +1019,33 @@ mod tests {
                 addr: 0,
                 when: true
             }),
-            N_OPS - 3 - 16
+            N_OPS - 4 - 16
         );
-        assert_eq!(OP_NAMES[N_OPS - 3 - 16], "CmpJmpSC");
+        assert_eq!(OP_NAMES[N_OPS - 4 - 16], "CmpJmpSC");
         assert_eq!(
             op_index(&Op::BinarySTDst { op: crate::hir::BinOp::Add, l: 0, dst: 0 }),
-            N_OPS - 3 - 15
+            N_OPS - 4 - 15
         );
-        assert_eq!(OP_NAMES[N_OPS - 3 - 15], "BinarySTDst");
+        assert_eq!(OP_NAMES[N_OPS - 4 - 15], "BinarySTDst");
         assert_eq!(
             op_index(&Op::BinaryTC { op: crate::hir::BinOp::Add, cidx: 0 }),
-            N_OPS - 3 - 14
+            N_OPS - 4 - 14
         );
-        assert_eq!(OP_NAMES[N_OPS - 3 - 14], "BinaryTC");
+        assert_eq!(OP_NAMES[N_OPS - 4 - 14], "BinaryTC");
         assert_eq!(
             op_index(&Op::IncDecSlotJmp { slot: 0, inc: true, addr: 0 }),
-            N_OPS - 3 - 11
+            N_OPS - 4 - 11
         );
-        assert_eq!(OP_NAMES[N_OPS - 3 - 11], "IncDecSlotJmp");
-        assert_eq!(op_index(&Op::StringifySlot { slot: 0 }), N_OPS - 3 - 8);
-        assert_eq!(OP_NAMES[N_OPS - 3 - 8], "StringifySlot");
-        assert_eq!(op_index(&Op::LoadVarPushConst { slot: 0, cidx: 0 }), N_OPS - 3 - 4);
-        assert_eq!(OP_NAMES[N_OPS - 3 - 4], "LoadVarPushConst");
-        assert_eq!(op_index(&Op::ConcatNConst { n: 0, cidx: 0 }), N_OPS - 3 - 3);
-        assert_eq!(OP_NAMES[N_OPS - 3 - 3], "ConcatNConst");
-        assert_eq!(op_index(&Op::BinaryAdd), N_OPS - 3 - 2);
-        assert_eq!(OP_NAMES[N_OPS - 3 - 2], "BinaryAdd");
-        assert_eq!(OP_NAMES[N_OPS - 3 - 1], "PropDimGetConst");
+        assert_eq!(OP_NAMES[N_OPS - 4 - 11], "IncDecSlotJmp");
+        assert_eq!(op_index(&Op::StringifySlot { slot: 0 }), N_OPS - 4 - 8);
+        assert_eq!(OP_NAMES[N_OPS - 4 - 8], "StringifySlot");
+        assert_eq!(op_index(&Op::LoadVarPushConst { slot: 0, cidx: 0 }), N_OPS - 4 - 4);
+        assert_eq!(OP_NAMES[N_OPS - 4 - 4], "LoadVarPushConst");
+        assert_eq!(op_index(&Op::ConcatNConst { n: 0, cidx: 0 }), N_OPS - 4 - 3);
+        assert_eq!(OP_NAMES[N_OPS - 4 - 3], "ConcatNConst");
+        assert_eq!(op_index(&Op::BinaryAdd), N_OPS - 4 - 2);
+        assert_eq!(OP_NAMES[N_OPS - 4 - 2], "BinaryAdd");
+        assert_eq!(OP_NAMES[N_OPS - 4 - 1], "PropDimGetConst");
     }
 
     #[test]

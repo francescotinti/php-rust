@@ -465,7 +465,7 @@ pub enum Op {
     /// value into a by-reference parameter's callee slot, so the callee writes
     /// through to the caller's variable. Emitted only for a by-ref argument
     /// position whose argument is a plain variable.
-    PushRef(Slot),
+    PushRef(Slot), PushRefArg(Slot), // S-194: `PushRefArg` = a plain-variable argument of a dynamic call — an UNDEFINED variable defers as a step-less arg place (a by-value parameter warns)
 
     /// `[keys…] -> [ref]` — REF-4. Navigate a place (a local/global/`$this` base
     /// plus `Index` steps; the keys are on the stack in source order), promoting

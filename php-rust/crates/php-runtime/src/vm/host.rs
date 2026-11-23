@@ -1905,7 +1905,7 @@ impl<'m> super::Vm<'m> {
         let callee = callee.deref_clone();
         // `call_user_func` always passes by value, so every by-ref parameter warns.
         self.warn_trampoline_byref(&callee, argv.len(), &[])?;
-        self.call_callable(callee, argv)
+        self.call_callable_site(callee, argv)
     }
     /// `call_user_func_array($callable, $args)`: the second argument is an array
     /// whose *values* become the positional arguments (string-keyed named
@@ -1940,7 +1940,7 @@ impl<'m> super::Vm<'m> {
             }
         };
         self.warn_trampoline_byref(&callee, argv.len(), &arg_is_ref)?;
-        self.call_callable(callee, argv)
+        self.call_callable_site(callee, argv)
     }
     /// `array_map($callback, ...$arrays)` (Session C): a single array preserves
     /// keys; several arrays re-index 0..max and pass one element from each per row

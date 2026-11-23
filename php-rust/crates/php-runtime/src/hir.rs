@@ -639,12 +639,14 @@ impl TypeHint {
             HintKind::Scalar(ScalarType::Bool) => "bool".into(),
             HintKind::Array => "array".into(),
             HintKind::Callable => "callable".into(),
-            HintKind::Iterable => "iterable".into(),
+            HintKind::Iterable => "Traversable|array".into(),
             HintKind::Object => "object".into(),
             HintKind::Class(name) => String::from_utf8_lossy(name).into_owned().into(),
             HintKind::Union(_) => unreachable!("handled above"),
         };
-        if self.nullable {
+        if self.nullable && matches!(self.kind, HintKind::Iterable) {
+            format!("{base}|null")
+        } else if self.nullable {
             format!("?{base}")
         } else {
             base.into_owned()

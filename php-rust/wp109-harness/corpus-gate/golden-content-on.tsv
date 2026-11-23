@@ -207,7 +207,7 @@ fb681851d1530b78825cb10ed03259693af794b77f0daebc07a35b1e90e50ae1	/Volumes/Extrem
 c24ef3cfb3de7feacd570ddb0b753dcbcf18df04e2599eb4297f8168fdb06ae7	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/bug72038.phpt
 3c1535071cb955469c71c6ba9b1ad3c8077d24b55ecce148cdeda6147420833b	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/bug72101.phpt
 bd4be905905b740255113e0a854bfff72811f980d6bcbb6de418648e6bd7bd48	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/bug72107.phpt
-f7509608806a1fe9783bb5892600f77d9a499da7e4c93ea95ece162a7ce37fe6	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/bug72347.phpt
+cbca83e12dbb2799baa8bf8875d11fdef6f0afa16b17da1db0fffc5953ad7ea6	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/bug72347.phpt
 40c3921d5ab266c516dcbc1489869c2dda1d1954ce6bb57cca25042dc4d97625	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/bug72543_2.phpt
 4aca057a2178620df6edfa1f1af2e3574f30a6e17b23c7d00f72da6b1fd5f2c0	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/bug72598.phpt
 c90a9f8e2ef6842b62675af8706b6776250cd0fb9cda9734bf4fdf21c90bb416	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/bug72598_2.phpt
@@ -1092,7 +1092,6 @@ d9f0b496c195c54bbfc3784612f1266c45522884a5648084c74e4f17d9ebb67a	/Volumes/Extrem
 4b33fc987be36b62a6cf1122c2dc4c32d07d4b397571b885178d895f45ac35b8	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/readonly_props/readonly_method_trait.phpt
 ba687625cf050b41413da6d1a6f25c4449044a13ac74e79cb479fdeb78e16248	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/readonly_props/readonly_modification.phpt
 636658174bcaa7c31a6ddd6d7eb615df2510122898856941f1ea1f359b2d75b9	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/recursive_array_comparison.phpt
-400a5331dc5047c279340d4d1859c5cd002a4db1246ed2e487879bafbcd42f52	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/recv_init_ref_type.phpt
 9ff52ddf16f8b93ab520d229802f0de57f1157223d1fdcba37f50fa02209fd73	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/register_shutdown_function_refcount.phpt
 f02db8e79ee36e653f146d36f5f445c4166cb04c7a689e5e5930d1520d4987a8	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/remove_predecessor_of_pi_node.phpt
 fd7cff17b5a793ffda4cb940deae52264089c7591ab73d547ac7131ffeec88f7	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/require_parse_exception.phpt
@@ -1270,10 +1269,9 @@ d5bf42fff0c5575aadaea3f8765721b1e7290bbc02c0ac014ae2fdb3ab818e43	/Volumes/Extrem
 59efa5aa4cea5d37f2d58efb900e38f9938390ea7d3adde1e16edd64516d4658	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_declarations/intersection_types/missing_interface_intersection_type.phpt
 6827b1ba3fadf45aa6aeaacd8f4367ee1f9f8c7ed682e2dce38b9295e6c93be4	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_declarations/intersection_types/parameter.phpt
 416202819ddbe6a25ab2959944006ebdf5d5fe9edbf657c84dd57d8dc2db8c59	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_declarations/intersection_types/typed_reference.phpt
-68345756e0ee532aa93cbb617fb55836d32ecf18ef2e3f18e0f75eb0fc7df5f8	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_declarations/iterable/iterable_001.phpt
+c294d76a9248cdc03a98ba361153cd209d5a1174466b67595dba02d350445d56	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_declarations/iterable/iterable_001.phpt
 93194525f72a4f09182106aacfb816aa82d8fae5a9a9880f169bb7ea56374b22	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_declarations/iterable/iterable_002.phpt
-ce27f5318cf1bc00b2cd4ddb3d0f6ef8f722c9f3b397d24429552ea25a965bdc	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_declarations/iterable/iterable_003.phpt
-ca88b6d688a689e8a3abb92c8063412eea2582525e50cd08b773a4c72e89551e	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_declarations/iterable/or_null.phpt
+4453a21021478f0b031327b118dfaa5f222cd21cf1af5491ea95a8ecc085309b	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_declarations/iterable/or_null.phpt
 1c70679dcc21b4ed40e882a29bea41aa5334ba6bd8cae868137a226b359e45be	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_declarations/literal_types/false_no_coercion.phpt
 5accaacec16264c0bd3936449d4ff9970ceb6991a1c84b5cb2cd1d608283b3f5	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_declarations/literal_types/false_no_coercion_on_overload.phpt
 208f55234962b6a2b0f2ef3b253434ff3b67af4006a8cfc37519e9541e63bd5d	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_declarations/literal_types/false_standalone_implicit_nullability.phpt
@@ -1283,13 +1281,11 @@ a0a86b39803bd5bd6321d57c49722eb1080d620430258045510ee4ef98080717	/Volumes/Extrem
 9b5a68cbe946a037bbdf5d75eec563849a2758131535744c19596d4f873020db	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_declarations/mixed/validation/mixed_return_strict_error.phpt
 9b5a68cbe946a037bbdf5d75eec563849a2758131535744c19596d4f873020db	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_declarations/mixed/validation/mixed_return_weak_error.phpt
 1966a48e5b5a8272bc78bfe854d71619961cda262afd52da2bda4c2d11720298	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_declarations/nullable_null.phpt
-90f3cdbe7a09abddf5d1602f23d0788019ac4bcac692cf9f1c24530dbc21cff5	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_declarations/scalar_basic.phpt
+f2510931d6a3e805cbbcf365eec7d806c2e45613a481a3a79d67d8e42ce01df4	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_declarations/scalar_basic.phpt
 489e405bfdcc50ecbb0e3055e7242c99be253d50d69cd21480ebca2d03754d15	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_declarations/scalar_constant_defaults.phpt
 ef0d4c6860f48b48ef1c00936a4873cfcae48af42e300c3c4ac29cbf95ca675c	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_declarations/scalar_constant_defaults_error.phpt
-3e41d2aaebc4256a832af7c9ddcd287ffeb3bb733291984d71f1d66667580880	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_declarations/scalar_strict_basic.phpt
-4f6d98a93452d325d4a1dec6e5cbb06ec097547e9dfcccd37110a802488911d2	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_declarations/scalar_weak_reference.phpt
-6ba85c598547992763fd5fe34fe72602190de33f59feb570beff8e7e0a725a0b	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_declarations/static_type_return.phpt
-bea38c4f90c2c019f2915fd18f64018c9594d46c15abca4511c8822798e6e1a9	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_declarations/static_type_trait.phpt
+c770c96a1fd66f4dea2d35c29b9a3956cfed2b41d906815ddb56f97866b531ca	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_declarations/scalar_strict_basic.phpt
+5afc32e6100b5c1fdbabeed1719d5927c1dfe03c0d0e1985776965ac338f63a9	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_declarations/static_type_trait.phpt
 08aaa564b868cfe87f67bc8e97534fefdb0b8aa19af61aeb005f1169fa36f5e7	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_declarations/strict_call_weak.phpt
 b02cf6aa2d50f94c6ebe7bda1a638045915f1df73a9f4e2e9bae648aebb9fd30	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_declarations/strict_call_weak_explicit.phpt
 497e512801501b1d76a7a20b8618ef9e9087336527086cb0a15e034dfca75b33	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_declarations/typed_class_constants_ast_print.phpt
@@ -1364,7 +1360,7 @@ c6a142981f737100a80b3af98db824a4058514913894f9ec6966238f6aba16de	/Volumes/Extrem
 83db0e1b134b543e8855f653598d18538bc79e3e784d30e946e4691fad0fec94	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/typehints/bug43332_1.phpt
 0fc70e4e6a78cd788250171501c54225d133993cee85decaf0c07cfff28dcab2	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/typehints/bug43332_2.phpt
 a6171b7bd6fd20c626bd5aad04447afd511c80c65d4ffaf76d6a40758d9a8639	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/typehints/bug62441.phpt
-63d5f54a4ac746f28a44cb0bddb1cb35ef60606e460a2a0d4f7e6d2e71f1d26e	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/typehints/or_null.phpt
+98c63343578b566865883096ce5f159cb1f453d0b7389d75b0d496afa700d894	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/typehints/or_null.phpt
 1fc9b18e16fe2844e8f67db18371627ede3683dc9dc11512129215720489bbf0	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/undef_index_to_exception.phpt
 c568b5f747849cbcc63960e866d2780b8d8bf91a23125c1b927bfb92483e8ce2	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/undef_var_in_verify_return.phpt
 2ca46ea7e661f1c7178f1e09d42553ec50a313a8ab296245c11492b329b902f9	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/undefined_multidimensional_array.phpt

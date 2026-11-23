@@ -3559,6 +3559,7 @@ fn lower_hint(lo: &Lowerer, hint: &Hint) -> Option<TypeHint> {
         Hint::Callable(_) => HintKind::Callable,
         Hint::Iterable(_) => HintKind::Iterable,
         Hint::Object(_) => HintKind::Object,
+        Hint::Static(_) => HintKind::Class(b"static"[..].into()), // S-194: checked against the called class at return
         // A class / interface name → an `instanceof` check at the binder. A name
         // that is actually a reserved type keyword (a *qualified* `\int`, `\bool`,
         // …, which PHP rejects as "must be unqualified") is left unenforced rather
@@ -3592,8 +3593,7 @@ fn lower_hint(lo: &Lowerer, hint: &Hint) -> Option<TypeHint> {
                 _ => Some(TypeHint { kind: HintKind::Union(members), nullable }),
             };
         }
-        // Intersection / `self`/`parent`/`static` / `mixed` / `void` /
-        // literal types stay unenforced (lowered to `None`) for now.
+        // Intersection / `self`/`parent` / `mixed` / `void` / literal types stay unenforced (lowered to `None`) for now.
         _ => return None,
     };
     Some(TypeHint { kind, nullable: false })

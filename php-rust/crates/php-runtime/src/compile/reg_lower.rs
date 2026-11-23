@@ -126,7 +126,7 @@ fn visit_addrs(op: &mut Op, f: &mut impl FnMut(&mut Addr)) {
         // (nasce a shrink, DOPO questo pass; classificato per il dente).
         | Op::PropDimGetConst { .. }
         | Op::BindRef { .. } | Op::StaticStore { .. } | Op::StaticAlias { .. }
-        | Op::PushRef { .. } | Op::MakeRef { .. } | Op::PushArgPlace { .. }
+        | Op::PushRef { .. } | Op::PushRefArg { .. } | Op::MakeRef { .. } | Op::PushArgPlace { .. }
         | Op::BindRefTo { .. } | Op::BindRefToChecked { .. } | Op::DerefTop { .. }
         | Op::MakeClosure { .. } | Op::MakeFcc { .. } | Op::CallValue { .. }
         | Op::CallNsFallback { .. } | Op::CallNsBuiltin { .. } | Op::CallValueArgs { .. }
@@ -373,7 +373,7 @@ fn bin_op_of(op: &Op) -> Option<BinOp> {
         | Op::LoadGlobals { .. } | Op::GlobalsDynAssign { .. }
         | Op::FillDefault { .. } | Op::CoerceParam { .. } | Op::CheckArity { .. }
         | Op::IncDecSlot { .. } | Op::BindRef { .. } | Op::StaticGuard { .. }
-        | Op::StaticStore { .. } | Op::StaticAlias { .. } | Op::PushRef { .. }
+        | Op::StaticStore { .. } | Op::StaticAlias { .. } | Op::PushRef { .. } | Op::PushRefArg { .. }
         | Op::MakeRef { .. } | Op::PushArgPlace { .. } | Op::BindRefTo { .. }
         | Op::BindRefToChecked { .. } | Op::DerefTop { .. }
         | Op::MakeClosure { .. } | Op::MakeFcc { .. } | Op::CallValue { .. }

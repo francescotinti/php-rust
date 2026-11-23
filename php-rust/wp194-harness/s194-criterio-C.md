@@ -70,3 +70,15 @@
     **Forma finale di C2**: `Call` — l'ammissione sta in testa al ramo generale (`call_typed_fast`, la condizione calda non è toccata); `MethodCall` — `methodcall_fast` ammette anche la funzione «solo tipi» ad arità esatta: senza posti differiti e con argomenti già del tipo giusto entra dal ramo in-place, altrimenti dal ramo che chiama `enter_callee` (che controlla e converte come prima). La prima forma (predicato sugli argomenti nell'ammissione) non entrava mai per via dei posti differiti e costava +20…+60 istruzioni: tolta.
     **Accettazione**: la prima corsa (`s194C2`) è ROSSA per il solo dente delle righe (`bytecode.rs` 2311 > tetto 2306: cinque righe di commento del campo nuovo); corpus ×2, gate di giorno e sentinelle verdi. Corretto a saldo zero (campo e nota su una riga) e rifatta per intero (`s194C2b`).
     **Reperto 8 del dente (preesistente)**: metodo tipizzato chiamato con una variabile non definita: PHP emette «Warning: Undefined variable» prima del TypeError, phpr no.
+
+17. **Cura delle divergenze dal PHP ufficiale trovate dai denti (delibera utente 23/11: «metti a posto gli errori, poi promuovi»).** Criterio scritto prima del codice: ogni divergenza ha un caso che è ROSSO sul pin s186 e VERDE dopo, con l'uscita dell'oracle come atteso (`crates/php-cli/tests/s194_tipi_dichiarati.rs`, sei test); `s194-c-comportamento.php` passa da «braccio identico al pin» a «braccio identico all'ORACLE»; nessuna fixture della sonda oltre +1 %; accettazione rc=0; conto sul carico vero.
+    | # | Divergenza | Cura |
+    |---|---|---|
+    | 1 | Tipo scalare ricevuto un oggetto: «object given» | il messaggio porta il nome della classe |
+    | 2 | `iterable` nei messaggi | «Traversable\|array» (`\|null` se annullabile) |
+    | 3 | Parametro by-ref tipizzato non controllato | `enter_callee` controlla il REFERENTE e scrive il valore convertito attraverso il riferimento |
+    | 4 | Tipo di ritorno `static` non applicato | abbassato a classe «static», verificata contro la classe chiamata del frame; il messaggio porta la classe chiamata |
+    | 5 | Callback chiamata da una funzione interna in un file `strict_types` trattata in modo stretto | `call_callable` segna la chiamata come debole; `call_user_func[_array]` resta stretta (come Zend, che la compila in chiamata diretta); debole anche chi è chiamato dal prelude (Reflection) |
+    | 6 | Riga della Deprecated di conversione al ritorno | flush alla riga del `return` |
+    | 8 | Variabile non definita passata a un METODO: nessun avviso (era più larga del reperto: ogni chiamata di metodo, non solo tipizzata) | l'argomento-variabile di una chiamata dinamica è un posto senza passi: definito = riferimento come prima, non definito = lettura differita che avvisa per un parametro by-value |
+    - **Non curate, per nome**: (7) ordine dei distruttori a fine script con globali tenuti per riferimento — sul file dei denti ora coincide con l'oracle, ma NON per una cura: dipende dallo stato del GC (sparisce togliendo righe qualsiasi), resta aperta; `__call`/`__callStatic` con variabile non definita non avvisano; `iterator_apply` e `ArrayObject::uasort` mancano.

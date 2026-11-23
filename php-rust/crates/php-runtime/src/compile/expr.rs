@@ -1844,7 +1844,7 @@ impl<'a> super::FnCompiler<'a> {
                     return Err(CompileError::Unsupported("argument unpacking (spread)".into()));
                 }
                 ExprKind::Var(slot) => {
-                    self.emit(Op::PushRef(*slot));
+                    self.emit(Op::PushRefArg(*slot)); // S-194: the reference when the variable is defined, a deferred step-less place when it is not (the R-fetch warns)
                 }
                 _ => {
                     // A *place* argument (`$a['k']`, `$_SESSION[$k]`, `$this->p`,

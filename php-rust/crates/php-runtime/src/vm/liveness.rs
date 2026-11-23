@@ -199,7 +199,7 @@ fn effect(op: &Op, park_targets: &[usize]) -> Effect {
             e.fall = false;
         }
         Op::IterInitRef(s) => e.uses.push(*s),
-        Op::PushRef(s) => e.uses.push(*s),
+        Op::PushRef(s) | Op::PushRefArg(s) => e.uses.push(*s),
         Op::MakeClosure { captures, .. } => {
             for c in captures.iter() {
                 e.uses.push(c.src);
@@ -560,7 +560,7 @@ fn renounce(func: &Func) -> (bool, Bits) {
                     whole = true;
                 }
             }
-            Op::PushRef(s) | Op::IterInitRef(s) => mark(*s, &mut slots),
+            Op::PushRef(s) | Op::PushRefArg(s) | Op::IterInitRef(s) => mark(*s, &mut slots),
             Op::StaticAlias { slot, .. } => mark(*slot, &mut slots),
             Op::IterNextRef { value, key, .. } => {
                 mark(*value, &mut slots);

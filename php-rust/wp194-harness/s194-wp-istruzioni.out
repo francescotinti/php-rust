@@ -19,3 +19,5 @@ binario C2 = /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harn
 C2         istruzioni  3754.961 G (dispersione 0.00 %)  vs C2  +0.00 %  cicli 1240.964 G  user 682.41 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
 uploads-guard restore rc=0
 fine rc=0 2026-11-23 12:05:33
+== s194 WordPress (phpunit full) istruzioni ritirate per gamba, 2026-11-23 16:52:51 (direzione sul lavoro, non verdetto di tempo) ==
+binario E = /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/out/phpr-e3 sha 0c3b24e8f55a4dac

@@ -1092,7 +1092,6 @@
 /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/readonly_props/readonly_method_trait.phpt
 /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/readonly_props/readonly_modification.phpt
 /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/recursive_array_comparison.phpt
-/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/recv_init_ref_type.phpt
 /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/register_shutdown_function_refcount.phpt
 /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/remove_predecessor_of_pi_node.phpt
 /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/require_parse_exception.phpt
@@ -1275,7 +1274,6 @@
 /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_declarations/intersection_types/typed_reference.phpt
 /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_declarations/iterable/iterable_001.phpt
 /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_declarations/iterable/iterable_002.phpt
-/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_declarations/iterable/iterable_003.phpt
 /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_declarations/iterable/or_null.phpt
 /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_declarations/literal_types/false_no_coercion.phpt
 /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_declarations/literal_types/false_no_coercion_on_overload.phpt
@@ -1290,8 +1288,6 @@
 /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_declarations/scalar_constant_defaults.phpt
 /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_declarations/scalar_constant_defaults_error.phpt
 /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_declarations/scalar_strict_basic.phpt
-/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_declarations/scalar_weak_reference.phpt
-/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_declarations/static_type_return.phpt
 /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_declarations/static_type_trait.phpt
 /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_declarations/strict_call_weak.phpt
 /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_declarations/strict_call_weak_explicit.phpt

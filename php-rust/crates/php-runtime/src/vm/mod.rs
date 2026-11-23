@@ -779,6 +779,7 @@ pub fn vm_new<'m>(
         gc_buf: Vec::new(),
         gc_buf_head: 0,
         gc_probe_mark: 0,
+        host_weak: false,
         magic_memo: Default::default(),
         gc_cycle_roots: HashSet::default(),
         gc_ctr_roots: Vec::new(),
@@ -3322,6 +3323,7 @@ pub struct Vm<'m> {
     gc_buf_head: usize,
     /// S-190 cursor: buffer length at the last Ret probe that scanned (`gc_probe`).
     gc_probe_mark: usize,
+    host_weak: bool, // S-194: the next entered callee is called by a host builtin (`array_map`…): weak argument typing
     magic_memo: std::cell::RefCell<Vec<gc_probe::MagicMemo>>, // S-192: per-class __destruct/__construct lookups
     /// Possible roots of *cyclic* garbage (mirrors Zend's root buffer feeding
     /// `gc_collect_cycles`): a candidate the sweep popped that was not
@@ -11266,13 +11268,9 @@ impl<'m> Vm<'m> {
         // S-140 census leva HC1: conta il check e la specie (solo probe build).
         #[cfg(feature = "zval-census")]
         zvalcensus::note_hint_check(&value);
-        // S-140 leva HC1 «hint-check senza clone»: i rami check-only
-        // ispezionano il valore PER RIFERIMENTO — il clone che moriva a fine
-        // check (Rc++/-- su Object/Array/Str, due volte per chiamata
-        // tipizzata: parametro e return) resta SOLO per `Zval::Ref`, dove
-        // serve la copia del contenuto della cella (tenere il borrow della
-        // RefCell attraverso i metodi `&mut self` rischierebbe un re-borrow
-        // della stessa cella).
+        // S-140 leva HC1 «hint-check senza clone»: i rami check-only ispezionano il valore PER RIFERIMENTO;
+        // il clone resta SOLO per `Zval::Ref` (il borrow della cella attraverso `&mut self` rischierebbe
+        // un re-borrow della stessa cella).
         let deref_tmp;
         let v: &Zval = match &value {
             Zval::Ref(cell) => {
@@ -11301,6 +11299,7 @@ impl<'m> Vm<'m> {
                         return Ok(Zval::Str(s));
                     }
                 }
+                if matches!(v, Zval::Object(_) | Zval::Closure(_) | Zval::Generator(_)) { return Err(v.type_name_for_error()); } // S-194: PHP names the class
                 coerce_to_hint(value, hint, &mut self.diags, strict).map_err(str::to_string)
             }
             HintKind::Array => match v {
@@ -11513,6 +11512,7 @@ impl<'m> Vm<'m> {
             Zval::Object(o) => {
                 // Is-a, implemented interfaces included (mirrors `instanceof`). S-194 C1c: the exact class answers before lowercase + table.
                 if self.classes.get(o.borrow().class_id as usize).is_some_and(|c| c.name.eq_ignore_ascii_case(name)) { return true; }
+                if name == b"static" { return self.frames.last().and_then(|f| f.static_class).is_some_and(|sc| self.instance_of(o.borrow().class_id as usize, sc)); } // S-194: the called class
                 let (mut buf, mut heap) = ([0u8; 128], Vec::new()); let lc = lc_name(name, &mut buf, &mut heap);
                 matches!(self.class_index.get(&lc[..]),
                     Some(&target) if self.instance_of(o.borrow().class_id as usize, target))
@@ -11878,7 +11878,7 @@ impl<'m> Vm<'m> {
         for (i, a) in args.iter_mut().enumerate() {
             let Zval::ArgPlace(p) = a else { continue };
             let p = Rc::clone(p);
-            let by_ref = callee.is_some_and(|f| match f.variadic_slot {
+            let by_ref = callee.map_or(p.steps.is_empty(), |f| match f.variadic_slot {
                 Some(v) if i >= v as usize => f.param_by_ref.get(v as usize).copied().unwrap_or(false),
                 _ => f.param_by_ref.get(i).copied().unwrap_or(false),
             });

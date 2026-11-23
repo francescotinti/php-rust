@@ -1,0 +1,36 @@
+== s190 catena C2 tag=s194E git=014928f2 phpr=b2aa769105cfec19 runner=6f9cc2a4817d0ae3 2026-11-23 15:42:08 ==
+gate di giorno: rc=0 (/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp190-harness/s190-gate-giorno-s194E.out)
+loc_dente: rc=0
+sentinelle drop-order: rc=0 test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 704 filtered out; fi
+leave_dtor_cmp_recursion: rc=0 test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
+corpus-gate ×2: rc=1
+  corpus-gate (live runner=6f9cc2a4817d0ae3) 2026-11-23 15:56:10
+  gate CORPUS(off) NOMI: DIVERGE dal congelato (extra 0, mancanti 4)
+    -/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/recv_init_ref_type.phpt
+    -/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_declarations/iterable/iterable_003.phpt
+    -/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_declarations/scalar_weak_reference.phpt
+    -/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_declarations/static_type_return.phpt
+  gate CORPUS(off) CONTENUTO: 7 test con chunk DIVERSO dal golden
+    /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/bug72347.phpt
+    /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_declarations/iterable/iterable_001.phpt
+    /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_declarations/iterable/or_null.phpt
+    /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_declarations/scalar_basic.phpt
+    /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_declarations/scalar_strict_basic.phpt
+    /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_declarations/static_type_trait.phpt
+    /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/typehints/or_null.phpt
+  gate CORPUS(on) NOMI: DIVERGE dal congelato (extra 0, mancanti 4)
+    -/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/recv_init_ref_type.phpt
+    -/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_declarations/iterable/iterable_003.phpt
+    -/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_declarations/scalar_weak_reference.phpt
+    -/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_declarations/static_type_return.phpt
+  gate CORPUS(on) CONTENUTO: 7 test con chunk DIVERSO dal golden
+    /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/bug72347.phpt
+    /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_declarations/iterable/iterable_001.phpt
+    /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_declarations/iterable/or_null.phpt
+    /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_declarations/scalar_basic.phpt
+    /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_declarations/scalar_strict_basic.phpt
+    /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/type_declarations/static_type_trait.phpt
+    /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/typehints/or_null.phpt
+  gate CORPUS off↔on: rc=0 — CORPUS-DIFF: ZERO differenze per-test off<->on fuori carve-out
+  CORPUS-GATE COMPLESSIVO: rc=1 (nomi E contenuto E off↔on; rc in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp190-harness/corpus-out/s194E/corpus-gate.rc)
+== esito catena rc=1 2026-11-23 15:56:10 ==

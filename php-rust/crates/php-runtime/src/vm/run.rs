@@ -3084,6 +3084,15 @@ impl<'m> super::Vm<'m> {
                     let cell = self.make_ref_cell(top, *base, &steps, keys)?;
                     self.frames[top].stack.push(Zval::Ref(cell));
                 }
+                Op::PushRefArg(slot) => {
+                    // S-194: `PushRef` for a DEFINED variable; an undefined one defers to the binder (out of line), so a by-value parameter warns.
+                    if matches!(self.frames[top].slots[*slot as usize], Zval::Undef) {
+                        self.push_undef_arg_place(top, *slot);
+                    } else {
+                        let cell = make_cell(&mut self.frames[top].slots[*slot as usize]);
+                        self.frames[top].stack.push(Zval::Ref(cell));
+                    }
+                }
                 Op::PushArgPlace { base, steps, name } => {
                     // SEND_VAR_EX place argument (FETCH_DIM/OBJ_FUNC_ARG):
                     // capture the evaluated keys and defer the fetch to the
@@ -7185,6 +7194,8 @@ impl<'m> super::Vm<'m> {
                     Ok(c) => ret = c,
                     Err(given) => return Err(self.return_type_error(func, hint, &given)),
                 }
+                let line = self.cur_line(top); // S-194: a conversion Deprecated is reported at the `return`, not at a later flush
+                self.flush_diags(line)?;
             }
             // A by-ref function that returned a plain value (the
             // in-body notice already fired) still hands the caller
