@@ -3764,7 +3764,7 @@ impl<'m> super::Vm<'m> {
                         }
                     } else if !((callee.hints_only || callee.simple_call) && self.call_typed_fast(callee, m, top, n)) { // S-194 C2 + C3a (fewer arguments than parameters)
                         #[cfg(feature = "census-time")]
-                        super::census_time::tick(super::census_time::Class::CallGeneral);
+                        super::census_time::call_general(callee, n);
                         #[cfg(feature = "op-census")]
                         super::census::census_branch("Call: cammino generale");
                         let mut args = Vec::with_capacity(n);
@@ -5698,7 +5698,7 @@ impl<'m> super::Vm<'m> {
                         continue;
                     }
                     #[cfg(feature = "census-time")]
-                    super::census_time::mcall_general(self, top, n, ic);
+                    super::census_time::mcall_general(self, top, n, ic, method);
                     #[cfg(feature = "op-census")]
                     super::census::census_branch("MethodCall: cammino generale");
                     let args = self.pop_keys(top, *argc); // source order
@@ -5755,7 +5755,7 @@ impl<'m> super::Vm<'m> {
                         }
                     };
                     #[cfg(feature = "census-time")]
-                    super::census_time::this_mcall_general(self, top);
+                    super::census_time::this_mcall_general(self, top, ic, method);
                     #[cfg(feature = "op-census")]
                     super::census::census_branch("ThisMethodCall: cammino generale");
                     self.method_call(top, this, &method, Vec::new(), Some(&ic), true)?;

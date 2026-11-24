@@ -165,7 +165,7 @@ pub fn ret_slow(f: &super::Frame<'_>, top: usize) {
 /// General-path admission of `Op::MethodCall`: counts it and records the
 /// first condition of `methodcall_fast` that refused the call (the operand
 /// stack is still intact when the op falls through).
-pub fn mcall_general(vm: &super::Vm<'_>, top: usize, n: usize, ic: &crate::bytecode::MethodIc) {
+pub fn mcall_general(vm: &super::Vm<'_>, top: usize, n: usize, ic: &crate::bytecode::MethodIc, method: &[u8]) {
     tick(Class::MCallGeneral);
     let stack = &vm.frames[top].stack;
     let reason = match stack.len().checked_sub(n + 1).map(|i| &stack[i]) {
@@ -173,10 +173,10 @@ pub fn mcall_general(vm: &super::Vm<'_>, top: usize, n: usize, ic: &crate::bytec
         Some(php_types::Zval::Object(o)) => {
             let cid = o.borrow().class_id as usize;
             match ic.get(cid) {
-                None => "ic_miss".to_string(),
+                None => ic_miss(vm, cid, ic, method),
                 Some((defc, midx)) => {
                     let c = &vm.classes[defc].methods[midx].func;
-                    if !c.simple_call {
+                    if !(c.simple_call || c.hints_only) {
                         let mut r = vec!["not_simple".to_string()];
                         if c.has_hints {
                             r.push("hint".to_string());
@@ -206,14 +206,64 @@ pub fn mcall_general(vm: &super::Vm<'_>, top: usize, n: usize, ic: &crate::bytec
 }
 
 /// General-path admission of `Op::ThisMethodCall` (zero-argument `$this->m()`).
-pub fn this_mcall_general(vm: &super::Vm<'_>, top: usize) {
+pub fn this_mcall_general(vm: &super::Vm<'_>, top: usize, ic: &crate::bytecode::MethodIc, method: &[u8]) {
     tick(Class::MCallGeneral);
     let reason = match &vm.frames[top].this {
-        Some(php_types::Zval::Object(_)) => "ic_miss",
-        Some(_) => "this_not_object",
-        None => "no_this",
+        Some(php_types::Zval::Object(o)) => ic_miss(vm, o.borrow().class_id as usize, ic, method),
+        Some(_) => "this_not_object".to_string(),
+        None => "no_this".to_string(),
     };
-    h2("this_mcall_general", reason.to_string());
+    h2("this_mcall_general", reason);
+}
+
+thread_local! {
+    /// S-194 C3b: per call site (address of its cache cell), the misses and the receiver classes that missed.
+    static SITES: std::cell::RefCell<std::collections::HashMap<usize, (u64, std::collections::BTreeSet<usize>)>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+/// S-194 C3b: why a method call site missed its one-entry cache — the cache state (`empty` = never
+/// filled or filled for a stale run, `other_class` = it holds another receiver class) and the
+/// visibility of the method the receiver class resolves to (the cache is filled for public methods only).
+fn ic_miss(vm: &super::Vm<'_>, cid: usize, ic: &crate::bytecode::MethodIc, method: &[u8]) -> String {
+    SITES.with(|s| {
+        let mut s = s.borrow_mut();
+        let e = s.entry(ic as *const _ as usize).or_default();
+        e.0 += 1;
+        e.1.insert(cid);
+    });
+    // The cell is private to `bytecode`: read it through its Debug form `(epoch, class + 1, defc, midx)`.
+    let dbg = format!("{ic:?}");
+    let filled = dbg.split(',').nth(1).map(|x| x.trim() != "0").unwrap_or(false);
+    let mut vis = "not_found".to_string();
+    let mut c = Some(cid);
+    while let Some(k) = c {
+        if let Some(m) = vm.classes[k].methods.iter().find(|m| m.name.eq_ignore_ascii_case(method)) {
+            vis = format!("{:?}", m.visibility).to_lowercase();
+            break;
+        }
+        c = vm.classes[k].parent;
+    }
+    format!("ic_miss:{}:{vis}", if filled { "other_class" } else { "empty" })
+}
+
+/// S-194 C3c: general-path admission of `Op::Call` — why the callee is off the fast entries.
+pub fn call_general(c: &crate::bytecode::Func, n: usize) {
+    tick(Class::CallGeneral);
+    let mut r = Vec::new();
+    if c.param_by_ref.iter().any(|b| *b) {
+        r.push("byref");
+    }
+    if c.variadic_slot.is_some() {
+        r.push("variadic");
+    }
+    if c.is_generator {
+        r.push("generator");
+    }
+    if r.is_empty() {
+        r.push(if n > c.n_params as usize { "arity_more_args" } else if c.hints_only { "hints_not_exact" } else { "other" });
+    }
+    h2("call_general", r.join("+"));
 }
 
 /// The `$this` note of a fused method `Ret`: did the S-192 tail short path
@@ -237,6 +287,18 @@ pub fn dump() {
         H2.with(|m| {
             for ((kind, reason), n) in m.borrow().iter() {
                 s.push_str(&format!("census-h2\t{kind}\t{reason}\t{n}\n"));
+            }
+        });
+        // S-194 C3b: misses grouped by how many receiver classes the site saw — `census-sites\t<classes>\t<sites>\t<misses>`.
+        SITES.with(|m| {
+            let mut by: std::collections::BTreeMap<usize, (u64, u64)> = std::collections::BTreeMap::new();
+            for (misses, classes) in m.borrow().values() {
+                let e = by.entry(classes.len().min(9)).or_default();
+                e.0 += 1;
+                e.1 += misses;
+            }
+            for (k, (sites, misses)) in by {
+                s.push_str(&format!("census-sites\t{k}\t{sites}\t{misses}\n"));
             }
         });
         Some(s)
