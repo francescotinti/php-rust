@@ -71,6 +71,7 @@ pub(super) fn compile_body(
     // its default before the body runs. Runs in the callee frame, so a default
     // may reference earlier parameters.
     c.param_prologue(params)?;
+    if matches!(c.ops.first(), Some(Op::CheckArity { .. })) { c.lines[0] = def_line; } // S-194 C3a: an ArgumentCountError reports the declaration line, like PHP
     c.block(body)?;
     c.resolve_gotos()?;
     // A body that runs off the end returns NULL (PHP's implicit return).

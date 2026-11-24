@@ -115,6 +115,8 @@ X = [
  ("call_typed_iface", "calls", "interface I {} class E implements I {} function fi(I $o, $a) { return $a + 1; }\nfunction fe($a) { static $e; $e ??= new E; return fi($e, $a); }\n", "$s = fe($s);", 1),
  ("mcall_typed", "calls", "class M { function mt(int $a): int { return $a + 1; } }\nfunction gm() { static $m; return $m ??= new M; }\n", "$s = gm()->mt($s);", 1),
  ("mcall_typed_class", "calls", "class M { function mc(C $o, $a): C { return $o; } }\nfunction gm() { static $m; return $m ??= new M; }\n", "$q = gm()->mc($o, $s);", 1),
+ ("call_default", "calls", "function fd($a, $b = 1) { return $a + $b; }\n", "$s = fd($s);", 1),
+ ("mcall_default", "calls", "class M { function md($a, $b = 1) { return $a + $b; } }\nfunction gm() { static $m; return $m ??= new M; }\n", "$s = gm()->md($s);", 1),
 ]
 TAIL = ' echo $s, "|", strlen((string)$t), "|", $x, "\\n";'
 

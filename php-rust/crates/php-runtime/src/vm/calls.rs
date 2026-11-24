@@ -1498,7 +1498,7 @@ impl<'m> Vm<'m> {
     pub(super) fn args_hints_exact(&self, callee: &Func, top: usize, n: usize) -> bool {
         let st = &self.frames[top].stack;
         let Some(base) = st.len().checked_sub(n) else { return false };
-        callee.param_hints.len() == n
+        callee.param_hints.len() >= n // S-194 C3a: the leading `n` parameters when fewer arguments are passed
             && callee.param_hints.iter().zip(&st[base..]).all(|(h, v)| match h {
                 Some(hint) => self.hint_exact(hint, v),
                 None => !matches!(v, Zval::ArgPlace(_)),
@@ -1511,7 +1511,7 @@ impl<'m> Vm<'m> {
     /// `CheckArity` skipped). `false` = not admitted, nothing touched, the general path runs.
     #[inline(never)]
     pub(super) fn call_typed_fast(&mut self, callee: &'m Func, m: &'m Module, top: usize, n: usize) -> bool {
-        if n != callee.n_params as usize || !self.args_hints_exact(callee, top, n) {
+        if n > callee.n_params as usize || !self.args_hints_exact(callee, top, n) { // S-194 C3a: fewer arguments enter too, at ip 0
             return false;
         }
         if log::log_enabled!(target: "phpr::call", log::Level::Trace) {
@@ -1526,7 +1526,7 @@ impl<'m> Vm<'m> {
             let a = caller[top].stack.pop().expect("call argument");
             cf.slots[i] = decay_arg(a);
         }
-        if matches!(callee.ops.first(), Some(Op::CheckArity { .. })) {
+        if n == callee.n_params as usize && matches!(callee.ops.first(), Some(Op::CheckArity { .. })) {
             cf.ip = 1;
         }
         true

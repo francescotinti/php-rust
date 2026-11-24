@@ -24,3 +24,10 @@ binario E = /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harne
 E          istruzioni  3756.353 G (dispersione 0.00 %)  vs E  +0.00 %  cicli 1232.734 G  user 680.37 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
 uploads-guard restore rc=0
 fine rc=0 2026-11-23 17:06:32
+== s194 WordPress (phpunit full) istruzioni ritirate per gamba, 2026-11-24 17:55:24 (direzione sul lavoro, non verdetto di tempo) ==
+binario pin = /Users/francescotinti/Claude/php-rust-output/release/phpr sha e7025fb37b1a87e0
+binario C3a = /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/out/phpr-c3a sha 9c7aae6f6fdf67f0
+pin        istruzioni  3754.952 G (dispersione 0.00 %)  vs pin  +0.00 %  cicli 1233.380 G  user 680.18 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
+C3a        istruzioni  3746.125 G (dispersione 0.00 %)  vs pin  -0.24 %  cicli 1234.251 G  user 680.94 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
+uploads-guard restore rc=0
+fine rc=0 2026-11-24 18:22:51

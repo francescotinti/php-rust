@@ -168,7 +168,6 @@ b40bce1e59e3975c8771d20f99910a4847c5454be540f35216bd4868bfe60e4b	/Volumes/Extrem
 95032bf5c6f1a9f7f247113e920e138b390d83ba90ed59d8274276564ffe1786	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/bug52614.phpt
 bdec25c1ac1386bf13d6f47c1b2faf692ff87be06cf7a52d228d2dda8fd7df3c	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/bug53432.phpt
 c3343024b7418be4d50afe957ba813202d06f95b2e729665e528a1b1d956aaaa	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/bug55007.phpt
-d3bdc3d0b87f6dbcea61a6c2c66c6baff8236bda38db4578b1a8af3ed4cbd35d	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/bug55705.phpt
 adad02b8dc45c12efbfa0b0f487e88446df1617e03a1194d15da2e1772ec53c6	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/bug60611.phpt
 5c862a04340e43e6a5f7a79b43af293c82ebf92fb6f72e92894ca3cf85017154	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/bug60825.phpt
 2ed2a3ee57f507866ed039aa3b6dfef7c7c31e44e1706e52f71f07908c0c9d2e	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/bug60909_1.phpt
@@ -195,7 +194,6 @@ bd2e2c114e33a4817285c66a2c6918bce4cf1c3f1332029adb6849dd992a901c	/Volumes/Extrem
 30dbd4d29198be28055a8fb68d06dc63b33e9d802aea4fe56a26ab88c008a8dc	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/bug70117.phpt
 d76c8aa202a908a79ba51fa375d810356b1d9dffbdc445149b81047036df6446	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/bug70662.phpt
 b88761e8e59a18a8a798d22410ef0ffb6d5246f3b406b4e04d6d1d63218c1be8	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/bug70681.phpt
-933876732193663bd015378e4f56b3e674a412822bfc74f73ca795ae39985433	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/bug70689.phpt
 158fb838d175cbdb3462a2fa9c50b34f21d7e04077900e30d1fb8520308fc5e3	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/bug70782.phpt
 554b5a94a77fca09b271d45c3b81ef396a929789ed9b932eff90aee492587790	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/bug70785.phpt
 1864c2054fa66a3215ebd8ea6d3f14ea02bd5bcf547a7d6ea959eefccd23d99b	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/bug70804.phpt
@@ -1111,7 +1109,6 @@ da0cb1d8d96887d20b65fb0e51bf166f0c12225b24d918012b2faf842d37d61d	/Volumes/Extrem
 54bdd3bb080cafc476da635dd719fc3c6bd8dbbfd4de0ce5d2f66ec70d67e66a	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/return_types/inheritance009.phpt
 ea43bb0440afb4535d3a5c345dc44328a2d9fa5aeac51a4d97e7647ece6d51b2	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/return_types/never_disallowed3.phpt
 91cd2a184a7743b165ccf9b6ac91cf9b11adf84aa1f859cdcc6d3f1c43978a51	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/return_types/never_disallowed5.phpt
-df0032dcbca31b003d04ff1d445452f5f7e95f5191b6b5bee25d6e2bf9292e6a	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/return_types/reflection001.phpt
 3fee7eb558d58b384ca156af6d5d7748296a761274ae76f45d8cd7a10828cad5	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/return_types/return_reference_separation.phpt
 0f19bec4d2a53f15035404506ec6e8983b6eb3ec64d1fad89a9c188747d481ee	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/self_in_eval.phpt
 1b0e95b86ba976140a1b4355d03043d4bd1e541246cfd0b6a666202f70448ce6	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/serialize/bug69761.phpt

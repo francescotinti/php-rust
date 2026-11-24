@@ -142,7 +142,7 @@ fn main() -> ExitCode {
             source.extend_from_slice(code.as_os_str().as_bytes());
             let mut argv_owned: Vec<Vec<u8>> = vec![b"Standard input code".to_vec()];
             argv_owned.extend(raw.map(|a| a.as_os_str().as_bytes().to_vec()));
-            return run(b"Standard input code", &source, argv_owned, ini_overrides);
+            return run(b"Command line code", &source, argv_owned, ini_overrides); // S-194 C3a: PHP names `-r` code so (`$argv[0]` stays "Standard input code")
         }
         path = Some(arg);
         break;

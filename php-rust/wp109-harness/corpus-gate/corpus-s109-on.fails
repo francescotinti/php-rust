@@ -168,7 +168,6 @@
 /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/bug52614.phpt
 /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/bug53432.phpt
 /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/bug55007.phpt
-/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/bug55705.phpt
 /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/bug60611.phpt
 /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/bug60825.phpt
 /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/bug60909_1.phpt
@@ -195,7 +194,6 @@
 /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/bug70117.phpt
 /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/bug70662.phpt
 /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/bug70681.phpt
-/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/bug70689.phpt
 /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/bug70782.phpt
 /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/bug70785.phpt
 /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/bug70804.phpt
@@ -1111,7 +1109,6 @@
 /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/return_types/inheritance009.phpt
 /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/return_types/never_disallowed3.phpt
 /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/return_types/never_disallowed5.phpt
-/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/return_types/reflection001.phpt
 /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/return_types/return_reference_separation.phpt
 /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/self_in_eval.phpt
 /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/serialize/bug69761.phpt

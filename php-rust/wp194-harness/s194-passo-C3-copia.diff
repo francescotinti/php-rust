@@ -1,0 +1,10 @@
+2,3c2,3
+< # s194-passo-C.sh <tag> [base.out] — S-194 package C (declared copy of s194-passo.sh, see gen-passo-C.py), one measured step: pin-recipe arm build of the current tree, then the primitive probe
+< # on the call/return fixtures against the pin reading C0. Outcome: s194-passo-<tag>.out, out/passo-<tag>.done.
+---
+> # s194-passo-C3.sh <tag> [base.out] — S-194 C3 (declared copy of s194-passo-C.sh, see gen-passo-C3.py), one measured step: pin-recipe arm build of the current tree, then the primitive probe
+> # on the call/return fixtures against the pin s187 reading C3base. Outcome: s194-passo-<tag>.out, out/passo-<tag>.done.
+17c17
+< bash "$W/s194-primitive.sh" "$T" --bin "$ARM/release/phpr" --base "${2:-s194-primitive-C0.out}" --only noop,ns_noop,call_user0,call_user2,call_typed,call_method,call_static,call_closure,call_this_inc,new_ctor,ns_user2,ret_typed_only,ret_typed_class,call_typed_class,call_typed_iface,mcall_typed,mcall_typed_class
+---
+> bash "$W/s194-primitive.sh" "$T" --bin "$ARM/release/phpr" --base "${2:-s194-primitive-C3base.out}" --only noop,ns_noop,call_user0,call_user2,call_typed,call_method,call_static,call_closure,call_this_inc,new_ctor,ns_user2,ret_typed_only,ret_typed_class,call_typed_class,call_typed_iface,mcall_typed,mcall_typed_class,call_default,mcall_default

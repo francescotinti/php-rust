@@ -1,0 +1,3 @@
+S-194 C3a (p.19), emenda dichiarata del corpus-gate (riga di ArgumentCountError = riga della dichiarazione; zero pass->fail, contenuto == golden)
+modo off: congelato 1403 -> 1400 (passano ora: bug55705.phpt, bug70689.phpt, return_types/reflection001.phpt); golden: 1400 -> 1397 righe (tolte le tre, nessun digest cambiato)
+modo on: congelato 1403 -> 1400 (passano ora: bug55705.phpt, bug70689.phpt, return_types/reflection001.phpt); golden: 1400 -> 1397 righe (tolte le tre, nessun digest cambiato)

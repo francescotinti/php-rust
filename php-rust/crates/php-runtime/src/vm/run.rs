@@ -3762,7 +3762,7 @@ impl<'m> super::Vm<'m> {
                         if matches!(callee.ops.first(), Some(Op::CheckArity { .. })) {
                             cf.ip = 1;
                         }
-                    } else if !(callee.hints_only && self.call_typed_fast(callee, m, top, n)) { // S-194 C2
+                    } else if !((callee.hints_only || callee.simple_call) && self.call_typed_fast(callee, m, top, n)) { // S-194 C2 + C3a (fewer arguments than parameters)
                         #[cfg(feature = "census-time")]
                         super::census_time::tick(super::census_time::Class::CallGeneral);
                         #[cfg(feature = "op-census")]
@@ -7054,7 +7054,7 @@ impl<'m> super::Vm<'m> {
                     let cid = o.borrow().class_id as usize;
                     if let Some((defc, midx)) = ic.get(cid) {
                         let callee = &self.classes[defc].methods[midx].func;
-                        if callee.n_params as usize == n && (callee.simple_call || callee.hints_only) { // S-194 C2: typed parameters too
+                        if callee.n_params as usize >= n && (callee.simple_call || callee.hints_only) { // S-194 C2: typed parameters too; C3a: fewer arguments too (the default prologue fills)
                             fast = Some((defc, midx, cid));
                         }
                     }
@@ -7105,7 +7105,7 @@ impl<'m> super::Vm<'m> {
             cf.this = Some(caller[top].stack.pop().expect("MethodCall receiver"));
             cf.class = Some(defc);
             cf.static_class = Some(cid); // LSB = classe del ricevitore
-            if matches!(callee.ops.first(), Some(Op::CheckArity { .. })) {
+            if n == callee.n_params as usize && matches!(callee.ops.first(), Some(Op::CheckArity { .. })) {
                 cf.ip = 1;
             }
             return Ok(true);
@@ -7154,7 +7154,7 @@ impl<'m> super::Vm<'m> {
         // L-CR1 (S-181) (b): arità esatta per ammissione ⇒ il `CheckArity`
         // in testa al corpo non può fallire (argc == n_params ≥ required):
         // ingresso a ip=1.
-        if matches!(callee.ops.first(), Some(Op::CheckArity { .. })) {
+        if n == callee.n_params as usize && matches!(callee.ops.first(), Some(Op::CheckArity { .. })) {
             frame.ip = 1;
         }
         self.enter_callee(frame)?;
