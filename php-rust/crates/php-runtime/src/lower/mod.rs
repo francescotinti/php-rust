@@ -3488,14 +3488,14 @@ fn collect_direct_vars<'a>(expr: &'a Expression<'a>, out: &mut Vec<&'a [u8]>) {
     }
 }
 
-/// PHP `dirname()` of the script path, for `__DIR__` (step 49). No separator →
-/// `"."`; a leading-slash-only parent → `"/"`; otherwise the bytes before the
-/// last `/`. Matches PHP for the POSIX paths `.phpt` runners use.
-fn dirname(path: &[u8]) -> &[u8] {
+fn dirname(path: &[u8]) -> std::borrow::Cow<'_, [u8]> {
+    if path == b"Command line code" || path == b"Standard input code" { // S-194: `-r` / stdin code has no file, PHP gives the working directory
+        if let Ok(d) = std::env::current_dir() { return d.into_os_string().into_encoded_bytes().into(); }
+    }
     match path.iter().rposition(|&b| b == b'/') {
-        None => b".",
-        Some(0) => b"/",
-        Some(i) => &path[..i],
+        None => b"."[..].into(),
+        Some(0) => b"/"[..].into(),
+        Some(i) => path[..i].into(),
     }
 }
 

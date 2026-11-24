@@ -1806,7 +1806,7 @@ impl<'f> Lowerer<'f> {
         match m {
             MagicConstant::Line(_) => ExprKind::Int(line as i64),
             MagicConstant::File(_) => s(&self.prog_name),
-            MagicConstant::Directory(_) => s(dirname(&self.prog_name)),
+            MagicConstant::Directory(_) => s(&dirname(&self.prog_name)),
             MagicConstant::Class(_) => s(cls),
             MagicConstant::Function(_) => s(func),
             // PHP: `Class::method` inside a method, the bare function name inside

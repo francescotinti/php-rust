@@ -52,3 +52,12 @@ A:1:A A:1:2 7 A:4:A+6
 A::t(): Argument #1 ($a) must be of type int, string given"#;
     assert_eq!(run(script).trim_end(), expected);
 }
+
+#[test]
+fn dir_magic_constant_of_command_line_code_is_the_working_directory() {
+    let script = r#"var_dump(__DIR__ === getcwd(), __DIR__ !== ".", __FILE__);"#;
+    let expected = r#"bool(true)
+bool(true)
+string(17) "Command line code""#;
+    assert_eq!(run(script).trim_end(), expected);
+}

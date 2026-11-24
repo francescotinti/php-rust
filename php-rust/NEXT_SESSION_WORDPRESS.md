@@ -3,7 +3,7 @@
 **NOTTI**: 29→30/10 guardia b MORDE (K0 +37,9) · b2 (v1) MORDE (+7,85) · fetta 0 dispatch +12,0 / obj_life +4,32 (modello falso) · 03→04/11 b3 su braccio B3 rc=0 (K0 +3,08) ⇒ promozione s184 04/11 rc=0 · 05→06/11 (ordine 4): t26/t28/server verdi, **b4 sul pin MORDE K0 +4,62/+4,31** · 20/11 (sera): b5 caduta sul gate (sonda inline), t29/t27 verdi, server t4 rc=2 (più veloce), coda b5b rc=5.
 
 ## Scoreboard (micro e dq = pin s187, 23/11 R=5; WP t28 e ORM t30 = pin s186)
-**arith 2,2 · prop 2,4 · calls 3,6 · str 3,1 · arr 2,9 · re 2,6** · calls-dq 80,2 · mcalls-dq 131,3 · ret-buf-dq K0 98,6 · prop-dq 32,2 · **WP t28 1,646** (N=4 pulite, [1,640;1,652]; t27 1,705) · **ORM t30 [6,075;6,119]** (t29 [6,449;6,576]) · corpus 2657 (1400 congelati per modo, tree) · batteria 1781/0/2 (tree) · CI OK fino a e2edcc9c.
+**arith 2,2 · prop 2,4 · calls 3,6 · str 3,1 · arr 2,9 · re 2,6** · calls-dq 80,2 · mcalls-dq 131,3 · ret-buf-dq K0 98,6 · prop-dq 32,2 · **WP t28 1,646** (N=4 pulite, [1,640;1,652]; t27 1,705) · **ORM t30 [6,075;6,119]** (t29 [6,449;6,576]) · corpus 2657 (1400 congelati per modo, tree) · batteria 1782/0/2 (tree) · CI OK fino a e2edcc9c.
 **Server WP (pin s188; t2 `s188-wp-server-pair-verdetto-t2.out` · t3 `-t3.out` · throughput `s188-throughput-verdetto-t1.out`, tutti 0 VOID)**: CPU/req **A (`--axum --workers 1`)/P = 1,00 su ogni URL** · A/O front 9,61 · post 9,81 · feed 10,58 · login 13,07 · rest 9,80 · **`ab` AX(4 worker) vs `php -S`×4: O4/AX 8,4–12,5× a C=1/4, 10,3–14,4× a C=8; AX scala 3,96–4,10× C1→C4, satura a C8** · P0/Ooff 3,7–4,3 (direzione) · Ooff/O 4,9–16,3.
 
 ## §S-194 — ordine (S-193 CHIUSA il 20/11: pin s185 confermato di notte, `main` = `s186-firma`)
