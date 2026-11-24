@@ -80,7 +80,7 @@ mod coroutines;
 mod dom;
 pub mod cli_stream;
 mod exceptions;
-mod gc_probe;
+mod gc_probe; mod ic_scoped; // S-194 C3b
 pub(crate) mod builtin_fast;
 pub(crate) mod call_bind;
 mod xmlparser;
@@ -11719,7 +11719,7 @@ impl<'m> Vm<'m> {
         // private same-name method anywhere in the ancestor chain —
         // `Closure::bind` can bring any scope through this site).
         if let Some(ic) = ic {
-            if let Some((defc, midx)) = ic.get(cid) {
+            if let Some((defc, midx)) = ic.get(cid).or_else(|| ic.get_scoped(cid, self.frames[top].class)) {
                 let callee = &self.classes[defc].methods[midx].func;
                 let m = self.class_mod(defc);
                 let mut frame = self.pooled_frame(callee, m);
@@ -11763,6 +11763,8 @@ impl<'m> Vm<'m> {
                         && !private_shadow_in_chain(&self.classes, cid, method)
                     {
                         ic.fill(cid, defc, midx);
+                    } else {
+                        ic.fill_scoped(cid, self.frames[top].class, defc, midx); // S-194 C3b
                     }
                 }
                 let callee = &self.classes[defc].methods[midx].func;

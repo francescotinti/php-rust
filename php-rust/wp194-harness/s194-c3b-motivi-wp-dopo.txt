@@ -1,0 +1,73 @@
+# S-194 C3b: census-time sul braccio C3b (commit-oggetto d04803ef, WordPress intero), sommato per chiave su tutti i processi
+census-h2	call_general	byref	1141784
+census-h2	call_general	hints_not_exact	4095
+census-h2	call_general	variadic	70302
+census-h2	mcall_general	arity_more_args	6970
+census-h2	mcall_general	ic_miss:empty:not_found	972
+census-h2	mcall_general	ic_miss:empty:private	10468
+census-h2	mcall_general	ic_miss:empty:protected	4802
+census-h2	mcall_general	ic_miss:empty:public	98170
+census-h2	mcall_general	ic_miss:other_class:private	177631
+census-h2	mcall_general	ic_miss:other_class:protected	439716
+census-h2	mcall_general	ic_miss:other_class:public	665797
+census-h2	mcall_general	not_simple+byref	2369798
+census-h2	mcall_general	not_simple+generator	4958
+census-h2	mcall_general	not_simple+hint+byref	47777
+census-h2	mcall_general	not_simple+hint+generator	6877
+census-h2	mcall_general	not_simple+hint+variadic	165
+census-h2	mcall_general	not_simple+variadic	342240
+census-h2	mcall_general	recv_other	60
+census-h2	mcall_general	recv_ref	231663
+census-h2	note_this	general_chain	137547736
+census-h2	note_this	tail_short_path	27451723
+census-h2	ret_slow	dyn_vars	1163
+census-h2	ret_slow	ext	9040624
+census-h2	ret_slow	ext+dyn_vars	453
+census-h2	ret_slow	flags0x1+ext	7371
+census-h2	ret_slow	flags0x10	6143
+census-h2	ret_slow	flags0x4	1448
+census-h2	ret_slow	flags0x40	33123
+census-h2	ret_slow	flags0x40+main	72
+census-h2	ret_slow	flags0x40+ret_cell	19977
+census-h2	ret_slow	iters	2260887
+census-h2	ret_slow	iters+ext	18
+census-h2	ret_slow	main	146
+census-h2	ret_slow	ret_cell	2176865
+census-h2	ret_slow	ret_cell+ext	1373
+census-h2	ret_slow	shape1	67730580
+census-h2	ret_slow	shape1+ext	57017
+census-h2	ret_slow	shape1+flags0x4	7271460
+census-h2	ret_slow	shape1+iters	54312
+census-h2	ret_slow	shape1+ret_cell	178470
+census-h2	ret_slow	shape2	62
+census-h2	ret_slow	shape2+flags0x8	343
+census-h2	this_mcall_general	ic_miss:empty:private	3216
+census-h2	this_mcall_general	ic_miss:empty:protected	1881
+census-h2	this_mcall_general	ic_miss:empty:public	6775
+census-h2	this_mcall_general	ic_miss:other_class:private	27863
+census-h2	this_mcall_general	ic_miss:other_class:protected	60329
+census-h2	this_mcall_general	ic_miss:other_class:public	373035
+census-h2	this_mcall_general	this_not_object	1796
+census-sites	1	394754
+census-sites	2	94036
+census-sites	3	237053
+census-sites	4	102910
+census-sites	5	99673
+census-sites	6	49323
+census-sites	7	2004
+census-sites	8	1327
+census-sites	9	889575
+census-time	arr	306837978
+census-time	builtin	223893565
+census-time	builtin_lookup	223893565
+census-time	call_fast	52998330
+census-time	call_general	1216181
+census-time	hostbuiltin	27216584
+census-time	mcall	138136235
+census-time	mcall_general	4882959
+census-time	new	21199124
+census-time	prop	321020625
+census-time	ret_fast	362592806
+census-time	ret_slow	88841907
+census-time	str	178430306
+census-time	sweep	250410106

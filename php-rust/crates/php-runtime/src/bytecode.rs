@@ -265,14 +265,14 @@ impl Clone for PropIc {
 /// cloni dell'op, stato invisibile all'uguaglianza strutturale, epoch
 /// per-run contro gli id stantii.
 #[derive(Debug)]
-pub struct MethodIc(Rc<std::cell::Cell<(u64, u32, u32, u32)>>);
+pub struct MethodIc(pub(crate) Rc<std::cell::Cell<(u64, u32, u32, u32, u32)>>); // S-194 C3b: + scope key, see `vm/ic_scoped`
 
 impl MethodIc {
     /// The cached `(defining ClassId, method idx)` when filled IN THIS RUN
     /// for exactly this receiver class.
     #[inline]
     pub fn get(&self, cid: usize) -> Option<(usize, usize)> {
-        let (epoch, cid1, defc, midx) = self.0.get();
+        let (epoch, cid1, defc, midx, _) = self.0.get();
         (cid1 as usize == cid + 1 && epoch == ic_epoch())
             .then_some((defc as usize, midx as usize))
     }
@@ -280,13 +280,13 @@ impl MethodIc {
     #[inline]
     pub fn fill(&self, cid: usize, defc: usize, midx: usize) {
         self.0
-            .set((ic_epoch(), cid as u32 + 1, defc as u32, midx as u32));
+            .set((ic_epoch(), cid as u32 + 1, defc as u32, midx as u32, 0));
     }
 }
 
 impl Default for MethodIc {
     fn default() -> Self {
-        MethodIc(Rc::new(std::cell::Cell::new((0, 0, 0, 0))))
+        MethodIc(Rc::new(std::cell::Cell::new((0, 0, 0, 0, 0))))
     }
 }
 

@@ -98,3 +98,118 @@ uploads-guard restore rc=0
    motivo mcall_general            60  recv_other
    motivo ret_slow              18  iters+ext
 fine rc=0 2026-11-22 21:12:42
+== s194 C0a motivi di uscita dal cammino corto (census-time), sorgente faaa24f4, build rc=0, 2026-11-24 19:51:20 ==
+-- orm: Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, PHPUnit Warnings: 554, Skipped: 5 | dump s194-c0-motivi-orm.txt presente
+   classe call_fast                  2093
+   classe call_general                  0
+   classe mcall                  21346424
+   classe mcall_general           3638097
+   classe ret_fast               34935006
+   classe ret_slow               17153157
+   classe prop                   42241846
+   classe str                     9673873
+   classe arr                    16756796
+   classe new                     3675174
+   classe sweep                  21112634
+   classe builtin_lookup         12121094
+   classe builtin                12121094
+   classe hostbuiltin             7905390
+   motivo note_this       22359869  general_chain
+   motivo ret_slow        14227637  shape1
+   motivo note_this        3054893  tail_short_path
+   motivo mcall_general       1652338  ic_miss:empty:private
+   motivo ret_slow         1103375  ext
+   motivo ret_slow          976398  shape1+flags0x4
+   motivo mcall_general        626068  ic_miss:empty:protected
+   motivo mcall_general        510963  ic_miss:other_class:public
+   motivo ret_slow          456411  ret_cell
+   motivo this_mcall_general        292810  ic_miss:empty:private
+   motivo this_mcall_general        290910  ic_miss:empty:protected
+   motivo ret_slow          196311  shape1+ext
+   motivo ret_slow          137189  shape1+ret_cell
+   motivo this_mcall_general        125504  ic_miss:other_class:public
+   motivo mcall_general         47939  not_simple+variadic
+   motivo mcall_general         41425  ic_miss:other_class:protected
+   motivo mcall_general         26010  ic_miss:empty:public
+   motivo ret_slow           17261  shape2+flags0x8
+   motivo ret_slow           17202  shape1+iters
+   motivo mcall_general         15623  not_simple+hint+byref
+   motivo ret_slow            8193  flags0x40
+   motivo mcall_general          7114  arity_more_args
+   motivo ret_slow            6809  iters
+   motivo ret_slow            3363  flags0x4
+   motivo ret_slow            1625  flags0x1+ext
+   motivo this_mcall_general          1051  ic_miss:empty:public
+   motivo ret_slow             862  flags0x10
+   motivo ret_slow             505  flags0x20+ret_cell
+   motivo this_mcall_general           202  ic_miss:other_class:protected
+   motivo mcall_general            59  recv_other
+   motivo mcall_general            47  not_simple+hint+variadic
+   motivo mcall_general            19  ic_miss:empty:not_found
+   motivo mcall_general            15  not_simple+hint+generator
+   motivo ret_slow               8  ret_cell+ext
+   motivo ret_slow               4  shape2
+   motivo ret_slow               2  dyn_vars
+   motivo ret_slow               2  main
+uploads-guard restore rc=0
+-- wp: Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73. | dump s194-c0-motivi-wp.txt presente
+   classe call_fast              52997402
+   classe call_general            1216181
+   classe mcall                 138133840
+   classe mcall_general          25349404
+   classe ret_fast              362587312
+   classe ret_slow               88841108
+   classe prop                  321014629
+   classe str                   178426701
+   classe arr                   306828167
+   classe new                    21198961
+   classe sweep                 250407223
+   classe builtin_lookup        223888172
+   classe builtin               223888172
+   classe hostbuiltin            27215500
+   motivo note_this      137545766  general_chain
+   motivo ret_slow        67729928  shape1
+   motivo note_this       27451243  tail_short_path
+   motivo mcall_general       9682422  ic_miss:empty:protected
+   motivo ret_slow         9040624  ext
+   motivo this_mcall_general       7807624  ic_miss:empty:private
+   motivo ret_slow         7271460  shape1+flags0x4
+   motivo mcall_general       2369746  not_simple+byref
+   motivo ret_slow         2260740  iters
+   motivo ret_slow         2176865  ret_cell
+   motivo mcall_general       1325823  ic_miss:empty:private
+   motivo this_mcall_general       1207235  ic_miss:empty:protected
+   motivo mcall_general       1169460  ic_miss:other_class:protected
+   motivo call_general       1141784  byref
+   motivo mcall_general        665725  ic_miss:other_class:public
+   motivo this_mcall_general        373034  ic_miss:other_class:public
+   motivo mcall_general        342222  not_simple+variadic
+   motivo mcall_general        231580  recv_ref
+   motivo ret_slow          178470  shape1+ret_cell
+   motivo mcall_general         98173  ic_miss:empty:public
+   motivo call_general         70302  variadic
+   motivo ret_slow           57017  shape1+ext
+   motivo ret_slow           54312  shape1+iters
+   motivo mcall_general         47777  not_simple+hint+byref
+   motivo ret_slow           33123  flags0x40
+   motivo ret_slow           19977  flags0x40+ret_cell
+   motivo ret_slow            7371  flags0x1+ext
+   motivo mcall_general          6970  arity_more_args
+   motivo mcall_general          6877  not_simple+hint+generator
+   motivo this_mcall_general          6776  ic_miss:empty:public
+   motivo ret_slow            6143  flags0x10
+   motivo mcall_general          4958  not_simple+generator
+   motivo call_general          4095  hints_not_exact
+   motivo this_mcall_general          1796  this_not_object
+   motivo ret_slow            1448  flags0x4
+   motivo ret_slow            1373  ret_cell+ext
+   motivo ret_slow            1163  dyn_vars
+   motivo mcall_general           972  ic_miss:empty:not_found
+   motivo ret_slow             453  ext+dyn_vars
+   motivo ret_slow             343  shape2+flags0x8
+   motivo mcall_general           165  not_simple+hint+variadic
+   motivo ret_slow             146  main
+   motivo ret_slow              72  flags0x40+main
+   motivo ret_slow              62  shape2
+   motivo mcall_general            60  recv_other
+fine rc=0 2026-11-24 20:06:45

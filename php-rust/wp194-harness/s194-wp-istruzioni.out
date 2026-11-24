@@ -31,3 +31,22 @@ pin        istruzioni  3754.952 G (dispersione 0.00 %)  vs pin  +0.00 %  cicli 1
 C3a        istruzioni  3746.125 G (dispersione 0.00 %)  vs pin  -0.24 %  cicli 1234.251 G  user 680.94 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
 uploads-guard restore rc=0
 fine rc=0 2026-11-24 18:22:51
+== s194 WordPress (phpunit full) istruzioni ritirate per gamba, 2026-11-24 20:38:14 (direzione sul lavoro, non verdetto di tempo) ==
+binario pin = /Users/francescotinti/Claude/php-rust-output/release/phpr sha e7025fb37b1a87e0
+binario C3b = /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/out/phpr-c3b sha c6801521261eed23
+pin        istruzioni  3754.547 G (dispersione 0.00 %)  vs pin  +0.00 %  cicli 1230.619 G  user 679.16 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
+C3b        istruzioni  3761.975 G (dispersione 0.00 %)  vs pin  +0.20 %  cicli 1242.029 G  user 679.30 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
+uploads-guard restore rc=0
+fine rc=0 2026-11-24 21:05:38
+== s194 WordPress (phpunit full) istruzioni ritirate per gamba, 2026-11-24 21:29:46 (direzione sul lavoro, non verdetto di tempo) ==
+binario dir = faaa24f4 sha fb3459ad34c7ae42
+dir        istruzioni  3744.288 G (dispersione 0.00 %)  vs dir  +0.00 %  cicli 1230.322 G  user 679.07 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
+uploads-guard restore rc=0
+fine rc=0 2026-11-24 21:45:54
+== s194 WordPress (phpunit full) istruzioni ritirate per gamba, 2026-11-24 21:48:37 (direzione sul lavoro, non verdetto di tempo) ==
+binario V1 = 516f41b5e1d798a608b18461c897deb2e422d053 sha 28c0c9b54441c23b
+binario V2 = 661399bc4077455eb7b6e32b0169dcb366cb687d sha e9e241d82f1564d2
+V1         istruzioni  3737.543 G (dispersione 0.00 %)  vs V1  +0.00 %  cicli 1234.879 G  user 680.35 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
+V2         istruzioni  3731.791 G (dispersione 0.00 %)  vs V1  -0.15 %  cicli 1231.532 G  user 678.64 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
+uploads-guard restore rc=0
+fine rc=0 2026-11-24 22:20:56

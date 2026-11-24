@@ -30,3 +30,15 @@ binario C3a = /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-har
 pin        istruzioni   242.920 G (dispersione 0.07 %)  vs pin  +0.00 %  cicli   68.378 G  user  31.18 s  | Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, PHP
 C3a        istruzioni   242.807 G (dispersione 0.03 %)  vs pin  -0.05 %  cicli   68.716 G  user  31.32 s  | Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, PHP
 fine rc=0 2026-11-24 17:55:24
+== s194 ORM istruzioni ritirate per gamba, REPS=2, 2026-11-24 20:35:47 (direzione sul lavoro, non verdetto di tempo) ==
+binario pin = /Users/francescotinti/Claude/php-rust-output/release/phpr sha e7025fb37b1a87e0
+binario C3b = /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/out/phpr-c3b sha c6801521261eed23
+pin        istruzioni   242.523 G (dispersione 0.00 %)  vs pin  +0.00 %  cicli   67.611 G  user  30.96 s  | Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, PHP
+C3b        istruzioni   239.607 G (dispersione 0.05 %)  vs pin  -1.20 %  cicli   66.950 G  user  30.67 s  | Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, PHP
+fine rc=0 2026-11-24 20:38:14
+== s194 ORM istruzioni ritirate per gamba, REPS=2, 2026-11-24 22:45:44 (direzione sul lavoro, non verdetto di tempo) ==
+binario pin = /Users/francescotinti/Claude/php-rust-output/release/phpr sha e7025fb37b1a87e0
+binario C3b2 = /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/out/phpr-c3b2 sha c4353a822d75f054
+pin        istruzioni   242.457 G (dispersione 0.04 %)  vs pin  +0.00 %  cicli   67.688 G  user  31.01 s  | Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, PHP
+C3b2       istruzioni   239.829 G (dispersione 0.05 %)  vs pin  -1.08 %  cicli   67.079 G  user  30.70 s  | Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, PHP
+fine rc=0 2026-11-24 22:48:11

@@ -7052,7 +7052,7 @@ impl<'m> super::Vm<'m> {
             if let Some(ridx) = stack.len().checked_sub(n + 1) {
                 if let Zval::Object(o) = &stack[ridx] {
                     let cid = o.borrow().class_id as usize;
-                    if let Some((defc, midx)) = ic.get(cid) {
+                    if let Some((defc, midx)) = ic.get(cid).or_else(|| ic.get_scoped(cid, self.frames[top].class)) {
                         let callee = &self.classes[defc].methods[midx].func;
                         if callee.n_params as usize >= n && (callee.simple_call || callee.hints_only) { // S-194 C2: typed parameters too; C3a: fewer arguments too (the default prologue fills)
                             fast = Some((defc, midx, cid));

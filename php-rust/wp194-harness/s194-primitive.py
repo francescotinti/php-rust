@@ -117,6 +117,9 @@ X = [
  ("mcall_typed_class", "calls", "class M { function mc(C $o, $a): C { return $o; } }\nfunction gm() { static $m; return $m ??= new M; }\n", "$q = gm()->mc($o, $s);", 1),
  ("call_default", "calls", "function fd($a, $b = 1) { return $a + $b; }\n", "$s = fd($s);", 1),
  ("mcall_default", "calls", "class M { function md($a, $b = 1) { return $a + $b; } }\nfunction gm() { static $m; return $m ??= new M; }\n", "$s = gm()->md($s);", 1),
+ ("mcall_private", "calls", "class M { private function pv($a) { return $a + 1; } function go($a) { return $this->pv($a); } }\nfunction gm() { static $m; return $m ??= new M; }\n", "$s = gm()->go($s);", 1),
+ ("this_private0", "calls", "class M { private function z() { return 1; } function go() { return $this->z(); } }\nfunction gm() { static $m; return $m ??= new M; }\n", "$s += gm()->go();", 1),
+ ("this_protected0", "calls", "class M { protected function z() { return 1; } function go() { return $this->z(); } }\nfunction gm() { static $m; return $m ??= new M; }\n", "$s += gm()->go();", 1),
 ]
 TAIL = ' echo $s, "|", strlen((string)$t), "|", $x, "\\n";'
 
