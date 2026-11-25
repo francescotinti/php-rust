@@ -1,0 +1,50 @@
+== profilo fixture p_field_isset_obj N=20000000: 21457 campioni, samply rc=0 (direzione) ==
+    3077  14.3%  (libsystem_platform.dylib)
+    2310  10.8%  _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm17field_magic_probe
+    2138  10.0%  nIjj9KQmRT_11php_runtime2vm6arrays9field_get
+    2019   9.4%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop
+    1786   8.3%  _NtCsePzg45LyhTm_9php_types6objectNtB5_11PropsLayout7slot_of
+    1536   7.2%  _NtCs3fRkGY2FHAU_9hashbrown3mapINtB6_7HashMapINtNtCshxvaOLs88l5_5alloc5boxed3BoxShENtNtCs4nIjj9KQmRT_11php_runtime8bytecode8PropInfoNtCsdnIwS7Na5wv_10rustc_hash13FxBuildHasherE3getB1n_EB1u_
+    1325   6.2%  nIjj9KQmRT_11php_runtime2vm3oop12deref_object
+    1159   5.4%  Mbv00yxnRz_4core3ptr9drop_glueNtNtCsePzg45LyhTm_9php_types4zval4ZvalECs4nIjj9KQmRT_11php_runtime
+    1133   5.3%  nIjj9KQmRT_11php_runtime2vm8gc_probeNtB4_2Vm12magic_method
+     948   4.4%  nIjj9KQmRT_11php_runtime2vm3oop19resolve_prop_access
+     570   2.7%  _NtCsePzg45LyhTm_9php_types4zvalNtB5_4ZvalNtNtCs8Mbv00yxnRz_4core5clone5Clone5clone
+     426   2.0%  _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm15field_lazy_root
+     366   1.7%  mi_free
+     357   1.7%  mi_malloc_aligned
+  righe (simbolo file:riga):
+    1159   5.4%  Mbv00yxnRz_4core3ptr9drop_glueNtNtCsePzg45LyhTm_9php_types4zval4ZvalECs4nIjj9KQmRT_11php_runtime mod.rs:823  | 
+     792   3.7%  _NtCs3fRkGY2FHAU_9hashbrown3mapINtB6_7HashMapINtNtCshxvaOLs88l5_5alloc5boxed3BoxShENtNtCs4nIjj9KQmRT_11php_runtime8bytecode8PropInfoNtCsdnIwS7Na5wv_10rustc_hash13FxBuildHasherE3getB1n_EB1u_ map.rs:1288  | 
+     655   3.1%  _NtCsePzg45LyhTm_9php_types6objectNtB5_11PropsLayout7slot_of object.rs:672  | }
+     609   2.8%  _NtCsePzg45LyhTm_9php_types6objectNtB5_11PropsLayout7slot_of object.rs:665  | return self.keys.iter().position(|k| k.as_ref() == name);
+     525   2.4%  _NtCsePzg45LyhTm_9php_types4zvalNtB5_4ZvalNtNtCs8Mbv00yxnRz_4core5clone5Clone5clone zval.rs:15  | #[cfg_attr(not(feature = "mem-census"), derive(Clone))]
+     517   2.4%  nIjj9KQmRT_11php_runtime2vm3oop12deref_object oop.rs:227  | match v {
+     467   2.2%  _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm17field_magic_probe mod.rs:13951  | 
+     455   2.1%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:1559  | match op {
+     441   2.1%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:2317  | self.backedge_cmp(top, func, a);
+     408   1.9%  nIjj9KQmRT_11php_runtime2vm3oop19resolve_prop_access oop.rs:475  | }
+     382   1.8%  nIjj9KQmRT_11php_runtime2vm3oop12deref_object oop.rs:232  | }
+     354   1.6%  _NtCsePzg45LyhTm_9php_types6objectNtB5_11PropsLayout7slot_of object.rs:664  | if self.keys.len() < HASH_SCAN_MIN {
+     344   1.6%  nIjj9KQmRT_11php_runtime2vm3oop12deref_object oop.rs:228  | Zval::Object(o) => Some(o.clone()),
+     337   1.6%  nIjj9KQmRT_11php_runtime2vm6arrays9field_get arrays.rs:676  | match obj.props.get(key.as_ref()) {
+     317   1.5%  nIjj9KQmRT_11php_runtime2vm3oop19resolve_prop_access oop.rs:441  | pub(super) fn resolve_prop_access<'a>(classes: &[&'a CompiledClass], obj_class: ClassId, name: &[u8]
+     310   1.4%  nIjj9KQmRT_11php_runtime2vm6arrays9field_get arrays.rs:650  | if let Zval::Ref(rc) = cell {
+     303   1.4%  nIjj9KQmRT_11php_runtime2vm6arrays9field_get arrays.rs:649  | pub(super) fn field_get(cell: &Zval, steps: &[FieldStep], keys: &mut std::vec::IntoIter<Zval>, fs: F
+     285   1.3%  nIjj9KQmRT_11php_runtime2vm6arrays9field_get arrays.rs:700  | }
+     280   1.3%  _NtCs3fRkGY2FHAU_9hashbrown3mapINtB6_7HashMapINtNtCshxvaOLs88l5_5alloc5boxed3BoxShENtNtCs4nIjj9KQmRT_11php_runtime8bytecode8PropInfoNtCsdnIwS7Na5wv_10rustc_hash13FxBuildHasherE3getB1n_EB1u_ map.rs:0  | 
+     277   1.3%  nIjj9KQmRT_11php_runtime2vm6arrays9field_get arrays.rs:659  | Some((first, rest)) => match first {
+     233   1.1%  nIjj9KQmRT_11php_runtime2vm8gc_probeNtB4_2Vm12magic_method gc_probe.rs:87  | }
+     231   1.1%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:1544  | let op = &func.ops[ip];
+     220   1.0%  OUTLINED_FUNCTION_32 alloc.c:0  | 
+     220   1.0%  OUTLINED_FUNCTION_41 free.c:0  | 
+     219   1.0%  _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm17field_magic_probe mod.rs:13963  | 
+     214   1.0%  nIjj9KQmRT_11php_runtime2vm8gc_probeNtB4_2Vm12magic_method gc_probe.rs:63  | let Some(class) = self.classes.get(cid) else {
+     206   1.0%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:1505  | if self.frames.len() > MAX_CALL_DEPTH {
+     191   0.9%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:2304  | self.incdec_slot_discard(top, *slot, *inc)?;
+     181   0.8%  nIjj9KQmRT_11php_runtime2vm8gc_probeNtB4_2Vm12magic_method gc_probe.rs:61  | pub(super) fn magic_method(&self, cid: ClassId, kind: usize) -> Option<(ClassId, usize)> {
+     170   0.8%  _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm17field_magic_probe mod.rs:13938  | 
+     168   0.8%  _NtCsePzg45LyhTm_9php_types6objectNtB5_11PropsLayout7slot_of object.rs:663  | fn slot_of(&self, name: &[u8]) -> Option<usize> {
+     165   0.8%  _NtCs3fRkGY2FHAU_9hashbrown3mapINtB6_7HashMapINtNtCshxvaOLs88l5_5alloc5boxed3BoxShENtNtCs4nIjj9KQmRT_11php_runtime8bytecode8PropInfoNtCsdnIwS7Na5wv_10rustc_hash13FxBuildHasherE3getB1n_EB1u_ map.rs:1287  | 
+     163   0.8%  nIjj9KQmRT_11php_runtime2vm6arrays9field_get arrays.rs:680  | }
+     162   0.8%  nIjj9KQmRT_11php_runtime2vm8gc_probeNtB4_2Vm12magic_method gc_probe.rs:75  | match e.state[kind] {

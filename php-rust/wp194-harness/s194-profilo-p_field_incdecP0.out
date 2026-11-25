@@ -1,0 +1,50 @@
+== profilo fixture p_field_incdec N=20000000: 10316 campioni, samply rc=0 (direzione) ==
+    2025  19.6%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop
+    1509  14.6%  nIjj9KQmRT_11php_runtime2vm6arraysNtB4_2Vm14field_rmw_fast
+     919   8.9%  nIjj9KQmRT_11php_runtime2vm6arrays16field_write_walk
+     708   6.9%  _NtCsePzg45LyhTm_9php_types5arrayNtB5_8KeyIndex6lookup
+     656   6.4%  nIjj9KQmRT_11php_runtime2vm6arrays17coerce_key_silent
+     538   5.2%  _NtCshxvaOLs88l5_5alloc7raw_vecNtB5_11RawVecInner11finish_growCs4nIjj9KQmRT_11php_runtime
+     487   4.7%  nIjj9KQmRT_11php_runtime2vm6arraysNtB4_2Vm16drain_aa_pending
+     362   3.5%  _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm14pop_field_keys
+     263   2.5%  Mbv00yxnRz_4core3ptr9drop_glueNtNtCsePzg45LyhTm_9php_types4zval4ZvalECs4nIjj9KQmRT_11php_runtime
+     260   2.5%  (libsystem_platform.dylib)
+     242   2.3%  mi_malloc_aligned
+     216   2.1%  mi_free
+     197   1.9%  OUTLINED_FUNCTION_41
+     180   1.7%  LyhTm_9php_types3ops9increment
+  righe (simbolo file:riga):
+     535   5.2%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:1559  | match op {
+     447   4.3%  _NtCsePzg45LyhTm_9php_types5arrayNtB5_8KeyIndex6lookup array.rs:252  | 
+     358   3.5%  nIjj9KQmRT_11php_runtime2vm6arrays17coerce_key_silent arrays.rs:946  | Zval::Str(s) => Some(Key::from_zstr(s)),
+     284   2.8%  nIjj9KQmRT_11php_runtime2vm6arraysNtB4_2Vm14field_rmw_fast arrays.rs:0  | }
+     284   2.8%  nIjj9KQmRT_11php_runtime2vm6arraysNtB4_2Vm16drain_aa_pending arrays.rs:1922  | while let Some(op) = pending.take() {
+     263   2.5%  Mbv00yxnRz_4core3ptr9drop_glueNtNtCsePzg45LyhTm_9php_types4zval4ZvalECs4nIjj9KQmRT_11php_runtime mod.rs:823  | 
+     261   2.5%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:2317  | self.backedge_cmp(top, func, a);
+     259   2.5%  _NtCshxvaOLs88l5_5alloc7raw_vecNtB5_11RawVecInner11finish_growCs4nIjj9KQmRT_11php_runtime mod.rs:568  | 
+     251   2.4%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:1563  | let v = self.frames[top].func.consts[*i as usize].to_zval();
+     225   2.2%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:1544  | let op = &func.ops[ip];
+     223   2.2%  nIjj9KQmRT_11php_runtime2vm6arrays17coerce_key_silent arrays.rs:942  | match v {
+     221   2.1%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:1505  | if self.frames.len() > MAX_CALL_DEPTH {
+     218   2.1%  nIjj9KQmRT_11php_runtime2vm6arrays16field_write_walk arrays.rs:473  | }
+     197   1.9%  OUTLINED_FUNCTION_41 free.c:0  | 
+     173   1.7%  nIjj9KQmRT_11php_runtime2vm6arrays16field_write_walk arrays.rs:331  | if let Zval::Ref(cell) = target {
+     165   1.6%  _NtCsePzg45LyhTm_9php_types4zvalNtB5_4ZvalNtNtCs8Mbv00yxnRz_4core5clone5Clone5clone zval.rs:15  | #[cfg_attr(not(feature = "mem-census"), derive(Clone))]
+     143   1.4%  _NtCsePzg45LyhTm_9php_types5arrayNtB5_8KeyIndex6lookup array.rs:272  | 
+     141   1.4%  _NtCshxvaOLs88l5_5alloc7raw_vecNtB5_11RawVecInner11finish_growCs4nIjj9KQmRT_11php_runtime mod.rs:549  | 
+     140   1.4%  Mbv00yxnRz_4core3ptr9drop_glueINtNtB4_6option6OptionNtNtNtCs4nIjj9KQmRT_11php_runtime2vm6arrays4AaOpEEB13_ mod.rs:823  | 
+     136   1.3%  _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm14pop_field_keys mod.rs:13900  | 
+     136   1.3%  nIjj9KQmRT_11php_runtime2vm6arraysNtB4_2Vm14field_rmw_fast arrays.rs:1619  | pub(super) fn field_rmw_fast(
+     135   1.3%  OUTLINED_FUNCTION_32 alloc.c:0  | 
+     124   1.2%  Mbv00yxnRz_4core3ptr9drop_glueNtNtCsePzg45LyhTm_9php_types4zval4ZvalEBF_ mod.rs:823  | 
+     117   1.1%  nIjj9KQmRT_11php_runtime2vm6arraysNtB4_2Vm16drain_aa_pending arrays.rs:2109  | }
+     117   1.1%  _NtCsePzg45LyhTm_9php_types5arrayNtB5_8KeyIndex6lookup array.rs:249  | 
+     111   1.1%  nIjj9KQmRT_11php_runtime2vm6arraysNtB4_2Vm14field_rmw_fast arrays.rs:1648  | let Some((cid1, bits)) = ic.get(PropIc::scope_key(scope)) else {
+     107   1.0%  _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm14pop_field_keys mod.rs:13894  | 
+     105   1.0%  nIjj9KQmRT_11php_runtime2vm6arrays16field_write_walk arrays.rs:318  | fn field_write_walk(
+     104   1.0%  nIjj9KQmRT_11php_runtime2vm6arraysNtB4_2Vm14field_rmw_fast arrays.rs:1679  | let Some(child) = obj.props.get_slot_mut(si) else {
+     103   1.0%  LyhTm_9php_types3ops9increment ops.rs:1192  | }
+      99   1.0%  Mbv00yxnRz_4core3ptr9drop_glueINtNtNtCshxvaOLs88l5_5alloc3vec9into_iter8IntoIterNtNtCsePzg45LyhTm_9php_types4zval4ZvalEECs4nIjj9KQmRT_11php_runtime mod.rs:823  | 
+      98   0.9%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:2304  | self.incdec_slot_discard(top, *slot, *inc)?;
+      96   0.9%  nIjj9KQmRT_11php_runtime2vm6arrays12ensure_array arrays.rs:1214  | match cell {
+      96   0.9%  _NtCsePzg45LyhTm_9php_types5arrayNtB5_8PhpArray3get array.rs:940  | 

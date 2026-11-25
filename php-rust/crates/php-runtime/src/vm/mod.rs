@@ -80,7 +80,7 @@ mod coroutines;
 mod dom;
 pub mod cli_stream;
 mod exceptions;
-mod gc_probe; mod ic_scoped; // S-194 C3b
+mod field_plain; mod gc_probe; mod ic_scoped; // S-194 P1, C3b
 pub(crate) mod builtin_fast;
 pub(crate) mod call_bind;
 mod xmlparser;
@@ -13914,8 +13914,7 @@ impl<'m> Vm<'m> {
     }
 
     /// The BP_VAR_IS walk behind `Op::FieldIsset`/`Op::FieldEmpty` with the
-    /// `__isset`/`__get` protocol dispatched at ANY property step — not just
-    /// the path start (`isset($block->block_type->uses_context)`: the magic
+    /// `__isset`/`__get` protocol dispatched at ANY property step — not just the path start (`isset($block->block_type->uses_context)`: the magic
     /// leaf sits one hop in; WP_Block_Type keys its private props on it).
     /// Walks the plain prefix silently, runs the protocol at the first magic
     /// boundary, finishes the rest through the plain walker. `Ok(None)` = no
@@ -13935,6 +13934,7 @@ impl<'m> Vm<'m> {
         keys: &[Zval],
         empty_mode: bool,
     ) -> Result<Option<bool>, PhpError> {
+        if let Some(r) = self.field_is_plain(base, top, steps, keys, empty_mode) { return Ok(Some(r)); } // S-194 P1
         let cur = self.frames[top].class;
         let base_val = match base {
             FieldBase::Local(s) => self.frames[top].slots.get(s as usize),

@@ -1,0 +1,50 @@
+== profilo fixture p_this_isset N=20000000: 38330 campioni, samply rc=0 (direzione) ==
+    4522  11.8%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop
+    4043  10.5%  (libsystem_platform.dylib)
+    3144   8.2%  _NtCs3fRkGY2FHAU_9hashbrown3mapINtB6_7HashMapINtNtCshxvaOLs88l5_5alloc5boxed3BoxShENtNtCs4nIjj9KQmRT_11php_runtime8bytecode8PropInfoNtCsdnIwS7Na5wv_10rustc_hash13FxBuildHasherE3getB1n_EB1u_
+    2818   7.4%  Mbv00yxnRz_4core3ptr9drop_glueNtNtCsePzg45LyhTm_9php_types4zval4ZvalECs4nIjj9KQmRT_11php_runtime
+    2653   6.9%  nIjj9KQmRT_11php_runtime2vm6arrays9field_get
+    2177   5.7%  _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm17field_magic_probe
+    1378   3.6%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm15methodcall_fast
+    1338   3.5%  nIjj9KQmRT_11php_runtime2vm3oop12deref_object
+    1279   3.3%  _NtCsePzg45LyhTm_9php_types4zvalNtB5_4ZvalNtNtCs8Mbv00yxnRz_4core5clone5Clone5clone
+    1212   3.2%  nIjj9KQmRT_11php_runtime2vm3oop19resolve_prop_access
+    1130   2.9%  _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm13gc_sweep_body
+     999   2.6%  _NtCsePzg45LyhTm_9php_types6objectNtB5_11PropsLayout7slot_of
+     982   2.6%  _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_5Frame12with_buffers
+     864   2.3%  _NtCsePzg45LyhTm_9php_types5arrayNtB5_8KeyIndex6lookup
+  righe (simbolo file:riga):
+    2818   7.4%  Mbv00yxnRz_4core3ptr9drop_glueNtNtCsePzg45LyhTm_9php_types4zval4ZvalECs4nIjj9KQmRT_11php_runtime mod.rs:823  | 
+    1587   4.1%  _NtCs3fRkGY2FHAU_9hashbrown3mapINtB6_7HashMapINtNtCshxvaOLs88l5_5alloc5boxed3BoxShENtNtCs4nIjj9KQmRT_11php_runtime8bytecode8PropInfoNtCsdnIwS7Na5wv_10rustc_hash13FxBuildHasherE3getB1n_EB1u_ map.rs:1288  | 
+    1009   2.6%  _NtCsePzg45LyhTm_9php_types4zvalNtB5_4ZvalNtNtCs8Mbv00yxnRz_4core5clone5Clone5clone zval.rs:15  | #[cfg_attr(not(feature = "mem-census"), derive(Clone))]
+     709   1.8%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:1559  | match op {
+     568   1.5%  _NtCs3fRkGY2FHAU_9hashbrown3mapINtB6_7HashMapINtNtCshxvaOLs88l5_5alloc5boxed3BoxShENtNtCs4nIjj9KQmRT_11php_runtime8bytecode8PropInfoNtCsdnIwS7Na5wv_10rustc_hash13FxBuildHasherE3getB1n_EB1u_ map.rs:0  | 
+     563   1.5%  _NtCsePzg45LyhTm_9php_types5arrayNtB5_8KeyIndex6lookup array.rs:252  | 
+     559   1.5%  nIjj9KQmRT_11php_runtime2vm3oop12deref_object oop.rs:227  | match v {
+     434   1.1%  _NtCsePzg45LyhTm_9php_types6objectNtB5_11PropsLayout7slot_of object.rs:672  | }
+     432   1.1%  _NtCs3fRkGY2FHAU_9hashbrown3mapINtB6_7HashMapINtNtCshxvaOLs88l5_5alloc5boxed3BoxShENtNtCs4nIjj9KQmRT_11php_runtime8bytecode8PropInfoNtCsdnIwS7Na5wv_10rustc_hash13FxBuildHasherE3getB1n_EB1u_ map.rs:1287  | 
+     408   1.1%  nIjj9KQmRT_11php_runtime2vm6arrays9field_get arrays.rs:700  | }
+     407   1.1%  nIjj9KQmRT_11php_runtime2vm6arrays9field_get arrays.rs:650  | if let Zval::Ref(rc) = cell {
+     405   1.1%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:2317  | self.backedge_cmp(top, func, a);
+     397   1.0%  nIjj9KQmRT_11php_runtime2vm3oop12deref_object oop.rs:232  | }
+     382   1.0%  nIjj9KQmRT_11php_runtime2vm6arrays9field_get arrays.rs:649  | pub(super) fn field_get(cell: &Zval, steps: &[FieldStep], keys: &mut std::vec::IntoIter<Zval>, fs: F
+     380   1.0%  _NtCs3fRkGY2FHAU_9hashbrown3mapINtB6_7HashMapINtNtCshxvaOLs88l5_5alloc5boxed3BoxShENtNtCs4nIjj9KQmRT_11php_runtime8bytecode8PropInfoNtCsdnIwS7Na5wv_10rustc_hash13FxBuildHasherE3getB1n_EB1u_ map.rs:1293  | 
+     371   1.0%  _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm17field_magic_probe mod.rs:13951  | 
+     362   0.9%  nIjj9KQmRT_11php_runtime2vm6arrays17coerce_key_silent arrays.rs:946  | Zval::Str(s) => Some(Key::from_zstr(s)),
+     362   0.9%  nIjj9KQmRT_11php_runtime2vm3oop19resolve_prop_access oop.rs:475  | }
+     344   0.9%  nIjj9KQmRT_11php_runtime2vm3oop19resolve_prop_access oop.rs:441  | pub(super) fn resolve_prop_access<'a>(classes: &[&'a CompiledClass], obj_class: ClassId, name: &[u8]
+     339   0.9%  _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm11field_value mod.rs:13906  | 
+     337   0.9%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:1544  | let op = &func.ops[ip];
+     312   0.8%  nIjj9KQmRT_11php_runtime2vm3oop12deref_object oop.rs:228  | Zval::Object(o) => Some(o.clone()),
+     308   0.8%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:1505  | if self.frames.len() > MAX_CALL_DEPTH {
+     295   0.8%  nIjj9KQmRT_11php_runtime2vm6arrays9field_get arrays.rs:676  | match obj.props.get(key.as_ref()) {
+     293   0.8%  _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_5Frame12with_buffers mod.rs:2738  | 
+     292   0.8%  OUTLINED_FUNCTION_41 free.c:0  | 
+     277   0.7%  _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_5Frame12with_buffers mod.rs:2754  | 
+     252   0.7%  OUTLINED_FUNCTION_32 alloc.c:0  | 
+     246   0.6%  Mbv00yxnRz_4core3ptr9drop_glueNtNtCs4nIjj9KQmRT_11php_runtime2vm5FrameEBF_ mod.rs:823  | 
+     245   0.6%  l5_5alloc3vecINtB5_3VecNtNtCs4nIjj9KQmRT_11php_runtime2vm5FrameE8push_mutBJ_ mod.rs:1043  | 
+     243   0.6%  _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_5Frame12with_buffers mod.rs:2737  | 
+     240   0.6%  nIjj9KQmRT_11php_runtime2vm6arrays9field_get arrays.rs:659  | Some((first, rest)) => match first {
+     237   0.6%  _NtCsePzg45LyhTm_9php_types6objectNtB5_11PropsLayout7slot_of object.rs:664  | if self.keys.len() < HASH_SCAN_MIN {
+     236   0.6%  _NtCsePzg45LyhTm_9php_types6objectNtB5_11PropsLayout7slot_of object.rs:665  | return self.keys.iter().position(|k| k.as_ref() == name);

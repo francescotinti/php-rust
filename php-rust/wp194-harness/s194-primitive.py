@@ -121,6 +121,25 @@ X = [
  ("this_private0", "calls", "class M { private function z() { return 1; } function go() { return $this->z(); } }\nfunction gm() { static $m; return $m ??= new M; }\n", "$s += gm()->go();", 1),
  ("this_protected0", "calls", "class M { protected function z() { return 1; } function go() { return $this->z(); } }\nfunction gm() { static $m; return $m ??= new M; }\n", "$s += gm()->go();", 1),
 ]
+# S-194 package P (paths and properties, s194-criterio-P.md): (name, family, header, extra setup, body, divisor)
+PH = "class P { public $arr = ['alpha' => 1, 'beta' => 2]; public $q; public $n = 0;\n  function setn($v) { $this->n = $v; } function has($k) { return isset($this->arr[$k]); } function put($k, $v) { $this->arr[$k] = $v; } }\n"
+PS = "$p = new P; $p->q = new P; $n2 = ['a' => ['b' => 1, 'c' => 2]];\n"
+PP = [
+ ("p_isset_str", "path", "if (isset($h['beta'])) { $s++; }", 1),
+ ("p_isset_miss", "path", "if (isset($h['zeta'])) { $s++; }", 1),
+ ("p_isset2", "path", "if (isset($n2['a']['b'])) { $s++; }", 1),
+ ("p_assign2", "path", "$n2['a']['b'] = $i;", 1),
+ ("p_incdec", "path", "$h['beta']++;", 1),
+ ("p_field_isset", "path", "if (isset($p->arr['beta'])) { $s++; }", 1),
+ ("p_field_isset_obj", "path", "if (isset($p->q->n)) { $s++; }", 1),
+ ("p_field_assign", "path", "$p->arr['beta'] = $i;", 1),
+ ("p_field_incdec", "path", "$p->arr['beta']++;", 1),
+ ("p_this_isset", "path", "if ($p->has('beta')) { $s++; }", 1),
+ ("p_this_assign", "path", "$p->put('beta', $i);", 1),
+ ("p_this_set", "path", "$p->setn($i);", 1),
+ ("p_prop_isset", "path", "if (isset($p->n)) { $s++; }", 1),
+ ("p_empty_str", "path", "if (empty($h['beta'])) { $s++; }", 1),
+]
 TAIL = ' echo $s, "|", strlen((string)$t), "|", $x, "\\n";'
 
 def gen():
@@ -140,6 +159,10 @@ def gen():
         open(os.path.join(FX, fn_), "w").write(txt)
     for name, _, head, body, _ in X:
         src = "<?php\n" + head + PRE + "function run($n) {\n  " + SETUP + "  for ($i = 0; $i < $n; $i++) { " + body + " }\n " + TAIL + "\n}\nrun((int)$argv[1]);\n"
+        open(os.path.join(FX, name + ".php"), "w").write(src)
+
+    for name, _, body, _ in PP:
+        src = "<?php\n" + PH + PRE + "function run($n) {\n  " + SETUP + PS + "  for ($i = 0; $i < $n; $i++) { " + body + " }\n " + TAIL + "\n}\nrun((int)$argv[1]);\n"
         open(os.path.join(FX, name + ".php"), "w").write(src)
 
 def lit_path(name, n):
@@ -171,7 +194,7 @@ def main():
     if A.bin: ENG["phpr"] = os.path.expanduser(A.bin)
     only = set(x for x in A.only.split(",") if x)
     sha = hashlib.sha256(open(ENG["phpr"], "rb").read()).hexdigest()[:16]
-    for name, fam, _, div in F + G + L + NS + [(n_, f_, b_, d_) for (n_, f_, _h, b_, d_) in X]:
+    for name, fam, _, div in F + G + L + NS + [(n_, f_, b_, d_) for (n_, f_, _h, b_, d_) in X] + PP:
         if only and name not in only: continue
         path = os.path.join(FX, name + ".php")
         n1 = N1 // div; n2 = 3 * n1

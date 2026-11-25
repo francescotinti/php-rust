@@ -1,0 +1,50 @@
+== profilo fixture p_prop_isset N=20000000: 3747 campioni, samply rc=0 (direzione) ==
+    2843  75.9%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop
+     404  10.8%  Mbv00yxnRz_4core3ptr9drop_glueNtNtCsePzg45LyhTm_9php_types4zval4ZvalECs4nIjj9KQmRT_11php_runtime
+     209   5.6%  _NtCsePzg45LyhTm_9php_types4zvalNtB5_4ZvalNtNtCs8Mbv00yxnRz_4core5clone5Clone5clone
+     146   3.9%  l5_5alloc3vecINtB5_3VecNtNtCsePzg45LyhTm_9php_types4zval4ZvalE8push_mutCs4nIjj9KQmRT_11php_runtime
+      28   0.7%  LyhTm_9php_types4zvalNtB4_4Zval11deref_clone
+      23   0.6%  (libsystem_platform.dylib)
+       7   0.2%  _11mago_syntax5lexerNtB2_5Lexer7advance
+       7   0.2%  _NtNtNtCslgvlIqPj547_11mago_syntax3ast3ast10expressionNtB5_10ExpressionNtCsiqUURHyj9Hw_9mago_span7HasSpan4span
+       6   0.2%  (libsystem_kernel.dylib)
+       6   0.2%  nIjj9KQmRT_11php_runtime7compile4func12compile_body
+       5   0.1%  mi_page_free_list_extend
+       4   0.1%  _11mago_syntax6parser6streamNtB2_11TokenStream16fill_buffer_slow
+       4   0.1%  nIjj9KQmRT_11php_runtime7compile4exprNtB4_10FnCompiler4call
+       3   0.1%  nIjj9KQmRT_11php_runtime5lower4exprNtB4_7Lowerer10lower_expr
+  righe (simbolo file:riga):
+     473  12.6%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:2317  | self.backedge_cmp(top, func, a);
+     472  12.6%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:1559  | match op {
+     404  10.8%  Mbv00yxnRz_4core3ptr9drop_glueNtNtCsePzg45LyhTm_9php_types4zval4ZvalECs4nIjj9KQmRT_11php_runtime mod.rs:823  | 
+     273   7.3%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:2304  | self.incdec_slot_discard(top, *slot, *inc)?;
+     250   6.7%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:1544  | let op = &func.ops[ip];
+     199   5.3%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:1505  | if self.frames.len() > MAX_CALL_DEPTH {
+     191   5.1%  _NtCsePzg45LyhTm_9php_types4zvalNtB5_4ZvalNtNtCs8Mbv00yxnRz_4core5clone5Clone5clone zval.rs:15  | #[cfg_attr(not(feature = "mem-census"), derive(Clone))]
+     116   3.1%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:2314  | self.frames[top].ip = a;
+     108   2.9%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:1510  | let top = self.frames.len() - 1;
+     104   2.8%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:2429  | if !self.pop_cond(top) {
+     103   2.7%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:1643  | let v = read_slot(&self.frames[top].slots[*s as usize]);
+      86   2.3%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:5457  | let obj = self.frames[top].stack.pop().expect("PropIsset object");
+      82   2.2%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:6980  | if !self.frames[top].flags.get(FrameFlags::IN_DESTRUCTOR) {
+      79   2.1%  l5_5alloc3vecINtB5_3VecNtNtCsePzg45LyhTm_9php_types4zval4ZvalE8push_mutCs4nIjj9KQmRT_11php_runtime mod.rs:1038  | 
+      77   2.1%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:5472  | self.frames[top].stack.push(Zval::Bool(set));
+      62   1.7%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:5465  | if let Some((cid1, slot)) = ic.get(crate::bytecode::PropIc::scope_key(cur)) {
+      58   1.5%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:1644  | self.frames[top].stack.push(v);
+      54   1.4%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:5464  | if let Zval::Object(o) = &recv {
+      53   1.4%  l5_5alloc3vecINtB5_3VecNtNtCsePzg45LyhTm_9php_types4zval4ZvalE8push_mutCs4nIjj9KQmRT_11php_runtime mod.rs:1048  | 
+      52   1.4%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:7005  | let noop = self.sweep_idle(top, *main);
+      50   1.3%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:5458  | let cur = self.frames[top].class;
+      48   1.3%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:5467  | if b.class_id + 1 == cid1 && b.lazy.is_none() {
+      42   1.1%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:5460  | let recv = if matches!(obj, Zval::Ref(_)) { obj.deref_clone() } else { obj };
+      41   1.1%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:5468  | if let Some(v) = b.props.get_slot(slot) {
+      40   1.1%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:5560  | }
+      35   0.9%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:5485  | let b = o.borrow();
+      28   0.7%  LyhTm_9php_types4zvalNtB4_4Zval11deref_clone zval.rs:349  | match self {
+      18   0.5%  _NtCsePzg45LyhTm_9php_types4zvalNtB5_4ZvalNtNtCs8Mbv00yxnRz_4core5clone5Clone5clone zval.rs:41  | Object(Rc<RefCell<Object>>),
+      12   0.3%  l5_5alloc3vecINtB5_3VecNtNtCsePzg45LyhTm_9php_types4zval4ZvalE8push_mutCs4nIjj9KQmRT_11php_runtime mod.rs:1033  | 
+       7   0.2%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:5466  | let b = o.borrow();
+       5   0.1%  mi_page_free_list_extend page.c:605  | 
+       5   0.1%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:1511  | let ip = self.frames[top].ip;
+       4   0.1%  nIjj9KQmRT_11php_runtime7compile4exprNtB4_10FnCompiler4call expr.rs:1108  | 
+       4   0.1%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:0  | }

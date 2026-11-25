@@ -1,0 +1,50 @@
+== profilo fixture p_isset2 N=20000000: 6686 campioni, samply rc=0 (direzione) ==
+    3439  51.4%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop
+     672  10.1%  nIjj9KQmRT_11php_runtime2vm6arrays11silent_walk
+     457   6.8%  nIjj9KQmRT_11php_runtime2vm6arrays17coerce_key_silent
+     408   6.1%  Mbv00yxnRz_4core3ptr9drop_glueNtNtCsePzg45LyhTm_9php_types4zval4ZvalECs4nIjj9KQmRT_11php_runtime
+     342   5.1%  _NtCsePzg45LyhTm_9php_types5arrayNtB5_8KeyIndex6lookup
+     265   4.0%  (libsystem_platform.dylib)
+     250   3.7%  _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm14is_walk_resume
+     170   2.5%  mi_free
+     163   2.4%  _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm9base_cell
+     141   2.1%  mi_malloc_aligned
+     131   2.0%  OUTLINED_FUNCTION_41
+      42   0.6%  OUTLINED_FUNCTION_32
+      41   0.6%  DYLD-STUB$$memcpy
+      36   0.5%  OUTLINED_FUNCTION_17
+  righe (simbolo file:riga):
+     653   9.8%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:1559  | match op {
+     523   7.8%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:1563  | let v = self.frames[top].func.consts[*i as usize].to_zval();
+     414   6.2%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:2317  | self.backedge_cmp(top, func, a);
+     408   6.1%  Mbv00yxnRz_4core3ptr9drop_glueNtNtCsePzg45LyhTm_9php_types4zval4ZvalECs4nIjj9KQmRT_11php_runtime mod.rs:823  | 
+     335   5.0%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:1544  | let op = &func.ops[ip];
+     323   4.8%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:1505  | if self.frames.len() > MAX_CALL_DEPTH {
+     301   4.5%  nIjj9KQmRT_11php_runtime2vm6arrays11silent_walk arrays.rs:78  | Zval::Array(a) => match coerce_key_silent(k).and_then(|key| a.get(&key)) {
+     280   4.2%  nIjj9KQmRT_11php_runtime2vm6arrays17coerce_key_silent arrays.rs:946  | Zval::Str(s) => Some(Key::from_zstr(s)),
+     206   3.1%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:2781  | }
+     173   2.6%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:2304  | self.incdec_slot_discard(top, *slot, *inc)?;
+     165   2.5%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:1564  | self.frames[top].stack.push(v);
+     162   2.4%  _NtCsePzg45LyhTm_9php_types5arrayNtB5_8KeyIndex6lookup array.rs:252  | 
+     141   2.1%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:2772  | let set = match self.dim_is_walk(*base, top, &keys, super::IsMode::Exists)? {
+     131   2.0%  OUTLINED_FUNCTION_41 free.c:0  | 
+     122   1.8%  nIjj9KQmRT_11php_runtime2vm6arrays11silent_walk arrays.rs:68  | match keys.split_first() {
+     111   1.7%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:2429  | if !self.pop_cond(top) {
+     108   1.6%  _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm14is_walk_resume mod.rs:14180  | 
+     105   1.6%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:2780  | self.frames[top].stack.push(Zval::Bool(set));
+      99   1.5%  nIjj9KQmRT_11php_runtime2vm6arrays17coerce_key_silent arrays.rs:942  | match v {
+      99   1.5%  _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm14is_walk_resume mod.rs:14158  | 
+      99   1.5%  _NtCsePzg45LyhTm_9php_types5arrayNtB5_8KeyIndex6lookup array.rs:272  | 
+      88   1.3%  mi_free free.c:207  | 
+      83   1.2%  nIjj9KQmRT_11php_runtime2vm6arrays11silent_walk arrays.rs:101  | }
+      81   1.2%  _NtCsePzg45LyhTm_9php_types5arrayNtB5_8KeyIndex6lookup array.rs:249  | 
+      79   1.2%  _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm9base_cell mod.rs:6148  | 
+      79   1.2%  nIjj9KQmRT_11php_runtime2vm6arrays11silent_walk arrays.rs:64  | if let Zval::Ref(rc) = cell {
+      77   1.2%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:2759  | let keys = self.pop_keys(top, *nkeys);
+      77   1.2%  nIjj9KQmRT_11php_runtime2vm6arrays17coerce_key_silent arrays.rs:959  | }
+      73   1.1%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:2314  | self.frames[top].ip = a;
+      48   0.7%  mi_free free.c:209  | 
+      44   0.7%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:6980  | if !self.frames[top].flags.get(FrameFlags::IN_DESTRUCTOR) {
+      44   0.7%  _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm9base_cell mod.rs:6150  | 
+      43   0.6%  _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm14is_walk_resume mod.rs:14151  | 
+      42   0.6%  OUTLINED_FUNCTION_32 alloc.c:0  | 

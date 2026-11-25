@@ -1,0 +1,18 @@
+== S-194 primitive: istruzioni ritirate per iterazione (differenziale N1/N2), phpr /Users/francescotinti/Claude/php-rust-output/release/phpr sha 98736f5fc9ac2d47 contro oracle. DIREZIONE ==
+fixture         fam           php     phpr     x |  php net phpr net  x net  eccesso | cyc x IPC php IPC phpr disp%
+noop            loop         34.7    123.0  3.54 |      0.0      0.0      -      0.0 |  1.69    5.75    12.06 12.42
+p_isset_str     path        133.8    968.3  7.24 |     99.1    845.3   8.53    746.3 |  6.70    6.51     7.04  0.24
+p_isset_miss    path         90.0    920.4 10.23 |     55.3    797.4  14.42    742.1 | 14.88   10.12     6.96  0.06
+p_isset2        path        211.9   1092.4  5.15 |    177.2    969.5   5.47    792.2 |  4.40    5.93     6.96  0.06
+p_assign2       path        237.0   1559.5  6.58 |    202.3   1436.5   7.10   1234.2 |  4.85    4.94     6.71  0.02
+p_incdec        path        172.0   1147.1  6.67 |    137.3   1024.2   7.46    886.9 |  7.15    6.55     6.11  0.18
+p_field_isset   path        197.7   3996.9 20.22 |    163.0   3873.9  23.77   3710.9 | 18.20    5.84     6.49  2.30
+p_field_isset_obj path        171.1   3248.4 18.98 |    136.4   3125.4  22.91   2988.9 | 25.15    8.44     6.37  0.06
+p_field_assign  path        215.1   1465.1  6.81 |    180.4   1342.2   7.44   1161.8 |  4.71    4.82     6.97  0.05
+p_field_incdec  path        226.0   1671.9  7.40 |    191.3   1549.0   8.10   1357.7 |  5.74    5.49     7.09  0.12
+p_this_isset    path        446.0   5779.9 12.96 |    411.3   5656.9  13.75   5245.6 | 11.61    5.66     6.31  0.02
+p_this_assign   path        463.1   3729.2  8.05 |    428.4   3606.2   8.42   3177.8 |  6.71    5.55     6.66  0.05
+p_this_set      path        300.1   2884.3  9.61 |    265.4   2761.3  10.41   2496.0 | 10.19    6.54     6.17  0.06
+p_prop_isset    path        120.9    610.1  5.04 |     86.2    487.1   5.65    400.9 |  7.04    9.62     6.89  0.04
+p_empty_str     path        138.1    918.4  6.65 |    103.4    795.4   7.70    692.1 |  5.80    6.36     7.29  0.07
+note: nessuna fixture nulla

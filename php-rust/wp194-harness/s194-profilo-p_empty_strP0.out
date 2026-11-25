@@ -1,0 +1,50 @@
+== profilo fixture p_empty_str N=20000000: 5541 campioni, samply rc=0 (direzione) ==
+    2355  42.5%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop
+     489   8.8%  nIjj9KQmRT_11php_runtime2vm6arrays11silent_walk
+     395   7.1%  Mbv00yxnRz_4core3ptr9drop_glueNtNtCsePzg45LyhTm_9php_types4zval4ZvalECs4nIjj9KQmRT_11php_runtime
+     288   5.2%  _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm14as_arrayaccess
+     274   4.9%  nIjj9KQmRT_11php_runtime2vm6arrays17coerce_key_silent
+     273   4.9%  _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm9base_cell
+     229   4.1%  _NtCsePzg45LyhTm_9php_types5arrayNtB5_8KeyIndex6lookup
+     185   3.3%  (libsystem_platform.dylib)
+     177   3.2%  _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm14is_walk_resume
+     172   3.1%  mi_free
+     141   2.5%  mi_malloc_aligned
+     112   2.0%  LyhTm_9php_types7convert14is_true_silent
+     103   1.9%  OUTLINED_FUNCTION_41
+      93   1.7%  _NtCsePzg45LyhTm_9php_types4zvalNtB5_4ZvalNtNtCs8Mbv00yxnRz_4core5clone5Clone5clone
+  righe (simbolo file:riga):
+     466   8.4%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:1559  | match op {
+     395   7.1%  Mbv00yxnRz_4core3ptr9drop_glueNtNtCsePzg45LyhTm_9php_types4zval4ZvalECs4nIjj9KQmRT_11php_runtime mod.rs:823  | 
+     271   4.9%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:1505  | if self.frames.len() > MAX_CALL_DEPTH {
+     265   4.8%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:1544  | let op = &func.ops[ip];
+     232   4.2%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:2317  | self.backedge_cmp(top, func, a);
+     183   3.3%  nIjj9KQmRT_11php_runtime2vm6arrays17coerce_key_silent arrays.rs:946  | Zval::Str(s) => Some(Key::from_zstr(s)),
+     160   2.9%  _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm14as_arrayaccess mod.rs:6181  | 
+     159   2.9%  nIjj9KQmRT_11php_runtime2vm6arrays11silent_walk arrays.rs:78  | Zval::Array(a) => match coerce_key_silent(k).and_then(|key| a.get(&key)) {
+     149   2.7%  _NtCsePzg45LyhTm_9php_types5arrayNtB5_8KeyIndex6lookup array.rs:252  | 
+     145   2.6%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:1563  | let v = self.frames[top].func.consts[*i as usize].to_zval();
+     131   2.4%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:2819  | }
+     128   2.3%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:2818  | self.frames[top].stack.push(Zval::Bool(empty));
+     112   2.0%  _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm9base_cell mod.rs:6148  | 
+     110   2.0%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:2783  | let keys = self.pop_keys(top, *nkeys);
+     103   1.9%  OUTLINED_FUNCTION_41 free.c:0  | 
+      97   1.8%  nIjj9KQmRT_11php_runtime2vm6arrays11silent_walk arrays.rs:64  | if let Zval::Ref(rc) = cell {
+      95   1.7%  LyhTm_9php_types7convert14is_true_silent convert.rs:42  | match v {
+      94   1.7%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:2804  | let empty = match self.dim_is_walk(*base, top, &keys, super::IsMode::Truthy)? {
+      91   1.6%  mi_free free.c:207  | 
+      91   1.6%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:2304  | self.incdec_slot_discard(top, *slot, *inc)?;
+      88   1.6%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:2429  | if !self.pop_cond(top) {
+      87   1.6%  _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm9base_cell mod.rs:6154  | 
+      84   1.5%  _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm14as_arrayaccess mod.rs:6173  | 
+      75   1.4%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:2789  | if let Some(recv) = self.as_arrayaccess(self.base_cell(*base, top)) {
+      74   1.3%  _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm9base_cell mod.rs:6150  | 
+      74   1.3%  _NtCsePzg45LyhTm_9php_types4zvalNtB5_4ZvalNtNtCs8Mbv00yxnRz_4core5clone5Clone5clone zval.rs:15  | #[cfg_attr(not(feature = "mem-census"), derive(Clone))]
+      73   1.3%  _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm14is_walk_resume mod.rs:14158  | 
+      73   1.3%  nIjj9KQmRT_11php_runtime2vm6arrays11silent_walk arrays.rs:68  | match keys.split_first() {
+      71   1.3%  _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm14is_walk_resume mod.rs:14180  | 
+      60   1.1%  nIjj9KQmRT_11php_runtime2vm6arrays11silent_walk arrays.rs:63  | pub(super) fn silent_walk(cell: &Zval, keys: &[Zval], depth: usize, mode: IsMode) -> SilentOut {
+      59   1.1%  nIjj9KQmRT_11php_runtime2vm6arrays11silent_walk arrays.rs:101  | }
+      53   1.0%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:1564  | self.frames[top].stack.push(v);
+      47   0.8%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:0  | }
+      46   0.8%  nIjj9KQmRT_11php_runtime2vm6arrays17coerce_key_silent arrays.rs:942  | match v {

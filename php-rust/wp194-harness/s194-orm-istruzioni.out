@@ -42,3 +42,9 @@ binario C3b2 = /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-ha
 pin        istruzioni   242.457 G (dispersione 0.04 %)  vs pin  +0.00 %  cicli   67.688 G  user  31.01 s  | Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, PHP
 C3b2       istruzioni   239.829 G (dispersione 0.05 %)  vs pin  -1.08 %  cicli   67.079 G  user  30.70 s  | Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, PHP
 fine rc=0 2026-11-24 22:48:11
+== s194 ORM istruzioni ritirate per gamba, REPS=2, 2026-11-25 09:14:23 (direzione sul lavoro, non verdetto di tempo) ==
+binario pin = /Users/francescotinti/Claude/php-rust-output/release/phpr sha 98736f5fc9ac2d47
+binario P1 = /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/out/phpr-p1 sha 7cd3fa24e3f2ba4a
+pin        istruzioni   240.009 G (dispersione 0.04 %)  vs pin  +0.00 %  cicli   67.916 G  user  30.77 s  | Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, PHP
+P1         istruzioni   231.189 G (dispersione 0.02 %)  vs pin  -3.68 %  cicli   65.433 G  user  29.94 s  | Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, PHP
+fine rc=0 2026-11-25 09:16:47
