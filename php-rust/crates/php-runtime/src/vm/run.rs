@@ -2661,10 +2661,10 @@ impl<'m> super::Vm<'m> {
                     self.frames[top].stack.push(read_dim_nullable(&base, &key));
                 }
                 Op::AssignPath { base, nkeys, append } => {
+                    if !*append && *nkeys == 1 && self.dim1_assign_fast(*base, top) { continue; } // S-194 P2
                     let value = self.frames[top].stack.pop().expect("AssignPath value");
                     let mut keys = self.pop_keys(top, *nkeys);
-                    // `$o[$k] = v` / `$o[] = v` on an ArrayAccess object dispatches
-                    // `offsetSet` (a single step only); the expression yields `v`.
+                    // `$o[$k] = v` / `$o[] = v` on an ArrayAccess object dispatches `offsetSet` (a single step only); the expression yields `v`.
                     if nkeys + *append as u32 == 1 {
                         if let Some(recv) = self.as_arrayaccess(self.base_cell(*base, top)) {
                             let key = if *append { Zval::Null } else { keys.pop().expect("set key") };
@@ -2756,9 +2756,9 @@ impl<'m> super::Vm<'m> {
                     self.frames[top].stack.push(result);
                 }
                 Op::IssetPath { base, nkeys } => {
+                    if *nkeys == 1 && self.dim1_is_fast(*base, top, false) { continue; } // S-194 P2
                     let keys = self.pop_keys(top, *nkeys);
-                    // `isset($o[$k])` on an ArrayAccess object is `offsetExists($k)`
-                    // (a single step only; it does not call `offsetGet`).
+                    // `isset($o[$k])` on an ArrayAccess object is `offsetExists($k)` (a single step only; it does not call `offsetGet`).
                     if *nkeys == 1 {
                         if let Some(recv) = self.as_arrayaccess(self.base_cell(*base, top)) {
                             let key = keys.into_iter().next().expect("isset key");
@@ -2780,9 +2780,9 @@ impl<'m> super::Vm<'m> {
                     self.frames[top].stack.push(Zval::Bool(set));
                 }
                 Op::EmptyPath { base, nkeys } => {
+                    if *nkeys == 1 && self.dim1_is_fast(*base, top, true) { continue; } // S-194 P2
                     let keys = self.pop_keys(top, *nkeys);
-                    // `empty($o[$k])` on an ArrayAccess object: `!offsetExists($k)`
-                    // short-circuits to empty (so `offsetGet` — which may throw for
+                    // `empty($o[$k])` on an ArrayAccess object: `!offsetExists($k)` short-circuits to empty (so `offsetGet` — which may throw for
                     // an absent key, e.g. WeakMap — is skipped); otherwise
                     // `!truthy(offsetGet($k))`. A single step only.
                     if *nkeys == 1 {

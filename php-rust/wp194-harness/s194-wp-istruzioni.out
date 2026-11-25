@@ -57,3 +57,10 @@ pin        istruzioni  3731.438 G (dispersione 0.00 %)  vs pin  +0.00 %  cicli 1
 P1         istruzioni  3662.727 G (dispersione 0.00 %)  vs pin  -1.84 %  cicli 1214.457 G  user 671.29 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
 uploads-guard restore rc=0
 fine rc=0 2026-11-25 09:44:03
+== s194 WordPress (phpunit full) istruzioni ritirate per gamba, 2026-11-25 10:35:36 (direzione sul lavoro, non verdetto di tempo) ==
+binario P1 = /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/out/phpr-p1 sha 7cd3fa24e3f2ba4a
+binario P2 = /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/out/phpr-p2 sha c9bc4262ec7887de
+P1         istruzioni  3663.976 G (dispersione 0.00 %)  vs P1  +0.00 %  cicli 1215.027 G  user 671.81 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
+P2         istruzioni  3551.392 G (dispersione 0.00 %)  vs P1  -3.07 %  cicli 1201.193 G  user 664.58 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
+uploads-guard restore rc=0
+fine rc=0 2026-11-25 11:02:32

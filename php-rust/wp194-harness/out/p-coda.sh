@@ -1,8 +1,20 @@
 #!/bin/bash
-# p-coda.sh <commit> — S-194 promotion, steps before the launch: wait for the CI job of <commit> to START (the chain then waits for it to end),
-# acceptance chain on HEAD, then the dry run of the 30 fixture gates with the fresh candidate.
-W="$(cd "$(dirname "$0")/.." && pwd)"; rm -f "$W/out/p-coda.done"
-until grep -q "^START $(echo "$1" | cut -c1-12)" "/Volumes/Extreme Pro/Claude/phpr-ci/CI_FEED.log"; do sleep 20; done
-bash "$W/s194-catena-P.sh"; c=$(cat "$W/out/catena-P.done" 2>/dev/null || echo 99)
-d=99; [ "$c" = 0 ] && { bash "$W/out/p-dryrun.sh"; d=$(cat "$W/out/p-dryrun.rc"); }
-echo "catena=$c dryrun=$d" > "$W/out/p-coda.done"
+# p-coda.sh <tag> <prev> — S-194 package P, one step after its code is written: s194-passo-P1.sh <tag> (arm build + whole probe against
+# the pin reading), day acceptance s194<tag>, then the instruction count of the whole ORM and WordPress legs, the arm of the previous
+# step (out/phpr-<prev>, already measured: its leg is repeated as the reference) against this one. Generalises p1-coda.sh.
+# Outcome: out/p-coda-<tag>.done. Generato con assistenza AI (Claude Fable 5.2).
+set -u
+export PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:$HOME/.cargo/bin
+W="$(cd "$(dirname "$0")/.." && pwd)"; T="$1"; PV="$2"; D="$W/out/p-coda-$T.done"; : > "$D.tmp"; rm -f "$D"
+lc() { echo "$1" | tr 'A-Z' 'a-z'; }
+REF="$W/out/phpr-$(lc "$PV")"; ARM="$W/out/phpr-$(lc "$T")"
+bash "$W/s194-passo-P1.sh" "$T"; echo "passo: rc=$? done=$(cat "$W/out/passo-$T.done")" >> "$D.tmp"
+[ "$(cat "$W/out/passo-$T.done")" = 0 ] || { mv "$D.tmp" "$D"; exit 1; }
+cp "$HOME/Claude/phpr-target/s192-armD/release/phpr" "$ARM"; echo "braccio $(shasum -a 256 "$ARM" | cut -c1-16) rif $(shasum -a 256 "$REF" | cut -c1-16)" >> "$D.tmp"
+bash "$W/../wp192-harness/s192-accettazione.sh" "s194$T"; a=$?; echo "accettazione: rc=$a" >> "$D.tmp"
+[ "$a" = 0 ] || { mv "$D.tmp" "$D"; exit 1; }
+python3 "$W/s194-orm-istruzioni.py" "$PV=$REF" "$T=$ARM" > "$W/out/p-coda-$T-orm.log" 2>&1; echo "orm: rc=$?" >> "$D.tmp"
+cp "$W/s194-orm-istruzioni.out" "$W/s194-orm-istruzioni-$T.out"
+python3 "$W/s194-wp-istruzioni.py" "$PV=$REF" "$T=$ARM" > "$W/out/p-coda-$T-wp.log" 2>&1; echo "wp: rc=$?" >> "$D.tmp"
+cp "$W/s194-wp-istruzioni.out" "$W/s194-wp-istruzioni-$T.out"
+mv "$D.tmp" "$D"
