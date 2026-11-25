@@ -558,6 +558,8 @@ impl<'m> Vm<'m> {
                 let cid = o.borrow().class_id as usize;
                 if resolve_method_runtime(&self.classes, cid, b"__invoke").is_some() {
                     let top = self.frames.len() - 1;
+                    let mut args = args;
+                    self.settle_instance_places(top, &callee, b"__invoke", &mut args)?; // S-194 C4
                     // `deref: false` preserves the pre-WP-53 behaviour: no
                     // `DerefTop` ever followed the CallValue family.
                     self.dispatch_instance_call(top, cid, callee.clone(), b"__invoke", args, None, false)
@@ -619,6 +621,8 @@ impl<'m> Vm<'m> {
         let result = match &elems[0] {
             Zval::Object(_) => {
                 let cid = object_class_id(&elems[0]).expect("object class id");
+                let mut args = args;
+                self.settle_instance_places(top, &elems[0], &method, &mut args)?; // S-194 C4
                 // `deref: false`: no `DerefTop` ever followed a callable-array
                 // dispatch (pre-WP-53 behaviour preserved).
                 self.dispatch_instance_call(top, cid, elems[0].clone(), &method, args, None, false)

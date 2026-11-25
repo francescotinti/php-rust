@@ -80,7 +80,7 @@ mod coroutines;
 mod dom;
 pub mod cli_stream;
 mod exceptions;
-mod field_plain; mod gc_probe; mod ic_scoped; // S-194 P1, C3b
+mod arg_slot; mod field_plain; mod gc_probe; mod ic_scoped; // S-194 C4, P1, C3b
 pub(crate) mod builtin_fast;
 pub(crate) mod call_bind;
 mod xmlparser;
@@ -760,7 +760,7 @@ pub fn vm_new<'m>(
         superglobals: std::array::from_fn(|_| Zval::Undef),
         preg_cache: HashMap::default(),
         frames: Vec::new(),
-        frame_pool: FramePool::default(),
+        frame_pool: FramePool::default(), slot_places: Vec::new(),
         census_on: {
             #[cfg(feature = "gc-census")]
             gc_census::arm();
@@ -3243,7 +3243,7 @@ pub struct Vm<'m> {
     preg_cache: HashMap<Vec<u8>, Option<Rc<crate::preg::Engine>>>,
     frames: Vec<Frame<'m>>,
     /// WP-30: recycled frame backing buffers (see [`FramePool`]).
-    frame_pool: FramePool,
+    frame_pool: FramePool, slot_places: Vec<Rc<ArgPlace>>, // S-194 C4: see `vm/arg_slot`
     /// WP-33 T0: whether the op census records this run (`PHPR_OP_CENSUS`).
     /// Hoisted to a bool so the per-tick check is one predictable branch.
     census_on: bool,
@@ -11869,8 +11869,7 @@ impl<'m> Vm<'m> {
     /// the place via [`Self::make_ref_cell`] (aliases it, silently creating a
     /// missing key); a by-value one — or any argument of a `None` callee
     /// (native / `__call` / unresolved) — R-fetches it (plain read semantics:
-    /// "Undefined variable"/"Undefined array key" warnings, nothing created).
-    /// Runs in the *caller's* frame, before the callee frame is built.
+    /// "Undefined variable"/"Undefined array key" warnings, nothing created). Caller's frame, before the callee's is built.
     fn materialize_arg_places(
         &mut self,
         top: usize,
@@ -11879,11 +11878,12 @@ impl<'m> Vm<'m> {
     ) -> Result<(), PhpError> {
         for (i, a) in args.iter_mut().enumerate() {
             let Zval::ArgPlace(p) = a else { continue };
-            let p = Rc::clone(p);
             let by_ref = callee.map_or(p.steps.is_empty(), |f| match f.variadic_slot {
                 Some(v) if i >= v as usize => f.param_by_ref.get(v as usize).copied().unwrap_or(false),
                 _ => f.param_by_ref.get(i).copied().unwrap_or(false),
             });
+            if let (false, Some(v)) = (by_ref, self.slot_place_value(top, p)) { *a = v; continue; } // S-194 C4
+            let p = Rc::clone(p);
             let base = match p.base {
                 ArgPlaceBase::Local(s) => FieldBase::Local(s),
                 ArgPlaceBase::Global(s) => FieldBase::Global(s),

@@ -3086,12 +3086,12 @@ impl<'m> super::Vm<'m> {
                 }
                 Op::PushRefArg(slot) => {
                     // S-194: `PushRef` for a DEFINED variable; an undefined one defers to the binder (out of line), so a by-value parameter warns.
-                    if matches!(self.frames[top].slots[*slot as usize], Zval::Undef) {
-                        self.push_undef_arg_place(top, *slot);
-                    } else {
-                        let cell = make_cell(&mut self.frames[top].slots[*slot as usize]);
-                        self.frames[top].stack.push(Zval::Ref(cell));
-                    }
+                    let v = match &self.frames[top].slots[*slot as usize] { // C4: only a slot that already is a reference sends one
+                        Zval::Ref(c) => Zval::Ref(Rc::clone(c)),
+                        Zval::Undef => { self.push_undef_arg_place(top, *slot); continue; }
+                        _ => self.slot_place(*slot),
+                    };
+                    self.frames[top].stack.push(v);
                 }
                 Op::PushArgPlace { base, steps, name } => {
                     // SEND_VAR_EX place argument (FETCH_DIM/OBJ_FUNC_ARG):
@@ -7062,6 +7062,7 @@ impl<'m> super::Vm<'m> {
             }
         }
         let Some((defc, midx, cid)) = fast else { return Ok(false) };
+        let has_place = self.settle_slot_places(top, n); // S-194 C4: no by-reference parameter here, a defined variable is its value
         let callee = &self.classes[defc].methods[midx].func;
         let m = self.class_mod(defc);
         // L-MC2 (S-185, wp185-harness/s185-criterio-mc2.md): forma di L-CR1 (a)
@@ -7075,10 +7076,6 @@ impl<'m> super::Vm<'m> {
         // ha count ≥ 2 al drop — muore solo la cella RefCell, senza id né
         // codice utente. Un `ArgPlace` resta sul cammino storico (sotto): la
         // sua lettura può avvisare o fallire, e lo fa col SOLO chiamante in pila.
-        let has_place = {
-            let st = &self.frames[top].stack;
-            st[st.len() - n..].iter().any(|a| matches!(a, Zval::ArgPlace(_)))
-        };
         if !has_place && (callee.simple_call || self.args_hints_exact(callee, top, n)) { // S-194 C2: a typed callee enters here only with exact arguments, else below (`enter_callee` checks)
             if log::log_enabled!(target: "phpr::call", log::Level::Trace) {
                 log::trace!(

@@ -1,0 +1,9 @@
+patch: rc=0 panic=1
+build: rc=0
+script: cmp=0 hits=0
+batteria: rc=101 hits=1 falliti=2
+corpus: rc=1 hits=0 righe=16253
+orm: rc=0  hits=0
+wp: rc=0 Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73. hits=0
+rif orm P4: 
+rif wp P4: Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.

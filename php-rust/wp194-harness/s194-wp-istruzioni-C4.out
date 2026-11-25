@@ -1,0 +1,92 @@
+== s194 WordPress (phpunit full) istruzioni ritirate per gamba, 2026-11-22 00:43:40 (direzione sul lavoro, non verdetto di tempo) ==
+binario pin = /Users/francescotinti/Claude/php-rust-output/release/phpr sha d9d6429301f60f4e
+binario N = /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/out/phpr-orm-istr-N sha 22b954b4bc336223
+binario F = /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/out/phpr-orm-istr-F sha 6e9bcd3308cee0fb
+pin        istruzioni  4032.826 G (dispersione 0.09 %)  vs pin  +0.00 %  cicli 1319.613 G  user 720.97 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
+N          istruzioni  3879.483 G (dispersione 0.00 %)  vs pin  -3.80 %  cicli 1264.023 G  user 695.99 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
+F          istruzioni  3797.974 G (dispersione 0.00 %)  vs pin  -5.82 %  cicli 1248.038 G  user 686.68 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
+uploads-guard restore rc=0
+fine rc=0 2026-11-22 01:40:21
+== s194 WordPress (phpunit full) istruzioni ritirate per gamba, 2026-11-23 10:51:51 (direzione sul lavoro, non verdetto di tempo) ==
+binario pin = /Users/francescotinti/Claude/php-rust-output/release/phpr sha 9977cc4b1cf19991
+binario C1 = /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/out/phpr-c1e sha 58754f51d1593c89
+pin        istruzioni  3780.393 G (dispersione 0.00 %)  vs pin  +0.00 %  cicli 1244.399 G  user 685.96 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
+C1         istruzioni  3765.310 G (dispersione 0.00 %)  vs pin  -0.40 %  cicli 1248.815 G  user 684.10 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
+uploads-guard restore rc=0
+fine rc=0 2026-11-23 11:19:36
+== s194 WordPress (phpunit full) istruzioni ritirate per gamba, 2026-11-23 11:51:46 (direzione sul lavoro, non verdetto di tempo) ==
+binario C2 = /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/out/phpr-c2b sha 3c3afd5ce19355aa
+C2         istruzioni  3754.961 G (dispersione 0.00 %)  vs C2  +0.00 %  cicli 1240.964 G  user 682.41 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
+uploads-guard restore rc=0
+fine rc=0 2026-11-23 12:05:33
+== s194 WordPress (phpunit full) istruzioni ritirate per gamba, 2026-11-23 16:52:51 (direzione sul lavoro, non verdetto di tempo) ==
+binario E = /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/out/phpr-e3 sha 0c3b24e8f55a4dac
+E          istruzioni  3756.353 G (dispersione 0.00 %)  vs E  +0.00 %  cicli 1232.734 G  user 680.37 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
+uploads-guard restore rc=0
+fine rc=0 2026-11-23 17:06:32
+== s194 WordPress (phpunit full) istruzioni ritirate per gamba, 2026-11-24 17:55:24 (direzione sul lavoro, non verdetto di tempo) ==
+binario pin = /Users/francescotinti/Claude/php-rust-output/release/phpr sha e7025fb37b1a87e0
+binario C3a = /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/out/phpr-c3a sha 9c7aae6f6fdf67f0
+pin        istruzioni  3754.952 G (dispersione 0.00 %)  vs pin  +0.00 %  cicli 1233.380 G  user 680.18 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
+C3a        istruzioni  3746.125 G (dispersione 0.00 %)  vs pin  -0.24 %  cicli 1234.251 G  user 680.94 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
+uploads-guard restore rc=0
+fine rc=0 2026-11-24 18:22:51
+== s194 WordPress (phpunit full) istruzioni ritirate per gamba, 2026-11-24 20:38:14 (direzione sul lavoro, non verdetto di tempo) ==
+binario pin = /Users/francescotinti/Claude/php-rust-output/release/phpr sha e7025fb37b1a87e0
+binario C3b = /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/out/phpr-c3b sha c6801521261eed23
+pin        istruzioni  3754.547 G (dispersione 0.00 %)  vs pin  +0.00 %  cicli 1230.619 G  user 679.16 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
+C3b        istruzioni  3761.975 G (dispersione 0.00 %)  vs pin  +0.20 %  cicli 1242.029 G  user 679.30 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
+uploads-guard restore rc=0
+fine rc=0 2026-11-24 21:05:38
+== s194 WordPress (phpunit full) istruzioni ritirate per gamba, 2026-11-24 21:29:46 (direzione sul lavoro, non verdetto di tempo) ==
+binario dir = faaa24f4 sha fb3459ad34c7ae42
+dir        istruzioni  3744.288 G (dispersione 0.00 %)  vs dir  +0.00 %  cicli 1230.322 G  user 679.07 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
+uploads-guard restore rc=0
+fine rc=0 2026-11-24 21:45:54
+== s194 WordPress (phpunit full) istruzioni ritirate per gamba, 2026-11-24 21:48:37 (direzione sul lavoro, non verdetto di tempo) ==
+binario V1 = 516f41b5e1d798a608b18461c897deb2e422d053 sha 28c0c9b54441c23b
+binario V2 = 661399bc4077455eb7b6e32b0169dcb366cb687d sha e9e241d82f1564d2
+V1         istruzioni  3737.543 G (dispersione 0.00 %)  vs V1  +0.00 %  cicli 1234.879 G  user 680.35 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
+V2         istruzioni  3731.791 G (dispersione 0.00 %)  vs V1  -0.15 %  cicli 1231.532 G  user 678.64 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
+uploads-guard restore rc=0
+fine rc=0 2026-11-24 22:20:56
+== s194 WordPress (phpunit full) istruzioni ritirate per gamba, 2026-11-25 09:16:47 (direzione sul lavoro, non verdetto di tempo) ==
+binario pin = /Users/francescotinti/Claude/php-rust-output/release/phpr sha 98736f5fc9ac2d47
+binario P1 = /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/out/phpr-p1 sha 7cd3fa24e3f2ba4a
+pin        istruzioni  3731.438 G (dispersione 0.00 %)  vs pin  +0.00 %  cicli 1226.710 G  user 677.55 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
+P1         istruzioni  3662.727 G (dispersione 0.00 %)  vs pin  -1.84 %  cicli 1214.457 G  user 671.29 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
+uploads-guard restore rc=0
+fine rc=0 2026-11-25 09:44:03
+== s194 WordPress (phpunit full) istruzioni ritirate per gamba, 2026-11-25 10:35:36 (direzione sul lavoro, non verdetto di tempo) ==
+binario P1 = /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/out/phpr-p1 sha 7cd3fa24e3f2ba4a
+binario P2 = /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/out/phpr-p2 sha c9bc4262ec7887de
+P1         istruzioni  3663.976 G (dispersione 0.00 %)  vs P1  +0.00 %  cicli 1215.027 G  user 671.81 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
+P2         istruzioni  3551.392 G (dispersione 0.00 %)  vs P1  -3.07 %  cicli 1201.193 G  user 664.58 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
+uploads-guard restore rc=0
+fine rc=0 2026-11-25 11:02:32
+== s194 WordPress (phpunit full) istruzioni ritirate per gamba, 2026-11-25 12:00:21 (direzione sul lavoro, non verdetto di tempo) ==
+binario P2 = /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/out/phpr-p2 sha c9bc4262ec7887de
+binario P3 = /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/out/phpr-p3 sha 80056a568ee5ef0f
+P2         istruzioni  3555.985 G (dispersione 0.00 %)  vs P2  +0.00 %  cicli 1208.006 G  user 664.88 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
+P3         istruzioni  3534.961 G (dispersione 0.00 %)  vs P2  -0.59 %  cicli 1192.217 G  user 660.61 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
+uploads-guard restore rc=0
+fine rc=0 2026-11-25 12:27:19
+== s194 WordPress (phpunit full) istruzioni ritirate per gamba, 2026-11-25 13:46:17 (direzione sul lavoro, non verdetto di tempo) ==
+binario P3 = /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/out/phpr-p3 sha 80056a568ee5ef0f
+binario P4 = /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/out/phpr-p4 sha 8e5858d5b5bbf15a
+P3         istruzioni  3537.102 G (dispersione 0.00 %)  vs P3  +0.00 %  cicli 1193.765 G  user 660.31 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
+P4         istruzioni  3534.325 G (dispersione 0.00 %)  vs P3  -0.08 %  cicli 1189.863 G  user 658.95 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
+uploads-guard restore rc=0
+fine rc=0 2026-11-25 14:12:57
+== s194 WordPress (phpunit full) istruzioni ritirate per gamba, 2026-11-25 21:01:33 (direzione sul lavoro, non verdetto di tempo) ==
+binario X = /Users/francescotinti/Claude/phpr-target/s194-armX/dev-release/phpr sha f4dadc9e947f9215
+X          istruzioni  3695.724 G (dispersione 0.00 %)  vs X  +0.00 %  cicli 1245.139 G  user 687.59 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
+uploads-guard restore rc=0
+fine rc=0 2026-11-25 21:15:18
+== s194 WordPress (phpunit full) istruzioni ritirate per gamba, 2026-11-25 21:48:37 (direzione sul lavoro, non verdetto di tempo) ==
+binario P4 = /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/out/phpr-p4 sha 8e5858d5b5bbf15a
+binario C4 = /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/out/phpr-c4 sha f4be95fc0b8a7afa
+P4         istruzioni  3534.111 G (dispersione 0.00 %)  vs P4  +0.00 %  cicli 1191.498 G  user 659.97 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
+C4         istruzioni  3509.521 G (dispersione 0.00 %)  vs P4  -0.70 %  cicli 1184.418 G  user 656.38 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
+uploads-guard restore rc=0
+fine rc=0 2026-11-25 22:15:10
