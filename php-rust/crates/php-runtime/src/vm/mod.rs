@@ -11565,7 +11565,7 @@ impl<'m> Vm<'m> {
         };
         // Deferred place arguments (SEND_VAR_EX, from a dynamic `$f(...)`)
         // resolve against the closure's by-ref mask now that the body is known.
-        if args.iter().any(|a| matches!(a, Zval::ArgPlace(_))) {
+        if self.settle_args(self.frames.len().wrapping_sub(1), &mut args, callee) { // S-194 C4c
             let top = self.frames.len() - 1;
             self.materialize_arg_places(top, &mut args, Some(callee))?;
         }
@@ -12047,7 +12047,7 @@ impl<'m> Vm<'m> {
         // (`__callStatic`, enum builtin) takes every argument by value.
         if args.iter().any(|a| matches!(a, Zval::ArgPlace(_))) {
             let callee = self.static_arg_ref_target(top, start, method);
-            self.materialize_arg_places(top, &mut args, callee)?;
+            if callee.map_or(true, |c| self.settle_args(top, &mut args, c)) { self.materialize_arg_places(top, &mut args, callee)?; } // S-194 C4c
             // R-fetch warnings report the CALL's line, not the callee's next
             // emit point.
             let line = self.cur_line(top);

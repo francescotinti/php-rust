@@ -6245,7 +6245,7 @@ impl<'m> super::Vm<'m> {
                         Some((defc, midx)) => {
                             // Deferred place arguments (SEND_VAR_EX) resolve against
                             // the now-known constructor's by-ref mask.
-                            if args.iter().any(|a| matches!(a, Zval::ArgPlace(_))) {
+                            if self.settle_args(top, &mut args, &self.classes[defc].methods[midx].func) { // S-194 C4c
                                 let cls = self.classes[defc];
                                 let ctor = &cls.methods[midx].func;
                                 self.materialize_arg_places(top, &mut args, Some(ctor))?;

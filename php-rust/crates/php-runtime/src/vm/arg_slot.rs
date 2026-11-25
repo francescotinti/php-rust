@@ -34,7 +34,7 @@ impl<'m> Vm<'m> {
     pub(super) fn settle_instance_places(&mut self, top: usize, this: &Zval, method: &[u8], args: &mut [Zval]) -> Result<(), PhpError> {
         if args.iter().any(|a| matches!(a, Zval::ArgPlace(_))) {
             let callee = self.instance_arg_ref_target(top, this, method);
-            self.materialize_arg_places(top, args, callee)?;
+            if callee.map_or(true, |c| self.settle_args(top, args, c)) { self.materialize_arg_places(top, args, callee)?; }
             let line = self.cur_line(top);
             self.flush_diags(line)?;
         }
@@ -48,6 +48,28 @@ impl<'m> Vm<'m> {
         let ArgPlaceBase::Local(s) = p.base else { return None };
         let v = &self.frames[top].slots[s as usize];
         (p.steps.is_empty() && !matches!(v, Zval::Undef)).then(|| arrays::read_slot(v))
+    }
+
+    /// The general funnels, callee known: a step-less place of a DEFINED local bound to a by-value
+    /// parameter becomes the value of its slot here, without the general resolver (which costs
+    /// ~150 instructions per place). True = a place is left for it (by-reference parameter,
+    /// undefined variable, a place with steps).
+    #[inline]
+    pub(super) fn settle_args(&self, top: usize, args: &mut [Zval], callee: &Func) -> bool {
+        let mut left = false;
+        for (i, a) in args.iter_mut().enumerate() {
+            let Zval::ArgPlace(p) = a else { continue };
+            let slots = &self.frames[top].slots; // only here: a callback run with no frame (shutdown) passes no place and no valid `top`
+            let by_ref = match callee.variadic_slot {
+                Some(v) if i >= v as usize => callee.param_by_ref.get(v as usize).copied().unwrap_or(false),
+                _ => callee.param_by_ref.get(i).copied().unwrap_or(false),
+            };
+            match p.base {
+                ArgPlaceBase::Local(s) if !by_ref && p.steps.is_empty() && !matches!(slots[s as usize], Zval::Undef) => *a = arrays::read_slot(&slots[s as usize]),
+                _ => left = true,
+            }
+        }
+        left
     }
 
     /// Fast admissions whose callee has no by-reference and no variadic parameter: replace, in

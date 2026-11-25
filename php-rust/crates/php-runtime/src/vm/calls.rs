@@ -1073,7 +1073,7 @@ impl<'m> Vm<'m> {
                 // Deferred place arguments (SEND_VAR_EX, from a dynamic call
                 // through a method first-class callable) resolve against the
                 // callee's by-ref mask now that the method is known.
-                if args.iter().any(|a| matches!(a, Zval::ArgPlace(_))) {
+                if self.settle_args(self.frames.len().wrapping_sub(1), &mut args, callee) { // S-194 C4c
                     let top = self.frames.len() - 1;
                     self.materialize_arg_places(top, &mut args, Some(callee))?;
                 }
@@ -1161,7 +1161,7 @@ impl<'m> Vm<'m> {
             let callee = &self.module.functions[idx];
             // Deferred place arguments (SEND_VAR_EX) resolve against the
             // callee's by-ref mask now that it is known.
-            if args.iter().any(|a| matches!(a, Zval::ArgPlace(_))) {
+            if self.settle_args(self.frames.len().wrapping_sub(1), &mut args, callee) { // S-194 C4c
                 let top = self.frames.len() - 1;
                 self.materialize_arg_places(top, &mut args, Some(callee))?;
             }
@@ -1175,7 +1175,7 @@ impl<'m> Vm<'m> {
         // and run its frame in the module that defined it.
         if let Some(&(fmod, idx)) = self.linked_functions.get(LcKey::new(name).as_slice()) {
             let callee = &fmod.functions[idx];
-            if args.iter().any(|a| matches!(a, Zval::ArgPlace(_))) {
+            if self.settle_args(self.frames.len().wrapping_sub(1), &mut args, callee) { // S-194 C4c
                 let top = self.frames.len() - 1;
                 self.materialize_arg_places(top, &mut args, Some(callee))?;
             }

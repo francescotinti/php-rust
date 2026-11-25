@@ -14,7 +14,7 @@ use std::cell::Cell;
 use std::rc::Rc;
 
 use super::calls::bind_params;
-use super::{LcKey, PhpError, Vm, Zval};
+use super::{LcKey, PhpError, Vm};
 use crate::bytecode::{Module, Op};
 
 /// The per-site binding: `(IC epoch of the run, index into Vm::bound_fns)`.
@@ -76,7 +76,7 @@ impl<'m> Vm<'m> {
         };
         // The same entry as `invoke_named` for a user function.
         let callee = &module.functions[idx];
-        if args.iter().any(|a| matches!(a, Zval::ArgPlace(_))) {
+        if self.settle_args(top, &mut args, callee) { // S-194 C4c
             self.materialize_arg_places(top, &mut args, Some(callee))?;
         }
         let mut frame = self.pooled_frame(callee, module);

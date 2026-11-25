@@ -1329,7 +1329,7 @@ impl<'m> Vm<'m> {
         // native receiver or a `__call` route takes every argument by value.
         if args.iter().any(|a| matches!(a, Zval::ArgPlace(_))) {
             let callee = self.instance_arg_ref_target(top, &this, method);
-            self.materialize_arg_places(top, &mut args, callee)?;
+            if callee.map_or(true, |c| self.settle_args(top, &mut args, c)) { self.materialize_arg_places(top, &mut args, callee)?; } // S-194 C4c
             // R-fetch warnings report the CALL's line, not the callee's next
             // emit point.
             let line = self.cur_line(top);
