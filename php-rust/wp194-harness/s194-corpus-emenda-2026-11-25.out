@@ -1,0 +1,3 @@
+S-194 P4 (criterio P p.13), emenda dichiarata del corpus-gate (segno di inizializzazione di una readonly dopo la coercizione riuscita; zero pass->fail, contenuto == golden)
+modo off: congelato 1400 -> 1399 (passa ora: readonly_props/readonly_clone_success4.phpt); golden: 1397 -> 1396 righe (tolta la riga, nessun digest cambiato)
+modo on: congelato 1400 -> 1399 (passa ora: readonly_props/readonly_clone_success4.phpt); golden: 1397 -> 1396 righe (tolta la riga, nessun digest cambiato)

@@ -682,6 +682,12 @@ impl PropsLayout {
         self.keys.iter().map(|k| k.as_ref())
     }
 
+    /// The storage key of declared slot `i` (S-194 P4: a slot-indexed cache hit that needs the key).
+    #[inline]
+    pub fn key_at(&self, i: u32) -> Option<&[u8]> {
+        self.keys.get(i as usize).map(|k| k.as_ref())
+    }
+
     pub fn len(&self) -> usize {
         self.keys.len()
     }

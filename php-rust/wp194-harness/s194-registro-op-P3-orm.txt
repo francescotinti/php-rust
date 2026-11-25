@@ -1,0 +1,438 @@
+== PHPR_OP_CENSUS: 577791025 ops dispatched ==
+== PHPR_OP_INSTR: attributed 275760527533 | before first op 4991223 | after last op 7883602 | thread total 2132837096602 | read bias 1536 | nested loops 2490151 | charged to a resumed caller 5134969613 ==
+-- instructions by branch tag (sum, count, mean; gross) --
+     1680636824        858743     1957.1  MethodCall: cammino generale
+     1154132650       1581155      729.9  Ret: generale, altro motivo
+    14438996976      15572002      927.2  Ret: generale, tipo di ritorno dichiarato
+      626471256        710479      881.8  ThisMethodCall: cammino generale
+-- instructions by op (sum, share, count, mean, min) --
+    31208550793  11.32%       7905390     3947.8     434  CallHostBuiltin
+    28023963390  10.16%      34935006      802.2     276  Ret
+    18595347969   6.74%          6125  3035975.2   26470  Include
+    17924220075   6.50%      63990286      280.1     115  Sweep
+    17758656014   6.44%      12121094     1465.1     232  CallBuiltin
+    16141542549   5.85%       9832858     1641.6     488  PropSetPop
+    11728913514   4.25%      15731339      745.6     384  MethodCall
+    11427842092   4.14%      62990859      181.4     169  LoadVar
+     9283071682   3.37%      56957062      163.0     141  PushConst
+     9246433396   3.35%        356081    25967.2    1043  CallHostBuiltinOut
+     8455113032   3.07%      29799843      283.7     204  ThisPropGet
+     5640391655   2.05%      38205534      147.6     131  JumpIfFalse
+     4774312464   1.73%      19205667      248.6     162  StoreSlot
+     4738590523   1.72%      12791744      370.4     262  FetchDim
+     4576983606   1.66%      10988152      416.5     160  CmpJmpConst
+     3480364014   1.26%       1630614     2134.4     852  FieldAssign
+     3035529214   1.10%       2435085     1246.6     639  FieldIsset
+     3019968987   1.10%       2646505     1141.1     593  Alloc
+     2792817446   1.01%       8699248      321.0     141  IterNext
+     2690647386   0.98%       2078580     1294.5     539  StaticCall
+     2681445610   0.97%      17540863      152.9     131  Pop
+     2605260888   0.94%           269  9684984.7  237612  DeclareDeferred
+     2559997797   0.93%       2778355      921.4     313  AssignPath
+     2554167380   0.93%       5615085      454.9     390  ThisMethodCall
+     2401542420   0.87%      14851070      161.7     146  This
+     2390379576   0.87%      20040094      119.3     110  Jump
+     2217670988   0.80%       7205918      307.8     152  CmpJmpSC
+     2059268634   0.75%       8502190      242.2     232  Unary
+     1954516045   0.71%        934904     2090.6    1312  AllocDynamic
+     1926488768   0.70%        812149     2372.1     335  InvokeCtor
+     1819643650   0.66%       7903944      230.2     217  LoadVarPushConst
+     1792723189   0.65%       2322859      771.8     458  InvokeMethod
+     1683131721   0.61%        586720     2868.7    1402  StaticCallDynamic
+     1530083711   0.55%       5225170      292.8     145  CmpJmp
+     1391468158   0.50%       3052961      455.8     199  IssetPath
+     1370256204   0.50%       3584210      382.3     232  StampThrowable
+     1364661842   0.49%       2530485      539.3     406  ConcatN
+     1356909117   0.49%       5140471      264.0     255  Stringify
+     1343221513   0.49%       1832326      733.1     257  IterInit
+     1323410732   0.48%       8420274      157.2     150  Dup
+     1317163453   0.48%       5295215      248.7     181  PushRefArg
+     1075453598   0.39%            74  14533156.7  6126735  Eval
+     1049913629   0.38%        361035     2908.1     216  Cast
+      994084013   0.36%       4118173      241.4     240  ClassConst
+      884746290   0.32%       1640315      539.4     497  StaticPropGet
+      859820247   0.31%       6975471      123.3     122  CheckArity
+      811365436   0.29%       1815629      446.9     185  IterPop
+      782934332   0.28%       1572363      497.9     436  PushArgPlace
+      730693998   0.26%       2271651      321.7     272  ArrayPush
+      708554656   0.26%       3584210      197.7     196  InitProps
+      651858814   0.24%       3014547      216.2     189  ArrayInit
+      638641809   0.23%        338037     1889.3    1051  InvokeCtorArgs
+      596974969   0.22%       1326589      450.0     210  CoalesceFetchDim
+      571476862   0.21%        331891     1721.9    1044  MakeClosure
+      559498720   0.20%       3386452      165.2     148  LoadSlot
+      483058154   0.18%        923335      523.2     311  ArrayInsert
+      461849238   0.17%       1721817      268.2     226  BinaryTC
+      460470532   0.17%        800200      575.4     464  InstanceOfDynamic
+      445874393   0.16%        649938      686.0     457  ConcatNConst
+      429130912   0.16%        547477      783.8     468  ClassConstFromValue
+      402161796   0.15%       3160646      127.2     124  FillDefault
+      397121430   0.14%       2743322      144.8     131  JumpIfTrue
+      389876707   0.14%         86579     4503.1     814  Clone
+      383471428   0.14%        467909      819.5     726  PropGetSilent
+      360260040   0.13%        496877      725.0     303  PropIssetFetchGate
+      355501483   0.13%       1293704      274.8     213  PropGetSlot
+      343954778   0.12%        254988     1348.9     517  StaticPropSet
+      298626865   0.11%        172468     1731.5     492  PropIncDec
+      296400537   0.11%       2305623      128.6     125  JumpIfNotNull
+      292990189   0.11%       1140189      257.0     233  Binary
+      281284006   0.10%        878465      320.2     310  StringifySlot
+      267537614   0.10%        980882      272.8     258  PropGet
+      249660812   0.09%         47126     5297.7     429  MakeRef
+      241752314   0.09%       1104052      219.0     154  Count
+      240605562   0.09%       1192965      201.7     148  CmpJmpSS
+      239605205   0.09%        875961      273.5     196  InstanceOf
+      232432641   0.08%        376172      617.9     329  ArrayAppendSpread
+      210052697   0.08%        610002      344.3     275  PropIsset
+      173559910   0.06%         52936     3278.7    2257  FieldUnset
+      173008541   0.06%        100447     1722.4    1130  MethodCallDynamic
+      169589660   0.06%        474514      357.4     250  ConcatAssignSlot
+      162713828   0.06%        119980     1356.2     506  PropSet
+      143064282   0.05%        366812      390.0     384  FetchDimList
+      139269596   0.05%         98897     1408.2     207  CallNsBuiltin
+      128329600   0.05%        516619      248.4     225  CoerceParam
+      123906610   0.04%        667351      185.7     183  BinarySTDst
+      117503893   0.04%        158075      743.3     284  UnsetPath
+      112449683   0.04%            14  8032120.2  3417888  NewAnonDeferred
+      104030383   0.04%        678608      153.3     145  Strlen
+      102982685   0.04%        515853      199.6     198  EnumCase
+       97402130   0.04%        103924      937.2     839  FieldEmpty
+       92842079   0.03%         60511     1534.3     381  CallBuiltinRef
+       90096226   0.03%        285300      315.8     271  EmptyPath
+       89761221   0.03%        420121      213.7     179  PushRef
+       88058712   0.03%         30897     2850.1    2275  StaticCallDynamicArgs
+       84389886   0.03%        268521      314.3     281  BinaryDst
+       78633617   0.03%         56212     1398.9    1147  PropGetDynamic
+       63383078   0.02%        429648      147.5     146  IncDecSlotJmp
+       50692190   0.02%        284960      177.9     175  BinarySS
+       43717667   0.02%         69699      627.2     265  CallHostBuiltinRef
+       43167575   0.02%         41621     1037.2     538  CallValue
+       37658265   0.01%          6052     6222.4    4262  FieldIncDec
+       33302663   0.01%         49972      666.4     425  BindRefTo
+       29867857   0.01%          8484     3520.5    1781  MethodCallDynamicArgs
+       28982432   0.01%         13967     2075.1    1131  CallNsFallback
+       28745672   0.01%          4327     6643.3    3698  MethodCallNamed
+       28495936   0.01%        173070      164.6     127  PushUndef
+       25705690   0.01%         99839      257.5     197  BinarySC
+       24617886   0.01%         41846      588.3     582  BinaryTCPropSetPop
+       21830314   0.01%         73177      298.3     134  IncDecSlotPop
+       16950484   0.01%         41250      410.9     360  ClassNameStatic
+       15200490   0.01%         39875      381.2     283  PropDimGetConst
+       14019975   0.01%           635    22078.7     325  Echo
+       13976440   0.01%        110600      126.4     121  JumpIfNull
+       11720113   0.00%         44300      264.6     255  BinarySCDst
+       10295040   0.00%         11655      883.3     838  StaticPropOpSet
+       10209999   0.00%         49192      207.6     163  BinaryAdd
+        8851112   0.00%          5209     1699.2    1360  AssignOpPath
+        8359880   0.00%          2990     2795.9     447  ClosureStatic
+        8189569   0.00%         48105      170.2     169  IncDecSlot
+        5470351   0.00%         44356      123.3     122  Swap
+        3984291   0.00%           594     6707.6    6609  FieldAssignOp
+        3912832   0.00%          8325      470.0     339  IterInitRef
+        3862258   0.00%           533     7246.3    1447  MethodCallArgs
+        3760385   0.00%          2801     1342.5     693  AllocStatic
+        3027649   0.00%         13406      225.8     131  IterNextRef
+        2671954   0.00%          2630     1016.0     311  YieldFrom
+        2193976   0.00%          2367      926.9     380  CallBuiltinRefCell
+        2018287   0.00%          2318      870.7     283  ConstFetch
+        1836203   0.00%          6950      264.2     258  Yield
+        1649287   0.00%           807     2043.7    1907  PropIssetDyn
+        1379298   0.00%          9723      141.9      96  EndFinally
+        1195276   0.00%           262     4562.1    4108  DeclareFn
+        1055741   0.00%          1904      554.5     259  CatchMatch
+         832554   0.00%          4287      194.2     193  SuppressEnd
+         821197   0.00%           246     3338.2    3119  MakeFcc
+         806508   0.00%          4287      188.1     187  SuppressBegin
+         788083   0.00%          2236      352.5     279  PropGetSlotRecv
+         754265   0.00%          2093      360.4     314  Call
+         683294   0.00%           390     1752.0    1163  CallBuiltinSpread
+         480465   0.00%           365     1316.3    1116  CallBuiltinRefSpread
+         388235   0.00%           142     2734.0    2039  StaticCallDynamicMethod
+         313828   0.00%          1457      215.4     192  InstanceOfBuiltin
+         234929   0.00%          1766      133.0     132  Throw
+         171709   0.00%            88     1951.2    1237  PropGetDynamicSilent
+          89630   0.00%             6    14938.3   14662  LoadGlobals
+          69769   0.00%           456      153.0     153  LoadSuperglobal
+          62345   0.00%            47     1326.5    1082  IncDecPath
+          50446   0.00%           295      171.0     171  LoadGlobal
+          21351   0.00%             7     3050.1    2854  PropUnset
+          12094   0.00%            13      930.3     713  StaticPropGetDynamic
+           6406   0.00%             4     1601.5     158  StoreGlobal
+           6320   0.00%             3     2106.7    1460  DeclareTrait
+           5323   0.00%             1     5323.0    5323  StaticCallDynamicMethodArgs
+           4868   0.00%            21      231.8     214  ParkReturn
+           2604   0.00%            31       84.0      84  Rethrow
+           1205   0.00%             2      602.5     589  GlobalsDynAssign
+            729   0.00%             1      729.0     729  StaticPropSetDynamic
+            651   0.00%             1      651.0     651  StaticPropIncDec
+            165   0.00%             1      165.0     165  Exit
+-- instructions by builtin name (sum, count, mean; top 80) --
+     8572442348         39195   218712.7  __pdo_run
+     8012173433        290311    27598.6  preg_match
+     5542549000         14027   395134.3  scandir
+     2831452473       2348719     1205.5  strpos
+     2740917744          4722   580457.0  array_diff
+     2346761196        469192     5001.7  debug_backtrace
+     1833300176          2288   801267.6  get_declared_classes
+     1776177156         27099    65544.0  realpath
+     1761214625        450868     3906.3  __reflect_method_info
+     1477261237       1771434      833.9  class_exists
+     1386663539         99165    13983.4  array_map
+     1319975319        583490     2262.2  str_replace
+     1276625513       4179187      305.5  is_object
+     1206320742       1133872     1063.9  __reflect_class_real_name
+     1177089973         18757    62754.7  __pdo_exec
+     1116892363         38871    28733.3  __pdo_prepare
+     1073674573        715906     1499.7  __reflect_class_loc
+     1060891843          6969   152230.1  getcwd
+      981706573         34895    28133.2  preg_replace
+      776116712         43477    17851.2  __lazy_set_raw
+      629958097        924227      681.6  assert
+      529811237        265232     1997.5  in_array
+      498840679        218364     2284.4  array_filter
+      453416357          1201   377532.4  __reflect_method_names
+      447564247         84891     5272.2  __reflect_prop_details
+      395113823        198198     1993.5  array_merge
+      390231055        563666      692.3  array_key_exists
+      373821904         63658     5872.3  __reflect_prop_attr_new
+      349289761         24382    14325.7  is_dir
+      317906931        176557     1800.6  implode
+      309857001        234362     1322.1  method_exists
+      281343712        926236      303.7  is_array
+      254068194        400137      635.0  strtolower
+      251843985        365495      689.0  spl_object_id
+      246431761         32840     7504.0  __reflect_prop_attributes
+      242944991       1106678      219.5  count
+      234843605        772298      304.1  is_string
+      230807049         18679    12356.5  preg_match_all
+      226451069        285020      794.5  ltrim
+      218034147        124168     1756.0  __reflect_prop_declaring_class
+      214898764         70743     3037.7  sprintf
+      192688972         16258    11851.9  preg_split
+      173084318         75127     2303.9  __reflect_prop_type
+      160016718         30877     5182.4  gc_status
+      136482194        116949     1167.0  property_exists
+      124619030         79919     1559.3  is_subclass_of
+      115859049        111111     1042.7  str_contains
+      109022495        121864      894.6  strcasecmp
+      104030383        678608      153.3  strlen
+       93776101        314341      298.3  is_int
+       85784255         19192     4469.8  __reflect_attr_newinstance
+       81962256         47588     1722.3  preg_quote
+       81492450         38333     2125.9  explode
+       78739921         26774     2940.9  serialize
+       68329180         13802     4950.7  __reflect_class_attributes
+       66071331         70834      932.8  str_starts_with
+       59570871         92889      641.3  array_keys
+       56486834         26832     2105.2  array_unique
+       56216377         18335     3066.1  defined
+       56185142        112333      500.2  array_values
+       55739829          4232    13171.0  fwrite
+       54795593          3638    15062.0  is_file
+       51831172          3584    14461.8  array_splice
+       43426554         15411     2817.9  __reflect_method_attributes
+       39495538         10844     3642.2  function_exists
+       39417445          6564     6005.1  call_user_func_array
+       37920045         56500      671.2  __lazy_is_uninitialized
+       37509972          9964     3764.5  strtr
+       37495573         60756      617.2  strtoupper
+       33605572         54868      612.5  substr
+       32111318        105663      303.9  is_resource
+       31905541         20826     1532.0  strrpos
+       31324983         11071     2829.5  array_flip
+       30166289          8037     3753.4  constant
+       27957466         16817     1662.5  __dom_info
+       27129513          2698    10055.4  array_change_key_case
+       26341325           154   171047.6  __dom_load
+       25746360         28732      896.1  get_class
+       25385438         14921     1701.3  usort
+       24864190         30879      805.2  hrtime
+-- op counts (top 40) --
+    63990286  11.07%  Sweep
+    62990859  10.90%  LoadVar
+    56957062   9.86%  PushConst
+    38205534   6.61%  JumpIfFalse
+    34935006   6.05%  Ret
+    29799843   5.16%  ThisPropGet
+    20040094   3.47%  Jump
+    19205667   3.32%  StoreSlot
+    17540863   3.04%  Pop
+    15731339   2.72%  MethodCall
+    14851070   2.57%  This
+    12791744   2.21%  FetchDim
+    12121094   2.10%  CallBuiltin
+    10988152   1.90%  CmpJmpConst
+     9832858   1.70%  PropSetPop
+     8699248   1.51%  IterNext
+     8502190   1.47%  Unary
+     8420274   1.46%  Dup
+     7905390   1.37%  CallHostBuiltin
+     7903944   1.37%  LoadVarPushConst
+     7205918   1.25%  CmpJmpSC
+     6975471   1.21%  CheckArity
+     5615085   0.97%  ThisMethodCall
+     5295215   0.92%  PushRefArg
+     5225170   0.90%  CmpJmp
+     5140471   0.89%  Stringify
+     4118173   0.71%  ClassConst
+     3584210   0.62%  InitProps
+     3584210   0.62%  StampThrowable
+     3386452   0.59%  LoadSlot
+     3160646   0.55%  FillDefault
+     3052961   0.53%  IssetPath
+     3014547   0.52%  ArrayInit
+     2778355   0.48%  AssignPath
+     2743322   0.47%  JumpIfTrue
+     2646505   0.46%  Alloc
+     2530485   0.44%  ConcatN
+     2435085   0.42%  FieldIsset
+     2322859   0.40%  InvokeMethod
+     2305623   0.40%  JumpIfNotNull
+-- bigrams (top 40) --
+    17402937  Sweep -> LoadVar
+    15901135  StoreSlot -> Sweep
+    13971472  PushConst -> Ret
+    11978893  JumpIfFalse -> Sweep
+    11088744  Sweep -> Jump
+    10303034  JumpIfFalse -> PushConst
+    10105211  Pop -> Sweep
+     9884475  This -> LoadVar
+     9849371  Sweep -> PushConst
+     9824402  PropSetPop -> Sweep
+     9772939  PushConst -> JumpIfFalse
+     8476112  LoadVar -> CallBuiltin
+     7636924  LoadVar -> MethodCall
+     7308907  LoadVar -> PropSetPop
+     7196446  Sweep -> This
+     7180531  Unary -> JumpIfFalse
+     7159165  LoadVar -> LoadVar
+     6685171  Ret -> Pop
+     6582070  Jump -> Sweep
+     6236731  MethodCall -> ThisPropGet
+     5984284  JumpIfFalse -> LoadVar
+     5957105  Jump -> IterNext
+     5639964  Ret -> JumpIfFalse
+     5542348  JumpIfFalse -> ThisPropGet
+     5398092  CmpJmpConst -> PushConst
+     5260975  PushConst -> PushConst
+     5167162  ThisPropGet -> CmpJmpConst
+     4599533  Sweep -> CmpJmpSC
+     4471933  Ret -> Ret
+     4195019  LoadVar -> FetchDim
+     4158735  ThisPropGet -> Stringify
+     4152758  LoadVarPushConst -> FetchDim
+     4118965  Ret -> StoreSlot
+     4107101  ClassConst -> PushConst
+     3991663  ThisMethodCall -> ThisPropGet
+     3704534  Sweep -> ThisPropGet
+     3683787  PushConst -> Jump
+     3622027  CallBuiltin -> Unary
+     3592538  PushConst -> FetchDim
+     3584210  Dup -> InitProps
+-- bigrams X -> Sweep (all) --
+    15901135  StoreSlot -> Sweep
+    11978893  JumpIfFalse -> Sweep
+    10105211  Pop -> Sweep
+     9824402  PropSetPop -> Sweep
+     6582070  Jump -> Sweep
+     1973308  CmpJmpConst -> Sweep
+     1803784  IterPop -> Sweep
+     1672025  CmpJmpSC -> Sweep
+     1592519  CmpJmp -> Sweep
+      835102  Sweep -> Sweep
+      667351  BinarySTDst -> Sweep
+      457170  CmpJmpSS -> Sweep
+      268519  BinaryDst -> Sweep
+      120258  UnsetPath -> Sweep
+       59581  IncDecSlotPop -> Sweep
+       50460  FieldUnset -> Sweep
+       44298  BinarySCDst -> Sweep
+       41846  BinaryTCPropSetPop -> Sweep
+        9654  EndFinally -> Sweep
+        1173  JumpIfTrue -> Sweep
+         635  Echo -> Sweep
+         311  Ret -> Sweep
+         309  IncDecSlotJmp -> Sweep
+         262  DeclareFn -> Sweep
+           7  PropUnset -> Sweep
+           3  DeclareTrait -> Sweep
+-- bigrams IncDecSlotJmp -> X (all) --
+      414803  IncDecSlotJmp -> CmpJmpSS
+        8537  IncDecSlotJmp -> CmpJmpSC
+        5999  IncDecSlotJmp -> LoadVar
+         309  IncDecSlotJmp -> Sweep
+-- prop_set entry (S-176 typed) --
+     4822795  prop_set ic_hit_plain
+     1385034  prop_set ic_hit_typed
+     3777635  prop_set miss
+           0  prop_set miss: not an object
+           2  prop_set miss: lazy or enum
+          14  prop_set miss: set hook / virtual
+           6  prop_set miss: class has __set
+           0  prop_set miss: access denied
+          20  prop_set miss: dynamic, created
+           1  prop_set miss: dynamic, present
+      654669  prop_set miss: declared without slot index, private of an ancestor
+           0  prop_set miss: declared without slot index, other
+     2886412  prop_set miss: readonly
+           0  prop_set miss: asymmetric visibility
+      232670  prop_set miss: cacheable: site holds another class
+        3841  prop_set miss: cacheable: site cold or other scope
+-- Binary/CmpJmp type pairs (top 40) --
+     2768468  Identical (Long, Long)
+      885997  Identical (Str, Str)
+      573451  NotIdentical (Str, Str)
+      373487  BitAnd (Long, Long)
+      344704  Lt (Long, Long)
+      337003  Identical (ObjLike, ObjLike)
+      240511  Eq (Bool, Bool)
+      121397  Eq (Long, Long)
+       83152  NotIdentical (Bool, Str)
+       77443  NotIdentical (Long, Long)
+       73434  Sub (Long, Long)
+       69413  Identical (Null, Null)
+       45893  NotIdentical (Array, Array)
+       44884  Identical (Array, Array)
+       42252  NotIdentical (Str, ObjLike)
+       38765  NotIdentical (Str, Null)
+       38632  BitOr (Long, Long)
+       30564  Identical (Bool, Bool)
+       29747  NotIdentical (Array, ObjLike)
+       26834  Ge (Long, Long)
+       25068  Eq (Str, Str)
+       15172  NotIdentical (ObjLike, ObjLike)
+       14136  Eq (ObjLike, ObjLike)
+        9736  Gt (Long, Double)
+        8907  Gt (Long, Long)
+        5949  NotIdentical (Long, ObjLike)
+        5237  Identical (Null, ObjLike)
+        4198  NotIdentical (Null, Str)
+        3778  Identical (Null, Str)
+        3612  Le (Double, Double)
+        3557  NotIdentical (Bool, ObjLike)
+        3016  NotIdentical (Null, Bool)
+        2928  NotIdentical (Bool, Bool)
+        2239  NotEq (Bool, Bool)
+        2219  NotIdentical (Null, ObjLike)
+        1662  NotIdentical (Null, Long)
+        1042  Gt (Double, Double)
+        1042  NotIdentical (Null, Null)
+         912  Identical (Array, Str)
+         798  Identical (Str, ObjLike)
+-- FetchDim base x key --
+        2465  base=Null key=Str
+          60  base=Bool key=Long
+         448  base=Bool key=Str
+     2389252  base=Str key=Long
+     3922628  base=Array key=Long
+     7802241  base=Array key=Str
+         342  base=ObjLike key=Long
+         891  base=ObjLike key=Str
+           6  base=Ref key=Str
+-- IncDecSlot slot tags --
+       48105  Long
+-- ConcatAssign non-local sites (lhs bytes = O(n^2) copy volume) --
+        5209 ev  lhs_b=386 rhs_b=20716 avg_lhs=0  ArrElem(AssignOpPath)
+        hist log2(lhs): b0=5108 b2=77 b3=21 b4=2 b7=1
+         594 ev  lhs_b=9306 rhs_b=10862 avg_lhs=15  Field(FieldAssignOp)
+        hist log2(lhs): b0=192 b4=192 b5=153 b6=49 b7=8

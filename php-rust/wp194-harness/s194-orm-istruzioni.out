@@ -60,3 +60,9 @@ binario P3 = /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harn
 P2         istruzioni   230.465 G (dispersione 0.11 %)  vs P2  +0.00 %  cicli   65.811 G  user  30.00 s  | Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, PHP
 P3         istruzioni   229.080 G (dispersione 0.03 %)  vs P2  -0.60 %  cicli   65.419 G  user  29.78 s  | Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, PHP
 fine rc=0 2026-11-25 12:00:21
+== s194 ORM istruzioni ritirate per gamba, REPS=2, 2026-11-25 13:43:56 (direzione sul lavoro, non verdetto di tempo) ==
+binario P3 = /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/out/phpr-p3 sha 80056a568ee5ef0f
+binario P4 = /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/out/phpr-p4 sha 8e5858d5b5bbf15a
+P3         istruzioni   228.750 G (dispersione 0.11 %)  vs P3  +0.00 %  cicli   64.807 G  user  29.62 s  | Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, PHP
+P4         istruzioni   225.277 G (dispersione 0.06 %)  vs P3  -1.52 %  cicli   64.020 G  user  29.27 s  | Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, PHP
+fine rc=0 2026-11-25 13:46:17

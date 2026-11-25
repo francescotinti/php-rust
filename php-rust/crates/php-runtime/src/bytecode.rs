@@ -209,8 +209,8 @@ impl PropIc {
     /// contratto sopra: le scritture non sono più plain-only — il ramo NP
     /// mantiene per-scrittura presenza slot, coercizione e typed_refs.
     pub const NP: u32 = 1 << 31;
-    pub const TY: u32 = 1 << 30;
-    pub const SLOT_MASK: u32 = Self::TY - 1;
+    pub const TY: u32 = 1 << 30; pub const RO: u32 = 1 << 29; // S-194 P4 `RO`: a readonly property this scope may initialise (the hit still asks the instance: uninitialised, no clone grant)
+    pub const SLOT_MASK: u32 = Self::RO - 1;
 
     /// The cached `(class_id + 1, slot)` when filled IN THIS RUN for
     /// exactly this calling scope (see [`PropIc::scope_key`]).

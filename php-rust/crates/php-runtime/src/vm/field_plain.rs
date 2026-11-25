@@ -20,6 +20,11 @@
 //! fallback when the slot vanished between the hit's check and the write (a typed coercion ran
 //! a `__toString` that unset the property): it addresses the storage key the scope resolves,
 //! which for a private is not the bare name.
+//!
+//! S-194 P4 (p.13): a readonly property is cached too (`PropIc::RO`) for the scopes that may
+//! initialise it. The class facts are proved at the fill; the hit asks the instance what only
+//! it knows ([`Vm::ro_uninit`]: the slot is uninitialised and no clone grant is pending) and
+//! records the initialisation after the typed coercion succeeded ([`Vm::ro_mark_slot`]).
 use super::arrays::coerce_key_silent;
 use super::oop::{resolve_prop_access, PropAccess};
 use super::*;
@@ -39,7 +44,35 @@ pub(super) fn write_slot(o: &Rc<RefCell<Object>>, i: u32, value: Zval) -> Result
     o.borrow_mut().props.replace_slot(i, value)
 }
 
+/// Record a readonly initialisation at `key` (`clone`: it consumes the grant `clone` gave).
+pub(super) fn ro_mark_key(o: &Rc<RefCell<Object>>, key: &[u8], clone: bool) {
+    let mut ob = o.borrow_mut();
+    if clone {
+        ob.consume_clone_writable(key);
+    }
+    ob.mark_readonly_init(key);
+}
+
 impl<'m> Vm<'m> {
+    /// A cached readonly write may proceed: declared slot `slot` of `b` is uninitialised, was
+    /// never initialised and holds no clone grant. Anything else is the general path's.
+    #[inline(never)]
+    pub(super) fn ro_uninit(&self, b: &Object, slot: u32) -> bool {
+        matches!(b.props.get_slot(slot), Some(Zval::Undef))
+            && self.classes[b.class_id as usize]
+                .props_layout
+                .key_at(slot)
+                .is_some_and(|k| !b.is_readonly_init(k) && !b.readonly_clone_writable(k))
+    }
+
+    #[inline(never)]
+    pub(super) fn ro_mark_slot(&self, o: &Rc<RefCell<Object>>, slot: u32) {
+        let cid = o.borrow().class_id as usize;
+        if let Some(k) = self.classes[cid].props_layout.key_at(slot) {
+            o.borrow_mut().mark_readonly_init(k);
+        }
+    }
+
     #[cold]
     #[inline(never)]
     pub(super) fn write_stale_slot(&self, recv: &Zval, name: &[u8], scope: Option<ClassId>, value: Zval) -> Result<Option<Zval>, PhpError> {

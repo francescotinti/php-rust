@@ -962,6 +962,7 @@ impl<'m> super::Vm<'m> {
                             Some(_) => true,
                             None => false,
                         }
+                        && (raw & crate::bytecode::PropIc::RO == 0 || self.ro_uninit(&b, slot)) // S-194 P4
                 };
                 if hit {
                     // S-134 IC non-plain (s134-criterio-icnp p.1): il ramo TY
@@ -995,6 +996,7 @@ impl<'m> super::Vm<'m> {
                             }
                         }
                     }
+                    if raw & crate::bytecode::PropIc::RO != 0 { self.ro_mark_slot(o, slot); } // S-194 P4
                     let wr = match super::field_plain::write_slot(o, slot, value.clone()) { Ok(old) => old, Err(v) => self.write_stale_slot(&target, name, cur, v)? }; // S-194 P3
                     if let Some(old) = wr {
                         #[cfg(feature = "zval-census")]
@@ -1169,13 +1171,11 @@ impl<'m> super::Vm<'m> {
             } else {
                 None
             };
+            let mut ro_mark = 0u8; // S-194 P4: the mark waits for the coercion (a TypeError leaves the property uninitialised, like Zend)
             if declared_slot {
                 if let Some(decl) = ro_decl {
                     if o.borrow().readonly_clone_writable(&key) {
-                        // Permitted re-initialisation during `__clone` (8.3).
-                        let mut ob = o.borrow_mut();
-                        ob.consume_clone_writable(&key);
-                        ob.mark_readonly_init(&key);
+                        ro_mark = 2; // permitted re-initialisation during `__clone` (8.3)
                     } else {
                         let inited = o.borrow().is_readonly_init(&key);
                         let set_vis = prop_info(&self.classes, ocid, name)
@@ -1183,7 +1183,7 @@ impl<'m> super::Vm<'m> {
                         if let Some(err) = readonly_write_error(&self.classes, cur, decl, name, inited, set_vis) {
                             return Err(err);
                         }
-                        o.borrow_mut().mark_readonly_init(&key);
+                        ro_mark = 1;
                     }
                 }
             }
@@ -1196,7 +1196,7 @@ impl<'m> super::Vm<'m> {
             // strutturalmente ASSENTE — con un `__set` il typed-unset DEVE
             // dispatchare il magic: l'assenza è ciò che rende il salto del
             // magic-check un fatto di classe e non di istanza.
-            if np_fillable && declared_slot && ro_decl.is_none() && (key.as_ref() == &name[..] || cur == Some(ocid)) { // S-194 P3: a private (mangled key) of the scope's own class
+            if np_fillable && declared_slot && (ro_decl.is_none() || ro_mark == 1) && (key.as_ref() == &name[..] || cur == Some(ocid)) { // S-194 P3: a private (mangled key) of the scope's own class
                 if let Some(i) = slot_idx {
                     if resolve_method_runtime(&self.classes, ocid, b"__set").is_none() {
                         debug_assert_eq!(i & !crate::bytecode::PropIc::SLOT_MASK, 0);
@@ -1205,7 +1205,7 @@ impl<'m> super::Vm<'m> {
                                 crate::bytecode::PropIc::TY
                             } else {
                                 0
-                            };
+                            } | if ro_mark == 1 { crate::bytecode::PropIc::RO } else { 0 };
                         ic.fill(ocid as u32, crate::bytecode::PropIc::scope_key(cur), i | bits);
                     }
                 }
@@ -1231,6 +1231,7 @@ impl<'m> super::Vm<'m> {
             // expression yields the coerced value.
             if declared_slot {
                 value = self.coerce_typed_prop_write(ocid, name, value)?;
+                if ro_mark != 0 { super::field_plain::ro_mark_key(o, &key, ro_mark == 2); }
             }
         }
         // A declared slot written on a lazy wrapper (guarded writes

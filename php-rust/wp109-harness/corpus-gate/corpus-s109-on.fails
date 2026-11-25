@@ -1085,7 +1085,6 @@
 /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/readonly_classes/readonly_class_unserialize_error.phpt
 /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/readonly_props/by_ref_foreach.phpt
 /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/readonly_props/gh7942.phpt
-/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/readonly_props/readonly_clone_success4.phpt
 /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/readonly_props/readonly_containing_object.phpt
 /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/readonly_props/readonly_method_trait.phpt
 /Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/readonly_props/readonly_modification.phpt

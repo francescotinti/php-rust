@@ -1,0 +1,5 @@
+== S-194 primitive: istruzioni ritirate per iterazione (differenziale N1/N2), phpr /Users/francescotinti/Claude/php-rust-output/release/phpr sha 98736f5fc9ac2d47 contro oracle. DIREZIONE ==
+fixture         fam           php     phpr     x |  php net phpr net  x net  eccesso | cyc x IPC php IPC phpr disp%
+noop            loop         34.8    123.3  3.54 |      0.0      0.0      -      0.0 |  3.72    6.22     5.92  2.45
+p_ro_ctor       path       1164.1  10236.5  8.79 |   1129.3  10113.2   8.96   8983.9 |  9.07    6.05     5.86  0.34
+note: nessuna fixture nulla

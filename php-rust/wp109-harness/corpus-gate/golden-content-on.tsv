@@ -1085,7 +1085,6 @@ c609a1ff9669d927e0b8354be047635fcd80d1c084b9effd289a0d78f42baefe	/Volumes/Extrem
 1df949be81e5201cd8dcaa864ad99eb192edb2a10ebcd673939b433a9b32f1c3	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/readonly_classes/readonly_class_unserialize_error.phpt
 52ef628a00015ab1e88412589d13ee47a994766b4e6f128e84560380c090df28	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/readonly_props/by_ref_foreach.phpt
 aebab373073c62a7c2036a23959e12379c35851dba6c13016cb068a1d5978565	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/readonly_props/gh7942.phpt
-d9f0b496c195c54bbfc3784612f1266c45522884a5648084c74e4f17d9ebb67a	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/readonly_props/readonly_clone_success4.phpt
 02cce65b08bcd6b99a29d022b67c0c3a02d4df0908142eb81d008db9ad980186	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/readonly_props/readonly_containing_object.phpt
 4b33fc987be36b62a6cf1122c2dc4c32d07d4b397571b885178d895f45ac35b8	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/readonly_props/readonly_method_trait.phpt
 ba687625cf050b41413da6d1a6f25c4449044a13ac74e79cb479fdeb78e16248	/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests/readonly_props/readonly_modification.phpt
