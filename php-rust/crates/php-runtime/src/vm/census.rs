@@ -782,6 +782,9 @@ impl OpCensus {
         ] {
             let _ = writeln!(o, "{:>12}  prop_set {}", c.swap(0, std::sync::atomic::Ordering::Relaxed), n);
         }
+        for (n, c) in PROP_SET_WHY_NAMES.iter().zip(&PROP_SET_WHY) { // S-194 P3: why a write missed the site cache
+            let _ = writeln!(o, "{:>12}  prop_set miss: {}", c.swap(0, std::sync::atomic::Ordering::Relaxed), n);
+        }
         let _ = writeln!(o, "-- Binary/CmpJmp type pairs (top 40) --");
         let mut pairs: Vec<(u64, usize)> = self
             .binary
@@ -911,6 +914,8 @@ pub fn census_concat_site(site: usize, lhs: &Zval, rhs: &Zval) {
 pub static PROP_SET_IC_PLAIN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 pub static PROP_SET_IC_TYPED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 pub static PROP_SET_MISS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+pub static PROP_SET_WHY: [std::sync::atomic::AtomicU64; 13] = [const { std::sync::atomic::AtomicU64::new(0) }; 13];
+pub const PROP_SET_WHY_NAMES: [&str; 13] = ["not an object", "lazy or enum", "set hook / virtual", "class has __set", "access denied", "dynamic, created", "dynamic, present", "declared without slot index, private of an ancestor", "declared without slot index, other", "readonly", "asymmetric visibility", "cacheable: site holds another class", "cacheable: site cold or other scope"];
 #[inline(always)]
 pub fn census_prop_set(counter: &std::sync::atomic::AtomicU64) {
     counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);

@@ -995,9 +995,8 @@ impl<'m> super::Vm<'m> {
                             }
                         }
                     }
-                    if let Some(old) =
-                        write_property_at(&target, name, Some(slot), value.clone())?
-                    {
+                    let wr = match super::field_plain::write_slot(o, slot, value.clone()) { Ok(old) => old, Err(v) => self.write_stale_slot(&target, name, cur, v)? }; // S-194 P3
+                    if let Some(old) = wr {
                         #[cfg(feature = "zval-census")]
                         super::zvalcensus::note_gcnote_site_propset_old();
                         self.gc_note(&old);
@@ -1014,7 +1013,7 @@ impl<'m> super::Vm<'m> {
         }
         // S-176 census «typed»: not served by the IC (fill/slow path).
         #[cfg(feature = "op-census")]
-        super::census::census_prop_set(&super::census::PROP_SET_MISS);
+        { super::census::census_prop_set(&super::census::PROP_SET_MISS); self.prop_set_miss_why(&target, name, cur, ic); }
         // FAST PATH (WP-25): overwrite of a *present* slot on a
         // non-lazy, non-enum instance of a class whose declared
         // properties are all plain for writing (public, symmetric,
@@ -1197,7 +1196,7 @@ impl<'m> super::Vm<'m> {
             // strutturalmente ASSENTE — con un `__set` il typed-unset DEVE
             // dispatchare il magic: l'assenza è ciò che rende il salto del
             // magic-check un fatto di classe e non di istanza.
-            if np_fillable && declared_slot && ro_decl.is_none() && key.as_ref() == &name[..] {
+            if np_fillable && declared_slot && ro_decl.is_none() && (key.as_ref() == &name[..] || cur == Some(ocid)) { // S-194 P3: a private (mangled key) of the scope's own class
                 if let Some(i) = slot_idx {
                     if resolve_method_runtime(&self.classes, ocid, b"__set").is_none() {
                         debug_assert_eq!(i & !crate::bytecode::PropIc::SLOT_MASK, 0);

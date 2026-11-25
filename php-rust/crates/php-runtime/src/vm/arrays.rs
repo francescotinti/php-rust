@@ -1822,7 +1822,7 @@ impl<'m> Vm<'m> {
         else {
             return;
         };
-        if key != &name[..] {
+        if key != &name[..] && scope != Some(cid) { // S-194 P3: a private of the scope's own class is cached too
             return;
         }
         if prop_readonly_decl(&self.classes, cid, name).is_some() {

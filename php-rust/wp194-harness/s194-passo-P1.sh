@@ -16,6 +16,6 @@ cd "$W/.." || exit 2
 CARGO_TARGET_DIR="$ARM" CARGO_PROFILE_RELEASE_DEBUG=line-tables-only CARGO_PROFILE_RELEASE_SPLIT_DEBUGINFO=packed cargo build --release -p php-cli > "$W/out/passo-$T-braccio.log" 2>&1
 b=$?; echo "braccio: rc=$b sha=$(shasum -a 256 "$ARM/release/phpr" | cut -c1-16)" >> "$V"
 if [ "$b" != 0 ]; then echo 1 > "$W/out/passo-$T.done"; exit 1; fi
-bash "$W/s194-primitive.sh" "$T" --bin "$ARM/release/phpr" --base s194-primitive-Pbase.out
+bash "$W/s194-primitive.sh" "$T" --bin "$ARM/release/phpr" --base "${S194_BASE:-s194-primitive-Pbase.out}"
 echo "sonda: rc=$(cat "$W/s194-primitive-$T.rc")" >> "$V"
 echo "fine $(date '+%F %T')" >> "$V"; echo 0 > "$W/out/passo-$T.done"

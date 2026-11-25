@@ -122,8 +122,8 @@ X = [
  ("this_protected0", "calls", "class M { protected function z() { return 1; } function go() { return $this->z(); } }\nfunction gm() { static $m; return $m ??= new M; }\n", "$s += gm()->go();", 1),
 ]
 # S-194 package P (paths and properties, s194-criterio-P.md): (name, family, header, extra setup, body, divisor)
-PH = "class P { public $arr = ['alpha' => 1, 'beta' => 2]; public $q; public $n = 0;\n  function setn($v) { $this->n = $v; } function has($k) { return isset($this->arr[$k]); } function put($k, $v) { $this->arr[$k] = $v; } }\n"
-PS = "$p = new P; $p->q = new P; $n2 = ['a' => ['b' => 1, 'c' => 2]];\n"
+PH = "class P { public $arr = ['alpha' => 1, 'beta' => 2]; public $q; public $n = 0;\n  function setn($v) { $this->n = $v; } function has($k) { return isset($this->arr[$k]); } function put($k, $v) { $this->arr[$k] = $v; } }\nclass Q { private $n = 0; private $arr = ['alpha' => 1, 'beta' => 2]; private int $t = 0;\n  function setn($v) { $this->n = $v; } function put($k, $v) { $this->arr[$k] = $v; } function sett($v) { $this->t = $v; } }\n"
+PS = "$p = new P; $p->q = new P; $n2 = ['a' => ['b' => 1, 'c' => 2]]; $pq = new Q;\n"
 PP = [
  ("p_isset_str", "path", "if (isset($h['beta'])) { $s++; }", 1),
  ("p_isset_miss", "path", "if (isset($h['zeta'])) { $s++; }", 1),
@@ -139,6 +139,9 @@ PP = [
  ("p_this_set", "path", "$p->setn($i);", 1),
  ("p_prop_isset", "path", "if (isset($p->n)) { $s++; }", 1),
  ("p_empty_str", "path", "if (empty($h['beta'])) { $s++; }", 1),
+ ("p_priv_set", "path", "$pq->setn($i);", 1),
+ ("p_priv_assign", "path", "$pq->put('beta', $i);", 1),
+ ("p_priv_typed", "path", "$pq->sett($i);", 1),
 ]
 TAIL = ' echo $s, "|", strlen((string)$t), "|", $x, "\\n";'
 

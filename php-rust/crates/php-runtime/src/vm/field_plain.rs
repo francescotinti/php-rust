@@ -14,11 +14,42 @@
 //! S-194 P2 (same criterion, p.7): isset() / empty() / assignment with ONE key on an array
 //! variable, without the key vector, the base clone and the general walkers. Both functions
 //! decide before they touch the operand stack; false = the arm goes on as before.
+//!
+//! S-194 P3 (p.10): the write caches admit a private property of the scope's own class. A cache
+//! hit writes by slot index; [`write_slot`] is that write, and [`Vm::write_stale_slot`] the
+//! fallback when the slot vanished between the hit's check and the write (a typed coercion ran
+//! a `__toString` that unset the property): it addresses the storage key the scope resolves,
+//! which for a private is not the bare name.
 use super::arrays::coerce_key_silent;
 use super::oop::{resolve_prop_access, PropAccess};
 use super::*;
 
+/// The slot write of a property cache hit: [`write_property_at`] without its by-name fallback
+/// (`Err` hands the value back when the slot is gone).
+#[inline]
+pub(super) fn write_slot(o: &Rc<RefCell<Object>>, i: u32, value: Zval) -> Result<Option<Zval>, Zval> {
+    // A slot holding a reference is written THROUGH, exactly like write_property_at.
+    let cell = match o.borrow().props.get_slot(i) {
+        Some(Zval::Ref(cell)) => Some(Rc::clone(cell)),
+        _ => None,
+    };
+    if let Some(cell) = cell {
+        return Ok(Some(std::mem::replace(&mut *cell.borrow_mut(), value)));
+    }
+    o.borrow_mut().props.replace_slot(i, value)
+}
+
 impl<'m> Vm<'m> {
+    #[cold]
+    #[inline(never)]
+    pub(super) fn write_stale_slot(&self, recv: &Zval, name: &[u8], scope: Option<ClassId>, value: Zval) -> Result<Option<Zval>, PhpError> {
+        let key: &[u8] = match object_class_id(recv).map(|cid| resolve_prop_access(&self.classes, cid, name, scope)) {
+            Some(PropAccess::Slot { key, .. }) => &key[..],
+            _ => name,
+        };
+        write_property(recv, key, value)
+    }
+
     /// Some(verdict) = the Bool the op pushes (isset: set; empty: empty); None = not decided here.
     pub(super) fn field_is_plain(&self, base: FieldBase, top: usize, steps: &[FieldStep], keys: &[Zval], empty_mode: bool) -> Option<bool> {
         let cell = match base {
@@ -171,5 +202,43 @@ impl<'m> Vm<'m> {
             }
         }
         true
+    }
+
+    /// S-194 P3 census (instrumentation builds only): why a property write missed the site cache.
+    #[cfg(feature = "op-census")]
+    pub(super) fn prop_set_miss_why(&self, target: &Zval, name: &[u8], cur: Option<ClassId>, ic: &crate::bytecode::PropIc) {
+        let why = (|| {
+            let Zval::Object(o) = target else { return 0 };
+            let (cid, lazy, present) = {
+                let b = o.borrow();
+                (b.class_id as usize, b.lazy.is_some() || b.info.is_enum_case, b.props.contains(name))
+            };
+            if lazy {
+                return 1;
+            }
+            if self.prop_hook(cid, name, true).is_some() || self.is_virtual_hooked(cid, name) {
+                return 2;
+            }
+            if self.magic_method(cid, 3).is_some() {
+                return 3;
+            }
+            match resolve_prop_access(&self.classes, cid, name, cur) {
+                PropAccess::Denied { .. } => 4,
+                PropAccess::Dynamic => 5 + present as usize,
+                PropAccess::Slot { key, slot: None } => 7 + (&key[..] == name) as usize,
+                PropAccess::Slot { .. } => {
+                    if prop_readonly_decl(&self.classes, cid, name).is_some() {
+                        9
+                    } else if asym_write_error(&self.classes, cur, cid, name, "modify").is_some() {
+                        10
+                    } else if ic.get(crate::bytecode::PropIc::scope_key(cur)).is_some() {
+                        11
+                    } else {
+                        12
+                    }
+                }
+            }
+        })();
+        super::census::PROP_SET_WHY[why].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
 }
