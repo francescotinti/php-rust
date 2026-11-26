@@ -78,6 +78,7 @@ nello stesso atto perché appenda in QUESTA sezione.)
 
 | pin (sha256/16) | sessione | collaudato | evidenza |
 |---|---|---|---|
+| 97e000aa00fe802e | s190 (sorgente @ 86416be4; riga da pin-phpr.sh) | smoke parità 2 modi OK 2026-11-26 09:51:25 — batteria/corpus/fixture/micro DOVUTI a parte | stash `phpr-s190` |
 | 2d42efd6606e8dd9 | s189 (sorgente @ 19e3b3c9; riga da pin-phpr.sh) | smoke parità 2 modi OK 2026-11-25 18:51:36 — batteria/corpus/fixture/micro DOVUTI a parte | stash `phpr-s189` |
 | 98736f5fc9ac2d47 | s188 (sorgente @ 04e85296; riga da pin-phpr.sh) | smoke parità 2 modi OK 2026-11-24 23:39:57 — batteria/corpus/fixture/micro DOVUTI a parte | stash `phpr-s188` |
 | e7025fb37b1a87e0 | s187 (sorgente @ 1bdd5f52; riga da pin-phpr.sh) | smoke parità 2 modi OK 2026-11-23 23:33:31 — batteria/corpus/fixture/micro DOVUTI a parte | stash `phpr-s187` |
