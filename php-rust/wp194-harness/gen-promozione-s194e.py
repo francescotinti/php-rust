@@ -19,11 +19,11 @@ def line_from(s, start):
 s = open('s194d-promozione.sh', encoding='utf-8').read()
 head_old = s[:s.index('# Testo S-193/')]
 head_new = '''#!/bin/bash
-# s194e-promozione.sh — gate di PROMOZIONE del tree «pin s189 + C4 + N1 + N2 (con B1/B2) + T1» → pin phpr s190
+# s194e-promozione.sh — gate di PROMOZIONE del tree «pin s189 + C4 + N1 + N2 (con B1/B2) + T1 + N3» → pin phpr s190
 # (criterio wp194-harness/s194-criterio-promozione-e.md; s189 resta nello stash; si lancia SOLO con la parola dell'utente).
 # COPIA DICHIARATA di s194d-promozione.sh (manifest s194e-promozione-copia.diff, generatore gen-promozione-s194e.py) coi SOLI
 # adattamenti: (1) tag s190, etichette dello stash s188 → s189, verdetto s194e-promo-verdetto.out, uscite in promo-out-e;
-# (2) CANDIDATO = braccio con la ricetta del pin su HEAD (commit passato al generatore); precondizione = accettazione s194T1
+# (2) CANDIDATO = braccio con la ricetta del pin su HEAD (commit passato al generatore); precondizione = accettazione s194N3
 # rc=0; (3) REF = stash phpr-s189 (2d42efd6606e8dd9); (4) i denti C4, N1 e T1 entrano come gate BILATERALI; i gate che le cure
 # rendono diversi dallo stash passano da invarianti a bilaterali, per nome nel criterio; (5) corpus congelato 1399 per modo,
 # invariato; (6) dichiarazioni PRE riscritte.
@@ -36,11 +36,11 @@ s = rep(s, 'OUT="$H14/promo-out-d"; mkdir -p "$OUT"', 'OUT="$H14/promo-out-e"; m
 s = rep(s, 'VERD="$H14/s194d-promo-verdetto.out"', 'VERD="$H14/s194e-promo-verdetto.out"')
 s = rep(s, 'REF_EXP="98736f5fc9ac2d47"', 'REF_EXP="2d42efd6606e8dd9"')
 s = rep(s, line_from(s, 'CAND_COMMIT="${CAND_COMMIT:-')[:line_from(s, 'CAND_COMMIT="${CAND_COMMIT:-').index('}"') + 2], 'CAND_COMMIT="${CAND_COMMIT:-%s}"' % COMMIT)
-s = rep(s, 'accettazione-s194P4b.rc', 'accettazione-s194T1.rc', 3)
-s = rep(s, 'accettazione s194P4b rc=', 'accettazione s194T1 rc=', 2)
+s = rep(s, 'accettazione-s194P4b.rc', 'accettazione-s194N3.rc', 3)
+s = rep(s, 'accettazione s194P4b rc=', 'accettazione s194N3 rc=', 2)
 s = rep(s, '"$H14/s194-p3-comportamento.php" "$H14/s194-p4-comportamento.php" \\', '"$H14/s194-p3-comportamento.php" "$H14/s194-p4-comportamento.php" "$H14/s194-c4-comportamento.php" "$H14/s194-n1-comportamento.php" "$H14/s194-t1-comportamento.php" \\')
-s = rep(s, line_from(s, 'note "PRE: candidato = braccio su HEAD $CH'), 'note "PRE: candidato = braccio su HEAD $CH (commit $CAND_COMMIT; accettazione s194T1 rc=0, conto in istruzioni su ORM e WordPress a ogni passo); REF = stash s189 $REF_EXP"')
-s = rep(s, line_from(s, 'note "PRE: DICHIARAZIONE dei cambiamenti del pin'), 'note "PRE: DICHIARAZIONE dei cambiamenti del pin s190 rispetto a s189 (per nome, wp194-harness/s194-criterio-C.md p.25, s194-criterio-N.md, s194-criterio-B.md): C4 un argomento-variabile di una chiamata dinamica non promuove piu la variabile a riferimento (29b6d962, 9b9b5f11), con CURA di una divergenza dal PHP ufficiale: una variabile non definita passata a un oggetto invocabile o a un callable-array ora avvisa come PHP; N1 hash veloci su new, include e reflection, ricerca di sottostringa senza cercatore per chiamata (fab50dd2); N2 impronta delle classi registrate incrementale, B1/B2 lettura delle variabili e scarto degli scalari in linea nel ciclo (047bbee5; righe in run_loop, giudicate sul carico intero); T1 memoria dei controlli di tipo di classe riusciti (%s). Corpus: fail-set congelato 1399 per modo, invariato."' % COMMIT)
+s = rep(s, line_from(s, 'note "PRE: candidato = braccio su HEAD $CH'), 'note "PRE: candidato = braccio su HEAD $CH (commit $CAND_COMMIT; accettazione s194N3 rc=0, conto in istruzioni su ORM e WordPress a ogni passo); REF = stash s189 $REF_EXP"')
+s = rep(s, line_from(s, 'note "PRE: DICHIARAZIONE dei cambiamenti del pin'), 'note "PRE: DICHIARAZIONE dei cambiamenti del pin s190 rispetto a s189 (per nome, wp194-harness/s194-criterio-C.md p.25, s194-criterio-N.md, s194-criterio-B.md): C4 un argomento-variabile di una chiamata dinamica non promuove piu la variabile a riferimento (29b6d962, 9b9b5f11), con CURA di una divergenza dal PHP ufficiale: una variabile non definita passata a un oggetto invocabile o a un callable-array ora avvisa come PHP; N1 hash veloci su new, include e reflection, ricerca di sottostringa senza cercatore per chiamata (fab50dd2); N2 impronta delle classi registrate incrementale, B1/B2 lettura delle variabili e scarto degli scalari in linea nel ciclo (047bbee5; righe in run_loop, giudicate sul carico intero); T1 memoria dei controlli di tipo di classe riusciti (a0a74e9c); N3 un solo buffer per passata sul seed delle classi (%s). Corpus: fail-set congelato 1399 per modo, invariato."' % COMMIT)
 l = line_from(s, 'bilat s194p4 "$H14/s194-p4-comportamento.php"')
 s = rep(s, l, l + '\nbilat s194c4 "$H14/s194-c4-comportamento.php" "" "dente C4 (S-194): argomenti-variabile delle chiamate dinamiche" -d log_errors=0 -d display_errors=1\nbilat s194n1 "$H14/s194-n1-comportamento.php" "" "dente N1 (S-194): ricerca di sottostringa, riuso degli id degli oggetti" -d log_errors=0 -d display_errors=1\nbilat s194t1 "$H14/s194-t1-comportamento.php" "" "dente T1 (S-194): controlli di tipo di classe attraverso la memoria dei successi" -d log_errors=0 -d display_errors=1')
 for a in sys.argv[2:]:  # gate che le cure rendono diversi dallo stash: invar -> bilat, per nome

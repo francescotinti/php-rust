@@ -54,4 +54,6 @@ Sono istruzioni (lavoro eseguito), non tempo: il verdetto di tempo è la notte d
 - **Cosa succede oggi** (`s194-profilo-orm-T1.out`, chiamanti di `libsystem_platform`): le tre passate curate in N1b (`seed_stub_mask` 0,5 %, `unit_remap_elided` 0,4 %, `get_declared_classes` 0,6 %) azzerano un buffer di 128 byte PER CLASSE del seed (`[0u8; 128]` dichiarato dentro il ciclo): l'allocazione è sparita, è rimasto un `bzero` per voce.
 - **Cura**: il buffer si dichiara una volta fuori dal ciclo. Nessun cambio di comportamento.
 - **Attese**: carico intero contro il braccio T1: ORM ≤ −0,5 %; WordPress mai sopra. Errore mio in N1b: il buffer andava fuori dal ciclo dall'inizio.
+- **Esito N3 (26/11 07:55)**: accettazione `s194N3` rc=0 (batteria 1790/0/2); carico intero contro T1 **ORM −0,02 %, WordPress −0,02 %**: attesa (≤ −0,5 %) **MANCATA**. L'ipotesi era sbagliata: il tempo attribuito a quelle righe è la copia del nome nel buffer (inevitabile finché si minuscolizza per voce), non l'azzeramento. Il passo è innocuo e resta (commit `6b5c0095`); la cura vera delle passate O(seed) per include resta l'apertura per nome già registrata (nome minuscolo precalcolato sulla dichiarazione, o contratto WP-63/64).
+- **Somma aggiornata contro il pin s189**: ORM 225,350 → 213,450 G = **−5,28 %**; WordPress 3534,325 → 3454,954 G = **−2,25 %** (contro s188: −11,07 % e −7,41 %).
 

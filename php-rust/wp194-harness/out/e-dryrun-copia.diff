@@ -10,7 +10,7 @@
 < BIN="$W/out/phpr-p4"; REF="/Volumes/Extreme Pro/Claude/phpr-old-target/release/phpr-s188"
 < OUT="$W/out/dryrun-d"; rm -rf "$OUT"; mkdir -p "$OUT"; V="$W/out/d-dryrun.out"; : > "$V"; BAD=0
 ---
-> BIN="$W/out/phpr-t1"; REF="/Volumes/Extreme Pro/Claude/phpr-old-target/release/phpr-s189"
+> BIN="$W/out/phpr-n3"; REF="/Volumes/Extreme Pro/Claude/phpr-old-target/release/phpr-s189"
 > OUT="$W/out/dryrun-e"; rm -rf "$OUT"; mkdir -p "$OUT"; V="$W/out/e-dryrun.out"; : > "$V"; BAD=0
 16,18c16,18
 < a=$(grep -n '^ORACLE=/opt/homebrew' "$W/s194d-promozione.sh" | cut -d: -f1); b=$(grep -n '^# E2 (emenda S-177' "$W/s194d-promozione.sh" | cut -d: -f1)

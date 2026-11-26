@@ -130,3 +130,10 @@ N2         istruzioni  3458.253 G (dispersione 0.00 %)  vs N2  +0.00 %  cicli 11
 T1         istruzioni  3455.316 G (dispersione 0.00 %)  vs N2  -0.08 %  cicli 1168.646 G  user 647.02 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
 uploads-guard restore rc=0
 fine rc=0 2026-11-26 06:41:09
+== s194 WordPress (phpunit full) istruzioni ritirate per gamba, 2026-11-26 07:30:35 (direzione sul lavoro, non verdetto di tempo) ==
+binario T1 = /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/out/phpr-t1 sha ac863f02b4a8be74
+binario N3 = /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/out/phpr-n3 sha cd4f512bf026eb5e
+T1         istruzioni  3455.756 G (dispersione 0.00 %)  vs T1  +0.00 %  cicli 1168.134 G  user 646.69 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
+N3         istruzioni  3454.954 G (dispersione 0.00 %)  vs T1  -0.02 %  cicli 1166.668 G  user 646.52 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
+uploads-guard restore rc=0
+fine rc=0 2026-11-26 07:56:46

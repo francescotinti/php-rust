@@ -7,7 +7,7 @@ export PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin
 SRC="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust"; W="$SRC/wp194-harness"
 H="$SRC/wp172-harness"; H4="$SRC/wp174-harness"; H8="$SRC/wp181-harness"; H9="$SRC/wp184-harness"; H3="$SRC/wp182-harness"
 H10="$SRC/wp185-harness"; H11="$SRC/wp190-harness"; H12="$SRC/wp186-harness"; H13="$SRC/wp193-harness"; H14="$SRC/wp194-harness"
-BIN="$W/out/phpr-t1"; REF="/Volumes/Extreme Pro/Claude/phpr-old-target/release/phpr-s189"
+BIN="$W/out/phpr-n3"; REF="/Volumes/Extreme Pro/Claude/phpr-old-target/release/phpr-s189"
 OUT="$W/out/dryrun-e"; rm -rf "$OUT"; mkdir -p "$OUT"; V="$W/out/e-dryrun.out"; : > "$V"; BAD=0
 note(){ echo "$1" >> "$V"; }
 stop(){ echo "MORDE: $1" >> "$V"; BAD=$((BAD + 1)); return 0; }

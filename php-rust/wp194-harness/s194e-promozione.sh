@@ -1,9 +1,9 @@
 #!/bin/bash
-# s194e-promozione.sh — gate di PROMOZIONE del tree «pin s189 + C4 + N1 + N2 (con B1/B2) + T1» → pin phpr s190
+# s194e-promozione.sh — gate di PROMOZIONE del tree «pin s189 + C4 + N1 + N2 (con B1/B2) + T1 + N3» → pin phpr s190
 # (criterio wp194-harness/s194-criterio-promozione-e.md; s189 resta nello stash; si lancia SOLO con la parola dell'utente).
 # COPIA DICHIARATA di s194d-promozione.sh (manifest s194e-promozione-copia.diff, generatore gen-promozione-s194e.py) coi SOLI
 # adattamenti: (1) tag s190, etichette dello stash s188 → s189, verdetto s194e-promo-verdetto.out, uscite in promo-out-e;
-# (2) CANDIDATO = braccio con la ricetta del pin su HEAD (commit passato al generatore); precondizione = accettazione s194T1
+# (2) CANDIDATO = braccio con la ricetta del pin su HEAD (commit passato al generatore); precondizione = accettazione s194N3
 # rc=0; (3) REF = stash phpr-s189 (2d42efd6606e8dd9); (4) i denti C4, N1 e T1 entrano come gate BILATERALI; i gate che le cure
 # rendono diversi dallo stash passano da invarianti a bilaterali, per nome nel criterio; (5) corpus congelato 1399 per modo,
 # invariato; (6) dichiarazioni PRE riscritte.
@@ -28,7 +28,7 @@ OUT="$H14/promo-out-e"; mkdir -p "$OUT"
 VERD="$H14/s194e-promo-verdetto.out"
 disk_guard(){ local g; g=$(df -g /System/Volumes/Data | awk 'NR==2{print $4}'); [ "${g:-0}" -ge 3 ] || stop "guardia disco: Data ${g}G < 3G prima di $1 — STOP"; note "guardia disco: Data ${g}G prima di $1"; }
 REF="$STASH/phpr-s189"; REF_EXP="2d42efd6606e8dd9"
-CAND="$HOME/Claude/phpr-target/s192-armD/release/phpr"; CAND_COMMIT="${CAND_COMMIT:-a0a74e9c}"
+CAND="$HOME/Claude/phpr-target/s192-armD/release/phpr"; CAND_COMMIT="${CAND_COMMIT:-6b5c0095}"
 note(){ echo "$1"; echo "$1" >> "$VERD"; }
 stop(){ note "$1"; echo 1 > "$OUT/rcb"; exit 1; }
 
@@ -37,7 +37,7 @@ for f in "$H/fx-ce.php" "$H/fx-am.php" "$H/fx-af.php" "$H/fx-refl.php" \
          "$H/fx-sm.php" "$H/fx-sm-div.php" "$H/fx-au.php" "$H/fx-au-div.php" \
          "$H/fx-mc.php" "$H/fx-mc2.php" "$H/fx-mc2-fib.php" "$H/fx-mck.php" \
          "$H/fx-sl1.php" "$H/fx-sl1-div.php" "$H/fx-sl2.php" "$H/fx-sl2-div.php" "$H/fx-sl3.php" "$H/fx-sl3-div.php" "$H/prop-dq.php" "$H4/fixtures/fx-sw1.php" \
-         "$H8/fx-cr1.php" "$H9/calls-dq.php" "$H3/fx-rt1.php" "$H9/fx-rt2.php" "$H10/fx-mc2.php" "$H10/mcalls-dq.php" "$H12/ret-buf-dq-k0.php" "$H4/fixtures/fx-sw2-gc.php" "$H11/fx-mc2-wp172.expected-diff" "$CAND" "$SRC/wp192-harness/out/accettazione-s194T1.rc" "$H14/s194-n-comportamento.php" "$H14/s194-f-comportamento.php" "$H14/s194-dbis-comportamento.php" "$H14/s194-dedicate-comportamento.php" "$H14/s194-a-comportamento.php" "$H14/s194-c-comportamento.php" "$H14/s194-c-comportamento-strict.php" "$H14/s194-c3-comportamento.php" "$H14/s194-c3b-comportamento.php" "$H14/s194-p1-comportamento.php" "$H14/s194-p2-comportamento.php" "$H14/s194-p3-comportamento.php" "$H14/s194-p4-comportamento.php" "$H14/s194-c4-comportamento.php" "$H14/s194-n1-comportamento.php" "$H14/s194-t1-comportamento.php" \
+         "$H8/fx-cr1.php" "$H9/calls-dq.php" "$H3/fx-rt1.php" "$H9/fx-rt2.php" "$H10/fx-mc2.php" "$H10/mcalls-dq.php" "$H12/ret-buf-dq-k0.php" "$H4/fixtures/fx-sw2-gc.php" "$H11/fx-mc2-wp172.expected-diff" "$CAND" "$SRC/wp192-harness/out/accettazione-s194N3.rc" "$H14/s194-n-comportamento.php" "$H14/s194-f-comportamento.php" "$H14/s194-dbis-comportamento.php" "$H14/s194-dedicate-comportamento.php" "$H14/s194-a-comportamento.php" "$H14/s194-c-comportamento.php" "$H14/s194-c-comportamento-strict.php" "$H14/s194-c3-comportamento.php" "$H14/s194-c3b-comportamento.php" "$H14/s194-p1-comportamento.php" "$H14/s194-p2-comportamento.php" "$H14/s194-p3-comportamento.php" "$H14/s194-p4-comportamento.php" "$H14/s194-c4-comportamento.php" "$H14/s194-n1-comportamento.php" "$H14/s194-t1-comportamento.php" \
          "$H/sonda-bt-autoload.php" "$SRC/wp164-harness/arith-dq.php" \
          "$H/empty.php" "$QUIESCE" "$WD" "$GATES/orm-work.tgz" "$GATES/hk-work.tgz" \
          "$SRC/wp125-harness/orm-baseline-failnames.txt" \
@@ -46,10 +46,10 @@ for f in "$H/fx-ce.php" "$H/fx-am.php" "$H/fx-af.php" "$H/fx-refl.php" \
   [ -s "$f" ] || stop "PRE: path d'ingresso MANCANTE: $f — STOP"
 done
 [ "$(shasum -a 256 "$REF" | cut -c1-16)" = "$REF_EXP" ] || stop "PRE: stash phpr-s189 hash != $REF_EXP — STOP"
-[ "$(cat "$SRC/wp192-harness/out/accettazione-s194T1.rc")" = 0 ] || stop "PRE: catena di accettazione s194T1 rc=$(cat "$SRC/wp192-harness/out/accettazione-s194T1.rc") ≠ 0 — nessuna promozione senza accettazione verde — STOP"
+[ "$(cat "$SRC/wp192-harness/out/accettazione-s194N3.rc")" = 0 ] || stop "PRE: catena di accettazione s194N3 rc=$(cat "$SRC/wp192-harness/out/accettazione-s194N3.rc") ≠ 0 — nessuna promozione senza accettazione verde — STOP"
 CH=$(shasum -a 256 "$CAND" | cut -c1-16)
-note "PRE: candidato = braccio su HEAD $CH (commit $CAND_COMMIT; accettazione s194T1 rc=0, conto in istruzioni su ORM e WordPress a ogni passo); REF = stash s189 $REF_EXP"
-note "PRE: DICHIARAZIONE dei cambiamenti del pin s190 rispetto a s189 (per nome, wp194-harness/s194-criterio-C.md p.25, s194-criterio-N.md, s194-criterio-B.md): C4 un argomento-variabile di una chiamata dinamica non promuove piu la variabile a riferimento (29b6d962, 9b9b5f11), con CURA di una divergenza dal PHP ufficiale: una variabile non definita passata a un oggetto invocabile o a un callable-array ora avvisa come PHP; N1 hash veloci su new, include e reflection, ricerca di sottostringa senza cercatore per chiamata (fab50dd2); N2 impronta delle classi registrate incrementale, B1/B2 lettura delle variabili e scarto degli scalari in linea nel ciclo (047bbee5; righe in run_loop, giudicate sul carico intero); T1 memoria dei controlli di tipo di classe riusciti (a0a74e9c). Corpus: fail-set congelato 1399 per modo, invariato."
+note "PRE: candidato = braccio su HEAD $CH (commit $CAND_COMMIT; accettazione s194N3 rc=0, conto in istruzioni su ORM e WordPress a ogni passo); REF = stash s189 $REF_EXP"
+note "PRE: DICHIARAZIONE dei cambiamenti del pin s190 rispetto a s189 (per nome, wp194-harness/s194-criterio-C.md p.25, s194-criterio-N.md, s194-criterio-B.md): C4 un argomento-variabile di una chiamata dinamica non promuove piu la variabile a riferimento (29b6d962, 9b9b5f11), con CURA di una divergenza dal PHP ufficiale: una variabile non definita passata a un oggetto invocabile o a un callable-array ora avvisa come PHP; N1 hash veloci su new, include e reflection, ricerca di sottostringa senza cercatore per chiamata (fab50dd2); N2 impronta delle classi registrate incrementale, B1/B2 lettura delle variabili e scarto degli scalari in linea nel ciclo (047bbee5; righe in run_loop, giudicate sul carico intero); T1 memoria dei controlli di tipo di classe riusciti (a0a74e9c); N3 un solo buffer per passata sul seed delle classi (6b5c0095). Corpus: fail-set congelato 1399 per modo, invariato."
 note "PRE: LOC (REGOLE §8): S-194 NON alza alcun cap (diff del dente loc_dente vuoto da e0a71c40; il dente resta nella batteria di questa catena)."
 
 cd "$SRC" || exit 4

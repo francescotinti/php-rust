@@ -1,4 +1,4 @@
-candidato ac863f02b4a8be74 · REF 2d42efd6606e8dd9 · 2026-11-26 06:41:33
+candidato cd4f512bf026eb5e · REF 2d42efd6606e8dd9 · 2026-11-26 07:57:08
 promozione gate fxce: oracle==pin BYTE-ID (12 forme class/interface/trait_exists)
 promozione gate sonda-bt: pin==stash s189 BYTE-ID (contratto autoload/backtrace §3.25 invariato)
 promozione gate fxrefl: pin==stash s189 BYTE-ID (contratto __reflect_* L-RF2 invariato)
