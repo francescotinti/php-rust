@@ -1,0 +1,35 @@
+1a2,5
+> # s194b-orm-coppia-t31.sh — S-194 notte b: coppia dbal+ORM t31 @ pin s190 (DOVUTA: conferma di s187..s190; t30 era @ s186).
+> # COPIA DICHIARATA di s194-orm-coppia-t30.sh (manifest s194b-orm-coppia-t31-copia.diff, generatore gen-notte-s194b.py) coi
+> # SOLI adattamenti: cartella orm-out-b, verdetto s194b-orm-coppia-verdetto-t31.out, PIN_ATTESO default s190, etichette
+> # t31/s190. Costanti E5 dal lanciatore, INVARIATE. Testo precedente sotto:
+51c55
+< # per gamba (retry x3), scaletta a DUE estremi. rc SOLO da orm-out/rimisura.done.
+---
+> # per gamba (retry x3), scaletta a DUE estremi. rc SOLO da orm-out-b/rimisura.done.
+61,62c65,66
+< OUT="$H/orm-out"; mkdir -p "$OUT"
+< VERD="$H/s194-orm-coppia-verdetto-t30.out"
+---
+> OUT="$H/orm-out-b"; mkdir -p "$OUT"
+> VERD="$H/s194b-orm-coppia-verdetto-t31.out"
+67c71
+< PIN_ATTESO="${PIN_ATTESO:-9977cc4b1cf19991}"
+---
+> PIN_ATTESO="${PIN_ATTESO:-97e000aa00fe802e}"
+103c107
+<     p "quiescenza $1 rc=$q tentativo-gate=$attempt (file: orm-out/quiesce-$1.rc)"
+---
+>     p "quiescenza $1 rc=$q tentativo-gate=$attempt (file: orm-out-b/quiesce-$1.rc)"
+207c211
+< print("coppia-t30 @ s186 (user CPU; pavimenti PARZIALI phpunit --version: orm o=%.3f p=%.3f · dbal o=%.3f p=%.3f) — costanti giudice: %s" % (fo, fp, dfo, dfp, "E5 (istruttoria DRIFT)" if E5 else "canone E4 (S-176)"))
+---
+> print("coppia-t31 @ s190 (user CPU; pavimenti PARZIALI phpunit --version: orm o=%.3f p=%.3f · dbal o=%.3f p=%.3f) — costanti giudice: %s" % (fo, fp, dfo, dfp, "E5 (istruttoria DRIFT)" if E5 else "canone E4 (S-176)"))
+309c313
+< { echo "== s194 coppia t30 dbal+ORM (pin s186 MISURATO $PINM vs oracle 8.5.7; criterio s185-criterio-istruttoria-orm.md p.5-6) =="
+---
+> { echo "== s194 coppia t31 dbal+ORM (pin s190 MISURATO $PINM vs oracle 8.5.7; criterio s185-criterio-istruttoria-orm.md p.5-6) =="
+318c322
+<     echo "quiescenza $g: rc=$(cat "$OUT/quiesce-$g.rc" 2>/dev/null || echo MANCANTE) (file: orm-out/quiesce-$g.rc)"
+---
+>     echo "quiescenza $g: rc=$(cat "$OUT/quiesce-$g.rc" 2>/dev/null || echo MANCANTE) (file: orm-out-b/quiesce-$g.rc)"
