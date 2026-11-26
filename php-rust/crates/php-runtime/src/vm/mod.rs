@@ -6420,8 +6420,8 @@ impl<'m> Vm<'m> {
         let mut retained_remap: Vec<ClassId> = Vec::new();
         let mut new_locals: Vec<usize> = Vec::new();
         let mut k = 0usize; // retained (module.classes) cursor
+        let (mut lb, mut lh) = ([0u8; 128], Vec::new()); // S-194 N1/N3: one lowercase buffer for the whole pass, no allocation per seed entry
         for (i, cd) in program.classes.iter().enumerate() {
-            let (mut lb, mut lh) = ([0u8; 128], Vec::new()); // S-194 N1: no allocation per seed entry per include
             let registered = self.class_index.get(lc_name(&cd.name, &mut lb, &mut lh)).copied();
             // Mirror of the compile-side predicate: the unit's own conditionals
             // and its genuinely-new names were materialized, everything else
@@ -7134,14 +7134,9 @@ impl<'m> Vm<'m> {
     /// never registered (name absent from `class_index`) also compiles in full,
     /// preserving today's behaviour.
     fn seed_stub_mask(&self, program: &Program) -> Vec<bool> {
-        program
-            .classes
-            .iter()
-            .enumerate()
-            .map(|(i, cd)| {
-                !program.conditional_classes.contains(&i)
-                    && { let (mut lb, mut lh) = ([0u8; 128], Vec::new()); self.class_index.contains_key(lc_name(&cd.name, &mut lb, &mut lh)) } // S-194 N1
-            })
+        let (mut lb, mut lh) = ([0u8; 128], Vec::new()); // S-194 N1/N3: one lowercase buffer for the whole pass, no allocation per seed entry
+        program.classes.iter().enumerate()
+            .map(|(i, cd)| !program.conditional_classes.contains(&i) && self.class_index.contains_key(lc_name(&cd.name, &mut lb, &mut lh)))
             .collect()
     }
 

@@ -50,3 +50,8 @@ Generato con assistenza AI (Claude Fable 5.2). Scritto il 26/11 01:15, PRIMA del
 
 Sono istruzioni (lavoro eseguito), non tempo: il verdetto di tempo è la notte di conferma.
 
+## 7. N3 — un solo buffer per passata (scritto il 26/11 06:50, prima della misura)
+- **Cosa succede oggi** (`s194-profilo-orm-T1.out`, chiamanti di `libsystem_platform`): le tre passate curate in N1b (`seed_stub_mask` 0,5 %, `unit_remap_elided` 0,4 %, `get_declared_classes` 0,6 %) azzerano un buffer di 128 byte PER CLASSE del seed (`[0u8; 128]` dichiarato dentro il ciclo): l'allocazione è sparita, è rimasto un `bzero` per voce.
+- **Cura**: il buffer si dichiara una volta fuori dal ciclo. Nessun cambio di comportamento.
+- **Attese**: carico intero contro il braccio T1: ORM ≤ −0,5 %; WordPress mai sopra. Errore mio in N1b: il buffer andava fuori dal ciclo dall'inizio.
+

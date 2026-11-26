@@ -50,6 +50,6 @@ for p in pats:
             sub[" <- ".join(names[:3])] += k
     n = sum(sub.values())
     out.append(f"-- foglia ~ '{p}': {n} campioni ({100 * n / total:.1f} %)")
-    for c, k in sub.most_common(8):
+    for c, k in sub.most_common(int(os.environ.get('S194_ROWS', '8'))):
         out.append(f"  {k:6d} {100 * k / total:5.1f}%  {c}")
 (H / f"s194-chiamanti-{fx}.out").write_text("\n".join(out) + "\n")

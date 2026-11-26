@@ -4698,11 +4698,11 @@ impl<'m> super::Vm<'m> {
     /// Composer\BinProxyWrapper — declared only on PHP < 8 — and die.
     /// Consumers (PHPUnit's TestSuiteLoader) diff the list around a `require`.
     pub(super) fn ho_get_declared(&mut self, which: i64) -> Result<Zval, PhpError> {
-        let mut arr = PhpArray::new();
+        let (mut arr, mut lb, mut lh) = (PhpArray::new(), [0u8; 128], Vec::new()); // S-194 N1/N3: one lowercase buffer for the whole pass
         for c in self.classes.iter() {
             let is_iface = matches!(c.instantiable, crate::bytecode::Instantiable::Interface);
             if (which == 1) == is_iface
-                && { let (mut lb, mut lh) = ([0u8; 128], Vec::new()); self.class_index.contains_key(super::oop::lc_name(&c.name, &mut lb, &mut lh)) } // S-194 N1
+                && self.class_index.contains_key(super::oop::lc_name(&c.name, &mut lb, &mut lh))
             {
                 let _ = arr.append(Zval::Str(PhpStr::new(c.name.to_vec())));
             }
