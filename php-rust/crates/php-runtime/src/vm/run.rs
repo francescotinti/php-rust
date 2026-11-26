@@ -4467,9 +4467,9 @@ impl<'m> super::Vm<'m> {
                     // Stamp line/file/trace on a `new`-constructed Throwable, after
                     // its property-init thunk ran (which would otherwise clobber
                     // `trace`), leaving the object on the stack (EXC-3b/3c).
-                    if let Some(obj) = self.frames[top].stack.last().cloned() {
-                        self.stamp_throwable_location(&obj);
-                    }
+                    let thr = matches!((self.frames[top].stack.last(), self.throwable_id), (Some(Zval::Object(o)), Some(t)) if self.instance_of(o.borrow().class_id as ClassId, t)); // S-194 N1: no handle clone for the common non-Throwable
+                    if thr { let obj = self.frames[top].stack.last().cloned().expect("object"); self.stamp_throwable_location(&obj); }
+                    
                 }
                 Op::This => match &self.frames[top].this {
                     Some(t) => {

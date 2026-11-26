@@ -889,7 +889,7 @@ impl<'f> Lowerer<'f> {
         // hook. A plain property satisfies it too (its storage is addressable),
         // and the reverse (a by-value `get;` implemented by `&get`) is fine.
         let mut ifq: Vec<usize> = interfaces.clone();
-        let mut if_seen: std::collections::HashSet<usize> = ifq.iter().copied().collect();
+        let mut if_seen: rustc_hash::FxHashSet<usize> = ifq.iter().copied().collect();
         while let Some(i) = ifq.pop() {
             let Some(icd) = self.classes.get(i) else { continue };
             for &ii in &icd.interfaces {

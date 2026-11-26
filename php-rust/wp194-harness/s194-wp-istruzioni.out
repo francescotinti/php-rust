@@ -97,3 +97,10 @@ C4         istruzioni  3508.974 G (dispersione 0.00 %)  vs C4  +0.00 %  cicli 11
 C4b        istruzioni  3506.865 G (dispersione 0.00 %)  vs C4  -0.06 %  cicli 1183.969 G  user 656.18 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
 uploads-guard restore rc=0
 fine rc=0 2026-11-25 23:11:02
+== s194 WordPress (phpunit full) istruzioni ritirate per gamba, 2026-11-26 00:27:14 (direzione sul lavoro, non verdetto di tempo) ==
+binario C4b = /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/out/phpr-c4b sha 337e0a1832453b8b
+binario C4d = /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/out/phpr-c4d sha 83178f6be347ff87
+C4b        istruzioni  3507.985 G (dispersione 0.00 %)  vs C4b  +0.00 %  cicli 1184.594 G  user 656.58 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
+C4d        istruzioni  3504.077 G (dispersione 0.00 %)  vs C4b  -0.11 %  cicli 1192.223 G  user 659.63 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
+uploads-guard restore rc=0
+fine rc=0 2026-11-26 00:53:55

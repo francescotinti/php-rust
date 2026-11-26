@@ -812,7 +812,7 @@ pub fn rtrim(args: &[Zval], ctx: &mut Ctx) -> Result<Zval, PhpError> {
 
 /// First byte index of `needle` in `hay`. Empty needle matches at 0.
 fn find_sub(hay: &[u8], needle: &[u8]) -> Option<usize> {
-    memchr::memmem::find(hay, needle)
+    crate::search::find_sub(hay, needle) // S-194 N1
 }
 
 /// Split `s` on every (non-overlapping) occurrence of `sep` (sep non-empty).

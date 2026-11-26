@@ -36,6 +36,7 @@ mod mbstring;
 mod net;
 mod openssl;
 mod pack;
+mod search;
 mod serialize;
 mod string;
 mod url;

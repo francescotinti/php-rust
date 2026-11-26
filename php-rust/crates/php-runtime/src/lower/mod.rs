@@ -138,7 +138,7 @@ pub fn lower_source_seeded(
     seed_globals: &[Box<[u8]>],
     seed_aliases: &[(Vec<u8>, Vec<u8>)],
     declared: &dyn Fn(&[u8]) -> Option<usize>,
-    seed_conditional: &std::collections::HashSet<Vec<u8>>,
+    seed_conditional: &rustc_hash::FxHashSet<Vec<u8>>,
     defer: DeferPolicy,
 ) -> Result<Program, LowerError> {
     lower_source_impl(
@@ -164,7 +164,7 @@ type Seed<'a> = (
     &'a [Box<[u8]>],
     &'a [(Vec<u8>, Vec<u8>)],
     &'a dyn Fn(&[u8]) -> Option<usize>,
-    &'a std::collections::HashSet<Vec<u8>>,
+    &'a rustc_hash::FxHashSet<Vec<u8>>,
 );
 
 // WP-65 B-65.3 (KB65-3): cumulative wall-ns of the two lower phases over
@@ -1083,12 +1083,12 @@ struct Lowerer<'f> {
     fn_index: HashMap<Vec<u8>, usize>,
     /// Indices into `functions` that are *conditional* declarations (registered at
     /// run time by `DeclareFn`, not resolvable by name eagerly).
-    conditional_fns: std::collections::HashSet<usize>,
+    conditional_fns: rustc_hash::FxHashSet<usize>,
     /// Traits declared inside a branch, registered at run time (DeclareTrait).
     conditional_traits: Vec<(Vec<u8>, LoweredTrait)>,
     /// Indices into `classes` that are *conditional* declarations (registered at
     /// run time by `DeclareClass`, not resolvable by name eagerly).
-    conditional_classes: std::collections::HashSet<usize>,
+    conditional_classes: rustc_hash::FxHashSet<usize>,
     /// Start offsets of the class-like statements the hoist RESERVED (WP-69
     /// S-69.1 family): a statement re-declaring an in-use name is not hoisted
     /// — it stays a runtime (re)declaration whose `DeclareClass` raises
@@ -1131,7 +1131,7 @@ struct Lowerer<'f> {
     /// WP-70 S-70.2: lowercase names of seed classes that are CONDITIONAL in
     /// their source unit; an eager supertype bind against one flags
     /// [`Program::used_conditional_seed`] (see [`Lowerer::note_seed_super`]).
-    seed_conditional: std::collections::HashSet<Vec<u8>>,
+    seed_conditional: rustc_hash::FxHashSet<Vec<u8>>,
     /// Set by [`Lowerer::note_seed_super`]; `Cell` because interface
     /// resolution runs under `&self`.
     used_conditional_seed: std::cell::Cell<bool>,
@@ -1264,8 +1264,8 @@ impl<'f> Lowerer<'f> {
             after_closing_tag: false,
             functions: Vec::new(),
             fn_index: HashMap::default(),
-            conditional_fns: std::collections::HashSet::new(),
-            conditional_classes: std::collections::HashSet::new(),
+            conditional_fns: Default::default(),
+            conditional_classes: Default::default(),
             hoisted_class_spans: HashSet::default(),
             conditional_traits: Vec::new(),
             closures: Vec::new(),
@@ -1277,7 +1277,7 @@ impl<'f> Lowerer<'f> {
             classes: Vec::new(),
             class_index: HashMap::default(),
             seed_class_len: 0,
-            seed_conditional: std::collections::HashSet::new(),
+            seed_conditional: Default::default(),
             used_conditional_seed: std::cell::Cell::new(false),
             traits: HashMap::default(),
             cur_class: None,

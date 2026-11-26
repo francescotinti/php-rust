@@ -85,3 +85,9 @@ fine rc=0 2026-11-25 22:44:34
 == s194 ORM istruzioni ritirate per gamba, REPS=2, 2026-11-26 00:24:56 (direzione sul lavoro, non verdetto di tempo) ==
 binario C4b = /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/out/phpr-c4b sha 337e0a1832453b8b
 binario C4d = /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/out/phpr-c4d sha 83178f6be347ff87
+C4b        istruzioni   224.076 G (dispersione 0.08 %)  vs C4b  +0.00 %  cicli   63.393 G  user  28.93 s  | Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, PHP
+C4d        istruzioni   223.922 G (dispersione 0.13 %)  vs C4b  -0.07 %  cicli   63.260 G  user  28.91 s  | Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, PHP
+fine rc=0 2026-11-26 00:27:14
+== s194 ORM istruzioni ritirate per gamba, REPS=2, 2026-11-26 02:18:09 (direzione sul lavoro, non verdetto di tempo) ==
+binario C4d = /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/out/phpr-c4d sha 83178f6be347ff87
+binario N1b = /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/out/phpr-n1b sha 9cdf9526284ff708

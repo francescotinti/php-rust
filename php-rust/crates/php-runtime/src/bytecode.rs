@@ -2210,7 +2210,7 @@ pub struct Module {
     /// statement inside a branch/block, possibly nested in another body): not
     /// resolvable by name until their [`Op::DeclareFn`] runs (which registers them
     /// in the VM's runtime function table), so name resolution skips these indices.
-    pub conditional_fns: std::collections::HashSet<usize>,
+    pub conditional_fns: rustc_hash::FxHashSet<usize>,
     /// Case-insensitive function index (WP-29 B2): `(ci_hash(name), index
     /// into functions)`, sorted by hash. `invoke_named`/`is_name_callable`
     /// binary-search it instead of scanning every function (prelude
@@ -2223,7 +2223,7 @@ pub struct Module {
     /// not resolvable by name until their [`Op::DeclareClass`] runs (which registers
     /// the name in the VM's runtime class index), so the eager `class_index` and its
     /// runtime clone skip these indices.
-    pub conditional_classes: std::collections::HashSet<usize>,
+    pub conditional_classes: rustc_hash::FxHashSet<usize>,
     /// Traits declared inside a branch (`(key, trait)`), registered into the
     /// VM's seed-trait image when their [`Op::DeclareTrait`] runs.
     pub conditional_traits: Vec<(Vec<u8>, crate::hir::LoweredTrait)>,

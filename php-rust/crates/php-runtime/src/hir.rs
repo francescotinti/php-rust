@@ -42,7 +42,7 @@ pub struct Program {
     /// they are not resolvable by name until their [`StmtKind::DeclareFn`] runs, so
     /// name resolution (compile-time and runtime) skips them. A simple prefix count
     /// can't express this because such declarations interleave with body lowering.
-    pub conditional_fns: std::collections::HashSet<usize>,
+    pub conditional_fns: rustc_hash::FxHashSet<usize>,
     /// Indices into `classes` that are **conditional** declarations (a `class` /
     /// `interface` / `enum` inside a branch/block or a function/method body): the
     /// class body is compiled eagerly (so it has a stable `ClassId`), but its name
@@ -50,7 +50,7 @@ pub struct Program {
     /// (compile-time `class_index` and the runtime clone) skips these, so a `new X`
     /// / static reference before the declaration resolves dynamically (autoload or
     /// "Class not found"), exactly as PHP defers a conditional class to run time.
-    pub conditional_classes: std::collections::HashSet<usize>,
+    pub conditional_classes: rustc_hash::FxHashSet<usize>,
     /// Traits declared inside a branch (`(key, trait)`, key = bare lowercase
     /// name), registered at run time by [`StmtKind::DeclareTrait`] into the
     /// VM's seed-trait image for later units to `use`.

@@ -1,0 +1,50 @@
+== profilo fixture new_obj N=3000000: 3333 campioni, samply rc=0 (direzione) ==
+     479  14.4%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop
+     285   8.6%  _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm13gc_sweep_body
+     213   6.4%  bWklYMk3w_3std4hash6random11RandomStateNtNtCs8Mbv00yxnRz_4core4hash11BuildHasher8hash_oneRINtCsf3vhkMagkxU_3lru10KeyWrappermEECs8t0zLLfTN5i_5mysql
+     207   6.2%  _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm7next_id
+     133   4.0%  _NtCsePzg45LyhTm_9php_types6objectNtB5_5PropsNtNtCs8Mbv00yxnRz_4core5clone5Clone5clone
+     123   3.7%  LyhTm_9php_types5idmapINtB4_5IdMapINtNtCshxvaOLs88l5_5alloc2rc2RcINtNtCs8Mbv00yxnRz_4core4cell7RefCellNtNtB6_6object6ObjectEEE6insertCs4nIjj9KQmRT_11php_runtime
+     122   3.7%  _NtNtCs8Mbv00yxnRz_4core4hash3sipINtB5_6HasherNtB5_11Sip13RoundsENtB7_6Hasher5writeCs4WlmuxpcqCG_14regex_automata
+     118   3.5%  _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm12alloc_object
+     111   3.3%  _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm18gc_release_cascade
+     109   3.3%  mi_malloc_aligned
+      92   2.8%  nIjj9KQmRT_11php_runtime2vm8gc_probeNtB4_2Vm12magic_method
+      89   2.7%  Mbv00yxnRz_4core3ptr9drop_glueNtNtCsePzg45LyhTm_9php_types6object5PropsEBF_
+      85   2.6%  Mbv00yxnRz_4core3ptr9drop_glueNtNtCsePzg45LyhTm_9php_types4zval4ZvalECs4nIjj9KQmRT_11php_runtime
+      68   2.0%  _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm16gc_release_child
+  righe (simbolo file:riga):
+     105   3.2%  bWklYMk3w_3std4hash6random11RandomStateNtNtCs8Mbv00yxnRz_4core4hash11BuildHasher8hash_oneRINtCsf3vhkMagkxU_3lru10KeyWrappermEECs8t0zLLfTN5i_5mysql mod.rs:702  | 
+      93   2.8%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:1559  | match op {
+      89   2.7%  Mbv00yxnRz_4core3ptr9drop_glueNtNtCsePzg45LyhTm_9php_types6object5PropsEBF_ mod.rs:823  | 
+      85   2.6%  Mbv00yxnRz_4core3ptr9drop_glueNtNtCsePzg45LyhTm_9php_types4zval4ZvalECs4nIjj9KQmRT_11php_runtime mod.rs:823  | 
+      71   2.1%  bWklYMk3w_3std4hash6random11RandomStateNtNtCs8Mbv00yxnRz_4core4hash11BuildHasher8hash_oneRINtCsf3vhkMagkxU_3lru10KeyWrappermEECs8t0zLLfTN5i_5mysql mod.rs:701  | 
+      65   2.0%  Mbv00yxnRz_4core3ptr9drop_glueINtNtNtCshxvaOLs88l5_5alloc3vec5drain5DrainINtNtB4_6option6OptionINtNtBI_2rc2RcINtNtB4_4cell7RefCellNtNtCsePzg45LyhTm_9php_types6object6ObjectEEEEECs4nIjj9KQmRT_11php_runtime mod.rs:823  | 
+      55   1.7%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:1505  | if self.frames.len() > MAX_CALL_DEPTH {
+      55   1.7%  _NtCsePzg45LyhTm_9php_types6objectNtB5_5PropsNtNtCs8Mbv00yxnRz_4core5clone5Clone5clone object.rs:768  | }
+      54   1.6%  _NtNtCs8Mbv00yxnRz_4core4hash3sipINtB5_6HasherNtB5_11Sip13RoundsENtB7_6Hasher5writeCs4WlmuxpcqCG_14regex_automata sip.rs:298  | 
+      52   1.6%  LyhTm_9php_types5idmapINtB4_5IdMapINtNtCshxvaOLs88l5_5alloc2rc2RcINtNtCs8Mbv00yxnRz_4core4cell7RefCellNtNtB6_6object6ObjectEEE6insertCs4nIjj9KQmRT_11php_runtime idmap.rs:56  | let old = self.slots[i].replace((id, value));
+      48   1.4%  _NtCsePzg45LyhTm_9php_types4zvalNtB5_4ZvalNtNtCs8Mbv00yxnRz_4core5clone5Clone5clone zval.rs:15  | #[cfg_attr(not(feature = "mem-census"), derive(Clone))]
+      45   1.4%  LyhTm_9php_types5idmapINtB4_5IdMapINtNtCshxvaOLs88l5_5alloc2rc2RcINtNtCs8Mbv00yxnRz_4core4cell7RefCellNtNtB6_6object6ObjectEEE6insertCs4nIjj9KQmRT_11php_runtime idmap.rs:54  | self.slots.resize_with(i + 1, || None);
+      44   1.3%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:2317  | self.backedge_cmp(top, func, a);
+      44   1.3%  OUTLINED_FUNCTION_41 free.c:0  | 
+      42   1.3%  _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm16gc_release_child mod.rs:4583  | 
+      38   1.1%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:1544  | let op = &func.ops[ip];
+      36   1.1%  _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm13gc_sweep_body mod.rs:4278  | 
+      36   1.1%  nIjj9KQmRT_11php_runtime2vm3oopNtB6_2Vm11instance_of oop.rs:901  | if let Some(&b) = self.iof_cache.borrow().get(&(class_id, target)) {
+      35   1.1%  _NtNtCs8Mbv00yxnRz_4core4hash3sipINtB5_6HasherNtB5_11Sip13RoundsENtB7_6Hasher5writeCs4WlmuxpcqCG_14regex_automata sip.rs:262  | 
+      34   1.0%  nIjj9KQmRT_11php_runtime2vm3runNtB4_2Vm8run_loop run.rs:1685  | let old = store_slot(&mut self.frames[top].slots[*s as usize], v);
+      31   0.9%  _NtCs3fRkGY2FHAU_9hashbrown3mapINtB5_7HashMapmuNtCsdnIwS7Na5wv_10rustc_hash13FxBuildHasherE6insertCs4nIjj9KQmRT_11php_runtime map.rs:1812  | 
+      30   0.9%  _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm12alloc_object mod.rs:12602  | 
+      29   0.9%  _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm7next_id mod.rs:3706  | 
+      28   0.8%  _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm13gc_sweep_body mod.rs:4214  | 
+      28   0.8%  _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm18gc_release_cascade mod.rs:4563  | 
+      27   0.8%  nIjj9KQmRT_11php_runtime2vm8gc_probeNtB4_2Vm12magic_method gc_probe.rs:87  | }
+      27   0.8%  _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm7next_id mod.rs:3707  | 
+      26   0.8%  bWklYMk3w_3std4hash6random11RandomStateNtNtCs8Mbv00yxnRz_4core4hash11BuildHasher8hash_oneRINtCsf3vhkMagkxU_3lru10KeyWrappermEECs8t0zLLfTN5i_5mysql mod.rs:699  | 
+      26   0.8%  Mbv00yxnRz_4core3ptr9drop_glueINtNtCshxvaOLs88l5_5alloc3vec3VecNtNtCs4nIjj9KQmRT_11php_runtime2vm7RelItemEEB1c_ mod.rs:823  | 
+      24   0.7%  _NtCsePzg45LyhTm_9php_types6objectNtB5_5PropsNtNtCs8Mbv00yxnRz_4core5clone5Clone5clone object.rs:757  | layout: Rc::clone(&self.layout),
+      24   0.7%  _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm13gc_sweep_body mod.rs:4436  | 
+      24   0.7%  _NtCsePzg45LyhTm_9php_types6objectNtB5_5PropsNtNtCs8Mbv00yxnRz_4core5clone5Clone5clone object.rs:758  | slots: self.slots.clone(),
+      24   0.7%  _NtCs4nIjj9KQmRT_11php_runtime2vmNtB5_2Vm12alloc_object mod.rs:12598  | 
+      24   0.7%  _NtNtCs8Mbv00yxnRz_4core4hash3sipINtB5_6HasherNtB5_11Sip13RoundsENtB7_6Hasher5writeCs4WlmuxpcqCG_14regex_automata sip.rs:0  | 

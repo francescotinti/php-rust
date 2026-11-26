@@ -4702,7 +4702,7 @@ impl<'m> super::Vm<'m> {
         for c in self.classes.iter() {
             let is_iface = matches!(c.instantiable, crate::bytecode::Instantiable::Interface);
             if (which == 1) == is_iface
-                && self.class_index.contains_key(&c.name.to_ascii_lowercase())
+                && { let (mut lb, mut lh) = ([0u8; 128], Vec::new()); self.class_index.contains_key(super::oop::lc_name(&c.name, &mut lb, &mut lh)) } // S-194 N1
             {
                 let _ = arr.append(Zval::Str(PhpStr::new(c.name.to_vec())));
             }

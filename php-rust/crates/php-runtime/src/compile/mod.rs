@@ -72,7 +72,7 @@ struct ProgramCtx<'a> {
     /// Indices into `funcs` that are conditional declarations: they do NOT resolve
     /// a call by name at compile time (dispatched dynamically, callable only once
     /// their `DeclareFn` runs).
-    conditional_fns: &'a std::collections::HashSet<usize>,
+    conditional_fns: &'a rustc_hash::FxHashSet<usize>,
     registry: &'a Registry,
     classes: &'a [std::rc::Rc<ClassDecl>],
     class_index: &'a rustc_hash::FxHashMap<Vec<u8>, ClassId>,
@@ -377,7 +377,7 @@ fn compile_program_impl_mode(
     let mut elided_classes: u32 = 0;
     // Contract v2 (WP-63): rebased conditional set — indices into the
     // RETAINED `classes` vec, matching what `run_linked` walks.
-    let mut cond_retained: std::collections::HashSet<usize> = std::collections::HashSet::new();
+    let mut cond_retained: rustc_hash::FxHashSet<usize> = Default::default();
     if link.is_none() {
         classes.reserve(program.classes.len());
     }

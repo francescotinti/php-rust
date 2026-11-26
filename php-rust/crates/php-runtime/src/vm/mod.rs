@@ -834,7 +834,7 @@ pub fn vm_new<'m>(
         lazy_props: HashMap::default(),
         var_dump_debug: std::collections::HashMap::new(),
         stringify_args: std::collections::HashMap::new(),
-        reflect_method_info_cache: std::collections::HashMap::new(),
+        reflect_method_info_cache: HashMap::default(),
         lazy_options: HashMap::default(),
         reflect_object_bound: HashMap::default(),
         lazy_initializing: HashSet::default(),
@@ -3087,7 +3087,7 @@ pub struct Vm<'m> {
     /// `DeclareClass` executes). The seeded lowering must not bind a
     /// supertype against one eagerly unless it is runtime-declared, and an
     /// eager bind that does marks the program cache-impure.
-    seed_conditional: std::collections::HashSet<Vec<u8>>,
+    seed_conditional: rustc_hash::FxHashSet<Vec<u8>>,
     /// The accumulating trait image (step 21, trait analogue of `seed_classes`):
     /// every loaded unit's declared traits, keyed by bare lowercase name, so a
     /// later (e.g. autoloaded) unit's `use T` resolves a trait an earlier unit
@@ -3592,7 +3592,7 @@ pub struct Vm<'m> {
     /// declarations cannot alter an existing cid's resolution. PHPUnit builds
     /// thousands of `ReflectionMethod`s over the same (class, method) pairs
     /// during suite construction — this turns each repeat into an Rc clone.
-    reflect_method_info_cache: std::collections::HashMap<(ClassId, Vec<u8>), Zval>,
+    reflect_method_info_cache: HashMap<(ClassId, Vec<u8>), Zval>,
     /// Per-lazy-object option flags (PHP 8.4 `ReflectionClass::newLazy*` /
     /// `resetAsLazy*` `$options`): SKIP_INITIALIZATION_ON_SERIALIZE (8) and
     /// SKIP_DESTRUCTOR (16, consumed at reset time). Keyed by object id.
@@ -3687,11 +3687,11 @@ impl<'m> Vm<'m> {
     /// dead lazy-object state.
     fn next_id(&mut self) -> u32 {
         if let Some(id) = php_types::take_freed_object_id() {
-            self.destructed.remove(&id);
-            self.lazy_init.remove(&id);
-            self.lazy_props.remove(&id);
-            self.lazy_options.remove(&id);
-            self.lazy_initializing.remove(&id);
+            if !self.destructed.is_empty() { self.destructed.remove(&id); }
+            if !self.lazy_init.is_empty() { self.lazy_init.remove(&id); }
+            if !self.lazy_props.is_empty() { self.lazy_props.remove(&id); }
+            if !self.lazy_options.is_empty() { self.lazy_options.remove(&id); }
+            if !self.lazy_initializing.is_empty() { self.lazy_initializing.remove(&id); }
             // (The candidate buffer cannot hold a freed id: its strong clone
             // would have kept the object alive. The buffer marks live in the
             // object and died with it — WP-40.)
@@ -3701,13 +3701,13 @@ impl<'m> Vm<'m> {
             // postorder handle release); the same holds for a generator's
             // suspended frame, the GC's per-id classification marks and the
             // transient per-id caches.
-            self.fibers.remove(&id);
-            self.generators.remove(&id);
-            self.gc_cycle_roots.remove(&id);
-            self.gc_light_demoted.remove(&id);
-            self.var_dump_debug.remove(&id);
-            self.stringify_args.remove(&id);
-            self.reflect_object_bound.remove(&id);
+            if !self.fibers.is_empty() { self.fibers.remove(&id); }
+            if !self.generators.is_empty() { self.generators.remove(&id); }
+            if !self.gc_cycle_roots.is_empty() { self.gc_cycle_roots.remove(&id); }
+            if !self.gc_light_demoted.is_empty() { self.gc_light_demoted.remove(&id); }
+            if !self.var_dump_debug.is_empty() { self.var_dump_debug.remove(&id); }
+            if !self.stringify_args.is_empty() { self.stringify_args.remove(&id); }
+            if !self.reflect_object_bound.is_empty() { self.reflect_object_bound.remove(&id); }
             return id;
         }
         let id = self.next_object_id;
@@ -6421,8 +6421,8 @@ impl<'m> Vm<'m> {
         let mut new_locals: Vec<usize> = Vec::new();
         let mut k = 0usize; // retained (module.classes) cursor
         for (i, cd) in program.classes.iter().enumerate() {
-            let lower = cd.name.to_ascii_lowercase();
-            let registered = self.class_index.get(&lower).copied();
+            let (mut lb, mut lh) = ([0u8; 128], Vec::new()); // S-194 N1: no allocation per seed entry per include
+            let registered = self.class_index.get(lc_name(&cd.name, &mut lb, &mut lh)).copied();
             // Mirror of the compile-side predicate: the unit's own conditionals
             // and its genuinely-new names were materialized, everything else
             // (masked classes + whole seed prefix) was elided.
@@ -6800,7 +6800,7 @@ impl<'m> Vm<'m> {
         // lowering cannot use what the autoload loaded (the name is known to
         // the VM but not resolvable by the seeded lowerer) — surface the
         // failure instead of retrying forever.
-        let mut attempted: std::collections::HashSet<Vec<u8>> = std::collections::HashSet::new();
+        let mut attempted: rustc_hash::FxHashSet<Vec<u8>> = Default::default();
         loop {
             match crate::lower_source_seeded(
                 name,
@@ -6932,7 +6932,7 @@ impl<'m> Vm<'m> {
         // S-70.2 guard (mirrors `lower_unit`): a name that surfaces AGAIN
         // after a "resolved" autoload is known to the VM but unresolvable by
         // the seeded lowerer — error out instead of retrying forever.
-        let mut attempted: std::collections::HashSet<Vec<u8>> = std::collections::HashSet::new();
+        let mut attempted: rustc_hash::FxHashSet<Vec<u8>> = Default::default();
         let program = loop {
             match crate::lower_source_seeded(
                 &file,
@@ -7141,7 +7141,7 @@ impl<'m> Vm<'m> {
             .enumerate()
             .map(|(i, cd)| {
                 !program.conditional_classes.contains(&i)
-                    && self.class_index.contains_key(&cd.name.to_ascii_lowercase())
+                    && { let (mut lb, mut lh) = ([0u8; 128], Vec::new()); self.class_index.contains_key(lc_name(&cd.name, &mut lb, &mut lh)) } // S-194 N1
             })
             .collect()
     }
@@ -20335,7 +20335,7 @@ mod tests {
             // Map/set fields are SORTED before formatting (Debug order of a
             // hash container is not part of the module's identity).
             use std::fmt::Write as _;
-            fn sorted_set(s: &std::collections::HashSet<usize>) -> Vec<usize> {
+            fn sorted_set(s: &rustc_hash::FxHashSet<usize>) -> Vec<usize> {
                 let mut v: Vec<usize> = s.iter().copied().collect();
                 v.sort_unstable();
                 v

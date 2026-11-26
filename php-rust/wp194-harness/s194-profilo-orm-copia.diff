@@ -1,0 +1,26 @@
+2c2,4
+< """s194-profilo-fixture.py <fixture> <N> — S-194 primitive anatomy, second step: samply profile of one primitive fixture on the
+---
+> """s194-profilo-orm.py — S-194: samply profile of ONE whole ORM leg (phpunit on a fresh untar of orm-work.tgz). DECLARED COPY of
+> s194-profilo-fixture.py (manifest s194-profilo-orm-copia.diff): only the profiled command, its working directory, the output names
+> and the length of the two histograms change. Original header: samply profile of one primitive fixture on the
+10c12,16
+< fx, n = sys.argv[1], sys.argv[2]
+---
+> fx, n = "orm", "leg"
+> import shutil, tarfile
+> SP = pathlib.Path.home() / "Claude/phpr-target/s192-orm"
+> shutil.rmtree(SP / "orm-work", ignore_errors=True); SP.mkdir(parents=True, exist_ok=True)
+> with tarfile.open("/Volumes/Extreme Pro/Claude/wp9-harness/gates/orm-work.tgz") as t: t.extractall(SP)
+15c21
+<                          BIN, str(H / "primitive" / f"{fx}.php"), n], stdout=dn, stderr=dn).returncode
+---
+>                          BIN, "vendor/bin/phpunit", "--no-coverage"], stdout=dn, stderr=dn, cwd=SP / "orm-work").returncode
+56c62
+< for k, c in syms.most_common(14):
+---
+> for k, c in syms.most_common(70):
+59c65
+< for (sym, f, no), c in lines.most_common(34):
+---
+> for (sym, f, no), c in lines.most_common(110):
