@@ -3220,7 +3220,7 @@ impl<'m> super::Vm<'m> {
             )));
             return Ok(Zval::Bool(false));
         }
-        self.class_index.insert(alias_key, cid);
+        self.class_index_put(alias_key, cid);
         // Make the alias visible to the *lowering image* too, so a later unit
         // can `extends`/`implements` it (monolog's tests alias the legacy
         // PHPUnit_Framework_TestCase). An index-only entry: the alias resolves

@@ -62,6 +62,6 @@ out = [f"== profilo fixture {fx} N={n}: {total} campioni, samply rc={rc} (direzi
 for k, c in syms.most_common(70):
     out.append(f"  {c:6d} {100 * c / total:5.1f}%  {k}")
 out.append("  righe (simbolo file:riga):")
-for (sym, f, no), c in lines.most_common(110):
+for (sym, f, no), c in lines.most_common(int(os.environ.get('S194_LINES', '110'))):
     out.append(f"  {c:6d} {100 * c / total:5.1f}%  {sym} {f}:{no}  | {text(f, no)}")
 (H / f"s194-profilo-{fx}{os.environ.get('S194_SUF', '')}.out").write_text("\n".join(out) + "\n")

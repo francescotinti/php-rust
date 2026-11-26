@@ -1,0 +1,5 @@
+loc_dente: rc=0
+braccio: rc=0
+orm: rc=0
+B1         istruzioni   218.705 G (dispersione 0.00 %)  vs B1  +0.00 %  cicli   63.165 G  
+B2         istruzioni   218.473 G (dispersione 0.00 %)  vs B1  -0.11 %  cicli   62.730 G  

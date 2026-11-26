@@ -650,6 +650,15 @@ impl<'m> Vm<'m> {
     /// unwinds out (its frames dropped) so it propagates through the host builtin.
     /// A value-builtin / generator-function callable pushes no frame — its result
     /// (or `Generator` handle) is taken straight off the caller's stack.
+    /// S-194 B1: the "Undefined variable" warning of `Op::LoadVar`, out of the dispatcher.
+    #[cold]
+    #[inline(never)]
+    pub(super) fn warn_undefined_var(&mut self, top: usize, name: u32) {
+        if let crate::bytecode::Const::Str(b) = &self.frames[top].func.consts[name as usize] {
+            let msg = format!("Undefined variable ${}", String::from_utf8_lossy(b.as_bytes()));
+            self.diags.push(Diag::Warning(msg));
+        }
+    }
     #[cold]
     #[inline(never)]
     pub(super) fn push_undef_arg_place(&mut self, top: usize, slot: Slot) {

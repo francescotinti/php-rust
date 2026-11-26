@@ -1,0 +1,55 @@
+2,4c2,5
+< # c4-copertura.sh — S-194 C4, criterion C p.25 "verifica di copertura degli imbuti": a PROOF-ONLY arm in which a deferred place that
+< # reaches the by-value decay backstop panics, built from a COPY of the tree (never the tree), runs the behaviour script, the battery,
+< # the Zend corpus, one ORM leg and one WordPress leg. Outcome: out/c4-copertura.done (hits per stage; 0 everywhere = covered).
+---
+> # n2-copertura.sh — S-194 N2, criterion N p.4: a PROOF-ONLY arm in which unit_fp asserts «incremental digest == whole recomputation»,
+> # built from a COPY of the tree (never the tree), runs the behaviour scripts, the battery (--no-fail-fast), the Zend corpus, one ORM
+> # leg and one WordPress leg. DECLARED COPY of n2-copertura.sh (manifest n2-copertura-copia.diff): the patch, the marker, the names.
+> # Outcome: out/n2-copertura.done (hits per stage; 0 everywhere = proved).
+9c10
+< D="$W/out/c4-copertura.done"; : > "$D.tmp"; rm -f "$D"; M="missed materialization funnel"
+---
+> D="$W/out/n2-copertura.done"; : > "$D.tmp"; rm -f "$D"; M="class_index_fp drift"
+13c14
+< python3 - "$SX/$C/php-runtime/src/vm/calls.r""s" <<'PY'
+---
+> python3 - "$SX/$C/php-runtime/src/vm/mod.r""s" <<'PY'
+16c17
+< a = 'debug_assert!(false, "ArgPlace reached decay_arg: missed materialization funnel");'
+---
+> a = 'debug_assert_eq!(acc, self.class_index_fp_full(), "class_index_fp drift");'
+18c19
+< p.write_text(s.replace(a, 'panic!("ArgPlace reached decay_arg: missed materialization funnel");'))
+---
+> p.write_text(s.replace(a, 'assert_eq!(acc, self.class_index_fp_full(), "class_index_fp drift");'))
+20c21
+< echo "patch: rc=$? panic=$(python3 -c 'import sys; print(open(sys.argv[1]).read().count("panic!(\"ArgPlace reached"))' "$SX/$C/php-runtime/src/vm/calls.r""s")" >> "$D.tmp"
+---
+> echo "patch: rc=$? panic=$(python3 -c 'import sys; print(open(sys.argv[1]).read().count("  assert_eq!(acc, self.class_index_fp_full()"))' "$SX/$C/php-runtime/src/vm/mod.r""s")" >> "$D.tmp"
+22c23
+< CARGO_TARGET_DIR="$TX" cargo build --profile dev-release -p php-cli -p phpt-runner > "$W/out/c4-copertura-build.log" 2>&1
+---
+> CARGO_TARGET_DIR="$TX" cargo build --profile dev-release -p php-cli -p phpt-runner > "$W/out/n2-copertura-build.log" 2>&1
+25,32c26,33
+< "$B" "$W/s194-c4-comportamento.php" > "$W/out/c4-copertura-script.txt" 2>&1
+< /opt/homebrew/opt/php/bin/php -d log_errors=0 "$W/s194-c4-comportamento.php" > "$W/out/c4-copertura-oracle.txt" 2>/dev/null
+< cmp -s "$W/out/c4-copertura-script.txt" "$W/out/c4-copertura-oracle.txt"; echo "script: cmp=$? hits=$(grep -c "$M" "$W/out/c4-copertura-script.txt")" >> "$D.tmp"
+< CARGO_TARGET_DIR="$TX" cargo test --profile dev-release > "$W/out/c4-copertura-batteria.log" 2>&1
+< echo "batteria: rc=$? hits=$(tr -d '\0' < "$W/out/c4-copertura-batteria.log" | grep -c "$M") falliti=$(grep -c -E '^test .* FAILED' "$W/out/c4-copertura-batteria.log")" >> "$D.tmp"
+< "$R" --list-fails --isolate "/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests" > "$W/out/c4-copertura-corpus.log" 2>&1
+< echo "corpus: rc=$? hits=$(tr -d '\0' < "$W/out/c4-copertura-corpus.log" | grep -c "$M") righe=$(wc -l < "$W/out/c4-copertura-corpus.log" | tr -d ' ')" >> "$D.tmp"
+< REPS=1 python3 "$W/s194-orm-istruzioni.py" "X=$B" > "$W/out/c4-copertura-orm.log" 2>&1
+---
+> "$B" "$W/s194-c4-comportamento.php" > "$W/out/n2-copertura-script.txt" 2>&1
+> /opt/homebrew/opt/php/bin/php -d log_errors=0 "$W/s194-c4-comportamento.php" > "$W/out/n2-copertura-oracle.txt" 2>/dev/null
+> cmp -s "$W/out/n2-copertura-script.txt" "$W/out/n2-copertura-oracle.txt"; echo "script: cmp=$? hits=$(grep -c "$M" "$W/out/n2-copertura-script.txt")" >> "$D.tmp"
+> CARGO_TARGET_DIR="$TX" cargo test --profile dev-release --no-fail-fast > "$W/out/n2-copertura-batteria.log" 2>&1
+> echo "batteria: rc=$? hits=$(tr -d '\0' < "$W/out/n2-copertura-batteria.log" | grep -c "$M") falliti=$(tr -d '\0' < "$W/out/n2-copertura-batteria.log" | grep -E '^test .* FAILED' | sort -u | tr '\n' ' ')" >> "$D.tmp"
+> "$R" --list-fails --isolate "/Volumes/Extreme Pro/Claude/php-8.5.7/Zend/tests" > "$W/out/n2-copertura-corpus.log" 2>&1
+> echo "corpus: rc=$? hits=$(tr -d '\0' < "$W/out/n2-copertura-corpus.log" | grep -c "$M") righe=$(wc -l < "$W/out/n2-copertura-corpus.log" | tr -d ' ')" >> "$D.tmp"
+> REPS=1 python3 "$W/s194-orm-istruzioni.py" "X=$B" > "$W/out/n2-copertura-orm.log" 2>&1
+34c35
+< python3 "$W/s194-wp-istruzioni.py" "X=$B" > "$W/out/c4-copertura-wp.log" 2>&1
+---
+> python3 "$W/s194-wp-istruzioni.py" "X=$B" > "$W/out/n2-copertura-wp.log" 2>&1

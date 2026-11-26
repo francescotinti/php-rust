@@ -80,7 +80,7 @@ mod coroutines;
 mod dom;
 pub mod cli_stream;
 mod exceptions;
-mod arg_slot; mod field_plain; mod gc_probe; mod ic_scoped; // S-194 C4, P1, C3b
+mod arg_slot; mod class_fp; mod field_plain; mod gc_probe; mod hot; mod ic_scoped; // S-194 C4, N2, P1, B2, C3b
 pub(crate) mod builtin_fast;
 pub(crate) mod call_bind;
 mod xmlparser;
@@ -702,7 +702,7 @@ pub fn vm_new<'m>(
         retain,
         module,
         classes: module.classes.iter().map(|c| &**c).collect(),
-        class_index: module.class_index.clone(),
+        class_index: module.class_index.clone(), class_index_fp: module.class_index.iter().fold(0, |a, (n, i)| a ^ class_fp::class_fp(n, i)),
         class_module: vec![module; module.classes.len()],
         modules: vec![module],
         main_hir,
@@ -3053,7 +3053,7 @@ pub struct Vm<'m> {
     /// through this, not `self.classes`.
     classes: Vec<&'m CompiledClass>,
     /// Global case-insensitive class-name → [`ClassId`] index over `classes`.
-    class_index: HashMap<Vec<u8>, ClassId>,
+    class_index: HashMap<Vec<u8>, ClassId>, class_index_fp: u64, // S-194 N2: XOR digest of the index, kept by `class_index_put` (vm/class_fp)
     /// Defining [`Module`] of each class in `classes`, parallel to it (step 57,
     /// Phase 1c-2b). For a class linked by an `eval`/`include` unit this is that
     /// unit's leaked module, so a method frame entered for the class resolves its
@@ -6566,8 +6566,7 @@ impl<'m> Vm<'m> {
             self.unit_chain_fp =
                 fp_mix(self.unit_chain_fp, b"mint-class", &leaked.classes[i].name);
             if !leaked.conditional_classes.contains(&i) {
-                self.class_index
-                    .insert(leaked.classes[i].name.to_ascii_lowercase(), self.classes.len() - 1);
+                self.class_index_put(leaked.classes[i].name.to_ascii_lowercase(), self.classes.len() - 1);
             }
         }
 
@@ -7212,13 +7211,8 @@ impl<'m> Vm<'m> {
         self.linked_functions.len().hash(&mut h);
         // Registered classes: (name, id) digest, XOR-combined so the HashMap's
         // iteration order cannot leak into the fingerprint.
-        let mut acc: u64 = 0;
-        for (name, id) in &self.class_index {
-            let mut eh = std::collections::hash_map::DefaultHasher::new();
-            name.hash(&mut eh);
-            id.hash(&mut eh);
-            acc ^= eh.finish();
-        }
+        let acc: u64 = self.class_index_fp; // S-194 N2: kept incrementally, same value
+        debug_assert_eq!(acc, self.class_index_fp_full(), "class_index_fp drift");
         acc.hash(&mut h);
         let mut aacc: u64 = 0;
         for (alias, target) in &self.seed_aliases {

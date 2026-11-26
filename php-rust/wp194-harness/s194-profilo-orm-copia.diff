@@ -23,4 +23,4 @@
 59c65
 < for (sym, f, no), c in lines.most_common(34):
 ---
-> for (sym, f, no), c in lines.most_common(110):
+> for (sym, f, no), c in lines.most_common(int(os.environ.get('S194_LINES', '110'))):

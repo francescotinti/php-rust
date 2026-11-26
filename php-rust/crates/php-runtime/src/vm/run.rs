@@ -1611,12 +1611,12 @@ impl<'m> super::Vm<'m> {
                         // S-101 census: sito Pop taggato (P2 drop-handle, P3 gc_note).
                         #[cfg(feature = "zval-census")]
                         super::zvalcensus::note_pop(&v);
-                        self.gc_note(&v);
-                        dcn!(Pop: &v); // il valore scartato muore a fine scope
+                        dcn!(Pop: &v);
+                        if let Err(v) = super::hot::drop_scalar(v) { self.gc_note(&v); } // S-194 B2; il valore scartato muore a fine scope
                     }
                 }
                 Op::Dup => {
-                    let v = self.frames[top].stack.last().expect("Dup on empty stack").clone();
+                    let v = super::hot::clone_hot(self.frames[top].stack.last().expect("Dup on empty stack")); // S-194 B2
                     self.frames[top].stack.push(v);
                 }
                 Op::Swap => {
@@ -1647,14 +1647,6 @@ impl<'m> super::Vm<'m> {
                     // A source-level `$x` read: an `Undef` slot raises the PHP 8
                     // "Undefined variable" warning (queued; flushed at the next
                     // emit point with the reading op's line) and yields NULL.
-                    if matches!(self.frames[top].slots[*slot as usize], Zval::Undef) {
-                        if let crate::bytecode::Const::Str(b) =
-                            &self.frames[top].func.consts[*name as usize]
-                        {
-                            let msg = format!("Undefined variable ${}", String::from_utf8_lossy(b.as_bytes()));
-                            self.diags.push(Diag::Warning(msg));
-                        }
-                    }
                     // S-95.0 A-ZV2 F1: conta se QUESTO sito è un ultimo uso
                     // (sola misura, design95-liveness.md).
                     #[cfg(feature = "zval-census")]
@@ -1664,7 +1656,13 @@ impl<'m> super::Vm<'m> {
                     super::zvalcensus::note_recv_load(&self.frames[top].slots[*slot as usize]);
                     scn!(LoadVar: op);
                     scn!(LoadVar: Push = 1);
-                    let v = read_slot(&self.frames[top].slots[*slot as usize]);
+                    #[cfg(feature = "zval-census")]
+                    super::zvalcensus::note_slot_read(super::zvalcensus::zval_holds_rc(&self.frames[top].slots[*slot as usize]));
+                    let v = match &self.frames[top].slots[*slot as usize] { // S-194 B1/B2: ONE look at the slot, the common species copied in line
+                        Zval::Undef => { self.warn_undefined_var(top, *name); Zval::Null }
+                        Zval::Ref(r) => r.borrow().clone(),
+                        other => super::hot::clone_hot(other),
+                    };
                     self.frames[top].stack.push(v);
                 }
                 Op::StoreSlot(s) => {
@@ -1683,7 +1681,7 @@ impl<'m> super::Vm<'m> {
                     }
                     let v = self.frames[top].stack.pop().expect("StoreSlot on empty stack");
                     let old = store_slot(&mut self.frames[top].slots[*s as usize], v);
-                    self.gc_note(&old);
+                    if let Err(old) = super::hot::drop_scalar(old) { self.gc_note(&old); } // S-194 B2
                 }
                 Op::LoadVarDyn => {
                     // `$$x` read: resolve the runtime name in the current frame.
@@ -3690,7 +3688,7 @@ impl<'m> super::Vm<'m> {
                         let line = self.cur_line(top);
                         return Err(self.class_redeclaration_fatal(old, file, line));
                     }
-                    self.class_index.insert(key, *cid);
+                    self.class_index_put(key, *cid);
                     self.serializable_link_check(*cid)?;
                 }
                 Op::DeclareDeferred { idx } => {
@@ -4473,7 +4471,7 @@ impl<'m> super::Vm<'m> {
                 }
                 Op::This => match &self.frames[top].this {
                     Some(t) => {
-                        let v = t.clone();
+                        let v = super::hot::clone_hot(t); // S-194 B2
                         self.frames[top].stack.push(v);
                     }
                     None => {

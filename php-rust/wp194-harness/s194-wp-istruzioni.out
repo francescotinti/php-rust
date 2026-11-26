@@ -104,3 +104,15 @@ C4b        istruzioni  3507.985 G (dispersione 0.00 %)  vs C4b  +0.00 %  cicli 1
 C4d        istruzioni  3504.077 G (dispersione 0.00 %)  vs C4b  -0.11 %  cicli 1192.223 G  user 659.63 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
 uploads-guard restore rc=0
 fine rc=0 2026-11-26 00:53:55
+== s194 WordPress (phpunit full) istruzioni ritirate per gamba, 2026-11-26 02:20:29 (direzione sul lavoro, non verdetto di tempo) ==
+binario C4d = /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/out/phpr-c4d sha 83178f6be347ff87
+binario N1b = /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/out/phpr-n1b sha 9cdf9526284ff708
+C4d        istruzioni  3503.785 G (dispersione 0.00 %)  vs C4d  +0.00 %  cicli 1180.344 G  user 654.31 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
+N1b        istruzioni  3488.047 G (dispersione 0.00 %)  vs C4d  -0.45 %  cicli 1179.854 G  user 652.38 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
+uploads-guard restore rc=0
+fine rc=0 2026-11-26 02:47:04
+== s194 WordPress (phpunit full) istruzioni ritirate per gamba, 2026-11-26 03:33:23 (direzione sul lavoro, non verdetto di tempo) ==
+binario X = /Users/francescotinti/Claude/phpr-target/s194-armX/dev-release/phpr sha 0acffa9a58b8b5e9
+X          istruzioni  3624.867 G (dispersione 0.00 %)  vs X  +0.00 %  cicli 1231.095 G  user 678.85 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
+uploads-guard restore rc=0
+fine rc=0 2026-11-26 03:47:05
