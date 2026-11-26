@@ -36,4 +36,17 @@ Generato con assistenza AI (Claude Fable 5.2). Scritto il 26/11 01:15, PRIMA del
 - **Cura**: tabella a indirizzamento diretto (1024 voci, file nuovo `vm/hint_memo`) delle coppie (id di classe, nome dichiarato) GIÀ soddisfatte. Si ricordano solo i successi: un successo resta vero per tutta la corsa (id, antenati e legame nome→classe non cambiano), mentre un nome non ancora dichiarato può esserlo dopo. `static` non passa dalla tabella (dipende dal frame). Si svuota al confine di richiesta, con `iof_cache`.
 - **Attese**: prova rapida contro il braccio N2: ORM ≤ −0,3 %; poi catena intera (WordPress mai sopra). Dente `s194-t1-comportamento.php` == oracle: classe esatta, sottoclasse, interfaccia, classe sbagliata, nullable, nomi con maiuscole diverse, `static`/`self` di ritorno, classe dichiarata DOPO un primo controllo fallito, `class_alias`, quaranta classi sorelle sugli stessi siti.
 - **Divergenza preesistente trovata scrivendo il dente** (pin compreso, non curata, apertura per nome): `self` come tipo di PARAMETRO non è verificato (`$a->same(new C)` passa; PHP lancia TypeError).
+- **Esito T1 (26/11 06:40)**: prova rapida contro N2 ORM −1,25 %; catena: accettazione `s194T1` rc=0 (batteria 1790/0/2, corpus ×2 == congelato); carico intero contro N2 **ORM −1,41 %** (attesa ≤ −0,3 %: superata), **WordPress −0,08 %** (non sopra); sonda `call_typed_iface` −8,3 %; commit `a0a74e9c`.
+
+## 6. Somma della notte 25→26/11 (istruzioni sul carico intero, bracci con la ricetta del pin)
+| passo | commit | ORM | WordPress |
+|---|---|---|---|
+| C4 + C4b + C4d | `29b6d962`, `9b9b5f11` | −0,59 % · −0,02 % · −0,07 % | −0,70 % · −0,06 % · −0,11 % |
+| N1b | `fab50dd2` | −1,88 % | −0,45 % |
+| N2 (+B1+B2) | `047bbee5` | −1,44 % | −0,87 % |
+| T1 | `a0a74e9c` | −1,41 % | −0,08 % |
+| **contro il pin s189** | | **225,350 → 213,463 G = −5,27 %** | **3534,325 → 3455,316 G = −2,24 %** |
+| contro il pin s188 | | 240,009 → 213,463 G = −11,06 % | 3731,438 → 3455,316 G = −7,40 % |
+
+Sono istruzioni (lavoro eseguito), non tempo: il verdetto di tempo è la notte di conferma.
 

@@ -1,0 +1,23 @@
+2c2,3
+< # s194d-lancio-promo.sh — lanciatore DETACHED della catena di promozione s194d → pin s189 (s194d-promozione.sh).
+---
+> # s194e-lancio-promo.sh — lanciatore DETACHED della catena di promozione s194e → pin s190 (s194e-promozione.sh).
+> # COPIA DICHIARATA di s194d-lancio-promo.sh (manifest s194e-lancio-promo-copia.diff, generatore gen-promozione-s194e.py): soli path/tag.
+13c14
+< H="$SRC/wp194-harness"; O="$H/promo-out-d"; mkdir -p "$O"
+---
+> H="$SRC/wp194-harness"; O="$H/promo-out-e"; mkdir -p "$O"
+15c16
+< export PROMO_SP="/private/tmp/promo-s194d-sp"
+---
+> export PROMO_SP="/private/tmp/promo-s194e-sp"
+32,33c33,34
+< echo "s194d promozione pin s189 $(date '+%F %T') pid=$$" > "$MLOCK"
+< l "CI quieta — lock scritto: $MLOCK (TOKEN s194d-promo)"
+---
+> echo "s194e promozione pin s190 $(date '+%F %T') pid=$$" > "$MLOCK"
+> l "CI quieta — lock scritto: $MLOCK (TOKEN s194e-promo)"
+35c36
+< "$H/s194d-promozione.sh" >> "$LOG" 2>&1
+---
+> "$H/s194e-promozione.sh" >> "$LOG" 2>&1

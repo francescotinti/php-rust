@@ -125,3 +125,6 @@ fine rc=0 2026-11-26 05:49:38
 == s194 ORM istruzioni ritirate per gamba, REPS=2, 2026-11-26 06:12:38 (direzione sul lavoro, non verdetto di tempo) ==
 binario N2 = /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/out/phpr-n2 sha 56699358eeb6d614
 binario T1 = /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp194-harness/out/phpr-t1 sha ac863f02b4a8be74
+N2         istruzioni   216.505 G (dispersione 0.00 %)  vs N2  +0.00 %  cicli   61.019 G  user  27.82 s  | Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, PHP
+T1         istruzioni   213.463 G (dispersione 0.01 %)  vs N2  -1.41 %  cicli   60.752 G  user  27.73 s  | Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, PHP
+fine rc=0 2026-11-26 06:14:52

@@ -1,0 +1,26 @@
+2c2
+< # d-dryrun.sh — S-194 promotion to pin s189, criterion d p.5 (declared copy of c-dryrun.sh: names only): the fixture gates of s194d-promozione.sh run DRY with the
+---
+> # e-dryrun.sh — S-194 promotion to pin s190, criterion e p.7 (declared copy of d-dryrun.sh, manifest e-dryrun-copia.diff: names only): the fixture gates of s194e-promozione.sh run DRY with the
+4c4
+< # Outcome: out/d-dryrun.out (one line per gate), out/d-dryrun.rc (number of gates that bite).
+---
+> # Outcome: out/e-dryrun.out (one line per gate), out/e-dryrun.rc (number of gates that bite).
+10,11c10,11
+< BIN="$W/out/phpr-p4"; REF="/Volumes/Extreme Pro/Claude/phpr-old-target/release/phpr-s188"
+< OUT="$W/out/dryrun-d"; rm -rf "$OUT"; mkdir -p "$OUT"; V="$W/out/d-dryrun.out"; : > "$V"; BAD=0
+---
+> BIN="$W/out/phpr-t1"; REF="/Volumes/Extreme Pro/Claude/phpr-old-target/release/phpr-s189"
+> OUT="$W/out/dryrun-e"; rm -rf "$OUT"; mkdir -p "$OUT"; V="$W/out/e-dryrun.out"; : > "$V"; BAD=0
+16,18c16,18
+< a=$(grep -n '^ORACLE=/opt/homebrew' "$W/s194d-promozione.sh" | cut -d: -f1); b=$(grep -n '^# E2 (emenda S-177' "$W/s194d-promozione.sh" | cut -d: -f1)
+< [ -n "$a" ] && [ -n "$b" ] || { echo "blocco dei gate non trovato" >> "$V"; echo 99 > "$W/out/d-dryrun.rc"; exit 99; }
+< sed -n "${a},$((b - 1))p" "$W/s194d-promozione.sh" > "$OUT/gates.sh"
+---
+> a=$(grep -n '^ORACLE=/opt/homebrew' "$W/s194e-promozione.sh" | cut -d: -f1); b=$(grep -n '^# E2 (emenda S-177' "$W/s194e-promozione.sh" | cut -d: -f1)
+> [ -n "$a" ] && [ -n "$b" ] || { echo "blocco dei gate non trovato" >> "$V"; echo 99 > "$W/out/e-dryrun.rc"; exit 99; }
+> sed -n "${a},$((b - 1))p" "$W/s194e-promozione.sh" > "$OUT/gates.sh"
+20c20
+< echo "gate che mordono: $BAD su $(grep -c -E '^(bilat|invar|expdiff) ' "$OUT/gates.sh")" >> "$V"; echo "$BAD" > "$W/out/d-dryrun.rc"
+---
+> echo "gate che mordono: $BAD su $(grep -c -E '^(bilat|invar|expdiff) ' "$OUT/gates.sh")" >> "$V"; echo "$BAD" > "$W/out/e-dryrun.rc"
