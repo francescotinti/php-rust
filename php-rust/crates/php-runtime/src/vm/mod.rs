@@ -80,7 +80,7 @@ mod coroutines;
 mod dom;
 pub mod cli_stream;
 mod exceptions;
-mod arg_slot; mod class_fp; mod field_plain; mod gc_probe; mod hot; mod ic_scoped; // S-194 C4, N2, P1, B2, C3b
+mod arg_slot; mod class_fp; mod field_plain; mod gc_probe; mod hint_memo; mod hot; mod ic_scoped; // S-194 C4, N2, P1, T1, B2, C3b
 pub(crate) mod builtin_fast;
 pub(crate) mod call_bind;
 mod xmlparser;
@@ -806,7 +806,7 @@ pub fn vm_new<'m>(
         iteratoraggregate_id: module.class_index.get(&b"iteratoraggregate"[..]).copied(),
         countable_id: module.class_index.get(&b"countable"[..]).copied(),
         stringable_id: module.class_index.get(&b"stringable"[..]).copied(),
-        iof_cache: Default::default(),
+        iof_cache: Default::default(), hint_memo: Default::default(),
         jsonserializable_id: module.class_index.get(&b"jsonserializable"[..]).copied(),
         json_last_error: 0,
         output_started: false,
@@ -3468,7 +3468,7 @@ pub struct Vm<'m> {
     /// table is append-only and a declared class's ancestry (parent chain,
     /// interfaces, methods, hence the `Stringable` auto-implementation) is
     /// immutable; a fresh Vm starts empty, so no epoch is needed.
-    iof_cache: std::cell::RefCell<HashMap<(ClassId, ClassId), bool>>,
+    iof_cache: std::cell::RefCell<HashMap<(ClassId, ClassId), bool>>, hint_memo: std::cell::RefCell<hint_memo::HintMemo>, // S-194 T1
     /// The `JsonSerializable` interface id, so `json_encode()` calls a value's
     /// `jsonSerialize()` method instead of encoding its properties (step 56c).
     jsonserializable_id: Option<ClassId>,
@@ -3918,7 +3918,7 @@ impl<'m> Vm<'m> {
         self.json_active.clear();
         self.enum_cache.clear();
         // AMEND-3: Clear iof_cache per-request (Hejlsberg E-B2: epoch reset)
-        self.iof_cache.borrow_mut().clear();
+        self.iof_cache.borrow_mut().clear(); self.hint_memo.borrow_mut().clear();
 
         // Other per-request state
         self.json_last_error = 0;
@@ -11505,11 +11505,12 @@ impl<'m> Vm<'m> {
             }
             Zval::Object(o) => {
                 // Is-a, implemented interfaces included (mirrors `instanceof`). S-194 C1c: the exact class answers before lowercase + table.
-                if self.classes.get(o.borrow().class_id as usize).is_some_and(|c| c.name.eq_ignore_ascii_case(name)) { return true; }
-                if name == b"static" { return self.frames.last().and_then(|f| f.static_class).is_some_and(|sc| self.instance_of(o.borrow().class_id as usize, sc)); } // S-194: the called class
+                let cid = o.borrow().class_id;
+                if name == b"static" { return self.frames.last().and_then(|f| f.static_class).is_some_and(|sc| self.instance_of(cid as usize, sc)); } // S-194: the called class
+                if self.hint_memo.borrow().hit(cid, name) { return true; } // S-194 T1: a pair once satisfied stays satisfied
                 let (mut buf, mut heap) = ([0u8; 128], Vec::new()); let lc = lc_name(name, &mut buf, &mut heap);
-                matches!(self.class_index.get(&lc[..]),
-                    Some(&target) if self.instance_of(o.borrow().class_id as usize, target))
+                let ok = self.classes.get(cid as usize).is_some_and(|c| c.name.eq_ignore_ascii_case(name)) || matches!(self.class_index.get(&lc[..]), Some(&target) if self.instance_of(cid as usize, target));
+                if ok { self.hint_memo.borrow_mut().put(cid, name); } ok
             }
             Zval::Ref(r) => self.value_satisfies_class(&r.borrow(), name),
             _ => false,
