@@ -1,0 +1,39 @@
+1a2,5
+> # s194c-orm-coppia-t32.sh — S-194 notte b, coda c: coppia dbal+ORM t32 @ STASH s186 (rimisura di controllo nella stessa notte).
+> # COPIA DICHIARATA di s194b-orm-coppia-t31.sh (manifest accanto, generatore gen-notte-s194c.py) coi SOLI adattamenti:
+> # binario = copia dello stash in /private/tmp/phpr-s194c-bin (non la canonica), cartella orm-out-c-s186, verdetto s194c-...-t32.out, PIN_ATTESO,
+> # etichette. Costanti E5 dal lanciatore, INVARIATE. Testo precedente sotto:
+55c59
+< # per gamba (retry x3), scaletta a DUE estremi. rc SOLO da orm-out-b/rimisura.done.
+---
+> # per gamba (retry x3), scaletta a DUE estremi. rc SOLO da orm-out-c-s186/rimisura.done.
+63c67
+< PHPR="$HOME/Claude/php-rust-output/release/phpr"
+---
+> PHPR="/private/tmp/phpr-s194c-bin/phpr-s186"
+65,66c69,70
+< OUT="$H/orm-out-b"; mkdir -p "$OUT"
+< VERD="$H/s194b-orm-coppia-verdetto-t31.out"
+---
+> OUT="$H/orm-out-c-s186"; mkdir -p "$OUT"
+> VERD="$H/s194c-orm-coppia-verdetto-t32.out"
+71c75
+< PIN_ATTESO="${PIN_ATTESO:-97e000aa00fe802e}"
+---
+> PIN_ATTESO="${PIN_ATTESO:-9977cc4b1cf19991}"
+107c111
+<     p "quiescenza $1 rc=$q tentativo-gate=$attempt (file: orm-out-b/quiesce-$1.rc)"
+---
+>     p "quiescenza $1 rc=$q tentativo-gate=$attempt (file: orm-out-c-s186/quiesce-$1.rc)"
+211c215
+< print("coppia-t31 @ s190 (user CPU; pavimenti PARZIALI phpunit --version: orm o=%.3f p=%.3f · dbal o=%.3f p=%.3f) — costanti giudice: %s" % (fo, fp, dfo, dfp, "E5 (istruttoria DRIFT)" if E5 else "canone E4 (S-176)"))
+---
+> print("coppia-t32 @ s186 (user CPU; pavimenti PARZIALI phpunit --version: orm o=%.3f p=%.3f · dbal o=%.3f p=%.3f) — costanti giudice: %s" % (fo, fp, dfo, dfp, "E5 (istruttoria DRIFT)" if E5 else "canone E4 (S-176)"))
+313c317
+< { echo "== s194 coppia t31 dbal+ORM (pin s190 MISURATO $PINM vs oracle 8.5.7; criterio s185-criterio-istruttoria-orm.md p.5-6) =="
+---
+> { echo "== s194 coppia t32 dbal+ORM (stash s186 MISURATO $PINM vs oracle 8.5.7; criterio s185-criterio-istruttoria-orm.md p.5-6) =="
+322c326
+<     echo "quiescenza $g: rc=$(cat "$OUT/quiesce-$g.rc" 2>/dev/null || echo MANCANTE) (file: orm-out-b/quiesce-$g.rc)"
+---
+>     echo "quiescenza $g: rc=$(cat "$OUT/quiesce-$g.rc" 2>/dev/null || echo MANCANTE) (file: orm-out-c-s186/quiesce-$g.rc)"

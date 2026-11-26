@@ -1,0 +1,4 @@
+24c24
+< PHPR="$HOME/Claude/php-rust-output/release/phpr"
+---
+> PHPR="/private/tmp/phpr-s194c-bin/phpr-s189"  # s194c: stash copy (declared copy of pair109.sh, generator gen-notte-s194c.py)

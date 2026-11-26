@@ -1,0 +1,102 @@
+2,8c2,7
+< # s194b-lancio-notte.sh — NOTTE b di S-194 (criterio wp194-harness/s194-criterio-notte-b.md): CATENA UNICA, un solo lock TOKEN s194,
+< # gate di finestra INVARIATI, poi in ORDINE: (1) guardia b7 = s186-guardia.sh INVARIATO con A = stash phpr-s183, Z gemello S-186,
+< # B = binario CANONICO (pin s190) · (2) coppia dbal+ORM t31 @ pin s190 (costanti E5 INVARIATE) · (3) coppia WP full+media t29
+< # @ pin s190 per ULTIMA · poi s194b-notte-confronto.py (regola esiti -> conferma contro la notte del 22/11).
+< # COPIA DICHIARATA di s194-lancio-notte.sh (manifest s194b-lancio-notte-copia.diff, generatore gen-notte-s194b.py) coi SOLI
+< # adattamenti: cartella catena-out-b e file catena-s194b.done, etichette b7/t31/t29 e pin s190, controlli di hash (stash
+< # s183/s186/s190, canoniche phpr s190 e server s191, gemello Z), blocco finale coi tre passi della notte b. Testo precedente sotto:
+---
+> # s194c-lancio-coda.sh — CODA c della notte b di S-194 (criterio wp194-harness/s194-criterio-notte-b.md p.10-13): aspetta la fine
+> # della catena b (file catena-s194b.done), poi ripete TUTTI i gate di finestra, riprende il lock TOKEN s194 e misura in ORDINE:
+> # ORM t32 @ stash s186 · ORM t33 @ stash s189 · WP t30 @ stash s186 · WP t31 @ stash s189 · poi s194c-notte-confronto.py.
+> # COPIA DICHIARATA di s194b-lancio-notte.sh (manifest s194c-lancio-coda-copia.diff, generatore gen-notte-s194c.py) coi SOLI
+> # adattamenti: attesa iniziale della catena b, cartella catena-out-c e file catena-s194c.done, etichette, blocco finale coi
+> # quattro passi sui binari copiati dallo stash in /private/tmp/phpr-s194c-bin (la canonica s190 non si tocca). Testo precedente sotto:
+12,13c11,14
+< LOG="$H/catena-out-b/lancio-catena.log"; mkdir -p "$H/catena-out-b"
+< echo "$(date '+%F %T') attesa quiete CI" >> "$LOG"
+---
+> LOG="$H/catena-out-c/lancio-catena.log"; mkdir -p "$H/catena-out-c"
+> echo "$(date '+%F %T') coda c: attesa fine catena b" >> "$LOG"
+> while [ ! -e "$H/catena-out-b/catena-s194b.done" ]; do sleep 60; done
+> echo "$(date '+%F %T') catena b finita ($(cat "$H/catena-out-b/catena-s194b.done")) — attesa quiete CI" >> "$LOG"
+22c23
+< echo "s194 notte-b b7+t31+t29 @ pin s190 $(date '+%F %T') pid=$$" > "$MLOCK"
+---
+> echo "s194 notte-b coda c t32+t33+t30+t31 @ stash s186/s189 $(date '+%F %T') pid=$$" > "$MLOCK"
+57c58
+< ( WD="$H/catena-out-b/watchdog-catena.txt"; PD="$H/catena-out-b/catena-s194b.done"; t0=$(date +%s); tdone=0
+---
+> ( WD="$H/catena-out-c/watchdog-catena.txt"; PD="$H/catena-out-c/catena-s194c.done"; t0=$(date +%s); tdone=0
+67,68c68,69
+< Q="$H/catena-out-b/quiet-decl-catena.txt"
+< { echo "== dichiarazione finestra quieta NOTTE b S-194 (b7, t31, t29) $(date '+%F %T') =="
+---
+> Q="$H/catena-out-c/quiet-decl-catena.txt"
+> { echo "== dichiarazione finestra quieta CODA c S-194 (t32, t33, t30, t31) $(date '+%F %T') =="
+72c73
+< echo "$(date '+%F %T') quiete raggiunta — dichiarazione in quiet-decl-catena.txt — (1) guardia b7, (2) t31, (3) t29" >> "$LOG"
+---
+> echo "$(date '+%F %T') quiete raggiunta — dichiarazione in quiet-decl-catena.txt — (1) ORM t32, (2) ORM t33, (3) WP t30, (4) WP t31" >> "$LOG"
+74c75
+< DONE="$H/catena-out-b/catena-s194b.done"; rm -f "$DONE"
+---
+> DONE="$H/catena-out-c/catena-s194c.done"; rm -f "$DONE"
+76,78c77,83
+< PIN183=$(shasum -a 256 "$STASH/phpr-s183" | cut -c1-16); PIN186=$(shasum -a 256 "$STASH/phpr-s186" | cut -c1-16); PIN190=$(shasum -a 256 "$STASH/phpr-s190" | cut -c1-16)
+< CANON="$HOME/Claude/php-rust-output/release/phpr"
+< PC=$(shasum -a 256 "$CANON" | cut -c1-16)
+---
+> BIN=/private/tmp/phpr-s194c-bin; mkdir -p "$BIN"
+> for pair in s186:9977cc4b1cf19991 s189:2d42efd6606e8dd9; do
+>   n=${pair%%:*}; h=${pair##*:}
+>   [ "$(shasum -a 256 "$STASH/phpr-$n" | cut -c1-16)" = "$h" ] || fine "stash $n != $h" "rc=9 stash-$n" 9
+>   cp "$STASH/phpr-$n" "$BIN/phpr-$n" && chmod 755 "$BIN/phpr-$n"
+>   [ "$(shasum -a 256 "$BIN/phpr-$n" | cut -c1-16)" = "$h" ] || fine "copia $n != $h" "rc=9 copia-$n" 9
+> done
+80,83d84
+< [ "$PIN183" = "9a6ae11bf7e900ef" ] || fine "stash s183 $PIN183 != 9a6ae11bf7e900ef" "rc=9 stash183" 9
+< [ "$PIN186" = "9977cc4b1cf19991" ] || fine "stash s186 $PIN186 != 9977cc4b1cf19991" "rc=9 stash186" 9
+< [ "$PIN190" = "97e000aa00fe802e" ] || fine "stash s190 $PIN190 != 97e000aa00fe802e" "rc=9 stash190" 9
+< [ "$PC" = "$PIN190" ] || fine "pin canonico $PC != stash s190 $PIN190" "rc=9 pin" 9
+85,92c86,88
+< ZB="$REPO/wp186-harness/ab-out/s186-leva/phpr-Z"
+< [ "$(shasum -a 256 "$ZB" 2>/dev/null | cut -c1-16)" = "23c0a94c26db62eb" ] || fine "gemello Z assente o diverso ($ZB)" "rc=9 Z" 9
+< [ -e "$REPO/wp186-harness/s186-guardia-verdetto-b7.out" ] && fine "verdetto b7 ESISTE già: spostarlo prima" "rc=7 verdetto-b7" 7
+< echo "$(date '+%F %T') pin canonico $PC == stash s190 · stash s183 $PIN183 · server $SRVC (s191, invariato) · Z ok — (1) GUARDIA b7 (A=stash s183, Z, B=CANONICO s190, R=5)" >> "$LOG"
+< PIN="$STASH/phpr-s183" Z="$ZB" B="$CANON" R=5 RE3=3 TAG=b7 /bin/bash "$REPO/wp186-harness/s186-guardia.sh"
+< rc1=$?; GR="$(cat "$REPO/wp186-harness/guardia-out-b7/guardia.done" 2>/dev/null)"
+< echo "$(date '+%F %T') guardia b7 fine rc=$rc1 ($GR) — verdetto wp186-harness/s186-guardia-verdetto-b7.out — (2) ORM t31 (E5 INVARIATE: ORA_REF2 4,870 SENT [4,81;4,93]; REF2 [34,23;34,31])" >> "$LOG"
+< SPD=/private/tmp/phpr-s194b-orm; mkdir -p "$SPD"
+---
+> for v in s194c-orm-coppia-verdetto-t32.out s194c-orm-coppia-verdetto-t33.out s194-pair-verdetto-t30.out s194-pair-verdetto-t31.out; do
+>   [ -e "$H/$v" ] && fine "verdetto $v ESISTE già: spostarlo prima" "rc=7 $v" 7
+> done
+94,101c90,106
+< PIN_ATTESO="$PIN190" MAPPA_SP="$SPD" /bin/bash "$H/s194b-orm-coppia-t31.sh"
+< rc2=$?; TR="$(cat "$H/orm-out-b/rimisura.done" 2>/dev/null)"
+< echo "$(date '+%F %T') t31 fine rc=$rc2 ($TR) — verdetto s194b-orm-coppia-verdetto-t31.out — (3) WP t29 full+media @ pin s190 (ULTIMA: le gambe media risvegliano mediaanalysisd)" >> "$LOG"
+< PIN_ATTESO="$PIN190" SRV_ATTESO="$SRVC" /bin/bash "$H/s194b-pair.sh" t29
+< rc3=$?; PR="$(cat "$H/pair-out/pair194-t29.done" 2>/dev/null)"
+< python3 "$H/s194b-notte-confronto.py" >> "$LOG" 2>&1
+< RC=0; for r in "$rc1" "$rc2" "$rc3"; do [ "$r" -gt "$RC" ] && RC=$r; done
+< fine "notte b fine: b7 rc=$rc1 · t31 rc=$rc2 · t29 rc=$rc3; confronto in s194b-notte-confronto.out; lock rimosso" "rc=$RC guardia_b7=[$GR] t31=[$TR] t29=[$PR]" "$RC"
+---
+> echo "$(date '+%F %T') binari copiati e verificati in $BIN — (1) ORM t32 @ s186" >> "$LOG"
+> SPD=/private/tmp/phpr-s194c-orm-s186; mkdir -p "$SPD"
+> PIN_ATTESO=9977cc4b1cf19991 MAPPA_SP="$SPD" /bin/bash "$H/s194c-orm-coppia-t32.sh"
+> rc1=$?; R1="$(cat "$H/orm-out-c-s186/rimisura.done" 2>/dev/null)"
+> echo "$(date '+%F %T') t32 fine rc=$rc1 ($R1) — (2) ORM t33 @ s189" >> "$LOG"
+> SPD=/private/tmp/phpr-s194c-orm-s189; mkdir -p "$SPD"
+> PIN_ATTESO=2d42efd6606e8dd9 MAPPA_SP="$SPD" /bin/bash "$H/s194c-orm-coppia-t33.sh"
+> rc2=$?; R2="$(cat "$H/orm-out-c-s189/rimisura.done" 2>/dev/null)"
+> echo "$(date '+%F %T') t33 fine rc=$rc2 ($R2) — (3) WP t30 @ s186" >> "$LOG"
+> PIN_ATTESO=9977cc4b1cf19991 SRV_ATTESO="$SRVC" /bin/bash "$H/s194c-pair-s186.sh" t30
+> rc3=$?; R3="$(cat "$H/pair-out/pair194-t30.done" 2>/dev/null)"
+> echo "$(date '+%F %T') t30 fine rc=$rc3 ($R3) — (4) WP t31 @ s189" >> "$LOG"
+> PIN_ATTESO=2d42efd6606e8dd9 SRV_ATTESO="$SRVC" /bin/bash "$H/s194c-pair-s189.sh" t31
+> rc4=$?; R4="$(cat "$H/pair-out/pair194-t31.done" 2>/dev/null)"
+> python3 "$H/s194c-notte-confronto.py" >> "$LOG" 2>&1
+> RC=0; for r in "$rc1" "$rc2" "$rc3" "$rc4"; do [ "$r" -gt "$RC" ] && RC=$r; done
+> fine "coda c fine: t32 rc=$rc1 · t33 rc=$rc2 · t30 rc=$rc3 · t31 rc=$rc4; confronto in s194c-notte-confronto.out; lock rimosso" "rc=$RC t32=[$R1] t33=[$R2] t30=[$R3] t31=[$R4]" "$RC"

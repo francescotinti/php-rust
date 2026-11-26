@@ -1,0 +1,42 @@
+1a2,4
+> # s194c-pair-s189.sh <tentativo> — S-194 notte b, coda c: coppia full/media WP t31 @ STASH s189 (rimisura di controllo nella
+> # stessa notte). COPIA DICHIARATA di s194b-pair.sh (manifest accanto, generatore gen-notte-s194c.py) coi SOLI adattamenti:
+> # binario = copia dello stash in /private/tmp/phpr-s194c-bin (non la canonica), etichette t31/s189. Testo precedente sotto:
+20c23
+< # s184-pair.sh <tentativo> — S-184: coppia full/media WP @ pin s182 (DOVUTA: pin nuovo, promozione COMPOSTA pin s190 (leve di S-194 dopo s186: attribuzione per leva); criterio
+---
+> # s184-pair.sh <tentativo> — S-184: coppia full/media WP @ pin s182 (DOVUTA: pin nuovo, promozione COMPOSTA stash s189 (rimisura di controllo, coda c); criterio
+23c26
+< # + t24=1,770 (banda giudizio INVARIATA [1,738;1,799]); messaggi GIÙ/REGRESSIONE riferiti a pin s190 (leve di S-194 dopo s186: attribuzione per leva) (pin NUOVO: la direzione
+---
+> # + t24=1,770 (banda giudizio INVARIATA [1,738;1,799]); messaggi GIÙ/REGRESSIONE riferiti a stash s189 (rimisura di controllo, coda c) (pin NUOVO: la direzione
+73c76
+< PHPR="$HOME/Claude/php-rust-output/release/phpr"
+---
+> PHPR="/private/tmp/phpr-s194c-bin/phpr-s189"
+168c171
+<     "$H109/pair109.sh" "$mode" >> "$OUT/progress-$T.txt" 2>&1
+---
+>     "$H/s194c-pair109-s189.sh" "$mode" >> "$OUT/progress-$T.txt" 2>&1
+195c198
+< print(f"== s194 coppia t29: WP full+media @ pin s190 MISURATO phpr={PINH} server={SRVH} tentativo={T} (criteri s132/s146/s148 EREDITATI + s184-criterio-coppia-t25.md: giudizio a MEDIANA per finestra, az.rev.3 S-149) ==")
+---
+> print(f"== s194 coppia t31: WP full+media @ stash s189 MISURATO phpr={PINH} server={SRVH} tentativo={T} (criteri s132/s146/s148 EREDITATI + s184-criterio-coppia-t25.md: giudizio a MEDIANA per finestra, az.rev.3 S-149) ==")
+273,278c276,281
+<         med_t29 = statistics.median(props)
+<         print(f"mediana_t29={med_t29:.3f} (N={len(props)} coppie proprie ON PULITE; mediane storiche t1=1.799 t2=1.738 t3=1.789 t4=1.781 t5=1.757 t6=1.771 t7=1.795 t8=1.754 t9=1.767 t10=1.760 t11=1.765 t12=1.767 t13=1.763 t14=1.761 t15=1.746 t16=1.749 t17=1.776 t18=1.769 t19=1.772 t20=1.765 t21=1.744 t23=1.799 t24=1.770 t25=1.747 t26=1.751 t27=1.705 t28=1.646; riferimento pin s190 (leve di S-194 dopo s186: attribuzione per leva): t24=1.770 t25=1.747 t26=1.751 t27=1.705 t28=1.646)")
+<         if MED_LO <= med_t29 <= MED_HI:
+<             print(f"giudizio_MEDIANA (canonico, criterio coppia-t25 p.4): COMPATIBILE (mediana in [{MED_LO}; {MED_HI}]) — pin s190 (leve di S-194 dopo s186: attribuzione per leva) sotto-risoluzione su WP (dichiarato); vs t28=1.646: {'≤' if med_t29 <= 1.646 else '>'} (direzione, non cifra)")
+<         elif med_t29 < MED_LO:
+<             print(f"giudizio_MEDIANA (canonico, criterio coppia-t25 p.4): direzione GIU' SEGNALATA (mediana {med_t29:.3f} < {MED_LO}) — pin NUOVO s190: coerente con pin s190 (leve di S-194 dopo s186: attribuzione per leva) (attesa ≤0), magnitudine non ripartita")
+---
+>         med_t31 = statistics.median(props)
+>         print(f"mediana_t31={med_t31:.3f} (N={len(props)} coppie proprie ON PULITE; mediane storiche t1=1.799 t2=1.738 t3=1.789 t4=1.781 t5=1.757 t6=1.771 t7=1.795 t8=1.754 t9=1.767 t10=1.760 t11=1.765 t12=1.767 t13=1.763 t14=1.761 t15=1.746 t16=1.749 t17=1.776 t18=1.769 t19=1.772 t20=1.765 t21=1.744 t23=1.799 t24=1.770 t25=1.747 t26=1.751 t27=1.705 t28=1.646; riferimento stash s189 (rimisura di controllo, coda c): t24=1.770 t25=1.747 t26=1.751 t27=1.705 t28=1.646)")
+>         if MED_LO <= med_t31 <= MED_HI:
+>             print(f"giudizio_MEDIANA (canonico, criterio coppia-t25 p.4): COMPATIBILE (mediana in [{MED_LO}; {MED_HI}]) — stash s189 (rimisura di controllo, coda c) sotto-risoluzione su WP (dichiarato); vs t28=1.646: {'≤' if med_t31 <= 1.646 else '>'} (direzione, non cifra)")
+>         elif med_t31 < MED_LO:
+>             print(f"giudizio_MEDIANA (canonico, criterio coppia-t25 p.4): direzione GIU' SEGNALATA (mediana {med_t31:.3f} < {MED_LO}) — stash s189: coerente con stash s189 (rimisura di controllo, coda c) (attesa ≤0), magnitudine non ripartita")
+280c283
+<             print(f"giudizio_MEDIANA (canonico, criterio coppia-t25 p.4): REGRESSIONE SEGNALATA (mediana {med_t29:.3f} > {MED_HI}) — in finestra pulita = REPERTO contro pin s190 (leve di S-194 dopo s186: attribuzione per leva) (criterio coppia-t25 p.5: regola 4, indagine prima di ogni leva)")
+---
+>             print(f"giudizio_MEDIANA (canonico, criterio coppia-t25 p.4): REGRESSIONE SEGNALATA (mediana {med_t31:.3f} > {MED_HI}) — in finestra pulita = REPERTO contro stash s189 (rimisura di controllo, coda c) (criterio coppia-t25 p.5: regola 4, indagine prima di ogni leva)")
