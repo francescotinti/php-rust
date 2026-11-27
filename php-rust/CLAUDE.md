@@ -14,7 +14,7 @@ grep/cat/sed/head/tail sui `.rs` via Bash sono **BLOCCATI** dall'hook `serena-ve
 (il tool Read funziona, ma per navigare ed editare vale Serena)
 (e `git add` di `.rs`: usare `git add -u` + `git commit -F`). Non è un fallback:
 usare Serena. Vale soprattutto per i file grossi
-(`crates/php-runtime/src/vm/mod.rs` ~26k righe, `run.rs` ~7,4k con cap LOC dichiarato).
+(`crates/php-runtime/src/vm/mod.rs` ~26k righe, `run.rs` ~7,6k con cap LOC dichiarato).
 Serena ha radice in `php-rust-experiment/`: i `relative_path` partono da `php-rust/crates/...`
 (`crates/...` da solo dà FileNotFoundError).
 
@@ -144,6 +144,17 @@ emendamenti passano dal sign-off dell'utente e dal handoff.
   vive nel prelude PHP: un chiamante con `func.file == b"prelude"` conta come debole.
 - Accettazione di un passo: `wp192-harness/s192-accettazione.sh <tag>` (batteria + corpus ×2, esito
   in `.rc`). Conto in istruzioni sul carico intero: `wp194-harness/s194-{orm,wp}-istruzioni.py`.
+- Rimisura su un binario dello stash: `wp109-harness/pair109.sh` ha il canonico CABLATO (misurerebbe il pin in silenzio) ⇒ copia dichiarata
+  con `PHPR=` esplicito e hash del binario letto dai file di gamba nel giudice (`wp194-harness/s194c-pair109-*.sh`).
+- Conto in cicli/istruzioni: `/usr/bin/time -l <bin> <fixture>` (righe `instructions retired`, `cycles elapsed`), binari a rotazione
+  (`wp194-harness/s194g-cicli.py`, forme `s194g-forme.sh`, bisezione per commit `s194f-bisezione.py`). Su una fixture piccola i cicli
+  NON seguono le istruzioni (S-194: −19 istr. = −0,8 cicli) e lo stesso paio di binari oscilla di ore in ore: giudicare sui carichi interi.
+- Binari da misurare su un percorso SENZA spazi (`/private/tmp/…`): il repo sta sotto «Extreme Pro» e `set -- $coppia` lo spezza
+  (conto nullo senza errore); ogni conto verifica che la riga attesa esista. `/private/tmp/phpr-*` si cancella a fine sessione.
+- Il mutex della CI vede solo `harness/s1NN-` nell'argv: uno script `s194f-…` NON la ferma ⇒ aspettare `DONE` nel feed prima di
+  lanciare build/misure e non pushare finché girano.
+- Fast-forward di `main` senza checkout (solo per delibera, dopo `DONE … OK` sul commit): `git push origin <sha>:refs/heads/main` +
+  `git fetch . origin/main:main`; il push accoda un altro job CI sullo stesso commit.
 - Commit **e** push a ogni step concluso (no chiedere).
 
 ## Contributi GitHub (PR e issue esterni)

@@ -54,7 +54,7 @@ Reimplementazione moderna di PHP 8.5 in Rust, guidata dal comportamento osservab
 > complete in `php-rust/CLAUDE.md`.
 > Engine: VM a bytecode unico (pipeline mago AST→HIR→bytecode→VM); il vecchio
 > tree-walker `eval/` è stato eliminato. Lowering in `php-runtime/src/lower/`,
-> VM in `php-runtime/src/vm/` (mod.rs ~26k righe, loop caldo in `run.rs` ~7,5k con
+> VM in `php-runtime/src/vm/` (mod.rs ~26k righe, loop caldo in `run.rs` ~7,6k con
 > cap LOC dichiarato in `tests/loc_dente.rs` — usare Serena). L'hook blocca OGNI segmento
 > Bash con grep/sed/awk/cat/head/tail che citi `crates/` o un token `.rs`, anche dentro
 > stringhe o heredoc: gli script che nominano file `.rs` si scrivono col tool Write.
