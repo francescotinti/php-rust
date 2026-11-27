@@ -1,0 +1,85 @@
+2,9c2,7
+< """s192-bisezione-k0.py <tag> <ref-commit> <commit>... — S-192: WHERE does the K0 cost of pin s184 over s183 come from?
+< 
+< Every commit is built from a git ARCHIVE (never the tree) with the pin recipe, all in the SAME source dir and the SAME
+< target dir on the bundle (~/Claude/phpr-target/s192-srcB, s192-armB: identical paths, so the layout differs only by the
+< code). The first commit is the reference; each later binary is timed against it on ret-buf-dq-k0 (R rounds, ABAB
+< interleaved, user CPU of the child, floor = empty.php median of 3), estimator = median of the paired differences in
+< ns/Ret. DIRECTION and attribution only, never a verdict. Results: out/bisezione-<tag>.out, rc in out/bisezione-<tag>.rc.
+< Generato con assistenza AI (Claude Fable 5.2).
+---
+> """s194f-bisezione.py <tag> <commit>... — S-194, criterion s194-criterio-notte-b.md p.19: WHICH step of pin s190 brought the
+> cycles-per-method-call cost seen by the guard? Declared copy of wp192-harness/s192-bisezione-k0.py (see gen-bisezione-s194f.py):
+> same build half (git ARCHIVE, pin recipe, one source dir and one target dir on the bundle), new measuring half: cycles and
+> instructions per call (/usr/bin/time -l) on wp185-harness/mcalls-dq.php, every binary in rotation, R rounds, median; the stash
+> s189 copy and the canonical s190 run in the same rotation as controls. Attribution only, never a verdict.
+> Results: out/bisezione-<tag>.out, rc in out/bisezione-<tag>.rc. Generato con assistenza AI (Claude Fable 5.2).
+14c12
+< O = P / "wp192-harness/out"
+---
+> O = P / "wp194-harness/out"
+16,17c14,15
+< SRC, TGT = BT / "s192-srcB", BT / "s192-armB"
+< K0 = P / "wp186-harness/ret-buf-dq-k0.php"
+---
+> SRC, TGT = BT / "s194f-src", BT / "s194f-arm"
+> FX = P / "wp185-harness/mcalls-dq.php"
+21c19
+< R = int(os.environ.get("R", "5"))
+---
+> R = int(os.environ.get("R", "9"))
+56,59c54,56
+< def ucpu(binary, script):
+<     before = resource.getrusage(resource.RUSAGE_CHILDREN).ru_utime
+<     subprocess.run([str(binary), str(script)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=900)
+<     return resource.getrusage(resource.RUSAGE_CHILDREN).ru_utime - before
+---
+> def count(binary):
+>     r = subprocess.run(["/usr/bin/time", "-l", str(binary), str(FX)], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, timeout=900)
+>     return (int(re.search(r"(\d+)\s+instructions retired", r.stderr).group(1)), int(re.search(r"(\d+)\s+cycles elapsed", r.stderr).group(1)))
+62,65c59,60
+< src = K0.read_text()
+< N = int(re.search(r"\$i<(\d+)", src).group(1))
+< RPI = int(re.search(r"RETS_PER_ITER=(\d+)", src).group(1))
+< out.write_text(f"== s192 bisezione K0 tag={tag} N={N}x{RPI} Ret R={R} {time.strftime('%F %T')} (attribuzione, non verdetto) ==\n")
+---
+> N = int(re.search(r"\$i<(\d+)", FX.read_text()).group(1))
+> out.write_text(f"== s194f bisezione mcalls-dq tag={tag} N={N} R={R} {time.strftime('%F %T')} (attribuzione, non verdetto) ==\n")
+78,90c73,95
+< ref_c, ref = bins[0]
+< floor = {c: statistics.median(ucpu(b, EMPTY) for _ in range(3)) for c, b in bins}
+< for c, b in bins[1:]:
+<     ds, ta, tb = [], [], []
+<     for r in range(R):
+<         if r % 2 == 0:
+<             a = ucpu(ref, K0); x = ucpu(b, K0)
+<         else:
+<             x = ucpu(b, K0); a = ucpu(ref, K0)
+<         ta.append(a); tb.append(x)
+<         ds.append(((x - floor[c]) - (a - floor[ref_c])) / (N * RPI) * 1e9)
+<     note(f"{c} vs {ref_c}: ref=[{' '.join('%.2f' % v for v in ta)}] s · B=[{' '.join('%.2f' % v for v in tb)}] s · "
+<          f"D appaiato=[{' '.join('%+.2f' % v for v in ds)}] ns/Ret · mediana {statistics.median(ds):+.2f}")
+---
+> PINS = [("stash-s189", pathlib.Path("/private/tmp/phpr-s194c-bin/phpr-s189"), "2d42efd6606e8dd9"),
+>         ("canon-s190", pathlib.Path.home() / "Claude/php-rust-output/release/phpr", "97e000aa00fe802e")]
+> for n, b, h in PINS:
+>     if hashlib.sha256(b.read_bytes()).hexdigest()[:16] != h:
+>         note(f"hash inatteso {n}"); rcf.write_text("7\n"); sys.exit(7)
+>     bins.append((n, b))
+> d = {c: [] for c, _ in bins}
+> for r in range(R):
+>     order = bins if r % 2 == 0 else bins[::-1]
+>     for c, b in order:
+>         d[c].append(count(b))
+> def drop1(v):
+>     return max(abs(statistics.median(v[:q] + v[q + 1:]) - statistics.median(v)) for q in range(len(v)))
+> med = {}
+> for c, _ in bins:
+>     ins = [x[0] / N for x in d[c]]; cyc = [x[1] / N for x in d[c]]
+>     med[c] = (statistics.median(ins), statistics.median(cyc))
+>     note(f"{c}: istr {med[c][0]:.2f} · cicli {med[c][1]:.2f} (min {min(cyc):.2f} max {max(cyc):.2f} drop-1 {drop1(cyc):.2f}) · corse=[{' '.join('%.1f' % v for v in cyc)}]")
+> names = [c for c, _ in bins[:-2]]
+> for a, b in zip(names, names[1:]):
+>     note(f"passo {a} -> {b}: istr {med[b][0] - med[a][0]:+.2f} · cicli {med[b][1] - med[a][1]:+.2f}")
+> note(f"BRACCIO ultimo - primo: istr {med[names[-1]][0] - med[names[0]][0]:+.2f} · cicli {med[names[-1]][1] - med[names[0]][1]:+.2f}")
+> note(f"PIN canon-s190 - stash-s189: istr {med['canon-s190'][0] - med['stash-s189'][0]:+.2f} · cicli {med['canon-s190'][1] - med['stash-s189'][1]:+.2f}")

@@ -1,0 +1,26 @@
+== s194f bisezione mcalls-dq tag=f1 N=60000000 R=9 2026-11-27 09:35:59 (attribuzione, non verdetto) ==
+build ee2114cf hash 1bf501aaa311f27b 09:39:12
+build 29b6d962 hash 428fa8f3e215e198 09:41:36
+build 9b9b5f11 hash ef2d6c949d379d58 09:44:00
+build fab50dd2 hash 768f99e4866ae17a 09:46:24
+build 047bbee5 hash 1ab568ec7420c5d2 09:48:49
+build a0a74e9c hash 031537733be351ec 09:51:13
+build 6b5c0095 hash a40b81beae349f74 09:53:38
+ee2114cf: istr 1842.90 · cicli 276.27 (min 274.70 max 278.09 drop-1 0.22) · corse=[276.0 275.9 277.2 277.2 276.3 274.7 276.7 278.1 275.3]
+29b6d962: istr 1885.92 · cicli 282.84 (min 281.20 max 286.84 drop-1 0.07) · corse=[286.8 283.0 281.2 282.5 284.1 282.7 282.2 284.3 282.8]
+9b9b5f11: istr 1885.92 · cicli 283.81 (min 282.91 max 288.85 drop-1 0.39) · corse=[284.7 283.8 283.0 286.4 284.6 282.9 283.5 283.5 288.8]
+fab50dd2: istr 1885.93 · cicli 288.28 (min 285.27 max 292.01 drop-1 0.51) · corse=[288.3 288.6 286.5 290.4 286.1 287.3 285.3 292.0 289.7]
+047bbee5: istr 1857.82 · cicli 288.32 (min 278.55 max 290.06 drop-1 1.00) · corse=[289.9 278.8 290.1 289.0 286.3 278.6 284.9 288.3 289.2]
+a0a74e9c: istr 1857.95 · cicli 285.06 (min 279.93 max 292.26 drop-1 0.88) · corse=[285.1 289.1 292.3 281.6 280.4 283.3 286.1 279.9 287.2]
+6b5c0095: istr 1857.82 · cicli 286.61 (min 281.72 max 290.03 drop-1 0.53) · corse=[290.0 287.7 281.7 287.7 286.6 285.7 286.2 283.4 287.8]
+stash-s189: istr 1842.81 · cicli 277.73 (min 275.99 max 282.62 drop-1 0.41) · corse=[278.3 278.5 282.6 276.8 276.9 276.0 279.0 276.8 277.7]
+canon-s190: istr 1857.78 · cicli 286.49 (min 280.36 max 289.85 drop-1 0.78) · corse=[287.3 289.8 282.6 284.9 286.5 282.5 286.9 286.5 280.4]
+passo ee2114cf -> 29b6d962: istr +43.03 · cicli +6.58
+passo 29b6d962 -> 9b9b5f11: istr -0.00 · cicli +0.97
+passo 9b9b5f11 -> fab50dd2: istr +0.02 · cicli +4.47
+passo fab50dd2 -> 047bbee5: istr -28.11 · cicli +0.04
+passo 047bbee5 -> a0a74e9c: istr +0.13 · cicli -3.25
+passo a0a74e9c -> 6b5c0095: istr -0.13 · cicli +1.54
+BRACCIO ultimo - primo: istr +14.92 · cicli +10.34
+PIN canon-s190 - stash-s189: istr +14.97 · cicli +8.75
+fine 2026-11-27 10:04:43
