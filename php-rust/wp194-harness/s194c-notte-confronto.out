@@ -1,0 +1,13 @@
+== s194 notte b, coda c: confronto nella STESSA notte (criterio s194-criterio-notte-b.md p.11) ==
+s186: ORM [6.105; 6.351] · WordPress 1.644
+s189: ORM [5.520; 5.601] · WordPress 1.582
+s190: ORM [5.184; 5.316] · WordPress 1.555
+GIUDIZIO s190 contro s186: ORM CONFERMATA · WordPress CONFERMATA (scarto -0.089, banda 0,010)
+ripartizione s189 contro s186: ORM CONFERMATA · WordPress CONFERMATA (scarto -0.062, banda 0,010)
+ripartizione s190 contro s189: ORM CONFERMATA · WordPress CONFERMATA (scarto -0.027, banda 0,010)
+deriva fra notti, ORM s186: stanotte [6.105; 6.351] contro 22/11 [6.075; 6.119]
+deriva fra notti, WordPress s186: stanotte 1.644 contro 22/11 1.646 (scarto -0.002)
+binario delle gambe WordPress t29: ['97e000aa00fe802e'] (atteso 97e000aa00fe802e) OK
+binario delle gambe WordPress t30: ['9977cc4b1cf19991'] (atteso 9977cc4b1cf19991) OK
+binario delle gambe WordPress t31: ['2d42efd6606e8dd9'] (atteso 2d42efd6606e8dd9) OK
+limite: s190 misurato prima di s186 e s189 (ordine non bilanciato)

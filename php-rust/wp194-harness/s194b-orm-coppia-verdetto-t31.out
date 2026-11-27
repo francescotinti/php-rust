@@ -1,0 +1,38 @@
+== s194 coppia t31 dbal+ORM (pin s190 MISURATO 97e000aa00fe802e vs oracle 8.5.7; criterio s185-criterio-istruttoria-orm.md p.5-6) ==
+costanti giudice: E5=1 ORA_REF2=4.870 SENT=[4.81;4.93] REF2=[34.23;34.31] (default = canone E4 S-176)
+# estrazione summ/names con LC_ALL=C + grep -a (fix az.rev. S-155 #4); reperto conteggi dbal phpr vs oracle A VERBALE (companion, non arbitra)
+# ADATTAMENTI (i)-(iii) dall'istruttoria p.1 + az.rev. S-159 #1: rodaggio non giudicante, quiescenza per gamba, scaletta a due estremi
+sentinella language-server inizio finestra (az.rev. S-157 #4): /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.98.1-aarch64-apple-darwin/bin/rust-analyzer /Users/francescotinti/.rustup/toolchains/1.98.1-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv 
+sentinella language-server fine finestra: /Users/francescotinti/.local/share/uv/tools/serena-agent/bin/python3 /Users/francescotinti/.rustup/toolchains/1.98.1-aarch64-apple-darwin/bin/rust-analyzer /Users/francescotinti/.rustup/toolchains/1.98.1-aarch64-apple-darwin/libexec/rust-analyzer-proc-macro-srv 
+rodaggio (NON giudicato, companion istruttoria) ictx/s: orm_oracle=17.9 orm_phpr=1.1 dbal_oracle=67.6 dbal_phpr=5.3
+quiescenza orm-leg1: rc=0 (file: orm-out-b/quiesce-orm-leg1.rc)
+quiescenza dbal-leg1: rc=0 (file: orm-out-b/quiesce-dbal-leg1.rc)
+quiescenza orm-leg2: rc=0 (file: orm-out-b/quiesce-orm-leg2.rc)
+quiescenza dbal-leg2: rc=0 (file: orm-out-b/quiesce-dbal-leg2.rc)
+floor_user_med3 orm: oracle=0.06 phpr=0.06 · dbal: oracle=0.06 phpr=0.17 (phpunit --version, pavimento PARZIALE dichiarato)
+coppia-t31 @ s190 (user CPU; pavimenti PARZIALI phpunit --version: orm o=0.060 p=0.060 · dbal o=0.060 p=0.170) — costanti giudice: E5 (istruttoria DRIFT)
+grade=VERDICT  # derivazione meccanica dai .time
+orm_leg1: oracle_user=5.06 (sys=0.46) phpr_user=25.98 (sys=0.99) ratio_raw=5.134 ratio_net=5.184
+orm_leg2: oracle_user=4.97 (sys=0.44) phpr_user=26.16 (sys=1.00) ratio_raw=5.264 ratio_net=5.316
+orm_ictx_abs: oracle1=36 phpr1=36 oracle2=34 phpr2=28
+orm_ictx/s (gate emenda S-127): oracle1=6.5 phpr1=1.3 oracle2=6.3 phpr2=1.0  contesa ok
+dbal_leg1: oracle_user=1.15 (sys=0.20) phpr_user=6.56 (sys=0.31) ratio_raw=5.704 ratio_net=5.862
+dbal_leg2: oracle_user=1.15 (sys=0.19) phpr_user=6.49 (sys=0.30) ratio_raw=5.643 ratio_net=5.798
+dbal_ictx_abs: oracle1=86 phpr1=36 oracle2=52 phpr2=40
+dbal_ictx/s (gate emenda S-127): oracle1=62.8 phpr1=5.2 oracle2=38.5 phpr2=5.9  contesa ok
+dbal_parita': phpr_failset_stabile=True |phpr_fail|=1 |diff_vs_oracle|=1
+dbal_diff_nomi: Doctrine\DBAL\Tests\Schema\Name\Parser\GenericNameParserTest::testValidInput with data set #11 ('schéma."übermäßigkeit".`àçcên...ràctér', [Doctrine\DBAL\Schema\Name\Identifier Object (...), Doctrine\DBAL\Schema\Name\Identifier Object (...), Doctrine\DBAL\Schema\Name\Identifier Object (...), Doctrine\DBAL\Schema\Name\Identifier Object (...), Doctrine\DBAL\Schema\Name\Identifier Object (...)])
+attesa-MC1 assoluto (companion): phpr_orm_net_new=[25.92; 26.10] ref=[34.23; 34.31] Delta=[+8.13; +8.39] s
+attesa-MC1 ORACLE-NORMALIZZATO (CANONICO coppia): net_norm=[25.25; 25.89] (ORA_REF=4.87, oracle_net_gambe=[5.0, 4.91]) Delta_norm=[+8.34; +9.06] s
+rapporto net (companion): [5.184; 5.316] vs registrato S-162 [7.023; 7.053]
+nota t19 (S-173): rapporto net t19 [6,988;7,012] RIENTRATO <=7,05 (regola 4 non scattata); se t20 torna >7,05 la voce si riapre — t20 min=5.184 <=7,05: resta rientrata
+SENTINELLA ORACLE FUORI BANDA [4.81;4.93]: gambe [5.0] — Delta_norm NON GIUDICANTE (emenda S-166), istruttoria drift dedicata
+parita': orm phpr per NOME vs baseline 16 · dbal fail-set stabile tra gambe — rc=0 (0=tutte valide)
+orm  oracle1: Tests: 3484, Assertions: 12003, Skipped: 59, Incomplete: 2.
+orm  phpr1:   Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, Skipped: 59, Incomplete: 2.
+dbal oracle1: Tests: 3929, Assertions: 5706, Skipped: 594, Incomplete: 13.
+dbal phpr1:   Tests: 3921, Assertions: 5597, Errors: 1, Skipped: 626, Incomplete: 13.
+orm  oracle2: Tests: 3484, Assertions: 12003, Skipped: 59, Incomplete: 2.
+orm  phpr2:   Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, Skipped: 59, Incomplete: 2.
+dbal oracle2: Tests: 3929, Assertions: 5706, Skipped: 594, Incomplete: 13.
+dbal phpr2:   Tests: 3921, Assertions: 5597, Errors: 1, Skipped: 626, Incomplete: 13.
