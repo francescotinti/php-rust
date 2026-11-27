@@ -1,0 +1,24 @@
+# WP_SESSION_194 — costo delle primitive: cinque pin (s186 → s190) e notte a tre binari (2026-11-21 → 27, CHIUSA) — Generato con assistenza AI (Claude Fable 5.2)
+**In una frase**: in una settimana il binario ufficiale è stato rifatto cinque volte, ogni volta un po' più veloce sui carichi veri; la notte di misura lo conferma (WordPress da 1,71 a 1,56 volte il PHP ufficiale, ORM da circa 6,5 a 5,2), mentre un piccolo costo sulle chiamate di metodo, visto solo da una prova sintetica, è stato indagato e lasciato aperto perché non si cura contando istruzioni.
+**SCOREBOARD** (PIN phpr **s190** `97e000aa00fe802e`, server **s191** `c413398a44f9b0a4` invariato): arith 2,2 ↑ · prop 2,4 ↑ · calls 3,6 ↑ · str 3,3 ↓ · arr 2,9 → · re 2,6 ↑ (micro R=5 sul pin, 26/11; str 3,1 su s189 da rivedere) · **WP t29 1,555** (t27 1,705) · **ORM t31 [5,184; 5,316]** (t29 [6,449; 6,576]) · **leve spedite: 5 pin** (s186 22/11 · s187 23/11 · s188 25/11 · s189 e s190 26/11) · batteria 1790/0/2 + 1 dente · corpus 1399 congelati per modo.
+## Esiti secchi (branch `s186-firma` 274658af → chiusura; `main` allineato per delibera il 27/11)
+- **Rotta (utente, 21-22/11)**: costo delle PRIMITIVE contro l'oracle; ogni passo porta il conto in istruzioni sul carico intero (`s194-{orm,wp}-istruzioni.py`). Storia e cifre nei criteri `s194-criterio-primitive.md`, `-C.md`, `-N.md`, `-B.md`.
+- **Pin s187** (C1 + C2 + sette cure sui tipi dichiarati) · **s188** (C3a arità parziale, C3b cache del sito con lo scope; WP −0,61 %, ORM −1,08 % istr.) · **s189** (P1–P4: isset/empty, cache di scrittura delle proprietà) · **s190** (C4 argomenti-variabile senza riferimento, N1, N2 + B1/B2, T1, N3: ORM −5,28 %, WP −2,25 % istr. su s189). Ogni promozione rc=0 con batteria, corpus ×2, fixture, micro.
+- **Notte 26→27/11, tre binari** (`s194-criterio-notte-b.md` p.1-16): ORM s186 [6,105; 6,351] · s189 [5,520; 5,601] · s190 [5,184; 5,316] · WordPress 1,644 · 1,582 · 1,555 ⇒ **s190 confermato in tempo a ogni passo**. Riserve: sentinella dell'oracle fuori banda nelle tre coppie ORM; ordine non bilanciato (s190 per primo).
+- **Guardia delle chiamate**: b7/b7b su s190 mcalls-dq **+9,67 ns** vs s183 (riprodotta, rumore 1,67), b7c su s189 +4,83 ⇒ per la regola scritta s190 NON confermato sulla guardia. **Decisione dell'utente 27/11: s190 resta.**
+- **Istruttoria (p.17-20, di giorno, in cicli)**: s190 − s189 = +8,89 cicli con +15 istruzioni · bisezione su sei commit: **C4 +6,58 cicli / +43 istr.**, **N1 +4,47 cicli / 0 istr.** · cura C5a (`-C.md` p.26): −19 istruzioni, −0,8 cicli ⇒ RITIRATA, codice invariato · gli stessi due bracci: +10,3 cicli la mattina, +3,7 il pomeriggio ⇒ costo reale, micro-architetturale, di taglia instabile.
+- **Delibere dell'utente (27/11)**: REGOLE §6 cancello di promozione in cicli a rotazione · REGOLE §3 guardia di notte = allarme da istruire · merge ff su `main` dopo CI OK.
+- **Dente nuovo**: `class_index_dente` (un solo scrittore di `class_index`: l'impronta incrementale di N2 è controllata solo da un `debug_assert` che nessuna build esegue).
+## Incidenti (contati negli ultimi due giorni: 6; quelli del 21–25/11 stanno nei criteri, non ricontati qui)
+1. Annuncio sbagliato dell'assistente: «la notte confronta s190 con s186 e s189», mentre misurava solo s190 contro le cifre del 22/11; corretto prima del lancio, coda c aggiunta con la parola dell'utente.
+2. `wp109-harness/pair109.sh` col binario canonico cablato: la rimisura di s186/s189 avrebbe misurato s190 in silenzio; preso prima del lancio (copia dichiarata + hash nel giudice).
+3. Guardia di giorno della promozione col segno opposto alla notte (132,33 vs 134,17): il cancello non vedeva il costo.
+4. Conto nullo per un percorso con spazio spezzato da `set --` (rifatto) · 5. regola di C5a emendata DOPO una cifra (dichiarata) · 6. Data sotto 10G (promozione s187 trattenuta; 8-9G alla chiusura).
+## Passi
+1. Rotta primitive: corpo di `Sweep` (~4,7 % ORM) · `$o->m($i, $i = 5)` · `self` come tipo di parametro. Tappa D: WP ≤1,5 (oggi 1,555), ORM ≤5 (oggi ~5,25), micro ≤3× (calls 3,6 e str 3,3 fuori).
+2. Aperture della guardia: costo fisso di C4 sui letterali, dispersione fra corse su `mcalls-dq`: solo con contatori hardware per simbolo.
+3. Prossima promozione: soglia in cicli scritta nel criterio (`s194g-cicli.py`); Data ≥10G prima di ogni finestra.
+## Lezioni
+- Le istruzioni sul carico intero predicono il tempo sul carico intero; su una fixture di poche centinaia di cicli non predicono nulla.
+- Una rimisura su un binario vecchio si prova leggendo l'hash del binario dai file di gamba, non fidandosi del nome dello script.
+- Prima di dire cosa misura una notte si rilegge il lanciatore, non il proposito.
