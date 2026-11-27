@@ -1,0 +1,7 @@
+== s194f: istruzioni e cicli per chiamata, mcalls-dq (N=60000000), R=5, mediana (criterio p.17) ==
+s183: istr 1760.04 · cicli 267.89 (min 266.32 max 268.66, drop-1 0.51) · cicli/istr 0.1522
+s189: istr 1842.89 · cicli 276.96 (min 275.30 max 278.86, drop-1 0.32) · cicli/istr 0.1503
+s190: istr 1857.96 · cicli 283.84 (min 281.25 max 287.33, drop-1 0.97) · cicli/istr 0.1528
+D s190-s189: istr +15.07 · cicli +6.88 · cicli spiegati dalle istruzioni +2.27
+D s189-s183: istr +82.85 · cicli +9.07
+GIUDIZIO: NON DECISO (fra +4 e +8): si ripete una volta con R=9

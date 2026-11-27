@@ -1,0 +1,7 @@
+== s194f: istruzioni e cicli per chiamata, mcalls-dq (N=60000000), R=9, mediana (criterio p.17) ==
+s183: istr 1760.03 · cicli 267.14 (min 266.17 max 269.13, drop-1 0.33) · cicli/istr 0.1518
+s189: istr 1842.87 · cicli 277.00 (min 276.06 max 284.52, drop-1 0.16) · cicli/istr 0.1503
+s190: istr 1857.85 · cicli 285.89 (min 278.81 max 288.65, drop-1 1.94) · cicli/istr 0.1539
+D s190-s189: istr +14.98 · cicli +8.89 · cicli spiegati dalle istruzioni +2.25
+D s189-s183: istr +82.84 · cicli +9.86
+GIUDIZIO: costo MICRO-ARCHITETTURALE (IPC): passo 2 = bisezione sui cinque passi, in cicli
