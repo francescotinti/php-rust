@@ -1,0 +1,11 @@
+== s194 notte b, coda d: istruttoria della guardia (criterio s194-criterio-notte-b.md p.15) ==
+b7 (B=s190, 18:42) mcalls-dq: B=137.00 ns · D colonna +9.67 appaiata +8.33 · rumore drop-1 4.17
+b7 (B=s190, 18:42) calls-dq: B=80.67 ns · D colonna +2.17 appaiata +2.33 · rumore drop-1 2.33
+b7 (B=s190, 18:42) ret-buf-dq-K0: B=99.23 ns · D colonna -1.85 appaiata -1.85 · rumore drop-1 1.08
+b7b (B=s190, ripetizione) mcalls-dq: B=137.00 ns · D colonna +9.67 appaiata +9.50 · rumore drop-1 1.67
+b7b (B=s190, ripetizione) calls-dq: B=80.17 ns · D colonna +1.67 appaiata +1.50 · rumore drop-1 0.83
+b7b (B=s190, ripetizione) ret-buf-dq-K0: B=98.92 ns · D colonna -3.08 appaiata -3.08 · rumore drop-1 3.23
+b7c (B=s189) mcalls-dq: B=131.83 ns · D colonna +4.83 appaiata +4.33 · rumore drop-1 1.33
+b7c (B=s189) calls-dq: B=79.00 ns · D colonna +0.83 appaiata +0.83 · rumore drop-1 0.83
+b7c (B=s189) ret-buf-dq-K0: B=97.54 ns · D colonna -3.23 appaiata -2.62 · rumore drop-1 1.38
+GIUDIZIO: b7b mcalls-dq D +9.67 > 6,00 ⇒ costo REALE sulle chiamate di metodo, entrato in s190 (C4, N1, N2, T1, N3); s190 NON confermato sulla guardia
