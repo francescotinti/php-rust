@@ -1,0 +1,12 @@
+braccio: rc=0 sha=207839d0eaff2d69
+empty N3 istr/iter 333.7 cicli/iter 52.6
+empty c5a istr/iter 333.5 cicli/iter 53.0
+lit N3 istr/iter 1786.1 cicli/iter 270.0
+lit c5a istr/iter 1778.1 cicli/iter 267.6
+var1 N3 istr/iter 1865.2 cicli/iter 293.7
+var1 c5a istr/iter 1846.2 cicli/iter 281.8
+var1x N3 istr/iter 1865.2 cicli/iter 282.4
+var1x c5a istr/iter 1846.2 cicli/iter 285.1
+var2 N3 istr/iter 1934.2 cicli/iter 291.5
+var2 c5a istr/iter 1904.2 cicli/iter 286.8
+fine 2026-11-27 15:06:17
