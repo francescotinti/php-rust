@@ -11,6 +11,10 @@
 < export PROMO_SP="/private/tmp/promo-s194e-sp"
 ---
 > export PROMO_SP="/private/tmp/promo-s195-sp"
+26c27
+< if [ "${DG:-0}" -lt 10 ]; then l "STOP: Data ${DG}G < 10G al lancio (veto S-188) — nessuna catena"; echo 7 > "$LRC"; echo "rc=7 rcb=assente (Data ${DG}G < 10G)" > "$LDONE"; exit 7; fi
+---
+> if [ "${DG:-0}" -lt 7 ]; then l "STOP: Data ${DG}G < 7G (soglia 10G abbassata per delibera 28/11) al lancio (veto S-188) — nessuna catena"; echo 7 > "$LRC"; echo "rc=7 rcb=assente (Data ${DG}G < 7G (soglia 10G abbassata per delibera 28/11))" > "$LDONE"; exit 7; fi
 33,34c34,35
 < echo "s194e promozione pin s190 $(date '+%F %T') pid=$$" > "$MLOCK"
 < l "CI quieta — lock scritto: $MLOCK (TOKEN s194e-promo)"

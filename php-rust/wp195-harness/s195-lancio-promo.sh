@@ -24,7 +24,7 @@ sentinelle(){
 }
 sentinelle inizio
 DG=$(df -g /System/Volumes/Data | awk 'NR==2{print $4}')
-if [ "${DG:-0}" -lt 10 ]; then l "STOP: Data ${DG}G < 10G al lancio (veto S-188) — nessuna catena"; echo 7 > "$LRC"; echo "rc=7 rcb=assente (Data ${DG}G < 10G)" > "$LDONE"; exit 7; fi
+if [ "${DG:-0}" -lt 7 ]; then l "STOP: Data ${DG}G < 7G (soglia 10G abbassata per delibera 28/11) al lancio (veto S-188) — nessuna catena"; echo 7 > "$LRC"; echo "rc=7 rcb=assente (Data ${DG}G < 7G (soglia 10G abbassata per delibera 28/11))" > "$LDONE"; exit 7; fi
 CIQ="/Volumes/Extreme Pro/Claude/phpr-ci/queue"
 ci_busy(){ pgrep -qx cargo || pgrep -qx rustc || pgrep -qf phpt-runner || [ -n "$(ls "$CIQ" 2>/dev/null)" ]; }
 l "attesa quiete CI (cargo/rustc/phpt-runner assenti, coda vuota)"

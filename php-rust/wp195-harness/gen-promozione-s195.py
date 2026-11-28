@@ -28,7 +28,8 @@ head_new = '''#!/bin/bash
 # braccio con la ricetta del pin sul commit passato al generatore (out/phpr-cand); precondizione = accettazione s195J rc=0;
 # (3) REF = stash phpr-s190 (97e000aa00fe802e); (4) il dente dell'invio entra come gate BILATERALE; i gate che le cure rendono
 # diversi dallo stash passano da invarianti a bilaterali, per nome nel criterio; (5) corpus congelato 1399 per modo, invariato;
-# (6) dichiarazioni PRE riscritte.
+# (6) dichiarazioni PRE riscritte; (7) una guardia sul disco in piu subito PRIMA di pin-phpr.sh (lancio sotto 10G per delibera
+# dell'utente del 28/11: uno stop per spazio deve arrivare prima che il pin nasca); nel lanciatore la soglia 10G scende a 7G.
 '''
 body = s[len(head_old):]
 l = line_from(body, 'CAND="$HOME/Claude/phpr-target/s192-armD/release/phpr"; CAND_COMMIT=')
@@ -54,6 +55,7 @@ s = rep(s, l, l + '\nbilat s195invio "$H15/s195-invio-comportamento.php" "" "den
 for a in sys.argv[2:]:  # gate che le cure rendono diversi dallo stash: invar -> bilat, per nome
     l = line_from(s, 'invar %s ' % a)
     s = rep(s, l, 'bilat' + l[len('invar'):] + ' -d log_errors=0 -d display_errors=1')
+s = rep(s, '"$SRC/scripts/pin-phpr.sh" s191 > "$OUT/pin.log" 2>&1', 'disk_guard pin  # S-195: a stop for disk space must come BEFORE the pin is born (launch below 10G by user decision, 28/11)\n"$SRC/scripts/pin-phpr.sh" s191 > "$OUT/pin.log" 2>&1')
 open('s195-promozione.sh', 'w', encoding='utf-8').write(s); os.chmod('s195-promozione.sh', 0o755)
 subprocess.run('diff ' + OLD + 's194e-promozione.sh s195-promozione.sh > s195-promozione-copia.diff', shell=True)
 
@@ -64,6 +66,8 @@ t = rep(t, 'export PROMO_SP="/private/tmp/promo-s194e-sp"', 'export PROMO_SP="/p
 t = rep(t, 'echo "s194e promozione pin s190 ', 'echo "s195 promozione pin s191 ')
 t = rep(t, '(TOKEN s194e-promo)', '(TOKEN s195-promo)')
 t = rep(t, '"$H/s194e-promozione.sh" >> "$LOG" 2>&1', '"$H/s195-promozione.sh" >> "$LOG" 2>&1')
+t = rep(t, '-lt 10 ]', '-lt 7 ]')  # user decision 28/11: launch below 10G (uv cache in use, nothing else to free)
+t = rep(t, '< 10G', '< 7G (soglia 10G abbassata per delibera 28/11)', 2)
 open('s195-lancio-promo.sh', 'w', encoding='utf-8').write(t); os.chmod('s195-lancio-promo.sh', 0o755)
 subprocess.run('diff ' + OLD + 's194e-lancio-promo.sh s195-lancio-promo.sh > s195-lancio-promo-copia.diff', shell=True)
 print('ok', s.count('s191'), s.count('s190'), s.count('s189'))

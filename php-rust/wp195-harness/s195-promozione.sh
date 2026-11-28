@@ -7,7 +7,8 @@
 # braccio con la ricetta del pin sul commit passato al generatore (out/phpr-cand); precondizione = accettazione s195J rc=0;
 # (3) REF = stash phpr-s190 (97e000aa00fe802e); (4) il dente dell'invio entra come gate BILATERALE; i gate che le cure rendono
 # diversi dallo stash passano da invarianti a bilaterali, per nome nel criterio; (5) corpus congelato 1399 per modo, invariato;
-# (6) dichiarazioni PRE riscritte.
+# (6) dichiarazioni PRE riscritte; (7) una guardia sul disco in piu subito PRIMA di pin-phpr.sh (lancio sotto 10G per delibera
+# dell'utente del 28/11: uno stop per spazio deve arrivare prima che il pin nasca); nel lanciatore la soglia 10G scende a 7G.
 # Testo S-193/S-190/S-185/S-184/S-181/S-180/S-177 conservato sotto:
 set -u
 export PATH=/usr/bin:/bin:/usr/sbin:/opt/homebrew/bin:"$HOME/.cargo/bin"
@@ -113,6 +114,7 @@ else
   note "promozione: batteria SENZA churn — build2 no-op dichiarato (binario intatto, hash $H2 == build 1; emenda S-184 del gate rilievo 1 S-182)"
 fi
 
+disk_guard pin  # S-195: a stop for disk space must come BEFORE the pin is born (launch below 10G by user decision, 28/11)
 "$SRC/scripts/pin-phpr.sh" s191 > "$OUT/pin.log" 2>&1
 prc=$?; echo "$prc" > "$OUT/pin.rc"
 [ "$prc" = 0 ] || stop "pin-phpr.sh rc=$prc"
