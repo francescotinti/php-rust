@@ -3096,6 +3096,7 @@ impl<'m> super::Vm<'m> {
                     // capture the evaluated keys and defer the fetch to the
                     // dispatch binder, which W-fetches (by-ref param) or
                     // R-fetches.
+                    if steps.is_empty() { self.push_snapshot_place(top, base); continue; } // S-195: value-at-send place
                     let keys = self.pop_field_keys(top, &steps);
                     let pbase = match base {
                         FieldBase::Local(s) => ArgPlaceBase::Local(*s),

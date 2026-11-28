@@ -29,6 +29,18 @@ impl<'m> Vm<'m> {
         Zval::ArgPlace(Rc::clone(&self.slot_places[slot as usize]))
     }
 
+    /// S-195 (`Op::PushArgPlace` with no steps, emitted by `compile/arg_hazard`): a later argument of the
+    /// same call may write this variable, so the place carries its value AT THE SEND.
+    #[cold]
+    #[inline(never)]
+    pub(super) fn push_snapshot_place(&mut self, top: usize, base: &FieldBase) {
+        let FieldBase::Local(s) = *base else { unreachable!("snapshot send of a non-local") };
+        let f = &mut self.frames[top];
+        let snap = match &f.slots[s as usize] { Zval::Undef => Zval::Undef, v => arrays::read_slot(v) };
+        let name = f.func.slot_names.get(s as usize).cloned().unwrap_or_default();
+        f.stack.push(Zval::ArgPlace(Rc::new(ArgPlace { base: ArgPlaceBase::Local(s), steps: Box::new([ArgPlaceStep::Snap]), keys: vec![snap], name })));
+    }
+
     /// A callable object (`$o(...)`) or a `[$o, 'm']` callable reaches `dispatch_instance_call`
     /// without passing through `method_call`: resolve the deferred places here, as it does.
     pub(super) fn settle_instance_places(&mut self, top: usize, this: &Zval, method: &[u8], args: &mut [Zval]) -> Result<(), PhpError> {

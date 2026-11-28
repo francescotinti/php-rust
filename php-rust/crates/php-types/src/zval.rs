@@ -161,6 +161,10 @@ pub enum ArgPlaceStep {
     /// parameter appends a fresh element and aliases it; a by-value one is
     /// PHP's runtime "Cannot use [] for reading" Error (WP-17, PclZip).
     Append,
+    /// S-195: the only step of a SNAPSHOT send of a local variable — `keys[0]` is the
+    /// variable's value at the send (`Undef` = not defined then). A by-value parameter
+    /// receives it; a by-reference one aliases the variable itself.
+    Snap,
 }
 
 /// A lowered-and-captured closure value (step 18). `fn_idx` selects the body

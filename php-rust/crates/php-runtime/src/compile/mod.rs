@@ -35,6 +35,7 @@ use crate::hir::{
     Visibility,
 };
 
+mod arg_hazard;
 mod class;
 mod func;
 pub(crate) mod reg_lower;

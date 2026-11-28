@@ -1838,13 +1838,14 @@ impl<'a> super::FnCompiler<'a> {
     /// the common case. Non-variable arguments push their value; spreads are
     /// rejected (the caller routes those through `build_args_array`).
     pub(super) fn push_dyn_args(&mut self, args: &[Expr]) -> R<()> {
+        let mut sent = Vec::new(); // S-195: the plain-variable sends of this list (`arg_hazard`)
         for a in args {
             match &a.kind {
                 ExprKind::Spread(_) => {
                     return Err(CompileError::Unsupported("argument unpacking (spread)".into()));
                 }
                 ExprKind::Var(slot) => {
-                    self.emit(Op::PushRefArg(*slot)); // S-194: the reference when the variable is defined, a deferred step-less place when it is not (the R-fetch warns)
+                    let at = self.emit(Op::PushRefArg(*slot)); sent.push((at, *slot)); // S-194: the reference when the variable is defined, a deferred step-less place when it is not (the R-fetch warns)
                 }
                 _ => {
                     // A *place* argument (`$a['k']`, `$_SESSION[$k]`, `$this->p`,
@@ -1908,6 +1909,7 @@ impl<'a> super::FnCompiler<'a> {
                 }
             }
         }
+        self.snapshot_hazard_sends(&sent);
         Ok(())
     }
 

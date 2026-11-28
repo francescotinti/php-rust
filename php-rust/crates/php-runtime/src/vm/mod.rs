@@ -11834,15 +11834,16 @@ impl<'m> Vm<'m> {
                 let steps: Vec<FieldStep> = p
                     .steps
                     .iter()
-                    .map(|s| match s {
-                        ArgPlaceStep::Index => FieldStep::Index,
-                        ArgPlaceStep::Prop(n) => FieldStep::Prop(n.clone()),
+                    .filter_map(|s| match s {
+                        ArgPlaceStep::Index => Some(FieldStep::Index),
+                        ArgPlaceStep::Prop(n) => Some(FieldStep::Prop(n.clone())),
                         // `f($a[])` to a by-ref param: field_cell appends a
                         // fresh element and aliases it (PclZip, WP-17).
-                        ArgPlaceStep::Append => FieldStep::Append,
+                        ArgPlaceStep::Append => Some(FieldStep::Append),
+                        ArgPlaceStep::Snap => None, // S-195: by reference the snapshot is dropped, the variable itself is aliased
                     })
                     .collect();
-                let cell = self.make_ref_cell(top, base, &steps, p.keys.clone())?;
+                let cell = self.make_ref_cell(top, base, &steps, if steps.is_empty() { Vec::new() } else { p.keys.clone() })?;
                 Zval::Ref(cell)
             } else {
                 self.arg_place_read(top, base, &p)?
@@ -11857,6 +11858,11 @@ impl<'m> Vm<'m> {
     /// `Op::FetchDim` (`offsetGet` for an ArrayAccess object, a warning read
     /// otherwise), `Prop` like `Op::PropGet` driven synchronously.
     fn arg_place_read(&mut self, top: usize, base: FieldBase, p: &ArgPlace) -> Result<Zval, PhpError> {
+        if let Some(ArgPlaceStep::Snap) = p.steps.first() { // S-195: the value captured at the send
+            if !matches!(p.keys[0], Zval::Undef) { return Ok(p.keys[0].clone()); }
+            self.diags.push(Diag::Warning(format!("Undefined variable ${}", String::from_utf8_lossy(&p.name))));
+            return Ok(Zval::Null);
+        }
         let mut v = match base {
             FieldBase::Local(s) => {
                 if matches!(self.frames[top].slots[s as usize], Zval::Undef) && !p.name.is_empty() {
@@ -11906,6 +11912,7 @@ impl<'m> Vm<'m> {
                 ArgPlaceStep::Append => {
                     return Err(PhpError::Error("Cannot use [] for reading".to_string()));
                 }
+                ArgPlaceStep::Snap => {} // answered above
             }
         }
         Ok(v)
