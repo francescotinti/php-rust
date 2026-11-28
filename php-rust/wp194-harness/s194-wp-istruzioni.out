@@ -144,3 +144,13 @@ A          istruzioni  3488.703 G (dispersione 0.00 %)  vs A  +0.00 %  cicli 125
 S          istruzioni  3435.261 G (dispersione 0.00 %)  vs A  -1.53 %  cicli 1214.583 G  user 657.92 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
 uploads-guard restore rc=0
 fine rc=0 2026-11-28 03:15:33
+== s194 WordPress (phpunit full) istruzioni ritirate per gamba, 2026-11-28 03:42:23 (direzione sul lavoro, non verdetto di tempo) ==
+binario S = b9365351bd8da06977aa6e7c81420633a7150974 sha e0efb4dcc08624b0
+binario I = e04ce6e43b3ef042b1297fdf09ccab5463b61193 sha 4653573c2740f6a3
+S          istruzioni  3431.942 G (dispersione 0.00 %)  vs S  +0.00 %  cicli 1164.314 G  user 644.71 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
+I          istruzioni  3434.674 G (dispersione 0.00 %)  vs S  +0.08 %  cicli 1176.578 G  user 650.19 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
+uploads-guard restore rc=0
+fine rc=0 2026-11-28 04:13:29
+== s194 WordPress (phpunit full) istruzioni ritirate per gamba, 2026-11-28 04:16:09 (direzione sul lavoro, non verdetto di tempo) ==
+binario ON = /private/tmp/phpr-s195-on sha 75d3976b0ccb0d1c
+binario OFF = /private/tmp/phpr-s195-off sha 775240517dcad927

@@ -7126,7 +7126,7 @@ impl<'m> super::Vm<'m> {
                 let a = std::mem::replace(&mut frame.slots[i], Zval::Undef);
                 frame.slots[i] = if let Zval::ArgPlace(p) = a {
                     let base = match p.base {
-                        ArgPlaceBase::Local(s) => FieldBase::Local(s),
+                        ArgPlaceBase::Local(s) | ArgPlaceBase::LocalSnap(s) => FieldBase::Local(s),
                         ArgPlaceBase::Global(s) => FieldBase::Global(s),
                         ArgPlaceBase::Superglobal(x) => FieldBase::Superglobal(x),
                         ArgPlaceBase::This => FieldBase::This,

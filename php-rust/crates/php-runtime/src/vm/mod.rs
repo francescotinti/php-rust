@@ -11818,14 +11818,16 @@ impl<'m> Vm<'m> {
     ) -> Result<(), PhpError> {
         for (i, a) in args.iter_mut().enumerate() {
             let Zval::ArgPlace(p) = a else { continue };
-            let by_ref = callee.map_or(p.steps.is_empty(), |f| match f.variadic_slot {
+            let snap = matches!(p.base, ArgPlaceBase::LocalSnap(_)); // S-195: value captured at the send (vm/arg_slot)
+            let by_ref = callee.map_or(p.steps.is_empty() && !snap, |f| match f.variadic_slot {
                 Some(v) if i >= v as usize => f.param_by_ref.get(v as usize).copied().unwrap_or(false),
                 _ => f.param_by_ref.get(i).copied().unwrap_or(false),
             });
             if let (false, Some(v)) = (by_ref, self.slot_place_value(top, p)) { *a = v; continue; } // S-194 C4
+            if snap && !by_ref && !matches!(p.keys[0], Zval::Undef) { *a = p.keys[0].clone(); continue; }
             let p = Rc::clone(p);
             let base = match p.base {
-                ArgPlaceBase::Local(s) => FieldBase::Local(s),
+                ArgPlaceBase::Local(s) | ArgPlaceBase::LocalSnap(s) => FieldBase::Local(s),
                 ArgPlaceBase::Global(s) => FieldBase::Global(s),
                 ArgPlaceBase::Superglobal(x) => FieldBase::Superglobal(x),
                 ArgPlaceBase::This => FieldBase::This,
@@ -11834,16 +11836,15 @@ impl<'m> Vm<'m> {
                 let steps: Vec<FieldStep> = p
                     .steps
                     .iter()
-                    .filter_map(|s| match s {
-                        ArgPlaceStep::Index => Some(FieldStep::Index),
-                        ArgPlaceStep::Prop(n) => Some(FieldStep::Prop(n.clone())),
+                    .map(|s| match s {
+                        ArgPlaceStep::Index => FieldStep::Index,
+                        ArgPlaceStep::Prop(n) => FieldStep::Prop(n.clone()),
                         // `f($a[])` to a by-ref param: field_cell appends a
                         // fresh element and aliases it (PclZip, WP-17).
-                        ArgPlaceStep::Append => Some(FieldStep::Append),
-                        ArgPlaceStep::Snap => None, // S-195: by reference the snapshot is dropped, the variable itself is aliased
+                        ArgPlaceStep::Append => FieldStep::Append,
                     })
                     .collect();
-                let cell = self.make_ref_cell(top, base, &steps, if steps.is_empty() { Vec::new() } else { p.keys.clone() })?;
+                let cell = self.make_ref_cell(top, base, &steps, if steps.is_empty() { Vec::new() } else { p.keys.clone() })?; // S-195: a snapshot is not a key
                 Zval::Ref(cell)
             } else {
                 self.arg_place_read(top, base, &p)?
@@ -11858,7 +11859,7 @@ impl<'m> Vm<'m> {
     /// `Op::FetchDim` (`offsetGet` for an ArrayAccess object, a warning read
     /// otherwise), `Prop` like `Op::PropGet` driven synchronously.
     fn arg_place_read(&mut self, top: usize, base: FieldBase, p: &ArgPlace) -> Result<Zval, PhpError> {
-        if let Some(ArgPlaceStep::Snap) = p.steps.first() { // S-195: the value captured at the send
+        if let ArgPlaceBase::LocalSnap(_) = p.base { // S-195: the value captured at the send
             if !matches!(p.keys[0], Zval::Undef) { return Ok(p.keys[0].clone()); }
             self.diags.push(Diag::Warning(format!("Undefined variable ${}", String::from_utf8_lossy(&p.name))));
             return Ok(Zval::Null);
@@ -11912,7 +11913,6 @@ impl<'m> Vm<'m> {
                 ArgPlaceStep::Append => {
                     return Err(PhpError::Error("Cannot use [] for reading".to_string()));
                 }
-                ArgPlaceStep::Snap => {} // answered above
             }
         }
         Ok(v)

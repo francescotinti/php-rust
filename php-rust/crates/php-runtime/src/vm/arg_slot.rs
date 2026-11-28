@@ -36,9 +36,11 @@ impl<'m> Vm<'m> {
     pub(super) fn push_snapshot_place(&mut self, top: usize, base: &FieldBase) {
         let FieldBase::Local(s) = *base else { unreachable!("snapshot send of a non-local") };
         let f = &mut self.frames[top];
-        let snap = match &f.slots[s as usize] { Zval::Undef => Zval::Undef, v => arrays::read_slot(v) };
-        let name = f.func.slot_names.get(s as usize).cloned().unwrap_or_default();
-        f.stack.push(Zval::ArgPlace(Rc::new(ArgPlace { base: ArgPlaceBase::Local(s), steps: Box::new([ArgPlaceStep::Snap]), keys: vec![snap], name })));
+        let (snap, name) = match &f.slots[s as usize] { // the name serves only the "Undefined variable" warning
+            Zval::Undef => (Zval::Undef, f.func.slot_names.get(s as usize).cloned().unwrap_or_default()),
+            v => (arrays::read_slot(v), Default::default()),
+        };
+        f.stack.push(Zval::ArgPlace(Rc::new(ArgPlace { base: ArgPlaceBase::LocalSnap(s), steps: Default::default(), keys: vec![snap], name })));
     }
 
     /// A callable object (`$o(...)`) or a `[$o, 'm']` callable reaches `dispatch_instance_call`
