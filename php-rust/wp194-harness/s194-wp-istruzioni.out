@@ -154,3 +154,7 @@ fine rc=0 2026-11-28 04:13:29
 == s194 WordPress (phpunit full) istruzioni ritirate per gamba, 2026-11-28 04:16:09 (direzione sul lavoro, non verdetto di tempo) ==
 binario ON = /private/tmp/phpr-s195-on sha 75d3976b0ccb0d1c
 binario OFF = /private/tmp/phpr-s195-off sha 775240517dcad927
+ON         istruzioni  3454.276 G (dispersione 0.00 %)  vs ON  +0.00 %  cicli 1175.028 G  user 649.33 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
+OFF        istruzioni  3551.187 G (dispersione 0.00 %)  vs ON  +2.81 %  cicli 1190.698 G  user 655.25 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
+uploads-guard restore rc=0
+fine rc=0 2026-11-28 04:42:46

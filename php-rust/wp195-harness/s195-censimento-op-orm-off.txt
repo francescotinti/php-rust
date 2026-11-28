@@ -1,0 +1,179 @@
+== PHPR_OP_CENSUS: 648572060 ops dispatched ==
+-- op counts (top 40) --
+    83414990  12.86%  LoadVar
+    67453658  10.40%  PushConst
+    63990039   9.87%  Sweep
+    45190878   6.97%  Pop
+    38205534   5.89%  JumpIfFalse
+    34935006   5.39%  Ret
+    29799843   4.59%  ThisPropGet
+    25693007   3.96%  Dup
+    20469495   3.16%  Jump
+    20185592   3.11%  StoreSlot
+    18194070   2.81%  CmpJmpConst
+    15731339   2.43%  MethodCall
+    14851070   2.29%  This
+    12826903   1.98%  FetchDim
+    12121094   1.87%  CallBuiltin
+     9994684   1.54%  PropSet
+     8699248   1.34%  IterNext
+     8521660   1.31%  Unary
+     7905390   1.22%  CallHostBuiltin
+     6975471   1.08%  CheckArity
+     6418135   0.99%  CmpJmp
+     6018936   0.93%  Stringify
+     5615085   0.87%  ThisMethodCall
+     5295215   0.82%  PushRefArg
+     4118173   0.63%  ClassConst
+     4061904   0.63%  Binary
+     4055792   0.63%  LoadSlot
+     3584210   0.55%  InitProps
+     3584210   0.55%  StampThrowable
+     3180423   0.49%  ConcatN
+     3160646   0.49%  FillDefault
+     3052961   0.47%  IssetPath
+     3014547   0.46%  ArrayInit
+     2778355   0.43%  AssignPath
+     2743322   0.42%  JumpIfTrue
+     2646505   0.41%  Alloc
+     2435085   0.38%  FieldIsset
+     2322859   0.36%  InvokeMethod
+     2316697   0.36%  PropGet
+     2305623   0.36%  JumpIfNotNull
+-- bigrams (top 40) --
+    36912104  Pop -> Sweep
+    26753696  Sweep -> LoadVar
+    17990470  Dup -> StoreSlot
+    17276884  StoreSlot -> Pop
+    13971472  PushConst -> Ret
+    11978893  JumpIfFalse -> Sweep
+    11088497  Sweep -> Jump
+    10412897  This -> LoadVar
+    10303034  JumpIfFalse -> PushConst
+     9883912  PropSet -> Pop
+     9849508  Sweep -> PushConst
+     9772939  PushConst -> JumpIfFalse
+     9133957  LoadVar -> LoadVar
+     8476112  LoadVar -> CallBuiltin
+     8152440  JumpIfFalse -> LoadVar
+     8071884  LoadVar -> PushConst
+     7780455  PushConst -> FetchDim
+     7636924  LoadVar -> MethodCall
+     7310599  LoadVar -> PropSet
+     7205918  LoadVar -> CmpJmpConst
+     7196446  Sweep -> This
+     7180531  Unary -> JumpIfFalse
+     6989909  CmpJmpConst -> PushConst
+     6685183  Ret -> Pop
+     6582132  Jump -> Sweep
+     6236731  MethodCall -> ThisPropGet
+     5957105  Jump -> IterNext
+     5639964  Ret -> JumpIfFalse
+     5542348  JumpIfFalse -> ThisPropGet
+     5418089  PushConst -> PushConst
+     5167162  ThisPropGet -> CmpJmpConst
+     4471933  Ret -> Ret
+     4195019  LoadVar -> FetchDim
+     4158735  ThisPropGet -> Stringify
+     4107101  ClassConst -> PushConst
+     4092185  Ret -> Dup
+     3991663  ThisMethodCall -> ThisPropGet
+     3891711  IterNext -> LoadVar
+     3704534  Sweep -> ThisPropGet
+     3683753  PushConst -> Jump
+-- bigrams X -> Sweep (all) --
+    36912104  Pop -> Sweep
+    11978893  JumpIfFalse -> Sweep
+     6582132  Jump -> Sweep
+     3645580  CmpJmpConst -> Sweep
+     2049689  CmpJmp -> Sweep
+     1803784  IterPop -> Sweep
+      835102  Sweep -> Sweep
+      120258  UnsetPath -> Sweep
+       50460  FieldUnset -> Sweep
+        9654  EndFinally -> Sweep
+        1173  JumpIfTrue -> Sweep
+         635  Echo -> Sweep
+         303  Ret -> Sweep
+         262  DeclareFn -> Sweep
+           7  PropUnset -> Sweep
+           3  DeclareTrait -> Sweep
+-- bigrams IncDecSlotJmp -> X (all) --
+-- prop_set entry (S-176 typed) --
+     4840225  prop_set ic_hit_plain
+     4249465  prop_set ic_hit_typed
+      895774  prop_set miss
+           0  prop_set miss: not an object
+           2  prop_set miss: lazy or enum
+          14  prop_set miss: set hook / virtual
+           6  prop_set miss: class has __set
+           0  prop_set miss: access denied
+          20  prop_set miss: dynamic, created
+           1  prop_set miss: dynamic, present
+      654669  prop_set miss: declared without slot index, private of an ancestor
+           0  prop_set miss: declared without slot index, other
+        4551  prop_set miss: readonly
+           0  prop_set miss: asymmetric visibility
+      232670  prop_set miss: cacheable: site holds another class
+        3841  prop_set miss: cacheable: site cold or other scope
+-- Binary/CmpJmp type pairs (top 40) --
+     2812290  Identical (Long, Long)
+     1621881  Identical (Str, Str)
+     1063200  Lt (Long, Long)
+      616207  NotIdentical (Str, Str)
+      550197  BitOr (Long, Long)
+      546296  BitAnd (Long, Long)
+      517900  Sub (Long, Long)
+      492982  Identical (Bool, Long)
+      387229  Ge (Long, Long)
+      371890  Identical (ObjLike, ObjLike)
+      251937  Gt (Long, Long)
+      240511  Eq (Bool, Bool)
+      121397  Eq (Long, Long)
+       94675  NotIdentical (ObjLike, Null)
+       83152  NotIdentical (Bool, Str)
+       77639  NotIdentical (Long, Long)
+       71372  Identical (Null, Null)
+       67271  NotIdentical (Null, Null)
+       66813  NotIdentical (Array, Array)
+       45432  Identical (Array, Array)
+       42252  NotIdentical (Str, ObjLike)
+       41992  NotIdentical (Bool, Bool)
+       41637  NotIdentical (Str, Null)
+       32564  Identical (Bool, Bool)
+       29747  NotIdentical (Array, ObjLike)
+       26577  NotIdentical (Array, Bool)
+       25068  Eq (Str, Str)
+       21363  Identical (Str, Bool)
+       19701  NotIdentical (ObjLike, ObjLike)
+       15725  NotIdentical (Long, Bool)
+       14136  Eq (ObjLike, ObjLike)
+        9736  Gt (Long, Double)
+        5949  NotIdentical (Long, ObjLike)
+        5291  Identical (Null, ObjLike)
+        5191  Identical (Null, Str)
+        5102  Le (Double, Double)
+        4200  NotIdentical (Null, Str)
+        3592  Div (Long, Long)
+        3557  NotIdentical (Bool, ObjLike)
+        3028  NotIdentical (Null, Bool)
+-- FetchDim base x key --
+        2465  base=Null key=Str
+          60  base=Bool key=Long
+         448  base=Bool key=Str
+     2389252  base=Str key=Long
+     3925622  base=Array key=Long
+     7834406  base=Array key=Str
+         342  base=ObjLike key=Long
+         891  base=ObjLike key=Str
+           6  base=Ref key=Str
+-- IncDecSlot slot tags --
+      533373  Long
+       17310  Ref
+-- ConcatAssign non-local sites (lhs bytes = O(n^2) copy volume) --
+        5209 ev  lhs_b=386 rhs_b=20716 avg_lhs=0  ArrElem(AssignOpPath)
+        hist log2(lhs): b0=5108 b2=77 b3=21 b4=2 b7=1
+         170 ev  lhs_b=8325 rhs_b=8309 avg_lhs=48  Prop(Swap;Concat;PropSet + PropOpSet)
+        hist log2(lhs): b0=55 b1=19 b2=35 b5=5 b6=30 b7=23 b8=2 b12=1
+         594 ev  lhs_b=9306 rhs_b=10862 avg_lhs=15  Field(FieldAssignOp)
+        hist log2(lhs): b0=192 b4=192 b5=153 b6=49 b7=8

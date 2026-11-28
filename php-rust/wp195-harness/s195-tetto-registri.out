@@ -1,0 +1,10 @@
+== orm: op a modo acceso 577.8 M; movimento M = 176.4 M (30.5 % degli op); residuo contabile R = 16.1 M (assegnazioni nude 0.0 + ultimo argomento nudo 16.1) ==
+   fuori dai primi 40 (contati 0): Swap
+   istruzioni: spento 219.908 G, acceso 213.788 G, E = 6.120 G (2.78 % dello spento)
+   op: spento 648.6 M, acceso 577.8 M, delta = 70.8 M; e = 86.5 istruzioni per op tolta
+   TETTO (per eccesso) = e x (M - R) / istruzioni(acceso) = 6.48 %   [senza togliere R: 7.13 %]
+== wp: op a modo acceso 10513.2 M; movimento M = 3473.8 M (33.0 % degli op); residuo contabile R = 214.7 M (assegnazioni nude 95.3 + ultimo argomento nudo 119.5) ==
+   fuori dai primi 40 (contati 0): Swap
+   istruzioni: spento 3551.187 G, acceso 3454.276 G, E = 96.911 G (2.73 % dello spento)
+   op: spento 11837.1 M, acceso 10513.2 M, delta = 1323.8 M; e = 73.2 istruzioni per op tolta
+   TETTO (per eccesso) = e x (M - R) / istruzioni(acceso) = 6.91 %   [senza togliere R: 7.36 %]
