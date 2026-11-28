@@ -1,0 +1,15 @@
+# S-195 — tetto misurato del modello a registri (solo misura, nessuna leva): criterio
+
+Generato con assistenza AI (Claude Fable 5.2). Scritto il 28/11 02:55, PRIMA delle misure. Richiesta dell'utente del 28/11: «uno split test tra il modello attuale e il modello a registri», ridotto per accordo a un TETTO misurato prima di ogni codice.
+
+1. **Domanda**: quante istruzioni del carico vero potrebbe togliere, al massimo, portare a operandi-registro TUTTO il movimento di pila che resta (oggi le forme a registri coprono solo aritmetica, confronti e alcune forme di proprietà)?
+2. **Strumento, senza codice nuovo**: il pin s190 ha i due modi nello stesso binario (`PHPR_REG_LOWER=1` default, `=0` spento; la cache delle unità porta il modo).
+   - **E** = istruzioni(spento) − istruzioni(acceso) su una gamba intera ORM e una WordPress (`s194-{orm,wp}-istruzioni.py`, il binario del pin dietro due involucri che fissano il modo): è quanto rendono OGGI le forme a registri, in produzione.
+   - **Δop** = op eseguite(spento) − op eseguite(acceso), dal censimento (`s194-censimento-op.py` sul commit del pin, nei due modi).
+   - **e = E / Δop**: istruzioni risparmiate per op tolta, empirico.
+   - **M** = op di puro movimento che restano a modo acceso: `LoadVar`, `LoadSlot`, `PushConst`, `LoadVarPushConst`, `StoreSlot`, `Pop`, `Dup`, `Swap`. **R** = quelle che una macchina a registri NON toglie, per quanto il censimento permette di contarle: assegnazioni di variabile/costante nuda (bigrammi `Load*`/`PushConst` → `StoreSlot`: resta una op su due) e ultimo argomento nudo di una chiamata (bigrammi `Load*`/`PushConst` → op di chiamata: l'argomento va comunque spostato). Il censimento stampa i primi 40 bigrammi: R è sottostimato, quindi il tetto è per ECCESSO.
+   - **Tetto** = e × (M − R) / istruzioni(acceso).
+3. **Controllo incrociato**: la classe «pila e variabili» del registro per op di S-194 (ORM 8,1–9,6 %, WordPress ~11 %) è il tetto «tutto gratis»; il tetto di p.2 deve starle sotto, o uno dei due strumenti sbaglia.
+4. **Limiti dichiarati**: (a) `e` viene dalle forme di oggi (aritmetica, confronti, proprietà) e si applica a forme diverse (argomenti, ritorni, assegnazioni): è un'estrapolazione; (b) il braccio di censimento spegne tre fusioni: Δop non è quello di produzione; (c) Δop conta anche le fusioni di salto, non solo i caricamenti; (d) nessun effetto di cache/layout: sono istruzioni, direzione sul lavoro.
+5. **Regola di lettura, scritta prima**: tetto < 5 % delle istruzioni su ENTRAMBI i carichi ⇒ la questione «bytecode a registri» si chiude per misura; tetto ≥ 5 % su almeno un carico ⇒ è giustificata UNA fetta vera dietro il flag (ritorno diretto di costante/variabile, risultato di chiamata nello slot, argomenti dagli slot), a tre bracci (pin, candidato spento, candidato acceso), col suo criterio. In nessun caso questo passo decide una riscrittura.
+6. **File**: `s195-catena-R.sh` (in coda dietro la catena I), esiti `out/catena-R.out`; censimenti `s195-censimento-op-{orm,wp}-{on,off}.txt`; conto `s195-tetto-registri.py` → `s195-tetto-registri.out`.
