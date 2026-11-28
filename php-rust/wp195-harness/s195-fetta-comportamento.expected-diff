@@ -1,0 +1,11 @@
+3c3
+< Warning: Undefined variable $nope in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp195-harness/s195-fetta-comportamento.php on line 9
+---
+> Warning: Undefined variable $nope in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp195-harness/s195-fetta-comportamento.php on line 32
+40c40
+< Warning: Undefined variable $nope in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp195-harness/s195-fetta-comportamento.php on line 9
+---
+> Warning: Undefined variable $nope in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp195-harness/s195-fetta-comportamento.php on line 62
+45,46d44
+< 
+< Deprecated: strlen(): Passing null to parameter #1 ($string) of type string is deprecated in /Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust/wp195-harness/s195-fetta-comportamento.php on line 65

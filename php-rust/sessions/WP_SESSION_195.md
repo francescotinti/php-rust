@@ -15,7 +15,7 @@
 ## Passi
 1. Liberare Data ≥10G → `wp195-harness/s195-lancio-promo.sh` col daemonizer → cancello in cicli ripetuto sul pin → notte s191 contro s190 (criterio di notte da scrivere prima).
 2. Fetta a registri: denti di p.7, poi forma A (`RetConst`/`RetSlot`), col conto a tre bracci.
-3. Catalogo: le due divergenze trovate per caso (ordine dei distruttori degli elementi di un array, id di oggetto riusato).
+3. Catalogo: quattro divergenze trovate per caso, tutte già nel pin (ordine dei distruttori degli elementi di un array · id di oggetto riusato · riga dell'avviso «Undefined variable» di un `return $x` · `strlen` di una variabile non definita senza il Deprecated).
 ## Lezioni
 - Un tetto misurato con gli strumenti che ci sono già costa un'ora e toglie di mezzo una discussione di molte sessioni.
 - Una soglia in cicli si scrive solo dopo un giro A-A nella stessa finestra: qui il rumore fra due copie dello stesso binario era 1,7 cicli.
