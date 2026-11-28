@@ -1,0 +1,12 @@
+# S-195 — pacchetto S (corpo di `Sweep`): criterio
+
+Generato con assistenza AI (Claude Fable 5.2). Scritto il 28/11 02:10, PRIMA del codice.
+
+1. **Da dove viene** (profilo ORM `wp192-harness/out/anatomia-s194c`, riletto il 28/11 con `s192-anatomia-dentro.py` e con un istogramma per indirizzo; campioni = direzione): `gc_sweep_body` 6,8 % inclusivo = raccolta dei cicli 3,2 % + proprio 1,6 % (sparso su ~15 righe, nessuna sopra 0,2 %) + `gc_release_cascade` 0,8 % + rilasci veri 0,6 %; `gc_note_slow` 1,5 %.
+2. **Cosa NON si tocca**: ordine FIFO del buffer, quando si nota, quando gira lo sweep, soglie e classificatore della raccolta dei cicli (3,2 %: garbage ciclico vero, efficace al 69 %, margine già stimato ≤ 0,5-0,8 % in S-192). Nessuna cura qui cambia QUANDO muore un oggetto.
+3. **S1 — niente SipHash nel rilascio a cascata**: `gc_release_cascade` e `gc_release_child` fanno `remove` su due mappe `std` per id (`var_dump_debug`, `stringify_args`) quasi sempre vuote (0,2 % dei campioni, tutto hash); la `remove` solo a mappa non vuota (stessa forma di `next_id`, N1 di S-194).
+4. **S2 — la nota di un oggetto in un frame suo**: in `gc_note_slow` (470 campioni) solo ~35 % cade nel lavoro della nota; il resto è costo fisso della funzione — prologo/epilogo con dieci registri salvati (richiesti dai bracci ricorsivi di array e closure) e catena di confronti sul tag: epilogo ~127 campioni, ingresso+tag ~130. Cura: il braccio `Object` diventa `gc_note_obj` (file nuovo `vm/gc_note_obj`, corpo copiato alla lettera); `gc_note_slow` resta un inoltro in coda. Nessun sito chiamante cambia (nessun corpo caldo in più nel ciclo dell'interprete).
+5. **Attese** (istruzioni sul carico intero, `wp194-harness/s194-{orm,wp}-istruzioni.py`, braccio S contro il pin s190 ricostruito dallo stesso strumento): ORM ≤ −0,3 %; WordPress mai sopra (+0,05 % di tolleranza dello strumento). Meccanismo: nel disassemblato `gc_note_obj` salva ≤ 3 coppie di registri e `gc_note_slow` non ha frame.
+6. **Gate**: dente LOC PRIMA della catena; `wp192-harness/s192-accettazione.sh s195S` (sentinelle drop-order 4/4, leave_dtor, corpus-gate ×2, batteria) rc=0.
+7. **Kill**: una sentinella o un test che cambia ⇒ ritiro (non si aggiusta). ORM sopra −0,15 % ⇒ S2 si ritira (movimento di codice senza resa), S1 resta se da sola non peggiora.
+8. **Detto prima**: il pacchetto vale al più ~0,5 %. Il resto del «corpo di Sweep» (4,7 % a registro) è la raccolta dei cicli e la forma a liberazione differita (voce-madre «timing GC»): fuori da questo criterio.
