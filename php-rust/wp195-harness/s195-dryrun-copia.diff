@@ -1,0 +1,32 @@
+2,4c2,4
+< # e-dryrun.sh — S-194 promotion to pin s190, criterion e p.7 (declared copy of d-dryrun.sh, manifest e-dryrun-copia.diff: names only): the fixture gates of s194e-promozione.sh run DRY with the
+< # candidate arm as BIN. The gate block is cut from the generated chain itself, so the dry run and the chain cannot drift.
+< # Outcome: out/e-dryrun.out (one line per gate), out/e-dryrun.rc (number of gates that bite).
+---
+> # s195-dryrun.sh — S-195 promotion to pin s191, criterion s195-criterio-promozione.md p.7 (declared copy of wp194-harness/out/e-dryrun.sh, manifest
+> # s195-dryrun-copia.diff: names only): the fixture gates of s195-promozione.sh run DRY with the candidate arm as BIN. The gate block is cut from the
+> # generated chain itself, so the dry run and the chain cannot drift. Outcome: out/dryrun.out (one line per gate), out/dryrun.rc (gates that bite).
+7c7
+< SRC="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust"; W="$SRC/wp194-harness"
+---
+> SRC="/Volumes/Extreme Pro/Claude/php-rust-experiment/php-rust"; W="$SRC/wp195-harness"
+9,11c9,11
+< H10="$SRC/wp185-harness"; H11="$SRC/wp190-harness"; H12="$SRC/wp186-harness"; H13="$SRC/wp193-harness"; H14="$SRC/wp194-harness"
+< BIN="$W/out/phpr-n3"; REF="/Volumes/Extreme Pro/Claude/phpr-old-target/release/phpr-s189"
+< OUT="$W/out/dryrun-e"; rm -rf "$OUT"; mkdir -p "$OUT"; V="$W/out/e-dryrun.out"; : > "$V"; BAD=0
+---
+> H10="$SRC/wp185-harness"; H11="$SRC/wp190-harness"; H12="$SRC/wp186-harness"; H13="$SRC/wp193-harness"; H14="$SRC/wp194-harness"; H15="$SRC/wp195-harness"
+> BIN="$W/out/phpr-cand"; REF="/Volumes/Extreme Pro/Claude/phpr-old-target/release/phpr-s190"
+> OUT="$W/out/dryrun"; rm -rf "$OUT"; mkdir -p "$OUT"; V="$W/out/dryrun.out"; : > "$V"; BAD=0
+16,18c16,18
+< a=$(grep -n '^ORACLE=/opt/homebrew' "$W/s194e-promozione.sh" | cut -d: -f1); b=$(grep -n '^# E2 (emenda S-177' "$W/s194e-promozione.sh" | cut -d: -f1)
+< [ -n "$a" ] && [ -n "$b" ] || { echo "blocco dei gate non trovato" >> "$V"; echo 99 > "$W/out/e-dryrun.rc"; exit 99; }
+< sed -n "${a},$((b - 1))p" "$W/s194e-promozione.sh" > "$OUT/gates.sh"
+---
+> a=$(grep -n '^ORACLE=/opt/homebrew' "$W/s195-promozione.sh" | cut -d: -f1); b=$(grep -n '^# E2 (emenda S-177' "$W/s195-promozione.sh" | cut -d: -f1)
+> [ -n "$a" ] && [ -n "$b" ] || { echo "blocco dei gate non trovato" >> "$V"; echo 99 > "$W/out/dryrun.rc"; exit 99; }
+> sed -n "${a},$((b - 1))p" "$W/s195-promozione.sh" > "$OUT/gates.sh"
+20c20
+< echo "gate che mordono: $BAD su $(grep -c -E '^(bilat|invar|expdiff) ' "$OUT/gates.sh")" >> "$V"; echo "$BAD" > "$W/out/e-dryrun.rc"
+---
+> echo "gate che mordono: $BAD su $(grep -c -E '^(bilat|invar|expdiff) ' "$OUT/gates.sh")" >> "$V"; echo "$BAD" > "$W/out/dryrun.rc"
