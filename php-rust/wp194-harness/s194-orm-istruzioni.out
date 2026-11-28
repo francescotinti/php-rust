@@ -152,3 +152,15 @@ binario OFF = /private/tmp/phpr-s195-off sha 775240517dcad927
 ON         istruzioni   213.788 G (dispersione 0.09 %)  vs ON  +0.00 %  cicli   61.405 G  user  27.88 s  | Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, PHP
 OFF        istruzioni   219.908 G (dispersione 0.10 %)  vs ON  +2.86 %  cicli   66.611 G  user  29.77 s  | Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, PHP
 fine rc=0 2026-11-28 04:16:09
+== s194 ORM istruzioni ritirate per gamba, REPS=2, 2026-11-28 05:38:27 (direzione sul lavoro, non verdetto di tempo) ==
+binario S = /private/tmp/phpr-s195-S sha e0efb4dcc08624b0
+binario J = abcbfd9010e12079030856bca3750fec18e5f619 sha 6f4be83a2ac3b0d6
+S          istruzioni   211.254 G (dispersione 0.04 %)  vs S  +0.00 %  cicli   60.334 G  user  27.50 s  | Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, PHP
+J          istruzioni   211.331 G (dispersione 0.01 %)  vs S  +0.04 %  cicli   60.531 G  user  27.59 s  | Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, PHP
+fine rc=0 2026-11-28 05:43:07
+== s194 ORM istruzioni ritirate per gamba, REPS=2, 2026-11-28 05:43:08 (direzione sul lavoro, non verdetto di tempo) ==
+binario J = /private/tmp/phpr-s195-J sha 6f4be83a2ac3b0d6
+binario S = /private/tmp/phpr-s195-S sha e0efb4dcc08624b0
+J          istruzioni   211.326 G (dispersione 0.04 %)  vs J  +0.00 %  cicli   60.598 G  user  27.62 s  | Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, PHP
+S          istruzioni   211.197 G (dispersione 0.00 %)  vs J  -0.06 %  cicli   60.560 G  user  27.61 s  | Tests: 3484, Assertions: 11989, Errors: 3, Failures: 13, PHP
+fine rc=0 2026-11-28 05:45:20

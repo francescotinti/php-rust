@@ -158,3 +158,10 @@ ON         istruzioni  3454.276 G (dispersione 0.00 %)  vs ON  +0.00 %  cicli 11
 OFF        istruzioni  3551.187 G (dispersione 0.00 %)  vs ON  +2.81 %  cicli 1190.698 G  user 655.25 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
 uploads-guard restore rc=0
 fine rc=0 2026-11-28 04:42:46
+== s194 WordPress (phpunit full) istruzioni ritirate per gamba, 2026-11-28 05:45:20 (direzione sul lavoro, non verdetto di tempo) ==
+binario S = b9365351bd8da06977aa6e7c81420633a7150974 sha e0efb4dcc08624b0
+binario J = abcbfd9010e12079030856bca3750fec18e5f619 sha 6f4be83a2ac3b0d6
+S          istruzioni  3437.398 G (dispersione 0.00 %)  vs S  +0.00 %  cicli 1173.279 G  user 649.14 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
+J          istruzioni  3437.129 G (dispersione 0.00 %)  vs S  -0.01 %  cicli 1172.967 G  user 649.16 s  | Tests: 30472, Assertions: 4558029, Failures: 2, Warnings: 86, Skipped: 73.
+uploads-guard restore rc=0
+fine rc=0 2026-11-28 06:16:26
