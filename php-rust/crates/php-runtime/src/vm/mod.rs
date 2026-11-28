@@ -80,7 +80,7 @@ mod coroutines;
 mod dom;
 pub mod cli_stream;
 mod exceptions;
-mod arg_slot; mod class_fp; mod field_plain; mod gc_probe; mod hint_memo; mod hot; mod ic_scoped; // S-194 C4, N2, P1, T1, B2, C3b
+mod arg_slot; mod class_fp; mod field_plain; mod gc_note_obj; mod gc_probe; mod hint_memo; mod hot; mod ic_scoped; // S-194 C4, N2, P1, T1, B2, C3b
 pub(crate) mod builtin_fast;
 pub(crate) mod call_bind;
 mod xmlparser;
@@ -3979,64 +3979,14 @@ impl<'m> Vm<'m> {
     }
 
 
-    fn gc_note_slow(&mut self, v: &Zval) {
+    fn gc_note_slow(&mut self, v: &Zval) { // S-195 S2: the Object note (the common species) tail-calls into its own small frame
+        if let Zval::Object(rc) = v { return self.gc_note_obj(rc); }
+        self.gc_note_rest(v)
+    }
+    #[inline(never)]
+    fn gc_note_rest(&mut self, v: &Zval) {
         match v {
-            Zval::Object(rc) => {
-                // One borrow serves the whole note: the DESTRUCTED mirror
-                // flag replaces the id-set probe (the set stays authoritative
-                // everywhere else) and the buffer insert is inlined
-                // (gc_buf_push would re-borrow).
-                let b = rc.borrow();
-                if b.gc.destructed() {
-                    return;
-                }
-                // Always buffer (no note-time classification): the sweep at
-                // the END of this statement re-checks the live count, which is
-                // the safety net for *unhooked* drops that happen later in the
-                // same statement (a temp consumed off the operand stack is not
-                // gc_note'd — see `gc_light_demoted`). A note-time `count > 2`
-                // shortcut straight to the cycle-roots buffer loses exactly
-                // that window: a destructor-driven cleanup (e.g. a file
-                // unlink) can slip past the tests that depend on it (WP-21:
-                // REST sideload unique-filename flake).
-                if !b.gc.buffered() {
-                    b.gc.set_pos(self.gc_buf.len());
-                    b.gc.set_birth(false);
-                    drop(b);
-                    self.gc_buf.push(Some(Rc::clone(rc)));
-                    self.gc_idle_set([false; 2]);
-                    #[cfg(feature = "gc-census")]
-                    gc_census::note_inserted();
-                } else {
-                    // Already buffered (birth seed, or an earlier note): this
-                    // is a LATER release, so the entry moves to the tail — the
-                    // sweep pops FIFO and Zend frees in release order. §3.35
-                    // form 3: `f(new A, new B)` dies A then B at leave, but
-                    // B's constructor-sweep demotion and `$this` re-note had
-                    // queued B ahead of A. The BIRTH mark is kept as it is
-                    // (a release note never flips it — `gc_buf_push`).
-                    // S-190: skipping this move for a live object (count > 3) was tried and RETIRED — the FIFO
-                    // position is order, not just liveness (sentinel iters_this_dynvars: a1/a2 and x2/x3 swapped).
-                    // (iv-b): already the TAIL slot ⇒ the move is the identity (no hole, no push); only the probe
-                    // window re-opens on it so the next `Ret` still sees this release (cursor invariant).
-                    if self.gc_buf.last().is_some_and(|s| s.as_ref().is_some_and(|l| Rc::ptr_eq(l, rc))) {
-                        drop(b);
-                        let p = self.gc_buf.len() - 1;
-                        if p >= self.gc_buf_head && self.gc_probe_mark > p {
-                            self.gc_probe_mark = p;
-                        }
-                        return;
-                    }
-                    let pos = b.gc.pos();
-                    drop(b);
-                    if let Some(p) = pos.filter(|&p| p >= self.gc_buf_head) {
-                        if let Some(entry) = self.gc_buf[p].take() {
-                            entry.borrow().gc.set_pos(self.gc_buf.len());
-                            self.gc_buf.push(Some(entry));
-                        }
-                    }
-                }
-            }
+            Zval::Object(rc) => self.gc_note_obj(rc),
             Zval::Ref(r) => {
                 // A-HO-105-2 (Concilio WP-105): l'invariante «i reference
                 // non si annidano» sorveglia ENTRAMBI i sentieri — issata
@@ -4553,8 +4503,8 @@ impl<'m> Vm<'m> {
         // with the object, not at id reuse: they would otherwise hold the
         // subtree's containers shared and defeat the exclusivity checks below.
         let oid = o.borrow().id;
-        self.var_dump_debug.remove(&oid);
-        self.stringify_args.remove(&oid);
+        if !self.var_dump_debug.is_empty() { self.var_dump_debug.remove(&oid); } // S-195 S1: no hash on the empty map
+        if !self.stringify_args.is_empty() { self.stringify_args.remove(&oid); }
         let mut work: Vec<RelItem> = vec![RelItem::Obj(Rc::clone(o))];
         while let Some(item) = work.pop() {
             match item {
@@ -4622,8 +4572,8 @@ impl<'m> Vm<'m> {
                         b.gc.set_cycle_root(false);
                         b.gc.set_light_demoted(false);
                     }
-                    self.var_dump_debug.remove(&id);
-                    self.stringify_args.remove(&id);
+                    if !self.var_dump_debug.is_empty() { self.var_dump_debug.remove(&id); }
+                    if !self.stringify_args.is_empty() { self.stringify_args.remove(&id); }
                     work.push(RelItem::Obj(Rc::clone(rc)));
                 } else {
                     self.gc_note(v);
